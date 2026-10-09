@@ -44,6 +44,7 @@ import {
   dropAuraRebroadcasts,
   supersededAuraBreaks,
 } from "./auraIntervals";
+import { auraEndFromLog } from "./auraEndCause";
 import { upperBound } from "./binarySearch";
 import {
   buildCannotCastIntervals,
@@ -1188,6 +1189,9 @@ export function ccRemovalCause(
   removeMs: number,
   /** the CC's official end at its DR step; unknown → no claim either way */
   officialEndMs?: number,
+  /** the aura's caster: with two casters' copies of one spell ending in the
+   * same ms, only this one's REMOVED is read (codex review of step 3c) */
+  srcUnitId?: string,
 ): ICcRemovalCause | undefined {
   // The break is the BROKEN line that ended this application: one its own
   // REMOVED superseded (`auraBreaksBeforeRemoved` — tied to that REMOVED in
@@ -1203,13 +1207,19 @@ export function ccRemovalCause(
   const endsHere = auras.filter(
     (a) => a.spellId === spellId && a.logLine.timestamp === removeMs,
   );
-  const removedHere = endsHere.filter(
+  const anyRemovedHere = endsHere.filter(
     (a) => (a.logLine.event as string) === LogEvent.SPELL_AURA_REMOVED,
+  );
+  const removedHere = anyRemovedHere.filter(
+    (a) => srcUnitId === undefined || a.srcUnitId === srcUnitId,
   );
   const breaks = (
     removedHere.length > 0
       ? removedHere.flatMap((r) => auraBreaksBeforeRemoved(auras, r))
-      : endsHere.filter((a) => isBreak(a.logLine.event as string))
+      : anyRemovedHere.length > 0
+        ? // another caster's copy ended here; this one has no REMOVED of its own
+          []
+        : endsHere.filter((a) => isBreak(a.logLine.event as string))
   ).filter((b) => b.logLine.timestamp >= applyMs);
   const brk = breaks[0];
   if (brk) {
@@ -1271,6 +1281,91 @@ export function ccRemovalCause(
     };
   }
   return undefined;
+}
+
+/**
+ * How a CC application ended, as the log itself states it — for its timeline
+ * line (FT-T08 step 3c). Damage that broke it (`ccRemovalCause`'s BROKEN
+ * reading: who, with what), a dispel of it on the holder
+ * (`auraEndFromLog`), the holder's death at the removal. The holder's own
+ * trinket / break press is not read here: the lines that render those bind a
+ * press to a CC by timing and say so themselves. Undefined = the log gives
+ * no cause (it ran out, was cancelled, or the round ended).
+ */
+export type ICcLoggedEnd =
+  | { kind: "broken"; spellName: string; byUnitId?: string; byName?: string }
+  | { kind: "dispelled"; spellName: string; byUnitId: string; byName: string }
+  | { kind: "death" };
+
+export function ccLoggedEnd(
+  holder: ICombatUnit,
+  cc: Pick<ICCInstance, "spellId" | "atSeconds" | "durationSeconds"> &
+    Partial<Pick<ICCInstance, "sourceId">>,
+  matchStartMs: number,
+): ICcLoggedEnd | undefined {
+  const applyMs = matchStartMs + Math.round(cc.atSeconds * 1000);
+  const removeMs =
+    matchStartMs + Math.round((cc.atSeconds + cc.durationSeconds) * 1000);
+  // The instance's end must be a line of the log: one clamped at the round's
+  // end, or closed at its official length with no REMOVED, has no logged
+  // cause to read (agy review of step 3c).
+  const endLogged = (holder.auraEvents ?? []).some((a) => {
+    const ev = a.logLine.event as string;
+    if (a.spellId !== cc.spellId || a.logLine.timestamp !== removeMs)
+      return false;
+    // this caster's own REMOVED — or a BROKEN line (its source is the breaker)
+    return ev === LogEvent.SPELL_AURA_REMOVED
+      ? cc.sourceId === undefined || a.srcUnitId === cc.sourceId
+      : ev === LogEvent.SPELL_AURA_BROKEN ||
+          ev === LogEvent.SPELL_AURA_BROKEN_SPELL;
+  });
+  if (!endLogged) return undefined;
+  const cause = ccRemovalCause(
+    holder,
+    cc.spellId,
+    applyMs,
+    removeMs,
+    undefined,
+    cc.sourceId,
+  );
+  if (cause?.kind === "broken")
+    return {
+      kind: "broken",
+      spellName: cause.spellName,
+      byUnitId: cause.byUnitId,
+      byName: cause.byName,
+    };
+  const end = auraEndFromLog(
+    holder,
+    cc.spellId,
+    { fromMs: applyMs, removedMs: removeMs },
+    cc.sourceId,
+  );
+  if (end.takenBy)
+    return {
+      kind: "dispelled",
+      spellName: end.takenBy.spellName,
+      byUnitId: end.takenBy.unitId,
+      byName: end.takenBy.unitName,
+    };
+  return end.holderDied ? { kind: "death" } : undefined;
+}
+
+/** The ` | …` clause a control line carries for `ccLoggedEnd`, and the
+ * pattern the gates read it back with (anchored by the caller). */
+export const CC_LOGGED_END_NOTE_RE_SRC = String.raw`(?: \| (?:broken by [^|]+|dispelled by [^|]+|ended at their death))?`;
+export function formatCcLoggedEnd(
+  end: ICcLoggedEnd | undefined,
+  label: (name: string, unitId: string | undefined) => string,
+): string {
+  if (!end) return "";
+  if (end.kind === "death") return " | ended at their death";
+  const who = label(end.byName ?? "", end.byUnitId);
+  if (end.kind === "dispelled")
+    return ` | dispelled by ${who}'s ${end.spellName}`;
+  return end.spellName === "Melee"
+    ? ` | broken by ${who}'s melee hit`
+    : ` | broken by ${who}'s ${end.spellName}`;
 }
 
 /** `endedBy` as a facts value: `trinket (Gladiator's Medallion)`, a break

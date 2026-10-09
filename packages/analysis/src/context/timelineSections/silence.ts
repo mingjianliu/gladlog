@@ -14,8 +14,10 @@
 import type { ICombatUnit } from "@gladlog/parser-compat";
 
 import { getEnglishSpellName } from "../../data/spellEffectData";
+import { auraEndFromLog } from "../../utils/auraEndCause";
 import { silenceIntervals } from "../../utils/cannotCastIntervals";
 import { TRINKET_BREAK_AFTER_REMOVAL_MS } from "../../utils/ccTrinketAnalysis";
+import { pvpTrinketUses } from "../../utils/pvpTrinketUses";
 import { fmtTime } from "../../utils/renderGrid";
 import type { TimelineCtx } from "./ctx";
 
@@ -84,10 +86,49 @@ export function emitSilenceEntries(
             endMs - tMs <= 300
           );
         });
+        // FT-T08 step 3c: a dispel of the silence, or the unit's death at
+        // its removal, is in the log (`auraEndFromLog`) — stated when no
+        // trinket press already accounts for the end. Clamped to the round's
+        // end, the removal is not the silence's own: no cause is read.
+        // an enemy's trinket has its own [ENEMY TRINKET] line: the same
+        // window keeps the DEATH reading (a cascade inferred from timing) off
+        // a silence it broke (codex review of step 3c). A dispel line names
+        // this aura outright and is still read.
+        const enemyTrinketed =
+          side === "enemy" &&
+          pvpTrinketUses(u).some(
+            (t) =>
+              t.atMs >= s.from &&
+              t.atMs <= endMs + TRINKET_BREAK_AFTER_REMOVAL_MS &&
+              endMs - t.atMs <= 300,
+          );
+        const end =
+          trinketAt === undefined && s.to <= matchEndMs
+            ? auraEndFromLog(
+                u,
+                s.spellId,
+                { fromMs: s.from, removedMs: s.to },
+                s.srcUnitId,
+              )
+            : undefined;
+        const taker = end?.takenBy;
+        const endNote = taker
+          ? ` | dispelled by ${actorLabel(
+              // the roster's name for that id — the log can spell one player
+              // two ways (138e632d)
+              [...friends, ...(enemies ?? [])].find(
+                (p) => p.id === taker.unitId,
+              )?.name ?? taker.unitName,
+              side === "friendly" ? "friendly" : "enemy",
+              taker.unitId,
+            )}'s ${taker.spellName}`
+          : end?.holderDied && !enemyTrinketed
+            ? " | ended at their death"
+            : "";
         const tail =
           trinketAt !== undefined
             ? ` | trinket broke this silence after ${(trinketAt - at).toFixed(0)}s (cut short — it had not expired)`
-            : ` | ${durS.toFixed(0)}s`;
+            : ` | ${durS.toFixed(0)}s${endNote}`;
         const who = side === "friendly" ? pid(u.name) : enemyPid(u.name);
         // cc-dr F-SR1: a silence the unit's own reflect sent back to it
         const by =

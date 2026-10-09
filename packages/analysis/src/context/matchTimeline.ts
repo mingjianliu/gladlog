@@ -702,6 +702,8 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     dispelSummary,
     matchStartMs,
     friends,
+    enemies,
+    rosterSides,
     avoidanceSourceTag,
   }));
 
@@ -766,6 +768,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     owner,
     ownerRenderedCcIds,
     enemyCcDrTag,
+    rosterSides,
   }));
 
   // ── Spell outcomes the log records and the timeline did not state ─────────

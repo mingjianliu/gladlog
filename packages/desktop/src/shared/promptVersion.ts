@@ -1180,5 +1180,9 @@
  *  compat layer's negative amounts and kept exactly the spells BELOW 5 %
  *  (filler listed, the main damage spells dropped). Lines appear, disappear
  *  and change their spell lists. Counts in the commit.
+ *  v346 (2026-10-09, FT-T08 step 3c): [CC ON ENEMY] / [CC ON TEAM] /
+ *  [SILENCE] lines state how the control ended when the log says —
+ *  `| broken by N(X)'s Spell`, `| dispelled by N(X)'s Spell`, `| ended at
+ *  their death`. Counts in the commit.
  */
-export const PROMPT_VERSION = 345;
+export const PROMPT_VERSION = 346;

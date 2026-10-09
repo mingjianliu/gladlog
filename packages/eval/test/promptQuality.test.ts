@@ -692,6 +692,30 @@ describe("checkForcedTrinketConsistency — [FORCED TRINKET] agrees with the tri
       ),
     ).toHaveLength(1);
   });
+  it("FT-T08 step 3c: accepts the aura line with its logged-end clause; the duration is still checked behind it", () => {
+    for (const note of [
+      " | broken by 2(MMonk)'s Rising Sun Kick",
+      " | broken by 3(BMHunter)'s pet's melee hit",
+      " | dispelled by 6(RShaman)'s Purify Spirit",
+      " | ended at their death",
+    ]) {
+      const noted = `${ccOn} [DR: Disorient Full]${note}`;
+      expect(
+        checkForcedTrinketConsistency(ok.map((l) => (l === ccOn ? noted : l))),
+      ).toEqual([]);
+      expect(
+        checkForcedTrinketConsistency(
+          ok.map((l) => (l === ccOn ? noted.replace("(6s)", "(1s)") : l)),
+        ),
+      ).toHaveLength(1);
+    }
+    // a clause the producer does not write is not waved through
+    expect(
+      checkForcedTrinketConsistency(
+        ok.map((l) => (l === ccOn ? `${ccOn} | whatever` : l)),
+      ),
+    ).toHaveLength(1);
+  });
   it("fails a missing trinket or attempt line", () => {
     expect(
       checkForcedTrinketConsistency(ok.filter((l) => l !== trinket)),
@@ -819,6 +843,33 @@ describe("checkCcBookmarkConsistency — [CC BOOKMARK] lines agree with the burs
       checkCcBookmarkConsistency([
         ...ok,
         "0:30  [CC ON ENEMY]   6(DPriest) ← Fear (by 2(DPriest)) (3s)",
+      ]),
+    ).toEqual([]);
+    // FT-T08 step 3c (agy review): a tail the producer does not write is a failure of its own —
+    // it used to swallow the span and pass
+    expect(
+      checkCcBookmarkConsistency([
+        ...ok,
+        "0:30  [CC ON ENEMY]   6(DPriest) ← Fear (by 2(DPriest)) (3s) | whatever",
+      ]),
+    ).toHaveLength(1);
+    expect(
+      checkCcBookmarkConsistency([
+        ...ok,
+        "0:30  [CC ON ENEMY]   6(DPriest) ← Fear (by 3(RShaman)'s pet) [DR: Disorient Full] | enemy Tremor Totem from 6(RShaman) ended this CC after 2s (cut short — it had not expired)",
+      ]),
+    ).toEqual([]);
+    // FT-T08 step 3c: the span is still read behind a logged-end clause
+    expect(
+      checkCcBookmarkConsistency([
+        ...ok,
+        "0:40  [CC ON ENEMY]   6(DPriest) ← Fear (by 2(DPriest)) (3s) [DR: Disorient Full] | broken by 1(ARogue)'s Eviscerate",
+      ]),
+    ).toHaveLength(1);
+    expect(
+      checkCcBookmarkConsistency([
+        ...ok,
+        "0:30  [CC ON ENEMY]   6(DPriest) ← Fear (by 2(DPriest)) (3s) | broken by 1(ARogue)'s Eviscerate",
       ]),
     ).toEqual([]);
     expect(

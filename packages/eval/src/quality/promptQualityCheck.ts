@@ -69,6 +69,7 @@ import {
 import { KILL_CREDIT_SLACK_S } from "@gladlog/analysis/src/utils/burstLedger";
 import {
   CC_LANDED_MATCH_WINDOW_MS,
+  CC_LOGGED_END_NOTE_RE_SRC,
   DEATH_BREAKABLE_CC_LOOKBACK_S,
   DEATH_BREAKABLE_CC_MIN_S,
 } from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
@@ -1266,9 +1267,21 @@ const BURST_LEDGER_LINE = /^\s*Burst #(\d+) — (\d+):(\d{2})–(\d+):(\d{2}) \|
 const DMG_SPIKE_BOUNDS_LINE =
   /^\s*(\d+):(\d{2})–(\d+):(\d{2})\s+\[DMG SPIKE\]\s+(\S+) \(/;
 const YOU_CC_LINE = /^\s*(\d+):(\d{2})\s+\[YOU\] \[CC\]\s+(.+?) →/;
-const CC_ON_ENEMY_SPAN_LINE =
-  // cc-dr F-CE1: an optional ` [DR: <category> <level>]` after the span
-  /^\s*(\d+):(\d{2})\s+\[CC ON ENEMY\]\s+(\S+) ← .*?(?:\((\d+(?:\.\d+)?)s\))?(?: \[DR: [^\]]+\])?\s*$/;
+const CC_ON_ENEMY_HEAD_LINE =
+  /^\s*(\d+):(\d{2})\s+\[CC ON ENEMY\]\s+(\S+) ← /;
+/**
+ * A `[CC ON ENEMY]` line from its `(by …)` to the end, in the two forms the
+ * producer writes: `(Ns)` + optional ` [DR: …]` (cc-dr F-CE1) + optional
+ * logged-end clause (`formatCcLoggedEnd`, FT-T08 step 3c) — group 1 = the
+ * span — or the Tremor form, which has no `(Ns)`. Read as head + tail, not
+ * as one pattern with a lazy `.*?` in front of optional groups: that
+ * swallowed the span whenever something unknown followed it and let any
+ * clause through (agy review of step 3c). Checked against all 58,321
+ * `[CC ON ENEMY]` lines of the 605-file capture: 0 unmatched, 121 Tremor.
+ */
+const CC_ON_ENEMY_TAIL = new RegExp(
+  String.raw`\((?:by [^|]*?|reflected back)\)(?:(?: \((\d+(?:\.\d+)?)s\))?(?: \[DR: [^\]]+\])?${CC_LOGGED_END_NOTE_RE_SRC}|(?: \[DR: [^\]]+\])? \| enemy Tremor Totem from \S+ ended this CC after \d+s \(cut short — it had not expired\))\s*$`,
+);
 const CC_USE_COUNTS_LINE = /^\s*Counts: (.*)$/;
 const CC_USE_COUNT_ITEM = /^(.+) cast (\d+)× \(first (\d+):(\d{2})\)$/;
 
@@ -1303,7 +1316,21 @@ export function checkCcBookmarkConsistency(lines: string[]): string[] {
   const spikes: Array<{ from: number; to: number; unit: string }> = [];
   const youCc: Array<{ at: number; spell: string }> = [];
   const enemyCc: Array<{ from: number; to: number; unit: string }> = [];
+  const unreadableCc: string[] = [];
   let countItems: string[] = [];
+  lines.forEach((line, i) => {
+    const e = line.match(CC_ON_ENEMY_HEAD_LINE);
+    if (!e) return;
+    const tail = line.match(CC_ON_ENEMY_TAIL);
+    if (!tail)
+      unreadableCc.push(
+        `line ${i + 1}: [CC ON ENEMY] 行尾不是生成格式(时长 / DR / 结束原因子句)—— ${line.trim().slice(0, 160)}`,
+      );
+    const at = Number(e[1]) * 60 + Number(e[2]);
+    // the Tremor form carries no span of its own here (as before)
+    const dur = tail?.[1] ? Number(tail[1]) : 0;
+    enemyCc.push({ from: at, to: at + Math.max(dur, 1) - 1, unit: e[3]! });
+  });
   for (const line of lines) {
     const b = line.match(BURST_LEDGER_LINE);
     if (b)
@@ -1320,16 +1347,10 @@ export function checkCcBookmarkConsistency(lines: string[]): string[] {
       });
     const y = line.match(YOU_CC_LINE);
     if (y) youCc.push({ at: Number(y[1]) * 60 + Number(y[2]), spell: y[3]! });
-    const e = line.match(CC_ON_ENEMY_SPAN_LINE);
-    if (e) {
-      const at = Number(e[1]) * 60 + Number(e[2]);
-      const dur = e[4] ? Number(e[4]) : 0;
-      enemyCc.push({ from: at, to: at + Math.max(dur, 1) - 1, unit: e[3]! });
-    }
     const c = line.match(CC_USE_COUNTS_LINE);
     if (c) countItems = c[1]!.split(" · ");
   }
-  const failures: string[] = [];
+  const failures: string[] = [...unreadableCc];
   let bookmarks = 0;
   lines.forEach((line, i) => {
     if (!CC_BOOKMARK_DATA_LINE.test(line)) return;
@@ -1523,7 +1544,7 @@ export function checkForcedTrinketConsistency(lines: string[]): string[] {
     const esc = spell.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const ccOn = ownerId
       ? new RegExp(
-          `^\\s*${fmtTime(cS)}\\s+\\[CC ON ENEMY\\]\\s+${unit.replace(/[()]/g, "\\$&")} ← ${esc} \\(by ${ownerId}\\([^)]*\\)\\)(?: \\(${dur}s\\)(?: \\[DR: [^\\]]+\\])?$|(?: \\[DR: [^\\]]+\\])? \\| enemy Tremor Totem from \\S+ ended this CC after ${dur}s )`,
+          `^\\s*${fmtTime(cS)}\\s+\\[CC ON ENEMY\\]\\s+${unit.replace(/[()]/g, "\\$&")} ← ${esc} \\(by ${ownerId}\\([^)]*\\)\\)(?: \\(${dur}s\\)(?: \\[DR: [^\\]]+\\])?${CC_LOGGED_END_NOTE_RE_SRC}$|(?: \\[DR: [^\\]]+\\])? \\| enemy Tremor Totem from \\S+ ended this CC after ${dur}s )`,
         )
       : null;
     if (!ccOn || !lines.some((l) => ccOn.test(l)))

@@ -9,8 +9,12 @@
  * and is passed in. Output is pinned by the 605-file acceptanceCapture context
  * hash.
  */
+import { CombatUnitReaction } from "@gladlog/parser-compat";
+
 import { BACKLASH_AURA_CC_TYPE } from "../../data/backlashCc";
 import {
+  ccLoggedEnd,
+  formatCcLoggedEnd,
   immunityBreak,
   lastTrinketPressBefore,
   renderedCcSeconds,
@@ -32,6 +36,8 @@ export function emitTrinketCcOnTeamEntries(
     | "dispelSummary"
     | "matchStartMs"
     | "friends"
+    | "enemies"
+    | "rosterSides"
     | "avoidanceSourceTag"
     | "trinketLastUsedCount"
   >,
@@ -45,6 +51,8 @@ export function emitTrinketCcOnTeamEntries(
     dispelSummary,
     matchStartMs,
     friends,
+    enemies,
+    rosterSides,
     avoidanceSourceTag,
   } = ctx;
   // threaded: read from ctx, returned to the caller (GH #116)
@@ -164,6 +172,34 @@ export function emitTrinketCcOnTeamEntries(
         ? ` | ${immunity.spellName} broke this CC after ${renderedCcSeconds(cc)}s`
         : "";
 
+      // FT-T08 step 3c: how it ended, when the log says and no note above
+      // already does — the damage that broke it, the player's death. A
+      // friendly dispel is the [CLEANSED] tag.
+      const loggedEnd =
+        !trinketBroke && !isCleansed && !tremor && !immunity && ccdUnit
+          ? ccLoggedEnd(ccdUnit, cc, matchStartMs)
+          : undefined;
+      const endNote = formatCcLoggedEnd(
+        loggedEnd?.kind === "dispelled" ? undefined : loggedEnd,
+        (name, id) => {
+          // a player is labelled by the roster's name for that id — the log
+          // can spell one player two ways (138e632d)
+          const mate = friends.find((f) => f.id === id);
+          const foe = (enemies ?? []).find((e) => e.id === id);
+          // a pet / totem: the roster says whose side its owner is on
+          const friendly =
+            mate !== undefined ||
+            (foe === undefined &&
+              id !== undefined &&
+              rosterSides?.get(id) === CombatUnitReaction.Friendly);
+          return actorLabel(
+            mate?.name ?? foe?.name ?? name,
+            friendly ? "friendly" : "enemy",
+            id,
+          );
+        },
+      );
+
       // `spell:<id>` is getDRCategory's self-DR fallback for a CC no DR
       // family claims (Infernal Awakening 22703 — drShareScan 2026-09-25: full
       // 79 % after a stun, 88 % after disorient / incapacitate, i.e. it shares
@@ -212,7 +248,7 @@ export function emitTrinketCcOnTeamEntries(
       addEntry(
         cc.atSeconds,
         // B112: "(by N)" not "(N)" — the bare "(6)" caster-id was misread as a "6s" duration.
-        `${fmtTime(cc.atSeconds)}  [CC ON TEAM]   ${pid(summary.playerName)} ← ${cc.spellName} ${byStr}${durStr}${drStr}${backlashStr}${posStr}${trinketNote}${tremorNote}${immunityNote}${cleansedNote}`,
+        `${fmtTime(cc.atSeconds)}  [CC ON TEAM]   ${pid(summary.playerName)} ← ${cc.spellName} ${byStr}${durStr}${drStr}${backlashStr}${posStr}${trinketNote}${tremorNote}${immunityNote}${endNote}${cleansedNote}`,
       );
     }
 

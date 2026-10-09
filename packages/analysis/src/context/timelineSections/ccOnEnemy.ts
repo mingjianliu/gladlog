@@ -9,9 +9,13 @@
  * [ENEMY TRINKET] legend reads it). Output is pinned by the 605-file
  * acceptanceCapture context hash.
  */
+import { CombatUnitReaction } from "@gladlog/parser-compat";
+
 import { BREAK_RACIAL_SPELL_IDS } from "../../data/racialAbilities";
 import {
+  ccLoggedEnd,
   findBrokenCC,
+  formatCcLoggedEnd,
   type ICCInstance,
   renderedCcSeconds,
   tremorTotemBreak,
@@ -41,6 +45,7 @@ export function emitCcOnEnemyEntries(
     | "owner"
     | "ownerRenderedCcIds"
     | "enemyCcDrTag"
+    | "rosterSides"
   >,
 ): Pick<TimelineCtx, "enemyTrinketCount"> {
   const {
@@ -58,6 +63,7 @@ export function emitCcOnEnemyEntries(
     owner,
     ownerRenderedCcIds,
     enemyCcDrTag,
+    rosterSides,
   } = ctx;
   // threaded: read from ctx, returned to the caller (GH #116)
   let { enemyTrinketCount } = ctx;
@@ -193,9 +199,35 @@ export function emitCcOnEnemyEntries(
           cc.sourceId,
           cc.sourceName,
         );
+        // FT-T08 step 3c: how it ended, when the log says — the damage that
+        // broke it, a dispel, the target's death. A trinket / break press
+        // has its own [ENEMY TRINKET] line; Tremor its note above.
+        const endNote =
+          trinketBroke || enemyTremor || !enemyUnit
+            ? ""
+            : formatCcLoggedEnd(
+                ccLoggedEnd(enemyUnit, cc, matchStartMs),
+                (name, id) => {
+                  // a player is labelled by the roster's name for that id —
+                  // the log can spell one player two ways (138e632d)
+                  const foe = (enemies ?? []).find((e) => e.id === id);
+                  const mate = friends.find((f) => f.id === id);
+                  // a pet / totem: the roster says whose side its owner is on
+                  const hostile =
+                    foe !== undefined ||
+                    (mate === undefined &&
+                      id !== undefined &&
+                      rosterSides?.get(id) === CombatUnitReaction.Hostile);
+                  return actorLabel(
+                    foe?.name ?? mate?.name ?? name,
+                    hostile ? "enemy" : "friendly",
+                    id,
+                  );
+                },
+              );
         const durStr = enemyTremor
           ? `${drTag} | enemy Tremor Totem from ${enemyPid(enemyTremor.shamanName)} ended this CC after ${renderedCcSeconds(cc)}s (cut short — it had not expired)`
-          : ` (${renderedCcSeconds(cc)}s)${drTag}`;
+          : ` (${renderedCcSeconds(cc)}s)${drTag}${endNote}`;
         addEntry(
           cc.atSeconds,
           `${fmtTime(cc.atSeconds)}  [CC ON ENEMY]   ${enemyPid(summary.playerName)} ← ${cc.spellName} (by ${actorLabel(cc.sourceName, "friendly", cc.sourceId)})${durStr}`,
