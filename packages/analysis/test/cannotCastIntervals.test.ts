@@ -353,10 +353,12 @@ describe("cannotCastIntervals — log-order pairing and pet sources (H23)", () =
     }
   });
 
-  it("the log's shape — BROKEN, then the caster's REMOVED: one interval ending at the break, and the REMOVED closes nothing else", () => {
+  it("the log's shape — BROKEN, then the caster's REMOVED: one interval ending at the REMOVED, which closes nothing else", () => {
     // the REMOVED arrives 300 ms after the break here so the two cannot be
     // told apart by luck; a later Fear from the same caster is its own
-    // interval, not swallowed by the leftover REMOVED
+    // interval, not swallowed by the leftover REMOVED. FT-T08 (2026-10-09):
+    // the aura is on the unit until its REMOVED — the interval ends there,
+    // not at the BROKEN line (was 12_400).
     const unit = {
       id: "Player-1",
       auraEvents: [
@@ -371,7 +373,7 @@ describe("cannotCastIntervals — log-order pairing and pet sources (H23)", () =
     expect(
       buildCannotCastIntervals(unit, new Set(["Enemy-1", "Enemy-2"])),
     ).toEqual([
-      { from: 10_000, to: 12_400 },
+      { from: 10_000, to: 12_700 },
       { from: 20_000, to: 23_000 },
     ]);
   });

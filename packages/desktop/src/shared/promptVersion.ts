@@ -1130,5 +1130,11 @@
  *  one time in ten. One application no longer prints as two CC lines with an
  *  extra DR step, or as a buff that "ended early" and a second press.
  *  Counts in the commit.
+ *  v338 (2026-10-09, FT-T08 step 2, user approval 2026-10-09 "3 同意"): an
+ *  aura ends at its SPELL_AURA_REMOVED; a SPELL_AURA_BROKEN[_SPELL] line the
+ *  REMOVED follows within 1 s is what hit it, not its end. Frost Nova, Ice
+ *  Nova and the Water Elemental's Freeze log one BROKEN_SPELL per damaging
+ *  hit and stay on about half a second longer — their roots (and every CC
+ *  window, by a few ms) now run to the real end. Counts in the commit.
  */
-export const PROMPT_VERSION = 337;
+export const PROMPT_VERSION = 338;

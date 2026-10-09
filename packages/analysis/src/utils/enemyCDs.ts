@@ -10,7 +10,11 @@ import {
   effectiveCooldownSeconds,
   spellEffectData,
 } from "../data/spellEffectData";
-import { buildAuraIntervals, type IAuraInterval } from "./auraIntervals";
+import {
+  buildAuraIntervals,
+  type IAuraInterval,
+  supersededAuraBreaks,
+} from "./auraIntervals";
 import { buffFullDurationForCaster } from "./buffDuration";
 import {
   getUnitHpAtTimestamp,
@@ -503,8 +507,10 @@ export function reconstructEnemyCDTimeline(
       if (owner && isHealerSpec(owner.spec)) {
         const ccStartBySpell = new Map<string, number>();
         const ccIntervals: { start: number; end: number }[] = [];
+        // a BROKEN line its aura's own REMOVED follows is not the end (FT-T08)
+        const notTheEnd = supersededAuraBreaks(owner.auraEvents);
         for (const a of owner.auraEvents) {
-          if (!a.spellId) continue;
+          if (!a.spellId || notTheEnd.has(a)) continue;
           const entry = SPELLS[a.spellId];
           if (entry?.type === "cc") {
             if (

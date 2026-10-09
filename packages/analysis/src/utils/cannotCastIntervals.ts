@@ -5,6 +5,7 @@ import {
   SPELL_CATEGORIES as SPELLS,
 } from "../data/spellCategories";
 import { BACKLASH_AURA_CC_TYPE } from "../data/backlashCc";
+import { supersededAuraBreaks } from "./auraIntervals";
 
 import { ccSpellIds, officialSilenceIds } from "../data/spellTags";
 import { REACTION_WINDOW_S } from "./cooldowns";
@@ -174,9 +175,12 @@ export function castBlockingAuraIntervals(
   // Fixture-built units may lack either stream (momentSnapshot.test.ts has
   // healers with no actionIn) — an absent stream is "nothing happened", not a
   // throw that the caller's try/catch would turn into "no gaps at all".
+  // a BROKEN line its aura's own REMOVED follows is not the end (FT-T08)
+  const notTheEnd = supersededAuraBreaks(unit.auraEvents ?? []);
   for (const aura of unit.auraEvents ?? []) {
     const spellId = aura.spellId;
     if (!spellId) continue;
+    if (notTheEnd.has(aura)) continue;
     // cc-dr F-SR1 (ruling A52 = A, 2026-09-30): a CC / silence whose source
     // is the unit itself was sent back to it (Diffuse Magic, Reverse Magic,
     // Spell Reflection) and locks it like any enemy's — 82a2d681's Death

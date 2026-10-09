@@ -44,7 +44,11 @@ import {
   USABLE_WHILE_CC_GENERATED,
 } from "../data/usableWhileCcGenerated";
 import { getSortedAdvancedActions } from "./advancedActions";
-import { buildAuraIntervals, type IAuraInterval } from "./auraIntervals";
+import {
+  buildAuraIntervals,
+  type IAuraInterval,
+  supersededAuraBreaks,
+} from "./auraIntervals";
 import { binarySearchClosest } from "./binarySearch";
 import { buffFullDurationForCaster } from "./buffDuration";
 import { COPY_CAST_IDS } from "./castPress";
@@ -4619,9 +4623,12 @@ export function hasOffensiveSpellActive(
   const applied = new Map<string, number[]>();
   const removed = new Map<string, number[]>();
 
+  // a BROKEN line its aura's own REMOVED follows is not the end (FT-T08)
+  const notTheEnd = supersededAuraBreaks(unit.auraEvents);
   for (const aura of unit.auraEvents) {
     const spellId = aura.spellId;
     if (!spellId || !isOffensiveSpell(spellId)) continue;
+    if (notTheEnd.has(aura)) continue;
     if (OFFENSIVE_AURA_EVIDENCE.has(spellId)) continue;
     if (requiredSourceIds !== null && !requiredSourceIds.has(aura.srcUnitId))
       continue;

@@ -125,7 +125,15 @@ describe("[BURST ANSWERED] credits an answer that reached the pressured unit thr
   });
 });
 
-import { AURA_REBROADCAST_GAP_MS, buildAuraIntervals, dropAuraRebroadcasts } from "../src/utils/auraIntervals";
+import {
+  AURA_BREAK_TO_REMOVED_MS,
+  AURA_REBROADCAST_GAP_MS,
+  auraBreaksBeforeRemoved,
+  buildAuraIntervals,
+  dropAuraRebroadcasts,
+  dropSupersededAuraBreaks,
+  supersededAuraBreaks,
+} from "../src/utils/auraIntervals";
 
 describe("aura re-broadcasts are one aura (rounds 2–3 W2e / N6)", () => {
   const ev = (event: string, spellId: string, ts: number, src = "s", dest = "d") =>
@@ -188,5 +196,67 @@ describe("aura re-broadcasts are one aura (rounds 2–3 W2e / N6)", () => {
     expect(iv).toHaveLength(1);
     expect(iv[0]!.fromS).toBe(10);
     expect(iv[0]!.toS).toBe(22);
+  });
+});
+
+describe("FT-T08 step 2 — an aura ends at its REMOVED; a BROKEN line before it is not the end", () => {
+  const ev = (event: string, spellId: string, ts: number, src = "s", dest = "d") =>
+    ({ logLine: { event, timestamp: ts, parameters: [] }, timestamp: ts, spellId, spellName: spellId, srcUnitId: src, srcUnitName: src, destUnitId: dest, destUnitName: dest }) as never;
+
+  it("Frost Nova:每次受击一条 BROKEN_SPELL,定身到 REMOVED 才结束", () => {
+    // f4da82c5's shape: APPLIED, BROKEN_SPELL rows from the breakers, REMOVED ~0.5 s after the first.
+    const evs = [
+      ev("SPELL_AURA_APPLIED", "122", 10_000, "mage"),
+      ev("SPELL_AURA_BROKEN_SPELL", "122", 10_640, "breaker1"),
+      ev("SPELL_AURA_BROKEN_SPELL", "122", 10_960, "breaker2"),
+      ev("SPELL_AURA_REMOVED", "122", 11_210, "mage"),
+    ];
+    expect([...supersededAuraBreaks(evs)]).toEqual([evs[1], evs[2]]);
+    expect(dropSupersededAuraBreaks(evs)).toEqual([evs[0], evs[3]]);
+    const iv = buildAuraIntervals({ id: "d", auraEvents: evs } as never, { startTime: 0, endTime: 60_000 }).filter((i) => i.spellId === "122");
+    expect(iv.map((i) => [i.fromS, i.toS, i.inferredEnd])).toEqual([[10, 11.21, false]]);
+  });
+
+  it("每条 REMOVED 自己带着它取代的 BROKEN 行;下一次施加的 REMOVED 不继承上一次的", () => {
+    const evs = [
+      ev("SPELL_AURA_APPLIED", "8122", 10_000, "priest"),
+      ev("SPELL_AURA_BROKEN_SPELL", "8122", 12_000, "breaker"),
+      ev("SPELL_AURA_REMOVED", "8122", 12_003, "priest"),
+      // a second application that simply ran out
+      ev("SPELL_AURA_APPLIED", "8122", 40_000, "priest"),
+      ev("SPELL_AURA_REMOVED", "8122", 44_000, "priest"),
+    ];
+    expect(auraBreaksBeforeRemoved(evs, evs[2]!)).toEqual([evs[1]]);
+    expect(auraBreaksBeforeRemoved(evs, evs[4]!)).toEqual([]);
+  });
+
+  it("BROKEN 之后没有 REMOVED(日志丢了那一行):BROKEN 仍是结束", () => {
+    const evs = [
+      ev("SPELL_AURA_APPLIED", "118", 10_000),
+      ev("SPELL_AURA_BROKEN_SPELL", "118", 12_000, "breaker"),
+      ev("SPELL_AURA_APPLIED", "118", 30_000),
+      ev("SPELL_AURA_REMOVED", "118", 36_000),
+    ];
+    expect(supersededAuraBreaks(evs).size).toBe(0);
+    const iv = buildAuraIntervals({ id: "d", auraEvents: evs } as never, { startTime: 0, endTime: 60_000 }).filter((i) => i.spellId === "118");
+    expect(iv.map((i) => [i.fromS, i.toS])).toEqual([
+      [10, 12],
+      [30, 36],
+    ]);
+  });
+
+  it("REMOVED 来得太晚(超过窗口)就不是这次 BROKEN 的那一行;别的单位、别的法术互不相干", () => {
+    const late = [
+      ev("SPELL_AURA_APPLIED", "118", 10_000),
+      ev("SPELL_AURA_BROKEN_SPELL", "118", 12_000, "breaker"),
+      ev("SPELL_AURA_REMOVED", "118", 12_000 + AURA_BREAK_TO_REMOVED_MS + 1),
+    ];
+    expect(supersededAuraBreaks(late).size).toBe(0);
+    const other = [
+      ev("SPELL_AURA_BROKEN_SPELL", "118", 12_000, "breaker", "d1"),
+      ev("SPELL_AURA_REMOVED", "118", 12_001, "s", "d2"),
+      ev("SPELL_AURA_REMOVED", "122", 12_001, "s", "d1"),
+    ];
+    expect(supersededAuraBreaks(other).size).toBe(0);
   });
 });

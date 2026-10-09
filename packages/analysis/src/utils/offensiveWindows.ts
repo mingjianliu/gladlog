@@ -13,6 +13,7 @@ import { SELF_WALL_AURA_TO_CAST_ID } from "../data/mitigationData";
 import { SPELL_CATEGORIES as spellsData } from "../data/spellCategories";
 import { spellEffectData } from "../data/spellEffectData";
 import { SpellTag } from "../data/spellTypes";
+import { supersededAuraBreaks } from "./auraIntervals";
 import { buffFullDurationForCaster } from "./buffDuration";
 import {
   chargeAvailabilityTransitions,
@@ -219,8 +220,10 @@ function ccSecondsInWindow(
   const ccStartBySpell = new Map<string, number>();
   const spans: { start: number; end: number }[] = [];
 
+  // a BROKEN line its aura's own REMOVED follows is not the end (FT-T08)
+  const notTheEnd = supersededAuraBreaks(unit.auraEvents);
   for (const a of unit.auraEvents) {
-    if (!a.spellId) continue;
+    if (!a.spellId || notTheEnd.has(a)) continue;
     const entry = SPELLS[a.spellId];
     if (entry?.type !== "cc") continue;
 

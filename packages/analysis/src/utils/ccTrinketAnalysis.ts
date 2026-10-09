@@ -39,7 +39,11 @@ import {
   trinketSpellIds,
 } from "../data/spellTags";
 import trinketItemIdsData from "../data/trinketItemIds.json";
-import { dropAuraRebroadcasts } from "./auraIntervals";
+import {
+  AURA_BREAK_TO_REMOVED_MS,
+  dropAuraRebroadcasts,
+  supersededAuraBreaks,
+} from "./auraIntervals";
 import { upperBound } from "./binarySearch";
 import {
   buildCannotCastIntervals,
@@ -1186,7 +1190,20 @@ export function ccRemovalCause(
   officialEndMs?: number,
 ): ICcRemovalCause | undefined {
   for (const a of holder.auraEvents ?? []) {
-    if (a.spellId !== spellId || a.logLine.timestamp !== removeMs) continue;
+    // The break is the BROKEN line at the removal — or up to
+    // `AURA_BREAK_TO_REMOVED_MS` before it, inside this application: the
+    // window ends at the aura's REMOVED, which follows its BROKEN line by a
+    // few ms (FT-T08). The first such line names the breaker — for a CC
+    // there is one; for an aura that logs a BROKEN line per hit (the three
+    // mage roots, not read here) which hit ended it is not in the log.
+    const t = a.logLine.timestamp;
+    if (
+      a.spellId !== spellId ||
+      t > removeMs ||
+      t < applyMs ||
+      removeMs - t > AURA_BREAK_TO_REMOVED_MS
+    )
+      continue;
     const ev = a.logLine.event as string;
     if (ev === LogEvent.SPELL_AURA_BROKEN_SPELL) {
       const params = a.logLine.parameters ?? [];
@@ -1626,10 +1643,14 @@ export function analyzePlayerCCAndTrinket(
     );
   };
 
-  // same-ms REMOVED→APPLIED re-broadcasts are one aura (d78f: a second CC)
+  // REMOVED→APPLIED re-broadcasts are one aura (d78f: a second CC); a BROKEN
+  // line its aura's own REMOVED follows is not the end (FT-T08: Frost Nova,
+  // Ice Nova and Freeze log one per damaging hit and stay on ~0.5 s longer)
+  const notTheEnd = supersededAuraBreaks(player.auraEvents);
   for (const aura of dropAuraRebroadcasts(player.auraEvents)) {
     const spellId = aura.spellId;
     if (!spellId) continue;
+    if (notTheEnd.has(aura)) continue;
     const isRemovalEvent =
       aura.logLine.event === LogEvent.SPELL_AURA_REMOVED ||
       aura.logLine.event === LogEvent.SPELL_AURA_BROKEN ||

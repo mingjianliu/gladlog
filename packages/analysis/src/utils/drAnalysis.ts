@@ -28,7 +28,11 @@ import { effectAurasOfCast } from "../data/castEffectAuras";
 import { spellClassMap } from "../data/drCategories";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import { ccSpellIds } from "../data/spellTags";
-import { dropAuraRebroadcasts, officialDurationS } from "./auraIntervals";
+import {
+  dropAuraRebroadcasts,
+  officialDurationS,
+  supersededAuraBreaks,
+} from "./auraIntervals";
 import { specToString } from "./cooldowns";
 import { summonOwnerById } from "./summonOwner";
 
@@ -312,9 +316,13 @@ export function buildCcCategoryHistory(
       srcUnitIds.has(aura.srcUnitId) &&
       getDRCategory(aura.spellId) === category,
   );
+  // a BROKEN line its aura's own REMOVED follows is not the end (FT-T08) —
+  // read off the unit's whole stream, where the REMOVED is
+  const notTheEnd = supersededAuraBreaks(unit.auraEvents);
   for (const aura of dropAuraRebroadcasts(relevant)) {
     const sid = aura.spellId;
     if (!sid) continue;
+    if (notTheEnd.has(aura)) continue;
     if (aura.logLine.event === LogEvent.SPELL_AURA_APPLIED) {
       const b = appliesBySpell.get(sid) ?? [];
       appliesBySpell.set(sid, [...b, aura.timestamp]);
@@ -689,6 +697,7 @@ export function analyzeOutgoingCCChains(
       // (CC ids only, filtered first — the filter reads only spellId, part of
       // the pairing key, so the result is unchanged and the re-broadcast pass
       // keys a few CC auras instead of every aura on the enemy)
+      const notTheEnd = supersededAuraBreaks(enemy.auraEvents);
       for (const aura of dropAuraRebroadcasts(
         enemy.auraEvents.filter(
           (a) => !!a.spellId && ccSpellIds.has(a.spellId),
@@ -696,6 +705,10 @@ export function analyzeOutgoingCCChains(
       )) {
         const { spellId } = aura;
         if (!spellId || !ccSpellIds.has(spellId)) continue;
+        // a BROKEN line its aura's own REMOVED follows is not the end
+        // (FT-T08): the application closes at the REMOVED, as in
+        // `buildAuraIntervals` and the CC windows on the holder
+        if (notTheEnd.has(aura)) continue;
         const event = aura.logLine.event;
         const isRemovalEvent =
           event === LogEvent.SPELL_AURA_REMOVED ||

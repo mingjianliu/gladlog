@@ -121,6 +121,44 @@ describe("outgoing CC pairing (G2)", () => {
     expect(w[0]?.endedBy?.kind).toBe("broken");
   });
 
+  it("FT-T08: the window ends at the aura's REMOVED a few ms after its BROKEN line — the break is still named", () => {
+    const params: (string | number)[] = [];
+    params[11] = 357209;
+    params[12] = "Fire Breath";
+    const base = aura(LogEvent.SPELL_AURA_BROKEN_SPELL, POLYMORPH, 15) as any;
+    const broken = {
+      ...base,
+      srcUnitId: "f1",
+      srcUnitName: "Rogue",
+      logLine: { ...base.logLine, parameters: params },
+    };
+    const e = healer({
+      auraEvents: [
+        aura(LogEvent.SPELL_AURA_APPLIED, POLYMORPH, 12),
+        broken,
+        aura(LogEvent.SPELL_AURA_REMOVED, POLYMORPH, 15.003),
+      ],
+    });
+    // the removal is the REMOVED line's time now, 3 ms after the BROKEN line
+    expect(
+      ccRemovalCause(e as never, POLYMORPH, at(12), at(15.003)),
+    ).toMatchObject({ kind: "broken", byUnitId: "f1", spellName: "Fire Breath" });
+    const f = rogue();
+    const w = enemyHealerCcWindows([f], [e], combat(f, e));
+    expect(w).toHaveLength(1);
+    expect(w[0]?.endedBy?.kind).toBe("broken");
+    // the outgoing chain closes the application at the REMOVED too — one end
+    // for one CC in every reader (agy review of FT-T08 step 2)
+    const [app] = analyzeOutgoingCCChains(
+      [f],
+      [e],
+      combat(f, e),
+    ).flatMap((c) => c.applications);
+    expect(app!.durationSeconds).toBeCloseTo(3.003, 3);
+    // a BROKEN line of an EARLIER application is not this one's cause
+    expect(ccRemovalCause(e as never, POLYMORPH, at(15.002), at(15.003))).toBeUndefined();
+  });
+
   it("F-S3: the healer's trinket at the removal, a dispel, or nothing logged", () => {
     const trinketed = healer({
       auraEvents: [

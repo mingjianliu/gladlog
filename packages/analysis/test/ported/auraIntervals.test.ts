@@ -183,13 +183,15 @@ describe("2026-07-25 生产修正:双来源分键 / DOSE 开段 / 官方时长�
   });
 
   describe("BACKLOG #28:同一控制被两个冗余关闭事件重复上报,不再倒推幻影区间", () => {
-    it("match 76ea5f90 复现:APPLIED 后 BROKEN_SPELL(真关闭)+ 1ms 后 REMOVED(冗余)→ 只出一段区间", () => {
+    it("match 76ea5f90 复现:APPLIED 后 BROKEN_SPELL + 1ms 后 REMOVED → 只出一段区间,结束在 REMOVED(FT-T08)", () => {
       // Mirrors the real repro: Freezing Trap (3355), applied once at
       // 168.075s, closed by BROKEN_SPELL at 173.421s, then a redundant
       // REMOVED for the same spellId (different, unrelated src — the log's
       // second close event) arrives 1ms later. Before the fix this second
       // close found no open interval and backdated a phantom
       // [167.421, 173.422] overlapping the real [168.075, 173.421].
+      // FT-T08 (2026-10-09): the aura ends at its REMOVED — the BROKEN line
+      // says what broke it — so the one interval now ends at 173.422.
       const ivs = buildAuraIntervals(
         unit([
           aura("SPELL_AURA_APPLIED", 168_075, "3355", "Boofers"),
@@ -201,7 +203,7 @@ describe("2026-07-25 生产修正:双来源分键 / DOSE 开段 / 官方时长�
       expect(ivs).toHaveLength(1);
       expect(ivs[0]).toMatchObject({
         fromS: 168.075,
-        toS: 173.421,
+        toS: 173.422,
         inferredStart: false,
         inferredEnd: false,
       });
@@ -218,7 +220,8 @@ describe("2026-07-25 生产修正:双来源分键 / DOSE 开段 / 官方时长�
         combat,
       );
       expect(ivs).toHaveLength(1);
-      expect(ivs[0]).toMatchObject({ fromS: 50, toS: 55 });
+      // ends at the REMOVED, not at the first of the two BROKEN lines (FT-T08)
+      expect(ivs[0]).toMatchObject({ fromS: 50, toS: 55.03 });
     });
 
     it("负控制:窗口开局前从未见过 APPLIED,只有孤立 REMOVED → 仍按旧行为回推(不是重复关闭)", () => {

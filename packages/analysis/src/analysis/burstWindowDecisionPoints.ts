@@ -31,6 +31,7 @@ import { type ICombatUnit } from "@gladlog/parser-compat";
 
 import { HEALING_VERDICTS } from "../data/healingVerdicts";
 import { getEnglishSpellName } from "../data/spellEffectData";
+import { supersededAuraBreaks } from "../utils/auraIntervals";
 import { buffFullDurationForCaster } from "../utils/buffDuration";
 import spellIdLists from "../data/spellIdLists";
 import {
@@ -362,8 +363,11 @@ export function aimedControlUpAt(
 ): boolean {
   const ids = new Set([castSpellId, ...drEffectAurasOfCast(castSpellId)]);
   let up = false;
+  // a BROKEN line its aura's own REMOVED follows is not the end (FT-T08)
+  const notTheEnd = supersededAuraBreaks(dest?.auraEvents ?? []);
   for (const a of dest?.auraEvents ?? []) {
     if (a.timestamp < castMs || a.timestamp > atMs) continue;
+    if (notTheEnd.has(a)) continue;
     if (a.srcUnitId !== casterId || !ids.has(a.spellId ?? "")) continue;
     const ev = a.logLine.event;
     if (

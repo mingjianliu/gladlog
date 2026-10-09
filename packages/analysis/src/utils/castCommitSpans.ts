@@ -1,7 +1,7 @@
 import { type ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
 import { CHANNELED_SPELL_IDS } from "../data/channeledGenerated";
-import { dropAuraRebroadcasts } from "./auraIntervals";
+import { dropAuraRebroadcasts, supersededAuraBreaks } from "./auraIntervals";
 
 /**
  * castCommitSpans.ts — the stretches a unit spent committed to a cast that
@@ -146,9 +146,12 @@ export function channelSpans(
   // Re-broadcast REMOVED / APPLIED pairs (a Dracthyr visage swap mid-channel)
   // are one continuous aura, not the channel's end — the filter every aura
   // consumer goes through.
+  // … and a BROKEN line the aura's own REMOVED follows is not its end.
+  const notTheEnd = supersededAuraBreaks(unit.auraEvents ?? []);
   const auras = dropAuraRebroadcasts(unit.auraEvents ?? [])
     .filter(
       (a) =>
+        !notTheEnd.has(a) &&
         a.srcUnitId === unit.id &&
         a.destUnitId === unit.id &&
         CHANNELED_SPELL_IDS.has(a.spellId),

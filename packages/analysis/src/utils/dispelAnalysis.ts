@@ -23,7 +23,12 @@ import {
   spellEffectData,
 } from "../data/spellEffectData";
 import spellIdListsData from "../data/spellIdLists";
-import { buildAuraIntervals, type IAuraInterval } from "./auraIntervals";
+import {
+  auraBreaksBeforeRemoved,
+  buildAuraIntervals,
+  type IAuraInterval,
+  supersededAuraBreaks,
+} from "./auraIntervals";
 import { buildCannotCastIntervals } from "./cannotCastIntervals";
 import {
   CHANNEL_AURA_LAG_MS,
@@ -2862,6 +2867,12 @@ export function reconstructDispelSummary(
       { ts: number; brokenByDamage: boolean }[]
     >();
 
+    // A BROKEN line its aura's own REMOVED follows is not the end (FT-T08):
+    // the window closes at the REMOVED, which still carries "broken by
+    // damage" when a BROKEN_SPELL line from an enemy came before it — the
+    // lines this loop read as a removal before (it only reads enemy-sourced
+    // events).
+    const notTheEnd = supersededAuraBreaks(unit.auraEvents);
     for (const aura of unit.auraEvents) {
       const spellId = aura.spellId;
       if (!spellId) continue;
@@ -2935,8 +2946,14 @@ export function reconstructDispelSummary(
         aura.logLine.event === LogEvent.SPELL_AURA_BROKEN ||
         aura.logLine.event === LogEvent.SPELL_AURA_BROKEN_SPELL
       ) {
+        if (notTheEnd.has(aura)) continue;
         const brokenByDamage =
-          aura.logLine.event === LogEvent.SPELL_AURA_BROKEN_SPELL;
+          aura.logLine.event === LogEvent.SPELL_AURA_BROKEN_SPELL ||
+          auraBreaksBeforeRemoved(unit.auraEvents, aura).some(
+            (b) =>
+              b.logLine.event === LogEvent.SPELL_AURA_BROKEN_SPELL &&
+              enemyIds.has(b.srcUnitId),
+          );
         const bucket = removedTimes.get(spellId) ?? [];
         removedTimes.set(spellId, [
           ...bucket,

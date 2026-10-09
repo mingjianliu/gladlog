@@ -14,9 +14,15 @@
  *           ended (both ends logged, not inferred)             → must be 0
  * and the gap histogram up to 50 ms, CC auras apart, so the bound can be
  * re-read on a new corpus.
+ *   EARLY   an interval that ends at a SPELL_AURA_BROKEN[_SPELL] line while
+ *           the aura's own SPELL_AURA_REMOVED follows on that unit within
+ *           1 s with no APPLIED in between — the aura was still on (FT-T08
+ *           step 2: Frost Nova, Ice Nova and Freeze log a BROKEN_SPELL per
+ *           damaging hit and stay ~0.5 s longer); with the seconds cut off
+ *                                                              → must be 0
  *
  * Usage: npx tsx packages/eval/scripts/auraSplitScan.ts [--show] <raw.txt | dir>...
- * Exit code 1 when SPLIT is non-zero.
+ * Exit code 1 when SPLIT or EARLY is non-zero.
  */
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
@@ -55,6 +61,38 @@ if (args.length === 0) {
   process.exit(2);
 }
 
+/** How many ms before its aura's REMOVED the interval ends, when it ends on
+ * a BROKEN line (0 = it does not). Independent of the product predicate. */
+function cutShortMs(
+  events: readonly {
+    spellId?: string | null;
+    timestamp: number;
+    logLine: { event: string };
+  }[],
+  startMs: number,
+  iv: auraIntervals.IAuraInterval,
+): number {
+  const endMs = Math.round(startMs + iv.toS * 1000);
+  const mine = events.filter((e) => e.spellId === iv.spellId);
+  const at = (e: { timestamp: number }) => Math.abs(e.timestamp - endMs) < 1;
+  if (mine.some((e) => at(e) && e.logLine.event === "SPELL_AURA_REMOVED"))
+    return 0;
+  if (
+    !mine.some((e) => at(e) && e.logLine.event.startsWith("SPELL_AURA_BROKEN"))
+  )
+    return 0;
+  for (const e of mine) {
+    if (e.timestamp <= endMs) continue;
+    if (e.timestamp - endMs > 1000) break;
+    if (e.logLine.event === "SPELL_AURA_APPLIED") return 0;
+    if (e.logLine.event === "SPELL_AURA_REMOVED") return e.timestamp - endMs;
+  }
+  return 0;
+}
+
+let early = 0;
+let earlyMs = 0;
+const earlyBySpell = new Map<string, number>();
 let files = 0;
 let rounds = 0;
 let intervals = 0;
@@ -77,6 +115,7 @@ for (const file of args.flatMap(rawFiles)) {
   p.end();
   files++;
   let fileSplit = 0;
+  let fileEarly = 0;
   for (const m of items) {
     let legacy;
     try {
@@ -105,6 +144,20 @@ for (const file of args.flatMap(rawFiles)) {
         );
       for (const iv of auraIntervals.buildAuraIntervals(u, legacy)) {
         intervals++;
+        if (!iv.inferredEnd) {
+          const cut = cutShortMs(u.auraEvents ?? [], legacy.startTime, iv);
+          if (cut > 0) {
+            early++;
+            earlyMs += cut;
+            fileEarly++;
+            const n = `${getEnglishSpellName(iv.spellId, iv.spellName)} (${iv.spellId})`;
+            earlyBySpell.set(n, (earlyBySpell.get(n) ?? 0) + 1);
+            if (SHOW)
+              console.log(
+                `  EARLY ${m.id} ${u.name} ${n} ${iv.fromS.toFixed(3)}–${iv.toS.toFixed(3)} cut ${cut} ms`,
+              );
+          }
+        }
         const key = `${iv.spellId}|${iv.srcUnitName}`;
         const prev = last.get(key);
         last.set(key, iv);
@@ -143,8 +196,10 @@ for (const file of args.flatMap(rawFiles)) {
       }
     }
   }
-  if (fileSplit > 0)
-    console.log(`${path.basename(path.dirname(file))} SPLIT=${fileSplit}`);
+  if (fileSplit > 0 || fileEarly > 0)
+    console.log(
+      `${path.basename(path.dirname(file))} SPLIT=${fileSplit} EARLY=${fileEarly}`,
+    );
 }
 
 console.log(
@@ -164,4 +219,11 @@ for (const [name, n] of [...bySpell.entries()]
   .sort((a, b) => b[1] - a[1])
   .slice(0, 20))
   console.log(`  ${n}  ${name}`);
-process.exit(split > 0 ? 1 : 0);
+console.log(
+  `EARLY ${early} intervals end on a BROKEN line before their REMOVED — ${(earlyMs / 1000).toFixed(1)} s cut off in total`,
+);
+for (const [name, n] of [...earlyBySpell.entries()]
+  .sort((a, b) => b[1] - a[1])
+  .slice(0, 12))
+  console.log(`  ${n}  ${name}`);
+process.exit(split > 0 || early > 0 ? 1 : 0);

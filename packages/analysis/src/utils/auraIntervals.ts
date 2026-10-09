@@ -193,6 +193,125 @@ export function dropAuraRebroadcasts<
   return drop.size === 0 ? [...events] : events.filter((a) => !drop.has(a));
 }
 
+/**
+ * How long after a `SPELL_AURA_BROKEN[_SPELL]` line the aura's own
+ * `SPELL_AURA_REMOVED` can follow and still be that application's end.
+ * Measured on the 60 raw logs of the 2026-10-08 re-eval, auras on players,
+ * first BROKEN → REMOVED of the same aura (2,233 applications with a BROKEN
+ * line): 1,597 within 1 ms and 313 more within 50 ms (a CC breaking — the
+ * BROKEN line is the end, to within a frame), 27 within 250 ms, 296 between
+ * 250 ms and 617 ms, none later. The late ones are three roots — Frost Nova
+ * 122, Ice Nova 157997, the Water Elemental's Freeze 33395 — which log a
+ * BROKEN_SPELL for each damaging hit (2.6 lines per application) and stay on
+ * the target about half a second longer. 23 applications had a BROKEN and no
+ * REMOVED before the aura's next APPLIED.
+ */
+export const AURA_BREAK_TO_REMOVED_MS = 1_000;
+
+interface AuraBreakPairing {
+  superseded: Set<unknown>;
+  /** each REMOVED event → the BROKEN lines it superseded, in log order */
+  before: Map<unknown, unknown[]>;
+}
+const auraBreakPairingCache = new WeakMap<object, AuraBreakPairing>();
+
+function auraBreakPairing<
+  T extends {
+    spellId?: string | null;
+    destUnitId?: string;
+    timestamp: number;
+    logLine: { event: string };
+  },
+>(events: readonly T[]): AuraBreakPairing {
+  const cached = auraBreakPairingCache.get(events);
+  if (cached) return cached;
+  const pending = new Map<string, T[]>();
+  const pairing: AuraBreakPairing = { superseded: new Set(), before: new Map() };
+  for (const a of events) {
+    if (!a.spellId) continue;
+    const ev = a.logLine.event;
+    const k = `${a.spellId}|${a.destUnitId ?? ""}`;
+    if (
+      ev === LogEvent.SPELL_AURA_BROKEN ||
+      ev === LogEvent.SPELL_AURA_BROKEN_SPELL
+    ) {
+      pending.set(k, [...(pending.get(k) ?? []), a]);
+    } else if (ev === LogEvent.SPELL_AURA_REMOVED) {
+      const mine = (pending.get(k) ?? []).filter((b) => {
+        const gap = a.timestamp - b.timestamp;
+        return gap >= 0 && gap <= AURA_BREAK_TO_REMOVED_MS;
+      });
+      for (const b of mine) pairing.superseded.add(b);
+      if (mine.length > 0) pairing.before.set(a, mine);
+      pending.delete(k);
+    } else if (ev === LogEvent.SPELL_AURA_APPLIED) {
+      pending.delete(k);
+    }
+  }
+  auraBreakPairingCache.set(events, pairing);
+  return pairing;
+}
+
+/**
+ * The BROKEN / BROKEN_SPELL events that are NOT their aura's end: the aura's
+ * own REMOVED follows on the same unit within `AURA_BREAK_TO_REMOVED_MS`, with
+ * no APPLIED of it in between. An aura ends at its REMOVED; a BROKEN line says
+ * what broke it (FT-T08 step 2). A BROKEN with no REMOVED after it stays the
+ * end — the log lost the REMOVED line.
+ *
+ * Keyed by spell and target only: a BROKEN line's source is the breaker, not
+ * the aura's caster. Memoised on the events array (callers pass a unit's own
+ * `auraEvents`, some once per window).
+ */
+export function supersededAuraBreaks<
+  T extends {
+    spellId?: string | null;
+    destUnitId?: string;
+    timestamp: number;
+    logLine: { event: string };
+  },
+>(events: readonly T[]): ReadonlySet<T> {
+  return auraBreakPairing(events).superseded as ReadonlySet<T>;
+}
+
+/**
+ * For a REMOVED event, the BROKEN / BROKEN_SPELL lines of the same aura on
+ * the same unit that it superseded (`supersededAuraBreaks`), in log order —
+ * what hit the aura before it ended. Empty when the aura simply ended. Tied
+ * to that one REMOVED event: a reader that carries "this removal was a
+ * break" over from the skipped BROKEN line reads it here, never from a flag
+ * of its own (a per-spell flag leaks into the next application when a filter
+ * drops the REMOVED it was meant for).
+ */
+export function auraBreaksBeforeRemoved<
+  T extends {
+    spellId?: string | null;
+    destUnitId?: string;
+    timestamp: number;
+    logLine: { event: string };
+  },
+>(events: readonly T[], removed: T): readonly T[] {
+  return (auraBreakPairing(events).before.get(removed) ?? []) as T[];
+}
+
+/** `events` without the BROKEN lines that are not their aura's end
+ * (`supersededAuraBreaks`) — for a reader that closes an aura on REMOVED /
+ * BROKEN / BROKEN_SPELL. A reader that wants to know WHAT broke an aura
+ * reads the unfiltered events. */
+export function dropSupersededAuraBreaks<
+  T extends {
+    spellId?: string | null;
+    destUnitId?: string;
+    timestamp: number;
+    logLine: { event: string };
+  },
+>(events: readonly T[]): T[] {
+  const superseded = supersededAuraBreaks(events);
+  return superseded.size === 0
+    ? [...events]
+    : events.filter((a) => !superseded.has(a));
+}
+
 export function buildAuraIntervals(
   unit: ICombatUnit,
   combat: {
@@ -242,8 +361,10 @@ export function buildAuraIntervals(
   // whether from a real pairing or an earlier fallback — see module header.
   const lastCloseToSBySpellId = new Map<string, number>();
 
+  // a BROKEN line its aura's own REMOVED follows is not the end (FT-T08)
+  const notTheEnd = supersededAuraBreaks(unit.auraEvents);
   const events = dropAuraRebroadcasts(unit.auraEvents)
-    .filter((a) => a.destUnitId === unit.id && a.spellId)
+    .filter((a) => a.destUnitId === unit.id && a.spellId && !notTheEnd.has(a))
     .sort((a, b) => a.timestamp - b.timestamp);
 
   for (const a of events) {
