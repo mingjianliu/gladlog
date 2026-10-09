@@ -278,7 +278,9 @@ export interface TimelineCtx {
     named?: ReadonlySet<string>,
   ) => string;
   ownerCcMissTag: (spellId: string, castTimeSeconds: number) => string;
-  /** cc-dr F-NE1: ` [no CC aura logged]` for an aimed owner CC with no aura
+  /** FT-T14: ` [hit no enemy player]` for an un-aimed area control
+   * (`AOE_CC_SPELL_IDS`) with no aura and no miss on any enemy player;
+   * cc-dr F-NE1: ` [no CC aura logged]` for an aimed owner CC with no aura
    * and no miss on its target (shared by both owner-CC emitters) */
   ownerNoCcAuraTag: (spellId: string, castTimeSeconds: number) => string;
   ownerEmpowerTag: (spellId: string, castTimeSeconds: number) => string;

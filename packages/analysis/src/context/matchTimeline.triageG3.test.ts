@@ -9,6 +9,7 @@ import {
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { ensureAnalysisData } from "../data/ensure";
+import { OWNER_AOE_CC_NO_PLAYER_TAG } from "../utils/drAnalysis";
 import { buildMatchTimeline, BuildMatchTimelineParams } from "./matchTimeline";
 
 /**
@@ -345,6 +346,106 @@ describe("F-NE1 — an aimed CC with no aura and no miss", () => {
       }),
     );
     expect(lineWith(t, "[YOU] [CC]")).toContain("[no CC aura logged]");
+  });
+});
+
+describe("FT-T14 — an un-aimed area control that hit no enemy player says so", () => {
+  const PSYCHIC_SCREAM = "8122";
+  const DRAGONS_BREATH = "31661"; // an area control outside AOE_CC_SPELL_IDS
+  const PET: [string, string] = [
+    "Pet-0-3878-2509-35306-26125-020560C99D",
+    "Mudflayer",
+  ];
+  const scream = ledger(PSYCHIC_SCREAM, "Psychic Scream", "CC", 30);
+  const render = (
+    ownerOver: Partial<ICombatUnit>,
+    enemies: ICombatUnit[],
+    cd = scream,
+  ) =>
+    buildMatchTimeline(
+      params(
+        mkUnit(ME[0], ME[1], {
+          spellCastEvents: [
+            ev(LogEvent.SPELL_CAST_SUCCESS, cd.spellId, 69_537, ME, ["", ""]),
+          ] as never,
+          ...ownerOver,
+        }),
+        enemies,
+        { ownerCDs: [{ ...cd, casts: [{ timeSeconds: 69.537 }] }] as never },
+      ),
+    );
+
+  it("5677ba13 1:09: 只扫到免疫的宠物,没有玩家 → [hit no enemy player]", () => {
+    const t = render(
+      {
+        missesOut: [miss(PSYCHIC_SCREAM, 69_537, ME, PET)] as never,
+      },
+      [hostile(ENEMY), hostile(OTHER)],
+    );
+    const line = lineWith(t, "Psychic Scream");
+    expect(line).toContain(`[YOU] [CC]   Psychic Scream`);
+    expect(line).toContain(OWNER_AOE_CC_NO_PLAYER_TAG);
+    expect(line).not.toContain("[IMMUNE");
+  });
+
+  it("日志里什么都没记(没光环、没 miss)也是没碰到玩家", () => {
+    const t = render({}, [hostile(ENEMY), hostile(OTHER)]);
+    expect(lineWith(t, "Psychic Scream")).toContain(OWNER_AOE_CC_NO_PLAYER_TAG);
+  });
+
+  it("有一个敌方玩家中了(窗口内的光环)→ 不标", () => {
+    const feared = hostile(OTHER, {
+      auraEvents: [
+        ev(LogEvent.SPELL_AURA_APPLIED, PSYCHIC_SCREAM, 69_540, ME, OTHER, {
+          auraType: "DEBUFF",
+        }),
+      ] as never,
+    });
+    const t = render({}, [hostile(ENEMY), feared]);
+    expect(lineWith(t, "Psychic Scream")).not.toContain("[hit no enemy");
+  });
+
+  it("玩家身上的 miss(免疫 / 未命中)归原来的标签说,这里不标", () => {
+    const t = render(
+      { missesOut: [miss(PSYCHIC_SCREAM, 69_537, ME, ENEMY)] as never },
+      [hostile(ENEMY), hostile(OTHER)],
+    );
+    expect(lineWith(t, "Psychic Scream")).not.toContain("[hit no enemy");
+  });
+
+  it("别的法术落在敌方玩家身上(一秒后的 Fear、被盾吸掉的 DoT)不算这次群控的落点:照标", () => {
+    const FEAR = "5782";
+    const SW_PAIN = "589";
+    const feared = hostile(OTHER, {
+      auraEvents: [
+        ev(LogEvent.SPELL_AURA_APPLIED, FEAR, 70_500, ME, OTHER, {
+          auraType: "DEBUFF",
+        }),
+      ] as never,
+    });
+    const t = render(
+      { missesOut: [miss(SW_PAIN, 70_000, ME, ENEMY, "ABSORB")] as never },
+      [hostile(ENEMY), feared],
+    );
+    expect(lineWith(t, "Psychic Scream")).toContain(OWNER_AOE_CC_NO_PLAYER_TAG);
+  });
+
+  it("延迟生效的 Sigil of Misery(施放 207684 → 光环 207685,约 2 秒后)不在窗口里判「没打到」:不标", () => {
+    const t = render(
+      {},
+      [hostile(ENEMY)],
+      ledger("207684", "Sigil of Misery", "CC", 30),
+    );
+    expect(lineWith(t, "Sigil of Misery")).not.toContain("[hit no enemy");
+  });
+
+  it("名单外的群控(Dragon's Breath)没有落点可读:不标", () => {
+    const t = render(
+      {},
+      [hostile(ENEMY)],
+      ledger(DRAGONS_BREATH, "Dragon's Breath", "CC", 30),
+    );
+    expect(lineWith(t, "Dragon's Breath")).not.toContain("[hit no enemy");
   });
 });
 

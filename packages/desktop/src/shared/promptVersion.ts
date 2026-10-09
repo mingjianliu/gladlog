@@ -1204,5 +1204,9 @@
  *  control / kick / break / root lines and in the damage rows (one
  *  predicate, `summonKindWord`). Two damage rows that differed only in that
  *  word are one row now. Counts in the commit.
+ *  v350 (2026-10-09, FT-T14b, same approval): an un-aimed area control
+ *  (Psychic Scream, Howl of Terror, Leg Sweep, …) that put its aura on no
+ *  enemy player and logged no miss on one reads `[hit no enemy player]` on
+ *  its [YOU] [CC] line instead of nothing. Counts in the commit.
  */
-export const PROMPT_VERSION = 349;
+export const PROMPT_VERSION = 350;

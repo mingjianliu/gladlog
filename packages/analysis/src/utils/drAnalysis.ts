@@ -197,6 +197,11 @@ export const AOE_CC_SPELL_IDS = new Set<string>([
   "207685", // Sigil of Misery (Demon Hunter) — AoE incapacitate
 ]);
 
+/** What the owner's cast line says when one of these, cast un-aimed, put its
+ * aura on no enemy player and logged no miss on one (FT-T14; written by
+ * `ownerNoCcAuraTag`). An absence the log states, not a verdict. */
+export const OWNER_AOE_CC_NO_PLAYER_TAG = "[hit no enemy player]";
+
 export interface IAoeCCEvent {
   casterName: string;
   spellId: string;

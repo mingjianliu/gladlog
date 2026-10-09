@@ -39,7 +39,12 @@ import {
   isTeamHealCD,
   specToString,
 } from "../../utils/cooldowns";
-import { getDRCategory, getDRLevel } from "../../utils/drAnalysis";
+import {
+  AOE_CC_SPELL_IDS,
+  getDRCategory,
+  getDRLevel,
+  OWNER_AOE_CC_NO_PLAYER_TAG,
+} from "../../utils/drAnalysis";
 import { sumIncomingPressure } from "../../utils/incomingPressure";
 import { toRenderSecond } from "../../utils/renderGrid";
 import { resourceDeltaPct } from "../../utils/resourceAt";
@@ -726,27 +731,67 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
         e.spellId === spellId &&
         Math.abs(e.logLine.timestamp - castMs) <= 1,
     );
-    // an aimed cast at an enemy player only — a ground / untargeted cast has
-    // no unit to read
-    const dest = ev && (enemies ?? []).find((u) => u.id === ev.destUnitId);
-    if (!ev || !dest) return "";
+    if (!ev) return "";
+    const dest = (enemies ?? []).find((u) => u.id === ev.destUnitId);
     const t0 = ev.logLine.timestamp;
     const inWindow = (ms: number) => ms >= t0 - 100 && ms <= t0 + 2500;
     const own = castAndEffectIds(spellId);
-    const landed = (dest.auraEvents ?? []).some(
-      (x) =>
-        ownCcSources.has(x.srcUnitId) &&
-        x.spellId !== undefined &&
-        (ccSpellIds.has(x.spellId) || own.has(x.spellId)) &&
-        (x.logLine.event === LogEvent.SPELL_AURA_APPLIED ||
-          x.logLine.event === LogEvent.SPELL_AURA_REFRESH) &&
-        inWindow(x.timestamp),
-    );
-    if (landed) return "";
-    const missed = (owner.missesOut ?? []).some(
-      (m) => m.destUnitId === dest.id && inWindow(m.timestamp),
-    );
-    return missed ? "" : " [no CC aura logged]";
+    const landedOn = (u: ICombatUnit) =>
+      (u.auraEvents ?? []).some(
+        (x) =>
+          ownCcSources.has(x.srcUnitId) &&
+          x.spellId !== undefined &&
+          (ccSpellIds.has(x.spellId) || own.has(x.spellId)) &&
+          (x.logLine.event === LogEvent.SPELL_AURA_APPLIED ||
+            x.logLine.event === LogEvent.SPELL_AURA_REFRESH) &&
+          inWindow(x.timestamp),
+      );
+    const missedOn = (u: ICombatUnit) =>
+      (owner.missesOut ?? []).some(
+        (m) => m.destUnitId === u.id && inWindow(m.timestamp),
+      );
+    if (!dest) {
+      // FT-T14: an un-aimed area control (the `AOE_CC_SPELL_IDS` the cast
+      // line lists landings for) that put its aura on NO enemy player and
+      // logged no miss on one says so. The line used to be bare, the same
+      // text as a landing nobody listed — 5677ba13 1:09 Psychic Scream:
+      // the log has two IMMUNE misses, a Death Knight's ghoul and his Lord
+      // of the Dead, and no player. Same window and aura test as the aimed
+      // case below; a pet's IMMUNE stays unsaid (the 2026-09-30 rule in
+      // `ccImmuneTagFor`). Any other un-aimed cast has no unit to read.
+      // The cast's own id must be the listed aura: the control lands with
+      // the cast. Sigil of Misery (207684 → 207685) arms for about 2 s
+      // (median 2.07 s in `castEffectAuraGenerated.json`) — too close to the
+      // window's end to call an absence, so it keeps its bare line.
+      if (!AOE_CC_SPELL_IDS.has(spellId)) return "";
+      const players = enemies ?? [];
+      if (players.length === 0) return "";
+      // Only THIS cast's own aura / miss ids count here (the aimed case
+      // below accepts any control aura and any miss on its one target): a
+      // Fear landing a second later, or a DoT tick a shield absorbed (a
+      // SPELL_MISSED too), on one of three enemies is not this cast's
+      // landing — 36 of the 101 such lines of the 605-file capture stayed
+      // bare that way.
+      const ownIn = (id: string | undefined, ms: number) =>
+        id !== undefined && own.has(id) && inWindow(ms);
+      const touched = players.some(
+        (u) =>
+          (u.auraEvents ?? []).some(
+            (x) =>
+              ownCcSources.has(x.srcUnitId) &&
+              (x.logLine.event === LogEvent.SPELL_AURA_APPLIED ||
+                x.logLine.event === LogEvent.SPELL_AURA_REFRESH) &&
+              ownIn(x.spellId, x.timestamp),
+          ) ||
+          (owner.missesOut ?? []).some(
+            (m) => m.destUnitId === u.id && ownIn(m.spellId, m.timestamp),
+          ),
+      );
+      return touched ? "" : ` ${OWNER_AOE_CC_NO_PLAYER_TAG}`;
+    }
+    // an aimed cast at an enemy player
+    if (landedOn(dest)) return "";
+    return missedOn(dest) ? "" : " [no CC aura logged]";
   }
 
   // cc-dr F-TM1 (ruling A53, 2026-09-30): the same tag on a teammate's
