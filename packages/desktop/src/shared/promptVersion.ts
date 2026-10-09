@@ -1136,5 +1136,13 @@
  *  Nova and the Water Elemental's Freeze log one BROKEN_SPELL per damaging
  *  hit and stay on about half a second longer — their roots (and every CC
  *  window, by a few ms) now run to the real end. Counts in the commit.
+ *  v339 (2026-10-09, FT-T08 step 3a, user approval 2026-10-09 "3 同意"): a
+ *  [BUFF FADED] line states the end cause the log gives — `(dispelled by
+ *  N(X)'s Spell)`, `(stolen by …)`, `(its target died)`, `(used up —
+ *  absorbed Nk)` — and an absorb's `Nk absorbed, Mk left` on its expired /
+ *  dispelled / ended-early forms (absorbed = the SPELL_ABSORBED lines naming
+ *  it; left = its REMOVED line). What is left reads `(ended early — no
+ *  dispel logged)` (was "absorbed, dispelled, or cancelled"). Counts in the
+ *  commit.
  */
-export const PROMPT_VERSION = 338;
+export const PROMPT_VERSION = 339;

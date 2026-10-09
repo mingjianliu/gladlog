@@ -11,6 +11,11 @@ import { DRUID_FORM_AURA_IDS, FORM_BOUND_BUFF_IDS } from "../data/druidForms";
 import { DEATH_CC_LOOKBACK_S } from "../analysis/candidates/death";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import {
+  auraEndFromLog,
+  DEATH_CASCADE_MS,
+  type IAuraEndFromLog,
+} from "../utils/auraEndCause";
+import {
   deathLockChain,
   enemySourceIds,
   freeMsBefore,
@@ -37,6 +42,7 @@ import {
   positionalWallReaches,
 } from "../utils/deathOutcomeAnalysis";
 import { IEnemyCDTimeline } from "../utils/enemyCDs";
+import { AURA_BEFORE_CAST_MAX_S } from "../utils/enemyDefensives";
 import { playerKillingBlow } from "../utils/killingBlow";
 import { getHpPercentAtTime } from "../utils/killWindowTargetSelection";
 import { fmtTime } from "../utils/renderGrid";
@@ -308,19 +314,40 @@ export interface ICDExpiryEvent {
    * = removed before its natural duration (absorb consumed, dispelled, or cancelled). Distinguishing
    * these stops the model from inventing a dispel for a naturally-expired buff and lets it tell a
    * consumed absorb (e.g. Life Cocoon) from an expired one.
+   *
+   * FT-T08 step 3: the causes the log itself states are read off it —
+   * 'dispelled' / 'stolen' = a SPELL_DISPEL / SPELL_STOLEN of this aura on its
+   * holder at the removal (`endedBy`), whether or not the timing looked like
+   * an expiry, and whatever died right after (the line names this aura; a
+   * death cascade is read from timing); 'target_death' = the ally it was on
+   * died at the removal; 'absorbed' = an absorb whose REMOVED line carries 0
+   * left. 'ended_early' is what remains: removed before its time with none of
+   * those logged.
    */
-  cause: "expired" | "ended_early" | "form_shift" | "death";
+  cause:
+    | "expired"
+    | "ended_early"
+    | "form_shift"
+    | "death"
+    | "dispelled"
+    | "stolen"
+    | "target_death"
+    | "absorbed";
+  /** cause dispelled / stolen: who did it, with what */
+  endedBy?: { unitId: string; unitName: string; spellName: string };
+  /** What this application absorbed (the SPELL_ABSORBED lines naming it) and
+   * what its REMOVED line had left — `auraEndFromLog`. Present only when it
+   * absorbed something. */
+  absorb?: IAuraEndFromLog["absorb"];
+  /** A dispel / steal of this spell is logged on the holder at the removal,
+   * but not which copy it took (`IAuraEndFromLog.takeUnclear`): the line
+   * must then not read "expired" or "no dispel logged". */
+  dispelUnclear?: true;
 }
 
 const FORM_SHIFT_PAIR_MS = 250;
-/**
- * Triage 2026-09-29 death-kill F-B1: a buff removed from the OWNER this
- * shortly before the owner's UNIT_DIED was stripped by the death cascade —
- * neither dispelled nor ended by a shapeshift. Editorial (measured, not a
- * game constant): repro gaps 7–45 ms (bd790c92, 121c7e15, 6062daf2); the
- * nearest non-cascade removal is 390 ms (0e0663e6 Pillar of Frost).
- */
-export const DEATH_CASCADE_MS = 100;
+// the death cascade's window lives with the aura-end reader (auraEndCause.ts)
+export { DEATH_CASCADE_MS };
 
 // 2026-08-21 S2 corpus scan (10,682 matches): removed Zen Meditation 115176; 421116 was a "Push Loot [DNT]" placeholder, not Ultimate Penitence (421453 is the real id) — 0 occurrences, ability gone in 12.x (eval-private/reports/s2-health-2026-08-21)
 export const CHANNELED_CD_SPELL_IDS = new Set<string>([
@@ -430,7 +457,8 @@ export function extractOwnerCDBuffExpiry(
     // across all friendly units, sorted ascending.
     // the recipient travels with each removal (codex c2 09-30): only a
     // removal from the owner can be the owner's death cascade
-    const removals: Array<{ ms: number; unitId: string }> = [];
+    const removals: Array<{ ms: number; unitId: string; amount?: number }> =
+      [];
     for (const friend of friends) {
       // a same-ms REMOVED→APPLIED re-broadcast is not the buff ending (3306:
       // "Obsidian Scales ended early" on a Dracthyr visage swap)
@@ -444,6 +472,7 @@ export function extractOwnerCDBuffExpiry(
           removals.push({
             ms: event.logLine.timestamp as number,
             unitId: friend.id,
+            amount: event.amount,
           });
         }
       }
@@ -557,7 +586,54 @@ export function extractOwnerCDBuffExpiry(
           cause = "form_shift";
       }
 
+      // FT-T08 step 3: what the log itself says ended it, read off the
+      // holder's own lines. A dispel is a dispel even when the removal fell
+      // inside the expiry tolerance (a Greater Purge at 3.2 s of a 4 s Ice
+      // Barrier read "(expired)").
+      const holder =
+        removedFromId === undefined
+          ? undefined
+          : friends.find((f) => f.id === removedFromId);
+      let endedBy: ICDExpiryEvent["endedBy"];
+      let absorb: ICDExpiryEvent["absorb"];
+      let dispelUnclear = false;
+      if (!isEstimated && holder) {
+        const end = auraEndFromLog(
+          holder,
+          cd.spellId,
+          {
+            // this press's application: from the press (its aura can be
+            // logged a few ms before the cast line) …
+            fromMs: Math.round(castMs - AURA_BEFORE_CAST_MAX_S * 1000),
+            // … back to the REMOVED line's own millisecond
+            removedMs: Math.round(matchStartMs + expiresAtSeconds * 1000),
+          },
+          ownerId,
+        );
+        absorb = end.absorb;
+        dispelUnclear = end.takeUnclear === true;
+        // The dispel line names this aura; a death right after it is a
+        // cascade read from timing. The line wins (codex review of step 3a).
+        if (end.takenBy) {
+          cause = end.takenBy.kind;
+          endedBy = {
+            unitId: end.takenBy.unitId,
+            unitName: end.takenBy.unitName,
+            spellName: end.takenBy.spellName,
+          };
+        } else if (cause !== "death") {
+          if (holder.id !== (owner?.id ?? ownerId) && end.holderDied) {
+            cause = "target_death";
+          } else if (cause !== "form_shift" && absorb?.left === 0) {
+            cause = "absorbed";
+          }
+        }
+      }
+
       result.push({
+        ...(endedBy ? { endedBy } : {}),
+        ...(absorb ? { absorb } : {}),
+        ...(dispelUnclear ? { dispelUnclear: true as const } : {}),
         spellId: cd.spellId,
         spellName: cd.spellName,
         castAtSeconds: cast.timeSeconds,

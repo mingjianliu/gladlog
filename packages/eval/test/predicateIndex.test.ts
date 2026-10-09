@@ -87,6 +87,7 @@ import * as syncWindowPrior from "@gladlog/analysis/src/data/syncWindowPrior";
 import * as teammateCrisisPriorData from "@gladlog/analysis/src/data/teammateCrisisPrior";
 import { TIMELINE_LINE_FLAGS } from "@gladlog/analysis/src/data/timelineLineFlags";
 import { PRODUCTION_FACT_CONFIG } from "@gladlog/analysis/src/facts/factProviderConfig";
+import * as auraEndCause from "@gladlog/analysis/src/utils/auraEndCause";
 import * as auraIntervals from "@gladlog/analysis/src/utils/auraIntervals";
 import * as bracketKey from "@gladlog/analysis/src/utils/bracketKey";
 import * as buffDuration from "@gladlog/analysis/src/utils/buffDuration";
@@ -1864,6 +1865,11 @@ const INDEX: PredicateRow[] = [
     file: `${A}/utils/auraIntervals.ts`,
     symbol: "supersededAuraBreaks",
     mod: auraIntervals,
+  },
+  {
+    file: `${A}/utils/auraEndCause.ts`,
+    symbol: "auraEndFromLog",
+    mod: auraEndCause,
   },
   {
     file: `${A}/analysis/momentSnapshot.ts`,

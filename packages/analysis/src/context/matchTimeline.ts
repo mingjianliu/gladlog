@@ -534,6 +534,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
   emitBuffFadedEntries({
     cdExpiryEvents,
     addEntry,
+    actorLabel,
   });
 
   // ── [YOU] [CAST] healer gap-filler (F61) ────────────────────────────────────

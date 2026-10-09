@@ -76,6 +76,111 @@ describe("[BUFF FADED] — a buff removed with the druid's own form is 'form_shi
     (late as { deathRecords: unknown[] }).deathRecords = [{ timestamp: T0 + 10_790 }];
     expect(extractOwnerCDBuffExpiry(cds, "player-1", [late], T0, late).map((e) => e.cause)).toEqual(["ended_early"]);
   });
+  // FT-T08 step 3: the causes the log itself states
+  describe("FT-T08: the end cause is read off the log", () => {
+    const IRONBARK = "102342";
+    const ironbark = [
+      { spellId: IRONBARK, spellName: "Ironbark", tag: "Defensive", casts: [{ timeSeconds: 10 }], cooldownSeconds: 90, neverUsed: false, availableWindows: [] },
+    ] as never;
+    const mateWith = (removedAtMs: number, extra: Partial<ICombatUnit> = {}, amounts?: { applied: number; left: number; absorbed?: number }) => {
+      const applied = makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, IRONBARK, T0 + 10_000, "player-1", "player-2", "BUFF") as any;
+      const removed = makeAuraEvent(LogEvent.SPELL_AURA_REMOVED, IRONBARK, removedAtMs, "player-1", "player-2", "BUFF") as any;
+      if (amounts) {
+        applied.amount = amounts.applied;
+        removed.amount = amounts.left;
+      }
+      return makeUnit("player-2", {
+        class: CombatUnitClass.Warrior,
+        spec: CombatUnitSpec.Warrior_Arms,
+        auraEvents: [applied, removed],
+        absorbsIn: amounts?.absorbed
+          ? ([
+              {
+                logLine: { event: LogEvent.SPELL_ABSORBED, timestamp: removedAtMs - 500, parameters: [] },
+                timestamp: removedAtMs - 500,
+                spellId: IRONBARK,
+                srcUnitId: "player-1",
+                destUnitId: "player-2",
+                absorbedAmount: amounts.absorbed,
+              },
+            ] as never)
+          : [],
+        ...extra,
+      }) as ICombatUnit;
+    };
+    const dispel = (event: LogEvent, atMs: number) =>
+      ({
+        logLine: { event, timestamp: atMs, parameters: [] },
+        timestamp: atMs,
+        spellId: "378773",
+        spellName: "Greater Purge",
+        srcUnitId: "enemy-1",
+        srcUnitName: "Shammy",
+        destUnitId: "player-2",
+        extraSpellId: IRONBARK,
+      }) as never;
+
+    it("a SPELL_DISPEL of the aura on its holder at the removal → dispelled, even inside the expiry tolerance", () => {
+      const owner = druid(false);
+      // removed at 21.2 s of a 12 s Ironbark cast at 10 s → inside the 1.5 s tolerance ("expired" before)
+      const at = T0 + 21_200;
+      const mate = mateWith(at, { actionIn: [dispel(LogEvent.SPELL_DISPEL, at)] as never });
+      const [e] = extractOwnerCDBuffExpiry(ironbark, "player-1", [owner, mate], T0, owner);
+      expect(e).toMatchObject({
+        cause: "dispelled",
+        endedBy: { unitId: "enemy-1", unitName: "Shammy", spellName: "Greater Purge" },
+      });
+      // a dispel of ANOTHER aura, or one a second away, is not this buff's end
+      const other = mateWith(at, { actionIn: [{ ...(dispel(LogEvent.SPELL_DISPEL, at) as object), extraSpellId: "1" }] as never });
+      expect(extractOwnerCDBuffExpiry(ironbark, "player-1", [owner, other], T0, owner)[0]!.cause).toBe("expired");
+      const far = mateWith(at, { actionIn: [dispel(LogEvent.SPELL_DISPEL, at - 1_000)] as never });
+      expect(extractOwnerCDBuffExpiry(ironbark, "player-1", [owner, far], T0, owner)[0]!.cause).toBe("expired");
+    });
+
+    it("SPELL_STOLEN → stolen", () => {
+      const owner = druid(false);
+      const at = T0 + 13_000;
+      const mate = mateWith(at, { actionIn: [dispel(LogEvent.SPELL_STOLEN, at)] as never });
+      expect(extractOwnerCDBuffExpiry(ironbark, "player-1", [owner, mate], T0, owner)[0]).toMatchObject({ cause: "stolen" });
+    });
+
+    it("the teammate it was on died at the removal → target_death, not \"ended early\"", () => {
+      const owner = druid(false);
+      const at = T0 + 13_000;
+      const mate = mateWith(at, { deathRecords: [{ timestamp: at + 40 }] as never });
+      expect(extractOwnerCDBuffExpiry(ironbark, "player-1", [owner, mate], T0, owner)[0]!.cause).toBe("target_death");
+    });
+
+    it("an absorb whose REMOVED line has 0 left → absorbed; one with some left keeps its timing cause and carries the amounts", () => {
+      const owner = druid(false);
+      const usedUp = mateWith(T0 + 13_000, {}, { applied: 247_413, left: 0, absorbed: 247_413 });
+      expect(extractOwnerCDBuffExpiry(ironbark, "player-1", [owner, usedUp], T0, owner)[0]).toMatchObject({
+        cause: "absorbed",
+        absorb: { absorbed: 247_413, left: 0 },
+      });
+      const partly = mateWith(T0 + 22_000, {}, { applied: 210_600, left: 136_990, absorbed: 73_610 });
+      expect(extractOwnerCDBuffExpiry(ironbark, "player-1", [owner, partly], T0, owner)[0]).toMatchObject({
+        cause: "expired",
+        absorb: { absorbed: 73_610, left: 136_990 },
+      });
+      // untouched, or an amount on a line that no absorb line backs: nothing is claimed
+      const untouched = mateWith(T0 + 22_000, {}, { applied: 247_413, left: 247_413 });
+      expect(extractOwnerCDBuffExpiry(ironbark, "player-1", [owner, untouched], T0, owner)[0]!.absorb).toBeUndefined();
+      const amountOnly = mateWith(T0 + 13_000, {}, { applied: 90_000, left: 0 });
+      expect(extractOwnerCDBuffExpiry(ironbark, "player-1", [owner, amountOnly], T0, owner)[0]).toMatchObject({ cause: "ended_early" });
+    });
+
+    it("codex 3a P2-3: a dispel line is read before the holder's death right after it", () => {
+      const owner = druid(false);
+      const at = T0 + 13_000;
+      const mate = mateWith(at, {
+        actionIn: [dispel(LogEvent.SPELL_DISPEL, at)] as never,
+        deathRecords: [{ timestamp: at + 40 }] as never,
+      });
+      expect(extractOwnerCDBuffExpiry(ironbark, "player-1", [owner, mate], T0, owner)[0]!.cause).toBe("dispelled");
+    });
+  });
+
   it("F-B1 negative (codex c2): an owner-cast external removed from a TEAMMATE just before the owner dies stays ended_early", () => {
     const owner = druid(false);
     (owner as { deathRecords: unknown[] }).deathRecords = [{ timestamp: T0 + 10_450 }];
