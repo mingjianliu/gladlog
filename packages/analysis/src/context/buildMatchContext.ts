@@ -683,6 +683,7 @@ export function buildMatchContext(
     enemyCDTimeline,
     enemies as ICombatUnit[],
     enemyCooldowns,
+    { startTime: combat.startTime, endTime: combat.endTime },
   );
   tLines.push(loadoutText);
 

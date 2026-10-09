@@ -1184,5 +1184,12 @@
  *  [SILENCE] lines state how the control ended when the log says —
  *  `| broken by N(X)'s Spell`, `| dispelled by N(X)'s Spell`, `| ended at
  *  their death`. Counts in the commit.
+ *  v347 (2026-10-09, FT-T06 items 1 + 4, user approval 2026-10-09): a
+ *  [YOU] [STASIS RELEASE] line sits where the stored spells were replayed
+ *  (the ready aura's end), not where storing ended; a Stasis never replayed
+ *  in the round reads [YOU] [STASIS STORED] … (not released …), one stored
+ *  before the round is found and marked. `[UNUSED]` on a cooldown whose cast
+ *  bar the unit started without ever finishing says so (`[UNUSED — started
+ *  N×, never finished]`). Counts in the commit.
  */
-export const PROMPT_VERSION = 346;
+export const PROMPT_VERSION = 347;

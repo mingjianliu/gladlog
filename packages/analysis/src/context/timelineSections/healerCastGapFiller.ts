@@ -407,7 +407,8 @@ export function emitHealerCastGapFillerEntries(
       continue;
 
     const activeStasis = stasisEvents.find(
-      (s) => timeSeconds >= s.startSeconds && timeSeconds < s.releaseSeconds,
+      // the storing window — the spells are replayed later, at the release
+      (s) => timeSeconds >= s.startSeconds && timeSeconds < s.storedSeconds,
     );
     // Suppress buffered heals — a stasis-stored cast renders at release, not here.
     if (activeStasis && activeStasis.spells.includes(displayName)) continue;

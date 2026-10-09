@@ -24,11 +24,35 @@ export function emitStasisEntries(
         : stasis.storedCount > 0
           ? `${stasis.storedCount} spell(s) stored (contents not identified)`
           : "";
-    if (contents) {
+    // stored before the round: its contents are not in this round's log
+    if (stasis.storedBeforeRound) {
+      const at = stasis.releaseSeconds ?? stasis.storedSeconds;
       addEntry(
-        stasis.releaseSeconds,
-        `${fmtTime(stasis.releaseSeconds)}  [YOU] [STASIS RELEASE] → ${contents}`,
+        at,
+        stasis.releaseSeconds === undefined
+          ? `${fmtTime(at)}  [YOU] [STASIS STORED] → stored before this round (not released before the round ended; its contents are not in this round's log)`
+          : `${fmtTime(at)}  [YOU] [STASIS RELEASE] → stored before this round (its contents are not in this round's log)`,
       );
+      continue;
     }
+    if (!contents) continue;
+    // FT-T06: the line sits where the spells were REPLAYED (the ready
+    // aura's end), not where storing ended. A Stasis that was never replayed
+    // inside the round says so at the moment it was stored.
+    if (stasis.releaseSeconds === undefined) {
+      addEntry(
+        stasis.storedSeconds,
+        `${fmtTime(stasis.storedSeconds)}  [YOU] [STASIS STORED] → ${contents} (${
+          stasis.unreleased === "lost"
+            ? "never released: it came off with nothing replayed"
+            : "not released before the round ended"
+        })`,
+      );
+      continue;
+    }
+    addEntry(
+      stasis.releaseSeconds,
+      `${fmtTime(stasis.releaseSeconds)}  [YOU] [STASIS RELEASE] → ${contents}`,
+    );
   }
 }

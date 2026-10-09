@@ -80,6 +80,9 @@ export function buildPlayerLoadout(
    * listing only what was actually cast this match.
    */
   enemyCooldowns?: Array<{ player: ICombatUnit; cds: IMajorCooldownInfo[] }>,
+  /** The round, in log ms — what "this round" means for a started cast
+   * (`[UNUSED — started N×…]`): the units keep lines from after it. */
+  roundMs?: { startTime: number; endTime: number },
 ): {
   text: string;
   playerIdMap: Map<string, number>;
@@ -129,12 +132,36 @@ export function buildPlayerLoadout(
       ? `, lasts ${Math.round(d * 10) / 10}s`
       : "";
   };
+  // FT-T06: "never spent" is not "never tried". A cast bar that was started
+  // and never finished (kicked, cancelled, CC'd) is in the log —
+  // SPELL_CAST_START with no SPELL_CAST_SUCCESS — and the bare [UNUSED] read
+  // as "did not think of it" (24b6a229, 3306e8ee, 7d1f14af: Hex started once
+  // or twice, kicked). A press the game rejected (SPELL_CAST_FAILED) is not
+  // kept per unit by the parser, so an instant that was pressed and refused
+  // still reads [UNUSED].
+  const triedNote = (cd: IMajorCooldownInfo, caster?: ICombatUnit): string => {
+    // inside the round only, as the cooldown ledger's casts are — a Shuffle
+    // round's units keep the lines that follow it (codex review: a Hex
+    // started and finished after the round read "never finished")
+    const starts = (caster?.castStartEvents ?? []).filter(
+      (e) =>
+        e.spellId === cd.spellId &&
+        (roundMs === undefined ||
+          (e.logLine.timestamp >= roundMs.startTime &&
+            e.logLine.timestamp <= roundMs.endTime)),
+    ).length;
+    return starts > 0 ? ` — started ${starts}×, never finished` : "";
+  };
   const fmtCDLabel = (cd: IMajorCooldownInfo, caster?: ICombatUnit) =>
     // a proc-only entry's "charges" are inferred from how often it procced
     // (Radiant Glory's Avenging Wrath every Wake of Ashes → "2 Charges"), not
     // something the player holds — not printed (GH #106 step 2)
     `${cd.spellName} [${cd.cooldownSeconds}s${(cd.charges ?? 1) > 1 && !cdIsProcOnly(cd) ? `, ${cd.charges} Charges` : ""}${lastsPart(cd, caster)}]${
-      cdIsProcOnly(cd) ? " [PASSIVE]" : cdNeverSpent(cd) ? " [UNUSED]" : ""
+      cdIsProcOnly(cd)
+        ? " [PASSIVE]"
+        : cdNeverSpent(cd)
+          ? ` [UNUSED${triedNote(cd, caster)}]`
+          : ""
     }`;
 
   const ownerId = nextId++;

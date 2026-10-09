@@ -6,6 +6,7 @@ import {
 } from "@gladlog/parser-compat";
 
 import { getEnglishSpellName } from "../data/spellEffectData";
+import { dropAuraRebroadcasts } from "./auraIntervals";
 
 export interface IFormInterval {
   form: "Bear" | "Cat";
@@ -20,7 +21,31 @@ export interface ISpiritOfRedemptionInterval {
 
 export interface IStasisEvent {
   startSeconds: number;
-  releaseSeconds: number;
+  /** When storing ended: the storing aura (370537) came off — the third
+   * spell stored, or Stasis pressed again. The stored spells then WAIT under
+   * the ready aura (370562). */
+  storedSeconds: number;
+  /**
+   * When the stored spells were replayed: the ready aura's REMOVED (FT-T06).
+   * It was stamped at `storedSeconds` — on the 60 re-eval logs the real
+   * release follows it by a median 9.0 s (p10 3.3 s, p90 23.0 s; the ready
+   * aura also releases by itself at 30 s: 16 of 16 full-length ones were
+   * followed by replays). Equal to `storedSeconds` when the log carries no
+   * ready aura for this Stasis; undefined when the spells were not replayed
+   * inside the log (`unreleased`).
+   */
+  releaseSeconds: number | undefined;
+  /** Not replayed: the ready aura was still up when the log ended ("held"),
+   * or came off with no cast after it — the Evoker died ("lost"). */
+  unreleased?: "held" | "lost";
+  /** The ready aura was already up when the round began: the spells were
+   * stored before it (the prep room, the previous Shuffle round). Their
+   * names are NOT in this round's log, and are not reconstructed from what
+   * the Evoker cast at the release: a replay has its own ids (Dream Breath
+   * 355941), comes 0.3–0.4 s after the last one with no global cooldown, and
+   * real presses land between them (codex review: three such readings were
+   * wrong). `spells` is empty and `storedCount` 0 for these. */
+  storedBeforeRound?: true;
   spells: string[];
   // Number of spells actually stored, derived from the Stasis aura's stack
   // (dose) removals. Used as a fallback when individual spell names cannot be
@@ -184,11 +209,86 @@ export function stasisReplayWindows(
     }));
 }
 
+/** How close the ready aura's APPLIED sits to the storing aura's REMOVED —
+ * the same instant in the log (141470d0: both at 00:56:36.621). */
+const STASIS_READY_AFTER_STORED_MS = 50;
+
+/** One press the log writes under two ids: Verdant Embrace is 360995 at the
+ * press and 361195 when it lands (605-file sample 119: 157 ms apart). Two
+ * presses of one heal are a global cooldown apart, so two SUCCESS lines of
+ * one name inside this window are one stored spell. */
+const STASIS_TWIN_CAST_MS = 700;
+
+interface StasisReadyLife {
+  appliedMs: number | undefined;
+  removedMs: number | undefined;
+  used: boolean;
+}
+
+/** The lives of the ready aura (370562) on the Evoker, in log order. */
+function stasisReadyLives(unit: ICombatUnit): StasisReadyLife[] {
+  const lives: StasisReadyLife[] = [];
+  let open: StasisReadyLife | undefined;
+  for (const e of dropAuraRebroadcasts(unit.auraEvents ?? [])) {
+    if (e.spellId !== STASIS_READY_AURA_ID) continue;
+    if (e.logLine.event === LogEvent.SPELL_AURA_APPLIED) {
+      open = { appliedMs: e.logLine.timestamp, removedMs: undefined, used: false };
+      lives.push(open);
+    } else if (e.logLine.event === LogEvent.SPELL_AURA_REMOVED) {
+      if (open && open.removedMs === undefined) open.removedMs = e.logLine.timestamp;
+      else
+        // up before the log began: only its end is logged
+        lives.push({ appliedMs: undefined, removedMs: e.logLine.timestamp, used: false });
+      open = undefined;
+    }
+  }
+  return lives;
+}
+
+/** The Evoker's casts right after a ready aura came off — the replays. */
+function stasisReplayCasts(unit: ICombatUnit, removedMs: number) {
+  return (unit.spellCastEvents ?? []).filter(
+    (c) =>
+      c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+      c.logLine.timestamp >= removedMs &&
+      c.logLine.timestamp <= removedMs + STASIS_REPLAY_WINDOW_S * 1000,
+  );
+}
+
+/** Where a Stasis whose storing ended at `storedMs` was released. A ready
+ * aura that comes off after the round's end was held through it. */
+function stasisReleaseOf(
+  unit: ICombatUnit,
+  lives: StasisReadyLife[],
+  storedMs: number,
+  startMs: number,
+  endMs: number,
+): Pick<IStasisEvent, "releaseSeconds" | "unreleased"> {
+  const life = lives.find(
+    (l) =>
+      !l.used &&
+      l.appliedMs !== undefined &&
+      Math.abs(l.appliedMs - storedMs) <= STASIS_READY_AFTER_STORED_MS,
+  );
+  // no ready aura in the log for it: the storing aura's end is all there is
+  if (!life) return { releaseSeconds: (storedMs - startMs) / 1000 };
+  life.used = true;
+  if (life.removedMs === undefined || life.removedMs > endMs)
+    return { releaseSeconds: undefined, unreleased: "held" };
+  if (stasisReplayCasts(unit, life.removedMs).length === 0)
+    return { releaseSeconds: undefined, unreleased: "lost" };
+  return { releaseSeconds: (life.removedMs - startMs) / 1000 };
+}
+
 export function extractStasisEvents(
   unit: ICombatUnit,
   combat: AtomicArenaCombat,
 ): IStasisEvent[] {
   const events: IStasisEvent[] = [];
+  const readyLives = stasisReadyLives(unit);
+  // one press of a spell the log writes under two ids (Verdant Embrace
+  // 360995 / 361195) is one stored spell (b12bfef4)
+  let lastBuffered: { name: string; ms: number } | undefined;
   let isBuffering = false;
   let startSeconds = 0;
   let bufferedSpells: string[] = [];
@@ -197,7 +297,14 @@ export function extractStasisEvents(
 
   // We scan aura events (for boundaries and stored-spell doses) and cast events
   // (for the buffered spell names).
-  const mergedEvents = [...unit.auraEvents, ...unit.spellCastEvents]
+  // The storing aura is re-broadcast mid-store (REMOVED and APPLIED in one
+  // ms; sample 119: 23:13:54.090) — one storing window, not two: split, the
+  // second half has no dose and no event, and its ready aura reads as a
+  // Stasis stored before the round.
+  const mergedEvents = [
+    ...dropAuraRebroadcasts(unit.auraEvents),
+    ...unit.spellCastEvents,
+  ]
     .filter(
       (e) =>
         e.logLine.event === LogEvent.SPELL_AURA_APPLIED ||
@@ -257,7 +364,14 @@ export function extractStasisEvents(
       if (isManualRelease || hasConsumption) {
         events.push({
           startSeconds,
-          releaseSeconds: (e.logLine.timestamp - combat.startTime) / 1000,
+          storedSeconds: (e.logLine.timestamp - combat.startTime) / 1000,
+          ...stasisReleaseOf(
+            unit,
+            readyLives,
+            e.logLine.timestamp,
+            combat.startTime,
+            combat.endTime,
+          ),
           spells: [...bufferedSpells],
           storedCount,
         });
@@ -276,11 +390,42 @@ export function extractStasisEvents(
       STASIS_STORABLE_HEAL_IDS.has(e.spellId) &&
       bufferedSpells.length < 3
     ) {
-      bufferedSpells.push(
-        getEnglishSpellName(e.spellId, e.spellName ?? "Unknown"),
-      );
+      const name = getEnglishSpellName(e.spellId, e.spellName ?? "Unknown");
+      const twin =
+        lastBuffered !== undefined &&
+        lastBuffered.name === name &&
+        e.logLine.timestamp - lastBuffered.ms <= STASIS_TWIN_CAST_MS;
+      lastBuffered = { name, ms: e.logLine.timestamp };
+      if (!twin) bufferedSpells.push(name);
     }
   }
 
-  return events;
+  // A ready aura no storing window of this round led to: stored before the
+  // round (141470d0: ready from 2.4 s, no 370537 press in the log). When it
+  // was released is in the log; what it held is not (`storedBeforeRound`).
+  for (const life of readyLives) {
+    if (life.used) continue;
+    const storedSeconds =
+      life.appliedMs === undefined
+        ? 0
+        : Math.max(0, (life.appliedMs - combat.startTime) / 1000);
+    const held =
+      life.removedMs === undefined || life.removedMs > combat.endTime;
+    // came off with nothing cast after it: the Evoker died holding it
+    if (!held && stasisReplayCasts(unit, life.removedMs!).length === 0)
+      continue;
+    events.push({
+      startSeconds: storedSeconds,
+      storedSeconds,
+      releaseSeconds: held
+        ? undefined
+        : (life.removedMs! - combat.startTime) / 1000,
+      ...(held ? { unreleased: "held" as const } : {}),
+      storedBeforeRound: true,
+      spells: [],
+      storedCount: 0,
+    });
+  }
+
+  return events.sort((a, b) => a.storedSeconds - b.storedSeconds);
 }

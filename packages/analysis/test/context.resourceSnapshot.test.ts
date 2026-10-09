@@ -336,6 +336,47 @@ describe("context.resourceSnapshot unit tests", () => {
       expect(res.friendlyIdMap.get("Player1")).toBe(1);
     });
 
+    it("FT-T06: 起手过但没读完的技能,[UNUSED] 写明试过", () => {
+      const ev = (event: string, spellId: string) =>
+        ({ spellId, logLine: { event, timestamp: 1, parameters: [] } }) as never;
+      const owner = makeUnit("player-1", {
+        name: "Player1",
+        spellCastEvents: [],
+        castStartEvents: [ev("SPELL_CAST_START", "51514"), ev("SPELL_CAST_START", "51514")],
+      });
+      const cd = (spellId: string, spellName: string) =>
+        ({ spellId, spellName, cooldownSeconds: 30, maxChargesDetected: 1, neverUsed: true, casts: [] }) as unknown as IMajorCooldownInfo;
+      const res = buildPlayerLoadout(
+        owner,
+        "Restoration Shaman",
+        [cd("51514", "Hex"), cd("109304", "Exhilaration"), cd("108271", "Astral Shift")],
+        [],
+        { players: [], alignedBurstWindows: [] } as unknown as IEnemyCDTimeline,
+      );
+      expect(res.text).toContain("Hex [30s] [UNUSED — started 2×, never finished]");
+      // a cast bar started after the round is not this round's attempt (codex review)
+      const late = makeUnit("player-1", {
+        name: "Player1",
+        spellCastEvents: [],
+        castStartEvents: [
+          { spellId: "51514", logLine: { event: "SPELL_CAST_START", timestamp: 105_000, parameters: [] } } as never,
+        ],
+      });
+      const lateRes = buildPlayerLoadout(
+        late,
+        "Restoration Shaman",
+        [cd("51514", "Hex")],
+        [],
+        { players: [], alignedBurstWindows: [] } as unknown as IEnemyCDTimeline,
+        undefined,
+        undefined,
+        { startTime: 0, endTime: 100_000 },
+      );
+      expect(lateRes.text).toMatch(/Hex \[30s[^\]]*\] \[UNUSED\]/);
+      expect(res.text).toMatch(/Exhilaration \[30s[^\]]*\] \[UNUSED\]/);
+      expect(res.text).toMatch(/Astral Shift \[30s[^\]]*\] \[UNUSED\]/);
+    });
+
     it("典型态: 携带天赋/PVP技能、未使用CD标签、队友CD、敌方CD时间轴与技能组", () => {
       // 1246126 Call of Ohn'ahra (Restoration Druid PvP Talent), maps to abilitySpellId: 33786
       const owner = makeUnit("player-1", {
