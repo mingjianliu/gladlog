@@ -254,6 +254,7 @@ export function formatTimeline(
           "    immunity; an aura that ended before its full duration says why when the log does: `— dispelled by X's Spell` /",
           "    `— stolen by …`, `— ended at death` / `— its target died`, `— used up, absorbed Nk` (an absorb eaten through);",
           "    `— removed early` = it ended early and the log gives no cause (cancelled, broken or replaced);",
+          "    `— still up when the round ended` = the round ended before it did;",
           "    `X → unit` = an external put on that unit; one with no duration is an instant heal (Lay on Hands) or a grip /",
           "    redirect (Leap of Faith, Intervene, Roar of Sacrifice, Master's Call); `(area)` = an area save pressed at that",
           "    second (Anti-Magic Zone, Darkness, Rallying Cry, Spirit Link Totem, Power Word: Barrier) — who was inside it is not stated. Absent = not pressed.",

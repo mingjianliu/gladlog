@@ -39,19 +39,25 @@ export function emitBuffFadedEntries(
     const by = expiry.endedBy
       ? `${actorLabel(expiry.endedBy.unitName, "enemy", expiry.endedBy.unitId)}'s ${expiry.endedBy.spellName}`
       : "";
+    // A dispel line the log cannot tie to this copy is stated next to
+    // whatever else the line reads from the removal — the death, the empty
+    // shield — never dropped behind it (codex post-hoc review of step 3a).
+    const unclear = expiry.dispelUnclear
+      ? "; a dispel of this spell is logged at that moment — not which copy it took"
+      : "";
     const causeNote =
       expiry.cause === "death"
-        ? " (removed at your death)"
+        ? ` (removed at your death${unclear})`
         : expiry.cause === "target_death"
-          ? " (its target died)"
+          ? ` (its target died${unclear})`
           : expiry.cause === "dispelled"
             ? ` (dispelled by ${by}${took ? `; ${took}` : ""})`
             : expiry.cause === "stolen"
               ? ` (stolen by ${by}${took ? `; ${took}` : ""})`
               : expiry.cause === "form_shift"
-                ? " (ended by your own shapeshift)"
+                ? ` (ended by your own shapeshift${unclear})`
                 : expiry.cause === "absorbed"
-                  ? ` (used up — absorbed ${k(a!.absorbed)})`
+                  ? ` (used up — absorbed ${k(a!.absorbed)}${unclear})`
                   : expiry.dispelUnclear
                     ? ` (a dispel of this spell is logged at that moment — not which copy it took${took ? `; ${took}` : ""})`
                     : expiry.cause === "ended_early"

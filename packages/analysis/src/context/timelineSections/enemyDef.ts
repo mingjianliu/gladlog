@@ -83,16 +83,23 @@ export function emitEnemyDefEntries(
               : "friendly",
             end.takenBy.unitId,
           )}'s ${end.takenBy.spellName}`;
-        const earlyNote = !d.removedEarly
+        // a dispel line the log cannot tie to this copy is stated next to
+        // the death / the empty shield, never dropped behind them
+        const unclear = end?.takeUnclear
+          ? "; a dispel of this spell is logged at that moment, not which copy it took"
+          : "";
+        const earlyNote = d.upAtRoundEnd
+          ? " — still up when the round ended"
+          : !d.removedEarly
           ? ""
           : end?.takenBy
             ? ` — ${end.takenBy.kind} by ${taker}`
             : end?.holderDied
               ? d.kind === "external"
-                ? " — its target died"
-                : " — ended at death"
+                ? ` — its target died${unclear}`
+                : ` — ended at death${unclear}`
               : end?.absorb?.left === 0
-                ? ` — used up, absorbed ${Math.round(end.absorb.absorbed / 1000)}k`
+                ? ` — used up, absorbed ${Math.round(end.absorb.absorbed / 1000)}k${unclear}`
                 : end?.takeUnclear
                   ? " — a dispel of this spell is logged at that moment, not which copy it took"
                   : " — removed early";

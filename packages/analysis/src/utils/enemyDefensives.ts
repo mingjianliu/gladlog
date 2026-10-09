@@ -490,6 +490,9 @@ export interface IEnemyDefensiveEvent {
    * a dispel / steal, its holder's death, an absorb used up. Set only with
    * `removedEarly`; an empty reading means the log gives no cause. */
   earlyEnd?: IAuraEndFromLog;
+  /** The aura was still up when the round ended (its REMOVED is logged
+   * after it): shorter than its full duration, but not removed early. */
+  upAtRoundEnd?: true;
 }
 
 /**
@@ -636,22 +639,43 @@ export function enemyDefensiveEvents(
     holder: ICombatUnit,
     iv: ISaveAuraInterval,
     auraId: string,
-  ): Pick<IEnemyDefensiveEvent, "removedEarly" | "earlyEnd"> => {
+  ): Pick<
+    IEnemyDefensiveEvent,
+    "removedEarly" | "earlyEnd" | "upAtRoundEnd"
+  > => {
     const early = !iv.inferredEnd && removedEarly(auraId, iv.toS - iv.fromS);
-    return early
-      ? {
-          removedEarly: true,
-          earlyEnd: auraEndFromLog(
-            holder,
-            iv.spellId,
-            {
-              fromMs: Math.round(combat.startTime + iv.fromS * 1000),
-              removedMs: Math.round(combat.startTime + iv.toS * 1000),
-            },
-            iv.srcUnitId,
-          ),
-        }
-      : { removedEarly: false };
+    if (!early) return { removedEarly: false };
+    const endMs = Math.round(combat.startTime + iv.toS * 1000);
+    // The interval builder clamps a REMOVED logged after the round's end onto
+    // it (a Shuffle round keeps its trailing lines). Then the aura was still
+    // up when the round ended: nothing removed it early, and no line at the
+    // clamp can say what did (codex post-hoc review of step 3b).
+    // this caster's REMOVED (or one written with no source) — another
+    // caster's copy of the spell ending in that ms is not this aura's
+    const removedLoggedThere = (holder.auraEvents ?? []).some(
+      (a) =>
+        a.spellId === iv.spellId &&
+        (a.logLine.event as string) === LogEvent.SPELL_AURA_REMOVED &&
+        a.logLine.timestamp === endMs &&
+        (!iv.srcUnitId ||
+          !a.srcUnitId ||
+          a.srcUnitId === "0000000000000000" ||
+          a.srcUnitId === iv.srcUnitId),
+    );
+    if (endMs >= combat.endTime && !removedLoggedThere)
+      return { removedEarly: false, upAtRoundEnd: true };
+    return {
+      removedEarly: true,
+      earlyEnd: auraEndFromLog(
+        holder,
+        iv.spellId,
+        {
+          fromMs: Math.round(combat.startTime + iv.fromS * 1000),
+          removedMs: endMs,
+        },
+        iv.srcUnitId,
+      ),
+    };
   };
   /** A unit's own SPELL_CAST_SUCCESS seconds of a spell — the press search
    * of an aura kind (`pressSeconds`, F-E11). */

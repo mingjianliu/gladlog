@@ -88,11 +88,11 @@ const taken = (
 });
 const combat = { startTime: ms(0), endTime: ms(120) };
 
-function render(enemies: any[]): string[] {
+function render(enemies: any[], matchEndSeconds = 120): string[] {
   const lines: string[] = [];
   emitEnemyDefEntries({
     matchStartMs: combat.startTime,
-    matchEndSeconds: 120,
+    matchEndSeconds,
     enemies,
     enemyPid: (n: string) => `E:${n}`,
     friends: [unit("f1")],
@@ -227,5 +227,53 @@ describe("FT-T08 step 3b — [ENEMY DEF] early end: the cause the log gives", ()
     expect(render([pal])[0]).toContain(
       "(immune, 3.0s — a dispel of this spell is logged at that moment, not which copy it took)",
     );
+  });
+  it("codex post-hoc 3b P2-1: 回合结束时还在身上(REMOVED 记在回合结束之后)→ 不是 removed early,也不读原因", () => {
+    const pal = unit("e1", {
+      auraEvents: [
+        applied(DIVINE_SHIELD, "e1", "e1", 50),
+        removed(DIVINE_SHIELD, "e1", "e1", 55.01),
+      ],
+      actionIn: [taken(LogEvent.SPELL_DISPEL, DIVINE_SHIELD, "e1", 55.01)],
+    });
+    const round = { startTime: ms(0), endTime: ms(55) };
+    const [d] = enemyDefensiveEvents(pal, [pal], round);
+    expect(d).toMatchObject({ observedSeconds: 5, removedEarly: false, upAtRoundEnd: true });
+    expect(d.earlyEnd).toBeUndefined();
+    expect(render([pal], 55)[0]).toContain("(immune, 5.0s — still up when the round ended)");
+    // a REMOVED logged AT the round's last ms is a real removal and is still read
+    const atEnd = unit("e1", {
+      auraEvents: [applied(DIVINE_SHIELD, "e1", "e1", 50), removed(DIVINE_SHIELD, "e1", "e1", 55)],
+      actionIn: [taken(LogEvent.SPELL_DISPEL, DIVINE_SHIELD, "e1", 55)],
+    });
+    expect(enemyDefensiveEvents(atEnd, [atEnd], round)[0].earlyEnd?.takenBy?.kind).toBe("dispelled");
+  });
+
+  it("codex post-hoc 3b P2-2: 日志里没写来源的 REMOVED 行也是这次施加的结束", () => {
+    const pal = unit("e1", {
+      auraEvents: [
+        applied(DIVINE_SHIELD, "e1", "e1", 50),
+        { ...removed(DIVINE_SHIELD, "e1", "e1", 53), srcUnitId: "", srcUnitName: "" },
+      ],
+      actionIn: [taken(LogEvent.SPELL_DISPEL, DIVINE_SHIELD, "e1", 53)],
+    });
+    const [d] = enemyDefensiveEvents(pal, [pal], combat);
+    expect(d.earlyEnd?.takenBy?.kind).toBe("dispelled");
+  });
+  it("agy follow-up P3: 另一个施法者的同名光环在回合最后一毫秒结束,不算这一份的 REMOVED", () => {
+    // e2's Ironbark on e3 ends at the round's last ms; e1's later copy is still up (its REMOVED is logged after)
+    const druidA = unit("e1", { spellCastEvents: [cast(IRONBARK, "e3", 52)] });
+    const druidB = unit("e2");
+    const mate = unit("e3", {
+      auraEvents: [
+        applied(IRONBARK, "e2", "e3", 45),
+        applied(IRONBARK, "e1", "e3", 52),
+        removed(IRONBARK, "e2", "e3", 55),
+        removed(IRONBARK, "e1", "e3", 55.2),
+      ],
+    });
+    const round = { startTime: ms(0), endTime: ms(55) };
+    const ev = enemyDefensiveEvents(druidA, [druidA, druidB, mate], round).find((d) => d.kind === "external");
+    expect(ev).toMatchObject({ removedEarly: false, upAtRoundEnd: true });
   });
 });

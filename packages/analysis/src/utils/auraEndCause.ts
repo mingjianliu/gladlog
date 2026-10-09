@@ -202,8 +202,13 @@ export function auraEndFromLog(
     srcUnitId === undefined || a.srcUnitId === srcUnitId;
   const isRemoved = (a: AuraLine) =>
     (a.logLine.event as LogEvent) === LogEvent.SPELL_AURA_REMOVED;
+  // The application's own REMOVED: this caster's — or one the log wrote with
+  // no source at all, which the interval builders pair to the open aura too
+  // (codex post-hoc review of step 3b).
   const ours = (a: AuraLine) =>
-    isRemoved(a) && a.logLine.timestamp === removedMs && mine(a);
+    isRemoved(a) &&
+    a.logLine.timestamp === removedMs &&
+    (mine(a) || !a.srcUnitId || a.srcUnitId === "0000000000000000");
 
   // ── what it absorbed, and what its REMOVED line had left ──────────────────
   // The aura's life up to this removal: it opens at an APPLIED (or at a
@@ -218,7 +223,8 @@ export function auraEndFromLog(
   let sawAmount = false;
   let removedAmount: number | undefined;
   for (const a of ofSpell) {
-    if (!mine(a)) continue;
+    // `ours` also takes a REMOVED the log wrote with no source
+    if (!mine(a) && !ours(a)) continue;
     const t = a.logLine.timestamp;
     if (t > removedMs) break;
     const ev = a.logLine.event as LogEvent;
@@ -232,10 +238,18 @@ export function auraEndFromLog(
     ) {
       if (!open) {
         open = true;
-        lifeFromMs = t;
-        lifeFromExclusive = false;
         size = undefined;
         sawAmount = false;
+        // An APPLIED is where the life begins. A REFRESH with no APPLIED
+        // before it means the aura was already on — its APPLIED is missing
+        // or predates the log — so the life began earlier than this line:
+        // the bound stays where it was (the previous REMOVED, if any) and
+        // the caller's own start decides (codex post-hoc review of step 3a:
+        // 40k absorbed between the press and a later REFRESH was dropped).
+        if (ev === LogEvent.SPELL_AURA_APPLIED) {
+          lifeFromMs = t;
+          lifeFromExclusive = false;
+        }
       }
       if (a.amount !== undefined) {
         sawAmount = true;

@@ -78,6 +78,9 @@ describe("[BUFF FADED] end causes (FT-T08)", () => {
         // a dispel line the log cannot tie to this copy: neither "expired" nor "no dispel logged"
         { ...base, dispelUnclear: true },
         { ...base, cause: "ended_early", dispelUnclear: true },
+        // …and it is not dropped behind an empty shield or a death (codex post-hoc review)
+        { ...base, cause: "absorbed", absorb: { absorbed: 20_000, left: 0 }, dispelUnclear: true },
+        { ...base, cause: "target_death", dispelUnclear: true },
       ]).map((l) => l.replace("0:13  [BUFF FADED]   Ice Barrier", "").trim()),
     ).toEqual([
       "(its target died)",
@@ -89,6 +92,8 @@ describe("[BUFF FADED] end causes (FT-T08)", () => {
       "(expired, estimated)",
       "(a dispel of this spell is logged at that moment — not which copy it took)",
       "(a dispel of this spell is logged at that moment — not which copy it took)",
+      "(used up — absorbed 20k; a dispel of this spell is logged at that moment — not which copy it took)",
+      "(its target died; a dispel of this spell is logged at that moment — not which copy it took)",
     ]);
   });
 });

@@ -474,6 +474,8 @@
 
 ## 尚未统一
 
+**2026-10-09 登记,未解决(FT-T08 第 5 步;codex 事后抽审 45-FT-95)** —— 控制有没有结束一次引导。`landingCutChannel`(`context/timelineHelpers.ts`)是 owner 的 `[YOU] [CD]` 引导后缀和 `[YOU] [CAST]` 的 `[channel cut by CC …]` 说明共用的判据:控制在引导开始之后落地,且引导在它落地后 `CHANNEL_CUT_BY_CC_MS` 内结束。`utils/kickAudit.ts` 的 `stoppedChannelOf`(敌方在我们的打断之前刚结束的引导,是对方自己停的 —— juke —— 还是被迫的)仍然对称地检查 `forcedStopInstantsMs`:引导结束时刻**前后** `CANCEL_CC_NEAR_S` 内有控制都算被迫,于是一个在引导和打断之后才落地的昏迷会把 `juked` 变成 `missed`(审查者复现:Divine Hymn 44.010–44.648,Mind Freeze 在 44.751 打空,Hammer of Justice 在 44.800)。目前有意不动:`CANCEL_CC_NEAR_S` 是裁决 A′17 的常数(与 `castCancels.ts` 里 owner 自己停手共用),而且改它会移动打断审计的判定(桌面的 missed-kick 卡片、juke 事实)—— 属于判定变更,要先给用户看 605 场增删汇总,再谈统一。
+
 **2026-10-02 登记,未收口(分诊 position F-S2 / F-S5;审查意见)** —— 日志里没有 REMOVED 的控制持续了多久。POSITIONING 的 `STAYED IN` 行里,`CC'd Ns of Ns` 来自 `analyzePlayerCCAndTrinket` 的 `ccInstances`,缺失的移除按该控制的官方时长封顶(`pendingEnd`);`(you could not cast for Ns of it)` 来自 `buildCannotCastIntervals`,同一段区间在那里是开着的(`to: Infinity`)。REMOVED 丢了的时候,同一行可能读成 `CC'd 4s of 10s … could not cast for 8s of it`。`buildCannotCastIntervals` 还有很多别的读者(cd-hoarded 的 owner 门、治疗空档、kick-priority、漏驱 / 漏偷的被锁判断),给它封顶要单开条目。
 
 **2026-10-02 登记,未收口(分诊 death-kill F-T1 + hp-state F-D1;该批的 Fable 预审)** —— 「谁打了这个单位、来自哪一边」还有两个读者没走共享谓词。(1)`context/ccUse.ts` 的防守 `[CC BOOKMARK]`:主攻者占比的分母是承压队友在尖峰窗口内的原始 `damageIn` 之和,所以仍把队友的灵魂链接 / 虚空汲取行算进去、又不含被吸收的伤害,而它所锚定的 `[DMG SPIKE]` 总量走的是 `incomingPressureEvents`。F-D1 签下的范围没有动直接读 `damageIn` 的读者,所以这是原有行为;统一它会移动 `[CC BOOKMARK]` 行。(2)`timelineHelpers.ts` → `opposingHitsOnUnit`(`[ENEMY SUMMON] … hit N× by`)按每行的阵营标志判「对面」,记录者被心控期间会数错队;同一块里的 `killed by:` 已走 `isSameSideSource`。两者都还没有条目。

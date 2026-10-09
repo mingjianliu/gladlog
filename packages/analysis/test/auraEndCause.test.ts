@@ -399,4 +399,34 @@ describe("auraEndFromLog", () => {
       auraEndFromLog(rePress, "11426", { fromMs: T0 + 25_000, removedMs: T0 + 50_000 }, "mage").absorb,
     ).toEqual({ absorbed: 10_000, left: 90_000 });
   });
+  it("codex post-hoc 3a P2-2: APPLIED missing, a REFRESH later — what was absorbed between the press and the REFRESH still counts", () => {
+    // press at 10 s (APPLIED not in the log); 40k absorbed at 11 s; REFRESH 200k at 12 s; 200k at 14 s; REMOVED 0 at 15 s
+    const holder = {
+      auraEvents: [
+        aura(LogEvent.SPELL_AURA_REFRESH, "11426", T0 + 12_000, "mage", 200_000),
+        aura(LogEvent.SPELL_AURA_REMOVED, "11426", T0 + 15_000, "mage", 0),
+      ],
+      absorbsIn: [
+        absorbed(T0 + 5_000, "11426", "mage", 9_999), // before the press
+        absorbed(T0 + 11_000, "11426", "mage", 40_000),
+        absorbed(T0 + 14_000, "11426", "mage", 200_000),
+      ],
+    } as never;
+    expect(
+      auraEndFromLog(holder, "11426", { fromMs: T0 + 10_000, removedMs: T0 + 15_000 }, "mage").absorb,
+    ).toEqual({ absorbed: 240_000, left: 0 });
+  });
+  it("agy follow-up P2: a REMOVED written with no source still gives what the shield had left", () => {
+    const holder = {
+      auraEvents: [
+        aura(LogEvent.SPELL_AURA_APPLIED, "11426", T0, "mage", 100_000),
+        { ...(aura(LogEvent.SPELL_AURA_REMOVED, "11426", T0 + 4_000, "mage", 0) as object), srcUnitId: "" },
+      ],
+      absorbsIn: [absorbed(T0 + 3_000, "11426", "mage", 100_000)],
+    } as never;
+    expect(auraEndFromLog(holder, "11426", { fromMs: T0, removedMs: T0 + 4_000 }, "mage").absorb).toEqual({
+      absorbed: 100_000,
+      left: 0,
+    });
+  });
 });

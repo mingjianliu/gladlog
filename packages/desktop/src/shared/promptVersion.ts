@@ -1160,5 +1160,11 @@
  *  stack decreases too (2v2, after a death: 19-20 points down) — the
  *  `dampening: N%` notes, [MATCH END] `damp:` and the DAMPENING summary after
  *  such a drop. Counts in the commit.
+ *  v343 (2026-10-09, FT-T08 step 3 follow-up, codex post-hoc review): an
+ *  [ENEMY DEF] aura that was still up when the round ended reads `— still
+ *  up when the round ended`, not `— removed early` (legend line added); a
+ *  dispel line the log cannot tie to this copy of a spell is stated beside
+ *  the death / used-up reading instead of being dropped. Counts in the
+ *  commit.
  */
-export const PROMPT_VERSION = 342;
+export const PROMPT_VERSION = 343;
