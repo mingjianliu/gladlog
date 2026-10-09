@@ -1198,5 +1198,11 @@
  *  talent replaced by a passive prints `[PASSIVE]` in the kit without the
  *  replaced button's cooldown. Burst windows are unchanged. Counts in the
  *  commit.
+ *  v349 (2026-10-09, FT-T14a, user approval 2026-10-09): a summon beside its
+ *  owner's label is called what the log says it is — `6(RShaman)'s totem`,
+ *  `4(UDKnight)'s pet` (a Pet- GUID only), `5(SPriest)'s guardian` — on
+ *  control / kick / break / root lines and in the damage rows (one
+ *  predicate, `summonKindWord`). Two damage rows that differed only in that
+ *  word are one row now. Counts in the commit.
  */
-export const PROMPT_VERSION = 348;
+export const PROMPT_VERSION = 349;

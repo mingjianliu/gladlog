@@ -456,6 +456,23 @@ describe("checkPetCreditSide — a summon-cast CC credited to the wrong side (GH
     ).toEqual([]);
   });
 
+  it("FT-T14: 换了称呼(totem / guardian)的召唤物,记错边照样报", () => {
+    for (const kind of ["totem", "guardian", "pet"]) {
+      expect(
+        checkPetCreditSide([
+          ...roster,
+          `0:32  [CC ON TEAM]   1(RShaman) ← Capacitor Totem (by 3(EShaman)'s ${kind}) | 3s [DR: Stun Full]`,
+        ]),
+      ).toHaveLength(1);
+      expect(
+        checkPetCreditSide([
+          ...roster,
+          `0:32  [CC ON TEAM]   1(RShaman) ← Capacitor Totem (by 6(RShaman)'s ${kind}) | 3s`,
+        ]),
+      ).toEqual([]);
+    }
+  });
+
   it("says nothing about a credit that never resolved to an id", () => {
     expect(
       checkPetCreditSide([

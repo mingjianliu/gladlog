@@ -58,9 +58,10 @@ import * as backlashCc from "@gladlog/analysis/src/data/backlashCc";
 import * as backlashDispelPrior from "@gladlog/analysis/src/data/backlashDispelPrior";
 import * as behaviorPrior from "@gladlog/analysis/src/data/behaviorPrior";
 import * as burstWindowPrior from "@gladlog/analysis/src/data/burstWindowPrior";
-import * as castEffectAuras from "@gladlog/analysis/src/data/castEffectAuras";
 import { CANDIDATE_TYPE_FLAGS } from "@gladlog/analysis/src/data/candidateTypeFlags";
 import * as candidateTypeRegistry from "@gladlog/analysis/src/data/candidateTypeRegistry";
+import * as castEffectAuras from "@gladlog/analysis/src/data/castEffectAuras";
+import * as ccBreakAbilities from "@gladlog/analysis/src/data/ccBreakAbilities";
 import * as cdTriggerPriorData from "@gladlog/analysis/src/data/cdTriggerPrior";
 import * as curatedAbilityFacts from "@gladlog/analysis/src/data/curatedAbilityFacts";
 import * as dispelObservedGenerated from "@gladlog/analysis/src/data/dispelObservedGenerated";
@@ -71,18 +72,17 @@ import * as kickPriorityHealSpells from "@gladlog/analysis/src/data/kickPriority
 import * as kickPriorityPrior from "@gladlog/analysis/src/data/kickPriorityPrior";
 import * as mitigationComponents from "@gladlog/analysis/src/data/mitigationComponents";
 import * as outcomeRefs from "@gladlog/analysis/src/data/outcomeRefs";
-import * as ccBreakAbilities from "@gladlog/analysis/src/data/ccBreakAbilities";
 import * as racialAbilities from "@gladlog/analysis/src/data/racialAbilities";
 import * as rootAuraGenerated from "@gladlog/analysis/src/data/rootAuraGenerated";
 import * as scopedPurges from "@gladlog/analysis/src/data/scopedPurges";
 import * as sharedChargeGenerated from "@gladlog/analysis/src/data/sharedChargeGenerated";
 import * as spellCategories from "@gladlog/analysis/src/data/spellCategories";
-import * as summonGenerated from "@gladlog/analysis/src/data/summonGenerated";
 import * as spellEffectData from "@gladlog/analysis/src/data/spellEffectData";
 import * as spellReach from "@gladlog/analysis/src/data/spellReach";
 import * as spellSchools from "@gladlog/analysis/src/data/spellSchools";
 import * as spellTags from "@gladlog/analysis/src/data/spellTags";
 import * as spellTargeting from "@gladlog/analysis/src/data/spellTargeting";
+import * as summonGenerated from "@gladlog/analysis/src/data/summonGenerated";
 import * as syncWindowPrior from "@gladlog/analysis/src/data/syncWindowPrior";
 import * as teammateCrisisPriorData from "@gladlog/analysis/src/data/teammateCrisisPrior";
 import { TIMELINE_LINE_FLAGS } from "@gladlog/analysis/src/data/timelineLineFlags";
@@ -91,17 +91,15 @@ import * as auraEndCause from "@gladlog/analysis/src/utils/auraEndCause";
 import * as auraIntervals from "@gladlog/analysis/src/utils/auraIntervals";
 import * as bracketKey from "@gladlog/analysis/src/utils/bracketKey";
 import * as buffDuration from "@gladlog/analysis/src/utils/buffDuration";
-import * as cannotCastIntervals from "@gladlog/analysis/src/utils/cannotCastIntervals";
-import * as ccBreakAnalysis from "@gladlog/analysis/src/utils/ccBreakAnalysis";
-import * as gapClosers from "@gladlog/analysis/src/utils/gapClosers";
 import * as burstLedger from "@gladlog/analysis/src/utils/burstLedger";
-import * as kickAudit from "@gladlog/analysis/src/utils/kickAudit";
+import * as cannotCastIntervals from "@gladlog/analysis/src/utils/cannotCastIntervals";
 import * as castCancels from "@gladlog/analysis/src/utils/castCancels";
 import * as castCommitSpans from "@gladlog/analysis/src/utils/castCommitSpans";
+import * as castingLocks from "@gladlog/analysis/src/utils/castingLocks";
 import * as castParam from "@gladlog/analysis/src/utils/castParam";
+import * as ccBreakAnalysis from "@gladlog/analysis/src/utils/ccBreakAnalysis";
 import * as ccTargetState from "@gladlog/analysis/src/utils/ccTargetState";
 import * as ccTrinketAnalysis from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
-import * as castingLocks from "@gladlog/analysis/src/utils/castingLocks";
 import * as charmedPlayer from "@gladlog/analysis/src/utils/charmedPlayer";
 import * as cooldowns from "@gladlog/analysis/src/utils/cooldowns";
 import * as counterfactual from "@gladlog/analysis/src/utils/counterfactual";
@@ -113,27 +111,30 @@ import * as drAnalysis from "@gladlog/analysis/src/utils/drAnalysis";
 import * as enemyCDs from "@gladlog/analysis/src/utils/enemyCDs";
 import * as enemyDefensives from "@gladlog/analysis/src/utils/enemyDefensives";
 import * as enemyInterrupts from "@gladlog/analysis/src/utils/enemyInterrupts";
-import * as offensiveAuraOccurrences from "@gladlog/analysis/src/utils/offensiveAuraOccurrences";
 import * as externalDamage from "@gladlog/analysis/src/utils/externalDamage";
+import * as gapClosers from "@gladlog/analysis/src/utils/gapClosers";
 import * as healerOffenseAnalysis from "@gladlog/analysis/src/utils/healerOffenseAnalysis";
 import * as incomingPressure from "@gladlog/analysis/src/utils/incomingPressure";
+import * as kickAudit from "@gladlog/analysis/src/utils/kickAudit";
 import * as killAttempts from "@gladlog/analysis/src/utils/killAttempts";
 import * as killWindowFactsMod from "@gladlog/analysis/src/utils/killWindowFacts";
 import * as killWindowTargetSelection from "@gladlog/analysis/src/utils/killWindowTargetSelection";
-import * as pvpTrinketUsesMod from "@gladlog/analysis/src/utils/pvpTrinketUses";
 import * as losAnalysis from "@gladlog/analysis/src/utils/losAnalysis";
+import * as offensiveAuraOccurrences from "@gladlog/analysis/src/utils/offensiveAuraOccurrences";
 import * as positionAnalysis from "@gladlog/analysis/src/utils/positionAnalysis";
 import * as positionSampling from "@gladlog/analysis/src/utils/positionSampling";
+import * as pvpTrinketUsesMod from "@gladlog/analysis/src/utils/pvpTrinketUses";
 import * as rawStreams from "@gladlog/analysis/src/utils/rawStreams";
 import * as renderGrid from "@gladlog/analysis/src/utils/renderGrid";
 import * as resourceAt from "@gladlog/analysis/src/utils/resourceAt";
 import * as rootReachability from "@gladlog/analysis/src/utils/rootReachability";
 import * as rosterSide from "@gladlog/analysis/src/utils/rosterSide";
-import * as spellDanger from "@gladlog/analysis/src/utils/spellDanger";
 import * as specBaselines from "@gladlog/analysis/src/utils/specBaselines";
+import * as spellDanger from "@gladlog/analysis/src/utils/spellDanger";
 import * as spellMechanics from "@gladlog/analysis/src/utils/spellMechanics";
 import * as spellRange from "@gladlog/analysis/src/utils/spellRange";
 import * as stats from "@gladlog/analysis/src/utils/stats";
+import * as summonKind from "@gladlog/analysis/src/utils/summonKind";
 import * as summonOwner from "@gladlog/analysis/src/utils/summonOwner";
 import * as summonReachability from "@gladlog/analysis/src/utils/summonReachability";
 import * as talentBehaviors from "@gladlog/analysis/src/utils/talentBehaviors";
@@ -178,6 +179,7 @@ import * as videoTime from "../../desktop/src/shared/videoTime";
 // standalone on the gaming machine), so corpus-tools cannot import it. The
 // naming relation between the two is asserted below instead.
 import * as collectLogs from "../../log-pipeline/src/collectLogs";
+import * as swingTwins from "../../parser/src/l3/swingTwins";
 // Desktop renderer predicates (the "Report UI" section). Relative for a
 // different reason than corpus-tools: eval has no dependency on the desktop app
 // and should not grow one. Both modules are leaf-safe to import — flowSeries
@@ -194,7 +196,6 @@ import * as redactOutcome from "../src/halo/redactOutcome";
 import * as checkScoreProvenance from "../src/provenance/checkScoreProvenance";
 import * as positioningScan from "../src/quality/positioningScan";
 import * as promptQualityCheck from "../src/quality/promptQualityCheck";
-import * as swingTwins from "../../parser/src/l3/swingTwins";
 
 type Namespace = Record<string, unknown>;
 
@@ -1096,6 +1097,21 @@ const INDEX: PredicateRow[] = [
     file: `${A}/utils/summonOwner.ts`,
     symbol: "summonOwnerById",
     mod: summonOwner,
+  },
+  {
+    file: `${A}/utils/summonKind.ts`,
+    symbol: "summonKindWord",
+    mod: summonKind,
+  },
+  {
+    file: `${A}/utils/summonKind.ts`,
+    symbol: "SUMMON_KIND_RE_SRC",
+    mod: summonKind,
+  },
+  {
+    file: `${A}/context/timelineHelpers.ts`,
+    symbol: "summonKindOf",
+    mod: timelineHelpers,
   },
   {
     file: `${A}/utils/resourceAt.ts`,

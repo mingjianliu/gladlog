@@ -222,6 +222,7 @@
     "test/spellSchools.test.ts",
     "test/spellTags.ccSpellIds.test.ts",
     "test/spellTargeting.test.ts",
+    "test/summonKind.test.ts",
     "test/summonReachability.test.ts",
     "test/syncWindowTimingFacts.test.ts",
     "test/talentNames.test.ts",

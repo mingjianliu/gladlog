@@ -28,7 +28,7 @@
 import type { ICombatUnit } from "@gladlog/parser-compat";
 import { CombatUnitReaction, LogEvent } from "@gladlog/parser-compat";
 
-import { resolveSummonOwner } from "../context/timelineHelpers";
+import { resolveSummonOwner, summonKindOf } from "../context/timelineHelpers";
 import { ROOT_DR_IDS, ROOT_SPELL_IDS } from "../data/rootSpells";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import { ccSpellIds } from "../data/spellTags";
@@ -209,7 +209,12 @@ export function rootSourceLabel(
     name: srcUnitName,
     side: "friendly",
   });
-  if (owner) return `${owner.name.split("-")[0]}'s pet`;
+  if (owner) {
+    const src = allUnits.find(
+      (u) => u.name === srcUnitName && u.ownerId === owner.id,
+    );
+    return `${owner.name.split("-")[0]}'s ${summonKindOf(src?.id, src)}`;
+  }
   const short = srcUnitName.split("-")[0];
   return [...short].some((c) => c.charCodeAt(0) > 127) ? "[pet]" : short;
 }

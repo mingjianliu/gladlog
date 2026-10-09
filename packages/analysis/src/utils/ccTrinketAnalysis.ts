@@ -39,12 +39,12 @@ import {
   trinketSpellIds,
 } from "../data/spellTags";
 import trinketItemIdsData from "../data/trinketItemIds.json";
+import { auraEndFromLog } from "./auraEndCause";
 import {
   auraBreaksBeforeRemoved,
   dropAuraRebroadcasts,
   supersededAuraBreaks,
 } from "./auraIntervals";
-import { auraEndFromLog } from "./auraEndCause";
 import { upperBound } from "./binarySearch";
 import {
   buildCannotCastIntervals,
@@ -55,13 +55,13 @@ import {
 import { ccFullDurationForCaster } from "./ccDuration";
 import { stasisReplayWindows } from "./combatStates";
 import { isHealerSpec, isPassiveProcCast, specToString } from "./cooldowns";
+import { ALLY_DISPEL_MATCH_TOLERANCE_S } from "./dispelAnalysis";
 import {
   computeIncomingDR,
   drDurationFactor,
   IDRInfo,
   matchPendingCcKey,
 } from "./drAnalysis";
-import { ALLY_DISPEL_MATCH_TOLERANCE_S } from "./dispelAnalysis";
 import { IMMUNITY_IDS } from "./enemyDefensives";
 import {
   interruptCooldownRemainingMs,
@@ -97,6 +97,7 @@ import {
   spellReachForCaster,
 } from "./spellRange";
 import { medianFinite } from "./stats";
+import { summonKindWord } from "./summonKind";
 import { interruptImmuneWindows } from "./talentBehaviors";
 import { getTalentAvoidanceBuffs } from "./talentBehaviors";
 import { DPS_TRINKET_CD_S, HEALER_TRINKET_CD_S } from "./trinketCooldown";
@@ -1203,7 +1204,8 @@ export function ccRemovalCause(
   // ended it is not in the log.
   const auras = holder.auraEvents ?? [];
   const isBreak = (ev: string) =>
-    ev === LogEvent.SPELL_AURA_BROKEN || ev === LogEvent.SPELL_AURA_BROKEN_SPELL;
+    ev === LogEvent.SPELL_AURA_BROKEN ||
+    ev === LogEvent.SPELL_AURA_BROKEN_SPELL;
   const endsHere = auras.filter(
     (a) => a.spellId === spellId && a.logLine.timestamp === removeMs,
   );
@@ -2691,7 +2693,7 @@ export function analyzePlayerCCAndTrinket(
               // (`checkCjkLeak`): name it through its owner
               const petOwner = enemies.find((e) => e.id === petKicker.ownerId);
               nearestKickerName = petOwner
-                ? `${petOwner.name}'s pet`
+                ? `${petOwner.name}'s ${summonKindWord(petKicker.id, { unit: petKicker })}`
                 : petKicker.name;
             }
             const range =

@@ -37,6 +37,22 @@ import {
 } from "@gladlog/analysis";
 import { fmtFactNum } from "@gladlog/analysis/src/analysis/factFormat";
 import {
+  CC_USE_CAP,
+  CC_USE_MIN_S,
+  CC_USE_MIN_SHARE,
+} from "@gladlog/analysis/src/context/ccUse";
+import {
+  FORCED_FOLLOWUP_CAP,
+  FORCED_FOLLOWUP_MAX_GAP_S,
+  forcedFollowUpDurOk,
+  forcedFollowUpGapOk,
+  renderedInsideSpan,
+} from "@gladlog/analysis/src/context/forcedTrinket";
+import {
+  PEEL_LOOKBACK_S,
+  PEEL_MIN_USABLE_S,
+} from "@gladlog/analysis/src/context/peelOptions";
+import {
   lookupBacklashPrior,
   lookupBacklashWorth,
 } from "@gladlog/analysis/src/data/backlashDispelPrior";
@@ -74,27 +90,12 @@ import {
   DEATH_BREAKABLE_CC_MIN_S,
 } from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
 import {
-  PEEL_LOOKBACK_S,
-  PEEL_MIN_USABLE_S,
-} from "@gladlog/analysis/src/context/peelOptions";
-import {
-  CC_USE_CAP,
-  CC_USE_MIN_S,
-  CC_USE_MIN_SHARE,
-} from "@gladlog/analysis/src/context/ccUse";
-import {
-  FORCED_FOLLOWUP_CAP,
-  FORCED_FOLLOWUP_MAX_GAP_S,
-  forcedFollowUpDurOk,
-  forcedFollowUpGapOk,
-  renderedInsideSpan,
-} from "@gladlog/analysis/src/context/forcedTrinket";
-import {
   canHelpAnotherUnit,
   isHpTroughWorthPrinting,
   PRESS_HP_LINE_TAGS,
 } from "@gladlog/analysis/src/utils/cooldowns";
 import { fmtTime } from "@gladlog/analysis/src/utils/renderGrid";
+import { SUMMON_KIND_RE_SRC } from "@gladlog/analysis/src/utils/summonKind";
 import fs from "fs-extra";
 import path from "path";
 
@@ -1267,8 +1268,7 @@ const BURST_LEDGER_LINE = /^\s*Burst #(\d+) — (\d+):(\d{2})–(\d+):(\d{2}) \|
 const DMG_SPIKE_BOUNDS_LINE =
   /^\s*(\d+):(\d{2})–(\d+):(\d{2})\s+\[DMG SPIKE\]\s+(\S+) \(/;
 const YOU_CC_LINE = /^\s*(\d+):(\d{2})\s+\[YOU\] \[CC\]\s+(.+?) →/;
-const CC_ON_ENEMY_HEAD_LINE =
-  /^\s*(\d+):(\d{2})\s+\[CC ON ENEMY\]\s+(\S+) ← /;
+const CC_ON_ENEMY_HEAD_LINE = /^\s*(\d+):(\d{2})\s+\[CC ON ENEMY\]\s+(\S+) ← /;
 /**
  * A `[CC ON ENEMY]` line from its `(by …)` to the end, in the two forms the
  * producer writes: `(Ns)` + optional ` [DR: …]` (cc-dr F-CE1) + optional
@@ -1884,11 +1884,13 @@ export function checkKillAttemptFraming(lines: string[]): string[] {
 
 /** `<unit id="4" … role="enemy">` — the side a rendered id belongs to. */
 const UNIT_ROLE_LINE = /<unit\s+id="(\d+)"[^>]*role="([^"]+)"/;
-/** `[CC ON TEAM] 1(RShaman) ← Capacitor Totem (by 6(RShaman)'s pet)` — the
- * credited owner id of a summon-cast CC. The inner `(Spec)` is why this cannot
+/** `[CC ON TEAM] 1(RShaman) ← Capacitor Totem (by 6(RShaman)'s totem)` — the
+ * credited owner id of a summon-cast CC, whatever kind word the summon got
+ * (`SUMMON_KIND_RE_SRC`, the analysis side's own list). The inner `(Spec)` is why this cannot
  * be `[^)]*`. */
-const CC_PET_CREDIT =
-  /\[(CC ON TEAM|CC ON ENEMY|ENEMY TRINKET)\][^\n]*?\(by (\d+)[^()]*(?:\([^()]*\)[^()]*)*'s pet\)/;
+const CC_PET_CREDIT = new RegExp(
+  String.raw`\[(CC ON TEAM|CC ON ENEMY|ENEMY TRINKET)\][^\n]*?\(by (\d+)[^()]*(?:\([^()]*\)[^()]*)*'s ${SUMMON_KIND_RE_SRC}\)`,
+);
 
 /**
  * A summon-cast CC must be credited to the side that could have cast it:

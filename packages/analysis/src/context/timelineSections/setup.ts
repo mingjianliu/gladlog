@@ -18,8 +18,8 @@ import {
   LogEvent,
 } from "@gladlog/parser-compat";
 
-import { castAndEffectIds } from "../../data/castEffectAuras";
 import { CYCLONE_SPELL_ID } from "../../analysis/candidates/massDispel";
+import { castAndEffectIds } from "../../data/castEffectAuras";
 import { getEnglishSpellName } from "../../data/spellEffectData";
 import { ccSpellIds } from "../../data/spellTags";
 import { buffFullDurationForCaster } from "../../utils/buffDuration";
@@ -54,6 +54,7 @@ import {
   GROUNDING_TOTEM_NPC_ID,
   MANA_COOLDOWN_SPELL_IDS,
   resolveSummonOwner,
+  summonKindOf,
 } from "../timelineHelpers";
 import { abbrevSpec } from "../unitLabel";
 import type { DeferredSnapshot } from "./ctx";
@@ -343,7 +344,12 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
       const label = friends.some((f) => f.id === ownerUnit.id)
         ? pid(ownerUnit.name)
         : enemyPid(ownerUnit.name);
-      return `${label}'s pet`;
+      // FT-T14: the summon's kind is read off the log — a Capacitor Totem
+      // is the shaman's totem, not a pet the round never had
+      const src = sourceId
+        ? allUnits?.find((u) => u.id === sourceId)
+        : allUnits?.find((u) => u.name === name && u.ownerId === ownerUnit.id);
+      return `${label}'s ${summonKindOf(src?.id ?? sourceId, src)}`;
     }
     const short = name.split("-")[0];
     return [...short].some((c) => c.charCodeAt(0) > 127) ? "[pet]" : short;

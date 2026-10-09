@@ -31,7 +31,7 @@ import {
   auraBlocksMechanic,
   INTERRUPT_MECHANIC,
 } from "../../utils/spellMechanics";
-import { resolveSummonOwner } from "../timelineHelpers";
+import { resolveSummonOwner, summonKindOf } from "../timelineHelpers";
 import type { TimelineCtx } from "./ctx";
 
 /** Two SPELL_MISSED rows of one kick (Skull Bash logs 93985 and 106839
@@ -87,7 +87,8 @@ export function emitKickEntries(
       const ownerLabel = friendlyNames.has(petOwner.name)
         ? pid(petOwner.name)
         : enemyPid(petOwner.name);
-      return `${ownerLabel}'s pet`;
+      const src = allUnits?.find((u) => u.id === unitId);
+      return `${ownerLabel}'s ${summonKindOf(src?.id ?? unitId, src)}`;
     }
     const short = name.split("-")[0];
     // Unresolved unit = pet/NPC whose owner lookup failed. Its name is

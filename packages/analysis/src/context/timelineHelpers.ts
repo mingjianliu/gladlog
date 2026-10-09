@@ -7,8 +7,8 @@ import {
   LogEvent,
 } from "@gladlog/parser-compat";
 
-import { DRUID_FORM_AURA_IDS, FORM_BOUND_BUFF_IDS } from "../data/druidForms";
 import { DEATH_CC_LOOKBACK_S } from "../analysis/candidates/death";
+import { DRUID_FORM_AURA_IDS, FORM_BOUND_BUFF_IDS } from "../data/druidForms";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import {
   auraEndFromLog,
@@ -16,16 +16,16 @@ import {
   type IAuraEndFromLog,
 } from "../utils/auraEndCause";
 import {
+  AURA_REBROADCAST_GAP_MS,
+  dropAuraRebroadcasts,
+} from "../utils/auraIntervals";
+import { buffFullDurationForCaster } from "../utils/buffDuration";
+import {
   deathLockChain,
   enemySourceIds,
   freeMsBefore,
   namedCannotCastIntervals,
 } from "../utils/cannotCastIntervals";
-import {
-  AURA_REBROADCAST_GAP_MS,
-  dropAuraRebroadcasts,
-} from "../utils/auraIntervals";
-import { buffFullDurationForCaster } from "../utils/buffDuration";
 import { IPlayerCCTrinketSummary } from "../utils/ccTrinketAnalysis";
 import { isControlledPlayerFlags } from "../utils/charmedPlayer";
 import {
@@ -55,6 +55,7 @@ import { getHpPercentAtTime } from "../utils/killWindowTargetSelection";
 import { fmtTime } from "../utils/renderGrid";
 import { isSameSideSource, type RosterSides } from "../utils/rosterSide";
 import { getSpellSchoolName } from "../utils/spellSchools";
+import { type SummonKindWord, summonKindWord } from "../utils/summonKind";
 import { summonOwnerById } from "../utils/summonOwner";
 
 export { isPassiveProcCast, PASSIVE_SPELL_BLOCKLIST };
@@ -464,8 +465,7 @@ export function extractOwnerCDBuffExpiry(
     // across all friendly units, sorted ascending.
     // the recipient travels with each removal (codex c2 09-30): only a
     // removal from the owner can be the owner's death cascade
-    const removals: Array<{ ms: number; unitId: string; amount?: number }> =
-      [];
+    const removals: Array<{ ms: number; unitId: string; amount?: number }> = [];
     for (const friend of friends) {
       // a same-ms REMOVED→APPLIED re-broadcast is not the buff ending (3306:
       // "Obsidian Scales ended early" on a Dracthyr visage swap)
@@ -1066,7 +1066,27 @@ function summonLabel(
         ? es
         : undefined);
   if (id === undefined) return "[pet]";
-  return `${id}'s ${srcType === CombatUnitType.Guardian ? "guardian" : "pet"}`;
+  return `${id}'s ${summonKindOf(d.srcUnitId || undefined, undefined, srcType)}`;
+}
+
+/** `summonKindWord` with both kinds of evidence the timeline has: the unit's
+ * own SPELL_SUMMON line and its npc's listed name (a Static Field Totem is
+ * in the log with no summon line of its own). The one call every `X's
+ * <kind>` label on the timeline goes through. The damage rows (`summonLabel`)
+ * have the source's GUID but not its unit, so there a totem is recognised by
+ * its listed npc only — an unlisted totem that deals damage reads
+ * `guardian` (0 such rows in the 605-file capture, 2026-10-09). */
+export function summonKindOf(
+  sourceId: string | undefined,
+  unit?: Pick<ICombatUnit, "actionIn">,
+  srcType?: CombatUnitType,
+): SummonKindWord {
+  return summonKindWord(sourceId, {
+    unit,
+    srcType,
+    npcName:
+      CRITICAL_NON_PLAYER_NPC_NAMES[getNpcIdFromGuid(sourceId ?? "") ?? ""],
+  });
 }
 
 /** When the unit was summoned (its own SPELL_SUMMON), or null. */

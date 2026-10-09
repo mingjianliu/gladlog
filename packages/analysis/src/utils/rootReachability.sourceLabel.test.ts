@@ -23,9 +23,9 @@ describe("rootSourceLabel", () => {
     );
   });
 
-  it("a summon with a resolvable owner → `<owner>'s pet`", () => {
-    const all = [...players, unit("t1", "陷地图腾", "p1")];
-    expect(rootSourceLabel("陷地图腾", players, all)).toBe("Bingbumlol's pet");
+  it("a summon with a resolvable owner → `<owner>'s <kind>` (an Earthgrab Totem is a totem)", () => {
+    const all = [...players, unit("Creature-0-3878-2509-1-60561-0000000001", "陷地图腾", "p1")];
+    expect(rootSourceLabel("陷地图腾", players, all)).toBe("Bingbumlol's totem");
   });
 
   it("sourceSide restricts the by-name owner lookup to the side that could cast it", () => {
@@ -34,12 +34,12 @@ describe("rootSourceLabel", () => {
     // credited the rooted player's own teammate.
     const all = [
       ...players,
-      unit("t1", "Earthgrab Totem", "p1"),
-      unit("t2", "Earthgrab Totem", "p2"),
+      unit("Creature-0-3878-2509-1-60561-0000000001", "Earthgrab Totem", "p1"),
+      unit("Creature-0-3878-2509-1-60561-0000000002", "Earthgrab Totem", "p2"),
     ];
     expect(
       rootSourceLabel("Earthgrab Totem", players, all, [players[1]!]),
-    ).toBe("Trillebelly's pet");
+    ).toBe("Trillebelly's totem");
     // No owner on the casting side → no owner is invented.
     expect(rootSourceLabel("Earthgrab Totem", players, all, [])).toBe(
       "Earthgrab Totem",

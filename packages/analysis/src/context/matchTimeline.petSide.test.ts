@@ -62,13 +62,13 @@ const mate = mkUnit("m", "Mate-Realm", CombatUnitReaction.Friendly);
 const enemy = mkUnit("e", "Enemy-Realm", CombatUnitReaction.Hostile);
 /** The collision: one totem per side, identical name, different GUIDs. */
 const friendlyTotem = mkUnit(
-  "totem-friendly",
+  "Creature-0-3878-2509-1-61245-00000000AA",
   "Capacitor Totem",
   CombatUnitReaction.Friendly,
   "m",
 );
 const enemyTotem = mkUnit(
-  "totem-enemy",
+  "Creature-0-3878-2509-1-61245-00000000BB",
   "Capacitor Totem",
   CombatUnitReaction.Hostile,
   "e",
@@ -145,8 +145,8 @@ describe("[CC ON TEAM] summon attribution (GH #99)", () => {
   it("credits the enemy totem that owns the source GUID, not the same-named friendly one", () => {
     const line = ccOnTeamLine(paramsWith(enemyTotem.id));
     expect(line).toBeDefined();
-    expect(line).toContain("(by Enemy's pet)");
-    expect(line).not.toContain("Mate's pet");
+    expect(line).toContain("(by Enemy's totem)");
+    expect(line).not.toContain("Mate's");
   });
 
   it("falls back to the same-side name match when the document carries no source id", () => {
@@ -155,7 +155,7 @@ describe("[CC ON TEAM] summon attribution (GH #99)", () => {
     // the old name lookup returned first.
     const line = ccOnTeamLine(paramsWith(""));
     expect(line).toBeDefined();
-    expect(line).toContain("(by Enemy's pet)");
-    expect(line).not.toContain("Mate's pet");
+    expect(line).toContain("(by Enemy's totem)");
+    expect(line).not.toContain("Mate's");
   });
 });
