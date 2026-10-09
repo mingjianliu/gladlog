@@ -193,6 +193,7 @@ import * as redactOutcome from "../src/halo/redactOutcome";
 import * as checkScoreProvenance from "../src/provenance/checkScoreProvenance";
 import * as positioningScan from "../src/quality/positioningScan";
 import * as promptQualityCheck from "../src/quality/promptQualityCheck";
+import * as swingTwins from "../../parser/src/l3/swingTwins";
 
 type Namespace = Record<string, unknown>;
 
@@ -263,6 +264,13 @@ const INDEX: PredicateRow[] = [
     file: `${A}/utils/rawStreams.ts`,
     symbol: "roundDurationSOf",
     mod: rawStreams,
+  },
+  // FT-T01: one swing, one damage event (parser side; the raw-level scan
+  // swingLandedScan.ts imports the same function).
+  {
+    file: "packages/parser/src/l3/swingTwins.ts",
+    symbol: "swingLandedTwins",
+    mod: swingTwins,
   },
   {
     file: `${A}/analysis/candidates/shared.ts`,
@@ -2516,6 +2524,16 @@ describe("谓词索引:刻意不统一的配对,两边的符号都还在", () =>
 });
 
 describe("谓词索引:无法共享 export 的配对,断言相等", () => {
+  it("FT-T01:平砍孪生行谓词只有一处声明 —— collect.ts 与 swingLandedScan.ts 都 import 它,窗口 = 1000 ms", () => {
+    expect(swingTwins.SWING_TWIN_WINDOW_MS).toBe(1_000);
+    expect(readRepo("packages/parser/src/l3/collect.ts")).toMatch(
+      /import \{ swingLandedTwins \} from "\.\/swingTwins"/,
+    );
+    expect(readRepo("packages/eval/scripts/swingLandedScan.ts")).toMatch(
+      /import \{[^}]*\bswingLandedTwins\b[^}]*\} from "@gladlog\/parser"/s,
+    );
+  });
+
   it("rawStreams 的 splitRawLine / parseRawTimestamp / mirrorDecodeAdvanced 自 2026-09-26 起就是 parser 的 splitLine / parseTimestamp / decodeAdvanced 本身(经 parser-compat 重导出,同一引用),不再是镜像", () => {
     expect(rawStreams.splitRawLine).toBe(parserSplitLine);
     expect(rawStreams.parseRawTimestamp).toBe(parserParseTimestamp);

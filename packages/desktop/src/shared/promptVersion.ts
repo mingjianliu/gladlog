@@ -1108,5 +1108,12 @@
  *  cdRecastFloor, corpus-tools reference_vectors) and CD_HOARDED_OUTCOME_REF
  *  re-measured (4.5 / 11.4 % n=16,960 → 5.8 / 13.0 % n=15,645). Reference
  *  numbers quoted in facts move; counts in the commit.
+ *  v335 (2026-10-08, FT-T01, user approval 2026-10-08 "走 A"): a melee swing
+ *  the log wrote only its victim-side line for (SWING_DAMAGE_LANDED with no
+ *  SWING_DAMAGE twin — a guardian the client has no owner for, e.g. Unholy's
+ *  Lesser Ghoul) is a damage event; the parser used to drop it. Damage sums
+ *  that include such swings move ([DMG SPIKE], [OFFENSIVE WINDOW] peak, the
+ *  DPS on press lines) and a [KILL] line can name a killing blow it lacked.
+ *  Counts in the commit.
  */
-export const PROMPT_VERSION = 334;
+export const PROMPT_VERSION = 335;

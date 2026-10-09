@@ -1,13 +1,14 @@
 import type { ParsedLine } from "../l1/types";
-import type { RosterUnit } from "./roster";
 import type {
-  GladUnit,
-  GladHpEvent,
   GladAbsorbEvent,
-  GladSpellEvent,
   GladAuraEvent,
   GladDeathEvent,
+  GladHpEvent,
+  GladSpellEvent,
+  GladUnit,
 } from "./model";
+import type { RosterUnit } from "./roster";
+import { swingLandedTwins } from "./swingTwins";
 
 export function collectEvents(
   records: ParsedLine[],
@@ -48,6 +49,8 @@ export function collectEvents(
     });
   }
 
+  const landedTwins = swingLandedTwins(records);
+
   for (const record of records) {
     const srcGuid = record.base?.srcGuid;
     const destGuid = record.base?.destGuid;
@@ -67,8 +70,16 @@ export function collectEvents(
       lineIndex: record.lineIndex,
     };
 
-    // 1. Damage group
-    if (record.damage && record.eventName !== "SWING_DAMAGE_LANDED") {
+    // 1. Damage group. One swing is logged as SWING_DAMAGE and / or
+    // SWING_DAMAGE_LANDED (see swingTwins.ts): a LANDED line that repeats a
+    // SWING_DAMAGE line is skipped, a LANDED line that stands alone IS the
+    // swing. A lone LANDED line with nothing landed (fully absorbed) is not a
+    // damage event — like a fully absorbed spell, it exists as its
+    // SPELL_ABSORBED record (and SWING_MISSED, when the log has one).
+    const skippedSwingLine =
+      record.eventName === "SWING_DAMAGE_LANDED" &&
+      (landedTwins.has(record) || !(record.damage && record.damage.amount > 0));
+    if (record.damage && !skippedSwingLine) {
       const hpEvent: GladHpEvent = {
         ...baseEvent,
         spellId,

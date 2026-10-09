@@ -21,6 +21,7 @@ export { GladLogParser } from "./api";
 export type { SegmentCloseInfo, SegmentOpenInfo } from "./api";
 export type { Segment, ShuffleClose } from "./l2/types";
 export { buildMatch, buildShuffle } from "./l3/compose";
+export { SWING_TWIN_WINDOW_MS, swingLandedTwins } from "./l3/swingTwins";
 export type {
   MatchResult,
   UnitKind,

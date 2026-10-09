@@ -85,6 +85,8 @@ export const EXTERNAL_DAMAGE_BIN_MIN_HIT = 100;
 const DIRECT_EVENTS = new Set<string>([
   LogEvent.SPELL_DAMAGE,
   LogEvent.SWING_DAMAGE,
+  // A swing the log wrote only its victim-side line for (parser swingTwins.ts).
+  LogEvent.SWING_DAMAGE_LANDED,
   LogEvent.RANGE_DAMAGE,
 ]);
 const PERIODIC_EVENT = LogEvent.SPELL_PERIODIC_DAMAGE as string;
