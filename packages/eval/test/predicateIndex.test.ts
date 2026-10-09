@@ -530,6 +530,21 @@ const INDEX: PredicateRow[] = [
     mod: cooldowns,
   },
   {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "selfForbearanceUntil",
+    mod: cooldowns,
+  },
+  {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "cdRemainingWholeSeconds",
+    mod: cooldowns,
+  },
+  {
+    file: `${A}/context/resLedgerPrune.ts`,
+    symbol: "resCcRemainingText",
+    mod: resLedgerPrune,
+  },
+  {
     file: `${A}/utils/deathOutcomeAnalysis.ts`,
     symbol: "externalReachYards",
     mod: deathOutcomeAnalysis,

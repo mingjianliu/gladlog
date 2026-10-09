@@ -3,15 +3,12 @@ import { type ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import { AURA_REBROADCAST_GAP_MS, dropAuraRebroadcasts } from "./auraIntervals";
 import { ALLY_DISPEL_MATCH_TOLERANCE_S } from "./dispelAnalysis";
+import { DEATH_CASCADE_MS } from "./unitDeath";
 
-/**
- * A buff removed this shortly before its holder's UNIT_DIED was stripped by
- * the death cascade — neither dispelled nor cancelled. Editorial (measured,
- * not a game constant; triage 2026-09-29 death-kill F-B1): repro gaps 7–45 ms
- * (bd790c92, 121c7e15, 6062daf2); the nearest non-cascade removal is 390 ms
- * (0e0663e6 Pillar of Frost).
- */
-export const DEATH_CASCADE_MS = 100;
+// `DEATH_CASCADE_MS` lives in the leaf `unitDeath.ts` (cooldowns.ts reads it
+// too, and this module sits downstream of cooldowns.ts through
+// dispelAnalysis.ts); re-exported here, its first home.
+export { DEATH_CASCADE_MS } from "./unitDeath";
 
 /** What the log itself says about how an aura ended (FT-T08 step 3). */
 export interface IAuraEndFromLog {
@@ -105,7 +102,7 @@ function pairTakesWithRemovals(
     if (done.has(r0)) continue;
     const knotR: AuraLine[] = [r0];
     const knotT: TakeLine[] = [];
-    for (let grew = true; grew; ) {
+    for (let grew = true; grew;) {
       grew = false;
       for (const t of takes)
         if (!knotT.includes(t) && knotR.some((r) => gap(t, r) <= tolMs)) {
@@ -306,9 +303,7 @@ export function auraEndFromLog(
       : undefined;
   // "any source" can match several removals in one ms: a claim only when
   // they all read the same
-  const taken = pairing
-    ? oursRemoved.map((r) => pairing.takenBy.get(r))
-    : [];
+  const taken = pairing ? oursRemoved.map((r) => pairing.takenBy.get(r)) : [];
   const one = taken[0];
   const sameTaker =
     one !== undefined &&

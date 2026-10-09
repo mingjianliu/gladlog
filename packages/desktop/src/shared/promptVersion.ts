@@ -1212,5 +1212,11 @@
  *  found under the aura the log carries (120954 → table row 115203) — it
  *  gets its [ENEMY DEF] line and KILL ATTEMPTS can say `popped Fortifying
  *  Brew`. Counts in the commit.
+ *  v352 (2026-10-09, FT-T04, user approval 2026-10-09): [RES] `cd:` remaining
+ *  is floored onto the render grid (a 120 s cooldown no longer reads
+ *  `(121s)`); a `cc:` entry under half a second reads `-<1s`, not `-0s`;
+ *  Forbearance is read off the logged aura, and a Divine Shield off cooldown
+ *  under it reads `cd:Divine Shield(Forbearance Ns)` instead of `rdy:`.
+ *  Counts in the commit.
  */
-export const PROMPT_VERSION = 351;
+export const PROMPT_VERSION = 352;

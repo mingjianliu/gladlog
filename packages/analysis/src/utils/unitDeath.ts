@@ -34,3 +34,12 @@ export function firstDeathMs(unit: Partial<WithDeaths>): number {
 export function isDeadAt(unit: Partial<WithDeaths>, tMs: number): boolean {
   return firstDeathMs(unit) <= tMs;
 }
+
+/**
+ * A buff removed this shortly before its holder's UNIT_DIED was stripped by
+ * the death cascade — neither dispelled nor cancelled. Editorial (measured,
+ * not a game constant; triage 2026-09-29 death-kill F-B1): repro gaps 7–45 ms
+ * (bd790c92, 121c7e15, 6062daf2); the nearest non-cascade removal is 390 ms
+ * (0e0663e6 Pillar of Frost).
+ */
+export const DEATH_CASCADE_MS = 100;

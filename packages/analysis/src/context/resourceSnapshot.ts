@@ -9,10 +9,14 @@ import {
   cdLatestRemainingSeconds,
   cdMaybeAvailableAt,
   cdNeverSpent,
+  cdRemainingWholeSeconds,
   cdSecondsUntilReady,
+  DIVINE_SHIELD_SPELL_ID,
+  forbearanceBlocks,
   IMajorCooldownInfo,
   lockCastsOf,
   pressSpentBy,
+  selfForbearanceUntil,
   specToString,
 } from "../utils/cooldowns";
 import { positionalWallReach } from "../utils/deathOutcomeAnalysis";
@@ -23,6 +27,7 @@ import { affordableAt, type ManaFallback } from "../utils/resourceAt";
 import type { RosterSides } from "../utils/rosterSide";
 import { getPvpToolkit } from "../utils/talentBehaviors";
 import { isDeadAt } from "../utils/unitDeath";
+import { resCcRemainingText } from "./resLedgerPrune";
 
 // F169: number of friendly units with an active Atonement (194384) at a given time. Disc Priest
 // healing scales with Atonement count, so this is a core throughput signal for the spec.
@@ -164,12 +169,12 @@ export function buildPlayerLoadout(
     cd.isProcOnly
       ? `${cd.spellName} [PASSIVE]`
       : `${cd.spellName} [${cd.cooldownSeconds}s${(cd.charges ?? 1) > 1 && !cdIsProcOnly(cd) ? `, ${cd.charges} Charges` : ""}${lastsPart(cd, caster)}]${
-      cdIsProcOnly(cd)
-        ? " [PASSIVE]"
-        : cdNeverSpent(cd)
-          ? ` [UNUSED${triedNote(cd, caster)}]`
-          : ""
-    }`;
+          cdIsProcOnly(cd)
+            ? " [PASSIVE]"
+            : cdNeverSpent(cd)
+              ? ` [UNUSED${triedNote(cd, caster)}]`
+              : ""
+        }`;
 
   const ownerId = nextId++;
   friendlyIdMap.set(owner.name, ownerId);
@@ -349,11 +354,8 @@ function remainingText(cd: IMajorCooldownInfo, timeSeconds: number): string {
   const latest = cdLatestRemainingSeconds(cd, timeSeconds);
   if (cd.earliestCooldownSeconds === undefined) return `${latest}s`;
   if (cdMaybeAvailableAt(cd, timeSeconds)) return `≤${latest}s`;
-  const soonest = Math.max(
-    1,
-    Math.round(
-      cdSecondsUntilReady(cd, timeSeconds, cd.earliestCooldownSeconds),
-    ),
+  const soonest = cdRemainingWholeSeconds(
+    cdSecondsUntilReady(cd, timeSeconds, cd.earliestCooldownSeconds),
   );
   return soonest < latest ? `${soonest}–${latest}s` : `${latest}s`;
 }
@@ -374,6 +376,12 @@ function onCdKey(
     .filter((c) => pressSpentBy(c.timeSeconds, timeSeconds))
     .reduce((m, c) => Math.max(m, c.timeSeconds), Number.NEGATIVE_INFINITY);
   return `${displayName}@${Math.round(last * 10) / 10}`;
+}
+
+/** B35 delta key of a Forbearance-locked entry: the name and the lockout it
+ * is waiting out, so a second Forbearance prints again. */
+function forbearanceKey(displayName: string, untilS: number): string {
+  return `${displayName}@forbearance${Math.round(untilS * 10) / 10}`;
 }
 
 /**
@@ -431,7 +439,13 @@ function friendlyResCds(
   ownerCDs: IMajorCooldownInfo[],
   teammateCDs: ResTeammateCds[],
   deaths: ResHolderDeaths | undefined,
-): Array<{ displayName: string; cd: IMajorCooldownInfo; holderDead: boolean }> {
+): Array<{
+  displayName: string;
+  cd: IMajorCooldownInfo;
+  holderDead: boolean;
+  /** off cooldown, but its holder is under Forbearance until this second */
+  forbearanceUntilS?: number;
+}> {
   // "dead before the row's second": `isDeadAt` 1 ms before it, so a death at
   // exactly 67.000 keeps the 1:07 row like one at 67.030 (codex review — the
   // shared predicate's own `<=` is unchanged)
@@ -442,6 +456,22 @@ function friendlyResCds(
   const dead = (unit: ICombatUnit | undefined) =>
     rowMs !== undefined && unit !== undefined && isDeadAt(unit, rowMs);
   const ownerDead = dead(deaths?.ownerUnit);
+  // FT-T04: Divine Shield is the one tracked cooldown Forbearance takes from
+  // its own holder (the ally-castable ones stay pressable on somebody
+  // else). `forbearanceBlocks` keeps it for a Light's Revocation holder.
+  const team = [deaths?.ownerUnit, ...teammateCDs.map((t) => t.player)].filter(
+    (u): u is ICombatUnit => u !== undefined,
+  );
+  const forbearanceUntil = (
+    cd: IMajorCooldownInfo,
+    holder: ICombatUnit | undefined,
+  ): number | undefined =>
+    deaths !== undefined &&
+    holder !== undefined &&
+    cd.spellId === DIVINE_SHIELD_SPELL_ID &&
+    forbearanceBlocks(holder, cd.spellId)
+      ? selfForbearanceUntil(holder, team, timeSeconds, deaths.matchStartMs)
+      : undefined;
   return [
     ...ownerCDs
       .filter((cd) => !cdIsProcOnly(cd))
@@ -449,6 +479,7 @@ function friendlyResCds(
         displayName: cd.spellName,
         cd,
         holderDead: ownerDead,
+        forbearanceUntilS: forbearanceUntil(cd, deaths?.ownerUnit),
       })),
     ...teammateCDs.flatMap(({ cds, playerLabel, player }) => {
       const holderDead = dead(player);
@@ -460,9 +491,29 @@ function friendlyResCds(
             : cd.spellName,
           cd,
           holderDead,
+          forbearanceUntilS: forbearanceUntil(cd, player),
         }));
     }),
   ];
+}
+
+/** What a `cd:` entry reads for a cooldown that is off cooldown while its
+ * holder is under Forbearance (FT-T04) — `Divine Shield(Forbearance 12s)`. */
+export const RES_FORBEARANCE_RE_SRC = String.raw`\(Forbearance \d+s\)`;
+function forbearanceText(untilS: number, timeSeconds: number): string {
+  return `Forbearance ${Math.max(1, Math.floor(untilS - timeSeconds))}s`;
+}
+
+/** `resStateOf` with the holder's Forbearance: a ready Divine Shield under it
+ * is "locked" — out of `rdy:`, in `cd:` with the lockout's own remaining. */
+function resEntryState(
+  e: { cd: IMajorCooldownInfo; forbearanceUntilS?: number },
+  timeSeconds: number,
+): "ready" | "onCd" | "skip" | "locked" {
+  const state = resStateOf(e.cd, timeSeconds);
+  return state === "ready" && e.forbearanceUntilS !== undefined
+    ? "locked"
+    : state;
 }
 
 /**
@@ -521,14 +572,9 @@ export function computeReadyNames(
   deaths?: ResHolderDeaths,
 ): string[] {
   const readyNames: string[] = [];
-  for (const { displayName, cd, holderDead } of friendlyResCds(
-    timeSeconds,
-    ownerCDs,
-    teammateCDs,
-    deaths,
-  ))
-    if (!holderDead && resStateOf(cd, timeSeconds) === "ready")
-      readyNames.push(displayName);
+  for (const e of friendlyResCds(timeSeconds, ownerCDs, teammateCDs, deaths))
+    if (!e.holderDead && resEntryState(e, timeSeconds) === "ready")
+      readyNames.push(e.displayName);
   return readyNames;
 }
 
@@ -546,14 +592,14 @@ export function computeOnCDDisplayNames(
   deaths?: ResHolderDeaths,
 ): string[] {
   const onCDNames: string[] = [];
-  for (const { displayName, cd, holderDead } of friendlyResCds(
-    timeSeconds,
-    ownerCDs,
-    teammateCDs,
-    deaths,
-  ))
-    if (!holderDead && resStateOf(cd, timeSeconds) === "onCd")
-      onCDNames.push(onCdKey(displayName, cd, timeSeconds));
+  for (const e of friendlyResCds(timeSeconds, ownerCDs, teammateCDs, deaths)) {
+    if (e.holderDead) continue;
+    const state = resEntryState(e, timeSeconds);
+    if (state === "onCd")
+      onCDNames.push(onCdKey(e.displayName, e.cd, timeSeconds));
+    else if (state === "locked")
+      onCDNames.push(forbearanceKey(e.displayName, e.forbearanceUntilS!));
+  }
   return onCDNames;
 }
 interface ResourceSnapshotParams {
@@ -702,8 +748,19 @@ export function buildResourceSnapshot({
   }
 
   const currentOnCDNames: string[] = [];
-  for (const { displayName, cd } of allFriendlyCDs) {
-    if (resStateOf(cd, timeSeconds) !== "onCd") continue;
+  for (const e of allFriendlyCDs) {
+    const { displayName, cd } = e;
+    const state = resEntryState(e, timeSeconds);
+    if (state === "locked") {
+      const key = forbearanceKey(displayName, e.forbearanceUntilS!);
+      currentOnCDNames.push(key);
+      if (prevOnCDSet === null || !prevOnCDSet.has(key))
+        onCDParts.push(
+          `${displayName}(${forbearanceText(e.forbearanceUntilS!, timeSeconds)})`,
+        );
+      continue;
+    }
+    if (state !== "onCd") continue;
     const key = onCdKey(displayName, cd, timeSeconds);
     currentOnCDNames.push(key);
     // B35: in delta mode only show CDs that newly went on cooldown (not in previous snapshot).
@@ -863,7 +920,7 @@ export function buildResourceSnapshot({
         timeSeconds < cc.atSeconds + cc.durationSeconds,
     );
     if (activeCC) {
-      const remaining = Math.round(
+      const remaining = resCcRemainingText(
         activeCC.atSeconds + activeCC.durationSeconds - timeSeconds,
       );
       const isStun = activeCC.drInfo?.category === "Stun";
@@ -873,7 +930,7 @@ export function buildResourceSnapshot({
         false;
       const trinketTag = isStun && trinketUsedNow ? "[trinketed]" : "";
       ccParts.push(
-        `${pid(name)}/${activeCC.spellName}-${remaining}s${stunTag}${trinketTag}`,
+        `${pid(name)}/${activeCC.spellName}-${remaining}${stunTag}${trinketTag}`,
       );
     }
 
@@ -884,10 +941,10 @@ export function buildResourceSnapshot({
         timeSeconds < r.atSeconds + r.durationSeconds,
     );
     if (activeRoot) {
-      const remaining = Math.round(
+      const remaining = resCcRemainingText(
         activeRoot.atSeconds + activeRoot.durationSeconds - timeSeconds,
       );
-      ccParts.push(`${pid(name)}/${activeRoot.spellName}-${remaining}s[root]`);
+      ccParts.push(`${pid(name)}/${activeRoot.spellName}-${remaining}[root]`);
     }
 
     // Disarm
@@ -897,11 +954,11 @@ export function buildResourceSnapshot({
         timeSeconds < d.atSeconds + d.durationSeconds,
     );
     if (activeDisarm) {
-      const remaining = Math.round(
+      const remaining = resCcRemainingText(
         activeDisarm.atSeconds + activeDisarm.durationSeconds - timeSeconds,
       );
       ccParts.push(
-        `${pid(name)}/${activeDisarm.spellName}-${remaining}s[disarm]`,
+        `${pid(name)}/${activeDisarm.spellName}-${remaining}[disarm]`,
       );
     }
 
@@ -912,11 +969,11 @@ export function buildResourceSnapshot({
         timeSeconds < k.atSeconds + k.lockoutDurationSeconds,
     );
     if (activeKick) {
-      const remaining = Math.round(
+      const remaining = resCcRemainingText(
         activeKick.atSeconds + activeKick.lockoutDurationSeconds - timeSeconds,
       );
       ccParts.push(
-        `${pid(name)}/${activeKick.kickSpellName}-${remaining}s[kick]`,
+        `${pid(name)}/${activeKick.kickSpellName}-${remaining}[kick]`,
       );
     }
   }

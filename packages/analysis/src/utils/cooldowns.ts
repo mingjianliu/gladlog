@@ -53,12 +53,12 @@ import { binarySearchClosest } from "./binarySearch";
 import { buffFullDurationForCaster } from "./buffDuration";
 import { COPY_CAST_IDS } from "./castPress";
 import { incomingPressureEvents } from "./incomingPressure";
-import { buildRosterSides } from "./rosterSide";
 import {
   auraOffensiveActiveAt,
   OFFENSIVE_AURA_EVIDENCE,
 } from "./offensiveAuraOccurrences";
 import { fmtTime } from "./renderGrid";
+import { buildRosterSides } from "./rosterSide";
 import { isOffensiveSpell } from "./spellDanger";
 import {
   CD_TALENT_MODIFIERS,
@@ -72,6 +72,7 @@ import {
   getPlayerTalentRanks,
   getSpecTalentTreeSpellInfo,
 } from "./talents";
+import { DEATH_CASCADE_MS } from "./unitDeath";
 
 export const MAJOR_DEFENSIVE_IDS = new Set<string>(
   (spellIdListsData as unknown as { externalOrBigDefensiveSpellIds?: string[] })
@@ -603,8 +604,9 @@ export function usableWhileStunned(
  * Forbearance: Paladin's Divine Shield / Lay on Hands / Blessing of Protection / Blessing of Spellwarding
  * share a 30s lockout. A defensive that reads "available" by its own cooldown is UNCASTABLE on the paladin
  * if they self-applied Forbearance within the last 30s — so it must not be listed as "unused"/"available"
- * at a death (false accusation). Forbearance is not reliably logged as an aura, so detect it from the
- * applying cast: Divine Shield always self-applies; the ally-castable ones self-apply only when cast on self.
+ * at a death (false accusation). Read from the unit's own Forbearance aura when the log has it
+ * (`selfForbearanceUntil`); from the applying cast otherwise: Divine Shield always self-applies; the
+ * ally-castable ones apply it to their target.
  */
 // Official read (GH #34 batch 4, 2026-08-28): DB2 Spell 25771 Forbearance
 // durationSeconds = 30 at 12.1.0.69382 (SpellMisc.DurationIndex 9 → 30000ms).
@@ -663,33 +665,111 @@ export function forbearanceStopsPress(
   return selfForbearanceActiveAt(target, allUnits, atSeconds, matchStartMs);
 }
 
+/** Forbearance's own aura id (DB2 Spell 25771). */
+export const FORBEARANCE_AURA_ID = "25771";
+/** How far a gated cast and the Forbearance line it writes sit apart. They
+ * share the ms; the aura line comes before or after the cast line. */
+export const FORBEARANCE_CAST_AURA_PAIR_MS = 300;
+
+/**
+ * Until when (seconds into the round) `unit` is under Forbearance at
+ * `atSeconds`, or undefined when it is not.
+ *
+ * Read off the log first (FT-T04, 2026-10-09): the unit's own 25771 aura —
+ * the last APPLIED / REFRESH at or before the instant with no REMOVED after
+ * it. The note this replaced said the aura "is not reliably logged"; on the
+ * 605-file capture every gated cast has it (Divine Shield 417 / 417, Blessing
+ * of Spellwarding 206 / 206, Blessing of Protection 234 / 235 and Lay on
+ * Hands, in the cast's own ms — the aura line precedes the cast line when
+ * the paladin is the recipient). A logged REMOVED ends it — except the one
+ * the unit's own death writes (`DEATH_CASCADE_MS`). The end returned is the application
+ * plus the applying paladin's Forbearance length (Holy Reprieve: 20 s), which
+ * also caps an application whose REMOVED the round never logged.
+ *
+ * Fallback, as before: a gated cast on the unit with NO Forbearance line
+ * within `FORBEARANCE_CAST_AURA_PAIR_MS` of it (a dropped line, a document
+ * without aura events) applies it for the modelled duration.
+ */
+export function selfForbearanceUntil(
+  unit: ICombatUnit,
+  allUnits: ICombatUnit[],
+  atSeconds: number,
+  matchStartMs: number,
+): number | undefined {
+  const atMs = matchStartMs + atSeconds * 1000;
+  const lengthS = (srcUnitId: string | undefined, ts: number) =>
+    buffFullDurationForCaster(
+      FORBEARANCE_AURA_ID,
+      allUnits.find((u) => u.id === srcUnitId),
+      ts,
+    ) ?? FORBEARANCE_SECONDS;
+  // A REMOVED the unit's own death wrote (every aura comes off in the death's
+  // cascade, the line a few ms BEFORE the UNIT_DIED) did not end the lockout:
+  // at the death instant the unit was still under it. Read as an end, 26
+  // `[DEATH] … (Unused: …)` lists of the 605-file capture named a blessing a
+  // paladin who died 12 s into his Forbearance could not have pressed.
+  const diedJustAfter = (removedMs: number) =>
+    (unit.deathRecords ?? []).some(
+      (d) =>
+        d.timestamp >= removedMs &&
+        d.timestamp - removedMs <= DEATH_CASCADE_MS,
+    );
+  const applications: number[] = [];
+  let open: { ts: number; srcUnitId?: string } | undefined;
+  for (const a of unit.auraEvents ?? []) {
+    if (a.spellId !== FORBEARANCE_AURA_ID) continue;
+    const ev = a.logLine.event as string;
+    const applies =
+      ev === LogEvent.SPELL_AURA_APPLIED || ev === LogEvent.SPELL_AURA_REFRESH;
+    if (applies) applications.push(a.timestamp);
+    if (a.timestamp > atMs) continue;
+    if (applies) open = { ts: a.timestamp, srcUnitId: a.srcUnitId };
+    else if (ev === LogEvent.SPELL_AURA_REMOVED && !diedJustAfter(a.timestamp))
+      open = undefined;
+  }
+  if (open) {
+    const untilS =
+      (open.ts - matchStartMs) / 1000 + lengthS(open.srcUnitId, open.ts);
+    if (atSeconds <= untilS) return untilS;
+  }
+  let until: number | undefined;
+  for (const u of allUnits) {
+    for (const cast of u.spellCastEvents ?? []) {
+      if (cast.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
+      if (!cast.spellId || !FORBEARANCE_GATED_IDS.has(cast.spellId)) continue;
+      const recipientId =
+        cast.spellId === DIVINE_SHIELD_SPELL_ID ? u.id : cast.destUnitId;
+      if (recipientId !== unit.id) continue;
+      // the log has this cast's Forbearance line: the aura read above is
+      // the answer for it, ended or not
+      if (
+        applications.some(
+          (t) => Math.abs(t - cast.timestamp) <= FORBEARANCE_CAST_AURA_PAIR_MS,
+        )
+      )
+        continue;
+      const castSec = (cast.timestamp - matchStartMs) / 1000;
+      // The applying paladin's Forbearance length — Holy Reprieve takes it to
+      // 20 s (BUFF_DURATION_TALENT_MODIFIERS 25771; talent impact audit
+      // 2026-09-26: the flat 30 s kept BoP / LoH / Divine Shield off the
+      // death Unused list 10 s too long).
+      const forbearanceS = lengthS(u.id, cast.timestamp);
+      if (castSec > atSeconds || atSeconds - castSec > forbearanceS) continue;
+      until = Math.max(until ?? 0, castSec + forbearanceS);
+    }
+  }
+  return until;
+}
+
 export function selfForbearanceActiveAt(
   unit: ICombatUnit,
   allUnits: ICombatUnit[],
   atSeconds: number,
   matchStartMs: number,
 ): boolean {
-  for (const u of allUnits) {
-    for (const cast of u.spellCastEvents ?? []) {
-      if (cast.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
-      if (!cast.spellId || !FORBEARANCE_GATED_IDS.has(cast.spellId)) continue;
-      const castSec = (cast.timestamp - matchStartMs) / 1000;
-      // The applying paladin's Forbearance length — Holy Reprieve takes it to
-      // 20 s (BUFF_DURATION_TALENT_MODIFIERS 25771; talent impact audit
-      // 2026-09-26: the flat 30 s kept BoP / LoH / Divine Shield off the
-      // death Unused list 10 s too long).
-      const forbearanceS =
-        buffFullDurationForCaster("25771", u, cast.timestamp) ??
-        FORBEARANCE_SECONDS;
-      if (castSec > atSeconds || atSeconds - castSec > forbearanceS) continue;
-      if (cast.spellId === "642") {
-        if (u.id === unit.id) return true;
-      } else {
-        if (cast.destUnitId === unit.id) return true;
-      }
-    }
-  }
-  return false;
+  return (
+    selfForbearanceUntil(unit, allUnits, atSeconds, matchStartMs) !== undefined
+  );
 }
 
 // "Is this an offensive cooldown" — the canonical table (GH #60 coarse spot 4,
@@ -1909,12 +1989,26 @@ function cdSecondsUntilReadyConsumed(
  * for both, so the two lines can never quote different seconds for one
  * cooldown at one instant). Never below 1: a cooldown that is not ready is
  * not "0 s away".
+ *
+ * FLOORED onto the render grid (FT-T04, 2026-10-09), like every time the
+ * prompt prints: the row is stamped with a whole second T, the cooldown
+ * returns at a fractional R, and the reader's `T + N` should be the second
+ * `fmtTime(R)` prints. Rounded, a press at 6.6 s read `Power Infusion(121s)`
+ * on the 0:06 row of a 120 s cooldown — 35,006 `cd:` entries of the 605-file
+ * capture sat exactly 1 s above their own cooldown.
  */
 export function cdLatestRemainingSeconds(
   cd: Parameters<typeof cdSecondsUntilReady>[0],
   tSeconds: number,
 ): number {
-  return Math.max(1, Math.round(cdSecondsUntilReady(cd, tSeconds)));
+  return cdRemainingWholeSeconds(cdSecondsUntilReady(cd, tSeconds));
+}
+
+/** Seconds-until-ready as the ledger prints them: floored, never below 1.
+ * The one rounding for `(Ns)`, `(≤Ns)` and both ends of `(a–Ns)`. */
+export function cdRemainingWholeSeconds(untilReadySeconds: number): number {
+  // 1e-6: a ready instant computed as 119.99999999 s away is 120
+  return Math.max(1, Math.floor(untilReadySeconds + 1e-6));
 }
 
 /** Charges of X in hand at `tSeconds` — the [RES] `[k/N]` suffix; N is the

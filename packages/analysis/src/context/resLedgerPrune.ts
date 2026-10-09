@@ -71,8 +71,16 @@ const fieldOf = (line: string, name: string): string | undefined => {
   }
   return undefined;
 };
-/** `3/Wind Shear-1s[kick]` → spell name. */
-const CC_ENTRY = /^\d+\/(.+?)-\d/;
+/** The remaining time of a `cc:` entry as the ledger prints it (FT-T04): a
+ * control with under half a second left used to read `-0s` — 10,644 entries
+ * of the 605-file capture said a control still on the unit had 0 s to run.
+ * Written by `resourceSnapshot.ts`, parsed by `CC_ENTRY` below. */
+export function resCcRemainingText(remainingSeconds: number): string {
+  const whole = Math.round(remainingSeconds);
+  return whole < 1 ? "<1s" : `${whole}s`;
+}
+/** `3/Wind Shear-1s[kick]`, `1/Psychic Scream-<1s` → spell name. */
+const CC_ENTRY = /^\d+\/(.+?)-(?:<1|\d+)s/;
 /** `Trueshot/Marksmanship Hunter(6s left)` → spell name. */
 const CD_ENTRY = /^(.+?)\//;
 /** `… ← Polymorph (by 6(RShaman)) | 6s [DR: …]` → duration seconds. */
@@ -184,7 +192,9 @@ export function classifyNoChangeResRows(
 }
 
 /** Indices of the no-change rows that may be dropped with zero information loss. */
-export function droppableNoChangeResRows(lines: readonly string[]): Set<number> {
+export function droppableNoChangeResRows(
+  lines: readonly string[],
+): Set<number> {
   const out = new Set<number>();
   for (const v of classifyNoChangeResRows(lines))
     if (v.uniqueFacts.length === 0) out.add(v.index);

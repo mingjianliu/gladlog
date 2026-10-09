@@ -16,6 +16,7 @@ import {
 import { BURST_ANSWERED_LEGEND } from "../burstAnswered";
 import { CD_PRIOR_LEGEND } from "../cdPrior";
 import { pruneZeroLossResRows } from "../resLedgerPrune";
+import { RES_FORBEARANCE_RE_SRC } from "../resourceSnapshot";
 import { STACKED_DEFENSIVES_LEGEND } from "../stackedDefensives";
 import { buildKillSequenceBlock, buildMatchEndBlock } from "../timelineHelpers";
 import { DR_CLASH_LEGEND } from "./contextFacts";
@@ -141,6 +142,12 @@ export function formatTimeline(
   const noManaRendered = entries.some((e) =>
     e.lines.some((l) => typeof l === "string" && l.includes("(no mana ")),
   );
+  const RES_FORBEARANCE_RE = new RegExp(RES_FORBEARANCE_RE_SRC);
+  // FT-T04: `cd:Divine Shield(Forbearance Ns)` is legended only when a row
+  // carries it (the same convention).
+  const forbearanceRendered = entries.some((e) =>
+    e.lines.some((l) => typeof l === "string" && RES_FORBEARANCE_RE.test(l)),
+  );
   // F-C16 (triage res-readiness): the `next spike in Ns on X` suffix on
   // [YOU] [CD] lines is hindsight — legend it whenever one is rendered.
   const nextSpikeRendered = entries.some((e) =>
@@ -220,6 +227,12 @@ export function formatTimeline(
     // print a range — the static number is only the latest they can return.
     "    `cd:<spell>(a–Ns)` = a cooldown that combat shortens: back in a to N s. `cd:<spell>(≤Ns)` = back in at",
     "    most N s and it MAY ALREADY BE BACK — never state that such a spell was certainly unavailable.",
+    ...(forbearanceRendered
+      ? [
+          "    `cd:<spell>(Forbearance Ns)` = <spell> is off cooldown, but its holder is under Forbearance for N more seconds and",
+          "    cannot press it until then.",
+        ]
+      : []),
     // GH #99 item 5: a bare `rdy:Δ  cd:—` row survives only when it states a
     // fact no other line does (resLedgerPrune.ts); tell the reader so an
     // absent ledger row is not misread as "nothing was tracked here".
