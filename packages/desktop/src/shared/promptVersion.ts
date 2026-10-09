@@ -1144,5 +1144,11 @@
  *  it; left = its REMOVED line). What is left reads `(ended early — no
  *  dispel logged)` (was "absorbed, dispelled, or cancelled"). Counts in the
  *  commit.
+ *  v340 (2026-10-09, FT-T08 step 3b, same approval): an [ENEMY DEF] aura
+ *  that ended early states the cause the log gives in place of `— removed
+ *  early` — `— dispelled by N(X)'s Spell`, `— ended at death`, `— its
+ *  target died`, `— used up, absorbed Nk`; `— removed early` remains for an
+ *  early end with no logged cause, and the legend says so. Counts in the
+ *  commit.
  */
-export const PROMPT_VERSION = 339;
+export const PROMPT_VERSION = 340;

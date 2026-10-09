@@ -41,6 +41,7 @@ export function emitEnemyDefEntries(
     | "friends"
     | "roundBounds"
     | "pid"
+    | "actorLabel"
     | "addEntry"
     | "_allUnits"
   >,
@@ -53,6 +54,7 @@ export function emitEnemyDefEntries(
     friends,
     roundBounds,
     pid,
+    actorLabel,
     addEntry,
     _allUnits,
   } = ctx;
@@ -67,9 +69,36 @@ export function emitEnemyDefEntries(
       for (const d of events) {
         if (d.atSeconds < 0 || d.atSeconds > matchEndSeconds) continue;
         const who = `${enemyPid(enemy.name)} (${specToString(enemy.spec)})`;
+        // FT-T08 step 3: an early end says the cause the log gives for it
+        // (`auraEndFromLog`); `removed early` is what is left when it gives
+        // none. A dispel line names this aura outright, so it is read before
+        // the holder's death (a cascade inferred from timing).
+        const end = d.earlyEnd;
+        const taker =
+          end?.takenBy &&
+          `${actorLabel(
+            end.takenBy.unitName,
+            (enemies ?? []).some((e) => e.id === end.takenBy!.unitId)
+              ? "enemy"
+              : "friendly",
+            end.takenBy.unitId,
+          )}'s ${end.takenBy.spellName}`;
+        const earlyNote = !d.removedEarly
+          ? ""
+          : end?.takenBy
+            ? ` — ${end.takenBy.kind} by ${taker}`
+            : end?.holderDied
+              ? d.kind === "external"
+                ? " — its target died"
+                : " — ended at death"
+              : end?.absorb?.left === 0
+                ? ` — used up, absorbed ${Math.round(end.absorb.absorbed / 1000)}k`
+                : end?.takeUnclear
+                  ? " — a dispel of this spell is logged at that moment, not which copy it took"
+                  : " — removed early";
         const dur =
           d.observedSeconds !== undefined
-            ? `${renderedObservedSeconds(d.observedSeconds).toFixed(1)}s${d.removedEarly ? " — removed early" : ""}`
+            ? `${renderedObservedSeconds(d.observedSeconds).toFixed(1)}s${earlyNote}`
             : "";
         const tSec = toRenderSecond(d.atSeconds);
         const tMs = matchStartMs + tSec * 1000;

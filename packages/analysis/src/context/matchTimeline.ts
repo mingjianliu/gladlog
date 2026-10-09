@@ -650,6 +650,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     friends,
     roundBounds,
     pid,
+    actorLabel,
     addEntry,
     _allUnits,
   });

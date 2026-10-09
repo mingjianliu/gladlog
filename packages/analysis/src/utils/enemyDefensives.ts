@@ -28,6 +28,7 @@ import spellIdListsData, {
   ENEMY_SELF_SAVE_ONLY_IDS,
 } from "../data/spellIdLists";
 import { immunitySchoolMask } from "../data/spellSchools";
+import { auraEndFromLog, type IAuraEndFromLog } from "./auraEndCause";
 import { buildAuraIntervals, type IAuraInterval } from "./auraIntervals";
 import { buffFullDurationForCaster } from "./buffDuration";
 import { AURA_ONLY_ACTIVATION_IDS } from "./cooldowns";
@@ -485,6 +486,10 @@ export interface IEnemyDefensiveEvent {
   auraSrcName?: string;
   /** observed duration fell short of the caster's full duration by more than the slack */
   removedEarly: boolean;
+  /** What the log itself says ended a `removedEarly` aura (FT-T08 step 3):
+   * a dispel / steal, its holder's death, an absorb used up. Set only with
+   * `removedEarly`; an empty reading means the log gives no cause. */
+  earlyEnd?: IAuraEndFromLog;
 }
 
 /**
@@ -625,6 +630,29 @@ export function enemyDefensiveEvents(
     const full = buffFullDurationForCaster(spellId, enemy);
     return full !== undefined && observed < full - REMOVED_EARLY_SLACK_S;
   };
+  /** `removedEarly` with the cause the log gives for that interval's end —
+   * read off the aura's HOLDER (the recipient of an external). */
+  const earlyEndOf = (
+    holder: ICombatUnit,
+    iv: ISaveAuraInterval,
+    auraId: string,
+  ): Pick<IEnemyDefensiveEvent, "removedEarly" | "earlyEnd"> => {
+    const early = !iv.inferredEnd && removedEarly(auraId, iv.toS - iv.fromS);
+    return early
+      ? {
+          removedEarly: true,
+          earlyEnd: auraEndFromLog(
+            holder,
+            iv.spellId,
+            {
+              fromMs: Math.round(combat.startTime + iv.fromS * 1000),
+              removedMs: Math.round(combat.startTime + iv.toS * 1000),
+            },
+            iv.srcUnitId,
+          ),
+        }
+      : { removedEarly: false };
+  };
   /** A unit's own SPELL_CAST_SUCCESS seconds of a spell — the press search
    * of an aura kind (`pressSeconds`, F-E11). */
   const castSecondsOf = (srcUnitName: string, spellId: string): number[] =>
@@ -685,7 +713,7 @@ export function enemyDefensiveEvents(
       // no pct — the line prints `immune` for it.
       pct: wallDoorPct(tableId, { carrierIsCaster: true, caster: enemy }),
       observedSeconds: observed,
-      removedEarly: !iv.inferredEnd && removedEarly(iv.spellId, observed),
+      ...earlyEndOf(enemy, iv, iv.spellId),
     });
   }
 
@@ -744,8 +772,7 @@ export function enemyDefensiveEvents(
           casterId: enemy.id,
           kind: "immune",
           observedSeconds: observed,
-          removedEarly:
-            !own.inferredEnd && removedEarly(immunityAuraId, observed),
+          ...earlyEndOf(enemy, own, immunityAuraId),
         });
       }
       continue;
@@ -785,11 +812,9 @@ export function enemyDefensiveEvents(
             auraSrcName: paired.srcUnitName,
           }
         : {}),
-      removedEarly:
-        paired !== undefined &&
-        !paired.inferredEnd &&
-        observed !== undefined &&
-        removedEarly(pairedAuraId, observed),
+      ...(paired
+        ? earlyEndOf(recipient, paired, pairedAuraId)
+        : { removedEarly: false }),
     });
   }
 
@@ -854,7 +879,7 @@ export function enemyDefensiveEvents(
         auraInferredStart: iv.inferredStart,
         auraInferredEnd: iv.inferredEnd,
         auraSrcName: iv.srcUnitName,
-        removedEarly: !iv.inferredEnd && removedEarly(iv.spellId, observed),
+        ...earlyEndOf(mate, iv, iv.spellId),
       });
     }
   }
