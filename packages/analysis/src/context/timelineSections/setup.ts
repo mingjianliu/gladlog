@@ -40,6 +40,7 @@ import {
   specToString,
 } from "../../utils/cooldowns";
 import {
+  AOE_CC_DELAYED_CAST_IDS,
   AOE_CC_SPELL_IDS,
   getDRCategory,
   getDRLevel,
@@ -759,11 +760,15 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
       // of the Dead, and no player. Same window and aura test as the aimed
       // case below; a pet's IMMUNE stays unsaid (the 2026-09-30 rule in
       // `ccImmuneTagFor`). Any other un-aimed cast has no unit to read.
-      // The cast's own id must be the listed aura: the control lands with
-      // the cast. Sigil of Misery (207684 → 207685) arms for about 2 s
-      // (median 2.07 s in `castEffectAuraGenerated.json`) — too close to the
-      // window's end to call an absence, so it keeps its bare line.
-      if (!AOE_CC_SPELL_IDS.has(spellId)) return "";
+      // A listed area control (its own id or one of its effect auras —
+      // Shockwave 46968 stuns with 132168) whose control lands with the
+      // cast. Sigil of Misery arms for about 2 s, too close to the window's
+      // end to call an absence: `AOE_CC_DELAYED_CAST_IDS` keep a bare line.
+      if (
+        AOE_CC_DELAYED_CAST_IDS.has(spellId) ||
+        ![...own].some((id) => AOE_CC_SPELL_IDS.has(id))
+      )
+        return "";
       const players = enemies ?? [];
       if (players.length === 0) return "";
       // Only THIS cast's own aura / miss ids count here (the aimed case

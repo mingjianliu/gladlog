@@ -195,6 +195,26 @@ export const AOE_CC_SPELL_IDS = new Set<string>([
   "30283", // Shadowfury (Warlock) — small AoE on impact
   "255941", // Wake of Ashes' stun (Paladin) — this line said "Bursting Shot (Hunter)" until 2026-10-09; Bursting Shot is NOT in this list
   "207685", // Sigil of Misery (Demon Hunter) — AoE incapacitate
+  // FT-T14c (2026-10-09, user approval): five more un-aimed area controls
+  // whose control lands with the cast. They were in no list, so the owner's
+  // cast line named no landing at all (and the owner's per-target
+  // [CC ON ENEMY] rows are folded away): 1,432 bare `[YOU] [CC]` lines of
+  // the 605-file capture — 14055cb2's four Dragon's Breaths read alike while
+  // the log has one, two, one and one players hit. Aura ids, as the rest.
+  "31661", // Dragon's Breath (Mage)
+  "132168", // Shockwave's stun (Warrior; the cast is 46968)
+  "179057", // Chaos Nova (Demon Hunter)
+  "207167", // Blinding Sleet (Death Knight)
+  "1234195", // Void Nova (Demon Hunter, Devourer)
+]);
+
+/** Listed area controls whose effect arrives seconds after the cast: the
+ * cast line can list a landing the fold finds, but an ABSENCE inside the
+ * `[hit no enemy player]` window proves nothing for them (Sigil of Misery
+ * arms for about 2 s — median 2.07 s in `castEffectAuraGenerated.json`).
+ * Cast ids. */
+export const AOE_CC_DELAYED_CAST_IDS: ReadonlySet<string> = new Set([
+  "207684", // Sigil of Misery
 ]);
 
 /** What the owner's cast line says when one of these, cast un-aimed, put its

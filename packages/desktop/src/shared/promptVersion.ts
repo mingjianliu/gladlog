@@ -1218,5 +1218,9 @@
  *  Forbearance is read off the logged aura, and a Divine Shield off cooldown
  *  under it reads `cd:Divine Shield(Forbearance Ns)` instead of `rdy:`.
  *  Counts in the commit.
+ *  v353 (2026-10-09, FT-T14c, user approval 2026-10-09): five more instant
+ *  area controls (Dragon's Breath, Shockwave, Chaos Nova, Blinding Sleet,
+ *  Void Nova) list who they landed on, on [YOU] [CC] and [TEAM] [CC] lines,
+ *  and read `[hit no enemy player]` when they hit none. Counts in the commit.
  */
-export const PROMPT_VERSION = 352;
+export const PROMPT_VERSION = 353;

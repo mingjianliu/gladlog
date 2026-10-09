@@ -351,7 +351,7 @@ describe("F-NE1 — an aimed CC with no aura and no miss", () => {
 
 describe("FT-T14 — an un-aimed area control that hit no enemy player says so", () => {
   const PSYCHIC_SCREAM = "8122";
-  const DRAGONS_BREATH = "31661"; // an area control outside AOE_CC_SPELL_IDS
+  const DRAGONS_BREATH = "31661";
   const PET: [string, string] = [
     "Pet-0-3878-2509-35306-26125-020560C99D",
     "Mudflayer",
@@ -439,13 +439,39 @@ describe("FT-T14 — an un-aimed area control that hit no enemy player says so",
     expect(lineWith(t, "Sigil of Misery")).not.toContain("[hit no enemy");
   });
 
-  it("名单外的群控(Dragon's Breath)没有落点可读:不标", () => {
+  it("FT-T14c: Dragon's Breath 现在在名单里 —— 没碰到玩家照标;名单外的群控(Capacitor Totem)仍不标", () => {
     const t = render(
       {},
       [hostile(ENEMY)],
       ledger(DRAGONS_BREATH, "Dragon's Breath", "CC", 30),
     );
-    expect(lineWith(t, "Dragon's Breath")).not.toContain("[hit no enemy");
+    expect(lineWith(t, "Dragon's Breath")).toContain(
+      OWNER_AOE_CC_NO_PLAYER_TAG,
+    );
+    const totem = render(
+      {},
+      [hostile(ENEMY)],
+      ledger("192058", "Capacitor Totem", "CC", 30),
+    );
+    expect(lineWith(totem, "Capacitor Totem")).not.toContain("[hit no enemy");
+  });
+
+  it("FT-T14c: Shockwave(施放 46968,昏迷光环 132168)—— 光环 id 在名单里;中了人不标,没中标", () => {
+    const SHOCKWAVE = "46968";
+    const stunned = hostile(OTHER, {
+      auraEvents: [
+        ev(LogEvent.SPELL_AURA_APPLIED, "132168", 69_640, ME, OTHER, {
+          auraType: "DEBUFF",
+        }),
+      ] as never,
+    });
+    const cdSw = ledger(SHOCKWAVE, "Shockwave", "CC", 30);
+    expect(
+      lineWith(render({}, [hostile(ENEMY), stunned], cdSw), "Shockwave"),
+    ).not.toContain("[hit no enemy");
+    expect(
+      lineWith(render({}, [hostile(ENEMY), hostile(OTHER)], cdSw), "Shockwave"),
+    ).toContain(OWNER_AOE_CC_NO_PLAYER_TAG);
   });
 });
 
