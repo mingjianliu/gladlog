@@ -1877,6 +1877,21 @@ const INDEX: PredicateRow[] = [
     mod: auraEndCause,
   },
   {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "ccLoggedEnd",
+    mod: ccTrinketAnalysis,
+  },
+  {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "formatCcLoggedEnd",
+    mod: ccTrinketAnalysis,
+  },
+  {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "CC_LOGGED_END_NOTE_RE_SRC",
+    mod: ccTrinketAnalysis,
+  },
+  {
     file: `${A}/analysis/momentSnapshot.ts`,
     symbol: "aurasActiveAt",
     mod: momentSnapshot,
