@@ -40,7 +40,7 @@ import {
 } from "../data/spellTags";
 import trinketItemIdsData from "../data/trinketItemIds.json";
 import {
-  AURA_BREAK_TO_REMOVED_MS,
+  auraBreaksBeforeRemoved,
   dropAuraRebroadcasts,
   supersededAuraBreaks,
 } from "./auraIntervals";
@@ -1189,41 +1189,48 @@ export function ccRemovalCause(
   /** the CC's official end at its DR step; unknown → no claim either way */
   officialEndMs?: number,
 ): ICcRemovalCause | undefined {
-  for (const a of holder.auraEvents ?? []) {
-    // The break is the BROKEN line at the removal — or up to
-    // `AURA_BREAK_TO_REMOVED_MS` before it, inside this application: the
-    // window ends at the aura's REMOVED, which follows its BROKEN line by a
-    // few ms (FT-T08). The first such line names the breaker — for a CC
-    // there is one; for an aura that logs a BROKEN line per hit (the three
-    // mage roots, not read here) which hit ended it is not in the log.
-    const t = a.logLine.timestamp;
-    if (
-      a.spellId !== spellId ||
-      t > removeMs ||
-      t < applyMs ||
-      removeMs - t > AURA_BREAK_TO_REMOVED_MS
-    )
-      continue;
-    const ev = a.logLine.event as string;
-    if (ev === LogEvent.SPELL_AURA_BROKEN_SPELL) {
-      const params = a.logLine.parameters ?? [];
+  // The break is the BROKEN line that ended this application: one its own
+  // REMOVED superseded (`auraBreaksBeforeRemoved` — tied to that REMOVED in
+  // log order, so a break of the PREVIOUS application in the very ms this
+  // one landed is not read; agy review of FT-T08 step 3c), or, when the log
+  // has no REMOVED there, a BROKEN line at the removal itself. The first
+  // names the breaker — for a CC there is one; for an aura that logs a
+  // BROKEN line per hit (the three mage roots, not read here) which hit
+  // ended it is not in the log.
+  const auras = holder.auraEvents ?? [];
+  const isBreak = (ev: string) =>
+    ev === LogEvent.SPELL_AURA_BROKEN || ev === LogEvent.SPELL_AURA_BROKEN_SPELL;
+  const endsHere = auras.filter(
+    (a) => a.spellId === spellId && a.logLine.timestamp === removeMs,
+  );
+  const removedHere = endsHere.filter(
+    (a) => (a.logLine.event as string) === LogEvent.SPELL_AURA_REMOVED,
+  );
+  const breaks = (
+    removedHere.length > 0
+      ? removedHere.flatMap((r) => auraBreaksBeforeRemoved(auras, r))
+      : endsHere.filter((a) => isBreak(a.logLine.event as string))
+  ).filter((b) => b.logLine.timestamp >= applyMs);
+  const brk = breaks[0];
+  if (brk) {
+    if ((brk.logLine.event as string) === LogEvent.SPELL_AURA_BROKEN_SPELL) {
+      const params = brk.logLine.parameters ?? [];
       const id = params[11] === undefined ? "" : String(params[11]);
       const name = typeof params[12] === "string" ? params[12] : "";
       if (!id && !name) return undefined;
       return {
         kind: "broken",
         spellName: getEnglishSpellName(id, name),
-        byUnitId: a.srcUnitId,
-        byName: a.srcUnitName,
+        byUnitId: brk.srcUnitId,
+        byName: brk.srcUnitName,
       };
     }
-    if (ev === LogEvent.SPELL_AURA_BROKEN)
-      return {
-        kind: "broken",
-        spellName: "Melee",
-        byUnitId: a.srcUnitId,
-        byName: a.srcUnitName,
-      };
+    return {
+      kind: "broken",
+      spellName: "Melee",
+      byUnitId: brk.srcUnitId,
+      byName: brk.srcUnitName,
+    };
   }
   const window = { applyMs, removeMs };
   const trinket = pvpTrinketUses(holder).find((u) =>
