@@ -268,9 +268,15 @@ export function analyzeKickAudit(
    * owner's own stops). Of two, the one that ended last. */
   const stoppedChannelOf = (enemy: ICombatUnit, kickMs: number) => {
     const forced = forcedStopInstantsMs(enemy);
+    // A control / displacement forces a stop it PRECEDES: one that lands
+    // after the channel already ended (and after our kick) forced nothing.
+    // The window was symmetric (codex 45-FT-95: Divine Hymn ends 44.648, the
+    // kick misses at 44.751, a stun lands at 44.800 → read as forced, so the
+    // juke became a plain miss). Same width as before (ruling A′17's
+    // CANCEL_CC_NEAR_S), one side; + 1 ms for a line across a ms boundary.
     const forcedNear = (ms: number) =>
       [...forced.cc, ...forced.displaced].some(
-        (t) => Math.abs(t - ms) <= CANCEL_CC_NEAR_S * 1000,
+        (t) => t <= ms + 1 && ms - t <= CANCEL_CC_NEAR_S * 1000,
       );
     return channelSpans(enemy)
       .filter((ch) => {

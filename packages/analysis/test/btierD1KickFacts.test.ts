@@ -175,6 +175,43 @@ describe("kickAudit: a channel the target stopped just before the kick (B21b)", 
     expect(k!.result).toBe("missed");
   });
 
+  it("a stun that lands after the channel ended forced nothing: the kick was still juked (codex 45-FT-95)", () => {
+    // Divine Hymn 44.010–44.648, Mind Freeze misses at 44.751, Hammer of
+    // Justice lands at 44.800 — after both
+    const enemy = priest(44.01, 44.648, {
+      auraEvents: [
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_APPLIED,
+          HAMMER_OF_JUSTICE,
+          T0 + 44_800,
+          "p2",
+          "e1",
+        ),
+      ],
+    });
+    const [k] = analyzeKickAudit(kicker(44.751), [enemy], combat);
+    expect(k!.result).toBe("juked");
+    expect(k!.jukedBySpellName).toBe("Divine Hymn");
+    expect(k!.jukedChannelStoppedAgoS).toBeCloseTo(0.103, 3);
+    // a stun logged in the channel's last ms (or 1 ms across the boundary)
+    // still forced it
+    for (const stunMs of [44_648, 44_649]) {
+      const forced = priest(44.01, 44.648, {
+        auraEvents: [
+          makeAuraEvent(
+            LogEvent.SPELL_AURA_APPLIED,
+            HAMMER_OF_JUSTICE,
+            T0 + stunMs,
+            "p2",
+            "e1",
+          ),
+        ],
+      });
+      const [f] = analyzeKickAudit(kicker(44.751), [forced], combat);
+      expect(f!.jukedChannelStoppedAgoS).toBeUndefined();
+    }
+  });
+
   it("a channel somebody else interrupted is not a stop either", () => {
     const enemy = priest(44, 44.6, {
       actionIn: [
