@@ -35,6 +35,16 @@ function mitigationText(row: DeathRecap["mitigationAudit"][number]): string {
         : "";
     return `${row.spellName} 挡了 ~${blockedK}k${pctPart},覆盖 ${overlap}s`;
   }
+  if (row.kind === "deferred") {
+    // A deferral shield (Time Dilation, Stretch Time) delays damage; the
+    // amount is the log's own record of what it delayed inside the window.
+    const deferredK = Math.round((row.deferredAmount ?? 0) / 1000);
+    const pctPart =
+      row.deferredPctMaxHp !== undefined
+        ? `(≈${row.deferredPctMaxHp}% maxHp)`
+        : "";
+    return `${row.spellName} 推迟了 ~${deferredK}k${pctPart},覆盖 ${overlap}s(只是延后,之后以自身伤害落地)`;
+  }
   if (row.kind === "immunity") {
     const dmgK = Math.round((row.damageTakenDuringImmunity ?? 0) / 1000);
     return `${row.spellName} 免疫覆盖 ${overlap}s(期内观测承伤 ~${dmgK}k)`;

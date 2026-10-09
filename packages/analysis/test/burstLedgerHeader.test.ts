@@ -22,7 +22,7 @@ const entry = (spells: IBurstLedgerEntry["spells"]): IBurstLedgerEntry => ({
 
 describe("formatBurstLedgerForContext — header (F-L4)", () => {
   it("DT 0:11–0:26 + Army 0:11–0:41 under the union 0:11–0:41", () => {
-    const [, header] = formatBurstLedgerForContext(
+    const [, , header] = formatBurstLedgerForContext(
       [
         entry([
           { spellId: "63560", spellName: "Dark Transformation", castTimeSeconds: 11.301, spanToSeconds: 26.301 },
@@ -37,7 +37,7 @@ describe("formatBurstLedgerForContext — header (F-L4)", () => {
     );
   });
   it("a single CD keeps the bare name", () => {
-    const [, header] = formatBurstLedgerForContext(
+    const [, , header] = formatBurstLedgerForContext(
       [entry([{ spellId: "42650", spellName: "Army of the Dead", castTimeSeconds: 11.358, spanToSeconds: 41.358 }])],
       [],
       [],

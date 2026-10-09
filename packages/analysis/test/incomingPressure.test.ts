@@ -3,9 +3,11 @@ import { describe, expect, it } from "vitest";
 
 import { computePressureWindows } from "../src/utils/cooldowns";
 import {
+  DEFERRAL_SHIELD_DAMAGE_IDS,
   documentRecordsAttackSpell,
   incomingPressureBySchool,
   incomingPressureEvents,
+  isDeferralAbsorb,
   logSchoolMask,
   sumAbsorbedPressure,
   sumIncomingPressure,
@@ -203,6 +205,92 @@ describe("incomingPressure — the single predicate for incoming pressure", () =
         absorbsIn: [eaten(1500, 60, undefined)],
       });
       expect(incomingPressureBySchool(unit, 0, 5000)).toEqual({ "1": 100 });
+    });
+  });
+});
+
+describe("incomingPressure — a deferral shield delays damage, it does not absorb it (FT-T02b)", () => {
+  /** Time Dilation's "absorb" of the half it delays (shield id 357170). */
+  const deferral = (t: number, amount: number, attackSpellId = "133") =>
+    ({
+      logLine: {
+        event: "SPELL_ABSORBED",
+        timestamp: t,
+        parameters: new Array(10).fill("").concat(["0x4"]),
+      },
+      timestamp: t,
+      absorbedAmount: amount,
+      spellId: "357170",
+      spellName: "Time Dilation",
+      srcUnitId: "evoker-1",
+      attackerId: "enemy-1",
+      attackSpellId,
+    }) as never;
+  /** The delayed half landing: self → self periodic damage 361029, logged 0x1. */
+  const tick = (t: number, amount: number) =>
+    ({
+      logLine: { event: "SPELL_PERIODIC_DAMAGE", timestamp: t, parameters: [] },
+      timestamp: t,
+      amount: -amount,
+      effectiveAmount: -amount,
+      spellId: "361029",
+      spellName: "Time Dilation",
+      spellSchoolId: "0x1",
+      srcUnitId: "victim",
+    }) as never;
+  const fire = (t: number, amount: number) =>
+    ({
+      logLine: { event: "SPELL_DAMAGE", timestamp: t, parameters: [] },
+      timestamp: t,
+      amount: -amount,
+      effectiveAmount: -amount,
+      spellId: "133",
+      spellName: "Fireball",
+      spellSchoolId: "0x4",
+      srcUnitId: "enemy-1",
+    }) as never;
+
+  it("表:Time Dilation 357170 → 361029,Stretch Time 410355 → 413924", () => {
+    expect(DEFERRAL_SHIELD_DAMAGE_IDS).toEqual({
+      "357170": "361029",
+      "410355": "413924",
+    });
+    expect(isDeferralAbsorb({ spellId: "357170" })).toBe(true);
+    expect(isDeferralAbsorb({ spellId: "17" })).toBe(false);
+  });
+
+  it("一次 1000 的火球被推迟一半:受到的伤害 = 落地 500 + 之后落地的 500,不是 1500", () => {
+    const unit = makeUnit("victim", {
+      damageIn: [fire(1000, 500), tick(4000, 500)],
+      absorbsIn: [deferral(1000, 500)],
+    });
+    expect(sumIncomingPressure(unit, 0, 10_000)).toBe(1000);
+    expect(sumAbsorbedPressure(unit, 0, 10_000)).toBe(0);
+    // counted when the health is lost: only the landed half is inside 0–2 s
+    expect(sumIncomingPressure(unit, 0, 2000)).toBe(500);
+  });
+
+  it("延迟伤害被真盾吃掉时算吸收(那是真的挡掉了)", () => {
+    const realShieldAteTheTick = {
+      ...(abs(4000, 500) as object),
+      attackSpellId: "361029",
+      attackerId: "victim",
+    } as never;
+    const unit = makeUnit("victim", {
+      damageIn: [fire(1000, 500)],
+      absorbsIn: [deferral(1000, 500), realShieldAteTheTick],
+    });
+    expect(sumIncomingPressure(unit, 0, 10_000)).toBe(1000);
+    expect(sumAbsorbedPressure(unit, 0, 10_000)).toBe(500);
+  });
+
+  it("按学派的读法例外:受击按原学派在受击时计,延迟跳数(日志记成物理 0x1)不计", () => {
+    const unit = makeUnit("victim", {
+      damageIn: [fire(1000, 500), tick(4000, 500)],
+      absorbsIn: [deferral(1000, 500)],
+    });
+    expect(incomingPressureBySchool(unit, 0, 10_000, undefined, true)).toEqual({
+      "4": 1000,
     });
   });
 });

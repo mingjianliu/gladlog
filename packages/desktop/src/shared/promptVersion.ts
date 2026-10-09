@@ -1166,5 +1166,14 @@
  *  dispel line the log cannot tie to this copy of a spell is stated beside
  *  the death / used-up reading instead of being dropped. Counts in the
  *  commit.
+ *  v344 (2026-10-09, FT-T02b + T02d, user ruling 2026-10-09 option B): damage
+ *  a Time Dilation / Stretch Time only DELAYED is counted once, when the
+ *  health is lost — the shield's SPELL_ABSORBED is no longer "absorbed"
+ *  ([DMG SPIKE] totals and `(X absorbed)`, press-line DPS, Top sources'
+ *  "N of it absorbed"); `[ENEMY DEF] … during it` writes it as `+Dk deferred`;
+ *  the mitigation audit says `deferred ~Nk … — delayed, not prevented` with
+ *  the log's own amount. Legends state what each damage figure is: the
+ *  [DMG SPIKE] total, the INCOMING DAMAGE BASELINES rows, KILL ATTEMPTS'
+ *  `on target`, BURST LEDGER's `your damage`. Counts in the commit.
  */
-export const PROMPT_VERSION = 343;
+export const PROMPT_VERSION = 344;

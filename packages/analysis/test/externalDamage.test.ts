@@ -207,6 +207,33 @@ describe("externalDamage — damage kept on a target under an ally-applied exter
     );
   });
 
+  it("FT-T02b:Time Dilation 推迟的部分不算 absorbed,单独写 deferred,仍算有伤害的秒", () => {
+    const row = (atS: number, amt: number, shieldId: string): any => ({
+      spellId: shieldId,
+      spellName: shieldId === "357170" ? "Time Dilation" : "Power Word: Shield",
+      srcUnitId: "E2",
+      srcUnitName: "E2",
+      destUnitId: "E1",
+      destUnitName: "E1",
+      attackerId: "A1",
+      absorbedAmount: amt,
+      timestamp: ms(atS),
+      logLine: { event: LogEvent.SPELL_ABSORBED, timestamp: ms(atS), parameters: [] },
+    });
+    const e1 = makeUnit("E1", {
+      spec: CombatUnitSpec.Hunter_Marksmanship,
+      reaction: CombatUnitReaction.Hostile,
+      auraEvents: psOn("E1"),
+      absorbsIn: [row(21.0, 30_000, "357170"), row(23.5, 25_000, "17")],
+    });
+    const a1 = ally("A1", [dmg(LogEvent.SPELL_DAMAGE, 19, "E1", 40_000)]);
+    const [o] = externalDamageObservations(e1, [a1], [e1], combat);
+    expect(o).toMatchObject({ absorbed: 25_000, deferred: 30_000, K: 2 });
+    expect(formatDuringExternal(o!, (n) => n)).toContain(
+      "A1 0k on target (+25k absorbed, +30k deferred)",
+    );
+  });
+
   it("self-applied, inferred-endpoint and ineligible auras yield nothing", () => {
     const a1 = ally("A1", [dmg(LogEvent.SPELL_DAMAGE, 19, "E1", 40_000), dmg(LogEvent.SPELL_DAMAGE, 22, "E1", 30_000)]);
     const selfApplied = enemy("E1", psOn("E1", "E1"));

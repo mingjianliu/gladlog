@@ -93,7 +93,10 @@ import {
   USABLE_WHILE_FEARED_GAP_IDS,
 } from "../utils/cooldowns";
 import { UNUSED_SELF_COVERAGE_UNMODELLED } from "../utils/counterfactual";
-import { REDISTRIBUTION_DAMAGE_IDS } from "../utils/incomingPressure";
+import {
+  DEFERRAL_SHIELD_DAMAGE_IDS,
+  REDISTRIBUTION_DAMAGE_IDS,
+} from "../utils/incomingPressure";
 import {
   EXTERNAL_DEFENSIVE_SPELLS,
   IMMUNITY_SPELLS,
@@ -644,6 +647,9 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   ),
   t("REDISTRIBUTION_DAMAGE_IDS", "utils/incomingPressure.ts", "cast", () =>
     set(REDISTRIBUTION_DAMAGE_IDS),
+  ),
+  t("DEFERRAL_SHIELD_DAMAGE_IDS", "utils/incomingPressure.ts", "aura", () =>
+    keys(DEFERRAL_SHIELD_DAMAGE_IDS),
   ),
   t("COMP_DEPENDENT_PURGE_TARGETS", "utils/dispelAnalysis.ts", "aura", () =>
     set(COMP_DEPENDENT_PURGE_TARGETS),

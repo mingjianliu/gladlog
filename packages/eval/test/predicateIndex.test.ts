@@ -608,6 +608,11 @@ const INDEX: PredicateRow[] = [
   },
   {
     file: `${A}/utils/incomingPressure.ts`,
+    symbol: "isDeferralAbsorb",
+    mod: incomingPressure,
+  },
+  {
+    file: `${A}/utils/incomingPressure.ts`,
     symbol: "incomingPressureBySchool",
     mod: incomingPressure,
   },

@@ -17,6 +17,7 @@ import {
   IMissedExternal,
   wasLockedOutThroughWindow,
 } from "./deathOutcomeAnalysis";
+import { DEFERRAL_SHIELD_DAMAGE_IDS } from "./incomingPressure";
 
 /**
  * counterfactual.ts — mitigation counterfactual accounting (#17b): the
@@ -185,12 +186,18 @@ function windowStartSecondsOf(deathS: number): number {
 export interface IMitigationAuditRow {
   spellId: string;
   spellName: string;
-  kind: "arith" | "immunity" | "mechanic" | "absorb";
+  kind: "arith" | "immunity" | "mechanic" | "absorb" | "deferred";
   /** Seconds of (active interval ∩ death window), one decimal. */
   activeOverlapS: number;
   /** kind=arith: blocked amount (absolute) and its share of maxHp. */
   blockedAmount?: number;
   blockedPctMaxHp?: number;
+  /** kind=deferred: what a deferral shield (`DEFERRAL_SHIELD_DAMAGE_IDS`:
+   * Time Dilation, Stretch Time) DELAYED inside the overlap — the log's own
+   * SPELL_ABSORBED rows of that shield, a measured amount — and its share of
+   * maxHp. Delayed, not prevented: it lands later as the unit's own damage. */
+  deferredAmount?: number;
+  deferredPctMaxHp?: number;
   /** kind=immunity: ALL damage taken during the immunity coverage (reported as-is). */
   damageTakenDuringImmunity?: number;
   /** kind=immunity: the part of it outside the immunity's schools (a physical
@@ -292,6 +299,32 @@ export function computeMitigationAudit(
           : unitByName(combat.units, iv.srcUnitName),
     });
 
+    // A deferral shield prevents nothing — whether the mitigation table
+    // prices it (Time Dilation) or not (Stretch Time, which would otherwise
+    // be read as an off-table ABSORB shield below; agy review of FT-T02b).
+    // The back-computation would price it from damage that includes its own
+    // delayed ticks; the log records what it delayed (FT-T02b, user ruling 2026-10-09; the table's
+    // 50 % for Time Dilation still prices kill windows — ruling 2026-07-30).
+    if (iv.spellId in DEFERRAL_SHIELD_DAMAGE_IDS) {
+      const deferredAmount =
+        absorbContributionsInWindow(
+          victim,
+          combat.startTime + overlapFrom * 1000,
+          combat.startTime + overlapTo * 1000,
+        ).find((c) => c.spellId === iv.spellId)?.absorbedAmount ?? 0;
+      rows.push({
+        spellId: iv.spellId,
+        spellName,
+        kind: "deferred",
+        activeOverlapS,
+        deferredAmount,
+        deferredPctMaxHp:
+          maxHp !== null && maxHp > 0
+            ? round1((deferredAmount / maxHp) * 100)
+            : undefined,
+      });
+      continue;
+    }
     if (!res) {
       // Off-table (including NO_MITIGATION_IDS; the two are mutually
       // exclusive). Absorb shields are the one off-table class that CAN be

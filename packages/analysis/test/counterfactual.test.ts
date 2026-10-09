@@ -118,6 +118,65 @@ describe("computeMitigationAudit(A 形态)", () => {
   // Synthetic: death at t=60s, window [50,60]; Barkskin (22812, 20%, 0x7f)
   // active over [52,58]; damageIn inside the window: 52.5s 100k (0x1 physical),
   // 55s 200k (0x20 shadow), 59s 300k (0x4 fire, outside the aura interval)
+  test("deferred(FT-T02b):Time Dilation 不反推「挡掉」,取日志里它推迟的量", () => {
+    // Time Dilation (357170) up over [52,58]. 300k landed in the overlap, and
+    // the log has the shield "absorbing" 120k + 60k of it (delayed) there, plus
+    // 40k outside the overlap. The old arith row read 300k × 50/50 = 300k
+    // "blocked".
+    const victim = mkVictim(
+      "v1",
+      [{ atS: 55, amount: 300_000, school: "0x20" }],
+      [{ spellId: "357170", spellName: "Time Dilation", fromS: 52, toS: 58 }],
+      [{ atS: 51, hp: 900_000, maxHp: 1_000_000 }],
+    );
+    const absorb = (atS: number, amount: number) => ({
+      spellId: "357170",
+      spellName: "Time Dilation",
+      absorbedAmount: amount,
+      timestamp: atS * 1000,
+      logLine: { event: "SPELL_ABSORBED", timestamp: atS * 1000 },
+    });
+    (victim as { absorbsIn: unknown[] }).absorbsIn = [
+      absorb(53, 120_000),
+      absorb(55, 60_000),
+      absorb(59, 40_000),
+    ];
+    const { rows } = computeMitigationAudit(victim, combatOf(), 60);
+    const td = rows.filter((r) => r.spellId === "357170");
+    expect(td).toHaveLength(1);
+    expect(td[0]).toMatchObject({
+      kind: "deferred",
+      deferredAmount: 180_000,
+      deferredPctMaxHp: 18,
+    });
+    expect(td[0]!.blockedAmount).toBeUndefined();
+  });
+
+  test("deferred(FT-T02b):减伤表里没有的延迟盾(Stretch Time)绝不落进 absorb 类", () => {
+    const victim = mkVictim(
+      "v1",
+      [{ atS: 55, amount: 100_000, school: "0x20" }],
+      [{ spellId: "410355", spellName: "Stretch Time", fromS: 52, toS: 58 }],
+    );
+    (victim as { absorbsIn: unknown[] }).absorbsIn = [
+      {
+        spellId: "410355",
+        spellName: "Stretch Time",
+        absorbedAmount: 50_000,
+        timestamp: 54_000,
+        logLine: { event: "SPELL_ABSORBED", timestamp: 54_000 },
+      },
+    ];
+    const { rows } = computeMitigationAudit(victim, combatOf(), 60);
+    // whether the death-window whitelist admits this aura or not, it must
+    // never be reported as an absorb
+    expect(rows.filter((r) => r.kind === "absorb")).toEqual([]);
+    // Stretch Time is not in the death-window whitelist today (no row at
+    // all); if it ever is, its row must be the deferred kind.
+    for (const r of rows.filter((x) => x.spellId === "410355"))
+      expect(r).toMatchObject({ kind: "deferred", deferredAmount: 50_000 });
+  });
+
   test("arith:反推只吃激活区间∩窗口∩schoolMask 命中的观测伤害", () => {
     const victim = mkVictim(
       "v1",

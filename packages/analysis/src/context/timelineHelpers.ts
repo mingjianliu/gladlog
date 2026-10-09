@@ -46,6 +46,10 @@ import {
 } from "../utils/deathOutcomeAnalysis";
 import { IEnemyCDTimeline } from "../utils/enemyCDs";
 import { AURA_BEFORE_CAST_MAX_S } from "../utils/enemyDefensives";
+import {
+  DEFERRAL_SHIELD_DAMAGE_IDS,
+  isDeferralAbsorb,
+} from "../utils/incomingPressure";
 import { playerKillingBlow } from "../utils/killingBlow";
 import { getHpPercentAtTime } from "../utils/killWindowTargetSelection";
 import { fmtTime } from "../utils/renderGrid";
@@ -1160,17 +1164,17 @@ export function summonLifetimeAtKillS(
  * Extracts the top-N damage sources that hit `unit` within the `windowMs` window
  * ending at `deathMs`. Returns an array of formatted "source — spell (Xk)" strings.
  */
-/** Self → self periodic damage that is damage DELAYED from earlier hits.
- * Time Dilation's deferral (361029) — b12b: 255k in the last 10 s of a death.
- * Registered in curatedIdRegistry. */
-export const DEFERRED_DAMAGE_SPELL_IDS: ReadonlySet<string> = new Set([
-  // selfDamageScan.ts (every 60th of the 12.1 archive, 303 files, 2026-09-26):
-  // the self → self periodic damage that is damage delayed from earlier hits.
-  // Refraction / Tempered in Battle / Blessing of Dawn / Fel Armor and
-  // reflected own spells are the unit's own damage too, but not deferred.
-  "361029", // Time Dilation — deferred damage (2,642 ticks, every spec)
-  "413924", // Stretch Time — deferred damage (1,005 ticks, Devastation)
-]);
+/** Self → self periodic damage that is damage DELAYED from earlier hits —
+ * the ids the deferral shields' delayed damage lands as
+ * (`DEFERRAL_SHIELD_DAMAGE_IDS`, the one table: Time Dilation 361029 — b12b:
+ * 255k in the last 10 s of a death — and Stretch Time 413924).
+ * selfDamageScan.ts (every 60th of the 12.1 archive, 303 files, 2026-09-26):
+ * 2,642 and 1,005 ticks; Refraction / Tempered in Battle / Blessing of Dawn /
+ * Fel Armor and reflected own spells are the unit's own damage too, but not
+ * deferred. Registered in curatedIdRegistry. */
+export const DEFERRED_DAMAGE_SPELL_IDS: ReadonlySet<string> = new Set(
+  Object.values(DEFERRAL_SHIELD_DAMAGE_IDS),
+);
 
 export function getTopDamageSourcesInWindow(
   unit: ICombatUnit,
@@ -1259,6 +1263,8 @@ export function getTopDamageSourcesInWindow(
       continue;
     const amt = Math.abs(a.absorbedAmount);
     if (amt <= 0) continue;
+    // delayed, not absorbed — it is the "deferred …" row when it lands
+    if (isDeferralAbsorb(a)) continue;
     const noSpell = hitSpellKey(a.attackSpellId) === "";
     const swing = noSpell && recordsAttackSpell;
     const unknownAttack = noSpell && !recordsAttackSpell;

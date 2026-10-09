@@ -227,6 +227,9 @@ export function formatTimeline(
     "    surviving [RES] shows, a CC no [CC ON …] line covers at that second, an enemy CD with no [ENEMY CD] line);",
     "    a `rdy:Δ  cd:—` row whose facts are all stated elsewhere is omitted, so its absence means nothing changed.",
     "  [DMG SPIKE] `START–END` = the window's exact bounds; its `A% -> B% HP` maps directly to those two timestamps.",
+    // FT-T02d / T02b: one stated definition of the spike's total.
+    "    Its `N in 10s` = the health that unit lost to hits in the window plus what its shields absorbed (`(X absorbed)` is",
+    "    that part). Damage a Time Dilation / Stretch Time only delayed counts when it lands (a `deferred …` source), never as absorbed.",
     // A21 (user ruling 2026-09-30): HP on press lines is read at the press
     // (worded without the literal line tags: tests and scans find press
     // lines by their tag)
@@ -268,8 +271,10 @@ export function formatTimeline(
             ? [
                 "    `| during it: A Nk on target · X% of their enemy-player damage · direct/periodic · damage in K of M s` = what each",
                 "    friendly who had hit that unit in the 3 s before the external kept doing while it was up (damage on it, share of",
-                "    their damage on enemy players, seconds with damage; `(+Ak absorbed)` = eaten by the target's shields; for a",
-                "    school-limited wall, how much of it was in the wall's school; `N hits immune` = hits the target was immune to).",
+                "    their damage on enemy players, seconds with damage; `(+Ak absorbed)` = eaten by the target's shields;",
+                "    `+Dk deferred` = only delayed by a Time Dilation / Stretch Time on the target — it lands later as that unit's",
+                "    own damage; for a school-limited wall, how much of it was in the wall's school; `N hits immune` = hits the",
+                "    target was immune to).",
                 "    A measurement, not a verdict — the team's CC lines say whether they could act.",
               ]
             : []),

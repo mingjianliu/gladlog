@@ -54,6 +54,52 @@ export const REDISTRIBUTION_DAMAGE_IDS: ReadonlySet<string> = new Set([
   "451963", // Void Leech (Shadow Priest draining an ally)
 ]);
 
+/**
+ * Shields that DELAY damage instead of preventing it, keyed to the id their
+ * delayed damage later lands as (self → self periodic damage). The log writes
+ * the delayed half of every hit as a `SPELL_ABSORBED` by the shield, and then
+ * writes it again as the tick that takes the health — one piece of damage,
+ * two records. Measured on the 60 raw logs of the 2026-10-08 re-eval
+ * (FT-T02b): Time Dilation "absorbed" 21,686,939 and its ticks came back as
+ * 19,480,882 landed + 1,764,448 absorbed by a real shield (98.0 %; the rest
+ * was still pending at a death or the round's end); Stretch Time 8,325,694 vs
+ * 7,292,177 + 941,210 (98.9 %). Counting both read 0e0663e6's 0:48–0:58 as a
+ * 1.90M spike of which 287k was the shield's "absorb" and 291k the same
+ * damage landing.
+ *
+ * User ruling 2026-10-09 (FT-T02b, option B): the damage counts when the
+ * health is lost — a deferral shield's SPELL_ABSORBED is not absorbed damage
+ * (`isDeferralAbsorb`), the tick is the damage. One exception, by the nature
+ * of the fact: a per-SCHOOL reading asks what was thrown at the unit, and a
+ * tick has no school of its own (the log writes both ids as 0x1, physical,
+ * whatever was delayed) — `incomingPressureBySchool` keeps the hit under its
+ * own school at the time it was thrown and leaves the tick out.
+ *
+ * NOT the mitigation table's concern: Time Dilation stays priced at 50 % there
+ * (user decision 2026-07-30, on a death / burst-window basis). Registered in
+ * curatedIdRegistry.
+ */
+export const DEFERRAL_SHIELD_DAMAGE_IDS: Readonly<Record<string, string>> = {
+  "357170": "361029", // Time Dilation → its deferred damage
+  "410355": "413924", // Stretch Time → its deferred damage
+};
+
+const DEFERRED_TICK_IDS: ReadonlySet<string> = new Set(
+  Object.values(DEFERRAL_SHIELD_DAMAGE_IDS),
+);
+
+/** An absorb event (its `spellId` is the shield) that only delayed the hit —
+ * the damage is the tick that lands later, not this. */
+export function isDeferralAbsorb(a: { spellId?: string | null }): boolean {
+  return !!a.spellId && a.spellId in DEFERRAL_SHIELD_DAMAGE_IDS;
+}
+
+/** A deferral shield's delayed damage landing (or being eaten by a real
+ * shield): the attacking spell is one of the deferred ids. */
+export function isDeferredTickId(spellId: string | null | undefined): boolean {
+  return !!spellId && DEFERRED_TICK_IDS.has(spellId);
+}
+
 /** A `REDISTRIBUTION_DAMAGE_IDS` row from the unit's own side — moved
  * health, not an enemy hitting it. The one test every reader of incoming
  * damage applies (`incomingPressureEvents`, `incomingPressureBySchool`). */
@@ -92,7 +138,9 @@ export type PressureUnit = Pick<
 >;
 
 /**
- * Damage taken plus damage absorbed, in one time-ordered list.
+ * Damage taken plus damage absorbed, in one time-ordered list. A hit a
+ * deferral shield delayed (`DEFERRAL_SHIELD_DAMAGE_IDS`) is in the list once,
+ * as the tick that takes the health.
  *
  * A partly absorbed hit emits a damage record AND its own `SPELL_ABSORBED`.
  * They do not overlap: the damage record's `amount` is already net of the
@@ -143,6 +191,8 @@ export function incomingPressureEvents(
   for (const a of unit.absorbsIn ?? []) {
     const amount = Math.abs(Number(a.absorbedAmount) || 0);
     if (amount <= 0 || !Number.isFinite(amount)) continue;
+    // delayed, not absorbed: it is counted as the tick that takes the health
+    if (isDeferralAbsorb(a)) continue;
     // the absorbed hit's own spell and attacker (`spellId` is the shield)
     if (
       redistributed(
@@ -286,6 +336,9 @@ export function incomingPressureBySchool(
       )
     )
       continue;
+    // a deferred tick has no school of its own; the hit is below, under the
+    // school it was thrown in (`DEFERRAL_SHIELD_DAMAGE_IDS`)
+    if (isDeferredTickId(d.spellId)) continue;
     add(logSchoolMask(d.spellSchoolId), Math.abs(d.effectiveAmount));
   }
   const absorbs = unit.absorbsIn ?? [];
@@ -308,6 +361,7 @@ export function incomingPressureBySchool(
       )
     )
       continue;
+    if (isDeferredTickId(a.attackSpellId)) continue;
     let mask: number | undefined;
     if (a.attackSpellId === undefined) {
       mask = swingWhenNoSpell ? SCHOOL_PHYSICAL : undefined;

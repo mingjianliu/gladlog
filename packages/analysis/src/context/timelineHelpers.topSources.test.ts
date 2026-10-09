@@ -89,4 +89,44 @@ describe("getTopDamageSourcesInWindow — absorbed parts of hits (round 3 N13, b
     const out = getTopDamageSourcesInWindow(unit, T0 + 10_000, 10_000, 3, new Map(), new Map([["Boomy-Illidan-US", 5]]));
     expect(out).toEqual(["5 — Starsurge (151k; 108k of it absorbed)"]);
   });
+
+  it("FT-T02b: what Time Dilation only delayed is not \"absorbed\" — it is the deferred row when it lands", () => {
+    const hit = {
+      logLine: { timestamp: T0 + 5_000 },
+      effectiveAmount: -60_000,
+      srcUnitId: "Player-B",
+      srcUnitName: "Boomy-Illidan-US",
+      srcUnitFlags: HOSTILE_PLAYER,
+      spellId: "78674",
+      spellName: "Starsurge",
+    };
+    const delayed = {
+      timestamp: T0 + 5_000,
+      absorbedAmount: 60_000,
+      spellId: "357170",
+      spellName: "Time Dilation",
+      attackerId: "Player-B",
+      attackSpellId: "78674",
+      attackSpellName: "Starsurge",
+      srcUnitFlags: HOSTILE_PLAYER,
+      logLine: { timestamp: T0 + 5_000, parameters: ["Player-B", "Boomy-Illidan-US"] },
+    };
+    const tick = {
+      logLine: { timestamp: T0 + 7_000 },
+      effectiveAmount: -20_000,
+      srcUnitId: "Player-V",
+      srcUnitName: "Victim-Illidan-US",
+      srcUnitFlags: 0x511,
+      spellId: "361029",
+      spellName: "Time Dilation",
+    };
+    const unit = {
+      id: "Player-V",
+      reaction: CombatUnitReaction.Friendly,
+      damageIn: [hit, tick],
+      absorbsIn: [delayed],
+    } as never;
+    const out = getTopDamageSourcesInWindow(unit, T0 + 10_000, 10_000, 3, new Map(), new Map([["Boomy-Illidan-US", 5]]));
+    expect(out).toEqual(["5 — Starsurge (60k)", "deferred Time Dilation (own) (20k)"]);
+  });
 });

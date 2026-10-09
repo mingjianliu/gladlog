@@ -697,6 +697,14 @@ export function formatMitigationAuditLine(row: IMitigationAuditRow): string {
         : "";
     return `Mitigation audit: ${row.spellName} blocked ~${blockedK}k${pctPart} over ${overlap}s active ${inWindow}`;
   }
+  if (row.kind === "deferred") {
+    const deferredK = Math.round((row.deferredAmount ?? 0) / 1000);
+    const pctPart =
+      row.deferredPctMaxHp !== undefined
+        ? ` (≈${row.deferredPctMaxHp}% max HP)`
+        : "";
+    return `Mitigation audit: ${row.spellName} deferred ~${deferredK}k${pctPart} over ${overlap}s active ${inWindow} — delayed, not prevented: it lands later as the unit's own damage`;
+  }
   if (row.kind === "immunity") {
     const dmgK = Math.round((row.damageTakenDuringImmunity ?? 0) / 1000);
     const outsideK = Math.round((row.damageOutsideImmunitySchool ?? 0) / 1000);

@@ -4,6 +4,7 @@ import { IMajorCooldownInfo } from "../src/utils/cooldowns";
 import {
   benchmarks,
   formatDTPSBaselines,
+  INCOMING_BASELINE_DEFINITION_NOTE,
   formatLobbyMmrFact,
   formatSpecBaselines,
   IBenchmarkData,
@@ -128,6 +129,7 @@ describe("specBaselines — formatDTPSBaselines", () => {
 
     expect(lines).toEqual([
       "INCOMING DAMAGE BASELINES (per 10s window, ≥2100 personal rating):",
+      INCOMING_BASELINE_DEFINITION_NOTE,
       "  Arms Warrior (n=150): p50 120k | p90 251k",
       "  Holy Paladin (n=200): p50 95k | p90 190k",
     ]);

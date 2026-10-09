@@ -122,6 +122,11 @@ export function formatSpecBaselines(
   return lines;
 }
 
+/** What a baseline row measures, next to the [DMG SPIKE] totals it is read
+ * against (FT-T02d). */
+export const INCOMING_BASELINE_DEFINITION_NOTE =
+  "  (health lost to hits in fixed, back-to-back 10 s windows — absorbed damage is not in it; a [DMG SPIKE] total also counts absorbed damage and is the worst sliding 10 s, so it reads higher)";
+
 /**
  * Emits a per-spec incoming-damage baseline block for all friendly specs that have
  * benchmark data. Helps the model interpret [DMG SPIKE] magnitudes.
@@ -138,5 +143,12 @@ export function formatDTPSBaselines(friendlySpecs: string[], data: IBenchmarkDat
     rows.push(`  ${spec} (n=${entry.sampleCount}): p50 ${p50k}k | p90 ${p90k}k`);
   }
   if (rows.length === 0) return [];
-  return [`INCOMING DAMAGE BASELINES (per 10s window, ≥${BASELINE_RATING_FLOOR} personal rating):`, ...rows];
+  return [
+    `INCOMING DAMAGE BASELINES (per 10s window, ≥${BASELINE_RATING_FLOOR} personal rating):`,
+    // FT-T02d: the two numbers are not the same measure (benchmark/metrics.ts
+    // buckets landed damageIn; a spike is the max sliding window of
+    // `incomingPressureEvents`).
+    INCOMING_BASELINE_DEFINITION_NOTE,
+    ...rows,
+  ];
 }

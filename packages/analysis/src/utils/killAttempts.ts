@@ -808,6 +808,10 @@ export function formatKillAttemptsForContext(
   lines.push(
     "  Trinket up is the default state (cooldowns reset at the gates): a stun on a trinket-up target is how the trinket gets forced, not a targeting error. Only a line naming a softer target raises a targeting question.",
   );
+  // FT-T02d: what the damage figure is.
+  lines.push(
+    "  `(N M on target)` = the team's damage on the target: what landed plus what the target's shields absorbed.",
+  );
   // F-E22 / F-E22b (rulings A29, A′4): what a FAILED cause is allowed to be.
   lines.push(
     "  A FAILED wall / external / self-save went up inside the attempt, or was already up when it began (`[up since m:ss]`) — one pressed after the attempt was over is not its cause; an immunity, the trinket or a break in the next 5 s still is. A cause naming both the target's own save and an external (`popped X; saved by external (Y)`) met both: neither alone is the reason. `target trinketed out` / `broke out (X)` = the trinket / a racial or class ability removed a control of this attempt.",

@@ -541,7 +541,7 @@ describe("analyzeBurstLedger — Target HP on the render grid, the low, other de
     expect(t.hpEndPct).toBe(0);
     expect(t.hpLow).toBeNull();
     expect(t.died).toBe(true);
-    expect(formatBurstLedgerForContext(bursts, [], [])[2]).toContain(
+    expect(formatBurstLedgerForContext(bursts, [], [])[3]).toContain(
       "Target: Victim 80% → 0% | your damage 0.05M | target DIED",
     );
   });
@@ -582,7 +582,7 @@ describe("analyzeBurstLedger — Target HP on the render grid, the low, other de
     expect(bursts[0].otherDeaths).toEqual([
       { unitName: "Shatters", atSeconds: 11.945 },
     ]);
-    expect(formatBurstLedgerForContext(bursts, [], [])[2]).toMatch(
+    expect(formatBurstLedgerForContext(bursts, [], [])[3]).toMatch(
       /Target: Kegrunner \| your damage 0\.70M \| also hit: Shatters DIED 0:11 \(\+1\.3s\)$/,
     );
   });

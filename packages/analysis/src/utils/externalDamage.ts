@@ -63,6 +63,7 @@ import { type ICombatUnit,LogEvent } from "@gladlog/parser-compat";
 import { MITIGATION_TABLE, NO_MITIGATION_IDS } from "../data/mitigationData";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import { buildAuraIntervals, type IAuraInterval } from "./auraIntervals";
+import { isDeferralAbsorb } from "./incomingPressure";
 
 /** Seconds before the application in which a hit on the target makes an ally
  *  "qualifying". Direct or periodic (user ruling 2026-09-30, A30 / triage
@@ -157,6 +158,10 @@ export interface IExternalDamageObservation {
   dAll: number;
   /** SPELL_ABSORBED amounts the ally put on the target inside W (not in N or D). */
   absorbed: number;
+  /** The part a deferral shield (Time Dilation, Stretch Time) only DELAYED —
+   * it lands later as the target's own deferred damage, so it is not
+   * "absorbed" (`isDeferralAbsorb`, FT-T02b). Not in N, D or `absorbed`. */
+  deferred: number;
   /** 100·(nDirect+nPeriodic)/dAll, null when dAll = 0. */
   X: number | null;
   /** Direct damage on the target in the PRE_HIT_S before the application. */
@@ -170,10 +175,15 @@ export function classifyExternalDamage(
   o: Pick<
     IExternalDamageObservation,
     "nDirect" | "nPeriodic" | "K" | "M" | "absorbed" | "immuneHits"
-  >,
+  > & { deferred?: number },
 ): ExternalDamageKind {
-  // Round 2: an absorbed or immune hit is still the ally attacking the target.
-  const attacked = o.nDirect > 0 || o.absorbed > 0 || o.immuneHits > 0;
+  // Round 2: an absorbed, delayed or immune hit is still the ally attacking
+  // the target.
+  const attacked =
+    o.nDirect > 0 ||
+    o.absorbed > 0 ||
+    (o.deferred ?? 0) > 0 ||
+    o.immuneHits > 0;
   if (!attacked && o.nPeriodic === 0) return "empty";
   if (!attacked) return "periodic-only";
   return o.K / Math.max(o.M, 1) >= EXTERNAL_DAMAGE_CONTINUES_SHARE
@@ -228,6 +238,7 @@ export function externalDamageForApplication(
     let nPeriodic = 0;
     let dAll = 0;
     let absorbed = 0;
+    let deferred = 0;
     let inSchool = 0;
     let immuneHits = 0;
     const bins = new Set<number>();
@@ -242,7 +253,8 @@ export function externalDamageForApplication(
       if (a.attackerId !== ally.id) continue;
       const tS = (a.logLine.timestamp - startMs) / 1000;
       if (tS < wFrom || tS >= wTo) continue;
-      absorbed += a.absorbedAmount;
+      if (isDeferralAbsorb(a)) deferred += a.absorbedAmount;
+      else absorbed += a.absorbedAmount;
       bins.add(Math.floor(tS));
     }
     for (const d of ally.damageOut) {
@@ -302,6 +314,7 @@ export function externalDamageForApplication(
       nPeriodic,
       dAll,
       absorbed,
+      deferred,
       X: dAll > 0 ? (100 * (nDirect + nPeriodic)) / dAll : null,
       preDirect,
       prePeriodic,
@@ -325,9 +338,14 @@ export function externalDamageObservations(
 }
 
 const k = (x: number): string => `${Math.round(x / 1000)}k`;
-/** `(+Ak absorbed)` when the target's shields ate a material amount. */
-const absorbedTag = (o: IExternalDamageObservation): string =>
-  o.absorbed >= 500 ? ` (+${k(o.absorbed)} absorbed)` : "";
+/** `(+Ak absorbed)` when the target's shields ate a material amount;
+ * `+Dk deferred` for what a deferral shield only delayed. */
+const absorbedTag = (o: IExternalDamageObservation): string => {
+  const parts: string[] = [];
+  if (o.absorbed >= 500) parts.push(`+${k(o.absorbed)} absorbed`);
+  if (o.deferred >= 500) parts.push(`+${k(o.deferred)} deferred`);
+  return parts.length > 0 ? ` (${parts.join(", ")})` : "";
+};
 /** Round-2 fields: the in-school share for a school-limited wall, and immune hits. */
 const round2Tags = (o: IExternalDamageObservation): string => {
   let s = "";
@@ -341,7 +359,7 @@ const round2Tags = (o: IExternalDamageObservation): string => {
   return s;
 };
 const isEmpty = (o: IExternalDamageObservation): boolean =>
-  o.dAll <= 0 && o.absorbed <= 0 && o.immuneHits === 0;
+  o.dAll <= 0 && o.absorbed <= 0 && o.deferred <= 0 && o.immuneHits === 0;
 
 /**
  * The rendered fact for one observation, appended to the `[ENEMY DEF]`

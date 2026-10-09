@@ -589,6 +589,11 @@ export function formatBurstLedgerForContext(
 ): string[] {
   if (bursts.length + targeting.length + kicks.length === 0) return [];
   const lines: string[] = ["## BURST LEDGER (your offensive audit)"];
+  // FT-T02d: what the damage figure is.
+  if (bursts.length > 0)
+    lines.push(
+      "  `your damage` = your damage on that target: what landed plus what its shields absorbed.",
+    );
 
   bursts.forEach((b, i) => {
     lines.push(

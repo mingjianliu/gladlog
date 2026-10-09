@@ -1430,6 +1430,21 @@ describe("context.timelineSections.test.ts", () => {
 
   // ── formatMitigationAuditLine / formatDecisiveCounterfactualLine (#17b Task4) ──
   describe("formatMitigationAuditLine / formatDecisiveCounterfactualLine", () => {
+    it("deferred(FT-T02b):写「deferred」而不是「blocked」,并说明是推迟不是挡掉", () => {
+      expect(
+        formatMitigationAuditLine({
+          spellId: "357170",
+          spellName: "Time Dilation",
+          kind: "deferred",
+          activeOverlapS: 6,
+          deferredAmount: 171_114,
+          deferredPctMaxHp: 18.8,
+        }),
+      ).toBe(
+        "Mitigation audit: Time Dilation deferred ~171k (≈18.8% max HP) over 6.0s active in the final 10s — delayed, not prevented: it lands later as the unit's own damage",
+      );
+    });
+
     it("arith 行:数字与措辞匹配 brief 示例(Barkskin ~75k / ≈8% / 6.0s)", () => {
       const row: IMitigationAuditRow = {
         spellId: "22812",
