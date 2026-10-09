@@ -349,6 +349,13 @@ export function formatTimeline(
           "  `(cast k of N)` on [ENEMY CD] / [ENEMY HEAL CD] = the k-th of N casts of that spell this round (not charges).",
         ]
       : []),
+    // FT-T06: an effect a talent triggers is not a cast
+    ...(enemyCdRender.procRendered
+      ? [
+          "  `(proc k of N[, with X])` on [ENEMY CD] = an effect a talent triggers: it has no button and no cooldown of its",
+          "    own; `with X` = the cast it came with. It is still a burst effect on that unit.",
+        ]
+      : []),
     // F-E8 (A26 = A): the healer throughput tag, outside the burst windows
     ...(enemyCdRender.healCdRendered
       ? [

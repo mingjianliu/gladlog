@@ -65,7 +65,11 @@ describe("G7-P3", () => {
       "1:00  [ENEMY HEAL CD]   5(Misanthropy) (Holy Priest): Apotheosis",
       "1:01  [ENEMY HEAL CD]   5(Pally) (Holy Paladin): Avenging Crusader",
     ]);
-    expect(out).toEqual({ ordinalRendered: true, healCdRendered: true });
+    expect(out).toEqual({
+      ordinalRendered: true,
+      healCdRendered: true,
+      procRendered: false,
+    });
   });
   it("the heal-CD set never overlaps the burst-window set", () => {
     for (const id of ENEMY_HEAL_CD_IDS)

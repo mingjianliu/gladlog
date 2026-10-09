@@ -8,10 +8,11 @@
  * its closure inputs now arrive through `ctx`. Output is pinned by the 605-file
  * acceptanceCapture context hash.
  */
-import { LogEvent } from "@gladlog/parser-compat";
+import { type ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
 import { ENEMY_HEAL_CD_IDS } from "../../data/enemyHealCds";
 import { getEnglishSpellName } from "../../data/spellEffectData";
+import { AURA_REBROADCAST_GAP_MS } from "../../utils/auraIntervals";
 import { specToString } from "../../utils/cooldowns";
 import { fmtTime } from "../../utils/renderGrid";
 import type { TimelineCtx } from "./ctx";
@@ -21,6 +22,56 @@ import type { TimelineCtx } from "./ctx";
  *  ` (cast k of N)`. Shared by [ENEMY CD] and [ENEMY HEAL CD]. */
 export function castOrdinal(seq: number, total: number): string {
   return total > 1 ? ` (cast ${seq} of ${total})` : "";
+}
+
+/**
+ * FT-T06: an activation of another cooldown's effect — no button, no cooldown
+ * of its own (`availableAgainAtSeconds === null`: Radiant Glory's Avenging
+ * Wrath 454351, GH #115) — is not a cast the enemy chose. The log still
+ * writes a SPELL_CAST_SUCCESS for it, in the very ms of the cast that
+ * triggered it (0e0663e6: five of them, each with a Wake of Ashes), and the
+ * line read `Avenging Wrath (cast 1 of 5)`. It says `proc`, and what it came
+ * with when the log shows that.
+ */
+export function procOrdinal(
+  seq: number,
+  total: number,
+  triggerName: string | undefined,
+): string {
+  const which = total > 1 ? `proc ${seq} of ${total}` : "proc";
+  return ` (${which}${triggerName ? `, with ${triggerName}` : ""})`;
+}
+
+/**
+ * What an activation comes with: the unit's own cast that shares its ms with
+ * at least two of the round's activations of that effect, and with strictly
+ * more of them than any other cast. One shared ms proves nothing — a trinket
+ * macro'd to the press, an off-GCD strike (the first cut named `Gladiator's
+ * Badge` and `Crusading Strikes` as triggers on 39 lines of the 605-file
+ * capture). Undefined = the log does not single one out.
+ */
+function triggerOf(
+  unit: ICombatUnit | undefined,
+  activationSpellId: string,
+  activationsMs: readonly number[],
+): string | undefined {
+  const counts = new Map<string, number>();
+  for (const atMs of activationsMs) {
+    const names = new Set<string>();
+    for (const e of unit?.spellCastEvents ?? []) {
+      if (
+        e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+        !!e.spellId &&
+        e.spellId !== activationSpellId &&
+        Math.abs(e.logLine.timestamp - atMs) <= AURA_REBROADCAST_GAP_MS
+      )
+        names.add(getEnglishSpellName(e.spellId, e.spellName));
+    }
+    for (const n of names) counts.set(n, (counts.get(n) ?? 0) + 1);
+  }
+  const ranked = [...counts.entries()].sort((a, b) => b[1] - a[1]);
+  const [top, next] = ranked;
+  return top && top[1] >= 2 && (!next || next[1] < top[1]) ? top[0] : undefined;
 }
 
 /** Returns whether any line carried a cast ordinal (its legend line). */
@@ -34,9 +85,14 @@ export function emitEnemyCdEntries(
     | "enemies"
     | "matchStartMs"
   >,
-): { ordinalRendered: boolean; healCdRendered: boolean } {
+): {
+  ordinalRendered: boolean;
+  healCdRendered: boolean;
+  procRendered: boolean;
+} {
   const { enemyCDTimeline, cdPurgeAnnotations, addEntry, enemyPid } = ctx;
   let ordinalRendered = false;
+  let procRendered = false;
 
   for (const player of enemyCDTimeline.players) {
     // GH #119: timeline-only facts (a Demonic Metamorphosis form) render here
@@ -49,13 +105,37 @@ export function emitEnemyCdEntries(
     for (const cd of shown) {
       totalBySpell.set(cd.spellName, (totalBySpell.get(cd.spellName) ?? 0) + 1);
     }
+    const enemyUnit = (ctx.enemies ?? []).find(
+      (e) => e.name === player.playerName,
+    );
+    const isActivationCd = (cd: (typeof shown)[number]) =>
+      cd.availableAgainAtSeconds === null && !cd.availabilityUnknown;
+    /** activation spell id → what it comes with this round, if anything */
+    const triggerBySpell = new Map<string, string | undefined>();
+    for (const cd of shown) {
+      if (!isActivationCd(cd) || triggerBySpell.has(cd.spellId)) continue;
+      triggerBySpell.set(
+        cd.spellId,
+        triggerOf(
+          enemyUnit,
+          cd.spellId,
+          shown
+            .filter((o) => o.spellId === cd.spellId && isActivationCd(o))
+            .map((o) => Math.round(ctx.matchStartMs + o.castTimeSeconds * 1000)),
+        ),
+      );
+    }
     const seqBySpell = new Map<string, number>();
     for (const cd of shown) {
       const total = totalBySpell.get(cd.spellName) ?? 1;
       const seq = (seqBySpell.get(cd.spellName) ?? 0) + 1;
       seqBySpell.set(cd.spellName, seq);
-      const seqAnnotation = castOrdinal(seq, total);
-      if (seqAnnotation) ordinalRendered = true;
+      const isActivation = isActivationCd(cd);
+      const seqAnnotation = isActivation
+        ? procOrdinal(seq, total, triggerBySpell.get(cd.spellId))
+        : castOrdinal(seq, total);
+      if (isActivation) procRendered = true;
+      else if (seqAnnotation) ordinalRendered = true;
       const purgeNote = cdPurgeAnnotations.get(cd) ?? "";
       addEntry(
         cd.castTimeSeconds,
@@ -93,5 +173,5 @@ export function emitEnemyCdEntries(
       );
     }
   }
-  return { ordinalRendered, healCdRendered };
+  return { ordinalRendered, healCdRendered, procRendered };
 }

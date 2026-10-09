@@ -1191,5 +1191,12 @@
  *  before the round is found and marked. `[UNUSED]` on a cooldown whose cast
  *  bar the unit started without ever finishing says so (`[UNUSED — started
  *  N×, never finished]`). Counts in the commit.
+ *  v348 (2026-10-09, FT-T06 item 2, same approval): an effect a talent
+ *  triggers (no button, no cooldown of its own — Radiant Glory's Avenging
+ *  Wrath, a Demonic Metamorphosis) reads `(proc k of N[, with X])` on its
+ *  [ENEMY CD] line instead of `(cast k of N)`, with a legend line; a button a
+ *  talent replaced by a passive prints `[PASSIVE]` in the kit without the
+ *  replaced button's cooldown. Burst windows are unchanged. Counts in the
+ *  commit.
  */
-export const PROMPT_VERSION = 347;
+export const PROMPT_VERSION = 348;

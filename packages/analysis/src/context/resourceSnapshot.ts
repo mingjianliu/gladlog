@@ -156,7 +156,14 @@ export function buildPlayerLoadout(
     // a proc-only entry's "charges" are inferred from how often it procced
     // (Radiant Glory's Avenging Wrath every Wake of Ashes → "2 Charges"), not
     // something the player holds — not printed (GH #106 step 2)
-    `${cd.spellName} [${cd.cooldownSeconds}s${(cd.charges ?? 1) > 1 && !cdIsProcOnly(cd) ? `, ${cd.charges} Charges` : ""}${lastsPart(cd, caster)}]${
+    // FT-T06: an entry with no button (`isProcOnly`: a talent replaced it by
+    // a passive, or a registered proc) has no cooldown the player waits for
+    // either — `[60s] [PASSIVE]` on an Avenging Wrath that comes with every
+    // Wake of Ashes read as a 60 s cooldown. 605-file capture: 1,468 kit
+    // entries printed seconds in front of [PASSIVE]; none does now.
+    cd.isProcOnly
+      ? `${cd.spellName} [PASSIVE]`
+      : `${cd.spellName} [${cd.cooldownSeconds}s${(cd.charges ?? 1) > 1 && !cdIsProcOnly(cd) ? `, ${cd.charges} Charges` : ""}${lastsPart(cd, caster)}]${
       cdIsProcOnly(cd)
         ? " [PASSIVE]"
         : cdNeverSpent(cd)
