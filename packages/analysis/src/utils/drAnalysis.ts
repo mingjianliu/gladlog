@@ -298,7 +298,7 @@ export function buildCcCategoryHistory(
 }> {
   const appliesBySpell = new Map<string, number[]>();
   const removesBySpell = new Map<string, number[]>();
-  // a same-ms REMOVED→APPLIED re-broadcast is one application, not two DR
+  // a REMOVED→APPLIED re-broadcast (`AURA_REBROADCAST_GAP_MS`) is one application, not two DR
   // steps (cc-dr F-RB1, ruling A50 = A: the shared `dropAuraRebroadcasts`).
   // Filter BEFORE the re-broadcast pass: this runs once per CC break / dispel
   // window, so re-keying every aura of the unit each call made it O(calls ×

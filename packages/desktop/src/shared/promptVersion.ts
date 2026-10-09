@@ -1122,5 +1122,13 @@
  *  the attacker-side line reported and a shield in fact absorbed is no
  *  longer counted as landed (and again as absorbed). Damage sums that
  *  include such swings move. Counts in the commit.
+ *  v337 (2026-10-09, FT-T08 step 1, user approval 2026-10-09 "3 同意"): an
+ *  aura the game re-broadcasts (REMOVED then APPLIED of the same spell,
+ *  source and target, no new cast) is one aura when the two lines are up to
+ *  1 ms apart, not only in the same millisecond — the log's four-decimal
+ *  timestamps put the pair on either side of a millisecond boundary about
+ *  one time in ten. One application no longer prints as two CC lines with an
+ *  extra DR step, or as a buff that "ended early" and a second press.
+ *  Counts in the commit.
  */
-export const PROMPT_VERSION = 336;
+export const PROMPT_VERSION = 337;

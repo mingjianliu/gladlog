@@ -129,13 +129,30 @@ export const DUPLICATE_CLOSE_WINDOW_S = 1;
  * ascending fromS.
  */
 /**
- * An aura the game RE-BROADCASTS — `SPELL_AURA_REMOVED` and `SPELL_AURA_APPLIED`
- * of the same spell, source and target in the same millisecond (a Dracthyr
- * visage swap, leaving stealth) — is one continuous aura, not an end and a new
- * press. Reliability rounds 2–3 (W2e / N6: d78f a second CC, 3306 "Obsidian
- * Scales ended early", ba44 one Ironbark rendered as two). Returns the events
- * with every such REMOVED/APPLIED pair dropped, order preserved. The one
- * predicate every aura consumer filters through.
+ * How far apart the REMOVED and the APPLIED of one re-broadcast can sit, in
+ * the parsed (whole-millisecond) timestamps. The log writes four decimals, so
+ * the two lines of one re-broadcast straddle a millisecond boundary about one
+ * time in ten (f4da82c5: one Sleep Walk cast, REMOVED 10.1853 / APPLIED
+ * 10.1863 — two `(0s)` CC lines and an extra DR step). Measured on the 60 raw
+ * logs of the 2026-10-08 re-eval, REMOVED → APPLIED of one aura with no cast of
+ * it in between, on players: 7,032 at 0 ms, 666 at 1 ms, 72 at 2–5 ms, then
+ * 2,541 at 6–50 ms. Every CC among them is at 0 or 1 ms (Sleep Walk, Chaos
+ * Nova, Void Nova, Oppressing Roar, Mighty Bash); the 2–5 ms band is poisons
+ * and proc stacks re-applying, the band beyond it ground effects pulsing
+ * (Consecration) — real ends and re-applications.
+ */
+export const AURA_REBROADCAST_GAP_MS = 1;
+
+/**
+ * An aura the game RE-BROADCASTS — `SPELL_AURA_REMOVED` and then
+ * `SPELL_AURA_APPLIED` of the same spell, source and target within
+ * `AURA_REBROADCAST_GAP_MS` (a Dracthyr visage swap, leaving stealth, Sleep
+ * Walk's two phases) — is one continuous aura, not an end and a new press.
+ * Reliability rounds 2–3 (W2e / N6: d78f a second CC, 3306 "Obsidian Scales
+ * ended early", ba44 one Ironbark rendered as two); FT-T08 widened "the same
+ * millisecond" to the gap above. Returns the events with every such
+ * REMOVED/APPLIED pair dropped, order preserved. The one predicate every aura
+ * consumer filters through.
  */
 export function dropAuraRebroadcasts<
   T extends {
@@ -147,7 +164,7 @@ export function dropAuraRebroadcasts<
   },
 >(events: readonly T[]): T[] {
   const key = (a: T) =>
-    `${a.spellId}|${a.srcUnitId ?? ""}|${a.destUnitId ?? ""}|${a.timestamp}`;
+    `${a.spellId}|${a.srcUnitId ?? ""}|${a.destUnitId ?? ""}`;
   // A rebroadcast is a REMOVED FOLLOWED BY an APPLIED (log order). An APPLIED
   // then a REMOVED at the same ms is a duplicate application and then the
   // real end — codex review of batch 9: Ironbark applied at 10 s, a duplicate
@@ -160,7 +177,13 @@ export function dropAuraRebroadcasts<
     if (a.logLine.event === LogEvent.SPELL_AURA_REMOVED) {
       pendingRemoved.set(k, [...(pendingRemoved.get(k) ?? []), a]);
     } else if (a.logLine.event === LogEvent.SPELL_AURA_APPLIED) {
-      const r = pendingRemoved.get(k)?.shift();
+      // only a REMOVED no older than the gap is this APPLIED's other half
+      const pending = (pendingRemoved.get(k) ?? []).filter((r) => {
+        const gap = a.timestamp - r.timestamp;
+        return gap >= 0 && gap <= AURA_REBROADCAST_GAP_MS;
+      });
+      const r = pending.shift();
+      pendingRemoved.set(k, pending);
       if (r) {
         drop.add(r);
         drop.add(a);

@@ -125,7 +125,7 @@ describe("[BURST ANSWERED] credits an answer that reached the pressured unit thr
   });
 });
 
-import { buildAuraIntervals, dropAuraRebroadcasts } from "../src/utils/auraIntervals";
+import { AURA_REBROADCAST_GAP_MS, buildAuraIntervals, dropAuraRebroadcasts } from "../src/utils/auraIntervals";
 
 describe("aura re-broadcasts are one aura (rounds 2–3 W2e / N6)", () => {
   const ev = (event: string, spellId: string, ts: number, src = "s", dest = "d") =>
@@ -139,6 +139,44 @@ describe("aura re-broadcasts are one aura (rounds 2–3 W2e / N6)", () => {
     ];
     const out = dropAuraRebroadcasts(evs);
     expect(out).toHaveLength(2);
+  });
+  it("FT-T08:REMOVED → APPLIED 隔 1 ms(跨毫秒边界的同一次重播)也是同一个光环;隔 2 ms 不是", () => {
+    // f4da82c5: one Sleep Walk cast, REMOVED 10.1853 / APPLIED 10.1863.
+    const oneMs = [
+      ev("SPELL_AURA_APPLIED", "360806", 9_964),
+      ev("SPELL_AURA_REMOVED", "360806", 10_185),
+      ev("SPELL_AURA_APPLIED", "360806", 10_186),
+      ev("SPELL_AURA_REMOVED", "360806", 10_571),
+    ];
+    expect(dropAuraRebroadcasts(oneMs).map((e: any) => e.timestamp)).toEqual([9_964, 10_571]);
+    const unit = { id: "d", auraEvents: oneMs } as never;
+    const iv = buildAuraIntervals(unit, { startTime: 0, endTime: 60_000 }).filter((i) => i.spellId === "360806");
+    expect(iv.map((i) => [i.fromS, i.toS])).toEqual([[9.964, 10.571]]);
+
+    const twoMs = [
+      ev("SPELL_AURA_APPLIED", "8680", 1_000),
+      ev("SPELL_AURA_REMOVED", "8680", 5_000),
+      ev("SPELL_AURA_APPLIED", "8680", 5_002),
+      ev("SPELL_AURA_REMOVED", "8680", 9_000),
+    ];
+    expect(dropAuraRebroadcasts(twoMs)).toHaveLength(4);
+    expect(AURA_REBROADCAST_GAP_MS).toBe(1);
+  });
+  it("FT-T08:更早的 REMOVED 不会和后来的 APPLIED 配成重播;APPLIED 在 REMOVED 之前 1 ms 也不是", () => {
+    const stale = [
+      ev("SPELL_AURA_APPLIED", "360806", 1_000),
+      ev("SPELL_AURA_REMOVED", "360806", 2_000),
+      ev("SPELL_AURA_APPLIED", "360806", 8_000),
+      ev("SPELL_AURA_REMOVED", "360806", 9_000),
+    ];
+    expect(dropAuraRebroadcasts(stale)).toHaveLength(4);
+    // log order REMOVED@5_001 then APPLIED@5_000 (a timestamp stepping back): not a re-broadcast
+    const backwards = [
+      ev("SPELL_AURA_APPLIED", "360806", 1_000),
+      ev("SPELL_AURA_REMOVED", "360806", 5_001),
+      ev("SPELL_AURA_APPLIED", "360806", 5_000),
+    ];
+    expect(dropAuraRebroadcasts(backwards)).toHaveLength(3);
   });
   it("a second APPLIED inside the duration with no recast (leaving stealth) keeps one interval", () => {
     const unit = {

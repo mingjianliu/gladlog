@@ -1856,6 +1856,11 @@ const INDEX: PredicateRow[] = [
     mod: auraIntervals,
   },
   {
+    file: `${A}/utils/auraIntervals.ts`,
+    symbol: "dropAuraRebroadcasts",
+    mod: auraIntervals,
+  },
+  {
     file: `${A}/analysis/momentSnapshot.ts`,
     symbol: "aurasActiveAt",
     mod: momentSnapshot,
