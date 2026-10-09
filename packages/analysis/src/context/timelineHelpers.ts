@@ -21,7 +21,10 @@ import {
   freeMsBefore,
   namedCannotCastIntervals,
 } from "../utils/cannotCastIntervals";
-import { dropAuraRebroadcasts } from "../utils/auraIntervals";
+import {
+  AURA_REBROADCAST_GAP_MS,
+  dropAuraRebroadcasts,
+} from "../utils/auraIntervals";
 import { buffFullDurationForCaster } from "../utils/buffDuration";
 import { IPlayerCCTrinketSummary } from "../utils/ccTrinketAnalysis";
 import { isControlledPlayerFlags } from "../utils/charmedPlayer";
@@ -647,10 +650,55 @@ export function extractOwnerCDBuffExpiry(
   return result;
 }
 
-/** H13: true if a real kick (interruptInstance) or control-CC (ccInstance) landed on the
- * caster within the channel window [startSeconds, endSeconds] (±0.5s tolerance so an
- * interrupt that lands right as the channel stops still counts). Used to confirm an early-
- * ended channel was actually interrupted, vs. a self-cancel/movement. */
+/**
+ * How long after a control lands the channel it cut is REMOVED. Measured on
+ * the 605-file S2 sample, the four channelled cooldowns (Divine Hymn,
+ * Tranquility, Emerald Communion, Ultimate Penitence; 1,219 channels;
+ * fix-FT/t08-channel-end-605.txt): of the debuffs that landed on a
+ * channelling caster, 43 landed at most 50 ms before the channel's end —
+ * hard controls almost to a line (Hammer of Justice, Freezing Trap, Fear,
+ * Polymorph …); between 51 and 250 ms before it there are still eight hard
+ * controls (Blind, Incapacitating Roar, Polymorph, Silence, a Binding Shot
+ * stun, Intimidating Shout, Psychic Scream, Sleep Walk); between 251 and
+ * 500 ms none. The cut lags its control by up to a quarter second. (The 60
+ * re-eval logs alone showed 1–19 ms for ten controls; the bound was not read
+ * off them.) A kick's SPELL_INTERRUPT is logged after the channel's
+ * REMOVED, in the same ms — 24 of 24.
+ */
+export const CHANNEL_CUT_BY_CC_MS = 250;
+
+/**
+ * Did something landing at `atMs` cut the channel that ran [startMs, endMs]?
+ * It landed after the channel began and the channel ended at its landing.
+ * One predicate for the `[YOU] [CD]` channel suffix (`channelWasInterrupted`)
+ * and the `[YOU] [CAST]` `[channel cut by CC …]` note (healer gap-filler),
+ * which decided the same fact with a 250 ms constant of its own.
+ */
+export function landingCutChannel(
+  atMs: number,
+  startMs: number,
+  endMs: number,
+): boolean {
+  return (
+    atMs > startMs &&
+    // a kick's line follows the REMOVED it caused; the two can sit on either
+    // side of a millisecond boundary
+    atMs <= endMs + AURA_REBROADCAST_GAP_MS &&
+    endMs - atMs <= CHANNEL_CUT_BY_CC_MS
+  );
+}
+
+/** H13: true if a kick (interruptInstance) or a control-CC (ccInstance)
+ * landed on the caster DURING the channel and the channel ended at its
+ * landing (`landingCutChannel`). Used to confirm an early-ended channel was
+ * actually interrupted, vs. a self-cancel/movement.
+ *
+ * FT-T08 step 5: a control already on the caster at the press, or one that
+ * landed and left the channel running, cut nothing — Emerald Communion is
+ * pressed while stunned, and 141470d0's two full 3.7 s channels read
+ * "interrupted" for the Binding Shot / Intimidation they were cast under.
+ * The same holds for a kick: one that hit the cast before the channel, or
+ * the cast after it, used to count through a ±0.5 s window (agy review). */
 export function channelWasInterrupted(
   ownerSummary:
     | Pick<IPlayerCCTrinketSummary, "ccInstances" | "interruptInstances">
@@ -659,19 +707,11 @@ export function channelWasInterrupted(
   endSeconds: number,
 ): boolean {
   if (!ownerSummary) return false;
-  const kickInWindow = ownerSummary.interruptInstances.some(
-    (i) => i.atSeconds >= startSeconds - 0.5 && i.atSeconds <= endSeconds + 0.5,
+  const startMs = Math.round(startSeconds * 1000);
+  const endMs = Math.round(endSeconds * 1000);
+  return [...ownerSummary.interruptInstances, ...ownerSummary.ccInstances].some(
+    (x) => landingCutChannel(Math.round(x.atSeconds * 1000), startMs, endMs),
   );
-  if (kickInWindow) return true;
-
-  return ownerSummary.ccInstances.some((cc) => {
-    const landedInWindow =
-      cc.atSeconds >= startSeconds - 0.5 && cc.atSeconds <= endSeconds + 0.5;
-    const activeAtEnd =
-      endSeconds >= cc.atSeconds - 0.5 &&
-      endSeconds <= cc.atSeconds + cc.durationSeconds + 0.5;
-    return landedInWindow || activeAtEnd;
-  });
 }
 
 /** Rendered timeline lines start with an `M:SS ` timestamp column (e.g. `0:13  [DMG SPIKE]   …`). */

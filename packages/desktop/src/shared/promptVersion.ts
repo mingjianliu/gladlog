@@ -1150,5 +1150,11 @@
  *  target died`, `— used up, absorbed Nk`; `— removed early` remains for an
  *  early end with no logged cause, and the legend says so. Counts in the
  *  commit.
+ *  v341 (2026-10-09, FT-T08 step 5, same approval): a channelled cooldown's
+ *  [YOU] [CD] line reads `(interrupted at Ns …)` only when a kick or a
+ *  control landed DURING the channel and the channel ended at its landing;
+ *  one pressed under a control, or one that outlasted it, reads
+ *  `(channeled Ns …)`. The [YOU] [CAST] `[channel cut by CC …]` note uses
+ *  the same predicate. Counts in the commit.
  */
-export const PROMPT_VERSION = 340;
+export const PROMPT_VERSION = 341;

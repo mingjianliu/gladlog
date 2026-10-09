@@ -34,6 +34,7 @@ import {
   GROUNDING_TOTEM_NPC_ID,
   HEALER_CAST_SPELL_ID_TO_NAME,
   isPassiveProcCast,
+  landingCutChannel,
 } from "../timelineHelpers";
 import type { TimelineCtx } from "./ctx";
 
@@ -159,7 +160,6 @@ export function emitHealerCastGapFillerEntries(
 
   /** Seconds a channel ran before an owner CC cut it, or null (F-O14). */
   const CHANNEL_AURA_AT_CAST_MS = 250;
-  const CHANNEL_CUT_BY_CC_MS = 250;
   // Re-broadcast REMOVED/APPLIED pairs dropped first (the one predicate
   // every aura consumer filters through): a visage swap mid-channel must not
   // read as the channel's end (agy review 2026-10-01).
@@ -183,11 +183,9 @@ export function emitHealerCastGapFillerEntries(
       )
       .reduce((min, a) => Math.min(min, a.logLine.timestamp), Infinity);
     if (!Number.isFinite(removeMs)) return null;
-    const cutBy = ownerCCMsTimestamps.some(
-      (ccMs) =>
-        ccMs > castMs &&
-        removeMs >= ccMs &&
-        removeMs - ccMs <= CHANNEL_CUT_BY_CC_MS,
+    // the one channel-cut predicate (`landingCutChannel`, FT-T08 step 5)
+    const cutBy = ownerCCMsTimestamps.some((ccMs) =>
+      landingCutChannel(ccMs, castMs, removeMs),
     );
     return cutBy ? (removeMs - castMs) / 1000 : null;
   };
@@ -434,8 +432,8 @@ export function emitHealerCastGapFillerEntries(
     // aura 363.771, stun 364.498, aura removed 364.531). Evidence, all from
     // the log: the spell is a channel (official table — an instant self-buff
     // dropping right after a CC is not a cut channel), it put its own aura on
-    // the owner at the cast, and that aura went within CHANNEL_CUT_BY_CC_MS
-    // after a CC landed on the owner.
+    // the owner at the cast, and that aura went right as a CC landed on the
+    // owner (`landingCutChannel`, shared with the [YOU] [CD] channel suffix).
     const cut = e.spellId ? channelCutByCc(e.spellId, tsMs) : null;
     if (cut !== null) {
       orderNote = ` [channel cut by CC after ${fmtFactNum(cut)}s]`;

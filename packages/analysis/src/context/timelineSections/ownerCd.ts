@@ -453,7 +453,7 @@ export function emitOwnerCdEntries(
             const interrupted = channelWasInterrupted(
               ownerCCSummary,
               cast.timeSeconds,
-              cast.timeSeconds + actualDuration,
+              expiry.expiresAtSeconds,
             );
             const channelEnd = fmtTime(cast.timeSeconds + actualDuration);
             channelSuffix = interrupted
