@@ -148,7 +148,11 @@ export const SPELL_EFFECT_OVERRIDES: Record<string, IMinedSpell> =
       // so 6 is the holder's value; the lockout path takes no caster, so a
       // non-holder still reads 6 (one second long, the "locked" side) — see
       // test/kickLockout.test.ts RULED_LOCKOUTS.
-      e("2139", "Counterspell", 24, 6),
+      // FT-T11 (2026-10-09): the cooldown is DB2's 25 s again (row built from
+      // the generated one, see Astral Shift) — the hand 24 put a Quick Witted
+      // holder's Counterspell back at 19 s; the corpus edge is 20.0 s = 25 − 5
+      // (605 files, 702 recast gaps: none below 19.9 s).
+      { ...SPELL_EFFECTS_GENERATED["2139"]!, durationSeconds: 6 },
       e("6552", "Pummel", 15),
       e("47528", "Mind Freeze", 15),
       e("57994", "Wind Shear", 12),
@@ -160,8 +164,12 @@ export const SPELL_EFFECT_OVERRIDES: Record<string, IMinedSpell> =
       e("183752", "Disrupt", 15),
       e("119910", "Spell Lock", 24),
       e("132409", "Spell Lock", 24),
-      e("351338", "Quell", 40),
-      e("15487", "Silence", 45),
+      // FT-T11 (2026-10-09): Quell and Silence have no row here any more —
+      // the hand 40 s / 45 s were an older patch's. DB2 12.1.5: Quell 20 s,
+      // Silence 30 s; the corpus agrees (605 files, shortest recast gap by the
+      // same player in a round: Quell 20.0 s, 76 of 97 gaps under 40 s;
+      // Silence 30.0 s, 266 of 349 under 45 s). `[KICK] … (Quell; back m:ss)`
+      // was contradicted by the same evoker's next Quell on 34 of 59 pairs.
       { ...SPELL_EFFECTS_GENERATED["8122"]!, durationSeconds: 6 }, // cooldown stays DB2's 40 s (row built from the generated one, see Astral Shift): the hand 30: the hand 30 already held Psychic Voice's −10 and CD_TALENT_MODIFIERS subtracted it again → 20 s. Corpus 2026-09-26 (605 files, --split-talent 196704): holders floor 29–30 s (1,909 gaps, 3 specs), non-holders 40 s (187 gaps). Reliability round 2 W2b (7b3c "≥ 30 s observed").
       e("78675", "Solar Beam", 60),
     ].map((s) => [s.spellId, s]),

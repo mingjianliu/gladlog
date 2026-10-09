@@ -1226,5 +1226,9 @@
  *  nothing carries the miss the log wrote — ` [REFLECTED by X]`,
  *  ` [IMMUNE: X]`, ` [MISSED on X]` — on `[KICK] your …` and the ledger's
  *  `Kicks:` line. The landed / juked / missed verdict is unchanged.
+ *  v355 (2026-10-09, FT-T11b, same approval): Quell, Silence and
+ *  Counterspell cool down for DB2's 20 / 30 / 25 s (hand values 40 / 45 / 24
+ *  removed) — `[KICK] … back m:ss`, [RES], `enemy interrupts UP` and the
+ *  kick candidates' cooldown facts. Counts in the commit.
  */
-export const PROMPT_VERSION = 354;
+export const PROMPT_VERSION = 355;
