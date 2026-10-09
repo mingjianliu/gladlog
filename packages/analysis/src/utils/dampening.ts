@@ -27,13 +27,23 @@ export interface DampeningEvent {
  * Pre-computes all dampening aura dose events from the player list, sorted
  * ascending by timestamp. Called once per timeline computation to avoid
  * flatMapping all players on every sample interval.
+ *
+ * Both dose events carry the stack count AFTER the change. The stack also
+ * goes DOWN (FT-T08 step 4): in 3 of the 60 re-eval logs — all 2v2, after a
+ * player died — the survivors' Dampening dropped by a third or more on a
+ * SPELL_AURA_REMOVED_DOSE line (95127ab4: 51 → 32) and climbed again from
+ * there; read on APPLIED_DOSE alone it stayed at 52 until the next dose.
  */
 export function buildDampeningEvents(players: ICombatUnit[]): DampeningEvent[] {
   return (players ?? [])
     .flatMap((p) => p?.auraEvents ?? [])
     .filter((a) => {
       if (!a || a.spellId !== "110310") return false;
-      if (!a.logLine || a.logLine.event !== "SPELL_AURA_APPLIED_DOSE")
+      if (
+        !a.logLine ||
+        (a.logLine.event !== "SPELL_AURA_APPLIED_DOSE" &&
+          a.logLine.event !== "SPELL_AURA_REMOVED_DOSE")
+      )
         return false;
       return typeof a.logLine.parameters?.[12] === "number";
     })

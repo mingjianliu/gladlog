@@ -1156,5 +1156,9 @@
  *  one pressed under a control, or one that outlasted it, reads
  *  `(channeled Ns …)`. The [YOU] [CAST] `[channel cut by CC …]` note uses
  *  the same predicate. Counts in the commit.
+ *  v342 (2026-10-09, FT-T08 step 4, same approval): Dampening reads its
+ *  stack decreases too (2v2, after a death: 19-20 points down) — the
+ *  `dampening: N%` notes, [MATCH END] `damp:` and the DAMPENING summary after
+ *  such a drop. Counts in the commit.
  */
-export const PROMPT_VERSION = 341;
+export const PROMPT_VERSION = 342;

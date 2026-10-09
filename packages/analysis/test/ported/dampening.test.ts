@@ -80,6 +80,25 @@ describe("dampening — timeline logic", () => {
     ).toBe(15);
   });
 
+  it("FT-T08 step 4: the stack also goes down — a REMOVED_DOSE line carries the new count (95127ab4: 51 → 32 after a death)", () => {
+    const dose = (event: LogEvent, atMs: number, stacks: number) => {
+      const e = makeAuraEvent(event as any, "110310", MATCH_START + atMs, "h", "h");
+      (e.logLine as any).parameters[12] = stacks;
+      return e as any;
+    };
+    const p = makeUnit("p", {
+      auraEvents: [
+        dose(LogEvent.SPELL_AURA_APPLIED_DOSE, 100_000, 51),
+        dose(LogEvent.SPELL_AURA_REMOVED_DOSE, 110_000, 32),
+        dose(LogEvent.SPELL_AURA_APPLIED_DOSE, 120_000, 33),
+      ],
+    });
+    const at = (ms: number) => getDampeningPercentage("2v2", [p] as any, MATCH_START + ms);
+    expect(at(105_000)).toBe(51);
+    expect(at(115_000)).toBe(32);
+    expect(at(125_000)).toBe(33);
+  });
+
   it("builds sparse timeline with de-duplication (B74)", () => {
     const dose1 = makeAuraEvent(
       LogEvent.SPELL_AURA_APPLIED_DOSE as any,
