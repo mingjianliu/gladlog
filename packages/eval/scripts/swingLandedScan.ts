@@ -286,14 +286,24 @@ function scanItem(m: GladMatchBase): Tally {
     if (r.eventName !== "SWING_DAMAGE" || !r.damage || !r.base) continue;
     if (twinned.has(r)) continue;
     t.swingOnly++;
-    if (
-      r.damage.amount > 0 &&
-      m.units[r.base.destGuid] &&
-      !inDamageArrays.has(r.lineIndex!)
+    if (!m.units[r.base.destGuid]) continue;
+    const idx = r.lineIndex!;
+    if (!inDamageArrays.has(idx)) {
+      if (r.damage.amount > 0) {
+        t.missing++;
+        t.missingDamage += r.damage.amount;
+        show("MISSING", m, r);
+      }
+    } else if (
+      storedAmount.get(idx) !== r.damage.amount ||
+      conflicting.has(idx)
     ) {
-      t.missing++;
-      t.missingDamage += r.damage.amount;
-      show("MISSING", m, r);
+      // its only line: the stored amount is that line's (codex post-hoc
+      // review of FT-T02c — this branch used to check presence only)
+      t.mismatch++;
+      t.mismatchAbs += Math.abs(storedAmount.get(idx)! - r.damage.amount);
+      t.mismatchNet += storedAmount.get(idx)! - r.damage.amount;
+      show("MISMATCH", m, r);
     }
   }
   return t;

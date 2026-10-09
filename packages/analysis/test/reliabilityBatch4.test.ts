@@ -185,6 +185,16 @@ describe("aura re-broadcasts are one aura (rounds 2–3 W2e / N6)", () => {
       ev("SPELL_AURA_APPLIED", "360806", 5_000),
     ];
     expect(dropAuraRebroadcasts(backwards)).toHaveLength(3);
+    // …and that REMOVED stays pending: the APPLIED after it, at its own ms, is its other half
+    // (codex post-hoc review of step 1 — the stepped-back APPLIED used to throw the pending REMOVED away)
+    const backwardsThenPair = [
+      ev("SPELL_AURA_APPLIED", "360806", 1_000),
+      ev("SPELL_AURA_REMOVED", "360806", 5_001),
+      ev("SPELL_AURA_APPLIED", "360806", 5_000),
+      ev("SPELL_AURA_APPLIED", "360806", 5_001),
+      ev("SPELL_AURA_REMOVED", "360806", 9_000),
+    ];
+    expect(dropAuraRebroadcasts(backwardsThenPair).map((e: any) => e.timestamp)).toEqual([1_000, 5_000, 9_000]);
   });
   it("a second APPLIED inside the duration with no recast (leaving stealth) keeps one interval", () => {
     const unit = {

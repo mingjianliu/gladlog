@@ -177,17 +177,20 @@ export function dropAuraRebroadcasts<
     if (a.logLine.event === LogEvent.SPELL_AURA_REMOVED) {
       pendingRemoved.set(k, [...(pendingRemoved.get(k) ?? []), a]);
     } else if (a.logLine.event === LogEvent.SPELL_AURA_APPLIED) {
-      // only a REMOVED no older than the gap is this APPLIED's other half
-      const pending = (pendingRemoved.get(k) ?? []).filter((r) => {
-        const gap = a.timestamp - r.timestamp;
-        return gap >= 0 && gap <= AURA_REBROADCAST_GAP_MS;
-      });
-      const r = pending.shift();
-      pendingRemoved.set(k, pending);
-      if (r) {
-        drop.add(r);
+      // only a REMOVED no older than the gap is this APPLIED's other half.
+      // One stamped AFTER this APPLIED (the log's timestamps step back now
+      // and then) is not its half, but stays pending for the APPLIED that
+      // follows it — codex post-hoc review of FT-T08 step 1.
+      const pending = (pendingRemoved.get(k) ?? []).filter(
+        (r) => a.timestamp - r.timestamp <= AURA_REBROADCAST_GAP_MS,
+      );
+      const at = pending.findIndex((r) => a.timestamp >= r.timestamp);
+      if (at >= 0) {
+        drop.add(pending[at]!);
         drop.add(a);
+        pending.splice(at, 1);
       }
+      pendingRemoved.set(k, pending);
     }
   }
   return drop.size === 0 ? [...events] : events.filter((a) => !drop.has(a));
