@@ -188,12 +188,12 @@ export const AOE_CC_SPELL_IDS = new Set<string>([
   "8122", // Psychic Scream (Priest)
   "5246", // Intimidating Shout (Warrior)
   "5484", // Howl of Terror (Warlock)
-  "77505", // Shockwave (Warrior)
+  "77505", // Earthquake's knockdown (Shaman) — this line said "Shockwave (Warrior)" until 2026-10-09; Shockwave casts 46968 and is NOT in this list
   "119381", // Leg Sweep (Monk)
   "20549", // War Stomp (Tauren racial)
   "99", // Incapacitating Roar (Druid Bear)
   "30283", // Shadowfury (Warlock) — small AoE on impact
-  "255941", // Bursting Shot (Hunter) — disorients group
+  "255941", // Wake of Ashes' stun (Paladin) — this line said "Bursting Shot (Hunter)" until 2026-10-09; Bursting Shot is NOT in this list
   "207685", // Sigil of Misery (Demon Hunter) — AoE incapacitate
 ]);
 
