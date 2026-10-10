@@ -131,3 +131,43 @@ describe("checkHealedThroughConsistency — trough half (2026-09-15)", () => {
     ).toEqual([]);
   });
 });
+
+// T12 ① c (user ruling 2026-10-10): a bucket closes at its victim's death and
+// reads 0 % there; the gate asks the renderer's own `isSpikeHealedThrough`.
+describe("checkHealedThroughConsistency — a window that ends on a death (T12 ① c)", () => {
+  const DIED =
+    "0:39–0:45  [DMG SPIKE]   2(AWarlock) (Affliction Warlock): 0.60M in 6s (100k DPS) (33% -> 0% HP, -6%/s)";
+  /** a bucket opened in the death second: Δ = 0, and still a death */
+  const DIED_AT_OPEN =
+    "0:45–0:45  [DMG SPIKE]   2(AWarlock) (Affliction Warlock): 0.60M in 0s (600k DPS) (0% -> 0% HP, 0%/s)";
+
+  it("`N% -> 0% HP` without the word → passes, beside its `dead` tick", () => {
+    expect(
+      checkHealedThroughConsistency([
+        state("0:39", 33),
+        DIED,
+        state("0:45", "dead"),
+      ]),
+    ).toEqual([]);
+  });
+
+  it("`0% -> 0% HP` without the word → passes (Δ = 0 is not `healed through` at 0 %)", () => {
+    expect(checkHealedThroughConsistency([DIED_AT_OPEN])).toEqual([]);
+  });
+
+  it("the word on a window that ends at 0 % → red", () => {
+    const fails = checkHealedThroughConsistency([
+      DIED_AT_OPEN.replace("0%/s)", "0%/s — healed through)"),
+    ]);
+    expect(fails).toHaveLength(1);
+    expect(fails[0]).toContain("终点 HP 为 0%");
+  });
+
+  it("Δ = 0 above 0 % still needs the word (the two-sided rule is unchanged)", () => {
+    const fails = checkHealedThroughConsistency([
+      "0:10–0:20  [DMG SPIKE]   x (50% -> 50% HP, +0%/s)",
+    ]);
+    expect(fails).toHaveLength(1);
+    expect(fails[0]).toContain("Δ0 ≥ 0");
+  });
+});

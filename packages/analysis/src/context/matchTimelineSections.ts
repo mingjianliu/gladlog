@@ -22,8 +22,10 @@ import {
   HP_SAMPLE_RADIUS_MS,
   IDamageBucket,
   IMajorCooldownInfo,
+  isDeadAtRenderSecond,
   isHealerSpec,
   isHpTroughWorthPrinting,
+  isSpikeHealedThrough,
   SELF_CAST_NOOP_EXTERNAL_IDS,
   specToBenchmarkKey,
   specToString,
@@ -54,7 +56,11 @@ import {
 } from "../utils/healAbsorbSave";
 import { executeKillingBlowOf } from "../utils/killingBlow";
 import { getHpPercentAtTime } from "../utils/killWindowTargetSelection";
-import { fmtTime, toRenderSecond } from "../utils/renderGrid";
+import {
+  fmtTime,
+  renderedWindowSeconds,
+  toRenderSecond,
+} from "../utils/renderGrid";
 import { type ManaFallback, manaReadingAt } from "../utils/resourceAt";
 import { benchmarks } from "../utils/specBaselines";
 import {
@@ -344,7 +350,11 @@ export function emitDmgSpikeEntries(params: {
   for (const pw of pressureWindows) {
     if (pw.totalDamage < DMG_SPIKE_THRESHOLD) continue;
     const dmgM = (pw.totalDamage / 1_000_000).toFixed(2);
-    const windowSec = Math.round(pw.toSeconds - pw.fromSeconds);
+    // The width of the DISPLAYED endpoints (`renderedWindowSeconds`): 10 for a
+    // full bucket, as before; fewer for one that closed at its victim's death
+    // or the round's end (T12 ① c) — `0:39–0:45 … in 6s`, not a raw 6.7
+    // rounded to 7 beside endpoints 6 apart.
+    const windowSec = renderedWindowSeconds(pw.fromSeconds, pw.toSeconds);
     // B20: Prevent Infinityk DPS on sub-second windows
     const dpsK = Math.round(pw.totalDamage / Math.max(1, windowSec) / 1000);
 
@@ -366,12 +376,19 @@ export function emitDmgSpikeEntries(params: {
           HP_SAMPLE_RADIUS_MS,
         )
       : null;
+    // T12 ① c: a unit dead at the end second reads 0 there — the `[STATE]`
+    // tick's own predicate (`isDeadAtRenderSecond`), the burst ledger's
+    // `Target:` convention. The sampler alone returned whatever advanced
+    // action sat within its radius of a second the unit did not live to see
+    // (121-5-690: `33% -> 100% HP, +7%/s` over a death), or nothing at all.
     const hpTo = targetUnit
-      ? getUnitHpAtTimestamp(
-          targetUnit,
-          matchStartMs + toSec * 1000,
-          HP_SAMPLE_RADIUS_MS,
-        )
+      ? isDeadAtRenderSecond(targetUnit, matchStartMs, toSec)
+        ? 0
+        : getUnitHpAtTimestamp(
+            targetUnit,
+            matchStartMs + toSec * 1000,
+            HP_SAMPLE_RADIUS_MS,
+          )
       : null;
     let hpStr = "";
     if (hpFrom !== null && hpTo !== null) {
@@ -399,8 +416,9 @@ export function emitDmgSpikeEntries(params: {
       const troughTag = trough
         ? `, low ${trough.pct}% @${fmtTime(trough.atSec)}`
         : "";
-      const outcomeTag =
-        hpDelta >= 0 && trough === null ? " — healed through" : "";
+      const outcomeTag = isSpikeHealedThrough(hpFrom, hpTo, trough !== null)
+        ? " — healed through"
+        : "";
       hpStr = ` (${hpFrom}% -> ${hpTo}% HP, ${sign}${hpVelocity.toFixed(0)}%/s${troughTag}${outcomeTag})`;
     }
 

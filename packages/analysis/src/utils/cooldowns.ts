@@ -59,6 +59,7 @@ import {
 } from "./offensiveAuraOccurrences";
 import { fmtTime } from "./renderGrid";
 import { buildRosterSides } from "./rosterSide";
+import { roundEndMs } from "./roundEnd";
 import { isOffensiveSpell, OFFENSIVE_CD_SPELL_IDS } from "./spellDanger";
 import {
   CD_TALENT_MODIFIERS,
@@ -73,7 +74,7 @@ import {
   getPlayerTalentRanks,
   getSpecTalentTreeSpellInfo,
 } from "./talents";
-import { DEATH_CASCADE_MS } from "./unitDeath";
+import { DEATH_CASCADE_MS, firstDeathMs } from "./unitDeath";
 
 export const MAJOR_DEFENSIVE_IDS = new Set<string>(
   (spellIdListsData as unknown as { externalOrBigDefensiveSpellIds?: string[] })
@@ -1529,6 +1530,28 @@ export function isHpTroughWorthPrinting(
   minPct: number,
 ): boolean {
   return Math.min(hpFrom, hpTo) - minPct >= HP_TROUGH_MIN_DROP_PTS;
+}
+
+/**
+ * Whether a `[DMG SPIKE]` line whose endpoints read `hpFrom% -> hpTo% HP`
+ * carries the outcome word `— healed through`: the unit ended the window at
+ * equal-or-higher HP, no trough was printed, and it ended it ALIVE.
+ *
+ * The last clause is T12 ① c (user ruling 2026-10-10): a bucket closes at its
+ * victim's death and its end reads 0 there (`isDeadAtRenderSecond`, the
+ * `[STATE]` tick's `dead`). A bucket that opens in the death second reads
+ * `0% -> 0% HP`, a non-negative delta — and a death is not "healed through".
+ *
+ * One predicate, two consumers (CLAUDE.md Shared-Predicate Rule): the
+ * renderer (`emitDmgSpikeEntries`) and the eval gate
+ * `checkHealedThroughConsistency`, which re-asks it of the printed pair.
+ */
+export function isSpikeHealedThrough(
+  hpFrom: number,
+  hpTo: number,
+  troughPrinted: boolean,
+): boolean {
+  return hpTo > 0 && hpTo - hpFrom >= 0 && !troughPrinted;
 }
 
 /**
@@ -4378,10 +4401,25 @@ export function computePressureWindows(
   topN = 5,
 ): IDamageBucket[] {
   const matchStartMs = combat.startTime;
-  const allSpikes: IDamageBucket[] = [];
+  // `closeSeconds`: where this victim's buckets close (below). Internal — the
+  // returned buckets carry it as their `toSeconds`.
+  const allSpikes: Array<IDamageBucket & { closeSeconds: number }> = [];
   const rosterSides = buildRosterSides(Object.values(combat.units ?? {}));
+  // T12 ① c (user ruling 2026-10-10): a bucket closes at its victim's death
+  // (`firstDeathMs`) or at the round's end (`roundEndMs`, the one round end —
+  // a Solo Shuffle round is over at its first player death), whichever comes
+  // first. 121-5-690 (Duration 0:47, the unit dead at 0:45): `0:39–0:49
+  // [DMG SPIKE] … 0.60M in 10s (33% -> 100% HP, +7%/s …)`. Nothing after the
+  // close is pressure on this unit in this round, so no hit past it is summed
+  // and no bucket starts past it.
+  const roundEnd = (roundEndMs(combat) - matchStartMs) / 1000;
+  const roundEndS = Number.isFinite(roundEnd) ? roundEnd : Infinity;
 
   for (const player of friendlyPlayers) {
+    const closeSeconds = Math.min(
+      roundEndS,
+      (firstDeathMs(player) - matchStartMs) / 1000,
+    );
     const damageEvents = incomingPressureEvents(player, rosterSides)
       .map((a) => ({
         timeSec: (a.timestamp - matchStartMs) / 1000,
@@ -4393,6 +4431,8 @@ export function computePressureWindows(
       // 实测(2026-08-23,S2 归档 585 文件 / 1,155 回合):5,697 个窗口里 15 个
       // (0.3%)的 totalDamage 是 NaN。
       .filter((e) => Number.isFinite(e.timeSec) && Number.isFinite(e.amount))
+      // `<=`: the killing blow shares its timestamp with the death
+      .filter((e) => e.timeSec <= closeSeconds)
       .sort((a, b) => a.timeSec - b.timeSec);
 
     // Two-pointer sliding window: O(n) — j only advances, windowDamage is updated incrementally
@@ -4412,15 +4452,18 @@ export function computePressureWindows(
         totalDamage: windowDamage,
         targetName: player.name,
         targetSpec: specToString(player.spec),
+        closeSeconds,
       });
       // Remove the event at i as the left edge advances
       windowDamage -= damageEvents[i].amount;
     }
   }
 
-  // Sort and deduplicate: keep only non-overlapping top-N spikes per target
+  // Sort and deduplicate: keep only non-overlapping top-N spikes per target.
+  // Overlap is judged on the nominal `windowSeconds` span, so which buckets
+  // are kept does not depend on where one of them closes.
   allSpikes.sort((a, b) => b.totalDamage - a.totalDamage);
-  const distinctSpikes: IDamageBucket[] = [];
+  const distinctSpikes: typeof allSpikes = [];
   for (const spike of allSpikes) {
     const overlaps = distinctSpikes.some(
       (s) =>
@@ -4435,7 +4478,10 @@ export function computePressureWindows(
     }
   }
 
-  return distinctSpikes;
+  return distinctSpikes.map(({ closeSeconds, ...bucket }) => ({
+    ...bucket,
+    toSeconds: Math.min(bucket.toSeconds, closeSeconds),
+  }));
 }
 
 // ---------------------------------------------------------------------------

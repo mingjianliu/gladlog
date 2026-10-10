@@ -12,11 +12,17 @@ import {
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { kickPriorityDecisionPoints } from "../src/analysis/candidates/kickPriority";
+import { emitDmgSpikeEntries } from "../src/context/matchTimelineSections";
 import { ensureAnalysisData } from "../src/data/ensure";
+import {
+  computePressureWindows,
+  isSpikeHealedThrough,
+} from "../src/utils/cooldowns";
 import { reconstructEnemyCDTimeline } from "../src/utils/enemyCDs";
 import { computeOffensiveWindows } from "../src/utils/offensiveWindows";
 import {
   makeAdvancedAction,
+  makeDamageEvent,
   makeSpellCastEvent,
   makeUnit,
 } from "./ported/testHelpers";
@@ -287,5 +293,171 @@ describe("① b — an aligned burst window ends at the round's end (reconstruct
       reconstructEnemyCDTimeline(onlyLate, shuffle([...onlyLate, victim]))
         .alignedBurstWindows,
     ).toEqual([]);
+  });
+});
+
+describe("① c — a [DMG SPIKE] bucket closes at its victim's death / the round's end", () => {
+  // 121-5-690 (Duration 0:47, the unit dead at 0:45): the line read
+  // `0:39–0:49 … 0.60M in 10s (60k DPS) (33% -> 100% HP, +7%/s, low 17% @0:44)`
+  const hits = (seconds: number[], amount = 100_000) =>
+    seconds.map((s) => makeDamageEvent(at(s), amount, "f1"));
+  const victim = (opts: {
+    hitsAt: number[];
+    deathS?: number;
+    hp?: Array<[number, number]>;
+  }) =>
+    makeUnit("f1", {
+      name: "Victim-Realm",
+      spec: CombatUnitSpec.Warlock_Affliction,
+      info: {},
+      damageIn: hits(opts.hitsAt),
+      deathRecords:
+        opts.deathS === undefined ? [] : [{ timestamp: at(opts.deathS) }],
+      advancedActions: (opts.hp ?? []).map(([s, pct]) =>
+        makeAdvancedAction(at(s), 0, 0, 100, pct),
+      ),
+    });
+  const combatOf = (
+    endS: number,
+    units: ReturnType<typeof makeUnit>[],
+    bracket = "3v3",
+  ) =>
+    ({
+      startTime: T0,
+      endTime: at(endS),
+      startInfo: { bracket },
+      units: Object.fromEntries(units.map((u) => [u.id, u])),
+    }) as never;
+  const render = (
+    unit: ReturnType<typeof makeUnit>,
+    combat: Parameters<typeof computePressureWindows>[1],
+  ) => {
+    const out: string[] = [];
+    emitDmgSpikeEntries({
+      pressureWindows: computePressureWindows([unit], combat),
+      friends: [unit],
+      matchStartMs: T0,
+      pid: (n) => n.split("-")[0]!,
+      addEntry: (_t, ...ls) => out.push(...ls),
+    });
+    return out;
+  };
+
+  it("the bucket ends at the death, the damage is unchanged, the selection is unchanged", () => {
+    const hitsAt = [39.2, 40.5, 41.7, 42.9, 44.1, 45.2];
+    const alive = victim({ hitsAt });
+    const before = computePressureWindows([alive], combatOf(300, [alive]));
+    expect(before[0]).toMatchObject({
+      fromSeconds: 39.2,
+      toSeconds: 49.2,
+      totalDamage: 600_000,
+    });
+
+    const dead = victim({ hitsAt, deathS: 45.2 });
+    const after = computePressureWindows([dead], combatOf(47, [dead]));
+    expect(after).toHaveLength(before.length);
+    expect(after[0]).toMatchObject({
+      fromSeconds: 39.2,
+      toSeconds: 45.2,
+      totalDamage: 600_000,
+    });
+    for (const b of after) {
+      expect(b.toSeconds).toBeLessThanOrEqual(45.2);
+      expect(b.toSeconds).toBeGreaterThanOrEqual(b.fromSeconds);
+    }
+  });
+
+  it("the line prints the closed bucket: its end second, its width, 0 % at the death — and never `healed through`", () => {
+    const dead = victim({
+      hitsAt: [39.2, 40.5, 41.7, 42.9, 44.1, 45.2],
+      deathS: 45.2,
+      // 33 % at the start; the sample nearest the end second is one logged
+      // after the death (100 % — what the sampler alone would print)
+      hp: [
+        [39, 33],
+        [43, 17],
+        [45.9, 100],
+      ],
+    });
+    const lines = render(dead, combatOf(47, [dead]));
+    expect(lines[0]).toContain("0:39–0:45  [DMG SPIKE]");
+    expect(lines[0]).toContain("0.60M in 6s (100k DPS)");
+    expect(lines[0]).toContain("(33% -> 0% HP, -6%/s)");
+    expect(lines.join("\n")).not.toContain("healed through");
+    expect(lines.join("\n")).not.toContain("100% HP");
+  });
+
+  it("a full bucket still reads `in 10s` with endpoints 10 apart", () => {
+    const alive = victim({
+      hitsAt: [39.2, 40.5, 41.7, 42.9, 44.1, 45.2],
+      hp: [
+        [39, 80],
+        [49, 60],
+      ],
+    });
+    const lines = render(alive, combatOf(300, [alive]));
+    expect(lines[0]).toContain("0:39–0:49  [DMG SPIKE]");
+    expect(lines[0]).toContain("0.60M in 10s (60k DPS)");
+    expect(lines[0]).toContain("(80% -> 60% HP, -2%/s)");
+  });
+
+  it("a bucket does not run past ARENA_MATCH_END", () => {
+    const alive = victim({ hitsAt: [39.2, 40.5, 41.7, 42.9, 44.1, 45.2] });
+    const w = computePressureWindows([alive], combatOf(47, [alive]));
+    expect(w[0]).toMatchObject({ fromSeconds: 39.2, toSeconds: 47 });
+  });
+
+  it("a Solo Shuffle round ends at its first player death: later hits are not summed, no bucket starts after it", () => {
+    const survivor = victim({ hitsAt: [39.2, 40.5, 41.7, 44.5, 45.2, 46] });
+    const other = makeUnit("f2", {
+      name: "Other-Realm",
+      info: {},
+      deathRecords: [{ timestamp: at(43) }],
+    });
+    const w = computePressureWindows(
+      [survivor],
+      combatOf(47, [survivor, other], "Rated Solo Shuffle"),
+    );
+    expect(w[0]).toMatchObject({
+      fromSeconds: 39.2,
+      toSeconds: 43,
+      totalDamage: 300_000,
+    });
+    for (const b of w) expect(b.fromSeconds).toBeLessThanOrEqual(43);
+  });
+
+  it("isSpikeHealedThrough: equal-or-higher HP, no trough, and alive at the end", () => {
+    expect(isSpikeHealedThrough(62, 71, false)).toBe(true);
+    expect(isSpikeHealedThrough(50, 50, false)).toBe(true);
+    expect(isSpikeHealedThrough(71, 38, false)).toBe(false);
+    expect(isSpikeHealedThrough(81, 87, true)).toBe(false);
+    // a bucket opened in the death second: 0 % -> 0 % is a death
+    expect(isSpikeHealedThrough(0, 0, false)).toBe(false);
+  });
+
+  it("a bucket opened in the death second reads 0 % at its end and carries no outcome word", () => {
+    const dead = victim({
+      hitsAt: [45.2],
+      deathS: 45.2,
+      hp: [[45.2, 0]],
+    });
+    const out: string[] = [];
+    emitDmgSpikeEntries({
+      pressureWindows: [
+        {
+          fromSeconds: 45.2,
+          toSeconds: 45.2,
+          totalDamage: 600_000,
+          targetName: "Victim-Realm",
+          targetSpec: "Affliction Warlock",
+        },
+      ],
+      friends: [dead],
+      matchStartMs: T0,
+      pid: (n) => n.split("-")[0]!,
+      addEntry: (_t, ...ls) => out.push(...ls),
+    });
+    expect(out[0]).toContain("(0% -> 0% HP");
+    expect(out[0]).not.toContain("healed through");
   });
 });

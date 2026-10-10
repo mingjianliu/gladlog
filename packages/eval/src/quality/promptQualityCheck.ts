@@ -93,6 +93,7 @@ import {
 import {
   canHelpAnotherUnit,
   isHpTroughWorthPrinting,
+  isSpikeHealedThrough,
   PRESS_HP_LINE_TAGS,
 } from "@gladlog/analysis/src/utils/cooldowns";
 import { DURING_ABSORBED_TAG_RE_SRC } from "@gladlog/analysis/src/utils/externalDamage";
@@ -786,7 +787,13 @@ export function checkHealedThroughConsistency(lines: string[]): string[] {
       );
     if (hasWord && low)
       failures.push(`${at} 同时标注「healed through」和 low ${low[1]}%`);
-    if (!hasWord && !low && delta >= 0)
+    // T12 ① c: a window that ends at 0 % ended on a death (the renderer
+    // prints 0 for a unit `dead` at the end second) — never "healed through",
+    // whatever the delta (`0% -> 0%` for a bucket opened in the death second).
+    if (hasWord && B === 0)
+      failures.push(`${at} 标注「healed through」但终点 HP 为 0%(死亡)`);
+    // the renderer's own predicate, so the two-sided rule cannot drift
+    if (!hasWord && isSpikeHealedThrough(A, B, Boolean(low)))
       failures.push(
         `${at} 同行 HP ${A}% -> ${B}%(Δ${delta} ≥ 0)却没有「healed through」标注`,
       );
