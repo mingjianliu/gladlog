@@ -470,8 +470,11 @@ export function deathLockChain<
  * cannot-cast run that starts before it, 0 when that run covers `atMs`, or
  * undefined when no run starts before it (never a `Math.max` over nothing).
  * Triage G5: death-setup `freeBeforeDeathS` (crisis-external F-D2) and the
- * `[DEFENSIVE AVAILABLE]` "free Ns before the death" (cc-dr F-KS1) — one
- * helper, one interval list.
+ * `[DEFENSIVE AVAILABLE]` "free to press it for the last Ns before the death"
+ * (cc-dr F-KS1) — one helper. The interval lists differ since FT-T10:
+ * death-setup asks about any cast (every lockout counts), the
+ * `[DEFENSIVE AVAILABLE]` line about the spell it names (a lockout on another
+ * school does not) — hence the line's "to press it".
  */
 export function freeMsBefore(
   intervals: ReadonlyArray<{ from: number; to: number }>,

@@ -1799,7 +1799,13 @@ export function buildKillSequenceBlock(params: {
               const freeNote =
                 freeMs === undefined
                   ? ""
-                  : ` (free ${(Math.round(freeMs / 100) / 10).toFixed(1)}s before the death)`;
+                  : // "to press it", not bare "free": this is the named
+                    // spell's own free time (a lockout on another school
+                    // does not count), where death-setup's
+                    // `freeBeforeDeathS` is the unit's free time for any
+                    // cast — the same words on both read as one number
+                    // (review 40-FT-54)
+                    ` (free to press it for the last ${(Math.round(freeMs / 100) / 10).toFixed(1)}s before the death)`;
               killSeqEntries.push({
                 timeSeconds: Math.max(0, deathTime - 1),
                 label: "[DEFENSIVE AVAILABLE]",
