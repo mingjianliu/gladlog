@@ -59,7 +59,7 @@ import {
 } from "./offensiveAuraOccurrences";
 import { fmtTime } from "./renderGrid";
 import { buildRosterSides } from "./rosterSide";
-import { isOffensiveSpell } from "./spellDanger";
+import { isOffensiveSpell, OFFENSIVE_CD_SPELL_IDS } from "./spellDanger";
 import {
   CD_TALENT_MODIFIERS,
   type ICDModifier,
@@ -68,6 +68,7 @@ import {
   specPassiveOwned,
 } from "./talentModifiers";
 import {
+  choiceSelectionResolved,
   getPlayerTalentedSpellInfo,
   getPlayerTalentRanks,
   getSpecTalentTreeSpellInfo,
@@ -1635,7 +1636,13 @@ export interface IMajorCooldownInfo {
    * Regeneration for Restoration Druid, 2026-09-25 「不指控」): pressing it
    * answers a crisis and it counts as a defensive the player has, but no
    * accusation may name it (cd-waste "never used", cd-hoarded "was ready").
-   * Read from the generated save roster. */
+   * Read from the generated save roster.
+   * Also set on an offensive cooldown the ledger holds on cast evidence
+   * alone (FT board item 1, user ruling 2026-10-09): its press enters a sync
+   * window and prints on a kill window's `pressed` lists, and neither
+   * missed-sync-window's `readyCds` nor a kill window's `ready` /
+   * `back inside` / `may already be back` lists (the `accountable` gate)
+   * name it. */
   responseOnly?: boolean;
   /** The ledger holds this row on the spec's baseline ownership alone
    * (`BASELINE_DEFENSIVE_BY_SPEC`, triage cd-hoarded F-W6): the player owns
@@ -3393,21 +3400,35 @@ function extractMajorCooldownsAll(
     }
   }
 
-  // --- Saves the enemy side prints, pressed by this player (FT board item 1) ---
-  // An enemy's press of an `ENEMY_ONLY_SAVE_IDS` save renders `[ENEMY DEF]`;
-  // this player's own press of the same spell had no row here, so no press
-  // line, no kit row and no [RES] entry — a Rogue at 3 % pressing Crimson
-  // Vial and climbing to 64 % with nothing on the timeline to say why. The
-  // LAST entry path: it fills only what the roster, discovery and the healer
-  // save roster all left out, so no existing row changes its tag — and an
-  // id the class roster lists is the roster's to decide (its talent / spec
-  // filters), never re-admitted here under another tag. Cast evidence only
-  // (like a racial — no "never used"), and `SpellTag.Utility`: on the ledger
-  // and out of every role reader.
+  // --- What the enemy side prints, pressed by this player (FT board item 1) ---
+  // Two catalogs render a line when an ENEMY presses a member, and had no
+  // row here for this player's own press of the same spell — so no press
+  // line, no kit row and no [RES] entry:
+  //  - `ENEMY_ONLY_SAVE_IDS` (`[ENEMY DEF]`): a Rogue at 3 % pressing Crimson
+  //    Vial and climbing to 64 % with nothing on the timeline to say why;
+  //  - `OFFENSIVE_CD_SPELL_IDS` (`[ENEMY CD]`, enemy burst windows): twelve
+  //    spells no class roster lists — a Destruction Warlock's Summon Infernal
+  //    and Malevolence unprinted, and a missed-sync-window accusation over a
+  //    lock his Infernal was up in.
+  // The LAST entry path: it fills only what the roster, discovery and the
+  // healer save roster all left out, so no existing row changes its tag —
+  // and an id the class roster lists is the roster's to decide (its talent /
+  // spec filters), never re-admitted here under another tag. Cast evidence
+  // only (like a racial — no "never used"), and `SpellTag.Utility`: on the
+  // ledger and out of every role reader.
+  // An offensive member is also `responseOnly` (user ruling 2026-10-09,
+  // option ②): its PRESS answers — the readers that key on the offensive
+  // catalog count it as pressed (a sync window entered, `pressed inside` on a
+  // kill window, `ownBurstPressed`) — and nothing may name it as ready and
+  // unpressed. Which of the twelve is worth an accusation is the offensive
+  // registration's call (offensiveCdGapScan), not this path's.
   const rosterIds = new Set(classData.abilities.map((a) => a.spellId));
+  const pressOnlyOffensiveIds = new Set<string>();
   for (const spellId of castSpellIds) {
     if (seen.has(spellId) || replacedByTalent.has(spellId)) continue;
-    if (!ENEMY_ONLY_SAVE_IDS.has(spellId) || rosterIds.has(spellId)) continue;
+    const offensive = OFFENSIVE_CD_SPELL_IDS.has(spellId);
+    if (!offensive && !ENEMY_ONLY_SAVE_IDS.has(spellId)) continue;
+    if (rosterIds.has(spellId)) continue;
     const effectData = spellEffectData[spellId];
     if (!effectData) continue;
     if ((effectiveCooldownSeconds(spellId) ?? 0) < MIN_CD_SECONDS) continue;
@@ -3425,6 +3446,7 @@ function extractMajorCooldownsAll(
       tags: [SpellTag.Utility],
     });
     seen.add(spellId);
+    if (offensive) pressOnlyOffensiveIds.add(spellId);
   }
 
   // Deduplicate majorSpells by canonical id so one spell -> one kit entry (GH #99).
@@ -3554,6 +3576,18 @@ function extractMajorCooldownsAll(
     // two charges when the talent-resolved cap allows it (reliability round 3
     // W1e, f4da: Ice Barrier's second charge at +0.73 s was dropped, so the
     // model kept a charge that was spent and cd-hoarded called it ready).
+    // Scripted talent effects on this cooldown (data/talentScriptedCooldowns,
+    // talent impact audit 2026-09-26). Talents unknown → neither applies. A
+    // talent on a choice node counts only when the loadout says WHICH entry
+    // was taken (`choiceSelectionResolved`): an unresolved choice lists both
+    // entries, and these effects strengthen a fact (codex review 40-FT-46:
+    // node 94675 with no entry id read as Save the Day over Divine Feathers).
+    const holds = (t: string) =>
+      (!!talentedSpellIds?.has(t) &&
+        (!unit.info?.talents ||
+          choiceSelectionResolved(specIdNum, unit.info.talents, t))) ||
+      pvpTalentIds.has(t);
+    const freeWindow = freeRecastWindowFor(spell.spellId, holds);
     const pressed = new Set<ICooldownCast>(castRawCasts);
     const casts: ICooldownCast[] = [];
     for (const c of rawCasts) {
@@ -3568,12 +3602,17 @@ function extractMajorCooldownsAll(
       // A duplicate line at the same instant is one press, not two charges
       // (codex astra review): a human's second press lands ≥ 0.485 s later
       // on the corpus (33 kept pairs, none under 0.05 s).
+      // A free-recast holder's second press is genuine too (codex review
+      // 40-FT-46): Save the Day's second Leap of Faith comes 1–2 s after the
+      // first in 25 of 64 raw pairs (605 files; shortest 0.05–1 s twice),
+      // and a non-holder never logs two inside 30 s. One extra press per
+      // 2 s — the window grants one.
       if (
-        baselineCharges > 1 &&
         pressed.has(c) &&
         pressed.has(last) &&
         c.timeSeconds - last.timeSeconds >= MULTI_CHARGE_MIN_GAP_S &&
-        pressesInWindow < baselineCharges
+        ((baselineCharges > 1 && pressesInWindow < baselineCharges) ||
+          (freeWindow !== undefined && pressesInWindow < 2))
       )
         casts.push(c);
     }
@@ -3611,10 +3650,6 @@ function extractMajorCooldownsAll(
       }
     }
 
-    // Scripted talent effects on this cooldown (data/talentScriptedCooldowns,
-    // talent impact audit 2026-09-26). Talents unknown → neither applies.
-    const holds = (t: string) =>
-      !!talentedSpellIds?.has(t) || pvpTalentIds.has(t);
     // Event reductions (Storm Conduit): each press's real ready instant, from
     // the holder's trigger casts. Single-charge spells only — a charge
     // simulation takes no per-press override.
@@ -3653,7 +3688,6 @@ function extractMajorCooldownsAll(
     // Free recast (Escape from Reality): the press that opens the window
     // carries it; a press inside an unused window is free and stays anchored
     // on the opener's cooldown.
-    const freeWindow = freeRecastWindowFor(spell.spellId, holds);
     if (freeWindow) {
       let opener: ICooldownCast | undefined;
       let used = false;
@@ -3800,7 +3834,9 @@ function extractMajorCooldownsAll(
           : {}),
         ...(spellAliasIds(spell.spellId).some(
           (id) => saveRoster?.get(id)?.responseOnly,
-        ) || RESPONSE_ONLY_DEFENSIVE_IDS.has(spell.spellId)
+        ) ||
+        RESPONSE_ONLY_DEFENSIVE_IDS.has(spell.spellId) ||
+        pressOnlyOffensiveIds.has(spell.spellId)
           ? { responseOnly: true }
           : {}),
         ...(baselineOnlyIds.has(spell.spellId) ? { baselineOnly: true } : {}),

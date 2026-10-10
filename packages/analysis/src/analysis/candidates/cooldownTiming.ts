@@ -420,20 +420,21 @@ export type SyncWindowCd = Pick<
   | "cooldownSeconds"
   | "neverUsed"
   | "charges"
-> & {
-  /** the unit that owns the CD */
-  owner?: any;
-  /** the owner's enemies' ids (for `buildCannotCastIntervals`) */
-  ownerEnemyIds?: Set<string>;
-  /** absolute ms of match start (the owner's intervals are absolute) */
-  matchStartMs?: number;
-  /** The enemies a burst in this lock would land on — every enemy but the
-   *  healers (the lock is on a healer). With them, a CD that hits an enemy
-   *  is ready only if its owner was within the spell's own reach
-   *  (`cdOutOfRangeReachYards`, the CD_OUT_OF_RANGE predicate) of one of
-   *  them at some half-second of the free part of the lock. */
-  reachTargets?: readonly any[];
-};
+> &
+  Partial<Pick<IMajorCooldownInfo, "responseOnly">> & {
+    /** the unit that owns the CD */
+    owner?: any;
+    /** the owner's enemies' ids (for `buildCannotCastIntervals`) */
+    ownerEnemyIds?: Set<string>;
+    /** absolute ms of match start (the owner's intervals are absolute) */
+    matchStartMs?: number;
+    /** The enemies a burst in this lock would land on — every enemy but the
+     *  healers (the lock is on a healer). With them, a CD that hits an enemy
+     *  is ready only if its owner was within the spell's own reach
+     *  (`cdOutOfRangeReachYards`, the CD_OUT_OF_RANGE predicate) of one of
+     *  them at some half-second of the free part of the lock. */
+    reachTargets?: readonly any[];
+  };
 
 /** Hard-cast bars a START → SUCCESS pair can span (the [ENEMY HARD CAST] /
  *  hardCastOccupancyWithin bound). */
@@ -581,6 +582,9 @@ export function evaluateSyncWindow(
     ? w.componentStartsSeconds
     : [w.fromSeconds];
   const ready = cds.filter((cd) => {
+    // a response-only row (`IMajorCooldownInfo.responseOnly`) enters a lock
+    // when pressed — `entered` below — and is never named ready and unpressed
+    if (cd.responseOnly) return false;
     const readyAtS = starts.find((s) => cdAvailableAt(cd, s));
     if (readyAtS === undefined) return false;
     // F-S1 (triage sync-burst): a holder dead at the instant its cooldown

@@ -1253,5 +1253,21 @@
  *  Nether Ward, Intervene, Master's Call, Leap of Faith …) gets a press
  *  line, a kit row and a [RES] entry when the owner or a teammate presses
  *  it. A Utility row: no candidate reads it. Counts in the commit.
+ *  v362 (2026-10-09, FT board item 1, user ruling 2026-10-09 option ②): the
+ *  twelve offensive cooldowns the enemy side prints as [ENEMY CD] and no
+ *  class roster lists (Summon Infernal, Malevolence, Soul Fire, Frozen Orb,
+ *  Ray of Frost, Feral Frenzy, Boomstick, Takedown, Stormkeeper, Strike of
+ *  the Windlord, Soul Immolation, The Hunt's Devourer id) get a press line,
+ *  a kit row and a [RES] entry when pressed. Press-only: a press enters a
+ *  sync window and prints under `pressed inside` on [KILL WINDOW] /
+ *  [VULNERABLE]; no `ready` list and no missed-sync-window `readyCds` names
+ *  them. missed-sync-window loses the accusations over a lock such a press
+ *  was in. With it, three cooldown facts these rows (and Leap of Faith's,
+ *  v361) exposed: the recast-floor table is regenerated (7 new cells — the
+ *  [RES] `cd:` entry of Frozen Orb, Ray of Frost, Stormkeeper, Boomstick,
+ *  Soul Immolation and a Balance / Feral Frenzied Regeneration prints the
+ *  `(a–Ns)` / `(≤Ns)` forms); a Save the Day holder's second Leap of Faith
+ *  within 6 s is the talent's free recast; Savagery takes 15 s per rank off
+ *  Takedown (60 s at rank 2). Counts in the commit.
  */
-export const PROMPT_VERSION = 361;
+export const PROMPT_VERSION = 362;

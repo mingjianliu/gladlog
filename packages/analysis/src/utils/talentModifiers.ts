@@ -85,6 +85,17 @@ export const PER_RANK_COOLDOWN_TALENTS: ReadonlySet<string> = new Set([
   "342249",
   // Static Charge (Capacitor Totem) — 10 s per rank, see RULED_COOLDOWN_VALUES.
   "265046",
+  // Savagery (Takedown −15/rank). FT board item 1b, 2026-10-10 — Takedown
+  // reached the ledger with the offensive gap rows and its recasts sat at
+  // ×0.80 of the value-once model. DB2: SpellEffect 1256590, aura 107
+  // (cooldown, misc 11), −15 000 ms, the class mask covers Takedown 1250646;
+  // the node has 2 ranks. Corpus, 605 new-season files, ranks from
+  // COMBATANT_INFO (ledgerImpossibleCastScan ranks2): 93 of 94 Survival
+  // rounds hold rank 2 — 67 of their 78 recasting rounds have a gap under
+  // the value-once 75 s, shortest 60.0 s = 90 − 2 × 15; the one rank-1 round
+  // recasts at ≥ 74 s. Every-3rd-file floor pass: 927 of 1,129 recast ratios
+  // under ×0.99 of 75 s, bunched at ×0.80–0.83.
+  "1251790",
 ]);
 
 /**

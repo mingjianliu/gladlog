@@ -1,6 +1,6 @@
 {
   "meta": {
-    "generatedAt": "2026-10-08",
+    "generatedAt": "2026-10-10",
     "manifest": "manifest-archive-2026-08-28-newseason.txt",
     "every": 3,
     "offset": 1,
@@ -118,6 +118,16 @@
       "nHoldout": 78,
       "holdoutBelow": 0.026
     },
+    "84714|64": {
+      "name": "Frozen Orb",
+      "quantile": 0.02,
+      "floorRatio": 0.485,
+      "staticBreak": 0.906,
+      "holdoutStaticBreak": 0.897,
+      "nTrain": 1901,
+      "nHoldout": 2153,
+      "holdoutBelow": 0.015
+    },
     "202770|102": {
       "name": "Fury of Elune",
       "quantile": 0.02,
@@ -127,6 +137,16 @@
       "nTrain": 271,
       "nHoldout": 219,
       "holdoutBelow": 0.014
+    },
+    "1241937|1480": {
+      "name": "Soul Immolation",
+      "quantile": 0.02,
+      "floorRatio": 0.596,
+      "staticBreak": 0.111,
+      "holdoutStaticBreak": 0.075,
+      "nTrain": 1180,
+      "nHoldout": 1070,
+      "holdoutBelow": 0.012
     },
     "473909|105": {
       "name": "Ancient of Lore",
@@ -148,6 +168,16 @@
       "nHoldout": 2118,
       "holdoutBelow": 0.018
     },
+    "22842|102": {
+      "name": "Frenzied Regeneration",
+      "quantile": 0.02,
+      "floorRatio": 0.67,
+      "staticBreak": 0.312,
+      "holdoutStaticBreak": 0.308,
+      "nTrain": 458,
+      "nHoldout": 490,
+      "holdoutBelow": 0.018
+    },
     "205636|102": {
       "name": "Force of Nature",
       "quantile": 0.02,
@@ -167,6 +197,16 @@
       "nTrain": 417,
       "nHoldout": 445,
       "holdoutBelow": 0.02
+    },
+    "191634|262": {
+      "name": "Stormkeeper",
+      "quantile": 0.02,
+      "floorRatio": 0.683,
+      "staticBreak": 0.651,
+      "holdoutStaticBreak": 0.645,
+      "nTrain": 1096,
+      "nHoldout": 930,
+      "holdoutBelow": 0.027
     },
     "33206|256": {
       "name": "Pain Suppression",
@@ -208,6 +248,16 @@
       "nHoldout": 2169,
       "holdoutBelow": 0.025
     },
+    "22842|103": {
+      "name": "Frenzied Regeneration",
+      "quantile": 0.02,
+      "floorRatio": 0.8,
+      "staticBreak": 0.17,
+      "holdoutStaticBreak": 0.175,
+      "nTrain": 188,
+      "nHoldout": 285,
+      "holdoutBelow": 0.011
+    },
     "132158|105": {
       "name": "Nature's Swiftness",
       "quantile": 0.02,
@@ -248,6 +298,16 @@
       "nHoldout": 2501,
       "holdoutBelow": 0.026
     },
+    "205021|64": {
+      "name": "Ray of Frost",
+      "quantile": 0.02,
+      "floorRatio": 0.828,
+      "staticBreak": 0.172,
+      "holdoutStaticBreak": 0.187,
+      "nTrain": 1374,
+      "nHoldout": 1471,
+      "holdoutBelow": 0.019
+    },
     "11426|64": {
       "name": "Ice Barrier",
       "quantile": 0.02,
@@ -257,6 +317,16 @@
       "nTrain": 2495,
       "nHoldout": 2726,
       "holdoutBelow": 0.016
+    },
+    "1261193|255": {
+      "name": "Boomstick",
+      "quantile": 0.02,
+      "floorRatio": 0.883,
+      "staticBreak": 0.038,
+      "holdoutStaticBreak": 0.035,
+      "nTrain": 579,
+      "nHoldout": 626,
+      "holdoutBelow": 0.024
     },
     "102560|102": {
       "name": "Incarnation: Chosen of Elune",

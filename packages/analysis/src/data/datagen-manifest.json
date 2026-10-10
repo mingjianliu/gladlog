@@ -180,7 +180,7 @@
       "producer": "packages/eval/scripts/syncWindowScan.ts emit-table"
     },
     "cdRecastFloorGenerated.json": {
-      "entries": 31,
+      "entries": 39,
       "producer": "packages/eval/scripts/cdRecastFloorScan.ts --out"
     },
     "cdTriggerPriorGenerated.json": {

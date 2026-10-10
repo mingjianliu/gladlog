@@ -175,7 +175,12 @@ export function createKillWindowFactsComputer(
       // dead-at predicate (missed-sync-window's ready filter and [RES] read
       // the same one). It filters every clause: a dead holder's cooldown is
       // neither ready, nor maybe back, nor back inside.
-      const living = teamCds.filter(({ holder }) => !isDeadAt(holder, tMs));
+      // A response-only row (`IMajorCooldownInfo.responseOnly`) is on the
+      // `pressed` lists below and on none of the ready ones: `accountable`
+      // reads the certain list, and no accusation may name such a row.
+      const living = teamCds.filter(
+        ({ cd, holder }) => !cd.responseOnly && !isDeadAt(holder, tMs),
+      );
       const certain = living.filter(({ cd }) =>
         cdAvailableAt(cd, readyAtSecond),
       );
@@ -378,4 +383,3 @@ export function buildDpsKillWindowLines(
   }
   return lines;
 }
-

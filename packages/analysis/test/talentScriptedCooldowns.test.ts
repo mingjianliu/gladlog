@@ -10,6 +10,10 @@ import {
   cdSecondsUntilReady,
   warpClock,
 } from "../src/utils/cooldowns";
+import {
+  CD_TALENT_MODIFIERS,
+  PER_RANK_COOLDOWN_TALENTS,
+} from "../src/utils/talentModifiers";
 
 describe("RULED_COOLDOWN_VALUES — 静电充能每级 10 秒(用户裁 2026-09-26)", () => {
   const mods = [
@@ -22,6 +26,37 @@ describe("RULED_COOLDOWN_VALUES — 静电充能每级 10 秒(用户裁 2026-09-
   it("1 级 −10,2 级 −20(DB2 行的 −15 被裁决值取代)", () => {
     expect(at(1)).toBe(50);
     expect(at(2)).toBe(40);
+  });
+});
+
+describe("PER_RANK_COOLDOWN_TALENTS — Savagery (Takedown −15 s per rank, FT board item 1b)", () => {
+  const SAVAGERY = "1251790";
+  const TAKEDOWN = "1250646";
+  const at = (rank: number | undefined) =>
+    applyCdModifiers(
+      CD_TALENT_MODIFIERS[TAKEDOWN],
+      90,
+      1,
+      new Set(rank === undefined ? [] : [SAVAGERY]),
+      new Set(),
+      rank === undefined
+        ? undefined
+        : { talentRanks: new Map([[SAVAGERY, rank]]) },
+    ).cooldownSeconds;
+  it("the generated row is the DB2 −15 s on Takedown, and the talent is rank-scaled", () => {
+    expect(CD_TALENT_MODIFIERS[TAKEDOWN]).toContainEqual(
+      expect.objectContaining({
+        talentSpellId: SAVAGERY,
+        effect: "reduce_cd",
+        value: 15,
+      }),
+    );
+    expect(PER_RANK_COOLDOWN_TALENTS.has(SAVAGERY)).toBe(true);
+  });
+  it("90 s without it, 75 s at rank 1, 60 s at rank 2 (the corpus floor: 60.0 s)", () => {
+    expect(at(undefined)).toBe(90);
+    expect(at(1)).toBe(75);
+    expect(at(2)).toBe(60);
   });
 });
 

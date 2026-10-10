@@ -37,6 +37,24 @@ export const FREE_RECAST_WINDOWS: Readonly<Record<string, IFreeRecastWindow>> =
       windowS: 10,
       note: "Escape from Reality — Transcendence: Transfer again within 10 s",
     },
+    // Save the Day (FT board item 1 follow-up, 2026-10-10): one more Leap of
+    // Faith within 6 s of a press, ignoring its cooldown (the talent-coverage
+    // join's tooltip row: "+1 free cast within 6s"). DB2: one dummy aura
+    // (SpellEffect 1134708, aura 4, no mask — a server script).
+    // Corpus, 605 new-season files, ranks from COMBATANT_INFO: 324 holder
+    // rounds, 143 recast gaps, 39 inside the modelled cooldown and all of
+    // them 2.0–6.0 s after the opener; 134 non-holder rounds, 21 gaps, 0
+    // inside the cooldown. The press after a pair comes ≥ 64.9 s after the
+    // OPENER on a 60 s cooldown — the cooldown stays anchored on it, this
+    // table's shape. (Two holder gaps of 51 / 55 s stay unexplained.)
+    // The row only exists on the ledger since Leap of Faith entered it for
+    // every priest spec (`ENEMY_ONLY_SAVE_IDS`); before that these presses
+    // were the healer gap-filler's and carried no cooldown.
+    "440669": {
+      spellId: "73325",
+      windowS: 6,
+      note: "Save the Day — Leap of Faith again within 6 s",
+    },
   };
 
 export interface IEventCooldownReduction {
