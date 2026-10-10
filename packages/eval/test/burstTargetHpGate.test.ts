@@ -92,16 +92,24 @@ describe("checkBurstTargetHpConsistency", () => {
     expect(out.some((f) => f.includes("该秒 [STATE] 报 dead"))).toBe(true);
   });
 
-  it("a low printed at the wrong second fails even when no tick reads below it", () => {
-    const out = run(
-      head,
-      target("100% → 98% (low 37% at 0:34)"),
-      state("0:27", 100),
-      state("0:34", 60),
-      state("0:40", 37),
-      state("0:48", 98),
-    );
-    expect(out.some((f) => f.includes("该秒 [STATE] 报 60%"))).toBe(true);
+  // FT-T03 (user ruling 2026-10-10, D7): the low is a trough — the true
+  // minimum inside the span — so the tick of its second may read above it.
+  // Before, `low 37% at 0:34` beside a 0:34 tick of 60 was red ("该秒 [STATE]
+  // 报 60%"): the low had to BE that tick.
+  it("FT-T03: a low below the tick of its own second → passes; a tick below the low is still red there", () => {
+    expect(
+      run(
+        head,
+        target("100% → 98% (low 37% at 0:34)"),
+        state("0:27", 100),
+        state("0:34", 60),
+        state("0:40", 37),
+        state("0:48", 98),
+      ),
+    ).toEqual([]);
+    expect(
+      run(head, target("100% → 98% (low 37% at 0:34)"), state("0:34", 36))[0],
+    ).toContain("标注 low 37% 但 0:34 [STATE] 报 36%");
   });
 
   it("finds the burst's Target line past a line in between, and never borrows the next burst's", () => {

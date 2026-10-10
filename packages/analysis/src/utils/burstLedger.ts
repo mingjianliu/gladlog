@@ -7,8 +7,8 @@ import {
 import { SPELL_CATEGORIES as spellsData } from "../data/spellCategories";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import {
-  gridHpMinInWindow,
   gridHpPct,
+  hpTroughInWindow,
   isDeadAtRenderSecond,
   isHpTroughWorthPrinting,
   SELF_CAST_NOOP_EXTERNAL_IDS,
@@ -152,9 +152,15 @@ export interface IBurstLedgerEntry {
      * dead at the end second. */
     hpStartPct: number | null;
     hpEndPct: number | null;
-    /** The grid low inside the rendered span and its second, when it is a
-     * trough worth printing (`isHpTroughWorthPrinting`, the `[DMG SPIKE]`
-     * rule); null otherwise, and whenever an endpoint is unknown or dead. */
+    /** The lowest HP inside the rendered span and the second it happened
+     * at, when it is a trough worth printing (`isHpTroughWorthPrinting`, the
+     * `[DMG SPIKE]` rule); null otherwise, and whenever an endpoint is
+     * unknown or dead. A TROUGH since FT-T03 (user ruling 2026-10-10, D7):
+     * `hpTroughInWindow`, the true minimum of every sample in the displayed
+     * seconds — not the lowest whole-second tick, so it can sit below every
+     * `[STATE]` number of the span. The two endpoints above stay grid
+     * readings, and nothing decides on this field (`isBurstConverted` reads
+     * `died`, the cards read the endpoints). */
     hpLow: { pct: number; atSeconds: number } | null;
     damage: number;
     /** The part of `damage` the target's shields absorbed. */
@@ -400,9 +406,11 @@ export function analyzeBurstLedger(
       const hpEndPct = deadAtEnd
         ? 0
         : gridHpPct(target, matchStartMs + toSec * 1000);
+      // the low is a trough (FT-T03): the true minimum inside the displayed
+      // seconds, the `[DMG SPIKE]` line's own function and window
       const low =
         hpStartPct !== null && hpEndPct !== null && !deadAtEnd
-          ? gridHpMinInWindow(target, matchStartMs, fromSec, toSec)
+          ? hpTroughInWindow(target, matchStartMs, fromSec, toSec)
           : null;
 
       dominantTarget = {
@@ -744,6 +752,13 @@ export function formatBurstLedgerForContext(
     lines.push(
       // one line: readers index the block's lines from the top
       `  \`Target\` = the enemy player your own damage in the burst was highest on, counting what its shields absorbed. \`your damage\` = that figure: what landed plus what the shields absorbed; \`(A of it absorbed)\` = the absorbed part, printed when it is not 0.00M. \`${BURST_SECOND_TARGET_LABEL}: X N\` = the enemy player your damage was next highest on, same measure — printed whenever the burst damaged a second one; it can be close to the Target's figure, and ahead of it on landed damage alone. \`${BURST_ALLY_OVERLAP_LABEL}\` = a teammate's offensive cooldown was running during part of this burst — an overlap in time and nothing more: \`Ns\` = how long the two ran together (0.0s = an instant cooldown pressed inside the burst, or the two only touched), \`their top target in it\` = the enemy player that teammate damaged most in those seconds (landed + absorbed), which need not be this burst's Target.`,
+    );
+  // FT-T03 (ruling D7): the low is off the grid — legended when one prints
+  // (worded without the literal line tag: tests and gates find the target
+  // line by it)
+  if (bursts.some((b) => b.dominantTarget?.hpLow))
+    lines.push(
+      "  On a burst's target line, `A% → B% (low L% at m:ss)` = that unit's [STATE] readings at the burst's first and last second; `low` = the lowest HP the log shows for it in between, at the second it happened (the true minimum between the ticks: it can sit below every [STATE] number of the span).",
     );
 
   bursts.forEach((b, i) => {

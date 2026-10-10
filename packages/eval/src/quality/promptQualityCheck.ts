@@ -893,18 +893,24 @@ const BURST_TARGET_HP =
  * off the render grid — 115 of 142 ledger targets on the 60 triage rounds
  * disagreed with `gridHpPct` at the displayed second (537209d8: "95% → 62%"
  * beside a `[STATE]` 69 % at 0:48), and no low was printed at all
- * (69546267: "100% → 100%" over a 37 % low). The analysis side now reads
- * `gridHpPct` / `gridHpMinInWindow`, the `[STATE]` tick's own sampler, so the
- * text certifies, exactly (every rendered tick IS one sample of that grid):
- *   - a tick for the target at the start / end second equals A / B (a `dead`
- *     tick at the end second means B = 0);
+ * (69546267: "100% → 100%" over a 37 % low). The analysis side reads the
+ * endpoints with `gridHpPct`, the `[STATE]` tick's own sampler, and the low
+ * with `hpTroughInWindow` — the true minimum inside the displayed seconds
+ * (FT-T03, user ruling 2026-10-10, D7; it was the lowest whole-second tick).
+ * So the text certifies:
+ *   - a tick for the target at the start / end second EQUALS A / B (a `dead`
+ *     tick at the end second means B = 0) — point readings, unchanged;
  *   - a printed low satisfies `isHpTroughWorthPrinting(A, B, L)` — the one
- *     trough rule, shared with `[DMG SPIKE]` — sits inside the span, and no
- *     tick inside the span reads below it;
- *   - with no low printed, no tick inside the span satisfies the rule.
+ *     trough rule, shared with `[DMG SPIKE]` — sits inside the span, not on
+ *     a second the target's tick reads `dead`, and no tick inside the span
+ *     reads below it (`isTickBelowTrough`). The tick of the low's own second
+ *     no longer has to equal it: a trough between two ticks is below both;
+ *   - with no low printed, no tick inside the span satisfies the rule (the
+ *     trough is at or below every tick, so it would have been printed).
  * A target the roster block does not name is not checked (no id to look
  * for). The reverse ("a trough at a second no tick shows") is invisible in
- * the text and is not adjudicated here.
+ * the text and is not adjudicated here — and since FT-T03 neither is a low
+ * stamped at the wrong second of its span.
  */
 export function checkBurstTargetHpConsistency(lines: string[]): string[] {
   const { idByName } = parseRoster(lines);
@@ -976,19 +982,15 @@ export function checkBurstTargetHpConsistency(lines: string[]): string[] {
         failures.push(
           `${at} low at ${fmtTime(lowS)} 落在 ${fmtTime(from)}–${fmtTime(to)} 之外`,
         );
-      // the tick of the printed second IS that low (same sampler) — a low
-      // with the wrong second passed when only "no tick below it" was asked
+      // a trough is never read on a second the unit is `dead` at; the tick
+      // of the printed second need not equal it (FT-T03) — like every tick
+      // of the span, it only must not be below it
       if (tickAt(lowS) === "dead")
         failures.push(
           `${at} 标注 low ${L}% at ${fmtTime(lowS)},但该秒 [STATE] 报 dead`,
         );
-      const atLow = inSpan.find((t) => t.s === lowS);
-      if (atLow && atLow.hp !== L)
-        failures.push(
-          `${at} 标注 low ${L}% at ${fmtTime(lowS)},但该秒 [STATE] 报 ${atLow.hp}%`,
-        );
       for (const t of inSpan)
-        if (t.hp < L)
+        if (isTickBelowTrough(t.hp, L))
           failures.push(
             `${at} 标注 low ${L}% 但 ${fmtTime(t.s)} [STATE] 报 ${t.hp}%`,
           );

@@ -10,7 +10,7 @@ import {
   burstSecondTargetClause,
   formatBurstLedgerForContext,
 } from "../../src/utils/burstLedger";
-import { gridHpPct } from "../../src/utils/cooldowns";
+import { gridHpPct, hpTroughInWindow } from "../../src/utils/cooldowns";
 import type { IOffensiveWindow } from "../../src/utils/offensiveWindows";
 import {
   makeAdvancedAction,
@@ -516,6 +516,81 @@ describe("analyzeBurstLedger — Target HP on the render grid, the low, other de
       [30, 70],
     ]);
     expect(atStart.low).toBeNull();
+  });
+
+  // FT-T03 (user ruling 2026-10-10, D7): the low is a TROUGH — the true
+  // minimum of every sample inside the displayed seconds, at the second it
+  // happened; the endpoints stay `[STATE]` grid readings.
+  it("FT-T03: a dip between two ticks is the low; the endpoints and the ticks keep their grid readings", () => {
+    const player = ret(MATCH_START + 10_000, [
+      dmgOut(MATCH_START + 12_000, -50_000, "e1"),
+    ]);
+    const e1 = makeUnit("e1", {
+      name: "Victim",
+      info,
+      advancedActions: [
+        hpAt(10, 100),
+        hpAt(17, 100),
+        hpAt(18, 37),
+        hpAt(18.4, 6), // the dip the grid cannot see
+        hpAt(19, 60),
+        hpAt(21, 90),
+        hpAt(30, 98),
+      ],
+    } as any);
+    const bursts = analyzeBurstLedger(player, [], [e1], makeCombat());
+    const t = bursts[0].dominantTarget!;
+    expect(t.hpStartPct).toBe(100);
+    expect(t.hpEndPct).toBe(98);
+    expect(t.hpLow).toEqual({ pct: 6, atSeconds: 18 });
+    // shared-predicate pin: the `[DMG SPIKE]` line's own function and window
+    const trough = hpTroughInWindow(e1, MATCH_START, 10, 30)!;
+    expect(t.hpLow).toEqual({ pct: trough.pct, atSeconds: trough.atSec });
+    // the [STATE] sampler still reads 37 on that second
+    expect(gridHpPct(e1, MATCH_START + 18_000)).toBe(37);
+    const lines = formatBurstLedgerForContext(bursts, [], []);
+    expect(
+      lines.find((l) => l.includes("Target:") && l.includes("|")),
+    ).toContain("Target: Victim 100% → 98% (low 6% at 0:18) |");
+    // …and the off-grid low is legended when one prints
+    expect(lines.some((l) => l.includes("`A% → B% (low L% at m:ss)` ="))).toBe(
+      true,
+    );
+  });
+
+  it("FT-T03: a dip no tick shows at all turns `100% → 98%` into a printed low; no low → no legend line", () => {
+    const player = ret(MATCH_START + 10_000, [
+      dmgOut(MATCH_START + 12_000, -50_000, "e1"),
+    ]);
+    const mk = (extra: unknown[]) =>
+      makeUnit("e1", {
+        name: "Victim",
+        info,
+        advancedActions: [
+          hpAt(10, 100),
+          hpAt(18, 100),
+          ...extra,
+          hpAt(19, 100),
+          hpAt(30, 98),
+        ],
+      } as any);
+    const flat = formatBurstLedgerForContext(
+      analyzeBurstLedger(player, [], [mk([])], makeCombat()),
+      [],
+      [],
+    );
+    expect(flat.find((l) => l.includes("Target: Victim"))).toContain(
+      "Target: Victim 100% → 98% |",
+    );
+    expect(flat.some((l) => l.includes("(low L% at m:ss)"))).toBe(false);
+    const dipped = formatBurstLedgerForContext(
+      analyzeBurstLedger(player, [], [mk([hpAt(18.5, 40)])], makeCombat()),
+      [],
+      [],
+    );
+    expect(dipped.find((l) => l.includes("Target: Victim"))).toContain(
+      "Target: Victim 100% → 98% (low 40% at 0:18) |",
+    );
   });
 
   it("a target dead inside the burst's first rendered second reads 0 at the start too", () => {
