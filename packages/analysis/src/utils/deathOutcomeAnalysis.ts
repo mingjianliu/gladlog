@@ -7,7 +7,7 @@ import {
 
 import { MITIGATION_TABLE } from "../data/mitigationData";
 import { getEnglishSpellName } from "../data/spellEffectData";
-import { namedCannotCastIntervals } from "./cannotCastIntervals";
+import { cannotCastIntervalsForSpells } from "./cannotCastIntervals";
 import { IPlayerCCTrinketSummary } from "./ccTrinketAnalysis";
 import {
   auraOnlyActivationSeconds,
@@ -676,10 +676,17 @@ export function deathWindowFreedom(
   matchStartMs: number,
   deathSeconds: number,
   windowSeconds = LETHAL_WINDOW_SECONDS,
+  // FT-T10 PREVIEW: the option the tag is about — a kick lockout counts
+  // only when it locks that spell's school; absent → every lockout
+  optionSpellId?: string,
 ): IDeathWindowFreedom | null {
   const windowStart = Math.max(0, deathSeconds - windowSeconds);
   if (deathSeconds <= windowStart) return null;
-  const named = namedCannotCastIntervals(unit, hostileIds);
+  const named = cannotCastIntervalsForSpells(
+    unit,
+    hostileIds,
+    optionSpellId === undefined ? undefined : [optionSpellId],
+  );
   const result = freeGapCore(
     named.map((iv) => ({
       start: (iv.from - matchStartMs) / 1000,
@@ -921,6 +928,8 @@ export function buildDeathOutcomeSummary(
     summary:
       Pick<IPlayerCCTrinketSummary, "playerName" | "ccInstances"> | undefined,
     atSeconds: number,
+    // FT-T10 PREVIEW: the immunity / external the line names
+    optionSpellId: string,
   ): { locked: boolean; freedom?: IDeathWindowFreedom } => {
     if (cannotCastSourceIds) {
       const freedom = deathWindowFreedom(
@@ -928,6 +937,8 @@ export function buildDeathOutcomeSummary(
         cannotCastSourceIds,
         matchStartMs,
         atSeconds,
+        LETHAL_WINDOW_SECONDS,
+        optionSpellId,
       );
       return freedom
         ? {
@@ -1004,7 +1015,7 @@ export function buildDeathOutcomeSummary(
           spellId,
           spellName: spell.name,
           ...(() => {
-            const l = lockAt(unit, ccSummary, atSeconds);
+            const l = lockAt(unit, ccSummary, atSeconds, spellId);
             return {
               wasInCC: l.locked,
               ...(l.freedom ? { freedom: l.freedom } : {}),
@@ -1087,7 +1098,7 @@ export function buildDeathOutcomeSummary(
             spellId,
             spellName: spell.name,
             ...(() => {
-              const l = lockAt(teammate, teammateCCSummary, atSeconds);
+              const l = lockAt(teammate, teammateCCSummary, atSeconds, spellId);
               return {
                 casterWasInCC: l.locked,
                 ...(l.freedom ? { casterFreedom: l.freedom } : {}),
