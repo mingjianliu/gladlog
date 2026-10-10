@@ -39,6 +39,7 @@ import {
   spikeWindowOverlapSeconds,
 } from "@gladlog/analysis";
 import { fmtFactNum } from "@gladlog/analysis/src/analysis/factFormat";
+import { parseBurstAnsweredLine } from "@gladlog/analysis/src/context/burstAnswered";
 import {
   CC_USE_CAP,
   CC_USE_MIN_S,
@@ -3728,6 +3729,42 @@ export function crisisHpProbeMismatch(p: CrisisHpStateProbe): boolean {
 }
 
 /**
+ * HardFailure class (T12 ⑧ i, user ruling 2026-10-10): the answer a
+ * `[BURST ANSWERED] … — L still died` line credits was pressed BEFORE L's
+ * death (`creditedAnswer` skips the engine's `afterPressuredDeath`, `isDeadAt`
+ * on raw instants). The prompt prints whole seconds, so the gate asserts what
+ * the grid can prove, with no tolerance of its own: the line opens at second
+ * `t` (the lead cast is at or after it), the answer came `N` s after the lead
+ * cast (one decimal, so at least `N − 0.05`), and L's earliest `[DEATH]` line
+ * at second `D` means the death was before `D + 1`. An answer at or after
+ * `D + 1` is therefore after the death — `t + N − 0.05 ≥ D + 1` fails. An
+ * answer inside the death's own second is beyond the grid and is pinned by
+ * the unit tests on the raw instants instead.
+ */
+export function checkBurstAnsweredBeforeDeath(lines: string[]): string[] {
+  const deathSec = new Map<string, number>();
+  for (const line of lines) {
+    const d = line.match(FRIENDLY_DEATH_LINE);
+    if (!d) continue;
+    const at = Number(d[1]) * 60 + Number(d[2]);
+    if (at < (deathSec.get(d[3]!) ?? Infinity)) deathSec.set(d[3]!, at);
+  }
+  const failures: string[] = [];
+  lines.forEach((line, i) => {
+    const a = parseBurstAnsweredLine(line);
+    if (!a || !a.pressuredDied) return;
+    const died = deathSec.get(a.pressured);
+    if (died === undefined) return;
+    // tenths, so the comparison is exact
+    if (a.atSec * 10 + Math.round(a.latencySec * 10) - 0.5 >= (died + 1) * 10)
+      failures.push(
+        `line ${i + 1}: [BURST ANSWERED] 记 ${a.answerer} 的 ${a.spellName} 为回应(开手 ${fmtTime(a.atSec)} 后 ${a.latencySec}s),但 ${a.pressured} 已在 ${fmtTime(died)} 死亡`,
+      );
+  });
+  return failures;
+}
+
+/**
  * Hard invariant (2026-08-30): a `cd-hoarded` / `crisis-no-response` menu line
  * claims a unit's HP at a rendered second; when the timeline also emits a
  * `[STATE]` tick for that unit at that same rendered second, the two numbers
@@ -4378,6 +4415,7 @@ export function checkMatch(
   hardFailures.push(...checkDeathTrinketCcConsistency(lines));
   hardFailures.push(...checkPressedDuringControlNote(lines));
   hardFailures.push(...checkBurstAnsweredBottomConsistency(lines));
+  hardFailures.push(...checkBurstAnsweredBeforeDeath(lines));
   hardFailures.push(...checkFreeOfWindowConsistency(lines));
   hardFailures.push(...checkPeelOptionConsistency(lines));
   hardFailures.push(...checkCcBookmarkConsistency(lines));

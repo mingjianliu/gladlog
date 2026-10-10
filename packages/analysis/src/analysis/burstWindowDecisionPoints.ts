@@ -67,6 +67,7 @@ import {
   type NamedCannotCastInterval,
   namedCannotCastIntervals,
 } from "../utils/cannotCastIntervals";
+import { isDeadAt } from "../utils/unitDeath";
 import { castAndEffectIds, isCastOrEffect } from "../data/castEffectAuras";
 import { drEffectAurasOfCast } from "../utils/drAnalysis";
 import { LANDED_PAIR_MS } from "../utils/kickAudit";
@@ -291,6 +292,13 @@ export interface BurstResponseCast {
    * never reads it (slow-defensive-response is unchanged). Absent on every
    * other response. */
   landed?: boolean;
+  /** The response was pressed at or after the pressured friendly's death
+   * (`isDeadAt` on its raw instant — the UNIT_DIED's own millisecond
+   * included). T12 ⑧ (i), user ruling 2026-10-10: 483f7433's Emerald
+   * Communion went out 0.251 s after the warrior it was credited for had
+   * died. Credit-line only — `responded` never reads it
+   * (slow-defensive-response is unchanged). Absent when it was not. */
+  afterPressuredDeath?: true;
 }
 
 /**
@@ -1227,6 +1235,9 @@ export function burstWindowDecisionPoints(
       const w1 = tMs + BURST_RESPONSE_WINDOW_MS;
       const casterIdSet = new Set(casterIds);
       const responseCasts: BurstResponseCast[] = [];
+      // the raw instant each response counts at (its `latencySec` origin) —
+      // read once more below, against the pressured friendly's death
+      const responseAtMs = new Map<BurstResponseCast, number>();
       for (const c of friendlyCasts) {
         if (c.tMs < w0) continue;
         if (c.tMs > w1) break;
@@ -1270,7 +1281,7 @@ export function burstWindowDecisionPoints(
                 INTERRUPT_IDS.has(c.spellId),
               )
             : undefined;
-        responseCasts.push({
+        const response: BurstResponseCast = {
           category,
           spellId: c.spellId,
           spellName: getEnglishSpellName(c.spellId),
@@ -1285,7 +1296,9 @@ export function burstWindowDecisionPoints(
             : {}),
           ...(preOpenerStillUp !== undefined ? { preOpenerStillUp } : {}),
           ...(landed !== undefined ? { landed } : {}),
-        });
+        };
+        responseAtMs.set(response, c.tMs);
+        responseCasts.push(response);
       }
       for (const r of controlLandedResponses(
         casterIds.map((id) => units.find((u) => u.id === id)).filter(Boolean),
@@ -1294,8 +1307,8 @@ export function burstWindowDecisionPoints(
         friendlyCasts,
         w0,
         w1,
-      ))
-        responseCasts.push({
+      )) {
+        const response: BurstResponseCast = {
           category: "control",
           spellId: r.spellId,
           spellName: getEnglishSpellName(r.spellId),
@@ -1318,7 +1331,10 @@ export function burstWindowDecisionPoints(
           // of an earlier landed Capacitor Totem (codex review of batch 8)
           latencySec:
             Math.round(((r.tMs - leadRawMs) / 1000 + Number.EPSILON) * 10) / 10,
-        });
+        };
+        responseAtMs.set(response, r.tMs);
+        responseCasts.push(response);
+      }
       responseCasts.sort((a, b) => a.latencySec - b.latencySec);
       // ── outcomes per friendly, and the ONE pressured friendly ────────────
       // Computed before the kite/feasibility/triage work below, because all
@@ -1393,6 +1409,15 @@ export function burstWindowDecisionPoints(
       const pressuredUnit = pressured
         ? (friendlies.find((f) => f.id === pressured.unitId) ?? null)
         : null;
+      // T12 ⑧ (i): mark the responses pressed at or after the pressured
+      // friendly's death — the one death predicate (`isDeadAt`), on the raw
+      // instants. Only the [BURST ANSWERED] credit line reads the mark;
+      // `responses` / `responded` below are computed from the same list as
+      // before and never look at it.
+      if (pressuredUnit)
+        for (const r of responseCasts)
+          if (isDeadAt(pressuredUnit, responseAtMs.get(r)!))
+            r.afterPressuredDeath = true;
       const casterUnits = casterIds.map((id) => units.find((u) => u.id === id));
       const kiteGain =
         pressuredUnit != null &&

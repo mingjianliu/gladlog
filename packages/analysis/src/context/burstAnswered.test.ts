@@ -30,6 +30,7 @@ import {
   BURST_ANSWERED_MAX_HP_PCT,
   BURST_ANSWERED_TAG,
   formatBurstAnsweredLines,
+  parseBurstAnsweredLine,
 } from "./burstAnswered";
 
 // ── part 1: the renderer, on injected decision points ───────────────────────
@@ -252,6 +253,134 @@ describe("triage sync-burst F-B7 / F-B4 — which answer is credited", () => {
       formatBurstAnsweredLines([point({ responseCasts: [ctl(true), pw] })])[0]!
         .line,
     ).toContain("Monk-R answered with Paralysis 1.1s before it opened");
+  });
+});
+
+describe("T12 ⑧ (i) — a response pressed at or after the pressured unit's death is not credited", () => {
+  // 483f7433 1:45: The Hunt opens, the warrior dies at 1:50.385, the evoker's
+  // Emerald Communion goes out at 1:50.636 — "answered … in 5.1s … still died".
+  const communion = {
+    category: "healCd" as const,
+    spellId: "370960",
+    spellName: "Emerald Communion",
+    casterName: "Evoker-R",
+    casterId: "f3",
+    tSec: 110,
+    latencySec: 5.1,
+    afterPressuredDeath: true as const,
+  };
+  const dead = {
+    anyFriendlyDeath: true,
+    pressured: { ...point().pressured!, died: true, minHpPct: 20 },
+  };
+  it("the only response came after the death → the window gets no line", () => {
+    expect(
+      formatBurstAnsweredLines([
+        point({ ...dead, responseCasts: [communion] }),
+      ]),
+    ).toEqual([]);
+    // the same press without the mark is the line this replaces
+    const { afterPressuredDeath: _mark, ...before } = communion;
+    expect(
+      formatBurstAnsweredLines([
+        point({ ...dead, responseCasts: [before] }),
+      ])[0]!.line,
+    ).toContain(
+      "Evoker-R answered with Emerald Communion in 5.1s; Mate-R bottomed at 20% at 0:45 — Mate-R still died",
+    );
+  });
+  it("another creditable response is the one named — an earlier one, or a later one the death did not precede", () => {
+    const pw = point().responseCasts[0]!;
+    expect(
+      formatBurstAnsweredLines([
+        point({ ...dead, responseCasts: [pw, communion] }),
+      ])[0]!.line,
+    ).toContain("Me-R answered with Pain Suppression in 2.4s");
+    expect(
+      formatBurstAnsweredLines([
+        point({
+          ...dead,
+          responseCasts: [{ ...communion, latencySec: 1.0 }, pw],
+        }),
+      ])[0]!.line,
+    ).toContain("Me-R answered with Pain Suppression in 2.4s");
+  });
+  it("the mark outranks every other credit rule — a landed control pressed after the death is skipped too", () => {
+    expect(
+      formatBurstAnsweredLines([
+        point({
+          ...dead,
+          responseCasts: [
+            {
+              category: "control",
+              spellId: "51514",
+              spellName: "Hex",
+              casterName: "Shaman-R",
+              casterId: "f4",
+              destId: "e1",
+              tSec: 46,
+              latencySec: 6.0,
+              landed: true,
+              afterPressuredDeath: true,
+            },
+          ],
+        }),
+      ]),
+    ).toEqual([]);
+  });
+});
+
+describe("parseBurstAnsweredLine — the producer's own reader of its line", () => {
+  const rendered = (over: Partial<BurstWindowDecisionPoint> = {}) => {
+    const [e] = formatBurstAnsweredLines([point(over)], undefined, {
+      friendly: (n: string) => (n === "Me-R" ? "1(DPriest)" : "2(FMage)"),
+      enemy: () => "4(ARogue)",
+    });
+    return `0:40  ${e!.line}`;
+  };
+  it("reads the answer, its latency and the pressured unit back", () => {
+    expect(parseBurstAnsweredLine(rendered())).toEqual({
+      atSec: 40,
+      answerer: "1(DPriest)",
+      spellName: "Pain Suppression",
+      latencySec: 2.4,
+      pressured: "2(FMage)",
+      pressuredDied: false,
+    });
+  });
+  it("a pre-opener answer reads as a negative latency; extras with '; ' do not break the parse", () => {
+    const p = parseBurstAnsweredLine(
+      rendered({
+        extraCds: [
+          { ...point().leadCd, spellName: "Recklessness", castSec: 44 },
+          { ...point().leadCd, spellName: "Avatar", castSec: 40 },
+        ],
+        responseCasts: [
+          { ...point().responseCasts[0]!, latencySec: -1.1, tSec: 39 },
+        ],
+      }),
+    );
+    expect(p!.latencySec).toBe(-1.1);
+    expect(p!.spellName).toBe("Pain Suppression");
+  });
+  it("`still died` is the pressured unit's own death; another friendly's is not", () => {
+    expect(
+      parseBurstAnsweredLine(
+        rendered({
+          anyFriendlyDeath: true,
+          pressured: { ...point().pressured!, died: true },
+        }),
+      )!.pressuredDied,
+    ).toBe(true);
+    expect(
+      parseBurstAnsweredLine(rendered({ anyFriendlyDeath: true }))!
+        .pressuredDied,
+    ).toBe(false);
+  });
+  it("any other line is null", () => {
+    expect(
+      parseBurstAnsweredLine("0:40  [CC ON ENEMY]   4(ARogue) ← Hex (by 1(X))"),
+    ).toBeNull();
   });
 });
 
@@ -514,5 +643,82 @@ describe("[BURST ANSWERED] — the bottom is the window's true minimum, at the s
     expect(formatBurstAnsweredLines([shown])[0]!.line).toContain(
       "Mate-R bottomed at 20% at 0:44",
     );
+  });
+});
+
+describe("[BURST ANSWERED] — T12 ⑧ (i) end to end: the death is read from the unit's own UNIT_DIED", () => {
+  /** Tranquility — a `BURST_HEAL_CD_IDS` answer the Restoration Druid teammate
+   * owns, so the window is feasible through them. */
+  const TRANQUILITY = "740";
+  const run = (answerSec: number) => {
+    const hpSamples = [];
+    for (let s = 0; s <= 14; s++)
+      hpSamples.push(hp(s, s >= 10 ? 90 - (s - 10) * 18 : 90, "F1"));
+    const damageIn = [];
+    for (let s = 10; s < 16; s++) damageIn.push(dmg(s, 18));
+    const f = unit({
+      advancedActions: hpSamples,
+      damageIn,
+      deathRecords: [{ timestamp: T0 + 15_385 }],
+    });
+    const mateHp = [];
+    for (let s = 0; s <= 40; s++) mateHp.push(hp(s, 100, "F2"));
+    const mate = unit({
+      id: "F2",
+      name: "Mate-R",
+      advancedActions: mateHp,
+      spellCastEvents: [cast(TRANQUILITY, answerSec)],
+    });
+    const e = unit({
+      id: "E1",
+      name: "Enemy-R",
+      reaction: CombatUnitReaction.Hostile,
+      info: { teamId: "1", specId: "260" },
+      spellCastEvents: [cast(AR, 10)],
+    });
+    const pts = burstWindowDecisionPoints({
+      startTime: T0,
+      endTime: T0 + 240_000,
+      units: { F1: f, F2: mate, E1: e },
+      startInfo: { bracket: "3v3" },
+    });
+    expect(pts).toHaveLength(1);
+    return pts;
+  };
+
+  /** The same points with the mark taken off — what the line read before.
+   * Each "no line" case below also shows the mark is the ONLY thing between
+   * the window and its line (feasible, deep enough, a creditable category). */
+  const unmarked = (pts: BurstWindowDecisionPoint[]) =>
+    pts.map((p) => ({
+      ...p,
+      responseCasts: p.responseCasts.map(
+        ({ afterPressuredDeath: _mark, ...r }) => r,
+      ),
+    }));
+
+  it("pressed 0.251 s after the death: `responded` stays true, the credit line is gone", () => {
+    const pts = run(15.636);
+    expect(pts[0]!.responded).toBe(true);
+    expect(pts[0]!.pressured!.name).toBe("Friend-R");
+    expect(formatBurstAnsweredLines(pts)).toEqual([]);
+    expect(formatBurstAnsweredLines(unmarked(pts))[0]!.line).toContain(
+      "Mate-R answered with Tranquility in 5.6s; Friend-R bottomed at 18% at 0:14 — Friend-R still died",
+    );
+  });
+
+  it("pressed on the death's own millisecond: not credited either", () => {
+    const pts = run(15.385);
+    expect(formatBurstAnsweredLines(pts)).toEqual([]);
+    expect(formatBurstAnsweredLines(unmarked(pts))).toHaveLength(1);
+  });
+
+  it("pressed 0.5 s before the death: credited, and the line says the unit still died", () => {
+    const lines = formatBurstAnsweredLines(run(14.885));
+    expect(lines).toHaveLength(1);
+    expect(lines[0]!.line).toContain(
+      "Mate-R answered with Tranquility in 4.9s;",
+    );
+    expect(lines[0]!.line).toContain("Friend-R still died");
   });
 });

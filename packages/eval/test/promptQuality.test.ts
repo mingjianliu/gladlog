@@ -1,5 +1,7 @@
 import { ensureAnalysisData } from "@gladlog/analysis";
+import type { BurstWindowDecisionPoint } from "@gladlog/analysis/src/analysis/burstWindowDecisionPoints";
 import { buildMomentSnapshotItems } from "@gladlog/analysis/src/analysis/momentSnapshot";
+import { formatBurstAnsweredLines } from "@gladlog/analysis/src/context/burstAnswered";
 import { formatPressedDuringNote } from "@gladlog/analysis/src/context/controlRejectedPresses";
 import {
   lookupBehaviorPrior,
@@ -12,6 +14,7 @@ import type { CoverageManifest } from "../src/quality/coverageManifest";
 import {
   checkBehaviorPriorConsistency,
   checkCcAvoidedLandedConsistency,
+  checkBurstAnsweredBeforeDeath,
   checkBurstAnsweredBottomConsistency,
   checkCcBookmarkConsistency,
   checkDeathTrinketCcConsistency,
@@ -1373,6 +1376,104 @@ describe("checkBurstAnsweredBottomConsistency — the credit line's bottom secon
     expect(
       checkBurstAnsweredBottomConsistency([roster, state, labelled(47)]),
     ).toHaveLength(1);
+  });
+});
+
+describe("checkBurstAnsweredBeforeDeath — the credited answer precedes the pressured unit's death (T12 ⑧ i)", () => {
+  // The lines are rendered by the producer, so the gate reads the wording the
+  // prompt carries — not a copy of it.
+  const labels = {
+    friendly: (n: string) => (n === "Warrior-R" ? "2(AWarrior)" : "3(PEvoker)"),
+    enemy: () => "4(HDHunter)",
+  };
+  const rendered = (latencySec: number, died = true) => {
+    const point = {
+      tSec: 105,
+      leadCd: {
+        spellId: "370965",
+        spellName: "The Hunt",
+        casterName: "Hunter-R",
+        casterSpec: "Havoc Demon Hunter",
+        castSec: 105,
+      },
+      extraCds: [],
+      pressured: {
+        unitId: "f2",
+        name: "Warrior-R",
+        minHpPct: 20,
+        minHpSec: 109,
+        startHpPct: 90,
+        startHpSec: 105,
+        died,
+      },
+      responded: true,
+      feasible: true,
+      anyFriendlyDeath: died,
+      friendlyOutcomes: [],
+      responseCasts: [
+        {
+          category: "healCd",
+          spellId: "370960",
+          spellName: "Emerald Communion",
+          casterName: "Evoker-R",
+          casterId: "f3",
+          tSec: 110,
+          latencySec,
+        },
+      ],
+    } as unknown as BurstWindowDecisionPoint;
+    const [e] = formatBurstAnsweredLines([point], undefined, labels);
+    return `1:45  ${e!.line}`;
+  };
+  const death = (at: string) =>
+    `${at}  [DEATH]  2(AWarrior) (Arms Warrior — friendly)`;
+
+  it("the producer's line is the one the gate reads", () => {
+    expect(rendered(5.1)).toBe(
+      "1:45  [BURST ANSWERED]   enemy opened The Hunt (4(HDHunter)): 3(PEvoker) answered with Emerald Communion in 5.1s; 2(AWarrior) bottomed at 20% at 1:49 — 2(AWarrior) still died",
+    );
+  });
+  it("an answer the grid proves came after the death fails", () => {
+    // opened 1:45 or later, +6.1 s ≥ 1:51.05; the death is before 1:51
+    expect(
+      checkBurstAnsweredBeforeDeath([death("1:50"), rendered(6.1)]),
+    ).toHaveLength(1);
+    expect(
+      checkBurstAnsweredBeforeDeath([rendered(7.9), death("1:50")]),
+    ).toHaveLength(1);
+  });
+  it("an answer that can precede the death passes — the death's own second is beyond the grid", () => {
+    // 483f7433's own numbers (5.1 s, death at 1:50.385) are inside one second:
+    // the raw-instant tests in analysis pin that case
+    expect(
+      checkBurstAnsweredBeforeDeath([death("1:50"), rendered(5.1)]),
+    ).toEqual([]);
+    expect(
+      checkBurstAnsweredBeforeDeath([death("1:50"), rendered(6.0)]),
+    ).toEqual([]);
+    expect(
+      checkBurstAnsweredBeforeDeath([death("1:52"), rendered(6.1)]),
+    ).toEqual([]);
+  });
+  it("reads the unit's EARLIEST [DEATH] line, and only that unit's", () => {
+    expect(
+      checkBurstAnsweredBeforeDeath([
+        death("1:50"),
+        death("3:10"),
+        rendered(6.1),
+      ]),
+    ).toHaveLength(1);
+    expect(
+      checkBurstAnsweredBeforeDeath([
+        "1:46  [DEATH]  3(PEvoker) (Preservation Evoker — friendly)",
+        rendered(6.1),
+      ]),
+    ).toEqual([]);
+  });
+  it("a line whose pressured unit did not die is not read", () => {
+    expect(
+      checkBurstAnsweredBeforeDeath([death("1:46"), rendered(6.1, false)]),
+    ).toEqual([]);
   });
 });
 

@@ -532,6 +532,78 @@ describe("burstWindowDecisionPoints — outcomes are table-only", () => {
   });
 });
 
+describe("burstWindowDecisionPoints — a response pressed after the pressured friendly's death (T12 ⑧ i)", () => {
+  // 483f7433's shape: the pressured friendly dies 5.385 s into the window and
+  // a teammate's healing cooldown goes out around that instant.
+  const DEATH_MS = T0 + 15_385;
+  const at = (castSec: number, over: Record<string, unknown> = {}) =>
+    burstWindowDecisionPoints(
+      combat([
+        friendly({
+          damageIn: steadyDamage(10, 16),
+          advancedActions: [...hpTrack("F1", 0, 13, 60), hp(14, 20, "F1")],
+          deathRecords: [{ timestamp: DEATH_MS }],
+          ...over,
+        }),
+        friendly({
+          id: "F2",
+          name: "Mate-R",
+          advancedActions: hpTrack("F2", 0, 40, 100),
+          spellCastEvents: [cast(HEALING_TIDE, castSec)],
+        }),
+        hostile({ spellCastEvents: [cast(AR, 10)] }),
+      ]),
+    )[0]!;
+
+  it("marks a press 0.251 s after the death, and one on the UNIT_DIED's own millisecond", () => {
+    const late = at(15.636);
+    expect(late.pressured!.unitId).toBe("F1");
+    expect(late.pressured!.died).toBe(true);
+    expect(late.responseCasts).toHaveLength(1);
+    expect(late.responseCasts[0]!.afterPressuredDeath).toBe(true);
+    expect(at(15.385).responseCasts[0]!.afterPressuredDeath).toBe(true);
+  });
+
+  it("a press one millisecond before the death carries no mark", () => {
+    const r = at(15.384).responseCasts[0]!;
+    expect(r.afterPressuredDeath).toBeUndefined();
+    expect("afterPressuredDeath" in r).toBe(false);
+  });
+
+  it("a press after ANOTHER friendly's death carries no mark — the predicate is about the pressured unit", () => {
+    // F1 stays the pressured unit (lowest HP) and lives; F2's own death at
+    // 12.0 does not mark F2's … nor anybody's … response.
+    const pts = burstWindowDecisionPoints(
+      combat([
+        friendly({
+          damageIn: steadyDamage(10, 16),
+          advancedActions: [...hpTrack("F1", 0, 13, 60), hp(14, 20, "F1")],
+          spellCastEvents: [cast(BARKSKIN, 13)],
+        }),
+        friendly({
+          id: "F2",
+          name: "Mate-R",
+          advancedActions: hpTrack("F2", 0, 11, 100),
+          deathRecords: [{ timestamp: T0 + 12_000 }],
+        }),
+        hostile({ spellCastEvents: [cast(AR, 10)] }),
+      ]),
+    )[0]!;
+    expect(pts.pressured!.unitId).toBe("F1");
+    expect(pts.responseCasts[0]!.afterPressuredDeath).toBeUndefined();
+  });
+
+  it("`responded` and the response classes do not read the mark — the candidate's half is unchanged", () => {
+    const late = at(15.636);
+    const early = at(15.384);
+    expect(late.responded).toBe(true);
+    expect(late.responses).toEqual(early.responses);
+    expect(late.feasible).toBe(early.feasible);
+    expect(late.triaged).toBe(early.triaged);
+    expect(late.firstResponseSec).toBe(5.6);
+  });
+});
+
 describe("burstWindowDecisionPoints — the pressured friendly (correction 1)", () => {
   /** two friendlies: F1 takes the damage, F2 is the healer standing next to
    * it. `over1`/`over2` add whatever the case under test needs. */

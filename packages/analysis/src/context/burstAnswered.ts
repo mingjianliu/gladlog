@@ -89,6 +89,48 @@ export const BURST_ANSWERED_LEGEND = [
   "    minimum between the ticks: it can sit below the [STATE] number of that second).",
 ];
 
+/** The clause a line ends on when the pressured unit died in the window. */
+export const BURST_ANSWERED_STILL_DIED = "still died";
+
+/**
+ * A rendered `[BURST ANSWERED]` line (with its `m:ss` prefix) read back — the
+ * producer's own reader, for the gates (`promptQualityCheck`), so the wording
+ * and its parse cannot drift apart. `latencySec` is negative for
+ * `Ns before it opened`. Null for any other line.
+ */
+const BURST_ANSWERED_LINE_RE = new RegExp(
+  String.raw`^\s*(\d+):(\d{2})\s+\[BURST ANSWERED\].*: (\S+) answered with (.+?) ` +
+    String.raw`(?:in (\d+\.\d)s|(\d+\.\d)s before it opened); ` +
+    String.raw`(\S+) bottomed at (\d+)%(?: at (\d+):(\d{2}))?` +
+    // `a friendly died inside it` when the dead unit has no name
+    String.raw`(?: — (.+?) (${BURST_ANSWERED_STILL_DIED}|died inside it))?$`,
+);
+export interface ParsedBurstAnsweredLine {
+  /** the line's own second (the window's opening) */
+  atSec: number;
+  answerer: string;
+  spellName: string;
+  /** seconds from the lead cast to the answer, one decimal; negative = before */
+  latencySec: number;
+  pressured: string;
+  /** the line ends on `— <pressured> still died` */
+  pressuredDied: boolean;
+}
+export function parseBurstAnsweredLine(
+  line: string,
+): ParsedBurstAnsweredLine | null {
+  const m = line.match(BURST_ANSWERED_LINE_RE);
+  if (!m) return null;
+  return {
+    atSec: Number(m[1]) * 60 + Number(m[2]),
+    answerer: m[3]!,
+    spellName: m[4]!,
+    latencySec: m[5] !== undefined ? Number(m[5]) : -Number(m[6]),
+    pressured: m[7]!,
+    pressuredDied: m[12] === BURST_ANSWERED_STILL_DIED && m[11] === m[7],
+  };
+}
+
 export interface BurstAnsweredEntry {
   /** whole second the window opened — already on `fmtTime`'s grid */
   atSeconds: number;
@@ -112,11 +154,21 @@ export interface BurstAnsweredEntry {
  * trough). An external must target the pressured unit; a personal wall must
  * be the pressured unit's own; healing CDs and control answer the window as a
  * whole. An effect with a known end must reach the trough second.
+ *
+ * T12 ⑧ (i) (user ruling 2026-10-10): a response pressed at or after the
+ * pressured unit's death — the engine's `afterPressuredDeath`, `isDeadAt` on
+ * the raw instants, the UNIT_DIED's own millisecond included — answered
+ * nothing for that unit and is never the credited one (483f7433: the warrior
+ * died at 1:50.385, Emerald Communion went out at 1:50.636, the line read
+ * "answered with Emerald Communion in 5.1s … still died"). With no other
+ * creditable response the window gets no line. `responded` — the
+ * slow-defensive-response candidate's half — does not read the mark.
  */
 export function creditedAnswer(p: BurstWindowDecisionPoint) {
   const pr = p.pressured;
   if (!pr) return undefined;
   return p.responseCasts.find((r) => {
+    if (r.afterPressuredDeath) return false;
     // an external aimed at another unit went to the wrong unit; an
     // untargeted / ground destination (Spirit Link, Barrier — the empty GUID
     // "0000000000000000") is a group effect and may cover the pressured unit
@@ -240,7 +292,7 @@ export function formatBurstAnsweredLines(
             : "a friendly"
           : null;
       const diedPart = pressured.died
-        ? ` — ${friendly(pressured.name)} still died`
+        ? ` — ${friendly(pressured.name)} ${BURST_ANSWERED_STILL_DIED}`
         : otherDeath
           ? ` — ${otherDeath} died inside it`
           : "";
