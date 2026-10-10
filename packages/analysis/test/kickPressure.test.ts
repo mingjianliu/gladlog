@@ -12,6 +12,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { CRISIS_HP_PCT_RENDERED } from "../src/analysis/crisisDecisionPoints";
 import { kickIsHarmless, kickPressureFor } from "../src/analysis/kickPressure";
 import { ensureAnalysisData } from "../src/data/ensure";
+import { gridHpPct, isTickBelowTrough } from "../src/utils/cooldowns";
 import {
   FULL_IMMUNITY_IDS,
   SCHOOL_LIMITED_IMMUNITY_IDS,
@@ -200,6 +201,77 @@ describe("kickPressureFor", () => {
       )({ atSeconds: 72.5, lockoutDurationSeconds: 3 });
       expect(p.ours.low).toBeUndefined();
     }
+  });
+
+  // FT-T03 (user ruling 2026-10-10, D7): whether the side HAS a low is the
+  // grid's question; what the fact prints is the trough inside the lockout.
+  describe("the low is a trough — the decision stays on the [STATE] grid (FT-T03)", () => {
+    const at = (s: number, pct: number) =>
+      makeAdvancedAction(T0 + s * 1000, 0, 0, 100, pct);
+    const mageWith = (
+      points: Record<number, number>,
+      between: Array<[number, number]>,
+    ) => {
+      const m = friendlyMage(points);
+      return makeUnit("f2", {
+        name: "Mage",
+        spec: CombatUnitSpec.Mage_Frost,
+        reaction: CombatUnitReaction.Friendly,
+        info: {},
+        advancedActions: [
+          ...m.advancedActions,
+          ...between.map(([s, pct]) => at(s, pct)),
+        ].sort((a, b) => a.timestamp - b.timestamp),
+      });
+    };
+    const kick = { atSeconds: 72.5, lockoutDurationSeconds: 3 };
+
+    it("a dip between two ticks is the printed low, at the second it happened", () => {
+      // ticks: 72 → 38, 73 → 38, 74 → 80; the mage reads 9 % at 73.4
+      const mate = mageWith({ 0: 100, 72: 38, 74: 80 }, [[73.4, 9]]);
+      const p = pressure(mate, enemyRet([]))(kick);
+      expect(p.ours.low).toEqual({ unit: "Mage", pct: 9, atSec: 73 });
+      // the [STATE] tick of that second is untouched
+      expect(gridHpPct(mate, T0 + 73_000)).toBe(38);
+      // …and the trough is never above a tick of the window
+      for (let s = 72; s <= 76; s++)
+        expect(isTickBelowTrough(gridHpPct(mate, T0 + s * 1000)!, 9)).toBe(
+          false,
+        );
+    });
+
+    it("a dip under the crisis line that no tick shows does NOT create a low: the kick stays unlisted", () => {
+      // every tick reads 80; 20 % at 73.4 only
+      const mate = mageWith({ 0: 80 }, [[73.4, 20]]);
+      const p = pressure(mate, enemyRet([]))(kick);
+      expect(p.ours.low).toBeUndefined();
+      expect(kickIsHarmless(p)).toBe(true);
+    });
+
+    it("the lockout bounds the samples: a dip in the kick's second BEFORE the kick, or after the lock ended, is not its low", () => {
+      // 72.2 s is before the kick (72.5); 75.8 s is after the lock ended (75.5)
+      const mate = mageWith({ 0: 100, 72: 38, 74: 80 }, [
+        [72.2, 5],
+        [75.8, 4],
+      ]);
+      const p = pressure(mate, enemyRet([]))(kick);
+      expect(p.ours.low).toEqual({ unit: "Mage", pct: 38, atSec: 72 });
+    });
+
+    it("a full-immunity second's samples are left out like its tick (ruling A33)", () => {
+      // Ice Block 69.6 → 75.9 covers seconds 70..75: the 9 % at 73.4 is
+      // inside it, and the tick at 76 reads 80
+      const base = mageWith({ 0: 100, 72: 38, 76: 80 }, [[73.4, 9]]);
+      const blocked = makeUnit("f2", {
+        name: "Mage",
+        spec: CombatUnitSpec.Mage_Frost,
+        reaction: CombatUnitReaction.Friendly,
+        info: {},
+        advancedActions: base.advancedActions,
+        auraEvents: friendlyMage({ 0: 100 }, [69.559, 75.865]).auraEvents,
+      });
+      expect(pressure(blocked, enemyRet([]))(kick).ours.low).toBeUndefined();
+    });
   });
 
   it("a tick after the immunity ended still counts", () => {

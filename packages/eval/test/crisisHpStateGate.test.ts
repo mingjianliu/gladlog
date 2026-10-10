@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   checkCrisisHpStateConsistency,
   checkCrisisStateTickPresent,
+  crisisHpProbeMismatch,
   crisisHpStateProbes,
 } from "../src/quality/promptQualityCheck";
 
@@ -118,6 +119,77 @@ describe("checkCrisisHpStateConsistency (11th hardFailure class)", () => {
         cdHoarded("27", "Tank-T", "99"),
       ]),
     ).toEqual([]);
+  });
+});
+
+// FT-T03 (user ruling 2026-10-10, D7): "the 'trough' numbers may leave the
+// whole-second grid and read the true minimum inside their window; the
+// [STATE] point readings, the crisis crossing instants and cd-hoarded's
+// `crisisHpPct` do NOT move".
+describe("checkCrisisHpStateConsistency — a trough fact is not a point reading (FT-T03)", () => {
+  const kickEaten = (ourLowPct: string, ourLowT: string) =>
+    `  - id=kick-eaten:P1:26.4 type=kick-eaten t=26.4s units=Heals-R ` +
+    `facts={t=26.4, interrupted=Healing Wave, lockout=3, ourLowUnit=Tank-T, ourLowPct=${ourLowPct}, ourLowT=${ourLowT}, enemyBurst=Trueshot}`;
+
+  it("kick-eaten: a low BELOW the tick of its own second → passes (the tick is the start of that second)", () => {
+    // 0:27 tick: Tank-T 38; the lowest reading inside that second was 12
+    expect(
+      checkCrisisHpStateConsistency([
+        ...ROSTER,
+        STATE_27,
+        kickEaten("12", "27"),
+      ]),
+    ).toEqual([]);
+    expect(
+      checkCrisisHpStateConsistency([
+        ...ROSTER,
+        STATE_27,
+        kickEaten("38", "27"),
+      ]),
+    ).toEqual([]);
+  });
+
+  it("kick-eaten: a tick below the low → red; a `dead` tick → red", () => {
+    const fails = checkCrisisHpStateConsistency([
+      ...ROSTER,
+      STATE_27,
+      kickEaten("40", "27"),
+    ]);
+    expect(fails).toHaveLength(1);
+    expect(fails[0]).toContain("kick-eaten");
+    expect(fails[0]).toContain("40%");
+    expect(fails[0]).toContain("38%");
+    expect(
+      checkCrisisHpStateConsistency([
+        ...ROSTER,
+        "0:27  [STATE]   friends 1(RShaman):71 2(FWarrior):dead",
+        kickEaten("12", "27"),
+      ]),
+    ).toHaveLength(1);
+  });
+
+  it("the point readings did not move: cd-hoarded one point under its tick is still red", () => {
+    expect(
+      checkCrisisHpStateConsistency([
+        ...ROSTER,
+        STATE_27,
+        cdHoarded("27", "Tank-T", "37"),
+      ]),
+    ).toHaveLength(1);
+  });
+
+  it("the probe says which kind it is, and one predicate judges both (the scan script's count)", () => {
+    const probes = crisisHpStateProbes([
+      ...ROSTER,
+      STATE_27,
+      cdHoarded("27", "Tank-T", "37"),
+      kickEaten("12", "27"),
+    ]);
+    expect(probes.map((p) => [p.type, p.trough])).toEqual([
+      ["cd-hoarded", false],
+      ["kick-eaten", true],
+    ]);
+    expect(probes.map(crisisHpProbeMismatch)).toEqual([true, false]);
   });
 });
 

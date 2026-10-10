@@ -3415,23 +3415,46 @@ const STATE_TOKEN = /(\d+)\([^)]*\):(\d+|dead|ghost)\b/g;
  * which facts carry the unit name / the HP claim / the second the claim is
  * about. `t` is that second by default; `slow-defensive-response` overrides it
  * because its HP fact is a MIN over the window, not the value at the window
- * start, so it renders (and is checked at) its own `pressuredHpT`. */
-const CRISIS_HP_FACT_KEYS = {
+ * start, so it renders (and is checked at) its own `pressuredHpT`.
+ *
+ * `trough: true` (FT-T03, user ruling 2026-10-10, D7): the fact is a TROUGH —
+ * the true minimum inside its window (`hpTroughInWindow`), printed at the
+ * second it happened — not a point reading. Its same-second `[STATE]` tick
+ * is the reading at the START of that second, so the two are not equal; the
+ * invariant is that the tick never reads BELOW the fact (`isTickBelowTrough`)
+ * and is not `dead`. The point readings (no flag) keep exact equality: the
+ * ruling leaves cd-hoarded's `crisisHpPct` and the crossing instants on the
+ * grid. */
+type CrisisHpFactType =
+  | "cd-hoarded"
+  | "crisis-no-response"
+  | "slow-defensive-response"
+  | "kick-eaten";
+const CRISIS_HP_FACT_KEYS: Record<
+  CrisisHpFactType,
+  ReadonlyArray<{ unit: string; hp: string; at: string; trough?: true }>
+> = {
   "cd-hoarded": [{ unit: "crisisUnit", hp: "crisisHpPct", at: "t" }],
   "crisis-no-response": [{ unit: "unit", hp: "hpPct", at: "t" }],
   "slow-defensive-response": [
     { unit: "pressured", hp: "pressuredHpPct", at: "pressuredHpT" },
   ],
-  // GH #113: both sides' lowest unit during the kick's lockout, read with
-  // gridHpMinInWindow — the [STATE] sampler.
+  // GH #113: the lowest unit of each side during the kick's lockout. Whether
+  // the fact exists is decided on the [STATE] grid (`gridHpMinInWindow`);
+  // its value is the trough inside the lockout. Only the fact's own second
+  // is checked: a full-immunity second is left out of the minimum, and the
+  // text does not say which seconds those were.
   "kick-eaten": [
-    { unit: "ourLowUnit", hp: "ourLowPct", at: "ourLowT" },
-    { unit: "theirLowUnit", hp: "theirLowPct", at: "theirLowT" },
+    { unit: "ourLowUnit", hp: "ourLowPct", at: "ourLowT", trough: true },
+    { unit: "theirLowUnit", hp: "theirLowPct", at: "theirLowT", trough: true },
   ],
-} as const;
+};
 
 export interface CrisisHpStateProbe {
-  type: keyof typeof CRISIS_HP_FACT_KEYS;
+  type: CrisisHpFactType;
+  /** the fact is a trough (a minimum inside a window), not a point reading —
+   * see `CRISIS_HP_FACT_KEYS` and `crisisHpProbeMismatch` */
+  trough: boolean;
   /** 0-based index into `lines` */
   lineIndex: number;
   /** the rendered second the fact's `t` floors onto (`fmtTime`'s grid) */
@@ -3496,7 +3519,8 @@ export function crisisHpStateProbes(lines: string[]): CrisisHpStateProbe[] {
         const tick =
           unitId === null ? undefined : stateAt.get(tSecond)?.get(unitId);
         probes.push({
-          type: type as keyof typeof CRISIS_HP_FACT_KEYS,
+          type: type as CrisisHpFactType,
+          trough: keys.trough === true,
           lineIndex: i,
           tSecond,
           unitName,
@@ -3596,6 +3620,23 @@ export function checkBurstAnsweredBottomConsistency(lines: string[]): string[] {
 }
 
 /**
+ * Does a covered probe contradict its `[STATE]` tick? One predicate for the
+ * gate and the standing measurement (`scripts/crisisHpStateScan.ts`):
+ *  - a point reading must EQUAL the tick;
+ *  - a trough must not be ABOVE it (`isTickBelowTrough`, the analysis side's
+ *    own invariant);
+ *  - `dead` contradicts either. An uncovered probe (`stateHp === null`) is
+ *    never a mismatch.
+ */
+export function crisisHpProbeMismatch(p: CrisisHpStateProbe): boolean {
+  if (p.stateHp === null) return false;
+  if (p.stateHp === "dead") return true;
+  return p.trough
+    ? isTickBelowTrough(p.stateHp, p.factHp)
+    : p.stateHp !== p.factHp;
+}
+
+/**
  * Hard invariant (2026-08-30): a `cd-hoarded` / `crisis-no-response` menu line
  * claims a unit's HP at a rendered second; when the timeline also emits a
  * `[STATE]` tick for that unit at that same rendered second, the two numbers
@@ -3613,12 +3654,17 @@ export function checkBurstAnsweredBottomConsistency(lines: string[]): string[] {
  *
  * A `dead` [STATE] tick against a numeric HP fact is also a failure — the two
  * lines then disagree about whether the unit was even alive.
+ *
+ * FT-T03 (user ruling 2026-10-10, D7): a TROUGH fact (kick-eaten's
+ * `ourLowPct` / `theirLowPct`) is the true minimum inside its window and may
+ * sit below its second's tick; for those the failure is a tick BELOW the
+ * fact, or `dead` (`crisisHpProbeMismatch`). The point readings — cd-hoarded,
+ * crisis-no-response — keep exact equality.
  */
 export function checkCrisisHpStateConsistency(lines: string[]): string[] {
   const failures: string[] = [];
   for (const p of crisisHpStateProbes(lines)) {
-    if (p.stateHp === null) continue;
-    if (p.stateHp === p.factHp) continue;
+    if (!crisisHpProbeMismatch(p)) continue;
     failures.push(
       `line ${p.lineIndex + 1}: ${p.type} 声称 ${p.unitName} 在 ${fmtMmSs(p.tSecond)} 为 ${p.factHp}%,` +
         `而同秒 [STATE] 报 ${p.stateHp === "dead" ? "dead" : `${p.stateHp}%`}`,

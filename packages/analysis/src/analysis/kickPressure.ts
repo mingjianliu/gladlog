@@ -22,9 +22,24 @@
  *
  * Window: the lockout on the render grid, whole seconds
  * [floor(kick), ceil(kick + lockout)]; deaths up to KICK_OUTCOME_S after the
- * lockout ends. HP is `gridHpMinInWindow` — the [STATE] tick sampler — with
- * CRISIS_HP_PCT_RENDERED as the low line, so a rendered "13%" is the same
- * reading a [STATE] tick at that second prints.
+ * lockout ends.
+ *
+ * HP, two readings since FT-T03 (user ruling 2026-10-10, D7 — "the 'trough'
+ * numbers may leave the whole-second grid and read the true minimum inside
+ * their window; the [STATE] point readings, the crisis crossing instants …
+ * do NOT move"):
+ *  - WHETHER a side has a unit at the crisis line (`low` exists — which
+ *    decides `kickIsHarmless`, i.e. whether the kick is listed at all, and
+ *    its cap tier) is asked of `gridHpMinInWindow`, the [STATE] tick
+ *    sampler, against CRISIS_HP_PCT_RENDERED, exactly as before. No
+ *    kick-eaten candidate appears or disappears with the ruling.
+ *  - WHAT the fact prints — the side's lowest unit, how low, and when — is
+ *    the trough: `hpTroughInWindow` over the same seconds, its samples
+ *    bounded to the lockout itself [kick, kick + lockout]. It is never above
+ *    the grid minimum, so a low that exists on the grid always has one to
+ *    print; `ourLowPct` can sit below the [STATE] tick of `ourLowT`, and the
+ *    unit named can be another one than the grid's lowest (rarely: when a
+ *    different unit dipped lower between two ticks).
  *
  * Triage 2026-09-29 (kick-eaten F-K3 / F-K9b), user rulings 2026-09-30:
  *  - A31 = A: an offensive cooldown counts only when it was ALREADY RUNNING
@@ -49,6 +64,7 @@ import { getEnglishSpellName } from "../data/spellEffectData";
 import { burstCastSpan } from "../utils/burstLedger";
 import {
   gridHpMinInWindow,
+  hpTroughInWindow,
   kitSpellReadyAt,
   playerTalentIdSets,
 } from "../utils/cooldowns";
@@ -61,7 +77,10 @@ import { CRISIS_HP_PCT_RENDERED } from "./crisisDecisionPoints";
 export const KICK_OUTCOME_S = 5;
 
 export interface KickSidePressure {
-  /** The side's lowest unit at or below CRISIS_HP_PCT_RENDERED in the window. */
+  /** Present when a unit of the side sat at or below CRISIS_HP_PCT_RENDERED
+   * on a [STATE] tick of the window (the decision, on the grid). The values
+   * are the side's lowest TROUGH inside the lockout and the second it
+   * happened at (`hpTroughInWindow`, FT-T03) — at or below that tick. */
   low?: { unit: string; pct: number; atSec: number };
   /** The side's first death from the kick to KICK_OUTCOME_S after the lockout. */
   death?: { unit: string; atSec: number };
@@ -153,12 +172,27 @@ export function kickPressureFor(params: {
   ): KickSidePressure => {
     const s0 = Math.floor(t0);
     const s1 = Math.ceil(t1);
+    // the lockout itself, in whole ms: the trough's samples are bounded to it
+    const span = {
+      fromMs: start + Math.round(t0 * 1000),
+      toMs: start + Math.round(t1 * 1000),
+    };
+    let gridLow = false;
     let low: KickSidePressure["low"];
     for (const u of units) {
-      const m = gridHpMinInWindow(u, start, s0, s1, immuneAt(u));
+      const skip = immuneAt(u);
+      // the DECISION stays on the [STATE] grid (ruling D7: crossings do not
+      // move) — is any unit of this side at the crisis line on a tick?
+      const g = gridHpMinInWindow(u, start, s0, s1, skip);
+      if (g && g.pct <= CRISIS_HP_PCT_RENDERED) gridLow = true;
+      // the FACT is the trough: the true minimum inside the lockout
+      const m = hpTroughInWindow(u, start, s0, s1, skip, span);
       if (m && m.pct <= CRISIS_HP_PCT_RENDERED && (!low || m.pct < low.pct))
         low = { unit: u.name, pct: Math.round(m.pct), atSec: m.atSec };
     }
+    // a trough under the line with every tick above it is not a low: the
+    // grid did not see a unit at the crisis line, so the fact is not added
+    if (!gridLow) low = undefined;
     let death: KickSidePressure["death"];
     for (const u of units) {
       const d = deathS(u);

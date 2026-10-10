@@ -27,6 +27,7 @@ import { readdirSync,readFileSync } from "node:fs";
 import path from "node:path";
 
 import {
+  crisisHpProbeMismatch,
   type CrisisHpStateProbe,
   crisisHpStateProbes,
 } from "../src/quality/promptQualityCheck";
@@ -73,7 +74,9 @@ for (const file of files) {
     t.total++;
     if (p.stateHp === null) continue;
     t.covered++;
-    if (p.stateHp === p.factHp) continue;
+    // the gate's own comparison: equality for a point reading, "the tick is
+    // not below it" for a trough fact (FT-T03)
+    if (!crisisHpProbeMismatch(p)) continue;
     t.mismatch++;
     if (examples.length < maxExamples) {
       const mm = `${Math.floor(p.tSecond / 60)}:${String(p.tSecond % 60).padStart(2, "0")}`;
