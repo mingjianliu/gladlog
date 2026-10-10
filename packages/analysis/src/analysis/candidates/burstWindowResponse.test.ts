@@ -256,6 +256,51 @@ describe("burstWindowResponseEvents — the rendered facts", () => {
     expect(evts[0]!.spellId).toBe("360194");
   });
 
+  // FT-T03 (user ruling 2026-10-10, D7): "fell to N% inside the window" is
+  // a trough — the engine's true-minimum pair — while which windows are
+  // listed, and in what order, still reads the grid pair.
+  it("FT-T03: `pressuredHpPct` / `pressuredHpT` are the engine's trough pair; the order under the cap is still the grid minimum's", () => {
+    const withTrough = (
+      tSec: number,
+      minHpPct: number,
+      troughHpPct: number,
+      troughHpSec: number,
+    ) =>
+      point({
+        tSec,
+        endSec: tSec + 15,
+        pressured: {
+          ...point().pressured!,
+          minHpPct,
+          minHpSec: tSec + 5,
+          troughHpPct,
+          troughHpSec,
+        },
+      });
+    const one = burstWindowResponseEvents(
+      [withTrough(40, 31, 8, 43)],
+      owner,
+      probes(),
+    );
+    expect(one[0]!.facts.pressuredHpPct).toBe("8");
+    expect(one[0]!.facts.pressuredHpT).toBe("43");
+    // cap 1: the window with the lower GRID minimum is the one kept, although
+    // the other one's trough is lower
+    const kept = burstWindowResponseEvents(
+      [withTrough(40, 31, 5, 43), withTrough(80, 20, 18, 84)],
+      owner,
+      probes(),
+      { cap: 1 },
+    );
+    expect(kept).toHaveLength(1);
+    expect(kept[0]!.t).toBe(80);
+    expect(kept[0]!.facts.pressuredHpPct).toBe("18");
+    // a hand-built point without the trough pair: the grid pair stands in
+    const plain = burstWindowResponseEvents([point()], owner, probes());
+    expect(plain[0]!.facts.pressuredHpPct).toBe("31");
+    expect(plain[0]!.facts.pressuredHpT).toBe("45");
+  });
+
   it("`t` and `pressuredHpT` are whole rendered seconds (render-grid rule)", () => {
     const evts = burstWindowResponseEvents([point()], owner, probes());
     for (const key of ["t", "pressuredHpT"]) {

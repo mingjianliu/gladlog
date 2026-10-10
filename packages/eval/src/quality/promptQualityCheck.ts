@@ -3423,9 +3423,9 @@ const STATE_TOKEN = /(\d+)\([^)]*\):(\d+|dead|ghost)\b/g;
  * second it happened — not a point reading. Its same-second `[STATE]` tick
  * is the reading at the START of that second, so the two are not equal; the
  * invariant is that the tick never reads BELOW the fact (`isTickBelowTrough`)
- * and is not `dead`. The point readings (no flag) keep exact equality: the
- * ruling leaves cd-hoarded's `crisisHpPct` and the crossing instants on the
- * grid. */
+ * and is not `dead`. The point readings (no flag: cd-hoarded,
+ * crisis-no-response) keep exact equality: the ruling leaves cd-hoarded's
+ * `crisisHpPct` and the crossing instants on the grid. */
 type CrisisHpFactType =
   | "cd-hoarded"
   | "crisis-no-response"
@@ -3437,8 +3437,16 @@ const CRISIS_HP_FACT_KEYS: Record<
 > = {
   "cd-hoarded": [{ unit: "crisisUnit", hp: "crisisHpPct", at: "t" }],
   "crisis-no-response": [{ unit: "unit", hp: "hpPct", at: "t" }],
+  // the pressured friendly's lowest HP inside the burst window — the
+  // engine's trough pair (`troughHpPct` / `troughHpSec`); whether the window
+  // is a candidate is decided on the grid pair (`triaged`)
   "slow-defensive-response": [
-    { unit: "pressured", hp: "pressuredHpPct", at: "pressuredHpT" },
+    {
+      unit: "pressured",
+      hp: "pressuredHpPct",
+      at: "pressuredHpT",
+      trough: true,
+    },
   ],
   // GH #113: the lowest unit of each side during the kick's lockout. Whether
   // the fact exists is decided on the [STATE] grid (`gridHpMinInWindow`);
@@ -3732,7 +3740,8 @@ export function crisisHpProbeMismatch(p: CrisisHpStateProbe): boolean {
  * lines then disagree about whether the unit was even alive.
  *
  * FT-T03 (user ruling 2026-10-10, D7): a TROUGH fact (kick-eaten's
- * `ourLowPct` / `theirLowPct`) is the true minimum inside its window and may
+ * `ourLowPct` / `theirLowPct`, slow-defensive-response's `pressuredHpPct`)
+ * is the true minimum inside its window and may
  * sit below its second's tick; for those the failure is a tick BELOW the
  * fact, or `dead` (`crisisHpProbeMismatch`). The point readings — cd-hoarded,
  * crisis-no-response — keep exact equality.

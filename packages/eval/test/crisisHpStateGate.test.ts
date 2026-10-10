@@ -168,6 +168,29 @@ describe("checkCrisisHpStateConsistency — a trough fact is not a point reading
     ).toHaveLength(1);
   });
 
+  it("slow-defensive-response: `pressuredHpPct` is a trough too — below its `pressuredHpT` tick passes, above it is red", () => {
+    const slow = (hp: string) =>
+      `  - id=slow-defensive-response:P1:20 type=slow-defensive-response t=20s units=Heals-R ` +
+      `facts={t=20, leadCd=Deathmark, pressured=Tank-T, pressuredHpPct=${hp}, pressuredHpT=27, diedInWindow=no}`;
+    // 0:27 tick: Tank-T 38
+    expect(
+      checkCrisisHpStateConsistency([...ROSTER, STATE_27, slow("9")]),
+    ).toEqual([]);
+    expect(
+      checkCrisisHpStateConsistency([...ROSTER, STATE_27, slow("38")]),
+    ).toEqual([]);
+    const fails = checkCrisisHpStateConsistency([
+      ...ROSTER,
+      STATE_27,
+      slow("41"),
+    ]);
+    expect(fails).toHaveLength(1);
+    expect(fails[0]).toContain("slow-defensive-response");
+    expect(
+      crisisHpStateProbes([...ROSTER, STATE_27, slow("9")])[0]!.trough,
+    ).toBe(true);
+  });
+
   it("the point readings did not move: cd-hoarded one point under its tick is still red", () => {
     expect(
       checkCrisisHpStateConsistency([
