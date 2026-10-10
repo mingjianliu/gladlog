@@ -29,7 +29,7 @@ import { getEnglishSpellName } from "../../data/spellEffectData";
 import { MELEE_RANGE_YD, spellRangeYards } from "../../data/spellReach";
 import { buildAuraIntervals } from "../../utils/auraIntervals";
 import {
-  buildCannotCastIntervals,
+  cannotCastIntervalsForSpells,
   enemySourceIds,
 } from "../../utils/cannotCastIntervals";
 import { castingLockIntervalsOf } from "../../utils/castingLocks";
@@ -332,7 +332,13 @@ export function kickPriorityDecisionPoints(
         // impact audit 2026-09-26.
         const kit = interruptForUnit(f as never);
         iv = [
-          ...buildCannotCastIntervals(f as never, cannotCastSrcIds),
+          // FT-T10 PREVIEW: a kick lockout counts only when it locks the
+          // school of this friend's interrupt (no kit → every lockout)
+          ...cannotCastIntervalsForSpells(
+            f as never,
+            cannotCastSrcIds,
+            kit ? [kit.spellId] : undefined,
+          ),
           ...castingLockIntervalsOf(f as never, combat, kit?.spellId),
         ];
       } catch {
