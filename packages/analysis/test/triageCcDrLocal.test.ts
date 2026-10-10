@@ -50,6 +50,48 @@ describe("cc-dr F-RT1 — a rooted unit that acted is not locked out", () => {
     );
     expect(e!.line).not.toContain("worked like hard CC");
   });
+  it("FT board item: 给了按名字查标签的函数时,被定身者、来源和受伤队友都印花名册标签", () => {
+    const label = (n: string) =>
+      ({
+        "Eaxlol-Sargeras-US": "1(ARogue)",
+        "Shatters-Garrosh-US": "5(FMage)",
+        "Mender-Illidan-US": "2(RDruid)",
+      })[n] ?? n;
+    const [mine] = formatRootReachabilityEntries(
+      [root({ sourcePlayerName: "Shatters-Garrosh-US" })],
+      "o",
+      undefined,
+      label,
+    );
+    expect(mine!.line).toContain(
+      "Frost Nova (from 5(FMage)) rooted friendly [YOU] 1(ARogue) (melee) for 6.0s",
+    );
+    const [totem] = formatRootReachabilityEntries(
+      [
+        root({
+          rootedId: "h",
+          rootedName: "Mender-Illidan-US",
+          rootedRole: "healer",
+          sourceLabel: "Shatters's totem",
+          sourcePlayerName: "Shatters-Garrosh-US",
+          sourceKind: "totem",
+          worstAlly: { name: "Eaxlol-Sargeras-US", seconds: 4 },
+        }),
+      ],
+      "o",
+      undefined,
+      label,
+    );
+    expect(totem!.line).toContain(
+      "(from 5(FMage)'s totem) rooted friendly 2(RDruid) (healer)",
+    );
+    expect(totem!.line).toContain("1(ARogue) (taking damage) out of range/LoS");
+    // 没给函数:原样(名字),旧调用方不受影响
+    const [plain] = formatRootReachabilityEntries([root({})], "o");
+    expect(plain!.line).toContain(
+      "(from Shatters-Garrosh-US) rooted friendly [YOU] Eaxlol-Sargeras-US",
+    );
+  });
   it("control: no casts on others keeps the hard-CC wording", () => {
     const [e] = formatRootReachabilityEntries([root({})], "o");
     expect(e!.line).toContain(

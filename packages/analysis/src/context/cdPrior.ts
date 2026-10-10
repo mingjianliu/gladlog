@@ -19,6 +19,7 @@
 import type { CdPriorHoldEpisode } from "../analysis/cdTriggerPrior";
 import { CRISIS_HP_PCT_RENDERED } from "../analysis/crisisDecisionPoints";
 import { fmtTime } from "../utils/renderGrid";
+import type { ContextFactLabels } from "./burstAnswered";
 
 export const CD_PRIOR_TAG = "[CD PRIOR]";
 
@@ -43,8 +44,10 @@ export function formatCdPriorLines(
   episodes: CdPriorHoldEpisode[],
   cohort: { spec: string; heroTree: string },
   overrides?: { cap?: number },
+  labels?: ContextFactLabels,
 ): CdPriorEntry[] {
   const cap = overrides?.cap ?? CD_PRIOR_CAP;
+  const friendly = labels?.friendly ?? ((n: string) => n);
   const ranked = [...episodes].sort(
     (a, b) => a.minHpPct - b.minHpPct || a.tSec - b.tSec,
   );
@@ -55,7 +58,9 @@ export function formatCdPriorLines(
         e.ref.fellBack || cohort.heroTree === "*"
           ? `${cohort.spec} (spec-wide)`
           : `${cohort.spec} · ${cohort.heroTree}`;
-      const who = e.minUnitIsOwner ? `${e.minUnitName} (you)` : e.minUnitName;
+      const who = e.minUnitIsOwner
+        ? `${friendly(e.minUnitName)} (you)`
+        : friendly(e.minUnitName);
       return {
         atSeconds: e.tSec,
         line:

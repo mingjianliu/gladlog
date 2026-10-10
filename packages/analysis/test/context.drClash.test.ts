@@ -71,7 +71,11 @@ describe("buildMatchTimeline — [DR CLASH] context lines (GH #67 S3)", () => {
             spellName: "Gouge",
             casterName: "OwnerPlayer",
             casterSpec: "Subtlety Rogue",
-            drInfo: { category: "Incapacitate", level: "Full", sequenceIndex: 0 },
+            drInfo: {
+              category: "Incapacitate",
+              level: "Full",
+              sequenceIndex: 0,
+            },
           },
           {
             atSeconds: 20,
@@ -80,7 +84,11 @@ describe("buildMatchTimeline — [DR CLASH] context lines (GH #67 S3)", () => {
             spellName: "Freezing Trap",
             casterName: "HunterTeammate",
             casterSpec: "Survival Hunter",
-            drInfo: { category: "Incapacitate", level: "50%", sequenceIndex: 1 },
+            drInfo: {
+              category: "Incapacitate",
+              level: "50%",
+              sequenceIndex: 1,
+            },
           },
         ],
       },
@@ -115,12 +123,49 @@ describe("buildMatchTimeline — [DR CLASH] context lines (GH #67 S3)", () => {
     );
     // Legend included conditionally
     expect(timeline).toContain(DR_CLASH_LEGEND[0]);
+
+    // FT board item: with the rosters' id maps the ENEMY target reads its
+    // roster label too (it printed the bare character name)
+    const labelled = buildMatchTimeline({
+      owner,
+      ownerSpec: "Subtlety Rogue",
+      friends: [owner, teammate],
+      enemies: [enemy],
+      allUnits: [owner, teammate, enemy],
+      playerIdMap: new Map([
+        [owner.name, 1],
+        [teammate.name, 2],
+      ]),
+      enemyIdMap: new Map([[enemy.name, 4]]),
+      matchStartMs: T0,
+      matchEndMs: T0 + 60_000,
+      isHealer: false,
+      ownerCDs: [],
+      teammateCDs: [],
+      enemyCDTimeline: { players: [], alignedBurstWindows: [] },
+      ccTrinketSummaries: [],
+      dispelSummary: emptyDispel as any,
+      enemyDispelSummary: emptyDispel as any,
+      pressureWindows: [],
+      healingGaps: [],
+      friendlyDeaths: [],
+      enemyDeaths: [],
+      criticalWindowSeconds: new Set(),
+      outgoingCCChains,
+    });
+    const clash = labelled.split("\n").find((l) => l.includes("[DR CLASH]   "));
+    expect(clash).toMatch(/Freezing Trap on 4\S* landed at 50% DR/);
+    expect(clash).not.toContain("on EnemyHealer");
   });
 
   it("omits [DR CLASH] and legend when no teammate DR clash occurred", () => {
     const owner = makeUnit({ id: "P1", name: "OwnerPlayer" });
     const teammate = makeUnit({ id: "P2", name: "HunterTeammate" });
-    const enemy = makeUnit({ id: "E1", name: "EnemyHealer", reaction: CombatUnitReaction.Hostile });
+    const enemy = makeUnit({
+      id: "E1",
+      name: "EnemyHealer",
+      reaction: CombatUnitReaction.Hostile,
+    });
 
     const timeline = buildMatchTimeline({
       owner,

@@ -665,6 +665,23 @@ export function forbearanceStopsPress(
   return selfForbearanceActiveAt(target, allUnits, atSeconds, matchStartMs);
 }
 
+/** A cast's `timingContext` with its target named by the roster label
+ * (`target 2(AWarrior) at 100% HP`): the note is written at analysis time
+ * with the character name, and the timeline names players by label (FT
+ * board item, user ruling 2026-10-09). The numbers are untouched. */
+export function timingContextWithLabel(
+  cast: { timingContext?: string; targetName?: string },
+  label: (name: string) => string,
+): string {
+  const text = cast.timingContext ?? "";
+  return cast.targetName
+    ? text.replace(
+        `target ${cast.targetName} at `,
+        `target ${label(cast.targetName)} at `,
+      )
+    : text;
+}
+
 /** Forbearance's own aura id (DB2 Spell 25771). */
 export const FORBEARANCE_AURA_ID = "25771";
 /** How far a gated cast and the Forbearance line it writes sit apart. They
@@ -711,8 +728,7 @@ export function selfForbearanceUntil(
   const diedJustAfter = (removedMs: number) =>
     (unit.deathRecords ?? []).some(
       (d) =>
-        d.timestamp >= removedMs &&
-        d.timestamp - removedMs <= DEATH_CASCADE_MS,
+        d.timestamp >= removedMs && d.timestamp - removedMs <= DEATH_CASCADE_MS,
     );
   const applications: number[] = [];
   let open: { ts: number; srcUnitId?: string } | undefined;

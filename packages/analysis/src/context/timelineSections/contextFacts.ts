@@ -37,6 +37,7 @@ export function emitContextFactEntries(
     | "matchStartMs"
     | "owner"
     | "pid"
+    | "enemyPid"
   >,
 ) {
   const {
@@ -50,6 +51,7 @@ export function emitContextFactEntries(
     matchStartMs,
     owner,
     pid,
+    enemyPid,
   } = ctx;
 
   // ── [BURST ANSWERED] context lines ─────────────────────────────────────────
@@ -61,8 +63,13 @@ export function emitContextFactEntries(
   // must be decided on what actually RENDERS, not on what the builder
   // returned — otherwise a window opening after [MATCH END] leaves a legend
   // describing lines that are not in the prompt (1 of 309 corpus prompts).
+  // FT board item: these three line families name players by the
+  // timeline's roster label, like every other line
+  const labels = { friendly: pid, enemy: enemyPid };
   const burstAnsweredEntries = formatBurstAnsweredLines(
     burstWindows ?? [],
+    undefined,
+    labels,
   ).filter((e) => e.atSeconds <= matchEndSeconds);
   for (const e of burstAnsweredEntries) {
     addEntry(e.atSeconds, `${fmtTime(e.atSeconds)}  ${e.line}`);
@@ -74,9 +81,12 @@ export function emitContextFactEntries(
   // the legend is decided on what actually renders.
   const cdPriorEntries =
     cdPriorCohort && cdPriorEpisodes
-      ? formatCdPriorLines(cdPriorEpisodes, cdPriorCohort).filter(
-          (e) => e.atSeconds <= matchEndSeconds,
-        )
+      ? formatCdPriorLines(
+          cdPriorEpisodes,
+          cdPriorCohort,
+          undefined,
+          labels,
+        ).filter((e) => e.atSeconds <= matchEndSeconds)
       : [];
   for (const e of cdPriorEntries) {
     addEntry(e.atSeconds, `${fmtTime(e.atSeconds)}  ${e.line}`);
@@ -88,6 +98,8 @@ export function emitContextFactEntries(
   // render-vs-legend discipline as [CD PRIOR].
   const stackedDefensiveEntries = formatStackedDefensiveLines(
     stackedDefensives ?? [],
+    undefined,
+    labels,
   ).filter((e) => e.atSeconds <= matchEndSeconds);
   for (const e of stackedDefensiveEntries) {
     addEntry(e.atSeconds, `${fmtTime(e.atSeconds)}  ${e.line}`);
@@ -129,7 +141,9 @@ export function emitContextFactEntries(
       clash.priorCasterName === owner.name
         ? "your"
         : `${pid(clash.priorCasterName)}'s`;
-    const target = pid(clash.targetName);
+    // the diminished CC landed on an ENEMY: the enemy roster's label (`pid`
+    // only knows the friendly side and printed the bare character name)
+    const target = enemyPid(clash.targetName);
     const line = `[DR CLASH]   ${victimWho} ${clash.diminishedSpellName} on ${target} landed at ${clash.level} DR (${clash.category}) — ${priorWho} ${clash.priorSpellName} ${clash.gapSeconds}s earlier put them on DR`;
     drClashEntries.push({ atSeconds: clash.atSeconds, line });
     addEntry(clash.atSeconds, `${fmtTime(clash.atSeconds)}  ${line}`);

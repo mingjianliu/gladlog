@@ -122,7 +122,11 @@ export function creditedAnswer(p: BurstWindowDecisionPoint) {
       r.destId !== pr.unitId
     )
       return false;
-    if (r.category === "wall" && r.casterId !== undefined && r.casterId !== pr.unitId)
+    if (
+      r.category === "wall" &&
+      r.casterId !== undefined &&
+      r.casterId !== pr.unitId
+    )
       return false;
     // F-B7: a self-only heal CD answers only its caster's own pressure — the
     // wall rule, carried to `healCd` (06bb9860: Qqii's Dark Pact credited for
@@ -164,10 +168,23 @@ function isCreditable(p: BurstWindowDecisionPoint): boolean {
   );
 }
 
+/** How a context-fact line names a player: the timeline's roster label
+ * (`3(AWarrior)`), resolved by the caller. FT board item (user ruling
+ * 2026-10-09): these lines printed raw character names
+ * (`Lawrelin-Stormrage-US answered with Dragon's Breath`) while every other
+ * line of the timeline used the label — 201 lines in the 60 re-eval prompts.
+ * Absent (tests, other callers) = the name as it is. */
+export interface ContextFactLabels {
+  friendly: (name: string) => string;
+  enemy: (name: string) => string;
+}
+
 export function formatBurstAnsweredLines(
   points: BurstWindowDecisionPoint[],
   overrides?: { cap?: number },
+  labels?: ContextFactLabels,
 ): BurstAnsweredEntry[] {
+  const friendly = labels?.friendly ?? ((n: string) => n);
   const cap = overrides?.cap ?? BURST_ANSWERED_CAP;
   const eligible = points.filter(isCreditable);
   // Danger order — a window somebody died in first, then the deepest HP dip.
@@ -201,11 +218,18 @@ export function formatBurstAnsweredLines(
       // unit died inside the window and the line said nothing — the window
       // read as a clean answer. Same observable-consequence shape as the
       // pressured suffix (GH #70), never a verdict on the answer.
-      const otherDeath = !pressured.died && p.anyFriendlyDeath
-        ? (p.friendlyOutcomes.find((f) => f.died)?.name ?? "a friendly")
-        : null;
+      const otherDeathName =
+        !pressured.died && p.anyFriendlyDeath
+          ? p.friendlyOutcomes.find((f) => f.died)?.name
+          : undefined;
+      const otherDeath =
+        !pressured.died && p.anyFriendlyDeath
+          ? otherDeathName !== undefined
+            ? friendly(otherDeathName)
+            : "a friendly"
+          : null;
       const diedPart = pressured.died
-        ? ` — ${pressured.name} still died`
+        ? ` — ${friendly(pressured.name)} still died`
         : otherDeath
           ? ` — ${otherDeath} died inside it`
           : "";
@@ -213,9 +237,11 @@ export function formatBurstAnsweredLines(
         atSeconds: p.tSec,
         line:
           `${BURST_ANSWERED_TAG}   enemy opened ${p.leadCd.spellName}${extrasPart} ` +
-          `(${p.leadCd.casterSpec} ${p.leadCd.casterName}): ` +
-          `${first.casterName} answered with ${first.spellName} ${when}; ` +
-          `${pressured.name} bottomed at ${pressured.minHpPct}%` +
+          // the label carries the spec (`4(AWarrior)`); the long form stays
+          // only where the caller gave no labels
+          `(${labels ? labels.enemy(p.leadCd.casterName) : `${p.leadCd.casterSpec} ${p.leadCd.casterName}`}): ` +
+          `${friendly(first.casterName)} answered with ${first.spellName} ${when}; ` +
+          `${friendly(pressured.name)} bottomed at ${pressured.minHpPct}%` +
           // F-B3: the bottom is the minimum over the whole bounded window (up
           // to 55 s) — its second says whether it belongs to this go. Already
           // on the render grid (`minHpSec` is a whole second).

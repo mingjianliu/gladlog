@@ -898,12 +898,29 @@ export function buildMatchContext(
   // Merge each per-window exposure entry into the timeline at its timestamp so the
   // cause (burst + exposure state) sits next to its effects (CC landing, damage,
   // defensive responses) instead of in a block after the timeline.
-  const exposureInserts = formatHealerExposureEntries(healerExposures).map(
-    (entry) => ({
-      atSeconds: entry.atSeconds,
-      line: `${fmtTime(entry.atSeconds)}  ${entry.line}`,
-    }),
-  );
+  // FT board item (user ruling 2026-10-09): the roster label of a player
+  // NAME (`4(RShaman)`) — the [HEALER EXPOSURE] pillar hint and the [ROOT]
+  // line printed raw character names. An unknown name stays as it is.
+  const rosterLabelOfName = (name: string): string => {
+    const u = [
+      ...(friends as ICombatUnit[]),
+      ...(enemies as ICombatUnit[]),
+    ].find((x) => x.name === name);
+    if (!u) return name;
+    const map =
+      u.reaction === CombatUnitReaction.Friendly ? playerIdMap : enemyIdMap;
+    const n = map.get(u.name);
+    return n !== undefined
+      ? `${n}(${abbrevSpec(specToString(u.spec))})`
+      : u.name.split("-")[0]!;
+  };
+  const exposureInserts = formatHealerExposureEntries(
+    healerExposures,
+    rosterLabelOfName,
+  ).map((entry) => ({
+    atSeconds: entry.atSeconds,
+    line: `${fmtTime(entry.atSeconds)}  ${entry.line}`,
+  }));
   // [ROOT] context facts (GH #24, 2026-08-30): roots whose target could not
   // reach anyone for >= ROOT_UNREACHABLE_MIN_S. Same merge path as exposure.
   let rootInserts: Array<{ atSeconds: number; line: string }> = [];
@@ -929,6 +946,7 @@ export function buildMatchContext(
           ? `${n}(${abbrevSpec(specToString(u.spec))})`
           : u.name.split("-")[0]!;
       },
+      rosterLabelOfName,
     ).map((entry) => ({
       atSeconds: entry.atSeconds,
       line: `${fmtTime(entry.atSeconds)}  ${entry.line}`,

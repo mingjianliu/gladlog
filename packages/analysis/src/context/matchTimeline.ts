@@ -889,6 +889,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     matchStartMs,
     owner,
     pid,
+    enemyPid,
   });
 
   // ── [HEALER INACTIVITY] events (healer only) ────────────────────────────────────

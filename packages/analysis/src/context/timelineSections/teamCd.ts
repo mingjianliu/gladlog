@@ -21,6 +21,7 @@ import {
   gridHpPct,
   guardianSpiritSaveClause,
   isDeadAtRenderSecond,
+  timingContextWithLabel,
 } from "../../utils/cooldowns";
 import { fmtTime, toRenderSecond } from "../../utils/renderGrid";
 import { ALTER_TIME_CAST_ID, alterTimeReturnSeconds } from "./alterTime";
@@ -81,7 +82,7 @@ export function emitTeamCdEntries(
         // verbatim, no recompute (single-source predicate).
         const unnecessaryNote =
           !isProc && cast.timingLabel === "Unnecessary" && cast.timingContext
-            ? ` [UNNECESSARY — ${cast.timingContext}]`
+            ? ` [UNNECESSARY — ${timingContextWithLabel(cast, pid)}]`
             : "";
 
         // B112(a): "[TEAM] [CC] N (Spec): X" was misread as teammate N BEING CC'd. It is actually N

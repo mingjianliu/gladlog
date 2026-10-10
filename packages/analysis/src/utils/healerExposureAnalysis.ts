@@ -474,6 +474,7 @@ export interface IHealerExposureEntry {
  */
 function buildEnemyRefMap(
   exposures: IHealerBurstExposure[],
+  labelOfName?: (name: string) => string,
 ): Map<string, string> {
   const specByEnemyName = new Map<string, string>();
   for (const e of exposures) {
@@ -492,7 +493,9 @@ function buildEnemyRefMap(
   for (const [name, spec] of specByEnemyName) {
     refMap.set(
       name,
-      (specCounts.get(spec) ?? 0) > 1 ? `${spec} (${name})` : spec,
+      (specCounts.get(spec) ?? 0) > 1
+        ? `${spec} (${labelOfName ? labelOfName(name) : name})`
+        : spec,
     );
   }
   return refMap;
@@ -569,12 +572,17 @@ export function formatEnemyCCKitHeader(
 /** Compact single-line-per-window exposure entries (see module comment above). */
 export function formatHealerExposureEntries(
   exposures: IHealerBurstExposure[],
+  /** roster label for a player NAME (FT board item, user ruling
+   * 2026-10-09: `pillar-blocks Hamisha-Misha-US` → `pillar-blocks
+   * 4(RPaladin)`); absent = the name as it is */
+  labelOfName?: (name: string) => string,
 ): IHealerExposureEntry[] {
   if (exposures.length === 0) return [];
 
-  const refMap = buildEnemyRefMap(exposures);
+  const refMap = buildEnemyRefMap(exposures, labelOfName);
   const refOf = (t: IHealerCCThreat) =>
-    refMap.get(t.enemyName) ?? `${t.enemySpec} (${t.enemyName})`;
+    refMap.get(t.enemyName) ??
+    `${t.enemySpec} (${labelOfName ? labelOfName(t.enemyName) : t.enemyName})`;
 
   return exposures.map((e) => {
     // Make the subject explicit (2026-07-16 DPS baseline: in matches 021 and
@@ -617,7 +625,7 @@ export function formatHealerExposureEntries(
           // the Hunter was advised against the Rogue's melee Kidney Shot.
           // Kept outside the parenthesis — the G5 gate captures the name
           // inside it.
-          ` — LoS break ~${e.losBreak.repositionYards}yd away (pillar-blocks ${e.losBreak.blocksEnemyName}) — that enemy only`
+          ` — LoS break ~${e.losBreak.repositionYards}yd away (pillar-blocks ${labelOfName ? labelOfName(e.losBreak.blocksEnemyName) : e.losBreak.blocksEnemyName}) — that enemy only`
         : "";
 
     const exposed = e.threats.filter((t) => !t.losBlocked);

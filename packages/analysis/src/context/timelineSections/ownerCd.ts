@@ -25,6 +25,7 @@ import {
   isTeamSaveCD,
   rendersOnCaster,
   THROUGHPUT_EMPOWER_DEFENSIVE_IDS,
+  timingContextWithLabel,
 } from "../../utils/cooldowns";
 import { getDampeningPercentage } from "../../utils/dampening";
 import {
@@ -291,7 +292,7 @@ export function emitOwnerCdEntries(
       // fmtTime, so pass it through verbatim.
       const unnecessaryNote =
         !isProc && cast.timingLabel === "Unnecessary" && cast.timingContext
-          ? ` [UNNECESSARY — ${cast.timingContext}]`
+          ? ` [UNNECESSARY — ${timingContextWithLabel(cast, pid)}]`
           : "";
 
       let dampeningNote = "";

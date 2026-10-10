@@ -300,9 +300,11 @@ export function extractGeoClaims(promptText: string): GeoExtraction {
       continue;
     }
 
-    // G5: 0:07  [HEALER EXPOSURE] … LoS break ~12.3yd away (pillar-blocks Oldchill-Proudmoore-US) …
+    // G5: 0:07  [HEALER EXPOSURE] … LoS break ~12.3yd away (pillar-blocks 4(RPaladin)) …
     m = line.match(
-      /^(\d+:\d{2}) {2}\[HEALER EXPOSURE\].*LoS break ~([\d.]+)yd away \(pillar-blocks ([^)]+)\)/,
+      // the unit is a roster label since FT (`4(RPaladin)`: one level of
+      // parentheses inside) or, in older prompts, a character name
+      /^(\d+:\d{2}) {2}\[HEALER EXPOSURE\].*LoS break ~([\d.]+)yd away \(pillar-blocks ((?:[^()]|\([^()]*\))+)\)/,
     );
     if (m) {
       claims.push({

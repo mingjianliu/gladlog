@@ -2894,7 +2894,10 @@ export function checkBurstAnsweredBottomConsistency(lines: string[]): string[] {
       failures.push(
         `line ${i + 1}: [BURST ANSWERED] 触底时刻 ${fmtTime(b)} 早于本行 ${fmtTime(t)}`,
       );
-    const id = idByName.get(m[3]!);
+    // the unit is a roster label since FT (`1(FMage)`), a character name in
+    // older prompts
+    const byLabel = m[3]!.match(/^(\d+)\(/);
+    const id = byLabel ? Number(byLabel[1]) : idByName.get(m[3]!);
     const tick = id === undefined ? undefined : stateAt.get(b)?.get(id);
     if (tick === "dead" || (typeof tick === "number" && tick !== pct))
       failures.push(

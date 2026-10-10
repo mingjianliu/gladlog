@@ -13,6 +13,7 @@
  */
 import type { StackedDefensivePair } from "../analysis/stackedDefensives";
 import { fmtTime, renderedWindowSeconds } from "../utils/renderGrid";
+import type { ContextFactLabels } from "./burstAnswered";
 
 export const STACKED_DEFENSIVES_TAG = "[STACKED DEFENSIVES]";
 
@@ -34,8 +35,10 @@ export interface StackedDefensivesEntry {
 export function formatStackedDefensiveLines(
   pairs: StackedDefensivePair[],
   overrides?: { cap?: number },
+  labels?: ContextFactLabels,
 ): StackedDefensivesEntry[] {
   const cap = overrides?.cap ?? STACKED_DEFENSIVES_CAP;
+  const friendly = labels?.friendly ?? ((n: string) => n);
   // selection by overlap length (longest first), emission by time
   const ranked = [...pairs].sort(
     (a, b) =>
@@ -46,8 +49,10 @@ export function formatStackedDefensiveLines(
     .slice(0, cap)
     .map((s) => {
       const who = (c: { casterName: string; casterIsOwner: boolean }) =>
-        c.casterIsOwner ? "you" : c.casterName;
-      const target = s.targetIsOwner ? `${s.targetName} (you)` : s.targetName;
+        c.casterIsOwner ? "you" : friendly(c.casterName);
+      const target = s.targetIsOwner
+        ? `${friendly(s.targetName)} (you)`
+        : friendly(s.targetName);
       let priced: string;
       if (s.pricing === "pct")
         priced = `blocked ~${s.blockedOverlapPct}% of their max HP during the overlap (~${s.blockedFullPct}% over its full ${s.secondRunSeconds}s run)`;

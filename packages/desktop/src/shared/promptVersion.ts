@@ -1238,5 +1238,9 @@
  *  v357 (2026-10-09, FT board, user ruling 2026-10-09): the kit entry of a
  *  Guardian Spirit under Guardian Angel reads `[60s from when it expires
  *  unused, 180s after a save, lasts 12s]`.
+ *  v358 (2026-10-09, FT board, same ruling): [BURST ANSWERED], [STACKED
+ *  DEFENSIVES], [CD PRIOR], [HEALER EXPOSURE], [ROOT], [DR CLASH] and the
+ *  `[UNNECESSARY — … target X …]` note name players by their roster label
+ *  (`3(AWarrior)`) instead of the character name. Counts in the commit.
  */
-export const PROMPT_VERSION = 357;
+export const PROMPT_VERSION = 358;

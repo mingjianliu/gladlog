@@ -101,6 +101,19 @@ describe("formatBurstAnsweredLines — which windows earn a credit line", () => 
     );
   });
 
+  it("FT board item: with roster labels the line names players as the timeline does", () => {
+    const labels = {
+      friendly: (n: string) => (n === "Me-R" ? "1(DPriest)" : "2(FMage)"),
+      enemy: () => "4(ARogue)",
+    };
+    expect(
+      formatBurstAnsweredLines([point()], undefined, labels)[0]!.line,
+    ).toBe(
+      `${BURST_ANSWERED_TAG}   enemy opened Deathmark (4(ARogue)): ` +
+        `1(DPriest) answered with Pain Suppression in 2.4s; 2(FMage) bottomed at 31% at 0:45`,
+    );
+  });
+
   it("an UNANSWERED window never renders — that is the candidate's half", () => {
     expect(
       formatBurstAnsweredLines([
@@ -274,7 +287,9 @@ describe("formatBurstAnsweredLines — wording", () => {
         pressured: { ...point().pressured!, died: true, minHpPct: 4 },
       }),
     ]);
-    expect(out[0]!.line).toContain("Mate-R bottomed at 4% at 0:45 — Mate-R still died");
+    expect(out[0]!.line).toContain(
+      "Mate-R bottomed at 4% at 0:45 — Mate-R still died",
+    );
   });
 
   it("a DIFFERENT friendly's death inside the window is stated as a fact, not as the pressured unit dying (round 3 N4, 483f)", () => {

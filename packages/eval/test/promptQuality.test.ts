@@ -1143,11 +1143,27 @@ describe("checkBurstAnsweredBottomConsistency — the credit line's bottom secon
       checkBurstAnsweredBottomConsistency([roster, line("0:03")]),
     ).toHaveLength(1);
   });
+  it("FT board item: 行里是花名册标签(1(WMonk))时照样核对同秒 [STATE]", () => {
+    const labelled = (pct: number) =>
+      `0:04  [BURST ANSWERED]   enemy opened The Hunt (4(HDHunter)): 2(RShaman) answered with Earthgrab 0.6s before it opened; 1(WMonk) bottomed at ${pct}% at 0:55`;
+    const state =
+      "0:55  [STATE]   friends 1(WMonk):42 / enemies 4(HDHunter):90";
+    expect(
+      checkBurstAnsweredBottomConsistency([roster, state, labelled(42)]),
+    ).toEqual([]);
+    expect(
+      checkBurstAnsweredBottomConsistency([roster, state, labelled(47)]),
+    ).toHaveLength(1);
+  });
 });
 
 describe("checkFreeOfWindowConsistency (F-C11)", () => {
   it("free X s of Y s with X > Y fails; X ≤ Y passes", () => {
-    expect(checkFreeOfWindowConsistency(["  0:40–0:56 … free 17s of 16s"])).toHaveLength(1);
-    expect(checkFreeOfWindowConsistency(["  0:40–0:56 … free 16s of 16s"])).toEqual([]);
+    expect(
+      checkFreeOfWindowConsistency(["  0:40–0:56 … free 17s of 16s"]),
+    ).toHaveLength(1);
+    expect(
+      checkFreeOfWindowConsistency(["  0:40–0:56 … free 16s of 16s"]),
+    ).toEqual([]);
   });
 });

@@ -96,6 +96,10 @@ export interface IRootInstance {
   sourceName: string;
   /** what the prompt prints for the caster — see `rootSourceLabel` */
   sourceLabel: string;
+  /** the player behind the root: the caster, or the summon's owner */
+  sourcePlayerName?: string;
+  /** set when a summon cast it: pet / totem / guardian */
+  sourceKind?: string;
   spellId: string;
   spellName: string;
   /** whole seconds (render grid) in which the rooted player's targets were unreachable */
@@ -202,7 +206,20 @@ export function rootSourceLabel(
    * same-named summon on the other team is never credited. */
   sourceSide?: ICombatUnit[],
 ): string {
-  if (players.some((p) => p.name === srcUnitName)) return srcUnitName;
+  return rootSourceOf(srcUnitName, players, allUnits, sourceSide).label;
+}
+
+/** `rootSourceLabel` with its parts: the player behind the root (the caster,
+ * or the summon's owner) and, for a summon, what kind it is — so the line can
+ * print the player's roster label instead of a raw name. */
+export function rootSourceOf(
+  srcUnitName: string,
+  players: ICombatUnit[],
+  allUnits: ICombatUnit[],
+  sourceSide?: ICombatUnit[],
+): { label: string; playerName?: string; kind?: string } {
+  if (players.some((p) => p.name === srcUnitName))
+    return { label: srcUnitName, playerName: srcUnitName };
   const owner = resolveSummonOwner({
     allUnits,
     friends: sourceSide ?? players,
@@ -213,10 +230,17 @@ export function rootSourceLabel(
     const src = allUnits.find(
       (u) => u.name === srcUnitName && u.ownerId === owner.id,
     );
-    return `${owner.name.split("-")[0]}'s ${summonKindOf(src?.id, src)}`;
+    const kind = summonKindOf(src?.id, src);
+    return {
+      label: `${owner.name.split("-")[0]}'s ${kind}`,
+      playerName: owner.name,
+      kind,
+    };
   }
   const short = srcUnitName.split("-")[0];
-  return [...short].some((c) => c.charCodeAt(0) > 127) ? "[pet]" : short;
+  return {
+    label: [...short].some((c) => c.charCodeAt(0) > 127) ? "[pet]" : short,
+  };
 }
 
 export function computeRootReachability(
@@ -335,12 +359,14 @@ export function computeRootReachability(
         rootedIsFriendly: X.reaction === CombatUnitReaction.Friendly,
         rootedRole: role,
         sourceName: iv.srcUnitName,
-        sourceLabel: rootSourceLabel(
-          iv.srcUnitName,
-          players,
-          allUnits,
-          enemies,
-        ),
+        ...(() => {
+          const src = rootSourceOf(iv.srcUnitName, players, allUnits, enemies);
+          return {
+            sourceLabel: src.label,
+            sourcePlayerName: src.playerName,
+            sourceKind: src.kind,
+          };
+        })(),
         spellId: iv.spellId,
         spellName: getEnglishSpellName(iv.spellId, iv.spellName),
         unreachableSeconds: unreachable,
@@ -383,14 +409,22 @@ export function formatRootReachabilityEntries(
   /** roster label for a unit id (cc-dr F-RT1's cast targets); absent = the
    * raw id */
   labelOf: (unitId: string) => string = (id) => id,
+  /** roster label for a player NAME (FT board item, user ruling 2026-10-09:
+   * the line printed raw character names — `(from Yuihorie's pet) rooted
+   * enemy Fluxxy-Tichondrius-US`); absent = the names as they are */
+  labelOfName?: (name: string) => string,
 ): Array<{ atSeconds: number; line: string }> {
   return instances
     .filter((r) => r.significant)
     .map((r) => {
-      const who =
-        r.rootedId === ownerId ? `[YOU] ${r.rootedName}` : r.rootedName;
+      const rooted = labelOfName ? labelOfName(r.rootedName) : r.rootedName;
+      const who = r.rootedId === ownerId ? `[YOU] ${rooted}` : rooted;
       const side = r.rootedIsFriendly ? "friendly" : "enemy";
-      const head = `${r.spellName} (from ${r.sourceLabel}) rooted ${side} ${who} (${r.rootedRole}) for ${r.durationSeconds.toFixed(1)}s`;
+      const from =
+        labelOfName && r.sourcePlayerName
+          ? `${labelOfName(r.sourcePlayerName)}${r.sourceKind ? `'s ${r.sourceKind}` : ""}`
+          : r.sourceLabel;
+      const head = `${r.spellName} (from ${from}) rooted ${side} ${who} (${r.rootedRole}) for ${r.durationSeconds.toFixed(1)}s`;
       // cc-dr F-RT1: a rooted unit that cast on others meanwhile was not
       // locked out — say what it did instead of "worked like hard CC"
       const acted = r.castsOnOthers?.length
@@ -400,7 +434,7 @@ export function formatRootReachabilityEntries(
       if (r.rootedRole === "melee")
         why = `nearest enemy beyond ${CLOSE_RANGE_YARDS}yd for ${r.unreachableSeconds}s — could not attack${acted ?? "; this stretch worked like hard CC"}`;
       else if (r.rootedRole === "healer")
-        why = `${r.worstAlly?.name ?? "a damaged ally"} (taking damage) out of range/LoS for ${r.worstAlly?.seconds ?? r.unreachableSeconds}s — could not be healed${acted ?? "; this stretch worked like hard CC on the healer"}`;
+        why = `${r.worstAlly ? (labelOfName ? labelOfName(r.worstAlly.name) : r.worstAlly.name) : "a damaged ally"} (taking damage) out of range/LoS for ${r.worstAlly?.seconds ?? r.unreachableSeconds}s — could not be healed${acted ?? "; this stretch worked like hard CC on the healer"}`;
       else
         why = `no enemy in range/LoS for ${r.unreachableSeconds}s — could not attack`;
       return {
