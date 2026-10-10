@@ -244,6 +244,22 @@ export const ENEMY_REDIRECT_SAVE_IDS: ReadonlySet<string> = new Set([
   "3411", // Intervene — 596, all on an ally (147833 / 316531 are the same press logged again as its buff and charge)
 ]);
 
+/** The three sets above as one: the saves that had a line only when an ENEMY
+ * pressed them. FT board item 1 (user ruling 2026-10-09): the owner's and a
+ * teammate's own press of the same spell is the same fact, so the cooldown
+ * ledger admits a member a player CAST and no roster path listed
+ * (`extractMajorCooldowns`, `SpellTag.Utility` — a press line, a kit row and
+ * a [RES] entry; under the contract above it still "can never produce a 'you
+ * did not press X' accusation"). 605 new-season files before that: 1,743 of
+ * the owners' 2,283 presses of these spells had no line (Crimson Vial 543,
+ * Master's Call 315, Intervene 277, Nether Ward 208, Demonic Healthstone
+ * 200, Frenzied Regeneration 114, Healthstone 55, Leap of Faith 29). */
+export const ENEMY_ONLY_SAVE_IDS: ReadonlySet<string> = new Set([
+  ...ENEMY_SELF_SAVE_ONLY_IDS,
+  ...ENEMY_ALLY_SAVE_IDS,
+  ...ENEMY_REDIRECT_SAVE_IDS,
+]);
+
 // —— Enemy immunity-kind saves (enemy-def F-E5 / F-E6; user ruling A25,
 // 2026-09-30: "遁地、时间停止、群体隐形、假死、消失、装死、灼烧、自然守护
 // 都当免疫") ————————————————————————————————————————————————————————————————

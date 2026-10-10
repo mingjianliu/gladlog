@@ -24,8 +24,8 @@ import spellIdListsData, {
   ENEMY_IMMUNITY_HEAL_PROCS,
   ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS,
   ENEMY_IMMUNITY_SAVE_AURAS,
+  ENEMY_ONLY_SAVE_IDS,
   ENEMY_REDIRECT_SAVE_IDS,
-  ENEMY_SELF_SAVE_ONLY_IDS,
 } from "../data/spellIdLists";
 import { immunitySchoolMask } from "../data/spellSchools";
 import { auraEndFromLog, type IAuraEndFromLog } from "./auraEndCause";
@@ -335,9 +335,7 @@ export const SELF_SAVE_IDS: ReadonlySet<string> = new Set<string>([
         .bigDefensiveSpellIds ?? []
     ).map(String),
   ].filter((id) => NO_MITIGATION_IDS.has(id)),
-  ...ENEMY_SELF_SAVE_ONLY_IDS,
-  ...ENEMY_ALLY_SAVE_IDS,
-  ...ENEMY_REDIRECT_SAVE_IDS,
+  ...ENEMY_ONLY_SAVE_IDS,
 ]);
 
 /** The enemy's own presses of a `SELF_SAVE_IDS` save on itself, in cast

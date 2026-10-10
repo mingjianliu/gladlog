@@ -1248,5 +1248,10 @@
  *  v360 (2026-10-09, FT board, same ruling): Capacitor Totem lists who its
  *  stun landed on (read ~2 s after the cast) on [YOU] [CC] / [TEAM] [CC],
  *  and reads `[hit no enemy player]` when it stunned none.
+ *  v361 (2026-10-09, FT board item 1, same ruling): a save the timeline
+ *  prints when an ENEMY presses it ([ENEMY DEF]: Crimson Vial, Healthstone,
+ *  Nether Ward, Intervene, Master's Call, Leap of Faith …) gets a press
+ *  line, a kit row and a [RES] entry when the owner or a teammate presses
+ *  it. A Utility row: no candidate reads it. Counts in the commit.
  */
-export const PROMPT_VERSION = 360;
+export const PROMPT_VERSION = 361;

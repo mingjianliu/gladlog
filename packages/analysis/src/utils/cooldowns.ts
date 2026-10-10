@@ -29,7 +29,7 @@ import {
   spellEffectData,
 } from "../data/spellEffectData";
 import { CORPUS_COOLDOWN_PATCHES } from "../data/spellEffectOverrides";
-import spellIdListsData from "../data/spellIdLists";
+import spellIdListsData, { ENEMY_ONLY_SAVE_IDS } from "../data/spellIdLists";
 import { spellSchoolMask } from "../data/spellSchools";
 import { hasOfficialTargeting, reachesAlly } from "../data/spellTargeting";
 import { SpellTag } from "../data/spellTypes";
@@ -3391,6 +3391,40 @@ function extractMajorCooldownsAll(
         for (const a of aliases) seen.add(a);
       }
     }
+  }
+
+  // --- Saves the enemy side prints, pressed by this player (FT board item 1) ---
+  // An enemy's press of an `ENEMY_ONLY_SAVE_IDS` save renders `[ENEMY DEF]`;
+  // this player's own press of the same spell had no row here, so no press
+  // line, no kit row and no [RES] entry — a Rogue at 3 % pressing Crimson
+  // Vial and climbing to 64 % with nothing on the timeline to say why. The
+  // LAST entry path: it fills only what the roster, discovery and the healer
+  // save roster all left out, so no existing row changes its tag — and an
+  // id the class roster lists is the roster's to decide (its talent / spec
+  // filters), never re-admitted here under another tag. Cast evidence only
+  // (like a racial — no "never used"), and `SpellTag.Utility`: on the ledger
+  // and out of every role reader.
+  const rosterIds = new Set(classData.abilities.map((a) => a.spellId));
+  for (const spellId of castSpellIds) {
+    if (seen.has(spellId) || replacedByTalent.has(spellId)) continue;
+    if (!ENEMY_ONLY_SAVE_IDS.has(spellId) || rosterIds.has(spellId)) continue;
+    const effectData = spellEffectData[spellId];
+    if (!effectData) continue;
+    if ((effectiveCooldownSeconds(spellId) ?? 0) < MIN_CD_SECONDS) continue;
+    const canon = canonicalSpellId(spellId);
+    if (
+      majorSpells.some(
+        (sp) =>
+          canonicalSpellId(sp.spellId) === canon || sp.name === effectData.name,
+      )
+    )
+      continue;
+    majorSpells.push({
+      spellId,
+      name: effectData.name,
+      tags: [SpellTag.Utility],
+    });
+    seen.add(spellId);
   }
 
   // Deduplicate majorSpells by canonical id so one spell -> one kit entry (GH #99).
