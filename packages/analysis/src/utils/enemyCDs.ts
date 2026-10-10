@@ -25,6 +25,7 @@ import {
   unitCooldownOf,
 } from "./cooldowns";
 import { fmtTime } from "./renderGrid";
+import { roundEndMs } from "./roundEnd";
 
 type SpellEntry = { type: string };
 const SPELLS = spellsData as Record<string, SpellEntry>;
@@ -418,7 +419,14 @@ export function reconstructEnemyCDTimeline(
     )
     .sort((a, b) => a.time - b.time);
 
-  const allCasts = allCastsRaw;
+  // T12 ① b (user ruling 2026-10-10: a window does not run past the round's
+  // end). `roundEndMs` is the one round end — a Solo Shuffle round is over at
+  // its first player death, the log runs on to ARENA_MATCH_END. A press at or
+  // after it is not in the round, so it opens and joins no window; a window's
+  // end is cut there below (2c6e85ec: `[OFFENSIVE WINDOW] 1:42–2:13` in a
+  // 1:57 round — Army of the Dead's nominal 30 s).
+  const roundEndS = (roundEndMs(combat) - matchStartMs) / 1000;
+  const allCasts = allCastsRaw.filter((c) => c.time < roundEndS);
 
   // Compute the match-average friendly damage RATE for ratio calculation. Rates (not fixed-width
   // sums) so windows of different spans compare fairly — the old ±10s sample around the window START
@@ -462,7 +470,13 @@ export function reconstructEnemyCDTimeline(
       const windowStart = inWindow[0].time;
       // toSeconds = when the last buff in this window actually expires, not just when it was cast.
       // Uses buffEndSeconds (cast + durationSeconds) when available; falls back to cast time.
-      const windowEnd = Math.max(...inWindow.map((c) => c.buffEndSeconds));
+      // … and never after the round did (T12 ① b): every reader of the span
+      // — the header line, the damage rate under the danger label, the HP
+      // endpoints, the positioning spans — gets the same end.
+      const windowEnd = Math.min(
+        Math.max(...inWindow.map((c) => c.buffEndSeconds)),
+        roundEndS,
+      );
 
       // Compute CD-based danger score
       const cdScore = inWindow.reduce((sum, c) => sum + c.dangerWeight, 0);
