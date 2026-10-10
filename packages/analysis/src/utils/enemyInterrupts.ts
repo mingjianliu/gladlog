@@ -2,7 +2,10 @@ import { ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
 import kitRaw from "../data/interruptKitGenerated.json";
 import { spellEffectData } from "../data/spellEffectData";
-import { eventReductionsFor } from "../data/talentScriptedCooldowns";
+import {
+  eventReductionsFor,
+  onInterruptReductionFor,
+} from "../data/talentScriptedCooldowns";
 import { castBlockingAuraAt, enemySourceIds } from "./cannotCastIntervals";
 import {
   chargeStateAt,
@@ -112,6 +115,105 @@ export function interruptCooldownSeconds(
   return (unit && unitCooldownOf(unit, spellId)?.cooldownSeconds) ?? base;
 }
 
+/** A landed kick's SPELL_INTERRUPT event pairs with the cast within this
+ * window. Also the burst-answered landed test's (sync-burst F-B1). Lives
+ * here (kickAudit.ts re-exports it) so the cooldown below and the audit pair
+ * a press with its interrupt the same way. */
+export const LANDED_PAIR_MS = 1_000;
+
+/**
+ * The cooldown of ONE press of an interrupt, in seconds: the unit's
+ * talent-resolved cooldown, less what an on-interrupt talent gives back when
+ * that press interrupted a cast (`ON_INTERRUPT_COOLDOWN_REDUCTIONS`:
+ * Coldthirst, Light of the Sun). "Interrupted" = a SPELL_INTERRUPT sourced by
+ * the unit within `LANDED_PAIR_MS` of the press. FT-T11c: the one number
+ * behind `[KICK] … back m:ss`, the readiness below (kick-priority, `enemy
+ * interrupts UP`) and the owner's [RES] kick entry — 48 `back` times of the
+ * 605-file capture were contradicted by the same unit's next kick.
+ */
+export function interruptPressCooldownSeconds(
+  unit: ICombatUnit,
+  spellId: string,
+  pressMs: number,
+  cooldownSeconds: number,
+): number {
+  // THIS press's interrupt: the SPELL_INTERRUPT carries the kick's own id or
+  // its effect id (Solar Beam 97547 → 78675), and it is on the unit the
+  // press was aimed at — Light of the Sun pays for the PRIMARY target only,
+  // and a caster who walks into a standing Solar Beam is interrupted by a
+  // press that did not land on him (codex 40-FT-40). A press whose row
+  // names no target accepts any.
+  const kickId = kickCastSpellId(spellId);
+  // the press's own cast rows (own or pet; one press can log two ids)
+  const rows = [
+    ...unit.spellCastEvents,
+    ...(unit.petSpellCastEvents ?? []),
+  ].filter(
+    (e) =>
+      e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+      kickCastSpellId(e.spellId ?? "") === kickId &&
+      Math.abs(e.logLine.timestamp - pressMs) <= PRESS_ROW_PAIR_MS,
+  );
+  // no press row at that instant: nothing says what it was aimed at — the
+  // static cooldown (a cooldown is shortened on evidence only)
+  if (rows.length === 0) return cooldownSeconds;
+  const aimedAt = rows.find(
+    (e) => !!e.destUnitId && e.destUnitId !== NO_UNIT_GUID,
+  )?.destUnitId;
+  const landed = (unit.actionOut ?? []).some(
+    (a) =>
+      a.logLine.event === LogEvent.SPELL_INTERRUPT &&
+      kickCastSpellId(a.spellId ?? "") === kickId &&
+      (aimedAt === undefined || a.destUnitId === aimedAt) &&
+      Math.abs(a.logLine.timestamp - pressMs) <= LANDED_PAIR_MS,
+  );
+  if (!landed) return cooldownSeconds;
+  const sets = playerTalentIdSets(unit);
+  const back = onInterruptReductionFor(
+    kickId,
+    (t) => !!sets.talentedSpellIds?.has(t) || sets.pvpTalentIds.has(t),
+  );
+  return Math.max(0, cooldownSeconds - back);
+}
+/** Two SPELL_CAST_SUCCESS rows of one press sit this close (Skull Bash logs
+ * its cast and effect ids a millisecond apart). */
+const PRESS_ROW_PAIR_MS = 50;
+const NO_UNIT_GUID = "0000000000000000";
+
+/**
+ * When the press behind a SPELL_INTERRUPT comes back, ms. The interrupt can
+ * be logged seconds after the press (a caster interrupted by a Solar Beam
+ * that has been standing for 4 s): the cooldown runs from the PRESS — the
+ * unit's last cast of the kick at or before the interrupt — not from the
+ * interrupt line. No cast found (a pet's kick, a cast outside the round) →
+ * the interrupt's own time, as before. `[KICK] … back m:ss` reads this, so
+ * the line and `interruptCooldownRemainingMs` cannot name different seconds.
+ */
+export function interruptBackAtMs(
+  unit: ICombatUnit,
+  eventSpellId: string,
+  interruptMs: number,
+  cooldownSeconds: number,
+): number {
+  const castId = kickCastSpellId(eventSpellId);
+  // the interrupt line can precede its cast line inside the ms
+  const casts = interruptCastsUpTo(
+    unit,
+    castId,
+    interruptMs + PRESS_ROW_PAIR_MS,
+  );
+  const last = casts.length ? casts[casts.length - 1]! : undefined;
+  const backOf = (pressMs: number) =>
+    pressMs +
+    interruptPressCooldownSeconds(unit, castId, pressMs, cooldownSeconds) *
+      1000;
+  // a press that had already come back before this interrupt is not the
+  // press behind it
+  return last !== undefined && backOf(last) > interruptMs
+    ? backOf(last)
+    : backOf(interruptMs);
+}
+
 /** The unit's successful casts of `spellId` (own or pet) up to `atMs`, in
  * time order — the cast list both cooldown readers below work from. */
 function interruptCastsUpTo(
@@ -152,7 +254,10 @@ function singleChargeReadyMs(
     spellId,
     (t) => !!sets.talentedSpellIds?.has(t) || sets.pvpTalentIds.has(t),
   );
-  let readyMs = lastCastMs + cooldownSeconds * 1000;
+  let readyMs =
+    lastCastMs +
+    interruptPressCooldownSeconds(unit, spellId, lastCastMs, cooldownSeconds) *
+      1000;
   if (reductions.length) {
     const events = reductions
       .flatMap((r) =>

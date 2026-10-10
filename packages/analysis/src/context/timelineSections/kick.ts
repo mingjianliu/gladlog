@@ -20,12 +20,13 @@ import {
   INTERRUPT_SPELL_IDS,
   interruptCooldownSeconds,
   interruptForUnit,
+  interruptBackAtMs,
   kickCastSpellId,
 } from "../../utils/enemyInterrupts";
 import {
   analyzeKickAudit,
-  kickMissTag,
   jukedByStoppedChannelText,
+  kickMissTag,
 } from "../../utils/kickAudit";
 import { fmtTime } from "../../utils/renderGrid";
 import {
@@ -173,12 +174,27 @@ export function emitKickEntries(
       // cooldown, the same number the "enemy
       // interrupts UP" ledger reads); no row → no suffix.
       const enemyKicker = enemyKickerUnit(action.srcUnitName, action.srcUnitId);
-      const kickCd =
+      const staticKickCd =
         enemyKicker && action.spellId
           ? enemyKickCooldown(enemyKicker, action.spellId, kickSpell)
           : undefined;
+      // FT-T11c: the cooldown runs from the PRESS behind this interrupt, and
+      // a holder of an on-interrupt talent (Coldthirst, Light of the Sun)
+      // gets a press that interrupted its target back sooner
+      // (`interruptBackAtMs` — the readiness predicate's own number)
+      const backAtSeconds =
+        staticKickCd !== undefined && enemyKicker && action.spellId
+          ? (interruptBackAtMs(
+              enemyKicker,
+              action.spellId,
+              action.logLine.timestamp,
+              staticKickCd,
+            ) -
+              matchStartMs) /
+            1000
+          : undefined;
       const backSuffix =
-        kickCd !== undefined ? `; back ${fmtTime(atSeconds + kickCd)}` : "";
+        backAtSeconds !== undefined ? `; back ${fmtTime(backAtSeconds)}` : "";
       addEntry(
         atSeconds,
         `${fmtTime(atSeconds)}  [KICK]   ${kicker} interrupted ${victim}${

@@ -6,12 +6,12 @@ import {
 } from "@gladlog/parser-compat";
 
 import { isCastOrEffect } from "../data/castEffectAuras";
-import { SPELL_CATEGORIES as spellsData } from "../data/spellCategories";
-import { getEnglishSpellName } from "../data/spellEffectData";
 import {
   classifyKickedSpell,
   type KickedSpellCategory,
 } from "../data/kickedSpellCategories";
+import { SPELL_CATEGORIES as spellsData } from "../data/spellCategories";
+import { getEnglishSpellName } from "../data/spellEffectData";
 import { buffFullDurationForCaster } from "./buffDuration";
 import { CHANNEL_AURA_LAG_MS, channelSpans } from "./castCommitSpans";
 import {
@@ -19,14 +19,15 @@ import {
   forcedStopInstantsMs,
   STOPPED_JUST_BEFORE_S,
 } from "./castStopEvidence";
-import { kickCastSpellId } from "./enemyInterrupts";
+import { kickCastSpellId, LANDED_PAIR_MS } from "./enemyInterrupts";
 
 type SpellEntry = { type: string };
 const SPELLS = spellsData as Record<string, SpellEntry>;
 
-/** A landed kick's SPELL_INTERRUPT event pairs with the cast within this
- * window. Also the burst-answered landed test's (sync-burst F-B1). */
-export const LANDED_PAIR_MS = 1_000;
+// `LANDED_PAIR_MS` (a landed kick's SPELL_INTERRUPT pairs with the cast
+// within it) lives in enemyInterrupts.ts, which also reads it for the
+// on-interrupt cooldown talents; re-exported from here, its first home.
+export { LANDED_PAIR_MS };
 /** Two SPELL_CAST_SUCCESS rows of ONE kick: Skull Bash logs its cast id
  * 106839 and its effect id 93985 a millisecond apart (58 / 58 casts in the 60
  * triage rounds, none between 0.05 and 1 s). Kept apart from `LANDED_PAIR_MS`

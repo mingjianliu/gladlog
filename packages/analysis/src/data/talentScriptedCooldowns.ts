@@ -87,6 +87,65 @@ export const EVENT_COOLDOWN_REDUCTIONS: Readonly<
   },
 };
 
+export interface IOnInterruptCooldownReduction {
+  /** the interrupt (its CAST id) whose own cooldown the talent shortens */
+  spellId: string;
+  /** seconds off the cooldown of a press that interrupted a cast */
+  seconds: number;
+  note: string;
+}
+
+/**
+ * A third shape (FT-T11c, 2026-10-09): the talent shortens the interrupt's
+ * OWN cooldown when the press interrupts a cast — nothing happens on a press
+ * that stops nothing. Keyed by the talent, hand table, registered in
+ * curatedIdRegistry.
+ *
+ * Three-way evidence (Game-Behaviour Rule), 605 new-season files, gaps
+ * between two casts of the kick by one player in one round, split by
+ * COMBATANT_INFO ownership × "the first press has a SPELL_INTERRUPT of the
+ * player's within LANDED_PAIR_MS" (eval-private fix-FT
+ * `t11c_onInterruptScan.ts`):
+ *  - Coldthirst 378848 → Mind Freeze 47528, −3 s. DB2: the talent triggers
+ *    378849, effect 292 on cooldown category 88 (the interrupt category
+ *    Quick Witted's aura 341 names), −3000 ms. Corpus: holders after a
+ *    landed kick 245 gaps, shortest 12.0 s, 40 under 14.5 s, none under
+ *    11.5 s; holders after a kick that stopped nothing 108 gaps, 3 under
+ *    14.5 s; non-holders 279 gaps, none under 14.5 s.
+ *  - Light of the Sun 202918 → Solar Beam 78675, −15 s. DB2: dummy aura,
+ *    base points 15 (tooltip: 15 sec when it interrupts the primary
+ *    target). Corpus: holders after a landed beam 30 gaps, shortest 45.1 s,
+ *    17 under 59.5 s, none under 44.5 s; holders otherwise 104 gaps, 2 under
+ *    59.5 s; non-holders 9 gaps, shortest 61.4 s.
+ * The five short gaps after a press with no interrupt line stay unexplained.
+ */
+export const ON_INTERRUPT_COOLDOWN_REDUCTIONS: Readonly<
+  Record<string, IOnInterruptCooldownReduction>
+> = {
+  "378848": {
+    spellId: "47528",
+    seconds: 3,
+    note: "Coldthirst — Mind Freeze −3 s when it interrupts",
+  },
+  "202918": {
+    spellId: "78675",
+    seconds: 15,
+    note: "Light of the Sun — Solar Beam −15 s when it interrupts",
+  },
+};
+
+/** Seconds a holder's press of `spellId` (the interrupt's cast id) gets back
+ * when it interrupts a cast; 0 for everyone else. */
+export function onInterruptReductionFor(
+  spellId: string,
+  holds: (talentSpellId: string) => boolean,
+): number {
+  let seconds = 0;
+  for (const [talent, r] of Object.entries(ON_INTERRUPT_COOLDOWN_REDUCTIONS))
+    if (r.spellId === spellId && holds(talent)) seconds += r.seconds;
+  return seconds;
+}
+
 /** The free-recast window a spell has for a holder of these talents. */
 export function freeRecastWindowFor(
   spellId: string,

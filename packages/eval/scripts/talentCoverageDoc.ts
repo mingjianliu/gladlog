@@ -34,6 +34,7 @@ import { TALENT_MITIGATION_MODIFIERS } from "@gladlog/analysis/src/data/talentMi
 import {
   EVENT_COOLDOWN_REDUCTIONS,
   FREE_RECAST_WINDOWS,
+  ON_INTERRUPT_COOLDOWN_REDUCTIONS,
 } from "@gladlog/analysis/src/data/talentScriptedCooldowns";
 import {
   CD_TALENT_MODIFIERS,
@@ -208,7 +209,11 @@ async function main(): Promise<void> {
     (FREE_RECAST_WINDOWS[talent] &&
       ids.includes(FREE_RECAST_WINDOWS[talent]!.spellId)) ||
     (EVENT_COOLDOWN_REDUCTIONS[talent] &&
-      ids.some((i) => EVENT_COOLDOWN_REDUCTIONS[talent]!.targets.includes(i)));
+      ids.some((i) =>
+        EVENT_COOLDOWN_REDUCTIONS[talent]!.targets.includes(i),
+      )) ||
+    (ON_INTERRUPT_COOLDOWN_REDUCTIONS[talent] &&
+      ids.includes(ON_INTERRUPT_COOLDOWN_REDUCTIONS[talent]!.spellId));
   const durationCarried = (target: string, talent: string) =>
     [
       ...(BUFF_DURATION_TALENT_MODIFIERS[target] ?? []),

@@ -30,6 +30,7 @@ import {
 import {
   interruptCooldownSeconds,
   interruptForUnit,
+  interruptPressCooldownSeconds,
 } from "../utils/enemyInterrupts";
 
 export const DEATH_GRIP_ID = "49576";
@@ -68,7 +69,22 @@ function withEventReductions(
     spellId,
     (t) => !!sets.talentedSpellIds?.has(t) || sets.pvpTalentIds.has(t),
   );
-  if (!reductions.length) return casts;
+  // FT-T11c: the press's own cooldown first — an on-interrupt talent
+  // (Coldthirst, Light of the Sun) shortens a press that interrupted a cast
+  // (`interruptPressCooldownSeconds`, the number interruptCooldownRemainingMs
+  // reads); the event reductions then act on that.
+  const pressCd = (c: { timeSeconds: number }) =>
+    interruptPressCooldownSeconds(
+      owner,
+      spellId,
+      matchStartMs + c.timeSeconds * 1000,
+      cooldownSeconds,
+    );
+  if (!reductions.length)
+    return casts.map((c) => {
+      const own = pressCd(c);
+      return own < cooldownSeconds ? { ...c, cooldownSecondsOverride: own } : c;
+    });
   const triggerSeconds = (r: { triggerCastIds: readonly string[] }) =>
     owner.spellCastEvents
       .filter(
@@ -80,7 +96,7 @@ function withEventReductions(
   return casts.map((c) => {
     const eff = eventReducedCooldownSeconds(
       c.timeSeconds,
-      cooldownSeconds,
+      pressCd(c),
       reductions,
       triggerSeconds,
     );

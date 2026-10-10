@@ -84,6 +84,7 @@ import * as spellTags from "@gladlog/analysis/src/data/spellTags";
 import * as spellTargeting from "@gladlog/analysis/src/data/spellTargeting";
 import * as summonGenerated from "@gladlog/analysis/src/data/summonGenerated";
 import * as syncWindowPrior from "@gladlog/analysis/src/data/syncWindowPrior";
+import * as talentScriptedCooldowns from "@gladlog/analysis/src/data/talentScriptedCooldowns";
 import * as teammateCrisisPriorData from "@gladlog/analysis/src/data/teammateCrisisPrior";
 import { TIMELINE_LINE_FLAGS } from "@gladlog/analysis/src/data/timelineLineFlags";
 import { PRODUCTION_FACT_CONFIG } from "@gladlog/analysis/src/facts/factProviderConfig";
@@ -1600,6 +1601,16 @@ const INDEX: PredicateRow[] = [
     file: `${A}/utils/enemyInterrupts.ts`,
     symbol: "interruptForUnit",
     mod: enemyInterrupts,
+  },
+  {
+    file: `${A}/utils/enemyInterrupts.ts`,
+    symbol: "interruptPressCooldownSeconds",
+    mod: enemyInterrupts,
+  },
+  {
+    file: `${A}/data/talentScriptedCooldowns.ts`,
+    symbol: "ON_INTERRUPT_COOLDOWN_REDUCTIONS",
+    mod: talentScriptedCooldowns,
   },
   {
     file: `${A}/utils/enemyInterrupts.ts`,

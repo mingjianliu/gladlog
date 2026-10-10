@@ -1230,5 +1230,10 @@
  *  Counterspell cool down for DB2's 20 / 30 / 25 s (hand values 40 / 45 / 24
  *  removed) — `[KICK] … back m:ss`, [RES], `enemy interrupts UP` and the
  *  kick candidates' cooldown facts. Counts in the commit.
+ *  v356 (2026-10-09, FT-T11c, same approval): a kick that interrupts a cast
+ *  cools down sooner for a holder of Coldthirst (Mind Freeze −3 s) or Light
+ *  of the Sun (Solar Beam −15 s) — `[KICK] … back m:ss`, kick readiness and
+ *  the owner's [RES] kick entry read one per-press cooldown. Counts in the
+ *  commit.
  */
-export const PROMPT_VERSION = 355;
+export const PROMPT_VERSION = 356;

@@ -45,13 +45,8 @@ import {
   UNRELENTING_ONSLAUGHT_TALENT_ID,
   USABLE_IN_BLADESTORM_WITH_TALENT,
 } from "../utils/castingLocks";
-import { DISPLACEMENT_EVIDENCE_IDS } from "../utils/castStopEvidence";
-import { HEAL_ABSORB_SELF_SAVE_IDS } from "../utils/healAbsorbSave";
-import { AUTO_ATTACK_REPLACEMENT_IDS } from "../utils/damagePress";
-import { TOUCH_OF_KARMA_FEED_IDS } from "../utils/karmaFeed";
-import { KILL_ATTEMPT_NON_ANCHOR_CDS } from "../utils/killAttempts";
-import { EXECUTE_KILLING_BLOW_IDS } from "../utils/killingBlow";
 import { COPY_CAST_IDS } from "../utils/castPress";
+import { DISPLACEMENT_EVIDENCE_IDS } from "../utils/castStopEvidence";
 import {
   BREAKABLE_CC_SPELL_IDS,
   CC_AVOIDANCE_BUFF_SPELLS,
@@ -59,10 +54,10 @@ import {
   GROUND_CC_SPELL_IDS,
   LOCK_IGNORING_CAST_IDS,
   MAGIC_ONLY_IMMUNITY_IDS,
-  TARGET_BOUND_MOBILITY_IDS,
   PHYSICAL_CC_IDS,
   PRE_TELEPORT_POSITION_SPELL_IDS,
   REPOSITIONING_SPELL_IDS,
+  TARGET_BOUND_MOBILITY_IDS,
   TARGETED_CC_DODGE_SPELLS,
   TREMOR_BREAKABLE_CC_IDS,
 } from "../utils/ccTrinketAnalysis";
@@ -84,19 +79,16 @@ import {
   SELF_CAST_NOOP_EXTERNAL_IDS,
   SPEC_EXCLUSIVE_SPELLS,
   SPELL_CANONICAL_IDS,
+  STUN_PURGE_WITHHELD_IDS,
   TEAM_HEAL_CD_IDS,
   TEAM_SAVE_CD_IDS,
   THROUGHPUT_EMPOWER_DEFENSIVE_IDS,
   USABLE_WHILE_CC_CONDITIONAL,
-  STUN_PURGE_WITHHELD_IDS,
   USABLE_WHILE_CC_GAP_IDS,
   USABLE_WHILE_FEARED_GAP_IDS,
 } from "../utils/cooldowns";
 import { UNUSED_SELF_COVERAGE_UNMODELLED } from "../utils/counterfactual";
-import {
-  DEFERRAL_SHIELD_DAMAGE_IDS,
-  REDISTRIBUTION_DAMAGE_IDS,
-} from "../utils/incomingPressure";
+import { AUTO_ATTACK_REPLACEMENT_IDS } from "../utils/damagePress";
 import {
   EXTERNAL_DEFENSIVE_SPELLS,
   IMMUNITY_SPELLS,
@@ -118,10 +110,19 @@ import {
 import { MOVEMENT_ROOT_BREAK_DISPEL_IDS } from "../utils/dispelKind";
 import { AOE_CC_SPELL_IDS } from "../utils/drAnalysis";
 import { NON_PLAYER_INTERRUPT_IDS } from "../utils/enemyInterrupts";
-import { KICK_LOCKOUT_VICTIM_MODIFIERS } from "../utils/kickLockout";
 import { EXTERNAL_DAMAGE_SHIELD_IDS } from "../utils/externalDamage";
+import { GAP_CLOSER_SPELL_IDS } from "../utils/gapClosers";
+import { HEAL_ABSORB_SELF_SAVE_IDS } from "../utils/healAbsorbSave";
 import { SPEC_PRIMARY_CC } from "../utils/healerExposureAnalysis";
 import { HEALER_AVOIDANCE_SPELLS } from "../utils/healerExposureAnalysis";
+import {
+  DEFERRAL_SHIELD_DAMAGE_IDS,
+  REDISTRIBUTION_DAMAGE_IDS,
+} from "../utils/incomingPressure";
+import { TOUCH_OF_KARMA_FEED_IDS } from "../utils/karmaFeed";
+import { KICK_LOCKOUT_VICTIM_MODIFIERS } from "../utils/kickLockout";
+import { KILL_ATTEMPT_NON_ANCHOR_CDS } from "../utils/killAttempts";
+import { EXECUTE_KILLING_BLOW_IDS } from "../utils/killingBlow";
 import { PVP_TRINKET_SPELL_IDS } from "../utils/killWindowTargetSelection";
 import {
   ASCENDANCE_ENH_ID,
@@ -140,7 +141,6 @@ import {
   OFFENSIVE_EFFECT_ACTIVATION_IDS,
   SPELL_EFFECT_OVERRIDES as SPELL_DANGER_OVERRIDES,
 } from "../utils/spellDanger";
-import { GAP_CLOSER_SPELL_IDS } from "../utils/gapClosers";
 import { HEALER_REACH_SPELLS } from "../utils/spellRange";
 import {
   OFFENSIVE_PURGE_TALENT_IDS,
@@ -153,6 +153,10 @@ import {
 import { KW_MAJOR_DEFENSIVE_IDS } from "./abilityProfile";
 import { castEffectPairs } from "./castEffectAuras";
 import { CAST_PARAM_DURATIONS } from "./castParamDurations";
+import {
+  AURA_KEYED_BREAK_RACIALS,
+  CLASS_CC_BREAK_ABILITIES,
+} from "./ccBreakAbilities";
 import { classMetadata } from "./classSpells";
 import { CURATED_ABILITY_FACTS } from "./curatedAbilityFacts";
 import { DISPEL_VERDICTS } from "./dispelVerdicts";
@@ -166,10 +170,6 @@ import {
   KICKED_HEAL_OVERRIDE_IDS,
   KICKED_OTHER_OVERRIDE_IDS,
 } from "./kickedSpellCategories";
-import {
-  AURA_KEYED_BREAK_RACIALS,
-  CLASS_CC_BREAK_ABILITIES,
-} from "./ccBreakAbilities";
 import {
   MITIGATION_OVERRIDES,
   NO_MITIGATION_IDS,
@@ -206,8 +206,8 @@ import {
   SPELL_EFFECT_OVERRIDES,
 } from "./spellEffectOverrides";
 import spellIdLists, {
-  ENEMY_AREA_SAVE_IDS,
   ENEMY_ALLY_SAVE_IDS,
+  ENEMY_AREA_SAVE_IDS,
   ENEMY_IMMUNITY_EXTERNAL_CASTS,
   ENEMY_IMMUNITY_HEAL_PROCS,
   ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS,
@@ -221,6 +221,7 @@ import { TALENT_REPLACES } from "./talentReplaces";
 import {
   EVENT_COOLDOWN_REDUCTIONS,
   FREE_RECAST_WINDOWS,
+  ON_INTERRUPT_COOLDOWN_REDUCTIONS,
 } from "./talentScriptedCooldowns";
 import { WARLOCK_PET_CAST_FUNCTION } from "./warlockPets";
 
@@ -896,6 +897,15 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
         ...r.targets,
         ...r.triggerCastIds,
       ]),
+    ],
+  ),
+  t(
+    "ON_INTERRUPT_COOLDOWN_REDUCTIONS",
+    "data/talentScriptedCooldowns.ts",
+    "mixed",
+    () => [
+      ...Object.keys(ON_INTERRUPT_COOLDOWN_REDUCTIONS),
+      ...Object.values(ON_INTERRUPT_COOLDOWN_REDUCTIONS).map((r) => r.spellId),
     ],
   ),
   t("OPPRESSING_ROAR_SPELL_ID", "data/spellEffectData.ts", "aura", () => [
