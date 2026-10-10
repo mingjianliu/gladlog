@@ -61,7 +61,10 @@ import {
   TARGETED_CC_DODGE_SPELLS,
   TREMOR_BREAKABLE_CC_IDS,
 } from "../utils/ccTrinketAnalysis";
-import { STASIS_STORABLE_HEAL_IDS } from "../utils/combatStates";
+import {
+  SPIRIT_OF_REDEMPTION_AURA_IDS,
+  STASIS_STORABLE_HEAL_IDS,
+} from "../utils/combatStates";
 import {
   ADDITIONAL_OVERLAP_DEFENSIVE_IDS,
   ALLY_REACH_REQUIRES_PVP_TALENT,
@@ -812,6 +815,9 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   ),
   t("STASIS_STORABLE_HEAL_IDS", "utils/combatStates.ts", "cast", () =>
     set(STASIS_STORABLE_HEAL_IDS),
+  ),
+  t("SPIRIT_OF_REDEMPTION_AURA_IDS", "utils/combatStates.ts", "aura", () =>
+    set(SPIRIT_OF_REDEMPTION_AURA_IDS),
   ),
   t("HEALER_AVOIDANCE_SPELLS", "utils/healerExposureAnalysis.ts", "cast", () =>
     Object.values(HEALER_AVOIDANCE_SPELLS).flatMap((arr) =>

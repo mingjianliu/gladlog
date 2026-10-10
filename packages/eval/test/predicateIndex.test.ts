@@ -102,6 +102,7 @@ import * as ccBreakAnalysis from "@gladlog/analysis/src/utils/ccBreakAnalysis";
 import * as ccTargetState from "@gladlog/analysis/src/utils/ccTargetState";
 import * as ccTrinketAnalysis from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
 import * as charmedPlayer from "@gladlog/analysis/src/utils/charmedPlayer";
+import * as combatStates from "@gladlog/analysis/src/utils/combatStates";
 import * as cooldowns from "@gladlog/analysis/src/utils/cooldowns";
 import * as counterfactual from "@gladlog/analysis/src/utils/counterfactual";
 import * as deathOutcomeAnalysis from "@gladlog/analysis/src/utils/deathOutcomeAnalysis";
@@ -1927,6 +1928,16 @@ const INDEX: PredicateRow[] = [
     file: `${A}/utils/auraEndCause.ts`,
     symbol: "auraEndFromLog",
     mod: auraEndCause,
+  },
+  {
+    file: `${A}/utils/combatStates.ts`,
+    symbol: "extractSpiritOfRedemptionIntervals",
+    mod: combatStates,
+  },
+  {
+    file: `${A}/utils/combatStates.ts`,
+    symbol: "SPIRIT_OF_REDEMPTION_AURA_IDS",
+    mod: combatStates,
   },
   {
     file: `${A}/utils/ccTrinketAnalysis.ts`,

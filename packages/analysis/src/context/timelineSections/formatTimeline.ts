@@ -22,6 +22,9 @@ import { buildKillSequenceBlock, buildMatchEndBlock } from "../timelineHelpers";
 import { DR_CLASH_LEGEND } from "./contextFacts";
 import type { TimelineCtx } from "./ctx";
 
+/** A [STATE] tick carrying a `unit:ghost` token (`state.ts`). */
+const STATE_GHOST_TOKEN_RE = /\[STATE\].*:ghost\b/;
+
 export function formatTimeline(
   ctx: Pick<
     TimelineCtx,
@@ -145,6 +148,10 @@ export function formatTimeline(
   const RES_FORBEARANCE_RE = new RegExp(RES_FORBEARANCE_RE_SRC);
   // FT-T04: `cd:Divine Shield(Forbearance Ns)` is legended only when a row
   // carries it (the same convention).
+  // FT-T10: `unit:ghost` is legended only when a [STATE] tick carries it.
+  const ghostRendered = entries.some((e) =>
+    e.lines.some((l) => typeof l === "string" && STATE_GHOST_TOKEN_RE.test(l)),
+  );
   const forbearanceRendered = entries.some((e) =>
     e.lines.some((l) => typeof l === "string" && RES_FORBEARANCE_RE.test(l)),
   );
@@ -291,6 +298,12 @@ export function formatTimeline(
                 "    A measurement, not a verdict — the team's CC lines say whether they could act.",
               ]
             : []),
+        ]
+      : []),
+    ...(ghostRendered
+      ? [
+          "  `unit:ghost` on a [STATE] line = that priest is in Spirit of Redemption form at that second (pressed, or the",
+          "    on-death proc): the form has no HP reading, so none is printed.",
         ]
       : []),
     ...(silenceLineCount > 0

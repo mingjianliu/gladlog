@@ -1281,5 +1281,8 @@
  *  own press ended says `| ended by their PvP trinket` / `… their Blink` /
  *  `… their Divine Shield` on its own line — a trinket press is bound to one
  *  control, and the others it removed said nothing. No candidate changes.
+ *  v364 (2026-10-10, FT-T10, same "Ok"): a priest in Spirit of Redemption
+ *  form reads `unit:ghost` on [STATE] ticks, with a legend line when one
+ *  does. The token's code existed and nothing passed it its intervals.
  */
-export const PROMPT_VERSION = 363;
+export const PROMPT_VERSION = 364;

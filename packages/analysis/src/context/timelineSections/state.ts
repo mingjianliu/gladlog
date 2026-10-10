@@ -39,7 +39,11 @@ export function emitStateEntries(
   } = ctx;
 
   const lastEmittedHp = new Map<string, number>();
-  const lastEmittedStatus = new Map<string, string>(); // 'alive' | 'dead'
+  const lastEmittedStatus = new Map<string, string>(); // 'alive' | 'dead' | 'ghost'
+  // FT-T10: entering / leaving Spirit of Redemption form is a status change
+  // like a death — a tick is due (inside the same emission gates as any other)
+  const statusOf = (p: { isDead: boolean; isGhost: boolean }) =>
+    p.isGhost ? "ghost" : p.isDead ? "dead" : "alive";
   const STATE_MIN_GAP_SECONDS = 3;
   let lastStateEmitT = -100;
 
@@ -70,7 +74,7 @@ export function emitStateEntries(
           friendlyParts.push(`${label(unit.name)}:${clamped}`);
         }
       }
-      return { name: unit.name, isDead, hp: clamped };
+      return { name: unit.name, isDead, isGhost, hp: clamped };
     });
 
     const enemyParts: string[] = [];
@@ -99,7 +103,7 @@ export function emitStateEntries(
                 enemyParts.push(`${label(unit.name)}:${clamped}`);
               }
             }
-            return { name: unit.name, isDead, hp: clamped };
+            return { name: unit.name, isDead, isGhost, hp: clamped };
           })
         : [];
 
@@ -143,7 +147,7 @@ export function emitStateEntries(
       for (const p of [...currentFriendlies, ...currentEnemies]) {
         const lastHp = lastEmittedHp.get(p.name);
         const lastStatus = lastEmittedStatus.get(p.name) ?? "alive";
-        const currentStatus = p.isDead ? "dead" : "alive";
+        const currentStatus = statusOf(p);
 
         if (currentStatus !== lastStatus) {
           shouldEmit = true;
@@ -164,7 +168,7 @@ export function emitStateEntries(
     // Update last emitted state
     for (const p of [...currentFriendlies, ...currentEnemies]) {
       if (p.hp !== null) lastEmittedHp.set(p.name, p.hp);
-      lastEmittedStatus.set(p.name, p.isDead ? "dead" : "alive");
+      lastEmittedStatus.set(p.name, statusOf(p));
     }
 
     let stateParts: string;

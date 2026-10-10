@@ -53,18 +53,37 @@ export interface IStasisEvent {
   storedCount: number;
 }
 
+/**
+ * The auras a priest in Spirit of Redemption form carries: 27827 (the
+ * on-death proc) and 215769 (the pressed PvP-talent version, ~9 s). Both are
+ * observed in the corpus; 215982, listed here until FT-T10, is the PvP
+ * talent's own id and is never an aura in a log (0 occurrences).
+ */
+export const SPIRIT_OF_REDEMPTION_AURA_IDS: ReadonlySet<string> = new Set([
+  "27827",
+  "215769",
+]);
+
+/**
+ * When `unit` was in Spirit of Redemption form — the `unit:ghost` token of a
+ * [STATE] tick. FT-T10: the token's code and this reader both existed, and no
+ * caller passed the intervals (0 `:ghost` in 3,520 contexts of the 605-file
+ * capture against 1,372 Spirit of Redemption press lines); wired in
+ * `buildMatchContext` for every player of the round.
+ */
 export function extractSpiritOfRedemptionIntervals(
-  unit: ICombatUnit,
-  combat: AtomicArenaCombat,
+  unit: Pick<ICombatUnit, "id" | "auraEvents">,
+  combat: Pick<AtomicArenaCombat, "startTime" | "endTime">,
 ): ISpiritOfRedemptionInterval[] {
   const intervals: ISpiritOfRedemptionInterval[] = [];
   let ghostStart: number | null = null;
 
   for (const aura of unit.auraEvents) {
     const isGhost =
-      aura.spellId === "27827" ||
-      aura.spellId === "215982" ||
-      aura.spellId === "215769";
+      !!aura.spellId &&
+      SPIRIT_OF_REDEMPTION_AURA_IDS.has(aura.spellId) &&
+      // on this unit (a unit's aura events can carry auras it put on others)
+      (aura.destUnitId === undefined || aura.destUnitId === unit.id);
 
     if (aura.logLine.event === LogEvent.SPELL_AURA_APPLIED) {
       if (isGhost) {

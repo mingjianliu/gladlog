@@ -29,7 +29,10 @@ import {
 import { enemySourceIds } from "../utils/cannotCastIntervals";
 import { analyzeCcBreaks } from "../utils/ccBreakAnalysis";
 import { analyzePlayerCCAndTrinket } from "../utils/ccTrinketAnalysis";
-import { extractStasisEvents } from "../utils/combatStates";
+import {
+  extractSpiritOfRedemptionIntervals,
+  extractStasisEvents,
+} from "../utils/combatStates";
 import {
   annotateDefensiveTimings,
   computePressureWindows,
@@ -885,6 +888,13 @@ export function buildMatchContext(
     outgoingCCChains,
     bracket: combat.startInfo.bracket,
     stasisEvents,
+    // FT-T10: the [STATE] tick's `unit:ghost` input, never passed before
+    spiritOfRedemptionIntervals: [...friends, ...enemies]
+      .map((player) => ({
+        player: player as ICombatUnit,
+        intervals: extractSpiritOfRedemptionIntervals(player, combat),
+      }))
+      .filter((x) => x.intervals.length > 0),
     criticalWindowSeconds,
     crisisAnchorSeconds,
     crisisUnfoldWindows,
