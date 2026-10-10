@@ -333,6 +333,44 @@ describe("hpTroughInWindow — the true minimum, on the grid sampler's own valid
     expect(hpTroughInWindow(over as never, T0, 10, 20)!.pct).toBe(100);
   });
 
+  it("`span`: only the samples of the event's own span are read; the window's ticks are read regardless", () => {
+    const u = friend(
+      { 0: 90, 13: 50 },
+      [],
+      [
+        [10.2, 5], // before the span opens (10.4)
+        [12.5, 30],
+        [20.7, 4], // after it closed (20.4)
+      ],
+    );
+    const span = { fromMs: T0 + 10_400, toMs: T0 + 20_400 };
+    expect(
+      hpTroughInWindow(u as never, T0, 10, 20, undefined, span),
+    ).toMatchObject({ pct: 30, atSec: 12 });
+    // without it, the displayed seconds: both edge dips are inside
+    expect(hpTroughInWindow(u as never, T0, 10, 20)!.pct).toBe(4);
+    // a span with nothing lower than the ticks → the lowest tick
+    expect(
+      hpTroughInWindow(u as never, T0, 10, 20, undefined, {
+        fromMs: T0 + 14_100,
+        toMs: T0 + 20_400,
+      }),
+    ).toMatchObject({ pct: 50, atSec: 13 });
+  });
+
+  it("`span` may open before the first tick: the fraction of a second before `fromSec` is read, its tick is not", () => {
+    // STAYED IN's shape: window 10.4 → 20.4, first tick inside it is 0:11.
+    // 10.0 s (5 %) is the 0:10 tick's sample and before the window; 10.6 s
+    // (25 %) is inside the window, before the first tick.
+    const u = friend({ 0: 90, 10: 5, 11: 90 }, [], [[10.6, 25]]);
+    expect(
+      hpTroughInWindow(u as never, T0, 11, 20, undefined, {
+        fromMs: T0 + 10_400,
+        toMs: T0 + 20_400,
+      }),
+    ).toEqual({ pct: 25, atSec: 10, atMs: T0 + 10_600 });
+  });
+
   it("no sample in reach → null", () => {
     const u = { ...friend({ 0: 90 }), advancedActions: [] };
     expect(hpTroughInWindow(u as never, T0, 10, 20)).toBeNull();

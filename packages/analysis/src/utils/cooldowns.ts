@@ -1540,11 +1540,15 @@ export function gridHpMinInWindow(
  * the minimum. Equal values resolve to the earliest second. `atMs` is the
  * timestamp of the sample that was read.
  *
- * `span` — for a window that is an EVENT's own span (a lockout, a CC) rather
- * than a pair of displayed seconds: the samples before `fromMs` or after
- * `toMs` are not read, so a dip in the fraction of a second before a kick
- * landed is not reported as having happened inside its lockout. The window's
- * ticks are read regardless (they are what the page prints for it).
+ * `span` — for a window that is an EVENT's own span (a lockout, a CC, a
+ * burst window) rather than a pair of displayed seconds: the samples read
+ * are the ones from `fromMs` to `toMs`, so a dip in the fraction of a second
+ * before a kick landed is not reported as having happened inside its
+ * lockout. `[fromSec, toSec]` then says only which TICKS belong to the
+ * window, and they are read regardless (they are what the page prints for
+ * it). The span may open before `fromSec` — a caller whose first tick is the
+ * first whole second INSIDE its window (STAYED IN: `ceil(from)`) still gets
+ * the samples of the fraction of a second before that tick.
  *
  * NOT for a point reading and NOT for a decision: what a unit's HP was at a
  * second is `gridHpPct`, and every "did it cross / does this candidate
@@ -1566,16 +1570,18 @@ export function hpTroughInWindow(
     best = { ...grid, atMs: gridHpSample(unit, tickMs)?.sampleMs ?? tickMs };
   }
 
+  // where the samples start: the span's own start, else the first second
+  const fromMs = span?.fromMs ?? matchStartMs + fromSec * 1000;
+  const scanFromSec = Math.min(
+    fromSec,
+    toRenderSecond((fromMs - matchStartMs) / 1000),
+  );
   // the last second the unit is alive at, on the tick's own predicate
-  let lastSec = fromSec - 1;
-  for (let s = fromSec; s <= toSec; s++) {
+  let lastSec = scanFromSec - 1;
+  for (let s = scanFromSec; s <= toSec; s++) {
     if (isDeadAtRenderSecond(unit, matchStartMs, s)) break;
     lastSec = s;
   }
-  const fromMs = Math.max(
-    matchStartMs + fromSec * 1000,
-    span?.fromMs ?? -Infinity,
-  );
   const endMs = matchStartMs + (lastSec + 1) * 1000; // exclusive
   const spanToMs = span?.toMs ?? Infinity; // inclusive
   const actions = getSortedAdvancedActions(unit);

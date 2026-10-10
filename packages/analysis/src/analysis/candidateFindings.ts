@@ -2310,7 +2310,7 @@ export function positionMistakeEvents(
     | "ownerCcSeconds"
     | "ownerRootSeconds"
   > &
-    Partial<Pick<IPositionEvent, "topDamagerName">>)[],
+    Partial<Pick<IPositionEvent, "topDamagerName" | "ownerHpLowPct">>)[],
   owner: { id: string; name: string },
 ): CandidateEvent[] {
   return events
@@ -2334,8 +2334,13 @@ export function positionMistakeEvents(
       if (e.nearestEnemyName) facts.enemy = e.nearestEnemyName;
       if (e.ownerHpStartPct != null)
         facts.hpStart = String(Math.round(e.ownerHpStartPct));
+      // FT-T03 (user ruling 2026-10-10, D7): the fact is the trough — the
+      // true minimum inside the span (`ownerHpLowPct`). The filter, the
+      // order and the cap above read the whole-second minimum
+      // (`ownerHpMinPct`), so which stays are listed does not change; only
+      // the number does, and it is never above the one that decided.
       if (e.ownerHpMinPct != null)
-        facts.hpMin = String(Math.round(e.ownerHpMinPct));
+        facts.hpMin = String(Math.round(e.ownerHpLowPct ?? e.ownerHpMinPct));
       if (e.spellName) facts.spell = e.spellName;
       // Reliability round 2 F13 (06bb): the owner's own displacement, so a
       // chaser keeping pace is not retold as "stood still".

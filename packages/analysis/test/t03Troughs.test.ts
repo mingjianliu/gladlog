@@ -18,13 +18,25 @@ import {
 } from "@gladlog/parser-compat";
 import { describe, expect, it } from "vitest";
 
+import { positionMistakeEvents } from "../src/analysis/candidateFindings";
 import {
   CONSEQ_DROP_MIN_PCT,
   formatObservedConsequences,
   mateHitDuringCc,
   mateHpAcross,
 } from "../src/context/observedConsequences";
-import { gridHpPct, isTickBelowTrough } from "../src/utils/cooldowns";
+import {
+  gridHpPct,
+  hpTroughInWindow,
+  isTickBelowTrough,
+} from "../src/utils/cooldowns";
+import {
+  computeOwnerPositionEvents,
+  formatPositionEventsForContext,
+  type IPositionEvent,
+  STAYED_IN_NEAR_DEATH_PCT,
+  stayedInHadRealCost,
+} from "../src/utils/positionAnalysis";
 import { makeUnit } from "./ported/testHelpers";
 
 const T0 = 1_000_000;
@@ -141,5 +153,157 @@ describe("[CONSEQ] — the low is the true minimum inside the lockout / CC (FT-T
     const dropped = mate([]);
     expect(mateHitDuringCc(dropped, T0, cc)).toBe(true);
     expect(render(dropped)).not.toContain("no teammate dropped");
+  });
+});
+
+describe("STAYED IN / position-mistake — the printed minimum is the trough; the cost gate keeps the whole-second minimum (FT-T03)", () => {
+  // The owner stands 3 yd from an enemy through a burst window 10.4 → 20.4:
+  // a sample every half second for the positions, HP from `hpAt`.
+  const mk = (
+    id: string,
+    name: string,
+    x: number,
+    hpAt: (s: number) => number,
+  ) => {
+    const advancedActions = [];
+    for (let ms = 0; ms <= 60_000; ms += 500)
+      advancedActions.push({
+        timestamp: T0 + ms,
+        logLine: { timestamp: T0 + ms },
+        advancedActorId: id,
+        advancedActorCurrentHp: hpAt(ms / 1000),
+        advancedActorMaxHp: 100,
+        advancedActorPositionX: x,
+        advancedActorPositionY: 0,
+        advancedActorPowers: [],
+      });
+    return {
+      id,
+      name,
+      spec: CombatUnitSpec.Paladin_Holy,
+      advancedActions,
+      deathRecords: [],
+      damageOut: [],
+      damageIn: [],
+    };
+  };
+  const burst = {
+    fromSeconds: 10.4,
+    toSeconds: 20.4,
+    activeCDs: [],
+    threatScore: 1,
+    threatLabel: "High",
+    dangerScore: 1,
+    dangerLabel: "High",
+    dampeningPct: 0,
+    damageInWindow: 0,
+    damageRatio: 0,
+    healerCCed: false,
+  };
+  const stay = (hpAt: (s: number) => number) => {
+    const owner = mk("o", "Owner-R-US", 0, hpAt);
+    const ev = computeOwnerPositionEvents({
+      owner: owner as never,
+      enemies: [mk("e1", "Dk-R-US", 3, () => 100)] as never,
+      combat: { startTime: T0, endTime: T0 + 60_000 } as never,
+      burstWindows: [burst] as never,
+      ownerCooldowns: [],
+      isHealer: true,
+      ownerIsMelee: false,
+    }).find((e) => e.type === "STAYED_IN")!;
+    return { owner, ev };
+  };
+  const line = (e: IPositionEvent) =>
+    formatPositionEventsForContext([e]).find((l) => l.includes(" burst] "))!;
+
+  it("engine: a dip on a half second is the low; the whole-second minimum does not move", () => {
+    // whole seconds read 90 → 60 from 0:15; 20 % at 15.5 only
+    const hpAt = (s: number) => (s === 15.5 ? 20 : s >= 15 ? 60 : 90);
+    const { owner, ev } = stay(hpAt);
+    expect(ev.ownerHpStartPct).toBe(90);
+    expect(ev.ownerHpMinPct).toBe(60);
+    expect(ev.ownerHpLowPct).toBe(20);
+    // the ticks inside the window keep their readings, none below the low
+    for (let s = 11; s <= 20; s++)
+      expect(
+        isTickBelowTrough(gridHpPct(owner as never, T0 + s * 1000)!, 20),
+      ).toBe(false);
+    expect(gridHpPct(owner as never, T0 + 15_000)).toBe(60);
+  });
+
+  it("engine: the window bounds the samples — a dip in the start second BEFORE the window opened, or after it closed, is not its minimum", () => {
+    // 10.0 s is before the window (10.4); 20.5 s is after it (20.4)
+    const hpAt = (s: number) =>
+      s === 10 || s === 20.5 ? 5 : s >= 15 ? 60 : 90;
+    const { owner, ev } = stay(hpAt);
+    expect(ev.ownerHpLowPct).toBe(60);
+    expect(ev.ownerHpMinPct).toBe(60);
+    // (the function alone, asked for those displayed seconds, would see both)
+    expect(hpTroughInWindow(owner as never, T0, 10, 20)!.pct).toBe(5);
+  });
+
+  const ev = (over: Partial<IPositionEvent>): IPositionEvent => ({
+    type: "STAYED_IN",
+    atSeconds: 174,
+    toSeconds: 184,
+    startDistanceYards: 7.7,
+    endDistanceYards: 2.9,
+    nearestEnemyName: "Enemy-R-US",
+    dangerLabel: "High",
+    ownerHpStartPct: 90,
+    ownerHpMinPct: 60,
+    ...over,
+  });
+
+  it("line: prints the low; `stayed at or above` only when it is true of the printed number", () => {
+    expect(STAYED_IN_NEAR_DEATH_PCT).toBe(35);
+    // both above the line → the fact tag, about the low
+    expect(line(ev({ ownerHpLowPct: 50 }))).toContain(
+      "your HP 90%→50% (min over window) (HP stayed at or above 35%)",
+    );
+    // ticks stayed above the line, the trough went under it → neither tag:
+    // "stayed at or above 35%" would be false, and "the stay was costly" is
+    // the menu gate's verdict, which reads the whole-second minimum
+    const mixed = line(ev({ ownerHpLowPct: 20 }));
+    expect(mixed).toContain("your HP 90%→20% (min over window)");
+    expect(mixed).not.toContain("stayed at or above");
+    expect(mixed).not.toContain("near-death");
+    // the whole-second minimum under the line → the verdict tag, as before
+    expect(line(ev({ ownerHpMinPct: 30, ownerHpLowPct: 12 }))).toContain(
+      "your HP 90%→12% (min over window) (near-death — the stay was costly)",
+    );
+    // no trough on the event (hand-built, older callers) → the old line
+    expect(line(ev({}))).toContain(
+      "your HP 90%→60% (min over window) (HP stayed at or above 35%)",
+    );
+  });
+
+  it("menu: `hpMin` is the low, but WHICH stays are listed is still the whole-second minimum's call", () => {
+    const owner = { id: "o", name: "Owner-R-US" };
+    const listed = positionMistakeEvents(
+      [ev({ ownerHpMinPct: 30, ownerHpLowPct: 12 })],
+      owner,
+    );
+    expect(listed).toHaveLength(1);
+    expect(listed[0]!.facts.hpStart).toBe("90");
+    expect(listed[0]!.facts.hpMin).toBe("12");
+    // a trough under the cost line with a whole-second minimum above it is
+    // NOT a candidate: the ruling adds no position-mistake
+    expect(stayedInHadRealCost(20)).toBe(true);
+    expect(
+      positionMistakeEvents(
+        [ev({ ownerHpMinPct: 60, ownerHpLowPct: 20 })],
+        owner,
+      ),
+    ).toEqual([]);
+    // …and the order under the cap is the decision's too
+    const two = positionMistakeEvents(
+      [
+        ev({ atSeconds: 10, ownerHpMinPct: 30, ownerHpLowPct: 5 }),
+        ev({ atSeconds: 50, ownerHpMinPct: 20, ownerHpLowPct: 18 }),
+      ],
+      owner,
+    );
+    expect(two.map((e) => e.facts.hpMin)).toEqual(["18", "5"]);
   });
 });

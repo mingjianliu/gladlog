@@ -23,6 +23,7 @@ import { ICCInstance } from "./ccTrinketAnalysis";
 import {
   getUnitHpAtTimestamp,
   HP_SAMPLE_RADIUS_MS,
+  hpTroughInWindow,
   IMajorCooldownInfo,
   isHealerSpec,
   isMeleeSpec,
@@ -180,6 +181,18 @@ export interface IPositionEvent {
    *  OUTCOME that turns "stayed in" from a hedge into a fact (near-death vs no cost). */
   ownerHpStartPct?: number | null;
   ownerHpMinPct?: number | null;
+  /** STAYED_IN only: the TRUE minimum of the owner's HP inside the window
+   *  (`hpTroughInWindow`: every sample, not only the whole-second readings)
+   *  — FT-T03, user ruling 2026-10-10 (D7). Never above `ownerHpMinPct`.
+   *
+   *  This is the number the prompt PRINTS (the POSITIONING line's `A%→B%
+   *  (min over window)`, position-mistake's `hpMin` fact). `ownerHpMinPct`
+   *  stays the whole-second minimum and stays what every DECISION reads:
+   *  `stayedInHadRealCost` for the menu gate and its ordering / cap, the
+   *  "(near-death — the stay was costly)" tag, the desktop key moment, the
+   *  deep-dive item and its teachable gate — so no position-mistake
+   *  candidate appears or disappears with the ruling. */
+  ownerHpLowPct?: number | null;
   /** HEALER_TRAINED only: healer was hard-CC'd for most of the camp → could not
    *  self-reposition (team must peel), so don't advise "reposition". */
   ownerCcLocked?: boolean;
@@ -912,6 +925,32 @@ export function computeOwnerPositionEvents(params: {
         );
         if (hp !== null && (hpMin === null || hp < hpMin)) hpMin = hp;
       }
+      // FT-T03 (user ruling 2026-10-10, D7): the minimum a line or the menu
+      // PRINTS is a trough — the true minimum of every sample inside the
+      // window, not the lowest whole-second reading (`hpMin`, which stays
+      // the decision's: see `ownerHpLowPct`). Same ticks as the loop above
+      // (the whole seconds inside the window), plus every sample from the
+      // window's start to its end.
+      const trough =
+        hpMin === null
+          ? null
+          : hpTroughInWindow(
+              owner,
+              matchStartMs,
+              Math.ceil(w.fromSeconds),
+              Math.floor(evalEnd),
+              undefined,
+              {
+                fromMs: matchStartMs + Math.round(w.fromSeconds * 1000),
+                toMs: matchStartMs + Math.round(evalEnd * 1000),
+              },
+            );
+      const hpLow =
+        hpMin === null
+          ? null
+          : trough === null
+            ? hpMin
+            : Math.min(hpMin, trough.pct);
 
       // B24b: who actually hit the owner over the rendered span
       const topDamager = topEnemyDamagerInSpan(
@@ -949,6 +988,7 @@ export function computeOwnerPositionEvents(params: {
         burstTargetName: burstTargetsOwner === false ? targetName : undefined,
         ownerHpStartPct: hpStart === null ? null : Math.round(hpStart),
         ownerHpMinPct: hpMin === null ? null : Math.round(hpMin),
+        ownerHpLowPct: hpLow === null ? null : Math.round(hpLow),
         ...(ownerMovedToEnd !== undefined
           ? { ownerMovedYards: ownerMovedToEnd }
           : {}),
@@ -1426,10 +1466,21 @@ export function formatPositionEventsForContext(
         // GH #16): at hpMin = 35 the old `<=` tagged "near-death" a stay the
         // gate did not count. The other side states the fact instead of the
         // verdict "(no real cost)" (user ruling 2026-09-30, A60 = B).
+        //
+        // FT-T03 (ruling D7): the PRINTED minimum is the trough
+        // (`ownerHpLowPct`). The verdict tag is a decision and stays where
+        // the menu gate is — on the grid minimum — so "the stay was costly"
+        // is printed exactly on the stays the menu can list. The other tag
+        // is a statement about the printed number and must be true of it: a
+        // stay whose ticks stayed at or above the line while the trough went
+        // under it prints neither (`90%→20% (min over window)`).
+        const low = e.ownerHpLowPct ?? e.ownerHpMinPct;
         const tag = stayedInHadRealCost(e.ownerHpMinPct, e.ownerHpStartPct)
           ? " (near-death — the stay was costly)"
-          : ` (HP stayed at or above ${STAYED_IN_NEAR_DEATH_PCT}%)`;
-        hpStr = ` — your HP ${e.ownerHpStartPct}%→${e.ownerHpMinPct}% (min over window)${tag}`;
+          : stayedInHadRealCost(low, e.ownerHpStartPct)
+            ? ""
+            : ` (HP stayed at or above ${STAYED_IN_NEAR_DEATH_PCT}%)`;
+        hpStr = ` — your HP ${e.ownerHpStartPct}%→${low}% (min over window)${tag}`;
       } else {
         // No HP data — fall back to the dampening context hedge.
         hpStr =

@@ -53,6 +53,7 @@
     "test/responseQuoteCheck.test.ts",
     "test/signalSkillGradient.test.ts",
     "test/smoke.test.ts",
+    "test/stayedInHpGate.test.ts",
     "test/sycophancy.test.ts",
     "test/unnecessaryNoteHpGate.test.ts"
   ]

@@ -120,6 +120,7 @@ import {
 } from "@gladlog/analysis/src/utils/enemyDefensives";
 import { DURING_ABSORBED_TAG_RE_SRC } from "@gladlog/analysis/src/utils/externalDamage";
 import { VULNERABLE_OWNER_DAMAGE_RE_SRC } from "@gladlog/analysis/src/utils/healerOffenseAnalysis";
+import { STAYED_IN_NEAR_DEATH_PCT } from "@gladlog/analysis/src/utils/positionAnalysis";
 import { fmtTime } from "@gladlog/analysis/src/utils/renderGrid";
 import { SUMMON_KIND_RE_SRC } from "@gladlog/analysis/src/utils/summonKind";
 import fs from "fs-extra";
@@ -3619,6 +3620,81 @@ export function checkBurstAnsweredBottomConsistency(lines: string[]): string[] {
   return failures;
 }
 
+// "    0:54–1:04 [Critical burst] 2.8→5.7yd from … — your HP 98%→70% (min over window) (HP stayed at or above 35%) — …"
+const STAYED_IN_HP =
+  /^\s+(\d+):(\d\d)–(\d+):(\d\d) \[[^\]]* burst\] .* — your HP (\d+)%→(\d+)% \(min over window\)( \(near-death — the stay was costly\)| \(HP stayed at or above (\d+)%\))?/;
+
+/**
+ * Hard invariant (FT-T03, user ruling 2026-10-10, D7): a POSITIONING
+ * `STAYED IN` line's `your HP A%→B% (min over window)` — B is a TROUGH, the
+ * true minimum of the log owner's HP inside the span
+ * (`computeOwnerPositionEvents` → `ownerHpLowPct`, `hpTroughInWindow`), so:
+ *  - B is not above A (the start reading is part of the minimum);
+ *  - no `[STATE]` tick of the log owner on a whole second inside the span
+ *    reads below B (`isTickBelowTrough`). The span's first displayed second
+ *    is left out: the window opens on a fractional instant, and the tick of
+ *    that second can be a reading from before it;
+ *  - the tag is true of the number it stands next to:
+ *    `(HP stayed at or above N%)` needs N = `STAYED_IN_NEAR_DEATH_PCT` (the
+ *    renderer's own constant) and B ≥ N; `(near-death — the stay was
+ *    costly)` needs B < N (the verdict is decided on the whole-second
+ *    minimum, and the trough is never above that).
+ * Before the ruling this line had no gate: B was the lowest whole-second
+ * reading and nothing re-read it. A line with no span (`m:ss [...]`) or no
+ * HP clause is out of scope; so is a roster without a `log owner`.
+ */
+export function checkStayedInHpConsistency(lines: string[]): string[] {
+  let ownerId: number | null = null;
+  const ownerTick = new Map<number, number>();
+  for (const line of lines) {
+    const role = line.match(UNIT_ROLE_LINE);
+    if (role && role[2] === "log owner") ownerId = Number(role[1]);
+  }
+  if (ownerId !== null)
+    for (const line of lines) {
+      const st = line.match(STATE_LINE);
+      if (!st) continue;
+      for (const tok of st[3]!.matchAll(STATE_TOKEN))
+        if (Number(tok[1]) === ownerId && /^\d+$/.test(tok[2]!))
+          ownerTick.set(Number(st[1]) * 60 + Number(st[2]), Number(tok[2]));
+    }
+
+  const failures: string[] = [];
+  lines.forEach((line, i) => {
+    const m = line.match(STAYED_IN_HP);
+    if (!m) return;
+    const from = Number(m[1]) * 60 + Number(m[2]);
+    const to = Number(m[3]) * 60 + Number(m[4]);
+    const A = Number(m[5]);
+    const B = Number(m[6]);
+    const at = `line ${i + 1}: STAYED IN ${fmtTime(from)}–${fmtTime(to)}`;
+    if (B > A) failures.push(`${at} 窗口最低 ${B}% 高于起点 ${A}%`);
+    if (m[7]?.includes("near-death") && B >= STAYED_IN_NEAR_DEATH_PCT)
+      failures.push(
+        `${at} 标注 near-death,但窗口最低 ${B}% ≥ ${STAYED_IN_NEAR_DEATH_PCT}%`,
+      );
+    if (m[8] !== undefined) {
+      const n = Number(m[8]);
+      if (n !== STAYED_IN_NEAR_DEATH_PCT)
+        failures.push(
+          `${at} 标注「HP stayed at or above ${n}%」与判据常量 ${STAYED_IN_NEAR_DEATH_PCT}% 不一致`,
+        );
+      if (B < n)
+        failures.push(
+          `${at} 标注「HP stayed at or above ${n}%」但窗口最低 ${B}%`,
+        );
+    }
+    for (let s = from + 1; s <= to; s++) {
+      const tick = ownerTick.get(s);
+      if (tick !== undefined && isTickBelowTrough(tick, B))
+        failures.push(
+          `${at} 窗口最低写 ${B}%,但 ${fmtTime(s)} 的 [STATE] 报 ${tick}%`,
+        );
+    }
+  });
+  return failures;
+}
+
 /**
  * Does a covered probe contradict its `[STATE]` tick? One predicate for the
  * gate and the standing measurement (`scripts/crisisHpStateScan.ts`):
@@ -4293,6 +4369,7 @@ export function checkMatch(
   hardFailures.push(...checkGuardianSpiritSaveClause(lines));
   hardFailures.push(...checkKarmaFedClause(lines));
   hardFailures.push(...checkResReturnAnnounced(lines));
+  hardFailures.push(...checkStayedInHpConsistency(lines));
 
   return {
     ordinal: entry.ordinal,
