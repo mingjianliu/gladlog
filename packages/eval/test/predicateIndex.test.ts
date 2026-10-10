@@ -980,6 +980,13 @@ const INDEX: PredicateRow[] = [
     symbol: "topDamagerClause",
     mod: positionAnalysis,
   },
+  // FT-T12 D2: the one enemy a STAYED IN / KITED span is measured to — the
+  // producer and the positioning gate's G4d call it
+  {
+    file: `${A}/utils/positionAnalysis.ts`,
+    symbol: "spanMeasuredEnemy",
+    mod: positionAnalysis,
+  },
   {
     file: `${A}/context/timelineHelpers.ts`,
     symbol: "dmgSpikeWindowsOf",
@@ -1648,6 +1655,13 @@ const INDEX: PredicateRow[] = [
   {
     file: `${A}/analysis/burstWindowDecisionPoints.ts`,
     symbol: "AIMED_CONTROL_LANDING_LEAD_MS",
+    mod: burstWindowDecisionPoints,
+  },
+  // FT-T12 D3: which control answers a burst — one rule for `responded` and
+  // the [BURST ANSWERED] credit
+  {
+    file: `${A}/analysis/burstWindowDecisionPoints.ts`,
+    symbol: "controlTargetHitPressured",
     mod: burstWindowDecisionPoints,
   },
   {
