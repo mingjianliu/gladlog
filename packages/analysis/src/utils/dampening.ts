@@ -31,25 +31,45 @@ export interface DampeningEvent {
  * player died — the survivors' Dampening dropped by a third or more on a
  * SPELL_AURA_REMOVED_DOSE line (95127ab4: 51 → 32) and climbed again from
  * there; read on APPLIED_DOSE alone it stayed at 52 until the next dose.
+ *
+ * This is the ONE place the stack count is read off a dose line
+ * (`doseStackCount`).
  */
 export function buildDampeningEvents(players: ICombatUnit[]): DampeningEvent[] {
-  return (players ?? [])
-    .flatMap((p) => p?.auraEvents ?? [])
-    .filter((a) => {
-      if (!a || a.spellId !== "110310") return false;
-      if (
-        !a.logLine ||
-        (a.logLine.event !== "SPELL_AURA_APPLIED_DOSE" &&
-          a.logLine.event !== "SPELL_AURA_REMOVED_DOSE")
-      )
-        return false;
-      return typeof a.logLine.parameters?.[12] === "number";
-    })
-    .map((a) => ({
-      timestamp: a.timestamp,
-      stacks: a.logLine.parameters![12] as number,
-    }))
-    .sort((a, b) => a.timestamp - b.timestamp);
+  const events: DampeningEvent[] = [];
+  for (const a of (players ?? []).flatMap((p) => p?.auraEvents ?? [])) {
+    if (!a || a.spellId !== "110310") continue;
+    if (
+      !a.logLine ||
+      (a.logLine.event !== "SPELL_AURA_APPLIED_DOSE" &&
+        a.logLine.event !== "SPELL_AURA_REMOVED_DOSE")
+    )
+      continue;
+    const stacks = doseStackCount(a.logLine.parameters?.[12]);
+    if (stacks !== null) events.push({ timestamp: a.timestamp, stacks });
+  }
+  return events.sort((a, b) => a.timestamp - b.timestamp);
+}
+
+/**
+ * The stack count of a dose line's amount parameter, or null when it is not
+ * a count.
+ *
+ * The parser hands it over as a number — except in a document stored by a
+ * parser older than the CRLF fix (parser/src/api.ts): the amount is the last
+ * field of the line, so it kept the line's trailing "\r" ("42\r"), which
+ * parser-compat's `convertParams` leaves a string. Such a document's stacks
+ * were never read; in 2v2, where no value is stated before the first logged
+ * stack (`getInitialDampening`), that left the whole round without a
+ * dampening number. Trailing / leading whitespace is trimmed here and a
+ * plain non-negative integer is accepted; anything else is still not a
+ * count.
+ */
+function doseStackCount(raw: unknown): number | null {
+  if (typeof raw === "number") return raw;
+  if (typeof raw !== "string") return null;
+  const trimmed = raw.trim();
+  return /^\d+$/.test(trimmed) ? Number(trimmed) : null;
 }
 
 /**
@@ -143,9 +163,9 @@ export function dampeningRulesOf(
  *   applied in the sampled round); in Shuffle it reads 12 / 11 / 13 in
  *   510 / 187 / 12 rounds, 20–90 s in (about 60 s after the aura is applied)
  *   — a flat 10, then the ramp (605-file capture).
- * - **2v2: `null` — deliberately not stated** (user ruling D11 of FT-T13,
- *   "follow the log's first tick", re-opening the signed O10 of 2026-09-30
- *   that had kept 30 / 10). The table's Dragonflight values — 30 with a healer
+ * - **2v2: `null` — deliberately not stated** (user ruling 2026-10-10, D11
+ *   of FT-T13, "follow the log's first tick", re-opening the signed O10 of
+ *   2026-09-30 that had kept 30 / 10). The table's Dragonflight values — 30 with a healer
  *   on both teams, 10 otherwise — are contradicted by the log: the first
  *   stack, about 10 s after the aura is applied, reads **42 in 258 of 258**
  *   rounds with two healers and **22 in 32 of 32** rounds of the other kind
@@ -329,9 +349,8 @@ export function formatDampeningForContext(
   // No value stated at any point of the round: a 2v2 round with no logged
   // stack (`getInitialDampening`). Said, not left out — and as what the data
   // has, not as a reason: the usual case is a round that ended inside its
-  // first ~11 s, but a document stored by a parser older than the CRLF fix
-  // (parser/src/api.ts) carries the stack as "42\r", which
-  // `buildDampeningEvents` does not read, whatever the round's length.
+  // first ~11 s, but a stored document that lost its dose lines says the
+  // same whatever the round's length.
   if (timeline.length === 0) {
     return [
       `DAMPENING (${bracket}): n/a — no dampening stack was logged in this round (${toRenderSecond(durationSeconds)}s)`,

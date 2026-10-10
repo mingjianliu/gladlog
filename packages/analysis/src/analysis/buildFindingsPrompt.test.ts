@@ -566,8 +566,14 @@ describe("crisis-no-response 图例(spec 2026-08-29 §1b,GH #58):条件渲染 + 
     // crisis-external F-C1 (ruling A48 = C): "did NOTHING" is gone — the line
     // says what the measure is and what the player did press.
     expect(p).not.toMatch(/did NOTHING/);
+    // WP-H 3 (FT-T13 D11): the dampening fact is conditional — it is left out
+    // in a 2v2 round before the first logged stack — so the legend says
+    // "when … is present" instead of citing it unconditionally.
     expect(p).toContain(
-      "did not answer it by this measure — no self-heal that reached 15% of max HP (facts.selfHealPct% landed from facts.selfHealCasts self-heal casts at facts.dampeningPct% dampening)",
+      "did not answer it by this measure — no self-heal that reached 15% of max HP (facts.selfHealPct% landed from facts.selfHealCasts self-heal casts — at facts.dampeningPct% dampening, when facts.dampeningPct is present)",
+    );
+    expect(p).not.toContain(
+      "self-heal casts at facts.dampeningPct% dampening)",
     );
   });
 

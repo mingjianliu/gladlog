@@ -2,6 +2,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 
 import { Timeline } from "../src/renderer/src/report/components/Timeline";
+import { deriveDampeningSeries } from "../src/renderer/src/report/derive/dampeningSeries";
 import {
   deriveFlowSeries,
   type FlowMetric,
@@ -133,6 +134,20 @@ describe("Timeline", () => {
     expect(Number(rects[0]!.getAttribute("x"))).toBeGreaterThan(
       Number(fromZero[0]!.getAttribute("x")),
     );
+  });
+
+  it('dampening 泳道:report-match.json(真实 2v2,旧解析存档的层数是 "42\\r")仍然有泳道,从第一次读数画起(WP-H 3)', () => {
+    // the lane this fixture renders in the report: one run at 42%, not the
+    // empty lane an unread "42\r" left it with
+    const dampening = deriveDampeningSeries(m);
+    expect(dampening[0]).toEqual({ tS: 13, pct: 42 });
+    const { container } = render(
+      <Timeline data={deriveTimeline(m)} dampening={dampening} />,
+    );
+    const rects = container.querySelectorAll("[data-testid='rpt-damp-lane']");
+    expect(rects).toHaveLength(1);
+    expect(rects[0]!.textContent).toContain("Dampening 42%");
+    expect(rects[0]!.getAttribute("opacity")).toBe("0.42");
   });
 });
 

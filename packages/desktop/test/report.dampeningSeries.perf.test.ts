@@ -37,7 +37,7 @@ import {
   deriveDampeningSeries,
 } from "../src/renderer/src/report/derive/dampeningSeries";
 import type { ReportSource } from "../src/renderer/src/report/derive/types";
-import { loadRealMatchFixture } from "./fixtures/loadFixture";
+import { loadMatchFixture, loadRealMatchFixture } from "./fixtures/loadFixture";
 
 type NativeUnit = { auraEvents: Array<Record<string, unknown>> };
 
@@ -144,5 +144,33 @@ describe("deriveDampeningSeries — 2v2 没有开局读数,曲线从第一次日
     );
     expect(series[0]).toEqual({ tS: 0, pct: 10 });
     expect(dampeningAt(series, 0)).toBe(10);
+  });
+
+  it('旧解析存档(层数存成 "42\\r")照样读得到:report-match.json 这场真实 2v2 的泳道从第一次读数开始(WP-H 3)', () => {
+    // report-match.json was stored by a parser older than the CRLF fix: its
+    // four dose lines carry the stack as "42\r" (at 12.1 / 12.5 / 15.0 /
+    // 15.2 s of a 15.5 s round). Unread, this 2v2 round had no dampening
+    // point at all; read, its series starts at the first cell at or after
+    // the first logged stack (cells sample at whole seconds: 12.1 s → 0:13).
+    const m = loadMatchFixture();
+    expect((m as unknown as { bracket: string }).bracket).toBe("2v2");
+    const stored = Object.values(m.units).flatMap((u) =>
+      (u as unknown as NativeUnit).auraEvents.filter(
+        (a) =>
+          String(a.spellId) === "110310" &&
+          a.eventName === "SPELL_AURA_APPLIED_DOSE",
+      ),
+    );
+    expect(stored).toHaveLength(4);
+    for (const a of stored) expect((a.params as string[])[12]).toBe("42\r");
+
+    const series = deriveDampeningSeries(m as unknown as ReportSource);
+    expect(series).toEqual([
+      { tS: 13, pct: 42 },
+      { tS: 14, pct: 42 },
+      { tS: 15, pct: 42 },
+    ]);
+    expect(dampeningAt(series, 12.9)).toBeNull();
+    expect(dampeningAt(series, 13)).toBe(42);
   });
 });

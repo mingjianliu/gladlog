@@ -6,6 +6,7 @@ import {
 } from "@gladlog/parser-compat";
 
 import {
+  buildDampeningEvents,
   computeDampening,
   computeDampeningTimeline,
   dampeningDangerMultiplier,
@@ -244,24 +245,67 @@ describe("FT-T13 D11: a 2v2 round states no dampening before its first logged st
     ]);
   });
 
-  it('a stack the stored document carries as a string ("42\\r", a pre-CRLF-fix parse) is not read — the round then has no logged stack', () => {
+  describe('WP-H 3: the stack count of a stored document ("42\\r", a pre-CRLF-fix parse) is read', () => {
     // packages/desktop/test/fixtures/report-match.json is such a document: a
-    // real 15 s healer 2v2 whose four `42\r` doses sit at 12.1–15.2 s.
-    const e = makeAuraEvent(
-      LogEvent.SPELL_AURA_APPLIED_DOSE as any,
-      "110310",
-      at(12),
-      "h",
-      "h",
-    );
-    (e.logLine as any).parameters[12] = "42\r";
-    const p = [makeUnit("p", { auraEvents: [e as any] })];
-    expect(firstLoggedDampening(p as any)).toBeNull();
-    expect(
-      formatDampeningForContext("2v2", p as any, MATCH_START, at(15.5)),
-    ).toEqual([
-      "DAMPENING (2v2): n/a — no dampening stack was logged in this round (15s)",
-    ]);
+    // real 15 s healer 2v2 whose four `42\r` doses sit at 12.1–15.2 s. The
+    // amount is the last field of the line, so it kept the trailing "\r" and
+    // parser-compat left it a string; read as "not a number" the round had
+    // no logged stack at all.
+    const doseWith = (raw: unknown, atS = 12) => {
+      const e = makeAuraEvent(
+        LogEvent.SPELL_AURA_APPLIED_DOSE as any,
+        "110310",
+        at(atS),
+        "h",
+        "h",
+      );
+      (e.logLine as any).parameters[12] = raw;
+      return e as any;
+    };
+    const unitWith = (...raws: unknown[]) => [
+      makeUnit("p", { auraEvents: raws.map((r, i) => doseWith(r, 12 + i)) }),
+    ];
+
+    it('trailing "\\r" / whitespace is trimmed; the value is the number', () => {
+      for (const raw of ["42\r", "42\r\n", " 42 ", "42", 42]) {
+        expect(buildDampeningEvents(unitWith(raw) as any)).toEqual([
+          { timestamp: at(12), stacks: 42 },
+        ]);
+      }
+      const p = unitWith("42\r");
+      expect(firstLoggedDampening(p as any)).toEqual({
+        timestamp: at(12),
+        stacks: 42,
+      });
+      expect(getDampeningPercentage("2v2", p as any, at(11))).toBeNull();
+      expect(getDampeningPercentage("2v2", p as any, at(13))).toBe(42);
+      expect(
+        formatDampeningForContext("2v2", p as any, MATCH_START, at(15.5)),
+      ).toEqual([
+        "DAMPENING (2v2): first logged at 42% (0:12; the log prints no value before that), ended at 42% at match end",
+        "  Dampening 42% at match end (≥40% bracket: healing received reduced by 42%).",
+      ]);
+    });
+
+    it("what is not a count is still not read", () => {
+      for (const raw of [
+        "",
+        "\r",
+        "DEBUFF",
+        "4x",
+        "-3",
+        "4.5",
+        "nil",
+        null,
+        undefined,
+      ]) {
+        expect(buildDampeningEvents(unitWith(raw) as any)).toEqual([]);
+      }
+      // a readable dose next to an unreadable one: only the readable one
+      expect(buildDampeningEvents(unitWith("DEBUFF\r", "43\r") as any)).toEqual(
+        [{ timestamp: at(13), stacks: 43 }],
+      );
+    });
   });
 });
 

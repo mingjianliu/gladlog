@@ -37,19 +37,35 @@ describe("buildMatchContext on real fixture", () => {
   it("GH #103 A1: every [DEATH] line carries the dampening at that instant — where one is stated", () => {
     const deathLines = (ctx: string) =>
       ctx.split("\n").filter((l) => l.includes("[DEATH]"));
-    // The fixture is a 2v2 round, and FT-T13 D11 states no dampening in 2v2
-    // before the first logged stack. This document was stored by a parser
-    // older than the CRLF fix: its doses read "42\r" and are never picked up,
-    // so the round has no logged stack at all — the [DEATH] lines carry no
-    // number (they used to carry the hand value 30%), and the header says so.
+    // The fixture is a real 15 s 2v2 round with a healer on both teams, and
+    // FT-T13 D11 states no dampening in 2v2 before the first logged stack.
+    // Its doses are stored as "42\r" (a parse older than the CRLF fix), which
+    // `buildDampeningEvents` reads since WP-H 3: the first stack is 42 at
+    // 12.099 s. Its only death is at 12.059 s — 40 ms BEFORE that stack — so
+    // the [DEATH] line carries no number (it used to carry the hand value
+    // 30%), while the alert of the same second, which IS the stack, does.
     const ctx = buildMatchContext(match, friends, enemies, {});
     const deaths = deathLines(ctx);
-    expect(deaths.length).toBeGreaterThan(0);
-    for (const l of deaths) expect(l).not.toMatch(/dampening/);
+    expect(deaths).toHaveLength(1);
+    expect(deaths[0]).toMatch(/^0:12 {2}\[DEATH\]/);
+    expect(deaths[0]).not.toMatch(/dampening/);
     expect(ctx).toContain(
-      "DAMPENING (2v2): n/a — no dampening stack was logged in this round (15s)",
+      "DAMPENING (2v2): first logged at 42% (0:12; the log prints no value before that), ended at 42% at match end",
     );
-    expect(ctx).not.toMatch(/dampening: \d+%|damp: \d+%|DAMPENING ALERT/);
+    const lines = ctx.split("\n");
+    expect(lines).toContain("0:12  [DAMPENING ALERT: 30%]");
+    expect(lines.find((l) => l.includes("[MATCH END]"))).toMatch(/damp: 42%/);
+    // no line stamped before 0:12 states a dampening number
+    const before = lines.filter((l) => {
+      const m = l.match(/^(\d+):(\d{2})\s/);
+      return m !== null && Number(m[1]) * 60 + Number(m[2]) < 12;
+    });
+    expect(before.length).toBeGreaterThan(0);
+    expect(
+      before.filter((l) =>
+        /dampening: \d+%|damp: \d+%|DAMPENING ALERT/.test(l),
+      ),
+    ).toEqual([]);
     // The same round under a bracket that states a value from 0:00 on: every
     // [DEATH] line carries it (the assertion this test was written for).
     const as3v3 = {
