@@ -14,13 +14,16 @@
  * Both teams' healers: an enemy healer locked while their DPS dropped is the
  * praise side of the same fact.
  *
- * Every HP number is the `[STATE]` grid reading (`gridHpPct` /
- * `gridHpMinInWindow` on whole render seconds), so a line can never disagree
- * with a `[STATE]` tick for the same unit and second; the gate
- * `checkConseqHpStateConsistency` (promptQualityCheck.ts) re-parses the
- * rendered text against those ticks. The CC instances are the same
- * `analyzePlayerCCAndTrinket` summaries the `[CC ON TEAM]` / `[CC ON ENEMY]`
- * lines render.
+ * The start HP is the `[STATE]` grid reading (`gridHpPct` at the span's first
+ * render second). The LOW is a trough since FT-T03 (user ruling 2026-10-10,
+ * D7): the true minimum of every sample inside the lockout / CC itself
+ * (`hpTroughInWindow` with the event's own span), printed at the second it
+ * happened — 121c7e15 read `66% → low 32% at 1:30` over a 22 % reading half
+ * a second later. A trough is never above a `[STATE]` tick of its span, and
+ * the gate `checkConseqHpStateConsistency` (promptQualityCheck.ts) re-parses
+ * the rendered text against those ticks on exactly that. The CC instances
+ * are the same `analyzePlayerCCAndTrinket` summaries the `[CC ON TEAM]` /
+ * `[CC ON ENEMY]` lines render.
  *
  * Probe that justified it (40 rounds × 2 arms, Opus 5.5, blind judge;
  * eval-private runs/2026-09-24-gh70-consequence): consequence sentences
@@ -40,7 +43,12 @@ import {
   IPlayerCCTrinketSummary,
   renderedCcSeconds,
 } from "../utils/ccTrinketAnalysis";
-import { gridHpMinInWindow, gridHpPct, isHealerSpec } from "../utils/cooldowns";
+import {
+  gridHpMinInWindow,
+  gridHpPct,
+  hpTroughInWindow,
+  isHealerSpec,
+} from "../utils/cooldowns";
 import { kickLockoutSecondsFor } from "../utils/kickLockout";
 import { fmtTime } from "../utils/renderGrid";
 
@@ -50,7 +58,7 @@ export const HEALER_CC_MIN_S = 2;
 export const CONSEQ_DROP_MIN_PCT = 10;
 
 export const CONSEQ_SECTION_HEADER =
-  "OBSERVED CONSEQUENCES — what the log shows happened to a team's HP while its healer was kicked (inside the school lockout) or CC'd. `A% → low B% at m:ss` = that unit's [STATE] reading at the start and its lowest reading inside the span. Measurements, not verdicts: they say what happened, not why the round went the way it did.";
+  "OBSERVED CONSEQUENCES — what the log shows happened to a team's HP while its healer was kicked (inside the school lockout) or CC'd. `A% → low B% at m:ss` = that unit's [STATE] reading at the start, and the lowest HP the log shows for it inside the span, at the second it happened (the true minimum between the ticks: it can sit below every [STATE] number of the span). Measurements, not verdicts: they say what happened, not why the round went the way it did.";
 
 interface Labels {
   friendly: (name: string) => string;
@@ -59,7 +67,13 @@ interface Labels {
 
 /**
  * One teammate's HP across a span of whole render seconds: the `[STATE]`
- * reading at `fromSec` and the lowest reading inside `[fromSec, toSec]`.
+ * reading at `fromSec`, and two lows inside `[fromSec, toSec]`:
+ *  - `lo` — the lowest `[STATE]`-grid reading (`gridHpMinInWindow`). The
+ *    reading a DECISION asks (`mateHitDuringCc` → death-setup healer-locked);
+ *  - `trough` — the true minimum (`hpTroughInWindow`), the number the
+ *    `[CONSEQ]` line prints (FT-T03, ruling D7). With `span` (the lockout /
+ *    CC in ms) the samples outside the event itself are not read.
+ * `trough.pct <= lo.pct` always (the grid minimum is part of the trough).
  * Null when the grid has no sample to read.
  */
 export function mateHpAcross(
@@ -67,20 +81,36 @@ export function mateHpAcross(
   matchStartMs: number,
   fromSec: number,
   toSec: number,
-): { h0: number; lo: { pct: number; atSec: number } } | null {
+  span?: { fromMs: number; toMs: number },
+): {
+  h0: number;
+  lo: { pct: number; atSec: number };
+  trough: { pct: number; atSec: number };
+} | null {
   const h0 = gridHpPct(mate, matchStartMs + fromSec * 1000);
   const lo = gridHpMinInWindow(mate, matchStartMs, fromSec, toSec);
   if (h0 === null || !lo) return null;
-  return { h0, lo };
+  const trough =
+    hpTroughInWindow(mate, matchStartMs, fromSec, toSec, undefined, span) ??
+    lo;
+  return { h0, lo, trough };
 }
 
 /**
- * Did this teammate pay for the healer's CC — the `[CONSEQ]` line's own
- * test: a drop of `CONSEQ_DROP_MIN_PCT` from the CC's first rendered second
- * to its lowest reading inside the CC, or a death inside it. Shared with
- * death-setup `healer-locked` (reliability round 2 W1c), so the menu never
- * says a CC held the healer before the death next to a `[CONSEQ]` line
- * saying nobody dropped during that CC (be835950).
+ * Did this teammate pay for the healer's CC: a drop of
+ * `CONSEQ_DROP_MIN_PCT` from the CC's first rendered second to its lowest
+ * `[STATE]`-grid reading inside the CC, or a death inside it. The test
+ * behind death-setup `healer-locked` (reliability round 2 W1c).
+ *
+ * FT-T03 (ruling D7): this is a DECISION — it says whether a death-setup
+ * kind exists — so it keeps the grid low (`lo`); only the number the
+ * `[CONSEQ]` line prints moved to the trough. The line's own "who dropped"
+ * test reads the trough, which is never above the grid low, so the
+ * guarantee this function was shared for still holds in the direction that
+ * matters: the menu never says a CC held the healer before the death next
+ * to a `[CONSEQ]` line saying nobody dropped during that CC (be835950). The
+ * reverse — a line naming a drop the grid did not see, and no healer-locked
+ * for it — is the candidate set not moving.
  */
 export function mateHitDuringCc(
   mate: ICombatUnit,
@@ -111,15 +141,24 @@ function teamDrops(
   mates: ICombatUnit[],
   label: (name: string) => string,
   matchStartMs: number,
-  fromSec: number,
-  toSec: number,
+  /** the event's own span, seconds since the round start (fractional) */
+  fromS: number,
+  toS: number,
 ): { parts: string[]; measured: number } {
+  const fromSec = Math.floor(fromS);
+  const toSec = Math.floor(toS);
+  // whole ms, as `diedIn`
+  const span = {
+    fromMs: matchStartMs + Math.round(fromS * 1000),
+    toMs: matchStartMs + Math.round(toS * 1000),
+  };
   const parts: string[] = [];
   let measured = 0;
   for (const mate of mates) {
-    const hp = mateHpAcross(mate, matchStartMs, fromSec, toSec);
+    const hp = mateHpAcross(mate, matchStartMs, fromSec, toSec, span);
     if (!hp) continue;
-    const { h0, lo } = hp;
+    // the printed low is the trough (FT-T03); `hp.lo` is the decision's
+    const { h0, trough: lo } = hp;
     measured++;
     if (h0 - lo.pct >= CONSEQ_DROP_MIN_PCT)
       parts.push(
@@ -194,10 +233,8 @@ export function formatObservedConsequences(params: {
         (a as { extraSpellId?: string }).extraSpellId,
       );
       const { team, label, who } = sideOf(victim);
-      const from = Math.floor(t);
-      const to = Math.floor(t + lockS);
       const mates = team.filter((m) => m.id !== victim.id);
-      const { parts, measured } = teamDrops(mates, label, start, from, to);
+      const { parts, measured } = teamDrops(mates, label, start, t, t + lockS);
       const died = diedIn(mates, label, start, t, t + lockS);
       if (!measured && !died) continue;
       const stopped =
@@ -221,9 +258,13 @@ export function formatObservedConsequences(params: {
     const mates = team.filter((m) => m.id !== healer.id);
     for (const cc of summary.ccInstances) {
       if (cc.durationSeconds < HEALER_CC_MIN_S) continue;
-      const from = Math.floor(cc.atSeconds);
-      const to = Math.floor(cc.atSeconds + cc.durationSeconds);
-      const { parts, measured } = teamDrops(mates, label, start, from, to);
+      const { parts, measured } = teamDrops(
+        mates,
+        label,
+        start,
+        cc.atSeconds,
+        cc.atSeconds + cc.durationSeconds,
+      );
       const died = diedIn(
         mates,
         label,
@@ -259,9 +300,13 @@ export function formatObservedConsequences(params: {
       const atS = (s.from - start) / 1000;
       const durS = (toMs - s.from) / 1000;
       if (atS < 0 || durS < HEALER_CC_MIN_S) continue;
-      const from = Math.floor(atS);
-      const to = Math.floor(atS + durS);
-      const { parts, measured } = teamDrops(mates, label, start, from, to);
+      const { parts, measured } = teamDrops(
+        mates,
+        label,
+        start,
+        atS,
+        atS + durS,
+      );
       const died = diedIn(mates, label, start, atS, atS + durS);
       if (!measured && !died) continue;
       const body = parts.length ? parts.join(", ") : noDropBody(died);

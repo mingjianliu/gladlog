@@ -1540,6 +1540,12 @@ export function gridHpMinInWindow(
  * the minimum. Equal values resolve to the earliest second. `atMs` is the
  * timestamp of the sample that was read.
  *
+ * `span` — for a window that is an EVENT's own span (a lockout, a CC) rather
+ * than a pair of displayed seconds: the samples before `fromMs` or after
+ * `toMs` are not read, so a dip in the fraction of a second before a kick
+ * landed is not reported as having happened inside its lockout. The window's
+ * ticks are read regardless (they are what the page prints for it).
+ *
  * NOT for a point reading and NOT for a decision: what a unit's HP was at a
  * second is `gridHpPct`, and every "did it cross / does this candidate
  * exist" question keeps asking the grid (`gridHpMinInWindow`), so no
@@ -1551,6 +1557,7 @@ export function hpTroughInWindow(
   fromSec: number,
   toSec: number,
   skipSec?: (sec: number) => boolean,
+  span?: { fromMs: number; toMs: number },
 ): { pct: number; atSec: number; atMs: number } | null {
   let best: { pct: number; atSec: number; atMs: number } | null = null;
   const grid = gridHpMinInWindow(unit, matchStartMs, fromSec, toSec, skipSec);
@@ -1565,8 +1572,12 @@ export function hpTroughInWindow(
     if (isDeadAtRenderSecond(unit, matchStartMs, s)) break;
     lastSec = s;
   }
-  const fromMs = matchStartMs + fromSec * 1000;
+  const fromMs = Math.max(
+    matchStartMs + fromSec * 1000,
+    span?.fromMs ?? -Infinity,
+  );
   const endMs = matchStartMs + (lastSec + 1) * 1000; // exclusive
+  const spanToMs = span?.toMs ?? Infinity; // inclusive
   const actions = getSortedAdvancedActions(unit);
   // first index at or after `fromMs`
   let lo = 0;
@@ -1579,7 +1590,7 @@ export function hpTroughInWindow(
   for (let i = lo; i < actions.length; i++) {
     const a = actions[i]!;
     const ts = a.logLine.timestamp;
-    if (ts >= endMs) break;
+    if (ts >= endMs || ts > spanToMs) break;
     // same timestamp: the last line is the state at that instant
     if (i + 1 < actions.length && actions[i + 1]!.logLine.timestamp === ts)
       continue;

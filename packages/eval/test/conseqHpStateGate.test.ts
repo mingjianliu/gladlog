@@ -45,12 +45,44 @@ describe("checkConseqHpStateConsistency (GH #70 — [CONSEQ] ⟺ [STATE] grid)",
         KICK,
       ]),
     ).toEqual([]);
+    // the enemy's tick BELOW the printed low → red (the friendly half's 60
+    // is another unit's number and is not read)
+    expect(
+      checkConseqHpStateConsistency([
+        state("0:48", "2(AWarrior):60", "4(AWarlock):65"),
+        KICK,
+      ]),
+    ).toHaveLength(1);
+  });
+  // FT-T03 (user ruling 2026-10-10, D7): the low is a trough — the true
+  // minimum inside the span, not the tick of its second.
+  it("FT-T03: a low BELOW the tick of its own second → passes (121c7e15: tick 32, low 22)", () => {
+    expect(
+      checkConseqHpStateConsistency([
+        state("1:00", "1(HPriest):99 2(AWarrior):80"),
+        state("1:02", "2(AWarrior):70"),
+        CC,
+      ]),
+    ).toEqual([]);
     expect(
       checkConseqHpStateConsistency([
         state("0:48", "2(AWarrior):70", "4(AWarlock):75"),
         KICK,
       ]),
-    ).toHaveLength(1);
+    ).toEqual([]);
+  });
+  it("FT-T03: a tick below the low at the low's own second is red, past the sure span too", () => {
+    // `for 3s` covers 1:00–1:02 for sure; the low is stamped at 1:03
+    const LATE = CC.replace("at 1:02", "at 1:03");
+    const f = checkConseqHpStateConsistency([
+      state("1:03", "2(AWarrior):50"),
+      LATE,
+    ]);
+    expect(f).toHaveLength(1);
+    expect(f[0]).toContain("低点");
+    expect(
+      checkConseqHpStateConsistency([state("1:03", "2(AWarrior):64"), LATE]),
+    ).toEqual([]);
   });
   it('"no teammate dropped" with a 10+ point drop in the span → red; the healer itself is exempt', () => {
     expect(

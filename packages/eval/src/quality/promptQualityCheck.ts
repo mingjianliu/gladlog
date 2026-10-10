@@ -3714,19 +3714,22 @@ const CONSEQ_LINE =
 const CONSEQ_DROP = /(\d+)\([^)]*\) (\d+)% → low (\d+)% at (\d+):(\d+)/g;
 
 /**
- * Hard invariant (GH #70, 2026-09-24): an `[CONSEQ]` line's HP numbers are
- * `[STATE]` grid readings (observedConsequences.ts samples with
- * `gridHpPct` / `gridHpMinInWindow`, the sampler behind every [STATE] tick),
- * so wherever the timeline also printed a tick they must agree:
- *  - `A% → low B% at m:ss`: the tick at the line's second reads A, the tick
- *    at m:ss reads B, and no tick of that unit inside the span reads below B;
+ * Hard invariant (GH #70, 2026-09-24): an `[CONSEQ]` line's START HP is a
+ * `[STATE]` grid reading (`gridHpPct`, the sampler behind every [STATE]
+ * tick), and its LOW is a trough (`hpTroughInWindow`, the true minimum
+ * inside the lockout / CC — FT-T03, user ruling 2026-10-10, D7), so wherever
+ * the timeline also printed a tick:
+ *  - `A% → low B% at m:ss`: the tick at the line's second reads A; the tick
+ *    at m:ss does not read below B (it no longer has to EQUAL B — the tick
+ *    is the start of that second, the low the lowest sample inside it); and
+ *    no tick of that unit inside the span reads below B (`isTickBelowTrough`);
  *  - `no teammate dropped 10% or more`: no teammate of that healer (same side
  *    of the [STATE] line) reads 10+ points below its tick at the line's second
- *    anywhere inside the span.
+ *    anywhere inside the span (the trough is at or below every such tick, so
+ *    the line would have named the drop).
  * The span end is only known to the second the analysis floored, so the
  * check covers [start, start + rendered duration − 1], which is always
- * inside it. Same class as checkHealedThroughConsistency (endpoints and
- * trough must come from one sampler).
+ * inside it. Same class as checkHealedThroughConsistency.
  */
 export function checkConseqHpStateConsistency(lines: string[]): string[] {
   const stateAt = new Map<
@@ -3773,14 +3776,20 @@ export function checkConseqHpStateConsistency(lines: string[]): string[] {
       const t0 = tick(start, side, id);
       if (t0 !== undefined && t0 !== a)
         failures.push(`${where} 起点写 ${id} 为 ${a}%,同秒 [STATE] 报 ${t0}%`);
+      // the low's own second lies inside the analysis's span even when it
+      // is past `lastSure`, so its tick is checked on its own
       const tl = tick(lowSec, side, id);
-      if (tl !== undefined && tl !== b)
+      if (
+        tl !== undefined &&
+        isTickBelowTrough(tl, b) &&
+        (lowSec < start || lowSec > lastSure)
+      )
         failures.push(
           `${where} 低点写 ${id} 在 ${fmtMmSs(lowSec)} 为 ${b}%,同秒 [STATE] 报 ${tl}%`,
         );
       for (let s = start; s <= lastSure; s++) {
         const v = tick(s, side, id);
-        if (v !== undefined && v < b)
+        if (v !== undefined && isTickBelowTrough(v, b))
           failures.push(
             `${where} 低点写 ${id} ${b}%,但 ${fmtMmSs(s)} 的 [STATE] 报 ${v}%`,
           );
