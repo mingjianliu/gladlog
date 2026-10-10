@@ -187,12 +187,65 @@ export function immunityLastsItsAura(spellId: string): boolean {
 }
 
 /**
+ * The save auras whose CARRIER goes unseen, taking the aura's REMOVED line
+ * out of the recorder's log: the three stealth-kind immunities of rulings
+ * U-KA3 / U-KA3b (`ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS`: Burrow, Vanish, Mass
+ * Invisibility) and the stealth wall ruling D6 adds
+ * (`ENEMY_STEALTH_WALL_AURAS`: Greater Invisibility). For these a missing
+ * REMOVED says nothing about the aura still being up — on the 605 new-season
+ * files 97 % of an opponent's Greater Invisibilities have none, while an
+ * ally's is over in 0.74 s (median).
+ */
+export const SAVE_AURA_END_UNSEEN_IDS: ReadonlySet<string> = new Set([
+  ...ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS,
+  ...Object.keys(ENEMY_STEALTH_WALL_AURAS),
+]);
+
+/** The same auras by the name their `[ENEMY DEF]` line and a KILL ATTEMPTS
+ * cause print — what the gate (`checkKillAttemptUpSinceEndLogged`) and the
+ * KILL ATTEMPTS legend read. */
+export const SAVE_AURA_END_UNSEEN_NAMES: ReadonlySet<string> = new Set([
+  ...[...ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS].map((id) =>
+    IMMUNITY_SAVE_AURA_NAMES.get(id)!,
+  ),
+  ...Object.values(ENEMY_STEALTH_WALL_AURAS),
+]);
+
+/**
+ * May a save aura that was ALREADY UP when a kill attempt began count as why
+ * it failed (KILL ATTEMPTS rule 2), as far as its END goes? Not when its
+ * carrier goes unseen (`SAVE_AURA_END_UNSEEN_IDS`) and the log never showed
+ * the aura end: it is then "up" at the attempt's start only by the interval
+ * builder's official-length cap (`inferredEnd`).
+ *
+ * User ruling P-FU-b8 (2026-10-06, option C) set this for the three
+ * stealth-kind immunities: "群体隐形只在光环被观测到仍在时算免疫,丢 REMOVED
+ * 的不按 12 s 封顶". Ruling D6 (2026-10-10) extends it to Greater
+ * Invisibility, a 60 % WALL that never passed through the immunity test: on
+ * the 605 new-season files `FAILED: popped Greater Invisibility [up since
+ * m:ss]` stood on at least 219 prompt lines, each read off the 20 s cap
+ * (fix-FT/T07-notes §2.2) — s2/112-1-757: pressed at 5:49, the mage casting
+ * Combustion 3 s later and taking direct damage from 5:54, the attempt at
+ * [6:04–6:18] "failed" on it. An aura that went up INSIDE the attempt is
+ * untouched: its start is logged.
+ *
+ * Every other aura keeps the cap (P-FU-b8: "a pct-100 table row or a DB2
+ * all-school immunity keeps the cap"; the rulings name no other wall or
+ * external): its carrier stays in the recorder's sight, so a missing REMOVED
+ * is a lost line, not a unit that left the log.
+ */
+export function saveAuraCountsWhenAlreadyUp(
+  iv: Pick<IAuraInterval, "spellId" | "inferredEnd">,
+): boolean {
+  return !(SAVE_AURA_END_UNSEEN_IDS.has(iv.spellId) && iv.inferredEnd);
+}
+
+/**
  * May an immunity that was ALREADY UP when a kill attempt began count as why
  * it failed (KILL ATTEMPTS rule 2)? `immunityLastsItsAura`, and for the
  * ruled-in stealth-kind auras (`ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS`: Burrow,
  * Vanish, Mass Invisibility) only an aura the log SAW end — user ruling
- * P-FU-b8 (2026-10-06, option C): "群体隐形只在光环被观测到仍在时算免疫,丢
- * REMOVED 的不按 12 s 封顶".
+ * P-FU-b8, through `saveAuraCountsWhenAlreadyUp`.
  *
  * Why: a unit that goes unseen often takes its aura's REMOVED line with it,
  * and `buildAuraIntervals` then closes the aura at its official length
@@ -207,24 +260,8 @@ export function immunityLastsItsAura(spellId: string): boolean {
 export function immunityCountsWhenAlreadyUp(
   iv: Pick<IAuraInterval, "spellId" | "inferredEnd">,
 ): boolean {
-  if (!immunityLastsItsAura(iv.spellId)) return false;
-  return !(ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS.has(iv.spellId) && iv.inferredEnd);
+  return immunityLastsItsAura(iv.spellId) && saveAuraCountsWhenAlreadyUp(iv);
 }
-
-/**
- * The save auras whose CARRIER goes unseen, taking the aura's REMOVED line
- * out of the recorder's log: the three stealth-kind immunities of rulings
- * U-KA3 / U-KA3b (`ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS`: Burrow, Vanish, Mass
- * Invisibility) and the stealth wall ruling D6 adds
- * (`ENEMY_STEALTH_WALL_AURAS`: Greater Invisibility). For these a missing
- * REMOVED says nothing about the aura still being up — on the 605 new-season
- * files 97 % of an opponent's Greater Invisibilities have none, while an
- * ally's is over in 0.74 s (median).
- */
-export const SAVE_AURA_END_UNSEEN_IDS: ReadonlySet<string> = new Set([
-  ...ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS,
-  ...Object.keys(ENEMY_STEALTH_WALL_AURAS),
-]);
 
 /** What an effect save does, as its `[ENEMY DEF]` line says it: Feign Death's
  * shield, or what a proc is (`ENEMY_PROC_SAVES`). */

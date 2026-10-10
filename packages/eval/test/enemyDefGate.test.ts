@@ -7,6 +7,7 @@ import {
   checkEnemyDefSaveEffect,
   checkGuardianSpiritSaveClause,
   checkKarmaFedClause,
+  checkKillAttemptUpSinceEndLogged,
   checkResReturnAnnounced,
 } from "../src/quality/promptQualityCheck";
 
@@ -551,6 +552,127 @@ describe("checkEnemyDefEndNotLogged (FT-T07 / T15, ruling D6)", () => {
     ]);
     expect(f).toHaveLength(1);
     expect(f[0]).toContain("no legend line defines it");
+  });
+});
+
+/**
+ * Rulings P-FU-b8 (2026-10-06) and D6 (2026-10-10): KILL ATTEMPTS never calls
+ * a cause "already up" on an unseen carrier's aura whose end the log did not
+ * show — Burrow, Vanish, Mass Invisibility, Greater Invisibility.
+ */
+describe("checkKillAttemptUpSinceEndLogged (rulings P-FU-b8 / D6)", () => {
+  const MAGE = "4(FMage) (Fire Mage)";
+  const D = (at: string, who: string, rest: string) =>
+    `${at}  [ENEMY DEF]   ${who}: ${rest}`;
+
+  it("fails `popped Greater Invisibility [up since m:ss]` whose line there says `end not logged` — s2/112-1-757 [6:04–6:18]", () => {
+    const f = checkKillAttemptUpSinceEndLogged([
+      LEGEND,
+      ...ROSTER,
+      D("5:49", MAGE, "Greater Invisibility (60%, end not logged)"),
+      ATTEMPT("6:04–6:18", "popped Greater Invisibility [up since 5:49]"),
+    ]);
+    expect(f).toHaveLength(1);
+    expect(f[0]).toContain("Greater Invisibility as up since 5:49");
+  });
+
+  it("passes when the log saw it end, when it went up inside the attempt, and for a wall whose carrier stays in sight", () => {
+    expect(
+      checkKillAttemptUpSinceEndLogged([
+        LEGEND,
+        ...ROSTER,
+        // the log saw this one end 9 s on: up when the attempt began
+        D("5:49", MAGE, "Greater Invisibility (60%, 9.0s — removed early)"),
+        ATTEMPT("5:52–5:58", "popped Greater Invisibility [up since 5:49]"),
+        // pressed inside the attempt: no `[up since]`, its start is logged
+        D("7:10", MAGE, "Greater Invisibility (60%, end not logged)"),
+        ATTEMPT("7:08–7:14", "popped Greater Invisibility"),
+        // Barkskin keeps the cap (P-FU-b8 names the unseen carriers only)
+        D("8:00", MAGE, "Barkskin (20%, end not logged)"),
+        ATTEMPT("8:05–8:09", "popped Barkskin [up since 8:00]"),
+        // one clause of several, the named one logged
+        D("9:00", MAGE, "Greater Invisibility (60%, 12.0s — removed early)"),
+        ATTEMPT(
+          "9:03–9:08",
+          "popped Greater Invisibility [up since 9:00]; saved by external (Ironbark)",
+        ),
+      ]),
+    ).toEqual([]);
+  });
+
+  it("`forced a full immunity [up since m:ss]`: fails when the only immunity there on that unit is an unseen carrier's with no logged end", () => {
+    const ROGUE = "4(ORogue) (Outlaw Rogue)";
+    const bad = checkKillAttemptUpSinceEndLogged([
+      LEGEND,
+      ...ROSTER,
+      D("0:09", ROGUE, "Vanish (immune, end not logged) (at 60% HP)"),
+      ATTEMPT(
+        "0:10–0:15",
+        "forced a full immunity [up since 0:09] (a win — re-open after it drops)",
+      ),
+    ]);
+    expect(bad).toHaveLength(1);
+    expect(bad[0]).toContain("an immunity as up since 0:09");
+    // a table immunity beside it keeps the cap and is a cause: no failure
+    expect(
+      checkKillAttemptUpSinceEndLogged([
+        LEGEND,
+        ...ROSTER,
+        D("0:09", ROGUE, "Vanish (immune, end not logged)"),
+        D("0:09", ROGUE, "Cloak of Shadows (immune, end not logged)"),
+        ATTEMPT(
+          "0:10–0:15",
+          "forced a full immunity [up since 0:09] (a win — re-open after it drops)",
+        ),
+      ]),
+    ).toEqual([]);
+    // the log saw the Vanish end: a cause
+    expect(
+      checkKillAttemptUpSinceEndLogged([
+        LEGEND,
+        ...ROSTER,
+        D("0:09", ROGUE, "Vanish (immune, 1.4s)"),
+        ATTEMPT(
+          "0:10–0:15",
+          "target trinketed out; forced a full immunity [up since 0:09] (a win — re-open after it drops)",
+        ),
+      ]),
+    ).toEqual([]);
+  });
+
+  it("makes no claim when a teammate's line sits at that second (a Mass Invisibility on the target is printed on the mage), without the roster, or without the legend", () => {
+    const immunity = ATTEMPT(
+      "0:10–0:15",
+      "forced a full immunity [up since 0:09] (a win — re-open after it drops)",
+    );
+    expect(
+      checkKillAttemptUpSinceEndLogged([
+        LEGEND,
+        ...ROSTER,
+        D(
+          "0:09",
+          "4(ORogue) (Outlaw Rogue)",
+          "Vanish (immune, end not logged)",
+        ),
+        D(
+          "0:09",
+          "6(AMage) (Arcane Mage)",
+          "Mass Invisibility (immune, end not logged)",
+        ),
+        immunity,
+      ]),
+    ).toEqual([]);
+    const lone = D(
+      "0:09",
+      "4(ORogue) (Outlaw Rogue)",
+      "Vanish (immune, end not logged)",
+    );
+    expect(checkKillAttemptUpSinceEndLogged([LEGEND, lone, immunity])).toEqual(
+      [],
+    );
+    expect(
+      checkKillAttemptUpSinceEndLogged([...ROSTER, lone, immunity]),
+    ).toEqual([]);
   });
 });
 

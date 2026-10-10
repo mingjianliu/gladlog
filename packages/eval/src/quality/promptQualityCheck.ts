@@ -107,6 +107,7 @@ import {
   ENEMY_DEF_END_NOT_LOGGED_SLOT_RE,
   ENEMY_SAVE_EFFECT_BY_NAME,
   enemySaveEffectOfNote,
+  SAVE_AURA_END_UNSEEN_NAMES,
 } from "@gladlog/analysis/src/utils/enemyDefensives";
 import { DURING_ABSORBED_TAG_RE_SRC } from "@gladlog/analysis/src/utils/externalDamage";
 import { fmtTime } from "@gladlog/analysis/src/utils/renderGrid";
@@ -2182,6 +2183,39 @@ function unitIdsByName(lines: readonly string[]): Map<string, string> {
   }
   return out;
 }
+/** Every `[ENEMY DEF]` line of a prompt, as the KILL ATTEMPTS gates pair it:
+ * its second, the save it names, the unit the save is on, and whether it
+ * says the log never showed the aura end. */
+interface EnemyDefLine {
+  atS: number;
+  spell: string;
+  onId?: string;
+  /** the line reads `end not logged` where its duration would stand */
+  endNotLogged: boolean;
+  /** the line can be an immunity: it prints `(immune…`, or it is an external
+   * (Blessing of Protection on an ally prints no strength) */
+  canBeImmunity: boolean;
+}
+function enemyDefLinesOf(lines: readonly string[]): EnemyDefLine[] {
+  const defs: EnemyDefLine[] = [];
+  for (const line of lines) {
+    const m = ENEMY_DEF_LINE.exec(line);
+    if (!m) continue;
+    const recipient = ENEMY_DEF_RECIPIENT_ID.exec(line);
+    defs.push({
+      atS: Number(m[1]) * 60 + Number(m[2]),
+      spell: m[3]!,
+      // an area save (`X (area)`) is on nobody in particular
+      onId: line.includes(" (area)")
+        ? undefined
+        : (recipient ?? ENEMY_DEF_CASTER_ID.exec(line))?.[1],
+      endNotLogged: ENEMY_DEF_END_NOT_LOGGED_SLOT_RE.test(line),
+      canBeImmunity:
+        recipient !== null || line.includes(": " + m[3] + " (immune"),
+    });
+  }
+  return defs;
+}
 /** The aura APPLIED that KILL ATTEMPTS attributes and the `[ENEMY DEF]` line
  * both render from the same log instant, but one is floored from the aura
  * event and the other from a paired cast ≤ 1.5 s away (externals), so the
@@ -2216,20 +2250,7 @@ const KILL_ATTEMPT_IMMUNITY_UP_SINCE =
 export function checkEnemyDefRefConsistency(lines: string[]): string[] {
   if (!lines.some((l) => ENEMY_DEF_LEGEND.test(l))) return [];
   const idOf = unitIdsByName(lines);
-  const defs: Array<{ atS: number; spell: string; onId?: string }> = [];
-  for (const line of lines) {
-    const m = ENEMY_DEF_LINE.exec(line);
-    if (m)
-      defs.push({
-        atS: Number(m[1]) * 60 + Number(m[2]),
-        spell: m[3]!,
-        // an area save (`X (area)`) is on nobody in particular
-        onId: line.includes(" (area)")
-          ? undefined
-          : (ENEMY_DEF_RECIPIENT_ID.exec(line) ??
-              ENEMY_DEF_CASTER_ID.exec(line))?.[1],
-      });
-  }
+  const defs = enemyDefLinesOf(lines);
   const failures: string[] = [];
   lines.forEach((line, i) => {
     const imm = KILL_ATTEMPT_IMMUNITY_UP_SINCE.exec(line);
@@ -2278,6 +2299,92 @@ export function checkEnemyDefRefConsistency(lines: string[]): string[] {
         failures.push(
           `line ${i + 1}: KILL ATTEMPTS attributes "${spell}" in [${fmtTime(lo)}–${fmtTime(hi)}] but no [ENEMY DEF] line names it there on that unit: "${line.trim()}"`,
         );
+    }
+  });
+  return failures;
+}
+
+/** `  [m:ss–m:ss] on <unit> — …` — the target of any KILL ATTEMPTS line. */
+const KILL_ATTEMPT_TARGET = /^\s*\[\d+:\d\d–\d+:\d\d\] on (\S+) — /;
+
+/**
+ * KILL ATTEMPTS never calls a cause "already up" on an aura whose end the log
+ * did not show, when the aura's carrier goes unseen — user ruling P-FU-b8
+ * (2026-10-06: Mass Invisibility / Vanish / Burrow, "丢 REMOVED 的不按 12 s
+ * 封顶"), extended to Greater Invisibility by ruling D6 (2026-10-10). The
+ * producer's rule is `saveAuraCountsWhenAlreadyUp`; here it is read off the
+ * text, with the producer's names (`SAVE_AURA_END_UNSEEN_NAMES`):
+ *  - `popped X [up since m:ss]` (or the external / self-save form) with X one
+ *    of those names ⇒ the `[ENEMY DEF]` line of X at that second, on that
+ *    unit, does not read `end not logged`;
+ *  - `forced a full immunity [up since m:ss]` names no spell ⇒ the lines at
+ *    that second that can be an immunity are not ALL such `end not logged`
+ *    lines on that unit (checked only when the roster resolves the unit and
+ *    no teammate's line sits there: a Mass Invisibility on the target is
+ *    printed on the mage who cast it).
+ * Before D6, 605 new-season files: `popped Greater Invisibility [up since …]`
+ * on at least 219 prompt lines, each off a `(60%, 20.0s)` that was the cap
+ * (fix-FT/T07-notes §2.2). A cause that went up INSIDE the attempt carries
+ * no `[up since]` and is not this gate's business.
+ */
+export function checkKillAttemptUpSinceEndLogged(lines: string[]): string[] {
+  if (!lines.some((l) => ENEMY_DEF_LEGEND.test(l))) return [];
+  const idOf = unitIdsByName(lines);
+  const defs = enemyDefLinesOf(lines);
+  const failures: string[] = [];
+  /** every line found is an unseen-carrier aura with no logged end */
+  const onlyUnseenEnds = (found: readonly EnemyDefLine[]): boolean =>
+    found.length > 0 &&
+    found.every(
+      (d) => d.endNotLogged && SAVE_AURA_END_UNSEEN_NAMES.has(d.spell),
+    );
+  lines.forEach((line, i) => {
+    const target = KILL_ATTEMPT_TARGET.exec(line)?.[1];
+    if (target === undefined) return;
+    const targetId = idOf.get(target);
+    const fail = (what: string, atS: number) =>
+      failures.push(
+        `line ${i + 1}: KILL ATTEMPTS counts ${what} as up since ${fmtTime(atS)}, but its [ENEMY DEF] line there says \`${ENEMY_DEF_END_NOT_LOGGED}\` — the log never showed it last until the attempt: "${line.trim()}"`,
+      );
+    const imm = KILL_ATTEMPT_IMMUNITY_UP_SINCE.exec(line);
+    if (imm && targetId !== undefined) {
+      const atS = Number(imm[1]) * 60 + Number(imm[2]);
+      const there = defs.filter(
+        (d) =>
+          d.canBeImmunity && Math.abs(d.atS - atS) <= ENEMY_DEF_PAIR_SLACK_S,
+      );
+      // A teammate's press at that second may be what is on the target (Mass
+      // Invisibility lands on the mage's allies, and its line sits on the
+      // mage): the text cannot say whose aura the cause is, so no claim.
+      if (there.every((d) => d.onId === targetId) && onlyUnseenEnds(there))
+        fail("an immunity", atS);
+    }
+    const m = KILL_ATTEMPT_DEFENSIVE.exec(line);
+    if (!m) return;
+    for (const clause of m[6]!.split("; ")) {
+      const c = KILL_ATTEMPT_SAVE_CLAUSE.exec(clause.trim());
+      // an unreadable clause is `checkEnemyDefRefConsistency`'s failure
+      if (!c) continue;
+      for (const raw of (c[1] ?? c[2] ?? c[3])!.split("/")) {
+        const up = KILL_ATTEMPT_UP_SINCE.exec(raw.trim());
+        if (!up) continue;
+        const spell = raw.trim().slice(0, up.index).trim();
+        if (!SAVE_AURA_END_UNSEEN_NAMES.has(spell)) continue;
+        const atS = Number(up[1]) * 60 + Number(up[2]);
+        if (
+          onlyUnseenEnds(
+            defs.filter(
+              (d) =>
+                d.spell === spell &&
+                (targetId === undefined ||
+                  d.onId === undefined ||
+                  d.onId === targetId) &&
+                Math.abs(d.atS - atS) <= ENEMY_DEF_PAIR_SLACK_S,
+            ),
+          )
+        )
+          fail(spell, atS);
+      }
     }
   });
   return failures;
@@ -3819,6 +3926,7 @@ export function checkMatch(
   hardFailures.push(...checkEnemyDefRefConsistency(lines));
   hardFailures.push(...checkEnemyDefSaveEffect(lines));
   hardFailures.push(...checkEnemyDefEndNotLogged(lines));
+  hardFailures.push(...checkKillAttemptUpSinceEndLogged(lines));
   hardFailures.push(...checkBrokeOutRefConsistency(lines));
   hardFailures.push(...checkFactsBlockIntegrity(lines));
   hardFailures.push(...checkPetCreditSide(lines));

@@ -47,6 +47,9 @@ import {
   MITIGATION_AURA_IDS,
   MITIGATION_AURA_MIN_PCT,
   REMOVED_EARLY_SLACK_S,
+  SAVE_AURA_END_UNSEEN_IDS,
+  SAVE_AURA_END_UNSEEN_NAMES,
+  saveAuraCountsWhenAlreadyUp,
   saveAuraIntervals,
   SELF_SAVE_IDS,
   wallTableIdOfAura,
@@ -1251,6 +1254,42 @@ describe("Anti-Magic Shell routing and the school-limited save masks", () => {
     // an effect save (ruling D8) is no immunity, up or not
     for (const id of ["87023", "45182", "202748"])
       expect(immunityCountsWhenAlreadyUp(iv(id, false)), id).toBe(false);
+  });
+
+  it("already-up saves of any kind: ruling D6 extends P-FU-b8 to Greater Invisibility — an unseen carrier's aura counts only when the log saw it end", () => {
+    const iv = (spellId: string, inferredEnd: boolean) => ({
+      spellId,
+      inferredEnd,
+    });
+    // the three ruled-in immunities and the stealth wall (aura 110960)
+    for (const id of ["409293", "11327", "414664", "110960"]) {
+      expect(SAVE_AURA_END_UNSEEN_IDS.has(id), id).toBe(true);
+      expect(saveAuraCountsWhenAlreadyUp(iv(id, false)), id).toBe(true);
+      expect(saveAuraCountsWhenAlreadyUp(iv(id, true)), id).toBe(false);
+    }
+    expect(SAVE_AURA_END_UNSEEN_IDS.size).toBe(4);
+    // Greater Invisibility is a wall, never an immunity: the immunity test
+    // could not carry the rule to it
+    expect(isImmunitySaveAura("110960")).toBe(false);
+    expect(immunityCountsWhenAlreadyUp(iv("110960", false))).toBe(false);
+    // every other save keeps the cap — a wall, an external, a table
+    // immunity, Feign Death's shield: their carrier stays in sight
+    for (const id of [BARKSKIN, "102342", "642", "45438", "378441", "202748"])
+      expect(saveAuraCountsWhenAlreadyUp(iv(id, true)), id).toBe(true);
+    // the immunity reading is this one plus "the aura is the immunity"
+    for (const id of ["409293", "11327", "414664", "642", "378441", "87023"])
+      for (const inferredEnd of [true, false])
+        expect(immunityCountsWhenAlreadyUp(iv(id, inferredEnd)), id).toBe(
+          immunityLastsItsAura(id) &&
+            saveAuraCountsWhenAlreadyUp(iv(id, inferredEnd)),
+        );
+    // the names are the ones the lines print, in the ids' order
+    expect([...SAVE_AURA_END_UNSEEN_NAMES]).toEqual([
+      "Burrow",
+      "Vanish",
+      "Mass Invisibility",
+      "Greater Invisibility",
+    ]);
   });
 
   it("the absorb mask is the DB2 one (datagen), read through cd-hoarded's saveSchoolMask — no literal", () => {

@@ -437,8 +437,16 @@ export function computeOffensiveWindows(
           emptiedAt.set(f.atSeconds, (emptiedAt.get(f.atSeconds) ?? 0) + 1);
       for (const castTimeSeconds of casts) {
         // A wall whose DB2 duration sits on its logged aura, not on the cast
-        // (Greater Invisibility 110959 → 110960, 20 s), is timed by that aura
-        // — the length the [ENEMY DEF] line prints for the same press.
+        // (Greater Invisibility 110959 → 110960, 20 s), is timed by that
+        // aura's OFFICIAL length. This state machine never reads the aura
+        // interval — every press, whatever the log shows of its end, holds
+        // "not defenseless" for the official length — so ruling D6 (an aura
+        // the log never shows end is no cause "already up" in KILL ATTEMPTS,
+        // and prints `end not logged`) leaves it as it is, on purpose:
+        // "defenseless" claims the wall was DOWN, and for a mage who went
+        // unseen the log shows that no more than it shows the wall up. The
+        // official length is the longest the wall can have lasted, so the
+        // span opens no earlier than the log can support.
         const castBuff = buffFullDurationForCaster(
           WALL_CAST_TO_AURA_ID[spellId] ?? spellId,
           enemy,

@@ -5,11 +5,13 @@ import { describe, expect, it } from "vitest";
 import { extractCandidateFindings } from "../src/analysis/candidateFindings";
 import { CANDIDATE_TYPE_FLAGS } from "../src/data/candidateTypeFlags";
 import { ensureAnalysisData } from "../src/data/ensure";
+import { SAVE_AURA_END_UNSEEN_NAMES } from "../src/utils/enemyDefensives";
 import {
   anchorsKillAttempt,
   attemptIntoTrinketEvents,
   extractKillAttempts,
   formatKillAttemptsForContext,
+  KILL_ATTEMPTS_END_UNSEEN_LEGEND,
   softerTargetAt,
 } from "../src/utils/killAttempts";
 
@@ -1253,6 +1255,100 @@ describe("attributeFailure — windows, bound trinket, school gates", () => {
       }),
     );
     expect(ended.attribution?.primary).toBe("pressure");
+  });
+
+  it("rule 2 and Greater Invisibility (ruling D6, P-FU-b8 extended): pressed before the attempt it is the cause only when the log saw it end — s2/112-1-757 read `popped Greater Invisibility [up since 5:49]` on an attempt at 6:04", async () => {
+    await ensureAnalysisData();
+    const GREATER_INVIS_AURA = "110960"; // cast 110959, the 60 % table row
+    const applied = (atS: number) =>
+      auraEv(GREATER_INVIS_AURA, "e1", "e1", atS, LogEvent.SPELL_AURA_APPLIED);
+    // no REMOVED in the log: the interval builder closes the aura at its
+    // official 20 s, so by the cap alone it is "up" when the stun lands 6 s on
+    const unseen = run(
+      stunned({
+        auraEvents: [...stunAuras("e1", KIDNEY, 10, 5), applied(4)],
+      }),
+    );
+    expect(unseen.attribution?.defensivePopped).toEqual([]);
+    // …and the attempt reads its next cause in the existing order
+    expect(unseen.attribution?.primary).toBe("pressure");
+    expect(formatKillAttemptsForContext([unseen]).join("\n")).not.toContain(
+      "popped Greater Invisibility",
+    );
+    // next cause, with one present: the healing that outran the damage
+    const unseenHealed = run(
+      stunned({
+        auraEvents: [...stunAuras("e1", KIDNEY, 10, 5), applied(4)],
+        healIn: [
+          {
+            effectiveAmount: 400_000,
+            logLine: {
+              event: LogEvent.SPELL_HEAL,
+              timestamp: ms(12),
+              parameters: [],
+            },
+          },
+        ],
+      }),
+    );
+    expect(unseenHealed.attribution?.primary).toBe("outhealed");
+    // the log SAW it end after the attempt began: up at its start, the cause
+    const seen = run(
+      stunned({
+        auraEvents: [
+          ...stunAuras("e1", KIDNEY, 10, 5),
+          ...up(GREATER_INVIS_AURA, "e1", "e1", 4, 13),
+        ],
+      }),
+    );
+    expect(seen.attribution?.primary).toBe("defensive");
+    expect(formatKillAttemptsForContext([seen]).join("\n")).toContain(
+      "FAILED: popped Greater Invisibility [up since 0:04]",
+    );
+    // seen to end BEFORE the attempt: nothing, as for any wall
+    const over = run(
+      stunned({
+        auraEvents: [
+          ...stunAuras("e1", KIDNEY, 10, 5),
+          ...up(GREATER_INVIS_AURA, "e1", "e1", 4, 4.7),
+        ],
+      }),
+    );
+    expect(over.attribution?.defensivePopped).toEqual([]);
+    // pressed INSIDE the attempt its start is logged: still `popped`, with or
+    // without a logged end
+    const inside = run(
+      stunned({
+        auraEvents: [...stunAuras("e1", KIDNEY, 10, 5), applied(12)],
+      }),
+    );
+    expect(inside.attribution?.primary).toBe("defensive");
+    expect(formatKillAttemptsForContext([inside]).join("\n")).toContain(
+      "FAILED: popped Greater Invisibility",
+    );
+    // every other wall keeps the cap (P-FU-b8 names the unseen carriers only):
+    // a Barkskin with no logged REMOVED is still up when the attempt begins
+    const barkskinUnseen = run(
+      stunned({
+        auraEvents: [
+          ...stunAuras("e1", KIDNEY, 10, 5),
+          auraEv(BARKSKIN, "e1", "e1", 4.3, LogEvent.SPELL_AURA_APPLIED),
+        ],
+      }),
+    );
+    expect(barkskinUnseen.attribution?.defensivePopped).toEqual(["Barkskin"]);
+  });
+
+  it("the legend names the auras that are never a cause `already up` on the cap alone — the predicate's own set", () => {
+    expect([...SAVE_AURA_END_UNSEEN_NAMES]).toEqual([
+      "Burrow",
+      "Vanish",
+      "Mass Invisibility",
+      "Greater Invisibility",
+    ]);
+    expect(KILL_ATTEMPTS_END_UNSEEN_LEGEND).toContain(
+      "  Burrow / Vanish / Mass Invisibility / Greater Invisibility: ",
+    );
   });
 
   it("the save window is the attempt as it renders: a wall in the span's last rendered second counts, one in the next does not", async () => {

@@ -97,7 +97,9 @@ import {
   limitedImmunitySchoolMask,
   MITIGATION_AURA_IDS,
   MITIGATION_AURA_MIN_PCT,
+  SAVE_AURA_END_UNSEEN_NAMES,
   SAVE_CAST_AURA_PAIR_S,
+  saveAuraCountsWhenAlreadyUp,
   saveAuraIntervals,
   SELF_SAVE_IDS,
   selfSaveCasts,
@@ -803,6 +805,16 @@ function failureText(
 }
 
 /**
+ * The KILL ATTEMPTS legend line for rulings P-FU-b8 / D6
+ * (`saveAuraCountsWhenAlreadyUp`): the auras that are never a cause "already
+ * up" unless the log shows them end. The names are the predicate's own
+ * (`SAVE_AURA_END_UNSEEN_NAMES`), so the legend cannot list another set than
+ * the attribution applies. Worded without the `[ENEMY DEF]` line's `end not
+ * logged`: this block also renders with that line off.
+ */
+export const KILL_ATTEMPTS_END_UNSEEN_LEGEND = `  ${[...SAVE_AURA_END_UNSEEN_NAMES].join(" / ")}: an enemy who goes unseen takes the aura's end out of the log, so one of these pressed BEFORE an attempt is its cause (\`[up since m:ss]\`) only when the log shows it end after the attempt began — otherwise how long it lasted is unknown and the attempt reads its next cause. Pressed inside the attempt it counts as any other save.`;
+
+/**
  * Renders the [KILL ATTEMPTS] prompt block. All attempts render (no silent
  * cap — median 5/round, p90 11); times on the fmtTime render grid. The span
  * deliberately carries NO "(Ns)" duration label and the gated note says
@@ -846,6 +858,8 @@ export function formatKillAttemptsForContext(
   lines.push(
     "  `FAILED: X` names what the attempt ran into — the first that applies, in this fixed order: the target's trinket, a break ability, a full immunity, a wall, an external, a self-save, `healed through` (over the attempt and the next 5 s the target received more healing than damage), `not enough damage` (none of the above). It is what was pressed or up, picked in that order — not a measurement of what stopped the kill. A wall / external / self-save is named when it went up inside the attempt, or was already up when it began (`[up since m:ss]`) — one pressed after the attempt was over is not named; an immunity, the trinket or a break in the next 5 s still is. An immunity met along with the trinket or a break is named beside it, and so is an external beside the target's own save (`popped X; saved by external (Y)`): the attempt met both. `target trinketed out` / `broke out (X)` = the trinket / a racial or class ability removed a control of this attempt.",
   );
+  // P-FU-b8 / D6: which "already up" is never claimed.
+  lines.push(KILL_ATTEMPTS_END_UNSEEN_LEGEND);
   let kills = 0;
   let withSofter = 0;
   let onPrime = 0;
@@ -1171,9 +1185,18 @@ function attributeFailure(
     coversIncomingDamage(limitedImmunitySchoolMask(spellId), true);
   const absorbCovers = (spellId: string): boolean =>
     coversIncomingDamage(limitedAbsorbSchoolMask(spellId), false);
+  // Rule 2's "already up when the attempt began" — for EVERY cause below
+  // (wall, immunity, external, self-save, Feign Death's shield), so none of
+  // them can read it another way. An aura whose carrier goes unseen and whose
+  // end the log never showed is "up" here only by the interval builder's
+  // official-length cap, and does not count (`saveAuraCountsWhenAlreadyUp`:
+  // ruling P-FU-b8 for Mass Invisibility / Vanish / Burrow, extended to
+  // Greater Invisibility by D6 — `popped Greater Invisibility [up since
+  // 5:49]` on an attempt at 6:04, the mage casting again 3 s after the press).
   const upAtFrom = (iv: ISaveAuraInterval): boolean =>
     matchStartMs + iv.fromS * 1000 < fromMs &&
-    matchStartMs + iv.toS * 1000 > fromMs;
+    matchStartMs + iv.toS * 1000 > fromMs &&
+    saveAuraCountsWhenAlreadyUp(iv);
   /** A save pressed BEFORE the attempt counts through its aura: one that went
    * up inside the span, or was up when it began. One rule for the external
    * and the self-save branch (codex review, 2026-10-06: an ally's
@@ -1207,10 +1230,10 @@ function attributeFailure(
     const bySelf = isIntervalFrom(iv, target);
     // An immunity that went up inside the credit window, or (rule 2) one
     // that was already up when the attempt began — the second only when the
-    // aura IS the immunity (`immunityCountsWhenAlreadyUp`): a Mass
-    // Invisibility / Vanish / Burrow whose REMOVED the log lost is "up" only
-    // by the official-length cap (ruling P-FU-b8) — a stun landing on the
-    // target shows it. Feign Death, Cheat Death, Cauterize and Nature's
+    // aura IS the immunity (`immunityCountsWhenAlreadyUp`; a Mass
+    // Invisibility / Vanish / Burrow whose REMOVED the log lost is already
+    // not `upAtStart`, ruling P-FU-b8 — a stun landing on the target shows
+    // it). Feign Death, Cheat Death, Cauterize and Nature's
     // Guardian are not read here at all (ruling D8): see the self-saves.
     const immunityInSpan = inCredit(startMs);
     if (
