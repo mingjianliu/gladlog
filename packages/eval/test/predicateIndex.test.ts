@@ -44,9 +44,11 @@ import * as claimChecker from "@gladlog/analysis/src/compare/claimChecker";
 import * as burstAnswered from "@gladlog/analysis/src/context/burstAnswered";
 import * as ccUse from "@gladlog/analysis/src/context/ccUse";
 import * as cdPrior from "@gladlog/analysis/src/context/cdPrior";
+import * as controlRejectedPresses from "@gladlog/analysis/src/context/controlRejectedPresses";
 import * as forcedTrinket from "@gladlog/analysis/src/context/forcedTrinket";
 import * as matchTimelineSections from "@gladlog/analysis/src/context/matchTimelineSections";
 import * as observedConsequences from "@gladlog/analysis/src/context/observedConsequences";
+import * as peakSpikePlacement from "@gladlog/analysis/src/context/peakSpikePlacement";
 import * as peelOptions from "@gladlog/analysis/src/context/peelOptions";
 import * as resLedgerPrune from "@gladlog/analysis/src/context/resLedgerPrune";
 import * as stackedDefensivesContext from "@gladlog/analysis/src/context/stackedDefensives";
@@ -78,6 +80,7 @@ import * as scopedPurges from "@gladlog/analysis/src/data/scopedPurges";
 import * as sharedChargeGenerated from "@gladlog/analysis/src/data/sharedChargeGenerated";
 import * as spellCategories from "@gladlog/analysis/src/data/spellCategories";
 import * as spellEffectData from "@gladlog/analysis/src/data/spellEffectData";
+import * as spellIdLists from "@gladlog/analysis/src/data/spellIdLists";
 import * as spellReach from "@gladlog/analysis/src/data/spellReach";
 import * as spellSchools from "@gladlog/analysis/src/data/spellSchools";
 import * as spellTags from "@gladlog/analysis/src/data/spellTags";
@@ -99,12 +102,14 @@ import * as castCommitSpans from "@gladlog/analysis/src/utils/castCommitSpans";
 import * as castingLocks from "@gladlog/analysis/src/utils/castingLocks";
 import * as castParam from "@gladlog/analysis/src/utils/castParam";
 import * as ccBreakAnalysis from "@gladlog/analysis/src/utils/ccBreakAnalysis";
+import * as ccDuration from "@gladlog/analysis/src/utils/ccDuration";
 import * as ccTargetState from "@gladlog/analysis/src/utils/ccTargetState";
 import * as ccTrinketAnalysis from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
 import * as charmedPlayer from "@gladlog/analysis/src/utils/charmedPlayer";
 import * as combatStates from "@gladlog/analysis/src/utils/combatStates";
 import * as cooldowns from "@gladlog/analysis/src/utils/cooldowns";
 import * as counterfactual from "@gladlog/analysis/src/utils/counterfactual";
+import * as dampening from "@gladlog/analysis/src/utils/dampening";
 import * as deathOutcomeAnalysis from "@gladlog/analysis/src/utils/deathOutcomeAnalysis";
 import * as dispelAnalysis from "@gladlog/analysis/src/utils/dispelAnalysis";
 import * as dispelKind from "@gladlog/analysis/src/utils/dispelKind";
@@ -1268,6 +1273,343 @@ const INDEX: PredicateRow[] = [
     file: `${A}/utils/cannotCastIntervals.ts`,
     symbol: "lockedSchoolsText",
     mod: cannotCastIntervals,
+  },
+  // WP-G (FT-T07, D9): the per-application CC length under Oppressing Roar
+  {
+    file: `${A}/utils/ccDuration.ts`,
+    symbol: "ccFullDurationForApplication",
+    mod: ccDuration,
+  },
+  {
+    file: `${A}/data/spellEffectData.ts`,
+    symbol: "OPPRESSING_ROAR_LENGTHENED_MECHANICS",
+    mod: spellEffectData,
+  },
+  {
+    file: `${A}/utils/ccBreakAnalysis.ts`,
+    symbol: "oppressingRoarOnAt",
+    mod: ccBreakAnalysis,
+  },
+  {
+    file: `${A}/utils/ccBreakAnalysis.ts`,
+    symbol: "oppressingRoarOnAtMs",
+    mod: ccBreakAnalysis,
+  },
+  // WP-E (FT-T03, ruling D7): troughs — the signed exception to the grid rule
+  {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "HP_TROUGH_MIN_DROP_PTS",
+    mod: cooldowns,
+  },
+  {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "hpTroughInWindow",
+    mod: cooldowns,
+  },
+  {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "isTickBelowTrough",
+    mod: cooldowns,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "crisisHpProbeMismatch",
+    mod: promptQualityCheck,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkStayedInHpConsistency",
+    mod: promptQualityCheck,
+  },
+  {
+    file: `${A}/utils/positionAnalysis.ts`,
+    symbol: "STAYED_IN_NEAR_DEATH_PCT",
+    mod: positionAnalysis,
+  },
+  // WP-A1 (T12 ① c): `healed through` needs a unit that ended the window alive
+  {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "isSpikeHealedThrough",
+    mod: cooldowns,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkHealedThroughConsistency",
+    mod: promptQualityCheck,
+  },
+  // WP-F (FT-T07, ruling D8): effect saves are not immunities
+  {
+    file: `${A}/utils/enemyDefensives.ts`,
+    symbol: "effectSaves",
+    mod: enemyDefensives,
+  },
+  {
+    file: `${A}/data/spellIdLists.ts`,
+    symbol: "ENEMY_PROC_SAVES",
+    mod: spellIdLists,
+  },
+  {
+    file: `${A}/utils/enemyDefensives.ts`,
+    symbol: "enemySaveEffectNote",
+    mod: enemyDefensives,
+  },
+  {
+    file: `${A}/utils/enemyDefensives.ts`,
+    symbol: "enemySaveEffectOfNote",
+    mod: enemyDefensives,
+  },
+  {
+    file: `${A}/utils/enemyDefensives.ts`,
+    symbol: "ENEMY_SAVE_EFFECT_BY_NAME",
+    mod: enemyDefensives,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkEnemyDefSaveEffect",
+    mod: promptQualityCheck,
+  },
+  // WP-D (FT-T07 / T15, ruling D6): an aura the log never shows end
+  {
+    file: `${A}/utils/enemyDefensives.ts`,
+    symbol: "ENEMY_DEF_END_NOT_LOGGED",
+    mod: enemyDefensives,
+  },
+  {
+    file: `${A}/utils/enemyDefensives.ts`,
+    symbol: "ENEMY_DEF_END_NOT_LOGGED_SLOT_RE",
+    mod: enemyDefensives,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkEnemyDefEndNotLogged",
+    mod: promptQualityCheck,
+  },
+  {
+    file: `${A}/utils/enemyDefensives.ts`,
+    symbol: "SAVE_AURA_END_UNSEEN_IDS",
+    mod: enemyDefensives,
+  },
+  {
+    file: `${A}/data/spellIdLists.ts`,
+    symbol: "ENEMY_STEALTH_WALL_AURAS",
+    mod: spellIdLists,
+  },
+  {
+    file: `${A}/utils/enemyDefensives.ts`,
+    symbol: "SAVE_AURA_END_UNSEEN_NAMES",
+    mod: enemyDefensives,
+  },
+  {
+    file: `${A}/utils/enemyDefensives.ts`,
+    symbol: "saveAuraCountsWhenAlreadyUp",
+    mod: enemyDefensives,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkKillAttemptUpSinceEndLogged",
+    mod: promptQualityCheck,
+  },
+  // WP-C (FT-T15): a legend interpolates its predicate's constants
+  {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "LATE_WINDOW_SECONDS",
+    mod: cooldowns,
+  },
+  {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "TIMING_DAMAGE_WINDOW_S",
+    mod: cooldowns,
+  },
+  {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "TIMING_SPIKE_THRESHOLD",
+    mod: cooldowns,
+  },
+  {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "UNNECESSARY_TARGET_HP_PCT",
+    mod: cooldowns,
+  },
+  {
+    file: `${A}/context/matchTimelineSections.ts`,
+    symbol: "ROT_PRESSURE_HP_PCT",
+    mod: matchTimelineSections,
+  },
+  {
+    file: `${A}/context/matchTimelineSections.ts`,
+    symbol: "ROT_PRESSURE_MIN_DOTS",
+    mod: matchTimelineSections,
+  },
+  {
+    file: `${A}/context/matchTimelineSections.ts`,
+    symbol: "ROT_PRESSURE_MIN_SECONDS",
+    mod: matchTimelineSections,
+  },
+  {
+    file: `${A}/context/matchTimelineSections.ts`,
+    symbol: "ROT_PRESSURE_MIN_PERIODIC_SHARE",
+    mod: matchTimelineSections,
+  },
+  {
+    file: `${A}/context/timelineHelpers.ts`,
+    symbol: "HEALING_BUCKET_S",
+    mod: timelineHelpers,
+  },
+  {
+    file: `${A}/context/timelineHelpers.ts`,
+    symbol: "OWN_AURA_CLAUSE_PREFIX",
+    mod: timelineHelpers,
+  },
+  // WP-I (FT-T16, D13 / D14): presses refused under control; the per-spell
+  // landing window
+  {
+    file: `${A}/context/controlRejectedPresses.ts`,
+    symbol: "CONTROL_REJECT_REASONS",
+    mod: controlRejectedPresses,
+  },
+  {
+    file: `${A}/context/controlRejectedPresses.ts`,
+    symbol: "ownerControlPressKit",
+    mod: controlRejectedPresses,
+  },
+  {
+    file: `${A}/context/controlRejectedPresses.ts`,
+    symbol: "ownerPressesRejectedDuring",
+    mod: controlRejectedPresses,
+  },
+  {
+    file: `${A}/context/controlRejectedPresses.ts`,
+    symbol: "formatPressedDuringNote",
+    mod: controlRejectedPresses,
+  },
+  {
+    file: `${A}/context/controlRejectedPresses.ts`,
+    symbol: "stripPressedDuringNote",
+    mod: controlRejectedPresses,
+  },
+  {
+    file: `${A}/context/controlRejectedPresses.ts`,
+    symbol: "PRESSED_DURING_NOTE_HEAD",
+    mod: controlRejectedPresses,
+  },
+  {
+    file: `${A}/context/controlRejectedPresses.ts`,
+    symbol: "PRESSED_DURING_NOTE_RE_SRC",
+    mod: controlRejectedPresses,
+  },
+  {
+    file: `${A}/context/controlRejectedPresses.ts`,
+    symbol: "PRESSED_DURING_ITEM_RE_SRC",
+    mod: controlRejectedPresses,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkPressedDuringControlNote",
+    mod: promptQualityCheck,
+  },
+  {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "ccLandedMatchWindowMs",
+    mod: ccTrinketAnalysis,
+  },
+  {
+    file: `${A}/utils/drAnalysis.ts`,
+    symbol: "AOE_CC_LANDING_WINDOW_S",
+    mod: drAnalysis,
+  },
+  // WP-H (FT-T13, D10 / D11): one dampening classification; no 2v2 value before
+  // the first logged stack
+  {
+    file: `${A}/utils/dampening.ts`,
+    symbol: "dampeningRulesOf",
+    mod: dampening,
+  },
+  {
+    file: `${A}/utils/dampening.ts`,
+    symbol: "getInitialDampening",
+    mod: dampening,
+  },
+  {
+    file: `${A}/utils/dampening.ts`,
+    symbol: "buildDampeningEvents",
+    mod: dampening,
+  },
+  {
+    file: `${A}/utils/dampening.ts`,
+    symbol: "getDampeningPercentage",
+    mod: dampening,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkDampeningStartConsistency",
+    mod: promptQualityCheck,
+  },
+  {
+    file: `${A}/utils/dampening.ts`,
+    symbol: "dampeningForThreatWeight",
+    mod: dampening,
+  },
+  {
+    file: `${A}/utils/dampening.ts`,
+    symbol: "firstLoggedDampening",
+    mod: dampening,
+  },
+  // WP-A2 (T12 ③ ⑤ ⑦): spike credit, the burst ledger's Target / ally lines,
+  // the healer view's own damage
+  {
+    file: `${A}/context/peakSpikePlacement.ts`,
+    symbol: "creditSpikesToWindows",
+    mod: peakSpikePlacement,
+  },
+  {
+    file: `${A}/context/peakSpikePlacement.ts`,
+    symbol: "spikeWindowOverlapSeconds",
+    mod: peakSpikePlacement,
+  },
+  {
+    file: `${A}/context/peakSpikePlacement.ts`,
+    symbol: "NO_CREDITED_SPIKE_CLAUSE",
+    mod: peakSpikePlacement,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkOffensiveWindowSpikeCredit",
+    mod: promptQualityCheck,
+  },
+  {
+    file: `${A}/utils/burstLedger.ts`,
+    symbol: "BURST_TARGET_DAMAGE_RE_SRC",
+    mod: burstLedger,
+  },
+  {
+    file: `${A}/utils/burstLedger.ts`,
+    symbol: "BURST_ALLY_OVERLAP_LABEL",
+    mod: burstLedger,
+  },
+  {
+    file: `${A}/utils/burstLedger.ts`,
+    symbol: "BURST_ALLY_OVERLAP_ITEM_RE_SRC",
+    mod: burstLedger,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkBurstTargetDamageParts",
+    mod: promptQualityCheck,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkBurstAllyOverlap",
+    mod: promptQualityCheck,
+  },
+  {
+    file: `${A}/utils/healerOffenseAnalysis.ts`,
+    symbol: "VULNERABLE_OWNER_DAMAGE_RE_SRC",
+    mod: healerOffenseAnalysis,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkVulnerableOwnerDamage",
+    mod: promptQualityCheck,
   },
   // user ruling P-FU-H23: the removal pairing has a fourth reader (cannot-cast)
   {
