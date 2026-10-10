@@ -672,17 +672,21 @@ export const BURST_SECOND_TARGET_LABEL = "second target";
  * (T12 ⑤, user ruling 2026-10-10) — ` | second target: <name> X.XXM[ (A of it
  * absorbed)]` — or "" when the burst damaged one enemy player only.
  *
- * No share threshold: it is printed whenever there is a second enemy with a
- * figure to print at the line's precision (not `0.00M`), from the same list
- * and the same sums the target was chosen on. On 60 raw rounds 34 of 131
- * ledger targets had a second enemy at half the target's figure or more, and
- * for 2 the order flips on landed damage alone.
+ * Printed when the second enemy took at least half of what the named target
+ * took (`ON_TARGET_GOOD_PCT`, the off-target line's own half) — the case the
+ * evidence measured: on 60 raw rounds 34 of 131 ledger targets had a second
+ * enemy at half the target's figure or more, and for 2 the order flips on
+ * landed damage alone. Below that it is incidental cleave: printed down to
+ * the line's precision it named an enemy for 5k of a 3.5M burst (review
+ * 40-FT-53 P2). From the same list and sums the target was chosen on.
  */
 export function burstSecondTargetClause(
   damageByTarget: IBurstLedgerEntry["damageByTarget"],
 ): string {
+  const top = damageByTarget[0];
   const second = damageByTarget[1];
-  if (!second || fmtM(second.damage) === fmtM(0)) return "";
+  if (!top || !second || fmtM(second.damage) === fmtM(0)) return "";
+  if (second.damage * 100 < top.damage * ON_TARGET_GOOD_PCT) return "";
   return ` | ${BURST_SECOND_TARGET_LABEL}: ${second.unitName} ${fmtDamageWithAbsorbed(second.damage, second.absorbed)}`;
 }
 
@@ -751,7 +755,7 @@ export function formatBurstLedgerForContext(
   if (bursts.length > 0)
     lines.push(
       // one line: readers index the block's lines from the top
-      `  \`Target\` = the enemy player your own damage in the burst was highest on, counting what its shields absorbed. \`your damage\` = that figure: what landed plus what the shields absorbed; \`(A of it absorbed)\` = the absorbed part, printed when it is not 0.00M. \`${BURST_SECOND_TARGET_LABEL}: X N\` = the enemy player your damage was next highest on, same measure — printed whenever the burst damaged a second one; it can be close to the Target's figure, and ahead of it on landed damage alone. \`${BURST_ALLY_OVERLAP_LABEL}\` = a teammate's offensive cooldown was running during part of this burst — an overlap in time and nothing more: \`Ns\` = how long the two ran together (0.0s = an instant cooldown pressed inside the burst, or the two only touched), \`their top target in it\` = the enemy player that teammate damaged most in those seconds (landed + absorbed), which need not be this burst's Target.`,
+      `  \`Target\` = the enemy player your own damage in the burst was highest on, counting what its shields absorbed. \`your damage\` = that figure: what landed plus what the shields absorbed; \`(A of it absorbed)\` = the absorbed part, printed when it is not 0.00M. \`${BURST_SECOND_TARGET_LABEL}: X N\` = the enemy player your damage was next highest on, same measure — printed when that enemy took at least half of the Target's figure; it can be close to the Target's figure, and ahead of it on landed damage alone. \`${BURST_ALLY_OVERLAP_LABEL}\` = a teammate's offensive cooldown was running during part of this burst — an overlap in time and nothing more: \`Ns\` = how long the two ran together (0.0s = an instant cooldown pressed inside the burst, or the two only touched), \`their top target in it\` = the enemy player that teammate damaged most in those seconds (landed + absorbed), which need not be this burst's Target.`,
     );
   // FT-T03 (ruling D7): the low is off the grid — legended when one prints
   // (worded without the literal line tag: tests and gates find the target

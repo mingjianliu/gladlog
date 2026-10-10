@@ -96,6 +96,7 @@ import {
   BURST_ALLY_OVERLAP_LABEL,
   BURST_TARGET_DAMAGE_RE_SRC,
   KILL_CREDIT_SLACK_S,
+  ON_TARGET_GOOD_PCT,
 } from "@gladlog/analysis/src/utils/burstLedger";
 import {
   CC_LOGGED_END_NOTE_RE_SRC,
@@ -1019,8 +1020,10 @@ const BURST_TARGET_DAMAGE = new RegExp(
  *
  *   - `(A of it absorbed)` is a part of `your damage`: A <= the figure;
  *   - `second target: X N` is the NEXT highest: N <= the target's figure
- *     (the target is the head of the same list), X is not the target, and
- *     its own absorbed part is <= N;
+ *     (the target is the head of the same list), X is not the target, its
+ *     own absorbed part is <= N, and N is at least `ON_TARGET_GOOD_PCT` % of
+ *     the target's figure — the producer's rule (`burstSecondTargetClause`),
+ *     read with the two printed figures' rounding (0.02M);
  *   - a `Target:` line with `| your damage` reads in the producer's pattern.
  *
  * Before: the line printed one figure (dfcccbf2 `your damage 0.70M` = 0.30M
@@ -1048,6 +1051,10 @@ export function checkBurstTargetDamageParts(lines: string[]): string[] {
     if (second > damage)
       failures.push(
         `${at} ${m[1]}:second target ${m[4]} ${m[5]}M 大于 Target 的 ${m[2]}M`,
+      );
+    if (second * 100 + 2 < damage * ON_TARGET_GOOD_PCT)
+      failures.push(
+        `${at} ${m[1]}:second target ${m[4]} ${m[5]}M 不到 Target ${m[2]}M 的 ${ON_TARGET_GOOD_PCT}%,不该印`,
       );
     if (m[6] !== undefined && Number(m[6]) > second)
       failures.push(

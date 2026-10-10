@@ -669,8 +669,9 @@ describe("analyzeBurstLedger — Target HP on the render grid, the low, other de
       { unitName: "Shatters", atSeconds: 11.945 },
     ]);
     expect(formatBurstLedgerForContext(bursts, [], [])[3]).toMatch(
-      // T12 ⑤: the second enemy the burst damaged is on the line too
-      /Target: Kegrunner \| your damage 0\.70M \| second target: Shatters 0\.30M \| also hit: Shatters DIED 0:11 \(\+1\.3s\)$/,
+      // T12 ⑤: a second enemy under half the target's figure is not a
+      // "second target" (0.30M of 0.70M) — the death note still names it
+      /Target: Kegrunner \| your damage 0\.70M \| also hit: Shatters DIED 0:11 \(\+1\.3s\)$/,
     );
   });
 });
@@ -765,7 +766,7 @@ describe("burstLedger — the second target and the absorbed part (T12 ⑤)", ()
     expect(burstSecondTargetClause(bursts[0].damageByTarget)).toBe("");
   });
 
-  it("a second enemy is printed whatever its share — no threshold — unless its figure is 0.00M", () => {
+  it("a second enemy is printed when it took at least half the target's figure (review 40-FT-53 P2: not for incidental cleave)", () => {
     const run = (onWarrior: number) =>
       targetLine(
         analyzeBurstLedger(
@@ -778,10 +779,11 @@ describe("burstLedger — the second target and the absorbed part (T12 ⑤)", ()
           makeCombat(),
         ),
       );
-    expect(run(12_000)).toBe(
-      "    Target: Rohbell | your damage 0.90M | second target: Shalamayne 0.01M",
+    expect(run(450_000)).toBe(
+      "    Target: Rohbell | your damage 0.90M | second target: Shalamayne 0.45M",
     );
-    expect(run(4_000)).toBe("    Target: Rohbell | your damage 0.90M");
+    expect(run(449_000)).toBe("    Target: Rohbell | your damage 0.90M");
+    expect(run(12_000)).toBe("    Target: Rohbell | your damage 0.90M");
   });
 
   it("the legend says what Target, your damage and the second target are", () => {

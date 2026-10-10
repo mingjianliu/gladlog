@@ -27,7 +27,7 @@ describe("checkBurstTargetDamageParts", () => {
           "0.70M (0.40M of it absorbed) | second target: Shalamayne-Sargeras-US 0.67M (0.03M of it absorbed)",
         ),
         target(
-          "0.70M | target DIED | second target: Shalamayne-Sargeras-US 0.30M | also hit: Shalamayne-Sargeras-US DIED 0:11 (+1.3s)",
+          "0.70M | target DIED | second target: Shalamayne-Sargeras-US 0.40M | also hit: Shalamayne-Sargeras-US DIED 0:11 (+1.3s)",
         ),
         target("0.70M | also hit: Shatters DIED 0:11 (+1.3s)"),
       ]),
@@ -52,19 +52,33 @@ describe("checkBurstTargetDamageParts", () => {
     );
   });
 
+  it("fails a second target under half the target's figure — the producer does not print one (40-FT-53 P2)", () => {
+    expect(
+      checkBurstTargetDamageParts([
+        target("3.50M | second target: Shalamayne-Sargeras-US 0.01M"),
+      ]).join(" "),
+    ).toContain("不该印");
+    // the two printed figures' rounding: 0.35M of 0.71M can be half of the raw sums
+    expect(
+      checkBurstTargetDamageParts([
+        target("0.71M | second target: Shalamayne-Sargeras-US 0.35M"),
+      ]),
+    ).toEqual([]);
+  });
+
   it("fails when the second target is the target, or its absorbed part exceeds it", () => {
     expect(
       checkBurstTargetDamageParts([
-        target("0.70M | second target: Rohbell-Tichondrius-US 0.30M"),
+        target("0.70M | second target: Rohbell-Tichondrius-US 0.40M"),
       ])[0],
     ).toContain("second target 与 Target 是同一单位");
     expect(
       checkBurstTargetDamageParts([
         target(
-          "0.70M | second target: Shalamayne-Sargeras-US 0.30M (0.31M of it absorbed)",
+          "0.70M | second target: Shalamayne-Sargeras-US 0.40M (0.41M of it absorbed)",
         ),
       ])[0],
-    ).toContain("absorbed 0.31M 大于它的 0.30M");
+    ).toContain("absorbed 0.41M 大于它的 0.40M");
   });
 
   it("fails on a damage clause it cannot read", () => {
