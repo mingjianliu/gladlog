@@ -31,6 +31,7 @@ const SPELLS = spellsData as Record<string, SpellEntry>;
 import {
   computeDampening,
   dampeningDangerMultiplier,
+  dampeningForThreatWeight,
   fmtDampening,
 } from "./dampening";
 import {
@@ -113,7 +114,9 @@ export interface IAlignedBurstWindow {
   /** Combined score including outcome factors (damage dealt, healer CC) — kept for existing consumers */
   readonly dangerScore: number;
   readonly dangerLabel: "Low" | "Moderate" | "High" | "Critical";
-  readonly dampeningPct: number; // 0–1
+  /** 0–1; `null` where no value is stated at the window's start — a 2v2
+   * round before its first logged stack (`getInitialDampening`). */
+  readonly dampeningPct: number | null;
   readonly damageInWindow: number;
   readonly damageRatio: number;
   readonly healerCCed: boolean;
@@ -488,18 +491,26 @@ export function reconstructEnemyCDTimeline(
       // Dampening at window start. The stack events are read on the units
       // this call was handed (unchanged); the bracket is classified on the
       // round's whole roster (FT-T13, D10) — half of this function's callers
-      // pass no `friendlies`, and one side alone never reads as "2v2 with a
-      // healer on both teams".
+      // pass no `friendlies`, and for a bracket string that names no bracket
+      // one side alone never counts as a 3v3 roster.
       const bracket = combat.startInfo?.bracket ?? "3v3";
       const allPlayers = [...enemies, ...(friendlies ?? [])];
       const roundUnits = Object.values(combat.units ?? {});
+      const roster = roundUnits.length > 0 ? roundUnits : allPlayers;
+      const windowStartAtMs = windowStart * 1000 + matchStartMs;
+      // `dampening` is the STATED value — null in a 2v2 round before its
+      // first logged stack (FT-T13 D11); it is what `dampeningPct` carries to
+      // anything that prints it. The threat score needs a weight even there
+      // and takes it from `dampeningForThreatWeight` (the first logged stack).
       const dampening = computeDampening(
-        windowStart * 1000 + matchStartMs,
+        windowStartAtMs,
         bracket,
         allPlayers,
-        roundUnits.length > 0 ? roundUnits : allPlayers,
+        roster,
       );
-      const dampeningMult = dampeningDangerMultiplier(dampening);
+      const dampeningMult = dampeningDangerMultiplier(
+        dampeningForThreatWeight(windowStartAtMs, bracket, allPlayers, roster),
+      );
 
       // Hoist window timestamps here so both the healer CC block and HP sampling share the same values
       const windowStartMs = matchStartMs + windowStart * 1000;
@@ -695,7 +706,11 @@ export function formatEnemyCDTimelineForContext(
     "  (Threat = strength of the stacked CDs before outcome; Outcome = what actually happened. High threat with below-average damage usually means the burst was well defended — worth crediting.)",
   );
   timeline.alignedBurstWindows.forEach((w, idx) => {
-    const dampStr = fmtDampening(w.dampeningPct);
+    // No `| Dampening:` where none is stated (2v2 before the first logged stack)
+    const dampStr =
+      w.dampeningPct === null
+        ? ""
+        : ` | Dampening: ${fmtDampening(w.dampeningPct)}`;
     // Each CD carries its own cast time: the window is the union of "earliest
     // cast -> latest buff end", and a list without times was once read as
     // everything popping at the window start (059).
@@ -709,7 +724,7 @@ export function formatEnemyCDTimelineForContext(
     const ratioStr = `${w.damageRatio.toFixed(1)}× match avg rate`;
     const healerStr = w.healerCCed ? "healer CCed" : "healer free";
     lines.push(
-      `  #${idx + 1} — ${fmtTime(w.fromSeconds)}–${fmtTime(w.toSeconds)} | Threat: ${w.threatLabel} (${w.threatScore.toFixed(1)}) | Dampening: ${dampStr}`,
+      `  #${idx + 1} — ${fmtTime(w.fromSeconds)}–${fmtTime(w.toSeconds)} | Threat: ${w.threatLabel} (${w.threatScore.toFixed(1)})${dampStr}`,
     );
     lines.push(`    CDs: ${cdNames}`);
     lines.push(`    Outcome: ${dmgM}M damage (${ratioStr}) | ${healerStr}`);

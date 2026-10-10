@@ -268,9 +268,10 @@ function extractCombatStats(
     const bracket = (combat as IArenaMatch).startInfo?.bracket ?? "3v3";
     const players = [...friendlies, ...enemies];
     for (const death of unit.deathRecords) {
-      const dampPct =
-        getDampeningPercentage(bracket, players, death.timestamp) / 100;
-      stats.dampeningAtDeathSamples.push(dampPct);
+      const dampPct = getDampeningPercentage(bracket, players, death.timestamp);
+      // null = none stated (a 2v2 death before the round's first logged
+      // stack, `getInitialDampening`): no sample, rather than a hand value.
+      if (dampPct !== null) stats.dampeningAtDeathSamples.push(dampPct / 100);
     }
   }
 }

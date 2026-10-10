@@ -23,9 +23,13 @@ describe("base utils", () => {
     const d0 = computeDampening(0, "3v3", []);
     const d60 = computeDampening(60_000, "3v3", []);
     const d300 = computeDampening(300_000, "3v3", []);
+    // 3v3 states a value from 0:00 on — `null` is a 2v2 round before its
+    // first logged stack only (FT-T13 D11)
+    expect(d0).not.toBeNull();
+    expect(d60).not.toBeNull();
     expect(d0).toBeGreaterThanOrEqual(0);
-    expect(d60).toBeGreaterThanOrEqual(d0);
-    expect(d300).toBeGreaterThanOrEqual(d60);
+    expect(d60).toBeGreaterThanOrEqual(d0 as number);
+    expect(d300).toBeGreaterThanOrEqual(d60 as number);
   });
 
   it("SIGNIFICANT_DAMAGE_HEAL_THRESHOLD: 钉死为 10,000", () => {

@@ -23,6 +23,16 @@ import type { CandidateEvent } from "../types";
 
 export const CRISIS_NO_RESPONSE_CAP = 2;
 
+/** The `dampeningPct` fact — rendered only where a dampening value is stated
+ * at the crossing (no probe, or `null` from it = no fact; FT-T13 D11). */
+function dampeningFact(
+  dampening: number | null | undefined,
+): { dampeningPct: string } | Record<string, never> {
+  return dampening === null || dampening === undefined
+    ? {}
+    : { dampeningPct: String(Math.round(dampening * 100)) };
+}
+
 export function crisisNoResponseEvents(
   points: DecisionPoint[],
   owner: { id: string; name: string },
@@ -33,8 +43,10 @@ export function crisisNoResponseEvents(
      * seconds). A crossing inside one abstains (A2b below); absent = none. */
     majorWalls?: ReadonlyArray<{ fromS: number; toS: number }>;
     /** Dampening (0–1) at a crossing's instant (`computeDampening`), for the
-     * `dampeningPct` fact; absent = the fact is not rendered. */
-    dampeningAt?: (tMs: number) => number;
+     * `dampeningPct` fact; absent = the fact is not rendered. `null` at an
+     * instant (a 2v2 round before its first logged stack — no value is
+     * stated there, `getInitialDampening`) = not rendered either. */
+    dampeningAt?: (tMs: number) => number | null;
   },
   overrides?: { cap?: number },
 ): CandidateEvent[] {
@@ -181,11 +193,7 @@ export function crisisNoResponseEvents(
               selfHealCasts: String(p.selfHealCasts),
             }
           : {}),
-        ...(probes.dampeningAt
-          ? {
-              dampeningPct: String(Math.round(probes.dampeningAt(p.tMs) * 100)),
-            }
-          : {}),
+        ...dampeningFact(probes.dampeningAt?.(p.tMs)),
       },
     });
   }

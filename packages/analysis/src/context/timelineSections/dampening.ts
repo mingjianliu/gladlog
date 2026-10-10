@@ -3,9 +3,16 @@
  * milestone (30 / 50 / 70 / 90 %) already reached when the match starts, then at
  * the first crossing of each remaining one.
  *
- * Cut out of buildMatchTimeline verbatim (GH #116); the body is unchanged, only
- * its closure inputs now arrive through `ctx`. Output is pinned by the 605-file
- * acceptanceCapture context hash.
+ * "Already reached when the match starts" needs a value stated at 0:00. A 2v2
+ * round has none before its first logged stack (`getInitialDampening`, FT-T13
+ * D11), so its 30 % alert sits at the second of the first logged stack at or
+ * above 30 — the first stack itself with a healer on both teams (it reads 42,
+ * inside the round's first 20 s), a later one otherwise (the first reads 22) —
+ * instead of the `0:00` a hand value put it at. The thresholds and the
+ * alert's meaning are unchanged.
+ *
+ * Cut out of buildMatchTimeline (GH #116); its closure inputs arrive through
+ * `ctx`.
  */
 import {
   buildDampeningEvents,
@@ -31,7 +38,7 @@ export function emitDampeningEntries(
   const milestones = [30, 50, 70, 90];
 
   for (const milestone of milestones) {
-    if (initialDampening >= milestone) {
+    if (initialDampening !== null && initialDampening >= milestone) {
       addEntry(0, `${fmtTime(0)}  [DAMPENING ALERT: ${milestone}%]`);
       emittedMilestones.add(milestone);
     }

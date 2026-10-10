@@ -639,11 +639,14 @@ export function emitManaMarkerEntries(params: {
 
 // ── [DEATH] events ──────────────────────────────────────────────────────────
 
+/** ` | dampening: N%` on a `[DEATH]` line — nothing where no value is stated
+ * (2v2 before the first logged stack; `getInitialDampening`, FT-T13 D11). */
 function dampeningSuffix(
-  dampeningAt: ((atSeconds: number) => number) | undefined,
+  dampeningAt: ((atSeconds: number) => number | null) | undefined,
   atSeconds: number,
 ): string {
-  return dampeningAt ? ` | dampening: ${dampeningAt(atSeconds)}%` : "";
+  const pct = dampeningAt ? dampeningAt(atSeconds) : null;
+  return pct === null ? "" : ` | dampening: ${pct}%`;
 }
 
 /**
@@ -825,9 +828,10 @@ export function emitFriendlyDeathEntries<S>(params: {
   unitNames?: ReadonlyMap<string, string>;
   /** GH #103 A1: the dampening at the death instant, same getter as the
    * `[CD] … | dampening: N%` lines. Without it the responder quoted the value
-   * of a neighbouring line ("died at 3:15 at 66%" — 66% was 3:16's). Omitted
-   * → no suffix. */
-  dampeningAt?: (atSeconds: number) => number;
+   * of a neighbouring line ("died at 3:15 at 66%" — 66% was 3:16's). Omitted,
+   * or `null` at that instant (2v2 before the first logged stack) → no
+   * suffix. */
+  dampeningAt?: (atSeconds: number) => number | null;
   /**
    * Mitigation audit / counterfactual (#17b Task4): given (victim name, death
    * instant), return a set of already-formatted lines (auditLines /
@@ -1175,9 +1179,10 @@ export function emitEnemyDeathEntries<S>(params: {
   unitNames?: ReadonlyMap<string, string>;
   /** GH #103 A1 (see emitFriendlyDeathEntries): the dampening at the death instant, same getter as the
    * `[CD] … | dampening: N%` lines. Without it the responder quoted the value
-   * of a neighbouring line ("died at 3:15 at 66%" — 66% was 3:16's). Omitted
-   * → no suffix. */
-  dampeningAt?: (atSeconds: number) => number;
+   * of a neighbouring line ("died at 3:15 at 66%" — 66% was 3:16's). Omitted,
+   * or `null` at that instant (2v2 before the first logged stack) → no
+   * suffix. */
+  dampeningAt?: (atSeconds: number) => number | null;
   requestSnapshotPlaceholder: (
     timeSeconds: number,
     forceFull?: boolean,

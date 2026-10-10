@@ -109,6 +109,31 @@ describe("Timeline", () => {
     expect(rects[0]!.textContent).toContain("Dampening 0%");
     expect(rects[1]!.textContent).toContain("10%");
   });
+
+  it("dampening 泳道:2v2 的序列从第一次日志读数那一秒开始(FT-T13 D11)—— 之前没有 rect,第一段从该秒画起", () => {
+    const data = deriveTimeline(m);
+    // what deriveDampeningSeries returns for a 2v2 round whose first logged
+    // stack is 42 at 0:11 — no point before it
+    const dampening = [
+      { tS: 11, pct: 42 },
+      { tS: 12, pct: 42 },
+      { tS: 13, pct: 43 },
+    ];
+    const { container } = render(
+      <Timeline data={data} dampening={dampening} />,
+    );
+    const rects = container.querySelectorAll("[data-testid='rpt-damp-lane']");
+    expect(rects).toHaveLength(2);
+    expect(rects[0]!.textContent).toContain("Dampening 42%");
+    // the first run starts at second 11, not at the left edge: a series that
+    // started at 0 puts its first rect further left
+    const fromZero = render(
+      <Timeline data={data} dampening={[{ tS: 0, pct: 42 }, ...dampening]} />,
+    ).container.querySelectorAll("[data-testid='rpt-damp-lane']");
+    expect(Number(rects[0]!.getAttribute("x"))).toBeGreaterThan(
+      Number(fromZero[0]!.getAttribute("x")),
+    );
+  });
 });
 
 describe("Timeline 指标下拉(每秒堆叠柱)", () => {

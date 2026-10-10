@@ -164,10 +164,13 @@ export function formatTimeline(
     e.lines.some((l) => typeof l === "string" && RES_FORBEARANCE_RE.test(l)),
   );
   // F-C16 (triage res-readiness): the `next spike in Ns on X` suffix on
-  // [YOU] [CD] lines is hindsight — legend it whenever one is rendered.
+  // [YOU] [CD] lines is hindsight — legend it whenever one is rendered. It
+  // follows the dampening note (`, next spike in`) or, where no dampening is
+  // stated (2v2 before the first logged stack), opens the clause itself
+  // (` | next spike in`).
   const nextSpikeRendered = entries.some((e) =>
     e.lines.some(
-      (l) => typeof l === "string" && l.includes(", next spike in "),
+      (l) => typeof l === "string" && /(?:,| \|) next spike in /.test(l),
     ),
   );
   // B18 (user ruling 2026-10-06): the Guardian Spirit save clause is

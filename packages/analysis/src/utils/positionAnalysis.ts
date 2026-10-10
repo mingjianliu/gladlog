@@ -164,8 +164,10 @@ export interface IPositionEvent {
   nearestEnemyName?: string;
   /** Burst window threat label for STAYED_IN / KITED */
   dangerLabel?: string;
-  /** Dampening during the window (0–1), for the "staying in may be correct" nuance */
-  dampeningPct?: number;
+  /** Dampening during the window (0–1), for the "staying in may be correct"
+   * nuance. `null` = none stated at the window's start (a 2v2 round before
+   * its first logged stack) — the nuance is then not printed. */
+  dampeningPct?: number | null;
   /** STAYED_IN only: whether a defensive CD was off cooldown at window start.
    *  undefined when no defensive CDs are tracked for this spec. */
   ownerDefensiveAvailable?: boolean;

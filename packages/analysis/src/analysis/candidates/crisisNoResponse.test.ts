@@ -205,4 +205,18 @@ describe("crisis-no-response — what the owner did press (F-C1)", () => {
     expect("selfHealPct" in ev!.facts).toBe(false);
     expect("dampeningPct" in ev!.facts).toBe(false);
   });
+
+  // FT-T13 D11: a 2v2 round states no dampening before its first logged
+  // stack — the probe answers null there, and the fact is left out rather
+  // than filled with a hand value (the old 30 / 10) or a 0.
+  it("a null reading from the probe renders no dampeningPct; the self-heal facts stay", () => {
+    const [ev] = crisisNoResponseEvents(
+      [pt({ tMs: 8_000, selfHealFreshPct: 4, selfHealCasts: 2 })],
+      owner,
+      "2v2",
+      { ...probes, dampeningAt: () => null },
+    );
+    expect("dampeningPct" in ev!.facts).toBe(false);
+    expect(ev!.facts).toMatchObject({ selfHealPct: "4", selfHealCasts: "2" });
+  });
 });

@@ -1,3 +1,4 @@
+import { formatDampeningForContext } from "@gladlog/analysis";
 import { describe, expect, it } from "vitest";
 
 import { checkDampeningStartConsistency } from "../src/quality/promptQualityCheck";
@@ -79,6 +80,164 @@ describe("checkDampeningStartConsistency", () => {
         "DAMPENING (Rated Solo Shuffle): started at 10%, ended at 58% at match end",
         "0:14  [YOU] [CD]   Alter Time (self: 100% HP, 0%/s, 2k DPS) | dampening: 10%, next spike in 14s on 3(FMage)",
         "1:17  [YOU] [CD]   Ring of Frost (self: 82% HP, +4%/s, 5k DPS) | dampening: 16%",
+      ]),
+    ).toEqual([]);
+  });
+});
+
+/**
+ * FT-T13 (D11, re-opening O10): a 2v2 prompt states no dampening before the
+ * round's first logged stack — the header says `first logged at N% (m:ss; …)`
+ * and no timeline line stamped before m:ss carries a dampening number.
+ */
+const HEADER_FIRST =
+  "DAMPENING (2v2): first logged at 42% (0:11; the log prints no value before that), ended at 63% at match end";
+
+describe("checkDampeningStartConsistency — `first logged at` (2v2)", () => {
+  it("passes when nothing before the first logged second carries a number", () => {
+    expect(
+      checkDampeningStartConsistency([
+        HEADER_FIRST,
+        "0:04  [YOU] [CD]   Frozen Orb (self: 100% HP, 0%/s, 0k DPS) | next spike in 18s on 1(FMage)",
+        "0:08  [DEATH]  4(FMage) (Frost Mage — enemy)",
+        "0:11  [DAMPENING ALERT: 30%]",
+        "0:11  [YOU] [CD]   Ice Barrier (self: 79% HP, -1%/s, 44k DPS) | dampening: 42%",
+        "0:17  [YOU] [CD]   Alter Time (self: 79% HP, +1%/s, 16k DPS) | dampening: 42%, next spike in 4s on 1(FMage)",
+        "2:27  [MATCH END]   damp: 63%",
+      ]),
+    ).toEqual([]);
+  });
+
+  it("fails on each kind of dampening number stamped before it: a press note, a [DEATH] note, an alert", () => {
+    const out = checkDampeningStartConsistency([
+      HEADER_FIRST,
+      "0:00  [DAMPENING ALERT: 30%]",
+      "0:04  [YOU] [CD]   Frozen Orb (self: 100% HP, 0%/s, 0k DPS) | dampening: 30%, next spike in 18s on 1(FMage)",
+      "0:08  [DEATH]  4(FMage) (Frost Mage — enemy) | dampening: 41%",
+      "0:10  [YOU] [PROC]   Nature's Guardian (self: 30% HP, -20%/s, 90k DPS) | dampening: 10%",
+      "0:17  [YOU] [CD]   Ice Barrier (self: 79% HP, -1%/s, 44k DPS) | dampening: 42%",
+    ]);
+    expect(out).toHaveLength(4);
+    expect(out[0]).toContain("line 2");
+    expect(out[0]).toContain("[DAMPENING ALERT: 30%]");
+    expect(out[1]).toContain("| dampening: 30%");
+    expect(out[2]).toContain("| dampening: 41%");
+    expect(out[3]).toContain("line 5");
+    for (const f of out) expect(f).toContain("first logged at 42% (0:11)");
+  });
+
+  it("reads the header's second, not a fixed one", () => {
+    const header =
+      "DAMPENING (2v2): first logged at 22% (0:12; the log prints no value before that), ended at 31% at match end";
+    expect(
+      checkDampeningStartConsistency([
+        header,
+        "0:11  [YOU] [CD]   Barkskin (self: 60% HP, -9%/s, 80k DPS) | dampening: 22%",
+      ]),
+    ).toHaveLength(1);
+    expect(
+      checkDampeningStartConsistency([
+        header,
+        "0:12  [YOU] [CD]   Barkskin (self: 60% HP, -9%/s, 80k DPS) | dampening: 22%",
+      ]),
+    ).toEqual([]);
+  });
+
+  it("a round without a logged stack: no dampening number anywhere in the timeline", () => {
+    const header =
+      "DAMPENING (2v2): n/a — no dampening stack was logged in this round (8s)";
+    expect(
+      checkDampeningStartConsistency([
+        header,
+        "0:04  [YOU] [CD]   Frozen Orb (self: 100% HP, 0%/s, 0k DPS) | next spike in 2s on 1(FMage)",
+        "0:07  [DEATH]  2(FMage) (Frost Mage — friendly)",
+        "0:08  [MATCH END]",
+      ]),
+    ).toEqual([]);
+    const out = checkDampeningStartConsistency([
+      header,
+      "0:04  [YOU] [CD]   Frozen Orb (self: 100% HP, 0%/s, 0k DPS) | dampening: 10%",
+      "0:08  [MATCH END]   damp: 10%",
+    ]);
+    expect(out).toHaveLength(2);
+    expect(out[1]).toContain("damp: 10%");
+  });
+
+  // The gate keys on the header's wording. These run the PRODUCER's header
+  // through it, so a reworded header cannot silently stop binding the lines.
+  describe("the producer's own header is the one the gate reads", () => {
+    const START = 1_000_000;
+    const unit = (stacksAtS: Array<[number, number]>) =>
+      ({
+        type: 1, // CombatUnitType.Player
+        auraEvents: stacksAtS.map(([s, stacks]) => {
+          const parameters: unknown[] = [];
+          parameters[12] = stacks;
+          return {
+            spellId: "110310",
+            timestamp: START + s * 1000,
+            logLine: { event: "SPELL_AURA_APPLIED_DOSE", parameters },
+          };
+        }),
+      }) as never;
+    const early =
+      "0:04  [YOU] [CD]   Frozen Orb (self: 100% HP, 0%/s, 0k DPS) | dampening: 30%";
+
+    it("`first logged at` — a 2v2 round with stacks", () => {
+      const [header] = formatDampeningForContext(
+        "2v2",
+        [
+          unit([
+            [11.4, 42],
+            [21.4, 43],
+          ]),
+        ],
+        START,
+        START + 100_000,
+      );
+      expect(header).toContain("first logged at 42% (0:11");
+      expect(checkDampeningStartConsistency([header, early])).toHaveLength(1);
+      expect(
+        checkDampeningStartConsistency([
+          header,
+          early.replace("0:04", "0:11").replace("30%", "42%"),
+        ]),
+      ).toEqual([]);
+    });
+
+    it("no stack at all — a 2v2 round without a logged one", () => {
+      const [header] = formatDampeningForContext(
+        "2v2",
+        [unit([])],
+        START,
+        START + 8_000,
+      );
+      expect(checkDampeningStartConsistency([header, early])).toHaveLength(1);
+    });
+
+    it("`started at` — 3v3", () => {
+      const [header] = formatDampeningForContext(
+        "3v3",
+        [unit([[200, 11]])],
+        START,
+        START + 240_000,
+      );
+      expect(header).toContain("started at 10%");
+      expect(
+        checkDampeningStartConsistency([header, early.replace("30%", "9%")]),
+      ).toHaveLength(1);
+      expect(
+        checkDampeningStartConsistency([header, early.replace("30%", "10%")]),
+      ).toEqual([]);
+    });
+  });
+
+  it("the other short-match n/a line (a stated 10% that never ramped) binds nothing", () => {
+    expect(
+      checkDampeningStartConsistency([
+        "DAMPENING (Rated Solo Shuffle): n/a — match ended (36s) before dampening ramped (10% at end)",
+        "0:04  [YOU] [CD]   Frozen Orb (self: 100% HP, 0%/s, 0k DPS) | dampening: 10%",
+        "0:36  [MATCH END]   damp: 10%",
       ]),
     ).toEqual([]);
   });

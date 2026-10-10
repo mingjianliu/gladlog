@@ -320,9 +320,14 @@ export function emitOwnerCdEntries(
           ? ` [UNNECESSARY — ${timingContextWithLabel(cast, pid)}]`
           : "";
 
+      // ` | dampening: N%, next spike in Ns on X`. The dampening half is left
+      // out where no value is stated — a 2v2 round before its first logged
+      // stack (`getInitialDampening`, FT-T13 D11) — and the spike half then
+      // stands alone: ` | next spike in Ns on X`.
       let dampeningNote = "";
       if (!isCC) {
-        dampeningNote = ` | dampening: ${dampeningAt(cast.timeSeconds)}%`;
+        const dampPct = dampeningAt(cast.timeSeconds);
+        const noteParts = dampPct === null ? [] : [`dampening: ${dampPct}%`];
         // pressureWindows is sorted by totalDamage descending (see computePressureWindows),
         // so Array.find() would return the biggest future spike rather than the nearest one.
         // Select by minimum fromSeconds among qualifying spikes instead of relying on order.
@@ -339,8 +344,11 @@ export function emitOwnerCdEntries(
           undefined,
         );
         if (nextSpike) {
-          dampeningNote += `, next spike in ${Math.round(nextSpike.fromSeconds - cast.timeSeconds)}s on ${pid(nextSpike.targetName)}`;
+          noteParts.push(
+            `next spike in ${Math.round(nextSpike.fromSeconds - cast.timeSeconds)}s on ${pid(nextSpike.targetName)}`,
+          );
         }
+        if (noteParts.length > 0) dampeningNote = ` | ${noteParts.join(", ")}`;
       }
 
       // F166: "cheaper-tool-available" tag — if a shorter-CD defensive was available, flag it.

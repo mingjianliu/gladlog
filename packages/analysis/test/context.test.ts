@@ -34,11 +34,33 @@ describe("buildMatchContext on real fixture", () => {
     expect(ctx.length).toBeGreaterThan(1000);
   });
 
-  it("GH #103 A1: every [DEATH] line carries the dampening at that instant", () => {
+  it("GH #103 A1: every [DEATH] line carries the dampening at that instant — where one is stated", () => {
+    const deathLines = (ctx: string) =>
+      ctx.split("\n").filter((l) => l.includes("[DEATH]"));
+    // The fixture is a 2v2 round, and FT-T13 D11 states no dampening in 2v2
+    // before the first logged stack. This document was stored by a parser
+    // older than the CRLF fix: its doses read "42\r" and are never picked up,
+    // so the round has no logged stack at all — the [DEATH] lines carry no
+    // number (they used to carry the hand value 30%), and the header says so.
     const ctx = buildMatchContext(match, friends, enemies, {});
-    const deaths = ctx.split("\n").filter((l) => l.includes("[DEATH]"));
+    const deaths = deathLines(ctx);
     expect(deaths.length).toBeGreaterThan(0);
-    for (const l of deaths) expect(l).toMatch(/ \| dampening: \d+%$/);
+    for (const l of deaths) expect(l).not.toMatch(/dampening/);
+    expect(ctx).toContain(
+      "DAMPENING (2v2): n/a — no dampening stack was logged in this round (15s)",
+    );
+    expect(ctx).not.toMatch(/dampening: \d+%|damp: \d+%|DAMPENING ALERT/);
+    // The same round under a bracket that states a value from 0:00 on: every
+    // [DEATH] line carries it (the assertion this test was written for).
+    const as3v3 = {
+      ...match,
+      startInfo: { ...match.startInfo, bracket: "3v3" },
+    } as typeof match;
+    const deaths3v3 = deathLines(
+      buildMatchContext(as3v3, friends, enemies, {}),
+    );
+    expect(deaths3v3).toHaveLength(deaths.length);
+    for (const l of deaths3v3) expect(l).toMatch(/ \| dampening: \d+%$/);
   });
 
   it("GH #103 A3: [KICK] lines print a back-time only for enemy kickers", () => {

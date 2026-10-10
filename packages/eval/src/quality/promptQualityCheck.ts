@@ -1062,29 +1062,87 @@ export function checkHeaderHpPromise(lines: string[]): string[] {
   return failures;
 }
 
-/** `DAMPENING (2v2): started at 30%, ended at …` — the header's start value. */
+/** `DAMPENING (3v3): started at 10%, ended at …` — the header's start value. */
 const DAMPENING_STARTED_HEADER = /^DAMPENING \([^)]*\): started at (\d+)%/;
+/** `DAMPENING (2v2): first logged at 42% (0:11; the log prints no value before
+ *  that), ended at …` — no value is stated before that second. */
+const DAMPENING_FIRST_LOGGED_HEADER =
+  /^DAMPENING \([^)]*\): first logged at (\d+)% \((\d+):(\d{2})[;)]/;
+/** `DAMPENING (2v2): n/a — no dampening stack was logged in this round (8s)` —
+ *  no value is stated anywhere in the round. */
+const DAMPENING_NO_STACK_HEADER =
+  /^DAMPENING \([^)]*\): n\/a — no dampening stack was logged/;
 /** The `| dampening: N%` note of a `[YOU] [CD]` / `[PROC]` / `[DEATH]` line. */
 const DAMPENING_NOTE = /\| dampening: (\d+)%/;
+/** Every dampening number a timeline line can carry: the note above, a
+ *  `[DAMPENING ALERT: N%]`, the `damp: N%` of `[MATCH END]`. */
+const DAMPENING_NUMBER_ON_LINE =
+  /\| dampening: \d+%|\[DAMPENING ALERT: \d+%\]|\bdamp: \d+%/;
 const DEATH_LINE = /^\d+:\d{2}\s+\[DEATH\]/;
 
 /**
- * One prompt states one dampening start (FT-T13, D10).
+ * One prompt states one dampening start, and none the log does not print
+ * (FT-T13, D10 + D11).
  *
- * The header's `started at N%` and the `| dampening: M%` notes of the timeline
- * are the same reading of the same aura, and the stack only goes down after a
- * death (`buildDampeningEvents`: a REMOVED_DOSE on the survivors). So before
- * the second of the first `[DEATH]` line no note may read below the header.
+ * The DAMPENING header opens in one of three ways, and each binds the
+ * timeline:
  *
- * Why: three consumers classified the bracket on a unit list that carried
- * pets, so a 2v2 round with a pet out printed `started at 30%` in the header
- * and `dampening: 10%` on the press lines until the first logged stack —
- * 159 of the 516 healer-2v2 prompts (220 lines) of the 605-file capture. The
- * producer now has one classification (`dampeningRulesOf`); this gate is what
- * keeps a consumer from being handed a different roster again.
+ * - `started at N%` (3v3 / Solo Shuffle). The `| dampening: M%` notes are the
+ *   same reading of the same aura, and the stack only goes down after a death
+ *   (`buildDampeningEvents`: a REMOVED_DOSE on the survivors). So before the
+ *   second of the first `[DEATH]` line no note may read below the header.
+ * - `first logged at N% (m:ss; …)` (2v2). No value is stated before the
+ *   round's first logged stack (`getInitialDampening` — the extrapolated
+ *   41 / 21 would be a number the log never prints). So no timeline line
+ *   stamped before m:ss may carry a dampening number of any kind.
+ * - `n/a — no dampening stack was logged in this round` (a 2v2 round without
+ *   one). No timeline line may carry a dampening number at all.
+ *
+ * Why (D10): three consumers classified the bracket on a unit list that
+ * carried pets, so a 2v2 round with a pet out printed `started at 30%` in the
+ * header and `dampening: 10%` on the press lines until the first logged
+ * stack — 159 of the 516 healer-2v2 prompts (220 lines) of the 605-file
+ * capture. The producer has one classification (`dampeningRulesOf`); this
+ * gate is what keeps a consumer from being handed a different roster again,
+ * or a hand value from coming back in front of the first logged stack.
  */
 export function checkDampeningStartConsistency(lines: string[]): string[] {
   const failures: string[] = [];
+  const secondOf = (line: string): number | null => {
+    const m = line.match(LEADING_TIME);
+    return m ? Number(m[1]) * 60 + Number(m[2]) : null;
+  };
+
+  // ── `first logged at` / no stack: nothing before the first logged second ──
+  const unstated = lines
+    .map((l, i) => {
+      const t = l.trim();
+      const first = t.match(DAMPENING_FIRST_LOGGED_HEADER);
+      if (first)
+        return {
+          line: i + 1,
+          untilS: Number(first[2]) * 60 + Number(first[3]),
+          says: `first logged at ${first[1]}% (${first[2]}:${first[3]})`,
+        };
+      return DAMPENING_NO_STACK_HEADER.test(t)
+        ? { line: i + 1, untilS: Infinity, says: "日志整局没有打出衰减层数" }
+        : null;
+    })
+    .find((h) => h !== null);
+  if (unstated) {
+    lines.forEach((line, i) => {
+      const s = secondOf(line);
+      if (s === null || s >= unstated.untilS) return;
+      const m = line.match(DAMPENING_NUMBER_ON_LINE);
+      if (m)
+        failures.push(
+          `line ${i + 1}: DAMPENING 段首(第 ${unstated.line} 行)写 ${unstated.says},本行在那之前却带衰减数字「${m[0]}」—— ${line.trim().slice(0, 140)}`,
+        );
+    });
+    return failures;
+  }
+
+  // ── `started at N%`: no note below it before the first death ──
   const headerAt = lines.findIndex((l) =>
     DAMPENING_STARTED_HEADER.test(l.trim()),
   );
@@ -1092,10 +1150,6 @@ export function checkDampeningStartConsistency(lines: string[]): string[] {
   const started = {
     pct: Number(lines[headerAt].trim().match(DAMPENING_STARTED_HEADER)![1]),
     line: headerAt + 1,
-  };
-  const secondOf = (line: string): number | null => {
-    const m = line.match(LEADING_TIME);
-    return m ? Number(m[1]) * 60 + Number(m[2]) : null;
   };
   let firstDeathS = Infinity;
   for (const line of lines) {

@@ -32,7 +32,10 @@ vi.mock("@gladlog/analysis", async (importOriginal) => {
   };
 });
 
-import { deriveDampeningSeries } from "../src/renderer/src/report/derive/dampeningSeries";
+import {
+  dampeningAt,
+  deriveDampeningSeries,
+} from "../src/renderer/src/report/derive/dampeningSeries";
 import type { ReportSource } from "../src/renderer/src/report/derive/types";
 import { loadRealMatchFixture } from "./fixtures/loadFixture";
 
@@ -96,5 +99,50 @@ describe("deriveDampeningSeries — O(events×seconds) → O(events), event-time
     const fallback = series[0]!.pct;
     expect(series.find((p) => p.tS === 89)!.pct).toBe(fallback); // before the boundary, it has not happened yet
     expect(series.find((p) => p.tS === 90)!.pct).toBe(77); // the last bucket queries the exact endTime and catches it
+  });
+});
+
+describe("deriveDampeningSeries — 2v2 没有开局读数,曲线从第一次日志读数开始(FT-T13 D11)", () => {
+  // The fixture is a 3v3 round; relabelled "2v2" it runs under the 2v2 rule:
+  // getInitialDampening states no value before the first logged stack.
+  const as2v2 = () => {
+    const clone = JSON.parse(
+      JSON.stringify(loadRealMatchFixture()),
+    ) as ReturnType<typeof loadRealMatchFixture>;
+    (clone as unknown as { bracket: string }).bracket = "2v2";
+    return clone;
+  };
+
+  it("第一次读数(0:11,42)之前没有点;之后逐秒连续,数值照日志", () => {
+    const clone = as2v2();
+    pushDoseEvent(clone, clone.startTime + 11_200, 42);
+    pushDoseEvent(clone, clone.startTime + 21_200, 43);
+    const series = deriveDampeningSeries(clone as unknown as ReportSource);
+    // 11.2 s is first visible on the 0:12 cell (cells sample at whole seconds)
+    expect(series[0]).toEqual({ tS: 12, pct: 42 });
+    for (let i = 1; i < series.length; i++)
+      expect(series[i]!.tS).toBe(series[i - 1]!.tS + 1);
+    expect(series.find((p) => p.tS === 21)!.pct).toBe(42);
+    expect(series.find((p) => p.tS === 22)!.pct).toBe(43);
+    expect(series[series.length - 1]!.tS).toBe(90);
+    // the scrub readout: nothing before the first point, the value from it on
+    expect(dampeningAt(series, 0)).toBeNull();
+    expect(dampeningAt(series, 11.9)).toBeNull();
+    expect(dampeningAt(series, 12)).toBe(42);
+    expect(dampeningAt(series, 60)).toBe(43);
+  });
+
+  it("整局没有任何日志读数 → 空序列(泳道与读数都不画),不再用手表值 30 / 10 垫底", () => {
+    const series = deriveDampeningSeries(as2v2() as unknown as ReportSource);
+    expect(series).toEqual([]);
+    expect(dampeningAt(series, 30)).toBeNull();
+  });
+
+  it("3v3 不变:从 0 秒起就有读数(10)", () => {
+    const series = deriveDampeningSeries(
+      loadRealMatchFixture() as unknown as ReportSource,
+    );
+    expect(series[0]).toEqual({ tS: 0, pct: 10 });
+    expect(dampeningAt(series, 0)).toBe(10);
   });
 });

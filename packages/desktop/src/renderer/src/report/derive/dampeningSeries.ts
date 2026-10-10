@@ -31,6 +31,13 @@ import type { ReportSource } from "./types";
  * would be missed on a whole-second boundary. Using the exact endTime
  * guarantees this last cell reflects the true value at the moment the match
  * ended.
+ *
+ * The series starts where a value is first known. getInitialDampening states
+ * one from 0:00 in 3v3 / Solo Shuffle; in 2v2 it states none (null) before the
+ * round's first logged stack — the prompt prints no number there either
+ * (FT-T13 D11) — so a 2v2 series has no point before that second, and is
+ * empty when the log printed no stack at all. Seconds stay contiguous from the
+ * first point on.
  */
 export function deriveDampeningSeries(
   source: ReportSource,
@@ -56,7 +63,7 @@ export function deriveDampeningSeries(
         cur = events[idx]!.stacks;
         idx++;
       }
-      out.push({ tS: s, pct: cur });
+      if (cur !== null) out.push({ tS: s, pct: cur });
     }
     return out;
   } catch {
@@ -65,12 +72,14 @@ export function deriveDampeningSeries(
 }
 
 /** The current dampening at the playback clock (the latest sample at or before
- *  t). */
+ *  t) — null before the series' first point (a 2v2 round before its first
+ *  logged stack), where no value is known. */
 export function dampeningAt(
   series: Array<{ tS: number; pct: number }>,
   tS: number,
 ): number | null {
   if (series.length === 0) return null;
+  if (series[0]!.tS > 0 && tS < series[0]!.tS) return null;
   let cur = series[0]!.pct;
   for (const p of series) {
     if (p.tS > tS) break;

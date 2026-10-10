@@ -9,9 +9,12 @@ import {
   computeDampening,
   computeDampeningTimeline,
   dampeningDangerMultiplier,
+  dampeningForThreatWeight,
   dampeningRulesOf,
+  firstLoggedDampening,
   formatDampeningForContext,
   getDampeningPercentage,
+  getInitialDampening,
 } from "../../src/utils/dampening";
 import { makeAuraEvent, makeUnit } from "./testHelpers";
 
@@ -40,7 +43,13 @@ describe("dampening — rule detection", () => {
       info: { teamId: "1" },
     });
 
-    expect(getDampeningPercentage("2v2", [p1, p2, p3, p4] as any, 0)).toBe(30);
+    // FT-T13 D11 (re-opens O10): this pinned 30 — the Dragonflight start the
+    // log contradicts (first stack 42 in 258 of 258 rounds). Before its first
+    // logged stack a 2v2 round states no value.
+    expect(dampeningRulesOf("2v2", [p1, p2, p3, p4] as any)).toBe("2v2");
+    expect(
+      getDampeningPercentage("2v2", [p1, p2, p3, p4] as any, 0),
+    ).toBeNull();
   });
 
   it("identifies 2v2 double DPS (B71)", () => {
@@ -52,7 +61,10 @@ describe("dampening — rule detection", () => {
       spec: CombatUnitSpec.Mage_Frost,
       info: { teamId: "1" },
     });
-    expect(getDampeningPercentage("2v2", [p1, p2] as any, 0)).toBe(10);
+    // FT-T13 D11: this pinned 10 (first stack 22 in 32 of 32 rounds of this
+    // kind). Same rule as with two healers: no value before the first stack.
+    expect(dampeningRulesOf("2v2", [p1, p2] as any)).toBe("2v2");
+    expect(getDampeningPercentage("2v2", [p1, p2] as any, 0)).toBeNull();
   });
 
   it("identifies 3v3 based on string or player count (B72)", () => {
@@ -97,10 +109,9 @@ describe("dampening — rule detection", () => {
       expect(dampeningRulesOf("2v2", players as any)).toBe("2v2");
       expect(dampeningRulesOf("2v2", withPets as any)).toBe("2v2");
       // the same reading from both lists — the header read the first, the
-      // press lines the second
-      expect(getDampeningPercentage("2v2", withPets as any, 0)).toBe(
-        getDampeningPercentage("2v2", players as any, 0),
-      );
+      // press lines the second. (Under the 3v3 rules it would be 10.)
+      expect(getDampeningPercentage("2v2", players as any, 0)).toBeNull();
+      expect(getDampeningPercentage("2v2", withPets as any, 0)).toBeNull();
     });
 
     it("a bracket string that names no bracket falls back to the PLAYER count", () => {
@@ -108,9 +119,10 @@ describe("dampening — rule detection", () => {
       const withPets = [...players, pet("pet1"), pet("totem1")];
       expect(dampeningRulesOf("", withPets as any)).toBe("2v2");
       expect(dampeningRulesOf(undefined, withPets as any)).toBe("2v2");
-      expect(dampeningRulesOf("", [...players, makeUnit("p5")] as any)).toBe(
-        "3v3",
-      );
+      expect(getDampeningPercentage("", withPets as any, 0)).toBeNull();
+      const five = [...players, makeUnit("p5")];
+      expect(dampeningRulesOf("", five as any)).toBe("3v3");
+      expect(getDampeningPercentage("", five as any, 0)).toBe(10);
     });
 
     it("the literal 2v2 string is not overridden by a roster count", () => {
@@ -119,17 +131,137 @@ describe("dampening — rule detection", () => {
     });
 
     it("one side's events, the round's roster: the bracket is classified on the roster", () => {
-      const players = healer2v2();
-      const enemies = players.slice(2);
-      // one side alone reads "double DPS" — which is why the roster is passed
-      expect(dampeningRulesOf("2v2", enemies as any)).toBe("2v2_dps");
-      expect(
-        getDampeningPercentage("2v2", enemies as any, 0, players as any),
-      ).toBe(getDampeningPercentage("2v2", players as any, 0));
-      expect(computeDampening(0, "2v2", enemies as any, players as any)).toBe(
-        computeDampening(0, "2v2", players as any),
+      // a 3v3 round whose bracket string names no bracket (a skirmish)
+      const roster = [...healer2v2(), makeUnit("p5"), makeUnit("p6")];
+      const enemies = roster.slice(3);
+      // one side alone never counts more than four — which is why the roster
+      // is passed
+      expect(dampeningRulesOf("", enemies as any)).toBe("2v2");
+      expect(dampeningRulesOf("", roster as any)).toBe("3v3");
+      expect(getDampeningPercentage("", enemies as any, 0)).toBeNull();
+      expect(getDampeningPercentage("", enemies as any, 0, roster as any)).toBe(
+        10,
       );
+      expect(computeDampening(0, "", enemies as any, roster as any)).toBe(0.1);
     });
+  });
+});
+
+describe("FT-T13 D11: a 2v2 round states no dampening before its first logged stack", () => {
+  /** stacks 42 at 0:11, +1 every 10 s — what the log prints with two healers */
+  const doses2v2 = (untilS: number) => {
+    const out: any[] = [];
+    for (let i = 0; 11 + i * 10 <= untilS; i++) {
+      const e = makeAuraEvent(
+        LogEvent.SPELL_AURA_APPLIED_DOSE as any,
+        "110310",
+        MATCH_START + (11 + i * 10) * 1000,
+        "h",
+        "h",
+      );
+      (e.logLine as any).parameters[12] = 42 + i;
+      out.push(e);
+    }
+    return out;
+  };
+  const withStacks = () => [makeUnit("p", { auraEvents: doses2v2(120) })];
+  const noStack = () => [makeUnit("p")];
+  const at = (s: number) => MATCH_START + s * 1000;
+
+  it("the value is null until the first stack, then the logged stack — never 30 / 10 / 41 / 21", () => {
+    const p = withStacks();
+    expect(getInitialDampening("2v2", p as any)).toBeNull();
+    expect(getDampeningPercentage("2v2", p as any, at(0))).toBeNull();
+    expect(getDampeningPercentage("2v2", p as any, at(10.9))).toBeNull();
+    expect(getDampeningPercentage("2v2", p as any, at(11))).toBe(42);
+    expect(getDampeningPercentage("2v2", p as any, at(25))).toBe(43);
+    expect(computeDampening(at(5), "2v2", p as any)).toBeNull();
+    expect(computeDampening(at(11), "2v2", p as any)).toBe(0.42);
+    expect(firstLoggedDampening(p as any)).toEqual({
+      timestamp: at(11),
+      stacks: 42,
+    });
+    expect(firstLoggedDampening(noStack() as any)).toBeNull();
+  });
+
+  it("3v3 and Solo Shuffle keep their stated 10 before the first stack", () => {
+    const p = withStacks();
+    expect(getInitialDampening("3v3", p as any)).toBe(10);
+    expect(getInitialDampening("Rated Solo Shuffle", p as any)).toBe(10);
+    expect(getDampeningPercentage("3v3", p as any, at(5))).toBe(10);
+    expect(getDampeningPercentage("Rated Solo Shuffle", p as any, at(5))).toBe(
+      10,
+    );
+  });
+
+  it("the threat weight is never a printed number: the first logged stack before it, the stated value after, 0 with no stack", () => {
+    const p = withStacks();
+    expect(dampeningForThreatWeight(at(5), "2v2", p as any)).toBe(0.42);
+    expect(dampeningForThreatWeight(at(25), "2v2", p as any)).toBe(0.43);
+    expect(dampeningForThreatWeight(at(5), "2v2", noStack() as any)).toBe(0);
+    // where a value is stated the weight is that value
+    expect(dampeningForThreatWeight(at(5), "3v3", p as any)).toBe(0.1);
+    expect(dampeningForThreatWeight(at(5), "3v3", noStack() as any)).toBe(0.1);
+  });
+
+  it("the 30 s timeline skips the samples without a value", () => {
+    const tl = computeDampeningTimeline(
+      "2v2",
+      withStacks() as any,
+      MATCH_START,
+      at(120),
+    );
+    expect(tl[0]).toEqual({ atSeconds: 30, dampening: 0.43 });
+    expect(tl[tl.length - 1]).toEqual({ atSeconds: 120, dampening: 0.52 });
+    expect(
+      computeDampeningTimeline("2v2", noStack() as any, MATCH_START, at(8)),
+    ).toEqual([]);
+  });
+
+  it("the header says when the first stack was logged, not where the round started", () => {
+    const lines = formatDampeningForContext(
+      "2v2",
+      withStacks() as any,
+      MATCH_START,
+      at(120),
+    );
+    expect(lines[0]).toBe(
+      "DAMPENING (2v2): first logged at 42% (0:11; the log prints no value before that), ended at 52% at match end",
+    );
+    expect(lines[0]).not.toContain("started at");
+    expect(lines[1]).toContain("Dampening 52% at match end");
+  });
+
+  it("a 2v2 round without a logged stack says so — what the data has, no hand value and no reason", () => {
+    const lines = formatDampeningForContext(
+      "2v2",
+      noStack() as any,
+      MATCH_START,
+      at(8.7),
+    );
+    expect(lines).toEqual([
+      "DAMPENING (2v2): n/a — no dampening stack was logged in this round (8s)",
+    ]);
+  });
+
+  it('a stack the stored document carries as a string ("42\\r", a pre-CRLF-fix parse) is not read — the round then has no logged stack', () => {
+    // packages/desktop/test/fixtures/report-match.json is such a document: a
+    // real 15 s healer 2v2 whose four `42\r` doses sit at 12.1–15.2 s.
+    const e = makeAuraEvent(
+      LogEvent.SPELL_AURA_APPLIED_DOSE as any,
+      "110310",
+      at(12),
+      "h",
+      "h",
+    );
+    (e.logLine as any).parameters[12] = "42\r";
+    const p = [makeUnit("p", { auraEvents: [e as any] })];
+    expect(firstLoggedDampening(p as any)).toBeNull();
+    expect(
+      formatDampeningForContext("2v2", p as any, MATCH_START, at(15.5)),
+    ).toEqual([
+      "DAMPENING (2v2): n/a — no dampening stack was logged in this round (15s)",
+    ]);
   });
 });
 
