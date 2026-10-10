@@ -36,8 +36,9 @@ import { bracketKey } from "../utils/bracketKey";
 import { analyzeBurstLedger, wallUpAtOpen } from "../utils/burstLedger";
 import {
   actWindowFor,
-  buildCannotCastIntervals,
   enemySourceIds,
+  intervalBlocksEverySpell,
+  type NamedCannotCastInterval,
   namedCannotCastIntervals,
 } from "../utils/cannotCastIntervals";
 import { type OwnerCastCancels, ownerCastCancels } from "../utils/castCancels";
@@ -3463,17 +3464,21 @@ function teamPlayEvents(
       );
       // W1a: the owner's own cannot-cast intervals (CC, silence, kick
       // lockout) — the one predicate every feasibility gate reads.
-      let ownerBlockedS: Array<{ from: number; to: number }> = [];
+      // FT-T10 PREVIEW: kept with their cause — a kick lockout counts for
+      // an option only when it stops every press of that option (below).
+      let ownerBlocked: NamedCannotCastInterval[] = [];
       try {
-        ownerBlockedS = buildCannotCastIntervals(owner, cannotCastSrcIds).map(
-          (b) => ({
+        ownerBlocked = namedCannotCastIntervals(owner, cannotCastSrcIds);
+      } catch {
+        ownerBlocked = [];
+      }
+      const ownerBlockedSFor = (pressIds: readonly string[]) =>
+        ownerBlocked
+          .filter((b) => intervalBlocksEverySpell(b, pressIds))
+          .map((b) => ({
             from: (b.from - combat.startTime) / 1000,
             to: (b.to - combat.startTime) / 1000,
-          }),
-        );
-      } catch {
-        ownerBlockedS = [];
-      }
+          }));
       const usableWhileCc = (id: string) =>
         USABLE_WHILE_CC_SPELL_IDS.has(id) ||
         USABLE_WHILE_FEARED_SPELL_IDS.has(id) ||
@@ -3500,7 +3505,7 @@ function teamPlayEvents(
                   castStartS,
                   inst.atSeconds,
                   pressIds.some((id) => !OFF_GCD_SPELL_IDS.has(id)),
-                  ownerBlockedS,
+                  ownerBlockedSFor(pressIds),
                   pressIds.some(usableWhileCc),
                 ),
             );

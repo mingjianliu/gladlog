@@ -110,10 +110,19 @@ export function cannotCastIntervalsForSpells(
   enemyIds: Set<string>,
   spellIds: readonly string[] | undefined,
 ): NamedCannotCastInterval[] {
-  const named = namedCannotCastIntervals(unit, enemyIds);
-  if (!spellIds?.length) return named;
-  return named.filter((iv) =>
-    spellIds.every((id) => intervalBlocksSpell(iv, id)),
+  return namedCannotCastIntervals(unit, enemyIds).filter((iv) =>
+    intervalBlocksEverySpell(iv, spellIds),
+  );
+}
+
+/** FT-T10 PREVIEW: `cannotCastIntervalsForSpells`'s test on one interval,
+ * for a reader that builds the intervals once and asks per option. */
+export function intervalBlocksEverySpell(
+  iv: Pick<NamedCannotCastInterval, "lockout" | "lockedSchoolMask">,
+  spellIds: readonly string[] | undefined,
+): boolean {
+  return (
+    !spellIds?.length || spellIds.every((id) => intervalBlocksSpell(iv, id))
   );
 }
 
