@@ -1235,5 +1235,8 @@
  *  of the Sun (Solar Beam −15 s) — `[KICK] … back m:ss`, kick readiness and
  *  the owner's [RES] kick entry read one per-press cooldown. Counts in the
  *  commit.
+ *  v357 (2026-10-09, FT board, user ruling 2026-10-09): the kit entry of a
+ *  Guardian Spirit under Guardian Angel reads `[60s from when it expires
+ *  unused, 180s after a save, lasts 12s]`.
  */
-export const PROMPT_VERSION = 356;
+export const PROMPT_VERSION = 357;

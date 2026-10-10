@@ -336,30 +336,92 @@ describe("context.resourceSnapshot unit tests", () => {
       expect(res.friendlyIdMap.get("Player1")).toBe(1);
     });
 
-    it("FT-T06: 起手过但没读完的技能,[UNUSED] 写明试过", () => {
-      const ev = (event: string, spellId: string) =>
-        ({ spellId, logLine: { event, timestamp: 1, parameters: [] } }) as never;
+    it("FT-T04 follow-up: Guardian Angel 下的 Guardian Spirit 写明 60 秒从光环到期起算、救到人是官方的 180 秒", () => {
       const owner = makeUnit("player-1", {
         name: "Player1",
         spellCastEvents: [],
-        castStartEvents: [ev("SPELL_CAST_START", "51514"), ev("SPELL_CAST_START", "51514")],
+      });
+      const cd = (
+        spellId: string,
+        spellName: string,
+        cooldownSeconds: number,
+      ) =>
+        ({
+          spellId,
+          spellName,
+          tag: "Defensive",
+          cooldownSeconds,
+          maxChargesDetected: 1,
+          neverUsed: false,
+          casts: [{ timeSeconds: 10 }],
+        }) as unknown as IMajorCooldownInfo;
+      const text = (cds: IMajorCooldownInfo[]) =>
+        buildPlayerLoadout(owner, "Holy Priest", cds, [], {
+          players: [],
+          alignedBurstWindows: [],
+        } as unknown as IEnemyCDTimeline).text;
+      expect(text([cd("47788", "Guardian Spirit", 60)])).toContain(
+        "Guardian Spirit [60s from when it expires unused, 180s after a save, lasts",
+      );
+      // 没有 Guardian Angel(条目就是官方冷却)和别的技能:照旧一个数字
+      expect(text([cd("47788", "Guardian Spirit", 180)])).toContain(
+        "Guardian Spirit [180s, lasts",
+      );
+      expect(text([cd("33206", "Pain Suppression", 180)])).toContain(
+        "Pain Suppression [180s",
+      );
+    });
+
+    it("FT-T06: 起手过但没读完的技能,[UNUSED] 写明试过", () => {
+      const ev = (event: string, spellId: string) =>
+        ({
+          spellId,
+          logLine: { event, timestamp: 1, parameters: [] },
+        }) as never;
+      const owner = makeUnit("player-1", {
+        name: "Player1",
+        spellCastEvents: [],
+        castStartEvents: [
+          ev("SPELL_CAST_START", "51514"),
+          ev("SPELL_CAST_START", "51514"),
+        ],
       });
       const cd = (spellId: string, spellName: string) =>
-        ({ spellId, spellName, cooldownSeconds: 30, maxChargesDetected: 1, neverUsed: true, casts: [] }) as unknown as IMajorCooldownInfo;
+        ({
+          spellId,
+          spellName,
+          cooldownSeconds: 30,
+          maxChargesDetected: 1,
+          neverUsed: true,
+          casts: [],
+        }) as unknown as IMajorCooldownInfo;
       const res = buildPlayerLoadout(
         owner,
         "Restoration Shaman",
-        [cd("51514", "Hex"), cd("109304", "Exhilaration"), cd("108271", "Astral Shift")],
+        [
+          cd("51514", "Hex"),
+          cd("109304", "Exhilaration"),
+          cd("108271", "Astral Shift"),
+        ],
         [],
         { players: [], alignedBurstWindows: [] } as unknown as IEnemyCDTimeline,
       );
-      expect(res.text).toContain("Hex [30s] [UNUSED — started 2×, never finished]");
+      expect(res.text).toContain(
+        "Hex [30s] [UNUSED — started 2×, never finished]",
+      );
       // a cast bar started after the round is not this round's attempt (codex review)
       const late = makeUnit("player-1", {
         name: "Player1",
         spellCastEvents: [],
         castStartEvents: [
-          { spellId: "51514", logLine: { event: "SPELL_CAST_START", timestamp: 105_000, parameters: [] } } as never,
+          {
+            spellId: "51514",
+            logLine: {
+              event: "SPELL_CAST_START",
+              timestamp: 105_000,
+              parameters: [],
+            },
+          } as never,
         ],
       });
       const lateRes = buildPlayerLoadout(

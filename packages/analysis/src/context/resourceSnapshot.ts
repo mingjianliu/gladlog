@@ -1,5 +1,6 @@
 import { ICombatUnit } from "@gladlog/parser-compat";
 
+import { spellEffectData } from "../data/spellEffectData";
 import { buffFullDurationForCaster } from "../utils/buffDuration";
 import { IPlayerCCTrinketSummary } from "../utils/ccTrinketAnalysis";
 import {
@@ -13,6 +14,7 @@ import {
   cdSecondsUntilReady,
   DIVINE_SHIELD_SPELL_ID,
   forbearanceBlocks,
+  GUARDIAN_SPIRIT_SPELL_ID,
   IMajorCooldownInfo,
   lockCastsOf,
   pressSpentBy,
@@ -157,6 +159,20 @@ export function buildPlayerLoadout(
     ).length;
     return starts > 0 ? ` — started ${starts}×, never finished` : "";
   };
+  // FT-T04 follow-up (user ruling 2026-10-09): a cooldown whose length
+  // depends on what its press did says so. Guardian Spirit under Guardian
+  // Angel recovers 60 s after the buff EXPIRES unused and the official 180 s
+  // after a save (`guardianSpiritCastCooldownSeconds`); the kit printed
+  // `[60s, lasts 12s]` while the [RES] row of a press read `(71s)` — 2,121
+  // `cd:` entries of the 605-file capture sat above the kit's own number.
+  const cdSecondsLabel = (cd: IMajorCooldownInfo): string => {
+    const official = spellEffectData[cd.spellId]?.cooldownSeconds;
+    return cd.spellId === GUARDIAN_SPIRIT_SPELL_ID &&
+      official !== undefined &&
+      cd.cooldownSeconds < official
+      ? `${cd.cooldownSeconds}s from when it expires unused, ${official}s after a save`
+      : `${cd.cooldownSeconds}s`;
+  };
   const fmtCDLabel = (cd: IMajorCooldownInfo, caster?: ICombatUnit) =>
     // a proc-only entry's "charges" are inferred from how often it procced
     // (Radiant Glory's Avenging Wrath every Wake of Ashes → "2 Charges"), not
@@ -168,7 +184,7 @@ export function buildPlayerLoadout(
     // entries printed seconds in front of [PASSIVE]; none does now.
     cd.isProcOnly
       ? `${cd.spellName} [PASSIVE]`
-      : `${cd.spellName} [${cd.cooldownSeconds}s${(cd.charges ?? 1) > 1 && !cdIsProcOnly(cd) ? `, ${cd.charges} Charges` : ""}${lastsPart(cd, caster)}]${
+      : `${cd.spellName} [${cdSecondsLabel(cd)}${(cd.charges ?? 1) > 1 && !cdIsProcOnly(cd) ? `, ${cd.charges} Charges` : ""}${lastsPart(cd, caster)}]${
           cdIsProcOnly(cd)
             ? " [PASSIVE]"
             : cdNeverSpent(cd)
