@@ -13,11 +13,13 @@ import { CombatUnitReaction } from "@gladlog/parser-compat";
 
 import { BACKLASH_AURA_CC_TYPE } from "../../data/backlashCc";
 import {
+  ccEndedByOwnPress,
   ccLoggedEnd,
   formatCcLoggedEnd,
   immunityBreak,
   lastTrinketPressBefore,
-  renderedCcSeconds,
+  renderedCcDuration,
+  renderedCcSpan,
   tremorTotemBreak,
 } from "../../utils/ccTrinketAnalysis";
 import { wasRemovedByAllyDispel } from "../../utils/dispelAnalysis";
@@ -81,7 +83,7 @@ export function emitTrinketCcOnTeamEntries(
       const tail =
         brokeAt !== undefined
           ? ` | trinket broke this disarm after ${(brokeAt - d.atSeconds).toFixed(0)}s (cut short — it had not expired)`
-          : ` | ${renderedCcSeconds(d)}s`;
+          : ` | ${renderedCcDuration(d)}`;
       // the legend counts only lines that print (codex 35-CD-15: a disarm
       // past the match end is skipped)
       if (
@@ -103,11 +105,11 @@ export function emitTrinketCcOnTeamEntries(
         // suppressed below and this note states how long the player endured and that the CC had NOT
         // expired on its own — otherwise the coach misreads a trinket-shortened "1s" as a trivial CC
         // that was not worth trinketing (see 294 Finding "trinketed a 1-second Hammer").
-        trinketNote = ` | trinket broke this CC after ${renderedCcSeconds(cc)}s (cut short — it had not expired)`;
+        trinketNote = ` | trinket broke this CC after ${renderedCcDuration(cc)} (cut short — it had not expired)`;
       } else if (cc.trinketState === "racial_break") {
         // Same truncated-duration semantics as the trinket break, but state
         // what actually happened: the racial was pressed, not the trinket.
-        trinketNote = ` | ${cc.breakRacialName ?? "racial"} broke this CC after ${renderedCcSeconds(cc)}s (cut short — it had not expired); PvP trinket NOT used`;
+        trinketNote = ` | ${cc.breakRacialName ?? "racial"} broke this CC after ${renderedCcDuration(cc)} (cut short — it had not expired); PvP trinket NOT used`;
       } else if (cc.trinketState === "on_cooldown") {
         const cdLeft =
           cc.trinketCDSecondsLeft !== undefined
@@ -157,7 +159,7 @@ export function emitTrinketCcOnTeamEntries(
           ? tremorTotemBreak(cc, matchStartMs, friends)
           : null;
       const tremorNote = tremor
-        ? ` | Tremor Totem from ${pid(tremor.shamanName)} ended this CC after ${renderedCcSeconds(cc)}s (cut short — it had not expired)`
+        ? ` | Tremor Totem from ${pid(tremor.shamanName)} ended this CC after ${renderedCcDuration(cc)} (cut short — it had not expired)`
         : "";
       // Triage enemy-def F-E20: the player's own immunity ended it (Divine
       // Shield out of a stun). The trinket / racial / Tremor notes above name
@@ -169,15 +171,18 @@ export function emitTrinketCcOnTeamEntries(
           ? immunityBreak(cc, matchStartMs, ccdUnit)
           : null;
       const immunityNote = immunity
-        ? ` | ${immunity.spellName} broke this CC after ${renderedCcSeconds(cc)}s`
+        ? ` | ${immunity.spellName} broke this CC after ${renderedCcDuration(cc)}`
         : "";
 
       // FT-T08 step 3c: how it ended, when the log says and no note above
       // already does — the damage that broke it, the player's death. A
-      // friendly dispel is the [CLEANSED] tag.
+      // friendly dispel is the [CLEANSED] tag. FT-T09: or the player's own
+      // press, for a CC the press's own note is not on (one trinket press is
+      // bound to one CC; a second CC it removed said nothing).
       const loggedEnd =
         !trinketBroke && !isCleansed && !tremor && !immunity && ccdUnit
-          ? ccLoggedEnd(ccdUnit, cc, matchStartMs)
+          ? (ccLoggedEnd(ccdUnit, cc, matchStartMs) ??
+            ccEndedByOwnPress(ccdUnit, cc, matchStartMs))
           : undefined;
       const endNote = formatCcLoggedEnd(
         loggedEnd?.kind === "dispelled" ? undefined : loggedEnd,
@@ -225,7 +230,7 @@ export function emitTrinketCcOnTeamEntries(
         cc.trinketState === "racial_break" ||
         tremor
           ? ""
-          : ` | ${renderedCcSeconds(cc)}s`;
+          : ` | ${renderedCcSpan(cc)}`;
 
       // B124: surface the caster→target range (and LoS) already computed at CC application, so claims
       // like "walked into the CC" / "should have LoS'd it" become checkable instead of inferred. Only

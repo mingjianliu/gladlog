@@ -1902,7 +1902,66 @@ describe("buildMatchTimeline — [UNNECESSARY] defensive-timing annotation (17c)
     expect(fearLine).toBeDefined();
     expect(fearLine).toContain("trinket: ON CD (45s left)");
     expect(fearLine).toContain(
-      "Tremor Totem from Shaman1 ended this CC after 0s (cut short — it had not expired)",
+      "Tremor Totem from Shaman1 ended this CC after <1s (cut short — it had not expired)",
     );
+  });
+
+  it("FT-T09 [CC ON TEAM]: a CC the round ended on says so; a sub-second one prints <1s", () => {
+    const owner = makeUnit("PlayerYou", {
+      name: "PlayerYou",
+      spec: CombatUnitSpec.Warrior_Fury,
+    });
+    const cc = (atSeconds: number, durationSeconds: number, over = {}) =>
+      ({
+        spellId: "46968",
+        spellName: "Shockwave",
+        atSeconds,
+        durationSeconds,
+        sourceName: "EnemyWarrior",
+        sourceSpec: "Arms Warrior",
+        trinketState: "passive_trinket",
+        distanceYards: null,
+        losBlocked: null,
+        ...over,
+      }) as any;
+    const timelineText = buildMatchTimeline({
+      ...baseParams,
+      owner,
+      ownerSpec: "Fury Warrior",
+      ownerCDs: [],
+      teammateCDs: [],
+      friends: [owner],
+      allUnits: [owner],
+      ccTrinketSummaries: [
+        {
+          playerName: "PlayerYou",
+          playerSpec: "Fury Warrior",
+          trinketType: "Relentless",
+          trinketCooldownSeconds: 120,
+          ccInstances: [
+            cc(10, 0.2),
+            cc(30, 3.4),
+            // 28c39eb1 round 3: landed 0.4 s before the round-ending death, removed 2.7 s in
+            cc(55, 0.4, { stillOnAtRoundEnd: true }),
+          ],
+          trinketUseTimes: [],
+          missedTrinketWindows: [],
+          rootInstances: [],
+          disarmInstances: [],
+          interruptInstances: [],
+          ccAvoidedInstances: [],
+        },
+      ] as IPlayerCCTrinketSummary[],
+    });
+    const shock = timelineText
+      .split("\n")
+      .filter((l) => l.includes("[CC ON TEAM]") && l.includes("Shockwave"));
+    expect(shock).toHaveLength(3);
+    expect(shock[0]).toMatch(/\(by EnemyWarrior\) \| <1s$/);
+    expect(shock[1]).toMatch(/\(by EnemyWarrior\) \| 3s$/);
+    expect(shock[2]).toMatch(
+      /\(by EnemyWarrior\) \| still on them when the round ended, <1s in$/,
+    );
+    expect(timelineText).not.toMatch(/\| 0s/);
   });
 });

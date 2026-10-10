@@ -41,6 +41,21 @@ describe("resLedgerPrune — zero-loss no-change [RES] rows", () => {
     expect(droppableNoChangeResRows(covered)).toEqual(new Set([4]));
     const expired = [t("0:10", "[STATE] a"), full("2"), landing("0:12"), t("0:25", "[STATE] b"), nc("focus:2  cc:3/Polymorph-3s[incap]")];
     expect(classifyNoChangeResRows(expired)).toEqual([{ index: 4, uniqueFacts: ["cc"] }]);
+    // FT-T09: a CC the round ended on prints its seconds behind a clause — still read (the first
+    // build fell back to 3 s and kept a row for every such CC)
+    const cut = (mmss: string) =>
+      t(mmss, "[CC ON TEAM]   3(FMage) ← Polymorph (by 4(BDruid)) | still on them when the round ended, 6s in [DR: Incapacitate Full]");
+    expect(
+      droppableNoChangeResRows([t("0:10", "[STATE] a"), full("2"), cut("0:12"), t("0:18", "[STATE] b"), nc("focus:2  cc:3/Polymorph-<1s[incap]")]),
+    ).toEqual(new Set([4]));
+    // `<1s` is 0 s, as `0s` was: covered inside the 1 s slack only
+    const blip = (mmss: string) => t(mmss, "[CC ON TEAM]   3(FMage) ← Polymorph (by 4(BDruid)) | <1s [DR: Incapacitate Full]");
+    expect(
+      droppableNoChangeResRows([t("0:10", "[STATE] a"), full("2"), blip("0:12"), t("0:13", "[STATE] b"), nc("focus:2  cc:3/Polymorph-<1s[incap]")]),
+    ).toEqual(new Set([4]));
+    expect(
+      classifyNoChangeResRows([t("0:10", "[STATE] a"), full("2"), blip("0:12"), t("0:15", "[STATE] b"), nc("focus:2  cc:3/Polymorph-<1s[incap]")]),
+    ).toEqual([{ index: 4, uniqueFacts: ["cc"] }]);
     // A kick lockout has no landing line → its row is never droppable.
     const kick = [t("0:10", "[STATE] a"), full("2"), t("0:15", "[STATE] b"), nc("focus:2  cc:3/Wind Shear-1s[kick]")];
     expect(classifyNoChangeResRows(kick)).toEqual([{ index: 3, uniqueFacts: ["cc"] }]);

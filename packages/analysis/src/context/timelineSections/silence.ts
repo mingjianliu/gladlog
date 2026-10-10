@@ -16,7 +16,10 @@ import type { ICombatUnit } from "@gladlog/parser-compat";
 import { getEnglishSpellName } from "../../data/spellEffectData";
 import { auraEndFromLog } from "../../utils/auraEndCause";
 import { silenceIntervals } from "../../utils/cannotCastIntervals";
-import { TRINKET_BREAK_AFTER_REMOVAL_MS } from "../../utils/ccTrinketAnalysis";
+import {
+  renderedCcDuration,
+  TRINKET_BREAK_AFTER_REMOVAL_MS,
+} from "../../utils/ccTrinketAnalysis";
 import { pvpTrinketUses } from "../../utils/pvpTrinketUses";
 import { fmtTime } from "../../utils/renderGrid";
 import type { TimelineCtx } from "./ctx";
@@ -127,8 +130,8 @@ export function emitSilenceEntries(
             : "";
         const tail =
           trinketAt !== undefined
-            ? ` | trinket broke this silence after ${(trinketAt - at).toFixed(0)}s (cut short — it had not expired)`
-            : ` | ${durS.toFixed(0)}s${endNote}`;
+            ? ` | trinket broke this silence after ${renderedCcDuration({ durationSeconds: trinketAt - at })} (cut short — it had not expired)`
+            : ` | ${renderedCcDuration({ durationSeconds: durS })}${endNote}`;
         const who = side === "friendly" ? pid(u.name) : enemyPid(u.name);
         // cc-dr F-SR1: a silence the unit's own reflect sent back to it
         const by =

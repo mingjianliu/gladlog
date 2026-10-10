@@ -36,6 +36,7 @@
  * A `[RES]` row carries no timestamp of its own; it belongs to the nearest
  * timestamped line above it.
  */
+import { renderedCcSpanSeconds } from "../utils/ccTrinketAnalysis";
 
 /** Any `[RES]` ledger row. */
 export const RES_ROW_RE = /\[RES\]\s+rdy:/;
@@ -83,8 +84,6 @@ export function resCcRemainingText(remainingSeconds: number): string {
 const CC_ENTRY = /^\d+\/(.+?)-(?:<1|\d+)s/;
 /** `Trueshot/Marksmanship Hunter(6s left)` → spell name. */
 const CD_ENTRY = /^(.+?)\//;
-/** `… ← Polymorph (by 6(RShaman)) | 6s [DR: …]` → duration seconds. */
-const CC_LINE_DUR = /\|\s*(\d+(?:\.\d+)?)s\b/;
 const CC_LANDING = /\[CC ON /;
 const ENEMY_CD = /\[ENEMY CD\]/;
 
@@ -161,9 +160,9 @@ export function classifyNoChangeResRows(
         if (!spell) continue;
         const covered = ccLines.some((c) => {
           if (!c.text.includes(spell)) return false;
-          const dur = Number(
-            c.text.match(CC_LINE_DUR)?.[1] ?? RES_PRUNE_CC_FALLBACK_S,
-          );
+          // `… ← Polymorph (by 6(RShaman)) | 6s [DR: …]` → its seconds,
+          // through the line's own reader (FT-T09)
+          const dur = renderedCcSpanSeconds(c.text) ?? RES_PRUNE_CC_FALLBACK_S;
           return (
             t >= c.t - RES_PRUNE_CC_SLACK_S &&
             t <= c.t + dur + RES_PRUNE_CC_SLACK_S

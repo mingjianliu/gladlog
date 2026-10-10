@@ -889,6 +889,26 @@ describe("checkCcBookmarkConsistency — [CC BOOKMARK] lines agree with the burs
         "0:30  [CC ON ENEMY]   6(DPriest) ← Fear (by 2(DPriest)) (3s) | broken by 1(ARogue)'s Eviscerate",
       ]),
     ).toEqual([]);
+    // FT-T09: `<1s`, a CC the round ended on, and an own-press end are producer forms; the span
+    // behind "still on them when the round ended" is still read
+    for (const tail of [
+      "(<1s) [DR: Disorient Full] | broken by Shadow Word: Death",
+      "(3s) | ended by their PvP trinket",
+      "(still on them when the round ended, <1s in) [DR: Disorient Full]",
+      "(still on them when the round ended, 3s in)",
+    ])
+      expect(
+        checkCcBookmarkConsistency([
+          ...ok,
+          `0:30  [CC ON ENEMY]   6(DPriest) ← Fear (by 2(DPriest)) ${tail}`,
+        ]),
+      ).toEqual([]);
+    expect(
+      checkCcBookmarkConsistency([
+        ...ok,
+        "0:40  [CC ON ENEMY]   6(DPriest) ← Fear (by 2(DPriest)) (still on them when the round ended, 3s in)",
+      ]),
+    ).toHaveLength(1);
     expect(
       checkCcBookmarkConsistency([
         ...ok,
@@ -1107,6 +1127,16 @@ describe("checkDeathTrinketCcConsistency — the death line's trinket tag vs [CC
     const broken =
       "2:40  [CC ON TEAM]   1(UDKnight) ← Kidney Shot (by 4(ARogue)) [DR: Stun Full] | trinket broke this CC after 3s (cut short — it had not expired)";
     expect(checkDeathTrinketCcConsistency([broken, death(bare)])).toEqual([]);
+  });
+  it("FT-T09: a CC the round ended on is read by its printed seconds; `<1s` is never breakable", () => {
+    const cut =
+      "2:50  [CC ON TEAM]   1(UDKnight) ← Kidney Shot (by 4(ARogue)) | still on them when the round ended, 3s in [DR: Stun Full]";
+    expect(checkDeathTrinketCcConsistency([cut, death(bare)])).toEqual([]);
+    expect(checkDeathTrinketCcConsistency([cut, death(none)])).toHaveLength(1);
+    const blip =
+      "2:50  [CC ON TEAM]   1(UDKnight) ← Kidney Shot (by 4(ARogue)) | <1s [DR: Stun Full] | ended by their PvP trinket";
+    expect(checkDeathTrinketCcConsistency([blip, death(none)])).toEqual([]);
+    expect(checkDeathTrinketCcConsistency([blip, death(bare)])).toHaveLength(1);
   });
   it("a CC ending more than 10 s before, or on another player, does not count", () => {
     const old = "2:22  [CC ON TEAM]   1(UDKnight) ← Fear (by 6(AWarlock)) | 8s";

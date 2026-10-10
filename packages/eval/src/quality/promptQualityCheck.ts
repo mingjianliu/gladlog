@@ -86,6 +86,7 @@ import { KILL_CREDIT_SLACK_S } from "@gladlog/analysis/src/utils/burstLedger";
 import {
   CC_LANDED_MATCH_WINDOW_MS,
   CC_LOGGED_END_NOTE_RE_SRC,
+  CC_STILL_ON_AT_ROUND_END,
   DEATH_BREAKABLE_CC_LOOKBACK_S,
   DEATH_BREAKABLE_CC_MIN_S,
 } from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
@@ -1118,7 +1119,12 @@ export function checkCcAvoidedLandedConsistency(lines: string[]): string[] {
  * DEATH_BREAKABLE_CC_MIN_S — the producer's `breakableCcBeforeDeath`, same
  * constants, read back from the text.
  */
-const CC_ON_TEAM_RENDERED_S = /\) \| (\d+)s\b|after (\d+)s \(cut short/;
+// FT-T09: a CC the round ended on prints its landing → round-end time behind
+// `CC_STILL_ON_AT_ROUND_END`; a sub-second CC prints `<1s` and is never
+// breakable (MIN_S), so it is not read.
+const CC_ON_TEAM_RENDERED_S = new RegExp(
+  String.raw`\) \| (?:${CC_STILL_ON_AT_ROUND_END}, )?(\d+)s\b|after (\d+)s \(cut short`,
+);
 const DEATH_TRINKET_TAG =
   /\(PvP Trinket available(; no breakable CC in the last (\d+) s)?\)/;
 export function checkDeathTrinketCcConsistency(lines: string[]): string[] {
@@ -1280,7 +1286,7 @@ const CC_ON_ENEMY_HEAD_LINE = /^\s*(\d+):(\d{2})\s+\[CC ON ENEMY\]\s+(\S+) ← /
  * `[CC ON ENEMY]` lines of the 605-file capture: 0 unmatched, 121 Tremor.
  */
 const CC_ON_ENEMY_TAIL = new RegExp(
-  String.raw`\((?:by [^|]*?|reflected back)\)(?:(?: \((\d+(?:\.\d+)?)s\))?(?: \[DR: [^\]]+\])?${CC_LOGGED_END_NOTE_RE_SRC}|(?: \[DR: [^\]]+\])? \| enemy Tremor Totem from \S+ ended this CC after \d+s \(cut short — it had not expired\))\s*$`,
+  String.raw`\((?:by [^|]*?|reflected back)\)(?:(?: \((?:${CC_STILL_ON_AT_ROUND_END}, )?(?:(\d+(?:\.\d+)?)s|<1s)(?: in)?\))?(?: \[DR: [^\]]+\])?${CC_LOGGED_END_NOTE_RE_SRC}|(?: \[DR: [^\]]+\])? \| enemy Tremor Totem from \S+ ended this CC after (?:\d+|<1)s \(cut short — it had not expired\))\s*$`,
 );
 const CC_USE_COUNTS_LINE = /^\s*Counts: (.*)$/;
 const CC_USE_COUNT_ITEM = /^(.+) cast (\d+)× \(first (\d+):(\d{2})\)$/;
@@ -1544,7 +1550,7 @@ export function checkForcedTrinketConsistency(lines: string[]): string[] {
     const esc = spell.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const ccOn = ownerId
       ? new RegExp(
-          `^\\s*${fmtTime(cS)}\\s+\\[CC ON ENEMY\\]\\s+${unit.replace(/[()]/g, "\\$&")} ← ${esc} \\(by ${ownerId}\\([^)]*\\)\\)(?: \\(${dur}s\\)(?: \\[DR: [^\\]]+\\])?${CC_LOGGED_END_NOTE_RE_SRC}$|(?: \\[DR: [^\\]]+\\])? \\| enemy Tremor Totem from \\S+ ended this CC after ${dur}s )`,
+          `^\\s*${fmtTime(cS)}\\s+\\[CC ON ENEMY\\]\\s+${unit.replace(/[()]/g, "\\$&")} ← ${esc} \\(by ${ownerId}\\([^)]*\\)\\)(?: \\((?:${CC_STILL_ON_AT_ROUND_END}, )?${dur}s(?: in)?\\)(?: \\[DR: [^\\]]+\\])?${CC_LOGGED_END_NOTE_RE_SRC}$|(?: \\[DR: [^\\]]+\\])? \\| enemy Tremor Totem from \\S+ ended this CC after ${dur}s )`,
         )
       : null;
     if (!ccOn || !lines.some((l) => ccOn.test(l)))

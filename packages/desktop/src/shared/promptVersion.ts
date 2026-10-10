@@ -1269,5 +1269,17 @@
  *  `(a–Ns)` / `(≤Ns)` forms); a Save the Day holder's second Leap of Faith
  *  within 6 s is the talent's free recast; Savagery takes 15 s per rank off
  *  Takedown (60 s at rank 2). Counts in the commit.
+ *  v363 (2026-10-10, FT-T09, user "Ok" 2026-10-10 to items 1–4): what a
+ *  control line says about its length and its end. `0s` prints `<1s`
+ *  ([CC ON TEAM] / [CC ON ENEMY] / [DISARM] / [SILENCE], the break notes'
+ *  `after …`, the
+ *  [DMG SPIKE] `enemy CC in window` list). A control the round ended on —
+ *  clipped at the round end, or never closed by the log — prints
+ *  `still on them when the round ended, Ns in`, not the clip as its length.
+ *  A break the log writes after the aura's REMOVED, or with no source, is
+ *  printed (`| broken by Shadow Word: Death`). Every control the holder's
+ *  own press ended says `| ended by their PvP trinket` / `… their Blink` /
+ *  `… their Divine Shield` on its own line — a trinket press is bound to one
+ *  control, and the others it removed said nothing. No candidate changes.
  */
-export const PROMPT_VERSION = 362;
+export const PROMPT_VERSION = 363;

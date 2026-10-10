@@ -13,11 +13,13 @@ import { CombatUnitReaction } from "@gladlog/parser-compat";
 
 import { BREAK_RACIAL_SPELL_IDS } from "../../data/racialAbilities";
 import {
+  ccEndedByOwnPress,
   ccLoggedEnd,
   findBrokenCC,
   formatCcLoggedEnd,
   type ICCInstance,
-  renderedCcSeconds,
+  renderedCcDuration,
+  renderedCcSpan,
   tremorTotemBreak,
 } from "../../utils/ccTrinketAnalysis";
 import { hasOffensiveSpellActive, hpAtPress } from "../../utils/cooldowns";
@@ -200,13 +202,21 @@ export function emitCcOnEnemyEntries(
           cc.sourceName,
         );
         // FT-T08 step 3c: how it ended, when the log says — the damage that
-        // broke it, a dispel, the target's death. A trinket / break press
-        // has its own [ENEMY TRINKET] line; Tremor its note above.
+        // broke it, a dispel, the target's death; Tremor has its note above.
+        // FT-T09: or the target's own press. The [ENEMY TRINKET] line names
+        // the ONE control a press is bound to; every control that press (or
+        // an immunity) ended says so here, on its own line.
         const endNote =
-          trinketBroke || enemyTremor || !enemyUnit
+          enemyTremor || !enemyUnit
             ? ""
             : formatCcLoggedEnd(
-                ccLoggedEnd(enemyUnit, cc, matchStartMs),
+                // a control a press is bound to reads the press only, and
+                // only when the press sits at its removal: the binder also
+                // takes a control that landed just after the press and ran on
+                trinketBroke
+                  ? ccEndedByOwnPress(enemyUnit, cc, matchStartMs)
+                  : (ccLoggedEnd(enemyUnit, cc, matchStartMs) ??
+                      ccEndedByOwnPress(enemyUnit, cc, matchStartMs)),
                 (name, id) => {
                   // a player is labelled by the roster's name for that id —
                   // the log can spell one player two ways (138e632d)
@@ -226,8 +236,8 @@ export function emitCcOnEnemyEntries(
                 },
               );
         const durStr = enemyTremor
-          ? `${drTag} | enemy Tremor Totem from ${enemyPid(enemyTremor.shamanName)} ended this CC after ${renderedCcSeconds(cc)}s (cut short — it had not expired)`
-          : ` (${renderedCcSeconds(cc)}s)${drTag}${endNote}`;
+          ? `${drTag} | enemy Tremor Totem from ${enemyPid(enemyTremor.shamanName)} ended this CC after ${renderedCcDuration(cc)} (cut short — it had not expired)`
+          : ` (${renderedCcSpan(cc)})${drTag}${endNote}`;
         addEntry(
           cc.atSeconds,
           `${fmtTime(cc.atSeconds)}  [CC ON ENEMY]   ${enemyPid(summary.playerName)} ← ${cc.spellName} (by ${actorLabel(cc.sourceName, "friendly", cc.sourceId)})${durStr}`,

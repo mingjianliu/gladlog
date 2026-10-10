@@ -1944,6 +1944,31 @@ const INDEX: PredicateRow[] = [
     mod: ccTrinketAnalysis,
   },
   {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "ccEndedByOwnPress",
+    mod: ccTrinketAnalysis,
+  },
+  {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "renderedCcDuration",
+    mod: ccTrinketAnalysis,
+  },
+  {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "renderedCcSpan",
+    mod: ccTrinketAnalysis,
+  },
+  {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "renderedCcSpanSeconds",
+    mod: ccTrinketAnalysis,
+  },
+  {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "CC_STILL_ON_AT_ROUND_END",
+    mod: ccTrinketAnalysis,
+  },
+  {
     file: `${A}/analysis/momentSnapshot.ts`,
     symbol: "aurasActiveAt",
     mod: momentSnapshot,

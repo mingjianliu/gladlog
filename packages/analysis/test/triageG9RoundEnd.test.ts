@@ -74,6 +74,34 @@ describe("roundEndMs", () => {
 describe("cc-dr F-CI1 — CC windows end at the round end", () => {
   const enemy = () => makeUnit("e1", { reaction: CombatUnitReaction.Hostile });
 
+  it("FT-T09: a CC the round end cut is marked — and one that ended inside the round is not", () => {
+    const victim = makeUnit("v", {
+      auraEvents: [
+        ...polyOn("v", 20, 23.5),
+        // 28c39eb1 round 3 shape: landed just before the round-ending death, removed after it
+        ...polyOn("v", 47.9, 50.6),
+      ],
+    });
+    const cc = analyzePlayerCCAndTrinket(
+      victim,
+      [enemy()],
+      shuffle(48.327),
+    ).ccInstances;
+    expect(cc.map((c) => c.stillOnAtRoundEnd)).toEqual([undefined, true]);
+    expect(cc[1]!.durationSeconds).toBeCloseTo(0.427, 3);
+    // no REMOVED at all, the round over before its 6 s: still on them too
+    const open = makeUnit("v", {
+      auraEvents: [aura(LogEvent.SPELL_AURA_APPLIED, "118", 45, "v")],
+    });
+    expect(
+      analyzePlayerCCAndTrinket(
+        open,
+        [enemy()],
+        shuffle(48.327),
+      ).ccInstances.map((c) => c.stillOnAtRoundEnd),
+    ).toEqual([true]);
+  });
+
   it("a removal after the end is clipped; a CC applied at or after it is dropped", () => {
     const victim = makeUnit("v", {
       auraEvents: [

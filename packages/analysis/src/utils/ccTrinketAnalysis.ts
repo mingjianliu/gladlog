@@ -578,6 +578,13 @@ export interface ICCInstance {
    * (`drDurationFactor`) — what the break binder ranks "time left" by.
    * Undefined when the game has no fixed duration for it (Maim). */
   expectedDurationSeconds?: number;
+  /** The round ended with this CC still on the player: its window is clipped
+   * at the round end (`roundEndMs`), or the log has no REMOVED for it and the
+   * round ended before its full length. `durationSeconds` is then the time
+   * from the landing to the round's end, not how long the CC lasted (FT-T09:
+   * 64 of 628 distinct "0s" control lines on the 605-file capture were CCs
+   * of 2.7–6 s the round end cut). */
+  stillOnAtRoundEnd?: true;
   spellId: string;
   spellName: string;
   sourceName: string;
@@ -1215,9 +1222,31 @@ export function ccRemovalCause(
   const removedHere = anyRemovedHere.filter(
     (a) => srcUnitId === undefined || a.srcUnitId === srcUnitId,
   );
+  // FT-T09: the log also writes the BROKEN line right AFTER the REMOVED, in
+  // the same ms, with no source (45 of the 52 named-but-unprinted breaks of
+  // the 605-file capture: a priest's own Shadow Word: Death backlash ending
+  // the Polymorph on them 0.06 s in). Read in log order up to the next line
+  // of this aura that is not a break — a re-application's lines are its own —
+  // and never a break another REMOVED supersedes: that one belongs to the
+  // other caster's copy ending in the same ms (codex review of step 3c).
+  const superseded = supersededAuraBreaks(auras);
+  const breaksRightAfter = (removed: (typeof auras)[number]) => {
+    const out: Array<(typeof auras)[number]> = [];
+    for (let k = auras.indexOf(removed) + 1; k < auras.length; k++) {
+      const a = auras[k]!;
+      if (a.logLine.timestamp !== removeMs) break;
+      if (a.spellId !== spellId) continue;
+      if (!isBreak(a.logLine.event as string) || superseded.has(a)) break;
+      out.push(a);
+    }
+    return out;
+  };
   const breaks = (
     removedHere.length > 0
-      ? removedHere.flatMap((r) => auraBreaksBeforeRemoved(auras, r))
+      ? removedHere.flatMap((r) => {
+          const before = auraBreaksBeforeRemoved(auras, r);
+          return before.length > 0 ? before : breaksRightAfter(r);
+        })
       : anyRemovedHere.length > 0
         ? // another caster's copy ended here; this one has no REMOVED of its own
           []
@@ -1230,11 +1259,16 @@ export function ccRemovalCause(
       const id = params[11] === undefined ? "" : String(params[11]);
       const name = typeof params[12] === "string" ? params[12] : "";
       if (!id && !name) return undefined;
+      // A break line with no source (FT-T09: the Shadow Word: Death backlash,
+      // whose damage line has none either) states the spell alone — no
+      // breaker is read into it.
+      const sourceless = !brk.srcUnitId || /^0+$/.test(brk.srcUnitId);
       return {
         kind: "broken",
         spellName: getEnglishSpellName(id, name),
-        byUnitId: brk.srcUnitId,
-        byName: brk.srcUnitName,
+        ...(sourceless
+          ? {}
+          : { byUnitId: brk.srcUnitId, byName: brk.srcUnitName }),
       };
     }
     return {
@@ -1297,7 +1331,9 @@ export function ccRemovalCause(
 export type ICcLoggedEnd =
   | { kind: "broken"; spellName: string; byUnitId?: string; byName?: string }
   | { kind: "dispelled"; spellName: string; byUnitId: string; byName: string }
-  | { kind: "death" };
+  | { kind: "death" }
+  /** the holder's own press ended it (`ccEndedByOwnPress`) */
+  | { kind: "press"; spellName: string };
 
 export function ccLoggedEnd(
   holder: ICombatUnit,
@@ -1353,15 +1389,65 @@ export function ccLoggedEnd(
   return end.holderDied ? { kind: "death" } : undefined;
 }
 
-/** The ` | …` clause a control line carries for `ccLoggedEnd`, and the
- * pattern the gates read it back with (anchored by the caller). */
-export const CC_LOGGED_END_NOTE_RE_SRC = String.raw`(?: \| (?:broken by [^|]+|dispelled by [^|]+|ended at their death))?`;
+/**
+ * The holder's own press that ended this CC, when no line already says so
+ * (FT-T09): one PvP trinket press is bound to ONE control (`bindBreakToWindow`
+ * — the `trinket broke this CC` note, the `[ENEMY TRINKET] … out of X` line),
+ * and a second control the same press removed printed a bare sub-second
+ * duration (`Hammer of Justice … trinket broke this CC after 2s`, then
+ * `Void Nova | 0s [DR: Stun 50%]`); an enemy's immunity or break press ending
+ * our CC was on no `[CC ON ENEMY]` line at all. Reads the existing predicates
+ * only: `ccRemovalCause`'s trinket / break reading (the press sits at the
+ * removal, `castEndedCcWindow`; a break must be one that removes this CC and
+ * the CC cut short of its official end) and `immunityBreak`.
+ */
+export function ccEndedByOwnPress(
+  holder: ICombatUnit,
+  cc: Pick<
+    ICCInstance,
+    "spellId" | "atSeconds" | "durationSeconds" | "expectedDurationSeconds"
+  > &
+    Partial<Pick<ICCInstance, "sourceId">>,
+  matchStartMs: number,
+): { kind: "press"; spellName: string } | undefined {
+  const applyMs = matchStartMs + Math.round(cc.atSeconds * 1000);
+  const removeMs =
+    matchStartMs + Math.round((cc.atSeconds + cc.durationSeconds) * 1000);
+  const cause = ccRemovalCause(
+    holder,
+    cc.spellId,
+    applyMs,
+    removeMs,
+    cc.expectedDurationSeconds === undefined
+      ? undefined
+      : applyMs + cc.expectedDurationSeconds * 1000,
+    cc.sourceId,
+  );
+  if (cause?.kind === "trinket")
+    return { kind: "press", spellName: "PvP trinket" };
+  if (cause?.kind === "break")
+    return { kind: "press", spellName: cause.spellName };
+  if (cause) return undefined;
+  const immunity = immunityBreak(cc, matchStartMs, holder);
+  return immunity
+    ? { kind: "press", spellName: immunity.spellName }
+    : undefined;
+}
+
+/** The ` | …` clause a control line carries for `ccLoggedEnd` /
+ * `ccEndedByOwnPress`, and the pattern the gates read it back with (anchored
+ * by the caller). */
+export const CC_LOGGED_END_NOTE_RE_SRC = String.raw`(?: \| (?:broken by [^|]+|dispelled by [^|]+|ended at their death|ended by their [^|]+))?`;
 export function formatCcLoggedEnd(
   end: ICcLoggedEnd | undefined,
   label: (name: string, unitId: string | undefined) => string,
 ): string {
   if (!end) return "";
   if (end.kind === "death") return " | ended at their death";
+  if (end.kind === "press") return ` | ended by their ${end.spellName}`;
+  // a break line with no source: the spell alone
+  if (end.kind === "broken" && end.byUnitId === undefined)
+    return ` | broken by ${end.spellName}`;
   const who = label(end.byName ?? "", end.byUnitId);
   if (end.kind === "dispelled")
     return ` | dispelled by ${who}'s ${end.spellName}`;
@@ -1380,6 +1466,8 @@ export function formatCcRemovalCause(
   const clean = (x: string) => x.replace(/, /g, " ");
   if (c.kind === "trinket") return `trinket (${clean(c.spellName)})`;
   if (c.kind === "break") return clean(c.spellName);
+  // a break line with no source: the spell alone
+  if (c.byUnitId === undefined && !c.byName) return clean(c.spellName);
   const who =
     c.byUnitId !== undefined && c.byUnitId === ownerId
       ? "you"
@@ -1583,6 +1671,42 @@ export function renderedCcSeconds(
   return Number(cc.durationSeconds.toFixed(0));
 }
 
+/** `renderedCcSeconds` as the text a line prints: `3s`, and `<1s` for a CC
+ *  that rounds to zero (FT-T09: "0s" read as a control that did nothing at
+ *  all — 1,649 such lines on the 605-file capture; `<1s` is what the [RES]
+ *  `cc:` token already prints, `resLedgerPrune`). Every CC line's duration
+ *  goes through here; the gates read both forms. */
+export function renderedCcDuration(
+  cc: Pick<ICCInstance, "durationSeconds">,
+): string {
+  const n = renderedCcSeconds(cc);
+  return n < 1 ? "<1s" : `${n}s`;
+}
+
+/** The duration slot of a CC the round ended on (`stillOnAtRoundEnd`): the
+ *  time printed is landing → round end, and the text says so. */
+export const CC_STILL_ON_AT_ROUND_END = "still on them when the round ended";
+export function renderedCcSpan(
+  cc: Pick<ICCInstance, "durationSeconds" | "stillOnAtRoundEnd">,
+): string {
+  return cc.stillOnAtRoundEnd
+    ? `${CC_STILL_ON_AT_ROUND_END}, ${renderedCcDuration(cc)} in`
+    : renderedCcDuration(cc);
+}
+
+/** `renderedCcSpan` read back from a `[CC ON TEAM]` line's `| …` slot, in
+ *  whole seconds (`<1s` = 0); undefined when the line carries none (a trinket
+ *  / Tremor break prints its time in the note). The reader of the [RES] row
+ *  prune (`resLedgerPrune`): its own pattern knew only `| Ns` and, on the
+ *  first FT-T09 build, kept a row for every CC the round ended on. */
+const CC_TEAM_LINE_SPAN_RE = new RegExp(
+  String.raw`\|\s*(?:${CC_STILL_ON_AT_ROUND_END}, )?(<1|\d+(?:\.\d+)?)s\b`,
+);
+export function renderedCcSpanSeconds(lineText: string): number | undefined {
+  const m = lineText.match(CC_TEAM_LINE_SPAN_RE)?.[1];
+  return m === undefined ? undefined : m === "<1" ? 0 : Number(m);
+}
+
 /** A `[DEATH] … (PvP Trinket available)` line says whether a CC worth
  *  breaking was on the dying player (user ruling 2026-09-30, A28 / triage
  *  enemy-def F-E28): a `[CC ON TEAM]` instance on them whose rendered span
@@ -1677,6 +1801,8 @@ export function analyzePlayerCCAndTrinket(
     srcUnitId: string;
     applyMs: number;
     removeMs: number;
+    /** closed here with no REMOVED in the log */
+    noRemoved?: true;
   }> = [];
 
   const pendingCC = new Map<
@@ -1902,6 +2028,7 @@ export function analyzePlayerCCAndTrinket(
       srcUnitId: pending.srcUnitId,
       applyMs: pending.applyMs,
       removeMs: pendingEnd(pendingSpellId, pending.srcUnitId, pending.applyMs),
+      noRemoved: true,
     });
   });
 
@@ -1950,9 +2077,18 @@ export function analyzePlayerCCAndTrinket(
   // rendered fd45b5d0's Scatter Shot as "-0s"); a dropped instance also
   // leaves the DR history, which only later CCs (post-round too) read.
   const roundEnd = roundEndMs(combat);
-  const filteredCCWindows = ccWindows
+  // FT-T09: a window the round end cut — or one the log never closed, still
+  // short of its full length when the round ended — is marked, so its line
+  // says the round ended on it instead of printing the cut as its duration.
+  const filteredCCWindows: Array<
+    (typeof ccWindows)[number] & { stillOnAtRoundEnd?: true }
+  > = ccWindows
     .filter((w) => w.applyMs < roundEnd)
-    .map((w) => (w.removeMs > roundEnd ? { ...w, removeMs: roundEnd } : w));
+    .map((w) =>
+      w.removeMs > roundEnd || (w.noRemoved && w.removeMs >= roundEnd)
+        ? { ...w, removeMs: roundEnd, stillOnAtRoundEnd: true as const }
+        : w,
+    );
 
   // B111: bind each trinket cast to the SINGLE CC it actually broke, instead of tagging
   // every CC that landed within 5s of the cast. An active PvP trinket (Gladiator's Medallion
@@ -2233,6 +2369,7 @@ export function analyzePlayerCCAndTrinket(
         ...(expectedDurationSeconds !== undefined
           ? { expectedDurationSeconds }
           : {}),
+        ...(w.stillOnAtRoundEnd ? { stillOnAtRoundEnd: true as const } : {}),
         spellId: w.spellId,
         spellName: w.spellName,
         sourceName: w.srcName,

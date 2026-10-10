@@ -65,6 +65,16 @@ describe("FT-T08 step 3c — [SILENCE] logged end", () => {
     ]);
   });
 
+  it("FT-T09: 不到半秒的沉默印 <1s,不印 0s", () => {
+    const blip = [
+      aura(LogEvent.SPELL_AURA_APPLIED, 20),
+      aura(LogEvent.SPELL_AURA_REMOVED, 20.2),
+    ];
+    expect(render(unit("f1", { auraEvents: blip }))).toEqual([
+      "0:20  [SILENCE]   F:f1 ← Silence (by E:e1) | <1s",
+    ]);
+  });
+
   it("被队友驱散 / 在移除时死亡", () => {
     const dispelled = unit("f1", {
       auraEvents: silenced,
