@@ -1817,3 +1817,127 @@ describe("burst anchor: a Holy Paladin's Avenging Wrath is not one (B15c-U10)", 
     expect(attempts[0]!.fromSeconds).toBe(46);
   });
 });
+
+// T12 ① d (user ruling 2026-10-10): a kill-attempt line does not run past the
+// target's death or the round's end.
+describe("extractKillAttempts — brackets end at the round's end and at the kill (T12 ① d)", () => {
+  // 101-3-555 (Duration 2:20): `[2:18–2:21] on … Storm Bolt opener` — the
+  // stun's nominal end, 1 s after ARENA_MATCH_END.
+  it("a stun anchor's end is the round's end, not the stun's nominal end", () => {
+    const e1 = unit("e1", { auraEvents: stunAuras("e1", KIDNEY, 138, 3.5) });
+    const f1 = unit("f1", {
+      reaction: 1,
+      damageOut: [dmg("f1", "e1", 139, 60_000)],
+    });
+    const combat = makeCombat(f1, e1);
+    const open = extractKillAttempts([f1], [e1], combat);
+    expect(open[0]!.toSeconds).toBeCloseTo(141.5, 6);
+
+    combat.endTime = MATCH_START + 140_000;
+    const cut = extractKillAttempts([f1], [e1], combat);
+    expect(cut).toHaveLength(1);
+    expect(cut[0]!.fromSeconds).toBe(138);
+    expect(cut[0]!.toSeconds).toBe(140);
+    expect(formatKillAttemptsForContext(cut).join("\n")).toContain(
+      "[2:18–2:20] on e1",
+    );
+  });
+
+  // 100-2-534: `[2:02–2:16] on … Zenith burst (no stun) | … | KILL`, the
+  // target dead at 2:14 — the cooldown's own reach.
+  it("a KILL's bracket ends at the death it is credited with", () => {
+    const mk = (deathS?: number) => {
+      const e1 = unit("e1", {
+        deathRecords: deathS === undefined ? [] : [{ timestamp: ms(deathS) }],
+      });
+      const f1 = unit("f1", {
+        reaction: 1,
+        spellCastEvents: [offensiveCast(122)],
+        damageOut: [dmg("f1", "e1", 124, 60_000)],
+      });
+      return extractKillAttempts([f1], [e1], makeCombat(f1, e1));
+    };
+    const reach = mk()[0]!.toSeconds;
+    expect(reach).toBeGreaterThan(130);
+
+    const [kill] = mk(128.4);
+    expect(kill!.killed).toBe(true);
+    expect(kill!.killedAtSeconds).toBeCloseTo(128.4, 6);
+    expect(kill!.toSeconds).toBeCloseTo(128.4, 6);
+    // the damage figure is the anchor's, unchanged
+    expect(kill!.teamDamageToTarget).toBe(60_000);
+    const text = formatKillAttemptsForContext([kill!], [128.4]).join("\n");
+    expect(text).toContain("[2:02–2:08] on e1 — Recklessness burst (no stun)");
+    expect(text).toContain("| KILL");
+    expect(text).not.toContain("outside every attempt window");
+  });
+
+  it("a death in the kill-credit slack after the bracket leaves the bracket alone", () => {
+    const e1 = unit("e1", {
+      auraEvents: stunAuras("e1", KIDNEY, 10, 5),
+      deathRecords: [{ timestamp: ms(18) }],
+    });
+    const f1 = unit("f1", {
+      reaction: 1,
+      damageOut: [dmg("f1", "e1", 12, 50_000)],
+    });
+    const [a] = extractKillAttempts([f1], [e1], makeCombat(f1, e1));
+    expect(a!.killed).toBe(true);
+    expect(a!.toSeconds).toBe(15);
+    expect(a!.killedAtSeconds).toBeCloseTo(18, 6);
+  });
+
+  it("a FAILED attempt keeps its anchor's end", () => {
+    const e1 = unit("e1");
+    const f1 = unit("f1", {
+      reaction: 1,
+      spellCastEvents: [offensiveCast(122)],
+      damageOut: [dmg("f1", "e1", 124, 60_000)],
+    });
+    const [a] = extractKillAttempts([f1], [e1], makeCombat(f1, e1));
+    expect(a!.killed).toBe(false);
+    expect(a!.toSeconds).toBeGreaterThan(130);
+  });
+
+  it("a Solo Shuffle round ends at its first player death: the anchor ends there, and one opened after it is not an attempt", () => {
+    const shuffle = (f1: any, e1: any, e2: any) => {
+      const combat = makeCombat(f1, e1, [e2]);
+      combat.startInfo = { ...combat.startInfo, bracket: "Rated Solo Shuffle" };
+      return combat;
+    };
+    // e2 dies at 126 s: the round is over; the log runs on to 300 s
+    const e2 = unit("e2", { deathRecords: [{ timestamp: ms(126) }] });
+    const e1 = unit("e1");
+    const f1 = unit("f1", {
+      reaction: 1,
+      spellCastEvents: [offensiveCast(122)],
+      damageOut: [dmg("f1", "e1", 124, 60_000)],
+    });
+    const [a] = extractKillAttempts([f1], [e1, e2], shuffle(f1, e1, e2));
+    expect(a!.targetUnitId).toBe("e1");
+    expect(a!.toSeconds).toBe(126);
+
+    const late = unit("f1", {
+      reaction: 1,
+      spellCastEvents: [offensiveCast(127)],
+      damageOut: [dmg("f1", "e1", 128, 60_000)],
+    });
+    expect(
+      extractKillAttempts([late], [e1, e2], shuffle(late, e1, e2)),
+    ).toHaveLength(0);
+    const lateStun = unit("e1", {
+      auraEvents: stunAuras("e1", KIDNEY, 127, 3),
+    });
+    const hitter = unit("f1", {
+      reaction: 1,
+      damageOut: [dmg("f1", "e1", 128, 60_000)],
+    });
+    expect(
+      extractKillAttempts(
+        [hitter],
+        [lateStun, e2],
+        shuffle(hitter, lateStun, e2),
+      ),
+    ).toHaveLength(0);
+  });
+});

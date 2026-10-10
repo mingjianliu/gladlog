@@ -118,6 +118,7 @@ import { KW_BURST_MIN_DAMAGE } from "./offensiveWindows";
 import { pvpTrinketUses } from "./pvpTrinketUses";
 import { fmtTime, toRenderSecond } from "./renderGrid";
 import { buildRosterSides, type RosterSides } from "./rosterSide";
+import { roundEndMs } from "./roundEnd";
 import { offensiveEffectCdId } from "./spellDanger";
 
 // The defensive sets live in enemyDefensives.ts since GH #97 (2026-09-15):
@@ -191,7 +192,9 @@ export interface IKillAttempt {
    * offensive cast for burst anchor. */
   anchorSpellName: string;
   /** Stun anchor: first stun landing → last stun expiry.
-   * Burst anchor: first offensive cast → cluster reach (burstCastSpan). */
+   * Burst anchor: first offensive cast → cluster reach (burstCastSpan).
+   * Neither runs past the round's end (`roundEndMs`), and a KILL ends at the
+   * death it is credited with when that comes first (T12 ① d). */
   fromSeconds: number;
   toSeconds: number;
   /** Empty for burst-anchored attempts. */
@@ -208,7 +211,8 @@ export interface IKillAttempt {
   /** DR level of the opening stun (Full = the chain started clean).
    * Absent for burst-anchored attempts (no stun to grade). */
   openingDrLevel?: DRLevel;
-  /** Team damage inside [from, to + KILL_CREDIT_SLACK_S]. */
+  /** Team damage inside [from, to + KILL_CREDIT_SLACK_S] — `to` as the
+   * anchor set it, before a KILL's `toSeconds` is cut at the death. */
   teamDamageToTarget: number;
   teamDamageTotal: number;
   /** 0–100: share of team damage that landed on the attempt's target. */
@@ -380,6 +384,13 @@ export function extractKillAttempts(
     }
   }
 
+  // T12 ① d (user ruling 2026-10-10: a kill-attempt line does not run past
+  // the round's end). `roundEndMs` is the one round end; both anchors end
+  // there, and an anchor that starts at or after it is not in the round.
+  // 101-3-555 (Duration 2:20): `[2:18–2:21] on … Storm Bolt opener` — the
+  // last stun's nominal end.
+  const roundEndS = (roundEndMs(combat) - matchStartMs) / 1000;
+
   const attempts: IKillAttempt[] = [];
   for (const [targetName, stuns] of stunsByTarget) {
     const target = enemyByName.get(targetName)!;
@@ -401,9 +412,10 @@ export function extractKillAttempts(
 
     for (const group of groups) {
       const fromSeconds = group[0].atSeconds;
+      if (fromSeconds >= roundEndS) continue;
       const last = group[group.length - 1];
       const toSeconds = Math.max(
-        last.atSeconds + last.durationSeconds,
+        Math.min(last.atSeconds + last.durationSeconds, roundEndS),
         fromSeconds,
       );
       const spanFromMs = matchStartMs + fromSeconds * 1000;
@@ -507,10 +519,10 @@ export function extractKillAttempts(
       }
       if (cur) clusters.push(cur);
     }
-    const matchEndS = (combat.endTime - matchStartMs) / 1000;
     for (const cl of clusters) {
       const fromSeconds = cl.from;
-      const toSeconds = Math.min(cl.to, matchEndS);
+      if (fromSeconds >= roundEndS) continue;
+      const toSeconds = Math.min(cl.to, roundEndS);
       const spanFromMs = matchStartMs + fromSeconds * 1000;
       const spanToMs = matchStartMs + (toSeconds + KILL_CREDIT_SLACK_S) * 1000;
       // Team damage per enemy inside the span (one pass).
@@ -626,7 +638,18 @@ export function extractKillAttempts(
       );
       for (const a of list) if (a !== keep) a.killed = false;
     }
-    for (const a of list) if (a.killed) a.killedAtSeconds = deathS;
+    for (const a of list)
+      if (a.killed) {
+        a.killedAtSeconds = deathS;
+        // T12 ① d: a KILL's bracket does not run past the death it is
+        // credited with (100-2-534: `[2:02–2:16] … Zenith burst (no stun) |
+        // … | KILL`, the target dead at 2:14 — the cooldown's own reach). A
+        // death in the kill-credit slack after the bracket leaves it alone.
+        // Cut on the attempt itself: `[FORCED TRINKET]` prints the same
+        // object's span, and the summary's "outside every attempt window"
+        // tests the brackets as printed.
+        a.toSeconds = Math.min(a.toSeconds, deathS);
+      }
   }
   // …and a covered cluster whose death went to another row did not "alone
   // reach the kill": it stays skipped, as before F-K2
