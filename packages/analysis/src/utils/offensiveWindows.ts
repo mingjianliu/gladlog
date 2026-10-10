@@ -26,6 +26,7 @@ import { fmtTime, renderedWindowSeconds } from "./renderGrid";
 // GH #31 ② (2026-09-02): the hand list is replaced by the shared official-face
 // predicate; the curated remainder lives as its registered fallback floor.
 import { summonOwnerById } from "./summonOwner";
+import { firstDeathMs } from "./unitDeath";
 
 type SpellEntry = { type: string };
 const SPELLS = spellsData as Record<string, SpellEntry>;
@@ -537,12 +538,19 @@ export function computeOffensiveWindows(
     // are the `[ENEMY DEF]` external events' own (`enemyDefensiveEvents`), so
     // the span and the timeline line agree on when the external was up.
     const received = externalsReceived.get(enemy.id) ?? [];
-    const cutWindows =
-      received.length === 0
-        ? vulnWindows
-        : subtractIntervals(vulnWindows, received).filter(
-            (w) => w.to - w.from >= MIN_VULN_SECONDS,
-          );
+    // ── 2c. A dead target is not "defenseless" — it is dead ───────────────────
+    // T12 ① a (user ruling 2026-10-10, D1): the state machine reads only the
+    // target's presses, so a wall whose nominal end fell after the target's
+    // death opened a span on a corpse (1bad0a5c: `[VULNERABLE] 1:38–1:50` on a
+    // shaman dead at 1:35.8), and kick-priority read "the kill target at 0 %"
+    // off it 2.3 s after the death (65-1 t=79.4). The span ends at the death
+    // (`firstDeathMs`, the one death instant); a span that starts at or after
+    // it does not exist. Cut at the source so every reader moves together.
+    const deathS = (firstDeathMs(enemy) - matchStartMs) / 1000;
+    const cutWindows = subtractIntervals(vulnWindows, received)
+      .filter((w) => w.from < deathS)
+      .map((w) => ({ from: w.from, to: Math.min(w.to, deathS) }))
+      .filter((w) => w.to - w.from >= MIN_VULN_SECONDS);
 
     // ── 3. Per-window metrics ──────────────────────────────────────────────────
 
