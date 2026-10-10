@@ -332,6 +332,24 @@ export interface MergedLockParts {
   componentCasters: Array<{ spellName: string; casterName?: string }>;
 }
 
+/**
+ * A merged lock's name: its components in order, joined by "→", a run of the
+ * same control written once with its count — `Fear→Cheap Shot`,
+ * `Hammer of Justice ×2`. FT-T09: a run used to be written once with no
+ * count, so two Hammers of Justice (2 s + 3 s on the timeline) read
+ * `cc=Hammer of Justice, durationS=5` — one control, of a length no
+ * `[CC ON ENEMY]` line shows.
+ */
+export function lockChainName(names: readonly string[]): string {
+  const runs: Array<{ name: string; n: number }> = [];
+  for (const name of names) {
+    const last = runs[runs.length - 1];
+    if (last && last.name === name) last.n++;
+    else runs.push({ name, n: 1 });
+  }
+  return runs.map((r) => (r.n > 1 ? `${r.name} ×${r.n}` : r.name)).join("→");
+}
+
 export function mergeHealerCcWindows<
   W extends Pick<
     IEnemyHealerCcWindow,
@@ -368,7 +386,7 @@ export function mergeHealerCcWindows<
           if (w.endedBy) cur.endedBy = w.endedBy;
           else delete cur.endedBy;
         }
-        if (names[names.length - 1] !== w.spellName) names.push(w.spellName);
+        names.push(w.spellName);
         starts.push(w.fromSeconds);
         casters.push({ spellName: w.spellName, casterName: w.casterName });
         continue;
@@ -376,7 +394,7 @@ export function mergeHealerCcWindows<
       if (cur)
         out.push({
           ...cur,
-          spellName: names.join("→"),
+          spellName: lockChainName(names),
           componentStartsSeconds: starts,
           componentCasters: casters,
         });
@@ -388,7 +406,7 @@ export function mergeHealerCcWindows<
     if (cur)
       out.push({
         ...cur,
-        spellName: names.join("→"),
+        spellName: lockChainName(names),
         componentStartsSeconds: starts,
         componentCasters: casters,
       });

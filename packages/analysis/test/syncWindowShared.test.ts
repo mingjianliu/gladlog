@@ -16,6 +16,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import {
   countsAsTeamBurst,
   evaluateSyncWindow,
+  lockChainName,
   mergeHealerCcWindows,
   syncWindowEligible,
 } from "../src/analysis/candidates/cooldownTiming";
@@ -69,12 +70,17 @@ describe("mergeHealerCcWindows (B3ii)", () => {
     ]);
   });
 
-  it("a repeat of the same CC inside the chain is not named twice", () => {
+  it("a repeat of the same CC inside the chain is named once, with its count (FT-T09)", () => {
     const out = mergeHealerCcWindows([
       win(40, 44, "Fear"),
       win(43, 46, "Fear"),
     ]);
-    expect(out[0]!.spellName).toBe("Fear");
+    // "Fear" alone read as one Fear of the whole lock's length
+    expect(out[0]!.spellName).toBe("Fear ×2");
+    expect(lockChainName(["Fear", "Cheap Shot", "Cheap Shot", "Fear"])).toBe(
+      "Fear→Cheap Shot ×2→Fear",
+    );
+    expect(lockChainName(["Fear"])).toBe("Fear");
   });
 });
 

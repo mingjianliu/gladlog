@@ -1290,5 +1290,10 @@
  *  not by its unit name — a totem's name is in the log's client language
  *  (`[IMMUNE: 根基图腾]`). With it, gate only: the `during it:` gate reads the
  *  `+Nk deferred` clause v344 added.
+ *  v366 (2026-10-10, FT-T09 item 6, user go-ahead 2026-10-10 after seeing
+ *  the example): a merged healer lock names a repeated control with its
+ *  count (`Hammer of Justice ×2`, was `Hammer of Justice`) in
+ *  missed-sync-window `cc` / `spell` and `enteredNextLock`; the legend says
+ *  that `durationS` is the whole lock on the whole-second grid.
  */
-export const PROMPT_VERSION = 365;
+export const PROMPT_VERSION = 366;
