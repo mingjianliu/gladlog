@@ -98,6 +98,25 @@ export function intervalBlocksSpell(
   return schoolLockedBy(m, iv.lockedSchoolMask);
 }
 
+/**
+ * FT-T10 PREVIEW: `namedCannotCastIntervals` asked for a SET of spells the
+ * unit could answer with — an interval is kept only when it stops EVERY one
+ * of them (`intervalBlocksSpell`; `actWindowFor().stateIn`'s reading). No
+ * spell to ask about (undefined / empty) → every interval, the unasked
+ * reading.
+ */
+export function cannotCastIntervalsForSpells(
+  unit: ICombatUnit,
+  enemyIds: Set<string>,
+  spellIds: readonly string[] | undefined,
+): NamedCannotCastInterval[] {
+  const named = namedCannotCastIntervals(unit, enemyIds);
+  if (!spellIds?.length) return named;
+  return named.filter((iv) =>
+    spellIds.every((id) => intervalBlocksSpell(iv, id)),
+  );
+}
+
 const SCHOOL_BIT_NAMES: ReadonlyArray<[number, string]> = [
   [1, "Physical"],
   [2, "Holy"],

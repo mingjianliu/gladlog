@@ -29,7 +29,10 @@ import {
   type IAuraInterval,
   supersededAuraBreaks,
 } from "./auraIntervals";
-import { buildCannotCastIntervals } from "./cannotCastIntervals";
+import {
+  buildCannotCastIntervals,
+  cannotCastIntervalsForSpells,
+} from "./cannotCastIntervals";
 import {
   CHANNEL_AURA_LAG_MS,
   channelSpans,
@@ -591,23 +594,28 @@ export function purgeReadyAtSeconds(
   atMs: number,
   matchStartMs: number,
 ): number {
-  // The purge abilities this unit HAS: its purge spell (Greater Purge
-  // replaces Purge), else the spec's list. One of them that was never cast,
-  // or has no cooldown, is ready — an unused Dispel Magic keeps a priest
-  // ready whatever its Mass Dispel is doing (codex review of F-P7).
+  return abilitiesReadyAtSeconds(
+    unit,
+    purgeSpellIdsOf(unit),
+    extraSpellIds,
+    atMs,
+    matchStartMs,
+  );
+}
+
+/** The purge abilities this unit HAS: its purge spell (Greater Purge
+ *  replaces Purge), else the spec's list. One of them that was never cast,
+ *  or has no cooldown, is ready — an unused Dispel Magic keeps a priest
+ *  ready whatever its Mass Dispel is doing (codex review of F-P7).
+ *  FT-T10 PREVIEW: also the spells "purger locked" asks a kick lockout about. */
+function purgeSpellIdsOf(unit: ICombatUnit): Set<string> {
   const own = purgeSpellOf(unit);
   const listed = PURGE_SPELLS_BY_SPEC[unit.spec] ?? [];
   const available = new Set<string>(
     own !== null && !listed.includes(own) ? [own] : listed,
   );
   if (own !== null) available.add(own);
-  return abilitiesReadyAtSeconds(
-    unit,
-    available,
-    extraSpellIds,
-    atMs,
-    matchStartMs,
-  );
+  return available;
 }
 
 /** `purgeReadyAtSeconds`'s ledger over an explicit ability set: `available`
@@ -2091,9 +2099,12 @@ function isPurgerFullyBlockedDuringWindow(
   windowStartMs: number,
   windowEndMs: number,
   enemyIds: Set<string>,
+  // FT-T10 PREVIEW: the removal(s) the unit would press — a kick lockout
+  // counts only when it stops every one of them; absent → every lockout
+  spellIds?: readonly string[],
 ): boolean {
   return isWindowFullyCovered(
-    buildCannotCastIntervals(purger, enemyIds),
+    cannotCastIntervalsForSpells(purger, enemyIds, spellIds),
     windowStartMs,
     windowEndMs,
   );
@@ -2132,6 +2143,9 @@ function dispellersLockedOutForWindow(
   endMs: number,
   enemyIds: Set<string>,
   freeThresholdMs: number,
+  // FT-T10 PREVIEW: each dispeller's removal(s) — a kick lockout counts only
+  // when it stops every one of them; absent → every lockout
+  spellIdsOf?: (d: ICombatUnit) => readonly string[] | undefined,
 ): boolean {
   if (dispellers.length === 0 || endMs <= startMs) return false;
   // The intersection is "everyone locked" millisecond by millisecond, which is
@@ -2140,7 +2154,9 @@ function dispellersLockedOutForWindow(
   // intersect the unions.
   let intersection: Array<{ from: number; to: number }> | null = null;
   for (const d of dispellers) {
-    const merged = mergeIntervals(buildCannotCastIntervals(d, enemyIds));
+    const merged = mergeIntervals(
+      cannotCastIntervalsForSpells(d, enemyIds, spellIdsOf?.(d)),
+    );
     intersection =
       intersection === null
         ? merged
@@ -3544,6 +3560,8 @@ export function reconstructDispelSummary(
                   applyTs,
                   windowEndMs,
                   cannotCastSrcIds,
+                  // FT-T10 PREVIEW: a lockout on another school leaves the purge
+                  [...purgeSpellIdsOf(purger)],
                 ),
               );
             // P-P5b = C: scoped holders whose tool covers this buff and who
@@ -3561,6 +3579,8 @@ export function reconstructDispelSummary(
                   applyTs,
                   windowEndMs,
                   cannotCastSrcIds,
+                  // FT-T10 PREVIEW: asked for the scoped tool's own press
+                  [tool.castSpellId],
                 )
                 ? [{ unit: h.unit, tool }]
                 : [];
@@ -3672,6 +3692,8 @@ export function reconstructDispelSummary(
                 ...(purgeWasOnCD ? { purgeReadyAtSeconds: teamReadyAt } : {}),
                 cdBurnedOn,
                 teamUnderPressure,
+                // FT-T10 PREVIEW: each purger's lockouts are asked for its own
+                // purge / scoped tool (the spells the gate above asks about)
                 purgersLockedOut: generalOpen
                   ? dispellersLockedOutForWindow(
                       eligiblePurgers,
@@ -3679,6 +3701,7 @@ export function reconstructDispelSummary(
                       windowEndMs,
                       cannotCastSrcIds,
                       MISSED_PURGE_THRESHOLD_S * 1000,
+                      (p) => [...purgeSpellIdsOf(p)],
                     )
                   : // scoped holders: each against its own tool's bar
                     scoped.every(({ unit, tool }) =>
@@ -3688,6 +3711,7 @@ export function reconstructDispelSummary(
                         windowEndMs,
                         cannotCastSrcIds,
                         freeBarMs(tool),
+                        () => [tool.castSpellId],
                       ),
                     ),
                 losReachable: anyDispellerReachable(
@@ -3726,6 +3750,7 @@ export function reconstructDispelSummary(
                             windowEndMs,
                             cannotCastSrcIds,
                             freeBarMs(tool),
+                            () => [tool.castSpellId],
                           ),
                           losReachable: anyDispellerReachable(
                             [unit],
