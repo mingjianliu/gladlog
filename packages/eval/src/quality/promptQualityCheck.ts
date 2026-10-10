@@ -29,11 +29,14 @@
  */
 
 import {
+  creditSpikesToWindows,
   droppableNoChangeResRows,
   ensureAnalysisData,
   GUARDIAN_SPIRIT_SAVE_WINDOW_S,
+  NO_CREDITED_SPIKE_CLAUSE,
   PEAK_SPIKE_MARKERS,
   peakSpikePlacement,
+  spikeWindowOverlapSeconds,
 } from "@gladlog/analysis";
 import { fmtFactNum } from "@gladlog/analysis/src/analysis/factFormat";
 import {
@@ -2750,6 +2753,126 @@ export function checkOffensiveWindowSpikeMarker(lines: string[]): string[] {
   return failures;
 }
 
+/** A timeline `[OFFENSIVE WINDOW]` header: its own span and the clause
+ * between the span and `CDs:` (the legend's mention of the tag has no
+ * timestamp column and does not match). */
+const OFFENSIVE_WINDOW_HEADER =
+  /^\s*\d+:\d{2}\s+\[OFFENSIVE WINDOW\]\s+(\d+):(\d{2})–(\d+):(\d{2}) \| (.*) \| CDs: /;
+const OFFENSIVE_WINDOW_PEAK_CLAUSE =
+  /^peak spike (\d+\.\d{2})M on (\S+) \(.*\) over (\d+):(\d{2})–(\d+):(\d{2})(?: \([^)]*\))?$/;
+const DMG_SPIKE_AMOUNT_LINE =
+  /^\s*(\d+):(\d{2})–(\d+):(\d{2})\s+\[DMG SPIKE\]\s+(\S+) \(.*?\): (\d+\.\d{2})M in /;
+
+/**
+ * HardFailure class (T12 ③, user ruling 2026-10-10): which `[DMG SPIKE]` an
+ * `[OFFENSIVE WINDOW]` header names. Re-runs the producer's own rule
+ * (`creditSpikesToWindows`) on the rendered headers and the rendered
+ * `[DMG SPIKE]` lines:
+ *
+ *  - a named spike is a listed `[DMG SPIKE]` line, overlaps the window on the
+ *    displayed seconds, and is credited to THIS window — so no spike is named
+ *    on two headers and none on a window it lies outside of;
+ *  - it is the largest credited to the window;
+ *  - a header that says none is credited has none.
+ *
+ * Before the rule: 444 of 8,154 headers on the 605 capture named a spike that
+ * began after the window ended, 180 spikes were named on two headers.
+ */
+export function checkOffensiveWindowSpikeCredit(lines: string[]): string[] {
+  const failures: string[] = [];
+  const headers: {
+    line: number;
+    fromSeconds: number;
+    toSeconds: number;
+    clause: string;
+  }[] = [];
+  const spikes: {
+    fromSeconds: number;
+    toSeconds: number;
+    unit: string;
+    amount: number;
+  }[] = [];
+  lines.forEach((line, i) => {
+    const h = line.match(OFFENSIVE_WINDOW_HEADER);
+    if (h) {
+      headers.push({
+        line: i + 1,
+        fromSeconds: Number(h[1]) * 60 + Number(h[2]),
+        toSeconds: Number(h[3]) * 60 + Number(h[4]),
+        clause: h[5]!,
+      });
+      return;
+    }
+    const sp = line.match(DMG_SPIKE_AMOUNT_LINE);
+    if (sp)
+      spikes.push({
+        fromSeconds: Number(sp[1]) * 60 + Number(sp[2]),
+        toSeconds: Number(sp[3]) * 60 + Number(sp[4]),
+        unit: sp[5]!,
+        amount: Number(sp[6]),
+      });
+  });
+  if (headers.length === 0) return failures;
+  const creditedTo = creditSpikesToWindows(headers, spikes);
+  const describe = (sp: (typeof spikes)[number]) =>
+    `${sp.amount.toFixed(2)}M on ${sp.unit} over ${fmtTime(sp.fromSeconds)}–${fmtTime(sp.toSeconds)}`;
+  headers.forEach((h, w) => {
+    const at = `line ${h.line}: [OFFENSIVE WINDOW] ${fmtTime(h.fromSeconds)}–${fmtTime(h.toSeconds)}`;
+    const credited = spikes.filter((_, s) => creditedTo[s] === w);
+    if (h.clause === NO_CREDITED_SPIKE_CLAUSE) {
+      if (credited.length > 0)
+        failures.push(
+          `${at} 写「${NO_CREDITED_SPIKE_CLAUSE}」,但 [DMG SPIKE] ${describe(credited[0]!)} 归属本窗口`,
+        );
+      return;
+    }
+    const m = h.clause.match(OFFENSIVE_WINDOW_PEAK_CLAUSE);
+    if (!m) {
+      failures.push(`${at} 无法解析 spike 子句「${h.clause}」`);
+      return;
+    }
+    const amount = Number(m[1]);
+    const unit = m[2]!;
+    const sFrom = Number(m[3]) * 60 + Number(m[4]);
+    const sTo = Number(m[5]) * 60 + Number(m[6]);
+    if (
+      spikeWindowOverlapSeconds(h.fromSeconds, h.toSeconds, sFrom, sTo) <= 0
+    ) {
+      failures.push(
+        `${at} 的 peak spike ${fmtTime(sFrom)}–${fmtTime(sTo)} 与窗口没有交集`,
+      );
+      return;
+    }
+    const s = spikes.findIndex(
+      (sp) =>
+        sp.unit === unit && sp.fromSeconds === sFrom && sp.toSeconds === sTo,
+    );
+    if (s < 0) {
+      failures.push(
+        `${at} 的 peak spike 没有对应的 [DMG SPIKE] 行(${unit} ${fmtTime(sFrom)}–${fmtTime(sTo)})`,
+      );
+      return;
+    }
+    if (spikes[s]!.amount !== amount)
+      failures.push(
+        `${at} 的 peak spike 写 ${amount.toFixed(2)}M,对应的 [DMG SPIKE] 行写 ${spikes[s]!.amount.toFixed(2)}M`,
+      );
+    if (creditedTo[s] !== w) {
+      const other = headers[creditedTo[s]!]!;
+      failures.push(
+        `${at} 的 peak spike ${describe(spikes[s]!)} 归属 ${fmtTime(other.fromSeconds)}–${fmtTime(other.toSeconds)} 的窗口(重叠更长 / 同长取先开的),不归本窗口`,
+      );
+      return;
+    }
+    const larger = credited.find((sp) => sp.amount > amount);
+    if (larger)
+      failures.push(
+        `${at} 的 peak spike ${amount.toFixed(2)}M 不是归属本窗口的最大一个:${describe(larger)}`,
+      );
+  });
+  return failures;
+}
+
 /** missed-sync-window (GH #13 resurrection, 2026-09-02): every rendered line
  * must quote exactly the bracket cell syncWindowPrior.ts holds, and the
  * quoted contrast must clear the same min-contrast door the producer used —
@@ -3912,6 +4035,7 @@ export function checkMatch(
   hardFailures.push(...checkBehaviorPriorConsistency(lines));
   hardFailures.push(...checkBurstWindowRefConsistency(lines));
   hardFailures.push(...checkOffensiveWindowSpikeMarker(lines));
+  hardFailures.push(...checkOffensiveWindowSpikeCredit(lines));
   hardFailures.push(...checkSyncWindowRefConsistency(lines));
   hardFailures.push(...checkBacklashRefConsistency(lines));
   hardFailures.push(...checkKickPriorityRefConsistency(lines));

@@ -18,6 +18,7 @@ import { BURST_ANSWERED_LEGEND } from "../burstAnswered";
 import { CD_PRIOR_LEGEND } from "../cdPrior";
 import { PRESSED_DURING_NOTE_HEAD } from "../controlRejectedPresses";
 import { ROT_PRESSURE_LEGEND } from "../matchTimelineSections";
+import { NO_CREDITED_SPIKE_CLAUSE } from "../peakSpikePlacement";
 import { pruneZeroLossResRows } from "../resLedgerPrune";
 import { RES_FORBEARANCE_RE_SRC } from "../resourceSnapshot";
 import { STACKED_DEFENSIVES_LEGEND } from "../stackedDefensives";
@@ -305,7 +306,14 @@ export function formatTimeline(
     "    ally out of range/LoS; ranged: no enemy in range/LoS) for the stated seconds — only such roots are listed; roots",
     "    that changed nothing are omitted. Roots have no DR tier and are not hard CC (the rooted player can still cast).",
     "  [OFFENSIVE WINDOW] `X on <unit>` = damage DEALT TO that unit (it is the victim, not the dealer);",
-    "    its `peak spike` figure covers the spike's own sub-window, printed after it — not the whole offensive window; a marker means the spike's sub-window extends past the offensive window (the +5 s allowance).",
+    "    its `peak spike` figure covers the spike's own sub-window, printed after it — not the whole offensive window.",
+    // T12 ③ (user ruling 2026-10-10): which spike a header names —
+    // `creditSpikesToWindows`, re-run by checkOffensiveWindowSpikeCredit.
+    "    Each listed [DMG SPIKE] is credited to ONE offensive window — the one its sub-window overlaps longest on the displayed",
+    "    seconds (the earlier window on a tie) — and never to a window it does not overlap; `peak spike` = the largest one credited",
+    "    to this window. `(runs past window)` = that sub-window ends after the offensive window; it can also begin before it — read",
+    `    the printed bounds. \`${NO_CREDITED_SPIKE_CLAUSE}\` = none of this timeline's [DMG SPIKE] lines overlaps the window, or the`,
+    "    one that does overlaps another window longer — a statement about the listed lines, not that no damage landed.",
     "    The full [RES] row under an [OFFENSIVE WINDOW] header = what your team had ready at the whole second the window opened;",
     "    the opener itself, pressed inside that second, is on the header's `CDs:` list and may be missing from that row's `enemy:` column.",
     ...(TIMELINE_LINE_FLAGS.enemyDef === "timeline"

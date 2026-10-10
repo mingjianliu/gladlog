@@ -772,9 +772,11 @@ export function computeOwnerPositionEvents(params: {
         : undefined;
 
     const delta = end.distanceYards - start.distanceYards;
-    // B4 fix: prefer the overlapping damage-spike's target (identical ±5s overlap rule to the
-    // [OFFENSIVE WINDOW] header in matchTimeline) so this line and the timeline can never
-    // disagree about who the burst hit; fall back to the whole-window most-pressured unit.
+    // B4 fix: prefer the overlapping damage-spike's target (the ±5 s rule the
+    // [OFFENSIVE WINDOW] header used until T12 ③ — the header now names a
+    // spike through `creditSpikesToWindows`; this line keeps its own rule and
+    // the A′12 half-span limit below, both feeding position-mistake);
+    // fall back to the whole-window most-pressured unit.
     const overlappingSpike = spikeWindows?.find(
       (pw) =>
         pw.fromSeconds >= w.fromSeconds - 5 &&
