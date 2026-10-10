@@ -13,6 +13,12 @@
  * low at least `HP_TROUGH_MIN_DROP_PTS` (10) under BOTH endpoints — the
  * 09-15 crisis-line rule (≤ 40 %) hid 19 of 32 "healed through" dips of the
  * 60 triage rounds and printed 1-point dips under a falling window.
+ *
+ * 2026-10-10 (user ruling D7, FT-T03): the low is a TROUGH — the true minimum
+ * of every sample inside the displayed seconds (`hpTroughInWindow`), printed
+ * at the second it occurred. The `[STATE]` readings (`gridHpPct`, the two
+ * endpoints) do not move; the invariant the gate keeps is "no tick of the
+ * window reads below the low" (`isTickBelowTrough`).
  */
 import {
   CombatUnitClass,
@@ -26,7 +32,9 @@ import {
   gridHpMinInWindow,
   gridHpPct,
   HP_TROUGH_MIN_DROP_PTS,
+  hpTroughInWindow,
   isHpTroughWorthPrinting,
+  isTickBelowTrough,
 } from "../utils/cooldowns";
 import { emitDmgSpikeEntries } from "./matchTimelineSections";
 
@@ -52,7 +60,15 @@ function walk(points: Record<number, number>) {
   return out;
 }
 
-function friend(points: Record<number, number>, deaths: number[] = []) {
+function friend(
+  points: Record<number, number>,
+  deaths: number[] = [],
+  /** extra samples between the whole seconds: `[second, hp]` */
+  between: Array<[number, number]> = [],
+) {
+  const actions = [...walk(points), ...between.map(([t, v]) => hp(t, v))].sort(
+    (a, b) => a.timestamp - b.timestamp,
+  );
   return {
     id: "F1",
     name: "Victim-Realm",
@@ -60,7 +76,7 @@ function friend(points: Record<number, number>, deaths: number[] = []) {
     class: CombatUnitClass.Druid,
     spec: CombatUnitSpec.Druid_Restoration,
     info: { teamId: "0", specId: "105" },
-    advancedActions: walk(points),
+    advancedActions: actions,
     damageIn: [],
     healIn: [],
     healOut: [],
@@ -69,6 +85,17 @@ function friend(points: Record<number, number>, deaths: number[] = []) {
     auraEvents: [],
     actionIn: [],
     deathRecords: deaths.map((s) => ({ timestamp: T0 + s * 1000 })),
+  };
+}
+
+/** The unit without its sample on whole second `sec` — that second's tick
+ * then reads the nearest sample either side. */
+function without(u: ReturnType<typeof friend>, sec: number) {
+  return {
+    ...u,
+    advancedActions: u.advancedActions.filter(
+      (a) => a.timestamp !== T0 + sec * 1000,
+    ),
   };
 }
 
@@ -99,11 +126,62 @@ describe("[DMG SPIKE] trough — endpoints must not hide a dip of 10 points or m
     expect(line).toContain("(81% -> 87% HP");
     expect(line).toContain(", low 37% @0:14)");
     expect(line).not.toContain("healed through");
-    // shared-predicate pin: the printed low IS the [STATE] sampler's reading
-    const low = gridHpMinInWindow(u as never, T0, 10, 20)!;
-    expect(low).toEqual({ pct: 37, atSec: 14 });
+    // a low that sits ON a whole second is the [STATE] sampler's reading,
+    // as before the trough ruling
+    const low = hpTroughInWindow(u as never, T0, 10, 20)!;
+    expect(low).toEqual({ pct: 37, atSec: 14, atMs: T0 + 14_000 });
+    expect(gridHpMinInWindow(u as never, T0, 10, 20)).toEqual({
+      pct: 37,
+      atSec: 14,
+    });
     expect(gridHpPct(u as never, T0 + 14_000)).toBe(37);
     expect(isHpTroughWorthPrinting(81, 87, 37)).toBe(true);
+  });
+
+  // FT-T03 (D7) — 141470d0's shape: 33 % on the 4:15 tick, 6 % 0.4 s later,
+  // 48 % on the next tick. The grid never sees the 6.
+  it("a dip BETWEEN two ticks is the low, at the second it occurred; the ticks keep their own readings", () => {
+    const u = friend({ 0: 80, 15: 33, 16: 48, 18: 57 }, [], [[15.4, 6]]);
+    const line = render(u as never);
+    expect(line).toContain("(80% -> 57% HP");
+    expect(line).toContain(", low 6% @0:15)");
+    // the [STATE] sampler is untouched: the tick of that second still reads 33
+    expect(gridHpPct(u as never, T0 + 15_000)).toBe(33);
+    expect(gridHpMinInWindow(u as never, T0, 10, 20)).toEqual({
+      pct: 33,
+      atSec: 15,
+    });
+    expect(hpTroughInWindow(u as never, T0, 10, 20)).toEqual({
+      pct: 6,
+      atSec: 15,
+      atMs: T0 + 15_400,
+    });
+  });
+
+  // 0e0663e6's shape: `82% -> 98% HP — healed through` over 65 % at 0:25.5
+  it("a dip the grid cannot see at all takes the word away", () => {
+    const u = friend({ 0: 82, 18: 98 }, [], [[15.5, 65]]);
+    // every whole second has its own sample, so no tick reads the 15.5 s one
+    expect(gridHpMinInWindow(u as never, T0, 10, 20)!.pct).toBe(82);
+    const line = render(u as never);
+    expect(line).toContain("(82% -> 98% HP, +2%/s, low 65% @0:15)");
+    expect(line).not.toContain("healed through");
+  });
+
+  it("the gate's invariant holds by construction: no tick of the window reads below the trough", () => {
+    for (const u of [
+      friend({ 0: 80, 15: 33, 16: 48, 18: 57 }, [], [[15.4, 6]]),
+      friend({ 0: 82, 18: 98 }, [], [[15.5, 65]]),
+      // rising through the window: the lowest reading is the first tick's,
+      // read from a sample BEFORE the window opened (9.8 s)
+      without(friend({ 0: 90, 11: 60, 12: 70, 14: 90 }, [], [[9.8, 40]]), 10),
+    ]) {
+      const low = hpTroughInWindow(u as never, T0, 10, 20)!;
+      for (let s = 10; s <= 20; s++) {
+        const tick = gridHpPct(u as never, T0 + s * 1000)!;
+        expect(isTickBelowTrough(tick, low.pct)).toBe(false);
+      }
+    }
   });
 
   it("no dip → the labelBias outcome word stays", () => {
@@ -152,5 +230,111 @@ describe("[DMG SPIKE] trough — endpoints must not hide a dip of 10 points or m
       pct: 5,
       atSec: 15,
     });
+  });
+});
+
+describe("hpTroughInWindow — the true minimum, on the grid sampler's own validity rules (FT-T03, D7)", () => {
+  it("reads the displayed seconds [from.000, (to+1).000): a sample in the last second counts, one after it does not", () => {
+    const u = friend(
+      { 0: 90 },
+      [],
+      [
+        [20.9, 30],
+        [21.2, 5],
+      ],
+    );
+    expect(hpTroughInWindow(u as never, T0, 10, 20)).toEqual({
+      pct: 30,
+      atSec: 20,
+      atMs: T0 + 20_900,
+    });
+  });
+
+  it("a window's own tick is part of the minimum even when its sample lies outside the window", () => {
+    // the 0:10 tick reads the 9.8 s sample (40 %); every sample inside the
+    // window is higher. The trough is that tick — never above a [STATE] number.
+    const u = without(
+      friend({ 0: 90, 11: 60, 12: 70, 14: 90 }, [], [[9.8, 40]]),
+      10,
+    );
+    expect(gridHpPct(u as never, T0 + 10_000)).toBe(40);
+    expect(hpTroughInWindow(u as never, T0, 10, 20)).toEqual({
+      pct: 40,
+      atSec: 10,
+      atMs: T0 + 9_800,
+    });
+  });
+
+  it("several lines on one timestamp: the LAST is the state at that instant (GH #100) — a same-ms transient is not a low", () => {
+    // 121c7e15's shape: a hit to 22 % and a heal back to 37 % on one stamp
+    const u = friend({ 0: 66 });
+    u.advancedActions.push(hp(15.573, 22), hp(15.573, 37));
+    u.advancedActions.sort((a, b) => a.timestamp - b.timestamp);
+    expect(hpTroughInWindow(u as never, T0, 10, 20)).toEqual({
+      pct: 37,
+      atSec: 15,
+      atMs: T0 + 15_573,
+    });
+  });
+
+  it("an instant whose last line is not the unit's own reading, or has no max HP, gives no reading", () => {
+    const u = friend({ 0: 66 });
+    u.advancedActions.push(hp(15.2, 5, "PET"), {
+      ...hp(15.6, 0),
+      advancedActorMaxHp: 0,
+    });
+    u.advancedActions.sort((a, b) => a.timestamp - b.timestamp);
+    expect(hpTroughInWindow(u as never, T0, 10, 20)!.pct).toBe(66);
+  });
+
+  it("nothing is read from the death second on — the killing blow is a death, not a low", () => {
+    // dies at 16.5: the 0:16 tick reads `dead`, so 16.2 s (3 %) is not a low
+    const u = friend(
+      { 0: 81, 14: 40 },
+      [16.5],
+      [
+        [15.7, 12],
+        [16.2, 3],
+      ],
+    );
+    expect(hpTroughInWindow(u as never, T0, 10, 20)).toEqual({
+      pct: 12,
+      atSec: 15,
+      atMs: T0 + 15_700,
+    });
+  });
+
+  it("`skipSec` leaves out a second's samples exactly as it leaves out its tick", () => {
+    const u = friend({ 0: 90, 13: 50 }, [], [[12.5, 20]]);
+    // second 12 skipped: neither its tick nor the 12.5 s sample is read
+    expect(
+      hpTroughInWindow(u as never, T0, 10, 20, (s) => s === 12),
+    ).toMatchObject({ pct: 50, atSec: 13 });
+    expect(hpTroughInWindow(u as never, T0, 10, 20)).toMatchObject({
+      pct: 20,
+      atSec: 12,
+    });
+  });
+
+  it("equal values resolve to the earliest second; clamped at 100 like the tick", () => {
+    const u = friend(
+      { 0: 100 },
+      [],
+      [
+        [12.3, 55],
+        [17.3, 55],
+      ],
+    );
+    expect(hpTroughInWindow(u as never, T0, 10, 20)).toMatchObject({
+      pct: 55,
+      atSec: 12,
+    });
+    const over = friend({ 0: 130 });
+    expect(hpTroughInWindow(over as never, T0, 10, 20)!.pct).toBe(100);
+  });
+
+  it("no sample in reach → null", () => {
+    const u = { ...friend({ 0: 90 }), advancedActions: [] };
+    expect(hpTroughInWindow(u as never, T0, 10, 20)).toBeNull();
   });
 });

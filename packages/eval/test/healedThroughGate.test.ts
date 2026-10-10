@@ -132,6 +132,42 @@ describe("checkHealedThroughConsistency — trough half (2026-09-15)", () => {
   });
 });
 
+// FT-T03 (user ruling 2026-10-10, D7): the low is a TROUGH — the true minimum
+// inside the window (`hpTroughInWindow`), not the lowest whole-second tick.
+// The tick of the printed second need not equal it; no tick may be below it.
+describe("checkHealedThroughConsistency — the low is a trough, off the grid (FT-T03)", () => {
+  // 141470d0: `low 6% @4:15` beside a 4:15 tick of 33 and a 4:16 tick of 48
+  const DEEP =
+    "0:10–0:20  [DMG SPIKE]   2(AWarrior) (Arms Warrior): 0.50M in 10s (80% -> 57% HP, -2%/s, low 6% @0:15)";
+  it("a low BELOW the tick of its own second → passes (the tick is the start of that second)", () => {
+    expect(
+      checkHealedThroughConsistency([
+        state("0:10", 80),
+        DEEP,
+        state("0:15", 33),
+        state("0:16", 48),
+        state("0:20", 57),
+      ]),
+    ).toEqual([]);
+  });
+  it("a tick below the low is still red — at the low's own second too", () => {
+    const fails = checkHealedThroughConsistency([DEEP, state("0:15", 4)]);
+    expect(fails).toHaveLength(1);
+    expect(fails[0]).toContain("标注 low 6% 但 0:15 [STATE] 报 4%");
+  });
+  it("a low on a second that unit's tick reads `dead` → red", () => {
+    const fails = checkHealedThroughConsistency([DEEP, state("0:15", "dead")]);
+    expect(fails.some((f) => f.includes("该秒 [STATE] 报 dead"))).toBe(true);
+  });
+  it("no low printed over a tick that is a trough → still red (the trough is at or below every tick)", () => {
+    const fails = checkHealedThroughConsistency([
+      DEEP.replace(", low 6% @0:15", ""),
+      state("0:15", 33),
+    ]);
+    expect(fails.some((f) => f.includes("未标注低谷"))).toBe(true);
+  });
+});
+
 // T12 ① c (user ruling 2026-10-10): a bucket closes at its victim's death and
 // reads 0 % there; the gate asks the renderer's own `isSpikeHealedThrough`.
 describe("checkHealedThroughConsistency — a window that ends on a death (T12 ① c)", () => {

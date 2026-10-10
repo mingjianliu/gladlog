@@ -108,6 +108,7 @@ import {
   canHelpAnotherUnit,
   isHpTroughWorthPrinting,
   isSpikeHealedThrough,
+  isTickBelowTrough,
   PRESS_HP_LINE_TAGS,
 } from "@gladlog/analysis/src/utils/cooldowns";
 import {
@@ -759,15 +760,25 @@ export function checkDmgSpikeCcCoverConsistency(lines: string[]): string[] {
  * `81% -> 87% HP — healed through` while the unit's own `[STATE]` tick inside
  * the window read 37%): the renderer now prints `, low N% @m:ss` instead of
  * the word whenever `isHpTroughWorthPrinting(A, B, min)` holds for the window's
- * `gridHpMinInWindow`. Every rendered `[STATE]` tick is one sample of that
- * same grid (same sampler, same clamp), so the text alone certifies:
+ * minimum.
+ *
+ * FT-T03 (user ruling 2026-10-10, D7): that minimum is a TROUGH now —
+ * `hpTroughInWindow`, the true minimum of every sample inside the displayed
+ * seconds, not the lowest whole-second tick — so "the tick of the printed
+ * second equals N" is no longer true and is no longer asked (141470d0: the
+ * tick at 4:15 reads 33, the low inside that second is 6). What the text
+ * still certifies, deterministically, because every `[STATE]` tick of the
+ * window is part of the trough's minimum (`isTickBelowTrough`):
  *   - a printed `low N%` must satisfy the predicate, sit inside the window,
- *     and no tick inside the window may read below N;
+ *     not on a second that unit's tick reads `dead`, and no tick inside the
+ *     window may read below N (the endpoints A / B are covered by the
+ *     predicate itself: N is 10+ points under both);
  *   - with no `low` printed, no tick inside the window may satisfy the
- *     predicate (the renderer would have seen at least that sample).
+ *     predicate (the trough is at or below that tick, so the renderer would
+ *     have printed it).
  * The reverse ("a trough exists at a second no tick shows") is invisible in
  * the text by construction and is not adjudicated here. The word ⟺ Δ ≥ 0
- * half above now also requires "and no trough".
+ * half above also requires "and no trough".
  */
 const SPIKE_OUTCOME =
   /^(\d+):(\d+)–(\d+):(\d+)\s+\[DMG SPIKE\]\s+(\S+)\s.*?\((\d+)% -> (\d+)% HP([^)]*)\)/;
@@ -840,19 +851,16 @@ export function checkHealedThroughConsistency(lines: string[]): string[] {
         failures.push(
           `${at} low @${fmtTime(lowS)} 落在窗口 ${fmtTime(from)}–${fmtTime(to)} 之外`,
         );
-      // same rule as the burst ledger's gate: the printed second's tick is L
-      // (and not `dead`)
+      // same rule as the burst ledger's gate: a trough is never read on a
+      // second the unit is `dead` at. The tick of the printed second is NOT
+      // required to equal L any more (FT-T03) — only never to be below it,
+      // like every other tick of the window.
       if (deadAt.get(lowS)?.has(unitId))
         failures.push(
           `${at} 标注 low ${L}% @${fmtTime(lowS)},但该秒 [STATE] 报 dead`,
         );
-      const atLow = inWindow.find((t) => t.s === lowS)?.hp.get(unitId);
-      if (atLow !== undefined && atLow !== L)
-        failures.push(
-          `${at} 标注 low ${L}% @${fmtTime(lowS)},但该秒 [STATE] 报 ${atLow}%`,
-        );
       for (const t of inWindow)
-        if (t.hp.get(unitId)! < L)
+        if (isTickBelowTrough(t.hp.get(unitId)!, L))
           failures.push(
             `${at} 标注 low ${L}% 但 ${fmtTime(t.s)} [STATE] 报 ${t.hp.get(unitId)}%`,
           );

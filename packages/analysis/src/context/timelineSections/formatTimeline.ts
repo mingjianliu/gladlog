@@ -13,6 +13,7 @@ import {
   DEATH_WINDOW_S,
   TIMELINE_LINE_FLAGS,
 } from "../../data/timelineLineFlags";
+import { HP_TROUGH_MIN_DROP_PTS } from "../../utils/cooldowns";
 import { ENEMY_DEF_END_NOT_LOGGED } from "../../utils/enemyDefensives";
 import { BURST_ANSWERED_LEGEND } from "../burstAnswered";
 import { CD_PRIOR_LEGEND } from "../cdPrior";
@@ -285,6 +286,10 @@ export function formatTimeline(
     // reading the [STATE] tick prints (the gate re-checks exactly that).
     "  [DMG SPIKE] `START–END` = the window's bounds in whole seconds (each rounded down; the damage is summed over the",
     "    unrounded window); its `A% -> B% HP` = the [STATE] readings of those two seconds.",
+    // FT-T03 (user ruling 2026-10-10, D7): the low is a trough — the true
+    // minimum, off the grid.
+    `    \`low N% @m:ss\` = the lowest HP the log shows for that unit anywhere inside the window, at the second it happened — printed when it is ${HP_TROUGH_MIN_DROP_PTS}+ points`,
+    "    under both A and B. It is the true minimum between the ticks, so it can sit below every [STATE] number of that window.",
     // T12 ① c (user ruling 2026-10-10): a bucket closes at its victim's
     // death / the round's end — the line no longer always reads `in 10s`.
     "    A window is 10 s, cut short where that unit died (`B` then reads 0%) or the round ended.",

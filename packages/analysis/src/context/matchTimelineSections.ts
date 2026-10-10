@@ -18,8 +18,8 @@ import {
   DEFENSIVE_TAGS,
   forbearanceStopsPress,
   getUnitHpAtTimestamp,
-  gridHpMinInWindow,
   HP_SAMPLE_RADIUS_MS,
+  hpTroughInWindow,
   IDamageBucket,
   IMajorCooldownInfo,
   isDeadAtRenderSecond,
@@ -437,12 +437,18 @@ export function emitDmgSpikeEntries(params: {
       //
       // …unless the endpoints hide a trough (2026-09-15 Opus baseline: 73/309
       // prompts read `81% -> 87% — healed through` over a window whose own
-      // [STATE] tick showed 37%). The minimum comes from the [STATE] tick's
-      // sampler (gridHpMinInWindow) and the "worth printing" question from
-      // isHpTroughWorthPrinting (≥ 10 points under both endpoints, ruling
-      // A′14) — the eval gate re-asks both on the rendered ticks.
+      // [STATE] tick showed 37%). "Worth printing" is isHpTroughWorthPrinting
+      // (≥ 10 points under both endpoints, ruling A′14).
+      //
+      // FT-T03 (user ruling 2026-10-10, D7): the low is a TROUGH — the true
+      // minimum of every sample inside the displayed seconds
+      // (hpTroughInWindow), printed at the second it occurred — no longer the
+      // lowest whole-second tick (141470d0: `low 33% @4:15` over a 6 % reading
+      // 0.4 s later; 0e0663e6: `82% -> 98% HP — healed through` over 65 %).
+      // The endpoints A / B stay [STATE] readings. The eval gate verifies the
+      // weaker invariant: no tick inside the window reads below the low.
       const low = targetUnit
-        ? gridHpMinInWindow(targetUnit, matchStartMs, fromSec, toSec)
+        ? hpTroughInWindow(targetUnit, matchStartMs, fromSec, toSec)
         : null;
       const trough =
         low !== null && isHpTroughWorthPrinting(hpFrom, hpTo, low.pct)

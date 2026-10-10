@@ -57,7 +57,7 @@ import {
   auraOffensiveActiveAt,
   OFFENSIVE_AURA_EVIDENCE,
 } from "./offensiveAuraOccurrences";
-import { fmtTime } from "./renderGrid";
+import { fmtTime, toRenderSecond } from "./renderGrid";
 import { buildRosterSides } from "./rosterSide";
 import { roundEndMs } from "./roundEnd";
 import { isOffensiveSpell, OFFENSIVE_CD_SPELL_IDS } from "./spellDanger";
@@ -1472,11 +1472,13 @@ export function gridHpSample(
  * healed through` while the same unit's own `[STATE]` tick three lines down
  * read 37%. The endpoints and the trough must come from the same sampler,
  * otherwise the line and the tick it sits next to contradict each other.
- * Consumers: `context/matchTimelineSections.ts`'s `[DMG SPIKE]` renderer;
- * the gate `checkHealedThroughConsistency` re-derives the same minimum from
- * the rendered `[STATE]` ticks (a sparse subset of this grid — every tick IS
- * one of these samples, so a tick below the printed trough is a contradiction
- * and a tick at the crisis line with no trough printed is one too).
+ *
+ * Since FT-T03 (user ruling 2026-10-10, D7) this is no longer the number a
+ * line PRINTS as a low — that is `hpTroughInWindow`, the true minimum, which
+ * starts from this one (so it is never above a tick). This grid minimum
+ * stays the reading every DECISION asks: whether a kick's side has a unit at
+ * the crisis line, whether a teammate "dropped" for death-setup's
+ * healer-locked — so the ruling moves printed numbers and no candidate.
  */
 export function gridHpMinInWindow(
   unit: ICombatUnit,
@@ -1497,6 +1499,121 @@ export function gridHpMinInWindow(
     if (best === null || pct < best.pct) best = { pct, atSec: s };
   }
   return best;
+}
+
+/**
+ * A TROUGH — the true minimum of a unit's HP inside a rendered window: every
+ * advanced-log sample of the window's displayed seconds
+ * `[fromSec.000, (toSec + 1).000)`, not only the whole-second ticks.
+ *
+ * User ruling 2026-10-10 (FT-T03, decision D7 — a PARTIAL re-opening of the
+ * grid ruling): "the 'trough' numbers may leave the whole-second grid and
+ * read the true minimum inside their window; the [STATE] point readings, the
+ * crisis crossing instants and cd-hoarded's `crisisHpPct` do NOT move". A
+ * trough is a number that claims "the lowest HP inside a window"; it was
+ * `gridHpMinInWindow`, which can only see the eleven instants a 10 s window
+ * has on the grid (141470d0: `low 33% @4:15` over a reading of 6 % 0.4 s
+ * later, and 48 % on the next tick — on the 605-file capture 815 of 6,845
+ * printed `[DMG SPIKE]` lows sat 10+ points above the window's true
+ * minimum, and 2,561 lines without one hid such a dip).
+ *
+ * The sample-validity rules are the grid sampler's own, not new ones
+ * (`unitHpSampleAt` / `binarySearchClosest`):
+ *  - several lines on one timestamp → the LAST one is the state at that
+ *    instant (GH #100); an instant whose last line is not the unit's own
+ *    reading, or has no max HP, gives no reading;
+ *  - rounded to a whole percent, clamped at 100 (`gridHpSample`);
+ *  - nothing is read from the unit's death second on (`isDeadAtRenderSecond`
+ *    — the `[STATE]` tick prints `dead` there), and `skipSec` leaves out the
+ *    samples of a rendered second exactly as it leaves out that second's tick.
+ *
+ * The window's own `[STATE]` ticks are part of the minimum
+ * (`gridHpMinInWindow`): a tick can read a sample up to `HP_SAMPLE_RADIUS_MS`
+ * outside the window, and the page prints that number under a second of the
+ * window. So a trough is never above a `[STATE]` tick of its unit inside its
+ * window, nor above the window's endpoint readings — the invariant the gates
+ * verify on the rendered text (`isTickBelowTrough`), in place of the old
+ * "the low equals the tick of its second".
+ *
+ * `atSec` is the second to print: the render second (`fmtTime`'s floor) of
+ * the instant the minimum occurred, or the tick's own second when a tick is
+ * the minimum. Equal values resolve to the earliest second. `atMs` is the
+ * timestamp of the sample that was read.
+ *
+ * NOT for a point reading and NOT for a decision: what a unit's HP was at a
+ * second is `gridHpPct`, and every "did it cross / does this candidate
+ * exist" question keeps asking the grid (`gridHpMinInWindow`), so no
+ * candidate appears or disappears with this function.
+ */
+export function hpTroughInWindow(
+  unit: ICombatUnit,
+  matchStartMs: number,
+  fromSec: number,
+  toSec: number,
+  skipSec?: (sec: number) => boolean,
+): { pct: number; atSec: number; atMs: number } | null {
+  let best: { pct: number; atSec: number; atMs: number } | null = null;
+  const grid = gridHpMinInWindow(unit, matchStartMs, fromSec, toSec, skipSec);
+  if (grid !== null) {
+    const tickMs = matchStartMs + grid.atSec * 1000;
+    best = { ...grid, atMs: gridHpSample(unit, tickMs)?.sampleMs ?? tickMs };
+  }
+
+  // the last second the unit is alive at, on the tick's own predicate
+  let lastSec = fromSec - 1;
+  for (let s = fromSec; s <= toSec; s++) {
+    if (isDeadAtRenderSecond(unit, matchStartMs, s)) break;
+    lastSec = s;
+  }
+  const fromMs = matchStartMs + fromSec * 1000;
+  const endMs = matchStartMs + (lastSec + 1) * 1000; // exclusive
+  const actions = getSortedAdvancedActions(unit);
+  // first index at or after `fromMs`
+  let lo = 0;
+  let hi = actions.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    if (actions[mid]!.logLine.timestamp < fromMs) lo = mid + 1;
+    else hi = mid;
+  }
+  for (let i = lo; i < actions.length; i++) {
+    const a = actions[i]!;
+    const ts = a.logLine.timestamp;
+    if (ts >= endMs) break;
+    // same timestamp: the last line is the state at that instant
+    if (i + 1 < actions.length && actions[i + 1]!.logLine.timestamp === ts)
+      continue;
+    if (a.advancedActorId !== unit.id || a.advancedActorMaxHp <= 0) continue;
+    const sec = toRenderSecond((ts - matchStartMs) / 1000);
+    if (skipSec?.(sec)) continue;
+    const pct = Math.min(
+      Math.round((a.advancedActorCurrentHp / a.advancedActorMaxHp) * 100),
+      100,
+    );
+    if (
+      best === null ||
+      pct < best.pct ||
+      (pct === best.pct && sec < best.atSec)
+    )
+      best = { pct, atSec: sec, atMs: ts };
+  }
+  return best;
+}
+
+/**
+ * The one thing rendered text can certify about a trough (FT-T03, ruling D7):
+ * no `[STATE]` tick of that unit inside the trough's window — the endpoint
+ * readings included — reads BELOW it. `hpTroughInWindow` guarantees it by
+ * construction (the window's ticks are part of its minimum); every gate that
+ * re-parses a trough (`checkHealedThroughConsistency`,
+ * `checkBurstTargetHpConsistency`, `checkConseqHpStateConsistency`,
+ * `checkBurstAnsweredBottomConsistency`, the trough facts of
+ * `checkCrisisHpStateConsistency`) asks this instead of "the tick equals the
+ * low". A tick ABOVE the trough is the normal case now: the tick is the
+ * reading at the start of its second, the trough the lowest sample inside it.
+ */
+export function isTickBelowTrough(tickPct: number, troughPct: number): boolean {
+  return tickPct < troughPct;
 }
 
 /** A trough is worth printing from this many points under BOTH endpoints. */
