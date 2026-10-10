@@ -1,11 +1,23 @@
-import { describe, expect, it } from "vitest";
+import { LogEvent } from "@gladlog/parser-compat";
+import { beforeAll, describe, expect, it } from "vitest";
 
+import { isKillWindowMajorDefensive } from "../src/data/abilityProfile";
+import { ensureAnalysisData } from "../src/data/ensure";
 import { MITIGATION_TABLE } from "../src/data/mitigationData";
 import { SPELL_CATEGORIES } from "../src/data/spellCategories";
+import { ENEMY_PROC_SAVES } from "../src/data/spellIdLists";
+import {
+  immunityMechanics,
+  immunitySchoolMask,
+} from "../src/data/spellSchools";
+import { immunityBreak } from "../src/utils/ccTrinketAnalysis";
 import { IMMUNITY_SPELLS } from "../src/utils/deathOutcomeAnalysis";
 import {
+  FEIGN_DEATH_ABSORB_AURA_IDS,
   FULL_IMMUNITY_IDS,
   IMMUNITY_IDS,
+  isImmunitySaveAura,
+  MITIGATION_AURA_IDS,
   SCHOOL_LIMITED_IMMUNITY_IDS,
 } from "../src/utils/enemyDefensives";
 
@@ -73,5 +85,85 @@ describe("免疫三表一致性(权威 = MITIGATION_TABLE pct=100)", () => {
       .map(([id]) => id)
       .sort();
     expect(categorized).toEqual(allImmunities);
+  });
+});
+
+/**
+ * FT-T07, user ruling D8 (2026-10-10): Feign Death (an absorb), Nature's
+ * Guardian (a heal proc), Cheat Death and Cauterize (cheat-death procs) are
+ * no immunity. The two readers that DID read them as one — the `[ENEMY DEF]`
+ * line and the KILL ATTEMPTS attribution — are changed and tested with their
+ * own suites. This pins the rest of the inventory: every other reader that
+ * asks "can this unit be damaged right now" or "did this press end a CC on
+ * its holder" keys on one of the sets below, and none of them holds the four
+ * — their logged ids, Feign Death's cast id, or the talents' own ids:
+ *
+ *   IMMUNITY_IDS                → `immunityBreak` (a press that ended a CC),
+ *                                 `limitedImmunitySchoolMask`
+ *   FULL_IMMUNITY_IDS           → burst ledger `isImmunity`, kick-eaten's
+ *                                 low-HP skip (`fullImmunityIntervals`), the
+ *                                 POSITIONING skip (`isOwnImmunityInterval`)
+ *   IMMUNITY_SPELLS             → death recap "an immunity could have saved"
+ *   SPELL_CATEGORIES immunities → burst ledger defensives, dispel priority
+ *   kill-window major defensive → `[KILL WINDOW]` defenseless spans, burst
+ *                                 ledger defensives
+ *   MITIGATION_AURA_IDS         → KILL ATTEMPTS `popped X`, `[ENEMY DEF]` %
+ */
+describe("ruling D8: the effect saves sit in no immunity / wall set another reader keys on", () => {
+  const LOGGED = [
+    ...FEIGN_DEATH_ABSORB_AURA_IDS,
+    ...Object.keys(ENEMY_PROC_SAVES),
+  ];
+  // Feign Death's cast, and the talents behind the three procs
+  const UNLOGGED = ["5384", "30884", "31230", "86949"];
+
+  beforeAll(async () => {
+    await ensureAnalysisData();
+  });
+
+  it("the four logged ids are the ones the ruling names", () => {
+    expect([...LOGGED].sort()).toEqual(["202748", "31616", "45182", "87023"]);
+  });
+
+  it.each([...LOGGED, ...UNLOGGED])("%s is in none of them", (id) => {
+    expect(IMMUNITY_IDS.has(id)).toBe(false);
+    expect(FULL_IMMUNITY_IDS.has(id)).toBe(false);
+    expect(SCHOOL_LIMITED_IMMUNITY_IDS.has(id)).toBe(false);
+    expect(isImmunitySaveAura(id)).toBe(false);
+    expect(id in IMMUNITY_SPELLS).toBe(false);
+    expect(id in MITIGATION_TABLE).toBe(false);
+    expect(MITIGATION_AURA_IDS.has(id)).toBe(false);
+    expect(
+      (SPELL_CATEGORIES as Record<string, { type?: string }>)[id]?.type,
+    ).not.toBe("immunities");
+    expect(isKillWindowMajorDefensive(id)).toBe(false);
+    // DB2: no school immunity (aura 39) and no mechanic immunity on it
+    expect(immunitySchoolMask(id)).toBeUndefined();
+    expect(immunityMechanics(id)).toBeUndefined();
+  });
+
+  it("immunityBreak: a cast of one of them at the instant a CC ended is not 'an immunity press ended it' (Divine Shield is)", () => {
+    const START = Date.UTC(2026, 9, 10);
+    const cc = { atSeconds: 10, durationSeconds: 3 };
+    const pressAtEnd = (spellId: string) => ({
+      id: "p1",
+      spellCastEvents: [
+        {
+          spellId,
+          spellName: `S${spellId}`,
+          destUnitId: "p1",
+          logLine: {
+            event: LogEvent.SPELL_CAST_SUCCESS,
+            timestamp: START + 13_000,
+            parameters: [],
+          },
+        },
+      ],
+    });
+    expect(immunityBreak(cc, START, pressAtEnd("642") as never)?.spellId).toBe(
+      "642",
+    );
+    for (const id of [...LOGGED, ...UNLOGGED])
+      expect(immunityBreak(cc, START, pressAtEnd(id) as never), id).toBeNull();
   });
 });

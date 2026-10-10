@@ -466,7 +466,16 @@ export function castEndedCcWindow(
  * The CC'd player's own immunity press that ended this CC, or null (F-E20):
  * e10c6bea's Hammer of Justice is REMOVED at 165.286 inside Divine Shield's
  * debuff purge (SPELL_CAST_SUCCESS 165.287), and the `[CC ON TEAM]` line read
- * as a 3 s stun that ran out. `IMMUNITY_IDS` is the `[ENEMY DEF]` immune set.
+ * as a 3 s stun that ran out. `IMMUNITY_IDS` is the pct-100 slice of the
+ * signed mitigation table (Divine Shield, Ice Block, Aspect of the Turtle,
+ * Blessing of Protection / Spellwarding, Cloak of Shadows) — the PRESSED
+ * immunities. It is not the whole `[ENEMY DEF]` `immune` set: the
+ * immunity-kind auras (Burrow, Vanish, …) are not in it, and neither were
+ * the four ruling D8 (2026-10-10) reclassified — Feign Death's press is
+ * never logged (this reader keys on casts) and DB2 gives 5384 / 202748 no
+ * school or mechanic immunity; Nature's Guardian, Cheat Death and Cauterize
+ * are passives with none either (`test/immunityTables.test.ts` pins the
+ * set membership).
  */
 export function immunityBreak(
   cc: Pick<ICCInstance, "atSeconds" | "durationSeconds">,
