@@ -9,7 +9,7 @@
  *    log owner's own death leaves the menu;
  *  - death-kill F-M1: the missed-options lock test asks the cannot-cast
  *    predicate (a silence locks a caster);
- *  - death-kill F-M2: the tag says the longest free stretch and what held
+ *  - death-kill F-M2: the tag says the longest stretch free to cast it and what held
  *    the caster through the death.
  */
 import { LogEvent } from "@gladlog/parser-compat";
@@ -205,7 +205,7 @@ describe("death-kill F-M1 — a silence locks a caster for the missed-options ta
   });
 });
 
-describe("death-kill F-M2 — longest free stretch, and what held the caster at the death", () => {
+describe("death-kill F-M2 — longest stretch free to cast it, and what held the caster at the death", () => {
   const aura = (
     event: LogEvent,
     spellId: string,
@@ -265,7 +265,7 @@ describe("death-kill F-M2 — longest free stretch, and what held the caster at 
       ],
     } as never);
     expect(text).toContain(
-      "Victim-R died — Caster-R had Rallying Cry available, caster's longest free stretch 2.9s of the last 5s, then in Song of Chi-Ji from 1:39 through the death",
+      "Victim-R died — Caster-R had Rallying Cry available, caster's longest stretch free to cast it 2.9s of the last 5s, then in Song of Chi-Ji from 1:39 through the death",
     );
   });
 });

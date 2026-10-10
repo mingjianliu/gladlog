@@ -337,7 +337,7 @@ export function cdPriorHoldEpisodes(
       let actionableSecs = 0;
       // The cooldown's own readiness, kept apart from the owner's: the line
       // says "ready from M:SS" about the COOLDOWN, while the owner's lockout
-      // has its own clause ("you could not cast for Ns of that dip").
+      // has its own clause ("you could not cast it for Ns of that dip").
       let firstReadySec: number | null = null;
       for (let t = s; t <= episodeEndSec; t++) {
         const ready = cdReadyInTimeAt(cd, t);

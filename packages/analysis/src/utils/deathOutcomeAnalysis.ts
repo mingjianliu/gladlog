@@ -1133,7 +1133,7 @@ function freedomNote(who: string, f: IDeathWindowFreedom): string {
       ? `, then school-locked (${f.heldAtDeath.spellName}) from ${fmtTime(f.heldAtDeath.fromSeconds)} through the death`
       : `, then in ${f.heldAtDeath.spellName} from ${fmtTime(f.heldAtDeath.fromSeconds)} through the death`
     : "";
-  return `, ${who}longest free stretch ${f.longestFreeS.toFixed(1)}s of the last ${LETHAL_WINDOW_SECONDS}s${held}`;
+  return `, ${who}longest stretch free to cast it ${f.longestFreeS.toFixed(1)}s of the last ${LETHAL_WINDOW_SECONDS}s${held}`;
 }
 
 export function formatDeathOutcomeForContext(
