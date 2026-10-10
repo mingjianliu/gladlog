@@ -9,6 +9,7 @@
  *       pet is listed whether or not the corpus has shown it.
  */
 import {
+  CombatUnitClass,
   CombatUnitReaction,
   CombatUnitSpec,
   CombatUnitType,
@@ -158,6 +159,115 @@ describe("summonLifetimeAtKillS — how long a summon stood before the killing b
     expect(line).toContain(", 3.4 s after it was summoned");
     expect(line).not.toMatch(/expected/i);
     expect(line).not.toContain("暗影魔");
+  });
+});
+
+describe("[UNIT DESTROYED] — a hunter's or warlock's permanent pet being killed (user ruling 2026-10-09)", () => {
+  const blow = (ms: number, src: string): never =>
+    ({
+      srcUnitId: src,
+      srcUnitFlags: 0x511,
+      srcUnitName: "OwnerPlayer",
+      spellId: "8092",
+      spellName: "Mind Blast",
+      amount: 1200,
+      effectiveAmount: 1200,
+      overkill: 300,
+      timestamp: ms,
+      logLine: { event: LogEvent.SPELL_DAMAGE, timestamp: ms },
+    }) as never;
+  const owner = unit({ id: "P1", name: "OwnerPlayer" });
+  const render = (enemy: ICombatUnit, pet: ICombatUnit) =>
+    buildMatchTimeline({
+      owner,
+      ownerSpec: "Arms Warrior",
+      friends: [owner],
+      enemies: [enemy],
+      allUnits: [owner, enemy, pet],
+      playerIdMap: new Map([["OwnerPlayer", 0]]),
+      enemyIdMap: new Map([[enemy.name, 1]]),
+      matchStartMs: T0,
+      matchEndMs: T0 + 60_000,
+      isHealer: false,
+      ownerCDs: [],
+      teammateCDs: [],
+      enemyCDTimeline: { players: [], alignedBurstWindows: [] },
+      ccTrinketSummaries: [],
+      dispelSummary: emptyDispel as never,
+      enemyDispelSummary: emptyDispel as never,
+      pressureWindows: [],
+      healingGaps: [],
+      friendlyDeaths: [],
+      enemyDeaths: [],
+      criticalWindowSeconds: new Set(),
+      outgoingCCChains: [],
+    })
+      .split("\n")
+      .filter((l) => l.includes("[UNIT DESTROYED]"));
+
+  it("术士的 Felhunter:按规范名字写,谁的、哪一边、被什么打死", () => {
+    const lock = unit({
+      id: "E1",
+      name: "EnemyLock",
+      reaction: CombatUnitReaction.Hostile,
+      class: CombatUnitClass.Warlock,
+      spec: CombatUnitSpec.Warlock_Affliction,
+    });
+    const pet = unit({
+      id: "Pet-0-3878-2509-35306-417-020560C99D",
+      name: "吉兹勒普",
+      type: CombatUnitType.Pet,
+      reaction: CombatUnitReaction.Hostile,
+      ownerId: "E1",
+      damageIn: [blow(T0 + 41_400, "P1")],
+    });
+    const lines = render(lock, pet);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toMatch(
+      /^0:41 {2}\[UNIT DESTROYED\] {3}\S+'s Felhunter \(Enemy\) killed by: /,
+    );
+    expect(lines[0]).toContain("Mind Blast");
+    expect(lines[0]).not.toContain("吉兹勒普");
+    expect(lines[0]).not.toMatch(/expected|should/i);
+  });
+
+  it("猎人的宠物写 pet;死亡骑士的宠物不出行(用户:无所谓);没被打死的不出行", () => {
+    const hunter = unit({
+      id: "E1",
+      name: "EnemyHunter",
+      reaction: CombatUnitReaction.Hostile,
+      class: CombatUnitClass.Hunter,
+      spec: CombatUnitSpec.Hunter_BeastMastery,
+    });
+    const hunterPet = (damageIn: never[]) =>
+      unit({
+        id: "Pet-0-3878-2509-35306-165189-020560C99D",
+        name: "Doku",
+        type: CombatUnitType.Pet,
+        reaction: CombatUnitReaction.Hostile,
+        ownerId: "E1",
+        damageIn,
+      });
+    const killed = render(hunter, hunterPet([blow(T0 + 20_000, "P1")]));
+    expect(killed).toHaveLength(1);
+    expect(killed[0]).toContain("'s pet (Enemy) killed by: ");
+    expect(render(hunter, hunterPet([]))).toHaveLength(0);
+    const dk = unit({
+      id: "E1",
+      name: "EnemyKnight",
+      reaction: CombatUnitReaction.Hostile,
+      class: CombatUnitClass.DeathKnight,
+      spec: CombatUnitSpec.DeathKnight_Unholy,
+    });
+    const ghoul = unit({
+      id: "Pet-0-3878-2509-35306-26125-020560C99D",
+      name: "Mudflayer",
+      type: CombatUnitType.Pet,
+      reaction: CombatUnitReaction.Hostile,
+      ownerId: "E1",
+      damageIn: [blow(T0 + 20_000, "P1")],
+    });
+    expect(render(dk, ghoul)).toHaveLength(0);
   });
 });
 

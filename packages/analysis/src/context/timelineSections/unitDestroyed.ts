@@ -6,7 +6,9 @@
  * its closure inputs now arrive through `ctx`. Output is pinned by the 605-file
  * acceptanceCapture context hash.
  */
-import { CombatUnitReaction } from "@gladlog/parser-compat";
+import { CombatUnitClass, CombatUnitReaction } from "@gladlog/parser-compat";
+
+import { WARLOCK_PET_FUNCTION } from "../../data/warlockPets";
 
 import { fmtTime } from "../../utils/renderGrid";
 import {
@@ -177,5 +179,59 @@ export function emitUnitDestroyedEntries(
       if (stood !== null) line += `, ${stood} s after it was summoned`;
       addEntry(atSeconds, line);
     }
+
+    // A hunter's or a warlock's permanent pet being killed (user, 2026-09-20:
+    // it "should matter a lot" — a Death Knight's does not; ruled into the
+    // prompt 2026-10-09). The fact only: when, whose, what killed it — the
+    // pet carries the kick / purge / stun (WARLOCK_PET_FUNCTION), so its
+    // death is a capability gone, and no line said so (1,500-file scan: a
+    // pet is killed in 5.3 % of hunter rounds and 4.4 % of warlock rounds;
+    // 46 % of the warlock pets never come back). A permanent pet has a
+    // `Pet-` GUID; the kill is `nonPlayerUnitKill`, the predicate above
+    // (overkill is the only evidence for 6 in 10). First death per GUID.
+    const roster = [...friends, ...(enemies ?? [])];
+    for (const unit of allUnits) {
+      if (!unit.id.startsWith("Pet-")) continue;
+      const ownerUnit = roster.find((p) => p.id === unit.ownerId);
+      if (!ownerUnit || !PET_DEATH_OWNER_CLASSES.has(Number(ownerUnit.class)))
+        continue;
+      const kill = nonPlayerUnitKill(unit);
+      if (!kill) continue;
+      const atSeconds = (kill.timestamp - matchStartMs) / 1000;
+      if (atSeconds < 0 || atSeconds > durationS) continue;
+      const friendly = friends.some((f) => f.id === ownerUnit.id);
+      const ownerLabel = friendly
+        ? pid(ownerUnit.name)
+        : enemyPid(ownerUnit.name);
+      // a warlock's pet by its canonical name (never the player-given one)
+      const petName =
+        WARLOCK_PET_FUNCTION[getNpcIdFromGuid(unit.id) ?? ""]?.pet ?? "pet";
+      let line = `${fmtTime(atSeconds)}  [UNIT DESTROYED]   ${ownerLabel}'s ${petName} (${friendly ? "Friendly" : "Enemy"})`;
+      if (kill.finalBlow) {
+        line += ` killed by: ${damageEventLabel(kill.finalBlow, playerIdMap, enemyIdMap, summonOwners)}`;
+      } else {
+        const topSources = getTopDamageSourcesInWindow(
+          unit,
+          kill.timestamp,
+          10_000,
+          2,
+          playerIdMap,
+          enemyIdMap,
+          summonOwners,
+          unitNames,
+          rosterSides,
+        );
+        if (topSources.length > 0)
+          line += ` killed by: ${topSources.join(", ")}`;
+      }
+      addEntry(atSeconds, line);
+    }
   }
 }
+
+/** Classes whose permanent pet's death is printed (user ruling): Hunter 3,
+ * Warlock 9 (`CombatUnitClass`). */
+export const PET_DEATH_OWNER_CLASSES: ReadonlySet<number> = new Set([
+  CombatUnitClass.Hunter,
+  CombatUnitClass.Warlock,
+]);

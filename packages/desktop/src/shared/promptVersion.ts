@@ -1242,5 +1242,8 @@
  *  DEFENSIVES], [CD PRIOR], [HEALER EXPOSURE], [ROOT], [DR CLASH] and the
  *  `[UNNECESSARY — … target X …]` note name players by their roster label
  *  (`3(AWarrior)`) instead of the character name. Counts in the commit.
+ *  v359 (2026-10-09, FT board, same ruling): a hunter's or warlock's
+ *  permanent pet being killed gets a [UNIT DESTROYED] line (when, whose,
+ *  which side, what killed it).
  */
-export const PROMPT_VERSION = 358;
+export const PROMPT_VERSION = 359;
