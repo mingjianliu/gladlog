@@ -221,7 +221,18 @@ export function buildFindingsPrompt(
       },
       candidates,
     ),
-    `- "cd-waste": a major defensive cooldown the player never successfully cast the entire match (facts.spell names it). This is a whole-round observation with no timestamp.${COST_NORM_LEGEND_NOTE}${ATTEMPTED_LEGEND_NOTE}`,
+    // FT-T15 ⑧ / M5 (user ruling 2026-10-10). "this round": cdNeverSpent
+    // reads the round's own cooldown ledger, and on the 605 capture 501 of
+    // 779 Solo Shuffle cd-waste rows name a spell the same player pressed in
+    // another round of that match. Conditional, like every other per-type
+    // legend: it used to print on all 3,520 prompts, 692 of which carry a
+    // cd-waste row.
+    ...legendLines(
+      {
+        "cd-waste": `- "cd-waste": a major defensive cooldown the player never successfully cast in this round (facts.spell names it) — the round this prompt covers: in Solo Shuffle each round has its own prompt, and the player may have pressed it in another round of the match. This is a whole-round observation with no timestamp.${COST_NORM_LEGEND_NOTE}${ATTEMPTED_LEGEND_NOTE}`,
+      },
+      candidates,
+    ),
     // Legends for DPS-owner event types are emitted only when the menu
     // contains that type -- a healer menu has none of them, so the healer
     // prompt stays byte-identical (D2).

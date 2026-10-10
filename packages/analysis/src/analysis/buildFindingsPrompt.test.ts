@@ -124,10 +124,34 @@ describe("buildFindingsPrompt", () => {
   });
 
   describe("cost_norm 守护注(#25,2026-08-14):facts.costNorm 字段说明", () => {
-    it("cd-waste 图例(始终渲染)已解释 costNorm 语义", () => {
-      const p = buildFindingsPrompt(candidates, "", "Holy Paladin");
+    // FT-T15 M5 (2026-10-10): the cd-waste legend follows the convention of
+    // every other per-type legend — printed only with a cd-waste row on the
+    // menu (it used to print on every prompt).
+    it("cd-waste 图例(菜单有 cd-waste 行时渲染)已解释 costNorm 语义", () => {
+      const p = buildFindingsPrompt(
+        [
+          ...candidates,
+          {
+            id: "cd-waste:p1:642",
+            type: "cd-waste",
+            t: 0,
+            unitNames: ["Me-R"],
+            spell: "Divine Shield",
+            facts: { spell: "Divine Shield", unit: "Me-R" },
+          },
+        ],
+        "",
+        "Holy Paladin",
+      );
       expect(p).toMatch(/facts\.costNorm/);
       expect(p).toMatch(/last-resort|emergency/);
+      expect(p).toContain(`- "cd-waste": `);
+    });
+
+    it("菜单里没有 cd-waste 行 → cd-waste 图例与 costNorm 说明都不渲染", () => {
+      const p = buildFindingsPrompt(candidates, "", "Holy Paladin");
+      expect(p).not.toContain(`- "cd-waste":`);
+      expect(p).not.toMatch(/facts\.costNorm/);
     });
   });
 
@@ -416,7 +440,11 @@ describe("P1/P2 起爆候选图例(Task 4,2026-08-15,特性开关接线;Task 9 �
     }
   });
 
-  it("单开 cdHoarded(其余三个显式关闭,隔离验证)→ 只有 cd-hoarded 的图例出现,且带 costNorm 联动措辞", () => {
+  // FT-T15 M5: the costNorm note this test used to find came from the
+  // cd-waste legend, which printed on every prompt; cd-hoarded rows carry no
+  // facts.costNorm (cost_norm abilities are kept out of readyCds), so with
+  // no cd-waste row on the menu the note is absent.
+  it("单开 cdHoarded(其余三个显式关闭,隔离验证)→ 只有 cd-hoarded 的图例出现;菜单无 cd-waste 行,costNorm 说明不出现", () => {
     const savedFlags = { ...CANDIDATE_TYPE_FLAGS };
     CANDIDATE_TYPE_FLAGS.missedSyncWindow = false;
     CANDIDATE_TYPE_FLAGS.unsyncedBurst = false;
@@ -428,7 +456,7 @@ describe("P1/P2 起爆候选图例(Task 4,2026-08-15,特性开关接线;Task 9 �
         "Discipline Priest",
       );
       expect(p).toMatch(/"cd-hoarded"/);
-      expect(p).toMatch(/facts\.costNorm is present/);
+      expect(p).not.toMatch(/facts\.costNorm is present/);
       expect(p).not.toMatch(/"missed-sync-window"/);
       expect(p).not.toMatch(/"unsynced-burst"/);
       expect(p).not.toMatch(/"cd-spent-idle"/);

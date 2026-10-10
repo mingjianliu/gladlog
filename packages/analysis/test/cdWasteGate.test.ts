@@ -112,7 +112,9 @@ describe("cd-waste — facts.attempted (F-W1)", () => {
     const [e] = cdWasteEvents([LOH], me, 40, { rawStreams, untilS: 120.408 });
     const p = buildFindingsPrompt([e!], "", "Holy Paladin");
     const legend = p.split("\n").find((l) => l.startsWith('- "cd-waste":'))!;
-    expect(legend).toMatch(/never successfully cast the entire match/);
+    // FT-T15 ⑧: the predicate is per round (a Solo Shuffle prompt is one round)
+    expect(legend).toMatch(/never successfully cast in this round/);
+    expect(legend).not.toMatch(/entire match/);
     expect(legend).toMatch(/DID try to press this ability/);
   });
   it("no rejects → no fact", () => {
