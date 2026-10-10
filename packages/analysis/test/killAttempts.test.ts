@@ -818,8 +818,10 @@ describe("extractKillAttempts — enemy-only saves are failure causes", () => {
 });
 
 /** enemy-def F-E5 / F-E6 (ruling A25): an immunity-kind save inside the span
- * reads "forced a full immunity", whoever applied the aura. */
-describe("extractKillAttempts — immunity-kind saves are immunity-baited", () => {
+ * reads "forced a full immunity", whoever applied the aura. Ruling D8
+ * (2026-10-10) took Feign Death, Nature's Guardian, Cheat Death and Cauterize
+ * out of that kind: they are `self-saved (X)`. */
+describe("extractKillAttempts — immunity-kind saves are immunity-baited; the effect saves are self-saved (ruling D8)", () => {
   const auraOn = (spellId: string, src: string, atS: number): any => ({
     spellId,
     spellName: `S${spellId}`,
@@ -845,7 +847,6 @@ describe("extractKillAttempts — immunity-kind saves are immunity-baited", () =
 
   it.each([
     ["378441", "e1", "Time Stop on itself"],
-    ["202748", "e1", "Feign Death (Survival Tactics)"],
     ["11327", "e1", "Vanish"],
     [
       "228050",
@@ -862,35 +863,208 @@ describe("extractKillAttempts — immunity-kind saves are immunity-baited", () =
     expect(a.attribution?.primary).toBe("immunity-baited");
   });
 
-  it("a Nature's Guardian heal on itself inside the span → immunity-baited; outside it → not", async () => {
+  const heal = (atS: number): any => ({
+    spellId: "31616",
+    srcUnitId: "e1",
+    destUnitId: "e1",
+    effectiveAmount: 10,
+    logLine: {
+      event: LogEvent.SPELL_HEAL,
+      timestamp: ms(atS),
+      parameters: [],
+    },
+  });
+  const auraOff = (spellId: string, src: string, atS: number): any => ({
+    ...auraOn(spellId, src, atS),
+    logLine: {
+      event: LogEvent.SPELL_AURA_REMOVED,
+      timestamp: ms(atS),
+      parameters: [],
+    },
+  });
+  const text = (a: any): string => formatKillAttemptsForContext([a]).join("\n");
+
+  // The attempt is Kidney Shot 10–15 s; its kill-credit slack runs to 20 s.
+  it.each([
+    ["202748", "Feign Death"],
+    ["45182", "Cheat Death"],
+    ["87023", "Cauterize"],
+  ])(
+    "ruling D8: aura %s (%s) inside the span → self-saved, not a forced immunity (it was immunity-baited)",
+    async (id, name) => {
+      await ensureAnalysisData();
+      const a = attempt(
+        unit("e1", {
+          auraEvents: [...stunAuras("e1", KIDNEY, 10, 5), auraOn(id, "e1", 12)],
+        }),
+      );
+      expect(a.attribution?.immunityBaited).toBe(false);
+      expect(a.attribution?.primary).toBe("self-saved");
+      expect(a.attribution?.selfSaved).toEqual([name]);
+      expect(text(a)).toContain(`FAILED: self-saved (${name})`);
+      expect(text(a)).not.toContain("forced a full immunity");
+    },
+  );
+
+  it("ruling D8: a Nature's Guardian heal on itself inside the span → self-saved (it was immunity-baited); outside it → not a cause", async () => {
     await ensureAnalysisData();
-    const heal = (atS: number): any => ({
-      spellId: "31616",
-      srcUnitId: "e1",
-      destUnitId: "e1",
-      effectiveAmount: 10,
-      logLine: {
-        event: LogEvent.SPELL_HEAL,
-        timestamp: ms(atS),
-        parameters: [],
-      },
-    });
-    expect(
-      attempt(
+    const inside = attempt(
+      unit("e1", {
+        auraEvents: stunAuras("e1", KIDNEY, 10, 5),
+        healIn: [heal(13)],
+      }),
+    );
+    expect(inside.attribution?.immunityBaited).toBe(false);
+    expect(inside.attribution?.primary).toBe("self-saved");
+    expect(text(inside)).toContain("FAILED: self-saved (Nature's Guardian)");
+    const later = attempt(
+      unit("e1", {
+        auraEvents: stunAuras("e1", KIDNEY, 10, 5),
+        healIn: [heal(60)],
+      }),
+    );
+    expect(later.attribution?.immunityBaited).toBe(false);
+    expect(later.attribution?.selfSaved).toEqual([]);
+  });
+
+  it("ruling D8: the four take the self-save's window — one in the 5 s after the span is not the cause (as an immunity it was)", async () => {
+    await ensureAnalysisData();
+    // each falls through to the next cause in the order. The fixture's target
+    // record holds no damage, so the heal row alone reads "healed through".
+    for (const [e1, next] of [
+      [
+        unit("e1", {
+          auraEvents: [
+            ...stunAuras("e1", KIDNEY, 10, 5),
+            auraOn("202748", "e1", 17),
+          ],
+        }),
+        "pressure",
+      ],
+      [
+        unit("e1", {
+          auraEvents: [
+            ...stunAuras("e1", KIDNEY, 10, 5),
+            auraOn("87023", "e1", 17),
+          ],
+        }),
+        "pressure",
+      ],
+      [
         unit("e1", {
           auraEvents: stunAuras("e1", KIDNEY, 10, 5),
-          healIn: [heal(13)],
+          healIn: [heal(17)],
         }),
-      ).attribution?.primary,
-    ).toBe("immunity-baited");
-    expect(
-      attempt(
+        "outhealed",
+      ],
+    ] as const) {
+      const a = attempt(e1);
+      expect(a.attribution?.immunityBaited).toBe(false);
+      expect(a.attribution?.selfSaved).toEqual([]);
+      expect(a.attribution?.primary).toBe(next);
+    }
+    // a real immunity in that slack still ends the go (ruling A29)
+    const shield = attempt(
+      unit("e1", {
+        auraEvents: [
+          ...stunAuras("e1", KIDNEY, 10, 5),
+          auraOn("642", "e1", 17),
+        ],
+      }),
+    );
+    expect(shield.attribution?.primary).toBe("immunity-baited");
+  });
+
+  it("ruling D8, rule 2: Feign Death's shield still up when the attempt began is the save, with its second; a proc that fired before it is not", async () => {
+    await ensureAnalysisData();
+    const feign = attempt(
+      unit("e1", {
+        auraEvents: [
+          ...stunAuras("e1", KIDNEY, 10, 5),
+          auraOn("202748", "e1", 9.2),
+          auraOff("202748", "e1", 11.2),
+        ],
+      }),
+    );
+    expect(feign.attribution?.primary).toBe("self-saved");
+    expect(text(feign)).toContain(
+      "FAILED: self-saved (Feign Death [up since 0:09])",
+    );
+    // the shield had already dropped: nothing
+    const dropped = attempt(
+      unit("e1", {
+        auraEvents: [
+          ...stunAuras("e1", KIDNEY, 10, 5),
+          auraOn("202748", "e1", 7),
+          auraOff("202748", "e1", 9),
+        ],
+      }),
+    );
+    expect(dropped.attribution?.selfSaved).toEqual([]);
+    // Cauterize fired at 8 s; its burn runs to 14 s, across the attempt's
+    // start — the proc is a moment, and that moment was before the attempt
+    for (const id of ["87023", "45182"]) {
+      const proc = attempt(
         unit("e1", {
-          auraEvents: stunAuras("e1", KIDNEY, 10, 5),
-          healIn: [heal(60)],
+          auraEvents: [
+            ...stunAuras("e1", KIDNEY, 10, 5),
+            auraOn(id, "e1", 8),
+            auraOff(id, "e1", 14),
+          ],
         }),
-      ).attribution?.immunityBaited,
-    ).toBe(false);
+      );
+      expect(proc.attribution?.selfSaved, id).toEqual([]);
+      expect(proc.attribution?.immunityBaited, id).toBe(false);
+    }
+  });
+
+  it("ruling D8: the existing order holds — a real immunity or a wall in the same attempt still comes first; self-saves list in log order", async () => {
+    await ensureAnalysisData();
+    const withShield = attempt(
+      unit("e1", {
+        auraEvents: [
+          ...stunAuras("e1", KIDNEY, 10, 5),
+          auraOn("202748", "e1", 11),
+          auraOn("642", "e1", 13),
+        ],
+      }),
+    );
+    expect(withShield.attribution?.primary).toBe("immunity-baited");
+    const withWall = attempt(
+      unit("e1", {
+        auraEvents: [
+          ...stunAuras("e1", KIDNEY, 10, 5),
+          auraOn("202748", "e1", 11),
+          auraOn("22812", "e1", 13),
+        ],
+      }),
+    );
+    expect(withWall.attribution?.primary).toBe("defensive");
+    expect(text(withWall)).toContain("FAILED: popped Barkskin");
+    // Dark Pact pressed at 13 s, the feign at 11 s
+    const two = attempt(
+      unit("e1", {
+        auraEvents: [
+          ...stunAuras("e1", KIDNEY, 10, 5),
+          auraOn("202748", "e1", 11),
+        ],
+        spellCastEvents: [
+          {
+            spellId: "108416",
+            spellName: "S108416",
+            destUnitId: "0000000000000000",
+            destUnitName: "",
+            logLine: {
+              event: LogEvent.SPELL_CAST_SUCCESS,
+              timestamp: ms(13),
+              parameters: [],
+            },
+          },
+        ],
+      }),
+    );
+    expect(two.attribution?.selfSaved).toEqual(["Feign Death", "Dark Pact"]);
+    expect(text(two)).toContain("FAILED: self-saved (Feign Death/Dark Pact)");
   });
 });
 
@@ -1212,7 +1386,8 @@ describe("attributeFailure — windows, bound trinket, school gates", () => {
     );
     expect(vanish.attribution?.primary).toBe("immunity-baited");
     expect(vanish.attribution?.immunityUpSinceS).toBeCloseTo(9.4, 6);
-    // Cauterize's aura lingers 6 s after the hit it refused — still a moment
+    // Cauterize's aura lingers 6 s after the hit it refused — still a moment,
+    // and since ruling D8 no immunity either way: not this attempt's cause
     const cauterize = run(
       stunned({
         auraEvents: [
@@ -1222,6 +1397,7 @@ describe("attributeFailure — windows, bound trinket, school gates", () => {
       }),
     );
     expect(cauterize.attribution?.immunityBaited).toBe(false);
+    expect(cauterize.attribution?.selfSaved).toEqual([]);
     // Time Stop's aura IS the immunity (DB2 aura 39, every school): thrown
     // on the target before the attempt, it is why the attempt failed
     const timeStop = run(

@@ -45,6 +45,41 @@ describe("checkEnemyDefRefConsistency", () => {
     expect(checkEnemyDefRefConsistency(missing)).toHaveLength(1);
   });
 
+  it("ruling D8 (2026-10-10): `self-saved (Feign Death)` / a proc is found on its effect-form [ENEMY DEF] line — in the span, or at its `[up since]` second", () => {
+    const ok = [
+      LEGEND,
+      ...ROSTER,
+      "0:09  [ENEMY DEF]   4(ORogue) (Outlaw Rogue): Feign Death (absorb 64k, 2.0s) (at 67% HP)",
+      "0:52  [ENEMY DEF]   4(ORogue) (Outlaw Rogue): Cheat Death (cheat-death proc) (at 7% HP)",
+      "1:13  [ENEMY DEF]   4(ORogue) (Outlaw Rogue): Nature's Guardian (heal proc) (at 31% HP)",
+      ATTEMPT("0:10–0:15", "self-saved (Feign Death [up since 0:09])"),
+      ATTEMPT("0:50–0:55", "self-saved (Cheat Death)"),
+      ATTEMPT(
+        "1:10–1:15",
+        "popped Barkskin; saved by external (Ironbark); self-saved (Nature's Guardian)",
+      ),
+      "1:11  [ENEMY DEF]   4(ORogue) (Outlaw Rogue): Barkskin (20%, 12.0s)",
+      "1:12  [ENEMY DEF]   5(RDruid) (Restoration Druid): Ironbark → 4(ORogue) (6.6s)",
+    ];
+    expect(checkEnemyDefRefConsistency(ok)).toEqual([]);
+    // the effect line sits 5 s after the span: the old immunity window, not a self-save's
+    const late = [
+      LEGEND,
+      ...ROSTER,
+      "0:20  [ENEMY DEF]   4(ORogue) (Outlaw Rogue): Feign Death (absorb, 2.0s)",
+      ATTEMPT("0:10–0:15", "self-saved (Feign Death)"),
+    ];
+    expect(checkEnemyDefRefConsistency(late)).toHaveLength(1);
+    // …and on another unit it is not this target's save
+    const other = [
+      LEGEND,
+      ...ROSTER,
+      "0:12  [ENEMY DEF]   6(HPriest) (Holy Priest): Feign Death (absorb, 2.0s)",
+      ATTEMPT("0:10–0:15", "self-saved (Feign Death)"),
+    ];
+    expect(checkEnemyDefRefConsistency(other)).toHaveLength(1);
+  });
+
   it("passes when the named wall / external has a line inside the span (± the cast/aura pairing slack)", () => {
     const lines = [
       LEGEND,

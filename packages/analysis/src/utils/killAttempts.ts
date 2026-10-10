@@ -161,7 +161,10 @@ export interface IKillAttemptAttribution {
   /** round seconds of each `externalReceived` cast (parallel array) */
   externalReceivedAtS: number[];
   /** B4a (2026-09-25): the target's own no-%-mitigation saves in the span
-   * (`selfSaveCasts`, the same predicate the [ENEMY DEF] self-save line uses) */
+   * (`selfSaveCasts`, the same predicate the [ENEMY DEF] self-save line uses)
+   * — and, since ruling D8 (2026-10-10), its effect saves (`effectSaves`:
+   * Feign Death's shield, a Nature's Guardian / Cheat Death / Cauterize
+   * proc), which were `immunityBaited` before it. */
   selfSaved: string[];
   selfSavedAtS: number[];
   outhealed: boolean;
@@ -1038,6 +1041,9 @@ function targetReadingsFactory(
  *    Pressed after the attempt was over — in the kill-credit slack — it is not
  *    why the attempt failed (rule 3′ = A′4: fa5e6c66 named a Divine Protection
  *    popped 2.8 s after the span; 69546267 a Guardian Spirit 3.3 s after).
+ *    Since ruling D8 (2026-10-10) the self-saves include Feign Death's shield
+ *    and the Nature's Guardian / Cheat Death / Cauterize procs, which read
+ *    "forced a full immunity" (with the immunity's window, below) before it.
  *  - **[from, to + KILL_CREDIT_SLACK_S]** — unchanged for the kill itself, for
  *    the healing / damage balance, for a bound trinket, and for an immunity
  *    (an immunity popped in the slack still ends the go; A29 lists it).
@@ -1197,11 +1203,11 @@ function attributeFailure(
     const bySelf = isIntervalFrom(iv, target);
     // An immunity that went up inside the credit window, or (rule 2) one
     // that was already up when the attempt began — the second only when the
-    // aura IS the immunity (`immunityCountsWhenAlreadyUp`): Feign Death or
-    // Cauterize are still "up" long after the moment they saved anyone, and
-    // a Mass Invisibility / Vanish / Burrow whose REMOVED the log lost is
-    // "up" only by the official-length cap (ruling P-FU-b8) — a stun landing
-    // on the target shows it.
+    // aura IS the immunity (`immunityCountsWhenAlreadyUp`): a Mass
+    // Invisibility / Vanish / Burrow whose REMOVED the log lost is "up" only
+    // by the official-length cap (ruling P-FU-b8) — a stun landing on the
+    // target shows it. Feign Death, Cheat Death, Cauterize and Nature's
+    // Guardian are not read here at all (ruling D8): see the self-saves.
     const immunityInSpan = inCredit(startMs);
     if (
       isImmunitySaveAura(iv.spellId) &&
@@ -1242,20 +1248,6 @@ function attributeFailure(
       defensivePopped.push(getEnglishSpellName(iv.spellId, iv.spellName));
       defensivePoppedAtS.push(iv.fromS);
     }
-  }
-
-  // The effect saves (Feign Death's shield, a Nature's Guardian / Cheat
-  // Death / Cauterize proc) are still read as an immunity here, as ruling A25
-  // had them: one inside the credit window ends the attempt.
-  if (
-    effectSaves(target, targetIntervals, matchStartMs).some(
-      (s) =>
-        !s.interval?.inferredStart &&
-        inCredit(matchStartMs + s.atSeconds * 1000),
-    )
-  ) {
-    immunityBaited = true;
-    immunityInside = true;
   }
 
   const externalReceived: string[] = [];
@@ -1331,6 +1323,43 @@ function attributeFailure(
     if (!absorbCovers(c.spellId)) continue;
     selfSaved.push(c.spellName);
     selfSavedAtS.push(c.atSeconds);
+  }
+
+  // User ruling D8 (2026-10-10, re-opening A25): "KILL ATTEMPTS 不再对这四个
+  // 写 forced a full immunity". Feign Death's shield and a Nature's Guardian /
+  // Cheat Death / Cauterize proc are the target's own saves without damage
+  // reduction — `effectSaves`, the reader of their `[ENEMY DEF]` lines — so
+  // they take the self-save's place in the order and the self-save's window:
+  // inside the span, not the 5 s after it an immunity is given. Rule 2
+  // ("already up when the attempt began") holds for the shield alone, whose
+  // aura IS the save; a proc is a moment — one that fired before the attempt
+  // is not why it failed, however long the aura it leaves lingers (Cauterize
+  // 6 s, Cheating Death 3 s). An aura whose start the log did not see is
+  // skipped, as for every other cause.
+  let effectSaved = false;
+  for (const s of effectSaves(target, targetIntervals, matchStartMs)) {
+    if (s.interval?.inferredStart) continue;
+    const atMs = matchStartMs + s.atSeconds * 1000;
+    if (!inSave(atMs)) {
+      if (atMs >= fromMs) continue; // after the span: not its cause
+      if (s.effect !== "absorb" || !s.interval || !upAtFrom(s.interval))
+        continue;
+    }
+    if (selfSaved.includes(s.spellName)) continue;
+    if (!absorbCovers(s.spellId)) continue;
+    selfSaved.push(s.spellName);
+    selfSavedAtS.push(s.atSeconds);
+    effectSaved = true;
+  }
+  // one list in log order (the casts above already are)
+  if (effectSaved) {
+    const order = selfSaved
+      .map((_, i) => i)
+      .sort((a, b) => selfSavedAtS[a]! - selfSavedAtS[b]!);
+    const names = order.map((i) => selfSaved[i]!);
+    const ats = order.map((i) => selfSavedAtS[i]!);
+    selfSaved.splice(0, selfSaved.length, ...names);
+    selfSavedAtS.splice(0, selfSavedAtS.length, ...ats);
   }
 
   let healedIn = 0;

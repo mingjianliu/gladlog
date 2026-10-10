@@ -279,7 +279,7 @@ export function formatTimeline(
           "    `(absorb Nk, Ts)` = Feign Death: a shield, not an immunity — the hunter can still be hit; Nk = what it absorbed",
           "    while up (no figure = the log shows none). `(heal proc)` = Nature's Guardian healed its owner; `(cheat-death proc)`",
           "    = Cheat Death / Cauterize refused a killing blow — passives nobody pressed, and the unit can still be hit.",
-          "    KILL ATTEMPTS counts an `immune` line and each of these four as a forced immunity.",
+          "    KILL ATTEMPTS counts an `immune` line as a forced immunity and names these four `self-saved (X)`.",
           "    An aura that ended before its full duration says why when the log does: `— dispelled by X's Spell` /",
           "    `— stolen by …`, `— ended at death` / `— its target died`, `— used up, absorbed Nk` / `— used up` (an absorb eaten through);",
           "    `— removed early` = it ended early and the log gives no cause (cancelled, broken or replaced);",
