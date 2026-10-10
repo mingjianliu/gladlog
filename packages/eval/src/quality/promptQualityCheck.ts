@@ -91,7 +91,10 @@ import {
   type TeammateCrisisDmgBin,
   teammateCrisisDmgBinOf,
 } from "@gladlog/analysis/src/data/teammateCrisisPrior";
-import { KILL_CREDIT_SLACK_S } from "@gladlog/analysis/src/utils/burstLedger";
+import {
+  BURST_TARGET_DAMAGE_RE_SRC,
+  KILL_CREDIT_SLACK_S,
+} from "@gladlog/analysis/src/utils/burstLedger";
 import {
   CC_LOGGED_END_NOTE_RE_SRC,
   CC_STILL_ON_AT_ROUND_END,
@@ -113,6 +116,7 @@ import {
   SAVE_AURA_END_UNSEEN_NAMES,
 } from "@gladlog/analysis/src/utils/enemyDefensives";
 import { DURING_ABSORBED_TAG_RE_SRC } from "@gladlog/analysis/src/utils/externalDamage";
+import { VULNERABLE_OWNER_DAMAGE_RE_SRC } from "@gladlog/analysis/src/utils/healerOffenseAnalysis";
 import { fmtTime } from "@gladlog/analysis/src/utils/renderGrid";
 import { SUMMON_KIND_RE_SRC } from "@gladlog/analysis/src/utils/summonKind";
 import fs from "fs-extra";
@@ -986,6 +990,82 @@ export function checkBurstTargetHpConsistency(lines: string[]): string[] {
         );
     }
   }
+  return failures;
+}
+
+/** The burst ledger's `Target:` line: 1 = the target's name; the rest is
+ * the producer's own tail pattern (`BURST_TARGET_DAMAGE_RE_SRC`). */
+const BURST_TARGET_DAMAGE = new RegExp(
+  String.raw`^\s*Target: (.+?)(?: \d+% → \d+%(?: \(low \d+% at \d+:\d+\))?)?` +
+    BURST_TARGET_DAMAGE_RE_SRC,
+);
+
+/**
+ * Hard invariant (T12 ⑤, user ruling 2026-10-10): the damage parts of a
+ * burst ledger `Target:` line add up the way the line says they do.
+ *
+ *   - `(A of it absorbed)` is a part of `your damage`: A <= the figure;
+ *   - `second target: X N` is the NEXT highest: N <= the target's figure
+ *     (the target is the head of the same list), X is not the target, and
+ *     its own absorbed part is <= N;
+ *   - a `Target:` line with `| your damage` reads in the producer's pattern.
+ *
+ * Before: the line printed one figure (dfcccbf2 `your damage 0.70M` = 0.30M
+ * landed + 0.40M absorbed) and no second enemy (0.67M on the warrior).
+ */
+export function checkBurstTargetDamageParts(lines: string[]): string[] {
+  const failures: string[] = [];
+  lines.forEach((line, i) => {
+    if (!/^\s*Target: /.test(line) || !line.includes(" | your damage ")) return;
+    const at = `line ${i + 1}: Burst Target`;
+    const m = line.match(BURST_TARGET_DAMAGE);
+    if (!m) {
+      failures.push(`${at} 的伤害子句无法解析:${line.trim().slice(0, 160)}`);
+      return;
+    }
+    const damage = Number(m[2]);
+    if (m[3] !== undefined && Number(m[3]) > damage)
+      failures.push(
+        `${at} ${m[1]}:absorbed ${m[3]}M 大于 your damage ${m[2]}M`,
+      );
+    if (m[4] === undefined) return;
+    const second = Number(m[5]);
+    if (m[4] === m[1])
+      failures.push(`${at} ${m[1]}:second target 与 Target 是同一单位`);
+    if (second > damage)
+      failures.push(
+        `${at} ${m[1]}:second target ${m[4]} ${m[5]}M 大于 Target 的 ${m[2]}M`,
+      );
+    if (m[6] !== undefined && Number(m[6]) > second)
+      failures.push(
+        `${at} second target ${m[4]}:absorbed ${m[6]}M 大于它的 ${m[5]}M`,
+      );
+  });
+  return failures;
+}
+
+const VULNERABLE_OWNER_DAMAGE = new RegExp(VULNERABLE_OWNER_DAMAGE_RE_SRC);
+
+/**
+ * Hard invariant (T12 ⑤): on a healer-view `[VULNERABLE]` line the owner's
+ * damage on the window's target is a part of the team's damage on it —
+ * `your damage on it N` <= `team damage M total` (same target, same measure,
+ * the owner's span inside the team's).
+ *
+ * Before: `your damage` was the owner's damage on every enemy, absorbs
+ * included — 78 lines of the 605 capture read `team damage 0k total` beside
+ * a `your damage` above 0.
+ */
+export function checkVulnerableOwnerDamage(lines: string[]): string[] {
+  const failures: string[] = [];
+  lines.forEach((line, i) => {
+    const m = line.match(VULNERABLE_OWNER_DAMAGE);
+    if (!m) return;
+    if (Number(m[2]) > Number(m[1]))
+      failures.push(
+        `line ${i + 1}: [VULNERABLE] your damage on it ${m[2]}k 大于同一目标的 team damage ${m[1]}k total`,
+      );
+  });
   return failures;
 }
 
@@ -4032,6 +4112,8 @@ export function checkMatch(
   hardFailures.push(...checkDmgSpikeCcCoverConsistency(lines));
   hardFailures.push(...checkHealedThroughConsistency(lines));
   hardFailures.push(...checkBurstTargetHpConsistency(lines));
+  hardFailures.push(...checkBurstTargetDamageParts(lines));
+  hardFailures.push(...checkVulnerableOwnerDamage(lines));
   hardFailures.push(...checkBehaviorPriorConsistency(lines));
   hardFailures.push(...checkBurstWindowRefConsistency(lines));
   hardFailures.push(...checkOffensiveWindowSpikeMarker(lines));

@@ -504,7 +504,16 @@ export interface IWindowContribution {
   /** Owner CC spells off cooldown at window start (cast-history replay). Empty when the owner cast no CC all match. */
   ownerCCReady: Array<{ spellName: string; enemyHealerDR: DRLevel | null }>;
   ownerCastCCInWindow: boolean;
-  ownerDamageInWindow: number;
+  /** The health the WINDOW'S TARGET lost to the owner's hits inside the
+   * rendered span — the measure of the line's own `team damage … total`
+   * (hits on `targetName`, absorbed part not counted). Until T12 ⑤ this was
+   * `ownerDamageInWindow`: the owner's damage on every enemy, absorbs
+   * included, printed beside a window on one target (78 lines of the 605
+   * capture read `team damage 0k total` with `your damage` above 0). */
+  ownerDamageOnTarget: number;
+  /** What the target's shields absorbed of the owner's hits in the span —
+   * printed apart, as `(+Ak absorbed)`. */
+  ownerAbsorbedOnTarget: number;
   /** Seconds of the window the owner could cast: not inside any
    * `buildCannotCastIntervals` interval (hard CC, silence, kick lockout). */
   ownerFreeSeconds: number;
@@ -601,7 +610,6 @@ export function computeWindowContributions(
   // the caster evidence for a CC cast with variants in different DR
   // families (Chastise: stun / incapacitate)
   const ownerApplied = auraIdsAppliedBy(owner.id, enemies);
-  const enemyIds = new Set(enemies.map((e) => e.id));
 
   // One contribution per damage burst (kill attempt) inside each vulnerability
   // span; spans with no qualifying burst yield a single unpunished contribution
@@ -648,14 +656,23 @@ export function computeWindowContributions(
       );
     });
 
-    const ownerDamageInWindow = owner.damageOut
-      .filter((d) => {
-        const t = (d.logLine.timestamp - matchStartMs) / 1000;
-        return t >= fromSeconds && t < toSeconds && enemyIds.has(d.destUnitId);
-      })
-      // Same sign fix as the slack segments above: damage is negative in the
-      // log convention; max(0,·) yielded absorb-only "your damage" figures.
-      .reduce((sum, d) => sum + Math.abs(d.effectiveAmount), 0);
+    // T12 ⑤ (user ruling 2026-10-10): the owner's damage on THIS window's
+    // target. The line is a window on one enemy and prints the team's damage
+    // on that enemy; the owner's figure beside it was his damage on every
+    // enemy, so `[VULNERABLE] … (team damage 0k total) … your damage 208k`
+    // (the target already dead; the 208k went elsewhere). Split the way the
+    // team figure is measured: a damage row is health lost (negative in the
+    // log convention — hence abs), a SPELL_ABSORBED row is what a shield ate.
+    let ownerDamageOnTarget = 0;
+    let ownerAbsorbedOnTarget = 0;
+    for (const d of owner.damageOut) {
+      if (d.destUnitId !== w.targetUnitId) continue;
+      const t = (d.logLine.timestamp - matchStartMs) / 1000;
+      if (t < fromSeconds || t >= toSeconds) continue;
+      if ((d.logLine.event as string) === LogEvent.SPELL_ABSORBED)
+        ownerAbsorbedOnTarget += Math.abs(d.effectiveAmount);
+      else ownerDamageOnTarget += Math.abs(d.effectiveAmount);
+    }
 
     // Sampled per whole second, as the CC instances were before F-O12: a
     // second is not free when its start lies inside a cannot-cast interval.
@@ -703,7 +720,8 @@ export function computeWindowContributions(
       enemyHealerSpec: enemyHealer ? specToString(enemyHealer.spec) : null,
       ownerCCReady,
       ownerCastCCInWindow,
-      ownerDamageInWindow,
+      ownerDamageOnTarget,
+      ownerAbsorbedOnTarget,
       ownerFreeSeconds,
       teamMinHpPct,
       gateFacts,
@@ -920,6 +938,22 @@ export function buildHealerOffenseSummary(
   };
 }
 
+/** `your damage on it Nk[ (+Ak absorbed)]` — the owner clause of a healer
+ * `[KILL WINDOW]` / `[VULNERABLE]` line. The absorbed tag is printed when it
+ * has a figure at the line's precision (not `0k`). */
+function healerWindowOwnerDamage(
+  w: Pick<IWindowContribution, "ownerDamageOnTarget" | "ownerAbsorbedOnTarget">,
+): string {
+  const k = (n: number) => (n / 1000).toFixed(0);
+  const absorbed = k(w.ownerAbsorbedOnTarget);
+  return `your damage on it ${k(w.ownerDamageOnTarget)}k${absorbed === "0" ? "" : ` (+${absorbed}k absorbed)`}`;
+}
+
+/** A healer-view `[VULNERABLE]` line's two damage figures, as the gate
+ * (`checkVulnerableOwnerDamage`) reads them back: 1 = the team's on the
+ * window's target, 2 = the owner's on it. */
+export const VULNERABLE_OWNER_DAMAGE_RE_SRC = String.raw`\[VULNERABLE\] .*\(team damage (\d+)k total\).*; your damage on it (\d+)k`;
+
 export function formatHealerOffenseForContext(
   summary: IHealerOffenseSummary,
 ): string[] {
@@ -989,6 +1023,13 @@ export function formatHealerOffenseForContext(
     }
   }
 
+  // T12 ⑤: what the per-window damage figure is measured on.
+  if (windowContributions.length > 0)
+    lines.push(
+      // (no bracket tags in this line: readers count the window lines by tag)
+      "  `your damage on it Nk` on a window line below = the health that window's target lost to your hits in the printed span — the measure of `team damage … total`; `(+Ak absorbed)` = what its shields absorbed of your hits on top. Your damage on other enemies is not in it.",
+    );
+
   // Cap the per-window lines; keep the highest-free-time windows (printed chronologically) and
   // roll the remainder up so aggregate sufficiency is preserved.
   let shownWindows = windowContributions;
@@ -1025,7 +1066,7 @@ export function formatHealerOffenseForContext(
     const cast = w.ownerCastCCInWindow
       ? "you cast CC in this window"
       : "you cast no CC";
-    const dmg = `your damage ${(w.ownerDamageInWindow / 1000).toFixed(0)}k`;
+    const dmg = healerWindowOwnerDamage(w);
     // The denominator is the rendered (floored) window; the free time is
     // continuous, so it can round past it ("free 21s of 20s", 193 of 3,956
     // KILL WINDOW lines on the 2026-09-30 605-file capture). Free time cannot
@@ -1063,10 +1104,10 @@ export function formatHealerOffenseForContext(
   }
 
   if (omittedWindows.length > 0) {
-    const omDmg = omittedWindows.reduce((s, w) => s + w.ownerDamageInWindow, 0);
+    const omDmg = omittedWindows.reduce((s, w) => s + w.ownerDamageOnTarget, 0);
     const omCC = omittedWindows.filter((w) => w.ownerCastCCInWindow).length;
     lines.push(
-      `  [+${omittedWindows.length} more windows omitted (least free time): your damage ${(omDmg / 1000).toFixed(0)}k total, CC cast in ${omCC} of ${omittedWindows.length}]`,
+      `  [+${omittedWindows.length} more windows omitted (least free time): your damage on their targets ${(omDmg / 1000).toFixed(0)}k total, CC cast in ${omCC} of ${omittedWindows.length}]`,
     );
   }
 

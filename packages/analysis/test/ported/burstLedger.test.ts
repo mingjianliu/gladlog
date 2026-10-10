@@ -4,6 +4,8 @@ import { CombatUnitSpec, LogEvent } from "@gladlog/parser-compat";
 import {
   analyzeBurstLedger,
   auditWindowTargeting,
+  BURST_TARGET_DAMAGE_RE_SRC,
+  burstSecondTargetClause,
   formatBurstLedgerForContext,
 } from "../../src/utils/burstLedger";
 import { gridHpPct } from "../../src/utils/cooldowns";
@@ -583,7 +585,129 @@ describe("analyzeBurstLedger — Target HP on the render grid, the low, other de
       { unitName: "Shatters", atSeconds: 11.945 },
     ]);
     expect(formatBurstLedgerForContext(bursts, [], [])[3]).toMatch(
-      /Target: Kegrunner \| your damage 0\.70M \| also hit: Shatters DIED 0:11 \(\+1\.3s\)$/,
+      // T12 ⑤: the second enemy the burst damaged is on the line too
+      /Target: Kegrunner \| your damage 0\.70M \| second target: Shatters 0\.30M \| also hit: Shatters DIED 0:11 \(\+1\.3s\)$/,
+    );
+  });
+});
+
+// T12 ⑤ (user ruling 2026-10-10): the `Target:` line prints the second enemy
+// the burst damaged, and the absorbed part of each figure.
+describe("burstLedger — the second target and the absorbed part (T12 ⑤)", () => {
+  const absorbedOut = (timestamp: number, amount: number, dest: string) => ({
+    ...dmgOut(timestamp, amount, dest),
+    logLine: { event: LogEvent.SPELL_ABSORBED, timestamp, parameters: [] },
+  });
+  const mage = (damageOut: unknown[]) =>
+    makeUnit("p1", {
+      name: "Mage",
+      spec: CombatUnitSpec.Paladin_Retribution,
+      info,
+      spellCastEvents: [
+        makeSpellCastEvent(
+          "31884",
+          MATCH_START + 12_000,
+          "p1",
+          "Self",
+          "p1",
+          "Mage",
+          0,
+          "Avenging Wrath",
+        ),
+      ],
+      damageOut,
+    } as any);
+  const paladin = () => makeUnit("e1", { name: "Rohbell", info } as any);
+  const warrior = () => makeUnit("e2", { name: "Shalamayne", info } as any);
+  const targetLine = (bursts: ReturnType<typeof analyzeBurstLedger>) =>
+    formatBurstLedgerForContext(bursts, [], []).find((l) =>
+      l.trimStart().startsWith("Target: "),
+    );
+
+  // dfcccbf2 Burst #1: paladin 301k landed + 403k absorbed, warrior 641k
+  // landed + 27k absorbed — `Target: Rohbell … | your damage 0.70M`, nothing
+  // about the 0.67M on the warrior or the 0.40M that was a shield.
+  const dfcccbf2 = () =>
+    analyzeBurstLedger(
+      mage([
+        dmgOut(MATCH_START + 13_000, -301_000, "e1"),
+        absorbedOut(MATCH_START + 14_000, 403_000, "e1"),
+        dmgOut(MATCH_START + 15_000, -641_000, "e2"),
+        absorbedOut(MATCH_START + 16_000, 27_000, "e2"),
+      ]),
+      [],
+      [paladin(), warrior()],
+      makeCombat(),
+    );
+
+  it("the target is still the enemy with the most landed + absorbed; both parts are kept", () => {
+    const [b] = dfcccbf2();
+    expect(b.dominantTarget?.unitName).toBe("Rohbell");
+    expect(b.dominantTarget?.damage).toBe(704_000);
+    expect(b.dominantTarget?.absorbed).toBe(403_000);
+    expect(b.damageByTarget).toEqual([
+      { unitId: "e1", unitName: "Rohbell", damage: 704_000, absorbed: 403_000 },
+      {
+        unitId: "e2",
+        unitName: "Shalamayne",
+        damage: 668_000,
+        absorbed: 27_000,
+      },
+    ]);
+    expect(b.totalDamage).toBe(1_372_000);
+  });
+
+  it("the line prints the absorbed part and the second target", () => {
+    expect(targetLine(dfcccbf2())).toBe(
+      "    Target: Rohbell | your damage 0.70M (0.40M of it absorbed) | second target: Shalamayne 0.67M (0.03M of it absorbed)",
+    );
+  });
+
+  it("the line reads in the pattern the gate uses", () => {
+    const m = targetLine(dfcccbf2())!.match(
+      new RegExp(BURST_TARGET_DAMAGE_RE_SRC),
+    );
+    expect(m?.slice(1)).toEqual(["0.70", "0.40", "Shalamayne", "0.67", "0.03"]);
+  });
+
+  it("one enemy damaged, nothing absorbed: the line is as it was", () => {
+    const bursts = analyzeBurstLedger(
+      mage([dmgOut(MATCH_START + 13_000, -520_000, "e1")]),
+      [],
+      [paladin(), warrior()],
+      makeCombat(),
+    );
+    expect(targetLine(bursts)).toBe("    Target: Rohbell | your damage 0.52M");
+    expect(burstSecondTargetClause(bursts[0].damageByTarget)).toBe("");
+  });
+
+  it("a second enemy is printed whatever its share — no threshold — unless its figure is 0.00M", () => {
+    const run = (onWarrior: number) =>
+      targetLine(
+        analyzeBurstLedger(
+          mage([
+            dmgOut(MATCH_START + 13_000, -900_000, "e1"),
+            dmgOut(MATCH_START + 15_000, -onWarrior, "e2"),
+          ]),
+          [],
+          [paladin(), warrior()],
+          makeCombat(),
+        ),
+      );
+    expect(run(12_000)).toBe(
+      "    Target: Rohbell | your damage 0.90M | second target: Shalamayne 0.01M",
+    );
+    expect(run(4_000)).toBe("    Target: Rohbell | your damage 0.90M");
+  });
+
+  it("the legend says what Target, your damage and the second target are", () => {
+    const legend = formatBurstLedgerForContext(dfcccbf2(), [], [])[1];
+    expect(legend).toContain(
+      "`Target` = the enemy player your own damage in the burst was highest on, counting what its shields absorbed",
+    );
+    expect(legend).toContain("`(A of it absorbed)` = the absorbed part");
+    expect(legend).toContain(
+      "`second target: X N` = the enemy player your damage was next highest on",
     );
   });
 });

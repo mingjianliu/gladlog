@@ -419,7 +419,12 @@ describe("offensivePackItems(进攻证据映射,纯函数)", () => {
     spells: [{ spellId: "1", spellName: "Combustion", castTimeSeconds: 40, spanToSeconds: 50 }],
     totalDamage: 500000,
     damageByTarget: [
-      { unitId: "e1", unitName: "Rdruid-Area52", damage: 500000 },
+      {
+        unitId: "e1",
+        unitName: "Rdruid-Area52",
+        damage: 500000,
+        absorbed: 0,
+      },
     ],
     dominantTarget: {
       unitId: "e1",
@@ -428,6 +433,7 @@ describe("offensivePackItems(进攻证据映射,纯函数)", () => {
       hpEndPct: 18,
       hpLow: null,
       damage: 500000,
+      absorbed: 0,
       defensivesHit: [
         {
           spellId: "9",

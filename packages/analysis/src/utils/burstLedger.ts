@@ -1,4 +1,8 @@
-import { AtomicArenaCombat, ICombatUnit } from "@gladlog/parser-compat";
+import {
+  AtomicArenaCombat,
+  ICombatUnit,
+  LogEvent,
+} from "@gladlog/parser-compat";
 
 import { SPELL_CATEGORIES as spellsData } from "../data/spellCategories";
 import { getEnglishSpellName } from "../data/spellEffectData";
@@ -111,6 +115,13 @@ export interface IBurstTargetDamage {
   damage: number;
 }
 
+/** One enemy's share of a burst: `damage` is what landed plus what its
+ * shields absorbed (the figure the target is chosen on); `absorbed` is the
+ * absorbed part of it — the attacker's `SPELL_ABSORBED` rows (T12 ⑤). */
+export interface IBurstLedgerTargetDamage extends IBurstTargetDamage {
+  absorbed: number;
+}
+
 export interface IBurstLedgerEntry {
   fromSeconds: number;
   toSeconds: number;
@@ -125,7 +136,11 @@ export interface IBurstLedgerEntry {
   }>;
   /** Player damage to enemy players inside the span (pets excluded from targeting). */
   totalDamage: number;
-  damageByTarget: IBurstTargetDamage[];
+  /** Every enemy player the burst damaged, largest `damage` first — the list
+   * `dominantTarget` is the head of. The `Target:` line prints the second
+   * entry too (T12 ⑤): the head is chosen on landed + absorbed, so it can
+   * lead by a little, and on landed damage alone not at all. */
+  damageByTarget: IBurstLedgerTargetDamage[];
   /** Enemy player that received the most damage; null when the burst hit nothing. */
   dominantTarget: {
     unitId: string;
@@ -142,6 +157,8 @@ export interface IBurstLedgerEntry {
      * rule); null otherwise, and whenever an endpoint is unknown or dead. */
     hpLow: { pct: number; atSeconds: number } | null;
     damage: number;
+    /** The part of `damage` the target's shields absorbed. */
+    absorbed: number;
     defensivesHit: IBurstDefensiveHit[];
     /** Target died inside [from, to + KILL_CREDIT_SLACK_S]. */
     died: boolean;
@@ -267,19 +284,30 @@ export function analyzeBurstLedger(
 
     // Player damage (pet damage is merged into damageOut upstream) to enemy players.
     const damageMap = new Map<string, number>();
+    // The absorbed part of each sum, kept beside it (T12 ⑤): an attacker's
+    // `damageOut` carries what a shield ate as rows of their own
+    // (`SPELL_ABSORBED`, parser-compat convert.ts). The target is still
+    // chosen on the whole — dfcccbf2: 301k landed + 403k absorbed on the
+    // paladin made him `Target: … your damage 0.70M` over a warrior who took
+    // 641k landed + 27k absorbed, and the line said neither.
+    const absorbedMap = new Map<string, number>();
     for (const d of player.damageOut) {
       if (d.logLine.timestamp < fromMs || d.logLine.timestamp > toMs) continue;
       if (!enemyById.has(d.destUnitId)) continue;
-      damageMap.set(
-        d.destUnitId,
-        (damageMap.get(d.destUnitId) ?? 0) + Math.abs(d.effectiveAmount),
-      );
+      const amount = Math.abs(d.effectiveAmount);
+      damageMap.set(d.destUnitId, (damageMap.get(d.destUnitId) ?? 0) + amount);
+      if ((d.logLine.event as string) === LogEvent.SPELL_ABSORBED)
+        absorbedMap.set(
+          d.destUnitId,
+          (absorbedMap.get(d.destUnitId) ?? 0) + amount,
+        );
     }
-    const damageByTarget: IBurstTargetDamage[] = [...damageMap.entries()]
+    const damageByTarget: IBurstLedgerTargetDamage[] = [...damageMap.entries()]
       .map(([unitId, damage]) => ({
         unitId,
         unitName: enemyById.get(unitId)?.name ?? unitId,
         damage,
+        absorbed: absorbedMap.get(unitId) ?? 0,
       }))
       .sort((a, b) => b.damage - a.damage);
     const totalDamage = damageByTarget.reduce((s, t) => s + t.damage, 0);
@@ -371,6 +399,7 @@ export function analyzeBurstLedger(
             ? { pct: low.pct, atSeconds: low.atSec }
             : null,
         damage: top.damage,
+        absorbed: top.absorbed,
         defensivesHit,
         died,
       };
@@ -568,6 +597,41 @@ export const ON_TARGET_GOOD_PCT = 50;
 
 const fmtM = (n: number): string => `${(n / 1_000_000).toFixed(2)}M`;
 
+/** `X.XXM`, plus ` (A.AAM of it absorbed)` when the absorbed part has a figure
+ * to print at the line's precision (it is not `0.00M`). */
+function fmtDamageWithAbsorbed(damage: number, absorbed: number): string {
+  const a = fmtM(absorbed);
+  return a === fmtM(0) ? fmtM(damage) : `${fmtM(damage)} (${a} of it absorbed)`;
+}
+
+/** The label of the `Target:` line's clause for the second enemy the burst
+ * damaged. The gate (`checkBurstTargetDamageParts`) reads it back. */
+export const BURST_SECOND_TARGET_LABEL = "second target";
+
+/**
+ * The second entry of `damageByTarget` as the `Target:` line prints it
+ * (T12 ⑤, user ruling 2026-10-10) — ` | second target: <name> X.XXM[ (A of it
+ * absorbed)]` — or "" when the burst damaged one enemy player only.
+ *
+ * No share threshold: it is printed whenever there is a second enemy with a
+ * figure to print at the line's precision (not `0.00M`), from the same list
+ * and the same sums the target was chosen on. On 60 raw rounds 34 of 131
+ * ledger targets had a second enemy at half the target's figure or more, and
+ * for 2 the order flips on landed damage alone.
+ */
+export function burstSecondTargetClause(
+  damageByTarget: IBurstLedgerEntry["damageByTarget"],
+): string {
+  const second = damageByTarget[1];
+  if (!second || fmtM(second.damage) === fmtM(0)) return "";
+  return ` | ${BURST_SECOND_TARGET_LABEL}: ${second.unitName} ${fmtDamageWithAbsorbed(second.damage, second.absorbed)}`;
+}
+
+/** The `Target:` line from `| your damage` on, as the gate reads it back:
+ * 1 = the target's figure, 2 = its absorbed part, 3 = the second target's
+ * name, 4 = its figure, 5 = its absorbed part. */
+export const BURST_TARGET_DAMAGE_RE_SRC = String.raw` \| your damage (\d+\.\d{2})M(?: \((\d+\.\d{2})M of it absorbed\))?(?: \| target DIED)?(?: \| ${BURST_SECOND_TARGET_LABEL}: (.+?) (\d+\.\d{2})M(?: \((\d+\.\d{2})M of it absorbed\))?)?(?: \| also hit: .*)?$`;
+
 /** The header's CD list: with two or more CDs each carries its own span
  *  (triage sync-burst F-L4: `Dark Transformation + Army of the Dead` under
  *  one 0:11–0:41 span, while DT's own span ended at 0:26). */
@@ -597,10 +661,12 @@ export function formatBurstLedgerForContext(
 ): string[] {
   if (bursts.length + targeting.length + kicks.length === 0) return [];
   const lines: string[] = ["## BURST LEDGER (your offensive audit)"];
-  // FT-T02d: what the damage figure is.
+  // FT-T02d: what the damage figure is. T12 ⑤: what "Target" is, and the
+  // two readings the one figure used to hide.
   if (bursts.length > 0)
     lines.push(
-      "  `your damage` = your damage on that target: what landed plus what its shields absorbed.",
+      // one line: readers index the block's lines from the top
+      `  \`Target\` = the enemy player your own damage in the burst was highest on, counting what its shields absorbed. \`your damage\` = that figure: what landed plus what the shields absorbed; \`(A of it absorbed)\` = the absorbed part, printed when it is not 0.00M. \`${BURST_SECOND_TARGET_LABEL}: X N\` = the enemy player your damage was next highest on, same measure — printed whenever the burst damaged a second one; it can be close to the Target's figure, and ahead of it on landed damage alone.`,
     );
 
   bursts.forEach((b, i) => {
@@ -632,7 +698,7 @@ export function formatBurstLedgerForContext(
               .join("; ")}`
           : "";
       lines.push(
-        `    Target: ${t.unitName}${hpStr} | your damage ${fmtM(t.damage)}${t.died ? " | target DIED" : ""}${alsoStr}`,
+        `    Target: ${t.unitName}${hpStr} | your damage ${fmtDamageWithAbsorbed(t.damage, t.absorbed)}${t.died ? " | target DIED" : ""}${burstSecondTargetClause(b.damageByTarget)}${alsoStr}`,
       );
       for (const d of t.defensivesHit) {
         // 2026-07-16 smoke test: without spelling out "on the target", the

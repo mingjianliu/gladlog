@@ -263,7 +263,10 @@ describe("computeSlackSegments", () => {
 });
 
 // Task 2: Kill-window contribution analysis
-import { computeWindowContributions } from "../../src/utils/healerOffenseAnalysis";
+import {
+  computeWindowContributions,
+  VULNERABLE_OWNER_DAMAGE_RE_SRC,
+} from "../../src/utils/healerOffenseAnalysis";
 import {
   computeBurstSubWindows,
   IOffensiveWindow,
@@ -468,6 +471,132 @@ function slackSeg(fromSeconds: number, toSeconds: number): ISlackSegment {
     teamMinHpPct: 90,
   };
 }
+
+// T12 ⑤ (user ruling 2026-10-10): a window is on one enemy; the owner's
+// damage beside it was his damage on every enemy, absorbs included.
+describe("healer view: `your damage on it` is measured on the window's target (T12 ⑤)", () => {
+  const enemyHealer = makeUnit("enemy-h", {
+    reaction: CombatUnitReaction.Hostile,
+    spec: CombatUnitSpec.Shaman_Restoration,
+    name: "Rsham",
+  });
+  const enemyDk = makeUnit("enemy-1", {
+    reaction: CombatUnitReaction.Hostile,
+    name: "Edk",
+  });
+  const hit = (
+    atS: number,
+    amount: number,
+    dest: string,
+    absorbed = false,
+  ) => ({
+    logLine: {
+      event: absorbed ? LogEvent.SPELL_ABSORBED : LogEvent.SPELL_DAMAGE,
+      timestamp: T0 + atS * 1000,
+      parameters: [],
+    },
+    timestamp: T0 + atS * 1000,
+    // log convention: a damage row is negative, an absorbed row positive
+    effectiveAmount: absorbed ? amount : -amount,
+    amount,
+    srcUnitId: "owner",
+    destUnitId: dest,
+  });
+  const contributions = (damageOut: unknown[], unpunished = false) => {
+    const owner = makeFriend("owner");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (owner as any).damageOut = damageOut;
+    return computeWindowContributions(
+      combat,
+      owner,
+      [owner],
+      [enemyDk, enemyHealer],
+      [makeWindow(40, 50, unpunished ? [] : undefined)],
+      [],
+      [],
+      stubFactsComputer,
+    );
+  };
+
+  it("damage on another enemy is not in it; the shield's part is kept apart", () => {
+    const [w] = contributions([
+      hit(42, 12_000, "enemy-1"),
+      hit(43, 3_000, "enemy-1", true),
+      hit(44, 208_000, "enemy-h"), // the old figure counted this
+      hit(45, 9_000, "enemy-h", true),
+      hit(39, 50_000, "enemy-1"), // before the window
+      hit(50, 50_000, "enemy-1"), // the window's end second is not in it
+    ]);
+    expect(w!.ownerDamageOnTarget).toBe(12_000);
+    expect(w!.ownerAbsorbedOnTarget).toBe(3_000);
+  });
+
+  it("the [VULNERABLE] line: the owner's figure sits beside the team's on the same target", () => {
+    // the old line: `(team damage 0k total); …; your damage 208k`
+    const windows = contributions([hit(44, 208_000, "enemy-h")], true);
+    expect(windows[0]!.unpunished).toBe(true);
+    const text = formatHealerOffenseForContext({
+      advancedLoggingAvailable: true,
+      slackSegments: [],
+      windowContributions: windows,
+      windowCreationFacts: [],
+      contestedTradeFacts: [],
+    });
+    const line = text.find((l) => l.includes("[VULNERABLE]"))!;
+    expect(line).toContain("(team damage 0k total)");
+    expect(line).toContain("; your damage on it 0k; ");
+    expect(line).not.toContain("208k");
+    expect(
+      line.match(new RegExp(VULNERABLE_OWNER_DAMAGE_RE_SRC))?.slice(1),
+    ).toEqual(["0", "0"]);
+  });
+
+  it("the clause and its legend", () => {
+    const text = formatHealerOffenseForContext({
+      advancedLoggingAvailable: true,
+      slackSegments: [],
+      windowContributions: contributions([
+        hit(42, 12_000, "enemy-1"),
+        hit(43, 3_000, "enemy-1", true),
+      ]),
+      windowCreationFacts: [],
+      contestedTradeFacts: [],
+    });
+    expect(text.find((l) => l.includes("[KILL WINDOW]"))).toContain(
+      "; your damage on it 12k (+3k absorbed); ",
+    );
+    const legend = text.find((l) => l.includes("`your damage on it Nk`"))!;
+    expect(legend).toContain(
+      "the health that window's target lost to your hits in the printed span",
+    );
+    expect(legend).toContain("Your damage on other enemies is not in it.");
+    // the legend names no line tag: readers count the window lines by tag
+    expect(legend).not.toMatch(/\[[A-Z ]+\]/);
+  });
+
+  it("no window lines, no legend line", () => {
+    const text = formatHealerOffenseForContext({
+      advancedLoggingAvailable: true,
+      slackSegments: [
+        {
+          fromSeconds: 10,
+          toSeconds: 30,
+          durationSeconds: 20,
+          ownerDamage: 0,
+          ownerCCCasts: 0,
+          ownerPurgeCasts: 0,
+          ownerKickCasts: 0,
+          idle: true,
+          teamMinHpPct: 95,
+        },
+      ],
+      windowContributions: [],
+      windowCreationFacts: [],
+      contestedTradeFacts: [],
+    });
+    expect(text.join("\n")).not.toContain("your damage on it");
+  });
+});
 
 describe("computeWindowCreationFacts", () => {
   const enemyHealerWithTrinketDown = makeUnit("enemy-h", {
@@ -1026,7 +1155,8 @@ describe("burst sub-windows (2026-07-17 kill-window redesign)", () => {
       enemyHealerSpec: "Restoration Shaman",
       ownerCCReady: [],
       ownerCastCCInWindow: false,
-      ownerDamageInWindow: 12_000,
+      ownerDamageOnTarget: 12_000,
+      ownerAbsorbedOnTarget: 0,
       ownerFreeSeconds: 5,
       teamMinHpPct: 80,
     };
@@ -1084,7 +1214,8 @@ describe("formatHealerOffenseForContext KILL WINDOW cap", () => {
       enemyHealerSpec: "Restoration Shaman",
       ownerCCReady: [],
       ownerCastCCInWindow: i % 2 === 0,
-      ownerDamageInWindow: 1000 * i,
+      ownerDamageOnTarget: 1000 * i,
+      ownerAbsorbedOnTarget: 0,
       ownerFreeSeconds: freeSeconds,
       teamMinHpPct: 95,
       gateFacts: stubFactsComputer.facts(),
@@ -1116,7 +1247,9 @@ describe("formatHealerOffenseForContext KILL WINDOW cap", () => {
     expect(idxA).toBeGreaterThan(-1);
     expect(idxB).toBeGreaterThan(idxA);
     // Rollup aggregates: damage of omitted 0+1+2 = 3k, CC cast in windows 0 and 2 => 2 of 3
-    expect(text).toContain("your damage 3k total, CC cast in 2 of 3");
+    expect(text).toContain(
+      "your damage on their targets 3k total, CC cast in 2 of 3",
+    );
   });
 
   it("leaves blocks at or under the cap untouched", () => {
@@ -1440,7 +1573,7 @@ describe("F193 V2 — contested trade facts", () => {
 
     expect(summary.contestedTradeFacts.length).toBe(1);
     expect(summary.contestedTradeFacts[0].ownerHealing).toBe(20_000);
-    expect(summary.windowContributions[0].ownerDamageInWindow).toBe(30_000);
+    expect(summary.windowContributions[0].ownerDamageOnTarget).toBe(30_000);
 
     const lines = formatHealerOffenseForContext(summary);
     const text = lines.join("\n");

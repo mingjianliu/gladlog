@@ -508,7 +508,7 @@ describe("checkPetCreditSide — a summon-cast CC credited to the wrong side (GH
 
 describe("checkHeaderHpPromise — an HP floor promised in a header binds the lines under it (GH #99)", () => {
   const killWindow =
-    "  [KILL WINDOW] 1:29–1:47 on Fury Warrior (Todory-MoonGuard-US): you cast no CC; your damage 480k; free 15s of 18s, team min HP 32%.";
+    "  [KILL WINDOW] 1:29–1:47 on Fury Warrior (Todory-MoonGuard-US): you cast no CC; your damage on it 480k; free 15s of 18s, team min HP 32%.";
 
   it("flags the pre-fix header over a window that reports 32%", () => {
     const out = checkHeaderHpPromise([
