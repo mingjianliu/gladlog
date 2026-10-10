@@ -38,7 +38,11 @@
 import { CombatUnitReaction } from "@gladlog/parser-compat";
 
 import type { CdTriggerPriorRef } from "../data/cdTriggerPrior";
-import { buildCannotCastIntervals } from "../utils/cannotCastIntervals";
+import {
+  intervalBlocksSpell,
+  type NamedCannotCastInterval,
+  namedCannotCastIntervals,
+} from "../utils/cannotCastIntervals";
 import {
   cdCanHelpAnotherUnit,
   cdReadyInTimeAt,
@@ -255,18 +259,23 @@ export function cdPriorHoldEpisodes(
       )
       .map((u) => u.id),
   );
-  let cannotCast: Array<{ from: number; to: number }> = [];
+  let cannotCast: NamedCannotCastInterval[] = [];
   try {
-    cannotCast = buildCannotCastIntervals(owner, enemyIds);
+    cannotCast = namedCannotCastIntervals(owner, enemyIds);
   } catch {
     cannotCast = [];
   }
-  const ownerCannotCastAt = (sec: number): boolean => {
+  // FT-T10 PREVIEW: asked for the held cooldown — a kick lockout counts
+  // only when it locks that cooldown's school (`intervalBlocksSpell`)
+  const ownerCannotCastAt = (sec: number, spellId: string): boolean => {
     const tMs = startMs + sec * 1000;
-    return cannotCast.some((iv) => iv.from <= tMs && tMs < iv.to);
+    return cannotCast.some(
+      (iv) => iv.from <= tMs && tMs < iv.to && intervalBlocksSpell(iv, spellId),
+    );
   };
-  const ownerCanActAt = (sec: number): boolean =>
-    !isDeadAtRenderSecond(owner, startMs, sec) && !ownerCannotCastAt(sec);
+  const ownerCanActAt = (sec: number, spellId: string): boolean =>
+    !isDeadAtRenderSecond(owner, startMs, sec) &&
+    !ownerCannotCastAt(sec, spellId);
 
   // One series, walked once per cooldown.
   const series: Array<{ hpPct: number; unit: UnitLike } | null> = [];
@@ -333,7 +342,7 @@ export function cdPriorHoldEpisodes(
       for (let t = s; t <= episodeEndSec; t++) {
         const ready = cdReadyInTimeAt(cd, t);
         if (ready) firstReadySec ??= t;
-        if (!ownerCanActAt(t)) continue;
+        if (!ownerCanActAt(t, cd.spellId)) continue;
         castableSecs++;
         if (ready) actionableSecs++;
       }
