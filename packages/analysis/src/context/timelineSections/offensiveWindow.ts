@@ -75,7 +75,17 @@ export function emitOffensiveWindowEntries(
         pw.fromSeconds <= burst.toSeconds + 5,
     ),
   );
-  const creditedTo = creditSpikesToWindows(listed, spikes);
+  // Credited against the span each header PRINTS (its end stops at the round's
+  // end — `headerEndS` below): the gate re-runs this on the rendered header,
+  // and two windows that print the same clamped end must tie the same way on
+  // both sides (review 40-FT-54).
+  const creditedTo = creditSpikesToWindows(
+    listed.map((burst) => ({
+      fromSeconds: burst.fromSeconds,
+      toSeconds: Math.min(burst.toSeconds, roundEndS),
+    })),
+    spikes,
+  );
 
   listed.forEach((burst, windowIndex) => {
     // The largest of the spikes credited to this window — the rendered

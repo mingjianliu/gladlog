@@ -339,6 +339,26 @@ describe("[OFFENSIVE WINDOW] names only a spike that overlaps it, and each spike
     ).toContain("0:32–0:54");
   });
 
+  it("review 40-FT-54: two windows cut at the same round end — the spike goes where the PRINTED spans send it", () => {
+    // unclamped, the later window overlaps the spike for 10 s and the earlier
+    // one for 4 s; as printed (both end 3:12) they tie at 4 s and the earlier
+    // one takes it — which is what the gate, reading the headers, computes
+    const headers = renderHeaders(
+      [
+        { fromSeconds: 185, toSeconds: 215 },
+        { fromSeconds: 180, toSeconds: 192 },
+      ],
+      [{ fromSeconds: 188, toSeconds: 198, totalDamage: BIG }],
+      { bracket: "Rated Solo Shuffle", ownerDiedAtMs: 192_400 },
+    );
+    expect(headers.map((h) => h.split(" | ").slice(0, 2).join(" | "))).toEqual(
+      [
+        "3:00  [OFFENSIVE WINDOW]   3:00–3:12 | peak spike 1.90M on Mate (Enhancement Shaman) over 3:08–3:18 (runs past window)",
+        `3:05  [OFFENSIVE WINDOW]   3:05–3:12 | ${NO_CREDITED_SPIKE_CLAUSE}`,
+      ],
+    );
+  });
+
   it("the largest credited spike is the peak, whatever order the buckets arrive in", () => {
     const headers = renderHeaders(
       [{ fromSeconds: 32, toSeconds: 70 }],
