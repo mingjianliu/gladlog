@@ -47,7 +47,12 @@ export function formatAttemptedFact(
   events: CastFailedEvent[],
 ): string | undefined {
   const agg = aggregateReasonCounts(events);
-  return agg === undefined ? undefined : `曾尝试施放被拒(${agg})`;
+  // FT-T15 ⑥a (user ruling 2026-10-10): the wrapper is English, the wording
+  // kick-eaten's `postKick` already uses for the same fact (`pressed Nx but
+  // rejected (…)`). It was `曾尝试施放被拒(…)` inside an English prompt
+  // (53 of 53 `attempted` values on the 605 capture). The reasons inside
+  // the brackets stay verbatim (rawStreams' rule), "、"-joined.
+  return agg === undefined ? undefined : `pressed but rejected (${agg})`;
 }
 
 /**

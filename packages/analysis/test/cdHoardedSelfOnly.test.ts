@@ -275,7 +275,7 @@ describe("cd-hoarded 意图守护(BACKLOG #26 Task 2,按了被拒不算屯 —�
       },
     );
     expect(evts).toHaveLength(1);
-    expect(evts[0]!.facts["attempted"]).toBe("曾尝试施放被拒(尚未恢复×1)");
+    expect(evts[0]!.facts["attempted"]).toBe("pressed but rejected (尚未恢复×1)");
   });
 
   it("rawStreams 缺省 → facts 无 attempted 字段,行为与传空 castFailed 一致", () => {

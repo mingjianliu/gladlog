@@ -176,7 +176,7 @@ describe("buildFindingsPrompt", () => {
           facts: {
             t: "100",
             readyCds: "Astral Shift",
-            attempted: "曾尝试施放被拒(尚未恢复×3)",
+            attempted: "pressed but rejected (尚未恢复×3)",
           },
         },
       ];
@@ -200,7 +200,7 @@ describe("buildFindingsPrompt", () => {
             facts: {
               t: "2:36",
               leadCd: "Summon Darkglare",
-              attempted: "曾尝试施放被拒(无法在昏迷时那样做×2)",
+              attempted: "pressed but rejected (无法在昏迷时那样做×2)",
             },
           },
         ],

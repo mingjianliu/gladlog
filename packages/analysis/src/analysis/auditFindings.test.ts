@@ -206,7 +206,7 @@ describe("意图守护 severity 降一档(BACKLOG #26 Task 2,candidateFindings.t
       refDeathSpent: "4.5",
       refDeathHeld: "11.4",
       refN: "16960",
-      attempted: "曾尝试施放被拒(尚未恢复×3)",
+      attempted: "pressed but rejected (尚未恢复×3)",
     },
   };
   const { attempted: _attempted, ...factsWithoutAttempted } =

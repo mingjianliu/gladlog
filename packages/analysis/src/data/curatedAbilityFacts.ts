@@ -471,8 +471,13 @@ export const PROPOSED_FACTS: Array<Omit<ICuratedAbilityFact, "approved">> = [];
  * import, not a boundary violation (only `PROPOSED_FACTS` is fenced, see the
  * import-boundary test in test/curatedFacts.test.ts).
  */
+// FT-T15 ⑥a (user ruling 2026-10-10): English, like the rest of the prompt —
+// the legend tells the model to "echo the costNorm caveat", so the old
+// Chinese sentence (86 of 86 `costNorm` values on the 605 capture) went
+// verbatim into an English reply. No ", " inside: a facts block is ", "-joined
+// (`factFormat.ts`).
 const COST_NORM_SHORT_PHRASE =
-  "大技能:机制可用,但代价过高,不得推荐为常规挡控手段,仅致死威胁下的最后手段";
+  "major cooldown: mechanically usable but too costly to recommend as a routine way to block a control — a last resort under lethal threat only";
 
 export function costNormPhrase(spellId: string): string | null {
   const hit = CURATED_ABILITY_FACTS.find(

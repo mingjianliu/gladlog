@@ -662,7 +662,7 @@ describe("triage missed-cleanse F-C14 / F-C12 (owner's cleanse facts)", () => {
       matchStartMs: MATCH_START,
       rawStreams,
     });
-    expect(c!.facts.attempted).toBe("曾尝试施放被拒(无法在昏迷时那样做×2)");
+    expect(c!.facts.attempted).toBe("pressed but rejected (无法在昏迷时那样做×2)");
     expect(c!.facts.ownerDispelSpell).toBe("Detox");
   });
 
