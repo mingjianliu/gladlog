@@ -230,6 +230,7 @@
     "test/spellTags.ccSpellIds.test.ts",
     "test/spellTargeting.test.ts",
     "test/stateGhost.test.ts",
+    "test/stateLegend.test.ts",
     "test/summonKind.test.ts",
     "test/summonReachability.test.ts",
     "test/syncWindowTimingFacts.test.ts",

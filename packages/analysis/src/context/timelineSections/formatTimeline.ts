@@ -13,7 +13,10 @@ import {
   DEATH_WINDOW_S,
   TIMELINE_LINE_FLAGS,
 } from "../../data/timelineLineFlags";
-import { HP_TROUGH_MIN_DROP_PTS } from "../../utils/cooldowns";
+import {
+  HP_SAMPLE_RADIUS_MS,
+  HP_TROUGH_MIN_DROP_PTS,
+} from "../../utils/cooldowns";
 import { ENEMY_DEF_END_NOT_LOGGED } from "../../utils/enemyDefensives";
 import { BURST_ANSWERED_LEGEND } from "../burstAnswered";
 import { CD_PRIOR_LEGEND } from "../cdPrior";
@@ -35,6 +38,33 @@ import type { TimelineCtx } from "./ctx";
 
 /** A [STATE] tick carrying a `unit:ghost` token (`state.ts`). */
 const STATE_GHOST_TOKEN_RE = /\[STATE\].*:ghost\b/;
+/** A [STATE] tick line as `state.ts` emits it: `0:21  [STATE]   friends …`. */
+const STATE_TICK_LINE_RE = /^\d+:\d{2}\s+\[STATE\]\s/;
+
+/**
+ * The `[STATE]` legend (FT-T03, user ruling 2026-10-10, decision D7 — the
+ * "say it plainly" half). No line of the prompt defined `[STATE]` before:
+ * other legends only pointed at it. Three things the tick does not say by
+ * itself, each measured on the 605-file capture (T03-notes):
+ *  - WHEN the number was read: it is the sample nearest `m:ss.000`
+ *    (`gridHpPct`), while every event line under the same `m:ss` is floored
+ *    there from somewhere in `[m:ss.000, +1 s)` — so the events of a second
+ *    come AFTER its tick. 7.9 % of printed readings sat 10+ points above the
+ *    lowest reading inside their own second, mostly this one-second offset;
+ *  - that a missing unit is not a statement of full health: a unit at 100 %
+ *    and a unit with no sample within `HP_SAMPLE_RADIUS_MS` are both left
+ *    out (27 % of the left-out living units were the second kind);
+ *  - that the `enemies` half is printed only inside a pressure window.
+ * The readings themselves do not move — this is wording only. The notes'
+ * optional `unit:?` token is deliberately NOT implemented.
+ */
+export const STATE_LEGEND = [
+  "  [STATE] `m:ss … unit:N` = that unit's HP % at the START of second m:ss (the log reading nearest m:ss.0). The other lines",
+  "    printed under the same `m:ss` happen during that second, AFTER the tick: a hit or a heal inside it is not in the tick's",
+  "    number. A later tick shows where the unit ended up; a `low N%` on a window line is the lowest point in between.",
+  `    A unit missing from a printed half is at full health or has no HP reading within ${HP_SAMPLE_RADIUS_MS / 1000} s of that second — not necessarily at`,
+  "    100%. `unit:dead` = dead at that second. A tick with no `enemies` half says nothing about the enemies.",
+];
 
 export function formatTimeline(
   ctx: Pick<
@@ -163,6 +193,10 @@ export function formatTimeline(
   const ghostRendered = entries.some((e) =>
     e.lines.some((l) => typeof l === "string" && STATE_GHOST_TOKEN_RE.test(l)),
   );
+  // FT-T03 (ruling D7): the tick's own legend, whenever a tick is printed
+  const stateRendered = entries.some((e) =>
+    e.lines.some((l) => typeof l === "string" && STATE_TICK_LINE_RE.test(l)),
+  );
   const forbearanceRendered = entries.some((e) =>
     e.lines.some((l) => typeof l === "string" && RES_FORBEARANCE_RE.test(l)),
   );
@@ -281,6 +315,7 @@ export function formatTimeline(
     "  A `rdy:Δ  cd:—` row is printed only when it carries a fact no other line states (a focus target no",
     "    surviving [RES] shows, a CC no [CC ON …] line covers at that second, an enemy CD with no [ENEMY CD] line);",
     "    a `rdy:Δ  cd:—` row whose facts are all stated elsewhere is omitted, so its absence means nothing changed.",
+    ...(stateRendered ? STATE_LEGEND : []),
     // FT-T15 ②: the bounds are toRenderSecond (floor) of a window that starts
     // on a damage event, and A / B are sampled on those whole seconds — the
     // reading the [STATE] tick prints (the gate re-checks exactly that).
