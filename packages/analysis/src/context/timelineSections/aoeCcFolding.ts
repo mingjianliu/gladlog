@@ -26,30 +26,41 @@ export function prepareAoeCcFolding(
       : [];
   const consumedAoeEvents = new Set<IAoeCCEvent>();
 
+  /** The two names are one player. Two full names (`Name-Realm`) that differ
+   * are two players — same-named characters from two realms on one team,
+   * whose landings a delayed control (`landing`) would otherwise hand to
+   * whichever cast line asks first. The character-name / roster-label
+   * comparison is the fallback for a name that carries no realm. */
+  const sameCaster = (a: string, b: string): boolean => {
+    if (a === b) return true;
+    if (a.includes("-") && b.includes("-")) return false;
+    return a.split("-")[0] === b.split("-")[0] || pid(a) === pid(b);
+  };
+
   function findAndConsumeAoeCC(
     castTimeSeconds: number,
     casterName: string,
     spellName: string,
     isOwnerCast: boolean,
+    /** a delayed control's landing window after the cast
+     * (`AOE_CC_LANDING_WINDOW_S`); absent = it lands in the cast's own
+     * rendered second */
+    landing?: { fromS: number; toS: number },
   ): IAoeCCEvent | undefined {
     const castSec = toRenderSecond(castTimeSeconds);
     for (const aoe of aoeCCEvents) {
       if (consumedAoeEvents.has(aoe)) continue;
-      if (toRenderSecond(aoe.atSeconds) !== castSec) continue;
+      if (landing) {
+        const after = aoe.atSeconds - castTimeSeconds;
+        if (after < landing.fromS || after > landing.toS) continue;
+      } else if (toRenderSecond(aoe.atSeconds) !== castSec) continue;
       if (aoe.spellName !== spellName) continue;
-      const aoeIsOwner =
-        aoe.casterName === owner.name ||
-        aoe.casterName.split("-")[0] === owner.name.split("-")[0] ||
-        pid(aoe.casterName) === pid(owner.name);
+      const aoeIsOwner = sameCaster(aoe.casterName, owner.name);
       if (isOwnerCast) {
         if (!aoeIsOwner) continue;
       } else {
         if (aoeIsOwner) continue;
-        const matchCaster =
-          aoe.casterName === casterName ||
-          aoe.casterName.split("-")[0] === casterName.split("-")[0] ||
-          pid(aoe.casterName) === pid(casterName);
-        if (!matchCaster) continue;
+        if (!sameCaster(aoe.casterName, casterName)) continue;
       }
       consumedAoeEvents.add(aoe);
       return aoe;

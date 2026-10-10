@@ -1245,5 +1245,8 @@
  *  v359 (2026-10-09, FT board, same ruling): a hunter's or warlock's
  *  permanent pet being killed gets a [UNIT DESTROYED] line (when, whose,
  *  which side, what killed it).
+ *  v360 (2026-10-09, FT board, same ruling): Capacitor Totem lists who its
+ *  stun landed on (read ~2 s after the cast) on [YOU] [CC] / [TEAM] [CC],
+ *  and reads `[hit no enemy player]` when it stunned none.
  */
-export const PROMPT_VERSION = 359;
+export const PROMPT_VERSION = 360;

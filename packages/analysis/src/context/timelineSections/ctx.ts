@@ -302,6 +302,7 @@ export interface TimelineCtx {
     casterName: string,
     spellName: string,
     isOwnerCast: boolean,
+    landing?: { fromS: number; toS: number },
   ) => IAoeCCEvent | undefined;
   formatAoeTargetPart: (aoe: IAoeCCEvent, existingTargetPart: string) => string;
   ownerHardCcTagAt: (timeSeconds: number) => string;

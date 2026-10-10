@@ -13,8 +13,8 @@
  */
 
 import { saveCoversPressureOn } from "../../analysis/candidates/cooldownTiming";
-import { reachesAlly } from "../../data/spellTargeting";
 import { ccSpellIds } from "../../data/spellTags";
+import { reachesAlly } from "../../data/spellTargeting";
 import { buffFullDurationForCaster } from "../../utils/buffDuration";
 import {
   cdIsProcOnly,
@@ -28,16 +28,17 @@ import {
   timingContextWithLabel,
 } from "../../utils/cooldowns";
 import { getDampeningPercentage } from "../../utils/dampening";
+import { AOE_CC_LANDING_WINDOW_S } from "../../utils/drAnalysis";
+import {
+  computeEnemyInterruptAvailability,
+  isInterruptUsable,
+} from "../../utils/enemyInterrupts";
 import {
   healAbsorbPressClause,
   healAbsorbUseOf,
   healerCreditOf,
 } from "../../utils/healAbsorbSave";
 import { documentRecordsAttackSpell } from "../../utils/incomingPressure";
-import {
-  computeEnemyInterruptAvailability,
-  isInterruptUsable,
-} from "../../utils/enemyInterrupts";
 import { fmtTime } from "../../utils/renderGrid";
 import { buildRosterSides } from "../../utils/rosterSide";
 import { unitUnderFireAt } from "../../utils/threatAssessment";
@@ -239,6 +240,7 @@ export function emitOwnerCdEntries(
           owner.name,
           cd.spellName,
           true,
+          AOE_CC_LANDING_WINDOW_S[cd.spellId] ?? undefined,
         );
         if (matchingAoe) {
           effectiveTargetPart = formatAoeTargetPart(matchingAoe, targetPart);

@@ -40,7 +40,7 @@ import {
   specToString,
 } from "../../utils/cooldowns";
 import {
-  AOE_CC_DELAYED_CAST_IDS,
+  AOE_CC_LANDING_WINDOW_S,
   AOE_CC_SPELL_IDS,
   getDRCategory,
   getDRLevel,
@@ -761,14 +761,19 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
       // case below; a pet's IMMUNE stays unsaid (the 2026-09-30 rule in
       // `ccImmuneTagFor`). Any other un-aimed cast has no unit to read.
       // A listed area control (its own id or one of its effect auras —
-      // Shockwave 46968 stuns with 132168) whose control lands with the
-      // cast. Sigil of Misery arms for about 2 s, too close to the window's
-      // end to call an absence: `AOE_CC_DELAYED_CAST_IDS` keep a bare line.
-      if (
-        AOE_CC_DELAYED_CAST_IDS.has(spellId) ||
-        ![...own].some((id) => AOE_CC_SPELL_IDS.has(id))
-      )
-        return "";
+      // Shockwave 46968 stuns with 132168). One that lands seconds after
+      // the cast is read in its own landing window (Capacitor Totem: the
+      // stun comes ~2 s later, `AOE_CC_LANDING_WINDOW_S`); one whose window
+      // is not known (Sigil of Misery) keeps a bare line — an absence can
+      // not be called.
+      if (![...own].some((id) => AOE_CC_SPELL_IDS.has(id))) return "";
+      const landing = AOE_CC_LANDING_WINDOW_S[spellId];
+      if (landing === null) return "";
+      const inLanding = landing
+        ? (ms: number) =>
+            ms >= t0 + landing.fromS * 1000 - 100 &&
+            ms <= t0 + landing.toS * 1000
+        : inWindow;
       const players = enemies ?? [];
       if (players.length === 0) return "";
       // Only THIS cast's own aura / miss ids count here (the aimed case
@@ -778,7 +783,7 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
       // landing — 36 of the 101 such lines of the 605-file capture stayed
       // bare that way.
       const ownIn = (id: string | undefined, ms: number) =>
-        id !== undefined && own.has(id) && inWindow(ms);
+        id !== undefined && own.has(id) && inLanding(ms);
       const touched = players.some(
         (u) =>
           (u.auraEvents ?? []).some(

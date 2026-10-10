@@ -14,8 +14,8 @@
  * the caller passes its current value and assigns back the returned one. Output
  * is pinned by the 605-file acceptanceCapture context hash.
  */
-import { reachesAlly } from "../../data/spellTargeting";
 import { ccSpellIds } from "../../data/spellTags";
+import { reachesAlly } from "../../data/spellTargeting";
 import {
   cdIsProcOnly,
   gridHpPct,
@@ -23,6 +23,7 @@ import {
   isDeadAtRenderSecond,
   timingContextWithLabel,
 } from "../../utils/cooldowns";
+import { AOE_CC_LANDING_WINDOW_S } from "../../utils/drAnalysis";
 import { fmtTime, toRenderSecond } from "../../utils/renderGrid";
 import { ALTER_TIME_CAST_ID, alterTimeReturnSeconds } from "./alterTime";
 import type { TimelineCtx } from "./ctx";
@@ -111,6 +112,7 @@ export function emitTeamCdEntries(
             player.name,
             cd.spellName,
             false,
+            AOE_CC_LANDING_WINDOW_S[cd.spellId] ?? undefined,
           );
           if (matchingAoe) {
             effectiveTgt = formatAoeTargetPart(matchingAoe, tgt);

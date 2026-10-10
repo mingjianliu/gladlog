@@ -206,16 +206,29 @@ export const AOE_CC_SPELL_IDS = new Set<string>([
   "179057", // Chaos Nova (Demon Hunter)
   "207167", // Blinding Sleet (Death Knight)
   "1234195", // Void Nova (Demon Hunter, Devourer)
+  "118905", // Capacitor Totem's Static Charge (Shaman; the cast is 192058, the stun lands ~2 s later — AOE_CC_LANDING_WINDOW_S)
 ]);
 
-/** Listed area controls whose effect arrives seconds after the cast: the
- * cast line can list a landing the fold finds, but an ABSENCE inside the
- * `[hit no enemy player]` window proves nothing for them (Sigil of Misery
- * arms for about 2 s — median 2.07 s in `castEffectAuraGenerated.json`).
- * Cast ids. */
-export const AOE_CC_DELAYED_CAST_IDS: ReadonlySet<string> = new Set([
-  "207684", // Sigil of Misery
-]);
+/**
+ * Listed area controls whose effect arrives seconds after the cast, by CAST
+ * id → when the control lands, seconds after the cast (`null` = not known
+ * well enough to pair a landing or to call an absence).
+ *
+ *  - Capacitor Totem 192058 → its Static Charge stun 118905: 605 new-season
+ *    files, 950 casts, 1,005 stuns on players — 1,003 of them 1.75–2.25 s
+ *    after the cast, one at 2.5 s, one at 4.0 s; 232 casts stunned no player.
+ *    The window is wide enough for all of them (FT board item, user ruling
+ *    2026-10-09: 464 `[YOU] [CC]   Capacitor Totem` lines named no landing).
+ *  - Sigil of Misery 207684 → 207685: arms for about 2 s (median 2.07 s in
+ *    `castEffectAuraGenerated.json`), 1 s with a talent; no owner line of it
+ *    in the 605-file capture to verify a window on — left unknown.
+ */
+export const AOE_CC_LANDING_WINDOW_S: Readonly<
+  Record<string, { fromS: number; toS: number } | null>
+> = {
+  "192058": { fromS: 1.5, toS: 4.5 },
+  "207684": null,
+};
 
 /** What the owner's cast line says when one of these, cast un-aimed, put its
  * aura on no enemy player and logged no miss on one (FT-T14; written by

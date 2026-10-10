@@ -448,12 +448,52 @@ describe("FT-T14 — an un-aimed area control that hit no enemy player says so",
     expect(lineWith(t, "Dragon's Breath")).toContain(
       OWNER_AOE_CC_NO_PLAYER_TAG,
     );
-    const totem = render(
-      {},
-      [hostile(ENEMY)],
-      ledger("192058", "Capacitor Totem", "CC", 30),
-    );
-    expect(lineWith(totem, "Capacitor Totem")).not.toContain("[hit no enemy");
+    // Capacitor Totem lands ~2 s after the cast: read in its own window
+    const totemCd = ledger("192058", "Capacitor Totem", "CC", 30);
+    const TOTEM: [string, string] = ["Creature-0-1-1-1-61245-00000000AA", "T"];
+    const stunned = hostile(OTHER, {
+      auraEvents: [
+        ev(
+          LogEvent.SPELL_AURA_APPLIED,
+          "118905",
+          69_537 + 2_010,
+          TOTEM,
+          OTHER,
+          {
+            auraType: "DEBUFF",
+          },
+        ),
+      ] as never,
+    });
+    const totemUnit = mkUnit(TOTEM[0], TOTEM[1], {
+      ownerId: ME[0],
+      type: CombatUnitType.Guardian,
+    });
+    const withTotem = (enemies: ICombatUnit[]) =>
+      buildMatchTimeline(
+        params(
+          mkUnit(ME[0], ME[1], {
+            spellCastEvents: [
+              ev(LogEvent.SPELL_CAST_SUCCESS, "192058", 69_537, ME, ["", ""]),
+            ] as never,
+          }),
+          enemies,
+          {
+            ownerCDs: [
+              { ...totemCd, casts: [{ timeSeconds: 69.537 }] },
+            ] as never,
+            allUnits: [totemUnit] as never,
+          },
+        ),
+      );
+    // the stun came 2.0 s later, from the owner's totem → no tag
+    expect(
+      lineWith(withTotem([hostile(ENEMY), stunned]), "Capacitor Totem"),
+    ).not.toContain("[hit no enemy");
+    // nobody was stunned in the landing window → tagged
+    expect(
+      lineWith(withTotem([hostile(ENEMY), hostile(OTHER)]), "Capacitor Totem"),
+    ).toContain(OWNER_AOE_CC_NO_PLAYER_TAG);
   });
 
   it("FT-T14c: Shockwave(施放 46968,昏迷光环 132168)—— 光环 id 在名单里;中了人不标,没中标", () => {

@@ -11,23 +11,24 @@
  */
 import { CombatUnitType, getUnitType, LogEvent } from "@gladlog/parser-compat";
 
+import { fmtFactNum } from "../../analysis/factFormat";
+import { CHANNELED_SPELL_IDS } from "../../data/channeledGenerated";
 import {
   effectiveCooldownSeconds,
   getEnglishSpellName,
 } from "../../data/spellEffectData";
-import { CHANNELED_SPELL_IDS } from "../../data/channeledGenerated";
 import { ccSpellIds } from "../../data/spellTags";
 import {
   DEATH_WINDOW_S,
   DEATH_WINDOW_UNFOLD_CAP,
   TIMELINE_LINE_FLAGS,
 } from "../../data/timelineLineFlags";
-import { fmtFactNum } from "../../analysis/factFormat";
 import { dropAuraRebroadcasts } from "../../utils/auraIntervals";
 import { COPY_CAST_IDS } from "../../utils/castPress";
 import { isControlledPlayerFlags } from "../../utils/charmedPlayer";
 import { cdRoleTag, hpAtPress, rendersOnCaster } from "../../utils/cooldowns";
 import { purgeableCountText } from "../../utils/dispelAnalysis";
+import { AOE_CC_LANDING_WINDOW_S } from "../../utils/drAnalysis";
 import { fmtTime } from "../../utils/renderGrid";
 import {
   getNpcIdFromGuid,
@@ -537,6 +538,7 @@ export function emitHealerCastGapFillerEntries(
         owner.name,
         displayName,
         true,
+        AOE_CC_LANDING_WINDOW_S[e.spellId] ?? undefined,
       );
       if (matchingAoe) {
         effectiveTargetPart = formatAoeTargetPart(matchingAoe, targetPart);
