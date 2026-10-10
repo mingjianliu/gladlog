@@ -19,6 +19,7 @@ import {
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { ensureAnalysisData } from "../data/ensure";
+import { analyzePlayerCCAndTrinket } from "../utils/ccTrinketAnalysis";
 import { extractMajorCooldowns } from "../utils/cooldowns";
 import {
   BURST_HEAL_CD_IDS,
@@ -1033,6 +1034,123 @@ describe("burstWindowDecisionPoints — reliability round 2 W1a", () => {
     });
     const pts = burstWindowDecisionPoints(combat([f, enemyWithBurst()]));
     expect(pts[0]!.feasible).toBe(false);
+  });
+});
+
+describe("burstWindowDecisionPoints — where a control answer landed (T12 ⑧ i)", () => {
+  const aura = (
+    event: string,
+    spellId: string,
+    tSec: number,
+    srcUnitId: string,
+    destUnitId: string,
+  ) => ({
+    spellId,
+    spellName: spellId,
+    srcUnitId,
+    srcUnitName: srcUnitId,
+    destUnitId,
+    timestamp: T0 + tSec * 1000,
+    logLine: { event, timestamp: T0 + tSec * 1000 },
+  });
+  const pressuredFriend = (over: Record<string, unknown> = {}) =>
+    friendly({
+      damageIn: steadyDamage(10, 20),
+      advancedActions: hpTrack("F1", 0, 40, 60),
+      ...over,
+    });
+  /** Storm Bolt's stun aura (107570 → 132169, `castEffectAuras.ts`). */
+  const STORM_BOLT_STUN = "132169";
+
+  it("an aimed control carries its target and the aura application it landed as", () => {
+    const e = hostile({
+      spellCastEvents: [cast(AR, 10)],
+      auraEvents: [
+        aura(LogEvent.SPELL_AURA_APPLIED, STORM_BOLT_STUN, 12.3, "F1", "E1"),
+        aura(LogEvent.SPELL_AURA_REMOVED, STORM_BOLT_STUN, 15.4, "F1", "E1"),
+      ],
+    });
+    const f = pressuredFriend({
+      spellCastEvents: [cast(STORM_BOLT, 12, "E1")],
+    });
+    const c = combat([f, e]);
+    const r = burstWindowDecisionPoints(c)[0]!.responseCasts[0]!;
+    expect(r.landed).toBe(true);
+    expect(r.controlOn).toEqual({
+      unitId: "E1",
+      unitName: "Enemy-R",
+      auras: [{ spellId: STORM_BOLT_STUN, atMs: T0 + 12_300 }],
+    });
+    // the join the credit line makes: the application IS the instance the
+    // `[CC ON ENEMY]` line renders (`analyzePlayerCCAndTrinket` on the enemy)
+    const summary = analyzePlayerCCAndTrinket(e as never, [f] as never, {
+      ...c,
+      startInfo: { zoneId: "0", bracket: "3v3" },
+    });
+    expect(summary.ccInstances).toHaveLength(1);
+    const cc = summary.ccInstances[0]!;
+    expect(cc.spellId).toBe(r.controlOn!.auras[0]!.spellId);
+    expect(T0 + cc.atSeconds * 1000).toBeCloseTo(
+      r.controlOn!.auras[0]!.atMs,
+      6,
+    );
+    expect(cc.durationSeconds).toBeCloseTo(3.1, 6);
+  });
+
+  it("an aimed control that did not land carries its target and no application", () => {
+    const r = burstWindowDecisionPoints(
+      combat([
+        pressuredFriend({ spellCastEvents: [cast(STORM_BOLT, 12, "E1")] }),
+        hostile({ spellCastEvents: [cast(AR, 10)] }),
+      ]),
+    )[0]!.responseCasts[0]!;
+    expect(r.landed).toBe(false);
+    expect(r.controlOn).toEqual({
+      unitId: "E1",
+      unitName: "Enemy-R",
+      auras: [],
+    });
+  });
+
+  it("a ground-cast control carries the holder it landed on and that application", () => {
+    const STATIC_CHARGE = "118905";
+    const pts = burstWindowDecisionPoints(
+      combat([
+        pressuredFriend({
+          spellCastEvents: [cast("192058", 17.8, "0000000000000000")],
+        }),
+        {
+          id: "T1",
+          name: "Capacitor Totem",
+          ownerId: "F1",
+          reaction: CombatUnitReaction.Friendly,
+          spellCastEvents: [],
+          auraEvents: [],
+        },
+        hostile({
+          spellCastEvents: [cast(AR, 10)],
+          auraEvents: [
+            aura(LogEvent.SPELL_AURA_APPLIED, STATIC_CHARGE, 19.8, "T1", "E1"),
+          ],
+        }),
+      ]),
+    );
+    expect(pts[0]!.responseCasts[0]!.controlOn).toEqual({
+      unitId: "E1",
+      unitName: "Enemy-R",
+      auras: [{ spellId: STATIC_CHARGE, atMs: T0 + 19_800 }],
+    });
+  });
+
+  it("a wall / heal / external answer carries none", () => {
+    const r = burstWindowDecisionPoints(
+      combat([
+        pressuredFriend({ spellCastEvents: [cast(BARKSKIN, 13)] }),
+        hostile({ spellCastEvents: [cast(AR, 10)] }),
+      ]),
+    )[0]!.responseCasts[0]!;
+    expect(r.category).toBe("wall");
+    expect("controlOn" in r).toBe(false);
   });
 });
 

@@ -14,7 +14,7 @@ import {
   type ITeammateDrClash,
 } from "../../utils/drAnalysis";
 import { fmtTime } from "../../utils/renderGrid";
-import { formatBurstAnsweredLines } from "../burstAnswered";
+import { ccSpanLookup, formatBurstAnsweredLines } from "../burstAnswered";
 import { formatCdPriorLines } from "../cdPrior";
 import { formatStackedDefensiveLines } from "../stackedDefensives";
 import type { TimelineCtx } from "./ctx";
@@ -38,6 +38,7 @@ export function emitContextFactEntries(
     | "owner"
     | "pid"
     | "enemyPid"
+    | "enemyCCSummaries"
   >,
 ) {
   const {
@@ -52,6 +53,7 @@ export function emitContextFactEntries(
     owner,
     pid,
     enemyPid,
+    enemyCCSummaries,
   } = ctx;
 
   // ── [BURST ANSWERED] context lines ─────────────────────────────────────────
@@ -70,6 +72,9 @@ export function emitContextFactEntries(
     burstWindows ?? [],
     undefined,
     labels,
+    // T12 ⑧ (i): a credited control's length is the `[CC ON ENEMY]`
+    // instance's — the summaries `emitCcOnEnemyEntries` renders
+    ccSpanLookup(enemyCCSummaries, matchStartMs),
   ).filter((e) => e.atSeconds <= matchEndSeconds);
   for (const e of burstAnsweredEntries) {
     addEntry(e.atSeconds, `${fmtTime(e.atSeconds)}  ${e.line}`);

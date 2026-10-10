@@ -18,7 +18,10 @@ import {
   HP_TROUGH_MIN_DROP_PTS,
 } from "../../utils/cooldowns";
 import { ENEMY_DEF_END_NOT_LOGGED } from "../../utils/enemyDefensives";
-import { BURST_ANSWERED_LEGEND } from "../burstAnswered";
+import {
+  BURST_ANSWERED_CONTROL_LEGEND,
+  BURST_ANSWERED_LEGEND,
+} from "../burstAnswered";
 import { CD_PRIOR_LEGEND } from "../cdPrior";
 import { PRESSED_DURING_NOTE_HEAD } from "../controlRejectedPresses";
 import { ROT_PRESSURE_LEGEND } from "../matchTimelineSections";
@@ -522,6 +525,9 @@ export function formatTimeline(
       : []),
     // Conditional: a round with no such line pays no tokens for its legend.
     ...(burstAnsweredEntries.length > 0 ? BURST_ANSWERED_LEGEND : []),
+    ...(burstAnsweredEntries.some((e) => e.namesControlTarget)
+      ? [BURST_ANSWERED_CONTROL_LEGEND]
+      : []),
     ...(cdPriorEntries.length > 0 ? CD_PRIOR_LEGEND : []),
     ...(stackedDefensiveEntries.length > 0 ? STACKED_DEFENSIVES_LEGEND : []),
     ...(drClashEntries.length > 0 ? DR_CLASH_LEGEND : []),

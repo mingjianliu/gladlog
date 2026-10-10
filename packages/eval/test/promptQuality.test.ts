@@ -1,7 +1,10 @@
 import { ensureAnalysisData } from "@gladlog/analysis";
 import type { BurstWindowDecisionPoint } from "@gladlog/analysis/src/analysis/burstWindowDecisionPoints";
 import { buildMomentSnapshotItems } from "@gladlog/analysis/src/analysis/momentSnapshot";
-import { formatBurstAnsweredLines } from "@gladlog/analysis/src/context/burstAnswered";
+import {
+  ccSpanLookup,
+  formatBurstAnsweredLines,
+} from "@gladlog/analysis/src/context/burstAnswered";
 import { formatPressedDuringNote } from "@gladlog/analysis/src/context/controlRejectedPresses";
 import {
   lookupBehaviorPrior,
@@ -16,6 +19,7 @@ import {
   checkCcAvoidedLandedConsistency,
   checkBurstAnsweredBeforeDeath,
   checkBurstAnsweredBottomConsistency,
+  checkBurstAnsweredControlSpan,
   checkCcBookmarkConsistency,
   checkDeathTrinketCcConsistency,
   checkDuringExternalConsistency,
@@ -1473,6 +1477,201 @@ describe("checkBurstAnsweredBeforeDeath — the credited answer precedes the pre
   it("a line whose pressured unit did not die is not read", () => {
     expect(
       checkBurstAnsweredBeforeDeath([death("1:46"), rendered(6.1, false)]),
+    ).toEqual([]);
+  });
+});
+
+describe("checkBurstAnsweredControlSpan — a credited control's length is its [CC ON ENEMY] line's (T12 ⑧ i)", () => {
+  const HEX_AT_MS = 46_300;
+  const labels = {
+    friendly: (n: string) =>
+      n === "Shaman-R"
+        ? "3(RShaman)"
+        : n === "Me-R"
+          ? "1(HPriest)"
+          : "2(AWarrior)",
+    enemy: (n: string) => (n === "Paladin-R" ? "5(RPaladin)" : "4(AWarrior)"),
+  };
+  /** the producer's line for a Hex 1.2 s into a window opened at 0:45, with
+   * the span it reads off a CC instance of `durationSeconds` */
+  const rendered = (
+    durationSeconds: number,
+    over: { casterName?: string; latencySec?: number } = {},
+  ) => {
+    const point = {
+      tSec: 45,
+      leadCd: {
+        spellId: "107574",
+        spellName: "Avatar",
+        casterName: "Warrior-E",
+        casterSpec: "Arms Warrior",
+        castSec: 45,
+      },
+      extraCds: [],
+      pressured: {
+        unitId: "f2",
+        name: "Warrior-R",
+        minHpPct: 35,
+        minHpSec: 50,
+        startHpPct: 90,
+        startHpSec: 45,
+        died: false,
+      },
+      responded: true,
+      feasible: true,
+      anyFriendlyDeath: false,
+      friendlyOutcomes: [],
+      responseCasts: [
+        {
+          category: "control",
+          spellId: "51514",
+          spellName: "Hex",
+          casterName: over.casterName ?? "Shaman-R",
+          casterId: "f3",
+          destId: "e2",
+          tSec: 46,
+          latencySec: over.latencySec ?? 1.2,
+          landed: true,
+          controlOn: {
+            unitId: "e2",
+            unitName: "Paladin-R",
+            auras: [{ spellId: "51514", atMs: HEX_AT_MS }],
+          },
+        },
+      ],
+    } as unknown as BurstWindowDecisionPoint;
+    const [e] = formatBurstAnsweredLines(
+      [point],
+      undefined,
+      labels,
+      ccSpanLookup(
+        [
+          {
+            playerName: "Paladin-R",
+            ccInstances: [
+              {
+                spellId: "51514",
+                atSeconds: HEX_AT_MS / 1000,
+                durationSeconds,
+              },
+            ],
+          },
+        ] as never,
+        0,
+      ),
+    );
+    return `0:45  ${e!.line}`;
+  };
+  const roster =
+    '  <unit id="1" name="Me-R" spec="Holy Priest" role="log owner">';
+  const landing = (at: string, tail: string, by = "3(RShaman)") =>
+    `${at}  [CC ON ENEMY]   5(RPaladin) ← Hex (by ${by})${tail}`;
+
+  it("the producer's line is the one the gate reads", () => {
+    expect(rendered(2.1)).toBe(
+      "0:45  [BURST ANSWERED]   enemy opened Avatar (4(AWarrior)): 3(RShaman) answered with Hex on 5(RPaladin) (2s) in 1.2s; 2(AWarrior) bottomed at 35% at 0:50",
+    );
+  });
+  it("the same span on the [CC ON ENEMY] line passes; a different one fails", () => {
+    expect(
+      checkBurstAnsweredControlSpan([
+        roster,
+        rendered(2.1),
+        landing("0:46", " (2s) | broken by damage from 2(AWarrior)"),
+      ]),
+    ).toEqual([]);
+    const bad = checkBurstAnsweredControlSpan([
+      roster,
+      rendered(2.1),
+      landing("0:46", " (5s)"),
+    ]);
+    expect(bad).toHaveLength(1);
+    expect(bad[0]).toContain("(2s)");
+    expect(bad[0]).toContain("(5s)");
+  });
+  it("reads the other forms the span takes: <1s, the round ending on it, a Tremor break", () => {
+    expect(
+      checkBurstAnsweredControlSpan([
+        roster,
+        rendered(0.2),
+        landing("0:46", " (<1s)"),
+      ]),
+    ).toEqual([]);
+    expect(
+      checkBurstAnsweredControlSpan([
+        roster,
+        rendered(0.2),
+        landing("0:46", " (1s)"),
+      ]),
+    ).toHaveLength(1);
+    expect(
+      checkBurstAnsweredControlSpan([
+        roster,
+        rendered(2.1),
+        landing(
+          "0:46",
+          " | enemy Tremor Totem from 4(AWarrior) ended this CC after 2s (cut short — it had not expired)",
+        ),
+      ]),
+    ).toEqual([]);
+    expect(
+      checkBurstAnsweredControlSpan([
+        roster,
+        rendered(2.1),
+        landing(
+          "0:46",
+          " | enemy Tremor Totem from 4(AWarrior) ended this CC after 4s (cut short — it had not expired)",
+        ),
+      ]),
+    ).toHaveLength(1);
+  });
+  it("only a landing whose second can be this application's is compared", () => {
+    // opened 0:45, +1.2 s, the aura from 0.1 s before the press to 3 s after
+    // it: seconds 0:46 … 0:50. A re-Hex at 0:51 is another application.
+    expect(
+      checkBurstAnsweredControlSpan([
+        roster,
+        rendered(2.1),
+        landing("0:51", " (5s)"),
+        landing("0:45", " (5s)"),
+      ]),
+    ).toEqual([]);
+    expect(
+      checkBurstAnsweredControlSpan([
+        roster,
+        rendered(2.1),
+        landing("0:50", " (5s)"),
+      ]),
+    ).toHaveLength(1);
+    // two applications in reach: one of them carrying the span is enough
+    expect(
+      checkBurstAnsweredControlSpan([
+        roster,
+        rendered(2.1),
+        landing("0:46", " (2s)"),
+        landing("0:49", " (5s)"),
+      ]),
+    ).toEqual([]);
+  });
+  it("another caster's Hex, another target's, or no [CC ON ENEMY] line at all proves nothing", () => {
+    expect(
+      checkBurstAnsweredControlSpan([
+        roster,
+        rendered(2.1),
+        landing("0:46", " (5s)", "2(AWarrior)"),
+        "0:46  [CC ON ENEMY]   4(AWarrior) ← Hex (by 3(RShaman)) (5s)",
+        "0:46  [CC ON ENEMY]   5(RPaladin) ← Polymorph (by 3(RShaman)) (5s)",
+      ]),
+    ).toEqual([]);
+    expect(checkBurstAnsweredControlSpan([roster, rendered(2.1)])).toEqual([]);
+  });
+  it("the log owner's own control is not read — its [CC ON ENEMY] lines are not all of its applications", () => {
+    expect(
+      checkBurstAnsweredControlSpan([
+        roster,
+        rendered(2.1, { casterName: "Me-R" }),
+        landing("0:46", " (5s)", "1(HPriest)"),
+      ]),
     ).toEqual([]);
   });
 });

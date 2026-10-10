@@ -14,6 +14,7 @@ import {
   CombatUnitClass,
   CombatUnitReaction,
   CombatUnitSpec,
+  CombatUnitType,
   LogEvent,
 } from "@gladlog/parser-compat";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -27,11 +28,14 @@ import { ensureAnalysisData } from "../data/ensure";
 import { gridHpPct } from "../utils/cooldowns";
 import {
   BURST_ANSWERED_CAP,
+  BURST_ANSWERED_CONTROL_LEGEND,
   BURST_ANSWERED_MAX_HP_PCT,
   BURST_ANSWERED_TAG,
+  ccSpanLookup,
   formatBurstAnsweredLines,
   parseBurstAnsweredLine,
 } from "./burstAnswered";
+import { buildMatchTimeline } from "./matchTimeline";
 
 // ── part 1: the renderer, on injected decision points ───────────────────────
 
@@ -330,6 +334,209 @@ describe("T12 ⑧ (i) — a response pressed at or after the pressured unit's de
   });
 });
 
+describe("T12 ⑧ (i) — a credited control says who it landed on and for how long", () => {
+  const HEX_AT_MS = 41_200;
+  const hex = (over: Record<string, unknown> = {}) => ({
+    category: "control" as const,
+    spellId: "51514",
+    spellName: "Hex",
+    casterName: "Shaman-R",
+    casterId: "f4",
+    destId: "e2",
+    tSec: 41,
+    latencySec: 1.2,
+    landed: true,
+    controlOn: {
+      unitId: "e2",
+      unitName: "Paladin-R",
+      auras: [{ spellId: "51514", atMs: HEX_AT_MS }],
+    },
+    ...over,
+  });
+  /** the enemy paladin's `[CC ON ENEMY]` instances: a Hex that ran 2.1 s */
+  const cc = (over: Record<string, unknown> = {}) => ({
+    spellId: "51514",
+    atSeconds: HEX_AT_MS / 1000,
+    durationSeconds: 2.1,
+    ...over,
+  });
+  const summaries = (...ccInstances: ReturnType<typeof cc>[]) =>
+    [{ playerName: "Paladin-R", ccInstances }] as never;
+  const labels = {
+    friendly: (n: string) => (n === "Shaman-R" ? "3(RShaman)" : "2(AWarrior)"),
+    enemy: (n: string) => (n === "Paladin-R" ? "5(RPaladin)" : "4(AWarrior)"),
+  };
+  const line = (
+    responseCasts: unknown[],
+    spanOf = ccSpanLookup(summaries(cc()), 0),
+    withLabels = true,
+  ) =>
+    formatBurstAnsweredLines(
+      [point({ responseCasts: responseCasts as never })],
+      undefined,
+      withLabels ? labels : undefined,
+      spanOf,
+    )[0]!;
+
+  it("names the target by the roster label, with the span the [CC ON ENEMY] instance prints", () => {
+    const e = line([hex()]);
+    expect(e.line).toBe(
+      `${BURST_ANSWERED_TAG}   enemy opened Deathmark (4(AWarrior)): ` +
+        `3(RShaman) answered with Hex on 5(RPaladin) (2s) in 1.2s; 2(AWarrior) bottomed at 31% at 0:45`,
+    );
+    expect(e.namesControlTarget).toBe(true);
+    // without labels the name is the name, as everywhere on this line
+    expect(line([hex()], undefined, false).line).toContain(
+      "Shaman-R answered with Hex on Paladin-R (2s) in 1.2s;",
+    );
+  });
+
+  it("a pre-opener control keeps its 'before it opened' wording after the clause", () => {
+    expect(
+      line([hex({ latencySec: -0.9, preOpenerStillUp: true })]).line,
+    ).toContain("answered with Hex on 5(RPaladin) (2s) 0.9s before it opened;");
+  });
+
+  it("the span is the one CC formatter's text — <1s, and a control the round ended on", () => {
+    expect(
+      line([hex()], ccSpanLookup(summaries(cc({ durationSeconds: 0.3 })), 0))
+        .line,
+    ).toContain("answered with Hex on 5(RPaladin) (<1s) in 1.2s;");
+    expect(
+      line(
+        [hex()],
+        ccSpanLookup(
+          summaries(cc({ durationSeconds: 2.1, stillOnAtRoundEnd: true })),
+          0,
+        ),
+      ).line,
+    ).toContain(
+      "answered with Hex on 5(RPaladin) (still on them when the round ended, 2s in) in 1.2s;",
+    );
+  });
+
+  it("no CC instance for the application (a root, an interrupt) → the target, no brackets", () => {
+    const kick = hex({
+      spellId: "57994",
+      spellName: "Wind Shear",
+      controlOn: { unitId: "e2", unitName: "Paladin-R", auras: [] },
+    });
+    const e = line([kick]);
+    expect(e.line).toContain(
+      "answered with Wind Shear on 5(RPaladin) in 1.2s;",
+    );
+    expect(e.namesControlTarget).toBe(true);
+    // an aura the CC walk has no instance for
+    expect(line([hex()], ccSpanLookup(summaries(), 0)).line).toContain(
+      "answered with Hex on 5(RPaladin) in 1.2s;",
+    );
+  });
+
+  it("one press that landed on two burst casters names both, each with its own span", () => {
+    const sweep = (unitId: string, unitName: string) =>
+      hex({
+        spellId: "119381",
+        spellName: "Leg Sweep",
+        destId: undefined,
+        controlOn: {
+          unitId,
+          unitName,
+          auras: [{ spellId: "119381", atMs: HEX_AT_MS }],
+        },
+      });
+    const spanOf = ccSpanLookup(
+      [
+        {
+          playerName: "Warrior-E",
+          ccInstances: [cc({ spellId: "119381", durationSeconds: 3 })],
+        },
+        {
+          playerName: "Paladin-R",
+          ccInstances: [cc({ spellId: "119381", durationSeconds: 0.2 })],
+        },
+      ] as never,
+      0,
+    );
+    expect(
+      line([sweep("e1", "Warrior-E"), sweep("e2", "Paladin-R")], spanOf).line,
+    ).toContain(
+      "answered with Leg Sweep on 4(AWarrior) (3s) and 5(RPaladin) (<1s) in 1.2s;",
+    );
+    // a target the press did not creditably reach (it did not land) is not named
+    expect(
+      line(
+        [
+          sweep("e1", "Warrior-E"),
+          { ...sweep("e2", "Paladin-R"), landed: false },
+        ],
+        spanOf,
+      ).line,
+    ).toContain("answered with Leg Sweep on 4(AWarrior) (3s) in 1.2s;");
+    // another press by the same player is another answer
+    expect(
+      line(
+        [
+          sweep("e1", "Warrior-E"),
+          { ...sweep("e2", "Paladin-R"), latencySec: 4 },
+        ],
+        spanOf,
+      ).line,
+    ).toContain("answered with Leg Sweep on 4(AWarrior) (3s) in 1.2s;");
+  });
+
+  it("any other answer carries no clause and no legend flag", () => {
+    const e = formatBurstAnsweredLines([point()], undefined, labels)[0]!;
+    expect(e.line).not.toContain(" on ");
+    expect(e.namesControlTarget).toBeUndefined();
+  });
+
+  it("ccSpanLookup joins on the application itself — holder, aura id and instant", () => {
+    const spanOf = ccSpanLookup(summaries(cc()), 1_000_000);
+    const aura = { spellId: "51514", atMs: 1_000_000 + HEX_AT_MS };
+    expect(spanOf("Paladin-R", aura)).toBe("2s");
+    expect(spanOf("Warrior-E", aura)).toBeUndefined();
+    expect(spanOf("Paladin-R", { ...aura, spellId: "118" })).toBeUndefined();
+    expect(
+      spanOf("Paladin-R", { ...aura, atMs: aura.atMs + 40 }),
+    ).toBeUndefined();
+    expect(ccSpanLookup(undefined, 0)("Paladin-R", aura)).toBeUndefined();
+  });
+
+  it("the producer's reader returns the clause it wrote", () => {
+    const at = (l: string) => parseBurstAnsweredLine(`0:40  ${l}`)!;
+    expect(at(line([hex()]).line)).toMatchObject({
+      spellName: "Hex",
+      controlOn: [{ target: "5(RPaladin)", span: "2s" }],
+      latencySec: 1.2,
+    });
+    expect(
+      at(
+        line(
+          [hex()],
+          ccSpanLookup(summaries(cc({ stillOnAtRoundEnd: true })), 0),
+        ).line,
+      ).controlOn,
+    ).toEqual([
+      {
+        target: "5(RPaladin)",
+        span: "still on them when the round ended, 2s in",
+      },
+    ]);
+    expect(
+      at(line([hex({ latencySec: -0.9, preOpenerStillUp: true })]).line),
+    ).toMatchObject({
+      controlOn: [{ target: "5(RPaladin)", span: "2s" }],
+      latencySec: -0.9,
+    });
+    expect(
+      at(line([hex()], ccSpanLookup(summaries(), 0)).line).controlOn,
+    ).toEqual([{ target: "5(RPaladin)" }]);
+    expect(at(formatBurstAnsweredLines([point()])[0]!.line).controlOn).toEqual(
+      [],
+    );
+  });
+});
+
 describe("parseBurstAnsweredLine — the producer's own reader of its line", () => {
   const rendered = (over: Partial<BurstWindowDecisionPoint> = {}) => {
     const [e] = formatBurstAnsweredLines([point(over)], undefined, {
@@ -343,6 +550,7 @@ describe("parseBurstAnsweredLine — the producer's own reader of its line", () 
       atSec: 40,
       answerer: "1(DPriest)",
       spellName: "Pain Suppression",
+      controlOn: [],
       latencySec: 2.4,
       pressured: "2(FMage)",
       pressuredDied: false,
@@ -720,5 +928,161 @@ describe("[BURST ANSWERED] — T12 ⑧ (i) end to end: the death is read from th
       "Mate-R answered with Tranquility in 4.9s;",
     );
     expect(lines[0]!.line).toContain("Friend-R still died");
+  });
+});
+
+// ── part 3: in the timeline, beside the [CC ON ENEMY] line ──────────────────
+
+describe("[BURST ANSWERED] — T12 ⑧ (i): the control's span is the [CC ON ENEMY] line's, and the legend says what it is", () => {
+  const START = Date.UTC(2026, 7, 20);
+  const mk = (id: string, name: string, over: Record<string, unknown> = {}) =>
+    ({
+      id,
+      name,
+      ownerId: "",
+      isWellFormed: true,
+      type: CombatUnitType.Player,
+      class: CombatUnitClass.Shaman,
+      spec: CombatUnitSpec.Shaman_Restoration,
+      reaction: CombatUnitReaction.Friendly,
+      info: { teamId: "0", specId: "264" },
+      damageIn: [],
+      damageOut: [],
+      healIn: [],
+      healOut: [],
+      absorbsIn: [],
+      absorbsOut: [],
+      auraEvents: [],
+      spellCastEvents: [],
+      castStartEvents: [],
+      petSpellCastEvents: [],
+      actionIn: [],
+      actionOut: [],
+      deathRecords: [],
+      advancedActions: [],
+      ...over,
+    }) as never;
+  const HEX = "51514";
+  const HEX_AT_S = 41.2;
+  const timeline = (burst: BurstWindowDecisionPoint[]) => {
+    const owner = mk("o", "Me-Realm");
+    const mate = mk("m", "Mate-Realm");
+    const foe = mk("e", "Paladin-Realm", {
+      reaction: CombatUnitReaction.Hostile,
+      class: CombatUnitClass.Paladin,
+      spec: CombatUnitSpec.Paladin_Retribution,
+      info: { teamId: "1", specId: "70" },
+    });
+    return buildMatchTimeline({
+      owner,
+      ownerSpec: "Shaman_Restoration",
+      ownerCDs: [],
+      teammateCDs: [],
+      enemyCDTimeline: { players: [], alignedBurstWindows: [] },
+      ccTrinketSummaries: [],
+      dispelSummary: {
+        allyCleanse: [],
+        ourPurges: [],
+        hostilePurges: [],
+        missedCleanseWindows: [],
+        lateCleanseWindows: [],
+        ccEfficiency: [],
+        missedPurgeWindows: [],
+      },
+      friendlyDeaths: [],
+      enemyDeaths: [],
+      pressureWindows: [],
+      healingGaps: [],
+      friends: [owner, mate],
+      enemies: [foe],
+      matchStartMs: START,
+      matchEndMs: START + 120_000,
+      isHealer: true,
+      criticalWindowSeconds: new Set<number>(),
+      playerIdMap: new Map([
+        ["Me-Realm", 1],
+        ["Mate-Realm", 2],
+      ]),
+      enemyIdMap: new Map([["Paladin-Realm", 4]]),
+      burstWindows: burst,
+      // the teammate's Hex on the paladin, 2.1 s — what [CC ON ENEMY] renders
+      enemyCCSummaries: [
+        {
+          playerName: "Paladin-Realm",
+          playerSpec: "Retribution Paladin",
+          trinketType: "None",
+          trinketCooldownSeconds: 120,
+          trinketUseTimes: [],
+          missedTrinketWindows: [],
+          rootInstances: [],
+          disarmInstances: [],
+          interruptInstances: [],
+          ccAvoidedInstances: [],
+          ccInstances: [
+            {
+              atSeconds: HEX_AT_S,
+              durationSeconds: 2.1,
+              spellId: HEX,
+              spellName: "Hex",
+              sourceName: "Mate-Realm",
+              sourceId: "m",
+              sourceSpec: "Restoration Shaman",
+              damageTakenDuring: 0,
+              trinketState: "passive_trinket",
+              drInfo: null,
+              distanceYards: null,
+              losBlocked: null,
+            },
+          ],
+        },
+      ],
+    } as never);
+  };
+  const answered = (responseCasts: unknown[]) =>
+    point({
+      leadCd: { ...point().leadCd, casterName: "Paladin-Realm" },
+      pressured: { ...point().pressured!, name: "Me-Realm" },
+      responseCasts: responseCasts as never,
+    });
+  const hex = {
+    category: "control",
+    spellId: HEX,
+    spellName: "Hex",
+    casterName: "Mate-Realm",
+    casterId: "m",
+    destId: "e",
+    tSec: 41,
+    latencySec: 1.2,
+    landed: true,
+    controlOn: {
+      unitId: "e",
+      unitName: "Paladin-Realm",
+      auras: [{ spellId: HEX, atMs: START + Math.round(HEX_AT_S * 1000) }],
+    },
+  };
+
+  it("both lines print one length for the one application, and the legend line is there", () => {
+    const lines = timeline([answered([hex])]).split("\n");
+    const credit = lines.find((l) => l.includes(`${BURST_ANSWERED_TAG}   `))!;
+    const landing = lines.find((l) => l.includes("[CC ON ENEMY]   "))!;
+    const who = landing.match(
+      /\[CC ON ENEMY\] {3}(\S+) ← Hex \(by (\S+)\) \((\S+)\)/,
+    )!;
+    expect(who[3]).toBe("2s");
+    expect(credit).toContain(
+      `${who[2]} answered with Hex on ${who[1]} (${who[3]}) in 1.2s;`,
+    );
+    expect(parseBurstAnsweredLine(credit)!.controlOn).toEqual([
+      { target: who[1], span: "2s" },
+    ]);
+    expect(lines).toContain(BURST_ANSWERED_CONTROL_LEGEND);
+  });
+
+  it("a round whose credited answers are not controls pays nothing for that legend line", () => {
+    const text = timeline([
+      answered([{ ...point().responseCasts[0]!, casterName: "Mate-Realm" }]),
+    ]);
+    expect(text).toContain(`${BURST_ANSWERED_TAG}   enemy opened Deathmark`);
+    expect(text).not.toContain(BURST_ANSWERED_CONTROL_LEGEND);
   });
 });

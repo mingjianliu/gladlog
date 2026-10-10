@@ -905,6 +905,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     owner,
     pid,
     enemyPid,
+    enemyCCSummaries,
   });
 
   // ── [HEALER INACTIVITY] events (healer only) ────────────────────────────────────

@@ -38,6 +38,10 @@ import {
   peakSpikePlacement,
   spikeWindowOverlapSeconds,
 } from "@gladlog/analysis";
+import {
+  AIMED_CONTROL_LANDING_LEAD_MS,
+  GROUND_CONTROL_FUSE_MS,
+} from "@gladlog/analysis/src/analysis/burstWindowDecisionPoints";
 import { fmtFactNum } from "@gladlog/analysis/src/analysis/factFormat";
 import { parseBurstAnsweredLine } from "@gladlog/analysis/src/context/burstAnswered";
 import {
@@ -3764,6 +3768,84 @@ export function checkBurstAnsweredBeforeDeath(lines: string[]): string[] {
   return failures;
 }
 
+const LOG_OWNER_ROSTER_LINE = /<unit\s+id="(\d+)"[^>]*role="log owner"/;
+/**
+ * HardFailure class (T12 ⑧ i, user ruling 2026-10-10): the length a
+ * `[BURST ANSWERED] … answered with X on T (span)` line prints for a control
+ * is the one its `[CC ON ENEMY]` line prints — `ccSpanLookup` joins the
+ * credit line to the CC instance of the same aura application and both go
+ * through `renderedCcSpan`.
+ *
+ * Read on the rendered text: among the `[CC ON ENEMY] T ← X (by <answerer>)`
+ * lines whose second can be that application's — the line opens at `t`, the
+ * answer came `N` s after the lead cast, and the aura lands from
+ * `AIMED_CONTROL_LANDING_LEAD_MS` before the press to
+ * `GROUND_CONTROL_FUSE_MS` after it, the engine's own two bounds — at least
+ * one prints the same span. No such line (a spell whose cast and aura carry
+ * different names, a pet's control) proves nothing and passes.
+ *
+ * The log owner's answers are not read: the owner's control prints on its
+ * `[YOU] [CC]` cast line and keeps a `[CC ON ENEMY]` line only in two cases,
+ * so the lines present are not all of that player's applications.
+ */
+export function checkBurstAnsweredControlSpan(lines: string[]): string[] {
+  let ownerId: string | undefined;
+  const landings: Array<{
+    sec: number;
+    target: string;
+    spell: string;
+    by: string;
+    span: string;
+  }> = [];
+  for (const line of lines) {
+    ownerId ??= line.match(LOG_OWNER_ROSTER_LINE)?.[1];
+    const c = line.match(CC_ON_ENEMY_LINE);
+    if (!c) continue;
+    const rest = line.slice(c[0].length);
+    const span =
+      rest.match(/^ \(([^)]*)\)/)?.[1] ??
+      rest.match(/ ended this CC after (\S+) \(cut short/)?.[1];
+    if (span === undefined) continue;
+    landings.push({
+      sec: Number(c[1]) * 60 + Number(c[2]),
+      target: c[3]!,
+      spell: c[4]!,
+      by: c[5]!,
+      span,
+    });
+  }
+  if (ownerId === undefined) return [];
+  const failures: string[] = [];
+  lines.forEach((line, i) => {
+    const a = parseBurstAnsweredLine(line);
+    if (!a || a.answerer.startsWith(`${ownerId}(`)) return;
+    // the answer is in [t + N − 0.05, t + 1 + N + 0.05)
+    const lo = Math.floor(
+      a.atSec + a.latencySec - 0.05 - AIMED_CONTROL_LANDING_LEAD_MS / 1000,
+    );
+    const hi = Math.floor(
+      a.atSec + 1 + a.latencySec + 0.05 + GROUND_CONTROL_FUSE_MS / 1000,
+    );
+    for (const on of a.controlOn) {
+      if (on.span === undefined) continue;
+      const same = landings.filter(
+        (l) =>
+          l.target === on.target &&
+          l.spell === a.spellName &&
+          l.by === a.answerer &&
+          l.sec >= lo &&
+          l.sec <= hi,
+      );
+      if (same.length > 0 && !same.some((l) => l.span === on.span))
+        failures.push(
+          `line ${i + 1}: [BURST ANSWERED] 写 ${a.spellName} 在 ${on.target} 身上 (${on.span}),` +
+            `同一次控制的 [CC ON ENEMY] 行(${same.map((l) => fmtTime(l.sec)).join(" / ")})写 (${same.map((l) => l.span).join(" / ")})`,
+        );
+    }
+  });
+  return failures;
+}
+
 /**
  * Hard invariant (2026-08-30): a `cd-hoarded` / `crisis-no-response` menu line
  * claims a unit's HP at a rendered second; when the timeline also emits a
@@ -4416,6 +4498,7 @@ export function checkMatch(
   hardFailures.push(...checkPressedDuringControlNote(lines));
   hardFailures.push(...checkBurstAnsweredBottomConsistency(lines));
   hardFailures.push(...checkBurstAnsweredBeforeDeath(lines));
+  hardFailures.push(...checkBurstAnsweredControlSpan(lines));
   hardFailures.push(...checkFreeOfWindowConsistency(lines));
   hardFailures.push(...checkPeelOptionConsistency(lines));
   hardFailures.push(...checkCcBookmarkConsistency(lines));

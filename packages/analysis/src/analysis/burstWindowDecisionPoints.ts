@@ -299,6 +299,71 @@ export interface BurstResponseCast {
    * died. Credit-line only — `responded` never reads it
    * (slow-defensive-response is unchanged). Absent when it was not. */
   afterPressuredDeath?: true;
+  /** A control: the enemy it was aimed at (an aimed cast) or landed on (a
+   * ground / untargeted one), and the aura applications it landed as — none
+   * for an interrupt, or a control that did not land. T12 ⑧ (i), second
+   * half: the credit line names the target and reads the control's length
+   * off the `[CC ON ENEMY]` instance of the same application. Credit-line
+   * only — `responded` never reads it. Absent on every other response. */
+  controlOn?: {
+    unitId: string;
+    unitName: string;
+    auras: ControlLandingAura[];
+  };
+}
+
+/** One aura application a control answer put on its target: the aura's own
+ * id and the instant it went on — the key the `[CC ON ENEMY]` instance of the
+ * same application carries (`ICCInstance.spellId` / `atSeconds`). */
+export interface ControlLandingAura {
+  spellId: string;
+  atMs: number;
+}
+
+/** How far before an aimed control's SPELL_CAST_SUCCESS its own aura / its
+ * SPELL_INTERRUPT may be logged and still be that cast's landing (the log
+ * can order the two either way). The value F-B1 shipped with, named so the
+ * gate that re-reads a landing's second derives its bound from it. */
+export const AIMED_CONTROL_LANDING_LEAD_MS = 100;
+
+/**
+ * The aura applications by which the aimed control `castSpellId`, cast by
+ * `casterId` at `castMs`, landed on `dest`: its own id or one of its effect
+ * auras (`castEffectAuras.ts`), from the caster or the caster's pet, inside
+ * the landing window. `aimedControlLanded`'s aura half — one scan, so "it
+ * landed" and "this is the aura it landed as" cannot disagree.
+ */
+export function aimedControlLandingAuras(
+  dest:
+    | {
+        auraEvents?: ReadonlyArray<{
+          timestamp: number;
+          spellId?: string;
+          srcUnitId: string;
+          logLine: { event: string };
+        }>;
+      }
+    | undefined,
+  casterId: string,
+  castSpellId: string,
+  castMs: number,
+  friendlyPlayerOf: (srcUnitId: string) => string | undefined,
+): ControlLandingAura[] {
+  const own = castAndEffectIds(castSpellId);
+  const out: ControlLandingAura[] = [];
+  for (const a of dest?.auraEvents ?? [])
+    if (
+      (a.logLine.event === "SPELL_AURA_APPLIED" ||
+        a.logLine.event === "SPELL_AURA_REFRESH") &&
+      a.spellId !== undefined &&
+      own.has(a.spellId) &&
+      (a.srcUnitId === casterId ||
+        friendlyPlayerOf(a.srcUnitId) === casterId) &&
+      a.timestamp >= castMs - AIMED_CONTROL_LANDING_LEAD_MS &&
+      a.timestamp <= castMs + GROUND_CONTROL_FUSE_MS
+    )
+      out.push({ spellId: a.spellId, atMs: a.timestamp });
+  return out;
 }
 
 /**
@@ -328,26 +393,23 @@ export function aimedControlLanded(
   isInterrupt: boolean,
 ): boolean {
   if (!dest) return true; // unknown target: never withhold credit
-  const own = castAndEffectIds(castSpellId);
   const fromCaster = (src: string) =>
     src === casterId || friendlyPlayerOf(src) === casterId;
-  const auraLanded = (dest.auraEvents ?? []).some(
-    (a) =>
-      (a.logLine.event === "SPELL_AURA_APPLIED" ||
-        a.logLine.event === "SPELL_AURA_REFRESH") &&
-      a.spellId !== undefined &&
-      own.has(a.spellId) &&
-      fromCaster(a.srcUnitId) &&
-      a.timestamp >= castMs - 100 &&
-      a.timestamp <= castMs + GROUND_CONTROL_FUSE_MS,
-  );
+  const auraLanded =
+    aimedControlLandingAuras(
+      dest,
+      casterId,
+      castSpellId,
+      castMs,
+      friendlyPlayerOf,
+    ).length > 0;
   if (auraLanded) return true;
   if (!isInterrupt) return false;
   return (dest.actionIn ?? []).some(
     (x) =>
       x.logLine.event === "SPELL_INTERRUPT" &&
       fromCaster(x.srcUnitId) &&
-      x.timestamp >= castMs - 100 &&
+      x.timestamp >= castMs - AIMED_CONTROL_LANDING_LEAD_MS &&
       x.timestamp <= castMs + LANDED_PAIR_MS,
   );
 }
@@ -1281,6 +1343,25 @@ export function burstWindowDecisionPoints(
                 INTERRUPT_IDS.has(c.spellId),
               )
             : undefined;
+        // T12 ⑧ (i): who the control was aimed at, and the aura applications
+        // it landed as — the scan `landed` itself rests on
+        const controlDest =
+          category === "control"
+            ? units.find((u) => u.id === c.dest)
+            : undefined;
+        const controlOn: BurstResponseCast["controlOn"] = controlDest
+          ? {
+              unitId: controlDest.id,
+              unitName: controlDest.name,
+              auras: aimedControlLandingAuras(
+                controlDest,
+                c.unitId,
+                c.spellId,
+                c.tMs,
+                friendlyPlayerOf,
+              ),
+            }
+          : undefined;
         const response: BurstResponseCast = {
           category,
           spellId: c.spellId,
@@ -1296,6 +1377,7 @@ export function burstWindowDecisionPoints(
             : {}),
           ...(preOpenerStillUp !== undefined ? { preOpenerStillUp } : {}),
           ...(landed !== undefined ? { landed } : {}),
+          ...(controlOn ? { controlOn } : {}),
         };
         responseAtMs.set(response, c.tMs);
         responseCasts.push(response);
@@ -1308,12 +1390,26 @@ export function burstWindowDecisionPoints(
         w0,
         w1,
       )) {
+        const holder = units.find((u) => u.id === r.holderId);
         const response: BurstResponseCast = {
           category: "control",
           spellId: r.spellId,
           spellName: getEnglishSpellName(r.spellId),
           casterName: friendlyNameById.get(r.unitId) ?? "",
           tSec: Math.floor((r.tMs - start) / 1000),
+          // the holder this aura landed on, and the application itself
+          ...(holder
+            ? {
+                controlOn: {
+                  unitId: holder.id,
+                  unitName: holder.name,
+                  auras:
+                    r.auraAtMs !== undefined
+                      ? [{ spellId: r.spellId, atMs: r.auraAtMs }]
+                      : [],
+                },
+              }
+            : {}),
           // F-B4's pre-opener check, as for an aimed control: a landed control
           // from before the lead cast answers only if its aura was still on
           // its holder then (codex 35-CD-13f: a root that ended 0.5 s before
