@@ -12,9 +12,11 @@ import { ensureAnalysisData } from "../src/data/ensure";
 import { spellSchoolMask } from "../src/data/spellSchools";
 import {
   actWindowFor,
+  cannotCastIntervalsForSpells,
   intervalBlocksSpell,
   lockedSchoolsText,
   namedCannotCastIntervals,
+  petCastSpellIdsOf,
 } from "../src/utils/cannotCastIntervals";
 
 const T0 = 1_000_000;
@@ -70,6 +72,50 @@ describe("a kick lockout by school (FT-T10)", () => {
     expect(lockedSchoolsText(64)).toBe(" (Arcane)");
     expect(lockedSchoolsText(36)).toBe(" (Fire/Shadow)");
     expect(lockedSchoolsText(undefined)).toBe("");
+  });
+
+  it("review 40-FT-54: the owner's lockout does not reach a spell the log shows the PET casting", () => {
+    const FEAR = "5782"; // Shadow
+    const SPELL_LOCK = "19647"; // Shadow — the Felhunter's
+    const DEVOUR_MAGIC = "19505"; // Shadow — the Felhunter's
+    const SHADOWFURY = "30283"; // Shadow — the warlock's own
+    expect(spellSchoolMask(FEAR)).toBe(32);
+    expect(spellSchoolMask(SPELL_LOCK)).toBe(32);
+    expect(spellSchoolMask(DEVOUR_MAGIC)).toBe(32);
+    expect(spellSchoolMask(SHADOWFURY)).toBe(32);
+    const success = (spellId: string, atS: number) => ({
+      spellId,
+      timestamp: T0 + atS * 1000,
+      logLine: {
+        event: LogEvent.SPELL_CAST_SUCCESS,
+        timestamp: T0 + atS * 1000,
+      },
+    });
+    const lock = kicked(80, FEAR);
+    // the pet pressed Spell Lock earlier in the round; Devour Magic never
+    lock.petSpellCastEvents = [success(SPELL_LOCK, 20)];
+    lock.spellCastEvents = [success(SHADOWFURY, 30)];
+    expect([...petCastSpellIdsOf(lock)]).toEqual([SPELL_LOCK]);
+    const [iv] = namedCannotCastIntervals(lock, enemyIds);
+    expect(iv).toMatchObject({ lockout: true, lockedSchoolMask: 32 });
+    // Shadow is locked for the warlock…
+    expect(intervalBlocksSpell(iv!, SHADOWFURY)).toBe(true);
+    // …and not for the Felhunter
+    expect(intervalBlocksSpell(iv!, SPELL_LOCK)).toBe(false);
+    expect(cannotCastIntervalsForSpells(lock, enemyIds, [SPELL_LOCK])).toEqual(
+      [],
+    );
+    // never seen from the pet this round → the owner's reading (the exemption stays)
+    expect(intervalBlocksSpell(iv!, DEVOUR_MAGIC)).toBe(true);
+    // a spell both the unit and a pet cast is the unit's own
+    lock.spellCastEvents.push(success(SPELL_LOCK, 40));
+    expect(petCastSpellIdsOf(lock).size).toBe(0);
+    expect(
+      intervalBlocksSpell(
+        namedCannotCastIntervals(lock, enemyIds)[0]!,
+        SPELL_LOCK,
+      ),
+    ).toBe(true);
   });
 
   it("couldRespond asked for a cooldown; stateIn counts free time against the named cooldowns", () => {

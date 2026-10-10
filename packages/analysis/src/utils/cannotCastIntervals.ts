@@ -69,6 +69,38 @@ export interface NamedCannotCastInterval {
   /** for a lockout: the schools of the spell that was interrupted (official
    * SchoolMask) — what the lock shuts out. Undefined when unknown. */
   lockedSchoolMask?: number;
+  /** for a lockout: the spells this unit's PET casts (`petCastSpellIdsOf`).
+   * The lock sits on the unit's own cast bar and stops none of them, whatever
+   * their school. */
+  petCastSpellIds?: ReadonlySet<string>;
+}
+
+/**
+ * The spells the log shows this unit's PET casting and never the unit itself
+ * (SPELL_CAST_SUCCESS in `petSpellCastEvents`, none in `spellCastEvents`):
+ * Spell Lock, Devour Magic, a pet's own kit. A kick lockout on the owner does
+ * not reach them — review 40-FT-54, asked of the corpus before it was
+ * believed (fix-FT/scripts/t10_petLock.ts, 605 files, 4,093 lockouts on
+ * players whose pets cast something): the pet pressed the spell inside the
+ * owner's lockout in 1,652 of 11,491 pairs whose school the lock covers
+ * (14.4 %) and in 906 of 6,234 pairs it does not (14.5 %) — the lock's school
+ * makes no difference to the pet, where for the player's own spells it is
+ * 0.09 % against 5.9 % (`intervalBlocksSpell`). Spell Lock alone: 68 / 905
+ * inside a lock that covers Shadow; Devour Magic 88 / 641.
+ * Observed, not listed: a pet spell never pressed this round stays on the
+ * owner's reading (the exemption stays).
+ */
+export function petCastSpellIdsOf(unit: ICombatUnit): ReadonlySet<string> {
+  const successIds = (events: ICombatUnit["spellCastEvents"] | undefined) =>
+    new Set(
+      (events ?? [])
+        .filter((c) => c.logLine.event === LogEvent.SPELL_CAST_SUCCESS)
+        .map((c) => String(c.spellId)),
+    );
+  const own = successIds(unit.spellCastEvents);
+  return new Set(
+    [...successIds(unit.petSpellCastEvents)].filter((id) => !own.has(id)),
+  );
 }
 
 /**
@@ -93,10 +125,15 @@ export interface NamedCannotCastInterval {
  * lockout as locking everything — predicate-index "Not yet unified".
  */
 export function intervalBlocksSpell(
-  iv: Pick<NamedCannotCastInterval, "lockout" | "lockedSchoolMask">,
+  iv: Pick<
+    NamedCannotCastInterval,
+    "lockout" | "lockedSchoolMask" | "petCastSpellIds"
+  >,
   spellId: string | undefined,
 ): boolean {
   if (!iv.lockout || spellId === undefined) return true;
+  // the pet's spell: the owner's cast bar is not its cast bar
+  if (iv.petCastSpellIds?.has(spellId)) return false;
   const m = spellSchoolMask(spellId);
   if (m === undefined || iv.lockedSchoolMask === undefined) return true;
   return schoolLockedBy(m, iv.lockedSchoolMask);
@@ -122,7 +159,10 @@ export function cannotCastIntervalsForSpells(
 /** FT-T10: `cannotCastIntervalsForSpells`'s test on one interval,
  * for a reader that builds the intervals once and asks per option. */
 export function intervalBlocksEverySpell(
-  iv: Pick<NamedCannotCastInterval, "lockout" | "lockedSchoolMask">,
+  iv: Pick<
+    NamedCannotCastInterval,
+    "lockout" | "lockedSchoolMask" | "petCastSpellIds"
+  >,
   spellIds: readonly string[] | undefined,
 ): boolean {
   return (
@@ -170,9 +210,11 @@ export function namedCannotCastIntervals(
     lockout: false,
   }));
 
+  let petCast: ReadonlySet<string> | undefined;
   for (const action of unit.actionIn ?? []) {
     if (action.logLine.event !== LogEvent.SPELL_INTERRUPT) continue;
     if (!enemyIds.has(action.srcUnitId)) continue;
+    petCast ??= petCastSpellIdsOf(unit);
     const kickSpellId = action.spellId ?? "";
     // kick-eaten F-K8 (A23): the lockout THIS unit sat in — a Storm Conduit
     // holder's interrupted Lightning Bolt locks for ×0.6
@@ -187,6 +229,7 @@ export function namedCannotCastIntervals(
       ...(interrupted && spellSchoolMask(String(interrupted)) !== undefined
         ? { lockedSchoolMask: spellSchoolMask(String(interrupted)) }
         : {}),
+      ...(petCast.size > 0 ? { petCastSpellIds: petCast } : {}),
     });
   }
 
