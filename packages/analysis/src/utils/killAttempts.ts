@@ -838,9 +838,13 @@ export function formatKillAttemptsForContext(
   lines.push(
     "  `(N M on target)` = the team's damage on the target: what landed plus what the target's shields absorbed.",
   );
-  // F-E22 / F-E22b (rulings A29, A′4): what a FAILED cause is allowed to be.
+  // F-E22 / F-E22b (rulings A29, A′4): what may be named after FAILED.
+  // FT-T15 ⑦ (user ruling 2026-10-10): the text after FAILED is the first
+  // match of `attributeFailure`'s fixed `primary` order, not a measured
+  // cause — the legend states that order and no longer says "cause" /
+  // "reason". The selection itself is untouched (A29 / A′4 / B16b).
   lines.push(
-    "  A FAILED wall / external / self-save went up inside the attempt, or was already up when it began (`[up since m:ss]`) — one pressed after the attempt was over is not its cause; an immunity, the trinket or a break in the next 5 s still is. A cause naming both the target's own save and an external (`popped X; saved by external (Y)`) met both: neither alone is the reason. `target trinketed out` / `broke out (X)` = the trinket / a racial or class ability removed a control of this attempt.",
+    "  `FAILED: X` names what the attempt ran into — the first that applies, in this fixed order: the target's trinket, a break ability, a full immunity, a wall, an external, a self-save, `healed through` (over the attempt and the next 5 s the target received more healing than damage), `not enough damage` (none of the above). It is what was pressed or up, picked in that order — not a measurement of what stopped the kill. A wall / external / self-save is named when it went up inside the attempt, or was already up when it began (`[up since m:ss]`) — one pressed after the attempt was over is not named; an immunity, the trinket or a break in the next 5 s still is. An immunity met along with the trinket or a break is named beside it, and so is an external beside the target's own save (`popped X; saved by external (Y)`): the attempt met both. `target trinketed out` / `broke out (X)` = the trinket / a racial or class ability removed a control of this attempt.",
   );
   let kills = 0;
   let withSofter = 0;
