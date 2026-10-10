@@ -154,6 +154,10 @@ export interface BuildMatchTimelineParams {
   }>;
   enemyDeaths: Array<{ spec: string; name: string; atSeconds: number }>;
   pressureWindows: IDamageBucket[];
+  /** The `[DMG SPIKE]` candidates the top-N cap dropped
+   * (`selectPressureWindows(...).notListed`, at `DMG_SPIKE_THRESHOLD`) — D4:
+   * the timeline counts them in one line under the legend. Absent = none. */
+  pressureWindowsNotListed?: IDamageBucket[];
   healingGaps: IHealingGap[];
   friends: ICombatUnit[];
   /**
@@ -1033,5 +1037,6 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     matchEndMs,
     bracket,
     enemyPid,
+    pressureWindowsNotListed: params.pressureWindowsNotListed,
   });
 }

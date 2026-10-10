@@ -26,6 +26,7 @@ import {
   isHealerSpec,
   isHpTroughWorthPrinting,
   isSpikeHealedThrough,
+  PRESSURE_WINDOWS_TOP_N,
   SELF_CAST_NOOP_EXTERNAL_IDS,
   specToBenchmarkKey,
   specToString,
@@ -338,6 +339,85 @@ export function emitRotPressureEntries(params: {
 }
 
 // ── [DMG SPIKE] events ──────────────────────────────────────────────────────
+
+/** A spike total as every `[DMG SPIKE]` figure prints it: `0.89M`. */
+const spikeM = (totalDamage: number): string =>
+  `${(totalDamage / 1_000_000).toFixed(2)}M`;
+
+/**
+ * D4 (user ruling 2026-10-10): the legend sentence that says the `[DMG SPIKE]`
+ * list is capped, by the ranking `selectPressureWindows` uses — the largest
+ * `PRESSURE_WINDOWS_TOP_N` totals over the whole team, a unit's own windows
+ * never overlapping, each at least `DMG_SPIKE_THRESHOLD`. The cap itself is
+ * the signed 2026-08-23 ruling and does not move; until now nothing in the
+ * prompt said it existed (88 % of 3,520 prompts print exactly five lines).
+ * A function, not a constant: both numbers are other modules' and are read
+ * when the legend is built, not while this module loads.
+ */
+export function dmgSpikeListLegend(): string {
+  return `    Only the round's ${PRESSURE_WINDOWS_TOP_N} largest windows are listed — ranked by \`N\` across your whole team, no two of one unit's overlapping — and only those of ${spikeM(DMG_SPIKE_THRESHOLD)} or more.`;
+}
+
+/**
+ * D4, second half: the one line that counts the windows the cap dropped —
+ * `Not listed this round: 8 more [DMG SPIKE] windows of 0.30M or more
+ * (largest: 0.89M on 2(HDHunter) at 1:01–1:11).` — printed under the legend
+ * sentence, and only when there is one. It opens on a word, not on the
+ * count: a legend line must never read as a timestamped entry to anything
+ * that looks at a line's first characters.
+ *
+ * `notListed` is `selectPressureWindows(...).notListed` with
+ * `notListedMinDamage = DMG_SPIKE_THRESHOLD`: the same greedy walk that
+ * picked the listed five, carried on past the cap — never a second
+ * derivation. A window that starts past the match end would not have printed
+ * even without the cap (`addEntry`, B103) and is not counted. Every figure is
+ * formatted as the `[DMG SPIKE]` lines format theirs (total, roster label,
+ * `fmtTime` bounds), and the gate reads the line back through
+ * `parseDmgSpikesNotListed`.
+ */
+export function formatDmgSpikesNotListed(params: {
+  notListed: ReadonlyArray<IDamageBucket>;
+  matchEndSeconds: number;
+  pid: (name: string) => string;
+}): string | null {
+  const dropped = params.notListed.filter(
+    (w) =>
+      w.totalDamage >= DMG_SPIKE_THRESHOLD &&
+      w.fromSeconds <= params.matchEndSeconds,
+  );
+  if (dropped.length === 0) return null;
+  // largest first already (the walk's order); do not rely on it
+  const top = dropped.reduce((a, b) => (b.totalDamage > a.totalDamage ? b : a));
+  const one = dropped.length === 1;
+  return (
+    `    Not listed this round: ${dropped.length} more [DMG SPIKE] window${one ? "" : "s"} of ${spikeM(DMG_SPIKE_THRESHOLD)} or more ` +
+    `(${one ? "" : "largest: "}${spikeM(top.totalDamage)} on ${params.pid(top.targetName)} at ${fmtTime(top.fromSeconds)}–${fmtTime(top.toSeconds)}).`
+  );
+}
+
+const DMG_SPIKES_NOT_LISTED_RE =
+  /^\s*Not listed this round: (\d+) more \[DMG SPIKE\] windows? of (\d+\.\d{2})M or more \((?:largest: )?(\d+\.\d{2})M on (\S+) at (\d+):(\d{2})–(\d+):(\d{2})\)\.$/;
+/** `formatDmgSpikesNotListed`'s line read back (amounts in M, bounds in
+ * whole seconds); null for any other line. */
+export function parseDmgSpikesNotListed(line: string): {
+  count: number;
+  thresholdM: number;
+  largestM: number;
+  unit: string;
+  fromSec: number;
+  toSec: number;
+} | null {
+  const m = line.match(DMG_SPIKES_NOT_LISTED_RE);
+  if (!m) return null;
+  return {
+    count: Number(m[1]),
+    thresholdM: Number(m[2]),
+    largestM: Number(m[3]),
+    unit: m[4]!,
+    fromSec: Number(m[5]) * 60 + Number(m[6]),
+    toSec: Number(m[7]) * 60 + Number(m[8]),
+  };
+}
 
 /**
  * Emits [DMG SPIKE] entries for each pressure window at or above DMG_SPIKE_THRESHOLD,

@@ -12,11 +12,19 @@ import {
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { kickPriorityDecisionPoints } from "../src/analysis/candidates/kickPriority";
-import { emitDmgSpikeEntries } from "../src/context/matchTimelineSections";
+import {
+  dmgSpikeListLegend,
+  emitDmgSpikeEntries,
+  formatDmgSpikesNotListed,
+  parseDmgSpikesNotListed,
+} from "../src/context/matchTimelineSections";
+import { DMG_SPIKE_THRESHOLD } from "../src/context/timelineHelpers";
 import { ensureAnalysisData } from "../src/data/ensure";
 import {
   computePressureWindows,
   isSpikeHealedThrough,
+  PRESSURE_WINDOWS_TOP_N,
+  selectPressureWindows,
 } from "../src/utils/cooldowns";
 import { computeOffensiveWindows } from "../src/utils/offensiveWindows";
 import {
@@ -369,5 +377,207 @@ describe("① c — a [DMG SPIKE] bucket closes at its victim's death / the roun
     });
     expect(out[0]).toContain("(0% -> 0% HP");
     expect(out[0]).not.toContain("healed through");
+  });
+});
+
+describe("② / D4 — the [DMG SPIKE] list is the round's top 5; the prompt says so and counts the rest", () => {
+  // One hit per window, 20 s apart, so every hit is its own 10 s window.
+  // 1bad0a5c's shape: more windows of the listing threshold than the cap.
+  const unitWith = (
+    id: string,
+    name: string,
+    spec: CombatUnitSpec,
+    hits: Array<[number, number]>,
+  ) =>
+    makeUnit(id, {
+      name,
+      spec,
+      info: {},
+      damageIn: hits.map(([s, amount]) => makeDamageEvent(at(s), amount, id)),
+    });
+  const warrior = () =>
+    unitWith("f1", "Warrior-Realm", CombatUnitSpec.Warrior_Arms, [
+      [10, 900_000],
+      [30, 800_000],
+      [50, 700_000],
+      [70, 350_000],
+      [90, 200_000], // under the listing threshold
+    ]);
+  const hunter = () =>
+    unitWith("f2", "Hunter-Realm", CombatUnitSpec.DemonHunter_Havoc, [
+      [20, 850_000],
+      [40, 750_000],
+      [60, 600_000],
+      [80, 310_000],
+    ]);
+  const combatOf = (units: ReturnType<typeof makeUnit>[]) =>
+    ({
+      startTime: T0,
+      endTime: at(300),
+      startInfo: { bracket: "3v3" },
+      units: Object.fromEntries(units.map((u) => [u.id, u])),
+    }) as never;
+  const totals = (ws: Array<{ totalDamage: number }>) =>
+    ws.map((w) => w.totalDamage);
+
+  it("`listed` is computePressureWindows's own return — with or without the walk past the cap", () => {
+    const friends = [warrior(), hunter()];
+    const combat = combatOf(friends);
+    const capOnly = computePressureWindows(friends, combat);
+    expect(capOnly).toHaveLength(PRESSURE_WINDOWS_TOP_N);
+    expect(totals(capOnly)).toEqual([
+      900_000, 850_000, 800_000, 750_000, 700_000,
+    ]);
+    expect(selectPressureWindows(friends, combat)).toEqual({
+      listed: capOnly,
+      notListed: [],
+    });
+    expect(
+      selectPressureWindows(friends, combat, {
+        notListedMinDamage: DMG_SPIKE_THRESHOLD,
+      }).listed,
+    ).toEqual(capOnly);
+  });
+
+  it("`notListed` is the same walk past the cap: every further window of the threshold or more, largest first", () => {
+    const friends = [warrior(), hunter()];
+    const { listed, notListed } = selectPressureWindows(
+      friends,
+      combatOf(friends),
+      { notListedMinDamage: DMG_SPIKE_THRESHOLD },
+    );
+    expect(
+      notListed.map((w) => [w.targetName, w.fromSeconds, w.totalDamage]),
+    ).toEqual([
+      ["Hunter-Realm", 60, 600_000],
+      ["Warrior-Realm", 70, 350_000],
+      ["Hunter-Realm", 80, 310_000],
+    ]);
+    // ranked below every listed window
+    expect(Math.max(...totals(notListed))).toBeLessThanOrEqual(
+      Math.min(...totals(listed)),
+    );
+  });
+
+  it("a window overlapping one already kept for that unit is not a further window", () => {
+    // 900k at 10 and 400k at 14: the window opened at 14 (400k) overlaps the
+    // listed one opened at 10 (1.3M) — it is that spike, not another
+    const w = unitWith("f1", "Warrior-Realm", CombatUnitSpec.Warrior_Arms, [
+      [10, 900_000],
+      [14, 400_000],
+      [30, 800_000],
+      [50, 700_000],
+      [70, 650_000],
+      [90, 600_000],
+      [110, 550_000],
+      [114, 500_000],
+    ]);
+    const { listed, notListed } = selectPressureWindows([w], combatOf([w]), {
+      notListedMinDamage: DMG_SPIKE_THRESHOLD,
+    });
+    expect(totals(listed)).toEqual([
+      1_300_000, 1_050_000, 800_000, 700_000, 650_000,
+    ]);
+    expect(notListed.map((x) => [x.fromSeconds, x.totalDamage])).toEqual([
+      [90, 600_000],
+    ]);
+    // the same no-overlap rule against the listed ones and each other
+    const all = [...listed, ...notListed];
+    for (const a of all)
+      for (const b of all)
+        if (a !== b)
+          expect(
+            Math.min(a.toSeconds, b.toSeconds) -
+              Math.max(a.fromSeconds, b.fromSeconds),
+          ).toBeLessThanOrEqual(0);
+  });
+
+  it("fewer windows than the cap, or none of the threshold past it → nothing is counted", () => {
+    const one = unitWith("f1", "Warrior-Realm", CombatUnitSpec.Warrior_Arms, [
+      [10, 900_000],
+      [30, 200_000],
+    ]);
+    expect(
+      selectPressureWindows([one], combatOf([one]), {
+        notListedMinDamage: DMG_SPIKE_THRESHOLD,
+      }).notListed,
+    ).toEqual([]);
+    const six = unitWith("f1", "Warrior-Realm", CombatUnitSpec.Warrior_Arms, [
+      [10, 900_000],
+      [30, 800_000],
+      [50, 700_000],
+      [70, 600_000],
+      [90, 500_000],
+      [110, 299_999],
+    ]);
+    expect(
+      selectPressureWindows([six], combatOf([six]), {
+        notListedMinDamage: DMG_SPIKE_THRESHOLD,
+      }).notListed,
+    ).toEqual([]);
+  });
+
+  const pid = (n: string) =>
+    n.startsWith("Hunter") ? "2(HDHunter)" : "3(AWarrior)";
+  const notListedOf = (friends: ReturnType<typeof makeUnit>[]) =>
+    selectPressureWindows(friends, combatOf(friends), {
+      notListedMinDamage: DMG_SPIKE_THRESHOLD,
+    }).notListed;
+
+  it("the summary line: the count, the threshold, and the largest as a [DMG SPIKE] line prints it", () => {
+    const line = formatDmgSpikesNotListed({
+      notListed: notListedOf([warrior(), hunter()]),
+      matchEndSeconds: 300,
+      pid,
+    });
+    expect(line).toBe(
+      "    Not listed this round: 3 more [DMG SPIKE] windows of 0.30M or more (largest: 0.60M on 2(HDHunter) at 1:00–1:10).",
+    );
+    expect(parseDmgSpikesNotListed(line!)).toEqual({
+      count: 3,
+      thresholdM: 0.3,
+      largestM: 0.6,
+      unit: "2(HDHunter)",
+      fromSec: 60,
+      toSec: 70,
+    });
+  });
+
+  it("one window reads in the singular; none prints no line", () => {
+    const friends = [warrior(), hunter()];
+    const [, second] = notListedOf(friends);
+    const line = formatDmgSpikesNotListed({
+      notListed: [second!],
+      matchEndSeconds: 300,
+      pid,
+    });
+    expect(line).toBe(
+      "    Not listed this round: 1 more [DMG SPIKE] window of 0.30M or more (0.35M on 3(AWarrior) at 1:10–1:20).",
+    );
+    expect(parseDmgSpikesNotListed(line!)).toMatchObject({
+      count: 1,
+      largestM: 0.35,
+      unit: "3(AWarrior)",
+    });
+    expect(
+      formatDmgSpikesNotListed({ notListed: [], matchEndSeconds: 300, pid }),
+    ).toBeNull();
+  });
+
+  it("a window that starts past the match end would not have printed without the cap either — not counted", () => {
+    const line = formatDmgSpikesNotListed({
+      notListed: notListedOf([warrior(), hunter()]),
+      matchEndSeconds: 75,
+      pid,
+    });
+    // 0:60 and 1:10 start inside the round; 1:20 does not
+    expect(line).toContain("2 more [DMG SPIKE] windows");
+  });
+
+  it("the legend sentence states the cap and the ranking the selection uses", () => {
+    expect(dmgSpikeListLegend()).toBe(
+      "    Only the round's 5 largest windows are listed — ranked by `N` across your whole team, no two of one unit's overlapping — and only those of 0.30M or more.",
+    );
+    expect(PRESSURE_WINDOWS_TOP_N).toBe(5);
   });
 });

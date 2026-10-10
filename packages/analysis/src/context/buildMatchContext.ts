@@ -35,11 +35,11 @@ import {
 } from "../utils/combatStates";
 import {
   annotateDefensiveTimings,
-  computePressureWindows,
   extractMajorCooldowns,
   IEnemyCDTimelineForTiming,
   type IMajorCooldownInfo,
   isHealerSpec,
+  selectPressureWindows,
   specToString,
 } from "../utils/cooldowns";
 import { isMeleeSpec } from "../utils/cooldowns";
@@ -121,6 +121,7 @@ import {
 import { buildMatchTimeline, BuildMatchTimelineParams } from "./matchTimeline";
 import { buildPlayerLoadout } from "./resourceSnapshot";
 import {
+  DMG_SPIKE_THRESHOLD,
   dmgSpikeWindowsOf,
   mergeTimestampedLines,
   resolveSummonOwner,
@@ -285,7 +286,15 @@ export function buildMatchContext(
       enemyCDTimeline as IEnemyCDTimelineForTiming,
     ),
   );
-  const pressureWindows = computePressureWindows(friends, combat);
+  // D4 (user ruling 2026-10-10): `pressureWindows` is the list every reader
+  // below gets — `computePressureWindows`'s own return, the first five of
+  // the walk — and `pressureWindowsNotListed` the windows of the listing
+  // threshold or more that the same walk kept past the cap. Only the
+  // timeline's legend reads the second (one line counting them).
+  const { listed: pressureWindows, notListed: pressureWindowsNotListed } =
+    selectPressureWindows(friends, combat, {
+      notListedMinDamage: DMG_SPIKE_THRESHOLD,
+    });
   const healingGaps = healer
     ? detectHealingGaps(owner, friends, enemies, combat)
     : [];
@@ -899,6 +908,7 @@ export function buildMatchContext(
     friendlyDeaths,
     enemyDeaths,
     pressureWindows,
+    pressureWindowsNotListed,
     healingGaps,
     friends: friends as ICombatUnit[],
     enemies: enemies as ICombatUnit[],

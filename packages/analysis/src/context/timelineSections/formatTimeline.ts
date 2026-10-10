@@ -24,7 +24,11 @@ import {
 } from "../burstAnswered";
 import { CD_PRIOR_LEGEND } from "../cdPrior";
 import { PRESSED_DURING_NOTE_HEAD } from "../controlRejectedPresses";
-import { ROT_PRESSURE_LEGEND } from "../matchTimelineSections";
+import {
+  dmgSpikeListLegend,
+  formatDmgSpikesNotListed,
+  ROT_PRESSURE_LEGEND,
+} from "../matchTimelineSections";
 import { NO_CREDITED_SPIKE_CLAUSE } from "../peakSpikePlacement";
 import { pruneZeroLossResRows } from "../resLedgerPrune";
 import { RES_FORBEARANCE_RE_SRC } from "../resourceSnapshot";
@@ -110,6 +114,7 @@ export function formatTimeline(
     | "matchEndMs"
     | "bracket"
     | "enemyPid"
+    | "pressureWindowsNotListed"
   >,
 ): string {
   const {
@@ -151,9 +156,18 @@ export function formatTimeline(
     matchEndMs,
     bracket,
     enemyPid,
+    pressureWindowsNotListed,
   } = ctx;
 
   entries.sort((a, b) => a.timeSeconds - b.timeSeconds);
+
+  // D4 (user ruling 2026-10-10): the windows the [DMG SPIKE] cap dropped,
+  // counted in one line under the legend sentence that states the cap.
+  const dmgSpikesNotListedLine = formatDmgSpikesNotListed({
+    notListed: pressureWindowsNotListed ?? [],
+    matchEndSeconds,
+    pid,
+  });
 
   const summaryLines: string[] = [];
   if (shapeshiftIntervals.length > 0) {
@@ -331,6 +345,11 @@ export function formatTimeline(
     // T12 ① c (user ruling 2026-10-10): a bucket closes at its victim's
     // death / the round's end — the line no longer always reads `in 10s`.
     "    A window is 10 s, cut short where that unit died (`B` then reads 0%) or the round ended.",
+    // D4 (user ruling 2026-10-10): the list is capped (signed 2026-08-23,
+    // unchanged) — say so, by the ranking the selection uses, and count what
+    // the cap dropped this round.
+    dmgSpikeListLegend(),
+    ...(dmgSpikesNotListedLine ? [dmgSpikesNotListedLine] : []),
     // FT-T02d / T02b: one stated definition of the spike's total.
     "    Its `N in Ks` = the health that unit lost to hits in the window plus what its shields absorbed (`(X absorbed)` is",
     "    that part). Damage a Time Dilation / Stretch Time only delayed counts when it lands (a `deferred …` source), never as absorbed.",

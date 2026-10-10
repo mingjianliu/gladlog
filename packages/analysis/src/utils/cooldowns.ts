@@ -4528,12 +4528,51 @@ export interface IDamageBucket {
   targetSpec: string;
 }
 
+/** How many pressure windows a round keeps: the largest `N` over the WHOLE
+ * friendly team (not per unit), one unit's windows never overlapping. The
+ * `[DMG SPIKE]` list's cap — signed ruling 2026-08-23 ("keep as is", see
+ * `DMG_SPIKE_THRESHOLD`) and D4 (2026-10-10): the cap stays, the prompt says
+ * so and counts what it dropped. */
+export const PRESSURE_WINDOWS_TOP_N = 5;
+
 export function computePressureWindows(
   friendlyPlayers: ICombatUnit[],
   combat: AtomicArenaCombat,
   windowSeconds = 10,
-  topN = 5,
+  topN = PRESSURE_WINDOWS_TOP_N,
 ): IDamageBucket[] {
+  return selectPressureWindows(friendlyPlayers, combat, {
+    windowSeconds,
+    topN,
+  }).listed;
+}
+
+/**
+ * `computePressureWindows`'s selection, with the windows the cap dropped.
+ *
+ * `listed` is what every reader of the pressure windows gets — the first
+ * `topN` windows of one greedy walk (largest total first, a unit's windows
+ * never overlapping). `notListed` is the SAME walk carried on past the cap
+ * while a window's total is at least `notListedMinDamage`: the further
+ * windows the list would hold without the cap, largest first. D4 (user ruling
+ * 2026-10-10): 88 % of prompts print exactly five `[DMG SPIKE]` lines and
+ * said nothing of the rest (1bad0a5c: 13 windows ≥ 300k, 5 listed, the
+ * largest unlisted a 0.89M on the DH at 1:01–1:11). Without
+ * `notListedMinDamage` the walk stops at the cap, as it always did, and
+ * `notListed` is empty. (`topN` is at least 1 at every call site; the old
+ * loop returned one window for `topN = 0`, this one returns none.)
+ */
+export function selectPressureWindows(
+  friendlyPlayers: ICombatUnit[],
+  combat: AtomicArenaCombat,
+  opts: {
+    windowSeconds?: number;
+    topN?: number;
+    notListedMinDamage?: number;
+  } = {},
+): { listed: IDamageBucket[]; notListed: IDamageBucket[] } {
+  const windowSeconds = opts.windowSeconds ?? 10;
+  const topN = opts.topN ?? PRESSURE_WINDOWS_TOP_N;
   const matchStartMs = combat.startTime;
   // `closeSeconds`: where this victim's buckets close (below). Internal — the
   // returned buckets carry it as their `toSeconds`.
@@ -4593,12 +4632,23 @@ export function computePressureWindows(
     }
   }
 
-  // Sort and deduplicate: keep only non-overlapping top-N spikes per target.
+  // Sort and deduplicate: the top-N spikes over ALL players (not per target),
+  // no two of one target overlapping.
   // Overlap is judged on the nominal `windowSeconds` span, so which buckets
   // are kept does not depend on where one of them closes.
   allSpikes.sort((a, b) => b.totalDamage - a.totalDamage);
+  // One walk. `distinctSpikes` is every window kept so far, in rank order —
+  // the first `topN` are the list, anything after them is what the cap
+  // dropped — so a dropped window obeys the same no-overlap rule against the
+  // listed ones and against each other.
   const distinctSpikes: typeof allSpikes = [];
   for (const spike of allSpikes) {
+    if (
+      distinctSpikes.length >= topN &&
+      // sorted by total: once one is under the floor, all the rest are
+      !(spike.totalDamage >= (opts.notListedMinDamage ?? Infinity))
+    )
+      break;
     const overlaps = distinctSpikes.some(
       (s) =>
         s.targetName === spike.targetName &&
@@ -4606,16 +4656,14 @@ export function computePressureWindows(
           Math.max(s.fromSeconds, spike.fromSeconds) >
           0,
     );
-    if (!overlaps) {
-      distinctSpikes.push(spike);
-      if (distinctSpikes.length >= topN) break;
-    }
+    if (!overlaps) distinctSpikes.push(spike);
   }
 
-  return distinctSpikes.map(({ closeSeconds, ...bucket }) => ({
+  const closed = distinctSpikes.map(({ closeSeconds, ...bucket }) => ({
     ...bucket,
     toSeconds: Math.min(bucket.toSeconds, closeSeconds),
   }));
+  return { listed: closed.slice(0, topN), notListed: closed.slice(topN) };
 }
 
 // ---------------------------------------------------------------------------

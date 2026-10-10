@@ -30,6 +30,7 @@
 
 import {
   creditSpikesToWindows,
+  DMG_SPIKE_THRESHOLD,
   droppableNoChangeResRows,
   ensureAnalysisData,
   GUARDIAN_SPIRIT_SAVE_WINDOW_S,
@@ -62,6 +63,10 @@ import {
   forcedFollowUpGapOk,
   renderedInsideSpan,
 } from "@gladlog/analysis/src/context/forcedTrinket";
+import {
+  dmgSpikeListLegend,
+  parseDmgSpikesNotListed,
+} from "@gladlog/analysis/src/context/matchTimelineSections";
 import {
   PEEL_LOOKBACK_S,
   PEEL_MIN_USABLE_S,
@@ -116,6 +121,7 @@ import {
   isSpikeHealedThrough,
   isTickBelowTrough,
   PRESS_HP_LINE_TAGS,
+  PRESSURE_WINDOWS_TOP_N,
 } from "@gladlog/analysis/src/utils/cooldowns";
 import {
   ENEMY_DEF_END_NOT_LOGGED,
@@ -2927,6 +2933,99 @@ const DMG_SPIKE_AMOUNT_LINE =
   /^\s*(\d+):(\d{2})–(\d+):(\d{2})\s+\[DMG SPIKE\]\s+(\S+) \(.*?\): (\d+\.\d{2})M in /;
 
 /**
+ * HardFailure class (D4, user ruling 2026-10-10): the `[DMG SPIKE]` list's
+ * cap and the line that counts what it dropped
+ * (`formatDmgSpikesNotListed`, read back by the producer's own
+ * `parseDmgSpikesNotListed`).
+ *
+ *  - The list never holds more than `PRESSURE_WINDOWS_TOP_N` lines — the cap
+ *    the legend sentence now states (signed 2026-08-23).
+ *  - A count line is printed once at most, under the legend sentence, and
+ *    only when the list is full: a window is dropped by the cap only after
+ *    `PRESSURE_WINDOWS_TOP_N` larger ones were kept.
+ *  - It states the listing threshold (`DMG_SPIKE_THRESHOLD`); its largest is
+ *    at least that and no more than any listed line's total (it ranked below
+ *    them all); and its window overlaps no listed line of the same unit on
+ *    the displayed seconds (one unit's windows never overlap).
+ *
+ * The count itself is not re-derivable from the text — the dropped windows
+ * are exactly what the prompt does not print; it is pinned on the selection
+ * (`selectPressureWindows`) by the analysis tests.
+ */
+export function checkDmgSpikeListCap(lines: string[]): string[] {
+  const failures: string[] = [];
+  const listed: {
+    fromSeconds: number;
+    toSeconds: number;
+    unit: string;
+    amount: number;
+  }[] = [];
+  const counts: {
+    line: number;
+    s: NonNullable<ReturnType<typeof parseDmgSpikesNotListed>>;
+  }[] = [];
+  // one window is one line; a section that quotes a timeline line again is
+  // not a second window
+  const seen = new Set<string>();
+  lines.forEach((line, i) => {
+    const sp = line.match(DMG_SPIKE_AMOUNT_LINE);
+    if (sp) {
+      const key = sp.slice(1, 7).join("|");
+      if (seen.has(key)) return;
+      seen.add(key);
+      listed.push({
+        fromSeconds: Number(sp[1]) * 60 + Number(sp[2]),
+        toSeconds: Number(sp[3]) * 60 + Number(sp[4]),
+        unit: sp[5]!,
+        amount: Number(sp[6]),
+      });
+      return;
+    }
+    const s = parseDmgSpikesNotListed(line);
+    if (s) counts.push({ line: i + 1, s });
+  });
+  if (listed.length > PRESSURE_WINDOWS_TOP_N)
+    failures.push(
+      `[DMG SPIKE] 列了 ${listed.length} 行,超过上限 ${PRESSURE_WINDOWS_TOP_N}`,
+    );
+  if (counts.length > 1)
+    failures.push(
+      `「not listed」汇总行出现了 ${counts.length} 次(line ${counts.map((c) => c.line).join(" / ")})`,
+    );
+  const thresholdM = Number((DMG_SPIKE_THRESHOLD / 1_000_000).toFixed(2));
+  const legend = dmgSpikeListLegend().trim();
+  for (const { line, s } of counts) {
+    const at = `line ${line}: [DMG SPIKE] 汇总行`;
+    if (lines[line - 2]?.trim() !== legend)
+      failures.push(`${at} 不在说明上限的图例句之下`);
+    if (s.count < 1) failures.push(`${at} 的数量是 ${s.count}`);
+    if (listed.length !== PRESSURE_WINDOWS_TOP_N)
+      failures.push(
+        `${at} 说还有 ${s.count} 个未列,但只列了 ${listed.length} 行(上限 ${PRESSURE_WINDOWS_TOP_N})`,
+      );
+    if (s.thresholdM !== thresholdM)
+      failures.push(`${at} 写的门槛 ${s.thresholdM}M ≠ ${thresholdM}M`);
+    if (s.largestM < thresholdM)
+      failures.push(`${at} 的最大值 ${s.largestM}M 低于门槛 ${thresholdM}M`);
+    const smaller = listed.filter((l) => l.amount < s.largestM);
+    if (smaller.length > 0)
+      failures.push(
+        `${at} 的最大值 ${s.largestM}M 超过已列出的 ${smaller.map((l) => `${l.amount.toFixed(2)}M`).join(" / ")}`,
+      );
+    const clash = listed.filter(
+      (l) =>
+        l.unit === s.unit &&
+        Math.min(l.toSeconds, s.toSec) - Math.max(l.fromSeconds, s.fromSec) > 0,
+    );
+    if (clash.length > 0)
+      failures.push(
+        `${at} 的窗口 ${s.unit} ${fmtTime(s.fromSec)}–${fmtTime(s.toSec)} 与已列出的 ${clash.map((l) => `${fmtTime(l.fromSeconds)}–${fmtTime(l.toSeconds)}`).join(" / ")} 重叠`,
+      );
+  }
+  return failures;
+}
+
+/**
  * HardFailure class (T12 ③, user ruling 2026-10-10): which `[DMG SPIKE]` an
  * `[OFFENSIVE WINDOW]` header names. Re-runs the producer's own rule
  * (`creditSpikesToWindows`) on the rendered headers and the rendered
@@ -4469,6 +4568,7 @@ export function checkMatch(
   hardFailures.push(...checkBurstWindowRefConsistency(lines));
   hardFailures.push(...checkOffensiveWindowSpikeMarker(lines));
   hardFailures.push(...checkOffensiveWindowSpikeCredit(lines));
+  hardFailures.push(...checkDmgSpikeListCap(lines));
   hardFailures.push(...checkSyncWindowRefConsistency(lines));
   hardFailures.push(...checkBacklashRefConsistency(lines));
   hardFailures.push(...checkKickPriorityRefConsistency(lines));

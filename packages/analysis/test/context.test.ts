@@ -6,6 +6,11 @@ import {
 } from "@gladlog/parser-compat";
 
 import { buildMatchContext } from "../src/context/buildMatchContext";
+import {
+  dmgSpikeListLegend,
+  parseDmgSpikesNotListed,
+} from "../src/context/matchTimelineSections";
+import { PRESSURE_WINDOWS_TOP_N } from "../src/utils/cooldowns";
 import { interruptCooldownSeconds } from "../src/utils/enemyInterrupts";
 import { fmtTime } from "../src/utils/renderGrid";
 import { loadLegacyMatchFixture } from "./helpers/legacyFixture";
@@ -421,5 +426,99 @@ describe("counterfactualOf 按 (name, atSeconds) 精确匹配(#17b Task4 复核 
     // at all (if the deaths get crossed, death ①'s line would wrongly show up
     // again here).
     expect(block2).not.toContain("Mitigation audit:");
+  });
+});
+
+describe("D4 — the context states the [DMG SPIKE] cap and counts the windows it dropped (T12 ②)", () => {
+  // One friendly, one hit every 20 s — each its own 10 s window.
+  const contextOf = (amounts: number[]) => {
+    const victim = makeUnit("victim-1", {
+      name: "Victim",
+      spec: CombatUnitSpec.Druid_Feral,
+      class: CombatUnitClass.Druid,
+      reaction: CombatUnitReaction.Friendly,
+      info: {
+        teamId: 0,
+        specId: 103,
+        personalRating: 1500,
+        talents: [],
+        pvpTalents: [],
+        equipment: [],
+        interestingAuras: [],
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any,
+      damageIn: amounts.map((amount, i) => ({
+        logLine: {
+          event: LogEvent.SPELL_DAMAGE,
+          timestamp: 10_000 + i * 20_000,
+          parameters: [],
+        },
+        timestamp: 10_000 + i * 20_000,
+        effectiveAmount: -amount,
+        amount,
+        spellSchoolId: "0x1",
+        srcUnitId: "enemy-1",
+        srcUnitName: "Enemy1",
+        destUnitId: "victim-1",
+        destUnitName: "Victim",
+        spellId: "12222",
+        spellName: "Test Dmg",
+      })),
+    });
+    const combat = {
+      startTime: 0,
+      endTime: 200_000,
+      units: { "victim-1": victim },
+      playerId: "victim-1",
+      playerTeamId: 0,
+      winningTeamId: null,
+      startInfo: { zoneId: "0", bracket: "2v2" },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any;
+    return buildMatchContext(combat, [victim], [], {}).split("\n");
+  };
+  const spikeLines = (lines: string[]) =>
+    lines.filter((l) => /^\d+:\d{2}–\d+:\d{2}\s+\[DMG SPIKE\]/.test(l));
+
+  it("eight windows of the threshold: five lines, the legend sentence, and one line counting the other three", () => {
+    const lines = contextOf([
+      900_000, 500_000, 800_000, 450_000, 700_000, 600_000, 310_000, 650_000,
+    ]);
+    expect(spikeLines(lines)).toHaveLength(PRESSURE_WINDOWS_TOP_N);
+    const legendAt = lines.indexOf(dmgSpikeListLegend());
+    expect(legendAt).toBeGreaterThan(0);
+    // the count line sits directly under the sentence it qualifies
+    const summary = parseDmgSpikesNotListed(lines[legendAt + 1]!);
+    expect(summary).toMatchObject({
+      count: 3,
+      thresholdM: 0.3,
+      largestM: 0.5,
+      // the second hit: 0:30–0:40
+      fromSec: 30,
+      toSec: 40,
+    });
+    // …and names the unit as the listed lines do
+    expect(spikeLines(lines)[0]).toContain(`[DMG SPIKE]   ${summary!.unit} (`);
+    // the largest unlisted ranks below every listed line
+    const listedM = spikeLines(lines).map((l) =>
+      Number(l.match(/: (\d+\.\d{2})M in /)![1]),
+    );
+    expect(Math.min(...listedM)).toBeGreaterThanOrEqual(summary!.largestM);
+    expect(listedM.sort((a, b) => a - b)).toEqual([0.6, 0.65, 0.7, 0.8, 0.9]);
+  });
+
+  it("five windows: the sentence is there, no count line", () => {
+    const lines = contextOf([900_000, 500_000, 800_000, 450_000, 700_000]);
+    expect(spikeLines(lines)).toHaveLength(5);
+    expect(lines).toContain(dmgSpikeListLegend());
+    expect(lines.some((l) => parseDmgSpikesNotListed(l) !== null)).toBe(false);
+  });
+
+  it("a sixth window under the listing threshold is not a window the list would hold", () => {
+    const lines = contextOf([
+      900_000, 500_000, 800_000, 450_000, 700_000, 299_000,
+    ]);
+    expect(spikeLines(lines)).toHaveLength(5);
+    expect(lines.some((l) => parseDmgSpikesNotListed(l) !== null)).toBe(false);
   });
 });

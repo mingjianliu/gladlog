@@ -88,6 +88,7 @@ export interface TimelineCtx {
   params: P;
   teammateCDs: P["teammateCDs"];
   pressureWindows: P["pressureWindows"];
+  pressureWindowsNotListed: P["pressureWindowsNotListed"];
   enemies: P["enemies"];
   enemyCDTimeline: P["enemyCDTimeline"];
   bracket: P["bracket"];

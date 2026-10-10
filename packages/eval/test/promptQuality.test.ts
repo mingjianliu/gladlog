@@ -7,6 +7,11 @@ import {
 } from "@gladlog/analysis/src/context/burstAnswered";
 import { formatPressedDuringNote } from "@gladlog/analysis/src/context/controlRejectedPresses";
 import {
+  dmgSpikeListLegend,
+  emitDmgSpikeEntries,
+  formatDmgSpikesNotListed,
+} from "@gladlog/analysis/src/context/matchTimelineSections";
+import {
   lookupBehaviorPrior,
   outcomePhrase,
 } from "@gladlog/analysis/src/data/behaviorPrior";
@@ -22,6 +27,7 @@ import {
   checkBurstAnsweredControlSpan,
   checkCcBookmarkConsistency,
   checkDeathTrinketCcConsistency,
+  checkDmgSpikeListCap,
   checkDuringExternalConsistency,
   checkForcedTrinketConsistency,
   checkFreeOfWindowConsistency,
@@ -1673,6 +1679,128 @@ describe("checkBurstAnsweredControlSpan — a credited control's length is its [
         landing("0:46", " (5s)", "1(HPriest)"),
       ]),
     ).toEqual([]);
+  });
+});
+
+describe("checkDmgSpikeListCap — the [DMG SPIKE] cap and the line counting what it dropped (D4)", () => {
+  // Every line is the producer's: the entry lines from `emitDmgSpikeEntries`,
+  // the legend sentence and the count line from their own formatters.
+  type W = [fromS: number, totalDamage: number, name?: string];
+  const bucket = ([fromSeconds, totalDamage, name = "Warrior-R"]: W) => ({
+    fromSeconds,
+    toSeconds: fromSeconds + 10,
+    totalDamage,
+    targetName: name,
+    targetSpec: name === "Warrior-R" ? "Arms Warrior" : "Havoc Demon Hunter",
+  });
+  const pid = (n: string) =>
+    n === "Warrior-R" ? "3(AWarrior)" : "2(HDHunter)";
+  const entries = (ws: W[]) => {
+    const out: string[] = [];
+    emitDmgSpikeEntries({
+      pressureWindows: ws.map(bucket),
+      friends: [],
+      matchStartMs: 0,
+      pid,
+      addEntry: (_t, ...ls) => out.push(...ls),
+    });
+    return out;
+  };
+  const count = (ws: W[]) =>
+    formatDmgSpikesNotListed({
+      notListed: ws.map(bucket),
+      matchEndSeconds: 600,
+      pid,
+    })!;
+  const FIVE: W[] = [
+    [10, 900_000],
+    [20, 850_000, "Hunter-R"],
+    [30, 800_000],
+    [40, 750_000, "Hunter-R"],
+    [50, 700_000],
+  ];
+  const DROPPED: W[] = [
+    [60, 600_000, "Hunter-R"],
+    [70, 350_000],
+  ];
+  const prompt = (listed: W[], dropped: W[] | null = DROPPED) => [
+    "MATCH TIMELINE",
+    dmgSpikeListLegend(),
+    ...(dropped ? [count(dropped)] : []),
+    "",
+    ...entries(listed),
+  ];
+
+  it("the producer's lines are the ones the gate reads, and a consistent prompt passes", () => {
+    const p = prompt(FIVE);
+    expect(p[2]).toBe(
+      "    Not listed this round: 2 more [DMG SPIKE] windows of 0.30M or more (largest: 0.60M on 2(HDHunter) at 1:00–1:10).",
+    );
+    expect(p[4]).toBe(
+      "0:10–0:20  [DMG SPIKE]   3(AWarrior) (Arms Warrior): 0.90M in 10s (90k DPS)",
+    );
+    expect(checkDmgSpikeListCap(p)).toEqual([]);
+    // no window past the cap: no count line, nothing to check
+    expect(checkDmgSpikeListCap(prompt(FIVE, null))).toEqual([]);
+    expect(checkDmgSpikeListCap(prompt(FIVE.slice(0, 3), null))).toEqual([]);
+  });
+
+  it("more lines than the cap fail; a line quoted a second time is not a second window", () => {
+    const six = checkDmgSpikeListCap(
+      prompt([...FIVE, [60, 600_000, "Hunter-R"]], null),
+    );
+    expect(six).toHaveLength(1);
+    expect(six[0]).toContain("6");
+    const p = prompt(FIVE, null);
+    expect(checkDmgSpikeListCap([...p, `  ${p[3]}`, p[3]!])).toEqual([]);
+  });
+
+  it("a count line beside a list that is not full fails", () => {
+    expect(checkDmgSpikeListCap(prompt(FIVE.slice(0, 4)))).toHaveLength(1);
+  });
+
+  it("the largest unlisted window cannot outrank a listed one", () => {
+    const f = checkDmgSpikeListCap(prompt(FIVE, [[60, 720_000, "Hunter-R"]]));
+    expect(f).toHaveLength(1);
+    expect(f[0]).toContain("0.72M");
+    expect(f[0]).toContain("0.70M");
+    // equal to the smallest listed total is in rank order
+    expect(
+      checkDmgSpikeListCap(prompt(FIVE, [[60, 700_000, "Hunter-R"]])),
+    ).toEqual([]);
+  });
+
+  it("the largest unlisted window cannot overlap a listed line of the same unit", () => {
+    // 0:15–0:25 on the warrior overlaps the listed 0:10–0:20
+    expect(checkDmgSpikeListCap(prompt(FIVE, [[15, 600_000]]))).toHaveLength(1);
+    // the same seconds on the other unit, or touching bounds, are fine
+    expect(
+      checkDmgSpikeListCap(prompt(FIVE, [[5, 600_000, "Hunter-R"]])),
+    ).toEqual([]);
+    expect(checkDmgSpikeListCap(prompt(FIVE, [[60, 600_000]]))).toEqual([]);
+  });
+
+  it("the count line sits under the legend sentence, once", () => {
+    const p = prompt(FIVE);
+    const moved = [p[0]!, p[1]!, "", p[2]!, ...p.slice(4)];
+    expect(checkDmgSpikeListCap(moved)).toHaveLength(1);
+    const twice = [...p.slice(0, 3), p[1]!, p[2]!, ...p.slice(3)];
+    expect(checkDmgSpikeListCap(twice)).toHaveLength(1);
+  });
+
+  it("a hand-edited threshold or a largest under it fails", () => {
+    const p = prompt(FIVE);
+    const at = (text: string) => [...p.slice(0, 2), text, ...p.slice(3)];
+    expect(
+      checkDmgSpikeListCap(
+        at(p[2]!.replace("of 0.30M or more", "of 0.50M or more")),
+      ),
+    ).toHaveLength(1);
+    expect(
+      checkDmgSpikeListCap(
+        at(p[2]!.replace("largest: 0.60M", "largest: 0.20M")),
+      ),
+    ).toHaveLength(1);
   });
 });
 
