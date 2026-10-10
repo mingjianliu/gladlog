@@ -1165,6 +1165,11 @@ const INDEX: PredicateRow[] = [
     mod: promptQualityCheck,
   },
   {
+    file: "packages/eval/src/quality/promptQualityCheck.ts",
+    symbol: "checkBurstAnsweredBottomConsistency",
+    mod: promptQualityCheck,
+  },
+  {
     file: "packages/eval/src/corpus/appCandidates.ts",
     symbol: "candidatesAsTheAppRuns",
     mod: appCandidates,
