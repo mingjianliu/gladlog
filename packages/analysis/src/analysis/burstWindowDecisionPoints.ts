@@ -62,7 +62,11 @@ import {
 import { getUnitPositionAtTime } from "../utils/losAnalysis";
 import { LOS_SWEEP_GAP_MS } from "../utils/positionSampling";
 import { canReachTargetAt } from "../utils/rootReachability";
-import { buildCannotCastIntervals } from "../utils/cannotCastIntervals";
+import {
+  intervalBlocksSpell,
+  type NamedCannotCastInterval,
+  namedCannotCastIntervals,
+} from "../utils/cannotCastIntervals";
 import { castAndEffectIds, isCastOrEffect } from "../data/castEffectAuras";
 import { drEffectAurasOfCast } from "../utils/drAnalysis";
 import { LANDED_PAIR_MS } from "../utils/kickAudit";
@@ -1067,7 +1071,16 @@ export function burstWindowDecisionPoints(
   // externals that do nothing self-cast, `canHelpAnotherUnit` is GH #28's.
   const selfCdsByUnit = new Map<string, IMajorCooldownInfo[]>();
   const allyCdsByUnit = new Map<string, IMajorCooldownInfo[]>();
-  const ccByUnit = new Map<string, { startMs: number; endMs: number }[]>();
+  const ccByUnit = new Map<
+    string,
+    {
+      startMs: number;
+      endMs: number;
+      // FT-T10 PREVIEW: a cannot-cast interval keeps its cause, so a kick
+      // lockout can be asked for one tool (`inCcAt`)
+      cause?: NamedCannotCastInterval;
+    }[]
+  >();
   /** PROBE-ONLY: spellId → base cooldown seconds, straight off the same
    * `extractMajorCooldowns` ledger `cdAvailableAt` reads above, so a spend's
    * weight and a spend's availability can never come from two tables. */
@@ -1122,9 +1135,10 @@ export function burstWindowDecisionPoints(
   for (const u of friendlies)
     ccByUnit.set(u.id, [
       ...(ccByUnit.get(u.id) ?? []),
-      ...buildCannotCastIntervals(u, enemySourceIds).map((iv) => ({
+      ...namedCannotCastIntervals(u, enemySourceIds).map((iv) => ({
         startMs: iv.from,
         endMs: iv.to,
+        cause: iv,
       })),
     ]);
   const friendlyPlayerIds = new Set<string>(friendlies.map((u) => u.id));
@@ -1422,9 +1436,15 @@ export function burstWindowDecisionPoints(
       // external in range at t who then sat in CC until t+7 and ran out of
       // range still counted as able to answer. A cooldown that came back
       // three seconds into the window is now an opportunity it was not.
-      const inCcAt = (u: any, ms: number): boolean =>
+      // FT-T10 PREVIEW: asked per tool — a kick lockout stops only a tool
+      // of the school it locked (`intervalBlocksSpell`); a unit is out at a
+      // second only when every ready tool is stopped
+      const inCcAt = (u: any, ms: number, toolSpellId: string): boolean =>
         (ccByUnit.get(u.id) ?? []).some(
-          (iv) => iv.startMs <= ms && ms < iv.endMs,
+          (iv) =>
+            iv.startMs <= ms &&
+            ms < iv.endMs &&
+            (!iv.cause || intervalBlocksSpell(iv.cause, toolSpellId)),
         );
       const windowSecs: number[] = [];
       for (let sec = tSec; start + sec * 1000 < w1; sec++) windowSecs.push(sec);
@@ -1434,8 +1454,11 @@ export function burstWindowDecisionPoints(
         // (a) the person under the burst could have saved themselves
         const selfCds = selfCdsByUnit.get(pressuredUnit.id) ?? [];
         for (const sec of windowSecs) {
-          if (inCcAt(pressuredUnit, start + sec * 1000)) continue;
-          const tool = selfCds.find((cd) => cdReadyInTimeAt(cd, sec));
+          const tool = selfCds.find(
+            (cd) =>
+              cdReadyInTimeAt(cd, sec) &&
+              !inCcAt(pressuredUnit, start + sec * 1000, cd.spellId),
+          );
           if (!tool) continue;
           feasibleUnits.push(pressuredUnit.name);
           feasibleEvidence.push({
@@ -1494,9 +1517,11 @@ export function burstWindowDecisionPoints(
           if (pressuredUnit && isDeadAtRenderSecond(pressuredUnit, start, sec))
             continue;
           const ms = start + sec * 1000;
-          if (inCcAt(u, ms)) continue;
           const deliverable = allyCds.find(
-            (cd) => cdReadyInTimeAt(cd, sec) && teammateCanDeliver(u, [cd], ms),
+            (cd) =>
+              cdReadyInTimeAt(cd, sec) &&
+              !inCcAt(u, ms, cd.spellId) &&
+              teammateCanDeliver(u, [cd], ms),
           );
           if (!deliverable) continue;
           feasibleUnits.push(u.name);
