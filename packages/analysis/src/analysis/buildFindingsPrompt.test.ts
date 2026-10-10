@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import { CANDIDATE_TYPE_FLAGS } from "../data/candidateTypeFlags";
+import {
+  LATE_WINDOW_SECONDS,
+  PRE_WALL_SECONDS,
+  TIMING_DAMAGE_WINDOW_S,
+  TIMING_SPIKE_THRESHOLD,
+  UNNECESSARY_TARGET_HP_PCT,
+} from "../utils/cooldowns";
+import { DR_CHAIN_LOOKAHEAD_S } from "../utils/dispelAnalysis";
 import { buildFindingsPrompt } from "./buildFindingsPrompt";
 import { LEGACY_TOPIC_TYPES } from "./candidateFindings";
 import { FINDING_CATEGORIES } from "./findingCategories";
@@ -39,7 +47,8 @@ describe("buildFindingsPrompt", () => {
   it("death-kill F-D1: the death legend prints only with a death on the menu, and names friendly deaths only", () => {
     const withDeath = buildFindingsPrompt(candidates, "", "Discipline Priest");
     expect(withDeath).toContain(
-      `- "death": one of YOUR team's players died (facts.side=friendly); enemy deaths are timeline context only.`,
+      // FT-T15 M4: facts.unit, which every death row carries, is named
+      `- "death": one of YOUR team's players died (facts.unit names them; facts.side=friendly); enemy deaths are timeline context only.`,
     );
     expect(withDeath).not.toContain("facts.side=enemy");
     const noDeath = buildFindingsPrompt(
@@ -598,5 +607,138 @@ describe("crisis-no-response 图例(spec 2026-08-29 §1b,GH #58):条件渲染 + 
     expect(p).toMatch(/"this player died within 10 s"/);
     expect(p).toMatch(/kill target is often a teammate/);
     expect(p).toMatch(/never as a code token/);
+  });
+});
+
+describe("FT-T15 M1–M4 (2026-10-10): a legend names every fact key its rows carry, and claims no more than they do", () => {
+  const ev = (
+    type: string,
+    facts: Record<string, string>,
+    t = 30,
+  ): CandidateEvent => ({
+    id: `${type}:x:${t}`,
+    type,
+    t,
+    unitNames: ["Me-R"],
+    facts,
+  });
+  const legendOf = (type: string, facts: Record<string, string>): string => {
+    const p = buildFindingsPrompt([ev(type, facts)], "", "Holy Paladin");
+    const line = p.split("\n").find((l) => l.startsWith(`- "${type}":`));
+    expect(line, `${type} has a legend`).toBeDefined();
+    return line!;
+  };
+
+  it("M1: questionable-external has a legend — printed only with the type, built from the Unnecessary tier's own constants", () => {
+    expect(buildFindingsPrompt(candidates, "", "Holy Paladin")).not.toContain(
+      `- "questionable-external":`,
+    );
+    const legend = legendOf("questionable-external", {
+      t: "67.2",
+      spell: "Blessing of Sacrifice",
+      caster: "Me-R",
+      target: "Ally-R",
+      targetHp: "100",
+      nearestBurstGapS: "22.3",
+    });
+    for (const key of [
+      "spell",
+      "caster",
+      "target",
+      "targetHp",
+      "nearestBurstGapS",
+    ])
+      expect(legend).toMatch(new RegExp(`facts\\.${key}\\b`));
+    expect(legend).toContain(`${UNNECESSARY_TARGET_HP_PCT}% or higher`);
+    expect(legend).toContain(
+      `less than ${TIMING_SPIKE_THRESHOLD / 1000}k damage in the ${TIMING_DAMAGE_WINDOW_S} s before the press`,
+    );
+    expect(legend).toContain(
+      `within ${PRE_WALL_SECONDS} s before or ${LATE_WINDOW_SECONDS} s after one`,
+    );
+    expect(legend).toContain(`"n/a" = the round had no such window`);
+    expect(legend).toMatch(/readings at the press, not a verdict/);
+  });
+
+  it("M2: missed-cleanse — a row with facts.latencyS WAS dispelled, late; the legend no longer says there was no friendly dispel", () => {
+    const legend = legendOf("missed-cleanse", {
+      t: "152",
+      target: "Ally-R",
+      cc: "Psychic Scream",
+      duration: "3.3",
+      worth: "must",
+      latencyS: "3",
+    });
+    expect(legend).not.toMatch(/seconds without a friendly dispel/);
+    expect(legend).toMatch(/facts\.latencyS/);
+    expect(legend).toMatch(/the debuff WAS dispelled/);
+    expect(legend).toMatch(/never write that nobody dispelled it/);
+    for (const key of [
+      "drChainRisk",
+      "dispelType",
+      "ownerCastingS",
+      "ownerCastingSpells",
+      "ownerCastingPreCommitted",
+    ])
+      expect(legend).toMatch(new RegExp(`facts\\.${key}\\b`));
+    expect(legend).toContain(`within ${DR_CHAIN_LOOKAHEAD_S} s after`);
+  });
+
+  it("M3: kick-priority-team — ownerWhy=unknown is 'not known', never 'could not'", () => {
+    const legend = legendOf("kick-priority-team", {
+      t: "1:10",
+      ownerWhy: "unknown",
+    });
+    expect(legend).not.toMatch(/The player could NOT kick it/);
+    expect(legend).toMatch(/"unknown" = none of those held/);
+    expect(legend).toMatch(
+      /say it is not known whether the player could kick, never that they could not/,
+    );
+    for (const key of [
+      "ownerWhy",
+      "refNCompleted",
+      "refNInterrupted",
+      "refDeathCompleted",
+      "refDeathInterrupted",
+    ])
+      expect(legend).toMatch(new RegExp(`facts\\.${key}\\b`));
+  });
+
+  it("M4: the keys the 605-capture table found on rows and in no legend are now named", () => {
+    const cases: Array<[string, string[]]> = [
+      ["death", ["unit"]],
+      ["cd-waste", ["unit"]],
+      ["death-setup", ["victim", "healer"]],
+      [
+        "slow-defensive-response",
+        [
+          "caster",
+          "casterSpec",
+          "pressuredHpT",
+          "diedInWindow",
+          "cellKey",
+          "fellBack",
+          "refTop",
+          "leadCdId",
+        ],
+      ],
+      [
+        "kick-priority-missed",
+        ["kickNeverUsed", "refDeathCompleted", "refDeathInterrupted"],
+      ],
+      ["crisis-no-response", ["unit", "refOutcomeKey"]],
+      ["backlash-dispel", ["refKey"]],
+    ];
+    for (const [type, keys] of cases) {
+      const legend = legendOf(type, { t: "30" });
+      for (const key of keys)
+        expect(legend, `${type} names facts.${key}`).toMatch(
+          new RegExp(`facts\\.${key}\\b`),
+        );
+    }
+    // a fallback cell is not this opener's: the legend says so
+    expect(legendOf("slow-defensive-response", { t: "30" })).toMatch(
+      /the numbers are not about facts\.leadCd alone/,
+    );
   });
 });

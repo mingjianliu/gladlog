@@ -4103,9 +4103,9 @@ export interface IEnemyCDTimelineForTiming {
 //   measured inert, 120 agy calls). Re-run the distribution script before moving any.
 export const PRE_WALL_SECONDS = 5;
 /** How many seconds after a burst window ends before a defensive is classified "Late" */
-const LATE_WINDOW_SECONDS = 8;
+export const LATE_WINDOW_SECONDS = 8;
 /** Damage curve window for fallback classification */
-const TIMING_DAMAGE_WINDOW_S = 3;
+export const TIMING_DAMAGE_WINDOW_S = 3;
 /** Ratio threshold: if damage before cast is this much higher than after, classify as Reactive */
 const REACTIVE_RATIO = 1.75;
 
