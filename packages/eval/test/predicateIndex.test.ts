@@ -1611,6 +1611,86 @@ const INDEX: PredicateRow[] = [
     symbol: "checkVulnerableOwnerDamage",
     mod: promptQualityCheck,
   },
+  // FT-T10 readers: a lockout asked for a set of spells
+  {
+    file: `${A}/utils/cannotCastIntervals.ts`,
+    symbol: "cannotCastIntervalsForSpells",
+    mod: cannotCastIntervals,
+  },
+  {
+    file: `${A}/utils/cannotCastIntervals.ts`,
+    symbol: "intervalBlocksEverySpell",
+    mod: cannotCastIntervals,
+  },
+  // WP-A2 fix (review 40-FT-53 P2): the second target's share
+  {
+    file: `${A}/utils/burstLedger.ts`,
+    symbol: "ON_TARGET_GOOD_PCT",
+    mod: burstLedger,
+  },
+  // WP-A3 1 / 2 (T12 ⑧ i): the [BURST ANSWERED] credit rules — not after the
+  // pressured unit's death; a control's target and span
+  {
+    file: `${A}/context/burstAnswered.ts`,
+    symbol: "parseBurstAnsweredLine",
+    mod: burstAnswered,
+  },
+  {
+    file: `${A}/context/burstAnswered.ts`,
+    symbol: "ccSpanLookup",
+    mod: burstAnswered,
+  },
+  {
+    file: `${A}/analysis/burstWindowDecisionPoints.ts`,
+    symbol: "aimedControlLandingAuras",
+    mod: burstWindowDecisionPoints,
+  },
+  {
+    file: `${A}/analysis/burstWindowDecisionPoints.ts`,
+    symbol: "AIMED_CONTROL_LANDING_LEAD_MS",
+    mod: burstWindowDecisionPoints,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkBurstAnsweredBeforeDeath",
+    mod: promptQualityCheck,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkBurstAnsweredControlSpan",
+    mod: promptQualityCheck,
+  },
+  // WP-A3 3 (T12 ②, D4): the [DMG SPIKE] list cap and the windows it dropped
+  {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "selectPressureWindows",
+    mod: cooldowns,
+  },
+  {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "PRESSURE_WINDOWS_TOP_N",
+    mod: cooldowns,
+  },
+  {
+    file: `${A}/context/matchTimelineSections.ts`,
+    symbol: "dmgSpikeListLegend",
+    mod: matchTimelineSections,
+  },
+  {
+    file: `${A}/context/matchTimelineSections.ts`,
+    symbol: "formatDmgSpikesNotListed",
+    mod: matchTimelineSections,
+  },
+  {
+    file: `${A}/context/matchTimelineSections.ts`,
+    symbol: "parseDmgSpikesNotListed",
+    mod: matchTimelineSections,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkDmgSpikeListCap",
+    mod: promptQualityCheck,
+  },
   // user ruling P-FU-H23: the removal pairing has a fourth reader (cannot-cast)
   {
     file: `${A}/utils/drAnalysis.ts`,
