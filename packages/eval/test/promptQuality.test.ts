@@ -1304,7 +1304,10 @@ describe("checkBurstAnsweredBottomConsistency — the credit line's bottom secon
     '  <unit id="1" name="Sgarbossa-Tortheldrin-US" spec="Windwalker Monk" role="log owner">';
   const line = (at: string) =>
     `0:04  [BURST ANSWERED]   enemy opened The Hunt (Havoc Demon Hunter Irridanz-Sargeras-US): Botobumps-Illidan-US answered with Earthgrab 0.6s before it opened; Sgarbossa-Tortheldrin-US bottomed at 42% at ${at}`;
-  it("passes when the same-second [STATE] agrees, fails when it does not", () => {
+  // FT-T03 (user ruling 2026-10-10, D7): the bottom is a trough — the true
+  // minimum inside the window — so the tick of its second may read ABOVE it
+  // (it was red: the bottom had to be that tick). A tick below it stays red.
+  it("passes when the same-second [STATE] is at or above the bottom, fails when it is below", () => {
     expect(
       checkBurstAnsweredBottomConsistency([
         roster,
@@ -1318,7 +1321,41 @@ describe("checkBurstAnsweredBottomConsistency — the credit line's bottom secon
         "0:55  [STATE]   friends 1(WMonk):47 / enemies 4(HDHunter):90",
         line("0:55"),
       ]),
+    ).toEqual([]);
+    expect(
+      checkBurstAnsweredBottomConsistency([
+        roster,
+        "0:55  [STATE]   friends 1(WMonk):40 / enemies 4(HDHunter):90",
+        line("0:55"),
+      ]),
     ).toHaveLength(1);
+  });
+  it("FT-T03: no tick from the line's second to the bottom's second reads below it; `dead` at the bottom's second fails; later ticks are not judged", () => {
+    const tick = (at: string, v: number | "dead") =>
+      `${at}  [STATE]   friends 1(WMonk):${v} / enemies 4(HDHunter):90`;
+    const f = checkBurstAnsweredBottomConsistency([
+      roster,
+      tick("0:30", 35),
+      line("0:55"),
+    ]);
+    expect(f).toHaveLength(1);
+    expect(f[0]).toContain("0:30 的 [STATE] 为 35");
+    expect(
+      checkBurstAnsweredBottomConsistency([
+        roster,
+        tick("0:55", "dead"),
+        line("0:55"),
+      ]),
+    ).toHaveLength(1);
+    // before the window opened (0:03) and after the bottom (0:58): not judged
+    expect(
+      checkBurstAnsweredBottomConsistency([
+        roster,
+        tick("0:03", 10),
+        tick("0:58", 10),
+        line("0:55"),
+      ]),
+    ).toEqual([]);
   });
   it("a bottom before the line's own second fails", () => {
     expect(

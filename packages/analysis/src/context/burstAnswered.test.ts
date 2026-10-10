@@ -438,3 +438,81 @@ describe("[BURST ANSWERED] — HP comes from the [STATE] tick's own sampler", ()
     expect(Number.isInteger(lines[0]!.atSeconds)).toBe(true);
   });
 });
+
+// FT-T03 (user ruling 2026-10-10, D7): "the 'trough' numbers may leave the
+// whole-second grid and read the true minimum inside their window" — the
+// printed bottom is the engine's trough; every decision keeps the grid pair.
+describe("[BURST ANSWERED] — the bottom is the window's true minimum, at the second it happened (FT-T03)", () => {
+  const build = (between: Array<[number, number]>) => {
+    const hpSamples = [];
+    for (let s = 0; s <= 40; s++)
+      hpSamples.push(hp(s, s >= 10 && s <= 20 ? 90 - (s - 10) * 6 : 90, "F1"));
+    for (const [t, v] of between) hpSamples.push(hp(t, v, "F1"));
+    hpSamples.sort((a, b) => a.timestamp - b.timestamp);
+    const damageIn = [];
+    for (let s = 10; s < 20; s++) damageIn.push(dmg(s, 6));
+    const f = unit({
+      advancedActions: hpSamples,
+      damageIn,
+      spellCastEvents: [cast(BARKSKIN, 12, "F1")],
+    });
+    const e = unit({
+      id: "E1",
+      name: "Enemy-R",
+      reaction: CombatUnitReaction.Hostile,
+      info: { teamId: "1", specId: "260" },
+      spellCastEvents: [cast(AR, 10)],
+    });
+    const pts = burstWindowDecisionPoints({
+      startTime: T0,
+      endTime: T0 + 240_000,
+      units: { F1: f, E1: e },
+      startInfo: { bracket: "3v3" },
+    });
+    return { f, pts, lines: formatBurstAnsweredLines(pts) };
+  };
+
+  it("a dip between two ticks is the printed bottom; the grid pair — and so every decision — is what it was", () => {
+    const base = build([]);
+    const dipped = build([[15.4, 8]]);
+    expect(base.lines[0]!.line).toContain("bottomed at 36% at 0:19");
+    expect(dipped.lines[0]!.line).toContain("bottomed at 8% at 0:15");
+
+    const a = base.pts[0]!.pressured!;
+    const b = dipped.pts[0]!.pressured!;
+    // the decision's readings did not move
+    expect([b.minHpPct, b.minHpSec]).toEqual([a.minHpPct, a.minHpSec]);
+    expect([b.minHpPct, b.minHpSec]).toEqual([36, 19]);
+    expect(dipped.pts[0]!.triaged).toBe(base.pts[0]!.triaged);
+    expect(dipped.pts[0]!.responded).toBe(base.pts[0]!.responded);
+    // the printed pair did; without a dip the two pairs are one
+    expect([b.troughHpPct, b.troughHpSec]).toEqual([8, 15]);
+    expect([a.troughHpPct, a.troughHpSec]).toEqual([36, 19]);
+    // the [STATE] tick of that second still reads its own sample
+    expect(gridHpPct(dipped.f as never, T0 + 15_000)).toBe(60);
+  });
+
+  it("the ≤ 60 % door and the ranking read the grid minimum, not the trough: no line appears with the ruling", () => {
+    // grid minimum 65 (above the door); the trough alone is under it
+    const quiet = point({
+      pressured: {
+        ...point().pressured!,
+        minHpPct: BURST_ANSWERED_MAX_HP_PCT + 5,
+        minHpSec: 45,
+        troughHpPct: 20,
+        troughHpSec: 44,
+      },
+    });
+    expect(formatBurstAnsweredLines([quiet])).toEqual([]);
+    const shown = point({
+      pressured: {
+        ...point().pressured!,
+        troughHpPct: 20,
+        troughHpSec: 44,
+      },
+    });
+    expect(formatBurstAnsweredLines([shown])[0]!.line).toContain(
+      "Mate-R bottomed at 20% at 0:44",
+    );
+  });
+});

@@ -3531,11 +3531,18 @@ export function checkFreeOfWindowConsistency(lines: string[]): string[] {
 
 /**
  * `[BURST ANSWERED] … <name> bottomed at P% at M:SS` (triage 2026-09-29
- * sync-burst F-B3). The bottom is the engine's `pressured.minHpSec` /
- * `minHpPct` — a `gridHpPct` reading at a whole second over the window's
- * outcome span — so its second can never precede the line's own second, and
- * a same-second `[STATE]` tick for that unit must print the same number
- * (the `checkCrisisHpStateConsistency` rule: same sampler, exact).
+ * sync-burst F-B3). The bottom is the engine's `pressured.troughHpPct` /
+ * `troughHpSec` — the true minimum inside the window's outcome span
+ * (`hpTroughInWindow`; FT-T03, user ruling 2026-10-10, D7 — it was the
+ * lowest whole-second `gridHpPct` reading, and a same-second `[STATE]` tick
+ * had to print the same number). What the text certifies now:
+ *  - its second can never precede the line's own second (the window opens
+ *    there);
+ *  - it is not on a second that unit's tick reads `dead`;
+ *  - no `[STATE]` tick of that unit from the line's second to the bottom's
+ *    second reads below it (`isTickBelowTrough`) — those seconds are inside
+ *    the window for sure; the window's end is not printed, so later ticks
+ *    are not adjudicated.
  */
 const BURST_ANSWERED_BOTTOM =
   /^\s*(\d+):(\d{2})\s+\[BURST ANSWERED\].*;\s+(\S+) bottomed at (\d+)% at (\d+):(\d{2})/;
@@ -3572,11 +3579,18 @@ export function checkBurstAnsweredBottomConsistency(lines: string[]): string[] {
     // older prompts
     const byLabel = m[3]!.match(/^(\d+)\(/);
     const id = byLabel ? Number(byLabel[1]) : idByName.get(m[3]!);
-    const tick = id === undefined ? undefined : stateAt.get(b)?.get(id);
-    if (tick === "dead" || (typeof tick === "number" && tick !== pct))
+    if (id === undefined) return;
+    if (stateAt.get(b)?.get(id) === "dead")
       failures.push(
-        `line ${i + 1}: [BURST ANSWERED] 说 ${m[3]} 在 ${fmtTime(b)} 触底 ${pct}%,同秒 [STATE] 为 ${tick}`,
+        `line ${i + 1}: [BURST ANSWERED] 说 ${m[3]} 在 ${fmtTime(b)} 触底 ${pct}%,同秒 [STATE] 为 dead`,
       );
+    for (let s = t; s <= b; s++) {
+      const tick = stateAt.get(s)?.get(id);
+      if (typeof tick === "number" && isTickBelowTrough(tick, pct))
+        failures.push(
+          `line ${i + 1}: [BURST ANSWERED] 说 ${m[3]} 在 ${fmtTime(b)} 触底 ${pct}%,但 ${fmtTime(s)} 的 [STATE] 为 ${tick}`,
+        );
+    }
   });
   return failures;
 }

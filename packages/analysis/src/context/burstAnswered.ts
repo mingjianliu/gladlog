@@ -14,10 +14,13 @@
  * candidate by exactly the field this one requires (`responded`). So the
  * population that can be credited and the population that can be blamed are
  * complementary halves of one predicate rather than two independent
- * derivations of "was this answered" (CLAUDE.md shared-predicate rule). Every
- * HP number is the engine's own `gridHpPct` reading at a whole second — the
- * `[STATE]` tick's sampler and radius — never a raw sample, and `tSec` /
- * `minHpSec` are already the seconds `fmtTime` displays.
+ * derivations of "was this answered" (CLAUDE.md shared-predicate rule). Which
+ * windows earn a line, which answer is credited and in what order they rank
+ * are decided on the engine's `gridHpPct` readings (`minHpPct` / `minHpSec`,
+ * the `[STATE]` tick's sampler). The bottom the line PRINTS is the engine's
+ * trough (`troughHpPct` / `troughHpSec`, `hpTroughInWindow`): the true
+ * minimum inside the window, at the second it happened — FT-T03, user ruling
+ * 2026-10-10 (D7). `tSec` and both seconds are the ones `fmtTime` displays.
  *
  * **No corpus reference numbers on these lines, deliberately.** The
  * kick-eaten A/B (GH #34) showed per-line corpus references inflate whatever
@@ -81,6 +84,9 @@ export const BURST_ANSWERED_MAX_HP_PCT = 60;
 export const BURST_ANSWERED_LEGEND = [
   `  ${BURST_ANSWERED_TAG} = an enemy burst window the team DID answer inside ${BURST_RESPONSE_WINDOW_SEC}s — context, not a mistake.`,
   `    At most ${BURST_ANSWERED_CAP} of them are listed per round (the most dangerous first), so this is NOT a full list of answered bursts.`,
+  // FT-T03 (ruling D7): the bottom is off the grid
+  "    `bottomed at N% at m:ss` = the lowest HP the log shows for that player inside the window, at the second it happened (the true",
+  "    minimum between the ticks: it can sit below the [STATE] number of that second).",
 ];
 
 export interface BurstAnsweredEntry {
@@ -214,6 +220,11 @@ export function formatBurstAnsweredLines(
           ? `${Math.abs(first.latencySec).toFixed(1)}s before it opened`
           : `in ${first.latencySec.toFixed(1)}s`;
       const pressured = p.pressured!;
+      // FT-T03: the printed bottom is the trough — the true minimum, not the
+      // lowest whole-second tick. The door, the ranking and `creditedAnswer`
+      // above keep the grid pair (a line neither appears nor disappears).
+      const bottomPct = pressured.troughHpPct ?? pressured.minHpPct;
+      const bottomSec = pressured.troughHpSec ?? pressured.minHpSec;
       // Reliability round 3 N4 (483f): a friendly OTHER than the pressured
       // unit died inside the window and the line said nothing — the window
       // read as a clean answer. Same observable-consequence shape as the
@@ -241,11 +252,11 @@ export function formatBurstAnsweredLines(
           // only where the caller gave no labels
           `(${labels ? labels.enemy(p.leadCd.casterName) : `${p.leadCd.casterSpec} ${p.leadCd.casterName}`}): ` +
           `${friendly(first.casterName)} answered with ${first.spellName} ${when}; ` +
-          `${friendly(pressured.name)} bottomed at ${pressured.minHpPct}%` +
+          `${friendly(pressured.name)} bottomed at ${bottomPct}%` +
           // F-B3: the bottom is the minimum over the whole bounded window (up
-          // to 55 s) — its second says whether it belongs to this go. Already
-          // on the render grid (`minHpSec` is a whole second).
-          `${pressured.minHpSec !== null ? ` at ${fmtTime(pressured.minHpSec)}` : ""}${diedPart}`,
+          // to 55 s) — its second says whether it belongs to this go. The
+          // render second of the instant it happened.
+          `${bottomSec !== null ? ` at ${fmtTime(bottomSec)}` : ""}${diedPart}`,
       };
     })
     .sort((a, b) => a.atSeconds - b.atSeconds);

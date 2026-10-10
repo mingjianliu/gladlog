@@ -44,6 +44,7 @@ import {
   cdReadyInTimeAt,
   extractMajorCooldowns,
   gridHpPct,
+  hpTroughInWindow,
   type IMajorCooldownInfo,
   isDeadAtRenderSecond,
   cdIsProcOnly,
@@ -423,6 +424,21 @@ export interface BurstFriendlyOutcome {
   minHpPct: number | null;
   /** the whole second `minHpPct` was read at */
   minHpSec: number | null;
+  /**
+   * The TRUE minimum over the same seconds (`hpTroughInWindow`: every sample
+   * of `[tSec, outcomeEndSec]`'s displayed seconds, not only the whole-second
+   * ticks) and the second it happened at — FT-T03, user ruling 2026-10-10
+   * (D7). This pair is what a LINE prints (`[BURST ANSWERED] … bottomed at N%
+   * at m:ss`); it is never above `minHpPct`.
+   *
+   * `minHpPct` / `minHpSec` stay the grid readings and stay the ones every
+   * DECISION asks — who `pressured` is, `triaged`, the `[BURST ANSWERED]`
+   * door and ranking, "the answer was still up at the bottom", the corpus
+   * reference tables — so the ruling moves a printed number and no window.
+   * Absent on a hand-built point (tests): the grid pair stands in.
+   */
+  troughHpPct?: number | null;
+  troughHpSec?: number | null;
   /**
    * `gridHpPct` at the window START — the first whole second in
    * `[tSec, outcomeEndSec]` that has a grid sample at all (normally `tSec`
@@ -1311,6 +1327,12 @@ export function burstWindowDecisionPoints(
             minHpSec = s;
           }
         }
+        // the printed bottom (FT-T03): the true minimum over the same
+        // seconds. Null exactly when the grid minimum is.
+        const trough =
+          minHpPct === null
+            ? null
+            : hpTroughInWindow(f, start, tSec, outcomeEndSec);
         // F-B6 (triage sync-burst, codex 09-30): the window the line prints
         // ends at the END of its last rendered second — a lethal burst's
         // segment ends at the death, which falls in the fractional part of
@@ -1324,6 +1346,8 @@ export function burstWindowDecisionPoints(
           name: f.name,
           minHpPct,
           minHpSec,
+          troughHpPct: trough?.pct ?? minHpPct,
+          troughHpSec: trough?.atSec ?? minHpSec,
           startHpPct,
           startHpSec,
           died,
