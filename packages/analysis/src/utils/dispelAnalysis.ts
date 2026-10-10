@@ -3148,6 +3148,14 @@ export function reconstructDispelSummary(
                 removal.ts,
                 cannotCastSrcIds,
                 MISSED_CLEANSE_THRESHOLD_S * 1000,
+                // FT-T10 PREVIEW: asked for the dispel(s) each would press
+                (d) =>
+                  removalSpellIdsFor(
+                    d,
+                    windowDispelType,
+                    capableFor(windowDispelType, unit, applyTs, removal.ts)
+                      .charmed,
+                  ),
               ),
               losReachable: true,
               drChainRisk: computeDrChainRisk(
@@ -3255,6 +3263,9 @@ export function reconstructDispelSummary(
                 applyTs,
                 removal.ts,
                 cannotCastSrcIds,
+                // FT-T10 PREVIEW: a lockout on another school leaves the
+                // dispel (the spells `removalSpellIdsFor` names)
+                removalSpellIdsFor(dispeller, windowDispelType, charmed),
               ),
             );
           if (allDispellersBlocked) {
@@ -3285,6 +3296,8 @@ export function reconstructDispelSummary(
                   applyTs,
                   removal.ts,
                   cannotCastSrcIds,
+                  // FT-T10 PREVIEW: the gate's spells above
+                  removalSpellIdsFor(d, windowDispelType, charmed),
                 ),
             );
 
@@ -3412,6 +3425,8 @@ export function reconstructDispelSummary(
               removal.ts,
               cannotCastSrcIds,
               MISSED_CLEANSE_THRESHOLD_S * 1000,
+              // FT-T10 PREVIEW: asked for the dispel(s) each would press
+              (d) => removalSpellIdsFor(d, windowDispelType, charmed),
             ),
             losReachable: anyDispellerReachable(
               capableDispellers,
