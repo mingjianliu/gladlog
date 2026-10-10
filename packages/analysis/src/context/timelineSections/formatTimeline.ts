@@ -246,7 +246,11 @@ export function formatTimeline(
     "  A `rdy:Δ  cd:—` row is printed only when it carries a fact no other line states (a focus target no",
     "    surviving [RES] shows, a CC no [CC ON …] line covers at that second, an enemy CD with no [ENEMY CD] line);",
     "    a `rdy:Δ  cd:—` row whose facts are all stated elsewhere is omitted, so its absence means nothing changed.",
-    "  [DMG SPIKE] `START–END` = the window's exact bounds; its `A% -> B% HP` maps directly to those two timestamps.",
+    // FT-T15 ②: the bounds are toRenderSecond (floor) of a window that starts
+    // on a damage event, and A / B are sampled on those whole seconds — the
+    // reading the [STATE] tick prints (the gate re-checks exactly that).
+    "  [DMG SPIKE] `START–END` = the window's bounds in whole seconds (each rounded down; the damage is summed over the",
+    "    unrounded window); its `A% -> B% HP` = the [STATE] readings of those two seconds.",
     // T12 ① c (user ruling 2026-10-10): a bucket closes at its victim's
     // death / the round's end — the line no longer always reads `in 10s`.
     "    A window is 10 s, cut short where that unit died (`B` then reads 0%) or the round ended.",
