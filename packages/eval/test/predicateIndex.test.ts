@@ -1259,6 +1259,16 @@ const INDEX: PredicateRow[] = [
     symbol: "buildCannotCastIntervals",
     mod: cannotCastIntervals,
   },
+  {
+    file: `${A}/utils/cannotCastIntervals.ts`,
+    symbol: "intervalBlocksSpell",
+    mod: cannotCastIntervals,
+  },
+  {
+    file: `${A}/utils/cannotCastIntervals.ts`,
+    symbol: "lockedSchoolsText",
+    mod: cannotCastIntervals,
+  },
   // user ruling P-FU-H23: the removal pairing has a fourth reader (cannot-cast)
   {
     file: `${A}/utils/drAnalysis.ts`,

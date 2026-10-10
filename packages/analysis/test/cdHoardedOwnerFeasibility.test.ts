@@ -68,7 +68,9 @@ const cd = () => ({
 });
 
 describe("cdHoardedEvents — owner feasibility (W1a)", () => {
-  const run = (couldRespond?: (fromS: number, toS: number) => boolean) =>
+  const run = (
+    couldRespond?: (fromS: number, toS: number, spellId?: string) => boolean,
+  ) =>
     cdHoardedEvents(
       [{ crisisUnit: MATE, own: false, points: [point(60)] }],
       [cd()],
@@ -84,13 +86,33 @@ describe("cdHoardedEvents — owner feasibility (W1a)", () => {
     expect(run(() => false)).toHaveLength(0);
   });
 
-  it("asks about the same window 'spent' uses: [t − 1.5 s, t + 5 s]", () => {
-    const seen: Array<[number, number]> = [];
-    run((a, b) => {
-      seen.push([a, b]);
+  it("asks about the same window 'spent' uses: [t − 1.5 s, t + 5 s] — once per ready cooldown (FT-T10)", () => {
+    const seen: Array<[number, number, string | undefined]> = [];
+    run((a, b, spellId) => {
+      seen.push([a, b, spellId]);
       return true;
     });
-    expect(seen).toEqual([[58.5, 65]]);
+    expect(seen).toEqual([[58.5, 65, "33206"]]);
+  });
+
+  it("FT-T10: a cooldown the owner could not press is not named; with none left the row is gone", () => {
+    const two = (
+      couldRespond: (a: number, b: number, id?: string) => boolean,
+    ) =>
+      cdHoardedEvents(
+        [{ crisisUnit: OWNER, own: true, points: [point(60)] }],
+        [cd(), { ...cd(), spellId: "47788", spellName: "Guardian Spirit" }],
+        OWNER,
+        undefined,
+        undefined,
+        undefined,
+        couldRespond,
+      );
+    // locked out of one cooldown's school only: the other is still named
+    const one = two((_a, _b, id) => id !== "33206");
+    expect(one).toHaveLength(1);
+    expect(one[0]!.facts!.readyCds).toBe("Guardian Spirit");
+    expect(two(() => false)).toHaveLength(0);
   });
 
   it("without the callback (no combat clock) the old behaviour stands", () => {

@@ -1295,5 +1295,15 @@
  *  count (`Hammer of Justice ×2`, was `Hammer of Justice`) in
  *  missed-sync-window `cc` / `spell` and `enteredNextLock`; the legend says
  *  that `durationS` is the whole lock on the whole-second grid.
+ *  v367 (2026-10-10, FT-T10, user ruling 2026-10-10 option B): a kick
+ *  lockout stops only the spells of the school it locked, for two gates —
+ *  cd-hoarded asks "could the owner press it" per ready cooldown (a Mage
+ *  Counterspelled on Polymorph can still Ice Block), and a sync-window
+ *  cooldown is "ready" unless a lockout on ITS school held its owner.
+ *  cd-hoarded `ownerCc` prints the locked school (`Counterspell lockout
+ *  (Arcane) …`) and `ownerFreeS` counts the time one of facts.readyCds could
+ *  be pressed; missed-sync-window `holderCc` lists only what stopped that
+ *  cooldown. Adds accusations (counts in the commit). The sync-window
+ *  reference table is stale by it (GH #115).
  */
-export const PROMPT_VERSION = 366;
+export const PROMPT_VERSION = 367;

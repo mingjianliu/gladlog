@@ -147,6 +147,39 @@ describe("evaluateSyncWindow — ready needs an owner free to act (B3i)", () => 
       evaluateSyncWindow(lock, [hunt(stunnedOwner(99, 104))]).ready,
     ).toHaveLength(0);
   });
+  it("FT-T10: a kick lockout stops the CD only when it locks the CD's school", () => {
+    // Counterspell on a Polymorph (Arcane) at 99 s — the lock [100, 105] sits inside it
+    const kickedOwner = {
+      id: "Player-1",
+      name: "Mage-R",
+      auraEvents: [],
+      spellCastEvents: [],
+      actionIn: [
+        {
+          spellId: "2139",
+          extraSpellId: "118",
+          srcUnitId: ENEMY,
+          timestamp: START + 99_000,
+          logLine: {
+            event: LogEvent.SPELL_INTERRUPT,
+            timestamp: START + 99_000,
+          },
+        },
+      ],
+    } as unknown as ICombatUnit;
+    const cdOf = (spellId: string, spellName: string) => ({
+      ...hunt(kickedOwner),
+      spellId,
+      spellName,
+    });
+    // Combustion is Fire: not stopped. Arcane Surge is Arcane: stopped.
+    expect(
+      evaluateSyncWindow(lock, [cdOf("190319", "Combustion")]).ready,
+    ).toHaveLength(1);
+    expect(
+      evaluateSyncWindow(lock, [cdOf("365350", "Arcane Surge")]).ready,
+    ).toHaveLength(0);
+  });
   it("owner free for more than half of the lock → ready", () => {
     expect(
       evaluateSyncWindow(lock, [hunt(stunnedOwner(99, 101))]).ready,
@@ -242,7 +275,12 @@ describe("countsAsTeamBurst (B3iii, user ruling 2026-09-25)", () => {
 
 describe("evaluateSyncWindow — round 3 W1a legs (reliability leftovers batch 11)", () => {
   const START = 1_000_000;
-  const at = (id: string, name: string, spec: unknown, xAt: (s: number) => number) =>
+  const at = (
+    id: string,
+    name: string,
+    spec: unknown,
+    xAt: (s: number) => number,
+  ) =>
     ({
       id,
       name,
@@ -281,8 +319,12 @@ describe("evaluateSyncWindow — round 3 W1a legs (reliability leftovers batch 1
     const warrior = at("Player-1", "War-R", 71, () => 0);
     const far = at("Enemy-1", "Dk-R", 252, () => 20);
     const near = at("Enemy-1", "Dk-R", 252, () => 3);
-    expect(evaluateSyncWindow(lock, [smash(warrior, far)]).ready).toHaveLength(0);
-    expect(evaluateSyncWindow(lock, [smash(warrior, near)]).ready).toHaveLength(1);
+    expect(evaluateSyncWindow(lock, [smash(warrior, far)]).ready).toHaveLength(
+      0,
+    );
+    expect(evaluateSyncWindow(lock, [smash(warrior, near)]).ready).toHaveLength(
+      1,
+    );
   });
 
   it("a hard-cast CD whose bar STARTS inside the lock entered it (f4eb Demonic Tyrant)", () => {

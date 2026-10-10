@@ -7,6 +7,7 @@ import {
 import { BACKLASH_AURA_CC_TYPE } from "../data/backlashCc";
 import { supersededAuraBreaks } from "./auraIntervals";
 
+import { schoolLockedBy, spellSchoolMask } from "../data/spellSchools";
 import { ccSpellIds, officialSilenceIds } from "../data/spellTags";
 import { REACTION_WINDOW_S } from "./cooldowns";
 import { matchPendingCcKey } from "./drAnalysis";
@@ -65,6 +66,57 @@ export interface NamedCannotCastInterval {
    * own `spellId`) */
   spellId: string;
   lockout: boolean;
+  /** for a lockout: the schools of the spell that was interrupted (official
+   * SchoolMask) — what the lock shuts out. Undefined when unknown. */
+  lockedSchoolMask?: number;
+}
+
+/**
+ * Does this cannot-cast interval stop `spellId`? An aura (hard CC, silence)
+ * is taken as stopping everything here; a kick lockout stops a spell only
+ * when every school of that spell is inside the lock (`schoolLockedBy`, the
+ * kick-eaten predicate). Unknown school on either side → it blocks (the
+ * exemption stays).
+ *
+ * FT-T10 (user ruling 2026-10-10, option B): until this, a lockout was read
+ * as stopping every spell ("a wrong exemption costs far less than a wrong
+ * accusation"). 605 files, 6,117 lockouts × the locked player's ledger
+ * spells (fix-FT/scripts/t10_lockSchool.ts): 45 % of the pairs have a school
+ * outside the lock and 1,199 of those were pressed inside the lockout; of the
+ * 24,658 pairs fully inside the lock, 23 were. Read per spell by the
+ * cd-hoarded owner gate and the sync-window ready gate; the other readers of
+ * `buildCannotCastIntervals` still take a lockout as locking everything —
+ * predicate-index "Not yet unified".
+ */
+export function intervalBlocksSpell(
+  iv: Pick<NamedCannotCastInterval, "lockout" | "lockedSchoolMask">,
+  spellId: string | undefined,
+): boolean {
+  if (!iv.lockout || spellId === undefined) return true;
+  const m = spellSchoolMask(spellId);
+  if (m === undefined || iv.lockedSchoolMask === undefined) return true;
+  return schoolLockedBy(m, iv.lockedSchoolMask);
+}
+
+const SCHOOL_BIT_NAMES: ReadonlyArray<[number, string]> = [
+  [1, "Physical"],
+  [2, "Holy"],
+  [4, "Fire"],
+  [8, "Nature"],
+  [16, "Frost"],
+  [32, "Shadow"],
+  [64, "Arcane"],
+];
+/** ` (Arcane)` / ` (Fire/Shadow)` — the schools a lockout shut, for the
+ * facts that name it (cd-hoarded `ownerCc`); "" when unknown. Each school
+ * by its own name, never a combined one ("Shadowflame"): the reader matches
+ * it against a spell's school. */
+export function lockedSchoolsText(mask: number | undefined): string {
+  if (!mask) return "";
+  const names = SCHOOL_BIT_NAMES.filter(([bit]) => (mask & bit) !== 0).map(
+    ([, name]) => name,
+  );
+  return names.length ? ` (${names.join("/")})` : "";
 }
 
 /**
@@ -100,6 +152,9 @@ export function namedCannotCastIntervals(
         kickLockoutSecondsFor(kickSpellId, unit, interrupted) * 1000,
       spellId: kickSpellId,
       lockout: true,
+      ...(interrupted && spellSchoolMask(String(interrupted)) !== undefined
+        ? { lockedSchoolMask: spellSchoolMask(String(interrupted)) }
+        : {}),
     });
   }
 
@@ -490,11 +545,15 @@ export interface ActWindowState {
   blocks: Array<{
     spellId: string;
     lockout: boolean;
+    /** a lockout's locked schools (`NamedCannotCastInterval`) */
+    lockedSchoolMask?: number;
     fromS: number;
     toS: number;
   }>;
   /** seconds of (anchorS, toS] — cut at death and the round end, like
-   * `couldRespond` — outside every cannot-cast interval */
+   * `couldRespond` — outside every cannot-cast interval; asked for a set of
+   * spells, outside every interval that stops ALL of them (the time at
+   * least one of them could be pressed, as far as one interval decides it) */
   freeAfterS: number;
   /** the window's end after that cut, seconds since round start (F-H5
    * `windowS` = endS − t) */
@@ -515,11 +574,12 @@ export function actWindowFor(
   matchStartMs: number,
   roundEndMs: number = Infinity,
 ): {
-  couldRespond: (fromS: number, toS: number) => boolean;
+  couldRespond: (fromS: number, toS: number, spellId?: string) => boolean;
   stateIn: (
     fromS: number,
     toS: number,
     anchorS: number,
+    spellIds?: readonly string[],
   ) => ActWindowState | null;
 } {
   let named: NamedCannotCastInterval[];
@@ -532,13 +592,19 @@ export function actWindowFor(
   const endMs = (toS: number) =>
     Math.min(matchStartMs + toS * 1000, deathMs, roundEndMs);
   return {
-    couldRespond: (fromS, toS) => {
+    couldRespond: (fromS, toS, spellId) => {
       const fromMs = matchStartMs + fromS * 1000;
       const toMs = endMs(toS);
       if (toMs <= fromMs) return false;
-      return couldReactWithin(named, fromMs, toMs);
+      return couldReactWithin(
+        spellId === undefined
+          ? named
+          : named.filter((iv) => intervalBlocksSpell(iv, spellId)),
+        fromMs,
+        toMs,
+      );
     },
-    stateIn: (fromS, toS, anchorS) => {
+    stateIn: (fromS, toS, anchorS, spellIds) => {
       const fromMs = matchStartMs + fromS * 1000;
       // the gate's own window: cut at death and the round end, so a CC that
       // landed after the round was over is never named (agy review of F-H1)
@@ -549,6 +615,9 @@ export function actWindowFor(
         .map((iv) => ({
           spellId: iv.spellId,
           lockout: iv.lockout,
+          ...(iv.lockedSchoolMask !== undefined
+            ? { lockedSchoolMask: iv.lockedSchoolMask }
+            : {}),
           fromS: (iv.from - matchStartMs) / 1000,
           toS: (iv.to - matchStartMs) / 1000,
         }));
@@ -558,7 +627,15 @@ export function actWindowFor(
         freeEndMs > anchorMs
           ? (freeEndMs -
               anchorMs -
-              coveredMsWithin(named, anchorMs, freeEndMs)) /
+              coveredMsWithin(
+                spellIds?.length
+                  ? named.filter((iv) =>
+                      spellIds.every((id) => intervalBlocksSpell(iv, id)),
+                    )
+                  : named,
+                anchorMs,
+                freeEndMs,
+              )) /
             1000
           : 0;
       return { blocks, freeAfterS, endS: (toMs - matchStartMs) / 1000 };

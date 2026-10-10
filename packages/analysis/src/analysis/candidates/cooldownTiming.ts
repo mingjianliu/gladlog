@@ -52,8 +52,10 @@ import {
 } from "../../utils/ccTrinketAnalysis";
 import {
   type ActWindowState,
-  buildCannotCastIntervals,
   couldActForMostOf,
+  intervalBlocksSpell,
+  lockedSchoolsText,
+  namedCannotCastIntervals,
 } from "../../utils/cannotCastIntervals";
 import { getEnglishSpellName } from "../../data/spellEffectData";
 import { incomingPressureBySchool } from "../../utils/incomingPressure";
@@ -619,7 +621,10 @@ export function evaluateSyncWindow(
       return true;
     let blocked: Array<{ from: number; to: number }>;
     try {
-      blocked = buildCannotCastIntervals(cd.owner, cd.ownerEnemyIds);
+      // FT-T10: a lockout counts only when it locks this cooldown's school
+      blocked = namedCannotCastIntervals(cd.owner, cd.ownerEnemyIds).filter(
+        (iv) => intervalBlocksSpell(iv, cd.spellId),
+      );
     } catch {
       return true;
     }
@@ -730,7 +735,10 @@ export function syncReadyTimingFacts(
     if (cd.owner && cd.ownerEnemyIds && cd.matchStartMs !== undefined) {
       let blocked: Array<{ from: number; to: number }> = [];
       try {
-        blocked = buildCannotCastIntervals(cd.owner, cd.ownerEnemyIds);
+        // the gate's own intervals (FT-T10): what stopped THIS cooldown
+        blocked = namedCannotCastIntervals(cd.owner, cd.ownerEnemyIds).filter(
+          (iv) => intervalBlocksSpell(iv, cd.spellId),
+        );
       } catch {
         blocked = [];
       }
@@ -1442,7 +1450,12 @@ export function cdHoardedEvents(
    * the caller from `buildCannotCastIntervals` + the owner's death — the same
    * predicate `evaluateSyncWindow` and cdTriggerPrior's opportunity set use.
    * Absent ⇒ no owner gate (tests, callers without a combat clock). */
-  ownerCouldRespond?: (fromS: number, toS: number) => boolean,
+  ownerCouldRespond?: (
+    fromS: number,
+    toS: number,
+    /** asked for one cooldown: a lockout counts only on its school (FT-T10) */
+    spellId?: string,
+  ) => boolean,
   /** User ruling 2026-09-26 (reliability leftovers item 3, fa5e): the crisis
    * counts as answered when the OWNER cast a control (a peel) or ANY friendly
    * pressed a team save (TEAM_HEAL_CD_IDS: Spirit Link, Barrier, Aura Mastery,
@@ -1461,6 +1474,7 @@ export function cdHoardedEvents(
     fromS: number,
     toS: number,
     anchorS: number,
+    spellIds?: readonly string[],
   ) => ActWindowState | null,
   /** Triage 2026-09-29 F-H7 / F-H9 (user ruling 2026-09-30, R4 = B, R5 = B):
    * every friendly's own major-cooldown ledger. A save the crisis unit
@@ -1573,13 +1587,12 @@ export function cdHoardedEvents(
       // 58.5–61.5 at a 1:00 teammate crisis; 138e Skull Bash lockout then
       // Incapacitating Roar). The owner must be able to act for at least
       // REACTION_WINDOW_S inside the same window "spent" counts presses in.
-      if (
-        ownerCouldRespond &&
-        !ownerCouldRespond(
-          p.tSec - RESPONSE_PRE_MS / 1000,
-          p.tSec + CD_HOARD_RESPONSE_S,
-        )
-      ) {
+      // FT-T10 (user ruling 2026-10-10): asked per cooldown below — a kick
+      // lockout stops only the spells of the school it locked. Unasked for a
+      // spell, the gate is the old one (every lockout locks everything).
+      const responseFromS = p.tSec - RESPONSE_PRE_MS / 1000;
+      const responseToS = p.tSec + CD_HOARD_RESPONSE_S;
+      const traceOwnerCouldNotAct = () => {
         if (tracing)
           trace.push({
             type: "cd-hoarded",
@@ -1590,8 +1603,7 @@ export function cdHoardedEvents(
             facts: pointFacts(src.own, p),
             candidateIds: [],
           });
-        continue;
-      }
+      };
       // Two sets on purpose (reaction window, user ruling 2026-09-23): the
       // ACCUSATION names only cooldowns ready by t − REACTION_WINDOW_S
       // (`cdReadyInTimeAt`), but "did they respond" (`spent` below) counts a
@@ -1619,7 +1631,7 @@ export function cdHoardedEvents(
       // F-H6: a cooldown the owner could not pay for at any mana sample in
       // [t, t + CD_HOARD_RESPONSE_S] is not "ready" to accuse (7f67e778 @378:
       // Restoral costs 11,482 while the owner held 1,398).
-      const ready = offCooldown.filter(
+      const readyButForOwner = offCooldown.filter(
         (cd) =>
           !cd.responseOnly &&
           cdReadyInTimeAt(cd, p.tSec) &&
@@ -1639,6 +1651,23 @@ export function cdHoardedEvents(
             true &&
           ownerReachesEnemyTarget?.(cd.spellId, p.tSec) !== false,
       );
+      // the owner could press THIS cooldown: free of CC, and of a lockout on
+      // its school, for REACTION_WINDOW_S of the window "spent" counts in
+      const ready = readyButForOwner.filter(
+        (cd) =>
+          ownerCouldRespond?.(responseFromS, responseToS, cd.spellId) !== false,
+      );
+      // the trace keeps its two reasons: the owner could not act (for any
+      // ready cooldown, or — with none ready — at all), else nothing ready
+      if (
+        ready.length === 0 &&
+        (readyButForOwner.length > 0 ||
+          (!!ownerCouldRespond &&
+            !ownerCouldRespond(responseFromS, responseToS)))
+      ) {
+        traceOwnerCouldNotAct();
+        continue;
+      }
       if (ready.length === 0) {
         if (tracing)
           trace.push({
@@ -1857,7 +1886,10 @@ export function cdHoardedEvents(
       // it. Only when something blocked them — a free owner gets neither.
       // anchored on the rendered second `t` (facts.t), which the legend
       // measures the offsets and ownerFreeS from
-      const act = ownerActState?.(windowFromS, windowToS, t) ?? null;
+      // FT-T10: free time is counted against the cooldowns the row names
+      const readySpellIds = ready.map((cd) => cd.spellId);
+      const act =
+        ownerActState?.(windowFromS, windowToS, t, readySpellIds) ?? null;
       const off = (s: number) => {
         const d = s - t;
         return `${d >= 0 ? "+" : ""}${d.toFixed(1)}`;
@@ -1869,7 +1901,12 @@ export function cdHoardedEvents(
         : "";
       const afterReject =
         rejectAt.length && ownerActState
-          ? ownerActState(windowFromS, windowToS, rejectAt.at(-1)!)
+          ? ownerActState(
+              windowFromS,
+              windowToS,
+              rejectAt.at(-1)!,
+              readySpellIds,
+            )
           : null;
       // F-H5 (ruling 2026-09-30, R3 = A): the window really available after
       // t — cut at the owner's death or the round end, the gate's own cut —
@@ -1990,7 +2027,7 @@ export function cdHoardedEvents(
         ? act.blocks
             .map(
               (b) =>
-                `${getEnglishSpellName(b.spellId)}${b.lockout ? " lockout" : ""} ${off(b.fromS)}…${Number.isFinite(b.toS) ? `${off(b.toS)}s` : "(no end logged)"}`,
+                `${getEnglishSpellName(b.spellId)}${b.lockout ? ` lockout${lockedSchoolsText(b.lockedSchoolMask)}` : ""} ${off(b.fromS)}…${Number.isFinite(b.toS) ? `${off(b.toS)}s` : "(no end logged)"}`,
             )
             .join("; ")
         : "";
