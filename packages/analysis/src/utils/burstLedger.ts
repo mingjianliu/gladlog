@@ -590,6 +590,10 @@ export function formatBurstLedgerForContext(
   bursts: IBurstLedgerEntry[],
   targeting: IWindowTargetingAudit[],
   kicks: IKickAuditEntry[],
+  /** How a kick's miss target is named when it is not a player — a totem's
+   * unit name is whatever language the log was written in (FT-T11 follow-up:
+   * `[IMMUNE: 根基图腾]` on a zhCN log, `checkCjkLeak`). Absent = the name. */
+  missTargetLabel: (name: string, unitId: string) => string = (name) => name,
 ): string[] {
   if (bursts.length + targeting.length + kicks.length === 0) return [];
   const lines: string[] = ["## BURST LEDGER (your offensive audit)"];
@@ -669,7 +673,7 @@ export function formatBurstLedgerForContext(
 
   if (kicks.length > 0) {
     // the target as this line names units elsewhere (`silenced <name>`)
-    const missTag = (k: IKickAuditEntry) => kickMissTag(k, (name) => name);
+    const missTag = (k: IKickAuditEntry) => kickMissTag(k, missTargetLabel);
     const parts = kicks.map((k) => {
       const at = fmtTime(k.atSeconds);
       switch (k.result) {

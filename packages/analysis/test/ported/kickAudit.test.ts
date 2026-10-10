@@ -340,6 +340,39 @@ describe("kickAudit — one kick one entry, landed silence, bounded juke (G11)",
     );
   });
 
+  it("FT-T11 follow-up: a miss on a totem is named through the caller's label, never by the totem's unit name", () => {
+    const missed = {
+      atSeconds: 80,
+      kickSpellId: "57994",
+      kickSpellName: "Wind Shear",
+      result: "missed",
+      kickMiss: {
+        missType: "IMMUNE",
+        targetId: "Creature-0-3019-1825-9-5925-00001",
+        targetName: "根基图腾",
+      },
+    } as any;
+    const kicksLine = (label?: (name: string, id: string) => string) =>
+      formatBurstLedgerForContext([], [], [missed], label).find((l) =>
+        l.includes("Kicks:"),
+      );
+    expect(
+      kicksLine((name, id) =>
+        id.startsWith("Player-") ? name : "Shammy-Realm's totem",
+      ),
+    ).toBe("  Kicks: 1:20 Wind Shear → hit nothing [IMMUNE: Shammy-Realm's totem]");
+    // a player target keeps the name this block uses everywhere
+    const onPlayer = {
+      ...missed,
+      kickMiss: { missType: "IMMUNE", targetId: "Player-1-0001", targetName: "Pal-Realm" },
+    };
+    expect(
+      formatBurstLedgerForContext([], [], [onPlayer], (name, id) =>
+        id.startsWith("Player-") ? name : "x",
+      ).find((l) => l.includes("Kicks:")),
+    ).toContain("[IMMUNE: Pal-Realm]");
+  });
+
   it("F-L6: the ledger's Kicks line says 'no cast interrupted' only for a target with no open cast", () => {
     const line = (openCastSpellName?: string) =>
       formatBurstLedgerForContext(

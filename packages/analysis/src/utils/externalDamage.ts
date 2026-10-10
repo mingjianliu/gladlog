@@ -346,6 +346,12 @@ const absorbedTag = (o: IExternalDamageObservation): string => {
   if (o.deferred >= 500) parts.push(`+${k(o.deferred)} deferred`);
   return parts.length > 0 ? ` (${parts.join(", ")})` : "";
 };
+/** `absorbedTag` as the gate reads it back (`DURING_SEG` in
+ * promptQualityCheck.ts): the three forms above, or none. FT-T02b added the
+ * `deferred` part to the writer and left the gate's own pattern at
+ * `(+Ak absorbed)` — 580 unparsable `during it:` segments on the 605-file
+ * capture until the pattern moved here, next to what it reads. */
+export const DURING_ABSORBED_TAG_RE_SRC = String.raw`(?: \((?:\+\d+k absorbed(?:, \+\d+k deferred)?|\+\d+k deferred)\))?`;
 /** Round-2 fields: the in-school share for a school-limited wall, and immune hits. */
 const round2Tags = (o: IExternalDamageObservation): string => {
   let s = "";

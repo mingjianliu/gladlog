@@ -1086,6 +1086,23 @@ describe("checkDuringExternalConsistency — the [ENEMY DEF] during-it annotatio
       ]),
     ).toEqual([]);
   });
+  it("FT-T02b follow-up: accepts the deferred tag, alone and after the absorbed one (the writer's three forms)", () => {
+    for (const tag of ["(+6k deferred)", "(+2k absorbed, +6k deferred)"])
+      expect(
+        checkDuringExternalConsistency([
+          ok.replace("13k on target ·", `13k on target ${tag} ·`),
+        ]),
+      ).toEqual([]);
+    // a form the writer does not produce is still unparsable
+    expect(
+      checkDuringExternalConsistency([
+        ok.replace(
+          "13k on target ·",
+          "13k on target (+6k deferred, +2k absorbed) ·",
+        ),
+      ]).length,
+    ).toBeGreaterThan(0);
+  });
   it("round 2: accepts the in-school and immune fields, and flags in-school above the total", () => {
     const r2 = ok.replace(
       "direct 0k / periodic 13k",

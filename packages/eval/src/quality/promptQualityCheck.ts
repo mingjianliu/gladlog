@@ -95,6 +95,7 @@ import {
   isHpTroughWorthPrinting,
   PRESS_HP_LINE_TAGS,
 } from "@gladlog/analysis/src/utils/cooldowns";
+import { DURING_ABSORBED_TAG_RE_SRC } from "@gladlog/analysis/src/utils/externalDamage";
 import { fmtTime } from "@gladlog/analysis/src/utils/renderGrid";
 import { SUMMON_KIND_RE_SRC } from "@gladlog/analysis/src/utils/summonKind";
 import fs from "fs-extra";
@@ -1790,8 +1791,9 @@ export function checkResReturnAnnounced(lines: string[]): string[] {
 const ENEMY_DEF_EXTERNAL_DUR =
   /\[ENEMY DEF\]\s+.*?→\s*\S+\s*\((\d+(?:\.\d+)?)s/;
 /** One `during it:` segment (segments are `; `-joined; fields ` · `-joined). */
-const DURING_SEG =
-  /^(\S+) (\d+)k on target(?: \(\+\d+k absorbed\))? · (\d+)% of their enemy-player damage · direct (\d+)k \/ periodic (\d+)k(?: · (\d+)k \((\d+)%\) of it in the wall's school)?(?: · (\d+) hits? immune)? · damage in (\d+) of (\d+) s · longest gap (\d+) s$/;
+const DURING_SEG = new RegExp(
+  String.raw`^(\S+) (\d+)k on target${DURING_ABSORBED_TAG_RE_SRC} · (\d+)% of their enemy-player damage · direct (\d+)k \/ periodic (\d+)k(?: · (\d+)k \((\d+)%\) of it in the wall's school)?(?: · (\d+) hits? immune)? · damage in (\d+) of (\d+) s · longest gap (\d+) s$`,
+);
 const DURING_EMPTY_SEG =
   /^(\S+) 0k on target · no damage on any enemy player · 0 of (\d+) s$/;
 

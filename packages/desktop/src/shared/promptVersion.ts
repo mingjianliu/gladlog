@@ -1284,5 +1284,11 @@
  *  v364 (2026-10-10, FT-T10, same "Ok"): a priest in Spirit of Redemption
  *  form reads `unit:ghost` on [STATE] ticks, with a legend line when one
  *  does. The token's code existed and nothing passed it its intervals.
+ *  v365 (2026-10-10, FT follow-up to v344 / v354): the burst ledger's
+ *  `Kicks:` line names a kick's miss target that is a summon as
+ *  `<owner>'s totem` / `pet` / `guardian` (the timeline's [KICK] wording),
+ *  not by its unit name — a totem's name is in the log's client language
+ *  (`[IMMUNE: 根基图腾]`). With it, gate only: the `during it:` gate reads the
+ *  `+Nk deferred` clause v344 added.
  */
-export const PROMPT_VERSION = 364;
+export const PROMPT_VERSION = 365;

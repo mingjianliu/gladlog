@@ -2056,6 +2056,11 @@ const INDEX: PredicateRow[] = [
     mod: externalDamage,
   },
   {
+    file: `${A}/utils/externalDamage.ts`,
+    symbol: "DURING_ABSORBED_TAG_RE_SRC",
+    mod: externalDamage,
+  },
+  {
     file: "packages/eval/src/quality/promptQualityCheck.ts",
     symbol: "checkDuringExternalConsistency",
     mod: promptQualityCheck,

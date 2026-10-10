@@ -120,7 +120,12 @@ import {
 } from "./matchTimelineSections";
 import { buildMatchTimeline, BuildMatchTimelineParams } from "./matchTimeline";
 import { buildPlayerLoadout } from "./resourceSnapshot";
-import { dmgSpikeWindowsOf, mergeTimestampedLines } from "./timelineHelpers";
+import {
+  dmgSpikeWindowsOf,
+  mergeTimestampedLines,
+  resolveSummonOwner,
+  summonKindOf,
+} from "./timelineHelpers";
 import { abbrevSpec, unitLabeler } from "./unitLabel";
 import type { RawStreams } from "../utils/rawStreams";
 
@@ -642,6 +647,25 @@ export function buildMatchContext(
         combat,
       ),
       analyzeKickAudit(owner as ICombatUnit, enemies as ICombatUnit[], combat),
+      // a player by the name this block uses everywhere; a summon as
+      // `<owner>'s <kind>`, the timeline's own [KICK] wording, never by its
+      // unit name (localized on a non-English client)
+      (name, unitId) => {
+        if (unitId.startsWith("Player-")) return name;
+        const allUnits = Object.values(combat.units) as ICombatUnit[];
+        const summonOwner = resolveSummonOwner({
+          allUnits,
+          friends: friends as ICombatUnit[],
+          enemies: enemies as ICombatUnit[],
+          name,
+          sourceId: unitId,
+        });
+        const kind = summonKindOf(
+          unitId,
+          allUnits.find((u) => u.id === unitId),
+        );
+        return summonOwner ? `${summonOwner.name}'s ${kind}` : `a ${kind}`;
+      },
     );
     if (ledgerLines.length > 0) {
       tLines.push("");
