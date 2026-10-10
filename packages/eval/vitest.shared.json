@@ -23,6 +23,7 @@
     "test/conseqHpStateGate.test.ts",
     "test/coverageManifest.test.ts",
     "test/crisisHpStateGate.test.ts",
+    "test/dampeningStartGate.test.ts",
     "test/deepseekDriver.test.ts",
     "test/evalHome.test.ts",
     "test/explore.answersAlignment.test.ts",

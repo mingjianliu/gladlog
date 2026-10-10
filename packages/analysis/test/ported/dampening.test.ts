@@ -1,10 +1,15 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { CombatUnitSpec, LogEvent } from "@gladlog/parser-compat";
+import {
+  CombatUnitSpec,
+  CombatUnitType,
+  LogEvent,
+} from "@gladlog/parser-compat";
 
 import {
   computeDampening,
   computeDampeningTimeline,
   dampeningDangerMultiplier,
+  dampeningRulesOf,
   formatDampeningForContext,
   getDampeningPercentage,
 } from "../../src/utils/dampening";
@@ -61,6 +66,71 @@ describe("dampening — rule detection", () => {
     ];
     expect(getDampeningPercentage("Unknown", players as any, 0)).toBe(10);
   });
+
+  describe("FT-T13 D10: one classification, on players only", () => {
+    const healer2v2 = () => [
+      makeUnit("p1", {
+        spec: CombatUnitSpec.Priest_Discipline,
+        info: { teamId: "0" },
+      }),
+      makeUnit("p2", {
+        spec: CombatUnitSpec.Warrior_Arms,
+        info: { teamId: "0" },
+      }),
+      makeUnit("p3", {
+        spec: CombatUnitSpec.Paladin_Holy,
+        info: { teamId: "1" },
+      }),
+      makeUnit("p4", {
+        spec: CombatUnitSpec.Hunter_BeastMastery,
+        info: { teamId: "1" },
+      }),
+    ];
+    const pet = (id: string) => ({
+      ...makeUnit(id, { ownerId: "p4" }),
+      type: CombatUnitType.Pet,
+    });
+
+    it("pets, totems and guardians in the unit list do not tip a 2v2 round into the 3v3 rules", () => {
+      const players = healer2v2();
+      const withPets = [...players, pet("pet1"), pet("totem1"), pet("g1")];
+      expect(dampeningRulesOf("2v2", players as any)).toBe("2v2");
+      expect(dampeningRulesOf("2v2", withPets as any)).toBe("2v2");
+      // the same reading from both lists — the header read the first, the
+      // press lines the second
+      expect(getDampeningPercentage("2v2", withPets as any, 0)).toBe(
+        getDampeningPercentage("2v2", players as any, 0),
+      );
+    });
+
+    it("a bracket string that names no bracket falls back to the PLAYER count", () => {
+      const players = healer2v2();
+      const withPets = [...players, pet("pet1"), pet("totem1")];
+      expect(dampeningRulesOf("", withPets as any)).toBe("2v2");
+      expect(dampeningRulesOf(undefined, withPets as any)).toBe("2v2");
+      expect(dampeningRulesOf("", [...players, makeUnit("p5")] as any)).toBe(
+        "3v3",
+      );
+    });
+
+    it("the literal 2v2 string is not overridden by a roster count", () => {
+      const six = [...healer2v2(), makeUnit("p5"), makeUnit("p6")];
+      expect(dampeningRulesOf("2v2", six as any)).toBe("2v2");
+    });
+
+    it("one side's events, the round's roster: the bracket is classified on the roster", () => {
+      const players = healer2v2();
+      const enemies = players.slice(2);
+      // one side alone reads "double DPS" — which is why the roster is passed
+      expect(dampeningRulesOf("2v2", enemies as any)).toBe("2v2_dps");
+      expect(
+        getDampeningPercentage("2v2", enemies as any, 0, players as any),
+      ).toBe(getDampeningPercentage("2v2", players as any, 0));
+      expect(computeDampening(0, "2v2", enemies as any, players as any)).toBe(
+        computeDampening(0, "2v2", players as any),
+      );
+    });
+  });
 });
 
 describe("dampening — timeline logic", () => {
@@ -82,7 +152,13 @@ describe("dampening — timeline logic", () => {
 
   it("FT-T08 step 4: the stack also goes down — a REMOVED_DOSE line carries the new count (95127ab4: 51 → 32 after a death)", () => {
     const dose = (event: LogEvent, atMs: number, stacks: number) => {
-      const e = makeAuraEvent(event as any, "110310", MATCH_START + atMs, "h", "h");
+      const e = makeAuraEvent(
+        event as any,
+        "110310",
+        MATCH_START + atMs,
+        "h",
+        "h",
+      );
       (e.logLine as any).parameters[12] = stacks;
       return e as any;
     };
@@ -93,7 +169,8 @@ describe("dampening — timeline logic", () => {
         dose(LogEvent.SPELL_AURA_APPLIED_DOSE, 120_000, 33),
       ],
     });
-    const at = (ms: number) => getDampeningPercentage("2v2", [p] as any, MATCH_START + ms);
+    const at = (ms: number) =>
+      getDampeningPercentage("2v2", [p] as any, MATCH_START + ms);
     expect(at(105_000)).toBe(51);
     expect(at(115_000)).toBe(32);
     expect(at(125_000)).toBe(33);

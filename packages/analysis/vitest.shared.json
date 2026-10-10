@@ -131,6 +131,7 @@
     "test/crisisSchoolCoverage.test.ts",
     "test/curatedFacts.test.ts",
     "test/curatedIdRegistry.test.ts",
+    "test/dampeningStart.test.ts",
     "test/data.test.ts",
     "test/datagen.mitigation.test.ts",
     "test/datagen.simcHotfix.test.ts",

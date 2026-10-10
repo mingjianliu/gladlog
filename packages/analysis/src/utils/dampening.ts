@@ -1,4 +1,8 @@
-import { CombatUnitSpec, ICombatUnit } from "@gladlog/parser-compat";
+import {
+  CombatUnitSpec,
+  CombatUnitType,
+  ICombatUnit,
+} from "@gladlog/parser-compat";
 
 import { isHealerSpec } from "./cooldowns";
 import { toRenderSecond } from "./renderGrid";
@@ -71,46 +75,63 @@ function getDampeningFromEvents(
   return fallback;
 }
 
-// FIX 4: bracket string is checked first; player count is only a fallback for unknown strings.
-function computeRules(
-  bracket?: string,
-  players?: ICombatUnit[],
-): "2v2" | "2v2_dps" | "3v3" | "Rated Solo Shuffle" {
+/** Which bracket's dampening rules a round runs under. */
+export type DampeningRules = "2v2" | "2v2_dps" | "3v3" | "Rated Solo Shuffle";
+
+/**
+ * The one classification of a round's dampening rules — every consumer of a
+ * dampening value goes through it (`getInitialDampening`), so one prompt never
+ * states two different start values.
+ *
+ * The bracket string decides when it names a bracket (the literal
+ * ARENA_MATCH_START strings "2v2", "3v3", "Rated Solo Shuffle"); the roster
+ * size is only the fallback for a string that names none (a skirmish, an
+ * absent bracket). The roster is counted on PLAYERS only, whatever list the
+ * caller hands in: three consumers used to pass every unit of the round —
+ * pets, totems and guardians included — to a count of "more than four", so a
+ * 2v2 round with a pet out was classified 3v3 and its press lines read
+ * `dampening: 10%` under a header that said `started at 30%` (FT-T13, D10:
+ * 159 of the 516 healer-2v2 prompts / 220 lines of the 605-file capture).
+ *
+ * `units` must still be the round's WHOLE roster for the 2v2 healer split —
+ * one side alone always reads "double DPS".
+ */
+export function dampeningRulesOf(
+  bracket: string | undefined,
+  units: readonly ICombatUnit[] | undefined,
+): DampeningRules {
   const safeBracket = bracket ?? "";
-  const safePlayers = players ?? [];
   if (safeBracket === "Rated Solo Shuffle") {
     return "Rated Solo Shuffle";
   }
   if (safeBracket.includes("3v3") || safeBracket.includes("Three")) {
     return "3v3";
   }
-  if (safePlayers.length > 4) {
+  const players = (units ?? []).filter(
+    (u) => u?.type === CombatUnitType.Player,
+  );
+  if (!safeBracket.includes("2v2") && players.length > 4) {
     return "3v3";
   }
-  const team0HasHealer = safePlayers.some(
-    (c) =>
-      c?.info?.teamId === "0" &&
-      (isHealerSpec(c?.spec as CombatUnitSpec) ||
-        tankSpecs.includes(c?.spec as CombatUnitSpec)),
-  );
-  const team1HasHealer = safePlayers.some(
-    (c) =>
-      c?.info?.teamId === "1" &&
-      (isHealerSpec(c?.spec as CombatUnitSpec) ||
-        tankSpecs.includes(c?.spec as CombatUnitSpec)),
-  );
-  if (team0HasHealer && team1HasHealer) {
-    return "2v2";
-  }
-  return "2v2_dps";
+  const hasHealer = (teamId: string) =>
+    players.some(
+      (c) =>
+        c?.info?.teamId === teamId &&
+        (isHealerSpec(c?.spec as CombatUnitSpec) ||
+          tankSpecs.includes(c?.spec as CombatUnitSpec)),
+    );
+  return hasHealer("0") && hasHealer("1") ? "2v2" : "2v2_dps";
 }
 
 /** Single-source predicate: the initial value is computed here and only here.
  * It is exported for reuse by callers that need the low-level "event stream +
  * initial value" composition (e.g. desktop's deriveDampeningSeries) — nobody
  * may copy the rule table a second time. */
-export function getInitialDampening(bracket: string, players: ICombatUnit[]) {
-  const rules = computeRules(bracket, players);
+export function getInitialDampening(
+  bracket: string,
+  players: readonly ICombatUnit[],
+) {
+  const rules = dampeningRulesOf(bracket, players);
   if (rules === "Rated Solo Shuffle") {
     return 10;
   }
@@ -128,13 +149,22 @@ export function getInitialDampening(bracket: string, players: ICombatUnit[]) {
 // Public API
 // ---------------------------------------------------------------------------
 
+/**
+ * The dampening (0–100) at `timestamp`.
+ *
+ * `players` are the units whose stack events are read. `roster` is the round's
+ * whole unit list the bracket is classified from (`dampeningRulesOf`); it
+ * defaults to `players` and must be passed whenever `players` is only one side
+ * of the round.
+ */
 export function getDampeningPercentage(
   bracket: string,
   players: ICombatUnit[],
   timestamp: number,
+  roster: readonly ICombatUnit[] = players,
 ): number {
   const events = buildDampeningEvents(players);
-  const fallback = getInitialDampening(bracket, players);
+  const fallback = getInitialDampening(bracket, roster);
   // FIX 3: use ?? instead of || so stacks=0 is not conflated with "no data"
   return getDampeningFromEvents(events, timestamp, fallback);
 }
@@ -151,8 +181,9 @@ export function computeDampening(
   matchTimeMs: number,
   bracket: string,
   players: ICombatUnit[],
+  roster: readonly ICombatUnit[] = players,
 ): number {
-  const damp = getDampeningPercentage(bracket, players, matchTimeMs);
+  const damp = getDampeningPercentage(bracket, players, matchTimeMs, roster);
   return Math.min(damp / 100, 1.0);
 }
 

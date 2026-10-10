@@ -263,10 +263,13 @@ function extractCombatStats(
     }
 
     // ── 6. Dampening at friendly deaths ───────────────────────────────────
+    // Read on the players, like every prompt line (FT-T13, D10): `allUnits`
+    // carries pets, and a unit list is what `dampeningRulesOf` classifies.
     const bracket = (combat as IArenaMatch).startInfo?.bracket ?? "3v3";
+    const players = [...friendlies, ...enemies];
     for (const death of unit.deathRecords) {
       const dampPct =
-        getDampeningPercentage(bracket, allUnits, death.timestamp) / 100;
+        getDampeningPercentage(bracket, players, death.timestamp) / 100;
       stats.dampeningAtDeathSamples.push(dampPct);
     }
   }

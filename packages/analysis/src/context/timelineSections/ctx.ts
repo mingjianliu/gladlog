@@ -164,6 +164,11 @@ export interface TimelineCtx {
   _allUnits: ICombatUnit[];
   /** friends + enemies (dampening, rot pressure) */
   allPlayers: ICombatUnit[];
+  /** the dampening (0–100) at a match second — the ONE reading every timeline
+   * line prints (the `| dampening: N%` note of `[YOU] [CD]` / `[PROC]` lines
+   * and of both `[DEATH]` families). Read on `allPlayers`, the list the
+   * DAMPENING header, the alerts and `[MATCH END]` read (FT-T13, D10). */
+  dampeningAt: (atSeconds: number) => number;
   /** AoE CC casts from outgoingCCChains; [] when there are none */
   aoeCCEvents: IAoeCCEvent[];
   /** AoE CC events already folded into a cast line (shared: owner casts,

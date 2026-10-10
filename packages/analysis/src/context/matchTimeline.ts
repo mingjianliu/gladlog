@@ -372,6 +372,17 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     return true;
   }
 
+  // The timeline's one dampening reading (FT-T13, D10). It reads the PLAYERS
+  // (`allPlayers`), like the DAMPENING header, the alerts and [MATCH END];
+  // the press lines and the [DEATH] lines used to read `_allUnits`, whose
+  // pets tipped a 2v2 round into the 3v3 rules (`dampeningRulesOf`).
+  const dampeningAt = (atSeconds: number) =>
+    getDampeningPercentage(
+      bracket ?? "3v3",
+      allPlayers,
+      matchStartMs + atSeconds * 1000,
+    );
+
   // ── Dampening Milestone Alerts (F149) ──────────────────────────────────────
   emitDampeningEntries({
     bracket,
@@ -425,12 +436,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     unitNames,
     rosterSides,
     counterfactualOf,
-    dampeningAt: (atSeconds) =>
-      getDampeningPercentage(
-        params.bracket ?? "3v3",
-        _allUnits,
-        matchStartMs + atSeconds * 1000,
-      ),
+    dampeningAt,
     requestSnapshotPlaceholder,
     addEntry,
   });
@@ -445,12 +451,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     summonOwners,
     unitNames,
     rosterSides,
-    dampeningAt: (atSeconds) =>
-      getDampeningPercentage(
-        params.bracket ?? "3v3",
-        _allUnits,
-        matchStartMs + atSeconds * 1000,
-      ),
+    dampeningAt,
     requestSnapshotPlaceholder,
     addEntry,
   });
@@ -519,6 +520,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     groundingAbsorbNote,
     params,
     _allUnits,
+    dampeningAt,
     pressureWindows,
     pid,
     cdExpiryEvents,

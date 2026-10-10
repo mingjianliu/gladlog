@@ -1062,6 +1062,59 @@ export function checkHeaderHpPromise(lines: string[]): string[] {
   return failures;
 }
 
+/** `DAMPENING (2v2): started at 30%, ended at …` — the header's start value. */
+const DAMPENING_STARTED_HEADER = /^DAMPENING \([^)]*\): started at (\d+)%/;
+/** The `| dampening: N%` note of a `[YOU] [CD]` / `[PROC]` / `[DEATH]` line. */
+const DAMPENING_NOTE = /\| dampening: (\d+)%/;
+const DEATH_LINE = /^\d+:\d{2}\s+\[DEATH\]/;
+
+/**
+ * One prompt states one dampening start (FT-T13, D10).
+ *
+ * The header's `started at N%` and the `| dampening: M%` notes of the timeline
+ * are the same reading of the same aura, and the stack only goes down after a
+ * death (`buildDampeningEvents`: a REMOVED_DOSE on the survivors). So before
+ * the second of the first `[DEATH]` line no note may read below the header.
+ *
+ * Why: three consumers classified the bracket on a unit list that carried
+ * pets, so a 2v2 round with a pet out printed `started at 30%` in the header
+ * and `dampening: 10%` on the press lines until the first logged stack —
+ * 159 of the 516 healer-2v2 prompts (220 lines) of the 605-file capture. The
+ * producer now has one classification (`dampeningRulesOf`); this gate is what
+ * keeps a consumer from being handed a different roster again.
+ */
+export function checkDampeningStartConsistency(lines: string[]): string[] {
+  const failures: string[] = [];
+  const headerAt = lines.findIndex((l) =>
+    DAMPENING_STARTED_HEADER.test(l.trim()),
+  );
+  if (headerAt < 0) return failures;
+  const started = {
+    pct: Number(lines[headerAt].trim().match(DAMPENING_STARTED_HEADER)![1]),
+    line: headerAt + 1,
+  };
+  const secondOf = (line: string): number | null => {
+    const m = line.match(LEADING_TIME);
+    return m ? Number(m[1]) * 60 + Number(m[2]) : null;
+  };
+  let firstDeathS = Infinity;
+  for (const line of lines) {
+    if (!DEATH_LINE.test(line)) continue;
+    const s = secondOf(line);
+    if (s !== null) firstDeathS = Math.min(firstDeathS, s);
+  }
+  lines.forEach((line, i) => {
+    const s = secondOf(line);
+    if (s === null || s >= firstDeathS) return;
+    const m = line.match(DAMPENING_NOTE);
+    if (m && Number(m[1]) < started.pct)
+      failures.push(
+        `line ${i + 1}: DAMPENING 段首(第 ${started.line} 行)写 started at ${started.pct}%,本行(第一次死亡之前)却写 dampening: ${m[1]}% —— ${line.trim().slice(0, 140)}`,
+      );
+  });
+  return failures;
+}
+
 /**
  * `[RES]` no-change rows (27th hardFailure class, GH #99 item 5, user ruling
  * 2026-09-22): a `rdy:Δ  cd:—` row may survive in the rendered prompt only
@@ -3663,6 +3716,7 @@ export function checkMatch(
   hardFailures.push(...checkFactsBlockIntegrity(lines));
   hardFailures.push(...checkPetCreditSide(lines));
   hardFailures.push(...checkHeaderHpPromise(lines));
+  hardFailures.push(...checkDampeningStartConsistency(lines));
   hardFailures.push(...checkKillAttemptFraming(lines));
   hardFailures.push(...checkResNoChangeRowsPruned(lines));
   hardFailures.push(...checkDuringExternalConsistency(lines));

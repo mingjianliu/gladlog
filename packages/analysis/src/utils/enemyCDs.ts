@@ -485,13 +485,19 @@ export function reconstructEnemyCDTimeline(
             )
           : 0.5;
 
-      // Dampening at window start
+      // Dampening at window start. The stack events are read on the units
+      // this call was handed (unchanged); the bracket is classified on the
+      // round's whole roster (FT-T13, D10) — half of this function's callers
+      // pass no `friendlies`, and one side alone never reads as "2v2 with a
+      // healer on both teams".
       const bracket = combat.startInfo?.bracket ?? "3v3";
       const allPlayers = [...enemies, ...(friendlies ?? [])];
+      const roundUnits = Object.values(combat.units ?? {});
       const dampening = computeDampening(
         windowStart * 1000 + matchStartMs,
         bracket,
         allPlayers,
+        roundUnits.length > 0 ? roundUnits : allPlayers,
       );
       const dampeningMult = dampeningDangerMultiplier(dampening);
 

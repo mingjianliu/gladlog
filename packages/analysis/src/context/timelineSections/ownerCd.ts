@@ -27,7 +27,6 @@ import {
   THROUGHPUT_EMPOWER_DEFENSIVE_IDS,
   timingContextWithLabel,
 } from "../../utils/cooldowns";
-import { getDampeningPercentage } from "../../utils/dampening";
 import { AOE_CC_LANDING_WINDOW_S } from "../../utils/drAnalysis";
 import {
   computeEnemyInterruptAvailability,
@@ -80,6 +79,7 @@ export function emitOwnerCdEntries(
     | "groundingAbsorbNote"
     | "params"
     | "_allUnits"
+    | "dampeningAt"
     | "pressureWindows"
     | "pid"
     | "cdExpiryEvents"
@@ -112,6 +112,7 @@ export function emitOwnerCdEntries(
     groundingAbsorbNote,
     params,
     _allUnits,
+    dampeningAt,
     pressureWindows,
     pid,
     cdExpiryEvents,
@@ -321,7 +322,7 @@ export function emitOwnerCdEntries(
 
       let dampeningNote = "";
       if (!isCC) {
-        dampeningNote = ` | dampening: ${getDampeningPercentage(params.bracket ?? "3v3", _allUnits, matchStartMs + cast.timeSeconds * 1000)}%`;
+        dampeningNote = ` | dampening: ${dampeningAt(cast.timeSeconds)}%`;
         // pressureWindows is sorted by totalDamage descending (see computePressureWindows),
         // so Array.find() would return the biggest future spike rather than the nearest one.
         // Select by minimum fromSeconds among qualifying spikes instead of relying on order.
