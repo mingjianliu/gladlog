@@ -21,6 +21,7 @@ import {
 } from "../utils/auraIntervals";
 import { buffFullDurationForCaster } from "../utils/buffDuration";
 import {
+  cannotCastIntervalsForSpells,
   deathLockChain,
   enemySourceIds,
   freeMsBefore,
@@ -1784,10 +1785,13 @@ export function buildKillSequenceBlock(params: {
               // cc-dr F-KS1: the holder's free time just before the death —
               // crisis-external F-D2's `freeBeforeDeathS` (`freeMsBefore`, the
               // same intervals); nothing when no lock started before it
+              // FT-T10 PREVIEW: asked for the defensive the line names — a
+              // kick lockout counts only when it locks that spell's school
               const freeMs = freeMsBefore(
-                namedCannotCastIntervals(
+                cannotCastIntervalsForSpells(
                   u.player as ICombatUnit,
                   enemySourceIds(enemies, params.allUnits ?? []),
+                  [u.cd.spellId],
                 ),
                 matchStartMs + Math.round(deathTime * 1000),
               );
