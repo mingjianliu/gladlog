@@ -22,7 +22,7 @@ import {
 const LEGEND =
   "  [ENEMY DEF] = an enemy pressed a defensive at that second: `(N%, Ts)` = official damage reduction and the";
 const ATTEMPT = (span: string, tail: string) =>
-  `  [${span}] on Osiklm-Archimonde-EU — Avatar burst (no stun) | opportunity: trinket up (no softer target) | team focus 55% (1.23M on target) | FAILED: ${tail}`;
+  `  [${span}] on Osiklm-Archimonde-EU — Avatar burst (no stun) | opportunity: trinket up (no softer target) | team focus 55% (0.98M on target inside it, 1.23M incl. the 5 s after) | FAILED: ${tail}`;
 
 /** the roster lines a rendered unit name is resolved through */
 const ROSTER = [

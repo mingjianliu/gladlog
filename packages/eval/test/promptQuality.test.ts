@@ -651,7 +651,7 @@ describe("checkForcedTrinketConsistency — [FORCED TRINKET] agrees with the tri
   const ccOn =
     "0:17  [CC ON ENEMY]   5(DPriest) ← Intimidating Shout (by 1(AWarrior)) (6s)";
   const attempt =
-    "  [0:13–0:26] on Zenkitty-Illidan-US — Leg Sweep opener (Full DR), 2 stuns | opportunity: trinket up (no softer target) | team focus 31% (0.46M on target) | FAILED: target trinketed out";
+    "  [0:13–0:26] on Zenkitty-Illidan-US — Leg Sweep opener (Full DR), 2 stuns | opportunity: trinket up (no softer target) | team focus 31% (0.31M on target inside it, 0.46M incl. the 5 s after) | FAILED: target trinketed out";
   const line =
     "0:16  [FORCED TRINKET]  5(DPriest) used PvP trinket inside your team's kill attempt [0:13–0:26] on them → 0:17 your Intimidating Shout landed on 5(DPriest) 1 s later (6s)";
   const ok = [...legend, trinket, you, ccOn, attempt, line];

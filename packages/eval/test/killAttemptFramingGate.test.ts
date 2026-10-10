@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { checkKillAttemptFraming } from "../src/quality/promptQualityCheck";
 
 const line = (opp: string) =>
-  `  [0:05–0:08] on Zmx-Lothar-US — Storm Bolt opener (Full DR), 1 stun | opportunity: ${opp} | team focus 58% (0.05M on target) | FAILED: not enough damage`;
+  `  [0:05–0:08] on Zmx-Lothar-US — Storm Bolt opener (Full DR), 1 stun | opportunity: ${opp} | team focus 58% (0.03M on target inside it, 0.05M incl. the 5 s after) | FAILED: not enough damage`;
 
 describe("checkKillAttemptFraming(第 26 类 hardFailure,用户裁决 2026-09-22)", () => {
   it("v92 措辞:开场晕标成 locked + 汇总统计徽章在手 → 两条失败", () => {

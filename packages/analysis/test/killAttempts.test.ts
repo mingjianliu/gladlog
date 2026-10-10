@@ -659,6 +659,7 @@ describe("extractKillAttempts — 大招锚定(v2)", () => {
       stuns: [],
       opportunity: { tier: "locked", wallsInHand: [] },
       teamDamageToTarget: 100_000,
+      teamDamageToTargetInBracket: 100_000,
       teamDamageTotal: 100_000,
       teamOnTargetPct: 100,
       killed: false,
@@ -1912,6 +1913,7 @@ describe("FAILED cause: own save + external in one attempt (B16b)", () => {
     stuns: [],
     opportunity: { tier: "locked", wallsInHand: [] },
     teamDamageToTarget: 980_000,
+    teamDamageToTargetInBracket: 980_000,
     teamDamageTotal: 980_000,
     teamOnTargetPct: 100,
     killed: false,
@@ -2211,5 +2213,90 @@ describe("extractKillAttempts — brackets end at the round's end and at the kil
         shuffle(hitter, lateStun, e2),
       ),
     ).toHaveLength(0);
+  });
+});
+
+// T12 ④ (user ruling 2026-10-10: print both numbers): the line printed the
+// bracket beside a sum taken over the bracket + the 5 s kill-credit slack.
+describe("KILL ATTEMPTS — the damage inside the bracket and with the 5 s after it (T12 ④)", () => {
+  // ae9d6fbc: `[5:41–5:46] … Maim opener … (0.87M on target) | FAILED: not
+  // enough damage` — 0.39M inside the Maim, 0.87M through the 5 s after it.
+  const maim = () => {
+    const e1 = unit("e1", { auraEvents: stunAuras("e1", KIDNEY, 341, 5) });
+    const e2 = unit("e2");
+    const f1 = unit("f1", {
+      reaction: 1,
+      damageOut: [
+        dmg("f1", "e1", 343, 390_000),
+        dmg("f1", "e1", 349, 480_000),
+        dmg("f1", "e2", 344, 65_000),
+        dmg("f1", "e1", 352, 500_000), // past the slack: in neither
+        dmg("f1", "e1", 340, 500_000), // before the bracket: in neither
+      ],
+    });
+    const combat = makeCombat(f1, e1, [e2]);
+    combat.endTime = MATCH_START + 400_000;
+    return extractKillAttempts([f1], [e1, e2], combat);
+  };
+
+  it("both sums are on the attempt; the one the outcome reads is unchanged", () => {
+    const [a] = maim();
+    expect(a!.fromSeconds).toBe(341);
+    expect(a!.toSeconds).toBe(346);
+    expect(a!.teamDamageToTargetInBracket).toBe(390_000);
+    expect(a!.teamDamageToTarget).toBe(870_000);
+    // team focus stays on the [from, to + 5 s] span: 870 / (870 + 65)
+    expect(a!.teamOnTargetPct).toBe(93);
+    expect(a!.attribution?.primary).toBe("pressure");
+  });
+
+  it("the line prints both, and the legend says which is which", () => {
+    const text = formatKillAttemptsForContext(maim());
+    // (the opener's name and the tier depend on loaded spell data — not pinned)
+    const line = text.find((l) => l.startsWith("  [5:41–5:46] on e1 — "));
+    expect(line).toMatch(
+      / \| team focus 93% \(0\.39M on target inside it, 0\.87M incl\. the 5 s after\) \| FAILED: not enough damage$/,
+    );
+    const legend = text.find((l) => l.includes("on target inside it, B M"));
+    expect(legend).toContain(
+      "A inside the printed bracket, B over the bracket and the 5 s after it",
+    );
+    expect(legend).toContain("are read over that longer span (B)");
+    expect(text.join("\n")).not.toContain("M on target)");
+  });
+
+  it("damage only in the 5 s after the bracket: still an attempt (the 30k floor reads the longer span), 0.00M inside", () => {
+    const e1 = unit("e1", { auraEvents: stunAuras("e1", KIDNEY, 10, 5) });
+    const f1 = unit("f1", {
+      reaction: 1,
+      damageOut: [dmg("f1", "e1", 18, 60_000)],
+    });
+    const attempts = extractKillAttempts([f1], [e1], makeCombat(f1, e1));
+    expect(attempts).toHaveLength(1);
+    expect(attempts[0]!.teamDamageToTargetInBracket).toBe(0);
+    expect(attempts[0]!.teamDamageToTarget).toBe(60_000);
+    expect(formatKillAttemptsForContext(attempts).join("\n")).toContain(
+      "(0.00M on target inside it, 0.06M incl. the 5 s after)",
+    );
+  });
+
+  it("a KILL's inside figure stops at the bracket it prints — the death", () => {
+    const e1 = unit("e1", {
+      deathRecords: [{ timestamp: ms(128.4) }],
+    });
+    const f1 = unit("f1", {
+      reaction: 1,
+      spellCastEvents: [offensiveCast(122)],
+      damageOut: [
+        dmg("f1", "e1", 124, 60_000),
+        dmg("f1", "e1", 128.4, 25_000), // the killing blow, at the death
+        dmg("f1", "e1", 129, 7_000), // logged after the death
+      ],
+    });
+    const [kill] = extractKillAttempts([f1], [e1], makeCombat(f1, e1));
+    expect(kill!.killed).toBe(true);
+    expect(kill!.toSeconds).toBeCloseTo(128.4, 6);
+    expect(kill!.teamDamageToTargetInBracket).toBe(85_000);
+    expect(kill!.teamDamageToTarget).toBe(92_000);
   });
 });

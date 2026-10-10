@@ -219,6 +219,12 @@ export interface IKillAttempt {
   /** Team damage inside [from, to + KILL_CREDIT_SLACK_S] — `to` as the
    * anchor set it, before a KILL's `toSeconds` is cut at the death. */
   teamDamageToTarget: number;
+  /** Team damage on the target inside the bracket as printed,
+   * [fromSeconds, toSeconds] — after a KILL's `toSeconds` is cut at the death.
+   * A second reading beside `teamDamageToTarget`, for the line only (T12 ④):
+   * the 30k floor, `teamOnTargetPct`, the kill credit and the failure
+   * attribution all stay on [from, to + KILL_CREDIT_SLACK_S] (ruling A29). */
+  teamDamageToTargetInBracket: number;
   teamDamageTotal: number;
   /** 0–100: share of team damage that landed on the attempt's target. */
   teamOnTargetPct: number;
@@ -465,6 +471,7 @@ export function extractKillAttempts(
         ),
         openingDrLevel: group[0].drLevel,
         teamDamageToTarget,
+        teamDamageToTargetInBracket: 0, // set below, once `toSeconds` is final
         teamDamageTotal,
         teamOnTargetPct:
           teamDamageTotal > 0
@@ -598,6 +605,7 @@ export function extractKillAttempts(
           inOurBreakableCc,
         ),
         teamDamageToTarget,
+        teamDamageToTargetInBracket: 0, // set below, once `toSeconds` is final
         teamDamageTotal,
         teamOnTargetPct:
           teamDamageTotal > 0
@@ -655,6 +663,27 @@ export function extractKillAttempts(
         // tests the brackets as printed.
         a.toSeconds = Math.min(a.toSeconds, deathS);
       }
+  }
+  // T12 ④ (user ruling 2026-10-10: print both numbers): the line printed
+  // `[a–b]` beside a sum taken over [a, b + 5 s], so 144 of 553 calibrated
+  // lines on 60 raw rounds had under half of the printed figure inside the
+  // bracket they printed (ae9d6fbc `[5:41–5:46] … (0.87M on target) | FAILED:
+  // not enough damage`: 0.39M inside the Maim, the rest in the 5 s after it).
+  // Same events, same amounts as `teamDamageToTarget` — only the end differs,
+  // and it is the end the line prints (a KILL's is its death, set just above).
+  for (const a of attempts) {
+    const fromMs = matchStartMs + a.fromSeconds * 1000;
+    const toMs = matchStartMs + a.toSeconds * 1000;
+    let inBracket = 0;
+    for (const f of friendlies) {
+      for (const d of f.damageOut) {
+        const ts = d.logLine.timestamp;
+        if (ts < fromMs || ts > toMs) continue;
+        if (d.destUnitId === a.targetUnitId)
+          inBracket += Math.abs(d.effectiveAmount);
+      }
+    }
+    a.teamDamageToTargetInBracket = inBracket;
   }
   // …and a covered cluster whose death went to another row did not "alone
   // reach the kill": it stays skipped, as before F-K2
@@ -846,9 +875,11 @@ export function formatKillAttemptsForContext(
   lines.push(
     "  Trinket up is the default state (cooldowns reset at the gates): a stun on a trinket-up target is how the trinket gets forced, not a targeting error. Only a line naming a softer target raises a targeting question.",
   );
-  // FT-T02d: what the damage figure is.
+  // FT-T02d: what the damage figure is. T12 ④: over which seconds — the
+  // bracket as printed, and the bracket plus the kill-credit slack that the
+  // outcome is read over (ruling A29 — the window itself is not changed).
   lines.push(
-    "  `(N M on target)` = the team's damage on the target: what landed plus what the target's shields absorbed.",
+    `  \`(A M on target inside it, B M incl. the ${KILL_CREDIT_SLACK_S} s after)\` = the team's damage on the target — what landed plus what the target's shields absorbed: A inside the printed bracket, B over the bracket and the ${KILL_CREDIT_SLACK_S} s after it. A death in those ${KILL_CREDIT_SLACK_S} s is still this attempt's KILL, and \`team focus P%\`, \`healed through\` and \`not enough damage\` are read over that longer span (B), not over the bracket alone.`,
   );
   // F-E22 / F-E22b (rulings A29, A′4): what may be named after FAILED.
   // FT-T15 ⑦ (user ruling 2026-10-10): the text after FAILED is the first
@@ -890,7 +921,7 @@ export function formatKillAttemptsForContext(
         ? `${a.anchorSpellName} opener (${a.openingDrLevel} DR), ${a.stuns.length} stun${a.stuns.length > 1 ? "s" : ""}`
         : `${a.anchorSpellName} burst (no stun)`;
     lines.push(
-      `  [${fmtTime(a.fromSeconds)}–${fmtTime(a.toSeconds)}] on ${a.targetName} — ${opener} | opportunity: ${opp} | team focus ${a.teamOnTargetPct}% (${(a.teamDamageToTarget / 1e6).toFixed(2)}M on target) | ${outcome}`,
+      `  [${fmtTime(a.fromSeconds)}–${fmtTime(a.toSeconds)}] on ${a.targetName} — ${opener} | opportunity: ${opp} | team focus ${a.teamOnTargetPct}% (${(a.teamDamageToTargetInBracket / 1e6).toFixed(2)}M on target inside it, ${(a.teamDamageToTarget / 1e6).toFixed(2)}M incl. the ${KILL_CREDIT_SLACK_S} s after) | ${outcome}`,
     );
   }
   lines.push(
