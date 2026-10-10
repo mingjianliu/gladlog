@@ -15,10 +15,15 @@ import {
 } from "../../data/timelineLineFlags";
 import { BURST_ANSWERED_LEGEND } from "../burstAnswered";
 import { CD_PRIOR_LEGEND } from "../cdPrior";
+import { ROT_PRESSURE_LEGEND } from "../matchTimelineSections";
 import { pruneZeroLossResRows } from "../resLedgerPrune";
 import { RES_FORBEARANCE_RE_SRC } from "../resourceSnapshot";
 import { STACKED_DEFENSIVES_LEGEND } from "../stackedDefensives";
-import { buildKillSequenceBlock, buildMatchEndBlock } from "../timelineHelpers";
+import {
+  buildKillSequenceBlock,
+  buildMatchEndBlock,
+  HEALING_BLOCK_LEGEND,
+} from "../timelineHelpers";
 import { DR_CLASH_LEGEND } from "./contextFacts";
 import type { TimelineCtx } from "./ctx";
 
@@ -178,6 +183,14 @@ export function formatTimeline(
   // when a line carries it.
   const purgeableCountRendered = entries.some((e) =>
     e.lines.some((l) => typeof l === "string" && l.includes(" purgeable buff")),
+  );
+  // FT-T15 M5: two line families that had no definition at all — legended
+  // only when a line of the family rendered (the convention above).
+  const healingBlockRendered = entries.some((e) =>
+    e.lines.some((l) => typeof l === "string" && l.includes("[HEALING]")),
+  );
+  const rotPressureRendered = entries.some((e) =>
+    e.lines.some((l) => typeof l === "string" && l.includes("[ROT PRESSURE]")),
   );
   // F-C5b (triage res-readiness, ruling A′16): "UP" means usable at that
   // instant, which the bare word does not say — legend it when rendered.
@@ -412,6 +425,8 @@ export function formatTimeline(
           "    but the kicker was crowd-controlled or silenced right then.",
         ]
       : []),
+    ...(healingBlockRendered ? HEALING_BLOCK_LEGEND : []),
+    ...(rotPressureRendered ? ROT_PRESSURE_LEGEND : []),
     // F-C17 (triage res-readiness): the per-cast lines come from the healer
     // gap filler only, so only a healer owner gets their legend.
     ...(isHealer && TIMELINE_LINE_FLAGS.deathWindowUnfold === "perCast"

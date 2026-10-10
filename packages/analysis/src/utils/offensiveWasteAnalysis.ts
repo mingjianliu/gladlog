@@ -26,6 +26,15 @@ import { fmtTime, toRenderSecond } from "./renderGrid";
  * 铁木树皮),80% 的伤害照样打进去了却被判「浪费」。
  */
 
+/** How many counted casts into a defensive make a line, by its verdict. */
+const WASTE_MIN_CASTS: Record<IDefenseWindow["verdict"], number> = {
+  unconditional: 2,
+  "kill-live-gated": 3,
+};
+/** A spell is "high value" for a player when it made at least this share of
+ * their damage this round. */
+const HIGH_VALUE_DAMAGE_SHARE = 0.05;
+
 interface IOffensiveWasteCast {
   spellId: string;
   spellName: string;
@@ -79,7 +88,8 @@ function buildDefenseWindows(
       if (!spellId) continue;
       const verdict = mitigationVerdictOf(spellId);
       // "never"(不构成真实阻碍)与 "unresolved"(裁定人未遇到过)都不出面。
-      if (verdict !== "unconditional" && verdict !== "kill-live-gated") continue;
+      if (verdict !== "unconditional" && verdict !== "kill-live-gated")
+        continue;
 
       const t = (e.logLine.timestamp - matchStartMs) / 1000;
 
@@ -139,7 +149,7 @@ export function getHighValueSpellIds(
   }
 
   if (grandTotal === 0) return new Set(Object.keys(totals));
-  const threshold = grandTotal * 0.05;
+  const threshold = grandTotal * HIGH_VALUE_DAMAGE_SHARE;
   return new Set(
     Object.entries(totals)
       .filter(([, v]) => v >= threshold)
@@ -187,7 +197,7 @@ export function buildOffensiveWasteSummary(
     );
 
     for (const window of defenseWindows) {
-      const threshold = window.verdict === "unconditional" ? 2 : 3;
+      const threshold = WASTE_MIN_CASTS[window.verdict];
 
       const wasteCasts: IOffensiveWasteCast[] = castEvents
         .filter((e) => {
@@ -214,7 +224,10 @@ export function buildOffensiveWasteSummary(
       if (wasteCasts.length < threshold) continue;
       // 击杀成立时顶着减伤打是正确操作 —— 只有不成立时才算该转火。
       // 无条件类不看这个:打不进去就是打不进去。
-      if (window.verdict === "kill-live-gated" && killWasLive(window, matchStartMs)) {
+      if (
+        window.verdict === "kill-live-gated" &&
+        killWasLive(window, matchStartMs)
+      ) {
         continue;
       }
       {
@@ -253,7 +266,20 @@ export function formatOffensiveWasteForContext(
   summary: IOffensiveWasteSummary,
 ): string {
   if (summary.events.length === 0) return "";
-  const lines: string[] = ["ABILITIES INTO IMMUNITY/DR"];
+  // FT-T15 M5: the section was a bare title, and its "DR" (damage
+  // reduction) is the timeline legend's word for diminishing returns. The
+  // definition states what `buildOffensiveWasteSummary` computes, from the
+  // same constants; it prints only with the section (an empty summary
+  // returns "" above).
+  const lines: string[] = [
+    "ABILITIES INTO IMMUNITY/DR",
+    "  (DR here = damage reduction, not the timeline's `[DR: …]` diminishing returns. Each line = one enemy defensive, from the",
+    "  second it went up (`[m:ss]`) to its logged end, and a player of your team whose casts on that enemy landed inside it.",
+    `  Two kinds of defensive are listed: one that makes hitting into it pointless whatever the target's HP (full immunities and`,
+    `  the few walls signed the same way) — from ${WASTE_MIN_CASTS.unconditional} casts; and a damage-reduction wall — from ${WASTE_MIN_CASTS["kill-live-gated"]} casts, and only when that enemy never`,
+    `  read ${KILL_LIVE_HP_PCT}% HP or lower while it was up. Casts counted: the player's spells that each made at least ${Math.round(HIGH_VALUE_DAMAGE_SHARE * 100)}% of their damage this`,
+    "  round, plus their control spells into the first kind.)",
+  ];
   for (const ev of summary.events) {
     const t = fmtTime(ev.defenseWindowSeconds[0]);
     const spells = formatAbilitySequence(ev.wasteCasts);

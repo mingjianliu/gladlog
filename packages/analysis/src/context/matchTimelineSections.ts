@@ -208,10 +208,28 @@ function extractPlayerDotIntervals(
   return intervals;
 }
 
+/** [ROT PRESSURE]'s four numbers — the predicate below and the legend that
+ * defines the line read the same constants (FT-T15 M5). */
+export const ROT_PRESSURE_HP_PCT = 40;
+export const ROT_PRESSURE_MIN_DOTS = 3;
+export const ROT_PRESSURE_MIN_SECONDS = 4;
+export const ROT_PRESSURE_MIN_PERIODIC_SHARE = 0.5;
+
+/** FT-T15 M5: the family had no definition anywhere in the prompt (1,155
+ * lines on the 605 capture, 0 legends). Printed by formatTimeline only when
+ * a line of the family rendered. States what `emitRotPressureEntries`
+ * computes, nothing more. */
+export const ROT_PRESSURE_LEGEND: readonly string[] = [
+  `  [ROT PRESSURE] = a player of either team spent ${ROT_PRESSURE_MIN_SECONDS} whole seconds in a row under ${ROT_PRESSURE_HP_PCT}% HP with ${ROT_PRESSURE_MIN_DOTS} or more tracked`,
+  `    damage-over-time debuffs on them, and at least ${Math.round(ROT_PRESSURE_MIN_PERIODIC_SHARE * 100)}% of the damage they took in those ${ROT_PRESSURE_MIN_SECONDS} s was periodic. Printed once per`,
+  "    such stretch, at the second it is reached, with the HP and the DoT count of that second.",
+];
+
 /**
  * Rot Pressure Detection (F147). Emits a [ROT PRESSURE] entry for each player that
- * sustains ≥4 consecutive seconds below 40% HP with ≥3 active DoTs, where the recent
- * damage was majority periodic. Pushes entries via the `addEntry` callback.
+ * sustains ≥ROT_PRESSURE_MIN_SECONDS consecutive seconds below ROT_PRESSURE_HP_PCT% HP
+ * with ≥ROT_PRESSURE_MIN_DOTS active DoTs, where the recent damage was majority
+ * periodic. Pushes entries via the `addEntry` callback.
  */
 export function emitRotPressureEntries(params: {
   allPlayers: ICombatUnit[];
@@ -261,10 +279,17 @@ export function emitRotPressureEntries(params: {
 
       const hp = getUnitHpAtTimestamp(player, tsMs, HP_SAMPLE_RADIUS_MS);
 
-      if (hp !== null && hp < 40 && dotCount >= 3) {
+      if (
+        hp !== null &&
+        hp < ROT_PRESSURE_HP_PCT &&
+        dotCount >= ROT_PRESSURE_MIN_DOTS
+      ) {
         consecutiveRotSeconds++;
-        if (consecutiveRotSeconds >= 4 && !emittedForThisBlock) {
-          const windowStartMs = tsMs - 4000;
+        if (
+          consecutiveRotSeconds >= ROT_PRESSURE_MIN_SECONDS &&
+          !emittedForThisBlock
+        ) {
+          const windowStartMs = tsMs - ROT_PRESSURE_MIN_SECONDS * 1000;
           const windowEndMs = tsMs;
 
           let periodicDmg = 0;
@@ -286,7 +311,10 @@ export function emitRotPressureEntries(params: {
             }
           }
 
-          if (totalDmg === 0 || periodicDmg / totalDmg >= 0.5) {
+          if (
+            totalDmg === 0 ||
+            periodicDmg / totalDmg >= ROT_PRESSURE_MIN_PERIODIC_SHARE
+          ) {
             addEntry(
               t,
               `${fmtTime(t)}  [ROT PRESSURE]   ${pid(player.name)} (${specToString(player.spec)}) at ${Math.round(hp)}% HP with ${dotCount} active DoTs`,

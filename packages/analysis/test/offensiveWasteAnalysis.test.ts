@@ -7,6 +7,7 @@ import {
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { ensureAnalysisData } from "../src/data/ensure";
+import { KILL_LIVE_HP_PCT } from "../src/data/mitigationVerdicts";
 import {
   buildOffensiveWasteSummary,
   formatOffensiveWasteForContext,
@@ -301,5 +302,19 @@ describe("offensiveWasteAnalysis — formatOffensiveWasteForContext", () => {
     const formatted = formatOffensiveWasteForContext(summary);
     expect(formatted).toContain("ABILITIES INTO IMMUNITY/DR");
     expect(formatted).toContain("[1:05] Arms Warrior (Ares): Mortal Strike ×2 + Bloodthirst into EnemyPaladin's Divine Shield");
+    // FT-T15 M5: the section defines itself — its "DR" is damage reduction
+    // (the timeline legend's `[DR: …]` is diminishing returns), and the
+    // listing rule is stated with the predicate's own numbers.
+    const lines = formatted.split("\n");
+    expect(lines[0]).toBe("ABILITIES INTO IMMUNITY/DR");
+    const isEventLine = (l: string) => /^\s*\[\d+:\d\d\]/.test(l);
+    const definition = lines.slice(1).filter((l) => !isEventLine(l)).join(" ");
+    expect(definition).toContain("DR here = damage reduction, not the timeline's `[DR: …]` diminishing returns");
+    expect(definition).toContain("from 2 casts");
+    expect(definition).toContain("from 3 casts");
+    expect(definition).toContain(`${KILL_LIVE_HP_PCT}% HP or lower while it was up`);
+    expect(definition).toContain("at least 5% of their damage this");
+    // one event → one event line, whatever the definition's length
+    expect(lines.filter(isEventLine)).toHaveLength(1);
   });
 });

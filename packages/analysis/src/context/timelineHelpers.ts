@@ -870,6 +870,24 @@ export const HEALING_WINDOW_EARLY_CD_SECONDS = 10;
  */
 export const HEALING_WINDOW_MIN_HPS = 1_000;
 
+/** Bucket width of the [HEALING] block, in seconds. */
+export const HEALING_BUCKET_S = 5;
+
+/** FT-T15 M5: the [HEALING] block had no definition anywhere in the prompt
+ * (893 lines on the 605 capture, 0 legends). Printed by formatTimeline only
+ * when a block rendered. It states what `computeHealingInWindow` measures
+ * (the owner's own `healOut`, effective amounts, over the buff's nominal
+ * duration) and which presses get a block (`ownerCdSetup.ts`: the first
+ * eligible one and the worst-scoring later one). */
+export const HEALING_BLOCK_LEGEND: readonly string[] = [
+  "  [HEALING] under one of your own throughput-cooldown presses = YOUR OWN healing over that buff's full duration from the",
+  `    press, in ${HEALING_BUCKET_S} s buckets: \`a–bs\` = seconds after the press, HPS = your effective healing per second (overheal left`,
+  "    out); `Overheal` = the share of your healing in the whole span that was overheal. At most two presses of a spell get",
+  "    the block: the first, and of the later ones the one with the most overheal and the lowest peak bucket — that",
+  `    spell's weakest later use, not a typical one. A press in the first ${HEALING_WINDOW_EARLY_CD_SECONDS} s with every bucket under ${HEALING_WINDOW_MIN_HPS / 1000}k HPS gets none. A`,
+  "    press without the block was not measured.",
+];
+
 /**
  * Computes healing throughput during a CD's active window.
  * Returns per-5s HPS buckets and overall overheal % from healOut events.
@@ -899,7 +917,7 @@ export function computeHealingInWindow(
   }
 
   const windowSeconds = (toMs - fromMs) / 1000;
-  const BUCKET_SIZE = 5;
+  const BUCKET_SIZE = HEALING_BUCKET_S;
   const buckets: Array<{
     fromSeconds: number;
     toSeconds: number;

@@ -11,6 +11,12 @@ import { beforeAll, describe, expect, it } from "vitest";
 
 import { ensureAnalysisData } from "../data/ensure";
 import { buildMatchTimeline, BuildMatchTimelineParams } from "./matchTimeline";
+import {
+  ROT_PRESSURE_HP_PCT,
+  ROT_PRESSURE_MIN_DOTS,
+  ROT_PRESSURE_MIN_PERIODIC_SHARE,
+  ROT_PRESSURE_MIN_SECONDS,
+} from "./matchTimelineSections";
 
 /**
  * Innervate (29166) is a MANA cooldown, and until 2026-08-23 it sat in
@@ -193,5 +199,122 @@ describe("Innervate is reported as resource, not throughput", () => {
     expect(timeline).toContain("[YOU] [CD]");
     expect(timeline).toContain("Innervate");
     expect(timeline).toContain("22% -> 41% mana (+19pp over 8s)");
+  });
+});
+
+// FT-T15 M5 (2026-10-10): [HEALING] and [ROT PRESSURE] had no definition
+// anywhere in the prompt (893 and 1,155 lines on the 605 capture, 0 legends).
+// Each legend prints only when a line of its family rendered.
+describe("[HEALING] / [ROT PRESSURE] legends print only with their line family", () => {
+  beforeAll(async () => {
+    await ensureAnalysisData();
+  });
+
+  const POWER_INFUSION = "10060";
+  const heal = (atMs: number, amount: number, effectiveAmount: number) =>
+    ({
+      timestamp: atMs,
+      amount,
+      effectiveAmount,
+      spellId: "2061",
+      spellName: "Flash Heal",
+      srcUnitId: "o",
+      destUnitId: "o",
+      logLine: { event: "SPELL_HEAL", timestamp: atMs, parameters: [] },
+    }) as unknown as ICombatUnit["healOut"][number];
+
+  function piParams(owner: ICombatUnit): BuildMatchTimelineParams {
+    const params = paramsWith(owner);
+    params.ownerCDs = [
+      {
+        spellId: POWER_INFUSION,
+        spellName: "Power Infusion",
+        tag: "Offensive",
+        cooldownSeconds: 120,
+        maxChargesDetected: 1,
+        casts: [{ timeSeconds: 30 }],
+        availableWindows: [],
+        neverUsed: false,
+      },
+    ] as BuildMatchTimelineParams["ownerCDs"];
+    return params;
+  }
+
+  it("neither family rendered → neither legend (and no stray tag for a scan to count)", () => {
+    const timeline = buildMatchTimeline(paramsWith(mkOwner()));
+    expect(timeline).not.toContain("[HEALING]");
+    expect(timeline).not.toContain("[ROT PRESSURE]");
+  });
+
+  it("a Power Infusion press with healing logged → the block and its legend, once", () => {
+    const owner = mkOwner({
+      healOut: [
+        heal(MATCH_START_MS + 31_000, 60_000, 45_000),
+        heal(MATCH_START_MS + 37_000, 40_000, 30_000),
+      ],
+    });
+    const lines = buildMatchTimeline(piParams(owner)).split("\n");
+    const block = lines.filter((l) => l.startsWith("      [HEALING]"));
+    expect(block).toEqual([
+      "      [HEALING]    0–5s: 9.0k HPS | 5–10s: 6.0k HPS | 10–15s: 0.0k HPS | Overheal: 25%",
+    ]);
+    const legend = lines.filter((l) => l.startsWith("  [HEALING] "));
+    expect(legend).toHaveLength(1);
+    expect(legend[0]).toContain("YOUR OWN healing");
+    const text = lines.join("\n");
+    expect(text).toContain("in 5 s buckets");
+    expect(text).toContain(
+      "`Overheal` = the share of your healing in the whole span that was overheal",
+    );
+    expect(text).toContain("At most two presses of a spell get");
+    expect(text).not.toContain("[ROT PRESSURE]");
+  });
+
+  it("a rot-pressure stretch → the line and its legend, with the predicate's own numbers", () => {
+    const debuff = (spellId: string) =>
+      ({
+        timestamp: MATCH_START_MS,
+        spellId,
+        spellName: spellId,
+        srcUnitId: "e1",
+        srcUnitName: "Enemy",
+        destUnitId: "o",
+        destUnitName: "Druid-Ravencrest",
+        logLine: {
+          event: LogEvent.SPELL_AURA_APPLIED,
+          timestamp: MATCH_START_MS,
+          parameters: Object.assign([], { 11: "DEBUFF" }),
+        },
+      }) as unknown as ICombatUnit["auraEvents"][number];
+    const hpAt = (sec: number, hp: number) => ({
+      ...advSample("o", MATCH_START_MS + sec * 1000, 50_000, 100_000),
+      advancedActorCurrentHp: hp,
+    });
+    const owner = mkOwner({
+      // Agony / Corruption / Unstable Affliction, on from the first second
+      auraEvents: [debuff("980"), debuff("146739"), debuff("30108")],
+      advancedActions: [
+        hpAt(8, 80),
+        hpAt(10, 30),
+        hpAt(11, 30),
+        hpAt(12, 30),
+        hpAt(13, 30),
+        hpAt(14, 30),
+        hpAt(20, 80),
+      ],
+    });
+    const lines = buildMatchTimeline(paramsWith(owner)).split("\n");
+    expect(
+      lines.filter((l) => /^\d+:\d\d\s+\[ROT PRESSURE\]/.test(l)),
+    ).toHaveLength(1);
+    const legend = lines.filter((l) => l.startsWith("  [ROT PRESSURE] = "));
+    expect(legend).toHaveLength(1);
+    const text = lines.join("\n");
+    expect(text).toContain(
+      `spent ${ROT_PRESSURE_MIN_SECONDS} whole seconds in a row under ${ROT_PRESSURE_HP_PCT}% HP with ${ROT_PRESSURE_MIN_DOTS} or more tracked`,
+    );
+    expect(text).toContain(
+      `at least ${ROT_PRESSURE_MIN_PERIODIC_SHARE * 100}% of the damage they took`,
+    );
   });
 });
