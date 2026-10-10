@@ -261,28 +261,71 @@ export const ENEMY_ONLY_SAVE_IDS: ReadonlySet<string> = new Set([
 ]);
 
 // —— Enemy immunity-kind saves (enemy-def F-E5 / F-E6; user ruling A25,
-// 2026-09-30: "遁地、时间停止、群体隐形、假死、消失、装死、灼烧、自然守护
-// 都当免疫") ————————————————————————————————————————————————————————————————
+// 2026-09-30, re-opened by ruling D8, 2026-10-10: "split by effect") ————————
 // Same reader as the sets above (`utils/enemyDefensives.ts` only). These are
 // NOT `MITIGATION_TABLE` rows: that table prices friendly mitigation
 // arithmetic and feeds `IMMUNITY_IDS`, which other predicates read as "a
 // pct-100 aura" (kick-eaten's low-HP facts). Here an id only says: the
 // `[ENEMY DEF]` line prints it as `immune`, and a kill attempt that ran into
 // it reads "forced a full immunity".
+//
+// A25 put eight abilities here ("遁地、时间停止、群体隐形、假死、消失、装死、
+// 灼烧、自然守护都当免疫"). D8 takes four of them out again — the ones whose
+// carrier goes on being hit: Feign Death is an absorb shield, Nature's
+// Guardian a heal, Cheat Death and Cauterize a refused killing blow
+// (`ENEMY_PROC_SAVES` below; Feign Death's aura is read from the ledger's own
+// table, `enemyDefensives.FEIGN_DEATH_ABSORB_AURA_IDS`). What stays is a unit
+// that cannot be hit: DB2's all-school immunity (Time Stop, Guardian of the
+// Forgotten Queen) and the three auras rulings U-KA3 / U-KA3b signed (Burrow,
+// Vanish, Mass Invisibility).
 
-/** Keyed by the LOGGED AURA id (the cast ids 31230 Cheat Death and 86949
- * Cauterize are never logged; Vanish casts 1856 and logs the aura 11327) →
- * the ability name the line prints. Applications in the 605-file capture.
- * Feign Death is not listed here: its aura comes from the ledger's own
- * table (`AURA_ONLY_ACTIVATION_IDS["5384"]`), joined in enemyDefensives.ts. */
+/** Keyed by the LOGGED AURA id (Vanish casts 1856 and logs the aura 11327) →
+ * the ability name the line prints. Applications in the 605-file capture. */
 export const ENEMY_IMMUNITY_SAVE_AURAS: Readonly<Record<string, string>> = {
   "409293": "Burrow", // 90, all self
   "378441": "Time Stop", // 35 (31 self, 4 on an ally)
   "414664": "Mass Invisibility", // 465 casts; the aura lands on the mage and on allies
   "11327": "Vanish", // 1,084, one per 1856 cast
-  "45182": "Cheat Death", // 10 (the proc's aura, "Cheating Death")
-  "87023": "Cauterize", // 77 (the proc's aura)
   "228050": "Guardian of the Forgotten Queen", // 2 — applied by the summoned guardian, see the cast map below
+};
+
+/** What a proc save does, as its `[ENEMY DEF]` line says it. */
+export type EnemyProcSaveEffect = "heal proc" | "cheat-death proc";
+
+/**
+ * An enemy's save that is a PROC — nothing was pressed, and the unit can be
+ * hit before, during and after it (user ruling D8, 2026-10-10: "自然守护 /
+ * 灼烧 / 装死印它们的触发类型;KILL ATTEMPTS 不再对这四个写 forced a full
+ * immunity"). Keyed by the LOGGED id — the talents' own ids (30884 Nature's
+ * Guardian, 31230 Cheat Death, 86949 Cauterize) are never logged; `via` says
+ * whether that id is the proc's aura on the unit or its heal of itself.
+ *
+ * Three-way evidence (Game-Behaviour rule), build 12.1.5.69594:
+ *  - DB2 (`talentEffectInventoryGenerated.json`): 31616 = effect 136, a heal
+ *    of 40 % of max health, no aura; the talents 31230 and 86949 = aura 316
+ *    on every school (mask 127) — a hit that would kill is absorbed instead
+ *    (`guardianSpiritSaveOf` documents the same aura type) — and no school
+ *    immunity (aura 39) on any of the five ids.
+ *    `test/enemyDefensives.test.ts` re-reads these rows.
+ *  - corpus, the 605 new-season files (fix-FT/t07-enemydef-vs-raw-605.txt):
+ *    enemy players' direct (non-periodic) damage on the carrier inside the
+ *    span the line used to print as `immune` — Nature's Guardian 164 of 174
+ *    (within 2 s of the heal), Cauterize 31 of 34, Cheat Death 7 of 10; an
+ *    IMMUNE miss in 3, 4 and 1 of them. The controls: Divine Shield 0 of 209
+ *    hit, 193 with an IMMUNE miss; Ice Block 0 of 113, 102.
+ * The same classification as the owner-side `CRISIS_PROC_ANSWERS`
+ * (crisisDecisionPoints.ts: `proc` via heal, `cheatDeath` via aura); a unit
+ * test holds the two together.
+ */
+export const ENEMY_PROC_SAVES: Readonly<
+  Record<
+    string,
+    { name: string; effect: EnemyProcSaveEffect; via: "aura" | "heal" }
+  >
+> = {
+  "31616": { name: "Nature's Guardian", effect: "heal proc", via: "heal" }, // 306 heals in 107 files, no cast, no aura
+  "45182": { name: "Cheat Death", effect: "cheat-death proc", via: "aura" }, // 10 ("Cheating Death")
+  "87023": { name: "Cauterize", effect: "cheat-death proc", via: "aura" }, // 77
 };
 
 /**
@@ -323,10 +366,11 @@ export const ENEMY_IMMUNITY_SAVE_AURAS: Readonly<Record<string, string>> = {
  * the 2026-10-01 first cut called 250 opening Mass Invisibilities "forced a
  * full immunity" on a target a stun had just landed on (`fix-KA/immcheck.py`)
  * — and U-KA3b rules it in with that known. The rest of ruling A25's list
- * stays a MOMENT: Cauterize (62 of 72 auras take other-than-periodic damage,
- * melee swings first, 47 past the first second), Cheat Death (7 of 10) and
- * Feign Death's Survival Tactics (1,135 of 1,474) are hit through. Time Stop
- * and Guardian of the Forgotten Queen need no row: DB2 gives their auras an
+ * was hit through — Cauterize (62 of 72 auras take other-than-periodic
+ * damage, melee swings first, 47 past the first second), Cheat Death (7 of
+ * 10) and Feign Death's Survival Tactics (1,135 of 1,474) — and is no
+ * immunity at all since ruling D8 (`ENEMY_PROC_SAVES`). Time Stop and
+ * Guardian of the Forgotten Queen need no row: DB2 gives their auras an
  * all-school immunity.
  */
 export const ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS: ReadonlySet<string> = new Set([
@@ -334,12 +378,6 @@ export const ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS: ReadonlySet<string> = new Set([
   "11327", // Vanish
   "414664", // Mass Invisibility (U-KA3b)
 ]);
-
-/** An immunity that leaves no aura: the save is a SPELL_HEAL of this id on the
- * unit itself. Nature's Guardian — 306 heals in 107 files, no cast, no aura. */
-export const ENEMY_IMMUNITY_HEAL_PROCS: Readonly<Record<string, string>> = {
-  "31616": "Nature's Guardian",
-};
 
 /** A cast that puts an immunity aura on ANOTHER unit (cast id → aura id).
  * Guardian of the Forgotten Queen: the paladin casts 228049 on an ally and

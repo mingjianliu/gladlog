@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   checkBrokeOutRefConsistency,
   checkEnemyDefRefConsistency,
+  checkEnemyDefSaveEffect,
   checkGuardianSpiritSaveClause,
   checkKarmaFedClause,
   checkResReturnAnnounced,
@@ -333,6 +334,85 @@ describe("checkGuardianSpiritSaveClause (B18)", () => {
     ],
   ])("fails %s", (_why, line) => {
     expect(checkGuardianSpiritSaveClause([line])).toHaveLength(1);
+  });
+});
+
+/**
+ * FT-T07, user ruling D8 (2026-10-10): an `[ENEMY DEF]` line names Feign
+ * Death, Nature's Guardian, Cheat Death and Cauterize by their effect, never
+ * as `(immune …)`; no other ability carries an effect note.
+ */
+describe("checkEnemyDefSaveEffect (FT-T07, ruling D8)", () => {
+  const D = (who: string, rest: string) =>
+    `0:21  [ENEMY DEF]   ${who}: ${rest}`;
+  const HUNTER = "6(BMHunter) (Beast Mastery Hunter)";
+
+  it("passes the four effect forms, with every tail the line can carry", () => {
+    expect(
+      checkEnemyDefSaveEffect([
+        D(
+          HUNTER,
+          "Feign Death (absorb 64k, 2.0s) [friendly offensive CD active] (at 67% HP)",
+        ),
+        D(HUNTER, "Feign Death (absorb, 2.0s) (at 67% HP)"),
+        D(HUNTER, "Feign Death (absorb <1k, 0.4s — removed early)"),
+        D(HUNTER, "Feign Death (absorb 594k, 1.2s — used up) (at 12% HP)"),
+        D(
+          HUNTER,
+          "Feign Death (absorb 20k, 0.9s — dispelled by 1(HPriest)'s Mass Dispel)",
+        ),
+        D(
+          "5(RShaman) (Restoration Shaman)",
+          "Nature's Guardian (heal proc) (at 31% HP)",
+        ),
+        D(
+          "4(SRogue) (Subtlety Rogue)",
+          "Cheat Death (cheat-death proc) (at 7% HP)",
+        ),
+        D(
+          "4(FMage) (Fire Mage)",
+          "Cauterize (cheat-death proc) [friendly offensive CD active] (at 35% HP)",
+        ),
+        // every other kind is none of this gate's business
+        D("4(FMage) (Fire Mage)", "Ice Block (immune, 10.0s) (at 20% HP)"),
+        D("5(RDruid) (Restoration Druid)", "Barkskin (20%, 12.0s)"),
+        D(
+          "5(RDruid) (Restoration Druid)",
+          "Ironbark → 4(FMage) (6.6s) (target at 40% HP)",
+        ),
+        D(
+          "5(HPriest) (Holy Priest)",
+          "Desperate Prayer (self-save) (at 75% HP)",
+        ),
+        D("5(HPriest) (Holy Priest)", "Power Word: Barrier (area)"),
+        "0:21  [STATE]   friends 1(HPriest):99 / enemies 6(BMHunter):67",
+      ]),
+    ).toEqual([]);
+  });
+
+  it.each([
+    ["the wording ruling D8 retired", "Feign Death (immune, 2.0s) (at 67% HP)"],
+    [
+      "Nature's Guardian as an immunity",
+      "Nature's Guardian (immune) (at 31% HP)",
+    ],
+    ["Cauterize with the burn's duration", "Cauterize (immune, 6.0s)"],
+    ["Cheat Death as a plain self-save", "Cheat Death (self-save) (at 7% HP)"],
+    ["the wrong effect for the ability", "Feign Death (cheat-death proc)"],
+    ["a proc called an absorb", "Cauterize (absorb 12k, 6.0s)"],
+  ])("fails %s", (_why, rest) => {
+    const f = checkEnemyDefSaveEffect([D(HUNTER, rest)]);
+    expect(f).toHaveLength(1);
+    expect(f[0]).toContain("something other than its effect");
+  });
+
+  it("fails an effect note on an ability that has none", () => {
+    const f = checkEnemyDefSaveEffect([
+      D("4(FMage) (Fire Mage)", "Ice Block (absorb 12k, 10.0s)"),
+      D("5(HPriest) (Holy Priest)", "Desperate Prayer (heal proc)"),
+    ]);
+    expect(f).toHaveLength(2);
+    expect(f[0]).toContain("no claim to");
   });
 });
 

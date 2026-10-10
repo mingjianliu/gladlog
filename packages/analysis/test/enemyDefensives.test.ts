@@ -3,6 +3,7 @@ import { LogEvent } from "@gladlog/parser-compat";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { saveSchoolMask } from "../src/analysis/candidates/cooldownTiming";
+import { CRISIS_PROC_ANSWERS } from "../src/analysis/crisisDecisionPoints";
 import { ABILITY_EFFECTS_GENERATED } from "../src/data/abilityEffectsGenerated";
 import castEffectAurasJson from "../src/data/castEffectAuraGenerated.json";
 import { ensureAnalysisData } from "../src/data/ensure";
@@ -15,16 +16,24 @@ import spellIdLists, {
   ENEMY_AREA_SAVE_IDS,
   ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS,
   ENEMY_IMMUNITY_SAVE_AURAS,
+  ENEMY_PROC_SAVES,
   ENEMY_REDIRECT_SAVE_IDS,
   ENEMY_SELF_SAVE_ONLY_IDS,
 } from "../src/data/spellIdLists";
 import { immunitySchoolMask } from "../src/data/spellSchools";
+import talentEffectInventory from "../src/data/talentEffectInventoryGenerated.json";
 import { AURA_ONLY_ACTIVATION_IDS } from "../src/utils/cooldowns";
 import { EXTERNAL_DEFENSIVE_SPELLS } from "../src/utils/deathOutcomeAnalysis";
 import {
+  absorbedDuring,
+  effectSaves,
+  ENEMY_SAVE_EFFECT_BY_NAME,
   enemyDefensiveEvents,
+  enemySaveEffectNote,
+  enemySaveEffectOfNote,
   EXTERNAL_DEF_IDS,
   externalAuraOf,
+  FEIGN_DEATH_ABSORB_AURA_IDS,
   IMMUNITY_IDS,
   IMMUNITY_SAVE_AURA_NAMES,
   immunityCountsWhenAlreadyUp,
@@ -495,12 +504,14 @@ describe("enemy-only saves: self-saves, instant heals, grips / redirects", () =>
 });
 
 /**
- * Triage 2026-09-29, enemy-def F-E5 / F-E6 (ruling A25): untargetable, feigned
- * and cheat-death saves are kind `immune` — from enemy-only tables, never from
- * `MITIGATION_TABLE`, so `IMMUNITY_IDS` stays the pct-100 slice other
- * predicates read.
+ * Triage 2026-09-29, enemy-def F-E5 / F-E6 (ruling A25): untargetable saves
+ * are kind `immune` — from enemy-only tables, never from `MITIGATION_TABLE`,
+ * so `IMMUNITY_IDS` stays the pct-100 slice other predicates read. Ruling D8
+ * (2026-10-10) split A25's list by effect: Feign Death (an absorb), Nature's
+ * Guardian (a heal proc), Cheat Death and Cauterize (cheat-death procs) are
+ * self-saves named by that effect, no longer `immune`.
  */
-describe("immunity-kind saves (Burrow, Time Stop, Vanish, Feign Death, Guardian of the Forgotten Queen …)", () => {
+describe("immunity-kind saves (Burrow, Time Stop, Vanish, Guardian of the Forgotten Queen …) and the effect saves ruling D8 took out of them", () => {
   const TIME_STOP = "378441";
   const BURROW = "409293";
   const SURVIVAL_TACTICS = "202748";
@@ -524,14 +535,17 @@ describe("immunity-kind saves (Burrow, Time Stop, Vanish, Feign Death, Guardian 
     expect(isImmunitySaveAura(BARKSKIN)).toBe(false);
   });
 
-  it("Feign Death is read from the ledger's own aura table, not a second copy", () => {
+  it("Feign Death is read from the ledger's own aura table, not a second copy — and is no immunity (ruling D8)", () => {
     const auras = AURA_ONLY_ACTIVATION_IDS["5384"];
     expect(auras).toContain(SURVIVAL_TACTICS);
-    for (const a of auras)
-      expect(IMMUNITY_SAVE_AURA_NAMES.get(a)).toBe("Feign Death");
+    expect([...FEIGN_DEATH_ABSORB_AURA_IDS].sort()).toEqual([...auras].sort());
+    for (const a of auras) {
+      expect(IMMUNITY_SAVE_AURA_NAMES.has(a), a).toBe(false);
+      expect(isImmunitySaveAura(a), a).toBe(false);
+    }
   });
 
-  it("a self Burrow / Time Stop / Feign Death aura is one `immune` event named after the ability", () => {
+  it("a self Burrow / Time Stop aura is one `immune` event named after the ability; Feign Death's is an absorb self-save", () => {
     const u = unit("e1", {
       auraEvents: [
         applied(BURROW, "e1", "e1", 10),
@@ -545,12 +559,17 @@ describe("immunity-kind saves (Burrow, Time Stop, Vanish, Feign Death, Guardian 
       spellCastEvents: [cast(TIME_STOP, "e1", 30.35)],
     });
     const evs = enemyDefensiveEvents(u, [u], combat);
-    expect(evs.map((e) => [e.kind, e.spellName, e.atSeconds])).toEqual([
-      ["immune", "Burrow", 10],
-      ["immune", "Time Stop", 30.35],
-      ["immune", "Feign Death", 52.6],
+    expect(
+      evs.map((e) => [e.kind, e.effect, e.spellName, e.atSeconds]),
+    ).toEqual([
+      ["immune", undefined, "Burrow", 10],
+      ["immune", undefined, "Time Stop", 30.35],
+      ["self-save", "absorb", "Feign Death", 52.6],
     ]);
     expect(evs[0].observedSeconds).toBeCloseTo(5, 5);
+    // the shield lasts its aura; with no absorb line in the log, no amount
+    expect(evs[2].observedSeconds).toBeCloseTo(1.5, 5);
+    expect(evs[2].absorbedAmount).toBeUndefined();
   });
 
   it("Time Stop cast on an ally is an external timed by the ally's aura, with no during-it interval", () => {
@@ -594,7 +613,7 @@ describe("immunity-kind saves (Burrow, Time Stop, Vanish, Feign Death, Guardian 
     expect(enemyDefensiveEvents(warrior, [pal, warrior], combat)).toEqual([]);
   });
 
-  it("Nature's Guardian: the self heal is an `immune` event without a duration", () => {
+  it("Nature's Guardian: the self heal is a `heal proc` self-save without a duration (ruling D8 — it was `immune`)", () => {
     const sham = unit("e1", {
       healIn: [
         {
@@ -623,10 +642,246 @@ describe("immunity-kind saves (Burrow, Time Stop, Vanish, Feign Death, Guardian 
       ],
     });
     const evs = enemyDefensiveEvents(sham, [sham], combat);
-    expect(evs.map((e) => [e.kind, e.spellName, e.atSeconds])).toEqual([
-      ["immune", "Nature's Guardian", 77],
-    ]);
+    expect(
+      evs.map((e) => [e.kind, e.effect, e.spellName, e.atSeconds]),
+    ).toEqual([["self-save", "heal proc", "Nature's Guardian", 77]]);
     expect(evs[0].observedSeconds).toBeUndefined();
+  });
+
+  it("Cheat Death / Cauterize: the proc's own aura is a `cheat-death proc` self-save at the moment it fired — no duration", () => {
+    for (const [auraId, name] of [
+      ["45182", "Cheat Death"],
+      ["87023", "Cauterize"],
+    ] as const) {
+      const u = unit("e1", {
+        auraEvents: [
+          applied(auraId, "e1", "e1", 40),
+          removed(auraId, "e1", "e1", 43),
+        ],
+      });
+      const evs = enemyDefensiveEvents(u, [u], combat);
+      expect(evs, name).toHaveLength(1);
+      expect(evs[0], name).toMatchObject({
+        kind: "self-save",
+        effect: "cheat-death proc",
+        spellName: name,
+        atSeconds: 40,
+        removedEarly: false,
+      });
+      // the aura the proc leaves is not how long anything protected the unit
+      expect(evs[0].observedSeconds, name).toBeUndefined();
+      expect(evs[0].earlyEnd, name).toBeUndefined();
+    }
+  });
+
+  it("Feign Death's amount is the SPELL_ABSORBED lines that name its aura while it was up — 0e0663e6 0:21: 594,477 → 530,795", () => {
+    const absorbedLine = (
+      atS: number,
+      amount: number,
+      shield: string,
+    ): any => ({
+      spellId: shield,
+      spellName: `S${shield}`,
+      srcUnitId: "e1",
+      srcUnitName: "e1",
+      destUnitId: "e1",
+      destUnitName: "e1",
+      attackerId: "f1",
+      absorbedAmount: amount,
+      timestamp: ms(atS),
+      logLine: {
+        event: LogEvent.SPELL_ABSORBED,
+        timestamp: ms(atS),
+        parameters: [],
+      },
+    });
+    const hunter = unit("e1", {
+      auraEvents: [
+        { ...applied(SURVIVAL_TACTICS, "e1", "e1", 21.3), amount: 594_477 },
+        { ...removed(SURVIVAL_TACTICS, "e1", "e1", 23.3), amount: 530_795 },
+      ],
+      absorbsIn: [
+        absorbedLine(21.4, 3_002, SURVIVAL_TACTICS),
+        absorbedLine(22.0, 40_000, SURVIVAL_TACTICS),
+        absorbedLine(23.1, 20_680, SURVIVAL_TACTICS),
+        // another shield on the hunter is not Feign Death's
+        absorbedLine(22.5, 9_000, "17"),
+        // …nor is a hit after the aura dropped
+        absorbedLine(24, 5_000, SURVIVAL_TACTICS),
+      ],
+    });
+    const [d] = enemyDefensiveEvents(hunter, [hunter], combat);
+    expect(d).toMatchObject({
+      kind: "self-save",
+      effect: "absorb",
+      absorbedAmount: 63_682,
+      removedEarly: false,
+    });
+    expect(d.observedSeconds).toBeCloseTo(2, 5);
+    // the same reader, called directly
+    const [iv] = saveAuraIntervals(hunter, [hunter], combat);
+    expect(absorbedDuring(hunter, iv, combat.startTime)).toBe(63_682);
+  });
+
+  it("effectSaves is the one reader of the four: Feign Death's aura, the two proc auras, the heal — the unit's OWN only", () => {
+    const u = unit("e1", {
+      auraEvents: [
+        applied(SURVIVAL_TACTICS, "e1", "e1", 10),
+        removed(SURVIVAL_TACTICS, "e1", "e1", 12),
+        applied("87023", "e1", "e1", 30),
+        removed("87023", "e1", "e1", 36),
+        // somebody else's aura of the same id on this unit is not its save
+        applied("45182", "e2", "e1", 50),
+        removed("45182", "e2", "e1", 53),
+        // a wall and an immunity are not effect saves
+        applied(BARKSKIN, "e1", "e1", 60),
+        removed(BARKSKIN, "e1", "e1", 72),
+        applied(BURROW, "e1", "e1", 80),
+        removed(BURROW, "e1", "e1", 85),
+      ],
+      healIn: [
+        {
+          spellId: NATURES_GUARDIAN,
+          srcUnitId: "e1",
+          destUnitId: "e1",
+          effectiveAmount: 1,
+          logLine: {
+            event: LogEvent.SPELL_HEAL,
+            timestamp: ms(20),
+            parameters: [],
+          },
+        },
+        // the same heal id from another unit is not this unit's proc
+        {
+          spellId: NATURES_GUARDIAN,
+          srcUnitId: "e2",
+          destUnitId: "e1",
+          effectiveAmount: 1,
+          logLine: {
+            event: LogEvent.SPELL_HEAL,
+            timestamp: ms(25),
+            parameters: [],
+          },
+        },
+      ],
+    });
+    const saves = effectSaves(
+      u,
+      saveAuraIntervals(u, [u], combat),
+      combat.startTime,
+    );
+    expect(saves.map((s) => [s.atSeconds, s.spellName, s.effect])).toEqual([
+      [10, "Feign Death", "absorb"],
+      [20, "Nature's Guardian", "heal proc"],
+      [30, "Cauterize", "cheat-death proc"],
+    ]);
+    expect(saves[1].interval).toBeUndefined();
+    expect(saves[0].interval?.spellId).toBe(SURVIVAL_TACTICS);
+  });
+
+  /**
+   * Game-Behaviour rule, the DB2 leg, re-read on every run: what each of the
+   * four IS in the official data, and that none of them carries a school
+   * immunity. A build that changes one turns this red.
+   */
+  it("DB2: Feign Death's aura is an all-school absorb, Nature's Guardian a heal, Cheat Death / Cauterize aura 316 on every school — none an immunity", () => {
+    for (const a of FEIGN_DEATH_ABSORB_AURA_IDS) {
+      expect(ABILITY_EFFECTS_GENERATED[a]?.absorbs, a).toBe(true);
+      expect(ABILITY_EFFECTS_GENERATED[a]?.absorbSchoolMask, a).toBe(0x7f);
+      expect(immunitySchoolMask(a), a).toBeUndefined();
+    }
+    const rows = (
+      talentEffectInventory as {
+        rows: Array<{
+          spellId: string;
+          effect: number;
+          aura: number;
+          misc0: number;
+          basePoints: number;
+        }>;
+      }
+    ).rows;
+    const rowsOf = (id: string) => rows.filter((r) => r.spellId === id);
+    // Nature's Guardian 31616: effect 136 (heal, % of max health), 40
+    expect(ABILITY_EFFECTS_GENERATED["31616"]?.healsSelf).toBe(true);
+    expect(
+      rowsOf("31616").map((r) => [r.effect, r.aura, r.basePoints]),
+    ).toEqual([[136, 0, 40]]);
+    // the talents behind the two proc auras: aura 316, mask 127
+    for (const talent of ["31230", "86949"])
+      expect(
+        rowsOf(talent).some((r) => r.aura === 316 && r.misc0 === 0x7f),
+        talent,
+      ).toBe(true);
+    for (const id of [...Object.keys(ENEMY_PROC_SAVES), "31230", "86949"]) {
+      expect(immunitySchoolMask(id), id).toBeUndefined();
+      expect(
+        rowsOf(id).some((r) => r.aura === 39),
+        id,
+      ).toBe(false);
+      expect(id in MITIGATION_TABLE, id).toBe(false);
+      expect(isImmunitySaveAura(id), id).toBe(false);
+    }
+  });
+
+  it("the proc saves read the same as the owner-side CRISIS_PROC_ANSWERS: heal → proc, aura → cheatDeath, same names", () => {
+    for (const [id, p] of Object.entries(ENEMY_PROC_SAVES)) {
+      const owner = CRISIS_PROC_ANSWERS.get(id);
+      expect(owner, id).toBeDefined();
+      expect(owner!.name, id).toBe(p.name);
+      expect(owner!.via, id).toBe(p.via);
+      expect(owner!.kind, id).toBe(
+        p.effect === "cheat-death proc" ? "cheatDeath" : "proc",
+      );
+    }
+    // and every cheat-death the owner side knows is one here
+    for (const [id, a] of CRISIS_PROC_ANSWERS)
+      if (a.kind === "cheatDeath")
+        expect(ENEMY_PROC_SAVES[id]?.effect, id).toBe("cheat-death proc");
+  });
+
+  it("the rendered note and its reader agree: every effect, with and without an amount", () => {
+    expect(enemySaveEffectNote("absorb", 63_682, "2.0s")).toBe(
+      "absorb 64k, 2.0s",
+    );
+    expect(enemySaveEffectNote("absorb", undefined, "2.0s")).toBe(
+      "absorb, 2.0s",
+    );
+    expect(enemySaveEffectNote("absorb", 300, "0.4s — removed early")).toBe(
+      "absorb <1k, 0.4s — removed early",
+    );
+    expect(enemySaveEffectNote("heal proc", undefined, "")).toBe("heal proc");
+    expect(enemySaveEffectNote("cheat-death proc", undefined, "")).toBe(
+      "cheat-death proc",
+    );
+    for (const [effect, amount, dur] of [
+      ["absorb", 63_682, "2.0s"],
+      ["absorb", undefined, "2.0s"],
+      ["absorb", 300, "0.4s — removed early"],
+      ["absorb", 594_000, "1.2s — used up"],
+      ["heal proc", undefined, ""],
+      ["cheat-death proc", undefined, ""],
+    ] as const)
+      expect(
+        enemySaveEffectOfNote(
+          `(${enemySaveEffectNote(effect, amount, dur)}) (at 67% HP)`,
+        ),
+        `${effect} ${amount}`,
+      ).toBe(effect);
+    for (const other of [
+      "(immune, 2.0s)",
+      "(30%, 12.0s)",
+      "(self-save)",
+      "(area)",
+      "",
+    ])
+      expect(enemySaveEffectOfNote(other), other).toBeUndefined();
+    expect([...ENEMY_SAVE_EFFECT_BY_NAME].sort()).toEqual([
+      ["Cauterize", "cheat-death proc"],
+      ["Cheat Death", "cheat-death proc"],
+      ["Feign Death", "absorb"],
+      ["Nature's Guardian", "heal proc"],
+    ]);
   });
 });
 
@@ -964,13 +1219,17 @@ describe("Anti-Magic Shell routing and the school-limited save masks", () => {
       expect(ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS.has(id), id).toBe(true);
       expect(immunityLastsItsAura(id), id).toBe(true);
     }
-    // Cheat Death, Cauterize, Feign Death's Survival Tactics: the moment,
-    // not the aura (other-than-periodic damage lands through 7 / 10, 62 / 72
-    // and 1,135 / 1,474 of their auras)
+    // Cheat Death, Cauterize, Feign Death's Survival Tactics: no immunity at
+    // all since ruling D8 (other-than-periodic damage lands through 7 / 10,
+    // 62 / 72 and 1,135 / 1,474 of their auras) — they were `immune` auras
+    // that did not last (A25) before it
     for (const id of ["45182", "87023", "202748"]) {
-      expect(isImmunitySaveAura(id), id).toBe(true);
+      expect(isImmunitySaveAura(id), id).toBe(false);
       expect(immunityLastsItsAura(id), id).toBe(false);
     }
+    // so every aura left in the immunity list holds while it is up
+    for (const id of IMMUNITY_SAVE_AURA_NAMES.keys())
+      expect(immunityLastsItsAura(id), id).toBe(true);
     // the signed list never admits an aura the enemy-save predicate does not know
     for (const id of ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS)
       expect(id in ENEMY_IMMUNITY_SAVE_AURAS, id).toBe(true);
@@ -989,8 +1248,9 @@ describe("Anti-Magic Shell routing and the school-limited save masks", () => {
     // a pct-100 table row and a DB2 all-school immunity keep the cap
     for (const id of ["642", "45438", "378441"])
       expect(immunityCountsWhenAlreadyUp(iv(id, true)), id).toBe(true);
-    // a 'moment' immunity never counts when already up
-    expect(immunityCountsWhenAlreadyUp(iv("87023", false))).toBe(false);
+    // an effect save (ruling D8) is no immunity, up or not
+    for (const id of ["87023", "45182", "202748"])
+      expect(immunityCountsWhenAlreadyUp(iv(id, false)), id).toBe(false);
   });
 
   it("the absorb mask is the DB2 one (datagen), read through cd-hoarded's saveSchoolMask — no literal", () => {

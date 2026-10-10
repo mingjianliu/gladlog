@@ -96,6 +96,10 @@ import {
   isSpikeHealedThrough,
   PRESS_HP_LINE_TAGS,
 } from "@gladlog/analysis/src/utils/cooldowns";
+import {
+  ENEMY_SAVE_EFFECT_BY_NAME,
+  enemySaveEffectOfNote,
+} from "@gladlog/analysis/src/utils/enemyDefensives";
 import { DURING_ABSORBED_TAG_RE_SRC } from "@gladlog/analysis/src/utils/externalDamage";
 import { fmtTime } from "@gladlog/analysis/src/utils/renderGrid";
 import { SUMMON_KIND_RE_SRC } from "@gladlog/analysis/src/utils/summonKind";
@@ -2085,6 +2089,40 @@ export function checkEnemyDefRefConsistency(lines: string[]): string[] {
   return failures;
 }
 
+/**
+ * An `[ENEMY DEF]` line names a save by its EFFECT exactly when the ability
+ * is an effect save (user ruling D8, 2026-10-10): Feign Death reads
+ * `(absorb …)`, Nature's Guardian `(heal proc)`, Cheat Death / Cauterize
+ * `(cheat-death proc)` — never `(immune …)`, the wording that made a shield
+ * and three passives read as "cannot be hit" (605 new-season files: an enemy
+ * player's direct damage landed inside 510 of 697 Feign Death "immunities",
+ * 164 of 174 Nature's Guardian, 31 of 34 Cauterize, 7 of 10 Cheat Death).
+ * And the reverse: no other ability's line carries an effect note. Names and
+ * the note's reader are the producer's (`ENEMY_SAVE_EFFECT_BY_NAME`,
+ * `enemySaveEffectOfNote`).
+ */
+export function checkEnemyDefSaveEffect(lines: string[]): string[] {
+  const failures: string[] = [];
+  lines.forEach((line, i) => {
+    const m = ENEMY_DEF_LINE.exec(line);
+    if (!m) return;
+    const spell = m[3]!;
+    // the text after the ability's name, from its parenthesis
+    const after = line.slice(
+      m.index + m[0].length - (m[0].endsWith("(") ? 1 : 0),
+    );
+    const expected = ENEMY_SAVE_EFFECT_BY_NAME.get(spell);
+    const stated = enemySaveEffectOfNote(after);
+    if (expected === stated) return;
+    failures.push(
+      expected
+        ? `line ${i + 1}: [ENEMY DEF] prints ${spell} as something other than its effect (${expected}): "${line.trim().slice(0, 160)}"`
+        : `line ${i + 1}: [ENEMY DEF] gives ${spell} an effect note (${stated}) it has no claim to: "${line.trim().slice(0, 160)}"`,
+    );
+  });
+  return failures;
+}
+
 /** `  [m:ss–m:ss] on <unit> — … | FAILED: broke out (A/B)[; forced a full immunity …]` */
 const KILL_ATTEMPT_BROKE_OUT =
   /^\s*\[(\d+):(\d\d)–(\d+):(\d\d)\] on (\S+) — .*\| FAILED: broke out \(([^()|]+)\)/;
@@ -3538,6 +3576,7 @@ export function checkMatch(
   hardFailures.push(...checkCjkLeak(lines));
   hardFailures.push(...checkKickWaitedOutConsistency(lines));
   hardFailures.push(...checkEnemyDefRefConsistency(lines));
+  hardFailures.push(...checkEnemyDefSaveEffect(lines));
   hardFailures.push(...checkBrokeOutRefConsistency(lines));
   hardFailures.push(...checkFactsBlockIntegrity(lines));
   hardFailures.push(...checkPetCreditSide(lines));

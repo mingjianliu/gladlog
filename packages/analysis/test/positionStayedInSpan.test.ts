@@ -14,7 +14,9 @@
 import { CombatUnitSpec, LogEvent } from "@gladlog/parser-compat";
 import { describe, expect, it } from "vitest";
 
+import { ENEMY_PROC_SAVES } from "../src/data/spellIdLists";
 import {
+  FEIGN_DEATH_ABSORB_AURA_IDS,
   FULL_IMMUNITY_IDS,
   IMMUNITY_IDS,
   IMMUNITY_SAVE_AURA_NAMES,
@@ -428,9 +430,16 @@ describe("isOwnImmunityInterval — the skip rule's immunity leg", () => {
     }
   });
 
-  it("does not take the immunity-kind saves (Vanish, Cheat Death, Cauterize, …)", () => {
+  it("does not take the immunity-kind saves (Vanish, Burrow, …) nor the effect saves ruling D8 took out of them (Feign Death, Cheat Death, Cauterize, Nature's Guardian)", () => {
     expect(IMMUNITY_SAVE_AURA_NAMES.size).toBeGreaterThan(0);
-    for (const id of IMMUNITY_SAVE_AURA_NAMES.keys()) {
+    const effectSaveIds = [
+      ...FEIGN_DEATH_ABSORB_AURA_IDS,
+      ...Object.keys(ENEMY_PROC_SAVES),
+    ];
+    expect(effectSaveIds).toEqual(
+      expect.arrayContaining(["202748", "45182", "87023", "31616"]),
+    );
+    for (const id of [...IMMUNITY_SAVE_AURA_NAMES.keys(), ...effectSaveIds]) {
       if (IMMUNITY_IDS.has(id)) continue;
       expect(
         isOwnImmunityInterval(me, { spellId: id, srcUnitName: "Owner" }),

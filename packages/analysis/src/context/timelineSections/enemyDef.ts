@@ -17,6 +17,7 @@ import {
 import { isEnemyCdWindowSpell } from "../../utils/enemyCDs";
 import {
   enemyDefensiveEvents,
+  enemySaveEffectNote,
   renderedObservedSeconds,
 } from "../../utils/enemyDefensives";
 import {
@@ -91,18 +92,21 @@ export function emitEnemyDefEntries(
         const earlyNote = d.upAtRoundEnd
           ? " — still up when the round ended"
           : !d.removedEarly
-          ? ""
-          : end?.takenBy
-            ? ` — ${end.takenBy.kind} by ${taker}`
-            : end?.holderDied
-              ? d.kind === "external"
-                ? ` — its target died${unclear}`
-                : ` — ended at death${unclear}`
-              : end?.absorb?.left === 0
-                ? ` — used up, absorbed ${Math.round(end.absorb.absorbed / 1000)}k${unclear}`
-                : end?.takeUnclear
-                  ? " — a dispel of this spell is logged at that moment, not which copy it took"
-                  : " — removed early";
+            ? ""
+            : end?.takenBy
+              ? ` — ${end.takenBy.kind} by ${taker}`
+              : end?.holderDied
+                ? d.kind === "external"
+                  ? ` — its target died${unclear}`
+                  : ` — ended at death${unclear}`
+                : end?.absorb?.left === 0
+                  ? // an `(absorb Nk, …)` line already leads with the amount
+                    d.effect === "absorb"
+                    ? ` — used up${unclear}`
+                    : ` — used up, absorbed ${Math.round(end.absorb.absorbed / 1000)}k${unclear}`
+                  : end?.takeUnclear
+                    ? " — a dispel of this spell is logged at that moment, not which copy it took"
+                    : " — removed early";
         const dur =
           d.observedSeconds !== undefined
             ? `${renderedObservedSeconds(d.observedSeconds).toFixed(1)}s${earlyNote}`
@@ -191,6 +195,12 @@ export function emitEnemyDefEntries(
           // Ruling A15 (2026-09-30): who pressed it and when — no %, no
           // recipients, no duration, no HP (nobody is "the target").
           line = `${d.spellName} (area)`;
+        } else if (d.effect !== undefined) {
+          // Ruling D8 (2026-10-10): a save named by what it does — Feign
+          // Death's shield with what it absorbed and how long it was up, a
+          // proc by its type. The rest of the line is the immunity line's.
+          const hpStr = hpPct !== null ? ` (at ${hpPct.toFixed(0)}% HP)` : "";
+          line = `${d.spellName} (${enemySaveEffectNote(d.effect, d.absorbedAmount, dur)})${burstStr}${hpStr}`;
         } else if (d.kind === "self-save") {
           const hpStr = hpPct !== null ? ` (at ${hpPct.toFixed(0)}% HP)` : "";
           // B18: a Guardian Spirit the priest put on THEMSELVES is a

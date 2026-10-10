@@ -85,11 +85,11 @@ import {
 import { analyzeOutgoingCCChains, DRLevel, drResetMsAt } from "./drAnalysis";
 import { reconstructEnemyCDTimeline } from "./enemyCDs";
 import {
+  effectSaves,
   enemyDefensiveEvents,
   externalAuraOf,
   type IEnemyDefensiveEvent,
   immunityCountsWhenAlreadyUp,
-  immunityProcHeals,
   type ISaveAuraInterval,
   isImmunitySaveAura,
   isIntervalFrom,
@@ -1244,10 +1244,14 @@ function attributeFailure(
     }
   }
 
-  // An immunity-kind save that leaves no aura (Nature's Guardian's heal).
+  // The effect saves (Feign Death's shield, a Nature's Guardian / Cheat
+  // Death / Cauterize proc) are still read as an immunity here, as ruling A25
+  // had them: one inside the credit window ends the attempt.
   if (
-    immunityProcHeals(target, matchStartMs).some((h) =>
-      inCredit(matchStartMs + h.atSeconds * 1000),
+    effectSaves(target, targetIntervals, matchStartMs).some(
+      (s) =>
+        !s.interval?.inferredStart &&
+        inCredit(matchStartMs + s.atSeconds * 1000),
     )
   ) {
     immunityBaited = true;

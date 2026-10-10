@@ -21,11 +21,12 @@ import spellIdListsData, {
   ENEMY_ALLY_SAVE_IDS,
   ENEMY_AREA_SAVE_IDS,
   ENEMY_IMMUNITY_EXTERNAL_CASTS,
-  ENEMY_IMMUNITY_HEAL_PROCS,
   ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS,
   ENEMY_IMMUNITY_SAVE_AURAS,
   ENEMY_ONLY_SAVE_IDS,
+  ENEMY_PROC_SAVES,
   ENEMY_REDIRECT_SAVE_IDS,
+  type EnemyProcSaveEffect,
 } from "../data/spellIdLists";
 import { immunitySchoolMask } from "../data/spellSchools";
 import { auraEndFromLog, type IAuraEndFromLog } from "./auraEndCause";
@@ -91,19 +92,38 @@ export const SCHOOL_LIMITED_IMMUNITY_IDS: ReadonlySet<string> = new Set(
  * unconscious=1`, which parser-compat does not carry to the analysis units. */
 const FEIGN_DEATH_CAST_ID = "5384";
 
-/** Enemy-def F-E5 / F-E6 (user ruling A25, 2026-09-30): auras the `[ENEMY
- * DEF]` line prints as `immune` and KILL ATTEMPTS reads as "forced a full
- * immunity" although they are no pct-100 `MITIGATION_TABLE` row — the unit
- * cannot be hit (Burrow, Time Stop, Mass Invisibility, Vanish, Feign Death) or
- * a lethal hit was refused (Cheat Death, Cauterize). Logged aura id → the
- * ability name to print. `IMMUNITY_IDS` stays the pct-100 slice: other
- * predicates read it as exactly that. */
-export const IMMUNITY_SAVE_AURA_NAMES: ReadonlyMap<string, string> = new Map([
-  ...Object.entries(ENEMY_IMMUNITY_SAVE_AURAS),
-  ...(AURA_ONLY_ACTIVATION_IDS[FEIGN_DEATH_CAST_ID] ?? []).map(
-    (auraId): [string, string] => [auraId, "Feign Death"],
-  ),
-]);
+/**
+ * Feign Death's logged aura(s) — an ABSORB shield, not an immunity (user
+ * ruling D8, 2026-10-10: "假死印它的吸收"). Read from the ledger's own table,
+ * so the two readers of "a Feign Death happened" stay one.
+ *
+ * Three-way evidence (Game-Behaviour rule), build 12.1.5.69594:
+ *  - DB2: Survival Tactics 202748 = aura 69 (SCHOOL_ABSORB) on every school
+ *    (`abilityEffectsGenerated`: `absorbs`, mask 127) and no school immunity
+ *    (aura 39) — `test/enemyDefensives.test.ts` re-reads both;
+ *  - corpus, the 605 new-season files (fix-FT/t07-enemydef-vs-raw-605.txt):
+ *    697 `[ENEMY DEF]` lines, every APPLIED carrying a shield amount; an
+ *    enemy player's direct damage lands on the hunter inside the aura in 510
+ *    (73 %), an IMMUNE miss is logged in 23. Divine Shield: 0 of 209 hit;
+ *  - one log (0e0663e6 0:21): APPLIED 594,477 → REMOVED 530,795 two seconds
+ *    later, the SPELL_ABSORBED lines naming 202748 between them, the hunter
+ *    68 % → 67 %.
+ */
+export const FEIGN_DEATH_ABSORB_AURA_IDS: ReadonlySet<string> = new Set(
+  AURA_ONLY_ACTIVATION_IDS[FEIGN_DEATH_CAST_ID] ?? [],
+);
+
+/** Enemy-def F-E5 / F-E6 (user ruling A25, 2026-09-30, narrowed by D8,
+ * 2026-10-10): auras the `[ENEMY DEF]` line prints as `immune` and KILL
+ * ATTEMPTS reads as "forced a full immunity" although they are no pct-100
+ * `MITIGATION_TABLE` row — the unit cannot be hit (Burrow, Time Stop, Mass
+ * Invisibility, Vanish, Guardian of the Forgotten Queen). Logged aura id →
+ * the ability name to print. `IMMUNITY_IDS` stays the pct-100 slice: other
+ * predicates read it as exactly that. Feign Death, Cheat Death, Cauterize
+ * and Nature's Guardian left this set with D8 — `effectSaves`. */
+export const IMMUNITY_SAVE_AURA_NAMES: ReadonlyMap<string, string> = new Map(
+  Object.entries(ENEMY_IMMUNITY_SAVE_AURAS),
+);
 
 /** Is this aura an immunity for the enemy-save predicate — a pct-100 table
  * row or an immunity-kind save. The one test the `[ENEMY DEF]` aura loop and
@@ -126,8 +146,11 @@ export function isImmunitySaveAura(spellId: string): boolean {
  *    the unit cannot be attacked while the aura is up; a DoT already on it,
  *    area damage and a hit inside the aura's first second still land and are
  *    no evidence against it.
- * The rest of the enemy-only aura list marks the MOMENT a unit could not be
- * killed, and its aura outlasts that moment. Corpus leg, the 605 S2 files —
+ * Until ruling D8 (2026-10-10) the list also held Cauterize, Cheat Death and
+ * Feign Death, which only marked the MOMENT a unit could not be killed —
+ * the last three rows below; they are no immunity now (`effectSaves`), so
+ * every aura left in the list holds while it is up, and the test stays as
+ * the guard for an entry added later. Corpus leg, the 605 S2 files —
  * damage on the carrier while the aura was up (0.3 s after it went up to
  * 0.1 s before it dropped), any row (fix-KA/immAuraProbe.ts, 2026-10-02) and
  * rows other than a periodic tick (fix-FU/immSplitRaw.py, 2026-10-06; an
@@ -187,24 +210,140 @@ export function immunityCountsWhenAlreadyUp(
   return !(ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS.has(iv.spellId) && iv.inferredEnd);
 }
 
-/** The unit's immunity-kind saves that leave no aura — a heal proc on itself
- * (Nature's Guardian), in log order, seconds from match start. */
-export function immunityProcHeals(
+/** What an effect save does, as its `[ENEMY DEF]` line says it: Feign Death's
+ * shield, or what a proc is (`ENEMY_PROC_SAVES`). */
+export type EnemySaveEffect = "absorb" | EnemyProcSaveEffect;
+
+/** Ability name → its effect, for every effect save. The `[ENEMY DEF]` gate
+ * (`checkEnemyDefSaveEffect`) reads the rendered line against this map. */
+export const ENEMY_SAVE_EFFECT_BY_NAME: ReadonlyMap<string, EnemySaveEffect> =
+  new Map<string, EnemySaveEffect>([
+    ["Feign Death", "absorb"],
+    ...Object.values(ENEMY_PROC_SAVES).map((p): [string, EnemySaveEffect] => [
+      p.name,
+      p.effect,
+    ]),
+  ]);
+
+/** One effect save of a unit (`effectSaves`). */
+export interface IEffectSave {
+  /** seconds from match start: the aura's start, or the heal's instant */
+  atSeconds: number;
+  /** the logged id — the aura, or the heal */
+  spellId: string;
+  spellName: string;
+  effect: EnemySaveEffect;
+  /** the aura the save is read from; absent for a heal proc, which leaves none */
+  interval?: ISaveAuraInterval;
+}
+
+/**
+ * The unit's own saves that are named by their EFFECT (user ruling D8,
+ * 2026-10-10) — Feign Death's absorb shield, Nature's Guardian's heal, a
+ * Cheat Death / Cauterize proc — in log order. None of them is pressed in
+ * the log (Feign Death's cast is never logged, the other three are passives),
+ * so they are read from the unit's own aura intervals (`saveAuraIntervals`)
+ * and its heals of itself. One reader for the `[ENEMY DEF]` line and for the
+ * KILL ATTEMPTS `self-saved (X)` attribution.
+ */
+export function effectSaves(
   unit: ICombatUnit,
+  intervals: readonly ISaveAuraInterval[],
   matchStartMs: number,
-): Array<{ atSeconds: number; spellId: string; spellName: string }> {
-  const out: Array<{ atSeconds: number; spellId: string; spellName: string }> =
-    [];
+): IEffectSave[] {
+  const out: IEffectSave[] = [];
+  for (const iv of intervals) {
+    if (!isIntervalFrom(iv, unit)) continue;
+    if (FEIGN_DEATH_ABSORB_AURA_IDS.has(iv.spellId)) {
+      out.push({
+        atSeconds: iv.fromS,
+        spellId: iv.spellId,
+        spellName: "Feign Death",
+        effect: "absorb",
+        interval: iv,
+      });
+      continue;
+    }
+    const proc = ENEMY_PROC_SAVES[iv.spellId];
+    if (proc?.via !== "aura") continue;
+    out.push({
+      atSeconds: iv.fromS,
+      spellId: iv.spellId,
+      spellName: proc.name,
+      effect: proc.effect,
+      interval: iv,
+    });
+  }
   for (const h of unit.healIn ?? []) {
-    const name = h.spellId ? ENEMY_IMMUNITY_HEAL_PROCS[h.spellId] : undefined;
-    if (!name || h.srcUnitId !== unit.id) continue;
+    const proc = h.spellId ? ENEMY_PROC_SAVES[h.spellId] : undefined;
+    if (proc?.via !== "heal" || h.srcUnitId !== unit.id) continue;
     out.push({
       atSeconds: (h.logLine.timestamp - matchStartMs) / 1000,
       spellId: h.spellId!,
-      spellName: name,
+      spellName: proc.name,
+      effect: proc.effect,
     });
   }
-  return out;
+  return out.sort((a, b) => a.atSeconds - b.atSeconds);
+}
+
+/**
+ * What a shield aura absorbed over one application: the sum of the
+ * SPELL_ABSORBED lines that name it, on its holder, inside the interval —
+ * `auraEndFromLog`'s reading, the one the `— used up, absorbed Nk` end note
+ * prints. Undefined when the log has no such line for it: nothing hit the
+ * shield, or the record carries no absorb lines — the two are not told
+ * apart, so no figure is printed (never a 0).
+ */
+export function absorbedDuring(
+  holder: ICombatUnit,
+  iv: ISaveAuraInterval,
+  matchStartMs: number,
+): number | undefined {
+  return auraEndFromLog(
+    holder,
+    iv.spellId,
+    {
+      fromMs: Math.round(matchStartMs + iv.fromS * 1000),
+      removedMs: Math.round(matchStartMs + iv.toS * 1000),
+    },
+    iv.srcUnitId ?? holder.id,
+  ).absorb?.absorbed;
+}
+
+/**
+ * What an effect save's `[ENEMY DEF]` line prints in its parenthesis:
+ * `absorb 64k, 2.0s` (the amount is left out when the log gives none, and an
+ * amount that rounds to 0k reads `<1k`), `heal proc`, `cheat-death proc`.
+ * `duration` is the line's own duration text (`2.0s`, `1.2s — used up`).
+ */
+export function enemySaveEffectNote(
+  effect: EnemySaveEffect,
+  absorbedAmount: number | undefined,
+  duration: string,
+): string {
+  if (effect !== "absorb") return effect;
+  const k =
+    absorbedAmount === undefined
+      ? undefined
+      : Math.round(absorbedAmount / 1000);
+  const amount = k === undefined ? "" : k < 1 ? " <1k" : ` ${k}k`;
+  return `absorb${amount}${duration ? `, ${duration}` : ""}`;
+}
+
+/** The start of `enemySaveEffectNote`'s parenthesis, as rendered. */
+const ENEMY_SAVE_EFFECT_NOTE_RE =
+  /^\((?:(absorb)(?: (?:\d+|<1)k)?(?:, \d+\.\ds\b|\))|(heal proc)\)|(cheat-death proc)\))/;
+
+/** The effect a rendered `[ENEMY DEF]` parenthesis states (the text that
+ * follows the ability's name, from its `(`), or undefined when it states
+ * none — `(immune, 8.0s)`, `(30%, 12.0s)`, `(self-save)`. The gate's reader
+ * of what `enemySaveEffectNote` wrote. */
+export function enemySaveEffectOfNote(
+  parenthesis: string,
+): EnemySaveEffect | undefined {
+  const m = ENEMY_SAVE_EFFECT_NOTE_RE.exec(parenthesis);
+  return (m?.[1] ?? m?.[2] ?? m?.[3]) as EnemySaveEffect | undefined;
 }
 
 /** When `unit` carried a FULL immunity (`FULL_IMMUNITY_IDS`), seconds since
@@ -233,8 +372,8 @@ export function fullImmunityIntervals(
  *    three Rogues inside their own Cloak fell to 34 %, 23 % and 32 %. The
  *    finer rule (enemy-def F-E24, ruling A30) is decided when it lands;
  *  - the immunity-kind saves `isImmunitySaveAura` adds for `[ENEMY DEF]`
- *    kind="immune" (Vanish, Feign Death, Cheat Death, Cauterize, … —
- *    enemy-def F-E5 / F-E6): a unit under Cauterize can still move. */
+ *    kind="immune" (Vanish, Burrow, Mass Invisibility, … — enemy-def F-E5 /
+ *    F-E6): a unit under Vanish can still move. */
 export function isOwnImmunityInterval(
   unit: Pick<ICombatUnit, "name">,
   iv: { spellId: string; srcUnitName: string },
@@ -465,8 +604,15 @@ export interface IEnemyDefensiveEvent {
   /** the enemy who pressed it */
   casterName: string;
   casterId?: string;
-  /** "self" = a wall on the caster (pct < 100); "immune" = pct 100; "external" = cast on another enemy; "self-save" = the caster's own no-%-mitigation save (`SELF_SAVE_IDS`); "area" = an area save anchored on its cast (`ENEMY_AREA_SAVE_IDS`): who pressed it and when, nothing else */
+  /** "self" = a wall on the caster (pct < 100); "immune" = pct 100; "external" = cast on another enemy; "self-save" = the caster's own no-%-mitigation save (`SELF_SAVE_IDS`, or an effect save — see `effect`); "area" = an area save anchored on its cast (`ENEMY_AREA_SAVE_IDS`): who pressed it and when, nothing else */
   kind: "self" | "immune" | "external" | "self-save" | "area";
+  /** Set on a self-save that is named by what it does (`effectSaves`, ruling
+   * D8): the line prints `(absorb Nk, Ts)` / `(heal proc)` / `(cheat-death
+   * proc)` in place of `(self-save)`. */
+  effect?: EnemySaveEffect;
+  /** What an `effect: "absorb"` save's shield absorbed while it was up
+   * (`absorbedDuring`); undefined when the log names no absorb line for it. */
+  absorbedAmount?: number;
   /** official mitigation pct (self / immune); undefined for externals and for an immunity-kind save, which has no table row */
   pct?: number;
   /** who received an external */
@@ -739,16 +885,30 @@ export function enemyDefensiveEvents(
     });
   }
 
-  // F-E5: an immunity-kind save with no aura (Nature's Guardian's heal).
-  for (const h of immunityProcHeals(enemy, combat.startTime)) {
+  // Ruling D8 (2026-10-10): the saves named by their effect. Feign Death's
+  // shield lasts its aura and says what it absorbed; a proc is a moment — the
+  // aura it leaves (Cauterize's 6 s burn, Cheating Death's 3 s) is not how
+  // long anything protected the unit, so no duration is printed for it.
+  for (const s of effectSaves(enemy, intervalsOf(enemy), combat.startTime)) {
+    const shield = s.effect === "absorb" ? s.interval : undefined;
+    const absorbed = shield
+      ? absorbedDuring(enemy, shield, combat.startTime)
+      : undefined;
     out.push({
-      atSeconds: h.atSeconds,
-      spellId: h.spellId,
-      spellName: h.spellName,
+      atSeconds: s.atSeconds,
+      spellId: s.spellId,
+      spellName: s.spellName,
       casterName: enemy.name,
       casterId: enemy.id,
-      kind: "immune",
-      removedEarly: false,
+      kind: "self-save",
+      effect: s.effect,
+      ...(shield
+        ? {
+            observedSeconds: shield.toS - shield.fromS,
+            ...(absorbed !== undefined ? { absorbedAmount: absorbed } : {}),
+            ...earlyEndOf(enemy, shield, shield.spellId),
+          }
+        : { removedEarly: false }),
     });
   }
 

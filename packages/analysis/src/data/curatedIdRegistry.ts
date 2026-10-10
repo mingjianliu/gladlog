@@ -212,9 +212,9 @@ import spellIdLists, {
   ENEMY_ALLY_SAVE_IDS,
   ENEMY_AREA_SAVE_IDS,
   ENEMY_IMMUNITY_EXTERNAL_CASTS,
-  ENEMY_IMMUNITY_HEAL_PROCS,
   ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS,
   ENEMY_IMMUNITY_SAVE_AURAS,
+  ENEMY_PROC_SAVES,
   ENEMY_REDIRECT_SAVE_IDS,
   ENEMY_SELF_SAVE_ONLY_IDS,
 } from "./spellIdLists";
@@ -316,9 +316,10 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
     "cast",
     () => set(ENEMY_REDIRECT_SAVE_IDS),
   ),
-  // enemy-def F-E5 / F-E6 (ruling A25): the immunity-kind saves. Aura-keyed
-  // (Cheat Death and Cauterize log only their proc aura), a heal-proc id, and
-  // the cast → aura pairs of immunities put on an ally.
+  // enemy-def F-E5 / F-E6 (ruling A25, split by effect in D8): the
+  // immunity-kind saves, aura-keyed; the proc saves (Cheat Death and Cauterize
+  // log only their proc aura, Nature's Guardian only its heal); and the
+  // cast → aura pairs of immunities put on an ally.
   t(
     "spellIdLists.ENEMY_IMMUNITY_SAVE_AURAS",
     "data/spellIdLists.ts",
@@ -332,11 +333,8 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
     "aura",
     () => set(ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS),
   ),
-  t(
-    "spellIdLists.ENEMY_IMMUNITY_HEAL_PROCS",
-    "data/spellIdLists.ts",
-    "aura",
-    () => keys(ENEMY_IMMUNITY_HEAL_PROCS),
+  t("spellIdLists.ENEMY_PROC_SAVES", "data/spellIdLists.ts", "aura", () =>
+    keys(ENEMY_PROC_SAVES),
   ),
   t(
     "spellIdLists.ENEMY_IMMUNITY_EXTERNAL_CASTS",
