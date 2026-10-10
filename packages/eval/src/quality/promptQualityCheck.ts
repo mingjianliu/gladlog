@@ -42,6 +42,12 @@ import {
   CC_USE_MIN_SHARE,
 } from "@gladlog/analysis/src/context/ccUse";
 import {
+  PRESSED_DURING_ITEM_RE_SRC,
+  PRESSED_DURING_NOTE_HEAD,
+  PRESSED_DURING_NOTE_RE_SRC,
+  stripPressedDuringNote,
+} from "@gladlog/analysis/src/context/controlRejectedPresses";
+import {
   FORCED_FOLLOWUP_CAP,
   FORCED_FOLLOWUP_MAX_GAP_S,
   forcedFollowUpDurOk,
@@ -713,7 +719,9 @@ export function checkDmgSpikeCcCoverConsistency(lines: string[]): string[] {
         (l) =>
           l.trimStart().startsWith(at) &&
           l.includes("[CC ON TEAM]") &&
-          l.includes(spell),
+          // FT-T16: not the owner's `pressed during it:` clause — it names
+          // the owner's cooldowns, not the control on the line
+          stripPressedDuringNote(l).includes(spell),
       );
       if (!ok)
         failures.push(
@@ -1172,6 +1180,71 @@ export function checkDeathTrinketCcConsistency(lines: string[]): string[] {
       failures.push(
         `line ${i + 1}: [DEATH] 说${saysNone ? "死前 10 s 没有" : "死前 10 s 有"}可解控制,但 [CC ON TEAM] 行${breakable ? "有" : "没有"}(渲染时长 ≥ ${DEATH_BREAKABLE_CC_MIN_S} s 且与 [死亡 − ${DEATH_BREAKABLE_CC_LOOKBACK_S} s, 死亡] 相交) —— ${line.trim().slice(0, 140)}`,
       );
+  });
+  return failures;
+}
+
+const PRESSED_DURING_NOTE = new RegExp(PRESSED_DURING_NOTE_RE_SRC);
+const PRESSED_DURING_HOST_LINE =
+  /^\s*\d+:\d{2}\s+\[(?:CC ON TEAM|SILENCE)\]\s+(\d+)\(/;
+const OWNER_KIT_LINE = /^\s*<cooldowns>(.*)<\/cooldowns>\s*$/;
+
+/**
+ * `| pressed during it: X ×N` (FT-T16, user decision D13 2026-10-10): the log
+ * owner's major cooldowns refused because of the control that line states.
+ * The producer (`context/controlRejectedPresses.ts`) reads the presses from
+ * the raw log, which the prompt does not carry, so the gate checks what the
+ * text can: the clause sits at the end of a `[CC ON TEAM]` / `[SILENCE]` line
+ * (the producer's own pattern, parsed in full), that line is the log owner's
+ * — only the recorder has refused presses — and every spell it names is an
+ * entry of the owner's `<cooldowns>` kit with a button, named once, with a
+ * count of at least 1. Without a `log owner` unit or its kit the ownership
+ * checks say nothing.
+ */
+export function checkPressedDuringControlNote(lines: string[]): string[] {
+  let ownerId: string | null = null;
+  let kit: string | null = null;
+  lines.forEach((line, i) => {
+    const u = line.match(UNIT_LEGEND_LINE);
+    if (u?.[3] !== "log owner") return;
+    ownerId = u[1]!;
+    kit = lines[i + 1]?.match(OWNER_KIT_LINE)?.[1] ?? null;
+  });
+  // `Name [..]( [..])?` entries joined by ", "; a name may hold a comma
+  const kitEntries = new Map<string, string>(
+    ((kit as string | null) ?? "")
+      .split(/\](?:, )/)
+      .map((e) => [e.slice(0, e.indexOf(" [")), e] as [string, string]),
+  );
+  const failures: string[] = [];
+  lines.forEach((line, i) => {
+    if (!line.includes(PRESSED_DURING_NOTE_HEAD)) return;
+    const fail = (why: string) =>
+      failures.push(
+        `line ${i + 1}: \`pressed during it\` ${why} —— ${line.trim().slice(0, 160)}`,
+      );
+    const host = line.match(PRESSED_DURING_HOST_LINE);
+    const note = line.match(PRESSED_DURING_NOTE);
+    if (!host || !note) {
+      fail("格式不符(必须是 [CC ON TEAM] / [SILENCE] 行的最后一个子句)");
+      return;
+    }
+    if (ownerId !== null && host[1] !== ownerId)
+      fail(`写在 ${host[1]} 的行上,被拒按键只有录制者 ${ownerId} 有`);
+    const seen = new Set<string>();
+    for (const item of note[1]!.matchAll(
+      new RegExp(PRESSED_DURING_ITEM_RE_SRC, "g"),
+    )) {
+      const name = item[1]!;
+      if (seen.has(name)) fail(`${name} 列了两次`);
+      seen.add(name);
+      if (Number(item[2]) < 1) fail(`${name} 的次数是 ${item[2]}`);
+      if (kit === null) continue;
+      const entry = kitEntries.get(name);
+      if (entry === undefined) fail(`${name} 不在录制者的 <cooldowns> 里`);
+      else if (entry.includes("[PASSIVE"))
+        fail(`${name} 在 <cooldowns> 里是 [PASSIVE](没有按键)`);
+    }
   });
   return failures;
 }
@@ -3587,6 +3660,7 @@ export function checkMatch(
   hardFailures.push(...checkConseqHpStateConsistency(lines));
   hardFailures.push(...checkCcAvoidedLandedConsistency(lines));
   hardFailures.push(...checkDeathTrinketCcConsistency(lines));
+  hardFailures.push(...checkPressedDuringControlNote(lines));
   hardFailures.push(...checkBurstAnsweredBottomConsistency(lines));
   hardFailures.push(...checkFreeOfWindowConsistency(lines));
   hardFailures.push(...checkPeelOptionConsistency(lines));

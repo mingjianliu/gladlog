@@ -15,6 +15,7 @@ import {
 } from "../../data/timelineLineFlags";
 import { BURST_ANSWERED_LEGEND } from "../burstAnswered";
 import { CD_PRIOR_LEGEND } from "../cdPrior";
+import { PRESSED_DURING_NOTE_HEAD } from "../controlRejectedPresses";
 import { ROT_PRESSURE_LEGEND } from "../matchTimelineSections";
 import { pruneZeroLossResRows } from "../resLedgerPrune";
 import { RES_FORBEARANCE_RE_SRC } from "../resourceSnapshot";
@@ -180,6 +181,13 @@ export function formatTimeline(
   // legended only when a line carries it.
   const karmaFeedRendered = entries.some((e) =>
     e.lines.some((l) => typeof l === "string" && l.includes(" | fed by")),
+  );
+  // FT-T16 (D13): the owner's refused presses on a control line are legended
+  // only when a line carries the clause.
+  const pressedDuringRendered = entries.some((e) =>
+    e.lines.some(
+      (l) => typeof l === "string" && l.includes(PRESSED_DURING_NOTE_HEAD),
+    ),
   );
   // B13e (user ruling 2026-10-07): the purgeable-buff count is legended only
   // when a line carries it.
@@ -362,6 +370,14 @@ export function formatTimeline(
           "    disarm it broke (no `on X` = the log ties no control to that press). It says where the cooldown went, nothing",
           "    more: never write from it that the trinket was used too early, wasted or should have been saved — breaking a",
           "    control to keep a burst or a heal going is a normal use.",
+        ]
+      : []),
+    ...(pressedDuringRendered
+      ? [
+          "  `| pressed during it: X ×N` on a [CC ON TEAM] / [SILENCE] line of yours = you pressed X (one of your `<cooldowns>`) N",
+          "    times while that control was on you, and the game refused every one of those presses because of the control —",
+          "    nothing was cast. A press refused only because X was still on cooldown is not counted. The log records refused",
+          "    presses for you alone: a teammate's line never carries the clause, whatever they pressed.",
         ]
       : []),
     ...(guardianSaveRendered

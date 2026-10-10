@@ -56,6 +56,17 @@ describe("resLedgerPrune — zero-loss no-change [RES] rows", () => {
     expect(
       classifyNoChangeResRows([t("0:10", "[STATE] a"), full("2"), blip("0:12"), t("0:15", "[STATE] b"), nc("focus:2  cc:3/Polymorph-<1s[incap]")]),
     ).toEqual([{ index: 4, uniqueFacts: ["cc"] }]);
+    // FT-T16: the owner's `pressed during it:` clause names the owner's own cooldowns — a Psychic
+    // Scream the stunned priest pressed is not a Psychic Scream on unit 3, and does not cover its row
+    const pressed = (mmss: string) =>
+      t(mmss, "[CC ON TEAM]   1(DPriest) ← Rake (by 4(FDruid)) | 6s [DR: Stun Full] | pressed during it: Psychic Scream ×4");
+    expect(
+      classifyNoChangeResRows([t("0:10", "[STATE] a"), full("2"), pressed("0:12"), t("0:15", "[STATE] b"), nc("focus:2  cc:3/Psychic Scream-3s[fear]")]),
+    ).toEqual([{ index: 4, uniqueFacts: ["cc"] }]);
+    // … while the control that line is about still covers its own row
+    expect(
+      droppableNoChangeResRows([t("0:10", "[STATE] a"), full("2"), pressed("0:12"), t("0:15", "[STATE] b"), nc("focus:2  cc:1/Rake-3s[stun]")]),
+    ).toEqual(new Set([4]));
     // A kick lockout has no landing line → its row is never droppable.
     const kick = [t("0:10", "[STATE] a"), full("2"), t("0:15", "[STATE] b"), nc("focus:2  cc:3/Wind Shear-1s[kick]")];
     expect(classifyNoChangeResRows(kick)).toEqual([{ index: 3, uniqueFacts: ["cc"] }]);

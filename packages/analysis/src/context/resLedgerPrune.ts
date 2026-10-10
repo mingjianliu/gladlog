@@ -37,6 +37,7 @@
  * timestamped line above it.
  */
 import { renderedCcSpanSeconds } from "../utils/ccTrinketAnalysis";
+import { stripPressedDuringNote } from "./controlRejectedPresses";
 
 /** Any `[RES]` ledger row. */
 export const RES_ROW_RE = /\[RES\]\s+rdy:/;
@@ -123,7 +124,10 @@ export function classifyNoChangeResRows(
   lines.forEach((l, i) => {
     const t = at[i];
     if (t === null || t === undefined) return;
-    if (CC_LANDING.test(l)) ccLines.push({ t, text: l });
+    // FT-T16: without the owner's `pressed during it:` clause — it names the
+    // owner's own cooldowns, not a control on anyone
+    if (CC_LANDING.test(l))
+      ccLines.push({ t, text: stripPressedDuringNote(l) });
     if (ENEMY_CD.test(l)) cdLines.push({ t, text: l });
   });
 

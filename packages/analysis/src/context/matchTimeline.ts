@@ -708,6 +708,9 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     enemies,
     rosterSides,
     avoidanceSourceTag,
+    owner,
+    ownerCDs,
+    rawStreams,
   }));
 
   // ── [SILENCE]: silences on players (reliability round 2 W1b, 2026-09-25) ───
@@ -743,6 +746,9 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     actorLabel,
     addEntry,
     silenceLineCount,
+    owner,
+    ownerCDs,
+    rawStreams,
   }));
 
   // ── [CC ON ENEMY]: our CC landing on enemies (2026-07-18 coverage fix) ─────

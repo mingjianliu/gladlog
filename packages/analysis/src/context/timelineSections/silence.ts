@@ -22,6 +22,11 @@ import {
 } from "../../utils/ccTrinketAnalysis";
 import { pvpTrinketUses } from "../../utils/pvpTrinketUses";
 import { fmtTime } from "../../utils/renderGrid";
+import {
+  formatPressedDuringNote,
+  ownerControlPressKit,
+  ownerPressesRejectedDuring,
+} from "../controlRejectedPresses";
 import type { TimelineCtx } from "./ctx";
 
 export function emitSilenceEntries(
@@ -38,9 +43,15 @@ export function emitSilenceEntries(
     | "actorLabel"
     | "addEntry"
     | "silenceLineCount"
+    | "owner"
+    | "ownerCDs"
+    | "rawStreams"
   >,
 ): Pick<TimelineCtx, "silenceLineCount"> {
   const {
+    owner,
+    ownerCDs,
+    rawStreams,
     allUnits,
     friends,
     enemies,
@@ -74,7 +85,26 @@ export function emitSilenceEntries(
           ? (ccTrinketSummaries.find((s) => s.playerName === u.name)
               ?.trinketUseTimes ?? [])
           : [];
-      for (const s of silenceIntervals(u, attackerIds)) {
+      const intervals = silenceIntervals(u, attackerIds);
+      // FT-T16 (D13): the owner's major cooldowns pressed into a silence and
+      // refused as "silenced", on that silence's line — the `[CC ON TEAM]`
+      // clause, for the control that family does not hold. Only the log's
+      // recorder has SPELL_CAST_FAILED rows.
+      const pressedDuring =
+        rawStreams?.available && side === "friendly" && u.id === owner.id
+          ? ownerPressesRejectedDuring(
+              rawStreams.castFailed,
+              owner.id,
+              ownerControlPressKit(ownerCDs),
+              "silence",
+              intervals,
+              (s) => ({
+                fromSeconds: (s.from - matchStartMs) / 1000,
+                toSeconds: (Math.min(s.to, matchEndMs) - matchStartMs) / 1000,
+              }),
+            )
+          : undefined;
+      for (const s of intervals) {
         const at = (s.from - matchStartMs) / 1000;
         const endMs = Math.min(s.to, matchEndMs);
         const durS = Math.max(0, (endMs - s.from) / 1000);
@@ -144,7 +174,7 @@ export function emitSilenceEntries(
               )})`;
         addEntry(
           at,
-          `${fmtTime(at)}  [SILENCE]   ${who} ← ${getEnglishSpellName(s.spellId, s.spellName)} ${by}${tail}`,
+          `${fmtTime(at)}  [SILENCE]   ${who} ← ${getEnglishSpellName(s.spellId, s.spellName)} ${by}${tail}${formatPressedDuringNote(pressedDuring?.get(s))}`,
         );
         silenceLineCount++;
       }

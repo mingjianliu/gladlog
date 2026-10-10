@@ -24,6 +24,11 @@ import {
 } from "../../utils/ccTrinketAnalysis";
 import { wasRemovedByAllyDispel } from "../../utils/dispelAnalysis";
 import { fmtTime } from "../../utils/renderGrid";
+import {
+  formatPressedDuringNote,
+  ownerControlPressKit,
+  ownerPressesRejectedDuring,
+} from "../controlRejectedPresses";
 import type { TimelineCtx } from "./ctx";
 
 export function emitTrinketCcOnTeamEntries(
@@ -42,6 +47,9 @@ export function emitTrinketCcOnTeamEntries(
     | "rosterSides"
     | "avoidanceSourceTag"
     | "trinketLastUsedCount"
+    | "owner"
+    | "ownerCDs"
+    | "rawStreams"
   >,
 ): Pick<TimelineCtx, "disarmLineCount" | "trinketLastUsedCount"> {
   const {
@@ -56,11 +64,32 @@ export function emitTrinketCcOnTeamEntries(
     enemies,
     rosterSides,
     avoidanceSourceTag,
+    owner,
+    ownerCDs,
+    rawStreams,
   } = ctx;
   // threaded: read from ctx, returned to the caller (GH #116)
   let { disarmLineCount, trinketLastUsedCount } = ctx;
 
   for (const summary of ccTrinketSummaries) {
+    // FT-T16 (D13): the owner's major cooldowns pressed into a control and
+    // refused because of it, on that control's line. Only the log's recorder
+    // has SPELL_CAST_FAILED rows; the windows are the lines that print.
+    const pressedDuring =
+      rawStreams?.available && summary.playerName === owner.name
+        ? ownerPressesRejectedDuring(
+            rawStreams.castFailed,
+            owner.id,
+            ownerControlPressKit(ownerCDs),
+            "control",
+            summary.ccInstances.filter((cc) => cc.durationSeconds !== 0),
+            (cc) => ({
+              fromSeconds: cc.atSeconds,
+              toSeconds: cc.atSeconds + cc.durationSeconds,
+            }),
+          )
+        : undefined;
+
     for (const t of summary.trinketUseTimes) {
       // F-E18: name the disarm, as [ENEMY TRINKET] names its CC
       const brokenDisarm = trinketBrokenDisarm(summary, t);
@@ -253,7 +282,7 @@ export function emitTrinketCcOnTeamEntries(
       addEntry(
         cc.atSeconds,
         // B112: "(by N)" not "(N)" — the bare "(6)" caster-id was misread as a "6s" duration.
-        `${fmtTime(cc.atSeconds)}  [CC ON TEAM]   ${pid(summary.playerName)} ← ${cc.spellName} ${byStr}${durStr}${drStr}${backlashStr}${posStr}${trinketNote}${tremorNote}${immunityNote}${endNote}${cleansedNote}`,
+        `${fmtTime(cc.atSeconds)}  [CC ON TEAM]   ${pid(summary.playerName)} ← ${cc.spellName} ${byStr}${durStr}${drStr}${backlashStr}${posStr}${trinketNote}${tremorNote}${immunityNote}${endNote}${cleansedNote}${formatPressedDuringNote(pressedDuring?.get(cc))}`,
       );
     }
 

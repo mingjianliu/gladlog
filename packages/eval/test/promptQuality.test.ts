@@ -1,5 +1,6 @@
 import { ensureAnalysisData } from "@gladlog/analysis";
 import { buildMomentSnapshotItems } from "@gladlog/analysis/src/analysis/momentSnapshot";
+import { formatPressedDuringNote } from "@gladlog/analysis/src/context/controlRejectedPresses";
 import {
   lookupBehaviorPrior,
   outcomePhrase,
@@ -20,6 +21,7 @@ import {
   checkMatch,
   checkPeelOptionConsistency,
   checkPetCreditSide,
+  checkPressedDuringControlNote,
   checkResNoChangeRowsPruned,
   checkSameSecondHpConsistency,
   checkSelfOnlyDefensiveClaims,
@@ -1052,6 +1054,86 @@ describe("checkCcAvoidedLandedConsistency — a CC that landed cannot also have 
         "0:45  [CC ON TEAM]   2(EShaman) ← Fear (by 5(DWarlock)) | 3s",
       ]),
     ).toEqual([]);
+  });
+});
+
+describe("checkPressedDuringControlNote — `| pressed during it:` names the log owner's own kit cooldowns (FT-T16, D13)", () => {
+  const roster = [
+    '  <unit id="1" name="Ingbumb-Illidan-US" spec="Discipline Priest" role="log owner">',
+    "    <cooldowns>Desperate Prayer [90s, lasts 10s], Fade [20s], Invoke Xuen, the White Tiger [120s] [UNUSED], Avenging Wrath [PASSIVE], Psychic Scream [30s] [UNUSED — started 2×, never finished]</cooldowns>",
+    '  <unit id="2" name="Mate-Illidan-US" spec="Frost Mage" role="teammate">',
+    "    <cooldowns>Ice Block [240s, lasts 10s]</cooldowns>",
+  ];
+  // the producer's own writer: the gate reads what it prints
+  const note = (...items: Array<[string, number]>) =>
+    formatPressedDuringNote(
+      items.map(([spellName, count], i) => ({
+        spellId: String(i),
+        spellName,
+        count,
+        firstSeconds: i,
+      })),
+    );
+  const cc = (unit: string, tail: string) =>
+    `0:20  [CC ON TEAM]   ${unit} ← Rake (by 3(FDruid)) | 6s [DR: Stun Full] | 5yd from caster${tail}`;
+
+  it("passes the owner's line, on [CC ON TEAM] and on [SILENCE], a comma inside a spell name included", () => {
+    expect(
+      checkPressedDuringControlNote([
+        ...roster,
+        cc("1(DPriest)", note(["Desperate Prayer", 12], ["Fade", 3])),
+        cc("1(DPriest)", note(["Invoke Xuen, the White Tiger", 1])),
+        `0:40  [SILENCE]   1(DPriest) ← Silence (by 4(SPriest)) | 3s${note(["Psychic Scream", 2])}`,
+        // a line without the clause is not this gate's
+        cc("2(FMage)", ""),
+      ]),
+    ).toEqual([]);
+  });
+
+  it("flags the clause on a teammate's line — only the recorder has refused presses", () => {
+    const out = checkPressedDuringControlNote([
+      ...roster,
+      cc("2(FMage)", note(["Ice Block", 2])),
+    ]);
+    expect(out.length).toBeGreaterThan(0);
+    expect(out[0]).toContain("line 5");
+  });
+
+  it("flags a spell that is not in the owner's <cooldowns>, one that has no button there, one named twice, a zero count", () => {
+    for (const tail of [
+      note(["Power Word: Shield", 16]),
+      note(["Avenging Wrath", 2]),
+      note(["Fade", 2], ["Fade", 1]),
+      note(["Fade", 0]),
+    ])
+      expect(
+        checkPressedDuringControlNote([...roster, cc("1(DPriest)", tail)]),
+        tail,
+      ).toHaveLength(1);
+  });
+
+  it("flags the clause anywhere but the end of a [CC ON TEAM] / [SILENCE] line, and a malformed list", () => {
+    for (const line of [
+      cc("1(DPriest)", `${note(["Fade", 3])} [CLEANSED]`),
+      cc("1(DPriest)", " | pressed during it: Fade"),
+      cc("1(DPriest)", " | pressed during it: Fade ×3,Desperate Prayer ×1"),
+      `0:20  [YOU] [CD]   Fade${note(["Fade", 3])}`,
+    ])
+      expect(
+        checkPressedDuringControlNote([...roster, line]),
+        line,
+      ).toHaveLength(1);
+  });
+
+  it("without a log-owner unit the ownership checks say nothing; the format is still checked", () => {
+    expect(
+      checkPressedDuringControlNote([cc("1(DPriest)", note(["Fade", 3]))]),
+    ).toEqual([]);
+    expect(
+      checkPressedDuringControlNote([
+        cc("1(DPriest)", " | pressed during it: Fade"),
+      ]),
+    ).toHaveLength(1);
   });
 });
 
