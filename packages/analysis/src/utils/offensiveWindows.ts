@@ -363,7 +363,10 @@ export function computeOffensiveWindows(
   // start (step 2b): the pair the `[ENEMY DEF]` line prints for that press —
   // its rendered second and its printed length (`renderedExternalSpanS`), so
   // a `defenseless …–m:ss` end and the next span's start are what a reader
-  // gets from the line itself.
+  // gets from the line itself. An external whose end the log never showed
+  // prints `end not logged` (ruling D6) and still cuts the span, at the
+  // interval's official-length cap: "defenseless" says nothing was up, and
+  // an aura that may still be up cannot be read as gone.
   const externalsReceived = new Map<
     string,
     Array<{ from: number; to: number }>

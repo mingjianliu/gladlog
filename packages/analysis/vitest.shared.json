@@ -159,6 +159,7 @@
     "test/dispellerOccupancy.test.ts",
     "test/drCategoryIds.test.ts",
     "test/drOutgoingCCReverse.test.ts",
+    "test/enemyDefEndNotLogged.test.ts",
     "test/enemyDefSaveEffect.test.ts",
     "test/enemyDefensives.test.ts",
     "test/externalDamage.test.ts",

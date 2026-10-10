@@ -26,6 +26,7 @@ import spellIdListsData, {
   ENEMY_ONLY_SAVE_IDS,
   ENEMY_PROC_SAVES,
   ENEMY_REDIRECT_SAVE_IDS,
+  ENEMY_STEALTH_WALL_AURAS,
   type EnemyProcSaveEffect,
 } from "../data/spellIdLists";
 import { immunitySchoolMask } from "../data/spellSchools";
@@ -210,6 +211,21 @@ export function immunityCountsWhenAlreadyUp(
   return !(ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS.has(iv.spellId) && iv.inferredEnd);
 }
 
+/**
+ * The save auras whose CARRIER goes unseen, taking the aura's REMOVED line
+ * out of the recorder's log: the three stealth-kind immunities of rulings
+ * U-KA3 / U-KA3b (`ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS`: Burrow, Vanish, Mass
+ * Invisibility) and the stealth wall ruling D6 adds
+ * (`ENEMY_STEALTH_WALL_AURAS`: Greater Invisibility). For these a missing
+ * REMOVED says nothing about the aura still being up — on the 605 new-season
+ * files 97 % of an opponent's Greater Invisibilities have none, while an
+ * ally's is over in 0.74 s (median).
+ */
+export const SAVE_AURA_END_UNSEEN_IDS: ReadonlySet<string> = new Set([
+  ...ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS,
+  ...Object.keys(ENEMY_STEALTH_WALL_AURAS),
+]);
+
 /** What an effect save does, as its `[ENEMY DEF]` line says it: Feign Death's
  * shield, or what a proc is (`ENEMY_PROC_SAVES`). */
 export type EnemySaveEffect = "absorb" | EnemyProcSaveEffect;
@@ -315,7 +331,8 @@ export function absorbedDuring(
  * What an effect save's `[ENEMY DEF]` line prints in its parenthesis:
  * `absorb 64k, 2.0s` (the amount is left out when the log gives none, and an
  * amount that rounds to 0k reads `<1k`), `heal proc`, `cheat-death proc`.
- * `duration` is the line's own duration text (`2.0s`, `1.2s — used up`).
+ * `duration` is the line's own duration text (`2.0s`, `1.2s — used up`,
+ * `end not logged`).
  */
 export function enemySaveEffectNote(
   effect: EnemySaveEffect,
@@ -331,9 +348,30 @@ export function enemySaveEffectNote(
   return `absorb${amount}${duration ? `, ${duration}` : ""}`;
 }
 
+/**
+ * What an `[ENEMY DEF]` line prints in place of a duration when the log has
+ * no end for the aura (`IEnemyDefensiveEvent.endNotLogged`; user ruling D6,
+ * 2026-10-10: "prints `end not logged`, not the official duration presented
+ * as OBSERVED"). One literal for the renderer, the legend and the gate
+ * (`checkEnemyDefEndNotLogged`).
+ */
+export const ENEMY_DEF_END_NOT_LOGGED = "end not logged";
+
+/**
+ * The parenthesis that carries `ENEMY_DEF_END_NOT_LOGGED`, whole: the phrase
+ * stands where the duration would — after the strength (`immune`, `60%`,
+ * `absorb 64k`) or alone on an external — and closes the parenthesis. No end
+ * note (`— removed early`, `— still up …`) follows it: an end the log never
+ * showed has no cause to state.
+ */
+export const ENEMY_DEF_END_NOT_LOGGED_SLOT_RE = new RegExp(
+  String.raw`\((?:(?:immune|\d+%|absorb(?: (?:\d+|<1)k)?), )?${ENEMY_DEF_END_NOT_LOGGED}\)`,
+);
+
 /** The start of `enemySaveEffectNote`'s parenthesis, as rendered. */
-const ENEMY_SAVE_EFFECT_NOTE_RE =
-  /^\((?:(absorb)(?: (?:\d+|<1)k)?(?:, \d+\.\ds\b|\))|(heal proc)\)|(cheat-death proc)\))/;
+const ENEMY_SAVE_EFFECT_NOTE_RE = new RegExp(
+  String.raw`^\((?:(absorb)(?: (?:\d+|<1)k)?(?:, \d+\.\ds\b|, ${ENEMY_DEF_END_NOT_LOGGED}\)|\))|(heal proc)\)|(cheat-death proc)\))`,
+);
 
 /** The effect a rendered `[ENEMY DEF]` parenthesis states (the text that
  * follows the ability's name, from its `(`), or undefined when it states
@@ -570,8 +608,14 @@ export function renderedObservedSeconds(observedSeconds: number): number {
  * end the kill-window span is cut at, to the second (codex review of
  * enemy-def F-E2, 2026-10-03: an external at 24.9 s lasting 11.2 s prints
  * `0:24 … (11.2s)`; cut at the raw 36.1 s the next span read `0:36`, the
- * printed facts give 0:35). Undefined when the line prints no length, or a
- * length that rounds to 0.0 s (codex review, 2026-10-04).
+ * printed facts give 0:35). Undefined when the event has no paired aura, or
+ * a length that rounds to 0.0 s (codex review, 2026-10-04).
+ *
+ * An external whose end the log never showed (`endNotLogged`: the line
+ * prints `end not logged`, no length) keeps its span here, at the interval
+ * builder's official-length cap. The one reader cuts `[KILL WINDOW]
+ * defenseless` with it, and "defenseless" claims that nothing was up: an
+ * aura that may still be up for all the log says cannot be read as gone.
  */
 export function renderedExternalSpanS(
   d: Pick<IEnemyDefensiveEvent, "atSeconds" | "observedSeconds">,
@@ -618,8 +662,20 @@ export interface IEnemyDefensiveEvent {
   /** who received an external */
   recipientName?: string;
   recipientId?: string;
-  /** observed aura duration in seconds (from the aura interval); undefined when no interval could be paired */
+  /** Length of the paired aura interval in seconds; undefined when no
+   * interval could be paired. The OBSERVED duration — except with
+   * `endNotLogged`, where it is only the interval builder's cap. */
   observedSeconds?: number;
+  /** The log has no end for this aura (no REMOVED / BROKEN), and the round
+   * did not simply end on it: `observedSeconds` is then the official length
+   * the interval builder closed it at, not an observation, and the
+   * `[ENEMY DEF]` line prints `end not logged` in its place (user ruling D6,
+   * 2026-10-10). On the 605 new-season files 1,302 of 7,541 lines with a
+   * duration had no logged end — Vanish 538, Greater Invisibility 320, Mass
+   * Invisibility 189 — and 1,129 printed the official maximum
+   * (fix-FT/t07-enemydef-vs-raw-605.txt): `Mass Invisibility (immune, 12.0s)`
+   * on a mage hit 3.3 s later. Never set with `removedEarly` / `upAtRoundEnd`. */
+  endNotLogged?: true;
   /** The paired aura interval of an external, so the `[ENEMY DEF]` line can
    * compute what the attackers did during it (GH #91,
    * `externalDamageForApplication`). Undefined when no interval was paired. */
@@ -634,8 +690,9 @@ export interface IEnemyDefensiveEvent {
    * a dispel / steal, its holder's death, an absorb used up. Set only with
    * `removedEarly`; an empty reading means the log gives no cause. */
   earlyEnd?: IAuraEndFromLog;
-  /** The aura was still up when the round ended (its REMOVED is logged
-   * after it): shorter than its full duration, but not removed early. */
+  /** The aura was still up when the round ended — its REMOVED is logged
+   * after it, or the log has none and the round ended inside the aura's
+   * official length: shorter than its full duration, but not removed early. */
   upAtRoundEnd?: true;
 }
 
@@ -785,11 +842,24 @@ export function enemyDefensiveEvents(
     auraId: string,
   ): Pick<
     IEnemyDefensiveEvent,
-    "removedEarly" | "earlyEnd" | "upAtRoundEnd"
+    "removedEarly" | "earlyEnd" | "upAtRoundEnd" | "endNotLogged"
   > => {
-    const early = !iv.inferredEnd && removedEarly(auraId, iv.toS - iv.fromS);
-    if (!early) return { removedEarly: false };
     const endMs = Math.round(combat.startTime + iv.toS * 1000);
+    if (iv.inferredEnd) {
+      // The log has no end for this application: the interval builder closed
+      // it at its official length, and that number is no observation (ruling
+      // D6). One case is not a lost line — the round ended inside the aura's
+      // official length, so the aura was simply still up — unless the carrier
+      // goes unseen (`SAVE_AURA_END_UNSEEN_IDS`): a Mass Invisibility pressed
+      // 10 s before the round's end has no REMOVED either way, and the allied
+      // side shows it broken within a second.
+      return endMs >= combat.endTime &&
+        !SAVE_AURA_END_UNSEEN_IDS.has(iv.spellId)
+        ? { removedEarly: false, upAtRoundEnd: true }
+        : { removedEarly: false, endNotLogged: true };
+    }
+    if (!removedEarly(auraId, iv.toS - iv.fromS))
+      return { removedEarly: false };
     // The interval builder clamps a REMOVED logged after the round's end onto
     // it (a Shuffle round keeps its trailing lines). Then the aura was still
     // up when the round ended: nothing removed it early, and no line at the

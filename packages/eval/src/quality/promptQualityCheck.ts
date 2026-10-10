@@ -103,6 +103,8 @@ import {
   PRESS_HP_LINE_TAGS,
 } from "@gladlog/analysis/src/utils/cooldowns";
 import {
+  ENEMY_DEF_END_NOT_LOGGED,
+  ENEMY_DEF_END_NOT_LOGGED_SLOT_RE,
   ENEMY_SAVE_EFFECT_BY_NAME,
   enemySaveEffectOfNote,
 } from "@gladlog/analysis/src/utils/enemyDefensives";
@@ -1987,7 +1989,10 @@ export function checkResReturnAnnounced(lines: string[]): string[] {
   return failures;
 }
 
-/** `[ENEMY DEF] … X → 5(DDHunter) (11.0s …)` — the observed duration of an external. */
+/** `[ENEMY DEF] … X → 5(DDHunter) (11.0s …)` — the observed duration of an
+ * external. An external whose end the log never showed prints
+ * `(end not logged)` there (ruling D6) and has none: `checkEnemyDefEndNotLogged`
+ * holds that such a line carries no `| during it:` at all. */
 const ENEMY_DEF_EXTERNAL_DUR =
   /\[ENEMY DEF\]\s+.*?→\s*\S+\s*\((\d+(?:\.\d+)?)s/;
 /** One `during it:` segment (segments are `; `-joined; fields ` · `-joined). */
@@ -2309,6 +2314,53 @@ export function checkEnemyDefSaveEffect(lines: string[]): string[] {
         : `line ${i + 1}: [ENEMY DEF] gives ${spell} an effect note (${stated}) it has no claim to: "${line.trim().slice(0, 160)}"`,
     );
   });
+  return failures;
+}
+
+/**
+ * `[ENEMY DEF] … (…, end not logged)` — an aura whose end the log never
+ * showed (user ruling D6, 2026-10-10: "prints `end not logged`, not the
+ * official duration presented as OBSERVED"; 605 new-season files: 1,302 of
+ * 7,541 lines with a duration had no logged end, 1,129 of them printed the
+ * official maximum). What the rendered text can be held to:
+ *  - the phrase stands in the duration's slot and closes the parenthesis
+ *    (`ENEMY_DEF_END_NOT_LOGGED_SLOT_RE`, the producer's) — never beside a
+ *    duration, never with an end note (`— removed early`, `— still up …`):
+ *    an end the log never showed has no length and no cause;
+ *  - the line carries no `| during it:` — what the attackers did "while it
+ *    was up" cannot be measured on an aura with no end
+ *    (`externalDamageForApplication` returns nothing for it);
+ *  - a prompt that prints the phrase defines it in the `[ENEMY DEF]` legend.
+ * Whether a given aura HAD a logged end is the log's to say, not the text's:
+ * `test/enemyDefEndNotLogged.test.ts` (analysis) pins that side.
+ */
+export function checkEnemyDefEndNotLogged(lines: string[]): string[] {
+  const failures: string[] = [];
+  let printed = false;
+  lines.forEach((line, i) => {
+    if (!ENEMY_DEF_LINE.test(line) || !line.includes(ENEMY_DEF_END_NOT_LOGGED))
+      return;
+    printed = true;
+    const fail = (why: string) =>
+      failures.push(
+        `line ${i + 1}: [ENEMY DEF] \`${ENEMY_DEF_END_NOT_LOGGED}\` ${why}: "${line.trim().slice(0, 160)}"`,
+      );
+    if (!ENEMY_DEF_END_NOT_LOGGED_SLOT_RE.test(line))
+      fail("is not alone in the duration's slot");
+    if (line.includes("| during it:"))
+      fail("beside a `during it` window, which needs the aura's end");
+  });
+  if (
+    printed &&
+    !lines.some(
+      (l) =>
+        !ENEMY_DEF_LINE.test(l) &&
+        l.includes(`\`${ENEMY_DEF_END_NOT_LOGGED}\``),
+    )
+  )
+    failures.push(
+      `[ENEMY DEF] lines print \`${ENEMY_DEF_END_NOT_LOGGED}\` but no legend line defines it`,
+    );
   return failures;
 }
 
@@ -3766,6 +3818,7 @@ export function checkMatch(
   hardFailures.push(...checkKickWaitedOutConsistency(lines));
   hardFailures.push(...checkEnemyDefRefConsistency(lines));
   hardFailures.push(...checkEnemyDefSaveEffect(lines));
+  hardFailures.push(...checkEnemyDefEndNotLogged(lines));
   hardFailures.push(...checkBrokeOutRefConsistency(lines));
   hardFailures.push(...checkFactsBlockIntegrity(lines));
   hardFailures.push(...checkPetCreditSide(lines));

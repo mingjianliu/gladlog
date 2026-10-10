@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   checkBrokeOutRefConsistency,
+  checkEnemyDefEndNotLogged,
   checkEnemyDefRefConsistency,
   checkEnemyDefSaveEffect,
   checkGuardianSpiritSaveClause,
@@ -448,6 +449,108 @@ describe("checkEnemyDefSaveEffect (FT-T07, ruling D8)", () => {
     ]);
     expect(f).toHaveLength(2);
     expect(f[0]).toContain("no claim to");
+  });
+
+  it("ruling D6: Feign Death's shield with no logged end still reads as its effect", () => {
+    expect(
+      checkEnemyDefSaveEffect([
+        D(HUNTER, "Feign Death (absorb, end not logged) (at 67% HP)"),
+        D(HUNTER, "Feign Death (absorb 64k, end not logged)"),
+        D("4(FMage) (Fire Mage)", "Mass Invisibility (immune, end not logged)"),
+      ]),
+    ).toEqual([]);
+    expect(
+      checkEnemyDefSaveEffect([
+        D(HUNTER, "Feign Death (immune, end not logged)"),
+      ]),
+    ).toHaveLength(1);
+  });
+});
+
+/**
+ * FT-T07 / T15 ③, user ruling D6 (2026-10-10): an `[ENEMY DEF]` aura whose
+ * end the log never showed prints `end not logged` in the duration's slot —
+ * alone there, with no `during it` window, and defined by the legend.
+ */
+describe("checkEnemyDefEndNotLogged (FT-T07 / T15, ruling D6)", () => {
+  const D = (who: string, rest: string) =>
+    `0:04  [ENEMY DEF]   ${who}: ${rest}`;
+  const MAGE = "4(AMage) (Arcane Mage)";
+  const DRUID = "5(RDruid) (Restoration Druid)";
+  const END_LEGEND =
+    "    `end not logged` in place of Ts = the log never shows that aura end (an enemy who goes invisible takes the";
+
+  it("passes every rendered form, and a prompt that never prints the phrase", () => {
+    expect(
+      checkEnemyDefEndNotLogged([
+        LEGEND,
+        END_LEGEND,
+        D(MAGE, "Mass Invisibility (immune, end not logged) (at 100% HP)"),
+        D(
+          MAGE,
+          "Greater Invisibility (60%, end not logged) [friendly offensive CD active] (at 41% HP)",
+        ),
+        D("4(SRogue) (Subtlety Rogue)", "Vanish (immune, end not logged)"),
+        D(DRUID, "Ironbark → 4(AMage) (end not logged) (target at 40% HP)"),
+        D(
+          "6(BMHunter) (Beast Mastery Hunter)",
+          "Feign Death (absorb 64k, end not logged) (at 67% HP)",
+        ),
+        // lines with a logged end are none of this gate's business
+        D(MAGE, "Mass Invisibility (immune, 0.7s — removed early)"),
+        D(
+          DRUID,
+          "Ironbark → 4(AMage) (12.0s) | during it: 1 40k on target · 100% of their enemy-player damage · direct 40k / periodic 0k · damage in 2 of 12 s · longest gap 9 s",
+        ),
+      ]),
+    ).toEqual([]);
+    expect(
+      checkEnemyDefEndNotLogged([
+        LEGEND,
+        D(MAGE, "Ice Block (immune, 10.0s) (at 20% HP)"),
+      ]),
+    ).toEqual([]);
+  });
+
+  it.each([
+    [
+      "the official length left beside it",
+      "Mass Invisibility (immune, 12.0s, end not logged)",
+    ],
+    [
+      "an end note on an end the log never showed",
+      "Greater Invisibility (60%, end not logged — removed early)",
+    ],
+    [
+      "the phrase outside the duration's slot",
+      "Vanish (immune, 1.5s) — end not logged",
+    ],
+  ])("fails %s", (_why, rest) => {
+    const f = checkEnemyDefEndNotLogged([LEGEND, END_LEGEND, D(MAGE, rest)]);
+    expect(f).toHaveLength(1);
+    expect(f[0]).toContain("not alone in the duration's slot");
+  });
+
+  it("fails a `during it` window on an external whose end is not logged", () => {
+    const f = checkEnemyDefEndNotLogged([
+      LEGEND,
+      END_LEGEND,
+      D(
+        DRUID,
+        "Ironbark → 4(AMage) (end not logged) | during it: 1 40k on target · 100% of their enemy-player damage · direct 40k / periodic 0k · damage in 2 of 12 s · longest gap 9 s",
+      ),
+    ]);
+    expect(f).toHaveLength(1);
+    expect(f[0]).toContain("during it");
+  });
+
+  it("fails a prompt that prints the phrase without a legend line for it", () => {
+    const f = checkEnemyDefEndNotLogged([
+      LEGEND,
+      D(MAGE, "Mass Invisibility (immune, end not logged) (at 100% HP)"),
+    ]);
+    expect(f).toHaveLength(1);
+    expect(f[0]).toContain("no legend line defines it");
   });
 });
 

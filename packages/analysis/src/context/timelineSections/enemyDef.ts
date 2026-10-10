@@ -16,6 +16,7 @@ import {
 } from "../../utils/cooldowns";
 import { isEnemyCdWindowSpell } from "../../utils/enemyCDs";
 import {
+  ENEMY_DEF_END_NOT_LOGGED,
   enemyDefensiveEvents,
   enemySaveEffectNote,
   renderedObservedSeconds,
@@ -107,8 +108,13 @@ export function emitEnemyDefEntries(
                   : end?.takeUnclear
                     ? " — a dispel of this spell is logged at that moment, not which copy it took"
                     : " — removed early";
-        const dur =
-          d.observedSeconds !== undefined
+        // Ruling D6 (2026-10-10): an aura the log never shows end prints
+        // that, not the official length the interval was closed at — the
+        // number was read as OBSERVED (`Mass Invisibility (immune, 12.0s)` on
+        // a mage hit 3.3 s later).
+        const dur = d.endNotLogged
+          ? ENEMY_DEF_END_NOT_LOGGED
+          : d.observedSeconds !== undefined
             ? `${renderedObservedSeconds(d.observedSeconds).toFixed(1)}s${earlyNote}`
             : "";
         const tSec = toRenderSecond(d.atSeconds);

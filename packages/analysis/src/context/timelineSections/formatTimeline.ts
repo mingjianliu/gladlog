@@ -13,6 +13,7 @@ import {
   DEATH_WINDOW_S,
   TIMELINE_LINE_FLAGS,
 } from "../../data/timelineLineFlags";
+import { ENEMY_DEF_END_NOT_LOGGED } from "../../utils/enemyDefensives";
 import { BURST_ANSWERED_LEGEND } from "../burstAnswered";
 import { CD_PRIOR_LEGEND } from "../cdPrior";
 import { PRESSED_DURING_NOTE_HEAD } from "../controlRejectedPresses";
@@ -310,8 +311,11 @@ export function formatTimeline(
     ...(TIMELINE_LINE_FLAGS.enemyDef === "timeline"
       ? [
           "  [ENEMY DEF] = an enemy pressed a defensive at that second: `(N%, Ts)` = official damage reduction (with the",
-          "    caster's own talents where the log shows them) and the OBSERVED duration in this round; `immune` = full",
-          "    immunity, or the unit could not be hit while it lasted (Burrow, Time Stop, Mass Invisibility, Vanish);",
+          "    caster's own talents where the log shows them) and the OBSERVED duration in this round;",
+          // Ruling D6 (2026-10-10): what stands there when the log has no end.
+          `    \`${ENEMY_DEF_END_NOT_LOGGED}\` in place of Ts = the log never shows that aura end (an enemy who goes invisible takes the`,
+          "    line with them) — how long it lasted is unknown: it is NOT the full duration, and the unit may have been hit seconds later.",
+          "    `immune` = full immunity, or the unit could not be hit while it lasted (Burrow, Time Stop, Mass Invisibility, Vanish);",
           "    `(absorb Nk, Ts)` = Feign Death: a shield, not an immunity — the hunter can still be hit; Nk = what it absorbed",
           "    while up (no figure = the log shows none). `(heal proc)` = Nature's Guardian healed its owner; `(cheat-death proc)`",
           "    = Cheat Death / Cauterize refused a killing blow — passives nobody pressed, and the unit can still be hit.",

@@ -379,6 +379,38 @@ export const ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS: ReadonlySet<string> = new Set([
   "414664", // Mass Invisibility (U-KA3b)
 ]);
 
+/**
+ * The enemy WALL auras whose carrier goes unseen — the wall-side half of
+ * "the log never shows this aura end" (`enemyDefensives.SAVE_AURA_END_UNSEEN_IDS`;
+ * the immunity-kind half is `ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS`). One entry:
+ * Greater Invisibility's logged aura 110960 (cast 110959, the 60 % row of
+ * `MITIGATION_TABLE`). User ruling D6 (2026-10-10): "the existing ruling
+ * P-FU-b8 ('only an aura the log saw end counts') is extended to Greater
+ * Invisibility".
+ *
+ * Corpus, the 605 new-season raw files, split by whether the carrier is the
+ * recorder's ally or opponent (fix-FT/t07-stealth-lifetimes-605.txt):
+ *
+ *                              on an ally                  on an opponent
+ *   Greater Invisibility   375, 373 with a REMOVED;    339, 329 with NO REMOVED
+ *     110960 (20 s)        median 0.74 s, p90 9.0 s,
+ *                          3 ran the full 20 s
+ *   Mass Invisibility      244, all with a REMOVED;    200, 197 with none
+ *     414664 (12 s)        median 0.72 s
+ *   Vanish 11327 (1.5 s)   518, 514 with a REMOVED     566, 547 with none
+ *
+ * An opponent who goes invisible takes the aura's REMOVED line out of the
+ * recorder's log with them; the interval builder then closes it at the
+ * official 20 s, an order of magnitude past what the allied side shows.
+ * DB2 has no row to read this from (110960 carries invisibility auras only,
+ * and the generated effect tables hold no stealth flag), so it is a signed
+ * list — registered in `curatedIdRegistry`. Keyed by the LOGGED AURA id → the
+ * name its `[ENEMY DEF]` line prints (a test holds it to the spell data).
+ */
+export const ENEMY_STEALTH_WALL_AURAS: Readonly<Record<string, string>> = {
+  "110960": "Greater Invisibility",
+};
+
 /** A cast that puts an immunity aura on ANOTHER unit (cast id → aura id).
  * Guardian of the Forgotten Queen: the paladin casts 228049 on an ally and
  * the summoned guardian applies 228050, so the aura's source is never the

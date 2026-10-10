@@ -191,6 +191,12 @@ describe("GH #97 timeline flags", () => {
       "0:30  [ENEMY DEF]   4(RDruid) (Restoration Druid): Barkskin (20%, 12.0s)",
     );
     expect(on).toContain("[ENEMY DEF] = ");
+    // ruling D6: the legend that calls Ts OBSERVED says what stands there
+    // when the log has no end for the aura
+    expect(on).toContain("OBSERVED duration in this round;");
+    expect(on).toContain(
+      "`end not logged` in place of Ts = the log never shows that aura end",
+    );
     for (const mode of ["off", "stamp"] as const) {
       TIMELINE_LINE_FLAGS.enemyDef = mode;
       const text = render();

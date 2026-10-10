@@ -217,6 +217,7 @@ import spellIdLists, {
   ENEMY_PROC_SAVES,
   ENEMY_REDIRECT_SAVE_IDS,
   ENEMY_SELF_SAVE_ONLY_IDS,
+  ENEMY_STEALTH_WALL_AURAS,
 } from "./spellIdLists";
 import { trinketSpellIds } from "./spellTags";
 import { TALENT_MITIGATION_MODIFIERS } from "./talentMitigationModifiers";
@@ -332,6 +333,14 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
     "data/spellIdLists.ts",
     "aura",
     () => set(ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS),
+  ),
+  // user ruling D6: the wall aura whose carrier goes unseen (Greater
+  // Invisibility) — with the three above, "the log never shows it end"
+  t(
+    "spellIdLists.ENEMY_STEALTH_WALL_AURAS",
+    "data/spellIdLists.ts",
+    "aura",
+    () => keys(ENEMY_STEALTH_WALL_AURAS),
   ),
   t("spellIdLists.ENEMY_PROC_SAVES", "data/spellIdLists.ts", "aura", () =>
     keys(ENEMY_PROC_SAVES),
