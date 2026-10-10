@@ -2363,9 +2363,12 @@ export function positionMistakeEvents(
         if (e.endEnemyName && e.endEnemyName !== e.nearestEnemyName)
           facts.endEnemy = e.endEnemyName;
         // B24b (user ruling 2026-10-06): who dealt the most damage to the
-        // owner over the span — `enemy` / `endEnemy` are only who stood
-        // nearest. The same event field the STAYED IN line renders and the
-        // positioning gate recomputes (G4c).
+        // owner over the span. The same event field the STAYED IN line
+        // renders and the positioning gate recomputes (G4c). Since FT-T12 D2
+        // (user ruling 2026-10-10) `enemy` IS this player and `endEnemy` is
+        // absent, except on the nearest-enemy fallback
+        // (`spanMeasuredEnemy`), where `enemy` / `endEnemy` are only who
+        // stood nearest — the legend states both cases.
         if (e.topDamagerName) facts.topDamager = e.topDamagerName;
         if (e.ownerCcSeconds !== undefined)
           facts.ccS = String(Math.round(e.ownerCcSeconds));

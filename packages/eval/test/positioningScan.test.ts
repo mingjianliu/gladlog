@@ -4,7 +4,11 @@
  * time and a fast-movement escape cannot be triggered). This carries the hard
  * gate on mutation detection.
  */
-import { CC_MAX_PLAUSIBLE_RANGE_YARDS } from "@gladlog/analysis";
+import {
+  CC_MAX_PLAUSIBLE_RANGE_YARDS,
+  computeOwnerPositionEvents,
+  formatPositionEventsForContext,
+} from "@gladlog/analysis";
 import { describe, expect, it } from "vitest";
 import {
   checkGeoClaims,
@@ -84,7 +88,19 @@ describe("G4 endpoint identity (2026-09-26, audits 483f / eb80)", () => {
       ["start", "Bad-Realm-US", 55, 10],
       ["end", "Buddy-Realm-US", 65, 2.1],
       ["end-own", "Bad-Realm-US", 65, 22.7],
+      // G4d (FT-T12 D2): the span's identity claim — whom the two ends name
+      [undefined, "Bad-Realm-US", 55, 0],
     ]);
+    expect(claims.map((c) => c.kind)).toEqual([
+      "STAYED_OR_KITED",
+      "STAYED_OR_KITED",
+      "STAYED_OR_KITED",
+      "MEASURED_ENEMY",
+    ]);
+    expect(claims[3]).toMatchObject({
+      toSeconds: 65,
+      endUnitName: "Buddy-Realm-US",
+    });
   });
 
   it("a wrong 'X Dyd at the end' is caught (codex review: 22.7 → 999 used to pass)", () => {
@@ -392,5 +408,151 @@ describe("G4c TOP_DAMAGER — STAYED 'most damage to you in the span' (B24b)", (
   it("the mutation harness perturbs the amount and is detected", () => {
     const m = mutationDetectionRate(top("Mage-Realm-US", 1095), tctx);
     expect(m.byKind["TOP_DAMAGER"]).toEqual({ mutated: 1, detected: 1 });
+  });
+});
+
+describe("G4d MEASURED_ENEMY — a STAYED span is measured to the enemy that hit the owner most (FT-T12 D2)", () => {
+  const dmg = (s: number, srcUnitId: string, amount: number) => ({
+    logLine: { timestamp: START + s * 1000 },
+    srcUnitId,
+    effectiveAmount: -amount,
+  });
+  // the healer is nearest (3 yd); the mage is in close range (8 yd) and hits
+  const healer = { ...staticUnit("Heal-Realm-US", 3, 0, START), id: "e-heal" };
+  const mage = { ...staticUnit("Mage-Realm-US", 8, 0, START), id: "e-mage" };
+  const hits = [dmg(81, "e-heal", 8_000), dmg(83, "e-mage", 600_000)];
+  const mk = (damageIn: unknown[], enemies: any[] = [healer, mage]) => {
+    const me = { ...owner, id: "me", damageIn };
+    return {
+      ...ctx,
+      owner: me,
+      friends: [me],
+      enemies,
+      units: [me, ...enemies],
+    } as any;
+  };
+  const measuredLine =
+    "    1:21–1:31 [High burst] 8→8yd from Mage-Realm-US (nearest enemy 3–3yd over the window) — you were the burst target — most damage to you in the span: Mage-Realm-US (600k)";
+  const nearestLine =
+    "    1:21–1:31 [High burst] 3→3yd from Heal-Realm-US — you were the burst target";
+  const codes = (line: string, c: any) =>
+    checkGeoClaims(extractGeoClaims(line).claims, c).violations.map(
+      (v) => v.code,
+    );
+  const identity = (line: string) =>
+    extractGeoClaims(line).claims.filter((c) => c.kind === "MEASURED_ENEMY");
+
+  it("extracts one identity claim per STAYED span line, none for a bare-time or KITED line", () => {
+    expect(identity(measuredLine)).toEqual([
+      expect.objectContaining({
+        kind: "MEASURED_ENEMY",
+        atSeconds: 81,
+        toSeconds: 91,
+        unitName: "Mage-Realm-US",
+      }),
+    ]);
+    expect(identity("    1:21 [High burst] 8→8yd from Mage-Realm-US")).toEqual(
+      [],
+    );
+    expect(
+      identity(
+        "    1:21 [High burst] opened 8→20yd from Mage-Realm-US (peak at 1:29)",
+      ),
+    ).toEqual([]);
+  });
+
+  it("passes for the producer's own answer, range clause and all", () => {
+    const r = checkGeoClaims(extractGeoClaims(measuredLine).claims, mk(hits));
+    expect(r.violations).toEqual([]);
+    // start + end distance, the top damager, the measured enemy
+    expect(r.checked).toBe(4);
+  });
+
+  it("catches the pre-D2 reading: the nearest enemy named while another one hit most", () => {
+    expect(codes(nearestLine, mk(hits))).toEqual(["G4_MEASURED_ENEMY"]);
+  });
+
+  it("catches the two-enemy form on a span that has a measured enemy", () => {
+    expect(
+      codes(
+        "    1:21–1:31 [High burst] 8→3yd from Mage-Realm-US→Heal-Realm-US (Mage-Realm-US 8yd at the end)",
+        mk(hits),
+      ),
+    ).toEqual(["G4_MEASURED_ENEMY"]);
+  });
+
+  it("asserts nothing on the fallback: no enemy damage, a tie, or no distance at an endpoint", () => {
+    const count = (c: any) => checkGeoClaims(identity(nearestLine), c).checked;
+    expect(codes(nearestLine, mk([]))).toEqual([]);
+    expect(count(mk([]))).toBe(0);
+    const tie = [dmg(81, "e-heal", 5_000), dmg(83, "e-mage", 5_000)];
+    expect(codes(nearestLine, mk(tie))).toEqual([]);
+    expect(count(mk(tie))).toBe(0);
+    // the mage's position stream ends at 1:24: no distance at the span end
+    const goneMage = {
+      ...mage,
+      advancedActions: mage.advancedActions.filter(
+        (a: { timestamp: number }) => a.timestamp <= START + 84_000,
+      ),
+    };
+    expect(codes(nearestLine, mk(hits, [healer, goneMage]))).toEqual([]);
+    expect(count(mk(hits, [healer, goneMage]))).toBe(0);
+  });
+
+  it("the mutation harness swaps the name for another enemy's and is detected", () => {
+    const m = mutationDetectionRate(identity(measuredLine), mk(hits));
+    expect(m.byKind["MEASURED_ENEMY"]).toEqual({ mutated: 1, detected: 1 });
+    // one enemy on the roster: no other name to swap in, nothing counted
+    const solo = mutationDetectionRate(
+      identity(measuredLine),
+      mk([dmg(83, "e-mage", 600_000)], [mage]),
+    );
+    expect(solo.byKind["MEASURED_ENEMY"]).toBeUndefined();
+  });
+
+  it("round trip: the line the producer renders for this roster passes every G4 check", () => {
+    // the producer reads HP through `logLine.timestamp`; the gate's fixture
+    // units carry the bare `timestamp` only
+    const logged = (u: any) => ({
+      ...u,
+      advancedActions: u.advancedActions.map((a: { timestamp: number }) => ({
+        ...a,
+        logLine: { timestamp: a.timestamp },
+      })),
+    });
+    const c = mk(hits, [logged(healer), logged(mage)]);
+    c.owner = logged(c.owner);
+    c.friends = [c.owner];
+    c.units = [c.owner, ...c.enemies];
+    const events = computeOwnerPositionEvents({
+      owner: c.owner,
+      enemies: c.enemies,
+      combat: {
+        startTime: START,
+        endTime: START + 120_000,
+        units: Object.fromEntries(c.units.map((u: any) => [u.id, u])),
+      } as any,
+      burstWindows: [
+        {
+          fromSeconds: 81,
+          toSeconds: 91,
+          dangerLabel: "High",
+          dampeningPct: 0,
+          mostPressuredTarget: { unitName: "Me-Realm-US" },
+        },
+      ] as any,
+      ownerCooldowns: [],
+      isHealer: true,
+      ownerIsMelee: false,
+    });
+    const line = formatPositionEventsForContext(events).find((l) =>
+      l.includes(" burst] "),
+    )!;
+    expect(line).toContain("1:21–1:31 [High burst] 8→8yd from Mage-Realm-US ");
+    const r = checkGeoClaims(extractGeoClaims(line).claims, c);
+    expect(r.violations).toEqual([]);
+    expect(extractGeoClaims(line).claims.map((x) => x.kind)).toContain(
+      "MEASURED_ENEMY",
+    );
   });
 });

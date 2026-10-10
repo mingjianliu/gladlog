@@ -55,6 +55,12 @@ import { isDeadAt } from "./unitDeath";
 //  · RANGED=45 仅 0.6% 采样超过(40yd 也才 1.2%)—— 保守到几乎只剩真离场,
 //    与行尾「35–40 是正常满射程走位」的设计意图一致。
 // 改任何一条前先重跑 scratchpad pos.mts 形态的分布脚本拿前后数字。
+//
+// FT-T12 D2 (2026-10-10): KITE / STAY / CLOSE_RANGE now read the distance to
+// the span's MEASURED enemy (`spanMeasuredEnemy`: the enemy that hit the owner
+// most, else the nearest), not to the nearest of any enemy at each instant.
+// The values are unchanged and the p66 / p39 placement above was measured on
+// the old quantity — it has NOT been re-measured on the new one.
 export const CLOSE_RANGE_YARDS = 12; // "in range" of an enemy — shared with rootReachability.ts (melee reach)
 const KITE_DELTA_YARDS = 10; // distance gained that counts as a successful kite(p66,见上)
 const STAY_DELTA_YARDS = 5; // distance gained below this = stayed in(p39,见上)
@@ -158,10 +164,21 @@ export interface IPositionEvent {
   /** STAYED_IN only (GH #103 A7): nearest-enemy distance range over the
    * window's whole-second samples plus both endpoints — the endpoints alone
    * ("8→3.3yd") read as "stayed within 3.3–8yd" when the owner had been at
-   * 15yd mid-window. Nearest ENEMY, not the named one: the sweep asks who is
-   * closest at each second, and that can change. */
+   * 15yd mid-window. Nearest of ANY enemy, not the named one: the sweep asks
+   * who is closest at each second, and that can change. It keeps that meaning
+   * after FT-T12 D2 — the endpoints follow the measured enemy
+   * (`spanMeasuredEnemy`), this range does not, so it can sit below both
+   * endpoints when another enemy stood closer than the measured one. */
   minDistanceYards?: number;
   maxDistanceYards?: number;
+  /** STAYED_IN / KITED: the enemy `startDistanceYards` is measured to. Since
+   *  FT-T12 D2 (user ruling 2026-10-10) that is the span's measured enemy —
+   *  the enemy player who dealt the most landed damage to the owner over the
+   *  span (`spanMeasuredEnemy`) — and `endEnemyName` / `peakEnemyName` are
+   *  then the same player. Only on the fallback (no enemy damage, a tie, no
+   *  distance at an endpoint) is it what the name says: the enemy nearest at
+   *  the span start. (CD_OUT_OF_RANGE / SPLIT_PUSH / HEALER_TRAINED reuse the
+   *  field for their own subject.) */
   nearestEnemyName?: string;
   /** Burst window threat label for STAYED_IN / KITED */
   dangerLabel?: string;
@@ -216,15 +233,20 @@ export interface IPositionEvent {
    *  (`buildCannotCastIntervals` — CC, silence, kick lockout: the one
    *  feasibility predicate), read beside "a defensive CD was available". */
   ownerCannotCastSeconds?: number;
-  /** STAYED_IN: the enemy nearest at the evaluated end (`endDistanceYards`
-   *  is its distance), and — when it is not `nearestEnemyName` — that start
-   *  enemy's own distance at the end */
+  /** STAYED_IN: the enemy `endDistanceYards` is measured to, and — when it
+   *  is not `nearestEnemyName` — that start enemy's own distance at the end.
+   *  The two names can differ only on the nearest-enemy fallback; a span
+   *  measured to one enemy (`spanMeasuredEnemy`) names it at both ends. */
   endEnemyName?: string;
   startEnemyEndYards?: number;
   /** STAYED_IN (B-tier B24b): the enemy player who dealt the most landed
    *  damage to the owner over the span's rendered seconds, and that damage
    *  (`topEnemyDamagerInSpan`). The nearest enemy is often the enemy healer
-   *  (2abc9185 @81: nearest = a Holy Priest with 8k of the 1.9M taken). */
+   *  (2abc9185 @81: nearest = a Holy Priest with 8k of the 1.9M taken).
+   *  Since FT-T12 D2 this is also the enemy the span's distances are
+   *  measured to, unless the span fell back (`spanMeasuredEnemy`): a tie
+   *  still prints its name-order pick here, and so does a top damager with
+   *  no distance at an endpoint. */
   topDamagerName?: string;
   topDamagerDamage?: number;
   /** STAYED_IN: the owner's own straight-line displacement between the span's
@@ -232,8 +254,10 @@ export interface IPositionEvent {
    *  walked ~18.5 yd while a Death Knight kept up, and "STAYED IN … little
    *  distance gained" was retold as "stood still" (原地硬抗). */
   ownerMovedYards?: number;
-  /** KITED: when and from whom the peak nearest-enemy distance
-   *  (`endDistanceYards`) was measured */
+  /** KITED: when and from whom the peak distance (`endDistanceYards`) was
+   *  measured — the measured enemy's peak (`spanMeasuredEnemy`), so
+   *  `peakEnemyName` is `nearestEnemyName`; on the fallback, the peak of the
+   *  nearest enemy at each second, who may be another one */
   peakSeconds?: number;
   peakEnemyName?: string;
   /** CD_OUT_OF_RANGE only */
@@ -352,6 +376,63 @@ export function topEnemyDamagerInSpan(
  *  producer writes it and the positioning gate's G4c parses it back. */
 export const topDamagerClause = (name: string, damage: number): string =>
   ` — most damage to you in the span: ${name} (${Math.round(damage / 1000)}k)`;
+
+/**
+ * FT-T12 D2 (user ruling 2026-10-10, "option C"): the ONE enemy a STAYED IN /
+ * KITED span measures its distances to — the enemy player who dealt the most
+ * landed damage to the owner over the span's rendered seconds
+ * (`topEnemyDamagerInSpan`, the B24b reading the STAYED IN line prints).
+ *
+ * null — the caller falls back, for the WHOLE span, to the nearest enemy at
+ * each instant (the rule before the ruling) — when:
+ *  - no enemy damage landed on the owner in the span;
+ *  - two enemies tie for the most (a tie has no "the one who hit you most";
+ *    `topEnemyDamagerInSpan`'s name-order tie-break is a rendering
+ *    convention, not a reason to measure one of the two);
+ *  - that enemy has no distance at the span's first or last rendered second
+ *    (dead, or no position sample within POSITION_MAX_GAP_MS — the owner's
+ *    own missing position counts too, and then the fallback has none either).
+ *
+ * Why: start, end and every mid-span sample used to read whoever stood
+ * nearest at that instant, so "A→B yd" paired two enemies' distances (605
+ * capture: 974 of 2,156 STAYED IN lines, 582 of 1,121 KITED lines; s0/1-6-16:
+ * a druid went 3 → 21.9 yd while a paladin closed to 1.2 yd, read "stayed in
+ * 3→1.2"). The 12 yd entry gate reads the measured enemy as well: a span
+ * whose top damager starts beyond `CLOSE_RANGE_YARDS` yields no event — and
+ * no position-mistake candidate — however close another enemy stood. The
+ * user was shown that consequence on the 605 capture and accepted it:
+ * position-mistake 341 rows → +8 / −150, every one `stayed-in`.
+ *
+ * ONE predicate, two readers: the producer below and the positioning gate's
+ * G4d, which re-reads a STAYED IN line's rendered span and the name after
+ * "from" and calls this again.
+ */
+export function spanMeasuredEnemy<E extends ICombatUnit>(
+  owner: ICombatUnit,
+  enemies: readonly E[],
+  allUnits: ReadonlyArray<Pick<ICombatUnit, "id" | "ownerId">>,
+  matchStartMs: number,
+  fromRenderS: number,
+  toRenderS: number,
+): E | null {
+  const read = (among: readonly E[]) =>
+    topEnemyDamagerInSpan(
+      owner,
+      among,
+      allUnits,
+      matchStartMs,
+      fromRenderS,
+      toRenderS,
+    );
+  const top = read(enemies);
+  const unit = top ? enemies.find((e) => e.name === top.name) : undefined;
+  if (!top || !unit) return null;
+  const runnerUp = read(enemies.filter((e) => e !== unit));
+  if (runnerUp && runnerUp.damage === top.damage) return null;
+  const hasDistanceAt = (renderS: number) =>
+    nearestEnemyAt([unit], null, matchStartMs + renderS * 1000, owner) !== null;
+  return hasDistanceAt(fromRenderS) && hasDistanceAt(toRenderS) ? unit : null;
+}
 
 /** The owner's straight-line displacement between two rendered seconds,
  *  one decimal — the "you moved N yd yourself (span start→end)" fact. The
@@ -488,10 +569,12 @@ export function beyondReachThroughout(
 }
 
 /**
- * "X" when the nearest enemy at the end is still the start's, else "X→Y"
+ * "X" when the enemy measured at the end is still the start's, else "X→Y"
  * plus the start enemy's own end distance — the two distances of
  * "A→B yd from …" name whoever they were measured to (audit eb80: "10→2.1yd
  * from Pressbro" while Pressbro was 22.7 yd away and 2.1 yd was Mastutinho).
+ * Since FT-T12 D2 a span measured to one enemy (`spanMeasuredEnemy`) always
+ * prints the bare "X"; "X→Y" is left to the nearest-enemy fallback.
  * positioningScan G4 parses this form.
  */
 export function stayedEndpointNames(
@@ -509,7 +592,9 @@ export function stayedEndpointNames(
   return `${e.nearestEnemyName}→${e.endEnemyName}${own}`;
 }
 
-/** KITED's B is the PEAK nearest-enemy distance: say when, and from whom
+/** KITED's B is the PEAK distance — to the span's measured enemy
+ *  (`spanMeasuredEnemy`), or on the fallback to the nearest enemy at each
+ *  second: say when, and from whom
  *  when it is not the start enemy. positioningScan G4 parses this form. */
 export function kitedPeakStr(
   e: Pick<IPositionEvent, "nearestEnemyName" | "peakSeconds" | "peakEnemyName">,
@@ -725,25 +810,48 @@ export function computeOwnerPositionEvents(params: {
     const tStart = toRenderSecond(w.fromSeconds);
     const tEnd = toRenderSecond(evalEnd);
     if (tEnd <= tStart) continue;
-    const start = nearestEnemyAt(
-      enemies,
-      null,
-      matchStartMs + tStart * 1000,
+    // FT-T12 D2 (user ruling 2026-10-10): the start, the end and every
+    // mid-span sample of this span read ONE enemy — the one that hit the
+    // owner most over it (`spanMeasuredEnemy`, which also states the three
+    // fallback cases) — so the STAYED_IN / KITED verdict, both rendered lines
+    // and the position-mistake candidate built from the event cannot pair two
+    // enemies' distances. On the fallback the WHOLE span reads the nearest
+    // enemy at each instant, as it did before; the two rules are never mixed
+    // inside one span.
+    const nearestAt = (t: number) =>
+      nearestEnemyAt(enemies, null, matchStartMs + t * 1000, owner);
+    const measured = spanMeasuredEnemy(
       owner,
-    );
-    const end = nearestEnemyAt(
       enemies,
-      null,
-      matchStartMs + tEnd * 1000,
-      owner,
+      combatUnits,
+      matchStartMs,
+      tStart,
+      tEnd,
     );
+    const sampleAt = measured
+      ? (t: number) =>
+          nearestEnemyAt([measured], null, matchStartMs + t * 1000, owner)
+      : nearestAt;
+    const start = sampleAt(tStart);
+    const end = sampleAt(tEnd);
     if (!start || !end) continue;
-    if (start.distanceYards > CLOSE_RANGE_YARDS) continue; // was not in range to begin with
+    // The entry gate reads the measured enemy too (D2): the enemy hitting the
+    // owner most was not in close range to begin with ⇒ no event, even with
+    // another enemy on top of the owner.
+    if (start.distanceYards > CLOSE_RANGE_YARDS) continue;
 
     // Sample every second across the window: hit-and-run kiting (out and back)
     // shows up as a mid-window peak that endpoint-only checks would miss.
     let maxDistance = Math.max(start.distanceYards, end.distanceYards);
-    let minDistance = Math.min(start.distanceYards, end.distanceYards);
+    // `maxDistance` (the KITED peak) follows the sampled enemy; the STAYED IN
+    // line's "(nearest enemy A–B yd over the window)" (`minDistance` /
+    // `nearestMax`) keeps its own meaning — the nearest of ANY enemy at each
+    // second — whichever rule measured the span.
+    const nearestEnds = [nearestAt(tStart), nearestAt(tEnd)].flatMap((n) =>
+      n ? [n.distanceYards] : [],
+    );
+    let nearestMax = Math.max(...nearestEnds);
+    let minDistance = Math.min(...nearestEnds);
     // the peak's own identity and time (KITED renders it; audit 483f / eb80:
     // "A→B yd from X" used to pair X with another enemy's distance)
     let peak =
@@ -751,20 +859,20 @@ export function computeOwnerPositionEvents(params: {
         ? { d: end.distanceYards, enemy: end.enemyName, t: tEnd }
         : { d: start.distanceYards, enemy: start.enemyName, t: tStart };
     for (let t = tStart + 1; t < tEnd; t += 1) {
-      const sample = nearestEnemyAt(
-        enemies,
-        null,
-        matchStartMs + t * 1000,
-        owner,
-      );
+      const sample = sampleAt(t);
+      const near = nearestAt(t);
+      if (near) {
+        nearestMax = Math.max(nearestMax, near.distanceYards);
+        minDistance = Math.min(minDistance, near.distanceYards);
+      }
       if (sample) {
         maxDistance = Math.max(maxDistance, sample.distanceYards);
-        minDistance = Math.min(minDistance, sample.distanceYards);
         if (sample.distanceYards > peak.d)
           peak = { d: sample.distanceYards, enemy: sample.enemyName, t };
       }
     }
     // the start enemy's own distance at the end, when someone else is nearest
+    // (fallback rule only: a measured span has one enemy at both ends)
     const startEnemy = enemies.find((e) => e.name === start.enemyName);
     const startEnemyEndPos =
       startEnemy && end.enemyName !== start.enemyName
@@ -838,8 +946,9 @@ export function computeOwnerPositionEvents(params: {
     // where the owner stood at the peak, minus the starting gap — the gap had
     // the enemy stood still. Displacement magnitude alone credited a chase
     // (codex review of batch 10: owner 0→10 yd after an enemy running 5→35
-    // read "KITED 5→25yd"); the peak is measured to the nearest enemy, which
-    // may be another one, so this is the owner's own share of the opening.
+    // read "KITED 5→25yd"); on the fallback rule the peak is measured to the
+    // nearest enemy, which may be another one, so this is the owner's own
+    // share of the opening.
     const startEnemyStartPos = startEnemy
       ? getUnitPositionAtTime(
           startEnemy,
@@ -968,7 +1077,7 @@ export function computeOwnerPositionEvents(params: {
         startDistanceYards: Math.round(start.distanceYards * 10) / 10,
         endDistanceYards: Math.round(end.distanceYards * 10) / 10,
         minDistanceYards: Math.round(minDistance * 10) / 10,
-        maxDistanceYards: Math.round(maxDistance * 10) / 10,
+        maxDistanceYards: Math.round(nearestMax * 10) / 10,
         nearestEnemyName: start.enemyName,
         endEnemyName: end.enemyName,
         ...(startEnemyEndYards !== undefined ? { startEnemyEndYards } : {}),
@@ -1409,6 +1518,11 @@ function lockStr(e: IPositionEvent): string {
   );
 }
 
+/** STAYED IN's "(nearest enemy A–Byd over the window)". The range is the
+ *  nearest of ANY enemy at each second (`STAYED_IN_SECTION_HEADER` says so),
+ *  the endpoints are the measured enemy's (FT-T12 D2): it prints when the
+ *  range leaves the endpoint span, which now includes every span on which
+ *  another enemy stood closer than the measured one. */
 function rangeStr(e: IPositionEvent): string {
   if (
     e.minDistanceYards === undefined ||
@@ -1422,6 +1536,22 @@ function rangeStr(e: IPositionEvent): string {
   if (e.minDistanceYards >= lo && e.maxDistanceYards <= hi) return "";
   return ` (nearest enemy ${e.minDistanceYards}–${e.maxDistanceYards}yd over the window)`;
 }
+
+/**
+ * The two section headers of the burst-span lines. They are the only place
+ * the prompt says WHO "A→B yd from X" is measured to, so they state the rule
+ * `spanMeasuredEnemy` implements (FT-T12 D2, user ruling 2026-10-10) and its
+ * fallback, and that the STAYED IN range clause is a different reading.
+ * Before the ruling the STAYED IN header read "an enemy stayed in close
+ * range" — true of the nearest enemy at each end, which could be two players.
+ * Neither header may contain the literal "most damage to you": that is the
+ * anchor of a line's own `topDamagerClause`, which the positioning gate (G4c)
+ * and the tests look for.
+ */
+export const STAYED_IN_SECTION_HEADER =
+  "  STAYED IN during enemy burst (A→Byd = your distance, at the span's start and end, to the ONE enemy named after 'from' — the enemy who dealt you the most damage over the span; it started in close range and little distance was gained on it. When no enemy damage landed in the span, two enemies tied for the most, or that enemy had no position at either end, each end reads the nearest enemy at that second instead, and 'from X→Y' names both when they differ. '(nearest enemy A–Byd over the window)' is always the nearest of ANY enemy at each second, not the named one. The line says nothing about whether you moved; see 'you moved'):";
+export const KITED_SECTION_HEADER =
+  "  KITED during enemy burst (opened distance: A = your distance at the start to the ONE enemy named after 'from' — the enemy who dealt you the most damage over the span — and B = your largest distance to that same enemy, at the second in '(peak at m:ss)'. When no enemy damage landed in the span, two enemies tied for the most, or that enemy had no position at either end, A is the nearest enemy at the start and B the largest nearest-enemy distance, with ', from Z' naming the enemy at the peak when it is another one):";
 
 export function formatPositionEventsForContext(
   events: IPositionEvent[],
@@ -1439,9 +1569,7 @@ export function formatPositionEventsForContext(
   const outOfRange = events.filter((e) => e.type === "CD_OUT_OF_RANGE");
 
   if (stayedIn.length > 0) {
-    lines.push(
-      "  STAYED IN during enemy burst (an enemy stayed in close range, little distance gained — says nothing about whether you moved; see 'you moved'):",
-    );
+    lines.push(STAYED_IN_SECTION_HEADER);
     for (const e of stayedIn) {
       // F-S5: availability is sampled at the span start; say how long of the
       // span the owner could not have pressed it
@@ -1513,7 +1641,7 @@ export function formatPositionEventsForContext(
   }
 
   if (kited.length > 0) {
-    lines.push("  KITED during enemy burst (opened distance):");
+    lines.push(KITED_SECTION_HEADER);
     for (const e of kited) {
       const targetStr =
         e.burstTargetsOwner === true

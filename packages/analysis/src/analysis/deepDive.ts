@@ -887,7 +887,7 @@ export function buildDeepDivePrompt(
     ``,
     `HARD RULES:`,
     `- Coach ${ownerShort} (facts with role=owner). role=teammate / role=enemy items are context only — cite a teammate's mistake ONLY when ${ownerShort} could have covered it (peel/CC the attacker, give an external, swap targets).`,
-    `- kind=position items are ${ownerShort}'s own movement: kind=stayed-in = an enemy stayed in close range through a burst while HP dropped — not proof the owner stood still (hpMin is where HP bottomed, defAvail says if a defensive was up); kind=missed-push = drifted out of range (dist yards) when pressure was needed; kind=cd-out-of-range = fired a cooldown (spell) while every enemy stayed beyond that spell's own reach for the next 5 s (summons and self-buffs are never listed). Coach the movement decision, not just cooldown usage.`,
+    `- kind=position items are ${ownerShort}'s own movement: kind=stayed-in = enemy (the enemy who dealt the most damage to the owner over the span; the one nearest at its start when no enemy damage landed, two tied, or that enemy had no position) started in close range and little distance was gained on it through a burst while HP dropped — not proof the owner stood still (hpMin is where HP bottomed, defAvail says if a defensive was up); kind=missed-push = drifted out of range (dist yards) when pressure was needed; kind=cd-out-of-range = fired a cooldown (spell) while every enemy stayed beyond that spell's own reach for the next 5 s (summons and self-buffs are never listed). Coach the movement decision, not just cooldown usage.`,
     ...(packs.some((p) =>
       p.items.some(
         (it) =>
