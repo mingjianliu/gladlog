@@ -122,7 +122,10 @@ function manifestSlice(): string[] {
     .slice(0, Number(flag("--limit", "100000")));
 }
 
-const MENU_ANCHOR = "\n\nEvent menu (the ONLY things that provably happened";
+// The prefix both header wordings share: "…the ONLY things that provably
+// happened" (stored runs before FT-T15) and "…the ONLY events and facts a
+// finding may cite" (buildFindingsPrompt.ts today).
+const MENU_ANCHOR = "\n\nEvent menu (the ONLY ";
 
 export function armBPrompt(promptA: string, section: string): string {
   if (!promptA.includes(CAUSATION_RULE_A))

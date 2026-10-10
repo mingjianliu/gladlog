@@ -202,7 +202,13 @@ export function buildFindingsPrompt(
     `Match context (for reasoning about the arc — do NOT cite anything not in the event menu):`,
     richContext,
     ``,
-    `Event menu (the ONLY things that provably happened — every finding must reference these ids):`,
+    // FT-T15 ① (user ruling 2026-10-10): the header states the citation rule
+    // only. It used to call the menu "the ONLY things that provably happened",
+    // while 3,793 of 8,017 rows on the 605 capture are facts about something
+    // that did NOT happen (a cooldown not pressed, a debuff not dispelled) and
+    // 2,322 carry corpus reference numbers. The constraint itself — cite menu
+    // ids only — is unchanged (see the ACCURACY NOTE above).
+    `Event menu (the ONLY events and facts a finding may cite — every finding must reference these ids):`,
     menu || "  (none)",
     ``,
     `Event legend:`,
