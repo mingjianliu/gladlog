@@ -412,6 +412,10 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     addEntry,
     pid,
     requestSnapshotPlaceholder,
+    allPlayers,
+    bracket,
+    matchStartMs,
+    matchEndMs,
   });
 
   // ── [DEATH] events ────────────────────────────────────────────────────────

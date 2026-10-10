@@ -96,8 +96,18 @@ describe("peakSpikePlacement", () => {
 type Span = { fromSeconds: number; toSeconds: number };
 type Spike = Span & { totalDamage: number; targetName?: string };
 
-function renderHeaders(windows: Span[], spikes: Spike[]): string[] {
+function renderHeaders(
+  windows: Span[],
+  spikes: Spike[],
+  over: Partial<BuildMatchTimelineParams> & { ownerDiedAtMs?: number } = {},
+): string[] {
+  const { ownerDiedAtMs, ...paramOver } = over;
   const owner = mkUnit("o", "Me-Realm", CombatUnitReaction.Friendly);
+  if (ownerDiedAtMs !== undefined)
+    Object.assign(owner, {
+      info: {},
+      deathRecords: [{ timestamp: ownerDiedAtMs }],
+    });
   const mate = mkUnit(
     "m",
     "Mate-Realm",
@@ -157,6 +167,7 @@ function renderHeaders(windows: Span[], spikes: Spike[]): string[] {
     matchEndMs: 200_000,
     isHealer: true,
     criticalWindowSeconds: new Set<number>(),
+    ...paramOver,
   };
 
   return buildMatchTimeline(params)
@@ -301,6 +312,31 @@ describe("[OFFENSIVE WINDOW] names only a spike that overlaps it, and each spike
         [{ fromSeconds: 120, toSeconds: 130, totalDamage: BIG }],
       ),
     ).toEqual([]);
+  });
+
+  it("T12 ① b: the header's end is cut at the round's end — the log's end, or a Solo Shuffle round's first death", () => {
+    const window = [{ fromSeconds: 185, toSeconds: 215 }];
+    const spike = [{ fromSeconds: 188, toSeconds: 198, totalDamage: BIG }];
+    // the log ends at 3:20: a union of buff lengths ran to 3:35
+    expect(renderHeaders(window, spike)).toEqual([
+      "3:05  [OFFENSIVE WINDOW]   3:05–3:20 | peak spike 1.90M on Mate (Enhancement Shaman) over 3:08–3:18 | CDs: Avatar@3:05",
+    ]);
+    // Solo Shuffle: the round is over at the first player death (3:12), 8 s before the log's end
+    expect(
+      renderHeaders(window, spike, {
+        bracket: "Rated Solo Shuffle",
+        ownerDiedAtMs: 192_400,
+      }),
+    ).toEqual([
+      "3:05  [OFFENSIVE WINDOW]   3:05–3:12 | peak spike 1.90M on Mate (Enhancement Shaman) over 3:08–3:18 (runs past window) | CDs: Avatar@3:05",
+    ]);
+    // a window that ends inside the round is untouched
+    expect(
+      renderHeaders(
+        [{ fromSeconds: 32, toSeconds: 54 }],
+        [{ fromSeconds: 37, toSeconds: 47, totalDamage: BIG }],
+      )[0],
+    ).toContain("0:32–0:54");
   });
 
   it("the largest credited spike is the peak, whatever order the buckets arrive in", () => {
