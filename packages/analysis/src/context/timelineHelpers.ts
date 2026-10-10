@@ -45,7 +45,10 @@ import {
   positionalWallReaches,
 } from "../utils/deathOutcomeAnalysis";
 import { IEnemyCDTimeline } from "../utils/enemyCDs";
-import { AURA_BEFORE_CAST_MAX_S } from "../utils/enemyDefensives";
+import {
+  AURA_BEFORE_CAST_MAX_S,
+  SAVE_CAST_AURA_PAIR_S,
+} from "../utils/enemyDefensives";
 import {
   DEFERRAL_SHIELD_DAMAGE_IDS,
   isDeferralAbsorb,
@@ -887,6 +890,80 @@ export const HEALING_BLOCK_LEGEND: readonly string[] = [
   `    spell's weakest later use, not a typical one. A press in the first ${HEALING_WINDOW_EARLY_CD_SECONDS} s with every bucket under ${HEALING_WINDOW_MIN_HPS / 1000}k HPS gets none. A`,
   "    press without the block was not measured.",
 ];
+
+/** The clause a throughput-buff press on a teammate carries when the log
+ * shows the same buff on the caster too — one string for the producer
+ * (`ownerCd.ts`) and for the legend's "did it render" test. */
+export const OWN_AURA_CLAUSE_PREFIX = " | also on you ";
+
+/** Printed by formatTimeline only when a line carries the clause. */
+export const OWN_AURA_CLAUSE_LEGEND: readonly string[] = [
+  "  `| also on you for Ns` on one of your own throughput-cooldown lines = that press went to a teammate and the log shows",
+  "    the same buff applied to you by it as well, on you for N s (`end not logged` = the log has no removal for it). A",
+  "    healing block under such a line is your own healing with the buff on you too; a press on a teammate without the",
+  "    clause = the log shows no such aura on you.",
+];
+
+/**
+ * FT-T15 ④ (user ruling 2026-10-10): the caster's OWN aura from a buff they
+ * pressed on someone else — Power Infusion with the twin talent logs one
+ * cast and two SPELL_AURA_APPLIED, the teammate's and, 8 ms later, the
+ * priest's (5677ba13 1:06). The [HEALING] block under such a press measures
+ * the priest's own healing, and nothing in the prompt said the priest had
+ * the buff (60 re-eval prompts: 8 of 8 `Power Infusion → teammate` blocks
+ * had the owner's aura in the log).
+ *
+ * Read from the log only, never from the talent: an aura of `spellId` on
+ * `caster`, cast by `caster`, applied within `SAVE_CAST_AURA_PAIR_S` of the
+ * press (the cast ↔ aura pairing radius the external-save reader uses).
+ * `seconds` = applied → that aura's first SPELL_AURA_REMOVED; null when the
+ * log has none. Returns null when the log shows no such aura.
+ */
+export function casterOwnAuraOfPress(
+  caster: Pick<ICombatUnit, "id" | "auraEvents">,
+  spellId: string,
+  pressMs: number,
+): { seconds: number | null } | null {
+  const mine = (caster.auraEvents ?? []).filter(
+    (a) => a.spellId === spellId && a.srcUnitId === caster.id,
+  );
+  let appliedMs: number | null = null;
+  for (const a of mine) {
+    if (a.logLine.event !== LogEvent.SPELL_AURA_APPLIED) continue;
+    const gap = Math.abs(a.logLine.timestamp - pressMs);
+    if (gap > SAVE_CAST_AURA_PAIR_S * 1000) continue;
+    if (appliedMs === null || gap < Math.abs(appliedMs - pressMs))
+      appliedMs = a.logLine.timestamp;
+  }
+  if (appliedMs === null) return null;
+  const from = appliedMs;
+  const removedMs = mine
+    .filter(
+      (a) =>
+        a.logLine.event === LogEvent.SPELL_AURA_REMOVED &&
+        a.logLine.timestamp >= from,
+    )
+    .reduce<number | null>(
+      (lo, a) =>
+        lo === null || a.logLine.timestamp < lo ? a.logLine.timestamp : lo,
+      null,
+    );
+  return { seconds: removedMs === null ? null : (removedMs - from) / 1000 };
+}
+
+/** `casterOwnAuraOfPress` as the press line's clause; "" when the log shows
+ * no such aura. */
+export function casterOwnAuraClause(
+  caster: Pick<ICombatUnit, "id" | "auraEvents">,
+  spellId: string,
+  pressMs: number,
+): string {
+  const own = casterOwnAuraOfPress(caster, spellId, pressMs);
+  if (!own) return "";
+  return own.seconds === null
+    ? `${OWN_AURA_CLAUSE_PREFIX}(end not logged)`
+    : `${OWN_AURA_CLAUSE_PREFIX}for ${own.seconds.toFixed(1)}s`;
+}
 
 /**
  * Computes healing throughput during a CD's active window.

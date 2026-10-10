@@ -270,6 +270,117 @@ describe("[HEALING] / [ROT PRESSURE] legends print only with their line family",
     expect(text).not.toContain("[ROT PRESSURE]");
   });
 
+  // FT-T15 ④ (user ruling 2026-10-10): Power Infusion pressed on a teammate
+  // lands on the priest too with the twin talent — one cast, two
+  // SPELL_AURA_APPLIED (5677ba13 1:06: the priest's own 8 ms after the
+  // teammate's, removed 15.0 s later). The [HEALING] block under that press
+  // measures the priest's own healing; the press line now says the priest
+  // had the buff — only when the priest's own aura is in the log.
+  describe("Power Infusion on a teammate: `| also on you` only when the owner's own aura is logged", () => {
+    const PRESS_MS = MATCH_START_MS + 30_000;
+    const aura = (
+      event: LogEvent,
+      atMs: number,
+      srcUnitId = "o",
+    ): ICombatUnit["auraEvents"][number] =>
+      ({
+        timestamp: atMs,
+        spellId: POWER_INFUSION,
+        spellName: "Power Infusion",
+        srcUnitId,
+        srcUnitName: "Source",
+        destUnitId: "o",
+        destUnitName: "Druid-Ravencrest",
+        auraType: "BUFF",
+        logLine: {
+          event,
+          timestamp: atMs,
+          parameters: Object.assign([], { 11: "BUFF" }),
+        },
+      }) as unknown as ICombatUnit["auraEvents"][number];
+    const mate = mkOwner({ id: "m", name: "Lock-Illidan" });
+
+    function timelineOf(
+      ownerAuras: ICombatUnit["auraEvents"],
+      pressedOn: "teammate" | "self" = "teammate",
+    ): string[] {
+      const targetName = pressedOn === "self" ? undefined : mate.name;
+      const owner = mkOwner({
+        auraEvents: ownerAuras,
+        healOut: [heal(PRESS_MS + 1_000, 60_000, 45_000)],
+      });
+      const params = piParams(owner);
+      params.ownerCDs[0]!.casts = [{ timeSeconds: 30, targetName }];
+      params.friends = [owner, mate];
+      params.playerIdMap = new Map([
+        [owner.name, 1],
+        [mate.name, 2],
+      ]);
+      return buildMatchTimeline(params).split("\n");
+    }
+    const pressOf = (lines: string[]) =>
+      lines.find((l) => /^0:30\s+\[YOU\] \[CD\]\s+Power Infusion/.test(l))!;
+    const legendOf = (lines: string[]) =>
+      lines.filter((l) => l.startsWith("  `| also on you for Ns`"));
+
+    it("the owner's own aura, applied 8 ms after the press and removed 15 s later → the clause, the legend, and the block unchanged", () => {
+      const lines = timelineOf([
+        aura(LogEvent.SPELL_AURA_APPLIED, PRESS_MS + 8),
+        aura(LogEvent.SPELL_AURA_REMOVED, PRESS_MS + 15_008),
+      ]);
+      const press = pressOf(lines);
+      expect(press).toContain("Power Infusion → 2(");
+      expect(press).toContain(" | also on you for 15.0s");
+      expect(legendOf(lines)).toHaveLength(1);
+      expect(lines.filter((l) => l.startsWith("      [HEALING]"))).toEqual([
+        "      [HEALING]    0–5s: 9.0k HPS | 5–10s: 0.0k HPS | 10–15s: 0.0k HPS | Overheal: 25%",
+      ]);
+    });
+
+    it("no aura of it on the owner in the log → no clause and no legend (never assumed from the talent)", () => {
+      const lines = timelineOf([]);
+      expect(pressOf(lines)).toContain("Power Infusion → 2(");
+      expect(pressOf(lines)).not.toContain("also on you");
+      expect(legendOf(lines)).toHaveLength(0);
+    });
+
+    it("an aura on the owner from ANOTHER caster is not this press's", () => {
+      const lines = timelineOf([
+        aura(LogEvent.SPELL_AURA_APPLIED, PRESS_MS + 8, "other-priest"),
+        aura(LogEvent.SPELL_AURA_REMOVED, PRESS_MS + 15_008, "other-priest"),
+      ]);
+      expect(pressOf(lines)).not.toContain("also on you");
+    });
+
+    it("applied but never removed in the log → `(end not logged)`, no invented duration", () => {
+      const lines = timelineOf([
+        aura(LogEvent.SPELL_AURA_APPLIED, PRESS_MS + 8),
+      ]);
+      expect(pressOf(lines)).toContain(" | also on you (end not logged)");
+    });
+
+    it("an aura that ended early says how long it was on the owner", () => {
+      const lines = timelineOf([
+        aura(LogEvent.SPELL_AURA_APPLIED, PRESS_MS + 8),
+        aura(LogEvent.SPELL_AURA_REMOVED, PRESS_MS + 3_208),
+      ]);
+      expect(pressOf(lines)).toContain(" | also on you for 3.2s");
+    });
+
+    it("pressed on the owner themselves → no clause (the line names no teammate)", () => {
+      const lines = timelineOf(
+        [
+          aura(LogEvent.SPELL_AURA_APPLIED, PRESS_MS),
+          aura(LogEvent.SPELL_AURA_REMOVED, PRESS_MS + 15_000),
+        ],
+        "self",
+      );
+      expect(pressOf(lines)).not.toContain("→");
+      expect(pressOf(lines)).not.toContain("also on you");
+      expect(legendOf(lines)).toHaveLength(0);
+    });
+  });
+
   const debuff = (spellId: string) =>
     ({
       timestamp: MATCH_START_MS,

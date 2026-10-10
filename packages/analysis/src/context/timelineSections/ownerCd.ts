@@ -44,6 +44,7 @@ import { buildRosterSides } from "../../utils/rosterSide";
 import { unitUnderFireAt } from "../../utils/threatAssessment";
 import { isDeadAt } from "../../utils/unitDeath";
 import {
+  casterOwnAuraClause,
   CHANNELED_CD_SPELL_IDS,
   channelWasInterrupted,
   computeHealingInWindow,
@@ -191,6 +192,27 @@ export function emitOwnerCdEntries(
         // periodic 60s refresh)
         requestSnapshotPlaceholder(cast.timeSeconds),
       ];
+
+      // FT-T15 ④: a throughput buff pressed on a TEAMMATE that the log shows
+      // on the owner too (Power Infusion with the twin talent). Stated on
+      // every such press, whether or not it gets a [HEALING] block; read
+      // from the owner's own aura events, so no aura in the log ⇒ no clause.
+      const pressedOnAnother =
+        !forceSelf &&
+        !!cast.targetName &&
+        cast.targetName !== "nil" &&
+        cast.targetName !== owner.name &&
+        cast.targetName.split("-")[0] !== owner.name.split("-")[0];
+      const ownAuraNote =
+        !isProc &&
+        pressedOnAnother &&
+        HEALING_AMPLIFIER_SPELL_IDS.has(cd.spellId)
+          ? casterOwnAuraClause(
+              owner,
+              cd.spellId,
+              matchStartMs + cast.timeSeconds * 1000,
+            )
+          : "";
 
       if (
         HEALING_AMPLIFIER_SPELL_IDS.has(cd.spellId) &&
@@ -526,7 +548,7 @@ export function emitOwnerCdEntries(
 
       addEntry(
         cast.timeSeconds,
-        `${fmtTime(cast.timeSeconds)}  ${prefix}   ${displayNameWithChannel}${effectiveTargetPart}${outgoingDrNote}${immuneNote}${empowerNote}${healAbsorbNote}${guardianSaveNote}${dampeningNote}${cheaperNote}${groundingNote}${interruptNote}${returnNote}${isProc ? "" : ownerHardCcTagAt(cast.timeSeconds)}${unnecessaryNote}`,
+        `${fmtTime(cast.timeSeconds)}  ${prefix}   ${displayNameWithChannel}${effectiveTargetPart}${ownAuraNote}${outgoingDrNote}${immuneNote}${empowerNote}${healAbsorbNote}${guardianSaveNote}${dampeningNote}${cheaperNote}${groundingNote}${interruptNote}${returnNote}${isProc ? "" : ownerHardCcTagAt(cast.timeSeconds)}${unnecessaryNote}`,
         ...extraLines,
       );
     }

@@ -23,6 +23,8 @@ import {
   buildKillSequenceBlock,
   buildMatchEndBlock,
   HEALING_BLOCK_LEGEND,
+  OWN_AURA_CLAUSE_LEGEND,
+  OWN_AURA_CLAUSE_PREFIX,
 } from "../timelineHelpers";
 import { DR_CLASH_LEGEND } from "./contextFacts";
 import type { TimelineCtx } from "./ctx";
@@ -188,6 +190,12 @@ export function formatTimeline(
   // only when a line of the family rendered (the convention above).
   const healingBlockRendered = entries.some((e) =>
     e.lines.some((l) => typeof l === "string" && l.includes("[HEALING]")),
+  );
+  // FT-T15 ④: the "also on you" clause is legended only when a line carries it.
+  const ownAuraClauseRendered = entries.some((e) =>
+    e.lines.some(
+      (l) => typeof l === "string" && l.includes(OWN_AURA_CLAUSE_PREFIX),
+    ),
   );
   const rotPressureRendered = entries.some((e) =>
     e.lines.some((l) => typeof l === "string" && l.includes("[ROT PRESSURE]")),
@@ -426,6 +434,7 @@ export function formatTimeline(
         ]
       : []),
     ...(healingBlockRendered ? HEALING_BLOCK_LEGEND : []),
+    ...(ownAuraClauseRendered ? OWN_AURA_CLAUSE_LEGEND : []),
     ...(rotPressureRendered ? ROT_PRESSURE_LEGEND : []),
     // F-C17 (triage res-readiness): the per-cast lines come from the healer
     // gap filler only, so only a healer owner gets their legend.
