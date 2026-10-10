@@ -676,7 +676,7 @@ export function deathWindowFreedom(
   matchStartMs: number,
   deathSeconds: number,
   windowSeconds = LETHAL_WINDOW_SECONDS,
-  // FT-T10 PREVIEW: the option the tag is about — a kick lockout counts
+  // FT-T10: the option the tag is about — a kick lockout counts
   // only when it locks that spell's school; absent → every lockout
   optionSpellId?: string,
 ): IDeathWindowFreedom | null {
@@ -928,7 +928,7 @@ export function buildDeathOutcomeSummary(
     summary:
       Pick<IPlayerCCTrinketSummary, "playerName" | "ccInstances"> | undefined,
     atSeconds: number,
-    // FT-T10 PREVIEW: the immunity / external the line names
+    // FT-T10: the immunity / external the line names
     optionSpellId: string,
   ): { locked: boolean; freedom?: IDeathWindowFreedom } => {
     if (cannotCastSourceIds) {

@@ -83,10 +83,14 @@ export interface NamedCannotCastInterval {
  * accusation"). 605 files, 6,117 lockouts × the locked player's ledger
  * spells (fix-FT/scripts/t10_lockSchool.ts): 45 % of the pairs have a school
  * outside the lock and 1,199 of those were pressed inside the lockout; of the
- * 24,658 pairs fully inside the lock, 23 were. Read per spell by the
- * cd-hoarded owner gate and the sync-window ready gate; the other readers of
- * `buildCannotCastIntervals` still take a lockout as locking everything —
- * predicate-index "Not yet unified".
+ * 24,658 pairs fully inside the lock, 23 were. Read per spell by every
+ * reader that asks about a named spell or set of spells (cd-hoarded's owner
+ * gate, the sync-window ready gate, purge / cleanse "locked", the kick run
+ * budget, cc-avoidable, [CD PRIOR], burst-window feasibility, the death
+ * block's option tags — `cannotCastIntervalsForSpells`); a reader with no
+ * single spell to ask about (healing gaps, HEALER OFFENSE free seconds,
+ * death-setup healer-locked, `ccInWindowS`, [RES], CONSEQ) still takes a
+ * lockout as locking everything — predicate-index "Not yet unified".
  */
 export function intervalBlocksSpell(
   iv: Pick<NamedCannotCastInterval, "lockout" | "lockedSchoolMask">,
@@ -99,7 +103,7 @@ export function intervalBlocksSpell(
 }
 
 /**
- * FT-T10 PREVIEW: `namedCannotCastIntervals` asked for a SET of spells the
+ * FT-T10: `namedCannotCastIntervals` asked for a SET of spells the
  * unit could answer with — an interval is kept only when it stops EVERY one
  * of them (`intervalBlocksSpell`; `actWindowFor().stateIn`'s reading). No
  * spell to ask about (undefined / empty) → every interval, the unasked
@@ -115,7 +119,7 @@ export function cannotCastIntervalsForSpells(
   );
 }
 
-/** FT-T10 PREVIEW: `cannotCastIntervalsForSpells`'s test on one interval,
+/** FT-T10: `cannotCastIntervalsForSpells`'s test on one interval,
  * for a reader that builds the intervals once and asks per option. */
 export function intervalBlocksEverySpell(
   iv: Pick<NamedCannotCastInterval, "lockout" | "lockedSchoolMask">,

@@ -607,7 +607,7 @@ export function purgeReadyAtSeconds(
  *  replaces Purge), else the spec's list. One of them that was never cast,
  *  or has no cooldown, is ready — an unused Dispel Magic keeps a priest
  *  ready whatever its Mass Dispel is doing (codex review of F-P7).
- *  FT-T10 PREVIEW: also the spells "purger locked" asks a kick lockout about. */
+ *  FT-T10: also the spells "purger locked" asks a kick lockout about. */
 function purgeSpellIdsOf(unit: ICombatUnit): Set<string> {
   const own = purgeSpellOf(unit);
   const listed = PURGE_SPELLS_BY_SPEC[unit.spec] ?? [];
@@ -2099,7 +2099,7 @@ function isPurgerFullyBlockedDuringWindow(
   windowStartMs: number,
   windowEndMs: number,
   enemyIds: Set<string>,
-  // FT-T10 PREVIEW: the removal(s) the unit would press — a kick lockout
+  // FT-T10: the removal(s) the unit would press — a kick lockout
   // counts only when it stops every one of them; absent → every lockout
   spellIds?: readonly string[],
 ): boolean {
@@ -2143,7 +2143,7 @@ function dispellersLockedOutForWindow(
   endMs: number,
   enemyIds: Set<string>,
   freeThresholdMs: number,
-  // FT-T10 PREVIEW: each dispeller's removal(s) — a kick lockout counts only
+  // FT-T10: each dispeller's removal(s) — a kick lockout counts only
   // when it stops every one of them; absent → every lockout
   spellIdsOf?: (d: ICombatUnit) => readonly string[] | undefined,
 ): boolean {
@@ -3148,7 +3148,7 @@ export function reconstructDispelSummary(
                 removal.ts,
                 cannotCastSrcIds,
                 MISSED_CLEANSE_THRESHOLD_S * 1000,
-                // FT-T10 PREVIEW: asked for the dispel(s) each would press
+                // FT-T10: asked for the dispel(s) each would press
                 (d) =>
                   removalSpellIdsFor(
                     d,
@@ -3263,7 +3263,7 @@ export function reconstructDispelSummary(
                 applyTs,
                 removal.ts,
                 cannotCastSrcIds,
-                // FT-T10 PREVIEW: a lockout on another school leaves the
+                // FT-T10: a lockout on another school leaves the
                 // dispel (the spells `removalSpellIdsFor` names)
                 removalSpellIdsFor(dispeller, windowDispelType, charmed),
               ),
@@ -3296,7 +3296,7 @@ export function reconstructDispelSummary(
                   applyTs,
                   removal.ts,
                   cannotCastSrcIds,
-                  // FT-T10 PREVIEW: the gate's spells above
+                  // FT-T10: the gate's spells above
                   removalSpellIdsFor(d, windowDispelType, charmed),
                 ),
             );
@@ -3425,7 +3425,7 @@ export function reconstructDispelSummary(
               removal.ts,
               cannotCastSrcIds,
               MISSED_CLEANSE_THRESHOLD_S * 1000,
-              // FT-T10 PREVIEW: asked for the dispel(s) each would press
+              // FT-T10: asked for the dispel(s) each would press
               (d) => removalSpellIdsFor(d, windowDispelType, charmed),
             ),
             losReachable: anyDispellerReachable(
@@ -3575,7 +3575,7 @@ export function reconstructDispelSummary(
                   applyTs,
                   windowEndMs,
                   cannotCastSrcIds,
-                  // FT-T10 PREVIEW: a lockout on another school leaves the purge
+                  // FT-T10: a lockout on another school leaves the purge
                   [...purgeSpellIdsOf(purger)],
                 ),
               );
@@ -3594,7 +3594,7 @@ export function reconstructDispelSummary(
                   applyTs,
                   windowEndMs,
                   cannotCastSrcIds,
-                  // FT-T10 PREVIEW: asked for the scoped tool's own press
+                  // FT-T10: asked for the scoped tool's own press
                   [tool.castSpellId],
                 )
                 ? [{ unit: h.unit, tool }]
@@ -3707,7 +3707,7 @@ export function reconstructDispelSummary(
                 ...(purgeWasOnCD ? { purgeReadyAtSeconds: teamReadyAt } : {}),
                 cdBurnedOn,
                 teamUnderPressure,
-                // FT-T10 PREVIEW: each purger's lockouts are asked for its own
+                // FT-T10: each purger's lockouts are asked for its own
                 // purge / scoped tool (the spells the gate above asks about)
                 purgersLockedOut: generalOpen
                   ? dispellersLockedOutForWindow(

@@ -3464,7 +3464,7 @@ function teamPlayEvents(
       );
       // W1a: the owner's own cannot-cast intervals (CC, silence, kick
       // lockout) — the one predicate every feasibility gate reads.
-      // FT-T10 PREVIEW: kept with their cause — a kick lockout counts for
+      // FT-T10: kept with their cause — a kick lockout counts for
       // an option only when it stops every press of that option (below).
       let ownerBlocked: NamedCannotCastInterval[] = [];
       try {

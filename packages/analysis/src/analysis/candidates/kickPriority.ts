@@ -332,7 +332,7 @@ export function kickPriorityDecisionPoints(
         // impact audit 2026-09-26.
         const kit = interruptForUnit(f as never);
         iv = [
-          // FT-T10 PREVIEW: a kick lockout counts only when it locks the
+          // FT-T10: a kick lockout counts only when it locks the
           // school of this friend's interrupt (no kit → every lockout)
           ...cannotCastIntervalsForSpells(
             f as never,

@@ -265,7 +265,7 @@ export function cdPriorHoldEpisodes(
   } catch {
     cannotCast = [];
   }
-  // FT-T10 PREVIEW: asked for the held cooldown — a kick lockout counts
+  // FT-T10: asked for the held cooldown — a kick lockout counts
   // only when it locks that cooldown's school (`intervalBlocksSpell`)
   const ownerCannotCastAt = (sec: number, spellId: string): boolean => {
     const tMs = startMs + sec * 1000;

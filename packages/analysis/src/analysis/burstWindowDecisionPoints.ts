@@ -1146,7 +1146,7 @@ export function burstWindowDecisionPoints(
     {
       startMs: number;
       endMs: number;
-      // FT-T10 PREVIEW: a cannot-cast interval keeps its cause, so a kick
+      // FT-T10: a cannot-cast interval keeps its cause, so a kick
       // lockout can be asked for one tool (`inCcAt`)
       cause?: NamedCannotCastInterval;
     }[]
@@ -1557,7 +1557,7 @@ export function burstWindowDecisionPoints(
       // external in range at t who then sat in CC until t+7 and ran out of
       // range still counted as able to answer. A cooldown that came back
       // three seconds into the window is now an opportunity it was not.
-      // FT-T10 PREVIEW: asked per tool — a kick lockout stops only a tool
+      // FT-T10: asked per tool — a kick lockout stops only a tool
       // of the school it locked (`intervalBlocksSpell`); a unit is out at a
       // second only when every ready tool is stopped
       const inCcAt = (u: any, ms: number, toolSpellId: string): boolean =>
