@@ -1305,5 +1305,45 @@
  *  be pressed; missed-sync-window `holderCc` lists only what stopped that
  *  cooldown. Adds accusations (counts in the commit). The sync-window
  *  reference table is stale by it (GH #115).
+ *  v368 (2026-10-10, FT-T03 / T07 / T10 / T12 / T13 / T15 / T16, user
+ *  rulings D1–D15 of 2026-10-10 and the two follow-ups of that day): the
+ *  fact lines of six themes, one batch.
+ *  T03 (D7): a number that claims the LOWEST HP of a window is the window's
+ *  true minimum, at the second it happened ([DMG SPIKE] `low`, [CONSEQ],
+ *  burst-ledger target line, [BURST ANSWERED] `bottomed at`, kick-eaten
+ *  `ourLowPct` / `theirLowPct`, STAYED IN `(min over window)` /
+ *  position-mistake `hpMin`, slow-defensive-response `pressuredHpPct`);
+ *  [STATE] readings and every decision stay on the grid; [STATE] gets a
+ *  legend. T07 (D8): [ENEMY DEF] prints Feign Death as an absorb and Nature's
+ *  Guardian / Cauterize / Cheat Death as the proc they are; KILL ATTEMPTS no
+ *  longer reads them as a full immunity. D9: Terror of the Skies under
+ *  Oppressing Roar reads its lengthened duration.
+ *  T12: a kill window ends at its target's death (D1) and its header at the
+ *  round's end; [DMG SPIKE] buckets close at the death / round end and say
+ *  when the target was healed through; an [OFFENSIVE WINDOW] names only a
+ *  spike that overlaps it, each spike once; KILL ATTEMPTS prints damage
+ *  inside the window and incl. the 5 s after; the burst ledger adds the
+ *  absorbed part and a second target; the top-5 [DMG SPIKE] cap is stated and
+ *  the dropped windows counted (D4); [BURST ANSWERED] names a control's
+ *  target and span and marks an answer pressed after the pressured unit
+ *  died. D2: a STAYED IN / KITED span and position-mistake measure distance
+ *  to the ONE enemy that hit the owner most in the span. D3: a control
+ *  answers a burst only when its target was hitting the pressured unit.
+ *  T13 (D10 / D11): 2v2 dampening has one start — no extrapolated number
+ *  before the first logged stack; the header and the press lines agree.
+ *  T15 (D5 / D6): the header says "only facts that may be cited"; an
+ *  [ENEMY DEF] aura whose removal the log never shows prints `end not
+ *  logged`, and KILL ATTEMPTS follows. T16 (D13 / D14): the owner's
+ *  [CC ON TEAM] / [SILENCE] line carries `| pressed during it: X ×N` (major
+ *  cooldowns pressed and refused under that control); a delayed-landing
+ *  ground control is matched to its cast. T10: the six remaining readers ask
+ *  a kick lockout per spell (purge / cleanse "locked", the kick run budget,
+ *  cc-avoidable, [CD PRIOR], burst-window feasibility, the death block's
+ *  option tags), and a lockout on the owner does not reach a spell its pet
+ *  casts. Legends and labels: [ROT PRESSURE] roster labels, `also on you for
+ *  Ns`, cd-waste / cd-hoarded fact wording. Candidate movement (counts in
+ *  the commit): kick-priority and position-mistake lose rows, cc-avoidable
+ *  gains one. The burst-window, kick-priority, cd-trigger and sync-window
+ *  reference tables are stale by it (GH #115).
  */
-export const PROMPT_VERSION = 367;
+export const PROMPT_VERSION = 368;
