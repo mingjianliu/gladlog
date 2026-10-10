@@ -14,7 +14,12 @@
  * candidate by exactly the field this one requires (`responded`). So the
  * population that can be credited and the population that can be blamed are
  * complementary halves of one predicate rather than two independent
- * derivations of "was this answered" (CLAUDE.md shared-predicate rule). Which
+ * derivations of "was this answered" (CLAUDE.md shared-predicate rule). That
+ * holds for WHICH control is an answer too (FT-T12 D3, user ruling
+ * 2026-10-10): the engine keeps a control in `responseCasts` only when it
+ * went on a unit that was hitting the pressured friendly
+ * (`controlTargetHitPressured`), so this module has no control-target rule of
+ * its own to drift from `responded`'s. Which
  * windows earn a line, which answer is credited and in what order they rank
  * are decided on the engine's `gridHpPct` readings (`minHpPct` / `minHpSec`,
  * the `[STATE]` tick's sampler). The bottom the line PRINTS is the engine's
@@ -83,6 +88,19 @@ export const BURST_ANSWERED_CAP = 2;
  */
 export const BURST_ANSWERED_MAX_HP_PCT = 60;
 
+/**
+ * What makes a control an answer, as the legend states it (FT-T12 D3, user
+ * ruling 2026-10-10) — the reader's side of `controlTargetHitPressured`. It
+ * is part of `BURST_ANSWERED_LEGEND`, not of the control-target line below:
+ * the rule decides which lines exist and which answer a line credits, so it
+ * matters on a line that credits a wall as much as on one that names a
+ * control's target. The last clause is the rule's known limit, said out loud
+ * so a control that stopped an attacker cold is not read as "no control was
+ * used".
+ */
+export const BURST_ANSWERED_CONTROL_RULE_LEGEND =
+  "    A control counts as an answer only when it went on an enemy who dealt damage to the pressured player inside the burst window (that enemy's pets count as that enemy); a control on any other enemy — an enemy healer who only pressed a cooldown — is not listed as the answer, and neither is one whose target dealt that player no damage at all in the window, even if the control is why.";
+
 /** Legend lines, emitted only when at least one `[BURST ANSWERED]` line is.
  * The second one is load-bearing: with `BURST_ANSWERED_CAP` = 2 the list is
  * not exhaustive, and an unqualified list reads as one (the same
@@ -90,6 +108,7 @@ export const BURST_ANSWERED_MAX_HP_PCT = 60;
 export const BURST_ANSWERED_LEGEND = [
   `  ${BURST_ANSWERED_TAG} = an enemy burst window the team DID answer inside ${BURST_RESPONSE_WINDOW_SEC}s — context, not a mistake.`,
   `    At most ${BURST_ANSWERED_CAP} of them are listed per round (the most dangerous first), so this is NOT a full list of answered bursts.`,
+  BURST_ANSWERED_CONTROL_RULE_LEGEND,
   // FT-T03 (ruling D7): the bottom is off the grid
   "    `bottomed at N% at m:ss` = the lowest HP the log shows for that player inside the window, at the second it happened (the true",
   "    minimum between the ticks: it can sit below the [STATE] number of that second).",
@@ -148,10 +167,13 @@ export function parseBurstAnsweredLine(
 }
 
 /** One more legend line, emitted only when a rendered line names a control's
- * target (T12 ⑧ i). It states what the clause is and — the point of the
- * ruling — that it is not a judgment of the target. */
+ * target (T12 ⑧ i). It states what the clause is and — the point of that
+ * ruling — that it is not a judgment of the target. Since FT-T12 D3 every
+ * named target is an enemy that was hitting the pressured player
+ * (`BURST_ANSWERED_CONTROL_RULE_LEGEND` states the rule); the sentence says
+ * so, and keeps "not a judgment" for everything beyond that. */
 export const BURST_ANSWERED_CONTROL_LEGEND =
-  "    A control answer names the enemy it landed on and, in brackets, how long it stayed on them (the [CC ON ENEMY] reading; no brackets when the log gives none — a root, an interrupt). What happened, not whether that was the right target.";
+  "    A control answer names the enemy it landed on and, in brackets, how long it stayed on them (the [CC ON ENEMY] reading; no brackets when the log gives none — a root, an interrupt). Every enemy named there was dealing damage to the pressured player in the window (the rule above); beyond that it says what happened, not whether that was the right target.";
 
 export interface BurstAnsweredEntry {
   /** whole second the window opened — already on `fmtTime`'s grid */
@@ -188,6 +210,13 @@ export interface BurstAnsweredEntry {
  * "answered with Emerald Communion in 5.1s … still died"). With no other
  * creditable response the window gets no line. `responded` — the
  * slow-defensive-response candidate's half — does not read the mark.
+ *
+ * FT-T12 D3 (user ruling 2026-10-10): WHICH enemy a control must have gone
+ * on is not decided here. A control that went on a unit that dealt the
+ * pressured friendly no damage inside the window is not in `responseCasts`
+ * at all (`controlTargetHitPressured`, applied by the engine), so it can be
+ * neither the credited answer nor one of the targets `controlTargetClause`
+ * names — and `responded` reads that same list.
  */
 export function creditedAnswer(p: BurstWindowDecisionPoint) {
   const pr = p.pressured;

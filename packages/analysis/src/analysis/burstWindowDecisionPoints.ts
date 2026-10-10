@@ -237,7 +237,9 @@ export interface BurstWindowResponses {
   healCd: boolean;
   /** a friendly aimed hard CC / a root / an interrupt AT one of the burst's
    * own casters (dest = caster), or a friendly's hard CC / root LANDED on one
-   * of them from an untargeted or ground cast (`controlLandedResponses`) */
+   * of them from an untargeted or ground cast (`controlLandedResponses`) —
+   * and that caster, or its pets, was hitting the pressured friendly inside
+   * the window (`controlTargetHitPressured`, FT-T12 D3) */
   control: boolean;
   /** the most-pressured friendly opened `KITE_GAIN_YARDS` on the nearest
    * burst caster across the response window */
@@ -267,7 +269,10 @@ export interface BurstResponseCast {
    * reliability round 3 4446 / 7d1f: from the floored window second it read
    * "Chastise 0.6s before" for a 1.55 s gap); may be negative (a pre-wall) */
   latencySec: number;
-  /** the cast's target unit id (externals: who received it) */
+  /** the cast's target unit id (externals: who received it; an aimed
+   * control: who it was aimed at). On a LANDED control (a ground / untargeted
+   * cast, `controlLandedResponses`) it is the unit the aura landed on — the
+   * cast has no target of its own (FT-T12 D3). */
   destId?: string;
   /** the caster's unit id */
   casterId?: string;
@@ -310,6 +315,77 @@ export interface BurstResponseCast {
     unitName: string;
     auras: ControlLandingAura[];
   };
+}
+
+/**
+ * Landed damage `unit` took in [fromMs, toMs] (both ends included), the
+ * engine's one reader of it: the burst window's damage per friendly (who is
+ * pressured, whether anybody was hit at all) and, narrowed by `fromSource` to
+ * the hits of one attacker, `controlTargetHitPressured`.
+ */
+function damageTakenBetween(
+  unit: any,
+  fromMs: number,
+  toMs: number,
+  fromSource?: (srcUnitId: string) => boolean,
+): number {
+  return ((unit.damageIn ?? []) as any[])
+    .filter((d) => {
+      const ts = d.timestamp ?? d.logLine?.timestamp;
+      if (fromSource && !(d.srcUnitId && fromSource(d.srcUnitId))) return false;
+      return ts != null && ts >= fromMs && ts <= toMs;
+    })
+    .reduce((n, d) => n + Math.abs(d.effectiveAmount ?? d.amount ?? 0), 0);
+}
+
+/**
+ * FT-T12 D3 (user ruling 2026-10-10, T12 item 8 ii): what makes a friendly
+ * CONTROL an answer to an enemy burst. The control's target — the unit an
+ * aimed control was cast at, or the holder a ground / untargeted control
+ * landed on (`BurstResponseCast.destId`) — or that target's pets / summons
+ * must have dealt landed damage > 0 to the PRESSURED friendly inside the
+ * burst window [fromMs, toMs] (the engine's `tMs` … `outcomeEndMs`, the span
+ * and amounts `damageTakenBetween` reads for the window itself). No
+ * threshold: one point of damage is "was hitting them".
+ *
+ * It narrows the rule it sits on, it does not replace it: the target must
+ * still be one of the window's cooldown casters (`casterIdSet`). Before, that
+ * was the whole rule, so a control on ANY enemy that pressed a cooldown in
+ * the window counted — an enemy healer whose only press was Power Infusion
+ * included (605 capture: 667 of 1,552 control answers were not on the opener,
+ * 252 of them on the enemy healer). No pressured friendly ⇒ nobody was being
+ * hit ⇒ no control answer.
+ *
+ * ONE rule, both signs: the engine drops a control that fails it from
+ * `responseCasts`, the list `responded` (the slow-defensive-response
+ * candidate's half) and `creditedAnswer` (the `[BURST ANSWERED]` line's
+ * half) both read. Measured on the 605 capture (the preview, parent
+ * session): slow-defensive-response 0 added / 0 removed; `[BURST ANSWERED]`
+ * −143 / +91 lines.
+ *
+ * Known limit, not addressed (flagged with the preview, accepted with it): a
+ * control that shut its target down for the WHOLE window leaves that target
+ * with zero damage on the pressured friendly, and so does not count — the
+ * most effective control of an attacker reads as no control. A hit from
+ * before the window does not rescue it: the span is the window's.
+ */
+export function controlTargetHitPressured(
+  pressuredUnit: unknown,
+  controlTargetId: string | undefined,
+  enemyPlayerOf: (srcUnitId: string) => string | undefined,
+  fromMs: number,
+  toMs: number,
+): boolean {
+  return (
+    pressuredUnit != null &&
+    controlTargetId !== undefined &&
+    damageTakenBetween(
+      pressuredUnit,
+      fromMs,
+      toMs,
+      (src) => enemyPlayerOf(src) === controlTargetId,
+    ) > 0
+  );
 }
 
 /** One aura application a control answer put on its target: the aura's own
@@ -1222,6 +1298,16 @@ export function burstWindowDecisionPoints(
   const friendlyNameById = new Map<string, string>(
     friendlies.map((u) => [u.id, u.name]),
   );
+  // A damage source → the enemy PLAYER behind it (itself, or its pet's /
+  // summon's owner), the mirror of `friendlyPlayerOf`. FT-T12 D3 asks it of
+  // every hit on the pressured friendly (`controlTargetHitPressured`).
+  const enemyOwnerOfUnit = new Map<string, string>(
+    units
+      .filter((u) => u.ownerId && enemyPlayerIds.has(u.ownerId))
+      .map((u) => [u.id as string, u.ownerId as string]),
+  );
+  const enemyPlayerOf = (srcUnitId: string): string | undefined =>
+    enemyPlayerIds.has(srcUnitId) ? srcUnitId : enemyOwnerOfUnit.get(srcUnitId);
 
   const out: BurstWindowDecisionPoint[] = [];
   {
@@ -1396,6 +1482,9 @@ export function burstWindowDecisionPoints(
           spellId: r.spellId,
           spellName: getEnglishSpellName(r.spellId),
           casterName: friendlyNameById.get(r.unitId) ?? "",
+          // the unit the control landed on, in the field an aimed control
+          // carries its target in — D3's rule reads one field for both
+          ...(r.holderId !== undefined ? { destId: r.holderId } : {}),
           tSec: Math.floor((r.tMs - start) / 1000),
           // the holder this aura landed on, and the application itself
           ...(holder
@@ -1480,15 +1569,7 @@ export function burstWindowDecisionPoints(
         };
       });
       const damageTakenIn = (f: any): number =>
-        ((f.damageIn ?? []) as any[])
-          .filter((d) => {
-            const ts = d.timestamp ?? d.logLine?.timestamp;
-            return ts != null && ts >= tMs && ts <= outcomeEndMs;
-          })
-          .reduce(
-            (n, d) => n + Math.abs(d.effectiveAmount ?? d.amount ?? 0),
-            0,
-          );
+        damageTakenBetween(f, tMs, outcomeEndMs);
       const dmgByUnitId = new Map<string, number>(
         friendlies.map((f) => [f.id, damageTakenIn(f)]),
       );
@@ -1505,11 +1586,32 @@ export function burstWindowDecisionPoints(
       const pressuredUnit = pressured
         ? (friendlies.find((f) => f.id === pressured.unitId) ?? null)
         : null;
+      // FT-T12 D3 (user ruling 2026-10-10): a control stays a response only
+      // when it went on a unit that was hitting the pressured friendly
+      // (`controlTargetHitPressured`). It leaves `responseCasts` itself — not
+      // a flag beside it — so `responses.control` / `responded` below
+      // (slow-defensive-response) and `creditedAnswer` ([BURST ANSWERED]) read
+      // ONE list and cannot disagree about what answered. Walls, externals
+      // and healing cooldowns are untouched.
+      for (let i = responseCasts.length - 1; i >= 0; i--) {
+        const r = responseCasts[i]!;
+        if (
+          r.category === "control" &&
+          !controlTargetHitPressured(
+            pressuredUnit,
+            r.destId,
+            enemyPlayerOf,
+            tMs,
+            outcomeEndMs,
+          )
+        )
+          responseCasts.splice(i, 1);
+      }
       // T12 ⑧ (i): mark the responses pressed at or after the pressured
       // friendly's death — the one death predicate (`isDeadAt`), on the raw
       // instants. Only the [BURST ANSWERED] credit line reads the mark;
-      // `responses` / `responded` below are computed from the same list as
-      // before and never look at it.
+      // `responses` / `responded` below are computed from the same list (the
+      // one D3 narrowed just above) and never look at it.
       if (pressuredUnit)
         for (const r of responseCasts)
           if (isDeadAt(pressuredUnit, responseAtMs.get(r)!))
