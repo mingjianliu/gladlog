@@ -170,8 +170,24 @@ export interface IBurstLedgerEntry {
    * on the burst's own damage, not a cast target. `dominantTarget.died` and
    * every conversion count are unchanged. */
   otherDeaths: Array<{ unitName: string; atSeconds: number }>;
-  /** Ally offensive CDs whose active span overlaps this burst (alignment evidence). */
-  allyCDsOverlapping: Array<{ playerName: string; spellName: string }>;
+  /** Ally offensive CDs whose active span overlaps this burst IN TIME — the
+   * whole of what is measured (endpoints touching count; no minimum; no
+   * target test). `dpsMetrics`' `alignedBurstRatio` counts bursts with a
+   * non-empty list and is not changed by the two readings below. */
+  allyCDsOverlapping: Array<{
+    playerName: string;
+    spellName: string;
+    /** Seconds the ally CD's span and this burst's span share (0 for an
+     * instant cooldown, whose span has no length, and for spans that only
+     * touch). */
+    overlapSeconds: number;
+    /** The enemy player that ally damaged most inside the shared seconds —
+     * landed + absorbed, the measure `dominantTarget` is chosen on — or null
+     * when they damaged no enemy player in them (T12 ⑦: 0e0663e6's Voidform
+     * was "aligned" with a burst on the paladin while 0.73M of the priest's
+     * damage went to the hunter and 0.34M to the paladin). */
+    topTarget: IBurstTargetDamage | null;
+  }>;
 }
 
 /**
@@ -245,6 +261,7 @@ export function analyzeBurstLedger(
       (
         reconstructEnemyCDTimeline([a], combat).players[0]?.offensiveCDs ?? []
       ).map((cd) => ({
+        ally: a,
         playerName: a.name,
         spellName: cd.spellName,
         ...burstCastSpan(cd),
@@ -426,7 +443,41 @@ export function analyzeBurstLedger(
 
     const allyCDsOverlapping = allyCDSpans
       .filter((s) => s.from <= toSeconds && s.to >= fromSeconds)
-      .map((s) => ({ playerName: s.playerName, spellName: s.spellName }));
+      .map((s) => {
+        // T12 ⑦ (user ruling 2026-10-10): the overlap is a fact about time
+        // and nothing else — print how long it was and where that ally's
+        // damage went in it, instead of a word that reads as "same target".
+        const overlapFrom = Math.max(s.from, fromSeconds);
+        const overlapTo = Math.min(s.to, toSeconds);
+        const oFromMs = matchStartMs + overlapFrom * 1000;
+        const oToMs = matchStartMs + overlapTo * 1000;
+        const byEnemy = new Map<string, number>();
+        for (const d of s.ally.damageOut ?? []) {
+          const ts = d.logLine.timestamp;
+          if (ts < oFromMs || ts > oToMs) continue;
+          if (!enemyById.has(d.destUnitId)) continue;
+          byEnemy.set(
+            d.destUnitId,
+            (byEnemy.get(d.destUnitId) ?? 0) + Math.abs(d.effectiveAmount),
+          );
+        }
+        let topTarget: IBurstTargetDamage | null = null;
+        for (const [unitId, damage] of byEnemy) {
+          if (damage <= 0) continue;
+          if (!topTarget || damage > topTarget.damage)
+            topTarget = {
+              unitId,
+              unitName: enemyById.get(unitId)?.name ?? unitId,
+              damage,
+            };
+        }
+        return {
+          playerName: s.playerName,
+          spellName: s.spellName,
+          overlapSeconds: Math.max(0, overlapTo - overlapFrom),
+          topTarget,
+        };
+      });
 
     entries.push({
       fromSeconds,
@@ -627,6 +678,32 @@ export function burstSecondTargetClause(
   return ` | ${BURST_SECOND_TARGET_LABEL}: ${second.unitName} ${fmtDamageWithAbsorbed(second.damage, second.absorbed)}`;
 }
 
+/** The label of the line that lists the ally offensive CDs overlapping a
+ * burst. It replaced `Aligned with:` (T12 ⑦) — a word the measurement, an
+ * overlap in time, does not carry. */
+export const BURST_ALLY_OVERLAP_LABEL = "Ally CDs overlapping";
+
+/** What an overlap item says when that ally damaged no enemy player in it. */
+const ALLY_NO_DAMAGE_IN_OVERLAP = "no damage by them on enemy players in it";
+
+/** One item's tail on the `Ally CDs overlapping:` line, as the gate reads it
+ * back (global): 1 = the overlap in seconds, 2 = that ally's top target in
+ * it, 3 = their damage on it (2 and 3 absent = no damage in it). */
+export const BURST_ALLY_OVERLAP_ITEM_RE_SRC = String.raw` (\d+\.\d)s \((?:${ALLY_NO_DAMAGE_IN_OVERLAP}|their top target in it: (\S+) (\d+\.\d{2})M)\)(?=; |$)`;
+
+function formatAllyOverlaps(b: IBurstLedgerEntry): string {
+  return `    ${BURST_ALLY_OVERLAP_LABEL}: ${b.allyCDsOverlapping
+    .map(
+      (a) =>
+        `${a.playerName} ${a.spellName} ${a.overlapSeconds.toFixed(1)}s (${
+          a.topTarget
+            ? `their top target in it: ${a.topTarget.unitName} ${fmtM(a.topTarget.damage)}`
+            : ALLY_NO_DAMAGE_IN_OVERLAP
+        })`,
+    )
+    .join("; ")}`;
+}
+
 /** The `Target:` line from `| your damage` on, as the gate reads it back:
  * 1 = the target's figure, 2 = its absorbed part, 3 = the second target's
  * name, 4 = its figure, 5 = its absorbed part. */
@@ -666,7 +743,7 @@ export function formatBurstLedgerForContext(
   if (bursts.length > 0)
     lines.push(
       // one line: readers index the block's lines from the top
-      `  \`Target\` = the enemy player your own damage in the burst was highest on, counting what its shields absorbed. \`your damage\` = that figure: what landed plus what the shields absorbed; \`(A of it absorbed)\` = the absorbed part, printed when it is not 0.00M. \`${BURST_SECOND_TARGET_LABEL}: X N\` = the enemy player your damage was next highest on, same measure — printed whenever the burst damaged a second one; it can be close to the Target's figure, and ahead of it on landed damage alone.`,
+      `  \`Target\` = the enemy player your own damage in the burst was highest on, counting what its shields absorbed. \`your damage\` = that figure: what landed plus what the shields absorbed; \`(A of it absorbed)\` = the absorbed part, printed when it is not 0.00M. \`${BURST_SECOND_TARGET_LABEL}: X N\` = the enemy player your damage was next highest on, same measure — printed whenever the burst damaged a second one; it can be close to the Target's figure, and ahead of it on landed damage alone. \`${BURST_ALLY_OVERLAP_LABEL}\` = a teammate's offensive cooldown was running during part of this burst — an overlap in time and nothing more: \`Ns\` = how long the two ran together (0.0s = an instant cooldown pressed inside the burst, or the two only touched), \`their top target in it\` = the enemy player that teammate damaged most in those seconds (landed + absorbed), which need not be this burst's Target.`,
     );
 
   bursts.forEach((b, i) => {
@@ -720,7 +797,7 @@ export function formatBurstLedgerForContext(
     // such a cast its effect, the line says nothing about its damage.
     lines.push(
       b.allyCDsOverlapping.length > 0
-        ? `    Aligned with: ${b.allyCDsOverlapping.map((a) => `${a.playerName} (${a.spellName})`).join(", ")}`
+        ? formatAllyOverlaps(b)
         : `    Solo burst — no ally offensive CD overlapped.`,
     );
   });

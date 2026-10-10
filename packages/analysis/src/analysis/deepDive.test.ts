@@ -446,7 +446,12 @@ describe("offensivePackItems(进攻证据映射,纯函数)", () => {
     },
     otherDeaths: [],
     allyCDsOverlapping: [
-      { playerName: "Mate-Area52", spellName: "Power Infusion" },
+      {
+        playerName: "Mate-Area52",
+        spellName: "Power Infusion",
+        overlapSeconds: 4,
+        topTarget: null,
+      },
     ],
   };
   const inWin = (t: number) => t >= 10 && t <= 50;
@@ -516,7 +521,12 @@ describe("offensivePackItems(进攻证据映射,纯函数)", () => {
     const crossRealmEntry: IBurstLedgerEntry = {
       ...entry,
       allyCDsOverlapping: [
-        { playerName: "Me-Ragnaros", spellName: "Power Infusion" },
+        {
+          playerName: "Me-Ragnaros",
+          spellName: "Power Infusion",
+          overlapSeconds: 4,
+          topTarget: null,
+        },
       ],
     };
     const items = offensivePackItems({

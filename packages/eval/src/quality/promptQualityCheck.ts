@@ -92,6 +92,8 @@ import {
   teammateCrisisDmgBinOf,
 } from "@gladlog/analysis/src/data/teammateCrisisPrior";
 import {
+  BURST_ALLY_OVERLAP_ITEM_RE_SRC,
+  BURST_ALLY_OVERLAP_LABEL,
   BURST_TARGET_DAMAGE_RE_SRC,
   KILL_CREDIT_SLACK_S,
 } from "@gladlog/analysis/src/utils/burstLedger";
@@ -1040,6 +1042,64 @@ export function checkBurstTargetDamageParts(lines: string[]): string[] {
       failures.push(
         `${at} second target ${m[4]}:absorbed ${m[6]}M 大于它的 ${m[5]}M`,
       );
+  });
+  return failures;
+}
+
+const BURST_ALLY_OVERLAP_LINE = new RegExp(
+  String.raw`^\s*${BURST_ALLY_OVERLAP_LABEL}: (.+)$`,
+);
+
+/**
+ * Hard invariant (T12 ⑦, user ruling 2026-10-10): a burst's ally-cooldown
+ * line says what was measured — an overlap in time.
+ *
+ *   - no ledger line reads `Aligned with:` (the word the measurement does
+ *     not carry: 24 of 85 burst × teammate pairs on 60 raw rounds had the
+ *     teammate's damage mostly on another enemy);
+ *   - every item of an `Ally CDs overlapping:` line reads in the producer's
+ *     pattern (`BURST_ALLY_OVERLAP_ITEM_RE_SRC`): the seconds, and that
+ *     ally's top target in them or the statement that there was none;
+ *   - an overlap is no longer than the burst it is an overlap with: at most
+ *     the header's displayed width + 1 s (the endpoints are floored).
+ */
+export function checkBurstAllyOverlap(lines: string[]): string[] {
+  const failures: string[] = [];
+  let burstWidth: number | null = null;
+  lines.forEach((line, i) => {
+    const head = line.match(BURST_HEAD);
+    if (head) {
+      burstWidth =
+        Number(head[3]) * 60 +
+        Number(head[4]) -
+        (Number(head[1]) * 60 + Number(head[2]));
+      return;
+    }
+    if (/^\s*Aligned with: /.test(line)) {
+      failures.push(
+        `line ${i + 1}: burst ledger 仍写「Aligned with」—— 量的只是时间重叠,应写 ${BURST_ALLY_OVERLAP_LABEL}`,
+      );
+      return;
+    }
+    const m = line.match(BURST_ALLY_OVERLAP_LINE);
+    if (!m) return;
+    const at = `line ${i + 1}: ${BURST_ALLY_OVERLAP_LABEL}`;
+    const items = [
+      ...m[1]!.matchAll(new RegExp(BURST_ALLY_OVERLAP_ITEM_RE_SRC, "g")),
+    ];
+    if (items.length !== m[1]!.split("; ").length) {
+      failures.push(`${at} 有无法解析的条目:${line.trim().slice(0, 160)}`);
+      return;
+    }
+    if (burstWidth === null) {
+      failures.push(`${at} 之前没有 Burst # 行`);
+      return;
+    }
+    for (const item of items)
+      if (Number(item[1]) > burstWidth + 1)
+        failures.push(
+          `${at} 重叠 ${item[1]}s 超过所在 burst 的显示长度 ${burstWidth}s(+1s 取整余量)`,
+        );
   });
   return failures;
 }
@@ -4113,6 +4173,7 @@ export function checkMatch(
   hardFailures.push(...checkHealedThroughConsistency(lines));
   hardFailures.push(...checkBurstTargetHpConsistency(lines));
   hardFailures.push(...checkBurstTargetDamageParts(lines));
+  hardFailures.push(...checkBurstAllyOverlap(lines));
   hardFailures.push(...checkVulnerableOwnerDamage(lines));
   hardFailures.push(...checkBehaviorPriorConsistency(lines));
   hardFailures.push(...checkBurstWindowRefConsistency(lines));

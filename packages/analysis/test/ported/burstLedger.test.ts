@@ -4,6 +4,8 @@ import { CombatUnitSpec, LogEvent } from "@gladlog/parser-compat";
 import {
   analyzeBurstLedger,
   auditWindowTargeting,
+  BURST_ALLY_OVERLAP_ITEM_RE_SRC,
+  BURST_ALLY_OVERLAP_LABEL,
   BURST_TARGET_DAMAGE_RE_SRC,
   burstSecondTargetClause,
   formatBurstLedgerForContext,
@@ -368,8 +370,15 @@ describe("burstLedger — burst grouping and audit", () => {
     } as any);
 
     const entries = analyzeBurstLedger(player, [ally], [e1], makeCombat());
+    // T12 ⑦: the overlap carries its length and where that ally's damage
+    // went in it — AW 10–30 s, Combustion from 13 s; the mage hit nobody
     expect(entries[0].allyCDsOverlapping).toEqual([
-      { playerName: "Mage", spellName: "Combustion" },
+      {
+        playerName: "Mage",
+        spellName: "Combustion",
+        overlapSeconds: 10, // Combustion 13–23 s inside 10–30 s
+        topTarget: null,
+      },
     ]);
     // AW buff 20s → span ends at 30s; death at 32s is inside the 5s credit slack
     expect(entries[0].dominantTarget?.died).toBe(true);
@@ -709,6 +718,146 @@ describe("burstLedger — the second target and the absorbed part (T12 ⑤)", ()
     expect(legend).toContain(
       "`second target: X N` = the enemy player your damage was next highest on",
     );
+  });
+});
+
+// T12 ⑦ (user ruling 2026-10-10): "Aligned with" meant only that a
+// teammate's offensive cooldown overlapped in time. The line says what was
+// measured — how long, and where that teammate's damage went in it.
+describe("burstLedger — ally CDs overlapping: seconds and their top target (T12 ⑦)", () => {
+  const cast = (id: string, atS: number, src: string, name: string) =>
+    makeSpellCastEvent(
+      id,
+      MATCH_START + atS * 1000,
+      src,
+      "Self",
+      src,
+      src,
+      0,
+      name,
+    );
+  // 0e0663e6 Burst #1: the DK's burst is on the paladin; the priest's
+  // Voidform overlaps it while 0.73M of his damage goes to the hunter and
+  // 0.34M to the paladin.
+  const dk = () =>
+    makeUnit("p1", {
+      name: "Dk",
+      spec: CombatUnitSpec.Paladin_Retribution,
+      info,
+      // Avenging Wrath: a 20 s effect → the burst is 13–33 s
+      spellCastEvents: [cast("31884", 13, "p1", "Avenging Wrath")],
+      damageOut: [dmgOut(MATCH_START + 15_000, -1_400_000, "e1")],
+    } as any);
+  const priest = (castAtS: number, damageOut: unknown[]) =>
+    makeUnit("f2", {
+      name: "Priest",
+      spec: CombatUnitSpec.Mage_Fire,
+      info,
+      spellCastEvents: [cast("190319", castAtS, "f2", "Combustion")],
+      damageOut,
+    } as any);
+  const paladin = () => makeUnit("e1", { name: "Paladin", info } as any);
+  const hunter = () => makeUnit("e2", { name: "Hunter", info } as any);
+  const ledger = (ally: ReturnType<typeof priest>) =>
+    analyzeBurstLedger(dk(), [ally], [paladin(), hunter()], makeCombat());
+  const overlapLine = (bursts: ReturnType<typeof analyzeBurstLedger>) =>
+    formatBurstLedgerForContext(bursts, [], []).find((l) =>
+      l.includes(`${BURST_ALLY_OVERLAP_LABEL}: `),
+    );
+
+  it("the teammate's top target in the overlap is his own, not the burst's", () => {
+    const bursts = ledger(
+      priest(13, [
+        dmgOut(MATCH_START + 16_000, -730_000, "e2"),
+        dmgOut(MATCH_START + 17_000, -340_000, "e1"),
+        dmgOut(MATCH_START + 5_000, -900_000, "e1"), // before the overlap
+      ]),
+    );
+    const [a] = bursts[0].allyCDsOverlapping;
+    expect(bursts[0].dominantTarget?.unitName).toBe("Paladin");
+    expect(a!.topTarget).toEqual({
+      unitId: "e2",
+      unitName: "Hunter",
+      damage: 730_000,
+    });
+    expect(a!.overlapSeconds).toBeGreaterThan(0);
+    expect(overlapLine(bursts)).toBe(
+      `    Ally CDs overlapping: Priest Combustion ${a!.overlapSeconds.toFixed(1)}s (their top target in it: Hunter 0.73M)`,
+    );
+  });
+
+  it("the overlap is the seconds both ran, not the ally cooldown's length", () => {
+    // Combustion pressed 5 s before the burst: only what is inside 13–33 s
+    const early = ledger(priest(8, []))[0].allyCDsOverlapping[0]!;
+    const inside = ledger(priest(13, []))[0].allyCDsOverlapping[0]!;
+    expect(inside.overlapSeconds - early.overlapSeconds).toBeCloseTo(5, 6);
+    // pressed 2 s before the burst ends: 2 s, whatever its own length
+    expect(
+      ledger(priest(31, []))[0].allyCDsOverlapping[0]!.overlapSeconds,
+    ).toBeCloseTo(2, 6);
+  });
+
+  it("an ally who damaged no enemy player in the overlap: said, not left blank", () => {
+    const bursts = ledger(
+      // all of it after the burst ended
+      priest(31, [dmgOut(MATCH_START + 40_000, -500_000, "e1")]),
+    );
+    expect(bursts[0].allyCDsOverlapping[0]!.topTarget).toBeNull();
+    expect(overlapLine(bursts)).toBe(
+      "    Ally CDs overlapping: Priest Combustion 2.0s (no damage by them on enemy players in it)",
+    );
+  });
+
+  it("which ally CDs are listed is the old predicate: spans that only touch still count, at 0.0s", () => {
+    // Combustion 3–13 s ends in the instant the burst begins (13 s). The
+    // list's length is what `alignedBurstRatio` counts — it must not move.
+    const bursts = ledger(priest(3, []));
+    expect(bursts[0].allyCDsOverlapping).toHaveLength(1);
+    expect(bursts[0].allyCDsOverlapping[0]!.overlapSeconds).toBe(0);
+    expect(overlapLine(bursts)).toBe(
+      "    Ally CDs overlapping: Priest Combustion 0.0s (no damage by them on enemy players in it)",
+    );
+    // one that ended before the burst began is not listed, as before
+    expect(ledger(priest(2, []))[0].allyCDsOverlapping).toEqual([]);
+  });
+
+  it("the bare word is gone; a burst nobody overlapped still reads Solo burst", () => {
+    const withAlly = formatBurstLedgerForContext(
+      ledger(priest(13, [])),
+      [],
+      [],
+    );
+    expect(withAlly.join("\n")).not.toContain("Aligned");
+    const solo = formatBurstLedgerForContext(
+      analyzeBurstLedger(dk(), [], [paladin(), hunter()], makeCombat()),
+      [],
+      [],
+    );
+    expect(solo).toContain("    Solo burst — no ally offensive CD overlapped.");
+    expect(solo.join("\n")).not.toContain("Aligned");
+  });
+
+  it("each item reads in the pattern the gate uses", () => {
+    const line = overlapLine(
+      ledger(priest(13, [dmgOut(MATCH_START + 16_000, -730_000, "e2")])),
+    )!;
+    const items = [
+      ...line.matchAll(new RegExp(BURST_ALLY_OVERLAP_ITEM_RE_SRC, "g")),
+    ];
+    expect(items).toHaveLength(1);
+    expect(items[0]!.slice(2)).toEqual(["Hunter", "0.73"]);
+  });
+
+  it("the legend says the overlap is in time only", () => {
+    const legend = formatBurstLedgerForContext(
+      ledger(priest(13, [])),
+      [],
+      [],
+    )[1];
+    expect(legend).toContain(
+      "`Ally CDs overlapping` = a teammate's offensive cooldown was running during part of this burst — an overlap in time and nothing more",
+    );
+    expect(legend).toContain("which need not be this burst's Target");
   });
 });
 

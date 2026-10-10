@@ -77,7 +77,7 @@ describe("checkBurstTargetDamageParts", () => {
     expect(
       checkBurstTargetDamageParts([
         "  `Target` = the enemy player your own damage in the burst was highest on, counting what its shields absorbed. `your damage` = that figure",
-        "    Aligned with: someone",
+        "    Solo burst — no ally offensive CD overlapped.",
       ]),
     ).toEqual([]);
   });
