@@ -9,8 +9,20 @@
  */
 import { CombatUnitSpec } from "@gladlog/parser-compat";
 
-import { CC_DURATION_TALENT_MODIFIERS } from "../src/data/spellEffectData";
-import { ccFullDurationForCaster } from "../src/utils/ccDuration";
+import {
+  CC_DURATION_TALENT_MODIFIERS,
+  ccFullDurationSeconds,
+  OPPRESSING_ROAR_LENGTHENED_MECHANICS,
+  OPPRESSING_ROAR_PVP_CC_DURATION_MULT,
+  OPPRESSING_ROAR_SPELL_ID,
+} from "../src/data/spellEffectData";
+import inventory from "../src/data/talentEffectInventoryGenerated.json";
+import {
+  ccFullDurationForApplication,
+  ccFullDurationForCaster,
+  oppressingRoarLengthens,
+} from "../src/utils/ccDuration";
+import { ccMechanicOf } from "../src/utils/spellMechanics";
 import { talentOwnershipOf } from "../src/utils/talentOwnership";
 import { makeUnit } from "./ported/testHelpers";
 
@@ -112,5 +124,106 @@ describe("ccFullDurationForCaster — 天赋条件时长", () => {
     // the trap: baseline-by-elimination
     expect(talentOwnershipOf(fury, BONESHAKER)).toBe("yes");
     expect(ccFullDurationForCaster(SHOCKWAVE_STUN, fury)).toBe(2);
+  });
+});
+
+/**
+ * FT-T07 (user decision D9, 2026-10-10): the length of ONE application —
+ * Oppressing Roar on the target as the CC lands lengthens it by 30 %, for the
+ * mechanics the Roar's DB2 rows list. `ccFullDurationSeconds` /
+ * `ccFullDurationForCaster` (the spell's official number) do not move.
+ */
+describe("ccFullDurationForApplication — Oppressing Roar on the target", () => {
+  const TERROR_OF_THE_SKIES = "372245"; // stun (mechanic 12), DB2 3 s
+  const POLYMORPH = "118"; // polymorph (17), 6 s
+  const MORTAL_COIL = "6789"; // horror (24) — not on the Roar's rows
+  const CHASTISE = "88625"; // no DB2 mechanic, no fixed duration
+  const CHAOS_NOVA = "179057";
+  const VOID_NOVA = "1234195";
+
+  it("the covered mechanics and the +30 % are the inventory's aura-232 rows of 372048 (the DB2 leg, re-checked on every data refresh)", () => {
+    const rows = (
+      inventory as unknown as {
+        rows: Array<{
+          spellId: string;
+          aura: number;
+          misc0: number;
+          basePoints: number;
+          pvpMultiplier?: number;
+        }>;
+      }
+    ).rows.filter(
+      (r) => r.spellId === OPPRESSING_ROAR_SPELL_ID && r.aura === 232,
+    );
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.map((r) => r.misc0).sort((a, b) => a - b)).toEqual(
+      [...OPPRESSING_ROAR_LENGTHENED_MECHANICS].sort((a, b) => a - b),
+    );
+    for (const r of rows)
+      expect(1 + (r.basePoints * (r.pvpMultiplier ?? 1)) / 100).toBeCloseTo(
+        OPPRESSING_ROAR_PVP_CC_DURATION_MULT,
+        6,
+      );
+  });
+
+  it("coverage is read off the CC's own DB2 mechanic; an unknown mechanic is not lengthened", () => {
+    expect(ccMechanicOf(TERROR_OF_THE_SKIES)).toBe(12);
+    expect(oppressingRoarLengthens(TERROR_OF_THE_SKIES)).toBe(true);
+    expect(oppressingRoarLengthens(POLYMORPH)).toBe(true);
+    expect(ccMechanicOf(MORTAL_COIL)).toBe(24);
+    expect(oppressingRoarLengthens(MORTAL_COIL)).toBe(false);
+    expect(ccMechanicOf(CHASTISE)).toBeUndefined();
+    expect(oppressingRoarLengthens(CHASTISE)).toBe(false);
+  });
+
+  it("Terror of the Skies: 3 s without the Roar, 3 × 1.3 = 3.9 s with it on the target", () => {
+    expect(ccFullDurationSeconds(TERROR_OF_THE_SKIES)).toBe(3);
+    expect(
+      ccFullDurationForApplication(TERROR_OF_THE_SKIES, undefined, false),
+    ).toBe(3);
+    expect(
+      ccFullDurationForApplication(TERROR_OF_THE_SKIES, undefined, true),
+    ).toBeCloseTo(3.9, 6);
+  });
+
+  it("without the Roar an application is exactly the caster's full duration", () => {
+    for (const id of [
+      TERROR_OF_THE_SKIES,
+      POLYMORPH,
+      MORTAL_COIL,
+      INTIMIDATING_SHOUT,
+      CHAOS_NOVA,
+      VOID_NOVA,
+    ])
+      expect(ccFullDurationForApplication(id, undefined, false), id).toBe(
+        ccFullDurationForCaster(id, undefined),
+      );
+  });
+
+  it("a mechanic the Roar does not list keeps its length under it; no duration stays no duration", () => {
+    expect(ccFullDurationForApplication(MORTAL_COIL, undefined, true)).toBe(
+      ccFullDurationSeconds(MORTAL_COIL),
+    );
+    expect(
+      ccFullDurationForApplication(CHASTISE, undefined, true),
+    ).toBeUndefined();
+    expect(
+      ccFullDurationForApplication("no-such-id", undefined, true),
+    ).toBeUndefined();
+  });
+
+  it("the Roar multiplies the caster's own length: Resonant Voice 7.2 s × 1.3", () => {
+    const warrior = makeUnit("w6", {
+      spec: CombatUnitSpec.Warrior_Arms,
+      info: { talents: [RESONANT_VOICE_TALENT], pvpTalents: [] },
+    });
+    expect(
+      ccFullDurationForApplication(INTIMIDATING_SHOUT, warrior, true),
+    ).toBeCloseTo(6 * 1.2 * 1.3, 6);
+  });
+
+  it("Chaos Nova and Void Nova stay on DB2's 3 s — their 4 s plateau has no known mechanism and is not the Roar", () => {
+    expect(ccFullDurationSeconds(CHAOS_NOVA)).toBe(3);
+    expect(ccFullDurationSeconds(VOID_NOVA)).toBe(3);
   });
 });

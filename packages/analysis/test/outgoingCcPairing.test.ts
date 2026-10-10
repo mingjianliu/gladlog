@@ -21,6 +21,7 @@ import {
 } from "../src/analysis/candidates/cooldownTiming";
 import { ensureAnalysisData } from "../src/data/ensure";
 import { ccFullDurationSeconds } from "../src/data/spellEffectData";
+import { oppressingRoarOnAtMs } from "../src/utils/ccBreakAnalysis";
 import {
   ccRemovalCause,
   formatCcRemovalCause,
@@ -265,6 +266,36 @@ describe("outgoing CC pairing (G2)", () => {
       ccRemovalCause(pressed as never, KIDNEY, at(10), at(12), at(12)),
     ).toBeUndefined();
   });
+  it("FT-T07: the healer lock's official end counts an Oppressing Roar on the healer at the landing — a press 5.5 s into a 5 s stun ended it only under the Roar (6.5 s)", () => {
+    expect(ccFullDurationSeconds(KIDNEY)).toBe(5);
+    const ROAR = "372048";
+    const stunned = (roar: boolean) =>
+      healer({
+        auraEvents: [
+          ...(roar ? [aura(LogEvent.SPELL_AURA_APPLIED, ROAR, 9)] : []),
+          aura(LogEvent.SPELL_AURA_APPLIED, KIDNEY, 10),
+          aura(LogEvent.SPELL_AURA_REMOVED, KIDNEY, 15.5),
+        ],
+        // Will to Survive at the removal
+        spellCastEvents: [
+          makeSpellCastEvent("59752", at(15.5), "0000000000000000"),
+        ],
+      });
+    const f = rogue();
+    const under = stunned(true);
+    expect(
+      enemyHealerCcWindows([f], [under], combat(f, under))[0]?.endedBy,
+    ).toMatchObject({ kind: "break" });
+    // the helper the window reads the Roar with: the application's own line
+    expect(oppressingRoarOnAtMs(under as never, KIDNEY, at(10))).toBe(true);
+    expect(oppressingRoarOnAtMs(under as never, KIDNEY, at(11))).toBe(false);
+    const plain = stunned(false);
+    expect(oppressingRoarOnAtMs(plain as never, KIDNEY, at(10))).toBe(false);
+    const w = enemyHealerCcWindows([f], [plain], combat(f, plain));
+    expect(w).toHaveLength(1);
+    expect(w[0]?.endedBy).toBeUndefined();
+  });
+
   it("F-S3: a chained lock reports what ended its LAST component (141470d0: the second Polymorph, broken by Fire Breath)", () => {
     const w = (fromSeconds: number, toSeconds: number, by?: string) => ({
       fromSeconds,

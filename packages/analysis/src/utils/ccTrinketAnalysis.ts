@@ -52,7 +52,11 @@ import {
   coveredMsWithin,
   hardCcAuraAt,
 } from "./cannotCastIntervals";
-import { ccFullDurationForCaster } from "./ccDuration";
+import { oppressingRoarOnAt } from "./ccBreakAnalysis";
+import {
+  ccFullDurationForApplication,
+  ccFullDurationForCaster,
+} from "./ccDuration";
 import { stasisReplayWindows } from "./combatStates";
 import { isHealerSpec, isPassiveProcCast, specToString } from "./cooldowns";
 import { ALLY_DISPEL_MATCH_TOLERANCE_S } from "./dispelAnalysis";
@@ -574,9 +578,11 @@ export interface ICCInstance {
   atSeconds: number;
   durationSeconds: number;
   /** How long this application was going to run: the CC's official full
-   * duration for its caster (`ccFullDurationForCaster`) × its DR level's share
-   * (`drDurationFactor`) — what the break binder ranks "time left" by.
-   * Undefined when the game has no fixed duration for it (Maim). */
+   * duration for its caster, lengthened by an Oppressing Roar that was on the
+   * player as it landed (`ccFullDurationForApplication`), × its DR level's
+   * share (`drDurationFactor`) — what the break binder ranks "time left" by
+   * and what "cut short of its official end" is read against. Undefined when
+   * the game has no fixed duration for it (Maim). */
   expectedDurationSeconds?: number;
   /** The round ended with this CC still on the player: its window is clipped
    * at the round end (`roundEndMs`), or the log has no REMOVED for it and the
@@ -1801,13 +1807,22 @@ export function analyzePlayerCCAndTrinket(
     srcUnitId: string;
     applyMs: number;
     removeMs: number;
+    /** Oppressing Roar was on the player as this application landed
+     * (`oppressingRoarOnAt`) — it runs 30 % longer (FT-T07) */
+    roarAtApply: boolean;
     /** closed here with no REMOVED in the log */
     noRemoved?: true;
   }> = [];
 
   const pendingCC = new Map<
     string,
-    { applyMs: number; spellName: string; srcName: string; srcUnitId: string }
+    {
+      applyMs: number;
+      spellName: string;
+      srcName: string;
+      srcUnitId: string;
+      roarAtApply: boolean;
+    }
   >();
 
   const pendingRoot = new Map<
@@ -1957,6 +1972,7 @@ export function analyzePlayerCCAndTrinket(
         spellName: getEnglishSpellName(spellId, aura.spellName),
         srcName: aura.srcUnitName,
         srcUnitId: aura.srcUnitId,
+        roarAtApply: oppressingRoarOnAt(player, aura),
       });
     } else if (isRemovalEvent) {
       const matchKey = matchPendingCcKey(pendingCC, spellId, ccKey);
@@ -1969,6 +1985,7 @@ export function analyzePlayerCCAndTrinket(
           srcUnitId: pending.srcUnitId,
           applyMs: pending.applyMs,
           removeMs: aura.timestamp,
+          roarAtApply: pending.roarAtApply,
         });
         pendingCC.delete(matchKey);
       }
@@ -1997,12 +2014,15 @@ export function analyzePlayerCCAndTrinket(
         srcUnitId: pending.srcUnitId,
         applyMs: pending.applyMs,
         removeMs: aura.timestamp,
+        roarAtApply: pending.roarAtApply,
       });
       pendingCC.set(ccKey, {
         applyMs: aura.timestamp,
         spellName: getEnglishSpellName(spellId, aura.spellName),
         srcName: aura.srcUnitName,
         srcUnitId: aura.srcUnitId,
+        // the re-cast is a new application: the Roar is read again
+        roarAtApply: oppressingRoarOnAt(player, aura),
       });
     }
   }
@@ -2028,6 +2048,7 @@ export function analyzePlayerCCAndTrinket(
       srcUnitId: pending.srcUnitId,
       applyMs: pending.applyMs,
       removeMs: pendingEnd(pendingSpellId, pending.srcUnitId, pending.applyMs),
+      roarAtApply: pending.roarAtApply,
       noRemoved: true,
     });
   });
@@ -2098,9 +2119,10 @@ export function analyzePlayerCCAndTrinket(
   // rather than the real one. When several CCs are active at once, credit the one with the
   // most official time left (F-E15, see bindBreakToWindow).
   // The length each window was going to run: official full duration for its
-  // caster × its DR level's share. The DR levels come from the same
-  // `computeIncomingDR` walk, over the same chronological order, that
-  // annotates the instances below.
+  // caster — × 1.3 when Oppressing Roar was on the player as it landed
+  // (`ccFullDurationForApplication`, FT-T07) — × its DR level's share. The DR
+  // levels come from the same `computeIncomingDR` walk, over the same
+  // chronological order, that annotates the instances below.
   const byApply = filteredCCWindows
     .map((w, idx) => ({ w, idx }))
     .sort((a, b) => a.w.applyMs - b.w.applyMs);
@@ -2114,12 +2136,13 @@ export function analyzePlayerCCAndTrinket(
     matchStartMs,
   ).forEach((dr, k) => drLevelOfIdx.set(byApply[k]!.idx, dr));
   const expectedDurationS = (
-    w: { spellId: string; srcUnitId: string },
+    w: { spellId: string; srcUnitId: string; roarAtApply: boolean },
     idx: number,
   ): number | undefined => {
-    const full = ccFullDurationForCaster(
+    const full = ccFullDurationForApplication(
       w.spellId,
       [...enemies, ...enemyPets].find((u) => u.id === w.srcUnitId),
+      w.roarAtApply,
     );
     if (full === undefined) return undefined;
     const dr = drLevelOfIdx.get(idx);

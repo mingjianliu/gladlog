@@ -44,7 +44,8 @@ import {
   drDurationFactor,
   type DRLevel,
 } from "../../utils/drAnalysis";
-import { ccFullDurationForCaster } from "../../utils/ccDuration";
+import { oppressingRoarOnAtMs } from "../../utils/ccBreakAnalysis";
+import { ccFullDurationForApplication } from "../../utils/ccDuration";
 import {
   ccRemovalCause,
   formatCcRemovalCause,
@@ -166,10 +167,13 @@ export function enemyHealerCcWindows(
       if (app.drInfo.level === "Immune") continue;
       const applyMs = Math.round(combat.startTime + app.atSeconds * 1000);
       // the official length at its DR step, as `[CC ON ENEMY] broke out`
-      // reads it: a CC that ran its course was not ended by a press
-      const full = ccFullDurationForCaster(
+      // reads it: a CC that ran its course was not ended by a press. Under an
+      // Oppressing Roar that course is 30 % longer (FT-T07) — the one
+      // per-application length, `ccFullDurationForApplication`.
+      const full = ccFullDurationForApplication(
         app.spellId,
         friends.find((f) => f.name === app.casterName),
+        healer ? oppressingRoarOnAtMs(healer, app.spellId, applyMs) : false,
       );
       const endedBy = healer
         ? ccRemovalCause(

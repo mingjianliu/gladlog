@@ -1952,3 +1952,135 @@ describe("CC-break abilities other than the trinket (F-E21 / A′15)", () => {
     expect(none.ccInstances[1]?.breakRacialOnCd).toBeUndefined();
   });
 });
+
+/**
+ * FT-T07 (user decision D9, 2026-10-10): the length an application was going
+ * to run counts an Oppressing Roar that was on the player as it landed
+ * (`ccFullDurationForApplication`). 605 S2 files: of the 20 Terror of the
+ * Skies that outlived 3.3 s, 14 landed under the Roar; of the 194 at
+ * 2.9–3.1 s, none did. The observed `durationSeconds` is the log's and never
+ * moves.
+ */
+describe("expectedDurationSeconds under Oppressing Roar (FT-T07)", () => {
+  const MATCH_START = 1_000_000;
+  const combat = {
+    startTime: MATCH_START,
+    endTime: MATCH_START + 300_000,
+    startInfo: { zoneId: "1672" },
+  };
+  const TERROR = "372245"; // Terror of the Skies — stun, DB2 3 s
+  const ROAR = "372048";
+  const CHAOS_NOVA = "179057";
+  const BLINK = "1953";
+
+  beforeAll(async () => {
+    await ensureAnalysisData();
+  });
+
+  const evoker = () =>
+    makeUnit("enemy-1", {
+      name: "EnemyEvoker",
+      spec: CombatUnitSpec.Evoker_Devastation,
+      reaction: CombatUnitReaction.Hostile,
+    });
+  const aura = (event: LogEvent, spellId: string, s: number) =>
+    makeAuraEvent(
+      event,
+      spellId,
+      MATCH_START + Math.round(s * 1000),
+      "enemy-1",
+      "player-1",
+    );
+  const on = (spellId: string, s: number) =>
+    aura(LogEvent.SPELL_AURA_APPLIED, spellId, s);
+  const off = (spellId: string, s: number) =>
+    aura(LogEvent.SPELL_AURA_REMOVED, spellId, s);
+  const run = (
+    auraEvents: ReturnType<typeof makeAuraEvent>[],
+    spellCastEvents: ReturnType<typeof makeSpellCastEvent>[] = [],
+  ) =>
+    analyzePlayerCCAndTrinket(
+      makeUnit("player-1", {
+        name: "Mage",
+        spec: CombatUnitSpec.Mage_Frost,
+        reaction: CombatUnitReaction.Friendly,
+        auraEvents,
+        spellCastEvents,
+      }),
+      [evoker()],
+      combat,
+    );
+
+  it("no Roar: Terror of the Skies was going to run its official 3 s", () => {
+    const r = run([on(TERROR, 10), off(TERROR, 13)]);
+    expect(r.ccInstances).toHaveLength(1);
+    expect(r.ccInstances[0]?.expectedDurationSeconds).toBe(3);
+    expect(r.ccInstances[0]?.durationSeconds).toBe(3);
+  });
+
+  it("the Roar on the player as it lands: 3 × 1.3 = 3.9 s (7b07c1dee3f0: 3.90 s under it, 3.00 s on the totem without)", () => {
+    const r = run([
+      on(ROAR, 8),
+      on(TERROR, 10),
+      off(TERROR, 13.897),
+      off(ROAR, 18),
+    ]);
+    // the Roar is not a CC: one instance
+    expect(r.ccInstances).toHaveLength(1);
+    expect(r.ccInstances[0]?.expectedDurationSeconds).toBeCloseTo(3.9, 6);
+    // the observed lifetime is the log's own
+    expect(r.ccInstances[0]?.durationSeconds).toBeCloseTo(3.897, 6);
+    expect(r.ccInstances[0]?.drInfo?.level).toBe("Full");
+  });
+
+  it("a Roar that ran out before the landing, or landed after it, does not lengthen", () => {
+    const ranOut = run([
+      on(ROAR, 1),
+      off(ROAR, 9.5),
+      on(TERROR, 10),
+      off(TERROR, 13),
+    ]);
+    expect(ranOut.ccInstances[0]?.expectedDurationSeconds).toBe(3);
+    const after = run([
+      on(TERROR, 10),
+      on(ROAR, 10.5),
+      off(TERROR, 13),
+      off(ROAR, 20),
+    ]);
+    expect(after.ccInstances[0]?.expectedDurationSeconds).toBe(3);
+  });
+
+  it("the DR share applies on top: a second one at 50 % under the Roar is 3 × 1.3 × 0.5 = 1.95 s", () => {
+    const r = run([
+      on(ROAR, 8),
+      on(TERROR, 10),
+      off(TERROR, 13.9),
+      on(TERROR, 16),
+      off(TERROR, 17.95),
+      off(ROAR, 18),
+    ]);
+    expect(r.ccInstances.map((c) => c.drInfo?.level)).toEqual(["Full", "50%"]);
+    expect(r.ccInstances[1]?.expectedDurationSeconds).toBeCloseTo(1.95, 6);
+  });
+
+  it("a Blink 3.5 s into a stun the Roar stretched to 3.9 s cut it short; with no Roar that stun had already run its 3 s", () => {
+    const blink = [
+      makeSpellCastEvent(BLINK, MATCH_START + 13_504, "0000000000000000"),
+    ];
+    const stretched = run(
+      [on(ROAR, 8), on(TERROR, 10), off(TERROR, 13.5), off(ROAR, 18)],
+      blink,
+    );
+    expect(stretched.ccInstances[0]?.trinketState).toBe("racial_break");
+    expect(stretched.ccInstances[0]?.breakRacialName).toBe("Blink");
+    const plain = run([on(TERROR, 10), off(TERROR, 13.5)], blink);
+    expect(plain.ccInstances[0]?.breakRacialName).toBeUndefined();
+    expect(plain.ccInstances[0]?.trinketState).not.toBe("racial_break");
+  });
+
+  it("Chaos Nova is not touched: 3 s expected whatever it ran (its 4 s plateau has no known mechanism)", () => {
+    const r = run([on(CHAOS_NOVA, 10), off(CHAOS_NOVA, 14)]);
+    expect(r.ccInstances[0]?.expectedDurationSeconds).toBe(3);
+    expect(r.ccInstances[0]?.durationSeconds).toBe(4);
+  });
+});

@@ -2,12 +2,11 @@ import { ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
 import {
   getEnglishSpellName,
-  OPPRESSING_ROAR_PVP_CC_DURATION_MULT,
   OPPRESSING_ROAR_SPELL_ID,
 } from "../data/spellEffectData";
 import { SPELL_CATEGORIES } from "../data/spellCategories";
 import { dropAuraRebroadcasts } from "./auraIntervals";
-import { ccFullDurationForCaster } from "./ccDuration";
+import { ccFullDurationForApplication } from "./ccDuration";
 import {
   buildCcCategoryHistory,
   drDurationFactor,
@@ -90,12 +89,12 @@ const isRootType = (spellId: string): boolean =>
  * against the earliest pending entry with the same spellId.
  */
 /**
- * How much of a CC was left when it ended early: official full duration
- * (`ccFullDurationForCaster`: DB2 PvP duration, caster-aware talents) × DR
- * factor at the apply × Oppressing Roar (+30 % when the debuff was on the
- * holder at application) − time already held. No duration known → null (no
- * guess). The one arithmetic for `[CC BROKEN]` and `[CC REMOVED]` (triage
- * cc-dr F-CR1).
+ * How much of a CC was left when it ended early: the application's full
+ * length (`ccFullDurationForApplication`: DB2 PvP duration, caster-aware
+ * talents, × Oppressing Roar's +30 % when the debuff was on the holder at
+ * application and covers the CC's mechanic) × DR factor at the apply − time
+ * already held. No duration known → null (no guess). The one arithmetic for
+ * `[CC BROKEN]` and `[CC REMOVED]` (triage cc-dr F-CR1).
  */
 export function ccRemainingSeconds(p: {
   spellId: string;
@@ -107,10 +106,12 @@ export function ccRemainingSeconds(p: {
   matchStartMs: number;
   roarAtApply: boolean;
 }): number | null {
-  const baseDuration = ccFullDurationForCaster(p.spellId, p.caster);
-  if (baseDuration === undefined) return null;
-  const tableDuration =
-    baseDuration * (p.roarAtApply ? OPPRESSING_ROAR_PVP_CC_DURATION_MULT : 1);
+  const tableDuration = ccFullDurationForApplication(
+    p.spellId,
+    p.caster,
+    p.roarAtApply,
+  );
+  if (tableDuration === undefined) return null;
   const category = getDRCategory(p.spellId);
   let factor = 1;
   if (category) {
@@ -137,7 +138,7 @@ export function ccRemainingSeconds(p: {
  * change later in log order at the same timestamp does not count (the
  * application-time state `analyzeCcBreaks` keeps). */
 export function oppressingRoarOnAt(
-  holder: ICombatUnit,
+  holder: Pick<ICombatUnit, "auraEvents">,
   applied: ICombatUnit["auraEvents"][number],
 ): boolean {
   let on = false;
@@ -153,6 +154,25 @@ export function oppressingRoarOnAt(
     else if (ev === LogEvent.SPELL_AURA_REMOVED) on = false;
   }
   return on;
+}
+
+/** `oppressingRoarOnAt` for a caller that holds the application's time, not
+ * its aura event (`IOutgoingCCApplication`): the APPLIED / REFRESH of
+ * `spellId` on `holder` at `applyMs`. No such line → false (nothing to read
+ * the Roar against). */
+export function oppressingRoarOnAtMs(
+  holder: Pick<ICombatUnit, "auraEvents">,
+  spellId: string,
+  applyMs: number,
+): boolean {
+  const applied = (holder.auraEvents ?? []).find(
+    (a) =>
+      a.spellId === spellId &&
+      a.timestamp === applyMs &&
+      (a.logLine.event === LogEvent.SPELL_AURA_APPLIED ||
+        a.logLine.event === LogEvent.SPELL_AURA_REFRESH),
+  );
+  return applied !== undefined && oppressingRoarOnAt(holder, applied);
 }
 
 export function analyzeCcBreaks(

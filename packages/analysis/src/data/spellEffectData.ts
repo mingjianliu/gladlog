@@ -86,6 +86,21 @@ export function effectiveCooldownSeconds(spellId: string): number | undefined {
  */
 export const OPPRESSING_ROAR_SPELL_ID = "372048";
 export const OPPRESSING_ROAR_PVP_CC_DURATION_MULT = 1.3;
+/**
+ * What the Roar covers: aura 232 is keyed by SpellMechanic, one row per
+ * mechanic (`EffectMiscValue_0`) — the 17 rows of 372048 in
+ * `talentEffectInventoryGenerated.json` (build 12.1.5.69594), each 50 × 0.6:
+ * charm 1, disorient 2, disarm 3, fear 5, root 7, silence 9, sleep 10,
+ * snare 11, stun 12, freeze 13, knockout 14, polymorph 17, banish 18, turn 23,
+ * interrupt 26, daze 27, sap 30. NOT on it: horror 24 (Mortal Coil) and
+ * shackle 20 — every other id typed `cc` / `roots` in SPELL_CATEGORIES has a
+ * listed mechanic (114 of 117; Holy Word: Chastise has no DB2 mechanic and no
+ * fixed duration). A set of mechanic ids, not spell ids, so the spell-id
+ * registry does not apply; `test/ccDuration.test.ts` pins it to the inventory
+ * rows instead, so a data refresh that changes them turns CI red.
+ */
+export const OPPRESSING_ROAR_LENGTHENED_MECHANICS: ReadonlySet<number> =
+  new Set([1, 2, 3, 5, 7, 9, 10, 11, 12, 13, 14, 17, 18, 23, 26, 27, 30]);
 
 /**
  * Full, undiminished PvP duration of a CC / root aura in seconds — the fact the
