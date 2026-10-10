@@ -270,39 +270,67 @@ describe("[HEALING] / [ROT PRESSURE] legends print only with their line family",
     expect(text).not.toContain("[ROT PRESSURE]");
   });
 
-  it("a rot-pressure stretch → the line and its legend, with the predicate's own numbers", () => {
-    const debuff = (spellId: string) =>
-      ({
+  const debuff = (spellId: string) =>
+    ({
+      timestamp: MATCH_START_MS,
+      spellId,
+      spellName: spellId,
+      srcUnitId: "src",
+      srcUnitName: "Source",
+      destUnitId: "dest",
+      destUnitName: "Dest",
+      logLine: {
+        event: LogEvent.SPELL_AURA_APPLIED,
         timestamp: MATCH_START_MS,
-        spellId,
-        spellName: spellId,
-        srcUnitId: "e1",
-        srcUnitName: "Enemy",
-        destUnitId: "o",
-        destUnitName: "Druid-Ravencrest",
-        logLine: {
-          event: LogEvent.SPELL_AURA_APPLIED,
-          timestamp: MATCH_START_MS,
-          parameters: Object.assign([], { 11: "DEBUFF" }),
-        },
-      }) as unknown as ICombatUnit["auraEvents"][number];
-    const hpAt = (sec: number, hp: number) => ({
-      ...advSample("o", MATCH_START_MS + sec * 1000, 50_000, 100_000),
-      advancedActorCurrentHp: hp,
+        parameters: Object.assign([], { 11: "DEBUFF" }),
+      },
+    }) as unknown as ICombatUnit["auraEvents"][number];
+  const hpAt = (id: string, sec: number, hp: number) => ({
+    ...advSample(id, MATCH_START_MS + sec * 1000, 50_000, 100_000),
+    advancedActorCurrentHp: hp,
+  });
+  /** Three DoTs on from the first second, under 40 % HP from 0:10 to 0:14. */
+  const rotting = (id: string): Partial<ICombatUnit> => ({
+    // Agony / Corruption / Unstable Affliction
+    auraEvents: [debuff("980"), debuff("146739"), debuff("30108")],
+    advancedActions: [
+      hpAt(id, 8, 80),
+      hpAt(id, 10, 30),
+      hpAt(id, 11, 30),
+      hpAt(id, 12, 30),
+      hpAt(id, 13, 30),
+      hpAt(id, 14, 30),
+      hpAt(id, 20, 80),
+    ],
+  });
+
+  // FT-T15 ⑤a: `pid` knows the friendly roster only, so an enemy's line
+  // printed its bare character name (`Jamosqueeze (Windwalker Monk)`, realm
+  // cut off) — 660 of 1,155 lines on the 605 capture.
+  it("an ENEMY's rot-pressure line carries its roster label, not the bare character name", () => {
+    const owner = mkOwner();
+    const enemy = mkOwner({
+      id: "e5",
+      name: "Jamosqueeze-Tichondrius-US",
+      class: CombatUnitClass.Monk,
+      spec: CombatUnitSpec.Monk_Windwalker,
+      reaction: CombatUnitReaction.Hostile,
+      ...rotting("e5"),
     });
-    const owner = mkOwner({
-      // Agony / Corruption / Unstable Affliction, on from the first second
-      auraEvents: [debuff("980"), debuff("146739"), debuff("30108")],
-      advancedActions: [
-        hpAt(8, 80),
-        hpAt(10, 30),
-        hpAt(11, 30),
-        hpAt(12, 30),
-        hpAt(13, 30),
-        hpAt(14, 30),
-        hpAt(20, 80),
-      ],
-    });
+    const params = paramsWith(owner);
+    params.enemies = [enemy];
+    params.playerIdMap = new Map([[owner.name, 1]]);
+    params.enemyIdMap = new Map([[enemy.name, 5]]);
+    const rot = buildMatchTimeline(params)
+      .split("\n")
+      .filter((l) => /^\d+:\d\d\s+\[ROT PRESSURE\]/.test(l));
+    expect(rot).toEqual([
+      "0:13  [ROT PRESSURE]   5(WMonk) (Windwalker Monk) at 30% HP with 3 active DoTs",
+    ]);
+  });
+
+  it("a rot-pressure stretch → the line and its legend, with the predicate's own numbers", () => {
+    const owner = mkOwner(rotting("o"));
     const lines = buildMatchTimeline(paramsWith(owner)).split("\n");
     expect(
       lines.filter((l) => /^\d+:\d\d\s+\[ROT PRESSURE\]/.test(l)),

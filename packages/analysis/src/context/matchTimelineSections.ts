@@ -237,6 +237,12 @@ export function emitRotPressureEntries(params: {
   matchEndMs: number;
   matchDurationS: number;
   pid: (name: string) => string;
+  /** FT-T15 ⑤a: the timeline's roster label for a player of EITHER side
+   * (`allPlayers` holds both teams, and `pid` knows the friendly roster
+   * only — an enemy printed as its bare character name, realm cut off:
+   * 660 of 1,155 lines on the 605 capture). Resolved by the unit, not its
+   * name. Absent ⇒ `pid(name)` as before, for callers without a roster. */
+  labelOf?: (player: ICombatUnit) => string;
   addEntry: (timeSeconds: number, ...lines: string[]) => void;
 }): void {
   const {
@@ -245,6 +251,7 @@ export function emitRotPressureEntries(params: {
     matchEndMs,
     matchDurationS,
     pid,
+    labelOf,
     addEntry,
   } = params;
 
@@ -317,7 +324,7 @@ export function emitRotPressureEntries(params: {
           ) {
             addEntry(
               t,
-              `${fmtTime(t)}  [ROT PRESSURE]   ${pid(player.name)} (${specToString(player.spec)}) at ${Math.round(hp)}% HP with ${dotCount} active DoTs`,
+              `${fmtTime(t)}  [ROT PRESSURE]   ${labelOf ? labelOf(player) : pid(player.name)} (${specToString(player.spec)}) at ${Math.round(hp)}% HP with ${dotCount} active DoTs`,
             );
             emittedForThisBlock = true;
           }

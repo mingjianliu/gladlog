@@ -387,6 +387,9 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     matchEndMs,
     matchDurationS,
     pid,
+    // an enemy is labelled from the enemy roster, like every other line
+    labelOf: (p) =>
+      friends.some((f) => f.id === p.id) ? pid(p.name) : enemyPid(p.name),
     addEntry,
   });
 
