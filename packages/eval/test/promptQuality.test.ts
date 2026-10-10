@@ -5,6 +5,7 @@ import {
   lookupBehaviorPrior,
   outcomePhrase,
 } from "@gladlog/analysis/src/data/behaviorPrior";
+import { ccLandedMatchWindowMs } from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
 import { CombatUnitReaction } from "@gladlog/parser-compat";
 
 import type { CoverageManifest } from "../src/quality/coverageManifest";
@@ -1052,6 +1053,58 @@ describe("checkCcAvoidedLandedConsistency — a CC that landed cannot also have 
         "0:46  [CC ON TEAM]   2(EShaman) ← Mortal Coil (by 5(DWarlock)) | 3s",
         "0:45  [CC ON TEAM]   1(RDruid) ← Mortal Coil (by 5(DWarlock)) | 3s",
         "0:45  [CC ON TEAM]   2(EShaman) ← Fear (by 5(DWarlock)) | 3s",
+      ]),
+    ).toEqual([]);
+  });
+
+  // FT-T16 (user decision D14, 2026-10-10): a control with a landing delay
+  // is paired as far after its cast as it can land — the gate reads the
+  // producer's own window for the name the line prints.
+  const fmt = (s: number) =>
+    `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+  const delayed = (spell: string, gapS: number) => [
+    `6:56  [CC AVOIDED?]   1(PEvoker): ${spell} (by 6(RShaman)) did not land; Nullifying Shroud (own) active`,
+    `${fmt(416 + gapS)}  [CC ON TEAM]   1(PEvoker) ← ${spell} (by 6(RShaman)'s totem) | 1s [DR: Stun 50%]`,
+  ];
+
+  it("141470d0: `6:56 Capacitor Totem did not land` with the same totem's stun at 6:58 is a contradiction", () => {
+    const out = checkCcAvoidedLandedConsistency(delayed("Capacitor Totem", 2));
+    expect(out).toHaveLength(1);
+    expect(out[0]).toContain("line 1");
+    expect(out[0]).toContain("6:58");
+  });
+
+  it("flags exactly the rendered gaps the producer's window makes certain: d + 1 <= after, per spell", () => {
+    const certain = (spell: string) =>
+      [-2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].filter(
+        (d) => checkCcAvoidedLandedConsistency(delayed(spell, d)).length > 0,
+      );
+    // no delay: the 1.5 s default, the same second only
+    expect(certain("Mortal Coil")).toEqual([0]);
+    // Capacitor Totem lands up to 4.5 s after the cast, Sigil of Misery 3 s,
+    // Ring of Frost 10.5 s (the ring's life)
+    expect(certain("Capacitor Totem")).toEqual([0, 1, 2, 3]);
+    expect(certain("Sigil of Misery")).toEqual([0, 1, 2]);
+    expect(certain("Ring of Frost")).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+    // … and those bounds are the producer's function, not a copy of it
+    for (const spell of [
+      "Mortal Coil",
+      "Capacitor Totem",
+      "Sigil of Misery",
+      "Ring of Frost",
+    ])
+      expect(Math.max(...certain(spell)), spell).toBe(
+        Math.floor(ccLandedMatchWindowMs(spell).afterMs / 1000 - 1),
+      );
+  });
+
+  it("a delayed landing on another unit, or of another spell, is not this line's twin", () => {
+    const [avoidedLine] = delayed("Capacitor Totem", 2);
+    expect(
+      checkCcAvoidedLandedConsistency([
+        avoidedLine!,
+        "6:58  [CC ON TEAM]   2(RDruid) ← Capacitor Totem (by 6(RShaman)'s totem) | 3s",
+        "6:58  [CC ON TEAM]   1(PEvoker) ← Hex (by 6(RShaman)) | 3s",
       ]),
     ).toEqual([]);
   });

@@ -111,7 +111,7 @@ import {
   UNPURGEABLE_MAGIC_AURAS,
 } from "../utils/dispelAnalysis";
 import { MOVEMENT_ROOT_BREAK_DISPEL_IDS } from "../utils/dispelKind";
-import { AOE_CC_SPELL_IDS } from "../utils/drAnalysis";
+import { AOE_CC_LANDING_WINDOW_S, AOE_CC_SPELL_IDS } from "../utils/drAnalysis";
 import { NON_PLAYER_INTERRUPT_IDS } from "../utils/enemyInterrupts";
 import { EXTERNAL_DAMAGE_SHIELD_IDS } from "../utils/externalDamage";
 import { GAP_CLOSER_SPELL_IDS } from "../utils/gapClosers";
@@ -781,6 +781,13 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   ),
   t("AOE_CC_SPELL_IDS", "utils/drAnalysis.ts", "cast", () =>
     set(AOE_CC_SPELL_IDS),
+  ),
+  // FT-T16 (D14, 2026-10-10): cast id → when its control lands. A hand table
+  // since 2026-10-09 and unregistered until the enemy-cast pairing
+  // (`ccLandedMatchWindowMs`) started reading it: a renumbered cast id would
+  // silently give that spell the 1.5 s default again.
+  t("AOE_CC_LANDING_WINDOW_S", "utils/drAnalysis.ts", "cast", () =>
+    keys(AOE_CC_LANDING_WINDOW_S),
   ),
   // Triage G3 (2026-10-02, ruling A10 = both): the one cast id → effect aura
   // table, which absorbed GH #111's hand list `CC_CAST_EFFECT_AURA`. Generated

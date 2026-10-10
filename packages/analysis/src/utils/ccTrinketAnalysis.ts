@@ -61,6 +61,7 @@ import { stasisReplayWindows } from "./combatStates";
 import { isHealerSpec, isPassiveProcCast, specToString } from "./cooldowns";
 import { ALLY_DISPEL_MATCH_TOLERANCE_S } from "./dispelAnalysis";
 import {
+  AOE_CC_LANDING_WINDOW_S,
   computeIncomingDR,
   drDurationFactor,
   IDRInfo,
@@ -281,6 +282,38 @@ export const BREAKABLE_CC_SPELL_IDS = new Set([
  * rendered-second gaps are a certain contradiction.
  */
 export const CC_LANDED_MATCH_WINDOW_MS = 1500;
+
+/**
+ * The window in which a CC aura counts as THIS cast's landing, around the
+ * cast: `beforeMs` before it, `afterMs` after it. `CC_LANDED_MATCH_WINDOW_MS`
+ * both ways, except that a control which lands seconds after its cast — a
+ * totem that pulses, a sigil that arms, a ring someone walks into — is given
+ * its own landing delay after the cast (`AOE_CC_LANDING_WINDOW_S`, the one
+ * table of those delays and its evidence).
+ *
+ * FT-T16 (user decision D14, 2026-10-10): with 1.5 s for every spell,
+ * 141470d0 printed `6:56 [CC AVOIDED?] … Capacitor Totem … did not land` and
+ * `6:58 [CC ON TEAM] … ← Capacitor Totem` for one totem (cast 01:01:50.336,
+ * stun 01:01:52.351). 605-file capture, 3,520 contexts: a `did not land` line
+ * followed by a `[CC ON TEAM]` line of the same unit and spell, by rendered
+ * gap — Capacitor Totem 72 of 277 lines (all at 2 s), Sigil of Misery 19 of
+ * 79 (all at 2 s), Ring of Frost 12 of 128 (1, 2, 5 and 7 s).
+ *
+ * Keyed by the cast's ENGLISH NAME, the form `[CC AVOIDED?]` prints: the
+ * producer (`landedOnPlayer`) and the gate
+ * (`promptQualityCheck.checkCcAvoidedLandedConsistency`) call this one
+ * function, the gate with the name it re-parses.
+ */
+export function ccLandedMatchWindowMs(castEnglishName: string): {
+  beforeMs: number;
+  afterMs: number;
+} {
+  let afterMs = CC_LANDED_MATCH_WINDOW_MS;
+  for (const [castId, landing] of Object.entries(AOE_CC_LANDING_WINDOW_S))
+    if (landing && getEnglishSpellName(castId) === castEnglishName)
+      afterMs = Math.max(afterMs, landing.toS * 1000);
+  return { beforeMs: CC_LANDED_MATCH_WINDOW_MS, afterMs };
+}
 
 /** Shaman Grounding Totem — redirects the first targeted hostile spell. */
 export const GROUNDING_TOTEM_SPELL_ID = "204336"; // 2026-08-21: was 8177 (no DB2 name); 204336 = live Grounding Totem
@@ -3171,12 +3204,18 @@ export function analyzePlayerCCAndTrinket(
       cast.spellId ?? "",
       cast.spellName ?? "",
     );
-    return ccInstances.some(
-      (cc) =>
-        Math.abs(cc.atSeconds * 1000 - atMs) <= CC_LANDED_MATCH_WINDOW_MS &&
+    // FT-T16 (D14): a control with a landing delay is matched as far after
+    // the cast as it can land (`ccLandedMatchWindowMs`)
+    const { beforeMs, afterMs } = ccLandedMatchWindowMs(castName);
+    return ccInstances.some((cc) => {
+      const afterCastMs = cc.atSeconds * 1000 - atMs;
+      return (
+        afterCastMs >= -beforeMs &&
+        afterCastMs <= afterMs &&
         (cc.spellId === cast.spellId ||
-          getEnglishSpellName(cc.spellId, cc.spellName) === castName),
-    );
+          getEnglishSpellName(cc.spellId, cc.spellName) === castName)
+      );
+    });
   };
 
   // 1. Unified Buff & Mobility CC Avoidance (targeted and ground CCs)

@@ -763,9 +763,10 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
       // A listed area control (its own id or one of its effect auras —
       // Shockwave 46968 stuns with 132168). One that lands seconds after
       // the cast is read in its own landing window (Capacitor Totem: the
-      // stun comes ~2 s later, `AOE_CC_LANDING_WINDOW_S`); one whose window
-      // is not known (Sigil of Misery) keeps a bare line — an absence can
-      // not be called.
+      // stun comes ~2 s later, `AOE_CC_LANDING_WINDOW_S`); one the table
+      // lists with a `null` window keeps a bare line — an absence can not
+      // be called (no entry is `null` since FT-T16; Sigil of Misery's cast
+      // id is not in `ccSpellIds`, so its cast line never asks here).
       if (![...own].some((id) => AOE_CC_SPELL_IDS.has(id))) return "";
       const landing = AOE_CC_LANDING_WINDOW_S[spellId];
       if (landing === null) return "";

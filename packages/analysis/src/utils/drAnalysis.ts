@@ -210,24 +210,49 @@ export const AOE_CC_SPELL_IDS = new Set<string>([
 ]);
 
 /**
- * Listed area controls whose effect arrives seconds after the cast, by CAST
- * id → when the control lands, seconds after the cast (`null` = not known
- * well enough to pair a landing or to call an absence).
+ * Area controls whose effect arrives seconds after the cast, by CAST id →
+ * when the control lands, seconds after the cast (`null` = not known well
+ * enough to pair a landing or to call an absence).
+ *
+ * Two readers: the cast-line fold of OUR casts (`findAndConsumeAoeCC`,
+ * `ownerNoCcAuraTag` — reached only for a cast id in `ccSpellIds`, today
+ * Capacitor Totem alone) and, since FT-T16 (user decision D14, 2026-10-10),
+ * the pairing of an ENEMY cast with its landing on our player
+ * (`ccLandedMatchWindowMs`): a control that landed inside its own window is
+ * never printed as `[CC AVOIDED?] … did not land`.
  *
  *  - Capacitor Totem 192058 → its Static Charge stun 118905: 605 new-season
  *    files, 950 casts, 1,005 stuns on players — 1,003 of them 1.75–2.25 s
  *    after the cast, one at 2.5 s, one at 4.0 s; 232 casts stunned no player.
  *    The window is wide enough for all of them (FT board item, user ruling
  *    2026-10-09: 464 `[YOU] [CC]   Capacitor Totem` lines named no landing).
- *  - Sigil of Misery 207684 → 207685: arms for about 2 s (median 2.07 s in
- *    `castEffectAuraGenerated.json`), 1 s with a talent; no owner line of it
- *    in the 605-file capture to verify a window on — left unknown.
+ *  - Sigil of Misery 207684 → 207685 (Game-Behaviour evidence, 2026-10-10).
+ *    DB2: the cast's own duration is 2 s — the sigil arms, then triggers
+ *    (`spellEffectGenerated.json`); Quickened Sigils 209281 takes 1 s off it
+ *    (flat duration modifier −1000 ms whose class mask covers 207684,
+ *    `talentEffectInventoryGenerated.json`). Corpus: 609 cast → aura pairs on
+ *    1,814 files, median 2.07 s, 608 within 3 s (`castEffectAuraGenerated.json`);
+ *    one raw log read line by line (74f541c0), five landings on players at
+ *    2.011 / 2.021 / 2.047 / 2.093 / 2.113 s. The numbers agree with the DB2
+ *    2 s; the window covers the talented 1 s as well.
+ *    OPEN, not modelled: the PvP talent Lay In Wait 1235091 adds 88 s to that
+ *    duration (DB2, mask covers 207684) — such a sigil waits up to 90 s for
+ *    someone to walk in. The one pair of 609 later than 3 s may be it; no
+ *    corpus split was made. A landing past the window is read as before this
+ *    entry existed (an avoidance line stays), never worse.
+ *  - Ring of Frost 113724 → 82691 (same date). DB2: the ring stays 10 s and
+ *    freezes whoever enters it; no talent changes that duration. Corpus:
+ *    1,214 pairs on 1,814 files, median 0.12 s, 1,000 within 3 s and 214
+ *    later; four raw logs read (4f36fe3a, 8af36676, 1b7f19cc, 2b380381), 12
+ *    freezes on players between 0.10 and 9.40 s after the cast — none past
+ *    the ring's 10 s. The window is the ring's life plus 0.5 s of log slack.
  */
 export const AOE_CC_LANDING_WINDOW_S: Readonly<
   Record<string, { fromS: number; toS: number } | null>
 > = {
   "192058": { fromS: 1.5, toS: 4.5 },
-  "207684": null,
+  "207684": { fromS: 0.5, toS: 3 },
+  "113724": { fromS: 0, toS: 10.5 },
 };
 
 /** What the owner's cast line says when one of these, cast un-aimed, put its
