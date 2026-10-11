@@ -96,6 +96,22 @@ export const PER_RANK_COOLDOWN_TALENTS: ReadonlySet<string> = new Set([
   // recasts at ≥ 74 s. Every-3rd-file floor pass: 927 of 1,129 recast ratios
   // under ×0.99 of 75 s, bunched at ×0.80–0.83.
   "1251790",
+  // Born To Be Wild (Aspect of the Turtle / Cheetah / Eagle −15/rank). FT
+  // F20, 2026-10-11 — 8 of the 605-file scan's "impossible" presses were
+  // Turtles of rank-2 holders. DB2: SpellEffect 713188, aura 107 (cooldown,
+  // misc 11), −15 000 ms, the class mask covers 186265 / 186257 / 186258 /
+  // 356781 / 186289; the node has 2 ranks. Corpus, Aspect of the Turtle
+  // recast gaps on the 1,814-file ledgerImpossibleCastScan of 2026-09-27,
+  // ranks from COMBATANT_INFO (ranks2), every unit also holding Improved
+  // Aspect of the Turtle (−30): no rank (150 s) 194 units, 9 gaps, shortest
+  // 150.2; rank 1 (135 s) 40 units, 2 gaps, 140.5 and 278.2; rank 2 158
+  // units, 27 gaps, 13 under the value-once 135 s and 25 at or over the
+  // per-rank 120 s = 180 − 30 − 2 × 15, three of them at 120.2 / 120.5 /
+  // 120.5. FLAG, not explained: the two rank-2 gaps under 120 s (101.9 and
+  // 107.4 s) are both Marksmanship. Cheetah and Eagle are outside the
+  // ledger, so their recasts were not measured — the row and its rank scale
+  // them as the game does every target of one effect.
+  "266921",
 ]);
 
 /**

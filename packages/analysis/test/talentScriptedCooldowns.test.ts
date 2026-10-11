@@ -61,6 +61,42 @@ describe("PER_RANK_COOLDOWN_TALENTS — Savagery (Takedown −15 s per rank, FT 
   });
 });
 
+describe("PER_RANK_COOLDOWN_TALENTS — Born To Be Wild (Aspect of the Turtle −15 s per rank, FT F20)", () => {
+  const BORN_TO_BE_WILD = "266921";
+  const IMPROVED_TURTLE = "1258485";
+  const TURTLE = "186265";
+  const at = (rank: number | undefined) =>
+    applyCdModifiers(
+      CD_TALENT_MODIFIERS[TURTLE],
+      180,
+      1,
+      new Set(
+        rank === undefined
+          ? [IMPROVED_TURTLE]
+          : [IMPROVED_TURTLE, BORN_TO_BE_WILD],
+      ),
+      new Set(),
+      rank === undefined
+        ? undefined
+        : { talentRanks: new Map([[BORN_TO_BE_WILD, rank]]) },
+    ).cooldownSeconds;
+  it("the generated row is the DB2 −15 s on the Turtle, and the talent is rank-scaled", () => {
+    expect(CD_TALENT_MODIFIERS[TURTLE]).toContainEqual(
+      expect.objectContaining({
+        talentSpellId: BORN_TO_BE_WILD,
+        effect: "reduce_cd",
+        value: 15,
+      }),
+    );
+    expect(PER_RANK_COOLDOWN_TALENTS.has(BORN_TO_BE_WILD)).toBe(true);
+  });
+  it("with Improved Aspect of the Turtle: 150 s without it, 135 s at rank 1, 120 s at rank 2 (the corpus floor: 120.2 s)", () => {
+    expect(at(undefined)).toBe(150);
+    expect(at(1)).toBe(135);
+    expect(at(2)).toBe(120);
+  });
+});
+
 /**
  * Scripted cooldown effects (talent impact audit 2026-09-26). The ready
  * instant of an event-reduced press is the fixed point R = press + cd − s ×
