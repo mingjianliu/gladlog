@@ -1,0 +1,200 @@
+import {
+  annotateMissedPurgesWithKillWindows,
+  buildMatchContext,
+  computeOffensiveWindows,
+  reconstructDispelSummary,
+} from "@gladlog/analysis";
+import { CombatUnitReaction } from "@gladlog/parser-compat";
+import { describe, expect, it } from "vitest";
+
+import { deriveDispelDash } from "../src/renderer/src/report/derive/dispelDash";
+import { toLegacySafe } from "../src/renderer/src/report/derive/legacySource";
+import { deriveMistakes } from "../src/renderer/src/report/derive/mistakes";
+import type { StoredMatch } from "../src/renderer/src/report/derive/types";
+import {
+  ROUND_END_DEATH_S,
+  roundEndFixture,
+  SOLO_SHUFFLE,
+} from "./fixtures/roundEndFixture";
+
+// One match, read twice: as a Solo Shuffle round (the injected death at 70 s
+// ends it) and as 3v3 (the same death ends nothing). See roundEndFixture.ts
+// for what crosses the 70 s mark.
+const shuffle = roundEndFixture(SOLO_SHUFFLE);
+const threes = roundEndFixture("3v3");
+
+/** `start|unit|printed seconds` of a panel row or a card. */
+const rowKeys = (
+  rows: ReadonlyArray<{ tS: number; unitName: string; text: string }>,
+): string[] =>
+  rows
+    .map((r) => {
+      const n = /(\d+)s 未被/.exec(r.text)?.[1];
+      return `${r.tS.toFixed(3)}|${r.unitName}|${n}`;
+    })
+    .sort();
+
+/** The same key off a window of the dispel summary. */
+const windowKeys = (
+  ws: ReadonlyArray<{
+    timeSeconds: number;
+    durationSeconds: number;
+    enemyName?: string;
+    targetName?: string;
+  }>,
+): string[] =>
+  ws
+    .map(
+      (w) =>
+        `${w.timeSeconds.toFixed(3)}|${w.enemyName ?? w.targetName}|${Math.round(w.durationSeconds)}`,
+    )
+    .sort();
+
+const purgeRows = (m: StoredMatch) =>
+  deriveDispelDash(m).missedPurges.map((r) => ({ ...r, text: r.label }));
+const cleanseRows = (m: StoredMatch) =>
+  deriveDispelDash(m).missedCleanses.map((r) => ({ ...r, text: r.label }));
+const cards = (m: StoredMatch) =>
+  deriveMistakes(m)
+    .filter((c) => c.type === "missed-purge-kill-window")
+    .map((c) => ({ ...c, text: c.detail }));
+
+function teams(m: StoredMatch) {
+  const legacy = toLegacySafe(m);
+  const all = Object.values(legacy.units);
+  const players = all.filter((u) => u.info);
+  const friends = players.filter(
+    (u) => u.reaction === CombatUnitReaction.Friendly,
+  );
+  const enemies = players.filter(
+    (u) => u.reaction === CombatUnitReaction.Hostile,
+  );
+  const petsOf = (owners: typeof players) =>
+    all.filter((u) => u.ownerId && owners.some((o) => o.id === u.ownerId));
+  return {
+    legacy,
+    friends,
+    enemies,
+    friendlyPets: petsOf(friends),
+    enemyPets: petsOf(enemies),
+  };
+}
+
+const at = <T extends { tS: number; unitName: string }>(
+  rows: readonly T[],
+  tS: number,
+  unitName: string,
+): T | undefined =>
+  rows.find((r) => Math.abs(r.tS - tS) < 0.0005 && r.unitName === unitName);
+
+describe("战报的驱散读者:窗口止于回合结束(与 prompt 同一个 roundEndMs)", () => {
+  it("单排:跨过回合终结死亡的漏驱散行被截在那一刻;回合内不足 3 秒或死亡之后才上的 buff 没有行", () => {
+    const rows = purgeRows(shuffle);
+    // 66.385 → 70: 3.6 s, printed 4s (20 s to its removal)
+    expect(at(rows, 66.385, "Player2-Test")!.label).toContain(
+      "身上 4s 未被驱散",
+    );
+    expect(at(rows, 66.386, "Player5-Test")!.label).toContain(
+      "身上 4s 未被驱散",
+    );
+    // 67.143 → 70: 2.9 s, under the 3 s reaction floor
+    expect(at(rows, 67.143, "Player4-Test")).toBeUndefined();
+    expect(rows.filter((r) => r.tS >= ROUND_END_DEATH_S)).toEqual([]);
+    expect(rows.length).toBeGreaterThan(20);
+    for (const r of rows) {
+      const n = Number(/(\d+)s 未被/.exec(r.label)![1]);
+      // the printed length is rounded: at most half a second over
+      expect(r.tS + n).toBeLessThanOrEqual(ROUND_END_DEATH_S + 0.5);
+    }
+  });
+
+  it("单排:未解除的控制行同样截在回合结束", () => {
+    const rows = cleanseRows(shuffle);
+    expect(rows).toHaveLength(1);
+    // 64 → 70 (its removal is at 72)
+    expect(rows[0]!.label).toContain("Fear 6s 未被解");
+  });
+
+  it("单排:missed-purge-kill-window 卡片跟着同一个窗口", () => {
+    const got = cards(shuffle);
+    expect(at(got, 66.385, "Player2-Test")!.detail).toContain(
+      "身上 4s 未被驱散",
+    );
+    expect(at(got, 67.143, "Player4-Test")).toBeUndefined();
+    expect(got.filter((c) => c.tS >= ROUND_END_DEATH_S)).toEqual([]);
+    expect(got.length).toBeGreaterThan(5);
+  });
+
+  it("其他赛制不变:3v3 里的死亡不是回合结束,行与卡片就是只给 {startTime, endTime} 时的那些", () => {
+    const rows = purgeRows(threes);
+    expect(at(rows, 66.385, "Player2-Test")!.label).toContain("身上 20s");
+    expect(at(rows, 66.386, "Player5-Test")!.label).toContain("身上 14s");
+    expect(at(rows, 67.143, "Player4-Test")!.label).toContain("身上 7s");
+    expect(rows.filter((r) => r.tS >= ROUND_END_DEATH_S)).toHaveLength(6);
+    expect(cleanseRows(threes)[0]!.label).toContain("Fear 8s 未被解");
+    expect(at(cards(threes), 66.385, "Player2-Test")!.detail).toContain(
+      "身上 20s",
+    );
+
+    // what the two readers handed the function before they handed the round
+    const { legacy, friends, enemies, friendlyPets, enemyPets } = teams(threes);
+    const logOnly = { startTime: legacy.startTime, endTime: legacy.endTime };
+    const dash = reconstructDispelSummary(
+      friends,
+      enemies,
+      logOnly,
+      friendlyPets,
+      enemyPets,
+    );
+    expect(dash.scopedMissedPurgeWindows ?? []).toEqual([]);
+    expect(rowKeys(rows)).toEqual(windowKeys(dash.missedPurgeWindows));
+    expect(rowKeys(cleanseRows(threes))).toEqual(
+      windowKeys(dash.missedCleanseWindows),
+    );
+    const card = reconstructDispelSummary(friends, enemies, logOnly);
+    annotateMissedPurgesWithKillWindows(
+      card.missedPurgeWindows,
+      computeOffensiveWindows(enemies, friends, legacy),
+    );
+    expect(rowKeys(cards(threes))).toEqual(
+      windowKeys(card.missedPurgeWindows.filter((w) => w.duringKillWindow)),
+    );
+  });
+
+  it("单排:面板的窗口就是 prompt 那份驱散汇总的窗口,[UNCLEANSED DEBUFF] 行印的是同一个秒数", () => {
+    const { legacy, friends, enemies, friendlyPets, enemyPets } =
+      teams(shuffle);
+    // as buildMatchContext calls it: the round itself, both sides' pets
+    const prompt = reconstructDispelSummary(
+      friends,
+      enemies,
+      legacy,
+      friendlyPets,
+      enemyPets,
+    );
+    annotateMissedPurgesWithKillWindows(
+      prompt.missedPurgeWindows,
+      computeOffensiveWindows(enemies, friends, legacy),
+    );
+    expect(prompt.scopedMissedPurgeWindows ?? []).toEqual([]);
+    expect(rowKeys(purgeRows(shuffle))).toEqual(
+      windowKeys(prompt.missedPurgeWindows),
+    );
+    expect(rowKeys(cleanseRows(shuffle))).toEqual(
+      windowKeys(prompt.missedCleanseWindows),
+    );
+    expect(rowKeys(cards(shuffle))).toEqual(
+      windowKeys(prompt.missedPurgeWindows.filter((w) => w.duringKillWindow)),
+    );
+
+    // the rendered prompt of the friendly who can dispel it (the Disc Priest)
+    const owner = friends.find((f) => f.name === "Player3-Test")!;
+    const context = buildMatchContext(legacy, friends, enemies, { owner });
+    const line = context
+      .split("\n")
+      .find((l) => l.includes("[UNCLEANSED DEBUFF]") && l.includes("Fear"));
+    expect(line).toMatch(
+      /^\s*1:04\s+\[UNCLEANSED DEBUFF\]\s+Fear on .* \| 6s \|/,
+    );
+  });
+});

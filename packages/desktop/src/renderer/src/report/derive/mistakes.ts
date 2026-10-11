@@ -12,6 +12,7 @@ import {
 import { CombatUnitReaction } from "@gladlog/parser-compat";
 
 import { resolveOwner } from "./analysisInput";
+import { dispelRoundOf } from "./dispelRound";
 import { toLegacySafe } from "./legacySource";
 import { type TimeRange, tInRange } from "./timeRange";
 import type { ReportSource } from "./types";
@@ -534,11 +535,13 @@ export function deriveMistakes(
     }
 
     // dispel source: missed purges inside a kill window (same annotation
-    // predicate as the prompt side)
-    const dispels = reconstructDispelSummary(friends, enemies, {
-      startTime: legacy.startTime,
-      endTime: legacy.endTime,
-    });
+    // predicate as the prompt side), each ending where the prompt's and the
+    // dispel panel's window does — at the round's end (`dispelRoundOf`)
+    const dispels = reconstructDispelSummary(
+      friends,
+      enemies,
+      dispelRoundOf(legacy),
+    );
     annotateMissedPurgesWithKillWindows(
       dispels.missedPurgeWindows,
       computeOffensiveWindows(enemies, friends, legacy),

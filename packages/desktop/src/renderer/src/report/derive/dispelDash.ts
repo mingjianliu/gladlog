@@ -10,6 +10,7 @@ import {
 } from "@gladlog/analysis";
 import { CombatUnitReaction } from "@gladlog/parser-compat";
 
+import { dispelRoundOf } from "./dispelRound";
 import { toLegacySafe } from "./legacySource";
 import { displaySpellName } from "./spellDisplay";
 import { tInRange, type TimeRange } from "./timeRange";
@@ -147,7 +148,9 @@ export function deriveDispelDash(
       (u) => u.reaction === CombatUnitReaction.Hostile,
     );
     if (friends.length === 0 || enemies.length === 0) return EMPTY;
-    const combatLike = { startTime: legacy.startTime, endTime: legacy.endTime };
+    // The round, so a window ends where the prompt's does — a Solo Shuffle
+    // round's ending death, not the log's end (`dispelRoundOf`)
+    const combatLike = dispelRoundOf(legacy);
 
     // Build once per side (same approach as statsTable); pet dispels are
     // attributed to the owner (B45) via the pets parameters
