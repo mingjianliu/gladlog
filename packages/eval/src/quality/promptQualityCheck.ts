@@ -2230,6 +2230,11 @@ export function checkCcNotLandedLines(lines: string[]): string[] {
       failures.push(
         `line ${i + 1}: [CC NOT LANDED] 写 logged ${type},但 ${type} 不是能断定控制没落地的 miss 类型 —— ${show}`,
       );
+    // every reflect has its own [REFLECTED] line (`reflectedSpells`)
+    if (type === "REFLECT")
+      failures.push(
+        `line ${i + 1}: [CC NOT LANDED] 写 logged REFLECT —— 反射一律由 [REFLECTED] 行陈述,这里不该再出一行 —— ${show}`,
+      );
     if (landed.has([at, target, spell, playerOfLabel(by)].join("\u0000")))
       failures.push(
         `line ${i + 1}: [CC NOT LANDED] 说 ${spell} 没落在 ${target} 身上,但同一秒有同一施法者的 [CC ON ENEMY] 落地行 —— ${show}`,

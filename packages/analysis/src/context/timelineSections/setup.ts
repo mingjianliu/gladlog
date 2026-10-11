@@ -58,7 +58,6 @@ import { resourceDeltaPct } from "../../utils/resourceAt";
 import { buildRosterSides } from "../../utils/rosterSide";
 import { buildResourceSnapshot } from "../resourceSnapshot";
 import { ownerResUtilityCds } from "../resUtilityCds";
-import { isControlSpell } from "../spellOutcomeLines";
 import {
   buildSummonOwnerNames,
   CRITICAL_NON_PLAYER_NPC_NAMES,
@@ -83,7 +82,7 @@ export const CC_NOT_LANDED_TAG = "[CC NOT LANDED]";
 /** Printed once, when a `[CC NOT LANDED]` line rendered. */
 export const CC_NOT_LANDED_LEGEND = [
   `  ${CC_NOT_LANDED_TAG} = a control your team cast at that enemy did NOT take effect at that second: the log wrote a miss row for it.`,
-  "    `logged X` is the log's own word (IMMUNE, MISS, REFLECT, PARRY, DODGE …); the parenthesis is the cause when the log shows",
+  "    `logged X` is the log's own word (IMMUNE, MISS, PARRY, DODGE …); the parenthesis is the cause when the log shows",
   "    one (an immunity that was up, your own team's Cyclone on the target, diminishing returns at Immune) — no parenthesis =",
   "    the log gives none. It is not a [CC ON ENEMY] line: nothing landed, and it is in no `[DR: …]` state of this timeline. A",
   "    failed control already tagged on its cast line (`[IMMUNE …]`, `[MISSED on …]`) or on a [REFLECTED] line is not repeated here.",
@@ -910,14 +909,16 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
    *    `[REFLECTED by …]` on `[YOU] [CC]` / `[TEAM] [CC]` / a cooldown line —
    *    the consumed sets above), or its twin did: one failure logged under
    *    the cast id and the effect id within `CAST_MISS_LEAD_MS`;
-   *  - it is a reflect of a control, which has its `[REFLECTED]` line
-   *    (`reflectedSpells` states every REFLECT of an `isControlSpell` id).
+   *  - it is a REFLECT: `reflectedSpells` gives every reflected spell its
+   *    `[REFLECTED]` line, whatever id the row is logged under. (Asked of
+   *    `isControlSpell(m.spellId)` at first — Lightning Lasso's reflect is
+   *    logged under its stun 305485, not the cast 305483, and got both lines:
+   *    3 contexts of the 605-file capture.)
    * Read AFTER every cast-line emitter has run — they consume as they print.
    */
   function missStatedOnAnotherLine(m: OutgoingMiss): boolean {
     if (consumedImmuneMisses.has(m) || consumedCcMisses.has(m)) return true;
-    if (m.missType === "REFLECT" && !!m.spellId && isControlSpell(m.spellId))
-      return true;
+    if (m.missType === "REFLECT" && !!m.spellId) return true;
     for (const c of [...consumedImmuneMisses, ...consumedCcMisses]) {
       const x = c as OutgoingMiss;
       if (

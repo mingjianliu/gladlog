@@ -344,6 +344,19 @@ describe("[CC NOT LANDED] — a failed control no other line states", () => {
     expect(notLanded(lines)).toEqual([]);
   });
 
+  it("a reflect logged under the control's EFFECT id (Lightning Lasso: cast 305483, stun 305485) gets no second line either", () => {
+    const lines = timelineOf({
+      mate: {
+        spellCastEvents: [cast("305483", "Lightning Lasso", 31_500, "m", "e")],
+        missesOut: [
+          miss("305485", "Lightning Lasso", 31_550, "m", "e", "REFLECT"),
+        ],
+      } as never,
+    });
+    expect(lines.filter((l) => l.includes("[REFLECTED]"))).toHaveLength(1);
+    expect(notLanded(lines)).toEqual([]);
+  });
+
   it("no line for a control that is on the target anyway", () => {
     // the aura of that spell from that caster starts in the miss's second
     const lines = timelineOf({

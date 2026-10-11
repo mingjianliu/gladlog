@@ -1201,9 +1201,9 @@ describe("checkCastStoppedLines — a [CAST STOPPED] line is one of the producer
       "1:21  [CAST STOPPED]   Cyclone — refused 1.2s in (client reason not translated)",
       "1:58  [CAST STOPPED]   Cyclone — no end logged; the round ended 1.4s after it began",
     ]);
-    expect(
-      checkCastStoppedLines([...unit, kick, ...six, started(9)]),
-    ).toEqual([]);
+    expect(checkCastStoppedLines([...unit, kick, ...six, started(9)])).toEqual(
+      [],
+    );
     // a prompt with no such line has nothing to check
     expect(checkCastStoppedLines([...unit, kick, started(9)])).toEqual([]);
   });
@@ -1264,9 +1264,9 @@ describe("checkCastStoppedLines — a [CAST STOPPED] line is one of the producer
 
   it("fails more lines, with the owner's kicked casts, than the entry has bars", () => {
     // six lines + one kicked Cyclone = seven bars
-    expect(
-      checkCastStoppedLines([...unit, kick, ...six, started(7)]),
-    ).toEqual([]);
+    expect(checkCastStoppedLines([...unit, kick, ...six, started(7)])).toEqual(
+      [],
+    );
     expect(
       checkCastStoppedLines([...unit, kick, ...six, started(6)]),
     ).toHaveLength(1);
@@ -1298,7 +1298,12 @@ describe("checkCastStoppedLines — a [CAST STOPPED] line is one of the producer
     const run = (why: string, span = " (1:55–1:58)") =>
       `1:55  [REJECTED]   your Cyclone ×4 — ${why}${span}`;
     expect(
-      checkCastStoppedLines([...unit, refused, run("out of range"), started(9)]),
+      checkCastStoppedLines([
+        ...unit,
+        refused,
+        run("out of range"),
+        started(9),
+      ]),
     ).toHaveLength(1);
     // another reason, another spell, or a span the refusal need not be in
     expect(
@@ -1346,14 +1351,26 @@ describe("checkCcNotLandedLines — a [CC NOT LANDED] line states a failed contr
     expect(
       checkCcNotLandedLines([...unit, cyclone, gouge, poly, landedLater]),
     ).toEqual([]);
+    // REFLECT establishes a failed control too, but never on this line
     for (const type of CONTROL_FAILED_MISS_TYPES)
-      expect(
-        checkCcNotLandedLines([
-          ...unit,
-          cyclone.replace("logged MISS", `logged ${type}`),
-        ]),
-        type,
-      ).toEqual([]);
+      if (type !== "REFLECT")
+        expect(
+          checkCcNotLandedLines([
+            ...unit,
+            cyclone.replace("logged MISS", `logged ${type}`),
+          ]),
+          type,
+        ).toEqual([]);
+  });
+
+  it("fails `logged REFLECT`: every reflect has its [REFLECTED] line", () => {
+    const out = checkCcNotLandedLines([
+      ...unit,
+      "0:42  [REFLECTED]   2(RShaman)'s Lightning Lasso reflected by 4(AWarlock) (a control — sent back at the caster)",
+      "0:42  [CC NOT LANDED]   4(AWarlock) ← Lightning Lasso (by 2(RShaman)) — logged REFLECT",
+    ]);
+    expect(out).toHaveLength(1);
+    expect(out[0]).toContain("REFLECT");
   });
 
   it("fails a type that does not establish a failed control", () => {
@@ -1448,7 +1465,10 @@ describe("checkCcNotLandedLines — a [CC NOT LANDED] line states a failed contr
     expect(
       checkCcNotLandedLines([
         ...unit,
-        teamLine.replace("2(ARogue) (Assassination Rogue)", "3(SRogue) (Subtlety Rogue)"),
+        teamLine.replace(
+          "2(ARogue) (Assassination Rogue)",
+          "3(SRogue) (Subtlety Rogue)",
+        ),
         gouge,
       ]),
     ).toEqual([]);
