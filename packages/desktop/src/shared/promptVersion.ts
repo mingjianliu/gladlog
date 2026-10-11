@@ -1455,5 +1455,19 @@
  *  `(self-save)`, and KILL ATTEMPTS words such a press `popped X` (a proc
  *  keeps `self-saved (X)`). No candidate row is added or removed on the
  *  605-file capture; one kick-eaten row names a different nearest kicker.
+ *  v377 (2026-10-11, FT, the user's "都做" on four open items): (1) a
+ *  missed-purge window ends at the round's end — `unpurged for Ns` on
+ *  [ENEMY BUFF] / [ENEMY CD] / [MISSED PURGE OPPORTUNITY] no longer counts
+ *  the strip after a Solo Shuffle round's ending death; (2) Roar of
+ *  Sacrifice pressed on oneself reads `(25%, Ts)` — the official reduction,
+ *  now with a corpus split behind it (hit multiplier 0.750 at the aura's
+ *  edges) — with a legend entry saying it is not a wall (v376 printed
+ *  `(redirect)`); (3) a Storm Conduit holder's interrupted Lightning Bolt
+ *  locks for x0.35 in a log from before the 2026-08-18 hotfix and x0.6
+ *  since ([CONSEQ] `school lockout` and kick-eaten `lockout=` follow), and
+ *  a modified lockout prints whole milliseconds; (4) Storm Conduit for an
+ *  Elemental holder was measured and stays DB2's 1 s. No candidate row is
+ *  added or removed on the 605-file capture; two kick-eaten rows read
+ *  `lockout=0.7` where they read 1.2.
  */
-export const PROMPT_VERSION = 376;
+export const PROMPT_VERSION = 377;
