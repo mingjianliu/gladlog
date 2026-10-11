@@ -51,7 +51,16 @@ export const SPELL_EFFECT_OVERRIDES: Record<string, IMinedSpell> =
       e("184364", "Enraged Regeneration", 120, 8),
       e("48792", "Icebound Fortitude", 120, 8),
       e("55233", "Vampiric Blood", 90, 10),
-      e("31850", "Ardent Defender", 120, 12), // 2026-09-06: hand 8 shadowed the official DB2 12; corpus 12.0 s in 94 % of 81 lifetimes
+      // Duration, 2026-09-06: hand 8 shadowed the official DB2 12; corpus 12.0 s
+      // in 94 % of 81 lifetimes. Cooldown, FT F20 2026-10-11: the hand 120
+      // shadowed the official 90 (SpellCooldowns 7108, RecoveryTime 90 000 ms
+      // at 12.1.5.69594). Every Protection Paladin of the 1,814-file ledger
+      // scan (4) holds Unbreakable Spirit (−30 %, its class mask covers this
+      // spell), so the hand value modelled 84 s and the official one 63 s;
+      // the one that recast it did so after 79.8, 84.0 and 157.2 s (76f70196,
+      // a 2v2). FLAG: one player, three gaps — it refutes 84 s once and never
+      // the official 63 s, and puts no floor under it.
+      e("31850", "Ardent Defender", 90, 12),
       e("86659", "Guardian of Ancient Kings", 300, 8),
       e("6940", "Blessing of Sacrifice", 120, 12),
       e("1022", "Blessing of Protection", 300, 10),
