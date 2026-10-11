@@ -2849,6 +2849,49 @@ const INDEX: PredicateRow[] = [
     symbol: "checkKickEatenCancelsCoverCastStopped",
     mod: promptQualityCheck,
   },
+  // 2026-10-11 (re-eval I01 / F21 / F07 / I06): the kick-eaten row's refused
+  // presses, its kick's own silence, its range and distance facts, and the
+  // legends' cross-references
+  {
+    file: `${A}/context/spellOutcomeLines.ts`,
+    symbol: "refusalWhy",
+    mod: spellOutcomeLines,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkKickEatenRefusedForAnotherReason",
+    mod: promptQualityCheck,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkKickEatenKickSilence",
+    mod: promptQualityCheck,
+  },
+  {
+    file: `${A}/analysis/candidateFindings.ts`,
+    symbol: "kickEatenReach",
+    mod: candidateFindings,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkKickEatenRangeFacts",
+    mod: promptQualityCheck,
+  },
+  {
+    file: `${A}/utils/losAnalysis.ts`,
+    symbol: "positionSampleSpanMs",
+    mod: losAnalysis,
+  },
+  {
+    file: `${A}/analysis/candidateFindings.ts`,
+    symbol: "distanceFact",
+    mod: candidateFindings,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkLegendCrossReferences",
+    mod: promptQualityCheck,
+  },
   {
     file: `${A}/context/forcedTrinket.ts`,
     symbol: "forcedTrinketFollowUps",
