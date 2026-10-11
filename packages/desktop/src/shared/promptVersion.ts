@@ -1368,5 +1368,18 @@
  *  counts). No candidate changes. The other two D15 line kinds (an
  *  uncompleted cast per line, a friendly control that was immune / missed)
  *  are not in this version.
+ *  v371 (2026-10-10, FT-T16 D15 (b) + (c), user approval on real-match
+ *  samples, under new tags): two fact lines. `[CAST STOPPED]` — a cast bar
+ *  of a control the log owner began that neither went off nor was kicked,
+ *  with how the log shows it ended (`cast bar stopped after 0.8s; not
+ *  kicked; no control, silence or knockback landed on you then`, `… as a
+ *  control or silence landed on you`, `refused 0.9s in: vision obscured
+ *  (Smoke Bomb)`); never "cancelled" or "moved" — the log cannot tell. Not
+ *  printed for a refusal a [REJECTED] line already states. `[CC NOT LANDED]`
+ *  — a control of the owner's team on an enemy player that the log says did
+ *  not take effect and no other line states (`4(AWarrior) ← Polymorph (by
+ *  1(AMage)) — logged IMMUNE (Bladestorm was up)`); it is no [CC ON ENEMY]
+ *  line and feeds no DR state. A reflect stays on its [REFLECTED] line. Each
+ *  tag has a legend, printed when it occurs. No candidate changes.
  */
-export const PROMPT_VERSION = 370;
+export const PROMPT_VERSION = 371;
