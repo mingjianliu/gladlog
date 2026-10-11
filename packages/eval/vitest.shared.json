@@ -43,6 +43,7 @@
     "test/judgeVariance.test.ts",
     "test/kickEatenKickSilenceGate.test.ts",
     "test/kickEatenPostKickGate.test.ts",
+    "test/kickEatenRangeFactsGate.test.ts",
     "test/kickPriorityRefGate.test.ts",
     "test/legendCrossReferenceGate.test.ts",
     "test/menuTRenderGridGate.test.ts",

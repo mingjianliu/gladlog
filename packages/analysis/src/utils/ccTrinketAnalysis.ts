@@ -86,6 +86,7 @@ import {
   distanceBetween,
   getUnitPositionAtTime,
   hasLineOfSight,
+  positionSampleSpanMs,
 } from "./losAnalysis";
 import {
   CC_MAX_PLAUSIBLE_RANGE_YARDS,
@@ -1057,6 +1058,28 @@ export interface IInterruptInstance {
   /** The SOURCE's own distance at cast start, whether or not its kick was
    * ready (F-K5a). null without a cast start or a position. */
   sourceDistYd?: number | null;
+  /** Set when `sourceDistYd` rests on a position read across two samples
+   * more than `INTERP_MAX_GAP_MS` apart (either unit's): that spacing in
+   * seconds. The distance is then a straight-line guess — the row prints it
+   * as approximate, with the spacing, and the out-range verdict does not
+   * build on it (re-eval 2026-10-08, F07). null / absent = both positions
+   * were read between samples at most that far apart. */
+  sourceDistSampleGapS?: number | null;
+  /** The same for `nearestKickerDistYd` (the player's reading or that
+   * kicker's). */
+  nearestKickerSampleGapS?: number | null;
+  /** The kicker → player distance (model centres) at the instant the kick
+   * was logged — where it actually LANDED from. null when either position
+   * there is missing or read across samples more than `INTERP_MAX_GAP_MS`
+   * apart. Re-eval 2026-10-08, F07: 0068182d r5 @72.5 printed
+   * `kickRangeYd=5` for a Rebuke that landed with the Paladin 10.6 yd from
+   * the Mage (his own cast row at the kick's millisecond, the Mage sampled
+   * 73 ms before): the table range is the game's hitbox-to-hitbox cast
+   * range, and a melee kick between two running players lands from farther
+   * in centre yards — on 5 logs 11 of 33 Rebukes landed beyond 5 yd, 3
+   * beyond 7 (fix-FT/scripts/n1_kickDist.ts). The row prints it when it
+   * exceeds the table range, and the out-range verdict reads it. */
+  kickLandedFromYd?: number | null;
   /** The source's kick was still on cooldown at cast start and came back
    * this many seconds into the cast (F-K5b: 1bad0a5c @27.4 read
    * `kickersInRange=0` for a Wind Shear that landed 2.4 s later). null when
@@ -1137,6 +1160,17 @@ export function ccAvoidedOutcomeText(
     ? `logged ${avoided.loggedMissType}`
     : "did not land";
 }
+
+/** The spacing, in seconds, of the two samples a unit's position at `ms` is
+ * read between — when it is wider than `INTERP_MAX_GAP_MS`, the grounding
+ * guard every other single-instant distance reads; null when it is not (or
+ * there is no position to speak of). */
+function wideSampleGapS(unit: ICombatUnit, ms: number): number | null {
+  const span = positionSampleSpanMs(unit, ms);
+  return span !== null && span > INTERP_MAX_GAP_MS ? span / 1000 : null;
+}
+const widerGapS = (a: number | null, b: number | null): number | null =>
+  a === null ? b : b === null ? a : Math.max(a, b);
 
 /** How far past the kick a modelled "kick ready again" instant may fall and
  * still be believed (`sourceKickReadyInS`): the kick landed, so its cooldown
@@ -2732,6 +2766,8 @@ export function analyzePlayerCCAndTrinket(
     let maxKickRangeSlackYd: number | null = null;
     let maxKickRangeLateYd: number | null = null;
     let sourceDistYd: number | null = null;
+    let sourceDistSampleGapS: number | null = null;
+    let nearestKickerSampleGapS: number | null = null;
     let sourceKickReadyInS: number | null = null;
     let sourceGapCloser: GapCloserState | null = null;
     let ownerImmobileBy: string | null = null;
@@ -2764,6 +2800,30 @@ export function analyzePlayerCCAndTrinket(
       ? Math.round((action.timestamp - channelStart.logLine.timestamp) / 100) /
         10
       : null;
+
+    // F07: where the kick landed from — both positions at the kick's own
+    // instant, each read between samples no more than INTERP_MAX_GAP_MS apart
+    const kickerUnit =
+      enemies.find((e) => e.id === action.srcUnitId) ??
+      enemyPets.find((p) => p.id === action.srcUnitId);
+    let kickLandedFromYd: number | null = null;
+    if (kickerUnit) {
+      const at = action.timestamp;
+      const victimPos = getUnitPositionAtTime(player, at, INTERP_MAX_GAP_MS);
+      const kickerPos = getUnitPositionAtTime(
+        kickerUnit,
+        at,
+        INTERP_MAX_GAP_MS,
+      );
+      if (
+        victimPos &&
+        kickerPos &&
+        wideSampleGapS(player, at) === null &&
+        wideSampleGapS(kickerUnit, at) === null
+      )
+        kickLandedFromYd =
+          Math.round(distanceBetween(victimPos, kickerPos) * 10) / 10;
+    }
 
     if (castStartEvent) {
       const castStartMs = castStartEvent.logLine.timestamp;
@@ -2867,9 +2927,15 @@ export function analyzePlayerCCAndTrinket(
         const sourcePos = sourceUnit
           ? getUnitPositionAtTime(sourceUnit, castStartMs, LOS_SWEEP_GAP_MS)
           : null;
-        if (sourcePos)
+        const playerGapS = wideSampleGapS(player, castStartMs);
+        if (sourcePos && sourceUnit) {
           sourceDistYd =
             Math.round(distanceBetween(playerPos, sourcePos) * 10) / 10;
+          sourceDistSampleGapS = widerGapS(
+            playerGapS,
+            wideSampleGapS(sourceUnit, castStartMs),
+          );
+        }
         for (const enemy of enemies) {
           const kit = interruptForUnit(enemy);
           if (!kit) continue;
@@ -2927,6 +2993,10 @@ export function analyzePlayerCCAndTrinket(
           if (dist < minDist) {
             minDist = dist;
             nearestKickerName = enemy.name;
+            nearestKickerSampleGapS = widerGapS(
+              playerGapS,
+              wideSampleGapS(enemy, castStartMs),
+            );
           }
           if (dist <= range) {
             countInRange++;
@@ -2972,6 +3042,10 @@ export function analyzePlayerCCAndTrinket(
               nearestKickerName = petOwner
                 ? `${petOwner.name}'s ${summonKindWord(petKicker.id, { unit: petKicker })}`
                 : petKicker.name;
+              nearestKickerSampleGapS = widerGapS(
+                playerGapS,
+                wideSampleGapS(petKicker, castStartMs),
+              );
             }
             const range =
               spellRangeForCaster(petKicker, kickCastSpellId(kickSpellId)) ??
@@ -2989,6 +3063,7 @@ export function analyzePlayerCCAndTrinket(
           kickersInRange = countInRange;
         } else {
           nearestKickerName = null;
+          nearestKickerSampleGapS = null;
         }
       }
     }
@@ -3008,6 +3083,9 @@ export function analyzePlayerCCAndTrinket(
       maxKickRangeSlackYd,
       maxKickRangeLateYd,
       sourceDistYd,
+      sourceDistSampleGapS,
+      nearestKickerSampleGapS,
+      kickLandedFromYd,
       sourceKickReadyInS,
       sourceGapCloser,
       ownerImmobileBy,

@@ -24,6 +24,7 @@ import {
   HARD_CC_CATEGORIES,
   healingGapEvents,
   kickEatenEvents,
+  kickEatenReach,
   LEGACY_TOPIC_TYPES,
   MANA_EFF_FLOOR,
   MANA_EFF_MIN_CASTS,
@@ -1453,6 +1454,83 @@ describe("团队协作候选映射(2026-07-24 覆盖面扩充)", () => {
 
     it("is absent when the ranges are unknown (the legend then forbids the advice)", () => {
       expect(facts({ sourceDistYd: 20 }, null)["outRangeable"]).toBeUndefined();
+    });
+
+    // Re-eval 2026-10-08, F07.
+    it("F07: a placeholder table range is no range — Shield of Virtue's 50,000 yd row prints no reach fact (dfcccbf2 @166.5)", () => {
+      // 217824: an effect id with no castable twin; Polymorph 118 = 30 yd
+      expect(
+        kickEatenReach(null, null, {
+          interruptedSpellId: "118",
+          kickSpellId: "217824",
+        }),
+      ).toBeNull();
+      // control: Rebuke 96231 = 5 yd on the same cast
+      expect(
+        kickEatenReach(null, null, {
+          interruptedSpellId: "118",
+          kickSpellId: "96231",
+        }),
+      ).toEqual({ yourReachYd: 30, yourCastRangeYd: 30, kickRangeYd: 5 });
+      // a caster-centred spell still gets its kick range (F-K6c, Ebon Might)
+      expect(
+        kickEatenReach(null, null, {
+          interruptedSpellId: "395152",
+          kickSpellId: "96231",
+        }),
+      ).toEqual({ kickRangeYd: 5 });
+      // …and the row then has none of the three facts
+      const f = facts({ sourceDistYd: 11 }, null);
+      expect(f["kickRangeYd"]).toBeUndefined();
+      expect(f["yourReachYd"]).toBeUndefined();
+      expect(f["outRangeable"]).toBeUndefined();
+    });
+
+    it("F07: a kick that landed from beyond its table range says from where, and the verdict measures from there (0068182d @72.5)", () => {
+      // a 5 yd Rebuke that landed with the centres 10.6 yd apart
+      const at = facts({ sourceDistYd: 9.4, kickLandedFromYd: 10.6 });
+      expect(at["kickRangeYd"]).toBe("5");
+      expect(at["kickLandedFromYd"]).toBe("10.6");
+      expect(at["outRangeable"]).toBe(
+        "no (kicker already within the 10.6 yd this kick landed from at cast start)",
+      );
+      // farther out, the walk-in is counted from the landing distance too
+      expect(
+        facts({ sourceDistYd: 18.4, kickLandedFromYd: 10.6, castWindowS: 1.5 })[
+          "outRangeable"
+        ],
+      ).toBe(
+        "no (kicker 7.8 yd beyond where this kick landed from could walk in during the 1.5s cast at 7 yd/s)",
+      );
+      expect(
+        facts({ sourceDistYd: 18.4, kickLandedFromYd: 10.6 })["outRangeable"],
+      ).toMatch(/^yes /);
+      // a landing inside the table range is not printed and changes nothing
+      const inside = facts({ sourceDistYd: 18.4, kickLandedFromYd: 4.2 });
+      expect(inside["kickLandedFromYd"]).toBeUndefined();
+      expect(inside["outRangeable"]).toMatch(/^yes /);
+      expect(
+        facts({ sourceDistYd: 18.4, kickLandedFromYd: 5.0 })["kickLandedFromYd"],
+      ).toBeUndefined();
+    });
+
+    it("F07: a distance read across position samples far apart is printed as approximate, and no permission is built on it", () => {
+      const f = facts({
+        sourceDistYd: 17.2,
+        sourceDistSampleGapS: 2.3,
+        nearestKickerDistYd: 17.2,
+        nearestKickerSampleGapS: 2.3,
+      });
+      expect(f["sourceDistYd"]).toBe("~17 (position samples 2.3s apart)");
+      expect(f["nearestKickerDistYd"]).toBe("~17 (position samples 2.3s apart)");
+      expect(f["outRangeable"]).toBe(
+        "no (kicker distance approximate — position samples 2.3s apart)",
+      );
+      expect(JSON.stringify(f)).not.toContain(", ");
+      // tight samples: the number as before
+      const tight = facts({ sourceDistYd: 17.2, nearestKickerDistYd: 3.1 });
+      expect(tight["sourceDistYd"]).toBe("17.2");
+      expect(tight["nearestKickerDistYd"]).toBe("3.1");
     });
 
     it("yes: source outside its range, no gap-closer, nobody else in range, owner free", () => {

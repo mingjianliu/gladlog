@@ -138,6 +138,7 @@ import {
 import { RANGE_HITBOX_SLACK_YD, spellReachToAccuse } from "../utils/spellRange";
 import {
   isCasterCentredSpell,
+  PLACEHOLDER_RANGE_YD,
   spellRangeForCaster,
   spellReachForCaster,
 } from "../utils/spellRange";
@@ -1459,6 +1460,9 @@ export function kickEatenEvents(
         | "castStartS"
         | "castWindowS"
         | "diedAfterKickS"
+        | "sourceDistSampleGapS"
+        | "nearestKickerSampleGapS"
+        | "kickLandedFromYd"
       >
     > &
     Partial<
@@ -1646,16 +1650,32 @@ export function kickEatenEvents(
         ...((): Record<string, string> => {
           const r = reach?.(k);
           if (!r) return {};
+          // F07: the kick landed from farther than its table range (model
+          // centres; the range is hitbox to hitbox). Compared with the range
+          // as the row prints it, so the gate re-reads the same two numbers.
+          const landedYd =
+            k.kickLandedFromYd != null &&
+            k.kickLandedFromYd > Math.round(r.kickRangeYd)
+              ? k.kickLandedFromYd
+              : undefined;
           return {
             ...(r.yourReachYd !== undefined && Number.isFinite(r.yourReachYd)
               ? { yourReachYd: String(Math.round(r.yourReachYd)) }
               : {}),
             kickRangeYd: String(Math.round(r.kickRangeYd)),
-            ...outRangeFact(k, r),
+            ...(landedYd !== undefined
+              ? { kickLandedFromYd: landedYd.toFixed(1) }
+              : {}),
+            ...outRangeFact(k, r, landedYd),
           };
         })(),
         ...(k.sourceDistYd != null
-          ? { sourceDistYd: k.sourceDistYd.toFixed(1) }
+          ? {
+              sourceDistYd: distanceFact(
+                k.sourceDistYd,
+                k.sourceDistSampleGapS,
+              ),
+            }
           : {}),
         ...(k.sourceKickReadyInS != null
           ? {
@@ -1663,7 +1683,12 @@ export function kickEatenEvents(
             }
           : {}),
         ...(k.nearestKickerDistYd != null
-          ? { nearestKickerDistYd: k.nearestKickerDistYd.toFixed(1) }
+          ? {
+              nearestKickerDistYd: distanceFact(
+                k.nearestKickerDistYd,
+                k.nearestKickerSampleGapS,
+              ),
+            }
           : {}),
         ...(k.nearestKickerDistYd != null && k.nearestKickerName
           ? { nearestKicker: k.nearestKickerName }
@@ -1777,7 +1802,29 @@ export function kickEatenEvents(
  *     Tested last, so a line another condition closes keeps that reason.
  * A gap-closer the kicker never cast this round is not in its kit as far as
  * the log shows, and the legend says `yes` covers only the ones it was seen
- * using. Values never contain ", " (`checkFactsBlockIntegrity`). */
+ * using. Values never contain ", " (`checkFactsBlockIntegrity`).
+ *
+ * Re-eval 2026-10-08, F07 — two readings the verdict has to respect:
+ *  - a distance read across position samples more than `INTERP_MAX_GAP_MS`
+ *    apart (`sourceDistSampleGapS`) is a guess, and a permission is not
+ *    built on a guess: it closes, like an unknown distance;
+ *  - `landedYd`, the centre distance this very kick landed from when that
+ *    exceeds its table range (`kickLandedFromYd`): the kicker reached from
+ *    there, so "outside kick range" (2) and "could walk in" (6) measure from
+ *    it, not from the table number (0068182d @72.5: a 5 yd Rebuke landing
+ *    from 10.6 yd). */
+/** `11.0`, or `~11 (position samples 2.3s apart)` when the positions behind
+ * it were read across samples that far apart (`sourceDistSampleGapS`). No
+ * ", " inside. Also what the gate reads (`checkKickEatenRangeFacts`). */
+export function distanceFact(
+  yd: number,
+  sampleGapS: number | null | undefined,
+): string {
+  return sampleGapS == null
+    ? yd.toFixed(1)
+    : `~${Math.round(yd)} (position samples ${sampleGapS.toFixed(1)}s apart)`;
+}
+
 function outRangeFact(
   k: {
     sourceDistYd?: number | null;
@@ -1788,8 +1835,10 @@ function outRangeFact(
     ownerImmobileBy?: string | null;
     channelS?: number | null;
     castWindowS?: number | null;
+    sourceDistSampleGapS?: number | null;
   },
   r: { yourReachYd?: number; yourCastRangeYd?: number; kickRangeYd: number },
+  landedYd?: number,
 ): { outRangeable: string } {
   const no = (why: string) => ({ outRangeable: `no (${why})` });
   if (r.yourReachYd === undefined || !Number.isFinite(r.yourReachYd))
@@ -1808,11 +1857,19 @@ function outRangeFact(
       `kicked ${k.channelS.toFixed(1)}s into the channel — the kicker had the cast and the channel to close in`,
     );
   if (k.sourceDistYd == null) return no("kicker distance unknown");
+  if (k.sourceDistSampleGapS != null)
+    return no(
+      `kicker distance approximate — position samples ${k.sourceDistSampleGapS.toFixed(1)}s apart`,
+    );
   if (!(k.sourceDistYd > r.kickRangeYd))
     return no("kicker already inside kick range at cast start");
   if (!(k.sourceDistYd > r.kickRangeYd + RANGE_HITBOX_SLACK_YD))
     return no(
       `kicker within ${RANGE_HITBOX_SLACK_YD} yd of kick range at cast start — inside it once hitboxes count`,
+    );
+  if (landedYd !== undefined && !(k.sourceDistYd > landedYd))
+    return no(
+      `kicker already within the ${landedYd.toFixed(1)} yd this kick landed from at cast start`,
     );
   const g = k.sourceGapCloser;
   if (g?.state === "used")
@@ -1836,15 +1893,53 @@ function outRangeFact(
   // 6 (X3): the kicker walks in during the cast. Last, so every line that
   // was already closed keeps the reason it had.
   if (k.castWindowS == null) return no("cast length unknown");
-  const beyondYd = k.sourceDistYd - r.kickRangeYd;
+  const beyondYd = k.sourceDistYd - Math.max(r.kickRangeYd, landedYd ?? 0);
   if (!(beyondYd > k.castWindowS * KICK_RUN_SPEED_YD_S))
     return no(
-      `kicker ${beyondYd.toFixed(1)} yd beyond kick range could walk in during the ${k.castWindowS.toFixed(1)}s cast at ${KICK_RUN_SPEED_YD_S} yd/s`,
+      `kicker ${beyondYd.toFixed(1)} yd beyond ${landedYd !== undefined ? "where this kick landed from" : "kick range"} could walk in during the ${k.castWindowS.toFixed(1)}s cast at ${KICK_RUN_SPEED_YD_S} yd/s`,
     );
   return {
     outRangeable:
       "yes (kicker outside kick range; no gap-closer of theirs just used or ready)",
   };
+}
+
+/**
+ * The reach pair of one kick, from the official tables with each caster's
+ * talents: the interrupted spell's reach and cast range for the owner, the
+ * kick's cast range for the kicker. null when a range is unknown.
+ *
+ * A table range at or above DB2's placeholder rows (`PLACEHOLDER_RANGE_YD`:
+ * the 100 yd "vision range" row of triggered auras, the 50,000 yd "anywhere"
+ * row) is no range — unknown, like a missing row (re-eval 2026-10-08, F07:
+ * dfcccbf2 @166.5 printed `kickRangeYd=50000` for Shield of Virtue 217824,
+ * an effect id with no castable twin, and hung "the spell does not reach
+ * farther than the kick" on it). The row then prints no reach fact and no
+ * out-range verdict, which the legend reads as "do not coach out-ranging".
+ */
+export function kickEatenReach(
+  owner: Parameters<typeof spellReachForCaster>[0],
+  kicker: Parameters<typeof spellRangeForCaster>[0],
+  k: { interruptedSpellId?: string; kickSpellId?: string },
+): { yourReachYd?: number; yourCastRangeYd?: number; kickRangeYd: number } | null {
+  if (!k.interruptedSpellId || !k.kickSpellId) return null;
+  const real = (yd: number | null) =>
+    yd !== null && yd < PLACEHOLDER_RANGE_YD ? yd : null;
+  // the kick's CAST id — the event may carry the interrupt effect id,
+  // whose range row is the 100 yd placeholder (Skull Bash 93985)
+  const kickRangeYd = real(
+    spellRangeForCaster(kicker, kickCastSpellId(k.kickSpellId)),
+  );
+  const reachYd = spellReachForCaster(owner, k.interruptedSpellId);
+  if (reachYd === null || kickRangeYd === null) return null;
+  // a caster-centred spell's "reach" is its radius, not a distance the
+  // player could keep from the kicker (F-K6c)
+  if (isCasterCentredSpell(k.interruptedSpellId)) return { kickRangeYd };
+  const yourReachYd = real(reachYd);
+  if (yourReachYd === null) return null;
+  const yourCastRangeYd =
+    real(spellRangeForCaster(owner, k.interruptedSpellId)) ?? undefined;
+  return { yourReachYd, yourCastRangeYd, kickRangeYd };
 }
 
 /** `kickEatenEvents` with the product's own inputs: the owner's rejected
@@ -1893,26 +1988,12 @@ export function ownerKickEatenEvents(
         tSeconds: (e.logLine.timestamp - combat.startTime) / 1000,
       })),
     },
-    (k) => {
-      if (!k.interruptedSpellId || !k.kickSpellId) return null;
-      const kicker = k.sourceId
-        ? ((combat.units ?? {})[k.sourceId] ?? null)
-        : null;
-      const yourReachYd = spellReachForCaster(owner, k.interruptedSpellId);
-      // the kick's CAST id — the event may carry the interrupt effect id,
-      // whose range row is the 100 yd placeholder (Skull Bash 93985)
-      const kickRangeYd = spellRangeForCaster(
-        kicker,
-        kickCastSpellId(k.kickSpellId),
-      );
-      if (yourReachYd === null || kickRangeYd === null) return null;
-      // a caster-centred spell's "reach" is its radius, not a distance the
-      // player could keep from the kicker (F-K6c)
-      if (isCasterCentredSpell(k.interruptedSpellId)) return { kickRangeYd };
-      const yourCastRangeYd =
-        spellRangeForCaster(owner, k.interruptedSpellId) ?? undefined;
-      return { yourReachYd, yourCastRangeYd, kickRangeYd };
-    },
+    (k) =>
+      kickEatenReach(
+        owner,
+        k.sourceId ? ((combat.units ?? {})[k.sourceId] ?? null) : null,
+        k,
+      ),
     kickPressureFor({ combat, owner, friends, enemies }),
     ownerCastCancels({ owner, friends, enemies, combat, rawStreams }),
   );

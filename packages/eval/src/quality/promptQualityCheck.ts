@@ -44,7 +44,10 @@ import {
   AIMED_CONTROL_LANDING_LEAD_MS,
   GROUND_CONTROL_FUSE_MS,
 } from "@gladlog/analysis/src/analysis/burstWindowDecisionPoints";
-import { POST_KICK_OTHER_REASON_HEAD } from "@gladlog/analysis/src/analysis/candidateFindings";
+import {
+  distanceFact,
+  POST_KICK_OTHER_REASON_HEAD,
+} from "@gladlog/analysis/src/analysis/candidateFindings";
 import { fmtFactNum } from "@gladlog/analysis/src/analysis/factFormat";
 import { parseBurstAnsweredLine } from "@gladlog/analysis/src/context/burstAnswered";
 import {
@@ -156,11 +159,16 @@ import { DURING_ABSORBED_TAG_RE_SRC } from "@gladlog/analysis/src/utils/external
 import { VULNERABLE_OWNER_DAMAGE_RE_SRC } from "@gladlog/analysis/src/utils/healerOffenseAnalysis";
 import { JUKE_LOOKBACK_MS } from "@gladlog/analysis/src/utils/kickAudit";
 import { STAYED_IN_NEAR_DEATH_PCT } from "@gladlog/analysis/src/utils/positionAnalysis";
+import { INTERP_MAX_GAP_MS } from "@gladlog/analysis/src/utils/positionSampling";
 import {
   fmtTime,
   parseWholeSeconds,
 } from "@gladlog/analysis/src/utils/renderGrid";
 import { SOLO_SHUFFLE_BRACKET } from "@gladlog/analysis/src/utils/roundEnd";
+import {
+  PLACEHOLDER_RANGE_YD,
+  RANGE_HITBOX_SLACK_YD,
+} from "@gladlog/analysis/src/utils/spellRange";
 import { SUMMON_KIND_RE_SRC } from "@gladlog/analysis/src/utils/summonKind";
 import fs from "fs-extra";
 import path from "path";
@@ -4250,6 +4258,86 @@ export function checkKickEatenKickSilence(lines: string[]): string[] {
 }
 
 /**
+ * kick-eaten range and distance facts (re-eval 2026-10-08, F07), each line
+ * re-read from its own rendered numbers:
+ *  - no table placeholder as a range: `kickRangeYd` / `yourReachYd` /
+ *    `maxKickRangeYd` below `PLACEHOLDER_RANGE_YD` (dfcccbf2 @166.5 printed
+ *    `kickRangeYd=50000`, DB2's "anywhere" row for Shield of Virtue);
+ *  - a distance is `N.N`, or `~N (position samples N.Ns apart)` with a
+ *    spacing of `INTERP_MAX_GAP_MS` or more as printed (`distanceFact`, the
+ *    producer's own writer and bound) — nothing else;
+ *  - `kickLandedFromYd` is printed only beyond the printed `kickRangeYd`;
+ *  - `outRangeable=yes` is a permission and rests on a measured distance:
+ *    `sourceDistYd` is not approximate, lies beyond `kickRangeYd` by more
+ *    than `RANGE_HITBOX_SLACK_YD` (less the half yard `kickRangeYd` is
+ *    rounded by) and beyond `kickLandedFromYd` when the kick landed from
+ *    farther than its range.
+ */
+const KICK_RANGE_FACT_KEYS = ["kickRangeYd", "yourReachYd", "maxKickRangeYd"];
+const KICK_DISTANCE_FACT_KEYS = ["sourceDistYd", "nearestKickerDistYd"];
+const APPROX_DISTANCE_FACT =
+  /^~(\d+) \(position samples (\d+\.\d)s apart\)$/;
+export function checkKickEatenRangeFacts(lines: string[]): string[] {
+  const failures: string[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!;
+    if (!line.includes("type=kick-eaten ")) continue;
+    const m = line.match(MENU_LINE_FACTS);
+    if (!m) continue;
+    const f = parseFactsBlock(m[1]!);
+    const fail = (msg: string) =>
+      failures.push(`line ${i + 1}: kick-eaten ${msg}`);
+    for (const key of KICK_RANGE_FACT_KEYS) {
+      const v = f[key];
+      if (v !== undefined && !(Number(v) < PLACEHOLDER_RANGE_YD))
+        fail(
+          `${key}=${v} is not a range (a table placeholder is ${PLACEHOLDER_RANGE_YD} yd or more)`,
+        );
+    }
+    for (const key of KICK_DISTANCE_FACT_KEYS) {
+      const v = f[key];
+      if (v === undefined || /^\d+\.\d$/.test(v)) continue;
+      const approx = v.match(APPROX_DISTANCE_FACT);
+      if (!approx) fail(`${key}=${v} is neither N.N nor an approximate distance`);
+      else if (
+        v !== distanceFact(Number(approx[1]), Number(approx[2])) ||
+        // one decimal: a spacing just above the bound prints as the bound
+        !(Number(approx[2]) * 1000 >= INTERP_MAX_GAP_MS)
+      )
+        fail(
+          `${key}=${v} is marked approximate with samples less than ${INTERP_MAX_GAP_MS} ms apart`,
+        );
+    }
+    const range = f["kickRangeYd"];
+    const landed = f["kickLandedFromYd"];
+    if (
+      landed !== undefined &&
+      !(range !== undefined && Number(landed) > Number(range))
+    )
+      fail(
+        `kickLandedFromYd=${landed} is printed without a kickRangeYd below it (${range ?? "absent"})`,
+      );
+    if (!(f["outRangeable"] ?? "").startsWith("yes")) continue;
+    const dist = f["sourceDistYd"] ?? "";
+    if (!/^\d+\.\d$/.test(dist) || range === undefined) {
+      fail(
+        `outRangeable=yes without a measured sourceDistYd and a kickRangeYd (sourceDistYd=${dist || "absent"})`,
+      );
+      continue;
+    }
+    if (!(Number(dist) > Number(range) + RANGE_HITBOX_SLACK_YD - 0.5))
+      fail(
+        `outRangeable=yes with the kicker ${dist} yd away from a ${range} yd kick`,
+      );
+    if (landed !== undefined && !(Number(dist) > Number(landed)))
+      fail(
+        `outRangeable=yes with the kicker ${dist} yd away at cast start and the kick landing from ${landed} yd`,
+      );
+  }
+  return failures;
+}
+
+/**
  * A candidate legend that names ANOTHER candidate type sends the reader to
  * that type's legend ("as in kick-priority-missed") — and a legend is printed
  * only when its type has a row in the menu. b711d4ac (re-eval 2026-10-08,
@@ -5563,6 +5651,7 @@ export function checkMatch(
   hardFailures.push(...checkLegendCrossReferences(lines));
   hardFailures.push(...checkKickEatenRefusedForAnotherReason(lines));
   hardFailures.push(...checkKickEatenKickSilence(lines));
+  hardFailures.push(...checkKickEatenRangeFacts(lines));
   hardFailures.push(...checkEnemyDefRefConsistency(lines));
   hardFailures.push(...checkEnemyDefSaveEffect(lines));
   hardFailures.push(...checkFormCooldownPressSpacing(lines));
