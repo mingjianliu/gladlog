@@ -1444,5 +1444,16 @@
  *  `cd:` / `rdy:` entries and the kit lines of those three follow. One
  *  cd-hoarded row is added on the capture (a Turtle ready 3 s before a
  *  crisis).
+ *  v376 (2026-10-11, FT, three user rulings of that day): (1) a buff still
+ *  up when the round ended prints no `[BUFF FADED]` / `[ENEMY BUFF END]`
+ *  line — those lines exist only for a buff that ended inside the round;
+ *  (2) Storm Conduit gives a Restoration holder 4 s a cast in a log from
+ *  before the 2026-08-18 hotfix and 2 s since (the `[RES]` `cd:` / `rdy:`
+ *  entries follow); (3) an enemy's own non-wall defensive is labelled by
+ *  what it DOES — `(absorb Nk, Ts)`, `(heal)`, `(dodge)`, `(spell reflect)`,
+ *  `(rewind)`, `(root / snare immunity)`, `(redirect)` … — never
+ *  `(self-save)`, and KILL ATTEMPTS words such a press `popped X` (a proc
+ *  keeps `self-saved (X)`). No candidate row is added or removed on the
+ *  605-file capture; one kick-eaten row names a different nearest kicker.
  */
-export const PROMPT_VERSION = 375;
+export const PROMPT_VERSION = 376;
