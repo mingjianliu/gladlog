@@ -1429,7 +1429,9 @@ export interface ICCEfficiencyStat {
 
 export interface IMissedPurgeWindow {
   timeSeconds: number;
-  /** How long the buff sat uncontested; capped at match duration if never removed */
+  /** How long the buff sat uncontested inside the round: to its removal, or
+   * to the round's end (`roundEndMs`) when it was still up then — never past
+   * it. */
   durationSeconds: number;
   enemyName: string;
   enemySpec: string;
@@ -3567,9 +3569,22 @@ export function reconstructDispelSummary(
         const removals = removedTimes.get(spellId) ?? [];
 
         for (const { ts: applyTs, spellName } of applications) {
+          // The window ends at the round's end (`roundEndMs` — the one the
+          // uncleansed windows above stop at, F-C3). A round's units keep
+          // the rows logged after its ending death, so a buff still up then
+          // paired with a removal written in the strip between two rounds,
+          // or with none and ran to `combat.endTime`: Power Infusion up
+          // 7.7 s when a Solo Shuffle round ended at 2:29 read "unpurged for
+          // 14s" (287ee68f round 2: its REMOVED is 6.0 s after the death,
+          // 4.0 s after `combat.endTime`). A buff applied at or after the
+          // end is not in the round, and neither is a removal — or a purge
+          // of ours — logged after it. Everything below (the length, the
+          // reaction floor, "purged by us", the purgers' lockouts, the
+          // pressure reading) is asked of [applyTs, windowEndMs].
+          if (applyTs >= roundEnd) continue;
           const removalTs = removals.find((r) => r >= applyTs);
-          const durationSeconds =
-            ((removalTs ?? combat.endTime) - applyTs) / 1000;
+          const windowEndMs = Math.min(removalTs ?? combat.endTime, roundEnd);
+          const durationSeconds = (windowEndMs - applyTs) / 1000;
 
           if (durationSeconds < MISSED_PURGE_THRESHOLD_S) continue;
 
@@ -3581,8 +3596,7 @@ export function reconstructDispelSummary(
           // 6.933 = 82.85499999999999 < the purge's 82.855 — a Shattering
           // Throw that took Blessing of Protection off read "unpurged for
           // 7s", 17664ae3 round 1).
-          const endRelative =
-            ((removalTs ?? combat.endTime) - combat.startTime) / 1000;
+          const endRelative = (windowEndMs - combat.startTime) / 1000;
           const purgedByUs = ourPurges.some(
             (p) =>
               p.removedSpellId === spellId &&
@@ -3595,7 +3609,6 @@ export function reconstructDispelSummary(
             // Only flag if at least one purger was free during the window AND
             // the priority meets the bar for that purger's spec (CD-gated purgers
             // only get flagged for Critical misses — they can't spam purge every GCD).
-            const windowEndMs = removalTs ?? combat.endTime;
             const generalPurgers = isMagicPurgeTarget(spellId)
               ? friendlyPurgers.filter(
                   (p) => priority === "Critical" || !isCdGatedPurger(p),
@@ -3712,7 +3725,7 @@ export function reconstructDispelSummary(
               // excuse missed purges during long, unpressured periods.
               const pressureWindowEndMs = Math.min(
                 applyTs + POST_CC_PRESSURE_WINDOW_S * 1000,
-                removalTs ?? combat.endTime,
+                windowEndMs,
               );
               const teamUnderPressure = friends.some((f) => {
                 const threshold = getPressureThreshold(f);

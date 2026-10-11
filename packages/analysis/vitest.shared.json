@@ -197,6 +197,7 @@
     "test/matchTimeline.spectag.test.ts",
     "test/mateHitDuringCc.test.ts",
     "test/minorDispelFold.test.ts",
+    "test/missedPurgeRoundEnd.test.ts",
     "test/mitigationData.test.ts",
     "test/mitigationVerdicts.test.ts",
     "test/nonPlayerUnitKill.test.ts",
