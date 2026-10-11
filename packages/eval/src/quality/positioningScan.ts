@@ -304,9 +304,10 @@ export function extractGeoClaims(promptText: string): GeoExtraction {
         });
         // G4b: "— you moved N yd yourself (span start→end)" — the owner's
         // straight-line displacement between the span's two render seconds
-        // (reliability round 2 F13, 06bb).
+        // (reliability round 2 F13, 06bb). Without "yourself" when a forced
+        // move lies inside the span (`movedStr`); the number is the same.
         const mv = line.match(
-          / you moved ([\d.]+) yd yourself \(span start→end\)/,
+          / you moved ([\d.]+) yd(?: yourself)? \(span start→end\)/,
         );
         if (mv && m[2])
           claims.push({

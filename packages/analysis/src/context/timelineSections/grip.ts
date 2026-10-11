@@ -10,14 +10,9 @@
  * passes its current value and assigns back the returned one (the [GRIP]
  * legend needs > 0).
  */
-import { LogEvent } from "@gladlog/parser-compat";
-
+import { deathGripsOn } from "../../utils/forcedDisplacement";
 import { fmtTime } from "../../utils/renderGrid";
-import { DEATH_GRIP_ID } from "../resUtilityCds";
 import type { TimelineCtx } from "./ctx";
-
-/** A SPELL_MISSED row of the grip sits within this of its cast row. */
-const GRIP_MISS_PAIR_MS = 200;
 
 export function emitGripEntries(
   ctx: Pick<
@@ -35,31 +30,27 @@ export function emitGripEntries(
   // threaded: read from ctx, returned to the caller (GH #116)
   let { gripLineCount } = ctx;
 
-  const friendById = new Map(friends.map((f) => [f.id, f]));
-  for (const dk of enemies ?? []) {
-    for (const c of dk.spellCastEvents ?? []) {
-      if (c.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
-      if (c.spellId !== DEATH_GRIP_ID) continue;
-      const victim = friendById.get(c.destUnitId ?? "");
-      if (!victim) continue;
-      const castMs = c.logLine.timestamp;
-      const at = (castMs - matchStartMs) / 1000;
-      // a grip the target was immune to (or that missed) moved nobody
-      const miss = (victim.missesIn ?? []).find(
-        (m) =>
-          m.spellId === DEATH_GRIP_ID &&
-          m.srcUnitId === dk.id &&
-          Math.abs(m.timestamp - castMs) <= GRIP_MISS_PAIR_MS,
-      );
-      const tail = miss ? ` — did not land (${miss.missType})` : "";
-      if (
-        addEntry(
-          at,
-          `${fmtTime(at)}  [GRIP]   ${pid(victim.name)} ← Death Grip (by ${actorLabel(dk.name, "enemy", dk.id)})${tail}`,
-        )
+  // `deathGripsOn` — the reading the STAYED IN line's "you moved" shares
+  const grips = friends.flatMap((victim) =>
+    deathGripsOn(victim, enemies ?? []).map((g) => ({ victim, ...g })),
+  );
+  // in the order the casts were walked before: by caster, then by cast
+  const casterOrder = new Map((enemies ?? []).map((e, i) => [e.id, i]));
+  grips.sort(
+    (a, b) =>
+      casterOrder.get(a.caster.id)! - casterOrder.get(b.caster.id)! ||
+      a.castMs - b.castMs,
+  );
+  for (const { victim, caster: dk, castMs, missType } of grips) {
+    const at = (castMs - matchStartMs) / 1000;
+    const tail = missType ? ` — did not land (${missType})` : "";
+    if (
+      addEntry(
+        at,
+        `${fmtTime(at)}  [GRIP]   ${pid(victim.name)} ← Death Grip (by ${actorLabel(dk.name, "enemy", dk.id)})${tail}`,
       )
-        gripLineCount++;
-    }
+    )
+      gripLineCount++;
   }
   return { gripLineCount };
 }

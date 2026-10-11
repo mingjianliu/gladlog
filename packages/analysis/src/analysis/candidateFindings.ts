@@ -98,6 +98,7 @@ import {
 import { computeDampening } from "../utils/dampening";
 import { drResetMsAt } from "../utils/drAnalysis";
 import { SCHOOL_LIMITED_IMMUNITY_IDS } from "../utils/enemyDefensives";
+import { forcedMovesText } from "../utils/forcedDisplacement";
 import { reconstructEnemyCDTimeline } from "../utils/enemyCDs";
 import { kickCastSpellId } from "../utils/enemyInterrupts";
 import {
@@ -1161,9 +1162,14 @@ export function missedCleanseEvents(
       // a dispeller with no stream at all is unknown — only a full set speaks
       const dispOccKnown =
         dispOcc !== null &&
-        eligible.every((f) => Array.isArray(f.castStartEvents) || Array.isArray(f.auraEvents));
+        eligible.every(
+          (f) =>
+            Array.isArray(f.castStartEvents) || Array.isArray(f.auraEvents),
+        );
       const dispS =
-        dispOcc && dispOccKnown ? (dispOcc.occupiedMs / 1000).toFixed(1) : "0.0";
+        dispOcc && dispOccKnown
+          ? (dispOcc.occupiedMs / 1000).toFixed(1)
+          : "0.0";
       // Rendering floor anchored to the rendered value itself: attach only
       // when the one-decimal rendering is non-zero. Zero is also what a
       // window full of instants looks like (instants emit no CAST_START), so
@@ -1543,8 +1549,7 @@ export function kickEatenEvents(
   // counts like any other kick, so a round lists at most 2 + 2. Without the
   // pressure closure (hand-built fixtures) every kick is tier 2: the old
   // order, the old cap.
-  const tierOf = (p: KickPressure | undefined) =>
-    p ? kickPressureTier(p) : 2;
+  const tierOf = (p: KickPressure | undefined) => (p ? kickPressureTier(p) : 2);
   // B6 (user ruling 2026-10-06; a fact, no new accusation): the round's kicks
   // on the player by kicker — EVERY kick passed in, the harmless ones and
   // the ones the cap drops included, so a line can say "this kicker, 7 times,
@@ -1921,7 +1926,11 @@ export function kickEatenReach(
   owner: Parameters<typeof spellReachForCaster>[0],
   kicker: Parameters<typeof spellRangeForCaster>[0],
   k: { interruptedSpellId?: string; kickSpellId?: string },
-): { yourReachYd?: number; yourCastRangeYd?: number; kickRangeYd: number } | null {
+): {
+  yourReachYd?: number;
+  yourCastRangeYd?: number;
+  kickRangeYd: number;
+} | null {
   if (!k.interruptedSpellId || !k.kickSpellId) return null;
   const real = (yd: number | null) =>
     yd !== null && yd < PLACEHOLDER_RANGE_YD ? yd : null;
@@ -2483,6 +2492,7 @@ export function positionMistakeEvents(
     | "ownerHpStartPct"
     | "ownerHpMinPct"
     | "ownerMovedYards"
+    | "ownerForcedMoves"
     | "spellName"
     | "startDistanceYards"
     | "endDistanceYards"
@@ -2528,6 +2538,14 @@ export function positionMistakeEvents(
       // chaser keeping pace is not retold as "stood still".
       if (e.type === "STAYED_IN" && e.ownerMovedYards !== undefined)
         facts.moved = String(Math.round(e.ownerMovedYards));
+      // …and what moved the owner inside the span without the owner doing
+      // it (the STAYED IN line's own words — `forcedMovesText`)
+      if (
+        e.type === "STAYED_IN" &&
+        e.ownerMovedYards !== undefined &&
+        e.ownerForcedMoves?.length
+      )
+        facts.movedIncludes = forcedMovesText(e.ownerForcedMoves);
       if (e.startDistanceYards != null)
         facts.dist = String(Math.round(e.startDistanceYards));
       // Triage position F-S1 / F-S2: `dist` is the span START; a stay is a
@@ -3253,8 +3271,7 @@ function teamPlayEvents(
               enemyMinHpPctAt: (from, to) =>
                 enemyMinHpPctInWindow(enemies, combat, from, to),
               enemyMinHpUnitAt: (from, to) =>
-                enemyMinHpInWindow(enemies, combat, from, to)?.unitName ??
-                null,
+                enemyMinHpInWindow(enemies, combat, from, to)?.unitName ?? null,
               enemyDeathS,
               ref: lookupSyncWindowPrior(combat?.startInfo?.bracket ?? ""),
               ownerId: owner?.id,

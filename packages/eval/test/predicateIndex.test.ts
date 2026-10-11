@@ -125,6 +125,7 @@ import * as enemyCDs from "@gladlog/analysis/src/utils/enemyCDs";
 import * as enemyDefensives from "@gladlog/analysis/src/utils/enemyDefensives";
 import * as enemyInterrupts from "@gladlog/analysis/src/utils/enemyInterrupts";
 import * as externalDamage from "@gladlog/analysis/src/utils/externalDamage";
+import * as forcedDisplacement from "@gladlog/analysis/src/utils/forcedDisplacement";
 import * as gapClosers from "@gladlog/analysis/src/utils/gapClosers";
 import * as healerOffenseAnalysis from "@gladlog/analysis/src/utils/healerOffenseAnalysis";
 import * as incomingPressure from "@gladlog/analysis/src/utils/incomingPressure";
@@ -3024,6 +3025,26 @@ const INDEX: PredicateRow[] = [
   {
     file: `${E}/quality/promptQualityCheck.ts`,
     symbol: "checkBareRosterPossessive",
+    mod: promptQualityCheck,
+  },
+  {
+    file: `${A}/utils/forcedDisplacement.ts`,
+    symbol: "deathGripsOn",
+    mod: forcedDisplacement,
+  },
+  {
+    file: `${A}/utils/forcedDisplacement.ts`,
+    symbol: "forcedMovesInRenderedSpan",
+    mod: forcedDisplacement,
+  },
+  {
+    file: `${A}/utils/forcedDisplacement.ts`,
+    symbol: "FORCED_MOVE_TEXT",
+    mod: forcedDisplacement,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkStayedInForcedMove",
     mod: promptQualityCheck,
   },
   {

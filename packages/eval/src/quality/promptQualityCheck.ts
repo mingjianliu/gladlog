@@ -168,6 +168,7 @@ import {
   SAVE_AURA_END_UNSEEN_NAMES,
 } from "@gladlog/analysis/src/utils/enemyDefensives";
 import { DURING_ABSORBED_TAG_RE_SRC } from "@gladlog/analysis/src/utils/externalDamage";
+import { FORCED_MOVE_TEXT } from "@gladlog/analysis/src/utils/forcedDisplacement";
 import { VULNERABLE_OWNER_DAMAGE_RE_SRC } from "@gladlog/analysis/src/utils/healerOffenseAnalysis";
 import { JUKE_LOOKBACK_MS } from "@gladlog/analysis/src/utils/kickAudit";
 import { STAYED_IN_NEAR_DEATH_PCT } from "@gladlog/analysis/src/utils/positionAnalysis";
@@ -4686,6 +4687,75 @@ export function checkBareRosterPossessive(lines: string[]): string[] {
   return failures;
 }
 
+/**
+ * A STAYED IN line's "you moved N yd" calls the yards the owner's own only
+ * when no forced move lies between the span's two ends
+ * (`forcedDisplacement.ts` `forcedMovesInRenderedSpan` — the reading the
+ * `[GRIP]` line shares).
+ *
+ * FT leftovers 2026-10-11 (the I13 fact half): `you moved 29.2 yd yourself
+ * (span start→end)` with a landed Death Grip on the owner inside the span —
+ * 10 lines in 9 of the 3,520 capture prompts of main 8c3275fa. From text only
+ * the grip can be held (a knockback has no line of its own):
+ *  - a landed `[GRIP]` on the log owner at a second in [start, end) → the
+ *    line does not say `yourself` after the yards, and names that grip;
+ *  - a grip the line names has its `[GRIP]` line, landed, at that second;
+ *  - every forced move the line names lies in [start, end).
+ */
+const STAYED_MOVED_LINE =
+  /^\s+(\d+):(\d\d)–(\d+):(\d\d) \[[^\]]* burst\] .* — you moved [\d.]+ yd( yourself)? \(span start→end\)(?:, not all of it yourself: (.*?))?(?: — |$)/;
+const OWNER_ROSTER_ID = /<unit\s+id="(\d+)"[^>]*role="log owner"/;
+const GRIP_LINE = /^(\d+):(\d\d)\s+\[GRIP\]\s+(\d+)[( ]/;
+const FORCED_MOVE_ITEM = new RegExp(
+  `(${Object.values(FORCED_MOVE_TEXT).map(reEscape).join("|")}) at (\\d+):(\\d\\d)`,
+  "g",
+);
+export function checkStayedInForcedMove(lines: string[]): string[] {
+  let ownerId: string | undefined;
+  for (const line of lines) {
+    const m = OWNER_ROSTER_ID.exec(line);
+    if (m) ownerId = m[1];
+  }
+  const grips = new Set<number>();
+  for (const line of lines) {
+    const m = GRIP_LINE.exec(line);
+    if (m && m[3] === ownerId && !line.includes("did not land"))
+      grips.add(Number(m[1]) * 60 + Number(m[2]));
+  }
+  const failures: string[] = [];
+  lines.forEach((line, i) => {
+    const m = STAYED_MOVED_LINE.exec(line);
+    if (!m) return;
+    const from = Number(m[1]) * 60 + Number(m[2]);
+    const to = Number(m[3]) * 60 + Number(m[4]);
+    const at = `line ${i + 1}`;
+    const named = [...(m[6] ?? "").matchAll(FORCED_MOVE_ITEM)].map((x) => ({
+      grip: x[1] === FORCED_MOVE_TEXT.grip,
+      s: Number(x[2]) * 60 + Number(x[3]),
+    }));
+    if (!m[5] && named.length === 0)
+      failures.push(
+        `${at}: the yards are not called the owner's own, and no forced move is named`,
+      );
+    for (const n of named) {
+      if (n.s < from || n.s >= to)
+        failures.push(
+          `${at}: a forced move at ${fmtTime(n.s)} is outside the span's two ends`,
+        );
+      if (n.grip && !grips.has(n.s))
+        failures.push(
+          `${at}: Death Grip at ${fmtTime(n.s)} has no landed [GRIP] line on the owner`,
+        );
+    }
+    for (const g of grips)
+      if (g >= from && g < to && !named.some((n) => n.grip && n.s === g))
+        failures.push(
+          `${at}: a landed [GRIP] on the owner at ${fmtTime(g)} is inside the span and the line ${m[5] ? 'says "yourself"' : "does not name it"}`,
+        );
+  });
+  return failures;
+}
+
 export function checkKickPriorityRefConsistency(lines: string[]): string[] {
   const failures: string[] = [];
   for (let i = 0; i < lines.length; i++) {
@@ -6064,6 +6134,7 @@ export function checkMatch(
   hardFailures.push(...checkKickWaitedOutConsistency(lines));
   hardFailures.push(...checkLegendCrossReferences(lines));
   hardFailures.push(...checkBareRosterPossessive(lines));
+  hardFailures.push(...checkStayedInForcedMove(lines));
   hardFailures.push(...checkKickEatenRefusedForAnotherReason(lines));
   hardFailures.push(...checkKickEatenKickSilence(lines));
   hardFailures.push(...checkKickEatenRangeFacts(lines));

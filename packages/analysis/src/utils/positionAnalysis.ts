@@ -32,6 +32,11 @@ import {
 import { IAlignedBurstWindow } from "./enemyCDs";
 import { isOwnImmunityInterval } from "./enemyDefensives";
 import {
+  type ForcedMove,
+  forcedMovesInRenderedSpan,
+  forcedMovesText,
+} from "./forcedDisplacement";
+import {
   HealerExposureLabel,
   IHealerBurstExposure,
 } from "./healerExposureAnalysis";
@@ -261,6 +266,11 @@ export interface IPositionEvent {
    *  walked ~18.5 yd while a Death Knight kept up, and "STAYED IN … little
    *  distance gained" was retold as "stood still" (原地硬抗). */
   ownerMovedYards?: number;
+  /** STAYED_IN: what moved the owner between those two seconds without the
+   *  owner doing it — a landed Death Grip, a landed enemy knockback or pull
+   *  (`forcedMovesInRenderedSpan`). With one inside, `ownerMovedYards` is not
+   *  all the owner's own walking and the line says so. */
+  ownerForcedMoves?: ForcedMove[];
   /** KITED: when and from whom the peak distance (`endDistanceYards`) was
    *  measured — the measured enemy's peak (`spanMeasuredEnemy`), so
    *  `peakEnemyName` is `nearestEnemyName`; on the fallback, the peak of the
@@ -1041,6 +1051,12 @@ export function computeOwnerPositionEvents(params: {
       tStart,
       tEnd,
     );
+    // FT leftovers 2026-10-11 (the I13 fact half): displacement the log
+    // shows the owner did not make, between the same two rendered seconds
+    const ownerForcedMoves =
+      ownerMovedToEnd === undefined
+        ? []
+        : forcedMovesInRenderedSpan(owner, enemies, matchStartMs, tStart, tEnd);
     const opened = maxDistance - start.distanceYards;
     if (opened >= KITE_DELTA_YARDS) {
       // Who moved (F13 c540): the enemy walking away from a stunned owner is
@@ -1158,6 +1174,7 @@ export function computeOwnerPositionEvents(params: {
         ...(ownerMovedToEnd !== undefined
           ? { ownerMovedYards: ownerMovedToEnd }
           : {}),
+        ...(ownerForcedMoves.length > 0 ? { ownerForcedMoves } : {}),
         // three-state: no summary passed ⇒ unknown, not 0
         ...(ownerCCSummary
           ? {
@@ -1543,8 +1560,10 @@ export function computeOwnerPositionEvents(params: {
 /** STAYED_IN: the owner's own displacement (render-grid span ends). The
  *  positioning gate re-derives it (G4 "you moved"). */
 function movedStr(e: IPositionEvent): string {
-  return e.ownerMovedYards === undefined
-    ? ""
+  if (e.ownerMovedYards === undefined) return "";
+  // the yards are the owner's own only when nothing the log shows moved them
+  return e.ownerForcedMoves?.length
+    ? ` — you moved ${e.ownerMovedYards} yd (span start→end), not all of it yourself: ${forcedMovesText(e.ownerForcedMoves)}`
     : ` — you moved ${e.ownerMovedYards} yd yourself (span start→end)`;
 }
 

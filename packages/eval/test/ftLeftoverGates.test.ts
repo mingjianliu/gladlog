@@ -3,7 +3,10 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { checkBareRosterPossessive } from "../src/quality/promptQualityCheck";
+import {
+  checkBareRosterPossessive,
+  checkStayedInForcedMove,
+} from "../src/quality/promptQualityCheck";
 
 const ROSTER = [
   '  <unit id="1" name="Me-Realm" spec="Restoration Druid" role="log owner">',
@@ -41,6 +44,80 @@ describe("checkBareRosterPossessive", () => {
       checkBareRosterPossessive([
         '  <unit id="3" name="Other-Realm" spec="" role="teammate">',
         "1:17  [CC BROKEN]   3's Slam broke own team's Polymorph on 5",
+      ]),
+    ).toEqual([]);
+  });
+});
+
+describe("checkStayedInForcedMove", () => {
+  const stayed = (moved: string) =>
+    `    0:13–0:23 [Moderate burst] 4.3→8.8yd from Trench-Velen-US — you moved 29.2 yd${moved} — you were the burst target — your HP 90%→40% (min over window)`;
+  const GRIP = "0:15  [GRIP]   1(RDruid) ← Death Grip (by 5(SRogue))";
+
+  it("flags `yourself` with a landed [GRIP] on the owner inside the span (main 8c3275fa)", () => {
+    const f = checkStayedInForcedMove([
+      ...ROSTER,
+      GRIP,
+      stayed(" yourself (span start→end)"),
+    ]);
+    expect(f).toHaveLength(1);
+    expect(f[0]).toContain('says "yourself"');
+  });
+
+  it("passes the line that names the grip, and a plain line with no grip in the span", () => {
+    expect(
+      checkStayedInForcedMove([
+        ...ROSTER,
+        GRIP,
+        stayed(
+          " (span start→end), not all of it yourself: Death Grip pulled you at 0:15",
+        ),
+      ]),
+    ).toEqual([]);
+    for (const grip of [
+      // on a teammate, not landed, at the end second (after the end sample)
+      "0:15  [GRIP]   2(BMHunter) ← Death Grip (by 5(SRogue))",
+      `${GRIP} — did not land (IMMUNE)`,
+      GRIP.replace("0:15", "0:23"),
+    ])
+      expect(
+        checkStayedInForcedMove([
+          ...ROSTER,
+          grip,
+          stayed(" yourself (span start→end)"),
+        ]),
+        grip,
+      ).toEqual([]);
+  });
+
+  it("flags a named grip with no [GRIP] line, one outside the span, and a second grip left out", () => {
+    const named = (list: string) =>
+      stayed(` (span start→end), not all of it yourself: ${list}`);
+    expect(
+      checkStayedInForcedMove([
+        ...ROSTER,
+        named("Death Grip pulled you at 0:15"),
+      ])[0],
+    ).toContain("no landed [GRIP] line");
+    expect(
+      checkStayedInForcedMove([
+        ...ROSTER,
+        named("an enemy knockback or pull landed on you at 0:25"),
+      ])[0],
+    ).toContain("outside the span");
+    expect(
+      checkStayedInForcedMove([
+        ...ROSTER,
+        GRIP,
+        GRIP.replace("0:15", "0:19"),
+        named("Death Grip pulled you at 0:15"),
+      ])[0],
+    ).toContain("does not name it");
+    // a knockback has no line of its own: inside the span it passes
+    expect(
+      checkStayedInForcedMove([
+        ...ROSTER,
+        named("an enemy knockback or pull landed on you at 0:18"),
       ]),
     ).toEqual([]);
   });
