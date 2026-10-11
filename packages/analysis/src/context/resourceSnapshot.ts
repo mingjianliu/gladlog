@@ -10,11 +10,11 @@ import {
   cdIsProcOnly,
   cdLatestRemainingSeconds,
   cdMaybeAvailableAt,
-  cdNeverSpent,
   cdRemainingWholeSeconds,
   cdSecondsUntilReady,
   GUARDIAN_SPIRIT_SPELL_ID,
   IMajorCooldownInfo,
+  kitRowUnused,
   lockCastsOf,
   ownPressLockout,
   type PressLockoutDebuff,
@@ -218,7 +218,9 @@ export function buildPlayerLoadout(
       : `${cd.spellName} [${cdSecondsLabel(cd)}${(cd.charges ?? 1) > 1 && !cdIsProcOnly(cd) ? `, ${cd.charges} Charges` : ""}${lastsPart(cd, caster)}]${
           cdIsProcOnly(cd)
             ? " [PASSIVE]"
-            : cdNeverSpent(cd)
+            : // `kitRowUnused`: the reading the kill-opportunity tier's "wall
+              // in hand" shares (R08 b) — the two cannot disagree
+              kitRowUnused(cd)
               ? ` [UNUSED${triedNote(cd, caster)}]`
               : ""
         }`;

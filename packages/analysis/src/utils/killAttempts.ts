@@ -404,16 +404,19 @@ export function softerTargetAt(
   target: ICombatUnit,
   enemies: readonly ICombatUnit[],
   atSeconds: number,
-  matchStartMs: number,
+  /** the round — its start, and each unit's cooldown ledger in it (the tier
+   * reads which walls a unit owns, `killOpportunityAt`) */
+  combat: IArenaMatch | IShuffleRound,
   /** death-kill F-K6 (ruling A′7 = A): an enemy sitting in a CC our team
    * applied that damage would break (DR Disorient / Incapacitate; Cyclone
    * cannot be hit at all) is no softer target — the team could not act on
    * it without breaking its own control. Absent ⇒ nobody is skipped. */
   inOurBreakableCc?: (e: ICombatUnit, atMs: number) => boolean,
 ): IKillAttemptSofterTarget | null {
+  const matchStartMs = combat.startTime;
   const atMs = matchStartMs + atSeconds * 1000;
   const targetRank =
-    TIER_RANK[killOpportunityAt(target, atSeconds, matchStartMs).tier];
+    TIER_RANK[killOpportunityAt(target, atSeconds, combat).tier];
   let best: IKillAttemptSofterTarget | null = null;
   let bestRank = targetRank;
   let bestHp = Infinity;
@@ -421,7 +424,7 @@ export function softerTargetAt(
     if (e.id === target.id) continue;
     if (e.deathRecords.some((rec) => rec.timestamp <= atMs)) continue;
     if (inOurBreakableCc?.(e, atMs)) continue;
-    const opp = killOpportunityAt(e, atSeconds, matchStartMs);
+    const opp = killOpportunityAt(e, atSeconds, combat);
     if (opp.tier === "locked") continue;
     const rank = TIER_RANK[opp.tier];
     if (rank >= targetRank) continue; // not strictly softer than the target
@@ -439,14 +442,14 @@ function softerField(
   target: ICombatUnit,
   enemies: readonly ICombatUnit[],
   atSeconds: number,
-  matchStartMs: number,
+  combat: IArenaMatch | IShuffleRound,
   inOurBreakableCc?: (e: ICombatUnit, atMs: number) => boolean,
 ): { softerTarget?: IKillAttemptSofterTarget } {
   const softer = softerTargetAt(
     target,
     enemies,
     atSeconds,
-    matchStartMs,
+    combat,
     inOurBreakableCc,
   );
   return softer ? { softerTarget: softer } : {};
@@ -617,14 +620,8 @@ export function extractKillAttempts(
         fromSeconds,
         toSeconds,
         stuns: group,
-        opportunity: killOpportunityAt(target, fromSeconds, matchStartMs),
-        ...softerField(
-          target,
-          enemies,
-          fromSeconds,
-          matchStartMs,
-          inOurBreakableCc,
-        ),
+        opportunity: killOpportunityAt(target, fromSeconds, combat),
+        ...softerField(target, enemies, fromSeconds, combat, inOurBreakableCc),
         openingDrLevel: group[0].drLevel,
         teamDamageToTarget,
         teamDamageToTargetInBracket: 0, // set below, once `toSeconds` is final
@@ -776,14 +773,8 @@ export function extractKillAttempts(
         fromSeconds,
         toSeconds,
         stuns: [],
-        opportunity: killOpportunityAt(target, fromSeconds, matchStartMs),
-        ...softerField(
-          target,
-          enemies,
-          fromSeconds,
-          matchStartMs,
-          inOurBreakableCc,
-        ),
+        opportunity: killOpportunityAt(target, fromSeconds, combat),
+        ...softerField(target, enemies, fromSeconds, combat, inOurBreakableCc),
         teamDamageToTarget,
         teamDamageToTargetInBracket: 0, // set below, once `toSeconds` is final
         teamDamageTotal,

@@ -2859,6 +2859,24 @@ export function cdIsProcOnly(cd: {
 }
 
 /**
+ * Does the kit line tag this ledger row `[UNUSED]` — a button the unit owns
+ * (the row is in its ledger: talent, PvP talent, spec baseline or a cast) and
+ * never spent this round? Not a row with no button (`[PASSIVE]`).
+ *
+ * One reading for the two places that say it (R08 b, user ruling 2026-10-11):
+ * the loadout's tag (`buildPlayerLoadout`) and the kill-opportunity tier's
+ * "wall in hand" (`wallsInHandAt`, killWindowTargetSelection.ts) — the kit
+ * printed `Unending Resolve [180s, lasts 8s] [UNUSED]` for an enemy the same
+ * prompt called `PRIME (no trinket, no 20-99% wall in hand)`.
+ */
+export function kitRowUnused(
+  cd: Pick<IMajorCooldownInfo, "spellId" | "neverUsed"> &
+    Partial<Pick<IMajorCooldownInfo, "isProcOnly" | "sharedCasts">>,
+): boolean {
+  return !cdIsProcOnly(cd) && cdNeverSpent(cd);
+}
+
+/**
  * Does a SPELL_CAST_SUCCESS under a same-named but DIFFERENT id count as
  * pressing the cooldown? Only when that id has a cooldown of its own (GH #106
  * step 2). Every real variant press does — Stampeding Roar's three forms

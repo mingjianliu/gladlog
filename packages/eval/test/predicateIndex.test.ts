@@ -838,6 +838,37 @@ const INDEX: PredicateRow[] = [
     symbol: "softerTargetAt",
     mod: killAttempts,
   },
+  // R08 (b): which walls a unit has in hand — the kit's [UNUSED] and the tier
+  {
+    file: `${A}/utils/killWindowTargetSelection.ts`,
+    symbol: "killOpportunityAt",
+    mod: killWindowTargetSelection,
+  },
+  {
+    file: `${A}/utils/killWindowTargetSelection.ts`,
+    symbol: "WALL_IN_HAND_MIT_IDS",
+    mod: killWindowTargetSelection,
+  },
+  {
+    file: `${A}/utils/killWindowTargetSelection.ts`,
+    symbol: "unpressedWallsOwned",
+    mod: killWindowTargetSelection,
+  },
+  {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "kitRowUnused",
+    mod: cooldowns,
+  },
+  {
+    file: `${A}/utils/killWindowTargetSelection.ts`,
+    symbol: "wallInHandKitNames",
+    mod: killWindowTargetSelection,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkKillTierWallOwnership",
+    mod: promptQualityCheck,
+  },
   // Position and geometry
   {
     file: `${A}/utils/bracketKey.ts`,

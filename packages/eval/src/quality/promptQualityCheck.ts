@@ -205,6 +205,7 @@ import {
   killAttemptBracketMeetsControl,
   killAttemptOwnControlClause,
 } from "@gladlog/analysis/src/utils/killAttempts";
+import { wallInHandKitNames } from "@gladlog/analysis/src/utils/killWindowTargetSelection";
 import { STAYED_IN_NEAR_DEATH_PCT } from "@gladlog/analysis/src/utils/positionAnalysis";
 import { INTERP_MAX_GAP_MS } from "@gladlog/analysis/src/utils/positionSampling";
 import {
@@ -4082,6 +4083,87 @@ export function checkKillAttemptAlreadyUpStated(lines: string[]): string[] {
   return failures;
 }
 
+/** `softer target then: <unit> — PRIME` / `— gated, A/B in hand` inside an
+ * opportunity clause. */
+const KILL_ATTEMPT_SOFTER_TARGET =
+  /softer target then: (\S+) — (PRIME|gated, (.+?) in hand)(?:;|\)|$)/;
+/** `gated (A/B in hand; …)` — the target's own walls in hand. */
+const KILL_ATTEMPT_GATED_WALLS = /^gated \((.+?) in hand[;)]/;
+
+/**
+ * R08 (b) (user ruling 2026-10-11): "does this unit have this wall" is one
+ * answer in a prompt. A 20–99 % wall the kit line tags `[UNUSED]` for a unit
+ * — owned, never pressed this round — is in that unit's hand wherever a
+ * KILL ATTEMPTS line states its tier:
+ *
+ *  - a target printed `PRIME (no trinket, no 20-99% wall in hand …)`, or an
+ *    alternative printed `softer target then: X — PRIME`, has no such wall;
+ *  - a target printed `gated (A/B in hand …)`, or an alternative printed
+ *    `X — gated, A/B in hand`, names every such wall among A/B.
+ * A `trinket up` line says nothing about the target's walls and is not read.
+ *
+ * Both sides are the cooldown ledger: the kit's tag is `kitRowUnused`, the
+ * tier's input is `unpressedWallsOwned` (the same rows, the same reading).
+ * Which kit names are walls is the tier's own set (`wallInHandKitNames`). A
+ * unit with no `<cooldowns>` kit in the roster is not compared.
+ *
+ * Before (the tier counted a wall only when the unit CAST it this round):
+ * f4da82c5 printed `Unending Resolve [180s, lasts 8s] [UNUSED]` for an enemy
+ * it called `softer target then: … — PRIME`.
+ */
+export function checkKillTierWallOwnership(lines: string[]): string[] {
+  const failures: string[] = [];
+  const wallNames = wallInHandKitNames();
+  /** unit name → the 20–99 % walls its kit tags `[UNUSED]` */
+  const unusedWallsOf = new Map<string, string[]>();
+  lines.forEach((line, i) => {
+    const u = line.match(UNIT_LEGEND_LINE);
+    if (!u) return;
+    const kit = lines[i + 1]?.match(OWNER_KIT_LINE)?.[1];
+    if (kit === undefined) return;
+    unusedWallsOf.set(
+      u[2]!,
+      kit
+        .split(/\](?:, )/)
+        .filter((e) => / \[UNUSED/.test(e))
+        .map((e) => e.slice(0, e.indexOf(" [")))
+        .filter((name) => wallNames.has(name)),
+    );
+  });
+  if (unusedWallsOf.size === 0) return failures;
+  lines.forEach((line, i) => {
+    const target = line.match(KILL_ATTEMPT_SPAN_LINE)?.[5];
+    const opp = line.match(KILL_ATTEMPT_OPPORTUNITY)?.[1]?.trim();
+    if (target === undefined || opp === undefined) return;
+    const check = (
+      who: string,
+      says: string,
+      inHand: readonly string[] | null,
+    ) => {
+      const unused = unusedWallsOf.get(who);
+      if (!unused) return;
+      const missing =
+        inHand === null ? unused : unused.filter((w) => !inHand.includes(w));
+      if (missing.length > 0)
+        failures.push(
+          `line ${i + 1}: KILL ATTEMPTS 把 ${who} 写成 ${says},而技能栏里 ${missing.join(" / ")} 标着 [UNUSED](拥有、本回合没按过的 20–99% 墙就在手里)—— ${line.trim().slice(0, 200)}`,
+        );
+    };
+    if (/^PRIME\b/.test(opp)) check(target, "PRIME", null);
+    const gated = opp.match(KILL_ATTEMPT_GATED_WALLS);
+    if (gated)
+      check(target, `gated (${gated[1]} in hand)`, gated[1]!.split("/"));
+    const softer = opp.match(KILL_ATTEMPT_SOFTER_TARGET);
+    if (softer)
+      check(
+        softer[1]!,
+        `更软的目标 — ${softer[2]}`,
+        softer[3] === undefined ? null : softer[3].split("/"),
+      );
+  });
+  return failures;
+}
+
 /** `m:ss  [CC ON ENEMY]   <pid> ← <Spell> (by <who>) (Ns)` — or `(still on
  * them when the round ended, Ns in)`: the second, the unit, the control and
  * the whole seconds the line prints (`<1` = none). */
@@ -7071,6 +7153,7 @@ export function checkMatch(
   hardFailures.push(...checkKillAttemptAlreadyUpStated(lines));
   hardFailures.push(...checkKillAttemptOwnControlClause(lines));
   hardFailures.push(...checkNoWindowAcrossSpiritOfRedemption(lines));
+  hardFailures.push(...checkKillTierWallOwnership(lines));
   hardFailures.push(...checkGuardianSpiritSaveClause(lines));
   hardFailures.push(...checkKarmaFedClause(lines));
   hardFailures.push(...checkResReturnAnnounced(lines));

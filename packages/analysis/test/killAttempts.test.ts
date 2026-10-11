@@ -367,10 +367,10 @@ describe("attemptIntoTrinketEvents(候选 mapper)", () => {
   }
 
   it("G2 F-K6: a softer candidate sitting in our own breakable CC is skipped", () => {
-    const { e1, e2 } = lockedScenario();
-    expect(softerTargetAt(e1, [e1, e2], 10, MATCH_START)?.name).toBe("e2");
+    const { e1, e2, combat } = lockedScenario();
+    expect(softerTargetAt(e1, [e1, e2], 10, combat)?.name).toBe("e2");
     expect(
-      softerTargetAt(e1, [e1, e2], 10, MATCH_START, (e) => e.id === "e2"),
+      softerTargetAt(e1, [e1, e2], 10, combat, (e) => e.id === "e2"),
     ).toBeNull();
   });
 
