@@ -93,7 +93,16 @@ describe("a kick lockout by school (FT-T10)", () => {
     });
     const lock = kicked(80, FEAR);
     // the pet pressed Spell Lock earlier in the round; Devour Magic never
-    lock.petSpellCastEvents = [success(SPELL_LOCK, 20)];
+    const byPet = (spellId: string, atS: number, srcUnitId: string) => ({
+      ...success(spellId, atS),
+      srcUnitId,
+    });
+    lock.petSpellCastEvents = [
+      byPet(SPELL_LOCK, 20, "Pet-0-4372-1-1-417-0102B3C4D5"),
+      // a totem / guardian of the unit is not a controlled pet: its spells
+      // stay on the owner's reading
+      byPet("118905", 25, "Creature-0-4372-1-1-61245-00001"),
+    ];
     lock.spellCastEvents = [success(SHADOWFURY, 30)];
     expect([...petCastSpellIdsOf(lock)]).toEqual([SPELL_LOCK]);
     const [iv] = namedCannotCastIntervals(lock, enemyIds);

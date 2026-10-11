@@ -128,8 +128,28 @@ export function petCastSpellIdsOf(unit: ICombatUnit): ReadonlySet<string> {
     );
   const own = successIds(unit.spellCastEvents);
   return new Set(
-    [...successIds(unit.petSpellCastEvents)].filter((id) => !own.has(id)),
+    [
+      ...successIds(
+        (unit.petSpellCastEvents ?? []).filter((c) =>
+          isControlledPetGuid(c.srcUnitId),
+        ),
+      ),
+    ].filter((id) => !own.has(id)),
   );
+}
+
+/**
+ * A CONTROLLED pet (a hunter's pet, a warlock's demon, a mage's elemental):
+ * its GUID is a `Pet-` GUID. `petSpellCastEvents` also carries every other
+ * summon of the unit — totems, treants, guardians (`Creature-` GUIDs) — and
+ * the evidence that the owner's control does not reach the caster is clean
+ * for controlled pets only (t10_petHardCc.ts, 605 files: Pet- GUID 18.1 %
+ * inside the owner's aura vs 17.3 % base; Creature- GUID 9.7 % vs 15.9 % —
+ * confounded, so those spells stay on the owner's reading: the exemption
+ * stays).
+ */
+export function isControlledPetGuid(unitId: string | undefined): boolean {
+  return !!unitId && unitId.startsWith("Pet-");
 }
 
 type PetCasters = ReadonlyMap<string, readonly ICombatUnit[]>;

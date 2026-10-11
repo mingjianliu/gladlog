@@ -69,10 +69,10 @@ const stun = (onId: string, fromS: number, toS: number) => [
     onId,
   ),
 ];
-const petCast = (spellId: string, atS: number, petId = "pet") =>
+const petCast = (spellId: string, atS: number, petId = "Pet-1") =>
   makeSpellCastEvent(spellId, at(atS), "e", "Enemy", petId, "Felhunter");
 
-/** A Warlock ("w") and its Felhunter ("pet"); the pet pressed Spell Lock and
+/** A Warlock ("w") and its Felhunter ("Pet-1"); the pet pressed Spell Lock and
  * Devour Magic earlier in the round, the Warlock Shadowfury. */
 function pair(opts: {
   ownerStun?: [number, number];
@@ -99,10 +99,10 @@ function pair(opts: {
         ? []
         : [{ timestamp: at(opts.ownerDeathS) }],
   });
-  const pet = makeUnit("pet", {
+  const pet = makeUnit("Pet-1", {
     name: "Felhunter",
     ownerId: "w",
-    auraEvents: opts.petStun ? stun("pet", ...opts.petStun) : [],
+    auraEvents: opts.petStun ? stun("Pet-1", ...opts.petStun) : [],
     actionIn: opts.petActionIn ?? [],
   });
   return { warlock, pet, units: [warlock, pet] };
@@ -156,7 +156,7 @@ describe("the one cannot-cast reading for a pet-cast spell", () => {
     expect(forLock[0]).toMatchObject({
       spellId: HAMMER_OF_JUSTICE,
       lockout: false,
-      onPetId: "pet",
+      onPetId: "Pet-1",
     });
     expect(
       spans(
@@ -186,7 +186,7 @@ describe("the one cannot-cast reading for a pet-cast spell", () => {
       units,
     );
     expect(spans(forLock)).toEqual([[80, 84]]);
-    expect(forLock[0]!.onPetId).toBe("pet");
+    expect(forLock[0]!.onPetId).toBe("Pet-1");
     // unasked: the owner's own stun, as before
     expect(
       spans(cannotCastIntervalsForSpells(warlock, enemyIds, undefined, units)),
@@ -272,7 +272,7 @@ describe("the one cannot-cast reading for a pet-cast spell", () => {
         at(80),
         "e",
       ),
-      destUnitId: "pet",
+      destUnitId: "Pet-1",
     });
     const shadowLocked = pair({ petActionIn: [kickOnPet(SPELL_LOCK)] });
     const lock = cannotCastIntervalsForSpells(
@@ -285,7 +285,7 @@ describe("the one cannot-cast reading for a pet-cast spell", () => {
     expect(lock[0]).toMatchObject({
       lockout: true,
       lockedSchoolMask: 32,
-      onPetId: "pet",
+      onPetId: "Pet-1",
     });
     const fireLocked = pair({ petActionIn: [kickOnPet(FIREBALL)] });
     expect(
@@ -302,9 +302,9 @@ describe("the one cannot-cast reading for a pet-cast spell", () => {
     // two pets cast Spell Lock this round
     const { warlock, pet } = pair({
       petStun: [80, 86],
-      petCasts: [petCast(SPELL_LOCK, 20), petCast(SPELL_LOCK, 50, "pet2")],
+      petCasts: [petCast(SPELL_LOCK, 20), petCast(SPELL_LOCK, 50, "Pet-2")],
     });
-    const pet2Free = makeUnit("pet2", { name: "Felhunter", ownerId: "w" });
+    const pet2Free = makeUnit("Pet-2", { name: "Felhunter", ownerId: "w" });
     expect(
       cannotCastIntervalsForSpells(
         warlock,
@@ -313,10 +313,10 @@ describe("the one cannot-cast reading for a pet-cast spell", () => {
         [warlock, pet, pet2Free],
       ),
     ).toEqual([]);
-    const pet2Stunned = makeUnit("pet2", {
+    const pet2Stunned = makeUnit("Pet-2", {
       name: "Felhunter",
       ownerId: "w",
-      auraEvents: stun("pet2", 84, 90),
+      auraEvents: stun("Pet-2", 84, 90),
     });
     const bothPets = cannotCastIntervalsForSpells(
       warlock,
@@ -328,7 +328,7 @@ describe("the one cannot-cast reading for a pet-cast spell", () => {
       [84, 86],
       [84, 86],
     ]);
-    expect(bothPets.map((iv) => iv.onPetId).sort()).toEqual(["pet", "pet2"]);
+    expect(bothPets.map((iv) => iv.onPetId).sort()).toEqual(["Pet-1", "Pet-2"]);
 
     // an own spell and a pet's: the time neither can go off, each cause kept
     const mixed = pair({ ownerStun: [80, 84], petStun: [82, 86] });
@@ -343,7 +343,7 @@ describe("the one cannot-cast reading for a pet-cast spell", () => {
       [82, 84],
     ]);
     expect(set.map((iv) => iv.onPetId)).toEqual(
-      expect.arrayContaining([undefined, "pet"]),
+      expect.arrayContaining([undefined, "Pet-1"]),
     );
     // the pet free → the set is never fully stopped
     const petFree = pair({ ownerStun: [80, 84] });

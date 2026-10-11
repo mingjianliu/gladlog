@@ -1731,6 +1731,11 @@ const INDEX: PredicateRow[] = [
     symbol: "petCastersOf",
     mod: cannotCastIntervals,
   },
+  {
+    file: `${A}/utils/cannotCastIntervals.ts`,
+    symbol: "isControlledPetGuid",
+    mod: cannotCastIntervals,
+  },
   // WP-A2 fix (review 40-FT-53 P2): the second target's share
   {
     file: `${A}/utils/burstLedger.ts`,
