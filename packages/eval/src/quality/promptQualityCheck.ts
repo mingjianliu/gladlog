@@ -192,6 +192,7 @@ import {
 import {
   SELF_SAVE_PURPOSE_LABEL,
   selfDefensiveLabelWords,
+  selfReductionLegend,
   statesSelfDefensiveLabel,
 } from "@gladlog/analysis/src/utils/selfDefensiveMechanism";
 import {
@@ -3768,6 +3769,12 @@ const ENEMY_DEF_WALL_LABEL = /^\((?:immune[,)]|\d+%[,)]|area\))/;
  *    `selfDefensiveMechanism` by the printed name, read with
  *    `statesSelfDefensiveLabel`: Dark Pact `(absorb …)`, Crimson Vial
  *    `(heal)`, Evasion `(dodge)`, Nether Ward `(spell reflect)` …;
+ *  - one of them prints a percentage in the wall line's form — Roar of
+ *    Sacrifice `(25%, Ts)`, the official figure a corpus split stands behind
+ *    (2026-10-11, `ownAuraReductionPct`) — and is no wall: a prompt that
+ *    carries the `[ENEMY DEF]` legend must carry that press's own entry
+ *    (`selfReductionLegend`, the producer's sentence), or the line reads as
+ *    a wall and KILL ATTEMPTS' `popped X` as a wall's;
  *  - any other ability opens with a wall's, an immunity's or an area save's
  *    label, and carries no effect note — so a press nobody classified cannot
  *    print without a label;
@@ -3780,6 +3787,10 @@ const ENEMY_DEF_WALL_LABEL = /^\((?:immune[,)]|\d+%[,)]|area\))/;
  */
 export function checkEnemyDefSaveEffect(lines: string[]): string[] {
   const failures: string[] = [];
+  const hasLegend = lines.some((l) => ENEMY_DEF_LEGEND.test(l));
+  /** pressed self defensives printed with a percentage whose legend entry
+   * the prompt lacks — reported once a name */
+  const unexplained = new Set<string>();
   lines.forEach((line, i) => {
     const m = ENEMY_DEF_LINE.exec(line);
     if (!m) return;
@@ -3811,6 +3822,17 @@ export function checkEnemyDefSaveEffect(lines: string[]): string[] {
         failures.push(
           `line ${i + 1}: [ENEMY DEF] prints ${spell} with a label other than what it does (${selfDefensiveLabelWords(mechanism)}): ${quoted}`,
         );
+      else if (
+        mechanism.kind === "reduction" &&
+        hasLegend &&
+        !unexplained.has(spell) &&
+        !lines.some((l) => l.trim() === selfReductionLegend(spell))
+      ) {
+        unexplained.add(spell);
+        failures.push(
+          `line ${i + 1}: [ENEMY DEF] prints ${spell} with a percentage, in a wall's form, and the legend does not say it is no wall: ${quoted}`,
+        );
+      }
       return;
     }
     if (stated !== undefined)

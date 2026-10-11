@@ -82,7 +82,8 @@ const spellIdLists = {
     // 一进白名单就能挖到,不用手工 override。补丁说明写的是 20%,官方表与 wowhead tooltip
     // 都是 30%(BACKLOG #24-9 的裁决就是「别照补丁说明填数」);S2 归档已观测(对局
     // 7d74b373,2026-08-13)。talentMitigationGenerated.json 同样挖到 30%(via "self s3
-    // (aura 87) = -30"),但那张表目前零消费者,产品用的减伤算术只读 MITIGATION_TABLE。
+    // (aura 87) = -30"),但那张表不进减伤算术 —— 产品的减伤算术只读 MITIGATION_TABLE
+    // (它唯一的运行时读者是 2026-10-11 起 `selfDefensiveMechanism` 的标签,只读一行)。
     "473909",
     "108416", // Dark Pact (Warlock)
   ],

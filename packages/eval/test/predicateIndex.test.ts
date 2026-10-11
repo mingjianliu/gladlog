@@ -1573,6 +1573,17 @@ const INDEX: PredicateRow[] = [
     symbol: "selfSaveMechanismOfName",
     mod: enemyDefensives,
   },
+  // 2026-10-11: Roar of Sacrifice's percentage — a wall's form, no wall
+  {
+    file: `${A}/utils/selfDefensiveMechanism.ts`,
+    symbol: "selfReductionLegend",
+    mod: selfDefensiveMechanismMod,
+  },
+  {
+    file: `${A}/utils/enemyDefensives.ts`,
+    symbol: "selfSaveReductionNames",
+    mod: enemyDefensives,
+  },
   {
     file: `${A}/utils/enemyDefensives.ts`,
     symbol: "ENEMY_PROC_SAVE_NAMES",

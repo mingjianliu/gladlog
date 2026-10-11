@@ -612,6 +612,24 @@ export function selfSaveMechanismOfName(
   return undefined;
 }
 
+/**
+ * The printed names of the pressed self defensives whose `[ENEMY DEF]` label
+ * is a percentage (`selfDefensiveMechanism` kind `reduction` — Roar of
+ * Sacrifice): the lines that take a wall's form without being a wall, each
+ * explained by `selfReductionLegend`. One reading for the legend's writer
+ * (`formatTimeline.ts`) and its gate (`checkEnemyDefSaveEffect`). Read at
+ * call time, as `selfSaveMechanismOfName` is.
+ */
+export function selfSaveReductionNames(): string[] {
+  const names = new Set<string>();
+  for (const id of SELF_SAVE_IDS) {
+    if (selfDefensiveMechanism(id)?.kind !== "reduction") continue;
+    const name = getEnglishSpellName(id, "");
+    if (name) names.add(name);
+  }
+  return [...names];
+}
+
 /** How close to an aura's start its cast is logged, either side. The same
  * pairing radius the external branch uses to tie a cast to its aura. */
 export const SAVE_CAST_AURA_PAIR_S = 1.5;
@@ -1219,23 +1237,26 @@ export function enemyDefensiveEvents(
   // 2026-10-11) — the label is the ability's, the figures are the log's.
   for (const c of selfSaveCasts(enemy, combat.startTime)) {
     const mechanism = selfDefensiveMechanism(c.spellId);
-    // An absorb carries what the log shows of the caster's own aura of the
-    // cast's id — how long it was up, with the existing end notes, and what
-    // it absorbed (Feign Death's form, ruling D8). With no such aura in the
-    // log the line says the mechanism alone: `(absorb)`.
+    // An absorb and a percentage reduction carry what the log shows of the
+    // caster's own aura of the cast's id — how long it was up, with the
+    // existing end notes, and for a shield what it absorbed (Feign Death's
+    // form, ruling D8). With no such aura in the log the line says the
+    // mechanism alone: `(absorb)`, `(25%)`.
     // Touch of Karma is the exception, and prints `(absorb)` alone: the
     // press's 10 s buff of the cast's id outlasts the shield (which is a
     // second aura, `karmaFeed.TOUCH_OF_KARMA_ABSORB_ID`, 0.8–7.5 s on six of
     // nine presses), and what it absorbed is the `| fed by` clause's
     // (ruling B20a) — a second figure here could only disagree with it.
     const figured =
-      mechanism?.kind === "absorb" && c.spellId !== TOUCH_OF_KARMA_ID;
+      (mechanism?.kind === "absorb" && c.spellId !== TOUCH_OF_KARMA_ID) ||
+      mechanism?.kind === "reduction";
     const own = figured
       ? auraPairedToCast(c.spellId, c.atSeconds, intervalsOf(enemy), enemy.id)
       : undefined;
-    const absorbed = own
-      ? absorbedDuring(enemy, inRound(own), combat.startTime)
-      : undefined;
+    const absorbed =
+      own && mechanism?.kind === "absorb"
+        ? absorbedDuring(enemy, inRound(own), combat.startTime)
+        : undefined;
     out.push({
       atSeconds: c.atSeconds,
       spellId: c.spellId,

@@ -29,12 +29,15 @@ import {
   ENEMY_SAVE_EFFECT_BY_NAME,
   SELF_SAVE_IDS,
   selfSaveMechanismOfName,
+  selfSaveReductionNames,
 } from "../src/utils/enemyDefensives";
 import {
+  carriesSelfReductionLabel,
   SELF_SAVE_PURPOSE_LABEL,
   selfDefensiveLabelLegends,
   selfDefensiveLabelWords,
   selfDefensiveMechanism,
+  selfReductionLegend,
   statesSelfDefensiveLabel,
 } from "../src/utils/selfDefensiveMechanism";
 
@@ -113,14 +116,13 @@ describe("selfDefensiveMechanism — what a self defensive does, official data f
         "1241871": "root / snare immunity", // Master's Call → 1224810
         // abilityProfile.moveSpeedPct — DB2 aura 31 (never cast on oneself)
         "374227": "+30% movement speed", // Zephyr
+        // talentMitigationGenerated, the reduction on the cast's own aura
+        "53480": "25%", // Roar of Sacrifice
         // ENEMY_SELF_DEFENSIVE_HAND_MECHANISMS
         "5277": "dodge", // Evasion
         "212295": "spell reflect", // Nether Ward
         "342245": "rewind", // Alter Time
-        // the signed sets (rulings A20 + U3, A15) — of these only Roar of
-        // Sacrifice is cast on oneself. Its official reduction (asserted
-        // below) is NOT its label: no corpus split stands behind the number
-        "53480": "redirect", // Roar of Sacrifice
+        // the signed sets (rulings A20 + U3, A15) — never cast on oneself
         "3411": "redirect", // Intervene
         "73325": "redirect", // Leap of Faith
         "97462": "area", // Rallying Cry
@@ -132,10 +134,14 @@ describe("selfDefensiveMechanism — what a self defensive does, official data f
 
   it("the official rows behind the derived labels (DB2, re-read)", () => {
     // Roar of Sacrifice: aura 87 on the target, −15 × PvpMultiplier 1.66666
+    // — the number the label prints; its corpus split (0.750 on every
+    // estimate, 605 files) is quoted at `ownAuraReductionPct`
     const roar = db2("53480").find((r) => r.aura === 87)!;
     expect(Math.round(roar.basePoints * roar.pvpMultiplier)).toBe(-25);
-    // … and the label does not print it (a signed redirect, no corpus split)
-    expect(selfDefensiveMechanism("53480")).toEqual({ kind: "redirect" });
+    expect(selfDefensiveMechanism("53480")).toEqual({
+      kind: "reduction",
+      pct: 25,
+    });
     // Guardian Spirit: aura 118, 60 points
     expect(db2("47788").find((r) => r.aura === 118)?.basePoints).toBe(60);
     // Dark Pact / Ice Barrier / Ultimate Penitence / Touch of Karma: aura 69
@@ -289,9 +295,10 @@ describe("selfDefensiveMechanism — what a self defensive does, official data f
       expect(statesSelfDefensiveLabel(ok, absorb), ok).toBe(true);
     for (const bad of ["(absorb 64)", "(absorbs)", "(absorb 64k; 2.0s)"])
       expect(statesSelfDefensiveLabel(bad, absorb), bad).toBe(false);
-    const roar = { kind: "redirect" } as const;
-    expect(statesSelfDefensiveLabel("(redirect)", roar)).toBe(true);
-    for (const bad of ["(25%)", "(25%, 10.0s)", "(redirect, 10.0s)", "(heal)"])
+    const roar = { kind: "reduction", pct: 25 } as const;
+    for (const ok of ["(25%)", "(25%, 10.0s)", "(25%, 3.1s — removed early)"])
+      expect(statesSelfDefensiveLabel(ok, roar), ok).toBe(true);
+    for (const bad of ["(30%, 10.0s)", "(250%)", "(25% 10.0s)", "(heal)"])
       expect(statesSelfDefensiveLabel(bad, roar), bad).toBe(false);
     // a figure on a kind that carries none is not that label
     expect(
@@ -310,9 +317,12 @@ describe("selfDefensiveMechanism — what a self defensive does, official data f
       if (!m) continue;
       const words = selfDefensiveLabelWords(m);
       const legends = selfDefensiveLabelLegends([line(words)]);
-      // an absorb and an area save are the legend's own lines
+      // an absorb and an area save are the legend's own lines; a percentage
+      // has its entry by NAME (`selfReductionLegend`, next test)
       expect(legends.length, words).toBe(
-        m.kind === "absorb" || m.kind === "area" ? 0 : 1,
+        m.kind === "absorb" || m.kind === "reduction" || m.kind === "area"
+          ? 0
+          : 1,
       );
     }
     expect(selfDefensiveLabelLegends([])).toEqual([]);
@@ -328,6 +338,43 @@ describe("selfDefensiveMechanism — what a self defensive does, official data f
     expect(two[0]).toContain("`(heal)` = ");
     expect(two[1]).toContain("`(dodge)` = ");
     for (const l of two) expect(l).not.toMatch(/sav(?:e|ed|ing)\b/);
+  });
+
+  it("a percentage on a pressed self defensive has its own legend entry, by name — it has a wall's form and is no wall", () => {
+    // the one member (the family is pinned by id above)
+    expect(selfSaveReductionNames()).toEqual(["Roar of Sacrifice"]);
+    const at = (rest: string) =>
+      `0:42  [ENEMY DEF]   4(BMHunter) (Beast Mastery Hunter): ${rest}`;
+    const own = at("Roar of Sacrifice (25%, 10.0s) (at 60% HP)");
+    const legend = selfReductionLegend("Roar of Sacrifice");
+    expect(legend).toContain("`Roar of Sacrifice (N%, Ts)` = NOT one of the");
+    expect(legend).toContain("KILL ATTEMPTS");
+    expect(legend).not.toMatch(/sav(?:e|ed|ing)\b/);
+    expect(
+      selfDefensiveLabelLegends(
+        [own, at("Exhilaration (heal) (at 40% HP)")],
+        selfSaveReductionNames(),
+      ),
+    ).toEqual([legend, expect.stringContaining("`(heal)` = ")]);
+    for (const ok of [own, at("Roar of Sacrifice (25%)")])
+      expect(carriesSelfReductionLabel(ok, "Roar of Sacrifice"), ok).toBe(true);
+    // not the external form, not a wall's percentage, not another label
+    for (const other of [
+      at("Roar of Sacrifice → 5(RDruid) (target at 40% HP)"),
+      at("Survival of the Fittest (30%, 6.0s) (at 60% HP)"),
+      at("Roar of Sacrifice (redirect) (at 60% HP)"),
+      at("Roar of Sacrifice"),
+    ]) {
+      expect(carriesSelfReductionLabel(other, "Roar of Sacrifice"), other).toBe(
+        false,
+      );
+      expect(
+        selfDefensiveLabelLegends([other], selfSaveReductionNames()),
+        other,
+      ).not.toContain(legend);
+    }
+    // without the names the general entries are all there is
+    expect(selfDefensiveLabelLegends([own])).toEqual([]);
   });
 });
 
@@ -486,20 +533,24 @@ describe("[ENEMY DEF] — a pressed self defensive prints what it does (2026-10-
     ]);
   });
 
-  it("Roar of Sacrifice on oneself reads `(redirect)` — no percentage, no duration", () => {
+  it("Roar of Sacrifice on oneself: the official reduction and the aura's observed length", () => {
     // 141470d0: APPLIED and SUCCESS 00:55:27.786, REMOVED 00:55:37.791
     const hunter = unit("e1", {
       spellCastEvents: [cast("53480", 20, "e1")],
       auraEvents: up("53480", 20, 30.005),
     });
-    expect(render(hunter).map(body)).toEqual(["Roar of Sacrifice (redirect)"]);
+    expect(render(hunter).map(body)).toEqual([
+      "Roar of Sacrifice (25%, 10.0s)",
+    ]);
     const cut = unit("e1", {
       spellCastEvents: [cast("53480", 20, "e1")],
       auraEvents: up("53480", 20, 23.1),
     });
-    expect(render(cut).map(body)).toEqual(["Roar of Sacrifice (redirect)"]);
+    expect(render(cut).map(body)).toEqual([
+      "Roar of Sacrifice (25%, 3.1s — removed early)",
+    ]);
     const bare = unit("e1", { spellCastEvents: [cast("53480", 20, "e1")] });
-    expect(render(bare).map(body)).toEqual(["Roar of Sacrifice (redirect)"]);
+    expect(render(bare).map(body)).toEqual(["Roar of Sacrifice (25%)"]);
   });
 
   it("no line says `(self-save)` — not even a press no source classifies, which prints no label", () => {

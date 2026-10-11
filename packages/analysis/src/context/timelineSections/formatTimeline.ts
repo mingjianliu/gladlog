@@ -19,7 +19,10 @@ import {
   HP_SAMPLE_RADIUS_MS,
   HP_TROUGH_MIN_DROP_PTS,
 } from "../../utils/cooldowns";
-import { ENEMY_DEF_END_NOT_LOGGED } from "../../utils/enemyDefensives";
+import {
+  ENEMY_DEF_END_NOT_LOGGED,
+  selfSaveReductionNames,
+} from "../../utils/enemyDefensives";
 import { ROUND_ENDED_WORDS, roundEndLegend } from "../../utils/roundEnd";
 import { selfDefensiveLabelLegends } from "../../utils/selfDefensiveMechanism";
 import {
@@ -482,9 +485,15 @@ export function formatTimeline(
           // User ruling 2026-10-11: a label says what the ability DOES, never
           // why it was pressed (it read `(self-save)`); each label form is
           // explained only when a line carries it (`selfDefensiveLabelLegends`).
+          // A pressed self defensive that prints a percentage (Roar of
+          // Sacrifice, 2026-10-11) has the wall's form and is no wall: its
+          // own entry says so, by name (`selfReductionLegend`).
           "    Any other word in that parenthesis = what the ability does, from the game's data — not why it was pressed, and not",
           "    that it saved anyone.",
-          ...selfDefensiveLabelLegends(enemyDefLines).map((l) => `    ${l}`),
+          ...selfDefensiveLabelLegends(
+            enemyDefLines,
+            selfSaveReductionNames(),
+          ).map((l) => `    ${l}`),
           "    `[friendly offensive CD active]` indicates at least one friendly offensive cooldown was active at that displayed second.",
           "    `(at N% HP)` / `(target at N% HP)` reflects the target's HP at the press (just before the press's own",
           "    heal), not the [STATE] reading of that second.",

@@ -1,3 +1,4 @@
+import { selfReductionLegend } from "@gladlog/analysis/src/utils/selfDefensiveMechanism";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -534,8 +535,9 @@ describe("checkEnemyDefSaveEffect (FT-T07, ruling D8)", () => {
     ],
     [
       "4(BMHunter) (Beast Mastery Hunter)",
-      "Roar of Sacrifice (redirect) (at 66% HP)",
+      "Roar of Sacrifice (25%, 10.0s) (at 66% HP)",
     ],
+    ["4(BMHunter) (Beast Mastery Hunter)", "Roar of Sacrifice (25%)"],
     ["4(ARogue) (Assassination Rogue)", "Evasion (dodge) (at 60% HP)"],
     [
       "4(AWarlock) (Affliction Warlock)",
@@ -595,7 +597,7 @@ describe("checkEnemyDefSaveEffect (FT-T07, ruling D8)", () => {
     ["a rewind called a heal", "Alter Time (heal)"],
     ["the wrong control list", "Lichborne (root / snare immunity)"],
     ["a freedom called a speed buff", "Spirit Walk (+60% movement speed)"],
-    ["a redirect given a percentage", "Roar of Sacrifice (25%, 10.0s)"],
+    ["another percentage than the official one", "Roar of Sacrifice (30%)"],
     ["a heal absorb left out", "Death Pact (heal)"],
     ["a heal absorb on a plain heal", "Exhilaration (heal + heal absorb)"],
     [
@@ -609,6 +611,37 @@ describe("checkEnemyDefSaveEffect (FT-T07, ruling D8)", () => {
     const f = checkEnemyDefSaveEffect([D(HUNTER, rest)]);
     expect(f).toHaveLength(1);
     expect(f[0]).toContain("with a label other than what it does");
+  });
+
+  it("2026-10-11: a pressed self defensive printed with a percentage needs its legend entry — a wall's form, and no wall", () => {
+    const roar = D(
+      "4(BMHunter) (Beast Mastery Hunter)",
+      "Roar of Sacrifice (25%, 10.0s) (at 66% HP)",
+    );
+    const entry = `    ${selfReductionLegend("Roar of Sacrifice")}`;
+    expect(checkEnemyDefSaveEffect([LEGEND, entry, roar, roar])).toEqual([]);
+    // mutation: the legend without the entry — one failure a name
+    const f = checkEnemyDefSaveEffect([LEGEND, roar, roar]);
+    expect(f).toHaveLength(1);
+    expect(f[0]).toContain("does not say it is no wall");
+    // mutation: an entry that says something else
+    expect(
+      checkEnemyDefSaveEffect([
+        LEGEND,
+        entry.replace("NOT one of the walls", "a wall"),
+        roar,
+      ]),
+    ).toHaveLength(1);
+    // a prompt without the [ENEMY DEF] legend is not asked for it, and
+    // neither a wall's percentage nor the external form ever is
+    expect(checkEnemyDefSaveEffect([roar])).toEqual([]);
+    expect(
+      checkEnemyDefSaveEffect([
+        LEGEND,
+        D(HUNTER, "Survival of the Fittest (30%, 6.0s) (at 40% HP)"),
+        D(HUNTER, "Roar of Sacrifice → 5(FMage)"),
+      ]),
+    ).toEqual([]);
   });
 
   it("2026-10-11 mutation: an ability outside both families cannot print without a wall's, an immunity's or an area save's label", () => {
