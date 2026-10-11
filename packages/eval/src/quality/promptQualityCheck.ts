@@ -1412,7 +1412,8 @@ export function checkCcRefreshedNote(lines: string[]): string[] {
   return failures;
 }
 
-/** A line that states when an aura ended: `m:ss  [BUFF FADED] …`. */
+/** A line that states when a buff ended — inside the round, or it is not
+ *  printed: `m:ss  [BUFF FADED] …`. */
 const AURA_END_LINE = /^(\d+):(\d{2})\s+\[(BUFF FADED|ENEMY BUFF END)\]/;
 /** A control line with its own start: `m:ss  [CC ON TEAM] …`. */
 const CONTROL_SPAN_LINE =
@@ -1442,8 +1443,13 @@ const TIMELINE_LEGEND_HEAD = /^MATCH TIMELINE$/;
  * producers cut at `roundEndMs`).
  *
  *  1. `[BUFF FADED]` / `[ENEMY BUFF END]`: the line's second is not after the
- *     round's end, and one that carries `AURA_STILL_UP_AT_ROUND_END` sits IN
- *     the round-end second (the producer prints it at `roundEndMs`).
+ *     round's end, and NO line of the two families carries
+ *     `AURA_STILL_UP_AT_ROUND_END` (user ruling 2026-10-11: a buff the round
+ *     ended on did not end in the round and gets no line — the producers
+ *     skip it at `roundEndMs`; a line here is a buff that ended inside the
+ *     round). PV373 had printed the label on these lines, in the round-end
+ *     second: 1,132 `[BUFF FADED]` and 350 `[ENEMY BUFF END]` lines of the
+ *     605-file capture of ae42aa6f (fix-FT/scripts/n5_still_up_buff_lines.py).
  *  2. `[CC ON TEAM]` / `[CC ON ENEMY]` / `[SILENCE]` / `[DISARM]`: the line
  *     does not start after the round's end; an unlabelled `Ns` does not carry
  *     it more than a second past the round's end; a labelled
@@ -1477,6 +1483,15 @@ const TIMELINE_LEGEND_HEAD = /^MATCH TIMELINE$/;
  */
 export function checkAuraEndWithinRound(lines: string[]): string[] {
   const failures: string[] = [];
+  // 1. a buff the round ended on has no end line at all (ruling 2026-10-11)
+  // — held whatever the prompt states of its round's end
+  lines.forEach((line, i) => {
+    const a = line.match(AURA_END_LINE);
+    if (a && line.includes(AURA_STILL_UP_AT_ROUND_END))
+      failures.push(
+        `line ${i + 1}: [${a[3]}] 行写「${AURA_STILL_UP_AT_ROUND_END}」,而回合结束时仍在的增益不印结束行 —— ${line.trim().slice(0, 160)}`,
+      );
+  });
   const end = statedRoundEnd(lines);
   if (end === null) return failures;
   const where = `${end.says}在 ${fmtTime(end.second)}`;
@@ -1523,10 +1538,6 @@ export function checkAuraEndWithinRound(lines: string[]): string[] {
     if (a) {
       const sec = Number(a[1]) * 60 + Number(a[2]);
       if (sec > end.second) fail(`[${a[3]}] 行在回合结束之后`);
-      else if (line.includes(AURA_STILL_UP_AT_ROUND_END) && sec !== end.second)
-        fail(
-          `[${a[3]}] 行写「${AURA_STILL_UP_AT_ROUND_END}」却不在回合结束那一秒`,
-        );
       return;
     }
     const c = line.match(CONTROL_SPAN_LINE);

@@ -18,24 +18,27 @@
  * applies. */
 export const SOLO_SHUFFLE_BRACKET = "Rated Solo Shuffle";
 
-/** What an aura-end line says of an aura the round's end cut (its REMOVED is
- * logged at or after `roundEndMs`, or the log has none and the round ended
- * inside its official length): the `[ENEMY DEF]` duration note, and — F02b —
- * `[BUFF FADED]` and `[ENEMY BUFF END]`, which printed `expired` /
- * `ended early` / a bare end for it. A control line says
- * `CC_STILL_ON_AT_ROUND_END`. Read back by `checkAuraEndWithinRound`. */
+/** What an `[ENEMY DEF]` line's duration note says of an aura the round's
+ * end cut (its REMOVED is logged at or after `roundEndMs`, or the log has
+ * none and the round ended inside its official length) — a label on a press
+ * line that exists anyway. A control line says `CC_STILL_ON_AT_ROUND_END`.
+ * `[BUFF FADED]` and `[ENEMY BUFF END]` do NOT carry it (user ruling
+ * 2026-10-11): a buff the round ended on did not end in the round and gets
+ * no end line at all — PV373 (F02b) had printed one with this label in place
+ * of the `expired` / `ended early` / bare end the strip after a round used to
+ * read. Read back by `checkAuraEndWithinRound`, which fails the label on
+ * either of those two families. */
 export const AURA_STILL_UP_AT_ROUND_END = "still up when the round ended";
 
 /**
  * The words every timeline line that states the round's end carries — one
  * instant, `roundEndMs`, whatever the line: `still up when the round ended`
- * (`AURA_STILL_UP_AT_ROUND_END`: `[BUFF FADED]`, `[ENEMY BUFF END]`,
- * `[ENEMY DEF]`), `still on them when the round ended, Ns in` (the control
- * lines, `CC_STILL_ON_AT_ROUND_END`), `still channeling when the round
- * ended`, `no end logged; the round ended …` (`[CAST STOPPED]`), `not
- * released before the round ended` (Stasis). What the legend's presence test
- * (`formatTimeline`) and the gate (`checkAuraEndWithinRound`) key on; a unit
- * test holds each phrase to it.
+ * (`AURA_STILL_UP_AT_ROUND_END`: `[ENEMY DEF]`), `still on them when the
+ * round ended, Ns in` (the control lines, `CC_STILL_ON_AT_ROUND_END`), `still
+ * channeling when the round ended`, `no end logged; the round ended …`
+ * (`[CAST STOPPED]`), `not released before the round ended` (Stasis). What
+ * the legend's presence test (`formatTimeline`) and the gate
+ * (`checkAuraEndWithinRound`) key on; a unit test holds each phrase to it.
  */
 export const ROUND_ENDED_WORDS = "the round ended";
 
@@ -50,10 +53,10 @@ export const ROUND_ENDED_WORDS = "the round ended";
  * follow); any other bracket ends where its log does.
  *
  * Before it the prompt showed two: `[ENEMY DEF] … (Ns — still up when the
- * round ended)` counted to the LOG's end while `[BUFF FADED]` /
- * `[ENEMY BUFF END]` / the control lines stopped at the death — 360 of the
- * 432 such `[ENEMY DEF]` lines of the 605-file capture's Solo Shuffle rounds
- * end outside the death's second.
+ * round ended)` counted to the LOG's end while the control lines (and the
+ * `[BUFF FADED]` / `[ENEMY BUFF END]` lines that then carried the label)
+ * stopped at the death — 360 of the 432 such `[ENEMY DEF]` lines of the
+ * 605-file capture's Solo Shuffle rounds end outside the death's second.
  */
 export function roundEndLegend(bracket: string | undefined): string[] {
   return bracket === SOLO_SHUFFLE_BRACKET

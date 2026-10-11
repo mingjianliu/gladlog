@@ -239,8 +239,8 @@ export function extractEnemyMajorBuffIntervals(
   matchStartMs: number,
   matchEndMs: number,
 ): Map<string, IEnemyBuffInterval[]> {
-  // (an interval that reaches the round's end is labelled where its
-  // `[ENEMY BUFF END]` line is printed — `emitEnemyBuffEntries`, F02b)
+  // (an interval that reaches the round's end gets no `[ENEMY BUFF END]`
+  // line — decided where the line is printed, `emitEnemyBuffEntries`)
   const result = new Map<string, IEnemyBuffInterval[]>();
 
   for (const enemy of enemies) {
@@ -353,7 +353,10 @@ export interface ICDExpiryEvent {
    * runs ~2 s past the ending death and strips every aura there), or the log
    * has none and its official length reaches the round's end.
    * `expiresAtSeconds` is then the round's end. A removal the round-ending
-   * death itself caused keeps 'death' / 'target_death'.
+   * death itself caused keeps 'death' / 'target_death'. Such a buff did not
+   * end in the round: it gets no `[BUFF FADED]` line (user ruling
+   * 2026-10-11, `emitBuffFadedEntries`); the cause is what the `[YOU] [CD]`
+   * channel suffix reads (`still channeling when the round ended`).
    */
   cause:
     | "expired"

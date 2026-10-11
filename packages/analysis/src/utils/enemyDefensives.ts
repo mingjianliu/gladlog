@@ -869,7 +869,8 @@ export function externalAuraOf(
  * Shuffle round's ending death; the log runs ~2 s on), passed by the
  * `[ENEMY DEF]` renderer: what an event says about its aura's END is then
  * read against that instant — the one every other line that says "the round
- * ended" uses (`[BUFF FADED]`, `[ENEMY BUFF END]`, the control lines). An
+ * ended" uses (the control lines, the channel suffix), and the one past
+ * which a buff gets no `[BUFF FADED]` / `[ENEMY BUFF END]` line. An
  * aura still on its holder there is `upAtRoundEnd` with the time from its
  * start to the round's end; one that went up at or after it has no length in
  * the round. Omitted, the log's end stands in (the two other callers read
@@ -919,10 +920,10 @@ export function enemyDefensiveEvents(
     // The round ended before the log did (a Solo Shuffle round's ending
     // death; `roundEndAtMs`). Read against the LOG's end, an aura pressed
     // 1 s before that death printed `3.0s — still up when the round ended`
-    // — an end two seconds after the `[BUFF FADED] … (still up when the
-    // round ended)` line of the same prompt (605-file capture: 360 of 432
-    // such lines in Solo Shuffle rounds). Returned AFTER the caller's own
-    // `observedSeconds`, so the length here replaces it.
+    // — an end two seconds after the round end the same prompt's control
+    // lines state (605-file capture: 360 of 432 such lines in Solo Shuffle
+    // rounds). Returned AFTER the caller's own `observedSeconds`, so the
+    // length here replaces it.
     if (roundEndAt < combat.endTime) {
       const startMs = Math.round(combat.startTime + iv.fromS * 1000);
       const unseenEnd =

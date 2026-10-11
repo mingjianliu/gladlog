@@ -2688,7 +2688,10 @@ const INDEX: PredicateRow[] = [
     mod: karmaFeed,
   },
   // F02b: the label of an aura the round's end cut, and the gate that holds
-  // aura ends and control lengths to the round.
+  // aura ends and control lengths to the round. Ruling 2026-10-11: the label
+  // is `[ENEMY DEF]`'s alone — a buff the round ended on has no
+  // `[BUFF FADED]` / `[ENEMY BUFF END]` line, and the gate fails one that
+  // carries it.
   {
     file: `${A}/utils/roundEnd.ts`,
     symbol: "AURA_STILL_UP_AT_ROUND_END",

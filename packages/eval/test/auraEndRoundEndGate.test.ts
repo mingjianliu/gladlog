@@ -1,3 +1,4 @@
+import { emitBuffFadedEntries } from "@gladlog/analysis/src/context/timelineSections/buffFaded";
 import { emitEnemyBuffEntries } from "@gladlog/analysis/src/context/timelineSections/enemyBuff";
 import {
   CC_STILL_ON_AT_ROUND_END,
@@ -16,6 +17,10 @@ import { checkAuraEndWithinRound } from "../src/quality/promptQualityCheck";
 // round's end. The gate reads the round's end off the prompt (`[MATCH END]`,
 // and a Solo Shuffle round's first `[DEATH]` line) — the producers cut at
 // `roundEndMs`.
+// User ruling 2026-10-11: a buff still up when the round ended gets NO
+// `[BUFF FADED]` / `[ENEMY BUFF END]` line — the label PV373 printed on those
+// two families (1,132 + 350 lines of the 605-file capture of ae42aa6f) now
+// fails wherever it sits.
 const header = (bracket: string) =>
   `  Spec: Restoration Shaman (Healer)  |  Bracket: ${bracket}  |  Result: Loss  |  Duration: 2:38  |  Map: Nagrand Arena`;
 const DEATH =
@@ -31,14 +36,14 @@ const shuffle = (...lines: string[]) =>
   checkAuraEndWithinRound(prompt(SOLO_SHUFFLE_BRACKET, ...lines));
 
 describe("checkAuraEndWithinRound — [BUFF FADED] / [ENEMY BUFF END]", () => {
-  it("passes an end inside the round, and the round-end label in the round-end second", () => {
+  it("passes an end inside the round — up to the round-end second itself", () => {
     expect(
       shuffle(
         "2:20  [BUFF FADED]   Spirit Link Totem (expired)",
+        "2:35  [BUFF FADED]   Astral Shift (ended early — no dispel logged)",
         "2:36  [BUFF FADED]   Ascendance (removed at your death)",
-        `2:36  [BUFF FADED]   Astral Shift (${AURA_STILL_UP_AT_ROUND_END})`,
         "2:30  [ENEMY BUFF END]   4(HPriest): Power Infusion",
-        `2:36  [ENEMY BUFF END]   5(ARogue): Power Infusion (${AURA_STILL_UP_AT_ROUND_END})`,
+        "2:36  [ENEMY BUFF END]   5(ARogue): Power Infusion",
       ),
     ).toEqual([]);
   });
@@ -55,12 +60,27 @@ describe("checkAuraEndWithinRound — [BUFF FADED] / [ENEMY BUFF END]", () => {
     expect(fails[2]).toContain("line 4: [ENEMY BUFF END] 行在回合结束之后");
   });
 
-  it("fails the round-end label printed anywhere but the round-end second", () => {
+  it("fails the round-end label on either family, in the round-end second too — PV373's `2:59 [BUFF FADED] Astral Shift (still up when the round ended)`", () => {
     const fails = shuffle(
+      `2:36  [BUFF FADED]   Astral Shift (${AURA_STILL_UP_AT_ROUND_END})`,
+      `2:36  [ENEMY BUFF END]   5(ARogue): Power Infusion (${AURA_STILL_UP_AT_ROUND_END})`,
       `2:20  [BUFF FADED]   Astral Shift (${AURA_STILL_UP_AT_ROUND_END})`,
     );
-    expect(fails).toHaveLength(1);
-    expect(fails[0]).toContain("却不在回合结束那一秒");
+    expect(fails).toHaveLength(3);
+    expect(fails[0]).toContain(
+      "line 2: [BUFF FADED] 行写「still up when the round ended」,而回合结束时仍在的增益不印结束行",
+    );
+    expect(fails[1]).toContain("line 3: [ENEMY BUFF END] 行写");
+    expect(fails[2]).toContain("line 4: [BUFF FADED] 行写");
+  });
+
+  it("a labelled line after the round's end fails on both counts", () => {
+    const fails = shuffle(
+      `2:38  [BUFF FADED]   Astral Shift (${AURA_STILL_UP_AT_ROUND_END})`,
+    );
+    expect(fails).toHaveLength(2);
+    expect(fails[0]).toContain("不印结束行");
+    expect(fails[1]).toContain("[BUFF FADED] 行在回合结束之后");
   });
 
   it("another bracket ends at [MATCH END]: a line between a death and it is in the round", () => {
@@ -69,10 +89,19 @@ describe("checkAuraEndWithinRound — [BUFF FADED] / [ENEMY BUFF END]", () => {
         prompt(
           "Rated Arena 3v3",
           "2:37  [BUFF FADED]   Astral Shift (expired)",
-          `2:38  [BUFF FADED]   Ascendance (${AURA_STILL_UP_AT_ROUND_END})`,
+          "2:38  [ENEMY BUFF END]   4(HPriest): Power Infusion",
         ),
       ),
     ).toEqual([]);
+    // … and the label fails there as well: no bracket prints it
+    expect(
+      checkAuraEndWithinRound(
+        prompt(
+          "Rated Arena 3v3",
+          `2:38  [BUFF FADED]   Ascendance (${AURA_STILL_UP_AT_ROUND_END})`,
+        ),
+      ),
+    ).toHaveLength(1);
     expect(
       checkAuraEndWithinRound(
         prompt(
@@ -83,13 +112,19 @@ describe("checkAuraEndWithinRound — [BUFF FADED] / [ENEMY BUFF END]", () => {
     ).toHaveLength(1);
   });
 
-  it("no round end stated → nothing to hold a line to", () => {
+  it("no round end stated → no second to hold a line to; the label needs none and still fails", () => {
     expect(
       checkAuraEndWithinRound([
         header(SOLO_SHUFFLE_BRACKET),
         "2:37  [BUFF FADED]   Astral Shift (expired)",
       ]),
     ).toEqual([]);
+    expect(
+      checkAuraEndWithinRound([
+        header(SOLO_SHUFFLE_BRACKET),
+        `2:37  [ENEMY BUFF END]   4(HPriest): Power Infusion (${AURA_STILL_UP_AT_ROUND_END})`,
+      ]),
+    ).toHaveLength(1);
   });
 });
 
@@ -183,18 +218,18 @@ describe("emitEnemyBuffEntries — the producer the gate holds (F02b)", () => {
     return out.filter((l) => l.includes("[ENEMY BUFF END]"));
   };
 
-  it("an end inside the round prints as it was; one at or after the round's end sits at it with the label; a buff that went up after it has no end line", () => {
+  it("an end inside the round prints as it was; one at or after the round's end has no end line; neither has a buff that went up after it", () => {
     const lines = run(
       [
         { startSeconds: 100, endSeconds: 115 },
         { startSeconds: 150, endSeconds: 158.2 },
+        { startSeconds: 150, endSeconds: 156 },
         { startSeconds: 156.5, endSeconds: 158.2 },
       ],
       156,
     );
     expect(lines).toEqual([
       "1:55  [ENEMY BUFF END]   4(HPriest): Power Infusion",
-      `2:36  [ENEMY BUFF END]   4(HPriest): Power Infusion (${AURA_STILL_UP_AT_ROUND_END})`,
     ]);
     expect(
       checkAuraEndWithinRound(prompt(SOLO_SHUFFLE_BRACKET, ...lines)),
@@ -202,8 +237,42 @@ describe("emitEnemyBuffEntries — the producer the gate holds (F02b)", () => {
   });
 });
 
+describe("emitBuffFadedEntries — the producer the gate holds (ruling 2026-10-11)", () => {
+  const run = (cause: "expired" | "round_end", expiresAtSeconds: number) => {
+    const out: string[] = [];
+    emitBuffFadedEntries({
+      cdExpiryEvents: [
+        {
+          spellId: "108271",
+          spellName: "Astral Shift",
+          castAtSeconds: 150,
+          expiresAtSeconds,
+          isEstimated: false,
+          cause,
+        },
+      ],
+      addEntry: (_t: number, ...lines: unknown[]) => {
+        out.push(...(lines as string[]));
+        return true;
+      },
+      actorLabel: (name: string) => name,
+    } as never);
+    return out;
+  };
+
+  it("a buff that ended in the round prints its line; one the round ended on prints none", () => {
+    const lines = [...run("expired", 155), ...run("round_end", 156)];
+    expect(lines).toEqual(["2:35  [BUFF FADED]   Astral Shift (expired)"]);
+    expect(
+      checkAuraEndWithinRound(prompt(SOLO_SHUFFLE_BRACKET, ...lines)),
+    ).toEqual([]);
+  });
+});
+
 // 2026-10-11: `[ENEMY DEF] … still up when the round ended` is held to the
-// same second as `[BUFF FADED]` — one round end in a prompt.
+// round-end second the control lines stop at — one round end in a prompt.
+// (The label stays on this family: it is a note on a press line that exists
+// anyway.)
 describe("checkAuraEndWithinRound — [ENEMY DEF]", () => {
   const D = (at: string, rest: string) =>
     `${at}  [ENEMY DEF]   6(BDruid) (Balance Druid): ${rest}`;
@@ -223,7 +292,6 @@ describe("checkAuraEndWithinRound — [ENEMY DEF]", () => {
         // no length at all: a press after the round, an unseen carrier
         D("2:37", "Divine Shield (immune)"),
         D("2:35", "Vanish (immune, end not logged)"),
-        `2:36  [BUFF FADED]   Astral Shift (${AURA_STILL_UP_AT_ROUND_END})`,
       ),
     ).toEqual([]);
   });
@@ -269,7 +337,11 @@ describe("checkAuraEndWithinRound — [ENEMY DEF]", () => {
 
 describe("checkAuraEndWithinRound — the legend says which instant `the round ended` is", () => {
   const LEGEND_HEAD = "MATCH TIMELINE";
-  const stated = `2:36  [BUFF FADED]   Astral Shift (${AURA_STILL_UP_AT_ROUND_END})`;
+  // a line that still says it: an `[ENEMY DEF]` aura the round ended on,
+  // its length ending in the round-end second of its bracket (2:36 / 2:38)
+  const def = (length: string) =>
+    `2:35  [ENEMY DEF]   6(BDruid) (Balance Druid): Barkskin (30%, ${length} — ${AURA_STILL_UP_AT_ROUND_END}) (at 51% HP)`;
+  const stated = def("1.4s");
 
   it("a timeline line that says it needs the producer's legend lines for the header's bracket", () => {
     for (const bracket of [SOLO_SHUFFLE_BRACKET, "Rated Arena 3v3"]) {
@@ -277,11 +349,7 @@ describe("checkAuraEndWithinRound — the legend says which instant `the round e
         header(bracket),
         LEGEND_HEAD,
         ...roundEndLegend(bracket),
-        ...(bracket === SOLO_SHUFFLE_BRACKET
-          ? [stated]
-          : [
-              `2:38  [BUFF FADED]   Astral Shift (${AURA_STILL_UP_AT_ROUND_END})`,
-            ]),
+        bracket === SOLO_SHUFFLE_BRACKET ? stated : def("3.5s"),
         DEATH,
         MATCH_END,
       ];

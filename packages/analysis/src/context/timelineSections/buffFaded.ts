@@ -11,7 +11,6 @@
  */
 import { HEAL_ABSORB_SELF_SAVE_IDS } from "../../utils/healAbsorbSave";
 import { fmtTime } from "../../utils/renderGrid";
-import { AURA_STILL_UP_AT_ROUND_END } from "../../utils/roundEnd";
 import type { TimelineCtx } from "./ctx";
 
 export function emitBuffFadedEntries(
@@ -25,6 +24,11 @@ export function emitBuffFadedEntries(
     // caster, not a buff — "ended early" there means the absorb was eaten,
     // and the press line already says how it ended.
     if (HEAL_ABSORB_SELF_SAVE_IDS.has(expiry.spellId)) continue;
+    // User ruling 2026-10-11: a buff the round ended on did not fade in the
+    // round — it gets no line, neither `expired` / `ended early` for the
+    // strip that follows a round (1–2 s after its ending death; F02b) nor a
+    // `still up` label. A line here is a buff that ended inside the round.
+    if (expiry.cause === "round_end") continue;
     // B129: tag the fade cause so the model does not invent a dispel for a buff that simply expired,
     // and can tell a consumed absorb (ended early) from an expired one. "(estimated)" is retained for
     // expiries inferred from duration (no removal event logged).
@@ -75,16 +79,9 @@ export function emitBuffFadedEntries(
                           : took
                             ? ` (expired; ${took})`
                             : " (expired)";
-    // F02b: a buff the round ended on. The line sits at the round's end and
-    // says the buff was still up — not `expired` / `ended early` for the
-    // strip that follows a round, 1–2 s after its ending death.
-    const note =
-      expiry.cause === "round_end"
-        ? ` (${AURA_STILL_UP_AT_ROUND_END})`
-        : causeNote;
     addEntry(
       expiry.expiresAtSeconds,
-      `${fmtTime(expiry.expiresAtSeconds)}  [BUFF FADED]   ${expiry.spellName}${note}`,
+      `${fmtTime(expiry.expiresAtSeconds)}  [BUFF FADED]   ${expiry.spellName}${causeNote}`,
     );
   }
 }

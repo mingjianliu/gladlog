@@ -1,14 +1,14 @@
 /**
  * [ENEMY BUFF] / [ENEMY BUFF END] (F67b) — enemies' major buff windows, minus the
  * intervals GH #99 Rules B & C folded into a cast line, with any missed-purge note
- * those rules attached.
+ * those rules attached. An `[ENEMY BUFF END]` line is a buff that ended inside
+ * the round; a start line with no end line is a buff that did not.
  *
  * Cut out of buildMatchTimeline verbatim (GH #116); the body is unchanged, only
  * its closure inputs now arrive through `ctx`. Output is pinned by the 605-file
  * acceptanceCapture context hash.
  */
 import { fmtTime } from "../../utils/renderGrid";
-import { AURA_STILL_UP_AT_ROUND_END } from "../../utils/roundEnd";
 import type { TimelineCtx } from "./ctx";
 
 export function emitEnemyBuffEntries(
@@ -32,7 +32,6 @@ export function emitEnemyBuffEntries(
     matchStartMs,
     roundEndAtMs,
   } = ctx;
-  const roundEndS = (roundEndAtMs - matchStartMs) / 1000;
 
   for (const [enemyName, intervals] of enemyBuffIntervals) {
     for (const interval of intervals) {
@@ -43,18 +42,17 @@ export function emitEnemyBuffEntries(
           `${fmtTime(interval.startSeconds)}  [ENEMY BUFF]   ${enemyPid(enemyName)}: ${interval.spellName}${purgeNote}`,
         );
       }
-      // F02b: a buff the round ended on did not end — its REMOVED is logged
-      // after the round (a Solo Shuffle log runs on past the ending death),
-      // or the log has none and the interval was closed at the log's end.
-      // The line sits at the round's end and says so; a buff that went up at
-      // or after it has no end in the round at all.
-      if (interval.startSeconds >= roundEndS) continue;
-      const cut =
-        Math.round(matchStartMs + interval.endSeconds * 1000) >= roundEndAtMs;
-      const endS = cut ? roundEndS : interval.endSeconds;
+      // A buff the round ended on did not end in it — its REMOVED is logged
+      // at or after the round's end (a Solo Shuffle log runs on past the
+      // ending death and strips every aura there; F02b), or the log has none
+      // and the interval was closed at the log's end. User ruling 2026-10-11:
+      // it gets no end line — neither a bare end at the strip nor a `still
+      // up` label.
+      if (Math.round(matchStartMs + interval.endSeconds * 1000) >= roundEndAtMs)
+        continue;
       addEntry(
-        endS,
-        `${fmtTime(endS)}  [ENEMY BUFF END]   ${enemyPid(enemyName)}: ${interval.spellName}${cut ? ` (${AURA_STILL_UP_AT_ROUND_END})` : ""}`,
+        interval.endSeconds,
+        `${fmtTime(interval.endSeconds)}  [ENEMY BUFF END]   ${enemyPid(enemyName)}: ${interval.spellName}`,
       );
     }
   }

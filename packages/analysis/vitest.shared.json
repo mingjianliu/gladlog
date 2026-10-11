@@ -100,6 +100,7 @@
     "test/btierD8TopDamager.test.ts",
     "test/btierRowFacts.test.ts",
     "test/buffDuration.test.ts",
+    "test/buffEndNoLineAtRoundEnd.test.ts",
     "test/burstCastSpan.test.ts",
     "test/burstLedgerHeader.test.ts",
     "test/castStopped.test.ts",
