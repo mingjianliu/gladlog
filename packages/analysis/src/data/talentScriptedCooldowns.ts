@@ -178,11 +178,32 @@ export const EVENT_COOLDOWN_REDUCTIONS: Readonly<
   //    of a target, 59 recasts): 27 pressed while the ledger said "not
   //    ready" at 1 s → 1 with the dated value; every other ledger entry in
   //    the same files 2 of 933 → 2 of 933.
-  // Not measured: Wind Shear, Gust of Wind and the other totems (one tooltip
-  // number, so the same seconds here); an Elemental holder (the holders in
-  // the five fit files whose COMBATANT_INFO was read are all spec 264 —
-  // DB2's second stands for everyone else); a log older than 08-13 (4 s by
-  // the ruling's wording, no corpus behind it).
+  //
+  // ELEMENTAL holders stay at DB2's 1 s — measured 2026-10-11 and too thin to
+  // move (Game-Behaviour Rule 7: upward on corpus evidence only). The same
+  // fit on every single-cooldown target, per spec and per side of the
+  // cutover (fix-FT `scl_elemental_fit.ts` → `scl-elemental-fit-605.txt`):
+  // the 605 files hold ONE Elemental holder — one player, three files of one
+  // evening after the hotfix, 28 recast pairs, 5 of them shorter than the
+  // unreduced cooldown. Four of the five fit 1 s, the press 0.4 – 1.4 s
+  // after its ready instant. The fifth, a Gust of Wind 17.8 s after the last
+  // on a 20 s cooldown with one Lightning Bolt in between, comes 1.2 s
+  // before it: that one pair fits 2 s a cast — and equally 1 s a cast plus
+  // 1 s for each of the two Lightning Bolt Overload hits that bolt made, a
+  // second TRIGGER which Restoration's fit cannot speak to. No Elemental
+  // holder before the hotfix. Control: 804 pairs of Elemental non-holders,
+  // none shorter than the cooldown. Enhancement cannot take the talent (the
+  // PvP talent pool; 0 of 113 unit-rounds in the corpus).
+  // The same run on Restoration, all targets: before the cutover 281 pairs,
+  // early at 2 s 52, at 4 s 3 (two Grounding Totem pairs of one file that
+  // need 6.7 s a cast — some other source, not looked into — and the 2.4 s
+  // Healing Tide one); since, 124 pairs, early at 1 s 2, at 2 s 0. Wind
+  // Shear, Earthgrab, Grounding and Static Field are in those counts (Wind
+  // Shear before: 32 pairs, early at 2 s 4, at 4 s 0).
+  // Still not measured: Healing Stream / Stormstream Totem (charges, no
+  // single cooldown to fit); a log older than 08-13 in the corpus — one
+  // 07-27 Restoration match read outside it fits 4 s (29 pairs, early at 2 s
+  // 5, at 4 s 0).
   "1217092": {
     targets: ["108271", "192063", "57994", ...SHAMAN_TOTEM_IDS],
     triggerCastIds: ["188196", "188443"],

@@ -113,9 +113,15 @@ describe("eventReductionSecondsAt — Storm Conduit by spec and by the date of t
     ])
       expect(eventReductionSecondsAt(conduit, RESTO, notADate)).toBe(2);
   });
-  it("every other holder keeps DB2's 1 s on every day", () => {
+  // Elemental was measured 2026-10-11 (605 files: one holder, 28 recast
+  // pairs, one of them early at 1 s — which 2 s a cast and a per-overload
+  // trigger both explain): too thin to move, so it is still DB2's second.
+  it("every other holder keeps DB2's 1 s on every day — Elemental measured and not moved", () => {
     for (const at of [AUG_14, AUG_19, Number.NaN]) {
       expect(eventReductionSecondsAt(conduit, ELEMENTAL, at)).toBe(1);
+      expect(
+        eventReductionSecondsAt(conduit, CombatUnitSpec.Shaman_Enhancement, at),
+      ).toBe(1);
       expect(eventReductionSecondsAt(conduit, undefined, at)).toBe(1);
     }
   });
