@@ -346,6 +346,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     snapshotFn,
     resOwnerCDs,
     matchEndSeconds,
+    roundEndAtMs,
     roundBounds,
     requestSnapshotPlaceholder,
   } = prepareTimelineSetup({
@@ -516,6 +517,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     enemies,
     ccTrinketSummaries,
     matchEndMs,
+    roundEndAtMs,
   });
 
   ({ procLinesEmitted } = emitOwnerCdEntries({
@@ -640,6 +642,8 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     buffPurgeAnnotations,
     addEntry,
     enemyPid,
+    matchStartMs,
+    roundEndAtMs,
   });
 
   // ── [ENEMY CD] events ──────────────────────────────────────────────────────
@@ -759,7 +763,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     enemies,
     ccTrinketSummaries,
     matchStartMs,
-    matchEndMs,
+    roundEndAtMs,
     pid,
     enemyPid,
     actorLabel,

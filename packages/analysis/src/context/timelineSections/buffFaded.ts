@@ -11,6 +11,7 @@
  */
 import { HEAL_ABSORB_SELF_SAVE_IDS } from "../../utils/healAbsorbSave";
 import { fmtTime } from "../../utils/renderGrid";
+import { AURA_STILL_UP_AT_ROUND_END } from "../../utils/roundEnd";
 import type { TimelineCtx } from "./ctx";
 
 export function emitBuffFadedEntries(
@@ -74,9 +75,16 @@ export function emitBuffFadedEntries(
                           : took
                             ? ` (expired; ${took})`
                             : " (expired)";
+    // F02b: a buff the round ended on. The line sits at the round's end and
+    // says the buff was still up — not `expired` / `ended early` for the
+    // strip that follows a round, 1–2 s after its ending death.
+    const note =
+      expiry.cause === "round_end"
+        ? ` (${AURA_STILL_UP_AT_ROUND_END})`
+        : causeNote;
     addEntry(
       expiry.expiresAtSeconds,
-      `${fmtTime(expiry.expiresAtSeconds)}  [BUFF FADED]   ${expiry.spellName}${causeNote}`,
+      `${fmtTime(expiry.expiresAtSeconds)}  [BUFF FADED]   ${expiry.spellName}${note}`,
     );
   }
 }

@@ -490,6 +490,10 @@ export function emitOwnerCdEntries(
           // length and its end; "interrupted" only on kick/CC evidence.
           if (expiry.isEstimated) {
             channelSuffix = ` (channel end not logged)`;
+          } else if (expiry.cause === "round_end") {
+            // F02b: the round's end is not the channel's (the wording of a
+            // control the round ended on, `CC_STILL_ON_AT_ROUND_END`)
+            channelSuffix = ` (still channeling when the round ended, ${actualDuration.toFixed(1)}s in)`;
           } else {
             const interrupted = channelWasInterrupted(
               ownerCCSummary,

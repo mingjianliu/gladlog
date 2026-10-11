@@ -828,6 +828,10 @@ export interface IRootInstance {
    */
   sourceId: string;
   sourceSpec: string;
+  /** A disarm the round ended on (`ICCInstance.stillOnAtRoundEnd`, same
+   * rule — F02b): `durationSeconds` is then landing → round end. Roots are
+   * not cut here. */
+  stillOnAtRoundEnd?: true;
 }
 
 /** BACKLOG #36(b): what the player did in the `POST_KICK_WINDOW_S` after
@@ -2569,15 +2573,21 @@ export function analyzePlayerCCAndTrinket(
     }))
     .sort((a, b) => a.atSeconds - b.atSeconds);
 
+  // F02b: a disarm ends at the round's end like a CC (F-CI1 above) — one
+  // applied at or after it is not in the round; one still on the player then
+  // is cut there and marked (`2:57 [DISARM] … | 5s` under a round that ended
+  // at 3:00: 9 lines on the 605 capture).
   const disarmInstances: IRootInstance[] = disarmWindows
+    .filter((w) => w.applyMs < roundEnd)
     .map((w) => ({
       atSeconds: (w.applyMs - matchStartMs) / 1000,
-      durationSeconds: (w.removeMs - w.applyMs) / 1000,
+      durationSeconds: (Math.min(w.removeMs, roundEnd) - w.applyMs) / 1000,
       spellId: w.spellId,
       spellName: w.spellName,
       sourceName: w.srcName,
       sourceId: w.srcId,
       sourceSpec: enemySpecMap.get(w.srcId) ?? "Unknown",
+      ...(w.removeMs > roundEnd ? { stillOnAtRoundEnd: true as const } : {}),
     }))
     .sort((a, b) => a.atSeconds - b.atSeconds);
 

@@ -173,7 +173,10 @@ import {
   fmtTime,
   parseWholeSeconds,
 } from "@gladlog/analysis/src/utils/renderGrid";
-import { SOLO_SHUFFLE_BRACKET } from "@gladlog/analysis/src/utils/roundEnd";
+import {
+  AURA_STILL_UP_AT_ROUND_END,
+  SOLO_SHUFFLE_BRACKET,
+} from "@gladlog/analysis/src/utils/roundEnd";
 import {
   PLACEHOLDER_RANGE_YD,
   RANGE_HITBOX_SLACK_YD,
@@ -1307,6 +1310,86 @@ export function checkKillWindowWithinRound(lines: string[]): string[] {
         failures.push(
           `line ${i + 1}: ${sp.what} ${sp.text} 结束于回合结束之后(${end.says}在 ${fmtTime(end.second)})—— ${line.trim().slice(0, 140)}`,
         );
+  });
+  return failures;
+}
+
+/** A line that states when an aura ended: `m:ss  [BUFF FADED] …`. */
+const AURA_END_LINE = /^(\d+):(\d{2})\s+\[(BUFF FADED|ENEMY BUFF END)\]/;
+/** A control line with its own start: `m:ss  [CC ON TEAM] …`. */
+const CONTROL_SPAN_LINE =
+  /^(\d+):(\d{2})\s+\[(CC ON TEAM|CC ON ENEMY|SILENCE|DISARM)\]/;
+/** Its printed whole seconds, unlabelled: `) | 3s` (`[CC ON TEAM]` /
+ *  `[SILENCE]` / `[DISARM]`) or `) (3s)` (`[CC ON ENEMY]`). */
+const CONTROL_PLAIN_SECONDS = /\) \| (\d+)s\b|\) \((\d+)s\)/;
+/** … and behind the round-end label (`renderedCcSpan`). */
+const CONTROL_CUT_SECONDS = new RegExp(
+  String.raw`${CC_STILL_ON_AT_ROUND_END}, (?:(\d+)s|<1s) in`,
+);
+
+/**
+ * Hard invariant (F02b): no line states an aura's end, or a control's
+ * length, past the round's end AS THE PROMPT STATES IT (`statedRoundEnd` —
+ * `[MATCH END]`, and a Solo Shuffle round's first `[DEATH]` line; the
+ * producers cut at `roundEndMs`).
+ *
+ *  1. `[BUFF FADED]` / `[ENEMY BUFF END]`: the line's second is not after the
+ *     round's end, and one that carries `AURA_STILL_UP_AT_ROUND_END` sits IN
+ *     the round-end second (the producer prints it at `roundEndMs`).
+ *  2. `[CC ON TEAM]` / `[CC ON ENEMY]` / `[SILENCE]` / `[DISARM]`: the line
+ *     does not start after the round's end; an unlabelled `Ns` does not carry
+ *     it more than a second past the round's end; a labelled
+ *     `CC_STILL_ON_AT_ROUND_END, Ns in` ends within a second of it.
+ *
+ * The one second is the grid: the start is floored (`fmtTime`), the length
+ * rounded to the nearest second (`renderedCcSeconds`), so start + N lands on
+ * the true end's second or either neighbour.
+ *
+ * Before (605-file capture of 8c3275fa, fix-FT/scripts/
+ * n4_after_round_end.py): 126 `[BUFF FADED]` and 42 `[ENEMY BUFF END]` lines
+ * after a Solo Shuffle round's ending death (`expired` 91, `ended early — no
+ * dispel logged` 26 — the strip that follows a round), 54 `[SILENCE]` and 9
+ * `[DISARM]` lengths running more than a second past it, 15 `[SILENCE]`
+ * lines that start after it.
+ */
+export function checkAuraEndWithinRound(lines: string[]): string[] {
+  const failures: string[] = [];
+  const end = statedRoundEnd(lines);
+  if (end === null) return failures;
+  const where = `${end.says}在 ${fmtTime(end.second)}`;
+  lines.forEach((line, i) => {
+    const fail = (why: string) =>
+      failures.push(
+        `line ${i + 1}: ${why}(${where})—— ${line.trim().slice(0, 160)}`,
+      );
+    const a = line.match(AURA_END_LINE);
+    if (a) {
+      const sec = Number(a[1]) * 60 + Number(a[2]);
+      if (sec > end.second) fail(`[${a[3]}] 行在回合结束之后`);
+      else if (line.includes(AURA_STILL_UP_AT_ROUND_END) && sec !== end.second)
+        fail(
+          `[${a[3]}] 行写「${AURA_STILL_UP_AT_ROUND_END}」却不在回合结束那一秒`,
+        );
+      return;
+    }
+    const c = line.match(CONTROL_SPAN_LINE);
+    if (!c) return;
+    const sec = Number(c[1]) * 60 + Number(c[2]);
+    if (sec > end.second) return fail(`[${c[3]}] 行起于回合结束之后`);
+    const cut = line.match(CONTROL_CUT_SECONDS);
+    if (cut) {
+      const to = sec + Number(cut[1] ?? 0);
+      if (Math.abs(to - end.second) > 1)
+        fail(
+          `[${c[3]}] 行写「${CC_STILL_ON_AT_ROUND_END}」,但起点 + 时长 = ${fmtTime(to)} 不在回合结束处`,
+        );
+      return;
+    }
+    const plain = line.match(CONTROL_PLAIN_SECONDS);
+    if (!plain) return;
+    const to = sec + Number(plain[1] ?? plain[2]);
+    if (to > end.second + 1)
+      fail(`[${c[3]}] 行的时长越过回合结束(起点 + 时长 = ${fmtTime(to)})`);
   });
   return failures;
 }
@@ -5727,6 +5810,7 @@ export function checkMatch(
   hardFailures.push(...checkBurstAllyOverlap(lines));
   hardFailures.push(...checkVulnerableOwnerDamage(lines));
   hardFailures.push(...checkKillWindowWithinRound(lines));
+  hardFailures.push(...checkAuraEndWithinRound(lines));
   hardFailures.push(...checkBehaviorPriorConsistency(lines));
   hardFailures.push(...checkBurstWindowRefConsistency(lines));
   hardFailures.push(...checkOffensiveWindowSpikeMarker(lines));

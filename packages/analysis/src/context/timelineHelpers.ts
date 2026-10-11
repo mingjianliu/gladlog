@@ -239,6 +239,8 @@ export function extractEnemyMajorBuffIntervals(
   matchStartMs: number,
   matchEndMs: number,
 ): Map<string, IEnemyBuffInterval[]> {
+  // (an interval that reaches the round's end is labelled where its
+  // `[ENEMY BUFF END]` line is printed — `emitEnemyBuffEntries`, F02b)
   const result = new Map<string, IEnemyBuffInterval[]>();
 
   for (const enemy of enemies) {
@@ -345,6 +347,13 @@ export interface ICDExpiryEvent {
    * (`TOUCH_OF_KARMA_ABSORB_ID`), not the 10 s buff's: 'target_debuff_off' =
    * that aura left early in the ms the Karma debuff came off the enemy it was
    * cast on (`lostOn`), 'target_death' when that enemy died there.
+   *
+   * F02b: 'round_end' = the round ended with the buff still up — its REMOVED
+   * is logged at or after the round's end (`roundEndMs`; a Solo Shuffle log
+   * runs ~2 s past the ending death and strips every aura there), or the log
+   * has none and its official length reaches the round's end.
+   * `expiresAtSeconds` is then the round's end. A removal the round-ending
+   * death itself caused keeps 'death' / 'target_death'.
    */
   cause:
     | "expired"
@@ -355,7 +364,8 @@ export interface ICDExpiryEvent {
     | "stolen"
     | "target_death"
     | "target_debuff_off"
-    | "absorbed";
+    | "absorbed"
+    | "round_end";
   /** cause dispelled / stolen: who did it, with what */
   endedBy?: { unitId: string; unitName: string; spellName: string };
   /** cause target_debuff_off: the enemy the debuff came off */
@@ -439,6 +449,9 @@ export function extractOwnerCDBuffExpiry(
     Pick<ICombatUnit, "id" | "name" | "auraEvents"> &
       Partial<Pick<ICombatUnit, "deathRecords">>
   > = [],
+  /** the round's end, epoch ms (`roundEndMs`); a press at or after it is not
+   * in the round and gets no expiry */
+  roundEnd: number = Number.POSITIVE_INFINITY,
 ): ICDExpiryEvent[] {
   const ownerDeathsMs = (owner?.deathRecords ?? []).map(
     (d) => d.timestamp as number,
@@ -531,6 +544,7 @@ export function extractOwnerCDBuffExpiry(
     for (let i = 0; i < cd.casts.length; i++) {
       const cast = cd.casts[i]!;
       const castMs = matchStartMs + cast.timeSeconds * 1000;
+      if (castMs >= roundEnd) break;
 
       // Skip removals that happened before this cast started (orphans / prior applications).
       while (
@@ -728,6 +742,25 @@ export function extractOwnerCDBuffExpiry(
             cause = "absorbed";
           }
         }
+      }
+
+      // F02b: the round ended on it. Nothing logged at or after the round's
+      // end is the buff's own end — not the removal, not a dispel, not what
+      // it absorbed by then.
+      if (
+        Math.round(matchStartMs + expiresAtSeconds * 1000) >= roundEnd &&
+        cause !== "death" &&
+        cause !== "target_death"
+      ) {
+        result.push({
+          spellId: cd.spellId,
+          spellName: cd.spellName,
+          castAtSeconds: cast.timeSeconds,
+          expiresAtSeconds: (roundEnd - matchStartMs) / 1000,
+          isEstimated: false,
+          cause: "round_end",
+        });
+        continue;
       }
 
       result.push({

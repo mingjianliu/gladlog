@@ -31,6 +31,7 @@ import {
   TOUCH_OF_KARMA_ID,
 } from "../../utils/karmaFeed";
 import { fmtTime, toRenderSecond } from "../../utils/renderGrid";
+import { AURA_STILL_UP_AT_ROUND_END } from "../../utils/roundEnd";
 import type { TimelineCtx } from "./ctx";
 
 export function emitEnemyDefEntries(
@@ -91,7 +92,7 @@ export function emitEnemyDefEntries(
           ? "; a dispel of this spell is logged at that moment, not which copy it took"
           : "";
         const earlyNote = d.upAtRoundEnd
-          ? " — still up when the round ended"
+          ? ` — ${AURA_STILL_UP_AT_ROUND_END}`
           : !d.removedEarly
             ? ""
             : end?.takenBy

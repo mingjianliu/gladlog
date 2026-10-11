@@ -33,6 +33,7 @@ export function prepareOwnerCdContext(
     | "enemies"
     | "ccTrinketSummaries"
     | "matchEndMs"
+    | "roundEndAtMs"
   >,
 ) {
   const {
@@ -43,6 +44,7 @@ export function prepareOwnerCdContext(
     enemies,
     ccTrinketSummaries,
     matchEndMs,
+    roundEndAtMs,
   } = ctx;
 
   // F114 (Variant C): precompute which amplifier-spell casts get a [HEALING] block.
@@ -91,6 +93,7 @@ export function prepareOwnerCdContext(
     matchStartMs,
     owner,
     enemies,
+    roundEndAtMs,
   );
 
   // H13: computed once — used to confirm early-ended channels were a real kick/CC, not a

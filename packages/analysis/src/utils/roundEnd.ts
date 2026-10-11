@@ -18,6 +18,14 @@
  * applies. */
 export const SOLO_SHUFFLE_BRACKET = "Rated Solo Shuffle";
 
+/** What an aura-end line says of an aura the round's end cut (its REMOVED is
+ * logged at or after `roundEndMs`, or the log has none and the round ended
+ * inside its official length): the `[ENEMY DEF]` duration note, and — F02b —
+ * `[BUFF FADED]` and `[ENEMY BUFF END]`, which printed `expired` /
+ * `ended early` / a bare end for it. A control line says
+ * `CC_STILL_ON_AT_ROUND_END`. Read back by `checkAuraEndWithinRound`. */
+export const AURA_STILL_UP_AT_ROUND_END = "still up when the round ended";
+
 /** Solo Shuffle only: the round-ending (first) player death, epoch ms, or
  * undefined for other brackets / a round with no player death. The one
  * definition behind `afterShuffleRoundEnd` and the owner gate's round-end

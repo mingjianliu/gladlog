@@ -499,7 +499,7 @@ describe("[SILENCE] — a press refused as silenced is on the owner's silence li
       enemies: [{ id: "e1", name: "e1", spellCastEvents: [], auraEvents: [] }],
       ccTrinketSummaries: [],
       matchStartMs: T0,
-      matchEndMs: T0 + 120_000,
+      roundEndAtMs: T0 + 120_000,
       pid: (n: string) => `F:${n}`,
       enemyPid: (n: string) => `E:${n}`,
       actorLabel: (n: string, side: "friendly" | "enemy") =>

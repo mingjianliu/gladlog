@@ -10,6 +10,7 @@
     "src/quality/percentileMonotonicity.test.ts",
     "src/quality/sameSecondHp.test.ts",
     "src/quality/windowSpan.test.ts",
+    "test/auraEndRoundEndGate.test.ts",
     "test/backlashRefGate.test.ts",
     "test/backlashSilenceAndTopSourcesGate.test.ts",
     "test/behaviorPriorTable.test.ts",

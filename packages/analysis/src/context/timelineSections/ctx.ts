@@ -157,6 +157,9 @@ export interface TimelineCtx {
   rosterSides: ReturnType<typeof buildRosterSides>;
   /** (matchEndMs − matchStartMs) / 1000 */
   matchEndSeconds: number;
+  /** the round's end, epoch ms (`roundEndMs`): a Solo Shuffle round's ending
+   * death, else `matchEndMs`. What an aura-end line is cut at (F02b). */
+  roundEndAtMs: number;
   /** the round, as reconstructEnemyCDTimeline reads it (GH #119) */
   roundBounds: { startTime: number; endTime: number };
   /** the owner's CC spell ids that already have a [YOU] [CC] cast line */

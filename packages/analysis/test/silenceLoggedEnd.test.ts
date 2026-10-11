@@ -31,7 +31,7 @@ const unit = (id: string, over: Record<string, unknown> = {}): any => ({
   deathRecords: [],
   ...over,
 });
-function render(victim: any): string[] {
+function render(victim: any, roundEndAtMs = T0 + 120_000): string[] {
   const lines: string[] = [];
   emitSilenceEntries({
     allUnits: [],
@@ -39,7 +39,7 @@ function render(victim: any): string[] {
     enemies: [unit("e1")],
     ccTrinketSummaries: [],
     matchStartMs: T0,
-    matchEndMs: T0 + 120_000,
+    roundEndAtMs,
     pid: (n: string) => `F:${n}`,
     enemyPid: (n: string) => `E:${n}`,
     actorLabel: (n: string, side: "friendly" | "enemy") =>
@@ -57,6 +57,23 @@ const silenced = [
 describe("FT-T08 step 3c — [SILENCE] logged end", () => {
   beforeAll(async () => {
     await ensureAnalysisData();
+  });
+
+  it("F02b: 回合结束时还在身上的沉默截在回合结束处并写明;回合结束后才落下的不印", () => {
+    // removed at 22 s, the round ended at 21 s (a Solo Shuffle log runs on)
+    expect(render(unit("f1", { auraEvents: silenced }), T0 + 21_000)).toEqual([
+      "0:20  [SILENCE]   F:f1 ← Silence (by E:e1) | still on them when the round ended, 1s in",
+    ]);
+    // a death at the removal is past the round's end too: no cause is read
+    const died = unit("f1", { auraEvents: silenced, deathRecords: [{ timestamp: T0 + 22_000 }] });
+    expect(render(died, T0 + 21_000)).toEqual([
+      "0:20  [SILENCE]   F:f1 ← Silence (by E:e1) | still on them when the round ended, 1s in",
+    ]);
+    // removed in the round-ending ms itself: it ended, the round did not cut it
+    expect(render(unit("f1", { auraEvents: silenced }), T0 + 22_000)).toEqual([
+      "0:20  [SILENCE]   F:f1 ← Silence (by E:e1) | 2s",
+    ]);
+    expect(render(unit("f1", { auraEvents: silenced }), T0 + 20_000)).toEqual([]);
   });
 
   it("没有日志原因:只印时长", () => {
@@ -120,7 +137,7 @@ describe("FT-T08 step 3c — [SILENCE] logged end", () => {
       enemies: [enemy],
       ccTrinketSummaries: [],
       matchStartMs: T0,
-      matchEndMs: T0 + 120_000,
+      roundEndAtMs: T0 + 120_000,
       pid: (n: string) => `F:${n}`,
       enemyPid: (n: string) => `E:${n}`,
       actorLabel: (n: string, side: "friendly" | "enemy") => (side === "friendly" ? `F:${n}` : `E:${n}`),

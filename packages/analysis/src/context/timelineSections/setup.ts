@@ -54,6 +54,7 @@ import {
 } from "../../utils/drAnalysis";
 import { sumIncomingPressure } from "../../utils/incomingPressure";
 import { fmtTime, toRenderSecond } from "../../utils/renderGrid";
+import { roundEndMs } from "../../utils/roundEnd";
 import { resourceDeltaPct } from "../../utils/resourceAt";
 import { buildRosterSides } from "../../utils/rosterSide";
 import { buildResourceSnapshot } from "../resourceSnapshot";
@@ -1219,6 +1220,13 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
   const resOwnerCDs = [...ownerCDs, ...ownerResUtilityCds(owner, matchStartMs)];
 
   const matchEndSeconds = (matchEndMs - matchStartMs) / 1000;
+  // F02b: the round's end (`roundEndMs`, the one round end — a Solo Shuffle
+  // round is over at its first player death, ~2 s before the log's end) for
+  // the lines that state when an aura ended.
+  const roundEndAtMs = roundEndMs(
+    { endTime: matchEndMs, startInfo: { bracket } },
+    allPlayers,
+  );
   // GH #119: the round the aura-evidenced bursts are read over (the same
   // bounds reconstructEnemyCDTimeline uses)
   const roundBounds = { startTime: matchStartMs, endTime: matchEndMs };
@@ -1307,6 +1315,7 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
     snapshotFn,
     resOwnerCDs,
     matchEndSeconds,
+    roundEndAtMs,
     roundBounds,
     requestSnapshotPlaceholder,
   };

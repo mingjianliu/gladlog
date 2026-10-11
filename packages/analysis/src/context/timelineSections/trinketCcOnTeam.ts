@@ -113,7 +113,7 @@ export function emitTrinketCcOnTeamEntries(
       const tail =
         brokeAt !== undefined
           ? ` | trinket broke this disarm after ${(brokeAt - d.atSeconds).toFixed(0)}s (cut short — it had not expired)`
-          : ` | ${renderedCcDuration(d)}`;
+          : ` | ${renderedCcSpan(d)}`;
       // the legend counts only lines that print (codex 35-CD-15: a disarm
       // past the match end is skipped)
       if (

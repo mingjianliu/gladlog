@@ -18,6 +18,7 @@ import { auraEndFromLog } from "../../utils/auraEndCause";
 import { silenceIntervals } from "../../utils/cannotCastIntervals";
 import {
   renderedCcDuration,
+  renderedCcSpan,
   TRINKET_BREAK_AFTER_REMOVAL_MS,
 } from "../../utils/ccTrinketAnalysis";
 import { pvpTrinketUses } from "../../utils/pvpTrinketUses";
@@ -37,7 +38,7 @@ export function emitSilenceEntries(
     | "enemies"
     | "ccTrinketSummaries"
     | "matchStartMs"
-    | "matchEndMs"
+    | "roundEndAtMs"
     | "pid"
     | "enemyPid"
     | "actorLabel"
@@ -57,7 +58,7 @@ export function emitSilenceEntries(
     enemies,
     ccTrinketSummaries,
     matchStartMs,
-    matchEndMs,
+    roundEndAtMs,
     pid,
     enemyPid,
     actorLabel,
@@ -100,13 +101,21 @@ export function emitSilenceEntries(
               intervals,
               (s) => ({
                 fromSeconds: (s.from - matchStartMs) / 1000,
-                toSeconds: (Math.min(s.to, matchEndMs) - matchStartMs) / 1000,
+                toSeconds: (Math.min(s.to, roundEndAtMs) - matchStartMs) / 1000,
               }),
             )
           : undefined;
       for (const s of intervals) {
+        // F02b: the round's end is the one the control lines use
+        // (`roundEndMs`, cc-dr F-CI1): a silence that landed at or after it
+        // is not in the round, and one still on the unit then is cut there
+        // and says so (`renderedCcSpan`). The cut was at the LOG's end,
+        // ~2 s after a Solo Shuffle round's ending death: `2:12 [SILENCE] …
+        // | 3s` in a round that ended at 2:13 (54 lines on the 605 capture).
+        if (s.from >= roundEndAtMs) continue;
         const at = (s.from - matchStartMs) / 1000;
-        const endMs = Math.min(s.to, matchEndMs);
+        const stillOnAtRoundEnd = s.to > roundEndAtMs;
+        const endMs = Math.min(s.to, roundEndAtMs);
         const durS = Math.max(0, (endMs - s.from) / 1000);
         // enemy-def F-E17: the Medallion cast is logged up to a few ms
         // after the removal it caused (dfcccbf2: silence removed 21.020,
@@ -136,7 +145,7 @@ export function emitSilenceEntries(
               endMs - t.atMs <= 300,
           );
         const end =
-          trinketAt === undefined && s.to <= matchEndMs
+          trinketAt === undefined && !stillOnAtRoundEnd
             ? auraEndFromLog(
                 u,
                 s.spellId,
@@ -161,7 +170,12 @@ export function emitSilenceEntries(
         const tail =
           trinketAt !== undefined
             ? ` | trinket broke this silence after ${renderedCcDuration({ durationSeconds: trinketAt - at })} (cut short — it had not expired)`
-            : ` | ${renderedCcDuration({ durationSeconds: durS })}${endNote}`;
+            : ` | ${renderedCcSpan({
+                durationSeconds: durS,
+                ...(stillOnAtRoundEnd
+                  ? { stillOnAtRoundEnd: true as const }
+                  : {}),
+              })}${endNote}`;
         const who = side === "friendly" ? pid(u.name) : enemyPid(u.name);
         // cc-dr F-SR1: a silence the unit's own reflect sent back to it
         const by =

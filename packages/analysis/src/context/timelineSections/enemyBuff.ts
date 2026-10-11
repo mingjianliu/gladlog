@@ -8,6 +8,7 @@
  * acceptanceCapture context hash.
  */
 import { fmtTime } from "../../utils/renderGrid";
+import { AURA_STILL_UP_AT_ROUND_END } from "../../utils/roundEnd";
 import type { TimelineCtx } from "./ctx";
 
 export function emitEnemyBuffEntries(
@@ -18,6 +19,8 @@ export function emitEnemyBuffEntries(
     | "buffPurgeAnnotations"
     | "addEntry"
     | "enemyPid"
+    | "matchStartMs"
+    | "roundEndAtMs"
   >,
 ): void {
   const {
@@ -26,7 +29,10 @@ export function emitEnemyBuffEntries(
     buffPurgeAnnotations,
     addEntry,
     enemyPid,
+    matchStartMs,
+    roundEndAtMs,
   } = ctx;
+  const roundEndS = (roundEndAtMs - matchStartMs) / 1000;
 
   for (const [enemyName, intervals] of enemyBuffIntervals) {
     for (const interval of intervals) {
@@ -37,9 +43,18 @@ export function emitEnemyBuffEntries(
           `${fmtTime(interval.startSeconds)}  [ENEMY BUFF]   ${enemyPid(enemyName)}: ${interval.spellName}${purgeNote}`,
         );
       }
+      // F02b: a buff the round ended on did not end — its REMOVED is logged
+      // after the round (a Solo Shuffle log runs on past the ending death),
+      // or the log has none and the interval was closed at the log's end.
+      // The line sits at the round's end and says so; a buff that went up at
+      // or after it has no end in the round at all.
+      if (interval.startSeconds >= roundEndS) continue;
+      const cut =
+        Math.round(matchStartMs + interval.endSeconds * 1000) >= roundEndAtMs;
+      const endS = cut ? roundEndS : interval.endSeconds;
       addEntry(
-        interval.endSeconds,
-        `${fmtTime(interval.endSeconds)}  [ENEMY BUFF END]   ${enemyPid(enemyName)}: ${interval.spellName}`,
+        endS,
+        `${fmtTime(endS)}  [ENEMY BUFF END]   ${enemyPid(enemyName)}: ${interval.spellName}${cut ? ` (${AURA_STILL_UP_AT_ROUND_END})` : ""}`,
       );
     }
   }

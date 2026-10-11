@@ -273,6 +273,52 @@ describe("[BUFF FADED] — a buff removed with the druid's own form is 'form_shi
       expect(e!.expiresAtSeconds).toBeCloseTo(20.003, 3);
     });
   });
+
+  // F02b: a Solo Shuffle log runs ~2 s past the round-ending death and strips
+  // every aura there — 126 [BUFF FADED] lines of the 605 capture sat after
+  // the round's end (`expired` 91, `ended early — no dispel logged` 26).
+  describe("F02b: a buff the round ended on is 'round_end', at the round's end", () => {
+    const AS = "108271"; // Astral Shift, 12 s
+    const shift = (castS: number[]) =>
+      [{ spellId: AS, spellName: "Astral Shift", tag: "Defensive", casts: castS.map((timeSeconds) => ({ timeSeconds })), cooldownSeconds: 120, neverUsed: false, availableWindows: [] }] as never;
+    const shaman = (removedMs: number | null, extra: Partial<ICombatUnit> = {}) =>
+      makeUnit("player-1", {
+        class: CombatUnitClass.Shaman,
+        spec: CombatUnitSpec.Shaman_Restoration,
+        spellCastEvents: [makeSpellCastEvent(AS, T0 + 100_000, "player-1")],
+        auraEvents: [
+          makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, AS, T0 + 100_000, "player-1", "player-1", "BUFF"),
+          ...(removedMs === null ? [] : [makeAuraEvent(LogEvent.SPELL_AURA_REMOVED, AS, removedMs, "player-1", "player-1", "BUFF")]),
+        ],
+        ...extra,
+      }) as ICombatUnit;
+    const ROUND_END = T0 + 105_000;
+    const run = (owner: ICombatUnit, casts = [100], roundEnd: number | undefined = ROUND_END) =>
+      extractOwnerCDBuffExpiry(shift(casts), "player-1", [owner], T0, owner, [], roundEnd);
+
+    it("REMOVED logged after the round's end (the post-round strip) → round_end at the round's end, no cause, no absorb", () => {
+      const [e] = run(shaman(T0 + 106_400));
+      expect(e).toEqual({ spellId: AS, spellName: "Astral Shift", castAtSeconds: 100, expiresAtSeconds: 105, isEstimated: false, cause: "round_end" });
+      // the same removal with no round end given reads as before
+      expect(extractOwnerCDBuffExpiry(shift([100]), "player-1", [shaman(T0 + 106_400)], T0, shaman(T0 + 106_400))[0]!.cause).toBe("ended_early");
+    });
+
+    it("no REMOVED in the log and the official length reaches the round's end → round_end, not 'expired, estimated'", () => {
+      expect(run(shaman(null))[0]).toMatchObject({ cause: "round_end", expiresAtSeconds: 105, isEstimated: false });
+      // … but one whose official length ended inside the round is still an estimate
+      expect(run(shaman(null), [100], T0 + 130_000)[0]).toMatchObject({ cause: "expired", isEstimated: true, expiresAtSeconds: 112 });
+    });
+
+    it("removed inside the round → untouched; removed by the round-ending death itself → still 'death'", () => {
+      expect(run(shaman(T0 + 103_000))[0]).toMatchObject({ cause: "ended_early", expiresAtSeconds: 103 });
+      const died = shaman(ROUND_END, { deathRecords: [{ timestamp: ROUND_END }] as never });
+      expect(run(died)[0]).toMatchObject({ cause: "death", expiresAtSeconds: 105 });
+    });
+
+    it("a press at or after the round's end is not in the round: no expiry at all", () => {
+      expect(run(shaman(T0 + 106_400), [100], T0 + 100_000)).toEqual([]);
+    });
+  });
 });
 
 describe("SPEC BASELINES names the owner's rating against the reference bracket", () => {
