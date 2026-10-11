@@ -33,6 +33,27 @@ const state = (t: string, owner: number | "dead", mate = 99) =>
 const run = (...lines: string[]) =>
   checkStayedInHpConsistency([...ROSTER, ...lines]);
 
+describe("checkStayedInHpConsistency — a span that ends on the owner's death second reads 0", () => {
+  it("passes 0% under a `dead` tick at the span's last second; fails any other minimum", () => {
+    expect(
+      run(
+        state("0:54", 90),
+        state("1:00", 60),
+        state("1:04", "dead"),
+        stay("90%→0%", COSTLY),
+      ),
+    ).toEqual([]);
+    const out = run(
+      state("0:54", 90),
+      state("1:00", 60),
+      state("1:04", "dead"),
+      stay("90%→60%", ABOVE),
+    );
+    expect(out).toHaveLength(1);
+    expect(out[0]).toContain("dead");
+  });
+});
+
 describe("checkStayedInHpConsistency (FT-T03 — STAYED IN's window minimum is a trough)", () => {
   it("a minimum below every owner tick of the span → passes", () => {
     expect(

@@ -25,6 +25,7 @@ import {
   gridHpPct,
   hpTroughInWindow,
   IMajorCooldownInfo,
+  isDeadAtRenderSecond,
   isHealerSpec,
   isMeleeSpec,
 } from "./cooldowns";
@@ -1088,8 +1089,18 @@ export function computeOwnerPositionEvents(params: {
       // at the death, and it never read the rendered start second — whose
       // `[STATE]` tick could then sit below the printed "(min over window)".
       const hpStart = gridHpPct(owner, matchStartMs + tStart * 1000);
-      const hpMin =
-        gridHpMinInWindow(owner, matchStartMs, tStart, tEnd)?.pct ?? null;
+      // A span whose last rendered second is the owner's death second (kept:
+      // its samples are of the living owner — `burstSpanSampledAfterDeath`)
+      // ends on a `[STATE]` tick that prints `dead`. The minimum reads 0
+      // there, the convention every endpoint has (`gridEndpointHpPct`): the
+      // grid minimum and the trough read nothing from the death second on,
+      // so without this a stay that ended in the owner's death could print
+      // "(HP stayed at or above 35%)" (2 of the 8 such spans of the 605-file
+      // capture had no tick under 35 % before the death).
+      const diedAtEnd = isDeadAtRenderSecond(owner, matchStartMs, tEnd);
+      const hpMin = diedAtEnd
+        ? 0
+        : (gridHpMinInWindow(owner, matchStartMs, tStart, tEnd)?.pct ?? null);
       // FT-T03 (user ruling 2026-10-10, D7): the minimum a line or the menu
       // PRINTS is a trough — the true minimum inside the window, not the
       // lowest whole-second reading (`hpMin`, which stays the decision's: see
@@ -1099,7 +1110,7 @@ export function computeOwnerPositionEvents(params: {
       // re-reads every one of them); its samples are the ones of the burst
       // span itself (`span`: from the window's own start to its end, in ms).
       const trough =
-        hpMin === null
+        hpMin === null || diedAtEnd
           ? null
           : hpTroughInWindow(owner, matchStartMs, tStart, tEnd, undefined, {
               fromMs: matchStartMs + Math.round(w.fromSeconds * 1000),

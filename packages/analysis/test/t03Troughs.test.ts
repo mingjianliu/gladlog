@@ -305,19 +305,20 @@ describe("STAYED IN / position-mistake — the printed minimum is the trough; th
     expect(line(flat)).toContain("your HP 100%→100% (min over window)");
   });
 
-  it("engine: nothing is read from the owner's death second on — the span's last rendered second when the owner dies inside it", () => {
+  it("engine: a span that ends on the owner's death second reads 0 there — the [STATE] tick prints dead", () => {
     // dead at 20.2 s: alive at 20.000, so the span stays
     // (`burstSpanSampledAfterDeath`), and 0:20 is the second [STATE] prints
-    // `dead` on. Its samples (3 % at 20.0) are in neither minimum — this is
-    // `gridHpMinInWindow`'s rule ("there is no number there to be lower
-    // than"), pinned as what the shared predicate does. The death itself is
-    // not read as a minimum of 0 here, unlike the end of a `[DMG SPIKE]`
-    // bucket; whether it should be is an open question, not a ruling.
+    // `dead` on. The grid minimum and the trough read nothing from the death
+    // second on, so the minimum is the endpoint's reading there — 0, as at
+    // the end of a `[DMG SPIKE]` bucket (`gridEndpointHpPct`): a stay that
+    // ended in the owner's death never reads "(HP stayed at or above 35%)".
     const hpAt = (s: number) => (s >= 20 ? 3 : s >= 15 ? 60 : 90);
     const { ev } = stay(hpAt, 10.4, [{ timestamp: T0 + 20_200 }]);
     expect(ev.ownerHpStartPct).toBe(90);
-    expect(ev.ownerHpMinPct).toBe(60);
-    expect(ev.ownerHpLowPct).toBe(60);
+    expect(ev.ownerHpMinPct).toBe(0);
+    expect(ev.ownerHpLowPct).toBe(0);
+    expect(line(ev)).toContain("your HP 90%→0% (min over window)");
+    expect(line(ev)).not.toContain("stayed at or above");
   });
 
   const ev = (over: Partial<IPositionEvent>): IPositionEvent => ({

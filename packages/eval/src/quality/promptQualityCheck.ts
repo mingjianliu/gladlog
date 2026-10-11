@@ -4283,6 +4283,8 @@ const STAYED_IN_HP =
 export function checkStayedInHpConsistency(lines: string[]): string[] {
   let ownerId: number | null = null;
   const ownerTick = new Map<number, number>();
+  // the seconds whose tick prints the owner `dead`
+  const ownerDeadAt = new Set<number>();
   for (const line of lines) {
     const role = line.match(UNIT_ROLE_LINE);
     if (role && role[2] === "log owner") ownerId = Number(role[1]);
@@ -4291,9 +4293,12 @@ export function checkStayedInHpConsistency(lines: string[]): string[] {
     for (const line of lines) {
       const st = line.match(STATE_LINE);
       if (!st) continue;
-      for (const tok of st[3]!.matchAll(STATE_TOKEN))
-        if (Number(tok[1]) === ownerId && /^\d+$/.test(tok[2]!))
-          ownerTick.set(Number(st[1]) * 60 + Number(st[2]), Number(tok[2]));
+      for (const tok of st[3]!.matchAll(STATE_TOKEN)) {
+        if (Number(tok[1]) !== ownerId) continue;
+        const at = Number(st[1]) * 60 + Number(st[2]);
+        if (/^\d+$/.test(tok[2]!)) ownerTick.set(at, Number(tok[2]));
+        else if (tok[2] === "dead") ownerDeadAt.add(at);
+      }
     }
 
   const failures: string[] = [];
@@ -4333,6 +4338,11 @@ export function checkStayedInHpConsistency(lines: string[]): string[] {
           `${at} 窗口最低写 ${B}%,但 ${fmtTime(s)} 的 [STATE] 报 ${tick}%`,
         );
     }
+    // a span that ends on the owner's death second reads 0 there
+    if (ownerDeadAt.has(to) && B !== 0)
+      failures.push(
+        `${at} 窗口最低写 ${B}%,但 ${fmtTime(to)} 的 [STATE] 报主人 dead(应为 0%)`,
+      );
   });
   return failures;
 }
