@@ -64,6 +64,7 @@ import {
 } from "@gladlog/parser-compat";
 
 import { SCHOOL_SAVE_MIN_SHARE } from "../analysis/candidates/cooldownTiming";
+import { isDamageImmuneControl } from "../analysis/candidates/massDispel";
 import { schoolShareCoveredBy } from "../analysis/crisisDecisionPoints";
 import { fmtFactTime } from "../analysis/factFormat";
 import { CandidateEvent } from "../analysis/types";
@@ -81,6 +82,7 @@ import {
   findBrokenCC,
   type ICCInstance,
   type IPlayerCCTrinketSummary,
+  renderedCcSeconds,
 } from "./ccTrinketAnalysis";
 import { analyzeOutgoingCCChains, DRLevel, drResetMsAt } from "./drAnalysis";
 import { reconstructEnemyCDTimeline } from "./enemyCDs";
@@ -236,7 +238,100 @@ export interface IKillAttempt {
   killedAtSeconds?: number;
   /** Present exactly when !killed. */
   attribution?: IKillAttemptAttribution;
+  /** I10: the attackers' own damage-immune controls (Cyclone) on the target
+   * whose printed seconds meet the printed bracket
+   * (`ownImmuneControlsOverBracket`). A fact beside the outcome — the
+   * attribution does not read it. Absent when there is none. */
+  ownImmuneControl?: IKillAttemptOwnControl[];
 }
+
+/** One of the attackers' own damage-immune controls on an attempt's target,
+ * on the render grid: the second its `[CC ON ENEMY]` line sits at, and that
+ * second plus the whole seconds the line prints. */
+export interface IKillAttemptOwnControl {
+  spellName: string;
+  fromSecond: number;
+  toSecond: number;
+}
+
+/**
+ * Does a control printed `ccFrom … ccTo` meet a bracket printed
+ * `[bracketFrom–bracketTo]`? All four are whole render seconds, both ends
+ * included — the numbers the two lines print, so the gate
+ * (`checkKillAttemptOwnControlClause`) asks the same question of the text.
+ */
+export function killAttemptBracketMeetsControl(
+  bracketFromSecond: number,
+  bracketToSecond: number,
+  ccFromSecond: number,
+  ccToSecond: number,
+): boolean {
+  return ccFromSecond <= bracketToSecond && ccToSecond >= bracketFromSecond;
+}
+
+/**
+ * I10 (user ruling 2026-10-11, option b): the target's instances of a
+ * control that makes it immune to damage (`isDamageImmuneControl` — the
+ * predicate behind `[CC NOT LANDED] … Cyclone was on the target`) that meet
+ * the attempt's bracket. `ccInstances` are the target's CC instances with
+ * the attackers as sources — the ones `[CC ON ENEMY]` renders — and each
+ * interval is that line's own: its second, and that second plus the whole
+ * seconds it prints (`renderedCcSeconds`). An instance that prints `<1s` is
+ * no stretch to be "in" and is left out.
+ */
+export function ownImmuneControlsOverBracket(
+  ccInstances: ReadonlyArray<
+    Pick<ICCInstance, "spellId" | "spellName" | "atSeconds" | "durationSeconds">
+  >,
+  fromSeconds: number,
+  toSeconds: number,
+): IKillAttemptOwnControl[] {
+  const out: IKillAttemptOwnControl[] = [];
+  for (const cc of ccInstances) {
+    if (!isDamageImmuneControl(cc.spellId)) continue;
+    const printed = renderedCcSeconds(cc);
+    if (printed < 1) continue;
+    const fromSecond = toRenderSecond(cc.atSeconds);
+    const toSecond = fromSecond + printed;
+    if (
+      killAttemptBracketMeetsControl(
+        toRenderSecond(fromSeconds),
+        toRenderSecond(toSeconds),
+        fromSecond,
+        toSecond,
+      )
+    )
+      out.push({ spellName: cc.spellName, fromSecond, toSecond });
+  }
+  return out.sort((a, b) => a.fromSecond - b.fromSecond);
+}
+
+/** How the clause opens — `… | FAILED: not enough damage | target in your
+ * team's Cyclone 0:42–0:47`. */
+export const KILL_ATTEMPT_OWN_CONTROL_LEAD = "target in your team's ";
+
+/** The trailing clause of a KILL ATTEMPTS line for `ownImmuneControl`: each
+ * control once, with every interval of it that meets the bracket. */
+export function killAttemptOwnControlClause(
+  controls: readonly IKillAttemptOwnControl[],
+): string {
+  const spansOf = new Map<string, string[]>();
+  for (const c of controls)
+    spansOf.set(c.spellName, [
+      ...(spansOf.get(c.spellName) ?? []),
+      `${fmtTime(c.fromSecond)}–${fmtTime(c.toSecond)}`,
+    ]);
+  return (
+    KILL_ATTEMPT_OWN_CONTROL_LEAD +
+    [...spansOf]
+      .map(([name, spans]) => `${name} ${spans.join(", ")}`)
+      .join("; ")
+  );
+}
+
+/** The legend sentence for the clause, printed only when a line carries it. */
+export const KILL_ATTEMPTS_OWN_CONTROL_LEGEND =
+  "  `| target in your team's Cyclone a–b` at the end of a line = your own team's Cyclone was on that target from a to b (its [CC ON ENEMY] line), and those seconds meet this attempt's bracket. A cycloned unit takes no damage from anyone while it lasts. It is a fact beside the outcome: `FAILED:` still names what its fixed order picked, and does not weigh the Cyclone.";
 
 interface StunApp {
   atSeconds: number;
@@ -697,6 +792,21 @@ export function extractKillAttempts(
       }
     }
     a.teamDamageToTargetInBracket = inBracket;
+    // I10: our own Cyclone on the target, against the bracket as printed.
+    // The target's CC instances are read only when it ever carried such an
+    // aura: the reading is the unit's whole CC analysis, which the other
+    // paths of this function also reach only when they need it.
+    const target = enemies.find((e) => e.id === a.targetUnitId);
+    const controls = target?.auraEvents.some((ev) =>
+      isDamageImmuneControl(ev.spellId),
+    )
+      ? ownImmuneControlsOverBracket(
+          readingsOf(target).ccSummary().ccInstances,
+          a.fromSeconds,
+          a.toSeconds,
+        )
+      : [];
+    if (controls.length > 0) a.ownImmuneControl = controls;
   }
   // …and a covered cluster whose death went to another row did not "alone
   // reach the kill": it stays skipped, as before F-K2
@@ -1030,6 +1140,9 @@ export function formatKillAttemptsForContext(
     lines.push(KILL_ATTEMPTS_ALREADY_UP_LEGEND);
   // P-FU-b8 / D6: which "already up" is never claimed.
   lines.push(KILL_ATTEMPTS_END_UNSEEN_LEGEND);
+  // I10: the trailing clause, explained only when a line carries it.
+  if (attempts.some((a) => a.ownImmuneControl?.length))
+    lines.push(KILL_ATTEMPTS_OWN_CONTROL_LEGEND);
   let kills = 0;
   let withSofter = 0;
   let onPrime = 0;
@@ -1064,8 +1177,12 @@ export function formatKillAttemptsForContext(
       a.anchor === "stun"
         ? `${a.anchorSpellName} opener (${a.openingDrLevel} DR), ${a.stuns.length} stun${a.stuns.length > 1 ? "s" : ""}`
         : `${a.anchorSpellName} burst (no stun)`;
+    // I10: our own Cyclone on the target — after the outcome, never in it
+    const ownControl = a.ownImmuneControl?.length
+      ? ` | ${killAttemptOwnControlClause(a.ownImmuneControl)}`
+      : "";
     lines.push(
-      `  [${fmtTime(a.fromSeconds)}–${fmtTime(a.toSeconds)}] on ${a.targetName} — ${opener} | opportunity: ${opp} | team focus ${a.teamOnTargetPct}% (${(a.teamDamageToTargetInBracket / 1e6).toFixed(2)}M on target inside it, ${(a.teamDamageToTarget / 1e6).toFixed(2)}M incl. the ${KILL_CREDIT_SLACK_S} s after) | ${outcome}`,
+      `  [${fmtTime(a.fromSeconds)}–${fmtTime(a.toSeconds)}] on ${a.targetName} — ${opener} | opportunity: ${opp} | team focus ${a.teamOnTargetPct}% (${(a.teamDamageToTargetInBracket / 1e6).toFixed(2)}M on target inside it, ${(a.teamDamageToTarget / 1e6).toFixed(2)}M incl. the ${KILL_CREDIT_SLACK_S} s after) | ${outcome}${ownControl}`,
     );
   }
   lines.push(

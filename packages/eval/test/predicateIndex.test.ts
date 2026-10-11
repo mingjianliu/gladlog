@@ -28,6 +28,7 @@ import * as backlashDispel from "@gladlog/analysis/src/analysis/candidates/backl
 import * as burstWindowResponse from "@gladlog/analysis/src/analysis/candidates/burstWindowResponse";
 import * as cooldownTiming from "@gladlog/analysis/src/analysis/candidates/cooldownTiming";
 import * as kickPriority from "@gladlog/analysis/src/analysis/candidates/kickPriority";
+import * as massDispel from "@gladlog/analysis/src/analysis/candidates/massDispel";
 import * as candidatesShared from "@gladlog/analysis/src/analysis/candidates/shared";
 import * as teammateCrisisIdle from "@gladlog/analysis/src/analysis/candidates/teammateCrisisIdle";
 import * as cdTriggerPrior from "@gladlog/analysis/src/analysis/cdTriggerPrior";
@@ -1910,6 +1911,42 @@ const INDEX: PredicateRow[] = [
   {
     file: `${E}/quality/promptQualityCheck.ts`,
     symbol: "checkKillAttemptAlreadyUpStated",
+    mod: promptQualityCheck,
+  },
+  // I10: our own Cyclone on the kill target
+  {
+    file: `${A}/analysis/candidates/massDispel.ts`,
+    symbol: "isDamageImmuneControl",
+    mod: massDispel,
+  },
+  {
+    file: `${A}/utils/killAttempts.ts`,
+    symbol: "ownImmuneControlsOverBracket",
+    mod: killAttempts,
+  },
+  {
+    file: `${A}/utils/killAttempts.ts`,
+    symbol: "killAttemptBracketMeetsControl",
+    mod: killAttempts,
+  },
+  {
+    file: `${A}/utils/killAttempts.ts`,
+    symbol: "killAttemptOwnControlClause",
+    mod: killAttempts,
+  },
+  {
+    file: `${A}/utils/killAttempts.ts`,
+    symbol: "KILL_ATTEMPT_OWN_CONTROL_LEAD",
+    mod: killAttempts,
+  },
+  {
+    file: `${A}/utils/killAttempts.ts`,
+    symbol: "KILL_ATTEMPTS_OWN_CONTROL_LEGEND",
+    mod: killAttempts,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkKillAttemptOwnControlClause",
     mod: promptQualityCheck,
   },
   {

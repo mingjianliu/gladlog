@@ -57,6 +57,10 @@ import {
   syncRowHasOwnerPart,
   syncRowNarrowedToOwnerPart,
 } from "@gladlog/analysis/src/analysis/candidates/cooldownTiming";
+import {
+  CYCLONE_SPELL_ID,
+  isDamageImmuneControl,
+} from "@gladlog/analysis/src/analysis/candidates/massDispel";
 import { fmtFactNum } from "@gladlog/analysis/src/analysis/factFormat";
 import { parseBurstAnsweredLine } from "@gladlog/analysis/src/context/burstAnswered";
 import {
@@ -191,9 +195,14 @@ import {
   JUKED_BY_FAKE_HEAD,
 } from "@gladlog/analysis/src/utils/kickAudit";
 import {
+  type IKillAttemptOwnControl,
   KILL_ATTEMPT_IMMUNITY_ALREADY_UP_NAME,
+  KILL_ATTEMPT_OWN_CONTROL_LEAD,
   KILL_ATTEMPTS_ALREADY_UP_LEGEND,
+  KILL_ATTEMPTS_OWN_CONTROL_LEGEND,
   killAttemptAlreadyUpFact,
+  killAttemptBracketMeetsControl,
+  killAttemptOwnControlClause,
 } from "@gladlog/analysis/src/utils/killAttempts";
 import { STAYED_IN_NEAR_DEATH_PCT } from "@gladlog/analysis/src/utils/positionAnalysis";
 import { INTERP_MAX_GAP_MS } from "@gladlog/analysis/src/utils/positionSampling";
@@ -3668,9 +3677,12 @@ const ENEMY_DEF_LEGEND = /^\s*\[ENEMY DEF\] = /;
  * `… | FAILED: self-saved (A/B)`; names may carry `@m:ss` (stamp mode).
  * Since B-tier B16b (2026-10-07) a cause can be several of those clauses
  * joined with "; " (`popped A; saved by external (B)`): the line regex takes
- * the whole cause and `KILL_ATTEMPT_SAVE_CLAUSE` reads each clause. */
-const KILL_ATTEMPT_DEFENSIVE =
-  /^\s*\[(\d+):(\d\d)–(\d+):(\d\d)\] on (\S+) — .*\| FAILED: ((?:popped |saved by external \(|self-saved \()[^|]+?)\s*$/;
+ * the whole cause and `KILL_ATTEMPT_SAVE_CLAUSE` reads each clause. The
+ * FAILED clause is the line's last, or (I10, 2026-10-11) is followed by the
+ * `| target in your team's …` fact clause, which is not part of the cause. */
+const KILL_ATTEMPT_DEFENSIVE = new RegExp(
+  String.raw`^\s*\[(\d+):(\d\d)–(\d+):(\d\d)\] on (\S+) — .*\| FAILED: ((?:popped |saved by external \(|self-saved \()[^|]+?)(?: \| ${KILL_ATTEMPT_OWN_CONTROL_LEAD}[^|]+)?\s*$`,
+);
 const KILL_ATTEMPT_SAVE_CLAUSE =
   /^(?:popped ([^()]+?)|saved by external \(([^()]+)\)|self-saved \(([^()]+)\))$/;
 /** `m:ss  [ENEMY DEF]   <pid> (<spec>): <Spell> (…)` / `: <Spell> → <pid> (…)` */
@@ -3970,6 +3982,91 @@ export function checkKillAttemptAlreadyUpStated(lines: string[]): string[] {
   if (!carried && legend)
     failures.push(
       "KILL ATTEMPTS 的图例解释了 `already up since`,却没有一行写它",
+    );
+  return failures;
+}
+
+/** `m:ss  [CC ON ENEMY]   <pid> ← <Spell> (by <who>) (Ns)` — or `(still on
+ * them when the round ended, Ns in)`: the second, the unit, the control and
+ * the whole seconds the line prints (`<1` = none). */
+const CC_ON_ENEMY_SPAN_LINE = new RegExp(
+  String.raw`^\s*(\d+):(\d\d)\s+\[CC ON ENEMY\]\s+(\d+)\([^)]*\) ← (.+?) \(by .+?\) \((?:${CC_STILL_ON_AT_ROUND_END}, )?(<1|\d+)s(?: in)?\)`,
+);
+/** The trailing `| target in your team's …` clause of a KILL ATTEMPTS line. */
+const KILL_ATTEMPT_OWN_CONTROL_CLAUSE = new RegExp(
+  String.raw` \| (${KILL_ATTEMPT_OWN_CONTROL_LEAD}[^|]+?)\s*$`,
+);
+
+/**
+ * I10 (user ruling 2026-10-11, option b): a KILL ATTEMPTS line whose bracket
+ * meets one of our own damage-immune controls on its target says so in a
+ * trailing fact clause — `… | FAILED: not enough damage | target in your
+ * team's Cyclone 0:42–0:47` — and no other line carries the clause.
+ *
+ * Re-derived from the text with the producer's own pieces: which control
+ * (`isDamageImmuneControl` — its English name is the `[CC ON ENEMY]` line's),
+ * the interval (the line's second, and that second plus the whole seconds it
+ * prints), "meets" (`killAttemptBracketMeetsControl`, on the printed seconds)
+ * and the clause's wording (`killAttemptOwnControlClause`). The expected
+ * clause must equal the printed one — both directions in one comparison: a
+ * missing clause, a clause with no such `[CC ON ENEMY]` line, another
+ * interval, another unit's Cyclone all differ. A target the `<unit>` legend
+ * does not resolve is not compared. The legend sentence is there exactly
+ * when a line carries the clause.
+ *
+ * Before (605 new-season files, PROMPT_VERSION 377): no line carries the
+ * clause, and this gate fails once per line that should — see the commit.
+ */
+export function checkKillAttemptOwnControlClause(lines: string[]): string[] {
+  const failures: string[] = [];
+  const idOf = unitIdsByName(lines);
+  const controlName = isDamageImmuneControl(CYCLONE_SPELL_ID)
+    ? getEnglishSpellName(CYCLONE_SPELL_ID, "")
+    : "";
+  const controlsOf = new Map<string, IKillAttemptOwnControl[]>();
+  for (const line of lines) {
+    const m = CC_ON_ENEMY_SPAN_LINE.exec(line);
+    if (!m || !controlName || m[4] !== controlName || m[5] === "<1") continue;
+    const fromSecond = Number(m[1]) * 60 + Number(m[2]);
+    controlsOf.set(m[3]!, [
+      ...(controlsOf.get(m[3]!) ?? []),
+      { spellName: m[4]!, fromSecond, toSecond: fromSecond + Number(m[5]) },
+    ]);
+  }
+  let carried = false;
+  lines.forEach((line, i) => {
+    const a = line.match(KILL_ATTEMPT_SPAN_LINE);
+    if (!a) return;
+    const printed = line.match(KILL_ATTEMPT_OWN_CONTROL_CLAUSE)?.[1] ?? "";
+    if (printed) carried = true;
+    const id = idOf.get(a[5]!);
+    if (id === undefined) return;
+    const from = Number(a[1]) * 60 + Number(a[2]);
+    const to = Number(a[3]) * 60 + Number(a[4]);
+    const meeting = (controlsOf.get(id) ?? [])
+      .filter((c) =>
+        killAttemptBracketMeetsControl(from, to, c.fromSecond, c.toSecond),
+      )
+      .sort((x, y) => x.fromSecond - y.fromSecond);
+    const expected =
+      meeting.length > 0 ? killAttemptOwnControlClause(meeting) : "";
+    if (printed !== expected)
+      failures.push(
+        `line ${i + 1}: KILL ATTEMPTS [${a[1]}:${a[2]}–${a[3]}:${a[4]}] on ${a[5]} ${
+          expected
+            ? `应以 "| ${expected}" 结尾(该目标的 [CC ON ENEMY] 行与括号相交)`
+            : "不该带我方控制子句(没有与括号相交的 [CC ON ENEMY] 行)"
+        },实际${printed ? ` "| ${printed}"` : "没有"} —— ${line.trim().slice(-140)}`,
+      );
+  });
+  const legend = lines.includes(KILL_ATTEMPTS_OWN_CONTROL_LEGEND);
+  if (carried && !legend)
+    failures.push(
+      "KILL ATTEMPTS 有行带 `target in your team's …` 子句,图例里没有解释它的那一句",
+    );
+  if (!carried && legend)
+    failures.push(
+      "KILL ATTEMPTS 的图例解释了 `target in your team's …` 子句,却没有一行带它",
     );
   return failures;
 }
@@ -6876,6 +6973,7 @@ export function checkMatch(
   hardFailures.push(...checkTopSourcesOneEntryPerAbility(lines));
   hardFailures.push(...checkKillAttemptBracketEnd(lines));
   hardFailures.push(...checkKillAttemptAlreadyUpStated(lines));
+  hardFailures.push(...checkKillAttemptOwnControlClause(lines));
   hardFailures.push(...checkGuardianSpiritSaveClause(lines));
   hardFailures.push(...checkKarmaFedClause(lines));
   hardFailures.push(...checkResReturnAnnounced(lines));

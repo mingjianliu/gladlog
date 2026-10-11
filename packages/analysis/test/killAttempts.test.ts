@@ -3,6 +3,7 @@ import { CombatUnitSpec, LogEvent } from "@gladlog/parser-compat";
 import { describe, expect, it } from "vitest";
 
 import { extractCandidateFindings } from "../src/analysis/candidateFindings";
+import { isDamageImmuneControl } from "../src/analysis/candidates/massDispel";
 import { CANDIDATE_TYPE_FLAGS } from "../src/data/candidateTypeFlags";
 import { ensureAnalysisData } from "../src/data/ensure";
 import {
@@ -17,8 +18,12 @@ import {
   KILL_ATTEMPT_IMMUNITY_ALREADY_UP_NAME,
   KILL_ATTEMPTS_ALREADY_UP_LEGEND,
   KILL_ATTEMPTS_END_UNSEEN_LEGEND,
+  KILL_ATTEMPTS_OWN_CONTROL_LEGEND,
   KILL_ATTEMPTS_POPPED_LEGEND,
   KILL_ATTEMPTS_PROC_LEGEND,
+  killAttemptBracketMeetsControl,
+  killAttemptOwnControlClause,
+  ownImmuneControlsOverBracket,
   softerTargetAt,
 } from "../src/utils/killAttempts";
 
@@ -2254,6 +2259,104 @@ describe("opportunity clause: what was already up when the attempt began (R08 c)
         attempt("prime", barkskinUp, { killed: true, attribution: undefined }),
       ),
     ).toBe("PRIME (no trinket, no 20-99% wall in hand)");
+  });
+});
+
+describe("our own Cyclone on the kill target: a fact clause after the outcome (I10)", () => {
+  const CYCLONE = "33786";
+  const cc = (spellId: string, atSeconds: number, durationSeconds: number) => ({
+    spellId,
+    spellName: spellId === CYCLONE ? "Cyclone" : "Polymorph",
+    atSeconds,
+    durationSeconds,
+  });
+
+  it("the predicate is the product's Cyclone reading, on the printed seconds — both ends included", () => {
+    expect(isDamageImmuneControl(CYCLONE)).toBe(true);
+    expect(isDamageImmuneControl("118")).toBe(false); // Polymorph: breakable, hittable
+    expect(isDamageImmuneControl(null)).toBe(false);
+    // bracket [0:40–0:45]
+    expect(killAttemptBracketMeetsControl(40, 45, 42, 47)).toBe(true);
+    expect(killAttemptBracketMeetsControl(40, 45, 45, 50)).toBe(true); // shares 0:45
+    expect(killAttemptBracketMeetsControl(40, 45, 35, 40)).toBe(true); // shares 0:40
+    expect(killAttemptBracketMeetsControl(40, 45, 46, 51)).toBe(false);
+    expect(killAttemptBracketMeetsControl(40, 45, 34, 39)).toBe(false);
+  });
+
+  it("only Cyclone, only an instance that prints a second or more, on the `[CC ON ENEMY]` line's own interval", () => {
+    expect(
+      ownImmuneControlsOverBracket(
+        [
+          cc("118", 41, 6), // Polymorph over the whole bracket: not this fact
+          cc(CYCLONE, 42.7, 4.6), // prints 0:42 … (5s)
+          cc(CYCLONE, 44.2, 0.3), // prints `<1s`
+          cc(CYCLONE, 60, 5), // after the bracket
+        ],
+        40.3,
+        45.9,
+      ),
+    ).toEqual([{ spellName: "Cyclone", fromSecond: 42, toSecond: 47 }]);
+    expect(
+      killAttemptOwnControlClause([
+        { spellName: "Cyclone", fromSecond: 42, toSecond: 47 },
+        { spellName: "Cyclone", fromSecond: 50, toSecond: 55 },
+      ]),
+    ).toBe("target in your team's Cyclone 0:42–0:47, 0:50–0:55");
+  });
+
+  // a Kidney Shot 10–15 s on e1 with team damage behind it; f1's Cyclone on
+  // e1 12.4–17.4 s (2c6e85ec's shape: the stunned target blown up by its own
+  // attackers' Druid)
+  const cyclone = (targetId: string, fromS: number, durS: number) =>
+    stunAuras(targetId, CYCLONE, fromS, durS);
+  const build = (auraEvents: any[], extra: any[] = []) => {
+    const f1 = unit("f1", {
+      reaction: 1,
+      damageOut: [dmg("f1", "e1", 11, 60_000)],
+    });
+    const e1 = unit("e1", { auraEvents });
+    return extractKillAttempts([f1], [e1, ...extra], makeCombat(f1, e1, extra));
+  };
+
+  it("the clause sits after the outcome; the outcome and the tier are what they were without the Cyclone", async () => {
+    await ensureAnalysisData();
+    const plain = build(stunAuras("e1", KIDNEY, 10, 5));
+    const withCyclone = build([
+      ...stunAuras("e1", KIDNEY, 10, 5),
+      ...cyclone("e1", 12.4, 5),
+    ]);
+    expect(withCyclone).toHaveLength(1);
+    expect(withCyclone[0].ownImmuneControl).toEqual([
+      { spellName: "Cyclone", fromSecond: 12, toSecond: 17 },
+    ]);
+    expect(plain[0].ownImmuneControl).toBeUndefined();
+    expect(withCyclone[0].attribution).toEqual(plain[0].attribution);
+    expect(withCyclone[0].opportunity).toEqual(plain[0].opportunity);
+    const lineOf = (as: any[]) =>
+      formatKillAttemptsForContext(as).find((l) => l.includes("] on e1 — "))!;
+    expect(lineOf(withCyclone)).toBe(
+      `${lineOf(plain)} | target in your team's Cyclone 0:12–0:17`,
+    );
+    expect(lineOf(plain)).toMatch(/\| FAILED: not enough damage$/);
+    // the legend sentence only when a line carries the clause
+    expect(formatKillAttemptsForContext(withCyclone)).toContain(
+      KILL_ATTEMPTS_OWN_CONTROL_LEGEND,
+    );
+    expect(formatKillAttemptsForContext(plain)).not.toContain(
+      KILL_ATTEMPTS_OWN_CONTROL_LEGEND,
+    );
+  });
+
+  it("a Cyclone on ANOTHER enemy, or one that ended before the bracket's first second, adds nothing", async () => {
+    await ensureAnalysisData();
+    const other = unit("e2", { auraEvents: cyclone("e2", 12.4, 5) });
+    expect(
+      build(stunAuras("e1", KIDNEY, 10, 5), [other])[0].ownImmuneControl,
+    ).toBeUndefined();
+    expect(
+      build([...stunAuras("e1", KIDNEY, 10, 5), ...cyclone("e1", 3.2, 5)])[0]
+        .ownImmuneControl,
+    ).toBeUndefined();
   });
 });
 

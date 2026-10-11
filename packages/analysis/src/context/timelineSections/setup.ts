@@ -18,7 +18,7 @@ import {
   LogEvent,
 } from "@gladlog/parser-compat";
 
-import { CYCLONE_SPELL_ID } from "../../analysis/candidates/massDispel";
+import { isDamageImmuneControl } from "../../analysis/candidates/massDispel";
 import { castAndEffectIds } from "../../data/castEffectAuras";
 import { getEnglishSpellName } from "../../data/spellEffectData";
 import { ccSpellIds } from "../../data/spellTags";
@@ -53,9 +53,9 @@ import {
 } from "../../utils/drAnalysis";
 import { sumIncomingPressure } from "../../utils/incomingPressure";
 import { fmtTime, toRenderSecond } from "../../utils/renderGrid";
-import { roundEndMs } from "../../utils/roundEnd";
 import { resourceDeltaPct } from "../../utils/resourceAt";
 import { buildRosterSides } from "../../utils/rosterSide";
+import { roundEndMs } from "../../utils/roundEnd";
 import { buildResourceSnapshot } from "../resourceSnapshot";
 import { ownerResUtilityCds } from "../resUtilityCds";
 import {
@@ -686,7 +686,7 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
     let by: string | undefined;
     for (const a of target.auraEvents ?? []) {
       if (a.timestamp > missMs) break;
-      if (a.spellId !== CYCLONE_SPELL_ID) continue;
+      if (!isDamageImmuneControl(a.spellId)) continue;
       const ev = a.logLine.event;
       if (
         ev === LogEvent.SPELL_AURA_APPLIED ||

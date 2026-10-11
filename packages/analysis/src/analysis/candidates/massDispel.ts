@@ -43,16 +43,27 @@ import {
   effectiveCooldownSeconds,
   spellEffectData,
 } from "../../data/spellEffectData";
-import {
-  chargesAvailableAt,
-  ICE_BLOCK_SPELL_ID,
-} from "../../utils/cooldowns";
+import { chargesAvailableAt, ICE_BLOCK_SPELL_ID } from "../../utils/cooldowns";
 import { toRenderSecond } from "../../utils/renderGrid";
 import { CandidateEvent } from "../types";
 import { CD_HOARD_CRISIS_HP_PCT, type ICrisisMoment } from "./cooldownTiming";
 
 export const MD_SPELL_ID = "32375";
 export const CYCLONE_SPELL_ID = "33786";
+/**
+ * A control whose target cannot be damaged while it lasts — Cyclone: the
+ * unit is banished, immune to everything, the caster's own team included.
+ * One reader for "our own control made the target unhittable": the cause a
+ * `[CC NOT LANDED]` / `[IMMUNE — …]` note names (`X's Cyclone was on the
+ * target`, timelineSections/setup.ts, B17a) and the KILL ATTEMPTS clause
+ * `target in your team's Cyclone a–b` (killAttempts.ts, I10). No list of its
+ * own: it is `CYCLONE_SPELL_ID`.
+ */
+export function isDamageImmuneControl(
+  spellId: string | null | undefined,
+): boolean {
+  return spellId === CYCLONE_SPELL_ID;
+}
 export { ICE_BLOCK_SPELL_ID };
 export const DIVINE_SHIELD_SPELL_ID = "642";
 
