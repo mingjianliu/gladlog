@@ -42,6 +42,16 @@ export const classMetadata: IClassSpellMetadata[] = [
       // p25 1.76 · p50 2.05; corrected run) — user delegated the ruling ("你自己决定吧").
       a("446035", "Bladestorm", O), // live id: 93 % of Arms rounds, lift 2.45 (227847 above: 5 %)
       a("167105", "Colossus Smash", O), // 45 s, lift 2.05, n 1,935
+      // F19 (2026-10-11): a 90 s class talent of all three specs with no
+      // roster row — the owner's and a teammate's press had no line, no
+      // loadout row and no [RES] entry (121c7e15 round 1: the Fury owner's
+      // two presses; 605-file capture: 0 press lines in 3,520 contexts).
+      // NOT an offensive registration: `offensiveCdGapScan` left it out of
+      // `OFFENSIVE_CD_SPELL_IDS` (coPressed 67–90 %, it rides the cooldown
+      // it is pressed with), so it opens no burst window and anchors no
+      // burst. `SpellTag.Utility`: the press line, the loadout and [RES],
+      // out of every role reader.
+      a("376079", "Champion's Spear", U),
       a("871", "Shield Wall", D),
       a("118038", "Die by the Sword", D),
       a("184364", "Enraged Regeneration", D),
