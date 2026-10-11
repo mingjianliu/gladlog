@@ -46,6 +46,7 @@ import {
   checkForcedTrinketConsistency,
   checkFreeOfWindowConsistency,
   checkHeaderHpPromise,
+  checkKickEatenCancelsCoverCastStopped,
   checkMatch,
   checkPeelOptionConsistency,
   checkPetCreditSide,
@@ -1328,6 +1329,87 @@ describe("checkCastStoppedLines — a [CAST STOPPED] line is one of the producer
         refused,
         run("out of range", ""),
         started(9),
+      ]),
+    ).toEqual([]);
+  });
+});
+
+describe("checkKickEatenCancelsCoverCastStopped — kick-eaten's yourCancels counts every [CAST STOPPED] line that states a cancel", () => {
+  const stopped = (startS: number, near: "cc" | "displaced" | null = null) =>
+    castStoppedLine(
+      startS,
+      "Cyclone",
+      castStoppedText(
+        {
+          id: "33786",
+          name: "Cyclone",
+          t: startS,
+          end: { kind: "stopped", atS: startS + 0.5, near },
+          earlierFailure: false,
+        },
+        600,
+        undefined,
+        new Set(),
+      )!,
+    );
+  const kickEaten = (facts: string) =>
+    `  - id=kick-eaten:Player-1:44 type=kick-eaten t=43.5s units=A/B facts={t=43.5, interrupted=Regrowth, kick=Kick, ${facts}}`;
+
+  it("passes a count at or above the lines — the ledger counts every cast-time spell, the lines controls only", () => {
+    const lines = [stopped(13.2), stopped(47.0)];
+    for (const n of [2, 3, 11])
+      expect(
+        checkKickEatenCancelsCoverCastStopped([
+          ...lines,
+          kickEaten(`yourCancels=${n}, baitedKicks=0`),
+        ]),
+      ).toEqual([]);
+  });
+
+  it("fails a count below the lines, once per kick-eaten row (the bar the ledger left out until 2026-10-11)", () => {
+    const lines = [stopped(13.2), stopped(47.0), stopped(70.0)];
+    const row = kickEaten("yourCancels=2, baitedKicks=0");
+    expect(checkKickEatenCancelsCoverCastStopped([...lines, row])).toHaveLength(
+      1,
+    );
+    expect(
+      checkKickEatenCancelsCoverCastStopped([...lines, row, row]),
+    ).toHaveLength(2);
+    expect(
+      checkKickEatenCancelsCoverCastStopped([
+        ...lines,
+        kickEaten("yourCancels=0, baitedKicks=0"),
+      ]),
+    ).toHaveLength(1);
+  });
+
+  it("counts only the lines that say nothing landed on the owner, and only rows that carry the fact", () => {
+    // a stop as a control or a knockback landed is not a cancel; nor is a
+    // refusal or a bar the round ended on
+    const others = [
+      stopped(20.0, "cc"),
+      stopped(30.0, "displaced"),
+      "0:49  [CAST STOPPED]   Cyclone — refused 0.9s in: vision obscured (Smoke Bomb)",
+      "1:58  [CAST STOPPED]   Cyclone — no end logged; the round ended 1.4s after it began",
+    ];
+    expect(
+      checkKickEatenCancelsCoverCastStopped([
+        ...others,
+        stopped(13.2),
+        kickEaten("yourCancels=1, baitedKicks=0"),
+      ]),
+    ).toEqual([]);
+    // a kick-eaten row of another log's owner has no cast-control facts
+    expect(
+      checkKickEatenCancelsCoverCastStopped([
+        stopped(13.2),
+        kickEaten("lockout=3.0"),
+      ]),
+    ).toEqual([]);
+    // no such line, nothing to compare
+    expect(
+      checkKickEatenCancelsCoverCastStopped([
+        kickEaten("yourCancels=0, baitedKicks=0"),
       ]),
     ).toEqual([]);
   });

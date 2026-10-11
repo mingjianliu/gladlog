@@ -269,7 +269,7 @@ describe("ownerCastBarOutcomes — how each cast bar ended", () => {
     expect(ownerCastBarOutcomes({ owner: f.owner, startMs: T0 })).toBeNull();
   });
 
-  it("ownerCastCancels reads the same outcomes and keeps its 2026-09-26 restriction", () => {
+  it("ownerCastCancels reads the same outcomes, every stopped bar", () => {
     const r = ownerCastCancels({
       owner: f.owner,
       friends: [f.owner],
@@ -278,15 +278,42 @@ describe("ownerCastBarOutcomes — how each cast bar ended", () => {
       rawStreams: f.rawStreams,
     })!;
     expect(r.hardcasts).toBe(outcomes.length);
-    // every bar the ledger calls a cancel is a `stopped` bar with nothing
-    // landing on the owner; the bar with a refused press before its stop
-    // (70 s) is one too, and the ledger still leaves it out
-    expect(r.cancels.map((c) => c.startS)).toEqual([5, 10]);
-    expect(
+    // a cancel = a `stopped` bar with nothing landing on the owner, and
+    // nothing else: the bar with a refused press before its stop (70 s,
+    // `earlierFailure`) is one — until 2026-10-11 the ledger left it out
+    expect(r.cancels.map((c) => c.startS)).toEqual(
       outcomes
         .filter((o) => o.end.kind === "stopped" && o.end.near === null)
         .map((o) => o.t),
-    ).toEqual([5, 10, 70]);
+    );
+    expect(r.cancels.map((c) => c.startS)).toEqual([5, 10, 70]);
+    // the median completed bar takes every completed bar: the plain one
+    // (0 s → 1.5 s), the one with a refused press before its SUCCESS (60 s →
+    // 1.5 s) and the queued completion (80 s → 1.05 s). Median 1.5 s, so the
+    // 0.5 s / 0.6 s stops read 33 % / 40 %.
+    expect(
+      r.cancels.filter((c) => c.spellId === CYCLONE).map((c) => c.progressPct),
+    ).toEqual([33, 40]);
+  });
+
+  it("the median completed bar counts a queued completion and a bar with a refused press", () => {
+    // without the plain bar of 0 s the only completed Cyclone bars are the
+    // two the ledger used to skip; it still has a median to measure against
+    const g = fixture();
+    g.owner.castStartEvents = (g.owner.castStartEvents ?? []).filter(
+      (e) => e.logLine.timestamp !== T0,
+    );
+    const r = ownerCastCancels({
+      owner: g.owner,
+      friends: [g.owner],
+      enemies: [g.rogue],
+      combat: g.combat,
+      rawStreams: g.rawStreams,
+    })!;
+    // bars of 60 s (1.5 s) and 80 s (1.05 s): the upper median, 1.5 s
+    expect(
+      r.cancels.filter((c) => c.spellId === CYCLONE).map((c) => c.progressPct),
+    ).toEqual([33, 40]);
   });
 });
 

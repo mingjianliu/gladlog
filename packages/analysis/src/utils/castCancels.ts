@@ -24,11 +24,12 @@
  *    "被敌方位移(台风等)打断的读条不算骗踢"); any other reason (line of
  *    sight, range, "another action is in progress") is not a cancel.
  * The window for all three is the next start or JUKE_LOOKBACK_MS, whichever is
- * first — `kickAudit`'s cast-bar pairing rule WITHOUT its queue tolerance
- * (`CAST_QUEUE_TOLERANCE_MS`): here a success past the next start would pair
- * with two starts at once (codex review 2026-09-26), so a queued completion
- * simply does not count as this start's and stays out of the median behind
- * `progressPct`.
+ * first (`kickAudit`'s cast-bar cap). A bar with none of the three there and
+ * a SUCCESS up to `CAST_QUEUE_TOLERANCE_MS` past the next bar's start is
+ * completed too (`queued`), and a key pressed again while the bar ran is not
+ * its end (`earlierFailure`) — the ledger counts every bar for what
+ * `ownerCastBarOutcomes` says of it, with no restriction of its own (see
+ * `ownerCastCancels`).
  *
  * `progressPct` = elapsed ÷ the owner's median completed duration of the same
  * spell in the round (haste included, since it is the owner's own cast time)
@@ -213,8 +214,8 @@ export interface CastBarOutcome extends CastBarStart {
   /**
    * A SPELL_CAST_FAILED of the spell sits inside the bar BEFORE the row that
    * ended it — a key pressed again while the bar ran ("Not yet recovered"),
-   * which is not the bar's end. `ownerCastCancels` does not count such a bar
-   * (see there).
+   * which is not the bar's end. Both readers take the bar for what its end
+   * row says; the flag only records that the earlier row was there.
    */
   earlierFailure: boolean;
 }
@@ -382,6 +383,36 @@ export function ownerCastBarOutcomes(params: {
   return outcomes;
 }
 
+/**
+ * The cancel ledger: `ownerCastBarOutcomes` counted, every bar for what that
+ * reading says of it.
+ *  - a cancel = a `stopped` bar with nothing landing on the owner
+ *    (`near === null`). For a control this is the bar whose `[CAST STOPPED]`
+ *    line reads "not kicked; no control, silence or knockback landed on you
+ *    then" (`CAST_STOPPED_NEAR_TEXT.none`): one reading, two places. The
+ *    ledger counts every cast-time spell and is not clamped to the round; the
+ *    lines exist for controls begun inside the round — so kick-eaten's
+ *    `yourCancels` is never below the number of those lines, and may be above
+ *    it (gate: `promptQualityCheck.checkKickEatenCancelsCoverCastStopped`);
+ *  - the median completed bar behind `progressPct` = every `completed` bar
+ *    of the spell longer than 0.2 s, a `queued` completion included;
+ *  - a baited kick = a kickAudit "juked" kick on the owner that went out into
+ *    one of those cancels.
+ *
+ * Until 2026-10-11 the ledger left two kinds of bar out of the shared reading
+ * (its 2026-09-26 code, kept when `[CAST STOPPED]` arrived so that no
+ * kick-eaten fact moved): a bar with a SPELL_CAST_FAILED of the spell before
+ * its end row (`earlierFailure`) was neither a cancel nor a completed
+ * duration, and a `queued` completion was no completed duration. A bar stopped
+ * after a repeated key press then had a `[CAST STOPPED]` line and was missing
+ * from `yourCancels`. Both are counted now (user decision 2026-10-11).
+ * Measured on the 605-match capture: 126 of 1,869 kick-eaten rows change a
+ * cast-control fact (`yourCancels`, `yourCancelMedianPct`, `baitedKicks`,
+ * `baitedThisKickerT`, `stoppedJustBefore`); no row added or removed, no
+ * context line changed.
+ *
+ * null when the unit did not record the log — never zero.
+ */
 export function ownerCastCancels(params: {
   owner: ICombatUnit;
   friends: ICombatUnit[];
@@ -397,19 +428,11 @@ export function ownerCastCancels(params: {
   });
   if (!starts) return null;
 
-  // The cancel ledger's own restriction on the shared reading, kept as it has
-  // been since 2026-09-26 because its numbers sit on kick-eaten's facts: a
-  // bar with a failure row of the spell before its end row (`earlierFailure`
-  // — the key pressed again while the bar ran) and a completion logged after
-  // the next bar's start (`queued`) are neither a cancel nor a completed
-  // duration here. OPEN in docs/predicate-index.md "Not yet unified".
   const completedDurations = new Map<string, number[]>();
   const pending: Array<{ id: string; name: string; t: number; failS: number }> =
     [];
   for (const s of starts) {
-    if (s.earlierFailure) continue;
     if (s.end.kind === "completed") {
-      if (s.end.queued) continue;
       const d = s.end.atS - s.t;
       if (d > 0.2) {
         const list = completedDurations.get(s.id) ?? [];

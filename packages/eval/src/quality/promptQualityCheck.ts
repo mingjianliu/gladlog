@@ -2171,6 +2171,52 @@ export function checkCastStoppedLines(lines: string[]): string[] {
   return failures;
 }
 
+/**
+ * kick-eaten's `yourCancels` against the `[CAST STOPPED]` lines — one reading
+ * of how a cast bar ended (`ownerCastBarOutcomes`), stated in two places. A
+ * control bar whose line reads `cast bar stopped after N.Ns; not kicked; no
+ * control, silence or knockback landed on you then`
+ * (`CAST_STOPPED_NEAR_TEXT.none`) is a cancel of the ledger
+ * (`ownerCastCancels`): a `stopped` bar with nothing landing on the owner.
+ *
+ * Only an inequality holds. The ledger counts every cast-time spell and is
+ * not clamped to the round; the lines exist for controls begun inside the
+ * round and may be fewer than the bars. So the gate fails a kick-eaten row
+ * whose `yourCancels` is BELOW the number of those lines, and nothing else.
+ * `yourCancels` is a round-wide count, the same on every kick-eaten row of
+ * the prompt.
+ *
+ * Until 2026-10-11 the ledger left out a bar with a refused key press before
+ * its stop (`earlierFailure`), which the line did state — the one way the
+ * count could fall below the lines.
+ */
+export function checkKickEatenCancelsCoverCastStopped(
+  lines: string[],
+): string[] {
+  let stopped = 0;
+  for (const line of lines)
+    if (
+      CAST_STOPPED_DATA_LINE.test(line) &&
+      line.endsWith(CAST_STOPPED_NEAR_TEXT.none) &&
+      line.match(CAST_STOPPED_LINE)?.[4] !== undefined
+    )
+      stopped++;
+  if (stopped === 0) return [];
+  const failures: string[] = [];
+  lines.forEach((line, i) => {
+    if (!line.includes("type=kick-eaten ")) return;
+    const m = line.match(MENU_LINE_FACTS);
+    if (!m) return;
+    const cancels = parseFactsBlock(m[1]!)["yourCancels"];
+    if (cancels === undefined) return;
+    if (!(Number(cancels) >= stopped))
+      failures.push(
+        `line ${i + 1}: kick-eaten 写 yourCancels=${cancels},但时间线有 ${stopped} 条「没被踢、当时没有控制 / 沉默 / 击退落在你身上」的 [CAST STOPPED] 行 —— 这些读条每一次都是台账里的一次取消`,
+      );
+  });
+  return failures;
+}
+
 const CC_NOT_LANDED_DATA_LINE = /^\s*\d+:\d{2}\s+\[CC NOT LANDED\]/;
 /** 1–2 = m:ss, 3 = the enemy, 4 = the spell, 5 = the caster's label (a
  * roster label, a summon's `N(Spec)'s pet`, or a bare name — nothing more
@@ -5055,6 +5101,7 @@ export function checkMatch(
   hardFailures.push(...checkCcBookmarkConsistency(lines));
   hardFailures.push(...checkCcUseStartedCounts(lines));
   hardFailures.push(...checkCastStoppedLines(lines));
+  hardFailures.push(...checkKickEatenCancelsCoverCastStopped(lines));
   hardFailures.push(...checkCcNotLandedLines(lines));
   hardFailures.push(...checkForcedTrinketConsistency(lines));
   hardFailures.push(...checkGuardianSpiritSaveClause(lines));

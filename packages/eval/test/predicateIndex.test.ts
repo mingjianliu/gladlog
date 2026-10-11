@@ -2767,6 +2767,13 @@ const INDEX: PredicateRow[] = [
     symbol: "checkCastStoppedLines",
     mod: promptQualityCheck,
   },
+  // 2026-10-11: kick-eaten's `yourCancels` ≥ the [CAST STOPPED] lines that
+  // state a cancel (one reading, `ownerCastBarOutcomes`)
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkKickEatenCancelsCoverCastStopped",
+    mod: promptQualityCheck,
+  },
   {
     file: `${A}/context/forcedTrinket.ts`,
     symbol: "forcedTrinketFollowUps",
