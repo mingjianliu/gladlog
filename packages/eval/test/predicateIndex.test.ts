@@ -132,6 +132,7 @@ import * as killWindowFactsMod from "@gladlog/analysis/src/utils/killWindowFacts
 import * as killWindowTargetSelection from "@gladlog/analysis/src/utils/killWindowTargetSelection";
 import * as losAnalysis from "@gladlog/analysis/src/utils/losAnalysis";
 import * as offensiveAuraOccurrences from "@gladlog/analysis/src/utils/offensiveAuraOccurrences";
+import * as offensiveWindows from "@gladlog/analysis/src/utils/offensiveWindows";
 import * as positionAnalysis from "@gladlog/analysis/src/utils/positionAnalysis";
 import * as positionSampling from "@gladlog/analysis/src/utils/positionSampling";
 import * as pvpTrinketUsesMod from "@gladlog/analysis/src/utils/pvpTrinketUses";
@@ -140,6 +141,7 @@ import * as renderGrid from "@gladlog/analysis/src/utils/renderGrid";
 import * as resourceAt from "@gladlog/analysis/src/utils/resourceAt";
 import * as rootReachability from "@gladlog/analysis/src/utils/rootReachability";
 import * as rosterSide from "@gladlog/analysis/src/utils/rosterSide";
+import * as roundEnd from "@gladlog/analysis/src/utils/roundEnd";
 import * as specBaselines from "@gladlog/analysis/src/utils/specBaselines";
 import * as spellDanger from "@gladlog/analysis/src/utils/spellDanger";
 import * as spellMechanics from "@gladlog/analysis/src/utils/spellMechanics";
@@ -1679,6 +1681,49 @@ const INDEX: PredicateRow[] = [
   {
     file: `${E}/quality/promptQualityCheck.ts`,
     symbol: "checkOffensiveWindowSpikeCredit",
+    mod: promptQualityCheck,
+  },
+  // Post-hoc review 45-FT-98 (2026-10-11): the round's end on the kill
+  // windows, the death on every credited attempt row, the header of a window
+  // opened after the round, the one-second [DMG SPIKE] bucket
+  {
+    file: `${A}/context/peakSpikePlacement.ts`,
+    symbol: "isPointBucket",
+    mod: peakSpikePlacement,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkOffensiveWindowHeaderSpan",
+    mod: promptQualityCheck,
+  },
+  {
+    file: `${A}/utils/offensiveWindows.ts`,
+    symbol: "computeOffensiveWindows",
+    mod: offensiveWindows,
+  },
+  {
+    file: `${A}/utils/roundEnd.ts`,
+    symbol: "roundEndMs",
+    mod: roundEnd,
+  },
+  {
+    file: `${A}/utils/roundEnd.ts`,
+    symbol: "SOLO_SHUFFLE_BRACKET",
+    mod: roundEnd,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkKillWindowWithinRound",
+    mod: promptQualityCheck,
+  },
+  {
+    file: `${A}/utils/killAttempts.ts`,
+    symbol: "extractKillAttempts",
+    mod: killAttempts,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkKillAttemptBracketEnd",
     mod: promptQualityCheck,
   },
   {
