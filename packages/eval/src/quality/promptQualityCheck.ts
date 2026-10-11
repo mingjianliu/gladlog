@@ -70,6 +70,10 @@ import {
   renderedInsideSpan,
 } from "@gladlog/analysis/src/context/forcedTrinket";
 import {
+  KIT_REFUSED_WHY_WORDS,
+  KIT_UNUSED_NOTE_RE_SRC,
+} from "@gladlog/analysis/src/context/kitUnusedNote";
+import {
   dmgSpikeListLegend,
   parseDmgSpikesNotListed,
 } from "@gladlog/analysis/src/context/matchTimelineSections";
@@ -2097,6 +2101,121 @@ export function checkPressedDuringControlNote(lines: string[]): string[] {
   return failures;
 }
 
+/** A kit entry's text from `[UNUSED` to its end, in full. */
+const KIT_UNUSED_TAG_FULL = new RegExp(`^${KIT_UNUSED_NOTE_RE_SRC}$`);
+const KIT_REFUSED_ITEM = /^(.+) ×(\d+)$/;
+
+/**
+ * A kit entry's `[UNUSED — …]` note (FT board F09, 2026-10-11:
+ * `pressed N×, refused: …` beside FT-T06's `started K×, never finished`).
+ * The producer (`context/kitUnusedNote.ts` → `formatKitUnusedNote`) reads the
+ * refused presses from the raw log, which the prompt does not carry, so the
+ * gate checks what the text can. It fails:
+ *  - an `[UNUSED` tag, on any unit's `<cooldowns>`, that is not the
+ *    producer's pattern to the end of the entry;
+ *  - `pressed N×, refused: …` on a unit that is not the log owner — the log
+ *    records refused presses for its recorder alone;
+ *  - N < 1; a reason outside the producer's words (`KIT_REFUSED_WHY_WORDS`);
+ *    a reason listed twice; a single reason with a count of its own, or
+ *    several whose counts do not add up to N;
+ *  - a disagreement with the owner's `| pressed during it: X ×M` clauses
+ *    (`checkPressedDuringControlNote`), which state some of the same rows:
+ *    for a cooldown the kit calls UNUSED, the M over the `[CC ON TEAM]` lines
+ *    may not exceed the note's `under crowd control` count, nor the M over
+ *    the `[SILENCE]` lines its `silenced` count (a press the control line
+ *    states is a refused press of that cooldown).
+ * Without a `log owner` unit the ownership and cross checks say nothing.
+ */
+export function checkKitUnusedNote(lines: string[]): string[] {
+  const failures: string[] = [];
+  const { ownerId } = ownerKitOf(lines);
+  const words = new Set(KIT_REFUSED_WHY_WORDS);
+  // the owner's UNUSED entries: name → count per reason
+  const ownerUnused = new Map<string, Map<string, number>>();
+  lines.forEach((line, i) => {
+    const kit = line.match(OWNER_KIT_LINE)?.[1];
+    if (kit === undefined || !kit.includes("[UNUSED")) return;
+    const role = lines[i - 1]?.match(UNIT_LEGEND_LINE)?.[3];
+    for (const entry of kit.split(/\](?:, )/)) {
+      const at = entry.indexOf("[UNUSED");
+      if (at < 0) continue;
+      const name = entry.slice(0, entry.indexOf(" ["));
+      const fail = (why: string) =>
+        failures.push(
+          `line ${i + 1}: <cooldowns> 的 ${name} [UNUSED…] ${why} —— ${entry.slice(at, at + 140)}`,
+        );
+      const m = entry.slice(at).match(KIT_UNUSED_TAG_FULL);
+      if (!m) {
+        fail(
+          "格式不符(必须是 [UNUSED]、started K×, never finished、pressed N×, refused: …,或后两者以 ; 相连)",
+        );
+        continue;
+      }
+      const pressed = m[2] ?? m[4];
+      const reasons = new Map<string, number>();
+      if (pressed !== undefined) {
+        if (role !== undefined && role !== "log owner")
+          fail(`写在 ${role} 的技能组上,被拒按键只有录制者有`);
+        const n = Number(pressed);
+        if (n < 1) fail(`被拒次数是 ${n}`);
+        const items = (m[3] ?? m[5])!.split(", ");
+        if (items.length === 1) {
+          if (!words.has(items[0]!))
+            fail(`原因「${items[0]}」不是产品的措辞(单一原因不带次数)`);
+          reasons.set(items[0]!, n);
+        } else {
+          let sum = 0;
+          for (const item of items) {
+            const it = item.match(KIT_REFUSED_ITEM);
+            if (!it || !words.has(it[1]!)) {
+              fail(`原因「${item}」不是「产品措辞 ×次数」`);
+              continue;
+            }
+            if (reasons.has(it[1]!)) fail(`原因「${it[1]}」列了两次`);
+            if (Number(it[2]) < 1) fail(`原因「${it[1]}」的次数是 ${it[2]}`);
+            reasons.set(it[1]!, Number(it[2]));
+            sum += Number(it[2]);
+          }
+          if (sum !== n) fail(`各原因次数之和 ${sum} ≠ 被拒次数 ${n}`);
+        }
+      }
+      if (role === "log owner") ownerUnused.set(name, reasons);
+    }
+  });
+  if (ownerId === null) return failures;
+  // what the owner's control lines state of the same rows
+  const stated = new Map<string, { control: number; silence: number }>();
+  for (const line of lines) {
+    if (!line.includes(PRESSED_DURING_NOTE_HEAD)) continue;
+    const host = line.match(PRESSED_DURING_HOST_LINE);
+    const note = line.match(PRESSED_DURING_NOTE);
+    if (!host || !note || host[1] !== ownerId) continue;
+    const kind = /^\s*\d+:\d{2}\s+\[SILENCE\]/.test(line)
+      ? "silence"
+      : "control";
+    for (const item of note[1]!.matchAll(
+      new RegExp(PRESSED_DURING_ITEM_RE_SRC, "g"),
+    )) {
+      const cur = stated.get(item[1]!) ?? { control: 0, silence: 0 };
+      cur[kind] += Number(item[2]);
+      stated.set(item[1]!, cur);
+    }
+  }
+  for (const [name, want] of stated) {
+    const have = ownerUnused.get(name);
+    if (have === undefined) continue; // not UNUSED in the kit
+    for (const [kind, why] of [
+      ["control", "under crowd control"],
+      ["silence", "silenced"],
+    ] as const)
+      if (want[kind] > (have.get(why) ?? 0))
+        failures.push(
+          `<cooldowns> 的 ${name} [UNUSED…] 写「${why}」${have.get(why) ?? 0} 次,而 \`pressed during it\` 在 ${kind === "control" ? "[CC ON TEAM]" : "[SILENCE]"} 行上共写了 ${want[kind]} 次`,
+        );
+  }
+  return failures;
+}
+
 // The row marker alone decides "this is a PEEL row" — a mangled time prefix
 // must fail the full parse, not escape detection (codex astra, 121c).
 const PEEL_DATA_LINE = /\[PEEL OPTION\]/;
@@ -2226,9 +2345,10 @@ const CC_USE_COUNT_ITEM = /^(.+) cast (\d+)× \(first (\d+):(\d{2})\)$/;
 /** `formatCcUseCount`'s started form — `checkCcUseStartedCounts`' class. */
 const CC_USE_STARTED_ITEM =
   /^(.+) cast bar started (\d+)×, went off (\d+)×(?: \(first (\d+):(\d{2})\))?$/;
-/** A kit entry's `[UNUSED]` tag and its FT-T06 note (`resourceSnapshot.ts`). */
-const KIT_UNUSED_NOTE =
-  /\[UNUSED(?: — started (\d+)×, never finished)?(?:\]|$)/;
+/** A kit entry's `[UNUSED]` tag and its note — the producer's own pattern
+ * (`context/kitUnusedNote.ts`): group 1 = the K of `started K×, never
+ * finished`. */
+const KIT_UNUSED_NOTE = new RegExp(KIT_UNUSED_NOTE_RE_SRC);
 
 /**
  * `[CC BOOKMARK]` / CC USE counts (32nd hardFailure class, GH #77 part 2,
@@ -6465,6 +6585,7 @@ export function checkMatch(
   hardFailures.push(...checkCcAvoidedMissType(lines));
   hardFailures.push(...checkDeathTrinketCcConsistency(lines));
   hardFailures.push(...checkPressedDuringControlNote(lines));
+  hardFailures.push(...checkKitUnusedNote(lines));
   hardFailures.push(...checkBurstAnsweredBottomConsistency(lines));
   hardFailures.push(...checkBurstAnsweredBeforeDeath(lines));
   hardFailures.push(...checkBurstAnsweredControlSpan(lines));

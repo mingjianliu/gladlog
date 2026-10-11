@@ -96,6 +96,7 @@ import {
   computeRootReachability,
   formatRootReachabilityEntries,
 } from "../utils/rootReachability";
+import { roundEndMs } from "../utils/roundEnd";
 import {
   benchmarks,
   formatDTPSBaselines,
@@ -722,6 +723,21 @@ export function buildMatchContext(
     enemies as ICombatUnit[],
     enemyCooldowns,
     { startTime: combat.startTime, endTime: combat.endTime },
+    // FT F09: the owner's refused presses, for `[UNUSED — pressed N×, refused:
+    // …]` — up to the round's end or the owner's own death (a key pressed
+    // while dead or between rounds is not a press of a button they had)
+    options.rawStreams?.available
+      ? {
+          castFailed: options.rawStreams.castFailed,
+          untilS:
+            (Math.min(
+              roundEndMs(combat),
+              ...(owner.deathRecords ?? []).map((d) => d.timestamp),
+            ) -
+              combat.startTime) /
+            1000,
+        }
+      : undefined,
   );
   tLines.push(loadoutText);
 

@@ -7,6 +7,7 @@ import {
 } from "@gladlog/analysis/src/context/burstAnswered";
 import { formatCcUseCount } from "@gladlog/analysis/src/context/ccUse";
 import { formatPressedDuringNote } from "@gladlog/analysis/src/context/controlRejectedPresses";
+import { formatKitUnusedNote } from "@gladlog/analysis/src/context/kitUnusedNote";
 import {
   dmgSpikeListLegend,
   emitDmgSpikeEntries,
@@ -47,6 +48,7 @@ import {
   checkFreeOfWindowConsistency,
   checkHeaderHpPromise,
   checkKickEatenCancelsCoverCastStopped,
+  checkKitUnusedNote,
   checkMatch,
   checkPeelOptionConsistency,
   checkPetCreditSide,
@@ -1093,6 +1095,22 @@ describe("checkCcUseStartedCounts — CC USE `cast bar started N×, went off M×
         ),
       ]),
     ).toEqual([]);
+    // the kit's note may also carry refused presses (FT F09): the K is read
+    // the same
+    expect(
+      checkCcUseStartedCounts([
+        ...kit(
+          "[UNUSED — started 2×, never finished; pressed 1×, refused: silenced]",
+        ),
+        ...line("Hex cast bar started 2×, went off 0×"),
+      ]),
+    ).toEqual([]);
+    expect(
+      checkCcUseStartedCounts([
+        ...kit("[UNUSED — pressed 1×, refused: silenced]"),
+        ...line("Hex cast bar started 2×, went off 0×"),
+      ]),
+    ).toHaveLength(1);
     // another number of bars for the same cooldown
     expect(
       checkCcUseStartedCounts([
@@ -1877,6 +1895,152 @@ describe("checkPressedDuringControlNote — `| pressed during it:` names the log
         cc("1(DPriest)", " | pressed during it: Fade"),
       ]),
     ).toHaveLength(1);
+  });
+});
+
+describe("checkKitUnusedNote — a kit entry's `[UNUSED — …]` note (FT F09: `pressed N×, refused: …`)", () => {
+  // the producer's own writer: the gate reads what it prints
+  const tag = (
+    started: number,
+    refused: Array<[string, number]> | null = null,
+  ) =>
+    `[UNUSED${formatKitUnusedNote(
+      started,
+      refused && {
+        count: refused.reduce((n, [, c]) => n + c, 0),
+        reasons: refused.map(([why, count]) => ({ why, count })),
+      },
+    )}]`;
+  const roster = (fade: string, mate = "[UNUSED]") => [
+    '  <unit id="1" name="Ingbumb-Illidan-US" spec="Discipline Priest" role="log owner">',
+    `    <cooldowns>Desperate Prayer [90s, lasts 10s], Fade [20s, lasts 10s] ${fade}, Invoke Xuen, the White Tiger [120s] ${tag(0)}, Psychic Scream [30s] ${tag(2)}</cooldowns>`,
+    '  <unit id="2" name="Mate-Illidan-US" spec="Frost Mage" role="teammate">',
+    `    <cooldowns>Ice Block [240s, lasts 10s] ${mate}, Ring of Frost [45s] ${tag(1)}</cooldowns>`,
+  ];
+  const during = (...items: Array<[string, number]>) =>
+    formatPressedDuringNote(
+      items.map(([spellName, count], i) => ({
+        spellId: String(i),
+        spellName,
+        count,
+        firstSeconds: i,
+      })),
+    );
+  const cc = (tail: string) =>
+    `0:20  [CC ON TEAM]   1(DPriest) ← Rake (by 3(FDruid)) | 6s [DR: Stun Full] | 5yd from caster${tail}`;
+  const silence = (tail: string) =>
+    `0:40  [SILENCE]   1(DPriest) ← Silence (by 4(SPriest)) | 3s${tail}`;
+
+  it("passes every form the producer writes, alone and beside the control lines that state the same presses", () => {
+    for (const fade of [
+      tag(0),
+      tag(2),
+      tag(0, [["under crowd control", 3]]),
+      tag(0, [
+        ["target not in line of sight", 5],
+        ["under crowd control", 1],
+      ]),
+      tag(1, [
+        ["not ready yet", 4],
+        ["vision obscured (Smoke Bomb)", 2],
+        ["client reason not translated", 1],
+      ]),
+    ])
+      expect(checkKitUnusedNote(roster(fade)), fade).toEqual([]);
+    expect(
+      checkKitUnusedNote([
+        ...roster(
+          tag(0, [
+            ["under crowd control", 3],
+            ["silenced", 2],
+            ["out of range", 1],
+          ]),
+        ),
+        cc(during(["Fade", 2])),
+        cc(during(["Fade", 1], ["Desperate Prayer", 4])),
+        silence(during(["Fade", 2])),
+      ]),
+    ).toEqual([]);
+    // a cooldown the kit does not call UNUSED is not this gate's
+    expect(
+      checkKitUnusedNote([
+        ...roster(tag(0)),
+        cc(during(["Desperate Prayer", 4])),
+      ]),
+    ).toEqual([]);
+  });
+
+  it("fails a kit that calls a cooldown UNUSED with fewer control-refused presses than its control lines state", () => {
+    // bare [UNUSED] against a stated press — the line the item was about
+    expect(
+      checkKitUnusedNote([...roster(tag(0)), cc(during(["Fade", 3]))]),
+    ).toHaveLength(1);
+    // two lines, three presses; the kit says two
+    expect(
+      checkKitUnusedNote([
+        ...roster(tag(0, [["under crowd control", 2]])),
+        cc(during(["Fade", 2])),
+        cc(during(["Fade", 1])),
+      ]),
+    ).toHaveLength(1);
+    // a [SILENCE] line's presses are `silenced`, not `under crowd control`
+    expect(
+      checkKitUnusedNote([
+        ...roster(tag(0, [["under crowd control", 2]])),
+        silence(during(["Fade", 2])),
+      ]),
+    ).toHaveLength(1);
+  });
+
+  it("fails the note on anyone but the log owner — only the recorder has refused presses", () => {
+    const out = checkKitUnusedNote(
+      roster(tag(0), tag(0, [["out of range", 2]])),
+    );
+    expect(out).toHaveLength(1);
+    expect(out[0]).toContain("line 4");
+  });
+
+  it("fails a count that does not add up, a reason outside the producer's words, one listed twice, a zero", () => {
+    for (const fade of [
+      "[UNUSED — pressed 5×, refused: out of range ×2, silenced ×1]",
+      "[UNUSED — pressed 2×, refused: Out of range]", // the client's text
+      "[UNUSED — pressed 2×, refused: its cast bar began and was stopped]",
+      "[UNUSED — pressed 3×, refused: out of range ×3]", // one reason carries no count
+      "[UNUSED — pressed 4×, refused: silenced ×2, silenced ×2]",
+      "[UNUSED — pressed 0×, refused: silenced]",
+      "[UNUSED — pressed 2×, refused: silenced ×2, out of range ×0]",
+    ])
+      expect(
+        checkKitUnusedNote(roster(fade)).length,
+        fade,
+      ).toBeGreaterThanOrEqual(1);
+  });
+
+  it("fails a tag that is not the producer's pattern to the end of the entry, on any unit", () => {
+    for (const fade of [
+      "[UNUSED — tried]",
+      "[UNUSED — started 2×, never finished — pressed 1×, refused: silenced]",
+      "[UNUSED; pressed 1×, refused: silenced]",
+      "[UNUSED — pressed 1×, refused: silenced] [x]",
+      "[UNUSED — pressed 1×]",
+    ])
+      expect(checkKitUnusedNote(roster(fade)), fade).toHaveLength(1);
+    expect(checkKitUnusedNote(roster(tag(0), "[UNUSED — tried]"))).toHaveLength(
+      1,
+    );
+  });
+
+  it("without a log-owner unit the format is still checked; the ownership and cross checks say nothing", () => {
+    const kit = (fade: string) => [
+      `    <cooldowns>Fade [20s, lasts 10s] ${fade}</cooldowns>`,
+    ];
+    expect(
+      checkKitUnusedNote([
+        ...kit(tag(0, [["silenced", 2]])),
+        cc(during(["Fade", 9])),
+      ]),
+    ).toEqual([]);
+    expect(checkKitUnusedNote(kit("[UNUSED — tried]"))).toHaveLength(1);
   });
 });
 

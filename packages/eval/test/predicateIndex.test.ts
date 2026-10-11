@@ -46,6 +46,7 @@ import * as ccUse from "@gladlog/analysis/src/context/ccUse";
 import * as cdPrior from "@gladlog/analysis/src/context/cdPrior";
 import * as controlRejectedPresses from "@gladlog/analysis/src/context/controlRejectedPresses";
 import * as forcedTrinket from "@gladlog/analysis/src/context/forcedTrinket";
+import * as kitUnusedNote from "@gladlog/analysis/src/context/kitUnusedNote";
 import * as matchTimelineSections from "@gladlog/analysis/src/context/matchTimelineSections";
 import * as observedConsequences from "@gladlog/analysis/src/context/observedConsequences";
 import * as peakSpikePlacement from "@gladlog/analysis/src/context/peakSpikePlacement";
@@ -1746,6 +1747,31 @@ const INDEX: PredicateRow[] = [
   {
     file: `${E}/quality/promptQualityCheck.ts`,
     symbol: "checkPressedDuringControlNote",
+    mod: promptQualityCheck,
+  },
+  {
+    file: `${A}/context/kitUnusedNote.ts`,
+    symbol: "kitRefusedPressesOf",
+    mod: kitUnusedNote,
+  },
+  {
+    file: `${A}/context/kitUnusedNote.ts`,
+    symbol: "formatKitUnusedNote",
+    mod: kitUnusedNote,
+  },
+  {
+    file: `${A}/context/kitUnusedNote.ts`,
+    symbol: "KIT_UNUSED_NOTE_RE_SRC",
+    mod: kitUnusedNote,
+  },
+  {
+    file: `${A}/context/kitUnusedNote.ts`,
+    symbol: "KIT_REFUSED_WHY_WORDS",
+    mod: kitUnusedNote,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkKitUnusedNote",
     mod: promptQualityCheck,
   },
   {

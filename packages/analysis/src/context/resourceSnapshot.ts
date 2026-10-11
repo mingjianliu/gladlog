@@ -24,11 +24,17 @@ import {
 import { positionalWallReach } from "../utils/deathOutcomeAnalysis";
 import { IEnemyCDTimeline } from "../utils/enemyCDs";
 import { sumIncomingPressure } from "../utils/incomingPressure";
+import type { CastFailedEvent } from "../utils/rawStreams";
 import { toRenderSecond } from "../utils/renderGrid";
 import { affordableAt, type ManaFallback } from "../utils/resourceAt";
 import type { RosterSides } from "../utils/rosterSide";
 import { getPvpToolkit } from "../utils/talentBehaviors";
 import { isDeadAt } from "../utils/unitDeath";
+import {
+  formatKitUnusedNote,
+  KIT_REFUSED_PRESS_LEGEND,
+  kitRefusedPressesOf,
+} from "./kitUnusedNote";
 import { resCcRemainingText } from "./resLedgerPrune";
 
 // F169: number of friendly units with an active Atonement (194384) at a given time. Disc Priest
@@ -90,6 +96,11 @@ export function buildPlayerLoadout(
   /** The round, in log ms — what "this round" means for a started cast
    * (`[UNUSED — started N×…]`): the units keep lines from after it. */
   roundMs?: { startTime: number; endTime: number },
+  /** The log owner's refused presses — `rawStreams.castFailed`, seconds since
+   * the round's start — and the second the round was over for the owner (its
+   * end or their death): what `[UNUSED — pressed N×, refused: …]` reads
+   * (`kitUnusedNote.ts`). Absent (no raw stream) = no such note. */
+  ownerRefused?: { castFailed: readonly CastFailedEvent[]; untilS: number },
 ): {
   text: string;
   playerIdMap: Map<string, number>;
@@ -143,9 +154,13 @@ export function buildPlayerLoadout(
   // and never finished (kicked, cancelled, CC'd) is in the log —
   // SPELL_CAST_START with no SPELL_CAST_SUCCESS — and the bare [UNUSED] read
   // as "did not think of it" (24b6a229, 3306e8ee, 7d1f14af: Hex started once
-  // or twice, kicked). A press the game rejected (SPELL_CAST_FAILED) is not
-  // kept per unit by the parser, so an instant that was pressed and refused
-  // still reads [UNUSED].
+  // or twice, kicked). FT F09 (2026-10-11): nor is it "never pressed" when
+  // the game refused every press (SPELL_CAST_FAILED — written for the log's
+  // recorder alone, read from the raw stream like `[REJECTED]`): the owner's
+  // entry says `pressed N×, refused: …` (`kitUnusedNote.ts`). The cooldown
+  // stays never spent for every reader of the ledger; only this tag's text
+  // changes.
+  let refusedNotePrinted = false;
   const triedNote = (cd: IMajorCooldownInfo, caster?: ICombatUnit): string => {
     if (!caster) return "";
     // inside the round only, as the cooldown ledger's casts are — a Shuffle
@@ -163,7 +178,17 @@ export function buildPlayerLoadout(
       caster,
       cd,
     ).length;
-    return starts > 0 ? ` — started ${starts}×, never finished` : "";
+    const refused =
+      ownerRefused && caster.id === owner.id
+        ? kitRefusedPressesOf(
+            ownerRefused.castFailed,
+            caster,
+            cd,
+            ownerRefused.untilS,
+          )
+        : null;
+    if (refused) refusedNotePrinted = true;
+    return formatKitUnusedNote(starts, refused);
   };
   // FT-T04 follow-up (user ruling 2026-10-09): a cooldown whose length
   // depends on what its press did says so. Guardian Spirit under Guardian
@@ -205,6 +230,7 @@ export function buildPlayerLoadout(
     ownerCDs.length > 0
       ? ownerCDs.map((cd) => fmtCDLabel(cd, owner)).join(", ")
       : "none tracked";
+  if (refusedNotePrinted) lines.push(KIT_REFUSED_PRESS_LEGEND);
 
   lines.push(
     `  <unit id="${ownerId}" name="${owner.name}" spec="${ownerSpec}" role="log owner">`,
