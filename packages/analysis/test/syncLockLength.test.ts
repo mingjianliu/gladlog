@@ -125,6 +125,7 @@ describe("missed-sync-window row (F06a)", () => {
   });
 
   it("with the round's end inside the lock: windowEndT, durationS and the HP reading stop there, endedBy says so — and the row is still the same row", () => {
+    // (the in-round part is 3 rendered seconds: still eligible)
     hpSpans.length = 0;
     const broke = { kind: "trinket", spellName: "Gladiator's Medallion" };
     const uncut = missedSyncWindowEvents(
@@ -135,20 +136,45 @@ describe("missed-sync-window row (F06a)", () => {
     const cut = missedSyncWindowEvents(
       [lock(94.9, 99.3, "Hammer of Justice", broke)],
       ready,
-      probes({ roundEndS: 96.2 }),
+      probes({ roundEndS: 97.2 }),
     );
     expect(cut.map((e) => e.id)).toEqual(uncut.map((e) => e.id));
     expect(uncut[0]!.facts["endedBy"]).toBe("trinket (Gladiator's Medallion)");
     expect(cut[0]!.facts).toMatchObject({
       t: "94",
-      windowEndT: "96",
-      durationS: "1",
+      windowEndT: "97",
+      durationS: "2",
       endedBy: SYNC_LOCK_ENDED_BY_ROUND_END,
     });
     // the accelerator HP is read over the lock up to the round's end
     expect(hpSpans).toEqual([
       [94.9, 99.3],
-      [94.9, 96.2],
+      [94.9, 97.2],
     ]);
+  });
+
+  it("which locks are candidates is read up to the round's end: under 3 rendered seconds in the round, or begun after it → no row", () => {
+    // s1/132-5-722: Kidney Shot 183.9 → 188.6 in a round a FRIENDLY death
+    // ended at 185.1 — no enemy died, so the lock as logged was eligible
+    const ks = [lock(183.9, 188.6, "Kidney Shot")];
+    expect(missedSyncWindowEvents(ks, ready, probes())).toHaveLength(1);
+    expect(
+      missedSyncWindowEvents(ks, ready, probes({ roundEndS: 185.1 })),
+    ).toEqual([]);
+    expect(
+      missedSyncWindowEvents(ks, ready, probes({ roundEndS: 183.9 })),
+    ).toEqual([]);
+    // 3 rendered seconds of it in the round: still a row, cut
+    const [e] = missedSyncWindowEvents(
+      ks,
+      ready,
+      probes({ roundEndS: 186.0 }),
+    );
+    expect(e!.facts).toMatchObject({
+      t: "183",
+      windowEndT: "186",
+      durationS: "2",
+      endedBy: SYNC_LOCK_ENDED_BY_ROUND_END,
+    });
   });
 });

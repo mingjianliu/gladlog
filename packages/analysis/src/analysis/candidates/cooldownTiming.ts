@@ -890,9 +890,11 @@ export function missedSyncWindowEvents(
     playableEndS?: number;
     /** the round's end in match seconds (`roundEndMs` — what the
      * `[CC ON ENEMY]` lines are cut at): the row's `windowEndT`,
-     * `durationS` and HP reading stop there (F06a). Facts only — which
-     * locks are candidates is decided on the lock as logged. Absent ⇒ no
-     * cut. */
+     * `durationS` and HP reading stop there (F06a), and so does the lock
+     * the eligibility test and the ranking read — a lock that began at or
+     * after it is not in the round, one the round ended on counts for its
+     * in-round part. Whether a cooldown ENTERED the lock is still read on
+     * the lock as logged. Absent ⇒ no cut. */
     roundEndS?: number;
     /** The bracket's reference cell, or null when the bracket has no cell,
      * misses the n floor, or fails the min-contrast door — null silences
@@ -927,8 +929,18 @@ export function missedSyncWindowEvents(
     SyncWindowCd,
     { end: number; cand: (typeof candidates)[number] }
   >();
+  // F06a: the lock up to the round's end. A Solo Shuffle round ends at its
+  // first player death — a FRIENDLY one leaves `enemyDeathS` empty, and a
+  // Kidney Shot that landed 1 s before it was a 5 s "missed sync window"
+  // (`syncLockLengthFacts`' rows: `durationS=<1, endedBy=the round's end`).
+  const inRound = (w: (typeof merged)[number]) =>
+    probes.roundEndS === undefined
+      ? w
+      : { ...w, toSeconds: Math.min(w.toSeconds, probes.roundEndS) };
   for (const w of merged) {
-    if (!syncWindowEligible(w, probes.enemyDeathS)) continue;
+    if (probes.roundEndS !== undefined && w.fromSeconds >= probes.roundEndS)
+      continue;
+    if (!syncWindowEligible(inRound(w), probes.enemyDeathS)) continue;
     const ev = evaluateSyncWindow(w, offensiveCds);
     const ready = ev.ready.map((cd) => cd.spellName);
     if (ready.length === 0) continue;
@@ -974,8 +986,8 @@ export function missedSyncWindowEvents(
   return candidates
     .sort(
       (a, b) =>
-        renderedWindowSeconds(b.w.fromSeconds, b.w.toSeconds) -
-        renderedWindowSeconds(a.w.fromSeconds, a.w.toSeconds),
+        renderedWindowSeconds(b.w.fromSeconds, inRound(b.w).toSeconds) -
+        renderedWindowSeconds(a.w.fromSeconds, inRound(a.w).toSeconds),
     )
     .slice(0, cap)
     .map(({ w, ready, readyCds, minHp, minHpUnit, alsoHeld }) => {
