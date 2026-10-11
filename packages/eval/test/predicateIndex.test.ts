@@ -71,6 +71,7 @@ import * as cdTriggerPriorData from "@gladlog/analysis/src/data/cdTriggerPrior";
 import * as curatedAbilityFacts from "@gladlog/analysis/src/data/curatedAbilityFacts";
 import * as dispelObservedGenerated from "@gladlog/analysis/src/data/dispelObservedGenerated";
 import * as dispelVerdicts from "@gladlog/analysis/src/data/dispelVerdicts";
+import * as druidForms from "@gladlog/analysis/src/data/druidForms";
 import * as healerSaveCd from "@gladlog/analysis/src/data/healerSaveCd";
 import * as healingVerdicts from "@gladlog/analysis/src/data/healingVerdicts";
 import * as kickPriorityHealSpells from "@gladlog/analysis/src/data/kickPriorityHealSpells";
@@ -105,6 +106,7 @@ import * as castCommitSpans from "@gladlog/analysis/src/utils/castCommitSpans";
 import * as castingLocks from "@gladlog/analysis/src/utils/castingLocks";
 import * as castMissRows from "@gladlog/analysis/src/utils/castMissRows";
 import * as castParam from "@gladlog/analysis/src/utils/castParam";
+import * as castPress from "@gladlog/analysis/src/utils/castPress";
 import * as ccBreakAnalysis from "@gladlog/analysis/src/utils/ccBreakAnalysis";
 import * as ccDuration from "@gladlog/analysis/src/utils/ccDuration";
 import * as ccTargetState from "@gladlog/analysis/src/utils/ccTargetState";
@@ -1318,6 +1320,27 @@ const INDEX: PredicateRow[] = [
     file: `${A}/utils/dispelKind.ts`,
     symbol: "classifyDispel",
     mod: dispelKind,
+  },
+  // N3 (F11): a rider that came with its own cast; a form cooldown's press
+  {
+    file: `${A}/utils/dispelKind.ts`,
+    symbol: "dispelCameWithOwnCast",
+    mod: dispelKind,
+  },
+  {
+    file: `${A}/utils/castPress.ts`,
+    symbol: "isFormReshiftCast",
+    mod: castPress,
+  },
+  {
+    file: `${A}/data/druidForms.ts`,
+    symbol: "FORM_COOLDOWN_BUFF_BY_CAST_ID",
+    mod: druidForms,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkFormCooldownPressSpacing",
+    mod: promptQualityCheck,
   },
   {
     file: `${A}/utils/dispelKind.ts`,
