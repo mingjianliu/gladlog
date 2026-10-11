@@ -488,7 +488,7 @@ Fortifying Brew +Ironshell Brew expect 0.7 (without 0.8) | holders null ci90 - u
 - **FLAG** Aspect of the Turtle:Born To Be Wild 按级之后(`PER_RANK_COOLDOWN_TALENTS`),仍有两个 Marksmanship 2 级间隔 101.9 / 107.4 秒 < 120 秒未解释(1,814 场)。
 - **FLAG** Ascendance 114052(恢复萨满,605 场 13 次施放 4 次「不可能」,间隔 18.1 / 48.0 / 68.5 / 110.6 秒):9 条台账记录(6 个文件)全部持有 Deeply Rooted Elements 378270(触发 Ascendance),疑为触发被记成按键;未核实,没改码。
 - **FLAG** Ardent Defender 31850:手写 120 秒改回 DB2 的 90 秒(FT F20),语料只有一个防护骑士的三个间隔(79.8 / 84.0 / 157.2 秒,Unbreakable Spirit −30 %:手写 84 秒被 79.8 驳倒一次,官方 63 秒没被驳倒也没有地板)。
-- **FLAG** 法力消耗(FT F09a;parser 2026-10-11 已存施放行的消耗 `casts[].powerCosts`,读者未接):`manaCostForCast` = DB2 百分比 × 读数的法力上限,游戏按基础法力算。7f67e778:上限 262,500,Invoke Chi-Ji 施放行的消耗字段是 12,500(5 % × 250,000),产品印 `(no mana 4.0k/13.1k)`;Restoral 10,935 对 11.5k。日志 advanced 块里 x 坐标前一格就是这次施放的消耗(`decodeCastCosts`:百分比减免之前的消耗 —— Echo 写 4,750、实扣 3,325);`affordableAt` 应读该单位该技能自己的施放行。605 场采集里 `(no mana a/b)` 共 25 处、8 份上下文。
+- **FLAG** 法力消耗(FT F09a,2026-10-11 修了一半):DB2 按百分比计价的技能,`affordableAt` / `affordableWithin` 现在读该单位本轮自己施放行写明的消耗(`statedManaCostInRound`,parser `casts[].powerCosts`)—— 7f67e778:上限 262,500,Invoke Chi-Ji 印 `(no mana 4.0k/13.1k)` → `12.5k`,Restoral `11.5k` → `10.9k`。**还开着的两处**:(1)本轮没放过的技能照旧是 DB2 百分比 × 读数的法力上限(3282debd:Divine Toll 印 `8.2k`,按基础法力是 7,500)—— 可以从该单位别的施放行反推基础法力(605 场 251,568 条百分比行全部是 250,000),没做,那是推算不是读数;(2)施放行写的是百分比减免之前的消耗,不是实扣(Echo 写 4,750、实扣 3,325;Holy Light 写 17,500、实扣 7,341),有减免的玩家仍被高估。605 场采集(改之前)`(no mana a/b)` 共 17 处、8 份上下文。
 
 ## 重跑
 

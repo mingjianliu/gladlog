@@ -48,13 +48,32 @@ export function manaCostForCast(
   specId: string,
   manaMax: number,
 ): number | null {
-  const row = SPELL_MANA_COST_TABLE[spellId];
-  if (!row) return null;
-  const raw =
-    row.bySpec?.[specId] ??
-    (row.pct !== undefined || row.flat !== undefined ? row : undefined);
+  const raw = manaCostRowFor(spellId, specId);
   if (!raw) return null;
   if (raw.pct !== undefined) return (raw.pct / 100) * manaMax;
   if (raw.flat !== undefined) return raw.flat;
   return null;
+}
+
+/** The row `manaCostForCast` resolves for this caster — the exact
+ * `bySpec[specId]` row first, else the spell's own unconditional one;
+ * `undefined` when neither exists. For a reader that has to know WHICH
+ * encoding it got (`resourceAt.ts`: only a percentage row is converted with a
+ * mana figure). */
+function manaCostRowFor(
+  spellId: string,
+  specId: string,
+): ISpellManaCostRaw | undefined {
+  const row = SPELL_MANA_COST_TABLE[spellId];
+  if (!row) return undefined;
+  return (
+    row.bySpec?.[specId] ??
+    (row.pct !== undefined || row.flat !== undefined ? row : undefined)
+  );
+}
+
+/** Is this caster's cost for the spell a PERCENTAGE row (a share of base
+ * mana), as opposed to a flat one or none? */
+export function manaCostIsPercentage(spellId: string, specId: string): boolean {
+  return manaCostRowFor(spellId, specId)?.pct !== undefined;
 }

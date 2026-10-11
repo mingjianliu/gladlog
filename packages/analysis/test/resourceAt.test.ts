@@ -9,6 +9,7 @@ import {
   MANA_POWER_TYPE,
   manaReadingAt,
   resourceDeltaPct,
+  statedManaCostInRound,
 } from "../src/utils/resourceAt";
 
 describe("resourceAt — getUnitResourceAtTimestamp", () => {
@@ -468,5 +469,139 @@ describe("resourceAt — affordableAt / affordableWithin", () => {
     expect(affordableWithin(u, "115203", 10_000, 15_000)).toBeNull(); // Fortifying Brew: no mana cost
     expect(affordableWithin(unit([]), "388615", 10_000, 15_000)).toBeNull();
     expect(affordableAt(unit([]), "388615", 10_000)).toBeNull();
+  });
+});
+
+// FT F09 (2026-10-11): the cost a unit's own cast rows state. 7f67e778 — a
+// Mistweaver with 262,500 max mana; Restoral's cast row says 10,935 (4.374 %
+// of 250,000 base), the official percentage against the max gave 11,482.
+describe("resourceAt — the cost the unit's own cast rows state", () => {
+  const MW = "270";
+  const ROUND = { startTime: 0, endTime: 60_000 };
+  const sample = (t: number, mana: number, max = 262_500) => ({
+    advancedActorId: "Player-1234",
+    logLine: { timestamp: t },
+    advancedActorPowers: [
+      { type: CombatUnitPowerType.Mana, current: mana, max },
+    ],
+  });
+  const cast = (
+    t: number,
+    spellId: string,
+    powerCosts?: Array<{ type: number; cost: number }>,
+    event = "SPELL_CAST_SUCCESS",
+  ) => ({
+    spellId,
+    timestamp: t,
+    logLine: { event, timestamp: t },
+    ...(powerCosts ? { powerCosts } : {}),
+  });
+  const unit = (samples: unknown[], casts: unknown[], spec = MW) =>
+    ({
+      id: "Player-1234",
+      spec,
+      advancedActions: samples,
+      spellCastEvents: casts,
+      auraEvents: [],
+    }) as never;
+  const mana = (cost: number) => [{ type: CombatUnitPowerType.Mana, cost }];
+
+  it("a cast of the spell in the round states its cost → that cost, not pct × max", () => {
+    const u = unit(
+      [sample(10_000, 11_000), sample(13_000, 10_000)],
+      [cast(5_000, "388615", mana(10_935))],
+    );
+    const at = affordableAt(u, "388615", 10_000, undefined, ROUND)!;
+    expect(at.cost).toBe(10_935);
+    expect(at.affordable).toBe(true); // 11,000 ≥ 10,935; pct × max wanted 11,482
+    expect(affordableAt(u, "388615", 13_000, undefined, ROUND)).toEqual({
+      affordable: false,
+      mana: 10_000,
+      cost: 10_935,
+    });
+    // the window form reads the same cost
+    expect(
+      affordableWithin(u, "388615", 10_000, 12_000, undefined, ROUND),
+    ).toBe(true);
+    expect(
+      affordableWithin(u, "388615", 12_500, 14_000, undefined, ROUND),
+    ).toBe(false);
+  });
+
+  it("a document without the field, or no round, reads exactly as before", () => {
+    const old = unit([sample(10_000, 11_000)], [cast(5_000, "388615")]);
+    const before = affordableAt(old, "388615", 10_000, undefined, ROUND)!;
+    expect(Math.round(before.cost)).toBe(11_482);
+    expect(before.affordable).toBe(false);
+    expect(
+      affordableWithin(old, "388615", 10_000, 12_000, undefined, ROUND),
+    ).toBe(false);
+    const withField = unit(
+      [sample(10_000, 11_000)],
+      [cast(5_000, "388615", mana(10_935))],
+    );
+    expect(Math.round(affordableAt(withField, "388615", 10_000)!.cost)).toBe(
+      11_482,
+    );
+    expect(affordableWithin(withField, "388615", 10_000, 12_000)).toBe(false);
+  });
+
+  it("only this spell's own casts inside the round count, and only a cost above 0", () => {
+    const u = unit(
+      [sample(10_000, 11_000)],
+      [
+        cast(-2_000, "388615", mana(10_935)), // before the round
+        cast(61_000, "388615", mana(10_935)), // after it
+        cast(5_000, "115151", mana(4_500)), // another spell
+        cast(6_000, "388615", mana(0)), // stated free
+        cast(7_000, "388615", mana(10_935), "SPELL_CAST_START"), // not a cast row
+        cast(8_000, "388615", [{ type: CombatUnitPowerType.Energy, cost: 50 }]),
+      ],
+    );
+    expect(statedManaCostInRound(u, "388615", ROUND)).toBeNull();
+    expect(
+      Math.round(affordableAt(u, "388615", 10_000, undefined, ROUND)!.cost),
+    ).toBe(11_482);
+    expect(statedManaCostInRound(u, "115151", ROUND)).toBe(4_500);
+  });
+
+  it("the mana entry of a two-power row is read, and the highest stated cost wins", () => {
+    const u = unit(
+      [],
+      [
+        cast(1_000, "85673", [
+          { type: CombatUnitPowerType.HolyPower, cost: 3 },
+          { type: CombatUnitPowerType.Mana, cost: 1_500 },
+        ]),
+        cast(2_000, "85673", mana(1_400)),
+      ],
+    );
+    expect(statedManaCostInRound(u, "85673", ROUND)).toBe(1_500);
+  });
+
+  it("a flat-priced spell keeps its official cost: Arcane Surge's row states what it SPENT", () => {
+    // DB2: flat 1. The row of a real cast: 320,773 — all the mana there was.
+    const u = unit(
+      [sample(10_000, 5, 306_000)],
+      [cast(5_000, "365350", mana(320_773))],
+      "62",
+    );
+    expect(statedManaCostInRound(u, "365350", ROUND)).toBe(320_773);
+    expect(affordableAt(u, "365350", 10_000, undefined, ROUND)).toEqual({
+      affordable: true,
+      mana: 5,
+      cost: 1,
+    });
+  });
+
+  it("no official cost row stays unknown — a logged cost does not create a gate", () => {
+    const u = unit(
+      [sample(10_000, 1_000)],
+      [cast(5_000, "115203", mana(5_000))],
+    );
+    expect(affordableAt(u, "115203", 10_000, undefined, ROUND)).toBeNull();
+    expect(
+      affordableWithin(u, "115203", 10_000, 12_000, undefined, ROUND),
+    ).toBeNull();
   });
 });

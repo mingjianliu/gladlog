@@ -1,6 +1,10 @@
-import { CombatUnitPowerType, ICombatUnit } from "@gladlog/parser-compat";
+import {
+  CombatUnitPowerType,
+  ICombatUnit,
+  LogEvent,
+} from "@gladlog/parser-compat";
 
-import { manaCostForCast } from "../data/spellManaCost";
+import { manaCostForCast, manaCostIsPercentage } from "../data/spellManaCost";
 import { buildAuraIntervals } from "./auraIntervals";
 import { binarySearchClosest } from "./binarySearch";
 import { HP_SAMPLE_RADIUS_MS } from "./cooldowns";
@@ -281,33 +285,118 @@ function freeCastWithin(
   );
 }
 
+// cast events → per spell id, the mana costs its rows state (cost > 0 only)
+const statedCostCache = new WeakMap<
+  readonly unknown[],
+  Map<string, Array<{ t: number; cost: number }>>
+>();
+
+/**
+ * The mana cost the unit's OWN cast rows of `spellId` state inside the round
+ * (`ISpellEvent.powerCosts`, the cost field of SPELL_CAST_SUCCESS), or null
+ * when none states one: the spell was not cast in the round, every cast of it
+ * was stated free, or the document was stored before the parser kept the
+ * field (2026-10-11).
+ *
+ * What the number is (measured, parser `decodeCastCosts`): the spell's cost
+ * before the caster's percentage reductions — for a spell DB2 prices as a
+ * percentage, that percentage of BASE mana (250,000 on all 251,568 such rows
+ * of the 605-file slice), not of the caster's current max. It is not always
+ * what was taken: a reduction on the caster is not in it.
+ *
+ * The highest one, should they differ. They do not for a percentage-priced
+ * spell (0 of 49,022 unit × spell × round groups on the slice); the one spell
+ * whose rows differ, Arcane Surge, states what it SPENT — all the mana there
+ * was — and is flat-priced, so `costFor` never asks for it.
+ *
+ * Only the round's own casts: a Solo Shuffle round's units keep the rows that
+ * follow it, and talents can change between rounds.
+ */
+export function statedManaCostInRound(
+  unit: Pick<ICombatUnit, "spellCastEvents">,
+  spellId: string,
+  round: { startTime: number; endTime: number },
+): number | null {
+  const events = unit.spellCastEvents ?? [];
+  let bySpell = statedCostCache.get(events);
+  if (!bySpell) {
+    bySpell = new Map();
+    for (const e of events) {
+      if (e.logLine.event !== LogEvent.SPELL_CAST_SUCCESS || !e.spellId)
+        continue;
+      const cost = e.powerCosts?.find(
+        (c) => (c.type as unknown as number) === MANA_POWER_TYPE,
+      )?.cost;
+      if (cost === undefined || !(cost > 0)) continue;
+      const list = bySpell.get(e.spellId) ?? [];
+      list.push({ t: e.logLine.timestamp, cost });
+      bySpell.set(e.spellId, list);
+    }
+    statedCostCache.set(events, bySpell);
+  }
+  let stated: number | null = null;
+  for (const c of bySpell.get(spellId) ?? [])
+    if (
+      c.t >= round.startTime &&
+      c.t <= round.endTime &&
+      (stated === null || c.cost > stated)
+    )
+      stated = c.cost;
+  return stated;
+}
+
+/**
+ * What the spell costs this unit, in mana: the official row
+ * (`manaCostForCast`), and — FT F09, 2026-10-11 — for a PERCENTAGE row the
+ * cost the unit's own cast rows of that spell state in the round, when one
+ * does (`statedManaCostInRound`).
+ *
+ * The percentage is a share of base mana, and the only mana figure a reading
+ * has is the unit's current MAX — equal to base on 57 % of the slice's mana
+ * cast rows, 4–9 % above it on most of the rest and up to half above — so
+ * `pct × max` overstated the cost (7f67e778: max 262,500; Invoke Chi-Ji
+ * printed `13.1k`, its cast rows say 12,500; Restoral `11.5k`, 10,935). A
+ * flat row is not converted with a
+ * mana figure and is left alone. No official row → null as before: the logged
+ * cost does not create a gate where there was none. No round, no stated cost
+ * in it, or a document without the field → `pct × max`, exactly as before.
+ */
 const costFor = (
-  unit: Pick<ICombatUnit, "spec">,
+  unit: Pick<ICombatUnit, "spec" | "spellCastEvents">,
   spellId: string,
   manaMax: number,
-) => manaCostForCast(spellId, String(unit.spec ?? ""), manaMax);
+  round?: { startTime: number; endTime: number },
+) => {
+  const spec = String(unit.spec ?? "");
+  const official = manaCostForCast(spellId, spec, manaMax);
+  if (official === null || !round || !manaCostIsPercentage(spellId, spec))
+    return official;
+  return statedManaCostInRound(unit, spellId, round) ?? official;
+};
 
 /**
  * "Could the unit pay for this spell's mana at `tMs`" — the ONE affordability
  * predicate (triage 2026-09-29 F-H6 × res-readiness F-C3, user ruling
  * 2026-09-30, res R2 = A). The reading is `manaReadingAt` (the [MANA]
- * sampler); the cost is the official `manaCostForCast` against that reading's
- * max. Null = unknown (no cost row, or no reading): callers must not gate on
- * it. [RES] (res F-C3) keeps an unaffordable cooldown `rdy` and annotates it
- * with `mana` / `cost`.
+ * sampler); the cost is `costFor` — the official `manaCostForCast` against
+ * that reading's max, or what the unit's own cast rows of the spell state in
+ * the round. Null = unknown (no cost row, or no reading): callers must not
+ * gate on it. [RES] (res F-C3) keeps an unaffordable cooldown `rdy` and
+ * annotates it with `mana` / `cost`.
  */
 export function affordableAt(
   unit: ICombatUnit,
   spellId: string,
   tMs: number,
   fallback?: ManaFallback,
-  /** the round, for the free-cast auras (`FREE_CAST_AURA_IDS`); absent = not checked */
+  /** the round, for the free-cast auras (`FREE_CAST_AURA_IDS`) and the cost
+   * the unit's cast rows state (`statedManaCostInRound`); absent = neither */
   combat?: { startTime: number; endTime: number },
 ): { affordable: boolean; mana: number; cost: number } | null {
   if (freeCastWithin(unit, tMs, tMs, combat)) return null;
   const r = manaReadingAt(unit, tMs, fallback);
   if (!r) return null;
-  const cost = costFor(unit, spellId, r.max);
+  const cost = costFor(unit, spellId, r.max, combat);
   if (cost === null || !(cost > 0)) return null;
   return { affordable: r.current >= cost, mana: r.current, cost };
 }
@@ -325,14 +414,15 @@ export function affordableWithin(
   fromMs: number,
   toMs: number,
   fallback?: ManaFallback,
-  /** the round, for the free-cast auras (`FREE_CAST_AURA_IDS`); absent = not checked */
+  /** the round, for the free-cast auras (`FREE_CAST_AURA_IDS`) and the cost
+   * the unit's cast rows state (`statedManaCostInRound`); absent = neither */
   combat?: { startTime: number; endTime: number },
 ): boolean | null {
   if (freeCastWithin(unit, fromMs, toMs, combat)) return null;
   const samples = manaSamplesWithin(unit, fromMs, toMs, fallback);
   let known = false;
   for (const s of samples) {
-    const cost = costFor(unit, spellId, s.max);
+    const cost = costFor(unit, spellId, s.max, combat);
     if (cost === null || !(cost > 0)) return null;
     known = true;
     if (s.current >= cost) return true;
