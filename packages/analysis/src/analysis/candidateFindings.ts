@@ -63,7 +63,6 @@ import {
   computePressureWindows,
   DEFENSIVE_TAGS,
   extractMajorCooldowns,
-  forbearanceStopsPress,
   type IAvailableWindow,
   type IMajorCooldownInfo,
   isAllyCastableDefensive,
@@ -72,6 +71,7 @@ import {
   isPassiveProcCast,
   isTeamSaveCD,
   kitSpellReadyAt,
+  lockoutDebuffStopsPress,
   playerTalentIdSets,
   REACTION_WINDOW_S,
   specToString,
@@ -3439,12 +3439,13 @@ function teamPlayEvents(
             );
           },
           // review of F-W6: a Forbearance-gated save under Forbearance is
-          // not ready — the [DEATH] "Unused:" gate's predicates
+          // not ready — the [DEATH] "Unused:" gate's predicates. FT F22:
+          // nor is Ice Block under Hypothermia (`lockoutDebuffStopsPress`).
           (spellId: string, tSec: number, crisisUnitId: string) => {
             const all = Object.values(combat.units ?? {}) as ICombatUnit[];
             const recipient =
               all.find((u) => u.id === crisisUnitId) ?? (owner as ICombatUnit);
-            return forbearanceStopsPress(
+            return lockoutDebuffStopsPress(
               owner,
               spellId,
               recipient,

@@ -13,13 +13,12 @@ import {
   cdNeverSpent,
   cdRemainingWholeSeconds,
   cdSecondsUntilReady,
-  DIVINE_SHIELD_SPELL_ID,
-  forbearanceBlocks,
   GUARDIAN_SPIRIT_SPELL_ID,
   IMajorCooldownInfo,
   lockCastsOf,
+  ownPressLockout,
+  type PressLockoutDebuff,
   pressSpentBy,
-  selfForbearanceUntil,
   specToString,
 } from "../utils/cooldowns";
 import { positionalWallReach } from "../utils/deathOutcomeAnalysis";
@@ -401,10 +400,10 @@ function onCdKey(
   return `${displayName}@${Math.round(last * 10) / 10}`;
 }
 
-/** B35 delta key of a Forbearance-locked entry: the name and the lockout it
- * is waiting out, so a second Forbearance prints again. */
-function forbearanceKey(displayName: string, untilS: number): string {
-  return `${displayName}@forbearance${Math.round(untilS * 10) / 10}`;
+/** B35 delta key of a debuff-locked entry (Forbearance, Hypothermia): the
+ * name and the lockout it is waiting out, so a second one prints again. */
+function lockoutKey(displayName: string, lock: ResPressLockout): string {
+  return `${displayName}@${lock.debuff.toLowerCase()}${Math.round(lock.untilS * 10) / 10}`;
 }
 
 /**
@@ -466,8 +465,9 @@ function friendlyResCds(
   displayName: string;
   cd: IMajorCooldownInfo;
   holderDead: boolean;
-  /** off cooldown, but its holder is under Forbearance until this second */
-  forbearanceUntilS?: number;
+  /** off cooldown, but its holder is under a debuff that refuses the press
+   * (`ownPressLockout`: Forbearance, Hypothermia) until this second */
+  lockout?: ResPressLockout;
 }> {
   // "dead before the row's second": `isDeadAt` 1 ms before it, so a death at
   // exactly 67.000 keeps the 1:07 row like one at 67.030 (codex review — the
@@ -479,21 +479,24 @@ function friendlyResCds(
   const dead = (unit: ICombatUnit | undefined) =>
     rowMs !== undefined && unit !== undefined && isDeadAt(unit, rowMs);
   const ownerDead = dead(deaths?.ownerUnit);
-  // FT-T04: Divine Shield is the one tracked cooldown Forbearance takes from
-  // its own holder (the ally-castable ones stay pressable on somebody
-  // else). `forbearanceBlocks` keeps it for a Light's Revocation holder.
+  // FT-T04 / FT F22: the debuff that takes a cooldown from its own holder
+  // while it is off cooldown (`ownPressLockout`: Divine Shield under
+  // Forbearance, Ice Block under Hypothermia).
   const team = [deaths?.ownerUnit, ...teammateCDs.map((t) => t.player)].filter(
     (u): u is ICombatUnit => u !== undefined,
   );
-  const forbearanceUntil = (
+  const lockoutOf = (
     cd: IMajorCooldownInfo,
     holder: ICombatUnit | undefined,
-  ): number | undefined =>
-    deaths !== undefined &&
-    holder !== undefined &&
-    cd.spellId === DIVINE_SHIELD_SPELL_ID &&
-    forbearanceBlocks(holder, cd.spellId)
-      ? selfForbearanceUntil(holder, team, timeSeconds, deaths.matchStartMs)
+  ): ResPressLockout | undefined =>
+    deaths !== undefined && holder !== undefined
+      ? ownPressLockout(
+          holder,
+          cd.spellId,
+          team,
+          timeSeconds,
+          deaths.matchStartMs,
+        )
       : undefined;
   return [
     ...ownerCDs
@@ -502,7 +505,7 @@ function friendlyResCds(
         displayName: cd.spellName,
         cd,
         holderDead: ownerDead,
-        forbearanceUntilS: forbearanceUntil(cd, deaths?.ownerUnit),
+        lockout: lockoutOf(cd, deaths?.ownerUnit),
       })),
     ...teammateCDs.flatMap(({ cds, playerLabel, player }) => {
       const holderDead = dead(player);
@@ -514,29 +517,32 @@ function friendlyResCds(
             : cd.spellName,
           cd,
           holderDead,
-          forbearanceUntilS: forbearanceUntil(cd, player),
+          lockout: lockoutOf(cd, player),
         }));
     }),
   ];
 }
 
+type ResPressLockout = { debuff: PressLockoutDebuff; untilS: number };
+
 /** What a `cd:` entry reads for a cooldown that is off cooldown while its
- * holder is under Forbearance (FT-T04) — `Divine Shield(Forbearance 12s)`. */
+ * holder is under the debuff that refuses the press — `Divine
+ * Shield(Forbearance 12s)` (FT-T04), `Ice Block(Hypothermia 12s)` (FT F22). */
 export const RES_FORBEARANCE_RE_SRC = String.raw`\(Forbearance \d+s\)`;
-function forbearanceText(untilS: number, timeSeconds: number): string {
-  return `Forbearance ${Math.max(1, Math.floor(untilS - timeSeconds))}s`;
+export const RES_HYPOTHERMIA_RE_SRC = String.raw`\(Hypothermia \d+s\)`;
+function lockoutText(lock: ResPressLockout, timeSeconds: number): string {
+  return `${lock.debuff} ${Math.max(1, Math.floor(lock.untilS - timeSeconds))}s`;
 }
 
-/** `resStateOf` with the holder's Forbearance: a ready Divine Shield under it
- * is "locked" — out of `rdy:`, in `cd:` with the lockout's own remaining. */
+/** `resStateOf` with the holder's lockout debuff: a ready Divine Shield under
+ * Forbearance, a ready Ice Block under Hypothermia, is "locked" — out of
+ * `rdy:`, in `cd:` with the lockout's own remaining. */
 function resEntryState(
-  e: { cd: IMajorCooldownInfo; forbearanceUntilS?: number },
+  e: { cd: IMajorCooldownInfo; lockout?: ResPressLockout },
   timeSeconds: number,
 ): "ready" | "onCd" | "skip" | "locked" {
   const state = resStateOf(e.cd, timeSeconds);
-  return state === "ready" && e.forbearanceUntilS !== undefined
-    ? "locked"
-    : state;
+  return state === "ready" && e.lockout !== undefined ? "locked" : state;
 }
 
 /**
@@ -621,7 +627,7 @@ export function computeOnCDDisplayNames(
     if (state === "onCd")
       onCDNames.push(onCdKey(e.displayName, e.cd, timeSeconds));
     else if (state === "locked")
-      onCDNames.push(forbearanceKey(e.displayName, e.forbearanceUntilS!));
+      onCDNames.push(lockoutKey(e.displayName, e.lockout!));
   }
   return onCDNames;
 }
@@ -775,11 +781,11 @@ export function buildResourceSnapshot({
     const { displayName, cd } = e;
     const state = resEntryState(e, timeSeconds);
     if (state === "locked") {
-      const key = forbearanceKey(displayName, e.forbearanceUntilS!);
+      const key = lockoutKey(displayName, e.lockout!);
       currentOnCDNames.push(key);
       if (prevOnCDSet === null || !prevOnCDSet.has(key))
         onCDParts.push(
-          `${displayName}(${forbearanceText(e.forbearanceUntilS!, timeSeconds)})`,
+          `${displayName}(${lockoutText(e.lockout!, timeSeconds)})`,
         );
       continue;
     }

@@ -1537,8 +1537,10 @@ export function cdHoardedEvents(
    * cd-hoarded F-W6, 2026-10-03: a Holy Paladin's unpressed Divine Shield,
    * owned on the spec baseline, named 10 s after a self Lay on Hands). The
    * caller checks the RECIPIENT (`forbearanceStopsPress`: the crisis unit
-   * for an external such as Lay on Hands). An absent callback does not
-   * gate; the response set is untouched. */
+   * for an external such as Lay on Hands). Since FT F22 the caller asks
+   * `lockoutDebuffStopsPress`, which also stops an Ice Block under
+   * Hypothermia. An absent callback does not gate; the response set is
+   * untouched. */
   ownerForbearanceBlocks?: (
     spellId: string,
     tSec: number,

@@ -16,7 +16,6 @@ import {
   cdNeverSpent,
   cdReadyInTimeAt,
   DEFENSIVE_TAGS,
-  forbearanceStopsPress,
   getUnitHpAtTimestamp,
   gridEndpointHpPct,
   HP_SAMPLE_RADIUS_MS,
@@ -26,6 +25,7 @@ import {
   isHealerSpec,
   isHpTroughWorthPrinting,
   isSpikeHealedThrough,
+  lockoutDebuffStopsPress,
   PRESSURE_WINDOWS_TOP_N,
   SELF_CAST_NOOP_EXTERNAL_IDS,
   specToBenchmarkKey,
@@ -1044,10 +1044,12 @@ export function emitFriendlyDeathEntries<S>(params: {
         // Forbearance in the last 30s — don't list those as "unused" (false accusation).
         // Light's Revocation holders keep Divine Shield (forbearanceBlocks).
         // One predicate with cd-hoarded and the kill sequence
-        // (`forbearanceStopsPress`, recipient = the dying unit itself).
+        // (`lockoutDebuffStopsPress`, recipient = the dying unit itself) —
+        // which also keeps an Ice Block under Hypothermia off the list
+        // (FT F22).
         .filter(
           (cd) =>
-            !forbearanceStopsPress(
+            !lockoutDebuffStopsPress(
               dyingUnit,
               cd.spellId,
               dyingUnit,

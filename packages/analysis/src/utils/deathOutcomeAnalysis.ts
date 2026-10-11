@@ -15,7 +15,10 @@ import {
   CD_INSTANT_SLACK_S,
   chargesAvailableAt,
   ENEMY_TARGET_DEFENSIVE_IDS,
+  FORBEARANCE_AURA_ID,
   forbearanceBlocks,
+  HYPOTHERMIA_AURA_ID,
+  hypothermiaUntil,
   type IMajorCooldownInfo,
   isCooldownAvailableFromLastUse,
   isPressOfCooldown,
@@ -57,7 +60,7 @@ export const IMMUNITY_SPELLS: Record<string, IImmunitySpell> = {
   "642": {
     name: "Divine Shield",
     cooldownSeconds: 300,
-    lockoutSpellId: "25771",
+    lockoutSpellId: FORBEARANCE_AURA_ID,
     specs: [
       CombatUnitSpec.Paladin_Holy,
       CombatUnitSpec.Paladin_Retribution,
@@ -67,7 +70,7 @@ export const IMMUNITY_SPELLS: Record<string, IImmunitySpell> = {
   "45438": {
     name: "Ice Block",
     cooldownSeconds: 240,
-    lockoutSpellId: "41425",
+    lockoutSpellId: HYPOTHERMIA_AURA_ID,
     specs: [
       CombatUnitSpec.Mage_Arcane,
       CombatUnitSpec.Mage_Fire,
@@ -1019,13 +1022,18 @@ export function buildDeathOutcomeSummary(
           // Light's Revocation: a holder casts Divine Shield through
           // Forbearance (forbearanceBlocks, the death-line gate's predicate)
           !(
-            spell.lockoutSpellId === "25771" &&
+            spell.lockoutSpellId === FORBEARANCE_AURA_ID &&
             !forbearanceBlocks(unit, spellId)
           ) &&
-          isLockedOutAt(
-            getLockoutIntervals(unit, spell.lockoutSpellId),
-            atSeconds,
-          )
+          // FT F22: Hypothermia through the one reader (`hypothermiaUntil`).
+          // The interval walk below ends a lockout at the REMOVED the unit's
+          // own death writes, a few ms before the death it is asked about.
+          (spell.lockoutSpellId === HYPOTHERMIA_AURA_ID
+            ? hypothermiaUntil(unit, atSeconds, matchStartMs) !== undefined
+            : isLockedOutAt(
+                getLockoutIntervals(unit, spell.lockoutSpellId),
+                atSeconds,
+              ))
         )
           continue;
         availableImmunities.push({

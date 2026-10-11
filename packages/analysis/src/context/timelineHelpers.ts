@@ -32,10 +32,10 @@ import { isControlledPlayerFlags } from "../utils/charmedPlayer";
 import {
   cdCanHelpAnotherUnit,
   cdReadyInTimeAt,
-  forbearanceStopsPress,
   IMajorCooldownInfo,
   isHealerSpec,
   isPassiveProcCast,
+  lockoutDebuffStopsPress,
   PASSIVE_SPELL_BLOCKLIST,
   pressSpentBy,
   specToString,
@@ -1847,9 +1847,10 @@ export function buildKillSequenceBlock(params: {
 
             // …and not a save Forbearance stops for the unit it would land
             // on (review of cd-hoarded F-W6: an unpressed baseline Divine
-            // Shield named 10 s after a self Lay on Hands)
+            // Shield named 10 s after a self Lay on Hands), nor an Ice Block
+            // under Hypothermia (FT F22)
             if (
-              forbearanceStopsPress(
+              lockoutDebuffStopsPress(
                 player as ICombatUnit,
                 cd.spellId,
                 dyingUnit as ICombatUnit,

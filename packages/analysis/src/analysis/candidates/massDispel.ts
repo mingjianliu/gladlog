@@ -43,14 +43,17 @@ import {
   effectiveCooldownSeconds,
   spellEffectData,
 } from "../../data/spellEffectData";
-import { chargesAvailableAt } from "../../utils/cooldowns";
+import {
+  chargesAvailableAt,
+  ICE_BLOCK_SPELL_ID,
+} from "../../utils/cooldowns";
 import { toRenderSecond } from "../../utils/renderGrid";
 import { CandidateEvent } from "../types";
 import { CD_HOARD_CRISIS_HP_PCT, type ICrisisMoment } from "./cooldownTiming";
 
 export const MD_SPELL_ID = "32375";
 export const CYCLONE_SPELL_ID = "33786";
-export const ICE_BLOCK_SPELL_ID = "45438";
+export { ICE_BLOCK_SPELL_ID };
 export const DIVINE_SHIELD_SPELL_ID = "642";
 
 /** User-ruled on GH #25 (2026-08-21) as part of the four-gate sign-off: an MD

@@ -630,6 +630,27 @@ const INDEX: PredicateRow[] = [
     symbol: "selfForbearanceUntil",
     mod: cooldowns,
   },
+  // FT F22: Hypothermia, read off the log; one predicate with Forbearance
+  {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "lockoutDebuffStopsPress",
+    mod: cooldowns,
+  },
+  {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "hypothermiaStopsPress",
+    mod: cooldowns,
+  },
+  {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "hypothermiaUntil",
+    mod: cooldowns,
+  },
+  {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "ownPressLockout",
+    mod: cooldowns,
+  },
   {
     file: `${A}/utils/cooldowns.ts`,
     symbol: "cdRemainingWholeSeconds",

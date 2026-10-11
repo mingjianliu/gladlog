@@ -75,6 +75,8 @@ import {
   CD_ROLE_TAGS,
   ENEMY_TARGET_DEFENSIVE_IDS,
   FORBEARANCE_GATED_IDS,
+  HYPOTHERMIA_AURA_ID,
+  HYPOTHERMIA_GATED_IDS,
   NON_SUBSTITUTE_DEFENSIVE_IDS,
   PASSIVE_PROC_CAST_IDS,
   PROC_ONLY_ACTIVATION_IDS,
@@ -510,6 +512,12 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   t("FORBEARANCE_GATED_IDS", "utils/cooldowns.ts", "cast", () =>
     set(FORBEARANCE_GATED_IDS),
   ),
+  // FT F22: the casts Hypothermia refuses (DB2 SpellAuraRestrictions), and
+  // the aura itself
+  t("HYPOTHERMIA_GATED_IDS", "utils/cooldowns.ts", "mixed", () => [
+    ...set(HYPOTHERMIA_GATED_IDS),
+    HYPOTHERMIA_AURA_ID,
+  ]),
   t("SPEC_EXCLUSIVE_SPELLS", "utils/cooldowns.ts", "cast", () =>
     keys(SPEC_EXCLUSIVE_SPELLS),
   ),

@@ -801,6 +801,177 @@ export function selfForbearanceActiveAt(
   );
 }
 
+/** Ice Block's cast id — also the ledger entry an Ice Cold mage's presses
+ * count on (`talentReplacementsOf`). */
+export const ICE_BLOCK_SPELL_ID = "45438";
+/** Hypothermia's own aura id (DB2 Spell 41425). */
+export const HYPOTHERMIA_AURA_ID = "41425";
+// Official read: DB2 Spell 41425 durationSeconds = 30 at 12.1.0.69587. The
+// literal is only the fallback if the generated table ever loses the row;
+// `hypothermia.test.ts` pins official == fallback.
+export const HYPOTHERMIA_FALLBACK_SECONDS = 30;
+export const HYPOTHERMIA_SECONDS =
+  spellEffectData[HYPOTHERMIA_AURA_ID]?.durationSeconds ??
+  HYPOTHERMIA_FALLBACK_SECONDS;
+/**
+ * The casts the game refuses while their caster carries Hypothermia: DB2
+ * SpellAuraRestrictions (12.1.0.69587) row 142, Ice Block 45438, and row
+ * 20340, Ice Cold 414658 — `ExcludeCasterAuraSpell = 41425` on both, the
+ * shape of Divine Shield's row (642 → 61988). The other rows that exclude
+ * 41425 (65802, 121548, 361059, 397291–3) are not player casts and are not
+ * in the corpus. Registered in curatedIdRegistry.
+ */
+export const HYPOTHERMIA_GATED_IDS: ReadonlySet<string> = new Set([
+  ICE_BLOCK_SPELL_ID,
+  "414658", // Ice Cold
+]);
+
+/**
+ * Until when (seconds into the round) `unit` is under Hypothermia at
+ * `atSeconds`, or undefined when it is not (FT F22).
+ *
+ * Ice Block puts Hypothermia on its caster and cannot be pressed again under
+ * it (`HYPOTHERMIA_GATED_IDS`) — while the cooldown itself can be back inside
+ * the debuff: a second charge (Glacial Bulwark), a Cold Snap reset. The
+ * ledger then called it ready: on the 605-file capture of 8c3275fa, 94 [RES]
+ * rows in 76 of 3,520 contexts list a mage's Ice Block as ready within 30 s
+ * of that mage's own press — 58 of them within 20 s, where the debuff is on
+ * whatever its length. Corpus leg, 5 raw logs of the 60 re-eval matches
+ * (0068182d, 141470d0, 69546267, f4da82c5, bd790c92): 31 Ice Block casts, 31
+ * with a 41425 application within 300 ms; of 24 re-presses by the same mage
+ * none came inside 30 s of the previous one (the shortest gaps: 30.5 s and
+ * 38.9 s).
+ *
+ * Read off the log, both ends. The start is the first APPLIED / REFRESH of
+ * the run that is open at the instant (no REMOVED since): the log re-writes
+ * a unit's auras as APPLIED now and then (0068182d: a second 41425 APPLIED
+ * 19.7 s into a 20 s debuff, among every other aura of the mage, with no
+ * cast) and that is not a new application. The end is the REMOVED that
+ * closes the run — in those logs 12 runs lasted 30.0 s (the DB2 length) and
+ * 7 lasted 20.0 s (DB2 SpellEffect 1254377 of spell 1250315: aura 219,
+ * −10 000 ms on 41425's label — NOT registered as a duration modifier; the
+ * logged end needs none). A REMOVED the unit's own death wrote
+ * (`DEATH_CASCADE_MS`) did not end the lockout. With no REMOVED to read —
+ * that death, the round's end, or a removal the log never wrote (0068182d:
+ * applied at 00:03:28.2, next line of the aura the press at 00:05:13.7) —
+ * the official length caps it (`buffFullDurationForCaster`), which is 10 s
+ * too long for a holder of that talent. No cast fallback: without the aura
+ * line there is no lockout, as before.
+ */
+export function hypothermiaUntil(
+  unit: ICombatUnit,
+  atSeconds: number,
+  matchStartMs: number,
+): number | undefined {
+  const atMs = matchStartMs + atSeconds * 1000;
+  const diedJustAfter = (removedMs: number) =>
+    (unit.deathRecords ?? []).some(
+      (d) =>
+        d.timestamp >= removedMs && d.timestamp - removedMs <= DEATH_CASCADE_MS,
+    );
+  let openMs: number | undefined;
+  let removedMs: number | undefined;
+  for (const a of unit.auraEvents ?? []) {
+    if (a.spellId !== HYPOTHERMIA_AURA_ID) continue;
+    const ev = a.logLine.event as string;
+    const applies =
+      ev === LogEvent.SPELL_AURA_APPLIED || ev === LogEvent.SPELL_AURA_REFRESH;
+    const removes =
+      ev === LogEvent.SPELL_AURA_REMOVED && !diedJustAfter(a.timestamp);
+    if (a.timestamp <= atMs) {
+      if (applies) openMs ??= a.timestamp;
+      else if (removes) openMs = undefined;
+    } else if (openMs !== undefined && removes) {
+      removedMs = a.timestamp;
+      break;
+    }
+  }
+  if (openMs === undefined) return undefined;
+  const capS =
+    (openMs - matchStartMs) / 1000 +
+    (buffFullDurationForCaster(HYPOTHERMIA_AURA_ID, unit, openMs) ??
+      HYPOTHERMIA_SECONDS);
+  const untilS =
+    removedMs === undefined
+      ? capS
+      : Math.min((removedMs - matchStartMs) / 1000, capS);
+  return atSeconds <= untilS ? untilS : undefined;
+}
+
+/** Would Hypothermia stop `holder` pressing `spellId` at `atSeconds`? */
+export function hypothermiaStopsPress(
+  holder: ICombatUnit,
+  spellId: string,
+  atSeconds: number,
+  matchStartMs: number,
+): boolean {
+  return (
+    HYPOTHERMIA_GATED_IDS.has(spellId) &&
+    hypothermiaUntil(holder, atSeconds, matchStartMs) !== undefined
+  );
+}
+
+/**
+ * Would a debuff the game refuses the cast under stop `holder` pressing
+ * `spellId` for `recipient` at `atSeconds` — Forbearance
+ * (`forbearanceStopsPress`) or Hypothermia (`hypothermiaStopsPress`)? One
+ * predicate for every reader that names a save as pressable: cd-hoarded's
+ * ready set, the kill sequence's `[DEFENSIVE AVAILABLE]` and the `[DEATH]`
+ * "(Unused: …)" list. The `[RES]` ledger asks the same two through
+ * `ownPressLockout`, which also says until when.
+ */
+export function lockoutDebuffStopsPress(
+  holder: ICombatUnit,
+  spellId: string,
+  recipient: ICombatUnit,
+  allUnits: ICombatUnit[],
+  atSeconds: number,
+  matchStartMs: number,
+): boolean {
+  return (
+    forbearanceStopsPress(
+      holder,
+      spellId,
+      recipient,
+      allUnits,
+      atSeconds,
+      matchStartMs,
+    ) || hypothermiaStopsPress(holder, spellId, atSeconds, matchStartMs)
+  );
+}
+
+export type PressLockoutDebuff = "Forbearance" | "Hypothermia";
+
+/**
+ * The debuff that keeps a cooldown that is OFF cooldown out of its own
+ * holder's hands at `atSeconds`, and until when — the `[RES]` ledger's
+ * `cd:<spell>(<debuff> Ns)`. Divine Shield under Forbearance (FT-T04: the
+ * one Forbearance-gated cooldown that is taken from its own holder — the
+ * ally-castable ones stay pressable on somebody else; a Light's Revocation
+ * holder keeps it, `forbearanceBlocks`), Ice Block under Hypothermia (FT
+ * F22).
+ */
+export function ownPressLockout(
+  holder: ICombatUnit,
+  spellId: string,
+  team: ICombatUnit[],
+  atSeconds: number,
+  matchStartMs: number,
+): { debuff: PressLockoutDebuff; untilS: number } | undefined {
+  if (
+    spellId === DIVINE_SHIELD_SPELL_ID &&
+    forbearanceBlocks(holder, spellId)
+  ) {
+    const untilS = selfForbearanceUntil(holder, team, atSeconds, matchStartMs);
+    return untilS === undefined ? undefined : { debuff: "Forbearance", untilS };
+  }
+  if (HYPOTHERMIA_GATED_IDS.has(spellId)) {
+    const untilS = hypothermiaUntil(holder, atSeconds, matchStartMs);
+    return untilS === undefined ? undefined : { debuff: "Hypothermia", untilS };
+  }
+  return undefined;
+}
+
 // "Is this an offensive cooldown" — the canonical table (GH #60 coarse spot 4,
 // unified 2026-09-02). This used to be a private classMetadata-only set (34
 // ids, 9 of them corpus-dead) that disagreed with `spellDanger.ts`'s

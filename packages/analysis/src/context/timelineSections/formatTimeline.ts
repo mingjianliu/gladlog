@@ -33,7 +33,10 @@ import {
 } from "../matchTimelineSections";
 import { NO_CREDITED_SPIKE_CLAUSE } from "../peakSpikePlacement";
 import { pruneZeroLossResRows } from "../resLedgerPrune";
-import { RES_FORBEARANCE_RE_SRC } from "../resourceSnapshot";
+import {
+  RES_FORBEARANCE_RE_SRC,
+  RES_HYPOTHERMIA_RE_SRC,
+} from "../resourceSnapshot";
 import { STACKED_DEFENSIVES_LEGEND } from "../stackedDefensives";
 import {
   buildKillSequenceBlock,
@@ -223,6 +226,11 @@ export function formatTimeline(
   const forbearanceRendered = entries.some((e) =>
     e.lines.some((l) => typeof l === "string" && RES_FORBEARANCE_RE.test(l)),
   );
+  // FT F22: `cd:Ice Block(Hypothermia Ns)`, the same convention
+  const RES_HYPOTHERMIA_RE = new RegExp(RES_HYPOTHERMIA_RE_SRC);
+  const hypothermiaRendered = entries.some((e) =>
+    e.lines.some((l) => typeof l === "string" && RES_HYPOTHERMIA_RE.test(l)),
+  );
   // FT F22: a `Top sources` entry summed over an ability's spell ids names
   // every school its damage came in — legended when one is printed.
   const mixedSchoolSourceRendered = entries.some((e) =>
@@ -369,6 +377,12 @@ export function formatTimeline(
     ...(forbearanceRendered
       ? [
           "    `cd:<spell>(Forbearance Ns)` = <spell> is off cooldown, but its holder is under Forbearance for N more seconds and",
+          "    cannot press it until then.",
+        ]
+      : []),
+    ...(hypothermiaRendered
+      ? [
+          "    `cd:<spell>(Hypothermia Ns)` = <spell> is off cooldown, but its holder is under Hypothermia for N more seconds and",
           "    cannot press it until then.",
         ]
       : []),

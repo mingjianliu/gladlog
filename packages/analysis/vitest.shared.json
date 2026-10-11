@@ -177,6 +177,7 @@
     "test/healerExposureEvents.test.ts",
     "test/healingVerdicts.test.ts",
     "test/hpAtPress.test.ts",
+    "test/hypothermia.test.ts",
     "test/immunityTables.test.ts",
     "test/incomingPressure.test.ts",
     "test/interruptReadySince.test.ts",
