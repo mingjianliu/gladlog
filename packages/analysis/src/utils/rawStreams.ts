@@ -19,6 +19,7 @@
  */
 import {
   decodeAdvanced,
+  logLineInstantMs,
   parseTimestamp,
   splitLine,
 } from "@gladlog/parser-compat";
@@ -30,6 +31,20 @@ export const splitRawLine = splitLine;
 /** raw.txt 日期前缀(如 `"7/19/2026 04:19:05.269-4"`)→ 绝对 epoch ms,畸形返回
  * `null`。就是 parser 的 `parseTimestamp`(同一引用)。 */
 export const parseRawTimestamp = parseTimestamp;
+
+/** A raw.txt date prefix → the instant the line states for ITSELF: its wall
+ * clock minus the UTC offset written after the milliseconds, signed (west of
+ * UTC, `…32.167-4`) or unsigned (east, `…32.16710` is .167 and +10) — the same
+ * number on every machine; `null` when the line states no offset. The
+ * parser's `logLineInstantMs` (same reference; the measured grammar is in its
+ * header).
+ *
+ * NOT interchangeable with `parseRawTimestamp`: that one is the reading every
+ * parsed event carries (for an unsigned offset, the wall clock in the parsing
+ * machine's zone), so it is the only one a raw line may be subtracted from a
+ * parsed epoch with. This one answers a calendar question — on which side of
+ * a dated game change a line was written (utils/logEra.ts). */
+export const rawLineInstantMs = logLineInstantMs;
 
 /** advanced 块(actorGuid / hp / x / y / powers …)。就是 parser 的 `decodeAdvanced`
  * (同一引用);名字沿用镜像时期的 `mirrorDecodeAdvanced`,消费者不用改。 */

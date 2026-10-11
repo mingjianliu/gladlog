@@ -167,6 +167,7 @@ import * as unitDeath from "@gladlog/analysis/src/utils/unitDeath";
 import * as warlockPet from "@gladlog/analysis/src/utils/warlockPet";
 import {
   decodeAdvanced as parserDecodeAdvanced,
+  logLineInstantMs as parserLogLineInstantMs,
   parseTimestamp as parserParseTimestamp,
   splitLine as parserSplitLine,
 } from "@gladlog/parser";
@@ -296,6 +297,13 @@ const INDEX: PredicateRow[] = [
   {
     file: `${A}/utils/rawStreams.ts`,
     symbol: "parseRawTimestamp",
+    mod: rawStreams,
+  },
+  // … and the OTHER reading of the same date prefix: the instant the line
+  // states for itself (its own UTC offset, signed or not)
+  {
+    file: `${A}/utils/rawStreams.ts`,
+    symbol: "rawLineInstantMs",
     mod: rawStreams,
   },
   {
@@ -3776,6 +3784,29 @@ describe("谓词索引:无法共享 export 的配对,断言相等", () => {
     expect(rawStreams.splitRawLine).toBe(parserSplitLine);
     expect(rawStreams.parseRawTimestamp).toBe(parserParseTimestamp);
     expect(rawStreams.mirrorDecodeAdvanced).toBe(parserDecodeAdvanced);
+  });
+
+  it("rawStreams.rawLineInstantMs 就是 parser 的 logLineInstantMs(同一引用);带符号的行与 parseRawTimestamp 同值,不带符号的行(UTC 以东)与机器时区无关;kickLockoutScan 的日期读它", () => {
+    expect(rawStreams.rawLineInstantMs).toBe(parserLogLineInstantMs);
+    for (const line of RAW_STREAMS_REAL_LINES) {
+      const datePart = rawStreams.splitRawLine(line)!.datePart;
+      // every fixture line carries a signed offset: one instant, two readers
+      expect(rawStreams.rawLineInstantMs(datePart)).toBe(
+        rawStreams.parseRawTimestamp(datePart),
+      );
+    }
+    // file 097c4ae3: .167 and +10 — 08:56:32 UTC whatever zone parses it
+    const oceanic = "8/18/2026 18:56:32.16710";
+    expect(rawStreams.rawLineInstantMs(oceanic)).toBe(
+      Date.UTC(2026, 7, 18, 8, 56, 32, 167),
+    );
+    expect(
+      rawStreams.parseRawTimestamp(oceanic, { timezone: "America/New_York" }),
+    ).toBe(Date.UTC(2026, 7, 18, 22, 56, 32, 167));
+    expect(rawStreams.rawLineInstantMs("8/18/2026 18:56:32.167")).toBeNull();
+    expect(readRepo("packages/eval/scripts/kickLockoutScan.ts")).toMatch(
+      /statedMs: rawLineInstantMs\(split\.dateText\) \?\? split\.at/,
+    );
   });
 
   it("rawStreams.splitRawLine/parseRawTimestamp 与 parser 的 splitLine/parseTimestamp 在真实 raw.txt 行上逐字节相同(2026-08-15 到 09-26 是镜像 + parity,现为同一引用的回归对照,BACKLOG #26 Task 1)", () => {

@@ -61,6 +61,16 @@
  * repo was generated before that: on the same 605 files the parser's reading
  * pairs 5,720 instead of 5,322, moves no kick's mode and moves p25 by at
  * most 0.44 s (Quell 3.55 → 3.99, Spell Lock 4.66 → 4.95).
+ *
+ * Two dates per pair (2026-10-11). The parser's date of a row whose offset
+ * has no sign is its wall clock in the zone of the machine running this
+ * scan, so "before / since the cutover" above depends on where the scan is
+ * run. Every dated pair is therefore also printed with the instant the row
+ * states for itself (`rawLineInstantMs`: wall clock minus the row's own UTC
+ * offset — the same everywhere), and the pairs the two readings put on
+ * different sides of the cutover are counted. The model column stays the
+ * product's number at the product's date: the dated rules are asked with
+ * the parser's timestamps (utils/logEra.ts says why).
  */
 import { NOT_READY_REASONS } from "@gladlog/analysis/src/analysis/candidates/shared";
 import { kickLockoutSeconds } from "@gladlog/analysis/src/data/spellEffectData";
@@ -70,7 +80,10 @@ import {
   kickLockoutVictimMultiplierAt,
 } from "@gladlog/analysis/src/utils/kickLockout";
 import { logIsFrom } from "@gladlog/analysis/src/utils/logEra";
-import { parseRawTimestamp } from "@gladlog/analysis/src/utils/rawStreams";
+import {
+  parseRawTimestamp,
+  rawLineInstantMs,
+} from "@gladlog/analysis/src/utils/rawStreams";
 import { readFileSync, writeFileSync } from "fs";
 import { resolve } from "path";
 import { gunzipSync } from "zlib";
@@ -161,6 +174,10 @@ interface SplitPair {
   file: string;
   dateText: string;
   epochMs: number;
+  /** the instant the SPELL_INTERRUPT row states for itself — its wall clock
+   * minus its own UTC offset, signed or not (`rawLineInstantMs`); the
+   * parser's reading when the row states no offset */
+  statedMs: number;
   spec: string;
   kick: string;
   interrupted: string;
@@ -321,6 +338,7 @@ for (const f of files) {
               file: f.replace(/^.*\//, "").slice(0, 8),
               dateText: split.dateText,
               epochMs: split.at,
+              statedMs: rawLineInstantMs(split.dateText) ?? split.at,
               spec: specOf.get(p[1] ?? "") ?? "?",
               kick: split.kick,
               interrupted: split.interrupted,
@@ -410,14 +428,18 @@ const cutoverOf = (x: SplitPair) =>
   typeof x.modifier.multiplier === "number"
     ? null
     : x.modifier.multiplier.cutoverEpochMs;
-const sideOf = (x: SplitPair) => {
+const sideAt = (x: SplitPair, logEpochMs: number) => {
   const cut = cutoverOf(x);
   return cut === null
     ? "undated"
-    : logIsFrom(x.epochMs, cut)
+    : logIsFrom(logEpochMs, cut)
       ? "since"
       : "before";
 };
+/** the side the product puts the pair on: the parser's date of the row */
+const sideOf = (x: SplitPair) => sideAt(x, x.epochMs);
+/** the side the row's own stated instant is on */
+const statedSideOf = (x: SplitPair) => sideAt(x, x.statedMs);
 console.log(
   "victim lockout modifiers by log date (the SPELL_INTERRUPT row as the parser dates it, against the modifier's own cutover) and victim spec; gap / table lockout:",
 );
@@ -455,8 +477,14 @@ console.log(
 );
 for (const x of modified)
   console.log(
-    `  ${x.file} ${x.dateText} → ${new Date(x.epochMs).toISOString()} ${sideOf(x)} spec ${x.spec} kick ${x.kick} (${x.lockS}s) on ${x.interrupted} → first locked-school cast ${x.firstCast} at ${x.gapS.toFixed(3)}s = ×${(x.gapS / x.lockS).toFixed(3)} | model ×${modelOf(x)}: Δ ${earlyMs(x, modelOf(x))} ms | current ×${currentOf(x)} alone: Δ ${earlyMs(x, currentOf(x))} ms${x.refusedAtS === null ? "" : ` | still refused at ${x.refusedAtS.toFixed(3)}s = ×${(x.refusedAtS / x.lockS).toFixed(3)}`}`,
+    `  ${x.file} ${x.dateText} → ${new Date(x.epochMs).toISOString()} ${sideOf(x)} (the row states ${new Date(x.statedMs).toISOString()}${statedSideOf(x) === sideOf(x) ? "" : `: ${statedSideOf(x).toUpperCase()} — the parser's date is on the other side`}) spec ${x.spec} kick ${x.kick} (${x.lockS}s) on ${x.interrupted} → first locked-school cast ${x.firstCast} at ${x.gapS.toFixed(3)}s = ×${(x.gapS / x.lockS).toFixed(3)} | model ×${modelOf(x)}: Δ ${earlyMs(x, modelOf(x))} ms | current ×${currentOf(x)} alone: Δ ${earlyMs(x, currentOf(x))} ms${x.refusedAtS === null ? "" : ` | still refused at ${x.refusedAtS.toFixed(3)}s = ×${(x.refusedAtS / x.lockS).toFixed(3)}`}`,
   );
+const otherSide = (xs: SplitPair[]) =>
+  xs.filter((x) => statedSideOf(x) !== sideOf(x)).length;
+const dated = splitPairs.filter((x) => cutoverOf(x) !== null);
+console.log(
+  `pairs the parser's date puts on the other side of the cutover than the instant their SPELL_INTERRUPT row states (an offset without a sign is read in this machine's zone): ${otherSide(dated)} of ${dated.length} dated pairs; holder × modified spell ${otherSide(modified)} of ${modified.length}`,
+);
 const tooLong = (mult: (x: SplitPair) => number) =>
   modified.filter((x) => earlyMs(x, mult(x)) < -EARLY_MS).length;
 const tooShort = (mult: (x: SplitPair) => number) =>

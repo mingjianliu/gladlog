@@ -11,13 +11,28 @@
  *
  * What that epoch is: the parser turns a log line's `M/D/YYYY HH:MM:SS.mmm`
  * into epoch ms (`parseTimestamp`, packages/parser/src/l1/timestamp.ts). A
- * line whose UTC offset is written with a sign (`…46.400-5`) is an exact
- * instant. Any other line — no offset, or one written with no sign
- * (`…03.5013` in the new-season archive: .501 and a +3) — is read in the
- * zone the parser was given, by default the zone of the machine doing the
- * parsing. For another player's log that can be many hours off, so a rule is
- * only as sharp as that: a match within a day of a cutover may land on the
- * wrong side of it.
+ * line whose UTC offset is written with a sign (`…46.400-5`, a log recorded
+ * west of UTC) is an exact instant. A log recorded EAST of UTC writes its
+ * offset with no sign (`…03.5013`: .501 and a +3 — 7,082 of the 18,134 files
+ * of the new-season archive), and the parser reads such a line in the zone
+ * it was given, by default the zone of the machine doing the parsing: the
+ * same instant on the machine that recorded the log, and off by the gap
+ * between the two zones on any other (a Central European log parsed on a US
+ * Eastern machine is dated 6 hours late, an Oceanic one 14).
+ *
+ * The instant such a line states for ITSELF is `rawLineInstantMs`
+ * (utils/rawStreams.ts — the parser's `logLineInstantMs`, whose header has
+ * the measured grammar). The dated rules are NOT asked with it: they are
+ * asked with event timestamps of the parsed match, dozens of call sites away
+ * from anything that knows how far that match's clock is from the stated
+ * one, and the parsed document does not carry the number (its timestamps
+ * must stay what they are — a recording is joined to a match on them, and a
+ * raw.txt line is subtracted from them). So a rule is only as sharp as the
+ * parsing machine's zone: another player's match within a day of a cutover
+ * may land on the wrong side of it — 2 of the 605 new-season files on a US
+ * Eastern machine, both at the Storm Conduit cutover (docs/predicate-index.md,
+ * "Not yet unified"; `kickLockoutScan.ts` prints both readings of every pair
+ * it dates).
  */
 
 /**
