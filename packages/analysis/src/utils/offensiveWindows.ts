@@ -15,6 +15,7 @@ import { spellEffectData } from "../data/spellEffectData";
 import { SpellTag } from "../data/spellTypes";
 import { supersededAuraBreaks } from "./auraIntervals";
 import { buffFullDurationForCaster } from "./buffDuration";
+import { extractSpiritOfRedemptionIntervals } from "./combatStates";
 import {
   chargeAvailabilityTransitions,
   extractMajorCooldowns,
@@ -575,7 +576,25 @@ export function computeOffensiveWindows(
     // purges read casts after the round as "inside a kill window".
     const deathS = (firstDeathMs(enemy) - matchStartMs) / 1000;
     const endS = Math.min(deathS, roundEndS);
-    const cutWindows = subtractIntervals(vulnWindows, received)
+    // ── 2d. A priest in Spirit of Redemption form is not "defenseless"
+    //        either — it cannot be hit ───────────────────────────────────────
+    // F17 (user ruling 2026-10-11, option b): the state machine times the
+    // pressed form (215769) as any other press, on an official length, and
+    // does not see the on-death one (27827) at all, so a span sat on or ran
+    // across the form — 174-1-1061: `[VULNERABLE] 1:06–1:26 … never punished`
+    // on a Holy Priest in the form until 1:07.4 (raw APPLIED 58.39 s, REMOVED
+    // 67.42 s), and `defenseless 0:39–1:27` across a whole form elsewhere.
+    // The form's interval is the `[STATE]` tick's own
+    // (`extractSpiritOfRedemptionIntervals`, read off the aura on the unit),
+    // taken out like an external received: the span ends where the form
+    // begins and the next one starts where it ends. 81 logs, 300 pressed
+    // forms: no damage row lands on the holder later than 1.47 s after the
+    // aura went up (40 rows in 13 of them, hits already in flight), and none
+    // dies in it. Only this form — Nullifying Shroud and stealth are not read.
+    const inForm = extractSpiritOfRedemptionIntervals(enemy, combat).map(
+      (g) => ({ from: g.startSeconds, to: g.endSeconds }),
+    );
+    const cutWindows = subtractIntervals(vulnWindows, [...received, ...inForm])
       .filter((w) => w.from < endS)
       .map((w) => ({ from: w.from, to: Math.min(w.to, endS) }))
       .filter((w) => w.to - w.from >= MIN_VULN_SECONDS);

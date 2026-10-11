@@ -111,6 +111,44 @@ export function extractSpiritOfRedemptionIntervals(
   return intervals;
 }
 
+/**
+ * Is a unit with these form intervals `:ghost` at the [STATE] tick of whole
+ * second `second`? The tick's own rule — every whole second from the form's
+ * start to its end, both included — in one place: the tick
+ * (`timelineSections/state.ts`) and the gate that reads the token back
+ * (`checkNoWindowAcrossSpiritOfRedemption`) are the two ends of it.
+ */
+export function isGhostAtRenderSecond(
+  intervals: ReadonlyArray<ISpiritOfRedemptionInterval>,
+  second: number,
+): boolean {
+  return intervals.some(
+    (int) => second >= int.startSeconds && second <= int.endSeconds,
+  );
+}
+
+/**
+ * Does a span printed `a–b` hold a `:ghost` second of its target? Whole
+ * render seconds; the span's own first and last second are not "held".
+ *
+ * Why the ends are open (F17): a kill window / kill-attempt bracket is cut at
+ * the form's raw instants (`computeOffensiveWindows` step 2c,
+ * `extractKillAttempts`) and both are printed floored. A span that ENDS where
+ * the form begins at S prints `floor(S)`, and the tick of that second is
+ * `ghost` only when S is whole; a span that STARTS where the form ends at E
+ * prints `floor(E)`, whose tick is still `ghost`. So the one second a cut
+ * span can share with the form is its own boundary second — every ghost
+ * second strictly between the two printed ends means the span runs across
+ * the form.
+ */
+export function spanHoldsGhostSecond(
+  fromSecond: number,
+  toSecond: number,
+  ghostSecond: number,
+): boolean {
+  return ghostSecond > fromSecond && ghostSecond < toSecond;
+}
+
 export function extractShapeshiftIntervals(
   unit: ICombatUnit,
   combat: AtomicArenaCombat,
@@ -251,13 +289,22 @@ function stasisReadyLives(unit: ICombatUnit): StasisReadyLife[] {
   for (const e of dropAuraRebroadcasts(unit.auraEvents ?? [])) {
     if (e.spellId !== STASIS_READY_AURA_ID) continue;
     if (e.logLine.event === LogEvent.SPELL_AURA_APPLIED) {
-      open = { appliedMs: e.logLine.timestamp, removedMs: undefined, used: false };
+      open = {
+        appliedMs: e.logLine.timestamp,
+        removedMs: undefined,
+        used: false,
+      };
       lives.push(open);
     } else if (e.logLine.event === LogEvent.SPELL_AURA_REMOVED) {
-      if (open && open.removedMs === undefined) open.removedMs = e.logLine.timestamp;
+      if (open && open.removedMs === undefined)
+        open.removedMs = e.logLine.timestamp;
       else
         // up before the log began: only its end is logged
-        lives.push({ appliedMs: undefined, removedMs: e.logLine.timestamp, used: false });
+        lives.push({
+          appliedMs: undefined,
+          removedMs: e.logLine.timestamp,
+          used: false,
+        });
       open = undefined;
     }
   }

@@ -8,6 +8,7 @@
  * its closure inputs now arrive through `ctx`. Output is pinned by the 605-file
  * acceptanceCapture context hash.
  */
+import { isGhostAtRenderSecond } from "../../utils/combatStates";
 import { gridHpPct, isDeadAtRenderSecond } from "../../utils/cooldowns";
 import { fmtTime } from "../../utils/renderGrid";
 import type { TimelineCtx } from "./ctx";
@@ -56,10 +57,7 @@ export function emitStateEntries(
 
       const isGhost = spiritOfRedemptionIntervals.some(
         (i) =>
-          i.player.name === unit.name &&
-          i.intervals.some(
-            (int) => t >= int.startSeconds && t <= int.endSeconds,
-          ),
+          i.player.name === unit.name && isGhostAtRenderSecond(i.intervals, t),
       );
 
       const clamped = gridHpPct(unit, tsMs);
@@ -86,9 +84,7 @@ export function emitStateEntries(
             const isGhost = spiritOfRedemptionIntervals.some(
               (i) =>
                 i.player.name === unit.name &&
-                i.intervals.some(
-                  (int) => t >= int.startSeconds && t <= int.endSeconds,
-                ),
+                isGhostAtRenderSecond(i.intervals, t),
             );
 
             const clamped = gridHpPct(unit, tsMs);

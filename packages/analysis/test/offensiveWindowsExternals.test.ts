@@ -18,6 +18,11 @@ import {
 } from "../src/data/abilityProfile";
 import { ensureAnalysisData } from "../src/data/ensure";
 import {
+  extractSpiritOfRedemptionIntervals,
+  isGhostAtRenderSecond,
+  spanHoldsGhostSecond,
+} from "../src/utils/combatStates";
+import {
   renderedExternalSpanS,
   renderedObservedSeconds,
 } from "../src/utils/enemyDefensives";
@@ -252,5 +257,128 @@ describe("computeOffensiveWindows — an external received cuts the span (F-E2)"
     });
     expect(renderedObservedSeconds(11.249)).toBe(11.2);
     expect(renderedExternalSpanS({ atSeconds: 24.9 })).toBeUndefined();
+  });
+});
+
+// F17 (user ruling 2026-10-11, option b): a priest in Spirit of Redemption
+// form cannot be hit — the span ends where the form begins and the next one
+// starts where it ends, on the `[STATE]` tick's own interval.
+describe("computeOffensiveWindows — Spirit of Redemption form cuts the span (F17)", () => {
+  const BARKSKIN = "22812";
+  const FORM_PRESSED = "215769";
+  const combat = { startTime: T0, endTime: at(60), units: {} } as never;
+  const formAura = (event: LogEvent, s: number, id = FORM_PRESSED) =>
+    makeAuraEvent(event, id, at(s), "e1", "e1", "BUFF");
+  // Barkskin at 2 s is the only tracked wall: defenseless from its end
+  const priest = (auraEvents: ReturnType<typeof makeAuraEvent>[] = []) =>
+    makeUnit("e1", {
+      name: "EnemyPriest",
+      spec: CombatUnitSpec.Priest_Holy,
+      reaction: CombatUnitReaction.Hostile,
+      spellCastEvents: [
+        makeSpellCastEvent(
+          BARKSKIN,
+          at(2),
+          "e1",
+          "EnemyPriest",
+          "e1",
+          "EnemyPriest",
+        ),
+      ],
+      auraEvents,
+    });
+
+  it("the form's interval is taken out of the span, at the aura's own instants", () => {
+    const plain = computeOffensiveWindows([priest()] as never, [], combat);
+    expect(plain).toHaveLength(1);
+    const { fromSeconds, toSeconds } = plain[0]!;
+    const forms = [
+      formAura(LogEvent.SPELL_AURA_APPLIED, 28.39),
+      formAura(LogEvent.SPELL_AURA_REMOVED, 37.42),
+    ];
+    expect(extractSpiritOfRedemptionIntervals(priest(forms), combat)).toEqual([
+      { startSeconds: 28.39, endSeconds: 37.42 },
+    ]);
+    const cut = computeOffensiveWindows([priest(forms)] as never, [], combat);
+    expect(cut.map((w) => [w.fromSeconds, w.toSeconds])).toEqual([
+      [fromSeconds, 28.39],
+      [37.42, toSeconds],
+    ]);
+    // no rendered second strictly inside either span is a `:ghost` second
+    const ghost = extractSpiritOfRedemptionIntervals(priest(forms), combat);
+    for (const w of cut)
+      for (let s = 0; s <= 60; s++)
+        if (isGhostAtRenderSecond(ghost, s))
+          expect(
+            spanHoldsGhostSecond(
+              Math.floor(w.fromSeconds),
+              Math.floor(w.toSeconds),
+              s,
+            ),
+          ).toBe(false);
+  });
+
+  it("a piece the form leaves under the minimum length is dropped; a form held to the log's end closes the span", () => {
+    const { fromSeconds } = computeOffensiveWindows(
+      [priest()] as never,
+      [],
+      combat,
+    )[0]!;
+    // the form begins 3 s into the span: nothing is left before it
+    const early = computeOffensiveWindows(
+      [
+        priest([
+          formAura(LogEvent.SPELL_AURA_APPLIED, fromSeconds + 3),
+          formAura(LogEvent.SPELL_AURA_REMOVED, fromSeconds + 12),
+        ]),
+      ] as never,
+      [],
+      combat,
+    );
+    expect(early).toHaveLength(1);
+    expect(early[0]!.fromSeconds).toBe(fromSeconds + 12);
+    // the on-death form (27827), never removed inside the log
+    const held = computeOffensiveWindows(
+      [priest([formAura(LogEvent.SPELL_AURA_APPLIED, 40, "27827")])] as never,
+      [],
+      combat,
+    );
+    expect(held.map((w) => [w.fromSeconds, w.toSeconds])).toEqual([
+      [fromSeconds, 40],
+    ]);
+  });
+
+  it("another unit's form, and an aura that is not the form, cut nothing", () => {
+    const plain = computeOffensiveWindows([priest()] as never, [], combat)[0]!;
+    const other = makeUnit("e2", {
+      name: "OtherPriest",
+      spec: CombatUnitSpec.Priest_Holy,
+      reaction: CombatUnitReaction.Hostile,
+      auraEvents: [
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_APPLIED,
+          FORM_PRESSED,
+          at(28),
+          "e2",
+          "e2",
+          "BUFF",
+        ),
+      ],
+    });
+    const w = computeOffensiveWindows(
+      [
+        priest([
+          // Nullifying Shroud is not read (the ruling: only this form)
+          formAura(LogEvent.SPELL_AURA_APPLIED, 28, "378464"),
+          formAura(LogEvent.SPELL_AURA_REMOVED, 37, "378464"),
+        ]),
+        other,
+      ] as never,
+      [],
+      combat,
+    ).filter((x) => x.targetUnitId === "e1");
+    expect(w.map((x) => [x.fromSeconds, x.toSeconds])).toEqual([
+      [plain.fromSeconds, plain.toSeconds],
+    ]);
   });
 });

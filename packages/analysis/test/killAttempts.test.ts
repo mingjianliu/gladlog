@@ -13,6 +13,7 @@ import {
 import {
   anchorsKillAttempt,
   attemptIntoTrinketEvents,
+  attemptSpanOutsideForm,
   extractKillAttempts,
   formatKillAttemptsForContext,
   KILL_ATTEMPT_IMMUNITY_ALREADY_UP_NAME,
@@ -2357,6 +2358,93 @@ describe("our own Cyclone on the kill target: a fact clause after the outcome (I
       build([...stunAuras("e1", KIDNEY, 10, 5), ...cyclone("e1", 3.2, 5)])[0]
         .ownImmuneControl,
     ).toBeUndefined();
+  });
+});
+
+describe("a bracket does not run across the target's Spirit of Redemption form (F17)", () => {
+  const FORM = "215769";
+  // the form on e1 itself, 16.4–25.4 s
+  const form = (fromS = 16.4, toS = 25.4): any[] =>
+    stunAuras("e1", FORM, fromS, toS - fromS).map((a) => ({
+      ...a,
+      srcUnitId: "e1",
+      srcUnitName: "e1",
+      auraType: "BUFF",
+    }));
+
+  it("attemptSpanOutsideForm: ends where the form begins, starts where a form it opened in ends, null when the form holds it all", () => {
+    const forms = [{ startSeconds: 16.4, endSeconds: 25.4 }];
+    // no form meets the span: the span itself
+    expect(attemptSpanOutsideForm(forms, 2, 9)).toEqual({
+      fromSeconds: 2,
+      toSeconds: 9,
+    });
+    expect(attemptSpanOutsideForm([], 10, 30)).toEqual({
+      fromSeconds: 10,
+      toSeconds: 30,
+    });
+    expect(attemptSpanOutsideForm(forms, 10, 30)).toEqual({
+      fromSeconds: 10,
+      toSeconds: 16.4,
+    });
+    expect(attemptSpanOutsideForm(forms, 20, 40)).toEqual({
+      fromSeconds: 25.4,
+      toSeconds: 40,
+    });
+    expect(attemptSpanOutsideForm(forms, 18, 22)).toBeNull();
+  });
+
+  it("183-3-1104's shape: a stun before the form and a stun after it, inside one DR window, are two attempts — neither bracket holds the form", () => {
+    const f1 = unit("f1", {
+      reaction: 1,
+      damageOut: [dmg("f1", "e1", 11, 60_000), dmg("f1", "e1", 28, 60_000)],
+    });
+    const stuns = [
+      ...stunAuras("e1", KIDNEY, 10, 5),
+      ...stunAuras("e1", KIDNEY, 27, 3),
+    ];
+    const without = unit("e1", { auraEvents: stuns });
+    const one = extractKillAttempts([f1], [without], makeCombat(f1, without));
+    // one DR chain (27 s is 12 s after the first stun's end): one bracket
+    expect(one.map((a) => [a.fromSeconds, a.toSeconds])).toEqual([[10, 30]]);
+    expect(one[0].stuns).toHaveLength(2);
+
+    const e1 = unit("e1", { auraEvents: [...stuns, ...form()] });
+    const two = extractKillAttempts([f1], [e1], makeCombat(f1, e1));
+    expect(two.map((a) => [a.fromSeconds, a.toSeconds])).toEqual([
+      [10, 15],
+      [27, 30],
+    ]);
+    expect(two.map((a) => a.stuns.length)).toEqual([1, 1]);
+    // the DR level of the second go's opener is the chain's, untouched
+    expect(two[1].openingDrLevel).toBe(one[0].stuns[1].drLevel);
+  });
+
+  it("a burst cluster on the priest ends where the form begins; left under the damage floor it is no attempt", async () => {
+    await ensureAnalysisData();
+    const build = (auraEvents: any[], damageAt: number[]) => {
+      const f1 = unit("f1", {
+        reaction: 1,
+        spec: "71",
+        spellCastEvents: [offensiveCast(10)],
+        damageOut: damageAt.map((s) => dmg("f1", "e1", s, 60_000)),
+      });
+      const e1 = unit("e1", { auraEvents });
+      return extractKillAttempts([f1], [e1], makeCombat(f1, e1));
+    };
+    const plain = build([], [12, 26]);
+    expect(plain).toHaveLength(1);
+    expect(plain[0].anchor).toBe("burst");
+    expect(plain[0].fromSeconds).toBe(10);
+    expect(plain[0].toSeconds).toBeGreaterThan(16.4);
+    // the form begins at 16.4 s: the bracket ends there, and the sums are
+    // the cut span's — the hit at 26 s (after the form) is not in them
+    const cut = build(form(), [12, 26]);
+    expect(cut.map((a) => [a.fromSeconds, a.toSeconds])).toEqual([[10, 16.4]]);
+    expect(cut[0].teamDamageToTarget).toBe(60_000);
+    expect(cut[0].teamDamageToTargetInBracket).toBe(60_000);
+    // every hit came after the form: nothing landed in the cut span
+    expect(build(form(), [26, 27])).toEqual([]);
   });
 });
 

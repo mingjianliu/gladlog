@@ -84,6 +84,10 @@ import {
   type IPlayerCCTrinketSummary,
   renderedCcSeconds,
 } from "./ccTrinketAnalysis";
+import {
+  extractSpiritOfRedemptionIntervals,
+  type ISpiritOfRedemptionInterval,
+} from "./combatStates";
 import { analyzeOutgoingCCChains, DRLevel, drResetMsAt } from "./drAnalysis";
 import { reconstructEnemyCDTimeline } from "./enemyCDs";
 import {
@@ -306,6 +310,30 @@ export function ownImmuneControlsOverBracket(
   return out.sort((a, b) => a.fromSecond - b.fromSecond);
 }
 
+/**
+ * F17 (user ruling 2026-10-11, option b): the part of an anchor's span
+ * `[fromSeconds, toSeconds]` its target could be attacked in, given when the
+ * target was in Spirit of Redemption form (`extractSpiritOfRedemptionIntervals`
+ * — the `[STATE]` tick's `:ghost` source). It starts where a form the target
+ * is in at `fromSeconds` ends, and ends where the next form begins; `null`
+ * when the form holds the whole span. With no form meeting the span it is the
+ * span itself, untouched.
+ */
+export function attemptSpanOutsideForm(
+  forms: ReadonlyArray<ISpiritOfRedemptionInterval>,
+  fromSeconds: number,
+  toSeconds: number,
+): { fromSeconds: number; toSeconds: number } | null {
+  let from = fromSeconds;
+  for (const g of forms)
+    if (g.startSeconds <= from && from < g.endSeconds) from = g.endSeconds;
+  if (from > toSeconds) return null;
+  let to = toSeconds;
+  for (const g of forms)
+    if (g.startSeconds > from && g.startSeconds < to) to = g.startSeconds;
+  return { fromSeconds: from, toSeconds: to };
+}
+
 /** How the clause opens — `… | FAILED: not enough damage | target in your
  * team's Cyclone 0:42–0:47`. */
 export const KILL_ATTEMPT_OWN_CONTROL_LEAD = "target in your team's ";
@@ -451,6 +479,17 @@ export function extractKillAttempts(
           t < cc.atSeconds + cc.durationSeconds,
       );
   };
+  // F17: when each target was in Spirit of Redemption form — the `[STATE]`
+  // tick's `:ghost` source, read once per target
+  const formsByTarget = new Map<string, ISpiritOfRedemptionInterval[]>();
+  const formsOf = (target: ICombatUnit): ISpiritOfRedemptionInterval[] => {
+    let v = formsByTarget.get(target.id);
+    if (!v) {
+      v = extractSpiritOfRedemptionIntervals(target, combat);
+      formsByTarget.set(target.id, v);
+    }
+    return v;
+  };
   // One death, one KILL (T2 → G2): the death each `killed` attempt credits,
   // decided once every attempt exists; failures are attributed after that.
   const creditedDeathMs = new Map<IKillAttempt, number>();
@@ -508,24 +547,44 @@ export function extractKillAttempts(
     //    within the DR reset window of the previous stun's end — the exact
     //    walk getDRLevel does, so "one attempt" can never disagree with
     //    "one DR chain".
+    //    F17 (user ruling 2026-10-11): …and the target did not go into
+    //    Spirit of Redemption form in between. A priest in the form cannot
+    //    be hit, so a stun that lands after it is another go, not the same
+    //    one — 183-3-1104 printed `[1:18–1:37] … 2 stuns` across a form the
+    //    priest was in from 1:25. The DR level each stun carries is untouched
+    //    (the second go's opener reads the chain's 50 %).
+    const forms = formsOf(target);
     const groups: StunApp[][] = [];
     for (const stun of stuns) {
       const cur = groups[groups.length - 1];
-      const prevEnd = cur
-        ? cur[cur.length - 1].atSeconds + cur[cur.length - 1].durationSeconds
-        : -Infinity;
-      if (cur && stun.atSeconds - prevEnd < chainGapS) cur.push(stun);
+      const prev = cur?.[cur.length - 1];
+      const prevEnd = prev ? prev.atSeconds + prev.durationSeconds : -Infinity;
+      const formBetween =
+        prev !== undefined &&
+        forms.some(
+          (g) =>
+            g.startSeconds > prev.atSeconds && g.startSeconds <= stun.atSeconds,
+        );
+      if (cur && stun.atSeconds - prevEnd < chainGapS && !formBetween)
+        cur.push(stun);
       else groups.push([stun]);
     }
 
     for (const group of groups) {
-      const fromSeconds = group[0].atSeconds;
-      if (fromSeconds >= roundEndS) continue;
+      if (group[0].atSeconds >= roundEndS) continue;
       const last = group[group.length - 1];
-      const toSeconds = Math.max(
-        Math.min(last.atSeconds + last.durationSeconds, roundEndS),
-        fromSeconds,
+      // F17: the bracket does not run into the form either (a stun still
+      // counted as running when the form began)
+      const span = attemptSpanOutsideForm(
+        forms,
+        group[0].atSeconds,
+        Math.max(
+          Math.min(last.atSeconds + last.durationSeconds, roundEndS),
+          group[0].atSeconds,
+        ),
       );
+      if (!span) continue;
+      const { fromSeconds, toSeconds } = span;
       const spanFromMs = matchStartMs + fromSeconds * 1000;
       const spanToMs = matchStartMs + (toSeconds + KILL_CREDIT_SLACK_S) * 1000;
 
@@ -628,38 +687,62 @@ export function extractKillAttempts(
       }
       if (cur) clusters.push(cur);
     }
-    for (const cl of clusters) {
-      const fromSeconds = cl.from;
-      if (fromSeconds >= roundEndS) continue;
-      const toSeconds = Math.min(cl.to, roundEndS);
-      const spanFromMs = matchStartMs + fromSeconds * 1000;
-      const spanToMs = matchStartMs + (toSeconds + KILL_CREDIT_SLACK_S) * 1000;
-      // Team damage per enemy inside the span (one pass).
-      const dmgByEnemy = new Map<string, number>();
-      let teamDamageTotal = 0;
-      const enemyIds = new Set(enemies.map((e) => e.id));
+    const enemyIds = new Set(enemies.map((e) => e.id));
+    /** Team damage per enemy inside [fromMs, toMs] (one pass). */
+    const damageOver = (
+      fromMs: number,
+      toMs: number,
+    ): { byEnemy: Map<string, number>; total: number } => {
+      const byEnemy = new Map<string, number>();
+      let total = 0;
       for (const f of friendlies) {
         for (const d of f.damageOut) {
           const ts = d.logLine.timestamp;
-          if (ts < spanFromMs || ts > spanToMs) continue;
+          if (ts < fromMs || ts > toMs) continue;
           if (!enemyIds.has(d.destUnitId)) continue;
           const amount = Math.abs(d.effectiveAmount);
-          teamDamageTotal += amount;
-          dmgByEnemy.set(
-            d.destUnitId,
-            (dmgByEnemy.get(d.destUnitId) ?? 0) + amount,
-          );
+          total += amount;
+          byEnemy.set(d.destUnitId, (byEnemy.get(d.destUnitId) ?? 0) + amount);
         }
       }
+      return { byEnemy, total };
+    };
+    for (const cl of clusters) {
+      if (cl.from >= roundEndS) continue;
+      const clusterTo = Math.min(cl.to, roundEndS);
+      const slackMs = KILL_CREDIT_SLACK_S * 1000;
+      const whole = damageOver(
+        matchStartMs + cl.from * 1000,
+        matchStartMs + clusterTo * 1000 + slackMs,
+      );
       let target: ICombatUnit | null = null;
-      let teamDamageToTarget = 0;
-      for (const [id, dmg] of dmgByEnemy) {
-        if (dmg > teamDamageToTarget) {
-          teamDamageToTarget = dmg;
+      let most = 0;
+      for (const [id, dmg] of whole.byEnemy) {
+        if (dmg > most) {
+          most = dmg;
           target = enemies.find((e) => e.id === id) ?? null;
         }
       }
-      if (!target || teamDamageToTarget < KW_BURST_MIN_DAMAGE) continue;
+      if (!target || most < KW_BURST_MIN_DAMAGE) continue;
+      // F17 (user ruling 2026-10-11): the bracket on a priest ends where its
+      // Spirit of Redemption form begins (and starts where a form it opened
+      // in ends) — the cluster's own reach is the team's, the stretch its
+      // target could be hit in is the target's. The sums, the floor, the
+      // kill credit and the attribution all read the cut span, as they read
+      // a span cut at the round's end; a cluster left under the floor is no
+      // attempt. Untouched when no form meets the span.
+      const span = attemptSpanOutsideForm(formsOf(target), cl.from, clusterTo);
+      if (!span) continue;
+      const { fromSeconds, toSeconds } = span;
+      const spanFromMs = matchStartMs + fromSeconds * 1000;
+      const spanToMs = matchStartMs + toSeconds * 1000 + slackMs;
+      const sums =
+        fromSeconds === cl.from && toSeconds === clusterTo
+          ? whole
+          : damageOver(spanFromMs, spanToMs);
+      const teamDamageToTarget = sums.byEnemy.get(target.id) ?? 0;
+      const teamDamageTotal = sums.total;
+      if (teamDamageToTarget < KW_BURST_MIN_DAMAGE) continue;
       const covered = attempts.some(
         (a) =>
           a.targetUnitId === target!.id &&

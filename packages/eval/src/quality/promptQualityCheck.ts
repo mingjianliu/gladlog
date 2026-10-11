@@ -169,6 +169,7 @@ import {
   DEATH_BREAKABLE_CC_LOOKBACK_S,
   DEATH_BREAKABLE_CC_MIN_S,
 } from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
+import { spanHoldsGhostSecond } from "@gladlog/analysis/src/utils/combatStates";
 import {
   canHelpAnotherUnit,
   isHpTroughWorthPrinting,
@@ -3287,6 +3288,101 @@ export function checkKillAttemptBracketEnd(lines: string[]): string[] {
     if (death !== undefined && from <= death && to > death)
       failures.push(
         `line ${i + 1}: KILL ATTEMPTS ${show} 越过了目标的死亡(${fmtTime(death)} 的 [DEATH] 行)—— ${line.trim().slice(-60)}`,
+      );
+  });
+  return failures;
+}
+
+/** The target of a `[KILL WINDOW]` / `[VULNERABLE]` line of either view:
+ *  `[…] a–b[ (Ns)] on <Spec> (<Name>): …`. */
+const KILL_WINDOW_TARGET =
+  /^\s*\[(?:KILL WINDOW|VULNERABLE)\] \d+:\d{2}–\d+:\d{2}(?: \(\d+s\))? on [^(]+ \(([^)]+)\):/;
+
+/**
+ * Hard invariant (F17, user ruling 2026-10-11, option b): a Holy Priest in
+ * Spirit of Redemption form cannot be hit, so no kill window and no
+ * kill-attempt bracket on that priest runs across the form. For every
+ * `[KILL WINDOW]` / `[VULNERABLE]` span (the line's own and the `defenseless
+ * a–b` it names) and every KILL ATTEMPTS bracket: no `[STATE]` tick strictly
+ * between its two printed seconds shows its target (resolved through the
+ * `<unit>` legend) as `:ghost` — `spanHoldsGhostSecond`, the producers' own
+ * reading of "a cut span shares at most its boundary second with the form".
+ *
+ * The producers cut at the form's interval (`extractSpiritOfRedemptionIntervals`,
+ * the `[STATE]` tick's source): `computeOffensiveWindows` step 2c subtracts
+ * it from the vulnerability spans, `extractKillAttempts` ends a bracket where
+ * the form begins. One-directional by construction: enemy ticks are printed
+ * only inside critical windows, so a form no tick shows cannot be read here.
+ */
+export function checkNoWindowAcrossSpiritOfRedemption(
+  lines: string[],
+): string[] {
+  const failures: string[] = [];
+  const ghostSecondsOf = new Map<string, Set<number>>();
+  for (const line of lines) {
+    const st = line.match(STATE_LINE);
+    if (!st) continue;
+    const second = Number(st[1]) * 60 + Number(st[2]);
+    for (const tok of st[3]!.matchAll(STATE_TOKEN))
+      if (tok[2] === "ghost")
+        ghostSecondsOf.set(
+          tok[1]!,
+          (ghostSecondsOf.get(tok[1]!) ?? new Set()).add(second),
+        );
+  }
+  if (ghostSecondsOf.size === 0) return failures;
+  const idOf = unitIdsByName(lines);
+  const check = (
+    i: number,
+    line: string,
+    what: string,
+    targetName: string,
+    from: number,
+    to: number,
+  ) => {
+    const id = idOf.get(targetName);
+    const ghost = id === undefined ? undefined : ghostSecondsOf.get(id);
+    if (!ghost) return;
+    const held = [...ghost]
+      .filter((s) => spanHoldsGhostSecond(from, to, s))
+      .sort((a, b) => a - b);
+    if (held.length > 0)
+      failures.push(
+        `line ${i + 1}: ${what} ${fmtTime(from)}–${fmtTime(to)} 的目标 ${targetName} 在其中 ${held.map((s) => fmtTime(s)).join("、")} 的 [STATE] 行上是 :ghost(救赎之魂形态,打不到)—— ${line.trim().slice(0, 140)}`,
+      );
+  };
+  lines.forEach((line, i) => {
+    const w = line.match(KILL_WINDOW_SPAN);
+    const target = w ? line.match(KILL_WINDOW_TARGET)?.[1] : undefined;
+    if (w && target !== undefined) {
+      check(
+        i,
+        line,
+        `[${w[1]}] 的区间`,
+        target,
+        Number(w[2]) * 60 + Number(w[3]),
+        Number(w[4]) * 60 + Number(w[5]),
+      );
+      const d = line.match(DEFENSELESS_SPAN);
+      if (d)
+        check(
+          i,
+          line,
+          "defenseless 区间",
+          target,
+          Number(d[1]) * 60 + Number(d[2]),
+          Number(d[3]) * 60 + Number(d[4]),
+        );
+    }
+    const a = line.match(KILL_ATTEMPT_SPAN_LINE);
+    if (a)
+      check(
+        i,
+        line,
+        "KILL ATTEMPTS 括号",
+        a[5]!,
+        Number(a[1]) * 60 + Number(a[2]),
+        Number(a[3]) * 60 + Number(a[4]),
       );
   });
   return failures;
@@ -6974,6 +7070,7 @@ export function checkMatch(
   hardFailures.push(...checkKillAttemptBracketEnd(lines));
   hardFailures.push(...checkKillAttemptAlreadyUpStated(lines));
   hardFailures.push(...checkKillAttemptOwnControlClause(lines));
+  hardFailures.push(...checkNoWindowAcrossSpiritOfRedemption(lines));
   hardFailures.push(...checkGuardianSpiritSaveClause(lines));
   hardFailures.push(...checkKarmaFedClause(lines));
   hardFailures.push(...checkResReturnAnnounced(lines));

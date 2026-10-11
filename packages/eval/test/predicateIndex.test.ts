@@ -1949,6 +1949,27 @@ const INDEX: PredicateRow[] = [
     symbol: "checkKillAttemptOwnControlClause",
     mod: promptQualityCheck,
   },
+  // F17: no kill window / bracket across Spirit of Redemption form
+  {
+    file: `${A}/utils/combatStates.ts`,
+    symbol: "isGhostAtRenderSecond",
+    mod: combatStates,
+  },
+  {
+    file: `${A}/utils/combatStates.ts`,
+    symbol: "spanHoldsGhostSecond",
+    mod: combatStates,
+  },
+  {
+    file: `${A}/utils/killAttempts.ts`,
+    symbol: "attemptSpanOutsideForm",
+    mod: killAttempts,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkNoWindowAcrossSpiritOfRedemption",
+    mod: promptQualityCheck,
+  },
   {
     file: `${A}/utils/burstLedger.ts`,
     symbol: "BURST_TARGET_DAMAGE_RE_SRC",
