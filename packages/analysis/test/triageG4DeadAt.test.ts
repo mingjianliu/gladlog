@@ -326,14 +326,17 @@ describe("kick-eaten F-K7e — the post-kick window ends at the player's death",
       failed(174.5, 605, "目标不在视野中"),
       failed(176.485, 605, "你已经死亡"),
     ]);
-    expect(f).toContain("no successful cast before dying 2.7s after the kick");
-    expect(f).toContain("pressed 1x but rejected");
+    // I01: the press was refused for line of sight — stated with that reason
+    expect(f).toBe(
+      "no successful cast before dying 2.7s after the kick; refused for another reason 1x — target not in line of sight (Mind Control +1.0s)",
+    );
   });
 
   it("control: a player who outlived the window keeps the 5 s wording and every press", () => {
     const f = postKick(kickInst(), [failed(176.485, 605, "目标不在视野中")]);
-    expect(f).toContain("no successful cast for 5s after the kick");
-    expect(f).toContain("pressed 1x but rejected");
+    expect(f).toBe(
+      "no successful cast for 5s after the kick; refused for another reason 1x — target not in line of sight (Mind Control +3.0s)",
+    );
   });
 });
 
