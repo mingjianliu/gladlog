@@ -104,6 +104,18 @@ export const EVENT_COOLDOWN_REDUCTIONS: Readonly<
   // Healing Tide 77.9 vs 120, Spirit Link 132.6 vs 180, Capacitor 32.6 vs
   // 34.9; Lightning Lasso / Nature's Swiftness / Hex / Ascendance unchanged
   // (not named, not totems).
+  // FLAG (FT F20, 2026-10-11; Game-Behaviour Rule — the value leg does not
+  // close, so the number is left at DB2's): 1 s is too little for a
+  // RESTORATION holder. On five holders' files (59 recast pairs, fix-FT
+  // `n6_storm_conduit_fit.py`) 27 presses come before this model's ready
+  // instant; the two files logged 08-14 need ≥ 3.56 / 4.26 s per cast, the
+  // two logged 08-19 / 08-22 need ≥ 1.95 / 1.83 s and fit 2 s with the
+  // tightest press 0.2 s after it. DB2 has no per-spec seconds (dummy 1000
+  // ms, a server script), but the talent's interrupt-duration aura 1223529
+  // moved −65 → −40 between builds 12.1.0.69382 and 69404 — the hotfix a
+  // community wiki dates 2026-08-18 and words "Restoration 4 s → 2 s, 65 %
+  // → 40 %". A per-spec value needs a user ruling (docs/talent-coverage-
+  // gaps.md §8).
   "1217092": {
     targets: ["108271", "192063", "57994", ...SHAMAN_TOTEM_IDS],
     triggerCastIds: ["188196", "188443"],

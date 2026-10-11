@@ -482,6 +482,13 @@ Fortifying Brew +Ironshell Brew expect 0.7 (without 0.8) | holders null ci90 - u
 - 闪避 / 佯攻 + 飘忽不定 20%:语料确凿,待减伤裁定(BACKLOG §63)。
 - 碎玉闪电击退算控制应对、地震击倒:用户裁不做。
 - 参照表过期(未逐次重跑,GH #115):`behaviorPriorGenerated`、打断优先级参照、爆发 / 同步窗口参照。
+- **FLAG** Storm Conduit 1217092(恢复萨满,FT F20 2026-10-11):模型按 DB2 dummy 1000 ms 每次闪电箭 / 闪电链 −1 秒,这是元素的值;恢复的秒数不在 DB2 里(服务器脚本,无掩码无标签)。605 场:持有者 Healing Tide Totem 22 个复放间隔 18 个短于模型(最短 77.9 秒),非持有者 102 个 0 个(最短 120.0);Capacitor / Spirit Link / Astral Shift 同向。五个持有者文件 59 对复放(`fix-FT/scripts/n6_storm_conduit_fit.py`):−1 秒时 27 对早于模型;日志日期 08-14 的两个文件(43 对)要 ≥ 3.56 / 4.26 秒 / 次(按 4 秒 1 对早 2.4 秒),08-13 的(4 对)≥ 2.09 秒,08-19 / 08-22 的(12 对)≥ 1.95 / 1.83 秒(按 2 秒 0 对早,最紧 0.2 秒)。DB2 的伴随光环 1223529(被打断时长)在 12.1.0.69382 → 69404 之间由 −65 变 −40,与社区 wiki 所记 2026-08-18 hotfix「恢复 4 秒 → 2 秒、65 % → 40 %」是同一次改动。**没改码**:数值没有 DB2 腿,待裁定(现行值应为恢复 2 秒 / 次;08-18 之前的对局仍会偏长)。
+- **FLAG** Anger Management 152278(Colossus Smash / Bladestorm / Avatar / Shockwave,605 场 40 次「不可能施放」):全部是持有者,且全部落在最早可用下限之下 —— 下限是 p2 分位,按定义放过约 2 %(Bladestorm 13 / 1,000,Colossus Smash 13 / 1,444)。不是新机制;精确建模要逐次怒气消耗账,而日志的消耗字段 parser 不存(见下面法力一条)。没改码。
+- **FLAG** Heart of the Jade Serpent 443294 → Strike of the Windlord 392983(605 场 13 次里 12 次是同一个 Conduit of the Celestials 武僧,间隔 18.6–28.9 秒 < 30):DB2 增益 443421 的光环 148(恢复速率 +75 %)只点名充能类别 1517 / 1518 / 2198 / 2294,Strike of the Windlord 的类别与充能类别都是 0 —— 掩码腿不成立,没改码。
+- **FLAG** Aspect of the Turtle:Born To Be Wild 按级之后(`PER_RANK_COOLDOWN_TALENTS`),仍有两个 Marksmanship 2 级间隔 101.9 / 107.4 秒 < 120 秒未解释(1,814 场)。
+- **FLAG** Ascendance 114052(恢复萨满,605 场 13 次施放 4 次「不可能」,间隔 18.1 / 48.0 / 68.5 / 110.6 秒):9 条台账记录(6 个文件)全部持有 Deeply Rooted Elements 378270(触发 Ascendance),疑为触发被记成按键;未核实,没改码。
+- **FLAG** Ardent Defender 31850:手写 120 秒改回 DB2 的 90 秒(FT F20),语料只有一个防护骑士的三个间隔(79.8 / 84.0 / 157.2 秒,Unbreakable Spirit −30 %:手写 84 秒被 79.8 驳倒一次,官方 63 秒没被驳倒也没有地板)。
+- **FLAG** 法力消耗(FT F09a,要改 parser,没做):`manaCostForCast` = DB2 百分比 × 读数的法力上限,游戏按基础法力算。7f67e778:上限 262,500,Invoke Chi-Ji 施放行的消耗字段是 12,500(5 % × 250,000),产品印 `(no mana 4.0k/13.1k)`;Restoral 10,935 对 11.5k。日志 advanced 块里 x 坐标前一格就是这次施放的消耗,parser 的 `decodeAdvanced` 只解到 maxPower;parser 保留它之后,`affordableAt` 应读该单位该技能自己的施放行。605 场采集里 `(no mana a/b)` 共 25 处、8 份上下文。
 
 ## 重跑
 

@@ -2314,6 +2314,11 @@ const INDEX: PredicateRow[] = [
     mod: talentScriptedCooldowns,
   },
   {
+    file: `${A}/data/talentScriptedCooldowns.ts`,
+    symbol: "eventTriggerTimesMs",
+    mod: talentScriptedCooldowns,
+  },
+  {
     file: `${A}/utils/enemyInterrupts.ts`,
     symbol: "kickCastSpellId",
     mod: enemyInterrupts,
