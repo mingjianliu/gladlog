@@ -8,6 +8,7 @@ import { CombatUnitReaction, LogEvent } from "@gladlog/parser-compat";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { sanctuaryRemovals } from "../src/context/spellOutcomeLines";
+import { emitSpellOutcomeEntries } from "../src/context/timelineSections/spellOutcomes";
 import { ensureAnalysisData } from "../src/data/ensure";
 import { formatRootReachabilityEntries } from "../src/utils/rootReachability";
 import {
@@ -102,7 +103,7 @@ describe("cc-dr F-RT1 — a rooted unit that acted is not locked out", () => {
 
 describe("cc-dr F-CR1 — a Sanctuary removal says held and left", () => {
   const START = 1_000_000;
-  const removal = (ccId: string) => {
+  const scene = (ccId: string, appliedAtMs = 37_024) => {
     const rogue = makeUnit("rogue", {
       name: "Rogue-R",
       reaction: CombatUnitReaction.Hostile,
@@ -114,7 +115,7 @@ describe("cc-dr F-CR1 — a Sanctuary removal says held and left", () => {
           ...makeAuraEvent(
             LogEvent.SPELL_AURA_APPLIED,
             ccId,
-            START + 37_024,
+            START + appliedAtMs,
             "rogue",
             "hp",
           ),
@@ -138,8 +139,55 @@ describe("cc-dr F-CR1 — a Sanctuary removal says held and left", () => {
         makeSpellCastEvent("210256", START + 39_990, "hp", "Priest-R", "pal"),
       ],
     });
+    return { pal, target, rogue };
+  };
+  const removal = (ccId: string) => {
+    const { pal, target, rogue } = scene(ccId);
     return sanctuaryRemovals([pal, target, rogue], START)[0]!;
   };
+  /** The `[CC REMOVED]` line of a Cheap Shot (4 s) applied at `appliedAtMs`
+   *  and removed at 40.000 by the Sanctuary cast at 39.990. */
+  const removedLine = (appliedAtMs: number): string => {
+    const { pal, target, rogue } = scene("1833", appliedAtMs);
+    const lines: string[] = [];
+    emitSpellOutcomeEntries({
+      actorLabel: (name: string) => name,
+      owner: pal,
+      _allUnits: [pal, target, rogue],
+      matchEndSeconds: 60,
+      matchStartMs: START,
+      friends: [pal, target],
+      enemies: [rogue],
+      pid: (name: string) => name,
+      enemyPid: (name: string) => name,
+      addEntry: (_t: number, line: string) => lines.push(line),
+      rawStreams: undefined,
+    } as never);
+    const line = lines.find((l) => l.includes("[CC REMOVED]"));
+    expect(line).toBeDefined();
+    return line!;
+  };
+  it("a whole second and more prints as before: `after 3s (~1s of it left)`", () => {
+    expect(removedLine(37_024)).toMatch(
+      /0:39 {2}\[CC REMOVED\] .* removed Rogue-R's Cheap Shot from Priest-R after 3s \(~1s of it left\)$/,
+    );
+  });
+  it("held under half a second reads `after <1s`, not `after 0s`", () => {
+    // applied 0.3 s before the removal: 3.7 s of the 4 left
+    const line = removedLine(39_700);
+    expect(line).toMatch(/ after <1s \(~4s of it left\)$/);
+    expect(line).not.toMatch(/after 0s/);
+  });
+  it("a positive remainder under half a second reads `~<1s of it left`", () => {
+    // held 3.7 s of 4: 0.3 s left
+    const line = removedLine(36_300);
+    expect(line).toMatch(/ after 4s \(~<1s of it left\)$/);
+    expect(line).not.toMatch(/~0s/);
+  });
+  it("a control that had run its full length had nothing left: `~0s` stays", () => {
+    // held 4.6 s of 4: `ccRemainingSeconds` clamps at zero
+    expect(removedLine(35_400)).toMatch(/ after 5s \(~0s of it left\)$/);
+  });
   it("0777a8e0 shape: Cheap Shot held 2.976 s of 4 → ~1 s left", () => {
     const r = removal("1833");
     expect(r.heldSeconds).toBeCloseTo(2.976, 3);

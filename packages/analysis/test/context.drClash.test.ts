@@ -254,3 +254,74 @@ describe("[DR CLASH] cap keeps the owner's clashes first (triage cc-dr F-DC1)", 
     expect([...times].sort()).toEqual(times);
   });
 });
+
+describe("[DR CLASH] gap under the line's tenth-second grid", () => {
+  const clashLine = (priorAt: number, at: number): string => {
+    const owner = makeUnit({ id: "P1", name: "OwnerPlayer" });
+    const mate = makeUnit({ id: "P2", name: "MateA" });
+    const enemy = makeUnit({
+      id: "E1",
+      name: "E1",
+      reaction: CombatUnitReaction.Hostile,
+    });
+    const app = (atSeconds: number, casterName: string, level: string) => ({
+      atSeconds,
+      durationSeconds: 3,
+      spellId: "1776",
+      spellName: "Gouge",
+      casterName,
+      casterSpec: "Subtlety Rogue",
+      drInfo: { category: "Incapacitate", level, sequenceIndex: 0 },
+    });
+    const timeline = buildMatchTimeline({
+      owner,
+      ownerSpec: "Subtlety Rogue",
+      friends: [owner, mate],
+      enemies: [enemy],
+      allUnits: [owner, mate, enemy],
+      matchStartMs: T0,
+      matchEndMs: T0 + 60_000,
+      isHealer: false,
+      ownerCDs: [],
+      teammateCDs: [],
+      enemyCDTimeline: { players: [], alignedBurstWindows: [] },
+      ccTrinketSummaries: [],
+      dispelSummary: emptyDispel as any,
+      enemyDispelSummary: emptyDispel as any,
+      pressureWindows: [],
+      healingGaps: [],
+      friendlyDeaths: [],
+      enemyDeaths: [],
+      criticalWindowSeconds: new Set(),
+      outgoingCCChains: [
+        {
+          targetName: "E1",
+          targetSpec: "Restoration Shaman",
+          applications: [
+            app(priorAt, "MateA", "Full"),
+            app(at, "OwnerPlayer", "50%"),
+          ],
+        },
+      ] as IOutgoingCCChain[],
+    });
+    const line = timeline.split("\n").find((l) => l.includes("[DR CLASH]   "));
+    expect(line).toBeDefined();
+    return line!;
+  };
+
+  it("two landings within 50 ms read `<0.1s earlier`, not `0s earlier`", () => {
+    // 20 ms apart, and on the same millisecond
+    for (const prior of [19.98, 20]) {
+      const line = clashLine(prior, 20);
+      expect(line).toContain("MateA's Gouge <0.1s earlier put them on DR");
+      expect(line).not.toMatch(/ 0s earlier/);
+    }
+  });
+
+  it("from a tenth of a second up the gap prints as before", () => {
+    expect(clashLine(19.9, 20)).toContain("Gouge 0.1s earlier put them");
+    expect(clashLine(19.7, 20)).toContain("Gouge 0.3s earlier put them");
+    expect(clashLine(18.5, 20)).toContain("Gouge 1.5s earlier put them");
+    expect(clashLine(16, 20)).toContain("Gouge 4s earlier put them");
+  });
+});

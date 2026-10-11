@@ -97,7 +97,7 @@ import {
   pvpTrinketUses,
   trinketUseRemainingSeconds,
 } from "./pvpTrinketUses";
-import { fmtTime } from "./renderGrid";
+import { fmtTime, fmtWholeSeconds } from "./renderGrid";
 import { rootIntervalsOf } from "./rootReachability";
 import { roundEndMs } from "./roundEnd";
 import { baseCastSeconds, isSilenceableCast } from "./spellMechanics";
@@ -1751,12 +1751,13 @@ export function renderedCcSeconds(
  *  that rounds to zero (FT-T09: "0s" read as a control that did nothing at
  *  all — 1,649 such lines on the 605-file capture; `<1s` is what the [RES]
  *  `cc:` token already prints, `resLedgerPrune`). Every CC line's duration
- *  goes through here; the gates read both forms. */
+ *  goes through here; the gates read both forms. The text is the render
+ *  grid's `fmtWholeSeconds` — one `<1s` rule for every whole-second duration
+ *  a line prints. */
 export function renderedCcDuration(
   cc: Pick<ICCInstance, "durationSeconds">,
 ): string {
-  const n = renderedCcSeconds(cc);
-  return n < 1 ? "<1s" : `${n}s`;
+  return fmtWholeSeconds(renderedCcSeconds(cc));
 }
 
 /** The duration slot of a CC the round ended on (`stillOnAtRoundEnd`): the

@@ -9,7 +9,12 @@
  */
 import type { ICombatUnit } from "@gladlog/parser-compat";
 
-import { fmtTime, toRenderSecond } from "../../utils/renderGrid";
+import {
+  fmtTime,
+  fmtWholeSeconds,
+  fmtWholeSecondsOrZero,
+  toRenderSecond,
+} from "../../utils/renderGrid";
 import {
   groundedControls,
   type IRejectRun,
@@ -113,13 +118,18 @@ export function emitSpellOutcomeEntries(
     addEntry(
       x.atSeconds,
       // cc-dr F-CR1: how long it held and how much was left (the
-      // [CC BROKEN] arithmetic; an unknown full duration says held only)
+      // [CC BROKEN] arithmetic; an unknown full duration says held only).
+      // Whole seconds through the render grid's formatter: a control removed
+      // 0.3 s in held `<1s`, not `0s`. What was left is clamped at zero by
+      // `ccRemainingSeconds` — a control that had already run its full
+      // length had nothing left, and that prints `~0s`, the fact it is; a
+      // positive remainder under half a second prints `~<1s`.
       `${fmtTime(x.atSeconds)}  [CC REMOVED]   ${unitLabel(pal)}'s Blessing of Sanctuary removed ${srcLabel ? `${srcLabel}'s ` : ""}${x.ccSpellName} from ${unitLabel(target)}${
         x.heldSeconds === undefined
           ? ""
-          : ` after ${x.heldSeconds.toFixed(0)}s${
+          : ` after ${fmtWholeSeconds(x.heldSeconds)}${
               x.leftSeconds != null
-                ? ` (~${x.leftSeconds.toFixed(0)}s of it left)`
+                ? ` (~${fmtWholeSecondsOrZero(x.leftSeconds)} of it left)`
                 : ""
             }`
       }`,

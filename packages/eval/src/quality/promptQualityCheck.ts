@@ -146,7 +146,10 @@ import { DURING_ABSORBED_TAG_RE_SRC } from "@gladlog/analysis/src/utils/external
 import { VULNERABLE_OWNER_DAMAGE_RE_SRC } from "@gladlog/analysis/src/utils/healerOffenseAnalysis";
 import { JUKE_LOOKBACK_MS } from "@gladlog/analysis/src/utils/kickAudit";
 import { STAYED_IN_NEAR_DEATH_PCT } from "@gladlog/analysis/src/utils/positionAnalysis";
-import { fmtTime } from "@gladlog/analysis/src/utils/renderGrid";
+import {
+  fmtTime,
+  parseWholeSeconds,
+} from "@gladlog/analysis/src/utils/renderGrid";
 import { SUMMON_KIND_RE_SRC } from "@gladlog/analysis/src/utils/summonKind";
 import fs from "fs-extra";
 import path from "path";
@@ -4094,16 +4097,28 @@ export function crisisHpStateProbes(lines: string[]): CrisisHpStateProbe[] {
  * `free Xs of Ys` (healer-offense windows, triage 2026-09-29 res-readiness
  * F-C11): the free seconds can never exceed the window's rendered length —
  * X used to round the raw window while Y is the rendered one ("17s of 16s").
+ *
+ * X is the producer's `fmtWholeSecondsOrZero` text — `12s`, `0s` (no free
+ * second at all) or `<1s` (a positive remainder that rounds to zero) — and is
+ * read back with the same module's `parseWholeSeconds` (`<1s` = 0, the number
+ * it rounded to). A slot the parser cannot read is a failure too: a private
+ * `\d+s` pattern here would simply stop seeing a line whose form changed.
  */
-const FREE_OF = /\bfree (\d+)s of (\d+)s\b/g;
+const FREE_OF = /\bfree (\S+s) of (\d+)s\b/g;
 export function checkFreeOfWindowConsistency(lines: string[]): string[] {
   const failures: string[] = [];
   lines.forEach((line, i) => {
-    for (const m of line.matchAll(FREE_OF))
-      if (Number(m[1]) > Number(m[2]))
+    for (const m of line.matchAll(FREE_OF)) {
+      const free = parseWholeSeconds(m[1]!);
+      if (free === undefined)
         failures.push(
-          `line ${i + 1}: free ${m[1]}s of ${m[2]}s —— 空闲秒数超过窗口渲染长度`,
+          `line ${i + 1}: free ${m[1]} of ${m[2]}s —— 空闲秒数不是 fmtWholeSecondsOrZero 的写法(Ns / <1s)`,
         );
+      else if (free > Number(m[2]))
+        failures.push(
+          `line ${i + 1}: free ${m[1]} of ${m[2]}s —— 空闲秒数超过窗口渲染长度`,
+        );
+    }
   });
   return failures;
 }

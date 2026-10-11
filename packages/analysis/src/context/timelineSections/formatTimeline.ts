@@ -229,6 +229,14 @@ export function formatTimeline(
       (l) => typeof l === "string" && /(?:,| \|) next spike in /.test(l),
     ),
   );
+  // …and its `in <1s` form (`fmtWholeSeconds`: the spike's first hit under
+  // half a second after the press — it printed `in 0s`) is explained only
+  // where a line carries it.
+  const nextSpikeSubSecondRendered = entries.some((e) =>
+    e.lines.some(
+      (l) => typeof l === "string" && /(?:,| \|) next spike in <1s /.test(l),
+    ),
+  );
   // B18 (user ruling 2026-10-06): the Guardian Spirit save clause is
   // legended only when a press line carries it.
   const guardianSaveRendered = entries.some((e) =>
@@ -528,7 +536,11 @@ export function formatTimeline(
     ...(nextSpikeRendered
       ? [
           "  `next spike in Ns on X` on a [YOU] [CD] line = the next damage spike after that press, known only in hindsight —",
-          "    the player could not see it coming.",
+          `    the player could not see it coming.${
+            nextSpikeSubSecondRendered
+              ? " `in <1s` = its first hit landed within half a second of the press."
+              : ""
+          }`,
         ]
       : []),
     ...(interruptNoteRendered

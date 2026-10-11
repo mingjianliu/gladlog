@@ -1054,6 +1054,75 @@ describe("[KILL WINDOW] free seconds are castable seconds (triage other F-O12)",
   });
 });
 
+describe("[KILL WINDOW] `free` under half a second is `<1s`; no free second at all stays `0s`", () => {
+  beforeAll(async () => {
+    await ensureAnalysisData();
+  });
+  const enemyHealer = makeUnit("enemy-h", {
+    reaction: CombatUnitReaction.Hostile,
+    spec: CombatUnitSpec.Shaman_Restoration,
+    name: "Rsham",
+  });
+  const enemyDk = makeUnit("enemy-1", {
+    reaction: CombatUnitReaction.Hostile,
+    name: "Edk",
+  });
+  /** The window 40.0–42.3 (rendered 0:40–0:42, 2 s; sampled seconds 40, 41,
+   *  42) with the owner Strangulated from `fromMs` to `toMs`. */
+  const freeText = (silence?: [number, number]): string => {
+    const owner = makeFriend("owner", {
+      auraEvents: (silence
+        ? [
+            makeAuraEvent(
+              LogEvent.SPELL_AURA_APPLIED,
+              "47476",
+              T0 + silence[0],
+              "enemy-1",
+              "owner",
+            ),
+            makeAuraEvent(
+              LogEvent.SPELL_AURA_REMOVED,
+              "47476",
+              T0 + silence[1],
+              "enemy-1",
+              "owner",
+            ),
+          ]
+        : []) as never,
+    });
+    const summary = buildHealerOffenseSummary(
+      combat,
+      owner,
+      [owner],
+      [enemyDk, enemyHealer],
+      [makeWindow(40, 42.3)],
+      emptyEnemyTimeline(),
+      [],
+      [],
+      [],
+    );
+    const line = formatHealerOffenseForContext(summary).find((l) =>
+      l.includes("[KILL WINDOW]"),
+    );
+    const m = line?.match(/\bfree (\S+) of 2s/);
+    expect(m).not.toBeNull();
+    return m![1]!;
+  };
+
+  it("one free sampled second in a window that ends 0.3 s into it: `free <1s`", () => {
+    // seconds 40 and 41 blocked, 42 free: 2.3 − 2 = 0.3 s
+    expect(freeText([40_000, 42_000])).toBe("<1s");
+  });
+  it("every sampled second blocked: `free 0s` is the fact", () => {
+    expect(freeText([39_500, 43_000])).toBe("0s");
+  });
+  it("a whole second and more prints as before", () => {
+    expect(freeText()).toBe("2s");
+    // second 40 blocked: 2.3 − 1 = 1.3 s
+    expect(freeText([40_000, 41_000])).toBe("1s");
+  });
+});
+
 import { MAX_KILL_WINDOW_LINES } from "../../src/utils/healerOffenseAnalysis";
 
 // GH #31 ① test stub: an always-accountable facts computer so pre-existing

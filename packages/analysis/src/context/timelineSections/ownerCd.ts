@@ -38,7 +38,7 @@ import {
   healerCreditOf,
 } from "../../utils/healAbsorbSave";
 import { documentRecordsAttackSpell } from "../../utils/incomingPressure";
-import { fmtTime } from "../../utils/renderGrid";
+import { fmtTime, fmtWholeSeconds } from "../../utils/renderGrid";
 import { buildRosterSides } from "../../utils/rosterSide";
 import { unitUnderFireAt } from "../../utils/threatAssessment";
 import { isDeadAt } from "../../utils/unitDeath";
@@ -344,8 +344,15 @@ export function emitOwnerCdEntries(
           undefined,
         );
         if (nextSpike) {
+          // `fromSeconds` is the spike's first hit, at or after the press
+          // (the filter above), so the gap is never negative. Under half a
+          // second it printed `in 0s` — 545 press lines of the 605-file
+          // capture — which reads as no gap at all; the spike is real and
+          // its first hit lands inside that second: `in <1s`
+          // (`fmtWholeSeconds`; also for a first hit on the press's own
+          // millisecond, which still follows the press).
           noteParts.push(
-            `next spike in ${Math.round(nextSpike.fromSeconds - cast.timeSeconds)}s on ${pid(nextSpike.targetName)}`,
+            `next spike in ${fmtWholeSeconds(nextSpike.fromSeconds - cast.timeSeconds)} on ${pid(nextSpike.targetName)}`,
           );
         }
         if (noteParts.length > 0) dampeningNote = ` | ${noteParts.join(", ")}`;

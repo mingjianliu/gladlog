@@ -2408,4 +2408,28 @@ describe("checkFreeOfWindowConsistency (F-C11)", () => {
       checkFreeOfWindowConsistency(["  0:40–0:56 … free 16s of 16s"]),
     ).toEqual([]);
   });
+
+  it("reads the producer's `<1s` (= 0) and `0s`; a slot it cannot read fails", () => {
+    // what `fmtWholeSecondsOrZero` prints for the free slot
+    for (const free of ["<1s", "0s", "2s"])
+      expect(
+        checkFreeOfWindowConsistency([
+          `  [KILL WINDOW] 0:40–0:42 on X: … your damage on it 0k; free ${free} of 2s, team min HP 34%.`,
+        ]),
+      ).toEqual([]);
+    // still fails a wrong line on the same family
+    expect(
+      checkFreeOfWindowConsistency([
+        "  [KILL WINDOW] 0:40–0:42 on X: … free 3s of 2s, team min HP 34%.",
+      ]),
+    ).toHaveLength(1);
+    // a form the shared parser does not know is not silently skipped
+    for (const free of ["0.3s", "<2s", "~1s"]) {
+      const failures = checkFreeOfWindowConsistency([
+        `  [KILL WINDOW] 0:40–0:42 on X: … free ${free} of 2s, team min HP 34%.`,
+      ]);
+      expect(failures).toHaveLength(1);
+      expect(failures[0]).toContain(`free ${free} of 2s`);
+    }
+  });
 });

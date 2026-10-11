@@ -39,7 +39,11 @@ import {
   getTrinketStateAtTime,
 } from "./killWindowTargetSelection";
 import { IOffensiveWindow } from "./offensiveWindows";
-import { fmtTime, renderedWindowSeconds } from "./renderGrid";
+import {
+  fmtTime,
+  fmtWholeSecondsOrZero,
+  renderedWindowSeconds,
+} from "./renderGrid";
 
 /**
  * Is this owner CAST a CC — by its own id, or through the one cast → effect
@@ -1071,8 +1075,15 @@ export function formatHealerOffenseForContext(
     // continuous, so it can round past it ("free 21s of 20s", 193 of 3,956
     // KILL WINDOW lines on the 2026-09-30 605-file capture). Free time cannot
     // exceed the window it sits in — cap it at the number the line prints.
+    // `ownerFreeSeconds` is the window's length minus its blocked whole
+    // seconds, clamped at zero: exactly 0 when every sampled second was
+    // blocked — `free 0s` is then the fact — and a positive remainder under
+    // half a second when a sampled second was free in a window that ends
+    // inside it, which printed `free 0s` as well. That one is `free <1s`
+    // (`fmtWholeSecondsOrZero`; `checkFreeOfWindowConsistency` reads both
+    // through `parseWholeSeconds`).
     const windowS = renderedWindowSeconds(w.fromSeconds, w.toSeconds);
-    const free = `free ${Math.min(Math.round(w.ownerFreeSeconds), windowS)}s of ${windowS}s`;
+    const free = `free ${fmtWholeSecondsOrZero(Math.min(w.ownerFreeSeconds, windowS))} of ${windowS}s`;
     const teamHp =
       w.teamMinHpPct !== null
         ? `, team min HP ${Math.round(w.teamMinHpPct)}%`

@@ -37,6 +37,7 @@
  * timestamped line above it.
  */
 import { renderedCcSpanSeconds } from "../utils/ccTrinketAnalysis";
+import { fmtWholeSeconds, WHOLE_SECONDS_RE_SRC } from "../utils/renderGrid";
 import { stripPressedDuringNote } from "./controlRejectedPresses";
 
 /** Any `[RES]` ledger row. */
@@ -76,13 +77,13 @@ const fieldOf = (line: string, name: string): string | undefined => {
 /** The remaining time of a `cc:` entry as the ledger prints it (FT-T04): a
  * control with under half a second left used to read `-0s` — 10,644 entries
  * of the 605-file capture said a control still on the unit had 0 s to run.
- * Written by `resourceSnapshot.ts`, parsed by `CC_ENTRY` below. */
+ * Written by `resourceSnapshot.ts`, parsed by `CC_ENTRY` below. Text and
+ * pattern are the render grid's (`fmtWholeSeconds`, `WHOLE_SECONDS_RE_SRC`). */
 export function resCcRemainingText(remainingSeconds: number): string {
-  const whole = Math.round(remainingSeconds);
-  return whole < 1 ? "<1s" : `${whole}s`;
+  return fmtWholeSeconds(remainingSeconds);
 }
 /** `3/Wind Shear-1s[kick]`, `1/Psychic Scream-<1s` → spell name. */
-const CC_ENTRY = /^\d+\/(.+?)-(?:<1|\d+)s/;
+const CC_ENTRY = new RegExp(String.raw`^\d+\/(.+?)-${WHOLE_SECONDS_RE_SRC}`);
 /** `Trueshot/Marksmanship Hunter(6s left)` → spell name. */
 const CD_ENTRY = /^(.+?)\//;
 const CC_LANDING = /\[CC ON /;

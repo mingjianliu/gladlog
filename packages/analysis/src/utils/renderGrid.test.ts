@@ -1,6 +1,67 @@
 import { describe, expect, it } from "vitest";
 
-import { fmtTime, toRenderSecond } from "./renderGrid";
+import { resCcRemainingText } from "../context/resLedgerPrune";
+import { renderedCcDuration } from "./ccTrinketAnalysis";
+import {
+  fmtTime,
+  fmtWholeSeconds,
+  fmtWholeSecondsOrZero,
+  parseWholeSeconds,
+  toRenderSecond,
+  WHOLE_SECONDS_RE_SRC,
+} from "./renderGrid";
+
+/**
+ * A duration or gap under half a second is not zero. `0s` remained on 713
+ * lines of the 605-file capture after FT-T04 / FT-T09 had fixed the control
+ * lines: the `next spike in` note of a press line (545), `free 0s of Ns` on
+ * `[KILL WINDOW]` / `[VULNERABLE]` (68), `[CC REMOVED]` (59), `[DR CLASH]`
+ * (41, on its own tenth-second grid — `drClashGapText`).
+ */
+describe("fmtWholeSeconds:四舍五入为 0 的时长印 <1s,不印 0s", () => {
+  it("不足半秒 → <1s;半秒起按四舍五入的整秒印", () => {
+    expect(fmtWholeSeconds(0.3)).toBe("<1s");
+    expect(fmtWholeSeconds(0.49)).toBe("<1s");
+    expect(fmtWholeSeconds(0)).toBe("<1s");
+    expect(fmtWholeSeconds(0.5)).toBe("1s");
+    expect(fmtWholeSeconds(1)).toBe("1s");
+    expect(fmtWholeSeconds(1.4)).toBe("1s");
+    expect(fmtWholeSeconds(12.6)).toBe("13s");
+  });
+
+  it("fmtWholeSecondsOrZero:真的为 0 才印 0s,正的零头印 <1s", () => {
+    expect(fmtWholeSecondsOrZero(0)).toBe("0s");
+    expect(fmtWholeSecondsOrZero(-0.2)).toBe("0s");
+    expect(fmtWholeSecondsOrZero(0.3)).toBe("<1s");
+    expect(fmtWholeSecondsOrZero(0.5)).toBe("1s");
+    expect(fmtWholeSecondsOrZero(7)).toBe("7s");
+  });
+
+  it("parseWholeSeconds 读回两个格式化函数印出的每一种写法,别的一律不认", () => {
+    for (const s of [0, 0.3, 0.5, 1, 7.4, 120]) {
+      expect(parseWholeSeconds(fmtWholeSeconds(s))).toBe(Math.round(s));
+      expect(parseWholeSeconds(fmtWholeSecondsOrZero(s))).toBe(Math.round(s));
+    }
+    const re = new RegExp(`^${WHOLE_SECONDS_RE_SRC}$`);
+    for (const text of ["<1s", "0s", "3s", "120s"]) {
+      expect(re.test(text)).toBe(true);
+      expect(parseWholeSeconds(text)).not.toBeUndefined();
+    }
+    for (const text of ["0.3s", "<2s", "<1", "3", "~3s", "s", ""]) {
+      expect(re.test(text)).toBe(false);
+      expect(parseWholeSeconds(text)).toBeUndefined();
+    }
+  });
+
+  it("控制行与 [RES] cc: 的两个旧格式化函数就是它(同一规则,不是各写一份)", () => {
+    for (const s of [0, 0.2, 0.49, 0.5, 0.9, 1, 2.5, 3.49, 6]) {
+      expect(renderedCcDuration({ durationSeconds: s })).toBe(
+        fmtWholeSeconds(s),
+      );
+      expect(resCcRemainingText(s)).toBe(fmtWholeSeconds(s));
+    }
+  });
+});
 
 /**
  * Regression guard for the render-grid predicate.

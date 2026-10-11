@@ -362,6 +362,48 @@ describe("legends follow the lines they explain (F-C16 / F-C17)", () => {
     expect(noSpike).not.toContain(SPIKE_LEGEND);
   });
 
+  it("a spike whose first hit lands under half a second after the press reads `in <1s`, not `in 0s`", () => {
+    const SUB_SECOND_LEGEND =
+      "`in <1s` = its first hit landed within half a second of the press.";
+    const spikeAt = (fromSeconds: number) =>
+      render({
+        ownerCDs: [astralShift],
+        pressureWindows: [
+          {
+            fromSeconds,
+            toSeconds: fromSeconds + 10,
+            totalDamage: 500_000,
+            targetName: "Alice",
+            targetSpec: "Beast Mastery Hunter",
+          },
+        ],
+      });
+    // 0.3 s after the press, and on the press's own millisecond
+    for (const from of [20.3, 20]) {
+      const text = spikeAt(from);
+      expect(text).toMatch(
+        /0:20 {2}\[YOU\] \[CD\] .*Astral Shift.*, next spike in <1s on 2/,
+      );
+      expect(text).not.toMatch(/next spike in 0s/);
+      expect(text).toContain(SPIKE_LEGEND);
+      expect(text).toContain(SUB_SECOND_LEGEND);
+    }
+    // half a second and more: the rounded whole second, as before — and the
+    // `<1s` clause of the legend is printed only where a line carries it
+    for (const [from, shown] of [
+      [20.5, "1s"],
+      [21.4, "1s"],
+      [27, "7s"],
+    ] as const) {
+      const text = spikeAt(from);
+      expect(text).toMatch(
+        new RegExp(String.raw`Astral Shift.*, next spike in ${shown} on 2`),
+      );
+      expect(text).toContain(SPIKE_LEGEND);
+      expect(text).not.toContain(SUB_SECOND_LEGEND);
+    }
+  });
+
   it("F-C3: the `(no mana a/b)` legend appears exactly when a [RES] row carries the tag", () => {
     const NO_MANA_LEGEND = "`X(no mana a/b)` = X is off cooldown";
     // Restoral 388615 costs 4.374 % of max mana (11,482 of 262,500)

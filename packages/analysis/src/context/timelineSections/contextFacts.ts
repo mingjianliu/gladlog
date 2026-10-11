@@ -24,6 +24,20 @@ export const DR_CLASH_LEGEND = [
   "    used a CC in the same category within the reset window — a timing note about DR conflict, not a verdict.",
 ];
 
+/**
+ * The `Ns earlier` of a `[DR CLASH]` line. `gapSeconds` is the gap between
+ * the two landings on a tenth-of-a-second grid (`detectTeammateDrClashes`),
+ * so the line prints `0.3s`, `5.7s`, `10s` — and printed `0s` for two
+ * controls that landed within 50 ms of each other (41 lines of the 605-file
+ * capture: a Capacitor Totem and a Monstrous Blow in the same instant). That
+ * is the smallest gap this grid can show, not no gap: `<0.1s`. It covers two
+ * landings on one millisecond as well — the prior one is the earlier
+ * application of the target's DR chain either way. No gate reads the number.
+ */
+export function drClashGapText(gapSeconds: number): string {
+  return gapSeconds < 0.1 ? "<0.1s" : `${gapSeconds}s`;
+}
+
 export function emitContextFactEntries(
   ctx: Pick<
     TimelineCtx,
@@ -149,7 +163,7 @@ export function emitContextFactEntries(
     // the diminished CC landed on an ENEMY: the enemy roster's label (`pid`
     // only knows the friendly side and printed the bare character name)
     const target = enemyPid(clash.targetName);
-    const line = `[DR CLASH]   ${victimWho} ${clash.diminishedSpellName} on ${target} landed at ${clash.level} DR (${clash.category}) — ${priorWho} ${clash.priorSpellName} ${clash.gapSeconds}s earlier put them on DR`;
+    const line = `[DR CLASH]   ${victimWho} ${clash.diminishedSpellName} on ${target} landed at ${clash.level} DR (${clash.category}) — ${priorWho} ${clash.priorSpellName} ${drClashGapText(clash.gapSeconds)} earlier put them on DR`;
     drClashEntries.push({ atSeconds: clash.atSeconds, line });
     addEntry(clash.atSeconds, `${fmtTime(clash.atSeconds)}  ${line}`);
   }

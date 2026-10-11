@@ -247,6 +247,26 @@ const INDEX: PredicateRow[] = [
     mod: renderGrid,
   },
   {
+    file: `${A}/utils/renderGrid.ts`,
+    symbol: "fmtWholeSeconds",
+    mod: renderGrid,
+  },
+  {
+    file: `${A}/utils/renderGrid.ts`,
+    symbol: "fmtWholeSecondsOrZero",
+    mod: renderGrid,
+  },
+  {
+    file: `${A}/utils/renderGrid.ts`,
+    symbol: "parseWholeSeconds",
+    mod: renderGrid,
+  },
+  {
+    file: `${A}/utils/renderGrid.ts`,
+    symbol: "WHOLE_SECONDS_RE_SRC",
+    mod: renderGrid,
+  },
+  {
     file: `${A}/analysis/factFormat.ts`,
     symbol: "fmtFactTime",
     mod: factFormat,
@@ -3510,6 +3530,39 @@ describe("谓词索引:分析产出 X ⇄ 门规验证 X", () => {
     // printed the raw 1-dp overlap and the integer-only regex never saw it).
     expect(
       promptQualityCheck.checkWindowSpanConsistency(["0:34–0:38 (4.3s)"]),
+    ).toHaveLength(1);
+  });
+
+  it("`free X of Ys`:fmtWholeSecondsOrZero 印出的每一种写法,门规都读得回来", () => {
+    // the producer's line (healerOffenseAnalysis): free time capped at the
+    // rendered window, printed through fmtWholeSecondsOrZero
+    const line = (free: number, from: number, to: number) => {
+      const windowS = renderGrid.renderedWindowSeconds(from, to);
+      return `  [KILL WINDOW] ${renderGrid.fmtTime(from)}–${renderGrid.fmtTime(to)} on X: free ${renderGrid.fmtWholeSecondsOrZero(Math.min(free, windowS))} of ${windowS}s, team min HP 50%.`;
+    };
+    const lines = [0, 0.3, 0.49, 0.5, 1.3, 2.3, 7.6, 20.6].map((free) =>
+      line(free, 40.1, 60.7),
+    );
+    expect(lines.some((l) => l.includes("free <1s of 20s"))).toBe(true);
+    expect(lines.some((l) => l.includes("free 0s of 20s"))).toBe(true);
+    expect(promptQualityCheck.checkFreeOfWindowConsistency(lines)).toEqual([]);
+    // every printed slot round-trips to the number it rounded to
+    for (const free of [0, 0.3, 0.5, 7.6])
+      expect(
+        renderGrid.parseWholeSeconds(renderGrid.fmtWholeSecondsOrZero(free)),
+      ).toBe(Math.round(free));
+
+    // Negative controls: the uncapped rounding the gate was written for, and
+    // a slot written outside the shared formatter.
+    expect(
+      promptQualityCheck.checkFreeOfWindowConsistency([
+        "  [KILL WINDOW] 0:40–1:00 on X: free 21s of 20s, team min HP 50%.",
+      ]),
+    ).toHaveLength(1);
+    expect(
+      promptQualityCheck.checkFreeOfWindowConsistency([
+        "  [KILL WINDOW] 0:40–1:00 on X: free 0.3s of 20s, team min HP 50%.",
+      ]),
     ).toHaveLength(1);
   });
 

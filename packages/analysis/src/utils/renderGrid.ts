@@ -64,3 +64,47 @@ export function renderedWindowSeconds(
 ): number {
   return Math.max(0, toRenderSecond(toSeconds) - toRenderSecond(fromSeconds));
 }
+
+/**
+ * A duration or a gap printed in whole seconds: `3s`, and `<1s` for one that
+ * rounds to zero.
+ *
+ * `0s` reads as "nothing happened": a control that held 0.3 s printed as one
+ * that did nothing (FT-T09), a control with 0.4 s to run as one already over
+ * (FT-T04). The interval is real — it is under half a second, and the text
+ * says so. The one formatter for that reading: `renderedCcDuration` (control
+ * lines), `resCcRemainingText` (the [RES] `cc:` token), the `next spike in`
+ * note of a press line and the `after …` of `[CC REMOVED]` all print through
+ * it, and `parseWholeSeconds` reads every one of them back.
+ *
+ * It prints `<1s` for an input of exactly 0 too — right for an interval whose
+ * two ends are both events in the log (a spike whose first hit shares the
+ * press's millisecond still follows the press). An amount that can truly be
+ * nothing goes through `fmtWholeSecondsOrZero`.
+ */
+export function fmtWholeSeconds(seconds: number): string {
+  const whole = Math.round(seconds);
+  return whole < 1 ? "<1s" : `${whole}s`;
+}
+
+/**
+ * `fmtWholeSeconds` for an amount that can be nothing at all — the owner's
+ * free time inside a window, what a control had left when it had already run
+ * its length: `0s` when it IS zero (that is the fact; `<1s` would claim a
+ * remainder), `<1s` when it is positive and rounds to zero.
+ */
+export function fmtWholeSecondsOrZero(seconds: number): string {
+  return seconds > 0 ? fmtWholeSeconds(seconds) : "0s";
+}
+
+/** What the two formatters above print, as a pattern source (no capture
+ *  group) for a reader that has to find the number inside a line. */
+export const WHOLE_SECONDS_RE_SRC = String.raw`(?:<1|\d+)s`;
+
+/** The whole seconds a `fmtWholeSeconds` / `fmtWholeSecondsOrZero` text
+ *  stands for — `<1s` is 0, the number it rounded to. Undefined for any
+ *  other text. */
+export function parseWholeSeconds(text: string): number | undefined {
+  const m = text.match(/^(<1|\d+)s$/);
+  return m ? (m[1] === "<1" ? 0 : Number(m[1])) : undefined;
+}
