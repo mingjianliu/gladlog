@@ -5,6 +5,7 @@ import {
   ccSpanLookup,
   formatBurstAnsweredLines,
 } from "@gladlog/analysis/src/context/burstAnswered";
+import { formatCcUseCount } from "@gladlog/analysis/src/context/ccUse";
 import { formatPressedDuringNote } from "@gladlog/analysis/src/context/controlRejectedPresses";
 import {
   dmgSpikeListLegend,
@@ -26,6 +27,7 @@ import {
   checkBurstAnsweredBottomConsistency,
   checkBurstAnsweredControlSpan,
   checkCcBookmarkConsistency,
+  checkCcUseStartedCounts,
   checkDeathTrinketCcConsistency,
   checkDmgSpikeListCap,
   checkDuringExternalConsistency,
@@ -954,6 +956,117 @@ describe("checkCcBookmarkConsistency — [CC BOOKMARK] lines agree with the burs
         ),
       ),
     ).toEqual([]); // omissions allowed
+  });
+});
+
+describe("checkCcUseStartedCounts — CC USE `cast bar started N×, went off M×` (FT-T16 D15 2c)", () => {
+  const line = (...items: string[]) => [`  Counts: ${items.join(" · ")}`];
+  const roar = "Incapacitating Roar cast 2× (first 0:26)";
+  it("passes what the producer writes, and the plain-form gate does not call it malformed", () => {
+    const items = [
+      { spellId: "99", spellName: "Incapacitating Roar", casts: 2, first: 26 },
+      { spellId: "106898", spellName: "Stampeding Roar", casts: 0 },
+      { spellId: "33786", spellName: "Cyclone", casts: 0, started: 4 },
+      {
+        spellId: "118",
+        spellName: "Polymorph",
+        casts: 11,
+        first: 32,
+        started: 14,
+      },
+      // every bar went off / more casts than bars: the plain form
+      {
+        spellId: "113724",
+        spellName: "Ring of Frost",
+        casts: 1,
+        first: 77,
+        started: 1,
+      },
+      { spellId: "5782", spellName: "Fear", casts: 3, first: 9, started: 2 },
+    ].map((c) =>
+      formatCcUseCount({
+        spellId: c.spellId,
+        spellName: c.spellName,
+        casts: c.casts,
+        firstCastS: c.first ?? null,
+        castBarsStarted: c.started,
+      }),
+    );
+    expect(items).toEqual([
+      roar,
+      "Stampeding Roar not cast",
+      "Cyclone cast bar started 4×, went off 0×",
+      "Polymorph cast bar started 14×, went off 11× (first 0:32)",
+      "Ring of Frost cast 1× (first 1:17)",
+      "Fear cast 3× (first 0:09)",
+    ]);
+    expect(checkCcUseStartedCounts(line(...items))).toEqual([]);
+    expect(checkCcBookmarkConsistency(line(...items))).toEqual([]);
+  });
+  it("fails went off ≥ started — that entry must read `cast N×`", () => {
+    expect(
+      checkCcUseStartedCounts(
+        line(roar, "Cyclone cast bar started 4×, went off 4× (first 0:19)"),
+      ),
+    ).toHaveLength(1);
+    expect(
+      checkCcUseStartedCounts(
+        line(roar, "Cyclone cast bar started 4×, went off 5× (first 0:19)"),
+      ),
+    ).toHaveLength(1);
+    expect(
+      checkCcUseStartedCounts(line("Cyclone cast bar started 0×, went off 0×")),
+    ).toHaveLength(1);
+  });
+  it("fails a `(first m:ss)` that disagrees with the went-off count", () => {
+    expect(
+      checkCcUseStartedCounts(
+        line("Cyclone cast bar started 4×, went off 0× (first 0:19)"),
+      ),
+    ).toHaveLength(1);
+    expect(
+      checkCcUseStartedCounts(line("Cyclone cast bar started 4×, went off 2×")),
+    ).toHaveLength(1);
+  });
+  it("fails two entries for one spell", () => {
+    expect(
+      checkCcUseStartedCounts(
+        line("Cyclone not cast", "Cyclone cast bar started 4×, went off 0×"),
+      ),
+    ).toHaveLength(1);
+    expect(
+      checkCcUseStartedCounts(
+        line(
+          "Cyclone cast 2× (first 0:19)",
+          "Cyclone cast bar started 4×, went off 2× (first 0:19)",
+        ),
+      ),
+    ).toHaveLength(1);
+  });
+  it("fails a went-off count the rendered [YOU] [CC] lines contradict", () => {
+    const walk = "Sleep Walk cast bar started 5×, went off 1× (first 0:36)";
+    const cast = (t: string) => `${t}  [YOU] [CC]   Sleep Walk → 4(BDruid)`;
+    expect(checkCcUseStartedCounts([...line(walk), cast("0:36")])).toEqual([]);
+    // two rendered casts against "went off 1×"
+    expect(
+      checkCcUseStartedCounts([...line(walk), cast("0:36"), cast("1:10")]),
+    ).toHaveLength(1);
+    // a rendered cast before the stated first
+    expect(checkCcUseStartedCounts([...line(walk), cast("0:20")])).toHaveLength(
+      1,
+    );
+    // a rendered cast of a spell that "went off 0×"
+    expect(
+      checkCcUseStartedCounts([
+        ...line("Sleep Walk cast bar started 5×, went off 0×"),
+        cast("0:36"),
+      ]),
+    ).toHaveLength(1);
+  });
+  it("the prototype's wording (`started N×, completed M×`) is a malformed entry", () => {
+    const old = line(roar, "Cyclone started 4×, completed 0×");
+    expect(checkCcUseStartedCounts(old)).toEqual([]);
+    expect(checkCcBookmarkConsistency(old)).toHaveLength(1);
   });
 });
 

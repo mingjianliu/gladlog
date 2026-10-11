@@ -103,6 +103,33 @@ export interface OwnerCastCancels {
   baitedKicks: BaitedKick[];
 }
 
+export interface CastBarStart {
+  id: string;
+  name: string;
+  /** Seconds since match start. */
+  t: number;
+}
+
+/**
+ * A unit's cast bars begun, in time order: one per SPELL_CAST_START row the
+ * parse kept for it. An instant spell writes none; a bar that was later
+ * kicked, stopped or refused is still one. The one reading of "a cast was
+ * started" behind `ownerCastCancels` below (its `hardcasts` and its pairing)
+ * and CC USE's `cast bar started N×` (context/ccUse.ts).
+ */
+export function castBarStartsOf(
+  unit: Pick<ICombatUnit, "castStartEvents">,
+  startMs: number,
+): CastBarStart[] {
+  return (unit.castStartEvents ?? [])
+    .map((e) => ({
+      id: e.spellId ?? "",
+      name: e.spellName ?? "",
+      t: (e.logLine.timestamp - startMs) / 1000,
+    }))
+    .sort((a, b) => a.t - b.t);
+}
+
 export function ownerCastCancels(params: {
   owner: ICombatUnit;
   friends: ICombatUnit[];
@@ -128,13 +155,7 @@ export function ownerCastCancels(params: {
   const forced = forcedStopInstantsMs(owner);
   const ccAt = forced.cc.map(sec);
   const displacedAt = forced.displaced.map(sec);
-  const starts = (owner.castStartEvents ?? [])
-    .map((e) => ({
-      id: e.spellId ?? "",
-      name: e.spellName ?? "",
-      t: sec(e.logLine.timestamp),
-    }))
-    .sort((a, b) => a.t - b.t);
+  const starts = castBarStartsOf(owner, start);
 
   const completedDurations = new Map<string, number[]>();
   const pending: Array<{ id: string; name: string; t: number; failS: number }> =

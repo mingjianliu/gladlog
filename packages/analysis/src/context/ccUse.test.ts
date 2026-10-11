@@ -11,6 +11,7 @@ import {
   makeAdvancedAction,
   makeAuraEvent,
   makeDamageEvent,
+  makeInterruptEvent,
   makeSpellCastEvent,
   makeUnit,
 } from "../../test/ported/testHelpers";
@@ -246,5 +247,211 @@ describe("ccUseSummary (GH #77 part 2)", () => {
     });
     expect(out.bookmarks).toHaveLength(CC_USE_CAP);
     expect(out.bookmarks.map((b) => b.burstIndex)).toEqual([2, 3]);
+  });
+});
+
+// FT-T16 D15 "2c" (user approval 2026-10-10): a control with a cast time —
+// cast bars begun (SPELL_CAST_START) next to casts that went off
+// (SPELL_CAST_SUCCESS).
+describe("CC USE counts — cast bars started vs casts that went off", () => {
+  const CYCLONE = "33786";
+  const MIGHTY_BASH = "5211"; // instant
+  const WRATH = "190984"; // a cast time, not a control
+  const RING_OF_FROST = "113724"; // on the Mage cooldown ledger, 2 s cast
+  const barStart = (spellId: string, s: number, name: string) => ({
+    ...makeSpellCastEvent(
+      spellId,
+      at(s),
+      "e1",
+      "Rogue",
+      "p1",
+      "Owner",
+      0,
+      name,
+    ),
+    logLine: {
+      event: LogEvent.SPELL_CAST_START,
+      timestamp: at(s),
+      parameters: [],
+    },
+  });
+  const wentOff = (spellId: string, s: number, name: string) =>
+    makeSpellCastEvent(spellId, at(s), "e1", "Rogue", "p1", "Owner", 0, name);
+
+  function countsLine(opts: {
+    spec?: CombatUnitSpec;
+    unitClass?: CombatUnitClass;
+    starts?: Array<[string, number, string]>;
+    casts?: Array<[string, number, string]>;
+    kicks?: Array<[string, number]>;
+  }) {
+    const owner = makeUnit("p1", {
+      name: "Owner",
+      spec: opts.spec ?? CombatUnitSpec.Druid_Balance,
+      class: opts.unitClass ?? CombatUnitClass.Druid,
+      reaction: CombatUnitReaction.Friendly,
+      castStartEvents: (opts.starts ?? []).map((x) => barStart(...x)),
+      spellCastEvents: (opts.casts ?? []).map((x) => wentOff(...x)),
+      actionIn: (opts.kicks ?? []).map(([spellId, s]) =>
+        makeInterruptEvent("1766", "Kick", spellId, "Cyclone", at(s), "e1"),
+      ),
+    });
+    const rogue = makeUnit("e1", {
+      name: "Rogue",
+      spec: CombatUnitSpec.Rogue_Assassination,
+      reaction: CombatUnitReaction.Hostile,
+    });
+    const combat: any = {
+      startTime: T0,
+      endTime: at(120),
+      startInfo: { zoneId: "" },
+      units: { p1: owner, e1: rogue },
+    };
+    const summary = ccUseSummary({
+      combat,
+      owner,
+      friends: [owner],
+      enemies: [rogue],
+      enemyCC: [],
+      burstLedger: [],
+      pressureWindows: [],
+    });
+    const lines = formatCcUse(summary, {
+      friendly: (n) => n,
+      enemy: (n) => n,
+    });
+    const items = (lines[1] ?? "").replace(/^\s*Counts: /, "").split(" · ");
+    return { summary, items, header: lines[0] ?? "" };
+  }
+  const of = (items: string[], spell: string) =>
+    items.filter((i) => i.startsWith(`${spell} `));
+
+  it("539b6ed0's shape: four Cyclone bars begun, none went off", () => {
+    const { summary, items } = countsLine({
+      starts: [47.9, 49.0, 55.6, 56.5].map((s) => [CYCLONE, s, "Cyclone"]),
+    });
+    expect(summary.counts.find((c) => c.spellName === "Cyclone")).toEqual(
+      expect.objectContaining({
+        casts: 0,
+        firstCastS: null,
+        castBarsStarted: 4,
+      }),
+    );
+    expect(of(items, "Cyclone")).toEqual([
+      "Cyclone cast bar started 4×, went off 0×",
+    ]);
+  });
+
+  it("every started bar went off: the plain `cast N×` entry, no started form", () => {
+    const { items } = countsLine({
+      starts: [
+        [CYCLONE, 10, "Cyclone"],
+        [CYCLONE, 30, "Cyclone"],
+      ],
+      casts: [
+        [CYCLONE, 11.6, "Cyclone"],
+        [CYCLONE, 31.6, "Cyclone"],
+      ],
+    });
+    expect(of(items, "Cyclone")).toEqual(["Cyclone cast 2× (first 0:11)"]);
+  });
+
+  it("a kicked bar is a started one: 3 begun, 1 kicked, 1 stopped, 1 went off", () => {
+    const { items } = countsLine({
+      starts: [
+        [CYCLONE, 10, "Cyclone"],
+        [CYCLONE, 15, "Cyclone"],
+        [CYCLONE, 19, "Cyclone"],
+      ],
+      kicks: [[CYCLONE, 10.9]],
+      casts: [[CYCLONE, 20.6, "Cyclone"]],
+    });
+    expect(of(items, "Cyclone")).toEqual([
+      "Cyclone cast bar started 3×, went off 1× (first 0:20)",
+    ]);
+  });
+
+  it("an instant control has no cast bar: its entry keeps the plain forms", () => {
+    const { summary, items } = countsLine({
+      casts: [[MIGHTY_BASH, 13, "Mighty Bash"]],
+    });
+    expect(of(items, "Mighty Bash")).toEqual([
+      "Mighty Bash cast 1× (first 0:13)",
+    ]);
+    expect(
+      summary.counts.find((c) => c.spellId === MIGHTY_BASH)!.castBarsStarted,
+    ).toBeUndefined();
+    expect(items.join(" · ")).not.toContain("cast bar started");
+    // and a control never started and never cast gets no entry of its own
+    expect(of(items, "Cyclone")).toEqual([]);
+  });
+
+  it("a cast-time spell that is not a control gets no entry", () => {
+    const { items } = countsLine({ starts: [[WRATH, 5, "Wrath"]] });
+    expect(of(items, "Wrath")).toEqual([]);
+  });
+
+  it("a cooldown-ledger control with a cast time takes the form on its own entry — one entry per spell", () => {
+    const { items } = countsLine({
+      spec: CombatUnitSpec.Mage_Arcane,
+      unitClass: CombatUnitClass.Mage,
+      starts: [
+        [RING_OF_FROST, 40, "Ring of Frost"],
+        [RING_OF_FROST, 75, "Ring of Frost"],
+      ],
+      casts: [[RING_OF_FROST, 77, "Ring of Frost"]],
+    });
+    expect(of(items, "Ring of Frost")).toEqual([
+      "Ring of Frost cast bar started 2×, went off 1× (first 1:17)",
+    ]);
+  });
+
+  it("the variants of one spell are one entry: Polymorph 118 and its 61305 skin", () => {
+    const { items } = countsLine({
+      spec: CombatUnitSpec.Mage_Arcane,
+      unitClass: CombatUnitClass.Mage,
+      // the client's own (here localized) name is not what the entry prints
+      starts: [
+        ["118", 32, "变形术"],
+        ["61305", 50, "变形术"],
+        ["118", 60, "变形术"],
+      ],
+      casts: [["61305", 51.7, "变形术"]],
+    });
+    expect(of(items, "Polymorph")).toEqual([
+      "Polymorph cast bar started 3×, went off 1× (first 0:51)",
+    ]);
+  });
+
+  it("more casts than bars (an instant proc of the spell) reads `cast N×`, never went off > started", () => {
+    const { items } = countsLine({
+      starts: [[CYCLONE, 10, "Cyclone"]],
+      casts: [
+        [CYCLONE, 11.6, "Cyclone"],
+        [CYCLONE, 40, "Cyclone"],
+      ],
+    });
+    expect(of(items, "Cyclone")).toEqual(["Cyclone cast 2× (first 0:11)"]);
+  });
+
+  it("counts only the round: a bar begun after the round's end is not one of them", () => {
+    const { items } = countsLine({
+      starts: [
+        [CYCLONE, 10, "Cyclone"],
+        [CYCLONE, 130, "Cyclone"],
+      ],
+      casts: [[CYCLONE, 131.6, "Cyclone"]],
+    });
+    expect(of(items, "Cyclone")).toEqual([
+      "Cyclone cast bar started 1×, went off 0×",
+    ]);
+  });
+
+  it("the header says `went off` is the cast completing, not the control landing", () => {
+    const { header } = countsLine({});
+    expect(header).toContain("`cast bar started N×, went off M×`");
+    expect(header).toContain(
+      "`went off` means the cast bar completed and the spell was cast, NOT that the control landed",
+    );
   });
 });

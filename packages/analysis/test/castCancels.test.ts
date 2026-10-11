@@ -2,7 +2,7 @@ import { CombatUnitReaction, LogEvent } from "@gladlog/parser-compat";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { ensureAnalysisData } from "../src";
-import { ownerCastCancels } from "../src/utils/castCancels";
+import { castBarStartsOf, ownerCastCancels } from "../src/utils/castCancels";
 import type { RawStreams } from "../src/utils/rawStreams";
 import {
   makeAuraEvent,
@@ -87,6 +87,11 @@ describe("ownerCastCancels", () => {
       rawStreams: streams,
     })!;
     expect(r.hardcasts).toBe(7);
+    // the shared cast-bar reading (CC USE's `cast bar started N×` counts the
+    // same rows)
+    expect(castBarStartsOf(owner, T0).map((s) => [s.id, s.t])).toEqual(
+      [0, 4, 10, 20, 30, 40, 50].map((s) => ["2061", s]),
+    );
     expect(r.cancels.map((c) => [c.startS, c.progressPct])).toEqual([
       [10, 40],
       [20, 60],

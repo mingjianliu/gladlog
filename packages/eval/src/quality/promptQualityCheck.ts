@@ -1713,6 +1713,9 @@ const CC_ON_ENEMY_TAIL = new RegExp(
 );
 const CC_USE_COUNTS_LINE = /^\s*Counts: (.*)$/;
 const CC_USE_COUNT_ITEM = /^(.+) cast (\d+)× \(first (\d+):(\d{2})\)$/;
+/** `formatCcUseCount`'s started form — `checkCcUseStartedCounts`' class. */
+const CC_USE_STARTED_ITEM =
+  /^(.+) cast bar started (\d+)×, went off (\d+)×(?: \(first (\d+):(\d{2})\))?$/;
 
 /**
  * `[CC BOOKMARK]` / CC USE counts (32nd hardFailure class, GH #77 part 2,
@@ -1853,6 +1856,8 @@ export function checkCcBookmarkConsistency(lines: string[]): string[] {
         );
       continue;
     }
+    // the started form is `checkCcUseStartedCounts`' class
+    if (CC_USE_STARTED_ITEM.test(item)) continue;
     const m = item.match(CC_USE_COUNT_ITEM);
     if (!m) {
       failures.push(`CC USE 计数格式不符:${item}`);
@@ -1870,6 +1875,70 @@ export function checkCcBookmarkConsistency(lines: string[]): string[] {
     if (early)
       failures.push(
         `CC USE 计数说 ${sp} 首次 ${fmtTime(first)},但 ${fmtTime(early.at)} 已有 [YOU] [CC]`,
+      );
+  }
+  return failures;
+}
+
+/**
+ * CC USE `<spell> cast bar started N×, went off M×[ (first m:ss)]` (FT-T16
+ * D15 "2c", user approval 2026-10-10). The producer (`context/ccUse.ts` →
+ * `formatCcUseCount`) writes this form for a control with a cast time only
+ * when fewer casts went off (SPELL_CAST_SUCCESS) than cast bars were begun
+ * (SPELL_CAST_START); with M ≥ N the entry is the plain `cast M×` / `not
+ * cast`, which `checkCcBookmarkConsistency` reads. It fails:
+ *  - N < 1 or M ≥ N (the form claims bars that did not go off);
+ *  - a `(first m:ss)` with M = 0, or none with M > 0;
+ *  - a second entry of the same spell on the line (two readings of one
+ *    spell's casts);
+ *  - like the plain form: more `[YOU] [CC]` lines of that spell than M, or
+ *    one before the stated first (the timeline may omit casts, so fewer is
+ *    allowed).
+ * A started-form entry the pattern does not read falls to
+ * `checkCcBookmarkConsistency`'s "格式不符".
+ */
+export function checkCcUseStartedCounts(lines: string[]): string[] {
+  const youCc: Array<{ at: number; spell: string }> = [];
+  let countItems: string[] = [];
+  for (const line of lines) {
+    const y = line.match(YOU_CC_LINE);
+    if (y) youCc.push({ at: Number(y[1]) * 60 + Number(y[2]), spell: y[3]! });
+    const c = line.match(CC_USE_COUNTS_LINE);
+    if (c) countItems = c[1]!.split(" · ");
+  }
+  const spellOf = (item: string) =>
+    item.match(CC_USE_STARTED_ITEM)?.[1] ??
+    item.match(CC_USE_COUNT_ITEM)?.[1] ??
+    (item.endsWith(" not cast") ? item.slice(0, -" not cast".length) : item);
+  const failures: string[] = [];
+  for (const item of countItems) {
+    const m = item.match(CC_USE_STARTED_ITEM);
+    if (!m) continue;
+    const sp = m[1]!;
+    const started = Number(m[2]);
+    const wentOff = Number(m[3]);
+    const first =
+      m[4] === undefined ? undefined : Number(m[4]) * 60 + Number(m[5]);
+    if (started < 1 || wentOff >= started)
+      failures.push(
+        `CC USE 计数说 ${sp} 读条开了 ${started} 次、放出 ${wentOff} 次 —— 放出不少于开读时应写 cast N× / not cast:${item}`,
+      );
+    if ((wentOff === 0) !== (first === undefined))
+      failures.push(
+        `CC USE 计数的 (first m:ss) 与放出次数 ${wentOff} 不符:${item}`,
+      );
+    if (countItems.filter((x) => spellOf(x) === sp).length > 1)
+      failures.push(`CC USE 计数里 ${sp} 出现了不止一条:${item}`);
+    const rendered = youCc.filter((y) => y.spell === sp);
+    if (rendered.length > wentOff)
+      failures.push(
+        `CC USE 计数说 ${sp} 放出 ${wentOff} 次,但时间线有 ${rendered.length} 条 [YOU] [CC]`,
+      );
+    const early =
+      first === undefined ? undefined : rendered.find((y) => y.at < first);
+    if (early)
+      failures.push(
+        `CC USE 计数说 ${sp} 首次放出 ${fmtTime(first!)},但 ${fmtTime(early.at)} 已有 [YOU] [CC]`,
       );
   }
   return failures;
@@ -4649,6 +4718,7 @@ export function checkMatch(
   hardFailures.push(...checkFreeOfWindowConsistency(lines));
   hardFailures.push(...checkPeelOptionConsistency(lines));
   hardFailures.push(...checkCcBookmarkConsistency(lines));
+  hardFailures.push(...checkCcUseStartedCounts(lines));
   hardFailures.push(...checkForcedTrinketConsistency(lines));
   hardFailures.push(...checkGuardianSpiritSaveClause(lines));
   hardFailures.push(...checkKarmaFedClause(lines));

@@ -17,6 +17,21 @@
  *        CC-able;
  *  - healer owners: counts only (their slack predicate and the defense branch
  *    exclude each other, and "not CC'd" is not spare capacity).
+ *  - FT-T16 D15 "2c" (user approval 2026-10-10, on real-match samples): a
+ *    control with a cast time says how many cast bars were begun next to how
+ *    many casts went off — `Cyclone cast bar started 4×, went off 0×`
+ *    (539b6ed0: four Cyclone bars, none finished, and the prompt never said
+ *    "Cyclone"). Started = the owner's SPELL_CAST_START rows
+ *    (`castBarStartsOf`, the reading `ownerCastCancels` counts hardcasts with
+ *    — a kicked bar is one of them); went off = SPELL_CAST_SUCCESS, the same
+ *    number `cast N×` prints. The approval's condition: the second number
+ *    must not read as "the control landed" (2c6e85ec round 6: 12 Cyclones
+ *    went off, 3 MISSED and 2 were IMMUNE) — hence "went off", and the header
+ *    says so. A control with no cooldown (Cyclone, Polymorph, Fear …) is on
+ *    no cooldown ledger, so it gets its entry here, from its first started
+ *    bar. The form is printed only when fewer went off than were started;
+ *    otherwise the entry is the plain `cast N×` (one entry per spell, never
+ *    both).
  * "CC-able" = `ccSamplerFor(...).stateAt` (shared with PEEL OPTIONS) at Full DR
  * only — an unresolved DR category is not admitted. The two doors
  * (>= CC_USE_MIN_S passing seconds, >= CC_USE_MIN_SHARE) are editorial,
@@ -27,8 +42,11 @@
  */
 import type { AtomicArenaCombat, ICombatUnit } from "@gladlog/parser-compat";
 
+import { castAndEffectIds } from "../data/castEffectAuras";
+import { getEnglishSpellName } from "../data/spellEffectData";
 import { ccSpellIds } from "../data/spellTags";
 import type { IBurstLedgerEntry } from "../utils/burstLedger";
+import { castBarStartsOf } from "../utils/castCancels";
 import { ccSamplerFor, pvpTrinketReadyAtSecond } from "../utils/ccTargetState";
 import type { IPlayerCCTrinketSummary } from "../utils/ccTrinketAnalysis";
 import {
@@ -52,13 +70,17 @@ export const CC_USE_CAP = 2;
 export const DISARM_MECHANIC = 3;
 
 export const CC_USE_SECTION_HEADER =
-  "CC USE — your control cooldowns this round. `cast N×` counts completed casts. A [CC BOOKMARK] marks a moment worth a look, not a missed cast: on every second of its span the CC was ready and not cast, you were not CC'd or in a casting lockout, and the named enemy was in range, with no detected LoS obstruction, not CC'd, not immune, at Full DR, and with no known ready self-breaker of their own. The distance, DR and trinket state after `at m:ss` are as of the span's first second. Enemy dispels are not considered, and nothing here says whether casting was the better play — or whether you had a free global then: say \"you weren't CC'd\", never \"you were free\". Use a bookmark only to point the player at that moment, in your own words; never say they should have cast it, never count it as a mistake, and never judge the player as passive or aggressive from the counts.";
+  "CC USE — your control cooldowns this round. `cast N×` counts completed casts. `cast bar started N×, went off M×` is printed for a control with a cast time when fewer casts went off than cast bars were started (otherwise its entry is the plain `cast N×`): N counts every cast bar you began, a kicked one included, and M the casts that finished (`first m:ss` = the first of them) — `went off` means the cast bar completed and the spell was cast, NOT that the control landed (a cast that went off can still miss or hit an immune target), and the counts do not say why a started bar did not go off. A [CC BOOKMARK] marks a moment worth a look, not a missed cast: on every second of its span the CC was ready and not cast, you were not CC'd or in a casting lockout, and the named enemy was in range, with no detected LoS obstruction, not CC'd, not immune, at Full DR, and with no known ready self-breaker of their own. The distance, DR and trinket state after `at m:ss` are as of the span's first second. Enemy dispels are not considered, and nothing here says whether casting was the better play — or whether you had a free global then: say \"you weren't CC'd\", never \"you were free\". Use a bookmark only to point the player at that moment, in your own words; never say they should have cast it, never count it as a mistake, and never judge the player as passive or aggressive from the counts.";
 
 export interface ICcUseCount {
   spellId: string;
   spellName: string;
   casts: number;
   firstCastS: number | null;
+  /** Cast bars begun (SPELL_CAST_START rows of this spell, `castBarStartsOf`)
+   * — absent for a control the owner started no cast bar of this round (an
+   * instant control never has one). */
+  castBarsStarted?: number;
 }
 
 export interface ICcUseBookmark {
@@ -128,6 +150,43 @@ export function ccUseSummary(params: {
       ? Math.min(...cd.casts.map((c) => c.timeSeconds))
       : null,
   }));
+  // FT-T16 D15 "2c": cast bars begun, per control. Same end clamp as the
+  // cooldown ledger's casts above (a Solo Shuffle round's units keep the gap
+  // after its end), so both numbers of an entry count one stretch of time.
+  const durationS = (combat.endTime - start) / 1000;
+  const wentOffS = (englishName: string) =>
+    (owner.spellCastEvents ?? [])
+      .filter(
+        (e) =>
+          e.logLine.event === "SPELL_CAST_SUCCESS" &&
+          !!e.spellId &&
+          getEnglishSpellName(e.spellId, e.spellName) === englishName,
+      )
+      .map((e) => (e.logLine.timestamp - start) / 1000)
+      .filter((t) => t <= durationS);
+  for (const s of castBarStartsOf(owner, start)) {
+    if (!s.id || s.t > durationS) continue;
+    // By English name as well as id: the variants of one spell (Polymorph's
+    // skins) are one entry, under the name the line prints.
+    const name = getEnglishSpellName(s.id, s.name);
+    let entry = counts.find((c) => c.spellId === s.id || c.spellName === name);
+    if (!entry) {
+      // Not on the cooldown ledger: a control by the hard-CC set, asked of
+      // the cast's own id and of its effect auras (a cast id is often not the
+      // id of the aura it leaves — data/castEffectAuras.ts).
+      if (![...castAndEffectIds(s.id)].some((id) => ccSpellIds.has(id)))
+        continue;
+      const went = wentOffS(name);
+      entry = {
+        spellId: s.id,
+        spellName: name,
+        casts: went.length,
+        firstCastS: went.length ? Math.min(...went) : null,
+      };
+      counts.push(entry);
+    }
+    entry.castBarsStarted = (entry.castBarsStarted ?? 0) + 1;
+  }
   if (isHealerSpec(owner.spec)) return { counts, bookmarks: [] };
 
   const enemyIds = new Set(enemies.map((u) => u.id));
@@ -239,18 +298,28 @@ export function ccUseSummary(params: {
   return { counts, bookmarks };
 }
 
+/**
+ * One entry of the `Counts:` line. The started form only when fewer casts
+ * went off than cast bars were begun: with every bar finished (or more casts
+ * than bars — an instant proc of a cast-time spell) the plain form says all
+ * there is, so a spell never reads two ways. The gate
+ * (`promptQualityCheck.checkCcUseStartedCounts`) re-parses this text.
+ */
+export function formatCcUseCount(c: ICcUseCount): string {
+  const first = c.casts > 0 ? ` (first ${fmtTime(c.firstCastS!)})` : "";
+  if ((c.castBarsStarted ?? 0) > c.casts)
+    return `${c.spellName} cast bar started ${c.castBarsStarted}×, went off ${c.casts}×${first}`;
+  return c.casts === 0
+    ? `${c.spellName} not cast`
+    : `${c.spellName} cast ${c.casts}×${first}`;
+}
+
 export function formatCcUse(
   summary: ICcUseSummary,
   labels: { friendly: (n: string) => string; enemy: (n: string) => string },
 ): string[] {
   if (summary.counts.length === 0) return [];
-  const countStr = summary.counts
-    .map((c) =>
-      c.casts === 0
-        ? `${c.spellName} not cast`
-        : `${c.spellName} cast ${c.casts}× (first ${fmtTime(c.firstCastS!)})`,
-    )
-    .join(" · ");
+  const countStr = summary.counts.map(formatCcUseCount).join(" · ");
   const lines = [CC_USE_SECTION_HEADER, `  Counts: ${countStr}`];
   for (const b of summary.bookmarks) {
     const from = b.seconds[0]!;
