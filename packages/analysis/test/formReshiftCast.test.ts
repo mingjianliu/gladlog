@@ -2,10 +2,10 @@
  * F11: Incarnation: Tree of Life logs a SPELL_CAST_SUCCESS of the cooldown's
  * id for the press AND for every shift back into the form while the
  * cooldown's own buff ("Incarnation", 117679) runs. Only the press is a
- * press — `isFormReshiftCast`, read by the ledger, the healer gap filler's
- * [YOU] [CD] promotion and the [ENEMY HEAL CD] line.
+ * press — `isFormReshiftCast`, read by the healer gap filler's [YOU] [CD]
+ * promotion and the [ENEMY HEAL CD] line.
  */
-import { LogEvent } from "@gladlog/parser-compat";
+import { CombatUnitSpec, LogEvent } from "@gladlog/parser-compat";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { emitEnemyCdEntries } from "../src/context/timelineSections/enemyCd";
@@ -47,7 +47,7 @@ const aura = (event: LogEvent, id: string, s: number) =>
 const druid = () =>
   makeUnit("d", {
     name: "Druid-R",
-    spec: "105", // Restoration Druid
+    spec: CombatUnitSpec.Druid_Restoration,
     spellCastEvents: [cast(27.832), cast(161.766), cast(185.5)],
     auraEvents: [
       aura(LogEvent.SPELL_AURA_APPLIED, TREE, 27.832),
@@ -74,7 +74,7 @@ describe("isFormReshiftCast", () => {
   it("a cast that applies the buff is a press; one inside it is a shift back", () => {
     const u = druid();
     expect(
-      u.spellCastEvents.map((c: never) => isFormReshiftCast(u as never, c)),
+      u.spellCastEvents.map((c) => isFormReshiftCast(u as never, c)),
     ).toEqual([false, false, true]);
   });
 
@@ -99,7 +99,7 @@ describe("isFormReshiftCast", () => {
     );
     const u = druid();
     const tranq = makeSpellCastEvent("740", T0 + 185_500, "d", "Druid-R");
-    expect(isFormReshiftCast(u as never, tranq)).toBe(false);
+    expect(isFormReshiftCast(u as never, tranq as never)).toBe(false);
   });
 
   it("the buff on somebody else is not this druid's", () => {

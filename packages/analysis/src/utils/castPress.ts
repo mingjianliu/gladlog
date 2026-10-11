@@ -55,11 +55,11 @@ export const FORM_COOLDOWN_BUFF_PAIR_MS = 50;
  * buff line at all leaves every cast a press.
  *
  * One predicate for every reader that turns a cast of the id into a
- * cooldown press: the ledger's cast list (`extractMajorCooldowns`), the
- * healer gap filler's `[YOU] [CD]` promotion and the `[ENEMY HEAL CD]`
- * line. Before it a shift back read as a second press of a three-minute
- * cooldown (b711d4ac: `[YOU] [CD] Incarnation: Tree of Life` at 0:22 and
- * again at 1:00).
+ * cooldown press: the healer gap filler's `[YOU] [CD]` promotion and the
+ * `[ENEMY HEAL CD]` line (the ledger holds no row for the id; one would
+ * have to filter its cast list through this too). Before it a shift back
+ * read as a second press of a three-minute cooldown (b711d4ac: `[YOU] [CD]
+ * Incarnation: Tree of Life` at 0:22 and again at 1:00).
  */
 export function isFormReshiftCast(
   unit: Pick<ICombatUnit, "id" | "auraEvents">,
