@@ -2033,6 +2033,19 @@ describe("expectedDurationSeconds under Oppressing Roar (FT-T07)", () => {
     expect(r.ccInstances[0]?.drInfo?.level).toBe("Full");
   });
 
+  it("the Roar logged under its other id (406971 — 7951f46fcfb3: 3.91 s under it) lengthens the same way", () => {
+    const ROAR_OTHER_ID = "406971";
+    const r = run([
+      on(ROAR_OTHER_ID, 8.244),
+      on(TERROR, 10),
+      off(TERROR, 13.906),
+      off(ROAR_OTHER_ID, 18.244),
+    ]);
+    expect(r.ccInstances).toHaveLength(1);
+    expect(r.ccInstances[0]?.expectedDurationSeconds).toBeCloseTo(3.9, 6);
+    expect(r.ccInstances[0]?.durationSeconds).toBeCloseTo(3.906, 6);
+  });
+
   it("a Roar that ran out before the landing, or landed after it, does not lengthen", () => {
     const ranOut = run([
       on(ROAR, 1),

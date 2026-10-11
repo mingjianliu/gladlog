@@ -16,6 +16,7 @@ import { SPELL_CATEGORIES } from "../src/data/spellCategories";
 import {
   ccFullDurationSeconds,
   OPPRESSING_ROAR_PVP_CC_DURATION_MULT,
+  OPPRESSING_ROAR_AURA_IDS,
   OPPRESSING_ROAR_SPELL_ID,
   spellEffectData,
 } from "../src/data/spellEffectData";
@@ -92,6 +93,8 @@ describe("ccFullDurationSeconds — 官方时长单源", () => {
 
   it("压迫咆哮:官方 aura 232 基点 50 × PvpMultiplier 0.6 = +30%", () => {
     expect(OPPRESSING_ROAR_SPELL_ID).toBe("372048");
+    // both ids the debuff is logged under are live in the corpus
+    expect([...OPPRESSING_ROAR_AURA_IDS].sort()).toEqual(["372048", "406971"]);
     expect(OPPRESSING_ROAR_PVP_CC_DURATION_MULT).toBeCloseTo(1.3);
   });
 });

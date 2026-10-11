@@ -2,7 +2,7 @@ import { ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
 import {
   getEnglishSpellName,
-  OPPRESSING_ROAR_SPELL_ID,
+  OPPRESSING_ROAR_AURA_IDS,
 } from "../data/spellEffectData";
 import { SPELL_CATEGORIES } from "../data/spellCategories";
 import { dropAuraRebroadcasts } from "./auraIntervals";
@@ -144,7 +144,7 @@ export function oppressingRoarOnAt(
   let on = false;
   for (const a of holder.auraEvents) {
     if (a === applied) break;
-    if (a.spellId !== OPPRESSING_ROAR_SPELL_ID) continue;
+    if (!a.spellId || !OPPRESSING_ROAR_AURA_IDS.has(a.spellId)) continue;
     const ev = a.logLine.event;
     if (
       ev === LogEvent.SPELL_AURA_APPLIED ||
@@ -220,7 +220,7 @@ export function analyzeCcBreaks(
       const spellId = aura.spellId;
       if (!spellId) continue;
       const ev = aura.logLine.event;
-      if (spellId === OPPRESSING_ROAR_SPELL_ID) {
+      if (OPPRESSING_ROAR_AURA_IDS.has(spellId)) {
         if (
           ev === LogEvent.SPELL_AURA_APPLIED ||
           ev === LogEvent.SPELL_AURA_REFRESH

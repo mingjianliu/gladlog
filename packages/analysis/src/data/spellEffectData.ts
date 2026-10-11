@@ -85,6 +85,24 @@ export function effectiveCooldownSeconds(spellId: string): number | undefined {
  * "羊本身永远是6秒 除非有龙给的加持续时间的debuff".
  */
 export const OPPRESSING_ROAR_SPELL_ID = "372048";
+/**
+ * The ids the Roar's debuff is logged under. 406971 is the same spell in DB2
+ * (name, 10 s, 120 s cooldown — `spellEffectGenerated.json`) cast by an
+ * Evoker whose log shows no 372048 at all; read as one id, its lengthening
+ * was invisible: of the 22 Terror of the Skies stuns that still outlived
+ * their labelled length on the 605-file capture, 12 sat under a 406971
+ * debuff applied by the caster 1.8–2.2 s earlier, 11 of them at 1.25–1.35 ×
+ * (fix-FT/scripts/t09_terrorOutlived.ts). FLAG (Game-Behaviour Rule): the
+ * aura-232 rows of 406971 are not in `talentEffectInventoryGenerated.json`
+ * (0 rows; 372048 has 17), so the DB2 leg for this id is its identity with
+ * 372048, not its own effect rows — the corpus leg carries it, and the
+ * direction is the safe one (a control cannot outlive its duration: lengthen
+ * on corpus evidence). Re-check with `buffDurationScan` at a data refresh.
+ */
+export const OPPRESSING_ROAR_AURA_IDS: ReadonlySet<string> = new Set([
+  OPPRESSING_ROAR_SPELL_ID,
+  "406971",
+]);
 export const OPPRESSING_ROAR_PVP_CC_DURATION_MULT = 1.3;
 /**
  * What the Roar covers: aura 232 is keyed by SpellMechanic, one row per

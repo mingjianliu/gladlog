@@ -83,8 +83,12 @@ export function oppressingRoarLengthens(spellId: string): boolean {
  * plateau (×16). One caster in one file (7b07c1dee3f0): 3.90 s on the target
  * carrying the Roar and 3.00 s on a totem without it from the same breath;
  * 3.00 s on all three targets in a later round, 8 s after the Roar ran out.
- * The 6 long ones with no Roar are unexplained (7951f46fcfb3: 3.91 s in a
- * round with no Roar cast at all) and stay flagged by the probe.
+ * The 6 long ones "with no Roar" were the Roar under its other id, 406971
+ * (`OPPRESSING_ROAR_AURA_IDS`; 7951f46fcfb3: 3.91 s, the 406971 debuff
+ * applied 1.8 s before the stun) — read since FT-T09's follow-up. What is
+ * left on the 605 files: 10 Terror of the Skies instances the log REFRESHes
+ * mid-stun (two applications inside one APPLIED → REMOVED span;
+ * `t09_terrorOutlived.ts`), which this per-application length does not cover.
  */
 export function ccFullDurationForApplication(
   spellId: string,
