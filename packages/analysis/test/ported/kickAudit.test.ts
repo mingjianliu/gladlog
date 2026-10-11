@@ -579,6 +579,32 @@ describe("kickAudit — the bait is the last bar before the kick (FT F12)", () =
     ).toBe("juked");
   });
 
+  it("9d899d10 r1 1:42: a bar with a stun on the target between its start and the kick is not called a fake — the stun broke it, or the log cannot tell", () => {
+    const stun = (ms: number) => ({
+      logLine: { event: LogEvent.SPELL_AURA_APPLIED, timestamp: kickTs + ms, parameters: [] },
+      timestamp: kickTs + ms,
+      spellId: "118905", // Static Charge (Capacitor Totem)
+      spellName: "Static Charge",
+      srcUnitId: "totem",
+      destUnitId: "e1",
+    });
+    const enemy = (auraMs: number[]) =>
+      makeUnit("e1", {
+        name: "Enemy",
+        info,
+        castStartEvents: [castStart(FLASH_HEAL, kickTs - 870, "e1")],
+        auraEvents: auraMs.map(stun),
+      } as any);
+    const result = (auraMs: number[]) =>
+      analyzeKickAudit(kickerOf(), [enemy(auraMs)], makeCombat())[0]!.result;
+    // Scorch begun 0.87 s before the Counter Shot, the stun 0.12 s before it
+    expect(result([-122])).toBe("missed");
+    // a stun before the bar began, or after the kick, stopped nothing of it
+    expect(result([-900])).toBe("juked");
+    expect(result([1])).toBe("juked");
+    expect(result([])).toBe("juked");
+  });
+
   // The recorder's bars, with their SPELL_CAST_FAILED rows handed in: read as
   // the cancel ledger reads them.
   describe("a target that recorded the log", () => {

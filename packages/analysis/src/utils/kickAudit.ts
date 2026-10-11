@@ -73,12 +73,14 @@ export interface IKickAuditEntry {
    *            the landed rate, and a lone `silenced` would be the only one
    *            counted against it;
    * juked    — kick missed AND the last cast bar the target began before it
-   *            (within `JUKE_LOOKBACK_MS`) never went off and nobody
-   *            interrupted it (fake-cast bait), or a channel it stopped just
-   *            before;
+   *            (within `JUKE_LOOKBACK_MS`) never went off, nobody
+   *            interrupted it and no control, silence or knockback landed on
+   *            the target while it can have run (fake-cast bait), or a
+   *            channel it stopped just before;
    * missed   — kick missed with cast-start data present and no bait found:
-   *            no bar begun in the lookback, or the last one went off or was
-   *            interrupted by somebody else (nothing kickable);
+   *            no bar begun in the lookback, or the last one went off, was
+   *            interrupted by somebody else or may have been broken by a
+   *            control (nothing kickable);
    * unknown  — kick missed but this match predates cast-start data (can't distinguish).
    */
   result: "landed" | "silenced" | "juked" | "missed" | "unknown";
@@ -300,13 +302,31 @@ export function analyzeKickAudit(
     }
     return bars;
   };
+  const forcedByUnit = new Map<string, ReturnType<typeof forcedStopInstantsMs>>();
+  const forcedOf = (enemy: ICombatUnit) => {
+    let forced = forcedByUnit.get(enemy.id);
+    if (!forced) {
+      forced = forcedStopInstantsMs(enemy);
+      forcedByUnit.set(enemy.id, forced);
+    }
+    return forced;
+  };
   /** The cast bar a kick at `kickMs` went out at: the LAST one `enemy` began
    * before it, inside the lookback — named when it did not go off and nobody
    * interrupted it, else nothing. An earlier bar is never the answer: the
    * target has cast since, and a kick is aimed at the bar on screen.
    *  - `faked` (the juke test): the bar has no end row (`none` — all the log
-   *    says of a unit that did not record it), or the recorder stopped it
-   *    with nothing landing on them (`stopped`, `near === null`);
+   *    says of a unit that did not record it) and nothing that stops a cast
+   *    landed on the unit between its start and the kick, or the recorder
+   *    stopped it with nothing landing on them (`stopped`, `near === null`).
+   *    A bar with no end row has no stop instant to hold `CANCEL_CC_NEAR_S`
+   *    against, so the evidence of ruling A′17 (`forcedStopInstantsMs`: a
+   *    control or silence aura, a landed displacement) is asked of the whole
+   *    stretch the bar can have ended in: 9d899d10 round 1, a Scorch begun
+   *    101.244, Capacitor Totem's stun on the mage 101.992, Counter Shot
+   *    102.114 — the stun broke the bar, and the line said "JUKED by fake
+   *    Scorch". Whether the unit had already stopped by itself the log
+   *    cannot tell, so such a kick is `missed`, never called a juke;
    *  - `unfinished` (the silenced branch): any end but a completion or
    *    somebody's interrupt — whether the silence or the target stopped it
    *    the log cannot tell. */
@@ -323,10 +343,20 @@ export function analyzeKickAudit(
     }
     if (!last || last.t < kickS - JUKE_LOOKBACK_MS / 1000) return undefined;
     const { end } = last;
+    const forcedInside = () => {
+      const forced = forcedOf(enemy);
+      const fromS = last.t;
+      return [...forced.cc, ...forced.displaced].some((ms) => {
+        const t = (ms - matchStartMs) / 1000;
+        return t >= fromS && t <= kickS;
+      });
+    };
     const open =
       want === "unfinished"
         ? end.kind !== "completed" && end.kind !== "kicked"
-        : end.kind === "none" || (end.kind === "stopped" && end.near === null);
+        : end.kind === "none"
+          ? !forcedInside()
+          : end.kind === "stopped" && end.near === null;
     return open ? getEnglishSpellName(last.id, last.name) : undefined;
   };
 
@@ -338,7 +368,7 @@ export function analyzeKickAudit(
    * `CANCEL_CC_NEAR_S` of its end (ruling A′17 applies here as it does to the
    * owner's own stops). Of two, the one that ended last. */
   const stoppedChannelOf = (enemy: ICombatUnit, kickMs: number) => {
-    const forced = forcedStopInstantsMs(enemy);
+    const forced = forcedOf(enemy);
     // A control / displacement forces a stop it PRECEDES: one that lands
     // after the channel already ended (and after our kick) forced nothing.
     // The window was symmetric (codex 45-FT-95: Divine Hymn ends 44.648, the
