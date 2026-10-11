@@ -1425,5 +1425,15 @@
  *  line across a REFRESH says so. Roster labels keep their spec tag (`N(Spec)'s
  *  pet's X`); STAYED IN's `you moved N yd` names a Death Grip / knockback
  *  inside the span. Counts in the commit.
+ *  v374 (2026-10-11, four follow-ups the re-verification of v373 found on
+ *  its own lines): Champion's Spear's re-press (1271980) is not a second
+ *  press of the 90 s cooldown; an enemy's Ultimate Penitence prints the
+ *  shield the log shows — `(absorb Nk, Ts)` — not `(self-save)`, and KILL
+ *  ATTEMPTS words it `popped Ultimate Penitence`; a control whose REMOVED
+ *  shares its millisecond with a control immunity going up on the holder
+ *  reads `| ended by their Bladestorm`, not `cause not logged`; `[ENEMY DEF]
+ *  … still up when the round ended` reads the same round end as every other
+ *  line (Solo Shuffle: the first death), and one legend sentence says which
+ *  instant "the round ended" is. No candidate changes.
  */
-export const PROMPT_VERSION = 373;
+export const PROMPT_VERSION = 374;
