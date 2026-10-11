@@ -188,6 +188,79 @@ function decodePowers(
   return out;
 }
 
+/** Where the advanced block's x/y pair sits: the first two neighbouring
+ * fields from `at + 4` on that both carry a decimal point; -1 when the line
+ * has none (no advanced block). The anchor every power field is read off. */
+function positionPairIdx(params: string[], at: number): number {
+  for (let i = at + 4; i < params.length - 1; i++) {
+    const val1 = params[i];
+    const val2 = params[i + 1];
+    if (
+      val1 !== undefined &&
+      val2 !== undefined &&
+      val1.includes(".") &&
+      val2.includes(".")
+    ) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+/** One power a cast was charged in, and how much. */
+interface PowerCost {
+  /** Blizzard power type, as `PowerEntry.powerType`. */
+  powerType: number;
+  /** In the log's own unit for that power — the unit of the same row's
+   * current / max reading (rage is logged ×10: 100 = 10 rage). */
+  cost: number;
+}
+
+const INTEGER_RE = /^-?\d+$/;
+
+/**
+ * What a `SPELL_CAST_SUCCESS` row says the cast cost: the field at `xIdx-1`,
+ * right after the three `decodePowers` reads, index-aligned with the power-type
+ * list at `xIdx-4`. Measured on raw rows before being read (2026-10-11):
+ *
+ *  - layout: all 995,281 cast rows of the 605-file slice list as many costs
+ *    as power types, integers every one. 24,884 list two powers — a spell
+ *    charged in two (`3|4,53|5,200|7,35|5`: Dispatch, 35 energy and 5 combo
+ *    points; `9|0,5|267798,5|273000,3|1500`: Word of Glory, 3 Holy Power and
+ *    1,500 mana);
+ *  - the row's `current` is the reading BEFORE the cost is paid: where the
+ *    caster's next mana reading follows within 20 ms (462 rows, five logs)
+ *    it is `current - cost` plus those milliseconds' regeneration on 366
+ *    (Sheilun's Gift 214634 − 7500 → 207134 one millisecond later), with an
+ *    ENERGIZE row in between on 60;
+ *  - it is the spell's cost BEFORE the caster's percentage reductions, not
+ *    always what was taken: on 19 of those rows mana fell by a fixed share of
+ *    it (Echo 4,750 stated, 3,325 taken, every time; Holy Light 17,500 stated,
+ *    7,341 taken). It was exceeded once (982 mana, no other cast between).
+ *
+ * `undefined` = the row does not state it (no advanced block, or a field that
+ * is not a list of integers aligned with the types) — unknown, never a
+ * guessed zero. A cost of 0 is a statement and is kept.
+ */
+export function decodeCastCosts(
+  params: string[],
+  at: number,
+): PowerCost[] | undefined {
+  const xIdx = positionPairIdx(params, at);
+  if (xIdx < at + 4) return undefined;
+  const types = (params[xIdx - 4] ?? "").split("|");
+  const costs = (params[xIdx - 1] ?? "").split("|");
+  if (types.length !== costs.length) return undefined;
+  const out: PowerCost[] = [];
+  for (let i = 0; i < types.length; i++) {
+    const type = types[i] ?? "";
+    const cost = costs[i] ?? "";
+    if (!INTEGER_RE.test(type) || !INTEGER_RE.test(cost)) return undefined;
+    out.push({ powerType: parseInt10(type), cost: parseInt10(cost) });
+  }
+  return out;
+}
+
 export function decodeAdvanced(
   params: string[],
   at: number,
@@ -207,22 +280,9 @@ export function decodeAdvanced(
   const hp = parseInt10(params[at + 2]);
   const maxHp = parseInt10(params[at + 3]);
 
-  let xIdx = at + 14;
-  let yIdx = at + 15;
-  for (let i = at + 4; i < params.length - 1; i++) {
-    const val1 = params[i];
-    const val2 = params[i + 1];
-    if (
-      val1 !== undefined &&
-      val2 !== undefined &&
-      val1.includes(".") &&
-      val2.includes(".")
-    ) {
-      xIdx = i;
-      yIdx = i + 1;
-      break;
-    }
-  }
+  const found = positionPairIdx(params, at);
+  const xIdx = found >= 0 ? found : at + 14;
+  const yIdx = xIdx + 1;
 
   const x = parseFloatSafe(params[xIdx]);
   const y = parseFloatSafe(params[yIdx]);

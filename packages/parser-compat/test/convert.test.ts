@@ -275,7 +275,10 @@ describe("absorb attribution + damage effective semantics (adjudication #13 as a
   });
 
   it("overkill is still removed: a 100 hit with 40 overkill and 30 absorbed lost 60 health", () => {
-    const OVERKILL = DMG_ABS.replace(",100,120,-1,1,0,0,30,", ",100,120,40,1,0,0,30,");
+    const OVERKILL = DMG_ABS.replace(
+      ",100,120,-1,1,0,0,30,",
+      ",100,120,40,1,0,0,30,",
+    );
     expect(OVERKILL).not.toBe(DMG_ABS);
     const { matches: m2 } = parseLines([
       "ARENA_MATCH_START,1825,41,3v3,1",
@@ -748,5 +751,50 @@ describe("empowered casts: starts and interrupts cross into the legacy unit (tri
     expect(legacy.empowerStarts).toBeUndefined();
     expect(legacy.empowerInterrupts).toBeUndefined();
     expect(legacy.empowerEnds).toHaveLength(1);
+  });
+});
+
+describe("the cost a cast row states (2026-10-11)", () => {
+  const CAST = (cost: string, tail = true) =>
+    `SPELL_CAST_SUCCESS,Player-1-A,"Alice-X",0x511,0x80000000,Player-2-B,"Bob-Y",0x548,0x80000000,85673,"Word of Glory",0x2${
+      tail
+        ? `,Player-1-A,0000000000000000,1000,1000,0,0,0,0,0,0,9|0,5|267798,5|273000,${cost},1.0,-1.0,0,1.0,70`
+        : ""
+    }`;
+  const { matches } = parseLines([
+    "ARENA_MATCH_START,1825,41,3v3,1",
+    CI("Player-1-A", 0, 65, 2400),
+    CI("Player-2-B", 1, 71, 2380),
+    CAST("3|1500"),
+    CAST("0|0"),
+    CAST("", false),
+    "ARENA_MATCH_END,0,30,1500,1501",
+  ]);
+  const casts = toLegacyMatch(matches[0]!).units["Player-1-A"]!.spellCastEvents;
+
+  it("spellCastEvents carry it per power, in the log's own unit", () => {
+    expect(casts).toHaveLength(3);
+    expect(casts[0]!.powerCosts).toEqual([
+      { type: 9, cost: 3 },
+      { type: 0, cost: 1500 },
+    ]);
+    // a stated zero stays a statement
+    expect(casts[1]!.powerCosts).toEqual([
+      { type: 9, cost: 0 },
+      { type: 0, cost: 0 },
+    ]);
+  });
+
+  it("a row without the field, and a document stored before the parser kept it, leave it undefined", () => {
+    expect(casts[2]!.powerCosts).toBeUndefined();
+    expect("powerCosts" in casts[2]!).toBe(false);
+    const old = structuredClone(matches[0]!);
+    for (const u of Object.values(old.units))
+      for (const e of u.casts)
+        delete (e as { powerCosts?: unknown }).powerCosts;
+    const legacy = toLegacyMatch(old).units["Player-1-A"]!;
+    expect(legacy.spellCastEvents).toHaveLength(3);
+    for (const e of legacy.spellCastEvents)
+      expect("powerCosts" in e).toBe(false);
   });
 });

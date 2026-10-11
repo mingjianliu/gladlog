@@ -145,6 +145,21 @@ function attackSpellFields(event: {
     : {};
 }
 
+/** What a cast cost, when the document carries it (cast rows parsed on or
+ * after 2026-10-11 that state it). No key otherwise: unknown, not free. */
+function powerCostFields(event: {
+  powerCosts?: Array<{ powerType: number; cost: number }>;
+}): Pick<ISpellEvent, "powerCosts"> {
+  return event.powerCosts
+    ? {
+        powerCosts: event.powerCosts.map((c) => ({
+          type: c.powerType as unknown as CombatUnitPowerType,
+          cost: c.cost,
+        })),
+      }
+    : {};
+}
+
 /** L3 stores `effectiveAmount = amount − overkill` (l1/decoders decodeDamage),
  * so the difference IS the overkill; carried only on a killing blow. */
 function overkillField(event: { amount: number; effectiveAmount: number }): {
@@ -615,6 +630,7 @@ function convertUnit(
     srcUnitName: event.srcName,
     destUnitId: event.destId,
     destUnitName: event.destName,
+    ...powerCostFields(event),
     logLine: {
       event: event.eventName as LogEvent,
       timestamp: event.timestamp,
@@ -653,6 +669,7 @@ function convertUnit(
     srcUnitName: event.srcName,
     destUnitId: event.destId,
     destUnitName: event.destName,
+    ...powerCostFields(event),
     logLine: {
       event: event.eventName as LogEvent,
       timestamp: event.timestamp,

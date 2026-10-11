@@ -55,7 +55,16 @@ export interface GladAbsorbEvent extends GladEventBase {
   attackSpellName?: string;
 }
 
-export interface GladSpellEvent extends GladEventBase {}
+export interface GladSpellEvent extends GladEventBase {
+  /** What the cast cost, as its `SPELL_CAST_SUCCESS` row states it — one
+   * entry per power the row lists (two when the spell is charged in two: 35
+   * energy and 5 combo points), `cost` in the log's own unit for that power
+   * and 0 when the row says 0. The row states the spell's cost before the
+   * caster's percentage reductions (see `decodeCastCosts`). Only on `casts`
+   * (and their `petCasts` copies). Absent on a row that does not state it and
+   * on documents stored before 2026-10-11 — absent means unknown, not free. */
+  powerCosts?: Array<{ powerType: number; cost: number }>;
+}
 
 export interface GladAuraEvent extends GladEventBase {
   auraType: "BUFF" | "DEBUFF";

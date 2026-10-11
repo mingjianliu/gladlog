@@ -303,6 +303,8 @@ export function collectEvents(
         ...baseEvent,
         spellId,
         spellName,
+        // what the row says the cast cost; no key when it does not say
+        ...(record.castCosts ? { powerCosts: record.castCosts } : {}),
       };
 
       if (srcGuid && srcGuid !== "0000000000000000") {

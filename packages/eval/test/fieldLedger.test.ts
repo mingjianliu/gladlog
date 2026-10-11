@@ -80,6 +80,8 @@ function decodedFieldTokens(): Set<string> {
   // ParsedLine's own scalar members that are not decoder objects.
   out.add("line.empowerLevel");
   out.add("line.unitDied");
+  // …and the one that is a list, not an object with keys (decodeCastCosts)
+  out.add("line.castCosts");
   // L3 unit arrays off a real parse of the synthetic log; COMBATANT_INFO's
   // decoded shape off its own line.
   const parser = new GladLogParser();

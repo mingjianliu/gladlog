@@ -4,6 +4,7 @@ import {
   decodeDamage,
   decodeHeal,
   decodeAdvanced,
+  decodeCastCosts,
   decodeAura,
   decodeExtraSpell,
   decodeAbsorbed,
@@ -120,6 +121,8 @@ export function parseLine(
       result.base = decodeBaseUnits(params);
       result.spell = decodeSpell(params, 8);
       result.advanced = decodeAdvanced(params, 11);
+      const castCosts = decodeCastCosts(params, 11);
+      if (castCosts) result.castCosts = castCosts;
     } else if (
       eventName.endsWith("_AURA_APPLIED") ||
       eventName.endsWith("_AURA_REMOVED") ||

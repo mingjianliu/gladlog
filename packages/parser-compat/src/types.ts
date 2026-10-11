@@ -102,6 +102,15 @@ export interface ISpellEvent extends ICombatEvent {
    * (params[11..12]); undefined for all other events */
   extraSpellId?: string;
   extraSpellName?: string;
+  /** What the cast cost, as its `SPELL_CAST_SUCCESS` row states it: one entry
+   * per power the row lists (two when the spell is charged in two), `cost` in
+   * the log's own unit for that power — the unit of `advancedActorPowers` —
+   * and 0 when the row says 0. It is the spell's cost before the caster's
+   * percentage reductions, not always what was taken (parser
+   * `decodeCastCosts`). Only on `spellCastEvents` / `petSpellCastEvents`.
+   * Undefined on a row that does not state it and on documents stored before
+   * 2026-10-11: unknown, not free. */
+  powerCosts?: { type: CombatUnitPowerType; cost: number }[];
 }
 
 /** `SPELL_EMPOWER_END` — an Evoker empowered cast and the charge level it was

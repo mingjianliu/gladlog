@@ -4,6 +4,7 @@ import {
   decodeDamage,
   decodeHeal,
   decodeAdvanced,
+  decodeCastCosts,
   decodeAura,
   decodeExtraSpell,
   decodeAbsorbed,
@@ -29,6 +30,9 @@ export interface ParsedLine {
   damage?: ReturnType<typeof decodeDamage>;
   heal?: ReturnType<typeof decodeHeal>;
   advanced?: ReturnType<typeof decodeAdvanced>;
+  /** `SPELL_CAST_SUCCESS` only: what the row says the cast cost, per power.
+   * Absent when the row does not state it — see decodeCastCosts. */
+  castCosts?: NonNullable<ReturnType<typeof decodeCastCosts>>;
   aura?: ReturnType<typeof decodeAura>;
   extraSpell?: ReturnType<typeof decodeExtraSpell>;
   absorbed?: ReturnType<typeof decodeAbsorbed>;
