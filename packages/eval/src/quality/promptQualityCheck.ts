@@ -78,6 +78,7 @@ import {
   CAST_STOPPED_NEAR_TEXT,
   CAST_STOPPED_TAG,
 } from "@gladlog/analysis/src/context/timelineSections/castStopped";
+import { CC_NOT_LANDED_TAG } from "@gladlog/analysis/src/context/timelineSections/setup";
 import {
   lookupBacklashPrior,
   lookupBacklashWorth,
@@ -115,7 +116,10 @@ import {
   KILL_CREDIT_SLACK_S,
   ON_TARGET_GOOD_PCT,
 } from "@gladlog/analysis/src/utils/burstLedger";
-import { CONTROL_FAILED_MISS_TYPES } from "@gladlog/analysis/src/utils/castMissRows";
+import {
+  CC_MISS_TAG_WORD,
+  CONTROL_FAILED_MISS_TYPES,
+} from "@gladlog/analysis/src/utils/castMissRows";
 import {
   CC_LOGGED_END_NOTE_RE_SRC,
   CC_STILL_ON_AT_ROUND_END,
@@ -2161,6 +2165,96 @@ export function checkCastStoppedLines(lines: string[]): string[] {
         `[CAST STOPPED] 有 ${n} 行 ${spell}${kicks ? `,另有 ${kicks} 条你被踢断 ${spell} 的 [KICK] 行` : ""},超过 CC USE 计数的读条数 ${bars}:${item}`,
       );
   }
+  return failures;
+}
+
+const CC_NOT_LANDED_DATA_LINE = /^\s*\d+:\d{2}\s+\[CC NOT LANDED\]/;
+/** 1–2 = m:ss, 3 = the enemy, 4 = the spell, 5 = the caster's label (a
+ * roster label, a summon's `N(Spec)'s pet`, or a bare name — nothing more
+ * fits between `(by` and the dash), 6 = the log's miss type, 7 = the cause
+ * (optional). */
+const CC_NOT_LANDED_LINE = new RegExp(
+  String.raw`^\s*(\d+):(\d{2})\s+${reEscape(CC_NOT_LANDED_TAG)}\s+(\S+) ← (.+?) \(by (\d+\([^()]*\)(?:'s [^()]+)?|[^()]+)\) — logged ([A-Z]+)(?: \((.+)\))?$`,
+);
+const CC_ON_ENEMY_BY_LINE =
+  /^\s*(\d+):(\d{2})\s+\[CC ON ENEMY\]\s+(\S+) ← (.+?) \(by (\d+\([^)]*\)[^)]*)\)/;
+/** A summon's label (`1(BDruid)'s pet`) → its player's. */
+const playerOfLabel = (label: string) => label.replace(/'s .*$/, "");
+
+/**
+ * `[CC NOT LANDED]` (FT-T16 D15 "3b", user approval 2026-10-10): a control
+ * by our team the log says did not land on an enemy player, on a line of its
+ * own only when no other line states that miss. The producer
+ * (`timelineSections/setup.ts` → `ccNotLandedLines`) reads SPELL_MISSED rows
+ * the prompt does not carry; the gate checks what the text can. It fails:
+ *  - a line that is not the producer's format to its last character;
+ *  - a type outside `CONTROL_FAILED_MISS_TYPES` (imported — IMMUNE and the
+ *    types the cast-line fail tags use; never ABSORB);
+ *  - a `[CC ON ENEMY]` line for the same player's same spell on the same
+ *    enemy at the same second: the control is on the target, so "not landed"
+ *    is false (the producer drops a miss whose aura starts in its second);
+ *  - the same miss also stated on that caster's cast line of that second —
+ *    `[YOU] …` for the log owner, `[TEAM] … <caster> …` for a teammate — by
+ *    the fail tag of that type (`[IMMUNE …]`, or `CC_MISS_TAG_WORD`'s
+ *    `[MISSED on …]` / `[REFLECTED by …]` …) on that enemy.
+ */
+export function checkCcNotLandedLines(lines: string[]): string[] {
+  const failures: string[] = [];
+  const { ownerId } = ownerKitOf(lines);
+  const landed = new Set<string>();
+  for (const line of lines) {
+    const c = line.match(CC_ON_ENEMY_BY_LINE);
+    if (c)
+      landed.add(
+        [
+          Number(c[1]) * 60 + Number(c[2]),
+          c[3],
+          c[4],
+          playerOfLabel(c[5]!),
+        ].join("\u0000"),
+      );
+  }
+  lines.forEach((line, i) => {
+    if (!CC_NOT_LANDED_DATA_LINE.test(line)) return;
+    const m = line.match(CC_NOT_LANDED_LINE);
+    if (!m) {
+      failures.push(
+        `line ${i + 1}: [CC NOT LANDED] 不是生成格式(<敌人> ← <技能> (by <施法者>) — logged <TYPE>[ (<原因>)])—— ${line.trim().slice(0, 160)}`,
+      );
+      return;
+    }
+    const at = Number(m[1]) * 60 + Number(m[2]);
+    const [target, spell, by, type] = [m[3]!, m[4]!, m[5]!, m[6]!];
+    const show = line.trim().slice(0, 160);
+    if (!CONTROL_FAILED_MISS_TYPES.has(type))
+      failures.push(
+        `line ${i + 1}: [CC NOT LANDED] 写 logged ${type},但 ${type} 不是能断定控制没落地的 miss 类型 —— ${show}`,
+      );
+    if (landed.has([at, target, spell, playerOfLabel(by)].join("\u0000")))
+      failures.push(
+        `line ${i + 1}: [CC NOT LANDED] 说 ${spell} 没落在 ${target} 身上,但同一秒有同一施法者的 [CC ON ENEMY] 落地行 —— ${show}`,
+      );
+    // the same miss on that caster's cast line of that second
+    const player = playerOfLabel(by);
+    const isOwner = ownerId !== null && player.startsWith(`${ownerId}(`);
+    const castLine = new RegExp(
+      isOwner
+        ? String.raw`^\s*${fmtTime(at)}\s+\[YOU\] \[(?:CC|CD)\]\s+${reEscape(spell)}(?: |$)`
+        : String.raw`^\s*${fmtTime(at)}\s+\[TEAM\] \[(?:CC|CD)\]\s+${reEscape(player)} \([^)]*\)(?: cast|:) ${reEscape(spell)}(?: |$)`,
+    );
+    const word = CC_MISS_TAG_WORD[type];
+    const states = (l: string) =>
+      type === "IMMUNE"
+        ? l.includes(`[IMMUNE: ${target}`) ||
+          (/\[IMMUNE(?:\]| — )/.test(l) && l.includes(target))
+        : word !== undefined &&
+          l.includes(`[${word}${word === "MISSED" ? " on" : ""} ${target}`);
+    const twin = lines.find((l) => castLine.test(l) && states(l));
+    if (twin)
+      failures.push(
+        `line ${i + 1}: [CC NOT LANDED] 的这次 ${type} 已经写在同一秒的施法行上(${twin.trim().slice(0, 90)})—— ${show}`,
+      );
+  });
   return failures;
 }
 
@@ -4941,6 +5035,7 @@ export function checkMatch(
   hardFailures.push(...checkCcBookmarkConsistency(lines));
   hardFailures.push(...checkCcUseStartedCounts(lines));
   hardFailures.push(...checkCastStoppedLines(lines));
+  hardFailures.push(...checkCcNotLandedLines(lines));
   hardFailures.push(...checkForcedTrinketConsistency(lines));
   hardFailures.push(...checkGuardianSpiritSaveClause(lines));
   hardFailures.push(...checkKarmaFedClause(lines));

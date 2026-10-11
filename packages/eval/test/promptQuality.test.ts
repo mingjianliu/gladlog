@@ -38,6 +38,7 @@ import {
   checkCcAvoidedLandedConsistency,
   checkCcAvoidedMissType,
   checkCcBookmarkConsistency,
+  checkCcNotLandedLines,
   checkCcUseStartedCounts,
   checkDeathTrinketCcConsistency,
   checkDmgSpikeListCap,
@@ -1322,6 +1323,154 @@ describe("checkCastStoppedLines — a [CAST STOPPED] line is one of the producer
         refused,
         run("out of range", ""),
         started(9),
+      ]),
+    ).toEqual([]);
+  });
+});
+
+describe("checkCcNotLandedLines — a [CC NOT LANDED] line states a failed control no other line states (FT-T16 D15 3b)", () => {
+  const unit = [
+    '  <unit id="1" name="Mangosbaby-Illidan-US" spec="Arcane Mage" role="log owner">',
+    "    <cooldowns>Ice Block [240s]</cooldowns>",
+  ];
+  const poly =
+    "1:40  [CC NOT LANDED]   4(AWarrior) ← Polymorph (by 1(AMage)) — logged IMMUNE (Bladestorm was up)";
+  const cyclone =
+    "0:19  [CC NOT LANDED]   6(UDKnight) ← Cyclone (by 1(AMage)) — logged MISS";
+  const gouge =
+    "0:25  [CC NOT LANDED]   4(DPriest) ← Gouge (by 2(ARogue)) — logged IMMUNE (Precognition was up)";
+  const landedLater =
+    "1:46  [CC ON ENEMY]   4(AWarrior) ← Polymorph (by 1(AMage)) (3s) [DR: Incapacitate Full]";
+
+  it("passes the producer's lines, with every type that establishes a failed control", () => {
+    expect(
+      checkCcNotLandedLines([...unit, cyclone, gouge, poly, landedLater]),
+    ).toEqual([]);
+    for (const type of CONTROL_FAILED_MISS_TYPES)
+      expect(
+        checkCcNotLandedLines([
+          ...unit,
+          cyclone.replace("logged MISS", `logged ${type}`),
+        ]),
+        type,
+      ).toEqual([]);
+  });
+
+  it("fails a type that does not establish a failed control", () => {
+    for (const type of ["ABSORB", "RESIST", "BLOCK"])
+      expect(
+        checkCcNotLandedLines([
+          ...unit,
+          cyclone.replace("logged MISS", `logged ${type}`),
+        ]),
+        type,
+      ).toHaveLength(1);
+  });
+
+  it("fails a line that is not the producer's format", () => {
+    for (const wrong of [
+      // the prototype's wording, on the landed tag's shape
+      "1:40  [CC NOT LANDED]   4(AWarrior) ← Polymorph (by 1(AMage)) [IMMUNE — Bladestorm was up]",
+      // a landed line's clauses
+      `${cyclone} [DR: Disorient Full]`,
+      cyclone.replace("(by 1(AMage))", "(by 1(AMage)) (5s)"),
+      cyclone.replace("logged MISS", "did not land"),
+      cyclone.replace("logged MISS", "logged undefined"),
+    ])
+      expect(checkCcNotLandedLines([...unit, wrong]), wrong).toHaveLength(1);
+  });
+
+  it("fails when the same control is on a [CC ON ENEMY] line of that second", () => {
+    const landed = (by: string, at = "1:40", target = "4(AWarrior)") =>
+      `${at}  [CC ON ENEMY]   ${target} ← Polymorph (by ${by}) (6s) [DR: Incapacitate Full]`;
+    expect(
+      checkCcNotLandedLines([...unit, poly, landed("1(AMage)")]),
+    ).toHaveLength(1);
+    // the player's summon is the player's control
+    expect(
+      checkCcNotLandedLines([...unit, poly, landed("1(AMage)'s pet")]),
+    ).toHaveLength(1);
+    // another caster, another enemy, another second
+    expect(checkCcNotLandedLines([...unit, poly, landed("3(FMage)")])).toEqual(
+      [],
+    );
+    expect(
+      checkCcNotLandedLines([
+        ...unit,
+        poly,
+        landed("1(AMage)", "1:40", "6(RShaman)"),
+      ]),
+    ).toEqual([]);
+    expect(
+      checkCcNotLandedLines([...unit, poly, landed("1(AMage)", "1:41")]),
+    ).toEqual([]);
+  });
+
+  it("fails a miss the caster's cast line of that second already states", () => {
+    // the owner's line, IMMUNE on its named target
+    expect(
+      checkCcNotLandedLines([
+        ...unit,
+        "1:40  [YOU] [CC]   Polymorph → 4(AWarrior) [IMMUNE — Bladestorm was up]",
+        poly,
+      ]),
+    ).toHaveLength(1);
+    // … IMMUNE on a player the line does not name
+    expect(
+      checkCcNotLandedLines([
+        ...unit,
+        "1:40  [YOU] [CC]   Polymorph → 6(RShaman) [DR: Incapacitate Full] [IMMUNE: 4(AWarrior)]",
+        poly,
+      ]),
+    ).toHaveLength(1);
+    // … and the MISS tag
+    expect(
+      checkCcNotLandedLines([
+        ...unit,
+        "0:19  [YOU] [CC]   Cyclone → 6(UDKnight) [MISSED on 6(UDKnight)]",
+        cyclone,
+      ]),
+    ).toHaveLength(1);
+    // a teammate's line
+    const teamLine =
+      "0:25  [TEAM] [CC]   2(ARogue) (Assassination Rogue) cast Gouge → 4(DPriest) [IMMUNE — Precognition was up]";
+    expect(checkCcNotLandedLines([...unit, teamLine, gouge])).toHaveLength(1);
+
+    // not the same miss: another enemy, another caster, another spell,
+    // another second, another type
+    expect(
+      checkCcNotLandedLines([
+        ...unit,
+        "1:40  [YOU] [CC]   Polymorph → 6(RShaman) [IMMUNE — Grounding Totem was up]",
+        poly,
+      ]),
+    ).toEqual([]);
+    expect(
+      checkCcNotLandedLines([
+        ...unit,
+        teamLine.replace("2(ARogue) (Assassination Rogue)", "3(SRogue) (Subtlety Rogue)"),
+        gouge,
+      ]),
+    ).toEqual([]);
+    expect(
+      checkCcNotLandedLines([
+        ...unit,
+        "1:40  [YOU] [CC]   Ring of Frost → 4(AWarrior) [IMMUNE — Bladestorm was up]",
+        poly,
+      ]),
+    ).toEqual([]);
+    expect(
+      checkCcNotLandedLines([
+        ...unit,
+        "1:39  [YOU] [CC]   Polymorph → 4(AWarrior) [IMMUNE — Bladestorm was up]",
+        poly,
+      ]),
+    ).toEqual([]);
+    expect(
+      checkCcNotLandedLines([
+        ...unit,
+        "0:19  [YOU] [CC]   Cyclone → 6(UDKnight) [IMMUNE — Anti-Magic Shell was up]",
+        cyclone,
       ]),
     ).toEqual([]);
   });

@@ -28,7 +28,9 @@ import {
   empowerSpans,
 } from "../../utils/castCommitSpans";
 import {
+  CAST_MISS_LEAD_MS,
   CC_MISS_TAG_WORD,
+  CONTROL_FAILED_MISS_TYPES,
   missBelongsToCast as missRowBelongsToCast,
 } from "../../utils/castMissRows";
 import {
@@ -51,11 +53,12 @@ import {
   OWNER_AOE_CC_NO_PLAYER_TAG,
 } from "../../utils/drAnalysis";
 import { sumIncomingPressure } from "../../utils/incomingPressure";
-import { toRenderSecond } from "../../utils/renderGrid";
+import { fmtTime, toRenderSecond } from "../../utils/renderGrid";
 import { resourceDeltaPct } from "../../utils/resourceAt";
 import { buildRosterSides } from "../../utils/rosterSide";
 import { buildResourceSnapshot } from "../resourceSnapshot";
 import { ownerResUtilityCds } from "../resUtilityCds";
+import { isControlSpell } from "../spellOutcomeLines";
 import {
   buildSummonOwnerNames,
   CRITICAL_NON_PLAYER_NPC_NAMES,
@@ -69,6 +72,22 @@ import {
 import { abbrevSpec } from "../unitLabel";
 import type { DeferredSnapshot } from "./ctx";
 import type { TimelineCtx } from "./ctx";
+
+type OutgoingMiss = NonNullable<ICombatUnit["missesOut"]>[number];
+
+/** The tag of a friendly control the log says did not land and no other line
+ * states (FT-T16 D15 "3b"). Deliberately not `[CC ON …]`: every reader of
+ * that prefix (DR chains, `resLedgerPrune`, the gates) means "landed". */
+export const CC_NOT_LANDED_TAG = "[CC NOT LANDED]";
+
+/** Printed once, when a `[CC NOT LANDED]` line rendered. */
+export const CC_NOT_LANDED_LEGEND = [
+  `  ${CC_NOT_LANDED_TAG} = a control your team cast at that enemy did NOT take effect at that second: the log wrote a miss row for it.`,
+  "    `logged X` is the log's own word (IMMUNE, MISS, REFLECT, PARRY, DODGE …); the parenthesis is the cause when the log shows",
+  "    one (an immunity that was up, your own team's Cyclone on the target, diminishing returns at Immune) — no parenthesis =",
+  "    the log gives none. It is not a [CC ON ENEMY] line: nothing landed, and it is in no `[DR: …]` state of this timeline. A",
+  "    failed control already tagged on its cast line (`[IMMUNE …]`, `[MISSED on …]`) or on a [REFLECTED] line is not repeated here.",
+];
 
 export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
   const { params } = ctx;
@@ -605,7 +624,20 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
     }
     if (!miss) return "";
     consumedImmuneMisses.add(miss);
+    const word = unnamedLabel ? `IMMUNE: ${unnamedLabel}` : "IMMUNE";
+    const cause = ccImmuneCauseOf(miss);
+    return cause ? ` [${word} — ${cause}]` : ` [${word}]`;
+  }
 
+  /**
+   * Why ONE logged IMMUNE miss of a control was immune, as far as the log
+   * shows — the text inside a cast line's `[IMMUNE — …]` and inside a
+   * `[CC NOT LANDED]` line's parenthesis (one reading for both): a listed
+   * immunity aura up on the target at impact, else our own team's Cyclone on
+   * it, else its diminishing returns at Immune. "" when the log shows none
+   * of the three — never a guess.
+   */
+  function ccImmuneCauseOf(miss: OutgoingMiss): string {
     // Which listed immunity was up on the target at impact.
     let immunityName = "";
     const target =
@@ -631,8 +663,7 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
       }
       immunityName = [...active.values()][0] ?? "";
     }
-    const word = unnamedLabel ? `IMMUNE: ${unnamedLabel}` : "IMMUNE";
-    if (immunityName) return ` [${word} — ${immunityName} was up]`;
+    if (immunityName) return `${immunityName} was up`;
     // B-tier B17a (user ruling 2026-10-06, "三种都写；找不到原因不加注"): the
     // two other reasons the log can show, after the immunity aura above —
     // our own team's Cyclone on the target, then diminishing returns.
@@ -640,7 +671,7 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
       ? (ccImmuneByOwnCyclone(target, miss.timestamp) ??
         ccImmuneByDr(target, miss.spellId!, miss.timestamp))
       : undefined;
-    return why ? ` [${word} — ${why}]` : ` [${word}]`;
+    return why ?? "";
   }
 
   /** B17a: a friendly Druid's Cyclone was on the target at the miss — a
@@ -809,6 +840,31 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
   // cause looked up for that caster. A miss's id is the cast's own or one of
   // its effect auras (F-E25b: Maim's MISS logged under its stun 203123).
   // IMMUNE never comes here — `ccImmuneTagFor` owns it.
+  /**
+   * The cause of a MISS / PARRY / … of a control cast, when the shared
+   * avoidance sweep found one for THIS cast (the enemy summary's
+   * ccAvoidedInstances — the predicate behind [CC AVOIDED?]): same caster,
+   * same spell, same cast time. 105 of 204 tags on the 605-file slice were
+   * Holy Priests (Phase Shift). One reading for the cast line's tag and a
+   * `[CC NOT LANDED]` line's parenthesis; "" for none.
+   */
+  function ccMissCauseOf(
+    unit: ICombatUnit,
+    spellId: string,
+    castTimeSeconds: number,
+    destUnitName: string,
+  ): string {
+    const avoided = enemyCCSummaries
+      ?.find((x) => x.playerName === destUnitName)
+      ?.ccAvoidedInstances?.find(
+        (a) =>
+          a.sourceName === unit.name &&
+          a.spellId === spellId &&
+          Math.abs(a.atSeconds - castTimeSeconds) < 0.01,
+      );
+    return avoided ? `${avoided.avoidanceSpellName} was up` : "";
+  }
+
   function ccMissTagFor(
     unit: ICombatUnit,
     spellId: string,
@@ -833,19 +889,8 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
       // By GUID: a pet target renders as "X's pet" / "[pet]", never its raw
       // (possibly localized) name (codex astra: `[MISSED on 恶魔卫士]`).
       const who = actorLabel(m.destUnitName, "enemy", m.destUnitId);
-      // The cause, when the shared avoidance sweep found one for THIS cast
-      // (the enemy summary's ccAvoidedInstances — the predicate behind
-      // [CC AVOIDED?]): same caster, same spell, same cast time. 105 of 204
-      // tags on the 605-file slice were Holy Priests (Phase Shift).
-      const avoided = enemyCCSummaries
-        ?.find((x) => x.playerName === m.destUnitName)
-        ?.ccAvoidedInstances?.find(
-          (a) =>
-            a.sourceName === unit.name &&
-            a.spellId === spellId &&
-            Math.abs(a.atSeconds - castTimeSeconds) < 0.01,
-        );
-      const cause = avoided ? ` — ${avoided.avoidanceSpellName} was up` : "";
+      const why = ccMissCauseOf(unit, spellId, castTimeSeconds, m.destUnitName);
+      const cause = why ? ` — ${why}` : "";
       parts.push(
         word === "MISSED"
           ? ` [MISSED on ${who}${cause}]`
@@ -856,6 +901,132 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
     // effect id (95127ab4: Maim 22570 and its stun 203123, 4 ms apart): say
     // it once
     return [...new Set(parts)].join("");
+  }
+
+  /**
+   * A miss row some other line already states — the ONE test of "this miss
+   * has its line" for `[CC NOT LANDED]`:
+   *  - a cast line's fail tag took it (`[IMMUNE …]`, `[MISSED on …]`,
+   *    `[REFLECTED by …]` on `[YOU] [CC]` / `[TEAM] [CC]` / a cooldown line —
+   *    the consumed sets above), or its twin did: one failure logged under
+   *    the cast id and the effect id within `CAST_MISS_LEAD_MS`;
+   *  - it is a reflect of a control, which has its `[REFLECTED]` line
+   *    (`reflectedSpells` states every REFLECT of an `isControlSpell` id).
+   * Read AFTER every cast-line emitter has run — they consume as they print.
+   */
+  function missStatedOnAnotherLine(m: OutgoingMiss): boolean {
+    if (consumedImmuneMisses.has(m) || consumedCcMisses.has(m)) return true;
+    if (m.missType === "REFLECT" && !!m.spellId && isControlSpell(m.spellId))
+      return true;
+    for (const c of [...consumedImmuneMisses, ...consumedCcMisses]) {
+      const x = c as OutgoingMiss;
+      if (
+        x.srcUnitId === m.srcUnitId &&
+        x.destUnitId === m.destUnitId &&
+        x.missType === m.missType &&
+        Math.abs(x.timestamp - m.timestamp) <= CAST_MISS_LEAD_MS
+      )
+        return true;
+    }
+    return false;
+  }
+
+  /**
+   * `[CC NOT LANDED]` (FT-T16 D15 "3b", user approval 2026-10-10 on
+   * real-match samples): a control by our team that the log says did not
+   * land on an enemy PLAYER — a SPELL_MISSED row of a failed-control type
+   * (`CONTROL_FAILED_MISS_TYPES`: IMMUNE, MISS, REFLECT, PARRY …) — and that
+   * no other line states (`missStatedOnAnotherLine`). A control with no
+   * cooldown (Polymorph, Cyclone, Fear, Hex …) has no cast line, and
+   * `[CC ON ENEMY]` prints landed auras only: 0068182d round 5 — the owner's
+   * Polymorph into Bladestorm at 1:40 was on no line.
+   *
+   *   1:40  [CC NOT LANDED]   4(AWarrior) ← Polymorph (by 1(AMage)) — logged IMMUNE (Bladestorm was up)
+   *
+   * The type is the log's own word; the parenthesis is the cast lines' cause
+   * (`ccImmuneCauseOf` / `ccMissCauseOf`), absent when the log shows none.
+   * A miss whose control is on the target anyway — an aura of that spell
+   * from that caster starting on the miss's displayed second or instant (the
+   * row was for another part of the spell) — gets no line: the landing has
+   * its own. Nothing here feeds DR, a landed count or a candidate.
+   */
+  function ccNotLandedLines(): Array<{ atSeconds: number; line: string }> {
+    const out: Array<{ atSeconds: number; line: string }> = [];
+    const seen = new Set<string>();
+    const friendIds = new Set(friends.map((f) => f.id));
+    // a friendly player, or a summon of one (a pet's control is logged under
+    // the pet) — the owning player's id either way
+    const sideOf = (unitId: string | undefined): string | undefined => {
+      if (!unitId) return undefined;
+      if (friendIds.has(unitId)) return unitId;
+      const ownerId = allUnits?.find((u) => u.id === unitId)?.ownerId;
+      return ownerId && friendIds.has(ownerId) ? ownerId : undefined;
+    };
+    const casters = [
+      ...friends,
+      ...(allUnits ?? []).filter(
+        (u) => !friendIds.has(u.id) && sideOf(u.id) !== undefined,
+      ),
+    ];
+    for (const caster of casters) {
+      for (const m of caster.missesOut ?? []) {
+        if (m.logLine?.event !== LogEvent.SPELL_MISSED) continue;
+        if (!m.spellId || !CONTROL_FAILED_MISS_TYPES.has(m.missType)) continue;
+        if (![...castAndEffectIds(m.spellId)].some((id) => ccSpellIds.has(id)))
+          continue;
+        const target = (enemies ?? []).find((e) => e.id === m.destUnitId);
+        if (!target) continue;
+        const atSeconds = (m.timestamp - matchStartMs) / 1000;
+        if (atSeconds < 0 || atSeconds > matchEndSeconds) continue;
+        if (missStatedOnAnotherLine(m)) continue;
+        // the cast this row belongs to, when the caster has one logged
+        // (`missBelongsToCast`, the cast lines' own attribution)
+        const cast = (caster.spellCastEvents ?? []).find(
+          (e) =>
+            e.logLine?.event === LogEvent.SPELL_CAST_SUCCESS &&
+            !!e.spellId &&
+            castAndEffectIds(e.spellId).has(m.spellId!) &&
+            missBelongsToCast(caster, e.spellId, e.timestamp, m.timestamp),
+        );
+        const family = castAndEffectIds(cast?.spellId ?? m.spellId);
+        const name = getEnglishSpellName(
+          cast?.spellId ?? m.spellId,
+          cast?.spellName ?? m.spellName ?? "",
+        );
+        const landed = enemyCCSummaries
+          ?.find((x) => x.playerName === target.name)
+          ?.ccInstances.some(
+            (cc) =>
+              sideOf(cc.sourceId) === sideOf(caster.id) &&
+              (family.has(cc.spellId) ||
+                cc.spellId === m.spellId ||
+                cc.spellName === name) &&
+              (toRenderSecond(cc.atSeconds) === toRenderSecond(atSeconds) ||
+                Math.abs(cc.atSeconds - atSeconds) * 1000 <= CAST_MISS_LEAD_MS),
+          );
+        if (landed) continue;
+        // the same failure logged under the cast id and the effect id
+        const key = `${caster.id}|${target.id}|${name}|${toRenderSecond(atSeconds)}|${m.missType}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const cause =
+          m.missType === "IMMUNE"
+            ? ccImmuneCauseOf(m)
+            : cast
+              ? ccMissCauseOf(
+                  caster,
+                  cast.spellId!,
+                  (cast.timestamp - matchStartMs) / 1000,
+                  target.name,
+                )
+              : "";
+        out.push({
+          atSeconds,
+          line: `${fmtTime(atSeconds)}  ${CC_NOT_LANDED_TAG}   ${enemyPid(target.name)} ← ${name} (by ${actorLabel(caster.name, "friendly", caster.id)}) — logged ${m.missType}${cause ? ` (${cause})` : ""}`,
+        });
+      }
+    }
+    return out.sort((a, b) => a.atSeconds - b.atSeconds);
   }
 
   /**
@@ -1129,6 +1300,7 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
     ownerCcMissTag,
     ownerNoCcAuraTag,
     ccMissTagFor,
+    ccNotLandedLines,
     ownerEmpowerTag,
     getCDTargetAndVelocityPart,
     snapshotFn,

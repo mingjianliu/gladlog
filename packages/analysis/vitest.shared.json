@@ -107,6 +107,7 @@
     "test/ccBrokenRemovalPairing.test.ts",
     "test/ccDuration.test.ts",
     "test/ccFullDuration.test.ts",
+    "test/ccNotLanded.test.ts",
     "test/ccOnEnemyEnds.test.ts",
     "test/ccTrinketAnalysis.test.ts",
     "test/cdAvailableAt.test.ts",

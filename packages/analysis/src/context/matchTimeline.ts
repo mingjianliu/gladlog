@@ -340,6 +340,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     ownerCcMissTag,
     ownerNoCcAuraTag,
     ccMissTagFor,
+    ccNotLandedLines,
     ownerEmpowerTag,
     getCDTargetAndVelocityPart,
     snapshotFn,
@@ -816,6 +817,12 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     addEntry,
     rawStreams,
   });
+
+  // ── [CC NOT LANDED]: our control the log says did not land, on no line ────
+  // FT-T16 D15 "3b". After every cast-line emitter (owner cooldowns, the
+  // healer gap filler, teammate cooldowns): they consume the miss rows they
+  // tag, and what is left is what no line states.
+  for (const l of ccNotLandedLines()) addEntry(l.atSeconds, l.line);
 
   // ── [CAST STOPPED]: a control cast bar the owner began that did not go off
   // FT-T16 D15 "2b". After the [REJECTED] lines: a refusal one of them

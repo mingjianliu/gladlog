@@ -43,6 +43,7 @@ import {
 import { CAST_STOPPED_LEGEND, CAST_STOPPED_TAG } from "./castStopped";
 import { DR_CLASH_LEGEND } from "./contextFacts";
 import type { TimelineCtx } from "./ctx";
+import { CC_NOT_LANDED_LEGEND, CC_NOT_LANDED_TAG } from "./setup";
 
 /** A [STATE] tick carrying a `unit:ghost` token (`state.ts`). */
 const STATE_GHOST_TOKEN_RE = /\[STATE\].*:ghost\b/;
@@ -247,10 +248,13 @@ export function formatTimeline(
       (l) => typeof l === "string" && l.includes(PRESSED_DURING_NOTE_HEAD),
     ),
   );
-  // FT-T16 D15 "2b": the tag is legended only when a line of the family
-  // rendered.
+  // FT-T16 D15 "2b" / "3b": the two tags are legended only when a line of
+  // the family rendered.
   const castStoppedRendered = entries.some((e) =>
     e.lines.some((l) => typeof l === "string" && l.includes(CAST_STOPPED_TAG)),
+  );
+  const ccNotLandedRendered = entries.some((e) =>
+    e.lines.some((l) => typeof l === "string" && l.includes(CC_NOT_LANDED_TAG)),
   );
   // B13e (user ruling 2026-10-07): the purgeable-buff count is legended only
   // when a line carries it.
@@ -464,6 +468,7 @@ export function formatTimeline(
         ]
       : []),
     ...(castStoppedRendered ? CAST_STOPPED_LEGEND : []),
+    ...(ccNotLandedRendered ? CC_NOT_LANDED_LEGEND : []),
     ...(guardianSaveRendered
       ? [
           "  `| save triggered Ns later (m:ss)` on a Guardian Spirit line = at m:ss the buff absorbed a hit that would have",
