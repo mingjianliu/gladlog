@@ -226,11 +226,13 @@ export function formatObservedConsequences(params: {
       seen.add(key);
       const t = (a.timestamp - start) / 1000;
       if (t < 0) continue;
-      // kick-eaten F-K8 (A23): the victim's own lockout (Storm Conduit)
+      // kick-eaten F-K8 (A23): the victim's own lockout (Storm Conduit, as
+      // of the interrupt's log date)
       const lockS = kickLockoutSecondsFor(
         String(a.spellId ?? ""),
         victim,
         (a as { extraSpellId?: string }).extraSpellId,
+        a.timestamp,
       );
       const { team, label, who } = sideOf(victim);
       const mates = team.filter((m) => m.id !== victim.id);

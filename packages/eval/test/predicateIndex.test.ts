@@ -132,6 +132,7 @@ import * as healerOffenseAnalysis from "@gladlog/analysis/src/utils/healerOffens
 import * as incomingPressure from "@gladlog/analysis/src/utils/incomingPressure";
 import * as karmaFeed from "@gladlog/analysis/src/utils/karmaFeed";
 import * as kickAudit from "@gladlog/analysis/src/utils/kickAudit";
+import * as kickLockout from "@gladlog/analysis/src/utils/kickLockout";
 import * as killAttempts from "@gladlog/analysis/src/utils/killAttempts";
 import * as killWindowFactsMod from "@gladlog/analysis/src/utils/killWindowFacts";
 import * as killWindowTargetSelection from "@gladlog/analysis/src/utils/killWindowTargetSelection";
@@ -2363,6 +2364,23 @@ const INDEX: PredicateRow[] = [
     file: `${A}/utils/logEra.ts`,
     symbol: "logIsFrom",
     mod: logEra,
+  },
+  // … and what a dated number is at a timestamp — the reading both halves of
+  // that hotfix share (the cooldown give-back, the lockout multiplier)
+  {
+    file: `${A}/utils/logEra.ts`,
+    symbol: "logDatedNumberAt",
+    mod: logEra,
+  },
+  {
+    file: `${A}/utils/kickLockout.ts`,
+    symbol: "kickLockoutSecondsFor",
+    mod: kickLockout,
+  },
+  {
+    file: `${A}/utils/kickLockout.ts`,
+    symbol: "kickLockoutVictimMultiplierAt",
+    mod: kickLockout,
   },
   {
     file: `${A}/utils/enemyInterrupts.ts`,

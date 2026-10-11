@@ -2989,11 +2989,13 @@ export function analyzePlayerCCAndTrinket(
     // same table and the same fallback — inlining it on each side is a breeding
     // ground for divergence.
     const interruptedSpellId = extraAction.extraSpellId ?? "";
-    // kick-eaten F-K8 (A23): the victim's own lockout (Storm Conduit)
+    // kick-eaten F-K8 (A23): the victim's own lockout (Storm Conduit, as of
+    // the interrupt's log date)
     const lockoutDurationSeconds = kickLockoutSecondsFor(
       kickSpellId,
       player,
       interruptedSpellId,
+      action.timestamp,
     );
 
     // F21: an interrupt whose own spell also silences (Shield of Virtue)

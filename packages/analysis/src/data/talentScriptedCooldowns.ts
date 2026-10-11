@@ -24,7 +24,7 @@ import {
   LogEvent,
 } from "@gladlog/parser-compat";
 
-import { logIsFrom } from "../utils/logEra";
+import { type ILogDatedNumber, logDatedNumberAt } from "../utils/logEra";
 
 export interface IFreeRecastWindow {
   /** the spell whose press opens the window */
@@ -82,14 +82,9 @@ export interface IEventCooldownReduction {
   note: string;
 }
 
-/** A number the game changed at `cutoverEpochMs` (a wall-clock epoch, asked
- * through `logIsFrom`): `before` for a log timestamp earlier than it,
- * `since` from it on. */
-export interface ILogDatedSeconds {
-  cutoverEpochMs: number;
-  before: number;
-  since: number;
-}
+/** Seconds the game changed on a date (`ILogDatedNumber`, utils/logEra.ts —
+ * read through `logDatedNumberAt`). */
+export type ILogDatedSeconds = ILogDatedNumber;
 
 /** Seconds that are not the same for every holder: `bySpec` for a holder of
  * that spec (the unit's COMBATANT_INFO spec id), `base` for everyone else. */
@@ -106,9 +101,18 @@ export interface IHolderSeconds {
  * the same way (`logIsFrom`, utils/logEra.ts, which also says how far a log
  * timestamp can be from the true instant). The holders' files that decide
  * the two values are dated 08-13 … 08-16 and 08-18 18:54 … 08-22 in their own
- * local time; nothing in the corpus places the change more exactly inside
- * that gap, and a log from the evening of 08-17 in the Americas already
+ * local time, and a log from the evening of 08-17 in the Americas already
  * reads 2 s here.
+ *
+ * The same instant dates the talent's other number, the interrupted-cast
+ * lockout (`KICK_LOCKOUT_VICTIM_MODIFIERS`, utils/kickLockout.ts), and that
+ * half places the change more exactly: the old lockout is still what the log
+ * shows at 2026-08-18 18:56 in an Oceanic file (UTC+10, so 08:56 UTC), the
+ * new one from 2026-08-19 04:37 UTC on. The true instant is therefore at
+ * least nine hours after this one, and a log of 08-18 before the hotfix went
+ * live reads the NEW numbers here — the longer lockout and the smaller
+ * give-back, the side on which the model claims less. Not moved: the day is
+ * the ruling's wording and the hour is still not known.
  */
 export const STORM_CONDUIT_HOTFIX_EPOCH_MS = Date.UTC(2026, 7, 18, 0, 0, 0);
 
@@ -297,7 +301,8 @@ export function eventTriggerTimesMs(
  * the CC being applied.
  *
  * A timestamp that is not a number is not a date and takes the CURRENT value
- * (`since`), never the old one: the dated value is a past exception, and for
+ * (`since`), never the old one (`logDatedNumberAt`, the reading the lockout
+ * half shares): the dated value is a past exception, and for
  * the one entry that has one the current number is the smaller give-back —
  * the cooldown reads "not ready" for longer, so the model claims less was in
  * hand, not more. (A real trigger always has its timestamp; a fixture's
@@ -313,10 +318,7 @@ export function eventReductionSecondsAt(
   const dated =
     holderSpec === undefined ? undefined : r.seconds.bySpec[holderSpec];
   if (!dated) return r.seconds.base;
-  return !Number.isFinite(logEpochMs) ||
-    logIsFrom(logEpochMs, dated.cutoverEpochMs)
-    ? dated.since
-    : dated.before;
+  return logDatedNumberAt(dated, logEpochMs);
 }
 
 /** One trigger of an event reduction: when it fired and what it gave back. */

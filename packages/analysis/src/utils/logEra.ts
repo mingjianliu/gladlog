@@ -24,8 +24,37 @@
  * Is a log timestamp at or after a dated game change? The cutover instant
  * itself is already the new rule. A timestamp that is not a number is on
  * neither side and reads `false` — a rule that must not take such a log for
- * an old one says so itself (`eventReductionSecondsAt`).
+ * an old one says so itself (`logDatedNumberAt`).
  */
 export function logIsFrom(logEpochMs: number, cutoverEpochMs: number): boolean {
   return logEpochMs >= cutoverEpochMs;
+}
+
+/** A number the game changed at `cutoverEpochMs` (a wall-clock epoch, asked
+ * through `logIsFrom`): `before` for a log timestamp earlier than it,
+ * `since` from it on. */
+export interface ILogDatedNumber {
+  cutoverEpochMs: number;
+  before: number;
+  since: number;
+}
+
+/**
+ * What a dated number is at a log timestamp — the one reading for every
+ * number that moved in a dated change, so two halves of one hotfix (Storm
+ * Conduit's cooldown give-back and its lockout multiplier) cannot put the
+ * same timestamp on different sides.
+ *
+ * A timestamp that is not a number is not a date and takes the CURRENT value
+ * (`since`), never the old one: the dated value is a past exception. A rule
+ * for which that is the less careful direction must not use this.
+ */
+export function logDatedNumberAt(
+  dated: ILogDatedNumber,
+  logEpochMs: number,
+): number {
+  return !Number.isFinite(logEpochMs) ||
+    logIsFrom(logEpochMs, dated.cutoverEpochMs)
+    ? dated.since
+    : dated.before;
 }

@@ -421,13 +421,20 @@ export function namedCannotCastIntervals(
     petCast ??= petCastSpellIdsOf(unit);
     const kickSpellId = action.spellId ?? "";
     // kick-eaten F-K8 (A23): the lockout THIS unit sat in — a Storm Conduit
-    // holder's interrupted Lightning Bolt locks for ×0.6
+    // holder's interrupted Lightning Bolt locks for ×0.35 before the
+    // 2026-08-18 hotfix and ×0.6 since
     const interrupted = (action as { extraSpellId?: string }).extraSpellId;
     intervals.push({
       from: action.timestamp,
       to:
         action.timestamp +
-        kickLockoutSecondsFor(kickSpellId, unit, interrupted) * 1000,
+        kickLockoutSecondsFor(
+          kickSpellId,
+          unit,
+          interrupted,
+          action.timestamp,
+        ) *
+          1000,
       spellId: kickSpellId,
       lockout: true,
       ...(interrupted && spellSchoolMask(String(interrupted)) !== undefined

@@ -12,7 +12,7 @@ import {
   drResetMsAt,
   PATCH_121_GOLIVE_EPOCH_MS,
 } from "../src/utils/drAnalysis";
-import { logIsFrom } from "../src/utils/logEra";
+import { logDatedNumberAt, logIsFrom } from "../src/utils/logEra";
 
 describe("logIsFrom", () => {
   it("the cutover instant itself is already the new rule", () => {
@@ -33,5 +33,27 @@ describe("logIsFrom", () => {
     expect(drResetMsAt(PATCH_121_GOLIVE_EPOCH_MS)).toBe(DR_RESET_MS_121);
     // a fixture's small synthetic epoch is a date long before the cutover
     expect(drResetMsAt(1_000_000)).toBe(DR_RESET_MS_PRE_121);
+  });
+});
+
+describe("logDatedNumberAt — a number the game changed on a date", () => {
+  const dated = { cutoverEpochMs: 100, before: 7, since: 3 };
+  it("`before` up to the cutover, `since` from the cutover instant on (logIsFrom's boundary)", () => {
+    expect(logDatedNumberAt(dated, 99)).toBe(7);
+    expect(logDatedNumberAt(dated, 100)).toBe(3);
+    expect(logDatedNumberAt(dated, 101)).toBe(3);
+    for (const at of [99, 100, 101])
+      expect(logDatedNumberAt(dated, at)).toBe(
+        logIsFrom(at, dated.cutoverEpochMs) ? dated.since : dated.before,
+      );
+  });
+  it("a timestamp that is not a number takes the CURRENT value, never the old one", () => {
+    for (const notADate of [
+      Number.NaN,
+      Number.POSITIVE_INFINITY,
+      Number.NEGATIVE_INFINITY,
+      undefined as unknown as number,
+    ])
+      expect(logDatedNumberAt(dated, notADate)).toBe(3);
   });
 });

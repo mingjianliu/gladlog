@@ -130,12 +130,13 @@ export function buildConsequenceLines(
       seen.add(key);
       const t = sec(a.timestamp);
       if (t < 0) continue;
-      // the victim's own lockout (kick-eaten F-K8: Storm Conduit ×0.6) — the
-      // production [CONSEQ] reader's number
+      // the victim's own lockout (kick-eaten F-K8: Storm Conduit, by the
+      // interrupt's log date) — the production [CONSEQ] reader's number
       const lockS = kickLockoutSecondsFor(
         String(a.spellId ?? ""),
         victim,
         a.extraSpellId,
+        a.timestamp,
       );
       const next = ((victim.spellCastEvents ?? []) as any[]).find(
         (c) =>
