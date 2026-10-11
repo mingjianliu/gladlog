@@ -863,7 +863,14 @@ export function hypothermiaUntil(
   atSeconds: number,
   matchStartMs: number,
 ): number | undefined {
-  const atMs = matchStartMs + atSeconds * 1000;
+  // Asked on the rendered second, whoever asks (Shared-Predicate Rule): the
+  // [RES] row reads the second's first instant, and a `[DEATH] (Unused: …)`
+  // / death-block reader asking at the death's own instant disagreed with it
+  // in the one second the debuff ends — 30846f8e: Hypothermia off at 2:20.0x,
+  // the mage dead later in 2:20, `Unused: Ice Block` beside
+  // `cd:Ice Block(Hypothermia …)` (3 contexts of the 605-file capture,
+  // `checkCooldownLedgerConsistency`).
+  const atMs = matchStartMs + toRenderSecond(atSeconds) * 1000;
   const diedJustAfter = (removedMs: number) =>
     (unit.deathRecords ?? []).some(
       (d) =>
@@ -895,7 +902,7 @@ export function hypothermiaUntil(
     removedMs === undefined
       ? capS
       : Math.min((removedMs - matchStartMs) / 1000, capS);
-  return atSeconds <= untilS ? untilS : undefined;
+  return toRenderSecond(atSeconds) <= untilS ? untilS : undefined;
 }
 
 /** Would Hypothermia stop `holder` pressing `spellId` at `atSeconds`? */
