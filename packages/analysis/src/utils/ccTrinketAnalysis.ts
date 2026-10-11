@@ -7,7 +7,7 @@ import {
 } from "@gladlog/parser-compat";
 
 import { BACKLASH_AURA_CC_TYPE } from "../data/backlashCc";
-import { castsOfEffectAura } from "../data/castEffectAuras";
+import { castAndEffectIds, castsOfEffectAura } from "../data/castEffectAuras";
 import {
   AURA_KEYED_BREAK_RACIALS,
   breakRemovesCc,
@@ -52,6 +52,11 @@ import {
   coveredMsWithin,
   hardCcAuraAt,
 } from "./cannotCastIntervals";
+import {
+  CAST_MISS_WINDOW_MS,
+  CONTROL_FAILED_MISS_TYPES,
+  missBelongsToCast,
+} from "./castMissRows";
 import { oppressingRoarOnAt } from "./ccBreakAnalysis";
 import {
   ccFullDurationForApplication,
@@ -1079,6 +1084,29 @@ export interface ICCAvoidedInstance {
    */
   sourceId: string;
   sourceSpec: string;
+  /**
+   * The miss type the log itself wrote for this cast on this player
+   * (SPELL_MISSED: IMMUNE, MISS, REFLECT … — `CONTROL_FAILED_MISS_TYPES`),
+   * when it has such a row. Absent = the log has none and "did not land" is
+   * read off the missing aura alone. FT-T16 D15 "3c" (user approval
+   * 2026-10-10): the line then says `logged <TYPE>` instead of `did not
+   * land`; nothing else about the instance changes.
+   */
+  loggedMissType?: string;
+}
+
+/**
+ * The first half of a `[CC AVOIDED?]` line: `logged <TYPE>` when the log
+ * wrote a miss row for the cast, else `did not land`. The gate
+ * (`promptQualityCheck.checkCcAvoidedMissType`) re-parses it against
+ * `CONTROL_FAILED_MISS_TYPES`.
+ */
+export function ccAvoidedOutcomeText(
+  avoided: Pick<ICCAvoidedInstance, "loggedMissType">,
+): string {
+  return avoided.loggedMissType
+    ? `logged ${avoided.loggedMissType}`
+    : "did not land";
 }
 
 /** How far past the kick a modelled "kick ready again" instant may fall and
@@ -3218,6 +3246,57 @@ export function analyzePlayerCCAndTrinket(
     });
   };
 
+  // FT-T16 D15 "3c" (user approval 2026-10-10): the log's own SPELL_MISSED
+  // row for an avoided cast, when it wrote one — 2c6e85ec r6 0:40, Hammer of
+  // Justice's SUCCESS and its `IMMUNE` miss on the druid share a millisecond,
+  // and the line said only "did not land". The row is the cast's by the rule
+  // the cast lines tag our own controls with (`missBelongsToCast`: the
+  // latest cast of that spell before it, by that caster), under the cast's
+  // id or one of its effect auras, and of a type that says the control
+  // failed (`CONTROL_FAILED_MISS_TYPES` — never ABSORB). A control that lands
+  // seconds after its cast is looked for as far as it can land, the window
+  // `landedOnPlayer` above gives it (WP-I, `ccLandedMatchWindowMs`). The row
+  // must come from the casting enemy or one of its summons (a totem pulses
+  // under its own GUID); anything else keeps "did not land".
+  const loggedMissTypeOf = (
+    enemy: ICombatUnit,
+    cast: { spellId: string; srcUnitId: string; timestamp: number },
+    castName: string,
+  ): string | undefined => {
+    const family = castAndEffectIds(cast.spellId);
+    const sameSpellCastMs = [
+      ...enemy.spellCastEvents,
+      ...(enemy.petSpellCastEvents ?? []),
+    ]
+      .filter(
+        (e) =>
+          e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+          e.spellId === cast.spellId,
+      )
+      .map((e) => e.logLine.timestamp);
+    const afterMs = Math.max(
+      CAST_MISS_WINDOW_MS,
+      ccLandedMatchWindowMs(castName).afterMs,
+    );
+    const fromCaster = (srcId: string) =>
+      srcId === enemy.id ||
+      srcId === cast.srcUnitId ||
+      enemyPets.some((p) => p.id === srcId && p.ownerId === enemy.id);
+    return (player.missesIn ?? []).find(
+      (m) =>
+        CONTROL_FAILED_MISS_TYPES.has(m.missType) &&
+        m.spellId !== undefined &&
+        family.has(m.spellId) &&
+        fromCaster(m.srcUnitId) &&
+        missBelongsToCast(
+          sameSpellCastMs,
+          cast.timestamp,
+          m.timestamp,
+          afterMs,
+        ),
+    )?.missType;
+  };
+
   // 1. Unified Buff & Mobility CC Avoidance (targeted and ground CCs)
   for (const enemy of enemies) {
     // F134: include the enemy's pet/guardian casts so a whiffed pet CC (Water Elemental Freeze,
@@ -3243,6 +3322,15 @@ export function analyzePlayerCCAndTrinket(
         const castTimeMs = cast.logLine.timestamp;
         if (!landedOnPlayer(cast)) {
           const ccSpellName = getEnglishSpellName(cast.spellId, cast.spellName);
+          const loggedMissType = loggedMissTypeOf(
+            enemy,
+            {
+              spellId: cast.spellId,
+              srcUnitId: cast.srcUnitId,
+              timestamp: castTimeMs,
+            },
+            ccSpellName,
+          );
           // Single-source predicate (2026-08-07, shared-predicate rule / CC
           // avoidance gating IS the spec): school gate (magic-only immunity
           // cannot explain a physical CC), Druid-form gate (forms only credited
@@ -3272,6 +3360,7 @@ export function analyzePlayerCCAndTrinket(
               // player (F134), so the owner's own id is the right source here.
               sourceId: enemy.id,
               sourceSpec: enemySpecMap.get(enemy.id) ?? "Unknown",
+              ...(loggedMissType ? { loggedMissType } : {}),
             });
             continue; // Avoid double counting
           }
@@ -3308,6 +3397,7 @@ export function analyzePlayerCCAndTrinket(
               // player (F134), so the owner's own id is the right source here.
               sourceId: enemy.id,
               sourceSpec: enemySpecMap.get(enemy.id) ?? "Unknown",
+              ...(loggedMissType ? { loggedMissType } : {}),
             });
           }
         }

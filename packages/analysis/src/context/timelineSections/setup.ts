@@ -28,6 +28,10 @@ import {
   empowerSpans,
 } from "../../utils/castCommitSpans";
 import {
+  CC_MISS_TAG_WORD,
+  missBelongsToCast as missRowBelongsToCast,
+} from "../../utils/castMissRows";
+import {
   CC_AVOIDANCE_BUFF_SPELLS,
   GROUNDING_TOTEM_SPELL_ID,
   GROUNDING_TOTEM_WINDOW_S,
@@ -500,16 +504,18 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
   }
   /** The miss falls in the cast's window AND no later cast of the same spell
    * by the same caster happened at or before it — it belongs to the latest
-   * cast before it. */
+   * cast before it (`utils/castMissRows.ts`, shared with the `logged <TYPE>`
+   * half of `[CC AVOIDED?]`). */
   function missBelongsToCast(
     unit: ICombatUnit,
     spellId: string,
     castMs: number,
     missMs: number,
   ): boolean {
-    if (missMs < castMs - 100 || missMs > castMs + 2500) return false;
-    return !(castMsBySpellOf(unit).get(spellId) ?? []).some(
-      (t) => t > castMs + 5 && t <= missMs + 100,
+    return missRowBelongsToCast(
+      castMsBySpellOf(unit).get(spellId) ?? [],
+      castMs,
+      missMs,
     );
   }
 
@@ -702,16 +708,9 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
    * another — and is consumed once. Attributed like the IMMUNE tag
    * (`missBelongsToCast`). Ground truth, same sample: after a MISS / REFLECT /
    * PARRY / DODGE the caster's CC aura appeared on that target within 0.5 s
-   * 0 / 474 times; after an ABSORB, 957 / 1,072 (89 %).
+   * 0 / 474 times; after an ABSORB, 957 / 1,072 (89 %). The type → word
+   * table is `CC_MISS_TAG_WORD` (`utils/castMissRows.ts`).
    */
-  const OWNER_CC_MISS_WORD: Record<string, string> = {
-    MISS: "MISSED",
-    REFLECT: "REFLECTED by",
-    PARRY: "PARRIED by",
-    DODGE: "DODGED by",
-    EVADE: "EVADED by",
-    DEFLECT: "DEFLECTED by",
-  };
   const consumedCcMisses = new Set<unknown>();
   function ownerCcMissTag(spellId: string, castTimeSeconds: number): string {
     return ccMissTagFor(owner, spellId, castTimeSeconds);
@@ -821,7 +820,7 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
     const family = castAndEffectIds(spellId);
     const parts: string[] = [];
     for (const m of misses) {
-      const word = m.missType ? OWNER_CC_MISS_WORD[m.missType] : undefined;
+      const word = m.missType ? CC_MISS_TAG_WORD[m.missType] : undefined;
       if (
         !word ||
         m.spellId === undefined ||

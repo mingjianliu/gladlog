@@ -16,13 +16,18 @@ import {
   lookupBehaviorPrior,
   outcomePhrase,
 } from "@gladlog/analysis/src/data/behaviorPrior";
-import { ccLandedMatchWindowMs } from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
+import { CONTROL_FAILED_MISS_TYPES } from "@gladlog/analysis/src/utils/castMissRows";
+import {
+  ccAvoidedOutcomeText,
+  ccLandedMatchWindowMs,
+} from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
 import { CombatUnitReaction } from "@gladlog/parser-compat";
 
 import type { CoverageManifest } from "../src/quality/coverageManifest";
 import {
   checkBehaviorPriorConsistency,
   checkCcAvoidedLandedConsistency,
+  checkCcAvoidedMissType,
   checkBurstAnsweredBeforeDeath,
   checkBurstAnsweredBottomConsistency,
   checkBurstAnsweredControlSpan,
@@ -1231,6 +1236,62 @@ describe("checkCcAvoidedLandedConsistency — a CC that landed cannot also have 
         avoidedLine!,
         "6:58  [CC ON TEAM]   2(RDruid) ← Capacitor Totem (by 6(RShaman)'s totem) | 3s",
         "6:58  [CC ON TEAM]   1(PEvoker) ← Hex (by 6(RShaman)) | 3s",
+      ]),
+    ).toEqual([]);
+  });
+
+  it("reads the `logged <TYPE>` form the same way (FT-T16 D15 3c)", () => {
+    const logged = avoided.replace("did not land", "logged IMMUNE");
+    expect(
+      checkCcAvoidedLandedConsistency([
+        logged,
+        "0:45  [CC ON TEAM]   2(EShaman) ← Mortal Coil (by 5(DWarlock)) | 3s",
+      ]),
+    ).toHaveLength(1);
+    expect(checkCcAvoidedLandedConsistency([logged])).toEqual([]);
+  });
+});
+
+describe("checkCcAvoidedMissType — `[CC AVOIDED?] … logged <TYPE>` names a miss type that means the control failed (FT-T16 D15 3c)", () => {
+  // the producer's own wording of the half the gate re-parses
+  const line = (outcome: string) =>
+    `0:40  [CC AVOIDED?]   1(BDruid): Hammer of Justice (by 5(RPaladin)) ${outcome}; Precognition (own) active`;
+  it("passes both forms the producer writes, for every type it admits", () => {
+    expect(checkCcAvoidedMissType([line(ccAvoidedOutcomeText({}))])).toEqual(
+      [],
+    );
+    expect(CONTROL_FAILED_MISS_TYPES.size).toBeGreaterThan(1);
+    for (const loggedMissType of CONTROL_FAILED_MISS_TYPES)
+      expect(
+        checkCcAvoidedMissType([
+          line(ccAvoidedOutcomeText({ loggedMissType })),
+        ]),
+        loggedMissType,
+      ).toEqual([]);
+    // a spell name with a colon, a totem's source label
+    expect(
+      checkCcAvoidedMissType([
+        "1:10  [CC AVOIDED?]   1(HPaladin): Holy Word: Chastise (by 4(HPriest)) logged IMMUNE; Divine Shield (own) active",
+        "6:56  [CC AVOIDED?]   1(PEvoker): Capacitor Totem (by 6(RShaman)) did not land; Nullifying Shroud (own) active",
+      ]),
+    ).toEqual([]);
+  });
+  it("fails ABSORB, an unknown type and a missing type", () => {
+    for (const bad of ["logged ABSORB", "logged undefined", "logged immune"]) {
+      const out = checkCcAvoidedMissType([line(bad)]);
+      expect(out, bad).toHaveLength(1);
+      expect(out[0]).toContain("line 1");
+    }
+  });
+  it("fails a first half that is neither form", () => {
+    for (const bad of ["was avoided", "logged", "landed"])
+      expect(checkCcAvoidedMissType([line(bad)]), bad).toHaveLength(1);
+  });
+  it("says nothing about other lines", () => {
+    expect(
+      checkCcAvoidedMissType([
+        "0:40  [CC ON TEAM]   1(BDruid) ← Hammer of Justice (by 5(RPaladin)) | 5s",
+        "0:41  [TEAM] [CD]   3(DKnight): Death Grip → 5(RPaladin) — did not land (IMMUNE)",
       ]),
     ).toEqual([]);
   });

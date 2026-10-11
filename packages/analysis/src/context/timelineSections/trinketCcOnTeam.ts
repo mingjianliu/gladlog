@@ -13,6 +13,7 @@ import { CombatUnitReaction } from "@gladlog/parser-compat";
 
 import { BACKLASH_AURA_CC_TYPE } from "../../data/backlashCc";
 import {
+  ccAvoidedOutcomeText,
   ccEndedByOwnPress,
   ccLoggedEnd,
   formatCcLoggedEnd,
@@ -292,7 +293,10 @@ export function emitTrinketCcOnTeamEntries(
           avoided.atSeconds,
           // M-g: state the observed facts (CC cast did not land; avoidance ability present),
           // not a causal verdict. Let the model infer whether the ability caused the avoidance.
-          `${fmtTime(avoided.atSeconds)}  [CC AVOIDED?]   ${pid(summary.playerName)}: ${avoided.spellName} (by ${actorLabel(avoided.sourceName, "enemy", avoided.sourceId)}) did not land; ${avoided.avoidanceSpellName}${avoidanceSourceTag(avoided.avoidanceSourceName, summary.playerName)} active`,
+          // FT-T16 D15 "3c": with a SPELL_MISSED row of the cast on this
+          // player, the first half is the log's own miss type; the second
+          // half stays a fact standing next to it, not the row's reason.
+          `${fmtTime(avoided.atSeconds)}  [CC AVOIDED?]   ${pid(summary.playerName)}: ${avoided.spellName} (by ${actorLabel(avoided.sourceName, "enemy", avoided.sourceId)}) ${ccAvoidedOutcomeText(avoided)}; ${avoided.avoidanceSpellName}${avoidanceSourceTag(avoided.avoidanceSourceName, summary.playerName)} active`,
         );
       }
     }

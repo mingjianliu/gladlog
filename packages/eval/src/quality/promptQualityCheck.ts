@@ -109,6 +109,7 @@ import {
   KILL_CREDIT_SLACK_S,
   ON_TARGET_GOOD_PCT,
 } from "@gladlog/analysis/src/utils/burstLedger";
+import { CONTROL_FAILED_MISS_TYPES } from "@gladlog/analysis/src/utils/castMissRows";
 import {
   CC_LOGGED_END_NOTE_RE_SRC,
   CC_STILL_ON_AT_ROUND_END,
@@ -1421,7 +1422,8 @@ const CC_ON_TEAM_LINE =
 
 /**
  * `[CC AVOIDED?] … did not land` ⟺ no landed `[CC ON TEAM]` line (30th
- * hardFailure class, GH #105, user "修" 2026-09-24). The producer
+ * hardFailure class, GH #105, user "修" 2026-09-24) — the same for the line's
+ * `logged <TYPE>` form (FT-T16 D15 "3c"). The producer
  * (`ccTrinketAnalysis`) drops an avoidance whenever a CC aura of the same id
  * or English name started on that player inside the cast's landing window —
  * `ccLandedMatchWindowMs(name)`: `CC_LANDED_MATCH_WINDOW_MS` either side of
@@ -1461,6 +1463,38 @@ export function checkCcAvoidedLandedConsistency(lines: string[]): string[] {
     if (twin !== undefined)
       failures.push(
         `line ${i + 1}: [CC AVOIDED?] 说 ${m[4]} 没落在 ${m[3]} 身上,但 ${fmtTime(twin)} 有同名 [CC ON TEAM] 落地行 —— ${line.trim().slice(0, 140)}`,
+      );
+  });
+  return failures;
+}
+
+const CC_AVOIDED_DATA_LINE = /^\s*\d+:\d{2}\s+\[CC AVOIDED\?\]/;
+const CC_AVOIDED_OUTCOME = /\) (?:did not land|logged (\S+)); /;
+
+/**
+ * The first half of a `[CC AVOIDED?]` line (FT-T16 D15 "3c", user approval
+ * 2026-10-10): `did not land`, or `logged <TYPE>` when the log wrote a
+ * SPELL_MISSED row for that cast on that player
+ * (`ccTrinketAnalysis.ccAvoidedOutcomeText`). The producer admits only a miss
+ * type that establishes a failed control — `CONTROL_FAILED_MISS_TYPES`,
+ * imported here: IMMUNE and the types the cast-line fail tags use; never
+ * ABSORB, which reports the control's damage part and is followed by the aura
+ * 89 % of the time. It fails a line whose first half is neither form, and a
+ * `logged <TYPE>` whose type is outside that set. Both forms are still read
+ * by `checkCcAvoidedLandedConsistency` (its pattern stops at `(by`).
+ */
+export function checkCcAvoidedMissType(lines: string[]): string[] {
+  const failures: string[] = [];
+  lines.forEach((line, i) => {
+    if (!CC_AVOIDED_DATA_LINE.test(line)) return;
+    const m = line.match(CC_AVOIDED_OUTCOME);
+    if (!m)
+      failures.push(
+        `line ${i + 1}: [CC AVOIDED?] 前半句既不是 did not land 也不是 logged <TYPE> —— ${line.trim().slice(0, 140)}`,
+      );
+    else if (m[1] !== undefined && !CONTROL_FAILED_MISS_TYPES.has(m[1]))
+      failures.push(
+        `line ${i + 1}: [CC AVOIDED?] 写 logged ${m[1]},但 ${m[1]} 不是能断定控制没落地的 miss 类型 —— ${line.trim().slice(0, 140)}`,
       );
   });
   return failures;
@@ -4710,6 +4744,7 @@ export function checkMatch(
   hardFailures.push(...checkDuringExternalConsistency(lines));
   hardFailures.push(...checkConseqHpStateConsistency(lines));
   hardFailures.push(...checkCcAvoidedLandedConsistency(lines));
+  hardFailures.push(...checkCcAvoidedMissType(lines));
   hardFailures.push(...checkDeathTrinketCcConsistency(lines));
   hardFailures.push(...checkPressedDuringControlNote(lines));
   hardFailures.push(...checkBurstAnsweredBottomConsistency(lines));

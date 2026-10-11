@@ -101,6 +101,7 @@
     "test/buffDuration.test.ts",
     "test/burstCastSpan.test.ts",
     "test/burstLedgerHeader.test.ts",
+    "test/ccAvoidedLoggedMiss.test.ts",
     "test/ccBreakAnalysis.test.ts",
     "test/ccBrokenRemovalPairing.test.ts",
     "test/ccDuration.test.ts",
