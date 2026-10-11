@@ -190,6 +190,11 @@ import {
   JUKE_LOOKBACK_MS,
   JUKED_BY_FAKE_HEAD,
 } from "@gladlog/analysis/src/utils/kickAudit";
+import {
+  KILL_ATTEMPT_IMMUNITY_ALREADY_UP_NAME,
+  KILL_ATTEMPTS_ALREADY_UP_LEGEND,
+  killAttemptAlreadyUpFact,
+} from "@gladlog/analysis/src/utils/killAttempts";
 import { STAYED_IN_NEAR_DEATH_PCT } from "@gladlog/analysis/src/utils/positionAnalysis";
 import { INTERP_MAX_GAP_MS } from "@gladlog/analysis/src/utils/positionSampling";
 import {
@@ -3895,6 +3900,80 @@ export function checkKillAttemptUpSinceEndLogged(lines: string[]): string[] {
   return failures;
 }
 
+/** `… | FAILED: <what the attempt ran into>[ | …]` — the FAILED clause alone. */
+const KILL_ATTEMPT_FAILED_CLAUSE = /\| FAILED: ([^|]+?)\s*(?:\||$)/;
+/** One `X [up since m:ss]` inside a FAILED clause: X runs back to the clause
+ * punctuation before it (`/` between names, `(` of a list, `; ` between
+ * clauses). */
+const KILL_ATTEMPT_UP_SINCE_STAMP = /([^/(;]+?) \[up since (\d+:\d\d)\]/g;
+/** One `X already up since m:ss` of an opportunity clause (its `; ` items). */
+const KILL_ATTEMPT_ALREADY_UP_ITEM = /^(.+) already up since (\d+:\d\d)$/;
+
+/**
+ * R08 (c) (user ruling 2026-10-11): a KILL ATTEMPTS line states, where its
+ * tier is, everything its own FAILED clause marks as already up when the
+ * attempt began — `opportunity: PRIME (no trinket, no 20-99% wall in hand;
+ * Barkskin already up since 0:59) | … | FAILED: popped Barkskin [up since
+ * 0:59]`. Before it the line said "no wall in hand" and, four clauses on,
+ * that a wall had been up since before the attempt, with nothing joining the
+ * two (605 new-season files, PROMPT_VERSION 377: this gate fails 2,314 times
+ * in 1,492 of 3,520 owner contexts — one per `[up since]` mark).
+ *
+ * Both directions, on the text, with the producer's own formatter
+ * (`killAttemptAlreadyUpFact`):
+ *  - every `X [up since m:ss]` of the FAILED clause is in the opportunity
+ *    clause as `X already up since m:ss` (an immunity, which names no spell,
+ *    as `KILL_ATTEMPT_IMMUNITY_ALREADY_UP_NAME`);
+ *  - the opportunity clause states none the FAILED clause does not mark.
+ * And the legend sentence is there exactly when a line carries the fact.
+ */
+export function checkKillAttemptAlreadyUpStated(lines: string[]): string[] {
+  const failures: string[] = [];
+  let carried = false;
+  lines.forEach((line, i) => {
+    const opp = line.match(KILL_ATTEMPT_OPPORTUNITY)?.[1];
+    if (opp === undefined) return;
+    const failed = line.match(KILL_ATTEMPT_FAILED_CLAUSE)?.[1] ?? "";
+    const expected = [...failed.matchAll(KILL_ATTEMPT_UP_SINCE_STAMP)].map(
+      (m) => {
+        const name = m[1]!.trim().replace(/^popped /, "");
+        return killAttemptAlreadyUpFact(
+          name === "forced a full immunity"
+            ? KILL_ATTEMPT_IMMUNITY_ALREADY_UP_NAME
+            : name,
+          m[2]!,
+        );
+      },
+    );
+    // the parenthesis of the tier: `PRIME (a; b)` / `gated (a; b; c)` / …
+    const inner = opp.trim().match(/^[^(]*\((.*)\)$/)?.[1] ?? "";
+    const stated = inner
+      .split("; ")
+      .filter((item) => KILL_ATTEMPT_ALREADY_UP_ITEM.test(item));
+    if (stated.length > 0) carried = true;
+    for (const fact of expected)
+      if (!stated.includes(fact))
+        failures.push(
+          `line ${i + 1}: KILL ATTEMPTS 的 FAILED 子句写了 [up since],opportunity 子句却没写 "${fact}" —— ${line.trim()}`,
+        );
+    for (const fact of stated)
+      if (!expected.includes(fact))
+        failures.push(
+          `line ${i + 1}: KILL ATTEMPTS 的 opportunity 子句写了 "${fact}",同一行的 FAILED 子句没有对应的 [up since] —— ${line.trim()}`,
+        );
+  });
+  const legend = lines.includes(KILL_ATTEMPTS_ALREADY_UP_LEGEND);
+  if (carried && !legend)
+    failures.push(
+      "KILL ATTEMPTS 有行写了 `already up since`,图例里没有解释它的那一句",
+    );
+  if (!carried && legend)
+    failures.push(
+      "KILL ATTEMPTS 的图例解释了 `already up since`,却没有一行写它",
+    );
+  return failures;
+}
+
 /** The label an own-press `[ENEMY DEF]` line may open its parenthesis with
  * when its ability is neither an effect save nor a pressed self defensive:
  * a wall's `(N%…`, an immunity's `(immune…`, an area save's `(area)`. */
@@ -6796,6 +6875,7 @@ export function checkMatch(
   hardFailures.push(...checkBacklashSilenceFamily(lines));
   hardFailures.push(...checkTopSourcesOneEntryPerAbility(lines));
   hardFailures.push(...checkKillAttemptBracketEnd(lines));
+  hardFailures.push(...checkKillAttemptAlreadyUpStated(lines));
   hardFailures.push(...checkGuardianSpiritSaveClause(lines));
   hardFailures.push(...checkKarmaFedClause(lines));
   hardFailures.push(...checkResReturnAnnounced(lines));

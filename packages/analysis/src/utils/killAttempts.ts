@@ -749,6 +749,41 @@ export function anchorsKillAttempt(
   return !KILL_ATTEMPT_NON_ANCHOR_CDS.get(attacker.spec)?.has(cdId);
 }
 
+/** Something that was already on the target when an attempt began — one
+ * `[up since m:ss]` of the line's FAILED clause. */
+export interface IKillAttemptAlreadyUp {
+  name: string;
+  /** round seconds it went up (the second its `[ENEMY DEF]` line sits at) */
+  sinceSeconds: number;
+}
+
+/** What an immunity that was already up is called in the opportunity clause:
+ * `forced a full immunity [up since m:ss]` names no spell. */
+export const KILL_ATTEMPT_IMMUNITY_ALREADY_UP_NAME = "a full immunity";
+
+/**
+ * R08 (c) (user ruling 2026-10-11): what was already UP on the target when
+ * the attempt began is stated beside the tier, as a fact — `opportunity:
+ * PRIME (no trinket, no 20-99% wall in hand; Barkskin already up since
+ * 0:59)`. The tier is untouched: it counts what the target still HELD
+ * (ruling 2026-08-18: a wall already running belongs to the after-the-fact
+ * attribution, never to the tier), and before this the line read "no wall in
+ * hand" and `popped Barkskin [up since 0:59]` with nothing between them
+ * (121c7e15). One fact per `[up since m:ss]` the FAILED clause of the same
+ * line prints — the same reading, collected where the mark is written
+ * (`stampNames` / `failureText`) — so the two cannot name different things.
+ * The gate `checkKillAttemptAlreadyUpStated` re-builds each fact with this
+ * function from the FAILED clause it re-parses.
+ */
+export function killAttemptAlreadyUpFact(name: string, since: string): string {
+  return `${name} already up since ${since}`;
+}
+
+/** The legend sentence for `killAttemptAlreadyUpFact`, printed only when a
+ * line of the block carries one. */
+export const KILL_ATTEMPTS_ALREADY_UP_LEGEND =
+  '  `X already up since m:ss` inside `opportunity: …` = X was on the target when the attempt began — the `[up since m:ss]` of the same line\'s FAILED clause, said where the tier is. The tier beside it (PRIME / gated / trinket up) is about what the target still HELD: something already running is not "in hand", and it is not what made the target PRIME or not.';
+
 /** GH #97 cheap alternative to the [ENEMY DEF] timeline line: the summary
  * names WHEN the wall went up (`popped Barkskin@2:17`) instead of a timeline
  * line. Only one of the two renders (TIMELINE_LINE_FLAGS.enemyDef). */
@@ -756,6 +791,8 @@ function stampNames(
   names: string[],
   atS: number[],
   spanFromSeconds: number,
+  /** collects every name this call marks `[up since m:ss]` (R08 c) */
+  alreadyUp?: IKillAttemptAlreadyUp[],
 ): string {
   if (TIMELINE_LINE_FLAGS.enemyDef !== "stamp")
     return names
@@ -765,10 +802,13 @@ function stampNames(
         // sits at, so the gate can find that line outside the span. One that
         // went up inside the span's own first second needs no mark.
         const at = atS[i];
-        return at !== undefined &&
-          toRenderSecond(at) < toRenderSecond(spanFromSeconds)
-          ? `${n} [up since ${fmtTime(at)}]`
-          : n;
+        if (
+          at === undefined ||
+          toRenderSecond(at) >= toRenderSecond(spanFromSeconds)
+        )
+          return n;
+        alreadyUp?.push({ name: n, sinceSeconds: at });
+        return `${n} [up since ${fmtTime(at)}]`;
       })
       .join("/");
   return names
@@ -781,34 +821,53 @@ function stampNames(
 function failureText(
   attr: IKillAttemptAttribution,
   spanFromSeconds: number,
+  /** collects every `[up since m:ss]` this text carries, in order (R08 c):
+   * what the line's `opportunity:` clause restates */
+  alreadyUp?: IKillAttemptAlreadyUp[],
 ): string {
   // Rule 2, as for a wall (`stampNames`): an immunity that was already up
   // when the attempt began says since when — this attempt did not force it.
-  const upSince =
+  const immunityWasUp =
     TIMELINE_LINE_FLAGS.enemyDef !== "stamp" &&
     attr.immunityUpSinceS !== undefined &&
-    toRenderSecond(attr.immunityUpSinceS) < toRenderSecond(spanFromSeconds)
-      ? ` [up since ${fmtTime(attr.immunityUpSinceS)}]`
-      : "";
-  const immunity = `forced a full immunity${upSince} (a win — re-open after it drops)`;
+    toRenderSecond(attr.immunityUpSinceS) < toRenderSecond(spanFromSeconds);
+  const upSince = immunityWasUp
+    ? ` [up since ${fmtTime(attr.immunityUpSinceS!)}]`
+    : "";
+  const immunityText = `forced a full immunity${upSince} (a win — re-open after it drops)`;
+  /** the immunity's clause, recorded as already up where it is written */
+  const immunity = (): string => {
+    if (immunityWasUp)
+      alreadyUp?.push({
+        name: KILL_ATTEMPT_IMMUNITY_ALREADY_UP_NAME,
+        sinceSeconds: attr.immunityUpSinceS!,
+      });
+    return immunityText;
+  };
   switch (attr.primary) {
     case "trinketed":
       // User ruling A29 (2026-09-30, "两个都写"): an attempt that met both a
       // trinket bound to one of its stuns and an immunity names both.
       return attr.immunityBaited
-        ? `target trinketed out; ${immunity}`
+        ? `target trinketed out; ${immunity()}`
         : "target trinketed out";
     case "broke-out":
       // Named like the trinket's cause; an immunity in the same attempt is
       // listed with it, as for the trinket (A29).
-      return `broke out (${(attr.brokeOut ?? []).join("/")})${attr.immunityBaited ? `; ${immunity}` : ""}`;
+      return `broke out (${(attr.brokeOut ?? []).join("/")})${attr.immunityBaited ? `; ${immunity()}` : ""}`;
     case "immunity-baited":
-      return immunity;
+      return immunity();
     case "defensive":
     case "external":
     case "self-saved": {
+      // Each list is stamped into its own collector: which of the three
+      // clauses print is decided below, and only a printed clause's
+      // `[up since]` is restated in the opportunity clause (R08 c).
+      const poppedUp: IKillAttemptAlreadyUp[] = [];
+      const externalUp: IKillAttemptAlreadyUp[] = [];
+      const ownUp: IKillAttemptAlreadyUp[] = [];
       const popped = attr.defensivePopped.length
-        ? `popped ${stampNames(attr.defensivePopped, attr.defensivePoppedAtS, spanFromSeconds)}`
+        ? `popped ${stampNames(attr.defensivePopped, attr.defensivePoppedAtS, spanFromSeconds, poppedUp)}`
         : "";
       // An external that carries a % reduction (Pain Suppression, Ironbark)
       // is already on the wall list — `defensivePopped` names every wall
@@ -824,6 +883,7 @@ function failureText(
             extra.map((i) => attr.externalReceived[i]!),
             extra.map((i) => attr.externalReceivedAtS[i]!),
             spanFromSeconds,
+            externalUp,
           )})`
         : "";
       // The target's own defensive outside the wall table is worded
@@ -846,6 +906,7 @@ function failureText(
                 idx.map((i) => attr.selfSaved[i]!),
                 idx.map((i) => attr.selfSavedAtS[i]!),
                 spanFromSeconds,
+                ownUp,
               ),
             )
           : "";
@@ -862,8 +923,11 @@ function failureText(
       // Enraged Regeneration at 22 %, Lay on Hands at 12 %, "popped Enraged
       // Regeneration"). Without an external the line is unchanged: the first
       // of wall / self-save, as `primary` orders them.
-      if (external && (popped || selfSaved))
+      if (external && (popped || selfSaved)) {
+        alreadyUp?.push(...poppedUp, ...externalUp, ...ownUp);
         return [popped, external, selfSaved].filter(Boolean).join("; ");
+      }
+      alreadyUp?.push(...(popped ? poppedUp : external ? externalUp : ownUp));
       return popped || external || selfSaved;
     }
     case "outhealed":
@@ -946,13 +1010,24 @@ export function formatKillAttemptsForContext(
   );
   // User ruling 2026-10-11: the two words for the target's own defensive,
   // each explained only when a line of this block carries it.
-  const failed = attempts
-    .filter((a) => !a.killed)
-    .map((a) => failureText(a.attribution!, a.fromSeconds));
+  const failureOf = new Map<
+    IKillAttempt,
+    { text: string; alreadyUp: IKillAttemptAlreadyUp[] }
+  >();
+  for (const a of attempts) {
+    if (a.killed) continue;
+    const alreadyUp: IKillAttemptAlreadyUp[] = [];
+    const text = failureText(a.attribution!, a.fromSeconds, alreadyUp);
+    failureOf.set(a, { text, alreadyUp });
+  }
+  const failed = [...failureOf.values()].map((f) => f.text);
   if (failed.some((f) => f.includes(KILL_ATTEMPT_POPPED_WORD)))
     lines.push(KILL_ATTEMPTS_POPPED_LEGEND);
   if (failed.some((f) => f.includes(KILL_ATTEMPT_PROC_WORD)))
     lines.push(KILL_ATTEMPTS_PROC_LEGEND);
+  // R08 (c): the already-up fact of an opportunity clause.
+  if ([...failureOf.values()].some((f) => f.alreadyUp.length > 0))
+    lines.push(KILL_ATTEMPTS_ALREADY_UP_LEGEND);
   // P-FU-b8 / D6: which "already up" is never claimed.
   lines.push(KILL_ATTEMPTS_END_UNSEEN_LEGEND);
   let kills = 0;
@@ -971,15 +1046,20 @@ export function formatKillAttemptsForContext(
             : `gated, ${a.softerTarget.wallsInHand.join("/")} in hand`
         }`
       : "no softer target";
+    const failure = failureOf.get(a);
+    // R08 (c): what the FAILED clause marks `[up since m:ss]`, restated where
+    // the tier is — after the tier's own facts, before the softer target.
+    // The tier itself does not read it.
+    const up = (failure?.alreadyUp ?? []).map((u) =>
+      killAttemptAlreadyUpFact(u.name, fmtTime(u.sinceSeconds)),
+    );
     const opp =
       a.opportunity.tier === "prime"
-        ? "PRIME (no trinket, no 20-99% wall in hand)"
+        ? `PRIME (${["no trinket, no 20-99% wall in hand", ...up].join("; ")})`
         : a.opportunity.tier === "gated"
-          ? `gated (${a.opportunity.wallsInHand.join("/")} in hand; ${softer})`
-          : `trinket up (${softer})`;
-    const outcome = a.killed
-      ? "KILL"
-      : `FAILED: ${failureText(a.attribution!, a.fromSeconds)}`;
+          ? `gated (${[`${a.opportunity.wallsInHand.join("/")} in hand`, ...up, softer].join("; ")})`
+          : `trinket up (${[...up, softer].join("; ")})`;
+    const outcome = failure ? `FAILED: ${failure.text}` : "KILL";
     const opener =
       a.anchor === "stun"
         ? `${a.anchorSpellName} opener (${a.openingDrLevel} DR), ${a.stuns.length} stun${a.stuns.length > 1 ? "s" : ""}`

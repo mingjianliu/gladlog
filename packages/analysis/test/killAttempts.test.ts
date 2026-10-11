@@ -14,6 +14,8 @@ import {
   attemptIntoTrinketEvents,
   extractKillAttempts,
   formatKillAttemptsForContext,
+  KILL_ATTEMPT_IMMUNITY_ALREADY_UP_NAME,
+  KILL_ATTEMPTS_ALREADY_UP_LEGEND,
   KILL_ATTEMPTS_END_UNSEEN_LEGEND,
   KILL_ATTEMPTS_POPPED_LEGEND,
   KILL_ATTEMPTS_PROC_LEGEND,
@@ -2113,6 +2115,148 @@ describe("FAILED cause: own save + external in one attempt (B16b)", () => {
 // B-tier B15c-U10 (user ruling 2026-10-06): our Holy Paladin's Avenging Wrath
 // does not anchor a kill attempt — it neither opens a burst cluster nor
 // extends one. Any other spec's wings, and any other cooldown, still do.
+describe("opportunity clause: what was already up when the attempt began (R08 c)", () => {
+  const attempt = (
+    tier: "prime" | "gated" | "locked",
+    attribution: Record<string, unknown>,
+    over: Record<string, unknown> = {},
+  ): any => ({
+    targetUnitId: "e1",
+    targetName: "Druid-R",
+    anchor: "burst",
+    anchorSpellName: "Adrenaline Rush",
+    fromSeconds: 307.2,
+    toSeconds: 322.4,
+    stuns: [],
+    opportunity: {
+      tier,
+      wallsInHand: tier === "gated" ? ["Ironbark"] : [],
+    },
+    teamDamageToTarget: 980_000,
+    teamDamageToTargetInBracket: 980_000,
+    teamDamageTotal: 980_000,
+    teamOnTargetPct: 100,
+    killed: false,
+    attribution: {
+      trinketed: false,
+      brokeOut: [],
+      immunityBaited: false,
+      defensivePopped: [],
+      defensivePoppedAtS: [],
+      externalReceived: [],
+      externalReceivedAtS: [],
+      selfSaved: [],
+      selfSavedAtS: [],
+      outhealed: false,
+      ...attribution,
+    },
+    ...over,
+  });
+  const oppOf = (a: any, block = formatKillAttemptsForContext([a])) =>
+    block
+      .find((l) => l.includes("| opportunity: "))!
+      .split("| opportunity: ")[1]!
+      .split(" | ")[0];
+  const barkskinUp = {
+    primary: "defensive",
+    defensivePopped: ["Barkskin"],
+    defensivePoppedAtS: [300], // 5:00, the attempt opens at 5:07
+  };
+
+  it("121c7e15's shape: PRIME, and the wall the FAILED clause marks `[up since]` is said beside the tier — the tier is not changed by it", () => {
+    const a = attempt("prime", barkskinUp);
+    const block = formatKillAttemptsForContext([a]);
+    expect(oppOf(a, block)).toBe(
+      "PRIME (no trinket, no 20-99% wall in hand; Barkskin already up since 5:00)",
+    );
+    expect(block.join("\n")).toContain(
+      "FAILED: popped Barkskin [up since 5:00]",
+    );
+    expect(block.join("\n")).toContain("1 on PRIME targets");
+    expect(block).toContain(KILL_ATTEMPTS_ALREADY_UP_LEGEND);
+  });
+
+  it("gated and trinket-up lines carry it too, between the tier's own facts and the softer target", () => {
+    expect(oppOf(attempt("gated", barkskinUp))).toBe(
+      "gated (Ironbark in hand; Barkskin already up since 5:00; no softer target)",
+    );
+    expect(
+      oppOf(
+        attempt("locked", barkskinUp, {
+          softerTarget: { name: "Mage-R", tier: "prime", wallsInHand: [] },
+        }),
+      ),
+    ).toBe(
+      "trinket up (Barkskin already up since 5:00; softer target then: Mage-R — PRIME)",
+    );
+  });
+
+  it("an immunity that was already up names no spell: `a full immunity`; an external and the target's own defensive are restated like a wall", () => {
+    expect(
+      oppOf(
+        attempt("prime", {
+          primary: "immunity-baited",
+          immunityBaited: true,
+          immunityUpSinceS: 304.3,
+        }),
+      ),
+    ).toBe(
+      `PRIME (no trinket, no 20-99% wall in hand; ${KILL_ATTEMPT_IMMUNITY_ALREADY_UP_NAME} already up since 5:04)`,
+    );
+    expect(
+      oppOf(
+        attempt("prime", {
+          primary: "defensive",
+          defensivePopped: ["Barkskin"],
+          defensivePoppedAtS: [300],
+          externalReceived: ["Leap of Faith"],
+          externalReceivedAtS: [301],
+          selfSaved: ["Renewal"],
+          selfSavedAtS: [302],
+        }),
+      ),
+    ).toBe(
+      "PRIME (no trinket, no 20-99% wall in hand; Barkskin already up since 5:00; Leap of Faith already up since 5:01; Renewal already up since 5:02)",
+    );
+  });
+
+  it("only what the FAILED clause prints: a wall that went up inside the attempt, or a clause the fixed order hides, adds nothing — and then no legend line", () => {
+    // went up inside the attempt
+    const inside = attempt("prime", {
+      primary: "defensive",
+      defensivePopped: ["Barkskin"],
+      defensivePoppedAtS: [310],
+    });
+    expect(oppOf(inside)).toBe("PRIME (no trinket, no 20-99% wall in hand)");
+    // the wall prints; the own defensive that was up is not printed (no
+    // external beside them), so it is not restated either
+    const hidden = attempt("prime", {
+      primary: "defensive",
+      defensivePopped: ["Barkskin"],
+      defensivePoppedAtS: [310],
+      selfSaved: ["Renewal"],
+      selfSavedAtS: [300],
+    });
+    const block = formatKillAttemptsForContext([hidden]);
+    expect(block.join("\n")).toContain("FAILED: popped Barkskin");
+    expect(oppOf(hidden, block)).toBe(
+      "PRIME (no trinket, no 20-99% wall in hand)",
+    );
+    expect(block).not.toContain(KILL_ATTEMPTS_ALREADY_UP_LEGEND);
+    // a trinket hides a wall that was up: the FAILED clause does not mark
+    // it, the opportunity clause does not state it
+    expect(
+      oppOf(attempt("prime", { ...barkskinUp, primary: "trinketed" })),
+    ).toBe("PRIME (no trinket, no 20-99% wall in hand)");
+    // a KILL has no FAILED clause
+    expect(
+      oppOf(
+        attempt("prime", barkskinUp, { killed: true, attribution: undefined }),
+      ),
+    ).toBe("PRIME (no trinket, no 20-99% wall in hand)");
+  });
+});
+
 describe("burst anchor: a Holy Paladin's Avenging Wrath is not one (B15c-U10)", () => {
   const cast = (spellId: string, spellName: string, atS: number): any => ({
     spellId,

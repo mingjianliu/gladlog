@@ -1891,6 +1891,27 @@ const INDEX: PredicateRow[] = [
     symbol: "checkKillAttemptBracketEnd",
     mod: promptQualityCheck,
   },
+  // R08 (c): what was already up when a kill attempt began
+  {
+    file: `${A}/utils/killAttempts.ts`,
+    symbol: "killAttemptAlreadyUpFact",
+    mod: killAttempts,
+  },
+  {
+    file: `${A}/utils/killAttempts.ts`,
+    symbol: "KILL_ATTEMPT_IMMUNITY_ALREADY_UP_NAME",
+    mod: killAttempts,
+  },
+  {
+    file: `${A}/utils/killAttempts.ts`,
+    symbol: "KILL_ATTEMPTS_ALREADY_UP_LEGEND",
+    mod: killAttempts,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkKillAttemptAlreadyUpStated",
+    mod: promptQualityCheck,
+  },
   {
     file: `${A}/utils/burstLedger.ts`,
     symbol: "BURST_TARGET_DAMAGE_RE_SRC",
