@@ -11,6 +11,13 @@
  * `healingGaps` and the candidate layer all read it.
  */
 
+/** The bracket whose rounds end at their first player death, as
+ * `startInfo.bracket` spells it — and as the prompt's header prints it
+ * (`Bracket: Rated Solo Shuffle`), which is how the gate that re-reads a
+ * round's end off the prompt (`checkKillWindowWithinRound`) knows the rule
+ * applies. */
+export const SOLO_SHUFFLE_BRACKET = "Rated Solo Shuffle";
+
 /** Solo Shuffle only: the round-ending (first) player death, epoch ms, or
  * undefined for other brackets / a round with no player death. The one
  * definition behind `afterShuffleRoundEnd` and the owner gate's round-end
@@ -22,7 +29,7 @@ export function shuffleRoundEndMs(
     deathRecords?: ReadonlyArray<{ timestamp?: number }>;
   }>,
 ): number | undefined {
-  if (combat?.startInfo?.bracket !== "Rated Solo Shuffle") return undefined;
+  if (combat?.startInfo?.bracket !== SOLO_SHUFFLE_BRACKET) return undefined;
   let firstDeathMs = Infinity;
   for (const u of units) {
     if (!u.info) continue;

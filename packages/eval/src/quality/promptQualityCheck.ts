@@ -150,6 +150,7 @@ import {
   fmtTime,
   parseWholeSeconds,
 } from "@gladlog/analysis/src/utils/renderGrid";
+import { SOLO_SHUFFLE_BRACKET } from "@gladlog/analysis/src/utils/roundEnd";
 import { SUMMON_KIND_RE_SRC } from "@gladlog/analysis/src/utils/summonKind";
 import fs from "fs-extra";
 import path from "path";
@@ -1184,6 +1185,83 @@ export function checkVulnerableOwnerDamage(lines: string[]): string[] {
       failures.push(
         `line ${i + 1}: [VULNERABLE] your damage on it ${m[2]}k 大于同一目标的 team damage ${m[1]}k total`,
       );
+  });
+  return failures;
+}
+
+/** The header line's `|  Bracket: <bracket>  |  Result: …`. */
+const BRACKET_HEADER = /\|\s+Bracket: (.+?)\s+\|\s+Result:/;
+/** `1:40  [MATCH END]   damp: 27%` — the log's end. */
+const MATCH_END_LINE = /^\d+:\d{2}\s+\[MATCH END\]/;
+/** A `[KILL WINDOW]` / `[VULNERABLE]` line of either view, with its span. */
+const KILL_WINDOW_SPAN =
+  /^\s*\[(KILL WINDOW|VULNERABLE)\] (\d+):(\d{2})–(\d+):(\d{2})/;
+/** The vulnerability span a `[KILL WINDOW]` line names beside its burst:
+ *  `(defenseless a–b)` (DPS view) / `; target defenseless a–b` (healer view). */
+const DEFENSELESS_SPAN = /\bdefenseless (\d+):(\d{2})–(\d+):(\d{2})/;
+
+/**
+ * Hard invariant (T12 ① a, user ruling 2026-10-10: a kill window does not run
+ * past the round's end): no `[KILL WINDOW]` / `[VULNERABLE]` span — the line's
+ * own, or the `defenseless a–b` it names — ends after the round's end AS THE
+ * PROMPT STATES IT.
+ *
+ * The producer cuts the windows at `roundEndMs` (`computeOffensiveWindows`);
+ * the prompt prints that instant twice over, and this gate reads it there:
+ *
+ *  - the log's end is the `[MATCH END]` line — every bracket;
+ *  - a Solo Shuffle round (the header's `Bracket:` is `SOLO_SHUFFLE_BRACKET`,
+ *    the constant `roundEndMs` itself tests) is over at its first player
+ *    death, and every player death of either team is a timeline `[DEATH]`
+ *    line — so the earliest `[DEATH]` line's second is the round's end.
+ *
+ * A window's end is at or before the round's end, so on the render grid its
+ * second is at or before that line's second — no tolerance.
+ *
+ * Before the cut: a still-open span closed at the LOG's end, ~2 s after a
+ * Solo Shuffle round's ending death (`[VULNERABLE] 1:28–1:40` under a first
+ * `[DEATH]` at 1:38), and casts after the round read as "inside a kill
+ * window" (kick-priority, the missed purges).
+ */
+export function checkKillWindowWithinRound(lines: string[]): string[] {
+  const failures: string[] = [];
+  const secondOf = (line: string): number | null => {
+    const m = line.match(LEADING_TIME);
+    return m ? Number(m[1]) * 60 + Number(m[2]) : null;
+  };
+  const bracket = lines
+    .map((l) => l.match(BRACKET_HEADER)?.[1])
+    .find((b) => b !== undefined);
+  let roundEnd: { second: number; says: string } | null = null;
+  const consider = (second: number | null, says: string) => {
+    if (second !== null && (roundEnd === null || second < roundEnd.second))
+      roundEnd = { second, says };
+  };
+  for (const line of lines) {
+    if (MATCH_END_LINE.test(line)) consider(secondOf(line), "[MATCH END]");
+    else if (bracket === SOLO_SHUFFLE_BRACKET && DEATH_LINE.test(line))
+      consider(secondOf(line), `${SOLO_SHUFFLE_BRACKET} 的第一条 [DEATH] 行`);
+  }
+  if (roundEnd === null) return failures;
+  const end: { second: number; says: string } = roundEnd;
+  lines.forEach((line, i) => {
+    const m = line.match(KILL_WINDOW_SPAN);
+    if (!m) return;
+    const spans = [
+      { what: `[${m[1]}] 的区间`, text: `${m[2]}:${m[3]}–${m[4]}:${m[5]}`, to: Number(m[4]) * 60 + Number(m[5]) },
+    ];
+    const d = line.match(DEFENSELESS_SPAN);
+    if (d)
+      spans.push({
+        what: "defenseless 区间",
+        text: `${d[1]}:${d[2]}–${d[3]}:${d[4]}`,
+        to: Number(d[3]) * 60 + Number(d[4]),
+      });
+    for (const sp of spans)
+      if (sp.to > end.second)
+        failures.push(
+          `line ${i + 1}: ${sp.what} ${sp.text} 结束于回合结束之后(${end.says}在 ${fmtTime(end.second)})—— ${line.trim().slice(0, 140)}`,
+        );
   });
   return failures;
 }
@@ -5097,6 +5175,7 @@ export function checkMatch(
   hardFailures.push(...checkBurstTargetDamageParts(lines));
   hardFailures.push(...checkBurstAllyOverlap(lines));
   hardFailures.push(...checkVulnerableOwnerDamage(lines));
+  hardFailures.push(...checkKillWindowWithinRound(lines));
   hardFailures.push(...checkBehaviorPriorConsistency(lines));
   hardFailures.push(...checkBurstWindowRefConsistency(lines));
   hardFailures.push(...checkOffensiveWindowSpikeMarker(lines));

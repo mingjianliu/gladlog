@@ -23,6 +23,7 @@ import {
 } from "./cooldowns";
 import { enemyDefensiveEvents, renderedExternalSpanS } from "./enemyDefensives";
 import { fmtTime, renderedWindowSeconds } from "./renderGrid";
+import { roundEndMs } from "./roundEnd";
 // GH #31 ② (2026-09-02): the hand list is replaced by the shared official-face
 // predicate; the curated remainder lives as its registered fallback floor.
 import { summonOwnerById } from "./summonOwner";
@@ -335,6 +336,13 @@ export function computeOffensiveWindows(
 ): IOffensiveWindow[] {
   const matchStartMs = combat.startTime;
   const matchDurationSeconds = (combat.endTime - matchStartMs) / 1000;
+  // T12 ① a (user ruling 2026-10-10): a kill window does not run past the
+  // round's end either. `roundEndMs` is the one round end — a Solo Shuffle
+  // round is over at its first player death, and the log runs on for a
+  // couple of seconds after it (the state machine below closes a still-open
+  // span at the LOG's end). See step 2c.
+  const roundEnd = (roundEndMs(combat) - matchStartMs) / 1000;
+  const roundEndS = Number.isFinite(roundEnd) ? roundEnd : Infinity;
   const windows: IOffensiveWindow[] = [];
 
   // (whole-match average damage rate deleted with damageRatio/capitalized —
@@ -549,7 +557,8 @@ export function computeOffensiveWindows(
     // are the `[ENEMY DEF]` external events' own (`enemyDefensiveEvents`), so
     // the span and the timeline line agree on when the external was up.
     const received = externalsReceived.get(enemy.id) ?? [];
-    // ── 2c. A dead target is not "defenseless" — it is dead ───────────────────
+    // ── 2c. A dead target is not "defenseless" — it is dead; a round that is
+    //        over has no kill window ─────────────────────────────────────────
     // T12 ① a (user ruling 2026-10-10, D1): the state machine reads only the
     // target's presses, so a wall whose nominal end fell after the target's
     // death opened a span on a corpse (1bad0a5c: `[VULNERABLE] 1:38–1:50` on a
@@ -557,10 +566,18 @@ export function computeOffensiveWindows(
     // off it 2.3 s after the death (65-1 t=79.4). The span ends at the death
     // (`firstDeathMs`, the one death instant); a span that starts at or after
     // it does not exist. Cut at the source so every reader moves together.
+    // …and so is a round that is over: the same cut at the round's end
+    // (`roundEndS`), whichever comes first. A Solo Shuffle round ends at its
+    // first player death — anyone's — so a span on a SURVIVING enemy ran to
+    // the log's end, ~2 s later (1,000 of 8,219 Solo Shuffle `[KILL WINDOW]` /
+    // `[VULNERABLE]` spans on the 605-file capture ended more than 1 s after
+    // the round's first `[DEATH]` line), and kick-priority and the missed
+    // purges read casts after the round as "inside a kill window".
     const deathS = (firstDeathMs(enemy) - matchStartMs) / 1000;
+    const endS = Math.min(deathS, roundEndS);
     const cutWindows = subtractIntervals(vulnWindows, received)
-      .filter((w) => w.from < deathS)
-      .map((w) => ({ from: w.from, to: Math.min(w.to, deathS) }))
+      .filter((w) => w.from < endS)
+      .map((w) => ({ from: w.from, to: Math.min(w.to, endS) }))
       .filter((w) => w.to - w.from >= MIN_VULN_SECONDS);
 
     // ── 3. Per-window metrics ──────────────────────────────────────────────────

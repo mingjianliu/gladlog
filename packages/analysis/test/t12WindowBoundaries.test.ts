@@ -217,6 +217,216 @@ describe("① a — a kill window ends at its target's death (computeOffensiveWi
   });
 });
 
+describe("① a — a kill window ends at the round's end (computeOffensiveWindows)", () => {
+  const BARKSKIN = "22812";
+  const druid = (
+    castS: number,
+    advancedActions: ReturnType<typeof makeAdvancedAction>[] = [],
+  ) =>
+    makeUnit("e1", {
+      name: "EnemyDruid",
+      spec: CombatUnitSpec.Druid_Feral,
+      reaction: CombatUnitReaction.Hostile,
+      info: {},
+      spellCastEvents: [
+        makeSpellCastEvent(
+          BARKSKIN,
+          at(castS),
+          "e1",
+          "EnemyDruid",
+          "e1",
+          "EnemyDruid",
+        ),
+      ],
+      advancedActions,
+    });
+  // the player whose death ends the Solo Shuffle round — not the window's target
+  const fallen = (deathS: number) =>
+    makeUnit("p2", {
+      name: "Fallen",
+      spec: CombatUnitSpec.Mage_Frost,
+      info: {},
+      deathRecords: [{ timestamp: at(deathS) }],
+    });
+  // 1-2-4 (Solo Shuffle, Duration 1:40, the first death at 1:38): the prompt
+  // read `[VULNERABLE] 1:28–1:40` — the log ran 2 s past the round.
+  const combatOf = (
+    endS: number,
+    units: ReturnType<typeof makeUnit>[],
+    bracket: string,
+  ) =>
+    ({
+      startTime: T0,
+      endTime: at(endS),
+      startInfo: { bracket },
+      units: Object.fromEntries(units.map((u) => [u.id, u])),
+    }) as never;
+  const windowsOf = (
+    castS: number,
+    endS: number,
+    bracket: string,
+    deathS?: number,
+  ) => {
+    const enemy = druid(castS);
+    const units = deathS === undefined ? [enemy] : [enemy, fallen(deathS)];
+    return computeOffensiveWindows(
+      [enemy] as never,
+      [],
+      combatOf(endS, units, bracket),
+    );
+  };
+
+  it("Solo Shuffle: a span on a surviving enemy stops at the round-ending death, not at the log's end", () => {
+    const toLogEnd = windowsOf(50, 100, "Rated Solo Shuffle");
+    expect(toLogEnd).toHaveLength(1);
+    expect(toLogEnd[0]!.toSeconds).toBe(100);
+
+    const cut = windowsOf(50, 100, "Rated Solo Shuffle", 98);
+    expect(cut).toHaveLength(1);
+    expect(cut[0]!.fromSeconds).toBe(toLogEnd[0]!.fromSeconds);
+    expect(cut[0]!.toSeconds).toBe(98);
+    // the length is the cut span's — one span, one set of numbers
+    expect(cut[0]!.durationSeconds).toBe(98 - cut[0]!.fromSeconds);
+  });
+
+  it("the round's end is the log's end in any other bracket: a teammate's death does not cut the span", () => {
+    const cut = windowsOf(50, 100, "3v3", 98);
+    expect(cut).toHaveLength(1);
+    expect(cut[0]!.toSeconds).toBe(100);
+  });
+
+  it("a span that would start at or after the round's end does not exist; one the cut leaves under the minimum is dropped", () => {
+    const from = windowsOf(50, 100, "Rated Solo Shuffle")[0]!.fromSeconds;
+    expect(windowsOf(50, 100, "Rated Solo Shuffle", from - 1)).toEqual([]);
+    expect(windowsOf(50, 100, "Rated Solo Shuffle", from)).toEqual([]);
+    expect(windowsOf(50, 100, "Rated Solo Shuffle", from + 4.9)).toEqual([]);
+    expect(windowsOf(50, 100, "Rated Solo Shuffle", from + 5)).toHaveLength(1);
+  });
+
+  it("the team's damage and its bursts are summed over the cut span: a hit after the round's end is in neither", () => {
+    const friend = makeUnit("p1", { name: "Rogue", info: {} });
+    const withHits = (deathS?: number) => {
+      const enemy = makeUnit("e1", {
+        ...druid(50),
+        damageIn: [
+          { ...makeDamageEvent(at(90), 40_000, "e1"), srcUnitId: "p1" },
+          { ...makeDamageEvent(at(99), 50_000, "e1"), srcUnitId: "p1" },
+        ],
+      });
+      const units =
+        deathS === undefined
+          ? [enemy, friend]
+          : [enemy, friend, fallen(deathS)];
+      return computeOffensiveWindows(
+        [enemy] as never,
+        [friend] as never,
+        combatOf(100, units, "Rated Solo Shuffle"),
+      )[0]!;
+    };
+    const whole = withHits();
+    expect(whole.friendlyDamageInWindow).toBe(90_000);
+    expect(whole.bursts.map((b) => b.damage)).toEqual([40_000, 50_000]);
+    const cut = withHits(98);
+    expect(cut.friendlyDamageInWindow).toBe(40_000);
+    expect(cut.bursts.map((b) => b.damage)).toEqual([40_000]);
+    for (const b of cut.bursts) expect(b.toSeconds).toBeLessThanOrEqual(98);
+  });
+
+  // The reader the finding names: a cast started after the round was over
+  // read as "inside a kill window" for the ~2 s the log runs on.
+  describe("kick-priority does not read a cast after the round's end", () => {
+    const FLASH_HEAL = "2061";
+    const healerWithCast = (startS: number) =>
+      makeUnit("e2", {
+        name: "EnemyPriest",
+        spec: CombatUnitSpec.Priest_Holy,
+        reaction: CombatUnitReaction.Hostile,
+        info: {},
+        castStartEvents: [
+          {
+            ...makeSpellCastEvent(
+              FLASH_HEAL,
+              at(startS),
+              "",
+              "",
+              "e2",
+              "EnemyPriest",
+            ),
+            logLine: {
+              event: LogEvent.SPELL_CAST_START,
+              timestamp: at(startS),
+              parameters: [],
+            },
+          },
+        ],
+        spellCastEvents: [
+          makeSpellCastEvent(
+            FLASH_HEAL,
+            at(startS + 1.5),
+            "",
+            "",
+            "e2",
+            "EnemyPriest",
+          ),
+        ],
+        healOut: [
+          {
+            logLine: {
+              event: LogEvent.SPELL_HEAL,
+              timestamp: at(startS + 1.5),
+              parameters: [],
+            },
+            timestamp: at(startS + 1.5),
+            spellId: FLASH_HEAL,
+            effectiveAmount: 100_000,
+            destUnitId: "e3",
+          },
+        ],
+      });
+    const friend = makeUnit("p1", {
+      name: "Rogue",
+      spec: CombatUnitSpec.Rogue_Subtlety,
+      info: {},
+    });
+    // the window's target stays alive at 20 % through the log's end
+    const hp = [
+      makeAdvancedAction(at(69.5), 0, 0, 500_000, 100_000),
+      makeAdvancedAction(at(78.9), 0, 0, 500_000, 100_000),
+    ];
+    const points = (startS: number, bracket: string) => {
+      const enemies = [druid(50, hp), healerWithCast(startS)];
+      const dead = fallen(77.08);
+      return kickPriorityDecisionPoints(
+        [friend, dead],
+        enemies,
+        {
+          startTime: T0,
+          endTime: at(82),
+          startInfo: { bracket },
+          units: Object.fromEntries(
+            [friend, dead, ...enemies].map((u) => [u.id, u]),
+          ),
+        } as never,
+        { eligibility: "bootstrap" },
+      );
+    };
+
+    it("a heal started before the round-ending death is a decision point, and its span ends at that death", () => {
+      const pts = points(70, "Rated Solo Shuffle");
+      expect(pts).toHaveLength(1);
+      expect(pts[0]!.targetId).toBe("e1");
+      expect(pts[0]!.windowToS).toBeCloseTo(77.08, 6);
+    });
+
+    it("a heal started 2.3 s after it is not — the same cast in a 3v3, where the round goes on, still is", () => {
+      expect(points(79.4, "Rated Solo Shuffle")).toEqual([]);
+      const threes = points(79.4, "3v3");
+      expect(threes).toHaveLength(1);
+      expect(threes[0]!.windowToS).toBe(82);
+    });
+  });
+});
+
 describe("① c — a [DMG SPIKE] bucket closes at its victim's death / the round's end", () => {
   // 121-5-690 (Duration 0:47, the unit dead at 0:45): the line read
   // `0:39–0:49 … 0.60M in 10s (60k DPS) (33% -> 100% HP, +7%/s, low 17% @0:44)`
