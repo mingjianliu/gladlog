@@ -50,6 +50,7 @@ import {
   ccRemovalCause,
   formatCcRemovalCause,
   type ICcRemovalCause,
+  renderedCcDuration,
 } from "../../utils/ccTrinketAnalysis";
 import {
   type ActWindowState,
@@ -810,6 +811,48 @@ function rawReturnAfter(cd: SyncWindowCd, probeS: number): number | null {
 export const SYNC_WINDOW_MIN_T_S = 30;
 export const SYNC_WINDOW_MIN_DUR_S = 3;
 export const SYNC_ENTER_LEAD_S = 2;
+/** `endedBy` of a lock the round ended on (F06a) — what its `[CC ON ENEMY]`
+ * line says with `CC_STILL_ON_AT_ROUND_END`. */
+export const SYNC_LOCK_ENDED_BY_ROUND_END = "the round's end";
+
+/**
+ * The numbers a missed-sync-window row states about its lock's length
+ * (F06a). `durationS` is the lock's length through the control lines' own
+ * formatter (`renderedCcDuration`: rounded to the whole second, `<1` under
+ * half a second) — for a one-control lock the very number its
+ * `[CC ON ENEMY]` line prints; `windowEndT` is the timeline second it ended
+ * in. Both stop at the round's end: the `[CC ON ENEMY]` line of a lock the
+ * round ended on is cut there (`stillOnAtRoundEnd`), and the row read
+ * `windowEndT=188, durationS=5` for a Kidney Shot the round ended 1 s into.
+ *
+ * `durationS` was `windowEndT − t`, the floored endpoints' difference: one
+ * off the control line's number in 32 of 452 one-control pairs of the
+ * 605-file capture (a 4.4 s Hammer of Justice from x.9 to y.3 read 5 here and
+ * `(4s)` there), and 2–6 s over it in 16 of the 19 pairs the round's end cut.
+ */
+export function syncLockLengthFacts(
+  w: { fromSeconds: number; toSeconds: number },
+  roundEndS: number | undefined,
+): {
+  /** the lock's end, cut at the round's end */
+  endSeconds: number;
+  cutByRoundEnd: boolean;
+  windowEndT: string;
+  durationS: string;
+} {
+  const cutByRoundEnd = roundEndS !== undefined && w.toSeconds > roundEndS;
+  const endSeconds = cutByRoundEnd
+    ? Math.max(w.fromSeconds, roundEndS)
+    : w.toSeconds;
+  return {
+    endSeconds,
+    cutByRoundEnd,
+    windowEndT: String(toRenderSecond(endSeconds)),
+    durationS: renderedCcDuration({
+      durationSeconds: endSeconds - w.fromSeconds,
+    }).replace(/s$/, ""),
+  };
+}
 export function missedSyncWindowEvents(
   ccWindows: Pick<
     IEnemyHealerCcWindow,
@@ -845,6 +888,12 @@ export function missedSyncWindowEvents(
     /** the last playable second (`playableEndMs`): a later lock, or a press
      * after it, never reaches `enteredNextLock`. Absent ⇒ no cut. */
     playableEndS?: number;
+    /** the round's end in match seconds (`roundEndMs` — what the
+     * `[CC ON ENEMY]` lines are cut at): the row's `windowEndT`,
+     * `durationS` and HP reading stop there (F06a). Facts only — which
+     * locks are candidates is decided on the lock as logged. Absent ⇒ no
+     * cut. */
+    roundEndS?: number;
     /** The bracket's reference cell, or null when the bracket has no cell,
      * misses the n floor, or fails the min-contrast door — null silences
      * the type for the whole round (the resurrection's bracket gate). */
@@ -907,14 +956,16 @@ export function missedSyncWindowEvents(
         accused.set(cd, { end: w.toSeconds, cand: accused.get(cd)!.cand });
       continue;
     }
+    // F06a: the readings stop where the row's own `windowEndT` does
+    const factsEndS = syncLockLengthFacts(w, probes.roundEndS).endSeconds;
     const cand = {
       w,
       ready,
       readyCds: ev.ready,
       // B8: this value only ever feeds `facts` below — it is read AFTER the
       // ready/castDuring gates above have already decided emission.
-      minHp: probes.enemyMinHpPctAt(w.fromSeconds, w.toSeconds),
-      minHpUnit: probes.enemyMinHpUnitAt?.(w.fromSeconds, w.toSeconds) ?? null,
+      minHp: probes.enemyMinHpPctAt(w.fromSeconds, factsEndS),
+      minHpUnit: probes.enemyMinHpUnitAt?.(w.fromSeconds, factsEndS) ?? null,
       alsoHeld: [] as number[],
     };
     candidates.push(cand);
@@ -929,7 +980,7 @@ export function missedSyncWindowEvents(
     .slice(0, cap)
     .map(({ w, ready, readyCds, minHp, minHpUnit, alsoHeld }) => {
       const t = toRenderSecond(w.fromSeconds);
-      const windowEndT = toRenderSecond(w.toSeconds);
+      const length = syncLockLengthFacts(w, probes.roundEndS);
       const timing = syncReadyTimingFacts(w, readyCds);
       // B2-① (user ruling 2026-10-06; facts only — the verdict and the
       // reference numbers are unchanged): a ready CD whose FIRST press after
@@ -976,13 +1027,14 @@ export function missedSyncWindowEvents(
         spellId: w.spellId,
         facts: {
           t: String(t),
-          windowEndT: String(windowEndT),
+          windowEndT: length.windowEndT,
           healer: w.healerName,
           cc: w.spellName,
           dr: w.drLevel ?? "Full",
-          // Render-grid anchoring (CLAUDE.md 门规谓词即规范): derived from the
-          // ALREADY-floored t/windowEndT, not the raw fractional seconds.
-          durationS: String(windowEndT - t),
+          // F06a: the control lines' formatter, not the floored endpoints'
+          // difference (`syncLockLengthFacts`) — the gate pairs it with the
+          // `[CC ON ENEMY]` line (`checkSyncWindowLockLength`).
+          durationS: length.durationS,
           readyCds: ready.join("、"),
           ...(minHp !== null ? { enemyMinHpPct: fmt(minHp) } : {}),
           ...(minHp !== null && minHpUnit ? { enemyMinHpUnit: minHpUnit } : {}),
@@ -991,10 +1043,13 @@ export function missedSyncWindowEvents(
           // "、"-joined — a ", " would cut the facts value)
           ...(alsoHeld.length ? { alsoHeldAt: alsoHeld.join("、") } : {}),
           // sync-burst F-S3: what ended the lock, only when the log says —
-          // a lock your own team's damage cut short is its own lesson
-          ...(w.endedBy
-            ? { endedBy: formatCcRemovalCause(w.endedBy, probes.ownerId) }
-            : {}),
+          // a lock your own team's damage cut short is its own lesson. A
+          // lock the round ended on was ended by nothing logged after it.
+          ...(length.cutByRoundEnd
+            ? { endedBy: SYNC_LOCK_ENDED_BY_ROUND_END }
+            : w.endedBy
+              ? { endedBy: formatCcRemovalCause(w.endedBy, probes.ownerId) }
+              : {}),
           ...(enteredNext.length
             ? { enteredNextLock: enteredNext.join("; ") }
             : {}),

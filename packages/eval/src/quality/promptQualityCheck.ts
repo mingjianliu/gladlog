@@ -48,6 +48,7 @@ import {
   distanceFact,
   POST_KICK_OTHER_REASON_HEAD,
 } from "@gladlog/analysis/src/analysis/candidateFindings";
+import { SYNC_LOCK_ENDED_BY_ROUND_END } from "@gladlog/analysis/src/analysis/candidates/cooldownTiming";
 import { fmtFactNum } from "@gladlog/analysis/src/analysis/factFormat";
 import { parseBurstAnsweredLine } from "@gladlog/analysis/src/context/burstAnswered";
 import {
@@ -4671,6 +4672,107 @@ export function checkBacklashRefConsistency(lines: string[]): string[] {
   return failures;
 }
 
+/** `0:47  [CC ON ENEMY]   4(HPaladin) ← Kidney Shot (by …` — the second,
+ *  the unit's `<unit>` id, the control and the rest of the line. The source
+ *  label nests parentheses (`(by 3(ORogue))`), so the length is searched for
+ *  in the tail, not anchored. */
+const CC_ON_ENEMY_AT_LINE =
+  /^\s*(\d+):(\d{2})\s+\[CC ON ENEMY\]\s+(\d+)\([^)]*\) ← (.+?) \((?:by |reflected back)(.*)$/;
+/** … its length: `) (4s)`, the round-end cut `) (still on them when the
+ *  round ended, 4s in)`, or the Tremor form. */
+const CC_ON_ENEMY_TAIL_SECONDS = new RegExp(
+  String.raw`\) \((${CC_STILL_ON_AT_ROUND_END}, )?(<1|\d+)s(?: in)?\)|ended this CC after (<1|\d+)s `,
+);
+
+/**
+ * Hard invariant (F06a): a missed-sync-window row states its lock's length
+ * as the timeline does.
+ *
+ *  1. A ONE-control lock (`cc=` names no chain: no `→`, no `×N`) whose
+ *     `[CC ON ENEMY]` line the timeline prints — at the row's `t`, on the
+ *     row's healer (through the `<unit>` legend), with that control — reads
+ *     `durationS` = the seconds that line prints (`<1` = `<1s`). Both come
+ *     out of `renderedCcDuration`; the row's value is
+ *     `syncLockLengthFacts`. And a line cut at the round's end
+ *     (`CC_STILL_ON_AT_ROUND_END`) pairs with `endedBy` =
+ *     `SYNC_LOCK_ENDED_BY_ROUND_END`, and only such a line does.
+ *     A row with no such line is not judged: an owner control can sit on its
+ *     `[YOU] [CC]` cast line alone, an area control in a fold.
+ *  2. No row's `windowEndT` is after the round's end as the prompt states it
+ *     (`statedRoundEnd`), chain or not.
+ *
+ * Before (605-file capture of 8c3275fa, fix-FT/scripts/
+ * n4_sync_duration_pairs.py; `durationS` was `windowEndT − t`): 473
+ * one-control rows paired with a line, 51 off it — 32 by one second either
+ * way (the floored endpoints against the rounded length), 19 where the round
+ * ended on the control (16 of them 1–6 s off: `durationS=5` for a Kidney
+ * Shot the round ended 1 s into).
+ */
+export function checkSyncWindowLockLength(lines: string[]): string[] {
+  const failures: string[] = [];
+  const idOfName = new Map<string, string>();
+  const ccLines: Array<{
+    at: number;
+    unitId: string;
+    spell: string;
+    seconds: string;
+    cut: boolean;
+  }> = [];
+  for (const line of lines) {
+    const u = line.match(UNIT_ROSTER_LINE);
+    if (u) idOfName.set(u[2]!, u[1]!);
+    const c = line.match(CC_ON_ENEMY_AT_LINE);
+    if (!c) continue;
+    const tail = c[5]!.match(CC_ON_ENEMY_TAIL_SECONDS);
+    if (!tail) continue;
+    ccLines.push({
+      at: Number(c[1]) * 60 + Number(c[2]),
+      unitId: c[3]!,
+      spell: c[4]!,
+      seconds: (tail[2] ?? tail[3])!,
+      cut: tail[1] !== undefined,
+    });
+  }
+  const end = statedRoundEnd(lines);
+  lines.forEach((line, i) => {
+    if (!line.includes("type=missed-sync-window ")) return;
+    const m = line.match(/facts=\{(.*)\}\s*$/);
+    if (!m) return; // `checkSyncWindowRefConsistency` reports it
+    const f = parseFactsBlock(m[1]!);
+    const fail = (why: string) =>
+      failures.push(
+        `line ${i + 1}: missed-sync-window ${why} —— t=${f.t} windowEndT=${f.windowEndT} durationS=${f.durationS} cc=${f.cc}${f.endedBy ? ` endedBy=${f.endedBy}` : ""}`,
+      );
+    const t = Number(f.t);
+    const windowEndT = Number(f.windowEndT);
+    if (end !== null && Number.isFinite(windowEndT) && windowEndT > end.second)
+      fail(
+        `的 windowEndT 在回合结束之后(${end.says}在 ${fmtTime(end.second)})`,
+      );
+    const cc = f.cc ?? "";
+    if (!cc || cc.includes("→") || / ×\d+$/.test(cc)) return;
+    const unitId = idOfName.get(f.healer ?? "");
+    if (unitId === undefined) return;
+    const paired = ccLines.filter(
+      (c) => c.at === t && c.unitId === unitId && c.spell === cc,
+    );
+    if (paired.length !== 1) return; // none, or two in one second: not judged
+    const cl = paired[0]!;
+    if (f.durationS !== cl.seconds)
+      fail(
+        `的 durationS=${f.durationS ?? "(缺)"} 与同秒 [CC ON ENEMY] 行印的 ${cl.seconds}s 不一致`,
+      );
+    const rowCut = f.endedBy === SYNC_LOCK_ENDED_BY_ROUND_END;
+    if (rowCut !== cl.cut)
+      fail(
+        cl.cut
+          ? `的 [CC ON ENEMY] 行写「${CC_STILL_ON_AT_ROUND_END}」,该行却没有 endedBy=${SYNC_LOCK_ENDED_BY_ROUND_END}`
+          : `写 endedBy=${SYNC_LOCK_ENDED_BY_ROUND_END},[CC ON ENEMY] 行却没有被回合结束截断`,
+      );
+  });
+  return failures;
+}
+
 function checkSyncWindowRefConsistency(lines: string[]): string[] {
   const failures: string[] = [];
   for (let i = 0; i < lines.length; i++) {
@@ -5818,6 +5920,7 @@ export function checkMatch(
   hardFailures.push(...checkOffensiveWindowHeaderSpan(lines));
   hardFailures.push(...checkDmgSpikeListCap(lines));
   hardFailures.push(...checkSyncWindowRefConsistency(lines));
+  hardFailures.push(...checkSyncWindowLockLength(lines));
   hardFailures.push(...checkBacklashRefConsistency(lines));
   hardFailures.push(...checkKickPriorityRefConsistency(lines));
   hardFailures.push(...checkCdPriorRefConsistency(lines));

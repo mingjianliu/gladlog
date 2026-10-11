@@ -3265,6 +3265,20 @@ function teamPlayEvents(
                   ? undefined
                   : (endMs - startMs) / 1000;
               })(),
+              // the timeline's round end (`utils/roundEnd.ts` `roundEndMs`:
+              // a Solo Shuffle round's ending death, else the log's end) —
+              // not the playable end above, which a 3v3's first friendly
+              // death moves and no `[CC ON ENEMY]` line is cut at
+              roundEndS: (() => {
+                const endMs =
+                  shuffleRoundEndMs(combat, units) ??
+                  (typeof combat?.endTime === "number" && combat.endTime > 0
+                    ? combat.endTime
+                    : undefined);
+                return endMs === undefined
+                  ? undefined
+                  : (endMs - startMs) / 1000;
+              })(),
             }),
           );
         }

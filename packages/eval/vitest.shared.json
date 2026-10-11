@@ -61,6 +61,7 @@
     "test/smoke.test.ts",
     "test/stayedInHpGate.test.ts",
     "test/sycophancy.test.ts",
+    "test/syncWindowLockLengthGate.test.ts",
     "test/unnecessaryNoteHpGate.test.ts"
   ]
 }
