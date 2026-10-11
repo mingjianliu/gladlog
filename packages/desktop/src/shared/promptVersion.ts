@@ -1400,5 +1400,30 @@
  *  unit, capped at 100 %); a one-second spike is credited to the window that
  *  holds it; a burst window opened after the round's end gets no header.
  *  Counts in the commit.
+ *  v373 (2026-10-11, the next fact round — the FX board's remaining
+ *  fact-layer items, re-verified on raw logs first; fact lines and facts,
+ *  candidate rows only removed): kick-eaten — presses the log refused for
+ *  another reason leave the lockout list (`refused for another reason`), a
+ *  kick whose spell also silences says so (`kickSilence`), no placeholder
+ *  range, `kickLandedFromYd`, `kickDepthPct` against the player's own
+ *  completed bars (absent rather than clamped), a cast bar the owner's death
+ *  or the round's end broke is not a cancel; two legends reworded.
+ *  "JUKED by fake X" names the last cast bar before the kick and not one a
+ *  control may have broken. Lines that were missing: an enemy's Ultimate
+ *  Penitence ([ENEMY DEF]) and Incarnation: Tree of Life ([ENEMY HEAL CD]; a
+ *  shift back into the form is not a press), Champion's Spear presses; a
+ *  [MINOR DISPELS] rider with its own cast reads `(side effect of the cast)`.
+ *  Labels: Time Spiral is no heal CD; Time Dilation `delays damage on its
+ *  target`; an enemy's dispel-backlash silence is a [SILENCE] line; `Top
+ *  sources` names one ability once (`[Physical + Shadow]`); Ice Block under
+ *  Hypothermia is `cd:Ice Block(Hypothermia Ns)` and not "unused"; an
+ *  offensive cooldown is running only while its effect is on a PLAYER.
+ *  Ends: Touch of Karma's end is its absorb's; an aura the round's end cut
+ *  says `still up when the round ended`; missed-sync-window `durationS` is
+ *  the control line's number and stops at the round's end; `endedBy` names
+ *  the breaking hit as that; `ended early — cause not logged`; a control
+ *  line across a REFRESH says so. Roster labels keep their spec tag (`N(Spec)'s
+ *  pet's X`); STAYED IN's `you moved N yd` names a Death Grip / knockback
+ *  inside the span. Counts in the commit.
  */
-export const PROMPT_VERSION = 372;
+export const PROMPT_VERSION = 373;
