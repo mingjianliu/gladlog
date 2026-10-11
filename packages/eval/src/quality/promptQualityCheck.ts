@@ -93,6 +93,7 @@ import {
   burstRefContrastPp,
   lookupBurstWindowPrior,
 } from "@gladlog/analysis/src/data/burstWindowPrior";
+import { CANDIDATE_TYPE_REGISTRY } from "@gladlog/analysis/src/data/candidateTypeRegistry";
 import { lookupCdTriggerPrior } from "@gladlog/analysis/src/data/cdTriggerPrior";
 import { classMetadata } from "@gladlog/analysis/src/data/classSpells";
 import { FORM_COOLDOWN_BUFF_BY_CAST_ID } from "@gladlog/analysis/src/data/druidForms";
@@ -4096,6 +4097,46 @@ export function checkKickWaitedOutConsistency(lines: string[]): string[] {
   return failures;
 }
 
+/**
+ * A candidate legend that names ANOTHER candidate type sends the reader to
+ * that type's legend ("as in kick-priority-missed") — and a legend is printed
+ * only when its type has a row in the menu. b711d4ac (re-eval 2026-10-08,
+ * I06): a `kick-priority-team` row with no `kick-priority-missed` row cited
+ * the absent legend three times. The legends are self-contained now; this
+ * holds them to it: a legend line that names another registered candidate
+ * type has that type's legend in the same prompt.
+ *
+ * Type names come from `CANDIDATE_TYPE_REGISTRY` (the one list of types).
+ * Only hyphenated names are read: `death` is an English word every legend
+ * uses.
+ */
+const CANDIDATE_LEGEND_LINE = /^- "([a-z][a-z0-9-]*)": /;
+const LEGEND_REFERENCE_TYPES: readonly string[] = Object.keys(
+  CANDIDATE_TYPE_REGISTRY,
+).filter((t) => t.includes("-"));
+export function checkLegendCrossReferences(lines: string[]): string[] {
+  const legendAt = new Map<string, number>();
+  lines.forEach((line, i) => {
+    const m = CANDIDATE_LEGEND_LINE.exec(line);
+    if (m) legendAt.set(m[1]!, i);
+  });
+  const failures: string[] = [];
+  for (const [type, i] of legendAt) {
+    for (const other of LEGEND_REFERENCE_TYPES) {
+      if (other === type || legendAt.has(other)) continue;
+      if (
+        new RegExp(`(?<![a-z0-9-])${reEscape(other)}(?![a-z0-9-])`).test(
+          lines[i]!,
+        )
+      )
+        failures.push(
+          `line ${i + 1}: the "${type}" legend names "${other}", whose legend is not in this prompt`,
+        );
+    }
+  }
+  return failures;
+}
+
 export function checkKickPriorityRefConsistency(lines: string[]): string[] {
   const failures: string[] = [];
   for (let i = 0; i < lines.length; i++) {
@@ -5367,6 +5408,7 @@ export function checkMatch(
   hardFailures.push(...checkMenuTRenderGrid(lines));
   hardFailures.push(...checkCjkLeak(lines));
   hardFailures.push(...checkKickWaitedOutConsistency(lines));
+  hardFailures.push(...checkLegendCrossReferences(lines));
   hardFailures.push(...checkEnemyDefRefConsistency(lines));
   hardFailures.push(...checkEnemyDefSaveEffect(lines));
   hardFailures.push(...checkFormCooldownPressSpacing(lines));

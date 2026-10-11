@@ -237,6 +237,11 @@ describe("healCasts: a healK that sums several casts says so (triage kick-priori
     expect(legend(missed, "kick-priority-missed")).toContain("facts.healK or the one inside facts.healedWhom when the heal went to another unit, is their sum");
     const elsewhere = kickPriorityMissedEvents([point({ healCasts: 2, healAmount: 0, healOtherName: "Warrior", healOtherAmount: 610_000 })], owner, probes)[0]!.facts;
     expect(elsewhere).toMatchObject({ healK: "0", healCasts: "2", healedWhom: "Warrior (610k)" });
-    expect(legend(team, "kick-priority-team")).toContain("facts.healCasts as in kick-priority-missed");
+    // I06: the team legend states it itself — a prompt with no
+    // kick-priority-missed row has no such legend to be sent to
+    expect(legend(team, "kick-priority-team")).toContain(
+      "when facts.healCasts is present, that many casts of facts.heal finished together",
+    );
+    expect(legend(team, "kick-priority-team")).not.toContain("kick-priority-missed");
   });
 });

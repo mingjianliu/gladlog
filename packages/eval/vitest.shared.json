@@ -42,6 +42,7 @@
     "test/hindsightScan.test.ts",
     "test/judgeVariance.test.ts",
     "test/kickPriorityRefGate.test.ts",
+    "test/legendCrossReferenceGate.test.ts",
     "test/menuTRenderGridGate.test.ts",
     "test/outcomeHalo.test.ts",
     "test/outcomeRefGate.test.ts",
