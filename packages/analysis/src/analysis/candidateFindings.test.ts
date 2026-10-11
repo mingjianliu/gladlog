@@ -1726,8 +1726,11 @@ describe("团队协作候选映射(2026-07-24 覆盖面扩充)", () => {
       },
     );
     const f = evts[0]!.facts["postKick"]!;
-    expect(f).toContain("no successful cast for 5s");
-    expect(f).toContain("pressed 3x but rejected");
+    // I01: one press was refused as "not ready"; the other two carry a reason
+    // of their own in the log and are stated with it
+    expect(f).toBe(
+      "no successful cast for 5s after the kick; pressed 1x but rejected (Holy Fire +1.8s); refused for another reason 1x — target not in line of sight (Mind Control +1.1s); refused for another reason 1x — under crowd control (Mind Control +3.5s)",
+    );
     expect(f).not.toContain("1262763");
     expect(f).not.toContain(", "); // checkFactsBlockIntegrity
     expect(f).not.toMatch(/[一-鿿]/); // checkCjkLeak: reasons stay out
@@ -2049,9 +2052,89 @@ describe("团队协作候选映射(2026-07-24 覆盖面扩充)", () => {
       ],
     );
     expect(f).toBe(
-      "acted on another school 1.4s later (Echo; not a hard cast); pressed 4x but rejected (Verdant Embrace×2 +0.9/+1.1s、Reversion×2 +2.6/+2.7s) inside the lockout; outside the locked school 1x not ready yet — its own cooldown or the GCD (Reversion +4.2s)",
+      // I01: the two Reversion presses were refused "out of range" — the log's
+      // own reason, not the lock — and the one after the lock is not printed
+      "acted on another school 1.4s later (Echo; not a hard cast); pressed 2x but rejected (Verdant Embrace×2 +0.9/+1.1s) inside the lockout; refused for another reason 2x — out of range (Reversion×2 +2.6/+2.7s); outside the locked school 1x not ready yet — its own cooldown or the GCD (Reversion +4.2s)",
     );
     expect(f).not.toContain(", ");
+  });
+
+  // Re-eval 2026-10-08, I01: what the log gives as the reason decides which
+  // list a refused press is in.
+  describe("kick-eaten: a press refused for a reason of its own is not a lockout reject (I01)", () => {
+    const acted = { postKick: "acted" as const, firstActionDelayS: 4.4 };
+
+    it("one clause per reason, in order of first press; an unworded reason is said to be one", () => {
+      const f = postKickOf(natureKick(acted), [
+        failed(100.4, 360995, "Can't do that while silenced"),
+        failed(100.6, 366155, "Can't do that while moving"),
+        failed(100.9, 360995, "Can't do that while silenced"),
+        failed(101.2, 366155, "No target"),
+        failed(101.5, 360995), // not ready: the lock's own answer
+      ]);
+      expect(f).toBe(
+        "pressed 1x but rejected (Verdant Embrace +1.5s) inside the lockout; first successful cast 4.4s later; refused for another reason 2x — silenced (Verdant Embrace×2 +0.4/+0.9s); refused for another reason 1x — can't cast while moving (Reversion +0.6s); refused for another reason 1x — client reason not translated (Reversion +1.2s)",
+      );
+      expect(f).not.toContain(", ");
+    });
+
+    it("with no not-ready press the line has no 'rejected inside the lockout' at all — and is not 'waited out'", () => {
+      const f = postKickOf(natureKick(acted), [
+        failed(100.6, 360995, "Out of range"),
+      ]);
+      expect(f).toBe(
+        "first successful cast 4.4s later; refused for another reason 1x — out of range (Verdant Embrace +0.6s)",
+      );
+    });
+
+    it("the acted / switched forms print it only inside the lock, the idle form for the whole window", () => {
+      const late = [failed(103.9, 360995, "Out of range")];
+      expect(postKickOf(natureKick(acted), late)).toBe(
+        "waited out the lockout (first cast 4.4s later)",
+      );
+      expect(postKickOf(natureKick({ postKick: "idle" }), late)).toBe(
+        "no successful cast for 5s after the kick; refused for another reason 1x — out of range (Verdant Embrace +3.9s)",
+      );
+    });
+
+    it("a cast bar that began and was stopped is said to be that, not a refusal the client left unworded", () => {
+      const f = postKickOf(natureKick({ postKick: "idle" }), [
+        failed(102.1, 360995, "Interrupted"),
+      ]);
+      expect(f).toBe(
+        "no successful cast for 5s after the kick; refused for another reason 1x — its cast bar began and was stopped (Verdant Embrace +2.1s)",
+      );
+    });
+
+    it("a not-ready press of a spell that had itself gone out inside the lock is not printed (f4eb8c87 @60.2: Demonic Circle: Teleport)", () => {
+      const shadow = (wentOutInLockS: Record<string, number>) =>
+        natureKick({
+          interruptedSpellId: "198590", // Drain Soul
+          interruptedSpellName: "Drain Soul",
+          postKick: "switched",
+          switchSpellName: "Dark Pact",
+          switchDelayS: 1.2,
+          switchWasHardCast: false,
+          wentOutInLockS,
+        });
+      // Teleport succeeded 2.634 s into the 3 s Shadow lock
+      const shadowKick = shadow({ "48020": 2.634 });
+      const presses = [
+        failed(100.065, 48181), // Haunt
+        failed(102.983, 48020), // Teleport, 0.35 s after its own success
+      ];
+      expect(postKickOf(shadowKick, presses)).toBe(
+        "acted on another school 1.2s later (Dark Pact; not a hard cast); pressed 1x but rejected (Haunt +0.0s) inside the lockout",
+      );
+      // without the success the press stays where it was
+      expect(postKickOf(shadow({}), presses)).toBe(
+        "acted on another school 1.2s later (Dark Pact; not a hard cast); pressed 2x but rejected (Haunt +0.0s、Demonic Circle: Teleport +2.9s) inside the lockout",
+      );
+      // …and a press BEFORE the success is still the lock's
+      expect(postKickOf(shadowKick, [failed(102.5, 48020)])).toContain(
+        "pressed 1x but rejected (Demonic Circle: Teleport +2.5s)",
+      );
+    });
   });
 
   it("kick-eaten: a switched line with no in-lockout reject is unchanged (F-K7d)", () => {
@@ -2099,7 +2182,7 @@ describe("团队协作候选映射(2026-07-24 覆盖面扩充)", () => {
       [{ spellId: "366155", tSeconds: 101.3 }],
     );
     expect(f).toBe(
-      "acted on another school 1.3s later (Reversion; not a hard cast); pressed 1x but rejected (Reversion +1.4s) inside the lockout; outside the locked school 1x not ready yet — its own cooldown or the GCD (Reversion +1.6s)",
+      "acted on another school 1.3s later (Reversion; not a hard cast); refused for another reason 1x — out of range (Reversion +1.4s); outside the locked school 1x not ready yet — its own cooldown or the GCD (Reversion +1.6s)",
     );
   });
 

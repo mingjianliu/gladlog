@@ -943,6 +943,18 @@ export interface IInterruptInstance {
    * not prove it: `LOCK_IGNORING_CAST_IDS`, a Stasis replay
    * (`stasisReplayWindows`), or a spell DB2 does not mark silenceable. */
   lockEndedBySuccessS?: number | null;
+  /** The spells the player got out inside the modelled lockout: spell id →
+   * seconds after the kick of its first SPELL_CAST_SUCCESS there (a Stasis
+   * replay is not a press and is left out). Such a spell was demonstrably
+   * not held by this lock, whatever its school — Demonic Circle: Teleport
+   * (`LOCK_IGNORING_CAST_IDS`), a spell a lockout does not prevent — so a
+   * later "not ready" on it is its own cooldown or the GCD, and the
+   * kick-eaten TEXT does not list it as rejected inside the lockout
+   * (re-eval 2026-10-08 I01, f4eb8c87 @60.2: Teleport went out 2.63 s into a
+   * 3 s Shadow lock and its reject 0.35 s later read as a lockout reject).
+   * The cast that sets `lockEndedBySuccessS` is in here too; the lock's own
+   * end already cuts the list there. Absent / empty = none. */
+  wentOutInLockS?: Record<string, number>;
   /** Reliability audit A3 (2026-09-25): seconds of the `POST_KICK_WINDOW_S`
    * window the player could NOT act for another reason than this kick's own
    * lockout (hard CC, silence, another kick — the shared
@@ -3088,6 +3100,14 @@ export function analyzePlayerCCAndTrinket(
             });
       inst.lockEndedBySuccessS =
         endedBy !== undefined ? endedBy.t - inst.atSeconds : null;
+      const wentOut: Record<string, number> = {};
+      for (const c of after) {
+        if (c.t >= lockEndS) break;
+        if (c.spellId in wentOut) continue;
+        if (replays.some((w) => c.ms >= w.from && c.ms <= w.to)) continue;
+        wentOut[c.spellId] = c.t - inst.atSeconds;
+      }
+      inst.wentOutInLockS = wentOut;
       if (switchCast !== undefined) {
         inst.switchSpellName = switchCast.spellName;
         inst.switchDelayS = switchCast.t - inst.atSeconds;

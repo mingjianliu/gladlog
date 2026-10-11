@@ -15,6 +15,7 @@ import { getEnglishSpellName } from "../data/spellEffectData";
 import { ccSpellIds } from "../data/spellTags";
 import { getSortedAdvancedActions } from "../utils/advancedActions";
 import { binarySearchClosest } from "../utils/binarySearch";
+import { CAST_INTERRUPTED_REASONS } from "../utils/castCancels";
 import {
   ccRemainingSeconds,
   oppressingRoarOnAt,
@@ -22,6 +23,10 @@ import {
 import { groundingRedirects } from "../utils/groundingRedirects";
 import { pvpTrinketUses } from "../utils/pvpTrinketUses";
 import type { CastFailedEvent } from "../utils/rawStreams";
+import {
+  CONTROL_REJECT_WHY,
+  controlRejectKindOf,
+} from "./controlRejectedPresses";
 
 /** A control: the official hard-CC set or a root ("控制要写"). */
 export function isControlSpell(spellId: string): boolean {
@@ -429,6 +434,44 @@ const KIND_OF = new Map<string, RejectKind>(
 export function rejectKindOf(reason: string): RejectKind | undefined {
   return KIND_OF.get(reason);
 }
+
+/** What stands for a refusal reason none of the product's kinds words. The
+ *  client's own text is not quoted: it is in the client's language, and the
+ *  repo has no reading of "this log is in English" to quote it under
+ *  (`[CAST STOPPED]`'s `CAST_REFUSED_OTHER_REASON` is this in brackets). */
+export const REJECT_WHY_UNWORDED = "client reason not translated";
+
+/** What `refusalWhy` says of a SPELL_CAST_FAILED whose reason is an
+ *  interruption (`CAST_INTERRUPTED_REASONS`): the bar had begun — the game
+ *  did not refuse the press. */
+export const REJECT_WHY_BAR_STOPPED = "its cast bar began and was stopped";
+
+/**
+ * The reason the log gives for one SPELL_CAST_FAILED row, in the product's
+ * words: the four `REJECT_WHY` kinds, "under crowd control" / "silenced"
+ * (`CONTROL_REJECT_REASONS`), a cast bar that was stopped
+ * (`CAST_INTERRUPTED_REASONS`), else `REJECT_WHY_UNWORDED`. Not for a "not
+ * ready" refusal (`NOT_READY_REASONS`: a locked school, the spell's own
+ * cooldown and the GCD all answer with it) — the caller sorts those out
+ * first. One wording for kick-eaten's `postKick` and its gate
+ * (`promptQualityCheck.checkKickEatenRefusedForAnotherReason`).
+ */
+export function refusalWhy(reason: string): string {
+  const kind = rejectKindOf(reason);
+  if (kind) return REJECT_WHY[kind];
+  const control = controlRejectKindOf(reason);
+  if (control) return CONTROL_REJECT_WHY[control];
+  return CAST_INTERRUPTED_REASONS.has(reason)
+    ? REJECT_WHY_BAR_STOPPED
+    : REJECT_WHY_UNWORDED;
+}
+/** Every text `refusalWhy` can return. */
+export const REFUSAL_WHY_WORDS: readonly string[] = [
+  ...Object.values(REJECT_WHY),
+  ...Object.values(CONTROL_REJECT_WHY),
+  REJECT_WHY_BAR_STOPPED,
+  REJECT_WHY_UNWORDED,
+];
 
 /** A run is stated from this many presses (the user's example: 12 Mortal
  *  Coil "Out of range"). */

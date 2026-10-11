@@ -197,6 +197,15 @@ export function controlRejectKindOf(
   return KIND_OF.get(reason);
 }
 
+/** What a line says of a press refused for a reason of that kind — the twin
+ *  of `REJECT_WHY` for the two kinds this table holds (kick-eaten `postKick`,
+ *  `refusalWhy`). */
+export const CONTROL_REJECT_WHY: Readonly<Record<ControlRejectKind, string>> =
+  {
+    control: "under crowd control",
+    silence: "silenced",
+  };
+
 export interface IPressedDuringControl {
   spellId: string;
   /** the cooldown's name as the owner's `<cooldowns>` kit prints it */

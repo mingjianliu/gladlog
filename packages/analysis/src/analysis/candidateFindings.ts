@@ -6,6 +6,7 @@ import {
 } from "@gladlog/parser-compat";
 
 import { mateHitDuringCc } from "../context/observedConsequences";
+import { refusalWhy } from "../context/spellOutcomeLines";
 import { dmgSpikeWindowsOf } from "../context/timelineHelpers";
 import {
   lookupBacklashPrior,
@@ -1476,6 +1477,7 @@ export function kickEatenEvents(
         | "kickSpellId"
         | "sourceId"
         | "lockEndedBySuccessS"
+        | "wentOutInLockS"
       >
     >)[],
   owner: { id: string; name: string },
@@ -2091,7 +2093,28 @@ function rejectedPressesAfterKick(
  *    second half on the rendered text.
  * Spell names are English (`getEnglishSpellName`) and joined by
  * `joinSpellCounts`, never with ", " (`checkFactsBlockIntegrity`); the
- * localized reject reasons stay out of the line (`checkCjkLeak`). */
+ * localized reject reasons stay out of the line (`checkCjkLeak`).
+ *
+ * Which refused presses the lockout list holds (re-eval 2026-10-08, I01).
+ * The game answers a press on a locked school with "not ready"
+ * (`NOT_READY_REASONS`) — the answer it also gives for a spell's own
+ * cooldown and for the GCD. So:
+ *  - a press the log gives ANOTHER reason for (moving, out of range, line of
+ *    sight, silenced, no target, …) is not listed as rejected by the lock:
+ *    it is stated with that reason, in the product's words (`refusalWhy`) —
+ *    "refused for another reason Nx — <reason> (…)", one clause per reason.
+ *    Of the 103 presses the 60 re-eval prompts printed "inside the lockout",
+ *    15 carry such a reason (dfcccbf2: Blazing Barrier ×2 "silenced" under an
+ *    Arcane lock; b12bfef4 @169: Reversion ×2 "out of range");
+ *  - a "not ready" press of a spell that itself went out inside this lock
+ *    before it (`wentOutInLockS`) is that spell's own cooldown or the GCD,
+ *    and is not printed — like any reject after the lock (ruling A′18);
+ *  - every other "not ready" press of a spell the lock covers stays: the log
+ *    cannot tell the lock from the spell's own cooldown there, the legend
+ *    says so, and the cooldown ledger cannot settle it either — of the 17
+ *    such presses the ledger put on their own cooldown, it gave 7 a charge in
+ *    hand and was contradicted by the player's own casts of that spell in the
+ *    same round for the other 10 (fix-FT/scripts/n1_i01_charges.py). */
 export function postKickFact(
   k: Pick<
     ReturnType<typeof analyzePlayerCCAndTrinket>["interruptInstances"][number],
@@ -2110,14 +2133,32 @@ export function postKickFact(
         >["interruptInstances"][number],
         | "interruptedSpellId"
         | "lockEndedBySuccessS"
+        | "wentOutInLockS"
         | "switchWasEmpowered"
         | "diedAfterKickS"
       >
     >,
-  allRejected: CastFailedEvent[],
+  everyRejected: CastFailedEvent[],
 ): string {
   const pressed = (list: CastFailedEvent[]) =>
     `pressed ${list.length}x but rejected (${joinPressesWithOffsets(list, k.atSeconds)})`;
+  // I01: the log's own reason first. Only a "not ready" press can be the
+  // lock's (or the spell's own cooldown's, or the GCD's) doing.
+  const otherReason = everyRejected.filter(
+    (h) => !NOT_READY_REASONS.has(h.reason),
+  );
+  // …and not one of a spell that had itself gone out inside this lock: in
+  // whole milliseconds, like the lock boundary below
+  const ms = (s: number) => Math.round(s * 1000);
+  const afterOwnSuccess = (h: CastFailedEvent) => {
+    const wentOutS = k.wentOutInLockS?.[String(h.spellId)];
+    return (
+      wentOutS !== undefined && ms(h.tSeconds) >= ms(k.atSeconds + wentOutS)
+    );
+  };
+  const allRejected = everyRejected.filter(
+    (h) => NOT_READY_REASONS.has(h.reason) && !afterOwnSuccess(h),
+  );
   // Reliability round 2 (1111 / W2a, "lockout vs own-cooldown rejections"):
   // a "not ready" press of a spell OUTSIDE the locked school was its own
   // cooldown, not the kick — the game gives both the same reason text, so
@@ -2127,8 +2168,7 @@ export function postKickFact(
     ? spellSchoolMask(k.interruptedSpellId)
     : undefined;
   const isOwnCd = (h: CastFailedEvent) => {
-    if (lockedMask === undefined || !NOT_READY_REASONS.has(h.reason))
-      return false;
+    if (lockedMask === undefined) return false;
     const m = spellSchoolMask(String(h.spellId));
     // the classifier's predicate: a spell with one school still open is not
     // locked, so its "not ready" is its own cooldown or the GCD (F-K7b:
@@ -2146,10 +2186,63 @@ export function postKickFact(
   // an attempt to act, never "waited out" (codex review of batch 10: Fire
   // Breath not ready at 11 s after a 10 s Disintegrate kick read "waited out
   // the lockout" beside "outside the locked school 1x not ready yet")
-  const triedInLockout = allRejected.some(
+  const triedInLockout = everyRejected.some(
     (h) => h.tSeconds < k.atSeconds + k.lockoutDurationSeconds,
   );
-  return postKickCore(k, rejected, pressed, triedInLockout) + ownCdStr;
+  // The lock the TEXT speaks of (see `postKickCore`); the idle form lists
+  // the whole window, the other two the presses made inside the lock.
+  const lockEndMs = textLockEndMs(k);
+  const otherShown =
+    k.postKick === "idle"
+      ? otherReason
+      : otherReason.filter((h) => ms(h.tSeconds) < lockEndMs);
+  return (
+    postKickCore(k, rejected, pressed, triedInLockout, otherShown.length > 0) +
+    refusedForAnotherReasonText(otherShown, k.atSeconds) +
+    ownCdStr
+  );
+}
+
+/** The head of a `postKick` clause for presses the log gives another reason
+ * than "not ready" for — also what the legend and the gate
+ * (`checkKickEatenRefusedForAnotherReason`) look for. */
+export const POST_KICK_OTHER_REASON_HEAD = "refused for another reason ";
+
+/** `; refused for another reason 2x — out of range (Reversion×2 +2.6/+2.7s)`,
+ * one clause per reason in order of its first press; "" for none. No ", "
+ * inside (`checkFactsBlockIntegrity`). */
+function refusedForAnotherReasonText(
+  presses: CastFailedEvent[],
+  kickS: number,
+): string {
+  const byWhy = new Map<string, CastFailedEvent[]>();
+  for (const h of [...presses].sort((a, b) => a.tSeconds - b.tSeconds)) {
+    const why = refusalWhy(h.reason);
+    byWhy.set(why, [...(byWhy.get(why) ?? []), h]);
+  }
+  return [...byWhy]
+    .map(
+      ([why, list]) =>
+        `; ${POST_KICK_OTHER_REASON_HEAD}${list.length}x — ${why} (${joinPressesWithOffsets(list, kickS)})`,
+    )
+    .join("");
+}
+
+/** When the lock the kick-eaten TEXT speaks of ends, whole ms since the
+ * match start: the modelled lockout or, earlier, the first successful press
+ * of a spell that lock covers (`lockEndedBySuccessS`, ruling A23).
+ *
+ * Whole milliseconds, like `dropKeyRepeatRejects`: `lockEndedBySuccessS` is
+ * `cast − kick`, and adding the kick back is one ulp above the cast's own
+ * instant when the subtraction was inexact (kick 0.177 s, cast 0.838 s →
+ * 0.8380000000000001), so a reject logged in the cast's own millisecond read
+ * as inside the lockout. */
+function textLockEndMs(k: Parameters<typeof postKickFact>[0]): number {
+  return Math.round(
+    (k.atSeconds +
+      Math.min(k.lockoutDurationSeconds, k.lockEndedBySuccessS ?? Infinity)) *
+      1000,
+  );
 }
 
 function postKickCore(
@@ -2157,6 +2250,9 @@ function postKickCore(
   rejected: CastFailedEvent[],
   pressed: (list: CastFailedEvent[]) => string,
   triedInLockout = false,
+  /** a press refused for another logged reason follows in its own clause:
+   * the player did press, so the idle form says "no successful cast" */
+  otherReasonFollows = false,
 ): string {
   if (k.postKick === "idle") {
     // F-K7e: a player who died inside the window had that long, not 5 s
@@ -2166,7 +2262,9 @@ function postKickCore(
         : `before dying ${k.diedAfterKickS.toFixed(1)}s after the kick`;
     return rejected.length > 0
       ? `no successful cast ${span}; ${pressed(rejected)}`
-      : `no cast ${span}`;
+      : otherReasonFollows
+        ? `no successful cast ${span}`
+        : `no cast ${span}`;
   }
   // Strict `<`: the lockout's end instant belongs to "after", the same
   // boundary the "waited out" test below uses for successful casts (a first
@@ -2176,18 +2274,8 @@ function postKickCore(
   // the first successful press of a spell that lock covers
   // (`lockEndedBySuccessS`, ruling A23): a reject after that cast was not the
   // lockout's doing, and a reject after the lock is not printed in either
-  // branch (ruling A′18).
-  //
-  // Compared in whole milliseconds, like `dropKeyRepeatRejects`:
-  // `lockEndedBySuccessS` is `cast − kick`, and adding the kick back is one
-  // ulp above the cast's own instant when the subtraction was inexact (kick
-  // 0.177 s, cast 0.838 s → 0.8380000000000001), so a reject logged in the
-  // cast's own millisecond read as inside the lockout.
-  const lockEndMs = Math.round(
-    (k.atSeconds +
-      Math.min(k.lockoutDurationSeconds, k.lockEndedBySuccessS ?? Infinity)) *
-      1000,
-  );
+  // branch (ruling A′18). `textLockEndMs` has the boundary.
+  const lockEndMs = textLockEndMs(k);
   const inLockout = rejected.filter(
     (h) => Math.round(h.tSeconds * 1000) < lockEndMs,
   );

@@ -37,7 +37,11 @@ import { JUKE_LOOKBACK_MS } from "../../utils/kickAudit";
 import type { CastFailedEvent } from "../../utils/rawStreams";
 import { fmtTime } from "../../utils/renderGrid";
 import type { IControlCastBar } from "../ccUse";
-import { REJECT_WHY, rejectKindOf } from "../spellOutcomeLines";
+import {
+  REJECT_WHY,
+  REJECT_WHY_UNWORDED,
+  rejectKindOf,
+} from "../spellOutcomeLines";
 import type { TimelineCtx } from "./ctx";
 
 /** The tag — also what the legend and the gate
@@ -46,10 +50,8 @@ import type { TimelineCtx } from "./ctx";
 export const CAST_STOPPED_TAG = "[CAST STOPPED]";
 
 /** What stands for a refusal reason that is not one of the four kinds the
- * product words (`REJECT_WHY`). The client's own text is not quoted: it is in
- * the client's language, and the repo has no reading of "this log is in
- * English" to quote it under. */
-export const CAST_REFUSED_OTHER_REASON = "(client reason not translated)";
+ * product words (`REJECT_WHY`) — `REJECT_WHY_UNWORDED`, in brackets. */
+export const CAST_REFUSED_OTHER_REASON = `(${REJECT_WHY_UNWORDED})`;
 
 /** `cast bar stopped after N.Ns` + this, per what landed on the owner within
  * `CANCEL_CC_NEAR_S` of the stop (`CastBarEnd.near`). */

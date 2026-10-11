@@ -44,6 +44,7 @@ import {
   AIMED_CONTROL_LANDING_LEAD_MS,
   GROUND_CONTROL_FUSE_MS,
 } from "@gladlog/analysis/src/analysis/burstWindowDecisionPoints";
+import { POST_KICK_OTHER_REASON_HEAD } from "@gladlog/analysis/src/analysis/candidateFindings";
 import { fmtFactNum } from "@gladlog/analysis/src/analysis/factFormat";
 import { parseBurstAnsweredLine } from "@gladlog/analysis/src/context/burstAnswered";
 import {
@@ -72,7 +73,10 @@ import {
   PEEL_LOOKBACK_S,
   PEEL_MIN_USABLE_S,
 } from "@gladlog/analysis/src/context/peelOptions";
-import { REJECT_WHY } from "@gladlog/analysis/src/context/spellOutcomeLines";
+import {
+  REFUSAL_WHY_WORDS,
+  REJECT_WHY,
+} from "@gladlog/analysis/src/context/spellOutcomeLines";
 import {
   CAST_REFUSED_OTHER_REASON,
   CAST_STOPPED_NEAR_TEXT,
@@ -4098,6 +4102,71 @@ export function checkKickWaitedOutConsistency(lines: string[]): string[] {
 }
 
 /**
+ * kick-eaten `postKick` lists refused presses in three kinds of clause, each
+ * with its count and the presses (`Spell×n +a/+b s`, one offset per press):
+ *   pressed Nx but rejected (…)                                   — "not ready"
+ *   refused for another reason Nx — <reason> (…)                  — the log's own reason
+ *   outside the locked school Nx not ready yet — its own … (…)    — a school the kick did not lock
+ * Re-eval 2026-10-08, I01: a press the log gives another reason for (moving,
+ * out of range, silenced, …) used to sit in the first list and read as
+ * rejected by the lockout — 15 of the 103 presses the 60 prompts printed
+ * there. Held here, on the rendered text:
+ *  - a "refused for another reason" clause names one of the reasons the
+ *    producer can word (`REFUSAL_WHY_WORDS` — the producer's own list), and
+ *    no reason has two clauses on a line;
+ *  - every clause's N is the number of presses it lists.
+ * What the gate cannot see is the log's reason itself (the row does not
+ * print it); `candidateFindings.test.ts` pins that half on the producer.
+ */
+const POST_KICK_PRESS_LIST = String.raw`\(((?:[^()]|\([^()]*\))*)\)`;
+const POST_KICK_OTHER_REASON_CLAUSE = new RegExp(
+  `${reEscape(POST_KICK_OTHER_REASON_HEAD)}(\\d+)x — (${REFUSAL_WHY_WORDS.map(reEscape).join("|")}) ${POST_KICK_PRESS_LIST}(?=; |$)`,
+  "g",
+);
+const POST_KICK_COUNTED_CLAUSE = new RegExp(
+  `(pressed|outside the locked school) (\\d+)x (?:but rejected|not ready yet — its own cooldown or the GCD) ${POST_KICK_PRESS_LIST}`,
+  "g",
+);
+const pressesListed = (list: string) =>
+  (list.match(/\+\d+\.\d/g) ?? []).length;
+export function checkKickEatenRefusedForAnotherReason(
+  lines: string[],
+): string[] {
+  const failures: string[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!;
+    if (!line.includes("type=kick-eaten ")) continue;
+    const m = line.match(MENU_LINE_FACTS);
+    if (!m) continue;
+    const postKick = parseFactsBlock(m[1]!)["postKick"] ?? "";
+    const heads = postKick.split(POST_KICK_OTHER_REASON_HEAD).length - 1;
+    const clauses = [...postKick.matchAll(POST_KICK_OTHER_REASON_CLAUSE)];
+    if (clauses.length !== heads)
+      failures.push(
+        `line ${i + 1}: kick-eaten postKick has a "${POST_KICK_OTHER_REASON_HEAD.trim()}" clause that is not "Nx — <a reason the product words> (presses)"`,
+      );
+    const seen = new Set<string>();
+    for (const c of clauses) {
+      if (seen.has(c[2]!))
+        failures.push(
+          `line ${i + 1}: kick-eaten postKick states "${c[2]}" in two clauses`,
+        );
+      seen.add(c[2]!);
+      if (Number(c[1]) !== pressesListed(c[3]!))
+        failures.push(
+          `line ${i + 1}: kick-eaten postKick says ${c[1]}x refused (${c[2]}) and lists ${pressesListed(c[3]!)} press(es)`,
+        );
+    }
+    for (const c of postKick.matchAll(POST_KICK_COUNTED_CLAUSE))
+      if (Number(c[2]) !== pressesListed(c[3]!))
+        failures.push(
+          `line ${i + 1}: kick-eaten postKick says "${c[1]} ${c[2]}x" and lists ${pressesListed(c[3]!)} press(es)`,
+        );
+  }
+  return failures;
+}
+
+/**
  * A candidate legend that names ANOTHER candidate type sends the reader to
  * that type's legend ("as in kick-priority-missed") — and a legend is printed
  * only when its type has a row in the menu. b711d4ac (re-eval 2026-10-08,
@@ -5409,6 +5478,7 @@ export function checkMatch(
   hardFailures.push(...checkCjkLeak(lines));
   hardFailures.push(...checkKickWaitedOutConsistency(lines));
   hardFailures.push(...checkLegendCrossReferences(lines));
+  hardFailures.push(...checkKickEatenRefusedForAnotherReason(lines));
   hardFailures.push(...checkEnemyDefRefConsistency(lines));
   hardFailures.push(...checkEnemyDefSaveEffect(lines));
   hardFailures.push(...checkFormCooldownPressSpacing(lines));
