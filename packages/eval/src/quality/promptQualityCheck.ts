@@ -4259,18 +4259,26 @@ const STAYED_IN_HP =
  * true minimum of the log owner's HP inside the span
  * (`computeOwnerPositionEvents` → `ownerHpLowPct`, `hpTroughInWindow`), so:
  *  - B is not above A (the start reading is part of the minimum);
- *  - no `[STATE]` tick of the log owner on a whole second inside the span
- *    reads below B (`isTickBelowTrough`). The span's first displayed second
- *    is left out: the window opens on a fractional instant, and the tick of
- *    that second can be a reading from before it;
+ *  - A is a point reading — the `[STATE]` tick of the span's first displayed
+ *    second (`gridHpPct` at the rendered start second): when that tick
+ *    carries the log owner, the two are EQUAL;
+ *  - no `[STATE]` tick of the log owner on a whole second inside the span —
+ *    its first displayed second included — reads below B
+ *    (`isTickBelowTrough`);
  *  - the tag is true of the number it stands next to:
  *    `(HP stayed at or above N%)` needs N = `STAYED_IN_NEAR_DEATH_PCT` (the
  *    renderer's own constant) and B ≥ N; `(near-death — the stay was
  *    costly)` needs B < N (the verdict is decided on the whole-second
  *    minimum, and the trough is never above that).
  * Before the ruling this line had no gate: B was the lowest whole-second
- * reading and nothing re-read it. A line with no span (`m:ss [...]`) or no
- * HP clause is out of scope; so is a roster without a `log owner`.
+ * reading and nothing re-read it. Until 2026-10-11 the span's first displayed
+ * second was left out, because the producer read the window from its
+ * fractional start (A = the raw reading at that instant, the minimum's ticks
+ * from the next whole second) — so a tick of the second the line begins on
+ * could sit below the printed minimum unseen. The producer now reads the
+ * rendered seconds the line prints, and the gate checks every one of them.
+ * A line with no span (`m:ss [...]`) or no HP clause is out of scope; so is a
+ * roster without a `log owner`.
  */
 export function checkStayedInHpConsistency(lines: string[]): string[] {
   let ownerId: number | null = null;
@@ -4313,7 +4321,12 @@ export function checkStayedInHpConsistency(lines: string[]): string[] {
           `${at} 标注「HP stayed at or above ${n}%」但窗口最低 ${B}%`,
         );
     }
-    for (let s = from + 1; s <= to; s++) {
+    const startTick = ownerTick.get(from);
+    if (startTick !== undefined && startTick !== A)
+      failures.push(
+        `${at} 起点写 ${A}%,但 ${fmtTime(from)} 的 [STATE] 报 ${startTick}%`,
+      );
+    for (let s = from; s <= to; s++) {
       const tick = ownerTick.get(s);
       if (tick !== undefined && isTickBelowTrough(tick, B))
         failures.push(

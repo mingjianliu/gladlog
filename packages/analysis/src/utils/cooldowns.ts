@@ -1546,9 +1546,13 @@ export function gridHpMinInWindow(
  * before a kick landed is not reported as having happened inside its
  * lockout. `[fromSec, toSec]` then says only which TICKS belong to the
  * window, and they are read regardless (they are what the page prints for
- * it). The span may open before `fromSec` — a caller whose first tick is the
- * first whole second INSIDE its window (STAYED IN: `ceil(from)`) still gets
- * the samples of the fraction of a second before that tick.
+ * it). Pass the seconds the page PRINTS for the event — the first tick is the
+ * tick of the second the span opens in (kick-eaten: `floor` of the lockout's
+ * start; STAYED IN: the line's `fmtTime(from)`), never the first whole second
+ * inside it: until 2026-10-11 STAYED IN passed `ceil(from)`, and the
+ * `[STATE]` tick of the second its line begins on could sit below the
+ * "(min over window)" printed for it. A span that does open before `fromSec`
+ * still has the samples from its own start read.
  *
  * NOT for a point reading and NOT for a decision: what a unit's HP was at a
  * second is `gridHpPct`, and every "did it cross / does this candidate

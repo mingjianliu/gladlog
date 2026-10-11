@@ -187,9 +187,9 @@ describe("STAYED IN / position-mistake — the printed minimum is the trough; th
       damageIn: [],
     };
   };
-  const burst = {
-    fromSeconds: 10.4,
-    toSeconds: 20.4,
+  const burstFrom = (fromSeconds: number) => ({
+    fromSeconds,
+    toSeconds: fromSeconds + 10,
     activeCDs: [],
     threatScore: 1,
     threatLabel: "High",
@@ -199,14 +199,18 @@ describe("STAYED IN / position-mistake — the printed minimum is the trough; th
     damageInWindow: 0,
     damageRatio: 0,
     healerCCed: false,
-  };
-  const stay = (hpAt: (s: number) => number) => {
-    const owner = mk("o", "Owner-R-US", 0, hpAt);
+  });
+  const stay = (
+    hpAt: (s: number) => number,
+    from = 10.4,
+    deathRecords: Array<{ timestamp: number }> = [],
+  ) => {
+    const owner = { ...mk("o", "Owner-R-US", 0, hpAt), deathRecords };
     const ev = computeOwnerPositionEvents({
       owner: owner as never,
       enemies: [mk("e1", "Dk-R-US", 3, () => 100)] as never,
       combat: { startTime: T0, endTime: T0 + 60_000 } as never,
-      burstWindows: [burst] as never,
+      burstWindows: [burstFrom(from)] as never,
       ownerCooldowns: [],
       isHealer: true,
       ownerIsMelee: false,
@@ -231,15 +235,89 @@ describe("STAYED IN / position-mistake — the printed minimum is the trough; th
     expect(gridHpPct(owner as never, T0 + 15_000)).toBe(60);
   });
 
-  it("engine: the window bounds the samples — a dip in the start second BEFORE the window opened, or after it closed, is not its minimum", () => {
-    // 10.0 s is before the window (10.4); 20.5 s is after it (20.4)
-    const hpAt = (s: number) =>
-      s === 10 || s === 20.5 ? 5 : s >= 15 ? 60 : 90;
+  // The three numbers are read on the window the line PRINTS — the rendered
+  // seconds 0:10–0:20 of a burst span 10.4 → 20.4 — with the [STATE] tick's
+  // own sampler (2026-10-11). Until then the start was the raw reading at
+  // 10.4 s, the minimum a loop from 0:11, and the trough's first tick 0:11.
+  it("engine: the [STATE] tick of the rendered start second is the start, and is part of both minimums (review scenario: 5 % at 0:10, window from 10.4 s)", () => {
+    const hpAt = (s: number) => (s === 10 ? 5 : s >= 15 ? 60 : 90);
     const { owner, ev } = stay(hpAt);
-    expect(ev.ownerHpLowPct).toBe(60);
+    expect(gridHpPct(owner as never, T0 + 10_000)).toBe(5);
+    expect(ev.ownerHpStartPct).toBe(5);
+    expect(ev.ownerHpMinPct).toBe(5);
+    expect(ev.ownerHpLowPct).toBe(5);
+    // the line prints that window and those numbers; the stay is the menu's
+    const text = line(ev);
+    expect(text).toContain("0:10–0:20 [High burst]");
+    expect(text).toContain(
+      "your HP 5%→5% (min over window) (near-death — the stay was costly)",
+    );
+    expect(
+      positionMistakeEvents([ev], { id: "o", name: "Owner-R-US" }).map((c) => [
+        c.facts.hpStart,
+        c.facts.hpMin,
+      ]),
+    ).toEqual([["5", "5"]]);
+    // no tick of the printed window is below the printed minimum
+    for (let s = 10; s <= 20; s++)
+      expect(
+        isTickBelowTrough(
+          gridHpPct(owner as never, T0 + s * 1000)!,
+          ev.ownerHpLowPct!,
+        ),
+      ).toBe(false);
+  });
+
+  it("engine: the start is the tick of the start second, not the reading at the window's fractional start", () => {
+    // 90 % on the tick of 0:10, 70 % at 10.5 s — the sample nearest the
+    // window's own start (10.4 s), which the start used to read
+    const hpAt = (s: number) => (s < 10.5 ? 90 : 70);
+    const { owner, ev } = stay(hpAt);
+    expect(ev.ownerHpStartPct).toBe(gridHpPct(owner as never, T0 + 10_000));
+    expect(ev.ownerHpStartPct).toBe(90);
+    expect(ev.ownerHpMinPct).toBe(70);
+  });
+
+  it("engine: the burst span bounds the trough's SAMPLES — a dip between ticks before it opened, or after it closed, is not its minimum", () => {
+    // span 10.7 → 20.7: 10.5 s is in the start second and before the span,
+    // 21.0 s is after it. Neither is a tick of 0:10–0:20.
+    const hpAt = (s: number) =>
+      s === 10.5 || s === 21 ? 5 : s >= 15 ? 60 : 90;
+    const { owner, ev } = stay(hpAt, 10.7);
+    expect(ev.ownerHpStartPct).toBe(90);
     expect(ev.ownerHpMinPct).toBe(60);
-    // (the function alone, asked for those displayed seconds, would see both)
+    expect(ev.ownerHpLowPct).toBe(60);
+    // (the function alone, asked for those displayed seconds, sees the first)
     expect(hpTroughInWindow(owner as never, T0, 10, 20)!.pct).toBe(5);
+  });
+
+  it("engine: a reading over 100 % is clamped, like the [STATE] tick", () => {
+    // 120 % of max HP on every sample until 0:15 (a max-HP change mid-sample)
+    const hpAt = (s: number) => (s >= 15 ? 60 : 120);
+    const { ev } = stay(hpAt);
+    expect(ev.ownerHpStartPct).toBe(100);
+    expect(ev.ownerHpMinPct).toBe(60);
+    // …and when nothing in the window reads under it, the minimum is 100 too
+    const flat = stay(() => 120).ev;
+    expect(flat.ownerHpStartPct).toBe(100);
+    expect(flat.ownerHpMinPct).toBe(100);
+    expect(flat.ownerHpLowPct).toBe(100);
+    expect(line(flat)).toContain("your HP 100%→100% (min over window)");
+  });
+
+  it("engine: nothing is read from the owner's death second on — the span's last rendered second when the owner dies inside it", () => {
+    // dead at 20.2 s: alive at 20.000, so the span stays
+    // (`burstSpanSampledAfterDeath`), and 0:20 is the second [STATE] prints
+    // `dead` on. Its samples (3 % at 20.0) are in neither minimum — this is
+    // `gridHpMinInWindow`'s rule ("there is no number there to be lower
+    // than"), pinned as what the shared predicate does. The death itself is
+    // not read as a minimum of 0 here, unlike the end of a `[DMG SPIKE]`
+    // bucket; whether it should be is an open question, not a ruling.
+    const hpAt = (s: number) => (s >= 20 ? 3 : s >= 15 ? 60 : 90);
+    const { ev } = stay(hpAt, 10.4, [{ timestamp: T0 + 20_200 }]);
+    expect(ev.ownerHpStartPct).toBe(90);
+    expect(ev.ownerHpMinPct).toBe(60);
+    expect(ev.ownerHpLowPct).toBe(60);
   });
 
   const ev = (over: Partial<IPositionEvent>): IPositionEvent => ({

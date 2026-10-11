@@ -21,8 +21,8 @@ import {
 } from "./cannotCastIntervals";
 import { ICCInstance } from "./ccTrinketAnalysis";
 import {
-  getUnitHpAtTimestamp,
-  HP_SAMPLE_RADIUS_MS,
+  gridHpMinInWindow,
+  gridHpPct,
   hpTroughInWindow,
   IMajorCooldownInfo,
   isHealerSpec,
@@ -195,7 +195,13 @@ export interface IPositionEvent {
   /** STAYED_IN / KITED: name of the burst's most-pressured target when it isn't the owner */
   burstTargetName?: string;
   /** STAYED_IN only: owner HP% at window start / minimum across the window — the
-   *  OUTCOME that turns "stayed in" from a hedge into a fact (near-death vs no cost). */
+   *  OUTCOME that turns "stayed in" from a hedge into a fact (near-death vs no cost).
+   *
+   *  Both are `[STATE]`-grid readings of the window the line prints
+   *  (`fmtTime(atSeconds)–fmtTime(toSeconds)`): the start is `gridHpPct` at
+   *  the rendered start second — the number that second's `[STATE]` tick
+   *  prints — and the minimum is `gridHpMinInWindow` over the rendered
+   *  seconds from the start second to the end second, both included. */
   ownerHpStartPct?: number | null;
   ownerHpMinPct?: number | null;
   /** STAYED_IN only: the TRUE minimum of the owner's HP inside the window
@@ -1065,52 +1071,41 @@ export function computeOwnerPositionEvents(params: {
       // The OUTCOME: did staying in actually cost HP? This is what turns STAYED_IN
       // from a hedge-pileup into a checkable finding — a coach should only fault a
       // stay that dropped the owner low, not one that cost nothing.
-      // HP freshness is NOT the position-interpolation grounding guard: this
-      // renders "HP fell from X% to Y%" into the prompt, so it must use the
-      // one shared radius every other rendered HP claim uses. Passing
-      // POSITION_MAX_GAP_MS here (1.5s, a guard against fabricating a
-      // coordinate across a sampling gap) was a 2026-07-14 copy-paste that the
-      // same day's shared-sampler commit did not sweep.
-      const hpStart = getUnitHpAtTimestamp(
-        owner,
-        matchStartMs + w.fromSeconds * 1000,
-        HP_SAMPLE_RADIUS_MS,
-      );
-      let hpMin = hpStart;
-      for (let t = Math.ceil(w.fromSeconds); t <= evalEnd; t += 1) {
-        const hp = getUnitHpAtTimestamp(
-          owner,
-          matchStartMs + t * 1000,
-          HP_SAMPLE_RADIUS_MS,
-        );
-        if (hp !== null && (hpMin === null || hp < hpMin)) hpMin = hp;
-      }
+      //
+      // All three HP numbers are read on the window the line PRINTS —
+      // `fmtTime(from)–fmtTime(to)`, the rendered seconds [tStart, tEnd] the
+      // distances above are sampled on — through the `[STATE]` tick's own
+      // sampler (CLAUDE.md Shared-Predicate Rule):
+      //  - the start is the tick of the rendered start second (`gridHpPct`);
+      //  - the DECISION's minimum is the lowest tick of the window
+      //    (`gridHpMinInWindow`: clamped at 100, nothing read from the
+      //    owner's death second on);
+      //  - the PRINTED minimum is the trough (below).
+      // Until 2026-10-11 the start was the raw reading at the window's
+      // fractional start (`w.fromSeconds` — another instant than the tick of
+      // the second the line prints), and the minimum a loop of raw readings
+      // from `ceil(w.fromSeconds)` seeded with that start: no clamp, no stop
+      // at the death, and it never read the rendered start second — whose
+      // `[STATE]` tick could then sit below the printed "(min over window)".
+      const hpStart = gridHpPct(owner, matchStartMs + tStart * 1000);
+      const hpMin =
+        gridHpMinInWindow(owner, matchStartMs, tStart, tEnd)?.pct ?? null;
       // FT-T03 (user ruling 2026-10-10, D7): the minimum a line or the menu
-      // PRINTS is a trough — the true minimum of every sample inside the
-      // window, not the lowest whole-second reading (`hpMin`, which stays
-      // the decision's: see `ownerHpLowPct`). Same ticks as the loop above
-      // (the whole seconds inside the window), plus every sample from the
-      // window's start to its end.
+      // PRINTS is a trough — the true minimum inside the window, not the
+      // lowest whole-second reading (`hpMin`, which stays the decision's: see
+      // `ownerHpLowPct`). Its ticks are the same rendered seconds
+      // [tStart, tEnd], so it is never above a `[STATE]` tick of the owner
+      // inside the printed window (the gate `checkStayedInHpConsistency`
+      // re-reads every one of them); its samples are the ones of the burst
+      // span itself (`span`: from the window's own start to its end, in ms).
       const trough =
         hpMin === null
           ? null
-          : hpTroughInWindow(
-              owner,
-              matchStartMs,
-              Math.ceil(w.fromSeconds),
-              Math.floor(evalEnd),
-              undefined,
-              {
-                fromMs: matchStartMs + Math.round(w.fromSeconds * 1000),
-                toMs: matchStartMs + Math.round(evalEnd * 1000),
-              },
-            );
-      const hpLow =
-        hpMin === null
-          ? null
-          : trough === null
-            ? hpMin
-            : Math.min(hpMin, trough.pct);
+          : hpTroughInWindow(owner, matchStartMs, tStart, tEnd, undefined, {
+              fromMs: matchStartMs + Math.round(w.fromSeconds * 1000),
+              toMs: matchStartMs + Math.round(evalEnd * 1000),
+            });
+      const hpLow = trough?.pct ?? hpMin;
 
       // B24b: who actually hit the owner over the rendered span
       const topDamager = topEnemyDamagerInSpan(
