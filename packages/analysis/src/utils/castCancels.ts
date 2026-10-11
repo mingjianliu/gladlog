@@ -8,6 +8,10 @@
  * written for that player alone (verified on the new-season archive — one GUID
  * per file). For anybody else `ownerCastCancels` returns null, never zero.
  *
+ * How a cast bar ended is ONE reading, `ownerCastBarOutcomes` below — the
+ * cancels of this file and the timeline's `[CAST STOPPED]` lines (FT-T16 D15
+ * "2b") both take it. What the cancel ledger counts of it:
+ *
  * A hardcast start (castStartEvents) ends with the first of:
  *  - a same-spell SPELL_CAST_SUCCESS within JUKE_LOOKBACK_MS → completed;
  *  - a SPELL_INTERRUPT of that spell on the owner → kicked;
@@ -49,14 +53,19 @@ import {
   LogEvent,
 } from "@gladlog/parser-compat";
 
+import { NOT_READY_REASONS } from "../analysis/candidates/shared";
 import {
   CANCEL_CC_NEAR_S,
   DISPLACEMENT_EVIDENCE_IDS,
   forcedStopInstantsMs,
 } from "./castStopEvidence";
 import { isPressOfCooldown, talentReplacementsOf } from "./cooldowns";
-import { analyzeKickAudit, JUKE_LOOKBACK_MS } from "./kickAudit";
-import type { RawStreams } from "./rawStreams";
+import {
+  analyzeKickAudit,
+  CAST_QUEUE_TOLERANCE_MS,
+  JUKE_LOOKBACK_MS,
+} from "./kickAudit";
+import type { CastFailedEvent, RawStreams } from "./rawStreams";
 
 /** SPELL_CAST_FAILED reasons that mean "the cast bar was interrupted" — the
  * client writes them localized. Every entry was observed in the new-season
@@ -176,19 +185,83 @@ export function castBarsOfCooldown(
   );
 }
 
-export function ownerCastCancels(params: {
+/**
+ * How one cast bar ended, as far as the log says:
+ *  - `completed`: a SPELL_CAST_SUCCESS of the spell. `queued` = that row came
+ *    after the NEXT cast bar had begun, within `CAST_QUEUE_TOLERANCE_MS` (the
+ *    client queues the next cast and often logs its start first);
+ *  - `kicked`: a SPELL_INTERRUPT of the spell on the unit;
+ *  - `stopped`: a SPELL_CAST_FAILED with an interruption reason
+ *    (`CAST_INTERRUPTED_REASONS`) and no SPELL_INTERRUPT. `near` = what landed
+ *    on the unit within `CANCEL_CC_NEAR_S` of it — a control or silence aura
+ *    (`cc`), an enemy displacement (`displaced`) — or null. With null the log
+ *    does not say why: stopping by hand and moving write the same row;
+ *  - `refused`: none of the above, and a SPELL_CAST_FAILED of the spell for
+ *    any reason but "not ready" (`row` carries the client's own, localized
+ *    text);
+ *  - `none`: the log has no row of the spell inside the bar's window.
+ */
+export type CastBarEnd =
+  | { kind: "completed"; atS: number; queued?: true }
+  | { kind: "kicked"; atS: number }
+  | { kind: "stopped"; atS: number; near: "cc" | "displaced" | null }
+  | { kind: "refused"; atS: number; row: CastFailedEvent }
+  | { kind: "none" };
+
+export interface CastBarOutcome extends CastBarStart {
+  end: CastBarEnd;
+  /**
+   * A SPELL_CAST_FAILED of the spell sits inside the bar BEFORE the row that
+   * ended it — a key pressed again while the bar ran ("Not yet recovered"),
+   * which is not the bar's end. `ownerCastCancels` does not count such a bar
+   * (see there).
+   */
+  earlierFailure: boolean;
+}
+
+/**
+ * How each of the log owner's cast bars ended — the ONE reading behind
+ * `ownerCastCancels` (kick-eaten's cancels, the desktop kick dashboard) and
+ * the timeline's `[CAST STOPPED]` lines (FT-T16 D15 "2b",
+ * `timelineSections/castStopped.ts`).
+ *
+ * A bar's rows are looked for from its start to the next bar's start or
+ * `JUKE_LOOKBACK_MS`, whichever is first (`kickAudit`'s cast-bar cap). In
+ * that window, in this order:
+ *  1. a SUCCESS with no interruption row before it → completed;
+ *  2. a SPELL_INTERRUPT of the spell on the owner → kicked;
+ *  3. an interruption row (`CAST_INTERRUPTED_REASONS`) → stopped;
+ *  4. with none of the three: a SUCCESS up to `CAST_QUEUE_TOLERANCE_MS` past
+ *     a window the next bar's start closed → completed, `queued` (a queued
+ *     completion is never called refused or missing);
+ *  5. any other SPELL_CAST_FAILED of the spell → refused — except a press
+ *     made while the bar was still running, which did not end it: a "not
+ *     ready" one (`NOT_READY_REASONS`, the key pressed again inside the bar's
+ *     own global cooldown), and one for a reason this same log shows on a
+ *     press before a bar's SUCCESS or interruption row ("Another action is
+ *     in progress" — learned from the log's rows, no table of client
+ *     strings);
+ *  6. else none.
+ *
+ * Known limit, the same for both readers: nothing ties a SUCCESS row to its
+ * bar but the window, so the previous cast's SUCCESS logged at or just after
+ * this bar's start (a queued chain) reads as this bar's completion — such a
+ * bar is `completed` whatever happened to it next.
+ *
+ * null when the unit did not record the log (SPELL_CAST_FAILED is written for
+ * the recorder alone). Times are seconds since `startMs`, the clock of
+ * `rawStreams.castFailed`.
+ */
+export function ownerCastBarOutcomes(params: {
   owner: ICombatUnit;
-  friends: ICombatUnit[];
-  enemies: ICombatUnit[];
-  combat: AtomicArenaCombat;
+  startMs: number;
   rawStreams?: RawStreams;
-}): OwnerCastCancels | null {
-  const { owner, friends, enemies, combat, rawStreams } = params;
+}): CastBarOutcome[] | null {
+  const { owner, startMs, rawStreams } = params;
   if (!rawStreams?.available) return null;
   const failed = rawStreams.castFailed.filter((e) => e.unitGuid === owner.id);
   if (failed.length === 0) return null; // not the recorder
-  const start = combat.startTime;
-  const sec = (ms: number) => (ms - start) / 1000;
+  const sec = (ms: number) => (ms - startMs) / 1000;
   const capS = JUKE_LOOKBACK_MS / 1000;
   const successes = (owner.spellCastEvents ?? []).filter(
     (e) => e.logLine.event === "SPELL_CAST_SUCCESS",
@@ -201,13 +274,22 @@ export function ownerCastCancels(params: {
   const forced = forcedStopInstantsMs(owner);
   const ccAt = forced.cc.map(sec);
   const displacedAt = forced.displaced.map(sec);
-  const starts = castBarStartsOf(owner, start);
+  const starts = castBarStartsOf(owner, startMs);
 
-  const completedDurations = new Map<string, number[]>();
-  const pending: Array<{ id: string; name: string; t: number; failS: number }> =
-    [];
-  starts.forEach((s, i) => {
-    const endS = Math.min(s.t + capS, starts[i + 1]?.t ?? Infinity);
+  // Reasons the client gave, IN THIS LOG, for a press made while a cast bar
+  // was demonstrably still running: a failure row of the spell before the
+  // bar's SUCCESS or before its interruption row ("Another action is in
+  // progress" 19 ms after the start — 0068182d round 3, a key pressed twice).
+  // Such a row is not what ended a bar; read off the log's own rows, in
+  // whatever language the client writes.
+  const busyReasons = new Set<string>();
+  const stillRunningAt = (rows: readonly CastFailedEvent[]) => {
+    for (const e of rows) busyReasons.add(e.reason.trim());
+  };
+  const undecided = new Map<number, CastFailedEvent[]>();
+  const outcomes = starts.map((s, i): CastBarOutcome => {
+    const nextS = starts[i + 1]?.t ?? Infinity;
+    const endS = Math.min(s.t + capS, nextS);
     // Same window for all three endings (codex review 2026-09-26: a success
     // looked up past the next start was paired with two starts at once).
     const done = successes.find(
@@ -216,35 +298,128 @@ export function ownerCastCancels(params: {
         sec(e.logLine.timestamp) >= s.t &&
         sec(e.logLine.timestamp) <= endS,
     );
-    const fail = failed.find(
+    const fails = failed.filter(
       (e) =>
         String(e.spellId) === s.id && e.tSeconds > s.t && e.tSeconds <= endS,
     );
-    if (done && (!fail || sec(done.logLine.timestamp) <= fail.tSeconds)) {
-      const d = sec(done.logLine.timestamp) - s.t;
-      if (d > 0.2) {
-        const list = completedDurations.get(s.id) ?? [];
-        list.push(d);
-        completedDurations.set(s.id, list);
-      }
-      return;
+    const first = fails[0];
+    const barFail = fails.find((e) =>
+      CAST_INTERRUPTED_REASONS.has(e.reason.trim()),
+    );
+    if (done && (!barFail || sec(done.logLine.timestamp) <= barFail.tSeconds)) {
+      const atS = sec(done.logLine.timestamp);
+      stillRunningAt(fails.filter((e) => e.tSeconds < atS));
+      return {
+        ...s,
+        end: { kind: "completed", atS },
+        earlierFailure: !!first && first.tSeconds < atS,
+      };
     }
-    const kicked = kicks.some(
+    const kick = kicks.find(
       (a) =>
         (a as { extraSpellId?: string }).extraSpellId === s.id &&
         sec(a.timestamp) >= s.t &&
         sec(a.timestamp) <= endS,
     );
-    if (kicked || !fail) return;
-    if (!CAST_INTERRUPTED_REASONS.has(fail.reason.trim())) return;
-    if (ccAt.some((t) => Math.abs(t - fail.tSeconds) <= CANCEL_CC_NEAR_S))
-      return;
-    if (
-      displacedAt.some((t) => Math.abs(t - fail.tSeconds) <= CANCEL_CC_NEAR_S)
-    )
-      return;
-    pending.push({ ...s, failS: fail.tSeconds });
+    if (kick)
+      return {
+        ...s,
+        end: { kind: "kicked", atS: sec(kick.timestamp) },
+        earlierFailure: false,
+      };
+    if (barFail) {
+      const near = (ts: number[]) =>
+        ts.some((t) => Math.abs(t - barFail.tSeconds) <= CANCEL_CC_NEAR_S);
+      stillRunningAt(fails.slice(0, fails.indexOf(barFail)));
+      return {
+        ...s,
+        end: {
+          kind: "stopped",
+          atS: barFail.tSeconds,
+          near: near(ccAt) ? "cc" : near(displacedAt) ? "displaced" : null,
+        },
+        earlierFailure: first !== barFail,
+      };
+    }
+    const queued =
+      nextS < s.t + capS
+        ? successes.find(
+            (e) =>
+              e.spellId === s.id &&
+              sec(e.logLine.timestamp) > endS &&
+              sec(e.logLine.timestamp) <=
+                Math.min(s.t + capS, nextS + CAST_QUEUE_TOLERANCE_MS / 1000),
+          )
+        : undefined;
+    if (queued) {
+      stillRunningAt(fails);
+      return {
+        ...s,
+        end: {
+          kind: "completed",
+          atS: sec(queued.logLine.timestamp),
+          queued: true,
+        },
+        earlierFailure: fails.length > 0,
+      };
+    }
+    // refused or none: decided below, once every bar's rows have been read
+    undecided.set(i, fails);
+    return { ...s, end: { kind: "none" }, earlierFailure: fails.length > 0 };
   });
+  for (const [i, fails] of undecided) {
+    const refusal = fails.find((e) => {
+      const reason = e.reason.trim();
+      return !NOT_READY_REASONS.has(reason) && !busyReasons.has(reason);
+    });
+    if (refusal)
+      outcomes[i] = {
+        ...outcomes[i]!,
+        end: { kind: "refused", atS: refusal.tSeconds, row: refusal },
+        earlierFailure: fails[0] !== refusal,
+      };
+  }
+  return outcomes;
+}
+
+export function ownerCastCancels(params: {
+  owner: ICombatUnit;
+  friends: ICombatUnit[];
+  enemies: ICombatUnit[];
+  combat: AtomicArenaCombat;
+  rawStreams?: RawStreams;
+}): OwnerCastCancels | null {
+  const { owner, friends, enemies, combat, rawStreams } = params;
+  const starts = ownerCastBarOutcomes({
+    owner,
+    startMs: combat.startTime,
+    rawStreams,
+  });
+  if (!starts) return null;
+
+  // The cancel ledger's own restriction on the shared reading, kept as it has
+  // been since 2026-09-26 because its numbers sit on kick-eaten's facts: a
+  // bar with a failure row of the spell before its end row (`earlierFailure`
+  // — the key pressed again while the bar ran) and a completion logged after
+  // the next bar's start (`queued`) are neither a cancel nor a completed
+  // duration here. OPEN in docs/predicate-index.md "Not yet unified".
+  const completedDurations = new Map<string, number[]>();
+  const pending: Array<{ id: string; name: string; t: number; failS: number }> =
+    [];
+  for (const s of starts) {
+    if (s.earlierFailure) continue;
+    if (s.end.kind === "completed") {
+      if (s.end.queued) continue;
+      const d = s.end.atS - s.t;
+      if (d > 0.2) {
+        const list = completedDurations.get(s.id) ?? [];
+        list.push(d);
+        completedDurations.set(s.id, list);
+      }
+    } else if (s.end.kind === "stopped" && s.end.near === null) {
+      pending.push({ id: s.id, name: s.name, t: s.t, failS: s.end.atS });
+    }
+  }
   const median = (id: string) => {
     const d = [...(completedDurations.get(id) ?? [])].sort((a, b) => a - b);
     return d.length ? d[Math.floor(d.length / 2)]! : null;

@@ -106,7 +106,7 @@ import { heroBuildGroupOf } from "../utils/talents";
 import { warlockPetFunctions } from "../utils/warlockPet";
 import { buildCriticalWindowSet } from "./criticalWindows";
 import { formatObservedConsequences } from "./observedConsequences";
-import { ccUseSummary, formatCcUse } from "./ccUse";
+import { ccUseSummary, formatCcUse, ownerControlCastBars } from "./ccUse";
 import {
   forcedTrinketFollowUps,
   formatForcedTrinketFollowUps,
@@ -894,6 +894,8 @@ export function buildMatchContext(
 
   const timelineText = buildMatchTimeline({
     rawStreams: options.rawStreams,
+    // FT-T16 D15 "2b": the bars CC USE's `cast bar started N×` counts
+    ownerControlCastBars: ownerControlCastBars(owner as ICombatUnit, combat),
     owner: owner as ICombatUnit,
     ownerSpec,
     ownerCDs: cooldowns,

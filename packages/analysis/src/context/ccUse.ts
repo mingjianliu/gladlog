@@ -123,68 +123,59 @@ function runsOf(seconds: number[]): number[][] {
   return out.filter((r) => r.length >= CC_USE_MIN_S);
 }
 
-export function ccUseSummary(params: {
-  combat: AtomicArenaCombat;
-  owner: ICombatUnit;
-  friends: ICombatUnit[];
-  enemies: ICombatUnit[];
-  enemyCC: ReadonlyArray<IPlayerCCTrinketSummary>;
-  /** The SAME array the <burst_ledger> block numbers (`Burst #i+1`). */
-  burstLedger: ReadonlyArray<IBurstLedgerEntry>;
-  /** The SAME array the [DMG SPIKE] lines render from. */
-  pressureWindows: ReadonlyArray<IDamageBucket>;
-}): ICcUseSummary {
-  const { combat, owner, friends, enemies, enemyCC } = params;
-  const start = combat.startTime;
-  let cds: ReturnType<typeof extractMajorCooldowns> = [];
+type ControlCooldown = ReturnType<typeof extractMajorCooldowns>[number];
+
+/** The owner's control cooldowns CC USE counts — W1g (reliability round 2,
+ * user ruling 2026-09-25): every control cooldown in the owner's kit, the
+ * roster's Control tag (disarms, grips, traps, totems included) as well as
+ * the hard-CC set. null when the cooldown ledger cannot be built. */
+function ccUseCooldowns(
+  owner: ICombatUnit,
+  combat: AtomicArenaCombat,
+): ControlCooldown[] | null {
   try {
-    // W1g (reliability round 2, user ruling 2026-09-25): every control
-    // cooldown in the owner's kit — the roster's Control tag (disarms, grips,
-    // traps, totems included) as well as the hard-CC set.
-    cds = extractMajorCooldowns(owner, combat).filter(
+    return extractMajorCooldowns(owner, combat).filter(
       (cd) => cd.tag === "Control" || ccSpellIds.has(cd.spellId),
     );
   } catch {
-    return { counts: [], bookmarks: [] };
+    return null;
   }
-  const counts: ICcUseCount[] = cds.map((cd) => ({
-    spellId: cd.spellId,
-    spellName: cd.spellName,
-    casts: cd.casts.length,
-    firstCastS: cd.casts.length
-      ? Math.min(...cd.casts.map((c) => c.timeSeconds))
-      : null,
-  }));
-  // FT-T16 D15 "2c": cast bars begun, per control, inside the round (a Solo
-  // Shuffle round's units keep the gap after its end — the bound the cooldown
-  // ledger puts on its casts above), so both numbers of an entry count one
-  // stretch of time.
+}
+
+/**
+ * The owner's cast bars of a control begun inside the round, sorted into the
+ * CC USE entries that count them (FT-T16 D15 "2c"). A Solo Shuffle round's
+ * units keep the gap after its end, so "inside the round" is asked
+ * (`castBarStartsInRound` — the bound the cooldown ledger puts on its casts),
+ * and both numbers of an entry count one stretch of time.
+ *  - `ofCooldown[i]`: the bars that are cooldown `cds[i]`'s, by the ledger's
+ *    own relation (`castBarsOfCooldown` — the number the kit's `[UNUSED —
+ *    started N×, never finished]` prints for the same spell);
+ *  - `offLedger`: a control on no cooldown ledger (Cyclone, Polymorph, Fear
+ *    …), one entry per English name — the variants of one spell (Polymorph's
+ *    skins) are one entry, under the name the line prints — in order of the
+ *    first bar.
+ */
+function sortControlCastBars(
+  owner: ICombatUnit,
+  combat: AtomicArenaCombat,
+  cds: readonly ControlCooldown[],
+): {
+  ofCooldown: CastBarStart[][];
+  offLedger: Array<{
+    spellId: string;
+    spellName: string;
+    bars: CastBarStart[];
+  }>;
+} {
   const begun = castBarStartsInRound(owner, combat);
-  // A cooldown-ledger control: the bars that are that cooldown's, by the
-  // ledger's own relation (`castBarsOfCooldown` — the number the kit's
-  // `[UNUSED — started N×, never finished]` prints for the same spell).
-  const onLedger = new Set<CastBarStart>();
-  cds.forEach((cd, i) => {
-    const bars = castBarsOfCooldown(begun, owner, cd);
-    for (const b of bars) onLedger.add(b);
-    if (bars.length > 0) counts[i]!.castBarsStarted = bars.length;
-  });
-  // A control on no cooldown ledger (Cyclone, Polymorph, Fear …): one entry
-  // per English name — the variants of one spell (Polymorph's skins) are one
-  // entry, under the name the line prints.
-  const ledgerNames = new Set(counts.map((c) => c.spellName));
-  const durationS = (combat.endTime - start) / 1000;
-  const wentOffS = (englishName: string) =>
-    (owner.spellCastEvents ?? [])
-      .filter(
-        (e) =>
-          e.logLine.event === "SPELL_CAST_SUCCESS" &&
-          !!e.spellId &&
-          getEnglishSpellName(e.spellId, e.spellName) === englishName,
-      )
-      .map((e) => (e.logLine.timestamp - start) / 1000)
-      .filter((t) => t >= 0 && t <= durationS);
-  const offLedger = new Map<string, ICcUseCount>();
+  const ofCooldown = cds.map((cd) => castBarsOfCooldown(begun, owner, cd));
+  const onLedger = new Set<CastBarStart>(ofCooldown.flat());
+  const ledgerNames = new Set(cds.map((cd) => cd.spellName));
+  const offLedger = new Map<
+    string,
+    { spellId: string; spellName: string; bars: CastBarStart[] }
+  >();
   for (const s of begun) {
     if (!s.id || onLedger.has(s)) continue;
     const name = getEnglishSpellName(s.id, s.name);
@@ -198,17 +189,97 @@ export function ccUseSummary(params: {
       // data/castEffectAuras.ts)
       if (![...castAndEffectIds(s.id)].some((id) => ccSpellIds.has(id)))
         continue;
-      const went = wentOffS(name);
-      entry = {
-        spellId: s.id,
-        spellName: name,
-        casts: went.length,
-        firstCastS: went.length ? Math.min(...went) : null,
-      };
+      entry = { spellId: s.id, spellName: name, bars: [] };
       offLedger.set(name, entry);
-      counts.push(entry);
     }
-    entry.castBarsStarted = (entry.castBarsStarted ?? 0) + 1;
+    entry.bars.push(s);
+  }
+  return { ofCooldown, offLedger: [...offLedger.values()] };
+}
+
+/** One cast bar of a control, with the name of the CC USE entry that counts
+ * it. */
+export interface IControlCastBar extends CastBarStart {
+  /** The spell name of its `Counts:` entry — what a line about this bar must
+   * call it for the two to read as one spell. */
+  entryName: string;
+}
+
+/**
+ * Every cast bar CC USE's `cast bar started N×` counts for the owner this
+ * round, each under its entry's name, in time order — the ONE set of "the
+ * owner's control cast bars" for the `Counts:` line and the timeline's
+ * `[CAST STOPPED]` lines (FT-T16 D15 "2b"), so a stopped bar can never be of
+ * a spell the counts do not hold. A bar two cooldown entries both take is
+ * listed once, under the first.
+ */
+export function ownerControlCastBars(
+  owner: ICombatUnit,
+  combat: AtomicArenaCombat,
+): IControlCastBar[] {
+  const cds = ccUseCooldowns(owner, combat);
+  if (!cds) return [];
+  const { ofCooldown, offLedger } = sortControlCastBars(owner, combat, cds);
+  const entryOf = new Map<CastBarStart, string>();
+  ofCooldown.forEach((bars, i) => {
+    for (const b of bars)
+      if (!entryOf.has(b)) entryOf.set(b, cds[i]!.spellName);
+  });
+  for (const e of offLedger)
+    for (const b of e.bars) entryOf.set(b, e.spellName);
+  return [...entryOf.entries()]
+    .map(([bar, entryName]) => ({ ...bar, entryName }))
+    .sort((a, b) => a.t - b.t);
+}
+
+export function ccUseSummary(params: {
+  combat: AtomicArenaCombat;
+  owner: ICombatUnit;
+  friends: ICombatUnit[];
+  enemies: ICombatUnit[];
+  enemyCC: ReadonlyArray<IPlayerCCTrinketSummary>;
+  /** The SAME array the <burst_ledger> block numbers (`Burst #i+1`). */
+  burstLedger: ReadonlyArray<IBurstLedgerEntry>;
+  /** The SAME array the [DMG SPIKE] lines render from. */
+  pressureWindows: ReadonlyArray<IDamageBucket>;
+}): ICcUseSummary {
+  const { combat, owner, friends, enemies, enemyCC } = params;
+  const start = combat.startTime;
+  const cds = ccUseCooldowns(owner, combat);
+  if (!cds) return { counts: [], bookmarks: [] };
+  const counts: ICcUseCount[] = cds.map((cd) => ({
+    spellId: cd.spellId,
+    spellName: cd.spellName,
+    casts: cd.casts.length,
+    firstCastS: cd.casts.length
+      ? Math.min(...cd.casts.map((c) => c.timeSeconds))
+      : null,
+  }));
+  // FT-T16 D15 "2c": cast bars begun, per control, inside the round.
+  const { ofCooldown, offLedger } = sortControlCastBars(owner, combat, cds);
+  ofCooldown.forEach((bars, i) => {
+    if (bars.length > 0) counts[i]!.castBarsStarted = bars.length;
+  });
+  const durationS = (combat.endTime - start) / 1000;
+  const wentOffS = (englishName: string) =>
+    (owner.spellCastEvents ?? [])
+      .filter(
+        (e) =>
+          e.logLine.event === "SPELL_CAST_SUCCESS" &&
+          !!e.spellId &&
+          getEnglishSpellName(e.spellId, e.spellName) === englishName,
+      )
+      .map((e) => (e.logLine.timestamp - start) / 1000)
+      .filter((t) => t >= 0 && t <= durationS);
+  for (const e of offLedger) {
+    const went = wentOffS(e.spellName);
+    counts.push({
+      spellId: e.spellId,
+      spellName: e.spellName,
+      casts: went.length,
+      firstCastS: went.length ? Math.min(...went) : null,
+      castBarsStarted: e.bars.length,
+    });
   }
   if (isHealerSpec(owner.spec)) return { counts, bookmarks: [] };
 

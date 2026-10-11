@@ -12,6 +12,7 @@ import type { ICombatUnit } from "@gladlog/parser-compat";
 import { fmtTime, toRenderSecond } from "../../utils/renderGrid";
 import {
   groundedControls,
+  type IRejectRun,
   ownerRejectRuns,
   reflectedSpells,
   REJECT_WHY,
@@ -35,7 +36,11 @@ export function emitSpellOutcomeEntries(
     | "addEntry"
     | "rawStreams"
   >,
-): void {
+): {
+  /** The `[REJECTED]` runs that printed — what a `[CAST STOPPED]` line must
+   * not say again (`rejectRunStatesRow`). */
+  rejectRunsPrinted: IRejectRun[];
+} {
   const {
     actorLabel,
     owner,
@@ -120,6 +125,7 @@ export function emitSpellOutcomeEntries(
       }`,
     );
   }
+  const rejectRunsPrinted: IRejectRun[] = [];
   if (rawStreams?.available) {
     // B15b: the owner's TEAMMATES' deaths — a reject in the 10 s before one
     // is stated whatever its count
@@ -139,10 +145,14 @@ export function emitSpellOutcomeEntries(
         toRenderSecond(run.toSeconds) > toRenderSecond(run.fromSeconds)
           ? ` (${fmtTime(run.fromSeconds)}–${fmtTime(run.toSeconds)})`
           : "";
-      addEntry(
-        run.fromSeconds,
-        `${fmtTime(run.fromSeconds)}  [REJECTED]   your ${run.spellName} ×${run.count} — ${why}${span}`,
-      );
+      if (
+        addEntry(
+          run.fromSeconds,
+          `${fmtTime(run.fromSeconds)}  [REJECTED]   your ${run.spellName} ×${run.count} — ${why}${span}`,
+        )
+      )
+        rejectRunsPrinted.push(run);
     }
   }
+  return { rejectRunsPrinted };
 }

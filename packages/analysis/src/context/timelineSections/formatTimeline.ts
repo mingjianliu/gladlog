@@ -40,6 +40,7 @@ import {
   OWN_AURA_CLAUSE_LEGEND,
   OWN_AURA_CLAUSE_PREFIX,
 } from "../timelineHelpers";
+import { CAST_STOPPED_LEGEND, CAST_STOPPED_TAG } from "./castStopped";
 import { DR_CLASH_LEGEND } from "./contextFacts";
 import type { TimelineCtx } from "./ctx";
 
@@ -245,6 +246,11 @@ export function formatTimeline(
     e.lines.some(
       (l) => typeof l === "string" && l.includes(PRESSED_DURING_NOTE_HEAD),
     ),
+  );
+  // FT-T16 D15 "2b": the tag is legended only when a line of the family
+  // rendered.
+  const castStoppedRendered = entries.some((e) =>
+    e.lines.some((l) => typeof l === "string" && l.includes(CAST_STOPPED_TAG)),
   );
   // B13e (user ruling 2026-10-07): the purgeable-buff count is legended only
   // when a line carries it.
@@ -457,6 +463,7 @@ export function formatTimeline(
           "    presses for you alone: a teammate's line never carries the clause, whatever they pressed.",
         ]
       : []),
+    ...(castStoppedRendered ? CAST_STOPPED_LEGEND : []),
     ...(guardianSaveRendered
       ? [
           "  `| save triggered Ns later (m:ss)` on a Guardian Spirit line = at m:ss the buff absorbed a hit that would have",

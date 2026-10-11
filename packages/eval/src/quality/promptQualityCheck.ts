@@ -72,6 +72,12 @@ import {
   PEEL_LOOKBACK_S,
   PEEL_MIN_USABLE_S,
 } from "@gladlog/analysis/src/context/peelOptions";
+import { REJECT_WHY } from "@gladlog/analysis/src/context/spellOutcomeLines";
+import {
+  CAST_REFUSED_OTHER_REASON,
+  CAST_STOPPED_NEAR_TEXT,
+  CAST_STOPPED_TAG,
+} from "@gladlog/analysis/src/context/timelineSections/castStopped";
 import {
   lookupBacklashPrior,
   lookupBacklashWorth,
@@ -134,6 +140,7 @@ import {
 } from "@gladlog/analysis/src/utils/enemyDefensives";
 import { DURING_ABSORBED_TAG_RE_SRC } from "@gladlog/analysis/src/utils/externalDamage";
 import { VULNERABLE_OWNER_DAMAGE_RE_SRC } from "@gladlog/analysis/src/utils/healerOffenseAnalysis";
+import { JUKE_LOOKBACK_MS } from "@gladlog/analysis/src/utils/kickAudit";
 import { STAYED_IN_NEAR_DEATH_PCT } from "@gladlog/analysis/src/utils/positionAnalysis";
 import { fmtTime } from "@gladlog/analysis/src/utils/renderGrid";
 import { SUMMON_KIND_RE_SRC } from "@gladlog/analysis/src/utils/summonKind";
@@ -2017,6 +2024,141 @@ export function checkCcUseStartedCounts(lines: string[]): string[] {
     if (early)
       failures.push(
         `CC USE 计数说 ${sp} 首次放出 ${fmtTime(first!)},但 ${fmtTime(early.at)} 已有 [YOU] [CC]`,
+      );
+  }
+  return failures;
+}
+
+const reEscape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const CAST_STOPPED_DATA_LINE = /^\s*\d+:\d{2}\s+\[CAST STOPPED\]/;
+/**
+ * A `[CAST STOPPED]` line in full, built from the producer's own pieces
+ * (`timelineSections/castStopped.ts`): 1–2 = m:ss, 3 = the spell, then one of
+ * 4 = `cast bar stopped after N.Ns` + a `CAST_STOPPED_NEAR_TEXT`,
+ * 5 = `refused N.Ns in` + (6 = a `REJECT_WHY` wording | the untranslated
+ * marker), 7 = `no end logged; the round ended N.Ns after it began`.
+ */
+const CAST_STOPPED_LINE = new RegExp(
+  String.raw`^\s*(\d+):(\d{2})\s+${reEscape(CAST_STOPPED_TAG)}\s+(.+?) — (?:cast bar stopped after (\d+\.\d)s(?:${Object.values(
+    CAST_STOPPED_NEAR_TEXT,
+  )
+    .map(reEscape)
+    .join(
+      "|",
+    )})|refused (\d+\.\d)s in(?:: (${Object.values(REJECT_WHY).map(reEscape).join("|")})| ${reEscape(CAST_REFUSED_OTHER_REASON)})|no end logged; the round ended (\d+\.\d)s after it began)$`,
+);
+const KICK_ON_UNIT_LINE =
+  /^\s*\d+:\d{2}\s+\[KICK\]\s+.+? interrupted (\d+)\([^)]*\)'s (.+?) \(/;
+const REJECTED_LINE =
+  /^\s*(\d+):(\d{2})\s+\[REJECTED\]\s+your (.+?) ×\d+ — (.+?)(?: \(\d+:\d{2}–(\d+):(\d{2})\))?$/;
+
+/**
+ * `[CAST STOPPED]` (FT-T16 D15 "2b", user approval 2026-10-10): one line per
+ * control cast bar the log owner began that did not go off and was not
+ * kicked. The producer (`timelineSections/castStopped.ts`) reads the raw log,
+ * which the prompt does not carry, so the gate checks what the text can. It
+ * fails:
+ *  - a line that is not one of the producer's wordings to its last character
+ *    — an HP token, a target, "cancelled" / "moved", a quoted client string;
+ *  - an elapsed time past `JUKE_LOOKBACK_MS`, the cap of the window a bar's
+ *    end row is looked for in (`ownerCastBarOutcomes`);
+ *  - a spell with no entry on CC USE's `Counts:` line: the lines and the
+ *    `cast bar started N×` count are one set of bars
+ *    (`ownerControlCastBars`), under one name;
+ *  - more lines of a spell, plus `[KICK]` lines on the log owner's casts of
+ *    it, than the entry has bars: N for `cast bar started N×, went off M×`,
+ *    M for the plain `cast M×` (printed only when no more bars than casts
+ *    were begun), none for `not cast`. A kicked bar has its `[KICK]` line
+ *    and no line here, so the two families never count one bar twice;
+ *  - a refusal a `[REJECTED]` line of that spell and reason already states:
+ *    every second the refusal can have fallen on (the line's second + the
+ *    printed N.N, rendered on the whole-second grid) inside that line's span.
+ *
+ * NOT checked, because it does not hold: lines ≤ N − M. `went off M×` counts
+ * every SPELL_CAST_SUCCESS of the spell, one with no cast bar included (an
+ * instant proc), so M can exceed the bars that completed.
+ */
+export function checkCastStoppedLines(lines: string[]): string[] {
+  const failures: string[] = [];
+  const { ownerId } = ownerKitOf(lines);
+  let countItems: string[] | null = null;
+  const kicked = new Map<string, number>();
+  const rejected: Array<{
+    from: number;
+    to: number;
+    spell: string;
+    why: string;
+  }> = [];
+  for (const line of lines) {
+    const c = line.match(CC_USE_COUNTS_LINE);
+    if (c) countItems = c[1]!.split(" · ");
+    const k = line.match(KICK_ON_UNIT_LINE);
+    if (k && k[1] === ownerId) kicked.set(k[2]!, (kicked.get(k[2]!) ?? 0) + 1);
+    const r = line.match(REJECTED_LINE);
+    if (r) {
+      const from = Number(r[1]) * 60 + Number(r[2]);
+      rejected.push({
+        from,
+        to: r[5] === undefined ? from : Number(r[5]) * 60 + Number(r[6]),
+        spell: r[3]!,
+        why: r[4]!,
+      });
+    }
+  }
+  const perSpell = new Map<string, number>();
+  lines.forEach((line, i) => {
+    if (!CAST_STOPPED_DATA_LINE.test(line)) return;
+    const m = line.match(CAST_STOPPED_LINE);
+    if (!m) {
+      failures.push(
+        `line ${i + 1}: [CAST STOPPED] 不是生成格式(整行必须是生成器的措辞之一;不带血量、目标或客户端原文)—— ${line.trim().slice(0, 160)}`,
+      );
+      return;
+    }
+    const at = Number(m[1]) * 60 + Number(m[2]);
+    const spell = m[3]!;
+    perSpell.set(spell, (perSpell.get(spell) ?? 0) + 1);
+    const elapsed = Number(m[4] ?? m[5] ?? m[7]);
+    if (elapsed > JUKE_LOOKBACK_MS / 1000)
+      failures.push(
+        `line ${i + 1}: [CAST STOPPED] 写读条 ${elapsed} 秒后才结束,超过读条配对窗口 ${JUKE_LOOKBACK_MS / 1000} 秒 —— ${line.trim().slice(0, 160)}`,
+      );
+    if (m[6] !== undefined) {
+      // the refusal row sits `elapsed` (printed to 0.1 s) after a start
+      // somewhere inside the line's second
+      const lo = Math.floor(at + elapsed - 0.05);
+      const hi = Math.floor(at + elapsed + 1.05);
+      const twin = rejected.find(
+        (r) =>
+          r.spell === spell && r.why === m[6] && r.from <= lo && hi <= r.to,
+      );
+      if (twin)
+        failures.push(
+          `line ${i + 1}: [CAST STOPPED] 的这次被拒已经由 ${fmtTime(twin.from)} 的 [REJECTED] 行说过(同技能、同原因、时间落在它的区间内)—— ${line.trim().slice(0, 160)}`,
+        );
+    }
+  });
+  for (const [spell, n] of perSpell) {
+    const item = (countItems ?? []).find(
+      (x) =>
+        x === `${spell} not cast` ||
+        x.match(CC_USE_STARTED_ITEM)?.[1] === spell ||
+        x.match(CC_USE_COUNT_ITEM)?.[1] === spell,
+    );
+    if (item === undefined) {
+      failures.push(
+        `[CAST STOPPED] 有 ${n} 行 ${spell},但 CC USE 计数行里没有 ${spell} 这一项`,
+      );
+      continue;
+    }
+    const started = item.match(CC_USE_STARTED_ITEM);
+    const bars = started
+      ? Number(started[2])
+      : Number(item.match(CC_USE_COUNT_ITEM)?.[2] ?? 0);
+    const kicks = kicked.get(spell) ?? 0;
+    if (n + kicks > bars)
+      failures.push(
+        `[CAST STOPPED] 有 ${n} 行 ${spell}${kicks ? `,另有 ${kicks} 条你被踢断 ${spell} 的 [KICK] 行` : ""},超过 CC USE 计数的读条数 ${bars}:${item}`,
       );
   }
   return failures;
@@ -4798,6 +4940,7 @@ export function checkMatch(
   hardFailures.push(...checkPeelOptionConsistency(lines));
   hardFailures.push(...checkCcBookmarkConsistency(lines));
   hardFailures.push(...checkCcUseStartedCounts(lines));
+  hardFailures.push(...checkCastStoppedLines(lines));
   hardFailures.push(...checkForcedTrinketConsistency(lines));
   hardFailures.push(...checkGuardianSpiritSaveClause(lines));
   hardFailures.push(...checkKarmaFedClause(lines));

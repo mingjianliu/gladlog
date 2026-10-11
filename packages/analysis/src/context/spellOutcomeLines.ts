@@ -342,10 +342,7 @@ export function sanctuaryRemovals(
 // ── Owner's rejected presses outside CC ──────────────────────────────────────
 
 export type RejectKind =
-  | "out of range"
-  | "moving"
-  | "no line of sight"
-  | "vision obscured";
+  "out of range" | "moving" | "no line of sight" | "vision obscured";
 
 /** SPELL_CAST_FAILED reason texts per kind, for every client locale the
  *  corpus carries. The texts are the client's own strings (wago.tools
@@ -425,6 +422,13 @@ const KIND_OF = new Map<string, RejectKind>(
     ([k, texts]) => texts.map((t) => [t, k] as [string, RejectKind]),
   ),
 );
+
+/** The kind of one SPELL_CAST_FAILED reason text, when it is one of the four
+ *  — the wording a `[CAST STOPPED]` line gives a refused cast bar
+ *  (`timelineSections/castStopped.ts`) is this table's too. */
+export function rejectKindOf(reason: string): RejectKind | undefined {
+  return KIND_OF.get(reason);
+}
 
 /** A run is stated from this many presses (the user's example: 12 Mortal
  *  Coil "Out of range"). */
@@ -510,4 +514,21 @@ export function ownerRejectRuns(
   }
   flush();
   return runs;
+}
+
+/** `row` is one of the presses `run` counts: the owner's failure of that
+ *  spell, for that kind of reason, inside the run's span. (A run takes every
+ *  such press between its first and its last — a same-spell refusal for
+ *  another reason ends it — so the span decides.) What a `[REJECTED]` line
+ *  states is not said again by a `[CAST STOPPED]` line. */
+export function rejectRunStatesRow(
+  run: IRejectRun,
+  row: CastFailedEvent,
+): boolean {
+  return (
+    String(row.spellId) === run.spellId &&
+    KIND_OF.get(row.reason) === run.kind &&
+    row.tSeconds >= run.fromSeconds &&
+    row.tSeconds <= run.toSeconds
+  );
 }

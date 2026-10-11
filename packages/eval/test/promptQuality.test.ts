@@ -13,9 +13,14 @@ import {
   formatDmgSpikesNotListed,
 } from "@gladlog/analysis/src/context/matchTimelineSections";
 import {
+  castStoppedLine,
+  castStoppedText,
+} from "@gladlog/analysis/src/context/timelineSections/castStopped";
+import {
   lookupBehaviorPrior,
   outcomePhrase,
 } from "@gladlog/analysis/src/data/behaviorPrior";
+import type { CastBarEnd } from "@gladlog/analysis/src/utils/castCancels";
 import { CONTROL_FAILED_MISS_TYPES } from "@gladlog/analysis/src/utils/castMissRows";
 import {
   ccAvoidedOutcomeText,
@@ -26,11 +31,12 @@ import { CombatUnitReaction } from "@gladlog/parser-compat";
 import type { CoverageManifest } from "../src/quality/coverageManifest";
 import {
   checkBehaviorPriorConsistency,
-  checkCcAvoidedLandedConsistency,
-  checkCcAvoidedMissType,
   checkBurstAnsweredBeforeDeath,
   checkBurstAnsweredBottomConsistency,
   checkBurstAnsweredControlSpan,
+  checkCastStoppedLines,
+  checkCcAvoidedLandedConsistency,
+  checkCcAvoidedMissType,
   checkCcBookmarkConsistency,
   checkCcUseStartedCounts,
   checkDeathTrinketCcConsistency,
@@ -1133,6 +1139,191 @@ describe("checkCcUseStartedCounts — CC USE `cast bar started N×, went off M×
     const old = line(roar, "Cyclone started 4×, completed 0×");
     expect(checkCcUseStartedCounts(old)).toEqual([]);
     expect(checkCcBookmarkConsistency(old)).toHaveLength(1);
+  });
+});
+
+describe("checkCastStoppedLines — a [CAST STOPPED] line is one of the producer's wordings and one of CC USE's bars (FT-T16 D15 2b)", () => {
+  const unit = [
+    '  <unit id="1" name="Herbivore-TwistingNether-EU" spec="Balance Druid" role="log owner">',
+    "    <cooldowns>Barkskin [60s], Mighty Bash [60s]</cooldowns>",
+  ];
+  const counts = (...items: string[]) => `  Counts: ${items.join(" · ")}`;
+  const kick =
+    "0:15  [KICK]   5(RPaladin) interrupted 1(BDruid)'s Cyclone (Rebuke; back 0:30)";
+  // every wording, written by the producer from one bar's ending
+  const produced = (
+    startS: number,
+    end: CastBarEnd,
+    opts: { roundEndS?: number; nextBarS?: number } = {},
+  ) =>
+    castStoppedLine(
+      startS,
+      "Cyclone",
+      castStoppedText(
+        { id: "33786", name: "Cyclone", t: startS, end, earlierFailure: false },
+        opts.roundEndS ?? 600,
+        opts.nextBarS,
+        new Set(),
+      )!,
+    );
+  const refusal = (atS: number, reason: string): CastBarEnd => ({
+    kind: "refused",
+    atS,
+    row: {
+      tSeconds: atS,
+      unitGuid: "p1",
+      spellId: 33786,
+      spellName: "Cyclone",
+      reason,
+    },
+  });
+  const six = [
+    produced(13.2, { kind: "stopped", atS: 13.7, near: null }),
+    produced(30.1, { kind: "stopped", atS: 30.6, near: "cc" }),
+    produced(51.4, { kind: "stopped", atS: 51.7, near: "displaced" }),
+    produced(49.04, refusal(49.94, "Your vision of the target is obscured")),
+    produced(81.0, refusal(82.2, "Invalid target")),
+    produced(118, { kind: "none" }, { roundEndS: 119.4 }),
+  ];
+  const started = (n: number, m = 2) =>
+    counts(
+      "Mighty Bash cast 2× (first 0:13)",
+      `Cyclone cast bar started ${n}×, went off ${m}× (first 0:19)`,
+    );
+
+  it("passes every wording the producer writes", () => {
+    expect(six).toEqual([
+      "0:13  [CAST STOPPED]   Cyclone — cast bar stopped after 0.5s; not kicked; no control, silence or knockback landed on you then",
+      "0:30  [CAST STOPPED]   Cyclone — cast bar stopped after 0.5s as a control or silence landed on you",
+      "0:51  [CAST STOPPED]   Cyclone — cast bar stopped after 0.3s as an enemy knockback or pull landed on you",
+      "0:49  [CAST STOPPED]   Cyclone — refused 0.9s in: vision obscured (Smoke Bomb)",
+      "1:21  [CAST STOPPED]   Cyclone — refused 1.2s in (client reason not translated)",
+      "1:58  [CAST STOPPED]   Cyclone — no end logged; the round ended 1.4s after it began",
+    ]);
+    expect(
+      checkCastStoppedLines([...unit, kick, ...six, started(9)]),
+    ).toEqual([]);
+    // a prompt with no such line has nothing to check
+    expect(checkCastStoppedLines([...unit, kick, started(9)])).toEqual([]);
+  });
+
+  it("fails a line that is not the producer's wording to the last character", () => {
+    const base = six[0]!;
+    for (const wrong of [
+      // an HP token: this is not a press line
+      `${base} (self: 62% HP)`,
+      base.replace("Cyclone —", "Cyclone (62% HP) —"),
+      // what the log cannot tell
+      base.replace("cast bar stopped", "cancelled by hand"),
+      base.replace("cast bar stopped", "you moved and the cast bar stopped"),
+      // the prototype's wording, on the press tag's text
+      "0:13  [CAST STOPPED]   Cyclone started — not completed (cast bar stopped after 0.5s; not kicked, no control landed on you then)",
+      // a quoted client string
+      '1:21  [CAST STOPPED]   Cyclone — refused 1.2s in; client: "Invalid target"',
+      // a reason the product does not word
+      "1:21  [CAST STOPPED]   Cyclone — refused 1.2s in: invalid target",
+    ])
+      expect(
+        checkCastStoppedLines([...unit, ...six.slice(1), wrong, started(9)]),
+        wrong,
+      ).toHaveLength(1);
+    // a target on the line: no CC USE entry reads `Cyclone → 4(DPriest)`
+    expect(
+      checkCastStoppedLines([
+        ...unit,
+        base.replace("Cyclone —", "Cyclone → 4(DPriest) —"),
+        started(9),
+      ]),
+    ).toHaveLength(1);
+  });
+
+  it("fails an elapsed time past the cast-bar window", () => {
+    const late = six[0]!.replace("after 0.5s", "after 4.1s");
+    expect(checkCastStoppedLines([...unit, late, started(9)])).toHaveLength(1);
+    expect(
+      checkCastStoppedLines([
+        ...unit,
+        six[0]!.replace("after 0.5s", "after 4.0s"),
+        started(9),
+      ]),
+    ).toEqual([]);
+  });
+
+  it("fails a spell CC USE has no entry for", () => {
+    expect(
+      checkCastStoppedLines([
+        ...unit,
+        ...six,
+        counts("Mighty Bash cast 2× (first 0:13)"),
+      ]),
+    ).toHaveLength(1);
+    // … and a prompt whose lines have no Counts line at all
+    expect(checkCastStoppedLines([...unit, six[0]!])).toHaveLength(1);
+  });
+
+  it("fails more lines, with the owner's kicked casts, than the entry has bars", () => {
+    // six lines + one kicked Cyclone = seven bars
+    expect(
+      checkCastStoppedLines([...unit, kick, ...six, started(7)]),
+    ).toEqual([]);
+    expect(
+      checkCastStoppedLines([...unit, kick, ...six, started(6)]),
+    ).toHaveLength(1);
+    // a teammate's kicked Cyclone is not the owner's bar
+    expect(
+      checkCastStoppedLines([
+        ...unit,
+        kick.replace("1(BDruid)", "2(RDruid)"),
+        ...six,
+        started(6),
+      ]),
+    ).toEqual([]);
+    // the plain form is printed when no more bars than casts were begun
+    const plain = counts("Cyclone cast 3× (first 0:19)");
+    expect(checkCastStoppedLines([...unit, ...six.slice(0, 3), plain])).toEqual(
+      [],
+    );
+    expect(
+      checkCastStoppedLines([...unit, kick, ...six.slice(0, 3), plain]),
+    ).toHaveLength(1);
+    expect(
+      checkCastStoppedLines([...unit, six[0]!, counts("Cyclone not cast")]),
+    ).toHaveLength(1);
+  });
+
+  it("fails a refusal a [REJECTED] line of that spell and reason already states", () => {
+    const refused =
+      "1:55  [CAST STOPPED]   Cyclone — refused 1.2s in: out of range";
+    const run = (why: string, span = " (1:55–1:58)") =>
+      `1:55  [REJECTED]   your Cyclone ×4 — ${why}${span}`;
+    expect(
+      checkCastStoppedLines([...unit, refused, run("out of range"), started(9)]),
+    ).toHaveLength(1);
+    // another reason, another spell, or a span the refusal need not be in
+    expect(
+      checkCastStoppedLines([
+        ...unit,
+        refused,
+        run("target not in line of sight"),
+        started(9),
+      ]),
+    ).toEqual([]);
+    expect(
+      checkCastStoppedLines([
+        ...unit,
+        refused,
+        run("out of range").replace("your Cyclone", "your Moonfire"),
+        started(9),
+      ]),
+    ).toEqual([]);
+    expect(
+      checkCastStoppedLines([
+        ...unit,
+        refused,
+        run("out of range", ""),
+        started(9),
+      ]),
+    ).toEqual([]);
   });
 });
 

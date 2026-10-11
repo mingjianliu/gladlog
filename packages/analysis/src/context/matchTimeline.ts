@@ -42,9 +42,10 @@ import "../utils/externalDamage";
 import { IHealingGap } from "../utils/healingGaps";
 import "../utils/incomingPressure";
 import "../utils/rosterSide";
-import type { RawStreams } from "../utils/rawStreams";
+import type { CastFailedEvent, RawStreams } from "../utils/rawStreams";
 import "./resUtilityCds";
-import "./spellOutcomeLines";
+import type { IControlCastBar } from "./ccUse";
+import { rejectRunStatesRow } from "./spellOutcomeLines";
 import "../utils/resourceAt";
 import "../utils/summonReachability";
 import "./burstAnswered";
@@ -102,6 +103,7 @@ import { emitPurgeEntries } from "./timelineSections/purges";
 import { resolveDeferredSnapshots } from "./timelineSections/resolveSnapshots";
 import { prepareTimelineSetup } from "./timelineSections/setup";
 import { emitGripEntries } from "./timelineSections/grip";
+import { emitCastStoppedEntries } from "./timelineSections/castStopped";
 import { emitSilenceEntries } from "./timelineSections/silence";
 import { emitSpellOutcomeEntries } from "./timelineSections/spellOutcomes";
 import { emitStasisEntries } from "./timelineSections/stasis";
@@ -194,6 +196,11 @@ export interface BuildMatchTimelineParams {
    * samples carry no powers (documents stored before 2026-08-23; reliability
    * audit D2). Absent → advanced samples only. */
   rawStreams?: RawStreams;
+  /** The owner's control cast bars of this round (`ownerControlCastBars` —
+   * the bars CC USE's `cast bar started N×` counts), computed in
+   * buildMatchContext (it has `combat`). Feeds the `[CAST STOPPED]` lines;
+   * absent ⇒ none. */
+  ownerControlCastBars?: readonly IControlCastBar[];
   allUnits?: ICombatUnit[];
   /** Arena zone id — the line-of-sight check of `summonReach` needs the map. */
   zoneId?: string;
@@ -796,7 +803,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
   // (controls always; damage spells only when they came back for real
   // damage), a control removed by Blessing of Sanctuary, and the owner's own
   // repeated rejections outside CC. Builders: spellOutcomeLines.ts.
-  emitSpellOutcomeEntries({
+  const { rejectRunsPrinted } = emitSpellOutcomeEntries({
     actorLabel,
     owner,
     _allUnits,
@@ -808,6 +815,25 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     enemyPid,
     addEntry,
     rawStreams,
+  });
+
+  // ── [CAST STOPPED]: a control cast bar the owner began that did not go off
+  // FT-T16 D15 "2b". After the [REJECTED] lines: a refusal one of them
+  // already states is not said twice.
+  emitCastStoppedEntries({
+    owner,
+    matchStartMs,
+    matchEndSeconds,
+    rawStreams,
+    addEntry,
+    controlCastBars: params.ownerControlCastBars ?? [],
+    statedByRejected: new Set<CastFailedEvent>(
+      (rawStreams?.castFailed ?? []).filter(
+        (row) =>
+          row.unitGuid === owner.id &&
+          rejectRunsPrinted.some((run) => rejectRunStatesRow(run, row)),
+      ),
+    ),
   });
 
   // ── [UNCLEANSED DEBUFF] and [CLEANSE] events ──────────────────────────────────
