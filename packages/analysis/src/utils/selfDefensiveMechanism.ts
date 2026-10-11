@@ -236,7 +236,7 @@ export const SELF_SAVE_PURPOSE_LABEL = "(self-save)";
  * cannot take this sentence unseen.
  */
 export function selfReductionLegend(spellName: string): string {
-  return `\`${spellName} (N%, Ts)\` = NOT one of the walls — a damage redirect the unit pressed on itself: it takes N% less damage while the aura is up (official figure, OBSERVED duration) and its pet is damaged in turn. KILL ATTEMPTS names it among the target's own other defensives, after a wall and an external;`;
+  return `\`${spellName} (N%, Ts)\` = NOT one of the walls — a damage redirect the unit pressed on itself: it takes N% less damage while the aura is up (official figure, OBSERVED duration) and its pet, when one is out, is damaged in turn. KILL ATTEMPTS names it among the target's own other defensives, after a wall and an external;`;
 }
 
 /** Does this `[ENEMY DEF]` line print `spellName` as a unit's own press with
