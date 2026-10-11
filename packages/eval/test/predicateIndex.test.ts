@@ -1544,6 +1544,17 @@ const INDEX: PredicateRow[] = [
     symbol: "ENEMY_SAVE_EFFECT_BY_NAME",
     mod: enemyDefensives,
   },
+  // 2026-10-11: a pressed shield is named as a shield, not as `(self-save)`
+  {
+    file: `${A}/data/spellIdLists.ts`,
+    symbol: "ENEMY_PRESSED_SHIELD_SAVES",
+    mod: spellIdLists,
+  },
+  {
+    file: `${A}/utils/enemyDefensives.ts`,
+    symbol: "ENEMY_PRESSED_SHIELD_NAMES",
+    mod: enemyDefensives,
+  },
   {
     file: `${E}/quality/promptQualityCheck.ts`,
     symbol: "checkEnemyDefSaveEffect",

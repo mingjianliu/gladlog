@@ -2026,6 +2026,53 @@ describe("FAILED cause: own save + external in one attempt (B16b)", () => {
       }),
     ).toBe("self-saved (Renewal)");
   });
+
+  it("a pressed shield (Ultimate Penitence) is worded `popped X` in the self-save's place — same selection, no `saved`", () => {
+    // alone: the attempt still names it, by the press
+    expect(
+      failed({
+        primary: "self-saved",
+        selfSaved: ["Ultimate Penitence"],
+        selfSavedAtS: [313],
+      }),
+    ).toBe("popped Ultimate Penitence");
+    // already up when the attempt began: the stamp is the self-save's
+    expect(
+      failed({
+        primary: "self-saved",
+        selfSaved: ["Ultimate Penitence"],
+        selfSavedAtS: [300],
+      }),
+    ).toBe("popped Ultimate Penitence [up since 5:00]");
+    // beside another self-save: each under its own word
+    expect(
+      failed({
+        primary: "self-saved",
+        selfSaved: ["Desperate Prayer", "Ultimate Penitence"],
+        selfSavedAtS: [310, 313],
+      }),
+    ).toBe("self-saved (Desperate Prayer); popped Ultimate Penitence");
+    // beside an external it is named after it, as a self-save is
+    expect(
+      failed({
+        primary: "external",
+        externalReceived: ["Life Cocoon"],
+        externalReceivedAtS: [310],
+        selfSaved: ["Ultimate Penitence"],
+        selfSavedAtS: [312],
+      }),
+    ).toBe("saved by external (Life Cocoon); popped Ultimate Penitence");
+    // behind a wall it stays unnamed, as a self-save does
+    expect(
+      failed({
+        primary: "defensive",
+        defensivePopped: ["Pain Suppression"],
+        defensivePoppedAtS: [311],
+        selfSaved: ["Ultimate Penitence"],
+        selfSavedAtS: [313],
+      }),
+    ).toBe("popped Pain Suppression");
+  });
 });
 
 // B-tier B15c-U10 (user ruling 2026-10-06): our Holy Paladin's Avenging Wrath

@@ -19,7 +19,10 @@ import {
   HP_SAMPLE_RADIUS_MS,
   HP_TROUGH_MIN_DROP_PTS,
 } from "../../utils/cooldowns";
-import { ENEMY_DEF_END_NOT_LOGGED } from "../../utils/enemyDefensives";
+import {
+  ENEMY_DEF_END_NOT_LOGGED,
+  ENEMY_PRESSED_SHIELD_NAMES,
+} from "../../utils/enemyDefensives";
 import {
   BURST_ANSWERED_CONTROL_LEGEND,
   BURST_ANSWERED_LEGEND,
@@ -51,6 +54,9 @@ import { CAST_STOPPED_LEGEND, CAST_STOPPED_TAG } from "./castStopped";
 import { DR_CLASH_LEGEND } from "./contextFacts";
 import type { TimelineCtx } from "./ctx";
 import { CC_NOT_LANDED_LEGEND, CC_NOT_LANDED_TAG } from "./setup";
+
+/** The pressed shields the `[ENEMY DEF]` legend names (`(absorb Nk, Ts)`). */
+const PRESSED_SHIELDS = [...ENEMY_PRESSED_SHIELD_NAMES].join(" / ");
 
 /** A [STATE] tick carrying a `unit:ghost` token (`state.ts`). */
 const STATE_GHOST_TOKEN_RE = /\[STATE\].*:ghost\b/;
@@ -453,10 +459,13 @@ export function formatTimeline(
           `    \`${ENEMY_DEF_END_NOT_LOGGED}\` in place of Ts = the log never shows that aura end (an enemy who goes invisible takes the`,
           "    line with them) — how long it lasted is unknown: it is NOT the full duration, and the unit may have been hit seconds later.",
           "    `immune` = full immunity, or the unit could not be hit while it lasted (Burrow, Time Stop, Mass Invisibility, Vanish);",
-          "    `(absorb Nk, Ts)` = Feign Death: a shield, not an immunity — the hunter can still be hit; Nk = what it absorbed",
-          "    while up (no figure = the log shows none). `(heal proc)` = Nature's Guardian healed its owner; `(cheat-death proc)`",
-          "    = Cheat Death / Cauterize refused a killing blow — passives nobody pressed, and the unit can still be hit.",
-          "    KILL ATTEMPTS counts an `immune` line as a forced immunity and names these four `self-saved (X)`.",
+          "    `(absorb Nk, Ts)` = a shield, not an immunity — the unit can still be hit; Nk = what it absorbed while up (no",
+          // 2026-10-11: a pressed shield is named as one, not as a purpose.
+          `    figure = the log shows none): Feign Death, and ${PRESSED_SHIELDS} — the caster's own shield while that heal channels,`,
+          "    pressed at any health: the line states the shield, not why it was pressed. `(heal proc)` = Nature's Guardian",
+          "    healed its owner; `(cheat-death proc)` = Cheat Death / Cauterize refused a killing blow — passives nobody pressed,",
+          "    and the unit can still be hit. KILL ATTEMPTS counts an `immune` line as a forced immunity, names Feign Death",
+          `    and the three procs \`self-saved (X)\` and ${PRESSED_SHIELDS} \`popped X\`.`,
           "    An aura that ended before its full duration says why when the log does: `— dispelled by X's Spell` /",
           "    `— stolen by …`, `— ended at death` / `— its target died`, `— used up, absorbed Nk` / `— used up` (an absorb eaten through);",
           "    `— removed early` = it ended early and the log gives no cause (cancelled, broken or replaced);",

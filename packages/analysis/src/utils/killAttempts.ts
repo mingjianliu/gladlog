@@ -86,6 +86,7 @@ import { analyzeOutgoingCCChains, DRLevel, drResetMsAt } from "./drAnalysis";
 import { reconstructEnemyCDTimeline } from "./enemyCDs";
 import {
   effectSaves,
+  ENEMY_PRESSED_SHIELD_NAMES,
   enemyDefensiveEvents,
   externalAuraOf,
   type IEnemyDefensiveEvent,
@@ -825,9 +826,33 @@ function failureText(
             spanFromSeconds,
           )})`
         : "";
-      const selfSaved = attr.selfSaved.length
-        ? `self-saved (${stampNames(attr.selfSaved, attr.selfSavedAtS, spanFromSeconds)})`
-        : "";
+      // A pressed shield (`ENEMY_PRESSED_SHIELD_NAMES`: Ultimate Penitence —
+      // the priest's own shield while the heal channels, pressed at full
+      // health as often as not) is worded `popped X` in the self-save's
+      // place: the log shows the press and the shield, not that it was
+      // pressed to survive. Which attempts name it, and when it is hidden
+      // behind a wall, is `attributeFailure`'s and unchanged.
+      const own = attr.selfSaved.map((_, i) => i);
+      const clauseOf = (verb: (names: string) => string, pressed: boolean) => {
+        const idx = own.filter(
+          (i) => ENEMY_PRESSED_SHIELD_NAMES.has(attr.selfSaved[i]!) === pressed,
+        );
+        return idx.length
+          ? verb(
+              stampNames(
+                idx.map((i) => attr.selfSaved[i]!),
+                idx.map((i) => attr.selfSavedAtS[i]!),
+                spanFromSeconds,
+              ),
+            )
+          : "";
+      };
+      const selfSaved = [
+        clauseOf((n) => `self-saved (${n})`, false),
+        clauseOf((n) => `popped ${n}`, true),
+      ]
+        .filter(Boolean)
+        .join("; ");
       // B-tier B16b (user ruling 2026-10-06, "照 A29 两个都写"): an attempt
       // that met the target's own save AND an external names both — the wall
       // used to hide the external that did the saving (7f67e778 [5:07–5:22]:

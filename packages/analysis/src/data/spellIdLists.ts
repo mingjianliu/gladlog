@@ -206,6 +206,32 @@ export const ENEMY_SELF_SAVE_ONLY_IDS: ReadonlySet<string> = new Set([
   "421453",
 ]);
 
+/**
+ * Members of `ENEMY_SELF_SAVE_ONLY_IDS` whose `[ENEMY DEF]` line names the
+ * SHIELD the log shows — `(absorb Nk, Ts)`, Feign Death's form (ruling D8) —
+ * and not `(self-save)`, which states why it was pressed. Cast id (the
+ * caster's own aura carries the same id) → the printed name.
+ *
+ * Ultimate Penitence (2026-10-11): Discipline's channelled burst-heal, with a
+ * shield on the priest while it channels (DB2 421453: aura 69, all schools —
+ * `abilityEffectsGenerated` `absorbs`, mask 127; its APPLIED carries the
+ * shield's size). It is pressed to heal or to deal damage as much as to
+ * survive: of the 372 enemy lines PV373 added on the 605-file capture (3,520
+ * contexts) the priest stood at ≥ 95 % HP at the press on 264 and under 50 %
+ * on 18 (median 100) — f4eb8c87 round 5, 2:01: 1,014,560 / 1,014,560 HP, an
+ * 835,679 shield that was 819,669 when it came off 6.5 s later. KILL ATTEMPTS still
+ * reads the press through `selfSaveCasts` (what an attempt ran into is not
+ * changed) and words it `popped X`.
+ *
+ * The other members of the set keep `(self-save)`: whether that label is an
+ * assertion for them too (Spirit Walk, Master's Call, Nether Ward, Alter
+ * Time … are pressed at a median ≥ 85 % HP on the same capture) is a wider
+ * wording question, not decided here.
+ */
+export const ENEMY_PRESSED_SHIELD_SAVES: Readonly<Record<string, string>> = {
+  "421453": "Ultimate Penitence",
+};
+
 /** F-E4, the ally-castable half of F-E7 and crisis-external F-A7: an instant
  * heal or an absorb thrown on an ally (rendered as an external, `X → unit`) or
  * on the caster itself (`(self-save)`). Lay on Hands' signed tier lives in

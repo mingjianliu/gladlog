@@ -19,6 +19,21 @@ const MATCH_START = Date.UTC(2026, 9, 10);
 const ms = (s: number): number => MATCH_START + Math.round(s * 1000);
 const SURVIVAL_TACTICS = "202748"; // Feign Death's aura, 2 s
 const DIVINE_SHIELD = "642";
+const ULTIMATE_PENITENCE = "421453"; // cast id = the priest's own shield aura
+const cast = (spellId: string, atS: number, destUnitId = "f1"): any => ({
+  spellId,
+  spellName: `S${spellId}`,
+  srcUnitId: "e1",
+  srcUnitName: "e1",
+  destUnitId,
+  destUnitName: destUnitId,
+  timestamp: ms(atS),
+  logLine: {
+    event: LogEvent.SPELL_CAST_SUCCESS,
+    timestamp: ms(atS),
+    parameters: [],
+  },
+});
 
 function unit(id: string, over: Record<string, unknown> = {}): any {
   return {
@@ -61,9 +76,13 @@ const applied = (id: string, atS: number, amount?: number) =>
   aura(LogEvent.SPELL_AURA_APPLIED, id, atS, amount);
 const removed = (id: string, atS: number, amount?: number) =>
   aura(LogEvent.SPELL_AURA_REMOVED, id, atS, amount);
-const absorbed = (atS: number, amount: number): any => ({
-  spellId: SURVIVAL_TACTICS,
-  spellName: "Survival Tactics",
+const absorbed = (
+  atS: number,
+  amount: number,
+  spellId = SURVIVAL_TACTICS,
+): any => ({
+  spellId,
+  spellName: `S${spellId}`,
   srcUnitId: "e1",
   srcUnitName: "e1",
   destUnitId: "e1",
@@ -187,8 +206,58 @@ describe("[ENEMY DEF] names an effect save by its effect (FT-T07, ruling D8)", (
     expect(body(render([pal])[0])).toBe("Divine Shield (immune, 8.0s)");
   });
 
+  it("Ultimate Penitence: the priest's shield, not `(self-save)` — f4eb8c87 2:01, pressed at 1,014,560 / 1,014,560 HP", () => {
+    // raw (round 5): SUCCESS and APPLIED (835,679) at 16:54:35.864, REMOVED
+    // (819,669) at 16:54:42.370; the cast's dest is the channel's target
+    const priest = unit("e1", {
+      spellCastEvents: [cast(ULTIMATE_PENITENCE, 121.3)],
+      auraEvents: [
+        applied(ULTIMATE_PENITENCE, 121.3, 835_679),
+        removed(ULTIMATE_PENITENCE, 127.806, 819_669),
+      ],
+      absorbsIn: [absorbed(123, 16_010, ULTIMATE_PENITENCE)],
+    });
+    const lines = render([priest], 300);
+    expect(lines).toHaveLength(1);
+    expect(lines[0].startsWith("2:01  [ENEMY DEF]   E:e1 (")).toBe(true);
+    expect(body(lines[0])).toBe("Ultimate Penitence (absorb 16k, 6.5s)");
+    expect(lines[0]).not.toContain("self-save");
+  });
+
+  it("Ultimate Penitence cut short (the channel stopped) says so, and one eaten through says `— used up`", () => {
+    const stopped = unit("e1", {
+      spellCastEvents: [cast(ULTIMATE_PENITENCE, 30)],
+      auraEvents: [
+        applied(ULTIMATE_PENITENCE, 30, 600_000),
+        removed(ULTIMATE_PENITENCE, 32.1, 600_000),
+      ],
+    });
+    expect(body(render([stopped])[0])).toBe(
+      "Ultimate Penitence (absorb, 2.1s — removed early)",
+    );
+    const eaten = unit("e1", {
+      spellCastEvents: [cast(ULTIMATE_PENITENCE, 30)],
+      auraEvents: [
+        applied(ULTIMATE_PENITENCE, 30, 600_000),
+        removed(ULTIMATE_PENITENCE, 33, 0),
+      ],
+      absorbsIn: [absorbed(32.9, 600_000, ULTIMATE_PENITENCE)],
+    });
+    expect(body(render([eaten])[0])).toBe(
+      "Ultimate Penitence (absorb 600k, 3.0s — used up)",
+    );
+  });
+
+  it("Ultimate Penitence with no aura in the log is still named a shield — `(absorb)`, no figure", () => {
+    const priest = unit("e1", {
+      spellCastEvents: [cast(ULTIMATE_PENITENCE, 30)],
+    });
+    expect(body(render([priest])[0])).toBe("Ultimate Penitence (absorb)");
+  });
+
   it("every rendered effect line states the effect its ability has (the gate's two readers)", () => {
     const all = unit("e1", {
+      spellCastEvents: [cast(ULTIMATE_PENITENCE, 90)],
       auraEvents: [
         applied(SURVIVAL_TACTICS, 10, 1000),
         removed(SURVIVAL_TACTICS, 12, 1000),
@@ -196,6 +265,8 @@ describe("[ENEMY DEF] names an effect save by its effect (FT-T07, ruling D8)", (
         removed("45182", 43),
         applied("87023", 50),
         removed("87023", 56),
+        applied(ULTIMATE_PENITENCE, 90, 1000),
+        removed(ULTIMATE_PENITENCE, 96.5, 1000),
       ],
       healIn: [selfHeal("31616", 77)],
     });

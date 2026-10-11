@@ -452,6 +452,34 @@ describe("checkEnemyDefSaveEffect (FT-T07, ruling D8)", () => {
     expect(f[0]).toContain("no claim to");
   });
 
+  it("2026-10-11: a pressed shield (Ultimate Penitence) reads as its shield — `(self-save)` on it fails", () => {
+    const PRIEST = "5(DPriest) (Discipline Priest)";
+    expect(
+      checkEnemyDefSaveEffect([
+        D(PRIEST, "Ultimate Penitence (absorb 16k, 6.5s) (at 100% HP)"),
+        D(
+          PRIEST,
+          "Ultimate Penitence (absorb, 2.1s — removed early) [friendly offensive CD active] (at 98% HP)",
+        ),
+        D(PRIEST, "Ultimate Penitence (absorb) (at 82% HP)"),
+      ]),
+    ).toEqual([]);
+    // f4eb8c87 2:01 as PV373 printed it
+    const f = checkEnemyDefSaveEffect([
+      D(PRIEST, "Ultimate Penitence (self-save) (at 100% HP)"),
+    ]);
+    expect(f).toHaveLength(1);
+    expect(f[0]).toContain("something other than its effect (absorb)");
+    // KILL ATTEMPTS words it `popped X`; the line it points at is the same
+    const kill = [
+      LEGEND,
+      "2:16  [ENEMY DEF]   4(DPriest) (Discipline Priest): Ultimate Penitence (absorb 16k, 6.5s) (at 100% HP)",
+      ATTEMPT("2:14–2:24", "popped Ultimate Penitence"),
+    ];
+    expect(checkEnemyDefRefConsistency(kill)).toEqual([]);
+    expect(checkEnemyDefRefConsistency([kill[0]!, kill[2]!])).toHaveLength(1);
+  });
+
   it("ruling D6: Feign Death's shield with no logged end still reads as its effect", () => {
     expect(
       checkEnemyDefSaveEffect([

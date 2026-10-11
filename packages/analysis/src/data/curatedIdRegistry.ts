@@ -220,6 +220,7 @@ import spellIdLists, {
   ENEMY_IMMUNITY_EXTERNAL_CASTS,
   ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS,
   ENEMY_IMMUNITY_SAVE_AURAS,
+  ENEMY_PRESSED_SHIELD_SAVES,
   ENEMY_PROC_SAVES,
   ENEMY_REDIRECT_SAVE_IDS,
   ENEMY_SELF_SAVE_ONLY_IDS,
@@ -313,6 +314,14 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
     "data/spellIdLists.ts",
     "cast",
     () => set(ENEMY_SELF_SAVE_ONLY_IDS),
+  ),
+  // 2026-10-11: the self-saves whose line names the shield (cast id = the
+  // caster's own aura id)
+  t(
+    "spellIdLists.ENEMY_PRESSED_SHIELD_SAVES",
+    "data/spellIdLists.ts",
+    "mixed",
+    () => keys(ENEMY_PRESSED_SHIELD_SAVES),
   ),
   t("spellIdLists.ENEMY_ALLY_SAVE_IDS", "data/spellIdLists.ts", "cast", () =>
     set(ENEMY_ALLY_SAVE_IDS),
