@@ -1065,6 +1065,14 @@ const INDEX: PredicateRow[] = [
     symbol: "spanMeasuredEnemy",
     mod: positionAnalysis,
   },
+  // No burst-span sample on the log owner's corpse — the producer (a span's
+  // last rendered second) and the positioning gate's G4e (every second a
+  // line prints a distance at) call it
+  {
+    file: `${A}/utils/positionAnalysis.ts`,
+    symbol: "burstSpanSampledAfterDeath",
+    mod: positionAnalysis,
+  },
   {
     file: `${A}/context/timelineHelpers.ts`,
     symbol: "dmgSpikeWindowsOf",

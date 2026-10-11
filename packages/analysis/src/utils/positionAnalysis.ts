@@ -434,6 +434,43 @@ export function spanMeasuredEnemy<E extends ICombatUnit>(
   return hasDistanceAt(fromRenderS) && hasDistanceAt(toRenderS) ? unit : null;
 }
 
+/**
+ * Whether a STAYED IN / KITED sample at rendered second `renderS` would be
+ * taken on the unit's corpse: the unit is dead (`isDeadAt`, the file's one
+ * dead-at predicate — the same test `nearestEnemyAt` puts to every enemy) at
+ * the instant the span samples that second, its first (`renderS.000`).
+ *
+ * Why it is asked of the OWNER: `getUnitPositionAtTime` holds a unit's last
+ * position for `POSITION_MAX_GAP_MS` (1.5 s) past its last sample, and a dead
+ * player's last sample is the death. A burst span whose last rendered second
+ * fell inside that 1.5 s was measured to the spot the owner died on — the
+ * "end distance" was an enemy's distance to a corpse — and a span that began
+ * inside it was built from nothing else (605-file capture of f8ce87ae: 16
+ * STAYED IN lines ending after the owner's death second, 1 starting after it,
+ * 2 KITED peaks after it). A death further than 1.5 s from the span's end
+ * already gave no event, because the end sample had no position: a span the
+ * owner did not live through is dropped, not shortened — so this drops the
+ * rest, and no span appears that was not there before.
+ *
+ * The instant, not the `[STATE]` tick's `isDeadAtRenderSecond`: the tick
+ * prints `dead` from the death's own second, but the sample of that second is
+ * taken at its first instant, before the death, and is a live position. A
+ * span whose LAST rendered second is the death second therefore stays (8
+ * STAYED IN lines on the same capture).
+ *
+ * ONE predicate, two readers: the producer below asks it of a span's last
+ * rendered second (death is monotone, so that covers the start, the peak and
+ * every second between), and the positioning gate's G4e asks it of every
+ * second a STAYED IN / KITED line prints a distance at.
+ */
+export function burstSpanSampledAfterDeath(
+  unit: Pick<ICombatUnit, "deathRecords">,
+  matchStartMs: number,
+  renderS: number,
+): boolean {
+  return isDeadAt(unit, matchStartMs + renderS * 1000);
+}
+
 /** The owner's straight-line displacement between two rendered seconds,
  *  one decimal — the "you moved N yd yourself (span start→end)" fact. The
  *  producer (STAYED IN) and the positioning gate's G4b both call this, at the
@@ -810,6 +847,20 @@ export function computeOwnerPositionEvents(params: {
     const tStart = toRenderSecond(w.fromSeconds);
     const tEnd = toRenderSecond(evalEnd);
     if (tEnd <= tStart) continue;
+    // The owner did not live to the span's last rendered second: no event.
+    // Without this the corpse's held position (1.5 s, POSITION_MAX_GAP_MS)
+    // stood in for the owner at the span's end, or at both ends — see
+    // `burstSpanSampledAfterDeath`. Dropped, not cut at the death: that is
+    // what already happens to every span the owner died further inside (the
+    // end sample has no position), and cutting would make the owner's last
+    // seconds assessable and ADD stays (the T12 ① b finding recorded in
+    // `timelineSections/offensiveWindow.ts`: +53 `stayed-in` candidates).
+    // The HP readings below (`hpStart`, the whole-second minimum, the
+    // trough) sit on the same rendered seconds, so none of them is taken
+    // after the death either. A Solo Shuffle round ends at its first player
+    // death (`roundEndMs`), which is never later than the owner's own: every
+    // span dropped here also runs past the round's end.
+    if (burstSpanSampledAfterDeath(owner, matchStartMs, tEnd)) continue;
     // FT-T12 D2 (user ruling 2026-10-10): the start, the end and every
     // mid-span sample of this span read ONE enemy — the one that hit the
     // owner most over it (`spanMeasuredEnemy`, which also states the three

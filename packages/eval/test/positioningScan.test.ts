@@ -556,3 +556,94 @@ describe("G4d MEASURED_ENEMY — a STAYED span is measured to the enemy that hit
     );
   });
 });
+
+describe("G4e OWNER_DEAD — no STAYED / KITED distance at a second the owner was dead at", () => {
+  // The static owner keeps its samples after the death, as a corpse keeps its
+  // last position: every distance below recomputes to 10 yd and passes G4.
+  const dying = (deathS?: number) => {
+    const me = {
+      ...owner,
+      id: "me",
+      damageIn: [],
+      deathRecords:
+        deathS === undefined ? [] : [{ timestamp: START + deathS * 1000 }],
+    };
+    return { ...ctx, owner: me, friends: [me] } as any;
+  };
+  const codes = (line: string, c: any) =>
+    checkGeoClaims(extractGeoClaims(line).claims, c).violations.map(
+      (v) => v.code,
+    );
+  const STAYED =
+    "    0:10–0:20 [High burst] 10→10yd from Bad-Realm-US — you were the burst target";
+  const KITED =
+    "    0:10 [High burst] opened 10→10yd from Bad-Realm-US (peak at 0:20) — you were the burst target";
+
+  it("a span that straddles the death: the end (STAYED) / the peak (KITED) is on the corpse", () => {
+    expect(codes(STAYED, dying(19.4))).toEqual(["G4_OWNER_DEAD"]);
+    expect(codes(KITED, dying(19.4))).toEqual(["G4_OWNER_DEAD"]);
+  });
+
+  it("a span that starts after the death: both ends are", () => {
+    expect(codes(STAYED, dying(9.9))).toEqual([
+      "G4_OWNER_DEAD",
+      "G4_OWNER_DEAD",
+    ]);
+  });
+
+  it("the same lines pass with the owner alive, or dying after the last printed second", () => {
+    for (const c of [dying(), dying(20.4), dying(45)]) {
+      expect(codes(STAYED, c)).toEqual([]);
+      expect(codes(KITED, c)).toEqual([]);
+    }
+  });
+
+  it("round trip: the producer prints no span for a death the gate would flag, and keeps the one it would not", () => {
+    const render = (deathS?: number) => {
+      const c = dying(deathS);
+      const logged = (u: any) => ({
+        ...u,
+        advancedActions: u.advancedActions.map((a: { timestamp: number }) => ({
+          ...a,
+          logLine: { timestamp: a.timestamp },
+        })),
+      });
+      const me = logged(c.owner);
+      const events = computeOwnerPositionEvents({
+        owner: me,
+        enemies: [logged({ ...caster, id: "bad" })],
+        combat: { startTime: START, endTime: START + 120_000 } as any,
+        burstWindows: [
+          {
+            fromSeconds: 10,
+            toSeconds: 20,
+            dangerLabel: "High",
+            dampeningPct: 0,
+            mostPressuredTarget: { unitName: "Me-Realm-US" },
+          },
+        ] as any,
+        ownerCooldowns: [],
+        isHealer: true,
+        ownerIsMelee: false,
+      });
+      return {
+        c,
+        lines: formatPositionEventsForContext(events).filter((l) =>
+          l.includes(" burst] "),
+        ),
+      };
+    };
+    // dead at 19.4 s: the 0:20 sample would be the corpse — no line at all
+    expect(render(19.4).lines).toEqual([]);
+    // dead at 20.4 s: the 0:20 sample is the living owner — the line stays
+    // and passes every check
+    for (const deathS of [20.4, undefined]) {
+      const { c, lines } = render(deathS);
+      expect(lines).toHaveLength(1);
+      expect(lines[0]).toContain("0:10–0:20 [High burst] 10→10yd from ");
+      expect(
+        checkGeoClaims(extractGeoClaims(lines[0]!).claims, c).violations,
+      ).toEqual([]);
+    }
+  });
+});

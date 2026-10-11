@@ -47,6 +47,15 @@
  *                     checks its distances. A KITED line prints no span end,
  *                     so its measured enemy cannot be re-derived from the text
  *                     — not checked.
+ *  G4e OWNER_DEAD  — no STAYED / KITED distance is printed for a second the
+ *                     log owner was already dead at (the producer's own
+ *                     `burstSpanSampledAfterDeath`, at the line's start, a
+ *                     STAYED line's end and a KITED line's peak). A corpse
+ *                     keeps its last position for the 1.5 s interpolation
+ *                     guard, so such a distance recomputes and passed G4. A
+ *                     KITED line prints no span end: a span the producer
+ *                     should have dropped whose peak precedes the death is
+ *                     not visible here.
  *  G5 LOS_BREAK     — "LoS break ~N.Nyd away (pillar-blocks <name>)": the map
  *                     must have obstacle data, and at that instant the owner
  *                     and that enemy must actually see each other (you can
@@ -65,6 +74,7 @@
 import type { ICombatUnit } from "@gladlog/parser-compat";
 import {
   arenaObstacles,
+  burstSpanSampledAfterDeath,
   CC_MAX_PLAUSIBLE_RANGE_YARDS,
   ccDistanceClaimWindowS,
   distanceBetween,
@@ -617,6 +627,25 @@ export function checkGeoClaims(
       }
 
       case "STAYED_OR_KITED": {
+        // G4e: the producer's own predicate at the second this distance is
+        // printed for (a line's start, STAYED end, KITED peak). A sample on
+        // the owner's corpse is a violation whatever the distance reads —
+        // the held position would otherwise recompute it and pass.
+        if (
+          burstSpanSampledAfterDeath(
+            ctx.owner,
+            ctx.matchStartMs,
+            claim.atSeconds,
+          )
+        ) {
+          checked++;
+          violations.push({
+            claim,
+            code: "G4_OWNER_DEAD",
+            detail: `${claim.endpoint ?? "start"} distance printed for ${claim.atSeconds}s, a second the log owner was already dead at`,
+          });
+          break;
+        }
         const enemy = claim.unitName ? resolveUnit(claim.unitName, ctx) : null;
         if (!enemy) {
           unverifiable++;
