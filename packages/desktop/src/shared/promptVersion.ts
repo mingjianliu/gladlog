@@ -1381,5 +1381,24 @@
  *  1(AMage)) — logged IMMUNE (Bladestorm was up)`); it is no [CC ON ENEMY]
  *  line and feeds no DR state. A reflect stays on its [REFLECTED] line. Each
  *  tag has a legend, printed when it occurs. No candidate changes.
+ *  v372 (2026-10-11, FT follow-ups; user "其他继续做" / "直接做吧", candidate
+ *  changes pushed and reported after): what the post-hoc reviews and four
+ *  corpus probes found. A STAYED IN / KITED span is never measured on the log
+ *  owner's corpse (no span whose last rendered second is after the death), a
+ *  span that ends on the death second reads 0 %, and its HP start / cost
+ *  minimum / printed minimum are the [STATE] ticks of the window the line
+ *  prints. A kill window ends at the round's end — Solo Shuffle's first death —
+ *  not at the log's ([KILL WINDOW] / [VULNERABLE], kick-priority). kick-eaten
+ *  `yourCancels` and its four sibling facts count every stopped cast bar the
+ *  way [CAST STOPPED] reads it. A spell the unit's CONTROLLED pet casts (Pet-
+ *  GUID) is asked of the pet's own cast-blocking auras and lockouts, not the
+ *  owner's. Oppressing Roar under its second id (406971) lengthens a control
+ *  too ([CC BROKEN] `Ns of CC wasted`). A duration or gap under half a second
+ *  prints `<1s` on the remaining lines (`next spike in <1s`, [CC REMOVED],
+ *  [DR CLASH] `<0.1s earlier`, [KILL WINDOW] `free <1s of Ns`); an exact zero
+ *  stays `0s`. A [DMG SPIKE] start reads the [STATE] tick (0 % on a dead
+ *  unit, capped at 100 %); a one-second spike is credited to the window that
+ *  holds it; a burst window opened after the round's end gets no header.
+ *  Counts in the commit.
  */
-export const PROMPT_VERSION = 371;
+export const PROMPT_VERSION = 372;
