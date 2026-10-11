@@ -51,6 +51,7 @@ import {
   castBlockingAuraAt,
   coveredMsWithin,
   hardCcAuraAt,
+  silenceIntervals,
 } from "./cannotCastIntervals";
 import {
   CAST_MISS_WINDOW_MS,
@@ -955,6 +956,22 @@ export interface IInterruptInstance {
    * The cast that sets `lockEndedBySuccessS` is in here too; the lock's own
    * end already cuts the list there. Absent / empty = none. */
   wentOutInLockS?: Record<string, number>;
+  /** The kick's own spell ALSO left a silence on the player: seconds its
+   * aura stayed on them as logged (cut at the round's end) — shorter than
+   * the spell's length when it was dispelled or broken. Re-eval 2026-10-08,
+   * F21. Shield of Virtue 217824 is both: DB2 effect 68 (interrupt cast,
+   * mechanic 26) and aura 27 (silence), 4 s — the log has its SPELL_INTERRUPT
+   * and, 3–6 ms later, its SPELL_AURA_APPLIED on the same player; while the
+   * aura is on, a press of another school is refused "silenced" and one of
+   * the interrupted school "not ready" (dfcccbf2 r6 @166.5: Frostfire Bolt /
+   * Fire Blast silenced, Polymorph not ready; r5 08:54:37: the silence
+   * trinketed off after 1.0 s and Polymorph still "not ready" 0.2 s later —
+   * the school lock is its own effect). The row used to print the Arcane lock
+   * alone, under a legend that calls every other school free.
+   * Read off `silenceIntervals` — the `[SILENCE]` line's own reading — as
+   * the interval of the kick's spell id from the kick's source that overlaps
+   * the lockout. null / absent = the kick left no such aura. */
+  kickSilenceS?: number | null;
   /** Reliability audit A3 (2026-09-25): seconds of the `POST_KICK_WINDOW_S`
    * window the player could NOT act for another reason than this kick's own
    * lockout (hard CC, silence, another kick — the shared
@@ -2656,6 +2673,7 @@ export function analyzePlayerCCAndTrinket(
   );
 
   const interruptInstances: IInterruptInstance[] = [];
+  let ownerSilences: ReturnType<typeof silenceIntervals> | null = null;
   for (const action of player.actionIn) {
     if (action.logLine.event !== LogEvent.SPELL_INTERRUPT) continue;
     if (!enemyIds.has(action.srcUnitId)) continue;
@@ -2680,6 +2698,22 @@ export function analyzePlayerCCAndTrinket(
       player,
       interruptedSpellId,
     );
+
+    // F21: an interrupt whose own spell also silences (Shield of Virtue)
+    ownerSilences ??= silenceIntervals(player, enemyIds);
+    const ownSilence = ownerSilences.find(
+      (iv) =>
+        iv.spellId === kickSpellId &&
+        iv.srcUnitId === action.srcUnitId &&
+        iv.to > action.timestamp &&
+        iv.from < action.timestamp + lockoutDurationSeconds * 1000,
+    );
+    const kickSilenceS = ownSilence
+      ? Math.max(
+          0,
+          (Math.min(ownSilence.to, combat.endTime) - ownSilence.from) / 1000,
+        )
+      : null;
 
     // B6: Find cast start to measure positioning/spacing at cast start
     const castStartEvent = (player.castStartEvents ?? [])
@@ -2986,6 +3020,7 @@ export function analyzePlayerCCAndTrinket(
         : null,
       firstActionDelayS: null,
       lockEndedBySuccessS: null,
+      kickSilenceS,
       kickSpellId,
       kickSpellName: getEnglishSpellName(kickSpellId, action.spellName),
       interruptedSpellId,

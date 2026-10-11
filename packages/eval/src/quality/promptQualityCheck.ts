@@ -4167,6 +4167,89 @@ export function checkKickEatenRefusedForAnotherReason(
 }
 
 /**
+ * kick-eaten `kickSilence` (re-eval 2026-10-08, F21): an interrupt whose own
+ * spell also silences — Shield of Virtue — put a `[SILENCE]` line of that
+ * spell on the player at the kick, and the row printed its school lockout
+ * alone (dfcccbf2 @166.5: `lockedSchool=Arcane` over five presses the log
+ * refused "silenced"). Both directions, on the rendered text, the player and
+ * the kick resolved through the `<unit>` legend and the spell's name:
+ *  - a kick-eaten row whose player has a `[SILENCE] … ← <facts.kick>` line
+ *    at the kick's second (or the next: the aura row follows the interrupt by
+ *    a few ms) carries `kickSilence`;
+ *  - a row with `kickSilence` has such a line, and the line prints that
+ *    duration — unless a trinket broke the silence, where the line prints the
+ *    time to the press.
+ * Both read `silenceIntervals` and `renderedCcDuration`.
+ */
+const SILENCE_AT_LINE =
+  /^\s*(\d+):(\d{2})\s+\[SILENCE\]\s+(\d+)\([^)]*\) ← (.+?) \((?:by |reflected back\))(.*)$/;
+export function checkKickEatenKickSilence(lines: string[]): string[] {
+  const idOfName = new Map<string, string>();
+  const silences: Array<{
+    at: number;
+    unitId: string;
+    spell: string;
+    rest: string;
+  }> = [];
+  for (const line of lines) {
+    const u = line.match(UNIT_LEGEND_LINE);
+    if (u) idOfName.set(u[2]!, u[1]!);
+    const sl = line.match(SILENCE_AT_LINE);
+    if (sl)
+      silences.push({
+        at: Number(sl[1]) * 60 + Number(sl[2]),
+        unitId: sl[3]!,
+        spell: sl[4]!,
+        rest: sl[5]!,
+      });
+  }
+  const failures: string[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!;
+    if (!line.includes("type=kick-eaten ")) continue;
+    const m = line.match(MENU_LINE_FACTS);
+    const units = line.match(/ units=([^/]+)\//);
+    if (!m || !units) continue;
+    const f = parseFactsBlock(m[1]!);
+    const ownerId = idOfName.get(units[1]!);
+    const kickS = Math.floor(Number(f["t"]));
+    const own = silences.filter(
+      (sl) =>
+        sl.unitId === ownerId &&
+        sl.spell === f["kick"] &&
+        (sl.at === kickS || sl.at === kickS + 1),
+    );
+    const stated = f["kickSilence"];
+    if (stated === undefined) {
+      if (own.length > 0)
+        failures.push(
+          `line ${i + 1}: kick-eaten kick=${f["kick"]} also silenced the player ([SILENCE] at ${fmtTime(own[0]!.at)}) and the row has no kickSilence`,
+        );
+      continue;
+    }
+    // without the timeline (a menu-only text) there is nothing to hold it to
+    if (ownerId === undefined) continue;
+    if (own.length === 0) {
+      failures.push(
+        `line ${i + 1}: kick-eaten kickSilence=${stated} has no [SILENCE] line of ${f["kick"]} on the player at ${fmtTime(kickS)}`,
+      );
+      continue;
+    }
+    if (
+      !own.some(
+        (sl) =>
+          sl.rest.includes("trinket broke this silence") ||
+          new RegExp(`\\| ${reEscape(stated)}(?: \\||$)`).test(sl.rest),
+      )
+    )
+      failures.push(
+        `line ${i + 1}: kick-eaten kickSilence=${stated} is not the duration its [SILENCE] line prints (${own[0]!.rest.trim().slice(0, 60)})`,
+      );
+  }
+  return failures;
+}
+
+/**
  * A candidate legend that names ANOTHER candidate type sends the reader to
  * that type's legend ("as in kick-priority-missed") — and a legend is printed
  * only when its type has a row in the menu. b711d4ac (re-eval 2026-10-08,
@@ -5479,6 +5562,7 @@ export function checkMatch(
   hardFailures.push(...checkKickWaitedOutConsistency(lines));
   hardFailures.push(...checkLegendCrossReferences(lines));
   hardFailures.push(...checkKickEatenRefusedForAnotherReason(lines));
+  hardFailures.push(...checkKickEatenKickSilence(lines));
   hardFailures.push(...checkEnemyDefRefConsistency(lines));
   hardFailures.push(...checkEnemyDefSaveEffect(lines));
   hardFailures.push(...checkFormCooldownPressSpacing(lines));

@@ -51,6 +51,7 @@ import {
   type IInterruptInstance,
   POST_KICK_WINDOW_S,
   postKickSeverityRank,
+  renderedCcDuration,
   REPOSITIONING_SPELL_IDS,
 } from "../utils/ccTrinketAnalysis";
 import {
@@ -1478,6 +1479,7 @@ export function kickEatenEvents(
         | "sourceId"
         | "lockEndedBySuccessS"
         | "wentOutInLockS"
+        | "kickSilenceS"
       >
     >)[],
   owner: { id: string; name: string },
@@ -1630,6 +1632,17 @@ export function kickEatenEvents(
               parts.length > 1 ? `${school} (${parts.join(" + ")})` : school,
           };
         })(),
+        // F21: the kick's own spell also silenced the player (Shield of
+        // Virtue) — the duration the `[SILENCE]` line prints for that aura
+        // (`renderedCcDuration`). Without it the row read as one locked
+        // school and every other one free.
+        ...(k.kickSilenceS != null
+          ? {
+              kickSilence: renderedCcDuration({
+                durationSeconds: k.kickSilenceS,
+              }),
+            }
+          : {}),
         ...((): Record<string, string> => {
           const r = reach?.(k);
           if (!r) return {};

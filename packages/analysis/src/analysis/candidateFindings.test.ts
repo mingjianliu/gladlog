@@ -2059,6 +2059,28 @@ describe("团队协作候选映射(2026-07-24 覆盖面扩充)", () => {
     expect(f).not.toContain(", ");
   });
 
+  // Re-eval 2026-10-08, F21 (dfcccbf2 @166.5, Shield of Virtue).
+  it("kick-eaten: a kick whose own spell also silenced the player says for how long, in the [SILENCE] line's own rendering", () => {
+    const factsOf = (kickSilenceS: number | null) =>
+      kickEatenEvents(
+        [
+          natureKick({
+            kickSpellName: "Shield of Virtue",
+            lockoutDurationSeconds: 4,
+            kickSilenceS,
+          }),
+        ],
+        { id: "P1", name: "Me" },
+      )[0]!.facts;
+    expect(factsOf(4.008)).toMatchObject({ lockout: "4.0", kickSilence: "4s" });
+    expect(factsOf(1.371)["kickSilence"]).toBe("1s"); // dispelled early
+    expect(factsOf(0.2)["kickSilence"]).toBe("<1s");
+    expect("kickSilence" in factsOf(null)).toBe(false);
+    // the fact sits with the lockout facts, before the reach and press facts
+    const keys = Object.keys(factsOf(4.008));
+    expect(keys.indexOf("kickSilence")).toBeLessThan(keys.indexOf("postKick"));
+  });
+
   // Re-eval 2026-10-08, I01: what the log gives as the reason decides which
   // list a refused press is in.
   describe("kick-eaten: a press refused for a reason of its own is not a lockout reject (I01)", () => {

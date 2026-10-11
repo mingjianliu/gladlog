@@ -584,6 +584,7 @@ describe("analyzePlayerCCAndTrinket — structured data contract (N4)", () => {
       sourceKickReadyInS: null,
       firstActionDelayS: null,
       lockEndedBySuccessS: null,
+      kickSilenceS: null,
       switchDelayS: null,
       switchSpellName: null,
       switchWasEmpowered: null,
@@ -1300,6 +1301,128 @@ describe("analyzePlayerCCAndTrinket — structured data contract (N4)", () => {
       // without the removal the same casts are presses
       const pressed = kicked(["33786", "Cyclone"], [["360995", 1.04]]);
       expect(pressed.lockEndedBySuccessS).toBeCloseTo(1.04, 5);
+    });
+
+    // Re-eval 2026-10-08, I01 (f4eb8c87 @60.2).
+    it("wentOutInLockS: the spells that went out inside the modelled lockout, each at its first success — whatever their school", () => {
+      // Demonic Circle: Teleport does not cut the lock (above), and is listed
+      const k = kicked(
+        ["5782", "Fear"],
+        [
+          ["48020", 2.6],
+          ["48020", 2.9],
+          ["5782", 3.4], // after the 3 s lock: not inside it
+        ],
+      );
+      expect(k.lockEndedBySuccessS).toBeNull();
+      expect(Object.keys(k.wentOutInLockS ?? {})).toEqual(["48020"]);
+      expect(k.wentOutInLockS!["48020"]).toBeCloseTo(2.6, 5);
+      // the cast that cuts the lock is in it too
+      const cut = kicked(["33786", "Cyclone"], [["61295", 1.0]]);
+      expect(cut.wentOutInLockS!["61295"]).toBeCloseTo(1.0, 5);
+      // a Stasis replay is not a press
+      expect(
+        kicked(["33786", "Cyclone"], [["360995", 1.04]], 1.02).wentOutInLockS,
+      ).toEqual({});
+    });
+  });
+
+  // Re-eval 2026-10-08, F21 (dfcccbf2 @166.5): Shield of Virtue 217824 is an
+  // interrupt AND a silence — the log has its SPELL_INTERRUPT and, a few ms
+  // later, its aura on the same player.
+  describe("kickSilenceS: a kick whose own spell also leaves a silence on the player", () => {
+    const enemy = makeUnit("enemy-1", {
+      name: "EnemyPaladin",
+      spec: CombatUnitSpec.Paladin_Protection,
+      reaction: CombatUnitReaction.Hostile,
+    });
+    const KICK_MS = MATCH_START + 10_000;
+    const kickedBy = (
+      kickId: string,
+      aura?: { id: string; fromMs: number; toMs: number; src?: string },
+    ) => {
+      const mk = (event: LogEvent, t: number) => {
+        const e = makeAuraEvent(
+          event,
+          aura!.id,
+          t,
+          aura!.src ?? "enemy-1",
+          "player-1",
+        );
+        e.srcUnitName = "EnemyPaladin";
+        return e;
+      };
+      const player = makeUnit("player-1", {
+        name: "Owner",
+        spec: CombatUnitSpec.Mage_Fire,
+        reaction: CombatUnitReaction.Friendly,
+        actionIn: [
+          makeInterruptEvent(
+            kickId,
+            "Shield of Virtue",
+            "118",
+            "Polymorph",
+            KICK_MS,
+            "enemy-1",
+            "EnemyPaladin",
+          ),
+        ],
+        auraEvents: aura
+          ? [
+              mk(LogEvent.SPELL_AURA_APPLIED, aura.fromMs),
+              mk(LogEvent.SPELL_AURA_REMOVED, aura.toMs),
+            ]
+          : [],
+      });
+      return analyzePlayerCCAndTrinket(player, [enemy], makeCombat())
+        .interruptInstances[0]!;
+    };
+
+    it("the aura of the kick's own id from the kicker, as long as the log shows it", () => {
+      const full = kickedBy("217824", {
+        id: "217824",
+        fromMs: KICK_MS + 3,
+        toMs: KICK_MS + 4_011,
+      });
+      expect(full.kickSilenceS).toBeCloseTo(4.008, 3);
+      // the school lockout is the same kick's and is still there
+      expect(full.lockoutDurationSeconds).toBe(4);
+      // dispelled after 1.4 s
+      expect(
+        kickedBy("217824", {
+          id: "217824",
+          fromMs: KICK_MS + 6,
+          toMs: KICK_MS + 1_377,
+        }).kickSilenceS,
+      ).toBeCloseTo(1.371, 3);
+    });
+
+    it("null for a kick that leaves no aura, for another spell's silence, and for another unit's", () => {
+      expect(kickedBy("217824").kickSilenceS).toBeNull();
+      // Rebuke with a Strangulate landing in the same window: not the kick's
+      expect(
+        kickedBy("96231", {
+          id: "47476",
+          fromMs: KICK_MS + 3,
+          toMs: KICK_MS + 4_000,
+        }).kickSilenceS,
+      ).toBeNull();
+      expect(
+        kickedBy("217824", {
+          id: "217824",
+          fromMs: KICK_MS + 3,
+          toMs: KICK_MS + 4_000,
+          src: "enemy-2",
+        }).kickSilenceS,
+      ).toBeNull();
+      // an earlier one that ended before this kick
+      expect(
+        kickedBy("217824", {
+          id: "217824",
+          fromMs: KICK_MS - 9_000,
+          toMs: KICK_MS - 5_000,
+        }).kickSilenceS,
+      ).toBeNull();
     });
   });
 
