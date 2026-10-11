@@ -7,6 +7,7 @@
 import { CombatUnitSpec, LogEvent } from "@gladlog/parser-compat";
 import { beforeAll, describe, expect, it } from "vitest";
 
+import { CRISIS_PROTECTIVE_ANSWER_IDS } from "../src/analysis/crisisDecisionPoints";
 import {
   castOrdinal,
   emitEnemyCdEntries,
@@ -81,7 +82,7 @@ describe("G7-P3", () => {
   // FT F01: Time Spiral 374968 sat in the set and is a movement-ability
   // reset (5 `[ENEMY HEAL CD]` lines on the 60 re-eval prompts, 96 on the
   // 605-file capture — 55 of them a Devastation Evoker's).
-  it("every heal CD heals, absorbs, empowers healing or is on the generated save roster", () => {
+  it("every heal CD heals, absorbs, empowers healing, is on the generated save roster — or is a healer major the user ruled one", () => {
     for (const id of ENEMY_HEAL_CD_IDS) {
       const p = abilityProfile(id);
       expect(
@@ -90,10 +91,15 @@ describe("G7-P3", () => {
           p.healsSelf ||
           p.absorbs ||
           p.throughputRole ||
-          HEALER_SAVE_CD_IDS.has(id),
+          HEALER_SAVE_CD_IDS.has(id) ||
+          // Incarnation: Tree of Life 33891 — a form, so the official
+          // profile carries no heal / absorb / throughput flag; it is here
+          // on the signed list ("树肯定算,是大技能", ruling 2026-09-14)
+          CRISIS_PROTECTIVE_ANSWER_IDS.has(id),
         id,
       ).toBe(true);
     }
+    expect(CRISIS_PROTECTIVE_ANSWER_IDS.has("33891")).toBe(true);
   });
   it("Time Spiral is not a heal CD: an enemy's press renders no [ENEMY HEAL CD] line", () => {
     const p = abilityProfile("374968");
