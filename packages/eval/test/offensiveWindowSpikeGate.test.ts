@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  checkOffensiveWindowHeaderSpan,
   checkOffensiveWindowSpikeCredit,
   checkOffensiveWindowSpikeMarker,
 } from "../src/quality/promptQualityCheck";
@@ -161,6 +162,78 @@ describe("checkOffensiveWindowSpikeCredit", () => {
         "  [OFFENSIVE WINDOW] `X on <unit>` = damage DEALT TO that unit (it is the victim, not the dealer);",
         `    the printed bounds. \`${NONE}\` = none of this timeline's [DMG SPIKE] lines overlaps the window, or the`,
       ]),
+    ).toEqual([]);
+  });
+});
+
+// T12 ① b (option A) + post-hoc review 45-FT-98, finding 3: the span a header
+// prints lies inside the round and does not end before it starts.
+describe("checkOffensiveWindowHeaderSpan", () => {
+  const prompt = (bracket: string, ...headers: string[]) => [
+    `  Spec: Holy Priest (Healer)  |  Bracket: ${bracket}  |  Result: Loss  |  Duration: 3:20  |  Map: Nagrand Arena`,
+    ...headers,
+    "3:12  [DEATH]  1(HPriest) (Holy Priest — friendly) | dampening: 30%",
+    "3:20  [MATCH END]   damp: 32%",
+  ];
+  const header = (at: string, span: string) =>
+    `${at}  [OFFENSIVE WINDOW]   ${span} | no listed [DMG SPIKE] credited to it | CDs: Avatar@${at}`;
+
+  it("passes headers inside the round — ending in, or opened in, the round's last second included", () => {
+    expect(
+      checkOffensiveWindowHeaderSpan(
+        prompt(
+          "Rated Solo Shuffle",
+          header("3:00", "3:00–3:12"),
+          header("3:12", "3:12–3:12"),
+        ),
+      ),
+    ).toEqual([]);
+    expect(
+      checkOffensiveWindowHeaderSpan(
+        prompt("3v3", header("3:14", "3:14–3:20")),
+      ),
+    ).toEqual([]);
+  });
+
+  it("fails the reviewed header: opened after a Solo Shuffle round's end, its end cut before its start", () => {
+    const fails = checkOffensiveWindowHeaderSpan(
+      prompt("Rated Solo Shuffle", header("3:14", "3:14–3:12")),
+    );
+    expect(fails).toHaveLength(2);
+    expect(fails[0]).toContain(
+      "line 2: [OFFENSIVE WINDOW] 3:14–3:12 的结束早于开始",
+    );
+    expect(fails[1]).toContain("开始于回合结束之后");
+    expect(fails[1]).toContain("第一条 [DEATH] 行在 3:12");
+  });
+
+  it("fails a header whose end runs past the round's end — the first [DEATH] of a Solo Shuffle round, [MATCH END] otherwise", () => {
+    const shuffle = checkOffensiveWindowHeaderSpan(
+      prompt("Rated Solo Shuffle", header("3:05", "3:05–3:20")),
+    );
+    expect(shuffle).toHaveLength(1);
+    expect(shuffle[0]).toContain("3:05–3:20 结束于回合结束之后");
+    // the same header in a 3v3, where the round runs to the log's end
+    expect(
+      checkOffensiveWindowHeaderSpan(
+        prompt("3v3", header("3:05", "3:05–3:20")),
+      ),
+    ).toEqual([]);
+    const threes = checkOffensiveWindowHeaderSpan(
+      prompt("3v3", header("3:05", "3:05–3:35")),
+    );
+    expect(threes).toHaveLength(1);
+    expect(threes[0]).toContain("[MATCH END]在 3:20");
+  });
+
+  it("ignores the legend's mention of the tag", () => {
+    expect(
+      checkOffensiveWindowHeaderSpan(
+        prompt(
+          "Rated Solo Shuffle",
+          "  [OFFENSIVE WINDOW] `X on <unit>` = damage DEALT TO that unit (it is the victim, not the dealer);",
+        ),
+      ),
     ).toEqual([]);
   });
 });

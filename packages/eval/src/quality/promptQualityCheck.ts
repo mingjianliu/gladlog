@@ -3786,6 +3786,42 @@ export function checkOffensiveWindowSpikeCredit(lines: string[]): string[] {
   return failures;
 }
 
+/**
+ * HardFailure class (T12 ① b, user ruling 2026-10-10, option A — the header's
+ * END is cut at the round's end; post-hoc review 45-FT-98, finding 3): the
+ * span an `[OFFENSIVE WINDOW]` header prints.
+ *
+ *  - it does not end before it starts (`0:42–0:40`: a window opened after the
+ *    round's end, its end cut at that end);
+ *  - it neither starts nor ends after the round's end as the prompt states it
+ *    (`statedRoundEnd` — `[MATCH END]`, and a Solo Shuffle round's first
+ *    `[DEATH]` line). The producer prints min(the window's end, `roundEndMs`)
+ *    and gives a window that opens at or after `roundEndMs` no header
+ *    (`emitOffensiveWindowEntries`), so both seconds are at or before that
+ *    line's — no tolerance. A header in the round-end second itself is not
+ *    judged: before or after the death inside that second is under the grid.
+ *
+ * The header only — the window OBJECT is not cut, on purpose (docs
+ * "Not yet unified", WP-A1 2).
+ */
+export function checkOffensiveWindowHeaderSpan(lines: string[]): string[] {
+  const failures: string[] = [];
+  const roundEnd = statedRoundEnd(lines);
+  lines.forEach((line, i) => {
+    const h = line.match(OFFENSIVE_WINDOW_HEADER);
+    if (!h) return;
+    const from = Number(h[1]) * 60 + Number(h[2]);
+    const to = Number(h[3]) * 60 + Number(h[4]);
+    const at = `line ${i + 1}: [OFFENSIVE WINDOW] ${h[1]}:${h[2]}–${h[3]}:${h[4]}`;
+    if (to < from) failures.push(`${at} 的结束早于开始`);
+    if (roundEnd !== null && Math.max(from, to) > roundEnd.second)
+      failures.push(
+        `${at} ${from > roundEnd.second ? "开始" : "结束"}于回合结束之后(${roundEnd.says}在 ${fmtTime(roundEnd.second)})`,
+      );
+  });
+  return failures;
+}
+
 /** missed-sync-window (GH #13 resurrection, 2026-09-02): every rendered line
  * must quote exactly the bracket cell syncWindowPrior.ts holds, and the
  * quoted contrast must clear the same min-contrast door the producer used —
@@ -5255,6 +5291,7 @@ export function checkMatch(
   hardFailures.push(...checkBurstWindowRefConsistency(lines));
   hardFailures.push(...checkOffensiveWindowSpikeMarker(lines));
   hardFailures.push(...checkOffensiveWindowSpikeCredit(lines));
+  hardFailures.push(...checkOffensiveWindowHeaderSpan(lines));
   hardFailures.push(...checkDmgSpikeListCap(lines));
   hardFailures.push(...checkSyncWindowRefConsistency(lines));
   hardFailures.push(...checkBacklashRefConsistency(lines));

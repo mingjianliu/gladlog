@@ -1,8 +1,9 @@
 /**
  * [OFFENSIVE WINDOW] — one synthesized header per aligned enemy burst window that
- * a listed DMG SPIKE starts within 5 s of: the window, the largest spike credited
- * to it (damage, target and the spike's own interval — not the burst's) or the
- * statement that none is, and the cooldowns in it.
+ * opens before the round's end and that a listed DMG SPIKE starts within 5 s
+ * of: the window, the largest spike credited to it (damage, target and the
+ * spike's own interval — not the burst's) or the statement that none is, and
+ * the cooldowns in it.
  *
  * Cut out of buildMatchTimeline (GH #116); its closure inputs arrive through
  * `ctx`. Which spike a header names is `creditSpikesToWindows` (T12 ③).
@@ -68,12 +69,24 @@ export function emitOffensiveWindowEntries(
   // 444 of 8,154 headers on the 605 capture named a spike that began after
   // the window had ended (223 of them with another listed spike inside the
   // window) and 180 spikes were named on two headers.
-  const listed = enemyCDTimeline.alignedBurstWindows.filter((burst) =>
-    spikes.some(
-      (pw) =>
-        pw.fromSeconds >= burst.fromSeconds - 5 &&
-        pw.fromSeconds <= burst.toSeconds + 5,
-    ),
+  //
+  // …except a window that opens at or after the round's end: it is not in
+  // the round and gets no header (and so no [RES] row) — the guard
+  // `killAttempts.ts` puts on its anchors. A listed spike starts at or before
+  // the round's end, so the 5 s rule alone admits a window opened up to 5 s
+  // after it, and the header's end, cut at the round's end, would read
+  // before its start (`0:42–0:40`; post-hoc review 45-FT-98, finding 3 —
+  // 0 such headers on the 605 capture). Filtered HERE, before the credit:
+  // the gate re-runs the credit on the headers that print, so a window
+  // without a header must not take a spike from one that has one.
+  const listed = enemyCDTimeline.alignedBurstWindows.filter(
+    (burst) =>
+      burst.fromSeconds < roundEndS &&
+      spikes.some(
+        (pw) =>
+          pw.fromSeconds >= burst.fromSeconds - 5 &&
+          pw.fromSeconds <= burst.toSeconds + 5,
+      ),
   );
   // Credited against the span each header PRINTS (its end stops at the round's
   // end — `headerEndS` below): the gate re-runs this on the rendered header,

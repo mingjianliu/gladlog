@@ -96,7 +96,17 @@ describe("peakSpikePlacement", () => {
 type Span = { fromSeconds: number; toSeconds: number };
 type Spike = Span & { totalDamage: number; targetName?: string };
 
+const isHeader = (l: string) => /^\d+:\d\d {2}\[OFFENSIVE WINDOW\]/.test(l);
+
 function renderHeaders(
+  windows: Span[],
+  spikes: Spike[],
+  over: Partial<BuildMatchTimelineParams> & { ownerDiedAtMs?: number } = {},
+): string[] {
+  return renderTimeline(windows, spikes, over).filter(isHeader);
+}
+
+function renderTimeline(
   windows: Span[],
   spikes: Spike[],
   over: Partial<BuildMatchTimelineParams> & { ownerDiedAtMs?: number } = {},
@@ -170,9 +180,7 @@ function renderHeaders(
     ...paramOver,
   };
 
-  return buildMatchTimeline(params)
-    .split("\n")
-    .filter((l) => /^\d+:\d\d {2}\[OFFENSIVE WINDOW\]/.test(l));
+  return buildMatchTimeline(params).split("\n");
 }
 
 const BIG = DMG_SPIKE_THRESHOLD + 1_600_000; // 1.90M
@@ -351,12 +359,86 @@ describe("[OFFENSIVE WINDOW] names only a spike that overlaps it, and each spike
       [{ fromSeconds: 188, toSeconds: 198, totalDamage: BIG }],
       { bracket: "Rated Solo Shuffle", ownerDiedAtMs: 192_400 },
     );
-    expect(headers.map((h) => h.split(" | ").slice(0, 2).join(" | "))).toEqual(
-      [
-        "3:00  [OFFENSIVE WINDOW]   3:00–3:12 | peak spike 1.90M on Mate (Enhancement Shaman) over 3:08–3:18 (runs past window)",
-        `3:05  [OFFENSIVE WINDOW]   3:05–3:12 | ${NO_CREDITED_SPIKE_CLAUSE}`,
-      ],
-    );
+    expect(headers.map((h) => h.split(" | ").slice(0, 2).join(" | "))).toEqual([
+      "3:00  [OFFENSIVE WINDOW]   3:00–3:12 | peak spike 1.90M on Mate (Enhancement Shaman) over 3:08–3:18 (runs past window)",
+      `3:05  [OFFENSIVE WINDOW]   3:05–3:12 | ${NO_CREDITED_SPIKE_CLAUSE}`,
+    ]);
+  });
+
+  // Post-hoc review 45-FT-98, finding 3: a listed spike starts at or before
+  // the round's end, so the 5 s rule admits a window opened up to 5 s after
+  // it — and its end, cut at the round's end, read before its start.
+  describe("a window that opens at or after the round's end gets no header", () => {
+    // a cooldown in the owner's ledger, so the B14b row under a header prints
+    const ownerCDs = [
+      {
+        spellId: "33206",
+        spellName: "Pain Suppression",
+        tag: "Defensive",
+        cooldownSeconds: 180,
+        maxChargesDetected: 1,
+        casts: [],
+        availableWindows: [],
+        neverUsed: true,
+      },
+    ] as never;
+    const threes = { ownerCDs };
+    const shuffle = {
+      ownerCDs,
+      bracket: "Rated Solo Shuffle",
+      ownerDiedAtMs: 192_400,
+    };
+    // the round's last listed spike: 3:10 to the round-ending death at 3:12
+    const spike = [{ fromSeconds: 190, toSeconds: 192.4, totalDamage: BIG }];
+    /** the `[RES]` rows printed for a window: the line under each header */
+    const resRowsUnderHeaders = (lines: string[]) =>
+      lines.filter(
+        (l, i) => i > 0 && isHeader(lines[i - 1]!) && l.includes("[RES] rdy:"),
+      );
+
+    it("opened 1.6 s after the round-ending death: no `3:14–3:12` header, and no [RES] row for it", () => {
+      const late = [{ fromSeconds: 194, toSeconds: 206 }];
+      // the same window in a 3v3 — the round goes on — keeps header and row
+      const inRound = renderTimeline(late, spike, threes);
+      expect(inRound.filter(isHeader)).toEqual([
+        `3:14  [OFFENSIVE WINDOW]   3:14–3:20 | ${NO_CREDITED_SPIKE_CLAUSE} | CDs: Avatar@3:14`,
+      ]);
+      expect(resRowsUnderHeaders(inRound)).toHaveLength(1);
+
+      const lines = renderTimeline(late, spike, shuffle);
+      expect(lines.filter(isHeader)).toEqual([]);
+      expect(lines.join("\n")).not.toContain("3:14–3:12");
+      expect(resRowsUnderHeaders(lines)).toEqual([]);
+    });
+
+    it("opened in the round's last second, before the death, it is in the round; opened in that second after the death it is not", () => {
+      expect(
+        renderHeaders([{ fromSeconds: 192.1, toSeconds: 206 }], spike, shuffle),
+      ).toEqual([
+        "3:12  [OFFENSIVE WINDOW]   3:12–3:12 | no listed [DMG SPIKE] credited to it | CDs: Avatar@3:12",
+      ]);
+      expect(
+        renderHeaders([{ fromSeconds: 192.4, toSeconds: 206 }], spike, shuffle),
+      ).toEqual([]);
+      expect(
+        renderHeaders([{ fromSeconds: 192.6, toSeconds: 206 }], spike, shuffle),
+      ).toEqual([]);
+    });
+
+    it("the windows of the round keep their headers, their [RES] rows and their spike — the dropped one takes nothing", () => {
+      const lines = renderTimeline(
+        [
+          { fromSeconds: 180, toSeconds: 200 },
+          { fromSeconds: 194, toSeconds: 206 },
+        ],
+        spike,
+        shuffle,
+      );
+      expect(lines.filter(isHeader)).toEqual([
+        "3:00  [OFFENSIVE WINDOW]   3:00–3:12 | peak spike 1.90M on Mate (Enhancement Shaman) over 3:10–3:12 | CDs: Avatar@3:00",
+      ]);
+      expect(resRowsUnderHeaders(lines)).toHaveLength(1);
+    });
   });
 
   it("the largest credited spike is the peak, whatever order the buckets arrive in", () => {
