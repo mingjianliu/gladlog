@@ -1435,5 +1435,14 @@
  *  … still up when the round ended` reads the same round end as every other
  *  line (Solo Shuffle: the first death), and one legend sentence says which
  *  instant "the round ended" is. No candidate changes.
+ *  v375 (2026-10-11, FT F20, user ruling of that day on three cooldown
+ *  numbers shown with their evidence and their 605-file add / remove): a
+ *  Lethal Calibration holder's Boomstick comes back 2 s sooner for every
+ *  enemy a Wildfire Bomb hits; Born To Be Wild takes 15 s off Aspect of the
+ *  Turtle PER RANK (a rank-2 hunter's kit line reads 120s, was 135s); Ardent
+ *  Defender is the official 90 s (the hand table said 120). The [RES]
+ *  `cd:` / `rdy:` entries and the kit lines of those three follow. One
+ *  cd-hoarded row is added on the capture (a Turtle ready 3 s before a
+ *  crisis).
  */
-export const PROMPT_VERSION = 374;
+export const PROMPT_VERSION = 375;
