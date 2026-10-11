@@ -51,8 +51,11 @@ import * as observedConsequences from "@gladlog/analysis/src/context/observedCon
 import * as peakSpikePlacement from "@gladlog/analysis/src/context/peakSpikePlacement";
 import * as peelOptions from "@gladlog/analysis/src/context/peelOptions";
 import * as resLedgerPrune from "@gladlog/analysis/src/context/resLedgerPrune";
+import * as spellOutcomeLines from "@gladlog/analysis/src/context/spellOutcomeLines";
 import * as stackedDefensivesContext from "@gladlog/analysis/src/context/stackedDefensives";
 import * as timelineHelpers from "@gladlog/analysis/src/context/timelineHelpers";
+import * as timelineCastStopped from "@gladlog/analysis/src/context/timelineSections/castStopped";
+import * as timelineSetup from "@gladlog/analysis/src/context/timelineSections/setup";
 import * as unitLabel from "@gladlog/analysis/src/context/unitLabel";
 import * as abilityProfileMod from "@gladlog/analysis/src/data/abilityProfile";
 import * as arenaGeometry from "@gladlog/analysis/src/data/arenaGeometry";
@@ -312,6 +315,33 @@ const INDEX: PredicateRow[] = [
     file: `${A}/utils/castCancels.ts`,
     symbol: "castBarsOfCooldown",
     mod: castCancels,
+  },
+  // how a cast bar ended, the owner's control cast bars, what a [REJECTED]
+  // line states (FT-T16 D15 "2b")
+  {
+    file: `${A}/utils/castCancels.ts`,
+    symbol: "ownerCastBarOutcomes",
+    mod: castCancels,
+  },
+  {
+    file: `${A}/context/ccUse.ts`,
+    symbol: "ownerControlCastBars",
+    mod: ccUse,
+  },
+  {
+    file: `${A}/context/spellOutcomeLines.ts`,
+    symbol: "rejectRunStatesRow",
+    mod: spellOutcomeLines,
+  },
+  {
+    file: `${A}/context/spellOutcomeLines.ts`,
+    symbol: "rejectKindOf",
+    mod: spellOutcomeLines,
+  },
+  {
+    file: `${A}/context/spellOutcomeLines.ts`,
+    symbol: "REJECT_WHY",
+    mod: spellOutcomeLines,
   },
   // which SPELL_MISSED row is a control cast's own (FT-T16 D15 "3c")
   {
@@ -2570,6 +2600,17 @@ const INDEX: PredicateRow[] = [
     symbol: "checkCcAvoidedMissType",
     mod: promptQualityCheck,
   },
+  // FT-T16 D15 "3b": [CC NOT LANDED]
+  {
+    file: `${A}/context/timelineSections/setup.ts`,
+    symbol: "CC_NOT_LANDED_TAG",
+    mod: timelineSetup,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkCcNotLandedLines",
+    mod: promptQualityCheck,
+  },
   {
     file: `${A}/utils/cooldowns.ts`,
     symbol: "kitSpellReadyAt",
@@ -2664,6 +2705,22 @@ const INDEX: PredicateRow[] = [
   {
     file: `${E}/quality/promptQualityCheck.ts`,
     symbol: "checkCcUseStartedCounts",
+    mod: promptQualityCheck,
+  },
+  // FT-T16 D15 "2b": [CAST STOPPED]
+  {
+    file: `${A}/context/timelineSections/castStopped.ts`,
+    symbol: "castStoppedText",
+    mod: timelineCastStopped,
+  },
+  {
+    file: `${A}/context/timelineSections/castStopped.ts`,
+    symbol: "CAST_STOPPED_NEAR_TEXT",
+    mod: timelineCastStopped,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkCastStoppedLines",
     mod: promptQualityCheck,
   },
   {
