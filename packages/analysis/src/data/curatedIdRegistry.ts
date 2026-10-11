@@ -943,6 +943,7 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
       ...Object.values(EVENT_COOLDOWN_REDUCTIONS).flatMap((r) => [
         ...r.targets,
         ...r.triggerCastIds,
+        ...(r.triggerHitIds ?? []),
       ]),
     ],
   ),

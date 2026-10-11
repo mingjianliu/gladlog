@@ -21,6 +21,8 @@ import { effectiveCooldownSeconds } from "../data/spellEffectData";
 import {
   eventReducedCooldownSeconds,
   eventReductionsFor,
+  eventTriggerTimesMs,
+  type IEventCooldownReduction,
 } from "../data/talentScriptedCooldowns";
 import {
   type IMajorCooldownInfo,
@@ -85,14 +87,8 @@ function withEventReductions(
       const own = pressCd(c);
       return own < cooldownSeconds ? { ...c, cooldownSecondsOverride: own } : c;
     });
-  const triggerSeconds = (r: { triggerCastIds: readonly string[] }) =>
-    owner.spellCastEvents
-      .filter(
-        (e) =>
-          e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
-          r.triggerCastIds.includes(String(e.spellId)),
-      )
-      .map((e) => (e.logLine.timestamp - matchStartMs) / 1000);
+  const triggerSeconds = (r: IEventCooldownReduction) =>
+    eventTriggerTimesMs(owner, r).map((t) => (t - matchStartMs) / 1000);
   return casts.map((c) => {
     const eff = eventReducedCooldownSeconds(
       c.timeSeconds,

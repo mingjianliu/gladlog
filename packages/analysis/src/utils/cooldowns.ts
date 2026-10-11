@@ -37,7 +37,9 @@ import { replacedSpellIds } from "../data/talentReplaces";
 import {
   eventReducedCooldownSeconds,
   eventReductionsFor,
+  eventTriggerTimesMs,
   freeRecastWindowFor,
+  type IEventCooldownReduction,
 } from "../data/talentScriptedCooldowns";
 import {
   STUN_PURGE_GENERATED,
@@ -4035,19 +4037,14 @@ function extractMajorCooldownsAll(
       }
     }
 
-    // Event reductions (Storm Conduit): each press's real ready instant, from
-    // the holder's trigger casts. Single-charge spells only — a charge
-    // simulation takes no per-press override.
+    // Event reductions (Storm Conduit, Lethal Calibration): each press's real
+    // ready instant, from the holder's triggers (`eventTriggerTimesMs`).
+    // Single-charge spells only — a charge simulation takes no per-press
+    // override.
     const reductions = eventReductionsFor(spell.spellId, holds);
     if (reductions.length && baselineCharges <= 1) {
-      const triggerSeconds = (r: { triggerCastIds: readonly string[] }) =>
-        unit.spellCastEvents
-          .filter(
-            (e) =>
-              e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
-              r.triggerCastIds.includes(String(e.spellId)),
-          )
-          .map((e) => (e.logLine.timestamp - matchStartMs) / 1000);
+      const triggerSeconds = (r: IEventCooldownReduction) =>
+        eventTriggerTimesMs(unit, r).map((t) => (t - matchStartMs) / 1000);
       for (const c of casts) {
         if (c.cooldownSecondsOverride !== undefined) continue;
         const eff = eventReducedCooldownSeconds(

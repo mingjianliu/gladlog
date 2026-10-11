@@ -4,6 +4,7 @@ import kitRaw from "../data/interruptKitGenerated.json";
 import { spellEffectData } from "../data/spellEffectData";
 import {
   eventReductionsFor,
+  eventTriggerTimesMs,
   onInterruptReductionFor,
 } from "../data/talentScriptedCooldowns";
 import { castBlockingAuraAt, enemySourceIds } from "./cannotCastIntervals";
@@ -261,15 +262,9 @@ function singleChargeReadyMs(
   if (reductions.length) {
     const events = reductions
       .flatMap((r) =>
-        unit.spellCastEvents
-          .filter(
-            (e) =>
-              e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
-              r.triggerCastIds.includes(String(e.spellId)) &&
-              e.logLine.timestamp > lastCastMs &&
-              e.logLine.timestamp <= atMs,
-          )
-          .map((e) => ({ t: e.logLine.timestamp, ms: r.seconds * 1000 })),
+        eventTriggerTimesMs(unit, r)
+          .filter((t) => t > lastCastMs && t <= atMs)
+          .map((t) => ({ t, ms: r.seconds * 1000 })),
       )
       .sort((a, b) => a.t - b.t);
     for (const e of events) {

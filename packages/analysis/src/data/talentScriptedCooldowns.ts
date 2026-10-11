@@ -18,6 +18,7 @@
  *    (press, R); `remaining(t)` is monotone and reaches 0 exactly at R, so
  *    "available at t" ⇔ R ≤ t — no event after t can change the answer at t.
  */
+import { type ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
 export interface IFreeRecastWindow {
   /** the spell whose press opens the window */
@@ -62,6 +63,12 @@ export interface IEventCooldownReduction {
   targets: readonly string[];
   /** the unit's own successful casts that drop it */
   triggerCastIds: readonly string[];
+  /** A talent worded "each enemy hit by X": the unit's own damage rows of
+   * these ids drop it too — one trigger per enemy hit (`eventTriggerTimesMs`). */
+  triggerHitIds?: readonly string[];
+  /** With `triggerHitIds`: at most this many hits of one use count (the
+   * talent's "up to N sec" cap ÷ `seconds`). */
+  maxHitsPerUse?: number;
   seconds: number;
   note: string;
 }
@@ -103,7 +110,95 @@ export const EVENT_COOLDOWN_REDUCTIONS: Readonly<
     seconds: 1,
     note: "Storm Conduit — Lightning Bolt / Chain Lightning −1 s",
   },
+  // Lethal Calibration (Survival, FT F20 2026-10-11): "Each enemy hit by
+  // Wildfire Bomb reduces the cooldown of Boomstick by 2.0 sec, up to 10
+  // sec." DB2 12.1.5.69594: SpellEffect 1272696 (aura 42, a server proc —
+  // no trigger spell, no class mask) base 2000 ms, and 1285246 dummy 5 = the
+  // cap in hits; the tooltip is `$s1/1000` and `$s1/1000*$s2`.
+  // Corpus, 605 new-season files (ledgerImpossibleCastScan, talents from
+  // COMBATANT_INFO): 4 holders, 32 Boomstick recast gaps, 19 under the
+  // modelled 45 s (shortest 29.3 s) and all 10 "impossible" presses; 30
+  // non-holders, 131 gaps, none under it (shortest 44.9 s). On three
+  // holders' files (fix-FT `n6_event_fit.py`), R = press + 45 − 2 ×
+  // #hits in (press, R): 0 of 31 recasts come before R, the tightest 0.0 /
+  // 1.0 / 1.1 / 1.3 / 1.5 s after it; at 1 s per hit 9 come early, at 3 s
+  // none lands within 2 s of R, and counting bomb CASTS fits no value.
+  // A hit is a SPELL_DAMAGE row of the explosion (265157), or a SPELL_MISSED
+  // one a shield soaked whole (ABSORB) — without those one recast is 2.0 s
+  // early. IMMUNE misses are not counted (4 rows in the three files; none
+  // decides a recast).
+  "1262409": {
+    targets: ["1261193"],
+    triggerCastIds: [],
+    triggerHitIds: ["265157"],
+    maxHitsPerUse: 5,
+    seconds: 2,
+    note: "Lethal Calibration — each enemy hit by Wildfire Bomb −2 s (≤ 5 hits a bomb)",
+  },
 };
+
+/** Hits of one use land together; rows of `triggerHitIds` further apart than
+ * this are different uses (`maxHitsPerUse` counts per use). The Wildfire
+ * Bomb's explosion rows sit within 0.1 s of each other and two bombs are at
+ * least a global cooldown apart. */
+export const EVENT_HIT_SAME_USE_MS = 1_000;
+
+/**
+ * When a reduction's triggers fired for `unit` (epoch ms, ascending) — the
+ * ONE reading of "a trigger happened" for the ledger (`extractMajorCooldowns`),
+ * the [RES] utility entries (`resUtilityCds`) and the interrupt cooldown
+ * (`interruptReadyAtMs`): the unit's own successful casts of
+ * `triggerCastIds`, plus, for a per-hit talent, its damage rows of
+ * `triggerHitIds` (and the hits a shield soaked whole, logged as an ABSORB
+ * miss), at most `maxHitsPerUse` per use.
+ */
+export function eventTriggerTimesMs(
+  unit: Pick<ICombatUnit, "spellCastEvents" | "damageOut" | "missesOut">,
+  r: Pick<
+    IEventCooldownReduction,
+    "triggerCastIds" | "triggerHitIds" | "maxHitsPerUse"
+  >,
+): number[] {
+  const out = unit.spellCastEvents
+    .filter(
+      (e) =>
+        e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+        r.triggerCastIds.includes(String(e.spellId)),
+    )
+    .map((e) => e.logLine.timestamp);
+  const hitIds = r.triggerHitIds;
+  if (hitIds?.length) {
+    const hits = [
+      ...unit.damageOut.filter(
+        (e) =>
+          e.logLine.event === LogEvent.SPELL_DAMAGE &&
+          hitIds.includes(String(e.spellId)),
+      ),
+      ...(unit.missesOut ?? []).filter(
+        (e) =>
+          e.logLine.event === LogEvent.SPELL_MISSED &&
+          e.missType === "ABSORB" &&
+          hitIds.includes(String(e.spellId)),
+      ),
+    ]
+      .map((e) => e.logLine.timestamp)
+      .sort((a, b) => a - b);
+    const cap = r.maxHitsPerUse ?? Number.POSITIVE_INFINITY;
+    let useStart = Number.NEGATIVE_INFINITY;
+    let counted = 0;
+    for (const t of hits) {
+      if (t - useStart > EVENT_HIT_SAME_USE_MS) {
+        useStart = t;
+        counted = 0;
+      }
+      if (counted < cap) {
+        out.push(t);
+        counted++;
+      }
+    }
+  }
+  return out.sort((a, b) => a - b);
+}
 
 export interface IOnInterruptCooldownReduction {
   /** the interrupt (its CAST id) whose own cooldown the talent shortens */

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   EVENT_COOLDOWN_REDUCTIONS,
   eventReducedCooldownSeconds,
+  eventTriggerTimesMs,
 } from "../src/data/talentScriptedCooldowns";
 import {
   applyCdModifiers,
@@ -176,5 +177,93 @@ describe("warpClock — buff 期间冷却加速(batch C)", () => {
       rateWindows: [{ fromSeconds: 50, toSeconds: 60, mult: 11 }],
     };
     expect(cdSecondsUntilReady(cd, 40)).toBeCloseTo(50, 6);
+  });
+});
+
+describe('eventTriggerTimesMs — one reading of "a trigger happened" (FT F20)', () => {
+  const lethal = EVENT_COOLDOWN_REDUCTIONS["1262409"]!;
+  const T0 = 1_000_000;
+  const row = (
+    event: string,
+    spellId: string,
+    atMs: number,
+    extra: Record<string, unknown> = {},
+  ) => ({ spellId, logLine: { event, timestamp: T0 + atMs }, ...extra });
+  const unit = (o: {
+    casts?: unknown[];
+    damage?: unknown[];
+    misses?: unknown[];
+  }) =>
+    ({
+      spellCastEvents: o.casts ?? [],
+      damageOut: o.damage ?? [],
+      ...(o.misses ? { missesOut: o.misses } : {}),
+    }) as never;
+  const seconds = (u: never, r = lethal) =>
+    eventTriggerTimesMs(u, r).map((t) => (t - T0) / 1000);
+
+  it("Lethal Calibration is the DB2 row: Boomstick, 2 s per Wildfire Bomb hit, 5 hits a bomb", () => {
+    expect(lethal).toMatchObject({
+      targets: ["1261193"],
+      triggerCastIds: [],
+      triggerHitIds: ["265157"],
+      maxHitsPerUse: 5,
+      seconds: 2,
+    });
+  });
+  it("a cast-triggered talent reads the unit's successful casts only", () => {
+    const u = unit({
+      casts: [
+        row("SPELL_CAST_SUCCESS", "188196", 3000),
+        row("SPELL_CAST_START", "188196", 1000),
+        row("SPELL_CAST_SUCCESS", "1064", 4000),
+        row("SPELL_CAST_SUCCESS", "188443", 2000),
+      ],
+      damage: [row("SPELL_DAMAGE", "188196", 3400)],
+    });
+    expect(seconds(u, conduit)).toEqual([2, 3]);
+  });
+  it("each enemy the explosion hits is a trigger; the bomb's cast and its DoT are not", () => {
+    const u = unit({
+      casts: [row("SPELL_CAST_SUCCESS", "259495", 10_000)],
+      damage: [
+        row("SPELL_DAMAGE", "265157", 10_300),
+        row("SPELL_DAMAGE", "265157", 10_320),
+        row("SPELL_PERIODIC_DAMAGE", "265157", 11_300),
+        row("SPELL_DAMAGE", "269747", 11_300),
+      ],
+    });
+    expect(seconds(u)).toEqual([10.3, 10.32]);
+  });
+  it("a hit a shield soaked whole counts, an immune target does not", () => {
+    const u = unit({
+      damage: [row("SPELL_DAMAGE", "265157", 10_300)],
+      misses: [
+        row("SPELL_MISSED", "265157", 10_310, { missType: "ABSORB" }),
+        row("SPELL_MISSED", "265157", 10_320, { missType: "IMMUNE" }),
+      ],
+    });
+    expect(seconds(u)).toEqual([10.3, 10.31]);
+  });
+  it("at most 5 hits of one bomb count; the next bomb starts a new count", () => {
+    const u = unit({
+      damage: [
+        ...Array.from({ length: 7 }, (_, i) =>
+          row("SPELL_DAMAGE", "265157", 10_000 + i * 10),
+        ),
+        row("SPELL_DAMAGE", "265157", 12_000),
+      ],
+    });
+    expect(seconds(u)).toEqual([10, 10.01, 10.02, 10.03, 10.04, 12]);
+  });
+  it("Boomstick pressed at 0 with 8 hits before it is back: 45 − 2 × 8 = 29 s", () => {
+    const u = unit({
+      damage: [5, 5.02, 12, 12.02, 12.04, 20, 20.02, 26].map((s) =>
+        row("SPELL_DAMAGE", "265157", s * 1000),
+      ),
+    });
+    expect(
+      eventReducedCooldownSeconds(0, 45, [lethal], (r) => seconds(u, r)),
+    ).toBe(29);
   });
 });
