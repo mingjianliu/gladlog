@@ -90,10 +90,12 @@ export function isFormReshiftCast(
   return upBefore && !appliedHere;
 }
 
-/** Cast ids that are copies/procs/ticks of another press, never a press of
- * their own. Ported from the research registry (healer-study/copy_ids.json)
- * with its per-id evidence; registered in curatedIdRegistry so the corpus rot
- * scans watch it. */
+/** Cast ids that are copies/procs/ticks or a later stage of another press,
+ * never a press of their own. Ported from the research registry
+ * (healer-study/copy_ids.json) with its per-id evidence; registered in
+ * curatedIdRegistry so the corpus rot scans watch it. The cooldown press
+ * predicate (`isPressOfCooldown`, utils/cooldowns.ts) refuses every id here,
+ * so the ledger, the death analysis and the cast-bar count agree. */
 export const COPY_CAST_IDS: ReadonlyMap<string, string> = new Map([
   // 2026-09-11: the Verdant Embrace pair was registered THE WRONG WAY ROUND.
   // The research entry read "360995 is the echo, 86% same-instant with
@@ -130,6 +132,24 @@ export const COPY_CAST_IDS: ReadonlyMap<string, string> = new Map([
   ["157982", "Tranquility channel tick (0.80s spacing; the press is 740)"],
   ["64844", "Divine Hymn channel tick (1.00s spacing; the press is 64843)"],
   ["450215", "Void Blast channel tick (1.00s spacing)"],
+  // The second stage of a Champion's Spear press, not a press of the 90 s
+  // cooldown (2026-10-11). The throw is 376079; 1271980 is the optional
+  // re-press while the spear stands (DB2: its own 6 s cooldown, 40 yd range,
+  // off the global cooldown; no damage, aura or summon row is ever logged
+  // under it — the spear's effects are 376080 / 376081, the throw's). Five
+  // raw logs of the re-eval set (82a2d681, 02c8e3ac, c2058ed4, fa5e6c66,
+  // 5677ba13): 37 throws, 12 of them followed by a 1271980 of the same
+  // caster 0.51–3.18 s later, none without a throw before it, and the caster
+  // is up to 23 yd from where he pressed it 0.3–0.7 s afterwards; the
+  // generated cast table counts 695 against 2,398 throws. Its 6 s cooldown
+  // made it a "variant press" by name (`isVariantPress`), so a re-press more
+  // than the ledger's 2 s merge after the throw printed a second
+  // `[CD] Champion's Spear` and restarted the 90 s (82a2d681 round 5: thrown
+  // 0:47.8, re-pressed 0:50.4 — 15 such pairs in 3,520 contexts).
+  [
+    "1271980",
+    "Champion's Spear re-press while the spear stands (never without a 376079 throw 0.5–3.2 s before it; the press is 376079)",
+  ],
 ]);
 
 /** Same-spellId events closer than this are ticks of one channel, not two

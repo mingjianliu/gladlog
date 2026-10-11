@@ -2954,6 +2954,13 @@ export function isPressOfCooldown(
   if (e.spellId === spellId) return true;
   if (canonicalSpellId(e.spellId) === canonicalSpellId(spellId)) return true;
   if (replacements.pressedAs.get(spellId)?.includes(e.spellId)) return true;
+  // A copy / tick / later stage of another press (`COPY_CAST_IDS`) is never a
+  // press by its name: Champion's Spear's re-press 1271980 has a 6 s cooldown
+  // of its own, which made it a "variant press" of the 90 s throw whenever it
+  // came more than the ledger's 2 s merge after it. The ledger dropped the
+  // other copy ids after this predicate; refusing them here gives its other
+  // two readers (`isAvailableAt`, `castBarsOfCooldown`) the same answer.
+  if (COPY_CAST_IDS.has(e.spellId)) return false;
   // Variant cast ids (form-specific Stampeding Roar, talent-modified Blessing
   // of Sacrifice / Oppressing Roar, …) log a different id with the same
   // English name. Exact-id matching stamped 15/1245 prompts' real casts

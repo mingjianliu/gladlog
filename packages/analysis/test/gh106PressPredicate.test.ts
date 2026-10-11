@@ -153,6 +153,62 @@ describe("aura evidence", () => {
   });
 });
 
+describe("a later stage of one press (COPY_CAST_IDS)", () => {
+  it("Champion's Spear: the re-press 1271980 is not a second press of the 90 s cooldown, however long after the throw", () => {
+    // 82a2d681 round 5 (Robou): thrown 0:47.841 (376079), re-pressed 0:50.421
+    // (1271980) — 2.58 s, past the ledger's 2 s merge. 1271980 carries a 6 s
+    // cooldown of its own in DB2, so by name it read as a variant press.
+    const warrior = makeUnit("p1", {
+      class: CombatUnitClass.Warrior,
+      spec: CombatUnitSpec.Warrior_Arms,
+      spellCastEvents: [
+        makeSpellCastEvent("376079", at(47.841), "p1"),
+        makeSpellCastEvent("1271980", at(50.421), "p1"),
+      ],
+    });
+    const repl = talentReplacementsOf(warrior);
+    const [thrown, again] = warrior.spellCastEvents as unknown as Array<{
+      spellId: string;
+      logLine: { event: string };
+    }>;
+    expect(isPressOfCooldown(thrown!, "376079", "Champion's Spear", repl)).toBe(
+      true,
+    );
+    expect(isPressOfCooldown(again!, "376079", "Champion's Spear", repl)).toBe(
+      false,
+    );
+    const combat = {
+      startTime: START,
+      endTime: at(200),
+      units: { p1: warrior },
+    } as unknown as AtomicArenaCombat;
+    const spear = extractMajorCooldowns(warrior, combat).find(
+      (cd) => cd.spellId === "376079",
+    );
+    expect(spear).toBeDefined();
+    expect(spear!.casts.map((c) => c.timeSeconds)).toEqual([47.841]);
+    // the death analysis reads the same press: 90 s from the throw, not from
+    // the re-press
+    expect(isAvailableAt(warrior, "376079", 90, 138.5, START)).toBe(true);
+    expect(isAvailableAt(warrior, "376079", 90, 137, START)).toBe(false);
+  });
+
+  it("a real same-named variant press still counts (a glyphed Hex, by name)", () => {
+    const shaman = makeUnit("p1", {
+      class: CombatUnitClass.Shaman,
+      spec: CombatUnitSpec.Shaman_Restoration,
+    });
+    // Hex's glyphed variant 211004 (30 s of its own) against the roster's 51514
+    const press = makeSpellCastEvent("211004", at(10), "p1") as unknown as {
+      spellId: string;
+      logLine: { event: string };
+    };
+    expect(
+      isPressOfCooldown(press, "51514", "Hex", talentReplacementsOf(shaman)),
+    ).toBe(true);
+  });
+});
+
 describe("the round's own window", () => {
   it("a press after a shuffle round's endTime (the next round's preparation phase) is not a press of this round", () => {
     // Crumbstain, every-12th archive file: Stasis at 100.0, the deciding death
