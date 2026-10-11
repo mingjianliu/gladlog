@@ -534,9 +534,8 @@ describe("checkEnemyDefSaveEffect (FT-T07, ruling D8)", () => {
     ],
     [
       "4(BMHunter) (Beast Mastery Hunter)",
-      "Roar of Sacrifice (25%, 10.0s) (at 66% HP)",
+      "Roar of Sacrifice (redirect) (at 66% HP)",
     ],
-    ["4(BMHunter) (Beast Mastery Hunter)", "Roar of Sacrifice (25%)"],
     ["4(ARogue) (Assassination Rogue)", "Evasion (dodge) (at 60% HP)"],
     [
       "4(AWarlock) (Affliction Warlock)",
@@ -596,7 +595,7 @@ describe("checkEnemyDefSaveEffect (FT-T07, ruling D8)", () => {
     ["a rewind called a heal", "Alter Time (heal)"],
     ["the wrong control list", "Lichborne (root / snare immunity)"],
     ["a freedom called a speed buff", "Spirit Walk (+60% movement speed)"],
-    ["another percentage than the official one", "Roar of Sacrifice (30%)"],
+    ["a redirect given a percentage", "Roar of Sacrifice (25%, 10.0s)"],
     ["a heal absorb left out", "Death Pact (heal)"],
     ["a heal absorb on a plain heal", "Exhilaration (heal + heal absorb)"],
     [

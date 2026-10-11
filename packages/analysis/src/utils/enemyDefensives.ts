@@ -1219,26 +1219,23 @@ export function enemyDefensiveEvents(
   // 2026-10-11) — the label is the ability's, the figures are the log's.
   for (const c of selfSaveCasts(enemy, combat.startTime)) {
     const mechanism = selfDefensiveMechanism(c.spellId);
-    // An absorb and a percentage reduction carry what the log shows of the
-    // caster's own aura of the cast's id — how long it was up, with the
-    // existing end notes, and for a shield what it absorbed (Feign Death's
-    // form, ruling D8). With no such aura in the log the line says the
-    // mechanism alone: `(absorb)`, `(25%)`.
+    // An absorb carries what the log shows of the caster's own aura of the
+    // cast's id — how long it was up, with the existing end notes, and what
+    // it absorbed (Feign Death's form, ruling D8). With no such aura in the
+    // log the line says the mechanism alone: `(absorb)`.
     // Touch of Karma is the exception, and prints `(absorb)` alone: the
     // press's 10 s buff of the cast's id outlasts the shield (which is a
     // second aura, `karmaFeed.TOUCH_OF_KARMA_ABSORB_ID`, 0.8–7.5 s on six of
     // nine presses), and what it absorbed is the `| fed by` clause's
     // (ruling B20a) — a second figure here could only disagree with it.
     const figured =
-      (mechanism?.kind === "absorb" && c.spellId !== TOUCH_OF_KARMA_ID) ||
-      mechanism?.kind === "reduction";
+      mechanism?.kind === "absorb" && c.spellId !== TOUCH_OF_KARMA_ID;
     const own = figured
       ? auraPairedToCast(c.spellId, c.atSeconds, intervalsOf(enemy), enemy.id)
       : undefined;
-    const absorbed =
-      own && mechanism?.kind === "absorb"
-        ? absorbedDuring(enemy, inRound(own), combat.startTime)
-        : undefined;
+    const absorbed = own
+      ? absorbedDuring(enemy, inRound(own), combat.startTime)
+      : undefined;
     out.push({
       atSeconds: c.atSeconds,
       spellId: c.spellId,

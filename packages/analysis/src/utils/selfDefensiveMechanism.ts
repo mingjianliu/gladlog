@@ -4,6 +4,13 @@
  * spell does — an absorb, a self-heal, a damage reduction, a freedom /
  * movement effect, a spell reflect, an avoidance — never a purpose").
  *
+ * No member prints a percentage: a percentage wall is a `MITIGATION_TABLE`
+ * row and renders from its aura, and the one member with an official
+ * reduction on its own aura — Roar of Sacrifice 53480, DB2 row 46148: aura
+ * 87, −15 × PvpMultiplier 1.66666 = 25 — is a signed redirect (rulings A20 +
+ * U3) whose number has no corpus split behind it, so it reads `(redirect)`
+ * here as it does everywhere else (predicate-index "Not yet unified").
+ *
  * The family is `enemyDefensives.SELF_SAVE_IDS`: the presses that used to
  * print `(self-save)`. That word states why the button was pressed, and the
  * log does not show it — on the 605-file capture (`cap605-n9`, 3,520
@@ -15,7 +22,6 @@
  *
  * | kind | source | label |
  * |---|---|---|
- * | `reduction` | `talentMitigationGenerated.json`, when the reduction sits on the cast's own aura (no member is a `MITIGATION_TABLE` row — a wall renders from its aura, with the caster's talents) | `(N%, Ts)` — the wall line's form |
  * | `absorb` | `abilityProfile.absorbs` (DB2 aura 69) | `(absorb Nk, Ts)` — Feign Death's form |
  * | `heal` | `abilityProfile.healsSelf` / `healsOthers` (DB2 Effect 10 / 136, aura 8 / 20); `+ heal absorb` from `HEAL_ABSORB_SELF_SAVE_IDS` | `(heal)` |
  * | `healing received` | `abilityProfile.healingReceivedPct` (DB2 aura 118 / 259) | `(+N% healing received)` |
@@ -41,12 +47,9 @@ import {
   type EnemySelfDefensiveHandMechanism,
 } from "../data/spellIdLists";
 import { immunityMechanics } from "../data/spellSchools";
-import talentMitigationGenerated from "../data/talentMitigationGenerated.json";
 import { HEAL_ABSORB_SELF_SAVE_IDS } from "./healAbsorbSave";
 
 export type SelfDefensiveMechanism =
-  /** an official percentage of damage reduction on the unit that carries it */
-  | { kind: "reduction"; pct: number }
   /** an absorb shield */
   | { kind: "absorb" }
   /** a heal of the caster; `healAbsorb` = it also puts a heal absorb on them */
@@ -77,32 +80,12 @@ const MECHANIC_NAMES: Readonly<Record<number, string>> = {
   12: "stun",
 };
 
-/**
- * The official percentage a cast's OWN aura takes off its carrier's damage:
- * the generated tooltip table's row for the cast, when the reduction sits on
- * the cast id itself (`auraSpellId` — Roar of Sacrifice 53480: DB2 row 46148,
- * aura 87 on the target, −15 × PvpMultiplier 1.66666 = 25). A row that points
- * at another aura (a talent's, a proc's) is not the press's.
- */
-function ownAuraReductionPct(spellId: string): number | undefined {
-  const row = (
-    talentMitigationGenerated as {
-      entries: Record<string, { pct: number; auraSpellId: string }>;
-    }
-  ).entries[spellId];
-  return row && row.auraSpellId === spellId && row.pct > 0
-    ? row.pct
-    : undefined;
-}
-
 /** What `spellId` does, for a unit that pressed it on itself — or undefined
  * when no source classifies it (`test/selfDefensiveMechanism.test.ts` fails
  * for a live `SELF_SAVE_IDS` member without one). */
 export function selfDefensiveMechanism(
   spellId: string,
 ): SelfDefensiveMechanism | undefined {
-  const pct = ownAuraReductionPct(spellId);
-  if (pct !== undefined) return { kind: "reduction", pct };
   const profile = abilityProfile(spellId);
   if (profile.absorbs) return { kind: "absorb" };
   if (profile.healsSelf || profile.healsOthers)
@@ -132,13 +115,11 @@ export function selfDefensiveMechanism(
 
 /**
  * The words a mechanism's label opens with — the whole label for every kind
- * but two: an `absorb` goes on to what the shield absorbed and how long it
- * was up (`enemySaveEffectNote`), a `reduction` to how long its aura was.
+ * but one: an `absorb` goes on to what the shield absorbed and how long it
+ * was up (`enemySaveEffectNote`).
  */
 export function selfDefensiveLabelWords(m: SelfDefensiveMechanism): string {
   switch (m.kind) {
-    case "reduction":
-      return `${m.pct}%`;
     case "heal":
       return m.healAbsorb ? "heal + heal absorb" : "heal";
     case "healing received":
@@ -152,17 +133,12 @@ export function selfDefensiveLabelWords(m: SelfDefensiveMechanism): string {
   }
 }
 
-/** The kinds whose label carries figures from the log after its words. */
-function carriesFigures(m: SelfDefensiveMechanism): boolean {
-  return m.kind === "absorb" || m.kind === "reduction";
-}
-
 /**
  * Does a rendered `[ENEMY DEF]` parenthesis — the text that follows the
  * ability's name, from its `(` — state this mechanism? The gate's reader of
  * what the renderer wrote with `selfDefensiveLabelWords`: the words, then
- * the parenthesis closes — or, for an absorb / a reduction, the log's
- * figures follow (` 64k`, `, 2.0s …`).
+ * the parenthesis closes — or, for an absorb, the log's figures follow
+ * (` 64k`, `, 2.0s …`).
  */
 export function statesSelfDefensiveLabel(
   parenthesis: string,
@@ -172,10 +148,7 @@ export function statesSelfDefensiveLabel(
   if (!parenthesis.startsWith(open)) return false;
   const rest = parenthesis.slice(open.length);
   if (rest.startsWith(")")) return true;
-  if (!carriesFigures(m)) return false;
-  return m.kind === "absorb"
-    ? /^(?: (?:\d+|<1)k)?(?:, |\))/.test(rest)
-    : rest.startsWith(", ");
+  return m.kind === "absorb" && /^(?: (?:\d+|<1)k)?(?:, |\))/.test(rest);
 }
 
 /** The label a line must NOT carry any more: a purpose, not a mechanism. */
@@ -183,8 +156,8 @@ export const SELF_SAVE_PURPOSE_LABEL = "(self-save)";
 
 /**
  * What the `[ENEMY DEF]` legend says of each label this module writes — one
- * entry per label form, emitted only when a line carries it. `(absorb …)`,
- * `(N%, Ts)` and `(area)` are the legend's own existing lines. The legend
+ * entry per label form, emitted only when a line carries it. `(absorb …)`
+ * and `(area)` are the legend's own existing lines. The legend
  * states the mechanism the label names, nothing about when to press it.
  */
 const LABEL_LEGENDS: ReadonlyArray<{ carried: RegExp; legend: string }> = [
@@ -229,7 +202,8 @@ const LABEL_LEGENDS: ReadonlyArray<{ carried: RegExp; legend: string }> = [
   },
   {
     carried: / \(redirect\)/,
-    legend: "`(redirect)` = a grip or a damage redirect;",
+    legend:
+      "`(redirect)` = part of the damage the unit takes goes to another unit (its pet, for Roar of Sacrifice);",
   },
 ];
 

@@ -228,14 +228,13 @@ export function emitEnemyDefEntries(
           //  - an effect note (ruling D8): Feign Death's shield and a pressed
           //    absorb with what it absorbed and how long it was up, a proc
           //    by its type;
-          //  - else the press's mechanism (`selfDefensiveMechanism`), a
-          //    percentage reduction with how long its aura was up;
+          //  - else the press's mechanism (`selfDefensiveMechanism`);
           //  - a press no source classifies prints no label at all.
           const label =
             d.effect !== undefined
               ? enemySaveEffectNote(d.effect, d.absorbedAmount, dur)
               : d.mechanism
-                ? `${selfDefensiveLabelWords(d.mechanism)}${d.mechanism.kind === "reduction" && dur ? `, ${dur}` : ""}`
+                ? selfDefensiveLabelWords(d.mechanism)
                 : "";
           const hpStr = hpPct !== null ? ` (at ${hpPct.toFixed(0)}% HP)` : "";
           // B18: a Guardian Spirit the priest put on THEMSELVES is a
