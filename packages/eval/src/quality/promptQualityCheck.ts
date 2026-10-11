@@ -52,6 +52,8 @@ import {
   parseSyncReadyCdEntry,
   SYNC_LOCK_ENDED_BY_ROUND_END,
   SYNC_READY_CD_YOURS,
+  syncRowHasOwnerPart,
+  syncRowNarrowedToOwnerPart,
 } from "@gladlog/analysis/src/analysis/candidates/cooldownTiming";
 import { fmtFactNum } from "@gladlog/analysis/src/analysis/factFormat";
 import { parseBurstAnsweredLine } from "@gladlog/analysis/src/context/burstAnswered";
@@ -5551,6 +5553,39 @@ export function checkSyncWindowReadyCdHolders(lines: string[]): string[] {
   return failures;
 }
 
+/**
+ * Hard invariant (L04 (c), user ruling 2026-10-11): a Solo Shuffle menu has
+ * no missed-sync-window row nothing of which is the log owner's — every row
+ * there names a ready cooldown as `(yours)` or carries `setupBy`. The
+ * producer's two predicates on the rendered row: `syncRowNarrowedToOwnerPart`
+ * (the bracket — the header's `Bracket:` when the text has one, else the
+ * row's `cellKey`, which is the bracket the reference was looked up with)
+ * and `syncRowHasOwnerPart`. 2v2 / 3v3 rows are not judged.
+ *
+ * Before (605-file capture of ebb689de, fix-FT/scripts/
+ * ms_sync_holder_text.py, holders read off the loadout kits): 211 of the 549
+ * Solo Shuffle rows, in 202 menus, had neither (61 of the 177 3v3 rows do,
+ * and stay).
+ */
+export function checkSyncWindowOwnerPart(lines: string[]): string[] {
+  const failures: string[] = [];
+  const headerBracket = lines
+    .map((l) => l.match(BRACKET_HEADER)?.[1])
+    .find((b) => b !== undefined);
+  lines.forEach((line, i) => {
+    if (!line.includes("type=missed-sync-window ")) return;
+    const m = line.match(/facts=\{(.*)\}\s*$/);
+    if (!m) return; // `checkSyncWindowRefConsistency` reports it
+    const f = parseFactsBlock(m[1]!);
+    if (!syncRowNarrowedToOwnerPart(headerBracket ?? f.cellKey)) return;
+    if (!syncRowHasOwnerPart(f))
+      failures.push(
+        `line ${i + 1}: ${SOLO_SHUFFLE_BRACKET} 的 missed-sync-window 行没有录制者的份(没有 (${SYNC_READY_CD_YOURS}) 的冷却,也没有 setupBy)—— t=${f.t} cc=${f.cc} readyCds=${f.readyCds ?? "(缺)"}`,
+      );
+  });
+  return failures;
+}
+
 /** The roster line that assigns every player the numeric id each [STATE]
  * token is keyed on: `<unit id="3" name="Supatease-Tichondrius-US" …>`. */
 const UNIT_ROSTER_LINE = /<unit\s+id="(\d+)"\s+name="([^"]+)"/;
@@ -6647,6 +6682,7 @@ export function checkMatch(
   hardFailures.push(...checkSyncWindowRefConsistency(lines));
   hardFailures.push(...checkSyncWindowLockLength(lines));
   hardFailures.push(...checkSyncWindowReadyCdHolders(lines));
+  hardFailures.push(...checkSyncWindowOwnerPart(lines));
   hardFailures.push(...checkBacklashRefConsistency(lines));
   hardFailures.push(...checkKickPriorityRefConsistency(lines));
   hardFailures.push(...checkCdPriorRefConsistency(lines));

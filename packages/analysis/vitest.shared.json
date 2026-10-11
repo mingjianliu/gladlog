@@ -252,6 +252,7 @@
     "test/summonKind.test.ts",
     "test/summonReachability.test.ts",
     "test/syncLockLength.test.ts",
+    "test/syncOwnerPart.test.ts",
     "test/syncReadyCdHolder.test.ts",
     "test/syncWindowTimingFacts.test.ts",
     "test/t03Troughs.test.ts",

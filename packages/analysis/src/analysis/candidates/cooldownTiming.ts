@@ -68,6 +68,7 @@ import {
   traceDecision,
 } from "../../facts/decisionTrace";
 import { renderedWindowSeconds, toRenderSecond } from "../../utils/renderGrid";
+import { SOLO_SHUFFLE_BRACKET } from "../../utils/roundEnd";
 import { OFFENSIVE_CD_SPELL_IDS } from "../../utils/spellDanger";
 import { type MatchThreatLevel } from "../../utils/threatAssessment";
 import { ABILITY_EFFECTS_GENERATED } from "../../data/abilityEffectsGenerated";
@@ -859,6 +860,40 @@ export function parseSyncReadyCdEntry(entry: string): {
 }
 
 /**
+ * L04 (c) (user ruling 2026-10-11): in Solo Shuffle a missed-sync-window row
+ * reaches the log owner's menu only when part of it is the owner's
+ * (`syncRowHasOwnerPart`) — "telling a player that a random teammate did not
+ * press has nothing actionable"; a fixed 2v2 / 3v3 team keeps every row. The
+ * bracket is the row's own `cellKey` (`lookupSyncWindowPrior` keys the
+ * reference on `startInfo.bracket` and returns it as `cellKey`), so the gate
+ * (`checkSyncWindowOwnerPart`) asks the same question of the rendered row.
+ */
+export function syncRowNarrowedToOwnerPart(
+  cellKey: string | undefined,
+): boolean {
+  return cellKey === SOLO_SHUFFLE_BRACKET;
+}
+
+/**
+ * Is part of this missed-sync-window row the log owner's — one of its ready
+ * cooldowns (`X (yours)`, `syncReadyCdEntry`) or the lock (`setupBy`: the
+ * owner cast it, or a control of its chain)? A yes/no on two facts the row
+ * carries, no threshold. A later lock folded into the row (`alsoHeldAt`) is
+ * not asked about: `setupBy` is about the row's own lock.
+ */
+export function syncRowHasOwnerPart(facts: {
+  readyCds?: string;
+  setupBy?: string;
+}): boolean {
+  return (
+    !!facts.setupBy ||
+    (facts.readyCds ?? "")
+      .split("、")
+      .some((entry) => parseSyncReadyCdEntry(entry).yours)
+  );
+}
+
+/**
  * The numbers a missed-sync-window row states about its lock's length
  * (F06a). `durationS` is the lock's length through the control lines' own
  * formatter (`renderedCcDuration`: rounded to the whole second, `<1` under
@@ -923,7 +958,10 @@ export function missedSyncWindowEvents(
     enemyDeathS: number[];
     /** the log owner's unit id — an `endedBy` breaker that is the owner
      * reads "you", and a ready cooldown the owner holds reads `(yours)`
-     * (`syncReadyCdEntry`); optional (absent, both are named). */
+     * (`syncReadyCdEntry`); optional (absent, both are named). With it, a
+     * Solo Shuffle round's rows are narrowed to the owner's part (L04 (c),
+     * `syncRowNarrowedToOwnerPart`) — pass `ownerName` too, or a lock the
+     * owner cast is not known as theirs. */
     ownerId?: string;
     /** the log owner's name as the CC applications carry it (`casterName`)
      * — with it, a lock the owner cast (part of) carries `setupBy` (B11b).
@@ -952,6 +990,10 @@ export function missedSyncWindowEvents(
   const cap = overrides?.cap ?? MISSED_SYNC_WINDOW_CAP;
   const ref = probes.ref;
   if (ref === null || !syncRefClearsMinContrast(ref)) return [];
+  // L04 (c): a Solo Shuffle owner gets the rows part of which is theirs.
+  // With no owner in the question (the calibration counts) nothing is cut.
+  const ownerPartOnly =
+    probes.ownerId !== undefined && syncRowNarrowedToOwnerPart(ref.cellKey);
   const merged = mergeHealerCcWindows(ccWindows);
   const candidates: Array<{
     w: (typeof merged)[number];
@@ -1027,108 +1069,116 @@ export function missedSyncWindowEvents(
     candidates.push(cand);
     for (const cd of ev.ready) accused.set(cd, { end: w.toSeconds, cand });
   }
-  return candidates
-    .sort(
-      (a, b) =>
-        renderedWindowSeconds(b.w.fromSeconds, inRound(b.w).toSeconds) -
-        renderedWindowSeconds(a.w.fromSeconds, inRound(a.w).toSeconds),
-    )
-    .slice(0, cap)
-    .map(({ w, readyCds, minHp, minHpUnit, alsoHeld }) => {
-      const t = toRenderSecond(w.fromSeconds);
-      const length = syncLockLengthFacts(w, probes.roundEndS);
-      const timing = syncReadyTimingFacts(w, readyCds);
-      // B2-① (user ruling 2026-10-06; facts only — the verdict and the
-      // reference numbers are unchanged): a ready CD whose FIRST press after
-      // this lock entered the NEXT lock on an enemy healer, by the verdict's
-      // own `castEntersWindow`. fe1a9355 @94: Kingsbane, unpressed through
-      // the Seduction, went into the Kidney Shot→Fear lock that followed.
-      const afterEnd = (s: number) =>
-        probes.playableEndS !== undefined && s > probes.playableEndS;
-      const next = merged.find((n) => n.fromSeconds > w.toSeconds);
-      const enteredNext =
-        next && !afterEnd(next.fromSeconds)
-          ? readyCds.flatMap((cd) => {
-              const first = cd.casts
-                .filter((c) => c.timeSeconds > w.toSeconds)
-                .sort((a, b) => a.timeSeconds - b.timeSeconds)[0];
-              if (!first || afterEnd(first.timeSeconds)) return [];
-              if (!castEntersWindow(cd, first, next)) return [];
-              return [
-                `${cd.spellName} at ${toRenderSecond(first.timeSeconds)} in the ${toRenderSecond(next.fromSeconds)}–${toRenderSecond(next.toSeconds)} lock (${next.spellName})`,
-              ];
-            })
+  return (
+    candidates
+      .sort(
+        (a, b) =>
+          renderedWindowSeconds(b.w.fromSeconds, inRound(b.w).toSeconds) -
+          renderedWindowSeconds(a.w.fromSeconds, inRound(a.w).toSeconds),
+      )
+      .slice(0, cap)
+      .map(({ w, readyCds, minHp, minHpUnit, alsoHeld }) => {
+        const t = toRenderSecond(w.fromSeconds);
+        const length = syncLockLengthFacts(w, probes.roundEndS);
+        const timing = syncReadyTimingFacts(w, readyCds);
+        // B2-① (user ruling 2026-10-06; facts only — the verdict and the
+        // reference numbers are unchanged): a ready CD whose FIRST press after
+        // this lock entered the NEXT lock on an enemy healer, by the verdict's
+        // own `castEntersWindow`. fe1a9355 @94: Kingsbane, unpressed through
+        // the Seduction, went into the Kidney Shot→Fear lock that followed.
+        const afterEnd = (s: number) =>
+          probes.playableEndS !== undefined && s > probes.playableEndS;
+        const next = merged.find((n) => n.fromSeconds > w.toSeconds);
+        const enteredNext =
+          next && !afterEnd(next.fromSeconds)
+            ? readyCds.flatMap((cd) => {
+                const first = cd.casts
+                  .filter((c) => c.timeSeconds > w.toSeconds)
+                  .sort((a, b) => a.timeSeconds - b.timeSeconds)[0];
+                if (!first || afterEnd(first.timeSeconds)) return [];
+                if (!castEntersWindow(cd, first, next)) return [];
+                return [
+                  `${cd.spellName} at ${toRenderSecond(first.timeSeconds)} in the ${toRenderSecond(next.fromSeconds)}–${toRenderSecond(next.toSeconds)} lock (${next.spellName})`,
+                ];
+              })
+            : [];
+        // B11b (user ruling 2026-10-06): whose control the lock was. Only the
+        // owner is named; a chain the owner cast part of names that part.
+        const ownParts = probes.ownerName
+          ? w.componentCasters.filter((c) => c.casterName === probes.ownerName)
           : [];
-      // B11b (user ruling 2026-10-06): whose control the lock was. Only the
-      // owner is named; a chain the owner cast part of names that part.
-      const ownParts = probes.ownerName
-        ? w.componentCasters.filter((c) => c.casterName === probes.ownerName)
-        : [];
-      const setupBy =
-        ownParts.length === 0
-          ? ""
-          : ownParts.length === w.componentCasters.length
-            ? "you"
-            : `you (${[...new Set(ownParts.map((c) => c.spellName))].join("、")})`;
-      return {
-        // spellId disambiguates two CC windows on the same healer that floor
-        // to the same rendered second (review fix round 2, 2026-08-15) — the
-        // menu id is the eventIds reference key, so a collision here corrupts
-        // adoption attribution, not just cosmetics.
-        id: `missed-sync-window:${w.healerName}:${w.spellId}:${t}`,
-        type: "missed-sync-window",
-        t,
-        unitNames: [w.healerName],
-        spell: w.spellName,
-        spellId: w.spellId,
-        facts: {
-          t: String(t),
-          windowEndT: length.windowEndT,
-          healer: w.healerName,
-          cc: w.spellName,
-          dr: w.drLevel ?? "Full",
-          // F06a: the control lines' formatter, not the floored endpoints'
-          // difference (`syncLockLengthFacts`) — the gate pairs it with the
-          // `[CC ON ENEMY]` line (`checkSyncWindowLockLength`).
-          durationS: length.durationS,
-          // L04: each entry says whose cooldown it is (`syncReadyCdEntry`)
-          readyCds: readyCds
-            .map((cd) =>
-              syncReadyCdEntry(
-                cd.spellName,
-                cd.owner?.name,
-                probes.ownerId !== undefined && cd.owner?.id === probes.ownerId,
-              ),
-            )
-            .join("、"),
-          ...(minHp !== null ? { enemyMinHpPct: fmt(minHp) } : {}),
-          ...(minHp !== null && minHpUnit ? { enemyMinHpUnit: minHpUnit } : {}),
-          ...timing,
-          // the same held CDs through later healer locks (rendered seconds,
-          // "、"-joined — a ", " would cut the facts value)
-          ...(alsoHeld.length ? { alsoHeldAt: alsoHeld.join("、") } : {}),
-          // sync-burst F-S3: what ended the lock, only when the log says —
-          // a lock your own team's damage cut short is its own lesson. A
-          // lock the round ended on was ended by nothing logged after it.
-          ...(length.cutByRoundEnd
-            ? { endedBy: SYNC_LOCK_ENDED_BY_ROUND_END }
-            : w.endedBy
-              ? { endedBy: formatCcRemovalCause(w.endedBy, probes.ownerId) }
+        const setupBy =
+          ownParts.length === 0
+            ? ""
+            : ownParts.length === w.componentCasters.length
+              ? "you"
+              : `you (${[...new Set(ownParts.map((c) => c.spellName))].join("、")})`;
+        return {
+          // spellId disambiguates two CC windows on the same healer that floor
+          // to the same rendered second (review fix round 2, 2026-08-15) — the
+          // menu id is the eventIds reference key, so a collision here corrupts
+          // adoption attribution, not just cosmetics.
+          id: `missed-sync-window:${w.healerName}:${w.spellId}:${t}`,
+          type: "missed-sync-window",
+          t,
+          unitNames: [w.healerName],
+          spell: w.spellName,
+          spellId: w.spellId,
+          facts: {
+            t: String(t),
+            windowEndT: length.windowEndT,
+            healer: w.healerName,
+            cc: w.spellName,
+            dr: w.drLevel ?? "Full",
+            // F06a: the control lines' formatter, not the floored endpoints'
+            // difference (`syncLockLengthFacts`) — the gate pairs it with the
+            // `[CC ON ENEMY]` line (`checkSyncWindowLockLength`).
+            durationS: length.durationS,
+            // L04: each entry says whose cooldown it is (`syncReadyCdEntry`)
+            readyCds: readyCds
+              .map((cd) =>
+                syncReadyCdEntry(
+                  cd.spellName,
+                  cd.owner?.name,
+                  probes.ownerId !== undefined &&
+                    cd.owner?.id === probes.ownerId,
+                ),
+              )
+              .join("、"),
+            ...(minHp !== null ? { enemyMinHpPct: fmt(minHp) } : {}),
+            ...(minHp !== null && minHpUnit
+              ? { enemyMinHpUnit: minHpUnit }
               : {}),
-          ...(enteredNext.length
-            ? { enteredNextLock: enteredNext.join("; ") }
-            : {}),
-          ...(setupBy ? { setupBy } : {}),
-          // Corpus reference (syncWindowPrior.ts) — the gate
-          // (checkSyncWindowRefConsistency) redoes the lookup from cellKey
-          // and re-checks every one of these numbers plus the door.
-          refN: String(ref.nEntered + ref.nUnentered),
-          refKillEntered: String(ref.killEnteredPct),
-          refKillUnentered: String(ref.killUnenteredPct),
-          cellKey: ref.cellKey,
-        },
-      };
-    });
+            ...timing,
+            // the same held CDs through later healer locks (rendered seconds,
+            // "、"-joined — a ", " would cut the facts value)
+            ...(alsoHeld.length ? { alsoHeldAt: alsoHeld.join("、") } : {}),
+            // sync-burst F-S3: what ended the lock, only when the log says —
+            // a lock your own team's damage cut short is its own lesson. A
+            // lock the round ended on was ended by nothing logged after it.
+            ...(length.cutByRoundEnd
+              ? { endedBy: SYNC_LOCK_ENDED_BY_ROUND_END }
+              : w.endedBy
+                ? { endedBy: formatCcRemovalCause(w.endedBy, probes.ownerId) }
+                : {}),
+            ...(enteredNext.length
+              ? { enteredNextLock: enteredNext.join("; ") }
+              : {}),
+            ...(setupBy ? { setupBy } : {}),
+            // Corpus reference (syncWindowPrior.ts) — the gate
+            // (checkSyncWindowRefConsistency) redoes the lookup from cellKey
+            // and re-checks every one of these numbers plus the door.
+            refN: String(ref.nEntered + ref.nUnentered),
+            refKillEntered: String(ref.killEnteredPct),
+            refKillUnentered: String(ref.killUnenteredPct),
+            cellKey: ref.cellKey,
+          },
+        };
+      })
+      // L04 (c): AFTER the cap — a row that goes frees no slot, so no shorter
+      // lock of the round moves up into the menu in its place.
+      .filter((e) => !ownerPartOnly || syncRowHasOwnerPart(e.facts))
+  );
 }
 
 /** Per-match cap for unsynced-burst. <标定定稿 2026-08-15,报告

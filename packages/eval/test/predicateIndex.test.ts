@@ -2868,6 +2868,23 @@ const INDEX: PredicateRow[] = [
     symbol: "checkSyncWindowReadyCdHolders",
     mod: promptQualityCheck,
   },
+  // L04 (c): in Solo Shuffle a row reaches the owner's menu only when part
+  // of it is the owner's; the gate asks the row the producer's two questions.
+  {
+    file: `${A}/analysis/candidates/cooldownTiming.ts`,
+    symbol: "syncRowNarrowedToOwnerPart",
+    mod: cooldownTiming,
+  },
+  {
+    file: `${A}/analysis/candidates/cooldownTiming.ts`,
+    symbol: "syncRowHasOwnerPart",
+    mod: cooldownTiming,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkSyncWindowOwnerPart",
+    mod: promptQualityCheck,
+  },
   // F06b / F08: a control gone in under half a second with no cause in the
   // log; a damage break's `endedBy` names the breaking hit as that.
   {

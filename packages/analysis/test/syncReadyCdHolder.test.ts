@@ -19,8 +19,10 @@ beforeAll(async () => {
   await ensureAnalysisData();
 });
 
+// a fixed-team bracket: every row reaches the owner (L04 (c) narrows Solo
+// Shuffle only — `syncOwnerPart.test.ts`)
 const REF = {
-  cellKey: "Rated Solo Shuffle",
+  cellKey: "3v3",
   nEntered: 174,
   killEnteredPct: 18,
   nUnentered: 174,
