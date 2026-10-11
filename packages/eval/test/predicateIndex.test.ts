@@ -1720,6 +1720,17 @@ const INDEX: PredicateRow[] = [
     symbol: "intervalBlocksEverySpell",
     mod: cannotCastIntervals,
   },
+  // a spell the unit's pet casts is asked of the pet (2026-10-11)
+  {
+    file: `${A}/utils/cannotCastIntervals.ts`,
+    symbol: "petCastSpellIdsOf",
+    mod: cannotCastIntervals,
+  },
+  {
+    file: `${A}/utils/cannotCastIntervals.ts`,
+    symbol: "petCastersOf",
+    mod: cannotCastIntervals,
+  },
   // WP-A2 fix (review 40-FT-53 P2): the second target's share
   {
     file: `${A}/utils/burstLedger.ts`,
