@@ -6,7 +6,7 @@
  * therefore no such legend).
  */
 import { buildFindingsPrompt } from "@gladlog/analysis/src/analysis/buildFindingsPrompt";
-import type { CandidateEvent } from "@gladlog/analysis/src/analysis/candidateFindings";
+import type { CandidateEvent } from "@gladlog/analysis/src/analysis/types";
 import { CANDIDATE_TYPE_REGISTRY } from "@gladlog/analysis/src/data/candidateTypeRegistry";
 import { describe, expect, it } from "vitest";
 
