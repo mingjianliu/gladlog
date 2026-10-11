@@ -24,6 +24,7 @@
     "test/ccEndCauseNotLoggedGate.test.ts",
     "test/ccRefreshedNoteGate.test.ts",
     "test/cdPriorRefGate.test.ts",
+    "test/cdWasteSharedCooldownGate.test.ts",
     "test/cjkLeakGate.test.ts",
     "test/conseqHpStateGate.test.ts",
     "test/coverageManifest.test.ts",

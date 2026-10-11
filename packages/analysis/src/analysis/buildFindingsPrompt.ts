@@ -1,6 +1,10 @@
 import { CANDIDATE_TYPE_FLAGS } from "../data/candidateTypeFlags";
 import { CANDIDATE_TYPE_REGISTRY } from "../data/candidateTypeRegistry";
-import { LEGACY_TOPIC_TYPES } from "./candidateFindings";
+import {
+  CD_WASTE_SHARED_COOLDOWN_NOTE,
+  cdWasteSpellNames,
+  LEGACY_TOPIC_TYPES,
+} from "./candidateFindings";
 import {
   LATE_WINDOW_SECONDS,
   PRE_WALL_SECONDS,
@@ -33,6 +37,11 @@ const LEGACY_TYPES_LIST = [...LEGACY_TOPIC_TYPES]
  * and its phrase) comes from curatedAbilityFacts.ts's `costNormPhrase` —
  * candidateFindings.ts's cost_norm sign-off book — this string only explains
  * what the field MEANS to the model, same split as ownerCanDispel above. */
+/** X1: what a cd-waste row whose facts.spell ends
+ * `CD_WASTE_SHARED_COOLDOWN_NOTE` says (`cdWasteSpellFact`) — the buttons of
+ * one DB2 charge pool, none pressed. */
+const CD_WASTE_SHARED_LEGEND_NOTE = ` When facts.spell lists several abilities joined by " / " and ends "${CD_WASTE_SHARED_COOLDOWN_NOTE}", they are the buttons of ONE cooldown — pressing any of them puts the others on cooldown too — and none was pressed: one unused cooldown, so never count or coach them as several.`;
+
 const COST_NORM_LEGEND_NOTE = ` When facts.costNorm is present, the named ability (e.g. Divine Shield/Ice Block) is mechanically usable but its real-game cost is too high to recommend as a routine reaction — echo the costNorm caveat and suggest it only as a last-resort/emergency option, never as "you should press this to block/mitigate".`;
 
 /** Intent guard (BACKLOG #26 Task 2 — "pressed but rejected ≠ never
@@ -243,9 +252,19 @@ export function buildFindingsPrompt(
     // another round of that match. Conditional, like every other per-type
     // legend: it used to print on all 3,520 prompts, 692 of which carry a
     // cd-waste row.
+    // X1 (user ruling 2026-10-11): the shared-cooldown sentence prints only
+    // beside a row that names one (40 of the 692 on that capture).
     ...legendLines(
       {
-        "cd-waste": `- "cd-waste": a major defensive cooldown the player never successfully cast in this round (facts.spell names it; facts.unit is the player) — the round this prompt covers: in Solo Shuffle each round has its own prompt, and the player may have pressed it in another round of the match. This is a whole-round observation with no timestamp.${COST_NORM_LEGEND_NOTE}${ATTEMPTED_LEGEND_NOTE}`,
+        "cd-waste": `- "cd-waste": a major defensive cooldown the player never successfully cast in this round (facts.spell names it; facts.unit is the player) — the round this prompt covers: in Solo Shuffle each round has its own prompt, and the player may have pressed it in another round of the match. This is a whole-round observation with no timestamp.${
+          candidates.some(
+            (c) =>
+              c.type === "cd-waste" &&
+              cdWasteSpellNames(c.facts.spell ?? "").shared,
+          )
+            ? CD_WASTE_SHARED_LEGEND_NOTE
+            : ""
+        }${COST_NORM_LEGEND_NOTE}${ATTEMPTED_LEGEND_NOTE}`,
       },
       candidates,
     ),

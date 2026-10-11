@@ -2974,10 +2974,25 @@ export function isPressOfCooldown(
 }
 
 /**
+ * Two DIFFERENT spells that draw on one DB2 charge pool
+ * (`SHARED_CHARGE_CATEGORY`, SpellCategories.ChargeCategory — Blessing of
+ * Protection / Blessing of Spellwarding, Holy Bulwark / Sacred Weapon,
+ * Intervene / Interpose …): one cooldown with two buttons. The one relation
+ * behind `spendsSharedChargeOf` (a press of one makes the other unavailable)
+ * and the cd-waste row that names both as one cooldown (`cdWasteEvents`, X1).
+ */
+export function sharesChargePool(spellIdA: string, spellIdB: string): boolean {
+  const pool = SHARED_CHARGE_CATEGORY[spellIdA];
+  return (
+    pool !== undefined &&
+    canonicalSpellId(spellIdB) !== canonicalSpellId(spellIdA) &&
+    SHARED_CHARGE_CATEGORY[spellIdB] === pool
+  );
+}
+
+/**
  * A press of ANOTHER spell that spends X's charge: both draw on one DB2
- * charge pool (`SHARED_CHARGE_CATEGORY`, SpellCategories.ChargeCategory —
- * Blessing of Protection / Blessing of Spellwarding, Holy Bulwark / Sacred
- * Weapon, Intervene / Interpose …). Not a press OF X (the ledger never lists
+ * charge pool (`sharesChargePool`). Not a press OF X (the ledger never lists
  * it as X's cast); it only makes X unavailable. Shared by the ledger's
  * availability (`extractMajorCooldowns` → `sharedCasts`) and the death-outcome
  * path (`deathOutcomeAnalysis.isAvailableAt`) — reliability round 2 W1e.
@@ -2988,12 +3003,7 @@ export function spendsSharedChargeOf(
 ): boolean {
   if (e.logLine.event !== LogEvent.SPELL_CAST_SUCCESS || !e.spellId)
     return false;
-  const pool = SHARED_CHARGE_CATEGORY[spellId];
-  return (
-    pool !== undefined &&
-    canonicalSpellId(e.spellId) !== canonicalSpellId(spellId) &&
-    SHARED_CHARGE_CATEGORY[e.spellId] === pool
-  );
+  return sharesChargePool(spellId, e.spellId);
 }
 
 /**

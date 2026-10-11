@@ -74,6 +74,7 @@ import {
   lockoutDebuffStopsPress,
   playerTalentIdSets,
   REACTION_WINDOW_S,
+  sharesChargePool,
   specToString,
   talentReplacementsOf,
   unitCooldownOf,
@@ -319,6 +320,36 @@ export const CD_WASTE_EXCLUDED_IDS: ReadonlySet<string> = new Set([
   "414664", // Mass Invisibility
 ]);
 
+/** What closes the `spell` fact of a cd-waste row that names the buttons of
+ * ONE cooldown (X1) — `A / B (one shared cooldown)`. */
+export const CD_WASTE_SHARED_COOLDOWN_NOTE = "(one shared cooldown)";
+
+/**
+ * The `spell` fact of a cd-waste row: the cooldown's name, or — for the
+ * never-spent buttons of one DB2 charge pool (`sharesChargePool`) — every
+ * button's name and `CD_WASTE_SHARED_COOLDOWN_NOTE`:
+ * `Blessing of Protection / Blessing of Spellwarding (one shared cooldown)`.
+ * Read back by `cdWasteSpellNames` (the gate, `checkCdWasteSharedCooldown`).
+ */
+export function cdWasteSpellFact(spellNames: readonly string[]): string {
+  const names = [...new Set(spellNames)];
+  return names.length < 2
+    ? (names[0] ?? "")
+    : `${names.join(" / ")} ${CD_WASTE_SHARED_COOLDOWN_NOTE}`;
+}
+
+/** `cdWasteSpellFact` read back: the buttons a cd-waste row names, and
+ * whether it says they are one shared cooldown. */
+export function cdWasteSpellNames(spellFact: string): {
+  names: string[];
+  shared: boolean;
+} {
+  const tail = ` ${CD_WASTE_SHARED_COOLDOWN_NOTE}`;
+  return spellFact.endsWith(tail)
+    ? { names: spellFact.slice(0, -tail.length).split(" / "), shared: true }
+    : { names: [spellFact], shared: false };
+}
+
 export function cdWasteEvents(
   cds: (Pick<
     IMajorCooldownInfo,
@@ -348,7 +379,13 @@ export function cdWasteEvents(
   },
 ): CandidateEvent[] {
   if (minHpPct !== null && minHpPct >= CD_WASTE_PRESSURE_HP_PCT) return [];
-  const out: CandidateEvent[] = [];
+  // X1 (user ruling 2026-10-11): one row per COOLDOWN, not per button. Two
+  // never-spent defensives of one DB2 charge pool (`sharesChargePool`, the
+  // relation readiness already reads) are one cooldown nobody pressed — a
+  // Paladin was told twice, once for Blessing of Protection and once for
+  // Blessing of Spellwarding (fe1a9355). The group keeps its first member's
+  // place and id.
+  const groups: (typeof cds)[] = [];
   for (const cd of cds) {
     // 指控说「防御」,就只能问防御 tag —— 不能拿「不是进攻」凑数。
     const isDefensive = cd.tag === undefined || DEFENSIVE_TAGS.has(cd.tag);
@@ -362,45 +399,60 @@ export function cdWasteEvents(
     // name at a crisis, never cd-waste's (user ruling 2026-10-01, P-W6).
     if (cd.baselineOnly) continue;
     // W2 (triage 2026-09-29): a press of the same DB2 charge pool spends it
-    if (cdNeverSpent(cd) && !cd.isThroughput && isDefensive) {
-      // Cost-norm guard (#25, 2026-08-14): a never-used major defensive is
-      // exactly the shape of fact that tempts the model into "you should
-      // have used your X" — for a signed-off cost_norm ability (Divine
-      // Shield/Ice Block: mechanically usable, but too costly to coach as a
-      // routine reaction) that advice is wrong. Same precedent as the dispel
-      // capability gates (candidateFindings.ts's missed-cleanse
-      // ownerCanDispel): the fact carries the guard, the prompt explains it.
-      const costNorm = costNormPhrase(cd.spellId);
-      const attempted = attempts
-        ? formatAttemptedFact(
-            filterIntentGuardEvidence(
+    if (!(cdNeverSpent(cd) && !cd.isThroughput && isDefensive)) continue;
+    const group = groups.find((g) =>
+      sharesChargePool(g[0]!.spellId, cd.spellId),
+    );
+    if (group) group.push(cd);
+    else groups.push([cd]);
+  }
+  const out: CandidateEvent[] = [];
+  for (const group of groups) {
+    const cd = group[0]!;
+    // Cost-norm guard (#25, 2026-08-14): a never-used major defensive is
+    // exactly the shape of fact that tempts the model into "you should
+    // have used your X" — for a signed-off cost_norm ability (Divine
+    // Shield/Ice Block: mechanically usable, but too costly to coach as a
+    // routine reaction) that advice is wrong. Same precedent as the dispel
+    // capability gates (candidateFindings.ts's missed-cleanse
+    // ownerCanDispel): the fact carries the guard, the prompt explains it.
+    // A shared cooldown carries it when any of its buttons does — the
+    // direction that keeps the guard.
+    const costNorm = group
+      .map((m) => costNormPhrase(m.spellId))
+      .find((phrase) => phrase !== null);
+    // … and a rejected press of any of its buttons was a try at it
+    const attempted = attempts
+      ? formatAttemptedFact(
+          filterIntentGuardEvidence(
+            group.flatMap((m) =>
               castFailedInWindow(
                 attempts.rawStreams,
                 healer.id,
                 0,
                 attempts.untilS,
-                Number(cd.spellId),
+                Number(m.spellId),
               ),
-              [],
-              { ownCastSuccessSeconds: attempts.ownCastSuccessSeconds },
             ),
-          )
-        : undefined;
-      out.push({
-        id: `cd-waste:${healer.id}:${cd.spellId}`,
-        type: "cd-waste",
-        t: 0, // whole-round observation, not time-specific
-        unitNames: [healer.name],
-        spell: cd.spellName,
-        spellId: cd.spellId,
-        facts: {
-          spell: cd.spellName,
-          unit: healer.name,
-          ...(costNorm ? { costNorm } : {}),
-          ...(attempted ? { attempted } : {}),
-        },
-      });
-    }
+            [],
+            { ownCastSuccessSeconds: attempts.ownCastSuccessSeconds },
+          ),
+        )
+      : undefined;
+    out.push({
+      id: `cd-waste:${healer.id}:${cd.spellId}`,
+      type: "cd-waste",
+      t: 0, // whole-round observation, not time-specific
+      unitNames: [healer.name],
+      spell: cd.spellName,
+      spellId: cd.spellId,
+      facts: {
+        spell: cdWasteSpellFact(group.map((m) => m.spellName)),
+        unit: healer.name,
+        ...(costNorm ? { costNorm } : {}),
+        ...(attempted ? { attempted } : {}),
+      },
+    });
   }
   return out;
 }

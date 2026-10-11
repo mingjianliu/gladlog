@@ -45,6 +45,8 @@ import {
   GROUND_CONTROL_FUSE_MS,
 } from "@gladlog/analysis/src/analysis/burstWindowDecisionPoints";
 import {
+  CD_WASTE_SHARED_COOLDOWN_NOTE,
+  cdWasteSpellNames,
   distanceFact,
   POST_KICK_OTHER_REASON_HEAD,
 } from "@gladlog/analysis/src/analysis/candidateFindings";
@@ -170,6 +172,7 @@ import {
   isTickBelowTrough,
   PRESS_HP_LINE_TAGS,
   PRESSURE_WINDOWS_TOP_N,
+  sharesChargePool,
 } from "@gladlog/analysis/src/utils/cooldowns";
 import { UNPURGED_FOR_RE_SRC } from "@gladlog/analysis/src/utils/dispelAnalysis";
 import {
@@ -5481,6 +5484,64 @@ function checkSyncWindowRefConsistency(lines: string[]): string[] {
   return failures;
 }
 
+const CD_WASTE_ROW = /\bid=cd-waste:([^:\s]+):(\d+) type=cd-waste /;
+
+/**
+ * Hard invariant (X1, user ruling 2026-10-11): one cd-waste row per
+ * cooldown, not per button.
+ *
+ *  1. No menu carries two cd-waste rows of one unit whose spells draw on
+ *     one DB2 charge pool — the producer's own relation (`sharesChargePool`,
+ *     what readiness reads) asked of the spell ids the rows' ids carry.
+ *  2. A row whose `spell` ends `CD_WASTE_SHARED_COOLDOWN_NOTE` names two or
+ *     more buttons (`cdWasteSpellNames`, the producer's fact read back), and
+ *     with a loadout in the text each of them is an entry of that unit's
+ *     `<cooldowns>` kit marked `[UNUSED` — "never spent" on both sides is
+ *     the ledger's `cdNeverSpent`.
+ *
+ * Before (605-file capture of ebb689de, fix-FT/scripts/
+ * ms_shared_cd_text.py): 40 menus carried a `Blessing of Protection` and a
+ * `Blessing of Spellwarding` row of one unit (ChargeCategory 1392); no other
+ * pool had two rows.
+ */
+export function checkCdWasteSharedCooldown(lines: string[]): string[] {
+  const failures: string[] = [];
+  const units = unitKitsOf(lines);
+  const rows: Array<{ line: number; unit: string; spellId: string }> = [];
+  lines.forEach((line, i) => {
+    const row = line.match(CD_WASTE_ROW);
+    if (!row) return;
+    const prior = rows.find(
+      (r) => r.unit === row[1] && sharesChargePool(r.spellId, row[2]!),
+    );
+    if (prior)
+      failures.push(
+        `line ${i + 1}: cd-waste 行的技能 ${row[2]} 与第 ${prior.line + 1} 行的 ${prior.spellId} 是同一个冷却(同一个充能池),同一单位 ${row[1]} 却各出一行`,
+      );
+    rows.push({ line: i, unit: row[1]!, spellId: row[2]! });
+    const m = line.match(/facts=\{(.*)\}\s*$/);
+    if (!m) return;
+    const f = parseFactsBlock(m[1]!);
+    const spell = cdWasteSpellNames(f.spell ?? "");
+    if (!spell.shared) return;
+    const fail = (why: string) =>
+      failures.push(
+        `line ${i + 1}: cd-waste 写「${CD_WASTE_SHARED_COOLDOWN_NOTE}」${why} —— spell=${f.spell}`,
+      );
+    if (new Set(spell.names).size < 2) fail(",却只列了一个技能");
+    const kit = units.find((u) => u.name === f.unit)?.kit;
+    if (!kit) return;
+    for (const name of spell.names) {
+      const entry = kit.get(name.replace(/\u00a0/g, " "));
+      if (entry === undefined)
+        fail(`,其中 ${name} 不在 ${f.unit} 的 <cooldowns> 里`);
+      else if (!entry.includes("[UNUSED"))
+        fail(`,其中 ${name} 在 <cooldowns> 里不是 [UNUSED]`);
+    }
+  });
+  return failures;
+}
+
 /**
  * Hard invariant (L04, user ruling 2026-10-11): a missed-sync-window row
  * says whose each ready cooldown is, and the loadout agrees.
@@ -6683,6 +6744,7 @@ export function checkMatch(
   hardFailures.push(...checkSyncWindowLockLength(lines));
   hardFailures.push(...checkSyncWindowReadyCdHolders(lines));
   hardFailures.push(...checkSyncWindowOwnerPart(lines));
+  hardFailures.push(...checkCdWasteSharedCooldown(lines));
   hardFailures.push(...checkBacklashRefConsistency(lines));
   hardFailures.push(...checkKickPriorityRefConsistency(lines));
   hardFailures.push(...checkCdPriorRefConsistency(lines));

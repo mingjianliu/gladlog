@@ -2248,6 +2248,28 @@ const INDEX: PredicateRow[] = [
     symbol: "SHARED_CHARGE_CATEGORY",
     mod: sharedChargeGenerated,
   },
+  // X1: one cd-waste row per cooldown — the never-spent buttons of one
+  // charge pool in one row; the gate asks the rows the producer's relation.
+  {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "sharesChargePool",
+    mod: cooldowns,
+  },
+  {
+    file: `${A}/analysis/candidateFindings.ts`,
+    symbol: "cdWasteSpellFact",
+    mod: candidateFindings,
+  },
+  {
+    file: `${A}/analysis/candidateFindings.ts`,
+    symbol: "cdWasteSpellNames",
+    mod: candidateFindings,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkCdWasteSharedCooldown",
+    mod: promptQualityCheck,
+  },
   {
     file: `${A}/utils/spellRange.ts`,
     symbol: "spellReachToAccuse",

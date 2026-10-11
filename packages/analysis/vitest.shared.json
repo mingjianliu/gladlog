@@ -122,6 +122,7 @@
     "test/cdHoardedSelfOnly.test.ts",
     "test/cdOutOfRangeReach.test.ts",
     "test/cdWasteGate.test.ts",
+    "test/cdWasteSharedCooldown.test.ts",
     "test/chargeAvailability.test.ts",
     "test/charmedPlayer.test.ts",
     "test/consequenceGate.test.ts",
