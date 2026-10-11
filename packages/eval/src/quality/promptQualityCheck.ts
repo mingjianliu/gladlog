@@ -146,6 +146,8 @@ import {
 import {
   CC_END_CAUSE_NOT_LOGGED,
   CC_LOGGED_END_NOTE_RE_SRC,
+  CC_REFRESHED_LEAD,
+  CC_REFRESHED_NOTE_RE_SRC,
   CC_STILL_ON_AT_ROUND_END,
   ccLandedMatchWindowMs,
   DEATH_BREAKABLE_CC_LOOKBACK_S,
@@ -1346,6 +1348,63 @@ export function checkCcEndCauseNotLogged(lines: string[]): string[] {
       fail("所在的行没有印 <1s");
     if (CC_OTHER_END_STATEMENT.test(line))
       fail("与该行另一处结束说明并存");
+  });
+  return failures;
+}
+
+/** `formatCcRefreshed`'s clause, whole. */
+const CC_REFRESHED_NOTE = new RegExp(CC_REFRESHED_NOTE_RE_SRC.slice(0, -1));
+/** A control's length where a break took the `| Ns` slot: `after 2s (cut
+ *  short` (trinket / racial / Tremor), `broke this CC after 2s` (immunity). */
+const CONTROL_BROKEN_AFTER_SECONDS = /after (?:(\d+)|<1)s/;
+
+/**
+ * Hard invariant (F06c): `refreshed at m:ss — the length printed runs across
+ * it` (`formatCcRefreshed`: a SPELL_AURA_REFRESH of the control, from its own
+ * source, inside the instance the line prints) holds on its own line —
+ *
+ *  - it sits on a `[CC ON TEAM]` / `[CC ON ENEMY]` line, in the producer's
+ *    exact form;
+ *  - every refresh second is inside the span the line prints: not before
+ *    the line's own second, not after it + the printed whole seconds (+ the
+ *    grid's one second — the start is floored, the length rounded). A line
+ *    whose length it cannot read is not judged on that.
+ */
+export function checkCcRefreshedNote(lines: string[]): string[] {
+  const failures: string[] = [];
+  lines.forEach((line, i) => {
+    if (!line.includes(` | ${CC_REFRESHED_LEAD}`)) return;
+    const fail = (why: string) =>
+      failures.push(
+        `line ${i + 1}: 「${CC_REFRESHED_LEAD}…」${why} —— ${line.trim().slice(0, 200)}`,
+      );
+    const head = line.match(CONTROL_SPAN_LINE);
+    if (!head || (head[3] !== "CC ON TEAM" && head[3] !== "CC ON ENEMY"))
+      return fail("不在 [CC ON TEAM] / [CC ON ENEMY] 行上");
+    const note = line.match(CC_REFRESHED_NOTE)?.[0];
+    if (!note) return fail("格式不符");
+    const start = Number(head[1]) * 60 + Number(head[2]);
+    const cut = line.match(CONTROL_CUT_SECONDS);
+    const plain = line.match(CONTROL_PLAIN_SECONDS);
+    const broken = line.match(CONTROL_BROKEN_AFTER_SECONDS);
+    const seconds = cut
+      ? Number(cut[1] ?? 0)
+      : plain
+        ? Number(plain[1] ?? plain[2])
+        : /\) \| <1s|\) \(<1s\)/.test(line)
+          ? 0
+          : broken
+            ? Number(broken[1] ?? 0)
+            : null;
+    for (const m of note.matchAll(/(\d+):(\d{2})/g)) {
+      const at = Number(m[1]) * 60 + Number(m[2]);
+      if (at < start)
+        fail(`的刷新时刻 ${m[0]} 早于该行的起点`);
+      else if (seconds !== null && at > start + seconds + 1)
+        fail(
+          `的刷新时刻 ${m[0]} 晚于该行印出的区间(起点 + ${seconds}s)`,
+        );
+    }
   });
   return failures;
 }
@@ -5949,6 +6008,7 @@ export function checkMatch(
   hardFailures.push(...checkKillWindowWithinRound(lines));
   hardFailures.push(...checkAuraEndWithinRound(lines));
   hardFailures.push(...checkCcEndCauseNotLogged(lines));
+  hardFailures.push(...checkCcRefreshedNote(lines));
   hardFailures.push(...checkBehaviorPriorConsistency(lines));
   hardFailures.push(...checkBurstWindowRefConsistency(lines));
   hardFailures.push(...checkOffensiveWindowSpikeMarker(lines));

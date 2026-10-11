@@ -19,6 +19,7 @@ import {
   ccLoggedEnd,
   findBrokenCC,
   formatCcLoggedEnd,
+  formatCcRefreshed,
   formatCcUnloggedEnd,
   type ICCInstance,
   renderedCcDuration,
@@ -269,9 +270,11 @@ export function emitCcOnEnemyEntries(
             : formatCcUnloggedEnd(
                 ccUnloggedEarlyEnd(enemyUnit, cc, matchStartMs),
               ));
+        // F06c: a REFRESH row this line's instance runs across
+        const refreshNote = formatCcRefreshed(cc, fmtTime, drTag !== "");
         const durStr = enemyTremor
           ? `${drTag} | enemy Tremor Totem from ${enemyPid(enemyTremor.shamanName)} ended this CC after ${renderedCcDuration(cc)} (cut short — it had not expired)`
-          : ` (${renderedCcSpan(cc)})${drTag}${endNote}`;
+          : ` (${renderedCcSpan(cc)})${drTag}${refreshNote}${endNote}`;
         addEntry(
           cc.atSeconds,
           `${fmtTime(cc.atSeconds)}  [CC ON ENEMY]   ${enemyPid(summary.playerName)} ← ${cc.spellName} (by ${actorLabel(cc.sourceName, "friendly", cc.sourceId)})${durStr}`,

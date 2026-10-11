@@ -640,6 +640,21 @@ export interface ICCInstance {
    * 64 of 628 distinct "0s" control lines on the 605-file capture were CCs
    * of 2.7–6 s the round end cut). */
   stillOnAtRoundEnd?: true;
+  /**
+   * Match seconds of every SPELL_AURA_REFRESH of this aura, from its own
+   * source, INSIDE this instance (F06c). A refresh its source cast for
+   * starts a new instance (ruling A51, `castBackedRefresh`); these are the
+   * ones that did not, so the instance runs across them: its
+   * `durationSeconds` is more than one application can last and its DR
+   * level is the first application's. Terror of the Skies is the case in
+   * the corpus — Deep Breath applies it under another id, so the refresh has
+   * no cast of its own id behind it: 8 instances on the 605 files ran
+   * 3.4–4.5 s on a 3 s stun, each REFRESHed 1.9–3.0 s in and gone 1.50 s
+   * after that (fix-FT/scripts/n4_terror_refresh.py, 6 of them read row by
+   * row). The line says where the refresh is (`formatCcRefreshed`); DR
+   * accounting is untouched.
+   */
+  refreshedAtSeconds?: number[];
   spellId: string;
   spellName: string;
   sourceName: string;
@@ -1651,10 +1666,44 @@ export function formatCcUnloggedEnd(
   return end === "no_cause" ? ` | ${CC_END_CAUSE_NOT_LOGGED}` : "";
 }
 
-/** The ` | …` clause a control line carries for `ccLoggedEnd` /
- * `ccEndedByOwnPress` / `ccUnloggedEarlyEnd`, and the pattern the gates read
- * it back with (anchored by the caller). */
-export const CC_LOGGED_END_NOTE_RE_SRC = String.raw`(?: \| (?:broken by [^|]+|dispelled by [^|]+|ended at their death|ended by their [^|]+|${CC_END_CAUSE_NOT_LOGGED}))?`;
+/**
+ * What a control line says of a refresh it runs across (F06c,
+ * `ICCInstance.refreshedAtSeconds`): `| refreshed at 1:39[, 1:41] — the
+ * length printed runs across it[; the DR shown is from when it first
+ * landed]` (the second half only on a line that prints a DR level).
+ *
+ * It states the REFRESH row and nothing about what the refresh was. The log
+ * has two kinds and the row does not tell them apart: Terror of the Skies'
+ * restarts the stun one DR step down (1.50 s more on a 3 s stun, 6 of 6
+ * read), a Bull Rush's 0.4 s after its APPLIED leaves the end where it was
+ * (06bb9860). The outgoing chain starts a new application — and burns a DR
+ * step — at every REFRESH; its level for the refresh is deliberately not
+ * printed here.
+ */
+export const CC_REFRESHED_LEAD = "refreshed at ";
+export const CC_REFRESHED_RUNS_ACROSS = "the length printed runs across it";
+export const CC_REFRESHED_DR_IS_FIRST =
+  "the DR shown is from when it first landed";
+export function formatCcRefreshed(
+  cc: Pick<ICCInstance, "refreshedAtSeconds">,
+  fmtTime: (seconds: number) => string,
+  /** the line prints a `[DR: …]` level */
+  drShown: boolean,
+): string {
+  const at = cc.refreshedAtSeconds ?? [];
+  if (at.length === 0) return "";
+  return ` | ${CC_REFRESHED_LEAD}${at.map(fmtTime).join(", ")} — ${CC_REFRESHED_RUNS_ACROSS}${
+    drShown ? `; ${CC_REFRESHED_DR_IS_FIRST}` : ""
+  }`;
+}
+/** `formatCcRefreshed` as the gates read it back. */
+export const CC_REFRESHED_NOTE_RE_SRC = String.raw`(?: \| ${CC_REFRESHED_LEAD}\d+:\d{2}(?:, \d+:\d{2})* — ${CC_REFRESHED_RUNS_ACROSS}(?:; ${CC_REFRESHED_DR_IS_FIRST})?)?`;
+
+/** The ` | …` clauses a control line carries after its length: the refresh
+ * note (`formatCcRefreshed`), then how it ended — `ccLoggedEnd` /
+ * `ccEndedByOwnPress` / `ccUnloggedEarlyEnd` — and the pattern the gates
+ * read them back with (anchored by the caller). */
+export const CC_LOGGED_END_NOTE_RE_SRC = String.raw`${CC_REFRESHED_NOTE_RE_SRC}(?: \| (?:broken by [^|]+|dispelled by [^|]+|ended at their death|ended by their [^|]+|${CC_END_CAUSE_NOT_LOGGED}))?`;
 export function formatCcLoggedEnd(
   end: ICcLoggedEnd | undefined,
   label: (name: string, unitId: string | undefined) => string,
@@ -2034,6 +2083,9 @@ export function analyzePlayerCCAndTrinket(
     roarAtApply: boolean;
     /** closed here with no REMOVED in the log */
     noRemoved?: true;
+    /** REFRESH rows of this aura from its source that did not start a new
+     * window (F06c, `ICCInstance.refreshedAtSeconds`) */
+    refreshesMs?: number[];
   }> = [];
 
   const pendingCC = new Map<
@@ -2044,6 +2096,7 @@ export function analyzePlayerCCAndTrinket(
       srcName: string;
       srcUnitId: string;
       roarAtApply: boolean;
+      refreshesMs?: number[];
     }
   >();
 
@@ -2208,6 +2261,7 @@ export function analyzePlayerCCAndTrinket(
           applyMs: pending.applyMs,
           removeMs: aura.timestamp,
           roarAtApply: pending.roarAtApply,
+          ...(pending.refreshesMs ? { refreshesMs: pending.refreshesMs } : {}),
         });
         pendingCC.delete(matchKey);
       }
@@ -2215,12 +2269,23 @@ export function analyzePlayerCCAndTrinket(
       event === LogEvent.SPELL_AURA_REFRESH &&
       ccSpellIds.has(spellId) &&
       pendingCC.has(ccKey) &&
-      castBackedRefresh(
+      !castBackedRefresh(
         aura.srcUnitId,
         spellId,
         aura.timestamp,
         pendingCC.get(ccKey)!.applyMs,
       )
+    ) {
+      // F06c: a REFRESH from the window's own source (the key is spell +
+      // source) with no cast of its id behind it stays inside the window,
+      // as before — and is remembered, so the line can say the control was
+      // refreshed there. No window is cut and no DR level moves.
+      const pending = pendingCC.get(ccKey)!;
+      (pending.refreshesMs ??= []).push(aura.timestamp);
+    } else if (
+      event === LogEvent.SPELL_AURA_REFRESH &&
+      ccSpellIds.has(spellId) &&
+      pendingCC.has(ccKey)
     ) {
       // Triage 2026-09-29 cc-dr F-RF1 (ruling A51 = A): a REFRESH its source
       // cast for is a new CC — close the window at the refresh and open the
@@ -2272,6 +2337,7 @@ export function analyzePlayerCCAndTrinket(
       removeMs: pendingEnd(pendingSpellId, pending.srcUnitId, pending.applyMs),
       roarAtApply: pending.roarAtApply,
       noRemoved: true,
+      ...(pending.refreshesMs ? { refreshesMs: pending.refreshesMs } : {}),
     });
   });
 
@@ -2615,6 +2681,17 @@ export function analyzePlayerCCAndTrinket(
           ? { expectedDurationSeconds }
           : {}),
         ...(w.stillOnAtRoundEnd ? { stillOnAtRoundEnd: true as const } : {}),
+        // only the refreshes strictly inside what is left of the window (a
+        // round end can have cut it before them)
+        ...((w.refreshesMs ?? []).some(
+          (ms) => ms > w.applyMs && ms < w.removeMs,
+        )
+          ? {
+              refreshedAtSeconds: w
+                .refreshesMs!.filter((ms) => ms > w.applyMs && ms < w.removeMs)
+                .map((ms) => (ms - matchStartMs) / 1000),
+            }
+          : {}),
         spellId: w.spellId,
         spellName: w.spellName,
         sourceName: w.srcName,
