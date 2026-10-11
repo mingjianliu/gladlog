@@ -6,7 +6,8 @@ import { fmtTime, toRenderSecond } from "./renderGrid";
 // Solo Shuffle - Start at 10% Dampening and after 1 minute, ramp up at a pace of 25% per minute
 // 3v3 - Start at 10% Dampening and after 3 minutes (down from 5 minutes), ramp up at a pace of 6% per minute
 // 2v2 - the Dragonflight start values (30% with a healer on both teams, 10%
-//   otherwise) are NOT what the log prints any more; see `getInitialDampening`.
+//   otherwise) are NOT what the log prints any more; the start is derived
+//   from the round's first logged stack — see `getInitialDampening`.
 
 // ---------------------------------------------------------------------------
 // Internal types
@@ -15,7 +16,15 @@ import { fmtTime, toRenderSecond } from "./renderGrid";
 export interface DampeningEvent {
   timestamp: number;
   stacks: number;
+  /** a SPELL_AURA_REMOVED_DOSE — the stack went DOWN to `stacks` */
+  removed?: true;
 }
+
+/** One dose of the Dampening aura: every SPELL_AURA_APPLIED_DOSE raises the
+ * stack by this much (605-file capture: 3,002 of 3,020 steps after a round's
+ * first are +1; the rest are the REMOVED_DOSE drops after a death). What
+ * `getInitialDampening` steps back from a 2v2 round's first logged stack. */
+export const DAMPENING_DOSE_PCT = 1;
 
 // ---------------------------------------------------------------------------
 // Private helpers
@@ -46,7 +55,14 @@ export function buildDampeningEvents(players: ICombatUnit[]): DampeningEvent[] {
     )
       continue;
     const stacks = doseStackCount(a.logLine.parameters?.[12]);
-    if (stacks !== null) events.push({ timestamp: a.timestamp, stacks });
+    if (stacks !== null)
+      events.push({
+        timestamp: a.timestamp,
+        stacks,
+        ...(a.logLine.event === "SPELL_AURA_REMOVED_DOSE"
+          ? { removed: true as const }
+          : {}),
+      });
   }
   return events.sort((a, b) => a.timestamp - b.timestamp);
 }
@@ -59,7 +75,7 @@ export function buildDampeningEvents(players: ICombatUnit[]): DampeningEvent[] {
  * parser older than the CRLF fix (parser/src/api.ts): the amount is the last
  * field of the line, so it kept the line's trailing "\r" ("42\r"), which
  * parser-compat's `convertParams` leaves a string. Such a document's stacks
- * were never read; in 2v2, where no value is stated before the first logged
+ * were never read; in 2v2, where the start is derived from the first logged
  * stack (`getInitialDampening`), that left the whole round without a
  * dampening number. Trailing / leading whitespace is trimmed here and a
  * plain non-negative integer is accepted; anything else is still not a
@@ -75,8 +91,7 @@ function doseStackCount(raw: unknown): number | null {
 /**
  * Returns the dampening stack count at or before `upToTimestamp` from a
  * pre-built sorted event list, falling back to `fallback` if no event exists
- * yet — `null` where no value is stated before the first logged stack
- * (`getInitialDampening`).
+ * yet — `null` where the round has no value to state (`getInitialDampening`).
  */
 function getDampeningFromEvents<F extends number | null>(
   events: DampeningEvent[],
@@ -163,30 +178,48 @@ export function dampeningRulesOf(
  *   applied in the sampled round); in Shuffle it reads 12 / 11 / 13 in
  *   510 / 187 / 12 rounds, 20–90 s in (about 60 s after the aura is applied)
  *   — a flat 10, then the ramp (605-file capture).
- * - **2v2: `null` — deliberately not stated** (user ruling 2026-10-10, D11
- *   of FT-T13, "follow the log's first tick", re-opening the signed O10 of
- *   2026-09-30 that had kept 30 / 10). The table's Dragonflight values — 30 with a healer
- *   on both teams, 10 otherwise — are contradicted by the log: the first
- *   stack, about 10 s after the aura is applied, reads **42 in 258 of 258**
- *   rounds with two healers and **22 in 32 of 32** rounds of the other kind
- *   (605-file capture), and from there the stack climbs by one every 10 s.
- *   Stepping one tick back gives 41 / 21, but that is an extrapolation: a
- *   number the log never prints (Game-Behaviour Rule). So before its first
- *   logged stack a 2v2 prompt carries NO dampening number — no `started at`,
- *   no `| dampening:` note, no `[DAMPENING ALERT]`, no `damp:` — and the
- *   header says `first logged at N% (m:ss)` instead.
+ * - **2v2: derived from the round's first logged stack — one dose below
+ *   it**, and `null` when the round logged none (user ruling 2026-10-10,
+ *   D11 of FT-T13, "按日志第一跳倒推", confirmed the same day after seeing both
+ *   forms on a real round; it re-opens the signed O10 of 2026-09-30 that had
+ *   kept 30 / 10). The table's Dragonflight values — 30 with a healer on both
+ *   teams, 10 otherwise — are contradicted by the log: the first stack, about
+ *   10 s after the aura is applied, reads **42 in 258 of 258** rounds with
+ *   two healers and **22 in 32 of 32** rounds of the other kind, between 0:10
+ *   and 0:14 in all 580 2v2 contexts of the 605-file capture, and from there
+ *   the stack climbs by one every 10 s. So the value in front of the first
+ *   logged stack is that stack minus one dose (`DAMPENING_DOSE_PCT`): 41 /
+ *   21. It is a DERIVED number — the log never prints it — and the header
+ *   says so (`started at 41% (derived: …)`); every other line prints it as
+ *   the round's dampening for those seconds. Not derived when the first
+ *   logged line is a REMOVED_DOSE (the stack going down is not a dose up).
+ *   (PV368 shipped this as "no number before the first logged stack"; that
+ *   was the implementer's reading, not the ruling.)
  *
- * Do not "fix" the 2v2 `null` back into a number without a logged source for
- * it. The one place that needs a weight where none is stated is the
- * burst-window threat score — see `dampeningForThreatWeight`.
+ * No hand table: a 2v2 value in front of the first logged stack comes from
+ * that stack or is not stated.
  */
 export function getInitialDampening(
   bracket: string,
   players: readonly ICombatUnit[],
 ): number | null {
-  const rules = dampeningRulesOf(bracket, players);
+  return initialDampeningOf(
+    dampeningRulesOf(bracket, players),
+    buildDampeningEvents(players as ICombatUnit[]),
+  );
+}
+
+/** `getInitialDampening` on an event list already built — the rules may be
+ * classified on a wider roster than the units whose events are read. */
+function initialDampeningOf(
+  rules: DampeningRules,
+  events: readonly DampeningEvent[],
+): number | null {
   if (rules === "2v2") {
-    return null;
+    const first = events[0];
+    return first && !first.removed
+      ? Math.max(0, first.stacks - DAMPENING_DOSE_PCT)
+      : null;
   }
   // 3v3, Rated Solo Shuffle
   return 10;
@@ -198,8 +231,8 @@ export function getInitialDampening(
 
 /**
  * The dampening (0–100) at `timestamp` — `null` where none is stated: a 2v2
- * round before its first logged stack (`getInitialDampening`). A caller that
- * prints the value prints nothing on `null`.
+ * round that logged no stack (`getInitialDampening`). A caller that prints
+ * the value prints nothing on `null`.
  *
  * `players` are the units whose stack events are read. `roster` is the round's
  * whole unit list the bracket is classified from (`dampeningRulesOf`); it
@@ -213,7 +246,10 @@ export function getDampeningPercentage(
   roster: readonly ICombatUnit[] = players,
 ): number | null {
   const events = buildDampeningEvents(players);
-  const fallback = getInitialDampening(bracket, roster);
+  const fallback = initialDampeningOf(
+    dampeningRulesOf(bracket, roster),
+    events,
+  );
   // FIX 3: use ?? instead of || so stacks=0 is not conflated with "no data"
   return getDampeningFromEvents(events, timestamp, fallback);
 }
@@ -238,18 +274,9 @@ export function computeDampening(
 
 /**
  * The dampening (0–1) a burst window's threat score is WEIGHTED with — never
- * a printed number. Where a value is stated it is that value. Where none is
- * (a 2v2 round before its first logged stack) the weight reads the round's
- * first logged stack — the nearest number the log does print — and 0 when the
- * log printed no stack at all.
- *
- * This is an implementation choice of FT-T13 D11, not part of the ruling
- * (which is about what the prompt STATES). The alternative is no weight
- * (×1.0) before the first stack; it was not taken because every 2v2 round's
- * first stack reads 42 or 22 (`getInitialDampening`), so ×1.0 would score an
- * opener at 0:08 as if the round had no dampening and step the same burst to
- * ×1.63 at 0:12. Before D11 the weight there came from the hand value
- * (30 → ×1.45, 10 → ×1.15). To switch, return 0 instead of the first stack.
+ * a printed number. Where a value is stated it is that value (in 2v2 before
+ * the first logged stack: the derived start, `getInitialDampening`); where
+ * none is — a 2v2 round that logged no stack — the weight is 0.
  */
 export function dampeningForThreatWeight(
   matchTimeMs: number,
@@ -257,10 +284,7 @@ export function dampeningForThreatWeight(
   players: ICombatUnit[],
   roster: readonly ICombatUnit[] = players,
 ): number {
-  const stated = computeDampening(matchTimeMs, bracket, players, roster);
-  if (stated !== null) return stated;
-  const first = firstLoggedDampening(players);
-  return first ? Math.min(first.stacks / 100, 1.0) : 0;
+  return computeDampening(matchTimeMs, bracket, players, roster) ?? 0;
 }
 
 /**
@@ -291,9 +315,8 @@ export interface IDampeningSnapshot {
  * the previous sample (avoids repetitive flat sections).
  * Events are precomputed once and reused across all sample points (FIX 1).
  *
- * A sample where no value is stated (a 2v2 round before its first logged
- * stack, `getInitialDampening`) is skipped, so the first entry of such a
- * round sits after 0 s, and the list is empty when the log printed no stack.
+ * A sample where no value is stated (a 2v2 round that logged no stack,
+ * `getInitialDampening`) is skipped — the list is then empty.
  */
 export function computeDampeningTimeline(
   bracket: string,
@@ -304,7 +327,10 @@ export function computeDampeningTimeline(
   const durationMs = endTime - startTime;
   // FIX 1: build event list once, reuse across all sample intervals
   const events = buildDampeningEvents(players);
-  const fallback = getInitialDampening(bracket, players);
+  const fallback = initialDampeningOf(
+    dampeningRulesOf(bracket, players),
+    events,
+  );
   const snapshots: IDampeningSnapshot[] = [];
   const INTERVAL_MS = 30_000;
 
@@ -375,16 +401,28 @@ export function formatDampeningForContext(
   // Compact single-line summary — the ramp schedule is fixed per bracket so only the
   // endpoint matters for AI reasoning. Full timeline is visible in the Dispels UI tab.
   //
-  // The opening clause states what is known at 0:00. A value is stated there
-  // in 3v3 / Solo Shuffle (`started at`); in 2v2 none is, and the clause gives
-  // the first logged stack and its second instead — the second the first
-  // `| dampening:` note and the first `[DAMPENING ALERT]` can appear at
-  // (`checkDampeningStartConsistency` reads it back).
-  const knownAtStart = timeline[0].atSeconds === 0;
-  const first = knownAtStart ? null : firstLoggedDampening(players);
-  const opening = first
-    ? `first logged at ${first.stacks}% (${fmtTime((first.timestamp - startTime) / 1000)}; the log prints no value before that)`
-    : `started at ${fmtDampening(timeline[0].dampening)}`;
+  // The opening clause states the value at 0:00. In 2v2 that value is derived
+  // from the first logged stack (`getInitialDampening`), and the clause says
+  // so and names the stack and its second — `checkDampeningStartConsistency`
+  // re-does the step from the rendered numbers. Where no start is stated —
+  // a 2v2 round whose first logged line is a stack DROP, which is not stepped
+  // back from (review 40-FT-56; 0 of the 580 2v2 contexts of the 605-file
+  // capture) — the clause gives that first line and its second instead, and
+  // no line before that second carries a number.
+  const first =
+    dampeningRulesOf(bracket, players) === "2v2"
+      ? firstLoggedDampening(players)
+      : null;
+  const firstAt = first
+    ? `${first.stacks}% at ${fmtTime((first.timestamp - startTime) / 1000)}`
+    : "";
+  const opening = first?.removed
+    ? `first logged ${firstAt} (a stack drop; the log prints no value before that)`
+    : `started at ${fmtDampening(timeline[0].dampening)}${
+        first
+          ? ` (derived: one ${DAMPENING_DOSE_PCT}% step below the first logged stack, ${firstAt} — the log prints no value before that)`
+          : ""
+      }`;
   lines.push(
     `DAMPENING (${bracket}): ${opening}, ended at ${fmtDampening(finalDamp)} at match end`,
   );

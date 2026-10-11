@@ -167,39 +167,43 @@ const SPIKE_LEGEND = "`next spike in Ns on X` on a [YOU] [CD] line";
  * D11 (re-opens the signed O10 of 2026-09-30): the log never prints a value
  * before the first stack, and the first stack reads 42 in 258 of 258 2v2
  * rounds with two healers (22 in 32 of 32 of the other kind) — so the old
- * `started at 30%` was wrong and an extrapolated 41 would be a number the log
- * never prints. Before the first logged stack a 2v2 prompt states NO number.
- * (Under WP-H 1 alone every line below read 30%: header, 0:00 alert, the 0:04
- * press line and the 0:08 [DEATH] line.)
+ * `started at 30%` was wrong. The user's ruling: step back from the log's
+ * first stack (one dose → 41) and say the number is derived. Before the
+ * first logged stack every line of a 2v2 prompt reads that ONE derived
+ * value. (Under WP-H 1 alone every line below read 30%; PV368 printed no
+ * number there.)
  */
-describe("FT-T13 D10 + D11: one 2v2 prompt, no dampening number before the first logged stack", () => {
+describe("FT-T13 D10 + D11: one 2v2 prompt, one derived dampening value before the first logged stack", () => {
   beforeAll(async () => {
     await ensureAnalysisData();
   });
 
-  it("the header names the first logged stack and its second instead of a start value", () => {
+  it("the header states the derived start, the stack it is derived from and that stack's second", () => {
     expect(header()[0]).toBe(
-      "DAMPENING (2v2): first logged at 42% (0:11; the log prints no value before that), ended at 52% at match end",
+      "DAMPENING (2v2): started at 41% (derived: one 1% step below the first logged stack, 42% at 0:11 — the log prints no value before that), ended at 52% at match end",
     );
   });
 
-  it("no line stamped before the first stack carries a dampening number — press line, [DEATH] line, alert", () => {
+  it("every line stamped before the first stack reads the derived 41% — press line and [DEATH] line", () => {
     const lines = renderTimeline();
     const before = stampedBefore(lines, FIRST_STACK_S);
-    // the lines are there …
+    expect(lineOf(before, /^0:04 {2}\[YOU\] \[CD\] .*Astral Shift/)).toMatch(
+      / \| dampening: 41%/,
+    );
+    expect(lineOf(before, /^0:08 {2}\[DEATH\]/)).toMatch(/ \| dampening: 41%$/);
+    // one value, nowhere another
     expect(
-      lineOf(before, /^0:04 {2}\[YOU\] \[CD\] .*Astral Shift/),
-    ).toBeTruthy();
-    expect(lineOf(before, /^0:08 {2}\[DEATH\]/)).toBeTruthy();
-    // … and none of them states a number
-    expect(before.filter((l) => DAMPENING_NUMBER.test(l))).toEqual([]);
-    expect(lines).not.toContain("0:00  [DAMPENING ALERT: 30%]");
+      before
+        .filter((l) => /dampening: \d+%|damp: \d+%/.test(l))
+        .filter((l) => !/(?:dampening|damp): 41%/.test(l)),
+    ).toEqual([]);
+    expect(before.some((l) => DAMPENING_NUMBER.test(l))).toBe(true);
   });
 
-  it("the 30% alert sits at the second of the first logged stack at or above 30", () => {
+  it("the 30% alert sits at 0:00: the round starts above it", () => {
     const lines = renderTimeline();
     expect(lines.filter((l) => l.includes("[DAMPENING ALERT: 30%]"))).toEqual([
-      "0:11  [DAMPENING ALERT: 30%]",
+      "0:00  [DAMPENING ALERT: 30%]",
     ]);
     // 50% is crossed by the stack at 91 s (42 + 8), as before
     expect(lines).toContain("1:31  [DAMPENING ALERT: 50%]");
@@ -214,7 +218,7 @@ describe("FT-T13 D10 + D11: one 2v2 prompt, no dampening number before the first
     expect(lineOf(lines, /\[MATCH END\]/)).toMatch(/damp: 52%/);
   });
 
-  it("the hindsight spike note survives without the dampening half, and keeps its legend", () => {
+  it("the hindsight spike note follows the derived dampening on the press line, and keeps its legend", () => {
     const spike = {
       fromSeconds: 9,
       toSeconds: 14,
@@ -224,8 +228,7 @@ describe("FT-T13 D10 + D11: one 2v2 prompt, no dampening number before the first
     };
     const lines = renderTimeline({ pressureWindows: [spike] });
     const press = lineOf(lines, /^0:04 {2}\[YOU\] \[CD\] .*Astral Shift/)!;
-    expect(press).toMatch(/ \| next spike in 5s on 2/);
-    expect(press).not.toMatch(/dampening/);
+    expect(press).toMatch(/ \| dampening: 41%, next spike in 5s on 2/);
     expect(lines.join("\n")).toContain(SPIKE_LEGEND);
   });
 

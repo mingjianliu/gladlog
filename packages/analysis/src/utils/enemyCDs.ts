@@ -114,8 +114,8 @@ export interface IAlignedBurstWindow {
   /** Combined score including outcome factors (damage dealt, healer CC) — kept for existing consumers */
   readonly dangerScore: number;
   readonly dangerLabel: "Low" | "Moderate" | "High" | "Critical";
-  /** 0–1; `null` where no value is stated at the window's start — a 2v2
-   * round before its first logged stack (`getInitialDampening`). */
+  /** 0–1; `null` where no value is stated — a 2v2 round that logged no
+   * stack (`getInitialDampening`). */
   readonly dampeningPct: number | null;
   readonly damageInWindow: number;
   readonly damageRatio: number;
@@ -498,10 +498,10 @@ export function reconstructEnemyCDTimeline(
       const roundUnits = Object.values(combat.units ?? {});
       const roster = roundUnits.length > 0 ? roundUnits : allPlayers;
       const windowStartAtMs = windowStart * 1000 + matchStartMs;
-      // `dampening` is the STATED value — null in a 2v2 round before its
-      // first logged stack (FT-T13 D11); it is what `dampeningPct` carries to
-      // anything that prints it. The threat score needs a weight even there
-      // and takes it from `dampeningForThreatWeight` (the first logged stack).
+      // `dampening` is the STATED value — null in a 2v2 round that logged no
+      // stack (FT-T13 D11); it is what `dampeningPct` carries to anything
+      // that prints it. The threat score needs a weight even there and takes
+      // it from `dampeningForThreatWeight` (0 for such a round).
       const dampening = computeDampening(
         windowStartAtMs,
         bracket,
@@ -706,7 +706,7 @@ export function formatEnemyCDTimelineForContext(
     "  (Threat = strength of the stacked CDs before outcome; Outcome = what actually happened. High threat with below-average damage usually means the burst was well defended — worth crediting.)",
   );
   timeline.alignedBurstWindows.forEach((w, idx) => {
-    // No `| Dampening:` where none is stated (2v2 before the first logged stack)
+    // No `| Dampening:` where none is stated (a 2v2 round with no logged stack)
     const dampStr =
       w.dampeningPct === null
         ? ""

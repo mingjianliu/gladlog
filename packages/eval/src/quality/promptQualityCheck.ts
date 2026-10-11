@@ -30,6 +30,7 @@
 
 import {
   creditSpikesToWindows,
+  DAMPENING_DOSE_PCT,
   DMG_SPIKE_THRESHOLD,
   droppableNoChangeResRows,
   ensureAnalysisData,
@@ -1239,10 +1240,11 @@ export function checkHeaderHpPromise(lines: string[]): string[] {
 
 /** `DAMPENING (3v3): started at 10%, ended at …` — the header's start value. */
 const DAMPENING_STARTED_HEADER = /^DAMPENING \([^)]*\): started at (\d+)%/;
-/** `DAMPENING (2v2): first logged at 42% (0:11; the log prints no value before
- *  that), ended at …` — no value is stated before that second. */
-const DAMPENING_FIRST_LOGGED_HEADER =
-  /^DAMPENING \([^)]*\): first logged at (\d+)% \((\d+):(\d{2})[;)]/;
+/** `DAMPENING (2v2): started at 41% (derived: one 1% step below the first
+ *  logged stack, 42% at 0:11 — the log prints no value before that), ended at
+ *  …` — the start is derived from that stack. */
+const DAMPENING_DERIVED_START_HEADER =
+  /^DAMPENING \([^)]*\): started at (\d+)% \(derived: one (\d+)% step below the first logged stack, (\d+)% at (\d+):(\d{2})\b/;
 /** `DAMPENING (2v2): n/a — no dampening stack was logged in this round (8s)` —
  *  no value is stated anywhere in the round. */
 const DAMPENING_NO_STACK_HEADER =
@@ -1253,10 +1255,18 @@ const DAMPENING_NOTE = /\| dampening: (\d+)%/;
  *  `[DAMPENING ALERT: N%]`, the `damp: N%` of `[MATCH END]`. */
 const DAMPENING_NUMBER_ON_LINE =
   /\| dampening: \d+%|\[DAMPENING ALERT: \d+%\]|\bdamp: \d+%/;
+/** A dampening VALUE on a timeline line: the `| dampening: N%` note or the
+ *  `damp: N%` of `[MATCH END]` (an alert names a milestone, not the value). */
+const DAMPENING_VALUE_ON_LINE = /(?:\| dampening|\bdamp): (\d+)%/g;
+/** `DAMPENING (2v2): first logged 28% at 0:09 (a stack drop; the log prints no
+ *  value before that), ended at …` — no start is stated: nothing before that
+ *  second carries a number. */
+const DAMPENING_FIRST_DROP_HEADER =
+  /^DAMPENING \([^)]*\): first logged (\d+)% at (\d+):(\d{2}) \(a stack drop/;
 const DEATH_LINE = /^\d+:\d{2}\s+\[DEATH\]/;
 
 /**
- * One prompt states one dampening start, and none the log does not print
+ * One prompt states one dampening start, and says where it comes from
  * (FT-T13, D10 + D11).
  *
  * The DAMPENING header opens in one of three ways, and each binds the
@@ -1266,10 +1276,17 @@ const DEATH_LINE = /^\d+:\d{2}\s+\[DEATH\]/;
  *   same reading of the same aura, and the stack only goes down after a death
  *   (`buildDampeningEvents`: a REMOVED_DOSE on the survivors). So before the
  *   second of the first `[DEATH]` line no note may read below the header.
- * - `first logged at N% (m:ss; …)` (2v2). No value is stated before the
- *   round's first logged stack (`getInitialDampening` — the extrapolated
- *   41 / 21 would be a number the log never prints). So no timeline line
- *   stamped before m:ss may carry a dampening number of any kind.
+ * - `started at N% (derived: one D% step below the first logged stack, M% at
+ *   m:ss …)` (2v2 — `getInitialDampening`; the user's D11: step back from
+ *   the log's first stack, and say the number is derived). The step is
+ *   re-done from the rendered numbers: D is `DAMPENING_DOSE_PCT` and
+ *   N = M − D. Before m:ss the round's dampening IS N, so every
+ *   `| dampening:` note and `damp:` stamped before that second reads N. The
+ *   first rule holds for it too.
+ * - `first logged M% at m:ss (a stack drop; …)` (a 2v2 round whose first
+ *   logged line is a REMOVED_DOSE — not stepped back from). No start is
+ *   stated, so no timeline line stamped before m:ss may carry a dampening
+ *   number of any kind.
  * - `n/a — no dampening stack was logged in this round` (a 2v2 round without
  *   one). No timeline line may carry a dampening number at all.
  *
@@ -1288,16 +1305,17 @@ export function checkDampeningStartConsistency(lines: string[]): string[] {
     return m ? Number(m[1]) * 60 + Number(m[2]) : null;
   };
 
-  // ── `first logged at` / no stack: nothing before the first logged second ──
+  // ── no start stated (no stack logged, or the first logged line is a
+  // drop): no dampening number before the first logged second ──
   const unstated = lines
     .map((l, i) => {
       const t = l.trim();
-      const first = t.match(DAMPENING_FIRST_LOGGED_HEADER);
-      if (first)
+      const drop = t.match(DAMPENING_FIRST_DROP_HEADER);
+      if (drop)
         return {
           line: i + 1,
-          untilS: Number(first[2]) * 60 + Number(first[3]),
-          says: `first logged at ${first[1]}% (${first[2]}:${first[3]})`,
+          untilS: Number(drop[2]) * 60 + Number(drop[3]),
+          says: `第一条记录是 ${drop[2]}:${drop[3]} 的掉层(${drop[1]}%),此前没有陈述值`,
         };
       return DAMPENING_NO_STACK_HEADER.test(t)
         ? { line: i + 1, untilS: Infinity, says: "日志整局没有打出衰减层数" }
@@ -1311,11 +1329,40 @@ export function checkDampeningStartConsistency(lines: string[]): string[] {
       const m = line.match(DAMPENING_NUMBER_ON_LINE);
       if (m)
         failures.push(
-          `line ${i + 1}: DAMPENING 段首(第 ${unstated.line} 行)写 ${unstated.says},本行在那之前却带衰减数字「${m[0]}」—— ${line.trim().slice(0, 140)}`,
+          `line ${i + 1}: DAMPENING 段首(第 ${unstated.line} 行)写${unstated.says},本行在那之前却带衰减数字「${m[0]}」—— ${line.trim().slice(0, 140)}`,
         );
     });
     return failures;
   }
+
+  // ── a derived start: the step, and one value before the first logged stack ──
+  // (those seconds are judged here and left out of the `started at` rule
+  // below, which would report a low note a second time)
+  let derivedUntilS = 0;
+  lines.forEach((l, h) => {
+    const d = l.trim().match(DAMPENING_DERIVED_START_HEADER);
+    if (!d) return;
+    const [startPct, stepPct, firstPct] = [d[1], d[2], d[3]].map(Number);
+    const firstS = Number(d[4]) * 60 + Number(d[5]);
+    derivedUntilS = Math.max(derivedUntilS, firstS);
+    // the producer's own clamp: a stack cannot go below 0
+    if (
+      stepPct !== DAMPENING_DOSE_PCT ||
+      startPct !== Math.max(0, firstPct - stepPct)
+    )
+      failures.push(
+        `line ${h + 1}: DAMPENING 段首写 started at ${startPct}%,但它声称的推导是「第一次记录 ${firstPct}% 减一步 ${stepPct}%」(一步应为 ${DAMPENING_DOSE_PCT}%)—— ${l.trim().slice(0, 160)}`,
+      );
+    lines.forEach((line, i) => {
+      const s = secondOf(line);
+      if (s === null || s >= firstS) return;
+      for (const m of line.matchAll(DAMPENING_VALUE_ON_LINE))
+        if (Number(m[1]) !== startPct)
+          failures.push(
+            `line ${i + 1}: DAMPENING 段首(第 ${h + 1} 行)写第一次记录在 ${d[4]}:${d[5]}、此前为 ${startPct}%,本行在那之前却写「${m[0]}」—— ${line.trim().slice(0, 140)}`,
+          );
+    });
+  });
 
   // ── `started at N%`: no note below it before the first death ──
   const headerAt = lines.findIndex((l) =>
@@ -1334,7 +1381,7 @@ export function checkDampeningStartConsistency(lines: string[]): string[] {
   }
   lines.forEach((line, i) => {
     const s = secondOf(line);
-    if (s === null || s >= firstDeathS) return;
+    if (s === null || s >= firstDeathS || s < derivedUntilS) return;
     const m = line.match(DAMPENING_NOTE);
     if (m && Number(m[1]) < started.pct)
       failures.push(

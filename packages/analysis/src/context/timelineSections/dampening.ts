@@ -3,13 +3,12 @@
  * milestone (30 / 50 / 70 / 90 %) already reached when the match starts, then at
  * the first crossing of each remaining one.
  *
- * "Already reached when the match starts" needs a value stated at 0:00. A 2v2
- * round has none before its first logged stack (`getInitialDampening`, FT-T13
- * D11), so its 30 % alert sits at the second of the first logged stack at or
- * above 30 — the first stack itself with a healer on both teams (it reads 42,
- * inside the round's first 20 s), a later one otherwise (the first reads 22) —
- * instead of the `0:00` a hand value put it at. The thresholds and the
- * alert's meaning are unchanged.
+ * "Already reached when the match starts" reads the value at 0:00. In a 2v2
+ * round that value is derived from the first logged stack
+ * (`getInitialDampening`, FT-T13 D11): 41 with a healer on both teams — its
+ * 30 % alert sits at `0:00` — and 21 otherwise, whose 30 % alert comes at the
+ * first logged stack at or above 30. A 2v2 round that logged no stack has no
+ * alert. The thresholds and the alert's meaning are unchanged.
  *
  * Cut out of buildMatchTimeline (GH #116); its closure inputs arrive through
  * `ctx`.

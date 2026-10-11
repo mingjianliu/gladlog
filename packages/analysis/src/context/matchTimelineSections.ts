@@ -726,7 +726,7 @@ export function emitManaMarkerEntries(params: {
 // ── [DEATH] events ──────────────────────────────────────────────────────────
 
 /** ` | dampening: N%` on a `[DEATH]` line — nothing where no value is stated
- * (2v2 before the first logged stack; `getInitialDampening`, FT-T13 D11). */
+ * (a 2v2 round that logged no stack; `getInitialDampening`, FT-T13 D11). */
 function dampeningSuffix(
   dampeningAt: ((atSeconds: number) => number | null) | undefined,
   atSeconds: number,
@@ -915,7 +915,7 @@ export function emitFriendlyDeathEntries<S>(params: {
   /** GH #103 A1: the dampening at the death instant, same getter as the
    * `[CD] … | dampening: N%` lines. Without it the responder quoted the value
    * of a neighbouring line ("died at 3:15 at 66%" — 66% was 3:16's). Omitted,
-   * or `null` at that instant (2v2 before the first logged stack) → no
+   * or `null` at that instant (a 2v2 round that logged no stack) → no
    * suffix. */
   dampeningAt?: (atSeconds: number) => number | null;
   /**
@@ -1266,7 +1266,7 @@ export function emitEnemyDeathEntries<S>(params: {
   /** GH #103 A1 (see emitFriendlyDeathEntries): the dampening at the death instant, same getter as the
    * `[CD] … | dampening: N%` lines. Without it the responder quoted the value
    * of a neighbouring line ("died at 3:15 at 66%" — 66% was 3:16's). Omitted,
-   * or `null` at that instant (2v2 before the first logged stack) → no
+   * or `null` at that instant (a 2v2 round that logged no stack) → no
    * suffix. */
   dampeningAt?: (atSeconds: number) => number | null;
   requestSnapshotPlaceholder: (

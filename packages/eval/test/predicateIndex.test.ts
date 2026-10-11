@@ -1561,6 +1561,11 @@ const INDEX: PredicateRow[] = [
     symbol: "firstLoggedDampening",
     mod: dampening,
   },
+  {
+    file: `${A}/utils/dampening.ts`,
+    symbol: "DAMPENING_DOSE_PCT",
+    mod: dampening,
+  },
   // WP-A2 (T12 ③ ⑤ ⑦): spike credit, the burst ledger's Target / ally lines,
   // the healer view's own damage
   {

@@ -210,29 +210,39 @@ describe("enemyCDs — timeline reconstruction", () => {
       reconstructEnemyCDTimeline(enemies(atS, withStack), combat2v2())
         .alignedBurstWindows[0];
 
-    it("states no dampening for the window (dampeningPct null), and prints none", () => {
+    it("states the derived start for the window (one dose below the first logged stack), and prints it", () => {
       const early = windowOf(4);
       expect(early.fromSeconds).toBe(4);
-      expect(early.dampeningPct).toBeNull();
+      expect(early.dampeningPct).toBe(0.41);
       expect(windowOf(12).dampeningPct).toBe(0.42);
       const text = formatEnemyCDTimelineForContext(
         { players: [], alignedBurstWindows: [early] } as any,
         120,
       ).join("\n");
       expect(text).toContain("| Threat: ");
-      expect(text).not.toContain("Dampening:");
+      expect(text).toContain("| Dampening: 41%");
+      // a round whose log printed no stack states none and prints none
+      const none = windowOf(4, false);
+      expect(none.dampeningPct).toBeNull();
+      expect(
+        formatEnemyCDTimelineForContext(
+          { players: [], alignedBurstWindows: [none] } as any,
+          120,
+        ).join("\n"),
+      ).not.toContain("Dampening:");
     });
 
-    it("weights the threat with the first logged stack — the same score as the same burst just after it, not a step from ×1.0", () => {
+    it("weights the threat with the stated value — one dose apart from the same burst just after the first stack, not a step from ×1.0", () => {
       const early = windowOf(4);
       const late = windowOf(12);
-      expect(early.threatScore).toBeCloseTo(late.threatScore, 10);
-      expect(early.threatLabel).toBe(late.threatLabel);
+      expect(early.threatScore / late.threatScore).toBeCloseTo(
+        (1 + 0.41 * 1.5) / (1 + 0.42 * 1.5),
+        10,
+      );
       // a round whose log printed no stack at all carries no dampening weight
       const unweighted = windowOf(4, false);
-      expect(unweighted.dampeningPct).toBeNull();
       expect(early.threatScore / unweighted.threatScore).toBeCloseTo(
-        1 + 0.42 * 1.5,
+        1 + 0.41 * 1.5,
         10,
       );
     });

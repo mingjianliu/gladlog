@@ -1345,5 +1345,15 @@
  *  the commit): kick-priority and position-mistake lose rows, cc-avoidable
  *  gains one. The burst-window, kick-priority, cd-trigger and sync-window
  *  reference tables are stale by it (GH #115).
+ *  v369 (2026-10-10, FT-T13 D11 as the user ruled it — v368 had shipped the
+ *  implementer's reading, "no number before the first logged stack"): a 2v2
+ *  round's dampening start is derived from the round's own first logged
+ *  stack, one dose below it (42 → 41, 22 → 21), and the header says so:
+ *  `started at 41% (derived: one 1% step below the first logged stack, 42%
+ *  at 0:11 — the log prints no value before that)`. Before that second the
+ *  press lines' `| dampening:` note, the [DEATH] note and the 0:00
+ *  [DAMPENING ALERT: 30%] read the derived value again; a round whose first
+ *  logged line is a stack drop, or that logged none, still states no start.
+ *  No candidate changes.
  */
-export const PROMPT_VERSION = 368;
+export const PROMPT_VERSION = 369;

@@ -269,8 +269,8 @@ function extractCombatStats(
     const players = [...friendlies, ...enemies];
     for (const death of unit.deathRecords) {
       const dampPct = getDampeningPercentage(bracket, players, death.timestamp);
-      // null = none stated (a 2v2 death before the round's first logged
-      // stack, `getInitialDampening`): no sample, rather than a hand value.
+      // null = none stated (a 2v2 round that logged no stack,
+      // `getInitialDampening`): no sample, rather than a hand value.
       if (dampPct !== null) stats.dampeningAtDeathSamples.push(dampPct / 100);
     }
   }

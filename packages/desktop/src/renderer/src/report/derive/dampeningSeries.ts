@@ -32,12 +32,11 @@ import type { ReportSource } from "./types";
  * guarantees this last cell reflects the true value at the moment the match
  * ended.
  *
- * The series starts where a value is first known. getInitialDampening states
- * one from 0:00 in 3v3 / Solo Shuffle; in 2v2 it states none (null) before the
- * round's first logged stack — the prompt prints no number there either
- * (FT-T13 D11) — so a 2v2 series has no point before that second, and is
- * empty when the log printed no stack at all. Seconds stay contiguous from the
- * first point on.
+ * The series starts at 0:00 with getInitialDampening's value: 10 in 3v3 / Solo
+ * Shuffle; in 2v2 the value derived from the round's first logged stack (one
+ * dose below it — the number the prompt prints for those seconds, FT-T13
+ * D11). A 2v2 round whose log printed no stack has none (null) and its series
+ * is empty. Seconds stay contiguous from the first point on.
  */
 export function deriveDampeningSeries(
   source: ReportSource,
@@ -72,8 +71,8 @@ export function deriveDampeningSeries(
 }
 
 /** The current dampening at the playback clock (the latest sample at or before
- *  t) — null before the series' first point (a 2v2 round before its first
- *  logged stack), where no value is known. */
+ *  t) — null when the series is empty (a 2v2 round that logged no stack),
+ *  where no value is known. */
 export function dampeningAt(
   series: Array<{ tS: number; pct: number }>,
   tS: number,

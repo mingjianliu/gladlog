@@ -220,7 +220,7 @@ export function formatTimeline(
   // F-C16 (triage res-readiness): the `next spike in Ns on X` suffix on
   // [YOU] [CD] lines is hindsight — legend it whenever one is rendered. It
   // follows the dampening note (`, next spike in`) or, where no dampening is
-  // stated (2v2 before the first logged stack), opens the clause itself
+  // stated (a 2v2 round that logged no stack), opens the clause itself
   // (` | next spike in`).
   const nextSpikeRendered = entries.some((e) =>
     e.lines.some(

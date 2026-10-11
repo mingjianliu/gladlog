@@ -169,7 +169,7 @@ export interface TimelineCtx {
    * line prints (the `| dampening: N%` note of `[YOU] [CD]` / `[PROC]` lines
    * and of both `[DEATH]` families). Read on `allPlayers`, the list the
    * DAMPENING header, the alerts and `[MATCH END]` read (FT-T13, D10).
-   * `null` = none stated (2v2 before the first logged stack, D11): the line
+   * `null` = none stated (a 2v2 round that logged no stack, D11): the line
    * prints no note. */
   dampeningAt: (atSeconds: number) => number | null;
   /** AoE CC casts from outgoingCCChains; [] when there are none */

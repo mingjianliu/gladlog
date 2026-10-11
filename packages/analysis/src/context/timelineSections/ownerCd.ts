@@ -321,9 +321,9 @@ export function emitOwnerCdEntries(
           : "";
 
       // ` | dampening: N%, next spike in Ns on X`. The dampening half is left
-      // out where no value is stated — a 2v2 round before its first logged
-      // stack (`getInitialDampening`, FT-T13 D11) — and the spike half then
-      // stands alone: ` | next spike in Ns on X`.
+      // out where no value is stated — a 2v2 round that logged no stack
+      // (`getInitialDampening`, FT-T13 D11) — and the spike half then stands
+      // alone: ` | next spike in Ns on X`.
       let dampeningNote = "";
       if (!isCC) {
         const dampPct = dampeningAt(cast.timeSeconds);

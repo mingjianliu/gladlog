@@ -102,9 +102,10 @@ describe("deriveDampeningSeries — O(events×seconds) → O(events), event-time
   });
 });
 
-describe("deriveDampeningSeries — 2v2 没有开局读数,曲线从第一次日志读数开始(FT-T13 D11)", () => {
+describe("deriveDampeningSeries — 2v2 的开局值由第一次日志读数倒推一步(FT-T13 D11)", () => {
   // The fixture is a 3v3 round; relabelled "2v2" it runs under the 2v2 rule:
-  // getInitialDampening states no value before the first logged stack.
+  // getInitialDampening derives the start from the first logged stack (one
+  // dose below it), and states none when the round logged no stack.
   const as2v2 = () => {
     const clone = JSON.parse(
       JSON.stringify(loadRealMatchFixture()),
@@ -113,21 +114,23 @@ describe("deriveDampeningSeries — 2v2 没有开局读数,曲线从第一次日
     return clone;
   };
 
-  it("第一次读数(0:11,42)之前没有点;之后逐秒连续,数值照日志", () => {
+  it("第一次读数(0:11,42)之前是倒推的 41;之后逐秒连续,数值照日志", () => {
     const clone = as2v2();
     pushDoseEvent(clone, clone.startTime + 11_200, 42);
     pushDoseEvent(clone, clone.startTime + 21_200, 43);
     const series = deriveDampeningSeries(clone as unknown as ReportSource);
+    expect(series[0]).toEqual({ tS: 0, pct: 41 });
     // 11.2 s is first visible on the 0:12 cell (cells sample at whole seconds)
-    expect(series[0]).toEqual({ tS: 12, pct: 42 });
+    expect(series.find((p) => p.tS === 11)!.pct).toBe(41);
+    expect(series.find((p) => p.tS === 12)!.pct).toBe(42);
     for (let i = 1; i < series.length; i++)
       expect(series[i]!.tS).toBe(series[i - 1]!.tS + 1);
     expect(series.find((p) => p.tS === 21)!.pct).toBe(42);
     expect(series.find((p) => p.tS === 22)!.pct).toBe(43);
     expect(series[series.length - 1]!.tS).toBe(90);
-    // the scrub readout: nothing before the first point, the value from it on
-    expect(dampeningAt(series, 0)).toBeNull();
-    expect(dampeningAt(series, 11.9)).toBeNull();
+    // the scrub readout: the derived start, then the logged values
+    expect(dampeningAt(series, 0)).toBe(41);
+    expect(dampeningAt(series, 11.9)).toBe(41);
     expect(dampeningAt(series, 12)).toBe(42);
     expect(dampeningAt(series, 60)).toBe(43);
   });
@@ -146,12 +149,13 @@ describe("deriveDampeningSeries — 2v2 没有开局读数,曲线从第一次日
     expect(dampeningAt(series, 0)).toBe(10);
   });
 
-  it('旧解析存档(层数存成 "42\\r")照样读得到:report-match.json 这场真实 2v2 的泳道从第一次读数开始(WP-H 3)', () => {
+  it('旧解析存档(层数存成 "42\\r")照样读得到:report-match.json 这场真实 2v2 的泳道从 0 秒的倒推值开始(WP-H 3)', () => {
     // report-match.json was stored by a parser older than the CRLF fix: its
     // four dose lines carry the stack as "42\r" (at 12.1 / 12.5 / 15.0 /
     // 15.2 s of a 15.5 s round). Unread, this 2v2 round had no dampening
-    // point at all; read, its series starts at the first cell at or after
-    // the first logged stack (cells sample at whole seconds: 12.1 s → 0:13).
+    // point at all; read, its series starts at 0:00 with the derived 41 and
+    // shows 42 from the first cell at or after the first logged stack (cells
+    // sample at whole seconds: 12.1 s → 0:13).
     const m = loadMatchFixture();
     expect((m as unknown as { bracket: string }).bracket).toBe("2v2");
     const stored = Object.values(m.units).flatMap((u) =>
@@ -165,12 +169,14 @@ describe("deriveDampeningSeries — 2v2 没有开局读数,曲线从第一次日
     for (const a of stored) expect((a.params as string[])[12]).toBe("42\r");
 
     const series = deriveDampeningSeries(m as unknown as ReportSource);
-    expect(series).toEqual([
+    expect(series).toHaveLength(16);
+    expect(series.slice(0, 13).every((p) => p.pct === 41)).toBe(true);
+    expect(series.slice(13)).toEqual([
       { tS: 13, pct: 42 },
       { tS: 14, pct: 42 },
       { tS: 15, pct: 42 },
     ]);
-    expect(dampeningAt(series, 12.9)).toBeNull();
+    expect(dampeningAt(series, 12.9)).toBe(41);
     expect(dampeningAt(series, 13)).toBe(42);
   });
 });

@@ -44,8 +44,8 @@ export function crisisNoResponseEvents(
     majorWalls?: ReadonlyArray<{ fromS: number; toS: number }>;
     /** Dampening (0–1) at a crossing's instant (`computeDampening`), for the
      * `dampeningPct` fact; absent = the fact is not rendered. `null` at an
-     * instant (a 2v2 round before its first logged stack — no value is
-     * stated there, `getInitialDampening`) = not rendered either. */
+     * instant (a 2v2 round that logged no stack — no value is stated,
+     * `getInitialDampening`) = not rendered either. */
     dampeningAt?: (tMs: number) => number | null;
   },
   overrides?: { cap?: number },

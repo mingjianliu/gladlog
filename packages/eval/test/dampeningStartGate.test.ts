@@ -86,21 +86,22 @@ describe("checkDampeningStartConsistency", () => {
 });
 
 /**
- * FT-T13 (D11, re-opening O10): a 2v2 prompt states no dampening before the
- * round's first logged stack — the header says `first logged at N% (m:ss; …)`
- * and no timeline line stamped before m:ss carries a dampening number.
+ * FT-T13 (D11, re-opening O10): a 2v2 prompt's start is derived from the
+ * round's first logged stack — the header says `started at N% (derived: one
+ * 1% step below the first logged stack, M% at m:ss …)`, N = M − 1, and every
+ * dampening value stamped before m:ss reads N.
  */
-const HEADER_FIRST =
-  "DAMPENING (2v2): first logged at 42% (0:11; the log prints no value before that), ended at 63% at match end";
+const HEADER_DERIVED =
+  "DAMPENING (2v2): started at 41% (derived: one 1% step below the first logged stack, 42% at 0:11 — the log prints no value before that), ended at 63% at match end";
 
-describe("checkDampeningStartConsistency — `first logged at` (2v2)", () => {
-  it("passes when nothing before the first logged second carries a number", () => {
+describe("checkDampeningStartConsistency — a derived start (2v2)", () => {
+  it("passes when every value before the first logged second is the derived one", () => {
     expect(
       checkDampeningStartConsistency([
-        HEADER_FIRST,
-        "0:04  [YOU] [CD]   Frozen Orb (self: 100% HP, 0%/s, 0k DPS) | next spike in 18s on 1(FMage)",
-        "0:08  [DEATH]  4(FMage) (Frost Mage — enemy)",
-        "0:11  [DAMPENING ALERT: 30%]",
+        HEADER_DERIVED,
+        "0:00  [DAMPENING ALERT: 30%]",
+        "0:04  [YOU] [CD]   Frozen Orb (self: 100% HP, 0%/s, 0k DPS) | dampening: 41%, next spike in 18s on 1(FMage)",
+        "0:08  [DEATH]  4(FMage) (Frost Mage — enemy) | dampening: 41%",
         "0:11  [YOU] [CD]   Ice Barrier (self: 79% HP, -1%/s, 44k DPS) | dampening: 42%",
         "0:17  [YOU] [CD]   Alter Time (self: 79% HP, +1%/s, 16k DPS) | dampening: 42%, next spike in 4s on 1(FMage)",
         "2:27  [MATCH END]   damp: 63%",
@@ -108,27 +109,39 @@ describe("checkDampeningStartConsistency — `first logged at` (2v2)", () => {
     ).toEqual([]);
   });
 
-  it("fails on each kind of dampening number stamped before it: a press note, a [DEATH] note, an alert", () => {
+  it("fails on every value before it that is not the derived one — the old table's 30 and 10, the first stack itself — once each", () => {
     const out = checkDampeningStartConsistency([
-      HEADER_FIRST,
-      "0:00  [DAMPENING ALERT: 30%]",
+      HEADER_DERIVED,
       "0:04  [YOU] [CD]   Frozen Orb (self: 100% HP, 0%/s, 0k DPS) | dampening: 30%, next spike in 18s on 1(FMage)",
       "0:08  [DEATH]  4(FMage) (Frost Mage — enemy) | dampening: 41%",
-      "0:10  [YOU] [PROC]   Nature's Guardian (self: 30% HP, -20%/s, 90k DPS) | dampening: 10%",
-      "0:17  [YOU] [CD]   Ice Barrier (self: 79% HP, -1%/s, 44k DPS) | dampening: 42%",
+      "0:09  [YOU] [PROC]   Nature's Guardian (self: 30% HP, -20%/s, 90k DPS) | dampening: 10%",
+      "0:10  [YOU] [CD]   Ice Barrier (self: 79% HP, -1%/s, 44k DPS) | dampening: 42%",
+      "0:17  [YOU] [CD]   Alter Time (self: 79% HP, +1%/s, 16k DPS) | dampening: 42%",
     ]);
-    expect(out).toHaveLength(4);
+    expect(out).toHaveLength(3);
     expect(out[0]).toContain("line 2");
-    expect(out[0]).toContain("[DAMPENING ALERT: 30%]");
-    expect(out[1]).toContain("| dampening: 30%");
-    expect(out[2]).toContain("| dampening: 41%");
-    expect(out[3]).toContain("line 5");
-    for (const f of out) expect(f).toContain("first logged at 42% (0:11)");
+    expect(out[0]).toContain("| dampening: 30%");
+    expect(out[1]).toContain("line 4");
+    expect(out[1]).toContain("| dampening: 10%");
+    expect(out[2]).toContain("line 5");
+    for (const f of out) expect(f).toContain("41%");
+  });
+
+  it("re-does the step: a start that is not the first logged stack minus one dose fails on the header", () => {
+    const off = HEADER_DERIVED.replace("started at 41%", "started at 30%");
+    const out = checkDampeningStartConsistency([off]);
+    expect(out).toHaveLength(1);
+    expect(out[0]).toContain("line 1");
+    expect(
+      checkDampeningStartConsistency([
+        HEADER_DERIVED.replace("one 1% step", "one 2% step"),
+      ]),
+    ).toHaveLength(1);
   });
 
   it("reads the header's second, not a fixed one", () => {
     const header =
-      "DAMPENING (2v2): first logged at 22% (0:12; the log prints no value before that), ended at 31% at match end";
+      "DAMPENING (2v2): started at 21% (derived: one 1% step below the first logged stack, 22% at 0:12 — the log prints no value before that), ended at 31% at match end";
     expect(
       checkDampeningStartConsistency([
         header,
@@ -138,9 +151,34 @@ describe("checkDampeningStartConsistency — `first logged at` (2v2)", () => {
     expect(
       checkDampeningStartConsistency([
         header,
+        "0:11  [YOU] [CD]   Barkskin (self: 60% HP, -9%/s, 80k DPS) | dampening: 21%",
         "0:12  [YOU] [CD]   Barkskin (self: 60% HP, -9%/s, 80k DPS) | dampening: 22%",
       ]),
     ).toEqual([]);
+  });
+
+  it("review 40-FT-56: the clamp is the producer's — a first stack of 0 derives 0, not −1", () => {
+    const zero =
+      "DAMPENING (2v2): started at 0% (derived: one 1% step below the first logged stack, 0% at 0:11 — the log prints no value before that), ended at 9% at match end";
+    expect(checkDampeningStartConsistency([zero])).toEqual([]);
+  });
+
+  it("review 40-FT-56: a first logged line that is a stack drop states no start — no number before its second", () => {
+    const header =
+      "DAMPENING (2v2): first logged 28% at 0:09 (a stack drop; the log prints no value before that), ended at 29% at match end";
+    expect(
+      checkDampeningStartConsistency([
+        header,
+        "0:04  [YOU] [CD]   Frozen Orb (self: 100% HP, 0%/s, 0k DPS) | next spike in 18s on 1(FMage)",
+        "0:09  [YOU] [CD]   Ice Barrier (self: 79% HP, -1%/s, 44k DPS) | dampening: 28%",
+      ]),
+    ).toEqual([]);
+    const out = checkDampeningStartConsistency([
+      header,
+      "0:00  [DAMPENING ALERT: 30%]",
+      "0:04  [YOU] [CD]   Frozen Orb (self: 100% HP, 0%/s, 0k DPS) | dampening: 27%",
+    ]);
+    expect(out).toHaveLength(2);
   });
 
   it("a round without a logged stack: no dampening number anywhere in the timeline", () => {
@@ -183,7 +221,7 @@ describe("checkDampeningStartConsistency — `first logged at` (2v2)", () => {
     const early =
       "0:04  [YOU] [CD]   Frozen Orb (self: 100% HP, 0%/s, 0k DPS) | dampening: 30%";
 
-    it("`first logged at` — a 2v2 round with stacks", () => {
+    it("a derived start — a 2v2 round with stacks", () => {
       const [header] = formatDampeningForContext(
         "2v2",
         [
@@ -195,14 +233,43 @@ describe("checkDampeningStartConsistency — `first logged at` (2v2)", () => {
         START,
         START + 100_000,
       );
-      expect(header).toContain("first logged at 42% (0:11");
+      expect(header).toContain(
+        "started at 41% (derived: one 1% step below the first logged stack, 42% at 0:11",
+      );
+      // the header alone passes: the producer's step is the gate's
+      expect(checkDampeningStartConsistency([header])).toEqual([]);
       expect(checkDampeningStartConsistency([header, early])).toHaveLength(1);
       expect(
-        checkDampeningStartConsistency([
-          header,
-          early.replace("0:04", "0:11").replace("30%", "42%"),
-        ]),
+        checkDampeningStartConsistency([header, early.replace("30%", "41%")]),
       ).toEqual([]);
+    });
+
+    it("a first line that is a stack drop — the producer's header binds the lines before it", () => {
+      const doseLine = (event: string, s: number, stacks: number) => {
+        const parameters: unknown[] = [];
+        parameters[12] = stacks;
+        return {
+          spellId: "110310",
+          timestamp: START + s * 1000,
+          logLine: { event, parameters },
+        };
+      };
+      const dropFirst = {
+        type: 1,
+        auraEvents: [
+          doseLine("SPELL_AURA_REMOVED_DOSE", 9, 28),
+          doseLine("SPELL_AURA_APPLIED_DOSE", 19, 29),
+        ],
+      } as never;
+      const [header] = formatDampeningForContext(
+        "2v2",
+        [dropFirst],
+        START,
+        START + 100_000,
+      );
+      expect(header).toContain("first logged 28% at 0:09 (a stack drop");
+      expect(checkDampeningStartConsistency([header])).toEqual([]);
+      expect(checkDampeningStartConsistency([header, early])).toHaveLength(1);
     });
 
     it("no stack at all — a 2v2 round without a logged one", () => {
