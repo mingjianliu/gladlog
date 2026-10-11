@@ -21,6 +21,48 @@ beforeAll(async () => {
   await ensureAnalysisData();
 });
 
+describe("F10: an enemy's Ultimate Penitence is its own absorb save", () => {
+  const ENEMY_OF_PRIEST = "x";
+  const up = (ts: number, event?: string) => {
+    const e = makeSpellCastEvent(
+      "421453",
+      ts,
+      "p",
+      "Priest-R",
+      ENEMY_OF_PRIEST,
+      "Knight-R",
+      0,
+      "Ultimate Penitence",
+    );
+    if (event) (e.logLine as { event: string }).event = event;
+    return e;
+  };
+
+  it("is a self-save whatever the channel's target — and only on SUCCESS", () => {
+    expect(SELF_SAVE_IDS.has("421453")).toBe(true);
+    const priest = makeUnit("p", {
+      name: "Priest-R",
+      // 3df6ccf8 round 4: started at 0:44 (kicked 0:45) and 1:00 (kicked
+      // 1:01), the third bar completed at 1:10.065
+      spellCastEvents: [
+        up(T0 + 44_399, "SPELL_CAST_START"),
+        up(T0 + 60_862, "SPELL_CAST_START"),
+        up(T0 + 70_065),
+      ],
+    });
+    expect(
+      selfSaveCasts(priest as any, T0).map((c) => [c.spellName, c.atSeconds]),
+    ).toEqual([["Ultimate Penitence", 70.065]]);
+    const events = enemyDefensiveEvents(priest as any, [priest as any], {
+      startTime: T0,
+      endTime: T0 + 110_000,
+    });
+    expect(events.map((d) => [d.spellName, d.kind, d.atSeconds])).toEqual([
+      ["Ultimate Penitence", "self-save", 70.065],
+    ]);
+  });
+});
+
 describe("enemy self-saves (B4a)", () => {
   it("the set holds the major lists ∩ NO_MITIGATION_IDS: Guardian Spirit and Desperate Prayer are in, a %-wall is not", () => {
     expect(SELF_SAVE_IDS.has("47788")).toBe(true); // Guardian Spirit

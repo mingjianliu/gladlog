@@ -193,6 +193,17 @@ export const ENEMY_SELF_SAVE_ONLY_IDS: ReadonlySet<string> = new Set([
   "109304", // Exhilaration — 597
   "22842", // Frenzied Regeneration — 346
   "58875", // Spirit Walk — 202
+  // Ultimate Penitence (F10, 2026-10-11): the Discipline Priest's own absorb
+  // shield for the channel — the caster's 421453 aura, `NO_MITIGATION_IDS`'
+  // "pure absorb (aura69)" row — in neither major list, so an enemy's press
+  // had no line: 3df6ccf8 round 4, SUCCESS at 1:10.065 with the APPLIED
+  // carrying a 596,132 shield, after two kicked attempts the timeline did
+  // show. 605-file capture (3,520 contexts): 324 friendly press lines, 0
+  // `[ENEMY DEF]`. The cast's dest is the channel's target (an enemy of the
+  // priest); the shield is always the caster's, so `selfSaveCasts` takes it
+  // whatever the dest. A friendly priest's ledger row is the Priest roster's
+  // (`extractMajorCooldowns` adds it there), not the press-only path's.
+  "421453",
 ]);
 
 /** F-E4, the ally-castable half of F-E7 and crisis-external F-A7: an instant
