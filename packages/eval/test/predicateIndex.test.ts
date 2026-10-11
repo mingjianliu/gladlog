@@ -135,6 +135,7 @@ import * as kickAudit from "@gladlog/analysis/src/utils/kickAudit";
 import * as killAttempts from "@gladlog/analysis/src/utils/killAttempts";
 import * as killWindowFactsMod from "@gladlog/analysis/src/utils/killWindowFacts";
 import * as killWindowTargetSelection from "@gladlog/analysis/src/utils/killWindowTargetSelection";
+import * as logEra from "@gladlog/analysis/src/utils/logEra";
 import * as losAnalysis from "@gladlog/analysis/src/utils/losAnalysis";
 import * as offensiveAuraOccurrences from "@gladlog/analysis/src/utils/offensiveAuraOccurrences";
 import * as offensiveWindows from "@gladlog/analysis/src/utils/offensiveWindows";
@@ -2317,6 +2318,18 @@ const INDEX: PredicateRow[] = [
     file: `${A}/data/talentScriptedCooldowns.ts`,
     symbol: "eventTriggerTimesMs",
     mod: talentScriptedCooldowns,
+  },
+  // Storm Conduit by log date (user ruling 2026-10-11): how much one trigger
+  // gives back, and the one comparison of a log timestamp with a dated change
+  {
+    file: `${A}/data/talentScriptedCooldowns.ts`,
+    symbol: "eventReductionSecondsAt",
+    mod: talentScriptedCooldowns,
+  },
+  {
+    file: `${A}/utils/logEra.ts`,
+    symbol: "logIsFrom",
+    mod: logEra,
   },
   {
     file: `${A}/utils/enemyInterrupts.ts`,
