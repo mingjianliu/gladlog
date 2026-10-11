@@ -290,6 +290,69 @@ describe("ownerCastCancels", () => {
     expect(r.baitedKicks).toEqual([]);
   });
 
+  // FT I11 (b): stops the player did not choose.
+  it("a cast bar the owner's own death ended is not a cancel (0fe0e2e2 0:43: the \"Interrupted\" row 24 ms before UNIT_DIED)", () => {
+    const base = {
+      ...owner,
+      castStartEvents: [0, 43.158].map((s) => start("2061", s)),
+      spellCastEvents: [
+        makeSpellCastEvent("2061", at(1.5), "p1", "Me", "p1", "Me"),
+      ],
+      auraEvents: [],
+    };
+    const failed = [fail("2061", 43.715, "Interrupted")];
+    // control: the owner lives → a cancel
+    expect(run(base, [enemy], failed).cancels).toHaveLength(1);
+    const died = { ...base, deathRecords: [{ timestamp: at(43.739) }] };
+    expect(run(died as never, [enemy], failed).cancels).toHaveLength(0);
+    // a death outside CANCEL_CC_NEAR_S of the stop row does not explain it
+    const later = { ...base, deathRecords: [{ timestamp: at(44.1) }] };
+    expect(run(later as never, [enemy], failed).cancels).toHaveLength(1);
+    // and an enemy kick that went out at the dead player's bar baited nothing
+    const kicker = {
+      ...enemy,
+      spellCastEvents: [
+        makeSpellCastEvent("1766", at(43.8), "p1", "Me", "e1", "Enemy"),
+      ],
+    };
+    expect(run(died as never, [kicker], failed).baitedKicks).toEqual([]);
+    expect(run(base, [kicker], failed).baitedKicks).toHaveLength(1);
+  });
+
+  it("a cast bar stopped at or after the round's end is not a cancel — a Solo Shuffle round is over at its first death (f0a10402 round 3)", () => {
+    // the round-ending death (an enemy's) at 103.983; a bar stopped before
+    // it, one stopped across it, one begun after it
+    const o2 = {
+      ...owner,
+      castStartEvents: [0, 100, 103.5, 104.062].map((s) => start("2061", s)),
+      spellCastEvents: [
+        makeSpellCastEvent("2061", at(1.5), "p1", "Me", "p1", "Me"),
+      ],
+      auraEvents: [],
+    };
+    const dead = { ...enemy, deathRecords: [{ timestamp: at(103.983) }] };
+    const failed = [
+      fail("2061", 100.6, "Interrupted"),
+      fail("2061", 104.0, "Interrupted"),
+      fail("2061", 104.602, "Interrupted"),
+    ];
+    const of = (bracket: string) =>
+      ownerCastCancels({
+        owner: o2 as never,
+        friends: [o2 as never],
+        enemies: [dead as never],
+        combat: {
+          ...combat,
+          startInfo: { bracket },
+          units: { p1: o2, e1: dead },
+        },
+        rawStreams: { ...streams, castFailed: failed },
+      })!.cancels.map((c) => c.startS);
+    expect(of("Rated Solo Shuffle")).toEqual([100]);
+    // in a 3v3 an enemy's death ends nothing: the round runs to the log's end
+    expect(of("3v3")).toEqual([100, 103.5, 104.062]);
+  });
+
   it("is null for a player who did not record the log (no SPELL_CAST_FAILED)", () => {
     expect(
       ownerCastCancels({

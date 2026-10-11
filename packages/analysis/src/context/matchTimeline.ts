@@ -47,6 +47,7 @@ import "./resUtilityCds";
 import type { IControlCastBar } from "./ccUse";
 import { rejectRunStatesRow } from "./spellOutcomeLines";
 import "../utils/resourceAt";
+import { roundEndMs } from "../utils/roundEnd";
 import "../utils/summonReachability";
 import "./burstAnswered";
 import "./cdPrior";
@@ -836,7 +837,13 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
   emitCastStoppedEntries({
     owner,
     matchStartMs,
-    matchEndSeconds,
+    // the round's end, not the log's (FT I11): a Solo Shuffle round is over
+    // at its first player death — the one round end the ledger's cancels
+    // (`ownerCastCancels`) are cut at
+    roundEndSeconds:
+      (roundEndMs({ endTime: matchEndMs, startInfo: { bracket } }, allPlayers) -
+        matchStartMs) /
+      1000,
     rawStreams,
     addEntry,
     controlCastBars: params.ownerControlCastBars ?? [],

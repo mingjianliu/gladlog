@@ -2535,6 +2535,66 @@ export function checkKickEatenCancelsCoverCastStopped(
   return failures;
 }
 
+/** A printed `N.Ns` is the exact elapsed time rounded to a tenth. */
+const ONE_DECIMAL_HALF_STEP_S = 0.05;
+
+/**
+ * `[CAST STOPPED]` against the round's end AS THE PROMPT STATES IT
+ * (`statedRoundEnd`: `[MATCH END]`, and a Solo Shuffle round's first
+ * `[DEATH]` line) — FT I11. The producer cuts the lines at `roundEndMs`
+ * (`castStoppedText`), with the test the cancel ledger counts by
+ * (`isCancelInRound`): a cast bar stopped at or after the round's end is the
+ * round ending, not the player stopping a cast, and a bar begun after it is
+ * not the round's. On the render grid, with R the stated second, T the
+ * line's second (the bar's start, floored) and N.N the printed elapsed time:
+ *  - the bar began inside the round: T ≤ R;
+ *  - `cast bar stopped after N.Ns …` / `refused N.Ns in …`: the end row is
+ *    before the round's end, so T + N.N < R + 1 + the rounding half-step;
+ *  - `no end logged; the round ended N.Ns after it began`: the bar's start
+ *    + N.N IS the round's end, so T + N.N is within 1 s + the half-step of
+ *    R on either side.
+ *
+ * Before the cut the lines ran to the LOG's end, ~2 s after a Solo Shuffle
+ * round's ending death: f0a10402 round 3 printed `1:44 [CAST STOPPED] Mind
+ * Control — cast bar stopped after 0.5s; not kicked; …` under a first
+ * `[DEATH]` at 1:43 — the bar was begun 0.08 s after that death and broken
+ * by the round ending; the ledger counted it as a cancel.
+ */
+export function checkCastStoppedWithinRound(lines: string[]): string[] {
+  const failures: string[] = [];
+  const end = statedRoundEnd(lines);
+  if (end === null) return failures;
+  const slack = 1 + ONE_DECIMAL_HALF_STEP_S + 1e-6;
+  lines.forEach((line, i) => {
+    if (!CAST_STOPPED_DATA_LINE.test(line)) return;
+    // a line that is not one of the producer's wordings is
+    // `checkCastStoppedLines`' failure, not this gate's
+    const m = line.match(CAST_STOPPED_LINE);
+    if (!m) return;
+    const began = Number(m[1]) * 60 + Number(m[2]);
+    const where = `(${end.says}在 ${fmtTime(end.second)})—— ${line.trim().slice(0, 160)}`;
+    if (began > end.second) {
+      failures.push(
+        `line ${i + 1}: [CAST STOPPED] 的读条开始于回合结束之后 ${where}`,
+      );
+      return;
+    }
+    const endRow = m[4] ?? m[5];
+    if (endRow !== undefined && began + Number(endRow) > end.second + slack)
+      failures.push(
+        `line ${i + 1}: [CAST STOPPED] 写读条 ${endRow} 秒后结束,那已在回合结束之后 —— 回合结束打断的读条不是玩家自己停的 ${where}`,
+      );
+    if (m[7] !== undefined) {
+      const at = began + Number(m[7]);
+      if (at > end.second + slack || at < end.second - slack)
+        failures.push(
+          `line ${i + 1}: [CAST STOPPED] 写回合在读条开始 ${m[7]} 秒后结束,与回合结束时刻对不上 ${where}`,
+        );
+    }
+  });
+  return failures;
+}
+
 /** 1 = m:ss, 2 = the kicker's label, 3 = `<victim>'s <spell>` (or the bare
  * victim when the log named no spell), 4 = the kick and its `back` note. */
 const KICK_INTERRUPTED_LINE =
@@ -6222,6 +6282,7 @@ export function checkMatch(
   hardFailures.push(...checkCastStoppedLines(lines));
   hardFailures.push(...checkKickEatenCancelsCoverCastStopped(lines));
   hardFailures.push(...checkJukedKickNotAfterInterrupt(lines));
+  hardFailures.push(...checkCastStoppedWithinRound(lines));
   hardFailures.push(...checkCcNotLandedLines(lines));
   hardFailures.push(...checkForcedTrinketConsistency(lines));
   hardFailures.push(...checkBacklashSilenceFamily(lines));

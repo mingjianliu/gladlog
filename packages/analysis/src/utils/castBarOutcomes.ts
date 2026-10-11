@@ -83,10 +83,13 @@ export function castBarStartsOf(
  *    client queues the next cast and often logs its start first);
  *  - `kicked`: a SPELL_INTERRUPT of the spell on the unit;
  *  - `stopped`: a SPELL_CAST_FAILED with an interruption reason
- *    (`CAST_INTERRUPTED_REASONS`) and no SPELL_INTERRUPT. `near` = what landed
- *    on the unit within `CANCEL_CC_NEAR_S` of it — a control or silence aura
- *    (`cc`), an enemy displacement (`displaced`) — or null. With null the log
- *    does not say why: stopping by hand and moving write the same row;
+ *    (`CAST_INTERRUPTED_REASONS`) and no SPELL_INTERRUPT. `near` = what
+ *    happened to the unit within `CANCEL_CC_NEAR_S` of it — a control or
+ *    silence aura landed (`cc`), an enemy displacement landed (`displaced`),
+ *    the unit died (`death`: dying breaks a cast bar, and the client writes
+ *    the same "Interrupted" row for it, 14 ms and 24 ms before the UNIT_DIED
+ *    row in the two raw samples of FT I11) — or null. With null the log does
+ *    not say why: stopping by hand and moving write the same row;
  *  - `refused`: none of the above, and a SPELL_CAST_FAILED of the spell for
  *    any reason but "not ready" (`row` carries the client's own, localized
  *    text);
@@ -98,7 +101,11 @@ export function castBarStartsOf(
 export type CastBarEnd =
   | { kind: "completed"; atS: number; queued?: true }
   | { kind: "kicked"; atS: number }
-  | { kind: "stopped"; atS: number; near: "cc" | "displaced" | null }
+  | {
+      kind: "stopped";
+      atS: number;
+      near: "cc" | "displaced" | "death" | null;
+    }
   | { kind: "refused"; atS: number; row: CastFailedEvent }
   | { kind: "none" };
 
@@ -153,6 +160,7 @@ export function castBarOutcomesOf(params: {
     | "actionIn"
     | "auraEvents"
     | "damageIn"
+    | "deathRecords"
   >;
   startMs: number;
   failed: readonly CastFailedEvent[];
@@ -171,6 +179,7 @@ export function castBarOutcomesOf(params: {
   const forced = forcedStopInstantsMs(unit);
   const ccAt = forced.cc.map(sec);
   const displacedAt = forced.displaced.map(sec);
+  const diedAt = (unit.deathRecords ?? []).map((d) => sec(d.timestamp));
   const starts = castBarStartsOf(unit, startMs);
 
   // Reasons the client gave, IN THIS LOG, for a press made while a cast bar
@@ -233,7 +242,13 @@ export function castBarOutcomesOf(params: {
         end: {
           kind: "stopped",
           atS: barFail.tSeconds,
-          near: near(ccAt) ? "cc" : near(displacedAt) ? "displaced" : null,
+          near: near(ccAt)
+            ? "cc"
+            : near(displacedAt)
+              ? "displaced"
+              : near(diedAt)
+                ? "death"
+                : null,
         },
         earlierFailure: first !== barFail,
       };

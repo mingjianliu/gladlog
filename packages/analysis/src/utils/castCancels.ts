@@ -23,8 +23,10 @@
  *    officialSilenceIds) landed on the owner within CANCEL_CC_NEAR_S of it,
  *    nor an enemy displacement (`DISPLACEMENT_EVIDENCE_IDS`: a knockback
  *    moves the caster and breaks the bar — user ruling A′17, 2026-09-30:
- *    "被敌方位移(台风等)打断的读条不算骗踢"); any other reason (line of
- *    sight, range, "another action is in progress") is not a cancel.
+ *    "被敌方位移(台风等)打断的读条不算骗踢"), nor did the owner die within
+ *    it (dying writes the same row — FT I11), and the row is before the
+ *    round's end (`isCancelInRound`); any other reason (line of sight,
+ *    range, "another action is in progress") is not a cancel.
  * The window for all three is the next start or JUKE_LOOKBACK_MS, whichever is
  * first (`kickAudit`'s cast-bar cap). A bar with none of the three there and
  * a SUCCESS up to `CAST_QUEUE_TOLERANCE_MS` past the next bar's start is
@@ -71,6 +73,7 @@ import {
 import { isPressOfCooldown, talentReplacementsOf } from "./cooldowns";
 import { analyzeKickAudit } from "./kickAudit";
 import type { RawStreams } from "./rawStreams";
+import { roundEndMs } from "./roundEnd";
 
 // The reading of how a cast bar ended, the rows it starts from and the
 // interruption reasons live in castBarOutcomes.ts (kickAudit reads them too);
@@ -178,16 +181,39 @@ export function ownerCastBarOutcomes(params: {
 }
 
 /**
+ * Is this bar a cancel of the round: the owner's cast bar the log shows
+ * stopped (`stopped`), with nothing that ends a cast happening to them then
+ * (`near === null`), before the round's end (`roundEndS`, seconds on the
+ * outcome's clock — `roundEndMs`). The ONE test behind the ledger's count
+ * and the `[CAST STOPPED]` line that reads "not kicked; no control, silence
+ * or knockback landed on you then" (`castStoppedText`): a stop row at or
+ * after the round's end is not the player stopping a cast in the round.
+ */
+export function isCancelInRound(
+  o: CastBarOutcome,
+  roundEndS: number,
+): o is CastBarOutcome & {
+  end: { kind: "stopped"; atS: number; near: null };
+} {
+  return (
+    o.end.kind === "stopped" && o.end.near === null && o.end.atS < roundEndS
+  );
+}
+
+/**
  * The cancel ledger: `ownerCastBarOutcomes` counted, every bar for what that
  * reading says of it.
- *  - a cancel = a `stopped` bar with nothing landing on the owner
- *    (`near === null`). For a control this is the bar whose `[CAST STOPPED]`
- *    line reads "not kicked; no control, silence or knockback landed on you
- *    then" (`CAST_STOPPED_NEAR_TEXT.none`): one reading, two places. The
- *    ledger counts every cast-time spell and is not clamped to the round; the
- *    lines exist for controls begun inside the round — so kick-eaten's
- *    `yourCancels` is never below the number of those lines, and may be above
- *    it (gate: `promptQualityCheck.checkKickEatenCancelsCoverCastStopped`);
+ *  - a cancel = a `stopped` bar with nothing that ends a cast happening to
+ *    the owner then (`near === null`: no control, silence or knockback
+ *    landed, and the owner did not die), stopped before the round's end
+ *    (`isCancelInRound`). For a control this is the bar whose
+ *    `[CAST STOPPED]` line reads "not kicked; no control, silence or
+ *    knockback landed on you then" (`CAST_STOPPED_NEAR_TEXT.none`): one
+ *    reading, two places. The ledger counts every cast-time spell and its
+ *    bars are not clamped to the round's START; the lines exist for controls
+ *    begun inside the round — so kick-eaten's `yourCancels` is never below
+ *    the number of those lines, and may be above it (gate:
+ *    `promptQualityCheck.checkKickEatenCancelsCoverCastStopped`);
  *  - the median completed bar behind `progressPct` = every `completed` bar
  *    of the spell longer than 0.2 s, a `queued` completion included;
  *  - a baited kick = a kickAudit "juked" kick on the owner that went out into
@@ -205,6 +231,14 @@ export function ownerCastBarOutcomes(params: {
  * `baitedThisKickerT`, `stoppedJustBefore`); no row added or removed, no
  * context line changed.
  *
+ * FT I11 (2026-10-11): two stops the player did not choose were cancels.
+ * A bar the owner's own death ended (0fe0e2e2: Sleep Walk begun 43.158,
+ * "Interrupted" row 43.715, the owner's UNIT_DIED 43.739) — `near` is now
+ * `death`. And a bar stopped at or after the round's end (`roundEndMs`: a
+ * Solo Shuffle round is over at its first player death, and the log runs on
+ * for ~2 s) — f0a10402 round 3: the round-ending death 103.983, the owner's
+ * Mind Control begun 104.062 and "Interrupted" 104.602, after the round.
+ *
  * null when the unit did not record the log — never zero.
  */
 export function ownerCastCancels(params: {
@@ -221,6 +255,7 @@ export function ownerCastCancels(params: {
     rawStreams,
   });
   if (!starts) return null;
+  const roundEndS = (roundEndMs(combat) - combat.startTime) / 1000;
 
   const completedDurations = new Map<string, number[]>();
   const pending: Array<{ id: string; name: string; t: number; failS: number }> =
@@ -233,7 +268,7 @@ export function ownerCastCancels(params: {
         list.push(d);
         completedDurations.set(s.id, list);
       }
-    } else if (s.end.kind === "stopped" && s.end.near === null) {
+    } else if (isCancelInRound(s, roundEndS)) {
       pending.push({ id: s.id, name: s.name, t: s.t, failS: s.end.atS });
     }
   }

@@ -19,6 +19,7 @@
     "test/burstWindowPriorTable.test.ts",
     "test/burstWindowRefGate.test.ts",
     "test/calibration.test.ts",
+    "test/castStoppedWithinRoundGate.test.ts",
     "test/ccCoverGate.test.ts",
     "test/ccEndCauseNotLoggedGate.test.ts",
     "test/ccRefreshedNoteGate.test.ts",

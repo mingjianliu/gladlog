@@ -2997,6 +2997,18 @@ const INDEX: PredicateRow[] = [
     symbol: "checkJukedKickNotAfterInterrupt",
     mod: promptQualityCheck,
   },
+  // 2026-10-11 (FT I11): a cancel is a stop inside the round with nothing
+  // ending the cast for the player, and the [CAST STOPPED] lines end there
+  {
+    file: `${A}/utils/castCancels.ts`,
+    symbol: "isCancelInRound",
+    mod: castCancels,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkCastStoppedWithinRound",
+    mod: promptQualityCheck,
+  },
   // 2026-10-11 (re-eval I01 / F21 / F07 / I06): the kick-eaten row's refused
   // presses, its kick's own silence, its range and distance facts, and the
   // legends' cross-references

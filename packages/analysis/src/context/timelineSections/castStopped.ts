@@ -21,6 +21,13 @@
  *    `[REJECTED]` family, ruling 2026-09-26, is not touched);
  *  - a bar the log has no end row for before the next bar or the cast-bar
  *    cap (`none`), unless the round ended on it;
+ *  - a bar the owner's own death ended (`near === "death"`): the `[DEATH]`
+ *    line of that second states the death, and the player did not stop the
+ *    bar (FT I11 — it read "not kicked; no control, silence or knockback
+ *    landed on you then", a cancel);
+ *  - a bar begun at or after the round's end (`roundEndMs`: a Solo Shuffle
+ *    round is over at its first player death, ~2 s before the log's end of
+ *    it) — it is not the round's;
  *  - any owner but the log's recorder: SPELL_CAST_FAILED is written for the
  *    recorder alone, and without it "how it ended" cannot be said.
  *
@@ -30,6 +37,7 @@
  */
 import {
   type CastBarOutcome,
+  isCancelInRound,
   ownerCastBarOutcomes,
 } from "../../utils/castCancels";
 import { CANCEL_CC_NEAR_S } from "../../utils/castStopEvidence";
@@ -78,10 +86,14 @@ const elapsed = (fromS: number, toS: number) =>
 
 /**
  * The text after `<Spell> — `, or null for a bar that gets no line.
- * `roundEndS` = the round's length, `nextBarS` = the owner's next cast bar
- * (any spell). A bar with no end row inside the round, whose window
- * (`ownerCastBarOutcomes`: to the next bar or `JUKE_LOOKBACK_MS`) the round's
- * end cut, says that and nothing about how it ended.
+ * `roundEndS` = the round's end (`roundEndMs`, in seconds since the match
+ * start — a Solo Shuffle round's ending death, else the log's end),
+ * `nextBarS` = the owner's next cast bar (any spell). A bar with no end row
+ * inside the round, whose window (`ownerCastBarOutcomes`: to the next bar or
+ * `JUKE_LOOKBACK_MS`) the round's end cut, says that and nothing about how
+ * it ended — an end row at or after the round's end is not the round's
+ * (`isCancelInRound`, the ledger's own test, is what keeps "not kicked; no
+ * control …" for the bars the ledger counts).
  */
 export function castStoppedText(
   o: CastBarOutcome,
@@ -90,14 +102,21 @@ export function castStoppedText(
   statedByRejected: ReadonlySet<CastFailedEvent>,
 ): string | null {
   const { end } = o;
-  if (end.kind === "none" || end.atS > roundEndS)
+  if (o.t >= roundEndS) return null;
+  if (end.kind === "none" || end.atS >= roundEndS)
     return roundEndS <
       Math.min(o.t + JUKE_LOOKBACK_MS / 1000, nextBarS ?? Infinity)
       ? `no end logged; the round ended ${elapsed(o.t, roundEndS)} after it began`
       : null;
   if (end.kind === "completed" || end.kind === "kicked") return null;
-  if (end.kind === "stopped")
-    return `cast bar stopped after ${elapsed(o.t, end.atS)}${CAST_STOPPED_NEAR_TEXT[end.near ?? "none"]}`;
+  if (end.kind === "stopped") {
+    if (end.near === "death") return null;
+    const near = isCancelInRound(o, roundEndS) ? "none" : end.near;
+    // unreachable by construction (a stop before the round's end with
+    // nothing near it IS a cancel); no wording is guessed for it
+    if (near === null) return null;
+    return `cast bar stopped after ${elapsed(o.t, end.atS)}${CAST_STOPPED_NEAR_TEXT[near]}`;
+  }
   if (statedByRejected.has(end.row)) return null;
   const kind = rejectKindOf(end.row.reason);
   const at = `refused ${elapsed(o.t, end.atS)} in`;
@@ -120,8 +139,10 @@ export function castStoppedLine(
 export function emitCastStoppedEntries(
   ctx: Pick<
     TimelineCtx,
-    "owner" | "matchStartMs" | "matchEndSeconds" | "rawStreams" | "addEntry"
+    "owner" | "matchStartMs" | "rawStreams" | "addEntry"
   > & {
+    /** The round's end, seconds since `matchStartMs` (`roundEndMs`). */
+    roundEndSeconds: number;
     /** `ownerControlCastBars` of this round (buildMatchContext). */
     controlCastBars: readonly IControlCastBar[];
     /** The SPELL_CAST_FAILED rows the printed `[REJECTED]` lines state. */
@@ -131,7 +152,7 @@ export function emitCastStoppedEntries(
   const {
     owner,
     matchStartMs,
-    matchEndSeconds,
+    roundEndSeconds,
     rawStreams,
     addEntry,
     controlCastBars,
@@ -154,7 +175,7 @@ export function emitCastStoppedEntries(
     if (name === undefined) return;
     const text = castStoppedText(
       o,
-      matchEndSeconds,
+      roundEndSeconds,
       outcomes[i + 1]?.t,
       statedByRejected,
     );

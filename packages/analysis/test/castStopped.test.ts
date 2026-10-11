@@ -144,12 +144,12 @@ function fixture(rejects: number[] = [113.0]) {
   return { owner, rogue, combat, rawStreams };
 }
 
-function timelineOf(
+function timelineParams(
   f: ReturnType<typeof fixture>,
   // null = the round has no raw streams at all
   streams: RawStreams | null = f.rawStreams,
-): string[] {
-  const params: BuildMatchTimelineParams = {
+): BuildMatchTimelineParams {
+  return {
     owner: f.owner,
     ownerSpec: "Druid_Balance",
     ownerCDs: [],
@@ -179,7 +179,12 @@ function timelineOf(
     rawStreams: streams ?? undefined,
     ownerControlCastBars: ownerControlCastBars(f.owner, f.combat),
   };
-  return buildMatchTimeline(params).split("\n");
+}
+function timelineOf(
+  f: ReturnType<typeof fixture>,
+  streams: RawStreams | null = f.rawStreams,
+): string[] {
+  return buildMatchTimeline(timelineParams(f, streams)).split("\n");
 }
 const stoppedLines = (lines: string[]) =>
   lines.filter((l) => /^\d+:\d{2}\s+\[CAST STOPPED\]/.test(l));
@@ -373,6 +378,71 @@ describe("castStoppedText — the wording of each ending", () => {
     expect(
       castStoppedText(outcomes[j]!, 81.02, outcomes[j + 1]?.t, new Set()),
     ).toBeNull();
+  });
+
+  // FT I11 (b): a stop the player did not choose is not worded as one.
+  it("a bar the owner's own death ended has no line — the [DEATH] line states it", () => {
+    const g = fixture();
+    (g.owner as any).deathRecords = [{ timestamp: at(10.52) }];
+    const o = ownerCastBarOutcomes({
+      owner: g.owner,
+      startMs: T0,
+      rawStreams: g.rawStreams,
+    })!;
+    const i = o.findIndex((b) => b.id === CYCLONE && b.t === 10);
+    expect(o[i]!.end).toMatchObject({ kind: "stopped", near: "death" });
+    expect(castStoppedText(o[i]!, 120, o[i + 1]?.t, new Set())).toBeNull();
+    // the ledger does not count it, the line does not say it: one reading
+    const led = ownerCastCancels({
+      owner: g.owner,
+      friends: [g.owner],
+      enemies: [g.rogue],
+      combat: g.combat,
+      rawStreams: g.rawStreams,
+    })!;
+    expect(led.cancels.map((c) => c.startS)).toEqual([5, 70]);
+    expect(
+      stoppedLines(timelineOf(g)).filter((l) => l.startsWith("0:10")),
+    ).toEqual([]);
+  });
+
+  it("a stop at or after the round's end is the round ending, and a bar begun after it has no line", () => {
+    const i = outcomes.findIndex((o) => o.id === CYCLONE && o.t === 10);
+    // the stop row is at 10.5 s: a round that ended at 10.5 s ended first
+    expect(castStoppedText(outcomes[i]!, 10.5, outcomes[i + 1]?.t, new Set())).toBe(
+      "no end logged; the round ended 0.5s after it began",
+    );
+    expect(castStoppedText(outcomes[i]!, 10.51, outcomes[i + 1]?.t, new Set())).toBe(
+      `cast bar stopped after 0.5s${CAST_STOPPED_NEAR_TEXT.none}`,
+    );
+    // begun at or after the round's end: not the round's bar
+    expect(castStoppedText(outcomes[i]!, 10, outcomes[i + 1]?.t, new Set())).toBeNull();
+    expect(castStoppedText(outcomes[i]!, 9.2, outcomes[i + 1]?.t, new Set())).toBeNull();
+  });
+
+  it("a Solo Shuffle round's lines and cancels end at its first death, not at the log's end", () => {
+    const g = fixture();
+    g.combat.startInfo = { zoneId: "", bracket: "Rated Solo Shuffle" };
+    // the rogue dies at 70.3 s: the Cyclone of 70 s is stopped at 70.6 s,
+    // after the round; every later bar was begun after it
+    (g.rogue as any).deathRecords = [{ timestamp: at(70.3) }];
+    const lines = stoppedLines(
+      buildMatchTimeline({
+        ...timelineParams(g),
+        bracket: "Rated Solo Shuffle",
+      }).split("\n"),
+    );
+    expect(lines.filter((l) => /^1:\d\d/.test(l))).toEqual([
+      "1:10  [CAST STOPPED]   Cyclone — no end logged; the round ended 0.3s after it began",
+    ]);
+    const led = ownerCastCancels({
+      owner: g.owner,
+      friends: [g.owner],
+      enemies: [g.rogue],
+      combat: g.combat,
+      rawStreams: g.rawStreams,
+    })!;
+    expect(led.cancels.map((c) => c.startS)).toEqual([5, 10]);
   });
 
   it("a refusal a [REJECTED] line states is not said again", () => {
