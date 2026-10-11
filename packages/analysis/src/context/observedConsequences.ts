@@ -37,6 +37,7 @@ import {
   LogEvent,
 } from "@gladlog/parser-compat";
 
+import { BACKLASH_AURA_CC_TYPE } from "../data/backlashCc";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import { enemySourceIds, silenceIntervals } from "../utils/cannotCastIntervals";
 import {
@@ -91,8 +92,7 @@ export function mateHpAcross(
   const lo = gridHpMinInWindow(mate, matchStartMs, fromSec, toSec);
   if (h0 === null || !lo) return null;
   const trough =
-    hpTroughInWindow(mate, matchStartMs, fromSec, toSec, undefined, span) ??
-    lo;
+    hpTroughInWindow(mate, matchStartMs, fromSec, toSec, undefined, span) ?? lo;
   return { h0, lo, trough };
 }
 
@@ -274,9 +274,13 @@ export function formatObservedConsequences(params: {
       );
       if (!measured && !died) continue;
       const body = parts.length ? parts.join(", ") : noDropBody(died);
+      // FT F22: a backlash that is a silence (Unstable Affliction's) says so,
+      // as the silences of block 3 do
+      const kind =
+        BACKLASH_AURA_CC_TYPE.get(cc.spellId) === "silence" ? " (silence)" : "";
       entries.push({
         atS: cc.atSeconds,
-        line: `${fmtTime(cc.atSeconds)}  [CONSEQ]   ${who} ${label(healer.name)} in ${cc.spellName} for ${renderedCcSeconds(cc)}s → during it: ${body}${died}`,
+        line: `${fmtTime(cc.atSeconds)}  [CONSEQ]   ${who} ${label(healer.name)} in ${cc.spellName}${kind} for ${renderedCcSeconds(cc)}s → during it: ${body}${died}`,
       });
     }
   }

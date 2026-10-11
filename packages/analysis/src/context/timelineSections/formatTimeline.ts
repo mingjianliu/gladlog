@@ -9,6 +9,7 @@
  * its closure inputs now arrive through `ctx`. Output is pinned by the 605-file
  * acceptanceCapture context hash.
  */
+import { backlashCcTag } from "../../data/backlashCc";
 import {
   DEATH_WINDOW_S,
   TIMELINE_LINE_FLAGS,
@@ -40,6 +41,8 @@ import {
   HEALING_BLOCK_LEGEND,
   OWN_AURA_CLAUSE_LEGEND,
   OWN_AURA_CLAUSE_PREFIX,
+  TOP_SOURCE_MIXED_SCHOOL_LEGEND,
+  TOP_SOURCE_MIXED_SCHOOL_RE,
 } from "../timelineHelpers";
 import { CAST_STOPPED_LEGEND, CAST_STOPPED_TAG } from "./castStopped";
 import { DR_CLASH_LEGEND } from "./contextFacts";
@@ -220,6 +223,23 @@ export function formatTimeline(
   const forbearanceRendered = entries.some((e) =>
     e.lines.some((l) => typeof l === "string" && RES_FORBEARANCE_RE.test(l)),
   );
+  // FT F22: a `Top sources` entry summed over an ability's spell ids names
+  // every school its damage came in — legended when one is printed.
+  const mixedSchoolSourceRendered = entries.some((e) =>
+    e.lines.some(
+      (l) => typeof l === "string" && TOP_SOURCE_MIXED_SCHOOL_RE.test(l),
+    ),
+  );
+  // FT F22: an enemy's dispel-backlash silence renders as [SILENCE] with
+  // the backlash tag (`ccOnEnemy.ts`); the tag is legended when one does.
+  const backlashSilenceLineRendered = entries.some((e) =>
+    e.lines.some(
+      (l) =>
+        typeof l === "string" &&
+        l.includes("  [SILENCE]   ") &&
+        l.includes(backlashCcTag("silence")),
+    ),
+  );
   // FT F01: the deferral role tag on a press line (Time Dilation) is
   // legended only when a line carries it.
   const deferralTagRendered = entries.some((e) =>
@@ -379,6 +399,7 @@ export function formatTimeline(
     // FT-T02d / T02b: one stated definition of the spike's total.
     "    Its `N in Ks` = the health that unit lost to hits in the window plus what its shields absorbed (`(X absorbed)` is",
     "    that part). Damage a Time Dilation / Stretch Time only delayed counts when it lands (a `deferred …` source), never as absorbed.",
+    ...(mixedSchoolSourceRendered ? [TOP_SOURCE_MIXED_SCHOOL_LEGEND] : []),
     // A21 (user ruling 2026-09-30): HP on press lines is read at the press
     // (worded without the literal line tags: tests and scans find press
     // lines by their tag)
@@ -458,6 +479,11 @@ export function formatTimeline(
       ? [
           "  [SILENCE] = that player was silenced from that second for the stated time: no spells (the [CC ON TEAM] / [CC ON ENEMY]",
           "    lines do not include silences). `trinket broke this silence` = a PvP trinket ended it early.",
+          ...(backlashSilenceLineRendered
+            ? [
+                `    \`${backlashCcTag("silence").trim()}\` on it = the silence a dispel of that debuff puts on the player who dispelled it.`,
+              ]
+            : []),
         ]
       : []),
     ...(disarmLineCount > 0

@@ -779,7 +779,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     ownerCDs.filter((cd) => ccSpellIds.has(cd.spellId)).map((cd) => cd.spellId),
   );
   let enemyTrinketCount = 0;
-  ({ enemyTrinketCount } = emitCcOnEnemyEntries({
+  ({ enemyTrinketCount, silenceLineCount } = emitCcOnEnemyEntries({
     enemyCCSummaries,
     enemies,
     friends,
@@ -796,6 +796,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     ownerRenderedCcIds,
     enemyCcDrTag,
     rosterSides,
+    silenceLineCount,
   }));
 
   // ── Spell outcomes the log records and the timeline did not state ─────────

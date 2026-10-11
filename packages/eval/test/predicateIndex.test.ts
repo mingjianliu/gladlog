@@ -1352,6 +1352,33 @@ const INDEX: PredicateRow[] = [
     symbol: "BACKLASH_AURA_CC_TYPE",
     mod: backlashCc,
   },
+  // FT F22: an enemy's backlash silence is a [SILENCE] line; a Top sources
+  // list names one source + ability once
+  {
+    file: `${A}/data/backlashCc.ts`,
+    symbol: "backlashCcTag",
+    mod: backlashCc,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkBacklashSilenceFamily",
+    mod: promptQualityCheck,
+  },
+  {
+    file: `${A}/context/timelineHelpers.ts`,
+    symbol: "damageEventParts",
+    mod: timelineHelpers,
+  },
+  {
+    file: `${A}/context/timelineHelpers.ts`,
+    symbol: "parseTopSourceEntries",
+    mod: timelineHelpers,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkTopSourcesOneEntryPerAbility",
+    mod: promptQualityCheck,
+  },
   {
     file: `${A}/data/dispelObservedGenerated.ts`,
     symbol: "CORPUS_OBSERVED_DISPEL_IDS",

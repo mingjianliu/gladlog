@@ -11,6 +11,7 @@
  */
 import { CombatUnitReaction } from "@gladlog/parser-compat";
 
+import { BACKLASH_AURA_CC_TYPE, backlashCcTag } from "../../data/backlashCc";
 import { BREAK_RACIAL_SPELL_IDS } from "../../data/racialAbilities";
 import {
   ccEndedByOwnPress,
@@ -48,8 +49,9 @@ export function emitCcOnEnemyEntries(
     | "ownerRenderedCcIds"
     | "enemyCcDrTag"
     | "rosterSides"
+    | "silenceLineCount"
   >,
-): Pick<TimelineCtx, "enemyTrinketCount"> {
+): Pick<TimelineCtx, "enemyTrinketCount" | "silenceLineCount"> {
   const {
     enemyCCSummaries,
     enemies,
@@ -68,7 +70,7 @@ export function emitCcOnEnemyEntries(
     rosterSides,
   } = ctx;
   // threaded: read from ctx, returned to the caller (GH #116)
-  let { enemyTrinketCount } = ctx;
+  let { enemyTrinketCount, silenceLineCount } = ctx;
 
   if (enemyCCSummaries) {
     for (const summary of enemyCCSummaries) {
@@ -235,6 +237,25 @@ export function emitCcOnEnemyEntries(
                   );
                 },
               );
+        // FT F22: a dispel backlash that is a SILENCE (Unstable Affliction's
+        // 196364 — DB2 mechanic 9, `BACKLASH_AURA_CC_TYPE`) is a silence on
+        // that enemy, not hard CC: the [SILENCE] line, in its format, with
+        // the tag the [CC ON TEAM] line of the same aura carries. It read
+        // `[CC ON ENEMY] … ← Unstable Affliction (by …) (4s)` under a legend
+        // that says those lines hold no silences. One exception: the landing
+        // a QUICK FOLLOW-UPS line cites keeps its [CC ON ENEMY] line — the
+        // gate reads that line (`checkForcedTrinketConsistency`).
+        const backlashType = BACKLASH_AURA_CC_TYPE.get(cc.spellId);
+        if (backlashType === "silence" && !enemyTremor && !keptForFollowUp) {
+          if (
+            addEntry(
+              cc.atSeconds,
+              `${fmtTime(cc.atSeconds)}  [SILENCE]   ${enemyPid(summary.playerName)} ← ${cc.spellName} (by ${actorLabel(cc.sourceName, "friendly", cc.sourceId)}) | ${renderedCcSpan(cc)}${backlashCcTag(backlashType)}${endNote}`,
+            )
+          )
+            silenceLineCount++;
+          continue;
+        }
         const durStr = enemyTremor
           ? `${drTag} | enemy Tremor Totem from ${enemyPid(enemyTremor.shamanName)} ended this CC after ${renderedCcDuration(cc)} (cut short — it had not expired)`
           : ` (${renderedCcSpan(cc)})${drTag}${endNote}`;
@@ -246,5 +267,5 @@ export function emitCcOnEnemyEntries(
     }
   }
 
-  return { enemyTrinketCount };
+  return { enemyTrinketCount, silenceLineCount };
 }

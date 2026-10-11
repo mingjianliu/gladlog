@@ -81,11 +81,19 @@ import {
   REJECT_WHY,
 } from "@gladlog/analysis/src/context/spellOutcomeLines";
 import {
+  parseTopSourceEntries,
+  TOP_SOURCE_LIST_RE,
+} from "@gladlog/analysis/src/context/timelineHelpers";
+import {
   CAST_REFUSED_OTHER_REASON,
   CAST_STOPPED_NEAR_TEXT,
   CAST_STOPPED_TAG,
 } from "@gladlog/analysis/src/context/timelineSections/castStopped";
 import { CC_NOT_LANDED_TAG } from "@gladlog/analysis/src/context/timelineSections/setup";
+import {
+  BACKLASH_AURA_CC_TYPE,
+  backlashCcTag,
+} from "@gladlog/analysis/src/data/backlashCc";
 import {
   lookupBacklashPrior,
   lookupBacklashWorth,
@@ -106,6 +114,7 @@ import { classMetadata } from "@gladlog/analysis/src/data/classSpells";
 import { FORM_COOLDOWN_BUFF_BY_CAST_ID } from "@gladlog/analysis/src/data/druidForms";
 import { lookupKickPriorityPrior } from "@gladlog/analysis/src/data/kickPriorityPrior";
 import { ATTEMPT_INTO_TRINKET_OUTCOME_REF } from "@gladlog/analysis/src/data/outcomeRefs";
+import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData";
 import {
   getEnglishSpellName,
   spellEffectData,
@@ -2554,6 +2563,93 @@ export function checkForcedTrinketConsistency(lines: string[]): string[] {
     failures.push(
       `[FORCED TRINKET] ${count} 条,超过上限 ${FORCED_FOLLOWUP_CAP}`,
     );
+  return failures;
+}
+
+/**
+ * A dispel backlash that is a SILENCE is not on a `[CC ON ENEMY]` line (FT
+ * F22). The producer (`timelineSections/ccOnEnemy.ts`) renders an enemy's
+ * silence-type backlash aura (`BACKLASH_AURA_CC_TYPE`: Unstable Affliction's
+ * 196364) as a `[SILENCE]` line carrying `backlashCcTag("silence")`; it read
+ * `[CC ON ENEMY] … ← Unstable Affliction (by …) (4s)` on 515 lines of the
+ * 605-file capture, under a legend that says the [CC ON …] lines hold no
+ * silences. Fails:
+ *  - a `[CC ON ENEMY]` data line whose control is named after a silence-type
+ *    backlash aura — unless a `[FORCED TRINKET]` line cites that landing
+ *    (same second, spell and unit): the producer keeps that one line, the
+ *    anchor `checkForcedTrinketConsistency` reads;
+ *  - a `[SILENCE]` line that carries the backlash tag for a spell that is
+ *    not such an aura.
+ * The names are the table's own (`getEnglishSpellName` of each silence-type
+ * aura id) — no list of spells here.
+ */
+export function checkBacklashSilenceFamily(lines: string[]): string[] {
+  const names = new Set(
+    [...BACKLASH_AURA_CC_TYPE]
+      .filter(([, type]) => type === "silence")
+      .map(([id]) => getEnglishSpellName(id)),
+  );
+  const tag = backlashCcTag("silence");
+  const cited = new Set<string>();
+  for (const line of lines) {
+    const f = line.match(FORCED_TRINKET_LINE);
+    if (f) cited.add(`${Number(f[8]) * 60 + Number(f[9])}|${f[10]}|${f[11]}`);
+  }
+  const failures: string[] = [];
+  lines.forEach((line, i) => {
+    const cc = line.match(
+      /^\s*(\d+):(\d{2})\s+\[CC ON ENEMY\]\s+(\S+) ← (.+?) \(by /,
+    );
+    if (
+      cc &&
+      names.has(cc[4]!) &&
+      !cited.has(`${Number(cc[1]) * 60 + Number(cc[2])}|${cc[4]}|${cc[3]}`)
+    )
+      failures.push(
+        `line ${i + 1}: [CC ON ENEMY] 写的是驱散反噬的沉默(${cc[4]}),应当是 [SILENCE] 行 —— ${line.trim().slice(0, 160)}`,
+      );
+    const s = line.match(/^\s*\d+:\d{2}\s+\[SILENCE\]\s+\S+ ← (.+?) \(by /);
+    if (s && line.includes(tag) && !names.has(s[1]!))
+      failures.push(
+        `line ${i + 1}: [SILENCE] 行带了${tag.trim()},但 ${s[1]} 不是沉默类的驱散反噬 —— ${line.trim().slice(0, 160)}`,
+      );
+  });
+  return failures;
+}
+
+/**
+ * A `Top sources:` / `Top damage in final Ns:` list names one source +
+ * ability once (FT F22). The producer (`getTopDamageSourcesInWindow`) sums by
+ * "source — English spell name"; keyed on the whole label it split an
+ * ability wherever its spell ids did not carry the same school tag
+ * (`4 — Eviscerate [Physical] (85k), …, 4 — Eviscerate [Shadow] (69k)`;
+ * `4 — The Hunt (116k; 116k of it absorbed), 4 — The Hunt [Chaos] (108k)`) —
+ * 312 of 20,847 lists on the 605-file capture. Read back through the
+ * producer's own `parseTopSourceEntries`. Fails a list that is not in the
+ * generated format to its end, and one with two entries of the same
+ * `ability`.
+ */
+export function checkTopSourcesOneEntryPerAbility(lines: string[]): string[] {
+  const failures: string[] = [];
+  lines.forEach((line, i) => {
+    const m = line.match(TOP_SOURCE_LIST_RE);
+    if (!m) return;
+    const entries = parseTopSourceEntries(m[1]!);
+    if (!entries) {
+      failures.push(
+        `line ${i + 1}: Top sources 列表不是生成格式 —— ${line.trim().slice(0, 160)}`,
+      );
+      return;
+    }
+    const seen = new Set<string>();
+    for (const e of entries) {
+      if (seen.has(e.ability))
+        failures.push(
+          `line ${i + 1}: Top sources 把同一来源的同一技能(${e.ability})拆成了两项 —— ${line.trim().slice(0, 160)}`,
+        );
+      seen.add(e.ability);
+    }
+  });
   return failures;
 }
 
@@ -5681,6 +5777,8 @@ export function checkMatch(
   hardFailures.push(...checkKickEatenCancelsCoverCastStopped(lines));
   hardFailures.push(...checkCcNotLandedLines(lines));
   hardFailures.push(...checkForcedTrinketConsistency(lines));
+  hardFailures.push(...checkBacklashSilenceFamily(lines));
+  hardFailures.push(...checkTopSourcesOneEntryPerAbility(lines));
   hardFailures.push(...checkKillAttemptBracketEnd(lines));
   hardFailures.push(...checkGuardianSpiritSaveClause(lines));
   hardFailures.push(...checkKarmaFedClause(lines));

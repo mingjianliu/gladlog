@@ -1051,6 +1051,23 @@ export function damageEventLabel(
   enemyIdMap?: Map<string, number>,
   summonOwners?: ReadonlyMap<string, string>,
 ): string {
+  const p = damageEventParts(d, playerIdMap, enemyIdMap, summonOwners);
+  return `${p.ability}${p.school ? ` [${p.school}]` : ""}`;
+}
+
+/**
+ * The parts of `damageEventLabel`: `ability` = "source — spell" (the source
+ * label and the English spell name — who hit with WHAT), `school` = the
+ * event's school name or null. `getTopDamageSourcesInWindow` sums by
+ * `ability`: one ability's damage is logged under several spell ids, and
+ * they do not all carry the same school (FT F22).
+ */
+export function damageEventParts(
+  d: ICombatUnit["damageIn"][number],
+  playerIdMap?: Map<string, number>,
+  enemyIdMap?: Map<string, number>,
+  summonOwners?: ReadonlyMap<string, string>,
+): { ability: string; school: string | null } {
   // B24: pet/guardian units may have localized (non-ASCII) names from non-en-US clients;
   // replace with "[pet]" to keep attribution readable without localization noise.
   const srcType = getUnitType(d.srcUnitFlags);
@@ -1108,13 +1125,52 @@ export function damageEventLabel(
     ? getEnglishSpellName(d.spellId, d.spellName)
     : (d.spellName ?? "melee");
 
-  const schoolName = getSpellSchoolName(d.spellSchoolId);
-  const spellLabel = schoolName
-    ? `${baseSpellLabel} [${schoolName}]`
-    : baseSpellLabel;
-
-  return `${srcName} — ${spellLabel}`;
+  return {
+    ability: `${srcName} — ${baseSpellLabel}`,
+    school: getSpellSchoolName(d.spellSchoolId),
+  };
 }
+
+/** Between the schools of one `Top sources` entry whose damage came in more
+ * than one (`Eviscerate [Physical + Shadow]`) — not the `/` of a single
+ * multi-school hit. The legend line is printed when an entry carries it. */
+export const TOP_SOURCE_SCHOOL_JOIN = " + ";
+/** A `Top sources` / `Top damage in final Ns` entry with such a tag. */
+export const TOP_SOURCE_MIXED_SCHOOL_RE =
+  / — [^\n[\]]+ \[[A-Za-z/]+(?: \+ [A-Za-z/]+)+\] \(\d+k/;
+/** A rendered `Top sources: …` / `Top damage in final Ns: …` line; group 1 is
+ * the list. */
+export const TOP_SOURCE_LIST_RE = /Top (?:sources|damage in final \d+s): (.+)$/;
+const TOP_SOURCE_ENTRY_RE =
+  /(.+?)(?: \[([^\]]+)\])? \((\d+)k(?:; \d+k of it absorbed)?\)(?:, |$)/y;
+/**
+ * The entries of such a list, read back as `getTopDamageSourcesInWindow`
+ * writes them: `ability` = "source — spell", the schools of its tag, the
+ * printed thousands. null when the text is not that format to its end. The
+ * gate's reader (`checkTopSourcesOneEntryPerAbility`): no two entries of one
+ * list may share an `ability`.
+ */
+export function parseTopSourceEntries(
+  list: string,
+): Array<{ ability: string; schools: string[]; k: number }> | null {
+  const out: Array<{ ability: string; schools: string[]; k: number }> = [];
+  const re = new RegExp(TOP_SOURCE_ENTRY_RE.source, "y");
+  let at = 0;
+  while (at < list.length) {
+    re.lastIndex = at;
+    const m = re.exec(list);
+    if (!m) return null;
+    out.push({
+      ability: m[1]!,
+      schools: m[2] ? m[2].split(TOP_SOURCE_SCHOOL_JOIN) : [],
+      k: Number(m[3]),
+    });
+    at = re.lastIndex;
+  }
+  return out.length ? out : null;
+}
+export const TOP_SOURCE_MIXED_SCHOOL_LEGEND =
+  "  `[A + B]` after an ability in a `Top sources` / `Top damage` list = its damage there came in both schools (largest first); the entry is their sum.";
 
 /** summon GUID → owner's full name, for every unit that carries an owner. */
 export function buildSummonOwnerNames(
@@ -1280,6 +1336,19 @@ export function summonLifetimeAtKillS(
 /**
  * Extracts the top-N damage sources that hit `unit` within the `windowMs` window
  * ending at `deathMs`. Returns an array of formatted "source — spell (Xk)" strings.
+ *
+ * One entry per ABILITY of a source — the source label and the English spell
+ * name (FT F22). The entries were keyed on the whole label, school tag
+ * included, so an ability the log writes under several spell ids was split
+ * wherever those ids did not carry the same tag: Eviscerate 196819
+ * (Physical) and its Shadowed Finishers half 328082 (Shadow) — 1b930c17
+ * `4 — Eviscerate [Physical] (85k), …, 4 — Eviscerate [Shadow] (69k)` —
+ * and The Hunt's impact 370966, absorbed whole (an absorb row carries no
+ * school here), beside its DoT 370969 — f94a7604 `4 — The Hunt (116k; 116k
+ * of it absorbed), 4 — The Hunt [Chaos] (108k)`. 312 of 20,847 such lists on
+ * the 605-file capture named one source + ability twice. The tag of a summed
+ * entry lists the schools its damage rows carried, largest first
+ * (`TOP_SOURCE_SCHOOL_JOIN`); a part the log gives no school for adds none.
  */
 /** Self → self periodic damage that is damage DELAYED from earlier hits —
  * the ids the deferral shields' delayed damage lands as
@@ -1313,9 +1382,19 @@ export function getTopDamageSourcesInWindow(
   const buckets = new Map<string, number>();
   /** bucket → the part of it a shield absorbed */
   const absorbedIn = new Map<string, number>();
-  /** `${attackerId}|${spellId}` → the bucket its damage events went to, so
-   *  an absorbed part joins the same line as the hit's landed part */
-  const keyOfHit = new Map<string, string>();
+  /** bucket → school name → the part of it that came in that school */
+  const schoolsIn = new Map<string, Map<string, number>>();
+  const add = (key: string, school: string | null, amount: number) => {
+    buckets.set(key, (buckets.get(key) ?? 0) + amount);
+    if (!school) return;
+    let m = schoolsIn.get(key);
+    if (!m) schoolsIn.set(key, (m = new Map()));
+    m.set(school, (m.get(school) ?? 0) + amount);
+  };
+  /** `${attackerId}|${spellId}` → the bucket its damage events went to and
+   *  their school, so an absorbed part joins the same line as the hit's
+   *  landed part */
+  const keyOfHit = new Map<string, ReturnType<typeof damageEventParts>>();
   for (const d of unit.damageIn) {
     if (d.logLine.timestamp < startMs || d.logLine.timestamp > endMs) continue;
     const dmg = Math.abs(d.effectiveAmount);
@@ -1344,14 +1423,17 @@ export function getTopDamageSourcesInWindow(
     // self-hit (Shadow Word: Death) is the unit's own, not deferred (codex
     // review of batch 7)
     const selfName = getEnglishSpellName(d.spellId ?? "", d.spellName ?? "");
-    const key = self
-      ? DEFERRED_DAMAGE_SPELL_IDS.has(d.spellId ?? "")
-        ? `deferred ${selfName} (own)`
-        : `${selfName} (own)`
-      : damageEventLabel(d, playerIdMap, enemyIdMap, summonOwners);
+    const hit = self
+      ? {
+          ability: DEFERRED_DAMAGE_SPELL_IDS.has(d.spellId ?? "")
+            ? `deferred ${selfName} (own)`
+            : `${selfName} (own)`,
+          school: null,
+        }
+      : damageEventParts(d, playerIdMap, enemyIdMap, summonOwners);
     if (d.srcUnitId)
-      keyOfHit.set(`${d.srcUnitId}|${hitSpellKey(d.spellId)}`, key);
-    buckets.set(key, (buckets.get(key) ?? 0) + dmg);
+      keyOfHit.set(`${d.srcUnitId}|${hitSpellKey(d.spellId)}`, hit);
+    add(hit.ability, hit.school, dmg);
   }
   // Absorbed parts of hits (reliability round 3 N13, b12b: "Starsurge 43k"
   // for 151k of Starsurge, most of it eaten by shields). The victim-keyed
@@ -1385,9 +1467,9 @@ export function getTopDamageSourcesInWindow(
     const noSpell = hitSpellKey(a.attackSpellId) === "";
     const swing = noSpell && recordsAttackSpell;
     const unknownAttack = noSpell && !recordsAttackSpell;
-    const key =
+    const hit =
       keyOfHit.get(`${a.attackerId}|${hitSpellKey(a.attackSpellId)}`) ??
-      damageEventLabel(
+      damageEventParts(
         {
           srcUnitId: a.attackerId,
           // the attacker by GUID — the raw name parameter is empty on stored
@@ -1407,15 +1489,21 @@ export function getTopDamageSourcesInWindow(
         enemyIdMap,
         summonOwners,
       );
-    buckets.set(key, (buckets.get(key) ?? 0) + amt);
-    absorbedIn.set(key, (absorbedIn.get(key) ?? 0) + amt);
+    add(hit.ability, hit.school, amt);
+    absorbedIn.set(hit.ability, (absorbedIn.get(hit.ability) ?? 0) + amt);
   }
   return [...buckets.entries()]
     .sort((a, b) => b[1] - a[1])
     .slice(0, topN)
     .map(([k, v]) => {
       const abs = Math.round((absorbedIn.get(k) ?? 0) / 1000);
-      return `${k} (${Math.round(v / 1000)}k${abs > 0 ? `; ${abs}k of it absorbed` : ""})`;
+      const schools = [...(schoolsIn.get(k)?.entries() ?? [])]
+        .sort((a, b) => b[1] - a[1])
+        .map(([name]) => name);
+      const tag = schools.length
+        ? ` [${schools.join(TOP_SOURCE_SCHOOL_JOIN)}]`
+        : "";
+      return `${k}${tag} (${Math.round(v / 1000)}k${abs > 0 ? `; ${abs}k of it absorbed` : ""})`;
     });
 }
 

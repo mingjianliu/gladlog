@@ -11,7 +11,7 @@
  */
 import { CombatUnitReaction } from "@gladlog/parser-compat";
 
-import { BACKLASH_AURA_CC_TYPE } from "../../data/backlashCc";
+import { BACKLASH_AURA_CC_TYPE, backlashCcTag } from "../../data/backlashCc";
 import {
   ccAvoidedOutcomeText,
   ccEndedByOwnPress,
@@ -248,9 +248,7 @@ export function emitTrinketCcOnTeamEntries(
       // GH #103: the tag names the CC (the coach guessed "stun" for a silence)
       // and reads the one backlash table (data/backlashCc.ts).
       const backlashType = BACKLASH_AURA_CC_TYPE.get(cc.spellId);
-      const backlashStr = backlashType
-        ? ` [DISPEL BACKLASH CC: ${backlashType}]`
-        : "";
+      const backlashStr = backlashType ? backlashCcTag(backlashType) : "";
 
       // B111: for a trinket-broken CC the logged duration is the truncated endured time, not the CC's
       // natural length; suppress the standalone "| Ns" (the trinket note carries the endured time) so it
