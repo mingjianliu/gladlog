@@ -15,9 +15,11 @@ import { BACKLASH_AURA_CC_TYPE, backlashCcTag } from "../../data/backlashCc";
 import { BREAK_RACIAL_SPELL_IDS } from "../../data/racialAbilities";
 import {
   ccEndedByOwnPress,
+  ccUnloggedEarlyEnd,
   ccLoggedEnd,
   findBrokenCC,
   formatCcLoggedEnd,
+  formatCcUnloggedEnd,
   type ICCInstance,
   renderedCcDuration,
   renderedCcSpan,
@@ -208,7 +210,7 @@ export function emitCcOnEnemyEntries(
         // FT-T09: or the target's own press. The [ENEMY TRINKET] line names
         // the ONE control a press is bound to; every control that press (or
         // an immunity) ended says so here, on its own line.
-        const endNote =
+        const loggedEndNote =
           enemyTremor || !enemyUnit
             ? ""
             : formatCcLoggedEnd(
@@ -256,6 +258,17 @@ export function emitCcOnEnemyEntries(
             silenceLineCount++;
           continue;
         }
+        // F06b / F08: gone within half a second with nothing in the log
+        // to say why — said, not left as a bare `<1s`
+        // (`ccUnloggedEarlyEnd`). An enemy's dispel of it is the
+        // `enemyDispelSummary` reading above.
+        const endNote =
+          loggedEndNote ||
+          (enemyTremor || !enemyUnit || trinketBroke || isCleansed
+            ? ""
+            : formatCcUnloggedEnd(
+                ccUnloggedEarlyEnd(enemyUnit, cc, matchStartMs),
+              ));
         const durStr = enemyTremor
           ? `${drTag} | enemy Tremor Totem from ${enemyPid(enemyTremor.shamanName)} ended this CC after ${renderedCcDuration(cc)} (cut short — it had not expired)`
           : ` (${renderedCcSpan(cc)})${drTag}${endNote}`;

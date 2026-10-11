@@ -20,6 +20,7 @@
     "test/burstWindowRefGate.test.ts",
     "test/calibration.test.ts",
     "test/ccCoverGate.test.ts",
+    "test/ccEndCauseNotLoggedGate.test.ts",
     "test/cdPriorRefGate.test.ts",
     "test/cjkLeakGate.test.ts",
     "test/conseqHpStateGate.test.ts",

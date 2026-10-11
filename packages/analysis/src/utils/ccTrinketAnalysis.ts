@@ -1577,10 +1577,84 @@ export function ccEndedByOwnPress(
     : undefined;
 }
 
+/** A control gone within half a second with no cause in the log: what its
+ * line says (`ccUnloggedEarlyEnd`). */
+export const CC_END_CAUSE_NOT_LOGGED = "ended early — cause not logged";
+
+/**
+ * A control that was gone within half a second with NOTHING in the log to
+ * say why — for the line that would otherwise print a bare `<1s` (F06b /
+ * F08). The caller has already read every cause the log does state (a break
+ * line, a dispel, the holder's death, their own press, a Tremor Totem, the
+ * round's end): this is what is left.
+ *
+ * Read on the render grid, so no number is invented: the line prints `<1s`
+ * while the control's own length at its DR level prints a whole second or
+ * more (`expectedDurationSeconds`, both through `renderedCcSeconds`). And
+ * its end is a REMOVED line of the log — an instance closed at its official
+ * length has no end to speak of.
+ *
+ * On the 605-file capture 208 distinct control lines read a bare `<1s`; on
+ * the five logs with the most of them (27 applications,
+ * fix-FT/scripts/n4_short_cc_ends.py) none has a dispel, a death, a break
+ * line, an immunity row or the round's end at its REMOVED — 19 have nothing
+ * there at all, 8 only an unrelated row (the holder's own heal, a proc
+ * buff).
+ *
+ * Deliberately NOT read, either way:
+ *  - a control that ran a whole second or more short of its table length
+ *    with no cause (113 of 1,356 instances on those five logs — fears and
+ *    Mind Control mostly): the table's length is before any reduction on
+ *    the holder, and a line must not call a shorter-than-table control
+ *    "ended early" on that alone;
+ *  - a hit near the removal as "the break the log did not write". A melee
+ *    swing that breaks a control writes no SPELL_AURA_BROKEN, but its
+ *    damage row is not in the REMOVED's ms either (08428e7e r5: swing at
+ *    .589, Hex REMOVED at .608), and a hit that close is no evidence:
+ *    eadf9636 r1's Psychic Scream came off 45 ms after a Meteorite hit — in
+ *    the ms a teammate's Berserker Shout landed on the holder.
+ */
+export function ccUnloggedEarlyEnd(
+  holder: Pick<ICombatUnit, "auraEvents">,
+  cc: Pick<
+    ICCInstance,
+    | "spellId"
+    | "atSeconds"
+    | "durationSeconds"
+    | "expectedDurationSeconds"
+    | "stillOnAtRoundEnd"
+  > &
+    Partial<Pick<ICCInstance, "sourceId">>,
+  matchStartMs: number,
+): "no_cause" | undefined {
+  if (cc.stillOnAtRoundEnd || cc.expectedDurationSeconds === undefined)
+    return undefined;
+  if (renderedCcSeconds(cc) !== 0) return undefined;
+  if (renderedCcSeconds({ durationSeconds: cc.expectedDurationSeconds }) < 1)
+    return undefined;
+  const removeMs =
+    matchStartMs + Math.round((cc.atSeconds + cc.durationSeconds) * 1000);
+  const removedLogged = (holder.auraEvents ?? []).some(
+    (a) =>
+      a.spellId === cc.spellId &&
+      a.logLine.timestamp === removeMs &&
+      (a.logLine.event as string) === LogEvent.SPELL_AURA_REMOVED &&
+      (cc.sourceId === undefined || a.srcUnitId === cc.sourceId),
+  );
+  return removedLogged ? "no_cause" : undefined;
+}
+
+/** `ccUnloggedEarlyEnd` as the line's ` | …` clause. */
+export function formatCcUnloggedEnd(
+  end: ReturnType<typeof ccUnloggedEarlyEnd>,
+): string {
+  return end === "no_cause" ? ` | ${CC_END_CAUSE_NOT_LOGGED}` : "";
+}
+
 /** The ` | …` clause a control line carries for `ccLoggedEnd` /
- * `ccEndedByOwnPress`, and the pattern the gates read it back with (anchored
- * by the caller). */
-export const CC_LOGGED_END_NOTE_RE_SRC = String.raw`(?: \| (?:broken by [^|]+|dispelled by [^|]+|ended at their death|ended by their [^|]+))?`;
+ * `ccEndedByOwnPress` / `ccUnloggedEarlyEnd`, and the pattern the gates read
+ * it back with (anchored by the caller). */
+export const CC_LOGGED_END_NOTE_RE_SRC = String.raw`(?: \| (?:broken by [^|]+|dispelled by [^|]+|ended at their death|ended by their [^|]+|${CC_END_CAUSE_NOT_LOGGED}))?`;
 export function formatCcLoggedEnd(
   end: ICcLoggedEnd | undefined,
   label: (name: string, unitId: string | undefined) => string,
@@ -1599,9 +1673,17 @@ export function formatCcLoggedEnd(
     : ` | broken by ${who}'s ${end.spellName}`;
 }
 
+/** What `endedBy` leads a damage break with (F06b): the log's break line
+ * names ONE hit — the one that landed as the control came off — and nothing
+ * about the damage before it. `endedBy=Agony (X)` read as "an Agony tick
+ * broke the lock" on a healer seven abilities had hit for 51k in that span;
+ * the value now says which part the log supports. */
+export const CC_BREAKING_HIT_LEAD = "damage — breaking hit: ";
+
 /** `endedBy` as a facts value: `trinket (Gladiator's Medallion)`, a break
- * ability's name, or `<spell> (<who>)` with "you" for the log owner. Never a
- * ", " (it would cut the facts block). */
+ * ability's name, a dispel as `<spell> (<who>)`, or a damage break as
+ * `CC_BREAKING_HIT_LEAD` + `<spell> (<who>)` — "you" for the log owner.
+ * Never a ", " (it would cut the facts block). */
 export function formatCcRemovalCause(
   c: ICcRemovalCause,
   ownerId: string | undefined,
@@ -1609,13 +1691,15 @@ export function formatCcRemovalCause(
   const clean = (x: string) => x.replace(/, /g, " ");
   if (c.kind === "trinket") return `trinket (${clean(c.spellName)})`;
   if (c.kind === "break") return clean(c.spellName);
+  const lead = c.kind === "broken" ? CC_BREAKING_HIT_LEAD : "";
   // a break line with no source: the spell alone
-  if (c.byUnitId === undefined && !c.byName) return clean(c.spellName);
+  if (c.byUnitId === undefined && !c.byName)
+    return `${lead}${clean(c.spellName)}`;
   const who =
     c.byUnitId !== undefined && c.byUnitId === ownerId
       ? "you"
       : clean(c.byName || "unknown");
-  return `${clean(c.spellName)} (${who})`;
+  return `${lead}${clean(c.spellName)} (${who})`;
 }
 
 export interface IPlayerCCTrinketSummary {

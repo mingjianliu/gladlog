@@ -15,8 +15,10 @@ import { BACKLASH_AURA_CC_TYPE, backlashCcTag } from "../../data/backlashCc";
 import {
   ccAvoidedOutcomeText,
   ccEndedByOwnPress,
+  ccUnloggedEarlyEnd,
   ccLoggedEnd,
   formatCcLoggedEnd,
+  formatCcUnloggedEnd,
   immunityBreak,
   lastTrinketPressBefore,
   renderedCcDuration,
@@ -214,6 +216,17 @@ export function emitTrinketCcOnTeamEntries(
           ? (ccLoggedEnd(ccdUnit, cc, matchStartMs) ??
             ccEndedByOwnPress(ccdUnit, cc, matchStartMs))
           : undefined;
+      // F06b / F08: gone within half a second with nothing in the log to
+      // say why — said, not left as a bare `<1s` (`ccUnloggedEarlyEnd`)
+      const unloggedNote =
+        !trinketBroke &&
+        !isCleansed &&
+        !tremor &&
+        !immunity &&
+        !loggedEnd &&
+        ccdUnit
+          ? formatCcUnloggedEnd(ccUnloggedEarlyEnd(ccdUnit, cc, matchStartMs))
+          : "";
       const endNote = formatCcLoggedEnd(
         loggedEnd?.kind === "dispelled" ? undefined : loggedEnd,
         (name, id) => {
@@ -281,7 +294,7 @@ export function emitTrinketCcOnTeamEntries(
       addEntry(
         cc.atSeconds,
         // B112: "(by N)" not "(N)" — the bare "(6)" caster-id was misread as a "6s" duration.
-        `${fmtTime(cc.atSeconds)}  [CC ON TEAM]   ${pid(summary.playerName)} ← ${cc.spellName} ${byStr}${durStr}${drStr}${backlashStr}${posStr}${trinketNote}${tremorNote}${immunityNote}${endNote}${cleansedNote}${formatPressedDuringNote(pressedDuring?.get(cc))}`,
+        `${fmtTime(cc.atSeconds)}  [CC ON TEAM]   ${pid(summary.playerName)} ← ${cc.spellName} ${byStr}${durStr}${drStr}${backlashStr}${posStr}${trinketNote}${tremorNote}${immunityNote}${endNote}${unloggedNote}${cleansedNote}${formatPressedDuringNote(pressedDuring?.get(cc))}`,
       );
     }
 

@@ -144,6 +144,7 @@ import {
   CONTROL_FAILED_MISS_TYPES,
 } from "@gladlog/analysis/src/utils/castMissRows";
 import {
+  CC_END_CAUSE_NOT_LOGGED,
   CC_LOGGED_END_NOTE_RE_SRC,
   CC_STILL_ON_AT_ROUND_END,
   ccLandedMatchWindowMs,
@@ -1311,6 +1312,40 @@ export function checkKillWindowWithinRound(lines: string[]): string[] {
         failures.push(
           `line ${i + 1}: ${sp.what} ${sp.text} 结束于回合结束之后(${end.says}在 ${fmtTime(end.second)})—— ${line.trim().slice(0, 140)}`,
         );
+  });
+  return failures;
+}
+
+/** Any other way a control line states its end. */
+const CC_OTHER_END_STATEMENT = new RegExp(
+  String.raw`${CC_STILL_ON_AT_ROUND_END}|broken by |dispelled by |ended at their death|ended by their |broke this CC|ended this CC|\[CLEANSED\]`,
+);
+
+/**
+ * Hard invariant (F06b / F08): `CC_END_CAUSE_NOT_LOGGED` — "this control was
+ * gone within half a second and the log names nothing that ended it"
+ * (`ccUnloggedEarlyEnd`) — sits only where that is what the line shows: on a
+ * `[CC ON TEAM]` / `[CC ON ENEMY]` line that prints `<1s` and states no other
+ * end (a break, a dispel, the holder's death or press, a trinket / Tremor /
+ * immunity break, `[CLEANSED]`, the round's end). A second end statement
+ * beside it is a contradiction; a whole-second length beside it is the
+ * claim the producer refuses to make (a control shorter than its table
+ * length is not thereby "ended early").
+ */
+export function checkCcEndCauseNotLogged(lines: string[]): string[] {
+  const failures: string[] = [];
+  lines.forEach((line, i) => {
+    if (!line.includes(CC_END_CAUSE_NOT_LOGGED)) return;
+    const fail = (why: string) =>
+      failures.push(
+        `line ${i + 1}: 「${CC_END_CAUSE_NOT_LOGGED}」${why} —— ${line.trim().slice(0, 180)}`,
+      );
+    if (!/^\s*\d+:\d{2}\s+\[CC ON (?:TEAM|ENEMY)\]/.test(line))
+      return fail("不在 [CC ON TEAM] / [CC ON ENEMY] 行上");
+    if (!/\) \| <1s|\) \(<1s\)/.test(line))
+      fail("所在的行没有印 <1s");
+    if (CC_OTHER_END_STATEMENT.test(line))
+      fail("与该行另一处结束说明并存");
   });
   return failures;
 }
@@ -5913,6 +5948,7 @@ export function checkMatch(
   hardFailures.push(...checkVulnerableOwnerDamage(lines));
   hardFailures.push(...checkKillWindowWithinRound(lines));
   hardFailures.push(...checkAuraEndWithinRound(lines));
+  hardFailures.push(...checkCcEndCauseNotLogged(lines));
   hardFailures.push(...checkBehaviorPriorConsistency(lines));
   hardFailures.push(...checkBurstWindowRefConsistency(lines));
   hardFailures.push(...checkOffensiveWindowSpikeMarker(lines));
