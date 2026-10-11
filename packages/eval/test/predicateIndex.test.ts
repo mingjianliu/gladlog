@@ -128,6 +128,7 @@ import * as externalDamage from "@gladlog/analysis/src/utils/externalDamage";
 import * as gapClosers from "@gladlog/analysis/src/utils/gapClosers";
 import * as healerOffenseAnalysis from "@gladlog/analysis/src/utils/healerOffenseAnalysis";
 import * as incomingPressure from "@gladlog/analysis/src/utils/incomingPressure";
+import * as karmaFeed from "@gladlog/analysis/src/utils/karmaFeed";
 import * as kickAudit from "@gladlog/analysis/src/utils/kickAudit";
 import * as killAttempts from "@gladlog/analysis/src/utils/killAttempts";
 import * as killWindowFactsMod from "@gladlog/analysis/src/utils/killWindowFacts";
@@ -2654,6 +2655,81 @@ const INDEX: PredicateRow[] = [
     file: `${A}/utils/ccTrinketAnalysis.ts`,
     symbol: "CC_STILL_ON_AT_ROUND_END",
     mod: ccTrinketAnalysis,
+  },
+  // N4 (2026-10-11) — how the prompt states the END or LENGTH of an aura /
+  // control. F02a: Touch of Karma's `[BUFF FADED]` reads the absorb's own
+  // aura, not the 10 s marker.
+  {
+    file: `${A}/utils/karmaFeed.ts`,
+    symbol: "TOUCH_OF_KARMA_ABSORB_ID",
+    mod: karmaFeed,
+  },
+  // F02b: the label of an aura the round's end cut, and the gate that holds
+  // aura ends and control lengths to the round.
+  {
+    file: `${A}/utils/roundEnd.ts`,
+    symbol: "AURA_STILL_UP_AT_ROUND_END",
+    mod: roundEnd,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkAuraEndWithinRound",
+    mod: promptQualityCheck,
+  },
+  // F06a: a missed-sync-window row's lock length through the control lines'
+  // formatter, cut at the round's end; the gate pairs it with its line.
+  {
+    file: `${A}/analysis/candidates/cooldownTiming.ts`,
+    symbol: "syncLockLengthFacts",
+    mod: cooldownTiming,
+  },
+  {
+    file: `${A}/analysis/candidates/cooldownTiming.ts`,
+    symbol: "SYNC_LOCK_ENDED_BY_ROUND_END",
+    mod: cooldownTiming,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkSyncWindowLockLength",
+    mod: promptQualityCheck,
+  },
+  // F06b / F08: a control gone in under half a second with no cause in the
+  // log; a damage break's `endedBy` names the breaking hit as that.
+  {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "ccUnloggedEarlyEnd",
+    mod: ccTrinketAnalysis,
+  },
+  {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "CC_END_CAUSE_NOT_LOGGED",
+    mod: ccTrinketAnalysis,
+  },
+  {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "CC_BREAKING_HIT_LEAD",
+    mod: ccTrinketAnalysis,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkCcEndCauseNotLogged",
+    mod: promptQualityCheck,
+  },
+  // F06c: a REFRESH a control line runs across.
+  {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "formatCcRefreshed",
+    mod: ccTrinketAnalysis,
+  },
+  {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "CC_REFRESHED_NOTE_RE_SRC",
+    mod: ccTrinketAnalysis,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkCcRefreshedNote",
+    mod: promptQualityCheck,
   },
   {
     file: `${A}/analysis/momentSnapshot.ts`,
