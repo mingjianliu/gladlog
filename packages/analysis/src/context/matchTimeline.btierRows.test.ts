@@ -659,7 +659,7 @@ describe("Guardian Spirit: the press line says when the save triggered (B18)", (
     );
   });
 
-  it("an ENEMY priest's Guardian Spirit on themselves (a self-save line) carries the clause too", () => {
+  it("an ENEMY priest's Guardian Spirit on themselves (their own press, labelled by what it does) carries the clause too", () => {
     const FOE_PRIEST: [string, string] = ["e", "Enemy-Realm"];
     const enemyPriest = mkUnit("e", "Enemy-Realm", {
       info: {} as never,
@@ -694,7 +694,11 @@ describe("Guardian Spirit: the press line says when the save triggered (B18)", (
     );
     const line =
       text.split("\n").find((l) => /^\d+:\d\d {2}\[ENEMY DEF\]/.test(l)) ?? "";
-    expect(line).toContain("Guardian Spirit (self-save)");
+    // user ruling 2026-10-11: the mechanism (DB2 aura 118, +60 %), not
+    // `(self-save)`
+    expect(line).toContain("Guardian Spirit (+60% healing received)");
+    expect(text).not.toContain("(self-save)");
+    expect(text).toContain("`(+N% healing received)` = ");
     expect(line).toContain(
       " | save triggered 2.4s later (1:02): a killing blow was prevented, healed 300k",
     );
@@ -756,7 +760,8 @@ describe("an enemy Touch of Karma line carries `| fed by` (B20a) — the timelin
 
   it("the press made after the cut is put on the owner, with the total", () => {
     const line = run(true);
-    expect(line).toContain("Touch of Karma (self-save)");
+    // the mechanism alone: the figures are the clause's (ruling B20a)
+    expect(line).toMatch(/Touch of Karma \(absorb\)(?: |$)/);
     expect(line).toContain(
       " | fed by (pressed 1 s or more after it went up): Me 80k · absorbed 80k in all by 1:03 · sent back: 0",
     );
@@ -764,7 +769,8 @@ describe("an enemy Touch of Karma line carries `| fed by` (B20a) — the timelin
 
   it("nothing absorbed and nothing sent back: the line stands without a clause", () => {
     const line = run(false);
-    expect(line).toContain("Touch of Karma (self-save)");
+    // the mechanism alone: the figures are the clause's (ruling B20a)
+    expect(line).toMatch(/Touch of Karma \(absorb\)(?: |$)/);
     expect(line).not.toContain("fed by");
   });
 });

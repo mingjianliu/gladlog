@@ -5,13 +5,18 @@ import { describe, expect, it } from "vitest";
 import { extractCandidateFindings } from "../src/analysis/candidateFindings";
 import { CANDIDATE_TYPE_FLAGS } from "../src/data/candidateTypeFlags";
 import { ensureAnalysisData } from "../src/data/ensure";
-import { SAVE_AURA_END_UNSEEN_NAMES } from "../src/utils/enemyDefensives";
+import {
+  ENEMY_PROC_SAVE_NAMES,
+  SAVE_AURA_END_UNSEEN_NAMES,
+} from "../src/utils/enemyDefensives";
 import {
   anchorsKillAttempt,
   attemptIntoTrinketEvents,
   extractKillAttempts,
   formatKillAttemptsForContext,
   KILL_ATTEMPTS_END_UNSEEN_LEGEND,
+  KILL_ATTEMPTS_POPPED_LEGEND,
+  KILL_ATTEMPTS_PROC_LEGEND,
   softerTargetAt,
 } from "../src/utils/killAttempts";
 
@@ -763,7 +768,7 @@ describe("extractKillAttempts — enemy-only saves are failure causes", () => {
   const attacker = () =>
     unit("f1", { reaction: 1, damageOut: [dmg("f1", "e1", 12, 50_000)] });
 
-  it("the target's own Dark Pact inside the span → self-saved (Dark Pact)", async () => {
+  it("the target's own Dark Pact inside the span → the self-save cause, worded `popped Dark Pact`", async () => {
     await ensureAnalysisData();
     const e1 = unit("e1", {
       auraEvents: stunAuras("e1", KIDNEY, 10, 5),
@@ -772,9 +777,13 @@ describe("extractKillAttempts — enemy-only saves are failure causes", () => {
     const f1 = attacker();
     const [a] = extractKillAttempts([f1], [e1], makeCombat(f1, e1));
     expect(a.attribution?.primary).toBe("self-saved");
-    expect(formatKillAttemptsForContext([a]).join("\n")).toContain(
-      "FAILED: self-saved (Dark Pact)",
-    );
+    // user ruling 2026-10-11: the word states the press, not a purpose
+    const block = formatKillAttemptsForContext([a]).join("\n");
+    expect(block).toMatch(/FAILED: popped Dark Pact$/m);
+    expect(block).not.toContain("self-saved (");
+    // … and each word is legended only where a line carries it
+    expect(block).toContain(KILL_ATTEMPTS_POPPED_LEGEND);
+    expect(block).not.toContain(KILL_ATTEMPTS_PROC_LEGEND);
   });
 
   it("a teammate's Lay on Hands or Leap of Faith on the target → saved by external, one name per spell", async () => {
@@ -823,7 +832,9 @@ describe("extractKillAttempts — enemy-only saves are failure causes", () => {
 /** enemy-def F-E5 / F-E6 (ruling A25): an immunity-kind save inside the span
  * reads "forced a full immunity", whoever applied the aura. Ruling D8
  * (2026-10-10) took Feign Death, Nature's Guardian, Cheat Death and Cauterize
- * out of that kind: they are `self-saved (X)`. */
+ * out of that kind: they take the self-save's place — worded `popped Feign
+ * Death` (a press, user ruling 2026-10-11) and `self-saved (X)` for the three
+ * procs, which nobody pressed. */
 describe("extractKillAttempts — immunity-kind saves are immunity-baited; the effect saves are self-saved (ruling D8)", () => {
   const auraOn = (spellId: string, src: string, atS: number): any => ({
     spellId,
@@ -904,7 +915,18 @@ describe("extractKillAttempts — immunity-kind saves are immunity-baited; the e
       expect(a.attribution?.immunityBaited).toBe(false);
       expect(a.attribution?.primary).toBe("self-saved");
       expect(a.attribution?.selfSaved).toEqual([name]);
-      expect(text(a)).toContain(`FAILED: self-saved (${name})`);
+      // Feign Death is a press; Cheat Death and Cauterize fired on their own
+      expect(text(a)).toMatch(
+        new RegExp(
+          name === "Feign Death"
+            ? "FAILED: popped Feign Death$"
+            : `FAILED: self-saved \\(${name}\\)$`,
+          "m",
+        ),
+      );
+      expect(text(a).includes(KILL_ATTEMPTS_PROC_LEGEND)).toBe(
+        name !== "Feign Death",
+      );
       expect(text(a)).not.toContain("forced a full immunity");
     },
   );
@@ -990,9 +1012,7 @@ describe("extractKillAttempts — immunity-kind saves are immunity-baited; the e
       }),
     );
     expect(feign.attribution?.primary).toBe("self-saved");
-    expect(text(feign)).toContain(
-      "FAILED: self-saved (Feign Death [up since 0:09])",
-    );
+    expect(text(feign)).toContain("FAILED: popped Feign Death [up since 0:09]");
     // the shield had already dropped: nothing
     const dropped = attempt(
       unit("e1", {
@@ -1067,7 +1087,7 @@ describe("extractKillAttempts — immunity-kind saves are immunity-baited; the e
       }),
     );
     expect(two.attribution?.selfSaved).toEqual(["Feign Death", "Dark Pact"]);
-    expect(text(two)).toContain("FAILED: self-saved (Feign Death/Dark Pact)");
+    expect(text(two)).toMatch(/FAILED: popped Feign Death\/Dark Pact$/m);
   });
 });
 
@@ -1776,7 +1796,7 @@ describe("attributeFailure — windows, bound trinket, school gates", () => {
     );
     expect(priest.attribution?.primary).toBe("self-saved");
     expect(formatKillAttemptsForContext([priest]).join("\n")).toContain(
-      "FAILED: self-saved (Guardian Spirit [up since 0:09])",
+      "FAILED: popped Guardian Spirit [up since 0:09]",
     );
     // pressed before the attempt, aura only up after it: no save of it
     const late = run(
@@ -1948,7 +1968,7 @@ describe("FAILED cause: own save + external in one attempt (B16b)", () => {
     ).toBe("popped Enraged Regeneration; saved by external (Lay on Hands)");
   });
 
-  it("an external and a no-% self-save: both; all three when all three were there", () => {
+  it("an external and the target's own non-wall defensive: both; all three when all three were there", () => {
     expect(
       failed({
         primary: "external",
@@ -1957,7 +1977,7 @@ describe("FAILED cause: own save + external in one attempt (B16b)", () => {
         selfSaved: ["Desperate Prayer"],
         selfSavedAtS: [312],
       }),
-    ).toBe("saved by external (Life Cocoon); self-saved (Desperate Prayer)");
+    ).toBe("saved by external (Life Cocoon); popped Desperate Prayer");
     expect(
       failed({
         primary: "defensive",
@@ -1969,7 +1989,7 @@ describe("FAILED cause: own save + external in one attempt (B16b)", () => {
         selfSavedAtS: [313],
       }),
     ).toBe(
-      "popped Barkskin [up since 5:00]; saved by external (Ironbark); self-saved (Renewal)",
+      "popped Barkskin [up since 5:00]; saved by external (Ironbark); popped Renewal",
     );
   });
 
@@ -2024,10 +2044,10 @@ describe("FAILED cause: own save + external in one attempt (B16b)", () => {
         selfSaved: ["Renewal"],
         selfSavedAtS: [313],
       }),
-    ).toBe("self-saved (Renewal)");
+    ).toBe("popped Renewal");
   });
 
-  it("a pressed shield (Ultimate Penitence) is worded `popped X` in the self-save's place — same selection, no `saved`", () => {
+  it("user ruling 2026-10-11: the target's own press is worded `popped X`, a proc `self-saved (X)` — same selection, same place in the order", () => {
     // alone: the attempt still names it, by the press
     expect(
       failed({
@@ -2040,29 +2060,44 @@ describe("FAILED cause: own save + external in one attempt (B16b)", () => {
     expect(
       failed({
         primary: "self-saved",
-        selfSaved: ["Ultimate Penitence"],
+        selfSaved: ["Alter Time"],
         selfSavedAtS: [300],
       }),
-    ).toBe("popped Ultimate Penitence [up since 5:00]");
-    // beside another self-save: each under its own word
+    ).toBe("popped Alter Time [up since 5:00]");
+    // several presses: one clause, in log order
     expect(
       failed({
         primary: "self-saved",
         selfSaved: ["Desperate Prayer", "Ultimate Penitence"],
         selfSavedAtS: [310, 313],
       }),
-    ).toBe("self-saved (Desperate Prayer); popped Ultimate Penitence");
-    // beside an external it is named after it, as a self-save is
+    ).toBe("popped Desperate Prayer/Ultimate Penitence");
+    // a proc nobody pressed keeps its own word, after the presses
+    for (const proc of ENEMY_PROC_SAVE_NAMES)
+      expect(
+        failed({
+          primary: "self-saved",
+          selfSaved: [proc, "Dark Pact"],
+          selfSavedAtS: [310, 313],
+        }),
+        proc,
+      ).toBe(`popped Dark Pact; self-saved (${proc})`);
+    expect([...ENEMY_PROC_SAVE_NAMES].sort()).toEqual([
+      "Cauterize",
+      "Cheat Death",
+      "Nature's Guardian",
+    ]);
+    // beside an external it is named after it, as before
     expect(
       failed({
         primary: "external",
         externalReceived: ["Life Cocoon"],
         externalReceivedAtS: [310],
-        selfSaved: ["Ultimate Penitence"],
+        selfSaved: ["Evasion"],
         selfSavedAtS: [312],
       }),
-    ).toBe("saved by external (Life Cocoon); popped Ultimate Penitence");
-    // behind a wall it stays unnamed, as a self-save does
+    ).toBe("saved by external (Life Cocoon); popped Evasion");
+    // behind a wall it stays unnamed, as before
     expect(
       failed({
         primary: "defensive",

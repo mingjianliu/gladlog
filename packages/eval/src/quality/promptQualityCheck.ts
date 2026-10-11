@@ -167,6 +167,7 @@ import {
   ENEMY_SAVE_EFFECT_BY_NAME,
   enemySaveEffectOfNote,
   SAVE_AURA_END_UNSEEN_NAMES,
+  selfSaveMechanismOfName,
 } from "@gladlog/analysis/src/utils/enemyDefensives";
 import { DURING_ABSORBED_TAG_RE_SRC } from "@gladlog/analysis/src/utils/externalDamage";
 import { FORCED_MOVE_TEXT } from "@gladlog/analysis/src/utils/forcedDisplacement";
@@ -187,6 +188,11 @@ import {
   roundEndLegend,
   SOLO_SHUFFLE_BRACKET,
 } from "@gladlog/analysis/src/utils/roundEnd";
+import {
+  SELF_SAVE_PURPOSE_LABEL,
+  selfDefensiveLabelWords,
+  statesSelfDefensiveLabel,
+} from "@gladlog/analysis/src/utils/selfDefensiveMechanism";
 import {
   PLACEHOLDER_RANGE_YD,
   RANGE_HITBOX_SLACK_YD,
@@ -3691,36 +3697,81 @@ export function checkKillAttemptUpSinceEndLogged(lines: string[]): string[] {
   return failures;
 }
 
+/** The label an own-press `[ENEMY DEF]` line may open its parenthesis with
+ * when its ability is neither an effect save nor a pressed self defensive:
+ * a wall's `(N%…`, an immunity's `(immune…`, an area save's `(area)`. */
+const ENEMY_DEF_WALL_LABEL = /^\((?:immune[,)]|\d+%[,)]|area\))/;
+
 /**
- * An `[ENEMY DEF]` line names a save by its EFFECT exactly when the ability
- * is an effect save (user ruling D8, 2026-10-10): Feign Death reads
- * `(absorb …)`, Nature's Guardian `(heal proc)`, Cheat Death / Cauterize
- * `(cheat-death proc)` — never `(immune …)`, the wording that made a shield
- * and three passives read as "cannot be hit" (605 new-season files: an enemy
- * player's direct damage landed inside 510 of 697 Feign Death "immunities",
- * 164 of 174 Nature's Guardian, 31 of 34 Cauterize, 7 of 10 Cheat Death).
- * And the reverse: no other ability's line carries an effect note. Names and
- * the note's reader are the producer's (`ENEMY_SAVE_EFFECT_BY_NAME`,
- * `enemySaveEffectOfNote`).
+ * What an own-press `[ENEMY DEF]` line says the ability DOES — the label in
+ * the parenthesis after its name — is the producer's, for every ability:
+ *
+ *  - an effect save (user ruling D8, 2026-10-10) reads its effect: Feign
+ *    Death `(absorb …)`, Nature's Guardian `(heal proc)`, Cheat Death /
+ *    Cauterize `(cheat-death proc)` — never `(immune …)`, the wording that
+ *    made a shield and three passives read as "cannot be hit" (605
+ *    new-season files: an enemy player's direct damage landed inside 510 of
+ *    697 Feign Death "immunities", 164 of 174 Nature's Guardian, 31 of 34
+ *    Cauterize, 7 of 10 Cheat Death) — `ENEMY_SAVE_EFFECT_BY_NAME`,
+ *    `enemySaveEffectOfNote`;
+ *  - a pressed self defensive (user ruling 2026-10-11) reads the mechanism
+ *    the shared function gives for it — `selfSaveMechanismOfName` =
+ *    `selfDefensiveMechanism` by the printed name, read with
+ *    `statesSelfDefensiveLabel`: Dark Pact `(absorb …)`, Crimson Vial
+ *    `(heal)`, Evasion `(dodge)`, Nether Ward `(spell reflect)` …;
+ *  - any other ability opens with a wall's, an immunity's or an area save's
+ *    label, and carries no effect note — so a press nobody classified cannot
+ *    print without a label;
+ *  - and no `[ENEMY DEF]` line prints `(self-save)` (`SELF_SAVE_PURPOSE_LABEL`)
+ *    at all: that label stated why the button was pressed, which the log
+ *    does not show (605-file capture `cap605-n9`: 13,068 such lines in 2,907 of 3,520
+ *    contexts, the unit at ≥ 95 % HP at the press on 160 of 292 Spirit Walk
+ *    lines, 424 of 1,543 Dark Pact, 313 of 1,022 Alter Time).
+ * An external (`X → unit`) carries no label of its own and is not read.
  */
 export function checkEnemyDefSaveEffect(lines: string[]): string[] {
   const failures: string[] = [];
   lines.forEach((line, i) => {
     const m = ENEMY_DEF_LINE.exec(line);
     if (!m) return;
+    const quoted = `"${line.trim().slice(0, 160)}"`;
+    if (line.includes(SELF_SAVE_PURPOSE_LABEL)) {
+      failures.push(
+        `line ${i + 1}: [ENEMY DEF] prints \`${SELF_SAVE_PURPOSE_LABEL}\` — a purpose the log does not show, not what the ability does: ${quoted}`,
+      );
+      return;
+    }
+    if (m[0].endsWith(" → ")) return;
     const spell = m[3]!;
     // the text after the ability's name, from its parenthesis
     const after = line.slice(
       m.index + m[0].length - (m[0].endsWith("(") ? 1 : 0),
     );
-    const expected = ENEMY_SAVE_EFFECT_BY_NAME.get(spell);
     const stated = enemySaveEffectOfNote(after);
-    if (expected === stated) return;
-    failures.push(
-      expected
-        ? `line ${i + 1}: [ENEMY DEF] prints ${spell} as something other than its effect (${expected}): "${line.trim().slice(0, 160)}"`
-        : `line ${i + 1}: [ENEMY DEF] gives ${spell} an effect note (${stated}) it has no claim to: "${line.trim().slice(0, 160)}"`,
-    );
+    const expected = ENEMY_SAVE_EFFECT_BY_NAME.get(spell);
+    if (expected !== undefined) {
+      if (stated !== expected)
+        failures.push(
+          `line ${i + 1}: [ENEMY DEF] prints ${spell} as something other than its effect (${expected}): ${quoted}`,
+        );
+      return;
+    }
+    const mechanism = selfSaveMechanismOfName(spell);
+    if (mechanism !== undefined) {
+      if (!statesSelfDefensiveLabel(after, mechanism))
+        failures.push(
+          `line ${i + 1}: [ENEMY DEF] prints ${spell} with a label other than what it does (${selfDefensiveLabelWords(mechanism)}): ${quoted}`,
+        );
+      return;
+    }
+    if (stated !== undefined)
+      failures.push(
+        `line ${i + 1}: [ENEMY DEF] gives ${spell} an effect note (${stated}) it has no claim to: ${quoted}`,
+      );
+    else if (!ENEMY_DEF_WALL_LABEL.test(after))
+      failures.push(
+        `line ${i + 1}: [ENEMY DEF] prints ${spell} with no label the producer writes for it: ${quoted}`,
+      );
   });
   return failures;
 }

@@ -11,13 +11,11 @@ import {
   MITIGATION_TABLE,
   SELF_WALL_AURA_TO_CAST_ID,
 } from "../src/data/mitigationData";
-import { getEnglishSpellName } from "../src/data/spellEffectData";
 import spellIdLists, {
   ENEMY_ALLY_SAVE_IDS,
   ENEMY_AREA_SAVE_IDS,
   ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS,
   ENEMY_IMMUNITY_SAVE_AURAS,
-  ENEMY_PRESSED_SHIELD_SAVES,
   ENEMY_PROC_SAVES,
   ENEMY_REDIRECT_SAVE_IDS,
   ENEMY_SELF_SAVE_ONLY_IDS,
@@ -29,7 +27,6 @@ import { EXTERNAL_DEFENSIVE_SPELLS } from "../src/utils/deathOutcomeAnalysis";
 import {
   absorbedDuring,
   effectSaves,
-  ENEMY_PRESSED_SHIELD_NAMES,
   ENEMY_SAVE_EFFECT_BY_NAME,
   enemyDefensiveEvents,
   enemySaveEffectNote,
@@ -877,29 +874,20 @@ describe("immunity-kind saves (Burrow, Time Stop, Vanish, Guardian of the Forgot
     for (const other of [
       "(immune, 2.0s)",
       "(30%, 12.0s)",
-      "(self-save)",
+      "(heal)",
+      "(dodge)",
       "(area)",
       "",
     ])
       expect(enemySaveEffectOfNote(other), other).toBeUndefined();
+    // the saves read off an aura or a heal; a PRESSED shield (Ultimate
+    // Penitence, Dark Pact …) is `selfDefensiveMechanism`'s since 2026-10-11
     expect([...ENEMY_SAVE_EFFECT_BY_NAME].sort()).toEqual([
       ["Cauterize", "cheat-death proc"],
       ["Cheat Death", "cheat-death proc"],
       ["Feign Death", "absorb"],
       ["Nature's Guardian", "heal proc"],
-      // 2026-10-11: a pressed shield (`ENEMY_PRESSED_SHIELD_SAVES`)
-      ["Ultimate Penitence", "absorb"],
     ]);
-    // every pressed shield is a self-save the enemy path already reads, an
-    // official all-school absorb (DB2 aura 69), and printed under its
-    // English name
-    for (const [id, name] of Object.entries(ENEMY_PRESSED_SHIELD_SAVES)) {
-      expect(ENEMY_SELF_SAVE_ONLY_IDS.has(id), id).toBe(true);
-      expect(ABILITY_EFFECTS_GENERATED[id]?.absorbs, id).toBe(true);
-      expect(ABILITY_EFFECTS_GENERATED[id]?.absorbSchoolMask, id).toBe(127);
-      expect(getEnglishSpellName(id, ""), id).toBe(name);
-      expect(ENEMY_PRESSED_SHIELD_NAMES.has(name), name).toBe(true);
-    }
   });
 });
 

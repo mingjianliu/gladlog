@@ -86,7 +86,7 @@ import { analyzeOutgoingCCChains, DRLevel, drResetMsAt } from "./drAnalysis";
 import { reconstructEnemyCDTimeline } from "./enemyCDs";
 import {
   effectSaves,
-  ENEMY_PRESSED_SHIELD_NAMES,
+  ENEMY_PROC_SAVE_NAMES,
   enemyDefensiveEvents,
   externalAuraOf,
   type IEnemyDefensiveEvent,
@@ -826,16 +826,19 @@ function failureText(
             spanFromSeconds,
           )})`
         : "";
-      // A pressed shield (`ENEMY_PRESSED_SHIELD_NAMES`: Ultimate Penitence —
-      // the priest's own shield while the heal channels, pressed at full
-      // health as often as not) is worded `popped X` in the self-save's
-      // place: the log shows the press and the shield, not that it was
-      // pressed to survive. Which attempts name it, and when it is hidden
-      // behind a wall, is `attributeFailure`'s and unchanged.
+      // The target's own defensive outside the wall table is worded
+      // `popped X`, as a wall is (user ruling 2026-10-11): the log shows the
+      // press, not that it was pressed to survive — `self-saved (X)` stated
+      // a purpose (Dark Pact, Alter Time, Spirit Walk … are pressed at full
+      // health as often as not). A proc (`ENEMY_PROC_SAVE_NAMES`: Nature's
+      // Guardian, Cheat Death, Cauterize) keeps `self-saved (X)`: nobody
+      // pressed it. Which attempts name either, and when they are hidden
+      // behind a wall, is `attributeFailure`'s and unchanged — these stay in
+      // the self-save's place of the order, after the wall and the external.
       const own = attr.selfSaved.map((_, i) => i);
       const clauseOf = (verb: (names: string) => string, pressed: boolean) => {
         const idx = own.filter(
-          (i) => ENEMY_PRESSED_SHIELD_NAMES.has(attr.selfSaved[i]!) === pressed,
+          (i) => !ENEMY_PROC_SAVE_NAMES.has(attr.selfSaved[i]!) === pressed,
         );
         return idx.length
           ? verb(
@@ -848,8 +851,8 @@ function failureText(
           : "";
       };
       const selfSaved = [
-        clauseOf((n) => `self-saved (${n})`, false),
         clauseOf((n) => `popped ${n}`, true),
+        clauseOf((n) => `self-saved (${n})`, false),
       ]
         .filter(Boolean)
         .join("; ");
@@ -879,6 +882,21 @@ function failureText(
  * logged`: this block also renders with that line off.
  */
 export const KILL_ATTEMPTS_END_UNSEEN_LEGEND = `  ${[...SAVE_AURA_END_UNSEEN_NAMES].join(" / ")}: an enemy who goes unseen takes the aura's end out of the log, so one of these pressed BEFORE an attempt is its cause (\`[up since m:ss]\`) only when the log shows it end after the attempt began — otherwise how long it lasted is unknown and the attempt reads its next cause. Pressed inside the attempt it counts as any other save.`;
+
+/** The opening of a `popped X` clause / of a `self-saved (X)` clause, as
+ * `failureText` writes them. */
+const KILL_ATTEMPT_POPPED_WORD = "popped ";
+const KILL_ATTEMPT_PROC_WORD = "self-saved (";
+
+/**
+ * The KILL ATTEMPTS legend lines for the target's own defensive (user ruling
+ * 2026-10-11: the word states the press, never a purpose). `popped X` covers
+ * a wall and every other defensive the target pressed on itself; a proc
+ * keeps `self-saved (X)`, its names read from the predicate's own set.
+ */
+export const KILL_ATTEMPTS_POPPED_LEGEND =
+  "  `popped X` = X went up on the target: a wall (a percentage damage reduction), or another defensive it pressed on itself — a shield, a heal, a dodge, a control immunity … (the timeline line of that press, where there is one, says which). The word states the press, not why it was pressed, and not that it saved anyone.";
+export const KILL_ATTEMPTS_PROC_LEGEND = `  \`self-saved (X)\` = a passive of the target fired (${[...ENEMY_PROC_SAVE_NAMES].join(" / ")}) — nobody pressed it.`;
 
 /**
  * Renders the [KILL ATTEMPTS] prompt block. All attempts render (no silent
@@ -924,8 +942,17 @@ export function formatKillAttemptsForContext(
   // cause — the legend states that order and no longer says "cause" /
   // "reason". The selection itself is untouched (A29 / A′4 / B16b).
   lines.push(
-    "  `FAILED: X` names what the attempt ran into — the first that applies, in this fixed order: the target's trinket, a break ability, a full immunity, a wall, an external, a self-save, `healed through` (over the attempt and the next 5 s the target received more healing than damage), `not enough damage` (none of the above). It is what was pressed or up, picked in that order — not a measurement of what stopped the kill. A wall / external / self-save is named when it went up inside the attempt, or was already up when it began (`[up since m:ss]`) — one pressed after the attempt was over is not named; an immunity, the trinket or a break in the next 5 s still is. An immunity met along with the trinket or a break is named beside it, and so is an external beside the target's own save (`popped X; saved by external (Y)`): the attempt met both. `target trinketed out` / `broke out (X)` = the trinket / a racial or class ability removed a control of this attempt.",
+    "  `FAILED: X` names what the attempt ran into — the first that applies, in this fixed order: the target's trinket, a break ability, a full immunity, a wall, an external, another defensive of the target's own, `healed through` (over the attempt and the next 5 s the target received more healing than damage), `not enough damage` (none of the above). It is what was pressed or up, picked in that order — not a measurement of what stopped the kill. A wall / external / own defensive is named when it went up inside the attempt, or was already up when it began (`[up since m:ss]`) — one pressed after the attempt was over is not named; an immunity, the trinket or a break in the next 5 s still is. An immunity met along with the trinket or a break is named beside it, and so is an external beside the target's own defensive (`popped X; saved by external (Y)`): the attempt met both. `target trinketed out` / `broke out (X)` = the trinket / a racial or class ability removed a control of this attempt.",
   );
+  // User ruling 2026-10-11: the two words for the target's own defensive,
+  // each explained only when a line of this block carries it.
+  const failed = attempts
+    .filter((a) => !a.killed)
+    .map((a) => failureText(a.attribution!, a.fromSeconds));
+  if (failed.some((f) => f.includes(KILL_ATTEMPT_POPPED_WORD)))
+    lines.push(KILL_ATTEMPTS_POPPED_LEGEND);
+  if (failed.some((f) => f.includes(KILL_ATTEMPT_PROC_WORD)))
+    lines.push(KILL_ATTEMPTS_PROC_LEGEND);
   // P-FU-b8 / D6: which "already up" is never claimed.
   lines.push(KILL_ATTEMPTS_END_UNSEEN_LEGEND);
   let kills = 0;

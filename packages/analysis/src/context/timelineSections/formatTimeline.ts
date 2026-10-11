@@ -19,11 +19,9 @@ import {
   HP_SAMPLE_RADIUS_MS,
   HP_TROUGH_MIN_DROP_PTS,
 } from "../../utils/cooldowns";
-import {
-  ENEMY_DEF_END_NOT_LOGGED,
-  ENEMY_PRESSED_SHIELD_NAMES,
-} from "../../utils/enemyDefensives";
+import { ENEMY_DEF_END_NOT_LOGGED } from "../../utils/enemyDefensives";
 import { ROUND_ENDED_WORDS, roundEndLegend } from "../../utils/roundEnd";
+import { selfDefensiveLabelLegends } from "../../utils/selfDefensiveMechanism";
 import {
   BURST_ANSWERED_CONTROL_LEGEND,
   BURST_ANSWERED_LEGEND,
@@ -55,9 +53,6 @@ import { CAST_STOPPED_LEGEND, CAST_STOPPED_TAG } from "./castStopped";
 import { DR_CLASH_LEGEND } from "./contextFacts";
 import type { TimelineCtx } from "./ctx";
 import { CC_NOT_LANDED_LEGEND, CC_NOT_LANDED_TAG } from "./setup";
-
-/** The pressed shields the `[ENEMY DEF]` legend names (`(absorb Nk, Ts)`). */
-const PRESSED_SHIELDS = [...ENEMY_PRESSED_SHIELD_NAMES].join(" / ");
 
 /** A [STATE] tick carrying a `unit:ghost` token (`state.ts`). */
 const STATE_GHOST_TOKEN_RE = /\[STATE\].*:ghost\b/;
@@ -341,6 +336,13 @@ export function formatTimeline(
           l.includes(" | no enemy interrupt usable (")),
     ),
   );
+  // The `[ENEMY DEF]` lines as rendered — which mechanism labels the legend
+  // has to explain (user ruling 2026-10-11).
+  const enemyDefLines = entries.flatMap((e) =>
+    e.lines.filter(
+      (l): l is string => typeof l === "string" && l.includes("[ENEMY DEF]"),
+    ),
+  );
   const outputLines: string[] = [
     ...summaryLines,
     "MATCH TIMELINE",
@@ -466,12 +468,10 @@ export function formatTimeline(
           "    line with them) — how long it lasted is unknown: it is NOT the full duration, and the unit may have been hit seconds later.",
           "    `immune` = full immunity, or the unit could not be hit while it lasted (Burrow, Time Stop, Mass Invisibility, Vanish);",
           "    `(absorb Nk, Ts)` = a shield, not an immunity — the unit can still be hit; Nk = what it absorbed while up (no",
-          // 2026-10-11: a pressed shield is named as one, not as a purpose.
-          `    figure = the log shows none): Feign Death, and ${PRESSED_SHIELDS} — the caster's own shield while that heal channels,`,
-          "    pressed at any health: the line states the shield, not why it was pressed. `(heal proc)` = Nature's Guardian",
+          "    figure = the log shows none; a bare `(absorb)` states the mechanism only). `(heal proc)` = Nature's Guardian",
           "    healed its owner; `(cheat-death proc)` = Cheat Death / Cauterize refused a killing blow — passives nobody pressed,",
-          "    and the unit can still be hit. KILL ATTEMPTS counts an `immune` line as a forced immunity, names Feign Death",
-          `    and the three procs \`self-saved (X)\` and ${PRESSED_SHIELDS} \`popped X\`.`,
+          "    and the unit can still be hit. KILL ATTEMPTS counts an `immune` line as a forced immunity, names the three procs",
+          "    `self-saved (X)` and words a unit's own press of anything else here `popped X`.",
           "    An aura that ended before its full duration says why when the log does: `— dispelled by X's Spell` /",
           "    `— stolen by …`, `— ended at death` / `— its target died`, `— used up, absorbed Nk` / `— used up` (an absorb eaten through);",
           "    `— removed early` = it ended early and the log gives no cause (cancelled, broken or replaced);",
@@ -479,9 +479,12 @@ export function formatTimeline(
           "    `X → unit` = an external put on that unit; one with no duration is an instant heal (Lay on Hands) or a grip /",
           "    redirect (Leap of Faith, Intervene, Roar of Sacrifice, Master's Call); `(area)` = an area save pressed at that",
           "    second (Anti-Magic Zone, Darkness, Rallying Cry, Spirit Link Totem, Power Word: Barrier) — who was inside it is not stated. Absent = not pressed.",
-          "    `(self-save)` = the enemy's own save that carries no damage reduction — an absorb, a heal or avoidance (Guardian",
-          "    Spirit on itself, Desperate Prayer, Touch of Karma, Dark Pact, Evasion, Healthstone, Ice Barrier…) — KILL",
-          "    ATTEMPTS `self-saved (X)` names these.",
+          // User ruling 2026-10-11: a label says what the ability DOES, never
+          // why it was pressed (it read `(self-save)`); each label form is
+          // explained only when a line carries it (`selfDefensiveLabelLegends`).
+          "    Any other word in that parenthesis = what the ability does, from the game's data — not why it was pressed, and not",
+          "    that it saved anyone.",
+          ...selfDefensiveLabelLegends(enemyDefLines).map((l) => `    ${l}`),
           "    `[friendly offensive CD active]` indicates at least one friendly offensive cooldown was active at that displayed second.",
           "    `(at N% HP)` / `(target at N% HP)` reflects the target's HP at the press (just before the press's own",
           "    heal), not the [STATE] reading of that second.",

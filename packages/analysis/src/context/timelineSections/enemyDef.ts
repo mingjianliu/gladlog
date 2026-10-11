@@ -32,6 +32,7 @@ import {
 } from "../../utils/karmaFeed";
 import { fmtTime, toRenderSecond } from "../../utils/renderGrid";
 import { AURA_STILL_UP_AT_ROUND_END } from "../../utils/roundEnd";
+import { selfDefensiveLabelWords } from "../../utils/selfDefensiveMechanism";
 import type { TimelineCtx } from "./ctx";
 
 export function emitEnemyDefEntries(
@@ -220,13 +221,22 @@ export function emitEnemyDefEntries(
           // Ruling A15 (2026-09-30): who pressed it and when — no %, no
           // recipients, no duration, no HP (nobody is "the target").
           line = `${d.spellName} (area)`;
-        } else if (d.effect !== undefined) {
-          // Ruling D8 (2026-10-10): a save named by what it does — Feign
-          // Death's shield with what it absorbed and how long it was up, a
-          // proc by its type. The rest of the line is the immunity line's.
-          const hpStr = hpPct !== null ? ` (at ${hpPct.toFixed(0)}% HP)` : "";
-          line = `${d.spellName} (${enemySaveEffectNote(d.effect, d.absorbedAmount, dur)})${burstStr}${hpStr}`;
         } else if (d.kind === "self-save") {
+          // The unit's own defensive outside the wall table, labelled by what
+          // it DOES — never by why it was pressed (user ruling 2026-10-11;
+          // the label read `(self-save)`):
+          //  - an effect note (ruling D8): Feign Death's shield and a pressed
+          //    absorb with what it absorbed and how long it was up, a proc
+          //    by its type;
+          //  - else the press's mechanism (`selfDefensiveMechanism`), a
+          //    percentage reduction with how long its aura was up;
+          //  - a press no source classifies prints no label at all.
+          const label =
+            d.effect !== undefined
+              ? enemySaveEffectNote(d.effect, d.absorbedAmount, dur)
+              : d.mechanism
+                ? `${selfDefensiveLabelWords(d.mechanism)}${d.mechanism.kind === "reduction" && dur ? `, ${dur}` : ""}`
+                : "";
           const hpStr = hpPct !== null ? ` (at ${hpPct.toFixed(0)}% HP)` : "";
           // B18: a Guardian Spirit the priest put on THEMSELVES is a
           // self-save here, not an external (agy review of the batch)
@@ -263,7 +273,7 @@ export function emitEnemyDefEntries(
               fmtTime,
             );
           }
-          line = `${d.spellName} (self-save)${burstStr}${hpStr}${selfSaveStr}${karmaStr}`;
+          line = `${d.spellName}${label ? ` (${label})` : ""}${burstStr}${hpStr}${selfSaveStr}${karmaStr}`;
         } else {
           const strength = d.kind === "immune" ? "immune" : `${d.pct}%`;
           const hpStr = hpPct !== null ? ` (at ${hpPct.toFixed(0)}% HP)` : "";

@@ -32,29 +32,37 @@ const ROSTER = [
 ];
 
 describe("checkEnemyDefRefConsistency", () => {
-  it("B4a (2026-09-25): `self-saved (X)` needs a `(self-save)` [ENEMY DEF] line for X in the span", () => {
+  it("B4a (2026-09-25): the target's own non-wall press (`popped X` since 2026-10-11) needs an [ENEMY DEF] line for X in the span", () => {
     const ok = [
       LEGEND,
-      "2:16  [ENEMY DEF]   4(HPriest) (Holy Priest): Guardian Spirit (self-save) (at 50% HP)",
-      "2:20  [ENEMY DEF]   4(HPriest) (Holy Priest): Desperate Prayer (self-save) (at 75% HP)",
-      ATTEMPT("2:14–2:24", "self-saved (Guardian Spirit/Desperate Prayer)"),
+      "2:16  [ENEMY DEF]   4(HPriest) (Holy Priest): Guardian Spirit (+60% healing received) (at 50% HP)",
+      "2:20  [ENEMY DEF]   4(HPriest) (Holy Priest): Desperate Prayer (heal) (at 75% HP)",
+      ATTEMPT("2:14–2:24", "popped Guardian Spirit/Desperate Prayer"),
     ];
     expect(checkEnemyDefRefConsistency(ok)).toEqual([]);
-    const missing = [
-      LEGEND,
-      ATTEMPT("2:14–2:24", "self-saved (Guardian Spirit)"),
-    ];
+    const missing = [LEGEND, ATTEMPT("2:14–2:24", "popped Guardian Spirit")];
     expect(checkEnemyDefRefConsistency(missing)).toHaveLength(1);
+    // a press and a proc of one attempt: two clauses, each read
+    const both = [
+      LEGEND,
+      "2:16  [ENEMY DEF]   4(SRogue) (Subtlety Rogue): Evasion (dodge) (at 50% HP)",
+      "2:20  [ENEMY DEF]   4(SRogue) (Subtlety Rogue): Cheat Death (cheat-death proc) (at 4% HP)",
+      ATTEMPT("2:14–2:24", "popped Evasion; self-saved (Cheat Death)"),
+    ];
+    expect(checkEnemyDefRefConsistency(both)).toEqual([]);
+    expect(
+      checkEnemyDefRefConsistency([both[0]!, both[1]!, both[3]!]),
+    ).toHaveLength(1);
   });
 
-  it("ruling D8 (2026-10-10): `self-saved (Feign Death)` / a proc is found on its effect-form [ENEMY DEF] line — in the span, or at its `[up since]` second", () => {
+  it("ruling D8 (2026-10-10): Feign Death (`popped`, a press) / a proc (`self-saved`) is found on its effect-form [ENEMY DEF] line — in the span, or at its `[up since]` second", () => {
     const ok = [
       LEGEND,
       ...ROSTER,
       "0:09  [ENEMY DEF]   4(ORogue) (Outlaw Rogue): Feign Death (absorb 64k, 2.0s) (at 67% HP)",
       "0:52  [ENEMY DEF]   4(ORogue) (Outlaw Rogue): Cheat Death (cheat-death proc) (at 7% HP)",
       "1:13  [ENEMY DEF]   4(ORogue) (Outlaw Rogue): Nature's Guardian (heal proc) (at 31% HP)",
-      ATTEMPT("0:10–0:15", "self-saved (Feign Death [up since 0:09])"),
+      ATTEMPT("0:10–0:15", "popped Feign Death [up since 0:09]"),
       ATTEMPT("0:50–0:55", "self-saved (Cheat Death)"),
       ATTEMPT(
         "1:10–1:15",
@@ -69,7 +77,7 @@ describe("checkEnemyDefRefConsistency", () => {
       LEGEND,
       ...ROSTER,
       "0:20  [ENEMY DEF]   4(ORogue) (Outlaw Rogue): Feign Death (absorb, 2.0s)",
-      ATTEMPT("0:10–0:15", "self-saved (Feign Death)"),
+      ATTEMPT("0:10–0:15", "popped Feign Death"),
     ];
     expect(checkEnemyDefRefConsistency(late)).toHaveLength(1);
     // …and on another unit it is not this target's save
@@ -77,7 +85,7 @@ describe("checkEnemyDefRefConsistency", () => {
       LEGEND,
       ...ROSTER,
       "0:12  [ENEMY DEF]   6(HPriest) (Holy Priest): Feign Death (absorb, 2.0s)",
-      ATTEMPT("0:10–0:15", "self-saved (Feign Death)"),
+      ATTEMPT("0:10–0:15", "popped Feign Death"),
     ];
     expect(checkEnemyDefRefConsistency(other)).toHaveLength(1);
   });
@@ -115,13 +123,13 @@ describe("checkEnemyDefRefConsistency", () => {
     // three clauses, one name already up before the span
     const three = ATTEMPT(
       "5:07–5:22",
-      "popped Barkskin [up since 5:00]; saved by external (Lay on Hands); self-saved (Renewal/Frenzied Regeneration)",
+      "popped Barkskin [up since 5:00]; saved by external (Lay on Hands); popped Renewal/Frenzied Regeneration",
     );
     const res = checkEnemyDefRefConsistency([
       LEGEND,
       "5:00  [ENEMY DEF]   3(FDruid) (Feral Druid): Barkskin (20%, 12.0s)",
       DEFS[1]!,
-      "5:12  [ENEMY DEF]   3(FDruid) (Feral Druid): Renewal (self-save) (at 30% HP)",
+      "5:12  [ENEMY DEF]   3(FDruid) (Feral Druid): Renewal (heal) (at 30% HP)",
       three,
     ]);
     expect(res).toHaveLength(1);
@@ -197,12 +205,12 @@ describe("checkEnemyDefRefConsistency", () => {
       LEGEND,
       "0:18  [ENEMY DEF]   6(FDruid) (Feral Druid): Barkskin (30%, 12.0s)",
       ATTEMPT("0:25–0:29", "popped Barkskin [up since 0:18]"),
-      "3:31  [ENEMY DEF]   4(HPriest) (Holy Priest): Guardian Spirit (self-save)",
+      "3:31  [ENEMY DEF]   4(HPriest) (Holy Priest): Guardian Spirit (+60% healing received)",
       ATTEMPT(
         "3:39–3:58",
-        "self-saved (Guardian Spirit [up since 3:31]/Desperate Prayer)",
+        "popped Guardian Spirit [up since 3:31]/Desperate Prayer",
       ),
-      "3:45  [ENEMY DEF]   4(HPriest) (Holy Priest): Desperate Prayer (self-save)",
+      "3:45  [ENEMY DEF]   4(HPriest) (Holy Priest): Desperate Prayer (heal)",
     ];
     expect(checkEnemyDefRefConsistency(ok)).toEqual([]);
     const wrongSecond = [
@@ -417,10 +425,7 @@ describe("checkEnemyDefSaveEffect (FT-T07, ruling D8)", () => {
           "5(RDruid) (Restoration Druid)",
           "Ironbark → 4(FMage) (6.6s) (target at 40% HP)",
         ),
-        D(
-          "5(HPriest) (Holy Priest)",
-          "Desperate Prayer (self-save) (at 75% HP)",
-        ),
+        D("5(HPriest) (Holy Priest)", "Desperate Prayer (heal) (at 75% HP)"),
         D("5(HPriest) (Holy Priest)", "Power Word: Barrier (area)"),
         "0:21  [STATE]   friends 1(HPriest):99 / enemies 6(BMHunter):67",
       ]),
@@ -434,7 +439,7 @@ describe("checkEnemyDefSaveEffect (FT-T07, ruling D8)", () => {
       "Nature's Guardian (immune) (at 31% HP)",
     ],
     ["Cauterize with the burn's duration", "Cauterize (immune, 6.0s)"],
-    ["Cheat Death as a plain self-save", "Cheat Death (self-save) (at 7% HP)"],
+    ["Cheat Death as a pressed heal", "Cheat Death (heal) (at 7% HP)"],
     ["the wrong effect for the ability", "Feign Death (cheat-death proc)"],
     ["a proc called an absorb", "Cauterize (absorb 12k, 6.0s)"],
   ])("fails %s", (_why, rest) => {
@@ -446,10 +451,11 @@ describe("checkEnemyDefSaveEffect (FT-T07, ruling D8)", () => {
   it("fails an effect note on an ability that has none", () => {
     const f = checkEnemyDefSaveEffect([
       D("4(FMage) (Fire Mage)", "Ice Block (absorb 12k, 10.0s)"),
-      D("5(HPriest) (Holy Priest)", "Desperate Prayer (heal proc)"),
+      D("5(RDruid) (Restoration Druid)", "Barkskin (heal proc)"),
     ]);
     expect(f).toHaveLength(2);
     expect(f[0]).toContain("no claim to");
+    expect(f[1]).toContain("no claim to");
   });
 
   it("2026-10-11: a pressed shield (Ultimate Penitence) reads as its shield — `(self-save)` on it fails", () => {
@@ -469,7 +475,7 @@ describe("checkEnemyDefSaveEffect (FT-T07, ruling D8)", () => {
       D(PRIEST, "Ultimate Penitence (self-save) (at 100% HP)"),
     ]);
     expect(f).toHaveLength(1);
-    expect(f[0]).toContain("something other than its effect (absorb)");
+    expect(f[0]).toContain("prints `(self-save)`");
     // KILL ATTEMPTS words it `popped X`; the line it points at is the same
     const kill = [
       LEGEND,
@@ -478,6 +484,146 @@ describe("checkEnemyDefSaveEffect (FT-T07, ruling D8)", () => {
     ];
     expect(checkEnemyDefRefConsistency(kill)).toEqual([]);
     expect(checkEnemyDefRefConsistency([kill[0]!, kill[2]!])).toHaveLength(1);
+  });
+
+  // User ruling 2026-10-11: every pressed self defensive prints what it does
+  // — the shared function's label for that spell — and nothing prints
+  // `(self-save)`.
+  const FAMILY: Array<[string, string]> = [
+    ["4(AWarlock) (Affliction Warlock)", "Dark Pact (absorb 120k, 20.0s)"],
+    ["4(AWarlock) (Affliction Warlock)", "Dark Pact (absorb) (at 81% HP)"],
+    [
+      "4(FMage) (Frost Mage)",
+      "Ice Barrier (absorb, 11.5s — removed early) (at 70% HP)",
+    ],
+    [
+      "4(UDKnight) (Unholy Death Knight)",
+      "Anti-Magic Shell (absorb 88k, 5.0s — used up)",
+    ],
+    [
+      "4(WMonk) (Windwalker Monk)",
+      "Touch of Karma (absorb) (at 58% HP) | fed by: nobody pressed into it 1 s or more after it went up · sent back: 0",
+    ],
+    ["4(MMonk) (Mistweaver Monk)", "Life Cocoon (absorb 300k, 12.0s)"],
+    ["4(ARogue) (Assassination Rogue)", "Crimson Vial (heal) (at 69% HP)"],
+    ["4(BMHunter) (Beast Mastery Hunter)", "Exhilaration (heal) (at 45% HP)"],
+    ["4(AWarlock) (Affliction Warlock)", "Demonic Healthstone (heal)"],
+    ["4(AWarlock) (Affliction Warlock)", "Healthstone (heal) (at 56% HP)"],
+    ["4(FDruid) (Feral Druid)", "Frenzied Regeneration (heal) (at 54% HP)"],
+    ["4(HPaladin) (Holy Paladin)", "Lay on Hands (heal) (at 28% HP)"],
+    ["4(HPriest) (Holy Priest)", "Gift of the Naaru (heal) (at 51% HP)"],
+    [
+      "4(UDKnight) (Unholy Death Knight)",
+      "Death Pact (heal + heal absorb) (at 46% HP)",
+    ],
+    [
+      "4(HPriest) (Holy Priest)",
+      "Guardian Spirit (+60% healing received) (at 48% HP) | save triggered 2.4s later (0:23): a killing blow was prevented",
+    ],
+    [
+      "4(UDKnight) (Unholy Death Knight)",
+      "Lichborne (charm / fear / sleep immunity) (at 82% HP)",
+    ],
+    [
+      "4(EShaman) (Enhancement Shaman)",
+      "Spirit Walk (root / snare immunity) (at 97% HP)",
+    ],
+    [
+      "4(BMHunter) (Beast Mastery Hunter)",
+      "Master's Call (root / snare immunity) [friendly offensive CD active] (at 89% HP)",
+    ],
+    [
+      "4(BMHunter) (Beast Mastery Hunter)",
+      "Roar of Sacrifice (25%, 10.0s) (at 66% HP)",
+    ],
+    ["4(BMHunter) (Beast Mastery Hunter)", "Roar of Sacrifice (25%)"],
+    ["4(ARogue) (Assassination Rogue)", "Evasion (dodge) (at 60% HP)"],
+    [
+      "4(AWarlock) (Affliction Warlock)",
+      "Nether Ward (spell reflect) (at 86% HP)",
+    ],
+    ["4(FMage) (Frost Mage)", "Alter Time (rewind) (at 85% HP)"],
+    ["4(FWarrior) (Fury Warrior)", "Rallying Cry (area)"],
+  ];
+
+  it("2026-10-11: passes every pressed self defensive under the label of what it does", () => {
+    expect(
+      checkEnemyDefSaveEffect(FAMILY.map(([who, rest]) => D(who, rest))),
+    ).toEqual([]);
+    // the same abilities thrown on an ally carry no label of their own
+    expect(
+      checkEnemyDefSaveEffect([
+        D(
+          "4(HPaladin) (Holy Paladin)",
+          "Lay on Hands → 5(FMage) (target at 12% HP)",
+        ),
+        D("4(BMHunter) (Beast Mastery Hunter)", "Roar of Sacrifice → 5(FMage)"),
+        D(
+          "4(UDKnight) (Unholy Death Knight)",
+          "Anti-Magic Shell → 5(FMage) (5.0s)",
+        ),
+      ]),
+    ).toEqual([]);
+  });
+
+  it("2026-10-11 mutation: `(self-save)` fails on every line that carries it", () => {
+    for (const [who, rest] of FAMILY) {
+      const name = rest.slice(0, rest.indexOf(" ("));
+      const f = checkEnemyDefSaveEffect([
+        D(who, `${name} (self-save) (at 70% HP)`),
+      ]);
+      expect(f, name).toHaveLength(1);
+      expect(f[0], name).toContain("prints `(self-save)`");
+    }
+    // … whatever the ability: a wall, an effect save, an external's tail
+    for (const rest of [
+      "Barkskin (self-save)",
+      "Cheat Death (self-save) (at 7% HP)",
+      "Ironbark → 4(FMage) (6.6s) (self-save)",
+    ]) {
+      const f = checkEnemyDefSaveEffect([D(HUNTER, rest)]);
+      expect(f, rest).toHaveLength(1);
+      expect(f[0], rest).toContain("prints `(self-save)`");
+    }
+  });
+
+  it.each([
+    ["an absorb called a heal", "Dark Pact (heal) (at 81% HP)"],
+    ["a heal called an absorb", "Crimson Vial (absorb 12k, 4.0s)"],
+    ["a heal with a duration it has no claim to", "Crimson Vial (heal, 4.0s)"],
+    ["a dodge called a reduction", "Evasion (30%, 10.0s)"],
+    ["a reflect called an immunity", "Nether Ward (immune, 3.0s)"],
+    ["a rewind called a heal", "Alter Time (heal)"],
+    ["the wrong control list", "Lichborne (root / snare immunity)"],
+    ["a freedom called a speed buff", "Spirit Walk (+60% movement speed)"],
+    ["another percentage than the official one", "Roar of Sacrifice (30%)"],
+    ["a heal absorb left out", "Death Pact (heal)"],
+    ["a heal absorb on a plain heal", "Exhilaration (heal + heal absorb)"],
+    [
+      "the wrong healing-received percent",
+      "Guardian Spirit (+50% healing received)",
+    ],
+    ["no label at all", "Dark Pact (at 81% HP)"],
+    ["no label and no tail", "Evasion"],
+    ["a proc's note on a press", "Desperate Prayer (heal proc)"],
+  ])("2026-10-11 mutation: fails %s", (_why, rest) => {
+    const f = checkEnemyDefSaveEffect([D(HUNTER, rest)]);
+    expect(f).toHaveLength(1);
+    expect(f[0]).toContain("with a label other than what it does");
+  });
+
+  it("2026-10-11 mutation: an ability outside both families cannot print without a wall's, an immunity's or an area save's label", () => {
+    for (const rest of [
+      "Renewing Blaze (at 40% HP)",
+      "Renewing Blaze",
+      "Barkskin (heal)",
+      "Ice Block (dodge)",
+      "Some New Defensive [friendly offensive CD active] (at 40% HP)",
+    ]) {
+      const f = checkEnemyDefSaveEffect([D(HUNTER, rest)]);
+      expect(f, rest).toHaveLength(1);
+      expect(f[0], rest).toContain("no label the producer writes for it");
+    }
   });
 
   it("ruling D6: Feign Death's shield with no logged end still reads as its effect", () => {
@@ -706,7 +852,7 @@ describe("checkKillAttemptUpSinceEndLogged (rulings P-FU-b8 / D6)", () => {
 
 describe("checkKarmaFedClause (B20a)", () => {
   const P =
-    "4:24  [ENEMY DEF]   5(WMonk) (Windwalker Monk): Touch of Karma (self-save) (at 58% HP)";
+    "4:24  [ENEMY DEF]   5(WMonk) (Windwalker Monk): Touch of Karma (absorb) (at 58% HP)";
   const ok = [
     `${P} | fed by (pressed 1 s or more after it went up): 2(ARogue) 122k · 3(FMage) 5k · DoTs already ticking: 66k · pressed before that: 207k · procs / auto-attacks / pets: 152k · absorbed 551k in all by 4:31 · sent back: 229k onto 3(FMage)`,
     `${P} | fed by: nobody pressed into it 1 s or more after it went up · DoTs already ticking: 61k · pressed before that: 103k · procs / auto-attacks / pets: 21k · absorbed 185k in all by 2:40 · sent back: 0`,

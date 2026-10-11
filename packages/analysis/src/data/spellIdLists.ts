@@ -82,7 +82,8 @@ const spellIdLists = {
     // 一进白名单就能挖到,不用手工 override。补丁说明写的是 20%,官方表与 wowhead tooltip
     // 都是 30%(BACKLOG #24-9 的裁决就是「别照补丁说明填数」);S2 归档已观测(对局
     // 7d74b373,2026-08-13)。talentMitigationGenerated.json 同样挖到 30%(via "self s3
-    // (aura 87) = -30"),但那张表目前零消费者,产品用的减伤算术只读 MITIGATION_TABLE。
+    // (aura 87) = -30"),但那张表不进减伤算术 —— 产品的减伤算术只读 MITIGATION_TABLE
+    // (它唯一的运行时读者是 2026-10-11 起 `selfDefensiveMechanism` 的标签,只读一行)。
     "473909",
     "108416", // Dark Pact (Warlock)
   ],
@@ -174,7 +175,9 @@ export default spellIdLists;
 
 /** F-E7 (user ruling A11, 2026-09-30: "全部出行,并作为 KA 失败原因"): an
  * enemy's own absorb / heal / avoidance saves that carry no percentage
- * mitigation and sit in neither major list. All are cast with a nil dest. */
+ * mitigation and sit in neither major list. All are cast with a nil dest.
+ * What each one's `[ENEMY DEF]` line says it does is
+ * `utils/selfDefensiveMechanism.ts` (user ruling 2026-10-11). */
 export const ENEMY_SELF_SAVE_ONLY_IDS: ReadonlySet<string> = new Set([
   // Anti-Magic Shell, the self-only id (ruling A7-补, 2026-09-30: no
   // MITIGATION_TABLE row — its KILL ATTEMPTS credit is gated on the DB2
@@ -206,35 +209,53 @@ export const ENEMY_SELF_SAVE_ONLY_IDS: ReadonlySet<string> = new Set([
   "421453",
 ]);
 
+/** What a hand-labelled self defensive does
+ * (`ENEMY_SELF_DEFENSIVE_HAND_MECHANISMS`). */
+export type EnemySelfDefensiveHandMechanism =
+  "dodge" | "spell reflect" | "rewind";
+
 /**
- * Members of `ENEMY_SELF_SAVE_ONLY_IDS` whose `[ENEMY DEF]` line names the
- * SHIELD the log shows — `(absorb Nk, Ts)`, Feign Death's form (ruling D8) —
- * and not `(self-save)`, which states why it was pressed. Cast id (the
- * caster's own aura carries the same id) → the printed name.
+ * The self defensives whose `[ENEMY DEF]` label the official ability profile
+ * cannot give (user ruling 2026-10-11: a label states what the spell DOES —
+ * `utils/selfDefensiveMechanism.ts` derives it from `abilityProfile`, the
+ * mitigation tables and the mechanic immunities; these three have no such
+ * dimension there). Cast id → the mechanism. DB2 `SpellEffect`, build
+ * 12.1.5.69594 (the same rows on 12.1.0.69587); every id is in
+ * `observedSpellIdsGenerated.json`.
  *
- * Ultimate Penitence (2026-10-11): Discipline's channelled burst-heal, with a
- * shield on the priest while it channels (DB2 421453: aura 69, all schools —
- * `abilityEffectsGenerated` `absorbs`, mask 127; its APPLIED carries the
- * shield's size). It is pressed to heal or to deal damage as much as to
- * survive: of the 372 enemy lines PV373 added on the 605-file capture (3,520
- * contexts) the priest stood at ≥ 95 % HP at the press on 264 and under 50 %
- * on 18 (median 100) — f4eb8c87 round 5, 2:01: 1,014,560 / 1,014,560 HP, an
- * 835,679 shield that was 819,669 when it came off 6.5 s later. KILL ATTEMPTS still
- * reads the press through `selfSaveCasts` (what an attempt ran into is not
- * changed) and words it `popped X`.
+ *  - Evasion 5277 — row 1892: Effect 6 (APPLY_AURA), aura 49
+ *    (MOD_DODGE_PERCENT), 200 points on the caster (the tooltip prints
+ *    `$s1/2` = 100 %); its two aura-87 rows carry 0 points (`NO_MITIGATION_IDS`).
+ *    Raw logs 2c6e85ec + 141470d0, 5 Evasion auras: 25 SWING_MISSED DODGE,
+ *    12 SPELL_MISSED DODGE and 1 RANGE_MISSED DODGE on the rogue while up.
+ *  - Nether Ward 212295 — row 314734: Effect 6, aura 28 (REFLECT_SPELLS),
+ *    100 points on the caster; its only effect row. Raw log 06bb9860, 27
+ *    Nether Ward auras: 88 SPELL_MISSED REFLECT on the warlock while up.
+ *  - Alter Time 342245 (the press) — rows 843168 / 843169 / 843170: Effect 28
+ *    (the image, creature 58542), Effect 64 triggering 342246, a dummy;
+ *    342246 row 843171 is aura 332 (the button becomes 342247, the return);
+ *    the health comes back as a heal on the caster at the return — 1219545
+ *    row 1205358, Effect 10 (HEAL), named "Alter Time" in the log. Official
+ *    description: position and health go back to what they were at the
+ *    press when it is pressed again or runs out. Raw log 141470d0: pressed
+ *    00:56:55.080 at 364,001 HP; 342247 at 00:57:03.226, a 211,459 heal of
+ *    1219545 on the row before it (00:57:03.225, HP 262,188 after it).
  *
- * The other members of the set keep `(self-save)`: whether that label is an
- * assertion for them too (Spirit Walk, Master's Call, Nether Ward, Alter
- * Time … are pressed at a median ≥ 85 % HP on the same capture) is a wider
- * wording question, not decided here.
+ * Registered in `curatedIdRegistry`; `test/selfDefensiveMechanism.test.ts`
+ * holds that none of them is an id the official path already classifies.
  */
-export const ENEMY_PRESSED_SHIELD_SAVES: Readonly<Record<string, string>> = {
-  "421453": "Ultimate Penitence",
+export const ENEMY_SELF_DEFENSIVE_HAND_MECHANISMS: Readonly<
+  Record<string, EnemySelfDefensiveHandMechanism>
+> = {
+  "5277": "dodge",
+  "212295": "spell reflect",
+  "342245": "rewind",
 };
 
 /** F-E4, the ally-castable half of F-E7 and crisis-external F-A7: an instant
  * heal or an absorb thrown on an ally (rendered as an external, `X → unit`) or
- * on the caster itself (`(self-save)`). Lay on Hands' signed tier lives in
+ * on the caster itself (its own press, labelled by what it does —
+ * `selfDefensiveMechanism`). Lay on Hands' signed tier lives in
  * `healingVerdicts.ts` (471195, burst-answer, 2026-09-26); the friendly side
  * already reads it from classSpells — nothing here feeds that. */
 export const ENEMY_ALLY_SAVE_IDS: ReadonlySet<string> = new Set([
@@ -271,7 +292,8 @@ export const ENEMY_ALLY_SAVE_IDS: ReadonlySet<string> = new Set([
  * 不进 externalDefensiveSpellIds,不产生「没交」指控". On an ally they render
  * `X → unit` with no duration and no "removed early" (a 1 s Leap of Faith
  * aura is the pull, not a buff that was cut short); Roar of Sacrifice and
- * Master's Call cast on oneself render `(self-save)`. The set is
+ * Master's Call cast on oneself render as the caster's own press, labelled
+ * by what they do (`selfDefensiveMechanism`). The set is
  * side-agnostic: enemy kill attempts on our team credit our grips too. */
 export const ENEMY_REDIRECT_SAVE_IDS: ReadonlySet<string> = new Set([
   "73325", // Leap of Faith — 648 casts, all on an ally

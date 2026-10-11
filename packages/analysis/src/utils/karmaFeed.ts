@@ -192,7 +192,7 @@ export function karmaFeedOf(
 const k = (n: number): string => `${Math.round(n / 1000)}k`;
 
 /**
- * The clause a `[ENEMY DEF] … Touch of Karma (self-save)` line gains, or ""
+ * The clause a `[ENEMY DEF] … Touch of Karma (absorb)` line gains, or ""
  * when Touch of Karma absorbed nothing from our side and sent nothing back.
  * `label` renders a player (the line's own pid form), `fmt` a second as m:ss.
  */

@@ -13,7 +13,9 @@ import { ensureAnalysisData } from "../src/data/ensure";
 import {
   ENEMY_SAVE_EFFECT_BY_NAME,
   enemySaveEffectOfNote,
+  selfSaveMechanismOfName,
 } from "../src/utils/enemyDefensives";
+import { statesSelfDefensiveLabel } from "../src/utils/selfDefensiveMechanism";
 
 const MATCH_START = Date.UTC(2026, 9, 10);
 const ms = (s: number): number => MATCH_START + Math.round(s * 1000);
@@ -271,13 +273,22 @@ describe("[ENEMY DEF] names an effect save by its effect (FT-T07, ruling D8)", (
       healIn: [selfHeal("31616", 77)],
     });
     const lines = render([all]);
-    expect(lines).toHaveLength(ENEMY_SAVE_EFFECT_BY_NAME.size);
+    // the four effect saves, and the one PRESSED shield of the fixture
+    expect(lines).toHaveLength(ENEMY_SAVE_EFFECT_BY_NAME.size + 1);
     for (const line of lines) {
       const b = body(line);
       const name = b.slice(0, b.indexOf(" ("));
-      expect(enemySaveEffectOfNote(b.slice(name.length + 1)), b).toBe(
-        ENEMY_SAVE_EFFECT_BY_NAME.get(name),
-      );
+      const note = b.slice(name.length + 1);
+      const effect = ENEMY_SAVE_EFFECT_BY_NAME.get(name);
+      if (effect !== undefined) {
+        expect(enemySaveEffectOfNote(note), b).toBe(effect);
+        continue;
+      }
+      // a press: its mechanism is the shared function's (2026-10-11)
+      const mechanism = selfSaveMechanismOfName(name);
+      expect(mechanism, b).toEqual({ kind: "absorb" });
+      expect(statesSelfDefensiveLabel(note, mechanism!), b).toBe(true);
+      expect(enemySaveEffectOfNote(note), b).toBe("absorb");
     }
   });
 });

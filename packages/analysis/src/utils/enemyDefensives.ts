@@ -24,7 +24,6 @@ import spellIdListsData, {
   ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS,
   ENEMY_IMMUNITY_SAVE_AURAS,
   ENEMY_ONLY_SAVE_IDS,
-  ENEMY_PRESSED_SHIELD_SAVES,
   ENEMY_PROC_SAVES,
   ENEMY_REDIRECT_SAVE_IDS,
   ENEMY_STEALTH_WALL_AURAS,
@@ -35,7 +34,12 @@ import { auraEndFromLog, type IAuraEndFromLog } from "./auraEndCause";
 import { buildAuraIntervals, type IAuraInterval } from "./auraIntervals";
 import { buffFullDurationForCaster } from "./buffDuration";
 import { AURA_ONLY_ACTIVATION_IDS } from "./cooldowns";
+import { TOUCH_OF_KARMA_ID } from "./karmaFeed";
 import { toRenderSecond } from "./renderGrid";
+import {
+  type SelfDefensiveMechanism,
+  selfDefensiveMechanism,
+} from "./selfDefensiveMechanism";
 
 const ALL_SCHOOLS = 0x7f;
 
@@ -265,30 +269,30 @@ export function immunityCountsWhenAlreadyUp(
 }
 
 /** What an effect save does, as its `[ENEMY DEF]` line says it: a shield
- * (Feign Death's; a pressed one — `ENEMY_PRESSED_SHIELD_SAVES`), or what a
- * proc is (`ENEMY_PROC_SAVES`). */
+ * (Feign Death's, or a pressed self defensive's whose mechanism is an absorb
+ * — `selfDefensiveMechanism`), or what a proc is (`ENEMY_PROC_SAVES`). */
 export type EnemySaveEffect = "absorb" | EnemyProcSaveEffect;
 
-/** Ability name → its effect, for every effect save. The `[ENEMY DEF]` gate
- * (`checkEnemyDefSaveEffect`) reads the rendered line against this map. */
+/** Ability name → its effect, for the effect saves that are read off an aura
+ * or a heal and not off a press (`effectSaves`, ruling D8). The `[ENEMY DEF]`
+ * gate (`checkEnemyDefSaveEffect`) reads the rendered line against this map;
+ * a PRESSED self defensive is read against `selfSaveMechanismOfName`. */
 export const ENEMY_SAVE_EFFECT_BY_NAME: ReadonlyMap<string, EnemySaveEffect> =
   new Map<string, EnemySaveEffect>([
     ["Feign Death", "absorb"],
-    ...Object.values(ENEMY_PRESSED_SHIELD_SAVES).map(
-      (name): [string, EnemySaveEffect] => [name, "absorb"],
-    ),
     ...Object.values(ENEMY_PROC_SAVES).map((p): [string, EnemySaveEffect] => [
       p.name,
       p.effect,
     ]),
   ]);
 
-/** The printed names of the pressed shields (`ENEMY_PRESSED_SHIELD_SAVES`) —
- * KILL ATTEMPTS words one of these `popped X`, not `self-saved (X)`
- * (`killAttempts.ts` `failureText`): the log shows the press and the shield,
- * not that it was pressed to survive. */
-export const ENEMY_PRESSED_SHIELD_NAMES: ReadonlySet<string> = new Set(
-  Object.values(ENEMY_PRESSED_SHIELD_SAVES),
+/** The printed names of the proc saves (`ENEMY_PROC_SAVES`) — the only
+ * causes KILL ATTEMPTS still words `self-saved (X)` (`killAttempts.ts`
+ * `failureText`): nobody pressed them, so `popped X` would be false of them.
+ * Everything else the target put up itself is a press and reads `popped X`
+ * (user ruling 2026-10-11). */
+export const ENEMY_PROC_SAVE_NAMES: ReadonlySet<string> = new Set(
+  Object.values(ENEMY_PROC_SAVES).map((p) => p.name),
 );
 
 /** One effect save of a unit (`effectSaves`). */
@@ -425,8 +429,8 @@ const ENEMY_SAVE_EFFECT_NOTE_RE = new RegExp(
 
 /** The effect a rendered `[ENEMY DEF]` parenthesis states (the text that
  * follows the ability's name, from its `(`), or undefined when it states
- * none — `(immune, 8.0s)`, `(30%, 12.0s)`, `(self-save)`. The gate's reader
- * of what `enemySaveEffectNote` wrote. */
+ * none — `(immune, 8.0s)`, `(30%, 12.0s)`, `(heal)`. The gate's reader of
+ * what `enemySaveEffectNote` wrote. */
 export function enemySaveEffectOfNote(
   parenthesis: string,
 ): EnemySaveEffect | undefined {
@@ -590,6 +594,24 @@ export function selfSaveCasts(
   return out;
 }
 
+/**
+ * The mechanism a PRESSED self defensive's `[ENEMY DEF]` line states, by the
+ * name the line prints (`selfSaveCasts`' `spellName`) — the gate's side of
+ * `selfDefensiveMechanism` (`checkEnemyDefSaveEffect`). Read at call time:
+ * the spell names load after this module does (`ensureAnalysisData`). Two
+ * ids of one name state one mechanism (`test/selfDefensiveMechanism.test.ts`).
+ */
+export function selfSaveMechanismOfName(
+  spellName: string,
+): SelfDefensiveMechanism | undefined {
+  for (const id of SELF_SAVE_IDS) {
+    if (getEnglishSpellName(id, "") !== spellName) continue;
+    const mechanism = selfDefensiveMechanism(id);
+    if (mechanism) return mechanism;
+  }
+  return undefined;
+}
+
 /** How close to an aura's start its cast is logged, either side. The same
  * pairing radius the external branch uses to tie a cast to its aura. */
 export const SAVE_CAST_AURA_PAIR_S = 1.5;
@@ -698,12 +720,18 @@ export interface IEnemyDefensiveEvent {
   /** the enemy who pressed it */
   casterName: string;
   casterId?: string;
-  /** "self" = a wall on the caster (pct < 100); "immune" = pct 100; "external" = cast on another enemy; "self-save" = the caster's own no-%-mitigation save (`SELF_SAVE_IDS`, or an effect save — see `effect`); "area" = an area save anchored on its cast (`ENEMY_AREA_SAVE_IDS`): who pressed it and when, nothing else */
+  /** "self" = a wall on the caster (pct < 100); "immune" = pct 100; "external" = cast on another enemy; "self-save" = the caster's own defensive outside the wall table (`SELF_SAVE_IDS` — see `mechanism` — or an effect save — see `effect`); "area" = an area save anchored on its cast (`ENEMY_AREA_SAVE_IDS`): who pressed it and when, nothing else */
   kind: "self" | "immune" | "external" | "self-save" | "area";
-  /** Set on a self-save that is named by what it does (`effectSaves`, ruling
-   * D8): the line prints `(absorb Nk, Ts)` / `(heal proc)` / `(cheat-death
-   * proc)` in place of `(self-save)`. */
+  /** Set on a self-save whose line carries an effect note
+   * (`enemySaveEffectNote`): `(absorb Nk, Ts)` — Feign Death (`effectSaves`,
+   * ruling D8) and a pressed self defensive whose mechanism is an absorb —
+   * or `(heal proc)` / `(cheat-death proc)`. */
   effect?: EnemySaveEffect;
+  /** What a PRESSED self defensive does (`selfDefensiveMechanism`, user
+   * ruling 2026-10-11) — the label its line prints. Undefined on every other
+   * kind, and on a press no source classifies (the line then prints no
+   * label; never a purpose). */
+  mechanism?: SelfDefensiveMechanism;
   /** What an `effect: "absorb"` save's shield absorbed while it was up
    * (`absorbedDuring`); undefined when the log names no absorb line for it. */
   absorbedAmount?: number;
@@ -838,14 +866,29 @@ export function externalAuraOf(
 ): ISaveAuraInterval | undefined {
   if (ENEMY_REDIRECT_SAVE_IDS.has(castSpellId)) return undefined;
   const summoned = castSpellId in ENEMY_IMMUNITY_EXTERNAL_CASTS;
-  const auraId = ENEMY_IMMUNITY_EXTERNAL_CASTS[castSpellId] ?? castSpellId;
+  return auraPairedToCast(
+    ENEMY_IMMUNITY_EXTERNAL_CASTS[castSpellId] ?? castSpellId,
+    castAtSeconds,
+    recipientIntervals,
+    summoned ? undefined : casterId,
+  );
+}
+
+/** `externalAuraOf`'s pairing itself: the interval of `auraId` that starts
+ * within `SAVE_CAST_AURA_PAIR_S` of the cast, the nearest one — from
+ * `casterId` when one is given and the interval carries a source id. */
+function auraPairedToCast(
+  auraId: string,
+  castAtSeconds: number,
+  holderIntervals: readonly ISaveAuraInterval[],
+  casterId: string | undefined,
+): ISaveAuraInterval | undefined {
   let best: ISaveAuraInterval | undefined;
-  for (const iv of recipientIntervals) {
+  for (const iv of holderIntervals) {
     if (iv.spellId !== auraId) continue;
     const gap = Math.abs(iv.fromS - castAtSeconds);
     if (gap > SAVE_CAST_AURA_PAIR_S) continue;
     if (
-      !summoned &&
       casterId !== undefined &&
       iv.srcUnitId !== undefined &&
       iv.srcUnitId !== casterId
@@ -1171,43 +1214,31 @@ export function enemyDefensiveEvents(
     });
   }
 
-  // B4a (2026-09-25): the caster's own no-%-mitigation saves.
+  // B4a (2026-09-25): the caster's own defensives outside the wall table,
+  // each labelled by what it does (`selfDefensiveMechanism`, user ruling
+  // 2026-10-11) — the label is the ability's, the figures are the log's.
   for (const c of selfSaveCasts(enemy, combat.startTime)) {
-    // A pressed shield (`ENEMY_PRESSED_SHIELD_SAVES`: Ultimate Penitence) is
-    // named by what the log shows of it, in Feign Death's form — the
-    // caster's own aura of the cast's id, paired as an external's is: how
-    // long it was up and what it absorbed. With no such aura in the log the
-    // line still says `(absorb)`: the label is the ability's, the figures
-    // are the log's.
-    if (c.spellId in ENEMY_PRESSED_SHIELD_SAVES) {
-      const shield = externalAuraOf(
-        c.spellId,
-        c.atSeconds,
-        intervalsOf(enemy),
-        enemy.id,
-      );
-      const absorbed = shield
-        ? absorbedDuring(enemy, inRound(shield), combat.startTime)
+    const mechanism = selfDefensiveMechanism(c.spellId);
+    // An absorb and a percentage reduction carry what the log shows of the
+    // caster's own aura of the cast's id — how long it was up, with the
+    // existing end notes, and for a shield what it absorbed (Feign Death's
+    // form, ruling D8). With no such aura in the log the line says the
+    // mechanism alone: `(absorb)`, `(25%)`.
+    // Touch of Karma is the exception, and prints `(absorb)` alone: the
+    // press's 10 s buff of the cast's id outlasts the shield (which is a
+    // second aura, `karmaFeed.TOUCH_OF_KARMA_ABSORB_ID`, 0.8–7.5 s on six of
+    // nine presses), and what it absorbed is the `| fed by` clause's
+    // (ruling B20a) — a second figure here could only disagree with it.
+    const figured =
+      (mechanism?.kind === "absorb" && c.spellId !== TOUCH_OF_KARMA_ID) ||
+      mechanism?.kind === "reduction";
+    const own = figured
+      ? auraPairedToCast(c.spellId, c.atSeconds, intervalsOf(enemy), enemy.id)
+      : undefined;
+    const absorbed =
+      own && mechanism?.kind === "absorb"
+        ? absorbedDuring(enemy, inRound(own), combat.startTime)
         : undefined;
-      out.push({
-        atSeconds: c.atSeconds,
-        pressSeconds: c.atSeconds,
-        spellId: c.spellId,
-        spellName: ENEMY_PRESSED_SHIELD_SAVES[c.spellId]!,
-        casterName: enemy.name,
-        casterId: enemy.id,
-        kind: "self-save",
-        effect: "absorb",
-        ...(shield
-          ? {
-              observedSeconds: shield.toS - shield.fromS,
-              ...(absorbed !== undefined ? { absorbedAmount: absorbed } : {}),
-              ...earlyEndOf(enemy, shield, shield.spellId),
-            }
-          : { removedEarly: false }),
-      });
-      continue;
-    }
     out.push({
       atSeconds: c.atSeconds,
       spellId: c.spellId,
@@ -1215,7 +1246,15 @@ export function enemyDefensiveEvents(
       casterName: enemy.name,
       casterId: enemy.id,
       kind: "self-save",
-      removedEarly: false,
+      ...(mechanism ? { mechanism } : {}),
+      ...(mechanism?.kind === "absorb" ? { effect: "absorb" as const } : {}),
+      ...(own
+        ? {
+            observedSeconds: own.toS - own.fromS,
+            ...(absorbed !== undefined ? { absorbedAmount: absorbed } : {}),
+            ...earlyEndOf(enemy, own, own.spellId),
+          }
+        : { removedEarly: false }),
     });
   }
 

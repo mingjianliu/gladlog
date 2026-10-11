@@ -148,6 +148,7 @@ import * as resourceAt from "@gladlog/analysis/src/utils/resourceAt";
 import * as rootReachability from "@gladlog/analysis/src/utils/rootReachability";
 import * as rosterSide from "@gladlog/analysis/src/utils/rosterSide";
 import * as roundEnd from "@gladlog/analysis/src/utils/roundEnd";
+import * as selfDefensiveMechanismMod from "@gladlog/analysis/src/utils/selfDefensiveMechanism";
 import * as specBaselines from "@gladlog/analysis/src/utils/specBaselines";
 import * as spellDanger from "@gladlog/analysis/src/utils/spellDanger";
 import * as spellMechanics from "@gladlog/analysis/src/utils/spellMechanics";
@@ -1545,15 +1546,36 @@ const INDEX: PredicateRow[] = [
     symbol: "ENEMY_SAVE_EFFECT_BY_NAME",
     mod: enemyDefensives,
   },
-  // 2026-10-11: a pressed shield is named as a shield, not as `(self-save)`
+  // 2026-10-11 (user ruling): a pressed self defensive is labelled by what it
+  // does, never `(self-save)`
+  {
+    file: `${A}/utils/selfDefensiveMechanism.ts`,
+    symbol: "selfDefensiveMechanism",
+    mod: selfDefensiveMechanismMod,
+  },
   {
     file: `${A}/data/spellIdLists.ts`,
-    symbol: "ENEMY_PRESSED_SHIELD_SAVES",
+    symbol: "ENEMY_SELF_DEFENSIVE_HAND_MECHANISMS",
     mod: spellIdLists,
   },
   {
+    file: `${A}/utils/selfDefensiveMechanism.ts`,
+    symbol: "selfDefensiveLabelWords",
+    mod: selfDefensiveMechanismMod,
+  },
+  {
+    file: `${A}/utils/selfDefensiveMechanism.ts`,
+    symbol: "statesSelfDefensiveLabel",
+    mod: selfDefensiveMechanismMod,
+  },
+  {
     file: `${A}/utils/enemyDefensives.ts`,
-    symbol: "ENEMY_PRESSED_SHIELD_NAMES",
+    symbol: "selfSaveMechanismOfName",
+    mod: enemyDefensives,
+  },
+  {
+    file: `${A}/utils/enemyDefensives.ts`,
+    symbol: "ENEMY_PROC_SAVE_NAMES",
     mod: enemyDefensives,
   },
   {

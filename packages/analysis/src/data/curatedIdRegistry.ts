@@ -220,9 +220,9 @@ import spellIdLists, {
   ENEMY_IMMUNITY_EXTERNAL_CASTS,
   ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS,
   ENEMY_IMMUNITY_SAVE_AURAS,
-  ENEMY_PRESSED_SHIELD_SAVES,
   ENEMY_PROC_SAVES,
   ENEMY_REDIRECT_SAVE_IDS,
+  ENEMY_SELF_DEFENSIVE_HAND_MECHANISMS,
   ENEMY_SELF_SAVE_ONLY_IDS,
   ENEMY_STEALTH_WALL_AURAS,
 } from "./spellIdLists";
@@ -315,13 +315,13 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
     "cast",
     () => set(ENEMY_SELF_SAVE_ONLY_IDS),
   ),
-  // 2026-10-11: the self-saves whose line names the shield (cast id = the
-  // caster's own aura id)
+  // 2026-10-11: the self defensives whose `[ENEMY DEF]` label the official
+  // profile cannot give (Evasion, Nether Ward, Alter Time) — cast ids
   t(
-    "spellIdLists.ENEMY_PRESSED_SHIELD_SAVES",
+    "spellIdLists.ENEMY_SELF_DEFENSIVE_HAND_MECHANISMS",
     "data/spellIdLists.ts",
-    "mixed",
-    () => keys(ENEMY_PRESSED_SHIELD_SAVES),
+    "cast",
+    () => keys(ENEMY_SELF_DEFENSIVE_HAND_MECHANISMS),
   ),
   t("spellIdLists.ENEMY_ALLY_SAVE_IDS", "data/spellIdLists.ts", "cast", () =>
     set(ENEMY_ALLY_SAVE_IDS),
