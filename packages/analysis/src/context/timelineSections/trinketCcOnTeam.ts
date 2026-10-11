@@ -15,8 +15,8 @@ import { BACKLASH_AURA_CC_TYPE, backlashCcTag } from "../../data/backlashCc";
 import {
   ccAvoidedOutcomeText,
   ccEndedByOwnPress,
-  ccUnloggedEarlyEnd,
   ccLoggedEnd,
+  ccUnloggedEarlyEnd,
   formatCcLoggedEnd,
   formatCcRefreshed,
   formatCcUnloggedEnd,

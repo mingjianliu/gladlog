@@ -15,8 +15,8 @@ import { BACKLASH_AURA_CC_TYPE, backlashCcTag } from "../../data/backlashCc";
 import { BREAK_RACIAL_SPELL_IDS } from "../../data/racialAbilities";
 import {
   ccEndedByOwnPress,
-  ccUnloggedEarlyEnd,
   ccLoggedEnd,
+  ccUnloggedEarlyEnd,
   findBrokenCC,
   formatCcLoggedEnd,
   formatCcRefreshed,
