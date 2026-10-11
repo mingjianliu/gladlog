@@ -1201,13 +1201,8 @@ const KILL_WINDOW_SPAN =
 const DEFENSELESS_SPAN = /\bdefenseless (\d+):(\d{2})–(\d+):(\d{2})/;
 
 /**
- * Hard invariant (T12 ① a, user ruling 2026-10-10: a kill window does not run
- * past the round's end): no `[KILL WINDOW]` / `[VULNERABLE]` span — the line's
- * own, or the `defenseless a–b` it names — ends after the round's end AS THE
- * PROMPT STATES IT.
- *
- * The producer cuts the windows at `roundEndMs` (`computeOffensiveWindows`);
- * the prompt prints that instant twice over, and this gate reads it there:
+ * The round's end as the prompt states it, on the render grid — what the
+ * producers' `roundEndMs` prints:
  *
  *  - the log's end is the `[MATCH END]` line — every bracket;
  *  - a Solo Shuffle round (the header's `Bracket:` is `SOLO_SHUFFLE_BRACKET`,
@@ -1215,16 +1210,11 @@ const DEFENSELESS_SPAN = /\bdefenseless (\d+):(\d{2})–(\d+):(\d{2})/;
  *    death, and every player death of either team is a timeline `[DEATH]`
  *    line — so the earliest `[DEATH]` line's second is the round's end.
  *
- * A window's end is at or before the round's end, so on the render grid its
- * second is at or before that line's second — no tolerance.
- *
- * Before the cut: a still-open span closed at the LOG's end, ~2 s after a
- * Solo Shuffle round's ending death (`[VULNERABLE] 1:28–1:40` under a first
- * `[DEATH]` at 1:38), and casts after the round read as "inside a kill
- * window" (kick-priority, the missed purges).
+ * `null` when the prompt states neither.
  */
-export function checkKillWindowWithinRound(lines: string[]): string[] {
-  const failures: string[] = [];
+function statedRoundEnd(
+  lines: string[],
+): { second: number; says: string } | null {
   const secondOf = (line: string): number | null => {
     const m = line.match(LEADING_TIME);
     return m ? Number(m[1]) * 60 + Number(m[2]) : null;
@@ -1242,13 +1232,41 @@ export function checkKillWindowWithinRound(lines: string[]): string[] {
     else if (bracket === SOLO_SHUFFLE_BRACKET && DEATH_LINE.test(line))
       consider(secondOf(line), `${SOLO_SHUFFLE_BRACKET} 的第一条 [DEATH] 行`);
   }
-  if (roundEnd === null) return failures;
-  const end: { second: number; says: string } = roundEnd;
+  return roundEnd;
+}
+
+/**
+ * Hard invariant (T12 ① a, user ruling 2026-10-10: a kill window does not run
+ * past the round's end): no `[KILL WINDOW]` / `[VULNERABLE]` span — the line's
+ * own, or the `defenseless a–b` it names — ends after the round's end AS THE
+ * PROMPT STATES IT.
+ *
+ * The producer cuts the windows at `roundEndMs` (`computeOffensiveWindows`);
+ * the prompt prints that instant, and this gate reads it there
+ * (`statedRoundEnd`: `[MATCH END]`, and a Solo Shuffle round's first `[DEATH]`
+ * line).
+ *
+ * A window's end is at or before the round's end, so on the render grid its
+ * second is at or before that line's second — no tolerance.
+ *
+ * Before the cut: a still-open span closed at the LOG's end, ~2 s after a
+ * Solo Shuffle round's ending death (`[VULNERABLE] 1:28–1:40` under a first
+ * `[DEATH]` at 1:38), and casts after the round read as "inside a kill
+ * window" (kick-priority, the missed purges).
+ */
+export function checkKillWindowWithinRound(lines: string[]): string[] {
+  const failures: string[] = [];
+  const end = statedRoundEnd(lines);
+  if (end === null) return failures;
   lines.forEach((line, i) => {
     const m = line.match(KILL_WINDOW_SPAN);
     if (!m) return;
     const spans = [
-      { what: `[${m[1]}] 的区间`, text: `${m[2]}:${m[3]}–${m[4]}:${m[5]}`, to: Number(m[4]) * 60 + Number(m[5]) },
+      {
+        what: `[${m[1]}] 的区间`,
+        text: `${m[2]}:${m[3]}–${m[4]}:${m[5]}`,
+        to: Number(m[4]) * 60 + Number(m[5]),
+      },
     ];
     const d = line.match(DEFENSELESS_SPAN);
     if (d)
@@ -2518,6 +2536,63 @@ export function checkForcedTrinketConsistency(lines: string[]): string[] {
     failures.push(
       `[FORCED TRINKET] ${count} 条,超过上限 ${FORCED_FOLLOWUP_CAP}`,
     );
+  return failures;
+}
+
+/** `1:38  [DEATH]  5(AWarrior) (Arms Warrior — enemy)` — the second and the
+ *  dying unit's `<unit>` id. */
+const DEATH_UNIT_LINE = /^(\d+):(\d{2})\s+\[DEATH\]\s+(\d+)\(/;
+
+/**
+ * Hard invariant (T12 ① d, user ruling 2026-10-10: a kill-attempt line does
+ * not run past the target's death or the round's end). For every
+ * `[m:ss–m:ss] on <target>` line of KILL ATTEMPTS:
+ *
+ *  - the bracket does not end after the round's end as the prompt states it
+ *    (`statedRoundEnd` — `[MATCH END]`, and a Solo Shuffle round's first
+ *    `[DEATH]` line);
+ *  - a bracket that holds its target's death does not run on after it: with
+ *    the target (resolved through the `<unit>` legend) on a `[DEATH]` line at
+ *    second D, a bracket that starts at or before D ends at or before D —
+ *    whatever its outcome reads, KILL or FAILED.
+ *
+ * The producer cuts both on the attempt object (`extractKillAttempts`: the
+ * anchors at `roundEndMs`, every row credited with a death at that death), so
+ * on the render grid the bracket's end second is at or before the line's — no
+ * tolerance. Post-hoc review 45-FT-98 asked for this gate: nothing checked
+ * that an attempt line stops at its target's death.
+ */
+export function checkKillAttemptBracketEnd(lines: string[]): string[] {
+  const failures: string[] = [];
+  const idOfName = new Map<string, string>();
+  const firstDeathOfId = new Map<string, number>();
+  for (const line of lines) {
+    const u = line.match(UNIT_LEGEND_LINE);
+    if (u) idOfName.set(u[2]!, u[1]!);
+    const d = line.match(DEATH_UNIT_LINE);
+    if (d) {
+      const s = Number(d[1]) * 60 + Number(d[2]);
+      firstDeathOfId.set(d[3]!, Math.min(firstDeathOfId.get(d[3]!) ?? s, s));
+    }
+  }
+  const roundEnd = statedRoundEnd(lines);
+  lines.forEach((line, i) => {
+    const a = line.match(KILL_ATTEMPT_SPAN_LINE);
+    if (!a) return;
+    const from = Number(a[1]) * 60 + Number(a[2]);
+    const to = Number(a[3]) * 60 + Number(a[4]);
+    const show = `[${a[1]}:${a[2]}–${a[3]}:${a[4]}] on ${a[5]}`;
+    if (roundEnd !== null && to > roundEnd.second)
+      failures.push(
+        `line ${i + 1}: KILL ATTEMPTS ${show} 结束于回合结束之后(${roundEnd.says}在 ${fmtTime(roundEnd.second)})`,
+      );
+    const id = idOfName.get(a[5]!);
+    const death = id === undefined ? undefined : firstDeathOfId.get(id);
+    if (death !== undefined && from <= death && to > death)
+      failures.push(
+        `line ${i + 1}: KILL ATTEMPTS ${show} 越过了目标的死亡(${fmtTime(death)} 的 [DEATH] 行)—— ${line.trim().slice(-60)}`,
+      );
+  });
   return failures;
 }
 
@@ -5220,6 +5295,7 @@ export function checkMatch(
   hardFailures.push(...checkKickEatenCancelsCoverCastStopped(lines));
   hardFailures.push(...checkCcNotLandedLines(lines));
   hardFailures.push(...checkForcedTrinketConsistency(lines));
+  hardFailures.push(...checkKillAttemptBracketEnd(lines));
   hardFailures.push(...checkGuardianSpiritSaveClause(lines));
   hardFailures.push(...checkKarmaFedClause(lines));
   hardFailures.push(...checkResReturnAnnounced(lines));

@@ -2214,6 +2214,125 @@ describe("extractKillAttempts — brackets end at the round's end and at the kil
       ),
     ).toHaveLength(0);
   });
+
+  // Post-hoc review 45-FT-98, finding 2: "two attempts on one target both
+  // cover its death; the one not kept is un-killed and then not cut, so it
+  // prints `[0:10–0:30] … FAILED` for a target dead at 0:24".
+  it("the reviewed pair — a burst cluster 10–22 over a stun 14–19, the target dead at 18 — is one row, the KILL, cut at the death", () => {
+    const e1 = unit("e1", {
+      auraEvents: stunAuras("e1", KIDNEY, 14, 5),
+      deathRecords: [{ timestamp: ms(18) }],
+    });
+    const f1 = unit("f1", {
+      reaction: 1,
+      spellCastEvents: [offensiveCast(10)],
+      damageOut: [dmg("f1", "e1", 12, 60_000), dmg("f1", "e1", 16, 60_000)],
+    });
+    const attempts = extractKillAttempts([f1], [e1], makeCombat(f1, e1));
+    // the cluster is under a stun attempt that got the kill: not a row (F-K2)
+    expect(
+      attempts.map((a) => [a.anchor, a.fromSeconds, a.toSeconds, a.killed]),
+    ).toEqual([["stun", 14, 18, true]]);
+  });
+
+  it("the row a shared death was not given to ended before it: it stays a FAILED row of its own, with its anchor's end", () => {
+    // Kidney 40–45 (credit to 50), a burst opened at 46, the target dead at 48
+    const e1 = unit("e1", {
+      auraEvents: stunAuras("e1", KIDNEY, 40, 5),
+      deathRecords: [{ timestamp: ms(48) }],
+    });
+    const f1 = unit("f1", {
+      reaction: 1,
+      spellCastEvents: [offensiveCast(46)],
+      damageOut: [dmg("f1", "e1", 42, 60_000), dmg("f1", "e1", 47, 60_000)],
+    });
+    const attempts = extractKillAttempts([f1], [e1], makeCombat(f1, e1));
+    expect(
+      attempts.map((a) => [a.anchor, a.fromSeconds, a.toSeconds, a.killed]),
+    ).toEqual([
+      ["stun", 40, 45, false],
+      ["burst", 46, 48, true],
+    ]);
+    const text = formatKillAttemptsForContext(attempts, [48]).join("\n");
+    expect(text).toMatch(/\[0:40–0:45\] on e1 .* \| FAILED: /);
+    expect(text).toMatch(/\[0:46–0:48\] on e1 .* \| KILL/);
+  });
+
+  // The property, over every way the two anchors can sit around one death:
+  // no bracket holds its target's death and runs on, and one death is one
+  // KILL. A grid, not a sample — 0 violations is the claim "the builders
+  // cannot produce the reviewed line", and the cut on every credited row
+  // (`extractKillAttempts`) is what keeps it true if a builder changes.
+  it("no attempt's bracket runs past its target's death, whatever the anchors — stun × burst × second burst × death, 1,440 rounds", () => {
+    const STUNS: Array<[number, number] | null> = [
+      null,
+      [20, 4],
+      [33, 5],
+      [41, 3],
+      [47, 6],
+    ];
+    const BURSTS: Array<number | null> = [null, 12, 30, 39, 46, 52];
+    const SECOND_BURSTS: Array<number | null> = [null, 14, 16, 30];
+    const DEATHS = [21, 24.5, 36, 43, 44, 45.5, 48, 50, 53.2, 56, 58.9, 66];
+    let rounds = 0;
+    let sharedDeaths = 0;
+    let rows = 0;
+    for (const stun of STUNS)
+      for (const burst of BURSTS)
+        for (const gap of SECOND_BURSTS)
+          for (const deathS of DEATHS) {
+            rounds++;
+            const casts =
+              burst === null
+                ? []
+                : gap === null
+                  ? [offensiveCast(burst)]
+                  : [offensiveCast(burst), offensiveCast(burst + gap)];
+            const e1 = unit("e1", {
+              auraEvents: stun ? stunAuras("e1", KIDNEY, stun[0], stun[1]) : [],
+              deathRecords: [{ timestamp: ms(deathS) }],
+            });
+            const f1 = unit("f1", {
+              reaction: 1,
+              spellCastEvents: casts,
+              // a hit a second up to the death: every anchor clears the floor
+              damageOut: Array.from({ length: 70 }, (_, i) => i + 5)
+                .filter((s) => s <= deathS)
+                .map((s) => dmg("f1", "e1", s, 60_000)),
+            });
+            const attempts = extractKillAttempts(
+              [f1],
+              [e1],
+              makeCombat(f1, e1),
+            );
+            rows += attempts.length;
+            const at = `stun ${stun} burst ${burst}+${gap} death ${deathS}`;
+            for (const a of attempts) {
+              // a bracket that holds the death ends at it
+              if (a.fromSeconds <= deathS)
+                expect(a.toSeconds, at).toBeLessThanOrEqual(deathS);
+              expect(a.toSeconds, at).toBeGreaterThanOrEqual(a.fromSeconds);
+              expect(a.attribution !== undefined, at).toBe(!a.killed);
+            }
+            const kills = attempts.filter((a) => a.killed);
+            expect(kills.length, at).toBeLessThanOrEqual(1);
+            // a second row whose kill-credit window held the same death
+            if (
+              kills.length === 1 &&
+              attempts.some(
+                (a) =>
+                  !a.killed &&
+                  a.fromSeconds <= deathS &&
+                  deathS <= a.toSeconds + 5,
+              )
+            )
+              sharedDeaths++;
+          }
+    expect(rounds).toBe(1440);
+    // the grid reaches the tie-break — the property is not vacuous
+    expect(sharedDeaths).toBeGreaterThan(20);
+    expect(rows).toBeGreaterThan(rounds);
+  });
 });
 
 // T12 ④ (user ruling 2026-10-10: print both numbers): the line printed the

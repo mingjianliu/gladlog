@@ -198,8 +198,9 @@ export interface IKillAttempt {
   anchorSpellName: string;
   /** Stun anchor: first stun landing → last stun expiry.
    * Burst anchor: first offensive cast → cluster reach (burstCastSpan).
-   * Neither runs past the round's end (`roundEndMs`), and a KILL ends at the
-   * death it is credited with when that comes first (T12 ① d). */
+   * Neither runs past the round's end (`roundEndMs`), nor past a death of
+   * the target that falls inside it — a KILL ends at the death it is
+   * credited with (T12 ① d). */
   fromSeconds: number;
   toSeconds: number;
   /** Empty for burst-anchored attempts. */
@@ -651,18 +652,29 @@ export function extractKillAttempts(
       );
       for (const a of list) if (a !== keep) a.killed = false;
     }
-    for (const a of list)
-      if (a.killed) {
-        a.killedAtSeconds = deathS;
-        // T12 ① d: a KILL's bracket does not run past the death it is
-        // credited with (100-2-534: `[2:02–2:16] … Zenith burst (no stun) |
-        // … | KILL`, the target dead at 2:14 — the cooldown's own reach). A
-        // death in the kill-credit slack after the bracket leaves it alone.
-        // Cut on the attempt itself: `[FORCED TRINKET]` prints the same
-        // object's span, and the summary's "outside every attempt window"
-        // tests the brackets as printed.
-        a.toSeconds = Math.min(a.toSeconds, deathS);
-      }
+    for (const a of list) {
+      if (a.killed) a.killedAtSeconds = deathS;
+      // T12 ① d: an attempt's bracket does not run past its target's death
+      // (100-2-534: `[2:02–2:16] … Zenith burst (no stun) | … | KILL`, the
+      // target dead at 2:14 — the cooldown's own reach). A death in the
+      // kill-credit slack after the bracket leaves it alone. Cut on the
+      // attempt itself: `[FORCED TRINKET]` prints the same object's span,
+      // and the summary's "outside every attempt window" tests the brackets
+      // as printed.
+      //
+      // Every attempt on this list, not the KILL alone (post-hoc review
+      // 45-FT-98): the row the death was NOT given to is cut here too, so
+      // "no bracket holds its target's death and runs on" is this line and
+      // not an argument about the builders. For that row the cut changes
+      // nothing today — it is on the list because the death fell in the
+      // 5 s after its bracket: every attempt whose bracket holds a death is
+      // credited with one (`creditOf`), two brackets holding the SAME death
+      // overlap, and the only overlapping pair built above is a burst
+      // cluster under a stun attempt, built only when that stun attempt has
+      // no kill (F-K2). It is a go of its own that ended before the target
+      // died, and it prints as one: FAILED.
+      a.toSeconds = Math.min(a.toSeconds, deathS);
+    }
   }
   // T12 ④ (user ruling 2026-10-10: print both numbers): the line printed
   // `[a–b]` beside a sum taken over [a, b + 5 s], so 144 of 553 calibrated
