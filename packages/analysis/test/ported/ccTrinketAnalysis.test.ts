@@ -20,6 +20,7 @@ import {
   makeUnit,
 } from "./testHelpers";
 import { ensureAnalysisData } from "../../src/data/ensure";
+import { hardcastHealSpell } from "../../src/data/kickPriorityHealSpells";
 
 // Mock the generated JSON so tests never depend on real item IDs.
 vi.mock("../../src/data/trinketItemIds.json", () => ({
@@ -422,8 +423,9 @@ describe("analyzePlayerCCAndTrinket — root/disarm/interrupt tracking", () => {
     expect(res2.interruptInstances[0].kickersInRange).toBeNull();
   });
 
-  it("computes kickDepthPct from hardcastHealSpell table or completed cast median (GH #87, B7)", () => {
-    // Case 1: Interrupted heal spell from hardcastHealSpell table (e.g. Flash Heal 2061)
+  it("computes kickDepthPct from the player's own completed cast median, never from the corpus heal table (GH #87, B7; FT I11)", () => {
+    // Case 1: a heal of the hardcastHealSpell table (Flash Heal 2061) with no
+    // completed cast in the round
     const healKick = makeInterruptEvent(
       "1766",
       "Kick",
@@ -451,8 +453,54 @@ describe("analyzePlayerCCAndTrinket — root/disarm/interrupt tracking", () => {
       [enemy],
       makeCombat(),
     );
-    // Flash Heal nominal = 1.17s -> Math.round((0.5 / 1.17) * 100) = 43%
-    expect(resHeal.interruptInstances[0].kickDepthPct).toBe(43);
+    // FT I11: nothing in this round to measure the bar against — it read 43,
+    // 0.5 s over the corpus-wide median of every player's Flash Heal
+    expect(resHeal.interruptInstances[0].kickDepthPct).toBeNull();
+    // the out-range verdict's window keeps its reading (the table first)
+    expect(resHeal.interruptInstances[0].castWindowS).toBe(
+      hardcastHealSpell("2061")!.medianCastS,
+    );
+
+    // Case 1b (856fd105 round 6): four Flash Heals of 1.29–1.32 s, the fifth
+    // kicked 1.157 s in — 89 % of this player's bar, not "100" against the
+    // table's 1.16 s
+    const bars = [
+      [28_609, 29_902],
+      [29_902, 31_207],
+      [31_208, 32_525],
+      [32_526, 33_817],
+    ];
+    const ownHeals = makeUnit("player-1", {
+      actionIn: [
+        makeInterruptEvent(
+          "2139",
+          "Counterspell",
+          "2061",
+          "Flash Heal",
+          MATCH_START + 34_975,
+          "enemy-1",
+          "EnemyA",
+        ),
+      ],
+      castStartEvents: [...bars.map((b) => b[0]!), 33_818].map((ms) => ({
+        spellId: "2061",
+        logLine: {
+          event: LogEvent.SPELL_CAST_START,
+          timestamp: MATCH_START + ms,
+        },
+      })) as any,
+      spellCastEvents: bars.map((b) => ({
+        spellId: "2061",
+        logLine: {
+          event: LogEvent.SPELL_CAST_SUCCESS,
+          timestamp: MATCH_START + b[1]!,
+        },
+      })) as any,
+    });
+    expect(
+      analyzePlayerCCAndTrinket(ownHeals, [enemy], makeCombat())
+        .interruptInstances[0].kickDepthPct,
+    ).toBe(89);
 
     // Case 2: Non-heal spell with completed cast in match
     const frostKick = makeInterruptEvent(
@@ -495,6 +543,34 @@ describe("analyzePlayerCCAndTrinket — root/disarm/interrupt tracking", () => {
     const resDps = analyzePlayerCCAndTrinket(playerDps, [enemy], makeCombat());
     // Completed cast = 2.0s -> Math.round((0.5 / 2.0) * 100) = 25%
     expect(resDps.interruptInstances[0].kickDepthPct).toBe(25);
+
+    // Case 2b (3306e8ee: Sleep Walk kicked 1.727 s in, the completed ones
+    // 1.647 and 1.595 s): a bar that had already run longer than the round's
+    // median completed bar is not "100" — the depth is not derivable
+    const longBar = makeUnit("player-1", {
+      actionIn: [
+        makeInterruptEvent(
+          "1766",
+          "Kick",
+          "116",
+          "Frostbolt",
+          MATCH_START + 32_100,
+          "enemy-1",
+          "EnemyA",
+        ),
+      ],
+      castStartEvents: [10_000, 30_000].map((ms) => ({
+        spellId: "116",
+        logLine: {
+          event: LogEvent.SPELL_CAST_START,
+          timestamp: MATCH_START + ms,
+        },
+      })) as any,
+      spellCastEvents: playerDps.spellCastEvents,
+    });
+    const resLong = analyzePlayerCCAndTrinket(longBar, [enemy], makeCombat());
+    expect(resLong.interruptInstances[0].kickDepthPct).toBeNull();
+    expect(resLong.interruptInstances[0].castWindowS).toBeCloseTo(2.1, 5);
 
     // Case 3: Unknown spell with no completed casts and no start event -> null
     const resNoData = analyzePlayerCCAndTrinket(

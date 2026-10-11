@@ -1117,14 +1117,20 @@ export interface IInterruptInstance {
    * CC is `hardCcAuraAt` — a silence or a school lockout does not stop
    * movement. */
   ownerImmobileBy?: string | null;
-  /** Percentage of nominal cast elapsed before interruption (GH #87, B7).
-   * null for a channel kick (`channelS` set): the cast had already finished. */
+  /** How far into the cast bar the kick landed, as a percentage of the
+   * player's own median completed bar of that spell in this round (GH #87,
+   * B7; FT I11) — an estimate, a single bar's haste can differ. null for a
+   * channel kick (`channelS` set: the cast had already finished), when the
+   * round has no completed bar of the spell to measure against, and when the
+   * bar had already run longer than that median (never clamped to 100). */
   kickDepthPct?: number | null;
   /** How long the kicker had to close in on this cast, seconds: the cast's
-   * nominal length (the divisor of `kickDepthPct`; the official base cast
-   * time, unhasted, when the round has no completed bar of it), and never
-   * less than the cast had run when the kick landed. null without a cast
-   * start. Read by kick-eaten's out-range verdict (B-tier X3). */
+   * nominal length (for a hardcast heal the corpus-wide median of
+   * `kickPriorityHealSpells`, else the round's own median completed bar —
+   * `kickDepthPct`'s divisor; the official base cast time, unhasted, when
+   * neither is known), and never less than the cast had run when the kick
+   * landed. null without a cast start. Read by kick-eaten's out-range
+   * verdict (B-tier X3). */
   castWindowS?: number | null;
   /** Seconds into the CHANNEL when the kick landed — the spell had already
    * gone out (its SPELL_CAST_SUCCESS precedes the kick), so it was not
@@ -3006,15 +3012,29 @@ export function analyzePlayerCCAndTrinket(
       // 8.9 %, p95 39.8 % vs 32.2 % (per-cast procs change cast times more
       // than slow haste buffs do). A haste-aware divisor needs the haste
       // auras themselves, not a neighbour.
-      const nominalS =
-        hardcastHealSpell(interruptedSpellId)?.medianCastS ??
-        getPlayerCompletedMedian(interruptedSpellId);
-      if (nominalS != null && nominalS > 0 && channelS === null) {
-        kickDepthPct = Math.max(
-          0,
-          Math.min(100, Math.round((elapsedS / nominalS) * 100)),
-        );
+      //
+      // The depth is measured against the player's OWN completed bars of the
+      // spell in this round and nothing else (FT I11): the log's own cast
+      // time, haste included. Until 2026-10-11 a hardcast heal was divided
+      // by the corpus-wide median of `kickPriorityHealSpells` first (every
+      // player, every haste), and the result was clamped to 100. 856fd105
+      // round 6: four Flash Heals of 1.29–1.32 s, the fifth kicked 1.157 s
+      // in — 89 % of this player's bar — read "100" against the table's
+      // 1.16 s. And a bar that had already run longer than the median
+      // (3306e8ee: Sleep Walk kicked 1.727 s in, the two completed ones
+      // 1.647 and 1.595 s) read "100" by the clamp. With no completed bar in
+      // the round, or above 100 %, the depth is not derivable and is not
+      // stated — omitted, never clamped, as `castCancels`' `progressPct` is.
+      const ownMedianS = getPlayerCompletedMedian(interruptedSpellId);
+      if (ownMedianS != null && ownMedianS > 0 && channelS === null) {
+        const pct = Math.round((elapsedS / ownMedianS) * 100);
+        kickDepthPct = pct <= 100 ? pct : null;
       }
+      // `castWindowS` keeps the reading it had (the corpus table first for a
+      // hardcast heal): it feeds kick-eaten's out-range verdict, which this
+      // change does not touch — predicate index, "Not yet unified".
+      const nominalS =
+        hardcastHealSpell(interruptedSpellId)?.medianCastS ?? ownMedianS;
       // X3: how long the kicker had to close in — the round's own bar when
       // it is known, else the official base cast (unhasted, so never too
       // short), and never less than the cast had already run at the kick.
