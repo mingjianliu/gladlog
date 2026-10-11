@@ -34,6 +34,7 @@ import {
   supersededAuraBreaks,
 } from "./auraIntervals";
 import { specToString } from "./cooldowns";
+import { logIsFrom } from "./logEra";
 import { summonOwnerById } from "./summonOwner";
 
 // ── DR category constants ─────────────────────────────────────────────────────
@@ -52,7 +53,8 @@ export const DR_RESET_MS_121 = 20_000;
  * Single source for "is this match 12.1-era" (shared-predicate rule): the DR
  * reset cutover below and dispelAnalysis's Stellar Protection gate are both
  * aliases of this one moment — patch-mechanic gates must import it, never
- * re-derive their own epoch.
+ * re-derive their own epoch, and ask it through `logIsFrom` (logEra.ts: the
+ * one comparison of a log timestamp with a dated game change).
  */
 export const PATCH_121_GOLIVE_EPOCH_MS = Date.UTC(2026, 7, 11, 22, 0, 0);
 /** Alias — the DR reset window flips exactly at 12.1 go-live. */
@@ -65,7 +67,7 @@ export const DR_RESET_CUTOVER_EPOCH_MS = PATCH_121_GOLIVE_EPOCH_MS;
  * synthetic epochs land in the 16s era by construction.
  */
 export function drResetMsAt(epochMs: number): number {
-  return epochMs >= DR_RESET_CUTOVER_EPOCH_MS
+  return logIsFrom(epochMs, DR_RESET_CUTOVER_EPOCH_MS)
     ? DR_RESET_MS_121
     : DR_RESET_MS_PRE_121;
 }

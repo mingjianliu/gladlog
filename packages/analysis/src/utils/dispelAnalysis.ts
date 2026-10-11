@@ -57,6 +57,7 @@ import {
   getDRLevelAtTime,
   PATCH_121_GOLIVE_EPOCH_MS,
 } from "./drAnalysis";
+import { logIsFrom } from "./logEra";
 import {
   distanceBetween,
   getUnitPositionAtTime,
@@ -185,7 +186,10 @@ function getDispelPenalty(
 ): string | undefined {
   const base = DISPEL_PENALTY_SPELLS.get(removedSpellId);
   if (base !== undefined) return base;
-  if (!casterMayBeBalanceDruid || epochMs < PATCH_121_GOLIVE_EPOCH_MS)
+  if (
+    !casterMayBeBalanceDruid ||
+    !logIsFrom(epochMs, PATCH_121_GOLIVE_EPOCH_MS)
+  )
     return undefined;
   return STELLAR_PROTECTION_PENALIZED_SPELLS.get(removedSpellId);
 }
