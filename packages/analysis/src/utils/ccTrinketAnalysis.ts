@@ -1497,7 +1497,15 @@ export type ICcLoggedEnd =
   | { kind: "dispelled"; spellName: string; byUnitId: string; byName: string }
   | { kind: "death" }
   /** the holder's own press ended it (`ccEndedByOwnPress`) */
-  | { kind: "press"; spellName: string };
+  | { kind: "press"; spellName: string }
+  /** a control immunity went up on the holder in the removal's millisecond
+   * (`ccEndedByImmunityAura`); `by*` are set when someone else put it there */
+  | {
+      kind: "immunity";
+      spellName: string;
+      byUnitId?: string;
+      byName?: string;
+    };
 
 export function ccLoggedEnd(
   holder: ICombatUnit,
@@ -1598,6 +1606,69 @@ export function ccEndedByOwnPress(
     : undefined;
 }
 
+/**
+ * The control immunity that went up on the holder in the very millisecond
+ * this CC came off — a cause the log gives, with no press to read it from
+ * (2026-10-11). 5e8b11c1 round 4: Mighty Bash on a Slayer warrior APPLIED
+ * 22:28:32.889, REMOVED 22:28:33.131, and in that same .131 his Bladestorm
+ * 446035 APPLIED (its SPELL_CAST_SUCCESS is the next row, .132; the warrior
+ * was 0.24 s into a 4 s stun and DB2 gives Bladestorm no allow-while-stunned
+ * bit — nobody pressed it). `ccEndedByOwnPress` reads PRESSES: the
+ * trinket, a break ability, a pct-100 damage immunity (`immunityBreak`);
+ * Bladestorm is none of those, and the line read `ended early — cause not
+ * logged`.
+ *
+ * Read from the tables the `[IMMUNE — X was up]` tag already reads: the
+ * aura is a listed control immunity (`CC_AVOIDANCE_BUFF_SPELLS`) that covers
+ * this control's school (`applicableCCAvoidanceIds` — a magic-only shield
+ * going up as a physical stun ends is no cause). The SAME millisecond, not a
+ * window: the REMOVED and the APPLIED are written together when one causes
+ * the other, and any slack would be a new threshold. The instance's end must
+ * be a REMOVED row of the log, as for every other logged end.
+ *
+ * It names the aura and who put it there, and says nothing of a press: the
+ * aura can be a proc. Asked after the readers that name a press or a break
+ * line (`ccLoggedEnd`, `ccEndedByOwnPress`), which keep their wording.
+ */
+export function ccEndedByImmunityAura(
+  holder: Pick<ICombatUnit, "id" | "auraEvents">,
+  cc: Pick<ICCInstance, "spellId" | "atSeconds" | "durationSeconds"> &
+    Partial<Pick<ICCInstance, "sourceId" | "stillOnAtRoundEnd">>,
+  matchStartMs: number,
+): Extract<ICcLoggedEnd, { kind: "immunity" }> | undefined {
+  if (cc.stillOnAtRoundEnd) return undefined;
+  const removeMs =
+    matchStartMs + Math.round((cc.atSeconds + cc.durationSeconds) * 1000);
+  const atRemoval = (holder.auraEvents ?? []).filter(
+    (a) => a.logLine.timestamp === removeMs && a.destUnitId === holder.id,
+  );
+  const removedLogged = atRemoval.some(
+    (a) =>
+      a.spellId === cc.spellId &&
+      (a.logLine.event as string) === LogEvent.SPELL_AURA_REMOVED &&
+      (cc.sourceId === undefined || a.srcUnitId === cc.sourceId),
+  );
+  if (!removedLogged) return undefined;
+  const covers = applicableCCAvoidanceIds(cc.spellId, "");
+  const up = atRemoval.find(
+    (a) =>
+      (a.logLine.event as string) === LogEvent.SPELL_AURA_APPLIED &&
+      !!a.spellId &&
+      CC_AVOIDANCE_BUFF_SPELLS.has(a.spellId) &&
+      covers.has(a.spellId),
+  );
+  if (!up?.spellId) return undefined;
+  const spellName = CC_AVOIDANCE_BUFF_SPELLS.get(up.spellId)!;
+  return up.srcUnitId === holder.id
+    ? { kind: "immunity", spellName }
+    : {
+        kind: "immunity",
+        spellName,
+        byUnitId: up.srcUnitId,
+        byName: up.srcUnitName,
+      };
+}
+
 /** A control gone within half a second with no cause in the log: what its
  * line says (`ccUnloggedEarlyEnd`). */
 export const CC_END_CAUSE_NOT_LOGGED = "ended early — cause not logged";
@@ -1606,8 +1677,9 @@ export const CC_END_CAUSE_NOT_LOGGED = "ended early — cause not logged";
  * A control that was gone within half a second with NOTHING in the log to
  * say why — for the line that would otherwise print a bare `<1s` (F06b /
  * F08). The caller has already read every cause the log does state (a break
- * line, a dispel, the holder's death, their own press, a Tremor Totem, the
- * round's end): this is what is left.
+ * line, a dispel, the holder's death, their own press, a control immunity
+ * going up in the removal's millisecond, a Tremor Totem, the round's end):
+ * this is what is left.
  *
  * Read on the render grid, so no number is invented: the line prints `<1s`
  * while the control's own length at its DR level prints a whole second or
@@ -1620,7 +1692,9 @@ export const CC_END_CAUSE_NOT_LOGGED = "ended early — cause not logged";
  * fix-FT/scripts/n4_short_cc_ends.py) none has a dispel, a death, a break
  * line, an immunity row or the round's end at its REMOVED — 19 have nothing
  * there at all, 8 only an unrelated row (the holder's own heal, a proc
- * buff).
+ * buff). (That probe read immunity PRESSES. A control immunity APPLIED in
+ * the REMOVED's millisecond — a Slayer warrior's Bladestorm, 5e8b11c1 — is a
+ * cause the log gives and `ccEndedByImmunityAura`'s to say, 2026-10-11.)
  *
  * Deliberately NOT read, either way:
  *  - a control that ran a whole second or more short of its table length
@@ -1705,18 +1779,30 @@ export function formatCcRefreshed(
 /** `formatCcRefreshed` as the gates read it back. */
 export const CC_REFRESHED_NOTE_RE_SRC = String.raw`(?: \| ${CC_REFRESHED_LEAD}\d+:\d{2}(?:, \d+:\d{2})* — ${CC_REFRESHED_RUNS_ACROSS}(?:; ${CC_REFRESHED_DR_IS_FIRST})?)?`;
 
+/** How an `ended by …` clause begins: `ended by their X` (the holder's own
+ * press, or their own immunity going up) / `ended by <unit>'s X` (an
+ * immunity someone else put on them). One literal for the writer and for
+ * the gate that refuses a second end statement beside
+ * `CC_END_CAUSE_NOT_LOGGED`. */
+export const CC_ENDED_BY_LEAD = "ended by ";
+
 /** The ` | …` clauses a control line carries after its length: the refresh
  * note (`formatCcRefreshed`), then how it ended — `ccLoggedEnd` /
- * `ccEndedByOwnPress` / `ccUnloggedEarlyEnd` — and the pattern the gates
- * read them back with (anchored by the caller). */
-export const CC_LOGGED_END_NOTE_RE_SRC = String.raw`${CC_REFRESHED_NOTE_RE_SRC}(?: \| (?:broken by [^|]+|dispelled by [^|]+|ended at their death|ended by their [^|]+|${CC_END_CAUSE_NOT_LOGGED}))?`;
+ * `ccEndedByOwnPress` / `ccEndedByImmunityAura` / `ccUnloggedEarlyEnd` — and
+ * the pattern the gates read them back with (anchored by the caller). */
+export const CC_LOGGED_END_NOTE_RE_SRC = String.raw`${CC_REFRESHED_NOTE_RE_SRC}(?: \| (?:broken by [^|]+|dispelled by [^|]+|ended at their death|${CC_ENDED_BY_LEAD}[^|]+|${CC_END_CAUSE_NOT_LOGGED}))?`;
 export function formatCcLoggedEnd(
   end: ICcLoggedEnd | undefined,
   label: (name: string, unitId: string | undefined) => string,
 ): string {
   if (!end) return "";
   if (end.kind === "death") return " | ended at their death";
-  if (end.kind === "press") return ` | ended by their ${end.spellName}`;
+  if (end.kind === "press")
+    return ` | ${CC_ENDED_BY_LEAD}their ${end.spellName}`;
+  if (end.kind === "immunity")
+    return end.byUnitId === undefined
+      ? ` | ${CC_ENDED_BY_LEAD}their ${end.spellName}`
+      : ` | ${CC_ENDED_BY_LEAD}${label(end.byName ?? "", end.byUnitId)}'s ${end.spellName}`;
   // a break line with no source: the spell alone
   if (end.kind === "broken" && end.byUnitId === undefined)
     return ` | broken by ${end.spellName}`;

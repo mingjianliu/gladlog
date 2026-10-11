@@ -144,6 +144,7 @@ import {
 } from "@gladlog/analysis/src/utils/castMissRows";
 import {
   CC_END_CAUSE_NOT_LOGGED,
+  CC_ENDED_BY_LEAD,
   CC_LOGGED_END_NOTE_RE_SRC,
   CC_REFRESHED_LEAD,
   CC_REFRESHED_NOTE_RE_SRC,
@@ -1323,7 +1324,7 @@ export function checkKillWindowWithinRound(lines: string[]): string[] {
 
 /** Any other way a control line states its end. */
 const CC_OTHER_END_STATEMENT = new RegExp(
-  String.raw`${CC_STILL_ON_AT_ROUND_END}|broken by |dispelled by |ended at their death|ended by their |broke this CC|ended this CC|\[CLEANSED\]`,
+  String.raw`${CC_STILL_ON_AT_ROUND_END}|broken by |dispelled by |ended at their death|${CC_ENDED_BY_LEAD}|broke this CC|ended this CC|\[CLEANSED\]`,
 );
 
 /**
@@ -1331,7 +1332,9 @@ const CC_OTHER_END_STATEMENT = new RegExp(
  * gone within half a second and the log names nothing that ended it"
  * (`ccUnloggedEarlyEnd`) — sits only where that is what the line shows: on a
  * `[CC ON TEAM]` / `[CC ON ENEMY]` line that prints `<1s` and states no other
- * end (a break, a dispel, the holder's death or press, a trinket / Tremor /
+ * end (a break, a dispel, the holder's death or press, a control immunity
+ * that went up as it came off — `ended by their X` / `ended by <unit>'s X`,
+ * the producer's `CC_ENDED_BY_LEAD` — a trinket / Tremor /
  * immunity break, `[CLEANSED]`, the round's end). A second end statement
  * beside it is a contradiction; a whole-second length beside it is the
  * claim the producer refuses to make (a control shorter than its table
@@ -1347,10 +1350,8 @@ export function checkCcEndCauseNotLogged(lines: string[]): string[] {
       );
     if (!/^\s*\d+:\d{2}\s+\[CC ON (?:TEAM|ENEMY)\]/.test(line))
       return fail("不在 [CC ON TEAM] / [CC ON ENEMY] 行上");
-    if (!/\) \| <1s|\) \(<1s\)/.test(line))
-      fail("所在的行没有印 <1s");
-    if (CC_OTHER_END_STATEMENT.test(line))
-      fail("与该行另一处结束说明并存");
+    if (!/\) \| <1s|\) \(<1s\)/.test(line)) fail("所在的行没有印 <1s");
+    if (CC_OTHER_END_STATEMENT.test(line)) fail("与该行另一处结束说明并存");
   });
   return failures;
 }
@@ -1401,12 +1402,9 @@ export function checkCcRefreshedNote(lines: string[]): string[] {
             : null;
     for (const m of note.matchAll(/(\d+):(\d{2})/g)) {
       const at = Number(m[1]) * 60 + Number(m[2]);
-      if (at < start)
-        fail(`的刷新时刻 ${m[0]} 早于该行的起点`);
+      if (at < start) fail(`的刷新时刻 ${m[0]} 早于该行的起点`);
       else if (seconds !== null && at > start + seconds + 1)
-        fail(
-          `的刷新时刻 ${m[0]} 晚于该行印出的区间(起点 + ${seconds}s)`,
-        );
+        fail(`的刷新时刻 ${m[0]} 晚于该行印出的区间(起点 + ${seconds}s)`);
     }
   });
   return failures;

@@ -41,7 +41,12 @@ const cc = (
   ...over,
 });
 
-function render(ccInstances: unknown[], pressMs: number | null) {
+function render(
+  ccInstances: unknown[],
+  pressMs: number | null,
+  /** more aura rows on the enemy (any order) */
+  extraAuras: any[] = [],
+) {
   const owner = makeUnit("o", { name: "Me" });
   const mate = makeUnit("m", { name: "Mate" });
   const enemy = makeUnit("e", {
@@ -55,7 +60,8 @@ function render(ccInstances: unknown[], pressMs: number | null) {
       // a later Fear that runs its course
       aura(LogEvent.SPELL_AURA_APPLIED, FEAR, 40_100),
       aura(LogEvent.SPELL_AURA_REMOVED, FEAR, 44_100),
-    ],
+      ...extraAuras,
+    ].sort((a, b) => a.timestamp - b.timestamp),
     spellCastEvents:
       pressMs === null
         ? []
@@ -143,6 +149,37 @@ describe("[CC ON ENEMY] — length and end (FT-T09)", () => {
     expect(render([cc(FEAR, "Fear", 40.1, 4)], null)[0]).toMatch(
       /← Fear \(by \S+\) \(4s\)$/,
     );
+  });
+
+  it("a control immunity that went up on the target in the REMOVED's millisecond is the end the line states — `cause not logged` only when no such row exists", () => {
+    // 5e8b11c1 0:15: Mighty Bash 0.242 s into its 4 s, the warrior's
+    // Bladestorm APPLIED in the ms of its REMOVED
+    const MIGHTY_BASH = "5211";
+    const BLADESTORM = "446035";
+    const bash = [
+      aura(LogEvent.SPELL_AURA_APPLIED, MIGHTY_BASH, 15_000),
+      aura(LogEvent.SPELL_AURA_REMOVED, MIGHTY_BASH, 15_242),
+    ];
+    const storm = (ms: number) => ({
+      ...aura(LogEvent.SPELL_AURA_APPLIED, BLADESTORM, ms),
+      srcUnitId: "e",
+      srcUnitName: "Enemy",
+    });
+    const instance = cc(MIGHTY_BASH, "Mighty Bash", 15, 0.242, {
+      expectedDurationSeconds: 4,
+    });
+    const withStorm = render([instance], null, [...bash, storm(15_242)]);
+    expect(withStorm).toHaveLength(1);
+    expect(withStorm[0]).toMatch(
+      /← Mighty Bash \(by \S+\) \(<1s\) \| ended by their Bladestorm$/,
+    );
+    // one millisecond later it is not this control's end: the note is back
+    for (const extra of [[...bash, storm(15_243)], bash]) {
+      const lines = render([instance], null, extra);
+      expect(lines[0]).toMatch(
+        /← Mighty Bash \(by \S+\) \(<1s\) \| ended early — cause not logged$/,
+      );
+    }
   });
 
   it("a control the round ended on prints the time to the round's end, as that", () => {

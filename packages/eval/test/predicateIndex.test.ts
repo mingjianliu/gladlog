@@ -2723,6 +2723,17 @@ const INDEX: PredicateRow[] = [
     symbol: "CC_END_CAUSE_NOT_LOGGED",
     mod: ccTrinketAnalysis,
   },
+  // 2026-10-11: a control immunity that went up in the REMOVED's millisecond
+  {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "ccEndedByImmunityAura",
+    mod: ccTrinketAnalysis,
+  },
+  {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "CC_ENDED_BY_LEAD",
+    mod: ccTrinketAnalysis,
+  },
   {
     file: `${A}/utils/ccTrinketAnalysis.ts`,
     symbol: "CC_BREAKING_HIT_LEAD",

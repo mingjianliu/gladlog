@@ -14,6 +14,7 @@ import { CombatUnitReaction } from "@gladlog/parser-compat";
 import { BACKLASH_AURA_CC_TYPE, backlashCcTag } from "../../data/backlashCc";
 import {
   ccAvoidedOutcomeText,
+  ccEndedByImmunityAura,
   ccEndedByOwnPress,
   ccLoggedEnd,
   ccUnloggedEarlyEnd,
@@ -215,7 +216,10 @@ export function emitTrinketCcOnTeamEntries(
       const loggedEnd =
         !trinketBroke && !isCleansed && !tremor && !immunity && ccdUnit
           ? (ccLoggedEnd(ccdUnit, cc, matchStartMs) ??
-            ccEndedByOwnPress(ccdUnit, cc, matchStartMs))
+            ccEndedByOwnPress(ccdUnit, cc, matchStartMs) ??
+            // …or a control immunity that went up on them in the removal's
+            // millisecond (a Slayer's Bladestorm: no press to read)
+            ccEndedByImmunityAura(ccdUnit, cc, matchStartMs))
           : undefined;
       // F06b / F08: gone within half a second with nothing in the log to
       // say why — said, not left as a bare `<1s` (`ccUnloggedEarlyEnd`)

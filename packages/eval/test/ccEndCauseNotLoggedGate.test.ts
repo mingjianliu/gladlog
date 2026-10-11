@@ -47,6 +47,24 @@ describe("checkCcEndCauseNotLogged", () => {
     expect(fails.filter((f) => f.includes("没有印 <1s"))).toHaveLength(1);
   });
 
+  it("2026-10-11: a control immunity that went up as the control came off is an end statement — in either form, alone it passes, beside the note it fails", () => {
+    // 5e8b11c1 0:15 as PV373 printed it, and as the log reads
+    const head =
+      "0:15  [CC ON ENEMY]   6(AWarrior) ← Mighty Bash (by 2(BDruid)) (<1s) [DR: Stun Full]";
+    const own = `${head} | ended by their Bladestorm`;
+    const other =
+      "0:40  [CC ON TEAM]   1(UDKnight) ← Kidney Shot (by 4(ARogue)) | <1s [DR: Stun Full] | ended by 3(HPaladin)'s Blessing of Protection";
+    expect(checkCcEndCauseNotLogged([`${head}${NOTE}`, own, other])).toEqual(
+      [],
+    );
+    const fails = checkCcEndCauseNotLogged([
+      `${own}${NOTE}`,
+      `${other}${NOTE}`,
+    ]);
+    expect(fails).toHaveLength(2);
+    for (const f of fails) expect(f).toContain("与该行另一处结束说明并存");
+  });
+
   it("fails the note on any other line family", () => {
     const fails = checkCcEndCauseNotLogged([
       `1:20  [SILENCE]   3(RShaman) ← Silence (by 4(SPriest)) | <1s${NOTE}`,

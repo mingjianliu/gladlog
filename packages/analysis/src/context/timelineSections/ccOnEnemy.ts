@@ -14,6 +14,7 @@ import { CombatUnitReaction } from "@gladlog/parser-compat";
 import { BACKLASH_AURA_CC_TYPE, backlashCcTag } from "../../data/backlashCc";
 import { BREAK_RACIAL_SPELL_IDS } from "../../data/racialAbilities";
 import {
+  ccEndedByImmunityAura,
   ccEndedByOwnPress,
   ccLoggedEnd,
   ccUnloggedEarlyEnd,
@@ -221,7 +222,10 @@ export function emitCcOnEnemyEntries(
                 trinketBroke
                   ? ccEndedByOwnPress(enemyUnit, cc, matchStartMs)
                   : (ccLoggedEnd(enemyUnit, cc, matchStartMs) ??
-                      ccEndedByOwnPress(enemyUnit, cc, matchStartMs)),
+                      ccEndedByOwnPress(enemyUnit, cc, matchStartMs) ??
+                      // …or a control immunity that went up on them in the
+                      // removal's millisecond (a Slayer's Bladestorm: no press)
+                      ccEndedByImmunityAura(enemyUnit, cc, matchStartMs)),
                 (name, id) => {
                   // a player is labelled by the roster's name for that id —
                   // the log can spell one player two ways (138e632d)
