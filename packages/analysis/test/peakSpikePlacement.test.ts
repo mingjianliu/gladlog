@@ -8,18 +8,22 @@ import {
 import { describe, expect, it } from "vitest";
 
 import {
-  buildMatchTimeline,
-  BuildMatchTimelineParams,
-} from "../src/context/matchTimeline";
-import {
   creditSpikesToWindows,
   DMG_SPIKE_THRESHOLD,
+  isPointBucket,
   NO_CREDITED_SPIKE_CLAUSE,
   PEAK_SPIKE_MARKERS,
   peakSpikeMarker,
   peakSpikePlacement,
   spikeWindowOverlapSeconds,
 } from "../src";
+import {
+  buildMatchTimeline,
+  BuildMatchTimelineParams,
+} from "../src/context/matchTimeline";
+import { emitDmgSpikeEntries } from "../src/context/matchTimelineSections";
+import { selectPressureWindows } from "../src/utils/cooldowns";
+import { makeDamageEvent, makeUnit } from "./ported/testHelpers";
 
 function mkUnit(
   id: string,
@@ -451,6 +455,182 @@ describe("[OFFENSIVE WINDOW] names only a spike that overlaps it, and each spike
     );
     expect(headers).toEqual([
       "0:32  [OFFENSIVE WINDOW]   0:32–1:10 | peak spike 1.90M on Mate (Enhancement Shaman) over 0:57–1:07 | CDs: Avatar@0:32",
+    ]);
+  });
+});
+
+// Post-hoc review 45-FT-98, finding 4: a bucket closed in the second it opened
+// (T12 ① c closes it at its victim's death / the round's end) prints
+// `m:ss–m:ss` on one second, has no length to share with any window, and was
+// credited to none.
+describe("a [DMG SPIKE] bucket that prints one second is in the window whose span holds it", () => {
+  const T0 = 1_000_000;
+  const at = (s: number) => T0 + s * 1000;
+  const victim = (hits: Array<[number, number]>, deathS?: number) =>
+    makeUnit("f1", {
+      name: "Victim-Realm",
+      spec: CombatUnitSpec.Warlock_Affliction,
+      info: {},
+      damageIn: hits.map(([s, amount]) => makeDamageEvent(at(s), amount, "f1")),
+      deathRecords: deathS === undefined ? [] : [{ timestamp: at(deathS) }],
+    });
+  const combatOf = (units: ReturnType<typeof makeUnit>[], bracket: string) =>
+    ({
+      startTime: T0,
+      endTime: at(60),
+      startInfo: { bracket },
+      units: Object.fromEntries(units.map((u) => [u.id, u])),
+    }) as never;
+  const spikeLines = (
+    unit: ReturnType<typeof makeUnit>,
+    combat: Parameters<typeof selectPressureWindows>[1],
+  ) => {
+    const out: string[] = [];
+    emitDmgSpikeEntries({
+      pressureWindows: selectPressureWindows([unit], combat).listed,
+      friends: [unit],
+      matchStartMs: T0,
+      pid: (n) => n.split("-")[0]!,
+      addEntry: (_t, ...ls) =>
+        out.push(...ls.filter((l) => typeof l === "string")),
+    });
+    return out.filter((l) => l.includes("[DMG SPIKE]"));
+  };
+
+  // The premise, on the real selection: the review's bucket exists.
+  it("selectPressureWindows does list one: the hits of the death second, when no earlier bucket of the unit reaches them", () => {
+    // 0.50M at 0:30 (its bucket runs to 0:40), then 0.40M inside the death second
+    const dead = victim(
+      [
+        [30, 500_000],
+        [45.05, 200_000],
+        [45.6, 200_000],
+      ],
+      45.6,
+    );
+    const combat = combatOf([dead], "3v3");
+    const { listed } = selectPressureWindows([dead], combat);
+    expect(listed.map((b) => [b.fromSeconds, b.toSeconds])).toEqual([
+      [30, 40],
+      [45.05, 45.6],
+    ]);
+    expect(listed[1]!.totalDamage).toBeGreaterThanOrEqual(DMG_SPIKE_THRESHOLD);
+    expect(isPointBucket(45.05, 45.6)).toBe(true);
+    expect(isPointBucket(30, 40)).toBe(false);
+    expect(spikeLines(dead, combat)[1]).toContain("0:45–0:45  [DMG SPIKE]");
+
+    // the killing blow alone: the bucket opens and closes on one timestamp
+    const oneShot = victim([[45.2, 400_000]], 45.2);
+    expect(
+      selectPressureWindows([oneShot], combatOf([oneShot], "3v3")).listed,
+    ).toMatchObject([{ fromSeconds: 45.2, toSeconds: 45.2 }]);
+
+    // …and at a Solo Shuffle round's end, on a unit that lived
+    const survivor = victim([[45.05, 400_000]]);
+    const other = makeUnit("f2", {
+      name: "Other-Realm",
+      info: {},
+      deathRecords: [{ timestamp: at(45.6) }],
+    });
+    expect(
+      selectPressureWindows(
+        [survivor],
+        combatOf([survivor, other], "Rated Solo Shuffle"),
+      ).listed,
+    ).toMatchObject([{ fromSeconds: 45.05, toSeconds: 45.6 }]);
+  });
+
+  it("spikeWindowOverlapSeconds: one second in every window whose printed span holds it, both ends included", () => {
+    // inside a window; at its printed end (the reviewed case); at its start
+    expect(spikeWindowOverlapSeconds(40, 60, 45.05, 45.6)).toBe(1);
+    expect(spikeWindowOverlapSeconds(40, 45.6, 45.05, 45.6)).toBe(1);
+    expect(spikeWindowOverlapSeconds(45.3, 60, 45.05, 45.6)).toBe(1);
+    // a window that prints 0:45–0:45 itself
+    expect(spikeWindowOverlapSeconds(45.1, 45.6, 45.05, 45.6)).toBe(1);
+    // not a window that ended the second before, or opens the second after
+    expect(spikeWindowOverlapSeconds(30, 44.9, 45.05, 45.6)).toBe(0);
+    expect(spikeWindowOverlapSeconds(46, 60, 45.05, 45.6)).toBe(0);
+    // a bucket WITH a length keeps the open far end: one starting in the
+    // second the window ends still shares nothing with it
+    expect(spikeWindowOverlapSeconds(40, 45.6, 45.05, 46.2)).toBe(0);
+    expect(spikeWindowOverlapSeconds(40, 45.6, 44.9, 45.6)).toBe(1);
+  });
+
+  it("peakSpikePlacement agrees: in the window's last second it is inside — no `(lands after window)` on a credited spike", () => {
+    expect(peakSpikePlacement(45.6, 45.05, 45.6)).toBe("inside");
+    expect(peakSpikePlacement(60, 45.05, 45.6)).toBe("inside");
+    expect(peakSpikePlacement(44.9, 45.05, 45.6)).toBe("after");
+    // unchanged for a bucket with a length
+    expect(peakSpikePlacement(45.6, 45.05, 55)).toBe("after");
+    // wherever the overlap is positive the placement is not "after", and
+    // the reverse — the two readings of one pair cannot disagree
+    for (const wTo of [44, 45, 46, 50])
+      for (const [sFrom, sTo] of [
+        [45, 45],
+        [45, 46],
+        [44, 45],
+        [46, 46],
+        [40, 50],
+      ] as const)
+        expect(
+          spikeWindowOverlapSeconds(30, wTo, sFrom, sTo) > 0,
+          `window 30–${wTo}, spike ${sFrom}–${sTo}`,
+        ).toBe(peakSpikePlacement(wTo, sFrom, sTo) !== "after");
+  });
+
+  it("creditSpikesToWindows: among the windows that hold it, the one that starts first", () => {
+    const point = [{ fromSeconds: 45.05, toSeconds: 45.6 }];
+    const A = { fromSeconds: 40, toSeconds: 45.6 };
+    const B = { fromSeconds: 44, toSeconds: 60 };
+    const C = { fromSeconds: 46, toSeconds: 60 };
+    expect(creditSpikesToWindows([A], point)).toEqual([0]);
+    expect(creditSpikesToWindows([B, A], point)).toEqual([1]);
+    expect(creditSpikesToWindows([C], point)).toEqual([-1]);
+    // beside a spike with a length: each is credited on its own
+    expect(
+      creditSpikesToWindows(
+        [A, C],
+        [...point, { fromSeconds: 47, toSeconds: 57 }],
+      ),
+    ).toEqual([0, 1]);
+  });
+
+  const LETHAL = DMG_SPIKE_THRESHOLD + 100_000; // 0.40M
+  it("the header: a Solo Shuffle window cut at the round-ending death names the death second's spike (it said none was credited)", () => {
+    expect(
+      renderHeaders(
+        [{ fromSeconds: 40, toSeconds: 60 }],
+        [{ fromSeconds: 45.05, toSeconds: 45.6, totalDamage: LETHAL }],
+        { bracket: "Rated Solo Shuffle", ownerDiedAtMs: 45_600 },
+      ),
+    ).toEqual([
+      "0:40  [OFFENSIVE WINDOW]   0:40–0:45 | peak spike 0.40M on Mate (Enhancement Shaman) over 0:45–0:45 | CDs: Avatar@0:40",
+    ]);
+  });
+
+  it("the header: in a 3v3 the window runs on past the death, and names the spike in its middle", () => {
+    expect(
+      renderHeaders(
+        [{ fromSeconds: 40, toSeconds: 60 }],
+        [{ fromSeconds: 45.05, toSeconds: 45.6, totalDamage: LETHAL }],
+      ),
+    ).toEqual([
+      "0:40  [OFFENSIVE WINDOW]   0:40–1:00 | peak spike 0.40M on Mate (Enhancement Shaman) over 0:45–0:45 | CDs: Avatar@0:40",
+    ]);
+  });
+
+  it("a larger spike with a length credited to the same window is still the peak", () => {
+    expect(
+      renderHeaders(
+        [{ fromSeconds: 30, toSeconds: 60 }],
+        [
+          { fromSeconds: 45.05, toSeconds: 45.6, totalDamage: LETHAL },
+          { fromSeconds: 32, toSeconds: 42, totalDamage: BIG },
+        ],
+        { bracket: "Rated Solo Shuffle", ownerDiedAtMs: 45_600 },
+      ),
+    ).toEqual([
+      "0:30  [OFFENSIVE WINDOW]   0:30–0:45 | peak spike 1.90M on Mate (Enhancement Shaman) over 0:32–0:42 | CDs: Avatar@0:30",
     ]);
   });
 });

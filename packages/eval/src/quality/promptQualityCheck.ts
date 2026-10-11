@@ -3688,6 +3688,10 @@ export function checkDmgSpikeListCap(lines: string[]): string[] {
  *  - it is the largest credited to the window;
  *  - a header that says none is credited has none.
  *
+ * "Overlaps" is the producer's `spikeWindowOverlapSeconds`, whole: a spike
+ * line that prints one second (`0:45–0:45`, a bucket closed in the second it
+ * opened) is in every window whose printed span holds that second.
+ *
  * Before the rule: 444 of 8,154 headers on the 605 capture named a spike that
  * began after the window ended, 180 spikes were named on two headers.
  */

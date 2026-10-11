@@ -18,6 +18,11 @@ export const PEAK_SPIKE_MARKERS: Record<PeakSpikePlacement, string> = {
  * - `"after"`: spikeFrom >= windowTo (e.g. 1:15–1:35 window with 1:37–1:47 spike)
  * - `"runs-past"`: spikeFrom < windowTo < spikeTo (starts inside, ends after)
  * - `"inside"`: spikeTo <= windowTo (entirely within or ending exactly at window edge)
+ *
+ * A bucket that prints ONE second (`isPointBucket` — closed in the second it
+ * opened) both starts and ends "exactly at the window edge" when that second
+ * is the window's last: it is `"inside"`, as `spikeWindowOverlapSeconds`
+ * counts it in the window; it is `"after"` only from the next second on.
  */
 export function peakSpikePlacement(
   windowToSeconds: number,
@@ -28,7 +33,9 @@ export function peakSpikePlacement(
   const sFrom = toRenderSecond(spikeFromSeconds);
   const sTo = toRenderSecond(spikeToSeconds);
 
-  if (sFrom >= wTo) {
+  if (
+    isPointBucket(spikeFromSeconds, spikeToSeconds) ? sFrom > wTo : sFrom >= wTo
+  ) {
     return "after";
   }
   if (sTo > wTo) {
@@ -49,11 +56,34 @@ export function peakSpikeMarker(placement: PeakSpikePlacement): string {
 export const NO_CREDITED_SPIKE_CLAUSE = "no listed [DMG SPIKE] credited to it";
 
 /**
+ * Whether a `[DMG SPIKE]` bucket prints one second — both ends on the same
+ * render second (`0:45–0:45`). A bucket closes at its victim's death or at the
+ * round's end (`selectPressureWindows`, T12 ① c), so one that OPENED in that
+ * second has no displayed length: the hits that killed the unit, or the last
+ * ones of the round.
+ */
+export function isPointBucket(
+  spikeFromSeconds: number,
+  spikeToSeconds: number,
+): boolean {
+  return toRenderSecond(spikeToSeconds) <= toRenderSecond(spikeFromSeconds);
+}
+
+/**
  * How many **displayed** seconds a spike's bucket and an offensive window
  * share: both intervals floored onto the render grid first (the rounding
  * `fmtTime` prints), so the gate's re-parse of the two `M:SS–M:SS` pairs gives
  * the same number. Open at the far end, like `peakSpikePlacement`'s "after": a
  * spike that starts in the second the window ends shares nothing with it.
+ *
+ * A bucket that prints one second (`isPointBucket`) has no length to share
+ * and would overlap nothing — not even the window it sits in the middle of
+ * (post-hoc review 45-FT-98, finding 4). It is counted as that one second, in
+ * every window whose printed span holds it, BOTH ends included: `0:45–0:45`
+ * is in `0:40–0:45`. The far end is closed for it because that is where such
+ * a bucket is — it closed at the round's end or its victim's death, and a
+ * header cut at the round's end prints that same second as its own end; left
+ * open, no window of a Solo Shuffle round could ever hold one.
  */
 export function spikeWindowOverlapSeconds(
   windowFromSeconds: number,
@@ -61,14 +91,13 @@ export function spikeWindowOverlapSeconds(
   spikeFromSeconds: number,
   spikeToSeconds: number,
 ): number {
-  const from = Math.max(
-    toRenderSecond(windowFromSeconds),
-    toRenderSecond(spikeFromSeconds),
-  );
-  const to = Math.min(
-    toRenderSecond(windowToSeconds),
-    toRenderSecond(spikeToSeconds),
-  );
+  const wFrom = toRenderSecond(windowFromSeconds);
+  const wTo = toRenderSecond(windowToSeconds);
+  const sFrom = toRenderSecond(spikeFromSeconds);
+  if (isPointBucket(spikeFromSeconds, spikeToSeconds))
+    return wFrom <= sFrom && sFrom <= wTo ? 1 : 0;
+  const from = Math.max(wFrom, sFrom);
+  const to = Math.min(wTo, toRenderSecond(spikeToSeconds));
   return Math.max(0, to - from);
 }
 
@@ -90,6 +119,9 @@ interface CreditSpan {
  * - One spike, one window: the one it overlaps longest; on a tie the window
  *   that starts first, then the one listed first. No threshold — the longest
  *   overlap is a comparison between the candidates, not against a constant.
+ * - A bucket that prints one second (`isPointBucket`) is one second in every
+ *   window whose printed span holds it — so among them it goes, by the same
+ *   tie rule, to the one that starts first.
  *
  * Used by the `[OFFENSIVE WINDOW]` renderer (`emitOffensiveWindowEntries`)
  * and re-run by the gate on the rendered headers and `[DMG SPIKE]` lines.

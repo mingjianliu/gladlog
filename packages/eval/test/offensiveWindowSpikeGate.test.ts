@@ -151,6 +151,75 @@ describe("checkOffensiveWindowSpikeCredit", () => {
     ).toContain("对应的 [DMG SPIKE] 行写 1.61M");
   });
 
+  // Post-hoc review 45-FT-98, finding 4: a bucket closed in the second it
+  // opened prints one second (`0:45–0:45 … in 0s`) and is in the window whose
+  // printed span holds that second, ends included.
+  describe("a [DMG SPIKE] line that prints one second", () => {
+    const point = `0:45–0:45  [DMG SPIKE]   1(BDruid) (Balance Druid): 0.40M in 0s (400k DPS)`;
+
+    it("passes: named on the window that ends in that second, with no marker — and the marker gate agrees", () => {
+      const lines = [
+        header("0:40", "0:40–0:45", peak("0.40", "1(BDruid)", "0:45–0:45")),
+        point,
+      ];
+      expect(checkOffensiveWindowSpikeCredit(lines)).toEqual([]);
+      expect(checkOffensiveWindowSpikeMarker(lines)).toEqual([]);
+    });
+
+    it("fails a header that says none is credited while that spike sits in its last second (what the producer printed)", () => {
+      const fails = checkOffensiveWindowSpikeCredit([
+        header("0:40", "0:40–0:45", NONE),
+        point,
+      ]);
+      expect(fails).toHaveLength(1);
+      expect(fails[0]).toContain(
+        "0.40M on 1(BDruid) over 0:45–0:45 归属本窗口",
+      );
+    });
+
+    it("fails `(lands after window)` on it; a window that ended the second before does not hold it", () => {
+      expect(
+        checkOffensiveWindowSpikeMarker([
+          header(
+            "0:40",
+            "0:40–0:45",
+            peak("0.40", "1(BDruid)", "0:45–0:45", " (lands after window)"),
+          ),
+        ])[0],
+      ).toContain("不应有标注 (lands after window)");
+      expect(
+        checkOffensiveWindowSpikeCredit([
+          header("0:30", "0:30–0:44", NONE),
+          point,
+        ]),
+      ).toEqual([]);
+      expect(
+        checkOffensiveWindowSpikeCredit([
+          header("0:30", "0:30–0:44", peak("0.40", "1(BDruid)", "0:45–0:45")),
+          point,
+        ])[0],
+      ).toContain("与窗口没有交集");
+    });
+
+    it("two windows hold it: it is the earlier one's", () => {
+      expect(
+        checkOffensiveWindowSpikeCredit([
+          header("0:40", "0:40–0:45", peak("0.40", "1(BDruid)", "0:45–0:45")),
+          header("0:43", "0:43–0:45", NONE),
+          point,
+        ]),
+      ).toEqual([]);
+      const fails = checkOffensiveWindowSpikeCredit([
+        header("0:40", "0:40–0:45", NONE),
+        header("0:43", "0:43–0:45", peak("0.40", "1(BDruid)", "0:45–0:45")),
+        point,
+      ]);
+      expect(fails).toHaveLength(2);
+      expect(fails[0]).toContain("line 1");
+      expect(fails[1]).toContain("归属 0:40–0:45 的窗口");
+    });
+  });
+
   it("fails on a clause it cannot read; ignores the legend's mention of the tag", () => {
     expect(
       checkOffensiveWindowSpikeCredit([
