@@ -1,4 +1,4 @@
-import { LogEvent } from "@gladlog/parser-compat";
+import { CombatUnitType, LogEvent } from "@gladlog/parser-compat";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { ensureAnalysisData } from "../src/data/ensure";
@@ -147,6 +147,94 @@ describe("observedEffectEndSeconds", () => {
     expect(
       observedEffectEndSeconds(caster, AVATAR, 10, Infinity, combat),
     ).toBeNull();
+  });
+
+  // FT F13 (9c6ab747): The Hunt's DoT left its player target at 83.9 and sat
+  // on a Jade Serpent Statue until 85.1; a kick at 84.7 read the cooldown as
+  // still running.
+  describe("an effect on a summon is not the player's cooldown running", () => {
+    const debuff = (
+      ev: LogEvent,
+      s: number,
+      dest: string,
+    ): Record<string, unknown> => ({
+      ...makeAuraEvent(ev, AVATAR, T0 + s * 1000, "c1", dest, "DEBUFF"),
+      srcUnitName: "Caster",
+    });
+    const sceneWithSummon = (
+      type: CombatUnitType,
+      playerAuras: Array<[LogEvent, number]>,
+      summonAuras: Array<[LogEvent, number]>,
+    ) => {
+      const caster = makeUnit("c1", { name: "Caster" });
+      const target = makeUnit("t1", {
+        name: "Target",
+        auraEvents: playerAuras.map(([ev, s]) => debuff(ev, s, "t1")),
+      } as never);
+      const summon = {
+        ...makeUnit("s1", {
+          name: "Statue",
+          auraEvents: summonAuras.map(([ev, s]) => debuff(ev, s, "s1")),
+        } as never),
+        type,
+      };
+      const combat = {
+        startTime: T0,
+        endTime: T0 + 200_000,
+        units: { c1: caster, t1: target, s1: summon },
+      } as never;
+      return { caster, combat };
+    };
+
+    for (const type of [
+      CombatUnitType.Guardian,
+      CombatUnitType.Pet,
+      CombatUnitType.NPC,
+    ])
+      it(`a copy that outlasts the player's on a unit of type ${CombatUnitType[type]} does not lengthen the span`, () => {
+        const { caster, combat } = sceneWithSummon(
+          type,
+          [
+            [LogEvent.SPELL_AURA_APPLIED, 10],
+            [LogEvent.SPELL_AURA_REMOVED, 16],
+          ],
+          [
+            [LogEvent.SPELL_AURA_APPLIED, 11.2],
+            [LogEvent.SPELL_AURA_REMOVED, 17.2],
+          ],
+        );
+        expect(
+          observedEffectEndSeconds(caster, AVATAR, 10, Infinity, combat),
+        ).toBe(16);
+      });
+
+    it("a summon's unclosed copy does not hide the end the log shows on the player", () => {
+      const { caster, combat } = sceneWithSummon(
+        CombatUnitType.Pet,
+        [
+          [LogEvent.SPELL_AURA_APPLIED, 10],
+          [LogEvent.SPELL_AURA_REMOVED, 16],
+        ],
+        [[LogEvent.SPELL_AURA_APPLIED, 10.1]],
+      );
+      expect(
+        observedEffectEndSeconds(caster, AVATAR, 10, Infinity, combat),
+      ).toBe(16);
+    });
+
+    it("an effect seen on a summon only is no observation: null, the official length stands", () => {
+      const { caster, combat } = sceneWithSummon(
+        CombatUnitType.Guardian,
+        [],
+        [
+          [LogEvent.SPELL_AURA_APPLIED, 10],
+          [LogEvent.SPELL_AURA_REMOVED, 13],
+        ],
+      );
+      expect(
+        observedEffectEndSeconds(caster, AVATAR, 10, Infinity, combat),
+      ).toBeNull();
+    });
   });
 
   it("another caster's aura, or one that belongs to the next press, is not this cast's", () => {

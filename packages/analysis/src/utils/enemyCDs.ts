@@ -1,5 +1,6 @@
 import {
   AtomicArenaCombat,
+  CombatUnitType,
   ICombatUnit,
   LogEvent,
 } from "@gladlog/parser-compat";
@@ -178,7 +179,12 @@ export const EFFECT_CHAIN_GAP_S = 0.5;
 export const EFFECT_START_BEFORE_S = 0.5;
 export const EFFECT_START_AFTER_S = 2;
 
-/** Every unit's aura intervals, once per combat. */
+/** Every PLAYER unit's aura intervals, once per combat. A summon's auras are
+ * left out (FT F13): `observedEffectEndSeconds` answers "until when was this
+ * player's cooldown running", and an effect that lives on only on a pet, a
+ * totem or a guardian is not that — 9c6ab747: The Hunt's DoT left its player
+ * target at 83.9 and sat on a Jade Serpent Statue until 85.1, and a kick at
+ * 84.7 read `ourBurst=The Hunt`. */
 const AURA_INDEX = new WeakMap<
   object,
   Array<{ destId: string; iv: IAuraInterval }>
@@ -187,9 +193,11 @@ function auraIndexOf(combat: AtomicArenaCombat) {
   let idx = AURA_INDEX.get(combat);
   if (!idx) {
     idx = [];
-    for (const u of Object.values(combat.units ?? {}))
+    for (const u of Object.values(combat.units ?? {})) {
+      if (u.type !== CombatUnitType.Player) continue;
       for (const iv of buildAuraIntervals(u, combat))
         idx.push({ destId: u.id, iv });
+    }
     AURA_INDEX.set(combat, idx);
   }
   return idx;
@@ -203,8 +211,9 @@ function auraIndexOf(combat: AtomicArenaCombat) {
  * floor half landed 2026-10-02): `burstCastSpan` ends at the observed aura
  * chain of the cast. The cast's effect auras are its own id plus the
  * cast→effect table's (`castAndEffectIds`, CROSS-THEME G3, ruling A10), on
- * ANY unit (The Hunt's DoT is on its target, Strike of the Windlord's debuff
- * too), applied by the caster: an interval that starts in [cast −
+ * any PLAYER unit (The Hunt's DoT is on its target, Strike of the Windlord's
+ * debuff too; a copy on a pet, a totem or a guardian is not read — FT F13,
+ * `auraIndexOf`), applied by the caster: an interval that starts in [cast −
  * `EFFECT_START_BEFORE_S`, cast + `EFFECT_START_AFTER_S`] (before the
  * caster's next press of the same spell), extended by re-applications on the
  * same unit no more than `EFFECT_CHAIN_GAP_S` after it ended. Several chains
