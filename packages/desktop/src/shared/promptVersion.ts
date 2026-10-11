@@ -1355,5 +1355,18 @@
  *  [DAMPENING ALERT: 30%] read the derived value again; a round whose first
  *  logged line is a stack drop, or that logged none, still states no start.
  *  No candidate changes.
+ *  v370 (2026-10-10, FT-T16 D15 (a) + (d), user "按你的建议来" after the
+ *  real-match samples): two fact texts. The CC USE `Counts:` line gives a
+ *  control with a cast time whose cast bar was started more often than it
+ *  went off as `Cyclone cast bar started 4×, went off 0×` — an off-ledger
+ *  control that never went off had no entry at all — and the section says
+ *  that `went off` is the cast completing, not the control landing. A
+ *  `[CC AVOIDED?]` line whose cast has a SPELL_MISSED row in the log reads
+ *  `logged IMMUNE` / `logged MISS` / `logged REFLECT` where it read `did not
+ *  land`. With it, the kit's `[UNUSED — started N×, never finished]` note
+ *  reads the same cast bars as CC USE (a variant id of the same cooldown now
+ *  counts). No candidate changes. The other two D15 line kinds (an
+ *  uncompleted cast per line, a friendly control that was immune / missed)
+ *  are not in this version.
  */
-export const PROMPT_VERSION = 369;
+export const PROMPT_VERSION = 370;
