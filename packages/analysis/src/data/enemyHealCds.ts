@@ -23,4 +23,12 @@ export const ENEMY_HEAL_CD_IDS: ReadonlySet<string> = new Set<string>([
   "374968", // Time Spiral — Preservation Evoker
   "370537", // Stasis — Preservation Evoker
   "216331", // Avenging Crusader — Holy Paladin (A27 = B)
+  // Incarnation: Tree of Life — Restoration Druid (F11, 2026-10-11): the
+  // spec's three-minute throughput major ("树肯定算,是大技能", ruling
+  // 2026-09-14 in `CRISIS_PROTECTIVE_ANSWER_IDS`), on no roster — an enemy
+  // druid's press was visible only as a `(passive)` part of the
+  // [MINOR DISPELS] fold (605-file capture: 337 such lines, 0 press lines).
+  // The line takes presses only: a shift back into the form is not one
+  // (`isFormReshiftCast`).
+  "33891",
 ]);

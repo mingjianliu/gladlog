@@ -95,8 +95,13 @@ import {
 } from "@gladlog/analysis/src/data/burstWindowPrior";
 import { lookupCdTriggerPrior } from "@gladlog/analysis/src/data/cdTriggerPrior";
 import { classMetadata } from "@gladlog/analysis/src/data/classSpells";
+import { FORM_COOLDOWN_BUFF_BY_CAST_ID } from "@gladlog/analysis/src/data/druidForms";
 import { lookupKickPriorityPrior } from "@gladlog/analysis/src/data/kickPriorityPrior";
 import { ATTEMPT_INTO_TRINKET_OUTCOME_REF } from "@gladlog/analysis/src/data/outcomeRefs";
+import {
+  getEnglishSpellName,
+  spellEffectData,
+} from "@gladlog/analysis/src/data/spellEffectData";
 import {
   lookupSyncWindowPrior,
   SYNC_REF_MIN_CONTRAST_PP,
@@ -3247,6 +3252,60 @@ export function checkEnemyDefSaveEffect(lines: string[]): string[] {
   return failures;
 }
 
+/** `m:ss  [YOU] [CD]   <Spell>…` / `m:ss  [TEAM] [CD]   <pid> (<spec>): <Spell>…`
+ * / `m:ss  [ENEMY HEAL CD]   <pid> (<spec>): <Spell>…` — the press lines a
+ * form cooldown can be printed on; group 3 / 4 = the unit's id. */
+const FORM_COOLDOWN_PRESS_LINE =
+  /^(\d+):(\d\d) {2}(?:\[YOU\] \[CD\] {3}|\[TEAM\] \[CD\] {3}(\d+)\([^)]*\) \([^)]*\): |\[ENEMY HEAL CD\] {3}(\d+)\([^)]*\) \([^)]*\): )(.*)$/;
+
+/**
+ * F11: a cooldown that opens a form — Incarnation: Tree of Life — logs a
+ * SPELL_CAST_SUCCESS for the press and for every shift back into the form
+ * while the cooldown's own buff runs (`FORM_COOLDOWN_BUFF_BY_CAST_ID`); only
+ * the press is a press (`isFormReshiftCast`, the producers' predicate). Two
+ * press lines of it for ONE unit closer together than that buff's official
+ * duration cannot both be presses: the cooldown cannot come back inside its
+ * own buff. b711d4ac printed `[YOU] [CD] Incarnation: Tree of Life` at 0:22
+ * and at 1:00; 14055cb2's druid pressed at 2:41 and shifted back at 3:05.
+ *
+ * Read on the rendered grid: both lines are floored to whole seconds, so
+ * two casts less than D apart can print up to D seconds apart — a gap of
+ * D − 2 printed seconds or less is always under D. A lower bound: a talent
+ * that lengthens the buff (b711d4ac's ran 40 s) lets a later shift back
+ * through, which only the log-side tests can see.
+ */
+export function checkFormCooldownPressSpacing(lines: string[]): string[] {
+  const forms = Object.entries(FORM_COOLDOWN_BUFF_BY_CAST_ID).flatMap(
+    ([castId, buffId]) => {
+      const name = getEnglishSpellName(castId, "");
+      const buffSeconds = spellEffectData[buffId]?.durationSeconds;
+      return name && buffSeconds ? [{ name, buffSeconds }] : [];
+    },
+  );
+  const failures: string[] = [];
+  const last = new Map<string, { t: number; line: number }>();
+  lines.forEach((line, i) => {
+    const m = FORM_COOLDOWN_PRESS_LINE.exec(line);
+    if (!m) return;
+    const rest = m[5]!;
+    const form = forms.find(
+      (f) =>
+        rest.startsWith(f.name) && !/[A-Za-z]/.test(rest[f.name.length] ?? ""),
+    );
+    if (!form) return;
+    const unit = m[3] ?? m[4] ?? "YOU";
+    const t = Number(m[1]) * 60 + Number(m[2]);
+    const key = `${unit}|${form.name}`;
+    const prev = last.get(key);
+    last.set(key, { t, line: i });
+    if (prev && t - prev.t <= form.buffSeconds - 2)
+      failures.push(
+        `line ${i + 1}: ${form.name} printed as pressed ${t - prev.t}s after the press on line ${prev.line + 1} — inside its own ${form.buffSeconds}s buff, so a shift back into the form: "${line.trim().slice(0, 140)}"`,
+      );
+  });
+  return failures;
+}
+
 /**
  * `[ENEMY DEF] … (…, end not logged)` — an aura whose end the log never
  * showed (user ruling D6, 2026-10-10: "prints `end not logged`, not the
@@ -5310,6 +5369,7 @@ export function checkMatch(
   hardFailures.push(...checkKickWaitedOutConsistency(lines));
   hardFailures.push(...checkEnemyDefRefConsistency(lines));
   hardFailures.push(...checkEnemyDefSaveEffect(lines));
+  hardFailures.push(...checkFormCooldownPressSpacing(lines));
   hardFailures.push(...checkEnemyDefEndNotLogged(lines));
   hardFailures.push(...checkKillAttemptUpSinceEndLogged(lines));
   hardFailures.push(...checkBrokeOutRefConsistency(lines));

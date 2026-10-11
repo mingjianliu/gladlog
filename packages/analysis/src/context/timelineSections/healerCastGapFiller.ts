@@ -24,7 +24,7 @@ import {
   TIMELINE_LINE_FLAGS,
 } from "../../data/timelineLineFlags";
 import { dropAuraRebroadcasts } from "../../utils/auraIntervals";
-import { COPY_CAST_IDS } from "../../utils/castPress";
+import { COPY_CAST_IDS, isFormReshiftCast } from "../../utils/castPress";
 import { isControlledPlayerFlags } from "../../utils/charmedPlayer";
 import { cdRoleTag, hpAtPress, rendersOnCaster } from "../../utils/cooldowns";
 import { purgeableCountText } from "../../utils/dispelAnalysis";
@@ -560,8 +560,11 @@ export function emitHealerCastGapFillerEntries(
     // B38: promote major-CD spells (CD ≥ 30s) to [YOU] [CD] format when extractMajorCooldowns
     // missed them (e.g. missing talent data). This keeps Avenging Crusader etc. from appearing
     // as filler casts when they are significant cooldown activations.
+    // F11: a shift back into Tree of Life form while Incarnation runs is a
+    // cast of the cooldown's id and no press of it (`isFormReshiftCast`) —
+    // it stays a [YOU] [CAST] line, like any other form shift.
     const cdSeconds = effectiveCooldownSeconds(e.spellId) ?? 0;
-    if (cdSeconds >= 30) {
+    if (cdSeconds >= 30 && !isFormReshiftCast(owner, e)) {
       flushFold();
       // B112/B127: apply the same self-only override here (this promotion path is where MW/Evoker
       // throughput CDs render). B113/B130: append the role tag so the model does not invent mechanics.

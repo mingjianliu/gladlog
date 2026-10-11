@@ -20,6 +20,10 @@
  *      5× (18,504 → 3,583 real presses corpus-wide); the press is 64843.
  *   3. The same press recorded twice at the SAME instant — Power Infusion on
  *      an ally logs "on ally" + "on self" 0.00s apart (n=90,269).
+ *   4. A shift back into a form its cooldown opened — Incarnation: Tree of
+ *      Life logs a SPELL_CAST_SUCCESS of the cooldown's id every time the
+ *      druid re-enters the form while the cooldown's buff runs
+ *      (`isFormReshiftCast`).
  *
  * ⚠ Threshold discipline (research, three failed statistical attempts before
  * a player's spoken walkthrough settled it):
@@ -33,6 +37,58 @@
  *     the identical millisecond (verified: 40 archive files, 405 Rejuvenation
  *     casts, zero same-instant pairs).
  */
+
+import { type ICombatUnit, LogEvent } from "@gladlog/parser-compat";
+
+import { FORM_COOLDOWN_BUFF_BY_CAST_ID } from "../data/druidForms";
+
+/** How far from a cast its own aura lines are logged (the press's 117679
+ * APPLIED lands 0–3 ms after the SUCCESS in the logs read). */
+export const FORM_COOLDOWN_BUFF_PAIR_MS = 50;
+
+/**
+ * Is this SPELL_CAST_SUCCESS a shift back into a form whose cooldown is
+ * already running, not a press of the cooldown (shape 4 above;
+ * `FORM_COOLDOWN_BUFF_BY_CAST_ID`)? True only on positive evidence: the
+ * cooldown's buff was put on the caster before this cast and not removed
+ * since, and this cast did not apply or refresh it. A log that shows no
+ * buff line at all leaves every cast a press.
+ *
+ * One predicate for every reader that turns a cast of the id into a
+ * cooldown press: the ledger's cast list (`extractMajorCooldowns`), the
+ * healer gap filler's `[YOU] [CD]` promotion and the `[ENEMY HEAL CD]`
+ * line. Before it a shift back read as a second press of a three-minute
+ * cooldown (b711d4ac: `[YOU] [CD] Incarnation: Tree of Life` at 0:22 and
+ * again at 1:00).
+ */
+export function isFormReshiftCast(
+  unit: Pick<ICombatUnit, "id" | "auraEvents">,
+  cast: { spellId?: string | null; logLine: { timestamp: number } },
+): boolean {
+  const buffId = cast.spellId
+    ? FORM_COOLDOWN_BUFF_BY_CAST_ID[cast.spellId]
+    : undefined;
+  if (buffId === undefined) return false;
+  const t = cast.logLine.timestamp;
+  let upBefore = false;
+  let appliedHere = false;
+  const events = (unit.auraEvents ?? [])
+    .filter((a) => a.spellId === buffId && a.destUnitId === unit.id)
+    .sort((a, b) => a.logLine.timestamp - b.logLine.timestamp);
+  for (const a of events) {
+    const at = a.logLine.timestamp;
+    if (at > t + FORM_COOLDOWN_BUFF_PAIR_MS) break;
+    const event = a.logLine.event as string;
+    const applies =
+      event === LogEvent.SPELL_AURA_APPLIED ||
+      event === LogEvent.SPELL_AURA_REFRESH;
+    if (at >= t - FORM_COOLDOWN_BUFF_PAIR_MS) {
+      if (applies) appliedHere = true;
+    } else if (applies) upBefore = true;
+    else if (event === LogEvent.SPELL_AURA_REMOVED) upBefore = false;
+  }
+  return upBefore && !appliedHere;
+}
 
 /** Cast ids that are copies/procs/ticks of another press, never a press of
  * their own. Ported from the research registry (healer-study/copy_ids.json)

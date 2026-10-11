@@ -164,7 +164,11 @@ import { classMetadata } from "./classSpells";
 import { CURATED_ABILITY_FACTS } from "./curatedAbilityFacts";
 import { DISPEL_VERDICTS } from "./dispelVerdicts";
 import { spellClassMap } from "./drCategories";
-import { DRUID_FORM_AURA_IDS, FORM_BOUND_BUFF_IDS } from "./druidForms";
+import {
+  DRUID_FORM_AURA_IDS,
+  FORM_BOUND_BUFF_IDS,
+  FORM_COOLDOWN_BUFF_BY_CAST_ID,
+} from "./druidForms";
 import { ENEMY_HEAL_CD_IDS } from "./enemyHealCds";
 import { HEALING_VERDICTS, PROPOSED_HEALING_VERDICTS } from "./healingVerdicts";
 import {
@@ -644,6 +648,11 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   t("DRUID_FORM_AURA_IDS", "data/druidForms.ts", "aura", () =>
     set(DRUID_FORM_AURA_IDS),
   ),
+  // F11: a cooldown's form (cast id) → the cooldown's own buff (aura id).
+  t("FORM_COOLDOWN_BUFF_BY_CAST_ID", "data/druidForms.ts", "mixed", () => [
+    ...keys(FORM_COOLDOWN_BUFF_BY_CAST_ID),
+    ...Object.values(FORM_COOLDOWN_BUFF_BY_CAST_ID),
+  ]),
   t("FORM_BOUND_BUFF_IDS", "data/druidForms.ts", "aura", () =>
     set(FORM_BOUND_BUFF_IDS),
   ),

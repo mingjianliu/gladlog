@@ -13,6 +13,7 @@ import { type ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 import { ENEMY_HEAL_CD_IDS } from "../../data/enemyHealCds";
 import { getEnglishSpellName } from "../../data/spellEffectData";
 import { AURA_REBROADCAST_GAP_MS } from "../../utils/auraIntervals";
+import { isFormReshiftCast } from "../../utils/castPress";
 import { specToString } from "../../utils/cooldowns";
 import { fmtTime } from "../../utils/renderGrid";
 import type { TimelineCtx } from "./ctx";
@@ -121,7 +122,9 @@ export function emitEnemyCdEntries(
           cd.spellId,
           shown
             .filter((o) => o.spellId === cd.spellId && isActivationCd(o))
-            .map((o) => Math.round(ctx.matchStartMs + o.castTimeSeconds * 1000)),
+            .map((o) =>
+              Math.round(ctx.matchStartMs + o.castTimeSeconds * 1000),
+            ),
         ),
       );
     }
@@ -154,11 +157,14 @@ export function emitEnemyCdEntries(
         (c) =>
           c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
           !!c.spellId &&
-          ENEMY_HEAL_CD_IDS.has(c.spellId),
+          ENEMY_HEAL_CD_IDS.has(c.spellId) &&
+          // a shift back into Tree of Life form is no second press
+          !isFormReshiftCast(enemy, c),
       )
       .sort((a, b) => a.logLine.timestamp - b.logLine.timestamp);
     const totalBy = new Map<string, number>();
-    for (const c of casts) totalBy.set(c.spellId, (totalBy.get(c.spellId) ?? 0) + 1);
+    for (const c of casts)
+      totalBy.set(c.spellId, (totalBy.get(c.spellId) ?? 0) + 1);
     const seqBy = new Map<string, number>();
     for (const c of casts) {
       const seq = (seqBy.get(c.spellId) ?? 0) + 1;

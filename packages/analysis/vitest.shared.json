@@ -168,6 +168,7 @@
     "test/externalDamage.test.ts",
     "test/externalReach.test.ts",
     "test/forbearance.test.ts",
+    "test/formReshiftCast.test.ts",
     "test/gapClosers.test.ts",
     "test/gh106PressPredicate.test.ts",
     "test/healerAvoidance.test.ts",
