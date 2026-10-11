@@ -18,11 +18,11 @@ import {
   DEFENSIVE_TAGS,
   forbearanceStopsPress,
   getUnitHpAtTimestamp,
+  gridEndpointHpPct,
   HP_SAMPLE_RADIUS_MS,
   hpTroughInWindow,
   IDamageBucket,
   IMajorCooldownInfo,
-  isDeadAtRenderSecond,
   isHealerSpec,
   isHpTroughWorthPrinting,
   isSpikeHealedThrough,
@@ -484,26 +484,25 @@ export function emitDmgSpikeEntries(params: {
     // critical windows once existed and has been deleted, see cooldowns.ts.
     const fromSec = toRenderSecond(pw.fromSeconds);
     const toSec = toRenderSecond(pw.toSeconds);
+    // Both ends are the `[STATE]` tick of their second as a number
+    // (`gridEndpointHpPct`, the burst ledger's `Target:` reading): the tick's
+    // sampler with its clamp at 100, and 0 on a second the tick prints `dead`.
+    //  - T12 ① c: a unit dead at the END second reads 0 there. The sampler
+    //    alone returned whatever advanced action sat within its radius of a
+    //    second the unit did not live to see (121-5-690: `33% -> 100% HP,
+    //    +7%/s` over a death), or nothing at all.
+    //  - 2026-10-11: the START is asked the same question. A bucket can open
+    //    in its victim's death second (no earlier hit in the 10 s before the
+    //    death opened one that covers it), and its start printed the last
+    //    pre-death sample —
+    //    `60% -> 0% HP, -60%/s` beside a tick reading `dead`. It reads
+    //    `0% -> 0% HP, 0%/s` now, with no low and no outcome word
+    //    (`isSpikeHealedThrough` needs a live end).
     const hpFrom = targetUnit
-      ? getUnitHpAtTimestamp(
-          targetUnit,
-          matchStartMs + fromSec * 1000,
-          HP_SAMPLE_RADIUS_MS,
-        )
+      ? gridEndpointHpPct(targetUnit, matchStartMs, fromSec)
       : null;
-    // T12 ① c: a unit dead at the end second reads 0 there — the `[STATE]`
-    // tick's own predicate (`isDeadAtRenderSecond`), the burst ledger's
-    // `Target:` convention. The sampler alone returned whatever advanced
-    // action sat within its radius of a second the unit did not live to see
-    // (121-5-690: `33% -> 100% HP, +7%/s` over a death), or nothing at all.
     const hpTo = targetUnit
-      ? isDeadAtRenderSecond(targetUnit, matchStartMs, toSec)
-        ? 0
-        : getUnitHpAtTimestamp(
-            targetUnit,
-            matchStartMs + toSec * 1000,
-            HP_SAMPLE_RADIUS_MS,
-          )
+      ? gridEndpointHpPct(targetUnit, matchStartMs, toSec)
       : null;
     let hpStr = "";
     if (hpFrom !== null && hpTo !== null) {

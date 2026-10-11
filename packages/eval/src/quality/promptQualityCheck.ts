@@ -868,6 +868,20 @@ export function checkHealedThroughConsistency(lines: string[]): string[] {
     if (!m || Number.isNaN(unitId)) return;
     const from = Number(m[1]) * 60 + Number(m[2]);
     const to = Number(m[3]) * 60 + Number(m[4]);
+    // Both ends are the `[STATE]` tick of their second as a number
+    // (`gridEndpointHpPct`): on a second that unit's tick reads `dead` the
+    // endpoint is 0 %. The end has read so since T12 ① c; the start since
+    // 2026-10-11 (a bucket opened in its victim's death second printed the
+    // last pre-death sample: `60% -> 0% HP`). A numeric tick at the start
+    // second is `checkSameSecondHpConsistency`'s; it does not read `dead`.
+    if (deadAt.get(from)?.has(unitId) && A !== 0)
+      failures.push(
+        `${at} 起点写 ${A}%,但 ${fmtTime(from)} 的 [STATE] 报 dead(应为 0%)`,
+      );
+    if (deadAt.get(to)?.has(unitId) && B !== 0)
+      failures.push(
+        `${at} 终点写 ${B}%,但 ${fmtTime(to)} 的 [STATE] 报 dead(应为 0%)`,
+      );
     const inWindow = ticks.filter(
       (t) => t.s >= from && t.s <= to && t.hp.has(unitId),
     );

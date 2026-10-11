@@ -1719,6 +1719,34 @@ export function isDeadAtRenderSecond(
 }
 
 /**
+ * The number a rendered window's ENDPOINT prints for a unit at a rendered
+ * second — that second's `[STATE]` tick, as a number: `gridHpPct` (the tick's
+ * sampler, clamped at 100), and 0 from the unit's death second on, where the
+ * tick prints `dead` (`isDeadAtRenderSecond`). Null when the tick has no
+ * reading.
+ *
+ * ONE reading for both ends of the two lines that print a window's `A% → B%`:
+ * the burst ledger's `Target:` line (`analyzeBurstLedger`) and `[DMG SPIKE]`
+ * (`emitDmgSpikeEntries`). Until 2026-10-11 the spike line asked the death of
+ * its END only and read both ends with the bare sampler, so a bucket that
+ * opened in its victim's death second printed the last pre-death sample as
+ * its start (`60% -> 0% HP, -60%/s`) beside a `[STATE]` tick reading `dead`,
+ * and an endpoint could print above 100 %.
+ *
+ * An endpoint, not a minimum: a window's low is `hpTroughInWindow`, which
+ * reads nothing from the death second on.
+ */
+export function gridEndpointHpPct(
+  unit: ICombatUnit,
+  matchStartMs: number,
+  renderSecond: number,
+): number | null {
+  return isDeadAtRenderSecond(unit, matchStartMs, renderSecond)
+    ? 0
+    : gridHpPct(unit, matchStartMs + renderSecond * 1000);
+}
+
+/**
  * Computes overall healing metrics (HPS and Overheal %) for a unit across a given duration.
  */
 export function computeOverallHealingMetrics(

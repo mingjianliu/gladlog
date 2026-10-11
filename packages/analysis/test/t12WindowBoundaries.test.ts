@@ -22,6 +22,9 @@ import { DMG_SPIKE_THRESHOLD } from "../src/context/timelineHelpers";
 import { ensureAnalysisData } from "../src/data/ensure";
 import {
   computePressureWindows,
+  gridEndpointHpPct,
+  gridHpPct,
+  isDeadAtRenderSecond,
   isSpikeHealedThrough,
   PRESSURE_WINDOWS_TOP_N,
   selectPressureWindows,
@@ -377,6 +380,75 @@ describe("① c — a [DMG SPIKE] bucket closes at its victim's death / the roun
     });
     expect(out[0]).toContain("(0% -> 0% HP");
     expect(out[0]).not.toContain("healed through");
+  });
+
+  // 2026-10-11. Such a bucket is not only a hand-built one: the selection
+  // opens a bucket on every hit up to the death, and one that starts in the
+  // death second is listed when no earlier hit's bucket covers and outranks
+  // it — an earlier hit in the 10 s before the death always does. (0 of
+  // 16,581 `[DMG SPIKE]` lines on the 605-file capture; possible all the
+  // same.)
+  it("a bucket CAN open in its victim's death second, and its START reads 0 % too — the [STATE] tick of that second says `dead`", () => {
+    const dead = victim({
+      // 0.6M inside the death second, nothing before it
+      hitsAt: [45.3, 45.35, 45.4, 45.45, 45.5, 45.6],
+      deathS: 45.6,
+      // the last sample before the death: what the sampler alone reads at
+      // 0:45, and what the line's start printed (`60% -> 0% HP, -60%/s`)
+      hp: [[44.8, 60]],
+    });
+    const combat = combatOf(47, [dead]);
+    expect(computePressureWindows([dead], combat)[0]).toMatchObject({
+      fromSeconds: 45.3,
+      toSeconds: 45.6,
+      totalDamage: 600_000,
+    });
+    expect(isDeadAtRenderSecond(dead, T0, 45)).toBe(true);
+    expect(gridEndpointHpPct(dead, T0, 45)).toBe(0);
+    const lines = render(dead, combat);
+    expect(lines[0]).toContain("0:45–0:45  [DMG SPIKE]");
+    expect(lines[0]).toContain("(0% -> 0% HP, 0%/s)");
+    expect(lines.join("\n")).not.toContain("60%");
+    expect(lines.join("\n")).not.toContain("low ");
+    expect(lines.join("\n")).not.toContain("healed through");
+  });
+
+  it("a bucket that opens before the death second keeps its live start", () => {
+    const dead = victim({
+      hitsAt: [44.2, 44.6, 45.1, 45.2, 45.3, 45.6],
+      deathS: 45.6,
+      hp: [
+        [44, 60],
+        [44.8, 20],
+      ],
+    });
+    const lines = render(dead, combatOf(47, [dead]));
+    expect(lines[0]).toContain("0:44–0:45  [DMG SPIKE]");
+    expect(lines[0]).toContain("(60% -> 0% HP, -60%/s)");
+  });
+
+  it("an endpoint is the [STATE] tick's reading: clamped at 100 %", () => {
+    // 105 % of max HP at the start second (a max-HP change mid-sample):
+    // [STATE] clamps it, and so does the line (it printed `105% -> 60% HP`)
+    const alive = victim({
+      hitsAt: [39.2, 40.5, 41.7, 42.9, 44.1, 45.2],
+      hp: [
+        [39, 105],
+        [49, 60],
+      ],
+    });
+    const lines = render(alive, combatOf(300, [alive]));
+    expect(gridHpPct(alive, at(39))).toBe(100);
+    expect(lines[0]).toContain("(100% -> 60% HP, -4%/s)");
+    // …at the end second too
+    const up = victim({
+      hitsAt: [39.2, 40.5, 41.7, 42.9, 44.1, 45.2],
+      hp: [
+        [39, 80],
+        [49, 105],
+      ],
+    });
+    expect(render(up, combatOf(300, [up]))[0]).toContain("(80% -> 100% HP");
   });
 });
 

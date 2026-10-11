@@ -430,6 +430,13 @@ const INDEX: PredicateRow[] = [
     symbol: "isDeadAtRenderSecond",
     mod: cooldowns,
   },
+  // 2026-10-11: a rendered window's endpoint = the tick as a number (0 on a
+  // `dead` second) — [DMG SPIKE] and the burst ledger's `Target:` line
+  {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "gridEndpointHpPct",
+    mod: cooldowns,
+  },
   // Cooldown availability
   {
     file: `${A}/utils/cooldowns.ts`,

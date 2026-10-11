@@ -206,4 +206,40 @@ describe("checkHealedThroughConsistency — a window that ends on a death (T12 �
     expect(fails).toHaveLength(1);
     expect(fails[0]).toContain("Δ0 ≥ 0");
   });
+
+  // 2026-10-11: both ends are the tick's reading — 0 % on a `dead` second
+  it("an endpoint on a second the unit's tick reads `dead` must be 0 %", () => {
+    // the bucket opened in the death second, as the renderer prints it now
+    expect(
+      checkHealedThroughConsistency([state("0:45", "dead"), DIED_AT_OPEN]),
+    ).toEqual([]);
+    // …and as it printed it before: the last pre-death sample as the start
+    const preDeathStart = DIED_AT_OPEN.replace(
+      "(0% -> 0% HP, 0%/s)",
+      "(60% -> 0% HP, -60%/s)",
+    );
+    const start = checkHealedThroughConsistency([
+      state("0:45", "dead"),
+      preDeathStart,
+    ]);
+    expect(start).toHaveLength(1);
+    expect(start[0]).toContain("起点写 60%,但 0:45 的 [STATE] 报 dead");
+    // the end likewise (the pre-T12 line: a sample from after the death)
+    const end = checkHealedThroughConsistency([
+      state("0:39", 33),
+      DIED.replace("(33% -> 0% HP, -6%/s)", "(33% -> 18% HP, -3%/s)"),
+      state("0:45", "dead"),
+    ]);
+    expect(end).toHaveLength(1);
+    expect(end[0]).toContain("终点写 18%,但 0:45 的 [STATE] 报 dead");
+    // another unit's `dead` tick, or a `dead` tick of another second, is not
+    // this line's
+    expect(
+      checkHealedThroughConsistency([
+        "0:45  [STATE]   friends 1(RShaman):dead 2(AWarlock):60 / enemies 6(RShaman):68",
+        preDeathStart,
+        state("0:46", "dead"),
+      ]),
+    ).toEqual([]);
+  });
 });

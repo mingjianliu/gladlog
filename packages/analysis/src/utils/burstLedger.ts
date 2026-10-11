@@ -7,7 +7,7 @@ import {
 import { SPELL_CATEGORIES as spellsData } from "../data/spellCategories";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import {
-  gridHpPct,
+  gridEndpointHpPct,
   hpTroughInWindow,
   isDeadAtRenderSecond,
   isHpTroughWorthPrinting,
@@ -397,15 +397,12 @@ export function analyzeBurstLedger(
       const fromSec = toRenderSecond(fromSeconds);
       const toSec = toRenderSecond(toSeconds);
       const deadAtEnd = isDeadAtRenderSecond(target, matchStartMs, toSec);
-      // a death inside the burst's first rendered second: that second's
-      // [STATE] tick already reads `dead`, so the start reads 0 like the end
-      const deadAtStart = isDeadAtRenderSecond(target, matchStartMs, fromSec);
-      const hpStartPct = deadAtStart
-        ? 0
-        : gridHpPct(target, matchStartMs + fromSec * 1000);
-      const hpEndPct = deadAtEnd
-        ? 0
-        : gridHpPct(target, matchStartMs + toSec * 1000);
+      // `gridEndpointHpPct`, shared with `[DMG SPIKE]`: the tick's reading,
+      // and 0 on a second the tick reads `dead` — at the end, and at the
+      // start too (a death inside the burst's first rendered second: that
+      // second's [STATE] tick already reads `dead`)
+      const hpStartPct = gridEndpointHpPct(target, matchStartMs, fromSec);
+      const hpEndPct = gridEndpointHpPct(target, matchStartMs, toSec);
       // the low is a trough (FT-T03): the true minimum inside the displayed
       // seconds, the `[DMG SPIKE]` line's own function and window
       const low =
