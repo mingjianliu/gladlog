@@ -1908,7 +1908,10 @@ export function cdHoardedEvents(
       // it. Only when something blocked them — a free owner gets neither.
       // anchored on the rendered second `t` (facts.t), which the legend
       // measures the offsets and ownerFreeS from
-      // FT-T10: free time is counted against the cooldowns the row names
+      // FT-T10: free time is counted against the cooldowns the row names;
+      // `ownerCc` still lists every interval on the owner, a lockout with
+      // its school — the legend tells the reader a named cooldown was
+      // outside it (deliberate; post-hoc review 45-FT-99)
       const readySpellIds = ready.map((cd) => cd.spellId);
       const act =
         ownerActState?.(windowFromS, windowToS, t, readySpellIds) ?? null;
