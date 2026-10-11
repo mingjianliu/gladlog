@@ -814,6 +814,49 @@ export const SYNC_ENTER_LEAD_S = 2;
 /** `endedBy` of a lock the round ended on (F06a) — what its `[CC ON ENEMY]`
  * line says with `CC_STILL_ON_AT_ROUND_END`. */
 export const SYNC_LOCK_ENDED_BY_ROUND_END = "the round's end";
+/** What a `readyCds` entry of a missed-sync-window row says of a cooldown
+ * the log owner holds — `The Hunt (yours)`. */
+export const SYNC_READY_CD_YOURS = "yours";
+const SYNC_READY_CD_ENTRY = new RegExp(
+  String.raw`^(.+) \((?:(${SYNC_READY_CD_YOURS})|(.+)'s)\)$`,
+);
+
+/**
+ * One `readyCds` entry of a missed-sync-window row: the cooldown and whose it
+ * is (L04, user ruling 2026-10-11) — `The Hunt (yours)` for the log owner's,
+ * `The Hunt (Name-Realm's)` for a teammate's, the unit name every candidate
+ * row and the loadout's `<unit name=…>` use. The holder is the unit whose
+ * ledger `evaluateSyncWindow` read the cooldown from (`SyncWindowCd.owner`);
+ * a cooldown with no holder unit (a hand-built fixture) stays a bare name.
+ *
+ * Before, the row listed names alone and its legend said they "may still be
+ * teammates'": on the 605-file capture 441 of 726 rows name no cooldown the
+ * owner's own kit lists (272 of them a lock the owner did not cast either).
+ * The gate (`checkSyncWindowReadyCdHolders`) parses the entry back with
+ * `parseSyncReadyCdEntry`.
+ */
+export function syncReadyCdEntry(
+  spellName: string,
+  holderName: string | undefined,
+  isOwner: boolean,
+): string {
+  if (isOwner) return `${spellName} (${SYNC_READY_CD_YOURS})`;
+  return holderName ? `${spellName} (${holderName}'s)` : spellName;
+}
+
+/** `syncReadyCdEntry` read back: the cooldown, and its holder — `yours`, a
+ * unit name, or neither (`holder` null) for an entry that states none. */
+export function parseSyncReadyCdEntry(entry: string): {
+  spell: string;
+  yours: boolean;
+  holder: string | null;
+} {
+  const m = entry.match(SYNC_READY_CD_ENTRY);
+  if (!m) return { spell: entry, yours: false, holder: null };
+  return m[2] !== undefined
+    ? { spell: m[1]!, yours: true, holder: null }
+    : { spell: m[1]!, yours: false, holder: m[3]! };
+}
 
 /**
  * The numbers a missed-sync-window row states about its lock's length
@@ -879,7 +922,8 @@ export function missedSyncWindowEvents(
     /** seconds (match-relative) of every enemy deathRecord. */
     enemyDeathS: number[];
     /** the log owner's unit id — an `endedBy` breaker that is the owner
-     * reads "you"; optional (absent, the breaker is named). */
+     * reads "you", and a ready cooldown the owner holds reads `(yours)`
+     * (`syncReadyCdEntry`); optional (absent, both are named). */
     ownerId?: string;
     /** the log owner's name as the CC applications carry it (`casterName`)
      * — with it, a lock the owner cast (part of) carries `setupBy` (B11b).
@@ -990,7 +1034,7 @@ export function missedSyncWindowEvents(
         renderedWindowSeconds(a.w.fromSeconds, inRound(a.w).toSeconds),
     )
     .slice(0, cap)
-    .map(({ w, ready, readyCds, minHp, minHpUnit, alsoHeld }) => {
+    .map(({ w, readyCds, minHp, minHpUnit, alsoHeld }) => {
       const t = toRenderSecond(w.fromSeconds);
       const length = syncLockLengthFacts(w, probes.roundEndS);
       const timing = syncReadyTimingFacts(w, readyCds);
@@ -1047,7 +1091,16 @@ export function missedSyncWindowEvents(
           // difference (`syncLockLengthFacts`) — the gate pairs it with the
           // `[CC ON ENEMY]` line (`checkSyncWindowLockLength`).
           durationS: length.durationS,
-          readyCds: ready.join("、"),
+          // L04: each entry says whose cooldown it is (`syncReadyCdEntry`)
+          readyCds: readyCds
+            .map((cd) =>
+              syncReadyCdEntry(
+                cd.spellName,
+                cd.owner?.name,
+                probes.ownerId !== undefined && cd.owner?.id === probes.ownerId,
+              ),
+            )
+            .join("、"),
           ...(minHp !== null ? { enemyMinHpPct: fmt(minHp) } : {}),
           ...(minHp !== null && minHpUnit ? { enemyMinHpUnit: minHpUnit } : {}),
           ...timing,

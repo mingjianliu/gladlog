@@ -48,7 +48,11 @@ import {
   distanceFact,
   POST_KICK_OTHER_REASON_HEAD,
 } from "@gladlog/analysis/src/analysis/candidateFindings";
-import { SYNC_LOCK_ENDED_BY_ROUND_END } from "@gladlog/analysis/src/analysis/candidates/cooldownTiming";
+import {
+  parseSyncReadyCdEntry,
+  SYNC_LOCK_ENDED_BY_ROUND_END,
+  SYNC_READY_CD_YOURS,
+} from "@gladlog/analysis/src/analysis/candidates/cooldownTiming";
 import { fmtFactNum } from "@gladlog/analysis/src/analysis/factFormat";
 import { parseBurstAnsweredLine } from "@gladlog/analysis/src/context/burstAnswered";
 import {
@@ -2024,34 +2028,53 @@ const PRESSED_DURING_HOST_LINE =
 const OWNER_KIT_LINE = /^\s*<cooldowns>(.*)<\/cooldowns>\s*$/;
 
 /**
- * The log owner's unit id and its `<cooldowns>` kit, entry text by spell
- * name (`Name [..]( [..])?` entries joined by ", "; a name may hold a comma;
+ * Every loadout unit with its `<cooldowns>` kit, entry text by spell name
+ * (`Name [..]( [..])?` entries joined by ", "; a name may hold a comma;
  * every entry but the last has lost its closing `]` to the split). `kit` is
+ * null for a unit with no kit line.
+ */
+function unitKitsOf(lines: string[]): Array<{
+  id: string;
+  name: string;
+  role: string;
+  kit: Map<string, string> | null;
+}> {
+  const units: ReturnType<typeof unitKitsOf> = [];
+  lines.forEach((line, i) => {
+    const u = line.match(UNIT_LEGEND_LINE);
+    if (!u) return;
+    const kit = lines[i + 1]?.match(OWNER_KIT_LINE)?.[1] ?? null;
+    units.push({
+      id: u[1]!,
+      name: u[2]!,
+      role: u[3]!,
+      kit:
+        kit === null
+          ? null
+          : new Map<string, string>(
+              kit
+                .split(/\](?:, )/)
+                .map(
+                  (e) => [e.slice(0, e.indexOf(" [")), e] as [string, string],
+                ),
+            ),
+    });
+  });
+  return units;
+}
+
+/**
+ * The log owner's unit id and its `<cooldowns>` kit (`unitKitsOf`). `kit` is
  * null without a `log owner` unit or its kit line.
  */
 function ownerKitOf(lines: string[]): {
   ownerId: string | null;
   kit: Map<string, string> | null;
 } {
-  let ownerId: string | null = null;
-  let kit: string | null = null;
-  lines.forEach((line, i) => {
-    const u = line.match(UNIT_LEGEND_LINE);
-    if (u?.[3] !== "log owner") return;
-    ownerId = u[1]!;
-    kit = lines[i + 1]?.match(OWNER_KIT_LINE)?.[1] ?? null;
-  });
-  return {
-    ownerId,
-    kit:
-      kit === null
-        ? null
-        : new Map<string, string>(
-            (kit as string)
-              .split(/\](?:, )/)
-              .map((e) => [e.slice(0, e.indexOf(" [")), e] as [string, string]),
-          ),
-  };
+  const owner = unitKitsOf(lines)
+    .filter((u) => u.role === "log owner")
+    .at(-1);
+  return { ownerId: owner?.id ?? null, kit: owner?.kit ?? null };
 }
 
 /**
@@ -5456,6 +5479,78 @@ function checkSyncWindowRefConsistency(lines: string[]): string[] {
   return failures;
 }
 
+/**
+ * Hard invariant (L04, user ruling 2026-10-11): a missed-sync-window row
+ * says whose each ready cooldown is, and the loadout agrees.
+ *
+ *  1. Every `readyCds` entry carries a holder — `X (yours)` or
+ *     `X (Name-Realm's)`, the producer's `syncReadyCdEntry` read back with
+ *     its own `parseSyncReadyCdEntry`.
+ *  2. With a loadout in the prompt: an entry marked `yours` is an entry of
+ *     the log owner's `<cooldowns>` kit, with a button (not `[PASSIVE]`);
+ *     an entry marked as a unit's names a `teammate` of the loadout — never
+ *     the log owner by name, whose cooldowns read `yours` — and is an entry
+ *     of that teammate's kit. Row and kit both come from the unit's
+ *     `extractMajorCooldowns` ledger (`spellName`), so a holder the kit
+ *     contradicts is the wrong holder.
+ *
+ * Before (605-file capture of ebb689de, fix-FT/scripts/
+ * ms_sync_holder_text.py): 726 rows, none stating a holder; by the kits, 211
+ * name only the owner's cooldowns, 74 some, 441 none.
+ */
+export function checkSyncWindowReadyCdHolders(lines: string[]): string[] {
+  const failures: string[] = [];
+  const units = unitKitsOf(lines);
+  const owner = units.filter((u) => u.role === "log owner").at(-1);
+  const inKit = (kit: Map<string, string>, spell: string) =>
+    // the facts serializer turns a spell name's ", " into ",\u00a0"
+    kit.get(spell.replace(/\u00a0/g, " "));
+  lines.forEach((line, i) => {
+    if (!line.includes("type=missed-sync-window ")) return;
+    const m = line.match(/facts=\{(.*)\}\s*$/);
+    if (!m) return; // `checkSyncWindowRefConsistency` reports it
+    const f = parseFactsBlock(m[1]!);
+    const fail = (why: string) =>
+      failures.push(
+        `line ${i + 1}: missed-sync-window ${why} —— t=${f.t} readyCds=${f.readyCds ?? "(缺)"}`,
+      );
+    if (!f.readyCds) {
+      fail("没有 readyCds");
+      return;
+    }
+    for (const entry of f.readyCds.split("、")) {
+      const e = parseSyncReadyCdEntry(entry);
+      if (!e.yours && e.holder === null) {
+        fail(
+          `的「${entry}」没写是谁的冷却(应为 (${SYNC_READY_CD_YOURS}) 或 (Name's))`,
+        );
+        continue;
+      }
+      if (units.length === 0) continue;
+      if (e.yours) {
+        if (!owner?.kit) continue;
+        const kitEntry = inKit(owner.kit, e.spell);
+        if (kitEntry === undefined)
+          fail(`写 ${e.spell} 是录制者的,录制者的 <cooldowns> 里没有它`);
+        else if (kitEntry.includes("[PASSIVE"))
+          fail(`写 ${e.spell} 是录制者的,它在 <cooldowns> 里是 [PASSIVE]`);
+        continue;
+      }
+      const holder = units.find((u) => u.name === e.holder);
+      if (!holder) fail(`的「${entry}」的持有者不在技能栏的单位里`);
+      else if (holder.role === "log owner")
+        fail(
+          `的「${entry}」按名字写了录制者(自己的冷却应写 (${SYNC_READY_CD_YOURS}))`,
+        );
+      else if (holder.role !== "teammate")
+        fail(`的「${entry}」的持有者是 ${holder.role},不是队友`);
+      else if (holder.kit && inKit(holder.kit, e.spell) === undefined)
+        fail(`写 ${e.spell} 是 ${holder.name} 的,其 <cooldowns> 里没有它`);
+    }
+  });
+  return failures;
+}
+
 /** The roster line that assigns every player the numeric id each [STATE]
  * token is keyed on: `<unit id="3" name="Supatease-Tichondrius-US" …>`. */
 const UNIT_ROSTER_LINE = /<unit\s+id="(\d+)"\s+name="([^"]+)"/;
@@ -6551,6 +6646,7 @@ export function checkMatch(
   hardFailures.push(...checkDmgSpikeListCap(lines));
   hardFailures.push(...checkSyncWindowRefConsistency(lines));
   hardFailures.push(...checkSyncWindowLockLength(lines));
+  hardFailures.push(...checkSyncWindowReadyCdHolders(lines));
   hardFailures.push(...checkBacklashRefConsistency(lines));
   hardFailures.push(...checkKickPriorityRefConsistency(lines));
   hardFailures.push(...checkCdPriorRefConsistency(lines));

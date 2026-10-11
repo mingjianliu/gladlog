@@ -2851,6 +2851,23 @@ const INDEX: PredicateRow[] = [
     symbol: "checkSyncWindowLockLength",
     mod: promptQualityCheck,
   },
+  // L04 (b): each `readyCds` entry of a missed-sync-window row says whose
+  // cooldown it is; the gate reads the entry back and asks the loadout.
+  {
+    file: `${A}/analysis/candidates/cooldownTiming.ts`,
+    symbol: "syncReadyCdEntry",
+    mod: cooldownTiming,
+  },
+  {
+    file: `${A}/analysis/candidates/cooldownTiming.ts`,
+    symbol: "parseSyncReadyCdEntry",
+    mod: cooldownTiming,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkSyncWindowReadyCdHolders",
+    mod: promptQualityCheck,
+  },
   // F06b / F08: a control gone in under half a second with no cause in the
   // log; a damage break's `endedBy` names the breaking hit as that.
   {
