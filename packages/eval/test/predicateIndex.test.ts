@@ -2748,6 +2748,23 @@ const INDEX: PredicateRow[] = [
     symbol: "checkAuraEndWithinRound",
     mod: promptQualityCheck,
   },
+  // a missed-purge window ends at the round's end: the one text for its
+  // length, that text read back, and the gate that holds it to the round
+  {
+    file: `${A}/utils/dispelAnalysis.ts`,
+    symbol: "unpurgedForText",
+    mod: dispelAnalysis,
+  },
+  {
+    file: `${A}/utils/dispelAnalysis.ts`,
+    symbol: "UNPURGED_FOR_RE_SRC",
+    mod: dispelAnalysis,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkUnpurgedWithinRound",
+    mod: promptQualityCheck,
+  },
   // F06a: a missed-sync-window row's lock length through the control lines'
   // formatter, cut at the round's end; the gate pairs it with its line.
   {
