@@ -4408,8 +4408,7 @@ const POST_KICK_COUNTED_CLAUSE = new RegExp(
   `(pressed|outside the locked school) (\\d+)x (?:but rejected|not ready yet — its own cooldown or the GCD) ${POST_KICK_PRESS_LIST}`,
   "g",
 );
-const pressesListed = (list: string) =>
-  (list.match(/\+\d+\.\d/g) ?? []).length;
+const pressesListed = (list: string) => (list.match(/\+\d+\.\d/g) ?? []).length;
 export function checkKickEatenRefusedForAnotherReason(
   lines: string[],
 ): string[] {
@@ -4548,8 +4547,7 @@ export function checkKickEatenKickSilence(lines: string[]): string[] {
  */
 const KICK_RANGE_FACT_KEYS = ["kickRangeYd", "yourReachYd", "maxKickRangeYd"];
 const KICK_DISTANCE_FACT_KEYS = ["sourceDistYd", "nearestKickerDistYd"];
-const APPROX_DISTANCE_FACT =
-  /^~(\d+) \(position samples (\d+\.\d)s apart\)$/;
+const APPROX_DISTANCE_FACT = /^~(\d+) \(position samples (\d+\.\d)s apart\)$/;
 export function checkKickEatenRangeFacts(lines: string[]): string[] {
   const failures: string[] = [];
   for (let i = 0; i < lines.length; i++) {
@@ -4571,7 +4569,8 @@ export function checkKickEatenRangeFacts(lines: string[]): string[] {
       const v = f[key];
       if (v === undefined || /^\d+\.\d$/.test(v)) continue;
       const approx = v.match(APPROX_DISTANCE_FACT);
-      if (!approx) fail(`${key}=${v} is neither N.N nor an approximate distance`);
+      if (!approx)
+        fail(`${key}=${v} is neither N.N nor an approximate distance`);
       else if (
         v !== distanceFact(Number(approx[1]), Number(approx[2])) ||
         // one decimal: a spacing just above the bound prints as the bound
@@ -4647,6 +4646,43 @@ export function checkLegendCrossReferences(lines: string[]): string[] {
         );
     }
   }
+  return failures;
+}
+
+/**
+ * A roster unit named as the owner of something — `5(BMHunter)'s pet`,
+ * `2(FMage)'s Pyroblast` — carries its spec tag, like every other reference
+ * to it (`unitLabel.ts` `rosterLabelByName`, the one builder of the tag).
+ *
+ * FT leftovers 2026-10-11: the id maps answer to a character name with and
+ * without its realm, the tag answered to the full name only, so a name that
+ * reached the label in its short form printed a bare `5` — and on those
+ * lines the unit was a pet read as its owner (`[CC BROKEN] 2's Kill Command`,
+ * `broken by 5's Bestial Wrath`): 433 lines of the 3,520-prompt capture of
+ * main 8c3275fa.
+ *
+ * Not held: the damage rows (`Top sources` / `killing blow` / `killed by`),
+ * which print `N — Spell` and `N's pet — Spell` without tags throughout.
+ */
+const ROSTER_UNIT_SPEC = /<unit\s+id="(\d+)"[^>]*\sspec="([^"]+)"/;
+const BARE_ID_POSSESSIVE = new RegExp(
+  String.raw`(?<![\w)%.:])(\d{1,2})'s (?!${SUMMON_KIND_RE_SRC} —)`,
+  "g",
+);
+export function checkBareRosterPossessive(lines: string[]): string[] {
+  const tagged = new Set<string>();
+  for (const line of lines) {
+    const m = ROSTER_UNIT_SPEC.exec(line);
+    if (m && m[2]!.trim()) tagged.add(m[1]!);
+  }
+  const failures: string[] = [];
+  lines.forEach((line, i) => {
+    for (const m of line.matchAll(BARE_ID_POSSESSIVE))
+      if (tagged.has(m[1]!))
+        failures.push(
+          `line ${i + 1}: roster id ${m[1]} named without its spec tag — ${line.trim().slice(0, 140)}`,
+        );
+  });
   return failures;
 }
 
@@ -6027,6 +6063,7 @@ export function checkMatch(
   hardFailures.push(...checkCjkLeak(lines));
   hardFailures.push(...checkKickWaitedOutConsistency(lines));
   hardFailures.push(...checkLegendCrossReferences(lines));
+  hardFailures.push(...checkBareRosterPossessive(lines));
   hardFailures.push(...checkKickEatenRefusedForAnotherReason(lines));
   hardFailures.push(...checkKickEatenKickSilence(lines));
   hardFailures.push(...checkKickEatenRangeFacts(lines));

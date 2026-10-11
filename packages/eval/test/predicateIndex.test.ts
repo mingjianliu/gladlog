@@ -426,6 +426,11 @@ const INDEX: PredicateRow[] = [
     mod: unitLabel,
   },
   {
+    file: `${A}/context/unitLabel.ts`,
+    symbol: "rosterLabelByName",
+    mod: unitLabel,
+  },
+  {
     file: `${A}/utils/enemyDefensives.ts`,
     symbol: "enemyDefensiveEvents",
     mod: enemyDefensives,
@@ -3014,6 +3019,11 @@ const INDEX: PredicateRow[] = [
   {
     file: `${E}/quality/promptQualityCheck.ts`,
     symbol: "checkLegendCrossReferences",
+    mod: promptQualityCheck,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkBareRosterPossessive",
     mod: promptQualityCheck,
   },
   {

@@ -43,7 +43,6 @@ import {
   HP_SAMPLE_RADIUS_MS,
   hpAtPress,
   isTeamHealCD,
-  specToString,
 } from "../../utils/cooldowns";
 import {
   AOE_CC_LANDING_WINDOW_S,
@@ -69,7 +68,7 @@ import {
   resolveSummonOwner,
   summonKindOf,
 } from "../timelineHelpers";
-import { abbrevSpec } from "../unitLabel";
+import { rosterLabelByName } from "../unitLabel";
 import type { DeferredSnapshot } from "./ctx";
 import type { TimelineCtx } from "./ctx";
 
@@ -286,17 +285,12 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
   // to map unit identity itself across thousands of tokens; blind review showed
   // fine-grained misattribution (pets / unit HP / dispel direction crossed).
   // Inline a compact spec tag at every reference; same-spec twins are still
-  // disambiguated by id. abbrevSpec is shared with observedConsequences.ts.
-  const nameSpecTag = new Map<string, string>(
-    [...friends, ...(enemies ?? [])].map((u) => [
-      u.name,
-      abbrevSpec(specToString(u.spec)),
-    ]),
-  );
-  function tagFor(name: string): string {
-    const tag = nameSpecTag.get(name);
-    return tag ? `(${tag})` : "";
-  }
+  // disambiguated by id.
+  // One builder for both sides (`unitLabel.ts`): the tag is keyed on the id
+  // the map resolves, so a name the map answers to never prints a bare id.
+  const rosterUnits = [...friends, ...(enemies ?? [])];
+  const friendLabel = rosterLabelByName(rosterUnits, playerIdMap);
+  const enemyLabel = rosterLabelByName(rosterUnits, enemyIdMap);
 
   /**
    * Returns the short numeric ID for a friendly player name, or the raw name
@@ -304,9 +298,7 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
    * ID collision when a friendly and enemy share a display name.
    */
   function pid(name: string): string {
-    if (!playerIdMap) return name.split("-")[0];
-    const id = playerIdMap.get(name) ?? playerIdMap.get(name.split("-")[0]);
-    return id !== undefined ? `${id}${tagFor(name)}` : name.split("-")[0];
+    return friendLabel(name) ?? name.split("-")[0];
   }
 
   /** GH #103 A6: who provided the avoidance aura on a `[CC AVOIDED?]` line —
@@ -327,15 +319,11 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
    * to the raw name and cannot tell. `playerIdMap` holds the friendly
    * players, owner included. */
   function friendlyPid(name: string): string | undefined {
-    if (!playerIdMap) return undefined;
-    const id = playerIdMap.get(name) ?? playerIdMap.get(name.split("-")[0]);
-    return id !== undefined ? `${id}${tagFor(name)}` : undefined;
+    return friendLabel(name);
   }
 
   function enemyPid(name: string): string {
-    if (!enemyIdMap) return name.split("-")[0];
-    const id = enemyIdMap.get(name) ?? enemyIdMap.get(name.split("-")[0]);
-    return id !== undefined ? `${id}${tagFor(name)}` : name.split("-")[0];
+    return enemyLabel(name) ?? name.split("-")[0];
   }
 
   /**
@@ -350,8 +338,22 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
     side: "friendly" | "enemy",
     sourceId?: string,
   ): string {
-    const primary = side === "friendly" ? pid(name) : enemyPid(name);
-    if (/^\d/.test(primary)) return primary; // hit the player map (player names never start with a digit)
+    // The event's own source GUID first. A roster player's id is that player
+    // whatever the row calls it; a non-player unit is never read as a player
+    // by its NAME — a hunter pet named like its owner (`Pet-…,"Laughing"` of
+    // `Laughing-Realm`) hit the player map through the short name and printed
+    // as the hunter himself, without the `'s pet` (FT leftovers 2026-10-11).
+    const mate = sourceId ? friends.find((f) => f.id === sourceId) : undefined;
+    if (mate) return pid(mate.name);
+    const foe = sourceId
+      ? (enemies ?? []).find((e) => e.id === sourceId)
+      : undefined;
+    if (foe) return enemyPid(foe.name);
+    const src = sourceId ? allUnits?.find((u) => u.id === sourceId) : undefined;
+    if (src === undefined || src.type === CombatUnitType.Player) {
+      const primary = side === "friendly" ? pid(name) : enemyPid(name);
+      if (/^\d/.test(primary)) return primary; // hit the player map (player names never start with a digit)
+    }
     // GH #99: resolve the summon by the event's OWN source GUID. Matching on
     // the NAME collided whenever both teams fielded a same-named summon (two
     // shamans → two units called "Capacitor Totem"): `find` returned whichever
@@ -375,10 +377,10 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
         : enemyPid(ownerUnit.name);
       // FT-T14: the summon's kind is read off the log — a Capacitor Totem
       // is the shaman's totem, not a pet the round never had
-      const src = sourceId
-        ? allUnits?.find((u) => u.id === sourceId)
-        : allUnits?.find((u) => u.name === name && u.ownerId === ownerUnit.id);
-      return `${label}'s ${summonKindOf(src?.id ?? sourceId, src)}`;
+      const summon =
+        src ??
+        allUnits?.find((u) => u.name === name && u.ownerId === ownerUnit.id);
+      return `${label}'s ${summonKindOf(summon?.id ?? sourceId, summon)}`;
     }
     const short = name.split("-")[0];
     return [...short].some((c) => c.charCodeAt(0) > 127) ? "[pet]" : short;

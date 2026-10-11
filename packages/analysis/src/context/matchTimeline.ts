@@ -699,7 +699,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
   emitCcBrokenEntries({
     params,
     addEntry,
-    pid,
+    actorLabel,
     enemyPid,
   });
 

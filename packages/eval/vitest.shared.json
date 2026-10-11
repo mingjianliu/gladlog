@@ -42,6 +42,7 @@
     "test/facingCalibration.test.ts",
     "test/factAuditBounds.test.ts",
     "test/familyBias.test.ts",
+    "test/ftLeftoverGates.test.ts",
     "test/healedThroughGate.test.ts",
     "test/hindsightScan.test.ts",
     "test/judgeVariance.test.ts",

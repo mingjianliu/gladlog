@@ -39,6 +39,10 @@ export interface ICcBreakEvent {
   casterName: string;
   /** The breaker (whose damage broke it). */
   breakerName: string;
+  /** The breaking row's own source unit (GUID and name as logged) — a pet's
+   * break is the pet's row; `breakerName` above folds it into the owner. */
+  breakerUnitId?: string;
+  breakerUnitName?: string;
   breakerIsFriendly: boolean;
   /** Breaking spell; a pure-melee BROKEN event yields an empty id + "Melee". */
   breakSpellId: string;
@@ -306,6 +310,8 @@ export function analyzeCcBreaks(
           holderIsFriendly,
           casterName: entry.casterName,
           breakerName,
+          breakerUnitId: aura.srcUnitId,
+          breakerUnitName: aura.srcUnitName,
           breakerIsFriendly,
           breakSpellId,
           breakSpellName,
