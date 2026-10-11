@@ -38,7 +38,7 @@ export function emitMinorDispelEntries(
   ) => {
     for (const e of events) {
       // High/Critical riders are NOT on a [CLEANSE] line (D1), so they fold
-      // here as "(passive)" instead of vanishing.
+      // here under their tag instead of vanishing.
       if (
         (e.priority === "Critical" || e.priority === "High") &&
         e.dispelKind !== "rider"
@@ -49,7 +49,11 @@ export function emitMinorDispelEntries(
       // line with a "(passive)" tag so 92 Cleanse the Weak procs never read
       // as 92 cleanse decisions. Same predicate as the desktop counts.
       const passive = e.dispelKind !== "deliberate";
-      const key = `${e.sourceName}|${spellName}|${passive ? "p" : "d"}`;
+      // F11: a rider that came with its own cast (a Demonic Circle: Teleport,
+      // a Deep Breath, an Incarnation: Tree of Life press shedding a snare)
+      // is not passive — the unit pressed that button. Its own part.
+      const tag = minorDispelPartTag(e);
+      const key = `${e.sourceName}|${spellName}|${tag ?? "d"}`;
       const cur = minor.get(key);
       if (cur) {
         cur.events.push(e);
@@ -57,7 +61,7 @@ export function emitMinorDispelEntries(
       } else {
         minor.set(key, {
           sourceLabel: labelOf(e.sourceName),
-          spellName: passive ? `${spellName} (passive)` : spellName,
+          spellName: tag ? `${spellName} ${tag}` : spellName,
           passive,
           events: [e],
           firstSeconds: e.timeSeconds,
@@ -86,6 +90,25 @@ export function emitMinorDispelEntries(
       `${fmtTime(firstSeconds)}  [MINOR DISPELS]   ${sourceLabel}: ${parts} (low-priority, folded)`,
     );
   }
+}
+
+/** A fold part of removals nobody pressed for: a proc (Cleanse the Weak), or
+ * a rider the log shows no cast of (the snare an Incarnation: Tree of Life
+ * sheds when the druid leaves the form). */
+export const MINOR_DISPEL_PASSIVE_TAG = "(passive)";
+/** A fold part of removals that came with a cast of the spell itself, pressed
+ * for something else (`IDispelEvent.riderOfOwnCast`). */
+export const MINOR_DISPEL_RIDER_TAG = "(side effect of the cast)";
+
+/** The tag a non-deliberate fold part carries; undefined for a deliberate
+ * dispel, which lists its casts instead. */
+export function minorDispelPartTag(
+  e: Pick<IDispelEvent, "dispelKind" | "riderOfOwnCast">,
+): string | undefined {
+  if (e.dispelKind === "deliberate") return undefined;
+  return e.dispelKind === "rider" && e.riderOfOwnCast
+    ? MINOR_DISPEL_RIDER_TAG
+    : MINOR_DISPEL_PASSIVE_TAG;
 }
 
 /** Removals of one source + dispel spell this close together are one cast. */

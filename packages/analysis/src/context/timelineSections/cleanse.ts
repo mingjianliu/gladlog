@@ -112,7 +112,7 @@ export function emitCleanseEntries(
       if (cleanse.priority !== "Critical" && cleanse.priority !== "High")
         continue;
       // D1 (2026-09-25): a rider (form shift, movement ability) is not a
-      // cleanse — it folds into the "(passive)" minor line below instead.
+      // cleanse — it folds into the tagged minor line below instead.
       if (cleanse.dispelKind === "rider") continue;
       const key = `${Math.round(cleanse.timeSeconds)}|${cleanse.sourceName}`;
       const group = cleanseGroups.get(key) ?? [];

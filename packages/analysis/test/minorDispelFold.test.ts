@@ -6,8 +6,21 @@
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { purgeMatchesCast } from "../src/context/timelineSections/healerCastGapFiller";
-import { formatMinorDispelPart } from "../src/context/timelineSections/minorDispels";
+import {
+  emitMinorDispelEntries,
+  formatMinorDispelPart,
+  MINOR_DISPEL_PASSIVE_TAG,
+  MINOR_DISPEL_RIDER_TAG,
+  minorDispelPartTag,
+} from "../src/context/timelineSections/minorDispels";
 import { ensureAnalysisData } from "../src/data/ensure";
+import type { IDispelEvent } from "../src/utils/dispelAnalysis";
+import {
+  addCastToIndex,
+  classifyDispel,
+  createCastMatchIndex,
+  dispelCameWithOwnCast,
+} from "../src/utils/dispelKind";
 
 beforeAll(async () => {
   await ensureAnalysisData();
@@ -60,6 +73,83 @@ describe("formatMinorDispelPart", () => {
         events: [ev(1, "1", "a"), ev(2, "1", "a")],
       }),
     ).toBe("Phantasm (passive) x2");
+  });
+});
+
+describe("F11: a rider that came with its own cast is not `(passive)`", () => {
+  const TELEPORT = "48020"; // Demonic Circle: Teleport — on the rider list
+  const TREE = "33891"; // Incarnation: Tree of Life — on the rider list
+  const index = createCastMatchIndex();
+  addCastToIndex(index, "lock", TELEPORT, "Demonic Circle: Teleport", 51_000);
+  const d = (src: string, id: string, name: string, t: number) => ({
+    srcUnitId: src,
+    spellId: id,
+    spellName: name,
+    timestamp: t,
+  });
+
+  it("the list still makes it a rider, cast or no cast", () => {
+    const pressed = d("lock", TELEPORT, "Demonic Circle: Teleport", 51_040);
+    const unpressed = d("druid", TREE, "Incarnation: Tree of Life", 90_000);
+    expect(classifyDispel(index, pressed)).toBe("rider");
+    expect(classifyDispel(index, unpressed)).toBe("rider");
+    expect(dispelCameWithOwnCast(index, pressed)).toBe(true);
+    // leaving the form: the removal is credited to 33891, no cast of it
+    expect(dispelCameWithOwnCast(index, unpressed)).toBe(false);
+    // the window is the classifier's own: 1 s either side, not 1.001
+    expect(
+      dispelCameWithOwnCast(
+        index,
+        d("lock", TELEPORT, "Demonic Circle: Teleport", 52_001),
+      ),
+    ).toBe(false);
+  });
+
+  it("the tag follows the cast, and only on a rider", () => {
+    expect(
+      minorDispelPartTag({ dispelKind: "rider", riderOfOwnCast: true }),
+    ).toBe(MINOR_DISPEL_RIDER_TAG);
+    expect(minorDispelPartTag({ dispelKind: "rider" })).toBe(
+      MINOR_DISPEL_PASSIVE_TAG,
+    );
+    expect(minorDispelPartTag({ dispelKind: "proc" })).toBe(
+      MINOR_DISPEL_PASSIVE_TAG,
+    );
+    expect(minorDispelPartTag({ dispelKind: "deliberate" })).toBeUndefined();
+    expect(MINOR_DISPEL_RIDER_TAG).not.toMatch(/passive/);
+  });
+
+  it("the fold keeps the two apart for one unit and one spell", () => {
+    const e = (t: number, over: Partial<IDispelEvent>): IDispelEvent =>
+      ({
+        timeSeconds: t,
+        sourceName: "Druid",
+        dispelSpellName: "Incarnation: Tree of Life",
+        removedSpellId: "1",
+        removedSpellName: "Chilled",
+        priority: "Low",
+        dispelKind: "rider",
+        ...over,
+      }) as IDispelEvent;
+    const lines: string[] = [];
+    emitMinorDispelEntries({
+      dispelSummary: {
+        allyCleanse: [
+          e(22, { riderOfOwnCast: true }),
+          e(126, { riderOfOwnCast: true }),
+          e(60, {}),
+        ],
+        ourPurges: [],
+        hostilePurges: [],
+      } as never,
+      pid: (n: string) => `2(${n})`,
+      enemyPid: (n: string) => `4(${n})`,
+      enemyDispelSummary: undefined,
+      addEntry: ((_: number, line: string) => lines.push(line)) as never,
+    });
+    expect(lines).toEqual([
+      "0:22  [MINOR DISPELS]   2(Druid): Incarnation: Tree of Life (side effect of the cast) x2, Incarnation: Tree of Life (passive) (low-priority, folded)",
+    ]);
   });
 });
 

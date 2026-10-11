@@ -147,26 +147,46 @@ export function buildCastMatchIndex(
 const within = (list: number[] | undefined, t: number): boolean =>
   !!list && list.some((c) => Math.abs(c - t) <= DISPEL_CAST_MATCH_WINDOW_MS);
 
-export function classifyDispel(
+interface IDispelToClassify {
+  srcUnitId: string;
+  spellId: string | null | undefined;
+  spellName: string | null | undefined;
+  timestamp: number;
+}
+
+/**
+ * Did the dispel's own source log a cast of the dispelling spell (same id or
+ * same name) inside `DISPEL_CAST_MATCH_WINDOW_MS` — the cast-match half of
+ * `classifyDispel`, on its own for a RIDER (F11): the list makes a Demonic
+ * Circle: Teleport's snare removal a rider whether or not the teleport was
+ * cast, and the [MINOR DISPELS] fold printed every rider as `(passive)` — on
+ * the 60 re-eval prompts the only mention of seven warlocks' teleports. A
+ * rider with its cast on the log is a side effect of a press; one without
+ * (Incarnation: Tree of Life's removal when the druid LEAVES the form, or
+ * enters it on a Reforestation proc) is not.
+ */
+export function dispelCameWithOwnCast(
   index: CastMatchIndex,
-  d: {
-    srcUnitId: string;
-    spellId: string | null | undefined;
-    spellName: string | null | undefined;
-    timestamp: number;
-  },
-): DispelKind {
-  // The list wins over the cast match: a form shift IS a cast, but its dispel
-  // is a root-break rider, not a cleanse decision.
-  if (d.spellId && MOVEMENT_ROOT_BREAK_DISPEL_IDS.has(d.spellId))
-    return "rider";
+  d: IDispelToClassify,
+): boolean {
   const idHit = d.spellId
     ? within(index.byId.get(`${d.srcUnitId}|${d.spellId}`), d.timestamp)
     : false;
   const nameHit = d.spellName
     ? within(index.byName.get(`${d.srcUnitId}|${d.spellName}`), d.timestamp)
     : false;
-  return idHit || nameHit ? "deliberate" : "proc";
+  return idHit || nameHit;
+}
+
+export function classifyDispel(
+  index: CastMatchIndex,
+  d: IDispelToClassify,
+): DispelKind {
+  // The list wins over the cast match: a form shift IS a cast, but its dispel
+  // is a root-break rider, not a cleanse decision.
+  if (d.spellId && MOVEMENT_ROOT_BREAK_DISPEL_IDS.has(d.spellId))
+    return "rider";
+  return dispelCameWithOwnCast(index, d) ? "deliberate" : "proc";
 }
 
 export const isDeliberateDispel = (k: DispelKind): boolean =>

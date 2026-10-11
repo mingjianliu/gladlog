@@ -82,6 +82,7 @@ export type DispelPriority = "Critical" | "High" | "Medium" | "Low";
 import {
   buildCastMatchIndex,
   classifyDispel,
+  dispelCameWithOwnCast,
   type DispelKind,
 } from "./dispelKind";
 
@@ -1329,6 +1330,10 @@ export interface IDispelEvent {
    * Weak …); rider = side effect of a movement/form action. One predicate,
    * utils/dispelKind.ts — the desktop counts and the prompt fold read this. */
   dispelKind: DispelKind;
+  /** A `rider` whose own source logged the cast of the dispelling spell at
+   * the removal (`dispelCameWithOwnCast`): a side effect of a press, which
+   * the [MINOR DISPELS] fold must not call passive. Absent otherwise. */
+  riderOfOwnCast?: true;
   /** B13e, our purges of a Magic buff only: how many purgeable buffs
    * (`purgeableBuffIntervals`) were on the target at the removal, the
    * removed one included. Absent when the removed aura is not one (an
@@ -2749,6 +2754,13 @@ export function reconstructDispelSummary(
 
       const priority = getPriority(removedSpellId);
       const destUnit = unitMap.get(action.destUnitId);
+      const dispelToClassify = {
+        srcUnitId: action.srcUnitId,
+        spellId: action.spellId,
+        spellName: action.spellName,
+        timestamp: action.timestamp,
+      };
+      const dispelKind = classifyDispel(castIndex, dispelToClassify);
 
       // Treat a pet owned by a friendly player as a friendly source
       // Pets passed via friendlyPets are always friendly — we already filtered them by reaction
@@ -2796,12 +2808,11 @@ export function reconstructDispelSummary(
         isSpellSteal: isSteal,
         // B45: pet unit actions are always pet dispels; player actions only when srcUnit ≠ player
         isPetDispel: isPetUnit || action.srcUnitId !== unit.id,
-        dispelKind: classifyDispel(castIndex, {
-          srcUnitId: action.srcUnitId,
-          spellId: action.spellId,
-          spellName: action.spellName,
-          timestamp: action.timestamp,
-        }),
+        dispelKind,
+        ...(dispelKind === "rider" &&
+        dispelCameWithOwnCast(castIndex, dispelToClassify)
+          ? { riderOfOwnCast: true as const }
+          : {}),
         wasFatal: false,
       };
 
