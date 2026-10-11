@@ -176,7 +176,7 @@ async function scan(): Promise<void> {
           for (const cd of extractMajorCooldowns(f, combat)) {
             if (!countsAsTeamBurst(f, String(cd.spellId))) continue;
             teamCds.push(
-              syncWindowCdFor(cd, f, enemies, enemyAndPetIds, startMs),
+              syncWindowCdFor(cd, f, enemies, enemyAndPetIds, startMs, units),
             );
           }
         } catch {

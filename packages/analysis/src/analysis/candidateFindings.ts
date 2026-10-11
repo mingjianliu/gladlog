@@ -36,9 +36,8 @@ import { bracketKey } from "../utils/bracketKey";
 import { analyzeBurstLedger, wallUpAtOpen } from "../utils/burstLedger";
 import {
   actWindowFor,
+  cannotCastIntervalsForSpells,
   enemySourceIds,
-  intervalBlocksEverySpell,
-  type NamedCannotCastInterval,
   namedCannotCastIntervals,
 } from "../utils/cannotCastIntervals";
 import { type OwnerCastCancels, ownerCastCancels } from "../utils/castCancels";
@@ -3052,6 +3051,7 @@ function teamPlayEvents(
                   enemies,
                   enemyAndPetIds,
                   combat.startTime,
+                  units,
                 ),
               );
             }
@@ -3155,6 +3155,8 @@ function teamPlayEvents(
         cannotCastSrcIds,
         combat.startTime,
         roundEndMs,
+        // a ready cooldown the owner's pet casts is asked of the pet
+        units,
       );
       const cdHoardSources = [
         {
@@ -3467,21 +3469,34 @@ function teamPlayEvents(
       );
       // W1a: the owner's own cannot-cast intervals (CC, silence, kick
       // lockout) — the one predicate every feasibility gate reads.
-      // FT-T10: kept with their cause — a kick lockout counts for
-      // an option only when it stops every press of that option (below).
-      let ownerBlocked: NamedCannotCastInterval[] = [];
-      try {
-        ownerBlocked = namedCannotCastIntervals(owner, cannotCastSrcIds);
-      } catch {
-        ownerBlocked = [];
-      }
-      const ownerBlockedSFor = (pressIds: readonly string[]) =>
-        ownerBlocked
-          .filter((b) => intervalBlocksEverySpell(b, pressIds))
-          .map((b) => ({
-            from: (b.from - combat.startTime) / 1000,
-            to: (b.to - combat.startTime) / 1000,
-          }));
+      // FT-T10: asked per option — a kick lockout counts for an option only
+      // when it stops every press of that option, and a press the owner's
+      // pet casts is asked of the pet (`cannotCastIntervalsForSpells`).
+      const ownerBlockedCache = new Map<
+        string,
+        Array<{ from: number; to: number }>
+      >();
+      const ownerBlockedSFor = (pressIds: readonly string[]) => {
+        const key = pressIds.join(",");
+        let blocked = ownerBlockedCache.get(key);
+        if (!blocked) {
+          try {
+            blocked = cannotCastIntervalsForSpells(
+              owner,
+              cannotCastSrcIds,
+              pressIds,
+              units,
+            ).map((b) => ({
+              from: (b.from - combat.startTime) / 1000,
+              to: (b.to - combat.startTime) / 1000,
+            }));
+          } catch {
+            blocked = [];
+          }
+          ownerBlockedCache.set(key, blocked);
+        }
+        return blocked;
+      };
       const usableWhileCc = (id: string) =>
         USABLE_WHILE_CC_SPELL_IDS.has(id) ||
         USABLE_WHILE_FEARED_SPELL_IDS.has(id) ||

@@ -231,6 +231,9 @@ export function deriveDeathRecaps(source: ReportSource): DeathRecap[] {
         resolved,
         // death-kill F-M1: the same cannot-cast predicate as the prompt
         enemySourceIds(hostilePlayers, Object.values(legacy.units)),
+        // and the round's units: an option the holder's pet casts is asked
+        // of the pet, as the prompt does
+        Object.values(legacy.units),
       ).events,
       ...buildDeathOutcomeSummary(
         outcomeCombat,
@@ -238,6 +241,7 @@ export function deriveDeathRecaps(source: ReportSource): DeathRecap[] {
         ccSummaries,
         resolved,
         enemySourceIds(friendlyPlayers, Object.values(legacy.units)),
+        Object.values(legacy.units),
       ).events,
     ];
     const ccSummaryByUnit = new Map(

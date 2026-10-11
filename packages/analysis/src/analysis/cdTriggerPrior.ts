@@ -39,9 +39,8 @@ import { CombatUnitReaction } from "@gladlog/parser-compat";
 
 import type { CdTriggerPriorRef } from "../data/cdTriggerPrior";
 import {
-  intervalBlocksSpell,
+  cannotCastIntervalsForSpells,
   type NamedCannotCastInterval,
-  namedCannotCastIntervals,
 } from "../utils/cannotCastIntervals";
 import {
   cdCanHelpAnotherUnit,
@@ -252,26 +251,38 @@ export function cdPriorHoldEpisodes(
     );
   if (cds.length === 0 || lastSec <= 0) return [];
 
+  const roundUnits = Object.values(combat.units ?? {}) as UnitLike[];
   const enemyIds = new Set(
-    (Object.values(combat.units ?? {}) as UnitLike[])
+    roundUnits
       .filter(
         (u) => u.reaction !== (owner.reaction ?? CombatUnitReaction.Friendly),
       )
       .map((u) => u.id),
   );
-  let cannotCast: NamedCannotCastInterval[] = [];
-  try {
-    cannotCast = namedCannotCastIntervals(owner, enemyIds);
-  } catch {
-    cannotCast = [];
-  }
-  // FT-T10: asked for the held cooldown — a kick lockout counts
-  // only when it locks that cooldown's school (`intervalBlocksSpell`)
+  // FT-T10: asked for the held cooldown — a kick lockout counts only when
+  // it locks that cooldown's school, and a cooldown the owner's pet casts is
+  // asked of the pet (`cannotCastIntervalsForSpells`)
+  const cannotCastBySpell = new Map<string, NamedCannotCastInterval[]>();
+  const cannotCastFor = (spellId: string): NamedCannotCastInterval[] => {
+    let ivs = cannotCastBySpell.get(spellId);
+    if (!ivs) {
+      try {
+        ivs = cannotCastIntervalsForSpells(
+          owner,
+          enemyIds,
+          [spellId],
+          roundUnits as never,
+        );
+      } catch {
+        ivs = [];
+      }
+      cannotCastBySpell.set(spellId, ivs);
+    }
+    return ivs;
+  };
   const ownerCannotCastAt = (sec: number, spellId: string): boolean => {
     const tMs = startMs + sec * 1000;
-    return cannotCast.some(
-      (iv) => iv.from <= tMs && tMs < iv.to && intervalBlocksSpell(iv, spellId),
-    );
+    return cannotCastFor(spellId).some((iv) => iv.from <= tMs && tMs < iv.to);
   };
   const ownerCanActAt = (sec: number, spellId: string): boolean =>
     !isDeadAtRenderSecond(owner, startMs, sec) &&

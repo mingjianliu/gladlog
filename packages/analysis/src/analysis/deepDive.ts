@@ -400,6 +400,8 @@ export function buildDeepDivePack(
       (unit, spellId) => resolvedCdByUnit.get(unit.id)?.get(spellId),
       // death-kill F-M1: the missed-options tags ask the cannot-cast predicate
       enemySourceIds(enemies, [...enemyPets]),
+      // an option the holder's pet casts is asked of the pet
+      units,
     );
     for (const ev of outcome.events) {
       if (!inWin(ev.atSeconds)) continue;

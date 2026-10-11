@@ -420,6 +420,8 @@ export function buildMatchContext(
     (unit, spellId) => resolvedCdByUnit.get(unit.id)?.get(spellId),
     // death-kill F-M1: the missed-options tags ask the cannot-cast predicate
     enemySourceIds(enemies, allUnitsForPets),
+    // an option the holder's pet casts is asked of the pet
+    allUnitsForPets as ICombatUnit[],
   );
   const offensiveWaste = buildOffensiveWasteSummary(
     combat,

@@ -53,10 +53,9 @@ import {
 } from "../../utils/ccTrinketAnalysis";
 import {
   type ActWindowState,
+  cannotCastIntervalsForSpells,
   couldActForMostOf,
-  intervalBlocksSpell,
   lockedSchoolsText,
-  namedCannotCastIntervals,
 } from "../../utils/cannotCastIntervals";
 import { getEnglishSpellName } from "../../data/spellEffectData";
 import { incomingPressureBySchool } from "../../utils/incomingPressure";
@@ -450,6 +449,9 @@ export type SyncWindowCd = Pick<
     owner?: any;
     /** the owner's enemies' ids (for `buildCannotCastIntervals`) */
     ownerEnemyIds?: Set<string>;
+    /** the round's units — a cooldown the owner's PET casts is asked of the
+     *  pet (`cannotCastIntervalsForSpells`); absent = the owner's reading */
+    roundUnits?: readonly any[];
     /** absolute ms of match start (the owner's intervals are absolute) */
     matchStartMs?: number;
     /** The enemies a burst in this lock would land on — every enemy but the
@@ -472,11 +474,15 @@ export function syncWindowCdFor<T extends object>(
   enemies: readonly any[],
   ownerEnemyIds: Set<string>,
   matchStartMs: number,
+  /** the round's units (`combat.units`) — required, so the candidate and the
+   *  scan cannot differ on whose intervals a pet-cast cooldown is asked of */
+  roundUnits: readonly any[],
 ): T & {
   owner: any;
   ownerEnemyIds: Set<string>;
   matchStartMs: number;
   reachTargets: readonly any[];
+  roundUnits: readonly any[];
 } {
   return {
     ...cd,
@@ -484,6 +490,7 @@ export function syncWindowCdFor<T extends object>(
     ownerEnemyIds,
     matchStartMs,
     reachTargets: enemies.filter((e) => !isHealerSpec(e.spec)),
+    roundUnits,
   };
 }
 
@@ -625,9 +632,13 @@ export function evaluateSyncWindow(
       return true;
     let blocked: Array<{ from: number; to: number }>;
     try {
-      // FT-T10: a lockout counts only when it locks this cooldown's school
-      blocked = namedCannotCastIntervals(cd.owner, cd.ownerEnemyIds).filter(
-        (iv) => intervalBlocksSpell(iv, cd.spellId),
+      // FT-T10: a lockout counts only when it locks this cooldown's school;
+      // a cooldown the owner's pet casts is asked of the pet
+      blocked = cannotCastIntervalsForSpells(
+        cd.owner,
+        cd.ownerEnemyIds,
+        [cd.spellId],
+        cd.roundUnits,
       );
     } catch {
       return true;
@@ -714,7 +725,8 @@ const signedS = (d: number): string => `${d >= 0 ? "+" : ""}${d.toFixed(1)}`;
  *    slack would print −0.1). Omitted for a rate-warped cooldown.
  *  - `holderCc`: the ready CD's holder's own cannot-cast intervals (the gate's
  *    `buildCannotCastIntervals`, no second predicate) that overlap the lock,
- *    unclipped. A disarm is not one.
+ *    unclipped. A disarm is not one. For a cooldown the holder's pet casts
+ *    the gate reads the PET's intervals, and none of those is printed.
  */
 export function syncReadyTimingFacts(
   w: { fromSeconds: number; toSeconds: number },
@@ -739,10 +751,16 @@ export function syncReadyTimingFacts(
     if (cd.owner && cd.ownerEnemyIds && cd.matchStartMs !== undefined) {
       let blocked: Array<{ from: number; to: number }> = [];
       try {
-        // the gate's own intervals (FT-T10): what stopped THIS cooldown
-        blocked = namedCannotCastIntervals(cd.owner, cd.ownerEnemyIds).filter(
-          (iv) => intervalBlocksSpell(iv, cd.spellId),
-        );
+        // the gate's own intervals (FT-T10): what stopped THIS cooldown —
+        // on the holder. The fact says "the holder was hard-CC'd / silenced
+        // / locked out", so what the gate read on the holder's PET (a
+        // cooldown the pet casts) is not printed here.
+        blocked = cannotCastIntervalsForSpells(
+          cd.owner,
+          cd.ownerEnemyIds,
+          [cd.spellId],
+          cd.roundUnits,
+        ).filter((iv) => iv.onPetId === undefined);
       } catch {
         blocked = [];
       }

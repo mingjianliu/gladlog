@@ -1787,12 +1787,15 @@ export function buildKillSequenceBlock(params: {
               // crisis-external F-D2's `freeBeforeDeathS` (`freeMsBefore`, the
               // same intervals); nothing when no lock started before it
               // FT-T10: asked for the defensive the line names — a
-              // kick lockout counts only when it locks that spell's school
+              // kick lockout counts only when it locks that spell's school,
+              // and a defensive the holder's pet casts is asked of the pet
+              // ("free to press it" is the spell's own free time either way)
               const freeMs = freeMsBefore(
                 cannotCastIntervalsForSpells(
                   u.player as ICombatUnit,
                   enemySourceIds(enemies, params.allUnits ?? []),
                   [u.cd.spellId],
+                  params.allUnits as ICombatUnit[] | undefined,
                 ),
                 matchStartMs + Math.round(deathTime * 1000),
               );

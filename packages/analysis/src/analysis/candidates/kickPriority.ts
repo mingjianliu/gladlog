@@ -333,11 +333,17 @@ export function kickPriorityDecisionPoints(
         const kit = interruptForUnit(f as never);
         iv = [
           // FT-T10: a kick lockout counts only when it locks the
-          // school of this friend's interrupt (no kit → every lockout)
+          // school of this friend's interrupt (no kit → every lockout).
+          // A pet's interrupt (`interruptForUnit` returns one only when the
+          // pet was seen casting it) is asked of the PET: the Warlock's stun
+          // does not lock Spell Lock, the Felhunter's does. The friend's own
+          // casting locks below and the roots of the run budget stay the
+          // friend's.
           ...cannotCastIntervalsForSpells(
             f as never,
             cannotCastSrcIds,
             kit ? [kit.spellId] : undefined,
+            units as never,
           ),
           ...castingLockIntervalsOf(f as never, combat, kit?.spellId),
         ];

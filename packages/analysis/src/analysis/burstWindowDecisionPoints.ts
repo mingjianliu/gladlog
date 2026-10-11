@@ -63,9 +63,8 @@ import { getUnitPositionAtTime } from "../utils/losAnalysis";
 import { LOS_SWEEP_GAP_MS } from "../utils/positionSampling";
 import { canReachTargetAt } from "../utils/rootReachability";
 import {
-  intervalBlocksSpell,
-  type NamedCannotCastInterval,
-  namedCannotCastIntervals,
+  cannotCastIntervalsForSpells,
+  petCastersOf,
 } from "../utils/cannotCastIntervals";
 import { isDeadAt } from "../utils/unitDeath";
 import { castAndEffectIds, isCastOrEffect } from "../data/castEffectAuras";
@@ -1217,16 +1216,8 @@ export function burstWindowDecisionPoints(
   // externals that do nothing self-cast, `canHelpAnotherUnit` is GH #28's.
   const selfCdsByUnit = new Map<string, IMajorCooldownInfo[]>();
   const allyCdsByUnit = new Map<string, IMajorCooldownInfo[]>();
-  const ccByUnit = new Map<
-    string,
-    {
-      startMs: number;
-      endMs: number;
-      // FT-T10: a cannot-cast interval keeps its cause, so a kick
-      // lockout can be asked for one tool (`inCcAt`)
-      cause?: NamedCannotCastInterval;
-    }[]
-  >();
+  // hard CC on the unit itself, from any source (`inCcAt`'s first half)
+  const ccByUnit = new Map<string, { startMs: number; endMs: number }[]>();
   /** PROBE-ONLY: spellId → base cooldown seconds, straight off the same
    * `extractMajorCooldowns` ledger `cdAvailableAt` reads above, so a spend's
    * weight and a spend's availability can never come from two tables. */
@@ -1278,15 +1269,32 @@ export function burstWindowDecisionPoints(
       .filter((u) => u.ownerId && enemyPlayerIds.has(u.ownerId))
       .map((u) => u.id as string),
   ]);
-  for (const u of friendlies)
-    ccByUnit.set(u.id, [
-      ...(ccByUnit.get(u.id) ?? []),
-      ...namedCannotCastIntervals(u, enemySourceIds).map((iv) => ({
-        startMs: iv.from,
-        endMs: iv.to,
-        cause: iv,
-      })),
-    ]);
+  // FT-T10: asked per tool, through the one reading for a named spell
+  // (`cannotCastIntervalsForSpells`): a kick lockout stops only a tool of the
+  // school it locked, and a tool the unit's PET casts is asked of the pet.
+  // `ofPet` = that second case: the hard-CC list above sits on the unit and
+  // says nothing about its pet, so it is not read for such a tool.
+  const cannotCastByTool = new Map<
+    string,
+    { ofPet: boolean; intervals: { from: number; to: number }[] }
+  >();
+  const cannotCastForTool = (u: any, toolSpellId: string) => {
+    const key = `${u.id}:${toolSpellId}`;
+    let entry = cannotCastByTool.get(key);
+    if (!entry) {
+      entry = {
+        ofPet: petCastersOf(u, units, toolSpellId).length > 0,
+        intervals: cannotCastIntervalsForSpells(
+          u,
+          enemySourceIds,
+          [toolSpellId],
+          units,
+        ),
+      };
+      cannotCastByTool.set(key, entry);
+    }
+    return entry;
+  };
   const friendlyPlayerIds = new Set<string>(friendlies.map((u) => u.id));
   const ownerOfUnit = new Map<string, string>(
     units
@@ -1659,16 +1667,18 @@ export function burstWindowDecisionPoints(
       // external in range at t who then sat in CC until t+7 and ran out of
       // range still counted as able to answer. A cooldown that came back
       // three seconds into the window is now an opportunity it was not.
-      // FT-T10: asked per tool — a kick lockout stops only a tool
-      // of the school it locked (`intervalBlocksSpell`); a unit is out at a
+      // FT-T10: asked per tool (`cannotCastForTool`); a unit is out at a
       // second only when every ready tool is stopped
-      const inCcAt = (u: any, ms: number, toolSpellId: string): boolean =>
-        (ccByUnit.get(u.id) ?? []).some(
-          (iv) =>
-            iv.startMs <= ms &&
-            ms < iv.endMs &&
-            (!iv.cause || intervalBlocksSpell(iv.cause, toolSpellId)),
+      const inCcAt = (u: any, ms: number, toolSpellId: string): boolean => {
+        const tool = cannotCastForTool(u, toolSpellId);
+        return (
+          (!tool.ofPet &&
+            (ccByUnit.get(u.id) ?? []).some(
+              (iv) => iv.startMs <= ms && ms < iv.endMs,
+            )) ||
+          tool.intervals.some((iv) => iv.from <= ms && ms < iv.to)
         );
+      };
       const windowSecs: number[] = [];
       for (let sec = tSec; start + sec * 1000 < w1; sec++) windowSecs.push(sec);
       const feasibleUnits: string[] = [];

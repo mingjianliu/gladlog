@@ -242,8 +242,14 @@ export interface IDeathWindowFreedom {
   /** the longest contiguous free gap — the gap `MIN_FREE_GAP_SECONDS` tests */
   longestFreeS: number;
   /** the cannot-cast interval covering the death instant, if any (the
-   * earliest-starting one) */
-  heldAtDeath?: { spellName: string; fromSeconds: number; lockout: boolean };
+   * earliest-starting one). `onPet`: it sat on the unit's pet — the option
+   * asked about is a spell that pet casts (`cannotCastIntervalsForSpells`) */
+  heldAtDeath?: {
+    spellName: string;
+    fromSeconds: number;
+    lockout: boolean;
+    onPet?: true;
+  };
 }
 
 export interface IDeathImmuneAvailable {
@@ -679,6 +685,8 @@ export function deathWindowFreedom(
   // FT-T10: the option the tag is about — a kick lockout counts
   // only when it locks that spell's school; absent → every lockout
   optionSpellId?: string,
+  // the round's units: an option the unit's pet casts is asked of the pet
+  roundUnits?: readonly ICombatUnit[],
 ): IDeathWindowFreedom | null {
   const windowStart = Math.max(0, deathSeconds - windowSeconds);
   if (deathSeconds <= windowStart) return null;
@@ -686,6 +694,7 @@ export function deathWindowFreedom(
     unit,
     hostileIds,
     optionSpellId === undefined ? undefined : [optionSpellId],
+    roundUnits,
   );
   const result = freeGapCore(
     named.map((iv) => ({
@@ -708,6 +717,7 @@ export function deathWindowFreedom(
             spellName: getEnglishSpellName(cover.spellId),
             fromSeconds: (cover.from - matchStartMs) / 1000,
             lockout: cover.lockout,
+            ...(cover.onPetId !== undefined ? { onPet: true as const } : {}),
           },
         }
       : {}),
@@ -918,6 +928,12 @@ export function buildDeathOutcomeSummary(
    * Absent = the hard-CC test from `ccSummaries`, as before.
    */
   cannotCastSourceIds?: Set<string>,
+  /**
+   * The round's units, with `cannotCastSourceIds`: an option the holder's
+   * PET casts is asked of the pet's cannot-cast intervals, not the holder's
+   * (`cannotCastIntervalsForSpells`). Absent = every option is the holder's.
+   */
+  roundUnits?: readonly ICombatUnit[],
 ): IDeathOutcomeSummary {
   const matchStartMs = combat.startTime;
   // death-kill F-M1 / F-M2: with the hostile sources, the cannot-cast
@@ -939,6 +955,7 @@ export function buildDeathOutcomeSummary(
         atSeconds,
         LETHAL_WINDOW_SECONDS,
         optionSpellId,
+        roundUnits,
       );
       return freedom
         ? {
@@ -1126,12 +1143,14 @@ export function buildDeathOutcomeSummary(
 /** death-kill F-M2 (cc-dr X-M2: the number is the LONGEST contiguous free
  * gap, the one `MIN_FREE_GAP_SECONDS` tests — not the total free time), and
  * what held the unit through the death when a cannot-cast interval covers
- * it. */
+ * it. When that interval sat on the unit's PET (the option is a spell the
+ * pet casts) the clause says so — it must not read as the unit's own CC. */
 function freedomNote(who: string, f: IDeathWindowFreedom): string {
+  const pet = f.heldAtDeath?.onPet ? "its pet " : "";
   const held = f.heldAtDeath
     ? f.heldAtDeath.lockout
-      ? `, then school-locked (${f.heldAtDeath.spellName}) from ${fmtTime(f.heldAtDeath.fromSeconds)} through the death`
-      : `, then in ${f.heldAtDeath.spellName} from ${fmtTime(f.heldAtDeath.fromSeconds)} through the death`
+      ? `, then ${pet}school-locked (${f.heldAtDeath.spellName}) from ${fmtTime(f.heldAtDeath.fromSeconds)} through the death`
+      : `, then ${pet}in ${f.heldAtDeath.spellName} from ${fmtTime(f.heldAtDeath.fromSeconds)} through the death`
     : "";
   return `, ${who}longest stretch free to cast it ${f.longestFreeS.toFixed(1)}s of the last ${LETHAL_WINDOW_SECONDS}s${held}`;
 }

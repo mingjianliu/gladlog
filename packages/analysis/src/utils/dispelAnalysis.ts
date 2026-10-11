@@ -2089,6 +2089,14 @@ export function occupancyWithin(
   return out;
 }
 
+/** What "the dispeller / purger was locked out" is asked with: the hostile
+ * sources (enemy players and their summons) and the round's units — the
+ * second so that a removal the unit's pet casts is asked of the pet. */
+interface CannotCastSrc {
+  enemyIds: Set<string>;
+  units: ICombatUnit[];
+}
+
 /**
  * Returns true if the unit was unable to cast (cast-blocking aura or kick
  * lockout — see buildCannotCastIntervals) for the ENTIRETY of
@@ -2098,13 +2106,15 @@ function isPurgerFullyBlockedDuringWindow(
   purger: ICombatUnit,
   windowStartMs: number,
   windowEndMs: number,
-  enemyIds: Set<string>,
+  src: CannotCastSrc,
   // FT-T10: the removal(s) the unit would press — a kick lockout
-  // counts only when it stops every one of them; absent → every lockout
+  // counts only when it stops every one of them; absent → every lockout.
+  // A removal the unit's pet casts (Devour Magic) is asked of the pet: a
+  // stunned Warlock is not "locked" for it, a stunned Felhunter is.
   spellIds?: readonly string[],
 ): boolean {
   return isWindowFullyCovered(
-    cannotCastIntervalsForSpells(purger, enemyIds, spellIds),
+    cannotCastIntervalsForSpells(purger, src.enemyIds, spellIds, src.units),
     windowStartMs,
     windowEndMs,
   );
@@ -2141,10 +2151,11 @@ function dispellersLockedOutForWindow(
   dispellers: ICombatUnit[],
   startMs: number,
   endMs: number,
-  enemyIds: Set<string>,
+  src: CannotCastSrc,
   freeThresholdMs: number,
   // FT-T10: each dispeller's removal(s) — a kick lockout counts only
-  // when it stops every one of them; absent → every lockout
+  // when it stops every one of them; absent → every lockout. A removal the
+  // dispeller's pet casts is asked of the pet.
   spellIdsOf?: (d: ICombatUnit) => readonly string[] | undefined,
 ): boolean {
   if (dispellers.length === 0 || endMs <= startMs) return false;
@@ -2155,7 +2166,7 @@ function dispellersLockedOutForWindow(
   let intersection: Array<{ from: number; to: number }> | null = null;
   for (const d of dispellers) {
     const merged = mergeIntervals(
-      cannotCastIntervalsForSpells(d, enemyIds, spellIdsOf?.(d)),
+      cannotCastIntervalsForSpells(d, src.enemyIds, spellIdsOf?.(d), src.units),
     );
     intersection =
       intersection === null
@@ -2653,9 +2664,11 @@ export function reconstructDispelSummary(
   const roundUnits = (
     Array.isArray(combat.units) ? combat.units : Object.values(combat.units ?? {})
   ) as ICombatUnit[];
-  const rosterSides = buildRosterSides(
-    roundUnits.length > 0 ? roundUnits : [...friends, ...enemies, ...friendlyPets, ...enemyPets],
-  );
+  const rosterUnits =
+    roundUnits.length > 0
+      ? roundUnits
+      : [...friends, ...enemies, ...friendlyPets, ...enemyPets];
+  const rosterSides = buildRosterSides(rosterUnits);
   const friendlyIds = new Set(friends.map((u) => u.id));
   const enemyIds = new Set(enemies.map((u) => u.id));
   // B45: pets are also considered friendly sources; owner lookup is via ownerId
@@ -2665,7 +2678,13 @@ export function reconstructDispelSummary(
   // with pets and totems as sources (a Felhunter's Spell Lock locks as hard
   // as a Kick; triage 2026-09-29 H23) — `enemyIds` stays players-only for its
   // other readers here (DR history, aura attribution).
-  const cannotCastSrcIds = new Set([...enemyIds, ...enemyPetIds]);
+  // `units`: the round's roster, so a removal the dispeller's PET casts
+  // (Devour Magic, Singe Magic) is asked of the pet and not of its owner
+  // (`cannotCastIntervalsForSpells`).
+  const cannotCastSrc: CannotCastSrc = {
+    enemyIds: new Set([...enemyIds, ...enemyPetIds]),
+    units: rosterUnits,
+  };
   const friendlyPlayerById = new Map(friends.map((u) => [u.id, u]));
   const enemyPlayerById = new Map(enemies.map((u) => [u.id, u]));
   const teamDispelTypes = buildTeamDispelTypes(friends);
@@ -3146,7 +3165,7 @@ export function reconstructDispelSummary(
                 ),
                 applyTs,
                 removal.ts,
-                cannotCastSrcIds,
+                cannotCastSrc,
                 MISSED_CLEANSE_THRESHOLD_S * 1000,
                 // FT-T10: asked for the dispel(s) each would press
                 (d) =>
@@ -3262,7 +3281,7 @@ export function reconstructDispelSummary(
                 dispeller,
                 applyTs,
                 removal.ts,
-                cannotCastSrcIds,
+                cannotCastSrc,
                 // FT-T10: a lockout on another school leaves the
                 // dispel (the spells `removalSpellIdsFor` names)
                 removalSpellIdsFor(dispeller, windowDispelType, charmed),
@@ -3295,7 +3314,7 @@ export function reconstructDispelSummary(
                   d,
                   applyTs,
                   removal.ts,
-                  cannotCastSrcIds,
+                  cannotCastSrc,
                   // FT-T10: the gate's spells above
                   removalSpellIdsFor(d, windowDispelType, charmed),
                 ),
@@ -3423,7 +3442,7 @@ export function reconstructDispelSummary(
               capableDispellers,
               applyTs,
               removal.ts,
-              cannotCastSrcIds,
+              cannotCastSrc,
               MISSED_CLEANSE_THRESHOLD_S * 1000,
               // FT-T10: asked for the dispel(s) each would press
               (d) => removalSpellIdsFor(d, windowDispelType, charmed),
@@ -3574,7 +3593,7 @@ export function reconstructDispelSummary(
                   purger,
                   applyTs,
                   windowEndMs,
-                  cannotCastSrcIds,
+                  cannotCastSrc,
                   // FT-T10: a lockout on another school leaves the purge
                   [...purgeSpellIdsOf(purger)],
                 ),
@@ -3593,7 +3612,7 @@ export function reconstructDispelSummary(
                   h.unit,
                   applyTs,
                   windowEndMs,
-                  cannotCastSrcIds,
+                  cannotCastSrc,
                   // FT-T10: asked for the scoped tool's own press
                   [tool.castSpellId],
                 )
@@ -3714,7 +3733,7 @@ export function reconstructDispelSummary(
                       eligiblePurgers,
                       applyTs,
                       windowEndMs,
-                      cannotCastSrcIds,
+                      cannotCastSrc,
                       MISSED_PURGE_THRESHOLD_S * 1000,
                       (p) => [...purgeSpellIdsOf(p)],
                     )
@@ -3724,7 +3743,7 @@ export function reconstructDispelSummary(
                         [unit],
                         applyTs,
                         windowEndMs,
-                        cannotCastSrcIds,
+                        cannotCastSrc,
                         freeBarMs(tool),
                         () => [tool.castSpellId],
                       ),
@@ -3763,7 +3782,7 @@ export function reconstructDispelSummary(
                             [unit],
                             applyTs,
                             windowEndMs,
-                            cannotCastSrcIds,
+                            cannotCastSrc,
                             freeBarMs(tool),
                             () => [tool.castSpellId],
                           ),

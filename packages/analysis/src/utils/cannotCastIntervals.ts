@@ -73,7 +73,15 @@ export interface NamedCannotCastInterval {
    * The lock sits on the unit's own cast bar and stops none of them, whatever
    * their school. */
   petCastSpellIds?: ReadonlySet<string>;
+  /** set by `cannotCastIntervalsForSpells` on an interval that sits on a PET
+   * of the unit asked about (the pet that casts the spell asked about), not
+   * on the unit: that pet's id. A fact naming what blocked "the owner" must
+   * not name such an interval as the owner's. */
+  onPetId?: string;
 }
+
+/** The round's units, as the pet reading needs them (`petCastersOf`). */
+export type RoundUnits = ReadonlyArray<ICombatUnit> | undefined;
 
 /**
  * The spells the log shows this unit's PET casting and never the unit itself
@@ -89,6 +97,27 @@ export interface NamedCannotCastInterval {
  * inside a lock that covers Shadow; Devour Magic 88 / 641.
  * Observed, not listed: a pet spell never pressed this round stays on the
  * owner's reading (the exemption stays).
+ *
+ * Nor does a cast-blocking AURA on the owner reach them
+ * (`cannotCastIntervalsForSpells`, 2026-10-11): what stops a pet-cast spell
+ * is a control or a lockout on the PET. Asked of the corpus the same way
+ * (fix-FT/scripts/t10_petHardCc.ts, 605 files: owner aura interval × spell
+ * the owner's pets cast, against that spell's rate in same-length windows
+ * with no aura on the owner). For controlled pets (Pet- GUID) with no unit
+ * of the owner's under a cast-blocking aura of its own, the pet cast the
+ * spell inside the owner's aura in 2,903 of 16,039 pairs (18.1 %) against a
+ * base of 17.3 % — while the player's OWN spells are 0.53 % inside against
+ * 7.0 %. Hard CC on the owner, by commanded spell: Spell Lock 60 / 1,010
+ * inside (5.9 %) vs 3.9 % base, Devour Magic 41 / 693 (5.9 %) vs 7.3 %,
+ * Master's Call 24 / 830 (2.9 %) vs 2.9 %, Seduction 9 / 179 (5.0 %) vs
+ * 3.9 %. With a unit of the owner's ITSELF under a cast-blocking aura in
+ * that interval the rate halves: 944 / 10,335 (9.1 %) vs 16.7 %.
+ * Those are controlled pets. `petSpellCastEvents` also holds what a
+ * guardian or a totem casts (Creature- GUID), and this one definition of
+ * "pet-cast" covers them for the lockout and the aura alike — for them the
+ * probe is confounded, not clean (9.7 % inside vs 15.9 % base: a summon's
+ * spell logged at the owner's own press is 0 % inside for that reason
+ * alone).
  */
 export function petCastSpellIdsOf(unit: ICombatUnit): ReadonlySet<string> {
   const successIds = (events: ICombatUnit["spellCastEvents"] | undefined) =>
@@ -103,12 +132,61 @@ export function petCastSpellIdsOf(unit: ICombatUnit): ReadonlySet<string> {
   );
 }
 
+type PetCasters = ReadonlyMap<string, readonly ICombatUnit[]>;
+const NO_PET_CASTERS: PetCasters = new Map();
+
+/** `petCastersOf` for every pet-cast spell of the unit, in one pass. */
+function petCastersBySpell(unit: ICombatUnit, units: RoundUnits): PetCasters {
+  const petCasts = unit.petSpellCastEvents;
+  if (!units?.length || !petCasts?.length) return NO_PET_CASTERS;
+  const petCast = petCastSpellIdsOf(unit);
+  if (petCast.size === 0) return NO_PET_CASTERS;
+  const owned = new Map(
+    units.filter((u) => u.ownerId === unit.id).map((u) => [u.id, u]),
+  );
+  const out = new Map<string, ICombatUnit[]>();
+  for (const c of petCasts) {
+    if (c.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
+    const spellId = String(c.spellId);
+    if (!petCast.has(spellId)) continue;
+    const pet = owned.get(c.srcUnitId);
+    if (!pet) continue;
+    const casters = out.get(spellId) ?? [];
+    if (!casters.includes(pet)) casters.push(pet);
+    out.set(spellId, casters);
+  }
+  return out;
+}
+
 /**
- * Does this cannot-cast interval stop `spellId`? An aura (hard CC, silence)
- * is taken as stopping everything here; a kick lockout stops a spell only
- * when every school of that spell is inside the lock (`schoolLockedBy`, the
- * kick-eaten predicate). Unknown school on either side → it blocks (the
- * exemption stays).
+ * The pet unit(s) the log shows casting `spellId` for `unit` this round: the
+ * units whose `ownerId` is the unit (the summon-owner attribution
+ * `enemySourceIds` reads) and whose SPELL_CAST_SUCCESS of that id sits in the
+ * unit's `petSpellCastEvents` — for a pet-cast spell only
+ * (`petCastSpellIdsOf`: a spell the unit also cast itself is the unit's).
+ * Empty for any other spell, and when the caster is not among `units`: the
+ * spell then stays on the owner's reading.
+ */
+export function petCastersOf(
+  unit: ICombatUnit,
+  units: RoundUnits,
+  spellId: string,
+): readonly ICombatUnit[] {
+  return petCastersBySpell(unit, units).get(spellId) ?? [];
+}
+
+/**
+ * Does this cannot-cast interval stop `spellId`, cast by the unit the
+ * interval sits on? An aura (hard CC, silence) is taken as stopping
+ * everything here; a kick lockout stops a spell only when every school of
+ * that spell is inside the lock (`schoolLockedBy`, the kick-eaten
+ * predicate). Unknown school on either side → it blocks (the exemption
+ * stays).
+ *
+ * ONE interval of ONE unit: it cannot see a pet's intervals. A reader asks
+ * `cannotCastIntervalsForSpells` (or `actWindowFor`) with the round's units
+ * and never filters the owner's list with this by hand — for a spell the
+ * unit's pet casts, the owner's intervals are the wrong list.
  *
  * FT-T10 (user ruling 2026-10-10, option B): until this, a lockout was read
  * as stopping every spell ("a wrong exemption costs far less than a wrong
@@ -140,24 +218,130 @@ export function intervalBlocksSpell(
 }
 
 /**
- * FT-T10: `namedCannotCastIntervals` asked for a SET of spells the
- * unit could answer with — an interval is kept only when it stops EVERY one
- * of them (`intervalBlocksSpell`; `actWindowFor().stateIn`'s reading). No
- * spell to ask about (undefined / empty) → every interval, the unasked
- * reading.
+ * FT-T10: "when could this unit cast NONE of these spells" — the one reading
+ * for a reader that knows which spell(s) it is asking about. No spell to ask
+ * about (undefined / empty) → every interval of the unit, the unasked
+ * reading (`namedCannotCastIntervals`), and never a pet's interval.
+ *
+ * Each spell is asked of the unit that CASTS it:
+ *  - the unit itself, for every spell but the ones below: its own intervals,
+ *    one kept only when it stops EVERY such spell (`intervalBlocksEverySpell`,
+ *    `actWindowFor().stateIn`'s reading);
+ *  - a pet of the unit, for a spell the log shows that pet casting and never
+ *    the unit (`petCastersOf`: Spell Lock, Devour Magic, Seduction): the
+ *    cast-blocking auras enemies put on the PET and the kick lockouts on the
+ *    PET (per school, like a player's) — and none of the owner's. A stunned
+ *    Warlock still commands Spell Lock; a stunned Felhunter does not cast it
+ *    (`petCastSpellIdsOf` has the corpus numbers). Those intervals carry
+ *    `onPetId`.
+ *
+ * Quantifier — EVERY, as for the spells of one unit: the result is the time
+ * at which every caster asked about is stopped, so that no spell of the set
+ * can go off. One caster → that caster's list as it is. Several (own spells
+ * and a pet's, or a spell two pets of the unit cast this round — it is
+ * stopped only while EVERY pet that cast it is) → each caster's intervals
+ * clipped to the time all of them are blocked, each keeping its cause, in
+ * start order.
+ *
+ * `units` = the round's units (`combat.units`). Without them, for a spell
+ * whose pet is not among them, and for a pet spell never seen from the pet
+ * this round (observed, not listed), the spell stays on the owner's reading.
+ *
+ * NOT known here, and not papered over: whether the pet was alive or out at
+ * all (nothing in the product reads a pet's UNIT_DIED or its dismissal; a
+ * dead pet has no aura on it and reads as free), the pet's own cooldown, and
+ * the pet's range / line of sight to the target (the readers' reach checks
+ * sample the owner).
  */
 export function cannotCastIntervalsForSpells(
   unit: ICombatUnit,
   enemyIds: Set<string>,
   spellIds: readonly string[] | undefined,
+  units: RoundUnits,
 ): NamedCannotCastInterval[] {
-  return namedCannotCastIntervals(unit, enemyIds).filter((iv) =>
-    intervalBlocksEverySpell(iv, spellIds),
+  return intervalsForSpells(
+    namedCannotCastIntervals(unit, enemyIds),
+    petBlockLists(enemyIds, spellIds, petCastersBySpell(unit, units)),
+    spellIds,
   );
 }
 
-/** FT-T10: `cannotCastIntervalsForSpells`'s test on one interval,
- * for a reader that builds the intervals once and asks per option. */
+/** `spellIds` split by caster: the unit's own, and for each pet that casts
+ * some of them that pet's intervals stopping every one of ITS spells. */
+function petBlockLists(
+  enemyIds: Set<string>,
+  spellIds: readonly string[] | undefined,
+  casters: PetCasters,
+): { ownSpellIds: readonly string[]; petLists: NamedCannotCastInterval[][] } {
+  if (!spellIds?.length || casters.size === 0)
+    return { ownSpellIds: spellIds ?? [], petLists: [] };
+  const ownSpellIds: string[] = [];
+  const spellsByPet = new Map<ICombatUnit, string[]>();
+  for (const id of spellIds) {
+    const pets = casters.get(id);
+    if (!pets?.length) {
+      ownSpellIds.push(id);
+      continue;
+    }
+    for (const pet of pets)
+      spellsByPet.set(pet, [...(spellsByPet.get(pet) ?? []), id]);
+  }
+  return {
+    ownSpellIds,
+    petLists: [...spellsByPet].map(([pet, ids]) =>
+      namedCannotCastIntervals(pet, enemyIds)
+        .filter((iv) => intervalBlocksEverySpell(iv, ids))
+        .map((iv) => ({ ...iv, onPetId: pet.id })),
+    ),
+  };
+}
+
+/** `cannotCastIntervalsForSpells` over the unit's already-built intervals. */
+function intervalsForSpells(
+  ownNamed: readonly NamedCannotCastInterval[],
+  split: ReturnType<typeof petBlockLists>,
+  spellIds: readonly string[] | undefined,
+): NamedCannotCastInterval[] {
+  if (split.petLists.length === 0)
+    return ownNamed.filter((iv) => intervalBlocksEverySpell(iv, spellIds));
+  const lists = [
+    ...(split.ownSpellIds.length
+      ? [
+          ownNamed.filter((iv) =>
+            intervalBlocksEverySpell(iv, split.ownSpellIds),
+          ),
+        ]
+      : []),
+    ...split.petLists,
+  ];
+  if (lists.length === 1) return lists[0]!;
+  // the time every caster is blocked, then each cause clipped to it
+  let common = cannotCastRuns(lists[0]!);
+  for (const list of lists.slice(1)) {
+    const runs = cannotCastRuns(list);
+    const both: Array<{ from: number; to: number }> = [];
+    for (const a of common)
+      for (const b of runs) {
+        const from = Math.max(a.from, b.from);
+        const to = Math.min(a.to, b.to);
+        if (to > from) both.push({ from, to });
+      }
+    common = both;
+  }
+  const out: NamedCannotCastInterval[] = [];
+  for (const list of lists)
+    for (const iv of list)
+      for (const run of common) {
+        const from = Math.max(iv.from, run.from);
+        const to = Math.min(iv.to, run.to);
+        if (to > from) out.push({ ...iv, from, to });
+      }
+  return out.sort((a, b) => a.from - b.from);
+}
+
+/** FT-T10: `cannotCastIntervalsForSpells`'s test on one interval of one
+ * caster — `intervalBlocksSpell` for every spell of a set. Like it, blind to
+ * a pet's intervals: readers go through `cannotCastIntervalsForSpells`. */
 export function intervalBlocksEverySpell(
   iv: Pick<
     NamedCannotCastInterval,
@@ -631,7 +815,10 @@ export interface ActWindowState {
   /** seconds of (anchorS, toS] — cut at death and the round end, like
    * `couldRespond` — outside every cannot-cast interval; asked for a set of
    * spells, outside every interval that stops ALL of them (the time at
-   * least one of them could be pressed, as far as one interval decides it) */
+   * least one of them could be pressed, as far as one interval decides it;
+   * a spell the unit's pet casts is asked of the pet —
+   * `cannotCastIntervalsForSpells`). `blocks` stays the UNIT's own
+   * intervals: what sat on a pet is counted here and never named there. */
   freeAfterS: number;
   /** the window's end after that cut, seconds since round start (F-H5
    * `windowS` = endS − t) */
@@ -645,12 +832,18 @@ export interface ActWindowState {
  * `ownerCc` / `ownerFreeS` (triage 2026-09-29 H1: the gate passes an owner
  * CC'd for most of the window by ruling, and the line then read "held").
  * `stateIn` is null when the intervals cannot be built.
+ *
+ * Asked with a spell / spells, both read `cannotCastIntervalsForSpells` —
+ * `units` (the round's units) is what lets a spell the unit's pet casts be
+ * asked of the pet; without it every spell is the unit's own. The death cut
+ * is the unit's, not the pet's.
  */
 export function actWindowFor(
   unit: ICombatUnit,
   enemyIds: Set<string>,
   matchStartMs: number,
   roundEndMs: number = Infinity,
+  units?: RoundUnits,
 ): {
   couldRespond: (fromS: number, toS: number, spellId?: string) => boolean;
   stateIn: (
@@ -669,15 +862,32 @@ export function actWindowFor(
   const deathMs = firstDeathMs(unit);
   const endMs = (toS: number) =>
     Math.min(matchStartMs + toS * 1000, deathMs, roundEndMs);
+  // `cannotCastIntervalsForSpells` over the intervals built above, the pet
+  // casters resolved once (a missing pet stream must not throw the caller's
+  // candidate away: the spells then stay on the unit's own reading)
+  let casters: PetCasters | undefined;
+  const forSpells = (
+    spellIds: readonly string[] | undefined,
+  ): NamedCannotCastInterval[] => {
+    if (!spellIds?.length) return named;
+    try {
+      casters ??= petCastersBySpell(unit, units);
+      return intervalsForSpells(
+        named,
+        petBlockLists(enemyIds, spellIds, casters),
+        spellIds,
+      );
+    } catch {
+      return named.filter((iv) => intervalBlocksEverySpell(iv, spellIds));
+    }
+  };
   return {
     couldRespond: (fromS, toS, spellId) => {
       const fromMs = matchStartMs + fromS * 1000;
       const toMs = endMs(toS);
       if (toMs <= fromMs) return false;
       return couldReactWithin(
-        spellId === undefined
-          ? named
-          : named.filter((iv) => intervalBlocksSpell(iv, spellId)),
+        forSpells(spellId === undefined ? undefined : [spellId]),
         fromMs,
         toMs,
       );
@@ -705,15 +915,7 @@ export function actWindowFor(
         freeEndMs > anchorMs
           ? (freeEndMs -
               anchorMs -
-              coveredMsWithin(
-                spellIds?.length
-                  ? named.filter((iv) =>
-                      spellIds.every((id) => intervalBlocksSpell(iv, id)),
-                    )
-                  : named,
-                anchorMs,
-                freeEndMs,
-              )) /
+              coveredMsWithin(forSpells(spellIds), anchorMs, freeEndMs)) /
             1000
           : 0;
       return { blocks, freeAfterS, endS: (toMs - matchStartMs) / 1000 };

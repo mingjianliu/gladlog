@@ -102,9 +102,11 @@ describe("a kick lockout by school (FT-T10)", () => {
     expect(intervalBlocksSpell(iv!, SHADOWFURY)).toBe(true);
     // …and not for the Felhunter
     expect(intervalBlocksSpell(iv!, SPELL_LOCK)).toBe(false);
-    expect(cannotCastIntervalsForSpells(lock, enemyIds, [SPELL_LOCK])).toEqual(
-      [],
-    );
+    // (no round units handed in: the owner's own intervals are the list —
+    // the pet's are in petOwnCc.test.ts)
+    expect(
+      cannotCastIntervalsForSpells(lock, enemyIds, [SPELL_LOCK], undefined),
+    ).toEqual([]);
     // never seen from the pet this round → the owner's reading (the exemption stays)
     expect(intervalBlocksSpell(iv!, DEVOUR_MAGIC)).toBe(true);
     // a spell both the unit and a pet cast is the unit's own
