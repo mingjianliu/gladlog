@@ -100,6 +100,7 @@ import * as cannotCastIntervals from "@gladlog/analysis/src/utils/cannotCastInte
 import * as castCancels from "@gladlog/analysis/src/utils/castCancels";
 import * as castCommitSpans from "@gladlog/analysis/src/utils/castCommitSpans";
 import * as castingLocks from "@gladlog/analysis/src/utils/castingLocks";
+import * as castMissRows from "@gladlog/analysis/src/utils/castMissRows";
 import * as castParam from "@gladlog/analysis/src/utils/castParam";
 import * as ccBreakAnalysis from "@gladlog/analysis/src/utils/ccBreakAnalysis";
 import * as ccDuration from "@gladlog/analysis/src/utils/ccDuration";
@@ -295,6 +296,33 @@ const INDEX: PredicateRow[] = [
     file: `${A}/utils/castCancels.ts`,
     symbol: "CAST_INTERRUPTED_REASONS",
     mod: castCancels,
+  },
+  // cast bars begun (FT-T16 D15 "2c")
+  {
+    file: `${A}/utils/castCancels.ts`,
+    symbol: "castBarStartsOf",
+    mod: castCancels,
+  },
+  {
+    file: `${A}/utils/castCancels.ts`,
+    symbol: "castBarStartsInRound",
+    mod: castCancels,
+  },
+  {
+    file: `${A}/utils/castCancels.ts`,
+    symbol: "castBarsOfCooldown",
+    mod: castCancels,
+  },
+  // which SPELL_MISSED row is a control cast's own (FT-T16 D15 "3c")
+  {
+    file: `${A}/utils/castMissRows.ts`,
+    symbol: "missBelongsToCast",
+    mod: castMissRows,
+  },
+  {
+    file: `${A}/utils/castMissRows.ts`,
+    symbol: "CC_MISS_TAG_WORD",
+    mod: castMissRows,
   },
   // HP sampling
   {
@@ -2526,6 +2554,22 @@ const INDEX: PredicateRow[] = [
     symbol: "checkCcAvoidedLandedConsistency",
     mod: promptQualityCheck,
   },
+  // FT-T16 D15 "3c": the `logged <TYPE>` half of [CC AVOIDED?]
+  {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "ccAvoidedOutcomeText",
+    mod: ccTrinketAnalysis,
+  },
+  {
+    file: `${A}/utils/castMissRows.ts`,
+    symbol: "CONTROL_FAILED_MISS_TYPES",
+    mod: castMissRows,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkCcAvoidedMissType",
+    mod: promptQualityCheck,
+  },
   {
     file: `${A}/utils/cooldowns.ts`,
     symbol: "kitSpellReadyAt",
@@ -2609,6 +2653,17 @@ const INDEX: PredicateRow[] = [
   {
     file: `${E}/quality/promptQualityCheck.ts`,
     symbol: "checkCcBookmarkConsistency",
+    mod: promptQualityCheck,
+  },
+  // FT-T16 D15 "2c": CC USE `cast bar started N×, went off M×`
+  {
+    file: `${A}/context/ccUse.ts`,
+    symbol: "formatCcUseCount",
+    mod: ccUse,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkCcUseStartedCounts",
     mod: promptQualityCheck,
   },
   {

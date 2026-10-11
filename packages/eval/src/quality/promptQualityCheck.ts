@@ -1562,6 +1562,37 @@ const PRESSED_DURING_HOST_LINE =
 const OWNER_KIT_LINE = /^\s*<cooldowns>(.*)<\/cooldowns>\s*$/;
 
 /**
+ * The log owner's unit id and its `<cooldowns>` kit, entry text by spell
+ * name (`Name [..]( [..])?` entries joined by ", "; a name may hold a comma;
+ * every entry but the last has lost its closing `]` to the split). `kit` is
+ * null without a `log owner` unit or its kit line.
+ */
+function ownerKitOf(lines: string[]): {
+  ownerId: string | null;
+  kit: Map<string, string> | null;
+} {
+  let ownerId: string | null = null;
+  let kit: string | null = null;
+  lines.forEach((line, i) => {
+    const u = line.match(UNIT_LEGEND_LINE);
+    if (u?.[3] !== "log owner") return;
+    ownerId = u[1]!;
+    kit = lines[i + 1]?.match(OWNER_KIT_LINE)?.[1] ?? null;
+  });
+  return {
+    ownerId,
+    kit:
+      kit === null
+        ? null
+        : new Map<string, string>(
+            (kit as string)
+              .split(/\](?:, )/)
+              .map((e) => [e.slice(0, e.indexOf(" [")), e] as [string, string]),
+          ),
+  };
+}
+
+/**
  * `| pressed during it: X ×N` (FT-T16, user decision D13 2026-10-10): the log
  * owner's major cooldowns refused because of the control that line states.
  * The producer (`context/controlRejectedPresses.ts`) reads the presses from
@@ -1574,20 +1605,7 @@ const OWNER_KIT_LINE = /^\s*<cooldowns>(.*)<\/cooldowns>\s*$/;
  * checks say nothing.
  */
 export function checkPressedDuringControlNote(lines: string[]): string[] {
-  let ownerId: string | null = null;
-  let kit: string | null = null;
-  lines.forEach((line, i) => {
-    const u = line.match(UNIT_LEGEND_LINE);
-    if (u?.[3] !== "log owner") return;
-    ownerId = u[1]!;
-    kit = lines[i + 1]?.match(OWNER_KIT_LINE)?.[1] ?? null;
-  });
-  // `Name [..]( [..])?` entries joined by ", "; a name may hold a comma
-  const kitEntries = new Map<string, string>(
-    ((kit as string | null) ?? "")
-      .split(/\](?:, )/)
-      .map((e) => [e.slice(0, e.indexOf(" [")), e] as [string, string]),
-  );
+  const { ownerId, kit: kitEntries } = ownerKitOf(lines);
   const failures: string[] = [];
   lines.forEach((line, i) => {
     if (!line.includes(PRESSED_DURING_NOTE_HEAD)) return;
@@ -1611,7 +1629,7 @@ export function checkPressedDuringControlNote(lines: string[]): string[] {
       if (seen.has(name)) fail(`${name} 列了两次`);
       seen.add(name);
       if (Number(item[2]) < 1) fail(`${name} 的次数是 ${item[2]}`);
-      if (kit === null) continue;
+      if (kitEntries === null) continue;
       const entry = kitEntries.get(name);
       if (entry === undefined) fail(`${name} 不在录制者的 <cooldowns> 里`);
       else if (entry.includes("[PASSIVE"))
@@ -1750,6 +1768,9 @@ const CC_USE_COUNT_ITEM = /^(.+) cast (\d+)× \(first (\d+):(\d{2})\)$/;
 /** `formatCcUseCount`'s started form — `checkCcUseStartedCounts`' class. */
 const CC_USE_STARTED_ITEM =
   /^(.+) cast bar started (\d+)×, went off (\d+)×(?: \(first (\d+):(\d{2})\))?$/;
+/** A kit entry's `[UNUSED]` tag and its FT-T06 note (`resourceSnapshot.ts`). */
+const KIT_UNUSED_NOTE =
+  /\[UNUSED(?: — started (\d+)×, never finished)?(?:\]|$)/;
 
 /**
  * `[CC BOOKMARK]` / CC USE counts (32nd hardFailure class, GH #77 part 2,
@@ -1927,7 +1948,13 @@ export function checkCcBookmarkConsistency(lines: string[]): string[] {
  *    spell's casts);
  *  - like the plain form: more `[YOU] [CC]` lines of that spell than M, or
  *    one before the stated first (the timeline may omit casts, so fewer is
- *    allowed).
+ *    allowed);
+ *  - a disagreement with the log owner's `<cooldowns>` kit, which states the
+ *    same bars for a cooldown never spent — `[UNUSED — started K×, never
+ *    finished]` (`resourceSnapshot.ts`; both lines count
+ *    `castBarsOfCooldown`): a spell the kit calls UNUSED must read
+ *    `cast bar started K×, went off 0×` here when K ≥ 1, and may not read the
+ *    started form at all when the kit's `[UNUSED]` carries no K.
  * A started-form entry the pattern does not read falls to
  * `checkCcBookmarkConsistency`'s "格式不符".
  */
@@ -1945,6 +1972,23 @@ export function checkCcUseStartedCounts(lines: string[]): string[] {
     item.match(CC_USE_COUNT_ITEM)?.[1] ??
     (item.endsWith(" not cast") ? item.slice(0, -" not cast".length) : item);
   const failures: string[] = [];
+  // the kit's word on the same spell: null = not UNUSED there (or no kit),
+  // else the K of `started K×, never finished` (0 for a bare `[UNUSED]`)
+  const { kit } = ownerKitOf(lines);
+  const kitUnusedStarted = (spell: string): number | null => {
+    const u = kit?.get(spell)?.match(KIT_UNUSED_NOTE);
+    return u ? Number(u[1] ?? 0) : null;
+  };
+  for (const item of countItems) {
+    const k = kitUnusedStarted(spellOf(item));
+    if (k === null) continue;
+    const m = item.match(CC_USE_STARTED_ITEM);
+    const agrees = m ? Number(m[2]) === k && Number(m[3]) === 0 : k === 0;
+    if (!agrees)
+      failures.push(
+        `CC USE 计数与 <cooldowns> 对不上:技能组写 ${spellOf(item)} [UNUSED${k ? ` — started ${k}×, never finished` : ""}],计数写「${item}」`,
+      );
+  }
   for (const item of countItems) {
     const m = item.match(CC_USE_STARTED_ITEM);
     if (!m) continue;

@@ -43,13 +43,18 @@
  * cancelled 17 % (median progress 44 %), kicked 6 %, CC'd 4 %; enemy kicks
  * baited 199 vs landed 953.
  */
-import type { AtomicArenaCombat, ICombatUnit } from "@gladlog/parser-compat";
+import {
+  type AtomicArenaCombat,
+  type ICombatUnit,
+  LogEvent,
+} from "@gladlog/parser-compat";
 
 import {
   CANCEL_CC_NEAR_S,
   DISPLACEMENT_EVIDENCE_IDS,
   forcedStopInstantsMs,
 } from "./castStopEvidence";
+import { isPressOfCooldown, talentReplacementsOf } from "./cooldowns";
 import { analyzeKickAudit, JUKE_LOOKBACK_MS } from "./kickAudit";
 import type { RawStreams } from "./rawStreams";
 
@@ -128,6 +133,47 @@ export function castBarStartsOf(
       t: (e.logLine.timestamp - startMs) / 1000,
     }))
     .sort((a, b) => a.t - b.t);
+}
+
+/**
+ * `castBarStartsOf` inside the round, both ends included. A Solo Shuffle
+ * round's units keep the lines that follow it (the gap, the next round's
+ * preparation), so "this round" has to be asked — the same bound the
+ * cooldown ledger puts on its casts. `t` is seconds since the round's start.
+ */
+export function castBarStartsInRound(
+  unit: Pick<ICombatUnit, "castStartEvents">,
+  round: { startTime: number; endTime: number },
+): CastBarStart[] {
+  const durationS = (round.endTime - round.startTime) / 1000;
+  return castBarStartsOf(unit, round.startTime).filter(
+    (s) => s.t >= 0 && s.t <= durationS,
+  );
+}
+
+/**
+ * The bars among `starts` that are cooldown `cd`'s for this unit: a bar is
+ * the cooldown's when its completed cast would have been a press of it
+ * (`isPressOfCooldown` — the same id, the canonical id, a talent's pressable
+ * replacement, a same-named variant press such as a glyphed Hex). One answer
+ * for the kit's `[UNUSED — started N×, never finished]`
+ * (context/resourceSnapshot.ts) and CC USE's `cast bar started N×`
+ * (context/ccUse.ts), which state the same number for one spell.
+ */
+export function castBarsOfCooldown(
+  starts: readonly CastBarStart[],
+  unit: ICombatUnit,
+  cd: { spellId: string; spellName: string },
+): CastBarStart[] {
+  const replacements = talentReplacementsOf(unit);
+  return starts.filter((s) =>
+    isPressOfCooldown(
+      { spellId: s.id, logLine: { event: LogEvent.SPELL_CAST_SUCCESS } },
+      cd.spellId,
+      cd.spellName,
+      replacements,
+    ),
+  );
 }
 
 export function ownerCastCancels(params: {

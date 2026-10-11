@@ -2,6 +2,7 @@ import { ICombatUnit } from "@gladlog/parser-compat";
 
 import { spellEffectData } from "../data/spellEffectData";
 import { buffFullDurationForCaster } from "../utils/buffDuration";
+import { castBarsOfCooldown, castBarStartsInRound } from "../utils/castCancels";
 import { IPlayerCCTrinketSummary } from "../utils/ccTrinketAnalysis";
 import {
   cdAvailableAt,
@@ -147,15 +148,21 @@ export function buildPlayerLoadout(
   // kept per unit by the parser, so an instant that was pressed and refused
   // still reads [UNUSED].
   const triedNote = (cd: IMajorCooldownInfo, caster?: ICombatUnit): string => {
+    if (!caster) return "";
     // inside the round only, as the cooldown ledger's casts are — a Shuffle
     // round's units keep the lines that follow it (codex review: a Hex
-    // started and finished after the round read "never finished")
-    const starts = (caster?.castStartEvents ?? []).filter(
-      (e) =>
-        e.spellId === cd.spellId &&
-        (roundMs === undefined ||
-          (e.logLine.timestamp >= roundMs.startTime &&
-            e.logLine.timestamp <= roundMs.endTime)),
+    // started and finished after the round read "never finished").
+    // Which bars are this cooldown's is the ledger's own relation
+    // (`castBarsOfCooldown`), shared with CC USE's `cast bar started N×`
+    // (FT-T16 D15): by the id alone, a glyphed Hex — another id, the same
+    // cooldown, whose casts the ledger does count — never got the note.
+    const starts = castBarsOfCooldown(
+      castBarStartsInRound(
+        caster,
+        roundMs ?? { startTime: 0, endTime: Infinity },
+      ),
+      caster,
+      cd,
     ).length;
     return starts > 0 ? ` — started ${starts}×, never finished` : "";
   };

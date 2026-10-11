@@ -21,9 +21,10 @@
  *    control with a cast time says how many cast bars were begun next to how
  *    many casts went off — `Cyclone cast bar started 4×, went off 0×`
  *    (539b6ed0: four Cyclone bars, none finished, and the prompt never said
- *    "Cyclone"). Started = the owner's SPELL_CAST_START rows
- *    (`castBarStartsOf`, the reading `ownerCastCancels` counts hardcasts with
- *    — a kicked bar is one of them); went off = SPELL_CAST_SUCCESS, the same
+ *    "Cyclone"). Started = the owner's SPELL_CAST_START rows in the round
+ *    (`castBarStartsInRound` — the rows `ownerCastCancels` counts hardcasts
+ *    with and the kit's `[UNUSED — started N×, never finished]` counts; a
+ *    kicked bar is one of them); went off = SPELL_CAST_SUCCESS, the same
  *    number `cast N×` prints. The approval's condition: the second number
  *    must not read as "the control landed" (2c6e85ec round 6: 12 Cyclones
  *    went off, 3 MISSED and 2 were IMMUNE) — hence "went off", and the header
@@ -46,7 +47,11 @@ import { castAndEffectIds } from "../data/castEffectAuras";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import { ccSpellIds } from "../data/spellTags";
 import type { IBurstLedgerEntry } from "../utils/burstLedger";
-import { castBarStartsOf } from "../utils/castCancels";
+import {
+  castBarsOfCooldown,
+  type CastBarStart,
+  castBarStartsInRound,
+} from "../utils/castCancels";
 import { ccSamplerFor, pvpTrinketReadyAtSecond } from "../utils/ccTargetState";
 import type { IPlayerCCTrinketSummary } from "../utils/ccTrinketAnalysis";
 import {
@@ -77,9 +82,9 @@ export interface ICcUseCount {
   spellName: string;
   casts: number;
   firstCastS: number | null;
-  /** Cast bars begun (SPELL_CAST_START rows of this spell, `castBarStartsOf`)
-   * — absent for a control the owner started no cast bar of this round (an
-   * instant control never has one). */
+  /** Cast bars begun in the round (SPELL_CAST_START rows of this spell,
+   * `castBarStartsInRound`) — absent for a control the owner started no cast
+   * bar of this round (an instant control never has one). */
   castBarsStarted?: number;
 }
 
@@ -150,9 +155,24 @@ export function ccUseSummary(params: {
       ? Math.min(...cd.casts.map((c) => c.timeSeconds))
       : null,
   }));
-  // FT-T16 D15 "2c": cast bars begun, per control. Same end clamp as the
-  // cooldown ledger's casts above (a Solo Shuffle round's units keep the gap
-  // after its end), so both numbers of an entry count one stretch of time.
+  // FT-T16 D15 "2c": cast bars begun, per control, inside the round (a Solo
+  // Shuffle round's units keep the gap after its end — the bound the cooldown
+  // ledger puts on its casts above), so both numbers of an entry count one
+  // stretch of time.
+  const begun = castBarStartsInRound(owner, combat);
+  // A cooldown-ledger control: the bars that are that cooldown's, by the
+  // ledger's own relation (`castBarsOfCooldown` — the number the kit's
+  // `[UNUSED — started N×, never finished]` prints for the same spell).
+  const onLedger = new Set<CastBarStart>();
+  cds.forEach((cd, i) => {
+    const bars = castBarsOfCooldown(begun, owner, cd);
+    for (const b of bars) onLedger.add(b);
+    if (bars.length > 0) counts[i]!.castBarsStarted = bars.length;
+  });
+  // A control on no cooldown ledger (Cyclone, Polymorph, Fear …): one entry
+  // per English name — the variants of one spell (Polymorph's skins) are one
+  // entry, under the name the line prints.
+  const ledgerNames = new Set(counts.map((c) => c.spellName));
   const durationS = (combat.endTime - start) / 1000;
   const wentOffS = (englishName: string) =>
     (owner.spellCastEvents ?? [])
@@ -163,17 +183,19 @@ export function ccUseSummary(params: {
           getEnglishSpellName(e.spellId, e.spellName) === englishName,
       )
       .map((e) => (e.logLine.timestamp - start) / 1000)
-      .filter((t) => t <= durationS);
-  for (const s of castBarStartsOf(owner, start)) {
-    if (!s.id || s.t > durationS) continue;
-    // By English name as well as id: the variants of one spell (Polymorph's
-    // skins) are one entry, under the name the line prints.
+      .filter((t) => t >= 0 && t <= durationS);
+  const offLedger = new Map<string, ICcUseCount>();
+  for (const s of begun) {
+    if (!s.id || onLedger.has(s)) continue;
     const name = getEnglishSpellName(s.id, s.name);
-    let entry = counts.find((c) => c.spellId === s.id || c.spellName === name);
+    // a same-named id the ledger does not take for a press of its entry is
+    // not given a second entry: one entry per spell
+    if (ledgerNames.has(name)) continue;
+    let entry = offLedger.get(name);
     if (!entry) {
-      // Not on the cooldown ledger: a control by the hard-CC set, asked of
-      // the cast's own id and of its effect auras (a cast id is often not the
-      // id of the aura it leaves — data/castEffectAuras.ts).
+      // a control by the hard-CC set, asked of the cast's own id and of its
+      // effect auras (a cast id is often not the id of the aura it leaves —
+      // data/castEffectAuras.ts)
       if (![...castAndEffectIds(s.id)].some((id) => ccSpellIds.has(id)))
         continue;
       const went = wentOffS(name);
@@ -183,6 +205,7 @@ export function ccUseSummary(params: {
         casts: went.length,
         firstCastS: went.length ? Math.min(...went) : null,
       };
+      offLedger.set(name, entry);
       counts.push(entry);
     }
     entry.castBarsStarted = (entry.castBarsStarted ?? 0) + 1;

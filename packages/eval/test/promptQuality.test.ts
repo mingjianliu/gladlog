@@ -1068,6 +1068,67 @@ describe("checkCcUseStartedCounts — CC USE `cast bar started N×, went off M×
       ]),
     ).toHaveLength(1);
   });
+  // The kit's `[UNUSED — started K×, never finished]` (FT-T06) and this line
+  // state the same bars of one cooldown.
+  const kit = (hex: string) => [
+    '  <unit id="1" name="Totem-Illidan-US" spec="Restoration Shaman" role="log owner">',
+    `    <cooldowns>Astral Shift [120s, lasts 12s], Hex [30s]${hex && ` ${hex}`}, Capacitor Totem [60s] [UNUSED]</cooldowns>`,
+  ];
+  it("agrees with the owner's kit: `[UNUSED — started K×, never finished]` ⟺ `cast bar started K×, went off 0×`", () => {
+    const started2 = "[UNUSED — started 2×, never finished]";
+    expect(
+      checkCcUseStartedCounts([
+        ...kit(started2),
+        ...line(
+          "Hex cast bar started 2×, went off 0×",
+          "Capacitor Totem not cast",
+        ),
+      ]),
+    ).toEqual([]);
+    // another number of bars for the same cooldown
+    expect(
+      checkCcUseStartedCounts([
+        ...kit(started2),
+        ...line("Hex cast bar started 3×, went off 0×"),
+      ]),
+    ).toHaveLength(1);
+    // the kit says never spent, the counts say one went off
+    expect(
+      checkCcUseStartedCounts([
+        ...kit(started2),
+        ...line("Hex cast bar started 2×, went off 1× (first 0:11)"),
+      ]),
+    ).toHaveLength(1);
+    // the kit says bars were begun, the counts do not
+    expect(
+      checkCcUseStartedCounts([...kit(started2), ...line("Hex not cast")]),
+    ).toHaveLength(1);
+    // the kit's bare [UNUSED] says no bar was begun, the counts say two
+    expect(
+      checkCcUseStartedCounts([
+        ...kit("[UNUSED]"),
+        ...line("Hex cast bar started 2×, went off 0×"),
+      ]),
+    ).toHaveLength(1);
+    // the last kit entry (its `]` survives the split) is read too
+    expect(
+      checkCcUseStartedCounts([
+        ...kit("[UNUSED]"),
+        ...line("Capacitor Totem cast bar started 1×, went off 0×"),
+      ]),
+    ).toHaveLength(1);
+  });
+  it("a kit entry that is not UNUSED, a spell the kit does not list, or no kit at all says nothing", () => {
+    for (const lines of [
+      [
+        ...kit(""),
+        ...line("Hex cast bar started 4×, went off 3× (first 0:11)"),
+      ],
+      [...kit("[UNUSED]"), ...line("Cyclone cast bar started 4×, went off 0×")],
+      line("Hex cast bar started 2×, went off 0×"),
+    ])
+      expect(checkCcUseStartedCounts(lines)).toEqual([]);
+  });
   it("the prototype's wording (`started N×, completed M×`) is a malformed entry", () => {
     const old = line(roar, "Cyclone started 4×, completed 0×");
     expect(checkCcUseStartedCounts(old)).toEqual([]);

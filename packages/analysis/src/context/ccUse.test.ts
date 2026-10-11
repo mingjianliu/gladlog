@@ -17,7 +17,9 @@ import {
 } from "../../test/ported/testHelpers";
 import { ensureAnalysisData } from "../index";
 import { pvpTrinketReadyAtSecond } from "../utils/ccTargetState";
+import { extractMajorCooldowns } from "../utils/cooldowns";
 import { CC_USE_CAP, ccUseSummary, formatCcUse } from "./ccUse";
+import { buildPlayerLoadout } from "./resourceSnapshot";
 
 const T0 = 1_000_000;
 const at = (s: number) => T0 + s * 1000;
@@ -321,7 +323,21 @@ describe("CC USE counts — cast bars started vs casts that went off", () => {
       enemy: (n) => n,
     });
     const items = (lines[1] ?? "").replace(/^\s*Counts: /, "").split(" · ");
-    return { summary, items, header: lines[0] ?? "" };
+    // the owner's kit line of the same round, from the same ledger
+    const kit =
+      buildPlayerLoadout(
+        owner,
+        "",
+        extractMajorCooldowns(owner, combat),
+        [],
+        { players: [], alignedBurstWindows: [] } as any,
+        undefined,
+        undefined,
+        { startTime: combat.startTime, endTime: combat.endTime },
+      )
+        .text.split("\n")
+        .find((l) => l.includes("<cooldowns>")) ?? "";
+    return { summary, items, header: lines[0] ?? "", kit };
   }
   const of = (items: string[], spell: string) =>
     items.filter((i) => i.startsWith(`${spell} `));
@@ -445,6 +461,60 @@ describe("CC USE counts — cast bars started vs casts that went off", () => {
     expect(of(items, "Cyclone")).toEqual([
       "Cyclone cast bar started 1×, went off 0×",
     ]);
+  });
+
+  // One number for one spell: the kit's `[UNUSED — started N×, never
+  // finished]` and this line read the same bars (`castBarsOfCooldown`).
+  it("a cooldown-ledger control never cast: the kit's `started N×` is this line's N", () => {
+    const { items, kit } = countsLine({
+      spec: CombatUnitSpec.Mage_Arcane,
+      unitClass: CombatUnitClass.Mage,
+      starts: [
+        [RING_OF_FROST, 40, "Ring of Frost"],
+        [RING_OF_FROST, 75, "Ring of Frost"],
+        [RING_OF_FROST, 130, "Ring of Frost"], // after the round
+      ],
+    });
+    expect(of(items, "Ring of Frost")).toEqual([
+      "Ring of Frost cast bar started 2×, went off 0×",
+    ]);
+    expect(kit).toMatch(
+      /Ring of Frost \[[^\]]*\] \[UNUSED — started 2×, never finished\]/,
+    );
+  });
+
+  it("a glyphed Hex (211015) is the Hex cooldown's bar on both lines — the id differs, the cooldown does not", () => {
+    const HEX_VARIANT = "211015";
+    const shaman = {
+      spec: CombatUnitSpec.Shaman_Restoration,
+      unitClass: CombatUnitClass.Shaman,
+    };
+    const unused = countsLine({
+      ...shaman,
+      starts: [
+        [HEX_VARIANT, 10, "Hex"],
+        [HEX_VARIANT, 24, "Hex"],
+      ],
+    });
+    expect(of(unused.items, "Hex")).toEqual([
+      "Hex cast bar started 2×, went off 0×",
+    ]);
+    expect(unused.kit).toMatch(
+      /Hex \[[^\]]*\] \[UNUSED — started 2×, never finished\]/,
+    );
+    const used = countsLine({
+      ...shaman,
+      starts: [
+        [HEX_VARIANT, 10, "Hex"],
+        [HEX_VARIANT, 24, "Hex"],
+        [HEX_VARIANT, 60, "Hex"],
+      ],
+      casts: [[HEX_VARIANT, 25.6, "Hex"]],
+    });
+    expect(of(used.items, "Hex")).toEqual([
+      "Hex cast bar started 3×, went off 1× (first 0:25)",
+    ]);
+    expect(used.kit).not.toMatch(/Hex \[[^\]]*\] \[UNUSED/);
   });
 
   it("the header says `went off` is the cast completing, not the control landing", () => {

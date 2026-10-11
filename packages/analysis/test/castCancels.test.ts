@@ -2,7 +2,12 @@ import { CombatUnitReaction, LogEvent } from "@gladlog/parser-compat";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { ensureAnalysisData } from "../src";
-import { castBarStartsOf, ownerCastCancels } from "../src/utils/castCancels";
+import {
+  castBarsOfCooldown,
+  castBarStartsInRound,
+  castBarStartsOf,
+  ownerCastCancels,
+} from "../src/utils/castCancels";
 import type { RawStreams } from "../src/utils/rawStreams";
 import {
   makeAuraEvent,
@@ -87,11 +92,25 @@ describe("ownerCastCancels", () => {
       rawStreams: streams,
     })!;
     expect(r.hardcasts).toBe(7);
-    // the shared cast-bar reading (CC USE's `cast bar started N×` counts the
-    // same rows)
-    expect(castBarStartsOf(owner, T0).map((s) => [s.id, s.t])).toEqual(
+    // the shared cast-bar reading (CC USE's `cast bar started N×` and the
+    // kit's `[UNUSED — started N×, never finished]` count the same rows)
+    const bars = castBarStartsOf(owner, T0);
+    expect(bars.map((s) => [s.id, s.t])).toEqual(
       [0, 4, 10, 20, 30, 40, 50].map((s) => ["2061", s]),
     );
+    // inside a round only, both ends included, in seconds since its start
+    expect(
+      castBarStartsInRound(owner, { startTime: at(4), endTime: at(30) }).map(
+        (s) => s.t,
+      ),
+    ).toEqual([0, 6, 16, 26]);
+    // a bar is a cooldown's when its completed cast would be a press of it
+    expect(
+      castBarsOfCooldown(bars, owner, { spellId: "2061", spellName: "Flash Heal" }),
+    ).toHaveLength(7);
+    expect(
+      castBarsOfCooldown(bars, owner, { spellId: "51514", spellName: "Hex" }),
+    ).toHaveLength(0);
     expect(r.cancels.map((c) => [c.startS, c.progressPct])).toEqual([
       [10, 40],
       [20, 60],
