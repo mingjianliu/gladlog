@@ -63,13 +63,29 @@ export interface ILogDatedNumber {
  * A timestamp that is not a number is not a date and takes the CURRENT value
  * (`since`), never the old one: the dated value is a past exception. A rule
  * for which that is the less careful direction must not use this.
+ *
+ * So does a timestamp inside `LOG_ZONE_UNCERTAINTY_MS` BEFORE the cutover:
+ * the parser dates a line without a signed offset in the parsing machine's
+ * zone (header), so such a match may really be up to that much later — a
+ * post-hotfix log must never be given the old number (codex review
+ * 45-FT-101, 2026-10-11: recorded east of UTC, imported further east, a
+ * match hours after the cutover read 4 s and a ×0.35 lockout). The old value
+ * is taken only for a timestamp that is before the cutover in every zone.
  */
 export function logDatedNumberAt(
   dated: ILogDatedNumber,
   logEpochMs: number,
 ): number {
-  return !Number.isFinite(logEpochMs) ||
-    logIsFrom(logEpochMs, dated.cutoverEpochMs)
-    ? dated.since
-    : dated.before;
+  return Number.isFinite(logEpochMs) &&
+    !logIsFrom(logEpochMs, dated.cutoverEpochMs - LOG_ZONE_UNCERTAINTY_MS)
+    ? dated.before
+    : dated.since;
 }
+
+/**
+ * How far the parser's date of a line can lie BEFORE the instant the line
+ * states: a line without a signed offset was recorded at UTC+0…+14 and is
+ * read in the parsing machine's zone (UTC−12…+14), so the parsed epoch is
+ * early by (machine − recorder) hours at most — 14.
+ */
+export const LOG_ZONE_UNCERTAINTY_MS = 14 * 60 * 60 * 1000;

@@ -32,6 +32,7 @@ import {
   extractMajorCooldowns,
 } from "../src/utils/cooldowns";
 import { interruptCooldownRemainingMs } from "../src/utils/enemyInterrupts";
+import { LOG_ZONE_UNCERTAINTY_MS } from "../src/utils/logEra";
 import { makeSpellCastEvent, makeUnit } from "./ported/testHelpers";
 
 beforeAll(async () => {
@@ -91,10 +92,20 @@ describe("eventReductionSecondsAt — Storm Conduit by spec and by the date of t
     expect(eventReductionSecondsAt(conduit, RESTO, AUG_14)).toBe(4);
     expect(eventReductionSecondsAt(conduit, RESTO, AUG_19)).toBe(2);
   });
-  it("the boundary: the last millisecond of 08-17 UTC is 4 s, 08-18 00:00:00.000 UTC is 2 s", () => {
-    const cut = STORM_CONDUIT_HOTFIX_EPOCH_MS;
+  it("the boundary: 4 s only before the cutover in every zone (14 h clear of 08-18 00:00 UTC), 2 s from there on", () => {
+    const cut = STORM_CONDUIT_HOTFIX_EPOCH_MS - LOG_ZONE_UNCERTAINTY_MS;
     expect(eventReductionSecondsAt(conduit, RESTO, cut - 1)).toBe(4);
     expect(eventReductionSecondsAt(conduit, RESTO, cut)).toBe(2);
+    expect(
+      eventReductionSecondsAt(
+        conduit,
+        RESTO,
+        STORM_CONDUIT_HOTFIX_EPOCH_MS - 1,
+      ),
+    ).toBe(2);
+    expect(
+      eventReductionSecondsAt(conduit, RESTO, STORM_CONDUIT_HOTFIX_EPOCH_MS),
+    ).toBe(2);
     // 2026-08-17 20:00 at UTC−4 is that same instant: already 2 s
     expect(
       eventReductionSecondsAt(
@@ -159,9 +170,11 @@ describe("eventTriggersFor — the same trigger stream on two dates", () => {
     expect(reduced(ELEMENTAL, AUG_19).cooldown).toBe(170);
   });
   it("a round played across the cutover: each cast gives what the game gave at its own instant", () => {
-    // round starts 25 s before the cutover: casts at 20 / 22 / 24 s are
-    // before it, the cast at 26 s and later after it
-    const startMs = STORM_CONDUIT_HOTFIX_EPOCH_MS - 25_000;
+    // round starts 25 s before the old value's last instant (the cutover
+    // less the zone uncertainty): casts at 20 / 22 / 24 s are before it,
+    // the cast at 26 s and later after it
+    const startMs =
+      STORM_CONDUIT_HOTFIX_EPOCH_MS - LOG_ZONE_UNCERTAINTY_MS - 25_000;
     expect(reduced(RESTO, startMs).seconds).toEqual([
       4, 4, 4, 2, 2, 2, 2, 2, 2, 2,
     ]);

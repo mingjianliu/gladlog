@@ -279,8 +279,8 @@ describe('eventTriggerTimesMs — one reading of "a trigger happened" (FT F20)',
     const u = unit({
       casts: [row("SPELL_CAST_SUCCESS", "259495", 10_000)],
       damage: [
-        row("SPELL_DAMAGE", "265157", 10_300),
-        row("SPELL_DAMAGE", "265157", 10_320),
+        row("SPELL_DAMAGE", "265157", 10_300, { destUnitId: "e1" }),
+        row("SPELL_DAMAGE", "265157", 10_320, { destUnitId: "e2" }),
         row("SPELL_PERIODIC_DAMAGE", "265157", 11_300),
         row("SPELL_DAMAGE", "269747", 11_300),
       ],
@@ -289,29 +289,62 @@ describe('eventTriggerTimesMs — one reading of "a trigger happened" (FT F20)',
   });
   it("a hit a shield soaked whole counts, an immune target does not", () => {
     const u = unit({
-      damage: [row("SPELL_DAMAGE", "265157", 10_300)],
+      damage: [row("SPELL_DAMAGE", "265157", 10_300, { destUnitId: "e1" })],
       misses: [
-        row("SPELL_MISSED", "265157", 10_310, { missType: "ABSORB" }),
-        row("SPELL_MISSED", "265157", 10_320, { missType: "IMMUNE" }),
+        row("SPELL_MISSED", "265157", 10_310, {
+          missType: "ABSORB",
+          destUnitId: "e2",
+        }),
+        row("SPELL_MISSED", "265157", 10_320, {
+          missType: "IMMUNE",
+          destUnitId: "e3",
+        }),
       ],
     });
     expect(seconds(u)).toEqual([10.3, 10.31]);
+  });
+  it("one bomb credits each unit once — a second row on the same unit is the same enemy (codex 45-FT-101)", () => {
+    // Boomstick at 0, one bomb, the same enemy in two rows 10 ms apart (a
+    // hit and the part of it a shield soaked): one trigger, not two
+    const u = unit({
+      damage: [
+        row("SPELL_DAMAGE", "265157", 10_000, { destUnitId: "e1" }),
+        row("SPELL_DAMAGE", "265157", 10_010, { destUnitId: "e1" }),
+      ],
+      misses: [
+        row("SPELL_MISSED", "265157", 10_010, {
+          missType: "ABSORB",
+          destUnitId: "e1",
+        }),
+      ],
+    });
+    expect(seconds(u)).toEqual([10]);
+    // the next bomb may credit that unit again
+    const two = unit({
+      damage: [
+        row("SPELL_DAMAGE", "265157", 10_000, { destUnitId: "e1" }),
+        row("SPELL_DAMAGE", "265157", 12_000, { destUnitId: "e1" }),
+      ],
+    });
+    expect(seconds(two)).toEqual([10, 12]);
   });
   it("at most 5 hits of one bomb count; the next bomb starts a new count", () => {
     const u = unit({
       damage: [
         ...Array.from({ length: 7 }, (_, i) =>
-          row("SPELL_DAMAGE", "265157", 10_000 + i * 10),
+          row("SPELL_DAMAGE", "265157", 10_000 + i * 10, {
+            destUnitId: `e${i}`,
+          }),
         ),
-        row("SPELL_DAMAGE", "265157", 12_000),
+        row("SPELL_DAMAGE", "265157", 12_000, { destUnitId: "e0" }),
       ],
     });
     expect(seconds(u)).toEqual([10, 10.01, 10.02, 10.03, 10.04, 12]);
   });
   it("Boomstick pressed at 0 with 8 hits before it is back: 45 − 2 × 8 = 29 s", () => {
     const u = unit({
-      damage: [5, 5.02, 12, 12.02, 12.04, 20, 20.02, 26].map((s) =>
-        row("SPELL_DAMAGE", "265157", s * 1000),
+      damage: [5, 5.02, 12, 12.02, 12.04, 20, 20.02, 26].map((s, i) =>
+        row("SPELL_DAMAGE", "265157", s * 1000, { destUnitId: `e${i}` }),
       ),
     });
     expect(

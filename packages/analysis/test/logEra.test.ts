@@ -13,7 +13,11 @@ import {
   drResetMsAt,
   PATCH_121_GOLIVE_EPOCH_MS,
 } from "../src/utils/drAnalysis";
-import { logDatedNumberAt, logIsFrom } from "../src/utils/logEra";
+import {
+  LOG_ZONE_UNCERTAINTY_MS,
+  logDatedNumberAt,
+  logIsFrom,
+} from "../src/utils/logEra";
 import { parseRawTimestamp, rawLineInstantMs } from "../src/utils/rawStreams";
 
 describe("logIsFrom", () => {
@@ -40,14 +44,25 @@ describe("logIsFrom", () => {
 
 describe("logDatedNumberAt — a number the game changed on a date", () => {
   const dated = { cutoverEpochMs: 100, before: 7, since: 3 };
-  it("`before` up to the cutover, `since` from the cutover instant on (logIsFrom's boundary)", () => {
-    expect(logDatedNumberAt(dated, 99)).toBe(7);
+  it("`before` only for a timestamp before the cutover in EVERY zone; `since` from the zone-uncertainty window on", () => {
+    // the parser may date a line up to LOG_ZONE_UNCERTAINTY_MS early (a line
+    // without a signed offset, read in the parsing machine's zone), so the
+    // old value needs that much clearance (codex review 45-FT-101)
+    const safe = dated.cutoverEpochMs - LOG_ZONE_UNCERTAINTY_MS;
+    expect(LOG_ZONE_UNCERTAINTY_MS).toBe(14 * 3_600_000);
+    expect(logDatedNumberAt(dated, safe - 1)).toBe(7);
+    expect(logDatedNumberAt(dated, safe)).toBe(3);
+    expect(logDatedNumberAt(dated, 99)).toBe(3);
     expect(logDatedNumberAt(dated, 100)).toBe(3);
     expect(logDatedNumberAt(dated, 101)).toBe(3);
-    for (const at of [99, 100, 101])
+    for (const at of [safe - 1, safe, 99, 100, 101])
       expect(logDatedNumberAt(dated, at)).toBe(
-        logIsFrom(at, dated.cutoverEpochMs) ? dated.since : dated.before,
+        logIsFrom(at, safe) ? dated.since : dated.before,
       );
+    // a post-hotfix match recorded at UTC+0 (no sign) and parsed at UTC+14
+    // is dated 14 h early — it must still read the current value
+    const trueInstant = dated.cutoverEpochMs + 3_600_000;
+    expect(logDatedNumberAt(dated, trueInstant - 14 * 3_600_000)).toBe(3);
   });
   it("a timestamp that is not a number takes the CURRENT value, never the old one", () => {
     for (const notADate of [

@@ -290,19 +290,24 @@ export function eventTriggerTimesMs(
           hitIds.includes(String(e.spellId)),
       ),
     ]
-      .map((e) => e.logLine.timestamp)
-      .sort((a, b) => a - b);
+      .map((e) => ({ t: e.logLine.timestamp, dest: e.destUnitId }))
+      .sort((a, b) => a.t - b.t);
     const cap = r.maxHitsPerUse ?? Number.POSITIVE_INFINITY;
     let useStart = Number.NEGATIVE_INFINITY;
-    let counted = 0;
-    for (const t of hits) {
+    // One use credits each unit it hits once — "per enemy hit", not per
+    // logged row: a second row on the same unit inside the use (a hit and
+    // the part of it a shield soaked, a re-logged hit) is the same enemy
+    // (codex review 45-FT-101, 2026-10-11).
+    let hitUnits = new Set<string>();
+    for (const { t, dest } of hits) {
       if (t - useStart > EVENT_HIT_SAME_USE_MS) {
         useStart = t;
-        counted = 0;
+        hitUnits = new Set();
       }
-      if (counted < cap) {
+      if (hitUnits.has(dest)) continue;
+      if (hitUnits.size < cap) {
         out.push(t);
-        counted++;
+        hitUnits.add(dest);
       }
     }
   }

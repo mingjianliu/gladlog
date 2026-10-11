@@ -37,7 +37,10 @@ import {
   kickLockoutSecondsFor,
   kickLockoutVictimMultiplierAt,
 } from "../src/utils/kickLockout";
-import type { ILogDatedNumber } from "../src/utils/logEra";
+import {
+  type ILogDatedNumber,
+  LOG_ZONE_UNCERTAINTY_MS,
+} from "../src/utils/logEra";
 import {
   makeAuraEvent,
   makeInterruptEvent,
@@ -220,8 +223,11 @@ describe("kick-eaten F-K8 — Storm Conduit shortens an interrupted Lightning Bo
     ).toBe(3.6);
   });
 
-  it("the boundary: the last millisecond of 08-17 UTC is ×0.35, 08-18 00:00:00.000 UTC is ×0.6", () => {
-    const cut = STORM_CONDUIT_HOTFIX_EPOCH_MS;
+  it("the boundary: ×0.35 only before the cutover in every zone (14 h clear of 08-18 00:00 UTC), ×0.6 from there on", () => {
+    const cut = STORM_CONDUIT_HOTFIX_EPOCH_MS - LOG_ZONE_UNCERTAINTY_MS;
+    expect(
+      kickLockoutVictimMultiplierAt(conduit, STORM_CONDUIT_HOTFIX_EPOCH_MS - 1),
+    ).toBe(0.6);
     expect(kickLockoutVictimMultiplierAt(conduit, cut - 1)).toBe(0.35);
     expect(kickLockoutVictimMultiplierAt(conduit, cut)).toBe(0.6);
     expect(
@@ -243,8 +249,16 @@ describe("kick-eaten F-K8 — Storm Conduit shortens an interrupted Lightning Bo
 
   it("both halves of the hotfix put one timestamp on one side: 4 s with ×0.35, 2 s with ×0.6", () => {
     const cooldown = EVENT_COOLDOWN_REDUCTIONS["1217092"]!;
-    const cut = STORM_CONDUIT_HOTFIX_EPOCH_MS;
-    for (const at of [AUG_14, cut - 1, cut, AUG_19, ...NOT_A_DATE]) {
+    const cut = STORM_CONDUIT_HOTFIX_EPOCH_MS - LOG_ZONE_UNCERTAINTY_MS;
+    for (const at of [
+      AUG_14,
+      cut - 1,
+      cut,
+      STORM_CONDUIT_HOTFIX_EPOCH_MS - 1,
+      STORM_CONDUIT_HOTFIX_EPOCH_MS,
+      AUG_19,
+      ...NOT_A_DATE,
+    ]) {
       const seconds = eventReductionSecondsAt(
         cooldown,
         CombatUnitSpec.Shaman_Restoration,
