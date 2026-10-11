@@ -30,6 +30,7 @@ export function prepareOwnerCdContext(
     | "owner"
     | "matchStartMs"
     | "friends"
+    | "enemies"
     | "ccTrinketSummaries"
     | "matchEndMs"
   >,
@@ -39,6 +40,7 @@ export function prepareOwnerCdContext(
     owner,
     matchStartMs,
     friends,
+    enemies,
     ccTrinketSummaries,
     matchEndMs,
   } = ctx;
@@ -88,6 +90,7 @@ export function prepareOwnerCdContext(
     friends,
     matchStartMs,
     owner,
+    enemies,
   );
 
   // H13: computed once — used to confirm early-ended channels were a real kick/CC, not a

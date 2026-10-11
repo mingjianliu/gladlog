@@ -198,6 +198,81 @@ describe("[BUFF FADED] — a buff removed with the druid's own form is 'form_shi
     const r = extractOwnerCDBuffExpiry(ironbark, "player-1", [owner, mate], T0, owner);
     expect(r.map((e) => e.cause)).toEqual(["ended_early"]);
   });
+
+  // F02a: Touch of Karma's shield is its own aura (125174); the cast id's
+  // buff (122470) is a 10 s marker. 2abc9185: pressed 1:12.71, the absorb
+  // aura REMOVED 3.04 s in with a hit it took part of, the marker at 10.0 s.
+  describe("F02a: Touch of Karma ends with its absorb aura, not the 10 s buff", () => {
+    const KARMA = "122470";
+    const ABSORB = "125174";
+    const karma = [
+      { spellId: KARMA, spellName: "Touch of Karma", tag: "Defensive", casts: [{ timeSeconds: 10 }], cooldownSeconds: 90, neverUsed: false, availableWindows: [] },
+    ] as never;
+    const hit = (atMs: number, amount: number) => ({
+      logLine: { event: LogEvent.SPELL_ABSORBED, timestamp: atMs, parameters: [] },
+      timestamp: atMs,
+      spellId: KARMA, // the absorb lines name the cast id as the shield
+      srcUnitId: "player-1",
+      destUnitId: "player-1",
+      absorbedAmount: amount,
+    });
+    const monk = (absorbRemovedMs: number | null, hits: Array<[number, number]>) =>
+      makeUnit("player-1", {
+        class: CombatUnitClass.Monk,
+        spec: CombatUnitSpec.Monk_Windwalker,
+        spellCastEvents: [makeSpellCastEvent(KARMA, T0 + 10_000, "player-1")],
+        auraEvents: [
+          ...(absorbRemovedMs === null ? [] : [makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, ABSORB, T0 + 10_000, "player-1", "player-1", "BUFF")]),
+          makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, KARMA, T0 + 10_000, "player-1", "player-1", "BUFF"),
+          ...(absorbRemovedMs === null ? [] : [makeAuraEvent(LogEvent.SPELL_AURA_REMOVED, ABSORB, absorbRemovedMs, "player-1", "player-1", "BUFF")]),
+          makeAuraEvent(LogEvent.SPELL_AURA_REMOVED, KARMA, T0 + 20_003, "player-1", "player-1", "BUFF"),
+        ],
+        absorbsIn: hits.map(([at, n]) => hit(at, n)) as never,
+      }) as ICombatUnit;
+    const target = (debuffRemovedMs: number, diedMs?: number) =>
+      makeUnit("enemy-1", {
+        name: "Mage",
+        auraEvents: [
+          makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, KARMA, T0 + 10_002, "player-1", "enemy-1", "DEBUFF"),
+          makeAuraEvent(LogEvent.SPELL_AURA_REMOVED, KARMA, debuffRemovedMs, "player-1", "enemy-1", "DEBUFF"),
+        ],
+        deathRecords: diedMs === undefined ? [] : ([{ timestamp: diedMs }] as never),
+      }) as ICombatUnit;
+
+    it("the absorb aura REMOVED early in the ms of a hit it absorbed → used up, at that time", () => {
+      const owner = monk(T0 + 13_040, [[T0 + 10_500, 500_000], [T0 + 13_040, 81_820]]);
+      const [e] = extractOwnerCDBuffExpiry(karma, "player-1", [owner], T0, owner, [target(T0 + 20_003)]);
+      expect(e).toMatchObject({ cause: "absorbed", isEstimated: false, absorb: { absorbed: 581_820 } });
+      expect(e!.expiresAtSeconds).toBeCloseTo(13.04, 3);
+    });
+
+    it("left with the 10 s buff → expired, with what it absorbed", () => {
+      const owner = monk(T0 + 19_995, [[T0 + 12_000, 99_000]]);
+      const [e] = extractOwnerCDBuffExpiry(karma, "player-1", [owner], T0, owner, [target(T0 + 20_003)]);
+      expect(e).toMatchObject({ cause: "expired", absorb: { absorbed: 99_000 } });
+      expect(e!.expiresAtSeconds).toBeCloseTo(19.995, 3);
+    });
+
+    it("left early with no hit at the removal, in the ms its debuff came off the enemy → says that, not 'used up'", () => {
+      // b711d4ac: the mage it was cast on pressed Ice Block 0.77 s in
+      const owner = monk(T0 + 10_770, [[T0 + 10_626, 184_707]]);
+      const [e] = extractOwnerCDBuffExpiry(karma, "player-1", [owner], T0, owner, [target(T0 + 10_770)]);
+      expect(e).toMatchObject({ cause: "target_debuff_off", lostOn: { unitId: "enemy-1", unitName: "Mage" }, absorb: { absorbed: 184_707 } });
+      const [dead] = extractOwnerCDBuffExpiry(karma, "player-1", [owner], T0, owner, [target(T0 + 10_770, T0 + 10_800)]);
+      expect(dead).toMatchObject({ cause: "target_death" });
+      expect(dead!.lostOn).toBeUndefined();
+      // neither in the log → what is left: ended early, no cause claimed
+      const [bare] = extractOwnerCDBuffExpiry(karma, "player-1", [owner], T0, owner, [target(T0 + 20_003)]);
+      expect(bare).toMatchObject({ cause: "ended_early" });
+    });
+
+    it("a log with no absorb aura keeps the cast id's end", () => {
+      const owner = monk(null, [[T0 + 12_000, 99_000]]);
+      const [e] = extractOwnerCDBuffExpiry(karma, "player-1", [owner], T0, owner);
+      expect(e).toMatchObject({ cause: "expired" });
+      expect(e!.expiresAtSeconds).toBeCloseTo(20.003, 3);
+    });
+  });
 });
 
 describe("SPEC BASELINES names the owner's rating against the reference bracket", () => {

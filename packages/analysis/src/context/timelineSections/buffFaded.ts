@@ -1,7 +1,7 @@
 /**
  * [BUFF FADED] (F70, B31) — the owner's cooldown buffs ending, tagged with the
  * cause (own shapeshift / dispelled / stolen / its target died / absorb used
- * up / ended early / expired / estimated) so the model does not invent a
+ * up / its debuff off its target / ended early / expired / estimated) so the model does not invent a
  * dispel for a buff that simply ran out (B129) nor miss one the log shows
  * (FT-T08 step 3).
  *
@@ -50,25 +50,30 @@ export function emitBuffFadedEntries(
         ? ` (removed at your death${unclear})`
         : expiry.cause === "target_death"
           ? ` (its target died${unclear})`
-          : expiry.cause === "dispelled"
-            ? ` (dispelled by ${by}${took ? `; ${took}` : ""})`
-            : expiry.cause === "stolen"
-              ? ` (stolen by ${by}${took ? `; ${took}` : ""})`
-              : expiry.cause === "form_shift"
-                ? ` (ended by your own shapeshift${unclear})`
-                : expiry.cause === "absorbed"
-                  ? ` (used up — absorbed ${k(a!.absorbed)}${unclear})`
-                  : expiry.dispelUnclear
-                    ? ` (a dispel of this spell is logged at that moment — not which copy it took${took ? `; ${took}` : ""})`
-                    : expiry.cause === "ended_early"
-                    ? took
-                      ? ` (ended early — ${took}; no dispel logged)`
-                      : " (ended early — no dispel logged)"
-                    : expiry.isEstimated
-                      ? " (expired, estimated)"
-                      : took
-                        ? ` (expired; ${took})`
-                        : " (expired)";
+          : expiry.cause === "target_debuff_off"
+            ? // F02a: Touch of Karma's shield goes when its debuff leaves the
+              // enemy it was cast on (their immunity, a dispel of it …) — the
+              // log shows the two removals in one ms, not what took it off
+              ` (ended early — its debuff came off ${actorLabel(expiry.lostOn!.unitName, "enemy", expiry.lostOn!.unitId)} at that moment${took ? `; ${took}` : ""}${unclear})`
+            : expiry.cause === "dispelled"
+              ? ` (dispelled by ${by}${took ? `; ${took}` : ""})`
+              : expiry.cause === "stolen"
+                ? ` (stolen by ${by}${took ? `; ${took}` : ""})`
+                : expiry.cause === "form_shift"
+                  ? ` (ended by your own shapeshift${unclear})`
+                  : expiry.cause === "absorbed"
+                    ? ` (used up — absorbed ${k(a!.absorbed)}${unclear})`
+                    : expiry.dispelUnclear
+                      ? ` (a dispel of this spell is logged at that moment — not which copy it took${took ? `; ${took}` : ""})`
+                      : expiry.cause === "ended_early"
+                        ? took
+                          ? ` (ended early — ${took}; no dispel logged)`
+                          : " (ended early — no dispel logged)"
+                        : expiry.isEstimated
+                          ? " (expired, estimated)"
+                          : took
+                            ? ` (expired; ${took})`
+                            : " (expired)";
     addEntry(
       expiry.expiresAtSeconds,
       `${fmtTime(expiry.expiresAtSeconds)}  [BUFF FADED]   ${expiry.spellName}${causeNote}`,

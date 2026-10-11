@@ -54,6 +54,10 @@ import {
   DEFERRAL_SHIELD_DAMAGE_IDS,
   isDeferralAbsorb,
 } from "../utils/incomingPressure";
+import {
+  TOUCH_OF_KARMA_ABSORB_ID,
+  TOUCH_OF_KARMA_ID,
+} from "../utils/karmaFeed";
 import { playerKillingBlow } from "../utils/killingBlow";
 import { getHpPercentAtTime } from "../utils/killWindowTargetSelection";
 import { fmtTime } from "../utils/renderGrid";
@@ -333,8 +337,14 @@ export interface ICDExpiryEvent {
    * an expiry, and whatever died right after (the line names this aura; a
    * death cascade is read from timing); 'target_death' = the ally it was on
    * died at the removal; 'absorbed' = an absorb whose REMOVED line carries 0
-   * left. 'ended_early' is what remains: removed before its time with none of
-   * those logged.
+   * left — or, for Touch of Karma, whose own aura left early in the ms of a
+   * hit it absorbed (below). 'ended_early' is what remains: removed before
+   * its time with none of those logged.
+   *
+   * F02a: Touch of Karma's end is its absorb aura's
+   * (`TOUCH_OF_KARMA_ABSORB_ID`), not the 10 s buff's: 'target_debuff_off' =
+   * that aura left early in the ms the Karma debuff came off the enemy it was
+   * cast on (`lostOn`), 'target_death' when that enemy died there.
    */
   cause:
     | "expired"
@@ -344,9 +354,12 @@ export interface ICDExpiryEvent {
     | "dispelled"
     | "stolen"
     | "target_death"
+    | "target_debuff_off"
     | "absorbed";
   /** cause dispelled / stolen: who did it, with what */
   endedBy?: { unitId: string; unitName: string; spellName: string };
+  /** cause target_debuff_off: the enemy the debuff came off */
+  lostOn?: { unitId: string; unitName: string };
   /** What this application absorbed (the SPELL_ABSORBED lines naming it) and
    * what its REMOVED line had left — `auraEndFromLog`. Present only when it
    * absorbed something. */
@@ -421,6 +434,11 @@ export function extractOwnerCDBuffExpiry(
    */
   owner?: Pick<ICombatUnit, "spec" | "info" | "spellCastEvents"> &
     Partial<Pick<ICombatUnit, "auraEvents" | "deathRecords" | "id">>,
+  /** the other side's units: Touch of Karma's debuff sits on one of them */
+  enemies: ReadonlyArray<
+    Pick<ICombatUnit, "id" | "name" | "auraEvents"> &
+      Partial<Pick<ICombatUnit, "deathRecords">>
+  > = [],
 ): ICDExpiryEvent[] {
   const ownerDeathsMs = (owner?.deathRecords ?? []).map(
     (d) => d.timestamp as number,
@@ -464,6 +482,23 @@ export function extractOwnerCDBuffExpiry(
     if (!seenOnFriendly) continue;
     const duration = buffFullDurationForCaster(cd.spellId, owner);
     if (!duration || duration <= 0) continue;
+    // F02a: the aura whose REMOVED is this cooldown's end. Touch of Karma is
+    // an absorb with an aura of its own (`TOUCH_OF_KARMA_ABSORB_ID`); the
+    // cast id's buff is a 10 s marker that outlives it — 2abc9185 read
+    // `1:22 [BUFF FADED] Touch of Karma (expired; 582k absorbed)` for a
+    // shield that was eaten through at 1:15. A log that never shows the
+    // absorb aura keeps the cast id's.
+    const endAuraId =
+      cd.spellId === TOUCH_OF_KARMA_ID &&
+      friends.some((friend) =>
+        friend.auraEvents.some(
+          (event) =>
+            event.spellId === TOUCH_OF_KARMA_ABSORB_ID &&
+            event.srcUnitId === ownerId,
+        ),
+      )
+        ? TOUCH_OF_KARMA_ABSORB_ID
+        : cd.spellId;
 
     // Collect all SPELL_AURA_REMOVED timestamps for this spell cast by the owner,
     // across all friendly units, sorted ascending.
@@ -474,7 +509,7 @@ export function extractOwnerCDBuffExpiry(
       // a same-ms REMOVED→APPLIED re-broadcast is not the buff ending (3306:
       // "Obsidian Scales ended early" on a Dracthyr visage swap)
       for (const event of dropAuraRebroadcasts(friend.auraEvents)) {
-        const isMatch = event.spellId === cd.spellId;
+        const isMatch = event.spellId === endAuraId;
         if (
           isMatch &&
           event.srcUnitId === ownerId &&
@@ -606,23 +641,72 @@ export function extractOwnerCDBuffExpiry(
           ? undefined
           : friends.find((f) => f.id === removedFromId);
       let endedBy: ICDExpiryEvent["endedBy"];
+      let lostOn: ICDExpiryEvent["lostOn"];
       let absorb: ICDExpiryEvent["absorb"];
       let dispelUnclear = false;
       if (!isEstimated && holder) {
-        const end = auraEndFromLog(
-          holder,
-          cd.spellId,
-          {
-            // this press's application: from the press (its aura can be
-            // logged a few ms before the cast line) …
-            fromMs: Math.round(castMs - AURA_BEFORE_CAST_MAX_S * 1000),
-            // … back to the REMOVED line's own millisecond
-            removedMs: Math.round(matchStartMs + expiresAtSeconds * 1000),
-          },
-          ownerId,
-        );
+        const span = {
+          // this press's application: from the press (its aura can be
+          // logged a few ms before the cast line) …
+          fromMs: Math.round(castMs - AURA_BEFORE_CAST_MAX_S * 1000),
+          // … back to the REMOVED line's own millisecond
+          removedMs: Math.round(matchStartMs + expiresAtSeconds * 1000),
+        };
+        // the absorb lines name the cast id as the shield; a dispel line
+        // would name the aura that came off
+        const ofCast = auraEndFromLog(holder, cd.spellId, span, ownerId);
+        const end =
+          endAuraId === cd.spellId
+            ? ofCast
+            : {
+                ...auraEndFromLog(holder, endAuraId, span, ownerId),
+                absorb: ofCast.absorb,
+              };
         absorb = end.absorb;
         dispelUnclear = end.takeUnclear === true;
+        // F02a: Touch of Karma's absorb aura that left before its time. Its
+        // lines carry no amount, so "used up" is read off the hit: an absorb
+        // line naming Karma on the monk in the REMOVED's own ms (one event's
+        // lines can straddle a ms boundary — `AURA_REBROADCAST_GAP_MS`).
+        // Otherwise the Karma debuff coming off the enemy it was cast on in
+        // that ms — the shield goes with it; whether that enemy died there
+        // is in the log too.
+        if (
+          endAuraId !== cd.spellId &&
+          cause === "ended_early" &&
+          !end.takenBy
+        ) {
+          const sameEvent = (ms: number) =>
+            Math.abs(ms - span.removedMs) <= AURA_REBROADCAST_GAP_MS;
+          const emptiedByHit = (holder.absorbsIn ?? []).some(
+            (x) =>
+              x.spellId === cd.spellId &&
+              x.srcUnitId === ownerId &&
+              sameEvent(x.logLine.timestamp),
+          );
+          const target = emptiedByHit
+            ? undefined
+            : enemies.find((e) =>
+                e.auraEvents.some(
+                  (a) =>
+                    a.spellId === cd.spellId &&
+                    a.srcUnitId === ownerId &&
+                    (a.logLine.event as LogEvent) ===
+                      LogEvent.SPELL_AURA_REMOVED &&
+                    sameEvent(a.logLine.timestamp as number),
+                ),
+              );
+          if (emptiedByHit && absorb) {
+            cause = "absorbed";
+          } else if (target) {
+            const died = (target.deathRecords ?? []).some((d) => {
+              const gap = (d.timestamp as number) - span.removedMs;
+              return gap >= 0 && gap <= DEATH_CASCADE_MS;
+            });
+            cause = died ? "target_death" : "target_debuff_off";
+            if (!died) lostOn = { unitId: target.id, unitName: target.name };
+          }
+        }
         // The dispel line names this aura; a death right after it is a
         // cascade read from timing. The line wins (codex review of step 3a).
         if (end.takenBy) {
@@ -635,7 +719,12 @@ export function extractOwnerCDBuffExpiry(
         } else if (cause !== "death") {
           if (holder.id !== (owner?.id ?? ownerId) && end.holderDied) {
             cause = "target_death";
-          } else if (cause !== "form_shift" && absorb?.left === 0) {
+          } else if (
+            cause !== "form_shift" &&
+            cause !== "target_death" &&
+            cause !== "target_debuff_off" &&
+            absorb?.left === 0
+          ) {
             cause = "absorbed";
           }
         }
@@ -643,6 +732,7 @@ export function extractOwnerCDBuffExpiry(
 
       result.push({
         ...(endedBy ? { endedBy } : {}),
+        ...(lostOn ? { lostOn } : {}),
         ...(absorb ? { absorb } : {}),
         ...(dispelUnclear ? { dispelUnclear: true as const } : {}),
         spellId: cd.spellId,

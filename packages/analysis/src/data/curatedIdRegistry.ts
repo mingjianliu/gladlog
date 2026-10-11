@@ -724,7 +724,8 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
     set(HEAL_ABSORB_SELF_SAVE_IDS),
   ),
   // B-tier B20a (user ruling 2026-10-06/07): Touch of Karma's cast / shield
-  // id and the id of the damage it sends back — the `| fed by` clause.
+  // id and the id of the damage it sends back — the `| fed by` clause; and
+  // the absorb's own aura, whose end is the `[BUFF FADED]` line's (F02a).
   t("TOUCH_OF_KARMA_FEED_IDS", "utils/karmaFeed.ts", "mixed", () =>
     set(TOUCH_OF_KARMA_FEED_IDS),
   ),

@@ -513,6 +513,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     owner,
     matchStartMs,
     friends,
+    enemies,
     ccTrinketSummaries,
     matchEndMs,
   });

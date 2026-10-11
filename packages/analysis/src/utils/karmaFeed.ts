@@ -32,10 +32,25 @@ import {
 export const TOUCH_OF_KARMA_ID = "122470";
 /** The damage Touch of Karma sends back (periodic rows from the monk). */
 export const TOUCH_OF_KARMA_REDIRECT_ID = "124280";
-/** Both, for curatedIdRegistry (a renumbered id would silence the clause). */
+/**
+ * The absorb itself: a second buff the press puts on the monk, in the cast's
+ * own ms, that leaves when the shield does — the 10 s buff above stays up
+ * its full length whatever happens to the shield. Its lines carry no amount
+ * and the absorb rows name the CAST id as the shield, never this one. Six
+ * raw logs of the 2026-10-08 re-eval, 9 presses (fix-FT/scripts/
+ * n4_karma_end.py): this aura came off 0.8–7.5 s in on six of them — five in
+ * the ms of a hit the shield took only part of (2abc9185: REMOVED 3.04 s in
+ * with a 76k Death Sweep of which it absorbed 48k), one in the ms the debuff
+ * came off the target (b711d4ac: the mage it was cast on pressed Ice Block
+ * 0.77 s in) — and with the 10 s buff, to within 11 ms, on the other three.
+ */
+export const TOUCH_OF_KARMA_ABSORB_ID = "125174";
+/** All three, for curatedIdRegistry (a renumbered id would silence the
+ * clause, or put the buff's end back on the 10 s marker). */
 export const TOUCH_OF_KARMA_FEED_IDS: ReadonlySet<string> = new Set([
   TOUCH_OF_KARMA_ID,
   TOUCH_OF_KARMA_REDIRECT_ID,
+  TOUCH_OF_KARMA_ABSORB_ID,
 ]);
 /** The buff's official length (DB2 122470: 10 s): absorb rows of a press end
  * with it. */
