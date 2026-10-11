@@ -170,7 +170,10 @@ import {
 import { DURING_ABSORBED_TAG_RE_SRC } from "@gladlog/analysis/src/utils/externalDamage";
 import { FORCED_MOVE_TEXT } from "@gladlog/analysis/src/utils/forcedDisplacement";
 import { VULNERABLE_OWNER_DAMAGE_RE_SRC } from "@gladlog/analysis/src/utils/healerOffenseAnalysis";
-import { JUKE_LOOKBACK_MS } from "@gladlog/analysis/src/utils/kickAudit";
+import {
+  JUKE_LOOKBACK_MS,
+  JUKED_BY_FAKE_HEAD,
+} from "@gladlog/analysis/src/utils/kickAudit";
 import { STAYED_IN_NEAR_DEATH_PCT } from "@gladlog/analysis/src/utils/positionAnalysis";
 import { INTERP_MAX_GAP_MS } from "@gladlog/analysis/src/utils/positionSampling";
 import {
@@ -2527,6 +2530,59 @@ export function checkKickEatenCancelsCoverCastStopped(
     if (!(Number(cancels) >= stopped))
       failures.push(
         `line ${i + 1}: kick-eaten 写 yourCancels=${cancels},但时间线有 ${stopped} 条「没被踢、当时没有控制 / 沉默 / 击退落在你身上」的 [CAST STOPPED] 行 —— 这些读条每一次都是台账里的一次取消`,
+      );
+  });
+  return failures;
+}
+
+/** 1 = m:ss, 2 = the kicker's label, 3 = `<victim>'s <spell>` (or the bare
+ * victim when the log named no spell), 4 = the kick and its `back` note. */
+const KICK_INTERRUPTED_LINE =
+  /^\s*(\d+:\d{2})\s+\[KICK\]\s+(.+?) interrupted (.+) \(([^()]*)\)$/;
+/** 1 = m:ss, 2 = the owner's kick, 3 = its target's label, 4 = the faked
+ * spell; a trailing miss tag (`kickMissTag`) is not part of the spell. */
+const KICK_JUKED_BY_FAKE_LINE = new RegExp(
+  String.raw`^\s*(\d+:\d{2})\s+\[KICK\]\s+your (.+?) on (.+?) — ${reEscape(JUKED_BY_FAKE_HEAD)}(.+?)(?: \[[^\]]*\])?$`,
+);
+
+/**
+ * `[KICK] your K on N — JUKED by fake Y` against the `[KICK] … interrupted
+ * N's Y (…)` lines (FT F12): a cast bar somebody's interrupt ended was not a
+ * fake. The kick audit reads how the target's LAST bar before the kick ended
+ * (`castBarOutcomesOf`: `kicked` is no fake); of that the prompt carries the
+ * interrupt lines, so the gate fails a JUKED line that follows, inside the
+ * same rendered second, an interrupt of that very spell on that very target
+ * — the target is inside the lockout then and cannot have begun the spell
+ * again. The timeline is in time order within a second, so "follows" is
+ * read off the line order; a fake BEFORE the interrupt in that second
+ * passes.
+ *
+ * Until 2026-10-11 the audit named the EARLIEST unfinished bar of its
+ * look-back, so a kick 0.14 s after a teammate's Rebuke had interrupted the
+ * second Haunt read "JUKED by fake Haunt" off the first one (8930cb36 0:59):
+ * 9 of the 562 `JUKED by fake` lines on the 605-file capture of 8c3275fa.
+ * A completed cast and a wrongly named fake leave no line to check — the
+ * prompt does not print an enemy's cast bars.
+ */
+export function checkJukedKickNotAfterInterrupt(lines: string[]): string[] {
+  const failures: string[] = [];
+  let second = "";
+  let interrupted = new Map<string, string>();
+  lines.forEach((line, i) => {
+    const kicked = line.match(KICK_INTERRUPTED_LINE);
+    const juked = kicked ? null : line.match(KICK_JUKED_BY_FAKE_LINE);
+    const at = kicked?.[1] ?? juked?.[1];
+    if (at === undefined) return;
+    if (at !== second) {
+      second = at;
+      interrupted = new Map();
+    }
+    if (kicked) interrupted.set(kicked[3]!, line.trim());
+    if (!juked) return;
+    const earlier = interrupted.get(`${juked[3]}'s ${juked[4]}`);
+    if (earlier)
+      failures.push(
+        `line ${i + 1}: [KICK] 写被 ${juked[3]} 的假 ${juked[4]} 骗了,但同一秒里前面已有「${earlier.slice(0, 120)}」—— 那条读条是被打断的,不是假读条;打断后的锁定期内对方也起不了同一个法术 —— ${line.trim().slice(0, 160)}`,
       );
   });
   return failures;
@@ -6165,6 +6221,7 @@ export function checkMatch(
   hardFailures.push(...checkCcUseStartedCounts(lines));
   hardFailures.push(...checkCastStoppedLines(lines));
   hardFailures.push(...checkKickEatenCancelsCoverCastStopped(lines));
+  hardFailures.push(...checkJukedKickNotAfterInterrupt(lines));
   hardFailures.push(...checkCcNotLandedLines(lines));
   hardFailures.push(...checkForcedTrinketConsistency(lines));
   hardFailures.push(...checkBacklashSilenceFamily(lines));

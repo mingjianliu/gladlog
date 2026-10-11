@@ -46,6 +46,7 @@
     "test/healedThroughGate.test.ts",
     "test/hindsightScan.test.ts",
     "test/judgeVariance.test.ts",
+    "test/jukedKickGate.test.ts",
     "test/kickEatenKickSilenceGate.test.ts",
     "test/kickEatenPostKickGate.test.ts",
     "test/kickEatenRangeFactsGate.test.ts",

@@ -101,6 +101,7 @@ import * as bracketKey from "@gladlog/analysis/src/utils/bracketKey";
 import * as buffDuration from "@gladlog/analysis/src/utils/buffDuration";
 import * as burstLedger from "@gladlog/analysis/src/utils/burstLedger";
 import * as cannotCastIntervals from "@gladlog/analysis/src/utils/cannotCastIntervals";
+import * as castBarOutcomes from "@gladlog/analysis/src/utils/castBarOutcomes";
 import * as castCancels from "@gladlog/analysis/src/utils/castCancels";
 import * as castCommitSpans from "@gladlog/analysis/src/utils/castCommitSpans";
 import * as castingLocks from "@gladlog/analysis/src/utils/castingLocks";
@@ -2977,6 +2978,23 @@ const INDEX: PredicateRow[] = [
   {
     file: `${E}/quality/promptQualityCheck.ts`,
     symbol: "checkKickEatenCancelsCoverCastStopped",
+    mod: promptQualityCheck,
+  },
+  // 2026-10-11 (FT F12): how a cast bar of any unit ended (the kick audit
+  // reads it too), and a JUKED line never follows an interrupt of that spell
+  {
+    file: `${A}/utils/castBarOutcomes.ts`,
+    symbol: "castBarOutcomesOf",
+    mod: castBarOutcomes,
+  },
+  {
+    file: `${A}/utils/kickAudit.ts`,
+    symbol: "JUKED_BY_FAKE_HEAD",
+    mod: kickAudit,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkJukedKickNotAfterInterrupt",
     mod: promptQualityCheck,
   },
   // 2026-10-11 (re-eval I01 / F21 / F07 / I06): the kick-eaten row's refused

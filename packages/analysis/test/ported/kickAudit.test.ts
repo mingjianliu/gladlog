@@ -3,6 +3,7 @@ import { LogEvent } from "@gladlog/parser-compat";
 
 import { analyzeKickAudit } from "../../src/utils/kickAudit";
 import { formatBurstLedgerForContext } from "../../src/utils/burstLedger";
+import type { RawStreams } from "../../src/utils/rawStreams";
 import {
   makeInterruptEvent,
   makeSpellCastEvent,
@@ -294,7 +295,9 @@ describe("kickAudit — one kick one entry, landed silence, bounded juke (G11)",
     const [e] = analyzeKickAudit(player, [enemy], makeCombat());
     expect(e!.result).toBe("silenced");
     expect(e!.openCastSpellName).toBeUndefined();
-    // the juke test keeps the earliest stopped cast: same target, no aura
+    // the juke test reads the same bar (FT F12: it kept the EARLIEST stopped
+    // cast and said "JUKED by fake Frostbolt" 0.7 s after the Polymorph had
+    // gone off): same target, no aura
     const bare = makeUnit("e1", {
       name: "Enemy",
       info,
@@ -302,8 +305,8 @@ describe("kickAudit — one kick one entry, landed silence, bounded juke (G11)",
       spellCastEvents: enemy.spellCastEvents,
     } as any);
     const [j] = analyzeKickAudit(player, [bare], makeCombat());
-    expect(j!.result).toBe("juked");
-    expect(j!.jukedBySpellName).toBe("Frostbolt");
+    expect(j!.result).toBe("missed");
+    expect(j!.jukedBySpellName).toBeUndefined();
   });
 
   it("F-L6: an aura that went onto two enemies names the one the kick was aimed at (Avenger's Shield; Fable review)", () => {
@@ -469,5 +472,169 @@ describe("kickAudit — one kick one entry, landed silence, bounded juke (G11)",
     expect(analyzeKickAudit(player, [enemy], makeCombat())[0]!.result).toBe(
       "missed",
     );
+  });
+});
+
+// FT F12: "JUKED by fake X" on a cast that was not a fake. The bait is the
+// LAST bar the target began before the kick, read by the one reading of how
+// a cast bar ended (`castBarOutcomesOf`).
+describe("kickAudit — the bait is the last bar before the kick (FT F12)", () => {
+  const kickTs = MATCH_START + 29_029;
+  const kickerOf = (spellId = WIND_SHEAR) =>
+    makeUnit("p1", {
+      name: "Kicker",
+      info,
+      spellCastEvents: [
+        makeSpellCastEvent(spellId, kickTs, "e1", "Enemy", "p1", "Kicker", 0, spellId),
+      ],
+    } as any);
+  const done = (spellId: string, ts: number) =>
+    makeSpellCastEvent(spellId, ts, "p1", "Kicker", "e1", "Enemy", 0, spellId);
+  const FLASH_HEAL = "2061";
+  const HOLY_FIRE = "14914";
+
+  it("a0a48716 0:29: a cast stopped 3.8 s earlier is not the fake when the target has cast since — the bar the kick went out at is", () => {
+    const enemy = makeUnit("e1", {
+      name: "Enemy",
+      info,
+      castStartEvents: [
+        castStart(FLASH_HEAL, kickTs - 3_809, "e1"), // stopped
+        castStart(FLASH_HEAL, kickTs - 1_944, "e1"), // went off
+        castStart(HOLY_FIRE, kickTs - 741, "e1"), // never finished
+      ],
+      spellCastEvents: [done(FLASH_HEAL, kickTs - 972)],
+    } as any);
+    const [e] = analyzeKickAudit(kickerOf(), [enemy], makeCombat());
+    expect(e!.result).toBe("juked");
+    expect(e!.jukedBySpellName).toBe("Holy Fire");
+  });
+
+  it("24b6a229 2:19: a kick 0.28 s after the recast went off hit nothing — the stopped first cast is not its bait", () => {
+    const enemy = makeUnit("e1", {
+      name: "Enemy",
+      info,
+      castStartEvents: [
+        castStart(FLASH_HEAL, kickTs - 2_517, "e1"), // stopped
+        castStart(FLASH_HEAL, kickTs - 1_429, "e1"), // went off 0.28 s before the kick
+      ],
+      spellCastEvents: [done(FLASH_HEAL, kickTs - 284)],
+    } as any);
+    const [e] = analyzeKickAudit(kickerOf(), [enemy], makeCombat());
+    expect(e!.result).toBe("missed");
+    expect(e!.beatenBy).toBeUndefined();
+  });
+
+  it("8930cb36 0:59: a kick 0.14 s after a teammate's interrupt ended the second cast is 'hit nothing — … had interrupted', not a juke by the first", () => {
+    const rebuke = makeInterruptEvent(
+      "96231",
+      "Rebuke",
+      FLASH_HEAL,
+      "Flash Heal",
+      kickTs - 143,
+      "f2",
+      "Teammate",
+    );
+    rebuke.destUnitId = "e1";
+    const enemy = makeUnit("e1", {
+      name: "Enemy",
+      info,
+      castStartEvents: [
+        castStart(FLASH_HEAL, kickTs - 3_056, "e1"), // stopped
+        castStart(FLASH_HEAL, kickTs - 735, "e1"), // interrupted by the teammate
+      ],
+      actionIn: [rebuke],
+    } as any);
+    const [e] = analyzeKickAudit(kickerOf(), [enemy], makeCombat());
+    expect(e!.result).toBe("missed");
+    expect(e!.beatenBy?.kickSpellName).toBe("Rebuke");
+    expect(e!.beatenBy?.interruptedSpellName).toBe("Flash Heal");
+  });
+
+  it("two fakes in a row: the later one is named", () => {
+    const enemy = makeUnit("e1", {
+      name: "Enemy",
+      info,
+      castStartEvents: [
+        castStart(FLASH_HEAL, kickTs - 2_500, "e1"),
+        castStart(HOLY_FIRE, kickTs - 600, "e1"),
+      ],
+    } as any);
+    const [e] = analyzeKickAudit(kickerOf(), [enemy], makeCombat());
+    expect(e!.result).toBe("juked");
+    expect(e!.jukedBySpellName).toBe("Holy Fire");
+  });
+
+  it("a bar begun after the kick, or more than the look-back before it, is not read", () => {
+    const enemy = (starts: number[]) =>
+      makeUnit("e1", {
+        name: "Enemy",
+        info,
+        castStartEvents: starts.map((ms) => castStart(FLASH_HEAL, kickTs + ms, "e1")),
+      } as any);
+    expect(
+      analyzeKickAudit(kickerOf(), [enemy([-4_001, 200])], makeCombat())[0]!.result,
+    ).toBe("missed");
+    expect(
+      analyzeKickAudit(kickerOf(), [enemy([-4_000, 200])], makeCombat())[0]!.result,
+    ).toBe("juked");
+  });
+
+  // The recorder's bars, with their SPELL_CAST_FAILED rows handed in: read as
+  // the cancel ledger reads them.
+  describe("a target that recorded the log", () => {
+    const streams = (reason: string): RawStreams => ({
+      available: true,
+      manaSamples: [],
+      castFailed: [
+        {
+          tSeconds: (kickTs - 400 - MATCH_START) / 1000,
+          unitGuid: "e1",
+          spellId: Number(FLASH_HEAL),
+          spellName: "Flash Heal",
+          reason,
+        } as never,
+      ],
+    });
+    const recorder = (extra: Record<string, unknown> = {}) =>
+      makeUnit("e1", {
+        name: "Enemy",
+        info,
+        castStartEvents: [castStart(FLASH_HEAL, kickTs - 1_000, "e1")],
+        ...extra,
+      } as any);
+    const audit = (enemy: any, s?: RawStreams) =>
+      analyzeKickAudit(kickerOf(), [enemy], makeCombat(), s)[0]!;
+
+    it("a bar it stopped is a fake even when the same spell went off as an instant right after", () => {
+      const enemy = recorder({
+        spellCastEvents: [done(FLASH_HEAL, kickTs + 300)],
+      });
+      // without the rows the SUCCESS reads as the bar's completion
+      expect(audit(enemy).result).toBe("missed");
+      expect(audit(enemy, streams("Interrupted")).result).toBe("juked");
+    });
+
+    it("a bar stopped next to a control on it, or refused by the client, is no fake (ruling A′17)", () => {
+      const stunned = recorder({
+        auraEvents: [
+          {
+            logLine: { event: LogEvent.SPELL_AURA_APPLIED, timestamp: kickTs - 450, parameters: [] },
+            timestamp: kickTs - 450,
+            spellId: "853", // Hammer of Justice
+            spellName: "Hammer of Justice",
+            srcUnitId: "f2",
+            destUnitId: "e1",
+          },
+        ],
+      });
+      expect(audit(stunned, streams("Interrupted")).result).toBe("missed");
+      expect(audit(recorder(), streams("Target not in line of sight")).result).toBe(
+        "missed",
+      );
+      // the rows of another unit change nothing
+      const other = streams("Target not in line of sight");
+      other.castFailed[0]!.unitGuid = "someone-else";
+      expect(audit(recorder(), other).result).toBe("juked");
+    });
   });
 });

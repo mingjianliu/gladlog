@@ -16,6 +16,7 @@ import {
 import { IEnemyCDCast, reconstructEnemyCDTimeline } from "./enemyCDs";
 import {
   type IKickAuditEntry,
+  jukedByFakeText,
   jukedByStoppedChannelText,
   kickMissTag,
 } from "./kickAudit";
@@ -849,7 +850,7 @@ export function formatBurstLedgerForContext(
         case "juked":
           return k.jukedChannelStoppedAgoS !== undefined
             ? `${at} ${k.kickSpellName} → ${jukedByStoppedChannelText(k)}${missTag(k)}`
-            : `${at} ${k.kickSpellName} → JUKED by fake ${k.jukedBySpellName}${missTag(k)}`;
+            : `${at} ${k.kickSpellName} → ${jukedByFakeText(k)}${missTag(k)}`;
         case "missed":
           return `${at} ${k.kickSpellName} → hit nothing${missTag(k)}`;
         default:

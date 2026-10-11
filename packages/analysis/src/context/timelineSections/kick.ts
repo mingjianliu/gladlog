@@ -25,6 +25,7 @@ import {
 } from "../../utils/enemyInterrupts";
 import {
   analyzeKickAudit,
+  jukedByFakeText,
   jukedByStoppedChannelText,
   kickMissTag,
 } from "../../utils/kickAudit";
@@ -316,7 +317,7 @@ export function emitKickEntries(
       k.result === "juked"
         ? k.jukedChannelStoppedAgoS !== undefined
           ? jukedByStoppedChannelText(k)
-          : `JUKED by fake ${k.jukedBySpellName}`
+          : jukedByFakeText(k)
         : k.beatenBy
           ? `hit nothing — ${resolveKicker(k.beatenBy.kickerName, k.beatenBy.kickerId)}'s ${k.beatenBy.kickSpellName} had interrupted ${k.beatenBy.interruptedSpellName ? `the ${k.beatenBy.interruptedSpellName}` : "the cast"} ${k.beatenBy.agoS < 0.1 ? "under 0.1s" : `${(Math.floor(k.beatenBy.agoS * 10 + 1e-9) / 10).toFixed(1)}s`} earlier`
           : "hit nothing";

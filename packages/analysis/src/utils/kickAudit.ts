@@ -13,6 +13,12 @@ import {
 import { SPELL_CATEGORIES as spellsData } from "../data/spellCategories";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import { buffFullDurationForCaster } from "./buffDuration";
+import {
+  CAST_QUEUE_TOLERANCE_MS,
+  type CastBarOutcome,
+  castBarOutcomesOf,
+  JUKE_LOOKBACK_MS,
+} from "./castBarOutcomes";
 import { CHANNEL_AURA_LAG_MS, channelSpans } from "./castCommitSpans";
 import {
   CANCEL_CC_NEAR_S,
@@ -20,6 +26,7 @@ import {
   STOPPED_JUST_BEFORE_S,
 } from "./castStopEvidence";
 import { kickCastSpellId, LANDED_PAIR_MS } from "./enemyInterrupts";
+import type { RawStreams } from "./rawStreams";
 
 type SpellEntry = { type: string };
 const SPELLS = spellsData as Record<string, SpellEntry>;
@@ -34,16 +41,13 @@ export { LANDED_PAIR_MS };
  * — that one pairs a kick with its SPELL_INTERRUPT (triage 2026-09-29, other
  * F-O4). */
 const DUPLICATE_KICK_ID_MS = 50;
-/** Spell-queue tolerance: the next cast's SPELL_CAST_START is often logged
- * before this cast's SUCCESS (client-side queuing), so a SUCCESS may follow
- * the next start by this much and still complete THIS cast. Desktop's
- * `castBars.ts` draws the cast bars with the same number (imported from here
- * — one fact, two readers). */
-export const CAST_QUEUE_TOLERANCE_MS = 400;
-/** How far back before the kick a cancelled enemy cast still counts as the juke bait.
- * Anchored on the cast-bar cap: an uncompleted cast is over within this long
- * (desktop castBars CAST_BAR_MAX_MS renders the same fact — keep equal). */
-export const JUKE_LOOKBACK_MS = 4_000;
+// `CAST_QUEUE_TOLERANCE_MS` (a SUCCESS up to this long after the next cast
+// start still completes THIS cast) and `JUKE_LOOKBACK_MS` (the cast-bar cap,
+// and how far back before the kick the bar it went out at may have begun)
+// live in castBarOutcomes.ts with the one reading of how a cast bar ended;
+// re-exported from here, their first home (desktop's `castBars.ts` imports
+// the tolerance through this file).
+export { CAST_QUEUE_TOLERANCE_MS, JUKE_LOOKBACK_MS };
 /** A channel counts as STOPPED (not run out) only when its logged length is
  * under this share of its official duration. Haste shortens a channel that
  * runs its course, and the log has no "channel finished" row, so the bound
@@ -68,8 +72,13 @@ export interface IKickAuditEntry {
    *            other kick that interrupted nothing is `unknown` and outside
    *            the landed rate, and a lone `silenced` would be the only one
    *            counted against it;
-   * juked    — kick missed AND the target cancelled a cast just before (fake-cast bait);
-   * missed   — kick missed with cast-start data present and no bait found (nothing kickable);
+   * juked    — kick missed AND the last cast bar the target began before it
+   *            (within `JUKE_LOOKBACK_MS`) never went off and nobody
+   *            interrupted it (fake-cast bait), or a channel it stopped just
+   *            before;
+   * missed   — kick missed with cast-start data present and no bait found:
+   *            no bar begun in the lookback, or the last one went off or was
+   *            interrupted by somebody else (nothing kickable);
    * unknown  — kick missed but this match predates cast-start data (can't distinguish).
    */
   result: "landed" | "silenced" | "juked" | "missed" | "unknown";
@@ -77,7 +86,8 @@ export interface IKickAuditEntry {
   interruptedSpellName?: string;
   /** landed: category of what was interrupted (GH #79). */
   interruptedCategory?: KickedSpellCategory;
-  /** juked: the cast that was faked. */
+  /** juked: the cast that was faked — the LAST bar the target began before
+   * the kick, never an earlier one (FT F12). */
   jukedBySpellName?: string;
   /** juked by a CHANNEL the target stopped itself: how long before the kick
    * it stopped, seconds (≤ `STOPPED_JUST_BEFORE_S`). Absent for a faked
@@ -144,6 +154,17 @@ export function kickMissTag(
   return word ? ` [${word} ${who}]` : "";
 }
 
+/** The one wording for a kick juked by a faked hardcast
+ * (`jukedBySpellName`, no `jukedChannelStoppedAgoS`): the `[KICK] your …`
+ * line, the `Kicks:` line and the gate that re-reads them
+ * (`checkJukedKickNotAfterInterrupt`) share the head. */
+export const JUKED_BY_FAKE_HEAD = "JUKED by fake ";
+export function jukedByFakeText(
+  k: Pick<IKickAuditEntry, "jukedBySpellName">,
+): string {
+  return `${JUKED_BY_FAKE_HEAD}${k.jukedBySpellName}`;
+}
+
 /** The one wording for a kick juked by a channel its target stopped
  * (`jukedChannelStoppedAgoS`): the prompt's `Kicks:` line and any other
  * rendering of the audit read it. The offset is floored to a tenth; under a
@@ -165,8 +186,9 @@ export function jukedByStoppedChannelText(
  * Shared predicates: "is an interrupt" = SPELL_CATEGORIES type "interrupts"
  * (same check the stats table uses); "kick landed" = the mirror of
  * ccTrinketAnalysis' interruptInstances (victim actionIn ∩ SPELL_INTERRUPT ∩
- * src = kicker); "cast was cancelled" mirrors the cast-bar pairing rule
- * (no same-spell SPELL_CAST_SUCCESS before the next start / 4s cap).
+ * src = kicker); "cast was cancelled" is the one reading of how a cast bar
+ * ended (`castBarOutcomesOf`, the reading the owner's cancel ledger and the
+ * `[CAST STOPPED]` lines take): no end row the target did not choose.
  *
  * Order of the three decisions (triage 2026-09-29, CROSS-THEME G11):
  *  1. one kick, one entry — two cast rows of the same kick are collapsed
@@ -180,12 +202,28 @@ export function jukedByStoppedChannelText(
  *     kick is the bait before any earlier unfinished hardcast (B-tier B21b,
  *     user ruling 2026-10-06 — the mirror of kick-eaten's `stoppedJustBefore`:
  *     0e0663e6, a Mind Freeze 0.1 s after Divine Hymn stopped read "JUKED by
- *     fake Benediction", a bar from 3.4 s earlier).
+ *     fake Benediction", a bar from 3.4 s earlier). Else the bait is the LAST
+ *     bar the target began before the kick, and only when that bar never
+ *     went off and nobody interrupted it (FT F12). Until 2026-10-11 it was
+ *     the EARLIEST unfinished bar of the lookback, whatever the target had
+ *     cast since: a0a48716 0:29 named a Flash Heal stopped 3 s earlier — a
+ *     Flash Heal had gone off since and the kick went out at a Benediction
+ *     bar; 24b6a229 2:19 was "JUKED by fake Benediction" 0.28 s after the
+ *     recast Benediction had gone off; 8930cb36 0:59 was "JUKED by fake
+ *     Haunt" 0.14 s after a teammate's Rebuke had interrupted the second
+ *     Haunt.
+ *
+ * `rawStreams` (optional): the log's SPELL_CAST_FAILED rows. With them a
+ * target that recorded the log has its bars read as `ownerCastBarOutcomes`
+ * reads them (a bar stopped next to a control or a knockback, or refused by
+ * the client, is no fake — ruling A′17); without them, and for every other
+ * target, a bar has no such row to read.
  */
 export function analyzeKickAudit(
   player: ICombatUnit,
   enemies: ICombatUnit[],
   combat: AtomicArenaCombat,
+  rawStreams?: RawStreams,
 ): IKickAuditEntry[] {
   const matchStartMs = combat.startTime;
   const enemyPlayers = enemies.filter((e) => e.info);
@@ -244,64 +282,52 @@ export function analyzeKickAudit(
   );
 
   const entries: IKickAuditEntry[] = [];
-  /** The cast `enemy` started in the lookback before `kickMs` and never
-   * finished: no same-spell success and no interrupt of it by anyone before
-   * the cast was over. The juke test takes the earliest such cast — the bait
-   * was stopped BEFORE the kick. `openAtKick` (the silenced branch) takes
-   * only a bar still running at the kick, and of two the latest: a cast the
-   * target's next cast start had already ended was not open when the silence
-   * landed, and naming it would coach around the wrong spell. */
+  // How each of an enemy's cast bars ended — the one reading
+  // (`castBarOutcomesOf`), with the unit's own SPELL_CAST_FAILED rows when it
+  // recorded the log and they were handed in.
+  const barsByUnit = new Map<string, CastBarOutcome[]>();
+  const barsOf = (enemy: ICombatUnit) => {
+    let bars = barsByUnit.get(enemy.id);
+    if (!bars) {
+      bars = castBarOutcomesOf({
+        unit: enemy,
+        startMs: matchStartMs,
+        failed: rawStreams?.available
+          ? rawStreams.castFailed.filter((e) => e.unitGuid === enemy.id)
+          : [],
+      });
+      barsByUnit.set(enemy.id, bars);
+    }
+    return bars;
+  };
+  /** The cast bar a kick at `kickMs` went out at: the LAST one `enemy` began
+   * before it, inside the lookback — named when it did not go off and nobody
+   * interrupted it, else nothing. An earlier bar is never the answer: the
+   * target has cast since, and a kick is aimed at the bar on screen.
+   *  - `faked` (the juke test): the bar has no end row (`none` — all the log
+   *    says of a unit that did not record it), or the recorder stopped it
+   *    with nothing landing on them (`stopped`, `near === null`);
+   *  - `unfinished` (the silenced branch): any end but a completion or
+   *    somebody's interrupt — whether the silence or the target stopped it
+   *    the log cannot tell. */
   const openCastOf = (
     enemy: ICombatUnit,
     kickMs: number,
-    openAtKick = false,
+    want: "faked" | "unfinished",
   ) => {
-    const successes = enemy.spellCastEvents.filter(
-      (c) => c.logLine.event === LogEvent.SPELL_CAST_SUCCESS,
-    );
-    // 3. A cast is over at the unit's NEXT cast start (plus the queue
-    // tolerance) or the 4 s cap, whichever is first — the rule the header
-    // states. Without the bound a stopped cast followed by a completed
-    // recast of the same spell read as completed, and the kick that hit
-    // the stop was "missed" (2c6e85ec: Rebuke 75.6 on a stopped Cyclone,
-    // recast and finished 0.4 s later). The last start has no next one.
-    const starts = [...(enemy.castStartEvents ?? [])].sort(
-      (a, b) => a.logLine.timestamp - b.logLine.timestamp,
-    );
-    let open: string | undefined;
-    for (let i = 0; i < starts.length; i++) {
-      const st = starts[i]!;
-      const stMs = st.logLine.timestamp;
-      if (stMs < kickMs - JUKE_LOOKBACK_MS || stMs > kickMs) continue;
-      const nextStartMs = starts[i + 1]?.logLine.timestamp ?? Infinity;
-      const endMs = Math.min(
-        stMs + JUKE_LOOKBACK_MS,
-        nextStartMs + CAST_QUEUE_TOLERANCE_MS,
-      );
-      if (openAtKick && endMs < kickMs) continue;
-      const completed = successes.some(
-        (c) =>
-          c.spellId === st.spellId &&
-          c.logLine.timestamp >= stMs &&
-          c.logLine.timestamp <= endMs,
-      );
-      // If that cast was interrupted by ANYONE (including a teammate!), it
-      // was a real cast that got kicked, not a fake cast
-      // (2026-07-16 DPS baseline: a teammate's kick was mislabeled
-      // "JUKED by fake")
-      const wasInterrupted = allInterrupts.some(
-        (a) =>
-          a.destUnitId === enemy.id &&
-          (a as CombatExtraSpellAction).extraSpellId === st.spellId &&
-          a.logLine.timestamp >= stMs &&
-          a.logLine.timestamp <= endMs,
-      );
-      if (!completed && !wasInterrupted) {
-        open = getEnglishSpellName(st.spellId ?? "", st.spellName ?? "");
-        if (!openAtKick) return open;
-      }
+    const kickS = (kickMs - matchStartMs) / 1000;
+    let last: CastBarOutcome | undefined;
+    for (const bar of barsOf(enemy)) {
+      if (bar.t > kickS) break;
+      last = bar;
     }
-    return open;
+    if (!last || last.t < kickS - JUKE_LOOKBACK_MS / 1000) return undefined;
+    const { end } = last;
+    const open =
+      want === "unfinished"
+        ? end.kind !== "completed" && end.kind !== "kicked"
+        : end.kind === "none" || (end.kind === "stopped" && end.near === null);
+    return open ? getEnglishSpellName(last.id, last.name) : undefined;
   };
 
   /** The channel `enemy` stopped itself just before `kickMs`: a logged
@@ -435,7 +461,7 @@ export function analyzeKickAudit(
         ? aimed
         : enemyPlayers.find(carriesKickAura);
     if (silenced) {
-      const open = openCastOf(silenced, kickMs, true);
+      const open = openCastOf(silenced, kickMs, "unfinished");
       // the aimed unit's miss stays beside "silenced <other>" — it is why
       // the intended target was unaffected (codex 40-FT-38: Avenger's Shield
       // IMMUNE on the aimed enemy, its silence on another)
@@ -454,8 +480,9 @@ export function analyzeKickAudit(
       continue;
     }
 
-    // Juke check: the kick's target (fall back to any enemy) cancelled a cast
-    // in the lookback window — started, never completed before the kick.
+    // Juke check: the kick's target (fall back to any enemy) stopped a channel
+    // just before the kick, or left the last cast bar it began in the
+    // lookback window unfinished.
     const candidates = kick.destUnitId
       ? enemyPlayers.filter((e) => e.id === kick.destUnitId)
       : enemyPlayers;
@@ -478,7 +505,7 @@ export function analyzeKickAudit(
     }
     let jukedBy: string | undefined;
     for (const enemy of candidates) {
-      jukedBy = openCastOf(enemy, kickMs);
+      jukedBy = openCastOf(enemy, kickMs, "faked");
       if (jukedBy) break;
     }
 
