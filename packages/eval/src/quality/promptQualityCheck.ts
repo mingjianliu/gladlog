@@ -115,7 +115,6 @@ import { classMetadata } from "@gladlog/analysis/src/data/classSpells";
 import { FORM_COOLDOWN_BUFF_BY_CAST_ID } from "@gladlog/analysis/src/data/druidForms";
 import { lookupKickPriorityPrior } from "@gladlog/analysis/src/data/kickPriorityPrior";
 import { ATTEMPT_INTO_TRINKET_OUTCOME_REF } from "@gladlog/analysis/src/data/outcomeRefs";
-import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData";
 import {
   getEnglishSpellName,
   spellEffectData,

@@ -240,6 +240,19 @@ export function emitCcOnEnemyEntries(
                   );
                 },
               );
+        // F06b / F08: gone within half a second with nothing in the log
+        // to say why — said, not left as a bare `<1s`
+        // (`ccUnloggedEarlyEnd`). An enemy's dispel of it is the
+        // `enemyDispelSummary` reading above.
+        const endNote =
+          loggedEndNote ||
+          (enemyTremor || !enemyUnit || trinketBroke || isCleansed
+            ? ""
+            : formatCcUnloggedEnd(
+                ccUnloggedEarlyEnd(enemyUnit, cc, matchStartMs),
+              ));
+        // F06c: a REFRESH row this line's instance runs across
+        const refreshNote = formatCcRefreshed(cc, fmtTime, drTag !== "");
         // FT F22: a dispel backlash that is a SILENCE (Unstable Affliction's
         // 196364 — DB2 mechanic 9, `BACKLASH_AURA_CC_TYPE`) is a silence on
         // that enemy, not hard CC: the [SILENCE] line, in its format, with
@@ -259,19 +272,6 @@ export function emitCcOnEnemyEntries(
             silenceLineCount++;
           continue;
         }
-        // F06b / F08: gone within half a second with nothing in the log
-        // to say why — said, not left as a bare `<1s`
-        // (`ccUnloggedEarlyEnd`). An enemy's dispel of it is the
-        // `enemyDispelSummary` reading above.
-        const endNote =
-          loggedEndNote ||
-          (enemyTremor || !enemyUnit || trinketBroke || isCleansed
-            ? ""
-            : formatCcUnloggedEnd(
-                ccUnloggedEarlyEnd(enemyUnit, cc, matchStartMs),
-              ));
-        // F06c: a REFRESH row this line's instance runs across
-        const refreshNote = formatCcRefreshed(cc, fmtTime, drTag !== "");
         const durStr = enemyTremor
           ? `${drTag} | enemy Tremor Totem from ${enemyPid(enemyTremor.shamanName)} ended this CC after ${renderedCcDuration(cc)} (cut short — it had not expired)`
           : ` (${renderedCcSpan(cc)})${drTag}${refreshNote}${endNote}`;
