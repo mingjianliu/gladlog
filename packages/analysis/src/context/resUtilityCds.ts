@@ -21,8 +21,7 @@ import { effectiveCooldownSeconds } from "../data/spellEffectData";
 import {
   eventReducedCooldownSeconds,
   eventReductionsFor,
-  eventTriggerTimesMs,
-  type IEventCooldownReduction,
+  eventTriggersFor,
 } from "../data/talentScriptedCooldowns";
 import {
   type IMajorCooldownInfo,
@@ -54,7 +53,7 @@ function castsOf(
 }
 
 /** The ledger's per-press event reductions (Storm Conduit: each Lightning
- *  Bolt −1 s on Wind Shear), as extractMajorCooldowns applies them —
+ *  Bolt gives Wind Shear seconds back), as extractMajorCooldowns applies them —
  *  single-charge only (codex review of batch 14: [RES] printed Wind Shear on
  *  cooldown while interruptCooldownRemainingMs had it ready). */
 function withEventReductions(
@@ -87,14 +86,15 @@ function withEventReductions(
       const own = pressCd(c);
       return own < cooldownSeconds ? { ...c, cooldownSecondsOverride: own } : c;
     });
-  const triggerSeconds = (r: IEventCooldownReduction) =>
-    eventTriggerTimesMs(owner, r).map((t) => (t - matchStartMs) / 1000);
+  const triggers = eventTriggersFor(owner, reductions).map((g) => ({
+    atSeconds: (g.atMs - matchStartMs) / 1000,
+    seconds: g.seconds,
+  }));
   return casts.map((c) => {
     const eff = eventReducedCooldownSeconds(
       c.timeSeconds,
       pressCd(c),
-      reductions,
-      triggerSeconds,
+      triggers,
     );
     return eff < cooldownSeconds ? { ...c, cooldownSecondsOverride: eff } : c;
   });

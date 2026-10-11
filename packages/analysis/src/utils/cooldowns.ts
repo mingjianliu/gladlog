@@ -37,9 +37,8 @@ import { replacedSpellIds } from "../data/talentReplaces";
 import {
   eventReducedCooldownSeconds,
   eventReductionsFor,
-  eventTriggerTimesMs,
+  eventTriggersFor,
   freeRecastWindowFor,
-  type IEventCooldownReduction,
 } from "../data/talentScriptedCooldowns";
 import {
   STUN_PURGE_GENERATED,
@@ -4038,32 +4037,30 @@ function extractMajorCooldownsAll(
     }
 
     // Event reductions (Storm Conduit, Lethal Calibration): each press's real
-    // ready instant, from the holder's triggers (`eventTriggerTimesMs`).
-    // Single-charge spells only — a charge simulation takes no per-press
-    // override.
+    // ready instant, from the holder's triggers and what each one gave back
+    // (`eventTriggersFor` — the seconds can depend on the holder's spec and
+    // on the date of the log). Single-charge spells only — a charge
+    // simulation takes no per-press override.
     const reductions = eventReductionsFor(spell.spellId, holds);
     if (reductions.length && baselineCharges <= 1) {
-      const triggerSeconds = (r: IEventCooldownReduction) =>
-        eventTriggerTimesMs(unit, r).map((t) => (t - matchStartMs) / 1000);
+      const triggers = eventTriggersFor(unit, reductions).map((g) => ({
+        atSeconds: (g.atMs - matchStartMs) / 1000,
+        seconds: g.seconds,
+      }));
       for (const c of casts) {
         if (c.cooldownSecondsOverride !== undefined) continue;
         const eff = eventReducedCooldownSeconds(
           c.timeSeconds,
           cooldownSeconds,
-          reductions,
-          triggerSeconds,
+          triggers,
         );
         if (eff < cooldownSeconds) {
           c.cooldownSecondsOverride = eff;
-          c.reductions = reductions
-            .flatMap((r) =>
-              triggerSeconds(r)
-                .filter(
-                  (t) => t > c.timeSeconds && t < c.timeSeconds + eff + 1e-9,
-                )
-                .map((t) => ({ atSeconds: t, seconds: r.seconds })),
-            )
-            .sort((a, b) => a.atSeconds - b.atSeconds);
+          c.reductions = triggers.filter(
+            (g) =>
+              g.atSeconds > c.timeSeconds &&
+              g.atSeconds < c.timeSeconds + eff + 1e-9,
+          );
         }
       }
     }

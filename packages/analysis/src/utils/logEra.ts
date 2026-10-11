@@ -3,9 +3,11 @@
  *
  * A dated game change is an exported epoch constant (`Date.UTC(…)`) next to
  * the rule it gates — 12.1 go-live (`PATCH_121_GOLIVE_EPOCH_MS`,
- * drAnalysis.ts: the DR reset window, the Stellar Protection dispel penalty)
- * — and "what date is this log" is always a wall-clock epoch from the log
- * itself: the match start or the timestamp of the event the rule is about.
+ * drAnalysis.ts: the DR reset window, the Stellar Protection dispel penalty),
+ * Storm Conduit's 2026-08-18 hotfix (`STORM_CONDUIT_HOTFIX_EPOCH_MS`,
+ * data/talentScriptedCooldowns.ts) — and "what date is this log" is always a
+ * wall-clock epoch from the log itself: the match start or the timestamp of
+ * the event the rule is about.
  *
  * What that epoch is: the parser turns a log line's `M/D/YYYY HH:MM:SS.mmm`
  * into epoch ms (`parseTimestamp`, packages/parser/src/l1/timestamp.ts). A
@@ -21,7 +23,8 @@
 /**
  * Is a log timestamp at or after a dated game change? The cutover instant
  * itself is already the new rule. A timestamp that is not a number is on
- * neither side and reads `false`.
+ * neither side and reads `false` — a rule that must not take such a log for
+ * an old one says so itself (`eventReductionSecondsAt`).
  */
 export function logIsFrom(logEpochMs: number, cutoverEpochMs: number): boolean {
   return logEpochMs >= cutoverEpochMs;

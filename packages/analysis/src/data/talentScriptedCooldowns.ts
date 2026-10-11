@@ -18,7 +18,13 @@
  *    (press, R); `remaining(t)` is monotone and reaches 0 exactly at R, so
  *    "available at t" ⇔ R ≤ t — no event after t can change the answer at t.
  */
-import { type ICombatUnit, LogEvent } from "@gladlog/parser-compat";
+import {
+  CombatUnitSpec,
+  type ICombatUnit,
+  LogEvent,
+} from "@gladlog/parser-compat";
+
+import { logIsFrom } from "../utils/logEra";
 
 export interface IFreeRecastWindow {
   /** the spell whose press opens the window */
@@ -69,9 +75,42 @@ export interface IEventCooldownReduction {
   /** With `triggerHitIds`: at most this many hits of one use count (the
    * talent's "up to N sec" cap ÷ `seconds`). */
   maxHitsPerUse?: number;
-  seconds: number;
+  /** What one trigger gives back. Not always one number, so no reader takes
+   * it from here: `eventTriggersFor` hands every trigger out with its own
+   * seconds (`eventReductionSecondsAt`). */
+  seconds: number | IHolderSeconds;
   note: string;
 }
+
+/** A number the game changed at `cutoverEpochMs` (a wall-clock epoch, asked
+ * through `logIsFrom`): `before` for a log timestamp earlier than it,
+ * `since` from it on. */
+export interface ILogDatedSeconds {
+  cutoverEpochMs: number;
+  before: number;
+  since: number;
+}
+
+/** Seconds that are not the same for every holder: `bySpec` for a holder of
+ * that spec (the unit's COMBATANT_INFO spec id), `base` for everyone else. */
+export interface IHolderSeconds {
+  base: number;
+  bySpec: Readonly<Partial<Record<string, ILogDatedSeconds>>>;
+}
+
+/**
+ * Storm Conduit's Restoration hotfix: 4 s → 2 s per cast (the entry below has
+ * the evidence). The day is a community source's, the hour is not known, so
+ * the instant is the start of that calendar day in UTC — the way 12.1
+ * go-live is a `Date.UTC` instant (`PATCH_121_GOLIVE_EPOCH_MS`), and asked
+ * the same way (`logIsFrom`, utils/logEra.ts, which also says how far a log
+ * timestamp can be from the true instant). The holders' files that decide
+ * the two values are dated 08-13 … 08-16 and 08-18 18:54 … 08-22 in their own
+ * local time; nothing in the corpus places the change more exactly inside
+ * that gap, and a log from the evening of 08-17 in the Americas already
+ * reads 2 s here.
+ */
+export const STORM_CONDUIT_HOTFIX_EPOCH_MS = Date.UTC(2026, 7, 18, 0, 0, 0);
 
 /** Every shaman totem is Nature school (DB2 SpellMisc.SchoolMask 8 for all
  * of these at 12.1.5.69594), so Storm Conduit's "Nature totems" is every
@@ -104,23 +143,56 @@ export const EVENT_COOLDOWN_REDUCTIONS: Readonly<
   // Healing Tide 77.9 vs 120, Spirit Link 132.6 vs 180, Capacitor 32.6 vs
   // 34.9; Lightning Lasso / Nature's Swiftness / Hex / Ascendance unchanged
   // (not named, not totems).
-  // FLAG (FT F20, 2026-10-11; Game-Behaviour Rule — the value leg does not
-  // close, so the number is left at DB2's): 1 s is too little for a
-  // RESTORATION holder. On five holders' files (59 recast pairs, fix-FT
-  // `n6_storm_conduit_fit.py`) 27 presses come before this model's ready
-  // instant; the two files logged 08-14 need ≥ 3.56 / 4.26 s per cast, the
-  // two logged 08-19 / 08-22 need ≥ 1.95 / 1.83 s and fit 2 s with the
-  // tightest press 0.2 s after it. DB2 has no per-spec seconds (dummy 1000
-  // ms, a server script), but the talent's interrupt-duration aura 1223529
-  // moved −65 → −40 between builds 12.1.0.69382 and 69404 — the hotfix a
-  // community wiki dates 2026-08-18 and words "Restoration 4 s → 2 s, 65 %
-  // → 40 %". A per-spec value needs a user ruling (docs/talent-coverage-
-  // gaps.md §8).
+  //
+  // RESTORATION holders get more than the tooltip's second, and the number
+  // moved once — modelled BY THE DATE OF THE LOG (user ruling 2026-10-11):
+  // 4 s per cast before 2026-08-18, 2 s from then on
+  // (`STORM_CONDUIT_HOTFIX_EPOCH_MS`). Every other holder keeps DB2's 1 s.
+  // FLAG (Game-Behaviour Rule — this is NOT three-way evidence, and stays
+  // flagged in docs/talent-coverage-gaps.md §8):
+  //  - DB2 has no leg for the seconds: a dummy effect of 1000 ms run by a
+  //    server script, no class mask, no label, nothing per spec. What DB2
+  //    does show is that the talent was changed then — its companion aura
+  //    1223529 (interrupted-cast duration) went −65 → −40 between builds
+  //    12.1.0.69382 and 69404.
+  //  - The day and the two values are a community wiki's hotfix note
+  //    (warcraft.wiki.gg/wiki/Storm_Conduit, read as a fetched summary, not
+  //    the page itself): 2026-08-18, "Restoration 4 s → 2 s".
+  //  - The corpus carries the numbers. 605 new-season files (fix-FT
+  //    `n6_storm_conduit_fit.py` → `n6-stormConduit-fit-605.txt`): recast
+  //    pairs of Healing Tide / Capacitor / Spirit Link / Astral Shift by
+  //    holders, R = press + cd − s × #casts in (press, R), "early" = the
+  //    next press more than 0.5 s before R. 11 files have recast pairs (78);
+  //    in 9 of them (70 pairs) some pair is shorter than the unreduced
+  //    cooldown, and the rest is about those. At 1 s: 28 early. Logs dated
+  //    before 08-18 (4 files, 50 pairs): at 2 s 19 early, all in the two
+  //    08-14 files, which need ≥ 3.56 / 4.26 s; at 4 s 1 early, by 2.4 s —
+  //    unexplained. Logs dated 08-18 or later (5 files, 20 pairs): at 2 s 0
+  //    early, the tightest file needs ≥ 1.95 s.
+  //    The product's own predicate on five of those files
+  //    (`ledgerImpossibleCastScan`, `cdAvailableAt` at each holder's recast
+  //    of a target, 59 recasts): 27 pressed while the ledger said "not
+  //    ready" at 1 s → 1 with the dated value; every other ledger entry in
+  //    the same files 2 of 933 → 2 of 933.
+  // Not measured: Wind Shear, Gust of Wind and the other totems (one tooltip
+  // number, so the same seconds here); an Elemental holder (the holders in
+  // the five fit files whose COMBATANT_INFO was read are all spec 264 —
+  // DB2's second stands for everyone else); a log older than 08-13 (4 s by
+  // the ruling's wording, no corpus behind it).
   "1217092": {
     targets: ["108271", "192063", "57994", ...SHAMAN_TOTEM_IDS],
     triggerCastIds: ["188196", "188443"],
-    seconds: 1,
-    note: "Storm Conduit — Lightning Bolt / Chain Lightning −1 s",
+    seconds: {
+      base: 1,
+      bySpec: {
+        [CombatUnitSpec.Shaman_Restoration]: {
+          cutoverEpochMs: STORM_CONDUIT_HOTFIX_EPOCH_MS,
+          before: 4,
+          since: 2,
+        },
+      },
+    },
+    note: "Storm Conduit — Lightning Bolt / Chain Lightning −1 s; Restoration −4 s before the 2026-08-18 hotfix, −2 s since (corpus + community date, FLAG)",
   },
   // Lethal Calibration (Survival, FT F20 2026-10-11): "Each enemy hit by
   // Wildfire Bomb reduces the cooldown of Boomstick by 2.0 sec, up to 10
@@ -159,10 +231,10 @@ export const EVENT_HIT_SAME_USE_MS = 1_000;
  * When a reduction's triggers fired for `unit` (epoch ms, ascending) — the
  * ONE reading of "a trigger happened" for the ledger (`extractMajorCooldowns`),
  * the [RES] utility entries (`resUtilityCds`) and the interrupt cooldown
- * (`interruptReadyAtMs`): the unit's own successful casts of
- * `triggerCastIds`, plus, for a per-hit talent, its damage rows of
- * `triggerHitIds` (and the hits a shield soaked whole, logged as an ABSORB
- * miss), at most `maxHitsPerUse` per use.
+ * (`interruptReadyAtMs`), which all get it through `eventTriggersFor`: the
+ * unit's own successful casts of `triggerCastIds`, plus, for a per-hit
+ * talent, its damage rows of `triggerHitIds` (and the hits a shield soaked
+ * whole, logged as an ABSORB miss), at most `maxHitsPerUse` per use.
  */
 export function eventTriggerTimesMs(
   unit: Pick<ICombatUnit, "spellCastEvents" | "damageOut" | "missesOut">,
@@ -210,6 +282,71 @@ export function eventTriggerTimesMs(
     }
   }
   return out.sort((a, b) => a - b);
+}
+
+/**
+ * The seconds ONE trigger of `r` gives back to a holder of spec `holderSpec`
+ * when it fires at `logEpochMs` — the one reading of "how much", next to
+ * `eventTriggerTimesMs`'s "when".
+ *
+ * The date is the trigger's own log timestamp, not the match start: the three
+ * readers all hold it (the interrupt cooldown is asked with a unit and an
+ * instant, no combat), so none of them can ask with a different day, and a
+ * round played across the cutover gives each cast what the game gave then.
+ * It is the DR gate's reading — `drResetMsAt` is asked with the timestamp of
+ * the CC being applied.
+ *
+ * A timestamp that is not a number is not a date and takes the CURRENT value
+ * (`since`), never the old one: the dated value is a past exception, and for
+ * the one entry that has one the current number is the smaller give-back —
+ * the cooldown reads "not ready" for longer, so the model claims less was in
+ * hand, not more. (A real trigger always has its timestamp; a fixture's
+ * small synthetic epoch is a date long before any cutover, as it is for the
+ * DR gate.)
+ */
+export function eventReductionSecondsAt(
+  r: Pick<IEventCooldownReduction, "seconds">,
+  holderSpec: string | undefined,
+  logEpochMs: number,
+): number {
+  if (typeof r.seconds === "number") return r.seconds;
+  const dated =
+    holderSpec === undefined ? undefined : r.seconds.bySpec[holderSpec];
+  if (!dated) return r.seconds.base;
+  return !Number.isFinite(logEpochMs) ||
+    logIsFrom(logEpochMs, dated.cutoverEpochMs)
+    ? dated.since
+    : dated.before;
+}
+
+/** One trigger of an event reduction: when it fired and what it gave back. */
+export interface IEventTrigger {
+  atMs: number;
+  seconds: number;
+}
+
+/**
+ * Every trigger of `reductions` for `unit`, ascending — what the three
+ * readers walk. "When" is `eventTriggerTimesMs`, "how much" is
+ * `eventReductionSecondsAt` at that same instant for the unit's spec; a
+ * reader has no other way to the seconds.
+ */
+export function eventTriggersFor(
+  unit: Pick<
+    ICombatUnit,
+    "spec" | "spellCastEvents" | "damageOut" | "missesOut"
+  >,
+  reductions: readonly IEventCooldownReduction[],
+): IEventTrigger[] {
+  const holderSpec = unit.spec === undefined ? undefined : String(unit.spec);
+  return reductions
+    .flatMap((r) =>
+      eventTriggerTimesMs(unit, r).map((atMs) => ({
+        atMs,
+        seconds: eventReductionSecondsAt(r, holderSpec, atMs),
+      })),
+    )
+    .sort((a, b) => a.atMs - b.atMs);
 }
 
 export interface IOnInterruptCooldownReduction {
@@ -293,28 +430,24 @@ export function eventReductionsFor(
 
 /**
  * The effective cooldown of ONE press under event reductions: R − press,
- * where R is the fixed point described above. `triggerSeconds` are the
- * holder's trigger casts (any order, match seconds).
+ * where R is the fixed point described above. `triggers` are the holder's
+ * (`eventTriggersFor`) on the press's clock — match seconds, any order —
+ * each with the seconds it gave back.
  */
 export function eventReducedCooldownSeconds(
   pressSeconds: number,
   cooldownSeconds: number,
-  reductions: readonly IEventCooldownReduction[],
-  triggerSecondsOf: (r: IEventCooldownReduction) => readonly number[],
+  triggers: ReadonlyArray<{ atSeconds: number; seconds: number }>,
 ): number {
-  if (!reductions.length || !(cooldownSeconds > 0)) return cooldownSeconds;
-  const events = reductions
-    .flatMap((r) =>
-      triggerSecondsOf(r)
-        .filter((t) => t > pressSeconds)
-        .map((t) => ({ t, s: r.seconds })),
-    )
-    .sort((a, b) => a.t - b.t);
+  if (!triggers.length || !(cooldownSeconds > 0)) return cooldownSeconds;
+  const events = triggers
+    .filter((g) => g.atSeconds > pressSeconds)
+    .sort((a, b) => a.atSeconds - b.atSeconds);
   // walk forward: each trigger before the (current) ready instant pulls it in
   let ready = pressSeconds + cooldownSeconds;
   for (const e of events) {
-    if (e.t >= ready) break;
-    ready = Math.max(e.t, ready - e.s);
+    if (e.atSeconds >= ready) break;
+    ready = Math.max(e.atSeconds, ready - e.seconds);
   }
   return ready - pressSeconds;
 }

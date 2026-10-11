@@ -245,6 +245,7 @@
     "test/spellTargeting.test.ts",
     "test/stateGhost.test.ts",
     "test/stateLegend.test.ts",
+    "test/stormConduitByLogDate.test.ts",
     "test/summonKind.test.ts",
     "test/summonReachability.test.ts",
     "test/syncLockLength.test.ts",

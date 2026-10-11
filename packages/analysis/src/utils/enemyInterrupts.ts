@@ -4,7 +4,7 @@ import kitRaw from "../data/interruptKitGenerated.json";
 import { spellEffectData } from "../data/spellEffectData";
 import {
   eventReductionsFor,
-  eventTriggerTimesMs,
+  eventTriggersFor,
   onInterruptReductionFor,
 } from "../data/talentScriptedCooldowns";
 import { castBlockingAuraAt, enemySourceIds } from "./cannotCastIntervals";
@@ -240,9 +240,9 @@ function interruptCastsUpTo(
 
 /** When a single-charge interrupt cast at `lastCastMs` comes back, as known
  * at `atMs`: last cast + cooldown, minus the event reductions the kicker
- * holds (Storm Conduit: every Lightning Bolt / Chain Lightning −1 s on Wind
- * Shear), only those that happened by `atMs` — the ledger's rule
- * (data/talentScriptedCooldowns). */
+ * holds (Storm Conduit: every Lightning Bolt / Chain Lightning gives Wind
+ * Shear seconds back — how many is `eventTriggersFor`'s), only those that
+ * happened by `atMs` — the ledger's rule (data/talentScriptedCooldowns). */
 function singleChargeReadyMs(
   unit: ICombatUnit,
   spellId: string,
@@ -260,16 +260,10 @@ function singleChargeReadyMs(
     interruptPressCooldownSeconds(unit, spellId, lastCastMs, cooldownSeconds) *
       1000;
   if (reductions.length) {
-    const events = reductions
-      .flatMap((r) =>
-        eventTriggerTimesMs(unit, r)
-          .filter((t) => t > lastCastMs && t <= atMs)
-          .map((t) => ({ t, ms: r.seconds * 1000 })),
-      )
-      .sort((a, b) => a.t - b.t);
-    for (const e of events) {
-      if (e.t >= readyMs) break;
-      readyMs = Math.max(e.t, readyMs - e.ms);
+    for (const g of eventTriggersFor(unit, reductions)) {
+      if (g.atMs <= lastCastMs || g.atMs > atMs) continue;
+      if (g.atMs >= readyMs) break;
+      readyMs = Math.max(g.atMs, readyMs - g.seconds * 1000);
     }
   }
   return readyMs;

@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
   EVENT_COOLDOWN_REDUCTIONS,
   eventReducedCooldownSeconds,
+  eventReductionSecondsAt,
+  eventTriggersFor,
   eventTriggerTimesMs,
 } from "../src/data/talentScriptedCooldowns";
 import {
@@ -105,26 +107,36 @@ describe("PER_RANK_COOLDOWN_TALENTS — Born To Be Wild (Aspect of the Turtle �
  * review: the final override alone would count later bolts early).
  */
 const conduit = EVENT_COOLDOWN_REDUCTIONS["1217092"]!;
+const AUG_14 = Date.UTC(2026, 7, 14, 20, 0, 0);
+const AUG_19 = Date.UTC(2026, 7, 19, 20, 0, 0);
+/** triggers at these match seconds, each giving back `seconds` */
+const giveBacks = (at: number[], seconds = 1) =>
+  at.map((atSeconds) => ({ atSeconds, seconds }));
 
 describe("eventReducedCooldownSeconds — 事件减 CD 的不动点", () => {
   it("没有触发 → 原冷却", () => {
-    expect(eventReducedCooldownSeconds(0, 90, [conduit], () => [])).toBe(90);
+    expect(eventReducedCooldownSeconds(0, 90, [])).toBe(90);
   });
   it("每次触发 −1 s,只算到(当前)就绪时刻之前的", () => {
     // 10 bolts at 10..19, ready 90 → 80
     const bolts = Array.from({ length: 10 }, (_, i) => 10 + i);
-    expect(eventReducedCooldownSeconds(0, 90, [conduit], () => bolts)).toBe(80);
+    expect(eventReducedCooldownSeconds(0, 90, giveBacks(bolts))).toBe(80);
   });
   it("就绪之后的触发不再算", () => {
     // cd 5: bolts at 1,2,3 pull ready 5 → 2 (bolt at 3 is after ready)
-    expect(eventReducedCooldownSeconds(0, 5, [conduit], () => [1, 2, 3])).toBe(
-      3,
-    );
+    expect(eventReducedCooldownSeconds(0, 5, giveBacks([1, 2, 3]))).toBe(3);
   });
   it("按下之前的触发不算", () => {
-    expect(eventReducedCooldownSeconds(50, 90, [conduit], () => [10, 20])).toBe(
-      90,
-    );
+    expect(eventReducedCooldownSeconds(50, 90, giveBacks([10, 20]))).toBe(90);
+  });
+  it("each trigger gives back its OWN seconds (a round across a dated change)", () => {
+    // 4 s at 10 and 20, 2 s at 30 and 40: 90 − 4 − 4 − 2 − 2 = 78
+    expect(
+      eventReducedCooldownSeconds(0, 90, [
+        ...giveBacks([10, 20], 4),
+        ...giveBacks([30, 40], 2),
+      ]),
+    ).toBe(78);
   });
 });
 
@@ -246,6 +258,10 @@ describe('eventTriggerTimesMs — one reading of "a trigger happened" (FT F20)',
       maxHitsPerUse: 5,
       seconds: 2,
     });
+    // one number for every holder on every day
+    for (const spec of ["255", "264", undefined])
+      for (const at of [0, AUG_14, AUG_19, Number.NaN])
+        expect(eventReductionSecondsAt(lethal, spec, at)).toBe(2);
   });
   it("a cast-triggered talent reads the unit's successful casts only", () => {
     const u = unit({
@@ -299,7 +315,14 @@ describe('eventTriggerTimesMs — one reading of "a trigger happened" (FT F20)',
       ),
     });
     expect(
-      eventReducedCooldownSeconds(0, 45, [lethal], (r) => seconds(u, r)),
+      eventReducedCooldownSeconds(
+        0,
+        45,
+        eventTriggersFor(u, [lethal]).map((g) => ({
+          atSeconds: (g.atMs - T0) / 1000,
+          seconds: g.seconds,
+        })),
+      ),
     ).toBe(29);
   });
 });
