@@ -17,6 +17,7 @@ import {
   type IMissedPurgeWindow,
   missedPurgesFor,
   purgeableCountText,
+  unpurgedForText,
 } from "../../utils/dispelAnalysis";
 import type { IEnemyCDCast } from "../../utils/enemyCDs";
 import { toRenderSecond } from "../../utils/renderGrid";
@@ -70,7 +71,7 @@ export function foldMissedPurges(
       miss.purgeableOnTarget !== undefined
         ? `; ${purgeableCountText(miss.purgeableOnTarget)} on it then`
         : "";
-    return ` (purgeable; unpurged for ${Math.round(miss.durationSeconds)}s${exemptionSuffix}${countSuffix})`;
+    return ` (purgeable; ${unpurgedForText(miss)}${exemptionSuffix}${countSuffix})`;
   }
 
   const droppedBuffIntervals = new Set<IEnemyBuffInterval>();

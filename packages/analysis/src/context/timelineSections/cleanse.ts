@@ -17,6 +17,7 @@ import {
   ownerRemovedOtherCopy,
   POST_CC_PRESSURE_WINDOW_S,
   purgeableCountText,
+  unpurgedForText,
 } from "../../utils/dispelAnalysis";
 import { fmtTime } from "../../utils/renderGrid";
 import type { TimelineCtx } from "./ctx";
@@ -100,7 +101,7 @@ export function emitCleanseEntries(
         : "";
     addEntry(
       miss.timeSeconds,
-      `${fmtTime(miss.timeSeconds)}  [MISSED PURGE OPPORTUNITY]   ${miss.spellName} active on ${enemyPid(miss.enemyName)} (unpurged for ${Math.round(miss.durationSeconds)}s)${formatMissedPurgeExemption(miss)}${countNote}${otherNote}`,
+      `${fmtTime(miss.timeSeconds)}  [MISSED PURGE OPPORTUNITY]   ${miss.spellName} active on ${enemyPid(miss.enemyName)} (${unpurgedForText(miss)})${formatMissedPurgeExemption(miss)}${countNote}${otherNote}`,
     );
   }
 

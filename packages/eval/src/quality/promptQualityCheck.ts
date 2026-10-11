@@ -161,6 +161,7 @@ import {
   PRESS_HP_LINE_TAGS,
   PRESSURE_WINDOWS_TOP_N,
 } from "@gladlog/analysis/src/utils/cooldowns";
+import { UNPURGED_FOR_RE_SRC } from "@gladlog/analysis/src/utils/dispelAnalysis";
 import {
   ENEMY_DEF_END_NOT_LOGGED,
   ENEMY_DEF_END_NOT_LOGGED_SLOT_RE,
@@ -1564,6 +1565,54 @@ export function checkAuraEndWithinRound(lines: string[]): string[] {
     const to = sec + Number(plain[1] ?? plain[2]);
     if (to > end.second + 1)
       fail(`[${c[3]}] 行的时长越过回合结束(起点 + 时长 = ${fmtTime(to)})`);
+  });
+  return failures;
+}
+
+/** `unpurgedForText`, read back: 1 = the whole seconds it printed. */
+const UNPURGED_FOR = new RegExp(UNPURGED_FOR_RE_SRC);
+
+/**
+ * Hard invariant (user instruction 2026-10-11, "facts stop at the round's
+ * end"): no `unpurged for Ns` — a `[MISSED PURGE OPPORTUNITY]` line's, or the
+ * note a missed purge leaves on an `[ENEMY BUFF]` / `[ENEMY CD]` line — runs
+ * past the round's end AS THE PROMPT STATES IT (`statedRoundEnd`:
+ * `[MATCH END]`, and a Solo Shuffle round's first `[DEATH]` line). The
+ * producer ends the window at `roundEndMs` (`reconstructDispelSummary`) and
+ * prints its length through `unpurgedForText`, whose pattern this reads.
+ *
+ * On the render grid: the line's second S is the application floored
+ * (`fmtTime`), N the window's seconds rounded, so the window's true end lies
+ * in [S + N − 0.5, S + N + 1.5) and the round's true end inside its second
+ * R. A window that ends at or before the round's end has S + N ≤ R + 1 —
+ * the one second is the grid, not a tolerance — and S + N > R + 1 is a
+ * window that outlasted the round. What the text can resolve: a window
+ * running 2.5 s or more past the round's end always fails; a shorter overrun
+ * can sit inside the grid's second. Every bracket: elsewhere the round's end
+ * is the log's, and a first death cuts nothing.
+ *
+ * Before the cut the window ran to the buff's removal row wherever the log
+ * wrote it — a round's units keep the rows after its ending death — or to
+ * the log's end: `2:22 [ENEMY CD] … Power Infusion (purgeable; unpurged for
+ * 14s; …)` under a round-ending `[DEATH]` at 2:29 (its REMOVED 6.0 s after
+ * the death). 143 of the 3,192 such lines of the 605-file capture's 2,395
+ * Solo Shuffle contexts (94388b0f: 59 `[ENEMY CD]`, 42 `[ENEMY BUFF]`, 42
+ * `[MISSED PURGE OPPORTUNITY]`, in 98 contexts), 0 of 1,423 in the other
+ * brackets (fix-FT/scripts/upr_unpurged_past_round_end.py).
+ */
+export function checkUnpurgedWithinRound(lines: string[]): string[] {
+  const failures: string[] = [];
+  const end = statedRoundEnd(lines);
+  if (end === null) return failures;
+  lines.forEach((line, i) => {
+    const at = line.match(LEADING_TIME);
+    const note = line.match(UNPURGED_FOR);
+    if (!at || !note) return;
+    const to = Number(at[1]) * 60 + Number(at[2]) + Number(note[1]);
+    if (to > end.second + 1)
+      failures.push(
+        `line ${i + 1}: 「${note[0]}」越过回合结束(起点 + 时长 = ${fmtTime(to)};${end.says}在 ${fmtTime(end.second)})—— ${line.trim().slice(0, 160)}`,
+      );
   });
   return failures;
 }
@@ -6349,6 +6398,7 @@ export function checkMatch(
   hardFailures.push(...checkVulnerableOwnerDamage(lines));
   hardFailures.push(...checkKillWindowWithinRound(lines));
   hardFailures.push(...checkAuraEndWithinRound(lines));
+  hardFailures.push(...checkUnpurgedWithinRound(lines));
   hardFailures.push(...checkCcEndCauseNotLogged(lines));
   hardFailures.push(...checkCcRefreshedNote(lines));
   hardFailures.push(...checkBehaviorPriorConsistency(lines));

@@ -67,6 +67,7 @@
     "test/stayedInHpGate.test.ts",
     "test/sycophancy.test.ts",
     "test/syncWindowLockLengthGate.test.ts",
-    "test/unnecessaryNoteHpGate.test.ts"
+    "test/unnecessaryNoteHpGate.test.ts",
+    "test/unpurgedRoundEndGate.test.ts"
   ]
 }

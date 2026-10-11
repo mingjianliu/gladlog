@@ -26,6 +26,7 @@ import { ensureAnalysisData } from "../src/data/ensure";
 import {
   formatMissedPurgeExemption,
   reconstructDispelSummary,
+  unpurgedForText,
 } from "../src/utils/dispelAnalysis";
 import {
   makeAuraEvent,
@@ -113,6 +114,8 @@ describe("missed-purge windows end at the round end", () => {
     const w = windows(freedomOn(40.652, 54.362), shuffle(48.327));
     expect(w).toHaveLength(1);
     expect(w[0]!.durationSeconds).toBeCloseTo(7.675, 3);
+    // what both lines print of it (the gate reads this text back)
+    expect(unpurgedForText(w[0]!)).toBe("unpurged for 8s");
   });
 
   it("a buff with no removal row ends at the round's end, not the log's", () => {

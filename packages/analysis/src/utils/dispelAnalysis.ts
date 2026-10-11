@@ -1537,6 +1537,26 @@ export function missedPurgesFor(
     });
 }
 
+/**
+ * The length a missed-purge line states for its window — `unpurged for Ns`,
+ * the window's seconds rounded. One formatter for the two lines that print
+ * it: `[MISSED PURGE OPPORTUNITY]` (`emitCleanseEntries`) and the note the
+ * owner's qualifying miss leaves on an `[ENEMY BUFF]` / `[ENEMY CD]` line
+ * (`foldMissedPurges`).
+ *
+ * The window ends at or before the round's end (`roundEndMs`), and the line
+ * it prints on starts in the application's second (`fmtTime` floors), so on
+ * the render grid start + N is at most ONE second past the round-end second
+ * — what `checkUnpurgedWithinRound` holds every such line to.
+ */
+export function unpurgedForText(
+  w: Pick<IMissedPurgeWindow, "durationSeconds">,
+): string {
+  return `unpurged for ${Math.round(w.durationSeconds)}s`;
+}
+/** `unpurgedForText`, read back: 1 = the whole seconds it printed. */
+export const UNPURGED_FOR_RE_SRC = String.raw`unpurged for (\d+)s`;
+
 /** Marks missed purges that fell inside a friendly kill window. Mutates in place;
  *  kept separate from reconstructDispelSummary so its signature (and all call sites) stay unchanged. */
 export function annotateMissedPurgesWithKillWindows(
