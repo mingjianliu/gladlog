@@ -2,6 +2,7 @@ export { parseLine } from "./l1/parseLine";
 export type { ParsedLine } from "./l1/types";
 export { splitLine, splitTopLevel } from "./l1/splitTopLevel";
 export { parseTimestamp } from "./l1/timestamp";
+export { logLineInstantMs } from "./l1/statedInstant";
 export {
   decodeBaseUnits,
   decodeSpell,
