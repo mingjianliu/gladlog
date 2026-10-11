@@ -183,6 +183,8 @@ import {
 } from "@gladlog/analysis/src/utils/renderGrid";
 import {
   AURA_STILL_UP_AT_ROUND_END,
+  ROUND_ENDED_WORDS,
+  roundEndLegend,
   SOLO_SHUFFLE_BRACKET,
 } from "@gladlog/analysis/src/utils/roundEnd";
 import {
@@ -1422,6 +1424,16 @@ const CONTROL_PLAIN_SECONDS = /\) \| (\d+)s\b|\) \((\d+)s\)/;
 const CONTROL_CUT_SECONDS = new RegExp(
   String.raw`${CC_STILL_ON_AT_ROUND_END}, (?:(\d+)s|<1s) in`,
 );
+/** An `[ENEMY DEF]` line's printed length — `: Barkskin (30%, 3.5s`,
+ * `(immune, 8.0s`, `(absorb 64k, 2.0s`, an external's `→ 4(FMage) (6.6s` —
+ * with its second (groups 1–2), the length (3) and the round-end label when
+ * it follows (4). Read on the line's head, before any `| during it:`. */
+const ENEMY_DEF_PRINTED_LENGTH = new RegExp(
+  String.raw`^(\d+):(\d{2})\s+\[ENEMY DEF\][^|]*? \((?:(?:immune|\d+%|absorb(?: (?:\d+|<1)k)?), )?(\d+(?:\.\d+)?)s\b( — ${AURA_STILL_UP_AT_ROUND_END})?`,
+);
+/** The timeline's legend header — the gate asks for the round-end legend
+ * only of a prompt that carries the timeline's legend at all. */
+const TIMELINE_LEGEND_HEAD = /^MATCH TIMELINE$/;
 
 /**
  * Hard invariant (F02b): no line states an aura's end, or a control's
@@ -1436,6 +1448,21 @@ const CONTROL_CUT_SECONDS = new RegExp(
  *     does not start after the round's end; an unlabelled `Ns` does not carry
  *     it more than a second past the round's end; a labelled
  *     `CC_STILL_ON_AT_ROUND_END, Ns in` ends within a second of it.
+ *
+ *  3. `[ENEMY DEF]` (2026-10-11): a printed length `N.Ns` does not carry the
+ *     aura past the round's end, and one labelled `— still up when the round
+ *     ended` ends IN the round-end second — the same instant as the lines of
+ *     1. The line's second is floored and the length rounded to a tenth, so
+ *     the end lies in [second + N − 0.05, second + 1 + N + 0.05); that span
+ *     must reach the round-end second, and for a labelled line contain part
+ *     of it. Before: the line counted to the LOG's end — `2:27 … Barkskin
+ *     (30%, 3.5s — still up when the round ended)` under a round-ending
+ *     `[DEATH]` at 2:28 — on 360 of the 432 such lines of the 605-file
+ *     capture's Solo Shuffle contexts.
+ *  4. The legend states which instant that is (`roundEndLegend`, the
+ *     producer's own lines for the header's bracket) whenever a timeline line
+ *     says the round ended (`ROUND_ENDED_WORDS`) — checked on a prompt that
+ *     carries the timeline's legend at all.
  *
  * The one second is the grid: the start is floored (`fmtTime`), the length
  * rounded to the nearest second (`renderedCcSeconds`), so start + N lands on
@@ -1453,11 +1480,45 @@ export function checkAuraEndWithinRound(lines: string[]): string[] {
   const end = statedRoundEnd(lines);
   if (end === null) return failures;
   const where = `${end.says}在 ${fmtTime(end.second)}`;
+  // 4. one definition in the legend, when a line of the timeline needs it
+  if (lines.some((l) => TIMELINE_LEGEND_HEAD.test(l))) {
+    const stated = lines.findIndex(
+      (l) => LEADING_TIME.test(l) && l.includes(ROUND_ENDED_WORDS),
+    );
+    const bracket = lines
+      .map((l) => l.match(BRACKET_HEADER)?.[1])
+      .find((b) => b !== undefined);
+    if (
+      stated >= 0 &&
+      !roundEndLegend(bracket).every((legend) => lines.includes(legend))
+    )
+      failures.push(
+        `line ${stated + 1}: 时间线写了「${ROUND_ENDED_WORDS}」,图例却没有说明它指哪一刻(roundEndLegend)—— ${lines[stated]!.trim().slice(0, 160)}`,
+      );
+  }
   lines.forEach((line, i) => {
     const fail = (why: string) =>
       failures.push(
         `line ${i + 1}: ${why}(${where})—— ${line.trim().slice(0, 160)}`,
       );
+    // 3. [ENEMY DEF]: the aura's printed length against the round's end
+    const d = line.match(ENEMY_DEF_PRINTED_LENGTH);
+    if (d) {
+      const sec = Number(d[1]) * 60 + Number(d[2]);
+      const n = Number(d[3]);
+      // the end lies in [lo, hi): floored second, length rounded to a tenth
+      const lo = sec + n - 0.05;
+      const hi = sec + 1 + n + 0.05;
+      if (lo >= end.second + 1)
+        fail(
+          `[ENEMY DEF] 行的时长越过回合结束(起点 + 时长 ≥ ${fmtTime(Math.floor(lo))})`,
+        );
+      else if (d[4] !== undefined && hi <= end.second)
+        fail(
+          `[ENEMY DEF] 行写「${AURA_STILL_UP_AT_ROUND_END}」,但起点 + 时长在回合结束之前`,
+        );
+      return;
+    }
     const a = line.match(AURA_END_LINE);
     if (a) {
       const sec = Number(a[1]) * 60 + Number(a[2]);

@@ -2689,6 +2689,17 @@ const INDEX: PredicateRow[] = [
     symbol: "AURA_STILL_UP_AT_ROUND_END",
     mod: roundEnd,
   },
+  // 2026-10-11: one round end for every line that says "the round ended"
+  {
+    file: `${A}/utils/roundEnd.ts`,
+    symbol: "ROUND_ENDED_WORDS",
+    mod: roundEnd,
+  },
+  {
+    file: `${A}/utils/roundEnd.ts`,
+    symbol: "roundEndLegend",
+    mod: roundEnd,
+  },
   {
     file: `${E}/quality/promptQualityCheck.ts`,
     symbol: "checkAuraEndWithinRound",

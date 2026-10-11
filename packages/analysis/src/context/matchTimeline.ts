@@ -672,6 +672,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
   emitEnemyDefEntries({
     matchStartMs,
     matchEndSeconds,
+    roundEndAtMs,
     enemies,
     enemyPid,
     friends,

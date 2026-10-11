@@ -23,6 +23,7 @@ import {
   ENEMY_DEF_END_NOT_LOGGED,
   ENEMY_PRESSED_SHIELD_NAMES,
 } from "../../utils/enemyDefensives";
+import { ROUND_ENDED_WORDS, roundEndLegend } from "../../utils/roundEnd";
 import {
   BURST_ANSWERED_CONTROL_LEGEND,
   BURST_ANSWERED_LEGEND,
@@ -306,6 +307,11 @@ export function formatTimeline(
   const ccNotLandedRendered = entries.some((e) =>
     e.lines.some((l) => typeof l === "string" && l.includes(CC_NOT_LANDED_TAG)),
   );
+  // 2026-10-11: which instant "the round ended" is, said once — when a line
+  // of the timeline says the round ended (`ROUND_ENDED_WORDS`).
+  const roundEndStatedRendered = entries.some((e) =>
+    e.lines.some((l) => typeof l === "string" && l.includes(ROUND_ENDED_WORDS)),
+  );
   // B13e (user ruling 2026-10-07): the purgeable-buff count is legended only
   // when a line carries it.
   const purgeableCountRendered = entries.some((e) =>
@@ -538,6 +544,8 @@ export function formatTimeline(
           "    presses for you alone: a teammate's line never carries the clause, whatever they pressed.",
         ]
       : []),
+    // one definition of "the round ended" for every line that says it
+    ...(roundEndStatedRendered ? roundEndLegend(bracket) : []),
     ...(castStoppedRendered ? CAST_STOPPED_LEGEND : []),
     ...(ccNotLandedRendered ? CC_NOT_LANDED_LEGEND : []),
     ...(guardianSaveRendered

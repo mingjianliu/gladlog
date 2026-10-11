@@ -47,7 +47,10 @@ export function emitEnemyDefEntries(
     | "actorLabel"
     | "addEntry"
     | "_allUnits"
-  >,
+  > &
+    // optional for the hand-built contexts of the unit tests: absent, the
+    // log's end stands in
+    Partial<Pick<TimelineCtx, "roundEndAtMs">>,
 ): void {
   const {
     matchStartMs,
@@ -67,8 +70,22 @@ export function emitEnemyDefEntries(
       startTime: matchStartMs,
       endTime: matchStartMs + matchEndSeconds * 1000,
     };
+    // The round's end (`roundEndMs`: a Solo Shuffle round's ending death,
+    // ~2 s before the log's end) — the instant `— still up when the round
+    // ended` and the `during it` window are read against, as on every other
+    // line that says the round ended.
+    const roundEndAtMs = Math.min(
+      ctx.roundEndAtMs ?? combatSpan.endTime,
+      combatSpan.endTime,
+    );
+    const roundSpan = { startTime: matchStartMs, endTime: roundEndAtMs };
     for (const enemy of enemies ?? []) {
-      const events = enemyDefensiveEvents(enemy, enemies ?? [], combatSpan);
+      const events = enemyDefensiveEvents(
+        enemy,
+        enemies ?? [],
+        combatSpan,
+        roundEndAtMs,
+      );
       for (const d of events) {
         if (d.atSeconds < 0 || d.atSeconds > matchEndSeconds) continue;
         const who = `${enemyPid(enemy.name)} (${specToString(enemy.spec)})`;
@@ -183,7 +200,8 @@ export function emitEnemyDefEntries(
               targetUnit,
               friends,
               enemies ?? [],
-              combatSpan,
+              // the window stops where the printed length does
+              roundSpan,
             );
             if (obs.length > 0)
               duringStr = ` | during it: ${obs.map((o) => formatDuringExternal(o, pid)).join("; ")}`;

@@ -864,13 +864,30 @@ export function externalAuraOf(
  * externals from SPELL_CAST_SUCCESS onto another enemy, paired with the
  * recipient's aura interval when one starts within 1.5 s of the cast — plus
  * externals seen only as the recipient's aura (cast event missing from the log).
+ *
+ * `roundEndAtMs` = the round's end (`roundEndMs`, utils/roundEnd.ts — a Solo
+ * Shuffle round's ending death; the log runs ~2 s on), passed by the
+ * `[ENEMY DEF]` renderer: what an event says about its aura's END is then
+ * read against that instant — the one every other line that says "the round
+ * ended" uses (`[BUFF FADED]`, `[ENEMY BUFF END]`, the control lines). An
+ * aura still on its holder there is `upAtRoundEnd` with the time from its
+ * start to the round's end; one that went up at or after it has no length in
+ * the round. Omitted, the log's end stands in (the two other callers read
+ * starts and spans, and clip at the round's end on their own side).
  */
 export function enemyDefensiveEvents(
   enemy: ICombatUnit,
   enemies: ICombatUnit[],
   combat: { startTime: number; endTime: number },
+  roundEndAtMs?: number,
 ): IEnemyDefensiveEvent[] {
   const out: IEnemyDefensiveEvent[] = [];
+  const roundEndAt = Math.min(roundEndAtMs ?? combat.endTime, combat.endTime);
+  const roundEndS = (roundEndAt - combat.startTime) / 1000;
+  /** The part of an aura interval inside the round — for what a shield
+   * absorbed "while up" on a line whose length stops at the round's end. */
+  const inRound = <T extends { toS: number }>(iv: T): T =>
+    iv.toS > roundEndS ? { ...iv, toS: roundEndS } : iv;
   const intervalsByUnit = new Map<string, ISaveAuraInterval[]>();
   const intervalsOf = (u: ICombatUnit) => {
     let iv = intervalsByUnit.get(u.id);
@@ -892,9 +909,42 @@ export function enemyDefensiveEvents(
     auraId: string,
   ): Pick<
     IEnemyDefensiveEvent,
-    "removedEarly" | "earlyEnd" | "upAtRoundEnd" | "endNotLogged"
+    | "observedSeconds"
+    | "removedEarly"
+    | "earlyEnd"
+    | "upAtRoundEnd"
+    | "endNotLogged"
   > => {
     const endMs = Math.round(combat.startTime + iv.toS * 1000);
+    // The round ended before the log did (a Solo Shuffle round's ending
+    // death; `roundEndAtMs`). Read against the LOG's end, an aura pressed
+    // 1 s before that death printed `3.0s — still up when the round ended`
+    // — an end two seconds after the `[BUFF FADED] … (still up when the
+    // round ended)` line of the same prompt (605-file capture: 360 of 432
+    // such lines in Solo Shuffle rounds). Returned AFTER the caller's own
+    // `observedSeconds`, so the length here replaces it.
+    if (roundEndAt < combat.endTime) {
+      const startMs = Math.round(combat.startTime + iv.fromS * 1000);
+      const unseenEnd =
+        iv.inferredEnd && SAVE_AURA_END_UNSEEN_IDS.has(iv.spellId);
+      // went up when the round was over: no length inside it to print (an
+      // unseen carrier's keeps `end not logged`, which is still what it is)
+      if (startMs >= roundEndAt)
+        return unseenEnd
+          ? { removedEarly: false, endNotLogged: true }
+          : { removedEarly: false, observedSeconds: undefined };
+      // an end the log never showed, capped at or past the round's end — or
+      // a REMOVED logged after it: the aura was on its holder at that
+      // instant (an unseen carrier's stays `end not logged`, as below)
+      if (iv.inferredEnd ? endMs >= roundEndAt : endMs > roundEndAt)
+        return unseenEnd
+          ? { removedEarly: false, endNotLogged: true }
+          : {
+              removedEarly: false,
+              upAtRoundEnd: true,
+              observedSeconds: roundEndS - iv.fromS,
+            };
+    }
     if (iv.inferredEnd) {
       // The log has no end for this application: the interval builder closed
       // it at its official length, and that number is no observation (ruling
@@ -1012,7 +1062,7 @@ export function enemyDefensiveEvents(
   for (const s of effectSaves(enemy, intervalsOf(enemy), combat.startTime)) {
     const shield = s.effect === "absorb" ? s.interval : undefined;
     const absorbed = shield
-      ? absorbedDuring(enemy, shield, combat.startTime)
+      ? absorbedDuring(enemy, inRound(shield), combat.startTime)
       : undefined;
     out.push({
       atSeconds: s.atSeconds,
@@ -1136,7 +1186,7 @@ export function enemyDefensiveEvents(
         enemy.id,
       );
       const absorbed = shield
-        ? absorbedDuring(enemy, shield, combat.startTime)
+        ? absorbedDuring(enemy, inRound(shield), combat.startTime)
         : undefined;
       out.push({
         atSeconds: c.atSeconds,

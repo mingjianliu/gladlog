@@ -5,6 +5,7 @@ import {
 } from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
 import {
   AURA_STILL_UP_AT_ROUND_END,
+  roundEndLegend,
   SOLO_SHUFFLE_BRACKET,
 } from "@gladlog/analysis/src/utils/roundEnd";
 import { describe, expect, it } from "vitest";
@@ -198,5 +199,123 @@ describe("emitEnemyBuffEntries — the producer the gate holds (F02b)", () => {
     expect(
       checkAuraEndWithinRound(prompt(SOLO_SHUFFLE_BRACKET, ...lines)),
     ).toEqual([]);
+  });
+});
+
+// 2026-10-11: `[ENEMY DEF] … still up when the round ended` is held to the
+// same second as `[BUFF FADED]` — one round end in a prompt.
+describe("checkAuraEndWithinRound — [ENEMY DEF]", () => {
+  const D = (at: string, rest: string) =>
+    `${at}  [ENEMY DEF]   6(BDruid) (Balance Druid): ${rest}`;
+  const UP = `— ${AURA_STILL_UP_AT_ROUND_END}`;
+
+  it("passes a length that ends inside the round, and the label on a length that ends in the round-end second (2:36)", () => {
+    expect(
+      shuffle(
+        D("2:10", "Barkskin (30%, 12.0s) (at 51% HP)"),
+        D("2:35", `Barkskin (30%, 1.4s ${UP}) (at 51% HP)`),
+        D("2:31", `Divine Shield (immune, 5.0s ${UP})`),
+        D("2:34", `Feign Death (absorb 30k, 2.0s ${UP})`),
+        D(
+          "2:33",
+          `Ironbark → 4(FMage) (3.4s ${UP}) (target at 40% HP) | during it: 1(AWarrior) 12k on target · 40% of their enemy-player damage · direct 12k / periodic 0k · damage in 2 of 3 s · longest gap 1 s`,
+        ),
+        // no length at all: a press after the round, an unseen carrier
+        D("2:37", "Divine Shield (immune)"),
+        D("2:35", "Vanish (immune, end not logged)"),
+        `2:36  [BUFF FADED]   Astral Shift (${AURA_STILL_UP_AT_ROUND_END})`,
+      ),
+    ).toEqual([]);
+  });
+
+  it("fails the label on a length counted to the LOG's end — s0/101-1-549 `2:27 … Barkskin (30%, 3.5s — still up when the round ended)` under a death at 2:28", () => {
+    // the same shape on this fixture's round (death 2:36, log end 2:38)
+    const fails = shuffle(
+      D("2:35", `Barkskin (30%, 3.5s ${UP}) (at 51% HP)`),
+      D("2:33", `Ironbark → 4(FMage) (5.4s ${UP}) (target at 40% HP)`),
+    );
+    expect(fails).toHaveLength(2);
+    expect(fails[0]).toContain("line 2: [ENEMY DEF] 行的时长越过回合结束");
+    expect(fails[0]).toContain("第一条 [DEATH] 行在 2:36");
+  });
+
+  it("fails the label on a length that stops short of the round's end, and an unlabelled length that runs past it", () => {
+    const fails = shuffle(
+      D("2:20", `Barkskin (30%, 4.0s ${UP})`),
+      D("2:30", "Barkskin (30%, 12.0s)"),
+    );
+    expect(fails).toHaveLength(2);
+    expect(fails[0]).toContain("但起点 + 时长在回合结束之前");
+    expect(fails[1]).toContain("[ENEMY DEF] 行的时长越过回合结束");
+  });
+
+  it("another bracket: the same lines are held to [MATCH END] (2:38)", () => {
+    expect(
+      checkAuraEndWithinRound(
+        prompt(
+          "Rated Arena 3v3",
+          D("2:35", `Barkskin (30%, 3.5s ${UP})`),
+          D("2:30", "Barkskin (30%, 8.0s)"),
+        ),
+      ),
+    ).toEqual([]);
+    expect(
+      checkAuraEndWithinRound(
+        prompt("Rated Arena 3v3", D("2:35", `Barkskin (30%, 1.4s ${UP})`)),
+      ),
+    ).toHaveLength(1);
+  });
+});
+
+describe("checkAuraEndWithinRound — the legend says which instant `the round ended` is", () => {
+  const LEGEND_HEAD = "MATCH TIMELINE";
+  const stated = `2:36  [BUFF FADED]   Astral Shift (${AURA_STILL_UP_AT_ROUND_END})`;
+
+  it("a timeline line that says it needs the producer's legend lines for the header's bracket", () => {
+    for (const bracket of [SOLO_SHUFFLE_BRACKET, "Rated Arena 3v3"]) {
+      const ok = [
+        header(bracket),
+        LEGEND_HEAD,
+        ...roundEndLegend(bracket),
+        ...(bracket === SOLO_SHUFFLE_BRACKET
+          ? [stated]
+          : [
+              `2:38  [BUFF FADED]   Astral Shift (${AURA_STILL_UP_AT_ROUND_END})`,
+            ]),
+        DEATH,
+        MATCH_END,
+      ];
+      expect(checkAuraEndWithinRound(ok), bracket).toEqual([]);
+      // mutation: the legend of the OTHER bracket, or none
+      const wrong = ok.filter((l) => !roundEndLegend(bracket).includes(l));
+      const fails = checkAuraEndWithinRound(wrong);
+      expect(fails, bracket).toHaveLength(1);
+      expect(fails[0]).toContain("图例却没有说明它指哪一刻");
+      expect(
+        checkAuraEndWithinRound([
+          ...wrong.slice(0, 2),
+          ...roundEndLegend(
+            bracket === SOLO_SHUFFLE_BRACKET ? "2v2" : SOLO_SHUFFLE_BRACKET,
+          ),
+          ...wrong.slice(2),
+        ]),
+        bracket,
+      ).toHaveLength(1);
+    }
+  });
+
+  it("no line says it → no legend asked for; a prompt without the timeline's legend is not judged on it", () => {
+    expect(
+      checkAuraEndWithinRound([
+        header(SOLO_SHUFFLE_BRACKET),
+        LEGEND_HEAD,
+        // the static legend text mentions the words; it is not a timeline line
+        "    `— still up when the round ended` = the round ended before it did;",
+        "2:20  [BUFF FADED]   Spirit Link Totem (expired)",
+        DEATH,
+        MATCH_END,
+      ]),
+    ).toEqual([]);
+    expect(shuffle(stated)).toEqual([]);
   });
 });

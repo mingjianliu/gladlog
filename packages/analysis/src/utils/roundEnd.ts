@@ -26,6 +26,49 @@ export const SOLO_SHUFFLE_BRACKET = "Rated Solo Shuffle";
  * `CC_STILL_ON_AT_ROUND_END`. Read back by `checkAuraEndWithinRound`. */
 export const AURA_STILL_UP_AT_ROUND_END = "still up when the round ended";
 
+/**
+ * The words every timeline line that states the round's end carries — one
+ * instant, `roundEndMs`, whatever the line: `still up when the round ended`
+ * (`AURA_STILL_UP_AT_ROUND_END`: `[BUFF FADED]`, `[ENEMY BUFF END]`,
+ * `[ENEMY DEF]`), `still on them when the round ended, Ns in` (the control
+ * lines, `CC_STILL_ON_AT_ROUND_END`), `still channeling when the round
+ * ended`, `no end logged; the round ended …` (`[CAST STOPPED]`), `not
+ * released before the round ended` (Stasis). What the legend's presence test
+ * (`formatTimeline`) and the gate (`checkAuraEndWithinRound`) key on; a unit
+ * test holds each phrase to it.
+ */
+export const ROUND_ENDED_WORDS = "the round ended";
+
+/**
+ * The legend sentence that says — once — which instant "the round ended" is
+ * on every line that says it, printed when a timeline line carries
+ * `ROUND_ENDED_WORDS` (2026-10-11). `roundEndMs`'s rule in words: a Solo
+ * Shuffle round is over at its first player death (the log runs on: a
+ * round's `endTime` is at most that death + 2 s — the `[MATCH END]` line is
+ * 2 s after the first `[DEATH]` line in 1,993 of the 605 capture's 2,395
+ * Solo Shuffle prompts, 0–1 s in 399 — and its units keep the lines that
+ * follow); any other bracket ends where its log does.
+ *
+ * Before it the prompt showed two: `[ENEMY DEF] … (Ns — still up when the
+ * round ended)` counted to the LOG's end while `[BUFF FADED]` /
+ * `[ENEMY BUFF END]` / the control lines stopped at the death — 360 of the
+ * 432 such `[ENEMY DEF]` lines of the 605-file capture's Solo Shuffle rounds
+ * end outside the death's second.
+ */
+export function roundEndLegend(bracket: string | undefined): string[] {
+  return bracket === SOLO_SHUFFLE_BRACKET
+    ? [
+        "  `the round ended` on any line (`still up …`, `still on them …`, `still channeling …`, `no end logged; …`) = one instant:",
+        "    this Solo Shuffle round's first player death — the round is over there, though the log can run a couple of seconds",
+        "    on (a round with no death: the end of the log).",
+      ]
+    : [
+        // not the bracketed tag: readers find the MATCH END line by it
+        "  `the round ended` on any line (`still up …`, `still on them …`, `still channeling …`, `no end logged; …`) = one instant:",
+        "    the end of the log, the second the timeline's last line (MATCH END) prints.",
+      ];
+}
+
 /** Solo Shuffle only: the round-ending (first) player death, epoch ms, or
  * undefined for other brackets / a round with no player death. The one
  * definition behind `afterShuffleRoundEnd` and the owner gate's round-end
