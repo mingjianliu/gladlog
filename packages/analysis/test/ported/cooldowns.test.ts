@@ -2302,7 +2302,9 @@ describe("cdRoleTag", () => {
     expect(cdRoleTag("388615")).toBe("mana+heal CD"); // Restoral
     expect(cdRoleTag("325197")).toBe("healing CD"); // Invoke Chi-Ji
     expect(cdRoleTag("116680")).toBe("heal amplifier"); // Thunder Focus Tea
-    expect(cdRoleTag("357170")).toBe("ally heal-over-time"); // Time Dilation
+    // Time Dilation — FT F01: not "ally heal-over-time", it heals nothing
+    // (test/deferralRoleTag.test.ts)
+    expect(cdRoleTag("357170")).toBe("delays damage on its target");
     expect(cdRoleTag("370553")).toBe("cast-time modifier"); // Tip the Scales
     expect(cdRoleTag("358267")).toBe("mobility"); // Hover
   });

@@ -185,6 +185,13 @@ export function canHelpAnotherUnit(spellId: string, tag?: string): boolean {
   return !isDefensiveClass;
 }
 
+/** The role tag of a deferral shield (`DEFERRAL_SHIELD_DAMAGE_IDS`): it heals
+ * nothing — part of each hit on its target is held back and lands later as
+ * that unit's own periodic damage. Legended where it is rendered
+ * (`formatTimeline.ts`). How the mitigation table prices it (50 %, user
+ * decision 2026-07-30) is not this tag's concern. */
+export const DEFERRAL_ROLE_TAG = "delays damage on its target";
+
 /**
  * B113/B130: role tags for throughput / mana / mobility / modifier cooldowns that reach the timeline
  * (often via the B38 [YOU] [CD] promotion) without a survival/defensive context. Absent a role, the
@@ -199,7 +206,11 @@ export const CD_ROLE_TAGS: Record<string, string> = {
   "325197": "healing CD", // Invoke Chi-Ji, the Red Crane — healing throughput
   "116680": "heal amplifier", // Thunder Focus Tea — empowers the next heal; not a defensive
   // Preservation Evoker (B130)
-  "357170": "ally heal-over-time", // Time Dilation — delayed healing on an ally; throughput
+  // Time Dilation — FT F01: read "ally heal-over-time" until 2026-10-11. It
+  // heals nothing (141470d0: 0 heal rows under 357170, 934 SPELL_ABSORBED by
+  // it, 159 ticks of its deferred damage 361029); the deferral table already
+  // said so, and `test/ported/cooldowns.test.ts` now ties this tag to it.
+  "357170": DEFERRAL_ROLE_TAG,
   "370553": "cast-time modifier", // Tip the Scales — makes next Empower instant; cheap modifier
   "358267": "mobility", // Hover — cast while moving; not a defensive
   // Windwalker / Mistweaver (W1g 2026-09-26)

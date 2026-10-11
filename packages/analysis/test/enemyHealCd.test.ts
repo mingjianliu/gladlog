@@ -11,8 +11,11 @@ import {
   castOrdinal,
   emitEnemyCdEntries,
 } from "../src/context/timelineSections/enemyCd";
+import { abilityProfile } from "../src/data/abilityProfile";
 import { ENEMY_HEAL_CD_IDS } from "../src/data/enemyHealCds";
 import { ensureAnalysisData } from "../src/data/ensure";
+import { HEALER_SAVE_CD_IDS } from "../src/data/healerSaveCd";
+import { TEAM_HEAL_CD_IDS } from "../src/utils/cooldowns";
 import { OFFENSIVE_CD_SPELL_IDS } from "../src/utils/spellDanger";
 
 beforeAll(async () => {
@@ -74,5 +77,54 @@ describe("G7-P3", () => {
   it("the heal-CD set never overlaps the burst-window set", () => {
     for (const id of ENEMY_HEAL_CD_IDS)
       expect(OFFENSIVE_CD_SPELL_IDS.has(id), id).toBe(false);
+  });
+  // FT F01: Time Spiral 374968 sat in the set and is a movement-ability
+  // reset (5 `[ENEMY HEAL CD]` lines on the 60 re-eval prompts, 96 on the
+  // 605-file capture — 55 of them a Devastation Evoker's).
+  it("every heal CD heals, absorbs, empowers healing or is on the generated save roster", () => {
+    for (const id of ENEMY_HEAL_CD_IDS) {
+      const p = abilityProfile(id);
+      expect(
+        TEAM_HEAL_CD_IDS.has(id) ||
+          p.healsOthers ||
+          p.healsSelf ||
+          p.absorbs ||
+          p.throughputRole ||
+          HEALER_SAVE_CD_IDS.has(id),
+        id,
+      ).toBe(true);
+    }
+  });
+  it("Time Spiral is not a heal CD: an enemy's press renders no [ENEMY HEAL CD] line", () => {
+    const p = abilityProfile("374968");
+    expect([p.healsOthers, p.healsSelf, p.absorbs, p.throughputRole]).toEqual([
+      false,
+      false,
+      false,
+      false,
+    ]);
+    expect(TEAM_HEAL_CD_IDS.has("374968")).toBe(false);
+    expect(HEALER_SAVE_CD_IDS.has("374968")).toBe(false);
+    expect(ENEMY_HEAL_CD_IDS.has("374968")).toBe(false);
+    const lines: string[] = [];
+    const out = emitEnemyCdEntries({
+      enemyCDTimeline: { players: [], alignedBurstWindows: [] } as never,
+      cdPurgeAnnotations: new Map(),
+      addEntry: (_t: number, ...l: unknown[]) => {
+        lines.push(...(l as string[]));
+        return true;
+      },
+      enemyPid: (n: string) => `4(${n})`,
+      matchStartMs: T0,
+      enemies: [
+        {
+          name: "Dev",
+          spec: CombatUnitSpec.Evoker_Devastation,
+          spellCastEvents: [cast("374968", 21.3)],
+        },
+      ] as never,
+    });
+    expect(lines).toEqual([]);
+    expect(out.healCdRendered).toBe(false);
   });
 });

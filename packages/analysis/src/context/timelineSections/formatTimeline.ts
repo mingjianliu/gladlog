@@ -14,6 +14,7 @@ import {
   TIMELINE_LINE_FLAGS,
 } from "../../data/timelineLineFlags";
 import {
+  DEFERRAL_ROLE_TAG,
   HP_SAMPLE_RADIUS_MS,
   HP_TROUGH_MIN_DROP_PTS,
 } from "../../utils/cooldowns";
@@ -219,6 +220,13 @@ export function formatTimeline(
   const forbearanceRendered = entries.some((e) =>
     e.lines.some((l) => typeof l === "string" && RES_FORBEARANCE_RE.test(l)),
   );
+  // FT F01: the deferral role tag on a press line (Time Dilation) is
+  // legended only when a line carries it.
+  const deferralTagRendered = entries.some((e) =>
+    e.lines.some(
+      (l) => typeof l === "string" && l.includes(`[${DEFERRAL_ROLE_TAG}]`),
+    ),
+  );
   // F-C16 (triage res-readiness): the `next spike in Ns on X` suffix on
   // [YOU] [CD] lines is hindsight — legend it whenever one is rendered. It
   // follows the dampening note (`, next spike in`) or, where no dampening is
@@ -379,6 +387,12 @@ export function formatTimeline(
     "    reading of that second; the two can differ, and inside one second the press value is the one to quote about the press.",
     "    The `at N% HP` inside a cooldown line's unnecessary-press note is the same press reading — on your own lines",
     "    and on a teammate's cooldown line alike.",
+    ...(deferralTagRendered
+      ? [
+          `  \`[${DEFERRAL_ROLE_TAG}]\` after a cooldown's name = it does not heal: while it is up, part of each hit on that unit is`,
+          "    held back and lands later as that unit's own periodic damage (the `deferred …` sources, `+Dk deferred`).",
+        ]
+      : []),
     "  Window durations `(Ns)` are computed from the displayed start/end timestamps, so they always match what you see.",
     // GH #24 (2026-08-30): roots carry no DR and are not hard CC; a [ROOT]
     // line appears only when the rooted player could not reach anyone.

@@ -12,6 +12,15 @@
  * ruling A27 = B: stays a defensive, renders on its own line, out of the
  * burst statistics). Cast ids, all observed in the corpus. Registered in
  * `curatedIdRegistry.ts`.
+ *
+ * Every entry heals, absorbs, empowers healing or is on the generated save
+ * roster (`test/enemyHealCd.test.ts` holds the set to that). Time Spiral
+ * 374968 was listed here until FT F01 and is none of those: a class talent
+ * of every Evoker spec whose only effect is the per-class aura that lets an
+ * ally press a movement ability again (375234 … 375258; official profile: no
+ * heal, no absorb, no throughput role — `rejectedForReview` in
+ * `healerSaveCdGenerated.json`). On the 605-file capture 55 of its 96
+ * `[ENEMY HEAL CD]` lines were a Devastation Evoker's.
  */
 import { TEAM_HEAL_CD_IDS } from "../utils/cooldowns";
 
@@ -20,7 +29,6 @@ export const ENEMY_HEAL_CD_IDS: ReadonlySet<string> = new Set<string>([
   "200183", // Apotheosis — Holy Priest
   "2050", // Holy Word: Serenity — Holy Priest
   "215769", // Spirit of Redemption (Spirit of the Redeemer, PvP) — Holy Priest
-  "374968", // Time Spiral — Preservation Evoker
   "370537", // Stasis — Preservation Evoker
   "216331", // Avenging Crusader — Holy Paladin (A27 = B)
   // Incarnation: Tree of Life — Restoration Druid (F11, 2026-10-11): the
