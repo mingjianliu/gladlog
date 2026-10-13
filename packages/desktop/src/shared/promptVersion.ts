@@ -1520,5 +1520,15 @@
  *  has its own panel sentence. 605 files: kick-priority-missed -5 +1,
  *  kick-priority-team -7 +2 (the added are one cap refill seen by three
  *  owners); no candidate moves on the Spellwarding step.
+ *  v381 (2026-10-13, FT, a gap found while doing v379's wall ownership): a
+ *  talent whose entry carries another spell id proves the button it grants
+ *  (DB2 TraitDefinition.VisibleSpellID) — a player who took Fortifying Brew,
+ *  Avenging Crusader, Incarnation: Chosen of Elune or Berserk and did not
+ *  press it has its kit row (`[UNUSED]`), and a Retribution / Protection
+ *  paladin's unpressed Lay on Hands too (344 player-rounds on 605 files had
+ *  no row at all). An enemy Monk holding an unpressed Fortifying Brew reads
+ *  `gated`, not PRIME. 605 files: cd-waste +77 (Fortifying Brew 9, Lay on
+ *  Hands 68), cd-hoarded +2 (a Retribution paladin's Lay on Hands ready at
+ *  a teammate's crisis); nothing removed.
  */
-export const PROMPT_VERSION = 380;
+export const PROMPT_VERSION = 381;
