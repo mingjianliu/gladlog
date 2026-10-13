@@ -280,9 +280,16 @@ describe("CC USE counts — cast bars started vs casts that went off", () => {
   const wentOff = (spellId: string, s: number, name: string) =>
     makeSpellCastEvent(spellId, at(s), "e1", "Rogue", "p1", "Owner", 0, name);
 
+  // COMBATANT_INFO talent rows ({node, entry, rank}): a never-cast talent-tree
+  // control is on the kit only for a unit whose talents show it.
+  const MIGHTY_BASH_TALENT = { id1: 82237, id2: 103315, count: 1 }; // Druid
+  const RING_OF_FROST_TALENT = { id1: 62088, id2: 80144, count: 1 }; // Mage
+  const HEX_TALENT = { id1: 103623, id2: 127903, count: 1 }; // Shaman
+
   function countsLine(opts: {
     spec?: CombatUnitSpec;
     unitClass?: CombatUnitClass;
+    talents?: Array<{ id1: number; id2: number; count: number }>;
     starts?: Array<[string, number, string]>;
     casts?: Array<[string, number, string]>;
     kicks?: Array<[string, number]>;
@@ -291,6 +298,7 @@ describe("CC USE counts — cast bars started vs casts that went off", () => {
       name: "Owner",
       spec: opts.spec ?? CombatUnitSpec.Druid_Balance,
       class: opts.unitClass ?? CombatUnitClass.Druid,
+      info: { talents: opts.talents ?? [MIGHTY_BASH_TALENT], pvpTalents: [] },
       reaction: CombatUnitReaction.Friendly,
       castStartEvents: (opts.starts ?? []).map((x) => barStart(...x)),
       spellCastEvents: (opts.casts ?? []).map((x) => wentOff(...x)),
@@ -411,6 +419,7 @@ describe("CC USE counts — cast bars started vs casts that went off", () => {
     const { items } = countsLine({
       spec: CombatUnitSpec.Mage_Arcane,
       unitClass: CombatUnitClass.Mage,
+      talents: [RING_OF_FROST_TALENT],
       starts: [
         [RING_OF_FROST, 40, "Ring of Frost"],
         [RING_OF_FROST, 75, "Ring of Frost"],
@@ -426,6 +435,7 @@ describe("CC USE counts — cast bars started vs casts that went off", () => {
     const { items } = countsLine({
       spec: CombatUnitSpec.Mage_Arcane,
       unitClass: CombatUnitClass.Mage,
+      talents: [RING_OF_FROST_TALENT],
       // the client's own (here localized) name is not what the entry prints
       starts: [
         ["118", 32, "变形术"],
@@ -469,6 +479,7 @@ describe("CC USE counts — cast bars started vs casts that went off", () => {
     const { items, kit } = countsLine({
       spec: CombatUnitSpec.Mage_Arcane,
       unitClass: CombatUnitClass.Mage,
+      talents: [RING_OF_FROST_TALENT],
       starts: [
         [RING_OF_FROST, 40, "Ring of Frost"],
         [RING_OF_FROST, 75, "Ring of Frost"],
@@ -488,6 +499,7 @@ describe("CC USE counts — cast bars started vs casts that went off", () => {
     const shaman = {
       spec: CombatUnitSpec.Shaman_Restoration,
       unitClass: CombatUnitClass.Shaman,
+      talents: [HEX_TALENT],
     };
     const unused = countsLine({
       ...shaman,

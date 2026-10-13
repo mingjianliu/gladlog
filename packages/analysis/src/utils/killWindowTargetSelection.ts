@@ -473,9 +473,10 @@ export function killOpportunityAt(
  *
  * What stands behind a row is the ledger's ownership rule, not a cast: a
  * talent-tree wall only when COMBATANT_INFO's talents hold it (never when it
- * was not taken; with an undecodable talent blob only on a cast), a wall
- * outside the spec's tree on a PvP-talent pick or on the spec's DB2 baseline
- * (`BASELINE_DEFENSIVE_BY_SPEC`, ruling C4). 605 new-season files, every
+ * was not taken; with an undecodable talent blob, or no COMBATANT_INFO row
+ * at all, only on a cast), a wall outside the spec's tree on a PvP-talent
+ * pick or on the spec's DB2 baseline (`BASELINE_DEFENSIVE_BY_SPEC`, ruling
+ * C4). 605 new-season files, every
  * player-round: 2,122 such rows — 1,363 on a taken talent, 755 on the
  * baseline, 4 on a PvP talent, none on anything else; 0 talent blobs
  * undecoded (fix-FT/wp-kill-attempt-judgments/r08_tierPaired-605.txt).

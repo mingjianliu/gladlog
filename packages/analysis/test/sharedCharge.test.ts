@@ -52,9 +52,16 @@ describe("shared DB2 charge pool", () => {
   });
 
   it("a Spellwarding press puts Blessing of Protection on cooldown — ledger and death path agree", () => {
+    // A paladin with both buttons: Blessing of Protection from the class tree
+    // (node 81616), Spellwarding as the PvP talent. (For Protection the
+    // Spellwarding talent REPLACES Blessing of Protection.)
     const unit = makeUnit("p1", {
       class: CombatUnitClass.Paladin,
-      spec: CombatUnitSpec.Paladin_Protection,
+      spec: CombatUnitSpec.Paladin_Holy,
+      info: {
+        talents: [{ id1: 81616, id2: 102604, count: 1 }],
+        pvpTalents: ["204018"],
+      },
       spellCastEvents: [makeSpellCastEvent("204018", T0 + 10_000, "p1")],
     });
     const combat = combatOf(unit);

@@ -23,8 +23,9 @@ import {
   CombatUnitSpec,
   LogEvent,
 } from "@gladlog/parser-compat";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 
+import { ensureAnalysisData } from "../src/data/ensure";
 import {
   cdAvailableAt,
   cdReadyInTimeAt,
@@ -41,6 +42,11 @@ import {
   makeSpellCastEvent,
   makeUnit,
 } from "./ported/testHelpers";
+
+// the Renewing Blaze fixture's talent row is decoded through the talent map
+beforeAll(async () => {
+  await ensureAnalysisData();
+});
 
 describe("isCooldownAvailableFromLastUse(共享算法核)", () => {
   it("从未使用(null)→ 全程可用", () => {
@@ -218,6 +224,12 @@ describe("cdAvailableAt 与 isAvailableAt 对「仅有光环证据」的技能�
     return makeUnit("p1", {
       class: CombatUnitClass.Evoker,
       spec: CombatUnitSpec.Evoker_Devastation,
+      // Renewing Blaze talented (class node 93354) — the proc aura alone
+      // proves no button, so the ledger holds the row on the talent
+      info: {
+        talents: [{ id1: 93354, id2: 115669, count: 1 }],
+        pvpTalents: [],
+      },
       spellCastEvents: [], // zero cast evidence — proc-only ability, by design
       auraEvents: [
         makeAuraEvent(

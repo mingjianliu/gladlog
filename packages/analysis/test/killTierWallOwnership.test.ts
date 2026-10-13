@@ -170,6 +170,38 @@ describe("ownership is the ledger's — never a wall behind a talent the unit di
     ).toEqual(["Unending Resolve"]);
   });
 
+  it("no COMBATANT_INFO row at all proves no talent-tree wall either — a cast would; the spec's DB2 baseline stands (codex review 40-FT-74)", () => {
+    // the reviewer's case: a Restoration Shaman without the row and without
+    // an Astral Shift cast read `gated` on a wall nothing showed it owned
+    const noRow = shaman(undefined);
+    expect(noRow.info).toBeUndefined();
+    expect(unpressedWallsOwned(noRow, combatOf(noRow))).toEqual([]);
+    expect(killOpportunityAt(noRow, 70, combatOf(noRow)).tier).toBe("prime");
+    const pressed = enemy(
+      "Sham",
+      {
+        class: CombatUnitClass.Shaman,
+        spec: CombatUnitSpec.Shaman_Restoration,
+      },
+      [makeSpellCastEvent(ASTRAL_SHIFT, at(10), "Sham")],
+    );
+    // spent at 10 s, back at 130 s: in hand again, on the cast's evidence
+    expect(
+      killOpportunityAt(pressed, 70, combatOf(pressed)).wallsInHand,
+    ).toEqual([]);
+    expect(
+      killOpportunityAt(pressed, 135, combatOf(pressed)).wallsInHand,
+    ).toEqual(["Astral Shift"]);
+    const lock = enemy("Lock", {
+      class: CombatUnitClass.Warlock,
+      spec: CombatUnitSpec.Warlock_Demonology,
+    });
+    expect(lock.info).toBeUndefined();
+    expect(
+      unpressedWallsOwned(lock, combatOf(lock)).map((r) => r.name),
+    ).toEqual(["Unending Resolve"]);
+  });
+
   it("a unit the class catalog cannot place (a hand-built fixture, a pet) owns nothing: the cast pass alone, as before", () => {
     const bare = enemy("Bare");
     expect(unpressedWallsOwned(bare, combatOf(bare))).toEqual([]);

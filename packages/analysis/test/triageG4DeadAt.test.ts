@@ -110,10 +110,16 @@ describe("sync-burst F-KW2 — kill-window readiness skips a dead friendly", () 
       endTime: START + 300_000,
       units: Object.fromEntries(units.map((u) => [u.id, u])),
     }) as unknown as AtomicArenaCombat;
+  // The offensive cooldown the readiness is asked of must be the Druid's on
+  // evidence: Force of Nature talented (spec node 88210), never pressed.
   const druid = (deathRecords: { timestamp: number }[]) =>
     makeUnit("P1", {
       class: CombatUnitClass.Druid,
       spec: CombatUnitSpec.Druid_Balance,
+      info: {
+        talents: [{ id1: 88210, id2: 109844, count: 1 }],
+        pvpTalents: [],
+      },
       deathRecords,
     });
   const target = makeUnit("E1");

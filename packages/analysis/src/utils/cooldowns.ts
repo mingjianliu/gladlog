@@ -3581,7 +3581,6 @@ function extractMajorCooldownsAll(
         !procOnlyForUnit.has(id),
     ),
   );
-  const hasCombatantInfo = unit.info !== undefined;
   // Aura-backed activations (AURA_ONLY_ACTIVATION_IDS) prove the button
   // exists exactly as a logged cast does — H15 (ruling 2026-09-30 A9-3):
   // Feign Death never logs a cast, so without this the ownership filter
@@ -3631,21 +3630,29 @@ function extractMajorCooldownsAll(
       if (talentedSpellIds !== null && !talentedSpellIds.has(spell.spellId)) {
         return false;
       }
-      // If talent data failed to parse (talentedSpellIds null) but COMBATANT_INFO is present,
-      // require cast evidence to avoid including talents the player didn't actually take.
-      if (
-        talentedSpellIds === null &&
-        hasCombatantInfo &&
-        !activatedSpellIds.has(spell.spellId)
-      ) {
+      // Talents unknown (talentedSpellIds null) — the COMBATANT_INFO talent
+      // blob does not decode, or the unit has no COMBATANT_INFO row at all:
+      // require activation evidence, so a talent the player may not have
+      // taken is never asserted. The no-row case used to pass unproven (codex
+      // review 40-FT-74: a Restoration Shaman without the row and without an
+      // Astral Shift cast got the wall `[UNUSED]`, cd-waste could accuse it
+      // and the kill tier counted it in hand). On a parsed log parser-compat
+      // drops a Player unit without the row (`toLegacyMatch`'s outsider
+      // filter) and its class is unknown, so this is about a unit built by
+      // hand and a document from outside the parser (the counts are in
+      // predicate-index, the 40-FT-74 note).
+      if (talentedSpellIds === null && !activatedSpellIds.has(spell.spellId)) {
         return false;
       }
-    } else if (hasCombatantInfo) {
+    } else {
       // Not in the regular talent tree — could be a PvP talent or a true baseline ability.
       // Accept if: (a) the player selected it as a PvP talent, OR (b) they actually cast it
       // this match (proof they have it regardless of talent source).
       // This filters out PvP talents the player didn't pick while keeping baseline abilities
-      // that were used.
+      // that were used. A unit with no COMBATANT_INFO row has no PvP-talent
+      // picks to read (`pvpTalentIds` is empty), so (b) and (c) decide alone —
+      // one rule, with or without the row (without it this branch used to be
+      // skipped, and every roster cooldown outside the tree passed).
       // F-W6 (user ruling 2026-09-30 C4): (c) the spec owns it as a baseline
       // defensive per DB2 (`BASELINE_DEFENSIVE_BY_SPEC`) — unless the ledger
       // already holds a row of the same NAME on evidence (a Death Knight with

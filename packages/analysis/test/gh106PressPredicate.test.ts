@@ -4,7 +4,9 @@
  *
  * Talent ownership in these fixtures goes through `pvpTalents`: the ownership
  * check reads talent and PvP-talent ids alike, and a synthetic unit has no
- * talent-tree blob to resolve node ids from.
+ * talent-tree blob to resolve node ids from. The one exception is the
+ * Renewing Blaze fixture: the ledger holds a never-cast talent-tree row only
+ * for a unit whose decoded talents show it, so that unit carries the node row.
  */
 import {
   AtomicArenaCombat,
@@ -12,8 +14,9 @@ import {
   CombatUnitSpec,
   LogEvent,
 } from "@gladlog/parser-compat";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 
+import { ensureAnalysisData } from "../src/data/ensure";
 import {
   auraOnlyActivationSeconds,
   extractMajorCooldowns,
@@ -29,6 +32,11 @@ import {
 
 const START = 1_700_000_000_000;
 const at = (s: number) => START + s * 1000;
+
+// the Renewing Blaze fixture's talent row is decoded through the talent map
+beforeAll(async () => {
+  await ensureAnalysisData();
+});
 
 describe("talent replacements (DB2 replace_spell)", () => {
   it("Radiant Glory makes Avenging Wrath proc-only for that player and keeps its procs as activations", () => {
@@ -127,6 +135,12 @@ describe("aura evidence", () => {
     const evoker = makeUnit("p1", {
       class: CombatUnitClass.Evoker,
       spec: CombatUnitSpec.Evoker_Devastation,
+      // Renewing Blaze talented (class node 93354): its aura is a proc and
+      // proves no button, so the ledger needs the talent to hold the row
+      info: {
+        talents: [{ id1: 93354, id2: 115669, count: 1 }],
+        pvpTalents: [],
+      },
       auraEvents: [
         makeAuraEvent(
           LogEvent.SPELL_AURA_APPLIED,
