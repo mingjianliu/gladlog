@@ -1469,5 +1469,24 @@
  *  Elemental holder was measured and stays DB2's 1 s. No candidate row is
  *  added or removed on the 605-file capture; two kick-eaten rows read
  *  `lockout=0.7` where they read 1.2.
+ *  v378 (2026-10-11, FT, the parked parser items + a codex post-hoc review):
+ *  (1) a cast event keeps the cost its SPELL_CAST_SUCCESS row states
+ *  (parser, optional `powerCosts`), and `(no mana have/cost)` on [RES] and
+ *  cd-hoarded's mana gate read it instead of DB2's percentage × the buffed
+ *  max (13.1k → 12.5k on a Mistweaver's Invoke Chi-Ji); (2) the log owner's
+ *  never-spent kit entry states refused presses — `[UNUSED — pressed 3×,
+ *  refused: under crowd control]`; (3) codex review 45-FT-101: a dated
+ *  Storm Conduit number takes its old value only 14 h clear of the cutover
+ *  (a line without a signed UTC offset can be dated that much early), and
+ *  one Wildfire Bomb credits each unit once for Lethal Calibration; (4) the
+ *  menu (user ruling 2026-10-11 on the judgment packet): a
+ *  missed-sync-window row says whose each ready cooldown is (`The Hunt
+ *  (Name-Realm's)`, `(yours)`), in Solo Shuffle it reaches an owner only
+ *  when a ready cooldown or the control is the owner's, and the unpressed
+ *  buttons of one shared cooldown are ONE cd-waste row (`Blessing of
+ *  Protection / Blessing of Spellwarding (one shared cooldown)`). Also in
+ *  the batch, no prompt change: the desktop dispel panel ends its windows at
+ *  the round's end like the prompt; `logLineInstantMs`. 605-file numbers in
+ *  the commit.
  */
-export const PROMPT_VERSION = 377;
+export const PROMPT_VERSION = 378;
