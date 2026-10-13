@@ -338,6 +338,84 @@ describe("extractMajorCooldowns — the talent proves the button nobody pressed"
   });
 });
 
+/**
+ * Lay on Hands: the talent's own spell is 633 (class node 81597), the roster
+ * lists 471195 — the id Empyreal Ward 387791 puts in its place (DB2 aura 332,
+ * base points 471195), `SPELL_CANONICAL_IDS["633"]`. 605 archive files: 864
+ * paladin player-rounds, every one holding 633; 831 hold Empyreal Ward and
+ * cast 471195, the 33 without it cast 633. Holy had the unpressed row through
+ * the healer save roster's alias evidence (148 player-rounds); Retribution
+ * (185 of 430) and Protection (1 of 2) had none.
+ */
+describe("extractMajorCooldowns — a talent whose own spell the roster lists under its canonical alias", () => {
+  const LAY_ON_HANDS: Row = { id1: 81597, id2: 102583, count: 1 };
+  const paladin = (
+    spec: CombatUnitSpec,
+    talents: Row[],
+    casts: string[] = [],
+  ) => unitOf(CombatUnitClass.Paladin, spec, talents, casts);
+
+  it.each([
+    ["Retribution", CombatUnitSpec.Paladin_Retribution],
+    ["Protection", CombatUnitSpec.Paladin_Protection],
+    ["Holy", CombatUnitSpec.Paladin_Holy],
+  ] as const)(
+    "%s: Lay on Hands taken and never pressed ⇒ one row, 471195, tagged [UNUSED]; not taken ⇒ no row",
+    (_name, spec) => {
+      const rows = ledgerOf(paladin(spec, [LAY_ON_HANDS])).filter(
+        (cd) => cd.spellName === "Lay on Hands",
+      );
+      expect(rows.map((r) => r.spellId)).toEqual(["471195"]);
+      expect(kitRowUnused(rows[0]!)).toBe(true);
+      expect(rowOf(paladin(spec, []), "Lay on Hands")).toBeUndefined();
+      expect(
+        rowOf(unitOf(CombatUnitClass.Paladin, spec, undefined), "Lay on Hands"),
+      ).toBeUndefined();
+    },
+  );
+
+  it.each([
+    ["Retribution", CombatUnitSpec.Paladin_Retribution],
+    ["Protection", CombatUnitSpec.Paladin_Protection],
+  ] as const)(
+    "%s: the unpressed row carries the pressed row's cooldown, whichever id the press had",
+    (_name, spec) => {
+      const unpressed = rowOf(paladin(spec, [LAY_ON_HANDS]), "Lay on Hands")!;
+      for (const castId of ["471195", "633"]) {
+        const pressed = ledgerOf(
+          paladin(spec, [LAY_ON_HANDS], [castId]),
+        ).filter((cd) => cd.spellName === "Lay on Hands");
+        expect(pressed).toHaveLength(1);
+        expect(pressed[0]!.casts).toHaveLength(1);
+        expect(pressed[0]!.cooldownSeconds).toBe(unpressed.cooldownSeconds);
+        expect(pressed[0]!.tag).toBe(unpressed.tag);
+      }
+    },
+  );
+
+  it("only where the roster has no row for the talent's own id: Bladestorm stays under 227847 until 446035 is pressed", () => {
+    // Arms, Bladestorm on the choice node 90441 (entry 112314 = spell 227847)
+    const BLADESTORM: Row = { id1: 90441, id2: 112314, count: 1 };
+    const arms = (casts: string[] = []) =>
+      unitOf(
+        CombatUnitClass.Warrior,
+        CombatUnitSpec.Warrior_Arms,
+        [BLADESTORM],
+        casts,
+      );
+    const unpressed = ledgerOf(arms()).filter(
+      (cd) => cd.spellName === "Bladestorm",
+    );
+    expect(unpressed.map((r) => r.spellId)).toEqual(["227847"]);
+    expect(unpressed[0]!.neverUsed).toBe(true);
+    const pressed = ledgerOf(arms(["446035"])).filter(
+      (cd) => cd.spellName === "Bladestorm",
+    );
+    expect(pressed.map((r) => r.spellId)).toEqual(["446035"]);
+    expect(pressed[0]!.casts).toHaveLength(1);
+  });
+});
+
 describe("the kill-opportunity tier — an owned, unpressed Fortifying Brew is a wall in hand", () => {
   const monk = (talents: Row[], casts: any[] = []) =>
     makeUnit("Monk", {
@@ -445,8 +523,9 @@ describe("talentOwnershipOf — a button the tree grants under another id is tal
  *     variant press of it;
  *   · the official button grant proves the roster's id
  *     (`getSpecTalentButtonGrants`);
- *   · the healer save roster admits it on a canonical alias (Holy's Lay on
- *     Hands).
+ *   · the roster's id is the canonical alias of the entry's own spell, which
+ *     the roster does not list (Lay on Hands 633 → 471195,
+ *     `SPELL_CANONICAL_IDS`).
  * A pair with no row is a renumbered id or a roster that fell behind the
  * game. `KNOWN_OPEN` holds the pairs known to be open, each with its reason;
  * the test fails on any pair outside it — and on a listed pair that is no
@@ -455,12 +534,6 @@ describe("talentOwnershipOf — a button the tree grants under another id is tal
 describe("completeness: every roster cooldown a talent of the spec names is in the ledger of a holder who never pressed it", () => {
   /** `spec|roster id|talent entry id` */
   const KNOWN_OPEN: Record<string, string> = {
-    // Lay on Hands: the talent's own spell 633 is the button; Empyreal Ward
-    // 387791 swaps in 471195 (DB2 aura 332), the only id the roster lists.
-    // Holy is covered through the healer save roster's alias evidence
-    // (`SPELL_CANONICAL_IDS`); Protection and Retribution are not.
-    "66|471195|633": "Lay on Hands, Protection",
-    "70|471195|633": "Lay on Hands, Retribution",
     // The Hunt, Devourer: its own spell 1246167, which the roster does not
     // list (it lists Havoc's 370965) and no discovery rule names. Press-only
     // by the user ruling of 2026-10-09 (an offensive-catalog member outside

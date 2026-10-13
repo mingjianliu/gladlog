@@ -3617,8 +3617,27 @@ function extractMajorCooldownsAll(
   // same rank as holding a talent of the roster's own id, and nothing else
   // changes: a button a held talent replaces is still dropped first
   // (`replacedByTalent`), and without the talent the cast decides as before.
+  //
+  // The same for a talent whose own spell the roster knows only under its
+  // canonical alias (`SPELL_CANONICAL_IDS`): Lay on Hands is the talent's
+  // spell 633, the roster's row is 471195 — the id Empyreal Ward 387791 puts
+  // in its place (DB2 aura 332) and the one 831 of the corpus's 864 paladin
+  // player-rounds have. Holy already stood on exactly this evidence through
+  // the healer save roster below; Protection and Retribution had no row until
+  // the press (186 player-rounds of 432). Only where the roster has no row
+  // for the talent's own id: Bladestorm 227847 has one, and 446035 stays the
+  // variant press of it that it was.
+  const rosterIds = new Set(classData.abilities.map((a) => a.spellId));
   const talentsGrantButton = (spellId: string): boolean =>
-    talentSets.grantedButtonIds.has(spellId);
+    talentSets.grantedButtonIds.has(spellId) ||
+    (talentedSpellIds !== null &&
+      spellAliasIds(spellId).some(
+        (alias) =>
+          alias !== spellId &&
+          !rosterIds.has(alias) &&
+          talentedSpellIds.has(alias) &&
+          choiceSelectionResolved(specIdNum, unit.info?.talents ?? [], alias),
+      ));
 
   // Keep only tagged spells with cooldown data >= MIN_CD_SECONDS that belong to the owner's spec
   const seen = new Set<string>();
@@ -3874,7 +3893,6 @@ function extractMajorCooldownsAll(
   // kill window, `ownBurstPressed`) — and nothing may name it as ready and
   // unpressed. Which of the twelve is worth an accusation is the offensive
   // registration's call (offensiveCdGapScan), not this path's.
-  const rosterIds = new Set(classData.abilities.map((a) => a.spellId));
   const pressOnlyOffensiveIds = new Set<string>();
   for (const spellId of castSpellIds) {
     if (seen.has(spellId) || replacedByTalent.has(spellId)) continue;
