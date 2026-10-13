@@ -130,6 +130,7 @@ import * as enemyInterrupts from "@gladlog/analysis/src/utils/enemyInterrupts";
 import * as externalDamage from "@gladlog/analysis/src/utils/externalDamage";
 import * as forcedDisplacement from "@gladlog/analysis/src/utils/forcedDisplacement";
 import * as gapClosers from "@gladlog/analysis/src/utils/gapClosers";
+import * as healerExposureAnalysis from "@gladlog/analysis/src/utils/healerExposureAnalysis";
 import * as healerOffenseAnalysis from "@gladlog/analysis/src/utils/healerOffenseAnalysis";
 import * as incomingPressure from "@gladlog/analysis/src/utils/incomingPressure";
 import * as karmaFeed from "@gladlog/analysis/src/utils/karmaFeed";
@@ -2061,6 +2062,28 @@ const INDEX: PredicateRow[] = [
   {
     file: `${E}/quality/promptQualityCheck.ts`,
     symbol: "checkContestedCastRisk",
+    mod: promptQualityCheck,
+  },
+  // FT R03 (reopens A17, user 2026-10-11): the ENEMY CC KIT line's
+  // `(landed N×)` entries are the [CC ON TEAM] lines on its unit
+  {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "rendersCcOnTeamLine",
+    mod: ccTrinketAnalysis,
+  },
+  {
+    file: `${A}/utils/healerExposureAnalysis.ts`,
+    symbol: "landedControlsForKit",
+    mod: healerExposureAnalysis,
+  },
+  {
+    file: `${A}/utils/healerExposureAnalysis.ts`,
+    symbol: "parseEnemyCcKitLine",
+    mod: healerExposureAnalysis,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkEnemyCcKitLanded",
     mod: promptQualityCheck,
   },
   // FT-T10 readers: a lockout asked for a set of spells

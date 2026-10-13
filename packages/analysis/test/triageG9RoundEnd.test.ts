@@ -25,6 +25,7 @@ import {
   findBrokenDisarm,
 } from "../src/utils/ccTrinketAnalysis";
 import { reconstructDispelSummary } from "../src/utils/dispelAnalysis";
+import { landedControlsForKit } from "../src/utils/healerExposureAnalysis";
 import { roundEndMs } from "../src/utils/roundEnd";
 import {
   makeAdvancedAction,
@@ -128,6 +129,35 @@ describe("cc-dr F-CI1 — CC windows end at the round end", () => {
       startInfo: { zoneId: "1672" },
     }).ccInstances;
     expect(plain.map((c) => Math.round(c.durationSeconds))).toEqual([6, 5]);
+  });
+
+  it("FT R03: the ENEMY CC KIT line's landed controls are the round's — one applied after the round-ending death is not counted", () => {
+    const victim = makeUnit("v", {
+      auraEvents: [
+        ...polyOn("v", 20, 23.5),
+        ...polyOn("v", 47.718, 53.726),
+        ...polyOn("v", 48.964, 54.0),
+      ],
+    });
+    const mage = makeUnit("e1", {
+      name: "Mage",
+      reaction: CombatUnitReaction.Hostile,
+    });
+    const count = (combat: Parameters<typeof analyzePlayerCCAndTrinket>[2]) =>
+      landedControlsForKit(
+        analyzePlayerCCAndTrinket(victim, [mage], combat),
+        [mage],
+        [mage],
+      ).map((l) => l.count);
+    expect(count(shuffle(48.327))).toEqual([2]);
+    // control: no Solo Shuffle death → all three are in the round
+    expect(
+      count({
+        startTime: START,
+        endTime: START + 60_000,
+        startInfo: { zoneId: "1672" },
+      }),
+    ).toEqual([3]);
   });
 });
 

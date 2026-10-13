@@ -192,6 +192,7 @@ import {
 } from "@gladlog/analysis/src/utils/enemyDefensives";
 import { DURING_ABSORBED_TAG_RE_SRC } from "@gladlog/analysis/src/utils/externalDamage";
 import { FORCED_MOVE_TEXT } from "@gladlog/analysis/src/utils/forcedDisplacement";
+import { parseEnemyCcKitLine } from "@gladlog/analysis/src/utils/healerExposureAnalysis";
 import {
   CONTESTED_LINE_RE_SRC,
   contestedTailForm,
@@ -1310,6 +1311,106 @@ export function checkContestedCastRisk(lines: string[]): string[] {
         `line ${i + 1}: [CONTESTED] ${m[5]} 按官方施法时间应为 ${allowed.size === 0 ? "silent" : [...allowed].join(" / ")},行尾写的是 ${form} —— ${line.trim().slice(0, 200)}`,
       );
   });
+  return failures;
+}
+
+/** `<unit id="4" name="…" spec="…" role="enemy">` — the roster. */
+const KIT_ROSTER_UNIT =
+  /<unit\s+id="(\d+)"\s+name="([^"]+)"[^>]*role="([^"]+)"/;
+/** A `[CC ON TEAM]` data line whose victim and source are roster labels:
+ * 1 = the victim's id, 2 = the control, 3 = the id of the source player — or
+ * of the owner of the summon that cast it (`… (by 4(BMHunter)'s pet)`). A
+ * control reflected back names no source and is not read. */
+const KIT_CC_ON_TEAM_LINE =
+  /^\s*\d+:\d{2}\s+\[CC ON TEAM\]\s+(\d+)\([^()]*\) ← (.+?) \(by (\d+)\([^()]*\)(?:'s [^()]*)?\)/;
+
+/**
+ * The `ENEMY CC KIT` line and the `[CC ON TEAM]` lines are one list (FT R03,
+ * user ruling 2026-10-11, option b — it reopens A17's "labels only"). The
+ * producer (`formatEnemyCCKitHeader` given `landedControlsForKit`) appends
+ * every control that landed on the kit's unit this round to the burst-window
+ * threats and marks it `(landed N×)`; the count is read from the instances
+ * the timeline prints its `[CC ON TEAM]` lines from, under the emitter's own
+ * test (`rendersCcOnTeamLine`). Before, the line was the burst-window list
+ * alone: 9,390 of the 28,816 controls that landed on its unit were not on it
+ * (605-file capture, by spell name).
+ *
+ * Read back through the producer's `parseEnemyCcKitLine` and the roster:
+ *  - a kit line that is not in the generated format, or that does not
+ *    promise the landed controls;
+ *  - an enemy on it that the roster does not list as an enemy;
+ *  - both ways, per enemy player and control name: N `[CC ON TEAM]` lines on
+ *    the kit's unit from that enemy (or its summon) ⟺ `(landed N×)` entries
+ *    summing to N — a control that landed and is missing or miscounted, and
+ *    a `landed` mark with no such lines, both fail;
+ *  - an entry marked `(spec default, not seen)` beside a landed entry of the
+ *    same control.
+ */
+export function checkEnemyCcKitLanded(lines: string[]): string[] {
+  const failures: string[] = [];
+  const kitAt = lines.findIndex((l) => l.startsWith("ENEMY CC KIT ("));
+  if (kitAt < 0) return failures;
+  const where = `line ${kitAt + 1}: ENEMY CC KIT`;
+  const kit = parseEnemyCcKitLine(lines[kitAt]!);
+  if (!kit || !kit.statesLanded)
+    return [
+      `${where} 格式不符(整行必须按生成格式,且写明 landed N×)—— ${lines[kitAt]!.slice(0, 200)}`,
+    ];
+  const idOfEnemyName = new Map<string, string>();
+  let ownerId: string | undefined;
+  for (const line of lines) {
+    const u = line.match(KIT_ROSTER_UNIT);
+    if (!u) continue;
+    if (u[3] === "enemy") idOfEnemyName.set(u[2]!, u[1]!);
+    if (u[3] === "log owner") ownerId = u[1]!;
+  }
+  const unitId = kit.healerLabel
+    ? /^(\d+)\(/.exec(kit.healerLabel)?.[1]
+    : ownerId;
+  if (unitId === undefined)
+    return [
+      `${where} 所指单位在名册里找不到 —— ${lines[kitAt]!.slice(0, 160)}`,
+    ];
+  const enemyIds = new Set(idOfEnemyName.values());
+
+  const key = (enemyId: string, spell: string) => `${enemyId}\u0000${spell}`;
+  const onTimeline = new Map<string, number>();
+  for (const line of lines) {
+    const m = line.match(KIT_CC_ON_TEAM_LINE);
+    if (!m || m[1] !== unitId || !enemyIds.has(m[3]!)) continue;
+    const k = key(m[3]!, m[2]!);
+    onTimeline.set(k, (onTimeline.get(k) ?? 0) + 1);
+  }
+  const onKit = new Map<string, number>();
+  for (const e of kit.enemies) {
+    const id = idOfEnemyName.get(e.name);
+    if (id === undefined) {
+      failures.push(`${where} 上的 ${e.spec} (${e.name}) 不是名册里的敌方`);
+      continue;
+    }
+    for (const s of e.entries) {
+      if (
+        s.specDefault &&
+        e.entries.some((o) => o.spellName === s.spellName && o.landed > 0)
+      )
+        failures.push(
+          `${where}: ${e.name} 的 ${s.spellName} 同时标了 spec default, not seen 和 landed`,
+        );
+      if (s.landed === 0) continue;
+      const k = key(id, s.spellName);
+      onKit.set(k, (onKit.get(k) ?? 0) + s.landed);
+    }
+  }
+  const nameOfId = new Map([...idOfEnemyName].map(([n, id]) => [id, n]));
+  for (const k of new Set([...onTimeline.keys(), ...onKit.keys()])) {
+    const [id, spell] = k.split("\u0000") as [string, string];
+    const lineCount = onTimeline.get(k) ?? 0;
+    const kitCount = onKit.get(k) ?? 0;
+    if (lineCount !== kitCount)
+      failures.push(
+        `${where}: ${nameOfId.get(id)} 的 ${spell} —— 名单写 landed ${kitCount}×,而落在该单位身上的 [CC ON TEAM] 行有 ${lineCount} 条`,
+      );
+  }
   return failures;
 }
 
@@ -7181,6 +7282,7 @@ export function checkMatch(
   hardFailures.push(...checkBurstAllyOverlap(lines));
   hardFailures.push(...checkVulnerableOwnerDamage(lines));
   hardFailures.push(...checkContestedCastRisk(lines));
+  hardFailures.push(...checkEnemyCcKitLanded(lines));
   hardFailures.push(...checkKillWindowWithinRound(lines));
   hardFailures.push(...checkAuraEndWithinRound(lines));
   hardFailures.push(...checkUnpurgedWithinRound(lines));

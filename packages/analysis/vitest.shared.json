@@ -169,6 +169,7 @@
     "test/dispellerOccupancy.test.ts",
     "test/drCategoryIds.test.ts",
     "test/drOutgoingCCReverse.test.ts",
+    "test/enemyCcKitLanded.test.ts",
     "test/enemyDefEndNotLogged.test.ts",
     "test/enemyDefRoundEnd.test.ts",
     "test/enemyDefSaveEffect.test.ts",

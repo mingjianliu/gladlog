@@ -65,6 +65,7 @@ import {
   computeHealerExposureEvents,
   formatEnemyCCKitHeader,
   formatHealerExposureEntries,
+  landedControlsForKit,
 } from "../utils/healerExposureAnalysis";
 import {
   buildHealerOffenseSummary,
@@ -761,9 +762,22 @@ export function buildMatchContext(
     healerUnit && healerUnit.id !== owner.id
       ? `${playerIdMap.get(healerUnit.name) ?? healerUnit.name.split("-")[0]}(${abbrevSpec(specToString(healerUnit.spec))})`
       : undefined;
+  // FT R03 (user ruling 2026-10-11): the kit is the burst-window threats ∪
+  // every control that landed on that healer this round — the healer's own
+  // instances of the summaries the [CC ON TEAM] lines are printed from
+  const kitHealerSummary = healerUnit
+    ? ccTrinketSummaries.find((s) => s.playerName === healerUnit.name)
+    : undefined;
   const enemyCCKitLines = formatEnemyCCKitHeader(
     healerExposures,
     kitHealerLabel,
+    kitHealerSummary
+      ? landedControlsForKit(
+          kitHealerSummary,
+          enemies as ICombatUnit[],
+          Object.values(combat.units) as ICombatUnit[],
+        )
+      : undefined,
   );
   if (enemyCCKitLines.length > 0) {
     tLines.push("");

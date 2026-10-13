@@ -2027,6 +2027,18 @@ export function lastTrinketPressBefore(
   };
 }
 
+/** Does this instance of a summary's `ccInstances` print a `[CC ON TEAM]`
+ *  line? Every instance does but one of no length at all (the instances are
+ *  already the round's: `analyzePlayerCCAndTrinket` drops a CC applied at or
+ *  after `roundEndMs`). The one test of the timeline's emitter and of the
+ *  `ENEMY CC KIT` line's `(landed N×)` counts (FT R03), which promise one
+ *  line each. */
+export function rendersCcOnTeamLine(
+  cc: Pick<ICCInstance, "durationSeconds">,
+): boolean {
+  return cc.durationSeconds !== 0;
+}
+
 /** The whole seconds a `[CC ON TEAM]` line prints for this instance — its
  *  `| Ns`, or the "after Ns" of a trinket / racial / Tremor break. One
  *  rounding for the line and every predicate that reads it back. Triage
@@ -2092,7 +2104,7 @@ export function breakableCcBeforeDeath(
 ): boolean {
   const deathS = Math.floor(deathAtSeconds);
   return summary.ccInstances.some((cc) => {
-    if (cc.durationSeconds === 0) return false; // never rendered
+    if (!rendersCcOnTeamLine(cc)) return false;
     const n = renderedCcSeconds(cc);
     const startS = Math.floor(cc.atSeconds);
     return (

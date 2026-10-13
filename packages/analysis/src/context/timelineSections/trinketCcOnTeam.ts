@@ -25,6 +25,7 @@ import {
   lastTrinketPressBefore,
   renderedCcDuration,
   renderedCcSpan,
+  rendersCcOnTeamLine,
   tremorTotemBreak,
 } from "../../utils/ccTrinketAnalysis";
 import { wasRemovedByAllyDispel } from "../../utils/dispelAnalysis";
@@ -87,7 +88,7 @@ export function emitTrinketCcOnTeamEntries(
             owner.id,
             ownerControlPressKit(ownerCDs),
             "control",
-            summary.ccInstances.filter((cc) => cc.durationSeconds !== 0),
+            summary.ccInstances.filter(rendersCcOnTeamLine),
             (cc) => ({
               fromSeconds: cc.atSeconds,
               toSeconds: cc.atSeconds + cc.durationSeconds,
@@ -130,7 +131,7 @@ export function emitTrinketCcOnTeamEntries(
     }
 
     for (const cc of summary.ccInstances) {
-      if (cc.durationSeconds === 0) continue;
+      if (!rendersCcOnTeamLine(cc)) continue;
       let trinketNote = "";
       if (cc.trinketState === "used") {
         // B111: with the active-at-cast attribution fix, 'used' means the trinket was pressed while this

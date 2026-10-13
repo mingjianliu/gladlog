@@ -26,6 +26,7 @@ import {
   analyzePlayerCCAndTrinket,
   IPlayerCCTrinketSummary,
   pvpTrinketRemainingSecondsAt,
+  rendersCcOnTeamLine,
 } from "./ccTrinketAnalysis";
 import {
   chargeAvailabilityTransitions,
@@ -501,10 +502,92 @@ function buildEnemyRefMap(
   return refMap;
 }
 
+/** One control of the `ENEMY CC KIT` line that LANDED on the kit's unit this
+ * round (`landedControlsForKit`). */
+export interface IKitLandedControl {
+  /** the enemy PLAYER credited — the caster, or its summon's owner */
+  enemyName: string;
+  enemySpec: string;
+  spellName: string;
+  /** `DR_CATEGORY_MAP`'s family of the landed aura — the kit's one category
+   * source; undefined for a control no DR family claims */
+  category?: string;
+  /** how many `[CC ON TEAM]` lines */
+  count: number;
+}
+
+/**
+ * Every control that landed on the kit's unit this round, per enemy player
+ * and control, in order of first landing (FT R03, user ruling 2026-10-11,
+ * option b — it reopens A17's "labels only"). ONE source with the timeline:
+ * the unit's own `ccInstances` of the summaries the `[CC ON TEAM]` lines are
+ * printed from, under the emitter's own test (`rendersCcOnTeamLine`), so a
+ * count is a number of lines; the round is the summary's (a CC applied at or
+ * after `roundEndMs` is not in it).
+ *
+ * The enemy credited is `buildEnemyCCHistory`'s: the source player, else its
+ * summon's owner (`summonOwnerById`, ruling pets R1 = A). A control whose
+ * source is neither — the unit's own CC reflected back, a source the round
+ * cannot place — is on no enemy's list.
+ */
+export function landedControlsForKit(
+  unitCCSummary: Pick<IPlayerCCTrinketSummary, "ccInstances">,
+  enemies: readonly ICombatUnit[],
+  allUnits?: Iterable<ICombatUnit>,
+): IKitLandedControl[] {
+  const out: IKitLandedControl[] = [];
+  const units = allUnits ? [...allUnits] : undefined;
+  for (const cc of [...unitCCSummary.ccInstances].sort(
+    (a, b) => a.atSeconds - b.atSeconds,
+  )) {
+    if (!rendersCcOnTeamLine(cc)) continue;
+    const enemy =
+      enemies.find((e) => e.id === cc.sourceId) ??
+      summonOwnerById(units, cc.sourceId, enemies);
+    if (!enemy) continue;
+    const category = DR_CATEGORY_MAP[cc.spellId];
+    const seen = out.find(
+      (l) =>
+        l.enemyName === enemy.name &&
+        l.spellName === cc.spellName &&
+        l.category === category,
+    );
+    if (seen) seen.count++;
+    else
+      out.push({
+        enemyName: enemy.name,
+        enemySpec: specToString(enemy.spec),
+        spellName: cc.spellName,
+        ...(category ? { category } : {}),
+        count: 1,
+      });
+  }
+  return out;
+}
+
+/** A kit entry's two marks. `(spec default, not seen)` (cc-dr F-KT1): the
+ * spec's default, listed for an enemy seen landing no control on the team.
+ * `(landed N×)` (FT R03): it landed on the kit's unit N times this round. */
+const KIT_SPEC_DEFAULT_MARK = "(spec default, not seen)";
+const kitLandedMark = (count: number) => `(landed ${count}×)`;
+/** What the header says once the landed controls are on the line. */
+const kitLandedClause = (who: "you" | "them") =>
+  `, plus every control that landed on ${who} this round, marked \`landed N×\``;
+
 /**
  * Once-per-match enemy CC kit header: the per-enemy union of (spell, DR category)
  * across ALL burst windows, both in-LoS and pillar-blocked. Stable order: enemies
  * by first appearance, spells by first appearance within each enemy.
+ *
+ * With `landed` (FT R03) the line is that list ∪ every control that landed
+ * on the unit this round: an entry that landed carries `(landed N×)` — also
+ * when it was a burst-window threat — and a control or an enemy the windows
+ * never listed is appended, in order of first landing. The burst-window
+ * entries themselves, the `(spec default, not seen)` mark and WHETHER the
+ * line prints (an exposure with a threat) are untouched, and so is every
+ * other reader of the threat table — `[HEALER EXPOSURE]`'s `IN LoS:` list
+ * states what could reach the healer at that window, not what an enemy has
+ * landed.
  */
 export function formatEnemyCCKitHeader(
   exposures: IHealerBurstExposure[],
@@ -513,6 +596,9 @@ export function formatEnemyCCKitHeader(
    * enemy burst windows, not to the reader (33 DPS-owner rounds read "threats
    * to you") */
   healerLabel?: string,
+  /** `landedControlsForKit` of that unit; absent = the burst-window list
+   * alone, under the header that promises no more */
+  landed?: readonly IKitLandedControl[],
 ): string[] {
   const enemyOrder: string[] = [];
   const kits = new Map<
@@ -521,8 +607,9 @@ export function formatEnemyCCKitHeader(
       spec: string;
       spells: Array<{
         spellName: string;
-        category: string;
+        category?: string;
         fromTemplate?: boolean;
+        landed?: number;
       }>;
     }
   >();
@@ -551,22 +638,106 @@ export function formatEnemyCCKitHeader(
 
   if (enemyOrder.length === 0) return [];
 
+  for (const l of landed ?? []) {
+    let kit = kits.get(l.enemyName);
+    if (!kit) {
+      kit = { spec: l.enemySpec, spells: [] };
+      kits.set(l.enemyName, kit);
+      enemyOrder.push(l.enemyName);
+    }
+    const entry = kit.spells.find(
+      (s) => s.spellName === l.spellName && s.category === l.category,
+    );
+    if (entry) entry.landed = (entry.landed ?? 0) + l.count;
+    else
+      kit.spells.push({
+        spellName: l.spellName,
+        ...(l.category ? { category: l.category } : {}),
+        landed: l.count,
+      });
+  }
+
   const parts = enemyOrder.map((name) => {
     const kit = kits.get(name)!;
-    // cc-dr F-KT1: a spec default the enemy was never seen landing says so
+    // cc-dr F-KT1: a spec default the enemy was never seen landing says so;
+    // FT R03: a control that landed on the unit says how many times
     const spellsStr = kit.spells
       .map(
         (s) =>
-          `${s.spellName} [${s.category}]${s.fromTemplate ? " (spec default, not seen)" : ""}`,
+          `${s.spellName}${s.category ? ` [${s.category}]` : ""}${s.landed ? ` ${kitLandedMark(s.landed)}` : s.fromTemplate ? ` ${KIT_SPEC_DEFAULT_MARK}` : ""}`,
       )
       .join(", ");
     return `${kit.spec} (${name}): ${spellsStr}`;
   });
 
   const who = healerLabel
-    ? `threats to your healer ${healerLabel} at enemy burst windows`
-    : "threats to you";
+    ? `threats to your healer ${healerLabel} at enemy burst windows${landed ? kitLandedClause("them") : ""}`
+    : `threats to you${landed ? kitLandedClause("you") : ""}`;
   return [`ENEMY CC KIT (${who}): ${parts.join("; ")}`];
+}
+
+/** An `ENEMY CC KIT` line read back (`parseEnemyCcKitLine`). */
+export interface IParsedEnemyCcKit {
+  /** the healer's roster label (`3(RDruid)`); null = the line is about the
+   * log owner */
+  healerLabel: string | null;
+  /** the header promises the landed controls (`formatEnemyCCKitHeader` was
+   * given them) */
+  statesLanded: boolean;
+  enemies: Array<{
+    spec: string;
+    name: string;
+    entries: Array<{
+      spellName: string;
+      category?: string;
+      /** 0 = no `(landed N×)` mark */
+      landed: number;
+      specDefault: boolean;
+    }>;
+  }>;
+}
+
+const KIT_LINE_RE =
+  /^ENEMY CC KIT \(threats to (?:you|your healer (\S+) at enemy burst windows)(, plus every control that landed on (?:you|them) this round, marked `landed N×`)?\): (.+)$/;
+const KIT_ENEMY_RE = /^(.+?) \((\S+)\): (.+)$/;
+/** One entry and the separator after it: the name, its `[family]`, one mark.
+ * Read entry by entry — the spec-default mark has a `, ` of its own, so the
+ * list cannot be split on it. */
+const KIT_ENTRY_RE =
+  /(.+?)(?: \[([^\]]+)\])?(?: \((?:landed (\d+)×|(spec default, not seen))\))?(?:, |$)/y;
+
+/** `formatEnemyCCKitHeader`'s line read back to its end — the gate's reader
+ * (`checkEnemyCcKitLanded`). Null when the line is not in the generated
+ * format. */
+export function parseEnemyCcKitLine(line: string): IParsedEnemyCcKit | null {
+  const m = KIT_LINE_RE.exec(line);
+  if (!m) return null;
+  const who = m[2] ? (m[1] ? "them" : "you") : undefined;
+  if (who && m[2] !== kitLandedClause(who)) return null;
+  const enemies: IParsedEnemyCcKit["enemies"] = [];
+  for (const part of m[3]!.split("; ")) {
+    const e = KIT_ENEMY_RE.exec(part);
+    if (!e) return null;
+    const entries: IParsedEnemyCcKit["enemies"][number]["entries"] = [];
+    const list = e[3]!;
+    KIT_ENTRY_RE.lastIndex = 0;
+    while (KIT_ENTRY_RE.lastIndex < list.length) {
+      const s = KIT_ENTRY_RE.exec(list);
+      if (!s) return null;
+      entries.push({
+        spellName: s[1]!,
+        ...(s[2] ? { category: s[2] } : {}),
+        landed: s[3] ? Number(s[3]) : 0,
+        specDefault: s[4] !== undefined,
+      });
+    }
+    enemies.push({ spec: e[1]!, name: e[2]!, entries });
+  }
+  return {
+    healerLabel: m[1] ?? null,
+    statesLanded: who !== undefined,
+    enemies,
+  };
 }
 
 /** Compact single-line-per-window exposure entries (see module comment above). */
