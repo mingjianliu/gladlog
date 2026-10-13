@@ -28,6 +28,7 @@
     "test/cdWasteSharedCooldownGate.test.ts",
     "test/cjkLeakGate.test.ts",
     "test/conseqHpStateGate.test.ts",
+    "test/contestedCastRiskGate.test.ts",
     "test/coverageManifest.test.ts",
     "test/crisisHpStateGate.test.ts",
     "test/dampeningStartGate.test.ts",

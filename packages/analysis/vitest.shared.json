@@ -126,6 +126,7 @@
     "test/chargeAvailability.test.ts",
     "test/charmedPlayer.test.ts",
     "test/consequenceGate.test.ts",
+    "test/contestedCastRisk.test.ts",
     "test/context.groundingAbsorb.test.ts",
     "test/context.matchNarrative.test.ts",
     "test/context.resourceSnapshot.test.ts",

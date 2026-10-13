@@ -6,6 +6,8 @@
  * is `undefined` / `null`, and callers treat that as "don't know → say
  * nothing", never as a yes or a no.
  */
+import { effectAurasOfCast } from "../data/castEffectAuras";
+import { CHANNELED_SPELL_IDS } from "../data/channeledGenerated";
 import raw from "../data/spellMechanicsGenerated.json";
 
 interface Entry {
@@ -45,6 +47,31 @@ export function isInstantCast(spellId: string): boolean {
 export function baseCastSeconds(spellId: string): number | undefined {
   const ms = SPELLS[spellId]?.castMs;
   return ms !== undefined && ms > 0 ? ms / 1000 : undefined;
+}
+
+/** What of a cast an interrupt can stop, by official data:
+ *  - `bar`: DB2 gives it a base cast time (`castMs` > 0);
+ *  - `channel`: no cast time, but the cast — or an effect aura the log shows
+ *    it applying (`effectAurasOfCast`) — is officially channelled
+ *    (`CHANNELED_SPELL_IDS`): Lightning Lasso 305483 begins instantly and
+ *    channels its stun 305485, and a kick ends the channel;
+ *  - `none`: DB2 says instant and nothing is channelled.
+ * `undefined` when DB2 has no row for the cast — never read as `none`.
+ * The BASE spell: a talent or proc that makes this unit's cast instant is not
+ * read here. */
+export type InterruptibleCast = "bar" | "channel" | "none";
+
+export function interruptibleCastOf(
+  castSpellId: string,
+): InterruptibleCast | undefined {
+  const ms = SPELLS[castSpellId]?.castMs;
+  if (ms !== undefined && ms > 0) return "bar";
+  if (
+    CHANNELED_SPELL_IDS.has(castSpellId) ||
+    effectAurasOfCast(castSpellId).some((a) => CHANNELED_SPELL_IDS.has(a))
+  )
+    return "channel";
+  return ms === 0 ? "none" : undefined;
 }
 
 /** Does carrying this aura make the carrier immune to a CC of `mech`?

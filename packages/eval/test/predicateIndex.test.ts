@@ -2036,6 +2036,33 @@ const INDEX: PredicateRow[] = [
     symbol: "checkVulnerableOwnerDamage",
     mod: promptQualityCheck,
   },
+  // FT I12: a [CONTESTED] line states cast risk only for a control that has
+  // a cast to interrupt
+  {
+    file: `${A}/utils/spellMechanics.ts`,
+    symbol: "interruptibleCastOf",
+    mod: spellMechanics,
+  },
+  {
+    file: `${A}/utils/healerOffenseAnalysis.ts`,
+    symbol: "contestedTradeTail",
+    mod: healerOffenseAnalysis,
+  },
+  {
+    file: `${A}/utils/healerOffenseAnalysis.ts`,
+    symbol: "contestedTailFormsOfName",
+    mod: healerOffenseAnalysis,
+  },
+  {
+    file: `${A}/utils/healerOffenseAnalysis.ts`,
+    symbol: "CONTESTED_LINE_RE_SRC",
+    mod: healerOffenseAnalysis,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkContestedCastRisk",
+    mod: promptQualityCheck,
+  },
   // FT-T10 readers: a lockout asked for a set of spells
   {
     file: `${A}/utils/cannotCastIntervals.ts`,

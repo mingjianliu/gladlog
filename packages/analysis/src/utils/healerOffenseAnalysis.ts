@@ -1,8 +1,13 @@
 import { ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
-import { castInAuraSet } from "../data/castEffectAuras";
+import {
+  castEffectPairs,
+  castInAuraSet,
+  castsOfEffectAura,
+  effectAurasOfCast,
+} from "../data/castEffectAuras";
 import { SPELL_CATEGORIES as spellsData } from "../data/spellCategories";
-import { getEnglishSpellName } from "../data/spellEffectData";
+import { getEnglishSpellName, spellNamesReady } from "../data/spellEffectData";
 import { ccSpellIds } from "../data/spellTags";
 import {
   buildCannotCastIntervals,
@@ -44,6 +49,7 @@ import {
   fmtWholeSecondsOrZero,
   renderedWindowSeconds,
 } from "./renderGrid";
+import { type InterruptibleCast, interruptibleCastOf } from "./spellMechanics";
 
 /**
  * Is this owner CAST a CC — by its own id, or through the one cast → effect
@@ -392,6 +398,12 @@ export interface IContestedTradeFact {
   durationSeconds: number;
   teamMinHpPct: number;
   ccSpellName: string;
+  /** the owner's cast id of that CC */
+  ccSpellId: string;
+  /** What of that cast an enemy interrupt can stop, by official data
+   * (`interruptibleCastOf`); undefined = DB2 has no row. The line states cast
+   * risk — and the interrupt count — only for `bar` / `channel`. */
+  ccInterruptible: InterruptibleCast | undefined;
   enemyHealerName: string;
   enemyHealerSpec: string;
   /** 'on CD' | 'available' | 'unknown' at segment start */
@@ -399,8 +411,104 @@ export interface IContestedTradeFact {
   ownerHealing: number;
   ownerCCCasts: number;
   /** Enemy interrupts usable at segment start (`isInterruptUsable`: off
-   * cooldown, kicker alive and not in a cast-blocking CC) — cast-risk context. */
+   * cooldown, kicker alive and not in a cast-blocking CC) — cast-risk context,
+   * printed only when the named CC has a cast to interrupt. */
   enemyInterruptsReady: number;
+}
+
+const CONTESTED_TRADE_TEXT =
+  "contested trade: a CC here competed with continued healing";
+const CONTESTED_CAST_RISK_TEXT = "AND carried cast risk";
+const CONTESTED_INSTANT_TEXT = "(instant: no cast to interrupt)";
+const CONTESTED_EV_TEXT = "(EV question, not a verdict).";
+
+/** The three ends a `[CONTESTED]` line can have (`contestedTradeTail`). */
+export type ContestedTailForm = "risk" | "instant" | "silent";
+
+/**
+ * The end of a `[CONTESTED]` line, after `cast N CC` (FT I12, user ruling
+ * 2026-10-11, option b). The line names ONE control — the first of the
+ * owner's that was ready at Full DR — and the cast-risk clause is about that
+ * one:
+ *  - `risk`, a cast bar or a channel: the enemy interrupts ready and `AND
+ *    carried cast risk` (the text every line carried until then);
+ *  - `instant`: neither — `(instant: no cast to interrupt)`. The interrupt
+ *    count is on the line as cast-risk context only, so it goes with the
+ *    clause: beside an instant it reads as a threat to a cast that does not
+ *    exist;
+ *  - `silent`, DB2 has no row for the cast: neither claim.
+ */
+export function contestedTradeTail(
+  interruptible: InterruptibleCast | undefined,
+  enemyInterruptsReady: number,
+): string {
+  if (interruptible === "bar" || interruptible === "channel")
+    return `; enemy interrupts ready: ${enemyInterruptsReady} — ${CONTESTED_TRADE_TEXT} ${CONTESTED_CAST_RISK_TEXT} ${CONTESTED_EV_TEXT}`;
+  if (interruptible === "none")
+    return ` — ${CONTESTED_TRADE_TEXT} ${CONTESTED_INSTANT_TEXT} ${CONTESTED_EV_TEXT}`;
+  return ` — ${CONTESTED_TRADE_TEXT} ${CONTESTED_EV_TEXT}`;
+}
+
+/** One `[CONTESTED]` line. */
+export function formatContestedTradeLine(f: IContestedTradeFact): string {
+  return `  [CONTESTED] ${fmtTime(f.fromSeconds)}–${fmtTime(f.toSeconds)} (${f.durationSeconds}s, team min HP ${f.teamMinHpPct}%): ${f.ccSpellName} ready on enemy healer ${f.enemyHealerName} (DR Full, trinket ${f.enemyHealerTrinket}); you healed ${(f.ownerHealing / 1000).toFixed(0)}k, cast ${f.ownerCCCasts} CC${contestedTradeTail(f.ccInterruptible, f.enemyInterruptsReady)}`;
+}
+
+/** A whole `[CONTESTED]` line, as the gates (`checkContestedCastRisk`,
+ * `scripts/contestedContract.ts`) read it back: 1–2 = the span, 3 = its
+ * seconds, 4 = team min HP, 5 = the control's name, 6 = the enemy healer,
+ * 7 = their trinket, 8 = healed (k), 9 = CC casts, 10 = the tail
+ * (`contestedTradeTail`; `contestedTailForm` reads it). */
+export const CONTESTED_LINE_RE_SRC = String.raw`^ {2}\[CONTESTED\] (\d+:\d{2})–(\d+:\d{2}) \((\d+)s, team min HP (\d+)%\): (.+?) ready on enemy healer (\S+) \(DR Full, trinket ([\w ]+?)\); you healed (\d+)k, cast (\d+) CC((?:; enemy interrupts ready: \d+)? — .*)$`;
+
+/** Which `contestedTradeTail` form a rendered tail is — null when it is none
+ * of the three to its last character. */
+export function contestedTailForm(tail: string): ContestedTailForm | null {
+  const risk = /^; enemy interrupts ready: (\d+) — /.exec(tail);
+  if (risk)
+    return tail === contestedTradeTail("bar", Number(risk[1])) ? "risk" : null;
+  if (tail === contestedTradeTail("none", 0)) return "instant";
+  if (tail === contestedTradeTail(undefined, 0)) return "silent";
+  return null;
+}
+
+let contestedFormsByName: Map<string, Set<ContestedTailForm>> | undefined;
+
+/**
+ * The tail forms `contestedTradeTail` can give a control of this English
+ * name — what a rendered `[CONTESTED]` line, which names its control by name,
+ * can be held to. Read from the same ids and the same official predicate as
+ * the producer: every CC cast (`isOwnerCcCast`), `interruptibleCastOf` of
+ * each. An id that is only another cast's effect aura is not what is pressed
+ * (Capacitor Totem's stun 118905 carries the totem's own 2 s; Song of
+ * Chi-Ji's disorient 198909 carries none) and is left out. One form for
+ * every name but `Fear` on the 12.1 tables (`test/contestedCastRisk.test.ts`
+ * pins that); an empty set = no cast of that name has a DB2 row, so the line
+ * may claim neither (`silent`, which is never in a set).
+ */
+export function contestedTailFormsOfName(
+  spellName: string,
+): ReadonlySet<ContestedTailForm> {
+  let byName = contestedFormsByName;
+  if (!byName) {
+    byName = new Map();
+    const ids = new Set<string>(ccSpellIds);
+    for (const [cast] of castEffectPairs())
+      if (isOwnerCcCast(cast)) ids.add(cast);
+    for (const id of ids) {
+      const effectOnly =
+        castsOfEffectAura(id).length > 0 && effectAurasOfCast(id).length === 0;
+      const kind = effectOnly ? undefined : interruptibleCastOf(id);
+      if (!kind) continue;
+      const name = getEnglishSpellName(id);
+      if (!byName.has(name)) byName.set(name, new Set());
+      byName.get(name)!.add(kind === "none" ? "instant" : "risk");
+    }
+    // the names load in the background: an index built before they are in
+    // would be keyed on ids
+    if (spellNamesReady()) contestedFormsByName = byName;
+  }
+  return byName.get(spellName) ?? new Set();
 }
 
 export function computeContestedTradeFacts(
@@ -470,6 +578,8 @@ export function computeContestedTradeFacts(
       durationSeconds: seg.durationSeconds,
       teamMinHpPct: seg.teamMinHpPct,
       ccSpellName: readyAtFullDR.spellName,
+      ccSpellId: readyAtFullDR.spellId,
+      ccInterruptible: interruptibleCastOf(readyAtFullDR.spellId),
       enemyHealerName: enemyHealer.name,
       enemyHealerSpec: specToString(enemyHealer.spec),
       enemyHealerTrinket,
@@ -1128,11 +1238,8 @@ export function formatHealerOffenseForContext(
     );
   }
 
-  for (const f of summary.contestedTradeFacts) {
-    lines.push(
-      `  [CONTESTED] ${fmtTime(f.fromSeconds)}–${fmtTime(f.toSeconds)} (${f.durationSeconds}s, team min HP ${f.teamMinHpPct}%): ${f.ccSpellName} ready on enemy healer ${f.enemyHealerName} (DR Full, trinket ${f.enemyHealerTrinket}); you healed ${(f.ownerHealing / 1000).toFixed(0)}k, cast ${f.ownerCCCasts} CC; enemy interrupts ready: ${f.enemyInterruptsReady} — contested trade: a CC here competed with continued healing AND carried cast risk (EV question, not a verdict).`,
-    );
-  }
+  for (const f of summary.contestedTradeFacts)
+    lines.push(formatContestedTradeLine(f));
 
   // The "facts, not conclusions / cross-check the timeline / valid uses of slack" guidance is
   // already in the system prompt's healer-offense rules — repeating it here cost ~35 tok/match

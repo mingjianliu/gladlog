@@ -192,7 +192,12 @@ import {
 } from "@gladlog/analysis/src/utils/enemyDefensives";
 import { DURING_ABSORBED_TAG_RE_SRC } from "@gladlog/analysis/src/utils/externalDamage";
 import { FORCED_MOVE_TEXT } from "@gladlog/analysis/src/utils/forcedDisplacement";
-import { VULNERABLE_OWNER_DAMAGE_RE_SRC } from "@gladlog/analysis/src/utils/healerOffenseAnalysis";
+import {
+  CONTESTED_LINE_RE_SRC,
+  contestedTailForm,
+  contestedTailFormsOfName,
+  VULNERABLE_OWNER_DAMAGE_RE_SRC,
+} from "@gladlog/analysis/src/utils/healerOffenseAnalysis";
 import {
   JUKE_LOOKBACK_MS,
   JUKED_BY_FAKE_HEAD,
@@ -1263,6 +1268,46 @@ export function checkVulnerableOwnerDamage(lines: string[]): string[] {
     if (Number(m[2]) > Number(m[1]))
       failures.push(
         `line ${i + 1}: [VULNERABLE] your damage on it ${m[2]}k 大于同一目标的 team damage ${m[1]}k total`,
+      );
+  });
+  return failures;
+}
+
+const CONTESTED_LINE = new RegExp(CONTESTED_LINE_RE_SRC);
+
+/**
+ * A `[CONTESTED]` line states cast risk only for a control that has a cast
+ * to interrupt (FT I12, user ruling 2026-10-11, option b). The producer
+ * (`contestedTradeTail`) reads the named control's own cast id through the
+ * official `interruptibleCastOf`: a cast bar or a channel carries `enemy
+ * interrupts ready: N` and `AND carried cast risk`; an instant carries
+ * neither and says `(instant: no cast to interrupt)`; a cast DB2 has no row
+ * for claims neither. Every line said the first until then — 332 lines on
+ * the 605-file capture, 193 of them naming an instant (Psychic Scream 84,
+ * Holy Word: Chastise 25, Maim 16, Hammer of Justice 16, …).
+ *
+ * Read back from the rendered name through the producer's own index
+ * (`contestedTailFormsOfName`: the same ids, the same predicate). Fails a
+ * `[CONTESTED]` line that is not in the generated format to its end, and one
+ * whose tail is a form no cast of that name can have.
+ */
+export function checkContestedCastRisk(lines: string[]): string[] {
+  const failures: string[] = [];
+  lines.forEach((line, i) => {
+    if (!line.includes("[CONTESTED]")) return;
+    const m = line.match(CONTESTED_LINE);
+    const form = m ? contestedTailForm(m[10]!) : null;
+    if (!m || !form) {
+      failures.push(
+        `line ${i + 1}: [CONTESTED] 格式不符(整行必须按生成格式)—— ${line.trim().slice(0, 200)}`,
+      );
+      return;
+    }
+    const allowed = contestedTailFormsOfName(m[5]!);
+    const ok = allowed.size === 0 ? form === "silent" : allowed.has(form);
+    if (!ok)
+      failures.push(
+        `line ${i + 1}: [CONTESTED] ${m[5]} 按官方施法时间应为 ${allowed.size === 0 ? "silent" : [...allowed].join(" / ")},行尾写的是 ${form} —— ${line.trim().slice(0, 200)}`,
       );
   });
   return failures;
@@ -7135,6 +7180,7 @@ export function checkMatch(
   hardFailures.push(...checkBurstTargetDamageParts(lines));
   hardFailures.push(...checkBurstAllyOverlap(lines));
   hardFailures.push(...checkVulnerableOwnerDamage(lines));
+  hardFailures.push(...checkContestedCastRisk(lines));
   hardFailures.push(...checkKillWindowWithinRound(lines));
   hardFailures.push(...checkAuraEndWithinRound(lines));
   hardFailures.push(...checkUnpurgedWithinRound(lines));

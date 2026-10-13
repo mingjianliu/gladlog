@@ -1402,11 +1402,66 @@ describe("F193 V2 — contested trade facts", () => {
     // Shaman archive rounds cast it). The old hand table keyed on class only
     // and this fixture's healer has no class set, so it used to count 0.
     expect(fact.enemyInterruptsReady).toBe(2);
+    // FT I12: Psychic Scream 8122 is instant by DB2 — no cast-risk clause and
+    // no interrupt count on its line
+    expect(fact.ccSpellId).toBe("8122");
+    expect(fact.ccInterruptible).toBe("none");
 
     const lines = formatHealerOffenseForContext(summary);
     const text = lines.join("\n");
     expect(text).toContain("[CONTESTED]");
     expect(text).toContain("EV question, not a verdict");
+    expect(text).toContain(
+      "cast 1 CC — contested trade: a CC here competed with continued healing (instant: no cast to interrupt) (EV question, not a verdict).",
+    );
+    expect(text).not.toContain("cast risk");
+    expect(text).not.toContain("enemy interrupts ready");
+  });
+
+  it("1b. a control with a cast time keeps the interrupt count and the cast-risk clause (FT I12)", () => {
+    const partialHpActions = [];
+    for (let s = 0; s <= 120; s += 5) {
+      partialHpActions.push(
+        makeAdvancedAction(T0 + s * 1000, 0, 0, 500_000, 375_000),
+      );
+    }
+    const mate = makeFriend("mate", {
+      advancedActions: partialHpActions as never[],
+    });
+    const owner = makeFriend("owner", {
+      spellCastEvents: [
+        // Cyclone: 1.7 s base cast
+        makeSpellCastEvent(
+          "33786",
+          T0 + 100_000,
+          "enemy-h",
+          "Rsham",
+          "owner",
+          "Owner",
+        ),
+      ],
+    });
+    const enemyWarrior = makeUnit("enemy-w", {
+      reaction: CombatUnitReaction.Hostile,
+      class: CombatUnitClass.Warrior,
+      name: "Ewar",
+    });
+    const summary = buildHealerOffenseSummary(
+      combat,
+      owner,
+      [owner, mate],
+      [enemyHealer, enemyWarrior],
+      [],
+      emptyEnemyTimeline(),
+      [],
+      [],
+      [],
+    );
+    expect(summary.contestedTradeFacts.length).toBe(1);
+    expect(summary.contestedTradeFacts[0].ccInterruptible).toBe("bar");
+    expect(formatHealerOffenseForContext(summary).join("\n")).toContain(
+      "cast 1 CC; enemy interrupts ready: 2 — contested trade: a CC here competed with continued healing AND carried cast risk (EV question, not a verdict).",
+    );
   });
 
   it("2. emits no facts when team is at 60% HP (below the band)", () => {
