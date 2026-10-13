@@ -63,6 +63,11 @@ import {
   isDamageImmuneControl,
 } from "@gladlog/analysis/src/analysis/candidates/massDispel";
 import { fmtFactNum } from "@gladlog/analysis/src/analysis/factFormat";
+import {
+  citableEventCount,
+  findingsPromptHead,
+  menuEventIdsOfPrompt,
+} from "@gladlog/analysis/src/analysis/findingsCount";
 import { parseBurstAnsweredLine } from "@gladlog/analysis/src/context/burstAnswered";
 import {
   CC_USE_CAP,
@@ -5659,6 +5664,44 @@ export function checkLegendCrossReferences(lines: string[]): string[] {
 }
 
 /**
+ * The number of findings a findings prompt asks for agrees with its own menu
+ * (L07, user ruling 2026-10-11). The prompt opened "Produce 4-8 coaching
+ * findings" whatever followed, and 1,861 of the 2,677 non-empty menus on the
+ * 605 capture hold one to three events; the stored replies to it carry 34
+ * surplus findings in 195.
+ *
+ * Both sides are the builder's own: the menu is read back from the rendered
+ * rows by `menuEventIdsOfPrompt`, counted by `citableEventCount` (distinct ids
+ * — what `auditFindings` can resolve), and the first line must be
+ * `findingsPromptHead` of that count. So a prompt that states a count its menu
+ * cannot carry fails, and so does one that states the right count in other
+ * words than the builder's.
+ *
+ * The bare match context (the default corpus prompt) has no menu block and is
+ * not held.
+ */
+const FINDINGS_HEAD =
+  /^You are a World of Warcraft arena coach reviewing a (.+?)'s match\. /;
+export function checkFindingsCountFollowsMenu(lines: string[]): string[] {
+  const ids = menuEventIdsOfPrompt(lines);
+  if (ids === null) return [];
+  const n = citableEventCount(ids.map((id) => ({ id })));
+  const head = lines[0] ?? "";
+  const spec = FINDINGS_HEAD.exec(head)?.[1];
+  if (spec === undefined)
+    return [
+      `line 1: a findings prompt (it has an event menu of ${n}) does not open with the coach sentence`,
+    ];
+  if (head === findingsPromptHead(spec, n)) return [];
+  const asked =
+    /Produce (.+? coaching findings?) as JSON/.exec(head)?.[1] ??
+    "no count the builder writes";
+  return [
+    `line 1: asks for "${asked}" while its menu holds ${n} event${n === 1 ? "" : "s"} (${ids.length} row${ids.length === 1 ? "" : "s"}) — not the instruction findingsCountInstruction(${n}) writes`,
+  ];
+}
+
+/**
  * A roster unit named as the owner of something — `5(BMHunter)'s pet`,
  * `2(FMage)'s Pyroblast` — carries its spec tag, like every other reference
  * to it (`unitLabel.ts` `rosterLabelByName`, the one builder of the tag).
@@ -7311,6 +7354,7 @@ export function checkMatch(
   hardFailures.push(...checkKickWaitedOutConsistency(lines));
   hardFailures.push(...checkCdHoardedOwnerFree(lines));
   hardFailures.push(...checkLegendCrossReferences(lines));
+  hardFailures.push(...checkFindingsCountFollowsMenu(lines));
   hardFailures.push(...checkBareRosterPossessive(lines));
   hardFailures.push(...checkStayedInForcedMove(lines));
   hardFailures.push(...checkKickEatenRefusedForAnotherReason(lines));

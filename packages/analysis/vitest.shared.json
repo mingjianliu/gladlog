@@ -23,6 +23,7 @@
     "src/analysis/deepDive.window.test.ts",
     "src/analysis/factFormat.test.ts",
     "src/analysis/findingCategories.test.ts",
+    "src/analysis/findingsCount.test.ts",
     "src/analysis/hindsightLint.test.ts",
     "src/analysis/momentSnapshot.test.ts",
     "src/analysis/parseModelJson.test.ts",

@@ -109,7 +109,13 @@ describe("buildFindingsPrompt", () => {
 
   describe("挑选层多样性指令(2026-08-11 定为旧四族合计上限 2,2026-08-15 约束审计 C1 放宽为 3;2026-08-19 GH #14 cc-locked 与 wasted-trinket 先后退役后缩为二族)", () => {
     it("prompt 含合计最多 3 条的指令行,并逐一列出 LEGACY_TOPIC_TYPES 的两个类型名", () => {
-      const p = buildFindingsPrompt(candidates, "", "Discipline Priest");
+      // A menu that can carry more than three findings: the cap of 3 is
+      // printed only where it can bind (findingsCount.test.ts).
+      const four = [0, 1, 2, 3].map((i) => ({
+        ...candidates[0]!,
+        id: `death:a:${30 + i}`,
+      }));
+      const p = buildFindingsPrompt(four, "", "Discipline Priest");
       // The instruction sentence itself (wording, not just the type names).
       expect(p).toMatch(/at most 3 findings TOTAL/);
       expect(p).toMatch(/Prioritize covering DIFFERENT event types/);

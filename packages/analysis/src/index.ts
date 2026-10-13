@@ -105,6 +105,7 @@ export * from "./analysis/buildFindingsPrompt";
 export * from "./analysis/causalLint";
 export * from "./analysis/deepDive";
 export * from "./analysis/findingCategories";
+export * from "./analysis/findingsCount";
 export * from "./analysis/hindsightLint";
 export * from "./analysis/parseModelJson";
 export * from "./analysis/rosterLint";

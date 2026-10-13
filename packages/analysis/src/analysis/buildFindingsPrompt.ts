@@ -1,11 +1,6 @@
 import { CANDIDATE_TYPE_FLAGS } from "../data/candidateTypeFlags";
 import { CANDIDATE_TYPE_REGISTRY } from "../data/candidateTypeRegistry";
 import {
-  CD_WASTE_SHARED_COOLDOWN_NOTE,
-  cdWasteSpellNames,
-  LEGACY_TOPIC_TYPES,
-} from "./candidateFindings";
-import {
   LATE_WINDOW_SECONDS,
   PRE_WALL_SECONDS,
   REACTION_WINDOW_S,
@@ -14,21 +9,23 @@ import {
   UNNECESSARY_TARGET_HP_PCT,
 } from "../utils/cooldowns";
 import { DR_CHAIN_LOOKAHEAD_S } from "../utils/dispelAnalysis";
+import {
+  CD_WASTE_SHARED_COOLDOWN_NOTE,
+  cdWasteSpellNames,
+} from "./candidateFindings";
 import { serializeFactsBlock } from "./factFormat";
 import { FINDING_CATEGORIES } from "./findingCategories";
+import {
+  citableEventCount,
+  EVENT_MENU_HEADER,
+  findingsPromptHead,
+  menuRowHead,
+} from "./findingsCount";
 import type { CandidateEvent } from "./types";
 
 /** The category enum rendered into the prompt (the same constant the audit
  * normalizes against -- single-source predicate). */
 const CATEGORY_UNION = FINDING_CATEGORIES.map((c) => `"${c}"`).join("|");
-
-/** Rendered into the selection-rule sentence below and shared with
- * auditFindings.ts's deterministic cap on the very same set — single-source
- * (CLAUDE.md shared-predicate rule), see LEGACY_TOPIC_TYPES's doc comment in
- * candidateFindings.ts. */
-const LEGACY_TYPES_LIST = [...LEGACY_TOPIC_TYPES]
-  .map((t) => `"${t}"`)
-  .join(", ");
 
 /** Cost-norm guard-note wording (#25, 2026-08-14 挂账清理 Task D): appended to
  * every legend line whose type can carry a `facts.costNorm` fact
@@ -216,24 +213,21 @@ export function buildFindingsPrompt(
       const when =
         c.facts.t !== undefined ? `t=${c.facts.t}s` : `t=whole-round`;
       return (
-        `  - id=${c.id} type=${c.type} ${when} units=${c.unitNames.join("/")}` +
+        `${menuRowHead(c)} ${when} units=${c.unitNames.join("/")}` +
         ` facts={${serializeFactsBlock(c.facts)}}`
       );
     })
     .join("\n");
   return [
-    `You are a World of Warcraft arena coach reviewing a ${specName}'s match. Produce 4-8 coaching findings as JSON — as many as the event menu genuinely supports; never fabricate, but prefer covering MORE distinct menu events over polishing few. Spread coverage across the whole match: when the menu has early/mid-game events (missed-cleanse, missed-purge, kick-eaten, bursts, kicks, targeting), do not spend every finding on the final seconds, and cover at least two non-death event types when present. At most 2 findings may be anchored solely on death events; when a death has "death-setup" events, pair them into one chain finding instead of adding another death-only item. Prioritize covering DIFFERENT event types over repeating the same one: of ${LEGACY_TYPES_LIST}, at most 3 findings TOTAL (combined across both, not 3 each) may draw from that group even when the menu offers more of them — spend your remaining picks on other types instead.`,
+    // The count follows the menu (L07, user ruling 2026-10-11): the sentence
+    // and its selection rules live in findingsCount.ts, keyed on the number
+    // of events a finding can cite.
+    findingsPromptHead(specName, citableEventCount(candidates)),
     ``,
     `Match context (for reasoning about the arc — do NOT cite anything not in the event menu):`,
     richContext,
     ``,
-    // FT-T15 ① (user ruling 2026-10-10): the header states the citation rule
-    // only. It used to call the menu "the ONLY things that provably happened",
-    // while 3,793 of 8,017 rows on the 605 capture are facts about something
-    // that did NOT happen (a cooldown not pressed, a debuff not dispelled) and
-    // 2,322 carry corpus reference numbers. The constraint itself — cite menu
-    // ids only — is unchanged (see the ACCURACY NOTE above).
-    `Event menu (the ONLY events and facts a finding may cite — every finding must reference these ids):`,
+    EVENT_MENU_HEADER,
     menu || "  (none)",
     ``,
     `Event legend:`,

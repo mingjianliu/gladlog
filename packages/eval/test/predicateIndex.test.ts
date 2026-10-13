@@ -35,6 +35,7 @@ import * as cdTriggerPrior from "@gladlog/analysis/src/analysis/cdTriggerPrior";
 import * as crisisDecisionPoints from "@gladlog/analysis/src/analysis/crisisDecisionPoints";
 import * as factFormat from "@gladlog/analysis/src/analysis/factFormat";
 import * as findingCategories from "@gladlog/analysis/src/analysis/findingCategories";
+import * as findingsCount from "@gladlog/analysis/src/analysis/findingsCount";
 import * as hindsightLint from "@gladlog/analysis/src/analysis/hindsightLint";
 import * as momentSnapshot from "@gladlog/analysis/src/analysis/momentSnapshot";
 import * as stackedDefensives from "@gladlog/analysis/src/analysis/stackedDefensives";
@@ -3453,6 +3454,46 @@ const INDEX: PredicateRow[] = [
   {
     file: `${E}/quality/promptQualityCheck.ts`,
     symbol: "checkLegendCrossReferences",
+    mod: promptQualityCheck,
+  },
+  {
+    file: `${A}/analysis/findingsCount.ts`,
+    symbol: "findingsCountInstruction",
+    mod: findingsCount,
+  },
+  {
+    file: `${A}/analysis/findingsCount.ts`,
+    symbol: "findingsPromptHead",
+    mod: findingsCount,
+  },
+  {
+    file: `${A}/analysis/findingsCount.ts`,
+    symbol: "citableEventCount",
+    mod: findingsCount,
+  },
+  {
+    file: `${A}/analysis/findingsCount.ts`,
+    symbol: "citableEvents",
+    mod: findingsCount,
+  },
+  {
+    file: `${A}/analysis/findingsCount.ts`,
+    symbol: "menuEventIdsOfPrompt",
+    mod: findingsCount,
+  },
+  {
+    file: `${A}/analysis/findingsCount.ts`,
+    symbol: "menuRowHead",
+    mod: findingsCount,
+  },
+  {
+    file: `${A}/analysis/findingsCount.ts`,
+    symbol: "EVENT_MENU_HEADER",
+    mod: findingsCount,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkFindingsCountFollowsMenu",
     mod: promptQualityCheck,
   },
   {

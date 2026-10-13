@@ -2,6 +2,7 @@ import { claimChecker, interpolate } from "../compare/claimChecker";
 import { ATTEMPTED_GUARD_TYPES, LEGACY_TOPIC_TYPES } from "./candidateFindings";
 import { causalLint } from "./causalLint";
 import { normalizeFindingCategory } from "./findingCategories";
+import { citableEvents } from "./findingsCount";
 import { hindsightViolations } from "./hindsightLint";
 import { rosterClassViolations } from "./rosterLint";
 import { repairSpellNameZh } from "./spellNameZhLint";
@@ -53,7 +54,9 @@ export function auditFindings(
   candidates: CandidateEvent[],
   options: AuditOptions = {},
 ): AuditResult {
-  const byId = new Map(candidates.map((c) => [c.id, c]));
+  // One entry per distinct menu id — the same map the prompt's requested
+  // count is taken from (findingsCount.ts).
+  const byId = citableEvents(candidates);
   // Diversity cap bookkeeping (2026-08-11): carried alongside each survivor
   // through the gate layers below so the post-loop cap (see after the loop)
   // can tell, without re-resolving eventIds, whether a finding belongs to the
