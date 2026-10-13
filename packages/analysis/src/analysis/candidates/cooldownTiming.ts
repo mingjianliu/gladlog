@@ -1663,6 +1663,10 @@ export function cdHoardedEvents(
     toS: number,
     /** asked for one cooldown: a lockout counts only on its school (FT-T10) */
     spellId?: string,
+    /** the press would land on the owner (their own crisis) — with
+     * `ownerActState`'s, what lets a school-limited purge count under a stun
+     * (I05 c, `stunLetsPress`) */
+    onSelf?: boolean,
   ) => boolean,
   /** User ruling 2026-09-26 (reliability leftovers item 3, fa5e): the crisis
    * counts as answered when the OWNER cast a control (a peel) or ANY friendly
@@ -1874,9 +1878,15 @@ export function cdHoardedEvents(
           ownerReachesEnemyTarget?.(cd.spellId, p.tSec) !== false,
       );
       // the owner could press THIS cooldown: free of CC, and of a lockout on
-      // its school, for REACTION_WINDOW_S of `ownerFreeSpan`
+      // its school, for REACTION_WINDOW_S of `ownerFreeSpan`. I05 (c): a stun
+      // is no CC for a cooldown the game lets a stunned player press — the
+      // reading `facts.ownerFreeS` has, so the gate and the fact agree per
+      // cooldown (an owner stunned through the span with Icebound Fortitude
+      // in hand is named for it; with Anti-Magic Shell alone, not)
       const ready = readyButForOwner.filter(
-        (cd) => ownerCouldRespond?.(free.fromS, free.toS, cd.spellId) !== false,
+        (cd) =>
+          ownerCouldRespond?.(free.fromS, free.toS, cd.spellId, src.own) !==
+          false,
       );
       // the trace keeps its two reasons: the owner could not act (for any
       // ready cooldown, or — with none ready — at all), else nothing ready

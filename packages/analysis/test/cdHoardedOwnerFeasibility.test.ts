@@ -591,17 +591,89 @@ describe("cdHoardedEvents — ownerFreeS reads a stun per named cooldown (I05 c)
     expect(holy!.facts!.ownerFreeS).toBe("3.0");
   });
 
-  it("the fact alone moves: the same rows with and without the reading", () => {
+  it("the gate reads it too: stunned through the whole span, a stun-pressable cooldown is named, another is not", () => {
+    const whole = unit([
+      aura("853", "Hammer of Justice", 59.9, true),
+      aura("853", "Hammer of Justice", 65.5, false),
+    ]);
+    // Icebound Fortitude could be pressed for all 5 s
+    const [e] = run(whole, [IBF]);
+    expect(e!.facts!.readyCds).toBe("Icebound Fortitude");
+    expect(e!.facts!.ownerCc).toBe("Hammer of Justice -0.1…+5.5s");
+    expect(e!.facts!.ownerFreeS).toBe("5.0");
+    // Anti-Magic Shell could not: no row for it alone, and it is not named
+    // next to the one that could
+    expect(run(whole, [AMS])).toHaveLength(0);
+    const [both] = run(whole, [AMS, IBF]);
+    expect(both!.facts!.readyCds).toBe("Icebound Fortitude");
+    // without the reading (every other caller of actWindowFor): no row
+    expect(run(whole, [AMS, IBF], { stunPressable: false })).toHaveLength(0);
+    // a teammate's crisis, Blessing of Protection: the stun on the paladin
+    // is not purged by a press on someone else
+    const kidney = unit([
+      aura("408", "Kidney Shot", 59.9, true),
+      aura("408", "Kidney Shot", 65.5, false),
+    ]);
+    expect(run(kidney, [BOP], { own: false })).toHaveLength(0);
+    expect(run(kidney, [BOP])).toHaveLength(1);
+  });
+
+  it("direction: the reading only ADDS — every row without it is a row with it, each cooldown still named", () => {
+    let added = 0;
     for (let from = 58; from <= 66; from += 0.31)
       for (const len of [0.6, 2, 4.2, 6.5]) {
         const u = unit([
           aura("853", "Hammer of Justice", from, true),
           aura("853", "Hammer of Justice", from + len, false),
         ]);
-        expect(run(u, [IBF, AMS]).map((e) => e.id)).toEqual(
-          run(u, [IBF, AMS], { stunPressable: false }).map((e) => e.id),
-        );
+        const withIt = run(u, [IBF, AMS]);
+        const without = run(u, [IBF, AMS], { stunPressable: false });
+        for (const o of without) {
+          const w = withIt.find((e) => e.id === o.id);
+          expect(w).toBeDefined();
+          for (const name of o.facts!.readyCds!.split("; "))
+            expect(w!.facts!.readyCds).toContain(name);
+        }
+        added += withIt.length - without.length;
       }
+    expect(added).toBeGreaterThan(0);
+  });
+
+  it("gate and fact are one count per cooldown (sweep, stun-pressable and not)", () => {
+    for (let from = 58; from <= 66; from += 0.137)
+      for (const len of [0.4, 1.2, 3, 4.6, 6.5])
+        for (const cd of [IBF, AMS]) {
+          const u = unit([
+            aura("853", "Hammer of Justice", from, true),
+            aura("853", "Hammer of Justice", from + len, false),
+          ]);
+          const act = actWindowFor(
+            u,
+            new Set(["e"]),
+            T0,
+            undefined,
+            undefined,
+            { pvpTalentIds: new Set() },
+          );
+          const span = ownerFreeSpan(60);
+          const free = act.stateIn(
+            58.5,
+            span.toS,
+            span.fromS,
+            [cd.spellId],
+            true,
+          )!.freeAfterS;
+          expect(act.couldRespond(span.fromS, span.toS, cd.spellId, true)).toBe(
+            free >= REACTION_WINDOW_S,
+          );
+          const out = run(u, [cd]);
+          expect(out).toHaveLength(free >= REACTION_WINDOW_S ? 1 : 0);
+          for (const e of out)
+            if (e.facts!.ownerFreeS !== undefined)
+              expect(Number(e.facts!.ownerFreeS)).toBeGreaterThanOrEqual(
+                REACTION_WINDOW_S,
+              );
+        }
   });
 });
 

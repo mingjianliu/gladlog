@@ -115,8 +115,17 @@ describe("checkCdHoardedOwnerFree ⇄ cdHoardedEvents (one span for the gate and
     gate: (
       act: ReturnType<typeof actWindowFor>,
     ) => ReturnType<typeof actWindowFor>["couldRespond"],
+    cd = { spellId: "33206", spellName: "Pain Suppression" },
+    stunPressable = false,
   ) => {
-    const act = actWindowFor(u, new Set(["e"]), T0);
+    const act = actWindowFor(
+      u,
+      new Set(["e"]),
+      T0,
+      undefined,
+      undefined,
+      stunPressable ? { pvpTalentIds: new Set() } : undefined,
+    );
     const events = cdHoardedEvents(
       [
         {
@@ -137,8 +146,7 @@ describe("checkCdHoardedOwnerFree ⇄ cdHoardedEvents (one span for the gate and
       ],
       [
         {
-          spellId: "33206",
-          spellName: "Pain Suppression",
+          ...cd,
           tag: "Defensive",
           cooldownSeconds: 180,
           casts: [],
@@ -165,6 +173,24 @@ describe("checkCdHoardedOwnerFree ⇄ cdHoardedEvents (one span for the gate and
         expect(checkCdHoardedOwnerFree(lines)).toEqual([]);
       }
     expect(rows).toBeGreaterThan(40);
+  });
+
+  it("with the stun read per cooldown (I05 c) the rows a stunned owner now gets pass too", () => {
+    let rows = 0;
+    for (let from = 57.5; from <= 66; from += 0.173)
+      for (const len of [0.5, 1.5, 3, 4.5, 6, 9]) {
+        const lines = menu(
+          stunned(from, from + len),
+          (a) => a.couldRespond,
+          // Pain Suppression: DB2 lets a stunned priest press it
+          { spellId: "33206", spellName: "Pain Suppression" },
+          true,
+        );
+        rows += lines.filter((l) => l.includes("type=cd-hoarded ")).length;
+        expect(checkCdHoardedOwnerFree(lines)).toEqual([]);
+      }
+    // every position of the stun leaves a row: it never stops the button
+    expect(rows).toBe(50 * 6);
   });
 
   it("mutation: the gate asked over the old window (1.5 s before t included) prints a row the check rejects", () => {

@@ -894,10 +894,8 @@ export interface ActWindowState {
    * `cannotCastIntervalsForSpells`). `blocks` stays the UNIT's own
    * intervals: what sat on a pet is counted here and never named there.
    * The same count as `couldRespond(anchorS, toS, spell)` compares with
-   * REACTION_WINDOW_S (`freeMsIn`): asked for one spell over the same span,
-   * the two cannot disagree — but for a stun under `stunPressable`, which
-   * this count reads per spell and `couldRespond` does not yet (so this is
-   * never the smaller of the two).
+   * REACTION_WINDOW_S (`freeMsIn`): asked for one spell over the same span
+   * (and the same `onSelf`), the two cannot disagree.
    * With `stunPressable`, a stun is not counted against a spell the game
    * lets a stunned player press (`stunLetsPress`); `blocks` still names it. */
   freeAfterS: number;
@@ -928,15 +926,18 @@ export interface ActWindowState {
  * is the unit's, not the pet's.
  *
  * `stunPressable` (I05 option c, user ruling 2026-10-11; cd-hoarded's
- * reader): the unit's PvP talents. When given, `stateIn`'s free time asks of
- * each stun on the unit whether the game lets a stunned player press the
- * spell (`stunLetsPress`) — an interval is counted only when it stops EVERY
- * spell asked about, a stun included: Icebound Fortitude under a Shockwave is
- * pressable, so `readyCds=Icebound Fortitude, ownerCc=Shockwave +0.8…+2.8s`
- * reads `ownerFreeS=5.0`, not 3.0 (11346ea9 r1 @51). `onSelf` says the press
- * would land on the unit itself (the owner's own crisis): only then can a
- * school-limited purge count. Absent ⇒ every aura stops everything, as for
- * every other reader.
+ * reader): the unit's PvP talents. When given, the free time — the gate's
+ * and the fact's, it is one count — asks of each stun on the unit whether
+ * the game lets a stunned player press the spell (`stunLetsPress`): an
+ * interval is counted only when it stops EVERY spell asked about, a stun
+ * included. Icebound Fortitude under a Shockwave is pressable, so
+ * `readyCds=Icebound Fortitude, ownerCc=Shockwave +0.8…+2.8s` reads
+ * `ownerFreeS=5.0`, not 3.0 (11346ea9 r1 @51), and an owner stunned for the
+ * whole span with Icebound Fortitude in hand could press it — `couldRespond`
+ * says so. `onSelf` says the press would land on the unit itself (the
+ * owner's own crisis): only then can a school-limited purge count. Asked
+ * with no spell, and without `stunPressable`, every aura stops everything,
+ * as for every other reader.
  */
 export function actWindowFor(
   unit: ICombatUnit,
@@ -946,7 +947,12 @@ export function actWindowFor(
   units?: RoundUnits,
   stunPressable?: { pvpTalentIds: ReadonlySet<string> },
 ): {
-  couldRespond: (fromS: number, toS: number, spellId?: string) => boolean;
+  couldRespond: (
+    fromS: number,
+    toS: number,
+    spellId?: string,
+    onSelf?: boolean,
+  ) => boolean;
   stateIn: (
     fromS: number,
     toS: number,
@@ -1017,8 +1023,10 @@ export function actWindowFor(
       endMs(toS),
     );
   return {
-    couldRespond: (fromS, toS, spellId) =>
-      freeMsIn(fromS, toS, spellId === undefined ? undefined : [spellId]) >=
+    couldRespond: (fromS, toS, spellId, onSelf) =>
+      freeMsIn(fromS, toS, spellId === undefined ? undefined : [spellId], {
+        onSelf: onSelf === true,
+      }) >=
       REACTION_WINDOW_S * 1000,
     stateIn: (fromS, toS, anchorS, spellIds, onSelf) => {
       const fromMs = matchStartMs + fromS * 1000;
