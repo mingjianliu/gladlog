@@ -790,6 +790,19 @@ const INDEX: PredicateRow[] = [
     symbol: "talentModifierOwnershipOf",
     mod: talentOwnership,
   },
+  // 2026-10-13: the button a talent grants when its entry carries another
+  // spell id than the cast (Fortifying Brew 388917 → 115203) — the cooldown
+  // ledger's ownership rule and talentOwnershipFromTables read one map
+  {
+    file: `${A}/utils/talents.ts`,
+    symbol: "getSpecTalentButtonGrants",
+    mod: talents,
+  },
+  {
+    file: `${A}/utils/talents.ts`,
+    symbol: "getPlayerTalentGrantedButtonIds",
+    mod: talents,
+  },
   {
     file: `${A}/data/racialAbilities.ts`,
     symbol: "RACIAL_ABILITIES",

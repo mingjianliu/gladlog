@@ -253,8 +253,10 @@ export const RESPONSE_ONLY_DEFENSIVE_IDS: ReadonlySet<string> = new Set([
  * buttons are left out: Feign Death keeps its own aura proof and is never
  * named as held. Not covered (DB2 does not prove them this way; none is
  * guessed in): Lay on Hands 471195, Fortifying Brew 115203, Blessing of
- * Spellwarding 204018, Anti-Magic Shell 410358. Registered in
- * curatedIdRegistry.
+ * Spellwarding 204018, Anti-Magic Shell 410358 — the first two are talents
+ * whose entry carries another id and are proven from the unit's talents
+ * since 2026-10-13 (`extractMajorCooldowns` → `talentsGrantButton`).
+ * Registered in curatedIdRegistry.
  */
 export const BASELINE_DEFENSIVE_BY_SPEC: Readonly<
   Record<string, readonly string[]>
