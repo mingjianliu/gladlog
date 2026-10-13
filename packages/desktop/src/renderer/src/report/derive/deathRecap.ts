@@ -184,7 +184,11 @@ export function deriveDeathRecaps(source: ReportSource): DeathRecap[] {
       const oppPets = allUnits.filter(
         (u) => u.ownerId && oppIds.has(u.ownerId),
       );
-      return analyzePlayerCCAndTrinket(p, opponents, combatLike, oppPets);
+      // The round itself, as the prompt and keyMoments.ts hand it: the
+      // function reads the round's end off it (`roundEndMs`), so a control
+      // still on at a Solo Shuffle round's ending death stops there instead
+      // of at its removal logged up to 2 s later.
+      return analyzePlayerCCAndTrinket(p, opponents, legacy, oppPets);
     });
     // I-1 (reviewer finding): the teammate/missedExternals loop inside
     // buildDeathOutcomeSummary does no faction filtering (it trusts the caller

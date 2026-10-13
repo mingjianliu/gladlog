@@ -69,7 +69,8 @@ interface CcSpan {
  * (ring + drain bar). CC detection = analyzePlayerCCAndTrinket, the same
  * predicate the prompt's [CC ON TEAM] lines and the death recap consume —
  * interval ends are log ground truth (aura apply→remove), so a trinket break
- * shortens the bar exactly where it shortened the CC.
+ * shortens the bar exactly where it shortened the CC; one still on when the
+ * round ended stops at the round's end, as its prompt line does.
  */
 export function deriveCcSpans(source: ReportSource): Record<string, CcSpan[]> {
   try {
@@ -77,11 +78,6 @@ export function deriveCcSpans(source: ReportSource): Record<string, CcSpan[]> {
     const players = Object.values(legacy.units).filter((u) => u.info);
     if (players.length === 0) return {};
     const allUnits = Object.values(legacy.units);
-    const combatLike = {
-      startTime: legacy.startTime,
-      endTime: legacy.endTime,
-      startInfo: { zoneId: legacy.startInfo.zoneId },
-    };
 
     const out: Record<string, CcSpan[]> = {};
     for (const p of players) {
@@ -90,12 +86,11 @@ export function deriveCcSpans(source: ReportSource): Record<string, CcSpan[]> {
       const oppPets = allUnits.filter(
         (u) => u.ownerId && oppIds.has(u.ownerId),
       );
-      const summary = analyzePlayerCCAndTrinket(
-        p,
-        opponents,
-        combatLike,
-        oppPets,
-      );
+      // The round itself, as the prompt and keyMoments.ts hand it: the
+      // function reads the round's end off it (`roundEndMs`), so the span of
+      // a control still on at a Solo Shuffle round's ending death stops at
+      // the death, not at its removal logged up to 2 s later.
+      const summary = analyzePlayerCCAndTrinket(p, opponents, legacy, oppPets);
       const span = (
         i: { atSeconds: number; durationSeconds: number } & {
           spellId: string;

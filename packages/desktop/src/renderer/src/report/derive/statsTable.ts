@@ -77,16 +77,19 @@ export function deriveStatsTable(
     const enemies = players.filter(
       (u) => u.reaction === CombatUnitReaction.Hostile,
     );
-    const combatLike = {
-      startTime: legacy.startTime,
-      endTime: legacy.endTime,
-      startInfo: { zoneId: (legacy as { zoneId?: string }).zoneId ?? "" },
-    };
+    // Both analysis functions below are handed the round itself (`legacy`),
+    // as the prompt and `keyMoments.ts` hand it: they read the round's end
+    // off it (`roundEndMs` — a Solo Shuffle round is over at its first player
+    // death, though its log runs ~2 s on), so a control still on at that
+    // death counts to the death and not to its logged removal. This used to
+    // be `{startTime, endTime, startInfo: {zoneId: legacy.zoneId ?? ""}}`:
+    // no round, and a zone read off a field the legacy match does not have
+    // (it is `startInfo.zoneId`), so always "".
 
     // Dispels both ways: build once from our perspective and once from the
     // enemy's (same predicate, symmetric on both sides)
-    const ourDispels = reconstructDispelSummary(friends, enemies, combatLike);
-    const theirDispels = reconstructDispelSummary(enemies, friends, combatLike);
+    const ourDispels = reconstructDispelSummary(friends, enemies, legacy);
+    const theirDispels = reconstructDispelSummary(enemies, friends, legacy);
 
     const rows: StatsRow[] = [];
     for (const p of players) {
@@ -96,7 +99,7 @@ export function deriveStatsTable(
       const oppPets = Object.values(legacy.units).filter(
         (u) => u.ownerId && oppIds.has(u.ownerId),
       );
-      const cc = analyzePlayerCCAndTrinket(p, opponents, combatLike, oppPets);
+      const cc = analyzePlayerCCAndTrinket(p, opponents, legacy, oppPets);
       // CC instances inside the window: overlap > 0 counts toward the instance
       // count, and duration counts only the overlapping part (a
       // boundary-crossing instance does not vanish wholesale)

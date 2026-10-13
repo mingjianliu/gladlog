@@ -3800,6 +3800,14 @@ const INDEX: PredicateRow[] = [
     symbol: "dispelSummaryOf",
     mod: dispelSummary,
   },
+  // where a control ends for the report's control readers: the function reads
+  // the round's end off the round it is handed — each reader hands the round
+  // itself, as the prompt does; asserted below
+  {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "analyzePlayerCCAndTrinket",
+    mod: ccTrinketAnalysis,
+  },
   // Dashboard lives outside report/ — spelled out so it matches the doc column
   {
     file: "packages/desktop/src/renderer/src/components/dashboard.ts",
@@ -4083,6 +4091,42 @@ describe("谓词索引:无法共享 export 的配对,断言相等", () => {
       expect(reader).toMatch(/const legacy = toLegacySafe\(source\);/);
     }
     expect(typeof dispelSummary.dispelSummaryOf).toBe("function");
+  });
+
+  it("战报的控制读者交给 analyzePlayerCCAndTrinket 的就是 prompt 交的那个回合:statsTable / deathRecap / replayHighlights / keyMoments 都把 legacy 本身交过去", () => {
+    // the function reads the zone and the round's end off the combat it is
+    // handed …
+    const fn = readRepo(`${A}/utils/ccTrinketAnalysis.ts`);
+    expect(fn).toMatch(/const zoneId = combat\.startInfo\.zoneId;/);
+    expect(fn).toMatch(/const roundEnd = roundEndMs\(combat\);/);
+    // … the prompt hands it the round …
+    expect(readRepo(`${A}/context/buildMatchContext.ts`)).toMatch(
+      /analyzePlayerCCAndTrinket\(p, enemies, combat, enemyPets\)/,
+    );
+    // … and each reader the legacy match itself, in every call it makes
+    const calls: Record<string, number> = {
+      statsTable: 1,
+      deathRecap: 1,
+      replayHighlights: 1,
+      keyMoments: 3,
+    };
+    for (const [name, n] of Object.entries(calls)) {
+      const src = readRepo(`${D}/derive/${name}.ts`);
+      const third = [
+        ...src.matchAll(
+          /analyzePlayerCCAndTrinket\(\s*\w+,\s*\w+,\s*([^,)]+?)\s*,/g,
+        ),
+      ].map((m) => m[1]);
+      expect(third, name).toEqual(Array(n).fill("legacy"));
+      expect(src.match(/analyzePlayerCCAndTrinket\(/g), name).toHaveLength(n);
+      expect(src, name).toMatch(/\blegacy = toLegacySafe\(source\);/);
+    }
+    // the stats table's zone was read off a field the legacy match does not
+    // have; it builds no round of its own any more
+    const stats = readRepo(`${D}/derive/statsTable.ts`);
+    expect(stats).not.toMatch(/const combatLike\b/);
+    expect(stats).not.toMatch(/legacy as \{ zoneId/);
+    expect(typeof ccTrinketAnalysis.analyzePlayerCCAndTrinket).toBe("function");
   });
 
   it("rawStreams 的 splitRawLine / parseRawTimestamp / mirrorDecodeAdvanced 自 2026-09-26 起就是 parser 的 splitLine / parseTimestamp / decodeAdvanced 本身(经 parser-compat 重导出,同一引用),不再是镜像", () => {
