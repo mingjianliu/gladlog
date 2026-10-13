@@ -35,8 +35,10 @@ const ov = SPELL_EFFECT_OVERRIDES as Record<
   { durationSeconds?: number }
 >;
 
-/** Corpus said the official DB2 duration was right — keep the two equal. */
-const OFFICIAL_WINS = ["31850", "204018", "13750", "102560"];
+/** Corpus said the official DB2 duration was right — keep the two equal.
+ * (Blessing of Spellwarding 204018 was here until its hand row was deleted on
+ * 2026-10-13 — the DB2 row stands alone, pinned in `sharedCharge.test.ts`.) */
+const OFFICIAL_WINS = ["31850", "13750", "102560"];
 
 /** Corpus said the hand value was right *because it is the talented one*. */
 const DELIBERATELY_TALENTED: Record<string, number> = {

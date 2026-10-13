@@ -64,7 +64,31 @@ export const SPELL_EFFECT_OVERRIDES: Record<string, IMinedSpell> =
       e("86659", "Guardian of Ancient Kings", 300, 8),
       e("6940", "Blessing of Sacrifice", 120, 12),
       e("1022", "Blessing of Protection", 300, 10),
-      e("204018", "Blessing of Spellwarding", 180, 6), // 2026-09-06: hand 10 was the PvE number and shadowed the official PvP one — SpellMisc.PvPDurationIndex 32 → 6 s; corpus 6.0 s in 91 % of 659 lifetimes
+      // Blessing of Spellwarding 204018 had `180, 6` here until 2026-10-13. The
+      // 180 s came with the first port of this file (f47badd2) and nothing
+      // signed it; the game recovers the button through the charge pool it
+      // shares with Blessing of Protection (Game-Behaviour Rule, four legs):
+      // (a) DB2 12.1.0.69587 — SpellCategories 52322 (204018) and 227 (1022)
+      //     both ChargeCategory 1392, 1 charge, 300 000 ms; SpellCooldowns
+      //     holds the global cooldown only for either spell;
+      // (b) the three talents that shorten it are charge-CATEGORY mods on
+      //     misc 1392 (auras 453 / 454: Improved Blessing of Protection −60 s,
+      //     Uther's Counsel −15 % × 0.67, Sacred Duty −33 %), each covering
+      //     both spells `via: chargeCategory` in the talent-effect inventory;
+      // (c) corpus, 18,134 new-season files (fix-FT/scripts/
+      //     sw_blessing_scan.py + sw_blessing_gaps.ts, ranks from
+      //     COMBATANT_INFO): 4,007 Spellwarding presses, 239 with room in the
+      //     round for a recast at the hand number and 59 at the pool's; 31
+      //     recasts, none before the pool's number;
+      // (d) the shortest gaps are the arithmetic's: 300.3 / 300.9 / 301.0 s
+      //     with no reduction, 249.8 s with Improved Blessing of Protection
+      //     (240); after a Blessing of Protection press 300.0 s and 243.9 s.
+      // The hand number called the button ready 120 s early (72–120 s under
+      // the talents). The DB2 row now stands on its own — 1 charge / 300 s,
+      // and the official PvP duration 6 s the hand row had been corrected to
+      // on 2026-09-06 (SpellMisc.PvPDurationIndex 32; corpus 6.0 s in 91 % of
+      // 659 lifetimes). Uther's Counsel and Sacred Duty holders never recast
+      // in the corpus (9 and 11 unit-rounds): their rows are DB2's, unsplit.
       e("116849", "Life Cocoon", 120, 12),
       e("115203", "Fortifying Brew", 360, 15),
       e("122470", "Touch of Karma", 90, 10),
