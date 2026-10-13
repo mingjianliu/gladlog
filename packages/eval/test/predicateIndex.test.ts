@@ -2190,6 +2190,21 @@ const INDEX: PredicateRow[] = [
   },
   {
     file: `${A}/utils/cannotCastIntervals.ts`,
+    symbol: "freeMsWithin",
+    mod: cannotCastIntervals,
+  },
+  {
+    file: `${A}/analysis/candidates/cooldownTiming.ts`,
+    symbol: "ownerFreeSpan",
+    mod: cooldownTiming,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkCdHoardedOwnerFree",
+    mod: promptQualityCheck,
+  },
+  {
+    file: `${A}/utils/cannotCastIntervals.ts`,
     symbol: "namedCannotCastIntervals",
     mod: cannotCastIntervals,
   },

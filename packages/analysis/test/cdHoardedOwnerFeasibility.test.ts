@@ -5,11 +5,15 @@ import {
   afterShuffleRoundEnd,
   dropCdHoardedBesideExternalUnused,
 } from "../src/analysis/candidateFindings";
-import { cdHoardedEvents } from "../src/analysis/candidates/cooldownTiming";
+import {
+  cdHoardedEvents,
+  ownerFreeSpan,
+} from "../src/analysis/candidates/cooldownTiming";
 import {
   actWindowFor,
   couldRespondFor,
 } from "../src/utils/cannotCastIntervals";
+import { REACTION_WINDOW_S } from "../src/utils/cooldowns";
 
 describe("afterShuffleRoundEnd — Solo Shuffle ends at the first player death (W1a)", () => {
   const units = [
@@ -86,13 +90,14 @@ describe("cdHoardedEvents — owner feasibility (W1a)", () => {
     expect(run(() => false)).toHaveLength(0);
   });
 
-  it("asks about the same window 'spent' uses: [t − 1.5 s, t + 5 s] — once per ready cooldown (FT-T10)", () => {
+  it("asks about the span ownerFreeS prints: [t, t + 5 s] — once per ready cooldown (FT-T10, I05)", () => {
     const seen: Array<[number, number, string | undefined]> = [];
     run((a, b, spellId) => {
       seen.push([a, b, spellId]);
       return true;
     });
-    expect(seen).toEqual([[58.5, 65, "33206"]]);
+    expect(seen).toEqual([[60, 65, "33206"]]);
+    expect(ownerFreeSpan(60)).toEqual({ fromS: 60, toS: 65 });
   });
 
   it("FT-T10: a cooldown the owner could not press is not named; with none left the row is gone", () => {
@@ -309,6 +314,107 @@ describe("cdHoardedEvents — ownerCc / ownerFreeS facts (H1)", () => {
   it("the free seconds stop at the round end, like the gate", () => {
     const act = actWindowFor(owner, new Set(["e"]), T0, at(62));
     expect(act.stateIn(58.5, 65, 60)!.freeAfterS).toBeCloseTo(1.375, 3);
+  });
+});
+
+// I05 (user ruling 2026-10-11, option b): the owner gate counts the span
+// `facts.ownerFreeS` prints — from the crisis second on — so a row can no
+// longer state less free time than the gate asked for.
+describe("cdHoardedEvents — the owner gate and ownerFreeS read one span (I05)", () => {
+  const T0 = 1_000_000;
+  const at = (s: number) => T0 + s * 1000;
+  // Hammer of Justice (853) on the owner
+  const stunned = (fromS: number, toS: number, deathS?: number) =>
+    ({
+      id: "h",
+      auraEvents: [
+        {
+          spellId: "853",
+          spellName: "Hammer of Justice",
+          srcUnitId: "e",
+          timestamp: at(fromS),
+          logLine: { event: LogEvent.SPELL_AURA_APPLIED },
+        },
+        {
+          spellId: "853",
+          spellName: "Hammer of Justice",
+          srcUnitId: "e",
+          timestamp: at(toS),
+          logLine: { event: LogEvent.SPELL_AURA_REMOVED },
+        },
+      ],
+      actionIn: [],
+      deathRecords: deathS === undefined ? [] : [{ timestamp: at(deathS) }],
+    }) as unknown as ICombatUnit;
+  const run = (u: ICombatUnit, casts: { timeSeconds: number }[] = []) => {
+    const act = actWindowFor(u, new Set(["e"]), T0);
+    return cdHoardedEvents(
+      [{ crisisUnit: MATE, own: false, points: [point(60)] }],
+      [{ ...cd(), casts, neverUsed: casts.length === 0 }],
+      OWNER,
+      undefined,
+      undefined,
+      undefined,
+      act.couldRespond,
+      undefined,
+      act.stateIn,
+    );
+  };
+
+  it("free only BEFORE the crisis second → no row (3b56ac97 r4 @79: stunned +0.75…+5.76 s)", () => {
+    // 1.5 s free before t and 0.75 s after it: the old window passed this
+    // and printed ownerFreeS=0.8
+    expect(run(stunned(60.75, 65.761))).toHaveLength(0);
+    // stunned from before t to the end of the window (ownerFreeS=0.0)
+    expect(run(stunned(59.6, 65.6))).toHaveLength(0);
+  });
+
+  it("REACTION_WINDOW_S free after the crisis second → the row, and it says so", () => {
+    const [e] = run(stunned(61, 65.5));
+    expect(e!.facts!.ownerCc).toBe("Hammer of Justice +1.0…+5.5s");
+    expect(e!.facts!.ownerFreeS).toBe("1.0");
+    // 1 ms short of it
+    expect(run(stunned(60.999, 65.5))).toHaveLength(0);
+  });
+
+  it("the window after t cut by the owner's death counts the same on both sides", () => {
+    // dies 1.4 s after t, free until then
+    const [e] = run(stunned(50, 51, 61.4));
+    expect(e!.facts!.windowS).toBe("1.4");
+    // dies 0.9 s after t: under REACTION_WINDOW_S of playable time
+    expect(run(stunned(50, 51, 60.9))).toHaveLength(0);
+  });
+
+  it("every row the gate lets through prints ownerFreeS ≥ REACTION_WINDOW_S (sweep)", () => {
+    let rows = 0;
+    for (let from = 58; from <= 66; from += 0.137)
+      for (const len of [0.4, 1.2, 3, 4.6, 6.5]) {
+        const u = stunned(from, from + len);
+        const act = actWindowFor(u, new Set(["e"]), T0);
+        const span = ownerFreeSpan(60);
+        const state = act.stateIn(58.5, span.toS, span.fromS, ["33206"])!;
+        // one count behind the gate and the fact
+        expect(act.couldRespond(span.fromS, span.toS, "33206")).toBe(
+          state.freeAfterS >= REACTION_WINDOW_S,
+        );
+        const out = run(u);
+        expect(out.length).toBe(state.freeAfterS >= REACTION_WINDOW_S ? 1 : 0);
+        for (const e of out) {
+          rows++;
+          if (e.facts!.ownerFreeS !== undefined)
+            expect(Number(e.facts!.ownerFreeS)).toBeGreaterThanOrEqual(
+              REACTION_WINDOW_S,
+            );
+        }
+      }
+    expect(rows).toBeGreaterThan(50);
+  });
+
+  it("the response set is not the gate's span: a press 1 s before t still answers the crisis", () => {
+    // free owner, Pain Suppression pressed at t − 1.0
+    const free = { ...stunned(10, 11) } as ICombatUnit;
+    expect(run(free)).toHaveLength(1);
+    expect(run(free, [{ timeSeconds: 59 }])).toHaveLength(0);
   });
 });
 

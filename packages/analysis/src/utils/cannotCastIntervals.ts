@@ -773,19 +773,35 @@ export function coveredMsWithin(
 }
 
 /**
+ * Milliseconds of [fromMs, toMs] outside every interval — the window's length
+ * minus `coveredMsWithin`; 0 for an empty or reversed window. The one free-time
+ * count behind `couldReactWithin` (a gate) and `actWindowFor().stateIn`'s
+ * `freeAfterS` (the fact a gated row prints), so the number a row states is
+ * the number its gate compared.
+ */
+export function freeMsWithin(
+  blocked: ReadonlyArray<{ from: number; to: number }>,
+  fromMs: number,
+  toMs: number,
+): number {
+  if (toMs <= fromMs) return 0;
+  return toMs - fromMs - coveredMsWithin(blocked, fromMs, toMs);
+}
+
+/**
  * The one "could this unit react at all in [fromMs, toMs]" test: at least
- * REACTION_WINDOW_S of the window not covered by a cannot-cast interval.
- * Shared by missed-sync-window's readiness (`evaluateSyncWindow`, B3i) and
- * cd-hoarded's owner gate (reliability round 2 W1a, 2026-09-25) — before this
- * each consumer either computed it inline or did not check at all.
+ * REACTION_WINDOW_S of the window not covered by a cannot-cast interval
+ * (`freeMsWithin`). Shared by missed-sync-window's readiness
+ * (`evaluateSyncWindow`, B3i) and cd-hoarded's owner gate (reliability round
+ * 2 W1a, 2026-09-25) — before this each consumer either computed it inline or
+ * did not check at all.
  */
 export function couldReactWithin(
   blocked: ReadonlyArray<{ from: number; to: number }>,
   fromMs: number,
   toMs: number,
 ): boolean {
-  const freeMs = toMs - fromMs - coveredMsWithin(blocked, fromMs, toMs);
-  return freeMs >= REACTION_WINDOW_S * 1000;
+  return freeMsWithin(blocked, fromMs, toMs) >= REACTION_WINDOW_S * 1000;
 }
 
 /**
@@ -845,7 +861,10 @@ export interface ActWindowState {
    * least one of them could be pressed, as far as one interval decides it;
    * a spell the unit's pet casts is asked of the pet —
    * `cannotCastIntervalsForSpells`). `blocks` stays the UNIT's own
-   * intervals: what sat on a pet is counted here and never named there. */
+   * intervals: what sat on a pet is counted here and never named there.
+   * The same count as `couldRespond(anchorS, toS, spell)` compares with
+   * REACTION_WINDOW_S (`freeMsIn`): asked for one spell over the same span,
+   * the two cannot disagree. */
   freeAfterS: number;
   /** the window's end after that cut, seconds since round start (F-H5
    * `windowS` = endS − t) */
@@ -859,6 +878,14 @@ export interface ActWindowState {
  * `ownerCc` / `ownerFreeS` (triage 2026-09-29 H1: the gate passes an owner
  * CC'd for most of the window by ruling, and the line then read "held").
  * `stateIn` is null when the intervals cannot be built.
+ *
+ * Both count free time with one closure (`freeMsIn`: the span cut at death
+ * and the round end, minus what the intervals for the spells asked about
+ * cover): `couldRespond(fromS, toS, spell)` is `freeAfterS` of
+ * `stateIn(…, toS, fromS, [spell])` compared with REACTION_WINDOW_S. A gate
+ * that passes on the span its row then prints (cd-hoarded since I05,
+ * 2026-10-11: from the crisis second on) can therefore never print less than
+ * the threshold it passed.
  *
  * Asked with a spell / spells, both read `cannotCastIntervalsForSpells` —
  * `units` (the round's units) is what lets a spell the unit's pet casts be
@@ -908,17 +935,17 @@ export function actWindowFor(
       return named.filter((iv) => intervalBlocksEverySpell(iv, spellIds));
     }
   };
+  // the one free-time count: gate and fact
+  const freeMsIn = (
+    fromS: number,
+    toS: number,
+    spellIds: readonly string[] | undefined,
+  ): number =>
+    freeMsWithin(forSpells(spellIds), matchStartMs + fromS * 1000, endMs(toS));
   return {
-    couldRespond: (fromS, toS, spellId) => {
-      const fromMs = matchStartMs + fromS * 1000;
-      const toMs = endMs(toS);
-      if (toMs <= fromMs) return false;
-      return couldReactWithin(
-        forSpells(spellId === undefined ? undefined : [spellId]),
-        fromMs,
-        toMs,
-      );
-    },
+    couldRespond: (fromS, toS, spellId) =>
+      freeMsIn(fromS, toS, spellId === undefined ? undefined : [spellId]) >=
+      REACTION_WINDOW_S * 1000,
     stateIn: (fromS, toS, anchorS, spellIds) => {
       const fromMs = matchStartMs + fromS * 1000;
       // the gate's own window: cut at death and the round end, so a CC that
@@ -936,16 +963,11 @@ export function actWindowFor(
           fromS: (iv.from - matchStartMs) / 1000,
           toS: (iv.to - matchStartMs) / 1000,
         }));
-      const anchorMs = matchStartMs + anchorS * 1000;
-      const freeEndMs = toMs;
-      const freeAfterS =
-        freeEndMs > anchorMs
-          ? (freeEndMs -
-              anchorMs -
-              coveredMsWithin(forSpells(spellIds), anchorMs, freeEndMs)) /
-            1000
-          : 0;
-      return { blocks, freeAfterS, endS: (toMs - matchStartMs) / 1000 };
+      return {
+        blocks,
+        freeAfterS: freeMsIn(anchorS, toS, spellIds) / 1000,
+        endS: (toMs - matchStartMs) / 1000,
+      };
     },
   };
 }

@@ -1567,6 +1567,20 @@ function readyDefensiveCds(
 }
 
 /**
+ * The span cd-hoarded reads the OWNER's free time over, in seconds since the
+ * round start: from the crisis's rendered second (`facts.t`, what
+ * `facts.ownerCc` / `facts.ownerFreeS` are offsets from) to the end of the
+ * response window. One definition for the owner gate and for the fact it
+ * prints (I05, user ruling 2026-10-11): the gate needs REACTION_WINDOW_S of
+ * free time inside it, `facts.ownerFreeS` is the free time inside it.
+ * "Spent" keeps its own, wider window — a press up to `RESPONSE_PRE_MS`
+ * before the crossing still answers it.
+ */
+export function ownerFreeSpan(tSec: number): { fromS: number; toS: number } {
+  return { fromS: toRenderSecond(tSec), toS: tSec + CD_HOARD_RESPONSE_S };
+}
+
+/**
  * cd-hoarded (2026-08-30 rewrite, GH #34, decision-point shaped): "a
  * teammate (or you) hit a crisis while you had a usable major defensive CD
  * ready and you did not spend it within `CD_HOARD_RESPONSE_S`". Replaces
@@ -1638,10 +1652,12 @@ export function cdHoardedEvents(
    * same convention as every other guard-carrying builder in this file. */
   ownCastSuccessSeconds?: number[],
   /** Reliability round 2 W1a (2026-09-25): could the OWNER act at all during
-   * the response window `[fromS, toS]` (seconds since round start)? Built by
-   * the caller from `buildCannotCastIntervals` + the owner's death — the same
-   * predicate `evaluateSyncWindow` and cdTriggerPrior's opportunity set use.
-   * Absent ⇒ no owner gate (tests, callers without a combat clock). */
+   * `[fromS, toS]` (seconds since round start)? Built by the caller from
+   * `buildCannotCastIntervals` + the owner's death — the same predicate
+   * `evaluateSyncWindow` and cdTriggerPrior's opportunity set use. Asked over
+   * `ownerFreeSpan` — from the crisis second on, the span `facts.ownerFreeS`
+   * prints (I05, 2026-10-11). Absent ⇒ no owner gate (tests, callers without
+   * a combat clock). */
   ownerCouldRespond?: (
     fromS: number,
     toS: number,
@@ -1659,9 +1675,10 @@ export function cdHoardedEvents(
   },
   /** Triage 2026-09-29 H1: what the owner gate saw — `actWindowFor(...)
    * .stateIn` over the SAME inputs as `ownerCouldRespond`. The gate passes an
-   * owner free for 1 s of the window (ruling 2026-09-23/26) even when CC'd for
-   * the rest; the facts then say so (`ownerCc`, `ownerFreeS`) instead of the
-   * line reading "held". Absent ⇒ neither fact. */
+   * owner free for 1 s after the crisis second (ruling 2026-09-23/26; the
+   * span since I05) even when CC'd for the rest; the facts then say so
+   * (`ownerCc`, `ownerFreeS`) instead of the line reading "held". Absent ⇒
+   * neither fact. */
   ownerActState?: (
     fromS: number,
     toS: number,
@@ -1780,12 +1797,20 @@ export function cdHoardedEvents(
       // accusation fired on a silenced / stunned / kicked owner (6fcb Garrote
       // 58.5–61.5 at a 1:00 teammate crisis; 138e Skull Bash lockout then
       // Incapacitating Roar). The owner must be able to act for at least
-      // REACTION_WINDOW_S inside the same window "spent" counts presses in.
+      // REACTION_WINDOW_S of `ownerFreeSpan` — from the crisis second on.
+      // I05 (user ruling 2026-10-11, option b): until then the gate read the
+      // whole window "spent" counts presses in, 1.5 s before the crossing
+      // included, while `facts.ownerFreeS` counts from `t` — so an owner free
+      // only BEFORE the crisis passed and the row printed `ownerFreeS=0.0`
+      // (30846f8e @82: a Frost Mage's Ice Block, Frost locked by Counterspell
+      // from −0.4 s; 3b56ac97 r4 @79: Hammer of Justice from +0.8 s to +5.8 s,
+      // `ownerFreeS=0.8`). Nobody is asked to answer a crisis before it
+      // exists; a press before it still ANSWERS it (`spent` below keeps its
+      // own window).
       // FT-T10 (user ruling 2026-10-10): asked per cooldown below — a kick
       // lockout stops only the spells of the school it locked. Unasked for a
       // spell, the gate is the old one (every lockout locks everything).
-      const responseFromS = p.tSec - RESPONSE_PRE_MS / 1000;
-      const responseToS = p.tSec + CD_HOARD_RESPONSE_S;
+      const free = ownerFreeSpan(p.tSec);
       const traceOwnerCouldNotAct = () => {
         if (tracing)
           trace.push({
@@ -1846,18 +1871,16 @@ export function cdHoardedEvents(
           ownerReachesEnemyTarget?.(cd.spellId, p.tSec) !== false,
       );
       // the owner could press THIS cooldown: free of CC, and of a lockout on
-      // its school, for REACTION_WINDOW_S of the window "spent" counts in
+      // its school, for REACTION_WINDOW_S of `ownerFreeSpan`
       const ready = readyButForOwner.filter(
-        (cd) =>
-          ownerCouldRespond?.(responseFromS, responseToS, cd.spellId) !== false,
+        (cd) => ownerCouldRespond?.(free.fromS, free.toS, cd.spellId) !== false,
       );
       // the trace keeps its two reasons: the owner could not act (for any
       // ready cooldown, or — with none ready — at all), else nothing ready
       if (
         ready.length === 0 &&
         (readyButForOwner.length > 0 ||
-          (!!ownerCouldRespond &&
-            !ownerCouldRespond(responseFromS, responseToS)))
+          (!!ownerCouldRespond && !ownerCouldRespond(free.fromS, free.toS)))
       ) {
         traceOwnerCouldNotAct();
         continue;
@@ -2079,14 +2102,21 @@ export function cdHoardedEvents(
       // window, offsets from the anchor second, and the free seconds after
       // it. Only when something blocked them — a free owner gets neither.
       // anchored on the rendered second `t` (facts.t), which the legend
-      // measures the offsets and ownerFreeS from
+      // measures the offsets and ownerFreeS from — `ownerFreeSpan`, the span
+      // the owner gate passed on (I05), so ownerFreeS ≥ REACTION_WINDOW_S
       // FT-T10: free time is counted against the cooldowns the row names;
       // `ownerCc` still lists every interval on the owner, a lockout with
       // its school — the legend tells the reader a named cooldown was
       // outside it (deliberate; post-hoc review 45-FT-99)
       const readySpellIds = ready.map((cd) => cd.spellId);
+      const freeSpan = ownerFreeSpan(point.tSec);
       const act =
-        ownerActState?.(windowFromS, windowToS, t, readySpellIds) ?? null;
+        ownerActState?.(
+          windowFromS,
+          freeSpan.toS,
+          freeSpan.fromS,
+          readySpellIds,
+        ) ?? null;
       const off = (s: number) => {
         const d = s - t;
         return `${d >= 0 ? "+" : ""}${d.toFixed(1)}`;

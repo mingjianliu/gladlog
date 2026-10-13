@@ -51,6 +51,7 @@ import {
   POST_KICK_OTHER_REASON_HEAD,
 } from "@gladlog/analysis/src/analysis/candidateFindings";
 import {
+  CD_HOARD_RESPONSE_S,
   parseSyncReadyCdEntry,
   SYNC_LOCK_ENDED_BY_ROUND_END,
   SYNC_READY_CD_YOURS,
@@ -178,6 +179,7 @@ import {
   PRESS_HP_LINE_TAGS,
   PRESSURE_WINDOWS_TOP_N,
   sharesChargePool,
+  REACTION_WINDOW_S,
 } from "@gladlog/analysis/src/utils/cooldowns";
 import { UNPURGED_FOR_RE_SRC } from "@gladlog/analysis/src/utils/dispelAnalysis";
 import {
@@ -5194,6 +5196,56 @@ export function checkKickWaitedOutConsistency(lines: string[]): string[] {
 }
 
 /**
+ * Hard invariant (re-eval 2026-10-08 I05, user ruling 2026-10-11): a
+ * cd-hoarded row says the player "had a usable cooldown ready and spent none"
+ * only when they could press one for `REACTION_WINDOW_S` of the span its own
+ * `ownerFreeS` fact counts — from `facts.t` to the end of the response window
+ * (`ownerFreeSpan`, the owner gate's span). Until then the gate also counted
+ * the 1.5 s BEFORE `t`, and 22 of the 644 rows that print the fact on the 605
+ * capture stated less than 1 s (6 of them `ownerFreeS=0.0`) under a legend
+ * that says "coach only that free part". Held on the rendered row, with the
+ * producer's own constants:
+ *  - `ownerFreeS` ≥ `REACTION_WINDOW_S`;
+ *  - `ownerFreeS` ≤ the window the row states — `windowS` when present (the
+ *    owner's death or the round end cut it), else `CD_HOARD_RESPONSE_S`;
+ *  - `ownerCc` and `ownerFreeS` come together (the legend reads one by the
+ *    other).
+ * All three numbers print with one decimal and rounding is monotone, so a row
+ * the producer may print always passes. A row with neither fact (nothing
+ * blocked the owner) is not this gate's.
+ */
+export function checkCdHoardedOwnerFree(lines: string[]): string[] {
+  const failures: string[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!;
+    if (!line.includes("type=cd-hoarded ")) continue;
+    const m = line.match(MENU_LINE_FACTS);
+    if (!m) continue;
+    const f = parseFactsBlock(m[1]!);
+    const free = f["ownerFreeS"];
+    if (free === undefined && f["ownerCc"] === undefined) continue;
+    if (free === undefined || f["ownerCc"] === undefined) {
+      failures.push(
+        `line ${i + 1}: cd-hoarded prints ${free === undefined ? "ownerCc without ownerFreeS" : "ownerFreeS without ownerCc"}`,
+      );
+      continue;
+    }
+    const freeS = Number(free);
+    const windowS =
+      f["windowS"] === undefined ? CD_HOARD_RESPONSE_S : Number(f["windowS"]);
+    if (!(freeS >= REACTION_WINDOW_S))
+      failures.push(
+        `line ${i + 1}: cd-hoarded ownerFreeS=${free} is under the ${REACTION_WINDOW_S} s the owner gate needs after facts.t — the row accuses a player who could not press`,
+      );
+    else if (!(freeS <= windowS))
+      failures.push(
+        `line ${i + 1}: cd-hoarded ownerFreeS=${free} is more than the ${f["windowS"] ?? CD_HOARD_RESPONSE_S} s window the row states`,
+      );
+  }
+  return failures;
+}
+
+/**
  * kick-eaten `postKick` lists refused presses in three kinds of clause, each
  * with its count and the presses (`Spell×n +a/+b s`, one offset per press):
  *   pressed Nx but rejected (…)                                   — "not ready"
@@ -7109,6 +7161,7 @@ export function checkMatch(
   hardFailures.push(...checkMenuTRenderGrid(lines));
   hardFailures.push(...checkCjkLeak(lines));
   hardFailures.push(...checkKickWaitedOutConsistency(lines));
+  hardFailures.push(...checkCdHoardedOwnerFree(lines));
   hardFailures.push(...checkLegendCrossReferences(lines));
   hardFailures.push(...checkBareRosterPossessive(lines));
   hardFailures.push(...checkStayedInForcedMove(lines));
