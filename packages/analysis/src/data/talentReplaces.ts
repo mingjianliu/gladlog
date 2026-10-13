@@ -43,6 +43,28 @@ export const TALENT_REPLACES: Readonly<Record<string, readonly string[]>> = {
   // commit that added this row. Match 4ef486f5: five 443454 casts, zero
   // 378081 casts, cd-waste "never pressed Nature's Swiftness".
   "448861": ["378081"],
+  // Incarnation: Chosen of Elune (Balance Druid; talent entry 394013, the
+  // button and its cast are 102560 — the entry's VisibleSpellID) stands where
+  // Celestial Alignment 194223 stood. Not in TraitDefinition.OverridesSpellID
+  // (row 114844 has 0; Feral's twin 102543 → Berserk 106951 has it and is in
+  // the generated table) and no tooltip sentence says "replaces". What DB2
+  // does say (12.1.0.69587): the two buttons spend ONE charge category
+  // (SpellCategories.ChargeCategory 2328, one charge, 180 s —
+  // `SHARED_CHARGE_CATEGORY`), and Orbital Strike 390378's description names
+  // its button as `$?s102560[Incarnation: Chosen of Elune][Celestial
+  // Alignment]` — Incarnation for a druid who knows 102560, Celestial
+  // Alignment otherwise (the conditional as the datagen cache's Spell table
+  // has it; the two names stand there in zhCN). Corpus (605 archive files, 2026-10-13,
+  // fix-FT/scripts/tic_scan.ts — talentReplaceScan cannot nominate a talent
+  // with 2 non-holders, its reverse check does re-measure this row): 138
+  // Balance player-rounds, every one holding Celestial Alignment's entry
+  // 395022; the 136 who also hold 394013 never cast Celestial Alignment (131
+  // pressed Incarnation), the 2 who do not both cast it. Entered together
+  // with the button-grant reading (`getSpecTalentButtonGrants`), which proves
+  // Celestial Alignment from 395022 and would have listed it `[UNUSED]`
+  // beside every Incarnation. With this row an Incarnation holder's ledger
+  // is what it was before both: no Celestial Alignment row unless it is cast.
+  "394013": ["194223"],
 };
 
 /**

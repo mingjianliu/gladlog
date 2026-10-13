@@ -261,6 +261,7 @@
     "test/syncWindowTimingFacts.test.ts",
     "test/t03Troughs.test.ts",
     "test/t12WindowBoundaries.test.ts",
+    "test/talentGrantedButtons.test.ts",
     "test/talentNames.test.ts",
     "test/talentOwnership.test.ts",
     "test/talentScriptedCooldowns.test.ts",

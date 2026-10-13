@@ -340,3 +340,91 @@ export const getSpecTalentTreeSpellIds = memoizeWhenReady(
     return new Set(info.keys());
   },
 );
+
+/**
+ * Buttons this spec's tree grants through an entry that carries ANOTHER
+ * spell id: button id → the talent entry spell ids that grant it.
+ *
+ * Official: the entry's `visibleSpellId` — DB2 TraitDefinition.VisibleSpellID,
+ * as raidbots' talents.json (`talentIdMap.json`) carries it. Such an entry's
+ * own `spellId` is a passive that teaches the button (Balance's Incarnation:
+ * Chosen of Elune is entry 394013, the button and its cast 102560; Fortifying
+ * Brew 388917 → 115203), so the two id sets every reader built from the tree
+ * (`getSpecTalentTreeSpellInfo`, `getPlayerTalentedSpellInfo`) hold the
+ * passive and never the button: asked about the button, the tree answered
+ * "not mine", and a holder's unpressed button stood in no ledger.
+ *
+ * A separate map and not more keys in those two sets: they are also read as
+ * TALENT ids (modifier and replacement tables are keyed by the talent's own
+ * spell), and a button id can be another definition's talent spell (Holy
+ * Bulwark 432459 is the visible id of Holy's Holy Armaments entry and a
+ * TraitDefinition.SpellID of its own, with an override that entry does not
+ * carry).
+ *
+ * Readers: `getPlayerTalentGrantedButtonIds` (the cooldown ledger's ownership
+ * rule, through `playerTalentIdSets`) and `talentOwnershipFromTables`.
+ */
+export const getSpecTalentButtonGrants = memoizeWhenReady(
+  talentDataReady,
+  (specId: number): ReadonlyMap<string, readonly string[]> => {
+    const specData = nodeMaps[specId];
+    const result = new Map<string, string[]>();
+    if (!specData) return result;
+    const allNodes = [
+      ...specData.classNodes,
+      ...specData.specNodes,
+      ...(specData.heroNodes ?? []),
+    ];
+    for (const node of allNodes) {
+      for (const entry of node.entries) {
+        if (!entry.spellId || !entry.visibleSpellId) continue;
+        if (entry.visibleSpellId === entry.spellId) continue;
+        const button = entry.visibleSpellId.toString();
+        const talentId = entry.spellId.toString();
+        const granting = result.get(button) ?? [];
+        if (!granting.includes(talentId)) granting.push(talentId);
+        result.set(button, granting);
+      }
+    }
+    return result;
+  },
+);
+
+/**
+ * The buttons of `getSpecTalentButtonGrants` THIS loadout holds: the same
+ * node walk as `getPlayerTalentedSpellInfo`, keeping the purchased entry's
+ * button. Stricter than that walk on one point, because it adds a claim
+ * about a button nobody pressed: a choice / subtree / tiered node counts
+ * only when the loadout says WHICH entry was taken (a row whose entry id
+ * selects none grants nothing here; `getPlayerTalentedSpellInfo` lists every
+ * entry of such a node). Returns null if talent data is unavailable.
+ */
+export function getPlayerTalentGrantedButtonIds(
+  specId: number,
+  talents: ({ id1: number; id2: number; count: number } | null)[],
+): Set<string> | null {
+  const specData = nodeMaps[specId];
+  if (!specData) return null;
+
+  const result = new Set<string>();
+  for (const talent of talents) {
+    if (!talent || talent.count === 0) continue;
+    const node =
+      specData.classNodeMap[talent.id1] ??
+      specData.specNodeMap[talent.id1] ??
+      specData.heroNodeMap[talent.id1];
+    if (!node) continue;
+    const entries =
+      node.type === "choice" ||
+      node.type === "subtree" ||
+      node.type === "tiered"
+        ? node.entries.filter((e) => e.id === talent.id2)
+        : node.entries;
+    for (const entry of entries) {
+      if (!entry.spellId || !entry.visibleSpellId) continue;
+      if (entry.visibleSpellId === entry.spellId) continue;
+      result.add(entry.visibleSpellId.toString());
+    }
+  }
+  return result;
+}

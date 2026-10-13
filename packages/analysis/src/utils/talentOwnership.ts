@@ -3,8 +3,10 @@ import { ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 import {
   choiceSelectionResolved,
   getPlayerTalentedSpellInfo,
+  getPlayerTalentGrantedButtonIds,
   getPlayerTalentRanks,
   getSpecFreeOrEntrySpellIds,
+  getSpecTalentButtonGrants,
   getSpecTalentTreeSpellInfo,
   isLoadoutFullyResolved,
 } from "./talents";
@@ -47,6 +49,10 @@ export type TalentOwnership = "yes" | "no" | "unknown";
  *        2026-08-11: every Blessing of Spellwarding "didn't talent it but
  *        cast it" contradiction was an old-build round).
  *     Talents missing/unparsed → unknown.
+ *  4b. spell the spec's tree grants through an entry of ANOTHER id
+ *     (`getSpecTalentButtonGrants`: Fortifying Brew 115203 is entry 388917)
+ *     → yes/no by that entry, with step 4's downgrades; a choice node whose
+ *     selection cannot be read → unknown. It used to fall to step 6.
  *  5. spell in this spec's official PvP-talent pool (DB2 PvpTalent) but not
  *     selected → no when the pvpTalents array is present; unknown otherwise
  *  6. in neither the trees nor the pool → baseline for this spec → yes
@@ -117,9 +123,36 @@ export function talentOwnershipFromTables(
     return "no";
   }
 
+  // 4b. Talent-gated all the same: the tree grants the spell through an
+  // entry that carries ANOTHER id (`getSpecTalentButtonGrants`, the official
+  // VisibleSpellID — Fortifying Brew 115203 is entry 388917), so step 4 never
+  // saw it and step 6 called it baseline: "yes" for a Monk who had not taken
+  // it. Judged like step 4, by the entry the loadout holds, with the same
+  // downgrades and one more: a choice node listed without a readable entry
+  // proves neither side. A slotted PvP-pool carrier (step 5) still wins.
+  const carrier = PVP_TALENT_POOL_GENERATED[unit.spec]?.[spellId];
+  const grantingTalentIds = getSpecTalentButtonGrants(specId).get(spellId);
+  if (
+    grantingTalentIds &&
+    !(carrier !== undefined && pvpTalentIds.has(carrier))
+  ) {
+    if (!talents || talents.length === 0 || selected === null) return "unknown";
+    if (getPlayerTalentGrantedButtonIds(specId, talents)?.has(spellId))
+      return "yes";
+    const freeOrEntry = getSpecFreeOrEntrySpellIds(specId);
+    if (grantingTalentIds.some((t) => freeOrEntry.has(t))) return "unknown";
+    if (
+      grantingTalentIds.some(
+        (t) => !choiceSelectionResolved(specId, talents, t),
+      )
+    )
+      return "unknown";
+    if (!isLoadoutFullyResolved(specId, talents)) return "unknown";
+    return "no";
+  }
+
   // 5. PvP-talent-gated spell (official per-spec pool, incl. the rare
   // distinct ActionBarSpellID carrier): owned iff its carrier is slotted.
-  const carrier = PVP_TALENT_POOL_GENERATED[unit.spec]?.[spellId];
   if (carrier !== undefined) {
     if (pvpTalentIds.has(carrier)) return "yes";
     // pvpTalents present (even with empty slots) = data present → not taken.

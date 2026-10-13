@@ -72,6 +72,7 @@ import {
 import {
   choiceSelectionResolved,
   getPlayerTalentedSpellInfo,
+  getPlayerTalentGrantedButtonIds,
   getPlayerTalentRanks,
   getSpecTalentTreeSpellInfo,
 } from "./talents";
@@ -3350,6 +3351,12 @@ export function chargeAvailabilityTransitions(
  */
 interface IPlayerTalentIdSets {
   talentedSpellIds: Set<string> | null;
+  /** Buttons the unit's talents grant through an entry that carries ANOTHER
+   * id (`getPlayerTalentGrantedButtonIds`: Fortifying Brew 115203 for a
+   * holder of entry 388917) — ids `talentedSpellIds` never holds. Empty when
+   * the talents are unknown. Asked by the ledger's ownership rule
+   * (`extractMajorCooldowns` → `talentsGrantButton`). */
+  grantedButtonIds: ReadonlySet<string>;
   pvpTalentIds: Set<string>;
   /** spec passives own their `specIds` modifiers (GH #106) */
   specId: string | undefined;
@@ -3370,6 +3377,10 @@ export function playerTalentIdSets(unit: ICombatUnit): IPlayerTalentIdSets {
     talentedSpellIds: talentedSpellInfo
       ? new Set(talentedSpellInfo.keys())
       : null,
+    grantedButtonIds:
+      (talentedSpellInfo && unit.info?.talents
+        ? getPlayerTalentGrantedButtonIds(specIdNum, unit.info.talents)
+        : null) ?? new Set<string>(),
     // PvP talents selected by this player (spell IDs). Available when
     // COMBATANT_INFO is present.
     pvpTalentIds: new Set<string>(unit.info?.pvpTalents ?? []),
@@ -3593,6 +3604,21 @@ function extractMajorCooldownsAll(
   for (const id of AURA_ACTIVATION_PROVES_BUTTON_IDS)
     if (auraOnlyActivationSeconds(unit, id, matchStartMs).length > 0)
       activatedSpellIds.add(id);
+  // A talent whose entry carries ANOTHER id than the button it grants proves
+  // that button (`grantedButtonIds`, the official TraitDefinition
+  // VisibleSpellID): Fortifying Brew is entry 388917 and cast 115203,
+  // Avenging Crusader 394088 / 216331, Balance's Incarnation 394013 / 102560
+  // and Celestial Alignment 395022 / 194223, Feral's Berserk 343223 / 106951.
+  // The roster lists the cast id, the tree and the unit's talents hold the
+  // entry's, so the button read as "outside the tree" and stood in the
+  // ledger only once pressed: a holder who never pressed it had no kit row —
+  // no `[UNUSED]`, no cd-waste, and no wall in hand for the kill tier (a Monk
+  // who had not pressed Fortifying Brew could read PRIME). Evidence of the
+  // same rank as holding a talent of the roster's own id, and nothing else
+  // changes: a button a held talent replaces is still dropped first
+  // (`replacedByTalent`), and without the talent the cast decides as before.
+  const talentsGrantButton = (spellId: string): boolean =>
+    talentSets.grantedButtonIds.has(spellId);
 
   // Keep only tagged spells with cooldown data >= MIN_CD_SECONDS that belong to the owner's spec
   const seen = new Set<string>();
@@ -3619,7 +3645,8 @@ function extractMajorCooldownsAll(
       !allowedSpecs.includes(unit.spec) &&
       !activatedSpellIds.has(spell.spellId) &&
       !pvpTalentIds.has(spell.spellId) &&
-      !talentedSpellIds?.has(spell.spellId)
+      !talentedSpellIds?.has(spell.spellId) &&
+      !talentsGrantButton(spell.spellId)
     )
       return false;
 
@@ -3657,9 +3684,12 @@ function extractMajorCooldownsAll(
       // defensive per DB2 (`BASELINE_DEFENSIVE_BY_SPEC`) — unless the ledger
       // already holds a row of the same NAME on evidence (a Death Knight with
       // the 410358 Anti-Magic Shell row must not list the button twice).
+      // (d) the unit's talents grant it through an entry of another id
+      // (`talentsGrantButton`) — a talent button after all, proven like one.
       if (
         !pvpTalentIds.has(spell.spellId) &&
         !activatedSpellIds.has(spell.spellId) &&
+        !talentsGrantButton(spell.spellId) &&
         !(
           baselineOwned &&
           specBaseline.has(spell.spellId) &&
@@ -3781,6 +3811,7 @@ function extractMajorCooldownsAll(
       const evidence =
         aliases.some((id) => castSpellIds.has(id)) ||
         aliases.some((id) => pvpTalentIds.has(id)) ||
+        aliases.some((id) => talentsGrantButton(id)) ||
         (talentedSpellIds !== null &&
           aliases.some((id) => talentedSpellIds.has(id)));
       if (!evidence) continue;
