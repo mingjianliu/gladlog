@@ -9,6 +9,7 @@ import {
   reconstructDispelSummary,
   RETIRED_TYPES,
 } from "@gladlog/analysis";
+import { parseSyncReadyCdEntry } from "@gladlog/analysis/src/analysis/candidates/cooldownTiming";
 import { CombatUnitReaction } from "@gladlog/parser-compat";
 
 import { resolveOwner } from "./analysisInput";
@@ -373,6 +374,27 @@ const RULE_BY_TYPE = new Map(MISTAKE_RULES.map((r) => [r.type, r]));
 const healCastsNote = (f: Record<string, string | undefined>): string =>
   f.healCasts && f.healK !== "0" ? `,${f.healCasts} 次施法合计` : "";
 
+/**
+ * missed-sync-window's `readyCds` for the card. The row states whose each
+ * cooldown is in the prompt's words — `The Hunt (Name-Realm's)`,
+ * `Touch of the Magi (yours)` (`syncReadyCdEntry`) — and the card is a Chinese
+ * sentence: each entry is read back with the producer's own
+ * `parseSyncReadyCdEntry` and the holder said in the card's language. The
+ * spell and the unit name stay as the row has them, like every other name on
+ * these cards; an entry that states no holder is the bare name.
+ */
+export function syncReadyCdsText(readyCds: string | undefined): string {
+  if (!readyCds) return "";
+  return readyCds
+    .split("、")
+    .map((entry) => {
+      const e = parseSyncReadyCdEntry(entry);
+      if (e.yours) return `${e.spell}(你的)`;
+      return e.holder ? `${e.spell}(${e.holder} 的)` : e.spell;
+    })
+    .join("、");
+}
+
 export function candidateDetail(c: CandidateEvent): string {
   const f = c.facts as Record<string, string | undefined>;
   switch (c.type) {
@@ -423,7 +445,7 @@ export function candidateDetail(c: CandidateEvent): string {
       // 反应慢」变成「整队 8 秒内没人应对承压的那个人」。
       return `${f.leadCd ?? ""}${f.extras ? `(+${f.extras})` : ""} 开启后 8 秒内全队无应对,${f.pressured ?? ""} 被打到 ${f.pressuredHpPct ?? "?"}%${f.diedInWindow === "yes" ? "、窗口内阵亡" : ""}`;
     case "missed-sync-window":
-      return `${f.healer ?? ""} 被 ${f.cc ?? ""} 控 ${f.durationS ?? "?"}s,${f.readyCds ?? ""} 均 ready 未按`;
+      return `${f.healer ?? ""} 被 ${f.cc ?? ""} 控 ${f.durationS ?? "?"}s,${syncReadyCdsText(f.readyCds)} 均 ready 未按`;
     case "unsynced-burst":
       return `${f.spell ?? ""} 起爆时 ${f.healer ?? ""} 没有硬控在身,自由治疗`;
     case "cd-hoarded":
