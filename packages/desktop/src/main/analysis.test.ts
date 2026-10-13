@@ -549,6 +549,85 @@ describe("fallbackReason(0 finding 可解释)", () => {
         .fallbackReason,
     ).toBe("bad-json");
   });
+
+  it("模型回了一个解析得出的空数组 → empty-reply:这是跑过的分析,不是旧缓存、不是坏 JSON —— 不重试、照常写缓存、照常进学习台账", async () => {
+    for (const raw of ["[]", "```json\n[]\n```", "没有值得写的。\n\n[]"]) {
+      const events: Array<{ findings: unknown[] }> = [];
+      const emitted: Array<{ ch: string; p: any }> = [];
+      const dir = mkdtempSync(join(tmpdir(), "gl-empty-reply-"));
+      const s = createAnalysisService({
+        getSettings: () => ({ anthropicApiKey: "k", wowDirectory: null }),
+        clientFactory: () => ({
+          async *stream() {
+            yield { delta: raw };
+          },
+        }),
+        matchesDir: dir,
+        emit: (ch, p) => emitted.push({ ch, p }),
+        onFindings: (e) => events.push(e),
+      });
+      await s.run(input);
+      const done = emitted.find((e) => e.ch === "gladlog:analysis:done")!;
+      expect(done.p.result, raw).toEqual({
+        findings: [],
+        dropped: 0,
+        hadNarration: false,
+        fallbackReason: "empty-reply",
+      });
+      expect(emitted.some((e) => e.ch === "gladlog:analysis:retry")).toBe(
+        false,
+      );
+      expect(emitted.some((e) => e.ch === "gladlog:analysis:error")).toBe(
+        false,
+      );
+      // cached under its own reason: a remount reads the same state back
+      expect(((await s.getCached("m1")) as any).fallbackReason).toBe(
+        "empty-reply",
+      );
+      expect(events).toEqual([
+        expect.objectContaining({ matchId: "m1", findings: [] }),
+      ]);
+    }
+  });
+
+  it("写了东西的回复不带 empty-reply:审计全丢的仍由 dropped 说明,过审的没有 fallbackReason", async () => {
+    // one finding citing an event the menu does not have: dropped by the audit
+    const droppedAll = svc(
+      JSON.stringify([
+        {
+          eventIds: ["death:nobody:99"],
+          severity: "high",
+          category: "survival",
+          title: "Death",
+          explanation: "You died at {{t}}s.",
+        },
+      ]),
+    );
+    await droppedAll.s.run(input);
+    const r1 = droppedAll.emitted.find((e) => e.ch === "gladlog:analysis:done")!
+      .p.result;
+    expect(r1.findings).toEqual([]);
+    expect(r1.dropped).toBe(1);
+    expect(r1.hadNarration).toBe(false);
+    expect(r1.fallbackReason).toBeUndefined();
+
+    const kept = svc(
+      JSON.stringify([
+        {
+          eventIds: ["death:a:30"],
+          severity: "high",
+          category: "survival",
+          title: "Death",
+          explanation: "You died at {{t}}s.",
+        },
+      ]),
+    );
+    await kept.s.run(input);
+    const r2 = kept.emitted.find((e) => e.ch === "gladlog:analysis:done")!.p
+      .result;
+    expect(r2.findings).toHaveLength(1);
+    expect(r2.fallbackReason).toBeUndefined();
+  });
 });
 
 describe("onFindings(学习台账写入点)", () => {
@@ -2404,7 +2483,6 @@ describe("analyzeWindow(#16 选段分析)", () => {
     if (r3.status === "ok") expect(r3.fromCache).toBe(true);
     expect(calls).toBe(2);
   });
-
 });
 
 describe("analyzeWindow 审计全灭反馈重试(SDD 2026-08-06)", () => {

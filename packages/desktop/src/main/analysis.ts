@@ -46,6 +46,7 @@ import {
   toSlottedDoc,
   upsertSlot,
 } from "../shared/analysisCache";
+import type { AnalysisFallbackReason } from "../shared/analysisFallback";
 import { findingKey } from "../shared/findingKey";
 import {
   type AiBackend,
@@ -76,9 +77,10 @@ export type AnalysisResult = {
   findings: Finding[];
   dropped: number;
   hadNarration: boolean;
-  /** Reason for the deterministic fallback (when hadNarration=false); older
-   * caches lack this field. */
-  fallbackReason?: "no-candidates" | "no-client" | "bad-json";
+  /** Why there is no narration (when hadNarration=false and the audit dropped
+   * nothing): one of the deterministic fallbacks, or `empty-reply` — the model
+   * ran and returned an empty array. Older caches lack this field. */
+  fallbackReason?: AnalysisFallbackReason;
   /** Deep-dive round already ran (regardless of how many it produced);
    * renderer uses it to guard against re-triggering. */
   deepened?: boolean;
@@ -636,7 +638,7 @@ export function createAnalysisService(deps: {
 
     // deterministic fallback: no narration; `reason` lets the UI explain why
     // (so a 0-finding result is accountable)
-    const fallback = (reason: "no-candidates" | "no-client" | "bad-json") =>
+    const fallback = (reason: Exclude<AnalysisFallbackReason, "empty-reply">) =>
       finish(
         {
           findings: [],
@@ -775,6 +777,15 @@ export function createAnalysisService(deps: {
           findings: audit.findings,
           dropped: audit.dropped.length,
           hadNarration: audit.findings.length > 0,
+          // The reply parsed and was an empty array: the model read the menu
+          // and wrote no finding (the prompt asks for "up to N" on a small
+          // menu). Not a fallback of ours and not an audit drop — without a
+          // reason of its own the panel read it as a cache from before
+          // `fallbackReason` existed. Still an analysis that ran: cached and
+          // recorded like any other.
+          ...(parsed.length === 0
+            ? { fallbackReason: "empty-reply" as const }
+            : {}),
           ...(call.capturedSession ? { sessionId: call.capturedSession } : {}),
         },
         true,

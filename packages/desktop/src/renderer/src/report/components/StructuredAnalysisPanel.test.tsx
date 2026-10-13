@@ -108,6 +108,42 @@ describe("StructuredAnalysisPanel", () => {
     expect(fx.settings.save).toHaveBeenCalledWith({ aiLanguage: "en" });
     expect(fx.analysis.getState.mock.calls.length).toBeGreaterThan(callsBefore);
   });
+
+  it("0 条 findings:模型回了空数组(empty-reply)的结果说「分析已完成…」,不说旧版本缓存;没有原因的旧缓存结果仍说旧版本缓存", async () => {
+    const fx = (window as any).__gladlogFixture;
+    const empty = { findings: [], dropped: 0, hadNarration: false };
+    const stateOf = (cached: unknown) => ({
+      cached,
+      running: false,
+      slots: [{ key: "anthropic:claude-sonnet-5", createdAt: 1, stale: false }],
+      activeKey: "anthropic:claude-sonnet-5",
+    });
+    fx.analysis.getState = vi
+      .fn()
+      .mockResolvedValue(stateOf({ ...empty, fallbackReason: "empty-reply" }));
+    const first = render(
+      <StructuredAnalysisPanel
+        source={{ units: {}, startInfo: {} } as any}
+        matchId="m1"
+      />,
+    );
+    const reason = await screen.findByTestId("zero-finding-reason");
+    expect(reason.textContent).toBe(
+      "分析已完成:模型看过本场的候选事件,没有哪一件值得写成教练意见 —— 时间线与各项统计照常可看。",
+    );
+    first.unmount();
+
+    fx.analysis.getState = vi.fn().mockResolvedValue(stateOf(empty));
+    render(
+      <StructuredAnalysisPanel
+        source={{ units: {}, startInfo: {} } as any}
+        matchId="m2"
+      />,
+    );
+    expect((await screen.findByTestId("zero-finding-reason")).textContent).toBe(
+      "未生成解说(旧版本缓存),点「重新分析」重新生成。",
+    );
+  });
 });
 
 describe("演示分析(UI review #7)", () => {
