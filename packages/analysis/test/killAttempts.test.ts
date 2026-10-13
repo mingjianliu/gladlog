@@ -7,6 +7,10 @@ import { isDamageImmuneControl } from "../src/analysis/candidates/massDispel";
 import { CANDIDATE_TYPE_FLAGS } from "../src/data/candidateTypeFlags";
 import { ensureAnalysisData } from "../src/data/ensure";
 import {
+  extractSpiritOfRedemptionIntervals,
+  PRESSED_SPIRIT_OF_REDEMPTION_AURA_IDS,
+} from "../src/utils/combatStates";
+import {
   ENEMY_PROC_SAVE_NAMES,
   SAVE_AURA_END_UNSEEN_NAMES,
 } from "../src/utils/enemyDefensives";
@@ -2392,6 +2396,46 @@ describe("a bracket does not run across the target's Spirit of Redemption form (
       toSeconds: 40,
     });
     expect(attemptSpanOutsideForm(forms, 18, 22)).toBeNull();
+    // codex 40-FT-74: a span the form covers to its LAST second leaves
+    // nothing — not a zero-length `[25.4–25.4]` attempt
+    expect(attemptSpanOutsideForm(forms, 17, 25.4)).toBeNull();
+    // a span that was one instant to begin with, outside any form, stays
+    expect(attemptSpanOutsideForm(forms, 30, 30)).toEqual({
+      fromSeconds: 30,
+      toSeconds: 30,
+    });
+  });
+
+  it("only the PRESSED form is cut around — the on-death form is the kill (codex 40-FT-74)", () => {
+    expect([...PRESSED_SPIRIT_OF_REDEMPTION_AURA_IDS]).toEqual(["215769"]);
+    const aura = (id: string, at: number, event: string) => ({
+      spellId: id,
+      destUnitId: "e1",
+      logLine: { event, timestamp: at * 1000 },
+    });
+    const priest = {
+      id: "e1",
+      auraEvents: [
+        aura("27827", 12, "SPELL_AURA_APPLIED"),
+        aura("27827", 27, "SPELL_AURA_REMOVED"),
+        aura("215769", 40, "SPELL_AURA_APPLIED"),
+        aura("215769", 49, "SPELL_AURA_REMOVED"),
+      ],
+    } as never;
+    const combat = { startTime: 0, endTime: 100_000 };
+    // the [STATE] reader sees both forms …
+    expect(extractSpiritOfRedemptionIntervals(priest, combat)).toEqual([
+      { startSeconds: 12, endSeconds: 27 },
+      { startSeconds: 40, endSeconds: 49 },
+    ]);
+    // … the attempt cut only the pressed one
+    expect(
+      extractSpiritOfRedemptionIntervals(
+        priest,
+        combat,
+        PRESSED_SPIRIT_OF_REDEMPTION_AURA_IDS,
+      ),
+    ).toEqual([{ startSeconds: 40, endSeconds: 49 }]);
   });
 
   it("183-3-1104's shape: a stun before the form and a stun after it, inside one DR window, are two attempts — neither bracket holds the form", () => {

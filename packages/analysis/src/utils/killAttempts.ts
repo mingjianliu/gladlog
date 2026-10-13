@@ -87,6 +87,7 @@ import {
 import {
   extractSpiritOfRedemptionIntervals,
   type ISpiritOfRedemptionInterval,
+  PRESSED_SPIRIT_OF_REDEMPTION_AURA_IDS,
 } from "./combatStates";
 import { analyzeOutgoingCCChains, DRLevel, drResetMsAt } from "./drAnalysis";
 import { reconstructEnemyCDTimeline } from "./enemyCDs";
@@ -327,7 +328,12 @@ export function attemptSpanOutsideForm(
   let from = fromSeconds;
   for (const g of forms)
     if (g.startSeconds <= from && from < g.endSeconds) from = g.endSeconds;
-  if (from > toSeconds) return null;
+  // nothing of the span is left outside the form: an anchor the form covers
+  // to its last second must not survive as a zero-length attempt (codex
+  // review 40-FT-74 — `[18–18]`, no bracket damage, admitted on the 5 s
+  // after it). A span that was a single instant to begin with is untouched.
+  if (from > toSeconds || (from !== fromSeconds && from >= toSeconds))
+    return null;
   let to = toSeconds;
   for (const g of forms)
     if (g.startSeconds > from && g.startSeconds < to) to = g.startSeconds;
@@ -488,7 +494,11 @@ export function extractKillAttempts(
   const formsOf = (target: ICombatUnit): ISpiritOfRedemptionInterval[] => {
     let v = formsByTarget.get(target.id);
     if (!v) {
-      v = extractSpiritOfRedemptionIntervals(target, combat);
+      v = extractSpiritOfRedemptionIntervals(
+        target,
+        combat,
+        PRESSED_SPIRIT_OF_REDEMPTION_AURA_IDS,
+      );
       formsByTarget.set(target.id, v);
     }
     return v;

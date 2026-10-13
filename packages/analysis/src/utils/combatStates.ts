@@ -65,6 +65,17 @@ export const SPIRIT_OF_REDEMPTION_AURA_IDS: ReadonlySet<string> = new Set([
 ]);
 
 /**
+ * The PRESSED form alone (the PvP talent, ~9 s, after which the priest is
+ * alive again). A kill attempt is cut around this one only: the on-death
+ * form (27827) is the priest dying — the death is logged when it ends — so
+ * an attempt whose target drops into it is the kill, not a span to cut
+ * (codex review 40-FT-74: with both ids a credited KILL at 10–22 s became a
+ * failed 10–12 s attempt).
+ */
+export const PRESSED_SPIRIT_OF_REDEMPTION_AURA_IDS: ReadonlySet<string> =
+  new Set(["215769"]);
+
+/**
  * When `unit` was in Spirit of Redemption form — the `unit:ghost` token of a
  * [STATE] tick. FT-T10: the token's code and this reader both existed, and no
  * caller passed the intervals (0 `:ghost` in 3,520 contexts of the 605-file
@@ -74,6 +85,7 @@ export const SPIRIT_OF_REDEMPTION_AURA_IDS: ReadonlySet<string> = new Set([
 export function extractSpiritOfRedemptionIntervals(
   unit: Pick<ICombatUnit, "id" | "auraEvents">,
   combat: Pick<AtomicArenaCombat, "startTime" | "endTime">,
+  auraIds: ReadonlySet<string> = SPIRIT_OF_REDEMPTION_AURA_IDS,
 ): ISpiritOfRedemptionInterval[] {
   const intervals: ISpiritOfRedemptionInterval[] = [];
   let ghostStart: number | null = null;
@@ -81,7 +93,7 @@ export function extractSpiritOfRedemptionIntervals(
   for (const aura of unit.auraEvents) {
     const isGhost =
       !!aura.spellId &&
-      SPIRIT_OF_REDEMPTION_AURA_IDS.has(aura.spellId) &&
+      auraIds.has(aura.spellId) &&
       // on this unit (a unit's aura events can carry auras it put on others)
       (aura.destUnitId === undefined || aura.destUnitId === unit.id);
 
