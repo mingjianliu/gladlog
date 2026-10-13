@@ -80,6 +80,7 @@ import * as healingVerdicts from "@gladlog/analysis/src/data/healingVerdicts";
 import * as kickPriorityHealSpells from "@gladlog/analysis/src/data/kickPriorityHealSpells";
 import * as kickPriorityPrior from "@gladlog/analysis/src/data/kickPriorityPrior";
 import * as mitigationComponents from "@gladlog/analysis/src/data/mitigationComponents";
+import * as mitigationData from "@gladlog/analysis/src/data/mitigationData";
 import * as outcomeRefs from "@gladlog/analysis/src/data/outcomeRefs";
 import * as racialAbilities from "@gladlog/analysis/src/data/racialAbilities";
 import * as rootAuraGenerated from "@gladlog/analysis/src/data/rootAuraGenerated";
@@ -2001,6 +2002,32 @@ const INDEX: PredicateRow[] = [
   {
     file: `${E}/quality/promptQualityCheck.ts`,
     symbol: "checkNoWindowAcrossSpiritOfRedemption",
+    mod: promptQualityCheck,
+  },
+  // R08 (d) gap 1: no kill window across the target's own 20–99 % wall
+  {
+    file: `${A}/utils/enemyDefensives.ts`,
+    symbol: "ownWallSpanS",
+    mod: enemyDefensives,
+  },
+  {
+    file: `${A}/utils/enemyDefensives.ts`,
+    symbol: "spanHoldsOwnWallSecond",
+    mod: enemyDefensives,
+  },
+  {
+    file: `${A}/utils/enemyDefensives.ts`,
+    symbol: "ownWallLineNames",
+    mod: enemyDefensives,
+  },
+  {
+    file: `${A}/data/mitigationData.ts`,
+    symbol: "MITIGATION_WALL_IDS",
+    mod: mitigationData,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkNoWindowAcrossOwnWall",
     mod: promptQualityCheck,
   },
   {

@@ -10,7 +10,7 @@ import {
 // GH #31 ② (2026-09-02): shared official-face predicate replaces the hand set.
 import { isKillWindowMajorDefensive } from "../data/abilityProfile";
 import { classMetadata } from "../data/classSpells";
-import { MITIGATION_TABLE } from "../data/mitigationData";
+import { MITIGATION_WALL_IDS } from "../data/mitigationData";
 import {
   effectiveCooldownSeconds,
   spellEffectData,
@@ -74,12 +74,12 @@ export const MIN_WINDOW_SECONDS = 5;
  * 2026-10-11 (R08 b): WHICH walls a unit has is the cooldown ledger's answer
  * (`unpressedWallsOwned` — a wall the unit owns and never pressed is in hand
  * too), not "it cast one this round". The set and the door are unchanged.
+ *
+ * 2026-10-13: the slice itself is `MITIGATION_WALL_IDS` (data/mitigationData),
+ * aliased here — the walls a `defenseless` span is cut on are the same rows
+ * (`computeOffensiveWindows` step 2b).
  */
-export const WALL_IN_HAND_MIT_IDS: ReadonlySet<string> = new Set(
-  Object.entries(MITIGATION_TABLE)
-    .filter(([, e]) => e.pct >= 20 && e.pct < 100)
-    .map(([id]) => id),
-);
+export const WALL_IN_HAND_MIT_IDS: ReadonlySet<string> = MITIGATION_WALL_IDS;
 
 // ---------------------------------------------------------------------------
 // Interfaces

@@ -134,6 +134,30 @@ export const MITIGATION_TABLE: Record<string, IMitigationEntry> = {
   ...MITIGATION_OVERRIDES,
 };
 
+/** The floor of "a wall": a row of at least this percentage. */
+export const MITIGATION_WALL_MIN_PCT = 20;
+
+/**
+ * The walls — every `MITIGATION_TABLE` row of 20–99 %. An immunity (pct 100)
+ * is not one. The ONE slice behind the readers of "this unit has / had a
+ * wall": the kill-opportunity tier's `WALL_IN_HAND_MIT_IDS` (an alias), the
+ * `[ENEMY DEF]` line's and KILL ATTEMPTS' `MITIGATION_AURA_IDS` (a copy) and,
+ * through that line's events of kind "self", the own walls a kill-window
+ * span is cut on (`computeOffensiveWindows` step 2b). Until 2026-10-13 the
+ * first two each spelled the filter out.
+ *
+ * It is NOT the kill-window roster (`KW_MAJOR_DEFENSIVE_IDS`, the spells the
+ * span's state machine times): on 2026-10-13 that curated list holds 24 of
+ * these 26 — all but Survival of the Fittest 264735 and Retribution's Divine
+ * Protection 403876 — and whether it takes the other two is open, see
+ * docs/predicate-index.md "Not yet unified".
+ */
+export const MITIGATION_WALL_IDS: ReadonlySet<string> = new Set(
+  Object.entries(MITIGATION_TABLE)
+    .filter(([, e]) => e.pct >= MITIGATION_WALL_MIN_PCT && e.pct < 100)
+    .map(([id]) => id),
+);
+
 /**
  * The percentage an aura is worth on the unit that carries it — the single
  * predicate for pricing a mitigation aura found ON a unit (burst ledger

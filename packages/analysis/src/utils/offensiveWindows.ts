@@ -22,7 +22,12 @@ import {
   specToString,
   unitCooldownOf,
 } from "./cooldowns";
-import { enemyDefensiveEvents, renderedExternalSpanS } from "./enemyDefensives";
+import {
+  enemyDefensiveEvents,
+  ownWallSpanS,
+  renderedExternalSpanS,
+  wallTableIdOfAura,
+} from "./enemyDefensives";
 import { fmtTime, renderedWindowSeconds } from "./renderGrid";
 import { roundEndMs } from "./roundEnd";
 // GH #31 ② (2026-09-02): the hand list is replaced by the shared official-face
@@ -321,6 +326,21 @@ export function subtractIntervals(
   return out;
 }
 
+/**
+ * Does the span's state machine time a CAST of this spell (step 1)? A roster
+ * spell with official data — admission on the official number the predicate
+ * itself reads (`kwCooldownSeconds`; it already enforced
+ * >= KW_MAJOR_DEF_MIN_CD_S). One test for the cast scan and for step 2b's
+ * "is this wall's press the machine's" (`ownWallSpanS`).
+ */
+function timesCastOf(spellId: string): boolean {
+  return (
+    isKillWindowMajorDefensive(spellId) &&
+    !!spellEffectData[spellId] &&
+    kwCooldownSeconds(spellId) >= KW_MAJOR_DEF_MIN_CD_S
+  );
+}
+
 /** Inverse of `SELF_WALL_AURA_TO_CAST_ID`: a cast-keyed wall → its logged aura. */
 const WALL_CAST_TO_AURA_ID: Readonly<Record<string, string>> =
   Object.fromEntries(
@@ -376,18 +396,39 @@ export function computeOffensiveWindows(
   // prints `end not logged` (ruling D6) and still cuts the span, at the
   // interval's official-length cap: "defenseless" says nothing was up, and
   // an aura that may still be up cannot be read as gone.
-  const externalsReceived = new Map<
-    string,
-    Array<{ from: number; to: number }>
-  >();
+  //
+  // …and the 20–99 % walls each enemy put up ITSELF that the state machine
+  // below does not time (R08 d, gap 1, 2026-10-13). The machine holds "not
+  // defenseless" only for a CAST of a roster spell (`timesCastOf`), and its
+  // roster is a curated list: a wall outside it (Survival of the Fittest
+  // 264735, Retribution's Divine Protection 403876 — both entered the
+  // mitigation table after the list was frozen), and a roster wall's aura
+  // with no cast of its id behind it (310e5c6d, raw 12:56:44.478: Ancient of
+  // Lore 473909 applied in the millisecond the Reforestation buff 392360 is
+  // removed, 28 ms after a Swiftmend), left the span open across the wall's
+  // own `[ENEMY DEF]` line — f4da82c5 round 5: `defenseless 1:35–2:51` on a
+  // hunter whose Survival of the Fittest went up at 2:04 (raw 11:15:51.992).
+  // Such a wall is taken out for as long as its aura was up (`ownWallSpanS`,
+  // the event its line is rendered from — an aura of a `MITIGATION_TABLE`
+  // 20–99 % row the unit applied to itself), so every table wall is covered
+  // whatever the roster holds; a pressed self defensive that is no wall is
+  // not an event of this kind (Roar of Sacrifice — a redirect, rulings A20 +
+  // U3). A press the machine times keeps its reading (ruling D6).
+  // The roster is NOT widened: a roster member also OPENS spans (a unit that
+  // pressed only that spell reads "defenseless" once it is spent), which is
+  // the owned-but-unpressed question — docs/predicate-index "Not yet unified".
+  const savesUpOn = new Map<string, Array<{ from: number; to: number }>>();
   for (const caster of enemies) {
     for (const d of enemyDefensiveEvents(caster, enemies, combat)) {
-      if (d.kind !== "external" || !d.recipientId) continue;
-      const span = renderedExternalSpanS(d);
-      if (!span) continue;
-      const list = externalsReceived.get(d.recipientId) ?? [];
+      const holderId = d.kind === "external" ? d.recipientId : caster.id;
+      const span =
+        d.kind === "external"
+          ? renderedExternalSpanS(d)
+          : ownWallSpanS(d, timesCastOf(wallTableIdOfAura(d.spellId)));
+      if (!holderId || !span) continue;
+      const list = savesUpOn.get(holderId) ?? [];
       list.push(span);
-      externalsReceived.set(d.recipientId, list);
+      savesUpOn.set(holderId, list);
     }
   }
 
@@ -401,11 +442,7 @@ export function computeOffensiveWindows(
     for (const cast of enemy.spellCastEvents) {
       if (cast.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
       const { spellId } = cast;
-      if (!spellId || !isKillWindowMajorDefensive(spellId)) continue;
-      if (!spellEffectData[spellId]) continue;
-      // Admission on the official number the predicate itself reads
-      // (kwCooldownSeconds) — it already enforced >= KW_MAJOR_DEF_MIN_CD_S.
-      if (kwCooldownSeconds(spellId) < KW_MAJOR_DEF_MIN_CD_S) continue;
+      if (!spellId || !timesCastOf(spellId)) continue;
       const list = castsBySpell.get(spellId) ?? [];
       list.push((cast.logLine.timestamp - matchStartMs) / 1000);
       castsBySpell.set(spellId, list);
@@ -557,7 +594,8 @@ export function computeOffensiveWindows(
     // `defenseless 1:47–2:51` across a 12 s Guardian Spirit). The intervals
     // are the `[ENEMY DEF]` external events' own (`enemyDefensiveEvents`), so
     // the span and the timeline line agree on when the external was up.
-    const received = externalsReceived.get(enemy.id) ?? [];
+    // The unit's own 20–99 % walls are in the same list (see `savesUpOn`).
+    const received = savesUpOn.get(enemy.id) ?? [];
     // ── 2c. A dead target is not "defenseless" — it is dead; a round that is
     //        over has no kill window ─────────────────────────────────────────
     // T12 ① a (user ruling 2026-10-10, D1): the state machine reads only the

@@ -13,6 +13,8 @@ import { saveSchoolMask } from "../analysis/candidates/cooldownTiming";
 import { wallDoorPct } from "../data/mitigationComponents";
 import {
   MITIGATION_TABLE,
+  MITIGATION_WALL_IDS,
+  MITIGATION_WALL_MIN_PCT,
   NO_MITIGATION_IDS,
   SELF_WALL_AURA_TO_CAST_ID,
 } from "../data/mitigationData";
@@ -478,15 +480,12 @@ export function isOwnImmunityInterval(
  * building MITIGATION_AURA_IDS, and again per aura through `resolveMitigation`
  * so a talent-shared copy on an ally (Obsidian Scales 15 %) does not count as
  * the target having popped a 30 % wall. */
-export const MITIGATION_AURA_MIN_PCT = 20;
+export const MITIGATION_AURA_MIN_PCT = MITIGATION_WALL_MIN_PCT;
 
-/** 20–99% self-mitigation aura ids (the non-immune official table slice) —
- * "the target popped a real defensive during the attempt". */
-export const MITIGATION_AURA_IDS = new Set<string>(
-  Object.entries(MITIGATION_TABLE)
-    .filter(([, e]) => e.pct >= MITIGATION_AURA_MIN_PCT && e.pct < 100)
-    .map(([id]) => id),
-);
+/** 20–99% self-mitigation aura ids (the non-immune official table slice,
+ * `MITIGATION_WALL_IDS`) — "the target popped a real defensive during the
+ * attempt". */
+export const MITIGATION_AURA_IDS = new Set<string>(MITIGATION_WALL_IDS);
 
 /** The `MITIGATION_TABLE` key behind an aura found on a unit: the aura id
  * itself, or — for a wall whose row is keyed by its cast (Blur 198589 logs
@@ -495,6 +494,28 @@ export const MITIGATION_AURA_IDS = new Set<string>(
  * X` test both resolve an aura through this before asking any wall set. */
 export function wallTableIdOfAura(auraSpellId: string): string {
   return SELF_WALL_AURA_TO_CAST_ID[auraSpellId] ?? auraSpellId;
+}
+
+/**
+ * The names an `[ENEMY DEF]` line prints for a unit's OWN 20–99 % wall (an
+ * event of kind "self"): the name of every `MITIGATION_AURA_IDS` row, and of
+ * the aura a cast-keyed row logs (`SELF_WALL_AURA_TO_CAST_ID` — the line
+ * names the aura it found). The gate that reads the kill-window spans back
+ * off the text (`checkNoWindowAcrossOwnWall`) asks "is this percentage line a
+ * wall" of the set the events themselves are built from, so a pressed self
+ * defensive that prints a percentage without being a wall (Roar of Sacrifice,
+ * `selfSaveReductionNames`) is not one. Read at call time.
+ */
+export function ownWallLineNames(): ReadonlySet<string> {
+  const names = new Set<string>();
+  const add = (id: string) => {
+    const name = getEnglishSpellName(id, "");
+    if (name) names.add(name);
+  };
+  for (const id of MITIGATION_AURA_IDS) add(id);
+  for (const [aura, cast] of Object.entries(SELF_WALL_AURA_TO_CAST_ID))
+    if (MITIGATION_AURA_IDS.has(cast)) add(aura);
+  return names;
 }
 
 /** A school-limited IMMUNITY's mask: a pct-100 `MITIGATION_TABLE` row that
@@ -716,6 +737,72 @@ export function renderedExternalSpanS(
   if (length <= 0) return undefined;
   const from = toRenderSecond(d.atSeconds);
   return { from, to: from + length };
+}
+
+/**
+ * The part of a unit's OWN 20–99 % wall (an event of kind "self") that a
+ * kill-window span is cut on (`computeOffensiveWindows` step 2b) —
+ * "defenseless" says nothing was up:
+ *
+ *  - a wall the span's state machine does not time — its spell is outside
+ *    the kill-window roster, or the log has no press behind this aura
+ *    (`pressSeconds` undefined: a proc, a re-application): the whole aura,
+ *    from its start (`atSeconds`, where the `[ENEMY DEF]` line is anchored)
+ *    for as long as the event says it was up. An end the log never showed
+ *    (`endNotLogged`) is the interval builder's official-length cap — the
+ *    aura may still be up, and that cannot be read as gone (ruling D6, as
+ *    for an external);
+ *  - a press the state machine times (`pressIsTimed`) keeps that reading —
+ *    "not defenseless" from its CAST line for the official length, never the
+ *    aura interval (ruling D6, unchanged on purpose). Only the gap between
+ *    the aura and a cast line logged AFTER it (`AURA_BEFORE_CAST_MAX_S` at
+ *    most) is cut: the span ends with the aura, in the second its line
+ *    prints.
+ *
+ * Raw instants, as the Spirit of Redemption cut (step 2d), not the rendered
+ * pair of an external (`renderedExternalSpanS`): floored to the line's
+ * second, the cut takes the last fraction of a second before the wall out
+ * of the span — the hits that forced it.
+ * Undefined for every other kind, for a wall with no length, and when
+ * nothing is left to cut.
+ */
+export function ownWallSpanS(
+  d: Pick<
+    IEnemyDefensiveEvent,
+    "kind" | "atSeconds" | "pressSeconds" | "observedSeconds"
+  >,
+  pressIsTimed: boolean,
+): { from: number; to: number } | undefined {
+  if (d.kind !== "self") return undefined;
+  if (pressIsTimed && d.pressSeconds !== undefined)
+    return d.pressSeconds > d.atSeconds
+      ? { from: d.atSeconds, to: d.pressSeconds }
+      : undefined;
+  if (d.observedSeconds === undefined) return undefined;
+  return { from: d.atSeconds, to: d.atSeconds + d.observedSeconds };
+}
+
+/**
+ * Does a span printed `a–b` hold the second an own-wall `[ENEMY DEF]` line
+ * is printed at? Whole render seconds; the span's own first and last second
+ * are not "held".
+ *
+ * Why the ends are open: a kill window is cut at the wall's raw instants
+ * (`ownWallSpanS`; a press the state machine times ends the span no later
+ * than its aura's start) and both ends are printed floored. The piece before
+ * the wall ENDS at the aura's start and prints its second — the line's own;
+ * the piece after STARTS where the wall ended and prints that second, which
+ * is the line's again when the wall lasted under a second. So the one second
+ * a cut span can share with the wall's line is its own boundary second — a
+ * wall line strictly between the two printed ends means the span runs across
+ * a wall that was up.
+ */
+export function spanHoldsOwnWallSecond(
+  fromSecond: number,
+  toSecond: number,
+  wallSecond: number,
+): boolean {
+  return wallSecond > fromSecond && wallSecond < toSecond;
 }
 
 /** An observed aura ended this much before its full duration → "removed

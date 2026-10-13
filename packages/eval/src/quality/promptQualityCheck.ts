@@ -192,8 +192,10 @@ import {
   ENEMY_DEF_END_NOT_LOGGED_SLOT_RE,
   ENEMY_SAVE_EFFECT_BY_NAME,
   enemySaveEffectOfNote,
+  ownWallLineNames,
   SAVE_AURA_END_UNSEEN_NAMES,
   selfSaveMechanismOfName,
+  spanHoldsOwnWallSecond,
 } from "@gladlog/analysis/src/utils/enemyDefensives";
 import { DURING_ABSORBED_TAG_RE_SRC } from "@gladlog/analysis/src/utils/externalDamage";
 import { FORCED_MOVE_TEXT } from "@gladlog/analysis/src/utils/forcedDisplacement";
@@ -4236,6 +4238,99 @@ export function checkKillAttemptAlreadyUpStated(lines: string[]): string[] {
   return failures;
 }
 
+/** What follows the ability's name on an own `[ENEMY DEF]` percentage line:
+ * `(N%)`, `(N%, 8.0s…`, `(N%, end not logged…` — the percentage and, when
+ * the line prints one, its length in seconds. */
+const ENEMY_DEF_OWN_PCT_LABEL = new RegExp(
+  String.raw`^\((\d+)%(?:, (?:${ENEMY_DEF_END_NOT_LOGGED}|(\d+(?:\.\d+)?)s))?`,
+);
+
+/**
+ * Hard invariant (R08 d, gap 1; 2026-10-13): "defenseless" says nothing was
+ * up, so no `[KILL WINDOW]` / `[VULNERABLE]` span — the line's own, or the
+ * `defenseless a–b` it names — runs across a 20–99 % wall its target put up
+ * itself. For every such span: no `[ENEMY DEF]` line of the target's own
+ * (resolved through the `<unit>` legend) that names a wall with a percentage
+ * sits strictly between the span's two printed seconds
+ * (`spanHoldsOwnWallSecond`, the producer's own reading of "a cut span shares
+ * at most its boundary second with the wall's line").
+ *
+ * The producer cuts the spans on the wall events the line is rendered from
+ * (`computeOffensiveWindows` step 2b: `enemyDefensiveEvents` of kind "self",
+ * the interval `ownWallSpanS` — from the aura's start, the instant the line
+ * is printed at, for as long as the aura was up). Which names are walls is
+ * the events' own set (`ownWallLineNames`, `MITIGATION_TABLE` 20–99 %): Roar
+ * of Sacrifice prints a percentage and is no wall (rulings A20 + U3), an
+ * external (`X → unit`) is step 2b's older half and has no label of its own.
+ * A wall on the span's first or last printed second is the cut itself: the
+ * span ends in the second the wall's line prints, and starts again in the
+ * second the wall ended — the line's own when the wall lasted under one. A
+ * line that prints no length (the aura went up as the round ended) or `0.0s`
+ * is not read: an aura of no length cuts nothing.
+ *
+ * Before (cap605-cl, 3,520 owner contexts of 605 new-season files, the tree
+ * before the cut): 755 failures on 587 window lines in 286 contexts, every
+ * one a `[KILL WINDOW]` line — its `defenseless` span 578, its own burst span
+ * 177; Survival of the Fittest 443, Divine Protection 298, Ancient of Lore
+ * 14. f4da82c5 round 5 printed `defenseless 1:35–2:51` on a hunter whose
+ * Survival of the Fittest line sits at 2:04.
+ */
+export function checkNoWindowAcrossOwnWall(lines: string[]): string[] {
+  const failures: string[] = [];
+  const wallNames = ownWallLineNames();
+  /** rendered unit id → the seconds and names of its own wall lines */
+  const wallsOf = new Map<string, Array<{ second: number; spell: string }>>();
+  for (const line of lines) {
+    const m = ENEMY_DEF_LINE.exec(line);
+    // an external (`X → unit`) is not the unit's own line
+    if (!m || !m[0].endsWith("(") || !wallNames.has(m[3]!)) continue;
+    const label = ENEMY_DEF_OWN_PCT_LABEL.exec(
+      line.slice(m.index + m[0].length - 1),
+    );
+    const id = ENEMY_DEF_CASTER_ID.exec(line)?.[1];
+    if (!label || id === undefined) continue;
+    // no printed length, or one that prints 0.0s: no interval to cut
+    if (!label[0].includes(", ")) continue;
+    if (label[2] !== undefined && Number(label[2]) <= 0) continue;
+    wallsOf.set(id, [
+      ...(wallsOf.get(id) ?? []),
+      { second: Number(m[1]) * 60 + Number(m[2]), spell: m[3]! },
+    ]);
+  }
+  if (wallsOf.size === 0) return failures;
+  const idOf = unitIdsByName(lines);
+  lines.forEach((line, i) => {
+    const w = line.match(KILL_WINDOW_SPAN);
+    const target = w ? line.match(KILL_WINDOW_TARGET)?.[1] : undefined;
+    if (!w || target === undefined) return;
+    const id = idOf.get(target);
+    const walls = id === undefined ? undefined : wallsOf.get(id);
+    if (!walls) return;
+    const check = (what: string, from: number, to: number) => {
+      const held = walls
+        .filter((x) => spanHoldsOwnWallSecond(from, to, x.second))
+        .sort((a, b) => a.second - b.second);
+      if (held.length > 0)
+        failures.push(
+          `line ${i + 1}: ${what} ${fmtTime(from)}–${fmtTime(to)} 的目标 ${target} 在其中 ${held.map((x) => `${fmtTime(x.second)} ${x.spell}`).join("、")} 自己开了 20–99% 的墙([ENEMY DEF] 行)—— ${line.trim().slice(0, 140)}`,
+        );
+    };
+    check(
+      `[${w[1]}] 的区间`,
+      Number(w[2]) * 60 + Number(w[3]),
+      Number(w[4]) * 60 + Number(w[5]),
+    );
+    const d = line.match(DEFENSELESS_SPAN);
+    if (d)
+      check(
+        "defenseless 区间",
+        Number(d[1]) * 60 + Number(d[2]),
+        Number(d[3]) * 60 + Number(d[4]),
+      );
+  });
+  return failures;
+}
+
 /** `softer target then: <unit> — PRIME` / `— gated, A/B in hand` inside an
  * opportunity clause. */
 const KILL_ATTEMPT_SOFTER_TARGET =
@@ -7398,6 +7493,7 @@ export function checkMatch(
   hardFailures.push(...checkKillAttemptAlreadyUpStated(lines));
   hardFailures.push(...checkKillAttemptOwnControlClause(lines));
   hardFailures.push(...checkNoWindowAcrossSpiritOfRedemption(lines));
+  hardFailures.push(...checkNoWindowAcrossOwnWall(lines));
   hardFailures.push(...checkKillTierWallOwnership(lines));
   hardFailures.push(...checkGuardianSpiritSaveClause(lines));
   hardFailures.push(...checkKarmaFedClause(lines));

@@ -75,6 +75,7 @@
     "test/syncWindowOwnerPartGate.test.ts",
     "test/syncWindowReadyCdHoldersGate.test.ts",
     "test/unnecessaryNoteHpGate.test.ts",
-    "test/unpurgedRoundEndGate.test.ts"
+    "test/unpurgedRoundEndGate.test.ts",
+    "test/windowAcrossOwnWallGate.test.ts"
   ]
 }

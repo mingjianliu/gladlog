@@ -17,15 +17,23 @@ import {
   kwCooldownSeconds,
 } from "../src/data/abilityProfile";
 import { ensureAnalysisData } from "../src/data/ensure";
+import { MITIGATION_WALL_IDS } from "../src/data/mitigationData";
 import {
   extractSpiritOfRedemptionIntervals,
   isGhostAtRenderSecond,
   spanHoldsGhostSecond,
 } from "../src/utils/combatStates";
 import {
+  enemyDefensiveEvents,
+  MITIGATION_AURA_IDS,
+  ownWallLineNames,
+  ownWallSpanS,
   renderedExternalSpanS,
   renderedObservedSeconds,
+  selfSaveReductionNames,
+  spanHoldsOwnWallSecond,
 } from "../src/utils/enemyDefensives";
+import { WALL_IN_HAND_MIT_IDS } from "../src/utils/killWindowTargetSelection";
 import {
   computeOffensiveWindows,
   subtractIntervals,
@@ -380,5 +388,263 @@ describe("computeOffensiveWindows — Spirit of Redemption form cuts the span (F
     expect(w.map((x) => [x.fromSeconds, x.toSeconds])).toEqual([
       [plain.fromSeconds, plain.toSeconds],
     ]);
+  });
+});
+
+// R08 (d), gap 1 (2026-10-13): "defenseless" says nothing was up — the span
+// is cut on the target's OWN 20–99 % wall the state machine does not time: a
+// wall outside the kill-window roster, and a wall's aura with no cast behind
+// it. The interval is the aura its `[ENEMY DEF]` line is rendered from.
+describe("computeOffensiveWindows — the target's own 20–99 % wall cuts the span (R08 d)", () => {
+  const BARKSKIN = "22812";
+  const SURVIVAL_OF_THE_FITTEST = "264735";
+  const DIVINE_PROTECTION_RET = "403876";
+  const ANCIENT_OF_LORE = "473909";
+  const ROAR_OF_SACRIFICE = "53480";
+  const combat = { startTime: T0, endTime: at(60), units: {} } as never;
+  const own = (event: LogEvent, id: string, s: number, src = "e1") => ({
+    ...makeAuraEvent(event, id, at(s), src, "e1", "BUFF"),
+    srcUnitName: src === "e1" ? "EnemyHunter" : "EnemyHealer",
+  });
+  const up = (id: string, from: number, to: number, src = "e1") => [
+    own(LogEvent.SPELL_AURA_APPLIED, id, from, src),
+    own(LogEvent.SPELL_AURA_REMOVED, id, to, src),
+  ];
+  const press = (id: string, s: number) =>
+    makeSpellCastEvent(id, at(s), "e1", "EnemyHunter", "e1", "EnemyHunter");
+  // Barkskin at 2 s is the one roster spell the unit pressed: defenseless
+  // from its end
+  const hunter = (
+    auras: ReturnType<typeof makeAuraEvent>[] = [],
+    casts: ReturnType<typeof makeSpellCastEvent>[] = [],
+  ) =>
+    makeUnit("e1", {
+      name: "EnemyHunter",
+      spec: CombatUnitSpec.Hunter_BeastMastery,
+      reaction: CombatUnitReaction.Hostile,
+      spellCastEvents: [press(BARKSKIN, 2), ...casts],
+      auraEvents: auras,
+    });
+  const spans = (u: ReturnType<typeof hunter>) =>
+    computeOffensiveWindows([u] as never, [], combat).map((w) => [
+      w.fromSeconds,
+      w.toSeconds,
+    ]);
+
+  it("the two walls the roster does not hold are still not roster members — the cut does not come from the roster", () => {
+    // roster membership also OPENS spans (a unit that pressed only that
+    // spell); registered as open in docs/predicate-index "Not yet unified"
+    for (const id of [SURVIVAL_OF_THE_FITTEST, DIVINE_PROTECTION_RET]) {
+      expect(MITIGATION_WALL_IDS.has(id), id).toBe(true);
+      expect(isKillWindowMajorDefensive(id), id).toBe(false);
+    }
+  });
+
+  it("f4da82c5 round 5's shape: a pressed wall outside the roster splits the span at the aura's own instants", () => {
+    const [[fromSeconds, toSeconds]] = spans(hunter()) as [[number, number]];
+    expect(toSeconds - fromSeconds).toBeGreaterThan(30);
+    // pressed at 24.6 s, up 8.0 s: the line reads `0:24 … (25%, 8.0s)`
+    const cut = spans(
+      hunter(up(SURVIVAL_OF_THE_FITTEST, 24.6, 32.6), [
+        press(SURVIVAL_OF_THE_FITTEST, 24.6),
+      ]),
+    );
+    expect(cut).toHaveLength(2);
+    expect(cut[0]).toEqual([fromSeconds, 24.6]);
+    expect(cut[1]![0]).toBeCloseTo(32.6, 6);
+    expect(cut[1]![1]).toBe(toSeconds);
+    // Retribution's Divine Protection the same
+    expect(
+      spans(
+        hunter(up(DIVINE_PROTECTION_RET, 30, 38), [
+          press(DIVINE_PROTECTION_RET, 30),
+        ]),
+      ),
+    ).toEqual([
+      [fromSeconds, 30],
+      [38, toSeconds],
+    ]);
+  });
+
+  it("310e5c6d's shape: a wall's aura with no cast of its id behind it cuts the span too", () => {
+    const [[fromSeconds, toSeconds]] = spans(hunter()) as [[number, number]];
+    const u = hunter(up(ANCIENT_OF_LORE, 40.4, 44.2));
+    const [d] = enemyDefensiveEvents(u as never, [u] as never, combat).filter(
+      (e) => e.kind === "self",
+    );
+    expect(d!.pressSeconds).toBeUndefined();
+    const cut = spans(u);
+    expect(cut).toHaveLength(2);
+    expect(cut[0]).toEqual([fromSeconds, 40.4]);
+    expect(cut[1]![0]).toBeCloseTo(44.2, 6);
+    expect(cut[1]![1]).toBe(toSeconds);
+  });
+
+  it("a wall that lasted a second leaves the pieces on either side; pieces under the minimum length are dropped; an aura of no length cuts nothing", () => {
+    const [[fromSeconds, toSeconds]] = spans(hunter()) as [[number, number]];
+    // 2c6e85ec round 1's shape: up 1.0 s
+    expect(spans(hunter(up(DIVINE_PROTECTION_RET, 30.7, 31.7)))).toEqual([
+      [fromSeconds, 30.7],
+      [31.7, toSeconds],
+    ]);
+    // 3 s into the span: nothing is left before it
+    expect(
+      spans(hunter(up(DIVINE_PROTECTION_RET, fromSeconds + 3, 38))),
+    ).toEqual([[38, toSeconds]]);
+    expect(spans(hunter(up(DIVINE_PROTECTION_RET, 30, 30)))).toEqual([
+      [fromSeconds, toSeconds],
+    ]);
+  });
+
+  it("a span that ends at the wall's press keeps that last fraction of a second (02c8e3ac round 2: Die by the Sword at 2:38.9 — the hits of that second forced it)", () => {
+    const [[fromSeconds]] = spans(hunter()) as [[number, number]];
+    const cut = computeOffensiveWindows(
+      [hunter(up(DIVINE_PROTECTION_RET, 38.9, 46.9))] as never,
+      [],
+      combat,
+    );
+    expect(cut[0]!.fromSeconds).toBe(fromSeconds);
+    // not 38: the rendered pair of an external floors its start
+    expect(cut[0]!.toSeconds).toBe(38.9);
+    expect(
+      renderedExternalSpanS({ atSeconds: 38.9, observedSeconds: 8 }),
+    ).toEqual({ from: 38, to: 46 });
+    expect(
+      ownWallSpanS(
+        { kind: "self", atSeconds: 38.9, observedSeconds: 8 },
+        false,
+      ),
+    ).toEqual({ from: 38.9, to: 46.9 });
+    expect(
+      ownWallSpanS(
+        { kind: "external", atSeconds: 38.9, observedSeconds: 8 },
+        false,
+      ),
+    ).toBeUndefined();
+    expect(
+      ownWallSpanS({ kind: "self", atSeconds: 38.9 }, false),
+    ).toBeUndefined();
+  });
+
+  it("a press the state machine times keeps its reading (ruling D6): the aura is not read, only the gap to a cast line logged after it", () => {
+    const [[fromSeconds, toSeconds]] = spans(hunter()) as [[number, number]];
+    // the same Barkskin press with its aura logged, running past the
+    // official length the machine holds: the span opens where it did
+    expect(spans(hunter(up(BARKSKIN, 2, fromSeconds + 6)))).toEqual([
+      [fromSeconds, toSeconds],
+    ]);
+    const d = { kind: "self" as const, atSeconds: 99.98, observedSeconds: 8 };
+    // no press behind the aura: the whole aura, roster wall or not
+    expect(ownWallSpanS(d, true)).toEqual({ from: 99.98, to: 107.98 });
+    // a timed press logged before its aura: the machine already ended the span
+    expect(ownWallSpanS({ ...d, pressSeconds: 99.9 }, true)).toBeUndefined();
+    // …logged 40 ms after it: the span ends with the aura, not the cast line
+    expect(ownWallSpanS({ ...d, pressSeconds: 100.02 }, true)).toEqual({
+      from: 99.98,
+      to: 100.02,
+    });
+    // the same press of a wall outside the roster: the whole aura
+    expect(ownWallSpanS({ ...d, pressSeconds: 100.02 }, false)).toEqual({
+      from: 99.98,
+      to: 107.98,
+    });
+  });
+
+  it("not a wall of the unit's own: a redirect that prints a percentage (Roar of Sacrifice, rulings A20 + U3), another unit's wall on itself, a wall aura somebody else applied", () => {
+    const plain = spans(hunter());
+    expect(
+      spans(
+        hunter(up(ROAR_OF_SACRIFICE, 30, 40), [press(ROAR_OF_SACRIFICE, 30)]),
+      ),
+    ).toEqual(plain);
+    const other = makeUnit("e2", {
+      name: "EnemyHealer",
+      spec: CombatUnitSpec.Druid_Restoration,
+      reaction: CombatUnitReaction.Hostile,
+      auraEvents: [
+        {
+          ...makeAuraEvent(
+            LogEvent.SPELL_AURA_APPLIED,
+            SURVIVAL_OF_THE_FITTEST,
+            at(30),
+            "e2",
+            "e2",
+            "BUFF",
+          ),
+          srcUnitName: "EnemyHealer",
+        },
+      ],
+    });
+    expect(
+      computeOffensiveWindows(
+        [
+          // the same aura on the hunter, applied by the other unit
+          hunter(up(SURVIVAL_OF_THE_FITTEST, 30, 38, "e2")),
+          other,
+        ] as never,
+        [],
+        combat,
+      )
+        .filter((w) => w.targetUnitId === "e1")
+        .map((w) => [w.fromSeconds, w.toSeconds]),
+    ).toEqual(plain);
+  });
+
+  it("no rendered second strictly inside a cut span is a wall line's second (the gate's reading)", () => {
+    const u = hunter(
+      [
+        ...up(SURVIVAL_OF_THE_FITTEST, 24.6, 32.6),
+        ...up(DIVINE_PROTECTION_RET, 36.7, 37.7),
+        ...up(ANCIENT_OF_LORE, 45.95, 50.2),
+      ],
+      [press(SURVIVAL_OF_THE_FITTEST, 24.6)],
+    );
+    const walls = enemyDefensiveEvents(u as never, [u] as never, combat)
+      .filter((e) => e.kind === "self" && e.spellId !== BARKSKIN)
+      .map((e) => Math.floor(e.atSeconds));
+    expect(walls).toEqual([24, 36, 45]);
+    const cut = computeOffensiveWindows([u] as never, [], combat);
+    expect(cut.length).toBeGreaterThanOrEqual(2);
+    for (const w of cut)
+      for (const s of walls)
+        expect(
+          spanHoldsOwnWallSecond(
+            Math.floor(w.fromSeconds),
+            Math.floor(w.toSeconds),
+            s,
+          ),
+        ).toBe(false);
+    expect(spanHoldsOwnWallSecond(20, 30, 20)).toBe(false);
+    expect(spanHoldsOwnWallSecond(20, 30, 30)).toBe(false);
+    expect(spanHoldsOwnWallSecond(20, 30, 21)).toBe(true);
+  });
+});
+
+describe("the wall slice has one source (R08 d)", () => {
+  it("the tier's walls, the [ENEMY DEF] wall auras and the table's 20–99 % rows are the same ids", () => {
+    expect(WALL_IN_HAND_MIT_IDS).toBe(MITIGATION_WALL_IDS);
+    expect([...MITIGATION_AURA_IDS].sort()).toEqual(
+      [...MITIGATION_WALL_IDS].sort(),
+    );
+    expect(MITIGATION_WALL_IDS.size).toBeGreaterThanOrEqual(26);
+  });
+
+  it("the names a wall line prints: every wall's, the aura of a cast-keyed one, and no percentage line that is not a wall", () => {
+    const names = ownWallLineNames();
+    for (const n of [
+      "Survival of the Fittest",
+      "Divine Protection",
+      "Ancient of Lore",
+      "Barkskin",
+      "Blur",
+      "Greater Invisibility",
+      "Fortifying Brew",
+    ])
+      expect(names.has(n), n).toBe(true);
+    expect(selfSaveReductionNames()).toEqual(["Roar of Sacrifice"]);
+    for (const n of selfSaveReductionNames())
+      expect(names.has(n), n).toBe(false);
+    expect(names.has("Divine Shield")).toBe(false);
+    expect(names.has("Mass Invisibility")).toBe(false);
   });
 });
