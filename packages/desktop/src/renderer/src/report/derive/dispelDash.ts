@@ -3,14 +3,13 @@ import {
   computeOffensiveWindows,
   missedPurgeNotActionable,
   missedPurgesFor,
-  reconstructDispelSummary,
   type ICCEfficiencyStat,
   type IDispelEvent,
   type IMissedPurgeWindow,
 } from "@gladlog/analysis";
 import { CombatUnitReaction } from "@gladlog/parser-compat";
 
-import { dispelRoundOf } from "./dispelRound";
+import { dispelSummaryOf } from "./dispelSummary";
 import { toLegacySafe } from "./legacySource";
 import { displaySpellName } from "./spellDisplay";
 import { tInRange, type TimeRange } from "./timeRange";
@@ -148,32 +147,12 @@ export function deriveDispelDash(
       (u) => u.reaction === CombatUnitReaction.Hostile,
     );
     if (friends.length === 0 || enemies.length === 0) return EMPTY;
-    // The round, so a window ends where the prompt's does — a Solo Shuffle
-    // round's ending death, not the log's end (`dispelRoundOf`)
-    const combatLike = dispelRoundOf(legacy);
-
-    // Build once per side (same approach as statsTable); pet dispels are
-    // attributed to the owner (B45) via the pets parameters
-    const petsOf = (owners: typeof players) => {
-      const ids = new Set(owners.map((o) => o.id));
-      return Object.values(legacy.units).filter(
-        (u) => u.ownerId && ids.has(u.ownerId),
-      );
-    };
-    const ours = reconstructDispelSummary(
-      friends,
-      enemies,
-      combatLike,
-      petsOf(friends),
-      petsOf(enemies),
-    );
-    const theirs = reconstructDispelSummary(
-      enemies,
-      friends,
-      combatLike,
-      petsOf(enemies),
-      petsOf(friends),
-    );
+    // Built once per side, each asked for as the prompt asks
+    // (`dispelSummaryOf`): the round itself — so a window ends at a Solo
+    // Shuffle round's ending death and its reach reading has the zone's line
+    // of sight — and both sides' pets, whose dispels go to their owner (B45)
+    const ours = dispelSummaryOf(legacy, friends, enemies);
+    const theirs = dispelSummaryOf(legacy, enemies, friends);
     // Annotate whether each missed purge falls inside one of our kill windows
     // (the same annotation predicate the prompt side uses)
     const windows = computeOffensiveWindows(enemies, friends, legacy);

@@ -6,14 +6,13 @@ import {
   computeOffensiveWindows,
   extractCandidateFindings,
   MENU_ONLY_TYPES,
-  reconstructDispelSummary,
   RETIRED_TYPES,
 } from "@gladlog/analysis";
 import { parseSyncReadyCdEntry } from "@gladlog/analysis/src/analysis/candidates/cooldownTiming";
 import { CombatUnitReaction } from "@gladlog/parser-compat";
 
 import { resolveOwner } from "./analysisInput";
-import { dispelRoundOf } from "./dispelRound";
+import { dispelSummaryOf } from "./dispelSummary";
 import { toLegacySafe } from "./legacySource";
 import { type TimeRange, tInRange } from "./timeRange";
 import type { ReportSource } from "./types";
@@ -557,13 +556,11 @@ export function deriveMistakes(
     }
 
     // dispel source: missed purges inside a kill window (same annotation
-    // predicate as the prompt side), each ending where the prompt's and the
-    // dispel panel's window does — at the round's end (`dispelRoundOf`)
-    const dispels = reconstructDispelSummary(
-      friends,
-      enemies,
-      dispelRoundOf(legacy),
-    );
+    // predicate as the prompt side), off the summary the prompt and the
+    // dispel panel read (`dispelSummaryOf`: the round itself, both sides'
+    // pets) — a window ends at the round's end, and a purge by our pet
+    // answers one
+    const dispels = dispelSummaryOf(legacy, friends, enemies);
     annotateMissedPurgesWithKillWindows(
       dispels.missedPurgeWindows,
       computeOffensiveWindows(enemies, friends, legacy),

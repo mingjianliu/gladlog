@@ -192,7 +192,7 @@ import * as pvpLogFetch from "../../corpus-tools/src/pvpLogFetch";
 import * as obsConfigWriter from "../../desktop/src/main/obsConfigWriter";
 import * as dashboard from "../../desktop/src/renderer/src/components/dashboard";
 import * as analysisInput from "../../desktop/src/renderer/src/report/derive/analysisInput";
-import * as dispelRound from "../../desktop/src/renderer/src/report/derive/dispelRound";
+import * as dispelSummary from "../../desktop/src/renderer/src/report/derive/dispelSummary";
 import * as flowSeries from "../../desktop/src/renderer/src/report/derive/flowSeries";
 import * as meterRows from "../../desktop/src/renderer/src/report/derive/meterRows";
 import * as reportMistakes from "../../desktop/src/renderer/src/report/derive/mistakes";
@@ -3793,12 +3793,12 @@ const INDEX: PredicateRow[] = [
     symbol: "rankMistakeMoments",
     mod: reportMistakes,
   },
-  // the round the report's dispel readers hand reconstructDispelSummary —
-  // the prompt hands it the round itself; the equality is asserted below
+  // the report's call of reconstructDispelSummary — the prompt's call (the
+  // round itself, both sides' pets); the equality is asserted below
   {
-    file: `${D}/derive/dispelRound.ts`,
-    symbol: "dispelRoundOf",
-    mod: dispelRound,
+    file: `${D}/derive/dispelSummary.ts`,
+    symbol: "dispelSummaryOf",
+    mod: dispelSummary,
   },
   // Dashboard lives outside report/ — spelled out so it matches the doc column
   {
@@ -4036,66 +4036,53 @@ describe("谓词索引:无法共享 export 的配对,断言相等", () => {
     );
   });
 
-  it("战报驱散读者问的回合结束就是 prompt 问的:roundEndMs(dispelRoundOf(x)) = roundEndMs(x);prompt 把回合本身交给 reconstructDispelSummary,dispelDash / mistakes 交的是 dispelRoundOf(legacy)", () => {
-    const unit = (deaths: number[]) => ({
-      info: {},
-      deathRecords: deaths.map((timestamp) => ({ timestamp })),
-    });
-    const rounds = [
-      // a Solo Shuffle round: over at its first player death
-      {
-        startTime: 1_000,
-        endTime: 100_000,
-        startInfo: { bracket: roundEnd.SOLO_SHUFFLE_BRACKET },
-        units: { a: unit([62_000, 60_000]), b: unit([]) },
-      },
-      // one with no death, and another bracket with one: the log's end
-      {
-        startTime: 1_000,
-        endTime: 100_000,
-        startInfo: { bracket: roundEnd.SOLO_SHUFFLE_BRACKET },
-        units: { a: unit([]), b: unit([]) },
-      },
-      {
-        startTime: 1_000,
-        endTime: 100_000,
-        startInfo: { bracket: "3v3" },
-        units: { a: unit([60_000]), b: unit([]) },
-      },
-    ];
-    expect(
-      rounds.map((r) => roundEnd.roundEndMs(dispelRound.dispelRoundOf(r))),
-    ).toEqual([60_000, 100_000, 100_000]);
-    for (const r of rounds)
-      expect(roundEnd.roundEndMs(dispelRound.dispelRoundOf(r))).toBe(
-        roundEnd.roundEndMs(r),
-      );
-    // the function reads the end off what it is handed …
-    expect(readRepo(`${A}/utils/dispelAnalysis.ts`)).toMatch(
-      /const roundEnd = roundEndMs\(combat\);/,
+  it("战报驱散读者的那次调用就是 prompt 的那次:回合本身 + 两边的宠物;dispelDash / mistakes 只经 dispelSummaryOf 调 reconstructDispelSummary", () => {
+    // the function reads the zone, the round's end and the units off the
+    // combat it is handed …
+    const fn = readRepo(`${A}/utils/dispelAnalysis.ts`);
+    expect(fn).toMatch(
+      /const zoneId = combat\.zoneId \?\? combat\.startInfo\?\.zoneId;\s*const roundEnd = roundEndMs\(combat\);/,
     );
-    // … the prompt hands it the round, the two readers this
-    expect(readRepo(`${A}/context/buildMatchContext.ts`)).toMatch(
-      /const dispelSummary = reconstructDispelSummary\(\s*friends,\s*enemies,\s*combat,/,
+    expect(fn).toMatch(/Object\.values\(combat\.units \?\? \{\}\)/);
+    // … the prompt hands it the round itself and both sides' pets, built off
+    // the round's units by owner …
+    const prompt = readRepo(`${A}/context/buildMatchContext.ts`);
+    expect(prompt).toMatch(
+      /const dispelSummary = reconstructDispelSummary\(\s*friends,\s*enemies,\s*combat,\s*friendlyPets,\s*enemyPets,\s*\);/,
     );
+    expect(prompt).toMatch(
+      /const enemyPets = Object\.values\(combat\.units \?\? \{\}\)\.filter\(\s*\(u\) => u\.ownerId && enemyPlayerIds\.has\(u\.ownerId\),\s*\);/,
+    );
+    // … and so does the report's one call: the legacy match whole (no object
+    // built of some of its fields), the pets by the same rule
+    const seam = readRepo(`${D}/derive/dispelSummary.ts`);
+    expect(seam).toMatch(
+      /return reconstructDispelSummary\(us, them, legacy, petsOf\(us\), petsOf\(them\)\);/,
+    );
+    expect(seam).toMatch(
+      /const units = Object\.values\(legacy\.units\);\s*const petsOf = \(owners: Side\) => \{\s*const ids = new Set\(owners\.map\(\(o\) => o\.id\)\);\s*return units\.filter\(\(u\) => u\.ownerId && ids\.has\(u\.ownerId\)\);/,
+    );
+    expect(seam.match(/\breturn reconstructDispelSummary\(/g)).toHaveLength(1);
+    // both readers go through it, and neither calls the function itself
     const dash = readRepo(`${D}/derive/dispelDash.ts`);
-    expect(dash).toMatch(/import \{ dispelRoundOf \} from "\.\/dispelRound"/);
-    expect(dash).toMatch(/const combatLike = dispelRoundOf\(legacy\);/);
-    expect(
-      dash.match(
-        /reconstructDispelSummary\(\s*(?:friends,\s*enemies|enemies,\s*friends),\s*combatLike,/g,
-      ),
-    ).toHaveLength(2);
+    expect(dash).toMatch(
+      /import \{ dispelSummaryOf \} from "\.\/dispelSummary"/,
+    );
+    expect(dash).toMatch(
+      /const ours = dispelSummaryOf\(legacy, friends, enemies\);\s*const theirs = dispelSummaryOf\(legacy, enemies, friends\);/,
+    );
     const mistakes = readRepo(`${D}/derive/mistakes.ts`);
     expect(mistakes).toMatch(
-      /import \{ dispelRoundOf \} from "\.\/dispelRound"/,
+      /import \{ dispelSummaryOf \} from "\.\/dispelSummary"/,
     );
     expect(mistakes).toMatch(
-      /reconstructDispelSummary\(\s*friends,\s*enemies,\s*dispelRoundOf\(legacy\),/,
+      /const dispels = dispelSummaryOf\(legacy, friends, enemies\);/,
     );
-    // and neither calls it any other way
-    expect(dash.match(/reconstructDispelSummary\(/g)).toHaveLength(2);
-    expect(mistakes.match(/reconstructDispelSummary\(/g)).toHaveLength(1);
+    for (const reader of [dash, mistakes]) {
+      expect(reader).not.toMatch(/reconstructDispelSummary\(/);
+      expect(reader).toMatch(/const legacy = toLegacySafe\(source\);/);
+    }
+    expect(typeof dispelSummary.dispelSummaryOf).toBe("function");
   });
 
   it("rawStreams 的 splitRawLine / parseRawTimestamp / mirrorDecodeAdvanced 自 2026-09-26 起就是 parser 的 splitLine / parseTimestamp / decodeAdvanced 本身(经 parser-compat 重导出,同一引用),不再是镜像", () => {

@@ -197,4 +197,99 @@ describe("战报的驱散读者:窗口止于回合结束(与 prompt 同一个 ro
       /^\s*1:04\s+\[UNCLEANSED DEBUFF\]\s+Fear on .* \| 6s \|/,
     );
   });
+
+  it("面板行的可行性标注就是 prompt 那份汇总的字段:无视线/超射程 = losReachable(射程 + 该地图的视线),不是只看射程", () => {
+    let noReach = 0;
+    let rangeAloneDiffers = 0;
+    for (const m of [shuffle, threes]) {
+      const { legacy, friends, enemies, friendlyPets, enemyPets } = teams(m);
+      const prompt = reconstructDispelSummary(
+        friends,
+        enemies,
+        legacy,
+        friendlyPets,
+        enemyPets,
+      );
+      annotateMissedPurgesWithKillWindows(
+        prompt.missedPurgeWindows,
+        computeOffensiveWindows(enemies, friends, legacy),
+      );
+      const start = (w: { timeSeconds: number }) => w.timeSeconds.toFixed(3);
+      expect(
+        purgeRows(m).map((r) => [
+          r.tS.toFixed(3),
+          r.unitName,
+          r.label.includes("(我方击杀窗口内)"),
+          r.label.includes("(驱散在 CD)"),
+          r.label.includes("(驱散者被控/被锁)"),
+          r.label.includes("(无视线/超射程)"),
+        ]),
+      ).toEqual(
+        [...prompt.missedPurgeWindows]
+          .sort((a, b) => a.timeSeconds - b.timeSeconds)
+          .map((w) => [
+            start(w),
+            w.enemyName,
+            !!w.duringKillWindow,
+            !!w.purgeWasOnCD,
+            !!w.purgersLockedOut,
+            w.losReachable === false,
+          ]),
+      );
+      expect(
+        cleanseRows(m).map((r) => [
+          r.tS.toFixed(3),
+          r.unitName,
+          r.label.includes("(解法在 CD)"),
+          r.label.includes("(驱散者被控/被锁)"),
+          r.label.includes("(无视线/超射程)"),
+          r.label.includes("(对方 DR 未递减,解了易被续控)"),
+        ]),
+      ).toEqual(
+        [...prompt.missedCleanseWindows]
+          .sort((a, b) => a.timeSeconds - b.timeSeconds)
+          .map((w) => [
+            start(w),
+            w.targetName,
+            !!w.cleanseWasOnCD,
+            !!w.dispellersLockedOut,
+            w.losReachable === false,
+            !!w.drChainRisk,
+          ]),
+      );
+      // the reading the panel had before: the round without its zone
+      const rangeAlone = reconstructDispelSummary(
+        friends,
+        enemies,
+        {
+          startTime: legacy.startTime,
+          endTime: legacy.endTime,
+          startInfo: { bracket: legacy.startInfo.bracket },
+          units: legacy.units,
+        },
+        friendlyPets,
+        enemyPets,
+      );
+      const windows = [
+        ...prompt.missedPurgeWindows,
+        ...prompt.missedCleanseWindows,
+      ];
+      const before = [
+        ...rangeAlone.missedPurgeWindows,
+        ...rangeAlone.missedCleanseWindows,
+      ];
+      expect(before).toHaveLength(windows.length);
+      noReach += windows.filter((w) => w.losReachable === false).length;
+      rangeAloneDiffers += windows.filter(
+        (w, i) => w.losReachable !== before[i]!.losReachable,
+      ).length;
+    }
+    // the fixture has the case: windows only the zone's line of sight rules
+    // out (the two brackets together) — a geometry or fixture change that
+    // empties it shows here
+    expect({ noReach, rangeAloneDiffers }).toEqual({
+      noReach: 9,
+      rangeAloneDiffers: 3,
+    });
+  });
 });
