@@ -3422,6 +3422,12 @@ function teamPlayEvents(
         roundEndMs,
         // a ready cooldown the owner's pet casts is asked of the pet
         units,
+        // I05 (c): a stun does not stop a cooldown a stunned player can press
+        {
+          pvpTalentIds: playerTalentIdSets(
+            owner as unknown as Parameters<typeof playerTalentIdSets>[0],
+          ).pvpTalentIds,
+        },
       );
       const cdHoardSources = [
         {

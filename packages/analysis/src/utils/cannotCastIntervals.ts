@@ -9,8 +9,8 @@ import { supersededAuraBreaks } from "./auraIntervals";
 
 import { schoolLockedBy, spellSchoolMask } from "../data/spellSchools";
 import { ccSpellIds, officialSilenceIds } from "../data/spellTags";
-import { REACTION_WINDOW_S } from "./cooldowns";
-import { matchPendingCcKey } from "./drAnalysis";
+import { REACTION_WINDOW_S, usableWhileStunned } from "./cooldowns";
+import { isStunDrAura, matchPendingCcKey } from "./drAnalysis";
 import { kickLockoutSecondsFor } from "./kickLockout";
 import { isSilenceableCast } from "./spellMechanics";
 import { firstDeathMs } from "./unitDeath";
@@ -235,6 +235,37 @@ export function intervalBlocksSpell(
   const m = spellSchoolMask(spellId);
   if (m === undefined || iv.lockedSchoolMask === undefined) return true;
   return schoolLockedBy(m, iv.lockedSchoolMask);
+}
+
+/**
+ * Does the game let the unit press `spellId` THROUGH this cannot-cast
+ * interval? Only through a stun (`isStunDrAura`, the test
+ * `wasLockedOutByStunOnly` applies to a CC instance), and only a spell the
+ * product's one usable-while-stunned predicate admits (`usableWhileStunned`:
+ * DB2's "Allow While Stunned" bits, the conditional PvP-talent layer read
+ * from `pvpTalentIds`, and the immunity-purge route of user ruling U-T1 —
+ * Divine Shield, Ice Block, Icebound Fortitude; Blink is withheld by U-T1b
+ * and stays blocked). A school-limited purge (Blessing of Protection) counts
+ * only where the press would land on the stunned unit itself (`onSelf`) and
+ * the stun is wholly a school it covers. Never through a kick lockout, a
+ * silence, a fear or any other control — the table has no such dimension
+ * wired — and never for an interval that sits on a pet.
+ *
+ * Opt-in (`actWindowFor`'s `stunPressable`): `intervalBlocksSpell` itself
+ * still takes every aura as stopping everything, for every other reader.
+ */
+export function stunLetsPress(
+  iv: Pick<NamedCannotCastInterval, "lockout" | "spellId" | "onPetId">,
+  spellId: string,
+  ctx: { pvpTalentIds?: ReadonlySet<string>; onSelf?: boolean },
+): boolean {
+  if (iv.lockout || iv.onPetId !== undefined) return false;
+  if (!isStunDrAura(iv.spellId)) return false;
+  return usableWhileStunned(
+    spellId,
+    ctx.pvpTalentIds,
+    ctx.onSelf ? [iv.spellId] : undefined,
+  );
 }
 
 /**
@@ -864,7 +895,11 @@ export interface ActWindowState {
    * intervals: what sat on a pet is counted here and never named there.
    * The same count as `couldRespond(anchorS, toS, spell)` compares with
    * REACTION_WINDOW_S (`freeMsIn`): asked for one spell over the same span,
-   * the two cannot disagree. */
+   * the two cannot disagree — but for a stun under `stunPressable`, which
+   * this count reads per spell and `couldRespond` does not yet (so this is
+   * never the smaller of the two).
+   * With `stunPressable`, a stun is not counted against a spell the game
+   * lets a stunned player press (`stunLetsPress`); `blocks` still names it. */
   freeAfterS: number;
   /** the window's end after that cut, seconds since round start (F-H5
    * `windowS` = endS − t) */
@@ -891,6 +926,17 @@ export interface ActWindowState {
  * `units` (the round's units) is what lets a spell the unit's pet casts be
  * asked of the pet; without it every spell is the unit's own. The death cut
  * is the unit's, not the pet's.
+ *
+ * `stunPressable` (I05 option c, user ruling 2026-10-11; cd-hoarded's
+ * reader): the unit's PvP talents. When given, `stateIn`'s free time asks of
+ * each stun on the unit whether the game lets a stunned player press the
+ * spell (`stunLetsPress`) — an interval is counted only when it stops EVERY
+ * spell asked about, a stun included: Icebound Fortitude under a Shockwave is
+ * pressable, so `readyCds=Icebound Fortitude, ownerCc=Shockwave +0.8…+2.8s`
+ * reads `ownerFreeS=5.0`, not 3.0 (11346ea9 r1 @51). `onSelf` says the press
+ * would land on the unit itself (the owner's own crisis): only then can a
+ * school-limited purge count. Absent ⇒ every aura stops everything, as for
+ * every other reader.
  */
 export function actWindowFor(
   unit: ICombatUnit,
@@ -898,6 +944,7 @@ export function actWindowFor(
   matchStartMs: number,
   roundEndMs: number = Infinity,
   units?: RoundUnits,
+  stunPressable?: { pvpTalentIds: ReadonlySet<string> },
 ): {
   couldRespond: (fromS: number, toS: number, spellId?: string) => boolean;
   stateIn: (
@@ -905,6 +952,7 @@ export function actWindowFor(
     toS: number,
     anchorS: number,
     spellIds?: readonly string[],
+    onSelf?: boolean,
   ) => ActWindowState | null;
 } {
   let named: NamedCannotCastInterval[];
@@ -920,19 +968,40 @@ export function actWindowFor(
   // casters resolved once (a missing pet stream must not throw the caller's
   // candidate away: the spells then stay on the unit's own reading)
   let casters: PetCasters | undefined;
+  // the unit's own intervals minus the stuns one of its OWN spells asked
+  // about can be pressed through (`stunLetsPress`) — "stops every spell"
+  const withoutPressableStuns = (
+    ownSpellIds: readonly string[],
+    through: { onSelf: boolean } | undefined,
+  ): NamedCannotCastInterval[] =>
+    through && stunPressable
+      ? named.filter(
+          (iv) =>
+            !ownSpellIds.some((id) =>
+              stunLetsPress(iv, id, {
+                pvpTalentIds: stunPressable.pvpTalentIds,
+                onSelf: through.onSelf,
+              }),
+            ),
+        )
+      : named;
   const forSpells = (
     spellIds: readonly string[] | undefined,
+    through?: { onSelf: boolean },
   ): NamedCannotCastInterval[] => {
     if (!spellIds?.length) return named;
     try {
       casters ??= petCastersBySpell(unit, units);
+      const split = petBlockLists(enemyIds, spellIds, casters);
       return intervalsForSpells(
-        named,
-        petBlockLists(enemyIds, spellIds, casters),
+        withoutPressableStuns(split.ownSpellIds, through),
+        split,
         spellIds,
       );
     } catch {
-      return named.filter((iv) => intervalBlocksEverySpell(iv, spellIds));
+      return withoutPressableStuns(spellIds, through).filter((iv) =>
+        intervalBlocksEverySpell(iv, spellIds),
+      );
     }
   };
   // the one free-time count: gate and fact
@@ -940,13 +1009,18 @@ export function actWindowFor(
     fromS: number,
     toS: number,
     spellIds: readonly string[] | undefined,
+    through?: { onSelf: boolean },
   ): number =>
-    freeMsWithin(forSpells(spellIds), matchStartMs + fromS * 1000, endMs(toS));
+    freeMsWithin(
+      forSpells(spellIds, through),
+      matchStartMs + fromS * 1000,
+      endMs(toS),
+    );
   return {
     couldRespond: (fromS, toS, spellId) =>
       freeMsIn(fromS, toS, spellId === undefined ? undefined : [spellId]) >=
       REACTION_WINDOW_S * 1000,
-    stateIn: (fromS, toS, anchorS, spellIds) => {
+    stateIn: (fromS, toS, anchorS, spellIds, onSelf) => {
       const fromMs = matchStartMs + fromS * 1000;
       // the gate's own window: cut at death and the round end, so a CC that
       // landed after the round was over is never named (agy review of F-H1)
@@ -965,7 +1039,8 @@ export function actWindowFor(
         }));
       return {
         blocks,
-        freeAfterS: freeMsIn(anchorS, toS, spellIds) / 1000,
+        freeAfterS:
+          freeMsIn(anchorS, toS, spellIds, { onSelf: onSelf === true }) / 1000,
         endS: (toMs - matchStartMs) / 1000,
       };
     },

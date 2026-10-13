@@ -2194,6 +2194,16 @@ const INDEX: PredicateRow[] = [
     mod: cannotCastIntervals,
   },
   {
+    file: `${A}/utils/cannotCastIntervals.ts`,
+    symbol: "stunLetsPress",
+    mod: cannotCastIntervals,
+  },
+  {
+    file: `${A}/utils/drAnalysis.ts`,
+    symbol: "isStunDrAura",
+    mod: drAnalysis,
+  },
+  {
     file: `${A}/analysis/candidates/cooldownTiming.ts`,
     symbol: "ownerFreeSpan",
     mod: cooldownTiming,

@@ -12,6 +12,7 @@ import {
 import {
   actWindowFor,
   couldRespondFor,
+  stunLetsPress,
 } from "../src/utils/cannotCastIntervals";
 import { REACTION_WINDOW_S } from "../src/utils/cooldowns";
 
@@ -415,6 +416,192 @@ describe("cdHoardedEvents — the owner gate and ownerFreeS read one span (I05)"
     const free = { ...stunned(10, 11) } as ICombatUnit;
     expect(run(free)).toHaveLength(1);
     expect(run(free, [{ timeSeconds: 59 }])).toHaveLength(0);
+  });
+});
+
+// I05 (user ruling 2026-10-11, option c): `ownerFreeS` asks of each stun on
+// the owner whether the game lets a stunned player press THAT cooldown
+// (`usableWhileStunned`, the product's one predicate — rulings U-T1 / U-T1b).
+describe("stunLetsPress — which interval a named cooldown is pressable through (I05 c)", () => {
+  const stun = (spellId: string) => ({ spellId, lockout: false });
+  const HOJ = "853"; // Hammer of Justice — Holy
+  const KIDNEY = "408"; // Kidney Shot — Physical
+  const NO_TALENTS = new Set<string>();
+
+  it("the immunity-purge route of U-T1 and DB2's allow-while-stunned bit, through a stun only", () => {
+    for (const id of ["642", "45438", "48792", "33206"])
+      expect(stunLetsPress(stun(HOJ), id, {})).toBe(true);
+    // not through a fear, a silence, or a kick lockout
+    expect(stunLetsPress(stun("8122"), "48792", {})).toBe(false);
+    expect(stunLetsPress(stun("1330"), "48792", {})).toBe(false);
+    expect(stunLetsPress({ spellId: "2139", lockout: true }, "48792", {})).toBe(
+      false,
+    );
+    // nor through a stun that sits on a pet
+    expect(stunLetsPress({ ...stun(HOJ), onPetId: "Pet-1" }, "48792", {})).toBe(
+      false,
+    );
+  });
+
+  it("a cooldown the table does not admit stays blocked — Blink is withheld by U-T1b", () => {
+    expect(stunLetsPress(stun(HOJ), "98008", {})).toBe(false); // Spirit Link Totem
+    expect(stunLetsPress(stun(HOJ), "1953", {})).toBe(false); // Blink
+  });
+
+  it("Blessing of Protection: on oneself, and only out of a stun its school covers", () => {
+    expect(stunLetsPress(stun(KIDNEY), "1022", { onSelf: true })).toBe(true);
+    expect(stunLetsPress(stun(HOJ), "1022", { onSelf: true })).toBe(false);
+    expect(stunLetsPress(stun(KIDNEY), "1022", { onSelf: false })).toBe(false);
+    expect(stunLetsPress(stun(KIDNEY), "1022", {})).toBe(false);
+  });
+
+  it("the conditional layer reads the unit's PvP talents (Transcendence: Transfer needs Eminence)", () => {
+    expect(
+      stunLetsPress(stun(HOJ), "119996", { pvpTalentIds: NO_TALENTS }),
+    ).toBe(false);
+    expect(
+      stunLetsPress(stun(HOJ), "119996", {
+        pvpTalentIds: new Set(["353584"]),
+      }),
+    ).toBe(true);
+  });
+});
+
+describe("cdHoardedEvents — ownerFreeS reads a stun per named cooldown (I05 c)", () => {
+  const T0 = 1_000_000;
+  const at = (s: number) => T0 + s * 1000;
+  const aura = (
+    spellId: string,
+    spellName: string,
+    s: number,
+    on: boolean,
+  ) => ({
+    spellId,
+    spellName,
+    srcUnitId: "e",
+    timestamp: at(s),
+    logLine: {
+      event: on ? LogEvent.SPELL_AURA_APPLIED : LogEvent.SPELL_AURA_REMOVED,
+    },
+  });
+  const unit = (auras: ReturnType<typeof aura>[]) =>
+    ({
+      id: "h",
+      auraEvents: auras,
+      actionIn: [],
+      deathRecords: [],
+    }) as unknown as ICombatUnit;
+  // 11346ea9 r1 @51: Shockwave on an Unholy Death Knight +0.83…+2.84 s
+  const shockwave = unit([
+    aura("132168", "Shockwave", 60.829, true),
+    aura("132168", "Shockwave", 62.844, false),
+  ]);
+  const save = (spellId: string, spellName: string) => ({
+    spellId,
+    spellName,
+    tag: "Defensive",
+    cooldownSeconds: 180,
+    casts: [] as { timeSeconds: number }[],
+    neverUsed: true,
+  });
+  const IBF = save("48792", "Icebound Fortitude");
+  const AMS = save("48707", "Anti-Magic Shell");
+  const BOP = save("1022", "Blessing of Protection");
+  const run = (
+    u: ICombatUnit,
+    cds: ReturnType<typeof save>[],
+    opts: { own?: boolean; stunPressable?: boolean } = {},
+  ) => {
+    const own = opts.own ?? true;
+    const act = actWindowFor(
+      u,
+      new Set(["e"]),
+      T0,
+      undefined,
+      undefined,
+      opts.stunPressable === false ? undefined : { pvpTalentIds: new Set() },
+    );
+    return cdHoardedEvents(
+      [{ crisisUnit: own ? OWNER : MATE, own, points: [point(60)] }],
+      cds,
+      OWNER,
+      undefined,
+      undefined,
+      undefined,
+      act.couldRespond,
+      undefined,
+      act.stateIn,
+    );
+  };
+
+  it("Icebound Fortitude under a Shockwave: the stun stays named, the 2 s count (ownerFreeS 3.0 → 5.0)", () => {
+    const [e] = run(shockwave, [IBF]);
+    expect(e!.facts!.ownerCc).toBe("Shockwave +0.8…+2.8s");
+    expect(e!.facts!.ownerFreeS).toBe("5.0");
+    // the reading every other caller of actWindowFor still gets
+    const [old] = run(shockwave, [IBF], { stunPressable: false });
+    expect(old!.facts!.ownerFreeS).toBe("3.0");
+  });
+
+  it("a cooldown a stunned player cannot press keeps the stun counted", () => {
+    const [e] = run(shockwave, [AMS]);
+    expect(e!.facts!.ownerFreeS).toBe("3.0");
+  });
+
+  it("several ready cooldowns: one number, the time AT LEAST ONE of them could be pressed (the FT-T10 quantifier)", () => {
+    const [e] = run(shockwave, [AMS, IBF]);
+    expect(e!.facts!.readyCds).toBe("Anti-Magic Shell; Icebound Fortitude");
+    expect(e!.facts!.ownerFreeS).toBe("5.0");
+  });
+
+  it("only a stun: a fear over the same seconds still counts against Icebound Fortitude", () => {
+    const feared = unit([
+      aura("8122", "Psychic Scream", 60.829, true),
+      aura("8122", "Psychic Scream", 62.844, false),
+    ]);
+    const [e] = run(feared, [IBF]);
+    expect(e!.facts!.ownerFreeS).toBe("3.0");
+    // and a fear on top of the stun keeps its own seconds
+    const both = unit([
+      aura("132168", "Shockwave", 60.829, true),
+      aura("8122", "Psychic Scream", 61.5, true),
+      aura("8122", "Psychic Scream", 62.5, false),
+      aura("132168", "Shockwave", 62.844, false),
+    ]);
+    const [b] = run(both, [IBF]);
+    expect(b!.facts!.ownerFreeS).toBe("4.0");
+  });
+
+  it("Blessing of Protection: out of a Kidney Shot on one's own crisis only", () => {
+    const kidney = unit([
+      aura("408", "Kidney Shot", 60.829, true),
+      aura("408", "Kidney Shot", 62.844, false),
+    ]);
+    const [own] = run(kidney, [BOP]);
+    expect(own!.facts!.ownerFreeS).toBe("5.0");
+    // pressed on a teammate it does not get the paladin out of the stun
+    const [mate] = run(kidney, [BOP], { own: false });
+    expect(mate!.facts!.ownerFreeS).toBe("3.0");
+    // Hammer of Justice is Holy: not covered
+    const hoj = unit([
+      aura("853", "Hammer of Justice", 60.829, true),
+      aura("853", "Hammer of Justice", 62.844, false),
+    ]);
+    const [holy] = run(hoj, [BOP]);
+    expect(holy!.facts!.ownerFreeS).toBe("3.0");
+  });
+
+  it("the fact alone moves: the same rows with and without the reading", () => {
+    for (let from = 58; from <= 66; from += 0.31)
+      for (const len of [0.6, 2, 4.2, 6.5]) {
+        const u = unit([
+          aura("853", "Hammer of Justice", from, true),
+          aura("853", "Hammer of Justice", from + len, false),
+        ]);
+        expect(run(u, [IBF, AMS]).map((e) => e.id)).toEqual(
+          run(u, [IBF, AMS], { stunPressable: false }).map((e) => e.id),
+        );
+      }
   });
 });
 

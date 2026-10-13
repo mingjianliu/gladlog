@@ -302,6 +302,14 @@ export interface IDRInfo {
  * candidateFindings.ts's instant-at-death check — that must not each redefine "Stun"). */
 export const STUN_DR_CATEGORY = SCM_CATEGORY_LABELS.stun;
 
+/** True iff this aura's DR category is stun (`getDRCategory`, the map a CC
+ * instance's `drInfo.category` is read from — `isStunCcInstance` on an aura id).
+ * An aura with no official DR category is not a stun here: the conservative
+ * direction, as below. */
+export function isStunDrAura(auraSpellId: string): boolean {
+  return getDRCategory(auraSpellId) === STUN_DR_CATEGORY;
+}
+
 /** True iff `cc`'s DR category is stun. Conservative on missing/unknown data (no
  * `drInfo`, or a category outside the known set): treated as NOT stun, the same
  * false-accusation-averse direction the rest of this CC-gating logic uses. */

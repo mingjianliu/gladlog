@@ -1684,6 +1684,9 @@ export function cdHoardedEvents(
     toS: number,
     anchorS: number,
     spellIds?: readonly string[],
+    /** the press would land on the owner (their own crisis): what lets a
+     * school-limited purge count under a stun (I05 c, `stunLetsPress`) */
+    onSelf?: boolean,
   ) => ActWindowState | null,
   /** Triage 2026-09-29 F-H7 / F-H9 (user ruling 2026-09-30, R4 = B, R5 = B):
    * every friendly's own major-cooldown ledger. A save the crisis unit
@@ -2108,6 +2111,9 @@ export function cdHoardedEvents(
       // `ownerCc` still lists every interval on the owner, a lockout with
       // its school — the legend tells the reader a named cooldown was
       // outside it (deliberate; post-hoc review 45-FT-99)
+      // I05 (c): and a stun is not counted against a cooldown the game lets
+      // a stunned player press (`actWindowFor`'s `stunPressable`) — the
+      // stun stays in `ownerCc`, the legend says why the time still counts
       const readySpellIds = ready.map((cd) => cd.spellId);
       const freeSpan = ownerFreeSpan(point.tSec);
       const act =
@@ -2116,6 +2122,7 @@ export function cdHoardedEvents(
           freeSpan.toS,
           freeSpan.fromS,
           readySpellIds,
+          own,
         ) ?? null;
       const off = (s: number) => {
         const d = s - t;
@@ -2133,6 +2140,7 @@ export function cdHoardedEvents(
               windowToS,
               rejectAt.at(-1)!,
               readySpellIds,
+              own,
             )
           : null;
       // F-H5 (ruling 2026-09-30, R3 = A): the window really available after
