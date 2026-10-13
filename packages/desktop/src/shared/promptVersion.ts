@@ -1488,5 +1488,21 @@
  *  the batch, no prompt change: the desktop dispel panel ends its windows at
  *  the round's end like the prompt; `logLineInstantMs`. 605-file numbers in
  *  the commit.
+ *  v379 (2026-10-13, FT, the rest of the user's 2026-10-11 rulings on the
+ *  judgment packet): KILL ATTEMPTS — a 20-99 % wall a unit owns and has not
+ *  pressed is in its hand (a target or a "softer target" with an `[UNUSED]`
+ *  wall is no longer PRIME), a wall already up is stated in the tier's
+ *  parenthesis (`…; Barkskin already up since 0:59`), an attempt that meets
+ *  our own Cyclone on its target says so (`| target in your team's Cyclone
+ *  0:42–0:47`), and no window or bracket runs across the target's pressed
+ *  Spirit of Redemption; cd-hoarded — the owner gate counts the span
+ *  `ownerFreeS` prints (from the crisis on) and both ask of each stun
+ *  whether it stops THAT cooldown; `[CONTESTED]` states cast risk only for
+ *  a control with a cast; `ENEMY CC KIT` lists every control that landed on
+ *  its unit, `(landed N×)`; line 1 asks for "up to N findings, at most one
+ *  per menu event" on a menu of one to three, and the audit drops a finding
+ *  that cites exactly the event ids of an earlier one. 605 files:
+ *  burst-into-mitigation -3, cd-hoarded -30 +7 (the 7 are cap refills, no
+ *  controlled owner among them); nothing else added.
  */
-export const PROMPT_VERSION = 378;
+export const PROMPT_VERSION = 379;
