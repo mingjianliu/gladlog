@@ -311,7 +311,9 @@ export function eventTriggerTimesMs(
         useStart = t;
         hitUnits = new Set();
       }
-      if (hitUnits.has(dest)) continue;
+      // a row that names no destination is not evidence of another enemy
+      // (the parser allows an empty one — review 40-FT-72)
+      if (!dest || hitUnits.has(dest)) continue;
       if (hitUnits.size < cap) {
         out.push(t);
         hitUnits.add(dest);

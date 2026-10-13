@@ -339,6 +339,16 @@ describe('eventTriggerTimesMs — one reading of "a trigger happened" (FT F20)',
       ],
     });
     expect(seconds(hasted)).toEqual([10.05, 10.85]);
+    // a row with no destination credits nobody (codex 40-FT-72): Boomstick
+    // must not read ready 2 s early on a duplicate row without a target
+    const unnamed = unit({
+      damage: [
+        row("SPELL_DAMAGE", "265157", 10_000, { destUnitId: "e1" }),
+        row("SPELL_DAMAGE", "265157", 10_010, { destUnitId: "" }),
+        row("SPELL_DAMAGE", "265157", 10_020),
+      ],
+    });
+    expect(seconds(unnamed)).toEqual([10]);
     expect(EVENT_HIT_SAME_USE_MS).toBe(300);
   });
   it("at most 5 hits of one bomb count; the next bomb starts a new count", () => {
