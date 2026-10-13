@@ -247,10 +247,17 @@ export const EVENT_COOLDOWN_REDUCTIONS: Readonly<
 };
 
 /** Hits of one use land together; rows of `triggerHitIds` further apart than
- * this are different uses (`maxHitsPerUse` counts per use). The Wildfire
- * Bomb's explosion rows sit within 0.1 s of each other and two bombs are at
- * least a global cooldown apart. */
-export const EVENT_HIT_SAME_USE_MS = 1_000;
+ * this are different uses (`maxHitsPerUse` and the one-credit-per-unit rule
+ * count per use). The Wildfire Bomb's explosion rows sit within 0.1 s of
+ * each other. Two bombs are at least a global cooldown apart when CAST
+ * (0.75 s at the haste floor), but they are projectiles: the second can be
+ * thrown from closer, so their IMPACTS can be nearer than the casts — a
+ * window of 1 s merged two bombs landing 0.8–0.96 s apart on one enemy and,
+ * with one credit per unit, dropped the second (review 40-FT-70,
+ * 2026-10-11). 0.3 s is three times one explosion's spread and under the
+ * closest two impacts can get (a 0.75 s cast gap less the ~0.3 s of flight
+ * a unit can close in that time). */
+export const EVENT_HIT_SAME_USE_MS = 300;
 
 /**
  * When a reduction's triggers fired for `unit` (epoch ms, ascending) — the

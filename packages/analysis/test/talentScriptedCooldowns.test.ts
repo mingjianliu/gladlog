@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   EVENT_COOLDOWN_REDUCTIONS,
+  EVENT_HIT_SAME_USE_MS,
   eventReducedCooldownSeconds,
   eventReductionSecondsAt,
   eventTriggersFor,
@@ -327,6 +328,18 @@ describe('eventTriggerTimesMs — one reading of "a trigger happened" (FT F20)',
       ],
     });
     expect(seconds(two)).toEqual([10, 12]);
+    // two bombs a hasted global cooldown apart, the second thrown from
+    // closer: impacts 0.8 s apart on one enemy are two uses, both credited
+    // (review 40-FT-70 — a 1 s window merged them and dropped the second)
+    const hasted = unit({
+      damage: [
+        row("SPELL_DAMAGE", "265157", 10_050, { destUnitId: "e1" }),
+        row("SPELL_DAMAGE", "265157", 10_850, { destUnitId: "e1" }),
+        row("SPELL_DAMAGE", "265157", 11_010, { destUnitId: "e1" }),
+      ],
+    });
+    expect(seconds(hasted)).toEqual([10.05, 10.85]);
+    expect(EVENT_HIT_SAME_USE_MS).toBe(300);
   });
   it("at most 5 hits of one bomb count; the next bomb starts a new count", () => {
     const u = unit({
