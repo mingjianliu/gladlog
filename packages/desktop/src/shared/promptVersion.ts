@@ -1504,5 +1504,21 @@
  *  that cites exactly the event ids of an earlier one. 605 files:
  *  burst-into-mitigation -3, cd-hoarded -30 +7 (the 7 are cap refills, no
  *  controlled owner among them); nothing else added.
+ *  v380 (2026-10-13, FT, the registered small items — user: "把后续那些小项
+ *  也都先给我做了"): (1) a `[KILL WINDOW]` / `defenseless` span is cut on the
+ *  20-99 % wall its target put up itself (Survival of the Fittest,
+ *  Retribution Divine Protection, a wall aura with no logged press) —
+ *  `defenseless 1:35–2:51` across a 2:04 wall reads `1:35–2:04` and
+ *  `2:12–2:51`; (2) Blessing of Spellwarding recovers with the charge pool
+ *  it shares with Blessing of Protection — 300 s, the hand 180 s is gone
+ *  (kit lines, `[RES]`, `cheaper available` notes follow); (3) the cooldown
+ *  ledger asserts no unproven cooldown for a unit whose talents are unknown
+ *  (no line moves for a parsed log). Desktop, no prompt change: the
+ *  missed-sync card names the holder in Chinese, the dispel panel reads
+ *  line of sight and pets as the prompt does, the stats table / replay /
+ *  death recap cut controls at a Solo Shuffle round's end, an empty reply
+ *  has its own panel sentence. 605 files: kick-priority-missed -5 +1,
+ *  kick-priority-team -7 +2 (the added are one cap refill seen by three
+ *  owners); no candidate moves on the Spellwarding step.
  */
-export const PROMPT_VERSION = 379;
+export const PROMPT_VERSION = 380;
