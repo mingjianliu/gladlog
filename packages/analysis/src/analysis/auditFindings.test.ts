@@ -180,9 +180,142 @@ describe("auditFindings", () => {
     expect(r.dropped[0].reason).toMatch(/causal/i);
   });
   it("sorts survivors by severity (high → low)", () => {
-    const low: RawFinding = { ...base, severity: "low", title: "Low" };
-    const r = auditFindings([low, base], candidates);
+    // two events: a second finding on the same event would be a repeat
+    const other: CandidateEvent = {
+      ...candidates[0]!,
+      id: "death:b:40",
+      facts: { t: "40", unit: "Ally-R" },
+    };
+    const low: RawFinding = {
+      ...base,
+      eventIds: [other.id],
+      severity: "low",
+      title: "Low",
+    };
+    const r = auditFindings([low, base], [...candidates, other]);
     expect(r.findings.map((f) => f.severity)).toEqual(["high", "low"]);
+  });
+});
+
+describe("repeats: a finding citing the same event ids as an earlier kept one is dropped (L07 c, 2026-10-11)", () => {
+  const ev = (id: string, t: string): CandidateEvent => ({
+    id,
+    type: "kick-eaten",
+    t: Number(t),
+    unitNames: ["Me-R"],
+    facts: { t, unit: "Me-R" },
+  });
+  const menu = [ev("kick:a:10", "10"), ev("kick:b:20", "20")];
+  const on = (
+    title: string,
+    eventIds: string[],
+    more: Partial<RawFinding> = {},
+  ): RawFinding => ({
+    eventIds,
+    severity: "med",
+    category: "interrupts",
+    title,
+    explanation: "A cast was stopped.",
+    ...more,
+  });
+
+  it("identical sets: the first is kept, the later one is dropped with a reason that names it", () => {
+    const r = auditFindings(
+      [on("First", ["kick:a:10"]), on("Second", ["kick:a:10"])],
+      menu,
+    );
+    expect(r.findings.map((f) => f.title)).toEqual(["First"]);
+    expect(r.dropped).toHaveLength(1);
+    expect(r.dropped[0]!.finding.title).toBe("Second");
+    expect(r.dropped[0]!.reason).toBe(
+      'repeat: cites the same event ids as an earlier finding ("First")',
+    );
+  });
+
+  it("a set is a set: order and a doubled id do not make it another one", () => {
+    const r = auditFindings(
+      [
+        on("Chain", ["kick:a:10", "kick:b:20"]),
+        on("Chain again", ["kick:b:20", "kick:a:10", "kick:b:20"]),
+      ],
+      menu,
+    );
+    expect(r.findings.map((f) => f.title)).toEqual(["Chain"]);
+    expect(r.dropped[0]!.reason).toMatch(/^repeat: /);
+  });
+
+  it("a subset and a superset are other findings — both kept", () => {
+    const r = auditFindings(
+      [
+        on("One", ["kick:a:10"]),
+        on("Both", ["kick:a:10", "kick:b:20"]),
+        on("Other", ["kick:b:20"]),
+      ],
+      menu,
+    );
+    expect(r.findings.map((f) => f.title)).toEqual(["One", "Both", "Other"]);
+    expect(r.dropped).toEqual([]);
+  });
+
+  it("no event ids at all: still the grounding drop it always was, never a repeat", () => {
+    const r = auditFindings([on("A", []), on("B", [])], menu);
+    expect(r.findings).toEqual([]);
+    expect(r.dropped.map((d) => d.reason)).toEqual([
+      "grounding: unanchored / unknown eventId",
+      "grounding: unanchored / unknown eventId",
+    ]);
+  });
+
+  it("order kept: the model's first finding on a set wins even when a later repeat is graded higher", () => {
+    const r = auditFindings(
+      [
+        on("B low", ["kick:b:20"], { severity: "low" }),
+        on("A med", ["kick:a:10"]),
+        on("B high", ["kick:b:20"], { severity: "high" }),
+      ],
+      menu,
+    );
+    // severity sort of the survivors, ties in the model's order
+    expect(r.findings.map((f) => f.title)).toEqual(["A med", "B low"]);
+    expect(r.dropped.map((d) => d.finding.title)).toEqual(["B high"]);
+  });
+
+  it("a finding another layer dropped does not make the next one a repeat — a reply never loses its only clean finding on an event", () => {
+    const r = auditFindings(
+      [
+        on("Bare digit", ["kick:a:10"], { explanation: "Stopped at 10s." }),
+        on("Clean", ["kick:a:10"]),
+        on("Clean again", ["kick:a:10"]),
+      ],
+      menu,
+    );
+    expect(r.findings.map((f) => f.title)).toEqual(["Clean"]);
+    expect(r.dropped.map((d) => d.reason.split(":")[0])).toEqual([
+      "numeric",
+      "repeat",
+    ]);
+  });
+
+  it("a repeat does not spend a legacy slot: three missed cleanses and a repeat of the first leave all three", () => {
+    const cleanse = (n: number): CandidateEvent => ({
+      id: `missed-cleanse:x:${n}`,
+      type: "missed-cleanse",
+      t: n,
+      unitNames: ["Ally-R"],
+      facts: { t: String(n) },
+    });
+    const cleanses = [cleanse(1), cleanse(2), cleanse(3)];
+    const r = auditFindings(
+      [
+        on("C1", [cleanses[0]!.id], { severity: "high" }),
+        on("C1 again", [cleanses[0]!.id], { severity: "high" }),
+        on("C2", [cleanses[1]!.id]),
+        on("C3", [cleanses[2]!.id], { severity: "low" }),
+      ],
+      cleanses,
+    );
+    expect(r.findings.map((f) => f.title)).toEqual(["C1", "C2", "C3"]);
+    expect(r.dropped.map((d) => d.reason.split(":")[0])).toEqual(["repeat"]);
   });
 });
 

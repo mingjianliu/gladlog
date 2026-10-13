@@ -5,9 +5,9 @@ import type { CandidateEvent } from "./types";
  * How many findings the first-round prompt asks for, and what counts as one
  * "menu event" when it asks — one definition for the three places that need
  * it (CLAUDE.md shared-predicate rule): `buildFindingsPrompt` (the sentence),
- * `auditFindings` (what an eventId resolves to) and `promptQualityCheck.ts`'s
- * `checkFindingsCountFollowsMenu` (the stated count re-derived from the
- * rendered menu).
+ * `auditFindings` (what an eventId resolves to, and when two findings cite
+ * the same thing) and `promptQualityCheck.ts`'s `checkFindingsCountFollowsMenu`
+ * (the stated count re-derived from the rendered menu).
  *
  * L07 (user ruling 2026-10-11, options b + c): the prompt asked for "4-8
  * coaching findings" whatever the menu held, while 1,861 of 2,677 non-empty
@@ -40,6 +40,17 @@ export function citableEventCount(
   candidates: readonly Pick<CandidateEvent, "id">[],
 ): number {
   return new Set(candidates.map((c) => c.id)).size;
+}
+
+/**
+ * The identity of what a finding cites: its event ids as a set (order and
+ * repeats do not matter). Two findings of one reply with the same key say two
+ * things about exactly the same events; `auditFindings` keeps the first.
+ * A subset or a superset is a different key — a chain finding that adds a
+ * second event to one already covered is not a repeat.
+ */
+export function eventIdSetKey(eventIds: readonly string[]): string {
+  return [...new Set(eventIds)].sort().join("\u0000");
 }
 
 /** The line that opens the menu block; the rows follow it directly. */

@@ -3492,6 +3492,11 @@ const INDEX: PredicateRow[] = [
     mod: findingsCount,
   },
   {
+    file: `${A}/analysis/findingsCount.ts`,
+    symbol: "eventIdSetKey",
+    mod: findingsCount,
+  },
+  {
     file: `${E}/quality/promptQualityCheck.ts`,
     symbol: "checkFindingsCountFollowsMenu",
     mod: promptQualityCheck,

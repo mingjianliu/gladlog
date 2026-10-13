@@ -6,6 +6,7 @@ import {
   citableEventCount,
   citableEvents,
   EVENT_MENU_HEADER,
+  eventIdSetKey,
   FINDINGS_COUNT_MAX,
   FINDINGS_COUNT_MIN,
   findingsCountInstruction,
@@ -161,5 +162,11 @@ describe("one definition of a menu event: the builder's count, the audit's map a
     expect(
       menuEventIdsOfPrompt(["MATCH TIMELINE", "0:10 [KICK] x"]),
     ).toBeNull();
+  });
+
+  it("eventIdSetKey: order and repeats do not matter, membership does", () => {
+    expect(eventIdSetKey(["b", "a", "b"])).toBe(eventIdSetKey(["a", "b"]));
+    expect(eventIdSetKey(["a"])).not.toBe(eventIdSetKey(["a", "b"]));
+    expect(eventIdSetKey(["a:b"])).not.toBe(eventIdSetKey(["a", "b"]));
   });
 });
