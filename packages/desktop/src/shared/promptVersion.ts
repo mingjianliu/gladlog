@@ -1579,5 +1579,13 @@
  *  change on 2,403 rows (kick-eaten 1,556, missed-sync-window 300,
  *  cd-hoarded 211, missed-cleanse 85, position-mistake 42, death-setup 6,
  *  kick-priority-missed 2).
+ *  v385 (2026-10-14, FT, two post-hoc reviews): (1) the sync-window
+ *  reference table carries v382's Quaking Palm fix (codex 40-FT-81: it was
+ *  generated before it) — eight more Solo Shuffle / one more 3v3 lock in
+ *  the counts, every printed rate unchanged (refN 49,136 → 49,143 in Solo
+ *  Shuffle); (2) codex 40-FT-82 on v383: an aura that ran its full length
+ *  compares in whole ms (a float rest read "ended at death"), and SPLIT
+ *  PUSH is not claimed across an instant where either player is dead or
+ *  has no position.
  */
-export const PROMPT_VERSION = 384;
+export const PROMPT_VERSION = 385;

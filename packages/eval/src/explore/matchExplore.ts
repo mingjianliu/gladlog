@@ -32,6 +32,7 @@ import {
   cdAvailableAt,
   cdIsProcOnly,
   cdMaybeAvailableAt,
+  cdRealisedSecondsUntilReady,
   cdSecondsUntilReady,
   detectHealingGaps,
   distanceBetween,
@@ -86,13 +87,22 @@ function allPlayers(legacy: LegacyRound): ICombatUnit[] {
 function remainingNote(cd: IMajorCooldownInfo, tt: number): string {
   const latest = Math.max(0, Math.round(cdSecondsUntilReady(cd, tt)));
   if (cdMaybeAvailableAt(cd, tt)) return `可能已好,最多还剩 ${latest}s`;
-  if (cd.earliestCooldownSeconds !== undefined) {
-    const soonest = Math.max(
-      0,
-      Math.round(cdSecondsUntilReady(cd, tt, cd.earliestCooldownSeconds)),
-    );
-    if (soonest < latest) return `还剩 ${soonest}–${latest}s`;
-  }
+  // an event-reduced press (Storm Conduit) is combat-shortened too: its real
+  // return is the low end, as the [RES] row prints it (codex 40-FT-82: the
+  // explorer said 还剩 175s beside the row's (165–175s))
+  const realised = Math.max(
+    0,
+    Math.round(cdRealisedSecondsUntilReady(cd, tt)),
+  );
+  const floored =
+    cd.earliestCooldownSeconds === undefined
+      ? realised
+      : Math.max(
+          0,
+          Math.round(cdSecondsUntilReady(cd, tt, cd.earliestCooldownSeconds)),
+        );
+  const soonest = Math.min(realised, floored);
+  if (soonest < latest) return `还剩 ${soonest}–${latest}s`;
   return `还剩 ${latest}s`;
 }
 

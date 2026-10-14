@@ -1320,8 +1320,10 @@ export function computeOwnerPositionEvents(params: {
   // ── 4. Iter 3: SPLIT_PUSH — a melee DPS away from the target during a committed push ──
   /** "Stayed >PUSH_AWOL_YARDS away" over [fromS, toS] (match seconds) at
    *  every instant the positioning gate samples (`positionSampleInstants`:
-   *  both units' real samples + the sub-second grid), skipping instants
-   *  where either has no position or is dead (a corpse is not a position). */
+   *  both units' real samples + the sub-second grid). An instant where
+   *  either unit is dead or has no position cannot show it, so the claim is
+   *  not made (codex 40-FT-82: a melee dead at 26 s of a 20–30 s span, or
+   *  without samples after 25 s, still read "stayed >20yd away"). */
   const stayedBeyondThroughout = (
     a: ICombatUnit,
     b: ICombatUnit,
@@ -1334,10 +1336,11 @@ export function computeOwnerPositionEvents(params: {
       fromMs,
       toMs,
     ])) {
-      if (isDeadAt(a, ts) || isDeadAt(b, ts)) continue;
+      if (isDeadAt(a, ts) || isDeadAt(b, ts)) return false;
       const pa = getUnitPositionAtTime(a, ts, POSITION_MAX_GAP_MS);
       const pb = getUnitPositionAtTime(b, ts, POSITION_MAX_GAP_MS);
-      if (pa && pb && distanceBetween(pa, pb) <= PUSH_AWOL_YARDS) return false;
+      if (!pa || !pb || distanceBetween(pa, pb) <= PUSH_AWOL_YARDS)
+        return false;
     }
     return true;
   };

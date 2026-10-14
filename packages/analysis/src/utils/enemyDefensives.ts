@@ -1116,9 +1116,15 @@ export function enemyDefensiveEvents(
       // log's end (below) is no end the log gave, and an aura that ran its
       // full length expired whatever else is logged in that ms.
       const full = buffFullDurationForCaster(auraId, enemy);
+      // in whole ms (codex 40-FT-82: 32.300 − 20.300 is 11.999999999999996
+      // in floating point, and a Barkskin that ran its full 12 s read
+      // "ended at death")
       if (
         full === undefined ||
-        !(iv.toS - iv.fromS < full) ||
+        !(
+          Math.round(iv.toS * 1000) - Math.round(iv.fromS * 1000) <
+          Math.round(full * 1000)
+        ) ||
         endMs >= combat.endTime
       )
         return { removedEarly: false };

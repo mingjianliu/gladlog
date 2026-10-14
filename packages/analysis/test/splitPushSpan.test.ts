@@ -105,4 +105,23 @@ describe("SPLIT PUSH — the printed span is the checked span", () => {
     );
     expect(run(warrior)).toHaveLength(0);
   });
+  it("a melee that died, or had no position, inside the span cannot be shown away: no claim (codex 40-FT-82)", () => {
+    const warrior = unit(
+      "f2",
+      "Warrior-R-US",
+      CombatUnitSpec.Warrior_Arms,
+      () => 30,
+    );
+    expect(
+      run({ ...warrior, deathRecords: [{ timestamp: T0 + 26_000 }] }),
+    ).toHaveLength(0);
+    expect(
+      run({
+        ...warrior,
+        advancedActions: warrior.advancedActions.filter(
+          (a: any) => a.timestamp <= T0 + 25_000,
+        ),
+      }),
+    ).toHaveLength(0);
+  });
 });

@@ -199,6 +199,20 @@ describe("FT-T08 step 3b — [ENEMY DEF] early end: the cause the log gives", ()
     expect(render([both])[0]).toContain("— stolen by F:f1's Mass Dispel)");
   });
 
+  it("a full run whose seconds differ in floating point is still full (codex 40-FT-82)", () => {
+    // 32.300 − 20.300 = 11.999999999999996 s of a 12 s Barkskin
+    const full = unit("e1", {
+      auraEvents: [
+        applied(BARKSKIN, "e1", "e1", 20.3),
+        removed(BARKSKIN, "e1", "e1", 32.3),
+      ],
+      deathRecords: [{ timestamp: ms(32.32) }],
+    });
+    expect(enemyDefensiveEvents(full, [full], combat)[0].removedEarly).toBe(
+      false,
+    );
+  });
+
   it("满时长或结束是推断的:不问原因,也不印", () => {
     const full = unit("e1", {
       auraEvents: [
