@@ -434,6 +434,12 @@ describe("stunLetsPress — which interval a named cooldown is pressable through
     // not through a fear, a silence, or a kick lockout
     expect(stunLetsPress(stun("8122"), "48792", {})).toBe(false);
     expect(stunLetsPress(stun("1330"), "48792", {})).toBe(false);
+    // nor through an incapacitate: Quaking Palm was filed as a stun until
+    // 2026-10-13 and let Pain Suppression / Guardian Spirit through (codex
+    // review 45-FT-102); War Stomp, the racial that IS a stun, still does
+    for (const id of ["33206", "47788", "48792"])
+      expect(stunLetsPress(stun("107079"), id, {})).toBe(false);
+    expect(stunLetsPress(stun("20549"), "33206", {})).toBe(true);
     expect(stunLetsPress({ spellId: "2139", lockout: true }, "48792", {})).toBe(
       false,
     );

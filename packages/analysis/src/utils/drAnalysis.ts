@@ -115,7 +115,18 @@ export const DR_CATEGORY_MAP: Record<string, string> = (() => {
   // Supplement: racials and pet abilities not resolvable to player specs in DB2
   map["20549"] = "Stun"; // War Stomp (Tauren racial)
   map["24394"] = "Stun"; // Intimidation (Hunter pet)
-  map["107079"] = "Stun"; // Quaking Palm (Pandaren racial)
+  // No entry for 107079 Quaking Palm: DB2 files it under Incapacitate
+  // (mechanic 14) and the loop above has already read that. This block said
+  // "Stun" until 2026-10-13 and overrode it (codex review 45-FT-102): the
+  // only entry of the 1,271 in this map that contradicted
+  // `DR_CATEGORIES_GENERATED`, and it let the two stun-only readers
+  // (`wasLockedOutByStunOnly`, `stunLetsPress`) press a Pain Suppression
+  // through an incapacitate. The log agrees with DB2 (`drShareScan.ts
+  // --spells 107079`, 6,045 archive files): Quaking Palm after an
+  // Incapacitate lands full 6 % (n=32, 20 half, 8 immune) against 58 % with
+  // no predecessor and 61 % after a Stun (n=44); an Incapacitate after
+  // Quaking Palm 0 % (n=21). test/drCategoryIds.test.ts refuses a hand entry
+  // that contradicts DB2.
 
   // Supplement: AoE CC rank variants sharing DR with their base spell
   map["6358"] = "Disorient"; // Seduction (Warlock pet)
