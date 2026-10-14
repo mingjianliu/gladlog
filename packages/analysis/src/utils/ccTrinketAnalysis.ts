@@ -1298,6 +1298,9 @@ export const LOCK_IGNORING_CAST_IDS: ReadonlySet<string> = new Set([
  * instant a hardcast — the conservative direction for a line whose whole
  * point is not to over-claim "kept casting". */
 export const CAST_START_LOOKBACK_S = 6;
+/** How far after a SUCCESS another id's SUCCESS of the same press is
+ *  logged (preview: Chrono Flames' Living Flame row, 2 ms). */
+export const COMPANION_SUCCESS_MS = 10;
 
 /** An empower's END may be logged a few ms before the SUCCESS row it belongs
  * to is read (same-tick ordering). */
@@ -3509,7 +3512,7 @@ export function analyzePlayerCCAndTrinket(
       // `find` where this used to read `some`: identical predicate (some(p)
       // is true iff find(p) is defined), but it also NAMES the cast so the
       // rendered line can cite the one it is actually talking about.
-      const switchCast =
+      let switchCast =
         lockedMask === undefined
           ? undefined
           : after.find((c) => {
@@ -3542,6 +3545,42 @@ export function analyzePlayerCCAndTrinket(
         wentOut[c.spellId] = c.t - inst.atSeconds;
       }
       inst.wentOutInLockS = wentOut;
+      // Work order 2026-10-14b Part 2 (preview): a hard cast can log a
+      // companion SUCCESS of another id a few ms before its own (Chrono
+      // Flames 431443 → Living Flame 361509 2 ms earlier, 141470d0 @388).
+      // When the switching row has no cast start of its own and the unit's
+      // next SUCCESS within COMPANION_SUCCESS_MS does, that one is the press.
+      if (switchCast !== undefined && haveCastStarts) {
+        const hasStart = (c: { spellId: string; t: number }) =>
+          castStarts.some(
+            (st) =>
+              st.spellId === c.spellId &&
+              st.t <= c.t &&
+              st.t >= c.t - CAST_START_LOOKBACK_S,
+          );
+        if (!hasStart(switchCast)) {
+          const companionOf = castTimes.find(
+            (c) =>
+              c.ms > switchCast!.ms &&
+              c.ms - switchCast!.ms <= COMPANION_SUCCESS_MS &&
+              c.spellId !== switchCast!.spellId &&
+              hasStart(c) &&
+              // still a cast on a school the kick did not lock
+              lockedMask !== undefined &&
+              spellSchoolMask(c.spellId) !== undefined &&
+              !schoolLockedBy(spellSchoolMask(c.spellId)!, lockedMask),
+          );
+          if (companionOf) {
+            // the press is one cast: the first cast after the kick, when it
+            // was the companion row, is that press too
+            if (after[0] === switchCast) {
+              inst.firstActionSpellName = companionOf.spellName;
+              inst.firstActionDelayS = companionOf.t - inst.atSeconds;
+            }
+            switchCast = companionOf;
+          }
+        }
+      }
       if (switchCast !== undefined) {
         inst.switchSpellName = switchCast.spellName;
         inst.switchDelayS = switchCast.t - inst.atSeconds;

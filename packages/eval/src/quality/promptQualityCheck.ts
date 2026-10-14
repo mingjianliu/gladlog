@@ -5556,6 +5556,39 @@ export function checkKickEatenRefusedForAnotherReason(
 }
 
 /**
+ * kick-eaten `ourLowT` / `theirLowT` sit inside the lockout the row prints
+ * (work order 2026-10-14b Part 2): the low is read from the second the kick
+ * floors onto to the second its lockout's end floors onto. A tick up to 1 s
+ * after the lock (`ceil` of the end) used to be read, and on the three
+ * raw-checked rows it was the only reading at or below 40 (1bad0a5c,
+ * 2c6e85ec, 3306e8ee).
+ */
+export function checkKickEatenLowInsideLockout(lines: string[]): string[] {
+  const failures: string[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!;
+    if (!line.includes("type=kick-eaten ")) continue;
+    const m = line.match(MENU_LINE_FACTS);
+    if (!m) continue;
+    const f = parseFactsBlock(m[1]!);
+    const t = Number(f["t"]);
+    const lockout = Number(f["lockout"]);
+    if (!Number.isFinite(t) || !Number.isFinite(lockout)) continue;
+    const last = Math.floor(t + lockout + 1e-9);
+    for (const side of ["our", "their"]) {
+      const atRaw = f[`${side}LowT`];
+      if (atRaw === undefined) continue;
+      const at = Number(atRaw);
+      if (at < Math.floor(t) || at > last)
+        failures.push(
+          `line ${i + 1}: kick-eaten ${side}LowT=${atRaw} is outside the lockout's seconds ${Math.floor(t)}–${last} (t=${f["t"]}, lockout=${f["lockout"]})`,
+        );
+    }
+  }
+  return failures;
+}
+
+/**
  * kick-eaten `kickSilence` (re-eval 2026-10-08, F21): an interrupt whose own
  * spell also silences — Shield of Virtue — put a `[SILENCE]` line of that
  * spell on the player at the kick, and the row printed its school lockout
@@ -7453,6 +7486,7 @@ export function checkMatch(
   hardFailures.push(...checkBareRosterPossessive(lines));
   hardFailures.push(...checkStayedInForcedMove(lines));
   hardFailures.push(...checkKickEatenRefusedForAnotherReason(lines));
+  hardFailures.push(...checkKickEatenLowInsideLockout(lines));
   hardFailures.push(...checkKickEatenKickSilence(lines));
   hardFailures.push(...checkKickEatenRangeFacts(lines));
   hardFailures.push(...checkEnemyDefRefConsistency(lines));

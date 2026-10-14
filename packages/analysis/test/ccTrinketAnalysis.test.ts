@@ -654,6 +654,74 @@ describe("analyzePlayerCCAndTrinket — structured data contract (N4)", () => {
     expect(resInstantSwitch.interruptInstances[0].postKick).toBe("switched");
   });
 
+  it("a hard cast that logs a companion SUCCESS first is the switch press (work order 2026-10-14b Part 2, user 10-14; 141470d0 Chrono Flames)", () => {
+    // Chrono Flames 431443: CAST_START +1.058 s, a Living Flame 361509
+    // SUCCESS 2 ms before its own SUCCESS at +1.881 s
+    const enemy = makeUnit("enemy-1", {
+      name: "EnemyRogue",
+      spec: CombatUnitSpec.Rogue_Subtlety,
+      reaction: CombatUnitReaction.Hostile,
+    });
+    const evoker = makeUnit("player-1", {
+      name: "PlayerEvoker",
+      spec: CombatUnitSpec.Evoker_Preservation,
+      reaction: CombatUnitReaction.Friendly,
+      actionIn: [
+        makeInterruptEvent(
+          "1766",
+          "Kick",
+          "2061",
+          "Flash Heal",
+          MATCH_START + 20_000,
+          "enemy-1",
+          "EnemyRogue",
+        ),
+      ],
+      castStartEvents: [
+        {
+          logLine: {
+            event: LogEvent.SPELL_CAST_START,
+            timestamp: MATCH_START + 21_058,
+            parameters: [],
+          },
+          spellId: "431443",
+        } as any,
+      ],
+      spellCastEvents: [
+        makeSpellCastEvent(
+          "361509",
+          MATCH_START + 21_879,
+          "player-1",
+          "PlayerEvoker",
+          "enemy-1",
+          "EnemyRogue",
+          0,
+          "Living Flame",
+        ),
+        makeSpellCastEvent(
+          "431443",
+          MATCH_START + 21_881,
+          "player-1",
+          "PlayerEvoker",
+          "enemy-1",
+          "EnemyRogue",
+          0,
+          "Chrono Flames",
+        ),
+      ],
+    });
+    const [k] = analyzePlayerCCAndTrinket(
+      evoker,
+      [enemy],
+      makeCombat(),
+    ).interruptInstances;
+    expect(k!.postKick).toBe("switched");
+    expect(k!.switchSpellName).toBe("Chrono Flames");
+    expect(k!.switchWasHardCast).toBe(true);
+    // the first cast after the kick is the same press, not the companion row
+    expect(k!.firstActionSpellName).toBe("Chrono Flames");
+  });
+
   // Triage 2026-09-29 kick-eaten F-K5a / F-K5b / F-K5d / F-K6d.
   describe("kicker facts at the kicked cast's start", () => {
     const CAST_START = MATCH_START + 18_500;

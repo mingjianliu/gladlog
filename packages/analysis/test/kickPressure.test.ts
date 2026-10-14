@@ -123,6 +123,26 @@ describe("kickPressureFor", () => {
 
   const calm = friendlyMage({ 0: 100 });
 
+  it("the low is read inside the lockout only: a tick after the lock's last second is not (work order 2026-10-14b Part 2, user 10-14)", () => {
+    // kick 72.5, 3 s lock → its seconds are 72..75; the mage is at 30 % only
+    // on the 76 tick (1bad0a5c's shape: the post-lock tick was the only ≤ 40)
+    const late = friendlyMage({ 0: 100, 76: 30, 77: 100 });
+    const p = pressure(
+      late,
+      enemyRet([]),
+    )({
+      atSeconds: 72.5,
+      lockoutDurationSeconds: 3,
+    });
+    expect(p.ours.low).toBeUndefined();
+    // the same dip one second earlier is inside the lock
+    const inside = friendlyMage({ 0: 100, 75: 30, 76: 100 });
+    expect(
+      pressure(inside, enemyRet([]))({ atSeconds: 72.5, lockoutDurationSeconds: 3 })
+        .ours.low,
+    ).toMatchObject({ unit: "Mage", pct: 30, atSec: 75 });
+  });
+
   it("names an enemy cooldown that was already running when the kick landed", () => {
     const p = pressure(
       calm,

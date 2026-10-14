@@ -5,6 +5,7 @@ import {
   buildCannotCastIntervals,
   castBlockingAuraIntervals,
   coveredMsWithin,
+  deathLockChain,
   enemySourceIds,
   silenceIntervals,
 } from "../src/utils/cannotCastIntervals";
@@ -303,6 +304,53 @@ describe("cannotCastIntervals — log-order pairing and pet sources (H23)", () =
     expect(buildCannotCastIntervals(unit, new Set(["Enemy-1"]))).toEqual([
       { from: 108_771, to: 110_321 },
     ]);
+  });
+
+  it("flights pair per id and are never left open (agy 40-FT-85)", () => {
+    const unit = {
+      id: "Player-1",
+      auraEvents: [
+        // no REMOVED before the next APPLIED: closed at its 6 s length
+        ev("357210", "Player-1", 30_000, LogEvent.SPELL_AURA_APPLIED),
+        ev("357210", "Player-1", 90_000, LogEvent.SPELL_AURA_APPLIED),
+        ev("357210", "Player-1", 92_000, LogEvent.SPELL_AURA_REMOVED),
+        // two ids overlapping: each its own piece
+        ev("357210", "Player-1", 100_000, LogEvent.SPELL_AURA_APPLIED),
+        ev("433874", "Player-1", 100_500, LogEvent.SPELL_AURA_APPLIED),
+        ev("357210", "Player-1", 102_000, LogEvent.SPELL_AURA_REMOVED),
+        ev("433874", "Player-1", 103_000, LogEvent.SPELL_AURA_REMOVED),
+        // never removed: closed at its 3.75 s length
+        ev("433874", "Player-1", 150_000, LogEvent.SPELL_AURA_APPLIED),
+      ],
+      actionIn: [],
+    } as unknown as ICombatUnit;
+    expect(
+      buildCannotCastIntervals(unit, new Set(["Enemy-1"])).sort(
+        (a, b) => a.from - b.from,
+      ),
+    ).toEqual([
+      { from: 30_000, to: 36_000 },
+      { from: 90_000, to: 92_000 },
+      { from: 100_000, to: 102_000 },
+      { from: 100_500, to: 103_000 },
+      { from: 150_000, to: 153_750 },
+    ]);
+  });
+
+  it("a death's lock chain counts the flight's time but does not name it as a CC (agy 40-FT-85)", () => {
+    const named = [
+      {
+        from: 10_000,
+        to: 12_000,
+        spellId: "357210",
+        lockout: false,
+        self: true as const,
+      },
+      { from: 12_000, to: 15_000, spellId: "853", lockout: false },
+    ];
+    const chain = deathLockChain(named, 15_000, 12_000);
+    expect(chain.links.map((l) => l.spellId)).toEqual(["853"]);
+    expect(chain.lockedMs).toBe(5_000);
   });
 
   it("a 1 ms gap is not filled: the covered time stays what the log shows (codex 40-FT-83)", () => {

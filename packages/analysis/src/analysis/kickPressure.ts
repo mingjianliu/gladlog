@@ -176,7 +176,11 @@ export function kickPressureFor(params: {
     t1: number,
   ): KickSidePressure => {
     const s0 = Math.floor(t0);
-    const s1 = Math.ceil(t1);
+    // the seconds the lockout is PRINTED on (fmtTime floors): a tick up to
+    // 1 s after the lock ended used to enter both the low and the ≤ 40 test
+    // (work order 2026-10-14b Part 2: 1bad0a5c 37 vs 43 in the lock,
+    // 2c6e85ec 35 vs 41.7, 3306e8ee 21 vs 49.5 — each the row's only ≤ 40)
+    const s1 = Math.floor(t1);
     // the lockout itself, in whole ms: the trough's samples are bounded to it
     const span = {
       fromMs: start + Math.round(t0 * 1000),

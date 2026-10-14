@@ -9,6 +9,7 @@ import {
 import { schoolLockedBy, spellSchoolMask } from "../data/spellSchools";
 import { ccSpellIds, officialSilenceIds } from "../data/spellTags";
 import { supersededAuraBreaks } from "./auraIntervals";
+import { buffFullDurationForCaster } from "./buffDuration";
 import { REACTION_WINDOW_S, usableWhileStunned } from "./cooldowns";
 import { isStunDrAura, matchPendingCcKey } from "./drAnalysis";
 import { kickLockoutSecondsFor } from "./kickLockout";
@@ -78,6 +79,9 @@ export interface NamedCannotCastInterval {
    * on the unit: that pet's id. A fact naming what blocked "the owner" must
    * not name such an interval as the owner's. */
   onPetId?: string;
+  /** the unit's own state, not something done to it (its flying breath,
+   *  `OWN_FLIGHT_AURA_IDS`): locked time, never a CC to name */
+  self?: true;
 }
 
 /** The round's units, as the pet reading needs them (`petCastersOf`). */
@@ -446,25 +450,43 @@ export function namedCannotCastIntervals(
   }));
 
   // The unit's own flying breath (`OWN_FLIGHT_AURA_IDS`, user ruling
-  // 2026-10-14): no cast while it flies — a lock on everything, like a stun
-  let flightFrom: number | undefined;
+  // 2026-10-14): no cast while it flies — a lock on everything, like a stun.
+  // `self`: the unit's own doing, so the readers that NAME a CC chain leave
+  // it out (`deathLockChain`); the locked time counts. Paired per id, in log
+  // order (agy 40-FT-85: one shared open start let a flight with no REMOVED
+  // run into the next flight, and two overlapping ids dropped a piece). A
+  // flight with no REMOVED — a new APPLIED of it first, or none at all — is
+  // closed at its official length, never left open.
+  const flightOpen = new Map<string, number>();
+  const closeFlight = (spellId: string, from: number, to: number) =>
+    intervals.push({ from, to, spellId, lockout: false, self: true });
+  const fullMs = (spellId: string): number | undefined => {
+    const s = buffFullDurationForCaster(spellId, unit);
+    return s === undefined ? undefined : s * 1000;
+  };
   for (const a of unit.auraEvents ?? []) {
-    if (!OWN_FLIGHT_AURA_IDS.has(String(a.spellId ?? ""))) continue;
+    const id = String(a.spellId ?? "");
+    if (!OWN_FLIGHT_AURA_IDS.has(id)) continue;
     if (a.srcUnitId !== unit.id) continue;
+    const open = flightOpen.get(id);
     if (a.logLine.event === LogEvent.SPELL_AURA_APPLIED) {
-      flightFrom ??= a.timestamp;
+      if (open !== undefined) {
+        const full = fullMs(id);
+        if (full !== undefined)
+          closeFlight(id, open, Math.min(open + full, a.timestamp));
+      }
+      flightOpen.set(id, a.timestamp);
     } else if (
       a.logLine.event === LogEvent.SPELL_AURA_REMOVED &&
-      flightFrom !== undefined
+      open !== undefined
     ) {
-      intervals.push({
-        from: flightFrom,
-        to: a.timestamp,
-        spellId: String(a.spellId),
-        lockout: false,
-      });
-      flightFrom = undefined;
+      closeFlight(id, open, a.timestamp);
+      flightOpen.delete(id);
     }
+  }
+  for (const [id, open] of flightOpen) {
+    const full = fullMs(id);
+    if (full !== undefined) closeFlight(id, open, open + full);
   }
 
   let petCast: ReadonlySet<string> | undefined;
@@ -768,11 +790,11 @@ export function cannotCastRuns(
  * the lock chain before a death. `runs` = every contiguous cannot-cast run
  * touching [deathMs − lookbackMs, deathMs], not clipped at the window start;
  * `links` = the cast-blocking auras inside those runs that began before the
- * death, in time order (a kick lockout counts toward the runs and `lockedMs`
- * but is not a CC to name); `lockedMs` = cannot-cast ms of the window.
+ * death, in time order (a kick lockout or the unit's own flight counts
+ * toward the runs and `lockedMs` but is not a CC to name); `lockedMs` = cannot-cast ms of the window.
  */
 export function deathLockChain<
-  T extends { from: number; to: number; lockout: boolean },
+  T extends { from: number; to: number; lockout: boolean; self?: true },
 >(
   named: ReadonlyArray<T>,
   deathMs: number,
@@ -786,6 +808,9 @@ export function deathLockChain<
     .filter(
       (iv) =>
         !iv.lockout &&
+        // the unit's own flight is locked time, not a CC an enemy put on it
+        // (agy 40-FT-85: "[HEALER CC] … ← Deep Breath")
+        !iv.self &&
         iv.from < deathMs &&
         runs.some((r) => iv.from < r.to && iv.to > r.from),
     )

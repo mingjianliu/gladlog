@@ -1599,5 +1599,16 @@
  *  are offset from facts.t. 605 files: missed-cleanse −1 (an Evoker blinded
  *  then in Deep Breath for all but 2.9 s of a 5.4 s root, under the 3 s
  *  gate), nothing added; facts change on 102 rows; 27 contexts.
+ *  v387 (2026-10-14, FT, work order 2 Part 2 — user "两项都落地" — and agy
+ *  40-FT-85 on v386): (1) kick-eaten's ourLow / theirLow are read inside
+ *  the lockout's printed seconds only (a tick up to 1 s after the lock used
+ *  to enter the low and the ≤ 40 test), with a gate holding LowT inside
+ *  floor(t)…floor(t + lockout); (2) a hard cast that logs a companion
+ *  SUCCESS first (Chrono Flames → Living Flame 2 ms earlier) is the switch
+ *  press — "Chrono Flames; hard cast"; (3) own flights pair per id and are
+ *  closed at their official length when the log shows no end; a death's
+ *  lock chain no longer names the unit's own Deep Breath as a CC. 605
+ *  files: kick-eaten −50 / +15 (−12 whose only pressure fact was the
+ *  post-lock low, −38 / +15 cap re-ranking); death-setup chain text 3 rows.
  */
-export const PROMPT_VERSION = 386;
+export const PROMPT_VERSION = 387;
