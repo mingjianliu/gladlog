@@ -394,6 +394,22 @@ describe("hardCastOccupancyWithin — instants and unbounded successes", () => {
     );
     expect(hardCastOccupancyWithin(u, new Set(), T0 + 3_000, T0 + 5_000)?.occupiedMs).toBe(0);
   });
+  it("another on-GCD spell going out ends the bar (work order 2026-10-14b fix 5, 24b6a229 abandoned Hex)", () => {
+    // Smite bar at 1 s with no end line, Power Word: Shield at 3 s, next
+    // start at 12 s: the bar was gone at 3 s, not running to 12 s
+    const u = caster(
+      [{ spellId: "585", ms: T0 + 1_000 }, { spellId: "2061", ms: T0 + 12_000 }],
+      [{ spellId: "17", ms: T0 + 3_000 }],
+    );
+    expect(hardCastOccupancyWithin(u, new Set(), T0 + 5_000, T0 + 10_000)?.occupiedMs).toBe(0);
+    expect(hardCastOccupancyWithin(u, new Set(), T0, T0 + 10_000)?.occupiedMs).toBe(2_000);
+    // an off-GCD button (Fade 586) does not end it
+    const v = caster(
+      [{ spellId: "585", ms: T0 + 1_000 }],
+      [{ spellId: "586", ms: T0 + 1_500 }, { spellId: "585", ms: T0 + 3_000 }],
+    );
+    expect(hardCastOccupancyWithin(v, new Set(), T0, T0 + 10_000)?.occupiedMs).toBe(2_000);
+  });
   it("a normal 2 s bar still counts", () => {
     const u = caster([{ spellId: "585", ms: T0 + 1_000 }], [{ spellId: "585", ms: T0 + 3_000 }]);
     const occ = hardCastOccupancyWithin(u, new Set(), T0, T0 + 10_000);

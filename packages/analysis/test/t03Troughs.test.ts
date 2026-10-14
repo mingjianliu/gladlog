@@ -27,8 +27,10 @@ import {
 } from "../src/context/observedConsequences";
 import {
   gridHpPct,
+  hpTroughInEventSpan,
   hpTroughInWindow,
   isTickBelowTrough,
+  lowestHpTroughInEventSpan,
 } from "../src/utils/cooldowns";
 import {
   computeOwnerPositionEvents,
@@ -112,7 +114,10 @@ describe("[CONSEQ] — the low is the true minimum inside the lockout / CC (FT-T
     const hpAcross = mateHpAcross(m, T0, 60, 63)!;
     expect(hpAcross.h0).toBe(66);
     expect(hpAcross.lo).toEqual({ pct: 32, atSec: 62 });
-    expect(hpAcross.trough).toMatchObject({ pct: 22, atSec: 62 });
+    expect(hpTroughInEventSpan(m, T0, 60, 63)).toMatchObject({
+      pct: 22,
+      atSec: 62,
+    });
   });
 
   it("without the dip the line is what it was: the low is the lowest tick", () => {
@@ -384,5 +389,47 @@ describe("STAYED IN / position-mistake — the printed minimum is the trough; th
       owner,
     );
     expect(two.map((e) => e.facts.hpMin)).toEqual(["18", "5"]);
+  });
+});
+
+describe("missed-sync-window enemyMinHpPct — the lock's trough, as its [CONSEQ] line (work order 2026-10-14b fix 1)", () => {
+  // 0068182d's shape: Polymorph on the healer 78.746 → 81.734; the ticks of
+  // the lowest enemy read 100 / 100 / 86 / 80, an Arcane Missiles hit puts
+  // it at 72 % at 81.708, inside the lock
+  const a = makeUnit("a", {
+    name: "Hamisha",
+    advancedActions: track(
+      "a",
+      75,
+      85,
+      (s) => (s <= 79 ? 100 : s === 80 ? 86 : 80),
+      [[81.708, 72]],
+    ),
+  });
+  const b = makeUnit("b", {
+    name: "Other",
+    advancedActions: track("b", 75, 85, () => 90),
+  });
+  it("the true minimum inside the span, and whose it was", () => {
+    expect(lowestHpTroughInEventSpan([b, a], T0, 78.746, 81.734)).toEqual({
+      pct: 72,
+      atSec: 81,
+      unitName: "Hamisha",
+    });
+  });
+  it("a dip after the lock ended is not inside it", () => {
+    expect(
+      lowestHpTroughInEventSpan([b, a], T0, 78.746, 81.7)?.pct,
+    ).toBe(80);
+  });
+  it("no samples at all → null (the fact is omitted, never 0)", () => {
+    expect(
+      lowestHpTroughInEventSpan(
+        [makeUnit("c", { name: "None" })],
+        T0,
+        10,
+        12,
+      ),
+    ).toBeNull();
   });
 });

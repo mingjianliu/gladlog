@@ -4,10 +4,7 @@
  */
 import { describe, expect, it } from "vitest";
 
-import {
-  enemyMinHpInWindow,
-  syncReadyTimingFacts,
-} from "../src/analysis/candidates/cooldownTiming";
+import { syncReadyTimingFacts } from "../src/analysis/candidates/cooldownTiming";
 
 const cd = (name: string, casts: number[], cooldownSeconds: number, charges = 1) =>
   ({
@@ -51,18 +48,5 @@ describe("syncReadyTimingFacts", () => {
     const w = { fromSeconds: 50, toSeconds: 55 };
     expect(syncReadyTimingFacts(w, [cd("X", [30], 30, 2)]).readyFrom).toBeUndefined();
     expect(syncReadyTimingFacts(w, [cd("X", [21, 22], 30, 2)]).readyFrom).toBe("X +1.0s");
-  });
-});
-
-describe("enemyMinHpInWindow (F-S7)", () => {
-  it("names whose reading the minimum was", () => {
-    const enemies = [
-      { id: "e1", name: "Ruñesmith" },
-      { id: "e2", name: "Adriels" },
-    ];
-    const min = enemyMinHpInWindow(enemies, { startTime: 0 }, 10, 12, (u: any) =>
-      u.id === "e2" ? 63 : 95,
-    );
-    expect(min).toEqual({ pct: 63, unitName: "Adriels" });
   });
 });

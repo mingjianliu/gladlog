@@ -950,6 +950,11 @@ export interface IInterruptInstance {
   castStartS?: number | null;
   /** Seconds until the first cast after the kick; null when idle. */
   firstActionDelayS: number | null;
+  /** That first cast's English name (work order 2026-10-14b fix 12: a
+   * switched line named only the disjoint-school cast — 1b930c17 @155
+   * "Spirit Walk 3.0s later" while Riptide, Nature, went out at +1.04 s,
+   * right after the 0.7 s Nature lock). */
+  firstActionSpellName?: string;
   /** Seconds after the kick at which the log shows the lock was already
    * over, before its modelled end: the first successful press of a spell the
    * lock fully covers (`schoolLockedBy`) that a lockout does prevent
@@ -1039,6 +1044,13 @@ export interface IInterruptInstance {
    * empower data (old archives) — then nothing is claimed. The severity rank
    * reads `switchWasHardCast` only and is unchanged. */
   switchWasEmpowered?: boolean | null;
+  /** `switched` only: the switching cast is a channeled spell (DB2 SpellMisc
+   * "Is Channelled", `CHANNELED_SPELL_IDS`). A channel logs no
+   * SPELL_CAST_START either, so the line said "not a hard cast" of a
+   * Penance (work order 2026-10-14b fix 4, 9c9d8601 @64). Like
+   * `switchWasEmpowered`, words only: the severity rank reads
+   * `switchWasHardCast`. */
+  switchWasChanneled?: boolean;
   /** The cast began while a PvP-talent interrupt immunity was up
    * (`interruptImmuneWindows`) and the immunity ended this many seconds into
    * it, before the kick (triage F-K14b, 3306e8ee @40.3: Eruption started
@@ -1117,6 +1129,12 @@ export interface IInterruptInstance {
    * CC is `hardCcAuraAt` — a silence or a school lockout does not stop
    * movement. */
   ownerImmobileBy?: string | null;
+  /** With `ownerImmobileBy`: seconds into the cast bar that root / control
+   * ended, when it ended before the kick landed (work order 2026-10-14b
+   * fix 12: 3306e8ee @78, a Frost Nova that came off 0.31 s into a Sleep
+   * Walk, 1.42 s before the kick, read as rooted for the whole bar). Words
+   * only — the outRangeable decision is unchanged. */
+  ownerImmobileEndedIntoCastS?: number | null;
   /** How far into the cast bar the kick landed, as a percentage of the
    * player's own median completed bar of that spell in this round (GH #87,
    * B7; FT I11) — an estimate, a single bar's haste can differ. null for a
@@ -3048,6 +3066,7 @@ export function analyzePlayerCCAndTrinket(
     let sourceKickReadyInS: number | null = null;
     let sourceGapCloser: GapCloserState | null = null;
     let ownerImmobileBy: string | null = null;
+    let ownerImmobileEndedIntoCastS: number | null = null;
     let kickImmunityEnded: { auraName: string; intoCastS: number } | null =
       null;
     let kickDepthPct: number | null = null;
@@ -3180,11 +3199,20 @@ export function analyzePlayerCCAndTrinket(
       ownerImmobileBy = root
         ? getEnglishSpellName(root.spellId, root.spellName)
         : null;
+      let immobileEndMs: number | null = root
+        ? matchStartMs + root.toS * 1000
+        : null;
       if (ownerImmobileBy === null) {
         const held = hardCcAuraAt(player, enemyIds, castStartMs);
-        if (held)
+        if (held) {
           ownerImmobileBy = getEnglishSpellName(held.spellId, held.spellName);
+          immobileEndMs = held.to;
+        }
       }
+      ownerImmobileEndedIntoCastS =
+        immobileEndMs !== null && immobileEndMs < action.timestamp
+          ? (immobileEndMs - castStartMs) / 1000
+          : null;
 
       // The source's own state at cast start (F-K5a / F-K5b / F-K6b) — read
       // whether or not its kick was ready, off the unit that cast the kick.
@@ -3380,6 +3408,7 @@ export function analyzePlayerCCAndTrinket(
       sourceKickReadyInS,
       sourceGapCloser,
       ownerImmobileBy,
+      ownerImmobileEndedIntoCastS,
       kickImmunityEnded,
       kickDepthPct,
       castWindowS,
@@ -3475,6 +3504,7 @@ export function analyzePlayerCCAndTrinket(
         continue;
       }
       inst.firstActionDelayS = after[0]!.t - inst.atSeconds;
+      inst.firstActionSpellName = after[0]!.spellName;
       const lockedMask = spellSchoolMask(inst.interruptedSpellId);
       // `find` where this used to read `some`: identical predicate (some(p)
       // is true iff find(p) is defined), but it also NAMES the cast so the
@@ -3523,6 +3553,7 @@ export function analyzePlayerCCAndTrinket(
                 st.t >= switchCast.t - CAST_START_LOOKBACK_S,
             )
           : null;
+        inst.switchWasChanneled = CHANNELED_SPELL_IDS.has(switchCast.spellId);
         // An empower's SPELL_CAST_SUCCESS is logged when the hold BEGINS
         // (with SPELL_EMPOWER_START); its SPELL_EMPOWER_END follows at the
         // release.

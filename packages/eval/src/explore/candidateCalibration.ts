@@ -35,12 +35,12 @@ import {
   cdHoardedEvents,
   cdSpentIdleEvents,
   enemyHealerCcWindows,
-  enemyMinHpPctInWindow,
   extractMajorCooldowns,
   type IEnemyHealerCcWindow,
   type IMajorCooldownInfo,
   isHealerSpec,
   type IThreatLevelOverrides,
+  lowestHpTroughInEventSpan,
   type MatchThreatLevel,
   matchThreatLevel,
   missedSyncWindowEvents,
@@ -346,7 +346,8 @@ export function countsAtThresholds(
     try {
       const syncProbes = {
         enemyMinHpPctAt: (from: number, to: number) =>
-          enemyMinHpPctInWindow(enemies, legacy, from, to),
+          lowestHpTroughInEventSpan(enemies, legacy.startTime, from, to)
+            ?.pct ?? null,
         // Mirror teamPlayEvents' production wiring exactly (2026-09-02
         // resurrection): same death list, same bracket-keyed reference —
         // calibration densities are only comparable if the door is the same.

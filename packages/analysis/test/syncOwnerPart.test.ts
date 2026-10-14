@@ -180,3 +180,33 @@ describe("missed-sync-window in Solo Shuffle (L04 (c))", () => {
     ).toHaveLength(1);
   });
 });
+
+describe("missed-sync-window refusedInLock / ownerFollowUpCc (work order 2026-10-14b fix 13)", () => {
+  it("a refused press of the owner's ready cooldown inside the lock is stated, the lock still counts", () => {
+    const [e] = missedSyncWindowEvents(
+      [lock(110.635, 115.637, "Cyclone", MATE.name)],
+      [cd("Volley", ME)] as any,
+      probes("3v3", {
+        ownerRefusedAt: (ids: readonly string[], from: number, to: number) =>
+          ids.includes("Volley") && from <= 111.785 && 111.785 <= to
+            ? [{ spellName: "Volley", tS: 111.785, why: "not ready yet" }]
+            : [],
+      }),
+    );
+    expect(e!.facts.refusedInLock).toBe("110: Volley +1.1s (not ready yet)");
+  });
+
+  it("the owner's own control right after the lock is stated apart, not chained", () => {
+    const rows = missedSyncWindowEvents(
+      [
+        lock(101.409, 104.422, "Storm Bolt", MATE.name),
+        lock(104.958, 105.77, "Blinding Sleet", ME.name),
+      ],
+      [cd("Army of the Dead", ME)] as any,
+      probes("3v3"),
+    );
+    const first = rows.find((r) => r.facts.cc === "Storm Bolt")!;
+    expect(first.facts.windowEndT).toBe("104");
+    expect(first.facts.ownerFollowUpCc).toBe("Blinding Sleet +0.5s (1s)");
+  });
+});

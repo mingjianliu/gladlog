@@ -1815,6 +1815,52 @@ export function hpTroughInWindow(
 }
 
 /**
+ * `hpTroughInWindow` over one EVENT's own span, given in fractional match
+ * seconds: the ticks of the seconds the page prints for it (`floor` of both
+ * ends) and the samples from its first ms to its last (whole ms). The one
+ * reading of "the lowest HP inside this CC / lock" — the `[CONSEQ]` low
+ * (`observedConsequences.ts`) and missed-sync-window's `enemyMinHpPct`
+ * (work order 2026-10-14b fix 1: the field read whole-second ticks only,
+ * 0068182d 80 % beside its own lock's `[CONSEQ]` low 72 %; 8 of 16 msw rows
+ * of the 60 disagreed).
+ */
+export function hpTroughInEventSpan(
+  unit: ICombatUnit,
+  matchStartMs: number,
+  fromS: number,
+  toS: number,
+): { pct: number; atSec: number; atMs: number } | null {
+  return hpTroughInWindow(
+    unit,
+    matchStartMs,
+    Math.floor(fromS),
+    Math.floor(toS),
+    undefined,
+    {
+      fromMs: matchStartMs + Math.round(fromS * 1000),
+      toMs: matchStartMs + Math.round(toS * 1000),
+    },
+  );
+}
+
+/** `hpTroughInEventSpan`'s lowest over several units, naming whose it was
+ *  (the first unit, in the given order, to reach it). */
+export function lowestHpTroughInEventSpan(
+  units: readonly ICombatUnit[],
+  matchStartMs: number,
+  fromS: number,
+  toS: number,
+): { pct: number; atSec: number; unitName: string } | null {
+  let best: { pct: number; atSec: number; unitName: string } | null = null;
+  for (const u of units) {
+    const t = hpTroughInEventSpan(u, matchStartMs, fromS, toS);
+    if (t && (best === null || t.pct < best.pct))
+      best = { pct: t.pct, atSec: t.atSec, unitName: u.name };
+  }
+  return best;
+}
+
+/**
  * The one thing rendered text can certify about a trough (FT-T03, ruling D7):
  * no `[STATE]` tick of that unit inside the trough's window — the endpoint
  * readings included — reads BELOW it. `hpTroughInWindow` guarantees it by

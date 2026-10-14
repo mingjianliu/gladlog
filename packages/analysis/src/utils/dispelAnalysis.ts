@@ -6,6 +6,7 @@ import {
   type HealerCell,
 } from "../data/dispelVerdicts";
 import { CHANNEL_PROXY_IDS, DRINK_AURA_IDS } from "../data/occupancyAuras";
+import { OFF_GCD_SPELL_IDS } from "../data/offGcdGenerated";
 import { racialName } from "../data/racialAbilities";
 import { ROOT_SPELL_IDS } from "../data/rootSpells";
 import {
@@ -47,6 +48,7 @@ import {
   getPressureThreshold,
   isHealerSpec,
   isMeleeSpec,
+  isPassiveProcCast,
   playerTalentIdSets,
   specToString,
 } from "./cooldowns";
@@ -524,7 +526,9 @@ export function dispelReachYards(
  * talented or cast) 12 s, DH 278326 10 s, Warlock 19505 15 s, Evoker
  * (Scouring Flame → Fire Breath) 357208 30 s, Hunter 19801 10 s.
  */
-export const PURGE_GATE_SPELL_BY_SPEC: Readonly<Partial<Record<string, string>>> = {
+export const PURGE_GATE_SPELL_BY_SPEC: Readonly<
+  Partial<Record<string, string>>
+> = {
   [CombatUnitSpec.Priest_Discipline]: "528", // Dispel Magic
   [CombatUnitSpec.Priest_Holy]: "528",
   [CombatUnitSpec.Priest_Shadow]: "528",
@@ -1921,9 +1925,26 @@ function hardCastBarsWithin(
             f.ms > from &&
             (nextStart === undefined || f.ms <= nextStart),
         )?.ms;
-    const ends = [succ?.timestamp, nextStart, cut, cancel].filter(
-      (x): x is number => typeof x === "number" && x > from,
-    );
+    // Work order 2026-10-14b fix 5: a success of ANOTHER spell on the global
+    // cooldown means the bar was gone — nothing on the GCD goes out while a
+    // bar runs (24b6a229: a Hex started 68.412 with no end line, then five
+    // instants 70.459–75.769, ran to the next start at 80.275 and read
+    // "busy casting Hex" through a 77.1–80.1 Binding Shot). Off-GCD buttons
+    // (DB2 `OFF_GCD_SPELL_IDS`) and passive procs logged as casts do not cut.
+    const otherGcdPress = successes.find(
+      (e) =>
+        e.timestamp > from &&
+        e.spellId !== sorted[i].spellId &&
+        !OFF_GCD_SPELL_IDS.has(String(e.spellId ?? "")) &&
+        !isPassiveProcCast(e),
+    )?.timestamp;
+    const ends = [
+      succ?.timestamp,
+      nextStart,
+      cut,
+      cancel,
+      otherGcdPress,
+    ].filter((x): x is number => typeof x === "number" && x > from);
     if (ends.length === 0) continue;
     const end = Math.min(...ends);
     // The success completed this bar only if nothing ended the bar first.
@@ -1949,11 +1970,7 @@ function hardCastBarsWithin(
 
 /** What occupied a unit, for the acceptance split (F-C11). */
 export type OccupancyKind =
-  | "hardcast"
-  | "empower"
-  | "channel"
-  | "proxy"
-  | "drink";
+  "hardcast" | "empower" | "channel" | "proxy" | "drink";
 
 export interface IOccupancy extends IHardCastOccupancy {
   kinds: OccupancyKind[];
@@ -2693,7 +2710,9 @@ export function reconstructDispelSummary(
   // redistribution rule — the round's roster as every pressure reader builds
   // it; the units this call was handed when the caller passed no roster.
   const roundUnits = (
-    Array.isArray(combat.units) ? combat.units : Object.values(combat.units ?? {})
+    Array.isArray(combat.units)
+      ? combat.units
+      : Object.values(combat.units ?? {})
   ) as ICombatUnit[];
   const rosterUnits =
     roundUnits.length > 0
@@ -3159,7 +3178,12 @@ export function reconstructDispelSummary(
             }
             const windowDispelType = getDispelType(spellId) as DispelType;
             const windowEndMs = applyTs + POST_CC_PRESSURE_WINDOW_S * 1000;
-            const postCcDamage = sumLandedPressure(unit, applyTs, windowEndMs, rosterSides);
+            const postCcDamage = sumLandedPressure(
+              unit,
+              applyTs,
+              windowEndMs,
+              rosterSides,
+            );
             const lateDied = targetDiedAround(unit, applyTs, removal.ts);
             const lateGate = consequenceGatedPriority(
               priority,
@@ -3333,7 +3357,12 @@ export function reconstructDispelSummary(
 
           // Measure post-CC pressure: damage taken in first POST_CC_PRESSURE_WINDOW_S seconds
           const windowEndMs = applyTs + POST_CC_PRESSURE_WINDOW_S * 1000;
-          const postCcDamage = sumLandedPressure(unit, applyTs, windowEndMs, rosterSides);
+          const postCcDamage = sumLandedPressure(
+            unit,
+            applyTs,
+            windowEndMs,
+            rosterSides,
+          );
 
           let cleanseWasOnCD = false;
           let cdBurnedOn:

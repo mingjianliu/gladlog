@@ -579,6 +579,7 @@ describe("analyzePlayerCCAndTrinket — structured data contract (N4)", () => {
       nearestKickerDistYd: null,
       nearestKickerName: null,
       ownerImmobileBy: null,
+      ownerImmobileEndedIntoCastS: null,
       sourceDistYd: null,
       sourceDistSampleGapS: null,
       nearestKickerSampleGapS: null,

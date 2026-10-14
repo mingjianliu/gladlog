@@ -1561,5 +1561,23 @@
  *  reading under 60 % came after the round's end; the NOTE now prints),
  *  nothing added; SPLIT PUSH lines 30 → 3; 234 `[ENEMY DEF]` lines gain
  *  an end note; `[RES]` presses before a row's own low bound 124 → 78.
+ *  v384 (2026-10-14, FT, menu fact fields from the PV382 re-eval audits —
+ *  facts and legends only): missed-sync-window's enemyMinHpPct reads the
+ *  lock's trough as its [CONSEQ] line does, and gains refusedInLock (own
+ *  ready cooldowns that did not go out inside a held lock) and
+ *  ownerFollowUpCc; kick-eaten states castStartT / burstAfterCastStart,
+ *  the first cast before a switch, a channel as "channel", when a root
+ *  ended into the cast (youImmobileEndedS), and an idle row's not-ready
+ *  presses after the lock apart; refused presses are worded for the common
+ *  client texts (no target, invalid target, not enough <resource>, …);
+ *  missed-cleanse adds ownerDispelUsed and dispellerPressed, and a bar
+ *  another on-GCD success ended no longer runs on as "busy casting";
+ *  cd-hoarded adds pressedLate, Alter Time's return and "(broken +Ns)" to
+ *  crisisUnitSaved, and its lockout legend no longer says readyCds escaped
+ *  the lock; one Cyclone re-broadcast is one chain link; stayed-in rows
+ *  carry refusedPresses. 605 files: no candidate added or removed; facts
+ *  change on 2,403 rows (kick-eaten 1,556, missed-sync-window 300,
+ *  cd-hoarded 211, missed-cleanse 85, position-mistake 42, death-setup 6,
+ *  kick-priority-missed 2).
  */
-export const PROMPT_VERSION = 383;
+export const PROMPT_VERSION = 384;

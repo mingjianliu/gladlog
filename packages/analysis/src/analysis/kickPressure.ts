@@ -87,6 +87,11 @@ export interface KickSidePressure {
   /** The OTHER side's offensive cooldowns already running when the kick
    * landed (ruling A31). */
   burstAgainst: string[];
+  /** When each `burstAgainst` cooldown went out, match seconds (its cast
+   *  span's start; the earliest when one name has several) — work order
+   *  2026-10-14b fix 12: whether it came before or after the kicked cast
+   *  began. Facts only. */
+  burstFromS?: Record<string, number>;
 }
 
 export interface KickPressure {
@@ -199,12 +204,17 @@ export function kickPressureFor(params: {
       if (d !== null && d >= t0 && d <= t1 + KICK_OUTCOME_S && (!death || d < death.atSec))
         death = { unit: u.name, atSec: d };
     }
-    const burstAgainst = [
-      ...new Set(
-        against.filter((b) => b.from <= t0 && b.to > t0).map((b) => b.spell),
-      ),
-    ];
-    return { ...(low ? { low } : {}), ...(death ? { death } : {}), burstAgainst };
+    const running = against.filter((b) => b.from <= t0 && b.to > t0);
+    const burstAgainst = [...new Set(running.map((b) => b.spell))];
+    const burstFromS: Record<string, number> = {};
+    for (const b of running)
+      burstFromS[b.spell] = Math.min(burstFromS[b.spell] ?? Infinity, b.from);
+    return {
+      ...(low ? { low } : {}),
+      ...(death ? { death } : {}),
+      burstAgainst,
+      ...(burstAgainst.length ? { burstFromS } : {}),
+    };
   };
 
   return (k) => {

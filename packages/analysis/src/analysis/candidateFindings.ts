@@ -8,6 +8,7 @@ import {
 import { mateHitDuringCc } from "../context/observedConsequences";
 import { refusalWhy } from "../context/spellOutcomeLines";
 import { dmgSpikeWindowsOf } from "../context/timelineHelpers";
+import { ALTER_TIME_RETURN_ID } from "../context/timelineSections/alterTime";
 import {
   lookupBacklashPrior,
   lookupBacklashWorth,
@@ -18,6 +19,7 @@ import {
   BRACKET_TYPE_ALLOWLIST,
   CANDIDATE_TYPE_FLAGS,
 } from "../data/candidateTypeFlags";
+import { castAndEffectIds } from "../data/castEffectAuras";
 import { costNormPhrase } from "../data/curatedAbilityFacts";
 import { CORPUS_OBSERVED_DISPEL_IDS } from "../data/dispelObservedGenerated";
 import { lookupKickPriorityPrior } from "../data/kickPriorityPrior";
@@ -72,6 +74,7 @@ import {
   isTeamSaveCD,
   kitSpellReadyAt,
   lockoutDebuffStopsPress,
+  lowestHpTroughInEventSpan,
   playerTalentIdSets,
   REACTION_WINDOW_S,
   sharesChargePool,
@@ -82,6 +85,7 @@ import {
   USABLE_WHILE_CONFUSED_SPELL_IDS,
   USABLE_WHILE_FEARED_SPELL_IDS,
 } from "../utils/cooldowns";
+import { computeDampening } from "../utils/dampening";
 import {
   enemyTargetReaches,
   positionalWallReaches,
@@ -96,19 +100,16 @@ import {
   reconstructDispelSummary,
   removalSpellIdsFor,
 } from "../utils/dispelAnalysis";
-import { computeDampening } from "../utils/dampening";
 import { drResetMsAt } from "../utils/drAnalysis";
-import { SCHOOL_LIMITED_IMMUNITY_IDS } from "../utils/enemyDefensives";
-import { forcedMovesText } from "../utils/forcedDisplacement";
 import { reconstructEnemyCDTimeline } from "../utils/enemyCDs";
+import { SCHOOL_LIMITED_IMMUNITY_IDS } from "../utils/enemyDefensives";
 import { kickCastSpellId } from "../utils/enemyInterrupts";
 import {
   externalDamageForApplication,
   formatDuringExternalForOwner,
 } from "../utils/externalDamage";
+import { forcedMovesText } from "../utils/forcedDisplacement";
 import { detectHealingGaps, type IHealingGap } from "../utils/healingGaps";
-import { shuffleRoundEndMs } from "../utils/roundEnd";
-import { firstDeathMs } from "../utils/unitDeath";
 import {
   attemptIntoTrinketEvents,
   extractKillAttempts,
@@ -137,6 +138,7 @@ import {
   type IRootInstance,
   rootReachProvenFact,
 } from "../utils/rootReachability";
+import { shuffleRoundEndMs } from "../utils/roundEnd";
 import { RANGE_HITBOX_SLACK_YD, spellReachToAccuse } from "../utils/spellRange";
 import {
   isCasterCentredSpell,
@@ -147,6 +149,7 @@ import {
 import { getSpellSchoolName } from "../utils/spellSchools";
 import { getTalentAvoidanceTriggers } from "../utils/talentBehaviors";
 import { matchThreatLevel, threatActiveAt } from "../utils/threatAssessment";
+import { firstDeathMs } from "../utils/unitDeath";
 import { burstWindowDecisionPoints } from "./burstWindowDecisionPoints";
 import {
   backlashDispelDecisionPoints,
@@ -160,8 +163,6 @@ import {
   cdSpentIdleEvents,
   countsAsTeamBurst,
   enemyHealerCcWindows,
-  enemyMinHpInWindow,
-  enemyMinHpPctInWindow,
   friendlyCrisisMomentInWindow,
   isSpendableDefensiveCd,
   missedSyncWindowEvents,
@@ -206,9 +207,9 @@ import {
 import { CRISIS_HP_PCT, crisisDecisionPoints } from "./crisisDecisionPoints";
 import { fmtFactTime } from "./factFormat";
 import {
+  KICK_CAP_EXEMPT_MAX_TIER,
   kickIsHarmless,
   type KickPressure,
-  KICK_CAP_EXEMPT_MAX_TIER,
   kickPressureFor,
   kickPressureTier,
   type KickSidePressure,
@@ -226,7 +227,6 @@ export {
   cdHoardedEvents,
   cdSpentIdleEvents,
   enemyHealerCcWindows,
-  enemyMinHpPctInWindow,
   friendlyCrisisMomentInWindow,
   HARD_CC_CATEGORIES,
   type ICdHoardedCrisisSource,
@@ -1189,28 +1189,33 @@ export function missedCleanseEvents(
       // When only teammates can remove it: the LEAST-occupied eligible
       // dispeller, so the fact reads "every eligible dispeller was busy for
       // at least N s" (a free one → no fact).
-      const dispOcc =
+      const dispBest =
         occupancy && !ownerCanDispel && eligible.length > 0
           ? eligible
-              .map((f) =>
-                occupancyWithin(
+              .map((f) => ({
+                f,
+                o: occupancyWithin(
                   f,
                   occupancy.enemyIds,
                   winFrom,
                   winTo,
                   occupancy.failedCastsByUnit?.get(f.id),
                 ),
-              )
-              .reduce<ReturnType<typeof occupancyWithin>>(
-                (best, o) =>
-                  o === null
+              }))
+              .reduce<{
+                f: any;
+                o: NonNullable<ReturnType<typeof occupancyWithin>>;
+              } | null>(
+                (best, x) =>
+                  x.o === null
                     ? best
-                    : best === null || o.occupiedMs < best.occupiedMs
-                      ? o
+                    : best === null || x.o.occupiedMs < best.o.occupiedMs
+                      ? { f: x.f, o: x.o }
                       : best,
                 null,
               )
           : null;
+      const dispOcc = dispBest?.o ?? null;
       // a dispeller with no stream at all is unknown — only a full set speaks
       const dispOccKnown =
         dispOcc !== null &&
@@ -1245,6 +1250,10 @@ export function missedCleanseEvents(
               occupancy.matchStartMs,
               occupancy.rawStreams,
             )
+          : undefined;
+      const used =
+        ownerCanDispel && occupancy
+          ? cleanseUsedFact(owner, w, occupancy.matchStartMs)
           : undefined;
       return {
         id: `missed-cleanse:${w.targetName}:${Math.round(w.timeSeconds)}`,
@@ -1287,6 +1296,8 @@ export function missedCleanseEvents(
             : {}),
           // F-C14: the owner pressed the cleanse and was rejected
           ...(attempted ? { attempted } : {}),
+          // …and where it did go out inside the window (fix 9)
+          ...(used ? { ownerDispelUsed: used } : {}),
           // #34(b2): what the owner's hands were doing during the window.
           // preCommitted "yes" = a counted cast started BEFORE the window
           // opened (couldn't have known); "no" = every counted cast started
@@ -1324,6 +1335,18 @@ export function missedCleanseEvents(
                 dispellerCastingPreCommitted: dispOcc.startedBeforeWindow
                   ? "yes"
                   : "no",
+                // Work order 2026-10-14b fix 14 (facts only): what that same
+                // dispeller pressed inside the window — ae9d6fbc @163: a
+                // Shadowmeld 0.46 s after the Coil, then Drink; "Shadowmeld"
+                // was nowhere on the page. The presses, not an intent.
+                ...(dispBest && occupancy
+                  ? dispellerPressedFact(
+                      dispBest.f,
+                      occupancy.matchStartMs,
+                      w.timeSeconds,
+                      w.timeSeconds + w.durationSeconds,
+                    )
+                  : {}),
               }
             : {}),
         },
@@ -1368,6 +1391,87 @@ function cleanseAttemptedFact(
     ),
   );
   return formatAttemptedFact(hits);
+}
+
+/** `dispellerPressed`: a teammate dispeller's successful casts inside the
+ * window, in order, "Shadowmeld +0.4s、Drink +1.1s" (seconds after the
+ * window's start, floored to 0.1 s); at most DISPELLER_PRESSED_MAX, then
+ * "…". No ", " inside (`checkFactsBlockIntegrity`). */
+const DISPELLER_PRESSED_MAX = 6;
+export function dispellerPressedFact(
+  f: any,
+  matchStartMs: number,
+  fromS: number,
+  toS: number,
+): Record<string, string> {
+  const presses = ((f.spellCastEvents ?? []) as any[])
+    .filter((c) => c.logLine?.event === LogEvent.SPELL_CAST_SUCCESS)
+    .map((c) => ({
+      t: (c.logLine.timestamp - matchStartMs) / 1000,
+      name: getEnglishSpellName(String(c.spellId), c.spellName),
+    }))
+    .filter((c) => c.t >= fromS && c.t <= toS)
+    .sort((a, b) => a.t - b.t);
+  if (!presses.length) return {};
+  const shown = presses
+    .slice(0, DISPELLER_PRESSED_MAX)
+    .map(
+      (c) =>
+        `${c.name} +${(Math.floor((c.t - fromS) * 10 + 1e-9) / 10).toFixed(1)}s`,
+    );
+  return {
+    dispellerPressed:
+      shown.join("、") + (presses.length > DISPELLER_PRESSED_MAX ? "、…" : ""),
+  };
+}
+
+/** Where the owner's own dispel for this debuff went out inside the window
+ * (work order 2026-10-14b fix 9): 9d899d10 @99 read `attempted=pressed but
+ * rejected (尚未恢复×1)` alone while Purify Spirit went out three times in
+ * the 33.6 s window, every time on the mage — as if the dispel had been
+ * locked out. "Purify Spirit×3 on Ssjcowkok +7.4/+16.3/+30.4s", one group
+ * per spell and target in time order, offsets after the window's start
+ * floored to 0.1 s; a success in the window's last 0.1 s is left out (that
+ * is the dispel that ENDED a late-cleanse window, `latencyS`). No ", "
+ * inside (`checkFactsBlockIntegrity`). */
+function cleanseUsedFact(
+  owner: any,
+  w: Pick<
+    IMissedCleanseWindow,
+    "timeSeconds" | "durationSeconds" | "dispelType" | "targetCharmed"
+  >,
+  matchStartMs: number,
+): string | undefined {
+  const ids = new Set(
+    removalSpellIdsFor(owner, w.dispelType, w.targetCharmed).map(String),
+  );
+  const endS = w.timeSeconds + w.durationSeconds;
+  const used = ((owner.spellCastEvents ?? []) as any[])
+    .filter(
+      (c) =>
+        c.logLine?.event === LogEvent.SPELL_CAST_SUCCESS &&
+        ids.has(String(c.spellId)),
+    )
+    .map((c) => ({
+      t: (c.logLine.timestamp - matchStartMs) / 1000,
+      spell: getEnglishSpellName(String(c.spellId), c.spellName),
+      on: String(c.destUnitName ?? "?"),
+    }))
+    .filter((c) => c.t >= w.timeSeconds && c.t < endS - 0.1)
+    .sort((a, b) => a.t - b.t);
+  if (!used.length) return undefined;
+  const groups = new Map<string, number[]>();
+  for (const c of used) {
+    const k = `${c.spell}\u0000${c.on}`;
+    groups.set(k, [...(groups.get(k) ?? []), c.t - w.timeSeconds]);
+  }
+  return [...groups]
+    .map(([k, offs]) => {
+      const [spell, on] = k.split("\u0000");
+      const n = offs.length > 1 ? `×${offs.length}` : "";
+      return `${spell}${n} on ${on} ${offs.map((o) => `+${(Math.floor(o * 10) / 10).toFixed(1)}`).join("/")}s`;
+    })
+    .join("、");
 }
 
 /** "精神控制, 精神控制, 快速治疗" → "精神控制×2, 快速治疗" */
@@ -1514,7 +1618,10 @@ export function kickEatenEvents(
         | "sourceGapCloser"
         | "ownerImmobileBy"
         | "kickImmunityEnded"
+        | "ownerImmobileEndedIntoCastS"
         | "switchWasEmpowered"
+        | "switchWasChanneled"
+        | "firstActionSpellName"
         | "castStartS"
         | "castWindowS"
         | "diedAfterKickS"
@@ -1759,6 +1866,13 @@ export function kickEatenEvents(
         ...(k.ownerImmobileBy
           ? { youImmobileAtCastStart: k.ownerImmobileBy }
           : {}),
+        ...(k.ownerImmobileBy && k.ownerImmobileEndedIntoCastS != null
+          ? {
+              youImmobileEndedS: (
+                Math.floor(k.ownerImmobileEndedIntoCastS * 10 + 1e-9) / 10
+              ).toFixed(1),
+            }
+          : {}),
         ...(k.kickDepthPct != null
           ? { kickDepthPct: String(k.kickDepthPct) }
           : {}),
@@ -1814,6 +1928,7 @@ export function kickEatenEvents(
         // keeps the filtered evidence set, as cd-hoarded does.
         postKick: postKickFact(k, pressed),
         ...(p ? kickPressureFacts(p) : {}),
+        ...castStartFacts(p, k.castStartS),
         ...(cancels ? castCancelFacts(cancels, k.sourceName) : {}),
         ...(cancels ? stoppedJustBeforeFact(cancels, k.castStartS) : {}),
         ...sameKickerFact(k.sourceName),
@@ -2142,6 +2257,31 @@ function kickPressureFacts(p: KickPressure): Record<string, string> {
   return f;
 }
 
+/** Work order 2026-10-14b fix 12: when the kicked bar began, and which of
+ * the line's burst cooldowns (facts.enemyBurst / facts.ourBurst) went out
+ * only after it had — "Bloodlust +0.6s、Ascendance +0.6s", seconds into the
+ * cast. 1bad0a5c @15: Mind Control began 14.424, Bloodlust + Ascendance at
+ * 15.039, the kick 15.400 — everything floors to 0:15, and the row could
+ * not say which came first. No ", " inside (`checkFactsBlockIntegrity`). */
+export function castStartFacts(
+  p: KickPressure | null | undefined,
+  castStartS: number | null | undefined,
+): Record<string, string> {
+  if (castStartS == null) return {};
+  const after = [p?.ours, p?.theirs]
+    .flatMap((side) => Object.entries(side?.burstFromS ?? {}))
+    .filter(([, fromS]) => fromS > castStartS)
+    .sort((a, b) => a[1] - b[1])
+    .map(
+      ([spell, fromS]) =>
+        `${spell} +${(Math.floor((fromS - castStartS) * 10 + 1e-9) / 10).toFixed(1)}s`,
+    );
+  return {
+    castStartT: fmtFactTime(castStartS),
+    ...(after.length ? { burstAfterCastStart: after.join("、") } : {}),
+  };
+}
+
 /** The owner's rejected presses in `[kick, kick + POST_KICK_WINDOW_S]`,
  * filtered per spell through the SAME `filterIntentGuardEvidence` cd-hoarded
  * uses (predicate index: "Which SPELL_CAST_FAILED hits count as genuine
@@ -2290,6 +2430,8 @@ export function postKickFact(
         | "lockEndedBySuccessS"
         | "wentOutInLockS"
         | "switchWasEmpowered"
+        | "switchWasChanneled"
+        | "firstActionSpellName"
         | "diedAfterKickS"
       >
     >,
@@ -2409,14 +2551,29 @@ function postKickCore(
    * the player did press, so the idle form says "no successful cast" */
   otherReasonFollows = false,
 ): string {
+  const lockEndMs = textLockEndMs(k);
+  const inLockout = rejected.filter(
+    (h) => Math.round(h.tSeconds * 1000) < lockEndMs,
+  );
   if (k.postKick === "idle") {
     // F-K7e: a player who died inside the window had that long, not 5 s
     const span =
       k.diedAfterKickS === undefined
         ? "for 5s after the kick"
         : `before dying ${k.diedAfterKickS.toFixed(1)}s after the kick`;
+    // The idle form covers the whole window, so a "not ready" press after
+    // the school was free again is stated apart: the legend says the lock's
+    // rejects were "refused while the school was locked" (work order
+    // 2026-10-14b fix 2: 138e632d Thunder Focus Tea +3.7 s, 0.76 s after a
+    // 3.0 s Nature lock, under Incapacitating Roar). `postKickSeverityRank`
+    // still reads the whole count.
+    const afterLockout = rejected.filter((h) => !inLockout.includes(h));
     return rejected.length > 0
-      ? `no successful cast ${span}; ${pressed(rejected)}`
+      ? `no successful cast ${span}${
+          inLockout.length > 0
+            ? `; ${pressed(inLockout)} inside the lockout`
+            : ""
+        }${afterLockout.length > 0 ? `; after the lockout ${pressed(afterLockout)}` : ""}`
       : otherReasonFollows
         ? `no successful cast ${span}`
         : `no cast ${span}`;
@@ -2430,10 +2587,6 @@ function postKickCore(
   // (`lockEndedBySuccessS`, ruling A23): a reject after that cast was not the
   // lockout's doing, and a reject after the lock is not printed in either
   // branch (ruling A′18). `textLockEndMs` has the boundary.
-  const lockEndMs = textLockEndMs(k);
-  const inLockout = rejected.filter(
-    (h) => Math.round(h.tSeconds * 1000) < lockEndMs,
-  );
   // F-K7d: the switched line used to print only the switching cast, so a
   // player who pressed the locked school four times first read as someone
   // who calmly changed school (b12bfef4 @169: Verdant Embrace ×2 not ready,
@@ -2444,12 +2597,22 @@ function postKickCore(
       // a held Fire Breath (F-K13)
       k.switchWasEmpowered === true
         ? "; empowered cast"
-        : k.switchWasHardCast === true
-          ? "; hard cast"
-          : k.switchWasHardCast === false
-            ? "; not a hard cast"
-            : ""
-    })${inLockout.length > 0 ? `; ${pressed(inLockout)} inside the lockout` : ""}`;
+        : k.switchWasChanneled === true
+          ? "; channel"
+          : k.switchWasHardCast === true
+            ? "; hard cast"
+            : k.switchWasHardCast === false
+              ? "; not a hard cast"
+              : ""
+    })${inLockout.length > 0 ? `; ${pressed(inLockout)} inside the lockout` : ""}${
+      // fix 12: a cast before the switch is the first one after the kick
+      k.firstActionDelayS != null &&
+      k.switchDelayS != null &&
+      k.firstActionSpellName &&
+      k.firstActionDelayS < k.switchDelayS
+        ? `; first cast ${k.firstActionDelayS.toFixed(1)}s later (${k.firstActionSpellName})`
+        : ""
+    }`;
   const first = k.firstActionDelayS?.toFixed(1) ?? "?";
   if (inLockout.length > 0)
     return `${pressed(inLockout)} inside the lockout; first successful cast ${first}s later`;
@@ -2554,8 +2717,17 @@ export function positionMistakeEvents(
     | "ownerCcSeconds"
     | "ownerRootSeconds"
   > &
-    Partial<Pick<IPositionEvent, "topDamagerName" | "ownerHpLowPct">>)[],
+    Partial<
+      Pick<IPositionEvent, "topDamagerName" | "ownerHpLowPct" | "toSeconds">
+    >)[],
   owner: { id: string; name: string },
+  /** The owner's refused presses (the recorder's SPELL_CAST_FAILED rows)
+   * in [fromS, toS], as `joinPressesWithOffsets` text offset from `fromS`
+   * — work order 2026-10-14b fix 14: f4eb8c87 @87 stayed in at 19 % with
+   * Demonic Circle: Teleport pressed 12× and refused ("not yet recovered")
+   * at 87.0–88.6, and nothing on the row or the page said so. Absent ⇒ no
+   * fact. */
+  refusedIn?: (fromS: number, toS: number) => string,
 ): CandidateEvent[] {
   return events
     .filter((e) => POSITION_MISTAKES.has(e.type))
@@ -2625,6 +2797,11 @@ export function positionMistakeEvents(
           facts.ccS = String(Math.round(e.ownerCcSeconds));
         if (e.ownerRootSeconds !== undefined)
           facts.rootS = String(Math.round(e.ownerRootSeconds));
+        const refused =
+          refusedIn && e.toSeconds !== undefined
+            ? refusedIn(e.atSeconds, e.toSeconds)
+            : "";
+        if (refused) facts.refusedPresses = refused;
       }
       return {
         id: `position-mistake:${owner.id}:${t}:${kind}`,
@@ -3320,14 +3497,46 @@ function teamPlayEvents(
           );
           out.push(
             ...missedSyncWindowEvents(ccWindows, teamOffensiveCds, {
+              // the lock's own span, as its [CONSEQ] line reads it
+              // (`hpTroughInEventSpan`; work order 2026-10-14b fix 1)
               enemyMinHpPctAt: (from, to) =>
-                enemyMinHpPctInWindow(enemies, combat, from, to),
+                lowestHpTroughInEventSpan(enemies, startMs, from, to)?.pct ??
+                null,
               enemyMinHpUnitAt: (from, to) =>
-                enemyMinHpInWindow(enemies, combat, from, to)?.unitName ?? null,
+                lowestHpTroughInEventSpan(enemies, startMs, from, to)
+                  ?.unitName ?? null,
               enemyDeathS,
               ref: lookupSyncWindowPrior(combat?.startInfo?.bracket ?? ""),
               ownerId: owner?.id,
               ownerName: owner?.name,
+              // fix 13: the owner's refused presses (the recorder's rows)
+              ...(rawStreams?.available && owner
+                ? {
+                    ownerRefusedAt: (
+                      ids: readonly string[],
+                      fromS: number,
+                      toS: number,
+                    ) =>
+                      rawStreams.castFailed
+                        .filter(
+                          (f) =>
+                            f.unitGuid === owner.id &&
+                            ids.includes(String(f.spellId)) &&
+                            f.tSeconds >= fromS &&
+                            f.tSeconds <= toS,
+                        )
+                        .map((f) => ({
+                          spellName: getEnglishSpellName(
+                            String(f.spellId),
+                            f.spellName,
+                          ),
+                          tS: f.tSeconds,
+                          why: NOT_READY_REASONS.has(f.reason)
+                            ? "not ready yet"
+                            : refusalWhy(f.reason),
+                        })),
+                  }
+                : {}),
               playableEndS: (() => {
                 const endMs = playableEndMs(combat, units);
                 return endMs === undefined
@@ -3500,7 +3709,40 @@ function teamPlayEvents(
               } catch {
                 cds = [];
               }
-            return { unit: { id: f.id, name: f.name }, cds };
+            return {
+              unit: { id: f.id, name: f.name },
+              cds,
+              // fix 7: Alter Time's return is its own cast id, on no ledger
+              returns: ((f.spellCastEvents ?? []) as any[])
+                .filter(
+                  (e) =>
+                    e.spellId === ALTER_TIME_RETURN_ID &&
+                    e.logLine.event === LogEvent.SPELL_CAST_SUCCESS,
+                )
+                .map((e) => ({
+                  atS: (e.logLine.timestamp - combat.startTime) / 1000,
+                  name: "Alter Time (return)",
+                })),
+              // fix 7: the press's own aura (cast or effect id) broken on
+              // this unit before that application's REMOVED
+              brokenAtS: (spellId: string, castS: number) => {
+                const ids = castAndEffectIds(spellId);
+                const castMs = combat.startTime + castS * 1000;
+                for (const a of (f.auraEvents ?? []) as any[]) {
+                  if (!ids.has(a.spellId) || a.logLine.timestamp < castMs)
+                    continue;
+                  if (a.destUnitId && a.destUnitId !== f.id) continue;
+                  const ev = a.logLine.event as string;
+                  if (ev === LogEvent.SPELL_AURA_REMOVED) return null;
+                  if (
+                    ev === LogEvent.SPELL_AURA_BROKEN ||
+                    ev === LogEvent.SPELL_AURA_BROKEN_SPELL
+                  )
+                    return (a.logLine.timestamp - combat.startTime) / 1000;
+                }
+                return null;
+              },
+            };
           }),
           // F-H6: the shared affordability predicate, with the timeline's
           // raw mana fallback
@@ -3727,6 +3969,44 @@ function teamPlayEvents(
           ),
         }),
         owner,
+        rawStreams?.available
+          ? (fromS: number, toS: number) => {
+              // a spell that also went out inside the span is GCD key spam,
+              // not a button that was not there: only the ones that never did
+              const wentOut = new Set(
+                ((owner.spellCastEvents ?? []) as any[])
+                  .filter((c) => {
+                    const tS = (c.logLine.timestamp - combat.startTime) / 1000;
+                    return (
+                      c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+                      tS >= fromS &&
+                      tS <= toS
+                    );
+                  })
+                  .map((c) => String(c.spellId)),
+              );
+              const refused = rawStreams.castFailed.filter(
+                (f) =>
+                  f.unitGuid === owner.id &&
+                  f.tSeconds >= fromS &&
+                  f.tSeconds <= toS &&
+                  !wentOut.has(String(f.spellId)),
+              );
+              const groups = new Map<string, CastFailedEvent[]>();
+              for (const f of refused) {
+                const why = NOT_READY_REASONS.has(f.reason)
+                  ? "not ready yet"
+                  : refusalWhy(f.reason);
+                groups.set(why, [...(groups.get(why) ?? []), f]);
+              }
+              return [...groups]
+                .map(
+                  ([why, list]) =>
+                    `${joinPressesWithOffsets(list, fromS)} (${why})`,
+                )
+                .join("; ");
+            }
+          : undefined,
       ),
     );
 

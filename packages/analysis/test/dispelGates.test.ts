@@ -22,6 +22,7 @@ import {
 } from "@gladlog/parser-compat";
 
 import {
+  dispellerPressedFact,
   missedCleanseEvents,
   missedPurgeEvents,
 } from "../src/analysis/candidateFindings";
@@ -664,6 +665,71 @@ describe("triage missed-cleanse F-C14 / F-C12 (owner's cleanse facts)", () => {
     });
     expect(c!.facts.attempted).toBe("pressed but rejected (无法在昏迷时那样做×2)");
     expect(c!.facts.ownerDispelSpell).toBe("Detox");
+  });
+
+  it("the owner's dispel went out inside the window: ownerDispelUsed says where (work order 2026-10-14b fix 9, 9d899d10)", () => {
+    const succ = (t: number, dest: string) => ({
+      spellId: "115450",
+      spellName: "清创生血",
+      destUnitName: dest,
+      timestamp: S(t),
+      logLine: { event: LogEvent.SPELL_CAST_SUCCESS, timestamp: S(t) },
+    });
+    const owner = makeUnit("mw", {
+      spec: CombatUnitSpec.Monk_Mistweaver,
+      // twice on the mage, once on another unit, once at the window's end
+      // (the dispel that ended it — not listed)
+      spellCastEvents: [
+        succ(17.43, "Mage"),
+        succ(26.3, "Mage"),
+        succ(30.5, "Rogue"),
+        succ(43.55, "t1"),
+      ],
+    });
+    const w = {
+      timeSeconds: 10,
+      durationSeconds: 33.6,
+      targetName: "t1",
+      spellName: "Curse of Weakness",
+      spellId: "702",
+      priority: "Critical",
+      postCcDamage: 10_000,
+      cleanseWasOnCD: false,
+      dispellersLockedOut: false,
+      losReachable: null,
+      drChainRisk: false,
+      dispelType: "Magic",
+    } as any;
+    const [c] = missedCleanseEvents([w], owner, [owner], false, {
+      enemyIds: new Set(),
+      matchStartMs: MATCH_START,
+      rawStreams: { available: true, manaSamples: [], castFailed: [] } as any,
+    });
+    expect(c!.facts.ownerDispelUsed).toBe(
+      "Detox×2 on Mage +7.4/+16.3s、Detox on Rogue +20.5s",
+    );
+    expect(c!.facts.ownerDispelUsed).not.toContain(", ");
+  });
+
+  it("dispellerPressed: the teammate dispeller's presses inside the window, in order (work order 2026-10-14b fix 14, ae9d6fbc)", () => {
+    const c = (spellId: string, spellName: string, t: number) => ({
+      spellId,
+      spellName,
+      timestamp: S(t),
+      logLine: { event: LogEvent.SPELL_CAST_SUCCESS, timestamp: S(t) },
+    });
+    const priest = makeUnit("dp", {
+      spec: CombatUnitSpec.Priest_Discipline,
+      spellCastEvents: [
+        c("58984", "Shadowmeld", 163.492),
+        c("1291791", "Drink", 164.169),
+        c("17", "Power Word: Shield", 170),
+      ],
+    });
+    expect(dispellerPressedFact(priest, MATCH_START, 163.036, 166.045)).toEqual({
+      dispellerPressed: "Shadowmeld +0.4s、Drink +1.1s",
+    });
+    expect(dispellerPressedFact(priest, MATCH_START, 150, 160)).toEqual({});
   });
 
   it("codex review: a charmed teammate is reached by the offensive purge — Dispel Magic, not Purify", () => {

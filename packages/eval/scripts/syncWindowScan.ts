@@ -30,13 +30,13 @@
 import {
   ensureAnalysisData,
   extractMajorCooldowns,
+  lowestHpTroughInEventSpan,
   toRenderSecond,
 } from "@gladlog/analysis";
 import {
   countsAsTeamBurst,
   syncWindowCdFor,
   enemyHealerCcWindows,
-  enemyMinHpPctInWindow,
   evaluateSyncWindow,
   mergeHealerCcWindows,
   syncWindowEligible,
@@ -194,12 +194,13 @@ async function scan(): Promise<void> {
         );
         let minHp: number | null = null;
         try {
-          minHp = enemyMinHpPctInWindow(
-            enemies,
-            combat,
-            w.fromSeconds,
-            w.toSeconds,
-          );
+          minHp =
+            lowestHpTroughInEventSpan(
+              enemies,
+              combat.startTime,
+              w.fromSeconds,
+              w.toSeconds,
+            )?.pct ?? null;
         } catch {
           /* torn/unparseable — skip */
         }

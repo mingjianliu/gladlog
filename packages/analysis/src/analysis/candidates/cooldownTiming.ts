@@ -204,60 +204,6 @@ export function enemyHealerCcWindows(
   return out.sort((a, b) => a.fromSeconds - b.fromSeconds);
 }
 
-/** Lowest HP% across all enemy players sampled at every rendered second inside
- * [fromSeconds, toSeconds] (inclusive) — the ACCELERATOR-only fact
- * `missed-sync-window` attaches (B8: never a gate). Render-grid discipline
- * (CLAUDE.md): the query instants are `toRenderSecond`-floored before
- * sampling (at `HP_SAMPLE_RADIUS_MS`, the gate's radius), so this cannot
- * contradict the whole-second [STATE] HP the prompt timeline separately renders. Returns
- * null only when NO sample succeeded anywhere in the window (no advanced
- * logging) — the caller must treat null as "omit the fact", never as "0%".
- */
-export function enemyMinHpPctInWindow(
-  enemies: any[],
-  combat: { startTime: number },
-  fromSeconds: number,
-  toSeconds: number,
-  hpLookup: (
-    unit: any,
-    timestampMs: number,
-    maxDtMs: number,
-  ) => number | null = getUnitHpAtTimestamp,
-): number | null {
-  return (
-    enemyMinHpInWindow(enemies, combat, fromSeconds, toSeconds, hpLookup)
-      ?.pct ?? null
-  );
-}
-
-/** `enemyMinHpPctInWindow`'s scan, also naming whose reading it was (triage
- *  sync-burst F-S7: `enemyMinHpPct=63` read as the healer's HP; d692582c's
- *  minimum was Adriels, not the locked healer). The first unit to reach the
- *  minimum in scan order (second, then roster) is named. */
-export function enemyMinHpInWindow(
-  enemies: any[],
-  combat: { startTime: number },
-  fromSeconds: number,
-  toSeconds: number,
-  hpLookup: (
-    unit: any,
-    timestampMs: number,
-    maxDtMs: number,
-  ) => number | null = getUnitHpAtTimestamp,
-): { pct: number; unitName: string } | null {
-  const fromR = toRenderSecond(fromSeconds);
-  const toR = toRenderSecond(toSeconds);
-  let min: { pct: number; unitName: string } | null = null;
-  for (let t = fromR; t <= toR; t++) {
-    for (const e of enemies) {
-      const hp = hpLookup(e, combat.startTime + t * 1000, HP_SAMPLE_RADIUS_MS);
-      if (hp === null) continue;
-      if (min === null || hp < min.pct) min = { pct: hp, unitName: e.name };
-    }
-  }
-  return min;
-}
-
 /** Per-match cap for missed-sync-window. <标定定稿 2026-08-15,报告
  * p1p2-calibration.md>: confirmed at 2, unchanged — full-corpus scan (1028
  * matches/3441 rounds, at B8's fixed no-HP-gate definition, which Task 5 has
@@ -945,10 +891,12 @@ export function missedSyncWindowEvents(
   >[],
   offensiveCds: SyncWindowCd[],
   probes: {
-    /** Wired to enemyMinHpPctInWindow in production. Accelerator-only, see
-     * the B8 doc comment above — must NEVER gate the candidate. */
+    /** Wired to `lowestHpTroughInEventSpan` (utils/cooldowns.ts) over the
+     * enemy team in production — the lowest HP inside the lock's own span,
+     * the reading its [CONSEQ] line prints. Accelerator-only, see the B8
+     * doc comment above — must NEVER gate the candidate. */
     enemyMinHpPctAt: (fromSeconds: number, toSeconds: number) => number | null;
-    /** Whose reading `enemyMinHpPctAt` returned (`enemyMinHpInWindow`);
+    /** Whose reading `enemyMinHpPctAt` returned;
      * optional — absent, the unit fact is omitted. Facts only (F-S7). */
     enemyMinHpUnitAt?: (
       fromSeconds: number,
@@ -978,6 +926,14 @@ export function missedSyncWindowEvents(
      * in-round part. Whether a cooldown ENTERED the lock is still read on
      * the lock as logged. Absent ⇒ no cut. */
     roundEndS?: number;
+    /** The owner's refused presses (SPELL_CAST_FAILED, the recorder's own
+     *  rows) of these spells in [fromS, toS] — work order 2026-10-14b
+     *  fix 13. Facts only; absent ⇒ the fact is omitted. */
+    ownerRefusedAt?: (
+      spellIds: readonly string[],
+      fromS: number,
+      toS: number,
+    ) => Array<{ spellName: string; tS: number; why: string }>;
     /** The bracket's reference cell, or null when the bracket has no cell,
      * misses the n floor, or fails the min-contrast door — null silences
      * the type for the whole round (the resurrection's bracket gate). */
@@ -1003,6 +959,8 @@ export function missedSyncWindowEvents(
     minHpUnit: string | null;
     /** later locks the same ready CDs were still held through */
     alsoHeld: number[];
+    /** …and those locks themselves */
+    alsoHeldWins: Array<(typeof merged)[number]>;
   }> = [];
   // One accusation per held CD (round 3 W1a, 24b6: Freezing Trap broken
   // 108.149, Cyclone 110.635 — two accusations against one held Volley).
@@ -1050,6 +1008,7 @@ export function missedSyncWindowEvents(
       });
     if (sameHold) {
       firstCand!.alsoHeld.push(toRenderSecond(w.fromSeconds));
+      firstCand!.alsoHeldWins.push(w);
       for (const cd of ev.ready)
         accused.set(cd, { end: w.toSeconds, cand: accused.get(cd)!.cand });
       continue;
@@ -1065,6 +1024,7 @@ export function missedSyncWindowEvents(
       minHp: probes.enemyMinHpPctAt(w.fromSeconds, factsEndS),
       minHpUnit: probes.enemyMinHpUnitAt?.(w.fromSeconds, factsEndS) ?? null,
       alsoHeld: [] as number[],
+      alsoHeldWins: [],
     };
     candidates.push(cand);
     for (const cd of ev.ready) accused.set(cd, { end: w.toSeconds, cand });
@@ -1077,7 +1037,7 @@ export function missedSyncWindowEvents(
           renderedWindowSeconds(a.w.fromSeconds, inRound(a.w).toSeconds),
       )
       .slice(0, cap)
-      .map(({ w, readyCds, minHp, minHpUnit, alsoHeld }) => {
+      .map(({ w, readyCds, minHp, minHpUnit, alsoHeld, alsoHeldWins }) => {
         const t = toRenderSecond(w.fromSeconds);
         const length = syncLockLengthFacts(w, probes.roundEndS);
         const timing = syncReadyTimingFacts(w, readyCds);
@@ -1107,6 +1067,62 @@ export function missedSyncWindowEvents(
         const ownParts = probes.ownerName
           ? w.componentCasters.filter((c) => c.casterName === probes.ownerName)
           : [];
+        // Work order 2026-10-14b fix 13 (facts only): (a) the owner's own
+        // ready cooldowns pressed and refused inside this lock or a later
+        // held one — 24b6a229: Volley refused "not ready" (the GCD) 1.2 s
+        // into the 1:50 Cyclone, listed in alsoHeldAt as a plain hold; the
+        // lock stays in alsoHeldAt. (b) the owner's own control on the same
+        // healer right after the lock, not chained into it (chaining would
+        // move the window) — 82a2d681: Blinding Sleet 0.54 s after the
+        // Storm Bolt ended.
+        const ownReadyIds = readyCds
+          .filter(
+            (cd) =>
+              probes.ownerId !== undefined && cd.owner?.id === probes.ownerId,
+          )
+          .map((cd) => cd.spellId);
+        const refusedInLock =
+          probes.ownerRefusedAt && ownReadyIds.length
+            ? [w, ...alsoHeldWins]
+                .flatMap((l) => {
+                  const groups = new Map<string, number[]>();
+                  for (const r of probes.ownerRefusedAt!(
+                    ownReadyIds,
+                    l.fromSeconds,
+                    Math.min(l.toSeconds, probes.roundEndS ?? Infinity),
+                  )) {
+                    const k = `${r.spellName}\u0000${r.why}`;
+                    groups.set(k, [
+                      ...(groups.get(k) ?? []),
+                      r.tS - l.fromSeconds,
+                    ]);
+                  }
+                  return [...groups].map(([k, offs]) => {
+                    const [spell, why] = k.split("\u0000");
+                    const n = offs.length > 1 ? `×${offs.length}` : "";
+                    const at = offs
+                      .map(
+                        (o) =>
+                          `+${(Math.floor(o * 10 + 1e-9) / 10).toFixed(1)}`,
+                      )
+                      .join("/");
+                    return `${toRenderSecond(l.fromSeconds)}: ${spell}${n} ${at}s (${why})`;
+                  });
+                })
+                .join("; ")
+            : "";
+        const followUp = probes.ownerName
+          ? merged.find(
+              (n) =>
+                n.healerName === w.healerName &&
+                n.fromSeconds > w.toSeconds &&
+                n.fromSeconds - w.toSeconds <= SYNC_ENTER_LEAD_S &&
+                n.componentCasters.length > 0 &&
+                n.componentCasters.every(
+                  (c) => c.casterName === probes.ownerName,
+                ),
+            )
+          : undefined;
         const setupBy =
           ownParts.length === 0
             ? ""
@@ -1165,6 +1181,12 @@ export function missedSyncWindowEvents(
               ? { enteredNextLock: enteredNext.join("; ") }
               : {}),
             ...(setupBy ? { setupBy } : {}),
+            ...(refusedInLock ? { refusedInLock } : {}),
+            ...(followUp
+              ? {
+                  ownerFollowUpCc: `${followUp.spellName} +${(Math.floor((followUp.fromSeconds - w.toSeconds) * 10 + 1e-9) / 10).toFixed(1)}s (${syncLockLengthFacts(followUp, probes.roundEndS).durationS}s)`,
+                }
+              : {}),
             // Corpus reference (syncWindowPrior.ts) — the gate
             // (checkSyncWindowRefConsistency) redoes the lookup from cellKey
             // and re-checks every one of these numbers plus the door.
@@ -1704,6 +1726,15 @@ export function cdHoardedEvents(
   teamLedgers?: ReadonlyArray<{
     unit: { id: string; name: string };
     cds: CdHoardCandidateCd[];
+    /** Presses of this unit's saves the ledger does not carry — Alter
+     *  Time's return, 342247 (work order 2026-10-14b fix 7: 138e632d's mage
+     *  snapped back from 33 % to 68 % at +0.1 s and the row did not say so). */
+    returns?: ReadonlyArray<{ atS: number; name: string }>;
+    /** When the aura a press of `spellId` at `castS` put on this unit was
+     *  broken (SPELL_AURA_BROKEN[_SPELL], seconds since round start), null
+     *  when it was not (b12bfef4: a Greater Invisibility broken by a Moonfire
+     *  0.54 s after the press read as a save that held). */
+    brokenAtS?: (spellId: string, castS: number) => number | null;
   }>,
   /** Triage 2026-09-29 F-H6 (user ruling 2026-09-30, with res-readiness
    * R2 = A): could the owner pay this cooldown's mana at any sample in
@@ -2172,7 +2203,7 @@ export function cdHoardedEvents(
       const pressedFor = (
         cds: CdHoardCandidateCd[],
         ally: boolean,
-      ): Array<{ at: number; name: string }> =>
+      ): Array<{ at: number; name: string; spellId: string }> =>
         cds
           .filter(
             (cd) =>
@@ -2188,16 +2219,52 @@ export function cdHoardedEvents(
                     c.targetName === undefined ||
                     c.targetName === crisisUnit.name),
               )
-              .map((c) => ({ at: c.timeSeconds, name: cd.spellName })),
+              .map((c) => ({
+                at: c.timeSeconds,
+                name: cd.spellName,
+                spellId: cd.spellId,
+              })),
           );
       const crisisUnitSaved = own
         ? ""
         : (teamLedgers ?? [])
             .filter((l) => l.unit.id === crisisUnit.id)
-            .flatMap((l) => pressedFor(l.cds, false))
+            .flatMap((l) => [
+              ...pressedFor(l.cds, false).map((x) => ({
+                ...x,
+                broken: l.brokenAtS?.(x.spellId, x.at) ?? null,
+              })),
+              ...(l.returns ?? [])
+                .filter((r) => r.atS >= windowFromS && r.atS <= windowToS)
+                .map((r) => ({ at: r.atS, name: r.name, broken: null })),
+            ])
             .sort((a, b) => a.at - b.at)
-            .map((x) => `${x.name} ${off(x.at)}s`)
+            .map(
+              (x) =>
+                `${x.name} ${off(x.at)}s${x.broken !== null ? ` (broken ${off(x.broken)}s)` : ""}`,
+            )
             .join("; ");
+      // Work order 2026-10-14b fix 11 (facts only): a listed ready cooldown
+      // the player DID press in the next response window after this one —
+      // late, not never (0068182d @152: Mass Invisibility reached the
+      // crisis unit at +5.8 s, the row said nothing; 3 of 22 rows of the 51
+      // had such a press). The first press in (window end, window end +
+      // CD_HOARD_RESPONSE_S], with whom it was aimed at.
+      const pressedLate = ready
+        .slice(0, 3)
+        .flatMap((cd) => {
+          const c = cd.casts.find(
+            (x) =>
+              x.timeSeconds > windowToS &&
+              x.timeSeconds <= windowToS + CD_HOARD_RESPONSE_S,
+          );
+          return c
+            ? [
+                `${cd.spellName}${c.targetName ? ` → ${c.targetName}` : ""} ${off(c.timeSeconds)}s`,
+              ]
+            : [];
+        })
+        .join("; ");
       const teamAnswered = (teamLedgers ?? [])
         .filter((l) => l.unit.id !== crisisUnit.id && l.unit.id !== owner.id)
         .flatMap((l) =>
@@ -2315,6 +2382,7 @@ export function cdHoardedEvents(
           ...(windowS ? { windowS } : {}),
           ...(crisisUnitSaved ? { crisisUnitSaved } : {}),
           ...(teamAnswered ? { teamAnswered } : {}),
+          ...(pressedLate ? { pressedLate } : {}),
           ...(spentElsewhere ? { spentElsewhere } : {}),
           ...(ownerCc && act
             ? { ownerCc, ownerFreeS: act.freeAfterS.toFixed(1) }
@@ -2339,8 +2407,8 @@ export interface ICrisisMoment {
 
 /**
  * Worst HP% any friendly reached inside [fromSeconds, toSeconds], render-grid
- * sampled at every rendered second — same scan shape as `enemyMinHpPctInWindow`
- * (Task 2), mirrored onto the owner's own team and extended to carry back
+ * sampled at every rendered second — the scan missed-sync-window's enemy
+ * reading ran until 2026-10-14 (Task 2), on the owner's own team, carrying back
  * WHICH unit and WHICH render second produced the worst reading (cd-hoarded's
  * crisis fact needs a citable moment, not just a number). Render-grid
  * discipline (CLAUDE.md): the caller must pass already-`toRenderSecond`-floored

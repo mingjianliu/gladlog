@@ -561,6 +561,16 @@ const INDEX: PredicateRow[] = [
   },
   {
     file: `${A}/utils/cooldowns.ts`,
+    symbol: "hpTroughInEventSpan",
+    mod: cooldowns,
+  },
+  {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "lowestHpTroughInEventSpan",
+    mod: cooldowns,
+  },
+  {
+    file: `${A}/utils/cooldowns.ts`,
     symbol: "cdMaybeAvailableAt",
     mod: cooldowns,
   },

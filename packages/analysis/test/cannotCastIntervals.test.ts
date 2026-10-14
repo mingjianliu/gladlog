@@ -271,7 +271,7 @@ describe("cannotCastIntervals — log-order pairing and pet sources (H23)", () =
     logLine: { event },
   });
 
-  it("a same-millisecond re-application pairs with the NEXT removal, not the one logged before it", () => {
+  it("a same-millisecond REMOVED → APPLIED is one Cyclone re-broadcast: one interval from the landing (H23; work order 2026-10-14b fix 8)", () => {
     const unit = {
       id: "Player-1",
       auraEvents: [
@@ -283,8 +283,7 @@ describe("cannotCastIntervals — log-order pairing and pet sources (H23)", () =
       actionIn: [],
     } as unknown as ICombatUnit;
     expect(buildCannotCastIntervals(unit, new Set(["Enemy-1"]))).toEqual([
-      { from: 23_103, to: 23_317 },
-      { from: 23_317, to: 28_109 },
+      { from: 23_103, to: 28_109 },
     ]);
   });
 

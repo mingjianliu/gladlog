@@ -802,6 +802,61 @@ describe("cdHoardedEvents — signed 09-30 facts", () => {
     );
   });
 
+  it("fix 11 (work order 2026-10-14b): a ready cooldown pressed in the next 5 s after the window is pressedLate", () => {
+    const u = stunned(50, 51);
+    const act = actWindowFor(u, new Set(["e"]), T0);
+    const late = (s: number) => ({
+      ...cd(),
+      casts: [{ timeSeconds: s, targetName: "Mate-R" }],
+      neverUsed: false,
+    });
+    const emit = (s: number) =>
+      cdHoardedEvents(
+        [{ crisisUnit: MATE, own: false, points: [point(60)] }],
+        [late(s)],
+        OWNER,
+        undefined,
+        undefined,
+        [],
+        act.couldRespond,
+        undefined,
+        act.stateIn,
+      );
+    // 0068182d's shape: +5.8 s, just outside the 5 s window
+    expect(emit(65.8)[0]!.facts!.pressedLate).toBe(
+      "Pain Suppression → Mate-R +5.8s",
+    );
+    // beyond the next 5 s: not stated
+    expect(emit(70.5)[0]!.facts!.pressedLate).toBeUndefined();
+  });
+
+  it("fix 7 (work order 2026-10-14b): Alter Time's return is listed, and a save broken right after is marked", () => {
+    const save = (spellId: string, spellName: string, s: number) => ({
+      spellId,
+      spellName,
+      tag: "Defensive",
+      cooldownSeconds: 120,
+      casts: [{ timeSeconds: s }],
+      neverUsed: false,
+    });
+    const [e] = run(stunned(50, 51), {
+      teamLedgers: [
+        {
+          unit: MATE,
+          cds: [save("110959", "Greater Invisibility", 60.4)],
+          // 138e632d: the snap-back at +0.1 s
+          returns: [{ atS: 60.1, name: "Alter Time (return)" }],
+          // b12bfef4: a Moonfire broke the invisibility 0.54 s later
+          brokenAtS: (spellId: string, castS: number) =>
+            spellId === "110959" && castS === 60.4 ? 60.94 : null,
+        },
+      ],
+    });
+    expect(e!.facts!.crisisUnitSaved).toBe(
+      "Alter Time (return) +0.1s; Greater Invisibility +0.4s (broken +0.9s)",
+    );
+  });
+
   it("F-H7 / F-H9: an ally save aimed at someone else is not listed; a self wall aimed at an enemy is (it lands on its caster)", () => {
     const save = (
       spellId: string,

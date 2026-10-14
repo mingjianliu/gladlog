@@ -447,10 +447,134 @@ export const REJECT_WHY_UNWORDED = "client reason not translated";
 export const REJECT_WHY_BAR_STOPPED = "its cast bar began and was stopped";
 
 /**
+ * More SPELL_CAST_FAILED reason texts `refusalWhy` words — product wording →
+ * the client's texts, every locale the corpus carries them in (work order
+ * 2026-10-14b fix 3: "client reason not translated" stood for 没有目标 /
+ * 无效的目标 / 你还不能那么做 / 精华不足 / "Target needs to be in front of
+ * you." / "Another action is in progress" on 4 of the 43 kick-eaten rows of
+ * the PV382 re-eval). Read off the corpus, not translated: every reason text
+ * on the 605-file capture and the 60 re-eval logs
+ * (eval-private fix-FT/wo2/castfailed-reasons-*.txt, counted by
+ * scripts/wo2_castfailed_reasons.py; unworded presses before
+ * wo2/unworded-before.txt, after wo2/unworded-after.txt). A text whose meaning
+ * is not plain from the string itself (Korean 아직 사용할 수 없습니다 next
+ * to the "not ready" family; "You must be in front of your target.") is left
+ * out. These words only: no `[REJECTED]` run (`REJECT_REASONS`) and no
+ * not-ready classification moves with this table.
+ */
+export const OTHER_REFUSAL_REASONS: Readonly<
+  Record<string, readonly string[]>
+> = {
+  "no target": [
+    "No target",
+    "没有目标",
+    "No hay objetivo",
+    "Pas de cible",
+    "Kein Ziel",
+    "Não há alvo",
+    "Нет цели.",
+  ],
+  "invalid target": [
+    "Invalid target",
+    "无效的目标",
+    "没有有效的目标。",
+    "Objetivo no válido",
+    "No hay objetivos válidos.",
+    "Cible incorrecte",
+    "Ungültiges Ziel",
+    "Alvo inválido",
+    "잘못된 대상입니다.",
+  ],
+  "target not in front": [
+    "Target needs to be in front of you.",
+    "你必须面对目标。",
+    "你必須面對目標。",
+    "El objetivo debe estar frente a ti.",
+    "Les cibles doivent être devant vous.",
+    "Ziel muss sich vor Euch befinden.",
+    "Цель должна быть перед вами.",
+    "대상이 앞에 있어야 합니다.",
+  ],
+  "target too close": [
+    "Target too close",
+    "目标过于接近",
+    "El objetivo está demasiado cerca",
+    "Cible trop proche",
+    "Ziel ist zu nah.",
+    "대상이 너무 가까이 있습니다.",
+  ],
+  "another action in progress": [
+    "Another action is in progress",
+    "另外一个动作正在进行中",
+    "另外一個動作正在進行中",
+    "Hay otra acción en curso",
+    "Une autre action est en cours",
+    "Es wird gerade eine andere Aktion ausgeführt.",
+    "Outra ação está em andamento",
+    "Выполняется другое действие.",
+    "다른 행동을 마칠 때까지 기다려야 합니다.",
+  ],
+  "can't do that yet": [
+    "You can't do that yet",
+    "你还不能那么做",
+    "你还不能那么做。",
+    "你還不能這麼做",
+    "你還不能這麼做。",
+    "Vous ne pouvez pas encore faire cela",
+    "Das könnt Ihr noch nicht.",
+    "Вы пока не можете этого сделать.",
+  ],
+  "can't do that right now": [
+    "You can't do that right now.",
+    "Vous ne pouvez pas faire ça maintenant.",
+    "Das könnt Ihr im Moment nicht tun.",
+    "지금 당장은 할 수 없습니다.",
+  ],
+  "in combat": ["You are in combat", "你正处于交战状态"],
+  "item not ready yet": [
+    "Item is not ready yet",
+    "物品还没有准备好",
+    "物品還沒有準備好",
+    "El objeto aún no está listo",
+    "Gegenstand ist noch nicht bereit.",
+    "L'objet n'est pas encore prêt",
+  ],
+  "not enough mana": ["Not enough mana", "法力值不足", "Pas assez de mana"],
+  "not enough energy": ["Not enough energy", "能量值不足"],
+  "not enough rage": ["Not enough rage", "Pas assez de rage"],
+  "not enough focus": ["Not enough focus", "集中值不足"],
+  "not enough fury": ["Not enough fury", "狂乱值不足", "恶魔之怒不足"],
+  "not enough runes": ["Not enough runes", "符文不足"],
+  "not enough runic power": ["Not enough runic power"],
+  "not enough holy power": [
+    "Not enough holy power",
+    "神圣能量不足",
+    "No tienes suficiente poder sagrado",
+    "Nicht genügend Heilige Kraft",
+    "Недостаточно энергии Света",
+  ],
+  "not enough soul shards": [
+    "Not enough soul shards",
+    "Pas assez d'éclats d'âme",
+    "Nicht genügend Seelensplitter",
+  ],
+  "not enough essence": ["Not enough essence", "精华不足", "龍能不足"],
+  "not enough insanity": ["Not enough insanity", "瘋狂不足"],
+  "not enough chi": ["Not enough chi"],
+  "not enough maelstrom": ["Not enough maelstrom"],
+};
+const OTHER_REFUSAL_OF = new Map<string, string>(
+  Object.entries(OTHER_REFUSAL_REASONS).flatMap(([why, texts]) =>
+    texts.map((t) => [t, why] as [string, string]),
+  ),
+);
+
+/**
  * The reason the log gives for one SPELL_CAST_FAILED row, in the product's
  * words: the four `REJECT_WHY` kinds, "under crowd control" / "silenced"
  * (`CONTROL_REJECT_REASONS`), a cast bar that was stopped
- * (`CAST_INTERRUPTED_REASONS`), else `REJECT_WHY_UNWORDED`. Not for a "not
+ * (`CAST_INTERRUPTED_REASONS`), the `OTHER_REFUSAL_REASONS` kinds, else
+ * `REJECT_WHY_UNWORDED`. Not for a "not
  * ready" refusal (`NOT_READY_REASONS`: a locked school, the spell's own
  * cooldown and the GCD all answer with it) — the caller sorts those out
  * first. One wording for kick-eaten's `postKick` and its gate
@@ -461,15 +585,15 @@ export function refusalWhy(reason: string): string {
   if (kind) return REJECT_WHY[kind];
   const control = controlRejectKindOf(reason);
   if (control) return CONTROL_REJECT_WHY[control];
-  return CAST_INTERRUPTED_REASONS.has(reason)
-    ? REJECT_WHY_BAR_STOPPED
-    : REJECT_WHY_UNWORDED;
+  if (CAST_INTERRUPTED_REASONS.has(reason)) return REJECT_WHY_BAR_STOPPED;
+  return OTHER_REFUSAL_OF.get(reason) ?? REJECT_WHY_UNWORDED;
 }
 /** Every text `refusalWhy` can return. */
 export const REFUSAL_WHY_WORDS: readonly string[] = [
   ...Object.values(REJECT_WHY),
   ...Object.values(CONTROL_REJECT_WHY),
   REJECT_WHY_BAR_STOPPED,
+  ...Object.keys(OTHER_REFUSAL_REASONS),
   REJECT_WHY_UNWORDED,
 ];
 

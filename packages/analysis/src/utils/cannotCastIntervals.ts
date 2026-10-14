@@ -5,7 +5,7 @@ import {
   SPELL_CATEGORIES as SPELLS,
 } from "../data/spellCategories";
 import { BACKLASH_AURA_CC_TYPE } from "../data/backlashCc";
-import { supersededAuraBreaks } from "./auraIntervals";
+import { dropAuraRebroadcasts, supersededAuraBreaks } from "./auraIntervals";
 
 import { schoolLockedBy, spellSchoolMask } from "../data/spellSchools";
 import { ccSpellIds, officialSilenceIds } from "../data/spellTags";
@@ -549,7 +549,13 @@ export function castBlockingAuraIntervals(
   // throw that the caller's try/catch would turn into "no gaps at all".
   // a BROKEN line its aura's own REMOVED follows is not the end (FT-T08)
   const notTheEnd = supersededAuraBreaks(unit.auraEvents ?? []);
-  for (const aura of unit.auraEvents ?? []) {
+  // A same-ms REMOVED → APPLIED pair is one aura re-broadcast, not a new
+  // application (`dropAuraRebroadcasts`, the reading the timeline, the DR
+  // chain and the CC-break analysis already share — work order 2026-10-14b
+  // fix 8: e5b3534b's one Cyclone printed two chain links, `Cyclone 116.7`,
+  // and an ownerCc start at the re-broadcast). The intervals were contiguous,
+  // so no locked or free time moves.
+  for (const aura of dropAuraRebroadcasts(unit.auraEvents ?? [])) {
     const spellId = aura.spellId;
     if (!spellId) continue;
     if (notTheEnd.has(aura)) continue;

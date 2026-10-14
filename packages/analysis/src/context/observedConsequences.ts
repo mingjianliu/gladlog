@@ -47,7 +47,7 @@ import {
 import {
   gridHpMinInWindow,
   gridHpPct,
-  hpTroughInWindow,
+  hpTroughInEventSpan,
   isHealerSpec,
 } from "../utils/cooldowns";
 import { kickLockoutSecondsFor } from "../utils/kickLockout";
@@ -68,13 +68,11 @@ interface Labels {
 
 /**
  * One teammate's HP across a span of whole render seconds: the `[STATE]`
- * reading at `fromSec`, and two lows inside `[fromSec, toSec]`:
- *  - `lo` — the lowest `[STATE]`-grid reading (`gridHpMinInWindow`). The
- *    reading a DECISION asks (`mateHitDuringCc` → death-setup healer-locked);
- *  - `trough` — the true minimum (`hpTroughInWindow`), the number the
- *    `[CONSEQ]` line prints (FT-T03, ruling D7). With `span` (the lockout /
- *    CC in ms) the samples outside the event itself are not read.
- * `trough.pct <= lo.pct` always (the grid minimum is part of the trough).
+ * reading at `fromSec`, and `lo`, the lowest `[STATE]`-grid reading inside
+ * `[fromSec, toSec]` (`gridHpMinInWindow`) — the reading a DECISION asks
+ * (`mateHitDuringCc` → death-setup healer-locked). The number the `[CONSEQ]`
+ * line prints is the trough of the event's own span (`hpTroughInEventSpan`,
+ * FT-T03 / ruling D7), never above `lo` (the grid minimum is part of it).
  * Null when the grid has no sample to read.
  */
 export function mateHpAcross(
@@ -82,18 +80,14 @@ export function mateHpAcross(
   matchStartMs: number,
   fromSec: number,
   toSec: number,
-  span?: { fromMs: number; toMs: number },
 ): {
   h0: number;
   lo: { pct: number; atSec: number };
-  trough: { pct: number; atSec: number };
 } | null {
   const h0 = gridHpPct(mate, matchStartMs + fromSec * 1000);
   const lo = gridHpMinInWindow(mate, matchStartMs, fromSec, toSec);
   if (h0 === null || !lo) return null;
-  const trough =
-    hpTroughInWindow(mate, matchStartMs, fromSec, toSec, undefined, span) ?? lo;
-  return { h0, lo, trough };
+  return { h0, lo };
 }
 
 /**
@@ -147,18 +141,16 @@ function teamDrops(
 ): { parts: string[]; measured: number } {
   const fromSec = Math.floor(fromS);
   const toSec = Math.floor(toS);
-  // whole ms, as `diedIn`
-  const span = {
-    fromMs: matchStartMs + Math.round(fromS * 1000),
-    toMs: matchStartMs + Math.round(toS * 1000),
-  };
   const parts: string[] = [];
   let measured = 0;
   for (const mate of mates) {
-    const hp = mateHpAcross(mate, matchStartMs, fromSec, toSec, span);
+    const hp = mateHpAcross(mate, matchStartMs, fromSec, toSec);
     if (!hp) continue;
-    // the printed low is the trough (FT-T03); `hp.lo` is the decision's
-    const { h0, trough: lo } = hp;
+    // the printed low is the trough of the event's own span (FT-T03) —
+    // `hpTroughInEventSpan`, the reading missed-sync-window's
+    // enemyMinHpPct shares; `hp.lo` is the decision's
+    const { h0 } = hp;
+    const lo = hpTroughInEventSpan(mate, matchStartMs, fromS, toS) ?? hp.lo;
     measured++;
     if (h0 - lo.pct >= CONSEQ_DROP_MIN_PCT)
       parts.push(

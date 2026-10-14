@@ -17,7 +17,6 @@ import {
   cdWasteEvents,
   deathSetupEvents,
   enemyHealerCcWindows,
-  enemyMinHpPctInWindow,
   externalUnusedEvents,
   extractCandidateFindings,
   friendlyCrisisMomentInWindow,
@@ -1807,11 +1806,26 @@ describe("团队协作候选映射(2026-07-24 覆盖面扩充)", () => {
     // I01: one press was refused as "not ready"; the other two carry a reason
     // of their own in the log and are stated with it
     expect(f).toBe(
-      "no successful cast for 5s after the kick; pressed 1x but rejected (Holy Fire +1.8s); refused for another reason 1x — target not in line of sight (Mind Control +1.1s); refused for another reason 1x — under crowd control (Mind Control +3.5s)",
+      "no successful cast for 5s after the kick; pressed 1x but rejected (Holy Fire +1.8s) inside the lockout; refused for another reason 1x — target not in line of sight (Mind Control +1.1s); refused for another reason 1x — under crowd control (Mind Control +3.5s)",
     );
     expect(f).not.toContain("1262763");
     expect(f).not.toContain(", "); // checkFactsBlockIntegrity
     expect(f).not.toMatch(/[一-鿿]/); // checkCjkLeak: reasons stay out
+  });
+
+  it("kick-eaten idle: a 'not ready' press after the lock ended is stated apart (work order 2026-10-14b fix 2, 138e632d)", () => {
+    // 3 s lock: Holy Fire +1.8 s inside it, Holy Fire +3.7 s after it
+    const evts = kickEatenEvents(
+      [kickInst({ lockoutDurationSeconds: 3 })],
+      { id: "P1", name: "Me" },
+      {
+        rawStreams: streams([failed(92.96, 14914), failed(94.83, 14914)]),
+        ownerCasts: [],
+      },
+    );
+    expect(evts[0]!.facts["postKick"]).toBe(
+      "no successful cast for 5s after the kick; pressed 1x but rejected (Holy Fire +1.8s) inside the lockout; after the lockout pressed 1x but rejected (Holy Fire +3.7s)",
+    );
   });
 
   it("kick-eaten: an idle kick with rejected presses no longer outranks a plain idle kick", () => {
@@ -2169,7 +2183,7 @@ describe("团队协作候选映射(2026-07-24 覆盖面扩充)", () => {
         failed(100.4, 360995, "Can't do that while silenced"),
         failed(100.6, 366155, "Can't do that while moving"),
         failed(100.9, 360995, "Can't do that while silenced"),
-        failed(101.2, 366155, "No target"),
+        failed(101.2, 366155, "Must be in Stealth"),
         failed(101.5, 360995), // not ready: the lock's own answer
       ]);
       expect(f).toBe(
@@ -2366,6 +2380,39 @@ describe("团队协作候选映射(2026-07-24 覆盖面扩充)", () => {
     );
     expect(f).toContain("(Reversion +2.5s");
     expect(f).not.toContain(", ");
+  });
+
+  it("kick-eaten: a channeled switching cast reads 'channel' (work order 2026-10-14b fix 4, 9c9d8601 Penance)", () => {
+    const base = {
+      postKick: "switched" as const,
+      switchSpellName: "Penance",
+      switchDelayS: 1.7,
+      switchWasHardCast: false,
+    };
+    expect(postKickOf(natureKick({ ...base, switchWasChanneled: true }), [])).toBe(
+      "acted on another school 1.7s later (Penance; channel)",
+    );
+    expect(postKickOf(natureKick({ ...base, switchWasChanneled: false }), [])).toBe(
+      "acted on another school 1.7s later (Penance; not a hard cast)",
+    );
+  });
+
+  it("kick-eaten switched: an earlier first cast is named too (work order 2026-10-14b fix 12, 1b930c17 @155)", () => {
+    const k = natureKick({
+      postKick: "switched" as const,
+      switchSpellName: "Spirit Walk",
+      switchDelayS: 3.02,
+      switchWasHardCast: false,
+      firstActionDelayS: 1.04,
+      firstActionSpellName: "Riptide",
+    });
+    expect(postKickOf(k, [])).toBe(
+      "acted on another school 3.0s later (Spirit Walk; not a hard cast); first cast 1.0s later (Riptide)",
+    );
+    // the switch IS the first cast: nothing added
+    expect(
+      postKickOf(natureKick({ ...k, firstActionDelayS: 3.02 }), []),
+    ).toBe("acted on another school 3.0s later (Spirit Walk; not a hard cast)");
   });
 
   it("kick-eaten: an empowered switching cast is not 'not a hard cast' (F-K13, 02c8e3ac @33.9)", () => {
@@ -3455,37 +3502,6 @@ describe("unsyncedBurstEvents(P1 起爆-2,2026-08-15,纯函数)", () => {
     );
     expect(evts).toHaveLength(2);
     expect(evts.map((e) => e.facts["spell"])).toEqual(["Big", "Mid"]);
-  });
-});
-
-describe("enemyMinHpPctInWindow(missed-sync-window 的血量 accelerator 探针,渲染网格离散扫描)", () => {
-  it("窗口内多次采样取最小值,跨多个敌人也取全场最小", () => {
-    const enemies = [{ id: "e1" }, { id: "e2" }];
-    const seen: number[] = [];
-    const hp = enemyMinHpPctInWindow(
-      enemies,
-      { startTime: 0 },
-      10,
-      12,
-      (unit: any, timestampMs: number) => {
-        seen.push(timestampMs);
-        return unit.id === "e2" ? 30 : 80;
-      },
-    );
-    expect(hp).toBe(30);
-    // 3 rendered seconds (10,11,12) x 2 enemies = 6 probes
-    expect(seen).toHaveLength(6);
-  });
-
-  it("全程采不到样(全部返回 null)→ 整体 null,不是 0", () => {
-    const hp = enemyMinHpPctInWindow(
-      [{ id: "e1" }],
-      { startTime: 0 },
-      10,
-      12,
-      () => null,
-    );
-    expect(hp).toBeNull();
   });
 });
 
@@ -5190,5 +5206,30 @@ describe("mana-efficiency 接线(extractCandidateFindings,BACKLOG #26 Task 4,202
       0,
     );
     expect(evts).toHaveLength(1);
+  });
+});
+
+describe("position-mistake refusedPresses (work order 2026-10-14b fix 14)", () => {
+  it("a stayed-in row states the presses the game refused inside the span", () => {
+    const [e] = positionMistakeEvents(
+      [
+        {
+          type: "STAYED_IN" as const,
+          atSeconds: 87,
+          toSeconds: 93,
+          nearestEnemyName: "E",
+          ownerHpStartPct: 87,
+          ownerHpMinPct: 19,
+        },
+      ],
+      { id: "o", name: "Owner" },
+      (fromS, toS) =>
+        fromS === 87 && toS === 93
+          ? "Demonic Circle: Teleport×12 +0.0/+0.2/+0.3s (not ready yet)"
+          : "",
+    );
+    expect(e!.facts.refusedPresses).toBe(
+      "Demonic Circle: Teleport×12 +0.0/+0.2/+0.3s (not ready yet)",
+    );
   });
 });
