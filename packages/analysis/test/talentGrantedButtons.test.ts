@@ -543,6 +543,8 @@ describe("completeness: every roster cooldown a talent of the spec names is in t
 
   it("no pair without a row outside the known-open list, and no stale entry in it", () => {
     const open: string[] = [];
+    const dead: string[] = [];
+    const observed = new Set((observedSpellIds as number[]).map(String));
     let pairs = 0;
     for (const [specId, sd] of Object.entries(nodeMaps) as [string, any][]) {
       const cls = classMetadata.find(
@@ -582,14 +584,22 @@ describe("completeness: every roster cooldown a talent of the spec names is in t
           const holder = unitOf(cls.unitClass, specId as CombatUnitSpec, [
             talent.row,
           ]);
-          if (!rowOf(holder, a.name))
-            open.push(`${specId}|${a.spellId}|${talent.id}`);
+          const row = rowOf(holder, a.name);
+          if (!row) open.push(`${specId}|${a.spellId}|${talent.id}`);
+          else if (!observed.has(row.spellId))
+            dead.push(`${specId}|${row.spellId}|${talent.id}`);
         }
       }
     }
     // the 19 spec × spell pairs of fix-FT/scripts/sw_talentIdVsCastId.ts
     expect(pairs).toBe(19);
     expect(open.sort()).toEqual(Object.keys(KNOWN_OPEN).sort());
+    // the row must stand under an id players cast: a same-name row whose id
+    // the corpus has never seen is a renumbered spell (the roster's id or
+    // the alias it was reached through), and a press would never join it
+    // (codex review 40-FT-79, 2026-10-13: dropping 471195 from the observed
+    // ids left this test green)
+    expect(dead).toEqual([]);
   });
 
   it("the grant map is not empty-by-accident: the five roster buttons it proves today", () => {
