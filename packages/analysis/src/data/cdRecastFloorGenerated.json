@@ -1,6 +1,6 @@
 {
   "meta": {
-    "generatedAt": "2026-10-10",
+    "generatedAt": "2026-10-14",
     "manifest": "manifest-archive-2026-08-28-newseason.txt",
     "every": 3,
     "offset": 1,
@@ -317,16 +317,6 @@
       "nTrain": 2495,
       "nHoldout": 2726,
       "holdoutBelow": 0.016
-    },
-    "1261193|255": {
-      "name": "Boomstick",
-      "quantile": 0.02,
-      "floorRatio": 0.883,
-      "staticBreak": 0.038,
-      "holdoutStaticBreak": 0.035,
-      "nTrain": 579,
-      "nHoldout": 626,
-      "holdoutBelow": 0.024
     },
     "102560|102": {
       "name": "Incarnation: Chosen of Elune",
