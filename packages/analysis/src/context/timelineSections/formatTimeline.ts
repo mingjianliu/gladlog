@@ -479,6 +479,8 @@ export function formatTimeline(
           "    `— stolen by …`, `— ended at death` / `— its target died`, `— used up, absorbed Nk` / `— used up` (an absorb eaten through);",
           "    `— removed early` = it ended early and the log gives no cause (cancelled, broken or replaced);",
           "    `— still up when the round ended` = the round ended before it did;",
+          "    `— channelled at X: it dealt Nk of the Mk damage they took over it` = a save that is a channel aimed at our player",
+          "    X (Ultimate Penitence): Nk = what the channel dealt X, landed plus absorbed; Mk = everything X took while it ran;",
           "    `X → unit` = an external put on that unit; one with no duration is an instant heal (Lay on Hands) or a grip /",
           "    redirect (Leap of Faith, Intervene, Roar of Sacrifice, Master's Call); `(area)` = an area save pressed at that",
           "    second (Anti-Magic Zone, Darkness, Rallying Cry, Spirit Link Totem, Power Word: Barrier) — who was inside it is not stated. Absent = not pressed.",
@@ -659,7 +661,7 @@ export function formatTimeline(
     ...(drClashEntries.length > 0 ? DR_CLASH_LEGEND : []),
     ...(procLinesEmitted
       ? [
-          "[PROC] = an automatically applied effect (a passive or a talent-replaced button); no button was pressed at that second, so it is never a timing or choice to judge.",
+          "[PROC] = an automatically applied effect (a passive or a talent-replaced button); no button was pressed at that second, so it is never a timing or choice to judge. `(cheat-death proc)` = Cauterize / Cheat Death refused a killing blow on that player — a passive, not a press, and they could still be hit.",
         ]
       : []),
     "",

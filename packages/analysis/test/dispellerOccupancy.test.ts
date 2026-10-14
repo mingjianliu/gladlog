@@ -103,3 +103,50 @@ describe("missedCleanseEvents — dispellerCasting* (least-occupied eligible dis
     expect(f.dispellerCastingPreCommitted).toBe("no");
   });
 });
+
+describe("missedCleanseEvents — ownerSelfRemoval (WO3 #11, r1008-41)", () => {
+  const w = (over: any = {}) =>
+    ({
+      timeSeconds: 23.5,
+      durationSeconds: 6,
+      targetName: "O-R-US",
+      spellName: "Frost Nova",
+      spellId: "122",
+      priority: "High",
+      postCcDamage: 10_000,
+      cleanseWasOnCD: false,
+      dispellersLockedOut: false,
+      losReachable: true,
+      drChainRisk: false,
+      dispelType: "Magic",
+      targetSelfBlockedS: 1.25,
+      ...over,
+    }) as any;
+  const cloak = (casts: number[] = []) =>
+    ({
+      spellId: "31224",
+      spellName: "Cloak of Shadows",
+      cooldownSeconds: 120,
+      casts: casts.map((t) => ({ timeSeconds: t })),
+      neverUsed: casts.length === 0,
+    }) as any;
+  const owner = unit("O", CombatUnitSpec.Rogue_Assassination, CombatUnitClass.Rogue);
+  const healer = unit("H", CombatUnitSpec.Priest_Discipline, CombatUnitClass.Priest);
+  const occ = { enemyIds: new Set<string>(), matchStartMs: T0 };
+  const facts = (win: any, cds: any[]) =>
+    missedCleanseEvents([win], owner, [owner, healer], false, occ, { ownerCds: cds })[0]!.facts;
+
+  it("a Rogue rooted with Cloak ready: ownerCanDispel stays no, the self-removal is its own fact", () => {
+    const f = facts(w(), [cloak()]);
+    expect(f.ownerCanDispel).toBe("no");
+    expect(f.ownerSelfRemoval).toBe("Cloak of Shadows");
+    expect(f.ownerSelfRemovalFreeS).toBe("4.7");
+  });
+  it("Cloak on cooldown, the debuff on a teammate, or a type Cloak is not listed for → nothing", () => {
+    expect(facts(w(), [cloak([0])]).ownerSelfRemoval).toBeUndefined();
+    expect(facts(w({ targetName: "H-R-US" }), [cloak()]).ownerSelfRemoval).toBeUndefined();
+    expect(facts(w({ dispelType: "Poison" }), [cloak()]).ownerSelfRemoval).toBeUndefined();
+    // locked for the whole window → no free time, no fact
+    expect(facts(w({ targetSelfBlockedS: 6 }), [cloak()]).ownerSelfRemoval).toBeUndefined();
+  });
+});

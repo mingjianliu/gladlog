@@ -315,10 +315,11 @@ describe("ownerCastBarOutcomes — how each cast bar ended", () => {
       combat: g.combat,
       rawStreams: g.rawStreams,
     })!;
-    // bars of 60 s (1.5 s) and 80 s (1.05 s): the upper median, 1.5 s
+    // bars of 60 s (1.5 s) and 80 s (1.05 s): the median of two is their
+    // mean, 1.275 s (work order 2026-10-14c #3 — it read the upper one, 1.5)
     expect(
       r.cancels.filter((c) => c.spellId === CYCLONE).map((c) => c.progressPct),
-    ).toEqual([33, 40]);
+    ).toEqual([39, 47]);
   });
 });
 

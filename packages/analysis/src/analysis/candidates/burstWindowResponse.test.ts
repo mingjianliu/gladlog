@@ -36,6 +36,7 @@ const point = (
     tMs: 0,
     tSec: 40,
     endSec: 55,
+    outcomeEndSec: 55,
     durationSec: 15,
     leadCd: {
       spellId: "360194",
@@ -244,6 +245,7 @@ describe("burstWindowResponseEvents — the rendered facts", () => {
       pressured: "Mate-R",
       pressuredHpPct: "31",
       pressuredHpT: "45",
+      windowEndT: "55",
       diedInWindow: "no",
       refN: "2534",
       refDeathResp: "9",

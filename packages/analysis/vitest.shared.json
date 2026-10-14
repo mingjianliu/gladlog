@@ -159,6 +159,7 @@
     "test/datagen/talents.test.ts",
     "test/datagen/usableWhileCc.test.ts",
     "test/datagenManifest.test.ts",
+    "test/deathOffCooldownFor.test.ts",
     "test/deathOutcome.whitelist.test.ts",
     "test/deathTrinketTag.test.ts",
     "test/deferralRoleTag.test.ts",
@@ -171,6 +172,7 @@
     "test/drCategoryIds.test.ts",
     "test/drOutgoingCCReverse.test.ts",
     "test/enemyCcKitLanded.test.ts",
+    "test/enemyDefChannelTarget.test.ts",
     "test/enemyDefEndNotLogged.test.ts",
     "test/enemyDefRoundEnd.test.ts",
     "test/enemyDefSaveEffect.test.ts",
@@ -179,6 +181,7 @@
     "test/externalReach.test.ts",
     "test/forbearance.test.ts",
     "test/formReshiftCast.test.ts",
+    "test/friendlyCheatDeath.test.ts",
     "test/gapClosers.test.ts",
     "test/gh106PressPredicate.test.ts",
     "test/healerAvoidance.test.ts",
@@ -280,6 +283,7 @@
     "test/triageG5DeathSetup.test.ts",
     "test/triageG9ClipBoundary.test.ts",
     "test/triageG9RoundEnd.test.ts",
-    "test/usableWhileCcShim.test.ts"
+    "test/usableWhileCcShim.test.ts",
+    "test/warlockPets.test.ts"
   ]
 }

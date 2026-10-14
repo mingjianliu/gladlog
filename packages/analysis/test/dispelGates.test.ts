@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+ 
 /**
  * Feasibility gates for blaming a missed cleanse (decided by the user
  * 2026-08-02) — a "you didn't dispel" accusation must first pass:
@@ -31,6 +31,8 @@ import {
   cleanseSpellNamesFor,
   computeDrChainRisk,
   consequenceGatedWorth,
+  coPresentBacklash,
+  dispelTypesRemovedBy,
   formatMissedCleanseExemption,
   formatMissedPurgeExemption,
   purgePriorityForTest,
@@ -589,6 +591,31 @@ describe("triage missed-cleanse F-C13 / F-C16", () => {
     expect(summarize([t2, discPriest("h1")]).missedCleanseWindows[0]!.coRemovesBacklash).toBeUndefined();
   });
 
+  it("WO3 #13: a backlash that lands inside the window counts; a cross-type one counts only when the dispel spell removes its type", () => {
+    // UA lands at 12 s, inside the 10–16 s Binding Shot → it was up when a
+    // cleanse could have been pressed
+    const t1 = targetWithBinding(10, 16, [
+      makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, "1259790", S(12), "e1", "t1"),
+    ]);
+    (t1 as any).auraEvents.sort((a: any, b: any) => a.timestamp - b.timestamp);
+    expect(summarize([t1, discPriest("h1")]).missedCleanseWindows[0]!.coRemovesBacklash).toBe("Unstable Affliction");
+    // applied after the window → nothing
+    const t2 = targetWithBinding(10, 16, [
+      makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, "1259790", S(17), "e1", "t1"),
+    ]);
+    (t2 as any).auraEvents.sort((a: any, b: any) => a.timestamp - b.timestamp);
+    expect(summarize([t2, discPriest("h1")]).missedCleanseWindows[0]!.coRemovesBacklash).toBeUndefined();
+    // Purify Spirit removes Magic and Curse; Remove Curse only Curse
+    expect([...dispelTypesRemovedBy("77130", CombatUnitSpec.Shaman_Restoration)].sort()).toEqual(["Curse", "Magic"]);
+    expect([...dispelTypesRemovedBy("475", CombatUnitSpec.Mage_Frost)]).toEqual(["Curse"]);
+    const target = makeUnit("t1", {
+      auraEvents: [makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, "1259790", S(5), "e1", "t1")],
+    });
+    const enemies = new Map([["e1", enemy()]]) as any;
+    expect(coPresentBacklash(target as any, new Set(["Curse", "Magic"]), S(10), S(16), enemies)).toEqual(["Unstable Affliction"]);
+    expect(coPresentBacklash(target as any, new Set(["Curse"]), S(10), S(16), enemies)).toEqual([]);
+  });
+
   it("F-C16: an id with no DR family (a curse) never reads drChainRisk; a root keeps its self-DR", () => {
     const curse = "1714"; // Curse of Tongues
     const t1 = makeUnit("t1", {
@@ -732,6 +759,38 @@ describe("triage missed-cleanse F-C14 / F-C12 (owner's cleanse facts)", () => {
       dispellerPressed: "Shadowmeld +0.4s、Drink +1.1s",
     });
     expect(dispellerPressedFact(priest, MATCH_START, 150, 160)).toEqual({});
+  });
+
+  it("dispellersCcS states the gate's own blocked seconds, floored (work order 2026-10-14c #12, 29aabcc2)", () => {
+    const owner = makeUnit("mw", { spec: CombatUnitSpec.Monk_Mistweaver });
+    const w = {
+      timeSeconds: 10,
+      durationSeconds: 6,
+      targetName: "t1",
+      spellName: "Psychic Scream",
+      spellId: "8122",
+      priority: "Critical",
+      postCcDamage: 10_000,
+      cleanseWasOnCD: false,
+      dispellersLockedOut: false,
+      dispellersBlockedS: 1.94,
+      losReachable: null,
+      drChainRisk: false,
+      dispelType: "Magic",
+    } as any;
+    const [c] = missedCleanseEvents([w], owner, [owner], false, {
+      enemyIds: new Set(),
+      matchStartMs: MATCH_START,
+    });
+    expect(c!.facts.dispellersCcS).toBe("1.9");
+    const [d] = missedCleanseEvents(
+      [{ ...w, dispellersBlockedS: 0.04 }],
+      owner,
+      [owner],
+      false,
+      { enemyIds: new Set(), matchStartMs: MATCH_START },
+    );
+    expect(d!.facts.dispellersCcS).toBeUndefined();
   });
 
   it("codex review: a charmed teammate is reached by the offensive purge — Dispel Magic, not Purify", () => {

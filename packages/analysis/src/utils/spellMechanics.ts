@@ -29,6 +29,9 @@ const STUN_MECHANICS = new Set([12]);
 const FEAR_MECHANICS = new Set([5, 24]); // fleeing, horrified
 const CONFUSE_MECHANICS = new Set([2]); // disoriented
 
+/** SpellMechanic SNARED: a movement slow — the carrier can still move. */
+export const SNARED_MECHANIC = 11;
+
 /** The CC's mechanic (SpellMechanic id), or undefined when DB2 cannot say
  * (Holy Word: Chastise 88625: its aura is an incapacitate or a stun
  * depending on a talent). */

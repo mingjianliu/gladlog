@@ -229,8 +229,15 @@ export function whitelistedIntervalsInDeathWindow(
   victim: ICombatUnit,
   combat: { startTime: number; endTime: number },
   deathS: number,
+  /** The death's real instant, when the caller has it: the active overlap is
+   *  a duration and runs to the death itself, like the [DEATH] block's "Top
+   *  damage in final 10s" (work order 2026-10-14c #2: 9c9d8601's Pain
+   *  Suppression up 3.24 s before the death printed 2.4 s — the window
+   *  stopped at the floored second). The HP / net-damage readings stay on
+   *  the render grid (`deathS`). */
+  deathInstantS: number = deathS,
 ): IWindowedAuraInterval[] {
-  const windowStartS = windowStartSecondsOf(deathS);
+  const windowStartS = windowStartSecondsOf(deathInstantS);
   const out: IWindowedAuraInterval[] = [];
   // 白名单里的减伤绝大多数是**自施**(树皮术、洞察之眼…),所以受害者自己就是
   // 施法者 —— 不用改签名就能让天赋加长的时长参与封顶(auraIntervals:11% 的上身
@@ -240,7 +247,7 @@ export function whitelistedIntervalsInDeathWindow(
   for (const iv of buildAuraIntervals(victim, combat, selfCaster)) {
     if (!WHITELIST_IDS.has(iv.spellId)) continue;
     const overlapFrom = Math.max(iv.fromS, windowStartS);
-    const overlapTo = Math.min(iv.toS, deathS);
+    const overlapTo = Math.min(iv.toS, deathInstantS);
     if (overlapTo <= overlapFrom) continue; // no overlap, emit no row
     out.push({ ...iv, overlapFrom, overlapTo });
   }
@@ -269,6 +276,8 @@ export function computeMitigationAudit(
     units: Record<string, ICombatUnit>;
   },
   deathS: number,
+  /** see `whitelistedIntervalsInDeathWindow` */
+  deathInstantS: number = deathS,
 ): {
   rows: IMitigationAuditRow[];
   netDamage: number | null;
@@ -282,7 +291,12 @@ export function computeMitigationAudit(
 
   const rows: IMitigationAuditRow[] = [];
 
-  for (const iv of whitelistedIntervalsInDeathWindow(victim, combat, deathS)) {
+  for (const iv of whitelistedIntervalsInDeathWindow(
+    victim,
+    combat,
+    deathS,
+    deathInstantS,
+  )) {
     const { overlapFrom, overlapTo } = iv;
     const activeOverlapS = round1(overlapTo - overlapFrom);
     const spellName = getEnglishSpellName(iv.spellId, iv.spellName);

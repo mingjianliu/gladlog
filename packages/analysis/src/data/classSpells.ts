@@ -10,6 +10,7 @@
  * and will be replaced by the subproject-5 pipeline's output.
  */
 import { CombatUnitClass } from "@gladlog/parser-compat";
+
 import { SpellTag } from "./spellTypes";
 
 interface IClassAbility {
@@ -146,6 +147,11 @@ export const classMetadata: IClassSpellMetadata[] = [
       // cd-hoarded rows, 35 cd-waste rows and `Unused: Smoke Bomb` on 22
       // deaths on the 605 files).
       a("212182", "Smoke Bomb", U),
+      // WO3 #19 (r1014-169, 483f7433: two owner presses, no line): Vanish had
+      // no roster row (only its 11327 aura, as an enemy's). Utility, by the
+      // Smoke Bomb rule: a press line, the loadout and [RES]; never a ready
+      // defensive (it drops targeting as often as it saves).
+      a("1856", "Vanish", U),
       a("207777", "Dismantle", C), // W1g 2026-09-25: control kit a player cast in the corpus (DB2 control mechanic, ≥ 30 s cooldown) that no roster listed
     ],
   },
@@ -234,6 +240,10 @@ export const classMetadata: IClassSpellMetadata[] = [
       a("204362", "Heroism", O),
       a("51514", "Hex", C),
       a("305483", "Lightning Lasso", C), // W1g 2026-09-25: control kit a player cast in the corpus (DB2 control mechanic, ≥ 30 s cooldown) that no roster listed
+      // WO3 #19 (r1008-152, f4647408: pressed in rounds 0 and 3, never
+      // printed): a fear / charm / sleep breaker for the team, no defensive.
+      // Utility (listed, never accused).
+      a("8143", "Tremor Totem", U),
       a("192058", "Capacitor Totem", C), // W1g 2026-09-25: cast id (was the aura id, which is never cast — the ledger's cast-evidence gate never admitted it)
     ],
   },

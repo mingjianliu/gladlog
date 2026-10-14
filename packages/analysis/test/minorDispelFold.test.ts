@@ -48,6 +48,29 @@ describe("formatMinorDispelPart", () => {
       "Greater Purge ×2 (1:00 Power Word: Fortitude; 1:52 Power Word: Fortitude、Body and Soul)",
     );
   });
+  it("WO3 #18 (eb8041ce): an Unstable Affliction removal says whether its silence landed, and is never folded into +N", () => {
+    const ua = (t: number, landed: boolean) => ({
+      ...ev(t, "1259790", "痛苦无常"),
+      hasDispelPenalty: true,
+      ...(landed ? { backlashCcSpellId: "196364" } : {}),
+    });
+    const out = formatMinorDispelPart({
+      spellName: "Purify",
+      passive: false,
+      events: [
+        ev(10, "172", "Corruption"),
+        ev(20, "172", "Corruption"),
+        ev(30, "172", "Corruption"),
+        ev(40, "172", "Corruption"),
+        ev(50, "172", "Corruption"),
+        ua(140.76, false),
+        ua(168.47, true),
+      ],
+    });
+    expect(out).toBe(
+      "Purify ×7 (0:10 Corruption; 0:20 Corruption; 0:30 Corruption; 0:40 Corruption; 2:20 Unstable Affliction — no backlash silence landed; 2:48 Unstable Affliction — backlash silence landed, +1)",
+    );
+  });
   it("more than four casts end in +N; removals ≤ 50 ms apart are one cast", () => {
     const out = formatMinorDispelPart({
       spellName: "Dispel Magic",

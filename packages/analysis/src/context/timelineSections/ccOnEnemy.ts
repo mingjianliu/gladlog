@@ -68,8 +68,6 @@ export function emitCcOnEnemyEntries(
     matchEndSeconds,
     enemyDispelSummary,
     params,
-    owner,
-    ownerRenderedCcIds,
     enemyCcDrTag,
     rosterSides,
   } = ctx;
@@ -178,23 +176,19 @@ export function emitCcOnEnemyEntries(
           !trinketBroke && !isCleansed
             ? tremorTotemBreak(cc, matchStartMs, enemies ?? [])
             : null;
-        // The owner's own tracked CC normally renders on its [YOU] [CC] cast
-        // line only; that line is per cast, not per target, so a tremor break
-        // keeps this per-target line.
-        // A QUICK FOLLOW-UPS line cites this landing, so it keeps its line.
+        // The owner's own CC keeps its per-target line too (work order
+        // 2026-10-14c #8): the [YOU] [CC] cast line is per cast and prints no
+        // length, so 82a2d681's two Blinding Sleets broken at 0.76 / 0.81 s
+        // had no length and no end anywhere on the page. Until then the line
+        // was kept only for a tremor break or a QUICK FOLLOW-UPS citation.
+        // A QUICK FOLLOW-UPS line cites this landing (it still decides the
+        // backlash-silence exception below).
         const keptForFollowUp = (params.keepOwnerCcOnEnemy ?? []).some(
           (k) =>
             k.targetName === summary.playerName &&
             k.spellId === cc.spellId &&
             k.ccAtS === cc.atSeconds,
         );
-        if (
-          cc.sourceName === owner.name &&
-          ownerRenderedCcIds.has(cc.spellId) &&
-          !enemyTremor &&
-          !keptForFollowUp
-        )
-          continue;
         // cc-dr F-CE1: the DR the OUTGOING chain holds for this landing —
         // same target, spell, caster (a pet's CC is its owner's, as the
         // chain credits it) and render second; never the enemy-side summary's

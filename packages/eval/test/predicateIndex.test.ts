@@ -85,6 +85,7 @@ import * as outcomeRefs from "@gladlog/analysis/src/data/outcomeRefs";
 import * as racialAbilities from "@gladlog/analysis/src/data/racialAbilities";
 import * as rootAuraGenerated from "@gladlog/analysis/src/data/rootAuraGenerated";
 import * as scopedPurges from "@gladlog/analysis/src/data/scopedPurges";
+import * as selfRemovals from "@gladlog/analysis/src/data/selfRemovals";
 import * as sharedChargeGenerated from "@gladlog/analysis/src/data/sharedChargeGenerated";
 import * as spellCategories from "@gladlog/analysis/src/data/spellCategories";
 import * as spellEffectData from "@gladlog/analysis/src/data/spellEffectData";
@@ -1614,6 +1615,17 @@ const INDEX: PredicateRow[] = [
     file: `${A}/data/spellIdLists.ts`,
     symbol: "ENEMY_PROC_SAVES",
     mod: spellIdLists,
+  },
+  // WO3 #11 / #13 (2026-10-14): self-removals and a cleanse's dispel types
+  {
+    file: `${A}/data/selfRemovals.ts`,
+    symbol: "SELF_REMOVAL_BY_TYPE",
+    mod: selfRemovals,
+  },
+  {
+    file: `${A}/utils/dispelAnalysis.ts`,
+    symbol: "dispelTypesRemovedBy",
+    mod: dispelAnalysis,
   },
   {
     file: `${A}/utils/enemyDefensives.ts`,

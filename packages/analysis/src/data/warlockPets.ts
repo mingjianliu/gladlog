@@ -27,8 +27,11 @@ export interface IWarlockPetFunction {
 
 export const WARLOCK_PET_FUNCTION: Record<string, IWarlockPetFunction> = {
   "417": { pet: "Felhunter", does: "Spell Lock (kick), Devour Magic (purge)" },
-  "1863": { pet: "Sayaad", does: "Seduction (incapacitate)" },
-  "184600": { pet: "Incubus", does: "Seduction (incapacitate)" },
+  // WO3 #18 (r1008-105): the category drAnalysis gives 6358 (`DR_CATEGORY_MAP`:
+  // Disorient), which the timeline, the DR tags and ENEMY CC KIT print — the
+  // label read "incapacitate" beside them (test/warlockPets.test.ts holds the two)
+  "1863": { pet: "Sayaad", does: "Seduction (disorient)" },
+  "184600": { pet: "Incubus", does: "Seduction (disorient)" },
   "17252": { pet: "Felguard", does: "Axe Toss (stun)" },
   "416": { pet: "Imp", does: "Singe Magic (friendly dispel)" },
   "1860": { pet: "Voidwalker", does: "no control or dispel" },

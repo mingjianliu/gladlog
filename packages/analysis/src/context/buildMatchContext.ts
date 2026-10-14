@@ -822,7 +822,7 @@ export function buildMatchContext(
           e.deadPlayer === victimName && Math.abs(e.atSeconds - atSeconds) < 1,
       )?.missedExternals ?? [];
 
-    const audit = computeMitigationAudit(victim, combat, deathS);
+    const audit = computeMitigationAudit(victim, combat, deathS, atSeconds);
     const decisiveHits = [
       ...(victimCcSummary
         ? computeUnusedSelfCounterfactuals(

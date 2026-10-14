@@ -9,6 +9,7 @@
  * its closure inputs now arrive through `ctx`. Output is pinned by the 605-file
  * acceptanceCapture context hash.
  */
+import { BACKLASH_CC_SPELL_IDS } from "../../data/backlashCc";
 import { getEnglishSpellName } from "../../data/spellEffectData";
 import type { IDispelEvent } from "../../utils/dispelAnalysis";
 import { fmtTime } from "../../utils/renderGrid";
@@ -128,28 +129,43 @@ export function formatMinorDispelPart(m: {
   spellName: string;
   passive: boolean;
   events: ReadonlyArray<
-    Pick<IDispelEvent, "timeSeconds" | "removedSpellId" | "removedSpellName">
+    Pick<IDispelEvent, "timeSeconds" | "removedSpellId" | "removedSpellName"> &
+      Partial<Pick<IDispelEvent, "hasDispelPenalty" | "backlashCcSpellId">>
   >;
 }): string {
   if (m.passive)
     return m.events.length > 1
       ? `${m.spellName} x${m.events.length}`
       : m.spellName;
-  const casts: Array<{ t: number; names: string[] }> = [];
+  const casts: Array<{ t: number; names: string[]; backlash?: string }> = [];
   for (const e of [...m.events].sort((a, b) => a.timeSeconds - b.timeSeconds)) {
     const name = getEnglishSpellName(e.removedSpellId, e.removedSpellName);
-    const c = casts.find(
+    let c = casts.find(
       (k) => Math.abs(k.t - e.timeSeconds) <= MINOR_DISPEL_CAST_MERGE_S,
     );
     if (c) c.names.push(name);
-    else casts.push({ t: e.timeSeconds, names: [name] });
+    else casts.push((c = { t: e.timeSeconds, names: [name] }));
+    // WO3 #18 (r1008-150, eb8041ce 2:20): removing a debuff whose dispel
+    // puts a CC on the dispeller (`BACKLASH_CC_SPELL_IDS`) says whether that
+    // CC landed — a fully absorbed Unstable Affliction silences nobody
+    const bl = e.hasDispelPenalty
+      ? BACKLASH_CC_SPELL_IDS.get(e.removedSpellId)
+      : undefined;
+    if (bl)
+      c.backlash = e.backlashCcSpellId
+        ? `backlash ${bl.ccType} landed`
+        : `no backlash ${bl.ccType} landed`;
   }
-  const shown = casts
-    .slice(0, MINOR_DISPEL_CASTS_SHOWN)
-    .map((c) => `${fmtTime(c.t)} ${c.names.join("、")}`);
+  // a backlash cast is always listed, never folded into `+N`
+  const shown = casts.filter(
+    (c, i) => i < MINOR_DISPEL_CASTS_SHOWN || c.backlash !== undefined,
+  );
   const more =
-    casts.length > MINOR_DISPEL_CASTS_SHOWN
-      ? `, +${casts.length - MINOR_DISPEL_CASTS_SHOWN}`
-      : "";
-  return `${m.spellName} ×${casts.length} (${shown.join("; ")}${more})`;
+    casts.length > shown.length ? `, +${casts.length - shown.length}` : "";
+  return `${m.spellName} ×${casts.length} (${shown
+    .map(
+      (c) =>
+        `${fmtTime(c.t)} ${c.names.join("、")}${c.backlash ? ` — ${c.backlash}` : ""}`,
+    )
+    .join("; ")}${more})`;
 }

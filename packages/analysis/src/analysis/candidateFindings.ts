@@ -25,6 +25,7 @@ import { CORPUS_OBSERVED_DISPEL_IDS } from "../data/dispelObservedGenerated";
 import { lookupKickPriorityPrior } from "../data/kickPriorityPrior";
 import { resolveMitigation, wallDoorPct } from "../data/mitigationComponents";
 import { OFF_GCD_SPELL_IDS } from "../data/offGcdGenerated";
+import { SELF_REMOVAL_BY_TYPE } from "../data/selfRemovals";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import { schoolLockedBy, spellSchoolMask } from "../data/spellSchools";
 import { ccSpellIds } from "../data/spellTags";
@@ -147,6 +148,7 @@ import {
   spellReachForCaster,
 } from "../utils/spellRange";
 import { getSpellSchoolName } from "../utils/spellSchools";
+import { medianFinite } from "../utils/stats";
 import { getTalentAvoidanceTriggers } from "../utils/talentBehaviors";
 import { matchThreatLevel, threatActiveAt } from "../utils/threatAssessment";
 import { firstDeathMs } from "../utils/unitDeath";
@@ -1065,6 +1067,55 @@ const BURST_INTO_MITIGATION_CAP = 2;
  *    "call it out" suggestion instead of blaming the owner for an ability
  *    they don't have (guard note in buildFindingsPrompt's CHAIN_LEGENDS).
  */
+/**
+ * WO3 #11 (r1008-41): the debuff sat on the owner, the owner has no dispel
+ * for its type, but had a self-removal (`SELF_REMOVAL_BY_TYPE`) ready when it
+ * landed — the `[RES]` reading (`cdAvailableAt`) and the Forbearance /
+ * Hypothermia refusal (`lockoutDebuffStopsPress`). A separate fact: it never
+ * flips `ownerCanDispel` (that one gates Shuffle candidates).
+ * `ownerSelfRemovalFreeS` = the window minus the owner's own cannot-cast time
+ * for it, floored to 0.1 s; nothing when that is 0.
+ */
+function selfRemovalFacts(
+  w: Pick<
+    IMissedCleanseWindow,
+    "timeSeconds" | "durationSeconds" | "dispelType" | "targetName" | "targetSelfBlockedS"
+  >,
+  owner: any,
+  friends: any[],
+  ownerCanDispel: boolean,
+  occupancy: { matchStartMs: number } | undefined,
+  extra: { ownerCds?: readonly IMajorCooldownInfo[] } | undefined,
+): Record<string, string> {
+  if (ownerCanDispel || w.targetName !== owner?.name) return {};
+  if (!extra?.ownerCds || occupancy?.matchStartMs === undefined) return {};
+  const ids = SELF_REMOVAL_BY_TYPE[w.dispelType] ?? [];
+  const ready = extra.ownerCds.filter(
+    (cd) =>
+      ids.includes(cd.spellId) &&
+      cdAvailableAt(cd, w.timeSeconds) &&
+      !lockoutDebuffStopsPress(
+        owner,
+        cd.spellId,
+        owner,
+        friends,
+        w.timeSeconds,
+        occupancy.matchStartMs,
+      ),
+  );
+  if (ready.length === 0) return {};
+  const free = Math.floor(
+    (w.durationSeconds - (w.targetSelfBlockedS ?? 0)) * 10 + 1e-9,
+  );
+  if (free <= 0) return {};
+  return {
+    ownerSelfRemoval: ready
+      .map((cd) => getEnglishSpellName(cd.spellId, cd.spellName))
+      .join("、"),
+    ownerSelfRemovalFreeS: (free / 10).toFixed(1),
+  };
+}
+
 /** The `[ROOT]` predicate's instances for this round; [] when it cannot run. */
 function rootReachFor(combat: any): IRootInstance[] {
   try {
@@ -1091,6 +1142,7 @@ export function missedCleanseEvents(
     | "postCcDamage"
     | "cleanseWasOnCD"
     | "dispellersLockedOut"
+    | "dispellersBlockedS"
     | "losReachable"
     | "drChainRisk"
     | "dispelType"
@@ -1098,6 +1150,7 @@ export function missedCleanseEvents(
     | "targetCharmed"
     | "coRemovesBacklash"
     | "worth"
+    | "targetSelfBlockedS"
   >[],
   owner: any,
   friends: any[],
@@ -1129,6 +1182,9 @@ export function missedCleanseEvents(
       IRootInstance,
       "rootedName" | "spellId" | "atSeconds" | "reachSweep"
     >[];
+    /** WO3 #11: the owner's ledger rows WITH the spec-baseline ones — the
+     * `[RES]` reading (`cdAvailableAt`) for `ownerSelfRemoval`. */
+    ownerCds?: readonly IMajorCooldownInfo[];
   },
 ): CandidateEvent[] {
   return windows
@@ -1295,6 +1351,16 @@ export function missedCleanseEvents(
           ...(ownerCanDispel && dispelSpells.length
             ? { ownerDispelSpell: dispelSpells.join("、") }
             : {}),
+          // #12: how long every capable dispeller could not cast (the gate's
+          // own intersection), floored to 0.1 s, when any
+          ...(w.dispellersBlockedS !== undefined &&
+          Math.floor(w.dispellersBlockedS * 10 + 1e-9) > 0
+            ? {
+                dispellersCcS: (
+                  Math.floor(w.dispellersBlockedS * 10 + 1e-9) / 10
+                ).toFixed(1),
+              }
+            : {}),
           // F-C14: the owner pressed the cleanse and was rejected
           ...(attempted ? { attempted } : {}),
           // …and where it did go out inside the window (fix 9)
@@ -1319,6 +1385,7 @@ export function missedCleanseEvents(
           ...(w.lateDispelSeconds !== undefined
             ? { latencyS: String(Math.round(w.lateDispelSeconds)) }
             : {}),
+          ...selfRemovalFacts(w, owner, friends, ownerCanDispel, occupancy, extra),
           ...(ownerCanDispel
             ? {}
             : {
@@ -1933,7 +2000,7 @@ export function kickEatenEvents(
         // @263: HoJ pressed 4× in the lockout rendered "pressed 1x" — three
         // were 尚未恢复 GCD presses the intent filter drops); the ranking above
         // keeps the filtered evidence set, as cd-hoarded does.
-        postKick: postKickFact(k, pressed),
+        postKick: postKickFact(k, pressed, intent?.ownerCasts),
         ...(p ? kickPressureFacts(p) : {}),
         ...castStartFacts(p, k.castStartS),
         ...(cancels ? castCancelFacts(cancels, k.sourceName) : {}),
@@ -2198,7 +2265,7 @@ function castCancelFacts(
   return {
     yourCancels: String(c.cancels.length),
     ...(pcts.length
-      ? { yourCancelMedianPct: String(pcts[Math.floor(pcts.length / 2)]) }
+      ? { yourCancelMedianPct: String(Math.round(medianFinite(pcts))) }
       : {}),
     baitedKicks: String(c.baitedKicks.length),
     ...(mine.length
@@ -2301,7 +2368,11 @@ export function castStartFacts(
  * the key bouncing, not an attempt). The evidence-grade subset for ranking is
  * `rejectedPressesAfterKick`. */
 function allRejectedPressesAfterKick(
-  k: { atSeconds: number; diedAfterKickS?: number },
+  k: {
+    atSeconds: number;
+    diedAfterKickS?: number;
+    lockoutDurationSeconds?: number;
+  },
   ownerId: string,
   intent:
     | {
@@ -2311,8 +2382,17 @@ function allRejectedPressesAfterKick(
     | undefined,
 ): CastFailedEvent[] {
   if (!intent?.rawStreams) return [];
+  // The text lists the presses "inside the lockout": a lock longer than the
+  // 5 s window is listed to its end (work order 2026-10-14c #5: a 6 s
+  // Counterspell printed 4 of its 7 in-lock presses, fa5e6c66). Text only —
+  // the ranking reads `rejectedPressesAfterKick`, on the 5 s window.
   return dropKeyRepeatRejects(
-    pressesInPostKickWindow(intent.rawStreams, ownerId, k),
+    pressesInPostKickWindow(
+      intent.rawStreams,
+      ownerId,
+      k,
+      Math.max(POST_KICK_WINDOW_S, k.lockoutDurationSeconds ?? 0),
+    ),
     intent.ownerCasts,
   );
 }
@@ -2326,6 +2406,7 @@ function pressesInPostKickWindow(
   rawStreams: RawStreams,
   ownerId: string,
   k: { atSeconds: number; diedAfterKickS?: number },
+  windowS: number = POST_KICK_WINDOW_S,
 ): CastFailedEvent[] {
   // in whole milliseconds, like the lockout boundary below: `kick + (death −
   // kick)` is one ulp past the death when the subtraction was inexact (kick
@@ -2339,7 +2420,7 @@ function pressesInPostKickWindow(
     rawStreams,
     ownerId,
     k.atSeconds,
-    k.atSeconds + POST_KICK_WINDOW_S,
+    k.atSeconds + windowS,
   ).filter(
     (h) => h.tSeconds > k.atSeconds && Math.round(h.tSeconds * 1000) < deathMs,
   );
@@ -2443,6 +2524,9 @@ export function postKickFact(
       >
     >,
   everyRejected: CastFailedEvent[],
+  /** the owner's successful casts (seconds since the round start), for the
+   * own-cooldown proof below; absent ⇒ no proof is attempted */
+  ownerCasts?: ReadonlyArray<{ spellId: string; tSeconds: number }>,
 ): string {
   const pressed = (list: CastFailedEvent[]) =>
     `pressed ${list.length}x but rejected (${joinPressesWithOffsets(list, k.atSeconds)})`;
@@ -2480,12 +2564,43 @@ export function postKickFact(
     // lockout" right after two Starsurges had gone out)
     return m !== undefined && !schoolLockedBy(m, lockedMask);
   };
-  const ownCd = allRejected.filter(isOwnCd);
-  const rejected = allRejected.filter((h) => !isOwnCd(h));
+  // Work order 2026-10-14c #4: a "not ready" press inside the lock whose
+  // spell was STILL not ready after the lock ended, with no success of it
+  // in between, was its own cooldown — a cooldown only runs down, and the
+  // lock was over. Only an off-GCD spell (DB2 `OFF_GCD_SPELL_IDS`), whose
+  // "not ready" after the lock cannot be the GCD (dfcccbf2 Shimmer,
+  // fa5e6c66 Fade). A press refused BEFORE the kick proves nothing about
+  // the lock: the cooldown may have come back inside it. Text only.
+  const lockEnd = textLockEndMs(k);
+  const ownCdProven = (h: CastFailedEvent) => {
+    if (!ownerCasts) return false;
+    const id = String(h.spellId);
+    if (!OFF_GCD_SPELL_IDS.has(id)) return false;
+    if (ms(h.tSeconds) >= lockEnd) return false;
+    return everyRejected.some(
+      (later) =>
+        String(later.spellId) === id &&
+        NOT_READY_REASONS.has(later.reason) &&
+        ms(later.tSeconds) >= lockEnd &&
+        !ownerCasts.some(
+          (c) =>
+            c.spellId === id &&
+            c.tSeconds > h.tSeconds &&
+            c.tSeconds < later.tSeconds,
+        ),
+    );
+  };
+  const ownCd = allRejected.filter((h) => isOwnCd(h) || ownCdProven(h));
+  const rejected = allRejected.filter((h) => !isOwnCd(h) && !ownCdProven(h));
+  const outside = ownCd.filter(isOwnCd);
+  const proven = ownCd.filter((h) => !isOwnCd(h));
   const ownCdStr =
-    ownCd.length > 0
-      ? `; outside the locked school ${ownCd.length}x not ready yet — its own cooldown or the GCD (${joinPressesWithOffsets(ownCd, k.atSeconds)})`
-      : "";
+    (outside.length > 0
+      ? `; outside the locked school ${outside.length}x not ready yet — its own cooldown or the GCD (${joinPressesWithOffsets(outside, k.atSeconds)})`
+      : "") +
+    (proven.length > 0
+      ? `; ${OWN_COOLDOWN_PROVEN_HEAD}${proven.length}x — still not ready after the lock (${joinPressesWithOffsets(proven, k.atSeconds)})`
+      : "");
   // any press inside the lockout — the outside-school ones included — is
   // an attempt to act, never "waited out" (codex review of batch 10: Fire
   // Breath not ready at 11 s after a 10 s Disintegrate kick read "waited out
@@ -2506,6 +2621,11 @@ export function postKickFact(
     ownCdStr
   );
 }
+
+/** The head of a `postKick` clause for in-lock "not ready" presses of an
+ * off-GCD spell that was still not ready after the lock (work order
+ * 2026-10-14c #4) — its own cooldown, not the lock. */
+export const OWN_COOLDOWN_PROVEN_HEAD = "its own cooldown ";
 
 /** The head of a `postKick` clause for presses the log gives another reason
  * than "not ready" for — also what the legend and the gate
@@ -2723,6 +2843,7 @@ export function positionMistakeEvents(
     | "endEnemyName"
     | "ownerCcSeconds"
     | "ownerRootSeconds"
+    | "ownerSnaredSeconds"
   > &
     Partial<
       Pick<IPositionEvent, "topDamagerName" | "ownerHpLowPct" | "toSeconds">
@@ -2804,6 +2925,9 @@ export function positionMistakeEvents(
           facts.ccS = String(Math.round(e.ownerCcSeconds));
         if (e.ownerRootSeconds !== undefined)
           facts.rootS = String(Math.round(e.ownerRootSeconds));
+        // WO3 #15: slowed (free to move), only when it rounds to a second
+        if (e.ownerSnaredSeconds !== undefined && Math.round(e.ownerSnaredSeconds) > 0)
+          facts.snaredS = String(Math.round(e.ownerSnaredSeconds));
         const refused =
           refusedIn && e.toSeconds !== undefined
             ? refusedIn(e.atSeconds, e.toSeconds)
@@ -3328,7 +3452,7 @@ function teamPlayEvents(
                 : undefined,
             }
           : undefined,
-        { rootReach: rootReachFor(combat) },
+        { rootReach: rootReachFor(combat), ownerCds: ownerCdsWithBaseline },
       ),
     );
     if (CANDIDATE_TYPE_FLAGS.missedPurge) {

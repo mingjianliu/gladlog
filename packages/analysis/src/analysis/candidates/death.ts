@@ -64,6 +64,8 @@ export interface DeathSetupParts {
       to: number;
       spellId: string;
       lockout: boolean;
+      /** the unit's own flight (`OWN_FLIGHT_AURA_IDS`) */
+      self?: true;
     }>;
     roots?: ReadonlyArray<{
       atSeconds: number;
@@ -137,6 +139,22 @@ function lockChainFacts(
       text: `${getEnglishSpellName(iv.spellId)} ${fmtFactTime(at)}`,
     };
   });
+  // agy 40-FT-86: the unit's own flight counts toward the runs (user ruling
+  // 2026-10-14) but is no enemy's CC — it is named as what it is, so a run
+  // that opens with it does not leave facts.chainFrom before every entry
+  for (const iv of cc.cannotCast) {
+    if (
+      !iv.self ||
+      !(iv.from < deathMs) ||
+      !runs.some((r) => iv.from < r.to && iv.to > r.from)
+    )
+      continue;
+    const at = (iv.from - start) / 1000;
+    chain.push({
+      at,
+      text: `${getEnglishSpellName(iv.spellId)} (own flight) ${fmtFactTime(at)}`,
+    });
+  }
   for (const r of cc.roots ?? []) {
     if (
       r.atSeconds < parts.deathT &&

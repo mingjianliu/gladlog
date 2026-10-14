@@ -7,6 +7,8 @@
  * its closure inputs now arrive through `ctx`. Output is pinned by the 605-file
  * acceptanceCapture context hash.
  */
+import { type ICombatUnit, LogEvent } from "@gladlog/parser-compat";
+
 import { TIMELINE_LINE_FLAGS } from "../../data/timelineLineFlags";
 import {
   guardianSpiritSaveClause,
@@ -273,7 +275,15 @@ export function emitEnemyDefEntries(
               fmtTime,
             );
           }
-          line = `${d.spellName}${label ? ` (${label})` : ""}${burstStr}${hpStr}${selfSaveStr}${karmaStr}`;
+          const channelStr = channelTargetClause(
+            enemy,
+            d,
+            friends,
+            matchStartMs,
+            roundEndAtMs,
+            pid,
+          );
+          line = `${d.spellName}${label ? ` (${label})` : ""}${burstStr}${hpStr}${selfSaveStr}${karmaStr}${channelStr}`;
         } else {
           const strength = d.kind === "immune" ? "immune" : `${d.pct}%`;
           const hpStr = hpPct !== null ? ` (at ${hpPct.toFixed(0)}% HP)` : "";
@@ -286,4 +296,65 @@ export function emitEnemyDefEntries(
       }
     }
   }
+}
+
+/**
+ * WO3 #16 (r1008-57): a self-save pressed AT one of our players — Ultimate
+ * Penitence channels at the target its SUCCESS names — says who that was and
+ * what the channel dealt them: the caster's damage rows to that player under
+ * the cast's own (log-locale) name, over the caster's own aura of it (the
+ * line's printed length, clipped to the round's end), beside everything
+ * that player took in the same span. Nothing when the SUCCESS names no
+ * friendly or no such damage landed.
+ * @internal exported for tests
+ */
+export function channelTargetClause(
+  enemy: ICombatUnit,
+  d: { spellId: string; atSeconds: number; pressSeconds?: number; observedSeconds?: number },
+  friends: readonly ICombatUnit[],
+  matchStartMs: number,
+  roundEndAtMs: number,
+  pid: (name: string) => string,
+): string {
+  if (d.observedSeconds === undefined) return "";
+  const pressMs = matchStartMs + Math.round((d.pressSeconds ?? d.atSeconds) * 1000);
+  const cast = (enemy.spellCastEvents ?? []).find(
+    (c) =>
+      c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+      c.spellId === d.spellId &&
+      Math.abs(c.logLine.timestamp - pressMs) <= 1,
+  );
+  const target = cast && friends.find((f) => f.id === cast.destUnitId);
+  if (!cast || !target) return "";
+  const fromMs = matchStartMs + Math.round(d.atSeconds * 1000);
+  const toMs = Math.min(fromMs + Math.round(d.observedSeconds * 1000), roundEndAtMs);
+  // landed (`effectiveAmount`) plus what shields absorbed (`absorbsIn`, the
+  // victim-keyed stream) — the two parts `Top damage` counts
+  let dealt = 0;
+  let took = 0;
+  const hitIds = new Set<string>();
+  for (const r of target.damageIn ?? []) {
+    const ts = r.logLine.timestamp;
+    if (ts < fromMs || ts > toMs || r.srcUnitId === target.id) continue;
+    const amount = Math.abs(r.effectiveAmount);
+    took += amount;
+    if (r.srcUnitId === enemy.id && r.spellName === cast.spellName) {
+      dealt += amount;
+      if (r.spellId) hitIds.add(r.spellId);
+    }
+  }
+  for (const a of target.absorbsIn ?? []) {
+    if (a.timestamp < fromMs || a.timestamp > toMs) continue;
+    if (!a.attackerId || a.attackerId === target.id) continue;
+    const amount = Math.abs(a.absorbedAmount);
+    took += amount;
+    if (
+      a.attackerId === enemy.id &&
+      ((a.attackSpellId !== undefined && hitIds.has(a.attackSpellId)) ||
+        a.attackSpellName === cast.spellName)
+    )
+      dealt += amount;
+  }
+  if (Math.round(dealt / 1000) <= 0) return "";
+  return ` — channelled at ${pid(target.name)}: it dealt ${Math.round(dealt / 1000)}k of the ${Math.round(took / 1000)}k damage they took over it`;
 }

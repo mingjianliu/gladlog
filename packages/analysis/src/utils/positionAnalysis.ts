@@ -49,6 +49,7 @@ import {
 } from "./positionSampling";
 import { fmtTime, toRenderSecond } from "./renderGrid";
 import { buildRosterSides, type RosterSides } from "./rosterSide";
+import { ccMechanicOf, SNARED_MECHANIC } from "./spellMechanics";
 import { spellReachToAccuse } from "./spellRange";
 import { isDeadAt } from "./unitDeath";
 
@@ -245,6 +246,12 @@ export interface IPositionEvent {
    *  — the union the two figures above overlap into (a root inside a stun
    *  counts in both). Set only when both summaries were passed. */
   ownerCcOrRootSeconds?: number;
+  /** STAYED_IN (WO3 #15, r1008-48): merged seconds of the span the owner
+   *  carried an enemy's snare — an aura DB2 gives spell-level mechanic
+   *  SNARED (`ccMechanicOf` = 11): free to move, slower. A lower bound (a
+   *  slow whose mechanic sits on an effect, Thunder Clap, is not read).
+   *  `undefined` = no aura stream. Facts only. */
+  ownerSnaredSeconds?: number;
   /** STAYED_IN (F-S5): merged seconds of the span the owner could not cast
    *  (`buildCannotCastIntervals` — CC, silence, kick lockout: the one
    *  feasibility predicate), read beside "a defensive CD was available". */
@@ -806,10 +813,19 @@ export function computeOwnerPositionEvents(params: {
   // The owner's OWN all-school immunities (Ice Block, Divine Shield, Aspect
   // of the Turtle): `isOwnImmunityInterval`.
   // (bare fixtures carry no aura stream)
-  const ownImmunities = (
-    owner.auraEvents ? buildAuraIntervals(owner, combat) : []
-  )
+  const ownerAuraIntervals = owner.auraEvents
+    ? buildAuraIntervals(owner, combat)
+    : undefined;
+  const ownImmunities = (ownerAuraIntervals ?? [])
     .filter((iv) => isOwnImmunityInterval(owner, iv))
+    .map((iv) => ({ atSeconds: iv.fromS, durationSeconds: iv.toS - iv.fromS }));
+  const enemyNames = new Set(enemies.map((u) => u.name));
+  const snareInstances = ownerAuraIntervals
+    ?.filter(
+      (iv) =>
+        ccMechanicOf(iv.spellId) === SNARED_MECHANIC &&
+        enemyNames.has(iv.srcUnitName),
+    )
     .map((iv) => ({ atSeconds: iv.fromS, durationSeconds: iv.toS - iv.fromS }));
   // No free choice of where to stand (user ruling 2026-09-30, A′13 = C):
   // hard CC, roots, and the owner's own immunity all enter the skip rule.
@@ -1198,6 +1214,15 @@ export function computeOwnerPositionEvents(params: {
               ),
               ownerCcOrRootSeconds: ccOverlapSeconds(
                 [...ccInstances, ...rootInstances],
+                w.fromSeconds,
+                evalEnd,
+              ),
+            }
+          : {}),
+        ...(snareInstances
+          ? {
+              ownerSnaredSeconds: ccOverlapSeconds(
+                snareInstances,
                 w.fromSeconds,
                 evalEnd,
               ),

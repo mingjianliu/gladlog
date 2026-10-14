@@ -30,6 +30,7 @@ import { getUnitPositionAtTime } from "./losAnalysis";
 import { CLOSE_RANGE_YARDS, isDeadAt } from "./positionAnalysis";
 import { LOS_SWEEP_GAP_MS } from "./positionSampling";
 import { canReachTargetAt } from "./rootReachability";
+import { roundEndMs } from "./roundEnd";
 
 /** Below this many seconds in reach and free, nobody is named: a second or two
  * of overlap is not an opportunity. Same 3 s floor as ROOT_UNREACHABLE_MIN_S. */
@@ -50,7 +51,9 @@ export interface ISummonReach {
  */
 export function summonReach(
   summon: ICombatUnit,
-  combat: { endTime: number; startInfo?: { zoneId?: string } },
+  combat: Parameters<typeof roundEndMs>[0] & {
+    startInfo?: { zoneId?: string; bracket?: string };
+  },
   friends: ICombatUnit[],
   enemies: ICombatUnit[],
 ): ISummonReach | null {
@@ -66,7 +69,8 @@ export function summonReach(
     buffFullDurationForCaster(String(summonEvent.spellId), summoner, fromMs) ??
     spellEffectData[String(summonEvent.spellId)]?.durationSeconds;
   if (!durationS) return null;
-  const toMs = Math.min(fromMs + durationS * 1000, combat.endTime);
+  // ends at the round's end (`roundEndMs`; work order 2026-10-14c #1)
+  const toMs = Math.min(fromMs + durationS * 1000, roundEndMs(combat));
   const windows: Array<{ secStart: number; secEnd: number; t: number }> = [];
   for (let t = fromMs; t + 1000 <= toMs; t += 1000) {
     windows.push({ secStart: t, secEnd: t + 1000, t: t + 500 });

@@ -409,7 +409,7 @@ describe("warlockPetFunction — the roster names a warlock's pet by what it doe
     const ctx = buildMatchContext(match, friends, enemies, {});
     const roster = ctx.split("\n").find((l) => l.startsWith("  Enemy team:"));
     expect(roster).toContain(
-      `(${lockPlayer.name}) [pet: Sayaad — Seduction (incapacitate); Felhunter from 0:36 — Spell Lock (kick), Devour Magic (purge)]`,
+      `(${lockPlayer.name}) [pet: Sayaad — Seduction (disorient); Felhunter from 0:36 — Spell Lock (kick), Devour Magic (purge)]`,
     );
   });
 

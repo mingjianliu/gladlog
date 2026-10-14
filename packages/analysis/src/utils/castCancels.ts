@@ -74,6 +74,7 @@ import { isPressOfCooldown, talentReplacementsOf } from "./cooldowns";
 import { analyzeKickAudit } from "./kickAudit";
 import type { RawStreams } from "./rawStreams";
 import { roundEndMs } from "./roundEnd";
+import { medianFinite } from "./stats";
 
 // The reading of how a cast bar ended, the rows it starts from and the
 // interruption reasons live in castBarOutcomes.ts (kickAudit reads them too);
@@ -272,9 +273,12 @@ export function ownerCastCancels(params: {
       pending.push({ id: s.id, name: s.name, t: s.t, failS: s.end.atS });
     }
   }
+  // the true median (`medianFinite`, the one kick depth reads) — the
+  // upper-middle element read high on an even count (work order 2026-10-14c
+  // #3: 12 of 30 rows of the 60 had one)
   const median = (id: string) => {
-    const d = [...(completedDurations.get(id) ?? [])].sort((a, b) => a - b);
-    return d.length ? d[Math.floor(d.length / 2)]! : null;
+    const d = completedDurations.get(id) ?? [];
+    return d.length ? medianFinite(d) : null;
   };
   const cancels: CastCancel[] = pending.map((p) => {
     const m = median(p.id);

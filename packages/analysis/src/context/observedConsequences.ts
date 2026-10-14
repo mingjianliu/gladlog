@@ -52,6 +52,7 @@ import {
 } from "../utils/cooldowns";
 import { kickLockoutSecondsFor } from "../utils/kickLockout";
 import { fmtTime } from "../utils/renderGrid";
+import { roundEndMs } from "../utils/roundEnd";
 
 /** A CC shorter than this is a GCD-sized blip — nothing to report inside it. */
 export const HEALER_CC_MIN_S = 2;
@@ -198,6 +199,7 @@ export function formatObservedConsequences(params: {
 }): string[] {
   const { combat, friends, enemies, friendlyCC, enemyCC, labels } = params;
   const start = combat.startTime;
+  const roundEnd = roundEndMs(combat);
   const entries: { atS: number; line: string }[] = [];
   const sideOf = (u: ICombatUnit) =>
     friends.some((f) => f.id === u.id)
@@ -218,6 +220,8 @@ export function formatObservedConsequences(params: {
       seen.add(key);
       const t = (a.timestamp - start) / 1000;
       if (t < 0) continue;
+      // a kick at or after the round's end is not in the round (#1)
+      if (a.timestamp >= roundEnd) continue;
       // kick-eaten F-K8 (A23): the victim's own lockout (Storm Conduit, as
       // of the interrupt's log date)
       const lockS = kickLockoutSecondsFor(
@@ -228,8 +232,10 @@ export function formatObservedConsequences(params: {
       );
       const { team, label, who } = sideOf(victim);
       const mates = team.filter((m) => m.id !== victim.id);
-      const { parts, measured } = teamDrops(mates, label, start, t, t + lockS);
-      const died = diedIn(mates, label, start, t, t + lockS);
+      // the lockout's readings stop at the round's end (#1)
+      const lockEndS = Math.min(t + lockS, (roundEnd - start) / 1000);
+      const { parts, measured } = teamDrops(mates, label, start, t, lockEndS);
+      const died = diedIn(mates, label, start, t, lockEndS);
       if (!measured && !died) continue;
       const stopped =
         a.extraSpellId !== undefined
@@ -291,9 +297,13 @@ export function formatObservedConsequences(params: {
       enemySourceIds(otherSide, allUnits),
     )) {
       // an open-ended silence (no removal before the round ended) runs to
-      // Infinity; clamp to the combat end as the [SILENCE] renderer does —
-      // unclamped, the HP sampler never terminated (codex 35-CD-30)
-      const toMs = Math.min(s.to, combat.endTime);
+      // Infinity; clamp to the round's end (`roundEndMs`, a Solo Shuffle
+      // round's ending death) as the [SILENCE] renderer does — unclamped,
+      // the HP sampler never terminated (codex 35-CD-30). Work order
+      // 2026-10-14c #1: clamped at the log's end, 5677ba13 printed
+      // "Strangulate (silence) for 4s" beside "[SILENCE] … still on them
+      // when the round ended, 3s in", with a low read after the round
+      const toMs = Math.min(s.to, roundEnd);
       if (!(toMs > s.from)) continue;
       const atS = (s.from - start) / 1000;
       const durS = (toMs - s.from) / 1000;

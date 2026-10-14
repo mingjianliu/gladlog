@@ -10,7 +10,7 @@
  *    own predicate;
  *  - position F-S5: how long of the span the owner could not cast.
  */
-/* eslint-disable @typescript-eslint/no-explicit-any */
+ 
 import { CombatUnitSpec, LogEvent } from "@gladlog/parser-compat";
 import { describe, expect, it } from "vitest";
 
@@ -257,6 +257,31 @@ describe("STAYED IN: CC / root seconds and the skip rule (F-S2)", () => {
     const text = formatPositionEventsForContext([e!]).join("\n");
     expect(text).toContain("CC'd 4s of ");
     expect(text).toContain(" — rooted 4s (4s in all)");
+  });
+
+  it("WO3 #15: an enemy snare (DB2 mechanic snared) is carried as its own seconds; a friendly one or an unknown stream is not", () => {
+    const aura = (event: string, s: number, src: string, srcName: string, spellId = "1715") => ({
+      spellId,
+      spellName: "Hamstring",
+      srcUnitId: src,
+      srcUnitName: srcName,
+      destUnitId: "o",
+      destUnitName: "Owner-R-US",
+      auraType: "DEBUFF",
+      timestamp: T0 + s * 1000,
+      logLine: { event, timestamp: T0 + s * 1000 },
+    });
+    const o = OWNER();
+    o.auraEvents = [
+      aura("SPELL_AURA_APPLIED", 12, "e1", "Dk-R-US"),
+      aura("SPELL_AURA_REMOVED", 15, "e1", "Dk-R-US"),
+      aura("SPELL_AURA_APPLIED", 16, "m", "Mate-R-US"),
+      aura("SPELL_AURA_REMOVED", 18, "m", "Mate-R-US"),
+    ];
+    const [e] = stayed(run(o, [o]));
+    expect(e!.ownerSnaredSeconds).toBe(3);
+    const [u] = stayed(run(OWNER(), [OWNER()]));
+    expect(u!.ownerSnaredSeconds).toBeUndefined();
   });
 
   it("CC alone under half, CC + root reaching half → the window is dropped (b12bfef4 shape)", () => {

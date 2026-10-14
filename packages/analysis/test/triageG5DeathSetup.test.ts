@@ -97,6 +97,24 @@ describe("crisis-external F-AS1 / F-D2 — the lock chain and the free time", ()
     );
   });
 
+  it("agy 40-FT-86: a run that opens with the healer's own flight names it, so chainFrom is the first entry", () => {
+    const [e] = deathSetupEvents({
+      deathT: 60,
+      victim,
+      healerCC: {
+        healerName: "Healer-R",
+        ccInstances: [cc(56, 4, "Kidney Shot")],
+        cannotCast: [
+          { ...iv(50, 56, "357210"), self: true as const }, // Deep Breath
+          iv(56, 60, "408"), // Kidney Shot
+        ],
+        matchStartMs: START,
+      },
+    });
+    expect(e!.facts["chainFrom"]).toBe("50");
+    expect(e!.facts["chain"]).toBe("Deep Breath (own flight) 50; Kidney Shot 56");
+  });
+
   it("lockedS counts the window's cannot-cast seconds once; freeBeforeDeathS the gap after the last run", () => {
     const [e] = deathSetupEvents(parts);
     // window 111–123: 111–116.4 and 117.1–120.1 → 5.4 + 3.0

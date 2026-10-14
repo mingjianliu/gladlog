@@ -206,6 +206,7 @@ import {
   SHIV_REMOVES,
   SHIV_SPELL_ID,
 } from "./scopedPurges";
+import { SELF_REMOVAL_SPELL_IDS } from "./selfRemovals";
 import { SPELL_CATEGORIES } from "./spellCategories";
 import {
   BUFF_DURATION_TALENT_MODIFIERS,
@@ -1031,6 +1032,10 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   ),
   t("OWN_FLIGHT_AURA_IDS", "data/occupancyAuras.ts", "aura", () =>
     set(OWN_FLIGHT_AURA_IDS),
+  ),
+  // WO3 #11: own buttons that clear the caster's debuffs of a dispel type
+  t("SELF_REMOVAL_BY_TYPE", "data/selfRemovals.ts", "cast", () =>
+    set(SELF_REMOVAL_SPELL_IDS),
   ),
   // GH #79 / B4: classification overrides for interrupted spells.
   t("KICKED_SPELL_OVERRIDES", "data/kickedSpellCategories.ts", "cast", () => [

@@ -1,21 +1,35 @@
+import "../data/backlashCc";
+import "../data/castEffectAuras";
+import "../data/racialAbilities";
+import "../data/spellEffectData";
+import "../utils/auraIntervals";
+import "../utils/buffDuration";
+import "../utils/cannotCastIntervals";
+import "../utils/castCommitSpans";
+import "../utils/enemyDefensives";
+import "../utils/enemyInterrupts";
+import "../utils/externalDamage";
+import "../utils/incomingPressure";
+import "../utils/rosterSide";
+import "./resUtilityCds";
+import "../utils/resourceAt";
+import "../utils/summonReachability";
+import "./burstAnswered";
+import "./cdPrior";
+import "./resLedgerPrune";
+import "./stackedDefensives";
+import "./unitLabel";
+
 import { ICombatUnit } from "@gladlog/parser-compat";
 
 import { type BurstWindowDecisionPoint } from "../analysis/burstWindowDecisionPoints";
 import type { CdPriorHoldEpisode } from "../analysis/cdTriggerPrior";
 import type { StackedDefensivePair } from "../analysis/stackedDefensives";
-import "../data/backlashCc";
-import "../data/castEffectAuras";
-import "../data/racialAbilities";
 import {
   HIGH_VALUE_PURGEABLE_BUFFS,
   PURGE_WHITELIST_DATA_BLOCKED,
 } from "../data/purgeWhitelist";
-import "../data/spellEffectData";
 import { ccSpellIds } from "../data/spellTags";
-import "../utils/auraIntervals";
-import "../utils/buffDuration";
-import "../utils/cannotCastIntervals";
-import "../utils/castCommitSpans";
 import type { ICcBreakEvent } from "../utils/ccBreakAnalysis";
 import {
   findBrokenCC,
@@ -36,21 +50,10 @@ import { getDampeningPercentage } from "../utils/dampening";
 import { IDispelSummary } from "../utils/dispelAnalysis";
 import { IOutgoingCCChain } from "../utils/drAnalysis";
 import { IEnemyCDTimeline } from "../utils/enemyCDs";
-import "../utils/enemyDefensives";
-import "../utils/enemyInterrupts";
-import "../utils/externalDamage";
 import { IHealingGap } from "../utils/healingGaps";
-import "../utils/incomingPressure";
-import "../utils/rosterSide";
 import type { CastFailedEvent, RawStreams } from "../utils/rawStreams";
-import "./resUtilityCds";
-import type { IControlCastBar } from "./ccUse";
-import { rejectRunStatesRow } from "./spellOutcomeLines";
-import "../utils/resourceAt";
 import { roundEndMs } from "../utils/roundEnd";
-import "../utils/summonReachability";
-import "./burstAnswered";
-import "./cdPrior";
+import type { IControlCastBar } from "./ccUse";
 import {
   emitDmgSpikeEntries,
   emitEnemyDeathEntries,
@@ -63,9 +66,7 @@ import {
   type PeakSpikePlacement,
   peakSpikePlacement,
 } from "./peakSpikePlacement";
-import "./resLedgerPrune";
-import "./stackedDefensives";
-import "./unitLabel";
+import { rejectRunStatesRow } from "./spellOutcomeLines";
 export {
   PEAK_SPIKE_MARKERS,
   peakSpikeMarker,
@@ -74,8 +75,11 @@ export {
 };
 import "./resourceSnapshot";
 import "./timelineHelpers";
+import "../utils/spellMechanics";
+
 import { prepareAoeCcFolding } from "./timelineSections/aoeCcFolding";
 import { emitBuffFadedEntries } from "./timelineSections/buffFaded";
+import { emitCastStoppedEntries } from "./timelineSections/castStopped";
 import { emitCcBrokenEntries } from "./timelineSections/ccBroken";
 import { emitCcCastEntries } from "./timelineSections/ccCast";
 import { emitCcOnEnemyEntries } from "./timelineSections/ccOnEnemy";
@@ -91,6 +95,8 @@ import { emitEnemyCdEntries } from "./timelineSections/enemyCd";
 import { emitEnemyDefEntries } from "./timelineSections/enemyDef";
 import { emitEnemyHardCastEntries } from "./timelineSections/enemyHardCast";
 import { formatTimeline } from "./timelineSections/formatTimeline";
+import { emitFriendlyCheatDeathEntries } from "./timelineSections/friendlyCheatDeath";
+import { emitGripEntries } from "./timelineSections/grip";
 import { emitHealerCastGapFillerEntries } from "./timelineSections/healerCastGapFiller";
 import { emitHealerInactivityEntries } from "./timelineSections/healerInactivity";
 import { emitKickEntries } from "./timelineSections/kick";
@@ -103,8 +109,6 @@ import { foldMissedPurges } from "./timelineSections/purgeFolding";
 import { emitPurgeEntries } from "./timelineSections/purges";
 import { resolveDeferredSnapshots } from "./timelineSections/resolveSnapshots";
 import { prepareTimelineSetup } from "./timelineSections/setup";
-import { emitGripEntries } from "./timelineSections/grip";
-import { emitCastStoppedEntries } from "./timelineSections/castStopped";
 import { emitSilenceEntries } from "./timelineSections/silence";
 import { emitSpellOutcomeEntries } from "./timelineSections/spellOutcomes";
 import { emitStasisEntries } from "./timelineSections/stasis";
@@ -113,7 +117,6 @@ import { prepareStateInputs } from "./timelineSections/stateInputs";
 import { emitTeamCdEntries } from "./timelineSections/teamCd";
 import { emitTrinketCcOnTeamEntries } from "./timelineSections/trinketCcOnTeam";
 import { emitUnitDestroyedEntries } from "./timelineSections/unitDestroyed";
-import "../utils/spellMechanics";
 
 // ── buildMatchTimeline ─────────────────────────────────────────────────────
 
@@ -608,6 +611,20 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     requestSnapshotPlaceholder,
     matchStartMs,
   }));
+
+  // WO3 #17: a friendly cheat-death proc (Cauterize / Cheat Death)
+  if (
+    emitFriendlyCheatDeathEntries({
+      owner,
+      friends,
+      matchStartMs,
+      matchEndSeconds,
+      roundEndAtMs,
+      pid,
+      addEntry,
+    })
+  )
+    procLinesEmitted = true;
 
   // ── [CC CAST] events — AoE CC cast by friendly players on enemies ──────────
 

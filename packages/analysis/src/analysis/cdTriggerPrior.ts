@@ -51,6 +51,7 @@ import {
   isDeadAtRenderSecond,
   SELF_CAST_NOOP_EXTERNAL_IDS,
 } from "../utils/cooldowns";
+import { roundEndMs } from "../utils/roundEnd";
 import {
   isSpendableDefensiveCd,
   type SpendableDefensiveCd,
@@ -240,7 +241,9 @@ export function cdPriorHoldEpisodes(
   overrides?: CdTriggerPriorOverrides,
 ): CdPriorHoldEpisode[] {
   const startMs: number = combat.startTime;
-  const endMs: number = combat.endTime;
+  // the round's end (`roundEndMs`): a dip is not walked into the strip after
+  // a Solo Shuffle round's ending death (work order 2026-10-14c #1)
+  const endMs: number = roundEndMs(combat);
   const lastSec = Math.floor((endMs - startMs) / 1000);
   const friends = friendliesOf(combat, owner);
   const cds = rosterOf(owner, combat, overrides)

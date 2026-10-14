@@ -261,6 +261,10 @@ export interface IDeathImmuneAvailable {
   wasInCC: boolean;
   /** death-kill F-M2; absent when the cannot-cast sources were not given */
   freedom?: IDeathWindowFreedom;
+  /** WO3 #18 (r1014-176): seconds before the death it had been off
+   * cooldown, when that is shorter than `LETHAL_WINDOW_SECONDS` — the free
+   * stretch above reads CC alone. Facts only. */
+  offCooldownForLastS?: number;
 }
 
 export interface IMissedExternal {
@@ -271,6 +275,8 @@ export interface IMissedExternal {
   casterWasInCC: boolean;
   /** death-kill F-M2; absent when the cannot-cast sources were not given */
   casterFreedom?: IDeathWindowFreedom;
+  /** as `IDeathImmuneAvailable.offCooldownForLastS`, of the caster's spell */
+  offCooldownForLastS?: number;
 }
 
 export interface IDeathOutcomeEvent {
@@ -506,6 +512,35 @@ export function isReadyInTimeAt(
       resetSpellIds,
     )
   );
+}
+
+/**
+ * WO3 #18 (r1014-176): how long before `atSeconds` the spell had been off
+ * cooldown without a break, on a 0.1 s walk back over the last
+ * `LETHAL_WINDOW_SECONDS` through the same `isAvailableAt` — undefined when it
+ * was off cooldown for the whole window. The free stretch the death line
+ * prints reads CC alone; this is the other half of "could cast it".
+ */
+export function offCooldownForLastSeconds(
+  unit: ICombatUnit,
+  spellId: string,
+  cooldown: CooldownSource,
+  atSeconds: number,
+  matchStartMs: number,
+  resetSpellIds?: string[],
+): number | undefined {
+  // `isAvailableAt` reads `t + CD_INSTANT_SLACK_S` (the rendered second's
+  // slack): its first "available" instant is the real return minus that
+  // slack, so the slack comes back off the figure — the cooldown's own
+  // return, not the ledger's rounding (f4da82c5: logged removal − 1 s + 60 =
+  // 4.0 s before the death, the walk's 4.5 s minus 0.5)
+  const windowStart = Math.max(0, atSeconds - LETHAL_WINDOW_SECONDS);
+  for (let k = 1; atSeconds - k / 10 >= windowStart - 1e-9; k++) {
+    const t = atSeconds - k / 10;
+    if (!isAvailableAt(unit, spellId, cooldown, t, matchStartMs, resetSpellIds))
+      return Math.max(0, Math.round((k - 1) - CD_INSTANT_SLACK_S * 10) / 10);
+  }
+  return undefined;
 }
 
 /** Pre-computed lockout intervals: [fromSeconds, toSeconds] pairs sorted by fromSeconds. */
@@ -1036,6 +1071,20 @@ export function buildDeathOutcomeSummary(
               ))
         )
           continue;
+        const immReadyFor = offCooldownForLastSeconds(
+          unit,
+          spellId,
+          cooldownSourceOf(
+            unit,
+            spellId,
+            spell.cooldownSeconds,
+            resolvedCooldownSeconds?.(unit, spellId),
+            matchStartMs,
+          ),
+          atSeconds,
+          matchStartMs,
+          spell.resetSpellIds,
+        );
         availableImmunities.push({
           spellId,
           spellName: spell.name,
@@ -1046,6 +1095,9 @@ export function buildDeathOutcomeSummary(
               ...(l.freedom ? { freedom: l.freedom } : {}),
             };
           })(),
+          ...(immReadyFor !== undefined
+            ? { offCooldownForLastS: immReadyFor }
+            : {}),
         });
       }
 
@@ -1117,6 +1169,19 @@ export function buildDeathOutcomeSummary(
             )
           )
             continue;
+          const extReadyFor = offCooldownForLastSeconds(
+            teammate,
+            spellId,
+            cooldownSourceOf(
+              teammate,
+              spellId,
+              spell.cooldownSeconds,
+              resolvedCooldownSeconds?.(teammate, spellId),
+              matchStartMs,
+            ),
+            atSeconds,
+            matchStartMs,
+          );
           missedExternals.push({
             casterName: teammate.name,
             casterSpec: specToString(teammate.spec),
@@ -1129,6 +1194,9 @@ export function buildDeathOutcomeSummary(
                 ...(l.freedom ? { casterFreedom: l.freedom } : {}),
               };
             })(),
+            ...(extReadyFor !== undefined
+              ? { offCooldownForLastS: extReadyFor }
+              : {}),
           });
         }
       }
@@ -1153,14 +1221,23 @@ export function buildDeathOutcomeSummary(
  * what held the unit through the death when a cannot-cast interval covers
  * it. When that interval sat on the unit's PET (the option is a spell the
  * pet casts) the clause says so — it must not read as the unit's own CC. */
-function freedomNote(who: string, f: IDeathWindowFreedom): string {
+function freedomNote(
+  who: string,
+  f: IDeathWindowFreedom,
+  offCooldownForLastS?: number,
+): string {
   const pet = f.heldAtDeath?.onPet ? "its pet " : "";
   const held = f.heldAtDeath
     ? f.heldAtDeath.lockout
       ? `, then ${pet}school-locked (${f.heldAtDeath.spellName}) from ${fmtTime(f.heldAtDeath.fromSeconds)} through the death`
       : `, then ${pet}in ${f.heldAtDeath.spellName} from ${fmtTime(f.heldAtDeath.fromSeconds)} through the death`
     : "";
-  return `, ${who}longest stretch free to cast it ${f.longestFreeS.toFixed(1)}s of the last ${LETHAL_WINDOW_SECONDS}s${held}`;
+  // the free stretch reads CC alone; the cooldown is the other half
+  const ready =
+    offCooldownForLastS !== undefined
+      ? ` (off cooldown only for the last ${offCooldownForLastS.toFixed(1)}s)`
+      : "";
+  return `, ${who}longest stretch free to cast it ${f.longestFreeS.toFixed(1)}s of the last ${LETHAL_WINDOW_SECONDS}s${ready}${held}`;
 }
 
 export function formatDeathOutcomeForContext(
@@ -1172,7 +1249,7 @@ export function formatDeathOutcomeForContext(
     const t = fmtTime(ev.atSeconds);
     for (const imm of ev.availableImmunities) {
       const ccNote = imm.freedom
-        ? freedomNote("", imm.freedom)
+        ? freedomNote("", imm.freedom, imm.offCooldownForLastS)
         : imm.wasInCC
           ? ", was in CC"
           : ", was not CC'd";
@@ -1182,7 +1259,7 @@ export function formatDeathOutcomeForContext(
     }
     for (const ext of ev.missedExternals) {
       const ccNote = ext.casterFreedom
-        ? freedomNote("caster's ", ext.casterFreedom)
+        ? freedomNote("caster's ", ext.casterFreedom, ext.offCooldownForLastS)
         : ext.casterWasInCC
           ? ", caster in CC"
           : ", caster was free";

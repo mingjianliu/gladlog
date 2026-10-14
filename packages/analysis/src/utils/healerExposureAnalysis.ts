@@ -154,6 +154,11 @@ export interface IHealerCCThreat {
   /** cc-dr F-KT1: the CC is the spec's default (`getPrimaryCC`), not one this
    * enemy was seen landing */
   fromTemplate?: boolean;
+  /** With `fromTemplate`: how many times the enemy pressed that control this
+   * round without it landing on the team (cast starts, else successes) —
+   * work order 2026-10-14c #9: a Hex started 4× read "(spec default, not
+   * seen)". */
+  pressedCount?: number;
 }
 
 export interface IHealerBurstExposure {
@@ -365,6 +370,17 @@ export function analyzeHealerExposureAtBurst(
       const observedCCs = enemyCCHistory.get(enemy.name) ?? [];
       const primaryCC = getPrimaryCC(enemySpec);
       const fromTemplate = observedCCs.length === 0 && !!primaryCC;
+      const pressedCount =
+        fromTemplate && primaryCC
+          ? (() => {
+              const of = (
+                list: ReadonlyArray<{ spellId?: string }> | undefined,
+              ) =>
+                (list ?? []).filter((e) => e.spellId === primaryCC.spellId)
+                  .length;
+              return of(enemy.castStartEvents) || of(enemy.spellCastEvents);
+            })()
+          : 0;
       const ccSources =
         observedCCs.length > 0 ? observedCCs : primaryCC ? [primaryCC] : [];
 
@@ -386,6 +402,7 @@ export function analyzeHealerExposureAtBurst(
           healerDRLevel: healerDRLevel as Exclude<DRLevel, "Immune">,
           losBlocked,
           ...(fromTemplate ? { fromTemplate: true } : {}),
+          ...(pressedCount > 0 ? { pressedCount } : {}),
         });
       }
     }
@@ -569,6 +586,9 @@ export function landedControlsForKit(
  * spec's default, listed for an enemy seen landing no control on the team.
  * `(landed N×)` (FT R03): it landed on the kit's unit N times this round. */
 const KIT_SPEC_DEFAULT_MARK = "(spec default, not seen)";
+/** …and the same default the enemy did press, never landing it (#9) */
+const kitPressedMark = (count: number) =>
+  `(spec default, pressed ${count}×, never landed)`;
 const kitLandedMark = (count: number) => `(landed ${count}×)`;
 /** What the header says once the landed controls are on the line. */
 const kitLandedClause = (who: "you" | "them") =>
@@ -609,6 +629,7 @@ export function formatEnemyCCKitHeader(
         spellName: string;
         category?: string;
         fromTemplate?: boolean;
+        pressedCount?: number;
         landed?: number;
       }>;
     }
@@ -631,6 +652,7 @@ export function formatEnemyCCKitHeader(
           spellName: t.ccSpellName,
           category: t.ccCategory,
           ...(t.fromTemplate ? { fromTemplate: true } : {}),
+          ...(t.pressedCount ? { pressedCount: t.pressedCount } : {}),
         });
       }
     }
@@ -664,7 +686,7 @@ export function formatEnemyCCKitHeader(
     const spellsStr = kit.spells
       .map(
         (s) =>
-          `${s.spellName}${s.category ? ` [${s.category}]` : ""}${s.landed ? ` ${kitLandedMark(s.landed)}` : s.fromTemplate ? ` ${KIT_SPEC_DEFAULT_MARK}` : ""}`,
+          `${s.spellName}${s.category ? ` [${s.category}]` : ""}${s.landed ? ` ${kitLandedMark(s.landed)}` : s.fromTemplate ? ` ${s.pressedCount ? kitPressedMark(s.pressedCount) : KIT_SPEC_DEFAULT_MARK}` : ""}`,
       )
       .join(", ");
     return `${kit.spec} (${name}): ${spellsStr}`;
@@ -704,7 +726,7 @@ const KIT_ENEMY_RE = /^(.+?) \((\S+)\): (.+)$/;
  * Read entry by entry — the spec-default mark has a `, ` of its own, so the
  * list cannot be split on it. */
 const KIT_ENTRY_RE =
-  /(.+?)(?: \[([^\]]+)\])?(?: \((?:landed (\d+)×|(spec default, not seen))\))?(?:, |$)/y;
+  /(.+?)(?: \[([^\]]+)\])?(?: \((?:landed (\d+)×|(spec default, (?:not seen|pressed \d+×, never landed)))\))?(?:, |$)/y;
 
 /** `formatEnemyCCKitHeader`'s line read back to its end — the gate's reader
  * (`checkEnemyCcKitLanded`). Null when the line is not in the generated

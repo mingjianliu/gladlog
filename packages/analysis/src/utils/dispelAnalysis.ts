@@ -17,6 +17,7 @@ import {
   SHIV_REMOVES,
   SHIV_SPELL_ID,
 } from "../data/scopedPurges";
+import { SELF_REMOVAL_BY_TYPE } from "../data/selfRemovals";
 import { SPELL_CATEGORIES as spellsData } from "../data/spellCategories";
 import {
   effectiveCooldownSeconds,
@@ -41,7 +42,6 @@ import {
   empowerSpans,
 } from "./castCommitSpans";
 import { charmedThrough } from "./charmedPlayer";
-import { sumLandedPressure } from "./incomingPressure";
 import {
   applyCdTalentModifiers,
   chargeStateAt,
@@ -59,6 +59,7 @@ import {
   getDRLevelAtTime,
   PATCH_121_GOLIVE_EPOCH_MS,
 } from "./drAnalysis";
+import { sumLandedPressure } from "./incomingPressure";
 import { logIsFrom } from "./logEra";
 import {
   distanceBetween,
@@ -197,19 +198,40 @@ function getDispelPenalty(
 }
 
 /**
- * F-C13: the backlash debuffs (the one penalty predicate, `getDispelPenalty`)
- * of dispel type `dispelType` that enemies had on `target` at `atMs` — a
- * defensive dispel removes every same-type debuff, so these go with the CC.
+ * The dispel types a spell removes for `spec` — every `CLEANSE_SPELLS_BY_TYPE`
+ * row that lists it (Purify Spirit: Magic and Curse; Cleanse: Magic, Poison
+ * and Disease). One cast removes all of them.
  */
-function coPresentBacklash(
+export function dispelTypesRemovedBy(
+  spellId: string,
+  spec: CombatUnitSpec,
+): Set<DispelType> {
+  const out = new Set<DispelType>();
+  for (const [t, bySpec] of Object.entries(CLEANSE_SPELLS_BY_TYPE))
+    if (bySpec[spec]?.includes(spellId)) out.add(t as DispelType);
+  return out;
+}
+
+/**
+ * F-C13: the backlash debuffs (the one penalty predicate, `getDispelPenalty`)
+ * enemies had on `target` at any instant of [fromMs, toMs] whose dispel type
+ * is in `dispelTypes` — a defensive dispel removes every debuff of every type
+ * its spell removes, so these go with the CC when it is pressed while they
+ * are up. WO3 #13 (2026-10-14): was the apply instant only, and the CC's own
+ * type only (a Purify Spirit on a Magic CC also takes a Curse backlash).
+ * @internal exported for tests
+ */
+export function coPresentBacklash(
   target: ICombatUnit,
-  dispelType: string,
-  atMs: number,
+  dispelTypes: ReadonlySet<string>,
+  fromMs: number,
+  toMs: number,
   enemyPlayerById: ReadonlyMap<string, ICombatUnit>,
 ): string[] {
   const up = new Map<string, { name: string; src: string }>();
+  const seen = new Map<string, { name: string; src: string }>();
   for (const a of target.auraEvents ?? []) {
-    if (a.logLine.timestamp > atMs) continue;
+    if (a.logLine.timestamp > toMs) continue;
     if (!a.spellId) continue;
     const key = `${a.spellId}|${a.srcUnitId}`;
     const ev = a.logLine.event;
@@ -217,18 +239,27 @@ function coPresentBacklash(
       ev === LogEvent.SPELL_AURA_APPLIED ||
       ev === LogEvent.SPELL_AURA_REFRESH ||
       ev === LogEvent.SPELL_AURA_APPLIED_DOSE
-    )
+    ) {
       up.set(key, { name: a.spellName, src: a.srcUnitId });
-    else if (ev === LogEvent.SPELL_AURA_REMOVED) up.delete(key);
+      if (a.logLine.timestamp >= fromMs)
+        seen.set(key, { name: a.spellName, src: a.srcUnitId });
+    } else if (ev === LogEvent.SPELL_AURA_REMOVED) {
+      // up into the window and removed inside it → it was up
+      if (a.logLine.timestamp > fromMs && up.has(key))
+        seen.set(key, up.get(key)!);
+      up.delete(key);
+    }
   }
+  for (const [key, a] of up) seen.set(key, a);
   const names: string[] = [];
-  for (const [key, a] of up) {
+  for (const [key, a] of seen) {
     const id = key.split("|")[0]!;
     const caster = enemyPlayerById.get(a.src);
     if (!caster) continue;
-    if (getDispelType(id) !== dispelType) continue;
+    const t = getDispelType(id);
+    if (!t || !dispelTypes.has(t)) continue;
     const isBalance = caster.spec === CombatUnitSpec.Druid_Balance;
-    if (!getDispelPenalty(id, isBalance, atMs)) continue;
+    if (!getDispelPenalty(id, isBalance, fromMs)) continue;
     const name = getEnglishSpellName(id, a.name);
     if (!names.includes(name)) names.push(name);
   }
@@ -1382,6 +1413,14 @@ export interface IMissedCleanseWindow {
    * time < the reaction threshold (MISSED_CLEANSE_THRESHOLD_S) inside the
    * window — you can't cleanse while CC'd/locked out, so it isn't a miss. */
   dispellersLockedOut: boolean;
+  /** Seconds of the window during which every capable dispeller was unable to
+   * cast — the intersection the gate above reads (`dispellersBlockedMsInWindow`);
+   * absent when there is no dispeller. Facts only (work order 2026-10-14c #12). */
+  dispellersBlockedS?: number;
+  /** WO3 #11: how long the TARGET itself could not press its own
+   * self-removal (`SELF_REMOVAL_BY_TYPE`) inside the window — facts only;
+   * absent when the type has no self-removal. */
+  targetSelfBlockedS?: number;
   /** The target was charmed (Mind Control, `charmedThrough`) for the
    * window: only a friendly offensive purge could remove anything on them
    * (`canRemoveFrom`). Absent on hand-built fixtures = false. */
@@ -2206,7 +2245,32 @@ function dispellersLockedOutForWindow(
   // dispeller's pet casts is asked of the pet.
   spellIdsOf?: (d: ICombatUnit) => readonly string[] | undefined,
 ): boolean {
-  if (dispellers.length === 0 || endMs <= startMs) return false;
+  const blockedMs = dispellersBlockedMsInWindow(
+    dispellers,
+    startMs,
+    endMs,
+    src,
+    spellIdsOf,
+  );
+  if (blockedMs === null) return false;
+  return endMs - startMs - blockedMs < freeThresholdMs;
+}
+
+/**
+ * The milliseconds of [startMs, endMs] during which EVERY dispeller was
+ * unable to cast — the intersection `dispellersLockedOutForWindow` gates on,
+ * exported for the fact that states it (work order 2026-10-14c #12:
+ * 29aabcc2's druid stunned 1.94 of the 6.0 s and the row said nothing).
+ * Null when there is no dispeller or no window.
+ */
+export function dispellersBlockedMsInWindow(
+  dispellers: ICombatUnit[],
+  startMs: number,
+  endMs: number,
+  src: CannotCastSrc,
+  spellIdsOf?: (d: ICombatUnit) => readonly string[] | undefined,
+): number | null {
+  if (dispellers.length === 0 || endMs <= startMs) return null;
   // The intersection is "everyone locked" millisecond by millisecond, which is
   // the window minus the time "at least one is free". Numerically: free time =
   // window length - intersection coverage. Build it as a per-unit union, then
@@ -2220,11 +2284,25 @@ function dispellersLockedOutForWindow(
       intersection === null
         ? merged
         : intersectIntervalSets(intersection, merged);
-    if (intersection.length === 0) return false; // someone was free throughout
+    if (intersection.length === 0) return 0; // someone was free throughout
   }
-  const blockedMs = coveredMsWithin(intersection ?? [], startMs, endMs);
-  const freeMs = endMs - startMs - blockedMs;
-  return freeMs < freeThresholdMs;
+  return coveredMsWithin(intersection ?? [], startMs, endMs);
+}
+
+/** WO3 #11: `targetSelfBlockedS` — the target's own cannot-cast time for its
+ *  self-removals of `dispelType`, on the same interval reading as
+ *  `dispellersBlockedMsInWindow`. */
+function targetSelfBlocked(
+  target: ICombatUnit,
+  dispelType: string,
+  startMs: number,
+  endMs: number,
+  src: CannotCastSrc,
+): { targetSelfBlockedS?: number } {
+  const ids = SELF_REMOVAL_BY_TYPE[dispelType];
+  if (!ids?.length) return {};
+  const b = dispellersBlockedMsInWindow([target], startMs, endMs, src, () => ids);
+  return b === null ? {} : { targetSelfBlockedS: b / 1000 };
 }
 
 /** The units still alive at `ms` (no death record at or before it). */
@@ -3237,6 +3315,29 @@ export function reconstructDispelSummary(
                       .charmed,
                   ),
               ),
+              ...(() => {
+                const cap = capableFor(
+                  windowDispelType,
+                  unit,
+                  applyTs,
+                  removal.ts,
+                );
+                const b = dispellersBlockedMsInWindow(
+                  aliveAt(cap.units, applyTs),
+                  applyTs,
+                  removal.ts,
+                  cannotCastSrc,
+                  (d) => removalSpellIdsFor(d, windowDispelType, cap.charmed),
+                );
+                return b === null ? {} : { dispellersBlockedS: b / 1000 };
+              })(),
+              ...targetSelfBlocked(
+                unit,
+                windowDispelType,
+                applyTs,
+                removal.ts,
+                cannotCastSrc,
+              ),
               losReachable: true,
               drChainRisk: computeDrChainRisk(
                 unit,
@@ -3492,10 +3593,28 @@ export function reconstructDispelSummary(
             cleanseWasOnCD,
             cdBurnedOn,
             ...(() => {
+              // the types every capable dispeller's own button removes
+              // (a backlash only some of them would take is not claimed)
+              let types: Set<string> | undefined;
+              for (const d of capableDispellers) {
+                const own = new Set<string>();
+                for (const sid of removalSpellIdsFor(
+                  d,
+                  windowDispelType,
+                  charmed,
+                ))
+                  for (const t of dispelTypesRemovedBy(sid, d.spec))
+                    own.add(t);
+                own.add(windowDispelType);
+                types = types
+                  ? new Set([...types].filter((t) => own.has(t)))
+                  : own;
+              }
               const co = coPresentBacklash(
                 unit,
-                windowDispelType,
+                types ?? new Set([windowDispelType]),
                 applyTs,
+                removal.ts,
                 enemyPlayerById,
               );
               return co.length ? { coRemovesBacklash: co.join("、") } : {};
@@ -3512,6 +3631,23 @@ export function reconstructDispelSummary(
               MISSED_CLEANSE_THRESHOLD_S * 1000,
               // FT-T10: asked for the dispel(s) each would press
               (d) => removalSpellIdsFor(d, windowDispelType, charmed),
+            ),
+            ...(() => {
+              const b = dispellersBlockedMsInWindow(
+                capableDispellers,
+                applyTs,
+                removal.ts,
+                cannotCastSrc,
+                (d) => removalSpellIdsFor(d, windowDispelType, charmed),
+              );
+              return b === null ? {} : { dispellersBlockedS: b / 1000 };
+            })(),
+            ...targetSelfBlocked(
+              unit,
+              windowDispelType,
+              applyTs,
+              removal.ts,
+              cannotCastSrc,
             ),
             losReachable: anyDispellerReachable(
               capableDispellers,

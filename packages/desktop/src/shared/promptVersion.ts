@@ -1610,5 +1610,25 @@
  *  lock chain no longer names the unit's own Deep Breath as a CC. 605
  *  files: kick-eaten −50 / +15 (−12 whose only pressure fact was the
  *  post-lock low, −38 / +15 cap re-ranking); death-setup chain text 3 rows.
+ *  v388 (2026-10-14, FT, work order 3 Part 1 — facts only — and agy
+ *  40-FT-86 on v387): round end for [CONSEQ] silences / kicks, [CD PRIOR]
+ *  and summon reach; the mitigation audit runs to the death instant; even-
+ *  count cancel medians; kick-eaten names an in-lock press still refused
+ *  after the lock as its own cooldown, lists every in-lock press of a lock
+ *  longer than 5 s, dates a hard-cast switch at its bar; owner-cast control
+ *  lengths get their own [CC ON ENEMY] lines; ENEMY CC KIT "pressed N×,
+ *  never landed"; missed-cleanse dispellersCcS, ownerSelfRemoval (Cloak of
+ *  Shadows / Divine Shield / Ice Block by type), coRemovesBacklash over the
+ *  window and every dispel type the dispel removes; stayed-in snaredS;
+ *  slow-defensive windowEndT; cd-hoarded freeAfterAttemptS after the
+ *  owner's own GCD; enemy Ultimate Penitence names its channel target and
+ *  damage; friendly Cauterize / Cheat Death [PROC] lines; MINOR DISPELS
+ *  says whether an Unstable Affliction / Vampiric Touch backlash landed;
+ *  Seduction is a disorient in the pet kit; death lines say how long the
+ *  option had been off cooldown; Tremor Totem and Vanish on the roster
+ *  (Utility); enemy major-buff intervals merge re-broadcasts. agy: an own
+ *  flight that opens a death's lock run is named in the chain, and an
+ *  off-GCD instant is never a hard cast's companion row. 605 files: no
+ *  candidate added or removed.
  */
-export const PROMPT_VERSION = 387;
+export const PROMPT_VERSION = 388;

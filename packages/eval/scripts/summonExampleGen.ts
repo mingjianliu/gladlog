@@ -59,7 +59,7 @@ if (!manifest) {
 /** Warlock pets by npcId → what the pet DOES (the ruling: "驱散、诱惑、恐惧、晕眩"). */
 const WARLOCK_PET_FUNCTION: Record<string, { pet: string; does: string }> = {
   "417": { pet: "Felhunter", does: "Spell Lock (kick) + Devour Magic (purge)" },
-  "1863": { pet: "Sayaad", does: "Seduction (incapacitate)" },
+  "1863": { pet: "Sayaad", does: "Seduction (disorient)" },
   "17252": { pet: "Felguard", does: "Axe Toss (stun)" },
   "416": { pet: "Imp", does: "Singe Magic (friendly dispel)" },
   "1860": { pet: "Voidwalker", does: "no control / dispel" },

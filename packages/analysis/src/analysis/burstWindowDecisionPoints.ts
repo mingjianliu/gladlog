@@ -29,48 +29,48 @@
  */
 import { type ICombatUnit } from "@gladlog/parser-compat";
 
+import { castAndEffectIds, isCastOrEffect } from "../data/castEffectAuras";
 import { HEALING_VERDICTS } from "../data/healingVerdicts";
 import { getEnglishSpellName } from "../data/spellEffectData";
-import { supersededAuraBreaks } from "../utils/auraIntervals";
-import { buffFullDurationForCaster } from "../utils/buffDuration";
 import spellIdLists from "../data/spellIdLists";
 import {
   ccSpellIds,
   rootSpellIds,
   spells as spellMeta,
 } from "../data/spellTags";
+import { supersededAuraBreaks } from "../utils/auraIntervals";
+import { buffFullDurationForCaster } from "../utils/buffDuration";
+import {
+  cannotCastIntervalsForSpells,
+  petCastersOf,
+} from "../utils/cannotCastIntervals";
 import {
   cdCanHelpAnotherUnit,
+  cdIsProcOnly,
   cdReadyInTimeAt,
   extractMajorCooldowns,
   gridHpPct,
   hpTroughInWindow,
   type IMajorCooldownInfo,
   isDeadAtRenderSecond,
-  cdIsProcOnly,
   SELF_CAST_NOOP_EXTERNAL_IDS,
   specToString,
   TEAM_HEAL_CD_IDS,
 } from "../utils/cooldowns";
 import { externalReachYards } from "../utils/deathOutcomeAnalysis";
+import { drEffectAurasOfCast } from "../utils/drAnalysis";
 import {
   type IAlignedBurstWindow,
   type IEnemyCDTimeline,
   reconstructEnemyCDTimeline,
   SOLO_WINDOW_MIN_WEIGHT,
 } from "../utils/enemyCDs";
+import { LANDED_PAIR_MS } from "../utils/kickAudit";
 import { getUnitPositionAtTime } from "../utils/losAnalysis";
 import { LOS_SWEEP_GAP_MS } from "../utils/positionSampling";
 import { canReachTargetAt } from "../utils/rootReachability";
-import {
-  cannotCastIntervalsForSpells,
-  petCastersOf,
-} from "../utils/cannotCastIntervals";
-import { isDeadAt } from "../utils/unitDeath";
-import { castAndEffectIds, isCastOrEffect } from "../data/castEffectAuras";
-import { drEffectAurasOfCast } from "../utils/drAnalysis";
-import { LANDED_PAIR_MS } from "../utils/kickAudit";
 import { isOffensiveSpell } from "../utils/spellDanger";
+import { isDeadAt } from "../utils/unitDeath";
 import { buildFilteredAuraIntervals } from "../utils/utils";
 import {
   CRISIS_HP_PCT_RENDERED,
@@ -615,6 +615,11 @@ export interface BurstWindowDecisionPoint {
   tSec: number;
   /** last whole second of the bounded window */
   endSec: number;
+  /** last whole second of the OUTCOME horizon — `endSec`, never shorter than
+   * the response window (`tSec + BURST_RESPONSE_WINDOW_SEC`): the span the
+   * pressured trough, `anyFriendlyDeath` and the reference table read.
+   * WO3 #18 (r1008-141): slow-defensive-response prints it, `windowEndT`. */
+  outcomeEndSec: number;
   /** `endSec - tSec` (rendered seconds, never raw) */
   durationSec: number;
   /** the CD that OPENED the window (earliest cast; a same-second tie goes to
@@ -1813,6 +1818,7 @@ export function burstWindowDecisionPoints(
         tMs,
         tSec,
         endSec,
+        outcomeEndSec,
         durationSec: endSec - tSec,
         leadCd,
         extraCds,

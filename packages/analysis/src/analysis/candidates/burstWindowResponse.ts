@@ -254,6 +254,9 @@ export function burstWindowResponseEvents(
         pressuredHpT: fmtFactTime(
           p.pressured!.troughHpSec ?? p.pressured!.minHpSec ?? p.tSec,
         ),
+        // WO3 #18 (r1008-141): where the window the trough and the death
+        // read ends — the burst's own span, not the 8 s answer window
+        windowEndT: fmtFactTime(p.outcomeEndSec),
         diedInWindow: p.anyFriendlyDeath ? "yes" : "no",
         refN: String(ref.nResp + ref.nNoResp),
         refDeathResp: String(ref.deathRespPct),

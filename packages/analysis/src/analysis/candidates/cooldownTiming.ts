@@ -8,42 +8,29 @@
  * angles — was this button pressed at the moment the team's window wanted it —
  * which is why the shared window predicates live here with them.
  */
-import { buffFullDurationForCaster } from "../../utils/buffDuration";
-import {
-  distanceBetween,
-  getUnitPositionAtTime,
-} from "../../utils/losAnalysis";
-import { cdOutOfRangeReachYards, isDeadAt } from "../../utils/positionAnalysis";
-import { INTERP_MAX_GAP_MS } from "../../utils/positionSampling";
+import { ABILITY_EFFECTS_GENERATED } from "../../data/abilityEffectsGenerated";
 import { costNormPhrase } from "../../data/curatedAbilityFacts";
+import { MITIGATION_TABLE } from "../../data/mitigationData";
+import { OFF_GCD_SPELL_IDS } from "../../data/offGcdGenerated";
+import { getEnglishSpellName } from "../../data/spellEffectData";
 import { reachesAlly } from "../../data/spellTargeting";
 import {
   syncRefClearsMinContrast,
   type SyncWindowPriorRef,
 } from "../../data/syncWindowPrior";
+import {
+  type DecisionRecord,
+  isDecisionTraceActive,
+  traceDecision,
+} from "../../facts/decisionTrace";
+import { buffFullDurationForCaster } from "../../utils/buffDuration";
 import { burstCastSpan } from "../../utils/burstLedger";
 import {
-  cdCanHelpAnotherUnit,
-  cdAvailableAt,
-  cdReadyInTimeAt,
-  CD_INSTANT_SLACK_S,
-  chargeStateAt,
-  lockCastsOf,
-  DEFENSIVE_TAGS,
-  getUnitHpAtTimestamp,
-  HP_SAMPLE_RADIUS_MS,
-  type IMajorCooldownInfo,
-  isHealerSpec,
-  cdIsProcOnly,
-  SELF_CAST_NOOP_EXTERNAL_IDS,
-  THROUGHPUT_EMPOWER_DEFENSIVE_IDS,
-} from "../../utils/cooldowns";
-import {
-  analyzeOutgoingCCChains,
-  DR_CATEGORY_MAP,
-  drDurationFactor,
-  type DRLevel,
-} from "../../utils/drAnalysis";
+  type ActWindowState,
+  cannotCastIntervalsForSpells,
+  couldActForMostOf,
+  lockedSchoolsText,
+} from "../../utils/cannotCastIntervals";
 import { oppressingRoarOnAtMs } from "../../utils/ccBreakAnalysis";
 import { ccFullDurationForApplication } from "../../utils/ccDuration";
 import {
@@ -53,26 +40,40 @@ import {
   renderedCcDuration,
 } from "../../utils/ccTrinketAnalysis";
 import {
-  type ActWindowState,
-  cannotCastIntervalsForSpells,
-  couldActForMostOf,
-  lockedSchoolsText,
-} from "../../utils/cannotCastIntervals";
-import { getEnglishSpellName } from "../../data/spellEffectData";
-import { incomingPressureBySchool } from "../../utils/incomingPressure";
-import { castFailedInWindow, type RawStreams } from "../../utils/rawStreams";
-import type { RosterSides } from "../../utils/rosterSide";
+  CD_INSTANT_SLACK_S,
+  cdAvailableAt,
+  cdCanHelpAnotherUnit,
+  cdIsProcOnly,
+  cdReadyInTimeAt,
+  chargeStateAt,
+  DEFENSIVE_TAGS,
+  getUnitHpAtTimestamp,
+  HP_SAMPLE_RADIUS_MS,
+  type IMajorCooldownInfo,
+  isHealerSpec,
+  lockCastsOf,
+  SELF_CAST_NOOP_EXTERNAL_IDS,
+  THROUGHPUT_EMPOWER_DEFENSIVE_IDS,
+} from "../../utils/cooldowns";
 import {
-  type DecisionRecord,
-  isDecisionTraceActive,
-  traceDecision,
-} from "../../facts/decisionTrace";
+  analyzeOutgoingCCChains,
+  DR_CATEGORY_MAP,
+  drDurationFactor,
+  type DRLevel,
+} from "../../utils/drAnalysis";
+import { incomingPressureBySchool } from "../../utils/incomingPressure";
+import {
+  distanceBetween,
+  getUnitPositionAtTime,
+} from "../../utils/losAnalysis";
+import { cdOutOfRangeReachYards, isDeadAt } from "../../utils/positionAnalysis";
+import { INTERP_MAX_GAP_MS } from "../../utils/positionSampling";
+import { castFailedInWindow, type RawStreams } from "../../utils/rawStreams";
 import { renderedWindowSeconds, toRenderSecond } from "../../utils/renderGrid";
+import type { RosterSides } from "../../utils/rosterSide";
 import { SOLO_SHUFFLE_BRACKET } from "../../utils/roundEnd";
 import { OFFENSIVE_CD_SPELL_IDS } from "../../utils/spellDanger";
 import { type MatchThreatLevel } from "../../utils/threatAssessment";
-import { ABILITY_EFFECTS_GENERATED } from "../../data/abilityEffectsGenerated";
-import { MITIGATION_TABLE } from "../../data/mitigationData";
 import {
   type DecisionPoint,
   DMG_WINDOW_MS,
@@ -84,6 +85,7 @@ import { CandidateEvent } from "../types";
 import {
   filterIntentGuardEvidence,
   formatAttemptedFact,
+  gcdLockedUntilS,
   INTENT_GUARD_GCD_S,
   NOT_READY_REASONS,
 } from "./shared";
@@ -2178,12 +2180,24 @@ export function cdHoardedEvents(
           ? `${off(rejectAt[0]!)}s`
           : `${off(rejectAt[0]!)}…${off(rejectAt.at(-1)!)}s`
         : "";
+      // WO3 #14 (r1008-79): a "not ready" reject of an on-GCD cooldown
+      // inside the owner's own GCD is free only once that GCD ends
+      // (`gcdLockedUntilS`, the guard's own test)
+      const freeFromS = failedHits.reduce((m, h) => {
+        const gcdEnd =
+          ownCastSuccessSeconds &&
+          NOT_READY_REASONS.has(h.reason) &&
+          !OFF_GCD_SPELL_IDS.has(String(h.spellId))
+            ? gcdLockedUntilS(ownCastSuccessSeconds, h.tSeconds)
+            : undefined;
+        return Math.max(m, gcdEnd ?? h.tSeconds);
+      }, -Infinity);
       const afterReject =
         rejectAt.length && ownerActState
           ? ownerActState(
               windowFromS,
               windowToS,
-              rejectAt.at(-1)!,
+              Math.min(freeFromS, windowToS),
               readySpellIds,
               own,
             )

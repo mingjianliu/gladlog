@@ -16,6 +16,7 @@ import {
 } from "../data/ccBreakAbilities";
 import { CHANNELED_SPELL_IDS } from "../data/channeledGenerated";
 import { hardcastHealSpell } from "../data/kickPriorityHealSpells";
+import { OFF_GCD_SPELL_IDS } from "../data/offGcdGenerated";
 import {
   BREAK_RACIAL_SPELL_IDS,
   racialTrinketLockoutMs,
@@ -3558,7 +3559,11 @@ export function analyzePlayerCCAndTrinket(
               st.t <= c.t &&
               st.t >= c.t - CAST_START_LOOKBACK_S,
           );
-        if (!hasStart(switchCast)) {
+        // agy 40-FT-86: only an ON-GCD instant can be a companion row of the
+        // bar's press — an off-GCD one (Pain Suppression, DB2
+        // `OFF_GCD_SPELL_IDS`) can be pressed while the bar runs, and is a
+        // press of its own
+        if (!hasStart(switchCast) && !OFF_GCD_SPELL_IDS.has(switchCast.spellId)) {
           const companionOf = castTimes.find(
             (c) =>
               c.ms > switchCast!.ms &&
@@ -3582,16 +3587,33 @@ export function analyzePlayerCCAndTrinket(
         }
       }
       if (switchCast !== undefined) {
-        inst.switchSpellName = switchCast.spellName;
-        inst.switchDelayS = switchCast.t - inst.atSeconds;
+        const sc = switchCast;
+        inst.switchSpellName = sc.spellName;
         inst.switchWasHardCast = haveCastStarts
           ? castStarts.some(
               (st) =>
-                st.spellId === switchCast.spellId &&
-                st.t <= switchCast.t &&
-                st.t >= switchCast.t - CAST_START_LOOKBACK_S,
+                st.spellId === sc.spellId &&
+                st.t <= sc.t &&
+                st.t >= sc.t - CAST_START_LOOKBACK_S,
             )
           : null;
+        // A hard cast acted when its bar began, not when it finished (work
+        // order 2026-10-14c #7: 3306e8ee's bar began 0.023 s after the kick
+        // and read "2.0s later"): the latest cast start of that spell after
+        // the kick and at or before its SUCCESS. Otherwise the SUCCESS.
+        const barStart = castStarts
+          .filter(
+            (st) =>
+              st.spellId === sc.spellId &&
+              st.t > inst.atSeconds &&
+              st.t <= sc.t &&
+              st.t >= sc.t - CAST_START_LOOKBACK_S,
+          )
+          .reduce<number | null>(
+            (m, st) => (m === null || st.t > m ? st.t : m),
+            null,
+          );
+        inst.switchDelayS = (barStart ?? sc.t) - inst.atSeconds;
         inst.switchWasChanneled = CHANNELED_SPELL_IDS.has(switchCast.spellId);
         // An empower's SPELL_CAST_SUCCESS is logged when the hold BEGINS
         // (with SPELL_EMPOWER_START); its SPELL_EMPOWER_END follows at the

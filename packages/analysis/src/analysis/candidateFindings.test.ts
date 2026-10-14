@@ -1434,9 +1434,7 @@ describe("团队协作候选映射(2026-07-24 覆盖面扩充)", () => {
       expect(
         facts({ sourceDistYd: 18.4, castWindowS: null })["outRangeable"],
       ).toBe("no (cast length unknown)");
-      expect(
-        facts({ sourceDistYd: 5.6, castWindowS: 3 })["outRangeable"],
-      ).toBe(
+      expect(facts({ sourceDistYd: 5.6, castWindowS: 3 })["outRangeable"]).toBe(
         "no (kicker within 2 yd of kick range at cast start — inside it once hitboxes count)",
       );
       expect(
@@ -1509,7 +1507,9 @@ describe("团队协作候选映射(2026-07-24 覆盖面扩充)", () => {
       expect(inside["kickLandedFromYd"]).toBeUndefined();
       expect(inside["outRangeable"]).toMatch(/^yes /);
       expect(
-        facts({ sourceDistYd: 18.4, kickLandedFromYd: 5.0 })["kickLandedFromYd"],
+        facts({ sourceDistYd: 18.4, kickLandedFromYd: 5.0 })[
+          "kickLandedFromYd"
+        ],
       ).toBeUndefined();
     });
 
@@ -1521,7 +1521,9 @@ describe("团队协作候选映射(2026-07-24 覆盖面扩充)", () => {
         nearestKickerSampleGapS: 2.3,
       });
       expect(f["sourceDistYd"]).toBe("~17 (position samples 2.3s apart)");
-      expect(f["nearestKickerDistYd"]).toBe("~17 (position samples 2.3s apart)");
+      expect(f["nearestKickerDistYd"]).toBe(
+        "~17 (position samples 2.3s apart)",
+      );
       expect(f["outRangeable"]).toBe(
         "no (kicker distance approximate — position samples 2.3s apart)",
       );
@@ -1593,7 +1595,11 @@ describe("团队协作候选映射(2026-07-24 覆盖面扩充)", () => {
       expect(
         facts({
           sourceDistYd: 10.5,
-          sourceGapCloser: { state: "ready", spellId: "100", spellName: "Charge" },
+          sourceGapCloser: {
+            state: "ready",
+            spellId: "100",
+            spellName: "Charge",
+          },
         })["outRangeable"],
       ).toBe("no (Charge ready)");
     });
@@ -1813,6 +1819,50 @@ describe("团队协作候选映射(2026-07-24 覆盖面扩充)", () => {
     expect(f).not.toMatch(/[一-鿿]/); // checkCjkLeak: reasons stay out
   });
 
+  it("kick-eaten: an off-GCD spell still not ready after the lock was its own cooldown (work order 2026-10-14c #4)", () => {
+    // Fade (586, off the GCD) refused at +0.5 s inside a 3 s lock and again
+    // at +3.6 s after it, never cast in between
+    const run = (ownerCasts: { spellId: string; tSeconds: number }[]) =>
+      kickEatenEvents(
+        [
+          kickInst({
+            lockoutDurationSeconds: 3,
+            postKick: "acted" as const,
+            firstActionDelayS: 4.4,
+          }),
+        ],
+        { id: "P1", name: "Me" },
+        {
+          rawStreams: streams([failed(91.63, 586), failed(94.73, 586)]),
+          ownerCasts,
+        },
+      )[0]!.facts["postKick"]!;
+    const f = run([]);
+    expect(f).toContain(
+      "its own cooldown 1x — still not ready after the lock (Fade +0.5s)",
+    );
+    expect(f).not.toContain("inside the lockout");
+    // a cast of it in between: no proof
+    expect(run([{ spellId: "586", tSeconds: 93.0 }])).not.toContain(
+      "its own cooldown",
+    );
+  });
+
+  it("kick-eaten: a lock longer than 5 s lists its presses to the lock's end (work order 2026-10-14c #5, fa5e6c66)", () => {
+    // 6 s lock: presses at +1.8 s and +5.5 s are both inside it
+    const evts = kickEatenEvents(
+      [kickInst({ lockoutDurationSeconds: 6 })],
+      { id: "P1", name: "Me" },
+      {
+        rawStreams: streams([failed(92.96, 14914), failed(96.63, 14914)]),
+        ownerCasts: [],
+      },
+    );
+    expect(evts[0]!.facts["postKick"]).toContain(
+      "pressed 2x but rejected (Holy Fire×2 +1.8/+5.5s) inside the lockout",
+    );
+  });
+
   it("kick-eaten idle: a 'not ready' press after the lock ended is stated apart (work order 2026-10-14b fix 2, 138e632d)", () => {
     // 3 s lock: Holy Fire +1.8 s inside it, Holy Fire +3.7 s after it
     const evts = kickEatenEvents(
@@ -1941,7 +1991,9 @@ describe("团队协作候选映射(2026-07-24 覆盖面扩充)", () => {
         ownerCasts: [{ spellId: "853", tSeconds: 94.13 }],
       },
     )[0]!.facts["postKick"]!;
-    expect(f).toContain("pressed 1x but rejected (Hammer of Justice +2.3s) inside the lockout");
+    expect(f).toContain(
+      "pressed 1x but rejected (Hammer of Justice +2.3s) inside the lockout",
+    );
   });
 
   // Triage 2026-09-29 F-K12a, user rulings A34 (2026-09-30) and the exempt
@@ -1970,7 +2022,12 @@ describe("团队协作候选映射(2026-07-24 覆盖面扩充)", () => {
     const acted = (atSeconds: number) =>
       kickInst({ atSeconds, postKick: "acted", firstActionDelayS: 4.1 });
     const menu = (
-      kicks: Array<[number, typeof burstOnly | typeof lowHp | typeof death | typeof readyOnly]>,
+      kicks: Array<
+        [
+          number,
+          typeof burstOnly | typeof lowHp | typeof death | typeof readyOnly,
+        ]
+      >,
     ) =>
       kickEatenEvents(
         kicks.map(([t]) => acted(t)),
@@ -2072,7 +2129,13 @@ describe("团队协作候选映射(2026-07-24 覆盖面扩充)", () => {
     const cancelsOf = (startS: number, cancelS: number) => ({
       hardcasts: 5,
       cancels: [
-        { spellId: "51514", spellName: "妖术", startS, cancelS, progressPct: 31 },
+        {
+          spellId: "51514",
+          spellName: "妖术",
+          startS,
+          cancelS,
+          progressPct: 31,
+        },
       ],
       baitedKicks: [],
     });
@@ -2261,7 +2324,9 @@ describe("团队协作候选映射(2026-07-24 覆盖面扩充)", () => {
       }),
       [failed(103.886, 366155, "超出范围")],
     );
-    expect(f).toBe("acted on another school 1.4s later (Echo; not a hard cast)");
+    expect(f).toBe(
+      "acted on another school 1.4s later (Echo; not a hard cast)",
+    );
   });
 
   it("kick-eaten: a not-ready press of a spell with one school outside the lock is its own cooldown, not a lockout reject (F-K7b, 2c6e85ec @15)", () => {
@@ -2389,12 +2454,12 @@ describe("团队协作候选映射(2026-07-24 覆盖面扩充)", () => {
       switchDelayS: 1.7,
       switchWasHardCast: false,
     };
-    expect(postKickOf(natureKick({ ...base, switchWasChanneled: true }), [])).toBe(
-      "acted on another school 1.7s later (Penance; channel)",
-    );
-    expect(postKickOf(natureKick({ ...base, switchWasChanneled: false }), [])).toBe(
-      "acted on another school 1.7s later (Penance; not a hard cast)",
-    );
+    expect(
+      postKickOf(natureKick({ ...base, switchWasChanneled: true }), []),
+    ).toBe("acted on another school 1.7s later (Penance; channel)");
+    expect(
+      postKickOf(natureKick({ ...base, switchWasChanneled: false }), []),
+    ).toBe("acted on another school 1.7s later (Penance; not a hard cast)");
   });
 
   it("kick-eaten switched: an earlier first cast is named too (work order 2026-10-14b fix 12, 1b930c17 @155)", () => {
@@ -2410,9 +2475,9 @@ describe("团队协作候选映射(2026-07-24 覆盖面扩充)", () => {
       "acted on another school 3.0s later (Spirit Walk; not a hard cast); first cast 1.0s later (Riptide)",
     );
     // the switch IS the first cast: nothing added
-    expect(
-      postKickOf(natureKick({ ...k, firstActionDelayS: 3.02 }), []),
-    ).toBe("acted on another school 3.0s later (Spirit Walk; not a hard cast)");
+    expect(postKickOf(natureKick({ ...k, firstActionDelayS: 3.02 }), [])).toBe(
+      "acted on another school 3.0s later (Spirit Walk; not a hard cast)",
+    );
   });
 
   it("kick-eaten: an empowered switching cast is not 'not a hard cast' (F-K13, 02c8e3ac @33.9)", () => {
@@ -2422,16 +2487,16 @@ describe("团队协作候选映射(2026-07-24 覆盖面扩充)", () => {
       switchDelayS: 2.4,
       switchWasHardCast: false,
     };
-    expect(postKickOf(natureKick({ ...base, switchWasEmpowered: true }), [])).toBe(
-      "acted on another school 2.4s later (Fire Breath; empowered cast)",
-    );
+    expect(
+      postKickOf(natureKick({ ...base, switchWasEmpowered: true }), []),
+    ).toBe("acted on another school 2.4s later (Fire Breath; empowered cast)");
     // no empower data (old archive) or not an empower: today's qualifier
-    expect(postKickOf(natureKick({ ...base, switchWasEmpowered: null }), [])).toBe(
-      "acted on another school 2.4s later (Fire Breath; not a hard cast)",
-    );
-    expect(postKickOf(natureKick({ ...base, switchWasEmpowered: false }), [])).toBe(
-      "acted on another school 2.4s later (Fire Breath; not a hard cast)",
-    );
+    expect(
+      postKickOf(natureKick({ ...base, switchWasEmpowered: null }), []),
+    ).toBe("acted on another school 2.4s later (Fire Breath; not a hard cast)");
+    expect(
+      postKickOf(natureKick({ ...base, switchWasEmpowered: false }), []),
+    ).toBe("acted on another school 2.4s later (Fire Breath; not a hard cast)");
   });
 
   it("kick-eaten: a cast started under an interrupt immunity that ran out is a fact (F-K14b, 3306e8ee @40.3)", () => {
@@ -3862,7 +3927,9 @@ describe("cdHoardedEvents 意图守护(BACKLOG #26 Task 2,按了被拒不算屯�
     expect(early[0]!.facts["attempted"]).toBeUndefined();
     const ready = run(199.3, 199.2);
     expect(ready).toHaveLength(1);
-    expect(ready[0]!.facts["attempted"]).toBe("pressed but rejected (not ready yet×1)");
+    expect(ready[0]!.facts["attempted"]).toBe(
+      "pressed but rejected (not ready yet×1)",
+    );
   });
 
   it("⑥ 新增(2026-08-30 多技能合并):两个 ready CD 各自的 CAST_FAILED 一起并入 facts.attempted,不是只看第一个", () => {

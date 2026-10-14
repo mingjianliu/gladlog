@@ -224,9 +224,7 @@ export function filterIntentGuardEvidence(
     );
     if (preCast) return false;
     if (NOT_READY_REASONS.has(h.reason) && ownCasts) {
-      const gcdLocked = ownCasts.some(
-        (ct) => ct <= h.tSeconds && ct >= h.tSeconds - INTENT_GUARD_GCD_S,
-      );
+      const gcdLocked = gcdLockedUntilS(ownCasts, h.tSeconds) !== undefined;
       if (gcdLocked) {
         if (keepUntil === undefined) return false;
         const castLater = sameSpellCastSeconds.some(
@@ -238,6 +236,27 @@ export function filterIntentGuardEvidence(
     }
     return true;
   });
+}
+
+/**
+ * When the owner's own global cooldown that covers `atS` ends: the latest own
+ * successful cast at or before `atS` and within `INTENT_GUARD_GCD_S` of it,
+ * plus that ceiling; undefined when none covers it. The intent guard's
+ * "GCD-locked" test (`filterIntentGuardEvidence`) and cd-hoarded's
+ * `freeAfterAttemptS` start (WO3 #14, r1008-79: two Restoral rejects 0.16 /
+ * 0.32 s after a Sheilun's Gift counted their free time from the rejects)
+ * read this one function. The ceiling over-states a hasted GCD — fewer
+ * free seconds, the side that never adds an accusation.
+ */
+export function gcdLockedUntilS(
+  ownCastSuccessSeconds: readonly number[],
+  atS: number,
+): number | undefined {
+  let last: number | undefined;
+  for (const ct of ownCastSuccessSeconds)
+    if (ct <= atS && ct >= atS - INTENT_GUARD_GCD_S && (last === undefined || ct > last))
+      last = ct;
+  return last === undefined ? undefined : last + INTENT_GUARD_GCD_S;
 }
 
 /** One SPELL_CAST_FAILED reason in the prompt's words: "not ready yet" for

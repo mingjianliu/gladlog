@@ -720,6 +720,74 @@ describe("analyzePlayerCCAndTrinket — structured data contract (N4)", () => {
     expect(k!.switchWasHardCast).toBe(true);
     // the first cast after the kick is the same press, not the companion row
     expect(k!.firstActionSpellName).toBe("Chrono Flames");
+    // dated when its bar began (work order 2026-10-14c #7), not at SUCCESS
+    expect(k!.switchDelayS).toBeCloseTo(1.058, 6);
+  });
+
+  it("agy 40-FT-86: an OFF-GCD instant 2 ms before a bar's SUCCESS is a press of its own, not its companion row", () => {
+    // Frost locked (Pain Suppression is Holy); Chrono Flames 431443: CAST_START +1.058 s, a Living Flame 361509
+    // SUCCESS 2 ms before its own SUCCESS at +1.881 s
+    const enemy = makeUnit("enemy-1", {
+      name: "EnemyRogue",
+      spec: CombatUnitSpec.Rogue_Subtlety,
+      reaction: CombatUnitReaction.Hostile,
+    });
+    const evoker = makeUnit("player-1", {
+      name: "PlayerEvoker",
+      spec: CombatUnitSpec.Evoker_Preservation,
+      reaction: CombatUnitReaction.Friendly,
+      actionIn: [
+        makeInterruptEvent(
+          "1766",
+          "Kick",
+          "116",
+          "Frostbolt",
+          MATCH_START + 20_000,
+          "enemy-1",
+          "EnemyRogue",
+        ),
+      ],
+      castStartEvents: [
+        {
+          logLine: {
+            event: LogEvent.SPELL_CAST_START,
+            timestamp: MATCH_START + 21_058,
+            parameters: [],
+          },
+          spellId: "431443",
+        } as any,
+      ],
+      spellCastEvents: [
+        makeSpellCastEvent(
+          "33206",
+          MATCH_START + 21_879,
+          "player-1",
+          "PlayerEvoker",
+          "enemy-1",
+          "EnemyRogue",
+          0,
+          "Pain Suppression",
+        ),
+        makeSpellCastEvent(
+          "431443",
+          MATCH_START + 21_881,
+          "player-1",
+          "PlayerEvoker",
+          "enemy-1",
+          "EnemyRogue",
+          0,
+          "Chrono Flames",
+        ),
+      ],
+    });
+    const [k] = analyzePlayerCCAndTrinket(
+      evoker,
+      [enemy],
+      makeCombat(),
+    ).interruptInstances;
+    expect(k!.postKick).toBe("switched");
+    expect(k!.switchSpellName).toBe("Pain Suppression");
+    expect(k!.firstActionSpellName).toBe("Pain Suppression");
   });
 
   // Triage 2026-09-29 kick-eaten F-K5a / F-K5b / F-K5d / F-K6d.

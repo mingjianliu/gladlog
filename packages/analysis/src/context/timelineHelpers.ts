@@ -247,10 +247,13 @@ export function extractEnemyMajorBuffIntervals(
     const intervals: IEnemyBuffInterval[] = [];
     // key: "${spellId}:${srcUnitId}" → startMs
     const openBuffs = new Map<string, number>();
+    // WO3 #20: a re-broadcast (REMOVED + APPLIED ≤ 1 ms apart) is one buff,
+    // not an end and a new one — the one predicate (`dropAuraRebroadcasts`)
+    const auraEvents = dropAuraRebroadcasts(enemy.auraEvents);
 
     // Pre-match scan: seed buffs applied before match start that were not removed before start
     const preNetActive = new Map<string, boolean>();
-    for (const event of enemy.auraEvents) {
+    for (const event of auraEvents) {
       const ts: number = event.logLine.timestamp;
       if (ts >= matchStartMs) break; // auraEvents are chronological; stop at match start
       const spellId = event.spellId ?? "";
@@ -267,7 +270,7 @@ export function extractEnemyMajorBuffIntervals(
     }
 
     // Main pass: process events during the match
-    for (const event of enemy.auraEvents) {
+    for (const event of auraEvents) {
       const spellId = event.spellId ?? "";
       const buffDef = ENEMY_MAJOR_BUFF_SPELL_IDS[spellId];
       if (!buffDef) continue;
