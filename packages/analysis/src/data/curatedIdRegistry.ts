@@ -185,7 +185,11 @@ import {
   SELF_WALL_AURA_TO_CAST_ID,
 } from "./mitigationData";
 import { MITIGATION_VERDICTS } from "./mitigationVerdicts";
-import { CHANNEL_PROXY_IDS, DRINK_AURA_IDS } from "./occupancyAuras";
+import {
+  CHANNEL_PROXY_IDS,
+  DRINK_AURA_IDS,
+  OWN_FLIGHT_AURA_IDS,
+} from "./occupancyAuras";
 import {
   HIGH_VALUE_PURGEABLE_BUFFS,
   PURGE_WHITELIST_DATA_BLOCKED,
@@ -1024,6 +1028,9 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   ),
   t("DRINK_AURA_IDS", "data/occupancyAuras.ts", "aura", () =>
     set(DRINK_AURA_IDS),
+  ),
+  t("OWN_FLIGHT_AURA_IDS", "data/occupancyAuras.ts", "aura", () =>
+    set(OWN_FLIGHT_AURA_IDS),
   ),
   // GH #79 / B4: classification overrides for interrupted spells.
   t("KICKED_SPELL_OVERRIDES", "data/kickedSpellCategories.ts", "cast", () => [

@@ -1,14 +1,14 @@
 import { ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
+import { BACKLASH_AURA_CC_TYPE } from "../data/backlashCc";
+import { OWN_FLIGHT_AURA_IDS } from "../data/occupancyAuras";
 import {
   isCastBlockingAuraType,
   SPELL_CATEGORIES as SPELLS,
 } from "../data/spellCategories";
-import { BACKLASH_AURA_CC_TYPE } from "../data/backlashCc";
-import { dropAuraRebroadcasts, supersededAuraBreaks } from "./auraIntervals";
-
 import { schoolLockedBy, spellSchoolMask } from "../data/spellSchools";
 import { ccSpellIds, officialSilenceIds } from "../data/spellTags";
+import { supersededAuraBreaks } from "./auraIntervals";
 import { REACTION_WINDOW_S, usableWhileStunned } from "./cooldowns";
 import { isStunDrAura, matchPendingCcKey } from "./drAnalysis";
 import { kickLockoutSecondsFor } from "./kickLockout";
@@ -445,6 +445,28 @@ export function namedCannotCastIntervals(
     lockout: false,
   }));
 
+  // The unit's own flying breath (`OWN_FLIGHT_AURA_IDS`, user ruling
+  // 2026-10-14): no cast while it flies — a lock on everything, like a stun
+  let flightFrom: number | undefined;
+  for (const a of unit.auraEvents ?? []) {
+    if (!OWN_FLIGHT_AURA_IDS.has(String(a.spellId ?? ""))) continue;
+    if (a.srcUnitId !== unit.id) continue;
+    if (a.logLine.event === LogEvent.SPELL_AURA_APPLIED) {
+      flightFrom ??= a.timestamp;
+    } else if (
+      a.logLine.event === LogEvent.SPELL_AURA_REMOVED &&
+      flightFrom !== undefined
+    ) {
+      intervals.push({
+        from: flightFrom,
+        to: a.timestamp,
+        spellId: String(a.spellId),
+        lockout: false,
+      });
+      flightFrom = undefined;
+    }
+  }
+
   let petCast: ReadonlySet<string> | undefined;
   for (const action of unit.actionIn ?? []) {
     if (action.logLine.event !== LogEvent.SPELL_INTERRUPT) continue;
@@ -549,13 +571,7 @@ export function castBlockingAuraIntervals(
   // throw that the caller's try/catch would turn into "no gaps at all".
   // a BROKEN line its aura's own REMOVED follows is not the end (FT-T08)
   const notTheEnd = supersededAuraBreaks(unit.auraEvents ?? []);
-  // A same-ms REMOVED → APPLIED pair is one aura re-broadcast, not a new
-  // application (`dropAuraRebroadcasts`, the reading the timeline, the DR
-  // chain and the CC-break analysis already share — work order 2026-10-14b
-  // fix 8: e5b3534b's one Cyclone printed two chain links, `Cyclone 116.7`,
-  // and an ownerCc start at the re-broadcast). The intervals were contiguous,
-  // so no locked or free time moves.
-  for (const aura of dropAuraRebroadcasts(unit.auraEvents ?? [])) {
+  for (const aura of unit.auraEvents ?? []) {
     const spellId = aura.spellId;
     if (!spellId) continue;
     if (notTheEnd.has(aura)) continue;
@@ -618,7 +634,28 @@ export function castBlockingAuraIntervals(
     });
   // in application order (a stable sort: same-millisecond applications keep
   // their log order)
-  return out.sort((a, b) => a.from - b.from);
+  out.sort((a, b) => a.from - b.from);
+  // One aura the game re-broadcast — REMOVED and APPLIED of the same spell
+  // from the same source in the same ms — is one interval, not two (work
+  // order 2026-10-14b fix 8: e5b3534b's one Cyclone printed two chain links,
+  // `Cyclone 116.7`, and an ownerCc start at the re-broadcast). Only pieces
+  // that meet exactly: the covered time is the same to the ms, so no
+  // decision moves (codex 40-FT-83 — `dropAuraRebroadcasts`' 1 ms gap
+  // filled in turned a 1.000 s free window into 0.999 s).
+  const merged: CastBlockingAura[] = [];
+  for (const iv of out) {
+    const prev = [...merged]
+      .reverse()
+      .find(
+        (m) =>
+          m.spellId === iv.spellId &&
+          m.srcUnitId === iv.srcUnitId &&
+          m.to === iv.from,
+      );
+    if (prev) prev.to = iv.to;
+    else merged.push({ ...iv });
+  }
+  return merged;
 }
 
 /** A cast-blocking aura that is a silence and not hard CC — the same split

@@ -745,7 +745,7 @@ describe("cdHoardedEvents — signed 09-30 facts", () => {
       })),
     };
     const [e] = run(stunned(58, 59.8), { rawStreams });
-    expect(e!.facts!.attempted).toContain("stunned×2");
+    expect(e!.facts!.attempted).toContain("under crowd control×2");
     expect(e!.facts!.attemptedAt).toBe("-1.4…-0.6s");
     // free from the 59.8 stun end to 65: 5.2 s
     expect(e!.facts!.freeAfterAttemptS).toBe("5.2");

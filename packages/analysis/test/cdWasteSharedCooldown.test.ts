@@ -150,7 +150,7 @@ describe("cd-waste — one row per shared cooldown (X1)", () => {
     };
     const [e] = cdWasteEvents([BOP, SW], me, 40, { rawStreams, untilS: 120 });
     expect(e!.facts.attempted).toBe(
-      "pressed but rejected (无法在放逐时那样做×2)",
+      "pressed but rejected (under crowd control×2)",
     );
   });
 

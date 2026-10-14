@@ -92,13 +92,13 @@ describe("cd-waste — facts.attempted (F-W1)", () => {
   it("counts the rejects up to the round end; the line still fires", () => {
     const [e] = cdWasteEvents([LOH], me, 40, { rawStreams, untilS: 120.408 });
     expect(e!.facts!.attempted).toBe(
-      "pressed but rejected (无法在放逐时那样做×3)",
+      "pressed but rejected (under crowd control×3)",
     );
   });
   it("the caller's window ends at the owner's own death — \"You are dead\" is no attempt", () => {
     const [e] = cdWasteEvents([LOH], me, 40, { rawStreams, untilS: 119.0 });
     expect(e!.facts!.attempted).toBe(
-      "pressed but rejected (无法在放逐时那样做×1)",
+      "pressed but rejected (under crowd control×1)",
     );
   });
   it("a not-ready reject within 1.5 s after an own success is a GCD miss-press, not an attempt (fe1a9355 shape)", () => {

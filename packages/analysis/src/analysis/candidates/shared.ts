@@ -5,6 +5,7 @@
  * theme). Nothing here decides whether a candidate fires — these only format
  * facts once a producer has already decided to emit one.
  */
+import { refusalWhy } from "../../context/spellOutcomeLines";
 import type { CastFailedEvent } from "../../utils/rawStreams";
 
 /**
@@ -33,9 +34,15 @@ export function aggregateReasonCounts(
   events: CastFailedEvent[],
 ): string | undefined {
   if (events.length === 0) return undefined;
+  // In the prompt's language (user ruling 2026-10-14, Q6-2: "只要和整体的语言
+  // 一样就可以了"): the client's own text, in whatever locale it was, read the
+  // way kick-eaten's postKick reads it — "not ready yet" for the not-ready
+  // family, else `refusalWhy`'s words ("client reason not translated" when it
+  // has none). `checkCjkLeak` 7 of the 60 re-eval prompts until then.
   const counts = new Map<string, number>();
   for (const e of events) {
-    counts.set(e.reason, (counts.get(e.reason) ?? 0) + 1);
+    const why = refusalReasonWords(e.reason);
+    counts.set(why, (counts.get(why) ?? 0) + 1);
   }
   return [...counts.entries()]
     .sort((a, b) => b[1] - a[1])
@@ -51,7 +58,7 @@ export function formatAttemptedFact(
   // kick-eaten's `postKick` already uses for the same fact (`pressed Nx but
   // rejected (…)`). It was `曾尝试施放被拒(…)` inside an English prompt
   // (53 of 53 `attempted` values on the 605 capture). The reasons inside
-  // the brackets stay verbatim (rawStreams' rule), "、"-joined.
+  // the brackets are `aggregateReasonCounts`' words, "、"-joined.
   return agg === undefined ? undefined : `pressed but rejected (${agg})`;
 }
 
@@ -231,4 +238,13 @@ export function filterIntentGuardEvidence(
     }
     return true;
   });
+}
+
+/** One SPELL_CAST_FAILED reason in the prompt's words: "not ready yet" for
+ * the not-ready family (`NOT_READY_REASONS` — a locked school, the spell's
+ * own cooldown and the GCD all answer with it), else `refusalWhy`'s. The
+ * `attempted` / mana `rejected` counts, msw `refusedInLock` and stayed-in
+ * `refusedPresses` all read it (user ruling 2026-10-14). */
+export function refusalReasonWords(reason: string): string {
+  return NOT_READY_REASONS.has(reason) ? "not ready yet" : refusalWhy(reason);
 }

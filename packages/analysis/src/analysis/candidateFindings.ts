@@ -199,6 +199,7 @@ import {
   formatAttemptedFact,
   INTENT_GUARD_GCD_S,
   NOT_READY_REASONS,
+  refusalReasonWords,
 } from "./candidates/shared";
 import {
   teammateCrisisIdleEvents,
@@ -1405,7 +1406,13 @@ export function dispellerPressedFact(
   toS: number,
 ): Record<string, string> {
   const presses = ((f.spellCastEvents ?? []) as any[])
-    .filter((c) => c.logLine?.event === LogEvent.SPELL_CAST_SUCCESS)
+    // a passive proc logged as a cast is not a press (codex 40-FT-83:
+    // Reclamation read as something the paladin pressed)
+    .filter(
+      (c) =>
+        c.logLine?.event === LogEvent.SPELL_CAST_SUCCESS &&
+        !isPassiveProcCast(c),
+    )
     .map((c) => ({
       t: (c.logLine.timestamp - matchStartMs) / 1000,
       name: getEnglishSpellName(String(c.spellId), c.spellName),
@@ -3531,9 +3538,7 @@ function teamPlayEvents(
                             f.spellName,
                           ),
                           tS: f.tSeconds,
-                          why: NOT_READY_REASONS.has(f.reason)
-                            ? "not ready yet"
-                            : refusalWhy(f.reason),
+                          why: refusalReasonWords(f.reason),
                         })),
                   }
                 : {}),
@@ -3994,15 +3999,16 @@ function teamPlayEvents(
               );
               const groups = new Map<string, CastFailedEvent[]>();
               for (const f of refused) {
-                const why = NOT_READY_REASONS.has(f.reason)
-                  ? "not ready yet"
-                  : refusalWhy(f.reason);
+                const why = refusalReasonWords(f.reason);
                 groups.set(why, [...(groups.get(why) ?? []), f]);
               }
+              // offsets from the row's facts.t (the floored start), as the
+              // legend says; the span's own bounds still pick the presses
+              // (codex 40-FT-83: a stay from 87.9 printed +0.3s for 88.2)
               return [...groups]
                 .map(
                   ([why, list]) =>
-                    `${joinPressesWithOffsets(list, fromS)} (${why})`,
+                    `${joinPressesWithOffsets(list, toRenderSecond(fromS))} (${why})`,
                 )
                 .join("; ");
             }

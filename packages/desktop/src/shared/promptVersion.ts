@@ -1587,5 +1587,17 @@
  *  compares in whole ms (a float rest read "ended at death"), and SPLIT
  *  PUSH is not claimed across an instant where either player is dead or
  *  has no position.
+ *  v386 (2026-10-14, FT, two user rulings + codex 40-FT-83): (1) an
+ *  Evoker's own flying breath (Deep Breath 357210 / 433874, Breath of Eons
+ *  403631) is time the unit cannot cast, like a stun ("深呼吸算是不能施法");
+ *  (2) refusal reasons inside `attempted` (and mana's rejected count) are in
+ *  the prompt's language — "not ready yet", "under crowd control",
+ *  "silenced", … — not the client's own text (Q6-2: "只要和整体的语言一样
+ *  就可以了"); (3) codex 40-FT-83 on v384: one aura re-broadcast is merged
+ *  only when its two pieces meet exactly (a 1 ms gap is no longer covered),
+ *  a passive proc is not a dispeller's press, and stayed-in refusedPresses
+ *  are offset from facts.t. 605 files: missed-cleanse −1 (an Evoker blinded
+ *  then in Deep Breath for all but 2.9 s of a 5.4 s root, under the 3 s
+ *  gate), nothing added; facts change on 102 rows; 27 contexts.
  */
-export const PROMPT_VERSION = 385;
+export const PROMPT_VERSION = 386;

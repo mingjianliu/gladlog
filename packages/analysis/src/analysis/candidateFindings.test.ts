@@ -3670,7 +3670,7 @@ describe("cdHoardedEvents 意图守护(BACKLOG #26 Task 2,按了被拒不算屯�
     );
     expect(evts).toHaveLength(1);
     expect(evts[0]!.facts["attempted"]).toBe(
-      "pressed but rejected (尚未恢复×2、法力值不足×1)",
+      "pressed but rejected (not ready yet×2、not enough mana×1)",
     );
   });
 
@@ -3822,7 +3822,7 @@ describe("cdHoardedEvents 意图守护(BACKLOG #26 Task 2,按了被拒不算屯�
     );
     expect(evts).toHaveLength(1);
     expect(evts[0]!.facts["attempted"]).toBe(
-      "pressed but rejected (尚未恢复×1、无法在昏迷时那样做×1)",
+      "pressed but rejected (not ready yet×1、under crowd control×1)",
     );
   });
 
@@ -3862,7 +3862,7 @@ describe("cdHoardedEvents 意图守护(BACKLOG #26 Task 2,按了被拒不算屯�
     expect(early[0]!.facts["attempted"]).toBeUndefined();
     const ready = run(199.3, 199.2);
     expect(ready).toHaveLength(1);
-    expect(ready[0]!.facts["attempted"]).toBe("pressed but rejected (尚未恢复×1)");
+    expect(ready[0]!.facts["attempted"]).toBe("pressed but rejected (not ready yet×1)");
   });
 
   it("⑥ 新增(2026-08-30 多技能合并):两个 ready CD 各自的 CAST_FAILED 一起并入 facts.attempted,不是只看第一个", () => {
@@ -3895,7 +3895,7 @@ describe("cdHoardedEvents 意图守护(BACKLOG #26 Task 2,按了被拒不算屯�
     );
     expect(evts).toHaveLength(1);
     expect(evts[0]!.facts["attempted"]).toBe(
-      "pressed but rejected (尚未恢复×1、法力值不足×1)",
+      "pressed but rejected (not ready yet×1、not enough mana×1)",
     );
   });
 });
@@ -4498,7 +4498,7 @@ describe("manaPressureEvents(BACKLOG #26 Task 3,2026-08-15,60ab-shape 纯函数,
       durationS: "10",
       mana: "545/273000",
       rejectedCount: "3",
-      rejected: "法力值不足×3",
+      rejected: "not enough mana×3",
       threat: "yes",
     });
   });

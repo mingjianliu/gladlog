@@ -663,7 +663,7 @@ describe("triage missed-cleanse F-C14 / F-C12 (owner's cleanse facts)", () => {
       matchStartMs: MATCH_START,
       rawStreams,
     });
-    expect(c!.facts.attempted).toBe("pressed but rejected (无法在昏迷时那样做×2)");
+    expect(c!.facts.attempted).toBe("pressed but rejected (under crowd control×2)");
     expect(c!.facts.ownerDispelSpell).toBe("Detox");
   });
 
@@ -724,6 +724,8 @@ describe("triage missed-cleanse F-C14 / F-C12 (owner's cleanse facts)", () => {
         c("58984", "Shadowmeld", 163.492),
         c("1291791", "Drink", 164.169),
         c("17", "Power Word: Shield", 170),
+        // a passive proc logged as a cast is not a press (codex 40-FT-83)
+        c("415388", "Reclamation", 163.6),
       ],
     });
     expect(dispellerPressedFact(priest, MATCH_START, 163.036, 166.045)).toEqual({

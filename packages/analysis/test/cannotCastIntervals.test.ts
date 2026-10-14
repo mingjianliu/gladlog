@@ -287,6 +287,41 @@ describe("cannotCastIntervals — log-order pairing and pet sources (H23)", () =
     ]);
   });
 
+  it("the unit's own Deep Breath flight is a cannot-cast interval (user ruling 2026-10-14)", () => {
+    // b12bfef4's shape: Deep Breath 108.771 → 110.321 on the Evoker itself
+    const unit = {
+      id: "Player-1",
+      auraEvents: [
+        ev("357210", "Player-1", 108_771, LogEvent.SPELL_AURA_APPLIED),
+        ev("357210", "Player-1", 110_321, LogEvent.SPELL_AURA_REMOVED),
+        // another unit's flight on this unit's records is not this unit's
+        ev("357210", "Player-9", 120_000, LogEvent.SPELL_AURA_APPLIED),
+        ev("357210", "Player-9", 122_000, LogEvent.SPELL_AURA_REMOVED),
+      ],
+      actionIn: [],
+    } as unknown as ICombatUnit;
+    expect(buildCannotCastIntervals(unit, new Set(["Enemy-1"]))).toEqual([
+      { from: 108_771, to: 110_321 },
+    ]);
+  });
+
+  it("a 1 ms gap is not filled: the covered time stays what the log shows (codex 40-FT-83)", () => {
+    const unit = {
+      id: "Player-1",
+      auraEvents: [
+        ev("33786", "Enemy-1", 0, LogEvent.SPELL_AURA_APPLIED),
+        ev("33786", "Enemy-1", 2_000, LogEvent.SPELL_AURA_REMOVED),
+        ev("33786", "Enemy-1", 2_001, LogEvent.SPELL_AURA_APPLIED),
+        ev("33786", "Enemy-1", 4_001, LogEvent.SPELL_AURA_REMOVED),
+      ],
+      actionIn: [],
+    } as unknown as ICombatUnit;
+    expect(buildCannotCastIntervals(unit, new Set(["Enemy-1"]))).toEqual([
+      { from: 0, to: 2_000 },
+      { from: 2_001, to: 4_001 },
+    ]);
+  });
+
   it("a removal closes ITS caster's application: a second caster's same-id stun runs to its own removal (ruling P-FU-H23)", () => {
     // 110-5-617's shape: Hammer of Justice from one paladin at 90.0 (5 s),
     // from the other at 95.1 — landing before the first one's REMOVED at

@@ -347,7 +347,7 @@ describe("burstWindowResponseEvents — facts.attempted (S1)", () => {
       undefined,
       attempts,
     );
-    expect(e!.facts!.attempted).toBe("pressed but rejected (无法在昏迷时那样做×2)");
+    expect(e!.facts!.attempted).toBe("pressed but rejected (under crowd control×2)");
   });
   it("no rejects, or no raw streams → no fact", () => {
     expect(
