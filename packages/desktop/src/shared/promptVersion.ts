@@ -1530,5 +1530,19 @@
  *  `gated`, not PRIME. 605 files: cd-waste +77 (Fortifying Brew 9, Lay on
  *  Hands 68), cd-hoarded +2 (a Retribution paladin's Lay on Hands ready at
  *  a teammate's crisis); nothing removed.
+ *  v382 (2026-10-13, FT, the GH #115 batched regen + a codex post-hoc
+ *  review): (1) Quaking Palm is an incapacitate, as in DB2 — the hand DR
+ *  table filed it under Stun, so `[DR: …]` labels and DR clashes counted it
+ *  with stuns, an own team's damage breaking it was never `[CC BROKEN]`,
+ *  and the stun-only readers let a priest press Pain Suppression through
+ *  it (codex 45-FT-102); (2) the ten reference tables and
+ *  CD_HOARDED_OUTCOME_REF regenerated on the FT code (pinned d511b212) —
+ *  printed reference rates move by at most a few points, cd-hoarded's
+ *  only its n (15,645 → 15,656), Boomstick loses its recast floor. 605
+ *  files: (1) no candidate moves, 52 contexts (DR labels, +5 [CC BROKEN]);
+ *  (2) slow-defensive-response −14 (four burst-window cells fell under the
+ *  3-point contrast gate), every other change a cited reference number;
+ *  Boomstick's `[RES]` cooldown reads one number where it read a range
+ *  (`40–45s` → `45s`, 779 lines in 160 contexts).
  */
-export const PROMPT_VERSION = 381;
+export const PROMPT_VERSION = 382;
