@@ -462,3 +462,60 @@ describe("the legends say what counts as a control answer (FT-T12 D3)", () => {
     expect(legend).not.toContain("control on the caster/kite");
   });
 });
+
+// Work order 2026-10-14c Part 2 G6 (user 2026-10-14, Ice Block edge: option B)
+describe("burstWindowDecisionPoints — the pressured friendly is one the burst's casters hit", () => {
+  /** a second friendly at 30 % through the window, hit by `damageIn` only */
+  const low = (damageIn: any[] = []) =>
+    unit({
+      id: "F2",
+      name: "Low-R",
+      reaction: CombatUnitReaction.Friendly,
+      info: { teamId: "0", specId: "62" },
+      advancedActions: Array.from({ length: 41 }, (_, s) => hp(s, 30, "F2")),
+      damageIn,
+    });
+  const immuneMiss = (tSec: number, destUnitId: string) => ({
+    timestamp: T0 + tSec * 1000,
+    srcUnitId: "E1",
+    destUnitId,
+    spellId: "1752",
+    missType: "IMMUNE",
+    amount: 0,
+    logLine: { event: LogEvent.SPELL_MISSED, timestamp: T0 + tSec * 1000 },
+  });
+
+  it("a lower friendly the burst never hit is not the pressured one (f4eb8c87 2:46)", () => {
+    const [p] = points([friend([], steady("E1")), low(), opener()]);
+    expect(p!.pressured!.name).toBe("Friend-R");
+  });
+
+  it("…nor is one only another enemy hit", () => {
+    const other = enemy("E3", "Other-R");
+    const [p] = points([
+      friend([], steady("E1")),
+      low([dmg(12, 30, "E3")]),
+      opener(),
+      other,
+    ]);
+    expect(p!.pressured!.name).toBe("Friend-R");
+  });
+
+  it("a friendly the burst's hits found IMMUNE inside the window is (s2/51-1-357: Ice Block 0.2 s before Deathmark)", () => {
+    const [p] = points([
+      friend([], steady("E1")),
+      low(),
+      opener({ missesOut: [immuneMiss(12, "F2")] }),
+    ]);
+    expect(p!.pressured!.name).toBe("Low-R");
+  });
+
+  it("…but not an IMMUNE miss before the window opened", () => {
+    const [p] = points([
+      friend([], steady("E1")),
+      low(),
+      opener({ missesOut: [immuneMiss(5, "F2")] }),
+    ]);
+    expect(p!.pressured!.name).toBe("Friend-R");
+  });
+});

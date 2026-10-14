@@ -1030,6 +1030,11 @@ const INDEX: PredicateRow[] = [
     mod: spellSchools,
   },
   {
+    file: `${A}/utils/combatStates.ts`,
+    symbol: "stasisReplayWindows",
+    mod: combatStates,
+  },
+  {
     file: `${A}/utils/gapClosers.ts`,
     symbol: "gapCloserStateAt",
     mod: gapClosers,
@@ -2487,6 +2492,11 @@ const INDEX: PredicateRow[] = [
     mod: castEffectAuras,
   },
   {
+    file: `${A}/data/castEffectAuras.ts`,
+    symbol: "triggeredEffectAurasOfCast",
+    mod: castEffectAuras,
+  },
+  {
     file: `${A}/utils/cooldowns.ts`,
     symbol: "spendsSharedChargeOf",
     mod: cooldowns,
@@ -3181,6 +3191,16 @@ const INDEX: PredicateRow[] = [
   {
     file: `${A}/utils/ccTrinketAnalysis.ts`,
     symbol: "ccEndedByImmunityAura",
+    mod: ccTrinketAnalysis,
+  },
+  {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "channelStoppedAtRemoval",
+    mod: ccTrinketAnalysis,
+  },
+  {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "CHANNEL_STOP_LEAD_MS",
     mod: ccTrinketAnalysis,
   },
   {

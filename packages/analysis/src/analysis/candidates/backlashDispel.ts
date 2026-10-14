@@ -61,7 +61,9 @@ import {
   reconstructDispelSummary,
 } from "../../utils/dispelAnalysis";
 import { analyzeOutgoingCCChains, getDRCategory } from "../../utils/drAnalysis";
+import { dropAuraRebroadcasts } from "../../utils/auraIntervals";
 import { toRenderSecond } from "../../utils/renderGrid";
+import { roundEndMs } from "../../utils/roundEnd";
 import { fmtFactNum as fmt, fmtFactTime } from "../factFormat";
 import type { CandidateEvent } from "../types";
 import { HARD_CC_CATEGORIES } from "./cooldownTiming";
@@ -315,8 +317,12 @@ export function backlashDispelDecisionPoints(
     return new Set([...on].filter(([, v]) => v).map(([id]) => id));
   };
 
+  // WO3 Part 2 (readers.json fact 2 / 3): the round's end (a Solo Shuffle
+  // round ends at its first death) and one aura re-broadcast is one
+  // application — `roundEndMs` / `dropAuraRebroadcasts`, the shared readings
+  const roundEnd = roundEndMs(combat);
   for (const target of friendPlayers) {
-    const auras = target.auraEvents ?? [];
+    const auras = dropAuraRebroadcasts(target.auraEvents ?? []);
     for (let i = 0; i < auras.length; i++) {
       const a = auras[i];
       if (a.logLine.event !== "SPELL_AURA_APPLIED" || a.auraType !== "DEBUFF")
@@ -326,6 +332,7 @@ export function backlashDispelDecisionPoints(
       const casterId: string = a.srcUnitId;
       if (!enemyIds.has(casterId)) continue;
       const applyMs: number = a.timestamp;
+      if (applyMs >= roundEnd) continue;
       const removed = auras
         .slice(i + 1)
         .find(
@@ -334,7 +341,10 @@ export function backlashDispelDecisionPoints(
             (b.logLine.event === "SPELL_AURA_REMOVED" ||
               b.logLine.event === "SPELL_AURA_APPLIED"),
         );
-      const endMs: number = removed ? removed.timestamp : combat.endTime;
+      const endMs: number = Math.min(
+        removed ? removed.timestamp : combat.endTime,
+        roundEnd,
+      );
       const applyRel = rel(applyMs);
       const dtype = getDispelType(sid);
       if (!dtype) continue;

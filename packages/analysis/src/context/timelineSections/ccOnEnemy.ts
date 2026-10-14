@@ -216,7 +216,12 @@ export function emitCcOnEnemyEntries(
                 trinketBroke
                   ? ccEndedByOwnPress(enemyUnit, cc, matchStartMs)
                   : (ccLoggedEnd(enemyUnit, cc, matchStartMs) ??
-                      ccEndedByOwnPress(enemyUnit, cc, matchStartMs) ??
+                      ccEndedByOwnPress(
+                        enemyUnit,
+                        cc,
+                        matchStartMs,
+                        friends.find((f) => f.id === cc.sourceId),
+                      ) ??
                       // …or a control immunity that went up on them in the
                       // removal's millisecond (a Slayer's Bladestorm: no press)
                       ccEndedByImmunityAura(enemyUnit, cc, matchStartMs)),

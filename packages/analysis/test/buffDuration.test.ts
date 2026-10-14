@@ -620,6 +620,9 @@ describe("buffFullDurationForCaster — 天赋条件的增益时长", () => {
     const exempt = new Set([
       ...Object.keys(SPELL_DURATION_OVERRIDES),
       ...NO_FIXED_DURATION_IDS,
+      // WO3 Part 2: Summon Infernal's cast row (0.25 s) lasts as
+      // the aura it triggers, 111685 (30 s) — every consumer above moves
+      "1122",
     ]);
     let checked = 0;
     for (const [id, mined] of Object.entries(spellEffectData)) {

@@ -32,6 +32,7 @@ interface Row {
   aura: string;
   casts: number;
   hits: number;
+  via?: string;
 }
 
 const byCast = new Map<string, readonly string[]>();
@@ -49,6 +50,21 @@ for (const [cast, rows] of Object.entries(
 }
 
 const NONE: readonly string[] = [];
+
+/** WO3 Part 2 (r1008-151): the effect auras of a cast that DB2 chains to it
+ * through `EffectTriggerSpell` (`via` holds "trigger") and the corpus shows on
+ * ≥ 90 % of its casts — the aura the cast's effect actually lives on
+ * (Summon Infernal 1122 → 111685, 560 / 562). */
+export function triggeredEffectAurasOfCast(
+  castSpellId: string,
+): readonly string[] {
+  const rows = (generated as unknown as { casts: Record<string, Row[]> }).casts[
+    castSpellId
+  ];
+  return (rows ?? [])
+    .filter((r) => r.via?.includes("trigger") && r.hits >= 0.9 * r.casts)
+    .map((r) => r.aura);
+}
 
 /** The aura ids the log shows this cast applying, most-applied first; empty
  * for a cast whose aura carries its own id (or no aura). */

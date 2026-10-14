@@ -1586,10 +1586,42 @@ export function burstWindowDecisionPoints(
       const dmgByUnitId = new Map<string, number>(
         friendlies.map((f) => [f.id, damageTakenIn(f)]),
       );
+      // WO3 Part 2 G6 (r1014-177): the pressured friendly is one the
+      // burst's casters (or their pets) hit inside the window — f4eb8c87:
+      // Frozen Orb / Ray of Frost did 0 to the owner named as pressured
+      const fromBurstCaster = (src: string) => {
+        const p = enemyPlayerOf(src);
+        return p !== undefined && casterIdSet.has(p);
+      };
+      // …or one their hits found IMMUNE: an immunity pressed at the opening
+      // is still the answer to it (user 2026-10-14, option B; s2/51-1-357:
+      // Ice Block 0.2 s before the Deathmark it answered)
+      const immuneToBurst = new Set<string>();
+      for (const u of units) {
+        if (!fromBurstCaster(u.id)) continue;
+        for (const m of u.missesOut ?? []) {
+          if (
+            m.missType === "IMMUNE" &&
+            m.destUnitId &&
+            m.timestamp >= tMs &&
+            m.timestamp <= outcomeEndMs
+          )
+            immuneToBurst.add(m.destUnitId);
+        }
+      }
+      const hitByBurst = new Set(
+        friendlies
+          .filter(
+            (f) =>
+              immuneToBurst.has(f.id) ||
+              damageTakenBetween(f, tMs, outcomeEndMs, fromBurstCaster) > 0,
+          )
+          .map((f) => f.id),
+      );
       // lowest grid-sampled HP wins; equal HP goes to whoever took more damage
       const pressured =
         [...friendlyOutcomes]
-          .filter((f) => f.minHpPct !== null)
+          .filter((f) => f.minHpPct !== null && hitByBurst.has(f.unitId))
           .sort(
             (a, b) =>
               a.minHpPct! - b.minHpPct! ||

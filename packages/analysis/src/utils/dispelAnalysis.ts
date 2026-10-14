@@ -28,6 +28,7 @@ import spellIdListsData from "../data/spellIdLists";
 import {
   auraBreaksBeforeRemoved,
   buildAuraIntervals,
+  dropAuraRebroadcasts,
   type IAuraInterval,
   supersededAuraBreaks,
 } from "./auraIntervals";
@@ -3042,7 +3043,10 @@ export function reconstructDispelSummary(
     // lines this loop read as a removal before (it only reads enemy-sourced
     // events).
     const notTheEnd = supersededAuraBreaks(unit.auraEvents);
-    for (const aura of unit.auraEvents) {
+    // WO3 Part 2 (readers.json fact 3): one re-broadcast is one
+    // application (`dropAuraRebroadcasts`) — it used to end the window at
+    // its own ms and pair the re-APPLIED with the same-ms REMOVED
+    for (const aura of dropAuraRebroadcasts(unit.auraEvents)) {
       const spellId = aura.spellId;
       if (!spellId) continue;
 
@@ -3712,7 +3716,9 @@ export function reconstructDispelSummary(
       >();
       const removedTimes = new Map<string, number[]>();
 
-      for (const aura of enemy.auraEvents) {
+      // one re-broadcast is one application (02c8e3ac: an Obsidian Scales
+      // run cut to 3.3 s of its 12 s)
+      for (const aura of dropAuraRebroadcasts(enemy.auraEvents)) {
         const spellId = aura.spellId;
         if (!spellId) continue;
         // Only consider buffs applied by the enemy's own side — skip debuffs our team placed on them

@@ -145,7 +145,11 @@ export function kickPressureFor(params: {
   owner: ICombatUnit;
   friends: ICombatUnit[];
   enemies: ICombatUnit[];
-}): (k: { atSeconds: number; lockoutDurationSeconds: number }) => KickPressure {
+}): (k: {
+  atSeconds: number;
+  lockoutDurationSeconds: number;
+  lockEndedBySuccessS?: number | null;
+}) => KickPressure {
   const { combat, owner, friends, enemies } = params;
   const start = combat.startTime;
   const spans = (side: ICombatUnit[]) =>
@@ -223,7 +227,11 @@ export function kickPressureFor(params: {
 
   return (k) => {
     const t0 = k.atSeconds;
-    const t1 = k.atSeconds + k.lockoutDurationSeconds;
+    // WO3 Part 2: the lock as the text reads it — ended early once
+    // a spell of the locked school went out or began its bar
+    const t1 =
+      k.atSeconds +
+      Math.min(k.lockoutDurationSeconds, k.lockEndedBySuccessS ?? Infinity);
     const ours = side(friends, enemySpans, t0, t1);
     const theirs = side(enemies, ourSpans, t0, t1);
     const burstReady: string[] = [];

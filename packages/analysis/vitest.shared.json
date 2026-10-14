@@ -284,6 +284,7 @@
     "test/triageG9ClipBoundary.test.ts",
     "test/triageG9RoundEnd.test.ts",
     "test/usableWhileCcShim.test.ts",
-    "test/warlockPets.test.ts"
+    "test/warlockPets.test.ts",
+    "test/wo3Part2Facts.test.ts"
   ]
 }

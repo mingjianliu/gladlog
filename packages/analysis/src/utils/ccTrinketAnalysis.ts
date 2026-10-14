@@ -48,7 +48,7 @@ import {
 } from "./auraIntervals";
 import { upperBound } from "./binarySearch";
 import {
-  buildCannotCastIntervals,
+  cannotCastIntervalsForSpells,
   castBlockingAuraAt,
   coveredMsWithin,
   hardCcAuraAt,
@@ -483,6 +483,28 @@ export function tremorTotemBreak(
  * after a CC expired on its own must not read as having broken it.
  */
 export const PRESS_ENDED_CC_LAG_MS = 10;
+/** How far before a channelled CC's REMOVED its caster's interrupt may sit
+ * (the interrupt row is written first). WO3 Part 2. */
+export const CHANNEL_STOP_LEAD_MS = 50;
+
+/** WO3 Part 2 (r1014-173): a CHANNELLED control whose caster was
+ * interrupted at its removal ended with the channel — no press of the holder
+ * ended it (9c6ab747: Pummel on the priest 10 ms before Mind Control came
+ * off, Will of the Forsaken 9 ms after). The one reading the trinket binder
+ * and `ccEndedByOwnPress` share. */
+export function channelStoppedAtRemoval(
+  caster: Pick<ICombatUnit, "actionIn"> | undefined,
+  spellId: string,
+  removeMs: number,
+): boolean {
+  if (!caster || !CHANNELED_SPELL_IDS.has(spellId)) return false;
+  return (caster.actionIn ?? []).some(
+    (a: any) =>
+      a.logLine?.event === LogEvent.SPELL_INTERRUPT &&
+      a.timestamp >= removeMs - CHANNEL_STOP_LEAD_MS &&
+      a.timestamp <= removeMs + PRESS_ENDED_CC_LAG_MS,
+  );
+}
 
 /**
  * Did this cast END the CC window — is its line the one sitting at the
@@ -1603,10 +1625,14 @@ export function ccEndedByOwnPress(
   > &
     Partial<Pick<ICCInstance, "sourceId">>,
   matchStartMs: number,
+  /** the CC's caster, when the caller has it: a channel stopped at the
+   * removal ended it (`channelStoppedAtRemoval`) */
+  caster?: Pick<ICombatUnit, "actionIn">,
 ): { kind: "press"; spellName: string } | undefined {
   const applyMs = matchStartMs + Math.round(cc.atSeconds * 1000);
   const removeMs =
     matchStartMs + Math.round((cc.atSeconds + cc.durationSeconds) * 1000);
+  if (channelStoppedAtRemoval(caster, cc.spellId, removeMs)) return undefined;
   const cause = ccRemovalCause(
     holder,
     cc.spellId,
@@ -2562,16 +2588,33 @@ export function analyzePlayerCCAndTrinket(
     const dr = drLevelOfIdx.get(idx);
     return full * (dr ? drDurationFactor(dr.level) : 1);
   };
-  const indexedCCWindows = filteredCCWindows.map((w, idx) => {
-    const expected = expectedDurationS(w, idx);
-    return {
-      ...w,
-      idx,
-      ...(expected !== undefined
-        ? { officialEndMs: w.applyMs + expected * 1000 }
-        : {}),
-    };
-  });
+  // WO3 Part 2 (r1014-173): a CHANNELLED control (Mind Control)
+  // ends when its caster's channel is interrupted — that, not a break the
+  // CC'd player pressed a few ms later, is what ended it (9c6ab747: Pummel
+  // on the priest, Will of the Forsaken 9 ms after the removal read "ended
+  // by their WotF"). Such a window takes no trinket or break credit.
+  const endedByCasterStop = (w: {
+    spellId: string;
+    srcUnitId: string;
+    removeMs: number;
+  }) =>
+    channelStoppedAtRemoval(
+      [...enemies, ...enemyPets].find((u) => u.id === w.srcUnitId),
+      w.spellId,
+      w.removeMs,
+    );
+  const indexedCCWindows = filteredCCWindows
+    .map((w, idx) => {
+      const expected = expectedDurationS(w, idx);
+      return {
+        ...w,
+        idx,
+        ...(expected !== undefined
+          ? { officialEndMs: w.applyMs + expected * 1000 }
+          : {}),
+      };
+    })
+    .filter((w) => !endedByCasterStop(w));
   const trinketBrokenWindowIdx = new Set<number>();
   for (const trinketTs of trinketCastTimestamps) {
     const bound = bindBreakToWindow(indexedCCWindows, trinketTs);
@@ -3486,7 +3529,19 @@ export function analyzePlayerCCAndTrinket(
       )
         inst.diedAfterKickS = deathS - inst.atSeconds;
       try {
-        cannotCast = cannotCast ?? buildCannotCastIntervals(player, enemyIds);
+        // WO3 Part 2 (r1008-128): "could not act at all" — only an
+        // interval that stops EVERY spell the player cast this round
+        // (`cannotCastIntervalsForSpells`' quantifier): a silence while
+        // Stormstrike went out (c2058ed4), or another school's lockout, is
+        // not time the player could not act
+        cannotCast =
+          cannotCast ??
+          cannotCastIntervalsForSpells(
+            player,
+            enemyIds,
+            [...new Set(castTimes.map((c) => c.spellId))],
+            undefined,
+          );
         const kickMs = matchStartMs + inst.atSeconds * 1000;
         const ccMs = coveredMsWithin(
           // this kick's own lockout starts at the interrupt itself
@@ -3513,10 +3568,14 @@ export function analyzePlayerCCAndTrinket(
       // `find` where this used to read `some`: identical predicate (some(p)
       // is true iff find(p) is defined), but it also NAMES the cast so the
       // rendered line can cite the one it is actually talking about.
+      // WO3 Part 2 (r1008-30): a Stasis RELEASE replays stored
+      // spells — no press of the player's, so no switch (141470d0 @198)
       let switchCast =
         lockedMask === undefined
           ? undefined
           : after.find((c) => {
+              if (replays.some((w) => c.ms >= w.from && c.ms <= w.to))
+                return false;
               const m = spellSchoolMask(c.spellId);
               return m !== undefined && !schoolLockedBy(m, lockedMask);
             });
@@ -3536,8 +3595,34 @@ export function analyzePlayerCCAndTrinket(
                 !replays.some((w) => c.ms >= w.from && c.ms <= w.to)
               );
             });
-      inst.lockEndedBySuccessS =
-        endedBy !== undefined ? endedBy.t - inst.atSeconds : null;
+      // WO3 Part 2 (r1008-75): a cast BAR of the locked school that
+      // started inside the modelled lock proves it over at its start, as a
+      // SUCCESS does (6062daf2: a Holy bar began 1.98 s into a 3.0 s lock)
+      const startedBy =
+        lockedMask === undefined
+          ? undefined
+          : castStarts.find((st) => {
+              if (!(st.t > inst.atSeconds) || st.t >= lockEndS) return false;
+              const m = spellSchoolMask(st.spellId);
+              return (
+                m !== undefined &&
+                schoolLockedBy(m, lockedMask) &&
+                isSilenceableCast(st.spellId) &&
+                !LOCK_IGNORING_CAST_IDS.has(st.spellId) &&
+                !replays.some(
+                  (w) =>
+                    matchStartMs + st.t * 1000 >= w.from &&
+                    matchStartMs + st.t * 1000 <= w.to,
+                )
+              );
+            });
+      const endedAt = Math.min(
+        endedBy !== undefined ? endedBy.t : Infinity,
+        startedBy !== undefined ? startedBy.t : Infinity,
+      );
+      inst.lockEndedBySuccessS = Number.isFinite(endedAt)
+        ? endedAt - inst.atSeconds
+        : null;
       const wentOut: Record<string, number> = {};
       for (const c of after) {
         if (c.t >= lockEndS) break;
@@ -3546,7 +3631,7 @@ export function analyzePlayerCCAndTrinket(
         wentOut[c.spellId] = c.t - inst.atSeconds;
       }
       inst.wentOutInLockS = wentOut;
-      // Work order 2026-10-14b Part 2 (preview): a hard cast can log a
+      // Work order 2026-10-14b Part 2: a hard cast can log a
       // companion SUCCESS of another id a few ms before its own (Chrono
       // Flames 431443 → Living Flame 361509 2 ms earlier, 141470d0 @388).
       // When the switching row has no cast start of its own and the unit's

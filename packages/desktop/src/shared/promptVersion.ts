@@ -1630,5 +1630,17 @@
  *  flight that opens a death's lock run is named in the chain, and an
  *  off-GCD instant is never a hard cast's companion row. 605 files: no
  *  candidate added or removed.
+ *  v389 (2026-10-14, FT, work order 3 Part 2, user "都可以落地", Ice
+ *  Block edge "走 b"): one aura re-broadcast is one application
+ *  in the uncleansed / missed-purge / backlash windows, backlash stops at
+ *  the round end; Summon Infernal lasts as its 30 s triggered aura; a
+ *  locked-school cast bar ends a kick's lock and the kick-eaten pressure
+ *  facts read the lock to that end; kick-eaten ccInWindowS counts only
+ *  what stops every spell cast that round; a channelled control whose
+ *  caster was interrupted at its removal takes no trinket / press credit;
+ *  Faerie Swarm and Sticky Tar Bomb are disarms; a Stasis release's
+ *  replayed casts are not the post-kick switch; a burst's pressured
+ *  friendly is one its casters hit or found IMMUNE. 605 files:
+ *  missed-cleanse +6 / −2, kick-eaten −1.
  */
-export const PROMPT_VERSION = 388;
+export const PROMPT_VERSION = 389;

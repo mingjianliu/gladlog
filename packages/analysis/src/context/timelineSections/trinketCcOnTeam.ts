@@ -217,7 +217,12 @@ export function emitTrinketCcOnTeamEntries(
       const loggedEnd =
         !trinketBroke && !isCleansed && !tremor && !immunity && ccdUnit
           ? (ccLoggedEnd(ccdUnit, cc, matchStartMs) ??
-            ccEndedByOwnPress(ccdUnit, cc, matchStartMs) ??
+            ccEndedByOwnPress(
+              ccdUnit,
+              cc,
+              matchStartMs,
+              (enemies ?? []).find((e) => e.id === cc.sourceId),
+            ) ??
             // …or a control immunity that went up on them in the removal's
             // millisecond (a Slayer's Bladestorm: no press to read)
             ccEndedByImmunityAura(ccdUnit, cc, matchStartMs))

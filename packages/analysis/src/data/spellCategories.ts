@@ -254,6 +254,11 @@ export const SPELL_CATEGORIES: Record<string, ISpellCategoryEntry> = {
   "236077": { type: "disarms" }, // Disarm (Warrior)
   "207777": { type: "disarms" }, // Dismantle
   "233759": { type: "disarms" }, // Grapple Weapon
+  // WO3 #10 / Part 2 (r1008-131): the rest of DB2 SpellMechanic 3
+  // (disarm) on observed auras — 7 of 60 re-eval matches carry one
+  "209749": { type: "disarms" }, // Faerie Swarm
+  "407031": { type: "disarms" }, // Sticky Tar Bomb
+  "407032": { type: "disarms" }, // Sticky Tar Bomb
   // -- Immunities --
   "642": { type: "immunities" }, // Divine Shield
   "45438": { type: "immunities" }, // Ice Block

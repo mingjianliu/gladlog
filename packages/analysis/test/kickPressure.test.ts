@@ -138,9 +138,28 @@ describe("kickPressureFor", () => {
     // the same dip one second earlier is inside the lock
     const inside = friendlyMage({ 0: 100, 75: 30, 76: 100 });
     expect(
-      pressure(inside, enemyRet([]))({ atSeconds: 72.5, lockoutDurationSeconds: 3 })
-        .ours.low,
+      pressure(
+        inside,
+        enemyRet([]),
+      )({ atSeconds: 72.5, lockoutDurationSeconds: 3 }).ours.low,
     ).toMatchObject({ unit: "Mage", pct: 30, atSec: 75 });
+  });
+
+  it("the lock ends where the text reads it: a dip after the locked school went out again is not inside it (work order 2026-10-14c Part 2 G3)", () => {
+    // kick 72.5, modelled 3 s lock, but a Nature cast went out 1.0 s in →
+    // the lock's seconds are 72..73; the mage is at 30 % on the 75 tick
+    const dip = friendlyMage({ 0: 100, 75: 30, 76: 100 });
+    const read = (lockEndedBySuccessS: number | null | undefined) =>
+      pressure(
+        dip,
+        enemyRet([]),
+      )({ atSeconds: 72.5, lockoutDurationSeconds: 3, lockEndedBySuccessS })
+        .ours.low;
+    expect(read(1.0)).toBeUndefined();
+    // no cut, or a cut after the modelled end: the full lock
+    expect(read(null)).toMatchObject({ pct: 30, atSec: 75 });
+    expect(read(undefined)).toMatchObject({ pct: 30, atSec: 75 });
+    expect(read(5)).toMatchObject({ pct: 30, atSec: 75 });
   });
 
   it("names an enemy cooldown that was already running when the kick landed", () => {
