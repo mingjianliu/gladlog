@@ -31,6 +31,7 @@ import {
 import { IOffensiveWindow } from "./offensiveWindows";
 import { pvpTrinketUses, trinketUseRemainingSeconds } from "./pvpTrinketUses";
 import { fmtTime } from "./renderGrid";
+import { roundEndMs } from "./roundEnd";
 import { DPS_TRINKET_CD_S, HEALER_TRINKET_CD_S } from "./trinketCooldown";
 
 /** PvP trinket spell IDs that break CC / grant freedom. Exported 2026-08-18:
@@ -215,16 +216,21 @@ export function getLowestHpPercentInWindow(
  * round's unit carries advanced samples logged AFTER its end in 20 of the 60
  * triage rounds, and the NOTE "lowest HP this match was 81%" of d692582c was
  * a sample 3.7 s past the round end (92 % inside it). Both production
- * callers pass it; without it the read is unbounded, as before. */
+ * callers pass it; without it the read is unbounded, as before.
+ *
+ * The end is `roundEndMs` — a Solo Shuffle round's ending death, the one
+ * round end every other "in the round" reader uses (acceptance 7e2a3c95 #6:
+ * 7d1f14af's NOTE "lowest HP this match was 69%" read a sample 1.2 s after
+ * the round's first death; 71.4 % inside the round). */
 export function matchMinHpPct(
   unit: ICombatUnit,
-  combat?: { startTime: number; endTime: number },
+  combat?: Parameters<typeof roundEndMs>[0] & { startTime: number },
 ): number | null {
   return combat
     ? getLowestHpPercentInWindow(
         unit,
         0,
-        (combat.endTime - combat.startTime) / 1000,
+        (roundEndMs(combat) - combat.startTime) / 1000,
         combat.startTime,
       )
     : getLowestHpPercentInWindow(unit, -Infinity, Infinity, 0);

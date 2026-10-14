@@ -297,7 +297,7 @@ const LABEL_LEGENDS: ReadonlyArray<{ carried: RegExp; legend: string }> = [
   {
     carried: / \(rewind\)/,
     legend:
-      "`(rewind)` = pressed again, or when it runs out, the unit goes back to where it stood at this press and is healed toward the health it had then;",
+      "`(rewind)` = pressed again, or when it runs out, the unit goes back to where it stood at this press and returns to the health it had then (up or down);",
   },
   {
     carried: / \(redirect\)/,

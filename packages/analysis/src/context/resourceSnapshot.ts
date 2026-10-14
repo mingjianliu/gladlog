@@ -10,6 +10,7 @@ import {
   cdIsProcOnly,
   cdLatestRemainingSeconds,
   cdMaybeAvailableAt,
+  cdRealisedSecondsUntilReady,
   cdRemainingWholeSeconds,
   cdSecondsUntilReady,
   GUARDIAN_SPIRIT_SPELL_ID,
@@ -402,11 +403,24 @@ export function chargesReadyCount(
  */
 function remainingText(cd: IMajorCooldownInfo, timeSeconds: number): string {
   const latest = cdLatestRemainingSeconds(cd, timeSeconds);
-  if (cd.earliestCooldownSeconds === undefined) return `${latest}s`;
   if (cdMaybeAvailableAt(cd, timeSeconds)) return `≤${latest}s`;
-  const soonest = cdRemainingWholeSeconds(
-    cdSecondsUntilReady(cd, timeSeconds, cd.earliestCooldownSeconds),
+  // An event-reduced press (Storm Conduit) is a cooldown combat shortens too:
+  // `latest` counts the bolts cast so far, the realised return every bolt
+  // before it came back — `(a–Ns)` with that as a, by the legend's own
+  // definition (acceptance 7e2a3c95 #1: 1b930c17 0:24 `Healing Tide
+  // Totem(119s)`, pressed again at 1:57).
+  const realised = cdRemainingWholeSeconds(
+    cdRealisedSecondsUntilReady(cd, timeSeconds),
   );
+  const soonest =
+    cd.earliestCooldownSeconds === undefined
+      ? realised
+      : Math.min(
+          realised,
+          cdRemainingWholeSeconds(
+            cdSecondsUntilReady(cd, timeSeconds, cd.earliestCooldownSeconds),
+          ),
+        );
   return soonest < latest ? `${soonest}–${latest}s` : `${latest}s`;
 }
 

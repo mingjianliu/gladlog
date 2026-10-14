@@ -7,10 +7,13 @@ import {
   eventReductionSecondsAt,
   eventTriggersFor,
   eventTriggerTimesMs,
+  ON_INTERRUPT_COOLDOWN_REDUCTIONS,
 } from "../src/data/talentScriptedCooldowns";
 import {
   applyCdModifiers,
+  applyEventReductions,
   cdAvailableAt,
+  cdRealisedSecondsUntilReady,
   cdSecondsUntilReady,
   warpClock,
 } from "../src/utils/cooldowns";
@@ -160,6 +163,37 @@ describe("cdSecondsUntilReady — 只计 t 之前发生的减 CD", () => {
   it("可用判定仍按最终就绪时刻 70", () => {
     expect(cdAvailableAt(cd, 69)).toBe(false);
     expect(cdAvailableAt(cd, 70)).toBe(true);
+  });
+  it("实际回来的秒数(区间下限)算上之后的两次:t=50 剩 20 s", () => {
+    expect(cdRealisedSecondsUntilReady(cd, 50)).toBeCloseTo(20, 6);
+    expect(cdRealisedSecondsUntilReady(cd, 62)).toBeCloseTo(8, 6);
+  });
+});
+
+describe("applyEventReductions — 台账与 [RES] 工具条目同一规则(验收 7e2a3c95 #1)", () => {
+  it("覆盖值 = 实际就绪 − 按下,reductions = (按下, 就绪) 内的触发", () => {
+    const casts: Array<{
+      timeSeconds: number;
+      cooldownSecondsOverride?: number;
+      reductions?: ReadonlyArray<{ atSeconds: number; seconds: number }>;
+    }> = [{ timeSeconds: 0 }];
+    applyEventReductions(casts, 90, giveBacks([60, 65, 200], 10));
+    expect(casts[0]!.cooldownSecondsOverride).toBe(70);
+    expect(casts[0]!.reductions).toEqual(giveBacks([60, 65], 10));
+  });
+  it("已有覆盖值的按下不动", () => {
+    const casts = [{ timeSeconds: 0, cooldownSecondsOverride: 50 }];
+    applyEventReductions(casts, 90, giveBacks([10], 10));
+    expect(casts[0]).toEqual({ timeSeconds: 0, cooldownSecondsOverride: 50 });
+  });
+  it("事件减 CD 的技能都不吃打断减 CD(resUtilityCds 以条目冷却为起点)", () => {
+    const eventTargets = new Set(
+      Object.values(EVENT_COOLDOWN_REDUCTIONS).flatMap((r) => r.targets),
+    );
+    const both = Object.values(ON_INTERRUPT_COOLDOWN_REDUCTIONS)
+      .map((r) => r.spellId)
+      .filter((id) => eventTargets.has(id));
+    expect(both).toEqual([]);
   });
 });
 

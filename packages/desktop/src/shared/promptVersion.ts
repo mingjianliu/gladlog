@@ -1544,5 +1544,22 @@
  *  3-point contrast gate), every other change a cited reference number;
  *  Boomstick's `[RES]` cooldown reads one number where it read a range
  *  (`40–45s` → `45s`, 779 lines in 160 contexts).
+ *  v383 (2026-10-14, FT, the PV382 acceptance leftovers): (1) a cooldown
+ *  Storm Conduit / Lethal Calibration shortens prints `(a–Ns)` on `[RES]`
+ *  — N the bolts cast so far, a its real return — and the owner's kick
+ *  entry reads the same rule (it counted later bolts early); (2) a shield
+ *  eaten through, dispelled or ended by its holder's death inside its last
+ *  second says so (`— used up` …); (3) the `(rewind)` legend: returns to
+ *  the health it had then (up or down); (4) the shared-cooldown cd-waste
+ *  legend: "none went off" (a refused press is not a use); (5) SPLIT PUSH
+ *  prints the span it checked and holds "stayed >20yd away" at every
+ *  sampled instant of it; (6) the low-pressure NOTE and cd-waste's
+ *  pressure gate read the owner's lowest HP up to the round's end
+ *  (`roundEndMs`), not past a Solo Shuffle round's ending death; (7) the
+ *  missed-sync-window legend points `durationS` at the lock's [CONSEQ]
+ *  line. 605 files: cd-waste −5 (three Solo Shuffle owners whose only
+ *  reading under 60 % came after the round's end; the NOTE now prints),
+ *  nothing added; SPLIT PUSH lines 30 → 3; 234 `[ENEMY DEF]` lines gain
+ *  an end note; `[RES]` presses before a row's own low bound 124 → 78.
  */
-export const PROMPT_VERSION = 382;
+export const PROMPT_VERSION = 383;

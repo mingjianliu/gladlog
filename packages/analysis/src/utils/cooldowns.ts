@@ -2388,6 +2388,70 @@ function cdSecondsUntilReadyConsumed(
 }
 
 /**
+ * Event reductions (Storm Conduit, Lethal Calibration) on single-charge
+ * presses — the one rule for the cooldown ledger (`extractMajorCooldowns`) and
+ * the [RES] utility entries (`resUtilityCds`): a press without an override of
+ * its own gets its realised ready instant R − press (`eventReducedCooldownSeconds`)
+ * and, in `reductions`, the triggers inside (press, R). "Available at t" reads
+ * the override (R ≤ t); "seconds until ready at t" counts only the triggers
+ * that had happened by t (`cdSecondsUntilReady`); the [RES] row prints the
+ * realised return as the low end of `(a–Ns)` (`cdRealisedSecondsUntilReady`).
+ * Acceptance 7e2a3c95 #1: [RES] set the override WITHOUT `reductions` on
+ * Wind Shear (later bolts counted early, 1b930c17 1:39 `Wind Shear(15s)`)
+ * while the ledger printed Healing Tide Totem's as-of-now 119 s as if exact
+ * (pressed again 93 s later).
+ */
+export function applyEventReductions(
+  casts: Array<
+    Pick<
+      ICooldownCast,
+      "timeSeconds" | "cooldownSecondsOverride" | "reductions"
+    >
+  >,
+  cooldownSeconds: number,
+  triggers: ReadonlyArray<{ atSeconds: number; seconds: number }>,
+): void {
+  for (const c of casts) {
+    if (c.cooldownSecondsOverride !== undefined) continue;
+    const eff = eventReducedCooldownSeconds(
+      c.timeSeconds,
+      cooldownSeconds,
+      triggers,
+    );
+    if (eff < cooldownSeconds) {
+      c.cooldownSecondsOverride = eff;
+      c.reductions = triggers.filter(
+        (g) =>
+          g.atSeconds > c.timeSeconds &&
+          g.atSeconds < c.timeSeconds + eff + 1e-9,
+      );
+    }
+  }
+}
+
+/**
+ * Seconds from `tSeconds` until X actually came back: `cdSecondsUntilReady`
+ * with an event-reduced press's later triggers counted too (its override, the
+ * instant `cdAvailableAt` reads). Equal to `cdSecondsUntilReady` for every
+ * cooldown without event reductions; the low end of a [RES] `(a–Ns)`.
+ */
+export function cdRealisedSecondsUntilReady(
+  cd: Parameters<typeof cdSecondsUntilReady>[0],
+  tSeconds: number,
+): number {
+  const realised = (c: ICooldownCast): ICooldownCast =>
+    c.reductions ? { ...c, reductions: undefined } : c;
+  return cdSecondsUntilReady(
+    {
+      ...cd,
+      casts: cd.casts.map(realised),
+      ...(cd.sharedCasts ? { sharedCasts: cd.sharedCasts.map(realised) } : {}),
+    },
+    tSeconds,
+  );
+}
+
+/**
  * The whole seconds a cooldown is at most away at `tSeconds` — the number
  * behind `(Ns)` / `(≤Ns)` on a [RES] `cd:` entry and behind the kill-window
  * facts' `may already be back: X ≤Ns` (triage res-readiness F-C8: one source
@@ -4129,26 +4193,14 @@ function extractMajorCooldownsAll(
     // simulation takes no per-press override.
     const reductions = eventReductionsFor(spell.spellId, holds);
     if (reductions.length && baselineCharges <= 1) {
-      const triggers = eventTriggersFor(unit, reductions).map((g) => ({
-        atSeconds: (g.atMs - matchStartMs) / 1000,
-        seconds: g.seconds,
-      }));
-      for (const c of casts) {
-        if (c.cooldownSecondsOverride !== undefined) continue;
-        const eff = eventReducedCooldownSeconds(
-          c.timeSeconds,
-          cooldownSeconds,
-          triggers,
-        );
-        if (eff < cooldownSeconds) {
-          c.cooldownSecondsOverride = eff;
-          c.reductions = triggers.filter(
-            (g) =>
-              g.atSeconds > c.timeSeconds &&
-              g.atSeconds < c.timeSeconds + eff + 1e-9,
-          );
-        }
-      }
+      applyEventReductions(
+        casts,
+        cooldownSeconds,
+        eventTriggersFor(unit, reductions).map((g) => ({
+          atSeconds: (g.atMs - matchStartMs) / 1000,
+          seconds: g.seconds,
+        })),
+      );
     }
     // Free recast (Escape from Reality): the press that opens the window
     // carries it; a press inside an unused window is free and stays anchored

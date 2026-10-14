@@ -250,6 +250,7 @@
     "test/spellSchools.test.ts",
     "test/spellTags.ccSpellIds.test.ts",
     "test/spellTargeting.test.ts",
+    "test/splitPushSpan.test.ts",
     "test/stateGhost.test.ts",
     "test/stateLegend.test.ts",
     "test/stormConduitByLogDate.test.ts",

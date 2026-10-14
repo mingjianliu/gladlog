@@ -1107,8 +1107,34 @@ export function enemyDefensiveEvents(
         ? { removedEarly: false, upAtRoundEnd: true }
         : { removedEarly: false, endNotLogged: true };
     }
-    if (!removedEarly(auraId, iv.toS - iv.fromS))
-      return { removedEarly: false };
+    if (!removedEarly(auraId, iv.toS - iv.fromS)) {
+      // Inside the slack an end the log gives a cause for is still early:
+      // the slack absorbs aura-event jitter, and a REMOVED that names its
+      // cause is not jitter (acceptance 7e2a3c95 #2: 64a7a24d `Ice Barrier
+      // (absorb 149k, 3.5s)` — REMOVED with 0 left 0.53 s before its 4 s,
+      // same ms as the last absorb — printed no `— used up`). A clamp at the
+      // log's end (below) is no end the log gave, and an aura that ran its
+      // full length expired whatever else is logged in that ms.
+      const full = buffFullDurationForCaster(auraId, enemy);
+      if (
+        full === undefined ||
+        !(iv.toS - iv.fromS < full) ||
+        endMs >= combat.endTime
+      )
+        return { removedEarly: false };
+      const end = auraEndFromLog(
+        holder,
+        iv.spellId,
+        {
+          fromMs: Math.round(combat.startTime + iv.fromS * 1000),
+          removedMs: endMs,
+        },
+        iv.srcUnitId,
+      );
+      return end.takenBy || end.holderDied || end.absorb?.left === 0
+        ? { removedEarly: true, earlyEnd: end }
+        : { removedEarly: false };
+    }
     // The interval builder clamps a REMOVED logged after the round's end onto
     // it (a Shuffle round keeps its trailing lines). Then the aura was still
     // up when the round ended: nothing removed it early, and no line at the

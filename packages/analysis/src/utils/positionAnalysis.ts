@@ -42,7 +42,11 @@ import {
 } from "./healerExposureAnalysis";
 import { sumIncomingPressure } from "./incomingPressure";
 import { distanceBetween, getUnitPositionAtTime } from "./losAnalysis";
-import { HEALER_TRAINED_YARDS, INTERP_MAX_GAP_MS } from "./positionSampling";
+import {
+  HEALER_TRAINED_YARDS,
+  INTERP_MAX_GAP_MS,
+  positionSampleInstants,
+} from "./positionSampling";
 import { fmtTime, toRenderSecond } from "./renderGrid";
 import { buildRosterSides, type RosterSides } from "./rosterSide";
 import { spellReachToAccuse } from "./spellRange";
@@ -1314,6 +1318,29 @@ export function computeOwnerPositionEvents(params: {
   }
 
   // ── 4. Iter 3: SPLIT_PUSH — a melee DPS away from the target during a committed push ──
+  /** "Stayed >PUSH_AWOL_YARDS away" over [fromS, toS] (match seconds) at
+   *  every instant the positioning gate samples (`positionSampleInstants`:
+   *  both units' real samples + the sub-second grid), skipping instants
+   *  where either has no position or is dead (a corpse is not a position). */
+  const stayedBeyondThroughout = (
+    a: ICombatUnit,
+    b: ICombatUnit,
+    fromS: number,
+    toS: number,
+  ): boolean => {
+    const fromMs = matchStartMs + fromS * 1000;
+    const toMs = matchStartMs + toS * 1000;
+    for (const ts of positionSampleInstants([a, b], fromMs, toMs, [
+      fromMs,
+      toMs,
+    ])) {
+      if (isDeadAt(a, ts) || isDeadAt(b, ts)) continue;
+      const pa = getUnitPositionAtTime(a, ts, POSITION_MAX_GAP_MS);
+      const pb = getUnitPositionAtTime(b, ts, POSITION_MAX_GAP_MS);
+      if (pa && pb && distanceBetween(pa, pb) <= PUSH_AWOL_YARDS) return false;
+    }
+    return true;
+  };
   if (friends && offensiveWindows) {
     const ccByName = new Map(
       (friendCCSummaries ?? []).map((c) => [c.playerName, c.ccInstances]),
@@ -1336,6 +1363,9 @@ export function computeOwnerPositionEvents(params: {
 
       const evalEnd = Math.min(w.toSeconds, w.fromSeconds + BURST_EVAL_SECONDS);
       const sampleTimes = [w.fromSeconds + 2, (w.fromSeconds + evalEnd) / 2];
+      // the rendered span `from–to` the line prints (floored like fmtTime)
+      const splitFromS = toRenderSecond(w.fromSeconds);
+      const splitToS = evalEnd;
       const onTarget: string[] = [];
       const awol: string[] = [];
       for (const dps of meleeDps) {
@@ -1364,7 +1394,10 @@ export function computeOwnerPositionEvents(params: {
         if (dists.some((d) => d === null)) continue; // unreliable positions — no claim
         if (dists.every((d) => (d as number) <= PUSH_ON_TARGET_YARDS))
           onTarget.push(dps.name);
-        else if (dists.every((d) => (d as number) > PUSH_AWOL_YARDS))
+        else if (
+          dists.every((d) => (d as number) > PUSH_AWOL_YARDS) &&
+          stayedBeyondThroughout(dps, target, splitFromS, splitToS)
+        )
           awol.push(dps.name);
       }
 
@@ -1372,7 +1405,11 @@ export function computeOwnerPositionEvents(params: {
         events.push({
           type: "SPLIT_PUSH",
           atSeconds: w.fromSeconds,
-          toSeconds: w.toSeconds,
+          // the span the line prints is the span checked (acceptance
+          // 7e2a3c95 #5): the window's whole length printed as "stayed >20yd
+          // away" from two samples in its first 10 s — c2058ed4 2:33–3:33,
+          // Lava Lash on the target from ~1 yd at 3:06.9
+          toSeconds: evalEnd,
           nearestEnemyName: w.targetName,
           playersInvolved: awol,
         });

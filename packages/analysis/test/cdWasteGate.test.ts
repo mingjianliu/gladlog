@@ -91,11 +91,15 @@ describe("cd-waste — facts.attempted (F-W1)", () => {
   };
   it("counts the rejects up to the round end; the line still fires", () => {
     const [e] = cdWasteEvents([LOH], me, 40, { rawStreams, untilS: 120.408 });
-    expect(e!.facts!.attempted).toBe("pressed but rejected (无法在放逐时那样做×3)");
+    expect(e!.facts!.attempted).toBe(
+      "pressed but rejected (无法在放逐时那样做×3)",
+    );
   });
   it("the caller's window ends at the owner's own death — \"You are dead\" is no attempt", () => {
     const [e] = cdWasteEvents([LOH], me, 40, { rawStreams, untilS: 119.0 });
-    expect(e!.facts!.attempted).toBe("pressed but rejected (无法在放逐时那样做×1)");
+    expect(e!.facts!.attempted).toBe(
+      "pressed but rejected (无法在放逐时那样做×1)",
+    );
   });
   it("a not-ready reject within 1.5 s after an own success is a GCD miss-press, not an attempt (fe1a9355 shape)", () => {
     const [e] = cdWasteEvents([LOH], me, 40, {
@@ -231,6 +235,35 @@ describe("matchMinHpPct", () => {
     expect(matchMinHpPct(u)).toBe(30);
     // the boundary instants are inside the round
     expect(matchMinHpPct(u, { startTime: 900, endTime: 6000 })).toBe(30);
+  });
+
+  it("a Solo Shuffle round ends at its first death — `roundEndMs` (acceptance 7e2a3c95 #6)", () => {
+    // 7d1f14af: the NOTE read 69 % 1.2 s after the round's first death
+    // (71.4 % inside the round); the log ran on to combat.endTime
+    const sample = (timestamp: number, hp: number) => ({
+      logLine: { timestamp },
+      advancedActorCurrentHp: hp,
+      advancedActorMaxHp: 1000,
+    });
+    const owner = makeUnit("p1", {
+      info: {},
+      advancedActions: [sample(2000, 714), sample(4200, 690)] as never[],
+    });
+    const dead = makeUnit("p2", {
+      info: {},
+      deathRecords: [{ timestamp: 3000 }],
+    } as never);
+    const round = {
+      startTime: 1000,
+      endTime: 5000,
+      startInfo: { bracket: "Rated Solo Shuffle" },
+      units: { p1: owner, p2: dead },
+    };
+    expect(matchMinHpPct(owner, round)).toBeCloseTo(71.4, 6);
+    // a 3v3 round keeps the combat's end
+    expect(
+      matchMinHpPct(owner, { ...round, startInfo: { bracket: "3v3" } }),
+    ).toBe(69);
   });
 });
 

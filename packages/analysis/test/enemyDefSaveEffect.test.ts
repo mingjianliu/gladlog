@@ -188,6 +188,30 @@ describe("[ENEMY DEF] names an effect save by its effect (FT-T07, ruling D8)", (
     );
   });
 
+  it("eaten through inside its last second still says `— used up` (acceptance 7e2a3c95 #2)", () => {
+    // 64a7a24d 0:47 Ice Barrier: REMOVED with 0 left 3.47 s into a 4 s aura —
+    // under the 1 s slack the jitter rule used to call that a full run
+    const hunter = unit("e1", {
+      auraEvents: [
+        applied(SURVIVAL_TACTICS, 21.3, 90_000),
+        removed(SURVIVAL_TACTICS, 22.8, 0),
+      ],
+      absorbsIn: [absorbed(21.5, 50_000), absorbed(22.8, 40_000)],
+    });
+    expect(body(render([hunter])[0])).toBe(
+      "Feign Death (absorb 90k, 1.5s — used up)",
+    );
+    // the same 1.5 s with absorb left over: no cause the log gives — no note
+    const left = unit("e1", {
+      auraEvents: [
+        applied(SURVIVAL_TACTICS, 21.3, 90_000),
+        removed(SURVIVAL_TACTICS, 22.8, 40_000),
+      ],
+      absorbsIn: [absorbed(21.5, 50_000)],
+    });
+    expect(body(render([left])[0])).toBe("Feign Death (absorb 50k, 1.5s)");
+  });
+
   it("Nature's Guardian: `(heal proc)`; Cheat Death / Cauterize: `(cheat-death proc)` — a moment, no duration", () => {
     const sham = unit("e1", { healIn: [selfHeal("31616", 77)] });
     expect(body(render([sham])[0])).toBe("Nature's Guardian (heal proc)");
