@@ -18,6 +18,7 @@ interface Entry {
   immuneAll?: boolean;
   locksCasting?: boolean;
   silenceable?: boolean;
+  unsilenceable?: boolean;
 }
 
 const SPELLS = (raw as unknown as { spells: Record<string, Entry | undefined> })
@@ -131,6 +132,14 @@ export function auraLocksCasting(auraId: string): boolean {
  * be locked". */
 export function isSilenceableCast(spellId: string): boolean {
   return SPELLS[spellId]?.silenceable === true;
+}
+
+/** DB2 says a silence does NOT prevent this cast: the spell has a
+ * SpellCategories row and none carries the silence bit (Stormstrike, Mortal
+ * Strike, Judgment). Not the negation of `isSilenceableCast` — a spell with
+ * no row is neither (no evidence either way). */
+export function isUnsilenceableCast(spellId: string): boolean {
+  return SPELLS[spellId]?.unsilenceable === true;
 }
 
 /** Which official usable-while-CC state a mechanic puts its victim in, or

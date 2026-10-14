@@ -1544,6 +1544,16 @@ const INDEX: PredicateRow[] = [
   },
   {
     file: `${A}/utils/cannotCastIntervals.ts`,
+    symbol: "isSilenceOnlyAura",
+    mod: cannotCastIntervals,
+  },
+  {
+    file: `${A}/utils/spellMechanics.ts`,
+    symbol: "isUnsilenceableCast",
+    mod: spellMechanics,
+  },
+  {
+    file: `${A}/utils/cannotCastIntervals.ts`,
     symbol: "lockedSchoolsText",
     mod: cannotCastIntervals,
   },

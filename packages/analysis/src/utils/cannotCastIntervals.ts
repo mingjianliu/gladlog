@@ -13,7 +13,7 @@ import { buffFullDurationForCaster } from "./buffDuration";
 import { REACTION_WINDOW_S, usableWhileStunned } from "./cooldowns";
 import { isStunDrAura, matchPendingCcKey } from "./drAnalysis";
 import { kickLockoutSecondsFor } from "./kickLockout";
-import { isSilenceableCast } from "./spellMechanics";
+import { isSilenceableCast, isUnsilenceableCast } from "./spellMechanics";
 import { firstDeathMs } from "./unitDeath";
 
 /**
@@ -201,8 +201,14 @@ export function petCastersOf(
 
 /**
  * Does this cannot-cast interval stop `spellId`, cast by the unit the
- * interval sits on? An aura (hard CC, silence) is taken as stopping
- * everything here; a kick lockout stops a spell only when every school of
+ * interval sits on? A hard-CC aura stops everything; a SILENCE aura (the
+ * official DR silence family, not hard CC — `isSilenceOnlyAura`) stops
+ * every spell but one DB2 says a silence does not prevent
+ * (`isUnsilenceableCast`: a SpellCategories row without the silence bit —
+ * Stormstrike, Mortal Strike, Judgment); a spell with no row stays stopped.
+ * FT-R1011c follow-up (2026-10-14): of the casts that went out inside a
+ * silence aura on 605 files, 2,368 had such a row, 2 the silence bit, 123 no
+ * row. A kick lockout stops a spell only when every school of
  * that spell is inside the lock (`schoolLockedBy`, the kick-eaten
  * predicate). Unknown school on either side → it blocks (the exemption
  * stays).
@@ -230,10 +236,17 @@ export function intervalBlocksSpell(
   iv: Pick<
     NamedCannotCastInterval,
     "lockout" | "lockedSchoolMask" | "petCastSpellIds"
-  >,
+  > &
+    Partial<Pick<NamedCannotCastInterval, "spellId">>,
   spellId: string | undefined,
 ): boolean {
-  if (!iv.lockout || spellId === undefined) return true;
+  if (spellId === undefined) return true;
+  if (!iv.lockout)
+    return !(
+      iv.spellId !== undefined &&
+      isSilenceOnlyAura(iv.spellId) &&
+      isUnsilenceableCast(spellId)
+    );
   // the pet's spell: the owner's cast bar is not its cast bar
   if (iv.petCastSpellIds?.has(spellId)) return false;
   const m = spellSchoolMask(spellId);
@@ -256,7 +269,8 @@ export function intervalBlocksSpell(
  * wired — and never for an interval that sits on a pet.
  *
  * Opt-in (`actWindowFor`'s `stunPressable`): `intervalBlocksSpell` itself
- * still takes every aura as stopping everything, for every other reader.
+ * still takes every hard-CC aura as stopping everything (a silence only what
+ * DB2 lets it prevent), for every other reader.
  */
 export function stunLetsPress(
   iv: Pick<NamedCannotCastInterval, "lockout" | "spellId" | "onPetId">,
@@ -401,7 +415,8 @@ export function intervalBlocksEverySpell(
   iv: Pick<
     NamedCannotCastInterval,
     "lockout" | "lockedSchoolMask" | "petCastSpellIds"
-  >,
+  > &
+    Partial<Pick<NamedCannotCastInterval, "spellId">>,
   spellIds: readonly string[] | undefined,
 ): boolean {
   return (
@@ -682,7 +697,7 @@ export function castBlockingAuraIntervals(
 
 /** A cast-blocking aura that is a silence and not hard CC — the same split
  * `silenceIntervals` renders `[SILENCE]` from. */
-const isSilenceOnlyAura = (auraId: string): boolean =>
+export const isSilenceOnlyAura = (auraId: string): boolean =>
   officialSilenceIds.has(auraId) && !ccSpellIds.has(auraId);
 
 /**

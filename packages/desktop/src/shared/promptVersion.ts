@@ -1642,5 +1642,12 @@
  *  replayed casts are not the post-kick switch; a burst's pressured
  *  friendly is one its casters hit or found IMMUNE. 605 files:
  *  missed-cleanse +6 / −2, kick-eaten −1.
+ *  v390 (2026-10-14, FT, FT-R1011c follow-up — facts only): a silence
+ *  stops a spell only when DB2 lets it (SpellCategories PreventionType
+ *  silence bit, or no row) — Stormstrike, Mortal Strike, Judgment, Barkskin
+ *  go out under a silence. Every can-act reader of a named spell takes it:
+ *  kick-eaten ccInWindowS, cd-hoarded ownerFreeS, missed-sync-window
+ *  holderCc / readyCds, [DEFENSIVE AVAILABLE] free seconds. 605 files: no
+ *  candidate added or removed.
  */
-export const PROMPT_VERSION = 389;
+export const PROMPT_VERSION = 390;

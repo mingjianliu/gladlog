@@ -69,6 +69,17 @@ describe("a kick lockout by school (FT-T10)", () => {
     expect(intervalBlocksSpell({ lockout: true }, ICE_BLOCK)).toBe(true);
     // an aura (hard CC, silence) is not a school lock
     expect(intervalBlocksSpell({ lockout: false }, ICE_BLOCK)).toBe(true);
+    // a silence stops what DB2 marks silenceable (Ice Block 45438:
+    // PreventionType 1) and a spell with no SpellCategories row; not one
+    // whose row has no silence bit (Stormstrike 17364, Barkskin 22812) —
+    // FT-R1011c follow-up, 2026-10-14
+    const garrote = { lockout: false, spellId: "1330" };
+    expect(intervalBlocksSpell(garrote, ICE_BLOCK)).toBe(true);
+    expect(intervalBlocksSpell(garrote, "17364")).toBe(false);
+    expect(intervalBlocksSpell(garrote, "22812")).toBe(false);
+    expect(intervalBlocksSpell(garrote, "341263")).toBe(true);
+    // hard CC stops all of them (Kidney Shot 408)
+    expect(intervalBlocksSpell({ lockout: false, spellId: "408" }, "17364")).toBe(true);
     expect(lockedSchoolsText(64)).toBe(" (Arcane)");
     expect(lockedSchoolsText(36)).toBe(" (Fire/Shadow)");
     expect(lockedSchoolsText(undefined)).toBe("");

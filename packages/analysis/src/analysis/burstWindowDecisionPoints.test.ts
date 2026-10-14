@@ -1022,9 +1022,11 @@ describe("burstWindowDecisionPoints — reliability round 2 W1a", () => {
     expect(pts[0]!.responses.control).toBe(false);
   });
 
-  it("a friendly silenced across the whole response window does not make it feasible", () => {
-    // Garrote - Silence (1330) is a silence, not hard CC: `inCcAt` alone
-    // never saw it; the shared cannot-cast predicate does.
+  it("a silence across the whole response window does not stop a wall DB2 says a silence does not prevent (Barkskin)", () => {
+    // Garrote - Silence (1330) is a silence, not hard CC. Barkskin's
+    // SpellCategories row has no silence bit (PreventionType 4) and went out
+    // inside a silence aura 15 times on 605 files — FT-R1011c follow-up
+    // (2026-10-14); until then a silence was read as stopping every spell.
     const f = pressuredFriend({
       spellCastEvents: [cast(BARKSKIN, 120)],
       auraEvents: [
@@ -1033,7 +1035,7 @@ describe("burstWindowDecisionPoints — reliability round 2 W1a", () => {
       ],
     });
     const pts = burstWindowDecisionPoints(combat([f, enemyWithBurst()]));
-    expect(pts[0]!.feasible).toBe(false);
+    expect(pts[0]!.feasible).toBe(true);
   });
 });
 

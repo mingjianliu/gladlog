@@ -48,6 +48,14 @@
  *                    (Shadowy Apparition 341263: 125 successes inside a Shadow
  *                    lock on 605 files) gets no flag, and no flag means "no
  *                    evidence", never "not lockable".
+ *   · unsilenceable — the spell HAS a SpellCategories row and none of its
+ *                    rows carries the silence bit: DB2 says a silence does
+ *                    not prevent it (Stormstrike, Mortal Strike, Judgment,
+ *                    Dream Breath). Separate from "no flag" on purpose: of
+ *                    the casts that went out inside a silence aura on 605
+ *                    files, 2,368 had such a row, 2 had the silence bit,
+ *                    123 had no row (pet commands, proc rows) — work order
+ *                    FT-R1011c follow-up, 2026-10-14.
  *
  * Universe = observedSpellIdsGenerated.json (every id the corpus has seen), so
  * the table cannot be incomplete relative to what a log can contain. An id
@@ -89,6 +97,7 @@ interface Entry {
   immuneAll?: true;
   locksCasting?: true;
   silenceable?: true;
+  unsilenceable?: true;
 }
 
 async function main() {
@@ -147,13 +156,19 @@ async function main() {
     if (ms !== undefined && entry(r.SpellID).castMs === undefined)
       entry(r.SpellID).castMs = ms;
   }
+  const hasCategoriesRow = new Set<string>();
   for (const r of cats.rows) {
     if (r.DifficultyID !== "0" || !observed.has(r.SpellID)) continue;
+    hasCategoriesRow.add(r.SpellID);
     const m = Number(r.Mechanic);
     if (m > 0) entry(r.SpellID).mech = m;
     if ((Number(r.PreventionType) & PREVENTION_TYPE_SILENCE) !== 0)
       entry(r.SpellID).silenceable = true;
   }
+  // a SpellCategories row with no silence bit is DB2 saying a silence does
+  // NOT prevent the cast — the positive "no" that a missing row is not
+  for (const id of hasCategoriesRow)
+    if (!out[id]?.silenceable) entry(id).unsilenceable = true;
   for (const r of eff.rows) {
     if (r.DifficultyID !== "0" || !observed.has(r.SpellID)) continue;
     const e = entry(r.SpellID);

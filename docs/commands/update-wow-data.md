@@ -468,6 +468,11 @@ npx tsx packages/eval/scripts/purgerRosterScan.ts --manifest <newseason manifest
 #    removed on its first run (DB2 was right); Infernal Awakening 22703 shares none. ~35 s at
 #    --every 30. drGapScan cannot see a CC DB2 leaves uncategorised — this can.
 npx tsx packages/eval/scripts/drShareScan.ts --manifest <newseason manifest> --every 30 --spells 33786,99,22703
+# 3b'. What a silence stops (2026-10-14, FT-R1011c follow-up): casts that went out inside a silence aura,
+#    split by DB2 SpellCategories.PreventionType's silence bit (`isSilenceableCast` / `isUnsilenceableCast`,
+#    the reading `intervalBlocksSpell` takes). Expect silenceable ≈ 0 per 10k; FLAG at ≥ 1. First run
+#    (605 files, DB2 69587): silenceable 0.05 / 10k, unsilenceable 70 / 10k, no row 28 / 10k. ~1 min.
+npx tsx packages/eval/scripts/silenceCastScan.ts --manifest <newseason manifest> --every 30
 # 3c. Cooldown-changing buffs the ledger cannot see (2026-09-25, GH #106 follow-up): every aura a player
 #    applied to themselves, fed through the talent generator's own target resolution against the spells
 #    extractMajorCooldowns really put in that spec's ledger; reports UNSEEN (never reached — a talent that
