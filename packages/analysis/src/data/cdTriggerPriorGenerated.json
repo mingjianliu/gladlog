@@ -1,7 +1,7 @@
 {
   "meta": {
-    "generatedAt": "2026-10-08",
-    "corpus": "wowarenalogs archive, GH #115 regen 2026-10-07",
+    "generatedAt": "2026-10-14",
+    "corpus": "wowarenalogs archive, GH #115 regen 2026-10-13",
     "command": "npx tsx packages/eval/scripts/cdTriggerPriorScan.ts emit-table --in <scan.jsonl> --out <file.json>",
     "cohort": "all",
     "cohortRule": "all 12.1+ healer rounds in the archive",

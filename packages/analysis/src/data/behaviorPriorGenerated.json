@@ -1,7 +1,7 @@
 {
   "meta": {
-    "generatedAt": "2026-10-08",
-    "corpus": "wowarenalogs archive, GH #115 regen 2026-10-07",
+    "generatedAt": "2026-10-14",
+    "corpus": "wowarenalogs archive, GH #115 regen 2026-10-13",
     "weeks": [
       "2026-W33",
       "2026-W34",
@@ -13,9 +13,9 @@
   },
   "cells": {
     "2v2|healer|*": {
-      "nNoResp": 2936,
+      "nNoResp": 2938,
       "deathNoResp": 0.3,
-      "nResp": 9207,
+      "nResp": 9212,
       "deathResp": 0.1,
       "top": [
         [
@@ -36,7 +36,7 @@
     "2v2|healer|10-20%": {
       "nNoResp": 1549,
       "deathNoResp": 0.25,
-      "nResp": 4117,
+      "nResp": 4112,
       "deathResp": 0.08,
       "top": [
         [
@@ -55,9 +55,9 @@
       "outcome": "ownDeath10s"
     },
     "2v2|healer|>=20%": {
-      "nNoResp": 1387,
+      "nNoResp": 1389,
       "deathNoResp": 0.35,
-      "nResp": 5090,
+      "nResp": 5100,
       "deathResp": 0.11,
       "top": [
         [
@@ -78,7 +78,7 @@
     "3v3|healer|*": {
       "nNoResp": 1674,
       "deathNoResp": 0.38,
-      "nResp": 4787,
+      "nResp": 4788,
       "deathResp": 0.1,
       "top": [
         [
@@ -97,9 +97,9 @@
       "outcome": "ownDeath10s"
     },
     "3v3|healer|10-20%": {
-      "nNoResp": 499,
+      "nNoResp": 498,
       "deathNoResp": 0.36,
-      "nResp": 1100,
+      "nResp": 1095,
       "deathResp": 0.09,
       "top": [
         [
@@ -118,9 +118,9 @@
       "outcome": "ownDeath10s"
     },
     "3v3|healer|>=20%": {
-      "nNoResp": 1175,
+      "nNoResp": 1176,
       "deathNoResp": 0.39,
-      "nResp": 3687,
+      "nResp": 3693,
       "deathResp": 0.11,
       "top": [
         [
@@ -141,7 +141,7 @@
     "Rated Solo Shuffle|healer|*": {
       "nNoResp": 1244,
       "deathNoResp": 0.34,
-      "nResp": 6050,
+      "nResp": 6051,
       "deathResp": 0.15,
       "top": [
         [
@@ -160,9 +160,9 @@
       "outcome": "teamDeath15s"
     },
     "Rated Solo Shuffle|healer|10-20%": {
-      "nNoResp": 622,
+      "nNoResp": 621,
       "deathNoResp": 0.34,
-      "nResp": 2110,
+      "nResp": 2103,
       "deathResp": 0.16,
       "top": [
         [
@@ -181,9 +181,9 @@
       "outcome": "teamDeath15s"
     },
     "Rated Solo Shuffle|healer|>=20%": {
-      "nNoResp": 622,
-      "deathNoResp": 0.33,
-      "nResp": 3940,
+      "nNoResp": 623,
+      "deathNoResp": 0.34,
+      "nResp": 3948,
       "deathResp": 0.15,
       "top": [
         [

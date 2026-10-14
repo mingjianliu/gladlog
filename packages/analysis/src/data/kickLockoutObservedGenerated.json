@@ -1,89 +1,89 @@
 {
-  "generatedAt": "2026-09-02T17:12:10.414Z",
+  "generatedAt": "2026-10-11T22:39:07.487Z",
   "generator": "packages/eval/scripts/kickLockoutScan.ts",
   "manifest": "corpus/manifest-archive-2026-08-28-newseason.txt",
   "every": 30,
   "files": 605,
   "interrupts": 6134,
-  "paired": 5322,
+  "paired": 5720,
   "rule": "first same-school cast after SPELL_INTERRUPT; 0.5s-bin mode (lower edge) over gaps >= 1.5s; n >= 20",
   "entries": {
     "1766": {
       "name": "Kick",
       "lockoutSeconds": 3,
-      "n": 473,
-      "p25": 3.01,
-      "p50": 3.5
+      "n": 516,
+      "p25": 3,
+      "p50": 3.35
     },
     "2139": {
       "name": "Counterspell",
       "lockoutSeconds": 6,
-      "n": 619,
-      "p25": 5.04,
-      "p50": 6.1
+      "n": 652,
+      "p25": 5.07,
+      "p50": 6.06
     },
     "6552": {
       "name": "Pummel",
       "lockoutSeconds": 3,
-      "n": 543,
+      "n": 587,
       "p25": 3,
-      "p50": 3.38
+      "p50": 3.31
     },
     "19647": {
       "name": "Spell Lock",
       "lockoutSeconds": 5,
-      "n": 446,
-      "p25": 4.66,
-      "p50": 5.08
+      "n": 465,
+      "p25": 4.95,
+      "p50": 5.02
     },
     "47528": {
       "name": "Mind Freeze",
       "lockoutSeconds": 3,
-      "n": 504,
+      "n": 555,
       "p25": 3,
-      "p50": 3.31
+      "p50": 3.29
     },
     "57994": {
       "name": "Wind Shear",
       "lockoutSeconds": 2,
-      "n": 684,
+      "n": 740,
       "p25": 2.01,
-      "p50": 2.38
+      "p50": 2.32
     },
     "91807": {
       "name": "Shambling Rush",
       "lockoutSeconds": 2,
-      "n": 34,
+      "n": 35,
       "p25": 2,
-      "p50": 2.38
+      "p50": 2.36
     },
     "93985": {
       "name": "Skull Bash",
       "lockoutSeconds": 3,
-      "n": 164,
-      "p25": 3.03,
-      "p50": 3.65
+      "n": 175,
+      "p25": 3,
+      "p50": 3.46
     },
     "96231": {
       "name": "Rebuke",
       "lockoutSeconds": 3,
-      "n": 385,
+      "n": 432,
       "p25": 3,
-      "p50": 3.3
+      "p50": 3.21
     },
     "97547": {
       "name": "Solar Beam",
       "lockoutSeconds": 5,
-      "n": 43,
-      "p25": 5,
-      "p50": 5.88
+      "n": 46,
+      "p25": 5.03,
+      "p50": 6.27
     },
     "116705": {
       "name": "Spear Hand Strike",
       "lockoutSeconds": 3,
-      "n": 141,
+      "n": 146,
       "p25": 3.01,
-      "p50": 3.42
+      "p50": 3.44
     },
     "132409": {
       "name": "Spell Lock",
@@ -95,23 +95,23 @@
     "147362": {
       "name": "Counter Shot",
       "lockoutSeconds": 3,
-      "n": 706,
+      "n": 740,
       "p25": 3,
-      "p50": 3.53
+      "p50": 3.38
     },
     "183752": {
       "name": "Disrupt",
       "lockoutSeconds": 3,
-      "n": 357,
+      "n": 394,
       "p25": 3,
-      "p50": 3.43
+      "p50": 3.33
     },
     "187707": {
       "name": "Muzzle",
       "lockoutSeconds": 3,
-      "n": 71,
-      "p25": 2.98,
-      "p50": 3.17
+      "n": 81,
+      "p25": 3,
+      "p50": 3.19
     },
     "347008": {
       "name": "Axe Toss",
@@ -123,9 +123,9 @@
     "351338": {
       "name": "Quell",
       "lockoutSeconds": 4,
-      "n": 92,
-      "p25": 3.55,
-      "p50": 4.1
+      "n": 96,
+      "p25": 3.99,
+      "p50": 4.06
     }
   }
 }

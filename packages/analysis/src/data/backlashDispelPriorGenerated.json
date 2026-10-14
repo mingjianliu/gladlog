@@ -1,7 +1,7 @@
 {
  "meta": {
-  "corpus": "wowarenalogs archive, GH #115 regen 2026-10-07",
-  "generatedAt": "2026-10-08T01:23:42.496Z",
+  "corpus": "wowarenalogs archive, GH #115 regen 2026-10-11",
+  "generatedAt": "2026-10-12T02:49:04.086Z",
   "files": 21101,
   "opportunities": 231948,
   "generator": "backlashDispelOutcomeProbe.ts emit-table",

@@ -1,7 +1,7 @@
 {
  "meta": {
-  "corpus": "wowarenalogs archive, GH #115 regen 2026-10-07",
-  "generatedAt": "2026-10-08T05:44:44.511Z",
+  "corpus": "wowarenalogs archive, GH #115 regen 2026-10-13",
+  "generatedAt": "2026-10-13T22:38:32.385Z",
   "files": 21101,
   "nFloor": 50,
   "generator": "kickPriorityOutcomeProbe.ts emit-heal-spells"
@@ -14,42 +14,42 @@
   },
   "2061": {
    "name": "Flash Heal",
-   "n": 8989,
+   "n": 8849,
    "medianCastS": 1.16
   },
   "8936": {
    "name": "Regrowth",
-   "n": 1781,
+   "n": 1725,
    "medianCastS": 1.24
   },
   "19750": {
    "name": "Flash of Light",
-   "n": 396,
+   "n": 384,
    "medianCastS": 1.38
   },
   "77472": {
    "name": "Healing Wave",
-   "n": 7271,
+   "n": 7095,
    "medianCastS": 1.34
   },
   "82326": {
    "name": "Holy Light",
-   "n": 2057,
+   "n": 2026,
    "medianCastS": 1.59
   },
   "186263": {
    "name": "Shadow Mend",
-   "n": 1826,
+   "n": 1755,
    "medianCastS": 1.2
   },
   "194509": {
    "name": "Power Word: Radiance",
-   "n": 285,
+   "n": 276,
    "medianCastS": 1.53
   },
   "1262763": {
    "name": "Benediction",
-   "n": 9896,
+   "n": 9658,
    "medianCastS": 1.17
   }
  }

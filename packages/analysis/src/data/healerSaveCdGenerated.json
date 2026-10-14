@@ -1,6 +1,6 @@
 {
   "meta": {
-    "generatedAt": "2026-10-08",
+    "generatedAt": "2026-10-14",
     "corpus": "1814 archived files (12.1+ rounds only)",
     "command": "npx tsx packages/eval/scripts/healerSaveCdScan.ts emit-table --in <counts.json> --out <file.json>",
     "minShare": 0.02,
@@ -214,7 +214,7 @@
         {
           "spellId": "204018",
           "name": "Blessing of Spellwarding",
-          "cooldownSeconds": 180,
+          "cooldownSeconds": 300,
           "share": 0.261,
           "rounds": 308,
           "casts": 309,
