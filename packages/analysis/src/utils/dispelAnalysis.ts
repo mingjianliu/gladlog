@@ -3094,18 +3094,18 @@ export function reconstructDispelSummary(
       const spellId = aura.spellId;
       if (!spellId) continue;
 
-      // Only CC applied by enemies. A BROKEN row names the BREAKER (raw.txt:
-      // Dragon's Breath broken by a warrior's Champion's Spear logs the
-      // warrior), and an enemy pet breaks a CC too — agy 40-FT-96: those rows
-      // were dropped here, so the window never read "broken by damage"
+      // Only CC applied by enemies. A BROKEN row names the BREAKER, whoever
+      // that is (raw.txt: Dragon's Breath broken by a warrior's Champion's
+      // Spear logs the warrior; an enemy pet's Kill Command logs the pet; a
+      // teammate's Blessing of Sacrifice or the holder's own Time Dilation
+      // logs that friendly — 65 of 1,360 BROKEN_SPELL rows in 60 matches) —
+      // agy 40-FT-96 / 40-FT-97: those rows were dropped here, so the window
+      // never read "broken by damage". A break only closes an open
+      // application, and only an enemy's opens one
       const isBreak =
         aura.logLine.event === LogEvent.SPELL_AURA_BROKEN ||
         aura.logLine.event === LogEvent.SPELL_AURA_BROKEN_SPELL;
-      if (
-        !enemyIds.has(aura.srcUnitId) &&
-        !(isBreak && enemyPetIds.has(aura.srcUnitId))
-      )
-        continue;
+      if (!enemyIds.has(aura.srcUnitId) && !isBreak) continue;
 
       // B11 fix: skip BUFF auras. When a friendly Mage spellsteals an enemy buff (e.g.
       // Blessing of Freedom 1044), the resulting SPELL_AURA_APPLIED on the Mage carries
@@ -3220,9 +3220,7 @@ export function reconstructDispelSummary(
         const brokenByDamage =
           aura.logLine.event === LogEvent.SPELL_AURA_BROKEN_SPELL ||
           auraBreaksBeforeRemoved(unit.auraEvents, aura).some(
-            (b) =>
-              b.logLine.event === LogEvent.SPELL_AURA_BROKEN_SPELL &&
-              (enemyIds.has(b.srcUnitId) || enemyPetIds.has(b.srcUnitId)),
+            (b) => b.logLine.event === LogEvent.SPELL_AURA_BROKEN_SPELL,
           );
         closeWindow(open, { ts: aura.timestamp, brokenByDamage });
       }

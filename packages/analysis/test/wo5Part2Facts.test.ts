@@ -212,10 +212,28 @@ describe("2a — the uncleansed window: a re-send inside the length is one windo
         ev(LogEvent.SPELL_AURA_APPLIED, "122", 20, "enemy-1", "m"),
         ev(LogEvent.SPELL_AURA_BROKEN_SPELL, "122", 24, "enemy-pet", "m"),
         ev(LogEvent.SPELL_AURA_REMOVED, "122", 24, "enemy-1", "m"),
+        // a terminal pet break closes the application: without it the
+        // 48 s re-application would cap this one at its length (agy 40-FT-97 #2)
         ev(LogEvent.SPELL_AURA_APPLIED, "122", 40, "enemy-1", "m"),
         ev(LogEvent.SPELL_AURA_BROKEN_SPELL, "122", 44, "enemy-pet", "m"),
+        ev(LogEvent.SPELL_AURA_APPLIED, "122", 48, "enemy-1", "m"),
+        ev(LogEvent.SPELL_AURA_REMOVED, "122", 54, "enemy-1", "m"),
       ]),
-    ).toEqual([]);
+    ).toEqual([[48, 6]]);
+  });
+
+  it("agy 40-FT-97 #1: a friendly-logged damage break (Sacrifice, Time Dilation) is broken by damage", () => {
+    expect(
+      windows2([
+        ev(LogEvent.SPELL_AURA_APPLIED, "122", 20, "enemy-2", "m"),
+        ev(LogEvent.SPELL_AURA_BROKEN_SPELL, "122", 24, "h", "m"),
+        ev(LogEvent.SPELL_AURA_REMOVED, "122", 24, "enemy-2", "m"),
+        ev(LogEvent.SPELL_AURA_APPLIED, "122", 40, "enemy-2", "m"),
+        ev(LogEvent.SPELL_AURA_BROKEN_SPELL, "122", 44, "m", "m"),
+        ev(LogEvent.SPELL_AURA_APPLIED, "122", 48, "enemy-2", "m"),
+        ev(LogEvent.SPELL_AURA_REMOVED, "122", 54, "enemy-2", "m"),
+      ]),
+    ).toEqual([[48, 6]]);
   });
 
   it("agy 40-FT-95 #2: a breaker's removal closes one application, not two", () => {
