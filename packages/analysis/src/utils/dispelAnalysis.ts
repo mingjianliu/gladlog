@@ -20,7 +20,6 @@ import {
 import { SELF_REMOVAL_BY_TYPE } from "../data/selfRemovals";
 import { SPELL_CATEGORIES as spellsData } from "../data/spellCategories";
 import {
-  ccFullDurationSeconds,
   effectiveCooldownSeconds,
   getEnglishSpellName,
   spellEffectData,
@@ -43,6 +42,8 @@ import {
   EMPOWER_PRESS_MATCH_MS,
   empowerSpans,
 } from "./castCommitSpans";
+import { oppressingRoarOnAtMs } from "./ccBreakAnalysis";
+import { ccFullDurationForApplication } from "./ccDuration";
 import { charmedThrough } from "./charmedPlayer";
 import {
   applyCdTalentModifiers,
@@ -60,6 +61,7 @@ import {
   getDRCategory,
   getDRLevelAtTime,
   PATCH_121_GOLIVE_EPOCH_MS,
+  ccRecastBetween,
   reAppliedIsSameApplication,
 } from "./drAnalysis";
 import { sumLandedPressure } from "./incomingPressure";
@@ -2441,6 +2443,7 @@ function drLevelAtApply(
   applyTs: number,
   enemyIds: Set<string>,
   matchStartMs: number,
+  unitById?: ReadonlyMap<string, ICombatUnit>,
 ): "Full" | "50%" | "25%" | "Immune" {
   const category = getDRCategory(ccSpellId);
   const instances = buildCcCategoryHistory(
@@ -2448,6 +2451,7 @@ function drLevelAtApply(
     category,
     enemyIds,
     matchStartMs,
+    unitById,
   );
   return getDRLevelAtTime(
     instances,
@@ -2464,6 +2468,7 @@ export function computeDrChainRisk(
   windowEndTs: number,
   enemyIds: Set<string>,
   matchStartMs: number,
+  unitById?: ReadonlyMap<string, ICombatUnit>,
 ): boolean {
   // Triage missed-cleanse F-C16: an id no DR family claims (a curse) falls
   // back to `spell:<id>` self-DR, and a curse re-applied 0.08 s after its
@@ -2483,6 +2488,7 @@ export function computeDrChainRisk(
     category,
     enemyIds,
     matchStartMs,
+    unitById,
   );
   const level = getDRLevelAtTime(
     instances,
@@ -2818,6 +2824,8 @@ export function reconstructDispelSummary(
   };
   const friendlyPlayerById = new Map(friends.map((u) => [u.id, u]));
   const enemyPlayerById = new Map(enemies.map((u) => [u.id, u]));
+  // the CC's possible casters for the DR history's recast test
+  const rosterUnitById = new Map(rosterUnits.map((u) => [u.id, u]));
   const teamDispelTypes = buildTeamDispelTypes(friends);
   const teamDispelCapability = buildTeamDispelCapability(friends);
   // Reliability round 2 W1d (2026-09-25): a charmed teammate (Mind Control)
@@ -3033,11 +3041,33 @@ export function reconstructDispelSummary(
       : isMeleeSpec(unit.spec)
         ? "melee"
         : "ranged";
-    const appliedTimes = new Map<string, { ts: number; spellName: string }[]>();
+    const appliedTimes = new Map<
+      string,
+      { ts: number; spellName: string; srcUnitId: string }[]
+    >();
     const removedTimes = new Map<
       string,
-      { ts: number; brokenByDamage: boolean }[]
+      { ts: number; brokenByDamage: boolean; srcUnitId: string }[]
     >();
+    // agy 40-FT-94 #2 / #3: an application is its source's — the CC
+    // pairings' key is spell AND source (`buildCcCategoryHistory`,
+    // `analyzeCcBreaks`). A removal is this source's when it names this
+    // source, or names a unit that applied none of the spell (a BROKEN logged
+    // by the enemy whose damage broke it); never another applier's.
+    const removalOf = (
+      r: { srcUnitId: string },
+      srcUnitId: string,
+      appliers: ReadonlySet<string>,
+    ) => r.srcUnitId === srcUnitId || !appliers.has(r.srcUnitId);
+    // the application's own length: caster talents and Oppressing Roar on
+    // the holder at the apply (`ccFullDurationForApplication`, as
+    // `analyzeCcBreaks` reads it); unknown → null (the same application)
+    const lengthOf = (spellId: string, srcUnitId: string, applyMs: number) =>
+      ccFullDurationForApplication(
+        spellId,
+        enemyPlayerById.get(srcUnitId),
+        oppressingRoarOnAtMs(unit, spellId, applyMs),
+      ) ?? null;
 
     // A BROKEN line its aura's own REMOVED follows is not the end (FT-T08):
     // the window closes at the REMOVED, which still carries "broken by
@@ -3110,22 +3140,35 @@ export function reconstructDispelSummary(
       if (aura.logLine.event === LogEvent.SPELL_AURA_APPLIED) {
         const bucket = appliedTimes.get(spellId) ?? [];
         // work order 2026-10-15 Part 2 (user 「好」): a re-APPLIED while the
-        // last application of the spell is still open and inside its
-        // official length is that application (`reAppliedIsSameApplication`
-        // — no caster here, no recast test); it used to open a second,
-        // nested window
-        const last = bucket[bucket.length - 1];
-        const lastRemoved = (removedTimes.get(spellId) ?? []).some(
-          (r) => last !== undefined && r.ts >= last.ts,
-        );
+        // last application of the spell from this source is still open and
+        // inside its length is that application (`reAppliedIsSameApplication`;
+        // a recast by the source — `ccRecastBetween` — is a new one); it used
+        // to open a second, nested window
+        const last = [...bucket]
+          .reverse()
+          .find((a) => a.srcUnitId === aura.srcUnitId);
+        const appliers = new Set(bucket.map((a) => a.srcUnitId));
+        const lastRemoved =
+          last !== undefined &&
+          (removedTimes.get(spellId) ?? []).some(
+            (r) => r.ts >= last.ts && removalOf(r, aura.srcUnitId, appliers),
+          );
+        const src = enemyPlayerById.get(aura.srcUnitId);
         if (
           last !== undefined &&
           !lastRemoved &&
           reAppliedIsSameApplication(
             last.ts,
             aura.timestamp,
-            ccFullDurationSeconds(spellId) ?? null,
-            false,
+            lengthOf(spellId, aura.srcUnitId, last.ts),
+            src !== undefined &&
+              ccRecastBetween(
+                [src],
+                spellId,
+                unit.id,
+                last.ts,
+                aura.timestamp,
+              ),
           )
         )
           continue;
@@ -3134,6 +3177,7 @@ export function reconstructDispelSummary(
           {
             ts: aura.timestamp,
             spellName: getEnglishSpellName(spellId, aura.spellName),
+            srcUnitId: aura.srcUnitId,
           },
         ]);
       } else if (
@@ -3152,7 +3196,7 @@ export function reconstructDispelSummary(
         const bucket = removedTimes.get(spellId) ?? [];
         removedTimes.set(spellId, [
           ...bucket,
-          { ts: aura.timestamp, brokenByDamage },
+          { ts: aura.timestamp, brokenByDamage, srcUnitId: aura.srcUnitId },
         ]);
       }
     }
@@ -3176,7 +3220,12 @@ export function reconstructDispelSummary(
       const priority = getPriority(spellId);
       const removals = removedTimes.get(spellId) ?? [];
 
-      for (const { ts: applyTs, spellName } of applications) {
+      const appliers = new Set(applications.map((a) => a.srcUnitId));
+      for (const {
+        ts: applyTs,
+        spellName,
+        srcUnitId: applySrc,
+      } of applications) {
         // Triage 2026-09-29 missed-cleanse F-C3 (with cc-dr F-CI1, one round
         // end): a window ends at `roundEndMs`. A CC still up when the round
         // ended paired with a removal logged after it and read as a full-
@@ -3185,22 +3234,24 @@ export function reconstructDispelSummary(
         // not in the round. A removal after the end is the round ending, not
         // a dispel, a rider or a break.
         if (applyTs >= roundEnd) continue;
-        const pairedRaw = removals.find((r) => r.ts >= applyTs);
+        const pairedRaw = removals.find(
+          (r) => r.ts >= applyTs && removalOf(r, applySrc, appliers),
+        );
         if (!pairedRaw) continue;
         // work order 2026-10-15 Part 2 (user 「好」): another application of
-        // the spell before that removal proves this one's REMOVED was lost —
-        // it ends at that application or its official end, whichever is
-        // first, never at the later removal
-        const nextApply = applications.find((a) => a.ts > applyTs);
-        const officialS = ccFullDurationSeconds(spellId);
+        // the spell from this source before that removal proves this one's
+        // REMOVED was lost — it ends at that application or its length,
+        // whichever is first, never at the later removal
+        const nextApply = applications.find(
+          (a) => a.ts > applyTs && a.srcUnitId === applySrc,
+        );
+        const lengthS = lengthOf(spellId, applySrc, applyTs);
         const paired =
           nextApply !== undefined && pairedRaw.ts > nextApply.ts
             ? {
                 ts: Math.min(
                   nextApply.ts,
-                  officialS === undefined
-                    ? Infinity
-                    : applyTs + officialS * 1000,
+                  lengthS === null ? Infinity : applyTs + lengthS * 1000,
                 ),
                 brokenByDamage: false,
               }
@@ -3279,6 +3330,7 @@ export function reconstructDispelSummary(
                   applyTs,
                   enemyIds,
                   combat.startTime,
+                  rosterUnitById,
                 ) !== "Full"
               ) {
                 lateWorth = lateVerdict.afterDR;
@@ -3390,6 +3442,7 @@ export function reconstructDispelSummary(
                 removal.ts,
                 enemyIds,
                 combat.startTime,
+                rosterUnitById,
               ),
               lateDispelSeconds: durationSeconds,
             });
@@ -3439,6 +3492,7 @@ export function reconstructDispelSummary(
                 applyTs,
                 enemyIds,
                 combat.startTime,
+                rosterUnitById,
               ) !== "Full"
             ) {
               effectiveWorth = windowVerdict.afterDR;
@@ -3713,6 +3767,7 @@ export function reconstructDispelSummary(
               removal.ts,
               enemyIds,
               combat.startTime,
+              rosterUnitById,
             ),
           });
         }

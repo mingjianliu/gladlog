@@ -111,6 +111,8 @@ export function ccRemainingSeconds(p: {
   opponentIds: Set<string>;
   matchStartMs: number;
   roarAtApply: boolean;
+  /** the CC's possible casters, for the DR history's recast test */
+  unitById?: ReadonlyMap<string, ICombatUnit>;
 }): number | null {
   const tableDuration = ccFullDurationForApplication(
     p.spellId,
@@ -126,6 +128,7 @@ export function ccRemainingSeconds(p: {
       category,
       p.opponentIds,
       p.matchStartMs,
+      p.unitById,
     );
     const level = getDRLevelAtTime(
       history,
@@ -333,6 +336,7 @@ export function analyzeCcBreaks(
           opponentIds,
           matchStartMs: combat.startTime,
           roarAtApply: entry.roarAtApply,
+          unitById,
         });
 
         events.push({

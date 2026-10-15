@@ -87,6 +87,32 @@ describe("2a — DR history: one application per re-send, a lost REMOVED capped"
       [100, 6],
     ]);
   });
+
+  it("agy 40-FT-94 #4: a re-APPLIED its source recast is a new DR step", () => {
+    const mage = {
+      id: "mage",
+      spellCastEvents: [
+        makeSpellCastEvent(POLY, S(12), "v", "v", "mage", "mage"),
+      ],
+    };
+    const events = [
+      ev(LogEvent.SPELL_AURA_APPLIED, POLY, 10, "mage", "v"),
+      ev(LogEvent.SPELL_AURA_APPLIED, POLY, 12, "mage", "v"),
+      ev(LogEvent.SPELL_AURA_REMOVED, POLY, 15, "mage", "v"),
+    ];
+    expect(
+      buildCcCategoryHistory(
+        { id: "v", auraEvents: events } as unknown as ICombatUnit,
+        cat(),
+        new Set(["mage"]),
+        T0,
+        new Map([["mage", mage as unknown as ICombatUnit]]),
+      ).map((i) => [i.atSeconds, i.durationSeconds]),
+    ).toEqual([
+      [10, 2],
+      [12, 3],
+    ]);
+  });
 });
 
 describe("2a — the uncleansed window: a re-send inside the length is one window", () => {
@@ -107,6 +133,28 @@ describe("2a — the uncleansed window: a re-send inside the length is one windo
       Math.round(w.durationSeconds * 10) / 10,
     ]);
 
+  const windows2 = (auraEvents: object[]) =>
+    reconstructDispelSummary(
+      [
+        makeUnit("h", { name: "Healer", spec: CombatUnitSpec.Paladin_Holy }),
+        makeUnit("m", {
+          name: "Melee",
+          spec: CombatUnitSpec.Warrior_Arms,
+          auraEvents,
+        }),
+      ] as never,
+      [
+        makeUnit("enemy-1", { reaction: CombatUnitReaction.Hostile }),
+        makeUnit("enemy-2", { reaction: CombatUnitReaction.Hostile }),
+      ] as never,
+      { startTime: T0, endTime: S(300) } as never,
+    )
+      .missedCleanseWindows.map((w) => [
+        w.timeSeconds,
+        Math.round(w.durationSeconds * 10) / 10,
+      ])
+      .sort((a, b) => a[0]! - b[0]!);
+
   it("APPLIED, APPLIED 2 s later, REMOVED: one window from the first", () => {
     expect(
       windows([
@@ -115,6 +163,21 @@ describe("2a — the uncleansed window: a re-send inside the length is one windo
         ev(LogEvent.SPELL_AURA_REMOVED, "118", 26, "enemy-1", "m"),
       ]),
     ).toEqual([[20, 6]]);
+  });
+
+  // Frost Nova (6 s; a root — no DR verdict skips the second)
+  it("agy 40-FT-94 #2 / #3: two sources' same CC are two windows, each to its own removal", () => {
+    expect(
+      windows2([
+        ev(LogEvent.SPELL_AURA_APPLIED, "122", 20, "enemy-1", "m"),
+        ev(LogEvent.SPELL_AURA_APPLIED, "122", 22, "enemy-2", "m"),
+        ev(LogEvent.SPELL_AURA_REMOVED, "122", 26, "enemy-1", "m"),
+        ev(LogEvent.SPELL_AURA_REMOVED, "122", 28, "enemy-2", "m"),
+      ]),
+    ).toEqual([
+      [20, 6],
+      [22, 6],
+    ]);
   });
 });
 
@@ -214,5 +277,43 @@ describe("2d — kick-eaten's lock end reads the whole lock", () => {
     ).interruptInstances;
     expect(k!.lockoutDurationSeconds).toBeGreaterThan(5.5);
     expect(k!.lockEndedBySuccessS).toBeCloseTo(5.5, 5);
+  });
+
+  it("agy 40-FT-94 #1: an idle 5 s window still reads the lock end past it", () => {
+    const player = makeUnit("player-1", {
+      name: "Owner",
+      spec: CombatUnitSpec.Paladin_Holy,
+      reaction: CombatUnitReaction.Friendly,
+      actionIn: [
+        makeInterruptEvent(
+          "2139",
+          "Counterspell",
+          "19750",
+          "Flash of Light",
+          S(10),
+          "enemy-1",
+        ),
+      ],
+      spellCastEvents: [
+        makeSpellCastEvent(
+          "20473",
+          S(15.5),
+          "player-1",
+          "Owner",
+          "player-1",
+          "Owner",
+          0,
+          "Holy Shock",
+        ),
+      ],
+    });
+    const [k] = analyzePlayerCCAndTrinket(
+      player,
+      [makeUnit("enemy-1", { reaction: CombatUnitReaction.Hostile })],
+      { startTime: T0, endTime: S(300), startInfo: { zoneId: "1672" } } as any,
+    ).interruptInstances;
+    expect(k!.postKick).toBe("idle");
+    expect(k!.lockEndedBySuccessS).toBeCloseTo(5.5, 5);
+    expect(k!.wentOutInLockS).toEqual({ "20473": 5.5 });
   });
 });

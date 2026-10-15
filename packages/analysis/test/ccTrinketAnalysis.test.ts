@@ -588,6 +588,8 @@ describe("analyzePlayerCCAndTrinket — structured data contract (N4)", () => {
       sourceKickReadyInS: null,
       firstActionDelayS: null,
       lockEndedBySuccessS: null,
+      // agy 40-FT-94 #1: the lock readings run for an idle window too
+      wentOutInLockS: {},
       kickSilenceS: null,
       switchDelayS: null,
       switchSpellName: null,

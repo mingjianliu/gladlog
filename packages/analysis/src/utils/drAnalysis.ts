@@ -449,6 +449,13 @@ export function buildCcCategoryHistory(
   category: string,
   srcUnitIds: ReadonlySet<string>,
   matchStartMs: number,
+  // agy 40-FT-94 #4: the units that can have cast the CC (and their pets'
+  // owners) — a re-APPLIED its source recast is a new application
+  // (`ccRecastBetween`); absent → no recast test
+  unitById?: ReadonlyMap<
+    string,
+    Pick<ICombatUnit, "spellCastEvents" | "ownerId">
+  >,
 ): Array<{
   atSeconds: number;
   durationSeconds: number;
@@ -487,8 +494,8 @@ export function buildCcCategoryHistory(
   // work order 2026-10-15 Part 2 (user 「好」): the CC pairings' reading —
   // keyed by spell and source (`matchPendingCcKey` for a removal), a
   // re-APPLIED inside the official length is the same application
-  // (`reAppliedIsSameApplication`; no caster here, so no recast test, as in
-  // `castBlockingAuraIntervals`), a lost REMOVED closes at the official
+  // (`reAppliedIsSameApplication`; recast by its source — `unitById` — is a
+  // new one, agy 40-FT-94 #4), a lost REMOVED closes at the official
   // length. It used to pair every APPLIED with the next removal of the
   // spell: a re-send was a second DR step, a lost REMOVED ran to a later
   // application's removal, an application never removed was skipped.
@@ -502,12 +509,21 @@ export function buildCcCategoryHistory(
     if (aura.logLine.event === LogEvent.SPELL_AURA_APPLIED) {
       const open = pending.get(key);
       if (open !== undefined) {
+        const src = unitById?.get(aura.srcUnitId);
+        const owner = src?.ownerId ? unitById?.get(src.ownerId) : undefined;
         if (
           reAppliedIsSameApplication(
             open.applyMs,
             aura.timestamp,
             officialS,
-            false,
+            src !== undefined &&
+              ccRecastBetween(
+                [src, owner],
+                sid,
+                unit.id,
+                open.applyMs,
+                aura.timestamp,
+              ),
           )
         )
           continue;

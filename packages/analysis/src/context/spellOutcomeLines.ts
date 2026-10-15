@@ -286,6 +286,7 @@ function heldAndLeft(
       opponentIds,
       matchStartMs,
       roarAtApply: oppressingRoarOnAt(target, applied),
+      unitById: new Map(units.map((u) => [u.id, u])),
     }),
   };
 }

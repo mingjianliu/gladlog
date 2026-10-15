@@ -3629,37 +3629,10 @@ export function analyzePlayerCCAndTrinket(
       } catch {
         /* no aura/interrupt streams → unknown, field stays absent */
       }
-      // A Stasis RELEASE replays stored spells — no press of the player's
-      // (work order 2026-10-14d #4: G8 kept them out of the switch only;
-      // 141470d0 @198 still printed the replayed Dream Breath as "first
-      // cast 1.0s later"). The post-kick reading — idle / acted / switched,
-      // the first cast, the switch — is over the player's own presses.
-      const after = castTimes.filter(
-        (c) =>
-          c.t > inst.atSeconds &&
-          c.t <= inst.atSeconds + POST_KICK_WINDOW_S &&
-          !replays.some((w) => c.ms >= w.from && c.ms <= w.to),
-      );
-      if (after.length === 0) {
-        inst.postKick = "idle";
-        inst.firstActionDelayS = null;
-        continue;
-      }
-      inst.firstActionDelayS = after[0]!.t - inst.atSeconds;
-      inst.firstActionSpellName = after[0]!.spellName;
       const lockedMask = spellSchoolMask(inst.interruptedSpellId);
-      // `find` where this used to read `some`: identical predicate (some(p)
-      // is true iff find(p) is defined), but it also NAMES the cast so the
-      // rendered line can cite the one it is actually talking about.
-      // (Stasis replays are already out of `after` — WO3 Part 2 G8)
-      let switchCast =
-        lockedMask === undefined
-          ? undefined
-          : after.find((c) => {
-              const m = spellSchoolMask(c.spellId);
-              return m !== undefined && !schoolLockedBy(m, lockedMask);
-            });
-      inst.postKick = switchCast !== undefined ? "switched" : "acted";
+      // agy 40-FT-94 #1: the lock-end and went-out readings do not depend on
+      // the 5 s post-kick window — an idle window (no press in 5 s) of a
+      // longer lock still reads a SUCCESS / cast bar past 5 s inside it
       const lockEndS = inst.atSeconds + inst.lockoutDurationSeconds;
       // work order 2026-10-15 Part 2 (user 「好」): the lock-end and went-out
       // readings run over the whole lock — past the 5 s `after` window for a
@@ -3720,6 +3693,36 @@ export function analyzePlayerCCAndTrinket(
         wentOut[c.spellId] = c.t - inst.atSeconds;
       }
       inst.wentOutInLockS = wentOut;
+      // A Stasis RELEASE replays stored spells — no press of the player's
+      // (work order 2026-10-14d #4: G8 kept them out of the switch only;
+      // 141470d0 @198 still printed the replayed Dream Breath as "first
+      // cast 1.0s later"). The post-kick reading — idle / acted / switched,
+      // the first cast, the switch — is over the player's own presses.
+      const after = castTimes.filter(
+        (c) =>
+          c.t > inst.atSeconds &&
+          c.t <= inst.atSeconds + POST_KICK_WINDOW_S &&
+          !replays.some((w) => c.ms >= w.from && c.ms <= w.to),
+      );
+      if (after.length === 0) {
+        inst.postKick = "idle";
+        inst.firstActionDelayS = null;
+        continue;
+      }
+      inst.firstActionDelayS = after[0]!.t - inst.atSeconds;
+      inst.firstActionSpellName = after[0]!.spellName;
+      // `find` where this used to read `some`: identical predicate (some(p)
+      // is true iff find(p) is defined), but it also NAMES the cast so the
+      // rendered line can cite the one it is actually talking about.
+      // (Stasis replays are already out of `after` — WO3 Part 2 G8)
+      let switchCast =
+        lockedMask === undefined
+          ? undefined
+          : after.find((c) => {
+              const m = spellSchoolMask(c.spellId);
+              return m !== undefined && !schoolLockedBy(m, lockedMask);
+            });
+      inst.postKick = switchCast !== undefined ? "switched" : "acted";
       // Work order 2026-10-14b Part 2: a hard cast can log a
       // companion SUCCESS of another id a few ms before its own (Chrono
       // Flames 431443 → Living Flame 361509 2 ms earlier, 141470d0 @388).

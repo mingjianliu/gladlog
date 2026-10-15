@@ -380,9 +380,15 @@ export function disarmIntervals(
   const close = (spellId: string, from: number, to: number) =>
     out.push({ from, to, spellId, lockout: false, disarm: true });
   const notTheEnd = supersededAuraBreaks(unit.auraEvents ?? []);
-  for (const a of dropAuraRebroadcasts(unit.auraEvents ?? [])) {
+  // filter BEFORE the re-broadcast pass (PV395 firstPaint: the whole stream
+  // per call put dropAuraRebroadcasts at 744 ms self on report-heavy, ratio
+  // 3.7 → 5.5). Equivalent: its pairing key holds the spell id, so each key
+  // group is kept or dropped whole and in order (`buildCcCategoryHistory`)
+  const disarmAuras = (unit.auraEvents ?? []).filter((a) =>
+    disarmSpellIds.has(String(a.spellId ?? "")),
+  );
+  for (const a of dropAuraRebroadcasts(disarmAuras)) {
     const id = String(a.spellId ?? "");
-    if (!disarmSpellIds.has(id)) continue;
     if (notTheEnd.has(a)) continue;
     const key = `${id}:${a.srcUnitId}`;
     const ev = a.logLine.event;
