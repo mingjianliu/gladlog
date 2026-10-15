@@ -6,6 +6,7 @@
  * facts once a producer has already decided to emit one.
  */
 import { refusalWhy } from "../../context/spellOutcomeLines";
+import { stasisReplayWindows } from "../../utils/combatStates";
 import type { CastFailedEvent } from "../../utils/rawStreams";
 
 /**
@@ -267,3 +268,24 @@ export function gcdLockedUntilS(
 export function refusalReasonWords(reason: string): string {
   return NOT_READY_REASONS.has(reason) ? "not ready yet" : refusalWhy(reason);
 }
+
+/**
+ * The owner's cast rows that are PRESSES: every `spellCastEvents` row but the
+ * spells a Stasis release replays (`stasisReplayWindows`). The one "did the
+ * player cast it" list for the intent guard's success evidence
+ * (`filterIntentGuardEvidence`, `dropKeyRepeatRejects`, `ownCdProven`) —
+ * work order 2026-10-15 #3: kick-eaten's post-kick reading dropped the
+ * replays in work order 2026-10-14d #4, these readers still saw them.
+ */
+export function ownerPressEvents<
+  T extends { logLine: { timestamp: number } },
+>(owner: { spellCastEvents?: T[]; auraEvents?: any[] }): T[] {
+  const replays = stasisReplayWindows(owner as any);
+  return (owner.spellCastEvents ?? []).filter(
+    (e) =>
+      !replays.some(
+        (w) => e.logLine.timestamp >= w.from && e.logLine.timestamp <= w.to,
+      ),
+  );
+}
+

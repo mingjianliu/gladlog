@@ -1036,6 +1036,11 @@ const INDEX: PredicateRow[] = [
     mod: combatStates,
   },
   {
+    file: `${A}/analysis/candidates/shared.ts`,
+    symbol: "ownerPressEvents",
+    mod: candidatesShared,
+  },
+  {
     file: `${A}/utils/gapClosers.ts`,
     symbol: "gapCloserStateAt",
     mod: gapClosers,
@@ -1044,6 +1049,11 @@ const INDEX: PredicateRow[] = [
     file: `${A}/utils/burstLedger.ts`,
     symbol: "burstCastSpan",
     mod: burstLedger,
+  },
+  {
+    file: `${A}/utils/enemyCDs.ts`,
+    symbol: "observedCastEndMs",
+    mod: enemyCDs,
   },
   {
     file: `${A}/utils/enemyCDs.ts`,
@@ -1195,6 +1205,16 @@ const INDEX: PredicateRow[] = [
     file: `${A}/utils/burstHit.ts`,
     symbol: "damageTakenBetween",
     mod: burstHit,
+  },
+  {
+    file: `${A}/utils/positionAnalysis.ts`,
+    symbol: "POSITIONING_BURST_ANSWERED_XREF",
+    mod: positionAnalysis,
+  },
+  {
+    file: `${A}/context/burstAnswered.ts`,
+    symbol: "BURST_ANSWERED_POSITIONING_XREF",
+    mod: burstAnswered,
   },
   {
     file: `${A}/utils/positionAnalysis.ts`,

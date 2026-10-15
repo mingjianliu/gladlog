@@ -91,6 +91,7 @@ import { computeOffensiveWindows } from "../utils/offensiveWindows";
 import {
   computeOwnerPositionEvents,
   formatPositionEventsForContext,
+  POSITIONING_BURST_ANSWERED_XREF,
 } from "../utils/positionAnalysis";
 import { fmtTime, toRenderSecond } from "../utils/renderGrid";
 import {
@@ -120,6 +121,7 @@ import {
   lowPressureUnusedDefensiveNote,
   MITIGATION_AUDIT_INDEPENDENT_NOTE,
 } from "./matchTimelineSections";
+import { BURST_ANSWERED_POSITIONING_XREF } from "./burstAnswered";
 import { buildMatchTimeline, BuildMatchTimelineParams } from "./matchTimeline";
 import { buildPlayerLoadout } from "./resourceSnapshot";
 import {
@@ -133,6 +135,36 @@ import { abbrevSpec, unitLabeler } from "./unitLabel";
 import type { RawStreams } from "../utils/rawStreams";
 
 // ──────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Work order 2026-10-15 #1: the [BURST ANSWERED] legend and the POSITIONING
+ * headers each name the other family's line — keep each cross-reference only
+ * when the prompt has a line of the other family (27 of 60 printed one with
+ * the other absent).
+ */
+export function applyLegendCrossRefs(
+  timelineText: string,
+  positionLines: readonly string[],
+): { timelineText: string; positionLines: string[] } {
+  const hasBurstAnsweredLine = /^\d+:\d{2}\s+\[BURST ANSWERED\]/m.test(
+    timelineText,
+  );
+  const hasPositioningBurstTarget = positionLines.some(
+    (l) =>
+      l.includes(" — you were the burst target") ||
+      l.includes(" — burst targeted "),
+  );
+  return {
+    timelineText: hasPositioningBurstTarget
+      ? timelineText
+      : timelineText.split(BURST_ANSWERED_POSITIONING_XREF).join(""),
+    positionLines: hasBurstAnsweredLine
+      ? [...positionLines]
+      : positionLines.map((l) =>
+          l.split(POSITIONING_BURST_ANSWERED_XREF).join(""),
+        ),
+  };
+}
 
 export function buildMatchContext(
   combat: AtomicArenaCombat,
@@ -924,7 +956,7 @@ export function buildMatchContext(
     killAttempts,
   });
 
-  const timelineText = buildMatchTimeline({
+  const timelineTextRaw = buildMatchTimeline({
     rawStreams: options.rawStreams,
     // FT-T16 D15 "2b": the bars CC USE's `cast bar started N×` counts
     ownerControlCastBars: ownerControlCastBars(owner as ICombatUnit, combat),
@@ -972,6 +1004,8 @@ export function buildMatchContext(
     cdPriorCohort,
     stackedDefensives,
   } as BuildMatchTimelineParams);
+  const { timelineText, positionLines: positionLinesXref } =
+    applyLegendCrossRefs(timelineTextRaw, positionLines);
 
   // Merge each per-window exposure entry into the timeline at its timestamp so the
   // cause (burst + exposure state) sits next to its effects (CC landing, damage,
@@ -1040,9 +1074,9 @@ export function buildMatchContext(
     ]).join("\n"),
   );
 
-  if (positionLines.length > 0) {
+  if (positionLinesXref.length > 0) {
     tLines.push("");
-    positionLines.forEach((l) => tLines.push(l));
+    positionLinesXref.forEach((l) => tLines.push(l));
   }
 
   // R1 (E2E regression fix): the death-outcome block — externals a teammate

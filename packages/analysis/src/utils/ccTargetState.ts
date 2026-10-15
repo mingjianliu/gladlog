@@ -17,8 +17,10 @@
  * casting this CC, the owner CC'd or locked, the target CC'd or immune) must
  * be absent over the whole rendered second [s, s+1); positions, LoS and DR
  * are read at the instant s.
- *  - owner: alive, the CC reaction-ready (`cdReadyInTimeAt`), not CC'd
- *    (`buildCannotCastIntervals`), not inside an own casting-lockout aura
+ *  - owner: alive, the CC reaction-ready (`cdReadyInTimeAt`), not stopped
+ *    from casting THIS control (`cannotCastIntervalsForSpells`: CC, a
+ *    silence that stops it, a lockout of its school, a disarm when it needs
+ *    a weapon), not inside an own casting-lockout aura
  *    (DB2 aura 60 / 263 — Bladestorm, Ice Block);
  *  - target: alive, not already inside a CC aura, no active aura that blocks
  *    the CC's mechanic (`auraBlocksMechanic`; unknown → blocked);
@@ -37,7 +39,7 @@ import type { AtomicArenaCombat, ICombatUnit } from "@gladlog/parser-compat";
 import { abilityProfile } from "../data/abilityProfile";
 import { ccSpellIds } from "../data/spellTags";
 import { buildAuraIntervals, type IAuraInterval } from "./auraIntervals";
-import { buildCannotCastIntervals } from "./cannotCastIntervals";
+import { cannotCastIntervalsForSpells } from "./cannotCastIntervals";
 import { castingLockIntervalsOf } from "./castingLocks";
 import { pvpTrinketRemainingSecondsAt } from "./ccTrinketAnalysis";
 import {
@@ -196,7 +198,16 @@ export function ccSamplerFor(params: {
     return d ? (d.timestamp - start) / 1000 : Infinity;
   };
   const ownerDeath = deathS(owner);
-  const cannot = buildCannotCastIntervals(owner, new Set(params.enemyIds));
+  // asked about THIS control (work order 2026-10-15 #7): a school lockout
+  // only when it locks the control's school, a silence only when DB2 lets it
+  // stop the control, a disarm only when the control needs a weapon (Kidney
+  // Shot, Gouge, Storm Bolt …) — the named-spell reading
+  const cannot = cannotCastIntervalsForSpells(
+    owner,
+    new Set(params.enemyIds),
+    [cd.spellId],
+    Object.values(combat.units ?? {}),
+  );
   // the one casting-lock predicate (Unrelenting Onslaught lets a holder
   // Storm Bolt inside Bladestorm)
   const locks: Interval[] = castingLockIntervalsOf(owner, combat, cd.spellId);

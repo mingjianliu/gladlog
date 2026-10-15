@@ -1674,5 +1674,14 @@
  *  teammate crises and external-unused is the shared cannot-cast reading;
  *  Dream Flight and Breath of Eons 442204 are own flights. 605 files:
  *  missed-sync-window +7 / −19, external-unused −7.
+ *  v394 (2026-10-15, FT, work order 2026-10-15 Part 1 — facts only): the
+ *  [BURST ANSWERED] / POSITIONING legends name each other's line only when
+ *  it is there, and the POSITIONING legend says what each burst-target
+ *  branch does; an answer covers a burst until its observed end; the intent
+ *  guard's success evidence has no Stasis replays; a death inside a lock
+ *  longer than 5 s bounds the press list;
+ *  PEEL OPTION / CC BOOKMARK ask about the control itself (lockout school,
+ *  silence bit, disarm); [HEALING] / [MANA] read the observed end. 605
+ *  files: no candidate added or removed.
  */
-export const PROMPT_VERSION = 393;
+export const PROMPT_VERSION = 394;

@@ -266,6 +266,53 @@ export function observedEffectEndSeconds(
   return best?.observed ? best.end : null;
 }
 
+const OWN_CAST_COMBAT = new WeakMap<object, AtomicArenaCombat>();
+
+/**
+ * `observedEffectEndSeconds` for a caller that has the round's players but
+ * no combat object (the timeline sections), in epoch ms: where this press of
+ * `spellId` by `caster` was seen to end, or null (the official length
+ * stands). The next press of the same spell bounds the search. Work order
+ * 2026-10-15 #8: the [HEALING] / [MANA] windows read cast + official length.
+ */
+export function observedCastEndMs(
+  caster: ICombatUnit,
+  spellId: string,
+  castMs: number,
+  players: readonly ICombatUnit[],
+  matchStartMs: number,
+  matchEndMs: number,
+): number | null {
+  let combat = OWN_CAST_COMBAT.get(players);
+  if (!combat) {
+    combat = {
+      startTime: matchStartMs,
+      endTime: matchEndMs,
+      units: Object.fromEntries(players.map((u) => [u.id, u])),
+    } as unknown as AtomicArenaCombat;
+    OWN_CAST_COMBAT.set(players, combat);
+  }
+  const nextMs = Math.min(
+    Infinity,
+    ...(caster.spellCastEvents ?? [])
+      .filter(
+        (e) =>
+          e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+          e.spellId === spellId &&
+          e.timestamp > castMs + 1,
+      )
+      .map((e) => e.timestamp),
+  );
+  const end = observedEffectEndSeconds(
+    caster,
+    spellId,
+    (castMs - matchStartMs) / 1000,
+    (nextMs - matchStartMs) / 1000,
+    combat,
+  );
+  return end === null ? null : matchStartMs + end * 1000;
+}
+
 export function reconstructEnemyCDTimeline(
   enemies: ICombatUnit[],
   combat: AtomicArenaCombat,

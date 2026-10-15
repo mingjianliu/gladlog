@@ -200,13 +200,16 @@ export interface IBurstLedgerEntry {
 
 /**
  * Active span of one offensive CD cast: from the cast to the end of its
- * effect (`buffEndSeconds`, the official duration for the caster), nothing
- * more. One predicate for every reader of "is this cooldown running": the
- * burst ledger's grouping / span / ally overlap, the kill-attempt burst
- * clusters (`killAttempts.ts`), kick-eaten's `enemyBurst` / `ourBurst`
- * (`kickPressure.ts`), `unsyncedBurstEvents`' effect window, and the replay
- * burst pulse (desktop `replayHighlights.ts` — the pulse covers exactly the
- * span the ledger audits).
+ * effect (`buffEndSeconds` — where the log shows the effect ended,
+ * `observedEffectEndSeconds`, else the official duration for the caster),
+ * nothing more. One predicate for every reader of "is this cooldown
+ * running": the burst ledger's grouping / span / ally overlap, the
+ * kill-attempt burst clusters (`killAttempts.ts`), kick-eaten's
+ * `enemyBurst` / `ourBurst` (`kickPressure.ts`), `unsyncedBurstEvents`'
+ * effect window, missed-sync-window's `castEntersWindow` (`castEndS`, since
+ * work order 2026-10-14d Part 2c), and the replay burst pulse (desktop
+ * `replayHighlights.ts` — the pulse covers exactly the span the ledger
+ * audits).
  *
  * Until 2026-10-01 the span was `max(buffEnd, cast + 10 s)` — a 10 s floor
  * borrowed from the clustering reach (`BURST_CLUSTER_SECONDS`). User ruling

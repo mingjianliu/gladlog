@@ -201,6 +201,7 @@ import {
   formatAttemptedFact,
   INTENT_GUARD_GCD_S,
   NOT_READY_REASONS,
+  ownerPressEvents,
   refusalReasonWords,
 } from "./candidates/shared";
 import {
@@ -632,7 +633,8 @@ export function extractCandidateFindings(
                 ) -
                   start) /
                 1000,
-              ownCastSuccessSeconds: (owner.spellCastEvents ?? []).map(
+              // presses only — no Stasis replays (`ownerPressEvents`)
+              ownCastSuccessSeconds: ownerPressEvents(owner as any).map(
                 (e: any) => (e.logLine.timestamp - start) / 1000,
               ),
             }
@@ -1439,7 +1441,8 @@ function cleanseAttemptedFact(
   matchStartMs: number,
   rawStreams: RawStreams,
 ): string | undefined {
-  const successes = ((owner.spellCastEvents ?? []) as any[]).filter(
+  // presses only — no Stasis replays (`ownerPressEvents`)
+  const successes = (ownerPressEvents(owner) as any[]).filter(
     (c) => c.logLine?.event === LogEvent.SPELL_CAST_SUCCESS,
   );
   const sec = (c: any) => (c.logLine.timestamp - matchStartMs) / 1000;
@@ -2233,7 +2236,7 @@ export function ownerKickEatenEvents(
       rawStreams,
       // Same seconds base and same source list as cd-hoarded's
       // `ownCastSuccessSeconds` (teamPlayEvents above).
-      ownerCasts: (owner.spellCastEvents ?? []).map((e: any) => ({
+      ownerCasts: ownerPressEvents(owner as any).map((e: any) => ({
         spellId: String(e.spellId ?? ""),
         tSeconds: (e.logLine.timestamp - combat.startTime) / 1000,
       })),
@@ -2683,9 +2686,11 @@ function postKickCore(
     (h) => Math.round(h.tSeconds * 1000) < lockEndMs,
   );
   if (k.postKick === "idle") {
-    // F-K7e: a player who died inside the window had that long, not 5 s
+    // F-K7e: a player who died inside the window had that long, not 5 s.
+    // A death past the 5 s (inside a longer lock) bounds the press list only:
+    // the idle reading itself covers 5 s (work order 2026-10-15 #4)
     const span =
-      k.diedAfterKickS === undefined
+      k.diedAfterKickS === undefined || k.diedAfterKickS > POST_KICK_WINDOW_S
         ? "for 5s after the kick"
         : `before dying ${k.diedAfterKickS.toFixed(1)}s after the kick`;
     // The idle form covers the whole window, so a "not ready" press after

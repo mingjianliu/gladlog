@@ -260,6 +260,12 @@ export function ccUseSummary(params: {
   ofCooldown.forEach((bars, i) => {
     if (bars.length > 0) counts[i]!.castBarsStarted = bars.length;
   });
+  // To the LOG's end, like the [YOU] [CC] lines it is checked against
+  // (`checkCcUseStartedCounts`, `checkCcBookmarkConsistency`). Work order
+  // 2026-10-15 #5 cut it at `roundEndMs` and the 605 capture showed the two
+  // disagree (2 files: a Cyclone pressed after a Solo Shuffle round's ending
+  // death prints a [YOU] [CC] line) — the round end moves for both or for
+  // neither (predicate-index "Not yet unified").
   const durationS = (combat.endTime - start) / 1000;
   const wentOffS = (englishName: string) =>
     (owner.spellCastEvents ?? [])

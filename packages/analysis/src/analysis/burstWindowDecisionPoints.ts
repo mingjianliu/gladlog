@@ -66,6 +66,7 @@ import { drEffectAurasOfCast } from "../utils/drAnalysis";
 import {
   type IAlignedBurstWindow,
   type IEnemyCDTimeline,
+  observedEffectEndSeconds,
   reconstructEnemyCDTimeline,
   SOLO_WINDOW_MIN_WEIGHT,
 } from "../utils/enemyCDs";
@@ -279,9 +280,12 @@ export interface BurstResponseCast {
   destId?: string;
   /** the caster's unit id */
   casterId?: string;
-  /** whole second the effect ends (cast + the caster's full buff duration),
-   * when the spell has one — an answer that expired before the trough did
-   * not answer it (round 3 6954) */
+  /** whole second the effect ends — where the log shows it ended
+   * (`observedEffectEndSeconds`, `burstCastSpan`'s reading), else cast + the
+   * caster's full buff duration — when the spell has one: an answer that
+   * expired before the trough did not answer it (round 3 6954; work order
+   * 2026-10-15 #2: 141470d0's Greater Invisibility, removed 0.28 s after it
+   * went up, read as covering 4.5 s) */
   effectEndSec?: number;
   /** An aimed control (cc / root, not an interrupt) cast BEFORE the lead
    * cast: whether its own aura was still on the target at the lead cast's
@@ -1407,6 +1411,30 @@ export function burstWindowDecisionPoints(
         const dur = casterUnit
           ? buffFullDurationForCaster(c.spellId, casterUnit)
           : undefined;
+        const castS = (c.tMs - start) / 1000;
+        // the observed end even for a cast with no official length of its
+        // own (Greater Invisibility 110959: its aura 110960 carries it —
+        // 141470d0 3:08 had no end at all and the coverage test was skipped)
+        const observedEndS =
+          casterUnit && category !== "control"
+            ? observedEffectEndSeconds(
+                casterUnit,
+                c.spellId,
+                castS,
+                Math.min(
+                  Infinity,
+                  ...((casterUnit.spellCastEvents ?? []) as any[])
+                    .filter(
+                      (e) =>
+                        e.logLine?.event === "SPELL_CAST_SUCCESS" &&
+                        e.spellId === c.spellId &&
+                        e.timestamp > c.tMs + 1,
+                    )
+                    .map((e) => (e.timestamp - start) / 1000),
+                ),
+                combat,
+              )
+            : null;
         const preOpenerStillUp =
           category === "control" &&
           c.tMs < leadRawMs &&
@@ -1459,9 +1487,11 @@ export function burstWindowDecisionPoints(
             Math.round(((c.tMs - leadRawMs) / 1000 + Number.EPSILON) * 10) / 10,
           ...(c.dest ? { destId: c.dest } : {}),
           casterId: c.unitId,
-          ...(dur
-            ? { effectEndSec: Math.floor((c.tMs - start) / 1000 + dur) }
-            : {}),
+          ...(observedEndS !== null
+            ? { effectEndSec: Math.floor(observedEndS) }
+            : dur
+              ? { effectEndSec: Math.floor(castS + dur) }
+              : {}),
           ...(preOpenerStillUp !== undefined ? { preOpenerStillUp } : {}),
           ...(landed !== undefined ? { landed } : {}),
           ...(controlOn ? { controlOn } : {}),

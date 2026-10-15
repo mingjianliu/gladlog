@@ -23,6 +23,7 @@ import { castAndEffectIds } from "../../data/castEffectAuras";
 import { getEnglishSpellName } from "../../data/spellEffectData";
 import { ccSpellIds } from "../../data/spellTags";
 import { buffFullDurationForCaster } from "../../utils/buffDuration";
+import { observedCastEndMs } from "../../utils/enemyCDs";
 import {
   EMPOWER_PRESS_MATCH_MS,
   empowerSpans,
@@ -232,15 +233,22 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
         ? allPlayers.find((u) => u.name === targetName)
         : undefined) ?? owner;
     const fromMs = matchStartMs + timeSeconds * 1000;
-    const delta = resourceDeltaPct(
-      target,
-      fromMs,
-      fromMs + duration * 1000,
-      manaFallback,
-    );
+    // where the buff was seen to end, else the official length (work order
+    // 2026-10-15 #8)
+    const toMs =
+      observedCastEndMs(
+        owner,
+        spellId,
+        fromMs,
+        allPlayers,
+        matchStartMs,
+        matchEndMs,
+      ) ?? fromMs + duration * 1000;
+    const spanS = Math.round((toMs - fromMs) / 100) / 10;
+    const delta = resourceDeltaPct(target, fromMs, toMs, manaFallback);
     const who = target.id === owner.id ? "self" : pid(target.name);
     return delta
-      ? `      [MANA]       ${who}: ${delta.fromPct}% -> ${delta.toPct}% mana (${delta.deltaPct >= 0 ? "+" : ""}${delta.deltaPct}pp over ${duration}s)`
+      ? `      [MANA]       ${who}: ${delta.fromPct}% -> ${delta.toPct}% mana (${delta.deltaPct >= 0 ? "+" : ""}${delta.deltaPct}pp over ${spanS}s)`
       : `      [MANA]       ${who}: no resource reading in this window`;
   }
 

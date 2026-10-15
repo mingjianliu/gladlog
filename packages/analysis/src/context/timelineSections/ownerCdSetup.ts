@@ -10,6 +10,7 @@
  * to the caller. Output is pinned by the 605-file acceptanceCapture context hash.
  */
 import { buffFullDurationForCaster } from "../../utils/buffDuration";
+import { observedCastEndMs } from "../../utils/enemyCDs";
 import { castEndedCcWindow } from "../../utils/ccTrinketAnalysis";
 import { cdIsProcOnly } from "../../utils/cooldowns";
 import { isStunCcInstance } from "../../utils/drAnalysis";
@@ -52,6 +53,7 @@ export function prepareOwnerCdContext(
   // cast (score = overhealPct * 1000 - maxBucketHps; higher = worse). Casts
   // suppressed by the early-low-activity gate are never eligible.
   const healingEmissionTimes = new Map<string, Set<number>>();
+  const roundPlayers = [...friends, ...(enemies ?? [])];
   for (const cd of ownerCDs) {
     if (!HEALING_AMPLIFIER_SPELL_IDS.has(cd.spellId)) continue;
     // A proc-only entry's "casts" are aura activations, not presses — no
@@ -62,7 +64,17 @@ export function prepareOwnerCdContext(
     const eligible: { timeSeconds: number; score: number }[] = [];
     for (const cast of cd.casts) {
       const fromMs = matchStartMs + cast.timeSeconds * 1000;
-      const toMs = fromMs + duration * 1000;
+      // where the buff was seen to end, else the official length (work
+      // order 2026-10-15 #8) — the [HEALING] block reads the same window
+      const toMs =
+        observedCastEndMs(
+          owner,
+          cd.spellId,
+          fromMs,
+          roundPlayers,
+          matchStartMs,
+          matchEndMs,
+        ) ?? fromMs + duration * 1000;
       const healStats = computeHealingInWindow(owner.healOut, fromMs, toMs);
       const maxBucketHps = healStats
         ? Math.max(...healStats.buckets.map((b) => b.hps))

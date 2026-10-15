@@ -98,8 +98,14 @@ export const BURST_ANSWERED_MAX_HP_PCT = 60;
  * so a control that stopped an attacker cold is not read as "no control was
  * used".
  */
+/** The cross-reference to the POSITIONING burst target, printed only when
+ * the prompt has a POSITIONING line naming one (work order 2026-10-15 #1 —
+ * `buildMatchContext` strips it otherwise). */
+export const BURST_ANSWERED_POSITIONING_XREF =
+  " — not necessarily a POSITIONING line's burst target, which is the one under the most damage over its own span";
+
 export const BURST_ANSWERED_CONTROL_RULE_LEGEND =
-  "    The pressured player (named before `bottomed at`) = of the friendlies the burst's casters hit inside the window (a hit stopped by an immunity counts), the one whose HP went lowest — not necessarily a POSITIONING line's burst target, which is the one under the most damage over its own span. A control counts as an answer only when it went on an enemy who dealt damage to the pressured player inside the burst window, or whose hit on them an immunity stopped (that enemy's pets count as that enemy); a control on any other enemy — an enemy healer who only pressed a cooldown — is not listed as the answer, and neither is one whose target neither damaged that player nor had a hit on them stopped by an immunity in the window, even if the control is why.";
+  "    The pressured player (named before `bottomed at`) = of the friendlies the burst's casters hit inside the window (a hit stopped by an immunity counts), the one whose HP went lowest"+BURST_ANSWERED_POSITIONING_XREF+". A control counts as an answer only when it went on an enemy who dealt damage to the pressured player inside the burst window, or whose hit on them an immunity stopped (that enemy's pets count as that enemy); a control on any other enemy — an enemy healer who only pressed a cooldown — is not listed as the answer, and neither is one whose target neither damaged that player nor had a hit on them stopped by an immunity in the window, even if the control is why.";
 
 /** Legend lines, emitted only when at least one `[BURST ANSWERED]` line is.
  * The second one is load-bearing: with `BURST_ANSWERED_CAP` = 2 the list is

@@ -16,6 +16,7 @@ import { saveCoversPressureOn } from "../../analysis/candidates/cooldownTiming";
 import { ccSpellIds } from "../../data/spellTags";
 import { reachesAlly } from "../../data/spellTargeting";
 import { buffFullDurationForCaster } from "../../utils/buffDuration";
+import { observedCastEndMs } from "../../utils/enemyCDs";
 import {
   cdIsProcOnly,
   cdRoleTag,
@@ -126,6 +127,7 @@ export function emitOwnerCdEntries(
     ownerStunnedAtCast,
     ownerStunIdsAtCast,
   } = ctx;
+  const roundPlayers = [...friends, ...(enemies ?? [])];
   // B3a: the round-level inputs of the school split (`saveCoversPressureOn`)
   const roundFacts = {
     sides: buildRosterSides(_allUnits),
@@ -222,7 +224,18 @@ export function emitOwnerCdEntries(
         const duration = buffFullDurationForCaster(cd.spellId, owner);
         if (duration) {
           const fromMs = matchStartMs + cast.timeSeconds * 1000;
-          const toMs = fromMs + duration * 1000;
+          // the window the emission choice read (`prepareOwnerCdContext`):
+          // the observed end, else the official length (work order
+          // 2026-10-15 #8)
+          const toMs =
+            observedCastEndMs(
+              owner,
+              cd.spellId,
+              fromMs,
+              roundPlayers,
+              matchStartMs,
+              params.matchEndMs,
+            ) ?? fromMs + duration * 1000;
           const healStats = computeHealingInWindow(owner.healOut, fromMs, toMs);
           if (healStats) {
             const bucketParts = healStats.buckets.map(

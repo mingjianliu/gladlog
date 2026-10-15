@@ -3592,10 +3592,16 @@ export function analyzePlayerCCAndTrinket(
     const deathS = (firstDeathMs(player) - matchStartMs) / 1000;
     for (const inst of interruptInstances) {
       // a death in the kick's own millisecond closes the window too (codex
-      // review: 0 s, every later press was by a dead player)
+      // review: 0 s, every later press was by a dead player). Up to the
+      // longer of the 5 s window and the lock: the press list runs to the
+      // lock's end (work order 2026-10-14c #5), and a "You are dead" press
+      // after a death 5–6 s into a 6 s lock is not one the lock refused
+      // (work order 2026-10-15 #4)
       if (
         deathS >= inst.atSeconds &&
-        deathS <= inst.atSeconds + POST_KICK_WINDOW_S
+        deathS <=
+          inst.atSeconds +
+            Math.max(POST_KICK_WINDOW_S, inst.lockoutDurationSeconds)
       )
         inst.diedAfterKickS = deathS - inst.atSeconds;
       try {

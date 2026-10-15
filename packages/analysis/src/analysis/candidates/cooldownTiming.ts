@@ -702,10 +702,12 @@ const signedS = (d: number): string => `${d >= 0 ? "+" : ""}${d.toFixed(1)}`;
  *    press + cooldown, charge-aware) — not `cdAvailableAt`'s first true
  *    instant, which includes the 0.5 s slack (e10c6bea Kingsbane: +0.4, the
  *    slack would print −0.1). Omitted for a rate-warped cooldown.
- *  - `holderCc`: the ready CD's holder's own cannot-cast intervals (the gate's
- *    `buildCannotCastIntervals`, no second predicate) that overlap the lock,
- *    unclipped. A disarm is not one. For a cooldown the holder's pet casts
- *    the gate reads the PET's intervals, and none of those is printed.
+ *  - `holderCc`: the ready CD's holder's own cannot-cast intervals for THIS
+ *    cooldown (the gate's `cannotCastIntervalsForSpells`, no second
+ *    predicate) that overlap the lock, unclipped — a disarm among them when
+ *    the cooldown needs a weapon (since work order 2026-10-14d Part 2b). For
+ *    a cooldown the holder's pet casts the gate reads the PET's intervals,
+ *    and none of those is printed.
  */
 export function syncReadyTimingFacts(
   w: { fromSeconds: number; toSeconds: number },
@@ -732,8 +734,8 @@ export function syncReadyTimingFacts(
       try {
         // the gate's own intervals (FT-T10): what stopped THIS cooldown —
         // on the holder. The fact says "the holder was hard-CC'd / silenced
-        // / locked out", so what the gate read on the holder's PET (a
-        // cooldown the pet casts) is not printed here.
+        // / locked out / disarmed", so what the gate read on the holder's PET
+        // (a cooldown the pet casts) is not printed here.
         blocked = cannotCastIntervalsForSpells(
           cd.owner,
           cd.ownerEnemyIds,
