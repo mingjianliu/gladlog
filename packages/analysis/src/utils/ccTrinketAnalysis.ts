@@ -3661,10 +3661,19 @@ export function analyzePlayerCCAndTrinket(
             });
       inst.postKick = switchCast !== undefined ? "switched" : "acted";
       const lockEndS = inst.atSeconds + inst.lockoutDurationSeconds;
+      // work order 2026-10-15 Part 2 (user 「好」): the lock-end and went-out
+      // readings run over the whole lock — past the 5 s `after` window for a
+      // longer lock, as `startedBy` (cast bars) and the printed list do
+      const inLock = castTimes.filter(
+        (c) =>
+          c.t > inst.atSeconds &&
+          c.t < lockEndS &&
+          !replays.some((w) => c.ms >= w.from && c.ms <= w.to),
+      );
       const endedBy =
         lockedMask === undefined
           ? undefined
-          : after.find((c) => {
+          : inLock.find((c) => {
               if (c.t >= lockEndS) return false;
               const m = spellSchoolMask(c.spellId);
               return (
@@ -3704,7 +3713,7 @@ export function analyzePlayerCCAndTrinket(
         ? endedAt - inst.atSeconds
         : null;
       const wentOut: Record<string, number> = {};
-      for (const c of after) {
+      for (const c of inLock) {
         if (c.t >= lockEndS) break;
         if (c.spellId in wentOut) continue;
         if (replays.some((w) => c.ms >= w.from && c.ms <= w.to)) continue;

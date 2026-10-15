@@ -20,6 +20,7 @@ import {
 import { SELF_REMOVAL_BY_TYPE } from "../data/selfRemovals";
 import { SPELL_CATEGORIES as spellsData } from "../data/spellCategories";
 import {
+  ccFullDurationSeconds,
   effectiveCooldownSeconds,
   getEnglishSpellName,
   spellEffectData,
@@ -59,6 +60,7 @@ import {
   getDRCategory,
   getDRLevelAtTime,
   PATCH_121_GOLIVE_EPOCH_MS,
+  reAppliedIsSameApplication,
 } from "./drAnalysis";
 import { sumLandedPressure } from "./incomingPressure";
 import { logIsFrom } from "./logEra";
@@ -3107,6 +3109,26 @@ export function reconstructDispelSummary(
 
       if (aura.logLine.event === LogEvent.SPELL_AURA_APPLIED) {
         const bucket = appliedTimes.get(spellId) ?? [];
+        // work order 2026-10-15 Part 2 (user 「好」): a re-APPLIED while the
+        // last application of the spell is still open and inside its
+        // official length is that application (`reAppliedIsSameApplication`
+        // — no caster here, no recast test); it used to open a second,
+        // nested window
+        const last = bucket[bucket.length - 1];
+        const lastRemoved = (removedTimes.get(spellId) ?? []).some(
+          (r) => last !== undefined && r.ts >= last.ts,
+        );
+        if (
+          last !== undefined &&
+          !lastRemoved &&
+          reAppliedIsSameApplication(
+            last.ts,
+            aura.timestamp,
+            ccFullDurationSeconds(spellId) ?? null,
+            false,
+          )
+        )
+          continue;
         appliedTimes.set(spellId, [
           ...bucket,
           {
@@ -3163,8 +3185,26 @@ export function reconstructDispelSummary(
         // not in the round. A removal after the end is the round ending, not
         // a dispel, a rider or a break.
         if (applyTs >= roundEnd) continue;
-        const paired = removals.find((r) => r.ts >= applyTs);
-        if (!paired) continue;
+        const pairedRaw = removals.find((r) => r.ts >= applyTs);
+        if (!pairedRaw) continue;
+        // work order 2026-10-15 Part 2 (user 「好」): another application of
+        // the spell before that removal proves this one's REMOVED was lost —
+        // it ends at that application or its official end, whichever is
+        // first, never at the later removal
+        const nextApply = applications.find((a) => a.ts > applyTs);
+        const officialS = ccFullDurationSeconds(spellId);
+        const paired =
+          nextApply !== undefined && pairedRaw.ts > nextApply.ts
+            ? {
+                ts: Math.min(
+                  nextApply.ts,
+                  officialS === undefined
+                    ? Infinity
+                    : applyTs + officialS * 1000,
+                ),
+                brokenByDamage: false,
+              }
+            : pairedRaw;
         const clippedAtRoundEnd = paired.ts > roundEnd;
         const removal = clippedAtRoundEnd
           ? { ts: roundEnd, brokenByDamage: false }

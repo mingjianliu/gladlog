@@ -454,8 +454,6 @@ export function buildCcCategoryHistory(
   durationSeconds: number;
   drInfo: IDRInfo | null;
 }> {
-  const appliesBySpell = new Map<string, number[]>();
-  const removesBySpell = new Map<string, number[]>();
   // a REMOVED→APPLIED re-broadcast (`AURA_REBROADCAST_GAP_MS`) is one application, not two DR
   // steps (cc-dr F-RB1, ruling A50 = A: the shared `dropAuraRebroadcasts`).
   // Filter BEFORE the re-broadcast pass: this runs once per CC break / dispel
@@ -473,40 +471,68 @@ export function buildCcCategoryHistory(
   // a BROKEN line its aura's own REMOVED follows is not the end (FT-T08) —
   // read off the unit's whole stream, where the REMOVED is
   const notTheEnd = supersededAuraBreaks(unit.auraEvents);
-  for (const aura of dropAuraRebroadcasts(relevant)) {
-    const sid = aura.spellId;
-    if (!sid) continue;
-    if (notTheEnd.has(aura)) continue;
-    if (aura.logLine.event === LogEvent.SPELL_AURA_APPLIED) {
-      const b = appliesBySpell.get(sid) ?? [];
-      appliesBySpell.set(sid, [...b, aura.timestamp]);
-    } else if (
-      aura.logLine.event === LogEvent.SPELL_AURA_REMOVED ||
-      aura.logLine.event === LogEvent.SPELL_AURA_BROKEN ||
-      aura.logLine.event === LogEvent.SPELL_AURA_BROKEN_SPELL
-    ) {
-      const b = removesBySpell.get(sid) ?? [];
-      removesBySpell.set(sid, [...b, aura.timestamp]);
-    }
-  }
   const instances: Array<{
     atSeconds: number;
     durationSeconds: number;
     drInfo: IDRInfo | null;
   }> = [];
-  for (const [sid, sApplies] of appliesBySpell) {
-    const sRemoves = removesBySpell.get(sid) ?? [];
-    for (const ts of sApplies) {
-      const removalTs = sRemoves.find((r) => r >= ts);
-      if (removalTs === undefined) continue;
-      instances.push({
-        atSeconds: (ts - matchStartMs) / 1000,
-        durationSeconds: (removalTs - ts) / 1000,
-        // getDRLevelAtTime only reads drInfo.category; level/sequenceIndex
-        // are placeholders.
-        drInfo: { category, level: "Full", sequenceIndex: 0 },
-      });
+  // getDRLevelAtTime only reads drInfo.category; level/sequenceIndex are
+  // placeholders.
+  const close = (applyMs: number, removeMs: number) =>
+    instances.push({
+      atSeconds: (applyMs - matchStartMs) / 1000,
+      durationSeconds: (removeMs - applyMs) / 1000,
+      drInfo: { category, level: "Full", sequenceIndex: 0 },
+    });
+  // work order 2026-10-15 Part 2 (user 「好」): the CC pairings' reading —
+  // keyed by spell and source (`matchPendingCcKey` for a removal), a
+  // re-APPLIED inside the official length is the same application
+  // (`reAppliedIsSameApplication`; no caster here, so no recast test, as in
+  // `castBlockingAuraIntervals`), a lost REMOVED closes at the official
+  // length. It used to pair every APPLIED with the next removal of the
+  // spell: a re-send was a second DR step, a lost REMOVED ran to a later
+  // application's removal, an application never removed was skipped.
+  const pending = new Map<string, { applyMs: number; spellId: string }>();
+  for (const aura of dropAuraRebroadcasts(relevant)) {
+    const sid = aura.spellId;
+    if (!sid) continue;
+    if (notTheEnd.has(aura)) continue;
+    const key = `${sid}:${aura.srcUnitId}`;
+    const officialS = ccFullDurationSeconds(sid) ?? null;
+    if (aura.logLine.event === LogEvent.SPELL_AURA_APPLIED) {
+      const open = pending.get(key);
+      if (open !== undefined) {
+        if (
+          reAppliedIsSameApplication(
+            open.applyMs,
+            aura.timestamp,
+            officialS,
+            false,
+          )
+        )
+          continue;
+        close(
+          open.applyMs,
+          Math.min(aura.timestamp, open.applyMs + officialS! * 1000),
+        );
+      }
+      pending.set(key, { applyMs: aura.timestamp, spellId: sid });
+    } else if (
+      aura.logLine.event === LogEvent.SPELL_AURA_REMOVED ||
+      aura.logLine.event === LogEvent.SPELL_AURA_BROKEN ||
+      aura.logLine.event === LogEvent.SPELL_AURA_BROKEN_SPELL
+    ) {
+      const k = matchPendingCcKey(pending, sid, key);
+      const open = k ? pending.get(k) : undefined;
+      if (!k || !open) continue;
+      pending.delete(k);
+      close(open.applyMs, aura.timestamp);
     }
+  }
+  for (const open of pending.values()) {
+    const officialS = ccFullDurationSeconds(open.spellId);
+    if (officialS !== undefined)
+      close(open.applyMs, open.applyMs + officialS * 1000);
   }
   instances.sort((a, b) => a.atSeconds - b.atSeconds);
   return instances;

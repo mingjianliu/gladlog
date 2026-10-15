@@ -2430,7 +2430,11 @@ function pressesInPostKickWindow(
 }
 
 function rejectedPressesAfterKick(
-  k: { atSeconds: number; diedAfterKickS?: number },
+  k: {
+    atSeconds: number;
+    diedAfterKickS?: number;
+    lockoutDurationSeconds?: number;
+  },
   ownerId: string,
   intent:
     | {
@@ -2444,7 +2448,14 @@ function rejectedPressesAfterKick(
   // inst.atSeconds`): the interrupted cast itself logs a same-millisecond
   // SPELL_CAST_FAILED "interrupted" (7c598eeb r0 @91.13, 1262763) — that is
   // the kick, not a press made after it.
-  const hits = pressesInPostKickWindow(intent.rawStreams, ownerId, k);
+  // work order 2026-10-15 Part 2 (user 「好」): over the span the text lists —
+  // the longer of the 5 s window and the lock — not the 5 s alone
+  const hits = pressesInPostKickWindow(
+    intent.rawStreams,
+    ownerId,
+    k,
+    Math.max(POST_KICK_WINDOW_S, k.lockoutDurationSeconds ?? 0),
+  );
   const ownCastSuccessSeconds = intent.ownerCasts.map((c) => c.tSeconds);
   const bySpell = new Map<number, CastFailedEvent[]>();
   for (const h of hits) {

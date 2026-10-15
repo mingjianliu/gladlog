@@ -51,6 +51,7 @@ import { fmtTime, toRenderSecond } from "./renderGrid";
 import { buildRosterSides, type RosterSides } from "./rosterSide";
 import { ccMechanicOf, SNARED_MECHANIC } from "./spellMechanics";
 import { spellReachToAccuse } from "./spellRange";
+import { roundEndMs } from "./roundEnd";
 import { isDeadAt } from "./unitDeath";
 import { hitByAttackers } from "./burstHit";
 
@@ -1006,6 +1007,8 @@ export function computeOwnerPositionEvents(params: {
       ? Math.min(overlappingSpike.toSeconds, evalEnd) -
         Math.max(overlappingSpike.fromSeconds, w.fromSeconds)
       : -1;
+    const spikeCoversSpan =
+      !!overlappingSpike && spikeOverlapS >= evalSpan * SPIKE_SPAN_MIN_SHARE;
     const spanTarget =
       overlappingSpike && spikeOverlapS >= evalSpan * SPIKE_SPAN_MIN_SHARE
         ? undefined
@@ -1041,10 +1044,16 @@ export function computeOwnerPositionEvents(params: {
                 : undefined,
             );
           })();
+    // work order 2026-10-15 Part 2 (user 「好」): when the window's cooldown
+    // casters are known and hit nobody in the span, no burst target is named
+    // — the any-source fallbacks (a shorter spike's friendly, the window's
+    // most-pressured) had no hit test
+    const castersKnown = (w.activeCDs ?? []).length > 0;
     const targetName =
       spanTarget ??
-      overlappingSpike?.targetName ??
-      w.mostPressuredTarget?.unitName;
+      (castersKnown && !spikeCoversSpan
+        ? undefined
+        : (overlappingSpike?.targetName ?? w.mostPressuredTarget?.unitName));
     const burstTargetsOwner =
       targetName !== undefined ? targetName === owner.name : undefined;
     // The owner's own displacement, on the same render-grid seconds.
@@ -1307,7 +1316,13 @@ export function computeOwnerPositionEvents(params: {
     const allLivingEnemiesKnownAt = (tMs: number) =>
       allLivingEnemiesKnown(enemies, tMs);
 
-    for (let t = 0; t <= durationSeconds; t += 1) {
+    // work order 2026-10-15 Part 2 (user 「好」): the sweep stops at the round's
+    // end (`roundEndMs`: a Solo Shuffle round ends at its first death)
+    const sweepEndS = Math.min(
+      durationSeconds,
+      (roundEndMs(combat as never) - matchStartMs) / 1000,
+    );
+    for (let t = 0; t <= sweepEndS; t += 1) {
       const tMs = matchStartMs + t * 1000;
       const allOffensivesReady = offensiveCDs.every((cd) =>
         isAvailableAt(cd, t),
@@ -1333,7 +1348,7 @@ export function computeOwnerPositionEvents(params: {
         closeRun(t);
       }
     }
-    closeRun(durationSeconds);
+    closeRun(sweepEndS);
   }
 
   // ── 3. CD_OUT_OF_RANGE: offensive CD cast beyond its own reach ───────────
@@ -1727,9 +1742,13 @@ export const POSITIONING_BURST_ANSWERED_XREF =
   " — which can differ from the [BURST ANSWERED] line's player, the lowest-HP one over the burst and what followed";
 
 export const STAYED_IN_SECTION_HEADER =
-  "  STAYED IN during enemy burst (A→Byd = your distance, at the span's start and end, to the ONE enemy named after 'from' — the enemy who dealt you the most damage over the span; it started in close range and little distance was gained on it. When no enemy damage landed in the span, two enemies tied for the most, or that enemy had no position at either end, each end reads the nearest enemy at that second instead, and 'from X→Y' names both when they differ. '(nearest enemy A–Byd over the window)' is always the nearest of ANY enemy at each second, not the named one. The line says nothing about whether you moved; see 'you moved'. 'you were the burst target' / 'burst targeted X' = the friendly of the [DMG SPIKE] that covers at least half the span; with no such spike, of the friendlies the burst's cooldown casters hit in the span (a hit stopped by an immunity counts) the one under the most incoming damage; with none hit, a shorter overlapping spike's friendly, else the window's most-damaged friendly from any source"+POSITIONING_BURST_ANSWERED_XREF+".):";
+  "  STAYED IN during enemy burst (A→Byd = your distance, at the span's start and end, to the ONE enemy named after 'from' — the enemy who dealt you the most damage over the span; it started in close range and little distance was gained on it. When no enemy damage landed in the span, two enemies tied for the most, or that enemy had no position at either end, each end reads the nearest enemy at that second instead, and 'from X→Y' names both when they differ. '(nearest enemy A–Byd over the window)' is always the nearest of ANY enemy at each second, not the named one. The line says nothing about whether you moved; see 'you moved'. 'you were the burst target' / 'burst targeted X' = the friendly of the [DMG SPIKE] that covers at least half the span; with no such spike, of the friendlies the burst's cooldown casters hit in the span (a hit stopped by an immunity counts) the one under the most incoming damage; with none hit, no burst target is named (only when the window's cooldown casters are unknown does it fall back to a shorter overlapping spike's friendly, else the window's most-damaged friendly from any source)" +
+  POSITIONING_BURST_ANSWERED_XREF +
+  ".):";
 export const KITED_SECTION_HEADER =
-  "  KITED during enemy burst (opened distance: A = your distance at the start to the ONE enemy named after 'from' — the enemy who dealt you the most damage over the span — and B = your largest distance to that same enemy, at the second in '(peak at m:ss)'. When no enemy damage landed in the span, two enemies tied for the most, or that enemy had no position at either end, A is the nearest enemy at the start and B the largest nearest-enemy distance, with ', from Z' naming the enemy at the peak when it is another one. 'you were the burst target' / 'burst targeted X' = the friendly of the [DMG SPIKE] that covers at least half the span; with no such spike, of the friendlies the burst's cooldown casters hit in the span (a hit stopped by an immunity counts) the one under the most incoming damage; with none hit, a shorter overlapping spike's friendly, else the window's most-damaged friendly from any source"+POSITIONING_BURST_ANSWERED_XREF+".):";
+  "  KITED during enemy burst (opened distance: A = your distance at the start to the ONE enemy named after 'from' — the enemy who dealt you the most damage over the span — and B = your largest distance to that same enemy, at the second in '(peak at m:ss)'. When no enemy damage landed in the span, two enemies tied for the most, or that enemy had no position at either end, A is the nearest enemy at the start and B the largest nearest-enemy distance, with ', from Z' naming the enemy at the peak when it is another one. 'you were the burst target' / 'burst targeted X' = the friendly of the [DMG SPIKE] that covers at least half the span; with no such spike, of the friendlies the burst's cooldown casters hit in the span (a hit stopped by an immunity counts) the one under the most incoming damage; with none hit, no burst target is named (only when the window's cooldown casters are unknown does it fall back to a shorter overlapping spike's friendly, else the window's most-damaged friendly from any source)" +
+  POSITIONING_BURST_ANSWERED_XREF +
+  ".):";
 
 export function formatPositionEventsForContext(
   events: IPositionEvent[],

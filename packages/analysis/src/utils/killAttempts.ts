@@ -1622,6 +1622,10 @@ function attributeFailure(
       else immunityUpSinceS = Math.max(immunityUpSinceS ?? 0, iv.fromS);
     }
     if (!inSave(startMs) && !upAtStart) continue;
+    // work order 2026-10-15 Part 2 (user 「好」): an aura the ATTACKING side put
+    // on the target is not the target's defensive (an attacker's Touch of
+    // Karma tether) — the mitigation audit's side rule, by unit
+    if (friendlies.some((f) => isIntervalFrom(iv, f))) continue;
     // The wall-in-hand subset is called out by name — those are the cards the
     // gated tier told the coach to bait; seeing one here closes that loop.
     // F-E1a: a wall whose table row is keyed by its cast (Blur, Greater

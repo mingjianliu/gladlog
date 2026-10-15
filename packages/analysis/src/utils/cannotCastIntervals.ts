@@ -16,7 +16,7 @@ import {
   disarmSpellIds,
   officialSilenceIds,
 } from "../data/spellTags";
-import { supersededAuraBreaks } from "./auraIntervals";
+import { dropAuraRebroadcasts, supersededAuraBreaks } from "./auraIntervals";
 import { buffFullDurationForCaster } from "./buffDuration";
 import { REACTION_WINDOW_S, usableWhileStunned } from "./cooldowns";
 import {
@@ -367,32 +367,62 @@ export function disarmIntervals(
   unit: ICombatUnit,
   enemyIds: Set<string>,
 ): NamedCannotCastInterval[] {
-  const open = new Map<string, number>();
+  // work order 2026-10-15 Part 2 (user 「好」): the CC pairings' reading — a
+  // re-broadcast is one aura (`dropAuraRebroadcasts`), a BROKEN its own
+  // REMOVED follows is not the end (`supersededAuraBreaks`), a removal closes
+  // its source's application or else the earliest of the spell
+  // (`matchPendingCcKey`: a BROKEN's source is the breaker), a re-APPLIED
+  // inside the official length is the same application
+  // (`reAppliedIsSameApplication`, no caster here), a lost REMOVED closes at
+  // the official length
+  const pending = new Map<string, { applyMs: number; spellId: string }>();
   const out: NamedCannotCastInterval[] = [];
   const close = (spellId: string, from: number, to: number) =>
     out.push({ from, to, spellId, lockout: false, disarm: true });
-  for (const a of unit.auraEvents ?? []) {
+  const notTheEnd = supersededAuraBreaks(unit.auraEvents ?? []);
+  for (const a of dropAuraRebroadcasts(unit.auraEvents ?? [])) {
     const id = String(a.spellId ?? "");
-    if (!disarmSpellIds.has(id) || !enemyIds.has(a.srcUnitId)) continue;
+    if (!disarmSpellIds.has(id)) continue;
+    if (notTheEnd.has(a)) continue;
     const key = `${id}:${a.srcUnitId}`;
     const ev = a.logLine.event;
+    const officialS = ccFullDurationSeconds(id) ?? null;
     if (ev === LogEvent.SPELL_AURA_APPLIED) {
-      if (!open.has(key)) open.set(key, a.timestamp);
+      if (!enemyIds.has(a.srcUnitId)) continue;
+      const open = pending.get(key);
+      if (open !== undefined) {
+        if (
+          reAppliedIsSameApplication(
+            open.applyMs,
+            a.timestamp,
+            officialS,
+            false,
+          )
+        )
+          continue;
+        close(
+          id,
+          open.applyMs,
+          Math.min(a.timestamp, open.applyMs + officialS! * 1000),
+        );
+      }
+      pending.set(key, { applyMs: a.timestamp, spellId: id });
     } else if (
       ev === LogEvent.SPELL_AURA_REMOVED ||
       ev === LogEvent.SPELL_AURA_BROKEN ||
       ev === LogEvent.SPELL_AURA_BROKEN_SPELL
     ) {
-      const from = open.get(key);
-      if (from === undefined) continue;
-      open.delete(key);
-      close(id, from, a.timestamp);
+      const k = matchPendingCcKey(pending, id, key);
+      const open = k ? pending.get(k) : undefined;
+      if (!k || !open) continue;
+      pending.delete(k);
+      close(id, open.applyMs, a.timestamp);
     }
   }
-  for (const [key, from] of open) {
-    const id = key.split(":")[0]!;
-    const s = ccFullDurationSeconds(id);
-    if (s !== undefined) close(id, from, from + s * 1000);
+  for (const open of pending.values()) {
+    const s = ccFullDurationSeconds(open.spellId);
+    if (s !== undefined)
+      close(open.spellId, open.applyMs, open.applyMs + s * 1000);
   }
   return out;
 }
@@ -1184,6 +1214,7 @@ export function actWindowFor(
   // casters resolved once (a missing pet stream must not throw the caller's
   // candidate away: the spells then stay on the unit's own reading)
   let casters: PetCasters | undefined;
+  let disarms: NamedCannotCastInterval[] | undefined;
   // the unit's own intervals minus the stuns one of its OWN spells asked
   // about can be pressed through (`stunLetsPress`) — "stops every spell"
   const withoutPressableStuns = (
@@ -1209,8 +1240,12 @@ export function actWindowFor(
     try {
       casters ??= petCastersBySpell(unit, units);
       const split = petBlockLists(enemyIds, spellIds, casters);
+      // work order 2026-10-15 Part 2 (user 「好」): a disarm stops a named
+      // weapon-requiring spell here too (cd-hoarded's owner gate read a
+      // disarmed Die by the Sword holder as free)
+      disarms ??= disarmIntervals(unit, enemyIds);
       return intervalsForSpells(
-        withoutPressableStuns(split.ownSpellIds, through),
+        [...withoutPressableStuns(split.ownSpellIds, through), ...disarms],
         split,
         spellIds,
       );

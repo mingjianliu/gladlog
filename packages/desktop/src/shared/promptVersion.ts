@@ -1683,5 +1683,14 @@
  *  PEEL OPTION / CC BOOKMARK ask about the control itself (lockout school,
  *  silence bit, disarm); [HEALING] / [MANA] read the observed end. 605
  *  files: no candidate added or removed.
+ *  v395 (2026-10-15, FT, work order 2026-10-15 Part 2, user 「好」): DR
+ *  history and the uncleansed windows read a re-APPLIED CC inside its
+ *  length as one application and cap a lost REMOVED; the disarm pairing
+ *  follows the CC pairings and the owner's act window reads disarms for
+ *  weapon spells; KILL ATTEMPTS "popped" skips the attacking side's auras;
+ *  kick-eaten's lock end, went-out list and rank read the whole lock;
+ *  POSITIONING names no burst target the burst's casters did not hit, and
+ *  MISSED_PUSH stops at the round end. 605 files: no candidate added or
+ *  removed.
  */
-export const PROMPT_VERSION = 394;
+export const PROMPT_VERSION = 395;

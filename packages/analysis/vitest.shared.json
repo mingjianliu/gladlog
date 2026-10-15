@@ -288,6 +288,7 @@
     "test/wo3Part2Facts.test.ts",
     "test/wo4Facts.test.ts",
     "test/wo4Part2Facts.test.ts",
-    "test/wo5Facts.test.ts"
+    "test/wo5Facts.test.ts",
+    "test/wo5Part2Facts.test.ts"
   ]
 }
