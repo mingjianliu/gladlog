@@ -1692,5 +1692,8 @@
  *  POSITIONING names no burst target the burst's casters did not hit, and
  *  MISSED_PUSH stops at the round end. 605 files: no candidate added or
  *  removed.
+ *  v396 (2026-10-15, FT, agy 40-FT-96, user 「落地」): a CC an enemy pet
+ *  broke is broken by damage, not an uncleansed window (a BROKEN row's
+ *  source is the breaker). 605 files: missed-cleanse +1 / −2.
  */
-export const PROMPT_VERSION = 395;
+export const PROMPT_VERSION = 396;

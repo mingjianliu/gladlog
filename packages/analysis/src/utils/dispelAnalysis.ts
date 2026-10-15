@@ -3094,8 +3094,18 @@ export function reconstructDispelSummary(
       const spellId = aura.spellId;
       if (!spellId) continue;
 
-      // Only CC applied by enemies
-      if (!enemyIds.has(aura.srcUnitId)) continue;
+      // Only CC applied by enemies. A BROKEN row names the BREAKER (raw.txt:
+      // Dragon's Breath broken by a warrior's Champion's Spear logs the
+      // warrior), and an enemy pet breaks a CC too — agy 40-FT-96: those rows
+      // were dropped here, so the window never read "broken by damage"
+      const isBreak =
+        aura.logLine.event === LogEvent.SPELL_AURA_BROKEN ||
+        aura.logLine.event === LogEvent.SPELL_AURA_BROKEN_SPELL;
+      if (
+        !enemyIds.has(aura.srcUnitId) &&
+        !(isBreak && enemyPetIds.has(aura.srcUnitId))
+      )
+        continue;
 
       // B11 fix: skip BUFF auras. When a friendly Mage spellsteals an enemy buff (e.g.
       // Blessing of Freedom 1044), the resulting SPELL_AURA_APPLIED on the Mage carries
@@ -3137,10 +3147,16 @@ export function reconstructDispelSummary(
       // spellEffectData — one data refresh and this would have blown up.
       // Stellar Protection tier (12.1): here the aura's caster is known
       // precisely, so gate on that unit's spec rather than team composition.
+      // (on the APPLIED only: a removal row's source can be the breaker — an
+      // application this skipped is never open, so its removal pairs nothing)
       const casterIsBalance =
         enemyPlayerById.get(aura.srcUnitId)?.spec ===
         CombatUnitSpec.Druid_Balance;
-      if (getDispelPenalty(spellId, casterIsBalance, aura.timestamp)) continue;
+      if (
+        aura.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
+        getDispelPenalty(spellId, casterIsBalance, aura.timestamp)
+      )
+        continue;
 
       // Skip spells that cannot be dispelled (DispelType=None in game data)
       const dispelType = getDispelType(spellId);
@@ -3206,7 +3222,7 @@ export function reconstructDispelSummary(
           auraBreaksBeforeRemoved(unit.auraEvents, aura).some(
             (b) =>
               b.logLine.event === LogEvent.SPELL_AURA_BROKEN_SPELL &&
-              enemyIds.has(b.srcUnitId),
+              (enemyIds.has(b.srcUnitId) || enemyPetIds.has(b.srcUnitId)),
           );
         closeWindow(open, { ts: aura.timestamp, brokenByDamage });
       }

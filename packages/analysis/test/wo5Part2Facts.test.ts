@@ -149,6 +149,13 @@ describe("2a — the uncleansed window: a re-send inside the length is one windo
         makeUnit("enemy-3", { reaction: CombatUnitReaction.Hostile }),
       ] as never,
       { startTime: T0, endTime: S(300) } as never,
+      [],
+      [
+        makeUnit("enemy-pet", {
+          reaction: CombatUnitReaction.Hostile,
+          ownerId: "enemy-1",
+        }),
+      ] as never,
     )
       .missedCleanseWindows.map((w) => [
         w.timeSeconds,
@@ -195,6 +202,20 @@ describe("2a — the uncleansed window: a re-send inside the length is one windo
       [20, 4],
       [40, 6],
     ]);
+  });
+
+  // raw.txt: a BROKEN_SPELL row names the breaker (Dragon's Breath broken by
+  // a warrior's Champion's Spear logs the warrior)
+  it("agy 40-FT-96: a CC an enemy PET broke is broken by damage, not uncleansed", () => {
+    expect(
+      windows2([
+        ev(LogEvent.SPELL_AURA_APPLIED, "122", 20, "enemy-1", "m"),
+        ev(LogEvent.SPELL_AURA_BROKEN_SPELL, "122", 24, "enemy-pet", "m"),
+        ev(LogEvent.SPELL_AURA_REMOVED, "122", 24, "enemy-1", "m"),
+        ev(LogEvent.SPELL_AURA_APPLIED, "122", 40, "enemy-1", "m"),
+        ev(LogEvent.SPELL_AURA_BROKEN_SPELL, "122", 44, "enemy-pet", "m"),
+      ]),
+    ).toEqual([]);
   });
 
   it("agy 40-FT-95 #2: a breaker's removal closes one application, not two", () => {
