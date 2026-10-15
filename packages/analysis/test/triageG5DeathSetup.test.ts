@@ -94,7 +94,8 @@ describe("crisis-external F-AS1 / F-D2 — the lock chain and the free time", ()
     expect(e!.facts["chainFrom"]).toBe("104");
     expect(e!.facts["chain"]).toBe(
       // WO6 #4: each entry with its span, so the 116.4–117.1 gap shows
-      "Blinding Sleet 104-108; Psychic Scream 107.5-112; Polymorph 111.9-116.4; Frost Nova (root) 112-116; Holy Word: Chastise 117.1-120.1",
+      // agy 40-FT-98: the kick lockout inside Chastise is listed too
+      "Blinding Sleet 104-108; Psychic Scream 107.5-112; Polymorph 111.9-116.4; Frost Nova (root) 112-116; Holy Word: Chastise 117.1-120.1; Counterspell (school lockout) 118-119",
     );
   });
 

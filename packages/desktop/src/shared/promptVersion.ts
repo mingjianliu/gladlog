@@ -1704,5 +1704,10 @@
  *  [BURST ANSWERED] names a second friendly death; a Stasis release after
  *  a kick is the player's press, not a replay. 605 files: no candidate
  *  added or removed.
+ *  v398 (2026-10-15, FT, agy 40-FT-98 — facts only): each press of a
+ *  buff reads its own target's copy (a removal one press stepped over
+ *  stays for the next); the death-setup chain lists kick lockouts and
+ *  [HEALER CC] counts a lockout between two CCs as locked, not free. 605
+ *  files: no candidate added or removed.
  */
-export const PROMPT_VERSION = 397;
+export const PROMPT_VERSION = 398;

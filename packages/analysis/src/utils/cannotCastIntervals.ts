@@ -1018,8 +1018,19 @@ export function deathLockChainText<T extends { from: number }>(
     const run = runOf(iv);
     if (!prev) text = name;
     else if (prev.run !== run && run >= 0 && prev.run >= 0) {
-      const gapS = (chain.runs[run]!.from - chain.runs[prev.run]!.to) / 1000;
-      text += ` … ${(Math.round(gapS * 10) / 10).toFixed(1)}s free … ${name}`;
+      // agy 40-FT-98 #2: a run between the two with no CC in it (a kick's
+      // school lockout, the unit's own flight) is locked time, not free
+      let freeMs = 0;
+      let lockedMs = 0;
+      for (let k = prev.run + 1; k <= run; k++) {
+        freeMs += chain.runs[k]!.from - chain.runs[k - 1]!.to;
+        if (k < run) lockedMs += chain.runs[k]!.to - chain.runs[k]!.from;
+      }
+      const s1 = (ms: number) => (Math.round(ms / 100) / 10).toFixed(1);
+      text +=
+        lockedMs > 0
+          ? ` … ${s1(freeMs)}s free + ${s1(lockedMs)}s kick lockout / own flight … ${name}`
+          : ` … ${s1(freeMs)}s free … ${name}`;
     } else if (prev.name !== name) text += ` → ${name}`;
     prev = { name, run };
   }

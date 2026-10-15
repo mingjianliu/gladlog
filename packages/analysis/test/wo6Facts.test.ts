@@ -160,6 +160,76 @@ describe("WO6 #3 (n45) — a buff on several friendlies fades with the owner's c
   });
 });
 
+describe("agy 40-FT-98 #1 — two presses on two friendlies keep their own copies", () => {
+  const IB = "102342"; // Ironbark, 12 s
+  const copy = (dest: string, fromS: number, toS: number) => [
+    makeAuraEvent(
+      LogEvent.SPELL_AURA_APPLIED,
+      IB,
+      at(fromS),
+      "player-1",
+      dest,
+      "BUFF",
+    ),
+    makeAuraEvent(
+      LogEvent.SPELL_AURA_REMOVED,
+      IB,
+      at(toS),
+      "player-1",
+      dest,
+      "BUFF",
+    ),
+  ];
+  it("B pressed at 10 (ran to 22), A at 12 (gone at 14): each press reads its own target's copy", () => {
+    const owner = makeUnit("player-1", {
+      name: "Druid",
+      class: CombatUnitClass.Druid,
+      spec: CombatUnitSpec.Druid_Restoration,
+      info: {},
+      spellCastEvents: [
+        makeSpellCastEvent(IB, at(10), "player-2"),
+        makeSpellCastEvent(IB, at(12), "player-3"),
+      ],
+    });
+    const b = makeUnit("player-2", {
+      name: "B",
+      info: {},
+      auraEvents: copy("player-2", 10, 22),
+    });
+    const a = makeUnit("player-3", {
+      name: "A",
+      info: {},
+      auraEvents: copy("player-3", 12, 14),
+    });
+    const events = extractOwnerCDBuffExpiry(
+      [
+        {
+          spellId: IB,
+          spellName: "Ironbark",
+          tag: "External",
+          casts: [
+            { timeSeconds: 10, targetName: "B" },
+            { timeSeconds: 12, targetName: "A" },
+          ],
+          cooldownSeconds: 45,
+          neverUsed: false,
+          availableWindows: [],
+        },
+      ] as never,
+      "player-1",
+      [owner, b, a] as never,
+      T0,
+      owner as never,
+    );
+    expect(
+      events.map((e) => [e.castAtSeconds, e.expiresAtSeconds, e.isEstimated]),
+    ).toEqual([
+      [10, 22, false],
+      [12, 14, false],
+    ]);
+  });
+});
+
 describe("WO6 #4 (n25) — [HEALER CC]: two cannot-cast runs are not one chain", () => {
   const iv = (from: number, to: number, name: string) => ({
     from: at(from),
@@ -175,6 +245,17 @@ describe("WO6 #4 (n25) — [HEALER CC]: two cannot-cast runs are not one chain",
     );
     expect(deathLockChainText(chain, (l) => l.name)).toBe(
       "Hex … 4.5s free … Polymorph",
+    );
+  });
+  it("agy 40-FT-98 #2: a lockout-only run between two CCs is not free time", () => {
+    const lockout = { ...iv(106, 110, "Wind Shear"), lockout: true };
+    const chain = deathLockChain(
+      [iv(100, 104, "Psychic Scream"), lockout, iv(114, 120, "Polymorph")],
+      at(120),
+      30_000,
+    );
+    expect(deathLockChainText(chain, (l) => l.name)).toBe(
+      "Psychic Scream … 6.0s free + 4.0s kick lockout / own flight … Polymorph",
     );
   });
   it("one run reads as before (Sleet → Scream → Polymorph)", () => {

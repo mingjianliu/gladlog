@@ -161,6 +161,22 @@ function lockChainFacts(
       text: `${getEnglishSpellName(iv.spellId)} (own flight) ${span(at, (iv.to - start) / 1000)}`,
     });
   }
+  // agy 40-FT-98 #2 / #3: a kick's school lockout is time the runs count
+  // (lockedS) — listed, so a gap between two CCs is not read as free time
+  for (const iv of cc.cannotCast) {
+    if (
+      !iv.lockout ||
+      iv.self ||
+      !(iv.from < deathMs) ||
+      !runs.some((r) => iv.from < r.to && iv.to > r.from)
+    )
+      continue;
+    const at = (iv.from - start) / 1000;
+    chain.push({
+      at,
+      text: `${getEnglishSpellName(iv.spellId)} (school lockout) ${span(at, (iv.to - start) / 1000)}`,
+    });
+  }
   for (const r of cc.roots ?? []) {
     if (
       r.atSeconds < parts.deathT &&

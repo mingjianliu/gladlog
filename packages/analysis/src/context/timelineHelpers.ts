@@ -553,20 +553,23 @@ export function extractOwnerCDBuffExpiry(
     removals.sort((a, b) => a.ms - b.ms);
     const removalTimestampsMs = removals.map((r) => r.ms);
 
-    // Match each cast (ascending) to the chronologically-next removal after the cast.
-    let removalIndex = 0;
+    // Match each cast (ascending) to the chronologically-next removal after
+    // the cast that no earlier cast took. A removal before the cast started
+    // is an orphan / a prior application's. agy 40-FT-98 #1: a removal is
+    // used once, but one an earlier cast stepped over (it took its own
+    // target's later copy) stays there for the next cast.
+    const used = removals.map(() => false);
+    // the unit a press was on: its friendly target, else (no target) the
+    // owner; a target that is no friendly unit (a pet) prefers no copy —
+    // agy 40-FT-98
+    const holderOf = (c: (typeof cd.casts)[number]): string | undefined =>
+      c.targetName !== undefined
+        ? friends.find((f) => f.name === c.targetName)?.id
+        : (owner?.id ?? ownerId);
     for (let i = 0; i < cd.casts.length; i++) {
       const cast = cd.casts[i]!;
       const castMs = matchStartMs + cast.timeSeconds * 1000;
       if (castMs >= roundEnd) break;
-
-      // Skip removals that happened before this cast started (orphans / prior applications).
-      while (
-        removalIndex < removalTimestampsMs.length &&
-        removalTimestampsMs[removalIndex] < castMs
-      ) {
-        removalIndex++;
-      }
 
       let expiresAtSeconds: number;
       let isEstimated: boolean;
@@ -574,7 +577,7 @@ export function extractOwnerCDBuffExpiry(
       // M-b: only accept the chronologically-next removal as this cast's real expiry when it
       // falls within duration + tolerance of the cast. Otherwise it likely belongs to a later
       // cast (this cast's own removal is missing from the log) — fall back to estimated and
-      // leave removalIndex where it is so the removal remains available for that later cast.
+      // leave the removal unused so it remains available for that later cast.
       // GH #34 ① (2026-08-29): a removal is this cast's as long as it lands
       // before the NEXT cast of the same spell — a removal later than
       // duration + tolerance is not "someone else's", it is the buff lasting
@@ -593,42 +596,45 @@ export function extractOwnerCDBuffExpiry(
         nextCastMs,
         castMs + (duration + BUFF_EXPIRY_PAIRING_TOLERANCE_S) * 1000,
       );
-      const withinWindow =
-        removalIndex < removalTimestampsMs.length &&
-        removalTimestampsMs[removalIndex] < windowEndMs;
       // WO6 #3 (n45, dfcccbf2): a buff one press put on several friendlies
       // ends with the copy on the unit it was pressed on — the target the
       // cast names (Power Infusion on a teammate: theirs, not the priest's
       // talent copy), or the owner for a press with no friendly target
       // (Mass Invisibility: the mage's own, not the first teammate's copy to
-      // go). That unit's copy inside this press's window wins; with none,
-      // the first removal stays this press's end.
-      if (withinWindow) {
-        const holderId =
-          (cast.targetName !== undefined
-            ? friends.find((f) => f.name === cast.targetName)?.id
-            : undefined) ??
-          owner?.id ??
-          ownerId;
-        for (
-          let j = removalIndex;
-          j < removals.length && removals[j]!.ms < windowEndMs;
-          j++
-        ) {
-          if (removals[j]!.unitId === holderId) {
-            removalIndex = j;
-            break;
-          }
+      // go). That unit's first copy to end inside this press's window —
+      // and before the next press on that same unit, whose copy it would
+      // be — wins; with none, the first removal stays this press's end.
+      const holderId = holderOf(cast);
+      let holderEndMs = windowEndMs;
+      for (let k = i + 1; k < cd.casts.length; k++) {
+        if (holderOf(cd.casts[k]!) !== holderId) continue;
+        holderEndMs = Math.min(
+          windowEndMs,
+          matchStartMs + cd.casts[k]!.timeSeconds * 1000,
+        );
+        break;
+      }
+      let pick = -1;
+      let firstOpen = -1;
+      for (let j = 0; j < removals.length; j++) {
+        const r = removals[j]!;
+        if (used[j] || r.ms < castMs) continue;
+        if (r.ms >= windowEndMs) break;
+        if (firstOpen < 0) firstOpen = j;
+        if (r.unitId === holderId && r.ms < holderEndMs) {
+          pick = j;
+          break;
         }
       }
+      if (pick < 0) pick = firstOpen;
+      const withinWindow = pick >= 0;
 
       let removedFromId: string | undefined;
       if (withinWindow) {
-        expiresAtSeconds =
-          (removalTimestampsMs[removalIndex] - matchStartMs) / 1000;
+        expiresAtSeconds = (removalTimestampsMs[pick]! - matchStartMs) / 1000;
         isEstimated = false;
-        removedFromId = removals[removalIndex]!.unitId;
-        removalIndex++;
+        removedFromId = removals[pick]!.unitId;
+        used[pick] = true;
       } else {
         expiresAtSeconds = cast.timeSeconds + duration;
         isEstimated = true;
