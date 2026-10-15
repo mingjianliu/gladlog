@@ -11,7 +11,11 @@ import {
   getEnglishSpellName,
 } from "../data/spellEffectData";
 import { schoolLockedBy, spellSchoolMask } from "../data/spellSchools";
-import { ccSpellIds, officialSilenceIds } from "../data/spellTags";
+import {
+  ccSpellIds,
+  disarmSpellIds,
+  officialSilenceIds,
+} from "../data/spellTags";
 import { supersededAuraBreaks } from "./auraIntervals";
 import { buffFullDurationForCaster } from "./buffDuration";
 import { REACTION_WINDOW_S, usableWhileStunned } from "./cooldowns";
@@ -21,7 +25,11 @@ import {
   reAppliedIsSameApplication,
 } from "./drAnalysis";
 import { kickLockoutSecondsFor } from "./kickLockout";
-import { isSilenceableCast, isUnsilenceableCast } from "./spellMechanics";
+import {
+  isSilenceableCast,
+  isUnsilenceableCast,
+  isWeaponRequiredCast,
+} from "./spellMechanics";
 import { firstDeathMs } from "./unitDeath";
 
 /**
@@ -90,6 +98,9 @@ export interface NamedCannotCastInterval {
   /** the unit's own state, not something done to it (its flying breath,
    *  `OWN_FLIGHT_AURA_IDS`): locked time, never a CC to name */
   self?: true;
+  /** a disarm (preview): stops only a weapon-requiring spell, and only for a
+   *  reader that names its spells (`cannotCastIntervalsForSpells`) */
+  disarm?: true;
 }
 
 /** The round's units, as the pet reading needs them (`petCastersOf`). */
@@ -248,6 +259,8 @@ export function intervalBlocksSpell(
     Partial<Pick<NamedCannotCastInterval, "spellId">>,
   spellId: string | undefined,
 ): boolean {
+  if ((iv as { disarm?: true }).disarm)
+    return spellId !== undefined && isWeaponRequiredCast(spellId);
   if (spellId === undefined) return true;
   if (!iv.lockout)
     return !(
@@ -336,11 +349,52 @@ export function cannotCastIntervalsForSpells(
   spellIds: readonly string[] | undefined,
   units: RoundUnits,
 ): NamedCannotCastInterval[] {
+  // work order 2026-10-14d Part 2 (preview): a disarm stops the weapon-
+  // requiring spells asked about — only when spells are named (an unasked
+  // reader would read a disarm as stopping everything)
+  const own = namedCannotCastIntervals(unit, enemyIds);
   return intervalsForSpells(
-    namedCannotCastIntervals(unit, enemyIds),
+    spellIds?.length ? [...own, ...disarmIntervals(unit, enemyIds)] : own,
     petBlockLists(enemyIds, spellIds, petCastersBySpell(unit, units)),
     spellIds,
   );
+}
+
+/** The disarm auras the other side put on `unit` (DB2 SpellMechanic 3,
+ * `disarmSpellIds`), APPLIED → first REMOVED / BROKEN of the same spell and
+ * source, a missing REMOVED at the official length. Preview. */
+export function disarmIntervals(
+  unit: ICombatUnit,
+  enemyIds: Set<string>,
+): NamedCannotCastInterval[] {
+  const open = new Map<string, number>();
+  const out: NamedCannotCastInterval[] = [];
+  const close = (spellId: string, from: number, to: number) =>
+    out.push({ from, to, spellId, lockout: false, disarm: true });
+  for (const a of unit.auraEvents ?? []) {
+    const id = String(a.spellId ?? "");
+    if (!disarmSpellIds.has(id) || !enemyIds.has(a.srcUnitId)) continue;
+    const key = `${id}:${a.srcUnitId}`;
+    const ev = a.logLine.event;
+    if (ev === LogEvent.SPELL_AURA_APPLIED) {
+      if (!open.has(key)) open.set(key, a.timestamp);
+    } else if (
+      ev === LogEvent.SPELL_AURA_REMOVED ||
+      ev === LogEvent.SPELL_AURA_BROKEN ||
+      ev === LogEvent.SPELL_AURA_BROKEN_SPELL
+    ) {
+      const from = open.get(key);
+      if (from === undefined) continue;
+      open.delete(key);
+      close(id, from, a.timestamp);
+    }
+  }
+  for (const [key, from] of open) {
+    const id = key.split(":")[0]!;
+    const s = ccFullDurationSeconds(id);
+    if (s !== undefined) close(id, from, from + s * 1000);
+  }
+  return out;
 }
 
 /** `spellIds` split by caster: the unit's own, and for each pet that casts

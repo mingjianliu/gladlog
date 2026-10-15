@@ -1666,5 +1666,13 @@
  *  40-FT-90: the mitigation side reads players only, the [CAST STOPPED]
  *  gate takes only what the producer prints. 605 files: no candidate added
  *  or removed.
+ *  v393 (2026-10-14, FT, work order 2026-10-14d Part 2 + 3, user 「擦边不管
+ *  落地 飞行不能施法」): one "hit by the burst" predicate for the burst
+ *  engine and the POSITIONING burst target (legends say which friendly
+ *  each names); a disarm stops weapon-requiring spells; a press enters a
+ *  sync window by its observed effect end; the owner's own can-act in
+ *  teammate crises and external-unused is the shared cannot-cast reading;
+ *  Dream Flight and Breath of Eons 442204 are own flights. 605 files:
+ *  missed-sync-window +7 / −19, external-unused −7.
  */
-export const PROMPT_VERSION = 392;
+export const PROMPT_VERSION = 393;

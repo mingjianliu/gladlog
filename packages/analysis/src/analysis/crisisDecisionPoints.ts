@@ -49,6 +49,10 @@ import { rootIntervalsOf } from "../utils/rootReachability";
 import { buildRosterSides } from "../utils/rosterSide";
 import { OFFENSIVE_CD_SPELL_IDS } from "../utils/spellDanger";
 import { buildFilteredAuraIntervals } from "../utils/utils";
+import {
+  isSilenceOnlyAura,
+  namedCannotCastIntervals,
+} from "../utils/cannotCastIntervals";
 
 /** Re-exported from data/behaviorPrior.ts (the non-cyclic home for this
  * type — see its doc comment) so callers of this module don't need a second
@@ -671,18 +675,26 @@ export function actionBlockedAt(
   combat: any,
   tMs: number,
 ): { inCC: boolean; lockedOut: boolean; dead: boolean; blocked: boolean } {
-  const cc = buildFilteredAuraIntervals(unit, ccSpellIds, combat);
-  const silence = buildFilteredAuraIntervals(unit, SILENCE_IDS, combat);
-  const inCC = cc.some((i) => i.startMs <= tMs && i.endMs >= tMs);
-  const interrupted = ((unit?.actionIn ?? []) as any[])
-    .filter((a) => a.logLine?.event === LogEvent.SPELL_INTERRUPT)
-    .some(
-      (a) =>
-        (a.timestamp as number) >= tMs - LOCKOUT_LOOKBACK_MS &&
-        (a.timestamp as number) <= tMs,
-    );
-  const lockedOut =
-    interrupted || silence.some((i) => i.startMs <= tMs && i.endMs >= tMs);
+  // work order 2026-10-14d Part 2 (preview): the unit's own cannot-cast
+  // reading is the shared one (`namedCannotCastIntervals`: hard CC and
+  // silences from the other side, capped at their official length; each kick
+  // at its modelled lockout; the unit's own flight) — it used to be any
+  // silence aura, 1.5 s after any interrupt, and no flight
+  const units: any[] = Object.values(combat?.units ?? {});
+  const hostile = new Set<string>(
+    units
+      .filter((u) => u.id !== unit.id && u.reaction !== unit.reaction)
+      .map((u) => u.id as string),
+  );
+  const at = namedCannotCastIntervals(unit, hostile).filter(
+    (iv) => iv.from <= tMs && tMs < iv.to,
+  );
+  const inCC = at.some(
+    (iv) => !iv.lockout && !iv.self && !isSilenceOnlyAura(iv.spellId),
+  );
+  const lockedOut = at.some(
+    (iv) => iv.lockout || iv.self || isSilenceOnlyAura(iv.spellId),
+  );
   const dead = ((unit?.deathRecords ?? []) as any[]).some(
     (d) => (d.timestamp as number) <= tMs,
   );

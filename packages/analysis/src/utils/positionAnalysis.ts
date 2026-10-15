@@ -52,6 +52,7 @@ import { buildRosterSides, type RosterSides } from "./rosterSide";
 import { ccMechanicOf, SNARED_MECHANIC } from "./spellMechanics";
 import { spellReachToAccuse } from "./spellRange";
 import { isDeadAt } from "./unitDeath";
+import { hitByAttackers } from "./burstHit";
 
 // Thresholds (yards / seconds) — starting values from the Feature 15 spec.
 //
@@ -718,9 +719,13 @@ export function mostPressuredInSpan(
   fromMs: number,
   toMs: number,
   sides?: RosterSides,
+  /** only friendlies this admits (work order 2026-10-14d Part 2, preview:
+   * the ones the burst's casters hit — `hitByAttackers`) */
+  admit?: (f: ICombatUnit) => boolean,
 ): string | undefined {
   let best: { name: string; pressure: number } | undefined;
   for (const f of friends ?? []) {
+    if (admit && !admit(f)) continue;
     const pressure = sumIncomingPressure(f, fromMs, toMs, sides);
     if (pressure > 0 && (!best || pressure > best.pressure))
       best = { name: f.name, pressure };
@@ -1004,12 +1009,38 @@ export function computeOwnerPositionEvents(params: {
     const spanTarget =
       overlappingSpike && spikeOverlapS >= evalSpan * SPIKE_SPAN_MIN_SHARE
         ? undefined
-        : mostPressuredInSpan(
-            friends,
-            matchStartMs + w.fromSeconds * 1000,
-            matchStartMs + evalEnd * 1000,
-            rosterSides,
-          );
+        : (() => {
+            // work order 2026-10-14d Part 2 (preview): the burst target is a
+            // friendly the window's cooldown casters (or their pets) hit —
+            // the burst engine's `pressured` reading (G6), not the most
+            // incoming damage from any source (f4647408 1:43: [BURST
+            // ANSWERED] named the warlock, POSITIONING the owner)
+            const casterNames = new Set(
+              (w.activeCDs ?? []).map((c) => c.playerName),
+            );
+            const casterIds = new Set(
+              enemies.filter((e) => casterNames.has(e.name)).map((e) => e.id),
+            );
+            const ownerOf = new Map(
+              combatUnits
+                .filter((u) => u.ownerId)
+                .map((u) => [u.id, u.ownerId as string]),
+            );
+            const fromCaster = (src: string) =>
+              casterIds.has(src) || casterIds.has(ownerOf.get(src) ?? "");
+            const fromMs = matchStartMs + w.fromSeconds * 1000;
+            const toMs = matchStartMs + evalEnd * 1000;
+            return mostPressuredInSpan(
+              friends,
+              fromMs,
+              toMs,
+              rosterSides,
+              casterIds.size > 0
+                ? (f) =>
+                    hitByAttackers(f, combatUnits, fromCaster, fromMs, toMs)
+                : undefined,
+            );
+          })();
     const targetName =
       spanTarget ??
       overlappingSpike?.targetName ??
@@ -1690,9 +1721,9 @@ function rangeStr(e: IPositionEvent): string {
  * and the tests look for.
  */
 export const STAYED_IN_SECTION_HEADER =
-  "  STAYED IN during enemy burst (A→Byd = your distance, at the span's start and end, to the ONE enemy named after 'from' — the enemy who dealt you the most damage over the span; it started in close range and little distance was gained on it. When no enemy damage landed in the span, two enemies tied for the most, or that enemy had no position at either end, each end reads the nearest enemy at that second instead, and 'from X→Y' names both when they differ. '(nearest enemy A–Byd over the window)' is always the nearest of ANY enemy at each second, not the named one. The line says nothing about whether you moved; see 'you moved'):";
+  "  STAYED IN during enemy burst (A→Byd = your distance, at the span's start and end, to the ONE enemy named after 'from' — the enemy who dealt you the most damage over the span; it started in close range and little distance was gained on it. When no enemy damage landed in the span, two enemies tied for the most, or that enemy had no position at either end, each end reads the nearest enemy at that second instead, and 'from X→Y' names both when they differ. '(nearest enemy A–Byd over the window)' is always the nearest of ANY enemy at each second, not the named one. The line says nothing about whether you moved; see 'you moved'. 'you were the burst target' / 'burst targeted X' = of the friendlies the burst's cooldown casters hit in the span (a hit stopped by an immunity counts), the one under the most incoming damage there — which can differ from the [BURST ANSWERED] line's player, the lowest-HP one over the burst and what followed.):";
 export const KITED_SECTION_HEADER =
-  "  KITED during enemy burst (opened distance: A = your distance at the start to the ONE enemy named after 'from' — the enemy who dealt you the most damage over the span — and B = your largest distance to that same enemy, at the second in '(peak at m:ss)'. When no enemy damage landed in the span, two enemies tied for the most, or that enemy had no position at either end, A is the nearest enemy at the start and B the largest nearest-enemy distance, with ', from Z' naming the enemy at the peak when it is another one):";
+  "  KITED during enemy burst (opened distance: A = your distance at the start to the ONE enemy named after 'from' — the enemy who dealt you the most damage over the span — and B = your largest distance to that same enemy, at the second in '(peak at m:ss)'. When no enemy damage landed in the span, two enemies tied for the most, or that enemy had no position at either end, A is the nearest enemy at the start and B the largest nearest-enemy distance, with ', from Z' naming the enemy at the peak when it is another one. 'you were the burst target' / 'burst targeted X' = of the friendlies the burst's cooldown casters hit in the span (a hit stopped by an immunity counts), the one under the most incoming damage there — which can differ from the [BURST ANSWERED] line's player, the lowest-HP one over the burst and what followed.):";
 
 export function formatPositionEventsForContext(
   events: IPositionEvent[],

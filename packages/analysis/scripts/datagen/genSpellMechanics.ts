@@ -98,6 +98,7 @@ interface Entry {
   locksCasting?: true;
   silenceable?: true;
   unsilenceable?: true;
+  weaponRequired?: true;
 }
 
 async function main() {
@@ -122,6 +123,14 @@ async function main() {
   );
   const cats = parseCsv(await fetchTable("SpellCategories", build, cacheDir));
   const eff = parseCsv(await fetchTable("SpellEffect", build, cacheDir));
+  const equipped = parseCsv(
+    await fetchTable("SpellEquippedItems", build, cacheDir),
+  );
+  assertColumns(
+    equipped.header,
+    ["SpellID", "EquippedItemClass"],
+    "SpellEquippedItems",
+  );
   assertColumns(
     misc.header,
     ["SpellID", "CastingTimeIndex", "DifficultyID"],
@@ -169,6 +178,13 @@ async function main() {
   // NOT prevent the cast — the positive "no" that a missing row is not
   for (const id of hasCategoriesRow)
     if (!out[id]?.silenceable) entry(id).unsilenceable = true;
+  // SpellEquippedItems.EquippedItemClass 2 (weapon): the cast needs a weapon,
+  // which a disarm takes away — work order 2026-10-14d Part 2 (preview):
+  // 605 files, casts inside a disarm aura: weapon-requiring 0 / 163,906,
+  // the rest 3,335 / 589,625
+  for (const r of equipped.rows)
+    if (observed.has(r.SpellID) && r.EquippedItemClass === "2")
+      entry(r.SpellID).weaponRequired = true;
   for (const r of eff.rows) {
     if (r.DifficultyID !== "0" || !observed.has(r.SpellID)) continue;
     const e = entry(r.SpellID);

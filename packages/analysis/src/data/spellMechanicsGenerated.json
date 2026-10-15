@@ -12,7 +12,8 @@
   },
   "53": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "66": {
    "castMs": 0,
@@ -20,7 +21,8 @@
   },
   "75": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "99": {
    "castMs": 0,
@@ -98,7 +100,8 @@
   "408": {
    "castMs": 0,
    "mech": 12,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "453": {
    "castMs": 0,
@@ -201,7 +204,8 @@
   "703": {
    "castMs": 0,
    "mech": 15,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "710": {
    "castMs": 1500,
@@ -224,7 +228,8 @@
   "772": {
    "castMs": 0,
    "mech": 15,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "774": {
    "castMs": 0,
@@ -244,7 +249,8 @@
   },
   "845": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "853": {
    "castMs": 0,
@@ -312,7 +318,8 @@
   },
   "1329": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "1330": {
    "castMs": 0,
@@ -329,7 +336,8 @@
   },
   "1464": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "1490": {
    "castMs": 0,
@@ -351,7 +359,8 @@
   },
   "1680": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "1706": {
    "castMs": 0,
@@ -364,6 +373,7 @@
   "1715": {
    "castMs": 0,
    "unsilenceable": true,
+   "weaponRequired": true,
    "mech": 11
   },
   "1719": {
@@ -377,7 +387,8 @@
   },
   "1752": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "1766": {
    "castMs": 0,
@@ -387,7 +398,8 @@
   "1776": {
    "castMs": 0,
    "mech": 14,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "1784": {
    "castMs": 0,
@@ -401,7 +413,8 @@
   "1833": {
    "castMs": 0,
    "mech": 12,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "1850": {
    "castMs": 0,
@@ -414,7 +427,8 @@
   "1943": {
    "castMs": 0,
    "mech": 15,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "1953": {
    "castMs": 0,
@@ -455,7 +469,8 @@
   },
   "2098": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "2120": {
    "castMs": 3500,
@@ -514,7 +529,8 @@
   },
   "2823": {
    "castMs": 1500,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "2825": {
    "castMs": 0,
@@ -549,6 +565,7 @@
   "3408": {
    "castMs": 1500,
    "unsilenceable": true,
+   "weaponRequired": true,
    "mech": 11
   },
   "3409": {
@@ -583,7 +600,8 @@
   },
   "5019": {
    "castMs": 500,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "5116": {
    "castMs": 0,
@@ -632,11 +650,13 @@
   },
   "5308": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "5374": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "5384": {
    "castMs": 0,
@@ -680,7 +700,8 @@
   },
   "5761": {
    "castMs": 1500,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "5782": {
    "castMs": 1700,
@@ -694,7 +715,8 @@
   },
   "5938": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "6201": {
    "castMs": 3000,
@@ -733,7 +755,8 @@
   },
   "6572": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "6653": {
    "castMs": 1500,
@@ -747,7 +770,8 @@
   "6770": {
    "castMs": 0,
    "mech": 30,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "6789": {
    "castMs": 0,
@@ -785,7 +809,8 @@
   },
   "7384": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "7744": {
    "castMs": 0,
@@ -836,11 +861,13 @@
   },
   "8676": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "8679": {
    "castMs": 1500,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "8680": {
    "castMs": 0,
@@ -908,7 +935,8 @@
   },
   "12294": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "12323": {
    "castMs": 0,
@@ -938,7 +966,8 @@
   },
   "13877": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "14189": {
    "castMs": 0
@@ -996,7 +1025,8 @@
   },
   "17364": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "17453": {
    "castMs": 1500,
@@ -1054,7 +1084,8 @@
   },
   "19434": {
    "castMs": 2500,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "19483": {
    "castMs": 0,
@@ -1255,7 +1286,8 @@
   },
   "23881": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "23920": {
    "castMs": 0,
@@ -1341,7 +1373,8 @@
   },
   "27576": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "27827": {
    "castMs": 0,
@@ -1397,7 +1430,8 @@
   },
   "30213": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "30283": {
    "castMs": 1500,
@@ -1464,11 +1498,13 @@
   },
   "32175": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "32176": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "32182": {
    "castMs": 0,
@@ -1499,7 +1535,8 @@
   },
   "32645": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "32727": {
    "castMs": 0
@@ -1536,7 +1573,8 @@
   },
   "33757": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "33763": {
    "castMs": 0,
@@ -1631,7 +1669,8 @@
   },
   "35395": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "35546": {
    "castMs": 0,
@@ -1793,7 +1832,8 @@
   },
   "44949": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "45181": {
    "castMs": 0
@@ -2000,11 +2040,13 @@
   },
   "49020": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "49028": {
    "castMs": 0,
-   "silenceable": true
+   "silenceable": true,
+   "weaponRequired": true
   },
   "49039": {
    "castMs": 0,
@@ -2021,7 +2063,8 @@
   },
   "49143": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "49184": {
    "castMs": 0,
@@ -2056,7 +2099,8 @@
   },
   "49998": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "50245": {
    "castMs": 0,
@@ -2155,7 +2199,8 @@
   },
   "51690": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "51714": {
    "castMs": 0,
@@ -2208,14 +2253,16 @@
   },
   "53351": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "53365": {
    "castMs": 0
   },
   "53385": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "53390": {
    "castMs": 0,
@@ -2231,7 +2278,8 @@
   },
   "53595": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "53600": {
    "castMs": 0,
@@ -2274,7 +2322,8 @@
   },
   "55090": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "55095": {
    "castMs": 0,
@@ -2305,7 +2354,8 @@
   },
   "56641": {
    "castMs": 1700,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "56814": {
    "castMs": 0,
@@ -2319,15 +2369,18 @@
   },
   "57755": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "57841": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "57842": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "57934": {
    "castMs": 0,
@@ -2434,7 +2487,8 @@
   },
   "60103": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "60114": {
    "castMs": 1500,
@@ -2576,11 +2630,13 @@
    "unsilenceable": true
   },
   "64380": {
-   "castMs": 0
+   "castMs": 0,
+   "weaponRequired": true
   },
   "64382": {
    "castMs": 1500,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "64659": {
    "castMs": 1500,
@@ -2650,15 +2706,18 @@
   },
   "66188": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "66196": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "66198": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "66847": {
    "castMs": 1500,
@@ -2743,7 +2802,8 @@
   },
   "73899": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "73920": {
    "castMs": 2000,
@@ -2946,15 +3006,18 @@
   },
   "85256": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "85288": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "85384": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "85416": {
    "castMs": 0
@@ -2968,7 +3031,8 @@
   },
   "85948": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "86040": {
    "castMs": 0,
@@ -3000,7 +3064,8 @@
   },
   "88263": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "88423": {
    "castMs": 0,
@@ -3038,7 +3103,8 @@
   },
   "89753": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "89766": {
    "castMs": 0,
@@ -3154,11 +3220,13 @@
   },
   "95738": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "96103": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "96231": {
    "castMs": 0,
@@ -3417,6 +3485,7 @@
   "107570": {
    "castMs": 0,
    "unsilenceable": true,
+   "weaponRequired": true,
    "mech": 12
   },
   "107574": {
@@ -3430,7 +3499,8 @@
   },
   "108211": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "108271": {
    "castMs": 0,
@@ -3528,6 +3598,7 @@
   "113656": {
    "castMs": 0,
    "unsilenceable": true,
+   "weaponRequired": true,
    "mech": 12
   },
   "113724": {
@@ -3567,11 +3638,13 @@
   },
   "114089": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "114093": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "114108": {
    "castMs": 0,
@@ -3690,15 +3763,18 @@
   },
   "115356": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "115357": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "115360": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "115399": {
    "castMs": 0,
@@ -3821,7 +3897,8 @@
   },
   "118038": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "118089": {
    "castMs": 1500,
@@ -4322,7 +4399,8 @@
   "132169": {
    "castMs": 0,
    "mech": 12,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "132403": {
    "castMs": 0
@@ -4510,6 +4588,7 @@
   "147362": {
    "castMs": 0,
    "unsilenceable": true,
+   "weaponRequired": true,
    "mech": 26
   },
   "147367": {
@@ -4616,7 +4695,8 @@
    "silenceable": true
   },
   "156327": {
-   "castMs": 0
+   "castMs": 0,
+   "weaponRequired": true
   },
   "156910": {
    "castMs": 0,
@@ -4727,7 +4807,8 @@
   },
   "162794": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "163024": {
    "castMs": 1500,
@@ -4745,7 +4826,8 @@
   },
   "163201": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "163212": {
    "castMs": 0,
@@ -4762,7 +4844,8 @@
   },
   "163558": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "164812": {
    "castMs": 0,
@@ -4785,7 +4868,8 @@
   },
   "167105": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "167152": {
    "castMs": 0
@@ -5091,11 +5175,13 @@
   },
   "184367": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "184575": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "184662": {
    "castMs": 0,
@@ -5108,11 +5194,13 @@
   },
   "184707": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "184709": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "185099": {
    "castMs": 0,
@@ -5137,7 +5225,8 @@
   },
   "185358": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "185422": {
    "castMs": 0,
@@ -5145,7 +5234,8 @@
   },
   "185438": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "185565": {
    "castMs": 0,
@@ -5181,7 +5271,8 @@
   },
   "186270": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "186289": {
    "castMs": 0,
@@ -5229,7 +5320,8 @@
   },
   "187874": {
    "castMs": 0,
-   "silenceable": true
+   "silenceable": true,
+   "weaponRequired": true
   },
   "187878": {
    "castMs": 0
@@ -5262,7 +5354,8 @@
   },
   "188499": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "188501": {
    "castMs": 0,
@@ -5303,7 +5396,8 @@
   },
   "190411": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "190446": {
    "castMs": 0,
@@ -5320,6 +5414,7 @@
   "190925": {
    "castMs": 0,
    "unsilenceable": true,
+   "weaponRequired": true,
    "mech": 7
   },
   "190984": {
@@ -5408,7 +5503,8 @@
   },
   "193315": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "193331": {
    "castMs": 0,
@@ -5420,7 +5516,8 @@
   },
   "193455": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "193472": {
    "castMs": 0
@@ -5466,7 +5563,8 @@
   },
   "194913": {
    "castMs": 0,
-   "silenceable": true
+   "silenceable": true,
+   "weaponRequired": true
   },
   "195072": {
    "castMs": 0,
@@ -5478,7 +5576,8 @@
   },
   "195182": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "195292": {
    "castMs": 0,
@@ -5490,7 +5589,8 @@
   },
   "195592": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "195617": {
    "castMs": 0,
@@ -5507,6 +5607,7 @@
   "195645": {
    "castMs": 0,
    "unsilenceable": true,
+   "weaponRequired": true,
    "mech": 11
   },
   "195707": {
@@ -5603,7 +5704,8 @@
   },
   "196819": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "196840": {
    "castMs": 0,
@@ -5633,7 +5735,8 @@
   },
   "197214": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "197277": {
    "castMs": 0
@@ -5658,7 +5761,8 @@
   },
   "197834": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "197835": {
    "castMs": 0,
@@ -5719,7 +5823,8 @@
   },
   "198137": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "198149": {
    "castMs": 0,
@@ -5755,7 +5860,8 @@
   },
   "198715": {
    "castMs": 2500,
-   "silenceable": true
+   "silenceable": true,
+   "weaponRequired": true
   },
   "198793": {
    "castMs": 0,
@@ -5845,11 +5951,13 @@
   },
   "199547": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "199552": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "199579": {
    "castMs": 0,
@@ -5857,11 +5965,13 @@
   },
   "199658": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "199667": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "199721": {
    "castMs": 0
@@ -5892,15 +6002,18 @@
   },
   "199850": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "199851": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "199852": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "199854": {
    "castMs": 0
@@ -5956,11 +6069,13 @@
   },
   "200685": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "200758": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "200829": {
    "castMs": 0,
@@ -5968,19 +6083,23 @@
   },
   "201363": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "201364": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "201427": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "201428": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "201594": {
    "castMs": 0,
@@ -6127,7 +6246,8 @@
   },
   "203796": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "203814": {
    "castMs": 0
@@ -6270,7 +6390,8 @@
   },
   "205523": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "205604": {
    "castMs": 0,
@@ -6336,6 +6457,7 @@
   "206930": {
    "castMs": 0,
    "unsilenceable": true,
+   "weaponRequired": true,
    "mech": 11
   },
   "206966": {
@@ -6376,7 +6498,8 @@
   },
   "207230": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "207317": {
    "castMs": 0,
@@ -6536,15 +6659,18 @@
   },
   "210152": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "210153": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "210155": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "210256": {
    "castMs": 0,
@@ -6667,7 +6793,8 @@
   },
   "212431": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "212459": {
    "castMs": 0,
@@ -6746,7 +6873,8 @@
   },
   "213243": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "213350": {
    "castMs": 1500,
@@ -6860,7 +6988,8 @@
   "217200": {
    "castMs": 0,
    "mech": 15,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "217597": {
    "castMs": 0
@@ -6941,15 +7070,18 @@
   },
   "222024": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "222026": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "222031": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "222202": {
    "castMs": 1500,
@@ -7007,7 +7139,8 @@
   },
   "224239": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "224324": {
    "castMs": 0
@@ -7032,11 +7165,13 @@
   },
   "225919": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "225921": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "227034": {
    "castMs": 0
@@ -7051,7 +7186,8 @@
   },
   "227518": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "227723": {
    "castMs": 0,
@@ -7060,6 +7196,7 @@
   "227847": {
    "castMs": 0,
    "unsilenceable": true,
+   "weaponRequired": true,
    "immuneMechMask": 1733,
    "locksCasting": true
   },
@@ -7102,11 +7239,13 @@
   },
   "228477": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "228478": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "228532": {
    "castMs": 0,
@@ -7141,6 +7280,7 @@
   "228645": {
    "castMs": 0,
    "unsilenceable": true,
+   "weaponRequired": true,
    "mech": 11
   },
   "228649": {
@@ -7149,7 +7289,8 @@
   },
   "228920": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "229376": {
    "castMs": 1500,
@@ -7245,7 +7386,8 @@
   },
   "232893": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "233395": {
    "castMs": 0,
@@ -7641,11 +7783,13 @@
   },
   "257044": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "257045": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "257284": {
    "castMs": 0,
@@ -7656,7 +7800,8 @@
   },
   "257620": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "257622": {
    "castMs": 0
@@ -7673,7 +7818,8 @@
   },
   "258860": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "258883": {
    "castMs": 0,
@@ -7721,7 +7867,8 @@
   },
   "260243": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "260247": {
    "castMs": 0,
@@ -7757,7 +7904,8 @@
   },
   "260798": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "260881": {
    "castMs": 0
@@ -7823,7 +7971,8 @@
   },
   "263642": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "263648": {
    "castMs": 0,
@@ -8086,7 +8235,8 @@
   },
   "265189": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "265221": {
    "castMs": 0,
@@ -8141,11 +8291,13 @@
   },
   "267997": {
    "castMs": 2000,
-   "silenceable": true
+   "silenceable": true,
+   "weaponRequired": true
   },
   "267999": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "268475": {
    "castMs": 0,
@@ -8169,6 +8321,7 @@
   "269513": {
    "castMs": 0,
    "unsilenceable": true,
+   "weaponRequired": true,
    "locksCasting": true
   },
   "269576": {
@@ -8235,15 +8388,18 @@
   },
   "271877": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "271881": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "271896": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "271971": {
    "castMs": 0,
@@ -8457,15 +8613,18 @@
    "castMs": 0
   },
   "280715": {
-   "castMs": 0
+   "castMs": 0,
+   "weaponRequired": true
   },
   "280719": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "280720": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "280729": {
    "castMs": 1500,
@@ -8474,15 +8633,18 @@
   },
   "280735": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "280849": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "281000": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "281044": {
    "castMs": 1500,
@@ -8941,7 +9103,8 @@
   },
   "315584": {
    "castMs": 1500,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "315585": {
    "castMs": 0,
@@ -8953,7 +9116,8 @@
   },
   "316239": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "316440": {
    "castMs": 0
@@ -9020,11 +9184,13 @@
   },
   "318038": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "319175": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "319190": {
    "castMs": 0,
@@ -9044,7 +9210,8 @@
   },
   "320338": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "321297": {
    "castMs": 2000,
@@ -9126,11 +9293,13 @@
   },
   "325461": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "325464": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "326733": {
    "castMs": 0
@@ -9176,7 +9345,8 @@
   },
   "328082": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "328891": {
    "castMs": 0
@@ -9198,7 +9368,8 @@
   },
   "331850": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "332243": {
    "castMs": 1500,
@@ -9292,11 +9463,13 @@
   },
   "334294": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "334302": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "334364": {
    "castMs": 1500,
@@ -9372,22 +9545,26 @@
   },
   "335096": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "335097": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "335098": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "335099": {
    "castMs": 0
   },
   "335100": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "335148": {
    "castMs": 0
@@ -9506,7 +9683,8 @@
   },
   "343294": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "343312": {
    "castMs": 0
@@ -9561,7 +9739,8 @@
   },
   "344351": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "344548": {
    "castMs": 0,
@@ -9582,11 +9761,13 @@
   },
   "344859": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "344862": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "344865": {
    "castMs": 0,
@@ -9990,7 +10171,8 @@
   "357021": {
    "castMs": 0,
    "mech": 12,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "357140": {
    "castMs": 0,
@@ -11066,11 +11248,13 @@
   },
   "381637": {
    "castMs": 1500,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "381664": {
    "castMs": 1500,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "381725": {
    "castMs": 0,
@@ -11143,7 +11327,8 @@
   },
   "382021": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "382022": {
    "castMs": 0
@@ -11233,7 +11418,8 @@
   },
   "383328": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "383332": {
    "castMs": 0,
@@ -11327,14 +11513,16 @@
   },
   "384110": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "384129": {
    "castMs": 0
   },
   "384352": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "384362": {
    "castMs": 0
@@ -11373,20 +11561,24 @@
   "385059": {
    "castMs": 0,
    "unsilenceable": true,
+   "weaponRequired": true,
    "mech": 15
   },
   "385060": {
    "castMs": 0,
    "mech": 15,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "385061": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "385062": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "385093": {
    "castMs": 0,
@@ -11912,11 +12104,13 @@
   },
   "391374": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "391378": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "391389": {
    "castMs": 0
@@ -12003,11 +12197,13 @@
   },
   "392058": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "392060": {
    "castMs": 1000,
    "unsilenceable": true,
+   "weaponRequired": true,
    "mech": 9
   },
   "392117": {
@@ -12086,11 +12282,13 @@
   },
   "393054": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "393055": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "393056": {
    "castMs": 0,
@@ -12237,11 +12435,13 @@
   },
   "394352": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "394354": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "394454": {
    "castMs": 0
@@ -12467,7 +12667,8 @@
   },
   "404358": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "404369": {
    "castMs": 0
@@ -12549,7 +12750,8 @@
   },
   "406647": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "406648": {
    "castMs": 0
@@ -12606,7 +12808,8 @@
   },
   "407480": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "407555": {
    "castMs": 1500,
@@ -12638,7 +12841,8 @@
   },
   "408385": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "408458": {
    "castMs": 0,
@@ -12846,7 +13050,8 @@
   },
   "411547": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "411565": {
    "castMs": 1500,
@@ -13153,6 +13358,7 @@
   "424597": {
    "castMs": 0,
    "unsilenceable": true,
+   "weaponRequired": true,
    "mech": 11
   },
   "424601": {
@@ -13462,11 +13668,13 @@
   },
   "429951": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "430023": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "430191": {
    "castMs": 0
@@ -13699,10 +13907,12 @@
    "castMs": 0
   },
   "433568": {
-   "castMs": 2000
+   "castMs": 2000,
+   "weaponRequired": true
   },
   "433583": {
-   "castMs": 2000
+   "castMs": 2000,
+   "weaponRequired": true
   },
   "433584": {
    "castMs": 0
@@ -13937,6 +14147,7 @@
   "436358": {
    "castMs": 0,
    "unsilenceable": true,
+   "weaponRequired": true,
    "locksCasting": true,
    "immuneMech": [
     6,
@@ -14111,15 +14322,18 @@
   },
   "440884": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "440886": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "440888": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "440989": {
    "castMs": 0
@@ -14212,7 +14426,8 @@
   },
   "441776": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "441786": {
    "castMs": 0
@@ -14524,7 +14739,8 @@
    "castMs": 0
   },
   "445385": {
-   "castMs": 3500
+   "castMs": 3500,
+   "weaponRequired": true
   },
   "445468": {
    "castMs": 0,
@@ -14601,6 +14817,7 @@
   "446035": {
    "castMs": 0,
    "unsilenceable": true,
+   "weaponRequired": true,
    "immuneMechMask": 1733,
    "locksCasting": true
   },
@@ -14970,7 +15187,8 @@
   },
   "450743": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "450752": {
    "castMs": 0
@@ -15591,7 +15809,8 @@
   },
   "458128": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "458147": {
    "castMs": 2000,
@@ -15599,7 +15818,8 @@
   },
   "458169": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "458175": {
    "castMs": 1500
@@ -15810,7 +16030,8 @@
   },
   "462140": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "462165": {
    "castMs": 0,
@@ -15819,35 +16040,43 @@
   },
   "462239": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "462240": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "462241": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "462242": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "462243": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "462244": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "462247": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "462248": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "462377": {
    "castMs": 0
@@ -15995,7 +16224,8 @@
   },
   "466772": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "466872": {
    "castMs": 0
@@ -16006,7 +16236,8 @@
   },
   "466930": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "466991": {
    "castMs": 0
@@ -16016,7 +16247,8 @@
   },
   "467283": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "467307": {
    "castMs": 0,
@@ -16032,7 +16264,8 @@
   },
   "467718": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "467745": {
    "castMs": 0,
@@ -16084,7 +16317,8 @@
   },
   "469270": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "469311": {
    "castMs": 0,
@@ -16150,7 +16384,8 @@
   },
   "470672": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "470677": {
    "castMs": 0
@@ -16760,15 +16995,18 @@
   },
   "1228433": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "1228436": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "1228443": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "1228865": {
    "castMs": 1500,
@@ -16776,7 +17014,8 @@
    "unsilenceable": true
   },
   "1229310": {
-   "castMs": 0
+   "castMs": 0,
+   "weaponRequired": true
   },
   "1229383": {
    "castMs": 0,
@@ -16784,7 +17023,8 @@
    "unsilenceable": true
   },
   "1229520": {
-   "castMs": 0
+   "castMs": 0,
+   "weaponRequired": true
   },
   "1229746": {
    "castMs": 0
@@ -16887,7 +17127,8 @@
   },
   "1233351": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "1233407": {
    "castMs": 0
@@ -16987,7 +17228,8 @@
   },
   "1235074": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "1235108": {
    "castMs": 0
@@ -17103,7 +17345,8 @@
   },
   "1237128": {
    "castMs": 0,
-   "silenceable": true
+   "silenceable": true,
+   "weaponRequired": true
   },
   "1237172": {
    "castMs": 0,
@@ -17111,7 +17354,8 @@
   },
   "1237388": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "1237631": {
    "castMs": 1500,
@@ -17386,7 +17630,8 @@
   },
   "1242172": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "1242173": {
    "castMs": 0,
@@ -17394,11 +17639,13 @@
   },
   "1242174": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "1242178": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "1242189": {
    "castMs": 0,
@@ -17627,11 +17874,13 @@
   },
   "1245412": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "1245414": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "1245453": {
    "castMs": 0,
@@ -17647,7 +17896,8 @@
   },
   "1245483": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "1245517": {
    "castMs": 1500,
@@ -17678,7 +17928,8 @@
   },
   "1245759": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "1245923": {
    "castMs": 0
@@ -17968,7 +18219,8 @@
   },
   "1250646": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "1250772": {
    "castMs": 0
@@ -19125,15 +19377,18 @@
   },
   "1264082": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "1264083": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "1264084": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "1264093": {
    "castMs": 0,
@@ -19186,7 +19441,8 @@
   },
   "1264353": {
    "castMs": 0,
-   "silenceable": true
+   "silenceable": true,
+   "weaponRequired": true
   },
   "1264355": {
    "castMs": 0,
@@ -19677,15 +19933,18 @@
   },
   "1269205": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "1269209": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "1269214": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "1269217": {
    "castMs": 0,
@@ -19700,7 +19959,8 @@
   },
   "1269336": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "1269340": {
    "castMs": 0,
@@ -19715,7 +19975,8 @@
   },
   "1269383": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "1269391": {
    "castMs": 0
@@ -19737,11 +19998,13 @@
   },
   "1269560": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "1269565": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "1269591": {
    "castMs": 0,
@@ -20217,7 +20480,8 @@
   },
   "1279187": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "1279200": {
    "castMs": 0,
@@ -20533,7 +20797,8 @@
    "unsilenceable": true
   },
   "1291471": {
-   "castMs": 0
+   "castMs": 0,
+   "weaponRequired": true
   },
   "1291484": {
    "castMs": 0
@@ -20862,7 +21127,8 @@
   },
   "1299944": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "1299975": {
    "castMs": 0
@@ -20889,7 +21155,8 @@
   },
   "1300660": {
    "castMs": 0,
-   "unsilenceable": true
+   "unsilenceable": true,
+   "weaponRequired": true
   },
   "1301070": {
    "castMs": 1500,

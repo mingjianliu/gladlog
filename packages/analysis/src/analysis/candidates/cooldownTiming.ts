@@ -89,6 +89,7 @@ import {
   INTENT_GUARD_GCD_S,
   NOT_READY_REASONS,
 } from "./shared";
+import { reconstructEnemyCDTimeline } from "../../utils/enemyCDs";
 
 /**
  * HARD_CC_CATEGORIES (P1 sync-lens, 2026-08-15, `missedSyncWindowEvents` /
@@ -410,6 +411,10 @@ export type SyncWindowCd = Pick<
      *  (`cdOutOfRangeReachYards`, the CD_OUT_OF_RANGE predicate) of one of
      *  them at some half-second of the free part of the lock. */
     reachTargets?: readonly any[];
+    /** work order 2026-10-14d Part 2 (preview): each press's OBSERVED effect
+     *  end (`burstCastSpan`'s `buffEndSeconds`), keyed by the press second in
+     *  whole ms; absent → the official length */
+    castEndS?: ReadonlyMap<number, number>;
   };
 
 /** Hard-cast bars a START → SUCCESS pair can span (the [ENEMY HARD CAST] /
@@ -427,6 +432,9 @@ export function syncWindowCdFor<T extends object>(
   /** the round's units (`combat.units`) — required, so the candidate and the
    *  scan cannot differ on whose intervals a pet-cast cooldown is asked of */
   roundUnits: readonly any[],
+  /** the round — with it each press carries its observed effect end
+   *  (`castEndS`); the candidate and the scan both pass it */
+  combat?: any,
 ): T & {
   owner: any;
   ownerEnemyIds: Set<string>;
@@ -434,6 +442,21 @@ export function syncWindowCdFor<T extends object>(
   reachTargets: readonly any[];
   roundUnits: readonly any[];
 } {
+  let castEndS: Map<number, number> | undefined;
+  if (combat) {
+    try {
+      castEndS = new Map(
+        (
+          reconstructEnemyCDTimeline([owner], combat).players[0]
+            ?.offensiveCDs ?? []
+        )
+          .filter((c) => c.spellId === String((cd as any).spellId))
+          .map((c) => [Math.round(c.castTimeSeconds * 1000), c.buffEndSeconds]),
+      );
+    } catch {
+      castEndS = undefined;
+    }
+  }
   return {
     ...cd,
     owner,
@@ -441,6 +464,7 @@ export function syncWindowCdFor<T extends object>(
     matchStartMs,
     reachTargets: enemies.filter((e) => !isHealerSpec(e.spec)),
     roundUnits,
+    ...(castEndS ? { castEndS } : {}),
   };
 }
 
@@ -612,9 +636,14 @@ function castEntersWindow(
   c: { timeSeconds: number },
   w: { fromSeconds: number; toSeconds: number },
 ): boolean {
+  // work order 2026-10-14d Part 2 (preview): the press's OBSERVED end when
+  // the CD timeline has it (`burstCastSpan` reads the same field), else the
+  // official length
+  const observed = cd.castEndS?.get(Math.round(c.timeSeconds * 1000));
   const spanEnd =
+    observed ??
     c.timeSeconds +
-    (cd.owner ? (buffFullDurationForCaster(cd.spellId, cd.owner) ?? 0) : 0);
+      (cd.owner ? (buffFullDurationForCaster(cd.spellId, cd.owner) ?? 0) : 0);
   // a press leading the lock by ≤ SYNC_ENTER_LEAD_S (the old test), or a
   // burst still ACTIVE when the lock starts — a burst that ended before
   // the lock is not in it, however close

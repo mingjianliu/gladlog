@@ -28,6 +28,10 @@
  * live to see. `tSec`/`endSec` are the seconds `fmtTime` will display.
  */
 import { type ICombatUnit } from "@gladlog/parser-compat";
+import {
+  damageTakenBetween,
+  hitByAttackers,
+} from "../utils/burstHit";
 
 import { castAndEffectIds, isCastOrEffect } from "../data/castEffectAuras";
 import { HEALING_VERDICTS } from "../data/healingVerdicts";
@@ -317,27 +321,6 @@ export interface BurstResponseCast {
 }
 
 /**
- * Landed damage `unit` took in [fromMs, toMs] (both ends included), the
- * engine's one reader of it: the burst window's damage per friendly (who is
- * pressured, whether anybody was hit at all) and, narrowed by `fromSource` to
- * the hits of one attacker, `controlTargetHitPressured`.
- */
-function damageTakenBetween(
-  unit: any,
-  fromMs: number,
-  toMs: number,
-  fromSource?: (srcUnitId: string) => boolean,
-): number {
-  return ((unit.damageIn ?? []) as any[])
-    .filter((d) => {
-      const ts = d.timestamp ?? d.logLine?.timestamp;
-      if (fromSource && !(d.srcUnitId && fromSource(d.srcUnitId))) return false;
-      return ts != null && ts >= fromMs && ts <= toMs;
-    })
-    .reduce((n, d) => n + Math.abs(d.effectiveAmount ?? d.amount ?? 0), 0);
-}
-
-/**
  * FT-T12 D3 (user ruling 2026-10-10, T12 item 8 ii): what makes a friendly
  * CONTROL an answer to an enemy burst. The control's target — the unit an
  * aimed control was cast at, or the holder a ground / untargeted control
@@ -374,16 +357,21 @@ export function controlTargetHitPressured(
   enemyPlayerOf: (srcUnitId: string) => string | undefined,
   fromMs: number,
   toMs: number,
+  /** the round's units — whose IMMUNE misses on the pressured friendly also
+   * count as hitting them (`hitByAttackers`, G6's reading; work order
+   * 2026-10-14d Part 2, preview) */
+  units: Iterable<unknown> = [],
 ): boolean {
   return (
     pressuredUnit != null &&
     controlTargetId !== undefined &&
-    damageTakenBetween(
+    hitByAttackers(
       pressuredUnit,
+      units,
+      (src) => enemyPlayerOf(src) === controlTargetId,
       fromMs,
       toMs,
-      (src) => enemyPlayerOf(src) === controlTargetId,
-    ) > 0
+    )
   );
 }
 
@@ -1595,26 +1583,11 @@ export function burstWindowDecisionPoints(
       };
       // …or one their hits found IMMUNE: an immunity pressed at the opening
       // is still the answer to it (user 2026-10-14, option B; s2/51-1-357:
-      // Ice Block 0.2 s before the Deathmark it answered)
-      const immuneToBurst = new Set<string>();
-      for (const u of units) {
-        if (!fromBurstCaster(u.id)) continue;
-        for (const m of u.missesOut ?? []) {
-          if (
-            m.missType === "IMMUNE" &&
-            m.destUnitId &&
-            m.timestamp >= tMs &&
-            m.timestamp <= outcomeEndMs
-          )
-            immuneToBurst.add(m.destUnitId);
-        }
-      }
+      // Ice Block 0.2 s before the Deathmark it answered) — `hitByAttackers`
       const hitByBurst = new Set(
         friendlies
-          .filter(
-            (f) =>
-              immuneToBurst.has(f.id) ||
-              damageTakenBetween(f, tMs, outcomeEndMs, fromBurstCaster) > 0,
+          .filter((f) =>
+            hitByAttackers(f, units, fromBurstCaster, tMs, outcomeEndMs),
           )
           .map((f) => f.id),
       );
@@ -1648,6 +1621,7 @@ export function burstWindowDecisionPoints(
             enemyPlayerOf,
             tMs,
             outcomeEndMs,
+            units,
           )
         )
           responseCasts.splice(i, 1);

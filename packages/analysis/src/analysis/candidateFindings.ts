@@ -3612,6 +3612,7 @@ function teamPlayEvents(
                   enemyAndPetIds,
                   combat.startTime,
                   units,
+                  combat,
                 ),
               );
             }
@@ -4478,7 +4479,28 @@ function extractDeathSetups(
               ownerExternals: cdsOf(ownerUnit).filter((cd) =>
                 isAllyCastableDefensive(cd.spellId),
               ),
-              ownerCC: ccOf(ownerUnit).ccInstances,
+              // work order 2026-10-14d Part 2 (preview): the owner's
+              // cannot-cast time for the externals they hold — the shared
+              // reading (silences, kick lockouts, own flight too), not their
+              // CC instances alone
+              ownerCC: (() => {
+                const ids = cdsOf(ownerUnit)
+                  .filter((cd) => isAllyCastableDefensive(cd.spellId))
+                  .map((cd) => String(cd.spellId));
+                try {
+                  return cannotCastIntervalsForSpells(
+                    ownerUnit,
+                    enemySourceIds(enemies, units),
+                    ids,
+                    units,
+                  ).map((iv) => ({
+                    atSeconds: (iv.from - start) / 1000,
+                    durationSeconds: (iv.to - iv.from) / 1000,
+                  }));
+                } catch {
+                  return ccOf(ownerUnit).ccInstances;
+                }
+              })(),
               ownerAliveAt: (t) =>
                 !(ownerUnit.deathRecords ?? []).some(
                   (dr: any) => (dr.timestamp - start) / 1000 <= t,

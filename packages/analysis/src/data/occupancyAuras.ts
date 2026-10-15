@@ -46,9 +46,22 @@ export const DRINK_AURA_IDS: ReadonlySet<string> = new Set([
  * "You can't do that right now." and 13 other casts went out mid-flight
  * (Dream Breath 7, Verdant Embrace 3, Echo 2, Twin Flame 1). The ruling
  * reads the flight as a lock regardless.
+ *
+ * Forward check against DB2 `locksCasting` (work order 2026-10-14d Part 3,
+ * user 2026-10-14 「飞行不能施法」, round1+2 FT-R1014g): the same flight
+ * mechanic also covers Dream Flight 359816 and Breath of Eons' second id
+ * 442204 — added. Neither has a row of any kind on the 605 files (no cast,
+ * no aura; eval-private fix-FT/scripts/name_scan.py), so their pairing is
+ * DB2's word only. The other `locksCasting` auras stay out by the same
+ * ruling: self-defensives (Ice Block 343 self-applications on 605,
+ * Dispersion 81), channels and own actions (Bladestorm 1,050, Felstorm 280,
+ * Demolish 115, Emerald Communion 100) and movement locks (Rain from Above
+ * 90, Burrow 89, Death from Above 29).
  */
 export const OWN_FLIGHT_AURA_IDS: ReadonlySet<string> = new Set([
   "357210", // Deep Breath
   "433874", // Deep Breath
   "403631", // Breath of Eons
+  "442204", // Breath of Eons
+  "359816", // Dream Flight
 ]);

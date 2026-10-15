@@ -19,6 +19,7 @@ interface Entry {
   locksCasting?: boolean;
   silenceable?: boolean;
   unsilenceable?: boolean;
+  weaponRequired?: boolean;
 }
 
 const SPELLS = (raw as unknown as { spells: Record<string, Entry | undefined> })
@@ -140,6 +141,13 @@ export function isSilenceableCast(spellId: string): boolean {
  * no row is neither (no evidence either way). */
 export function isUnsilenceableCast(spellId: string): boolean {
   return SPELLS[spellId]?.unsilenceable === true;
+}
+
+/** DB2 SpellEquippedItems: the cast needs a weapon (EquippedItemClass 2) —
+ * what a disarm stops (work order 2026-10-14d Part 2, preview: 0 of 163,906
+ * such casts went out inside a disarm aura on 605 files). */
+export function isWeaponRequiredCast(spellId: string): boolean {
+  return SPELLS[spellId]?.weaponRequired === true;
 }
 
 /** Which official usable-while-CC state a mechanic puts its victim in, or

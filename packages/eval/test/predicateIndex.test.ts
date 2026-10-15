@@ -103,6 +103,7 @@ import { PRODUCTION_FACT_CONFIG } from "@gladlog/analysis/src/facts/factProvider
 import * as auraEndCause from "@gladlog/analysis/src/utils/auraEndCause";
 import * as auraIntervals from "@gladlog/analysis/src/utils/auraIntervals";
 import * as bracketKey from "@gladlog/analysis/src/utils/bracketKey";
+import * as burstHit from "@gladlog/analysis/src/utils/burstHit";
 import * as buffDuration from "@gladlog/analysis/src/utils/buffDuration";
 import * as burstLedger from "@gladlog/analysis/src/utils/burstLedger";
 import * as cannotCastIntervals from "@gladlog/analysis/src/utils/cannotCastIntervals";
@@ -1181,6 +1182,21 @@ const INDEX: PredicateRow[] = [
     mod: positionAnalysis,
   },
   {
+    file: `${A}/utils/burstHit.ts`,
+    symbol: "hitByAttackers",
+    mod: burstHit,
+  },
+  {
+    file: `${A}/utils/burstHit.ts`,
+    symbol: "immuneHitTargets",
+    mod: burstHit,
+  },
+  {
+    file: `${A}/utils/burstHit.ts`,
+    symbol: "damageTakenBetween",
+    mod: burstHit,
+  },
+  {
     file: `${A}/utils/positionAnalysis.ts`,
     symbol: "topEnemyDamagerInSpan",
     mod: positionAnalysis,
@@ -1546,6 +1562,16 @@ const INDEX: PredicateRow[] = [
     file: `${A}/utils/cannotCastIntervals.ts`,
     symbol: "intervalBlocksSpell",
     mod: cannotCastIntervals,
+  },
+  {
+    file: `${A}/utils/cannotCastIntervals.ts`,
+    symbol: "disarmIntervals",
+    mod: cannotCastIntervals,
+  },
+  {
+    file: `${A}/utils/spellMechanics.ts`,
+    symbol: "isWeaponRequiredCast",
+    mod: spellMechanics,
   },
   {
     file: `${A}/utils/cannotCastIntervals.ts`,

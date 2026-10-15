@@ -417,13 +417,13 @@ describe("the legends say what counts as a control answer (FT-T12 D3)", () => {
   it("[BURST ANSWERED]: the rule is part of the legend every credit line brings, limit included", () => {
     expect(BURST_ANSWERED_LEGEND).toContain(BURST_ANSWERED_CONTROL_RULE_LEGEND);
     expect(BURST_ANSWERED_CONTROL_RULE_LEGEND).toContain(
-      "A control counts as an answer only when it went on an enemy who dealt damage to the pressured player inside the burst window (that enemy's pets count as that enemy)",
+      "A control counts as an answer only when it went on an enemy who dealt damage to the pressured player inside the burst window, or whose hit on them an immunity stopped (that enemy's pets count as that enemy)",
     );
     expect(BURST_ANSWERED_CONTROL_RULE_LEGEND).toContain(
       "an enemy healer who only pressed a cooldown",
     );
     expect(BURST_ANSWERED_CONTROL_RULE_LEGEND).toContain(
-      "neither is one whose target dealt that player no damage at all in the window, even if the control is why",
+      "neither is one whose target neither damaged that player nor had a hit on them stopped by an immunity in the window, even if the control is why",
     );
   });
 
@@ -451,13 +451,13 @@ describe("the legends say what counts as a control answer (FT-T12 D3)", () => {
       .split("\n")
       .find((l) => l.startsWith('- "slow-defensive-response"'))!;
     expect(legend).toContain(
-      "a control on an enemy who pressed a cooldown in that window and dealt damage to facts.pressured inside it, that enemy's pets counting as that enemy",
+      "a control on an enemy who pressed a cooldown in that window and dealt damage to facts.pressured inside it or had a hit on them stopped by an immunity, that enemy's pets counting as that enemy",
     );
     expect(legend).toContain(
       "a control on any other enemy, an enemy healer who only pressed a cooldown, is not an answer",
     );
     expect(legend).toContain(
-      "neither is one whose target dealt facts.pressured no damage at all in the window, even if the control is why",
+      "neither is one whose target neither damaged facts.pressured nor had a hit on them stopped by an immunity in the window, even if the control is why",
     );
     expect(legend).not.toContain("control on the caster/kite");
   });
