@@ -217,6 +217,25 @@ describe("#3 — an aura the opposing side applied is not the victim's mitigatio
     ).toEqual([]);
   });
 
+  it("an own pet named like the enemy player does not let the enemy's aura back in (agy 40-FT-91)", () => {
+    const withPet = {
+      ...units,
+      ownPet: {
+        id: "ownPet",
+        name: "monk",
+        reaction: CombatUnitReaction.Friendly,
+        type: CombatUnitType.Pet,
+      },
+    } as unknown as Record<string, ICombatUnit>;
+    expect(
+      whitelistedIntervalsInDeathWindow(
+        victimWith("monk"),
+        { ...combat, units: withPet },
+        60,
+      ).filter((iv) => iv.spellId === "122470"),
+    ).toEqual([]);
+  });
+
   it("control: the same aura from the victim's own side is kept", () => {
     expect(
       whitelistedIntervalsInDeathWindow(
