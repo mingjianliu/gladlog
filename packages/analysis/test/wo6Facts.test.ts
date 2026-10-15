@@ -303,6 +303,57 @@ describe("agy 40-FT-99 — a refresh's removal is the refreshing press's", () =>
   });
 });
 
+describe("agy 40-FT-100 — a press after the round's end refreshes nothing", () => {
+  it("Ironbark on B at 55, again at 61 after a 60 s round end: the 55 s press ends at the round end", () => {
+    const IB = "102342";
+    const owner = makeUnit("player-1", {
+      name: "Druid",
+      class: CombatUnitClass.Druid,
+      spec: CombatUnitSpec.Druid_Restoration,
+      info: {},
+    });
+    const b = makeUnit("player-2", {
+      name: "B",
+      info: {},
+      auraEvents: [
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_APPLIED,
+          IB,
+          at(55),
+          "player-1",
+          "player-2",
+          "BUFF",
+        ),
+      ],
+    });
+    const events = extractOwnerCDBuffExpiry(
+      [
+        {
+          spellId: IB,
+          spellName: "Ironbark",
+          tag: "External",
+          casts: [
+            { timeSeconds: 55, targetName: "B" },
+            { timeSeconds: 61, targetName: "B" },
+          ],
+          cooldownSeconds: 45,
+          neverUsed: false,
+          availableWindows: [],
+        },
+      ] as never,
+      "player-1",
+      [owner, b] as never,
+      T0,
+      owner as never,
+      [],
+      at(60),
+    );
+    expect(events.map((e) => [e.castAtSeconds, e.cause])).toEqual([
+      [55, "round_end"],
+    ]);
+  });
+});
+
 describe("WO6 #4 (n25) — [HEALER CC]: two cannot-cast runs are not one chain", () => {
   const iv = (from: number, to: number, name: string) => ({
     from: at(from),

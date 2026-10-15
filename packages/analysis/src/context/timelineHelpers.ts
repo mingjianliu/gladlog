@@ -630,8 +630,15 @@ export function extractOwnerCDBuffExpiry(
         nextOnHolder === undefined
           ? undefined
           : matchStartMs + nextOnHolder.timeSeconds * 1000;
+      // (agy 40-FT-100: only a press inside the round — one after the round's
+      // end refreshes nothing the round shows, and its own reading breaks
+      // off there)
+      // A removal the log lost reads the same as a refresh (a re-APPLIED
+      // with no REMOVED is the same application everywhere else): no line
+      // rather than an estimate at the press's own length.
       if (
         nextOnHolderMs !== undefined &&
+        nextOnHolderMs < roundEnd &&
         nextOnHolderMs < castMs + duration * 1000 &&
         !removals.some(
           (r) =>
