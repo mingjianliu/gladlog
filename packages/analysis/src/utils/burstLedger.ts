@@ -23,6 +23,7 @@ import {
 import { MIN_WINDOW_SECONDS } from "./killWindowTargetSelection";
 import { IOffensiveWindow } from "./offensiveWindows";
 import { fmtTime, toRenderSecond } from "./renderGrid";
+import { roundEndMs } from "./roundEnd";
 import { FULL_IMMUNITY_IDS } from "./enemyDefensives";
 import { buildFilteredAuraIntervals } from "./utils";
 
@@ -251,7 +252,11 @@ export function analyzeBurstLedger(
   combat: AtomicArenaCombat,
 ): IBurstLedgerEntry[] {
   const matchStartMs = combat.startTime;
-  const matchEndS = (combat.endTime - matchStartMs) / 1000;
+  // Work order 2026-10-14d #7: a burst ends at the ROUND's end (a Solo
+  // Shuffle round ends at its first death, `roundEndMs`), not the log's —
+  // 0068182d `Burst #4 — 2:55–2:59` ran past the 2:57 round-ending death and
+  // counted hits after it
+  const matchEndS = (roundEndMs(combat) - matchStartMs) / 1000;
   const attackingSide = new Set<string>([
     player.name,
     ...allies.map((a) => a.name),
@@ -299,6 +304,7 @@ export function analyzeBurstLedger(
   const entries: IBurstLedgerEntry[] = [];
   for (const group of groups) {
     const fromSeconds = group[0].castTimeSeconds;
+    if (fromSeconds >= matchEndS) continue; // pressed after the round ended
     const toSeconds = Math.min(
       Math.max(...group.map((cd) => burstCastSpan(cd).to)),
       matchEndS,

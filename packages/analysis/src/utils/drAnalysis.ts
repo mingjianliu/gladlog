@@ -24,9 +24,12 @@ import {
   LogEvent,
 } from "@gladlog/parser-compat";
 
-import { effectAurasOfCast } from "../data/castEffectAuras";
+import { castsOfEffectAura, effectAurasOfCast } from "../data/castEffectAuras";
 import { spellClassMap } from "../data/drCategories";
-import { getEnglishSpellName } from "../data/spellEffectData";
+import {
+  ccFullDurationSeconds,
+  getEnglishSpellName,
+} from "../data/spellEffectData";
 import { ccSpellIds } from "../data/spellTags";
 import {
   dropAuraRebroadcasts,
@@ -361,6 +364,73 @@ export function matchPendingCcKey(
     }
   }
   return best;
+}
+
+/** cc-dr F-RF1 (ruling A51 = A): a CC re-applied on a holder is a new CC
+ * when its source cast it in this window before the re-application (the
+ * probe's 3 s, `probes/cc-dr/p14_sim_refresh.ts`). */
+export const CAST_BACKED_REFRESH_MS = 3_000;
+/** cc-dr F-RF1 (codex 35-CD-14): the cast that OPENED a CC window can be
+ * logged a moment after its own APPLIED (Bull Rush: APPLIED 10.000, cast
+ * 10.001); a cast this close after the opening is that cast, not a recast — no
+ * CC can be recast inside a quarter second. */
+export const OPENING_CAST_SKEW_MS = 250;
+
+/**
+ * Did one of `casters` (the aura's source, and its owner for a pet) CAST this
+ * CC — its aura id or a cast whose effect aura it is (`castsOfEffectAura`) —
+ * at `targetId` or untargeted, after the open application began
+ * (`OPENING_CAST_SKEW_MS`) and at most `CAST_BACKED_REFRESH_MS` before `atMs`?
+ * The one reading of "this re-application is a recast" for the CC pairings
+ * (`analyzePlayerCCAndTrinket`, `analyzeOutgoingCCChains`, `analyzeCcBreaks`).
+ */
+export function ccRecastBetween(
+  casters: ReadonlyArray<Pick<ICombatUnit, "spellCastEvents"> | undefined>,
+  auraSpellId: string,
+  targetId: string,
+  openedAtMs: number,
+  atMs: number,
+): boolean {
+  const castIds = new Set([auraSpellId, ...castsOfEffectAura(auraSpellId)]);
+  return casters.some((u) =>
+    (u?.spellCastEvents ?? []).some(
+      (e) =>
+        e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+        !!e.spellId &&
+        castIds.has(e.spellId) &&
+        (!e.destUnitId ||
+          /^0+$/.test(e.destUnitId) ||
+          e.destUnitId === targetId) &&
+        e.timestamp > openedAtMs + OPENING_CAST_SKEW_MS &&
+        e.timestamp <= atMs &&
+        e.timestamp >= atMs - CAST_BACKED_REFRESH_MS,
+    ),
+  );
+}
+
+/**
+ * Work order 2026-10-14d #1: a SPELL_AURA_APPLIED of a CC whose application
+ * from the same source is still open — no REMOVED / BROKEN in between — is
+ * the SAME application, unless its source recast it (`ccRecastBetween`: a new
+ * CC, as a cast-backed REFRESH is) or the open one is past its official
+ * length (`officialS`; its REMOVED was never logged — the open one ends
+ * there and this is a new application). The game re-sends every aura on a
+ * unit in some state changes with no REMOVED: Mass Invisibility (fa5e6c66: a
+ * Psychic Scream applied 13.755 re-APPLIED 15.714 with ~15 other auras), a
+ * flag change on the holder (483f7433: Kidney Shot 35.594, again at 36.963
+ * with no cast). Read as a new application, the start moved to the re-send
+ * (`0:15 … (1s)` for a 2.85 s fear; `0:36 (4s)` beside its own 0:35 press).
+ * `dropAuraRebroadcasts` only merges REMOVED → APPLIED. Unknown official
+ * length → the same application (nothing says the first one ended).
+ */
+export function reAppliedIsSameApplication(
+  openedAtMs: number,
+  atMs: number,
+  officialS: number | null | undefined,
+  recast: boolean,
+): boolean {
+  if (recast) return false;
+  return officialS == null || atMs < openedAtMs + officialS * 1000;
 }
 
 // ── Core DR computation ───────────────────────────────────────────────────────
@@ -809,6 +879,50 @@ export function analyzeOutgoingCCChains(
 
         const key = `${spellId}:${aura.srcUnitId}`;
 
+        const open =
+          event === LogEvent.SPELL_AURA_APPLIED ? pending.get(key) : undefined;
+        if (open !== undefined) {
+          // work order 2026-10-14d #1: an APPLIED while this source's
+          // application is still open is that application unless recast or
+          // past its official length (`reAppliedIsSameApplication`). It
+          // used to overwrite the open one, which then never closed: the
+          // chain lost it and [CC CAST] printed the re-send (fa5e6c66 0:15)
+          const src = allUnits.find((u) => u.id === aura.srcUnitId);
+          const owner = src?.ownerId
+            ? allUnits.find((u) => u.id === src.ownerId)
+            : undefined;
+          const recast = ccRecastBetween(
+            [src, owner],
+            spellId,
+            enemy.id,
+            open.applyMs,
+            aura.timestamp,
+          );
+          // a CC whose aura length the interval table leaves open (Kidney
+          // Shot: combo points) still has the control's official length
+          const officialS =
+            officialDurationS(spellId, caster, open.applyMs) ??
+            ccFullDurationSeconds(spellId) ??
+            null;
+          if (
+            reAppliedIsSameApplication(
+              open.applyMs,
+              aura.timestamp,
+              officialS,
+              recast,
+            )
+          )
+            continue;
+          closePending(
+            key,
+            // its REMOVED was never logged: never longer than its official
+            // length, recast or not (the 605 preview: a Scatter Shot whose
+            // removal Mass Invisibility swallowed ran 77 s to the next cast)
+            officialS === null
+              ? aura.timestamp
+              : Math.min(aura.timestamp, open.applyMs + officialS * 1000),
+          );
+        }
         if (event === LogEvent.SPELL_AURA_APPLIED) {
           pending.set(key, {
             applyMs: aura.timestamp,

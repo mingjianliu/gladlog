@@ -353,11 +353,14 @@ describe("castStoppedText — the wording of each ending", () => {
       expect(text(s)).not.toMatch(/cancel|moved|fake|juke/i);
   });
 
-  it("a refused bar words the four known reasons in any client language, and quotes no other", () => {
+  it("a refused bar is worded in the report's words (refusalWhy), never quoting the client's text", () => {
     expect(text(50)).toBe("refused 0.9s in: vision obscured (Smoke Bomb)");
     expect(text(110)).toBe("refused 0.5s in: out of range");
     expect(text(112)).toBe("refused 1.0s in: out of range");
-    expect(text(100)).toBe(`refused 1.2s in ${CAST_REFUSED_OTHER_REASON}`);
+    // work order 2026-10-14d #8: "Invalid target" has the report's words
+    // since FT-R1014b (2c6e85ec 1:21 printed the untranslated marker)
+    expect(text(100)).toBe("refused 1.2s in: invalid target");
+    expect(text(100)).not.toContain(CAST_REFUSED_OTHER_REASON);
     expect(text(100)).not.toContain("Invalid target");
   });
 
@@ -463,7 +466,7 @@ describe("[CAST STOPPED] on the timeline", () => {
       "0:30  [CAST STOPPED]   Cyclone — cast bar stopped after 0.3s as an enemy knockback or pull landed on you",
       "0:50  [CAST STOPPED]   Cyclone — refused 0.9s in: vision obscured (Smoke Bomb)",
       "1:10  [CAST STOPPED]   Cyclone — cast bar stopped after 0.6s; not kicked; no control, silence or knockback landed on you then",
-      "1:40  [CAST STOPPED]   Cyclone — refused 1.2s in (client reason not translated)",
+      "1:40  [CAST STOPPED]   Cyclone — refused 1.2s in: invalid target",
       "1:50  [CAST STOPPED]   Cyclone — refused 0.5s in: out of range",
       "1:52  [CAST STOPPED]   Cyclone — refused 1.0s in: out of range",
       "1:58  [CAST STOPPED]   Cyclone — no end logged; the round ended 2.0s after it began",

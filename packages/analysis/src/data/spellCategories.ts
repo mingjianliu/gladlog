@@ -421,7 +421,7 @@ export const SPELL_CATEGORIES: Record<string, ISpellCategoryEntry> = {
   // Silences (drGapScan S2 DR gap fill-ins, official DiminishType = silence):
   "1330": { type: "interrupts" }, // Garrote - Silence (Rogue)
   "47476": { type: "interrupts" }, // Strangulate (DK silence aura)
-  "356727": { type: "interrupts" }, // Spider Venom (Rogue PvP talent silence)
+  "356727": { type: "interrupts" }, // Spider Venom (the silence of the Hunter PvP talent Chimaeral Sting 356719)
   "374776": { type: "interrupts" }, // Tightening Grasp (DK silence talent)
   // -- Speed boosts --
   "2983": { type: "buffs_speed_boost" }, // Sprint

@@ -71,10 +71,10 @@ describe("channelTargetClause", () => {
         (n) => `[${n}]`,
       ),
     ).toBe(
-      " — channelled at [Dk-R-US]: it dealt 120k of the 150k damage they took over it",
+      " — its bolts hit [Dk-R-US]: 120k of the 150k damage they took over it",
     );
   });
-  it("a SUCCESS on no friendly, or no length, says nothing", () => {
+  it("no friendly hit, or no length, says nothing", () => {
     expect(channelTargetClause(enemy, d, [], T0, T0 + 200_000, (n) => n)).toBe(
       "",
     );
@@ -93,7 +93,37 @@ describe("channelTargetClause", () => {
     expect(
       channelTargetClause(enemy, d, [target], T0, T0 + 71_500, (n) => n),
     ).toBe(
-      " — channelled at Dk-R-US: it dealt 100k of the 100k damage they took over it",
+      " — its bolts hit Dk-R-US: 100k of the 100k damage they took over it",
+    );
+  });
+  it("names where the bolts landed, largest first, and the cast row's target when it is someone else (work order 2026-10-14d #2, f94a7604 1:05)", () => {
+    const hunter: any = {
+      id: "f1",
+      name: "Hunter-R-US",
+      damageIn: [hit(71, "e1", "421543", "终极苦修", 9_329)],
+      absorbsIn: [],
+    };
+    const priest: any = {
+      id: "f2",
+      name: "Priest-R-US",
+      damageIn: [
+        hit(72, "e1", "421543", "终极苦修", 600_000),
+        hit(73, "e1", "421543", "终极苦修", 73_000),
+        hit(74, "e2", "1", "Fireball", 27_000),
+      ],
+      absorbsIn: [],
+    };
+    expect(
+      channelTargetClause(
+        enemy,
+        d,
+        [hunter, priest],
+        T0,
+        T0 + 200_000,
+        (n) => n,
+      ),
+    ).toBe(
+      " — its bolts hit Priest-R-US: 673k of the 700k damage they took over it; Hunter-R-US: 9k of the 9k damage they took over it (its cast row names Hunter-R-US)",
     );
   });
 });

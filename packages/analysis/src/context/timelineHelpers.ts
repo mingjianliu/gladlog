@@ -1055,7 +1055,9 @@ export function casterOwnAuraOfPress(
   spellId: string,
   pressMs: number,
 ): { seconds: number | null } | null {
-  const mine = (caster.auraEvents ?? []).filter(
+  // one re-broadcast (REMOVED + APPLIED ≤ 1 ms apart) is one aura — work
+  // order 2026-10-14d #9: its REMOVED would end "also on you for Ns" early
+  const mine = dropAuraRebroadcasts(caster.auraEvents ?? []).filter(
     (a) => a.spellId === spellId && a.srcUnitId === caster.id,
   );
   let appliedMs: number | null = null;

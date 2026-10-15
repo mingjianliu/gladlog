@@ -10,9 +10,11 @@ import { ccFullDurationForApplication } from "./ccDuration";
 import {
   buildCcCategoryHistory,
   drDurationFactor,
+  ccRecastBetween,
   getDRCategory,
   matchPendingCcKey,
   getDRLevelAtTime,
+  reAppliedIsSameApplication,
 } from "./drAnalysis";
 
 /**
@@ -195,6 +197,12 @@ export function analyzeCcBreaks(
   const friendlyPetById = new Map(friendlyPets.map((u) => [u.id, u]));
   const enemyPetById = new Map(enemyPets.map((u) => [u.id, u]));
   const playerById = new Map([...friends, ...enemies].map((u) => [u.id, u]));
+  const unitById = new Map(
+    [...friends, ...enemies, ...friendlyPets, ...enemyPets].map((u) => [
+      u.id,
+      u,
+    ]),
+  );
 
   const events: ICcBreakEvent[] = [];
   let rootBreakCount = 0;
@@ -238,6 +246,31 @@ export function analyzeCcBreaks(
       if (!cc && !root) continue;
       const key = `${spellId}:${aura.srcUnitId}`;
 
+      const open =
+        ev === LogEvent.SPELL_AURA_APPLIED ? pending.get(key) : undefined;
+      if (open !== undefined) {
+        // work order 2026-10-14d #1: an APPLIED while this source's
+        // application is still open (no REMOVED / BROKEN) is that
+        // application — its start stays — unless recast or past its length
+        const src = unitById.get(aura.srcUnitId);
+        const owner = src?.ownerId ? unitById.get(src.ownerId) : undefined;
+        if (
+          reAppliedIsSameApplication(
+            open.applyMs,
+            aura.timestamp,
+            ccFullDurationForApplication(spellId, src, open.roarAtApply) ??
+              null,
+            ccRecastBetween(
+              [src, owner],
+              spellId,
+              holder.id,
+              open.applyMs,
+              aura.timestamp,
+            ),
+          )
+        )
+          continue;
+      }
       if (
         ev === LogEvent.SPELL_AURA_APPLIED ||
         ev === LogEvent.SPELL_AURA_REFRESH

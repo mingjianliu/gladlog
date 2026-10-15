@@ -1649,5 +1649,16 @@
  *  kick-eaten ccInWindowS, cd-hoarded ownerFreeS, missed-sync-window
  *  holderCc / readyCds, [DEFENSIVE AVAILABLE] free seconds. 605 files: no
  *  candidate added or removed.
+ *  v391 (2026-10-14, FT, work order 2026-10-14d Part 1 — facts only): a CC
+ *  re-APPLIED while still open (Mass Invisibility, a holder flag change) is
+ *  the same application in the holder windows, the outgoing chain / [CC
+ *  CAST] and [CC BROKEN]; Ultimate Penitence names where its bolts landed;
+ *  an enemy's Touch of Karma tether is not our mitigation; Stasis replays
+ *  are not the first post-kick cast; kick-eaten legend names its two spans
+ *  and the bar-start lock end; [SILENCE] legend; bursts / kickSilenceS /
+ *  duringExternal end at the round's end; [CAST STOPPED] words refusals in
+ *  the report's words; three aura pairings merge re-broadcasts; an enemy in
+ *  its own flight is no ready kicker. 605 files: no candidate added or
+ *  removed.
  */
-export const PROMPT_VERSION = 390;
+export const PROMPT_VERSION = 391;

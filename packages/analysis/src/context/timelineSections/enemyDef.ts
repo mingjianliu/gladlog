@@ -310,51 +310,84 @@ export function emitEnemyDefEntries(
  */
 export function channelTargetClause(
   enemy: ICombatUnit,
-  d: { spellId: string; atSeconds: number; pressSeconds?: number; observedSeconds?: number },
+  d: {
+    spellId: string;
+    atSeconds: number;
+    pressSeconds?: number;
+    observedSeconds?: number;
+  },
   friends: readonly ICombatUnit[],
   matchStartMs: number,
   roundEndAtMs: number,
   pid: (name: string) => string,
 ): string {
   if (d.observedSeconds === undefined) return "";
-  const pressMs = matchStartMs + Math.round((d.pressSeconds ?? d.atSeconds) * 1000);
+  const pressMs =
+    matchStartMs + Math.round((d.pressSeconds ?? d.atSeconds) * 1000);
   const cast = (enemy.spellCastEvents ?? []).find(
     (c) =>
       c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
       c.spellId === d.spellId &&
       Math.abs(c.logLine.timestamp - pressMs) <= 1,
   );
-  const target = cast && friends.find((f) => f.id === cast.destUnitId);
-  if (!cast || !target) return "";
+  if (!cast) return "";
   const fromMs = matchStartMs + Math.round(d.atSeconds * 1000);
-  const toMs = Math.min(fromMs + Math.round(d.observedSeconds * 1000), roundEndAtMs);
-  // landed (`effectiveAmount`) plus what shields absorbed (`absorbsIn`, the
-  // victim-keyed stream) — the two parts `Top damage` counts
-  let dealt = 0;
-  let took = 0;
-  const hitIds = new Set<string>();
-  for (const r of target.damageIn ?? []) {
-    const ts = r.logLine.timestamp;
-    if (ts < fromMs || ts > toMs || r.srcUnitId === target.id) continue;
-    const amount = Math.abs(r.effectiveAmount);
-    took += amount;
-    if (r.srcUnitId === enemy.id && r.spellName === cast.spellName) {
-      dealt += amount;
-      if (r.spellId) hitIds.add(r.spellId);
+  const toMs = Math.min(
+    fromMs + Math.round(d.observedSeconds * 1000),
+    roundEndAtMs,
+  );
+  // Work order 2026-10-14d #2: name the units the bolts LANDED on, not the
+  // cast row's target — f94a7604 1:05: the SUCCESS names the hunter, one bolt
+  // hit him (9k) and ~30 hit the priest (673k). The log does not say whether
+  // the game re-aims the channel; it says where the damage went.
+  // Per friendly: landed (`effectiveAmount`) plus what shields absorbed
+  // (`absorbsIn`, the victim-keyed stream) — the two parts `Top damage`
+  // counts — beside everything they took over the channel.
+  const per = friends.map((f) => {
+    let dealt = 0;
+    let took = 0;
+    const hitIds = new Set<string>();
+    for (const r of f.damageIn ?? []) {
+      const ts = r.logLine.timestamp;
+      if (ts < fromMs || ts > toMs || r.srcUnitId === f.id) continue;
+      const amount = Math.abs(r.effectiveAmount);
+      took += amount;
+      if (r.srcUnitId === enemy.id && r.spellName === cast.spellName) {
+        dealt += amount;
+        if (r.spellId) hitIds.add(r.spellId);
+      }
     }
-  }
-  for (const a of target.absorbsIn ?? []) {
-    if (a.timestamp < fromMs || a.timestamp > toMs) continue;
-    if (!a.attackerId || a.attackerId === target.id) continue;
-    const amount = Math.abs(a.absorbedAmount);
-    took += amount;
-    if (
-      a.attackerId === enemy.id &&
-      ((a.attackSpellId !== undefined && hitIds.has(a.attackSpellId)) ||
-        a.attackSpellName === cast.spellName)
+    for (const a of f.absorbsIn ?? []) {
+      if (a.timestamp < fromMs || a.timestamp > toMs) continue;
+      if (!a.attackerId || a.attackerId === f.id) continue;
+      const amount = Math.abs(a.absorbedAmount);
+      took += amount;
+      if (
+        a.attackerId === enemy.id &&
+        ((a.attackSpellId !== undefined && hitIds.has(a.attackSpellId)) ||
+          a.attackSpellName === cast.spellName)
+      )
+        dealt += amount;
+    }
+    return {
+      f,
+      dealtK: Math.round(dealt / 1000),
+      tookK: Math.round(took / 1000),
+    };
+  });
+  const hit = per
+    .filter((x) => x.dealtK > 0)
+    .sort((a, b) => b.dealtK - a.dealtK);
+  if (hit.length === 0) return "";
+  const named = friends.find((f) => f.id === cast.destUnitId);
+  const castRow =
+    named && named.id !== hit[0]!.f.id
+      ? ` (its cast row names ${pid(named.name)})`
+      : "";
+  return ` — its bolts hit ${hit
+    .map(
+      (x) =>
+        `${pid(x.f.name)}: ${x.dealtK}k of the ${x.tookK}k damage they took over it`,
     )
-      dealt += amount;
-  }
-  if (Math.round(dealt / 1000) <= 0) return "";
-  return ` — channelled at ${pid(target.name)}: it dealt ${Math.round(dealt / 1000)}k of the ${Math.round(took / 1000)}k damage they took over it`;
+    .join("; ")}${castRow}`;
 }

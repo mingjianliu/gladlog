@@ -1460,10 +1460,12 @@ describe("analyzePlayerCCAndTrinket — structured data contract (N4)", () => {
       // the cast that cuts the lock is in it too
       const cut = kicked(["33786", "Cyclone"], [["61295", 1.0]]);
       expect(cut.wentOutInLockS!["61295"]).toBeCloseTo(1.0, 5);
-      // a Stasis replay is not a press
-      expect(
-        kicked(["33786", "Cyclone"], [["360995", 1.04]], 1.02).wentOutInLockS,
-      ).toEqual({});
+      // a Stasis replay is not a press (work order 2026-10-14d #4: a kick
+      // followed only by replays reads idle, with nothing gone out)
+      const replayOnly = kicked(["33786", "Cyclone"], [["360995", 1.04]], 1.02);
+      expect(replayOnly.wentOutInLockS ?? {}).toEqual({});
+      expect(replayOnly.postKick).toBe("idle");
+      expect(replayOnly.firstActionDelayS).toBeNull();
     });
   });
 

@@ -7,7 +7,7 @@ import {
 } from "@gladlog/parser-compat";
 
 import { BACKLASH_AURA_CC_TYPE } from "../data/backlashCc";
-import { castAndEffectIds, castsOfEffectAura } from "../data/castEffectAuras";
+import { castAndEffectIds } from "../data/castEffectAuras";
 import {
   AURA_KEYED_BREAK_RACIALS,
   breakRemovesCc,
@@ -71,8 +71,10 @@ import {
   AOE_CC_LANDING_WINDOW_S,
   computeIncomingDR,
   drDurationFactor,
+  ccRecastBetween,
   IDRInfo,
   matchPendingCcKey,
+  reAppliedIsSameApplication,
 } from "./drAnalysis";
 import { IMMUNITY_IDS } from "./enemyDefensives";
 import {
@@ -2181,16 +2183,6 @@ const PRE_TELEPORT_STALE_MS = 500;
  * casts land 0–3 ms before the aura). */
 const LANDED_CAST_PROVES_LOS_MS = 1_500;
 
-/** cc-dr F-RF1 (ruling A51 = A): a REFRESH of a CC on the holder is a new
- * CC when its source cast it in this window before the refresh (the probe's
- * 3 s, `probes/cc-dr/p14_sim_refresh.ts`). */
-export const CAST_BACKED_REFRESH_MS = 3_000;
-/** cc-dr F-RF1 (codex 35-CD-14): the cast that OPENED a CC window can be
- * logged a moment after its own APPLIED (Bull Rush: APPLIED 10.000, cast
- * 10.001); a cast this close after the opening is that cast, not a recast — no
- * CC can be recast inside a quarter second. */
-const OPENING_CAST_SKEW_MS = 250;
-
 export function analyzePlayerCCAndTrinket(
   player: ICombatUnit,
   enemies: ICombatUnit[],
@@ -2282,11 +2274,9 @@ export function analyzePlayerCCAndTrinket(
   }> = [];
 
   // cc-dr F-RF1: did the aura's source (or a pet's owner) cast this CC again
-  // — its own id or a cast whose effect aura it is (the one cast → effect
-  // table) — after the open window began and within `CAST_BACKED_REFRESH_MS`
-  // before the refresh, at this unit or at no unit (an AoE)? The cast that
-  // opened the window does not count: one Bull Rush logs APPLIED then a
-  // REFRESH a moment later (06bb9860), which is one CC.
+  // after the open window began (`ccRecastBetween`, the shared reading)? The
+  // cast that opened the window does not count: one Bull Rush logs APPLIED
+  // then a REFRESH a moment later (06bb9860), which is one CC.
   const castersById = new Map(
     [player, ...enemies, ...enemyPets].map((u) => [u.id, u]),
   );
@@ -2296,23 +2286,31 @@ export function analyzePlayerCCAndTrinket(
     atMs: number,
     openedAtMs: number,
   ): boolean => {
-    const castIds = new Set([auraSpellId, ...castsOfEffectAura(auraSpellId)]);
     const src = castersById.get(srcId);
     const owner = src?.ownerId ? castersById.get(src.ownerId) : undefined;
-    return [src, owner].some((u) =>
-      (u?.spellCastEvents ?? []).some(
-        (e) =>
-          e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
-          !!e.spellId &&
-          castIds.has(e.spellId) &&
-          (!e.destUnitId ||
-            /^0+$/.test(e.destUnitId) ||
-            e.destUnitId === player.id) &&
-          e.timestamp > openedAtMs + OPENING_CAST_SKEW_MS &&
-          e.timestamp <= atMs &&
-          e.timestamp >= atMs - CAST_BACKED_REFRESH_MS,
-      ),
+    return ccRecastBetween(
+      [src, owner],
+      auraSpellId,
+      player.id,
+      openedAtMs,
+      atMs,
     );
+  };
+  // Close a CC still pending — at the CC's full duration for that caster when
+  // it is known, never later than the match end. Closing at combat.endTime
+  // alone rendered a pre-gate Sap with no REMOVED event as "(276s)" (the GH
+  // #77 CC USE gate caught it, 2026-09-24); buildAuraIntervals already caps
+  // its missing-REMOVED intervals by duration the same way.
+  const fullSFor = (spellId: string, srcUnitId: string) =>
+    ccFullDurationForCaster(
+      spellId,
+      [...enemies, ...enemyPets].find((u) => u.id === srcUnitId),
+    );
+  const pendingEnd = (spellId: string, srcUnitId: string, applyMs: number) => {
+    const full = fullSFor(spellId, srcUnitId);
+    return full === undefined
+      ? combat.endTime
+      : Math.min(combat.endTime, applyMs + full * 1000);
   };
 
   // REMOVED→APPLIED re-broadcasts are one aura (d78f: a second CC); a BROKEN
@@ -2360,7 +2358,43 @@ export function analyzePlayerCCAndTrinket(
       const key = `${spellId}:${aura.srcUnitId}`;
       const event = aura.logLine.event;
 
-      if (event === LogEvent.SPELL_AURA_APPLIED) {
+      // work order 2026-10-14d #1: an APPLIED while the same source's
+      // application is still open is that application
+      // (`reAppliedIsSameApplication`) unless recast or past its length
+      const open =
+        event === LogEvent.SPELL_AURA_APPLIED ? pending.get(key) : undefined;
+      const recast =
+        open !== undefined &&
+        castBackedRefresh(
+          aura.srcUnitId,
+          spellId,
+          aura.timestamp,
+          open.applyMs,
+        );
+      if (
+        open !== undefined &&
+        reAppliedIsSameApplication(
+          open.applyMs,
+          aura.timestamp,
+          fullSFor(spellId, aura.srcUnitId),
+          recast,
+        )
+      ) {
+        // the open application continues
+      } else if (event === LogEvent.SPELL_AURA_APPLIED) {
+        if (open !== undefined)
+          windows.push({
+            spellId,
+            spellName: open.spellName,
+            srcId: open.srcId,
+            srcName: open.srcName,
+            applyMs: open.applyMs,
+            // no REMOVED was logged for it: never past its official length
+            removeMs: Math.min(
+              aura.timestamp,
+              pendingEnd(spellId, open.srcId, open.applyMs),
+            ),
+          });
         pending.set(key, {
           applyMs: aura.timestamp,
           spellName: getEnglishSpellName(spellId, aura.spellName),
@@ -2393,7 +2427,52 @@ export function analyzePlayerCCAndTrinket(
     // overwrite the pending entry before the first removal fires.
     const ccKey = `${spellId}:${aura.srcUnitId}`;
     const event = aura.logLine.event;
+    const openCc =
+      event === LogEvent.SPELL_AURA_APPLIED ? pendingCC.get(ccKey) : undefined;
+    const recastCc =
+      openCc !== undefined &&
+      castBackedRefresh(
+        aura.srcUnitId,
+        spellId,
+        aura.timestamp,
+        openCc.applyMs,
+      );
+    if (
+      openCc !== undefined &&
+      reAppliedIsSameApplication(
+        openCc.applyMs,
+        aura.timestamp,
+        fullSFor(spellId, aura.srcUnitId),
+        recastCc,
+      )
+    ) {
+      // work order 2026-10-14d #1: the game re-sent the aura (Mass
+      // Invisibility, a flag change on the holder) — the open application
+      // goes on, its start stays
+      continue;
+    }
     if (event === LogEvent.SPELL_AURA_APPLIED) {
+      if (openCc !== undefined)
+        // recast: a new CC from the re-application (F-RF1's reading); past
+        // its official length: the first one's REMOVED was never logged —
+        // either way the open one closes
+        ccWindows.push({
+          spellId,
+          spellName: openCc.spellName,
+          srcName: openCc.srcName,
+          srcUnitId: openCc.srcUnitId,
+          applyMs: openCc.applyMs,
+          // no REMOVED was logged for it: never past its official length,
+          // recast or not (the 605 preview: a Scatter Shot whose removal
+          // Mass Invisibility swallowed ran 77 s to the next cast)
+          removeMs: Math.min(
+            aura.timestamp,
+            pendingEnd(spellId, openCc.srcUnitId, openCc.applyMs),
+          ),
+          roarAtApply: openCc.roarAtApply,
+          noRemoved: true,
+          ...(openCc.refreshesMs ? { refreshesMs: openCc.refreshesMs } : {}),
+        });
       pendingCC.set(ccKey, {
         applyMs: aura.timestamp,
         spellName: getEnglishSpellName(spellId, aura.spellName),
@@ -2466,18 +2545,7 @@ export function analyzePlayerCCAndTrinket(
     }
   }
 
-  // Close any CCs still pending at match end — at the CC's full duration for
-  // that caster when it is known, never later than the match end. Closing at
-  // combat.endTime alone rendered a pre-gate Sap with no REMOVED event as
-  // "(276s)" (the GH #77 CC USE gate caught it, 2026-09-24); buildAuraIntervals
-  // already caps its missing-REMOVED intervals by duration the same way.
-  const pendingEnd = (spellId: string, srcUnitId: string, applyMs: number) => {
-    const caster = [...enemies, ...enemyPets].find((u) => u.id === srcUnitId);
-    const full = ccFullDurationForCaster(spellId, caster);
-    return full === undefined
-      ? combat.endTime
-      : Math.min(combat.endTime, applyMs + full * 1000);
-  };
+  // Close any CCs still pending at match end (`pendingEnd`, above).
   Array.from(pendingCC.entries()).forEach(([ccKey, pending]) => {
     const [pendingSpellId] = ccKey.split(":");
     ccWindows.push({
@@ -3087,7 +3155,9 @@ export function analyzePlayerCCAndTrinket(
     const kickSilenceS = ownSilence
       ? Math.max(
           0,
-          (Math.min(ownSilence.to, combat.endTime) - ownSilence.from) / 1000,
+          // the round's end, as the doc says (work order 2026-10-14d #7)
+          (Math.min(ownSilence.to, roundEndMs(combat)) - ownSilence.from) /
+            1000,
         )
       : null;
 
@@ -3553,9 +3623,16 @@ export function analyzePlayerCCAndTrinket(
       } catch {
         /* no aura/interrupt streams → unknown, field stays absent */
       }
+      // A Stasis RELEASE replays stored spells — no press of the player's
+      // (work order 2026-10-14d #4: G8 kept them out of the switch only;
+      // 141470d0 @198 still printed the replayed Dream Breath as "first
+      // cast 1.0s later"). The post-kick reading — idle / acted / switched,
+      // the first cast, the switch — is over the player's own presses.
       const after = castTimes.filter(
         (c) =>
-          c.t > inst.atSeconds && c.t <= inst.atSeconds + POST_KICK_WINDOW_S,
+          c.t > inst.atSeconds &&
+          c.t <= inst.atSeconds + POST_KICK_WINDOW_S &&
+          !replays.some((w) => c.ms >= w.from && c.ms <= w.to),
       );
       if (after.length === 0) {
         inst.postKick = "idle";
@@ -3568,14 +3645,11 @@ export function analyzePlayerCCAndTrinket(
       // `find` where this used to read `some`: identical predicate (some(p)
       // is true iff find(p) is defined), but it also NAMES the cast so the
       // rendered line can cite the one it is actually talking about.
-      // WO3 Part 2 (r1008-30): a Stasis RELEASE replays stored
-      // spells — no press of the player's, so no switch (141470d0 @198)
+      // (Stasis replays are already out of `after` — WO3 Part 2 G8)
       let switchCast =
         lockedMask === undefined
           ? undefined
           : after.find((c) => {
-              if (replays.some((w) => c.ms >= w.from && c.ms <= w.to))
-                return false;
               const m = spellSchoolMask(c.spellId);
               return m !== undefined && !schoolLockedBy(m, lockedMask);
             });
@@ -3648,7 +3722,10 @@ export function analyzePlayerCCAndTrinket(
         // bar's press — an off-GCD one (Pain Suppression, DB2
         // `OFF_GCD_SPELL_IDS`) can be pressed while the bar runs, and is a
         // press of its own
-        if (!hasStart(switchCast) && !OFF_GCD_SPELL_IDS.has(switchCast.spellId)) {
+        if (
+          !hasStart(switchCast) &&
+          !OFF_GCD_SPELL_IDS.has(switchCast.spellId)
+        ) {
           const companionOf = castTimes.find(
             (c) =>
               c.ms > switchCast!.ms &&

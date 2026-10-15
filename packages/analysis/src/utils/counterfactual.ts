@@ -227,7 +227,11 @@ export interface IWindowedAuraInterval extends IAuraInterval {
  */
 export function whitelistedIntervalsInDeathWindow(
   victim: ICombatUnit,
-  combat: { startTime: number; endTime: number },
+  combat: {
+    startTime: number;
+    endTime: number;
+    units?: Record<string, ICombatUnit>;
+  },
   deathS: number,
   /** The death's real instant, when the caller has it: the active overlap is
    *  a duration and runs to the death itself, like the [DEATH] block's "Top
@@ -244,8 +248,19 @@ export function whitelistedIntervalsInDeathWindow(
   // 等不到 REMOVED)。外置减伤(守护之魂等)的施法者不在这里,按无施法者取值,
   // 即接线前的行为。
   const selfCaster = new Map([[victim.id, victim]]);
+  // Work order 2026-10-14d #3: an aura the OTHER side put on the victim is
+  // not the victim's mitigation — an enemy Windwalker's Touch of Karma
+  // tether (122470, a DEBUFF on our mage) read as "Touch of Karma active
+  // 9.0s in the final 10s" (b711d4ac 4:33). Same reading as the burst
+  // ledger's target defensives (`burstLedger.ts`: by the aura's source name).
+  const opposing = new Set(
+    Object.values(combat.units ?? {})
+      .filter((u) => u.reaction !== victim.reaction)
+      .map((u) => u.name),
+  );
   for (const iv of buildAuraIntervals(victim, combat, selfCaster)) {
     if (!WHITELIST_IDS.has(iv.spellId)) continue;
+    if (opposing.has(iv.srcUnitName)) continue;
     const overlapFrom = Math.max(iv.fromS, windowStartS);
     const overlapTo = Math.min(iv.toS, deathInstantS);
     if (overlapTo <= overlapFrom) continue; // no overlap, emit no row

@@ -20,9 +20,11 @@
  * ours only 25 %, theirs only 20 %, calm with a burst ready 5 %, calm with
  * nothing ready 9 % — the last group is the one kick-eaten stops listing.
  *
- * Window: the lockout on the render grid, whole seconds
- * [floor(kick), ceil(kick + lockout)]; deaths up to KICK_OUTCOME_S after the
- * lockout ends.
+ * Window: the lock the text prints, on the render grid — whole seconds
+ * [floor(kick), floor(kick + min(lockout, lockEndedBySuccessS))] (the end
+ * floored since work order 2026-10-14b Part 2; cut at a locked-school SUCCESS
+ * or cast-bar start since 2026-10-14c Part 2 G3); deaths up to
+ * KICK_OUTCOME_S after the lock ends.
  *
  * HP, two readings since FT-T03 (user ruling 2026-10-10, D7 — "the 'trough'
  * numbers may leave the whole-second grid and read the true minimum inside

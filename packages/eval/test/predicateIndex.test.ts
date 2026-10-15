@@ -1085,6 +1085,11 @@ const INDEX: PredicateRow[] = [
     mod: cannotCastIntervals,
   },
   {
+    file: `${A}/utils/cannotCastIntervals.ts`,
+    symbol: "ownFlightIntervals",
+    mod: cannotCastIntervals,
+  },
+  {
     file: `${A}/utils/talentBehaviors.ts`,
     symbol: "interruptImmuneWindows",
     mod: talentBehaviors,
@@ -2281,6 +2286,16 @@ const INDEX: PredicateRow[] = [
   {
     file: `${A}/utils/drAnalysis.ts`,
     symbol: "matchPendingCcKey",
+    mod: drAnalysis,
+  },
+  {
+    file: `${A}/utils/drAnalysis.ts`,
+    symbol: "reAppliedIsSameApplication",
+    mod: drAnalysis,
+  },
+  {
+    file: `${A}/utils/drAnalysis.ts`,
+    symbol: "ccRecastBetween",
     mod: drAnalysis,
   },
   // Triage 2026-09-29 (missed-cleanse F-C10 / other F-O6): commitments with

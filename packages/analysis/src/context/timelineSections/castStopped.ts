@@ -45,11 +45,7 @@ import { JUKE_LOOKBACK_MS } from "../../utils/kickAudit";
 import type { CastFailedEvent } from "../../utils/rawStreams";
 import { fmtTime } from "../../utils/renderGrid";
 import type { IControlCastBar } from "../ccUse";
-import {
-  REJECT_WHY,
-  REJECT_WHY_UNWORDED,
-  rejectKindOf,
-} from "../spellOutcomeLines";
+import { REJECT_WHY_UNWORDED, refusalWhy } from "../spellOutcomeLines";
 import type { TimelineCtx } from "./ctx";
 
 /** The tag — also what the legend and the gate
@@ -57,8 +53,8 @@ import type { TimelineCtx } from "./ctx";
  * `PRESS_HP_LINE_TAGS`: the line prints no HP. */
 export const CAST_STOPPED_TAG = "[CAST STOPPED]";
 
-/** What stands for a refusal reason that is not one of the four kinds the
- * product words (`REJECT_WHY`) — `REJECT_WHY_UNWORDED`, in brackets. */
+/** What stands for a refusal reason the product does not word
+ * (`refusalWhy` → `REJECT_WHY_UNWORDED`), in brackets. */
 export const CAST_REFUSED_OTHER_REASON = `(${REJECT_WHY_UNWORDED})`;
 
 /** `cast bar stopped after N.Ns` + this, per what landed on the owner within
@@ -118,11 +114,14 @@ export function castStoppedText(
     return `cast bar stopped after ${elapsed(o.t, end.atS)}${CAST_STOPPED_NEAR_TEXT[near]}`;
   }
   if (statedByRejected.has(end.row)) return null;
-  const kind = rejectKindOf(end.row.reason);
+  // the report's words for every reason it has words for (`refusalWhy`,
+  // FT-R1014b) — work order 2026-10-14d #8: 2c6e85ec 1:21 Cyclone, raw
+  // "Invalid target", still printed "(client reason not translated)"
+  const why = refusalWhy(end.row.reason);
   const at = `refused ${elapsed(o.t, end.atS)} in`;
-  return kind
-    ? `${at}: ${REJECT_WHY[kind]}`
-    : `${at} ${CAST_REFUSED_OTHER_REASON}`;
+  return why === REJECT_WHY_UNWORDED
+    ? `${at} ${CAST_REFUSED_OTHER_REASON}`
+    : `${at}: ${why}`;
 }
 
 /** The whole line: the second the bar BEGAN, the tag, the spell under its CC

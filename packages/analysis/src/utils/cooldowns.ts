@@ -47,6 +47,7 @@ import {
 import { getSortedAdvancedActions } from "./advancedActions";
 import {
   buildAuraIntervals,
+  dropAuraRebroadcasts,
   type IAuraInterval,
   supersededAuraBreaks,
 } from "./auraIntervals";
@@ -114,8 +115,11 @@ export function isSelfOnlyDefensive(spellId: string): boolean {
  * the aura lands on the hunter and the pet — rendered `→ <enemy> (that
  * unit's HP)`. The second arm is official data: a defensive-class cooldown
  * (`DEFENSIVE_CLASS_IDS`) whose DB2 targeting is known and reaches no ally.
- * A runtime-injected cooldown (Ultimate Penitence 421453, whose logged target
- * is real — the channel damages it) is in neither set and keeps its target.
+ * A runtime-injected cooldown (Ultimate Penitence 421453) is in neither set
+ * and keeps its logged target. That target is the cast row's, not always
+ * where the channel's damage went (work order 2026-10-14d #2, f94a7604: the
+ * row names a hunter who took one bolt) — the [ENEMY DEF] clause reads the
+ * damage (`enemyDef.ts` `channelTargetClause`).
  */
 export function rendersOnCaster(spellId: string): boolean {
   return (
@@ -1154,7 +1158,9 @@ export function guardianSpiritCastCooldownSeconds(
     buffFullDurationForCaster(GUARDIAN_SPIRIT_SPELL_ID, caster, castMs) ?? 0;
   let buffSeconds = full;
   for (const u of units)
-    for (const a of u.auraEvents)
+    // a re-broadcast's REMOVED is not the buff's end (work order
+    // 2026-10-14d #9 — `dropAuraRebroadcasts`)
+    for (const a of dropAuraRebroadcasts(u.auraEvents))
       if (
         a.spellId === GUARDIAN_SPIRIT_SPELL_ID &&
         a.srcUnitId === caster.id &&

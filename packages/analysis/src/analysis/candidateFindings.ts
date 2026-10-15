@@ -139,7 +139,7 @@ import {
   type IRootInstance,
   rootReachProvenFact,
 } from "../utils/rootReachability";
-import { shuffleRoundEndMs } from "../utils/roundEnd";
+import { roundEndMs as roundEndOf, shuffleRoundEndMs } from "../utils/roundEnd";
 import { RANGE_HITBOX_SLACK_YD, spellReachToAccuse } from "../utils/spellRange";
 import {
   isCasterCentredSpell,
@@ -4793,7 +4793,9 @@ function dpsOwnerEvents(
           target,
           [owner],
           enemies,
-          combat,
+          // the round's span, as the [ENEMY DEF] line's `during it:` reads
+          // it (work order 2026-10-14d #7)
+          { startTime: combat.startTime, endTime: roundEndOf(combat) },
         )[0];
         return obs ? formatDuringExternalForOwner(obs) : undefined;
       })();

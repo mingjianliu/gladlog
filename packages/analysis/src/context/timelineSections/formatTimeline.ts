@@ -479,8 +479,10 @@ export function formatTimeline(
           "    `— stolen by …`, `— ended at death` / `— its target died`, `— used up, absorbed Nk` / `— used up` (an absorb eaten through);",
           "    `— removed early` = it ended early and the log gives no cause (cancelled, broken or replaced);",
           "    `— still up when the round ended` = the round ended before it did;",
-          "    `— channelled at X: it dealt Nk of the Mk damage they took over it` = a save that is a channel aimed at our player",
-          "    X (Ultimate Penitence): Nk = what the channel dealt X, landed plus absorbed; Mk = everything X took while it ran;",
+          "    `— its bolts hit X: Nk of the Mk damage they took over it` = a save that is a channel whose damage landed on our",
+          "    player X (Ultimate Penitence; several units, largest first): Nk = what the channel dealt X, landed plus absorbed;",
+          "    Mk = everything X took while it ran; `(its cast row names Y)` = the cast row's target was someone else — the log",
+          "    shows where the damage went, not whether the channel was re-aimed;",
           "    `X → unit` = an external put on that unit; one with no duration is an instant heal (Lay on Hands) or a grip /",
           "    redirect (Leap of Faith, Intervene, Roar of Sacrifice, Master's Call); `(area)` = an area save pressed at that",
           "    second (Anti-Magic Zone, Darkness, Rallying Cry, Spirit Link Totem, Power Word: Barrier) — who was inside it is not stated. Absent = not pressed.",
@@ -520,8 +522,10 @@ export function formatTimeline(
       : []),
     ...(silenceLineCount > 0
       ? [
-          "  [SILENCE] = that player was silenced from that second for the stated time: no spells (the [CC ON TEAM] / [CC ON ENEMY]",
-          "    lines do not include silences). `trinket broke this silence` = a PvP trinket ended it early.",
+          "  [SILENCE] = that player was silenced from that second for the stated time: no spell a silence stops — most spells;",
+          "    the abilities the game data marks as not stopped by a silence (many melee strikes, forms, some defensives and",
+          "    racials) still go out (the [CC ON TEAM] / [CC ON ENEMY] lines do not include silences). `trinket broke this silence` =",
+          "    a PvP trinket ended it early.",
           ...(backlashSilenceLineRendered
             ? [
                 `    \`${backlashCcTag("silence").trim()}\` on it = the silence a dispel of that debuff puts on the player who dispelled it.`,

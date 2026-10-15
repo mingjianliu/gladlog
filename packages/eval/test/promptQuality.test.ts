@@ -1217,12 +1217,24 @@ describe("checkCastStoppedLines — a [CAST STOPPED] line is one of the producer
       "0:30  [CAST STOPPED]   Cyclone — cast bar stopped after 0.5s as a control or silence landed on you",
       "0:51  [CAST STOPPED]   Cyclone — cast bar stopped after 0.3s as an enemy knockback or pull landed on you",
       "0:49  [CAST STOPPED]   Cyclone — refused 0.9s in: vision obscured (Smoke Bomb)",
-      "1:21  [CAST STOPPED]   Cyclone — refused 1.2s in (client reason not translated)",
+      "1:21  [CAST STOPPED]   Cyclone — refused 1.2s in: invalid target",
       "1:58  [CAST STOPPED]   Cyclone — no end logged; the round ended 1.4s after it began",
     ]);
     expect(checkCastStoppedLines([...unit, kick, ...six, started(9)])).toEqual(
       [],
     );
+    // a reason refusalWhy has no words for keeps the bracketed marker
+    // (work order 2026-10-14d #8)
+    expect(
+      checkCastStoppedLines([
+        ...unit,
+        kick,
+        ...six.slice(0, 4),
+        "1:21  [CAST STOPPED]   Cyclone — refused 1.2s in (client reason not translated)",
+        six[5]!,
+        started(9),
+      ]),
+    ).toEqual([]);
     // a prompt with no such line has nothing to check
     expect(checkCastStoppedLines([...unit, kick, started(9)])).toEqual([]);
   });
@@ -1240,8 +1252,9 @@ describe("checkCastStoppedLines — a [CAST STOPPED] line is one of the producer
       "0:13  [CAST STOPPED]   Cyclone started — not completed (cast bar stopped after 0.5s; not kicked, no control landed on you then)",
       // a quoted client string
       '1:21  [CAST STOPPED]   Cyclone — refused 1.2s in; client: "Invalid target"',
-      // a reason the product does not word
-      "1:21  [CAST STOPPED]   Cyclone — refused 1.2s in: invalid target",
+      // a reason the product does not word (refusalWhy words "invalid
+      // target" since FT-R1014b — work order 2026-10-14d #8)
+      "1:21  [CAST STOPPED]   Cyclone — refused 1.2s in: the target was busy",
     ])
       expect(
         checkCastStoppedLines([...unit, ...six.slice(1), wrong, started(9)]),

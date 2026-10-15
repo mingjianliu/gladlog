@@ -12,6 +12,8 @@
  * CC_AVOIDANCE_BUFF_SPELLS and CD_TALENT_MODIFIERS.
  */
 
+import { dropAuraRebroadcasts } from "./auraIntervals";
+
 export type TalentEffectKind =
   /** while buffSpellId is active, immune to magic damage/effects → credit a magic CC/damage avoidance */
   | "magic_immunity"
@@ -436,7 +438,9 @@ export function interruptImmuneWindows(
       : cond.name;
     const auraName = cond.conditionName || cond.name;
     let openFrom: number | null = null;
-    for (const a of owner.auraEvents ?? []) {
+    // a re-broadcast's REMOVED is not the window's end (work order
+    // 2026-10-14d #9 — `dropAuraRebroadcasts`)
+    for (const a of dropAuraRebroadcasts(owner.auraEvents ?? [])) {
       if (a.spellId !== cond.conditionAuraId) continue;
       if (
         a.logLine.event === "SPELL_AURA_APPLIED" ||

@@ -6,6 +6,7 @@ import {
   isCastBlockingAuraType,
   SPELL_CATEGORIES as SPELLS,
 } from "../data/spellCategories";
+import { getEnglishSpellName } from "../data/spellEffectData";
 import { schoolLockedBy, spellSchoolMask } from "../data/spellSchools";
 import { ccSpellIds, officialSilenceIds } from "../data/spellTags";
 import { supersededAuraBreaks } from "./auraIntervals";
@@ -464,45 +465,12 @@ export function namedCannotCastIntervals(
     lockout: false,
   }));
 
-  // The unit's own flying breath (`OWN_FLIGHT_AURA_IDS`, user ruling
-  // 2026-10-14): no cast while it flies — a lock on everything, like a stun.
-  // `self`: the unit's own doing, so the readers that NAME a CC chain leave
-  // it out (`deathLockChain`); the locked time counts. Paired per id, in log
-  // order (agy 40-FT-85: one shared open start let a flight with no REMOVED
-  // run into the next flight, and two overlapping ids dropped a piece). A
-  // flight with no REMOVED — a new APPLIED of it first, or none at all — is
-  // closed at its official length, never left open.
-  const flightOpen = new Map<string, number>();
-  const closeFlight = (spellId: string, from: number, to: number) =>
-    intervals.push({ from, to, spellId, lockout: false, self: true });
-  const fullMs = (spellId: string): number | undefined => {
-    const s = buffFullDurationForCaster(spellId, unit);
-    return s === undefined ? undefined : s * 1000;
-  };
-  for (const a of unit.auraEvents ?? []) {
-    const id = String(a.spellId ?? "");
-    if (!OWN_FLIGHT_AURA_IDS.has(id)) continue;
-    if (a.srcUnitId !== unit.id) continue;
-    const open = flightOpen.get(id);
-    if (a.logLine.event === LogEvent.SPELL_AURA_APPLIED) {
-      if (open !== undefined) {
-        const full = fullMs(id);
-        if (full !== undefined)
-          closeFlight(id, open, Math.min(open + full, a.timestamp));
-      }
-      flightOpen.set(id, a.timestamp);
-    } else if (
-      a.logLine.event === LogEvent.SPELL_AURA_REMOVED &&
-      open !== undefined
-    ) {
-      closeFlight(id, open, a.timestamp);
-      flightOpen.delete(id);
-    }
-  }
-  for (const [id, open] of flightOpen) {
-    const full = fullMs(id);
-    if (full !== undefined) closeFlight(id, open, open + full);
-  }
+  // The unit's own flying breath (`ownFlightIntervals`): no cast while it
+  // flies — a lock on everything, like a stun. `self`: the unit's own doing,
+  // so the readers that NAME a CC chain leave it out (`deathLockChain`); the
+  // locked time counts.
+  for (const f of ownFlightIntervals(unit))
+    intervals.push({ ...f, lockout: false, self: true });
 
   let petCast: ReadonlySet<string> | undefined;
   for (const action of unit.actionIn ?? []) {
@@ -552,6 +520,57 @@ export function enemySourceIds(
   const players = new Set(ids);
   for (const u of units) if (u.ownerId && players.has(u.ownerId)) ids.add(u.id);
   return ids;
+}
+
+/**
+ * The unit's own flying breath (`OWN_FLIGHT_AURA_IDS`, user ruling
+ * 2026-10-14): no cast while it flies. Paired per id, in log order (agy
+ * 40-FT-85: one shared open start let a flight with no REMOVED run into the
+ * next flight, and two overlapping ids dropped a piece). A flight with no
+ * REMOVED — a new APPLIED of it first, or none at all — is closed at its
+ * official length, never left open. Read by `namedCannotCastIntervals` (the
+ * unit's own locked time) and `castBlockingAuraAt` (a kicker in flight
+ * cannot kick — work order 2026-10-14d #10).
+ */
+export function ownFlightIntervals(
+  unit: ICombatUnit,
+): Array<{ from: number; to: number; spellId: string }> {
+  const out: Array<{ from: number; to: number; spellId: string }> = [];
+  const flightOpen = new Map<string, number>();
+  const fullMs = (spellId: string): number | undefined => {
+    const s = buffFullDurationForCaster(spellId, unit);
+    return s === undefined ? undefined : s * 1000;
+  };
+  for (const a of unit.auraEvents ?? []) {
+    const id = String(a.spellId ?? "");
+    if (!OWN_FLIGHT_AURA_IDS.has(id)) continue;
+    if (a.srcUnitId !== unit.id) continue;
+    const open = flightOpen.get(id);
+    if (a.logLine.event === LogEvent.SPELL_AURA_APPLIED) {
+      if (open !== undefined) {
+        const full = fullMs(id);
+        if (full !== undefined)
+          out.push({
+            from: open,
+            to: Math.min(open + full, a.timestamp),
+            spellId: id,
+          });
+      }
+      flightOpen.set(id, a.timestamp);
+    } else if (
+      a.logLine.event === LogEvent.SPELL_AURA_REMOVED &&
+      open !== undefined
+    ) {
+      out.push({ from: open, to: a.timestamp, spellId: id });
+      flightOpen.delete(id);
+    }
+  }
+  for (const [id, open] of flightOpen) {
+    const full = fullMs(id);
+    if (full !== undefined)
+      out.push({ from: open, to: open + full, spellId: id });
+  }
+  return out;
 }
 
 export interface CastBlockingAura {
@@ -739,13 +758,29 @@ export function castBlockingAuraAt(
   // category, not CC) — is the lockout half this predicate leaves out, and
   // used to be read as hard CC (pre-review of the batch: a Warrior in Pummel
   // range under 91807 dropped out of `kickersInRange`).
-  return castBlockingAuraIntervals(unit, hostileIds).find(
+  const held = castBlockingAuraIntervals(unit, hostileIds).find(
     (a) =>
       a.from <= tMs &&
       tMs < a.to &&
       (ccSpellIds.has(a.spellId) ||
         (silenceStops && officialSilenceIds.has(a.spellId))),
   );
+  if (held) return held;
+  // …or the unit's own flying breath (work order 2026-10-14d #10: an enemy
+  // Evoker inside Deep Breath read as a ready kicker)
+  const flight = ownFlightIntervals(unit).find(
+    (f) => f.from <= tMs && tMs < f.to,
+  );
+  return flight
+    ? {
+        spellId: flight.spellId,
+        spellName: getEnglishSpellName(flight.spellId),
+        srcUnitId: unit.id,
+        srcUnitName: unit.name,
+        from: flight.from,
+        to: flight.to,
+      }
+    : undefined;
 }
 
 /** The root-like half of the same question for MOVEMENT: the hard CC (never
