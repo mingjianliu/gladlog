@@ -57,11 +57,12 @@ import {
 } from "./cooldowns";
 import {
   buildCcCategoryHistory,
+  ccRecastBetween,
   DR_CATEGORY_MAP,
   getDRCategory,
   getDRLevelAtTime,
+  matchPendingCcKey,
   PATCH_121_GOLIVE_EPOCH_MS,
-  ccRecastBetween,
   reAppliedIsSameApplication,
 } from "./drAnalysis";
 import { sumLandedPressure } from "./incomingPressure";
@@ -2306,7 +2307,13 @@ function targetSelfBlocked(
 ): { targetSelfBlockedS?: number } {
   const ids = SELF_REMOVAL_BY_TYPE[dispelType];
   if (!ids?.length) return {};
-  const b = dispellersBlockedMsInWindow([target], startMs, endMs, src, () => ids);
+  const b = dispellersBlockedMsInWindow(
+    [target],
+    startMs,
+    endMs,
+    src,
+    () => ids,
+  );
   return b === null ? {} : { targetSelfBlockedS: b / 1000 };
 }
 
@@ -3041,27 +3048,32 @@ export function reconstructDispelSummary(
       : isMeleeSpec(unit.spec)
         ? "melee"
         : "ranged";
-    const appliedTimes = new Map<
+    // agy 40-FT-94 #2 / #3, 40-FT-95: the CC pairings' walk
+    // (`buildCcCategoryHistory`, `disarmIntervals`) — keyed by spell AND
+    // source; a removal closes its source's open application, else the
+    // earliest open one of the spell (`matchPendingCcKey`: a BROKEN names the
+    // breaker), and is consumed. It used to pair every APPLIED with the
+    // first later removal of the spell, whoever's.
+    const windows = new Map<
       string,
-      { ts: number; spellName: string; srcUnitId: string }[]
+      {
+        ts: number;
+        spellName: string;
+        removal: { ts: number; brokenByDamage: boolean };
+      }[]
     >();
-    const removedTimes = new Map<
+    const pending = new Map<
       string,
-      { ts: number; brokenByDamage: boolean; srcUnitId: string }[]
+      { applyMs: number; spellId: string; spellName: string; src: string }
     >();
-    // agy 40-FT-94 #2 / #3: an application is its source's — the CC
-    // pairings' key is spell AND source (`buildCcCategoryHistory`,
-    // `analyzeCcBreaks`). A removal is this source's when it names this
-    // source, or names a unit that applied none of the spell (a BROKEN logged
-    // by the enemy whose damage broke it); never another applier's.
-    const removalOf = (
-      r: { srcUnitId: string },
-      srcUnitId: string,
-      appliers: ReadonlySet<string>,
-    ) => r.srcUnitId === srcUnitId || !appliers.has(r.srcUnitId);
-    // the application's own length: caster talents and Oppressing Roar on
-    // the holder at the apply (`ccFullDurationForApplication`, as
-    // `analyzeCcBreaks` reads it); unknown → null (the same application)
+    const closeWindow = (
+      open: { applyMs: number; spellId: string; spellName: string },
+      removal: { ts: number; brokenByDamage: boolean },
+    ) =>
+      windows.set(open.spellId, [
+        ...(windows.get(open.spellId) ?? []),
+        { ts: open.applyMs, spellName: open.spellName, removal },
+      ]);
     const lengthOf = (spellId: string, srcUnitId: string, applyMs: number) =>
       ccFullDurationForApplication(
         spellId,
@@ -3137,55 +3149,58 @@ export function reconstructDispelSummary(
       // Only flag if the team has someone capable of removing this debuff type
       if (!teamDispelTypes.has(dispelType)) continue;
 
+      const key = `${spellId}:${aura.srcUnitId}`;
       if (aura.logLine.event === LogEvent.SPELL_AURA_APPLIED) {
-        const bucket = appliedTimes.get(spellId) ?? [];
-        // work order 2026-10-15 Part 2 (user 「好」): a re-APPLIED while the
-        // last application of the spell from this source is still open and
-        // inside its length is that application (`reAppliedIsSameApplication`;
-        // a recast by the source — `ccRecastBetween` — is a new one); it used
-        // to open a second, nested window
-        const last = [...bucket]
-          .reverse()
-          .find((a) => a.srcUnitId === aura.srcUnitId);
-        const appliers = new Set(bucket.map((a) => a.srcUnitId));
-        const lastRemoved =
-          last !== undefined &&
-          (removedTimes.get(spellId) ?? []).some(
-            (r) => r.ts >= last.ts && removalOf(r, aura.srcUnitId, appliers),
-          );
-        const src = enemyPlayerById.get(aura.srcUnitId);
-        if (
-          last !== undefined &&
-          !lastRemoved &&
-          reAppliedIsSameApplication(
-            last.ts,
-            aura.timestamp,
-            lengthOf(spellId, aura.srcUnitId, last.ts),
-            src !== undefined &&
-              ccRecastBetween(
-                [src],
-                spellId,
-                unit.id,
-                last.ts,
-                aura.timestamp,
-              ),
+        // work order 2026-10-15 Part 2 (user 「好」): a re-APPLIED while this
+        // source's application of the spell is still open and inside its
+        // length is that application (`reAppliedIsSameApplication`; a recast
+        // by the source — `ccRecastBetween` — is a new one); past it, or
+        // recast, the open one's REMOVED was lost and it ends at this
+        // application or its length, whichever is first
+        const open = pending.get(key);
+        if (open !== undefined) {
+          const lengthS = lengthOf(spellId, aura.srcUnitId, open.applyMs);
+          const src = enemyPlayerById.get(aura.srcUnitId);
+          if (
+            reAppliedIsSameApplication(
+              open.applyMs,
+              aura.timestamp,
+              lengthS,
+              src !== undefined &&
+                ccRecastBetween(
+                  [src],
+                  spellId,
+                  unit.id,
+                  open.applyMs,
+                  aura.timestamp,
+                ),
+            )
           )
-        )
-          continue;
-        appliedTimes.set(spellId, [
-          ...bucket,
-          {
-            ts: aura.timestamp,
-            spellName: getEnglishSpellName(spellId, aura.spellName),
-            srcUnitId: aura.srcUnitId,
-          },
-        ]);
+            continue;
+          closeWindow(open, {
+            ts: Math.min(
+              aura.timestamp,
+              lengthS === null ? Infinity : open.applyMs + lengthS * 1000,
+            ),
+            brokenByDamage: false,
+          });
+        }
+        pending.set(key, {
+          applyMs: aura.timestamp,
+          spellId,
+          spellName: getEnglishSpellName(spellId, aura.spellName),
+          src: aura.srcUnitId,
+        });
       } else if (
         aura.logLine.event === LogEvent.SPELL_AURA_REMOVED ||
         aura.logLine.event === LogEvent.SPELL_AURA_BROKEN ||
         aura.logLine.event === LogEvent.SPELL_AURA_BROKEN_SPELL
       ) {
         if (notTheEnd.has(aura)) continue;
+        const k = matchPendingCcKey(pending, spellId, key);
+        const open = k ? pending.get(k) : undefined;
+        if (!k || !open) continue;
+        pending.delete(k);
         const brokenByDamage =
           aura.logLine.event === LogEvent.SPELL_AURA_BROKEN_SPELL ||
           auraBreaksBeforeRemoved(unit.auraEvents, aura).some(
@@ -3193,13 +3208,10 @@ export function reconstructDispelSummary(
               b.logLine.event === LogEvent.SPELL_AURA_BROKEN_SPELL &&
               enemyIds.has(b.srcUnitId),
           );
-        const bucket = removedTimes.get(spellId) ?? [];
-        removedTimes.set(spellId, [
-          ...bucket,
-          { ts: aura.timestamp, brokenByDamage, srcUnitId: aura.srcUnitId },
-        ]);
+        closeWindow(open, { ts: aura.timestamp, brokenByDamage });
       }
     }
+    // an application never removed stays out (no removal to pair, as before)
 
     // Ensure efficiency entry exists for this unit
     const effKey = unit.id;
@@ -3216,16 +3228,10 @@ export function reconstructDispelSummary(
     const eff = efficiencyMap.get(effKey);
     if (!eff) continue;
 
-    for (const [spellId, applications] of appliedTimes) {
+    for (const [spellId, applications] of windows) {
       const priority = getPriority(spellId);
-      const removals = removedTimes.get(spellId) ?? [];
 
-      const appliers = new Set(applications.map((a) => a.srcUnitId));
-      for (const {
-        ts: applyTs,
-        spellName,
-        srcUnitId: applySrc,
-      } of applications) {
+      for (const { ts: applyTs, spellName, removal: paired } of applications) {
         // Triage 2026-09-29 missed-cleanse F-C3 (with cc-dr F-CI1, one round
         // end): a window ends at `roundEndMs`. A CC still up when the round
         // ended paired with a removal logged after it and read as a full-
@@ -3234,28 +3240,6 @@ export function reconstructDispelSummary(
         // not in the round. A removal after the end is the round ending, not
         // a dispel, a rider or a break.
         if (applyTs >= roundEnd) continue;
-        const pairedRaw = removals.find(
-          (r) => r.ts >= applyTs && removalOf(r, applySrc, appliers),
-        );
-        if (!pairedRaw) continue;
-        // work order 2026-10-15 Part 2 (user 「好」): another application of
-        // the spell from this source before that removal proves this one's
-        // REMOVED was lost — it ends at that application or its length,
-        // whichever is first, never at the later removal
-        const nextApply = applications.find(
-          (a) => a.ts > applyTs && a.srcUnitId === applySrc,
-        );
-        const lengthS = lengthOf(spellId, applySrc, applyTs);
-        const paired =
-          nextApply !== undefined && pairedRaw.ts > nextApply.ts
-            ? {
-                ts: Math.min(
-                  nextApply.ts,
-                  lengthS === null ? Infinity : applyTs + lengthS * 1000,
-                ),
-                brokenByDamage: false,
-              }
-            : pairedRaw;
         const clippedAtRoundEnd = paired.ts > roundEnd;
         const removal = clippedAtRoundEnd
           ? { ts: roundEnd, brokenByDamage: false }
@@ -3701,8 +3685,7 @@ export function reconstructDispelSummary(
                   windowDispelType,
                   charmed,
                 ))
-                  for (const t of dispelTypesRemovedBy(sid, d.spec))
-                    own.add(t);
+                  for (const t of dispelTypesRemovedBy(sid, d.spec)) own.add(t);
                 own.add(windowDispelType);
                 types = types
                   ? new Set([...types].filter((t) => own.has(t)))

@@ -146,6 +146,7 @@ describe("2a — the uncleansed window: a re-send inside the length is one windo
       [
         makeUnit("enemy-1", { reaction: CombatUnitReaction.Hostile }),
         makeUnit("enemy-2", { reaction: CombatUnitReaction.Hostile }),
+        makeUnit("enemy-3", { reaction: CombatUnitReaction.Hostile }),
       ] as never,
       { startTime: T0, endTime: S(300) } as never,
     )
@@ -176,6 +177,36 @@ describe("2a — the uncleansed window: a re-send inside the length is one windo
       ]),
     ).toEqual([
       [20, 6],
+      [22, 6],
+    ]);
+  });
+
+  // agy 40-FT-95: a removal closes its source's open application, else the
+  // earliest open one of the spell, and is consumed (`matchPendingCcKey`)
+  it("agy 40-FT-95 #1: a BROKEN by a unit that casts the spell later still closes the open one", () => {
+    expect(
+      windows2([
+        ev(LogEvent.SPELL_AURA_APPLIED, "122", 20, "enemy-1", "m"),
+        ev(LogEvent.SPELL_AURA_BROKEN, "122", 24, "enemy-2", "m"),
+        ev(LogEvent.SPELL_AURA_APPLIED, "122", 40, "enemy-2", "m"),
+        ev(LogEvent.SPELL_AURA_REMOVED, "122", 46, "enemy-2", "m"),
+      ]),
+    ).toEqual([
+      [20, 4],
+      [40, 6],
+    ]);
+  });
+
+  it("agy 40-FT-95 #2: a breaker's removal closes one application, not two", () => {
+    expect(
+      windows2([
+        ev(LogEvent.SPELL_AURA_APPLIED, "122", 20, "enemy-1", "m"),
+        ev(LogEvent.SPELL_AURA_APPLIED, "122", 22, "enemy-2", "m"),
+        ev(LogEvent.SPELL_AURA_BROKEN, "122", 24, "enemy-3", "m"),
+        ev(LogEvent.SPELL_AURA_REMOVED, "122", 28, "enemy-2", "m"),
+      ]),
+    ).toEqual([
+      [20, 4],
       [22, 6],
     ]);
   });
