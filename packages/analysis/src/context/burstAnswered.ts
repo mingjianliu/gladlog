@@ -105,9 +105,9 @@ export const BURST_ANSWERED_POSITIONING_XREF =
   " — not necessarily a POSITIONING line's burst target, which is the one under the most damage over its own span";
 
 export const BURST_ANSWERED_CONTROL_RULE_LEGEND =
-  "    The pressured player (named before `bottomed at`) = of the friendlies the burst's casters hit inside the window (a hit stopped by an immunity counts), the one who died inside it (the first to die, if several did), else the one whose HP went lowest" +
+  "    The pressured player (named before `bottomed at`) = of the friendlies the burst's casters hit inside the window (a hit stopped by an immunity counts) and the log has an HP reading for there, the one who died inside it (the first to die, if several did), else the one with the lowest [STATE] tick in it (equal ticks: the one who took more damage)" +
   BURST_ANSWERED_POSITIONING_XREF +
-  ". A control counts as an answer only when it went on an enemy who dealt damage to the pressured player inside the burst window, or whose hit on them an immunity stopped (that enemy's pets count as that enemy); a control on any other enemy — an enemy healer who only pressed a cooldown — is not listed as the answer, and neither is one whose target neither damaged that player nor had a hit on them stopped by an immunity in the window, even if the control is why.";
+  ". A control counts as an answer only when it went on an enemy who pressed one of the burst's cooldowns and dealt damage to the pressured player inside the burst window, or whose hit on them an immunity stopped (that enemy's pets count as that enemy); a control on any other enemy — an enemy healer who only pressed a cooldown — is not listed as the answer, and neither is one whose target neither damaged that player nor had a hit on them stopped by an immunity in the window, even if the control is why.";
 
 /** Legend lines, emitted only when at least one `[BURST ANSWERED]` line is.
  * The second one is load-bearing: with `BURST_ANSWERED_CAP` = 2 the list is

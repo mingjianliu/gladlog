@@ -679,6 +679,22 @@ describe("burstWindowDecisionPoints — the pressured friendly (correction 1)", 
     expect(pts[0]!.feasible).toBe(true);
     expect(pts[0]!.feasibleUnits).toEqual(["Friend-R"]);
   });
+
+  it("agy 40-FT-101: the pressured friendly's own wall back only after its death is no chance (U8 for the self-save)", () => {
+    // Barkskin pressed 47 s before the opener comes back ~13 s in; the druid
+    // dies at 11.6 s
+    const pts = burstWindowDecisionPoints(
+      combat(
+        twoFriendlies({
+          ...DRUID,
+          spellCastEvents: [cast(BARKSKIN, -47)],
+          deathRecords: [{ timestamp: T0 + 11_600 }],
+        }),
+      ),
+    );
+    expect(pts[0]!.pressured?.name).toBe("Friend-R");
+    expect(pts[0]!.feasibleUnits).not.toContain("Friend-R");
+  });
 });
 
 describe("burstWindowDecisionPoints — severity triage (correction 2 + the 2026-09-01 HP-drop door)", () => {

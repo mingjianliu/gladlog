@@ -1717,5 +1717,9 @@
  *  burst's pressured friendly is the one the burst hit who died inside the
  *  window (the first to die), else the lowest HP. 605 files:
  *  slow-defensive-response −1.
+ *  v401 (2026-10-15, FT, agy 40-FT-101 — facts only): a dead pressured
+ *  friendly has no self-save after its death and is not read kiting off
+ *  its corpse; the [BURST ANSWERED] legend states the pressured pick and
+ *  the control rule exactly. 605 files: no candidate added or removed.
  */
-export const PROMPT_VERSION = 400;
+export const PROMPT_VERSION = 401;

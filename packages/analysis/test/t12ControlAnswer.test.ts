@@ -421,7 +421,7 @@ describe("the legends say what counts as a control answer (FT-T12 D3)", () => {
   it("[BURST ANSWERED]: the rule is part of the legend every credit line brings, limit included", () => {
     expect(BURST_ANSWERED_LEGEND).toContain(BURST_ANSWERED_CONTROL_RULE_LEGEND);
     expect(BURST_ANSWERED_CONTROL_RULE_LEGEND).toContain(
-      "A control counts as an answer only when it went on an enemy who dealt damage to the pressured player inside the burst window, or whose hit on them an immunity stopped (that enemy's pets count as that enemy)",
+      "A control counts as an answer only when it went on an enemy who pressed one of the burst's cooldowns and dealt damage to the pressured player inside the burst window, or whose hit on them an immunity stopped (that enemy's pets count as that enemy)",
     );
     expect(BURST_ANSWERED_CONTROL_RULE_LEGEND).toContain(
       "an enemy healer who only pressed a cooldown",

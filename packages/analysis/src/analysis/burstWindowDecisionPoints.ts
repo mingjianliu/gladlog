@@ -1690,12 +1690,17 @@ export function burstWindowDecisionPoints(
           if (isDeadAt(pressuredUnit, responseAtMs.get(r)!))
             r.afterPressuredDeath = true;
       const casterUnits = casterIds.map((id) => units.find((u) => u.id === id));
+      // agy 40-FT-101: a pressured friendly who died is not read kiting past
+      // its death — the distance is measured up to it, never off a corpse
+      const kiteEndMs = pressured
+        ? Math.min(w1, deathMsOf(pressured.unitId))
+        : w1;
       const kiteGain =
         pressuredUnit != null &&
         (dmgByUnitId.get(pressuredUnit.id) ?? 0) > 0 &&
-        kitedAway(pressuredUnit, casterUnits, tMs, w1);
+        kitedAway(pressuredUnit, casterUnits, tMs, kiteEndMs);
       const kiteWho = kiteGain
-        ? kiteAttribution(pressuredUnit, casterUnits, tMs, w1)
+        ? kiteAttribution(pressuredUnit, casterUnits, tMs, kiteEndMs)
         : null;
       const attackerMoved =
         !!kiteWho &&
@@ -1752,6 +1757,9 @@ export function burstWindowDecisionPoints(
         // (a) the person under the burst could have saved themselves
         const selfCds = selfCdsByUnit.get(pressuredUnit.id) ?? [];
         for (const sec of windowSecs) {
+          // agy 40-FT-101: U8 for (a) too — a dead unit saves nobody, itself
+          // included (an Ice Block back 0.8 s after the death read feasible)
+          if (isDeadAtRenderSecond(pressuredUnit, start, sec)) break;
           const tool = selfCds.find(
             (cd) =>
               cdReadyInTimeAt(cd, sec) &&
