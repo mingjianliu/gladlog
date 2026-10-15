@@ -362,7 +362,9 @@ describe("[BURST ANSWERED] reads the same list (FT-T12 D3)", () => {
     expect(rest).toEqual([]);
     expect(l).toContain("Friend-R answered with Barkskin in 4.0s");
     expect(l).not.toContain("Storm Bolt");
-    expect(l).not.toContain("Healer-R");
+    // WO6 #2: the healer is named as the extra's caster, never as a target
+    expect(l).not.toContain(" on Healer-R");
+    expect(l).toContain("by Healer-R");
     expect(creditedAnswer(points(units)[0]!)!.category).toBe("wall");
     // the gates' own reader still reads the line (its wording did not change)
     expect(parseBurstAnsweredLine(`0:10  ${l}`)).toMatchObject({
@@ -406,7 +408,9 @@ describe("[BURST ANSWERED] reads the same list (FT-T12 D3)", () => {
       piHealer({ auraEvents: [aura(STATIC_CHARGE, 14, "T1", "E2")] }),
     ]);
     expect(l).toContain(" on Opener-R ");
-    expect(l).not.toContain("Healer-R");
+    // WO6 #2: the healer is named as the extra's caster, never as a target
+    expect(l).not.toContain(" on Healer-R");
+    expect(l).toContain("by Healer-R");
     expect(parseBurstAnsweredLine(`0:10  ${l}`)!.controlOn).toEqual([
       { target: "Opener-R" },
     ]);

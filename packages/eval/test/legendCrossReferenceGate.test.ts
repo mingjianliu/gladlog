@@ -67,7 +67,8 @@ describe("checkLegendCrossReferences", () => {
       l.startsWith('- "kick-priority-team": '),
     )!;
     expect(legend).not.toContain("kick-priority-missed");
-    expect(legend).toContain("no major defensive up or available");
+    // WO6 #8: "defenseless" is the target's own defensives
+    expect(legend).toContain("OWN major defensives up or ready");
     expect(legend).toContain("both figures are DEATH rates");
   });
 });

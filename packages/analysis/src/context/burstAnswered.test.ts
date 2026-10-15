@@ -629,6 +629,25 @@ describe("formatBurstAnsweredLines — wording", () => {
     );
   });
 
+  it("WO6 #9 (n37, b711d4ac): a pressured friendly who died does not hide another friendly's death in the window", () => {
+    const out = formatBurstAnsweredLines([
+      point({
+        anyFriendlyDeath: true,
+        pressured: { ...point().pressured!, died: true, minHpPct: 16 },
+        friendlyOutcomes: [
+          { name: "Mage-R", died: true } as never,
+          { name: "Mate-R", died: true } as never,
+        ],
+      }),
+    ]);
+    expect(out[0]!.line).toContain(
+      "— Mate-R still died; Mage-R died inside it as well",
+    );
+    const parsed = parseBurstAnsweredLine(`0:40  ${out[0]!.line}`)!;
+    expect(parsed.pressured).toBe("Mate-R");
+    expect(parsed.pressuredDied).toBe(true);
+  });
+
   it("a DIFFERENT friendly's death inside the window is stated as a fact, not as the pressured unit dying (round 3 N4, 483f)", () => {
     const out = formatBurstAnsweredLines([
       point({ anyFriendlyDeath: true, deathsInWindow: 1 }),

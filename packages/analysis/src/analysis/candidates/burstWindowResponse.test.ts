@@ -241,7 +241,7 @@ describe("burstWindowResponseEvents — the rendered facts", () => {
       leadCdId: "360194",
       casterSpec: "Assassination Rogue",
       caster: "Rogue-R",
-      extras: "Recklessness 2s later",
+      extras: "Recklessness by Warr-R (Arms Warrior) 2s later",
       pressured: "Mate-R",
       pressuredHpPct: "31",
       pressuredHpT: "45",
@@ -349,7 +349,9 @@ describe("burstWindowResponseEvents — facts.attempted (S1)", () => {
       undefined,
       attempts,
     );
-    expect(e!.facts!.attempted).toBe("pressed but rejected (under crowd control×2)");
+    expect(e!.facts!.attempted).toBe(
+      "pressed but rejected (under crowd control×2)",
+    );
   });
   it("no rejects, or no raw streams → no fact", () => {
     expect(

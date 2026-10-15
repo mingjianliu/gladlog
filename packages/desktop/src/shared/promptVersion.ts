@@ -1695,5 +1695,13 @@
  *  v396 (2026-10-15, FT, agy 40-FT-96, user 「落地」): a CC an enemy pet
  *  broke is broken by damage, not an uncleansed window (a BROKEN row's
  *  source is the breaker). 605 files: missed-cleanse +1 / −2.
+ *  v397 (2026-10-15, FT, work order 6 Part 1 — facts only): a burst's
+ *  extra another enemy pressed names that enemy; [BUFF FADED] reads the
+ *  copy on the unit the press was on and states a logged break; the
+ *  death-setup chain prints each entry's span and [HEALER CC] the free time
+ *  between runs; legends: [STATE] `dead` in the death second, [RES] as of
+ *  m:ss.0 and `cc:`, msw alsoHeldAt, "defenseless" is the target's own;
+ *  [BURST ANSWERED] names a second friendly death. 605 files: no candidate
+ *  added or removed.
  */
-export const PROMPT_VERSION = 396;
+export const PROMPT_VERSION = 397;

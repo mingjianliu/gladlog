@@ -84,7 +84,9 @@ export const STATE_LEGEND = [
   "    printed under the same `m:ss` happen during that second, AFTER the tick: a hit or a heal inside it is not in the tick's",
   "    number. A later tick shows where the unit ended up; a `low N%` on a window line is the lowest point in between.",
   `    A unit missing from a printed half is at full health or has no HP reading within ${HP_SAMPLE_RADIUS_MS / 1000} s of that second — not necessarily at`,
-  "    100%. `unit:dead` = dead at that second. A tick with no `enemies` half says nothing about the enemies.",
+  "    100%. `unit:dead` = the unit died during second m:ss or before it: the second a unit dies in reads dead from its start, so",
+  "    a line under that same second from before the death (a press, a hit) can still show the unit alive with HP left.",
+  "    A tick with no `enemies` half says nothing about the enemies.",
 ];
 
 export function formatTimeline(
@@ -376,7 +378,13 @@ export function formatTimeline(
           "    could not have covered them from there; never count it as an unused save for that death.",
         ]
       : []),
-    "  [RES] rdy: = abilities READY at that instant. `rdy:Δ` = unchanged since the previous [RES];",
+    // WO6 #6 (n34, 9e9f9565): the row is read at its floored second (GH #63)
+    // — "at that instant" let a press 0.33 s later read as made inside it
+    "  [RES] = the ledger as of m:ss.0, the START of its second: a press or a cooldown coming back later in that second is not in it.",
+    "    `cc:N/<spell>-Rs` = friendly N was under that control then, about R s of it left (`[stun]` a stun, `[trinketed]` a stun",
+    "    they pressed a PvP trinket within 1 s of, `[root]` a root — they could still cast, `[disarm]` a disarm, `[kick]` a school",
+    "    lockout); several are comma-separated.",
+    "  [RES] rdy: = abilities READY then. `rdy:Δ` = unchanged since the previous [RES];",
     // res-readiness F-C3 (ruling res R2 = A): off cooldown, but not payable —
     // legended only when a row carries the tag (the F-C16 convention)
     ...(noManaRendered

@@ -3111,6 +3111,11 @@ const INDEX: PredicateRow[] = [
   },
   {
     file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "auraBreakAtRemoval",
+    mod: ccTrinketAnalysis,
+  },
+  {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
     symbol: "formatCcLoggedEnd",
     mod: ccTrinketAnalysis,
   },

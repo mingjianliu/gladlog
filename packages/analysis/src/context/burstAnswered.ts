@@ -105,7 +105,9 @@ export const BURST_ANSWERED_POSITIONING_XREF =
   " — not necessarily a POSITIONING line's burst target, which is the one under the most damage over its own span";
 
 export const BURST_ANSWERED_CONTROL_RULE_LEGEND =
-  "    The pressured player (named before `bottomed at`) = of the friendlies the burst's casters hit inside the window (a hit stopped by an immunity counts), the one whose HP went lowest"+BURST_ANSWERED_POSITIONING_XREF+". A control counts as an answer only when it went on an enemy who dealt damage to the pressured player inside the burst window, or whose hit on them an immunity stopped (that enemy's pets count as that enemy); a control on any other enemy — an enemy healer who only pressed a cooldown — is not listed as the answer, and neither is one whose target neither damaged that player nor had a hit on them stopped by an immunity in the window, even if the control is why.";
+  "    The pressured player (named before `bottomed at`) = of the friendlies the burst's casters hit inside the window (a hit stopped by an immunity counts), the one whose HP went lowest" +
+  BURST_ANSWERED_POSITIONING_XREF +
+  ". A control counts as an answer only when it went on an enemy who dealt damage to the pressured player inside the burst window, or whose hit on them an immunity stopped (that enemy's pets count as that enemy); a control on any other enemy — an enemy healer who only pressed a cooldown — is not listed as the answer, and neither is one whose target neither damaged that player nor had a hit on them stopped by an immunity in the window, even if the control is why.";
 
 /** Legend lines, emitted only when at least one `[BURST ANSWERED]` line is.
  * The second one is load-bearing: with `BURST_ANSWERED_CAP` = 2 the list is
@@ -115,6 +117,9 @@ export const BURST_ANSWERED_LEGEND = [
   `  ${BURST_ANSWERED_TAG} = an enemy burst window the team DID answer inside ${BURST_RESPONSE_WINDOW_SEC}s — context, not a mistake.`,
   `    At most ${BURST_ANSWERED_CAP} of them are listed per round (the most dangerous first), so this is NOT a full list of answered bursts.`,
   BURST_ANSWERED_CONTROL_RULE_LEGEND,
+  // WO6 #2 (n48): an extra names its own caster when another enemy pressed it
+  "    `enemy opened X (+Y; Z by <enemy> Ns later) (<opener>)` = the other cooldowns inside the window: Y is the opener's own, Z was",
+  "    pressed by that other enemy, N s after X when marked so.",
   // FT-T03 (ruling D7): the bottom is off the grid
   "    `bottomed at N% at m:ss` = the lowest HP the log shows for that player inside the window, at the second it happened (the true",
   "    minimum between the ticks: it can sit below the [STATE] number of that second).",
@@ -132,7 +137,9 @@ const BURST_ANSWERED_LINE_RE = new RegExp(
     String.raw`(?:in (\d+\.\d)s|(\d+\.\d)s before it opened); ` +
     String.raw`(\S+) bottomed at (\d+)%(?: at (\d+):(\d{2}))?` +
     // `a friendly died inside it` when the dead unit has no name
-    String.raw`(?: — (.+?) (${BURST_ANSWERED_STILL_DIED}|died inside it))?$`,
+    String.raw`(?: — (.+?) (${BURST_ANSWERED_STILL_DIED}|died inside it))?` +
+    // WO6 #9: another friendly who died in it besides a pressured one who did
+    String.raw`(?:; (\S+|a friendly) died inside it as well)?$`,
 );
 export interface ParsedBurstAnsweredLine {
   /** the line's own second (the window's opening) */
@@ -413,7 +420,10 @@ export function formatBurstAnsweredLines(
     .map((p) => {
       // Only the CDs inside the response horizon this line talks about, each
       // offset from the opener — the same helper as `burstWindowResponseEvents`.
-      const extras = burstExtrasLabel(p);
+      const extras = burstExtrasLabel(
+        p,
+        labels ? (c) => labels.enemy(c.casterName) : undefined,
+      );
       const extrasPart = extras ? ` (+${extras})` : "";
       const first = creditedAnswer(p)!;
       // Latency is an INTERVAL between two instants, not a grid-anchored
@@ -445,8 +455,16 @@ export function formatBurstAnsweredLines(
             ? friendly(otherDeathName)
             : "a friendly"
           : null;
+      // WO6 #9 (n37, b711d4ac): the burst killed the mage at 4:33 and the
+      // pressured rogue at 4:39 — the line named only the rogue's death
+      const otherDiedToo = pressured.died
+        ? p.friendlyOutcomes.find((f) => f.died && f.name !== pressured.name)
+        : undefined;
       const diedPart = pressured.died
-        ? ` — ${friendly(pressured.name)} ${BURST_ANSWERED_STILL_DIED}`
+        ? ` — ${friendly(pressured.name)} ${BURST_ANSWERED_STILL_DIED}` +
+          (otherDiedToo
+            ? `; ${friendly(otherDiedToo.name)} died inside it as well`
+            : "")
         : otherDeath
           ? ` — ${otherDeath} died inside it`
           : "";

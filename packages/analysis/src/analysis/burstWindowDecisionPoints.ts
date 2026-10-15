@@ -28,10 +28,7 @@
  * live to see. `tSec`/`endSec` are the seconds `fmtTime` will display.
  */
 import { type ICombatUnit } from "@gladlog/parser-compat";
-import {
-  damageTakenBetween,
-  hitByAttackers,
-} from "../utils/burstHit";
+import { damageTakenBetween, hitByAttackers } from "../utils/burstHit";
 
 import { castAndEffectIds, isCastOrEffect } from "../data/castEffectAuras";
 import { HEALING_VERDICTS } from "../data/healingVerdicts";
@@ -927,17 +924,31 @@ export function controlLandedResponses(
  * facts separator the gates split on. One helper for the candidate and the
  * [BURST ANSWERED] line.
  */
-export function burstExtrasLabel(p: {
-  tSec: number;
-  extraCds: ReadonlyArray<{ spellName: string; castSec: number }>;
-}): string {
+export function burstExtrasLabel(
+  p: {
+    tSec: number;
+    leadCd: Pick<BurstCdRef, "casterName">;
+    extraCds: ReadonlyArray<
+      Pick<BurstCdRef, "spellName" | "castSec" | "casterName" | "casterSpec">
+    >;
+  },
+  // WO6 #2 (n48, e10c6bea): an extra another enemy pressed names that enemy —
+  // without it the rogue's Kingsbane read as the warlock's, who opened. An
+  // extra of the opener's own stays bare. Without labels it reads like the
+  // menu's `facts.caster (facts.casterSpec)`.
+  casterLabel: (c: Pick<BurstCdRef, "casterName" | "casterSpec">) => string = (
+    c,
+  ) => `${c.casterName} (${c.casterSpec})`,
+): string {
   return p.extraCds
     .filter((c) => c.castSec <= p.tSec + BURST_RESPONSE_WINDOW_SEC)
-    .map((c) =>
-      c.castSec > p.tSec
-        ? `${c.spellName} ${c.castSec - p.tSec}s later`
-        : c.spellName,
-    )
+    .map((c) => {
+      const by =
+        c.casterName !== p.leadCd.casterName ? ` by ${casterLabel(c)}` : "";
+      return c.castSec > p.tSec
+        ? `${c.spellName}${by} ${c.castSec - p.tSec}s later`
+        : `${c.spellName}${by}`;
+    })
     .join("; ");
 }
 

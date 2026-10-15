@@ -1387,30 +1387,21 @@ export interface ICcRemovalCause {
 }
 
 /**
- * Why a CC on `holder` that was removed at `removeMs` ended — only from a
- * logged cause, else undefined (a CC that ran out, or one closed at the
- * round end, has none). In order: the removal event itself is a break
- * (`SPELL_AURA_BROKEN_SPELL`: its source is the breaker and its extra spell
- * the breaking spell — 141470d0's Polymorph broken by the owner's Fire
- * Breath; `SPELL_AURA_BROKEN`: a melee swing); the holder's own PvP trinket
- * or CC-break press that ended it (`castEndedCcWindow`, and `breakRemovesCc`
- * for a break other than the trinket — the predicates the [CC ON TEAM] /
- * [ENEMY TRINKET] lines use; a break press needs the CC cut short of
- * `officialEndMs`, as the [CC ON ENEMY] break line does); a `SPELL_DISPEL` of
- * this aura on the holder within the dispel pairing tolerance
- * (`ALLY_DISPEL_MATCH_TOLERANCE_S`).
+ * The break that ended an aura application on `holder` removed at
+ * `removeMs`: the `SPELL_AURA_BROKEN_SPELL` / `SPELL_AURA_BROKEN` line its
+ * REMOVED superseded, or the one right after it in the same ms, or a BROKEN
+ * line that is the removal itself. `null` = no break line ended it;
+ * `undefined` = a BROKEN_SPELL line did, naming no spell. One reader for a
+ * CC (`ccRemovalCause`) and for a buff (`extractOwnerCDBuffExpiry`, WO6 #3:
+ * Mass Invisibility broken by enemy damage).
  */
-export function ccRemovalCause(
-  holder: ICombatUnit,
+export function auraBreakAtRemoval(
+  holder: Pick<ICombatUnit, "auraEvents">,
   spellId: string,
   applyMs: number,
   removeMs: number,
-  /** the CC's official end at its DR step; unknown → no claim either way */
-  officialEndMs?: number,
-  /** the aura's caster: with two casters' copies of one spell ending in the
-   * same ms, only this one's REMOVED is read (codex review of step 3c) */
   srcUnitId?: string,
-): ICcRemovalCause | undefined {
+): (ICcRemovalCause & { kind: "broken" }) | undefined | null {
   // The break is the BROKEN line that ended this application: one its own
   // REMOVED superseded (`auraBreaksBeforeRemoved` — tied to that REMOVED in
   // log order, so a break of the PREVIOUS application in the very ms this
@@ -1488,6 +1479,42 @@ export function ccRemovalCause(
       byName: brk.srcUnitName,
     };
   }
+  return null;
+}
+
+/**
+ * Why a CC on `holder` that was removed at `removeMs` ended — only from a
+ * logged cause, else undefined (a CC that ran out, or one closed at the
+ * round end, has none). In order: the removal event itself is a break
+ * (`SPELL_AURA_BROKEN_SPELL`: its source is the breaker and its extra spell
+ * the breaking spell — 141470d0's Polymorph broken by the owner's Fire
+ * Breath; `SPELL_AURA_BROKEN`: a melee swing); the holder's own PvP trinket
+ * or CC-break press that ended it (`castEndedCcWindow`, and `breakRemovesCc`
+ * for a break other than the trinket — the predicates the [CC ON TEAM] /
+ * [ENEMY TRINKET] lines use; a break press needs the CC cut short of
+ * `officialEndMs`, as the [CC ON ENEMY] break line does); a `SPELL_DISPEL` of
+ * this aura on the holder within the dispel pairing tolerance
+ * (`ALLY_DISPEL_MATCH_TOLERANCE_S`).
+ */
+export function ccRemovalCause(
+  holder: ICombatUnit,
+  spellId: string,
+  applyMs: number,
+  removeMs: number,
+  /** the CC's official end at its DR step; unknown → no claim either way */
+  officialEndMs?: number,
+  /** the aura's caster: with two casters' copies of one spell ending in the
+   * same ms, only this one's REMOVED is read (codex review of step 3c) */
+  srcUnitId?: string,
+): ICcRemovalCause | undefined {
+  const broken = auraBreakAtRemoval(
+    holder,
+    spellId,
+    applyMs,
+    removeMs,
+    srcUnitId,
+  );
+  if (broken !== null) return broken;
   const window = { applyMs, removeMs };
   const trinket = pvpTrinketUses(holder).find((u) =>
     castEndedCcWindow(window, u.atMs),

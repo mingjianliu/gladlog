@@ -1157,17 +1157,37 @@ describe("burstWindowDecisionPoints — where a control answer landed (T12 ⑧ i
 });
 
 describe("burstExtrasLabel", () => {
+  const hunter = { casterName: "Hunter", casterSpec: "MHunter" };
+  const druid = { casterName: "Druid", casterSpec: "BDruid" };
+  const rogue = { casterName: "Gematria", casterSpec: "ARogue" };
   it("marks each extra pressed after the opener and drops those past the horizon", () => {
     expect(
       burstExtrasLabel({
         tSec: 63,
+        leadCd: { casterName: "Hunter" },
         extraCds: [
-          { spellName: "Trueshot", castSec: 63 },
-          { spellName: "Incarnation: Chosen of Elune", castSec: 69 },
-          { spellName: "Avatar", castSec: 84 },
+          { spellName: "Trueshot", castSec: 63, ...hunter },
+          { spellName: "Incarnation: Chosen of Elune", castSec: 69, ...druid },
+          { spellName: "Avatar", castSec: 84, ...hunter },
         ],
       }),
-    ).toBe("Trueshot; Incarnation: Chosen of Elune 6s later");
+    ).toBe("Trueshot; Incarnation: Chosen of Elune by Druid (BDruid) 6s later");
+  });
+
+  it("WO6 #2 (n48): an extra another enemy pressed names that enemy, through the caller's label", () => {
+    expect(
+      burstExtrasLabel(
+        {
+          tSec: 156,
+          leadCd: { casterName: "Akuro" },
+          extraCds: [
+            { spellName: "Kingsbane", castSec: 156, ...rogue },
+            { spellName: "Deathmark", castSec: 164, ...rogue },
+          ],
+        },
+        (c) => `3(${c.casterSpec})`,
+      ),
+    ).toBe("Kingsbane by 3(ARogue); Deathmark by 3(ARogue) 8s later");
   });
 });
 

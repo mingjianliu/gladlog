@@ -93,7 +93,8 @@ describe("crisis-external F-AS1 / F-D2 — the lock chain and the free time", ()
     const [e] = deathSetupEvents(parts);
     expect(e!.facts["chainFrom"]).toBe("104");
     expect(e!.facts["chain"]).toBe(
-      "Blinding Sleet 104; Psychic Scream 107.5; Polymorph 111.9; Frost Nova (root) 112; Holy Word: Chastise 117.1",
+      // WO6 #4: each entry with its span, so the 116.4–117.1 gap shows
+      "Blinding Sleet 104-108; Psychic Scream 107.5-112; Polymorph 111.9-116.4; Frost Nova (root) 112-116; Holy Word: Chastise 117.1-120.1",
     );
   });
 
@@ -112,7 +113,9 @@ describe("crisis-external F-AS1 / F-D2 — the lock chain and the free time", ()
       },
     });
     expect(e!.facts["chainFrom"]).toBe("50");
-    expect(e!.facts["chain"]).toBe("Deep Breath (own flight) 50; Kidney Shot 56");
+    expect(e!.facts["chain"]).toBe(
+      "Deep Breath (own flight) 50-56; Kidney Shot 56-60",
+    );
   });
 
   it("lockedS counts the window's cannot-cast seconds once; freeBeforeDeathS the gap after the last run", () => {

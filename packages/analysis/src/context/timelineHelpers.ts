@@ -23,11 +23,15 @@ import { buffFullDurationForCaster } from "../utils/buffDuration";
 import {
   cannotCastIntervalsForSpells,
   deathLockChain,
+  deathLockChainText,
   enemySourceIds,
   freeMsBefore,
   namedCannotCastIntervals,
 } from "../utils/cannotCastIntervals";
-import { IPlayerCCTrinketSummary } from "../utils/ccTrinketAnalysis";
+import {
+  auraBreakAtRemoval,
+  IPlayerCCTrinketSummary,
+} from "../utils/ccTrinketAnalysis";
 import { isControlledPlayerFlags } from "../utils/charmedPlayer";
 import {
   cdCanHelpAnotherUnit,
@@ -369,11 +373,15 @@ export interface ICDExpiryEvent {
     | "dispelled"
     | "stolen"
     | "target_death"
+    | "broken"
     | "target_debuff_off"
     | "absorbed"
     | "round_end";
   /** cause dispelled / stolen: who did it, with what */
   endedBy?: { unitId: string; unitName: string; spellName: string };
+  /** cause broken: the breaking spell and, when the BROKEN line names one,
+   * the breaker (`auraBreakAtRemoval`) */
+  brokenBy?: { spellName: string; unitId?: string; unitName?: string };
   /** cause target_debuff_off: the enemy the debuff came off */
   lostOn?: { unitId: string; unitName: string };
   /** What this application absorbed (the SPELL_ABSORBED lines naming it) and
@@ -581,13 +589,38 @@ export function extractOwnerCDBuffExpiry(
         i + 1 < cd.casts.length
           ? matchStartMs + cd.casts[i + 1]!.timeSeconds * 1000
           : Number.POSITIVE_INFINITY;
+      const windowEndMs = Math.max(
+        nextCastMs,
+        castMs + (duration + BUFF_EXPIRY_PAIRING_TOLERANCE_S) * 1000,
+      );
       const withinWindow =
         removalIndex < removalTimestampsMs.length &&
-        removalTimestampsMs[removalIndex] <
-          Math.max(
-            nextCastMs,
-            castMs + (duration + BUFF_EXPIRY_PAIRING_TOLERANCE_S) * 1000,
-          );
+        removalTimestampsMs[removalIndex] < windowEndMs;
+      // WO6 #3 (n45, dfcccbf2): a buff one press put on several friendlies
+      // ends with the copy on the unit it was pressed on — the target the
+      // cast names (Power Infusion on a teammate: theirs, not the priest's
+      // talent copy), or the owner for a press with no friendly target
+      // (Mass Invisibility: the mage's own, not the first teammate's copy to
+      // go). That unit's copy inside this press's window wins; with none,
+      // the first removal stays this press's end.
+      if (withinWindow) {
+        const holderId =
+          (cast.targetName !== undefined
+            ? friends.find((f) => f.name === cast.targetName)?.id
+            : undefined) ??
+          owner?.id ??
+          ownerId;
+        for (
+          let j = removalIndex;
+          j < removals.length && removals[j]!.ms < windowEndMs;
+          j++
+        ) {
+          if (removals[j]!.unitId === holderId) {
+            removalIndex = j;
+            break;
+          }
+        }
+      }
 
       let removedFromId: string | undefined;
       if (withinWindow) {
@@ -663,6 +696,7 @@ export function extractOwnerCDBuffExpiry(
       let endedBy: ICDExpiryEvent["endedBy"];
       let lostOn: ICDExpiryEvent["lostOn"];
       let absorb: ICDExpiryEvent["absorb"];
+      let brokenBy: ICDExpiryEvent["brokenBy"];
       let dispelUnclear = false;
       if (!isEstimated && holder) {
         const span = {
@@ -748,6 +782,27 @@ export function extractOwnerCDBuffExpiry(
             cause = "absorbed";
           }
         }
+        // WO6 #3 (n45): a BROKEN line ended it — enemy damage broke the
+        // aura (Mass Invisibility broken by Refining Fire), which the log
+        // names: the shared break reader of the CC lines
+        if (cause === "ended_early" || cause === "expired") {
+          const brk = auraBreakAtRemoval(
+            holder,
+            endAuraId,
+            span.fromMs,
+            span.removedMs,
+            ownerId,
+          );
+          if (brk) {
+            cause = "broken";
+            brokenBy = {
+              spellName: brk.spellName,
+              ...(brk.byUnitId && brk.byName
+                ? { unitId: brk.byUnitId, unitName: brk.byName }
+                : {}),
+            };
+          }
+        }
       }
 
       // F02b: the round ended on it. Nothing logged at or after the round's
@@ -772,6 +827,7 @@ export function extractOwnerCDBuffExpiry(
       result.push({
         ...(endedBy ? { endedBy } : {}),
         ...(lostOn ? { lostOn } : {}),
+        ...(brokenBy ? { brokenBy } : {}),
         ...(absorb ? { absorb } : {}),
         ...(dispelUnclear ? { dispelUnclear: true as const } : {}),
         spellId: cd.spellId,
@@ -1841,13 +1897,14 @@ export function buildKillSequenceBlock(params: {
         // the enemy healer has no roster label here and would print a bare
         // character name
         if (healerSummary && lockChain.links.length > 0) {
-          const names = lockChain.links
-            .map((iv) => getEnglishSpellName(iv.spellId))
-            .filter((n, i, all) => i === 0 || all[i - 1] !== n);
+          // WO6 #4 (n25, 82a2d681): two runs are not one chain
+          const chainText = deathLockChainText(lockChain, (iv) =>
+            getEnglishSpellName(iv.spellId),
+          );
           killSeqEntries.push({
             timeSeconds: (lockChain.links[0]!.from - matchStartMs) / 1000,
             label: "[HEALER CC]",
-            text: `${pid(dyingHealer.name)} (${specToString(dyingHealer.spec)}) ← ${names.join(" → ")} (locked ${(Math.round(lockChain.lockedMs / 100) / 10).toFixed(1)} of the last ${KILL_SEQ_LOCK_LOOKBACK_S}s)`,
+            text: `${pid(dyingHealer.name)} (${specToString(dyingHealer.spec)}) ← ${chainText} (locked ${(Math.round(lockChain.lockedMs / 100) / 10).toFixed(1)} of the last ${KILL_SEQ_LOCK_LOOKBACK_S}s)`,
           });
         } else if (healerSummary) {
           const relevantCC = [...healerSummary.ccInstances]

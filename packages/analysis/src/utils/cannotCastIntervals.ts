@@ -997,6 +997,36 @@ export function deathLockChain<
 }
 
 /**
+ * `deathLockChain`'s links as one line of text: links of one cannot-cast run
+ * joined by " → " (a repeat of the previous name dropped), and the free time
+ * between two runs printed where it falls — `Hex … 4.5s free … Polymorph`.
+ * WO6 #4 (n25, 82a2d681): two runs 4.5 s apart read as one unbroken chain.
+ */
+export function deathLockChainText<T extends { from: number }>(
+  chain: {
+    runs: ReadonlyArray<{ from: number; to: number }>;
+    links: readonly T[];
+  },
+  nameOf: (link: T) => string,
+): string {
+  const runOf = (iv: T) =>
+    chain.runs.findIndex((r) => iv.from >= r.from && iv.from < r.to);
+  let text = "";
+  let prev: { name: string; run: number } | undefined;
+  for (const iv of chain.links) {
+    const name = nameOf(iv);
+    const run = runOf(iv);
+    if (!prev) text = name;
+    else if (prev.run !== run && run >= 0 && prev.run >= 0) {
+      const gapS = (chain.runs[run]!.from - chain.runs[prev.run]!.to) / 1000;
+      text += ` … ${(Math.round(gapS * 10) / 10).toFixed(1)}s free … ${name}`;
+    } else if (prev.name !== name) text += ` → ${name}`;
+    prev = { name, run };
+  }
+  return text;
+}
+
+/**
  * Free milliseconds just before `atMs`: `atMs` − the end of the last
  * cannot-cast run that starts before it, 0 when that run covers `atMs`, or
  * undefined when no run starts before it (never a `Math.max` over nothing).

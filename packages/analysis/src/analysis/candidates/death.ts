@@ -132,11 +132,17 @@ function lockChainFacts(
     DEATH_CC_LOOKBACK_S * 1000,
   );
   const facts: Record<string, string> = {};
+  // WO6 #4 (n25 82a2d681, n15 3df6ccf8): each entry prints its span — with
+  // start times alone two runs 4.5 s apart (Hex 162.6; Polymorph 168.1) read
+  // as one unbroken chain, and a root running on under the next CC read as
+  // a gap
+  const span = (fromS: number, toS: number) =>
+    `${fmtFactTime(fromS)}-${fmtFactTime(toS)}`;
   const chain: Array<{ at: number; text: string }> = links.map((iv) => {
     const at = (iv.from - start) / 1000;
     return {
       at,
-      text: `${getEnglishSpellName(iv.spellId)} ${fmtFactTime(at)}`,
+      text: `${getEnglishSpellName(iv.spellId)} ${span(at, (iv.to - start) / 1000)}`,
     };
   });
   // agy 40-FT-86: the unit's own flight counts toward the runs (user ruling
@@ -152,7 +158,7 @@ function lockChainFacts(
     const at = (iv.from - start) / 1000;
     chain.push({
       at,
-      text: `${getEnglishSpellName(iv.spellId)} (own flight) ${fmtFactTime(at)}`,
+      text: `${getEnglishSpellName(iv.spellId)} (own flight) ${span(at, (iv.to - start) / 1000)}`,
     });
   }
   for (const r of cc.roots ?? []) {
@@ -162,7 +168,7 @@ function lockChainFacts(
     )
       chain.push({
         at: r.atSeconds,
-        text: `${r.spellName} (root) ${fmtFactTime(r.atSeconds)}`,
+        text: `${r.spellName} (root) ${span(r.atSeconds, r.atSeconds + r.durationSeconds)}`,
       });
   }
   chain.sort((a, b) => a.at - b.at);
