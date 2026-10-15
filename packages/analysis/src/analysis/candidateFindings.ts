@@ -3800,8 +3800,10 @@ function teamPlayEvents(
           rawStreams,
           // #29 (2026-08-17): feeds filterIntentGuardEvidence's gcd-locked
           // exclusion — the owner's own successful casts, re-based to
-          // seconds the same way every other tSeconds fact is.
-          (owner.spellCastEvents ?? []).map(
+          // seconds the same way every other tSeconds fact is. Presses only
+          // (`ownerPressEvents`; agy 40-FT-93: a Stasis replay read as a
+          // GCD lock threw a real attempt away)
+          ownerPressEvents(owner as any).map(
             (e: any) => (e.logLine.timestamp - combat.startTime) / 1000,
           ),
           ownerAct.couldRespond,
@@ -4359,7 +4361,8 @@ function teamPlayEvents(
                     isSpendableDefensiveCd(cd) && cdCanHelpAnotherUnit(cd),
                 ),
                 // #29's gcd-locked exclusion input, as cd-hoarded passes it
-                ownCastSuccessSeconds: (owner.spellCastEvents ?? []).map(
+                // (presses only, `ownerPressEvents` — agy 40-FT-93)
+                ownCastSuccessSeconds: ownerPressEvents(owner as any).map(
                   (e: any) => (e.logLine.timestamp - combat.startTime) / 1000,
                 ),
               }
