@@ -1709,5 +1709,9 @@
  *  stays for the next); the death-setup chain lists kick lockouts and
  *  [HEALER CC] counts a lockout between two CCs as locked, not free. 605
  *  files: no candidate added or removed.
+ *  v399 (2026-10-15, FT, agy 40-FT-99 — facts only): a buff pressed again
+ *  on the same unit while up was refreshed — no [BUFF FADED] line of its
+ *  own, and the copy that ends is the refreshing press's. 605 files: no
+ *  candidate added or removed.
  */
-export const PROMPT_VERSION = 398;
+export const PROMPT_VERSION = 399;

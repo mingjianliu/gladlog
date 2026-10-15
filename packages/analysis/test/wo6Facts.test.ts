@@ -230,6 +230,79 @@ describe("agy 40-FT-98 #1 — two presses on two friendlies keep their own copie
   });
 });
 
+describe("agy 40-FT-99 — a refresh's removal is the refreshing press's", () => {
+  const IB = "102342"; // Ironbark, 12 s
+  it("B at 10 and again at 15 (no REMOVED between), gone at 22: the 15 s press reads it, the refreshed 10 s press has no end", () => {
+    const owner = makeUnit("player-1", {
+      name: "Druid",
+      class: CombatUnitClass.Druid,
+      spec: CombatUnitSpec.Druid_Restoration,
+      info: {},
+      spellCastEvents: [
+        makeSpellCastEvent(IB, at(10), "player-2"),
+        makeSpellCastEvent(IB, at(15), "player-2"),
+      ],
+    });
+    const b = makeUnit("player-2", {
+      name: "B",
+      info: {},
+      auraEvents: [
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_APPLIED,
+          IB,
+          at(10),
+          "player-1",
+          "player-2",
+          "BUFF",
+        ),
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_REFRESH,
+          IB,
+          at(15),
+          "player-1",
+          "player-2",
+          "BUFF",
+        ),
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_REMOVED,
+          IB,
+          at(22),
+          "player-1",
+          "player-2",
+          "BUFF",
+        ),
+      ],
+    });
+    const events = extractOwnerCDBuffExpiry(
+      [
+        {
+          spellId: IB,
+          spellName: "Ironbark",
+          tag: "External",
+          casts: [
+            { timeSeconds: 10, targetName: "B" },
+            { timeSeconds: 15, targetName: "B" },
+          ],
+          cooldownSeconds: 45,
+          neverUsed: false,
+          availableWindows: [],
+        },
+      ] as never,
+      "player-1",
+      [owner, b] as never,
+      T0,
+      owner as never,
+    );
+    expect(
+      events.map((e) => [e.castAtSeconds, e.expiresAtSeconds, e.isEstimated]),
+    ).toEqual([
+      // the 10 s press was refreshed at 15 s: its buff did not fade, so no
+      // line ("expired, estimated" at 22 would be made up)
+      [15, 22, false],
+    ]);
+  });
+});
+
 describe("WO6 #4 (n25) — [HEALER CC]: two cannot-cast runs are not one chain", () => {
   const iv = (from: number, to: number, name: string) => ({
     from: at(from),
@@ -257,6 +330,24 @@ describe("WO6 #4 (n25) — [HEALER CC]: two cannot-cast runs are not one chain",
     expect(deathLockChainText(chain, (l) => l.name)).toBe(
       "Psychic Scream … 6.0s free + 4.0s kick lockout / own flight … Polymorph",
     );
+  });
+  it("agy 40-FT-99: a link outside every run claims no continuity", () => {
+    expect(
+      deathLockChainText(
+        {
+          runs: [
+            { from: 100_000, to: 104_000 },
+            { from: 110_000, to: 115_000 },
+          ],
+          links: [
+            { from: 100_000, name: "Psychic Scream" },
+            { from: 106_000, name: "Orphan" },
+            { from: 110_000, name: "Polymorph" },
+          ],
+        },
+        (l) => l.name,
+      ),
+    ).toBe("Psychic Scream … Orphan … Polymorph");
   });
   it("one run reads as before (Sleet → Scream → Polymorph)", () => {
     const chain = deathLockChain(

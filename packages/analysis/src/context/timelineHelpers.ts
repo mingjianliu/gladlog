@@ -601,27 +601,53 @@ export function extractOwnerCDBuffExpiry(
       // cast names (Power Infusion on a teammate: theirs, not the priest's
       // talent copy), or the owner for a press with no friendly target
       // (Mass Invisibility: the mage's own, not the first teammate's copy to
-      // go). That unit's first copy to end inside this press's window —
-      // and before the next press on that same unit, whose copy it would
-      // be — wins; with none, the first removal stays this press's end.
+      // go). That unit's first copy to end inside this press's window wins;
+      // with none, the first removal stays this press's end.
       const holderId = holderOf(cast);
-      let holderEndMs = windowEndMs;
-      for (let k = i + 1; k < cd.casts.length; k++) {
-        if (holderOf(cd.casts[k]!) !== holderId) continue;
-        holderEndMs = Math.min(
-          windowEndMs,
-          matchStartMs + cd.casts[k]!.timeSeconds * 1000,
-        );
-        break;
-      }
+      // agy 40-FT-99: a removal on a unit at or after a LATER press on that
+      // same unit is that press's (a refresh with no REMOVED between: the
+      // copy that ends is the refreshed one) — neither the target search
+      // nor the fallback below takes it (GH #34's own rule, "a removal is
+      // this cast's as long as it lands before the next cast", per unit)
+      const claimedByLater = (r: (typeof removals)[number]) => {
+        for (let k = i + 1; k < cd.casts.length; k++) {
+          const kMs = matchStartMs + cd.casts[k]!.timeSeconds * 1000;
+          if (kMs > r.ms) return false;
+          if (holderOf(cd.casts[k]!) === r.unitId) return true;
+        }
+        return false;
+      };
+      // A press pressed again on the same unit while its copy was still up
+      // (no removal of that copy in between, inside its length) was
+      // refreshed: its buff did not fade — the refreshing press's line
+      // says when it did (Ice Barrier at 0:43 and 0:49, gone at 1:07: no
+      // "expired, estimated" for the 0:43 press)
+      const nextOnHolder =
+        holderId === undefined
+          ? undefined
+          : cd.casts.slice(i + 1).find((c) => holderOf(c) === holderId);
+      const nextOnHolderMs =
+        nextOnHolder === undefined
+          ? undefined
+          : matchStartMs + nextOnHolder.timeSeconds * 1000;
+      if (
+        nextOnHolderMs !== undefined &&
+        nextOnHolderMs < castMs + duration * 1000 &&
+        !removals.some(
+          (r) =>
+            r.unitId === holderId && r.ms >= castMs && r.ms < nextOnHolderMs,
+        )
+      )
+        continue;
       let pick = -1;
       let firstOpen = -1;
       for (let j = 0; j < removals.length; j++) {
         const r = removals[j]!;
         if (used[j] || r.ms < castMs) continue;
         if (r.ms >= windowEndMs) break;
+        if (claimedByLater(r)) continue;
         if (firstOpen < 0) firstOpen = j;
-        if (r.unitId === holderId && r.ms < holderEndMs) {
+        if (r.unitId === holderId) {
           pick = j;
           break;
         }

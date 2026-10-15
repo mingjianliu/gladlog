@@ -1017,7 +1017,11 @@ export function deathLockChainText<T extends { from: number }>(
     const name = nameOf(iv);
     const run = runOf(iv);
     if (!prev) text = name;
-    else if (prev.run !== run && run >= 0 && prev.run >= 0) {
+    // agy 40-FT-99: a link outside every run (not produced by
+    // deathLockChain, which keeps only links inside a run) claims no
+    // continuity either way
+    else if (run < 0 || prev.run < 0) text += ` … ${name}`;
+    else if (prev.run !== run) {
       // agy 40-FT-98 #2: a run between the two with no CC in it (a kick's
       // school lockout, the unit's own flight) is locked time, not free
       let freeMs = 0;
