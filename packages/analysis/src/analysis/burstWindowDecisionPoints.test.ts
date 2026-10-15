@@ -634,6 +634,25 @@ describe("burstWindowDecisionPoints — the pressured friendly (correction 1)", 
     expect(pts[0]!.pressured?.minHpPct).toBe(25);
   });
 
+  it("WO6 Part 2 n37 (b711d4ac): a friendly the burst hit who DIED in the window is pressured, over a lower-HP survivor", () => {
+    // F2 is hit, sits at 60 % on the grid until it dies at 15.4 s (its death
+    // second reads nothing); F1 survives at 25 %
+    const pts = burstWindowDecisionPoints(
+      combat(
+        twoFriendlies(
+          {},
+          {
+            damageIn: steadyDamage(10, 15),
+            advancedActions: hpTrack("F2", 0, 14, 60),
+            deathRecords: [{ timestamp: T0 + 15_400 }],
+          },
+        ),
+      ),
+    );
+    expect(pts[0]!.pressured?.name).toBe("Mate-R");
+    expect(pts[0]!.pressured?.died).toBe(true);
+  });
+
   it("a teammate's ready wall does NOT make the window feasible — it cannot reach the pressured friendly", () => {
     // Ironbark on the healer is a personal wall: ready, but useless to F1.
     const pts = burstWindowDecisionPoints(

@@ -1713,5 +1713,9 @@
  *  on the same unit while up was refreshed — no [BUFF FADED] line of its
  *  own, and the copy that ends is the refreshing press's. 605 files: no
  *  candidate added or removed.
+ *  v400 (2026-10-15, FT, work order 6 Part 2 n37, user 「按你的建议走」): a
+ *  burst's pressured friendly is the one the burst hit who died inside the
+ *  window (the first to die), else the lowest HP. 605 files:
+ *  slow-defensive-response −1.
  */
-export const PROMPT_VERSION = 399;
+export const PROMPT_VERSION = 400;

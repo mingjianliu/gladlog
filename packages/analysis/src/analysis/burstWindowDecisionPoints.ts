@@ -1632,12 +1632,25 @@ export function burstWindowDecisionPoints(
           )
           .map((f) => f.id),
       );
-      // lowest grid-sampled HP wins; equal HP goes to whoever took more damage
+      // WO6 Part 2 n37 (user 2026-10-15, 「按你的建议走」): a friendly the burst hit who DIED inside
+      // the window beats every survivor — its grid minimum stops before its
+      // death second, so 37 % on the grid (b711d4ac's mage, dead at 4:33)
+      // lost to a survivor's 29.5 %; two deaths: the earlier one. Then the
+      // lowest grid-sampled HP; equal HP goes to whoever took more damage
+      const deathMsOf = (unitId: string) => {
+        const f = friendlies.find((u) => u.id === unitId);
+        const ds = ((f?.deathRecords ?? []) as any[])
+          .map((d) => d.timestamp as number)
+          .filter((t) => t >= tMs && t < outcomeEndMs + 1000);
+        return ds.length > 0 ? Math.min(...ds) : Infinity;
+      };
       const pressured =
         [...friendlyOutcomes]
           .filter((f) => f.minHpPct !== null && hitByBurst.has(f.unitId))
           .sort(
             (a, b) =>
+              Number(b.died) - Number(a.died) ||
+              deathMsOf(a.unitId) - deathMsOf(b.unitId) ||
               a.minHpPct! - b.minHpPct! ||
               (dmgByUnitId.get(b.unitId) ?? 0) -
                 (dmgByUnitId.get(a.unitId) ?? 0),
