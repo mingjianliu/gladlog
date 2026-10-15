@@ -16,6 +16,7 @@ import {
   deathLockChain,
   deathLockChainText,
 } from "../src/utils/cannotCastIntervals";
+import { stasisReleasePressesMs } from "../src/utils/combatStates";
 import {
   makeAuraEvent,
   makeSpellCastEvent,
@@ -189,5 +190,65 @@ describe("WO6 #4 (n25) — [HEALER CC]: two cannot-cast runs are not one chain",
     expect(deathLockChainText(chain, (l) => l.name)).toBe(
       "Blinding Sleet → Psychic Scream → Polymorph",
     );
+  });
+});
+
+describe("WO6 #5 (n9) — the Stasis release is a press", () => {
+  const READY = "370562";
+  const evoker = (removedS: number, casts: Array<[string, number]>) =>
+    makeUnit("player-1", {
+      name: "Evoker",
+      class: CombatUnitClass.Evoker,
+      spec: CombatUnitSpec.Evoker_Preservation,
+      info: {},
+      auraEvents: [
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_APPLIED,
+          READY,
+          at(193.037),
+          "player-1",
+          "player-1",
+          "BUFF",
+        ),
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_REMOVED,
+          READY,
+          at(removedS),
+          "player-1",
+          "player-1",
+          "BUFF",
+        ),
+      ],
+      spellCastEvents: casts.map(([id, s]) =>
+        makeSpellCastEvent(id, at(s), "player-1"),
+      ),
+    });
+  it("141470d0: the ready aura off 6.25 s in, replays after, no SUCCESS → a press at the REMOVED", () => {
+    expect(
+      stasisReleasePressesMs(
+        evoker(199.288, [
+          ["355941", 199.307],
+          ["364343", 199.569],
+        ]) as never,
+      ),
+    ).toEqual([at(199.288)]);
+  });
+  it("a ready aura that ran its 30 s released on its own — no press", () => {
+    expect(
+      stasisReleasePressesMs(evoker(223.037, [["355941", 223.05]]) as never),
+    ).toEqual([]);
+  });
+  it("one that came off with nothing replayed was lost, not released", () => {
+    expect(stasisReleasePressesMs(evoker(199.288, []) as never)).toEqual([]);
+  });
+  it("0e0663e6: a logged 370564 SUCCESS in the REMOVED ms is the one press", () => {
+    expect(
+      stasisReleasePressesMs(
+        evoker(199.288, [
+          ["370564", 199.288],
+          ["355941", 199.307],
+        ]) as never,
+      ),
+    ).toEqual([at(199.288)]);
   });
 });

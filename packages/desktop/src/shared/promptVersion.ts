@@ -1701,7 +1701,8 @@
  *  death-setup chain prints each entry's span and [HEALER CC] the free time
  *  between runs; legends: [STATE] `dead` in the death second, [RES] as of
  *  m:ss.0 and `cc:`, msw alsoHeldAt, "defenseless" is the target's own;
- *  [BURST ANSWERED] names a second friendly death. 605 files: no candidate
+ *  [BURST ANSWERED] names a second friendly death; a Stasis release after
+ *  a kick is the player's press, not a replay. 605 files: no candidate
  *  added or removed.
  */
 export const PROMPT_VERSION = 397;

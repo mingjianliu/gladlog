@@ -6,7 +6,10 @@
  * facts once a producer has already decided to emit one.
  */
 import { refusalWhy } from "../../context/spellOutcomeLines";
-import { stasisReplayWindows } from "../../utils/combatStates";
+import {
+  STASIS_RELEASE_SPELL_ID,
+  stasisReplayWindows,
+} from "../../utils/combatStates";
 import type { CastFailedEvent } from "../../utils/rawStreams";
 
 /**
@@ -255,7 +258,11 @@ export function gcdLockedUntilS(
 ): number | undefined {
   let last: number | undefined;
   for (const ct of ownCastSuccessSeconds)
-    if (ct <= atS && ct >= atS - INTENT_GUARD_GCD_S && (last === undefined || ct > last))
+    if (
+      ct <= atS &&
+      ct >= atS - INTENT_GUARD_GCD_S &&
+      (last === undefined || ct > last)
+    )
       last = ct;
   return last === undefined ? undefined : last + INTENT_GUARD_GCD_S;
 }
@@ -283,9 +290,10 @@ export function ownerPressEvents<
   const replays = stasisReplayWindows(owner as any);
   return (owner.spellCastEvents ?? []).filter(
     (e) =>
+      // WO6 #5: the release press itself is a press, not a replay
+      (e as { spellId?: string }).spellId === STASIS_RELEASE_SPELL_ID ||
       !replays.some(
         (w) => e.logLine.timestamp >= w.from && e.logLine.timestamp <= w.to,
       ),
   );
 }
-

@@ -64,7 +64,11 @@ import {
   ccFullDurationForApplication,
   ccFullDurationForCaster,
 } from "./ccDuration";
-import { stasisReplayWindows } from "./combatStates";
+import {
+  STASIS_RELEASE_SPELL_ID,
+  stasisReleasePressesMs,
+  stasisReplayWindows,
+} from "./combatStates";
 import { isHealerSpec, isPassiveProcCast, specToString } from "./cooldowns";
 import { ALLY_DISPEL_MATCH_TOLERANCE_S } from "./dispelAnalysis";
 import {
@@ -3606,6 +3610,27 @@ export function analyzePlayerCCAndTrinket(
       }))
       .sort((a, b) => a.t - b.t);
     const replays = stasisReplayWindows(player);
+    // WO6 #5 (n9, 141470d0): the Stasis release is the player's own press —
+    // never one of the replays it starts — and where the log wrote no
+    // SUCCESS for it, the ready aura's early REMOVED is that press
+    for (const ms of stasisReleasePressesMs(player)) {
+      if (
+        castTimes.some(
+          (c) => c.ms === ms && c.spellId === STASIS_RELEASE_SPELL_ID,
+        )
+      )
+        continue;
+      castTimes.push({
+        t: (ms - matchStartMs) / 1000,
+        ms,
+        spellId: STASIS_RELEASE_SPELL_ID,
+        spellName: getEnglishSpellName(STASIS_RELEASE_SPELL_ID, "Stasis"),
+      });
+    }
+    castTimes.sort((a, b) => a.t - b.t);
+    const isReplay = (c: { ms: number; spellId: string }) =>
+      c.spellId !== STASIS_RELEASE_SPELL_ID &&
+      replays.some((w) => c.ms >= w.from && c.ms <= w.to);
     // Optional field: absent on old archives. Absence is "unknown", never
     // "instant" — see IInterruptInstance.switchWasHardCast.
     const rawCastStarts = player.castStartEvents;
@@ -3665,10 +3690,7 @@ export function analyzePlayerCCAndTrinket(
       // readings run over the whole lock — past the 5 s `after` window for a
       // longer lock, as `startedBy` (cast bars) and the printed list do
       const inLock = castTimes.filter(
-        (c) =>
-          c.t > inst.atSeconds &&
-          c.t < lockEndS &&
-          !replays.some((w) => c.ms >= w.from && c.ms <= w.to),
+        (c) => c.t > inst.atSeconds && c.t < lockEndS && !isReplay(c),
       );
       const endedBy =
         lockedMask === undefined
@@ -3681,7 +3703,7 @@ export function analyzePlayerCCAndTrinket(
                 schoolLockedBy(m, lockedMask) &&
                 isSilenceableCast(c.spellId) &&
                 !LOCK_IGNORING_CAST_IDS.has(c.spellId) &&
-                !replays.some((w) => c.ms >= w.from && c.ms <= w.to)
+                !isReplay(c)
               );
             });
       // WO3 Part 2 (r1008-75): a cast BAR of the locked school that
@@ -3716,7 +3738,7 @@ export function analyzePlayerCCAndTrinket(
       for (const c of inLock) {
         if (c.t >= lockEndS) break;
         if (c.spellId in wentOut) continue;
-        if (replays.some((w) => c.ms >= w.from && c.ms <= w.to)) continue;
+        if (isReplay(c)) continue;
         wentOut[c.spellId] = c.t - inst.atSeconds;
       }
       inst.wentOutInLockS = wentOut;
@@ -3729,7 +3751,7 @@ export function analyzePlayerCCAndTrinket(
         (c) =>
           c.t > inst.atSeconds &&
           c.t <= inst.atSeconds + POST_KICK_WINDOW_S &&
-          !replays.some((w) => c.ms >= w.from && c.ms <= w.to),
+          !isReplay(c),
       );
       if (after.length === 0) {
         inst.postKick = "idle";

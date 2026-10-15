@@ -6,7 +6,7 @@ import {
 } from "@gladlog/parser-compat";
 
 import { getEnglishSpellName } from "../data/spellEffectData";
-import { dropAuraRebroadcasts } from "./auraIntervals";
+import { dropAuraRebroadcasts, officialDurationS } from "./auraIntervals";
 
 export interface IFormInterval {
   form: "Bear" | "Cat";
@@ -331,6 +331,60 @@ function stasisReplayCasts(unit: ICombatUnit, removedMs: number) {
       c.logLine.timestamp >= removedMs &&
       c.logLine.timestamp <= removedMs + STASIS_REPLAY_WINDOW_S * 1000,
   );
+}
+
+/** The press that releases Stasis' stored spells (`SPELL_CAST_SUCCESS`,
+ * when the log writes one — 0e0663e6 does, in the ready aura's REMOVED ms;
+ * 141470d0 does not). */
+export const STASIS_RELEASE_SPELL_ID = "370564";
+
+/** How close to its official length a ready aura may come off and still be
+ * its own expiry rather than a press. */
+const STASIS_READY_EXPIRY_SLACK_MS = 500;
+
+/**
+ * The Evoker's own Stasis releases (ms, log clock, ascending): a
+ * `STASIS_RELEASE_SPELL_ID` SUCCESS, or a ready aura (370562) that came off
+ * before its official length (DB2, 30 s) with the stored spells replayed
+ * after it — a release the log wrote no SUCCESS for (WO6 #5, n9: 141470d0
+ * 199.288, 6.25 s into the aura, 1.02 s after a kick). A ready aura that runs
+ * its length releases on its own and is no press; one that comes off with
+ * nothing replayed was lost (a death), not released.
+ */
+export function stasisReleasePressesMs(unit: ICombatUnit): number[] {
+  const out: number[] = (unit.spellCastEvents ?? [])
+    .filter(
+      (c) =>
+        c.spellId === STASIS_RELEASE_SPELL_ID &&
+        c.logLine.event === LogEvent.SPELL_CAST_SUCCESS,
+    )
+    .map((c) => c.logLine.timestamp);
+  const lengthS = officialDurationS(STASIS_READY_AURA_ID, undefined);
+  if (lengthS) {
+    for (const life of stasisReadyLives(unit)) {
+      const { appliedMs, removedMs } = life;
+      if (appliedMs === undefined || removedMs === undefined) continue;
+      if (
+        removedMs - appliedMs >=
+        lengthS * 1000 - STASIS_READY_EXPIRY_SLACK_MS
+      )
+        continue;
+      if (
+        !stasisReplayCasts(unit, removedMs).some(
+          (c) => c.spellId !== STASIS_RELEASE_SPELL_ID,
+        )
+      )
+        continue;
+      if (
+        out.some(
+          (ms) => Math.abs(ms - removedMs) <= STASIS_READY_AFTER_STORED_MS,
+        )
+      )
+        continue;
+      out.push(removedMs);
+    }
+  }
+  return out.sort((a, b) => a - b);
 }
 
 /** Where a Stasis whose storing ended at `storedMs` was released. A ready
