@@ -1660,5 +1660,11 @@
  *  the report's words; three aura pairings merge re-broadcasts; an enemy in
  *  its own flight is no ready kicker. 605 files: no candidate added or
  *  removed.
+ *  v392 (2026-10-14, FT, work order 2026-10-14d #13 — facts only): a cast-
+ *  blocking aura (silence, hard CC) whose REMOVED was lost closes at its
+ *  official length — no more 50 s silences in [CONSEQ] / [SILENCE]; agy
+ *  40-FT-90: the mitigation side reads players only, the [CAST STOPPED]
+ *  gate takes only what the producer prints. 605 files: no candidate added
+ *  or removed.
  */
-export const PROMPT_VERSION = 391;
+export const PROMPT_VERSION = 392;

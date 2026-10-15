@@ -1,4 +1,4 @@
-import { ICombatUnit } from "@gladlog/parser-compat";
+import { CombatUnitType, ICombatUnit } from "@gladlog/parser-compat";
 
 import { resolveMitigation } from "../data/mitigationComponents";
 import { getEnglishSpellName } from "../data/spellEffectData";
@@ -253,9 +253,22 @@ export function whitelistedIntervalsInDeathWindow(
   // tether (122470, a DEBUFF on our mage) read as "Touch of Karma active
   // 9.0s in the final 10s" (b711d4ac 4:33). Same reading as the burst
   // ledger's target defensives (`burstLedger.ts`: by the aura's source name).
+  // Players only, and never a name the victim's side also has (agy
+  // 40-FT-90: a pet's bare name could equal a player's): a player's name is
+  // realm-qualified and unique in the round
+  const units = Object.values(combat.units ?? {});
+  const ownSide = new Set(
+    units.filter((u) => u.reaction === victim.reaction).map((u) => u.name),
+  );
+  ownSide.add(victim.name);
   const opposing = new Set(
-    Object.values(combat.units ?? {})
-      .filter((u) => u.reaction !== victim.reaction)
+    units
+      .filter(
+        (u) =>
+          u.reaction !== victim.reaction &&
+          u.type === CombatUnitType.Player &&
+          !ownSide.has(u.name),
+      )
       .map((u) => u.name),
   );
   for (const iv of buildAuraIntervals(victim, combat, selfCaster)) {

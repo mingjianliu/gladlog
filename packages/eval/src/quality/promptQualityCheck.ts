@@ -107,6 +107,7 @@ import {
 import {
   CAST_REFUSED_OTHER_REASON,
   CAST_STOPPED_NEAR_TEXT,
+  CAST_STOPPED_REFUSAL_WORDS,
   CAST_STOPPED_TAG,
 } from "@gladlog/analysis/src/context/timelineSections/castStopped";
 import { CC_NOT_LANDED_TAG } from "@gladlog/analysis/src/context/timelineSections/setup";
@@ -2802,8 +2803,8 @@ const CAST_STOPPED_DATA_LINE = /^\s*\d+:\d{2}\s+\[CAST STOPPED\]/;
  * A `[CAST STOPPED]` line in full, built from the producer's own pieces
  * (`timelineSections/castStopped.ts`): 1–2 = m:ss, 3 = the spell, then one of
  * 4 = `cast bar stopped after N.Ns` + a `CAST_STOPPED_NEAR_TEXT`,
- * 5 = `refused N.Ns in` + (6 = a `refusalWhy` wording, `REFUSAL_WHY_WORDS`
- * | the untranslated marker), 7 = `no end logged; the round ended N.Ns after it began`.
+ * 5 = `refused N.Ns in` + (6 = a wording the producer prints there,
+ * `CAST_STOPPED_REFUSAL_WORDS` | the bracketed untranslated marker), 7 = `no end logged; the round ended N.Ns after it began`.
  */
 const CAST_STOPPED_LINE = new RegExp(
   String.raw`^\s*(\d+):(\d{2})\s+${reEscape(CAST_STOPPED_TAG)}\s+(.+?) — (?:cast bar stopped after (\d+\.\d)s(?:${Object.values(
@@ -2812,7 +2813,7 @@ const CAST_STOPPED_LINE = new RegExp(
     .map(reEscape)
     .join(
       "|",
-    )})|refused (\d+\.\d)s in(?:: (${REFUSAL_WHY_WORDS.map(reEscape).join("|")})| ${reEscape(CAST_REFUSED_OTHER_REASON)})|no end logged; the round ended (\d+\.\d)s after it began)$`,
+    )})|refused (\d+\.\d)s in(?:: (${CAST_STOPPED_REFUSAL_WORDS.map(reEscape).join("|")})| ${reEscape(CAST_REFUSED_OTHER_REASON)})|no end logged; the round ended (\d+\.\d)s after it began)$`,
 );
 const KICK_ON_UNIT_LINE =
   /^\s*\d+:\d{2}\s+\[KICK\]\s+.+? interrupted (\d+)\([^)]*\)'s (.+?) \(/;

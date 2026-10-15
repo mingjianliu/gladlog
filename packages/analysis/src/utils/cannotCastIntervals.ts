@@ -6,13 +6,20 @@ import {
   isCastBlockingAuraType,
   SPELL_CATEGORIES as SPELLS,
 } from "../data/spellCategories";
-import { getEnglishSpellName } from "../data/spellEffectData";
+import {
+  ccFullDurationSeconds,
+  getEnglishSpellName,
+} from "../data/spellEffectData";
 import { schoolLockedBy, spellSchoolMask } from "../data/spellSchools";
 import { ccSpellIds, officialSilenceIds } from "../data/spellTags";
 import { supersededAuraBreaks } from "./auraIntervals";
 import { buffFullDurationForCaster } from "./buffDuration";
 import { REACTION_WINDOW_S, usableWhileStunned } from "./cooldowns";
-import { isStunDrAura, matchPendingCcKey } from "./drAnalysis";
+import {
+  isStunDrAura,
+  matchPendingCcKey,
+  reAppliedIsSameApplication,
+} from "./drAnalysis";
 import { kickLockoutSecondsFor } from "./kickLockout";
 import { isSilenceableCast, isUnsilenceableCast } from "./spellMechanics";
 import { firstDeathMs } from "./unitDeath";
@@ -580,8 +587,9 @@ export interface CastBlockingAura {
   srcUnitName: string;
   /** SPELL_AURA_APPLIED, epoch ms */
   from: number;
-  /** first REMOVED / BROKEN after the APPLIED in log order; Infinity when
-   * never removed */
+  /** first REMOVED / BROKEN after the APPLIED in log order; with no REMOVED
+   * the official length (`ccFullDurationSeconds`), Infinity when that is
+   * unknown */
   to: number;
 }
 
@@ -650,7 +658,33 @@ export function castBlockingAuraIntervals(
     const key = `${spellId}:${aura.srcUnitId}`;
     if (aura.logLine.event === LogEvent.SPELL_AURA_APPLIED) {
       // a second APPLIED from the same caster with no removal between keeps
-      // the first one's start (both used to run to the same removal)
+      // the first one's start (both used to run to the same removal) — while
+      // it is inside the first one's official length
+      // (`reAppliedIsSameApplication`, work order 2026-10-14d #13): past it,
+      // the first one's REMOVED was lost, and it closes at its official end
+      // (605: six `[CONSEQ] enemy healer … in Strangulate (silence) for 51s`
+      // ran from one silence to a later one's REMOVED)
+      const open = pending.get(key);
+      const officialS = ccFullDurationSeconds(spellId);
+      if (
+        open !== undefined &&
+        !reAppliedIsSameApplication(
+          open.applyMs,
+          aura.timestamp,
+          officialS,
+          false,
+        )
+      ) {
+        pending.delete(key);
+        out.push({
+          spellId,
+          spellName: open.name,
+          srcUnitId: open.srcId,
+          srcUnitName: open.srcName,
+          from: open.applyMs,
+          to: Math.min(aura.timestamp, open.applyMs + officialS! * 1000),
+        });
+      }
       if (!pending.has(key))
         pending.set(key, {
           applyMs: aura.timestamp,
@@ -678,16 +712,20 @@ export function castBlockingAuraIntervals(
       });
     }
   }
-  // never removed: open-ended
-  for (const p of pending.values())
+  // never removed: its official length when known (the cap `ccInstances`
+  // and `buildAuraIntervals` put on a missing REMOVED — work order
+  // 2026-10-14d #13), else open-ended
+  for (const p of pending.values()) {
+    const officialS = ccFullDurationSeconds(p.spellId);
     out.push({
       spellId: p.spellId,
       spellName: p.name,
       srcUnitId: p.srcId,
       srcUnitName: p.srcName,
       from: p.applyMs,
-      to: Infinity,
+      to: officialS === undefined ? Infinity : p.applyMs + officialS * 1000,
     });
+  }
   // in application order (a stable sort: same-millisecond applications keep
   // their log order)
   out.sort((a, b) => a.from - b.from);

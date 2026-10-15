@@ -184,9 +184,27 @@ describe("#3 — an aura the opposing side applied is not the victim's mitigatio
         aura(LogEvent.SPELL_AURA_REMOVED, "122470", 59, src, "mage"),
       ],
     }) as unknown as ICombatUnit;
+  const player = CombatUnitType.Player;
   const units = {
-    monk: { id: "monk", name: "monk", reaction: CombatUnitReaction.Hostile },
-    mage: { id: "mage", name: "Mage", reaction: CombatUnitReaction.Friendly },
+    monk: {
+      id: "monk",
+      name: "monk",
+      reaction: CombatUnitReaction.Hostile,
+      type: player,
+    },
+    mage: {
+      id: "mage",
+      name: "Mage",
+      reaction: CombatUnitReaction.Friendly,
+      type: player,
+    },
+    // an enemy pet with a bare name that equals ours (agy 40-FT-90)
+    pet: {
+      id: "pet",
+      name: "Mage",
+      reaction: CombatUnitReaction.Hostile,
+      type: CombatUnitType.Pet,
+    },
   } as unknown as Record<string, ICombatUnit>;
 
   it("b711d4ac 4:33: an enemy Windwalker's Touch of Karma tether on our mage is dropped", () => {

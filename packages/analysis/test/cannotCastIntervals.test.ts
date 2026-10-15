@@ -83,7 +83,7 @@ describe("cannotCastIntervals — buildCannotCastIntervals", () => {
     expect(intervals).toEqual([{ from: 10_000, to: 16_000 }]);
   });
 
-  it("treats unremoved CC auras as open-ended (to: Infinity)", () => {
+  it("closes an unremoved CC aura at its official length (work order 2026-10-14d #13; it used to run open-ended)", () => {
     const unit = {
       id: "Player-1",
       auraEvents: [
@@ -98,7 +98,42 @@ describe("cannotCastIntervals — buildCannotCastIntervals", () => {
     } as unknown as ICombatUnit;
 
     const intervals = buildCannotCastIntervals(unit, enemyIds);
-    expect(intervals).toEqual([{ from: 10_000, to: Infinity }]);
+    // Polymorph's official 6 s (`ccFullDurationSeconds`)
+    expect(intervals).toEqual([{ from: 10_000, to: 16_000 }]);
+  });
+
+  it("a second APPLIED with no REMOVED between: the same application inside the official length, a new one past it (work order 2026-10-14d #13)", () => {
+    const ev = (event: LogEvent, ms: number) => ({
+      spellId: "118",
+      srcUnitId: "Enemy-1",
+      timestamp: ms,
+      logLine: { event },
+    });
+    const of = (auraEvents: object[]) =>
+      buildCannotCastIntervals(
+        { id: "Player-1", auraEvents, actionIn: [] } as unknown as ICombatUnit,
+        enemyIds,
+      );
+    // a re-send 2 s in: one interval to the REMOVED
+    expect(
+      of([
+        ev(LogEvent.SPELL_AURA_APPLIED, 10_000),
+        ev(LogEvent.SPELL_AURA_APPLIED, 12_000),
+        ev(LogEvent.SPELL_AURA_REMOVED, 15_000),
+      ]),
+    ).toEqual([{ from: 10_000, to: 15_000 }]);
+    // a lost REMOVED, the next application 50 s later: the first closes at
+    // its official end, never at the later REMOVED
+    expect(
+      of([
+        ev(LogEvent.SPELL_AURA_APPLIED, 10_000),
+        ev(LogEvent.SPELL_AURA_APPLIED, 60_000),
+        ev(LogEvent.SPELL_AURA_REMOVED, 63_000),
+      ]),
+    ).toEqual([
+      { from: 10_000, to: 16_000 },
+      { from: 60_000, to: 63_000 },
+    ]);
   });
 
   it("adds kick lockout intervals from enemy SPELL_INTERRUPT events", () => {

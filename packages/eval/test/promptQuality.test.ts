@@ -1255,6 +1255,11 @@ describe("checkCastStoppedLines — a [CAST STOPPED] line is one of the producer
       // a reason the product does not word (refusalWhy words "invalid
       // target" since FT-R1014b — work order 2026-10-14d #8)
       "1:21  [CAST STOPPED]   Cyclone — refused 1.2s in: the target was busy",
+      // wordings refusalWhy has that the producer never prints after a colon
+      // (agy 40-FT-90): the unworded marker goes in brackets, an
+      // interruption row ends the bar as "cast bar stopped"
+      "1:21  [CAST STOPPED]   Cyclone — refused 1.2s in: client reason not translated",
+      "1:21  [CAST STOPPED]   Cyclone — refused 1.2s in: its cast bar began and was stopped",
     ])
       expect(
         checkCastStoppedLines([...unit, ...six.slice(1), wrong, started(9)]),

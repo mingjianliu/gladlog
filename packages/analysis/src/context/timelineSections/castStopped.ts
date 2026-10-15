@@ -45,7 +45,12 @@ import { JUKE_LOOKBACK_MS } from "../../utils/kickAudit";
 import type { CastFailedEvent } from "../../utils/rawStreams";
 import { fmtTime } from "../../utils/renderGrid";
 import type { IControlCastBar } from "../ccUse";
-import { REJECT_WHY_UNWORDED, refusalWhy } from "../spellOutcomeLines";
+import {
+  REFUSAL_WHY_WORDS,
+  REJECT_WHY_BAR_STOPPED,
+  REJECT_WHY_UNWORDED,
+  refusalWhy,
+} from "../spellOutcomeLines";
 import type { TimelineCtx } from "./ctx";
 
 /** The tag — also what the legend and the gate
@@ -56,6 +61,16 @@ export const CAST_STOPPED_TAG = "[CAST STOPPED]";
 /** What stands for a refusal reason the product does not word
  * (`refusalWhy` → `REJECT_WHY_UNWORDED`), in brackets. */
 export const CAST_REFUSED_OTHER_REASON = `(${REJECT_WHY_UNWORDED})`;
+
+/** The wordings `refused N.Ns in: <reason>` can carry — `refusalWhy`'s, less
+ * the two it never prints there: the unworded marker (bracketed instead,
+ * `CAST_REFUSED_OTHER_REASON`) and the interruption wording (an
+ * interruption row ends the bar as `stopped`, `castBarOutcomes.ts`). The
+ * gate (`checkCastStoppedLines`) reads this list (agy 40-FT-90). */
+export const CAST_STOPPED_REFUSAL_WORDS: readonly string[] =
+  REFUSAL_WHY_WORDS.filter(
+    (w) => w !== REJECT_WHY_UNWORDED && w !== REJECT_WHY_BAR_STOPPED,
+  );
 
 /** `cast bar stopped after N.Ns` + this, per what landed on the owner within
  * `CANCEL_CC_NEAR_S` of the stop (`CastBarEnd.near`). */
