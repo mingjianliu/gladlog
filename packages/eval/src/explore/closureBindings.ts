@@ -269,29 +269,49 @@ export function classifyUse(id: ts.Identifier): UseClass {
 
 /** A checker-backed program over one file (imports unresolved — only the
  * file's own scopes matter). `text` overrides the file's content (tests). */
+const PROGRAM_OPTIONS: ts.CompilerOptions = {
+  noResolve: true,
+  noEmit: true,
+  // the standard library is loaded so array / Map / Set types resolve
+  // (isSyncCollection); imports stay unresolved
+  target: ts.ScriptTarget.ES2022,
+  module: ts.ModuleKind.ESNext,
+};
+
+/** The standard-library source files, parsed once per process. Every program
+ * this module builds loads the same lib.*.d.ts set (`PROGRAM_OPTIONS` never
+ * changes), and parsing them was the whole cost of `programFor`: the
+ * closureBindings test built 63 programs at ~350 ms each (22 s) for files of
+ * twenty lines. With the lib files shared, `createProgram` reuses the old
+ * program's structure and only the named file is parsed and bound. */
+const libSourceFiles = new Map<string, ts.SourceFile>();
+let lastProgram: ts.Program | undefined;
+
 export function programFor(
   fileName: string,
   text?: string,
 ): { sf: ts.SourceFile; checker: ts.TypeChecker } {
-  const options: ts.CompilerOptions = {
-    noResolve: true,
-    noEmit: true,
-    // the standard library is loaded so array / Map / Set types resolve
-    // (isSyncCollection); imports stay unresolved
-    target: ts.ScriptTarget.ES2022,
-    module: ts.ModuleKind.ESNext,
-  };
+  const options = PROGRAM_OPTIONS;
   const host = ts.createCompilerHost(options);
-  if (text !== undefined) {
-    const orig = host.getSourceFile.bind(host);
-    host.getSourceFile = (f, lang, ...rest) =>
-      f === fileName
+  const orig = host.getSourceFile.bind(host);
+  host.getSourceFile = (f, lang, ...rest) => {
+    if (f === fileName)
+      return text !== undefined
         ? ts.createSourceFile(f, text, lang, true)
         : orig(f, lang, ...rest);
+    let lib = libSourceFiles.get(f);
+    if (!lib) {
+      lib = orig(f, lang, ...rest);
+      if (lib) libSourceFiles.set(f, lib);
+    }
+    return lib;
+  };
+  if (text !== undefined) {
     host.fileExists = (f) => f === fileName || ts.sys.fileExists(f);
     host.readFile = (f) => (f === fileName ? text : ts.sys.readFile(f));
   }
-  const program = ts.createProgram([fileName], options, host);
+  const program = ts.createProgram([fileName], options, host, lastProgram);
+  lastProgram = program;
   const sf = program.getSourceFile(fileName);
   if (!sf) throw new Error(`cannot load ${fileName}`);
   return { sf, checker: program.getTypeChecker() };
