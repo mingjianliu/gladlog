@@ -318,7 +318,10 @@ interface NamedEvent {
 /** An event counts as covered if EITHER its logged (localized) name or its
  * canonical English name appears in the prompt — non-EN logs carry localized
  * names while the builder renders English from static data. */
-function checkSpells(promptText: string, events: NamedEvent[]): CoverageResult {
+export function checkSpells(
+  promptText: string,
+  events: NamedEvent[],
+): CoverageResult {
   const distinct = new Map<string, string[]>();
   for (const e of events) {
     const candidates = [e.spellName, e.spellNameEn].filter(
@@ -347,7 +350,7 @@ function checkSpells(promptText: string, events: NamedEvent[]): CoverageResult {
 const TRINKET_USE =
   /trinketed|trinket broke|\[(ENEMY )?TRINKET\]|trinket:\s*used/i;
 
-function checkTrinkets(
+export function checkTrinkets(
   promptLines: string[],
   manifest: CoverageManifest,
 ): CoverageResult {
@@ -6149,7 +6152,7 @@ export function checkSyncWindowLockLength(lines: string[]): string[] {
   return failures;
 }
 
-function checkSyncWindowRefConsistency(lines: string[]): string[] {
+export function checkSyncWindowRefConsistency(lines: string[]): string[] {
   const failures: string[] = [];
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]!;
