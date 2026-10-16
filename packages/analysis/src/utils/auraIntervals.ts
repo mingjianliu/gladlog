@@ -1,5 +1,6 @@
 import { ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
+import { analysisDataReady } from "../data/ensure";
 import { CC_DURATION_TALENT_MODIFIERS } from "../data/spellEffectData";
 import { buffFullDurationForCaster } from "./buffDuration";
 import type { CastParamCaster } from "./castParam";
@@ -315,7 +316,10 @@ export function dropSupersededAuraBreaks<
     : events.filter((a) => !superseded.has(a));
 }
 
-export function buildAuraIntervals(
+/** @internal The reading itself; exported for test/auraIntervalsMemo.test.ts,
+ * which holds the memoised `buildAuraIntervals` to it. Product code calls
+ * `buildAuraIntervals`. */
+export function buildAuraIntervalsUncached(
   unit: ICombatUnit,
   combat: {
     startTime: number;
@@ -547,4 +551,89 @@ export function buildAuraIntervals(
   return out.sort(
     (a, b) => a.fromS - b.fromS || a.spellId.localeCompare(b.spellId),
   );
+}
+
+/**
+ * One memo entry of `buildAuraIntervals`: the inputs the uncached reading
+ * depends on, besides the aura stream the entry is keyed by. `castsFp` is
+ * the casters' cast counts — a fixture that pushes a cast onto a caster
+ * between two calls gets a fresh reading, not the first one.
+ */
+interface AuraIntervalsEntry {
+  unitId: string;
+  len: number;
+  startTime: number;
+  endTime: number;
+  casters: object | undefined;
+  castsFp: number;
+  result: IAuraInterval[];
+}
+const AURA_INTERVALS_ENTRIES_MAX = 8;
+const auraIntervalsCache = new WeakMap<readonly unknown[], AuraIntervalsEntry[]>();
+
+/**
+ * `buildAuraIntervals`, memoised. Twenty call sites in nineteen files rebuild
+ * the same unit's intervals inside one analysis (the timeline's control
+ * lines, the kill windows, the crisis and burst engines, the kick audit …);
+ * measured on the real-match fixture, the uncached reading plus
+ * `dropAuraRebroadcasts` was about a third of the pipeline's CPU. The memo is
+ * keyed by the unit's `auraEvents` array (the same object
+ * `supersededAuraBreaks` keys its own cache by) and holds the other inputs the
+ * reading depends on: the unit id, the stream's length, the combat window, the
+ * casters container (`castersById`, else `combat.units`) and the casters'
+ * cast counts. A call made before the analysis data is ready is never cached
+ * (an official duration read then could differ from the one read after).
+ * Callers get a fresh array each time; the interval objects are shared, and
+ * no consumer writes to one (the call sites were read for that).
+ */
+export function buildAuraIntervals(
+  unit: ICombatUnit,
+  combat: {
+    startTime: number;
+    endTime: number;
+    units?: Readonly<Record<string, ICombatUnit>>;
+  },
+  castersById?: ReadonlyMap<
+    string,
+    Pick<ICombatUnit, "spec" | "info" | "spellCastEvents"> & CastParamCaster
+  >,
+): IAuraInterval[] {
+  const events = unit.auraEvents;
+  if (!events || !analysisDataReady())
+    return buildAuraIntervalsUncached(unit, combat, castersById);
+  const casters: object | undefined = castersById ?? combat.units;
+  let castsFp = 0;
+  if (castersById)
+    for (const c of castersById.values())
+      castsFp += c.spellCastEvents?.length ?? 0;
+  else if (combat.units)
+    for (const c of Object.values(combat.units))
+      castsFp += c.spellCastEvents?.length ?? 0;
+  let entries = auraIntervalsCache.get(events);
+  if (!entries) {
+    entries = [];
+    auraIntervalsCache.set(events, entries);
+  }
+  const hit = entries.find(
+    (e) =>
+      e.unitId === unit.id &&
+      e.len === events.length &&
+      e.startTime === combat.startTime &&
+      e.endTime === combat.endTime &&
+      e.casters === casters &&
+      e.castsFp === castsFp,
+  );
+  if (hit) return hit.result.slice();
+  const result = buildAuraIntervalsUncached(unit, combat, castersById);
+  if (entries.length >= AURA_INTERVALS_ENTRIES_MAX) entries.shift();
+  entries.push({
+    unitId: unit.id,
+    len: events.length,
+    startTime: combat.startTime,
+    endTime: combat.endTime,
+    casters,
+    castsFp,
+    result,
+  });
+  return result.slice();
 }
