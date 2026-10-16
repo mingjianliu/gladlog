@@ -1,43 +1,46 @@
 {
-  "build": "12.1.0.69587",
-  "generatedAt": "2026-09-24T20:26:42.547Z",
+  "build": "12.1.5.70391",
+  "generatedAt": "2026-10-16T18:04:14.593Z",
   "artifacts": {
     "talentIdMap.json": {
       "specs": 40
     },
     "spellNames.json": {
-      "entries": 413984,
-      "bytes": 12242355
+      "entries": 416203,
+      "bytes": 12313428
     },
     "spellNamesZhGenerated.json": {
-      "entries": 41361,
-      "bytes": 1006300
+      "entries": 41477,
+      "bytes": 1009197
     },
     "spellEffectGenerated.ts": {
-      "entries": 9613,
-      "bytes": 654294
+      "entries": 9609,
+      "bytes": 653902
     },
     "spellClassMapGenerated.ts": {
-      "entries": 250
+      "entries": 249
     },
     "spellIconsGenerated.ts": {
-      "entries": 43403,
-      "distinctIcons": 7710,
-      "bytes": 822537
+      "entries": 43527,
+      "distinctIcons": 7716,
+      "bytes": 824557
     },
     "trinketItemIds.json": {
       "adaptation": 28,
-      "relentless": 10,
-      "gladiator": 36
+      "relentless": 10
     },
     "talentModifiers.json": {
-      "trackedSpells": 685
+      "trackedSpells": 704
     },
     "talentEffectInventoryGenerated.json": {
-      "rows": 8229,
-      "edges": 4037,
+      "rows": 10242,
+      "edges": 4510,
       "truncatedTriggerEdges": 7,
-      "bytes": 2686766
+      "bytes": 3704312
+    },
+    "conditionalCooldownsGenerated.json": {
+      "entries": 19,
+      "modifiers": 26
     },
     "mitigationGenerated.json": {
       "entries": 20,
@@ -45,18 +48,15 @@
       "bytes": 1897
     },
     "talentMitigationGenerated.json": {
-      "entries": 59,
+      "entries": 60,
       "pendingRuling": 0,
-      "bytes": 14814
+      "bytes": 15069
     },
     "offGcdGenerated.ts": {
       "entries": 422
     },
     "channeledGenerated.ts": {
       "entries": 83
-    },
-    "sharedChargeGenerated.ts": {
-      "entries": 92
     },
     "summonGenerated.ts": {
       "entries": 185
@@ -66,40 +66,40 @@
     },
     "castEffectNominationsGenerated.json": {
       "casts": 3830,
-      "pairs": 40642
+      "pairs": 40689
+    },
+    "sharedChargeGenerated.ts": {
+      "entries": 92
     },
     "abilityEffectsGenerated.ts": {
-      "entries": 2232,
+      "entries": 2231,
       "absorbs": 109,
       "healsOthers": 264,
-      "hitsEnemy": 1638,
-      "bytes": 93781
+      "hitsEnemy": 1637,
+      "bytes": 96229
     },
     "spellSchoolsGenerated.ts": {
       "entries": 6447,
       "withSchool": 6447,
       "withSchoolImmunity": 21,
-      "bytes": 145474
+      "bytes": 145479
     },
     "spellTargetingGenerated.ts": {
-      "entries": 5367,
+      "entries": 5363,
       "reaching": 530,
-      "bytes": 80246
+      "bytes": 80186
     },
     "drCategoriesGenerated.ts": {
       "byCategory": {
-        "disorient": 225,
+        "disorient": 226,
         "incapacitate": 325,
         "root": 139,
         "silence": 61,
-        "stun": 649
+        "stun": 651
       }
     },
     "pvpTalentReplacesGenerated.ts": {
       "pairs": 17
-    },
-    "talentReplacesGenerated.ts": {
-      "pairs": 18
     },
     "pvpTalentPoolGenerated.ts": {
       "specs": 40
@@ -120,27 +120,31 @@
       "producer": "packages/eval/scripts/behaviorPriorScan.ts emit-table"
     },
     "castEffectAuraGenerated.json": {
-      "casts": 148,
-      "pairs": 189,
+      "casts": 199,
+      "pairs": 258,
       "producer": "packages/eval/scripts/castEffectAuraScan.ts --emit"
     },
     "burstWindowPriorGenerated.json": {
-      "entries": 157,
+      "entries": 163,
       "producer": "packages/eval/scripts/burstWindowScan.ts emit-table"
     },
     "ccCloseInGenerated.json": {
       "entries": 45,
       "producer": "packages/eval/scripts/ccCloseInScan.ts --emit"
     },
+    "cdRecastFloorGenerated.json": {
+      "entries": 38,
+      "producer": "packages/eval/scripts/cdRecastFloorScan.ts --out"
+    },
     "usableWhileCcGenerated.ts": {
-      "stunned": 437,
+      "stunned": 438,
       "feared": 403,
-      "confused": 405
+      "confused": 406
     },
     "spellManaCostGenerated.json": {
-      "entries": 344,
+      "entries": 346,
       "bySpecEntries": 63,
-      "bytes": 22217
+      "bytes": 22307
     },
     "parser-compat/enumsGenerated.ts": {
       "specs": 41,
@@ -153,35 +157,34 @@
       "instant": 4310,
       "immuneMech": 58,
       "locksCasting": 28,
-      "bytes": 206603
+      "bytes": 305047
     },
     "spellReachGenerated.json": {
       "spells": 3017,
-      "bytes": 224626,
+      "bytes": 226984,
       "generator": "scripts/datagen/genSpellReach.ts",
       "consumer": "utils/spellRange.ts (caster + talent range: kicks, externals, cleanse / purge, healer reach, CC threat — GH #83); utils/deathOutcomeAnalysis.ts externalReachYards (GH #34 ②)"
     },
     "kickLockoutObservedGenerated.json": {
       "kicks": 17,
-      "bytes": 2546,
+      "bytes": 2544,
       "generator": "packages/eval/scripts/kickLockoutScan.ts",
       "consumer": "data/spellEffectData.ts kickLockoutSeconds — verification gate, official DB2 PvP duration first (GH #62, 2026-09-04)"
     },
     "hotfixOverlayGenerated.json": {
-      "effects": 123,
-      "spells": 77,
-      "clientBuild": "12.1.0.69587",
-      "hotfixDate": "2026-09-02",
-      "simc": "midnight@ca042f5a1389",
+      "effects": 7,
+      "spells": 4,
+      "clientBuild": "12.1.5.70391",
+      "hotfixDate": "2026-10-15",
+      "simc": "midnight@196974b32d6b",
       "generator": "scripts/datagen/fetchSimcHotfixes.ts"
+    },
+    "talentReplacesGenerated.ts": {
+      "pairs": 18
     },
     "syncWindowPriorGenerated.json": {
       "entries": 3,
       "producer": "packages/eval/scripts/syncWindowScan.ts emit-table"
-    },
-    "cdRecastFloorGenerated.json": {
-      "entries": 39,
-      "producer": "packages/eval/scripts/cdRecastFloorScan.ts --out"
     },
     "cdTriggerPriorGenerated.json": {
       "entries": 81,
@@ -214,10 +217,6 @@
     "kickPriorityHealSpellsGenerated.json": {
       "entries": 9,
       "producer": "packages/eval/scripts/kickPriorityOutcomeProbe.ts emit-heal-spells"
-    },
-    "conditionalCooldownsGenerated.json": {
-      "entries": 19,
-      "modifiers": 26
     }
   }
 }

@@ -1,6 +1,6 @@
 /**
- * Generated at: 2026-09-30T21:24:43.386Z
- * Build: 12.1.0.69587
+ * Generated at: 2026-10-16T15:39:45.053Z
+ * Build: 12.1.5.70391
  * Source: DB2 SpellEffect — aura 69 (absorb, school mask = MiscValue_0), Effect 10/136 + aura 8/20
  *   (healing, split self vs ally by ImplicitTarget), aura 118/259
  *   (healing received %), aura 31 (movement speed %). One EffectTriggerSpell hop,

@@ -38,5 +38,16 @@
  *  friendly has no self-save after its death and is not read kiting off
  *  its corpse; the [BURST ANSWERED] legend states the pressured pick and
  *  the control rule exactly. 605 files: no candidate added or removed.
+ *  v402 (2026-10-16, data refresh 12.1.0.69587 → 12.1.5.70391, user
+ *  「可以先把数据刷新做一下」): every DB2 generator re-run at the new build
+ *  (hotfixes through 2026-10-15). Printed numbers move where the game moved:
+ *  Nature's Swiftness with Call of Ohn'ahra +30 s (DB2 −60; the hand −30
+ *  that duplicated DB2 is removed), Ice Block +30 s (Winter's Protection
+ *  PvpMultiplier 0.5), Merithra's Blessing is Arcane (castable in a Nature
+ *  lockout), PvP taunt / Ox Kick / Dark Simulacrum cooldowns, several
+ *  defensive durations; Ice Cold's node spell is 414658 and its presses stay
+ *  Ice Block's. Data stands for the current build on logs of any date (user
+ *  ruling). 605 files: cd-hoarded −1, kick-priority-team +2,
+ *  kick-priority-missed +1 (one new kill window: Ice Block on cooldown).
  */
-export const PROMPT_VERSION = 401;
+export const PROMPT_VERSION = 402;

@@ -1,6 +1,6 @@
 /**
- * Generated at: 2026-09-05T00:12:12.455Z
- * Build: 12.1.0.69587
+ * Generated at: 2026-10-16T15:39:37.028Z
+ * Build: 12.1.5.70391
  * Source: DB2 SpellEffect.ImplicitTarget_0/_1 (DifficultyID 0), dummy
  *   effects ignored unless they are all the spell has, one
  *   EffectTriggerSpell hop followed. See scripts/datagen/genSpellTargeting.ts
@@ -9,7 +9,7 @@
  * true  = at least one effect reaches a FRIENDLY unit other than the caster
  * false = the spell only ever affects the caster (and/or enemies)
  * absent = no official effect row; consumers must fall back, never assume
- * ids: 5367 (530 reach others)
+ * ids: 5363 (530 reach others)
  * The data lives in the .json of the same name (vite json.stringify ->
  * JSON.parse loading — the big-JSON lesson).
  */

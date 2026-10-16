@@ -1,6 +1,6 @@
 /**
- * Generated at: 2026-09-26T05:20:39.682Z
- * Build: 12.1.0.69587
+ * Generated at: 2026-10-16T15:38:59.259Z
+ * Build: 12.1.5.70391
  * Source: SpellCategories.ChargeCategory shared by ≥ 2 observed spells whose
  *   SpellCategory row has charges; restricted to the observed universe
  * spells: 92 in 36 charge pools

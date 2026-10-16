@@ -205,7 +205,7 @@ export function mdCycloneWindowEvents(opts: {
     const tS = toRenderSecond(chain[1].atS);
 
     // Gate 4: MD ready at window start (the owner's own cooldown —
-    // Improved Mass Dispel makes it 60 s)…
+    // Improved Mass Dispel takes 75 s off it since 12.1.5, read from DB2)…
     const mdCooldownS = opts.ownerMdCooldownS ?? MD_COOLDOWN_S;
     const mdReady = !ownerMdCastSeconds.some(
       (c) => c > fromS - mdCooldownS && c <= fromS,

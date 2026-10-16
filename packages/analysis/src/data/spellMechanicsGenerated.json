@@ -1,5 +1,5 @@
 {
- "build": "12.1.0.69587",
+ "build": "12.1.5.70391",
  "spells": {
   "1": {
    "castMs": 10000,
@@ -6131,7 +6131,7 @@
   "202127": {
    "castMs": 0,
    "unsilenceable": true,
-   "mech": 2
+   "mech": 14
   },
   "202138": {
    "castMs": 0,
@@ -6164,7 +6164,7 @@
   "202274": {
    "castMs": 0,
    "unsilenceable": true,
-   "mech": 2
+   "mech": 14
   },
   "202335": {
    "castMs": 0,
@@ -12979,7 +12979,7 @@
   },
   "410364": {
    "castMs": 0,
-   "mech": 2
+   "mech": 14
   },
   "410559": {
    "castMs": 0
@@ -14089,7 +14089,7 @@
   },
   "434766": {
    "castMs": 0,
-   "unsilenceable": true
+   "silenceable": true
   },
   "434767": {
    "castMs": 0,

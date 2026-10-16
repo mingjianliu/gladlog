@@ -1,10 +1,10 @@
 {
   "_meta": {
-    "generatedAt": "2026-09-05T00:12:07.777Z",
-    "build": "12.1.0.69587",
+    "generatedAt": "2026-10-16T15:39:27.302Z",
+    "build": "12.1.5.70391",
     "source": "zhCN Spell.Description_lang tooltip predicate over the talent spell universe (talentIdMap class/spec/hero nodes ∪ PvpTalent pool); percentage resolved through the placeholder the tooltip points at",
     "universeSize": 3491,
-    "tooltipHits": 67,
+    "tooltipHits": 68,
     "beneficiaryIsHeuristic": "tooltip-derived, not official — filter to self for enemy hardness"
   },
   "entries": {
@@ -331,10 +331,10 @@
       ]
     },
     "382020": {
-      "pct": 5,
+      "pct": 8,
       "auraSpellId": "382020",
       "zh": "大地祥和",
-      "via": "self s3 (aura 107) = -5.01",
+      "via": "self s3 (aura 107) = -8.01",
       "beneficiary": "other",
       "source": "spec",
       "specIds": [
@@ -444,6 +444,19 @@
       "source": "spec",
       "specIds": [
         250
+      ]
+    },
+    "414658": {
+      "pct": 70,
+      "auraSpellId": "414658",
+      "zh": "深寒凝冰",
+      "via": "self s8 (aura 87) = -70",
+      "beneficiary": "self",
+      "source": "class",
+      "specIds": [
+        62,
+        63,
+        64
       ]
     },
     "424654": {

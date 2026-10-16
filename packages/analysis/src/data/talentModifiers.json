@@ -965,7 +965,7 @@
     {
       "talentSpellId": "426438",
       "effect": "reduce_cd",
-      "value": 60,
+      "value": 75,
       "sourceRowId": "1104914"
     }
   ],
@@ -981,7 +981,7 @@
     {
       "talentSpellId": "426438",
       "effect": "reduce_cd",
-      "value": 60,
+      "value": 75,
       "sourceRowId": "1104914"
     }
   ],
@@ -1142,7 +1142,7 @@
     {
       "talentSpellId": "426438",
       "effect": "reduce_cd",
-      "value": 60,
+      "value": 75,
       "sourceRowId": "1104914"
     }
   ],
@@ -1173,14 +1173,8 @@
     {
       "talentSpellId": "382424",
       "effect": "reduce_cd",
-      "value": 30,
+      "value": 15,
       "sourceRowId": "1013746"
-    },
-    {
-      "talentSpellId": "414659",
-      "effect": "replace_spell",
-      "value": 414658,
-      "sourceRowId": "1083954"
     },
     {
       "talentSpellId": "1244110",
@@ -1199,6 +1193,11 @@
       "effect": "reduce_cd",
       "value": 30,
       "sourceRowId": "1277318"
+    },
+    {
+      "talentSpellId": "414658",
+      "effect": "replace_spell",
+      "value": 414658
     }
   ],
   "45524": [
@@ -2369,7 +2368,7 @@
     {
       "talentSpellId": "1246126",
       "effect": "reduce_cd",
-      "value": -30,
+      "value": -60,
       "sourceRowId": "1247559"
     }
   ],
@@ -5257,7 +5256,7 @@
     {
       "talentSpellId": "1246131",
       "effect": "reduce_cd",
-      "value": -30,
+      "value": -20,
       "sourceRowId": "1247572"
     }
   ],
@@ -6324,7 +6323,7 @@
     {
       "talentSpellId": "382424",
       "effect": "reduce_cd",
-      "value": 30,
+      "value": 15,
       "sourceRowId": "1013746"
     },
     {
@@ -6623,7 +6622,7 @@
     {
       "talentSpellId": "1246131",
       "effect": "reduce_cd",
-      "value": -30,
+      "value": -20,
       "sourceRowId": "1247572"
     }
   ],
@@ -7100,7 +7099,7 @@
     {
       "talentSpellId": "1244220",
       "effect": "reduce_cd",
-      "value": 2,
+      "value": 2.5,
       "sourceRowId": "1244852"
     }
   ],
@@ -7123,6 +7122,14 @@
       "value": 473919,
       "sourceRowId": "1193213",
       "isConditional": true
+    }
+  ],
+  "474149": [
+    {
+      "talentSpellId": "428937",
+      "effect": "reduce_cd",
+      "value": 1,
+      "sourceRowId": "1256778"
     }
   ],
   "474421": [

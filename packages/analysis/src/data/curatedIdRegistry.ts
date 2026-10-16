@@ -207,7 +207,7 @@ import {
   SHIV_SPELL_ID,
 } from "./scopedPurges";
 import { SELF_REMOVAL_SPELL_IDS } from "./selfRemovals";
-import { SPELL_CATEGORIES } from "./spellCategories";
+import { SILENCE_AURAS_NOT_KICKS, SPELL_CATEGORIES } from "./spellCategories";
 import {
   BUFF_DURATION_TALENT_MODIFIERS,
   CC_DURATION_TALENT_MODIFIERS,
@@ -852,6 +852,9 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   // generated data/interruptKitGenerated.json (DB2 SkillLineAbility +
   // SpecializationSpells + talent trees) — its id universe is SPELL_CATEGORIES
   // type "interrupts", already registered above.
+  t("SILENCE_AURAS_NOT_KICKS", "data/spellCategories.ts", "aura", () =>
+    set(SILENCE_AURAS_NOT_KICKS),
+  ),
   t("ADAPTATION_TRINKET_AURAS", "utils/pvpTrinketUses.ts", "aura", () => [
     ADAPTATION_TRIGGER_AURA_ID,
     ADAPTATION_LOCKOUT_AURA_ID,

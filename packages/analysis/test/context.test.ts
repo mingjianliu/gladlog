@@ -254,8 +254,10 @@ describe("buildMatchContext on real fixture", () => {
   it("GH #103 A5: Defensive loadout entries state how long the effect lasts", () => {
     const ctx = buildMatchContext(match, friends, enemies, {});
     expect(ctx).toContain("Pain Suppression [180s, 2 Charges, lasts 8s]");
-    // 150 s since GH #106: Winter's Protection counts per rank (rank 2 = −60)
-    expect(ctx).toContain("Ice Block [150s, lasts 10s]");
+    // Winter's Protection counts per rank (GH #106). 12.1.5.70391 set its row
+    // 1013746 PvpMultiplier 1 → 0.5 (not in the patch notes): rank 2 = −30 in
+    // PvP, so 240 − 30 − 30 (Glacial Bulwark 1265517) = 180 (was 150).
+    expect(ctx).toContain("Ice Block [180s, lasts 10s]");
     // offensive / control cooldowns keep the old shape
     expect(ctx).toContain("Combustion [60s]");
     // 2026-09-26: 30 s = DB2 40 − Psychic Voice 10, applied once (the hand override used to hold 30 and the talent took 10 again → 20).

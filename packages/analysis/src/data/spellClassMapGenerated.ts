@@ -1,7 +1,7 @@
 /**
- * Generated at: 2026-09-05T00:11:38.524Z
- * Build: 12.1.0.69587
- * Entries: 250
+ * Generated at: 2026-10-16T15:38:23.057Z
+ * Build: 12.1.5.70391
+ * Entries: 249
  */
 
 export const SPELL_TO_CLASSES: Record<string, number[]> = {
@@ -1004,9 +1004,6 @@ export const SPELL_TO_CLASSES: Record<string, number[]> = {
   ],
   "323673": [
     5
-  ],
-  "323764": [
-    11
   ],
   "342601": [
     9

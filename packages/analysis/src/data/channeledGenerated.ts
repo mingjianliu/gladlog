@@ -1,6 +1,6 @@
 /**
- * Generated at: 2026-09-26T02:56:10.454Z
- * Build: 12.1.0.69587
+ * Generated at: 2026-10-16T15:38:58.475Z
+ * Build: 12.1.5.70391
  * Source: SpellMisc Attributes_1 bit 2 (Is Channelled), restricted to the
  *   observed universe
  * ids: 83

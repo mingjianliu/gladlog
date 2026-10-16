@@ -423,6 +423,9 @@ export const SPELL_CATEGORIES: Record<string, ISpellCategoryEntry> = {
   "47476": { type: "interrupts" }, // Strangulate (DK silence aura)
   "356727": { type: "interrupts" }, // Spider Venom (the silence of the Hunter PvP talent Chimaeral Sting 356719)
   "374776": { type: "interrupts" }, // Tightening Grasp (DK silence talent)
+  //   … but none of the four is a kick: each is only a silence aura (DB2 aura
+  //   27, no INTERRUPT_CAST effect 68), so it never opens a school lockout. See
+  //   SILENCE_AURAS_NOT_KICKS below.
   // -- Speed boosts --
   "2983": { type: "buffs_speed_boost" }, // Sprint
   "1850": { type: "buffs_speed_boost" }, // Dash
@@ -432,3 +435,23 @@ export const SPELL_CATEGORIES: Record<string, ISpellCategoryEntry> = {
   "1714": { type: "debuffs_offensive" }, // Curse of Tongues
   "12654": { type: "debuffs_offensive" }, // Ignite
 };
+
+/**
+ * Silences filed under "interrupts" (the 2026-09-23 drGapScan fill-ins, DB2
+ * DiminishType = silence) that are NOT kicks and stay out of the interrupt kit
+ * (genInterruptKit → INTERRUPT_SPELL_IDS → the [KICK] lines and the "enemy
+ * interrupts UP" ledger). Each is only a silence aura (DB2 aura 27, no
+ * INTERRUPT_CAST effect 68): it blocks casting as control does and never opens
+ * a school lockout, so there is no cooldown trade-off to read (user ruling
+ * 2026-10-16: 「沉默本身其实是一种控制。打断的话，实际上主要是一个 cooldown
+ * trade-off 的问题」). Kept out because the 12.1.5 refresh would otherwise have
+ * printed their misses as `[KICK] … missed — IMMUNE` (605 files: 403 lines).
+ * Priest Silence 15487 is the same shape but has been Shadow's kick since
+ * GH #78 — deliberately not listed here (open question for the user).
+ */
+export const SILENCE_AURAS_NOT_KICKS: ReadonlySet<string> = new Set([
+  "1330", // Garrote - Silence (rides on Garrote)
+  "47476", // Strangulate
+  "356727", // Spider Venom (rides on Chimaeral Sting 356719)
+  "374776", // Tightening Grasp (rides on Gorefiend's Grasp)
+]);
