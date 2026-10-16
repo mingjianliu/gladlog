@@ -31,7 +31,7 @@ desktop 主进程
   MatchStore          一场一目录:meta.json + match.json + raw.txt,
   │                   外加一个只追加的 NDJSON 索引(_index.ndjson)
   ├─ RecorderService  按 segmentOpen/segmentClose 走 OBS websocket 起停录像
-  ├─ AnalysisService  候选事件 → prompt → LLM → 审计 → 按模型分槽的缓存
+  ├─ AnalysisService  候选事件 → prompt → LLM → 审计 →(可选)AI 自查 → 按模型分槽的缓存
   ├─ CompareService   你的指标 vs 预先构建的高分玩家参照语料
   ├─ LearningService  跨场台账 → 确定性模式扫描 → 提炼成规则
   └─ IPC              约 40 个 ipcMain.handle 频道 + 推送频道(src/main/ipc.ts)
@@ -339,6 +339,7 @@ analysis 的函数要的是旧的 `ICombatUnit` 形状。`parser-compat` 导出�
 | `buildFindingsPrompt.ts`                              | findings prompt。                                                                                                                      |
 | `auditFindings.ts`                                    | 出模型后的审计:凡带裸数字、编造事件、或违禁因果断言的一律丢弃。                                                                        |
 | `causalLint.ts`                                       | 纯正则的强因果**措辞**检查(策略禁止),中英双语。它查的是措辞,不是真伪。                                                                 |
+| `selfReview.ts`                                       | 可选的第二次调用(设置项,默认关;2026-10-15):同一后端 / 模型拿着生成它们的那份 prompt 重读审计后的 findings,逐条保留 / 更正 / 弱化 / 删除——绝不新增。由 `applySelfReview` 而非 `auditFindings` 校验(它看到的是渲染后的数字);缓存身份带 `SELF_REVIEW_PROMPT_VERSION`,与 `PROMPT_VERSION` 独立。 |
 | `spellNameZhLint.ts`                                  | 防止输出里把技能名译成中文。                                                                                                           |
 | `parseModelJson.ts`                                   | 容错的 JSON 抽取(带 markdown 围栏也认)—— `bad-json` 误杀那一类的修法。                                                                 |
 | `findingCategories.ts` / `types.ts` / `factFormat.ts` | 类别归一化与共享类型。                                                                                                                 |

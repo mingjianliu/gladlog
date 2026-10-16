@@ -8,6 +8,15 @@ data is already gladlog-native).
 
 ---
 
+> **Frozen since 2026-10-08.** No entry has been added or updated here since the
+> 2026-10-07 fact-layer direction; the live backlog is GitHub issues
+> (`mingjianliu/gladlog`), and the maintainer's rulings and lessons are in
+> `.claude/knowledge/` (fact-layer rulings of 2026-09-30 → 10-15:
+> `fact-layer-rulings-2026-10.md`). Status lines below ("待裁", "进行中") are as
+> of their own dates and may be stale — check the code, `git log -S` and the
+> issue before citing one. Entries referenced from `CLAUDE.md` (#34) and
+> `docs/rule-history.md` stay here as the evidence record.
+
 > Completed items (#2-13, #15, #16, #20, #22, #23, #24 dr reverse, #26-28, #32, #39, #40, multi-model, spellNames, etc.) have been moved to
 > [BACKLOG-archive.md](BACKLOG-archive.md), retaining original numbering and landing notes.
 

@@ -31,7 +31,7 @@ desktop main process
   MatchStore          one directory per match on disk: meta.json + match.json + raw.txt,
   │                   plus an append-only NDJSON index (_index.ndjson)
   ├─ RecorderService  OBS websocket start/stop, driven by segmentOpen/segmentClose
-  ├─ AnalysisService  candidate findings → prompt → LLM → audit → per-model cache slots
+  ├─ AnalysisService  candidate findings → prompt → LLM → audit → (opt-in) self-review → per-model cache slots
   ├─ CompareService   your metrics vs a pre-built reference corpus of high-rated players
   ├─ LearningService  cross-match ledger → deterministic pattern scan → distilled rules
   └─ IPC              ~40 ipcMain.handle channels + push channels (src/main/ipc.ts)
@@ -339,6 +339,7 @@ This is where analysis output becomes the text a model sees. There is no single 
 | `buildFindingsPrompt.ts`                              | The findings prompt.                                                                                                                                                                                       |
 | `auditFindings.ts`                                    | Post-model audit: drop anything with bare numbers, invented events, or forbidden causal claims.                                                                                                            |
 | `causalLint.ts`                                       | Regex-only lint for strong causal _language_ (the policy forbids it), in Chinese and English. It checks language, not truth.                                                                               |
+| `selfReview.ts`                                       | Opt-in second call (setting, default off; 2026-10-15): the same backend/model re-reads the audited findings against the prompt that produced them and keeps / corrects / weakens / deletes each — never adds one. Checked by `applySelfReview`, not `auditFindings` (it sees rendered numbers); cache identity carries `SELF_REVIEW_PROMPT_VERSION`, independent of `PROMPT_VERSION`. |
 | `spellNameZhLint.ts`                                  | Guards against spell names being translated into Chinese in output.                                                                                                                                        |
 | `parseModelJson.ts`                                   | Tolerant JSON extraction (markdown fences and all) — the fix for the `bad-json` false-rejection class.                                                                                                     |
 | `findingCategories.ts` / `types.ts` / `factFormat.ts` | Category normalisation and shared types.                                                                                                                                                                   |

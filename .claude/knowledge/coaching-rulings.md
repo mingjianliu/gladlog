@@ -47,4 +47,8 @@
 - 2v2 菜单只留 cd-hoarded + missed-cleanse(`BRACKET_TYPE_ALLOWLIST`)。
 - **用户领域直觉与我的数字冲突时,先怀疑我量的是不是他说的那件事。**
 
-相关:[fact-layer-direction.md](fact-layer-direction.md)、[signal-research-conclusions.md](signal-research-conclusions.md)、[dispel-cc-mitigation.md](dispel-cc-mitigation.md)
+## 2026-09-30 之后
+
+事实层工单(triage / FT)期间的裁决按主题收在 [fact-layer-rulings-2026-10.md](fact-layer-rulings-2026-10.md)——回合末、光环生命周期、真最低点、免疫措辞、能不能按、击杀窗口、爆发回应、踢、驱散、账本所有权、伤害读数、语言。本文件只保留那之前的指控口径。
+
+相关:[fact-layer-direction.md](fact-layer-direction.md)、[signal-research-conclusions.md](signal-research-conclusions.md)、[dispel-cc-mitigation.md](dispel-cc-mitigation.md)、[fact-layer-rulings-2026-10.md](fact-layer-rulings-2026-10.md)
