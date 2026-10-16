@@ -47,6 +47,7 @@ import {
   cdReadyInTimeAt,
   extractMajorCooldowns,
   gridHpPct,
+  hpTroughInWindow,
   type IMajorCooldownInfo,
   isDeadAtRenderSecond,
   SELF_CAST_NOOP_EXTERNAL_IDS,
@@ -110,6 +111,12 @@ export interface CdPriorHoldEpisode {
    * median (or the round ended) */
   minHpPct: number;
   minSec: number;
+  /** What the line PRINTS as "bottomed at": that friendly's true minimum
+   * over the dip's seconds (`hpTroughInWindow` — user ruling 2026-10-16, F15
+   * R1). `minHpPct` stays the grid reading every decision and the ranking
+   * read (09dda3c6: grid 43 % at 1:14, the log 41.3 %). */
+  troughHpPct: number;
+  troughSec: number;
   /** last rendered second still at or below the median — `endSec - tSec`
    * is how long the dip persisted */
   endSec: number;
@@ -296,6 +303,18 @@ export function cdPriorHoldEpisodes(
   for (let s = 0; s <= lastSec; s++)
     series.push(lowestFriendlyGridHp(friends, startMs, s));
 
+  const troughOf = (
+    unit: UnitLike,
+    fromSec: number,
+    toSec: number,
+    gridPct: number,
+    gridSec: number,
+  ): { troughHpPct: number; troughSec: number } => {
+    const t = hpTroughInWindow(unit as any, startMs, fromSec, toSec);
+    return t && t.pct < gridPct
+      ? { troughHpPct: t.pct, troughSec: t.atSec }
+      : { troughHpPct: gridPct, troughSec: gridSec };
+  };
   const out: CdPriorHoldEpisode[] = [];
   for (const { cd, ref } of cds) {
     const line = ref.medianHpPct;
@@ -391,6 +410,7 @@ export function cdPriorHoldEpisodes(
         hpAtCrossPct: cur.hpPct,
         minHpPct: min.hpPct,
         minSec,
+        ...troughOf(min.unit, s, episodeEndSec, min.hpPct, minSec),
         endSec: episodeEndSec,
         ownerLockedSecs: episodeEndSec - s + 1 - castableSecs,
         readyFromSec: firstReadySec ?? s,

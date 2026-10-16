@@ -265,19 +265,19 @@ describe("hpTroughInWindow — the true minimum, on the grid sampler's own valid
     });
   });
 
-  it("several lines on one timestamp: the LAST is the state at that instant (GH #100) — a same-ms transient is not a low", () => {
+  it("several lines on one timestamp: every line counts — a same-ms dip IS a low (user ruling 2026-10-16, F15 R1; the point reading keeps GH #100's last line)", () => {
     // 121c7e15's shape: a hit to 22 % and a heal back to 37 % on one stamp
     const u = friend({ 0: 66 });
     u.advancedActions.push(hp(15.573, 22), hp(15.573, 37));
     u.advancedActions.sort((a, b) => a.timestamp - b.timestamp);
     expect(hpTroughInWindow(u as never, T0, 10, 20)).toEqual({
-      pct: 37,
+      pct: 22,
       atSec: 15,
       atMs: T0 + 15_573,
     });
   });
 
-  it("an instant whose last line is not the unit's own reading, or has no max HP, gives no reading", () => {
+  it("a line that is not the unit's own reading, or has no max HP, gives no reading", () => {
     const u = friend({ 0: 66 });
     u.advancedActions.push(hp(15.2, 5, "PET"), {
       ...hp(15.6, 0),

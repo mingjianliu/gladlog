@@ -17,6 +17,8 @@ const ep = (over: Partial<CdPriorHoldEpisode> = {}): CdPriorHoldEpisode => ({
   hpAtCrossPct: 52,
   minHpPct: 44,
   minSec: 55,
+  troughHpPct: 44,
+  troughSec: 55,
   minUnitName: "Mate-Realm-US",
   minUnitIsOwner: false,
   endSec: 55,

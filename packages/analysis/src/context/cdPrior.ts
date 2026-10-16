@@ -12,7 +12,8 @@
  *
  * Every number on the line is either a rendered integer from the reference
  * table (`medianHpPct`, `n`) or the engine's own `gridHpPct` reading at a
- * whole second (`hpAtCrossPct`, `minHpPct`) — the `[STATE]` tick's sampler.
+ * whole second (`hpAtCrossPct`) — the `[STATE]` tick's sampler — or, for
+ * "bottomed at", the dip's trough (`troughHpPct`, F15 R1 2026-10-16).
  * The `[ref=…]` suffix is machine-readable on purpose: the eval gate
  * `checkCdPriorRefConsistency` re-parses the line and redoes the lookup.
  */
@@ -65,7 +66,7 @@ export function formatCdPriorLines(
         atSeconds: e.tSec,
         line:
           `${CD_PRIOR_TAG}   ${cohortLabel} cohort spends ${e.spellName} at a median lowest-friendly HP of ${e.ref.medianHpPct}% (n=${e.ref.n}); ` +
-          `${who} fell below that at ${fmtTime(e.tSec)} (${e.hpAtCrossPct}%) and bottomed at ${e.minHpPct}% by ${fmtTime(e.minSec)} with ${e.spellName} ${e.readyFromSec > e.tSec ? `ready from ${fmtTime(e.readyFromSec)}` : "ready"} and unspent` +
+          `${who} fell below that at ${fmtTime(e.tSec)} (${e.hpAtCrossPct}%) and bottomed at ${e.troughHpPct}% by ${fmtTime(e.troughSec)} with ${e.spellName} ${e.readyFromSec > e.tSec ? `ready from ${fmtTime(e.readyFromSec)}` : "ready"} and unspent` +
           (e.ownerLockedSecs > 0
             ? ` (you could not cast it for ${e.ownerLockedSecs}s of that dip)`
             : "") +

@@ -18,6 +18,7 @@ import {
 } from "./cannotCastIntervals";
 import {
   chargesAvailableAt,
+  hpTroughInEventSpan,
   isHealerSpec,
   specToString,
   unitCooldownOf,
@@ -804,13 +805,15 @@ export function computeWindowContributions(
       toSeconds - fromSeconds - blockedSeconds,
     );
 
+    // A trough (user ruling 2026-10-16, F15 R1: every printed "lowest /
+    // team min" reads the true minimum): the window's own samples, not its
+    // whole-second ticks only — 8cd58545 printed `team min HP 33%` over a
+    // paladin at 3.8 % between two ticks. Printed only; nothing decides on it.
     let teamMinHpPct: number | null = null;
     for (const f of friends) {
-      for (let t = Math.ceil(fromSeconds); t <= Math.floor(toSeconds); t++) {
-        const hp = getHpPercentAtTime(f, t, matchStartMs);
-        if (hp !== null && (teamMinHpPct === null || hp < teamMinHpPct))
-          teamMinHpPct = hp;
-      }
+      const low = hpTroughInEventSpan(f, matchStartMs, fromSeconds, toSeconds);
+      if (low && (teamMinHpPct === null || low.pct < teamMinHpPct))
+        teamMinHpPct = low.pct;
     }
 
     const targetUnit = enemies.find((e) => e.id === w.targetUnitId) ?? null;

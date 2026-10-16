@@ -1723,9 +1723,10 @@ export function gridHpMinInWindow(
  *
  * The sample-validity rules are the grid sampler's own, not new ones
  * (`unitHpSampleAt` / `binarySearchClosest`):
- *  - several lines on one timestamp → the LAST one is the state at that
- *    instant (GH #100); an instant whose last line is not the unit's own
- *    reading, or has no max HP, gives no reading;
+ *  - every line of the unit's own reading counts, intermediate lines of one
+ *    timestamp included (user ruling 2026-10-16, F15 R1 — the point
+ *    readings keep GH #100's "last line of the instant"); a line with no max
+ *    HP gives no reading;
  *  - rounded to a whole percent, clamped at 100 (`gridHpSample`);
  *  - nothing is read from the unit's death second on (`isDeadAtRenderSecond`
  *    — the `[STATE]` tick prints `dead` there), and `skipSec` leaves out the
@@ -1805,9 +1806,11 @@ export function hpTroughInWindow(
     const a = actions[i]!;
     const ts = a.logLine.timestamp;
     if (ts >= endMs || ts > spanToMs) break;
-    // same timestamp: the last line is the state at that instant
-    if (i + 1 < actions.length && actions[i + 1]!.logLine.timestamp === ts)
-      continue;
+    // Every line of an instant counts, not only its last (user ruling
+    // 2026-10-16, F15 R1): a hit and the heal it provoked share one ms, and
+    // the HP between them is a state the unit was in (332b9b2f: 36.8 % under
+    // a printed 43 %). The last-line rule stays the POINT reading's
+    // (`unitHpSampleAt`, GH #100 / 2026-09-23).
     if (a.advancedActorId !== unit.id || a.advancedActorMaxHp <= 0) continue;
     const sec = toRenderSecond((ts - matchStartMs) / 1000);
     if (skipSec?.(sec)) continue;
