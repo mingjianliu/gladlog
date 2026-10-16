@@ -93,6 +93,58 @@ describe("StructuredAnalysisPanel", () => {
     expect(screen.queryByTestId("analysis-slot-tabs")).toBeNull();
   });
 
+  it("AI 自查标注(2026-10-15):自查过的结果顶部一行淡色小字;自查失败标未自查;没开不显示", async () => {
+    const fx = (window as any).__gladlogFixture;
+    const stateOf = (cached: unknown) => ({
+      cached,
+      running: false,
+      slots: [{ key: "anthropic:claude-sonnet-5", createdAt: 1, stale: false }],
+      activeKey: "anthropic:claude-sonnet-5",
+    });
+    const reviewed = {
+      ...result,
+      selfReview: {
+        status: "reviewed",
+        original: [{ ...result.findings[0], explanation: "第30秒阵亡,没人管。" }],
+      },
+    };
+    fx.analysis.getState.mockResolvedValue(stateOf(reviewed));
+    const { unmount } = render(
+      <StructuredAnalysisPanel
+        source={{ units: {}, startInfo: {} } as any}
+        matchId="m1"
+      />,
+    );
+    expect((await screen.findByTestId("self-review-note")).textContent).toBe(
+      "已 AI 自查 · 1 条结论有改动",
+    );
+    unmount();
+
+    fx.analysis.getState.mockResolvedValue(
+      stateOf({ ...result, selfReview: { status: "failed" } }),
+    );
+    const second = render(
+      <StructuredAnalysisPanel
+        source={{ units: {}, startInfo: {} } as any}
+        matchId="m1"
+      />,
+    );
+    expect((await screen.findByTestId("self-review-note")).textContent).toMatch(
+      /^未自查/,
+    );
+    second.unmount();
+
+    fx.analysis.getState.mockResolvedValue(stateOf(result));
+    render(
+      <StructuredAnalysisPanel
+        source={{ units: {}, startInfo: {} } as any}
+        matchId="m1"
+      />,
+    );
+    await screen.findByText(/第30秒阵亡/);
+    expect(screen.queryByTestId("self-review-note")).toBeNull();
+  });
+
   it("语言切换:点 EN 持久化 aiLanguage 并重查缓存(backlog #1)", async () => {
     render(
       <StructuredAnalysisPanel

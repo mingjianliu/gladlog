@@ -29,6 +29,7 @@ const baseSettings: Settings = {
   aiBackendCommand: null,
   aiLanguage: "zh",
   autoAnalyzeNew: false,
+  aiSelfReview: false,
   recordingEnabled: false,
   obsWebsocketUrl: null,
   obsWebsocketPassword: null,

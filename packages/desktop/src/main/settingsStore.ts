@@ -39,6 +39,12 @@ export interface GladlogSettings {
    * historical imports do not trigger it (the discriminator is the `live`
    * flag on the matchStored payload). */
   autoAnalyzeNew: boolean;
+  /** AI self-review (user 2026-10-15, default off): after the first-round
+   * analysis, one more call on the same backend/model re-checks the findings
+   * against the prompt and keeps / corrects / weakens / deletes statements,
+   * never adding any. Part of the analysis cache identity
+   * (analysis.ts selfReviewMatches). */
+  aiSelfReview: boolean;
   // -- OBS externally driven recording (2026-07-28, track C phase 1) --
   recordingEnabled: boolean;
   /** null -> use DEFAULT_OBS_WS_URL for connecting / as the placeholder. */
@@ -108,6 +114,7 @@ const DEFAULTS: GladlogSettings = {
   aiBackendCommand: null,
   aiLanguage: "zh",
   autoAnalyzeNew: false,
+  aiSelfReview: false,
   recordingEnabled: false,
   obsWebsocketUrl: null,
   obsWebsocketPassword: null,

@@ -17,6 +17,10 @@ export const SEVERITY_RANK: Record<string, number> = {
 };
 const RANK = SEVERITY_RANK;
 
+/** Bracket / format terms (1v1, 2v2, 3v3) — never a fabricated stat, so the
+ * raw-digit rule exempts them. Shared with selfReview.ts's numeric rule. */
+export const BRACKET_TERM = /\b\d+v\d+\b/gi;
+
 /**
  * Intent-guard severity downgrade (BACKLOG #26 Task 2, 意图守护): a finding
  * that cites a `cd-hoarded` candidate (gated on
@@ -178,7 +182,7 @@ export function auditFindings(
     // digit rule (agy review F3).
     const prose = f.explanation
       .replace(/\{\{\s*[\w.]+\s*\}\}/g, " ")
-      .replace(/\b\d+v\d+\b/gi, " ");
+      .replace(BRACKET_TERM, " ");
     if (/\d/.test(prose)) {
       dropped.push({
         finding: f,

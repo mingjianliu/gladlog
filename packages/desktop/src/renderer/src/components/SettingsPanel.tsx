@@ -596,6 +596,26 @@ export function SettingsPanel() {
               {settings.autoAnalyzeNew ? "停用" : "启用"}
             </button>
           </span>
+
+          <span className="settings-k">AI 自查</span>
+          <span className="settings-v">
+            分析出结果后,让同一个模型对照本场数据再核对一遍:改正或删掉没有依据的说法,不新增结论。每次分析多一次
+            AI 调用,用量约翻倍,多等 1–2 分钟。离线实测(Opus,51
+            场):说错的句子少约三分之二。默认关闭;切换后已分析的对局需要重新分析。
+          </span>
+          <span className="settings-actions">
+            <button
+              aria-label="AI 自查"
+              onClick={() =>
+                void save(
+                  { aiSelfReview: !settings.aiSelfReview },
+                  settings.aiSelfReview ? "已关闭 AI 自查" : "已开启 AI 自查",
+                )
+              }
+            >
+              {settings.aiSelfReview ? "关闭" : "开启"}
+            </button>
+          </span>
         </div>
       </section>
 

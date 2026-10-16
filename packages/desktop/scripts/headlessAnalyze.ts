@@ -11,7 +11,9 @@
  * so the cache slot is exactly the one the app shows.
  *
  *   npx tsx packages/desktop/scripts/headlessAnalyze.ts <matchId>[#roundSeq] ...
- *   env: GLADLOG_MATCH_DIR (default = app library), GLADLOG_SETTINGS (default = app settings.json)
+ *   env: GLADLOG_MATCH_DIR (default = app library), GLADLOG_SETTINGS (default = app settings.json),
+ *        GLADLOG_SELF_REVIEW=1|0 (force the AI self-review on / off; default = the settings file's
+ *        aiSelfReview, i.e. off unless the app turned it on — user 2026-10-15)
  */
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -49,8 +51,15 @@ async function main() {
     process.exit(2);
   }
   const settings = JSON.parse(readFileSync(SETTINGS, "utf8"));
+  const selfReviewEnv = process.env["GLADLOG_SELF_REVIEW"];
+  if (selfReviewEnv === "1" || selfReviewEnv === "0")
+    settings.aiSelfReview = selfReviewEnv === "1";
+  else if (selfReviewEnv !== undefined) {
+    console.error("GLADLOG_SELF_REVIEW must be 1 or 0");
+    process.exit(2);
+  }
   console.log(
-    `backend=${settings.aiBackend} model=${JSON.stringify(settings.aiModels)} lang=${settings.aiLanguage} dir=${MATCH_DIR}`,
+    `backend=${settings.aiBackend} model=${JSON.stringify(settings.aiModels)} lang=${settings.aiLanguage} selfReview=${settings.aiSelfReview === true} dir=${MATCH_DIR}`,
   );
   const svc = createAnalysisService({
     getSettings: () => settings,
@@ -114,6 +123,8 @@ async function main() {
             ? a.slots[a.lastSlotKey]?.result
             : a.result;
         n = String(r?.findings?.length ?? "none");
+        if (r?.selfReview)
+          n += ` selfReview=${r.selfReview.status}${r.selfReview.failure ? `(${r.selfReview.failure})` : ""}`;
       } catch {
         /* cache unreadable → reported as "?" */
       }

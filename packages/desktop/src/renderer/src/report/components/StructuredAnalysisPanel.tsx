@@ -14,6 +14,7 @@ import { categoryLabel, severityLabel } from "../derive/findingDisplay";
 import { makeRichText } from "../derive/inlineRich";
 import { resolveJumpTarget } from "../derive/jumpTarget";
 import { deriveKeyMoments } from "../derive/keyMoments";
+import { selfReviewNote, type SelfReviewView } from "../derive/selfReviewNote";
 import { backendModelLabel, slotLabel } from "../derive/slotLabel";
 import { cliWaitHint, fmtElapsed } from "../derive/aiRunStatus";
 import { useElapsedSince } from "./useElapsedSince";
@@ -37,6 +38,7 @@ type AnalysisResult = {
   hadNarration: boolean;
   fallbackReason?: AnalysisFallbackReason;
   deepened?: boolean;
+  selfReview?: SelfReviewView;
 };
 
 type State = "idle" | "running" | "done" | "error";
@@ -165,6 +167,9 @@ export function StructuredAnalysisPanel({
   // 首轮 bad-json 自动重试中(main 发 gladlog:analysis:retry)——总时长会
   // 翻倍,状态行必须解释这段额外等待。
   const [retrying, setRetrying] = useState(false);
+  // 首轮已出结果、正在跑 AI 自查(main 发 gladlog:analysis:reviewing;
+  // 重挂载时由 runningMeta.reviewing 回填)——与 retrying 同一套。
+  const [reviewing, setReviewing] = useState(false);
   const elapsedS = useElapsedSince(
     state === "running" ? (runMeta?.since ?? null) : null,
   );
@@ -304,6 +309,7 @@ export function StructuredAnalysisPanel({
     setActiveKey(null);
     setRunMeta(null);
     setRetrying(false);
+    setReviewing(false);
     void (async () => {
       try {
         // Single atomic query: the cache and the running flag must be read from
@@ -325,6 +331,7 @@ export function StructuredAnalysisPanel({
             backend: string;
             model: string;
             retrying?: boolean;
+            reviewing?: boolean;
           } | null;
           slots?: Array<{ key: string; createdAt: number; stale: boolean }>;
           activeKey?: string | null;
@@ -353,6 +360,7 @@ export function StructuredAnalysisPanel({
           // 重试标注也从 main 回填(agy review #1):重挂载后计时还在涨,
           // 「为什么翻倍」的解释不能丢
           setRetrying(runningMeta?.retrying === true);
+          setReviewing(runningMeta?.reviewing === true);
         }
       } catch {
         /* test stub / no bridge facet: stay idle */
@@ -368,6 +376,7 @@ export function StructuredAnalysisPanel({
     // bridge facet (test stub) must not make mounting throw.
     let offDelta: (() => void) | undefined;
     let offRetry: (() => void) | undefined;
+    let offReviewing: (() => void) | undefined;
     let offDone: (() => void) | undefined;
     let offError: (() => void) | undefined;
     try {
@@ -379,6 +388,10 @@ export function StructuredAnalysisPanel({
       offRetry = ai.onRetry?.((d: { matchId: string }) => {
         if (d.matchId !== matchId) return;
         setRetrying(true);
+      });
+      offReviewing = ai.onReviewing?.((d: { matchId: string }) => {
+        if (d.matchId !== matchId) return;
+        setReviewing(true);
       });
       offDone = ai.onDone(
         (d: { matchId: string; result: unknown; slotKey?: string }) => {
@@ -402,6 +415,7 @@ export function StructuredAnalysisPanel({
           setError("");
           setRunMeta(null);
           setRetrying(false);
+          setReviewing(false);
           // New analysis landed: back to "follow activeKey", discarding any
           // in-flight old-slot tab request (otherwise that late getCached
           // response could overwrite the fresh result with the old slot).
@@ -473,6 +487,7 @@ export function StructuredAnalysisPanel({
         setError(d.message);
         setRunMeta(null);
         setRetrying(false);
+        setReviewing(false);
       });
     } catch {
       /* test stub / no bridge facet: skip subscribing, mounting must not throw */
@@ -480,6 +495,7 @@ export function StructuredAnalysisPanel({
     return () => {
       offDelta?.();
       offRetry?.();
+      offReviewing?.();
       offDone?.();
       offError?.();
     };
@@ -764,6 +780,7 @@ export function StructuredAnalysisPanel({
     setPreview("");
     setState("running");
     setRetrying(false);
+    setReviewing(false);
     // 与 main 侧 run() 的 backend/model 决策同构(override 优先,否则
     // settings 默认);重挂载后会被 getState 的 runningMeta(单源)覆盖回填
     setRunMeta({
@@ -981,6 +998,18 @@ export function StructuredAnalysisPanel({
               ))}
             </div>
           )}
+          {displayEmpty !== "stale" &&
+            (() => {
+              const note = selfReviewNote(result);
+              return note ? (
+                <p
+                  className="rpt-self-review-note"
+                  data-testid="self-review-note"
+                >
+                  {note}
+                </p>
+              ) : null;
+            })()}
           {displayEmpty === "stale" ? (
             // Review I-2: getCached returned null for the selected slot (e.g.
             // the slot was invalidated by a prompt upgrade) -- say so honestly
@@ -989,7 +1018,8 @@ export function StructuredAnalysisPanel({
             // these are the new slot's own findings). `result` itself is not
             // cleared, it is just not rendered here.
             <p className="rpt-slot-stale-note" data-testid="slot-stale-note">
-              该槽为旧版本分析(提示词已升级),重新分析后可查看
+              该槽为旧版本分析(提示词已升级,或 AI
+              自查设置已切换),重新分析后可查看
             </p>
           ) : result.hadNarration === false ? (
             <div>
@@ -1079,6 +1109,12 @@ export function StructuredAnalysisPanel({
             <>
               <br />
               首轮输出解析失败,已自动重试一次(总时长会翻倍)
+            </>
+          )}
+          {reviewing && (
+            <>
+              <br />
+              首轮已出结果,正在 AI 自查(多一次 AI 调用)
             </>
           )}
         </p>

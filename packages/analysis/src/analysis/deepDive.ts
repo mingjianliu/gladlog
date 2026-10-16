@@ -38,6 +38,7 @@ import {
   stayedInHadRealCost,
 } from "../utils/positionAnalysis";
 import { fmtTime } from "../utils/renderGrid";
+import { BRACKET_TERM } from "./auditFindings";
 import { causalLint } from "./causalLint";
 import { fmtFactTime, serializeFactsBlock } from "./factFormat";
 import { repairSpellNameZh } from "./spellNameZhLint";
@@ -1116,7 +1117,7 @@ export function auditDeepDives(
     // first round — any digit outside a placeholder = fabricated or defiant)
     const prose = entry.deepDive
       .replace(/\{\{[^}]*\}\}/g, " ")
-      .replace(/\b\d+v\d+\b/gi, " ");
+      .replace(BRACKET_TERM, " ");
     if (/\d/.test(prose)) {
       onDrop?.({
         reason: "bare-digit",

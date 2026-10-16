@@ -22,6 +22,7 @@
  *     end to end, each with a negative control so it cannot silently no-op.
  */
 import { ensureAnalysisData } from "@gladlog/analysis";
+import * as auditFindings from "@gladlog/analysis/src/analysis/auditFindings";
 import * as burstWindowDecisionPoints from "@gladlog/analysis/src/analysis/burstWindowDecisionPoints";
 import * as candidateFindings from "@gladlog/analysis/src/analysis/candidateFindings";
 import * as backlashDispel from "@gladlog/analysis/src/analysis/candidates/backlashDispel";
@@ -3057,6 +3058,11 @@ const INDEX: PredicateRow[] = [
     file: `${A}/compare/claimChecker.ts`,
     symbol: "PLACEHOLDER",
     mod: claimChecker,
+  },
+  {
+    file: `${A}/analysis/auditFindings.ts`,
+    symbol: "BRACKET_TERM",
+    mod: auditFindings,
   },
   {
     file: `${A}/compare/buildExemplarLedPrompt.ts`,

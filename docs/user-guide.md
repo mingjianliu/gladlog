@@ -53,6 +53,7 @@ Three time ranges — today / 7 days / all: match count and win rate, rating cur
 - **AI backend**: five options — the Anthropic API and the DeepSeek API (both need a key), and the Claude, agy, and Codex CLIs (local, no key; the command path is auto-detected, and you can enter it by hand if it lives somewhere unusual). Each backend has its own model dropdown.
 - **API key**: keys are encrypted on disk and the UI never shows more than "configured". You can clear one at any time. Note that with an API backend the match summary goes to that provider's servers, whereas the local CLIs keep the call on your machine (apart from whatever the CLI itself does).
 - **Coach reply language**: Chinese or English.
+- **AI self-review** (off by default): after an analysis, the same model checks its own findings once more against the match data — it corrects or removes statements the data does not support and never adds new ones. It costs one extra AI call per analysis (roughly double the AI usage, 1–2 minutes longer). A result that went through it says "已 AI 自查" above the findings; if the check fails, you get the original findings marked "未自查". Turning it on or off makes already-analyzed matches show as not analyzed until you re-run them.
 
 ## Troubleshooting
 

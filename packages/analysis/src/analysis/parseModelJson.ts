@@ -30,7 +30,10 @@ const FENCE = /```(?:json|JSON)?\s*\n([\s\S]*?)\n?```/;
  * first. This only **locates**, it never repairs — repairing would mean
  * inventing content on the model's behalf.
  */
-function candidates(raw: string): string[] {
+function candidates(
+  raw: string,
+  shape: "array" | "object" = "array",
+): string[] {
   const t = raw.trim();
   if (!t) return [];
 
@@ -47,17 +50,40 @@ function candidates(raw: string): string[] {
   if (fenced) out.push(fenced);
 
   // When the payload starts with neither { nor [ (plain prose wrapping a bare
-  // array), slice at the outermost square brackets:
+  // array — or, for `shape: "object"`, a bare object: same rule with braces),
+  // slice at the outermost square brackets:
   //   starts with [ but fails to parse = truncated / syntax error, and
   //     slicing would only mask it as a half result;
   //   starts with { = the model returned an object, which is a contract
   //     violation and must not be "rescued" by slicing out some inner array.
   if (!payload.startsWith("{") && !payload.startsWith("[")) {
-    const a = payload.indexOf("[");
-    const b = payload.lastIndexOf("]");
+    const [open, close] = shape === "array" ? ["[", "]"] : ["{", "}"];
+    const a = payload.indexOf(open);
+    const b = payload.lastIndexOf(close);
     if (a !== -1 && b > a) out.push(payload.slice(a, b + 1));
   }
   return out;
+}
+
+/**
+ * Parse the JSON **object** returned by the model (the self-review reply,
+ * selfReview.ts, whose contract is `{"findings": [...], "changes": [...]}`).
+ * Same locate-never-repair rules as parseModelJsonArray, mirrored: a top-level
+ * array is a contract violation here and is never "rescued"; truncation → null.
+ */
+export function parseModelJsonObject(
+  raw: string,
+): Record<string, unknown> | null {
+  for (const c of candidates(raw, "object")) {
+    try {
+      const parsed: unknown = JSON.parse(c);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed))
+        return parsed as Record<string, unknown>;
+    } catch {
+      /* try the next candidate */
+    }
+  }
+  return null;
 }
 
 /**

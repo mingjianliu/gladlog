@@ -1687,6 +1687,7 @@ describe("getState 原子查询(周度复核 P2#5)", () => {
         backend: "anthropic",
         model: "claude-opus-5-5",
         retrying: false,
+        reviewing: false,
       },
       slots: [],
       activeKey: null,
