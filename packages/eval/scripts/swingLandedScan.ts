@@ -39,6 +39,10 @@
  *   --show prints every offending raw line (class, match id, rawLines index)
  *   (a dir is walked for raw.txt files; one file at a time)
  * Exit code 1 when any must-be-0 class is non-zero.
+ *
+ * The scan itself (`scanItem`, `itemsOfRawText`, `isClean`) is exported for
+ * test/swingLandedScan.test.ts; only the `process.argv` guard at the bottom
+ * runs the CLI.
  */
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
@@ -63,9 +67,9 @@ function rawFiles(arg: string): string[] {
   return out;
 }
 
-const GAP_EDGES = [0, 5, 25, 50, 100, 200, 500, SWING_TWIN_WINDOW_MS];
+export const GAP_EDGES = [0, 5, 25, 50, 100, 200, 500, SWING_TWIN_WINDOW_MS];
 
-interface Tally {
+export interface Tally {
   items: number;
   swing: number;
   landed: number;
@@ -95,7 +99,7 @@ interface Tally {
   amountDiffers: number;
 }
 
-const newTally = (): Tally => ({
+export const newTally = (): Tally => ({
   items: 0,
   swing: 0,
   landed: 0,
@@ -125,7 +129,7 @@ const newTally = (): Tally => ({
   amountDiffers: 0,
 });
 
-function add(into: Tally, t: Tally): void {
+export function addTally(into: Tally, t: Tally): void {
   for (const k of Object.keys(t) as (keyof Tally)[]) {
     if (k === "gaps") t.gaps.forEach((n, i) => (into.gaps[i]! += n));
     else if (k === "maxGapMs") into.maxGapMs = Math.max(into.maxGapMs, t[k]);
@@ -133,13 +137,36 @@ function add(into: Tally, t: Tally): void {
   }
 }
 
-const SHOW = process.argv.includes("--show");
-function show(cls: string, m: GladMatchBase, r: ParsedLine): void {
-  if (SHOW)
-    console.log(`  ${cls} ${m.id} #${r.lineIndex} ${r.raw.slice(0, 160)}`);
+/** The must-be-0 contract, as the exit code reads it. */
+export function isClean(t: Tally): boolean {
+  return (
+    t.missing === 0 && t.double === 0 && t.mismatch === 0 && t.zeroNoAbsorb === 0
+  );
 }
 
-function scanItem(m: GladMatchBase): Tally {
+/** Called once per offending raw line with its class (`--show`). */
+export type OffenceReport = (
+  cls: "MISSING" | "DOUBLE" | "MISMATCH" | "ZERO-NOABS",
+  m: GladMatchBase,
+  r: ParsedLine,
+) => void;
+
+/** The matches / shuffle rounds of one raw log's text, parsed as the CLI
+ * parses a file (one `GladLogParser`, default options). */
+export function itemsOfRawText(text: string): GladMatchBase[] {
+  const items: GladMatchBase[] = [];
+  const p = new GladLogParser();
+  p.on("match", (m: GladMatchBase) => items.push(m));
+  p.on("shuffle", (sh: { rounds: GladMatchBase[] }) => {
+    for (const r of sh.rounds) items.push(r);
+  });
+  for (const line of text.split("\n")) p.push(line);
+  p.end();
+  return items;
+}
+
+export function scanItem(m: GladMatchBase, report?: OffenceReport): Tally {
+  const show: OffenceReport = (cls, mm, r) => report?.(cls, mm, r);
   const t = newTally();
   t.items = 1;
   const records: ParsedLine[] = [];
@@ -309,63 +336,58 @@ function scanItem(m: GladMatchBase): Tally {
   return t;
 }
 
-const args = process.argv.slice(2).filter((a) => a !== "--show");
-if (args.length === 0) {
-  console.error("usage: swingLandedScan.ts <raw.txt | dir>...");
-  process.exit(2);
-}
+function main(): void {
+  const SHOW = process.argv.includes("--show");
+  const args = process.argv.slice(2).filter((a) => a !== "--show");
+  if (args.length === 0) {
+    console.error("usage: swingLandedScan.ts <raw.txt | dir>...");
+    process.exit(2);
+  }
+  const report: OffenceReport | undefined = SHOW
+    ? (cls, m, r) =>
+        console.log(`  ${cls} ${m.id} #${r.lineIndex} ${r.raw.slice(0, 160)}`)
+    : undefined;
 
-const total = newTally();
-let files = 0;
-for (const file of args.flatMap(rawFiles)) {
-  const items: GladMatchBase[] = [];
-  const p = new GladLogParser();
-  p.on("match", (m: GladMatchBase) => items.push(m));
-  p.on("shuffle", (sh: { rounds: GladMatchBase[] }) => {
-    for (const r of sh.rounds) items.push(r);
-  });
-  for (const line of readFileSync(file, "utf8").split("\n")) p.push(line);
-  p.end();
-  const t = newTally();
-  for (const m of items) add(t, scanItem(m));
-  add(total, t);
-  files++;
-  const tag = path.basename(path.dirname(file));
+  const total = newTally();
+  let files = 0;
+  for (const file of args.flatMap(rawFiles)) {
+    const t = newTally();
+    for (const m of itemsOfRawText(readFileSync(file, "utf8")))
+      addTally(t, scanItem(m, report));
+    addTally(total, t);
+    files++;
+    const tag = path.basename(path.dirname(file));
+    console.log(
+      `${tag} items=${t.items} landed=${t.landed} pairs=${t.pairs} landedOnlyHit=${t.landedOnlyHit} ` +
+        `MISSING=${t.missing} (${t.missingDamage} dmg, on players ${t.missingOnPlayerDamage}, killing blows ${t.missingKillingBlows}) ` +
+        `DOUBLE=${t.double} MISMATCH=${t.mismatch} (phantom ${t.phantom}) ZERO-NOABS=${t.zeroNoAbsorb}/${t.zero}`,
+    );
+  }
+
+  console.log(`\n=== ${files} files, ${total.items} matches / rounds ===`);
   console.log(
-    `${tag} items=${t.items} landed=${t.landed} pairs=${t.pairs} landedOnlyHit=${t.landedOnlyHit} ` +
-      `MISSING=${t.missing} (${t.missingDamage} dmg, on players ${t.missingOnPlayerDamage}, killing blows ${t.missingKillingBlows}) ` +
-      `DOUBLE=${t.double} MISMATCH=${t.mismatch} (phantom ${t.phantom}) ZERO-NOABS=${t.zeroNoAbsorb}/${t.zero}`,
+    `SWING_DAMAGE ${total.swing} · SWING_DAMAGE_LANDED ${total.landed} · pairs ${total.pairs} ` +
+      `(LANDED first in ${total.landedFirst}; amount differs in ${total.amountDiffers}) · max gap ${total.maxGapMs} ms`,
   );
+  console.log(
+    "pair gap ≤ms: " +
+      GAP_EDGES.map((e, i) => `${e}:${total.gaps[i]}`).join("  "),
+  );
+  console.log(
+    `LANDED-only ${total.landedOnly}: amount>0 ${total.landedOnlyHit} (${total.landedOnlyHitDamage} dmg), ` +
+      `amount=0 LANDED lines ${total.zero}; SWING_DAMAGE-only ${total.swingOnly}; target not a parsed unit ${total.targetNotAUnit}`,
+  );
+  console.log(
+    `MISSING ${total.missing} lines / ${total.missingDamage} dmg ` +
+      `(on players ${total.missingOnPlayer} / ${total.missingOnPlayerDamage}; killing blows ${total.missingKillingBlows})`,
+  );
+  console.log(`DOUBLE ${total.double} swings / ${total.doubleDamage} dmg`);
+  console.log(
+    `MISMATCH ${total.mismatch} swings / ${total.mismatchAbs} dmg apart (net ${total.mismatchNet}); ` +
+      `PHANTOM ${total.phantom} swings / ${total.phantomDamage} dmg the victim-side line says did not land`,
+  );
+  console.log(`ZERO-NOABS ${total.zeroNoAbsorb} of ${total.zero}`);
+  process.exit(isClean(total) ? 0 : 1);
 }
 
-console.log(`\n=== ${files} files, ${total.items} matches / rounds ===`);
-console.log(
-  `SWING_DAMAGE ${total.swing} · SWING_DAMAGE_LANDED ${total.landed} · pairs ${total.pairs} ` +
-    `(LANDED first in ${total.landedFirst}; amount differs in ${total.amountDiffers}) · max gap ${total.maxGapMs} ms`,
-);
-console.log(
-  "pair gap ≤ms: " +
-    GAP_EDGES.map((e, i) => `${e}:${total.gaps[i]}`).join("  "),
-);
-console.log(
-  `LANDED-only ${total.landedOnly}: amount>0 ${total.landedOnlyHit} (${total.landedOnlyHitDamage} dmg), ` +
-    `amount=0 LANDED lines ${total.zero}; SWING_DAMAGE-only ${total.swingOnly}; target not a parsed unit ${total.targetNotAUnit}`,
-);
-console.log(
-  `MISSING ${total.missing} lines / ${total.missingDamage} dmg ` +
-    `(on players ${total.missingOnPlayer} / ${total.missingOnPlayerDamage}; killing blows ${total.missingKillingBlows})`,
-);
-console.log(`DOUBLE ${total.double} swings / ${total.doubleDamage} dmg`);
-console.log(
-  `MISMATCH ${total.mismatch} swings / ${total.mismatchAbs} dmg apart (net ${total.mismatchNet}); ` +
-    `PHANTOM ${total.phantom} swings / ${total.phantomDamage} dmg the victim-side line says did not land`,
-);
-console.log(`ZERO-NOABS ${total.zeroNoAbsorb} of ${total.zero}`);
-process.exit(
-  total.missing > 0 ||
-    total.double > 0 ||
-    total.mismatch > 0 ||
-    total.zeroNoAbsorb > 0
-    ? 1
-    : 0,
-);
+if (process.argv[1]?.includes("swingLandedScan")) main();

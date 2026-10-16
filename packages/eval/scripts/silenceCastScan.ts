@@ -32,6 +32,10 @@
  *   npx tsx packages/eval/scripts/silenceCastScan.ts \
  *     --manifest $GLADLOG_EVAL_HOME/corpus/manifest-archive-2026-08-28-newseason.txt \
  *     [--every 30] [--top 15]
+ *
+ * The scan itself (`klassOf`, `scanLogText`, `perTenK`, `isFlagged`) is
+ * exported for test/silenceCastScan.test.ts; only the `process.argv` guard at
+ * the bottom runs the CLI.
  */
 import { ensureAnalysisData } from "@gladlog/analysis/src/data/ensure";
 import { isSilenceOnlyAura } from "@gladlog/analysis/src/utils/cannotCastIntervals";
@@ -43,17 +47,111 @@ import {
 import { readFileSync } from "fs";
 import { gunzipSync } from "zlib";
 
-const FLAG_PER_10K = 1;
-const LEAD_MS = 100;
-const LAG_MS = 50;
+export const FLAG_PER_10K = 1;
+export const LEAD_MS = 100;
+export const LAG_MS = 50;
 
-type Klass = "silenceable" | "unsilenceable" | "no row";
-const klassOf = (spellId: string): Klass =>
+export type Klass = "silenceable" | "unsilenceable" | "no row";
+export const KLASSES: readonly Klass[] = ["silenceable", "unsilenceable", "no row"];
+export const klassOf = (spellId: string): Klass =>
   isSilenceableCast(spellId)
     ? "silenceable"
     : isUnsilenceableCast(spellId)
       ? "unsilenceable"
       : "no row";
+
+export interface SilenceCastCounts {
+  /** SUCCESSes strictly inside a silence on their caster, per class. */
+  inside: Map<Klass, number>;
+  /** Every SUCCESS by a player, per class — the rate's denominator. */
+  total: Map<Klass, number>;
+  /** Inside-silence casts per class, by `"<name> <id>"`. */
+  bySpell: Map<Klass, Map<string, number>>;
+}
+
+export const newCounts = (): SilenceCastCounts => ({
+  inside: new Map(),
+  total: new Map(),
+  bySpell: new Map(),
+});
+
+export function addCounts(into: SilenceCastCounts, c: SilenceCastCounts): void {
+  for (const [k, n] of c.inside) into.inside.set(k, (into.inside.get(k) ?? 0) + n);
+  for (const [k, n] of c.total) into.total.set(k, (into.total.get(k) ?? 0) + n);
+  for (const [k, m] of c.bySpell) {
+    const cur = into.bySpell.get(k) ?? new Map<string, number>();
+    for (const [s, n] of m) cur.set(s, (cur.get(s) ?? 0) + n);
+    into.bySpell.set(k, cur);
+  }
+}
+
+/** Inside-silence casts of a class per 10,000 of its SUCCESSes (0 with none). */
+export function perTenK(c: SilenceCastCounts, k: Klass): number {
+  const n = c.inside.get(k) ?? 0;
+  const d = c.total.get(k) ?? 0;
+  return d ? (n / d) * 1e4 : 0;
+}
+
+/** The FLAG: silenceable casts went out inside silences at ≥ FLAG_PER_10K. */
+export const isFlagged = (c: SilenceCastCounts): boolean =>
+  perTenK(c, "silenceable") >= FLAG_PER_10K;
+
+/** One raw log's text, read the way the CLI reads a file: the scan's own
+ * line split (it needs only the event name, the two GUIDs, the spell id and
+ * name), not the parser's. */
+export function scanLogText(text: string): SilenceCastCounts {
+  const c = newCounts();
+  const casts: Array<{ t: number; src: string; id: string; name: string }> =
+    [];
+  const openAt = new Map<string, number>();
+  const silenced = new Map<string, Array<[number, number]>>();
+  for (const line of text.split("\n")) {
+    const sep = line.indexOf("  ");
+    if (sep < 0) continue;
+    const body = line.slice(sep + 2);
+    const ev = body.slice(0, body.indexOf(","));
+    if (
+      ev !== "SPELL_CAST_SUCCESS" &&
+      ev !== "SPELL_AURA_APPLIED" &&
+      ev !== "SPELL_AURA_REMOVED"
+    )
+      continue;
+    const p = body.split(",");
+    const t = parseRawTimestamp(line.slice(0, sep));
+    if (t === null || p.length < 12) continue;
+    const src = p[1] ?? "";
+    const dst = p[5] ?? "";
+    const id = p[9] ?? "";
+    if (ev === "SPELL_CAST_SUCCESS") {
+      if (src.startsWith("Player-"))
+        casts.push({ t, src, id, name: (p[10] ?? "").replace(/"/g, "") });
+      continue;
+    }
+    if (!dst.startsWith("Player-") || src === dst || !isSilenceOnlyAura(id))
+      continue;
+    const k = `${dst}|${id}`;
+    if (ev === "SPELL_AURA_APPLIED") openAt.set(k, t);
+    else {
+      const a = openAt.get(k);
+      if (a === undefined) continue;
+      openAt.delete(k);
+      silenced.set(dst, [...(silenced.get(dst) ?? []), [a, t]]);
+    }
+  }
+  for (const cast of casts) {
+    const k = klassOf(cast.id);
+    c.total.set(k, (c.total.get(k) ?? 0) + 1);
+    const spans = silenced.get(cast.src);
+    if (!spans?.some(([a, b]) => a + LEAD_MS < cast.t && cast.t < b - LAG_MS))
+      continue;
+    c.inside.set(k, (c.inside.get(k) ?? 0) + 1);
+    const m = c.bySpell.get(k) ?? new Map<string, number>();
+    const key = `${cast.name} ${cast.id}`;
+    m.set(key, (m.get(key) ?? 0) + 1);
+    c.bySpell.set(k, m);
+  }
+  return c;
+}
 
 function parseArgs() {
   const args = process.argv.slice(2);
@@ -81,9 +179,7 @@ async function main() {
     .filter(Boolean)
     .filter((_, i) => i % args.every === 0);
 
-  const inside = new Map<Klass, number>();
-  const total = new Map<Klass, number>();
-  const bySpell = new Map<Klass, Map<string, number>>();
+  const total = newCounts();
   let read = 0;
   for (const f of files) {
     let text: string;
@@ -94,78 +190,27 @@ async function main() {
       continue;
     }
     read++;
-    const casts: Array<{ t: number; src: string; id: string; name: string }> =
-      [];
-    const openAt = new Map<string, number>();
-    const silenced = new Map<string, Array<[number, number]>>();
-    for (const line of text.split("\n")) {
-      const sep = line.indexOf("  ");
-      if (sep < 0) continue;
-      const body = line.slice(sep + 2);
-      const ev = body.slice(0, body.indexOf(","));
-      if (
-        ev !== "SPELL_CAST_SUCCESS" &&
-        ev !== "SPELL_AURA_APPLIED" &&
-        ev !== "SPELL_AURA_REMOVED"
-      )
-        continue;
-      const p = body.split(",");
-      const t = parseRawTimestamp(line.slice(0, sep));
-      if (t === null || p.length < 12) continue;
-      const src = p[1] ?? "";
-      const dst = p[5] ?? "";
-      const id = p[9] ?? "";
-      if (ev === "SPELL_CAST_SUCCESS") {
-        if (src.startsWith("Player-"))
-          casts.push({ t, src, id, name: (p[10] ?? "").replace(/"/g, "") });
-        continue;
-      }
-      if (!dst.startsWith("Player-") || src === dst || !isSilenceOnlyAura(id))
-        continue;
-      const k = `${dst}|${id}`;
-      if (ev === "SPELL_AURA_APPLIED") openAt.set(k, t);
-      else {
-        const a = openAt.get(k);
-        if (a === undefined) continue;
-        openAt.delete(k);
-        silenced.set(dst, [...(silenced.get(dst) ?? []), [a, t]]);
-      }
-    }
-    for (const c of casts) {
-      const k = klassOf(c.id);
-      total.set(k, (total.get(k) ?? 0) + 1);
-      const spans = silenced.get(c.src);
-      if (!spans?.some(([a, b]) => a + LEAD_MS < c.t && c.t < b - LAG_MS))
-        continue;
-      inside.set(k, (inside.get(k) ?? 0) + 1);
-      const m = bySpell.get(k) ?? new Map<string, number>();
-      const key = `${c.name} ${c.id}`;
-      m.set(key, (m.get(key) ?? 0) + 1);
-      bySpell.set(k, m);
-    }
+    addCounts(total, scanLogText(text));
   }
 
   console.log(`silenceCastScan: ${read} files`);
-  let flag = false;
-  for (const k of ["silenceable", "unsilenceable", "no row"] as Klass[]) {
-    const n = inside.get(k) ?? 0;
-    const d = total.get(k) ?? 0;
-    const rate = d ? (n / d) * 1e4 : 0;
-    if (k === "silenceable" && rate >= FLAG_PER_10K) flag = true;
+  for (const k of KLASSES) {
+    const n = total.inside.get(k) ?? 0;
+    const d = total.total.get(k) ?? 0;
     console.log(
-      `  ${k.padEnd(13)} inside ${String(n).padStart(6)} / ${String(d).padStart(8)}  ${rate.toFixed(2)} per 10k`,
+      `  ${k.padEnd(13)} inside ${String(n).padStart(6)} / ${String(d).padStart(8)}  ${perTenK(total, k).toFixed(2)} per 10k`,
     );
-    const top = [...(bySpell.get(k) ?? new Map<string, number>())]
+    const top = [...(total.bySpell.get(k) ?? new Map<string, number>())]
       .sort((a, b) => b[1] - a[1])
       .slice(0, args.top)
       .map(([s, x]) => `${s} ×${x}`);
     if (top.length) console.log(`      ${top.join(", ")}`);
   }
   console.log(
-    flag
+    isFlagged(total)
       ? `FLAG: silenceable casts went out inside silences at ≥ ${FLAG_PER_10K} per 10k — re-check the PreventionType reading`
       : "OK: the silence bit separates the casts a silence stops",
   );
 }
 
-void main();
+if (process.argv[1]?.includes("silenceCastScan")) void main();
