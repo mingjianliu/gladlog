@@ -6,8 +6,8 @@
  * capture (`<dir>/s<k>/context/`; file layout as `pressFactScan.ts`).
  *
  * Read straight from the parsed advanced-log lines (every line whose actor
- * is the unit, max HP > 0, rounded to a whole percent, before the unit's
- * death), never through `hpTroughInWindow`:
+ * is the unit, max HP > 0, rounded to a whole percent — a living 0 % counts
+ * — before the unit's death second), never through `hpTroughInWindow`:
  *
  *  - `dmgSpikeLow`: `M:SS–M:SS  [DMG SPIKE]   <pid>(…) … low N% @M:SS` — no
  *    line of the unit inside the window's displayed seconds
@@ -87,7 +87,6 @@ function minPct(
       Math.round((a.advancedActorCurrentHp / a.advancedActorMaxHp) * 100),
       100,
     );
-    if (pct <= 0) continue;
     if (!best || pct < best.pct) best = { pct, ms: ts };
   }
   return best;
@@ -119,8 +118,10 @@ let cacheItems: GladMatch[] = [];
 let contexts = 0;
 for (const f of files) {
   const text = readFileSync(join(dir, f.shard, "context", f.name), "utf8");
-  if (!SPIKE.test(text.replace(/\n/g, " ")) && !text.includes("team min HP"))
-    continue;
+  // a per-line test below; this only skips contexts with neither family
+  // (codex 20-F15-02: an anchored test on the flattened text skipped 6,213
+  // of 9,443 lows)
+  if (!text.includes("[DMG SPIKE]") && !text.includes("team min HP")) continue;
   const [archive] = text.split("\n", 1);
   if (!archive) continue;
   const key = `${f.shard}:${archive}`;

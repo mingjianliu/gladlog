@@ -87,7 +87,7 @@
  *  first-second tick (62fdbf2e), `hpAtPress`. 605 files: no candidate added or
  *  removed; 49 rows' HP facts move (kick-eaten 25, missed-sync-window 14,
  *  slow-defensive-response 7, position-mistake 3); troughFactScan: [DMG SPIKE]
- *  lows below the log 106 → 0 of 3,239, [KILL WINDOW] team min 2,215 → 0 of
+ *  lows below the log 310 → 0 of 9,468, [KILL WINDOW] team min 2,224 → 0 of
  *  3,891; two burst target lines gain a `(low …)` the same-ms dip now clears.
  */
 export const PROMPT_VERSION = 405;

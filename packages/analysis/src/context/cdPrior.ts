@@ -31,7 +31,7 @@ export const CD_PRIOR_CAP = 2;
 
 export const CD_PRIOR_LEGEND = [
   `  ${CD_PRIOR_TAG} = a friendly dipped below the HP at which this healer's cohort (spec × hero tree, from the corpus) usually spends a save cooldown, while the owner had it ready and did not spend it — context, not a mistake.`,
-  `    The cohort number is a median of what most players do, not a rule; dips that reached the crisis line (${CRISIS_HP_PCT_RENDERED}%) are judged by the crisis lines instead and are not listed here. At most ${CD_PRIOR_CAP} per round.`,
+  `    The cohort number is a median of what most players do, not a rule; dips whose whole-second [STATE] readings reached the crisis line (${CRISIS_HP_PCT_RENDERED}%) are judged by the crisis lines instead and are not listed here; "bottomed at" is the true minimum the log shows between those readings, so it can sit below that line. At most ${CD_PRIOR_CAP} per round.`,
 ];
 
 export interface CdPriorEntry {
