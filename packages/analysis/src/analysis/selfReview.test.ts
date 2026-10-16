@@ -74,7 +74,7 @@ describe("numbersIn", () => {
     expect([...numbersIn("吃了 30k,掉到 −12%,+0.6s,82K,0:34-0:54")]).toEqual([
       "30k",
       "-12",
-      "0.6",
+      "+0.6",
       "82k",
       "0:34",
       "0:54",
@@ -111,11 +111,17 @@ describe("applySelfReview", () => {
     f[0]!.explanation = "You died at 30s; healing was 131k lower.";
     let out = applySelfReview(original, reply(f), signed);
     expect(out.ok && out.reverted).toEqual([]);
-    f[0]!.explanation = "You died at -30s.";
-    out = applySelfReview(original, reply(f), signed);
-    expect(out.ok && out.reverted.map((r) => r.reason)).toEqual([
-      "numeric: -30 not in the cited facts",
-    ]);
+    for (const [text, reason] of [
+      ["You died at -30s.", "numeric: -30 not in the cited facts"],
+      [
+        "You died at 30s; healing was +131k.",
+        "numeric: +131k not in the cited facts",
+      ],
+    ]) {
+      f[0]!.explanation = text!;
+      out = applySelfReview(original, reply(f), signed);
+      expect(out.ok && out.reverted.map((r) => r.reason)).toEqual([reason]);
+    }
   });
 
   it("删掉一条结论可以;一条不剩不行", () => {
@@ -160,6 +166,11 @@ describe("applySelfReview", () => {
       [{ explanation: "You died at 45s." }, /^numeric: 45/],
       [{ explanation: "You took 30k damage at 30s." }, /^numeric: 30k/],
       [{ explanation: "Your HP reached −12% at 30s." }, /^numeric: -12/],
+      // codex 50-SR-02: digits after ":" / "." were skipped; a sign after a
+      // letter was dropped; "+" matched a negative fact
+      [{ explanation: "You died at 30s at HP:99%." }, /^numeric: 99/],
+      [{ explanation: "You died at 30s within .99s." }, /^numeric: 0.99/],
+      [{ explanation: "You died at 30s at HP−12%." }, /^numeric: -12/],
       [{ title: "" }, /^schema/],
       [{ explanation: "You died because you were not healed." }, /^causal/],
       [{ explanation: "The Paladin bubbled." }, /^roster/],

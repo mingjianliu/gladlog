@@ -188,3 +188,49 @@ it("AI 自查开关是分析会话的身份:切换后分析面板显示未分析
   selfReview = false;
   expect((await svc.getState("m1")).status).toBe("not-ready");
 });
+
+it("自查成功但没抓到自查会话的结果:问教练可用,第一问不续接任何会话而是走重新播种(codex 50-SR-02 #3)", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "chat-"));
+  seedAnalysisCache(dir, "m1", {
+    selfReview: { version: SELF_REVIEW_PROMPT_VERSION, status: "reviewed" },
+  });
+  const chatRunner = vi.fn();
+  const seedClient = () => ({
+    async *stream(params: { sessionIdHint?: string }) {
+      yield { delta: "播种回答" };
+      yield { sessionId: params.sessionIdHint ?? "new-sid" };
+    },
+  });
+  const svc = createCoachChatService({
+    getSettings: () => ({ ...settings(), aiSelfReview: true }),
+    matchesDir: dir,
+    chatRunner: chatRunner as never,
+    seedClient: seedClient as never,
+  });
+  expect((await svc.getState("m1")).status).toBe("ready");
+  expect(await svc.send({ matchId: "m1", question: "问" })).toEqual({
+    status: "need-reseed",
+  });
+  expect(chatRunner).not.toHaveBeenCalled();
+  const r2 = await svc.send({
+    matchId: "m1",
+    question: "问",
+    seed: { richContext: "CTX", spec: "Holy Paladin", findingsSummary: "F1" },
+  });
+  expect(r2.status).toBe("ok");
+  expect(chatRunner).not.toHaveBeenCalled();
+  expect(
+    ((await svc.getState("m1")) as { messages: unknown[] }).messages,
+  ).toHaveLength(2);
+
+  // 自查失败 / 没开自查的老结果没有会话:仍是 not-ready(既有规则不变)
+  const dir2 = mkdtempSync(join(tmpdir(), "chat-"));
+  seedAnalysisCache(dir2, "m1", {
+    selfReview: { version: SELF_REVIEW_PROMPT_VERSION, status: "failed" },
+  });
+  const svc2 = createCoachChatService({
+    getSettings: () => ({ ...settings(), aiSelfReview: true }),
+    matchesDir: dir2,
+  });
+  expect((await svc2.getState("m1")).status).toBe("not-ready");
+});

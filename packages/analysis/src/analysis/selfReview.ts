@@ -122,37 +122,42 @@ ${reply}
 === END REPLY ===`;
 }
 
-/** A number as printed: an optional sign (only where it cannot be a range
- * dash — `0:34-0:54` is two unsigned times), the digits (times like 1:23 and
- * decimals stay whole) and an optional magnitude suffix (`30k` is not `30`).
- * codex review 50-SR-01 #1: unsigned bare digits let "30k damage" and
- * "−12% HP" through on facts {t: 30, hpPct: 12}. */
+/** A number as printed: an optional sign (anywhere but right after a digit,
+ * where it is a range dash — `0:34-0:54` is two unsigned times; `HP−12%` is
+ * signed), the digits (times like 1:23 and decimals stay whole, `.99` reads as
+ * 0.99) and an optional magnitude suffix (`30k` is not `30`). Every digit of
+ * the text lands in some token — nothing is skipped after `:` or `.`.
+ * codex review 50-SR-01 #1 / 50-SR-02 #1–2: unsigned bare digits let "30k
+ * damage" and "−12% HP" through on facts {t: 30, hpPct: 12}; a digit
+ * lookbehind then hid `HP:99%`. */
 const NUMBER =
-  /(?:(?<![\w.:])([-−+]))?(?<![\d.:])(\d+(?:[.:]\d+)*)([kKM万千]?)/g;
+  /(?:(?<![\d.:])([-−+]))?(\d*\.\d+(?:[.:]\d+)*|\d+(?:[.:]\d+)*)([kKM万千]?)/g;
 
-/** Every number printed in `text`, canonical: `-` for a minus sign, nothing
- * for a plus, the magnitude suffix lower-cased. */
+/** Every number printed in `text`, canonical: `-` for a minus sign (either
+ * glyph), `+` kept, a leading-dot decimal given its 0, the magnitude suffix
+ * lower-cased. */
 export function numbersIn(text: string): Set<string> {
   const out = new Set<string>();
   for (const [, sign, digits, suffix] of text
     .replace(BRACKET_TERM, " ")
-    .matchAll(NUMBER))
-    out.add(
-      `${sign === "-" || sign === "−" ? "-" : ""}${digits}${suffix?.toLowerCase() ?? ""}`,
-    );
+    .matchAll(NUMBER)) {
+    const s = sign === "−" ? "-" : (sign ?? "");
+    const d = digits!.startsWith(".") ? `0${digits}` : digits;
+    out.add(`${s}${d}${suffix?.toLowerCase() ?? ""}`);
+  }
   return out;
 }
 
 /** The numbers a reviewed finding may print, given an evidence text (a fact
  * value, or the finding as first shown): each number as written, and its
  * unsigned form — a fact `-131k` is rendered "131k less" in prose — but never
- * a sign or a magnitude the evidence does not carry. On the experiment's 51
- * outputs this puts back 3 of 144 reviewed findings (the same 3 as the
- * unsigned rule). */
+ * a sign or a magnitude the evidence does not carry (`+131k` against `-131k`
+ * is a reversal, not a rendering). On the experiment's 51 outputs this puts
+ * back 3 of 144 reviewed findings (the same 3 as the unsigned rule). */
 function allowedNumbers(evidence: string, into: Set<string>): void {
   for (const n of numbersIn(evidence)) {
     into.add(n);
-    into.add(n.replace(/^-/, ""));
+    into.add(n.replace(/^[-+]/, ""));
   }
 }
 

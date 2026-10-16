@@ -122,8 +122,15 @@ function findAnalysisSession(
     if (!split || split.backend !== backend) continue;
     if (slot.promptVersion !== PROMPT_VERSION) continue;
     if (!selfReviewMatches(slot.result, selfReviewOn)) continue;
-    const sid = slot.result?.sessionId;
-    if (!sid) continue;
+    // A reviewed result stores no session when the review call's own was not
+    // captured (analysis.ts: the first round's would remember the unreviewed
+    // wording). It is still an analysis to chat about: "" = ready, but the
+    // first question goes through reseeding (send → need-reseed) — codex
+    // review 50-SR-02 #3. Older results without a session stay not-ready.
+    const sid =
+      slot.result?.sessionId ??
+      (slot.result?.selfReview?.status === "reviewed" ? "" : undefined);
+    if (sid === undefined) continue;
     if (!best || slot.createdAt > best.createdAt)
       best = { sessionId: sid, model: split.model, createdAt: slot.createdAt };
   }
@@ -320,6 +327,10 @@ export function createCoachChatService(deps: {
           });
           thread.sessionId = seeded.sessionId;
           reply = seeded.reply;
+        } else if (!thread.sessionId) {
+          // Nothing to resume (a reviewed analysis without a captured
+          // session): the renderer builds a seed and calls again.
+          return { status: "need-reseed" };
         } else {
           try {
             reply = await chatRunner({
