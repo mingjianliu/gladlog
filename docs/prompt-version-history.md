@@ -3387,3 +3387,18 @@ control lines), and the stats table stops counting them as kicks. 605
 files: no candidate added or removed; 93 files change — 249 Strangulate
 entries leave the `Kicks:` lists (237 silenced, 12 hit nothing) and the
 12 matching `[KICK] your Strangulate … hit nothing` lines go.
+v404 (2026-10-16, F15 batch 1 — fact1215 deep dive C6 + C1, user-approved
+605 preview 「Defensive,接受候选变动」/「接受」): three major cooldowns had no
+friendly ledger row — Time Stop 378441 (Evoker roster, Defensive), Incarnation:
+Tree of Life 33891 (Druid roster, Utility: the healer save table strips its
+Defensive tag for Restoration Druid) and Havoc Metamorphosis (pressed as the
+200166 landing → 191427 via SPELL_CANONICAL_IDS). Flameshaper Obsidian Scales
+cast on an ally is read from the ally's own copy (`allyCopyRecipient`): the
+`[YOU] [CD]` / `[TEAM] [CD]` line names the ally, `[ENEMY DEF]` prints the ally
+copy as an external, cd-hoarded's teamAnswered counts it, and ABILITIES INTO /
+KILL ATTEMPTS / `defenseless` spans do not read the 15 % copy as a wall. 605
+files: cd-waste +8 and cd-hoarded +8 (Time Stop held / never pressed; 5 more
+rows' facts change), missed-sync-window +4 net (+7 / −3, friendly
+Metamorphosis now seen); lines: [ENEMY DEF] ally Obsidian Scales 0 → 73, press
+lines naming the ally 0 → 102, ABILITIES INTO into Obsidian Scales 145 → 81,
+Time Stop press lines 1 → 108, Tree of Life 185 → 652, Metamorphosis 0 → 377.

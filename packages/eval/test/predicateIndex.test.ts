@@ -101,11 +101,12 @@ import * as talentScriptedCooldowns from "@gladlog/analysis/src/data/talentScrip
 import * as teammateCrisisPriorData from "@gladlog/analysis/src/data/teammateCrisisPrior";
 import { TIMELINE_LINE_FLAGS } from "@gladlog/analysis/src/data/timelineLineFlags";
 import { PRODUCTION_FACT_CONFIG } from "@gladlog/analysis/src/facts/factProviderConfig";
+import * as allyCopyWall from "@gladlog/analysis/src/utils/allyCopyWall";
 import * as auraEndCause from "@gladlog/analysis/src/utils/auraEndCause";
 import * as auraIntervals from "@gladlog/analysis/src/utils/auraIntervals";
 import * as bracketKey from "@gladlog/analysis/src/utils/bracketKey";
-import * as burstHit from "@gladlog/analysis/src/utils/burstHit";
 import * as buffDuration from "@gladlog/analysis/src/utils/buffDuration";
+import * as burstHit from "@gladlog/analysis/src/utils/burstHit";
 import * as burstLedger from "@gladlog/analysis/src/utils/burstLedger";
 import * as cannotCastIntervals from "@gladlog/analysis/src/utils/cannotCastIntervals";
 import * as castBarOutcomes from "@gladlog/analysis/src/utils/castBarOutcomes";
@@ -1366,6 +1367,11 @@ const INDEX: PredicateRow[] = [
     file: `${A}/data/spellTargeting.ts`,
     symbol: "reachesAlly",
     mod: spellTargeting,
+  },
+  {
+    file: `${A}/utils/allyCopyWall.ts`,
+    symbol: "allyCopyRecipient",
+    mod: allyCopyWall,
   },
   {
     file: `${A}/data/spellSchools.ts`,

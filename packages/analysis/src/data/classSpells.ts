@@ -329,6 +329,16 @@ export const classMetadata: IClassSpellMetadata[] = [
       a("61336", "Survival Instincts", D),
       a("102342", "Ironbark", D),
       a("740", "Tranquility", D),
+      // F15 / fact1215 C6 (2026-10-16): Resto Druid's 180 s Incarnation had
+      // no friendly row — no kit row, no [TEAM] / [YOU] [CD] line, no [RES],
+      // while the enemy side prints it as [ENEMY HEAL CD] (enemyHealCds.ts)
+      // and the crisis readers count its press ("树肯定算,是大技能",
+      // CRISIS_PROTECTIVE_ANSWER_IDS). Utility, not Defensive: the healer save
+      // table strips Defensive from it for Restoration Druid
+      // (healerSaveCdGenerated `stripDefensive`), so the row is a press line,
+      // the loadout and [RES] — no role reader. Form re-shifts are no presses
+      // (`isFormReshiftCast`); Reforestation's 8 s copies log no cast.
+      a("33891", "Incarnation: Tree of Life", U),
       a("106951", "Berserk", O),
       a("102560", "Incarnation: Chosen of Elune", O),
       a("194223", "Celestial Alignment", O),
@@ -365,6 +375,12 @@ export const classMetadata: IClassSpellMetadata[] = [
       a("363916", "Obsidian Scales", D),
       a("374348", "Renewing Blaze", D),
       a("357170", "Time Dilation", D),
+      // F15 / fact1215 C6 (2026-10-16, the one high item): Time Stop, the 5 s
+      // immunity PvP talent (DB2 45 s, self or an ally — targeting reaches
+      // allies; 605 files: 31 self, 4 on an ally). It sat only in the
+      // enemy-side and purge lists, so an owner who pressed it at 21 % HP
+      // six seconds before dying (a2e71187) had no line for it anywhere.
+      a("378441", "Time Stop", D),
       a("374227", "Zephyr", D),
       a("375087", "Dragonrage", O),
       a("360806", "Sleep Walk", C),

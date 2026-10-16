@@ -16,7 +16,6 @@ import { saveCoversPressureOn } from "../../analysis/candidates/cooldownTiming";
 import { ccSpellIds } from "../../data/spellTags";
 import { reachesAlly } from "../../data/spellTargeting";
 import { buffFullDurationForCaster } from "../../utils/buffDuration";
-import { observedCastEndMs } from "../../utils/enemyCDs";
 import {
   cdIsProcOnly,
   cdRoleTag,
@@ -29,6 +28,7 @@ import {
   timingContextWithLabel,
 } from "../../utils/cooldowns";
 import { AOE_CC_LANDING_WINDOW_S } from "../../utils/drAnalysis";
+import { observedCastEndMs } from "../../utils/enemyCDs";
 import {
   computeEnemyInterruptAvailability,
   isInterruptUsable,
@@ -167,7 +167,7 @@ export function emitOwnerCdEntries(
     // rendering so a self-buff (e.g. Obsidian Scales) logged against the caster's current enemy/ally
     // target is not shown as "→ <unit>" with that unit's HP. `rendersOnCaster` (hp-state F-S1)
     // adds the officially self-only Defensives outside the big-defensive roster.
-    const forceSelf = rendersOnCaster(cd.spellId);
+    const selfOnlyId = rendersOnCaster(cd.spellId);
     // Reliability round 3 N5 (02c8 / ba8c / 3306): a proc-only entry (Renewing
     // Blaze — structurally cast-less; a talent-replaced button) keeps its aura
     // activations in `casts`, and this loop read them as presses: "[YOU] [CD]
@@ -177,6 +177,9 @@ export function emitOwnerCdEntries(
     const isProc = cdIsProcOnly(cd);
     if (isProc) procLinesEmitted = true;
     for (const cast of cd.casts) {
+      // F15 C1: a talent-shared wall's press that put its copy on an ally
+      // (Flameshaper Obsidian Scales) keeps that ally as its target.
+      const forceSelf = selfOnlyId && !cast.allyCopyOn;
       // No `cast.targetHpPct` override (hp-state F-R8): the helper reads
       // `hpAtPress` itself. The ledger field is the same press reading since
       // the A21 extension (2026-10-01) — one sampler for the line, the

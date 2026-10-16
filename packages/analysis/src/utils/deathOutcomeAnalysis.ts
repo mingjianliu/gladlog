@@ -8,6 +8,7 @@ import {
 import { MITIGATION_TABLE } from "../data/mitigationData";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import { cannotCastIntervalsForSpells } from "./cannotCastIntervals";
+import { isFormReshiftCast } from "./castPress";
 import { IPlayerCCTrinketSummary } from "./ccTrinketAnalysis";
 import {
   auraOnlyActivationSeconds,
@@ -346,7 +347,8 @@ function pressSeconds(
   const castSeconds = unit.spellCastEvents
     .filter(
       (e) =>
-        isPressOfCooldown(e, spellId, name, replacements) ||
+        (isPressOfCooldown(e, spellId, name, replacements) &&
+          !isFormReshiftCast(unit, e)) ||
         spendsSharedChargeOf(e, spellId),
     )
     .map((e) => (e.logLine.timestamp - matchStartMs) / 1000);

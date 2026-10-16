@@ -125,8 +125,10 @@ export function emitTeamCdEntries(
           // such as Obsidian Scales logs the caster's current target), never
           // the caster itself, never an unmapped name (a pet / NPC / a
           // localized name)
+          // (F15 C1: or a talent-shared wall's press the log shows landing
+          // a copy on the ally — `allyCopyOn`, Flameshaper Obsidian Scales)
           const recipient =
-            reachesAlly(cd.spellId) &&
+            (reachesAlly(cd.spellId) || !!cast.allyCopyOn) &&
             cast.targetName &&
             cast.targetName !== "nil" &&
             cast.targetName !== player.name

@@ -6,11 +6,12 @@ import {
 
 import {
   KILL_LIVE_HP_PCT,
-  mitigationVerdictOf,
   type MitigationVerdict,
+  mitigationVerdictOf,
 } from "../data/mitigationVerdicts";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import { ccSpellIds } from "../data/spellTags";
+import { isAllyCopyWallId } from "./allyCopyWall";
 import {
   getUnitHpAtTimestamp,
   HP_SAMPLE_RADIUS_MS,
@@ -90,6 +91,9 @@ function buildDefenseWindows(
       // "never"(不构成真实阻碍)与 "unresolved"(裁定人未遇到过)都不出面。
       if (verdict !== "unconditional" && verdict !== "kill-live-gated")
         continue;
+      // F15 C1(2026-10-16 默认):签字表签的是施法者自己身上的那份;天赋共享墙
+      // 给队友的副本(Flameshaper 黑曜鳞片 15%)低于墙门槛,不是这堵墙。
+      if (isAllyCopyWallId(spellId) && e.srcUnitId !== enemy.id) continue;
 
       const t = (e.logLine.timestamp - matchStartMs) / 1000;
 

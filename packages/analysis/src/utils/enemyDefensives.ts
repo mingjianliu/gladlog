@@ -32,6 +32,7 @@ import spellIdListsData, {
   type EnemyProcSaveEffect,
 } from "../data/spellIdLists";
 import { immunitySchoolMask } from "../data/spellSchools";
+import { allyCopyRecipient } from "./allyCopyWall";
 import { auraEndFromLog, type IAuraEndFromLog } from "./auraEndCause";
 import { buildAuraIntervals, type IAuraInterval } from "./auraIntervals";
 import { buffFullDurationForCaster } from "./buffDuration";
@@ -482,6 +483,22 @@ export function isOwnImmunityInterval(
  * the target having popped a 30 % wall. */
 export const MITIGATION_AURA_MIN_PCT = MITIGATION_WALL_MIN_PCT;
 
+/** F15 C1: an external priced below the wall floor — a talent-shared wall's
+ * ally copy (Flameshaper Obsidian Scales, 15 %; the only external event that
+ * carries a `pct`). It prints its `[ENEMY DEF]` line, and like a 15 % self
+ * aura it is no wall: KILL ATTEMPTS does not name it and it does not cut a
+ * `defenseless` span (the 2026-09-12 pricing, kept by the 2026-10-16 F15
+ * default). */
+export function isBelowWallFloorExternal(
+  d: Pick<IEnemyDefensiveEvent, "kind" | "pct">,
+): boolean {
+  return (
+    d.kind === "external" &&
+    d.pct !== undefined &&
+    d.pct < MITIGATION_AURA_MIN_PCT
+  );
+}
+
 /** 20–99% self-mitigation aura ids (the non-immune official table slice,
  * `MITIGATION_WALL_IDS`) — "the target popped a real defensive during the
  * attempt". */
@@ -840,7 +857,7 @@ export interface IEnemyDefensiveEvent {
   /** What an `effect: "absorb"` save's shield absorbed while it was up
    * (`absorbedDuring`); undefined when the log names no absorb line for it. */
   absorbedAmount?: number;
-  /** official mitigation pct (self / immune); undefined for externals and for an immunity-kind save, which has no table row */
+  /** official mitigation pct (self / immune; an ally copy's 15 % — F15 C1); undefined for other externals and for an immunity-kind save, which has no table row */
   pct?: number;
   /** who received an external */
   recipientName?: string;
@@ -1265,7 +1282,16 @@ export function enemyDefensiveEvents(
 
   for (const cast of enemy.spellCastEvents ?? []) {
     if (cast.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
-    if (!cast.spellId || !isExternalSaveId(cast.spellId)) continue;
+    // F15 C1 (fact1215, 2026-10-16): a talent-shared wall's press that put
+    // its copy on an ally (Flameshaper Obsidian Scales) is an external on
+    // that ally as well — the caster's own copy keeps its self line above.
+    // Before, the ally copy had no line at all (four presses on teammates in
+    // 086019c0, a press whose caster copy was only REFRESHed in 332b9b2f).
+    const allyCopy = allyCopyRecipient(enemy.id, cast, (id) =>
+      enemies.find((e) => e.id === id),
+    );
+    if (!cast.spellId || (!isExternalSaveId(cast.spellId) && !allyCopy))
+      continue;
     const atSeconds = (cast.logLine.timestamp - combat.startTime) / 1000;
     // F-E1b / F-A1b (ruling A15): an area save is anchored on the cast — its
     // aura names no source (Anti-Magic Zone), is never applied (Darkness) or
@@ -1333,6 +1359,16 @@ export function enemyDefensiveEvents(
       kind: "external",
       recipientId: recipient.id,
       recipientName: recipient.name,
+      // the ally copy's own price (`pctOnOthers`, 15 %): below the wall
+      // floor, so no reader counts it as a wall (`isBelowWallFloorExternal`)
+      ...(allyCopy
+        ? {
+            pct: wallDoorPct(cast.spellId, {
+              carrierIsCaster: false,
+              caster: enemy,
+            }),
+          }
+        : {}),
       observedSeconds: observed,
       // The during-it measurement is defined for mitigation externals; an
       // immunity put on an ally reports its duration only.

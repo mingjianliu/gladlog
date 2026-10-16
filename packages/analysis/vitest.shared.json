@@ -80,6 +80,7 @@
     "test/abilityProfile.test.ts",
     "test/absorbShields.test.ts",
     "test/advancedActions.test.ts",
+    "test/allyCopyWall.test.ts",
     "test/aoeCcFolding.sameName.test.ts",
     "test/archetypeLabelAlignment.test.ts",
     "test/backlashCc.test.ts",

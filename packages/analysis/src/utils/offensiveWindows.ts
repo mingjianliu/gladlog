@@ -24,6 +24,7 @@ import {
 } from "./cooldowns";
 import {
   enemyDefensiveEvents,
+  isBelowWallFloorExternal,
   ownWallSpanS,
   renderedExternalSpanS,
   wallTableIdOfAura,
@@ -420,6 +421,8 @@ export function computeOffensiveWindows(
   const savesUpOn = new Map<string, Array<{ from: number; to: number }>>();
   for (const caster of enemies) {
     for (const d of enemyDefensiveEvents(caster, enemies, combat)) {
+      // F15 C1: a 15 % ally copy cuts no span, as a 15 % own aura does not
+      if (isBelowWallFloorExternal(d)) continue;
       const holderId = d.kind === "external" ? d.recipientId : caster.id;
       const span =
         d.kind === "external"

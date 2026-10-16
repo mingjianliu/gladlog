@@ -61,6 +61,7 @@ import {
   drDurationFactor,
   type DRLevel,
 } from "../../utils/drAnalysis";
+import { reconstructEnemyCDTimeline } from "../../utils/enemyCDs";
 import { incomingPressureBySchool } from "../../utils/incomingPressure";
 import {
   distanceBetween,
@@ -89,7 +90,6 @@ import {
   INTENT_GUARD_GCD_S,
   NOT_READY_REASONS,
 } from "./shared";
-import { reconstructEnemyCDTimeline } from "../../utils/enemyCDs";
 
 /**
  * HARD_CC_CATEGORIES (P1 sync-lens, 2026-08-15, `missedSyncWindowEvents` /
@@ -2250,19 +2250,20 @@ export function cdHoardedEvents(
         ally: boolean,
       ): Array<{ at: number; name: string; spellId: string }> =>
         cds
-          .filter(
-            (cd) =>
-              isSpendableDefensiveCd(cd) && (!ally || cdCanHelpAnotherUnit(cd)),
-          )
+          .filter((cd) => isSpendableDefensiveCd(cd))
           .flatMap((cd) =>
             cd.casts
               .filter(
                 (c) =>
                   c.timeSeconds >= windowFromS &&
                   c.timeSeconds <= windowToS &&
-                  (!cdCanHelpAnotherUnit(cd) ||
-                    c.targetName === undefined ||
-                    c.targetName === crisisUnit.name),
+                  (cdCanHelpAnotherUnit(cd)
+                    ? c.targetName === undefined ||
+                      c.targetName === crisisUnit.name
+                    : // F15 C1: a self wall answers for a teammate only
+                      // through the copy the log shows on that teammate
+                      // (Flameshaper Obsidian Scales — `allyCopyOn`)
+                      !ally || c.allyCopyOn === crisisUnit.name),
               )
               .map((c) => ({
                 at: c.timeSeconds,

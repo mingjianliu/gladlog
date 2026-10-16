@@ -56,8 +56,9 @@ export const FORM_COOLDOWN_BUFF_PAIR_MS = 50;
  *
  * One predicate for every reader that turns a cast of the id into a
  * cooldown press: the healer gap filler's `[YOU] [CD]` promotion and the
- * `[ENEMY HEAL CD]` line (the ledger holds no row for the id; one would
- * have to filter its cast list through this too). Before it a shift back
+ * `[ENEMY HEAL CD]` line, and since F15 C6 (33891's roster row) the
+ * cooldown ledger's press list and `deathOutcomeAnalysis`'s cast seconds.
+ * Before it a shift back
  * read as a second press of a three-minute cooldown (b711d4ac: `[YOU] [CD]
  * Incarnation: Tree of Life` at 0:22 and again at 1:00).
  */

@@ -23,6 +23,7 @@ import {
   DEATH_WINDOW_UNFOLD_CAP,
   TIMELINE_LINE_FLAGS,
 } from "../../data/timelineLineFlags";
+import { allyCopyRecipient } from "../../utils/allyCopyWall";
 import { dropAuraRebroadcasts } from "../../utils/auraIntervals";
 import { COPY_CAST_IDS, isFormReshiftCast } from "../../utils/castPress";
 import { isControlledPlayerFlags } from "../../utils/charmedPlayer";
@@ -572,7 +573,11 @@ export function emitHealerCastGapFillerEntries(
         e.spellId,
         timeSeconds,
         e.destUnitName,
-        rendersOnCaster(e.spellId),
+        // F15 C1: a press whose copy the log shows on an ally keeps it
+        rendersOnCaster(e.spellId) &&
+          !allyCopyRecipient(owner.id, e, (id) =>
+            _allUnits.find((u) => u.id === id),
+          ),
       );
       const promotedRole = cdRoleTag(e.spellId);
       const promotedDisplayName = promotedRole

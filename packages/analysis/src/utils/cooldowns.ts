@@ -45,6 +45,7 @@ import {
   USABLE_WHILE_CC_GENERATED,
 } from "../data/usableWhileCcGenerated";
 import { getSortedAdvancedActions } from "./advancedActions";
+import { allyCopyRecipient } from "./allyCopyWall";
 import {
   buildAuraIntervals,
   dropAuraRebroadcasts,
@@ -53,7 +54,7 @@ import {
 } from "./auraIntervals";
 import { binarySearchClosest } from "./binarySearch";
 import { buffFullDurationForCaster } from "./buffDuration";
-import { COPY_CAST_IDS } from "./castPress";
+import { COPY_CAST_IDS, isFormReshiftCast } from "./castPress";
 import { incomingPressureEvents } from "./incomingPressure";
 import {
   auraOffensiveActiveAt,
@@ -1424,6 +1425,10 @@ export interface ICooldownCast {
   targetHpPct?: number;
   /** Name of the unit the spell was cast on (from destUnitName), when available */
   targetName?: string;
+  /** F15 C1: the ally a talent-shared wall's press put its copy on
+   * (`allyCopyRecipient` — Flameshaper Obsidian Scales), read from the
+   * ally's own aura. Absent when the press stayed on the caster. */
+  allyCopyOn?: string;
   /**
    * 17a: distance in seconds to the nearest aligned burst window (before or after the cast).
    * Only set when timingLabel === "Unnecessary" — computed once here (annotateDefensiveTimings
@@ -2786,6 +2791,14 @@ export const SPELL_CANONICAL_IDS: Record<string, string> = {
   // branch); the alias makes it an id fact, so no reader can grow a second
   // "Blessing of Sacrifice" entry or line.
   "199448": "6940",
+  // Havoc Metamorphosis (F15 / fact1215 C6, 2026-10-16): the 191427 button
+  // never logs a cast; a press shows as the leap landing 200166, 0.3–1 s
+  // after the 162264 aura (`offensiveAuraOccurrences.ts`
+  // METAMORPHOSIS_PRESS_CAST_IDS — 258 of 266 on 605 files; Demonic's 5 s
+  // forms log no 200166). The enemy side read it that way since GH #119;
+  // the friendly ledger had no row for it, so a Havoc DH's Metamorphosis had
+  // no kit row, no [TEAM] / [YOU] [CD] line and no [RES] entry (26bfd4f3).
+  "200166": "191427",
 };
 
 export function canonicalSpellId(spellId: string): string {
@@ -3719,6 +3732,9 @@ function extractMajorCooldownsAll(
   // the Sun's Avenging Wrath, a Riptide Ascendance) would let a proc prove a
   // button a talent removed when the talents are not decoded (codex review).
   const activatedSpellIds = new Set<string>(castSpellIds);
+  // A cast logged under an alias proves the canonical button
+  // (`SPELL_CANONICAL_IDS`: Havoc Metamorphosis 191427 is pressed as 200166).
+  for (const id of castSpellIds) activatedSpellIds.add(canonicalSpellId(id));
   for (const id of AURA_ACTIVATION_PROVES_BUTTON_IDS)
     if (auraOnlyActivationSeconds(unit, id, matchStartMs).length > 0)
       activatedSpellIds.add(id);
@@ -4077,8 +4093,13 @@ function extractMajorCooldownsAll(
       spell.spellId,
     )!;
 
-    const castEvents = unit.spellCastEvents.filter((e) =>
-      isPressOfCooldown(e, spell.spellId, spell.name, replacements),
+    // A shift back into Tree of Life form while its buff runs logs a cast of
+    // the cooldown's id and is no press (`isFormReshiftCast`; F15 C6 gave
+    // 33891 a roster row, so the ledger reads its casts now).
+    const castEvents = unit.spellCastEvents.filter(
+      (e) =>
+        isPressOfCooldown(e, spell.spellId, spell.name, replacements) &&
+        !isFormReshiftCast(unit, e),
     );
 
     const isDefOrExternal = spell.tags.includes(SpellTag.Defensive);
@@ -4131,6 +4152,12 @@ function extractMajorCooldownsAll(
             if (hp !== null) cast.targetHpPct = hp;
           }
         }
+        const allyCopy = allyCopyRecipient(
+          unit.id,
+          e,
+          (id) => combat.units[id],
+        );
+        if (allyCopy) cast.allyCopyOn = allyCopy.name;
         return cast;
       });
 

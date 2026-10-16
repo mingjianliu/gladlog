@@ -99,6 +99,7 @@ import {
   type IEnemyDefensiveEvent,
   immunityCountsWhenAlreadyUp,
   type ISaveAuraInterval,
+  isBelowWallFloorExternal,
   isImmunitySaveAura,
   isIntervalFrom,
   limitedAbsorbSchoolMask,
@@ -1663,6 +1664,9 @@ function attributeFailure(
   // so an external seen only as its aura (the cast missing from the log)
   // counts here exactly where it renders (codex review, 2026-10-03).
   for (const d of readings.externalsReceived()) {
+    // F15 C1: an ally copy below the wall floor (15 % Obsidian Scales) is no
+    // wall here either — as the same aura is not one in the loop above
+    if (isBelowWallFloorExternal(d)) continue;
     const castMs = matchStartMs + d.atSeconds * 1000;
     if (!inSave(castMs)) {
       // Rule 2, as for a wall and a self-save: thrown before the attempt
