@@ -127,8 +127,9 @@ function findAnalysisSession(
     // wording). It is still an analysis to chat about: "" = ready, but the
     // first question goes through reseeding (send → need-reseed) — codex
     // review 50-SR-02 #3. Older results without a session stay not-ready.
+    // `||`: a stored "" is no session either (codex review 50-SR-03 #3).
     const sid =
-      slot.result?.sessionId ??
+      slot.result?.sessionId ||
       (slot.result?.selfReview?.status === "reviewed" ? "" : undefined);
     if (sid === undefined) continue;
     if (!best || slot.createdAt > best.createdAt)

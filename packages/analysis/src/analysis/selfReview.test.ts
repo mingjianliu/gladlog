@@ -171,6 +171,9 @@ describe("applySelfReview", () => {
       [{ explanation: "You died at 30s at HP:99%." }, /^numeric: 99/],
       [{ explanation: "You died at 30s within .99s." }, /^numeric: 0.99/],
       [{ explanation: "You died at 30s at HP−12%." }, /^numeric: -12/],
+      // codex 50-SR-03: a sign after ":" and a lower-case magnitude
+      [{ explanation: "You died at 30s at HP:-12%." }, /^numeric: -12/],
+      [{ explanation: "You took 30m damage at 30s." }, /^numeric: 30m/],
       [{ title: "" }, /^schema/],
       [{ explanation: "You died because you were not healed." }, /^causal/],
       [{ explanation: "The Paladin bubbled." }, /^roster/],

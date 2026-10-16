@@ -122,16 +122,18 @@ ${reply}
 === END REPLY ===`;
 }
 
-/** A number as printed: an optional sign (anywhere but right after a digit,
- * where it is a range dash — `0:34-0:54` is two unsigned times; `HP−12%` is
- * signed), the digits (times like 1:23 and decimals stay whole, `.99` reads as
- * 0.99) and an optional magnitude suffix (`30k` is not `30`). Every digit of
- * the text lands in some token — nothing is skipped after `:` or `.`.
- * codex review 50-SR-01 #1 / 50-SR-02 #1–2: unsigned bare digits let "30k
- * damage" and "−12% HP" through on facts {t: 30, hpPct: 12}; a digit
- * lookbehind then hid `HP:99%`. */
+/** A number as printed: an optional sign (anywhere but right after a digit
+ * or a decimal point, where it is a range dash — `0:34-0:54` and `3-5` are
+ * unsigned; `HP−12%` and `HP:-12%` are signed), the digits (times like 1:23
+ * and decimals stay whole, `.99` reads as 0.99) and an optional magnitude
+ * suffix, either case (`30k` / `30m` / `30B` are not `30`). Every digit of the
+ * text lands in some token — nothing is skipped after `:` or `.`.
+ * codex review 50-SR-01 #1 / 50-SR-02 #1–2 / 50-SR-03 #1–2: unsigned bare
+ * digits let "30k damage" and "−12% HP" through on facts {t: 30, hpPct: 12};
+ * a digit lookbehind then hid `HP:99%`; a colon still dropped the sign and a
+ * lower-case `m` the magnitude. */
 const NUMBER =
-  /(?:(?<![\d.:])([-−+]))?(\d*\.\d+(?:[.:]\d+)*|\d+(?:[.:]\d+)*)([kKM万千]?)/g;
+  /(?:(?<![\d.])([-−+]))?(\d*\.\d+(?:[.:]\d+)*|\d+(?:[.:]\d+)*)([kKmMbB万千亿]?)/g;
 
 /** Every number printed in `text`, canonical: `-` for a minus sign (either
  * glyph), `+` kept, a leading-dot decimal given its 0, the magnitude suffix

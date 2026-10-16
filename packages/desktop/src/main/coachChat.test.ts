@@ -9,7 +9,7 @@ import { PROMPT_VERSION } from "../shared/promptVersion";
 function seedAnalysisCache(
   dir: string,
   matchId: string,
-  opts?: { sessionId?: string; selfReview?: unknown },
+  opts?: { sessionId?: string; selfReview?: unknown; emptySession?: boolean },
 ) {
   mkdirSync(join(dir, matchId), { recursive: true });
   writeFileSync(
@@ -27,6 +27,7 @@ function seedAnalysisCache(
             dropped: 0,
             hadNarration: true,
             ...(opts?.sessionId ? { sessionId: opts.sessionId } : {}),
+            ...(opts?.emptySession ? { sessionId: "" } : {}),
             ...(opts?.selfReview ? { selfReview: opts.selfReview } : {}),
           },
         },
@@ -233,4 +234,22 @@ it("自查成功但没抓到自查会话的结果:问教练可用,第一问不�
     matchesDir: dir2,
   });
   expect((await svc2.getState("m1")).status).toBe("not-ready");
+});
+
+it("存了空串会话的未自查 / 自查失败结果:仍是 not-ready(codex 50-SR-03 #3)", async () => {
+  for (const [selfReview, on] of [
+    [undefined, false],
+    [{ version: SELF_REVIEW_PROMPT_VERSION, status: "failed" }, true],
+  ] as const) {
+    const dir = mkdtempSync(join(tmpdir(), "chat-"));
+    seedAnalysisCache(dir, "m1", { emptySession: true, selfReview });
+    const svc = createCoachChatService({
+      getSettings: () => ({ ...settings(), aiSelfReview: on }),
+      matchesDir: dir,
+    });
+    expect((await svc.getState("m1")).status).toBe("not-ready");
+    expect(await svc.send({ matchId: "m1", question: "q" })).toEqual({
+      status: "not-ready",
+    });
+  }
 });
