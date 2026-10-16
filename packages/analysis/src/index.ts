@@ -23,7 +23,7 @@ export {
 } from "./data/mitigationData";
 export { OBSERVED_SPELL_IDS } from "./data/observedSpellIds";
 export { SPEC_ICONS } from "./data/specIconsGenerated";
-export { SPELL_CATEGORIES } from "./data/spellCategories";
+export { isKickSpellId, SPELL_CATEGORIES } from "./data/spellCategories";
 export { getEnglishSpellName } from "./data/spellEffectData";
 export { SPELL_EFFECT_OVERRIDES } from "./data/spellEffectOverrides";
 export { SPELL_ICONS_GENERATED } from "./data/spellIconsGenerated";

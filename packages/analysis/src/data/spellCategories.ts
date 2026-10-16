@@ -455,3 +455,14 @@ export const SILENCE_AURAS_NOT_KICKS: ReadonlySet<string> = new Set([
   "356727", // Spider Venom (rides on Chimaeral Sting 356719)
   "374776", // Tightening Grasp (rides on Gorefiend's Grasp)
 ]);
+
+/** "Is this a kick" — the interrupts category minus the silence auras above.
+ *  One predicate for every reader that counts or audits kicks (the interrupt
+ *  kit, the kick audit, healer offense kick casts, the stats table); readers
+ *  that want control responses keep reading the whole category. */
+export function isKickSpellId(spellId: string): boolean {
+  return (
+    SPELL_CATEGORIES[spellId]?.type === "interrupts" &&
+    !SILENCE_AURAS_NOT_KICKS.has(spellId)
+  );
+}

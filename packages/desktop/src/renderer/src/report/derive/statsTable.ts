@@ -1,7 +1,7 @@
 import {
   analyzePlayerCCAndTrinket,
+  isKickSpellId,
   reconstructDispelSummary,
-  SPELL_CATEGORIES,
 } from "@gladlog/analysis";
 import { CombatUnitReaction, LogEvent } from "@gladlog/parser-compat";
 
@@ -116,7 +116,7 @@ export function deriveStatsTable(
       const kickCastEvents = p.spellCastEvents.filter(
         (e) =>
           e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
-          SPELL_CATEGORIES[e.spellId ?? ""]?.type === "interrupts" &&
+          isKickSpellId(e.spellId ?? "") &&
           inR(e.logLine),
       );
       const kicksCast = kickCastEvents.length;

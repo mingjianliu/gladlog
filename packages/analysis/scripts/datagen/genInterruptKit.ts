@@ -19,9 +19,10 @@
  *                   Spell Lock 19647 (Felhunter), Axe Toss 89766 (Felguard) —
  *                   possession is OBSERVED (the pet cast it), never assumed.
  *
- * Id universe = SPELL_CATEGORIES type "interrupts" (the roster kickAudit and
- * the stats table already use), minus SILENCE_AURAS_NOT_KICKS (silence auras
- * with no school lockout — control, not a kick; user ruling 2026-10-16). Corpus cross-check 2026-09-12 (704 files,
+ * Id universe = `isKickSpellId` — SPELL_CATEGORIES type "interrupts" minus
+ * the silence auras with no school lockout (control, not a kick; user ruling
+ * 2026-10-16); the same predicate kickAudit and the stats table read. Corpus
+ * cross-check 2026-09-12 (704 files,
  * every 30th of the archive): Holy Paladin 0 % of rounds cast an interrupt,
  * Preservation 0 %, Restoration Druid 0 %, Mistweaver 0 %, Discipline / Holy
  * Priest 0 %, Demonology 0 % — the specs this table gives no interrupt; every
@@ -31,7 +32,7 @@
  *     npx tsx packages/analysis/scripts/datagen/genInterruptKit.ts
  */
 import {
-  SILENCE_AURAS_NOT_KICKS,
+  isKickSpellId,
   SPELL_CATEGORIES,
 } from "../../src/data/spellCategories";
 import { getEnglishSpellName } from "../../src/data/spellEffectData";
@@ -62,9 +63,7 @@ async function main() {
   const roster = Object.entries(
     SPELL_CATEGORIES as Record<string, { type: string; name?: string }>,
   )
-    .filter(
-      ([id, v]) => v.type === "interrupts" && !SILENCE_AURAS_NOT_KICKS.has(id),
-    )
+    .filter(([id]) => isKickSpellId(id))
     .map(([id]) => [id, getEnglishSpellName(id, id)] as const);
   const rosterIds = new Set(roster.map(([id]) => id));
 

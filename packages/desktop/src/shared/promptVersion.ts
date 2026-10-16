@@ -49,5 +49,15 @@
  *  Ice Block's. Data stands for the current build on logs of any date (user
  *  ruling). 605 files: cd-hoarded −1, kick-priority-team +2,
  *  kick-priority-missed +1 (one new kill window: Ice Block on cooldown).
+ *  v403 (2026-10-16, user ruling 「沉默本身其实是一种控制。打断的话，实际上
+ *  主要是一个 cooldown trade-off 的问题」 — facts only): one "is this a kick"
+ *  predicate (`isKickSpellId`) for every reader that counts or audits kicks;
+ *  Garrote - Silence, Strangulate, Spider Venom and Tightening Grasp are
+ *  silence auras with no school lockout and leave it. A DK's own Strangulate
+ *  presses no longer sit in the kick audit (they stay as [SILENCE] / [CONSEQ]
+ *  control lines), and the stats table stops counting them as kicks. 605
+ *  files: no candidate added or removed; 93 files change — 249 Strangulate
+ *  entries leave the `Kicks:` lists (237 silenced, 12 hit nothing) and the
+ *  12 matching `[KICK] your Strangulate … hit nothing` lines go.
  */
-export const PROMPT_VERSION = 402;
+export const PROMPT_VERSION = 403;

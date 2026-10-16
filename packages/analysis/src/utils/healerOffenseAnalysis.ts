@@ -6,7 +6,10 @@ import {
   castsOfEffectAura,
   effectAurasOfCast,
 } from "../data/castEffectAuras";
-import { SPELL_CATEGORIES as spellsData } from "../data/spellCategories";
+import {
+  isKickSpellId,
+  SPELL_CATEGORIES as spellsData,
+} from "../data/spellCategories";
 import { getEnglishSpellName, spellNamesReady } from "../data/spellEffectData";
 import { ccSpellIds } from "../data/spellTags";
 import {
@@ -245,7 +248,7 @@ export function computeSlackSegments(
         isOwnerCcCast(e.spellId as string),
       ).length;
       const ownerKickCasts = casts.filter(
-        (e) => SPELLS[e.spellId as string]?.type === "interrupts",
+        (e) => isKickSpellId(e.spellId as string),
       ).length;
       const ownerPurgeCasts = ownerPurgeTimesSeconds.filter(
         (t) => t >= s.fromSeconds && t < s.toSeconds,
@@ -354,7 +357,7 @@ export function computeContestedSegments(
         isOwnerCcCast(e.spellId as string),
       ).length;
       const ownerKickCasts = casts.filter(
-        (e) => SPELLS[e.spellId as string]?.type === "interrupts",
+        (e) => isKickSpellId(e.spellId as string),
       ).length;
       const ownerPurgeCasts = ownerPurgeTimesSeconds.filter(
         (t) => t >= s.fromSeconds && t < s.toSeconds,

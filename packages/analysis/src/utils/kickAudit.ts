@@ -10,7 +10,7 @@ import {
   classifyKickedSpell,
   type KickedSpellCategory,
 } from "../data/kickedSpellCategories";
-import { SPELL_CATEGORIES as spellsData } from "../data/spellCategories";
+import { isKickSpellId } from "../data/spellCategories";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import { buffFullDurationForCaster } from "./buffDuration";
 import {
@@ -27,9 +27,6 @@ import {
 } from "./castStopEvidence";
 import { kickCastSpellId, LANDED_PAIR_MS } from "./enemyInterrupts";
 import type { RawStreams } from "./rawStreams";
-
-type SpellEntry = { type: string };
-const SPELLS = spellsData as Record<string, SpellEntry>;
 
 // `LANDED_PAIR_MS` (a landed kick's SPELL_INTERRUPT pairs with the cast
 // within it) lives in enemyInterrupts.ts, which also reads it for the
@@ -67,7 +64,8 @@ export interface IKickAuditEntry {
   /**
    * landed   — SPELL_INTERRUPT confirms the kick stopped a cast;
    * silenced — no SPELL_INTERRUPT, but the kick's own silence aura went onto
-   *            the target (Silence 15487, Strangulate 47476): it landed — not
+   *            the target (Silence 15487; Strangulate left the kick set on
+   *            2026-10-16 — `isKickSpellId`): it landed — not
    *            a miss. Only in a match with cast-start data: without it every
    *            other kick that interrupted nothing is `unknown` and outside
    *            the landed rate, and a lone `silenced` would be the only one
@@ -185,8 +183,9 @@ export function jukedByStoppedChannelText(
 /**
  * Audits every interrupt the player cast: did it land, get juked, or hit air?
  *
- * Shared predicates: "is an interrupt" = SPELL_CATEGORIES type "interrupts"
- * (same check the stats table uses); "kick landed" = the mirror of
+ * Shared predicates: "is an interrupt" = `isKickSpellId` (the interrupts
+ * category minus the silence auras that are control; the stats table uses the
+ * same predicate); "kick landed" = the mirror of
  * ccTrinketAnalysis' interruptInstances (victim actionIn ∩ SPELL_INTERRUPT ∩
  * src = kicker); "cast was cancelled" is the one reading of how a cast bar
  * ended (`castBarOutcomesOf`, the reading the owner's cancel ledger and the
@@ -249,7 +248,7 @@ export function analyzeKickAudit(
     .filter(
       (e) =>
         e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
-        SPELLS[e.spellId ?? ""]?.type === "interrupts",
+        isKickSpellId(e.spellId ?? ""),
     )
     .sort((a, b) => a.logLine.timestamp - b.logLine.timestamp);
   if (kickRows.length === 0) return [];
@@ -302,7 +301,10 @@ export function analyzeKickAudit(
     }
     return bars;
   };
-  const forcedByUnit = new Map<string, ReturnType<typeof forcedStopInstantsMs>>();
+  const forcedByUnit = new Map<
+    string,
+    ReturnType<typeof forcedStopInstantsMs>
+  >();
   const forcedOf = (enemy: ICombatUnit) => {
     let forced = forcedByUnit.get(enemy.id);
     if (!forced) {

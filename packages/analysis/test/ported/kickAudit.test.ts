@@ -152,7 +152,15 @@ describe("kickAudit — DPS baseline 修复(2026-07-16)", () => {
       name: "Enemy",
       info,
       actionIn: [
-        makeInterruptEvent(WIND_SHEAR, "Wind Shear", "116", "Frostbolt", kickTs, "pet1", "Felhunter"),
+        makeInterruptEvent(
+          WIND_SHEAR,
+          "Wind Shear",
+          "116",
+          "Frostbolt",
+          kickTs,
+          "pet1",
+          "Felhunter",
+        ),
       ],
     } as any);
     const combat = {
@@ -176,7 +184,15 @@ describe("kickAudit — DPS baseline 修复(2026-07-16)", () => {
       // (SPELL_INTERRUPT src=f2, dest=e1)
       actionIn: [
         (() => {
-          const ev = makeInterruptEvent("57994", "Wind Shear", "116", "Frostbolt", stTs + 1_000, "f2", "Teammate");
+          const ev = makeInterruptEvent(
+            "57994",
+            "Wind Shear",
+            "116",
+            "Frostbolt",
+            stTs + 1_000,
+            "f2",
+            "Teammate",
+          );
           ev.destUnitId = "e1";
           return ev;
         })(),
@@ -200,7 +216,11 @@ describe("kickAudit — one kick one entry, landed silence, bounded juke (G11)",
   const success = (spellId: string, ts: number) =>
     makeSpellCastEvent(spellId, ts, "p1", "Kicker", "e1", "Enemy", 0, spellId);
   const applied = (spellId: string, ts: number, src = "p1") => ({
-    logLine: { event: LogEvent.SPELL_AURA_APPLIED, timestamp: ts, parameters: [] },
+    logLine: {
+      event: LogEvent.SPELL_AURA_APPLIED,
+      timestamp: ts,
+      parameters: [],
+    },
     timestamp: ts,
     spellId,
     spellName: spellId,
@@ -214,7 +234,15 @@ describe("kickAudit — one kick one entry, landed silence, bounded juke (G11)",
       name: "Enemy",
       info,
       actionIn: [
-        makeInterruptEvent("93985", "Skull Bash", "116", "Frostbolt", kickTs + 1, "p1", "Kicker"),
+        makeInterruptEvent(
+          "93985",
+          "Skull Bash",
+          "116",
+          "Frostbolt",
+          kickTs + 1,
+          "p1",
+          "Kicker",
+        ),
       ],
     } as any);
     const entries = analyzeKickAudit(player, [enemy], makeCombat());
@@ -225,8 +253,15 @@ describe("kickAudit — one kick one entry, landed silence, bounded juke (G11)",
   });
 
   it("F-O4: two real kicks of the same spell seconds apart stay two entries", () => {
-    const player = kicker([cast("106839", kickTs), cast("106839", kickTs + 15_000)]);
-    const enemy = makeUnit("e1", { name: "Enemy", info, castStartEvents: [] } as any);
+    const player = kicker([
+      cast("106839", kickTs),
+      cast("106839", kickTs + 15_000),
+    ]);
+    const enemy = makeUnit("e1", {
+      name: "Enemy",
+      info,
+      castStartEvents: [],
+    } as any);
     expect(analyzeKickAudit(player, [enemy], makeCombat())).toHaveLength(2);
   });
 
@@ -288,7 +323,16 @@ describe("kickAudit — one kick one entry, landed silence, bounded juke (G11)",
         castStart("118", kickTs - 2_000, "e1"),
       ],
       spellCastEvents: [
-        makeSpellCastEvent("118", kickTs - 700, "p1", "Kicker", "e1", "Enemy", 0, "118"),
+        makeSpellCastEvent(
+          "118",
+          kickTs - 700,
+          "p1",
+          "Kicker",
+          "e1",
+          "Enemy",
+          0,
+          "118",
+        ),
       ],
       auraEvents: [applied("15487", kickTs + 2)],
     } as any);
@@ -326,8 +370,16 @@ describe("kickAudit — one kick one entry, landed silence, bounded juke (G11)",
     expect(e!.result).toBe("silenced");
     expect(e!.silencedTargetName).toBe("Aimed");
     // no aura on the aimed unit: whoever carries it
-    const lone = makeUnit("e2", { name: "Aimed", info, castStartEvents: [] } as any);
-    const [f] = analyzeKickAudit(player, [mk("e1", "First"), lone], makeCombat());
+    const lone = makeUnit("e2", {
+      name: "Aimed",
+      info,
+      castStartEvents: [],
+    } as any);
+    const [f] = analyzeKickAudit(
+      player,
+      [mk("e1", "First"), lone],
+      makeCombat(),
+    );
     expect(f!.silencedTargetName).toBe("First");
   });
 
@@ -363,11 +415,17 @@ describe("kickAudit — one kick one entry, landed silence, bounded juke (G11)",
       kicksLine((name, id) =>
         id.startsWith("Player-") ? name : "Shammy-Realm's totem",
       ),
-    ).toBe("  Kicks: 1:20 Wind Shear → hit nothing [IMMUNE: Shammy-Realm's totem]");
+    ).toBe(
+      "  Kicks: 1:20 Wind Shear → hit nothing [IMMUNE: Shammy-Realm's totem]",
+    );
     // a player target keeps the name this block uses everywhere
     const onPlayer = {
       ...missed,
-      kickMiss: { missType: "IMMUNE", targetId: "Player-1-0001", targetName: "Pal-Realm" },
+      kickMiss: {
+        missType: "IMMUNE",
+        targetId: "Player-1-0001",
+        targetName: "Pal-Realm",
+      },
     };
     expect(
       formatBurstLedgerForContext([], [], [onPlayer], (name, id) =>
@@ -416,14 +474,18 @@ describe("kickAudit — one kick one entry, landed silence, bounded juke (G11)",
     );
   });
 
-  it("precedence: a kick that silenced its target is decided before the juke test (d692582c Strangulate @51.3)", () => {
-    const player = kicker([cast("47476", kickTs)]);
+  // Found on d692582c with Strangulate @51.3; Strangulate left the kick set on
+  // 2026-10-16 (a silence aura with no school lockout is control — user
+  // ruling, `isKickSpellId`), so the precedence is pinned on Priest Silence,
+  // the silencing kick that stays.
+  it("precedence: a kick that silenced its target is decided before the juke test (d692582c, Silence)", () => {
+    const player = kicker([cast("15487", kickTs)]);
     const enemy = makeUnit("e1", {
       name: "Enemy",
       info,
       // a cast the target stopped 1.5 s earlier — a juke under F-B1 alone
       castStartEvents: [castStart("116", kickTs - 1_500, "e1")],
-      auraEvents: [applied("47476", kickTs + 1)],
+      auraEvents: [applied("15487", kickTs + 1)],
     } as any);
     expect(analyzeKickAudit(player, [enemy], makeCombat())[0]!.result).toBe(
       "silenced",
@@ -485,7 +547,16 @@ describe("kickAudit — the bait is the last bar before the kick (FT F12)", () =
       name: "Kicker",
       info,
       spellCastEvents: [
-        makeSpellCastEvent(spellId, kickTs, "e1", "Enemy", "p1", "Kicker", 0, spellId),
+        makeSpellCastEvent(
+          spellId,
+          kickTs,
+          "e1",
+          "Enemy",
+          "p1",
+          "Kicker",
+          0,
+          spellId,
+        ),
       ],
     } as any);
   const done = (spellId: string, ts: number) =>
@@ -569,19 +640,27 @@ describe("kickAudit — the bait is the last bar before the kick (FT F12)", () =
       makeUnit("e1", {
         name: "Enemy",
         info,
-        castStartEvents: starts.map((ms) => castStart(FLASH_HEAL, kickTs + ms, "e1")),
+        castStartEvents: starts.map((ms) =>
+          castStart(FLASH_HEAL, kickTs + ms, "e1"),
+        ),
       } as any);
     expect(
-      analyzeKickAudit(kickerOf(), [enemy([-4_001, 200])], makeCombat())[0]!.result,
+      analyzeKickAudit(kickerOf(), [enemy([-4_001, 200])], makeCombat())[0]!
+        .result,
     ).toBe("missed");
     expect(
-      analyzeKickAudit(kickerOf(), [enemy([-4_000, 200])], makeCombat())[0]!.result,
+      analyzeKickAudit(kickerOf(), [enemy([-4_000, 200])], makeCombat())[0]!
+        .result,
     ).toBe("juked");
   });
 
   it("9d899d10 r1 1:42: a bar with a stun on the target between its start and the kick is not called a fake — the stun broke it, or the log cannot tell", () => {
     const stun = (ms: number) => ({
-      logLine: { event: LogEvent.SPELL_AURA_APPLIED, timestamp: kickTs + ms, parameters: [] },
+      logLine: {
+        event: LogEvent.SPELL_AURA_APPLIED,
+        timestamp: kickTs + ms,
+        parameters: [],
+      },
       timestamp: kickTs + ms,
       spellId: "118905", // Static Charge (Capacitor Totem)
       spellName: "Static Charge",
@@ -644,7 +723,11 @@ describe("kickAudit — the bait is the last bar before the kick (FT F12)", () =
       const stunned = recorder({
         auraEvents: [
           {
-            logLine: { event: LogEvent.SPELL_AURA_APPLIED, timestamp: kickTs - 450, parameters: [] },
+            logLine: {
+              event: LogEvent.SPELL_AURA_APPLIED,
+              timestamp: kickTs - 450,
+              parameters: [],
+            },
             timestamp: kickTs - 450,
             spellId: "853", // Hammer of Justice
             spellName: "Hammer of Justice",
@@ -654,9 +737,9 @@ describe("kickAudit — the bait is the last bar before the kick (FT F12)", () =
         ],
       });
       expect(audit(stunned, streams("Interrupted")).result).toBe("missed");
-      expect(audit(recorder(), streams("Target not in line of sight")).result).toBe(
-        "missed",
-      );
+      expect(
+        audit(recorder(), streams("Target not in line of sight")).result,
+      ).toBe("missed");
       // the rows of another unit change nothing
       const other = streams("Target not in line of sight");
       other.castFailed[0]!.unitGuid = "someone-else";

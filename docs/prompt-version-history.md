@@ -3219,8 +3219,7 @@ PUSH is not claimed across an instant where either player is dead or
 has no position.
 
 v386 (2026-10-14, FT, two user rulings + codex 40-FT-83): (1) an
-Evoker's own flying breath (Deep Breath 357210 / 433874, Breath of Eons
-403631) is time the unit cannot cast, like a stun ("深呼吸算是不能施法");
+Evoker's own flying breath (Deep Breath 357210 / 433874, Breath of Eons 403631) is time the unit cannot cast, like a stun ("深呼吸算是不能施法");
 (2) refusal reasons inside `attempted` (and mana's rejected count) are in
 the prompt's language — "not ready yet", "under crowd control",
 "silenced", … — not the client's own text (Q6-2: "只要和整体的语言一样
@@ -3378,3 +3377,13 @@ defensive durations; Ice Cold's node spell is 414658 and its presses stay
 Ice Block's. Data stands for the current build on logs of any date (user
 ruling). 605 files: cd-hoarded −1, kick-priority-team +2,
 kick-priority-missed +1 (one new kill window: Ice Block on cooldown).
+v403 (2026-10-16, user ruling 「沉默本身其实是一种控制。打断的话，实际上
+主要是一个 cooldown trade-off 的问题」 — facts only): one "is this a kick"
+predicate (`isKickSpellId`) for every reader that counts or audits kicks;
+Garrote - Silence, Strangulate, Spider Venom and Tightening Grasp are
+silence auras with no school lockout and leave it. A DK's own Strangulate
+presses no longer sit in the kick audit (they stay as [SILENCE] / [CONSEQ]
+control lines), and the stats table stops counting them as kicks. 605
+files: no candidate added or removed; 93 files change — 249 Strangulate
+entries leave the `Kicks:` lists (237 silenced, 12 hit nothing) and the
+12 matching `[KICK] your Strangulate … hit nothing` lines go.

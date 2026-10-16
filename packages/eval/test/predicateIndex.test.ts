@@ -1575,6 +1575,11 @@ const INDEX: PredicateRow[] = [
     mod: spellCategories,
   },
   {
+    file: `${A}/data/spellCategories.ts`,
+    symbol: "isKickSpellId",
+    mod: spellCategories,
+  },
+  {
     file: `${A}/utils/cannotCastIntervals.ts`,
     symbol: "buildCannotCastIntervals",
     mod: cannotCastIntervals,
