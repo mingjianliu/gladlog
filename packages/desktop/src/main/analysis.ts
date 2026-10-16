@@ -135,7 +135,7 @@ const SELF_REVIEW_TIMEOUT_MS = 300_000;
  * on, by the current SELF_REVIEW_PROMPT_VERSION. So toggling the setting never
  * shows a result of the other kind.
  */
-function selfReviewMatches(
+export function selfReviewMatches(
   result: AnalysisResult | null | undefined,
   selfReviewOn: boolean,
 ): boolean {
@@ -1001,7 +1001,11 @@ export function createAnalysisService(deps: {
         review = { selfReview: out.record };
         if (out.record.status === "reviewed") {
           findings = out.findings;
-          if (out.sessionId) sessionId = out.sessionId;
+          // The first round's session remembers the unreviewed wording; when
+          // the review call's own session was not captured (agy / codex may
+          // answer without one), store none so coach chat reseeds from the
+          // findings as shown (codex review 50-SR-01 #3).
+          sessionId = out.sessionId;
         }
       }
       finish(

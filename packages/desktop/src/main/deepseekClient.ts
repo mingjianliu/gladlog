@@ -135,6 +135,13 @@ export function deepseekClientFactory(
     async *stream(params) {
       const controller = new AbortController();
       activeControllers.add(controller);
+      // A caller's own cancellation (the self-review deadline) aborts the
+      // request too, not only this module's watchdogs (codex review 50-SR-01
+      // #2). Listener on a per-call signal: nothing to remove afterwards.
+      if (params.signal?.aborted) controller.abort();
+      params.signal?.addEventListener("abort", () => controller.abort(), {
+        once: true,
+      });
       // A fixed absolute deadline: it is NOT reset per chunk, so a connection
       // that keeps making brief progress while blowing past the total budget is
       // still cut off, instead of being kept alive indefinitely by repeatedly

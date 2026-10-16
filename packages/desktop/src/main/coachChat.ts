@@ -20,7 +20,7 @@ import {
   buildCoachSystemPrompt,
 } from "./ai";
 import { API_MAX_TOKENS } from "./aiBudgets";
-import type { AnalysisResult } from "./analysis";
+import { type AnalysisResult, selfReviewMatches } from "./analysis";
 import {
   agyClientFactory,
   claudeCliClientFactory,
@@ -94,12 +94,16 @@ function writeDoc(
 }
 
 /** The newest analysis slot for this CLI backend that carries a sessionId and is
- * on the current prompt version. */
+ * on the current prompt version — and of the kind the AI self-review setting
+ * asks for (selfReviewMatches, the analysis panel's own cache predicate):
+ * otherwise, after the setting is toggled, the panel shows "not analyzed"
+ * while chat resumes the other kind's session (codex review 50-SR-01 #4). */
 function findAnalysisSession(
   matchesDir: string,
   matchId: string,
   lang: AiLanguage,
   backend: string,
+  selfReviewOn: boolean,
 ): { sessionId: string; model: string } | null {
   let raw: unknown = null;
   try {
@@ -117,6 +121,7 @@ function findAnalysisSession(
     const split = splitSlotKey(key);
     if (!split || split.backend !== backend) continue;
     if (slot.promptVersion !== PROMPT_VERSION) continue;
+    if (!selfReviewMatches(slot.result, selfReviewOn)) continue;
     const sid = slot.result?.sessionId;
     if (!sid) continue;
     if (!best || slot.createdAt > best.createdAt)
@@ -131,6 +136,7 @@ export function createCoachChatService(deps: {
     aiBackendCommand?: string | null;
     aiModels?: AiModelSelection | null;
     aiLanguage?: AiLanguage;
+    aiSelfReview?: boolean;
   };
   matchesDir: string;
   /** Test injection; production uses the real localAiBackends function. */
@@ -167,6 +173,7 @@ export function createCoachChatService(deps: {
       s,
       backend,
       lang: (s.aiLanguage ?? "zh") as AiLanguage,
+      selfReviewOn: s.aiSelfReview === true,
       cmd: s.aiBackendCommand || undefined,
       // Single-source predicate (final review F3): shares the same
       // shared/aiModels.ts constant with analysis.ts's isCliBackend instead of
@@ -234,7 +241,7 @@ export function createCoachChatService(deps: {
 
   return {
     async getState(matchId: string): Promise<ChatState> {
-      const { backend, lang, isCli } = ctx();
+      const { backend, lang, isCli, selfReviewOn } = ctx();
       if (!isCli) return { status: "unsupported" };
       const doc = readDoc(chatPath(deps.matchesDir, matchId, lang));
       const thread = doc.threads[backend];
@@ -246,7 +253,13 @@ export function createCoachChatService(deps: {
           messages: thread.messages,
           busy: inFlight.has(matchId),
         };
-      const sess = findAnalysisSession(deps.matchesDir, matchId, lang, backend);
+      const sess = findAnalysisSession(
+        deps.matchesDir,
+        matchId,
+        lang,
+        backend,
+        selfReviewOn,
+      );
       if (!sess) return { status: "not-ready" };
       return {
         status: "ready",
@@ -262,7 +275,7 @@ export function createCoachChatService(deps: {
       question: string;
       seed?: ChatSeed;
     }): Promise<ChatSendResult> {
-      const { backend, lang, cmd, isCli } = ctx();
+      const { backend, lang, cmd, isCli, selfReviewOn } = ctx();
       if (!isCli) return { status: "unsupported" };
       if (inFlight.has(input.matchId)) return { status: "busy" };
       const path = chatPath(deps.matchesDir, input.matchId, lang);
@@ -274,6 +287,7 @@ export function createCoachChatService(deps: {
           input.matchId,
           lang,
           backend,
+          selfReviewOn,
         );
         if (!sess && !input.seed) return { status: "not-ready" };
         thread = {

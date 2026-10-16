@@ -122,11 +122,38 @@ ${reply}
 === END REPLY ===`;
 }
 
-const NUMBER = /\d+(?:[.:]\d+)*/g;
+/** A number as printed: an optional sign (only where it cannot be a range
+ * dash — `0:34-0:54` is two unsigned times), the digits (times like 1:23 and
+ * decimals stay whole) and an optional magnitude suffix (`30k` is not `30`).
+ * codex review 50-SR-01 #1: unsigned bare digits let "30k damage" and
+ * "−12% HP" through on facts {t: 30, hpPct: 12}. */
+const NUMBER =
+  /(?:(?<![\w.:])([-−+]))?(?<![\d.:])(\d+(?:[.:]\d+)*)([kKM万千]?)/g;
 
-/** Every number printed in `text` (times like 1:23 and decimals stay whole). */
+/** Every number printed in `text`, canonical: `-` for a minus sign, nothing
+ * for a plus, the magnitude suffix lower-cased. */
 export function numbersIn(text: string): Set<string> {
-  return new Set(text.replace(BRACKET_TERM, " ").match(NUMBER) ?? []);
+  const out = new Set<string>();
+  for (const [, sign, digits, suffix] of text
+    .replace(BRACKET_TERM, " ")
+    .matchAll(NUMBER))
+    out.add(
+      `${sign === "-" || sign === "−" ? "-" : ""}${digits}${suffix?.toLowerCase() ?? ""}`,
+    );
+  return out;
+}
+
+/** The numbers a reviewed finding may print, given an evidence text (a fact
+ * value, or the finding as first shown): each number as written, and its
+ * unsigned form — a fact `-131k` is rendered "131k less" in prose — but never
+ * a sign or a magnitude the evidence does not carry. On the experiment's 51
+ * outputs this puts back 3 of 144 reviewed findings (the same 3 as the
+ * unsigned rule). */
+function allowedNumbers(evidence: string, into: Set<string>): void {
+  for (const n of numbersIn(evidence)) {
+    into.add(n);
+    into.add(n.replace(/^-/, ""));
+  }
 }
 
 const sameIds = (a: readonly string[], b: readonly string[]): boolean =>
@@ -233,10 +260,11 @@ export function applySelfReview(
       revert("schema: missing / empty title or explanation");
       continue;
     }
-    const allowed = numbersIn(`${orig.title}\n${orig.explanation}`);
+    const allowed = new Set<string>();
+    allowedNumbers(`${orig.title}\n${orig.explanation}`, allowed);
     for (const id of orig.eventIds)
       for (const v of Object.values(byId.get(id)?.facts ?? {}))
-        for (const n of numbersIn(String(v))) allowed.add(n);
+        allowedNumbers(String(v), allowed);
     const extra = [...numbersIn(`${r.title}\n${r.explanation}`)].filter(
       (n) => !allowed.has(n),
     );

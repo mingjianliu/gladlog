@@ -3,12 +3,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it, vi } from "vitest";
 import { createCoachChatService } from "./coachChat";
+import { SELF_REVIEW_PROMPT_VERSION } from "@gladlog/analysis/src/analysis/selfReview";
 import { PROMPT_VERSION } from "../shared/promptVersion";
 
 function seedAnalysisCache(
   dir: string,
   matchId: string,
-  opts?: { sessionId?: string },
+  opts?: { sessionId?: string; selfReview?: unknown },
 ) {
   mkdirSync(join(dir, matchId), { recursive: true });
   writeFileSync(
@@ -26,6 +27,7 @@ function seedAnalysisCache(
             dropped: 0,
             hadNarration: true,
             ...(opts?.sessionId ? { sessionId: opts.sessionId } : {}),
+            ...(opts?.selfReview ? { selfReview: opts.selfReview } : {}),
           },
         },
       },
@@ -162,4 +164,27 @@ it("每 CLI 各一条线程:切后端显示各自历史", async () => {
   backend = "claudeCli";
   const st = (await svc.getState("m1")) as { messages: unknown[] };
   expect(st.messages).toHaveLength(2);
+});
+
+it("AI 自查开关是分析会话的身份:切换后分析面板显示未分析,问教练也不续接另一类的会话(codex 50-SR-01 #4)", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "chat-"));
+  let selfReview = false;
+  const svc = createCoachChatService({
+    getSettings: () => ({ ...settings(), aiSelfReview: selfReview }),
+    matchesDir: dir,
+  });
+  seedAnalysisCache(dir, "m1", { sessionId: "sid-plain" });
+  expect((await svc.getState("m1")).status).toBe("ready");
+  selfReview = true;
+  expect((await svc.getState("m1")).status).toBe("not-ready");
+  expect(await svc.send({ matchId: "m1", question: "q" })).toEqual({
+    status: "not-ready",
+  });
+  seedAnalysisCache(dir, "m1", {
+    sessionId: "sid-reviewed",
+    selfReview: { version: SELF_REVIEW_PROMPT_VERSION, status: "reviewed" },
+  });
+  expect((await svc.getState("m1")).status).toBe("ready");
+  selfReview = false;
+  expect((await svc.getState("m1")).status).toBe("not-ready");
 });

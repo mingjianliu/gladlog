@@ -393,6 +393,16 @@ describe("AI 自查:问教练续接哪个会话", () => {
     await ok.s.run(input);
     expect(ok.done().sessionId).toBe("s-review");
 
+    // 自查成功但没抓到自己的会话(agy / codex 可能不给):不留首轮会话,
+    // 让问教练从显示的结论重新播种(codex 50-SR-01 #3)
+    const noCapture = setup(
+      [[{ delta: FIRST }, { sessionId: "s-first" }], [{ delta: reviewed() }]],
+      { selfReview: true },
+    );
+    await noCapture.s.run(input);
+    expect(noCapture.done().selfReview.status).toBe("reviewed");
+    expect(noCapture.done().sessionId).toBeUndefined();
+
     const bad = setup(
       [
         [{ delta: FIRST }, { sessionId: "s-first" }],
