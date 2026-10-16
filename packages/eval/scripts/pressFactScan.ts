@@ -24,10 +24,10 @@
  * its name is `<fileNo>-<round>-<owner#>` (acceptanceCapture.ts). Pids are
  * read from the context's own `<unit id="N" name="…">` tags.
  *
- *   npx tsx packages/eval/scripts/pressFactScan.ts <captureDir> [--examples N]
+ *   npx tsx packages/eval/scripts/pressFactScan.ts <captureDir> [--examples N] [--archive-dir <dir>]
  */
 import { readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { gunzipSync } from "node:zlib";
 
 import { ensureAnalysisData } from "@gladlog/analysis";
@@ -36,10 +36,17 @@ import { LogEvent, toLegacyMatch } from "@gladlog/parser-compat";
 
 const dir = process.argv[2];
 if (!dir) {
-  console.error("usage: pressFactScan.ts <captureDir> [--examples N]");
+  console.error("usage: pressFactScan.ts <captureDir> [--examples N] [--archive-dir <dir>]");
   process.exit(2);
 }
 const exIdx = process.argv.indexOf("--examples");
+// relative manifest paths are written as given: resolve them the way
+// acceptanceCapture.ts did (`--archive-dir`)
+const adIdx = process.argv.indexOf("--archive-dir");
+const ARCHIVE_DIR = adIdx > 0 ? (process.argv[adIdx + 1] ?? "") : "";
+/** contexts that could not be mapped back to a parsed round — any one fails
+ * the run (codex review 20-F15-01: a silent skip read as "0 missing") */
+const unmapped: string[] = [];
 const EXAMPLES = exIdx > 0 ? Number(process.argv[exIdx + 1]) : 5;
 const ALLY_COPY_MS = 500;
 const FORM_BUFF_MS = 50;
@@ -99,18 +106,24 @@ for (const f of files) {
   const key = `${f.shard}:${archive}`;
   if (key !== cacheKey) {
     try {
-      cacheItems = parseFile(archive);
+      cacheItems = parseFile(
+        archive.startsWith("/") ? archive : resolve(ARCHIVE_DIR, archive),
+      );
     } catch {
       cacheItems = [];
     }
     cacheKey = key;
   }
   const item = cacheItems[f.round - 1];
-  if (!item) continue;
+  if (!item) {
+    unmapped.push(`${f.shard}/${f.name} (${archive})`);
+    continue;
+  }
   let legacy: ReturnType<typeof toLegacyMatch>;
   try {
     legacy = toLegacyMatch({ ...item, rawLines: [] } as GladMatch);
   } catch {
+    unmapped.push(`${f.shard}/${f.name} (toLegacyMatch threw)`);
     continue;
   }
   contexts++;
@@ -155,8 +168,8 @@ for (const f of files) {
           const tag = friendly
             ? isOwner
               ? "[YOU] [CD]"
-              : "[TEAM] [CD]"
-            : "[ENEMY DEF]";
+              : `[TEAM] [CD]   ${me.pid}(`
+            : `[ENEMY DEF]   ${me.pid}(`;
           if (
             !has(
               t,
@@ -208,4 +221,9 @@ for (const c of [
   const m = missing.get(c) ?? [];
   console.log(`${c}: expected ${expected.get(c) ?? 0}, missing ${m.length}`);
   for (const s of m.slice(0, EXAMPLES)) console.log(`    ${s}`);
+}
+if (unmapped.length > 0) {
+  console.error(`UNMAPPED contexts: ${unmapped.length}`);
+  for (const u of unmapped.slice(0, 10)) console.error(`    ${u}`);
+  process.exit(1);
 }

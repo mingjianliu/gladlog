@@ -58,6 +58,7 @@ import { COPY_CAST_IDS, isFormReshiftCast } from "./castPress";
 import { incomingPressureEvents } from "./incomingPressure";
 import {
   auraOffensiveActiveAt,
+  METAMORPHOSIS_PRESS_CAST_IDS,
   OFFENSIVE_AURA_EVIDENCE,
 } from "./offensiveAuraOccurrences";
 import { fmtTime, toRenderSecond } from "./renderGrid";
@@ -3735,9 +3736,14 @@ function extractMajorCooldownsAll(
   // the Sun's Avenging Wrath, a Riptide Ascendance) would let a proc prove a
   // button a talent removed when the talents are not decoded (codex review).
   const activatedSpellIds = new Set<string>(castSpellIds);
-  // A cast logged under an alias proves the canonical button
-  // (`SPELL_CANONICAL_IDS`: Havoc Metamorphosis 191427 is pressed as 200166).
-  for (const id of castSpellIds) activatedSpellIds.add(canonicalSpellId(id));
+  // Havoc Metamorphosis: the 191427 button never logs a cast, its press is
+  // the 200166 landing (`METAMORPHOSIS_PRESS_CAST_IDS`), so that cast proves
+  // the button. Only this pair — the other `SPELL_CANONICAL_IDS` aliases keep
+  // the ownership they had (codex review 20-F15-01: a 633 Lay on Hands cast
+  // promoted the Defensive 471195 row and added a cd-hoarded accusation).
+  for (const id of castSpellIds)
+    if (METAMORPHOSIS_PRESS_CAST_IDS.has(id))
+      activatedSpellIds.add(canonicalSpellId(id));
   for (const id of AURA_ACTIVATION_PROVES_BUTTON_IDS)
     if (auraOnlyActivationSeconds(unit, id, matchStartMs).length > 0)
       activatedSpellIds.add(id);
