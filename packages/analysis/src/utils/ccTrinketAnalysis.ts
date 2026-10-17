@@ -870,6 +870,14 @@ export function ccsRemovedByPress(
     const removeMs =
       matchStartMs + Math.round((cc.atSeconds + cc.durationSeconds) * 1000);
     if (cc.endedByLoggedCause && castTsMs > removeMs) continue;
+    // and it was cut short: one that ran its full official length (DR
+    // included) ended on its own, whatever was pressed in that ms — the
+    // break-ability path's rule (agy review 20-F15-05)
+    if (
+      cc.expectedDurationSeconds !== undefined &&
+      removeMs >= applyMs + cc.expectedDurationSeconds * 1000
+    )
+      continue;
     if (castEndedCcWindow({ applyMs, removeMs }, castTsMs)) out.push(cc);
   }
   return out;

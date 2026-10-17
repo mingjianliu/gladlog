@@ -169,6 +169,7 @@ describe("F11: a rider that came with its own cast is not `(passive)`", () => {
       enemyPid: (n: string) => `4(${n})`,
       enemyDispelSummary: undefined,
       addEntry: ((_: number, line: string) => lines.push(line)) as never,
+      _allUnits: [],
     });
     expect(lines).toEqual([
       "0:22  [MINOR DISPELS]   2(Druid): Incarnation: Tree of Life (side effect of the cast) x2, Incarnation: Tree of Life (passive) (low-priority, folded)",

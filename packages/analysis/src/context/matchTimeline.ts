@@ -905,6 +905,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     enemyDispelSummary,
     isHealer,
     matchStartMs,
+    _allUnits,
   });
 
   // ── [MINOR DISPELS] folded lines (T5 dispel coverage) ─────────────────────
@@ -918,6 +919,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     enemyPid,
     enemyDispelSummary,
     addEntry,
+    _allUnits,
   });
 
   // ── [KICK] events ───────────────────────────────────────────────────────────

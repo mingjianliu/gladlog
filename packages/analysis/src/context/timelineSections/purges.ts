@@ -12,11 +12,11 @@ import { LogEvent } from "@gladlog/parser-compat";
 
 import { getEnglishSpellName } from "../../data/spellEffectData";
 import {
-  dispelActorLabel,
   type IDispelEvent,
   purgeableCountText,
 } from "../../utils/dispelAnalysis";
 import { fmtTime } from "../../utils/renderGrid";
+import { dispelActorLabel } from "../timelineHelpers";
 import type { TimelineCtx } from "./ctx";
 import { purgeMatchesCast } from "./healerCastGapFiller";
 
@@ -31,9 +31,11 @@ export function emitPurgeEntries(
     | "enemyDispelSummary"
     | "isHealer"
     | "matchStartMs"
+    | "_allUnits"
   >,
 ): void {
   const {
+    _allUnits,
     dispelSummary,
     owner,
     enemyPid,
@@ -87,7 +89,7 @@ export function emitPurgeEntries(
       .join(", ");
     addEntry(
       first.timeSeconds,
-      `${fmtTime(first.timeSeconds)}  [PURGE]   ${dispelActorLabel(first, pid)} purged ${effects}${viaTag}`,
+      `${fmtTime(first.timeSeconds)}  [PURGE]   ${dispelActorLabel(first, pid, _allUnits)} purged ${effects}${viaTag}`,
     );
   }
 
@@ -110,7 +112,7 @@ export function emitPurgeEntries(
       .join(", ");
     addEntry(
       first.timeSeconds,
-      `${fmtTime(first.timeSeconds)}  [ENEMY PURGE]   ${dispelActorLabel(first, enemyPid)} stripped ${effects}${viaTag}`,
+      `${fmtTime(first.timeSeconds)}  [ENEMY PURGE]   ${dispelActorLabel(first, enemyPid, _allUnits)} stripped ${effects}${viaTag}`,
     );
   }
 
@@ -139,7 +141,7 @@ export function emitPurgeEntries(
         .join(", ");
       addEntry(
         first.timeSeconds,
-        `${fmtTime(first.timeSeconds)}  [ENEMY CLEANSE]   ${dispelActorLabel(first, enemyPid)} cleansed ${effects}${viaTag}`,
+        `${fmtTime(first.timeSeconds)}  [ENEMY CLEANSE]   ${dispelActorLabel(first, enemyPid, _allUnits)} cleansed ${effects}${viaTag}`,
       );
     }
   }

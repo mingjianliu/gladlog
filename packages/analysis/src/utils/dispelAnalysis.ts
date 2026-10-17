@@ -1371,6 +1371,9 @@ export interface IDispelEvent {
   isSpellSteal: boolean;
   /** True when the dispel was performed by a pet/NPC merged into the player's actionOut (e.g. Warlock Felhunter Devour Magic, Imp Singe Magic). */
   isPetDispel: boolean;
+  /** The summon's own unit id when `isPetDispel` (F15 R2) — what the line
+   * names it as (`summonKindOf`: pet / guardian / totem). */
+  summonUnitId?: string;
   /** deliberate = a cast produced it; proc = passive trigger (Cleanse the
    * Weak …); rider = side effect of a movement/form action. One predicate,
    * utils/dispelKind.ts — the desktop counts and the prompt fold read this. */
@@ -2571,25 +2574,6 @@ export function wasRemovedByAllyDispel(
 export const ALLY_DISPEL_MATCH_TOLERANCE_S = 0.05;
 
 /**
- * F15 / fact1215 R2 (2026-10-16): the actor a dispel line names — the
- * player's roster label, or `<label>'s pet` when a pet cast it
- * (`isPetDispel`: a Felhunter's Devour Magic is credited to its warlock by
- * `sourceName`). The [KICK] lines already said `5(AWarlock)'s pet`; the
- * [PURGE] / [ENEMY PURGE] / [ENEMY CLEANSE] / [MINOR DISPELS] lines named the
- * warlock (06356dd9, 0f894aee, 364e3201, 519781fd, 62fdbf2e, 8cd58545: every
- * Devour Magic in those files came from a Pet- GUID). One label for every
- * dispel line, and the line groups key on it so a pet's and its owner's
- * removals in one second stay apart.
- */
-export function dispelActorLabel(
-  e: Pick<IDispelEvent, "sourceName" | "isPetDispel">,
-  labelOf: (name: string) => string,
-): string {
-  const label = labelOf(e.sourceName);
-  return e.isPetDispel ? `${label}'s pet` : label;
-}
-
-/**
  * One cleanse press removing several debuffs logs one SPELL_DISPEL per
  * removal at the same instant — `allyCleanse` then holds that press several
  * times. A cooldown / charge replay must count PRESSES (triage
@@ -2968,6 +2952,9 @@ export function reconstructDispelSummary(
         isSpellSteal: isSteal,
         // B45: pet unit actions are always pet dispels; player actions only when srcUnit ≠ player
         isPetDispel: isPetUnit || action.srcUnitId !== unit.id,
+        ...(isPetUnit || action.srcUnitId !== unit.id
+          ? { summonUnitId: isPetUnit ? unit.id : action.srcUnitId }
+          : {}),
         dispelKind,
         ...(dispelKind === "rider" &&
         dispelCameWithOwnCast(castIndex, dispelToClassify)

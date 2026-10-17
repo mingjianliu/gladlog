@@ -11,7 +11,8 @@
  *  - `petDispel` (R2): a SPELL_DISPEL whose source is a pet of player P (a
  *    unit whose `ownerId` is P). No [PURGE] / [ENEMY PURGE] / [ENEMY
  *    CLEANSE] line at that second, and no [MINOR DISPELS] line, may credit
- *    P's pid with that dispel spell without `'s pet` (P casting the spell
+ *    P's pid with that dispel spell without `'s pet` / `'s guardian` /
+ *    `'s totem` (`summonKindOf`'s words; P casting the spell
  *    itself in the round exempts it).
  *  - `enemyTrinketOutOf` (R3): an enemy's Gladiator's Medallion cast at
  *    which one of our CC / disarm / silence auras on that enemy was REMOVED
@@ -186,7 +187,9 @@ for (const f of files) {
           ((l.startsWith(`${t}  `) && /\[(ENEMY )?(PURGE|CLEANSE)\]/.test(l)) ||
             l.includes("[MINOR DISPELS]")) &&
           l.includes(`]   ${op.pid}(`) &&
-          !new RegExp(`\\]   ${op.pid}\\([^)]*\\)'s pet`).test(l) &&
+          !new RegExp(
+            `\\]   ${op.pid}\\([^)]*\\)'s (pet|guardian|totem)`,
+          ).test(l) &&
           l.includes(spell),
       );
       if (credited)

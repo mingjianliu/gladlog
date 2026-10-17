@@ -1468,6 +1468,27 @@ export function summonKindOf(
   });
 }
 
+/**
+ * F15 / fact1215 R2 (2026-10-16): the actor a dispel line names — the
+ * player's roster label, or `<label>'s <kind>` when a summon cast it
+ * (`isPetDispel`; `summonKindOf`, the [KICK] lines' word: a Felhunter is
+ * `pet`, Poison Cleansing Totem `totem`, an Arcane Phoenix `guardian`). The
+ * [PURGE] / [ENEMY PURGE] / [ENEMY CLEANSE] / [MINOR DISPELS] lines named the
+ * warlock for his Felhunter's Devour Magic (06356dd9, 0f894aee, 364e3201,
+ * 519781fd, 62fdbf2e, 8cd58545). The line groups key on this label, so a
+ * summon's and its owner's removals in one second stay apart.
+ */
+export function dispelActorLabel(
+  e: { sourceName: string; isPetDispel: boolean; summonUnitId?: string },
+  labelOf: (name: string) => string,
+  allUnits: readonly ICombatUnit[],
+): string {
+  const label = labelOf(e.sourceName);
+  if (!e.isPetDispel) return label;
+  const src = allUnits.find((u) => u.id === e.summonUnitId);
+  return `${label}'s ${summonKindOf(e.summonUnitId, src)}`;
+}
+
 /** When the unit was summoned (its own SPELL_SUMMON), or null. */
 export function summonedAtMs(unit: ICombatUnit): number | null {
   const e = unit.actionIn.find(

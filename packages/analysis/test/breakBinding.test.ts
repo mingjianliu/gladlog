@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 
+import { dispelActorLabel } from "../src/context/timelineHelpers";
 import {
   bindBreakToWindow,
   ccsRemovedByPress,
   type ICCInstance,
   pressEndedSilence,
 } from "../src/utils/ccTrinketAnalysis";
-import { dispelActorLabel } from "../src/utils/dispelAnalysis";
 
 /**
  * F15 / fact1215 R2 + R3 (2026-10-16): what a PvP trinket press removed, and
@@ -63,6 +63,18 @@ describe("break binding (F15 R3)", () => {
     expect(
       ccsRemovedByPress([broken], T0, T0 + 12_530).map((c) => c.spellName),
     ).toEqual([]);
+    // a secondary CC that ran its full official length ended on its own
+    // (the binder's own pick is not re-judged here — see predicate-index NYU)
+    const ranOut = cc(10, 4, { spellName: "Stun", expectedDurationSeconds: 4 });
+    const kidney = cc(13, 1.005, {
+      spellName: "Kidney Shot",
+      expectedDurationSeconds: 5,
+    });
+    expect(
+      ccsRemovedByPress([kidney, ranOut], T0, T0 + 14_005).map(
+        (c) => c.spellName,
+      ),
+    ).toEqual(["Kidney Shot"]);
   });
 
   it("pressEndedSilence: within 300 ms before the removal or 50 ms after it", () => {
@@ -76,13 +88,22 @@ describe("break binding (F15 R3)", () => {
 });
 
 describe("dispel actor label (F15 R2)", () => {
-  it("a pet's dispel names the pet through its owner, as the [KICK] lines do", () => {
+  it("a summon's dispel names it through its owner, with the [KICK] lines' word", () => {
     const label = (n: string) => `5(${n})`;
+    const pet = { id: "Pet-0-1-2-3-417-0001", actionIn: [] } as never;
     expect(
-      dispelActorLabel({ sourceName: "AWarlock", isPetDispel: true }, label),
+      dispelActorLabel(
+        {
+          sourceName: "AWarlock",
+          isPetDispel: true,
+          summonUnitId: "Pet-0-1-2-3-417-0001",
+        },
+        label,
+        [pet],
+      ),
     ).toBe("5(AWarlock)'s pet");
     expect(
-      dispelActorLabel({ sourceName: "AWarlock", isPetDispel: false }, label),
+      dispelActorLabel({ sourceName: "AWarlock", isPetDispel: false }, label, []),
     ).toBe("5(AWarlock)");
   });
 });

@@ -580,6 +580,8 @@
 
 ## 尚未统一
 
+**2026-10-16 登记,未收口(F15 第 3 批,agy 审查 20-F15-05)** —— 「控制跑满了官方时长 = 自己结束」读的是 `officialEndMs = applyMs + 预期时长`;而窗口构建器会把同毫秒 REMOVED + APPLIED 的重新施加合并成一个窗口(112-1 0:54:偷袭 07.118 → 11.131 跑满 4 秒,重新施放 11.132 落地、徽章 12.015 解掉),`applyMs` 仍是第一次落地,于是 0.9 秒的第二次偷袭看起来像跑满了。解控技能的绑定路径 2026-10-03 起就带着这条规则;`ccsRemovedByPress` 现在对次要控制也用它。饰品绑定器本身(`bindBreakToWindow`)**不**用:按键那一毫秒恰好自然到期的昏迷仍可能盖过饰品真正针对的控制 —— 第 3 批试过又撤回,就是因为合并窗口(605:6 条 KILL ATTEMPTS、3 条 `out of` 变动,至少一条变错)。要收口需要窗口构建器记下最后一次重新施加(fact1215 R8)。
+
 **2026-10-16 登记,未收口(F15 / fact1215 R3 (d))** —— 敌方自己的反射把控制反弹到自己身上、再被 PvP 饰品解掉时,饰品行什么也不写(086019c0 3:14:德鲁伊的旋风被反射到自己身上,在徽章那一毫秒被移除):`analyzePlayerCCAndTrinket` 只对友方承受者收录自己来源(反射)的控制(裁决 A52 / F-SR1 —— `[CC ON ENEMY]` 不得把敌人写成他自己的来源),所以敌方汇总的 `ccInstances` 没有它,`findBrokenCC` 绑不上。要收口需要一个不是 `[CC ON ENEMY]` 行的绑定输入(只给解控绑定器用的反射实例表)。饰品解掉的**定身**两边都不写 —— 这不是缺口,是用户 2026-10-16 划在范围外的判断。
 
 **2026-10-16 登记,未收口 —— 有意为之(F15 / fact1215 R1,用户 2026-10-16 裁定:凡打印的「最低 / low / team min」读真最低;点读数保持 09-23 同毫秒取末行)** —— 两个最低值读数仍不读真最低。(1) `[SLACK]` / `[CONTESTED]` 的 `team min HP`(`packages/analysis/src/utils/healerOffenseAnalysis.ts` 的 `teamMinHpPctOver`)留在网格上:这两类区间本身就是网格上的血线带(整秒 team ≥ 85% / 70–85%),读真最低会印出与本行血线带矛盾的数字 —— 判断与它的数字是同一个读数。`[KILL WINDOW]` 的 team min 已改走 `hpTroughInEventSpan`。(2) 事件区间的刻度(`hpTroughInWindow` 的 span 模式 —— kick-eaten 的 `ourLow` / `theirLow`、`[CONSEQ]`、msw 的 `enemyMinHpPct`)仍包含区间首秒的刻度,它可能读到事件之前的采样(62fdbf2e:`theirLowPct=37 @111` 是 1:51.000 刻度读的 1:51.339,踢在 1:51.857 才落,锁定期内最低 43%)。去掉它,一旦谷底落在首秒就与 `checkCrisisHpStateConsistency`(事实本秒的刻度不得低于谷底)冲突;而且 kick-eaten 是否存在也由同一个网格刻度决定(判断 —— 网格规则),所以等裁决。`hpAtPress`(按键行的 `(at N% HP)`)是点读数,保持原切法(fact1215 第 6 条)。

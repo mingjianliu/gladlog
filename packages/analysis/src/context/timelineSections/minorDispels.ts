@@ -11,20 +11,24 @@
  */
 import { BACKLASH_CC_SPELL_IDS } from "../../data/backlashCc";
 import { getEnglishSpellName } from "../../data/spellEffectData";
-import {
-  dispelActorLabel,
-  type IDispelEvent,
-} from "../../utils/dispelAnalysis";
+import type { IDispelEvent } from "../../utils/dispelAnalysis";
 import { fmtTime } from "../../utils/renderGrid";
+import { dispelActorLabel } from "../timelineHelpers";
 import type { TimelineCtx } from "./ctx";
 
 export function emitMinorDispelEntries(
   ctx: Pick<
     TimelineCtx,
-    "dispelSummary" | "pid" | "enemyPid" | "enemyDispelSummary" | "addEntry"
+    | "dispelSummary"
+    | "pid"
+    | "enemyPid"
+    | "enemyDispelSummary"
+    | "addEntry"
+    | "_allUnits"
   >,
 ): void {
-  const { dispelSummary, pid, enemyPid, enemyDispelSummary, addEntry } = ctx;
+  const { dispelSummary, pid, enemyPid, enemyDispelSummary, addEntry, _allUnits } =
+    ctx;
 
   const minor = new Map<
     string,
@@ -57,7 +61,7 @@ export function emitMinorDispelEntries(
       // a Deep Breath, an Incarnation: Tree of Life press shedding a snare)
       // is not passive — the unit pressed that button. Its own part.
       const tag = minorDispelPartTag(e);
-      const sourceLabel = dispelActorLabel(e, labelOf);
+      const sourceLabel = dispelActorLabel(e, labelOf, _allUnits);
       const key = `${sourceLabel}|${spellName}|${tag ?? "d"}`;
       const cur = minor.get(key);
       if (cur) {
