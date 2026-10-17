@@ -11,7 +11,10 @@
  */
 import { BACKLASH_CC_SPELL_IDS } from "../../data/backlashCc";
 import { getEnglishSpellName } from "../../data/spellEffectData";
-import type { IDispelEvent } from "../../utils/dispelAnalysis";
+import {
+  dispelActorLabel,
+  type IDispelEvent,
+} from "../../utils/dispelAnalysis";
 import { fmtTime } from "../../utils/renderGrid";
 import type { TimelineCtx } from "./ctx";
 
@@ -54,14 +57,15 @@ export function emitMinorDispelEntries(
       // a Deep Breath, an Incarnation: Tree of Life press shedding a snare)
       // is not passive — the unit pressed that button. Its own part.
       const tag = minorDispelPartTag(e);
-      const key = `${e.sourceName}|${spellName}|${tag ?? "d"}`;
+      const sourceLabel = dispelActorLabel(e, labelOf);
+      const key = `${sourceLabel}|${spellName}|${tag ?? "d"}`;
       const cur = minor.get(key);
       if (cur) {
         cur.events.push(e);
         cur.firstSeconds = Math.min(cur.firstSeconds, e.timeSeconds);
       } else {
         minor.set(key, {
-          sourceLabel: labelOf(e.sourceName),
+          sourceLabel,
           spellName: tag ? `${spellName} ${tag}` : spellName,
           passive,
           events: [e],

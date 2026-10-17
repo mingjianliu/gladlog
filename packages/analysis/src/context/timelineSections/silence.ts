@@ -17,9 +17,9 @@ import { getEnglishSpellName } from "../../data/spellEffectData";
 import { auraEndFromLog } from "../../utils/auraEndCause";
 import { silenceIntervals } from "../../utils/cannotCastIntervals";
 import {
+  pressEndedSilence,
   renderedCcDuration,
   renderedCcSpan,
-  TRINKET_BREAK_AFTER_REMOVAL_MS,
 } from "../../utils/ccTrinketAnalysis";
 import { pvpTrinketUses } from "../../utils/pvpTrinketUses";
 import { fmtTime } from "../../utils/renderGrid";
@@ -37,6 +37,7 @@ export function emitSilenceEntries(
     | "friends"
     | "enemies"
     | "ccTrinketSummaries"
+    | "enemyCCSummaries"
     | "matchStartMs"
     | "roundEndAtMs"
     | "pid"
@@ -57,6 +58,7 @@ export function emitSilenceEntries(
     friends,
     enemies,
     ccTrinketSummaries,
+    enemyCCSummaries,
     matchStartMs,
     roundEndAtMs,
     pid,
@@ -81,11 +83,12 @@ export function emitSilenceEntries(
     side: "friendly" | "enemy",
   ) => {
     for (const u of victims) {
+      // F15 / fact1215 R3: both sides read their own PvP trinket presses
+      // (the enemy side had none — 364e3201's Medallion ended Spider Venom
+      // and Silence and the lines read a plain `| 1s`)
       const trinketTimes =
-        side === "friendly"
-          ? (ccTrinketSummaries.find((s) => s.playerName === u.name)
-              ?.trinketUseTimes ?? [])
-          : [];
+        (side === "friendly" ? ccTrinketSummaries : (enemyCCSummaries ?? []))
+          .find((s) => s.playerName === u.name)?.trinketUseTimes ?? [];
       const intervals = silenceIntervals(u, attackerIds);
       // FT-T16 (D13): the owner's major cooldowns pressed into a silence and
       // refused as "silenced", on that silence's line — the `[CC ON TEAM]`
@@ -120,14 +123,9 @@ export function emitSilenceEntries(
         // enemy-def F-E17: the Medallion cast is logged up to a few ms
         // after the removal it caused (dfcccbf2: silence removed 21.020,
         // trinket 21.021) — the CC binder's `TRINKET_BREAK_AFTER_REMOVAL_MS`
-        const trinketAt = trinketTimes.find((t) => {
-          const tMs = matchStartMs + t * 1000;
-          return (
-            tMs >= s.from &&
-            tMs <= endMs + TRINKET_BREAK_AFTER_REMOVAL_MS &&
-            endMs - tMs <= 300
-          );
-        });
+        const trinketAt = trinketTimes.find((t) =>
+          pressEndedSilence(s.from, endMs, matchStartMs + t * 1000),
+        );
         // FT-T08 step 3c: a dispel of the silence, or the unit's death at
         // its removal, is in the log (`auraEndFromLog`) — stated when no
         // trinket press already accounts for the end. Clamped to the round's
@@ -138,12 +136,7 @@ export function emitSilenceEntries(
         // this aura outright and is still read.
         const enemyTrinketed =
           side === "enemy" &&
-          pvpTrinketUses(u).some(
-            (t) =>
-              t.atMs >= s.from &&
-              t.atMs <= endMs + TRINKET_BREAK_AFTER_REMOVAL_MS &&
-              endMs - t.atMs <= 300,
-          );
+          pvpTrinketUses(u).some((t) => pressEndedSilence(s.from, endMs, t.atMs));
         const end =
           trinketAt === undefined && !stillOnAtRoundEnd
             ? auraEndFromLog(

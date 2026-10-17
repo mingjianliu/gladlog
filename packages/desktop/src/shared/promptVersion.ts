@@ -89,5 +89,21 @@
  *  slow-defensive-response 7, position-mistake 3); troughFactScan: [DMG SPIKE]
  *  lows below the log 310 → 0 of 9,468, [KILL WINDOW] team min 2,224 → 0 of
  *  3,891; two burst target lines gain a `(low …)` the same-ms dip now clears.
+ *  v406 (2026-10-16, F15 batch 3 — fact1215 R2 + R3, facts only): a pet's
+ *  dispel names the pet (`dispelActorLabel`: `5(AWarlock)'s pet` on [PURGE] /
+ *  [ENEMY PURGE] / [ENEMY CLEANSE] / [MINOR DISPELS], as the [KICK] lines
+ *  already did); what a PvP trinket press removed — the [ENEMY TRINKET] line
+ *  falls back from a CC to a disarm (`findBrokenDisarm`, the friendly line's
+ *  fallback) to a silence (`pressEndedSilence`, now the [SILENCE] tail's one
+ *  predicate, and enemy silences read the enemy's own presses); a press logged
+ *  after a removal the log gives another cause for (a damage break / a dispel,
+ *  `ccEndedByLoggedCause`) does not take that CC; KILL ATTEMPTS counts every CC
+ *  a press ended (`ccsRemovedByPress`), not only the bound one. Deliberately
+ *  unchanged: roots (a judgment), an enemy's reflected Cyclone (NYU). 605 files:
+ *  no candidate added or removed; breakFactScan: pet dispels credited to the
+ *  owner 1,952 → 0 of 2,438, enemy trinket presses that removed our CC /
+ *  disarm / silence with no `out of` 356 → 0 of 7,966, trinket credited after a
+ *  logged break / dispel 15 → 0 of 73; KILL ATTEMPTS `target trinketed out`
+ *  11 → 206 lines.
  */
-export const PROMPT_VERSION = 405;
+export const PROMPT_VERSION = 406;

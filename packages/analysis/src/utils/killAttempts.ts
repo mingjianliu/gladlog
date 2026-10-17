@@ -79,7 +79,7 @@ import { burstCastSpan, KILL_CREDIT_SLACK_S } from "./burstLedger";
 import {
   analyzePlayerCCAndTrinket,
   breakAbilityPresses,
-  findBrokenCC,
+  ccsRemovedByPress,
   type ICCInstance,
   type IPlayerCCTrinketSummary,
   renderedCcSeconds,
@@ -1514,12 +1514,15 @@ function attributeFailure(
   let trinketed = false;
   for (const use of pvpTrinketUses(target)) {
     if (!inCredit(use.atMs)) continue;
-    const bound = findBrokenCC(
-      readings.ccSummary().ccInstances,
-      matchStartMs,
-      use.atMs,
-    );
-    if (bound && ofThisAttempt(bound)) {
+    // every CC the press removed, not only the one the binder names
+    // (F15 R3, `ccsRemovedByPress`)
+    if (
+      ccsRemovedByPress(
+        readings.ccSummary().ccInstances,
+        matchStartMs,
+        use.atMs,
+      ).some(ofThisAttempt)
+    ) {
       trinketed = true;
       break;
     }

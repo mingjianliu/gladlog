@@ -580,6 +580,8 @@
 
 ## 尚未统一
 
+**2026-10-16 登记,未收口(F15 / fact1215 R3 (d))** —— 敌方自己的反射把控制反弹到自己身上、再被 PvP 饰品解掉时,饰品行什么也不写(086019c0 3:14:德鲁伊的旋风被反射到自己身上,在徽章那一毫秒被移除):`analyzePlayerCCAndTrinket` 只对友方承受者收录自己来源(反射)的控制(裁决 A52 / F-SR1 —— `[CC ON ENEMY]` 不得把敌人写成他自己的来源),所以敌方汇总的 `ccInstances` 没有它,`findBrokenCC` 绑不上。要收口需要一个不是 `[CC ON ENEMY]` 行的绑定输入(只给解控绑定器用的反射实例表)。饰品解掉的**定身**两边都不写 —— 这不是缺口,是用户 2026-10-16 划在范围外的判断。
+
 **2026-10-16 登记,未收口 —— 有意为之(F15 / fact1215 R1,用户 2026-10-16 裁定:凡打印的「最低 / low / team min」读真最低;点读数保持 09-23 同毫秒取末行)** —— 两个最低值读数仍不读真最低。(1) `[SLACK]` / `[CONTESTED]` 的 `team min HP`(`packages/analysis/src/utils/healerOffenseAnalysis.ts` 的 `teamMinHpPctOver`)留在网格上:这两类区间本身就是网格上的血线带(整秒 team ≥ 85% / 70–85%),读真最低会印出与本行血线带矛盾的数字 —— 判断与它的数字是同一个读数。`[KILL WINDOW]` 的 team min 已改走 `hpTroughInEventSpan`。(2) 事件区间的刻度(`hpTroughInWindow` 的 span 模式 —— kick-eaten 的 `ourLow` / `theirLow`、`[CONSEQ]`、msw 的 `enemyMinHpPct`)仍包含区间首秒的刻度,它可能读到事件之前的采样(62fdbf2e:`theirLowPct=37 @111` 是 1:51.000 刻度读的 1:51.339,踢在 1:51.857 才落,锁定期内最低 43%)。去掉它,一旦谷底落在首秒就与 `checkCrisisHpStateConsistency`(事实本秒的刻度不得低于谷底)冲突;而且 kick-eaten 是否存在也由同一个网格刻度决定(判断 —— 网格规则),所以等裁决。`hpAtPress`(按键行的 `(at N% HP)`)是点读数,保持原切法(fact1215 第 6 条)。
 
 **2026-10-16 登记,未收口 —— 有意为之(F15 / fact1215 C1,用户 2026-10-16 默认:只修事实半)** —— Flameshaper 黑曜鳞片对「够不够得着队友」有两个答案。一次按键「做了什么」从日志读(`allyCopyRecipient`:队友身上的副本),所有按键读者都换上了 —— 按键行、`[ENEMY DEF]`、cd-hoarded 的 `teamAnswered`。玩家「本可以做什么」仍是 id 级的 `canHelpAnotherUnit` / `cdCanHelpAnotherUnit`,对 363916 答否(DB2 targeting 只对自己;解锁它的是 Lifecinders 444322,605 场语料分流见 `MITIGATION_TABLE` 那一行的注释):队友危机时 cd-hoarded 的 `readyCds`、cdTriggerPrior、燃烧窗口的应对、`cheaper available:` 都不会为别的单位点它,即便是点了 Lifecinders 的 Flameshaper。要收口就是做一个像 `ALLY_REACH_REQUIRES_PVP_TALENT` 那样的天赋门控队友可达(英雄天赋,所以读 `talentedSpellIds`)—— 会新增指控,等用户定。

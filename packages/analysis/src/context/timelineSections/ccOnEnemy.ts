@@ -13,16 +13,20 @@ import { CombatUnitReaction } from "@gladlog/parser-compat";
 
 import { BACKLASH_AURA_CC_TYPE, backlashCcTag } from "../../data/backlashCc";
 import { BREAK_RACIAL_SPELL_IDS } from "../../data/racialAbilities";
+import { getEnglishSpellName } from "../../data/spellEffectData";
+import { silenceIntervals } from "../../utils/cannotCastIntervals";
 import {
   ccEndedByImmunityAura,
   ccEndedByOwnPress,
   ccLoggedEnd,
   ccUnloggedEarlyEnd,
   findBrokenCC,
+  findBrokenDisarm,
   formatCcLoggedEnd,
   formatCcRefreshed,
   formatCcUnloggedEnd,
   type ICCInstance,
+  pressEndedSilence,
   renderedCcDuration,
   renderedCcSpan,
   tremorTotemBreak,
@@ -54,9 +58,11 @@ export function emitCcOnEnemyEntries(
     | "enemyCcDrTag"
     | "rosterSides"
     | "silenceLineCount"
+    | "allUnits"
   >,
 ): Pick<TimelineCtx, "enemyTrinketCount" | "silenceLineCount"> {
   const {
+    allUnits,
     enemyCCSummaries,
     enemies,
     friends,
@@ -83,6 +89,11 @@ export function emitCcOnEnemyEntries(
       // "trinket state never observed".
       const enemyUnit = enemies?.find((e) => e.name === summary.playerName);
       const friendlyIds = new Set(friends.map((f) => f.id));
+      // our players and their summons — the attacker set the [SILENCE]
+      // lines read an enemy's silences against (silence.ts `idsOf`)
+      const friendAndSummonIds = new Set(friendlyIds);
+      for (const u of allUnits ?? [])
+        if (u.ownerId && friendlyIds.has(u.ownerId)) friendAndSummonIds.add(u.id);
       /** One `[ENEMY TRINKET]` line: `used <what>[ out of <CC> (by <src>)]`. */
       const addEnemyBreakLine = (
         t: number,
@@ -131,17 +142,40 @@ export function emitCcOnEnemyEntries(
           `${fmtTime(t)}  [ENEMY TRINKET]   ${enemyPid(summary.playerName)} used ${what}${ccPart}${burstPart}${hpPart}`,
         );
       };
+      // F15 / fact1215 R3: what the press removed — a CC, else a disarm
+      // (the friendly [TRINKET] line's fallback, `findBrokenDisarm`), else a
+      // silence (`pressEndedSilence`, the [SILENCE] tail's predicate). The
+      // enemy line named CCs only: 0f894aee / 10bce166 / 3867e9ef disarms and
+      // 06aa443c / 364e3201 silences ended by a Medallion named nothing.
+      const silences = enemyUnit
+        ? silenceIntervals(enemyUnit, friendAndSummonIds)
+        : [];
       for (const t of summary.trinketUseTimes) {
         enemyTrinketCount++;
+        const pressMs = matchStartMs + Math.round(t * 1000);
+        const silence = silences.find((x) =>
+          pressEndedSilence(x.from, x.to, pressMs),
+        );
         addEnemyBreakLine(
           t,
           "PvP trinket",
           MEDALLION_SPELL_ID,
-          findBrokenCC(
-            summary.ccInstances,
-            matchStartMs,
-            matchStartMs + Math.round(t * 1000),
-          ),
+          findBrokenCC(summary.ccInstances, matchStartMs, pressMs) ??
+            findBrokenDisarm(
+              summary.disarmInstances ?? [],
+              matchStartMs,
+              pressMs,
+            ) ??
+            (silence
+              ? {
+                  spellName: getEnglishSpellName(
+                    silence.spellId,
+                    silence.spellName,
+                  ),
+                  sourceName: silence.srcUnitName,
+                  sourceId: silence.srcUnitId,
+                }
+              : undefined),
         );
       }
       // F-E21 / ruling A′15: the same line for a break that was not the

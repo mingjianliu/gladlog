@@ -781,6 +781,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     friends,
     enemies,
     ccTrinketSummaries,
+    enemyCCSummaries,
     matchStartMs,
     roundEndAtMs,
     pid,
@@ -804,6 +805,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
   );
   let enemyTrinketCount = 0;
   ({ enemyTrinketCount, silenceLineCount } = emitCcOnEnemyEntries({
+    allUnits,
     enemyCCSummaries,
     enemies,
     friends,

@@ -73,9 +73,9 @@ import { isHealerSpec, isPassiveProcCast, specToString } from "./cooldowns";
 import { ALLY_DISPEL_MATCH_TOLERANCE_S } from "./dispelAnalysis";
 import {
   AOE_CC_LANDING_WINDOW_S,
+  ccRecastBetween,
   computeIncomingDR,
   drDurationFactor,
-  ccRecastBetween,
   IDRInfo,
   matchPendingCcKey,
   reAppliedIsSameApplication,
@@ -695,6 +695,9 @@ export interface ICCInstance {
    */
   sourceId: string;
   sourceSpec: string;
+  /** The log records a damage break or a dispel at this CC's removal
+   * (`ccEndedByLoggedCause`, F15 R3) — no later press ended it. */
+  endedByLoggedCause?: true;
   damageTakenDuring: number;
   /**
    * `racial_break` (2026-08-12): the CC was removed by a racial that does what
@@ -745,6 +748,9 @@ export interface ICCBreakableWindow {
    * Absent when the game has no fixed duration for it (Maim scales with
    * combo points). */
   officialEndMs?: number;
+  /** The log records another cause at the removal (`ccEndedByLoggedCause`):
+   * a press logged after `removeMs` cannot have ended it. */
+  endedByLoggedCause?: boolean;
 }
 
 /**
@@ -798,6 +804,8 @@ export function bindBreakToWindow<T extends ICCBreakableWindow>(
       castTs >= w.applyMs - toleranceMs &&
       castTs <= w.removeMs + afterRemovalMs;
     if (!activeAtCast) continue;
+    // a removal the log gives another cause for, before the press (F15 R3)
+    if (w.endedByLoggedCause && castTs > w.removeMs) continue;
     // 2 = ended at the cast; 1 = on the unit when the cast was made (it may
     // have been removed up to `afterRemovalMs` earlier); 0 = landed after it.
     const tier = castEndedCcWindow(w, castTs) ? 2 : w.applyMs <= castTs ? 1 : 0;
@@ -834,9 +842,59 @@ export function findBrokenCC(
       ...(cc.expectedDurationSeconds !== undefined
         ? { officialEndMs: applyMs + cc.expectedDurationSeconds * 1000 }
         : {}),
+      ...(cc.endedByLoggedCause ? { endedByLoggedCause: true } : {}),
     };
   });
   return bindBreakToWindow(breakable, castTsMs)?.cc;
+}
+
+/**
+ * F15 / fact1215 R3: every CC a break press removed — the one the binder
+ * names (`findBrokenCC`) and any other that ended at the press
+ * (`castEndedCcWindow`, the predicate `ccRemovalCause` reads), minus one the
+ * log already gives another cause for. 6bf253f2 2:16: the Medallion ended a
+ * Hammer of Justice and a Polymorph in one ms; the binder names the
+ * Polymorph (more time left), and KILL ATTEMPTS, asking only for that one,
+ * read the stun attempt as "not enough damage".
+ */
+export function ccsRemovedByPress(
+  instances: ICCInstance[],
+  matchStartMs: number,
+  castTsMs: number,
+): ICCInstance[] {
+  const bound = findBrokenCC(instances, matchStartMs, castTsMs);
+  const out = bound ? [bound] : [];
+  for (const cc of instances) {
+    if (cc === bound) continue;
+    const applyMs = matchStartMs + Math.round(cc.atSeconds * 1000);
+    const removeMs =
+      matchStartMs + Math.round((cc.atSeconds + cc.durationSeconds) * 1000);
+    if (cc.endedByLoggedCause && castTsMs > removeMs) continue;
+    if (castEndedCcWindow({ applyMs, removeMs }, castTsMs)) out.push(cc);
+  }
+  return out;
+}
+
+/**
+ * F15 / fact1215 R3: did a break press at `pressMs` end the silence applied
+ * at `fromMs` and removed at `endMs`? The Medallion is logged up to a few ms
+ * after the removal it caused (enemy-def F-E17, dfcccbf2: removed 21.020,
+ * trinket 21.021 — `TRINKET_BREAK_AFTER_REMOVAL_MS`), and within 300 ms
+ * before it. One predicate for both sides' `[SILENCE]` tail ("trinket broke
+ * this silence") and the `[ENEMY TRINKET]` line's `out of` — the enemy side
+ * had no trinket times at all (364e3201: Spider Venom and Silence ended by a
+ * Medallion read as plain `| 1s`).
+ */
+export function pressEndedSilence(
+  fromMs: number,
+  endMs: number,
+  pressMs: number,
+): boolean {
+  return (
+    pressMs >= fromMs &&
+    pressMs <= endMs + TRINKET_BREAK_AFTER_REMOVAL_MS &&
+    endMs - pressMs <= 300
+  );
 }
 
 /** enemy-def F-E18: the disarm a PvP trinket press broke — `bindBreakToWindow`
@@ -1542,22 +1600,54 @@ export function ccRemovalCause(
       kind: "break",
       spellName: ccBreakAbilityName(press.spellId) ?? press.spellId,
     };
-  for (const x of holder.actionIn ?? []) {
-    if ((x.logLine.event as string) !== LogEvent.SPELL_DISPEL) continue;
-    if (x.extraSpellId !== spellId) continue;
-    if (
-      Math.abs(x.logLine.timestamp - removeMs) >
-      ALLY_DISPEL_MATCH_TOLERANCE_S * 1000
-    )
-      continue;
+  const x = dispelAtRemoval(holder, spellId, removeMs);
+  if (x)
     return {
       kind: "dispel",
       spellName: getEnglishSpellName(x.spellId ?? "", x.spellName),
       byUnitId: x.srcUnitId,
       byName: x.srcUnitName,
     };
-  }
   return undefined;
+}
+
+/** A `SPELL_DISPEL` of this aura on `holder` within
+ * `ALLY_DISPEL_MATCH_TOLERANCE_S` of its removal — `ccRemovalCause`'s dispel
+ * reading. */
+function dispelAtRemoval(
+  holder: Pick<ICombatUnit, "actionIn">,
+  spellId: string,
+  removeMs: number,
+) {
+  return (holder.actionIn ?? []).find(
+    (x) =>
+      (x.logLine.event as string) === LogEvent.SPELL_DISPEL &&
+      x.extraSpellId === spellId &&
+      Math.abs(x.logLine.timestamp - removeMs) <=
+        ALLY_DISPEL_MATCH_TOLERANCE_S * 1000,
+  );
+}
+
+/**
+ * F15 / fact1215 R3 (2026-10-16): the log itself says what removed this CC —
+ * a damage break (`auraBreakAtRemoval`) or a dispel of it on the holder
+ * (`dispelAtRemoval`) — the two non-press causes `ccRemovalCause` reads. A
+ * break press logged AFTER such a removal did not end it
+ * (`bindBreakToWindow`): 62fdbf2e's Fear came off with a Detox 33 ms before
+ * the Medallion and read "trinket broke this CC … [CLEANSED]"; its Howl of
+ * Terror, broken by Agony 22 ms before, read the same.
+ */
+export function ccEndedByLoggedCause(
+  holder: ICombatUnit,
+  spellId: string,
+  applyMs: number,
+  removeMs: number,
+  srcUnitId?: string,
+): boolean {
+  return (
+    auraBreakAtRemoval(holder, spellId, applyMs, removeMs, srcUnitId) !==
+      null || dispelAtRemoval(holder, spellId, removeMs) !== undefined
+  );
 }
 
 /**
@@ -2702,12 +2792,16 @@ export function analyzePlayerCCAndTrinket(
       w.spellId,
       w.removeMs,
     );
+  const loggedEndOfIdx = filteredCCWindows.map((w) =>
+    ccEndedByLoggedCause(player, w.spellId, w.applyMs, w.removeMs, w.srcUnitId),
+  );
   const indexedCCWindows = filteredCCWindows
     .map((w, idx) => {
       const expected = expectedDurationS(w, idx);
       return {
         ...w,
         idx,
+        endedByLoggedCause: loggedEndOfIdx[idx]!,
         ...(expected !== undefined
           ? { officialEndMs: w.applyMs + expected * 1000 }
           : {}),
@@ -2965,6 +3059,7 @@ export function analyzePlayerCCAndTrinket(
         sourceName: w.srcName,
         sourceId: w.srcUnitId,
         sourceSpec: enemySpecMap.get(w.srcUnitId) ?? "Unknown",
+        ...(loggedEndOfIdx[idx] ? { endedByLoggedCause: true as const } : {}),
         damageTakenDuring,
         trinketState,
         trinketCDSecondsLeft,

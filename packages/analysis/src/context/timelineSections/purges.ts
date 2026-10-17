@@ -8,13 +8,14 @@
  * its closure inputs now arrive through `ctx`. Output is pinned by the 605-file
  * acceptanceCapture context hash.
  */
+import { LogEvent } from "@gladlog/parser-compat";
+
 import { getEnglishSpellName } from "../../data/spellEffectData";
 import {
+  dispelActorLabel,
   type IDispelEvent,
   purgeableCountText,
 } from "../../utils/dispelAnalysis";
-import { LogEvent } from "@gladlog/parser-compat";
-
 import { fmtTime } from "../../utils/renderGrid";
 import type { TimelineCtx } from "./ctx";
 import { purgeMatchesCast } from "./healerCastGapFiller";
@@ -69,7 +70,7 @@ export function emitPurgeEntries(
     )
       continue;
     if (purge.priority !== "Critical" && purge.priority !== "High") continue;
-    const key = `${Math.round(purge.timeSeconds)}|${purge.sourceName}`;
+    const key = `${Math.round(purge.timeSeconds)}|${purge.sourceName}|${purge.isPetDispel}`;
     const group = purgeGroups.get(key) ?? [];
     group.push(purge);
     purgeGroups.set(key, group);
@@ -86,14 +87,14 @@ export function emitPurgeEntries(
       .join(", ");
     addEntry(
       first.timeSeconds,
-      `${fmtTime(first.timeSeconds)}  [PURGE]   ${pid(first.sourceName)} purged ${effects}${viaTag}`,
+      `${fmtTime(first.timeSeconds)}  [PURGE]   ${dispelActorLabel(first, pid)} purged ${effects}${viaTag}`,
     );
   }
 
   const hostileGroups = new Map<string, IDispelEvent[]>();
   for (const purge of dispelSummary.hostilePurges) {
     if (purge.priority !== "Critical" && purge.priority !== "High") continue;
-    const key = `${Math.round(purge.timeSeconds)}|${purge.sourceName}`;
+    const key = `${Math.round(purge.timeSeconds)}|${purge.sourceName}|${purge.isPetDispel}`;
     const group = hostileGroups.get(key) ?? [];
     group.push(purge);
     hostileGroups.set(key, group);
@@ -109,7 +110,7 @@ export function emitPurgeEntries(
       .join(", ");
     addEntry(
       first.timeSeconds,
-      `${fmtTime(first.timeSeconds)}  [ENEMY PURGE]   ${enemyPid(first.sourceName)} stripped ${effects}${viaTag}`,
+      `${fmtTime(first.timeSeconds)}  [ENEMY PURGE]   ${dispelActorLabel(first, enemyPid)} stripped ${effects}${viaTag}`,
     );
   }
 
@@ -122,7 +123,7 @@ export function emitPurgeEntries(
     const enemyCleanseGroups = new Map<string, IDispelEvent[]>();
     for (const c of enemyDispelSummary.allyCleanse) {
       if (c.priority !== "Critical" && c.priority !== "High") continue;
-      const key = `${Math.round(c.timeSeconds)}|${c.sourceName}`;
+      const key = `${Math.round(c.timeSeconds)}|${c.sourceName}|${c.isPetDispel}`;
       const group = enemyCleanseGroups.get(key) ?? [];
       group.push(c);
       enemyCleanseGroups.set(key, group);
@@ -138,7 +139,7 @@ export function emitPurgeEntries(
         .join(", ");
       addEntry(
         first.timeSeconds,
-        `${fmtTime(first.timeSeconds)}  [ENEMY CLEANSE]   ${enemyPid(first.sourceName)} cleansed ${effects}${viaTag}`,
+        `${fmtTime(first.timeSeconds)}  [ENEMY CLEANSE]   ${dispelActorLabel(first, enemyPid)} cleansed ${effects}${viaTag}`,
       );
     }
   }

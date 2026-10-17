@@ -88,6 +88,7 @@
     "test/base-utils.test.ts",
     "test/baselineDefensives.test.ts",
     "test/benchmark.test.ts",
+    "test/breakBinding.test.ts",
     "test/btierD10GuardianSave.test.ts",
     "test/btierD10HealAbsorb.test.ts",
     "test/btierD10KarmaFeed.test.ts",
