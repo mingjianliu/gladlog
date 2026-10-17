@@ -71,8 +71,8 @@ describe("buildAuraIntervals — the memo holds to the uncached reading", () => 
     expect(buildAuraIntervals(owner, combat)).toHaveLength(2);
   });
 
-  it("an aura pushed onto the same stream, a cast pushed onto a caster, another window or another casters map each give a fresh reading", () => {
-    const { owner, mage, combat } = fixture();
+  it("an aura pushed onto the same stream, another end or another start of the window each give a fresh reading", () => {
+    const { owner, combat } = fixture();
     expect(buildAuraIntervals(owner, combat)).toHaveLength(2);
 
     owner.auraEvents.push(
@@ -83,26 +83,76 @@ describe("buildAuraIntervals — the memo holds to the uncached reading", () => 
     expect(grown).toHaveLength(3);
     expect(grown).toEqual(buildAuraIntervalsUncached(owner, combat));
 
-    // a second Polymorph cast 1 s before the 40 s application: the reading
-    // that asks the caster's casts changes, so the memo must not answer from
-    // before the push
-    mage.spellCastEvents.push(
-      makeSpellCastEvent(POLY, at(39.5), "p1", "Me", "e1", "Mage") as never,
-    );
-    expect(buildAuraIntervals(owner, combat)).toEqual(
-      buildAuraIntervalsUncached(owner, combat),
-    );
-
     const shorter = { ...combat, endTime: at(8) };
     expect(buildAuraIntervals(owner, shorter)).toEqual(
       buildAuraIntervalsUncached(owner, shorter),
     );
     expect(buildAuraIntervals(owner, shorter)[0]!.toS).toBeLessThanOrEqual(8);
 
-    const casters = new Map([["e1", mage]]);
-    expect(buildAuraIntervals(owner, combat, casters)).toEqual(
-      buildAuraIntervalsUncached(owner, combat, casters),
+    // startTime alone: every fromS / toS moves with it
+    const later = { ...combat, startTime: at(1) };
+    const shifted = buildAuraIntervals(owner, later);
+    expect(shifted).toEqual(buildAuraIntervalsUncached(owner, later));
+    expect(shifted[0]!.fromS).toBe(4);
+  });
+
+  // review of 698fc58: the casters are an input only through the
+  // re-broadcast test — a second APPLIED while the aura is open, inside its
+  // official length, is the same aura unless its caster cast it then. These
+  // cases make the casters change the reading, so each key part is asked.
+  function rebroadcastFixture() {
+    const f = fixture();
+    // a second Polymorph APPLIED at 7 s while the 5 s one is still open
+    f.owner.auraEvents.splice(
+      1,
+      0,
+      makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, POLY, at(7), "e1", "p1") as never,
     );
+    return f;
+  }
+
+  it("premises: with the caster's casts, a second APPLIED and no cast near it is one aura; a cast near it makes two", () => {
+    const { owner, mage, combat } = rebroadcastFixture();
+    const polys = () =>
+      buildAuraIntervalsUncached(owner, combat).filter((i) => i.spellId === POLY);
+    expect(polys()).toHaveLength(1);
+    mage.spellCastEvents.push(
+      makeSpellCastEvent(POLY, at(7), "p1", "Me", "e1", "Mage") as never,
+    );
+    expect(polys()).toHaveLength(2);
+  });
+
+  it("a cast pushed onto a caster between two readings gives the new reading", () => {
+    const { owner, mage, combat } = rebroadcastFixture();
+    const polys = (r: { spellId: string }[]) =>
+      r.filter((i) => i.spellId === POLY);
+    expect(polys(buildAuraIntervals(owner, combat))).toHaveLength(1);
+    mage.spellCastEvents.push(
+      makeSpellCastEvent(POLY, at(7), "p1", "Me", "e1", "Mage") as never,
+    );
+    expect(polys(buildAuraIntervals(owner, combat))).toHaveLength(2);
+  });
+
+  it("another casters container with as many casts gives its own reading", () => {
+    const { owner, combat } = rebroadcastFixture();
+    const polys = (r: { spellId: string }[]) =>
+      r.filter((i) => i.spellId === POLY);
+    expect(polys(buildAuraIntervals(owner, combat))).toHaveLength(1);
+    // same number of casts as combat.units (one), so only the container
+    // tells the two apart: this caster's one Polymorph is the 7 s one
+    const other = makeUnit("e1", {
+      name: "Mage",
+      reaction: CombatUnitReaction.Hostile,
+      info: {},
+      spellCastEvents: [makeSpellCastEvent(POLY, at(7), "p1", "Me", "e1", "Mage")],
+    });
+    const map = new Map([["e1", other]]);
+    expect(polys(buildAuraIntervals(owner, combat, map))).toHaveLength(2);
+    expect(buildAuraIntervals(owner, combat, map)).toEqual(
+      buildAuraIntervalsUncached(owner, combat, map),
+    );
+    // and the first container's entry is still there
+    expect(polys(buildAuraIntervals(owner, combat))).toHaveLength(1);
   });
 
   it("two units sharing one aura stream are read apart", () => {

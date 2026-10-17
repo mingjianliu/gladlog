@@ -564,12 +564,19 @@ interface AuraIntervalsEntry {
   len: number;
   startTime: number;
   endTime: number;
-  casters: object | undefined;
   castsFp: number;
   result: IAuraInterval[];
 }
 const AURA_INTERVALS_ENTRIES_MAX = 8;
-const auraIntervalsCache = new WeakMap<readonly unknown[], AuraIntervalsEntry[]>();
+/** The casters key when a call has neither `castersById` nor `combat.units`. */
+const NO_CASTERS: object = {};
+/** aura stream → casters container → entries. A caller that builds a fresh
+ * `castersById` every call (five do) gets its own short-lived list and
+ * never pushes out another caller's entries (review of 698fc58). */
+const auraIntervalsCache = new WeakMap<
+  readonly unknown[],
+  WeakMap<object, AuraIntervalsEntry[]>
+>();
 
 /**
  * `buildAuraIntervals`, memoised. Twenty call sites in nineteen files rebuild
@@ -585,6 +592,13 @@ const auraIntervalsCache = new WeakMap<readonly unknown[], AuraIntervalsEntry[]>
  * (an official duration read then could differ from the one read after).
  * Callers get a fresh array each time; the interval objects are shared, and
  * no consumer writes to one (the call sites were read for that).
+ *
+ * The limit, as the 2026-10-17 review states it: a caster's `spec`, `info`
+ * (talents), `empowerEnds` / `advancedActions` or the CONTENT of its
+ * `spellCastEvents`, and an aura event's fields, are not in the key. No
+ * product code writes them after the parse (checked by grep); a test that
+ * changes one in place between two readings of the same stream gets the
+ * first reading — build a new unit or a new `auraEvents` array instead.
  */
 export function buildAuraIntervals(
   unit: ICombatUnit,
@@ -601,7 +615,7 @@ export function buildAuraIntervals(
   const events = unit.auraEvents;
   if (!events || !analysisDataReady())
     return buildAuraIntervalsUncached(unit, combat, castersById);
-  const casters: object | undefined = castersById ?? combat.units;
+  const casters: object = castersById ?? combat.units ?? NO_CASTERS;
   let castsFp = 0;
   if (castersById)
     for (const c of castersById.values())
@@ -609,10 +623,15 @@ export function buildAuraIntervals(
   else if (combat.units)
     for (const c of Object.values(combat.units))
       castsFp += c.spellCastEvents?.length ?? 0;
-  let entries = auraIntervalsCache.get(events);
+  let byCasters = auraIntervalsCache.get(events);
+  if (!byCasters) {
+    byCasters = new WeakMap();
+    auraIntervalsCache.set(events, byCasters);
+  }
+  let entries = byCasters.get(casters);
   if (!entries) {
     entries = [];
-    auraIntervalsCache.set(events, entries);
+    byCasters.set(casters, entries);
   }
   const hit = entries.find(
     (e) =>
@@ -620,7 +639,6 @@ export function buildAuraIntervals(
       e.len === events.length &&
       e.startTime === combat.startTime &&
       e.endTime === combat.endTime &&
-      e.casters === casters &&
       e.castsFp === castsFp,
   );
   if (hit) return hit.result.slice();
@@ -631,7 +649,6 @@ export function buildAuraIntervals(
     len: events.length,
     startTime: combat.startTime,
     endTime: combat.endTime,
-    casters,
     castsFp,
     result,
   });
