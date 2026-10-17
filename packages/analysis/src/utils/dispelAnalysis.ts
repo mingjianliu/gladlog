@@ -3856,6 +3856,8 @@ export function reconstructDispelSummary(
       for (const [spellId, applications] of appliedTimes) {
         const priority = getPriority(spellId, friends);
         const removals = removedTimes.get(spellId) ?? [];
+        /** the end of the last window emitted for this spell on this enemy */
+        let emittedEndMs: number | null = null;
 
         for (const { ts: applyTs, spellName } of applications) {
           // The window ends at the round's end (`roundEndMs` — the one the
@@ -3874,6 +3876,14 @@ export function reconstructDispelSummary(
           const removalTs = removals.find((r) => r >= applyTs);
           const windowEndMs = Math.min(removalTs ?? combat.endTime, roundEnd);
           const durationSeconds = (windowEndMs - applyTs) / 1000;
+          // F15 / fact1215 R8: an APPLIED inside a window already emitted for
+          // this spell, ending at the same removal, is that aura re-logged
+          // (62fdbf2e 0:14: one Alter Time cast 0:13.35, re-APPLIED 0:14.88
+          // during Mass Invisibility with no REMOVED — a second "unpurged
+          // for 3s"; 105-1: Power Infusion 0:18 with its 0:21 re-log printed
+          // as two windows of one buff). Only a window emitted inside the
+          // round absorbs it (see below).
+          if (emittedEndMs !== null && windowEndMs === emittedEndMs) continue;
 
           if (durationSeconds < MISSED_PURGE_THRESHOLD_S) continue;
 
@@ -4028,6 +4038,9 @@ export function reconstructDispelSummary(
                 return dmg >= threshold;
               });
 
+              // only a window that started in the round absorbs a re-log (one
+              // opened before `combat.startTime` is not a line of the round)
+              if (applyTs >= combat.startTime) emittedEndMs = windowEndMs;
               (generalOpen
                 ? missedPurgeWindows
                 : scopedMissedPurgeWindows

@@ -245,11 +245,20 @@ export function observedEffectEndSeconds(
       .filter((m) => m.destId === dest)
       .map((m) => m.iv)
       .sort((a, b) => a.fromS - b.fromS);
-    const first = ivs.findIndex(
+    let first = ivs.findIndex(
       (iv) =>
         iv.fromS >= castS - EFFECT_START_BEFORE_S &&
         iv.fromS <= castS + EFFECT_START_AFTER_S,
     );
+    // F15 / fact1215 R8: a press that REFRESHed an aura already up (an
+    // un-pressed application before it) starts no interval of its own — the
+    // open one it refreshed is its effect (519781fd: Malevolence up from
+    // 1:11.95, the 1:21.50 press refreshed it, it ran to 1:47.96; the span
+    // read the official 20 s, 1:21–1:41)
+    if (first < 0)
+      first = ivs.findIndex(
+        (iv) => iv.fromS < castS && iv.toS > castS + EFFECT_START_AFTER_S,
+      );
     if (first < 0) continue;
     let chainEnd = ivs[first]!.toS;
     let observed = !ivs[first]!.inferredEnd;
@@ -263,6 +272,13 @@ export function observedEffectEndSeconds(
     if (best === null || chainEnd > best.end)
       best = { end: chainEnd, observed };
   }
+  // F15 / fact1215 R8: the interval builder clamps a REMOVED logged after
+  // the combat's end onto that end (`buildAuraIntervals` `rel`) and still
+  // calls the end observed — a clamp is no observation (26bfd4f3: Kingsbane
+  // removed 1:50.78, after the round; `4s left` at 1:42 was the round's end
+  // minus now). The official duration stands.
+  const combatEndS = (combat.endTime - combat.startTime) / 1000;
+  if (best !== null && best.end >= combatEndS - 0.001) return null;
   return best?.observed ? best.end : null;
 }
 

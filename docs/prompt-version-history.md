@@ -3452,3 +3452,15 @@ and 68 msw rows' HP facts move, [CONSEQ] 250 / [KILL WINDOW] 232 lines;
 troughFactScan: [SLACK] / [CONTESTED] team min above the log 502 → 0 of 919,
 kick-eaten lows below every in-lockout reading 70 → 12 of 790 (the 12 are
 the printed t / lockout rounding at the lock's last instant).
+v408 (2026-10-17, F15 batch 5 — fact1215 R8, 605 preview approved 「接受」):
+aura re-broadcasts and refreshes read as one aura. ABILITIES INTO's walls are
+the shared `buildAuraIntervals` (09195b87: one Time Dilation split at a same-ms
+REMOVED + APPLIED printed a second wall); a missed-purge window is not opened
+again by a re-log inside a window already emitted for the same buff (62fdbf2e
+Alter Time, 105-1 Power Infusion 0:18 + 0:21); an enemy cooldown pressed while
+its aura was already up reads that aura's end (519781fd Malevolence 1:21–1:47,
+not the official 20 s), and an end the builder clamped to the combat's end is
+no observed end (26bfd4f3 Kingsbane / 101-5 Army of the Dead `6s left`). 605
+files: position-mistake −4, missed-sync-window −2, kick-eaten +1 net,
+slow-defensive-response +1; 87 duplicate [MISSED PURGE OPPORTUNITY] lines go;
+ABILITIES INTO 156 lines, [RES] `s left` 2,881, burst / kill windows 132.

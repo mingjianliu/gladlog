@@ -12,6 +12,7 @@ import {
 import { getEnglishSpellName } from "../data/spellEffectData";
 import { ccSpellIds } from "../data/spellTags";
 import { isAllyCopyWallId } from "./allyCopyWall";
+import { buildAuraIntervals } from "./auraIntervals";
 import {
   getUnitHpAtTimestamp,
   HP_SAMPLE_RADIUS_MS,
@@ -71,55 +72,46 @@ interface IDefenseWindow {
   unit: ICombatUnit;
 }
 
+/**
+ * The signed walls on each enemy, as intervals of the shared builder
+ * (`buildAuraIntervals` — F15 / fact1215 R8, 2026-10-17). The hand pairing
+ * of APPLIED → REMOVED it replaces split one aura at a re-broadcast (a same-ms
+ * REMOVED + APPLIED, 09195b87 1:30: one Time Dilation 1:25 → 1:33 read as two
+ * walls, and the 1:30 half passed the ≤ 20 % HP rule the whole one did not).
+ * As before, only an aura the log shows open and close counts: an interval
+ * whose start or end the builder inferred is left out.
+ */
 function buildDefenseWindows(
   enemies: ICombatUnit[],
-  matchStartMs: number,
+  combat: Pick<AtomicArenaCombat, "startTime" | "endTime"> &
+    Partial<Pick<AtomicArenaCombat, "units">>,
 ): IDefenseWindow[] {
   const windows: IDefenseWindow[] = [];
-
   for (const enemy of enemies) {
-    const openAt: Record<string, number> = {};
-
-    const sorted = [...enemy.auraEvents].sort(
-      (a, b) => a.logLine.timestamp - b.logLine.timestamp,
-    );
-
-    for (const e of sorted) {
-      const spellId = e.spellId;
-      if (!spellId) continue;
-      const verdict = mitigationVerdictOf(spellId);
+    for (const iv of buildAuraIntervals(enemy, combat)) {
+      const verdict = mitigationVerdictOf(iv.spellId);
       // "never"(不构成真实阻碍)与 "unresolved"(裁定人未遇到过)都不出面。
       if (verdict !== "unconditional" && verdict !== "kill-live-gated")
         continue;
+      if (iv.inferredStart || iv.inferredEnd) continue;
       // F15 C1(2026-10-16 默认):签字表签的是施法者自己身上的那份;天赋共享墙
       // 给队友的副本(Flameshaper 黑曜鳞片 15%)低于墙门槛,不是这堵墙。
-      if (isAllyCopyWallId(spellId) && e.srcUnitId !== enemy.id) continue;
-
-      const t = (e.logLine.timestamp - matchStartMs) / 1000;
-
-      if (e.logLine.event === LogEvent.SPELL_AURA_APPLIED) {
-        openAt[spellId] = t;
-      } else if (
-        e.logLine.event === LogEvent.SPELL_AURA_REMOVED &&
-        openAt[spellId] !== undefined
-      ) {
-        windows.push({
-          spellId,
-          // 英文名 —— prompt 侧禁止中文技能名(spellNameZhLint)。
-          defenseName: getEnglishSpellName(spellId, spellId),
-          verdict,
-          fromSeconds: openAt[spellId],
-          toSeconds: t,
-          unitId: enemy.id,
-          unitName: enemy.name,
-          unitSpec: specToString(enemy.spec),
-          unit: enemy,
-        });
-        delete openAt[spellId];
-      }
+      if (isAllyCopyWallId(iv.spellId) && iv.srcUnitName !== enemy.name)
+        continue;
+      windows.push({
+        spellId: iv.spellId,
+        // 英文名 —— prompt 侧禁止中文技能名(spellNameZhLint)。
+        defenseName: getEnglishSpellName(iv.spellId, iv.spellId),
+        verdict,
+        fromSeconds: iv.fromS,
+        toSeconds: iv.toS,
+        unitId: enemy.id,
+        unitName: enemy.name,
+        unitSpec: specToString(enemy.spec),
+        unit: enemy,
+      });
     }
   }
-
   return windows;
 }
 
@@ -186,12 +178,13 @@ function killWasLive(w: IDefenseWindow, matchStartMs: number): boolean {
 }
 
 export function buildOffensiveWasteSummary(
-  combat: Pick<AtomicArenaCombat, "startTime">,
+  combat: Pick<AtomicArenaCombat, "startTime" | "endTime"> &
+    Partial<Pick<AtomicArenaCombat, "units">>,
   friends: ICombatUnit[],
   enemies: ICombatUnit[],
 ): IOffensiveWasteSummary {
   const matchStartMs = combat.startTime;
-  const defenseWindows = buildDefenseWindows(enemies, matchStartMs);
+  const defenseWindows = buildDefenseWindows(enemies, combat);
   const events: IOffensiveWasteEvent[] = [];
 
   for (const friend of friends) {
