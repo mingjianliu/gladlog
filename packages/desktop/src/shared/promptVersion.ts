@@ -151,5 +151,13 @@
  *  readers that hand-tested `"Stun"` (resourceSnapshot, killAttempts) read the
  *  predicate. 605 files: no candidate added or removed; 232 contexts change —
  *  KILL ATTEMPTS gains Infernal Awakening stun openers, [RES] `cc:` tags them.
+ *  v411 (2026-10-17, F15 batch 8 — fact1215 C10 item 91, facts only): the burst
+ *  ledger's "target had a major defensive up" matches a wall that logs under an
+ *  aura id other than its cast's (`SELF_WALL_AURA_TO_CAST_ID`: Greater
+ *  Invisibility 110960, Blur 212800, Fortifying Brew 120954) — 62fdbf2e Burst #2
+ *  missed Vizine's Greater Invisibility that KILL ATTEMPTS named. 605 files: no
+ *  candidate added or removed (burst-into-mitigation prices those aura ids at no
+ *  wall, as before); 504 ledger lines added (320 Greater Invisibility, 184 Blur /
+ *  Fortifying Brew).
  */
-export const PROMPT_VERSION = 410;
+export const PROMPT_VERSION = 411;

@@ -4,6 +4,7 @@ import {
   LogEvent,
 } from "@gladlog/parser-compat";
 
+import { SELF_WALL_AURA_TO_CAST_ID } from "../data/mitigationData";
 import { SPELL_CATEGORIES as spellsData } from "../data/spellCategories";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import {
@@ -14,6 +15,7 @@ import {
   SELF_CAST_NOOP_EXTERNAL_IDS,
 } from "./cooldowns";
 import { IEnemyCDCast, reconstructEnemyCDTimeline } from "./enemyCDs";
+import { FULL_IMMUNITY_IDS } from "./enemyDefensives";
 import {
   type IKickAuditEntry,
   jukedByFakeText,
@@ -24,7 +26,6 @@ import { MIN_WINDOW_SECONDS } from "./killWindowTargetSelection";
 import { IOffensiveWindow } from "./offensiveWindows";
 import { fmtTime, toRenderSecond } from "./renderGrid";
 import { roundEndMs } from "./roundEnd";
-import { FULL_IMMUNITY_IDS } from "./enemyDefensives";
 import { buildFilteredAuraIntervals } from "./utils";
 
 type SpellEntry = { type: string };
@@ -37,11 +38,22 @@ const SPELLS = spellsData as Record<string, SpellEntry>;
 // for entries the face lacks).
 import { isKillWindowMajorDefensive } from "../data/abilityProfile";
 import { spellEffectData } from "../data/spellEffectData";
-const DEF_OR_IMMUNE_IDS = new Set<string>([
+const DEF_OR_IMMUNE_CAST_IDS = new Set<string>([
   // Enumerate the official universe through the shared predicate — the same
   // ids the span state machine reasons with, so the two can never disagree.
   ...Object.keys(spellEffectData).filter(isKillWindowMajorDefensive),
   ...Object.keys(SPELLS).filter((id) => SPELLS[id]?.type === "immunities"),
+]);
+/** …and the AURA a wall logs under when it is not its cast id
+ * (`SELF_WALL_AURA_TO_CAST_ID`: Greater Invisibility 110959 → aura 110960,
+ * Blur, Fortifying Brew) — the ledger matches aura intervals (F15 /
+ * fact1215 C10: 62fdbf2e Burst #2 missed Vizine's Greater Invisibility that
+ * KILL ATTEMPTS named). */
+const DEF_OR_IMMUNE_IDS = new Set<string>([
+  ...DEF_OR_IMMUNE_CAST_IDS,
+  ...Object.entries(SELF_WALL_AURA_TO_CAST_ID)
+    .filter(([, castId]) => DEF_OR_IMMUNE_CAST_IDS.has(castId))
+    .map(([auraId]) => auraId),
 ]);
 
 /** A target death up to this long after the burst ends still credits the burst. */
