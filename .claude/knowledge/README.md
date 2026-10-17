@@ -29,7 +29,7 @@
 - [range-los.md](range-los.md) — 射程 / 视野的日志真值、hold-out 教训、reach 表所有权
 - [signal-research-conclusions.md](signal-research-conclusions.md) — 已退役 / 负结果信号的原因,救人 CD 名单判据
 - [coaching-rulings.md](coaching-rulings.md) — 用户裁过的指控口径:伤害看需求、3v3 首死、身份准确性、击杀与饰品
-- [fact-layer-rulings-2026-10.md](fact-layer-rulings-2026-10.md) — 事实层工单两周(PV192 → PV401)的裁决按主题:回合末、光环生命周期、真最低点、免疫措辞、能不能按、击杀窗口、爆发回应、踢、驱散、账本所有权、伤害读数、语言、流程
+- [fact-layer-rulings-2026-10.md](fact-layer-rulings-2026-10.md) — 事实层工单(PV192 → PV406)的裁决按主题:回合末、光环生命周期、真最低点、免疫措辞、能不能按、击杀窗口、爆发回应、踢、驱散、账本所有权、伤害读数、语言、流程
 - [perf.md](perf.md) — 大 JSON 走 JSON.parse、对局库规模与无上限路径
 - [desktop-ui.md](desktop-ui.md) — renderer 架构模式、布局坑、测试台、功能定论、有意偏离
 - [test-build-ci.md](test-build-ci.md) — ensureAnalysisData、工作区依赖外部化、vitest、flaky、CI 判读、视觉基线、打包

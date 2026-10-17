@@ -1,4 +1,4 @@
-# 事实层工单的裁决(2026-09-30 → 10-15,PV192 → PV401)
+# 事实层工单的裁决(2026-09-30 → 10-16,PV192 → PV406)
 
 这两周是 [fact-layer-direction.md](fact-layer-direction.md) 那条方向落下来的样子:270 个提交,几乎全是「事实行怎么读、怎么写」。裁决原来只活在提交信息、`promptVersion.ts` 的版本说明和 `docs/predicate-index.md` 的 OPEN 条目里;这里按主题收一遍,每条带 PV 号,原文去 `docs/prompt-version-history.md` 查。**状态以代码为准**;裁决编号(A/D/U/B/P/R/X 系)是 triage / FT 工单内部的,仓库里没有总表。
 
@@ -119,6 +119,24 @@
 - 行自述时刻 `logLineInstantMs`(东半球偏移不带符号);日期门还读解析器日期(OPEN)。
 - 施法消耗读 `SPELL_CAST_SUCCESS` 行自带的 `powerCosts`(PV378):是减免前的标称消耗,百分比类 = 基础法力 250,000 × 百分比;只做「买不买得起」的事实,**法力信号不做**(2026-09-20 裁决仍在)。
 - 近战双行(`swingTwins`)、充能开始 / 中断(`SPELL_EMPOWER_START / _INTERRUPT`)只在新解析的文档里有——评测一律从 raw.txt 重解析。
+
+## 16. 10-16 那一批(PV402 → PV406)
+
+方向:用户 10-16(经 round1+2 转述)「**我现在只关心事实层的东西**」。fact1215 深挖(`runs/fact1215-2026-10-16`)按类出缺陷、按批修,每批配一个**确定性事实扫描**。
+
+- **数据对任何日期的日志都成立**(PV402,用户裁):DB2 刷到 12.1.5.70391 后,数字按当前 build 读,不按日志日期回退——只有 `logEra` 里显式登记的日期规则(Storm Conduit)例外。刷新时手工修正表与 DB2 重复的行要删(Call of Ohn'ahra 手写 −30 与 DB2 −60 会叠成 −90);`TraitDefinition.OverridesSpellID` 表达的替换,aura-332 读者看不见,要手补(Ice Cold → Ice Block)。
+- **沉默是控制,打断是冷却取舍**(PV403,用户原话:「沉默本身其实是一种控制。打断的话，实际上主要是一个 cooldown trade-off 的问题 … 因为你会被锁」):一个谓词 `isKickSpellId` = `interrupts` 类别减 `SILENCE_AURAS_NOT_KICKS`(Garrote - Silence、Strangulate、Spider Venom、Tightening Grasp:DB2 aura 27、无 effect 68、不开学派锁)。数踢 / 审计踢的读者都走它;**收集控制回应的读者(crisis、burst-window)刻意保留整类**——沉默在那里是回应。Priest Silence 15487 同形状但仍算踢(GH #78 起暗牧的踢),**待用户裁**。
+- **所有「最低 / low / trough / team min」读真实最低点,同毫秒的中间行也算**(PV405):一下伤害和它触发的治疗在同一毫秒,只看最后一行会漏掉真低点(332b9b2f:印 43 %,实际 36.8 %)。**点读数**(「t 时刻的 HP」)仍按 09-23 的同毫秒取最后一行。`[KILL WINDOW]` team min、`[CD PRIOR]` bottomed at 跟着改;`[CD PRIOR]` 的排名和门仍读网格。没动的(登记在 Not yet unified):`[SLACK]` / `[CONTESTED]` team min、事件跨度首秒可能读到事件前的样本(等裁决)、`hpAtPress`。
+- **账本新行**(PV404):Time Stop(Defensive)、Tree of Life(Utility——治疗救人表会剥掉它的 Defensive,标 Defensive 会再次消失)、浩劫恶魔变形(191427 从不记施放,按键是 200166 落地)。**只有 `METAMORPHOSIS_PRESS_CAST_IDS` 证明规范按键**——第一版让所有 `SPELL_CANONICAL_IDS` 别名都证明,605 文件上没动候选却改了 101 个上下文(codex 20-F15-01 复现)。
+- **给队友的副本墙看日志不看天赋**(PV404):Flameshaper 的 Obsidian Scales 施给队友时,队友身上 0.5 s 内出现同源 APPLIED / REFRESH 才算(`allyCopyRecipient`)。**低于 20 % 门槛的副本不算「popped」**(用户默认,10-16)。「本可以给队友」仍读 `canHelpAnotherUnit`,登记未统一——关上它会加指控。
+- **宠物的驱散点名宠物**(PV406):`'s pet` / `'s guardian` / `'s totem` 读召唤物自己的单位(`summonKindOf`,与 `[KICK]` 同一个词),不按「召唤物都是 pet」。
+- **饰品按掉了什么**(PV406):`[ENEMY TRINKET]` 依次回退 CC → 缴械 → 沉默;**日志已给出别的结束原因(BROKEN、驱散)的 CC 不归饰品**;KILL ATTEMPTS 问的是这次按键结束了尝试里**任何一个** CC;**跑满官方时长(含 DR)的次要 CC 不是饰品解的**。在 `bindBreakToWindow` 里同样加这条被试过又撤了——窗口构造器把同毫秒 REMOVED + APPLIED 合并时保留第一次落地,0.9 s 的重施被读成跑满(登记 R8)。
+
+**这批的流程教训**:
+- **事实扫描从解析后的日志重新推导,不经过产品谓词**(`pressFactScan` / `troughFactScan` / `breakFactScan`,只 import 分类集合)——经过产品谓词的扫描验证不了谓词本身。
+- **扫描遇到映射不上的上下文必须失败**,不能静默跳过:一次「0 missing」其实是相对路径没解析、整批没读(codex 20-F15-01)。一个预过滤正则在拼平的文本上锚错位置,9,443 个 low 只读了 3,230(20-F15-02)。又是「任何扫描先看扫了多少」。
+- **写文件的脚本先读后写**:一次脚本先以写模式打开 `prompt-version-history.md` 再读,把 3,404 行截成一条,下一个提交才从 git 恢复。
+- 每批都有 codex / agy REQUEST_CHANGES,每条都**先在代码和 605 采集上核实再动**;审查改动「folded in」进同一个 PV,不另升号。
 
 ## 15. 流程上的裁决
 
