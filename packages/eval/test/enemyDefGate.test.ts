@@ -10,6 +10,7 @@ import {
   checkKarmaFedClause,
   checkKillAttemptUpSinceEndLogged,
   checkResReturnAnnounced,
+  checkSchoolLimitedImmuneLabel,
 } from "../src/quality/promptQualityCheck";
 
 /**
@@ -1032,6 +1033,22 @@ describe("checkResReturnAnnounced (the [RES] delta chain, b19)", () => {
           "      [RES] rdy:Δ -Barkskin  cd:Barkskin(34s)",
         ),
       ),
+    ).toEqual([]);
+  });
+});
+
+describe("checkSchoolLimitedImmuneLabel (F15 / fact1215 C2)", () => {
+  it("a school-limited immunity with a bare `immune` → red; with its schools, or a full immunity → green", () => {
+    expect(
+      checkSchoolLimitedImmuneLabel([
+        "5:00  [ENEMY DEF]   5(SRogue) (Subtlety Rogue): Cloak of Shadows (immune, 5.0s) (at 24% HP)",
+      ]),
+    ).toHaveLength(1);
+    expect(
+      checkSchoolLimitedImmuneLabel([
+        "5:00  [ENEMY DEF]   5(SRogue) (Subtlety Rogue): Cloak of Shadows (immune to magic, 5.0s) (at 24% HP)",
+        "1:10  [ENEMY DEF]   4(HPaladin) (Holy Paladin): Divine Shield (immune, 8.0s) (at 30% HP)",
+      ]),
     ).toEqual([]);
   });
 });

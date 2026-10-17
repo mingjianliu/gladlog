@@ -188,10 +188,12 @@ import { UNPURGED_FOR_RE_SRC } from "@gladlog/analysis/src/utils/dispelAnalysis"
 import {
   ENEMY_DEF_END_NOT_LOGGED,
   ENEMY_DEF_END_NOT_LOGGED_SLOT_RE,
+  ENEMY_DEF_IMMUNE_LABEL_RE_SRC,
   ENEMY_SAVE_EFFECT_BY_NAME,
   enemySaveEffectOfNote,
   ownWallLineNames,
   SAVE_AURA_END_UNSEEN_NAMES,
+  schoolLimitedImmunityNames,
   selfSaveMechanismOfName,
   spanHoldsOwnWallSecond,
 } from "@gladlog/analysis/src/utils/enemyDefensives";
@@ -1623,7 +1625,7 @@ const CONTROL_CUT_SECONDS = new RegExp(
  * with its second (groups 1–2), the length (3) and the round-end label when
  * it follows (4). Read on the line's head, before any `| during it:`. */
 const ENEMY_DEF_PRINTED_LENGTH = new RegExp(
-  String.raw`^(\d+):(\d{2})\s+\[ENEMY DEF\][^|]*? \((?:(?:immune|\d+%|absorb(?: (?:\d+|<1)k)?), )?(\d+(?:\.\d+)?)s\b( — ${AURA_STILL_UP_AT_ROUND_END})?`,
+  String.raw`^(\d+):(\d{2})\s+\[ENEMY DEF\][^|]*? \((?:(?:${ENEMY_DEF_IMMUNE_LABEL_RE_SRC}|\d+%|absorb(?: (?:\d+|<1)k)?), )?(\d+(?:\.\d+)?)s\b( — ${AURA_STILL_UP_AT_ROUND_END})?`,
 );
 /** The timeline's legend header — the gate asks for the round-end legend
  * only of a prompt that carries the timeline's legend at all. */
@@ -4504,7 +4506,9 @@ export function checkKillAttemptOwnControlClause(lines: string[]): string[] {
 /** The label an own-press `[ENEMY DEF]` line may open its parenthesis with
  * when its ability is neither an effect save nor a pressed self defensive:
  * a wall's `(N%…`, an immunity's `(immune…`, an area save's `(area)`. */
-const ENEMY_DEF_WALL_LABEL = /^\((?:immune[,)]|\d+%[,)]|area\))/;
+const ENEMY_DEF_WALL_LABEL = new RegExp(
+  String.raw`^\((?:${ENEMY_DEF_IMMUNE_LABEL_RE_SRC}[,)]|\d+%[,)]|area\))`,
+);
 
 /**
  * What an own-press `[ENEMY DEF]` line says the ability DOES — the label in
@@ -4672,6 +4676,28 @@ export function checkFormCooldownPressSpacing(lines: string[]): string[] {
  * Whether a given aura HAD a logged end is the log's to say, not the text's:
  * `test/enemyDefEndNotLogged.test.ts` (analysis) pins that side.
  */
+/**
+ * HardFailure class (F15 / fact1215 C2, 2026-10-17): an `[ENEMY DEF]` line of
+ * a school-limited immunity — Cloak of Shadows, Blessing of Protection,
+ * Blessing of Spellwarding (`limitedImmunitySchoolMask`) — names the schools
+ * it stops (`immune to magic`), never a bare `immune`, which the legend
+ * defines as full immunity (0f894aee 5:00: `Cloak of Shadows (immune, 5.0s)`
+ * while 9 physical hits landed).
+ */
+const ENEMY_DEF_BARE_IMMUNE = /^\s*\d+:\d{2}\s+\[ENEMY DEF\].*?: (.+?) \(immune[,)]/;
+export function checkSchoolLimitedImmuneLabel(lines: string[]): string[] {
+  const names = schoolLimitedImmunityNames();
+  const failures: string[] = [];
+  lines.forEach((line, i) => {
+    const m = ENEMY_DEF_BARE_IMMUNE.exec(line);
+    if (m && names.has(m[1]!))
+      failures.push(
+        `line ${i + 1}: ${m[1]} 只免疫部分学派,却写成完全免疫 \`immune\` —— ${line.trim().slice(0, 160)}`,
+      );
+  });
+  return failures;
+}
+
 export function checkEnemyDefEndNotLogged(lines: string[]): string[] {
   const failures: string[] = [];
   let printed = false;
@@ -7522,6 +7548,7 @@ export function checkMatch(
   hardFailures.push(...checkEnemyDefSaveEffect(lines));
   hardFailures.push(...checkFormCooldownPressSpacing(lines));
   hardFailures.push(...checkEnemyDefEndNotLogged(lines));
+  hardFailures.push(...checkSchoolLimitedImmuneLabel(lines));
   hardFailures.push(...checkKillAttemptUpSinceEndLogged(lines));
   hardFailures.push(...checkBrokeOutRefConsistency(lines));
   hardFailures.push(...checkFactsBlockIntegrity(lines));

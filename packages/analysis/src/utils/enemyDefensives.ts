@@ -421,8 +421,26 @@ export const ENEMY_DEF_END_NOT_LOGGED = "end not logged";
  * note (`— removed early`, `— still up …`) follows it: an end the log never
  * showed has no cause to state.
  */
+/** The English names of the school-limited immunities
+ * (`limitedImmunitySchoolMask` defined) — what the C2 gate keys on. */
+export function schoolLimitedImmunityNames(): ReadonlySet<string> {
+  const out = new Set<string>();
+  for (const id of Object.keys(MITIGATION_TABLE))
+    if (limitedImmunitySchoolMask(id) !== undefined) {
+      const name = getEnglishSpellName(id, "");
+      if (name) out.add(name);
+    }
+  return out;
+}
+
+/** An `[ENEMY DEF]` immunity's strength as rendered: `immune`, or a
+ * school-limited one's `immune to magic` / `immune to physical`
+ * (`immunitySchoolWords`, F15 C2) — one source for the producer's slot and
+ * every gate that re-parses the label. */
+export const ENEMY_DEF_IMMUNE_LABEL_RE_SRC = String.raw`immune(?: to [a-z]+(?:\/[a-z]+)*)?`;
+
 export const ENEMY_DEF_END_NOT_LOGGED_SLOT_RE = new RegExp(
-  String.raw`\((?:(?:immune|\d+%|absorb(?: (?:\d+|<1)k)?), )?${ENEMY_DEF_END_NOT_LOGGED}\)`,
+  String.raw`\((?:(?:${ENEMY_DEF_IMMUNE_LABEL_RE_SRC}|\d+%|absorb(?: (?:\d+|<1)k)?), )?${ENEMY_DEF_END_NOT_LOGGED}\)`,
 );
 
 /** The start of `enemySaveEffectNote`'s parenthesis, as rendered. */
@@ -546,6 +564,19 @@ export function limitedImmunitySchoolMask(spellId: string): number | undefined {
   return (row.schoolMask & ALL_SCHOOLS) === ALL_SCHOOLS
     ? undefined
     : row.schoolMask;
+}
+
+/** F15 / fact1215 C2 (2026-10-17): the words a school-limited immunity's
+ * `[ENEMY DEF]` label names its schools by — `physical` (Blessing of
+ * Protection), `magic` (Cloak of Shadows, Blessing of Spellwarding: every
+ * school but physical), else the schools themselves. Read off
+ * `limitedImmunitySchoolMask`, the mask KILL ATTEMPTS gates the same aura on
+ * (0f894aee: `Cloak of Shadows (immune, 5.0s)` while 9 physical hits landed). */
+export function immunitySchoolWords(mask: number): string {
+  if (mask === 0x01) return "physical";
+  if ((mask & ALL_SCHOOLS) === 0x7e) return "magic";
+  const names = ["physical", "holy", "fire", "nature", "frost", "shadow", "arcane"];
+  return names.filter((_, i) => (mask & (1 << i)) !== 0).join("/");
 }
 
 /** A school-limited ABSORB's mask: a save with no `MITIGATION_TABLE` row

@@ -21,7 +21,10 @@ import {
   ENEMY_DEF_END_NOT_LOGGED,
   enemyDefensiveEvents,
   enemySaveEffectNote,
+  immunitySchoolWords,
+  limitedImmunitySchoolMask,
   renderedObservedSeconds,
+  wallTableIdOfAura,
 } from "../../utils/enemyDefensives";
 import {
   externalDamageForApplication,
@@ -285,7 +288,17 @@ export function emitEnemyDefEntries(
           );
           line = `${d.spellName}${label ? ` (${label})` : ""}${burstStr}${hpStr}${selfSaveStr}${karmaStr}${channelStr}`;
         } else {
-          const strength = d.kind === "immune" ? "immune" : `${d.pct}%`;
+          // F15 C2: a school-limited immunity says which schools it stops
+          const limited =
+            d.kind === "immune"
+              ? limitedImmunitySchoolMask(wallTableIdOfAura(d.spellId))
+              : undefined;
+          const strength =
+            d.kind === "immune"
+              ? limited !== undefined
+                ? `immune to ${immunitySchoolWords(limited)}`
+                : "immune"
+              : `${d.pct}%`;
           const hpStr = hpPct !== null ? ` (at ${hpPct.toFixed(0)}% HP)` : "";
           line = `${d.spellName} (${strength}${dur ? `, ${dur}` : ""})${burstStr}${hpStr}`;
         }

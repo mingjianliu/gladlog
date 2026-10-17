@@ -568,10 +568,10 @@ describe("buildMatchTimeline — [ENEMY DEF] and [ENEMY TRINKET] context enrichm
 
     expect(timeline).toContain("[ENEMY DEF]");
     expect(timeline).toContain(
-      "Cloak of Shadows (immune, 5.0s) [friendly offensive CD active] (at 28% HP)",
+      "Cloak of Shadows (immune to magic, 5.0s) [friendly offensive CD active] (at 28% HP)",
     );
     expect(timeline).toMatch(
-      /0:45\s+\[ENEMY DEF\]\s+2\(SRogue\) \(Subtlety Rogue\): Cloak of Shadows \(immune, 5\.0s\) \[friendly offensive CD active\] \(at 28% HP\)/,
+      /0:45\s+\[ENEMY DEF\]\s+2\(SRogue\) \(Subtlety Rogue\): Cloak of Shadows \(immune to magic, 5\.0s\) \[friendly offensive CD active\] \(at 28% HP\)/,
     );
   });
 
@@ -801,7 +801,7 @@ describe("buildMatchTimeline — [ENEMY DEF] and [ENEMY TRINKET] context enrichm
     expect(timeline).not.toContain("(at % HP)");
     expect(timeline).not.toContain("(target at % HP)");
     expect(timeline).toContain(
-      "Cloak of Shadows (immune, 5.0s) [friendly offensive CD active]",
+      "Cloak of Shadows (immune to magic, 5.0s) [friendly offensive CD active]",
     );
     expect(timeline).toContain(
       "used PvP trinket [friendly offensive CD active]",

@@ -1374,6 +1374,16 @@ const INDEX: PredicateRow[] = [
     mod: allyCopyWall,
   },
   {
+    file: `${A}/utils/enemyDefensives.ts`,
+    symbol: "limitedImmunitySchoolMask",
+    mod: enemyDefensives,
+  },
+  {
+    file: `${A}/utils/enemyDefensives.ts`,
+    symbol: "ENEMY_DEF_IMMUNE_LABEL_RE_SRC",
+    mod: enemyDefensives,
+  },
+  {
     file: `${A}/data/spellSchools.ts`,
     symbol: "immunityCoversSpell",
     mod: spellSchools,

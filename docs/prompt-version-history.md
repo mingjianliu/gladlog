@@ -3464,3 +3464,11 @@ no observed end (26bfd4f3 Kingsbane / 101-5 Army of the Dead `6s left`). 605
 files: position-mistake −4, missed-sync-window −2, kick-eaten +1 net,
 slow-defensive-response +1; 87 duplicate [MISSED PURGE OPPORTUNITY] lines go;
 ABILITIES INTO 156 lines, [RES] `s left` 2,881, burst / kill windows 132.
+v409 (2026-10-17, F15 batch 6 — fact1215 C2, facts only): a school-limited
+immunity's [ENEMY DEF] label names the schools it stops — `immune to magic`
+(Cloak of Shadows, Blessing of Spellwarding) / `immune to physical` (Blessing
+of Protection) — read off `limitedImmunitySchoolMask`, the mask KILL ATTEMPTS
+gates the same aura on; the legend says so (0f894aee 5:00: Cloak `immune`
+while 9 physical hits landed). 605 files: no candidate added or removed;
+4,426 [ENEMY DEF] lines change label (4,341 magic, 85 physical); new gate
+checkSchoolLimitedImmuneLabel 906 → 0.
