@@ -137,7 +137,20 @@ export function teamMinHpPctOver(
   let min: number | null = null;
   if (toSeconds > fromSeconds)
     for (const f of friends) {
-      const t = hpTroughInWindow(f, matchStartMs, fromSeconds, toSeconds - 1);
+      // the half-open segment [from, to): a tick counts only when its
+      // sample lies inside it (codex 20-F15-07: the last tick borrowed the
+      // first failed second's sample)
+      const t = hpTroughInWindow(
+        f,
+        matchStartMs,
+        fromSeconds,
+        toSeconds - 1,
+        undefined,
+        {
+          fromMs: matchStartMs + fromSeconds * 1000,
+          toMs: matchStartMs + toSeconds * 1000 - 1,
+        },
+      );
       if (t && (min === null || t.pct < min)) min = t.pct;
     }
   return Math.round(min ?? 100);

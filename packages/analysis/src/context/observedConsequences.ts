@@ -151,9 +151,12 @@ function teamDrops(
     // `hpTroughInEventSpan`, the reading missed-sync-window's
     // enemyMinHpPct shares; `hp.lo` is the decision's
     const { h0 } = hp;
-    const lo = hpTroughInEventSpan(mate, matchStartMs, fromS, toS) ?? hp.lo;
+    // no reading inside the span → no low (user ruling 2026-10-17: the
+    // span reads only its own samples; codex 20-F15-07: the grid fallback
+    // printed a reading from after the control ended)
+    const lo = hpTroughInEventSpan(mate, matchStartMs, fromS, toS);
     measured++;
-    if (h0 - lo.pct >= CONSEQ_DROP_MIN_PCT)
+    if (lo && h0 - lo.pct >= CONSEQ_DROP_MIN_PCT)
       parts.push(
         `${label(mate.name)} ${Math.round(h0)}% → low ${Math.round(lo.pct)}% at ${fmtTime(lo.atSec)}`,
       );

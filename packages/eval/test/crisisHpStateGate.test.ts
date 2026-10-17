@@ -151,11 +151,19 @@ describe("checkCrisisHpStateConsistency — a trough fact is not a point reading
 
   it("kick-eaten: on the lockout's edge seconds the tick may predate the kick (user ruling 2026-10-17) — not adjudicated; inside the lockout it still is", () => {
     // kick at 26.8 s, lockout 3 s: the 0:27 tick can read a sample from
-    // before the kick (38-1 shape), so a low above it is no contradiction
+    // before the kick (38-1 shape), so a low above it is no contradiction —
+    // and so at 26.4 s (codex 20-F15-07: no sample until 27.8 s)
     const late = (pct: string, at: string) =>
       kickEaten(pct, at).replace(/26\.4/g, "26.8");
     expect(
       checkCrisisHpStateConsistency([...ROSTER, STATE_27, late("40", "27")]),
+    ).toEqual([]);
+    expect(
+      checkCrisisHpStateConsistency([
+        ...ROSTER,
+        STATE_27,
+        kickEaten("40", "27"),
+      ]),
     ).toEqual([]);
     // the same low on a second strictly inside the lockout stays red
     expect(
@@ -168,10 +176,11 @@ describe("checkCrisisHpStateConsistency — a trough fact is not a point reading
   });
 
   it("kick-eaten: a tick below the low → red; a `dead` tick → red", () => {
+    // 0:28 — strictly inside the 26.4 s + 3 s lockout, not an edge second
     const fails = checkCrisisHpStateConsistency([
       ...ROSTER,
-      STATE_27,
-      kickEaten("40", "27"),
+      STATE_27.replace("0:27", "0:28"),
+      kickEaten("40", "28"),
     ]);
     expect(fails).toHaveLength(1);
     expect(fails[0]).toContain("kick-eaten");
@@ -180,8 +189,8 @@ describe("checkCrisisHpStateConsistency — a trough fact is not a point reading
     expect(
       checkCrisisHpStateConsistency([
         ...ROSTER,
-        "0:27  [STATE]   friends 1(RShaman):71 2(FWarrior):dead",
-        kickEaten("12", "27"),
+        "0:28  [STATE]   friends 1(RShaman):71 2(FWarrior):dead",
+        kickEaten("12", "28"),
       ]),
     ).toHaveLength(1);
   });

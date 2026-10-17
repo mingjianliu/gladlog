@@ -6455,8 +6455,8 @@ export interface CrisisHpStateProbe {
   /** whether a same-second [STATE] line carries this unit at all (any
    * token, "ghost" included) — `checkCrisisStateTickPresent` */
   stateSeen: boolean;
-  /** a kick-eaten trough on the lockout's first (or the next) or last
-   * rendered second: that second's tick can read a sample from before the
+  /** a kick-eaten trough on the lockout's first second, the one after it,
+   * or its last rendered second: that second's tick can read a sample from before the
    * kick or after the lock (user ruling 2026-10-17, F15: an event span reads only its own
    * samples), so it says nothing about the trough */
   spanEdge?: true;
@@ -6514,11 +6514,10 @@ export function crisisHpStateProbes(lines: string[]): CrisisHpStateProbe[] {
           Number.isFinite(lock) &&
           (tSecond === Math.floor(kickT) ||
             // the tick of the next second reads its NEAREST sample, which
-            // can still predate a kick in the latter half of its own second
-            // (38-1 1:11: kick 70.8 s, the 1:11 tick read ~70.7 s); a kick
-            // early in its second keeps the next tick adjudicated
-            (tSecond === Math.floor(kickT) + 1 &&
-              kickT - Math.floor(kickT) >= 0.5) ||
+            // can still predate the kick (38-1 1:11: kick 70.8 s, the 1:11
+            // tick read ~70.7 s; codex 20-F15-07: a kick at 26.4 s with no
+            // sample until 27.8 s does the same) — no cutoff on the fraction
+            tSecond === Math.floor(kickT) + 1 ||
             tSecond === Math.floor(kickT + lock));
         probes.push({
           type: type as CrisisHpFactType,
