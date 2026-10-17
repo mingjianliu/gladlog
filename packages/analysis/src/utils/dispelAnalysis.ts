@@ -3810,7 +3810,7 @@ export function reconstructDispelSummary(
     for (const enemy of enemies) {
       const appliedTimes = new Map<
         string,
-        { ts: number; spellName: string }[]
+        { ts: number; spellName: string; srcUnitId: string }[]
       >();
       const removedTimes = new Map<string, number[]>();
 
@@ -3841,6 +3841,7 @@ export function reconstructDispelSummary(
             {
               ts: aura.timestamp,
               spellName: getEnglishSpellName(spellId, aura.spellName),
+              srcUnitId: aura.srcUnitId,
             },
           ]);
         } else if (
@@ -3856,10 +3857,11 @@ export function reconstructDispelSummary(
       for (const [spellId, applications] of appliedTimes) {
         const priority = getPriority(spellId, friends);
         const removals = removedTimes.get(spellId) ?? [];
-        /** the end of the last window emitted for this spell on this enemy */
-        let emittedEndMs: number | null = null;
+        /** the end and the source of the last window emitted for this spell
+         * on this enemy */
+        let emitted: { endMs: number; srcUnitId: string } | null = null;
 
-        for (const { ts: applyTs, spellName } of applications) {
+        for (const { ts: applyTs, spellName, srcUnitId } of applications) {
           // The window ends at the round's end (`roundEndMs` — the one the
           // uncleansed windows above stop at, F-C3). A round's units keep
           // the rows logged after its ending death, so a buff still up then
@@ -3877,13 +3879,22 @@ export function reconstructDispelSummary(
           const windowEndMs = Math.min(removalTs ?? combat.endTime, roundEnd);
           const durationSeconds = (windowEndMs - applyTs) / 1000;
           // F15 / fact1215 R8: an APPLIED inside a window already emitted for
-          // this spell, ending at the same removal, is that aura re-logged
+          // this spell by the same source, ending at the same removal, is
+          // that aura re-logged
           // (62fdbf2e 0:14: one Alter Time cast 0:13.35, re-APPLIED 0:14.88
           // during Mass Invisibility with no REMOVED — a second "unpurged
           // for 3s"; 105-1: Power Infusion 0:18 with its 0:21 re-log printed
           // as two windows of one buff). Only a window emitted inside the
           // round absorbs it (see below).
-          if (emittedEndMs !== null && windowEndMs === emittedEndMs) continue;
+          // the SAME source's aura: another caster's press ending at the
+          // same removal is a new application (codex 20-F15-08: two priests'
+          // Power Infusions, the second feasible, read as one)
+          if (
+            emitted !== null &&
+            windowEndMs === emitted.endMs &&
+            srcUnitId === emitted.srcUnitId
+          )
+            continue;
 
           if (durationSeconds < MISSED_PURGE_THRESHOLD_S) continue;
 
@@ -4040,7 +4051,8 @@ export function reconstructDispelSummary(
 
               // only a window that started in the round absorbs a re-log (one
               // opened before `combat.startTime` is not a line of the round)
-              if (applyTs >= combat.startTime) emittedEndMs = windowEndMs;
+              if (applyTs >= combat.startTime)
+                emitted = { endMs: windowEndMs, srcUnitId };
               (generalOpen
                 ? missedPurgeWindows
                 : scopedMissedPurgeWindows

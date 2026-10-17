@@ -155,8 +155,11 @@ function teamDrops(
     // span reads only its own samples; codex 20-F15-07: the grid fallback
     // printed a reading from after the control ended)
     const lo = hpTroughInEventSpan(mate, matchStartMs, fromS, toS);
+    // a span with no reading of its own measured nothing (codex 20-F15-08:
+    // it read "no teammate dropped 10% or more")
+    if (!lo) continue;
     measured++;
-    if (lo && h0 - lo.pct >= CONSEQ_DROP_MIN_PCT)
+    if (h0 - lo.pct >= CONSEQ_DROP_MIN_PCT)
       parts.push(
         `${label(mate.name)} ${Math.round(h0)}% → low ${Math.round(lo.pct)}% at ${fmtTime(lo.atSec)}`,
       );

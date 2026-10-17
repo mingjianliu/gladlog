@@ -88,6 +88,16 @@ function buildDefenseWindows(
 ): IDefenseWindow[] {
   const windows: IDefenseWindow[] = [];
   for (const enemy of enemies) {
+    // the log's source id for each source name on this unit — a player can
+    // be logged under two names (138e632d; codex 20-F15-08), the id is one
+    // (`saveAuraIntervals`' mapping)
+    const srcIdByName = new Map<string, string>();
+    for (const a of enemy.auraEvents ?? [])
+      if (a.destUnitId === enemy.id && a.srcUnitId && !srcIdByName.has(a.srcUnitName))
+        srcIdByName.set(a.srcUnitName, a.srcUnitId);
+    const isOwn = (srcUnitName: string) =>
+      (srcIdByName.get(srcUnitName) ?? null) === enemy.id ||
+      srcUnitName === enemy.name;
     for (const iv of buildAuraIntervals(enemy, combat)) {
       const verdict = mitigationVerdictOf(iv.spellId);
       // "never"(不构成真实阻碍)与 "unresolved"(裁定人未遇到过)都不出面。
@@ -96,8 +106,7 @@ function buildDefenseWindows(
       if (iv.inferredStart || iv.inferredEnd) continue;
       // F15 C1(2026-10-16 默认):签字表签的是施法者自己身上的那份;天赋共享墙
       // 给队友的副本(Flameshaper 黑曜鳞片 15%)低于墙门槛,不是这堵墙。
-      if (isAllyCopyWallId(iv.spellId) && iv.srcUnitName !== enemy.name)
-        continue;
+      if (isAllyCopyWallId(iv.spellId) && !isOwn(iv.srcUnitName)) continue;
       windows.push({
         spellId: iv.spellId,
         // 英文名 —— prompt 侧禁止中文技能名(spellNameZhLint)。

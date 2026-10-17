@@ -239,7 +239,24 @@ export function observedEffectEndSeconds(
       !iv.inferredStart &&
       iv.fromS < nextSameCastS,
   );
-  let best: { end: number; observed: boolean } | null = null;
+  const castMs = combat.startTime + castS * 1000;
+  const auraRowsOf = (destId: string) =>
+    (combat.units?.[destId]?.auraEvents ?? []).filter(
+      (a) =>
+        !!a.spellId &&
+        ids.has(a.spellId) &&
+        a.srcUnitId === caster.id &&
+        a.destUnitId === destId,
+    );
+  const refreshedAtCast = (destId: string): boolean =>
+    auraRowsOf(destId).some(
+      (a) =>
+        (a.logLine.event === LogEvent.SPELL_AURA_REFRESH ||
+          a.logLine.event === LogEvent.SPELL_AURA_APPLIED) &&
+        a.logLine.timestamp >= castMs - EFFECT_START_BEFORE_S * 1000 &&
+        a.logLine.timestamp <= castMs + EFFECT_START_AFTER_S * 1000,
+    );
+  let best: { end: number; observed: boolean; destId: string } | null = null;
   for (const dest of new Set(mine.map((m) => m.destId))) {
     const ivs = mine
       .filter((m) => m.destId === dest)
@@ -255,7 +272,10 @@ export function observedEffectEndSeconds(
     // open one it refreshed is its effect (519781fd: Malevolence up from
     // 1:11.95, the 1:21.50 press refreshed it, it ran to 1:47.96; the span
     // read the official 20 s, 1:21–1:41)
-    if (first < 0)
+    // Only with the log's word for it: this caster's REFRESH (or re-APPLIED)
+    // of one of the ids on this unit at the press (codex 20-F15-08: another
+    // target's older copy merely overlapping the press is not this press's)
+    if (first < 0 && refreshedAtCast(dest))
       first = ivs.findIndex(
         (iv) => iv.fromS < castS && iv.toS > castS + EFFECT_START_AFTER_S,
       );
@@ -270,15 +290,27 @@ export function observedEffectEndSeconds(
       }
     }
     if (best === null || chainEnd > best.end)
-      best = { end: chainEnd, observed };
+      best = { end: chainEnd, observed, destId: dest };
   }
   // F15 / fact1215 R8: the interval builder clamps a REMOVED logged after
   // the combat's end onto that end (`buildAuraIntervals` `rel`) and still
   // calls the end observed — a clamp is no observation (26bfd4f3: Kingsbane
   // removed 1:50.78, after the round; `4s left` at 1:42 was the round's end
   // minus now). The official duration stands.
+  // Read on the raw rows (codex 20-F15-08: an aura really removed at the
+  // combat's end is an observation): the chain ends on the clamp only when
+  // the log's own REMOVED of it came after the combat ended.
   const combatEndS = (combat.endTime - combat.startTime) / 1000;
-  if (best !== null && best.end >= combatEndS - 0.001) return null;
+  if (
+    best !== null &&
+    best.end >= combatEndS - 0.001 &&
+    auraRowsOf(best.destId).some(
+      (a) =>
+        a.logLine.event === LogEvent.SPELL_AURA_REMOVED &&
+        a.logLine.timestamp > combat.endTime,
+    )
+  )
+    return null;
   return best?.observed ? best.end : null;
 }
 
