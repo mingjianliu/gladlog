@@ -4,6 +4,7 @@
  * kick-eaten row, and what it says is the `[SILENCE]` line's duration.
  */
 import { buildFindingsPrompt } from "@gladlog/analysis/src/analysis/buildFindingsPrompt";
+import { renderedCcSpan } from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
 import { describe, expect, it } from "vitest";
 
 import { checkKickEatenKickSilence } from "../src/quality/promptQualityCheck";
@@ -69,6 +70,33 @@ describe("checkKickEatenKickSilence", () => {
         row("Shield of Virtue", ", kickSilence=1s"),
       ]),
     ).toEqual([]);
+  });
+
+  it("passes the round-end form `renderedCcSpan` prints for a silence the round's end cut (codex post-hoc U1)", () => {
+    expect(
+      checkKickEatenKickSilence([
+        ...UNITS,
+        silence(
+          "2:46",
+          "1(FMage)",
+          "Shield of Virtue",
+          renderedCcSpan({ durationSeconds: 1.5, stillOnAtRoundEnd: true }),
+        ),
+        row("Shield of Virtue", ", kickSilence=2s"),
+      ]),
+    ).toEqual([]);
+    expect(
+      checkKickEatenKickSilence([
+        ...UNITS,
+        silence(
+          "2:46",
+          "1(FMage)",
+          "Shield of Virtue",
+          renderedCcSpan({ durationSeconds: 1.5, stillOnAtRoundEnd: true }),
+        ),
+        row("Shield of Virtue", ", kickSilence=4s"),
+      ]),
+    ).toHaveLength(1);
   });
 
   it("flags a stated silence the timeline does not show, or shows with another duration", () => {

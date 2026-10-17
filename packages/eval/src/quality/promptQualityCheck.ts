@@ -3451,9 +3451,12 @@ export function checkKillAttemptBracketEnd(lines: string[]): string[] {
 }
 
 /** The target of a `[KILL WINDOW]` / `[VULNERABLE]` line of either view:
- *  `[…] a–b[ (Ns)] on <Spec> (<Name>): …`. */
+ *  `[…] a–b[ (Ns)] on <Spec> (<Name>): …`. A realm may carry its own
+ *  parentheses (`Target-Aggra(Português)-EU`) — one nested group is allowed,
+ *  or the line was skipped and both window gates below silently passed
+ *  (codex post-hoc review U1). */
 const KILL_WINDOW_TARGET =
-  /^\s*\[(?:KILL WINDOW|VULNERABLE)\] \d+:\d{2}–\d+:\d{2}(?: \(\d+s\))? on [^(]+ \(([^)]+)\):/;
+  /^\s*\[(?:KILL WINDOW|VULNERABLE)\] \d+:\d{2}–\d+:\d{2}(?: \(\d+s\))? on [^(]+ \(([^()]+(?:\([^()]*\)[^()]*)*)\):/;
 
 /**
  * Hard invariant (F17, user ruling 2026-10-11, option b): a Holy Priest in
@@ -5662,7 +5665,12 @@ export function checkKickEatenKickSilence(lines: string[]): string[] {
       !own.some(
         (sl) =>
           sl.rest.includes("trinket broke this silence") ||
-          new RegExp(`\\| ${reEscape(stated)}(?: \\||$)`).test(sl.rest),
+          // `renderedCcSpan`: `| 2s`, or `| still on them when the round
+          // ended, 2s in` for a silence the round's end cut (codex post-hoc
+          // review U1: the round-end form failed as a mismatch)
+          new RegExp(
+            `\\| (?:${reEscape(CC_STILL_ON_AT_ROUND_END)}, )?${reEscape(stated)}(?: in)?(?: \\||$)`,
+          ).test(sl.rest),
       )
     )
       failures.push(

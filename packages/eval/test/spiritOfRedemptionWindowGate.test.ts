@@ -85,6 +85,18 @@ describe("checkNoWindowAcrossSpiritOfRedemption", () => {
     expect(fails[2]).toContain("line 6: KILL ATTEMPTS 括号 0:52–1:12");
   });
 
+  it("a realm with its own parentheses is still read (codex post-hoc U1: `Aggra(Português)` skipped the line)", () => {
+    const paren = "Blessedxx-Aggra(Português)-EU";
+    const fails = checkNoWindowAcrossSpiritOfRedemption([
+      `  <unit id="1" name="Owner-Realm-US" spec="Holy Paladin" role="log owner">`,
+      `  <unit id="5" name="${paren}" spec="Holy Priest" role="enemy">`,
+      vulnerable("1:06–1:26", `Holy Priest (${paren})`),
+      ...GHOST_TICKS,
+    ]);
+    expect(fails).toHaveLength(1);
+    expect(fails[0]).toContain(`的目标 ${paren} 在其中 1:07`);
+  });
+
   it("no `:ghost` tick, or a target the roster does not resolve: nothing to read", () => {
     expect(
       checkNoWindowAcrossSpiritOfRedemption([
