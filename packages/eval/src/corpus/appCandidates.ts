@@ -20,16 +20,27 @@
 import {
   type CandidateEvent,
   extractCandidateFindings,
-  parseRawStreams,
+  type parseRawStreams,
 } from "@gladlog/analysis";
+import {
+  parseRawStreamsAbsolute,
+  type RawStreamsAbsolute,
+  rawStreamsForRound,
+} from "@gladlog/analysis/src/utils/rawStreams";
 
 type LegacyCombat = Parameters<typeof extractCandidateFindings>[0];
 
 let lastKey: { text: string; startMs: number; durS: number } | null = null;
 let lastStreams: ReturnType<typeof parseRawStreams> | null = null;
+let lastFileText: string | null = null;
+let lastFile: RawStreamsAbsolute | null = null;
 
 /** The round's raw streams, parsed once per (text, round): every owner of the
- * same round reuses them. */
+ * same round reuses them. The file pass itself is made once per text
+ * (`parseRawStreamsAbsolute`) and each round cut from it — a Solo Shuffle's
+ * six rounds used to re-read the whole file six times (2026-10-17,
+ * profilePipeline.ts: 29 % of a 12 MB shuffle's wall clock). Same result as
+ * `parseRawStreams(rawText, startMs, durS)`, byte for byte. */
 export function roundRawStreams(
   combat: LegacyCombat,
   rawText: string | null | undefined,
@@ -46,7 +57,11 @@ export function roundRawStreams(
     lastKey.durS === durS
   )
     return lastStreams;
-  lastStreams = parseRawStreams(rawText, startMs, durS);
+  if (lastFileText !== rawText || !lastFile) {
+    lastFile = parseRawStreamsAbsolute(rawText);
+    lastFileText = rawText;
+  }
+  lastStreams = rawStreamsForRound(lastFile, startMs, durS);
   lastKey = { text: rawText, startMs, durS };
   return lastStreams;
 }
