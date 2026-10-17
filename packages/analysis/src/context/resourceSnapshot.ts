@@ -23,6 +23,7 @@ import {
   specToString,
 } from "../utils/cooldowns";
 import { positionalWallReach } from "../utils/deathOutcomeAnalysis";
+import { isStunCcInstance } from "../utils/drAnalysis";
 import { IEnemyCDTimeline } from "../utils/enemyCDs";
 import { sumIncomingPressure } from "../utils/incomingPressure";
 import type { CastFailedEvent } from "../utils/rawStreams";
@@ -994,7 +995,7 @@ export function buildResourceSnapshot({
       const remaining = resCcRemainingText(
         activeCC.atSeconds + activeCC.durationSeconds - timeSeconds,
       );
-      const isStun = activeCC.drInfo?.category === "Stun";
+      const isStun = isStunCcInstance(activeCC);
       const stunTag = isStun ? "[stun]" : "";
       const trinketUsedNow =
         summary?.trinketUseTimes.some((t) => Math.abs(t - timeSeconds) <= 1) ??

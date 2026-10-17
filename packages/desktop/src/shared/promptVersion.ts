@@ -143,5 +143,13 @@
  *  while 9 physical hits landed). 605 files: no candidate added or removed;
  *  4,426 [ENEMY DEF] lines change label (4,341 magic, 85 physical); new gate
  *  checkSchoolLimitedImmuneLabel 906 → 0.
+ *  v410 (2026-10-17, F15 batch 7 — fact1215 C9, facts only): "is this a stun"
+ *  reads the aura's official mechanic as well as its DR category
+ *  (`isStunDrAura` / `isStunCcInstance`): Infernal Awakening 22703 is a stun
+ *  (mechanic 12) with no DR family, and KILL ATTEMPTS said "(no stun)" over it
+ *  and the [RES] `cc:` slot gave it no [stun] (0b86016f, 15b4d4ec). The two
+ *  readers that hand-tested `"Stun"` (resourceSnapshot, killAttempts) read the
+ *  predicate. 605 files: no candidate added or removed; 232 contexts change —
+ *  KILL ATTEMPTS gains Infernal Awakening stun openers, [RES] `cc:` tags them.
  */
-export const PROMPT_VERSION = 409;
+export const PROMPT_VERSION = 410;

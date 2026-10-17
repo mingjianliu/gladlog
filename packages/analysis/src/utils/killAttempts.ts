@@ -89,7 +89,12 @@ import {
   type ISpiritOfRedemptionInterval,
   PRESSED_SPIRIT_OF_REDEMPTION_AURA_IDS,
 } from "./combatStates";
-import { analyzeOutgoingCCChains, DRLevel, drResetMsAt } from "./drAnalysis";
+import {
+  analyzeOutgoingCCChains,
+  DRLevel,
+  drResetMsAt,
+  isStunCcInstance,
+} from "./drAnalysis";
 import { reconstructEnemyCDTimeline } from "./enemyCDs";
 import {
   effectSaves,
@@ -530,7 +535,7 @@ export function extractKillAttempts(
   for (const chain of analyzeOutgoingCCChains(friendlies, enemies, combat)) {
     if (!enemyByName.has(chain.targetName)) continue;
     for (const app of chain.applications) {
-      if (app.drInfo.category !== "Stun") continue;
+      if (!isStunCcInstance(app)) continue;
       if (app.drInfo.level !== "Full" && app.drInfo.level !== "50%") continue;
       const arr = stunsByTarget.get(chain.targetName) ?? [];
       arr.push({

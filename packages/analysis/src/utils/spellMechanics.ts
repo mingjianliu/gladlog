@@ -33,6 +33,9 @@ const CONFUSE_MECHANICS = new Set([2]); // disoriented
 
 /** SpellMechanic SNARED: a movement slow — the carrier can still move. */
 export const SNARED_MECHANIC = 11;
+/** DB2 SpellMechanic 12, "stunned" (F15 C9: a stun with no DR family —
+ * Infernal Awakening 22703 — is a stun by its mechanic). */
+export const STUNNED_MECHANIC = 12;
 
 /** The CC's mechanic (SpellMechanic id), or undefined when DB2 cannot say
  * (Holy Word: Chastise 88625: its aura is an incapacitate or a stun

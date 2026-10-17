@@ -38,6 +38,7 @@ import {
 } from "./auraIntervals";
 import { specToString } from "./cooldowns";
 import { logIsFrom } from "./logEra";
+import { ccMechanicOf, STUNNED_MECHANIC } from "./spellMechanics";
 import { summonOwnerById } from "./summonOwner";
 
 // ── DR category constants ─────────────────────────────────────────────────────
@@ -321,16 +322,27 @@ export const STUN_DR_CATEGORY = SCM_CATEGORY_LABELS.stun;
  * An aura with no official DR category is not a stun here: the conservative
  * direction, as below. */
 export function isStunDrAura(auraSpellId: string): boolean {
-  return getDRCategory(auraSpellId) === STUN_DR_CATEGORY;
+  return (
+    getDRCategory(auraSpellId) === STUN_DR_CATEGORY ||
+    // F15 / fact1215 C9 (2026-10-17): a stun with no DR family is a stun by
+    // its official mechanic (Infernal Awakening 22703, mechanic 12 — the one
+    // CC aura of the catalog with "stunned" and no stun DR)
+    ccMechanicOf(auraSpellId) === STUNNED_MECHANIC
+  );
 }
 
-/** True iff `cc`'s DR category is stun. Conservative on missing/unknown data (no
+/** True iff `cc` is a stun: its DR category, or its aura's official mechanic
+ * (`isStunDrAura`'s rule, F15 C9). Conservative on missing/unknown data (no
  * `drInfo`, or a category outside the known set): treated as NOT stun, the same
  * false-accusation-averse direction the rest of this CC-gating logic uses. */
 export function isStunCcInstance(cc: {
   drInfo?: { category: string } | null;
+  spellId?: string;
 }): boolean {
-  return cc.drInfo?.category === STUN_DR_CATEGORY;
+  return (
+    cc.drInfo?.category === STUN_DR_CATEGORY ||
+    (cc.spellId !== undefined && ccMechanicOf(cc.spellId) === STUNNED_MECHANIC)
+  );
 }
 
 interface CCEntry {
