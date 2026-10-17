@@ -240,12 +240,16 @@ export function observedEffectEndSeconds(
       iv.fromS < nextSameCastS,
   );
   const castMs = combat.startTime + castS * 1000;
-  const auraRowsOf = (destId: string) =>
+  const auraRowsOf = (destId: string, orNoSource = false) =>
     (combat.units?.[destId]?.auraEvents ?? []).filter(
       (a) =>
         !!a.spellId &&
         ids.has(a.spellId) &&
-        a.srcUnitId === caster.id &&
+        (a.srcUnitId === caster.id ||
+          // a REMOVED written with no source closes the caster's interval in
+          // the builder too (its source fallback)
+          (orNoSource &&
+            (!a.srcUnitId || a.srcUnitId === "0000000000000000"))) &&
         a.destUnitId === destId,
     );
   const refreshedAtCast = (destId: string): boolean =>
@@ -256,7 +260,12 @@ export function observedEffectEndSeconds(
         a.logLine.timestamp >= castMs - EFFECT_START_BEFORE_S * 1000 &&
         a.logLine.timestamp <= castMs + EFFECT_START_AFTER_S * 1000,
     );
-  let best: { end: number; observed: boolean; destId: string } | null = null;
+  let best: {
+    end: number;
+    observed: boolean;
+    destId: string;
+    lastFromS: number;
+  } | null = null;
   for (const dest of new Set(mine.map((m) => m.destId))) {
     const ivs = mine
       .filter((m) => m.destId === dest)
@@ -282,15 +291,17 @@ export function observedEffectEndSeconds(
     if (first < 0) continue;
     let chainEnd = ivs[first]!.toS;
     let observed = !ivs[first]!.inferredEnd;
+    let lastFromS = ivs[first]!.fromS;
     for (const iv of ivs.slice(first + 1)) {
       if (iv.fromS > chainEnd + EFFECT_CHAIN_GAP_S) break;
       if (iv.toS > chainEnd) {
         chainEnd = iv.toS;
         observed = !iv.inferredEnd;
+        lastFromS = iv.fromS;
       }
     }
     if (best === null || chainEnd > best.end)
-      best = { end: chainEnd, observed, destId: dest };
+      best = { end: chainEnd, observed, destId: dest, lastFromS };
   }
   // F15 / fact1215 R8: the interval builder clamps a REMOVED logged after
   // the combat's end onto that end (`buildAuraIntervals` `rel`) and still
@@ -301,16 +312,22 @@ export function observedEffectEndSeconds(
   // combat's end is an observation): the chain ends on the clamp only when
   // the log's own REMOVED of it came after the combat ended.
   const combatEndS = (combat.endTime - combat.startTime) / 1000;
-  if (
-    best !== null &&
-    best.end >= combatEndS - 0.001 &&
-    auraRowsOf(best.destId).some(
-      (a) =>
-        a.logLine.event === LogEvent.SPELL_AURA_REMOVED &&
-        a.logLine.timestamp > combat.endTime,
-    )
-  )
-    return null;
+  // The REMOVED that closed the chain's last interval: the first one at or
+  // after that interval's start, from the caster or written with no source
+  // (codex 20-F15-09: a duplicate REMOVED after a real one at the end, and a
+  // source-less REMOVED the builder pairs, both read wrong by "any later
+  // REMOVED").
+  if (best !== null && best.end >= combatEndS - 0.001) {
+    const fromMs = combat.startTime + best.lastFromS * 1000;
+    const closing = auraRowsOf(best.destId, true)
+      .filter(
+        (a) =>
+          a.logLine.event === LogEvent.SPELL_AURA_REMOVED &&
+          a.logLine.timestamp >= fromMs,
+      )
+      .sort((x, y) => x.logLine.timestamp - y.logLine.timestamp)[0];
+    if (closing && closing.logLine.timestamp > combat.endTime) return null;
+  }
   return best?.observed ? best.end : null;
 }
 

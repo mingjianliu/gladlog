@@ -3857,9 +3857,9 @@ export function reconstructDispelSummary(
       for (const [spellId, applications] of appliedTimes) {
         const priority = getPriority(spellId, friends);
         const removals = removedTimes.get(spellId) ?? [];
-        /** the end and the source of the last window emitted for this spell
-         * on this enemy */
-        let emitted: { endMs: number; srcUnitId: string } | null = null;
+        /** per source: the end of the last window emitted for this spell on
+         * this enemy (codex 20-F15-09: two casters' re-logs interleave) */
+        const emittedEndBySrc = new Map<string, number>();
 
         for (const { ts: applyTs, spellName, srcUnitId } of applications) {
           // The window ends at the round's end (`roundEndMs` — the one the
@@ -3889,12 +3889,7 @@ export function reconstructDispelSummary(
           // the SAME source's aura: another caster's press ending at the
           // same removal is a new application (codex 20-F15-08: two priests'
           // Power Infusions, the second feasible, read as one)
-          if (
-            emitted !== null &&
-            windowEndMs === emitted.endMs &&
-            srcUnitId === emitted.srcUnitId
-          )
-            continue;
+          if (emittedEndBySrc.get(srcUnitId) === windowEndMs) continue;
 
           if (durationSeconds < MISSED_PURGE_THRESHOLD_S) continue;
 
@@ -4052,7 +4047,7 @@ export function reconstructDispelSummary(
               // only a window that started in the round absorbs a re-log (one
               // opened before `combat.startTime` is not a line of the round)
               if (applyTs >= combat.startTime)
-                emitted = { endMs: windowEndMs, srcUnitId };
+                emittedEndBySrc.set(srcUnitId, windowEndMs);
               (generalOpen
                 ? missedPurgeWindows
                 : scopedMissedPurgeWindows

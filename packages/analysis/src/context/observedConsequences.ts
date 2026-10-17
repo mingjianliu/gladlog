@@ -144,6 +144,7 @@ function teamDrops(
   const toSec = Math.floor(toS);
   const parts: string[] = [];
   let measured = 0;
+  let unmeasured = 0;
   for (const mate of mates) {
     const hp = mateHpAcross(mate, matchStartMs, fromSec, toSec);
     if (!hp) continue;
@@ -157,13 +158,20 @@ function teamDrops(
     const lo = hpTroughInEventSpan(mate, matchStartMs, fromS, toS);
     // a span with no reading of its own measured nothing (codex 20-F15-08:
     // it read "no teammate dropped 10% or more")
-    if (!lo) continue;
+    if (!lo) {
+      unmeasured++;
+      continue;
+    }
     measured++;
     if (h0 - lo.pct >= CONSEQ_DROP_MIN_PCT)
       parts.push(
         `${label(mate.name)} ${Math.round(h0)}% → low ${Math.round(lo.pct)}% at ${fmtTime(lo.atSec)}`,
       );
   }
+  // "no teammate dropped" is a claim about every teammate: with one of them
+  // unread inside the span and no drop seen, nothing is claimed (codex
+  // 20-F15-09 — a measured drop is still printed)
+  if (unmeasured > 0 && parts.length === 0) measured = 0;
   return { parts, measured };
 }
 
