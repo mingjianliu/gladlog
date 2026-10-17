@@ -19,6 +19,7 @@ import {
 import {
   chargesAvailableAt,
   hpTroughInEventSpan,
+  hpTroughInWindow,
   isHealerSpec,
   specToString,
   unitCooldownOf,
@@ -119,32 +120,32 @@ export interface IContestedSegment extends ISlackSegment {
   ownerHealing: number;
 }
 
-/** Lowest friendly HP% over the whole seconds of [fromSeconds, toSeconds),
- * sampled with `getHpPercentAtTime` — the same grid the slack / contested band
- * predicates sweep, so the number can never fall below the band the section
- * header promises. The segment is [from, to): toSeconds is the first second
- * that FAILED the band predicate — sampling it would report a min below the
- * floor. 100 when no friend has a reading. Shared by `[SLACK]` and
- * `[CONTESTED]`. */
+/** Lowest friendly HP% inside the segment [fromSeconds, toSeconds) — the
+ * true minimum the log shows (`hpTroughInWindow` over the segment's
+ * displayed seconds; user ruling 2026-10-17, F15: 「改成真最低」). The
+ * segment itself is still the grid band's (`isSlackSecond` / the contested
+ * band read the whole-second ticks), so this number can sit below the band —
+ * the legend says so (`SLACK_TEAM_MIN_LEGEND`). toSeconds is the first second
+ * that FAILED the band predicate and is not read. 100 when no friend has a
+ * reading. Shared by `[SLACK]` and `[CONTESTED]`. */
 export function teamMinHpPctOver(
   friends: ICombatUnit[],
   fromSeconds: number,
   toSeconds: number,
   matchStartMs: number,
 ): number {
-  let min = 100;
-  let found = false;
-  for (const f of friends) {
-    for (let t = fromSeconds; t < toSeconds; t++) {
-      const hp = getHpPercentAtTime(f, t, matchStartMs);
-      if (hp !== null && (!found || hp < min)) {
-        min = hp;
-        found = true;
-      }
+  let min: number | null = null;
+  if (toSeconds > fromSeconds)
+    for (const f of friends) {
+      const t = hpTroughInWindow(f, matchStartMs, fromSeconds, toSeconds - 1);
+      if (t && (min === null || t.pct < min)) min = t.pct;
     }
-  }
-  return Math.round(found ? min : 100);
+  return Math.round(min ?? 100);
 }
+
+/** The `[SLACK]` / `[CONTESTED]` legend for their `team min HP` (F15). */
+export const SLACK_TEAM_MIN_LEGEND =
+  "  `team min HP N%` on a slack or contested line below = the lowest HP any of your team had inside that span, the true minimum the log shows; the span itself is judged on the whole-second [STATE] readings (team at or above the band at every one of them), so N can sit below the band.";
 
 type CCInterval = ReadonlyArray<{ atSeconds: number; durationSeconds: number }>;
 
@@ -1130,12 +1131,17 @@ export function formatHealerOffenseForContext(
   const idleSlack = slackSegments
     .filter((s) => s.idle)
     .reduce((s, seg) => s + seg.durationSeconds, 0);
+  let teamMinLegendShown = false;
   if (slackSegments.length > 0) {
     lines.push(
       // The gate is rendered FROM the constant the sweep uses, so the claim
       // cannot drift from `isSlackSecond` (shared-predicate rule).
       `  Slack time (team ≥${SLACK_TEAM_HP_THRESHOLD}% HP, no enemy offensive CDs active, you un-CC-d): ${totalSlack}s across ${slackSegments.length} segment(s); ${idleSlack}s with zero offensive output.`,
     );
+    if (idleSegs.length > 0) {
+      lines.push(SLACK_TEAM_MIN_LEGEND);
+      teamMinLegendShown = true;
+    }
     for (const seg of idleSegs) {
       lines.push(
         `  [SLACK] ${fmtTime(seg.fromSeconds)}–${fmtTime(seg.toSeconds)} (${seg.durationSeconds}s, team min HP ${seg.teamMinHpPct}%): no damage, no CC, no purge, no kick.`,
@@ -1244,6 +1250,8 @@ export function formatHealerOffenseForContext(
     );
   }
 
+  if (summary.contestedTradeFacts.length > 0 && !teamMinLegendShown)
+    lines.push(SLACK_TEAM_MIN_LEGEND);
   for (const f of summary.contestedTradeFacts)
     lines.push(formatContestedTradeLine(f));
 

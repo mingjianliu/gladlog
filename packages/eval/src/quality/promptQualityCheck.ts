@@ -181,8 +181,8 @@ import {
   isTickBelowTrough,
   PRESS_HP_LINE_TAGS,
   PRESSURE_WINDOWS_TOP_N,
-  sharesChargePool,
   REACTION_WINDOW_S,
+  sharesChargePool,
 } from "@gladlog/analysis/src/utils/cooldowns";
 import { UNPURGED_FOR_RE_SRC } from "@gladlog/analysis/src/utils/dispelAnalysis";
 import {
@@ -6455,6 +6455,11 @@ export interface CrisisHpStateProbe {
   /** whether a same-second [STATE] line carries this unit at all (any
    * token, "ghost" included) — `checkCrisisStateTickPresent` */
   stateSeen: boolean;
+  /** a kick-eaten trough on the lockout's first (or the next) or last
+   * rendered second: that second's tick can read a sample from before the
+   * kick or after the lock (user ruling 2026-10-17, F15: an event span reads only its own
+   * samples), so it says nothing about the trough */
+  spanEdge?: true;
 }
 
 /**
@@ -6500,8 +6505,24 @@ export function crisisHpStateProbes(lines: string[]): CrisisHpStateProbe[] {
         const unitId = idByName.get(unitName) ?? null;
         const tick =
           unitId === null ? undefined : stateAt.get(tSecond)?.get(unitId);
+        // the lockout's own edges (kick-eaten: `t` = the kick, `lockout` = s)
+        const kickT = Number(f["t"]);
+        const lock = Number(f["lockout"]);
+        const spanEdge =
+          type === "kick-eaten" &&
+          Number.isFinite(kickT) &&
+          Number.isFinite(lock) &&
+          (tSecond === Math.floor(kickT) ||
+            // the tick of the next second reads its NEAREST sample, which
+            // can still predate a kick in the latter half of its own second
+            // (38-1 1:11: kick 70.8 s, the 1:11 tick read ~70.7 s); a kick
+            // early in its second keeps the next tick adjudicated
+            (tSecond === Math.floor(kickT) + 1 &&
+              kickT - Math.floor(kickT) >= 0.5) ||
+            tSecond === Math.floor(kickT + lock));
         probes.push({
           type: type as CrisisHpFactType,
+          ...(spanEdge ? { spanEdge: true as const } : {}),
           trough: keys.trough === true,
           lineIndex: i,
           tSecond,
@@ -6724,7 +6745,7 @@ export function crisisHpProbeMismatch(p: CrisisHpStateProbe): boolean {
   if (p.stateHp === null) return false;
   if (p.stateHp === "dead") return true;
   return p.trough
-    ? isTickBelowTrough(p.stateHp, p.factHp)
+    ? !p.spanEdge && isTickBelowTrough(p.stateHp, p.factHp)
     : p.stateHp !== p.factHp;
 }
 

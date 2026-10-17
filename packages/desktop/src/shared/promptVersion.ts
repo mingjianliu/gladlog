@@ -105,5 +105,23 @@
  *  disarm / silence with no `out of` 356 → 0 of 7,966, trinket credited after a
  *  logged break / dispel 15 → 0 of 73; KILL ATTEMPTS `target trinketed out`
  *  11 → 206 lines.
+ *  v407 (2026-10-17, F15 batch 4 — user rulings 2026-10-17 「只读事件开始之后」 and
+ *  「改成真最低」, 605 preview approved 「接受」): an event span's minimum reads
+ *  only what happened inside it — `hpTroughInWindow`'s span mode counts a tick
+ *  only when the sample it read lies inside the span (kick-eaten ourLow /
+ *  theirLow, [CONSEQ], missed-sync-window enemyMinHpPct, [KILL WINDOW] team
+ *  min; 62fdbf2e `theirLowPct=37` was the 1:51 tick read 0.5 s before the kick,
+ *  the in-lockout low 43 %). STAYED IN (a burst span whose line pairs its
+ *  minimum with the start second's tick) is left as it was (predicate-index
+ *  NYU). [SLACK] / [CONTESTED] `team min HP` is the true minimum inside the
+ *  span (`teamMinHpPctOver` → `hpTroughInWindow`), with a legend line saying
+ *  the span is judged on the whole-second readings. `checkCrisisHpStateConsistency`
+ *  does not adjudicate a kick-eaten trough on the lockout's edge seconds. 605
+ *  files: kick-eaten −9 (12 rows leave — their only ≤ 40 % low was read before
+ *  the kick — 3 kicks of the same rounds take the capped slots), 66 kick-eaten
+ *  and 68 msw rows' HP facts move, [CONSEQ] 250 / [KILL WINDOW] 232 lines;
+ *  troughFactScan: [SLACK] / [CONTESTED] team min above the log 502 → 0 of 919,
+ *  kick-eaten lows below every in-lockout reading 70 → 12 of 790 (the 12 are
+ *  the printed t / lockout rounding at the lock's last instant).
  */
-export const PROMPT_VERSION = 406;
+export const PROMPT_VERSION = 407;

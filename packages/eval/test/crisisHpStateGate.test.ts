@@ -149,6 +149,24 @@ describe("checkCrisisHpStateConsistency — a trough fact is not a point reading
     ).toEqual([]);
   });
 
+  it("kick-eaten: on the lockout's edge seconds the tick may predate the kick (user ruling 2026-10-17) — not adjudicated; inside the lockout it still is", () => {
+    // kick at 26.8 s, lockout 3 s: the 0:27 tick can read a sample from
+    // before the kick (38-1 shape), so a low above it is no contradiction
+    const late = (pct: string, at: string) =>
+      kickEaten(pct, at).replace(/26\.4/g, "26.8");
+    expect(
+      checkCrisisHpStateConsistency([...ROSTER, STATE_27, late("40", "27")]),
+    ).toEqual([]);
+    // the same low on a second strictly inside the lockout stays red
+    expect(
+      checkCrisisHpStateConsistency([
+        ...ROSTER,
+        STATE_27.replace("0:27", "0:28"),
+        late("40", "28"),
+      ]),
+    ).toHaveLength(1);
+  });
+
   it("kick-eaten: a tick below the low → red; a `dead` tick → red", () => {
     const fails = checkCrisisHpStateConsistency([
       ...ROSTER,

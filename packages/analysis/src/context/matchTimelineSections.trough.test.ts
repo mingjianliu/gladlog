@@ -333,7 +333,7 @@ describe("hpTroughInWindow — the true minimum, on the grid sampler's own valid
     expect(hpTroughInWindow(over as never, T0, 10, 20)!.pct).toBe(100);
   });
 
-  it("`span`: only the samples of the event's own span are read; the window's ticks are read regardless", () => {
+  it("`span`: only the samples of the event's own span are read — a tick counts only when the sample it read is inside the span (user ruling 2026-10-17)", () => {
     const u = friend(
       { 0: 90, 13: 50 },
       [],
@@ -349,13 +349,14 @@ describe("hpTroughInWindow — the true minimum, on the grid sampler's own valid
     ).toMatchObject({ pct: 30, atSec: 12 });
     // without it, the displayed seconds: both edge dips are inside
     expect(hpTroughInWindow(u as never, T0, 10, 20)!.pct).toBe(4);
-    // a span with nothing lower than the ticks → the lowest tick
+    // a span with nothing lower than the ticks → the lowest tick whose
+    // sample lies inside it (the 0:13 tick read 13.0 s, before 14.1 s)
     expect(
       hpTroughInWindow(u as never, T0, 10, 20, undefined, {
         fromMs: T0 + 14_100,
         toMs: T0 + 20_400,
       }),
-    ).toMatchObject({ pct: 50, atSec: 13 });
+    ).toMatchObject({ pct: 50, atSec: 15 });
   });
 
   it("`span` may open before the first tick: the fraction of a second before `fromSec` is read, its tick is not", () => {

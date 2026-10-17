@@ -43,7 +43,11 @@ const unmapped: string[] = [];
 const EXAMPLES = exIdx > 0 ? Number(process.argv[exIdx + 1]) : 5;
 
 const secOf = (m: string, s: string) => Number(m) * 60 + Number(s);
-type Check = "dmgSpikeLow" | "killWindowTeamMin";
+type Check =
+  | "dmgSpikeLow"
+  | "killWindowTeamMin"
+  | "slackTeamMin"
+  | "kickLowInSpan";
 const checked = new Map<Check, number>();
 const bad = new Map<Check, string[]>();
 const count = (c: Check) => checked.set(c, (checked.get(c) ?? 0) + 1);
@@ -112,6 +116,9 @@ files.sort((a, b) =>
 const SPIKE =
   /^(\d+):(\d{2})–(\d+):(\d{2})\s+\[DMG SPIKE\]\s+(\d+)\(.*low (\d+)% @(\d+):(\d{2})/;
 const KW = /\[KILL WINDOW\] (\d+):(\d{2})–(\d+):(\d{2}) .*team min HP (\d+)%/;
+const SLACK =
+  /^ {2}\[(SLACK|CONTESTED)\] (\d+):(\d{2})–(\d+):(\d{2}) \(\d+s, team min HP (\d+)%\)/;
+const KICK_ROW = /type=kick-eaten t=\S+ units=\S+ facts=\{(.*)\}/;
 
 let cacheKey = "";
 let cacheItems: GladMatch[] = [];
@@ -121,7 +128,19 @@ for (const f of files) {
   // a per-line test below; this only skips contexts with neither family
   // (codex 20-F15-02: an anchored test on the flattened text skipped 6,213
   // of 9,443 lows)
-  if (!text.includes("[DMG SPIKE]") && !text.includes("team min HP")) continue;
+  const findingsPath = join(dir, f.shard, "findings", f.name);
+  let menu = "";
+  try {
+    menu = readFileSync(findingsPath, "utf8");
+  } catch {
+    menu = "";
+  }
+  if (
+    !text.includes("[DMG SPIKE]") &&
+    !text.includes("team min HP") &&
+    !menu.includes("type=kick-eaten")
+  )
+    continue;
   const [archive] = text.split("\n", 1);
   if (!archive) continue;
   const key = `${f.shard}:${archive}`;
@@ -180,6 +199,23 @@ for (const f of files) {
           `${where} ${s[1]}:${s[2]}–${s[3]}:${s[4]} ${unit.name}: printed ${printed}%, log ${m.pct}% at +${((m.ms - start) / 1000).toFixed(3)}s`,
         );
     }
+    const sl = SLACK.exec(l);
+    if (sl) {
+      count("slackTeamMin");
+      const from = secOf(sl[2]!, sl[3]!);
+      const to = secOf(sl[4]!, sl[5]!);
+      const printed = Number(sl[6]);
+      let low: { pct: number; ms: number; name: string } | null = null;
+      for (const u of friends) {
+        const m = minPct(u, start, start + from * 1000, start + to * 1000);
+        if (m && (!low || m.pct < low.pct)) low = { ...m, name: u.name };
+      }
+      if (low && low.pct < printed)
+        fail(
+          "slackTeamMin",
+          `${where} [${sl[1]}] ${sl[2]}:${sl[3]}–${sl[4]}:${sl[5]}: printed ${printed}%, log ${low.pct}% (${low.name})`,
+        );
+    }
     const k = KW.exec(l);
     if (k) {
       count("killWindowTeamMin");
@@ -198,10 +234,51 @@ for (const f of files) {
         );
     }
   }
+  // kick-eaten ourLow / theirLow: a trough of the lockout's own span — no
+  // reading from before the kick (user ruling 2026-10-17); the printed value
+  // must not sit below every reading inside [kick, kick + lockout]
+  for (const row of menu.split("\n")) {
+    const km = KICK_ROW.exec(row);
+    if (!km) continue;
+    const facts = new Map(
+      km[1]!.split(", ").map((kv: string) => {
+        const i = kv.indexOf("=");
+        return [kv.slice(0, i), kv.slice(i + 1)] as const;
+      }),
+    );
+    const t = Number(facts.get("t"));
+    const lock = Number(facts.get("lockout"));
+    if (!Number.isFinite(t) || !Number.isFinite(lock)) continue;
+    for (const side of ["our", "their"]) {
+      const unitName = facts.get(`${side}LowUnit`);
+      const pct = Number(facts.get(`${side}LowPct`));
+      if (!unitName || !Number.isFinite(pct)) continue;
+      const unit = byName.get(unitName);
+      if (!unit) continue;
+      count("kickLowInSpan");
+      // `t` is printed to 0.1 s (fmtFactNum): ±50 ms covers its rounding
+      const m = minPct(
+        unit,
+        start,
+        start + Math.round((t - 0.05) * 1000),
+        start + Math.round((t + lock + 0.05) * 1000) + 1,
+      );
+      if (m && pct < m.pct)
+        fail(
+          "kickLowInSpan",
+          `${where} kick t=${t} ${side}Low ${unitName}: printed ${pct}%, lowest inside the lockout ${m.pct}%`,
+        );
+    }
+  }
 }
 
 console.log(`contexts read: ${contexts}`);
-for (const c of ["dmgSpikeLow", "killWindowTeamMin"] as Check[]) {
+for (const c of [
+  "dmgSpikeLow",
+  "killWindowTeamMin",
+  "slackTeamMin",
+  "kickLowInSpan",
+] as Check[]) {
   const b = bad.get(c) ?? [];
   console.log(`${c}: lines ${checked.get(c) ?? 0}, below-printed ${b.length}`);
   for (const s of b.slice(0, EXAMPLES)) console.log(`    ${s}`);

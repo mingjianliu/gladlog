@@ -1751,8 +1751,9 @@ export function gridHpMinInWindow(
  * are the ones from `fromMs` to `toMs`, so a dip in the fraction of a second
  * before a kick landed is not reported as having happened inside its
  * lockout. `[fromSec, toSec]` then says only which TICKS belong to the
- * window, and they are read regardless (they are what the page prints for
- * it). Pass the seconds the page PRINTS for the event — the first tick is the
+ * window, and a tick counts only when the sample it read lies inside the
+ * span (user ruling 2026-10-17 — before it the ticks were read regardless,
+ * and the span's first tick could report a reading from before the event). Pass the seconds the page PRINTS for the event — the first tick is the
  * tick of the second the span opens in (kick-eaten: `floor` of the lockout's
  * start; STAYED IN: the line's `fmtTime(from)`), never the first whole second
  * inside it: until 2026-10-11 STAYED IN passed `ceil(from)`, and the
@@ -1771,13 +1772,38 @@ export function hpTroughInWindow(
   fromSec: number,
   toSec: number,
   skipSec?: (sec: number) => boolean,
-  span?: { fromMs: number; toMs: number },
+  span?: {
+    fromMs: number;
+    toMs: number;
+    /** read the window's ticks whatever instant they sampled (the rule
+     * before 2026-10-17) — STAYED IN, whose line pairs its minimum with the
+     * start second's tick (`checkStayedInHpConsistency`, 2026-10-11); see
+     * predicate-index "Not yet unified" */
+    ticksRegardless?: true;
+  },
 ): { pct: number; atSec: number; atMs: number } | null {
   let best: { pct: number; atSec: number; atMs: number } | null = null;
-  const grid = gridHpMinInWindow(unit, matchStartMs, fromSec, toSec, skipSec);
-  if (grid !== null) {
-    const tickMs = matchStartMs + grid.atSec * 1000;
-    best = { ...grid, atMs: gridHpSample(unit, tickMs)?.sampleMs ?? tickMs };
+  if (span && !span.ticksRegardless) {
+    // An event's own span reads only what happened inside it (user ruling
+    // 2026-10-17, F15: 「只读事件开始之后」): a tick whose sample was taken
+    // before the event began — or after it ended — is not a reading of the
+    // span (62fdbf2e: the 1:51.000 tick read 1:51.339, the kick landed
+    // 1:51.857; `theirLowPct=37` over an in-lockout low of 43 %).
+    for (let s = fromSec; s <= toSec; s++) {
+      if (isDeadAtRenderSecond(unit, matchStartMs, s)) break;
+      if (skipSec?.(s)) continue;
+      const smp = gridHpSample(unit, matchStartMs + s * 1000);
+      if (smp === null) continue;
+      if (smp.sampleMs < span.fromMs || smp.sampleMs > span.toMs) continue;
+      if (best === null || smp.pct < best.pct)
+        best = { pct: smp.pct, atSec: s, atMs: smp.sampleMs };
+    }
+  } else {
+    const grid = gridHpMinInWindow(unit, matchStartMs, fromSec, toSec, skipSec);
+    if (grid !== null) {
+      const tickMs = matchStartMs + grid.atSec * 1000;
+      best = { ...grid, atMs: gridHpSample(unit, tickMs)?.sampleMs ?? tickMs };
+    }
   }
 
   // where the samples start: the span's own start, else the first second

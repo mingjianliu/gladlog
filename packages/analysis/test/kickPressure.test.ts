@@ -205,7 +205,7 @@ describe("kickPressureFor", () => {
       friendlyMage({ 0: 100, 72: low, 76: 80 }),
       enemyRet([]),
     )({ atSeconds: 72.5, lockoutDurationSeconds: 3 });
-    expect(p.ours.low).toEqual({ unit: "Mage", pct: low, atSec: 72 });
+    expect(p.ours.low).toEqual({ unit: "Mage", pct: low, atSec: 73 });
   });
 
   it("the same teammate inside Ice Block is not our side's low (ruling A33, 0068182d @72.5)", () => {
@@ -228,7 +228,7 @@ describe("kickPressureFor", () => {
         friendlyMage({ 0: 100, 72: low, 76: 80 }, [69.559, 75.865], id),
         enemyRet([]),
       )({ atSeconds: 72.5, lockoutDurationSeconds: 3 });
-      expect(p.ours.low).toEqual({ unit: "Mage", pct: low, atSec: 72 });
+      expect(p.ours.low).toEqual({ unit: "Mage", pct: low, atSec: 73 });
     }
     // and every full immunity skips, Aspect of the Turtle and Divine Shield
     // like Ice Block
@@ -294,7 +294,7 @@ describe("kickPressureFor", () => {
         [75.8, 4],
       ]);
       const p = pressure(mate, enemyRet([]))(kick);
-      expect(p.ours.low).toEqual({ unit: "Mage", pct: 38, atSec: 72 });
+      expect(p.ours.low).toEqual({ unit: "Mage", pct: 38, atSec: 73 });
     });
 
     it("a full-immunity second's samples are left out like its tick (ruling A33)", () => {

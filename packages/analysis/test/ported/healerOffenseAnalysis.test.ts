@@ -903,15 +903,16 @@ describe("buildHealerOffenseSummary + formatHealerOffenseForContext", () => {
     // Note trimmed 2026-07-09 (week-eval tokens.md #4): redundant guidance lives in the system
     // prompt; only the load-bearing "outranks" rule remains in the block.
     expect(text).toContain("healing under pressure always outranks offense");
-    // GH #103 A4: every [SLACK] line states its own team min HP, which the
-    // slack band (team ≥ SLACK_TEAM_HP_THRESHOLD) can never undercut
-    const slackLines = lines.filter((l) => l.includes("[SLACK]"));
+    // GH #103 A4: every [SLACK] line states its own team min HP — since the
+    // 2026-10-17 ruling (F15, 「改成真最低」) the true minimum, which can sit
+    // below the band the span is judged on (the legend line says so)
+    const slackLines = lines.filter((l) => l.startsWith("  [SLACK]"));
     expect(slackLines.length).toBeGreaterThan(0);
     for (const l of slackLines) {
       const m = l.match(/team min HP (\d+)%/);
       expect(m).not.toBeNull();
-      expect(Number(m![1])).toBeGreaterThanOrEqual(85);
     }
+    expect(text).toContain("so N can sit below the band");
   });
 });
 

@@ -14,6 +14,7 @@ import { AtomicArenaCombat, ICombatUnit } from "@gladlog/parser-compat";
 import { abilityProfile } from "../data/abilityProfile";
 import { SUMMON_SPELL_IDS } from "../data/summonGenerated";
 import { buildAuraIntervals } from "./auraIntervals";
+import { hitByAttackers } from "./burstHit";
 import {
   buildCannotCastIntervals,
   coveredMsWithin,
@@ -49,11 +50,10 @@ import {
 } from "./positionSampling";
 import { fmtTime, toRenderSecond } from "./renderGrid";
 import { buildRosterSides, type RosterSides } from "./rosterSide";
+import { roundEndMs } from "./roundEnd";
 import { ccMechanicOf, SNARED_MECHANIC } from "./spellMechanics";
 import { spellReachToAccuse } from "./spellRange";
-import { roundEndMs } from "./roundEnd";
 import { isDeadAt } from "./unitDeath";
-import { hitByAttackers } from "./burstHit";
 
 // Thresholds (yards / seconds) — starting values from the Feature 15 spec.
 //
@@ -1191,6 +1191,8 @@ export function computeOwnerPositionEvents(params: {
           : hpTroughInWindow(owner, matchStartMs, tStart, tEnd, undefined, {
               fromMs: matchStartMs + Math.round(w.fromSeconds * 1000),
               toMs: matchStartMs + Math.round(evalEnd * 1000),
+              // the line pairs this minimum with the start second's tick
+              ticksRegardless: true,
             });
       const hpLow = trough?.pct ?? hpMin;
 
