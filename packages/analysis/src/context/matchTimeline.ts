@@ -753,6 +753,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     owner,
     ownerCDs,
     rawStreams,
+    allUnits,
   }));
 
   // ── [SILENCE]: silences on players (reliability round 2 W1b, 2026-09-25) ───

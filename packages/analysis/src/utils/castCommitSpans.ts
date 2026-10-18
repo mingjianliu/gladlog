@@ -1,7 +1,9 @@
 import { type ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
 import { CHANNELED_SPELL_IDS } from "../data/channeledGenerated";
+import { getEnglishSpellName } from "../data/spellEffectData";
 import { dropAuraRebroadcasts, supersededAuraBreaks } from "./auraIntervals";
+import { buffFullDurationForCaster } from "./buffDuration";
 
 /**
  * castCommitSpans.ts — the stretches a unit spent committed to a cast that
@@ -184,6 +186,97 @@ export function channelSpans(
       spellName: cast.spellName,
       startMs: Math.min(cast.timestamp, from),
       endMs: a.timestamp,
+    });
+  }
+  return out;
+}
+
+/**
+ * fact1215 R9 (2026-10-18): the channels `channelSpans` cannot see — an
+ * officially channelled cast (`CHANNELED_SPELL_IDS`) that puts no same-id
+ * aura on its caster (Arcane Missiles 5143: its ticks log as 7268 "Arcane
+ * Missiles" damage, no aura) — ended where the log shows it ending:
+ *  - a SPELL_INTERRUPT of that spell on the caster (a kick), else
+ *  - the caster's own last row of the channel's effect: a damage / heal row
+ *    from the caster with the channel's English name (the tick's id is not
+ *    the cast's, its name is).
+ * Read inside the cast's official length (`buffFullDurationForCaster`) and
+ * before the caster's next press of the same spell. With neither, or no
+ * official length, nothing is guessed. A lower bound like `channelSpans`:
+ * the last tick is not later than the channel's end.
+ *
+ * NOT for a reader that needs the channel's exact end (`kickAudit`'s
+ * "stopped just before the kick" reads `channelSpans` alone: a last tick
+ * sits up to one tick interval before the end). The occupancy reader
+ * (`occupancyWithin`, missed-cleanse `ownerCastingS`) adds these — 62fdbf2e
+ * r0 had three Arcane Missiles channels in a cleanse window counted as free
+ * hands.
+ */
+export function tickEndedChannelSpans(
+  unit: Pick<
+    ICombatUnit,
+    | "id"
+    | "spellCastEvents"
+    | "auraEvents"
+    | "damageOut"
+    | "healOut"
+    | "actionIn"
+  > &
+    Partial<Pick<ICombatUnit, "spec" | "info">>,
+): IChannelSpan[] {
+  const casts = (unit.spellCastEvents ?? [])
+    .filter((e) => CHANNELED_SPELL_IDS.has(e.spellId))
+    .sort((a, b) => a.timestamp - b.timestamp);
+  if (casts.length === 0) return [];
+  const logged = channelSpans(unit);
+  const out: IChannelSpan[] = [];
+  for (let i = 0; i < casts.length; i++) {
+    const c = casts[i]!;
+    if (
+      logged.some(
+        (l) =>
+          l.spellId === c.spellId &&
+          l.startMs <= c.timestamp &&
+          c.timestamp <= l.endMs + CHANNEL_AURA_LAG_MS,
+      )
+    )
+      continue;
+    const fullS = buffFullDurationForCaster(
+      c.spellId,
+      unit as never,
+      c.timestamp,
+    );
+    if (fullS === undefined || !(fullS > 0)) continue;
+    const nextSame = casts.slice(i + 1).find((n) => n.spellId === c.spellId);
+    const capMs = Math.min(
+      c.timestamp + fullS * 1000,
+      nextSame?.timestamp ?? Infinity,
+    );
+    const kick = (unit.actionIn ?? []).find(
+      (a) =>
+        a.logLine.event === LogEvent.SPELL_INTERRUPT &&
+        a.destUnitId === unit.id &&
+        (a as { extraSpellId?: string }).extraSpellId === c.spellId &&
+        a.logLine.timestamp >= c.timestamp &&
+        a.logLine.timestamp <= capMs,
+    );
+    const name = getEnglishSpellName(c.spellId, c.spellName);
+    const endBy = kick?.logLine.timestamp ?? capMs;
+    let lastTick: number | undefined;
+    for (const r of [...(unit.damageOut ?? []), ...(unit.healOut ?? [])]) {
+      if (r.srcUnitId !== unit.id) continue;
+      const t = r.logLine.timestamp;
+      if (t <= c.timestamp || t > endBy) continue;
+      if (getEnglishSpellName(r.spellId, r.spellName) !== name) continue;
+      if (lastTick === undefined || t > lastTick) lastTick = t;
+    }
+    const endMs = kick?.logLine.timestamp ?? lastTick;
+    if (endMs === undefined || endMs <= c.timestamp) continue;
+    out.push({
+      spellId: c.spellId,
+      spellName: c.spellName,
+      startMs: c.timestamp,
+      endMs,
     });
   }
   return out;

@@ -629,13 +629,59 @@ export function channelStoppedAtRemoval(
   spellId: string,
   removeMs: number,
 ): boolean {
-  if (!caster || !CHANNELED_SPELL_IDS.has(spellId)) return false;
-  return (caster.actionIn ?? []).some(
-    (a: any) =>
-      a.logLine?.event === LogEvent.SPELL_INTERRUPT &&
+  return channelStopAtRemoval(caster, spellId, removeMs) !== undefined;
+}
+
+/** The interrupt row `channelStoppedAtRemoval` reads: the kick on the
+ * channelled control's caster at its removal (who kicked, with what). */
+export function channelStopAtRemoval(
+  caster: Pick<ICombatUnit, "actionIn"> | undefined,
+  spellId: string,
+  removeMs: number,
+): ICombatUnit["actionIn"][number] | undefined {
+  if (!caster || !CHANNELED_SPELL_IDS.has(spellId)) return undefined;
+  return (caster.actionIn ?? []).find(
+    (a) =>
+      (a.logLine?.event as string) === LogEvent.SPELL_INTERRUPT &&
       a.timestamp >= removeMs - CHANNEL_STOP_LEAD_MS &&
       a.timestamp <= removeMs + PRESS_ENDED_CC_LAG_MS,
   );
+}
+
+/**
+ * fact1215 R9 (2026-10-18): a channelled control (Mind Control) that came
+ * off because its CASTER was interrupted — the cause is logged, on the
+ * caster (519781fd 3:20: a Felhunter's Spell Lock on the priest 12 ms before
+ * Mind Control left the Evoker; the line said "ended early — cause not
+ * logged" beside the [KICK] line naming it). The control's end must be a
+ * REMOVED row of the log, as for every logged end. Printed `ended by <who>'s
+ * <kick> on its caster` (`formatCcLoggedEnd`).
+ */
+export function ccEndedByCasterInterrupt(
+  holder: Pick<ICombatUnit, "auraEvents">,
+  cc: Pick<ICCInstance, "spellId" | "atSeconds" | "durationSeconds"> &
+    Partial<Pick<ICCInstance, "sourceId">>,
+  matchStartMs: number,
+  caster: Pick<ICombatUnit, "actionIn"> | undefined,
+): Extract<ICcLoggedEnd, { kind: "casterInterrupted" }> | undefined {
+  const removeMs =
+    matchStartMs + Math.round((cc.atSeconds + cc.durationSeconds) * 1000);
+  const removed = (holder.auraEvents ?? []).some(
+    (a) =>
+      a.spellId === cc.spellId &&
+      a.logLine.timestamp === removeMs &&
+      (a.logLine.event as string) === LogEvent.SPELL_AURA_REMOVED &&
+      (cc.sourceId === undefined || a.srcUnitId === cc.sourceId),
+  );
+  if (!removed) return undefined;
+  const kick = channelStopAtRemoval(caster, cc.spellId, removeMs);
+  if (!kick) return undefined;
+  return {
+    kind: "casterInterrupted",
+    spellName: getEnglishSpellName(kick.spellId, kick.spellName),
+    byUnitId: kick.srcUnitId,
+    byName: kick.srcUnitName,
+  };
 }
 
 /**
@@ -1805,6 +1851,14 @@ export type ICcLoggedEnd =
   | { kind: "death" }
   /** the holder's own press ended it (`ccEndedByOwnPress`) */
   | { kind: "press"; spellName: string }
+  /** the channelled control's caster was interrupted at its removal
+   * (`ccEndedByCasterInterrupt`) */
+  | {
+      kind: "casterInterrupted";
+      spellName: string;
+      byUnitId: string;
+      byName: string;
+    }
   /** a control immunity went up on the holder in the removal's millisecond
    * (`ccEndedByImmunityAura`); `by*` are set when someone else put it there */
   | {
@@ -2110,6 +2164,8 @@ export function formatCcLoggedEnd(
   if (end.kind === "death") return " | ended at their death";
   if (end.kind === "press")
     return ` | ${CC_ENDED_BY_LEAD}their ${end.spellName}`;
+  if (end.kind === "casterInterrupted")
+    return ` | ${CC_ENDED_BY_LEAD}${label(end.byName, end.byUnitId)}'s ${end.spellName} on its caster`;
   if (end.kind === "immunity")
     return end.byUnitId === undefined
       ? ` | ${CC_ENDED_BY_LEAD}their ${end.spellName}`

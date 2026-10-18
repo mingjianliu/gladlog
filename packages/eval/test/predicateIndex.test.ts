@@ -2357,6 +2357,23 @@ const INDEX: PredicateRow[] = [
     symbol: "checkDmgSpikeListCap",
     mod: promptQualityCheck,
   },
+  // fact1215 R9 / R10: channels without an aura, a kick on a channelled
+  // control's caster, a refused press's mechanic
+  {
+    file: `${A}/utils/castCommitSpans.ts`,
+    symbol: "tickEndedChannelSpans",
+    mod: castCommitSpans,
+  },
+  {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "ccEndedByCasterInterrupt",
+    mod: ccTrinketAnalysis,
+  },
+  {
+    file: `${A}/context/controlRejectedPresses.ts`,
+    symbol: "CONTROL_REJECT_MECHANIC",
+    mod: controlRejectedPresses,
+  },
   // fact1215 R5 / R6: which avoidance aura was up when a control hit
   {
     file: `${A}/utils/ccTrinketAnalysis.ts`,

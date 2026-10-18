@@ -16,6 +16,7 @@ import { BREAK_RACIAL_SPELL_IDS } from "../../data/racialAbilities";
 import { getEnglishSpellName } from "../../data/spellEffectData";
 import { silenceIntervals } from "../../utils/cannotCastIntervals";
 import {
+  ccEndedByCasterInterrupt,
   ccEndedByImmunityAura,
   ccEndedByOwnPress,
   ccLoggedEnd,
@@ -93,7 +94,8 @@ export function emitCcOnEnemyEntries(
       // lines read an enemy's silences against (silence.ts `idsOf`)
       const friendAndSummonIds = new Set(friendlyIds);
       for (const u of allUnits ?? [])
-        if (u.ownerId && friendlyIds.has(u.ownerId)) friendAndSummonIds.add(u.id);
+        if (u.ownerId && friendlyIds.has(u.ownerId))
+          friendAndSummonIds.add(u.id);
       /** One `[ENEMY TRINKET]` line: `used <what>[ out of <CC> (by <src>)]`. */
       const addEnemyBreakLine = (
         t: number,
@@ -250,11 +252,20 @@ export function emitCcOnEnemyEntries(
                 trinketBroke
                   ? ccEndedByOwnPress(enemyUnit, cc, matchStartMs)
                   : (ccLoggedEnd(enemyUnit, cc, matchStartMs) ??
+                      // …the caster's channel kicked at its removal (R9)
+                      ccEndedByCasterInterrupt(
+                        enemyUnit,
+                        cc,
+                        matchStartMs,
+                        (allUnits ?? []).find((u) => u.id === cc.sourceId) ??
+                          friends.find((f) => f.id === cc.sourceId),
+                      ) ??
                       ccEndedByOwnPress(
                         enemyUnit,
                         cc,
                         matchStartMs,
-                        friends.find((f) => f.id === cc.sourceId),
+                        (allUnits ?? []).find((u) => u.id === cc.sourceId) ??
+                          friends.find((f) => f.id === cc.sourceId),
                       ) ??
                       // …or a control immunity that went up on them in the
                       // removal's millisecond (a Slayer's Bladestorm: no press)

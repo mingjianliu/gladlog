@@ -190,6 +190,99 @@ const KIND_OF = new Map<string, ControlRejectKind>(
   ).flatMap(([k, texts]) => texts.map((t) => [t, k] as const)),
 );
 
+/**
+ * fact1215 R10 (2026-10-18): the control MECHANIC (DB2 SpellMechanic) a
+ * `control` reason names — read off the corpus, not translated: on the
+ * 605-file capture, every refused press with a `control` reason at which the
+ * presser had exactly one hard-CC aura up, tallied by that aura's mechanic
+ * (`ccMechanicOf`; eval-private fix/scripts/rejectMechanicProbe.mts). Each
+ * text below sat on one mechanic in ≥ 98 % of its rows (stunned 8,983 of
+ * 9,056 → 12; fleeing 2,877 of 2,883 → 5; the rest 100 % or within 1–2
+ * rows). A text the corpus gave no single-control row for, or that names no
+ * mechanic ("You are not in control of your actions", "You are possessed"
+ * aside), is absent: its press keeps the earliest-start reading.
+ */
+export const CONTROL_REJECT_MECHANIC: Readonly<Record<string, number>> = {
+  // 12 stunned
+  "Can't do that while stunned": 12,
+  无法在昏迷时那样做: 12,
+  無法在昏迷狀態下這麼做: 12,
+  "기절 중에는 불가능합니다.": 12,
+  "No puedes hacer eso mientras estás aturdido": 12,
+  "Impossible lorsque vous êtes étourdi(e)": 12,
+  "Das geht nicht, während Euer Status 'betäubt' ist.": 12,
+  "Действие невозможно. Причина: оглушение.": 12,
+  "Você não pode fazer isto enquanto estiver atordoado": 12,
+  // 5 fleeing
+  "Can't do that while fleeing": 5,
+  无法在逃跑时那样做: 5,
+  無法在逃跑狀態下這麼做: 5,
+  "도망 중에는 불가능합니다.": 5,
+  "No puedes hacer eso mientras estás huyendo": 5,
+  "Impossible lorsque vous êtes en fuite": 5,
+  "Das geht nicht, während Euer Status 'fliehend' ist.": 5,
+  "Действие невозможно. Причина: паника.": 5,
+  "Você não pode fazer isto enquanto estiver fugindo": 5,
+  // 24 horrified (zh-TW 恐懼 is horror, 4 of 4)
+  "Can't do that while horrified": 24,
+  无法在惊骇时那样做: 24,
+  無法在恐懼狀態下這麼做: 24,
+  "Действие невозможно. Причина: ужас.": 24,
+  // 2 disoriented
+  "Can't do that while disoriented": 2,
+  无法在迷惑时那样做: 2,
+  無法在困惑狀態下這麼做: 2,
+  "방향 감각 상실 중에는 불가능합니다.": 2,
+  "No puedes hacer eso mientras estás desorientado": 2,
+  "Impossible lorsque vous êtes désorienté(e)": 2,
+  "Действие невозможно. Причина: дезориентация.": 2,
+  "Você não pode fazer isto enquanto estiver desnorteado": 2,
+  // 17 polymorphed
+  "Can't do that while polymorphed": 17,
+  无法在变形时那样做: 17,
+  "Impossible lorsque vous êtes métamorphosé(e)": 17,
+  "Das geht nicht, während Euer Status 'verwandelt' ist.": 17,
+  "Действие невозможно. Причина: превращение.": 17,
+  // 13 frozen
+  "Can't do that while frozen": 13,
+  无法在冻结时那样做: 13,
+  "얼어 붙음 중에는 불가능합니다.": 13,
+  "Impossible lorsque vous êtes gelé(e)": 13,
+  "Das geht nicht, während Euer Status 'eingefroren' ist.": 13,
+  "Você não pode fazer isto enquanto estiver congelado": 13,
+  // 14 incapacitated
+  "Can't do that while incapacitated": 14,
+  无法在瘫痪时那样做: 14,
+  "행동 불가 중에는 불가능합니다.": 14,
+  "Impossible lorsque vous êtes stupéfié(e)": 14,
+  "Действие невозможно. Причина: паралич.": 14,
+  "Você não pode fazer isto enquanto estiver incapacitado": 14,
+  // 18 banished (Cyclone)
+  "Can't do that while banished": 18,
+  无法在放逐时那样做: 18,
+  "Das geht nicht, während Euer Status 'verbannt' ist.": 18,
+  "Действие невозможно. Причина: изгнание.": 18,
+  // 30 sapped
+  "Can't do that while sapped": 30,
+  无法在闷棍时那样做: 30,
+  "No puedes hacer eso mientras estás aporreado": 30,
+  "Das geht nicht, während Euer Status 'ausgeschaltet' ist.": 30,
+  "의식 불명 중에는 불가능합니다.": 30,
+  // 10 asleep
+  "Can't do that while asleep": 10,
+  无法在沉睡时那样做: 10,
+  無法在沉睡狀態下這麼做: 10,
+  "수면 중에는 불가능합니다.": 10,
+  "Impossible lorsque vous êtes endormi(e)": 10,
+  // 1 charmed / possessed
+  "Can't do that while charmed": 1,
+  无法在魅惑时那样做: 1,
+  "No puedes hacer eso mientras estás embelesado": 1,
+  "Você não pode fazer isto enquanto estiver enfeitiçado": 1,
+  "You are possessed": 1,
+  你被占据了: 1,
+};
+
 /** The kind of control a SPELL_CAST_FAILED reason states, if it states one. */
 export function controlRejectKindOf(
   reason: string,
@@ -200,11 +293,10 @@ export function controlRejectKindOf(
 /** What a line says of a press refused for a reason of that kind — the twin
  *  of `REJECT_WHY` for the two kinds this table holds (kick-eaten `postKick`,
  *  `refusalWhy`). */
-export const CONTROL_REJECT_WHY: Readonly<Record<ControlRejectKind, string>> =
-  {
-    control: "under crowd control",
-    silence: "silenced",
-  };
+export const CONTROL_REJECT_WHY: Readonly<Record<ControlRejectKind, string>> = {
+  control: "under crowd control",
+  silence: "silenced",
+};
 
 export interface IPressedDuringControl {
   spellId: string;
@@ -244,8 +336,13 @@ export function ownerControlPressKit(
  * cooldowns pressed inside it and refused for a reason of `kind`, in order of
  * first press.
  *
- *  - a press belongs to ONE window: the earliest-started one that holds it
- *    (two controls overlapping do not both claim it). Bounds are inclusive,
+ *  - a press belongs to ONE window (two controls overlapping do not both
+ *    claim it): the earliest-started one that holds it AND whose control is
+ *    the mechanic the refusal names (`CONTROL_REJECT_MECHANIC` against
+ *    `mechanicOf`, fact1215 R10 — 09dda3c6: a "can't do that while
+ *    polymorphed" press inside Asphyxiate and Polymorph went to Asphyxiate,
+ *    the earlier one); a reason that names no mechanic, or no holding window
+ *    of it, keeps the earliest-started holding window. Bounds are inclusive,
  *    compared in whole milliseconds, the log's own grid.
  *  - no count threshold: one refused press of a save is the fact.
  *
@@ -259,6 +356,8 @@ export function ownerPressesRejectedDuring<W>(
   kind: ControlRejectKind,
   windows: readonly W[],
   spanOf: (w: W) => IControlWindow,
+  /** the window's control mechanic (DB2 SpellMechanic); absent = unknown */
+  mechanicOf?: (w: W) => number | undefined,
 ): Map<W, IPressedDuringControl[]> {
   const out = new Map<W, IPressedDuringControl[]>();
   if (windows.length === 0 || kit.size === 0) return out;
@@ -279,7 +378,12 @@ export function ownerPressesRejectedDuring<W>(
     .sort((a, b) => a.tSeconds - b.tSeconds);
   for (const h of hits) {
     const t = ms(h.tSeconds);
-    const held = ordered.find((x) => x.fromMs <= t && t <= x.toMs);
+    const holding = ordered.filter((x) => x.fromMs <= t && t <= x.toMs);
+    const named = CONTROL_REJECT_MECHANIC[h.reason];
+    const held =
+      (named !== undefined && mechanicOf
+        ? holding.find((x) => mechanicOf(x.w) === named)
+        : undefined) ?? holding[0];
     if (!held) continue;
     const id = String(h.spellId);
     const spellName = kit.get(id)!;

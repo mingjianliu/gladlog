@@ -41,6 +41,7 @@ import {
   channelSpans,
   EMPOWER_PRESS_MATCH_MS,
   empowerSpans,
+  tickEndedChannelSpans,
 } from "./castCommitSpans";
 import { oppressingRoarOnAtMs } from "./ccBreakAnalysis";
 import { ccFullDurationForApplication } from "./ccDuration";
@@ -2102,7 +2103,12 @@ export function occupancyWithin(
     .map((iv) => iv.from)
     .sort((a, b) => a - b);
   const holds = empowerSpans(unit) ?? [];
-  const channels = channelSpans(unit).filter(
+  // the aura-ended channels and the ones whose end only a kick or their
+  // own last tick logs (`tickEndedChannelSpans`, fact1215 R9)
+  const channels = [
+    ...channelSpans(unit),
+    ...tickEndedChannelSpans(unit),
+  ].filter(
     (c) =>
       !holds.some(
         (h) =>

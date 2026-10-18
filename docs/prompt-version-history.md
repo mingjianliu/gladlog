@@ -3547,3 +3547,19 @@ second (06aa443c: "Shroud active" for a pulse after the Shroud ran out).
 second, some credits drop (aura / mobility not up at the hit) and some
 appear. breakFactScan `immuneCauseConsumed` 100/105 → 0, `delayedAvoidAtHit`
 28/426 → 0.
+v416 (2026-10-18, F15 batch 12 — fact1215 R9 + R10, facts only): (R10) a
+press the game refused inside two controls goes to the control of the
+mechanic its reason names (`CONTROL_REJECT_MECHANIC`, read off the 605
+corpus: each reason text on one DB2 mechanic in ≥ 98 % of its single-control
+rows), else the earliest-started; a dispel-backlash silence takes no
+`control` press (09dda3c6: "while polymorphed" presses went to Asphyxiate;
+06356dd9: "while stunned" presses went to the UA backlash silence). (R9) a
+channelled control whose caster was interrupted at its removal says so —
+`ended by <who>'s <kick> on its caster` (was `cause not logged` or nothing;
+a pet caster such as a Succubus resolved too); a channel that puts no aura
+on its caster (Arcane Missiles) counts as busy from its cast to its kick or
+its own last tick, for missed-cleanse `ownerCastingS` and kick-priority's
+`youChannelling`. 605 files: no candidate added or removed; +310 `on its
+caster` ends (30 of them were `cause not logged`); `pressed during it`
+clauses −38 / +42; 18 menu facts (ownerCastingS up where Ray of Frost, Mind
+Flay: Insanity, Rapid Fire, Disintegrate … fell in the window).

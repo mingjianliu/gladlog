@@ -50,6 +50,16 @@
  *    caster or its summon inside the control's landing window, in a later
  *    second than the cast. No `[CC AVOIDED?]` line of that player and spell
  *    may sit at the CAST second (the avoidance is read at the hit).
+ *  - `casterKickEnd` (R9, 2026-10-18): a channelled control
+ *    (`CHANNELED_SPELL_IDS`) on a player whose REMOVED sits within −50…+10 ms
+ *    of a SPELL_INTERRUPT on its caster. The control's line (landing second,
+ *    name, player) must not say `ended early — cause not logged`.
+ *  - `refusedPressMechanic` (R10): the recorder's refused presses
+ *    (SPELL_CAST_FAILED, raw stream, `control` reasons) re-assigned to the
+ *    controls that have a `[CC ON TEAM]` line — the earliest-started one of
+ *    the mechanic the reason names (`CONTROL_REJECT_MECHANIC` ×
+ *    `ccMechanicOf`), else the earliest-started; every `pressed during it:`
+ *    count must equal the re-assignment's.
  *
  *   npx tsx packages/eval/scripts/breakFactScan.ts <captureDir>
  *     [--examples N] [--archive-dir <dir>]
@@ -59,6 +69,11 @@ import { join, resolve } from "node:path";
 import { gunzipSync } from "node:zlib";
 
 import { ensureAnalysisData } from "@gladlog/analysis";
+import {
+  CONTROL_REJECT_MECHANIC,
+  CONTROL_REJECT_REASONS,
+} from "@gladlog/analysis/src/context/controlRejectedPresses";
+import { CHANNELED_SPELL_IDS } from "@gladlog/analysis/src/data/channeledGenerated";
 import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData";
 import {
   ccSpellIds,
@@ -66,7 +81,13 @@ import {
 } from "@gladlog/analysis/src/data/spellTags";
 import { isSilenceOnlyAura } from "@gladlog/analysis/src/utils/cannotCastIntervals";
 import { CC_AVOIDANCE_BUFF_SPELLS } from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
+import {
+  parseRawStreamsAbsolute,
+  type RawStreamsAbsolute,
+  rawStreamsForRound,
+} from "@gladlog/analysis/src/utils/rawStreams";
 import { roundEndMs } from "@gladlog/analysis/src/utils/roundEnd";
+import { ccMechanicOf } from "@gladlog/analysis/src/utils/spellMechanics";
 import { GladLogParser, type GladMatch } from "@gladlog/parser";
 import {
   type IAuraEvent,
@@ -88,6 +109,7 @@ const EXAMPLES = exIdx > 0 ? Number(process.argv[exIdx + 1]) : 5;
 const adIdx = process.argv.indexOf("--archive-dir");
 const ARCHIVE_DIR = adIdx > 0 ? (process.argv[adIdx + 1] ?? "") : "";
 const MEDALLION = "336126";
+const CONTROL_REASONS = new Set<string>(CONTROL_REJECT_REASONS.control);
 
 const fmt = (s: number): string => {
   const t = Math.max(0, Math.floor(s));
@@ -100,7 +122,9 @@ type Check =
   | "brokenByHolder"
   | "brokenBySplitAlly"
   | "immuneCauseConsumed"
-  | "delayedAvoidAtHit";
+  | "delayedAvoidAtHit"
+  | "casterKickEnd"
+  | "refusedPressMechanic";
 const expected = new Map<Check, number>();
 const bad = new Map<Check, string[]>();
 const unmapped: string[] = [];
@@ -111,9 +135,11 @@ const fail = (c: Check, s: string) => {
   bad.set(c, l);
 };
 
+let cacheRaw: RawStreamsAbsolute | null = null;
 function parseFile(path: string): GladMatch[] {
   const raw = readFileSync(path);
   const text = (path.endsWith(".gz") ? gunzipSync(raw) : raw).toString("utf8");
+  cacheRaw = parseRawStreamsAbsolute(text);
   const parser = new GladLogParser();
   const items: GladMatch[] = [];
   parser.on("match", (m) => items.push(m));
@@ -434,6 +460,161 @@ for (const f of files) {
     }
   }
 
+  // ── casterKickEnd (R9) ──────────────────────────────────────────────────
+  for (const u of units) {
+    const me = pidOf.get(u.name);
+    if (!me) continue;
+    const auras = (u.auraEvents ?? []) as IAuraEvent[];
+    for (const r of auras) {
+      if (r.logLine.event !== LogEvent.SPELL_AURA_REMOVED) continue;
+      if (!r.spellId || !CHANNELED_SPELL_IDS.has(r.spellId)) continue;
+      if (!ccSpellIds.has(r.spellId)) continue;
+      const rms = r.logLine.timestamp;
+      if (rms < start || rms > roundEnd) continue;
+      const caster = byId.get(r.srcUnitId);
+      const kicked = ((caster?.actionIn ?? []) as ISpellEvent[]).some(
+        (a) =>
+          a.logLine?.event === LogEvent.SPELL_INTERRUPT &&
+          a.timestamp >= rms - 50 &&
+          a.timestamp <= rms + 10,
+      );
+      if (!kicked) continue;
+      const applied = [...auras]
+        .reverse()
+        .find(
+          (a) =>
+            a.spellId === r.spellId &&
+            a.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
+            a.logLine.timestamp <= rms,
+        );
+      if (!applied) continue;
+      const t = at(applied.logLine.timestamp);
+      const name = getEnglishSpellName(r.spellId, r.spellName);
+      const ccLines = lines.filter(
+        (l) =>
+          /^\d+:\d{2} {2}\[CC ON (TEAM|ENEMY)\]/.test(l) &&
+          l.startsWith(`${t}  `) &&
+          l.includes(`${me.pid}(`) &&
+          l.includes(`← ${name} `),
+      );
+      if (ccLines.length === 0) continue;
+      bump("casterKickEnd");
+      if (ccLines.some((l) => l.includes("ended early — cause not logged")))
+        fail("casterKickEnd", `${where} ${t} ${u.name} ${name}`);
+    }
+  }
+
+  // ── refusedPressMechanic (R10) ──────────────────────────────────────────
+  // An independent re-assignment: every refused press with a `control`
+  // reason, inside the player's controls that have a [CC ON TEAM] line, goes
+  // to the earliest-started one of the mechanic its reason names
+  // (`CONTROL_REJECT_MECHANIC` × `ccMechanicOf`), else the earliest-started.
+  // Each line's `pressed during it:` count of a name must equal that
+  // re-assignment's count (names the clause does not list are not judged —
+  // the kit is the producer's).
+  const raw = cacheRaw as RawStreamsAbsolute | null;
+  if (raw?.available) {
+    const failed = rawStreamsForRound(
+      raw,
+      start,
+      (legacy.endTime - start) / 1000,
+    ).castFailed;
+    for (const u of units) {
+      const me = pidOf.get(u.name);
+      if (!me || me.enemy) continue;
+      const presses = failed.filter(
+        (x) => x.unitGuid === u.id && CONTROL_REASONS.has(x.reason),
+      );
+      if (presses.length === 0) continue;
+      const wins: Array<{
+        id: string;
+        from: number;
+        to: number;
+        line: string;
+      }> = [];
+      const open = new Map<string, number>();
+      // one aura the game re-broadcast (REMOVED and APPLIED of one spell in
+      // one ms) is one control, as the [CC ON TEAM] line reads it
+      const own = ((u.auraEvents ?? []) as IAuraEvent[]).filter(
+        (a) =>
+          !!a.spellId &&
+          ccSpellIds.has(a.spellId) &&
+          (!a.destUnitId || a.destUnitId === u.id),
+      );
+      const rebroadcast = new Set<IAuraEvent>();
+      for (const r of own)
+        if (r.logLine.event === LogEvent.SPELL_AURA_REMOVED) {
+          const re = own.find(
+            (x) =>
+              x !== r &&
+              x.spellId === r.spellId &&
+              x.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
+              x.logLine.timestamp === r.logLine.timestamp,
+          );
+          if (re) {
+            rebroadcast.add(r);
+            rebroadcast.add(re);
+          }
+        }
+      for (const a of own) {
+        if (rebroadcast.has(a) || !a.spellId) continue;
+        if (a.logLine.event === LogEvent.SPELL_AURA_APPLIED) {
+          if (!open.has(a.spellId)) open.set(a.spellId, a.logLine.timestamp);
+        } else if (
+          (a.logLine.event === LogEvent.SPELL_AURA_REMOVED ||
+            a.logLine.event === LogEvent.SPELL_AURA_BROKEN ||
+            a.logLine.event === LogEvent.SPELL_AURA_BROKEN_SPELL) &&
+          open.has(a.spellId)
+        ) {
+          const from = open.get(a.spellId)!;
+          open.delete(a.spellId);
+          const line = lines.find(
+            (l) =>
+              l.startsWith(`${at(from)}  [CC ON TEAM]   ${me.pid}(`) &&
+              l.includes(`← ${getEnglishSpellName(a.spellId!)} `),
+          );
+          if (line)
+            wins.push({ id: a.spellId, from, to: a.logLine.timestamp, line });
+        }
+      }
+      if (wins.length === 0) continue;
+      wins.sort((a, b) => a.from - b.from);
+      const counts = new Map<string, Map<string, number>>(); // line → name → n
+      for (const x of presses) {
+        const ms = start + Math.round(x.tSeconds * 1000);
+        const holding = wins.filter((w) => w.from <= ms && ms <= w.to);
+        if (holding.length === 0) continue;
+        const want = CONTROL_REJECT_MECHANIC[x.reason];
+        const w =
+          (want !== undefined
+            ? holding.find((h) => ccMechanicOf(h.id) === want)
+            : undefined) ?? holding[0]!;
+        const name = getEnglishSpellName(String(x.spellId), x.spellName);
+        const m = counts.get(w.line) ?? new Map<string, number>();
+        m.set(name, (m.get(name) ?? 0) + 1);
+        counts.set(w.line, m);
+      }
+      for (const w of wins) {
+        const k = w.line.indexOf(" | pressed during it: ");
+        if (k < 0) continue;
+        bump("refusedPressMechanic");
+        const listed = w.line.slice(k + " | pressed during it: ".length);
+        const bad: string[] = [];
+        for (const it of listed.matchAll(/(.+?) ×(\d+)(?:, |$)/g)) {
+          const name = it[1]!;
+          const n = Number(it[2]);
+          const got = counts.get(w.line)?.get(name) ?? 0;
+          if (got !== n) bad.push(`${name} ×${n} (re-read ×${got})`);
+        }
+        if (bad.length > 0)
+          fail(
+            "refusedPressMechanic",
+            `${where} ${at(w.from)} ${u.name} ${getEnglishSpellName(w.id)}: ${bad.join("; ")}`,
+          );
+      }
+    }
+  }
+
   // ── trinket presses ─────────────────────────────────────────────────────
   for (const u of units) {
     const me = pidOf.get(u.name);
@@ -541,6 +722,8 @@ for (const c of [
   "brokenBySplitAlly",
   "immuneCauseConsumed",
   "delayedAvoidAtHit",
+  "casterKickEnd",
+  "refusedPressMechanic",
 ] as Check[]) {
   const b = bad.get(c) ?? [];
   console.log(`${c}: expected ${expected.get(c) ?? 0}, wrong ${b.length}`);

@@ -182,5 +182,10 @@
  *  length when never closed, forms exclusive (`ccAvoidanceBuffsUpAt`); a
  *  delayed control is read at the instant it hit. 605 files: no candidate
  *  added or removed; immuneCauseConsumed 100 → 0, delayedAvoidAtHit 28 → 0.
+ *  v416 (2026-10-18, F15 batch 12 — fact1215 R9 + R10, facts only): a refused
+ *  press goes to the control of the mechanic its reason names; a channelled
+ *  control ended by a kick on its caster says so; a channel with no caster
+ *  aura counts as busy to its kick or last tick. 605 files: no candidate
+ *  added or removed; +310 `on its caster` ends.
  */
-export const PROMPT_VERSION = 415;
+export const PROMPT_VERSION = 416;

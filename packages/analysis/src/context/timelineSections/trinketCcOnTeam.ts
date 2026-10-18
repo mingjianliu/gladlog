@@ -14,6 +14,7 @@ import { CombatUnitReaction } from "@gladlog/parser-compat";
 import { BACKLASH_AURA_CC_TYPE, backlashCcTag } from "../../data/backlashCc";
 import {
   ccAvoidedOutcomeText,
+  ccEndedByCasterInterrupt,
   ccEndedByImmunityAura,
   ccEndedByOwnPress,
   ccLoggedEnd,
@@ -30,6 +31,7 @@ import {
 } from "../../utils/ccTrinketAnalysis";
 import { wasRemovedByAllyDispel } from "../../utils/dispelAnalysis";
 import { fmtTime } from "../../utils/renderGrid";
+import { ccMechanicOf } from "../../utils/spellMechanics";
 import {
   formatPressedDuringNote,
   ownerControlPressKit,
@@ -56,6 +58,7 @@ export function emitTrinketCcOnTeamEntries(
     | "owner"
     | "ownerCDs"
     | "rawStreams"
+    | "allUnits"
   >,
 ): Pick<TimelineCtx, "disarmLineCount" | "trinketLastUsedCount"> {
   const {
@@ -73,7 +76,15 @@ export function emitTrinketCcOnTeamEntries(
     owner,
     ownerCDs,
     rawStreams,
+    allUnits,
   } = ctx;
+  // a control's caster, a pet included (a Succubus's Seduction is
+  // channelled: a kick on the pet ends it — fact1215 R9)
+  const casterOf = (id: string | undefined) =>
+    id === undefined
+      ? undefined
+      : ((allUnits ?? []).find((u) => u.id === id) ??
+        (enemies ?? []).find((e) => e.id === id));
   // threaded: read from ctx, returned to the caller (GH #116)
   let { disarmLineCount, trinketLastUsedCount } = ctx;
 
@@ -88,11 +99,19 @@ export function emitTrinketCcOnTeamEntries(
             owner.id,
             ownerControlPressKit(ownerCDs),
             "control",
-            summary.ccInstances.filter(rendersCcOnTeamLine),
+            // a dispel-backlash SILENCE renders as [CC ON TEAM] too, but it
+            // is no loss of control: a "can't do that while stunned" press
+            // inside it is the stun's (fact1215 R10, 06356dd9 2:15)
+            summary.ccInstances.filter(
+              (cc) =>
+                rendersCcOnTeamLine(cc) &&
+                BACKLASH_AURA_CC_TYPE.get(cc.spellId) !== "silence",
+            ),
             (cc) => ({
               fromSeconds: cc.atSeconds,
               toSeconds: cc.atSeconds + cc.durationSeconds,
             }),
+            (cc) => ccMechanicOf(cc.spellId),
           )
         : undefined;
 
@@ -217,11 +236,18 @@ export function emitTrinketCcOnTeamEntries(
       const loggedEnd =
         !trinketBroke && !isCleansed && !tremor && !immunity && ccdUnit
           ? (ccLoggedEnd(ccdUnit, cc, matchStartMs) ??
+            // …the caster's channel kicked at its removal (fact1215 R9)
+            ccEndedByCasterInterrupt(
+              ccdUnit,
+              cc,
+              matchStartMs,
+              casterOf(cc.sourceId),
+            ) ??
             ccEndedByOwnPress(
               ccdUnit,
               cc,
               matchStartMs,
-              (enemies ?? []).find((e) => e.id === cc.sourceId),
+              casterOf(cc.sourceId),
             ) ??
             // …or a control immunity that went up on them in the removal's
             // millisecond (a Slayer's Bladestorm: no press to read)
