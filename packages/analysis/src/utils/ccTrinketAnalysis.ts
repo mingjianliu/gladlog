@@ -3743,7 +3743,7 @@ export function analyzePlayerCCAndTrinket(
       t: (e.logLine.timestamp - matchStartMs) / 1000,
       spellId: e.spellId ?? "",
     }));
-    let cannotCast: Array<{ from: number; to: number }> | null = null;
+    const castSpellIds = [...new Set(castTimes.map((c) => c.spellId))];
     const deathS = (firstDeathMs(player) - matchStartMs) / 1000;
     for (const inst of interruptInstances) {
       // a death in the kick's own millisecond closes the window too (codex
@@ -3765,18 +3765,22 @@ export function analyzePlayerCCAndTrinket(
         // (`cannotCastIntervalsForSpells`' quantifier): a silence while
         // Stormstrike went out (c2058ed4), or another school's lockout, is
         // not time the player could not act
-        cannotCast =
-          cannotCast ??
-          cannotCastIntervalsForSpells(
-            player,
-            enemyIds,
-            [...new Set(castTimes.map((c) => c.spellId))],
-            undefined,
-          );
+        //
+        // This kick's own lockout (it starts at the interrupt itself) is left
+        // out BEFORE the set is read (codex post-hoc 60-POSTHOC-02 U2): the
+        // set reading is per time now, and its pieces are clipped — a
+        // second kick on the other school overlapping this one's lock would
+        // otherwise count as time neither spell could go out
         const kickMs = matchStartMs + inst.atSeconds * 1000;
+        const cannotCast = cannotCastIntervalsForSpells(
+          player,
+          enemyIds,
+          castSpellIds,
+          undefined,
+          (iv) => Math.abs(iv.from - kickMs) <= 1,
+        );
         const ccMs = coveredMsWithin(
-          // this kick's own lockout starts at the interrupt itself
-          cannotCast.filter((iv) => Math.abs(iv.from - kickMs) > 1),
+          cannotCast,
           kickMs,
           kickMs + POST_KICK_WINDOW_S * 1000,
         );

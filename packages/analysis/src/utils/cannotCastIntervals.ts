@@ -315,8 +315,8 @@ export function stunLetsPress(
  *
  * Each spell is asked of the unit that CASTS it:
  *  - the unit itself, for every spell but the ones below: its own intervals,
- *    one kept only when it stops EVERY such spell (`intervalBlocksEverySpell`,
- *    `actWindowFor().stateIn`'s reading);
+ *    the time during which it could press none of them
+ *    (`blockedForEverySpell`, `actWindowFor().stateIn`'s reading);
  *  - a pet of the unit, for a spell the log shows that pet casting and never
  *    the unit (`petCastersOf`: Spell Lock, Devour Magic, Seduction): the
  *    cast-blocking auras enemies put on the PET and the kick lockouts on the
@@ -348,11 +348,17 @@ export function cannotCastIntervalsForSpells(
   enemyIds: Set<string>,
   spellIds: readonly string[] | undefined,
   units: RoundUnits,
+  /** the unit's own intervals to leave out BEFORE the set is read — the
+   * pieces that come back are clipped to the time every spell is stopped,
+   * so a reader cannot pick an interval out of them by its start (kick-
+   * eaten's `ccInWindowS`: this kick's own lockout) */
+  exclude?: (iv: NamedCannotCastInterval) => boolean,
 ): NamedCannotCastInterval[] {
   // work order 2026-10-14d Part 2 (preview): a disarm stops the weapon-
   // requiring spells asked about — only when spells are named (an unasked
   // reader would read a disarm as stopping everything)
-  const own = namedCannotCastIntervals(unit, enemyIds);
+  const named = namedCannotCastIntervals(unit, enemyIds);
+  const own = exclude ? named.filter((iv) => !exclude(iv)) : named;
   return intervalsForSpells(
     spellIds?.length ? [...own, ...disarmIntervals(unit, enemyIds)] : own,
     petBlockLists(enemyIds, spellIds, petCastersBySpell(unit, units)),
@@ -456,33 +462,17 @@ function petBlockLists(
   return {
     ownSpellIds,
     petLists: [...spellsByPet].map(([pet, ids]) =>
-      namedCannotCastIntervals(pet, enemyIds)
-        .filter((iv) => intervalBlocksEverySpell(iv, ids))
-        .map((iv) => ({ ...iv, onPetId: pet.id })),
+      blockedForEverySpell(namedCannotCastIntervals(pet, enemyIds), ids).map(
+        (iv) => ({ ...iv, onPetId: pet.id }),
+      ),
     ),
   };
 }
 
-/** `cannotCastIntervalsForSpells` over the unit's already-built intervals. */
-function intervalsForSpells(
-  ownNamed: readonly NamedCannotCastInterval[],
-  split: ReturnType<typeof petBlockLists>,
-  spellIds: readonly string[] | undefined,
-): NamedCannotCastInterval[] {
-  if (split.petLists.length === 0)
-    return ownNamed.filter((iv) => intervalBlocksEverySpell(iv, spellIds));
-  const lists = [
-    ...(split.ownSpellIds.length
-      ? [
-          ownNamed.filter((iv) =>
-            intervalBlocksEverySpell(iv, split.ownSpellIds),
-          ),
-        ]
-      : []),
-    ...split.petLists,
-  ];
-  if (lists.length === 1) return lists[0]!;
-  // the time every caster is blocked, then each cause clipped to it
+/** The time every list's union covers. */
+function commonRuns(
+  lists: ReadonlyArray<readonly NamedCannotCastInterval[]>,
+): Array<{ from: number; to: number }> {
   let common = cannotCastRuns(lists[0]!);
   for (const list of lists.slice(1)) {
     const runs = cannotCastRuns(list);
@@ -495,6 +485,71 @@ function intervalsForSpells(
       }
     common = both;
   }
+  return common;
+}
+
+/** Each interval clipped to the runs, keeping its cause, in start order. */
+function clipToRuns(
+  ivs: readonly NamedCannotCastInterval[],
+  runs: ReadonlyArray<{ from: number; to: number }>,
+): NamedCannotCastInterval[] {
+  const out: NamedCannotCastInterval[] = [];
+  for (const iv of ivs)
+    for (const run of runs) {
+      const from = Math.max(iv.from, run.from);
+      const to = Math.min(iv.to, run.to);
+      if (to > from) out.push({ ...iv, from, to });
+    }
+  return out.sort((a, b) => a.from - b.from);
+}
+
+/**
+ * FT-T10: the intervals of ONE caster during which it could press NONE of
+ * `spellIds` — read per TIME, not per interval (codex post-hoc
+ * 60-POSTHOC-02 U2): the unit is stopped while every spell is stopped by
+ * some interval (`intervalBlocksSpell`), and free while at least one of them
+ * is castable. Until this an interval was kept only when it alone stopped
+ * every spell, so two overlapping single-school locks — Frost 10–13 by
+ * Pummel, Arcane 11–17 by Counterspell — were both dropped and Ice Block ∪
+ * Greater Invisibility read free over 10–15 instead of blocked 11–13. Each
+ * interval that stops at least one of the spells, clipped to that time; one
+ * that stops every spell lies inside it and is kept whole. No spell to ask
+ * about → the list as it is. Like `intervalBlocksSpell`, blind to a pet's
+ * intervals: readers go through `cannotCastIntervalsForSpells`.
+ */
+export function blockedForEverySpell(
+  named: readonly NamedCannotCastInterval[],
+  spellIds: readonly string[] | undefined,
+): NamedCannotCastInterval[] {
+  if (!spellIds?.length) return [...named];
+  if (spellIds.length === 1)
+    return named.filter((iv) => intervalBlocksSpell(iv, spellIds[0]));
+  const perSpell = spellIds.map((id) =>
+    named.filter((iv) => intervalBlocksSpell(iv, id)),
+  );
+  return clipToRuns(
+    named.filter((iv) => perSpell.some((list) => list.includes(iv))),
+    commonRuns(perSpell),
+  );
+}
+
+/** `cannotCastIntervalsForSpells` over the unit's already-built intervals. */
+function intervalsForSpells(
+  ownNamed: readonly NamedCannotCastInterval[],
+  split: ReturnType<typeof petBlockLists>,
+  spellIds: readonly string[] | undefined,
+): NamedCannotCastInterval[] {
+  if (split.petLists.length === 0)
+    return blockedForEverySpell(ownNamed, spellIds);
+  const lists = [
+    ...(split.ownSpellIds.length
+      ? [blockedForEverySpell(ownNamed, split.ownSpellIds)]
+      : []),
+    ...split.petLists,
+  ];
+  if (lists.length === 1) return lists[0]!;
+  // the time every caster is blocked, then each cause clipped to it
+  const common = commonRuns(lists);
   const out: NamedCannotCastInterval[] = [];
   for (const list of lists)
     for (const iv of list)
@@ -504,22 +559,6 @@ function intervalsForSpells(
         if (to > from) out.push({ ...iv, from, to });
       }
   return out.sort((a, b) => a.from - b.from);
-}
-
-/** FT-T10: `cannotCastIntervalsForSpells`'s test on one interval of one
- * caster — `intervalBlocksSpell` for every spell of a set. Like it, blind to
- * a pet's intervals: readers go through `cannotCastIntervalsForSpells`. */
-export function intervalBlocksEverySpell(
-  iv: Pick<
-    NamedCannotCastInterval,
-    "lockout" | "lockedSchoolMask" | "petCastSpellIds"
-  > &
-    Partial<Pick<NamedCannotCastInterval, "spellId">>,
-  spellIds: readonly string[] | undefined,
-): boolean {
-  return (
-    !spellIds?.length || spellIds.every((id) => intervalBlocksSpell(iv, id))
-  );
 }
 
 const SCHOOL_BIT_NAMES: ReadonlyArray<[number, string]> = [
@@ -733,7 +772,20 @@ export function castBlockingAuraIntervals(
     // is the unit itself was sent back to it (Diffuse Magic, Reverse Magic,
     // Spell Reflection) and locks it like any enemy's — 82a2d681's Death
     // Knight sat in his own reflected Strangulate 57.33–60.31 and read free.
-    if (!enemyIds.has(aura.srcUnitId) && aura.srcUnitId !== unit.id) continue;
+    //
+    // The caster filter is the APPLIED's alone (ccInstances' and
+    // `disarmIntervals`' rule): a BROKEN row names the BREAKER, a friendly
+    // one too (a teammate's Blessing of Sacrifice) — dropped here, the CC
+    // ran on to its official end (codex post-hoc 60-POSTHOC-02 U2: 16 s
+    // instead of 12 s). A removal only closes an open application, and only
+    // an enemy's (or a reflected one) opens one.
+    const isApplied = aura.logLine.event === LogEvent.SPELL_AURA_APPLIED;
+    if (
+      isApplied &&
+      !enemyIds.has(aura.srcUnitId) &&
+      aura.srcUnitId !== unit.id
+    )
+      continue;
     // cc-dr F-BK1: the dispel-backlash auras (Unstable Affliction's silence
     // 196364, Vampiric Touch's horror 87204 — DB2 aura 7 / mechanic 24,
     // tier-C 09-30) have no SPELL_CATEGORIES row; the one registered table is
@@ -746,7 +798,7 @@ export function castBlockingAuraIntervals(
       continue;
 
     const key = `${spellId}:${aura.srcUnitId}`;
-    if (aura.logLine.event === LogEvent.SPELL_AURA_APPLIED) {
+    if (isApplied) {
       // a second APPLIED from the same caster with no removal between keeps
       // the first one's start (both used to run to the same removal) — while
       // it is inside the first one's official length
@@ -842,10 +894,25 @@ export function castBlockingAuraIntervals(
   return merged;
 }
 
-/** A cast-blocking aura that is a silence and not hard CC — the same split
- * `silenceIntervals` renders `[SILENCE]` from. */
+/** A cast-blocking aura that is hard CC: the official set, or a dispel
+ * backlash that is a horror (Sin and Punishment 87204 — no SPELL_CATEGORIES
+ * row and no DR family, so `ccSpellIds` does not hold it; its CC type is
+ * `BACKLASH_AURA_CC_TYPE`'s). One test for `castBlockingAuraAt` and
+ * `hardCcAuraAt` (codex post-hoc 60-POSTHOC-02 U2: a Priest in its own
+ * dispel's horror read as a ready kicker). */
+export const isHardCcAura = (auraId: string): boolean =>
+  ccSpellIds.has(auraId) || BACKLASH_AURA_CC_TYPE.get(auraId) === "horror";
+
+/** A cast-blocking aura that is a silence and not hard CC: the official DR
+ * silence family, or a dispel backlash that is a silence (Unstable
+ * Affliction's 196364 — 60-POSTHOC-02 U2: a Shaman under it read as a ready
+ * Wind Shear kicker). `silenceIntervals` renders `[SILENCE]` from the
+ * official half only — the backlash has its own `[CC ON TEAM] … [DISPEL
+ * BACKLASH CC: silence]` line. */
 export const isSilenceOnlyAura = (auraId: string): boolean =>
-  officialSilenceIds.has(auraId) && !ccSpellIds.has(auraId);
+  !isHardCcAura(auraId) &&
+  (officialSilenceIds.has(auraId) ||
+    BACKLASH_AURA_CC_TYPE.get(auraId) === "silence");
 
 /**
  * "Could this unit press `spellId` at `tMs`, as far as auras go?" — the
@@ -890,8 +957,8 @@ export function castBlockingAuraAt(
     (a) =>
       a.from <= tMs &&
       tMs < a.to &&
-      (ccSpellIds.has(a.spellId) ||
-        (silenceStops && officialSilenceIds.has(a.spellId))),
+      (isHardCcAura(a.spellId) ||
+        (silenceStops && isSilenceOnlyAura(a.spellId))),
   );
   if (held) return held;
   // …or the unit's own flying breath (work order 2026-10-14d #10: an enemy
@@ -919,7 +986,7 @@ export function hardCcAuraAt(
   tMs: number,
 ): CastBlockingAura | undefined {
   return castBlockingAuraIntervals(unit, hostileIds).find(
-    (a) => a.from <= tMs && tMs < a.to && ccSpellIds.has(a.spellId),
+    (a) => a.from <= tMs && tMs < a.to && isHardCcAura(a.spellId),
   );
 }
 
@@ -939,7 +1006,10 @@ export function silenceIntervals(
   enemyIds: Set<string>,
 ): CastBlockingAura[] {
   return castBlockingAuraIntervals(unit, enemyIds)
-    .filter((a) => isSilenceOnlyAura(a.spellId))
+    .filter(
+      (a) =>
+        isSilenceOnlyAura(a.spellId) && !BACKLASH_AURA_CC_TYPE.has(a.spellId),
+    )
     .sort((x, y) => x.from - y.from);
 }
 
@@ -1301,8 +1371,9 @@ export function actWindowFor(
         spellIds,
       );
     } catch {
-      return withoutPressableStuns(spellIds, through).filter((iv) =>
-        intervalBlocksEverySpell(iv, spellIds),
+      return blockedForEverySpell(
+        withoutPressableStuns(spellIds, through),
+        spellIds,
       );
     }
   };

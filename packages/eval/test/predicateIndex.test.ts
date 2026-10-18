@@ -2255,7 +2255,13 @@ const INDEX: PredicateRow[] = [
   },
   {
     file: `${A}/utils/cannotCastIntervals.ts`,
-    symbol: "intervalBlocksEverySpell",
+    symbol: "blockedForEverySpell",
+    mod: cannotCastIntervals,
+  },
+  // the backlash horror is hard CC for the castability questions (60-POSTHOC-02)
+  {
+    file: `${A}/utils/cannotCastIntervals.ts`,
+    symbol: "isHardCcAura",
     mod: cannotCastIntervals,
   },
   // a spell the unit's pet casts is asked of the pet (2026-10-11)

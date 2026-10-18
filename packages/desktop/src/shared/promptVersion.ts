@@ -159,5 +159,11 @@
  *  candidate added or removed (burst-into-mitigation prices those aura ids at no
  *  wall, as before); 504 ledger lines added (320 Greater Invisibility, 184 Blur /
  *  Fortifying Brew).
+ *  v412 (2026-10-18, F15 — codex post-hoc 60-POSTHOC-02 U2, facts only): a
+ *  dispel backlash is a control for the castability questions (UA's silence
+ *  196364 a silence, VT's horror 87204 hard CC); a friendly breaker's BROKEN
+ *  row ends a CC; a set of spells is stopped while every member is, per time
+ *  (`blockedForEverySpell`). 605 files: no candidate added or removed; one
+ *  kick-eaten `ccInWindowS` 2.8 → 0.9.
  */
-export const PROMPT_VERSION = 411;
+export const PROMPT_VERSION = 412;

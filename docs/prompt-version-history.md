@@ -3488,3 +3488,16 @@ missed Vizine's Greater Invisibility that KILL ATTEMPTS named. 605 files: no
 candidate added or removed (burst-into-mitigation prices those aura ids at no
 wall, as before); 504 ledger lines added (320 Greater Invisibility, 184 Blur /
 Fortifying Brew).
+v412 (2026-10-18, F15 — codex post-hoc 60-POSTHOC-02 U2 castability, facts
+only): (1) a dispel backlash is a control for "could this unit cast now" —
+Unstable Affliction's silence 196364 is a silence, Vampiric Touch's horror
+87204 hard CC (`isHardCcAura` / `isSilenceOnlyAura` read
+`BACKLASH_AURA_CC_TYPE`; neither has a DR family, and a kicker under either
+read as ready); (2) `castBlockingAuraIntervals` filters the caster on the
+APPLIED only, so a friendly breaker's BROKEN row (Blessing of Sacrifice) ends
+the CC instead of the official length; (3) a set of spells is stopped while
+every member is, read per time (`blockedForEverySpell`) — two overlapping
+single-school locks used to be dropped as free. 605 files: no candidate added
+or removed; one menu fact changes — 192-3-1144 kick-eaten @103.3
+`ccInWindowS` 2.8 → 0.9 (the priest's UA backlash silence counted as hard CC;
+it now stops only silenceable casts, the Seduction 0.9 s remains).
