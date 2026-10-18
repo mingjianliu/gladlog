@@ -171,5 +171,11 @@
  *  paladin's spell (`breakerOfBrokenRow`); the paladin's own 6940 link is no
  *  protection (`isCasterSideLinkAura`). 605 files: cd-hoarded +14,
  *  crisis-no-response +1; 744 `broken by` lines; +30 [CC BROKEN].
+ *  v414 (2026-10-18, F15 batch 10 — codex post-hoc 60-POSTHOC-03 U3, facts
+ *  only): a burst window's outcome readings share the end of its last
+ *  rendered second; the burst ledger drops post-round presses before
+ *  grouping; a HoT tick is a fresh self-heal only when the HoT went on the
+ *  owner inside the window. 605 files: no candidate added or removed;
+ *  [BURST ANSWERED] −14 / +20; gate checkBurstLedgerSpellSpans 4 → 0.
  */
-export const PROMPT_VERSION = 413;
+export const PROMPT_VERSION = 414;

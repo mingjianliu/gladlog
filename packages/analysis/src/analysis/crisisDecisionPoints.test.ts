@@ -186,6 +186,50 @@ describe("crisisDecisionPoints", () => {
     expect(p.selfHealPct).toBe(7); // all own healing, the carried HoT included
   });
 
+  // codex post-hoc 60-POSTHOC-03 U3: a HoT tick belongs to the HoT's latest
+  // (re)application on the owner, not to any cast of the spell id
+  it("a self-HoT from before the window, ticking while the owner casts the same HoT on an ally, is no fresh self-heal; recast on self it is", () => {
+    const tick = {
+      timestamp: T0 + 2200,
+      srcUnitId: "H",
+      spellId: "774",
+      amount: 5,
+      effectiveAmount: 5,
+      logLine: { event: LogEvent.SPELL_PERIODIC_HEAL, timestamp: T0 + 2200 },
+    };
+    const selfRejuv = (t: number, event: LogEvent) => ({
+      timestamp: T0 + t,
+      spellId: "774",
+      srcUnitId: "H",
+      destUnitId: "H",
+      logLine: { event, timestamp: T0 + t },
+    });
+    const onAlly = unit({
+      spellCastEvents: [
+        { timestamp: T0 + 1800, spellId: "774", destUnitId: "A" },
+      ],
+      auraEvents: [selfRejuv(-5000, LogEvent.SPELL_AURA_APPLIED)],
+      healIn: [tick],
+    });
+    const a = crisisDecisionPoints(onAlly, combat(onAlly))[0]!;
+    expect(a.selfHealFreshPct).toBe(0);
+    expect(a.selfHealCasts).toBe(0);
+    expect(a.selfHealPct).toBe(5);
+    const onSelf = unit({
+      spellCastEvents: [
+        { timestamp: T0 + 1800, spellId: "774", destUnitId: "H" },
+      ],
+      auraEvents: [
+        selfRejuv(-5000, LogEvent.SPELL_AURA_APPLIED),
+        selfRejuv(1800, LogEvent.SPELL_AURA_REFRESH),
+      ],
+      healIn: [tick],
+    });
+    const b = crisisDecisionPoints(onSelf, combat(onSelf))[0]!;
+    expect(b.selfHealFreshPct).toBe(5);
+    expect(b.selfHealCasts).toBe(1);
+  });
+
   // The rendered % sits on a line that names the 15 % bar, so it is floored:
   // 14.6 % is not a response and must not read 15.
   it("selfHealFreshPct is floored to the bar's grid: 14.6 % of max HP reads 14, and is not a selfHeal response", () => {

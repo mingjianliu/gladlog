@@ -11,7 +11,7 @@
  * Design: docs/superpowers/specs/2026-08-29-crisis-no-response-design.md.
  * Evidence: eval-private/reports/behavior-prior-2026-08-28/ (18,134 matches).
  */
-import { LogEvent } from "@gladlog/parser-compat";
+import { type IAuraEvent, LogEvent } from "@gladlog/parser-compat";
 
 import { type CrisisRole } from "../data/behaviorPrior";
 import { BREAK_RACIAL_SPELL_IDS } from "../data/racialAbilities";
@@ -756,7 +756,34 @@ export function crisisDecisionPoints(
     src: h.srcUnitId,
     id: String(h.spellId ?? ""),
     a: Math.abs(h.effectiveAmount ?? h.amount ?? 0),
+    periodic: h.logLine?.event === LogEvent.SPELL_PERIODIC_HEAL,
   }));
+  // codex post-hoc 60-POSTHOC-03 U3: a HoT tick on the owner belongs to the
+  // owner's latest (re)application of that HoT ON THE OWNER — not to any
+  // cast of the spell id. A self-Rejuvenation from before the window ticked
+  // on while the owner cast Rejuvenation on an ally inside it, and read as
+  // a fresh self-heal press (`selfHealCasts` 1, `selfHealFreshPct` 5).
+  const ownHotApplies = (
+    (owner.auraEvents ?? []) as Array<
+      Pick<IAuraEvent, "srcUnitId" | "spellId" | "timestamp" | "logLine">
+    >
+  )
+    .filter(
+      (a) =>
+        a.srcUnitId === owner.id &&
+        (a.logLine?.event === LogEvent.SPELL_AURA_APPLIED ||
+          a.logLine?.event === LogEvent.SPELL_AURA_REFRESH),
+    )
+    .map((a) => ({ t: a.timestamp, id: String(a.spellId ?? "") }));
+  /** the (re)application of HoT `id` on the owner that a tick at `atMs`
+   * belongs to */
+  const hotAppliedAt = (id: string, atMs: number): number | undefined => {
+    let at: number | undefined;
+    for (const a of ownHotApplies)
+      if (a.id === id && a.t <= atMs && (at === undefined || a.t > at))
+        at = a.t;
+    return at;
+  };
   const ownerCasts = ((owner.spellCastEvents ?? []) as any[]).map((c) => ({
     t: c.timestamp,
     id: String(c.spellId ?? ""),
@@ -919,10 +946,26 @@ export function crisisDecisionPoints(
     // GH #93: only heals from spells the owner cast inside the window are a
     // press; the rest was already ticking
     const castIdsInWin = new Set(castsIn.map((c) => c.id));
+    // a HoT tick is fresh only when the application it belongs to went on
+    // the owner inside the window (U3); a direct heal keeps the id test — a
+    // Chain Heal or a smart heal cast on an ally lands on the owner as one
+    const freshHeal = (h: (typeof healIn)[number]): boolean =>
+      castIdsInWin.has(h.id) &&
+      !procHealIds.has(h.id) &&
+      (!h.periodic || (hotAppliedAt(h.id, h.t) ?? -Infinity) >= w0);
     const selfHealFresh =
-      ownHealInWin
-        .filter((h) => castIdsInWin.has(h.id) && !procHealIds.has(h.id))
-        .reduce((n, h) => n + h.a, 0) / x.max;
+      ownHealInWin.filter(freshHeal).reduce((n, h) => n + h.a, 0) / x.max;
+    /** this press put the HoT that `h` ticks from on the owner: the
+     * application lies between it and the next press of the spell */
+    const pressBehind = (
+      c: (typeof castsIn)[number],
+      h: (typeof healIn)[number],
+    ): boolean => {
+      if (!h.periodic) return true;
+      const at = hotAppliedAt(h.id, h.t);
+      if (at === undefined || at < c.t) return false;
+      return !ownerCasts.some((o) => o.id === c.id && o.t > c.t && o.t <= at);
+    };
 
     // one kite predicate, shared with burstWindowDecisionPoints (see kitedAway)
     const attackerUnits = [...attackers].map((id) => unitById.get(id));
@@ -1078,7 +1121,10 @@ export function crisisDecisionPoints(
       selfHealFreshPct: Math.floor(selfHealFresh * 100),
       selfHealCasts: castsIn.filter(
         (c) =>
-          !procHealIds.has(c.id) && ownHealInWin.some((h) => h.id === c.id),
+          !procHealIds.has(c.id) &&
+          ownHealInWin.some(
+            (h) => h.id === c.id && freshHeal(h) && pressBehind(c, h),
+          ),
       ).length,
       hasTool,
       feasible: !inCC && !lockedOut && !diedInWindow && hasTool,

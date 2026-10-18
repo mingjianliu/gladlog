@@ -283,22 +283,29 @@ export function analyzeBurstLedger(
     ...allies.map((a) => a.name),
   ]);
 
-  const ownCDs =
-    reconstructEnemyCDTimeline([player], combat).players[0]?.offensiveCDs ?? [];
+  // a press after the round ended is no part of it — dropped BEFORE the
+  // grouping: grouped by span, a post-round press joined the burst it
+  // overlapped and printed `Avatar 0:10–0:20 + Recklessness 0:21–0:20` in a
+  // Solo Shuffle round that ended at 0:20 (codex post-hoc 60-POSTHOC-03 U3)
+  const pressedInRound = (cd: { castTimeSeconds: number }) =>
+    cd.castTimeSeconds < matchEndS;
+  const ownCDs = (
+    reconstructEnemyCDTimeline([player], combat).players[0]?.offensiveCDs ?? []
+  ).filter(pressedInRound);
   if (ownCDs.length === 0) return [];
 
   // Ally offensive CD spans, computed once (player excluded).
   const allyCDSpans = allies
     .filter((a) => a.id !== player.id)
     .flatMap((a) =>
-      (
-        reconstructEnemyCDTimeline([a], combat).players[0]?.offensiveCDs ?? []
-      ).map((cd) => ({
-        ally: a,
-        playerName: a.name,
-        spellName: cd.spellName,
-        ...burstCastSpan(cd),
-      })),
+      (reconstructEnemyCDTimeline([a], combat).players[0]?.offensiveCDs ?? [])
+        .filter(pressedInRound)
+        .map((cd) => ({
+          ally: a,
+          playerName: a.name,
+          spellName: cd.spellName,
+          ...burstCastSpan(cd),
+        })),
     );
 
   const enemyPlayers = enemies.filter((e) => e.info);

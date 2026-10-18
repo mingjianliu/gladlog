@@ -653,6 +653,29 @@ describe("burstWindowDecisionPoints — the pressured friendly (correction 1)", 
     expect(pts[0]!.pressured?.died).toBe(true);
   });
 
+  it("codex post-hoc 60-POSTHOC-03 U3: hit and dead inside the window's LAST rendered second — still the hit friendly who died", () => {
+    // the outcome window's last second, read off the same burst with F2 idle
+    const end = burstWindowDecisionPoints(combat(twoFriendlies()))[0]!
+      .outcomeEndSec;
+    const pts = burstWindowDecisionPoints(
+      combat(
+        twoFriendlies(
+          {},
+          {
+            // one hit at end + 0.5 s, dead at end + 0.6 s: inside the
+            // printed window, past the whole-second `outcomeEndMs`
+            damageIn: [dmg(end + 0.5, 5)],
+            advancedActions: hpTrack("F2", 0, end, 60),
+            deathRecords: [{ timestamp: T0 + (end + 0.6) * 1000 }],
+          },
+        ),
+      ),
+    );
+    expect(pts[0]!.outcomeEndSec).toBe(end);
+    expect(pts[0]!.pressured?.name).toBe("Mate-R");
+    expect(pts[0]!.pressured?.died).toBe(true);
+  });
+
   it("a teammate's ready wall does NOT make the window feasible — it cannot reach the pressured friendly", () => {
     // Ironbark on the healer is a personal wall: ready, but useless to F1.
     const pts = burstWindowDecisionPoints(

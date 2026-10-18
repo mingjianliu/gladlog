@@ -327,7 +327,7 @@ export interface BurstResponseCast {
  * aimed control was cast at, or the holder a ground / untargeted control
  * landed on (`BurstResponseCast.destId`) — or that target's pets / summons
  * must have dealt landed damage > 0 to the PRESSURED friendly inside the
- * burst window [fromMs, toMs] (the engine's `tMs` … `outcomeEndMs`, the span
+ * burst window [fromMs, toMs] (the engine's `tMs` … `outcomeLastMs`, the span
  * and amounts `damageTakenBetween` reads for the window itself). No
  * threshold: one point of damage is "was hitting them".
  *
@@ -1362,6 +1362,13 @@ export function burstWindowDecisionPoints(
       // inside 0 seconds" is not an outcome, it is a rounding artefact.
       const outcomeEndSec = Math.max(endSec, tSec + BURST_RESPONSE_WINDOW_SEC);
       const outcomeEndMs = start + outcomeEndSec * 1000;
+      // F-B6: the window the line prints ends at the END of its last
+      // rendered second — the last ms of `outcomeEndSec`. One bound for every
+      // outcome reading (who died, who the burst hit, the damage taken, the
+      // control-answer filter): codex post-hoc 60-POSTHOC-03 U3 — a friendly
+      // hit at 18.5 s and dead at 18.6 s (outcomeEndSec 18) counted as died
+      // but not as hit, so the death-first pick passed it over
+      const outcomeLastMs = outcomeEndMs + 999;
 
       const ordered = orderedAll;
       const refOf = (
@@ -1596,7 +1603,7 @@ export function burstWindowDecisionPoints(
         // the floored `outcomeEndSec` (0777a8e0 1:19: death at 88.892, end
         // second 88). Render-grid reading, no new threshold.
         const died = ((f.deathRecords ?? []) as any[]).some(
-          (d) => d.timestamp >= tMs && d.timestamp < outcomeEndMs + 1000,
+          (d) => d.timestamp >= tMs && d.timestamp <= outcomeLastMs,
         );
         return {
           unitId: f.id,
@@ -1611,7 +1618,7 @@ export function burstWindowDecisionPoints(
         };
       });
       const damageTakenIn = (f: any): number =>
-        damageTakenBetween(f, tMs, outcomeEndMs);
+        damageTakenBetween(f, tMs, outcomeLastMs);
       const dmgByUnitId = new Map<string, number>(
         friendlies.map((f) => [f.id, damageTakenIn(f)]),
       );
@@ -1628,7 +1635,7 @@ export function burstWindowDecisionPoints(
       const hitByBurst = new Set(
         friendlies
           .filter((f) =>
-            hitByAttackers(f, units, fromBurstCaster, tMs, outcomeEndMs),
+            hitByAttackers(f, units, fromBurstCaster, tMs, outcomeLastMs),
           )
           .map((f) => f.id),
       );
@@ -1641,7 +1648,7 @@ export function burstWindowDecisionPoints(
         const f = friendlies.find((u) => u.id === unitId);
         const ds = ((f?.deathRecords ?? []) as any[])
           .map((d) => d.timestamp as number)
-          .filter((t) => t >= tMs && t < outcomeEndMs + 1000);
+          .filter((t) => t >= tMs && t <= outcomeLastMs);
         return ds.length > 0 ? Math.min(...ds) : Infinity;
       };
       const pressured =
@@ -1674,7 +1681,7 @@ export function burstWindowDecisionPoints(
             r.destId,
             enemyPlayerOf,
             tMs,
-            outcomeEndMs,
+            outcomeLastMs,
             units,
           )
         )

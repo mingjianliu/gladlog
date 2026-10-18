@@ -44,6 +44,41 @@ function dmgOut(timestamp: number, amount: number, destUnitId: string): any {
 const info = { teamId: "0", specId: "x" } as any;
 
 describe("burstLedger — burst grouping and audit", () => {
+  // codex post-hoc 60-POSTHOC-03 U3: a press after the round ended joined
+  // the burst it overlapped — `Avatar 0:10–0:20 + Recklessness 0:21–0:20`
+  it("a press after the round's end is not part of the burst it overlaps", () => {
+    const cast = (id: string, atS: number, name: string) =>
+      makeSpellCastEvent(
+        id,
+        MATCH_START + atS * 1000,
+        "p1",
+        "Self",
+        "p1",
+        "Ret",
+        0,
+        name,
+      );
+    const player = makeUnit("p1", {
+      name: "Ret",
+      spec: CombatUnitSpec.Paladin_Retribution,
+      info,
+      spellCastEvents: [
+        cast("31884", 10, "Avenging Wrath"),
+        cast("190319", 21, "Combustion"),
+      ],
+    } as any);
+    const enemy = makeUnit("e1", { name: "Enemy", info } as any);
+    const entries = analyzeBurstLedger(player, [], [enemy], {
+      startTime: MATCH_START,
+      endTime: MATCH_START + 20_000,
+    } as any);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]!.spells.map((x) => x.spellName)).toEqual([
+      "Avenging Wrath",
+    ]);
+    expect(entries[0]!.toSeconds).toBe(20);
+  });
+
   it("groups close casts into one burst, far casts into two (D1-B1)", () => {
     // 31884 Avenging Wrath (offensive, 20s buff): casts at 10s and 15s overlap
     // (buff reach), the 80s cast is separate.

@@ -3516,3 +3516,18 @@ healer +5), crisis-no-response +1, 3 cd-hoarded rows move to an earlier
 crisis of the same context; 744 `broken by` lines change owner; +30 [CC
 BROKEN]; [STACKED DEFENSIVES] −21 / +7. breakFactScan `brokenByHolder` 115
 → 0, `brokenBySplitAlly` 611 → 0.
+v414 (2026-10-18, F15 batch 10 — codex post-hoc 60-POSTHOC-03 U3 burst,
+facts only): (1) a burst window's outcome readings share one bound — the end
+of its last rendered second (`outcomeLastMs`): who the burst hit, the damage
+taken and the control-answer filter used to stop at the whole second while
+the deaths ran to its end, so a friendly hit and dead in that last second
+lost the death-first pressured pick; (2) the burst ledger drops a press after
+the round's end before grouping (`Avatar 0:10–0:20 + Recklessness
+0:21–0:20`); (3) a HoT tick on the owner is a fresh self-heal only when the
+HoT was (re)applied on the owner inside the crisis window — a self-
+Rejuvenation from before ticked on while the owner cast Rejuvenation on an
+ally (`selfHealCasts` / `selfHealFreshPct`). 605 files: no candidate added or
+removed; 2 ledger headers lose their post-round CD; [BURST ANSWERED] −14 /
++20 lines (a control on an enemy that hit the pressured friendly in the last
+second now answers; one window newly listed). New gate
+checkBurstLedgerSpellSpans 4 → 0.

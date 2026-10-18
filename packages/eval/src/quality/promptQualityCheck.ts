@@ -4684,7 +4684,8 @@ export function checkFormCooldownPressSpacing(lines: string[]): string[] {
  * defines as full immunity (0f894aee 5:00: `Cloak of Shadows (immune, 5.0s)`
  * while 9 physical hits landed).
  */
-const ENEMY_DEF_BARE_IMMUNE = /^\s*\d+:\d{2}\s+\[ENEMY DEF\].*?: (.+?) \(immune[,)]/;
+const ENEMY_DEF_BARE_IMMUNE =
+  /^\s*\d+:\d{2}\s+\[ENEMY DEF\].*?: (.+?) \(immune[,)]/;
 export function checkSchoolLimitedImmuneLabel(lines: string[]): string[] {
   const names = schoolLimitedImmunityNames();
   const failures: string[] = [];
@@ -5256,6 +5257,38 @@ export function checkOffensiveWindowHeaderSpan(lines: string[]): string[] {
       failures.push(
         `${at} ${from > roundEnd.second ? "开始" : "结束"}于回合结束之后(${roundEnd.says}在 ${fmtTime(roundEnd.second)})`,
       );
+  });
+  return failures;
+}
+
+/**
+ * HardFailure class (codex post-hoc 60-POSTHOC-03 U3, 2026-10-18): the spans
+ * a multi-CD burst-ledger header gives each cooldown (`Burst #1 — 0:10–0:20 |
+ * Avatar 0:10–0:20 + Recklessness 0:21–0:20`). Every span lies inside the
+ * header's: it does not end before it starts, nor start after the header
+ * ends. A press after the round's end used to join the burst it overlapped
+ * and print a span that started after the clipped header end
+ * (`analyzeBurstLedger` drops it before grouping now). No tolerance: both
+ * sides print the same seconds.
+ */
+export function checkBurstLedgerSpellSpans(lines: string[]): string[] {
+  const failures: string[] = [];
+  const toS = (m: string, ss: string) => Number(m) * 60 + Number(ss);
+  lines.forEach((line, i) => {
+    const h = line.match(BURST_LEDGER_LINE);
+    if (!h) return;
+    const headerTo = toS(h[4]!, h[5]!);
+    const spells = line.slice(line.indexOf("|") + 1).split(" + ");
+    for (const sp of spells) {
+      const m = sp.match(/ (\d+):(\d{2})–(\d+):(\d{2})\s*$/);
+      if (!m) continue;
+      const from = toS(m[1]!, m[2]!);
+      const to = toS(m[3]!, m[4]!);
+      const at = `line ${i + 1}: Burst #${h[1]} 的 ${sp.trim()}`;
+      if (to < from) failures.push(`${at} 结束早于开始`);
+      if (from > headerTo)
+        failures.push(`${at} 开始于整段结束(${h[4]}:${h[5]})之后`);
+    }
   });
   return failures;
 }
@@ -7519,6 +7552,7 @@ export function checkMatch(
   hardFailures.push(...checkOffensiveWindowSpikeMarker(lines));
   hardFailures.push(...checkOffensiveWindowSpikeCredit(lines));
   hardFailures.push(...checkOffensiveWindowHeaderSpan(lines));
+  hardFailures.push(...checkBurstLedgerSpellSpans(lines));
   hardFailures.push(...checkDmgSpikeListCap(lines));
   hardFailures.push(...checkSyncWindowRefConsistency(lines));
   hardFailures.push(...checkSyncWindowLockLength(lines));
