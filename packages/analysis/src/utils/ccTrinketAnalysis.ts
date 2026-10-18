@@ -47,6 +47,7 @@ import {
   supersededAuraBreaks,
 } from "./auraIntervals";
 import { upperBound } from "./binarySearch";
+import { breakerOfBrokenRow } from "./brokenRowBreaker";
 import {
   cannotCastIntervalsForSpells,
   castBlockingAuraAt,
@@ -1466,7 +1467,7 @@ export interface ICcRemovalCause {
  * Mass Invisibility broken by enemy damage).
  */
 export function auraBreakAtRemoval(
-  holder: Pick<ICombatUnit, "auraEvents">,
+  holder: Pick<ICombatUnit, "id" | "name" | "auraEvents" | "damageIn">,
   spellId: string,
   applyMs: number,
   removeMs: number,
@@ -1532,14 +1533,15 @@ export function auraBreakAtRemoval(
       if (!id && !name) return undefined;
       // A break line with no source (FT-T09: the Shadow Word: Death backlash,
       // whose damage line has none either) states the spell alone — no
-      // breaker is read into it.
-      const sourceless = !brk.srcUnitId || /^0+$/.test(brk.srcUnitId);
+      // breaker is read into it. Otherwise the breaker is the row's source,
+      // except where the log names the holder for another unit's hit or a
+      // Blessing's protected ally for the paladin's own spell
+      // (`breakerOfBrokenRow`, fact1215 R4 / C4).
+      const by = breakerOfBrokenRow(holder, brk);
       return {
         kind: "broken",
         spellName: getEnglishSpellName(id, name),
-        ...(sourceless
-          ? {}
-          : { byUnitId: brk.srcUnitId, byName: brk.srcUnitName }),
+        ...(by ? { byUnitId: by.unitId, byName: by.name } : {}),
       };
     }
     return {

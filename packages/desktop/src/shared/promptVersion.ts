@@ -165,5 +165,11 @@
  *  row ends a CC; a set of spells is stopped while every member is, per time
  *  (`blockedForEverySpell`). 605 files: no candidate added or removed; one
  *  kick-eaten `ccInWindowS` 2.8 → 0.9.
+ *  v413 (2026-10-18, F15 batch 9 — fact1215 R4 + C4, user 「接受」 the 605
+ *  preview): who broke an aura reads the hit behind a BROKEN_SPELL row that
+ *  names the holder, and a Blessing of Sacrifice split onto the paladin as the
+ *  paladin's spell (`breakerOfBrokenRow`); the paladin's own 6940 link is no
+ *  protection (`isCasterSideLinkAura`). 605 files: cd-hoarded +14,
+ *  crisis-no-response +1; 744 `broken by` lines; +30 [CC BROKEN].
  */
-export const PROMPT_VERSION = 412;
+export const PROMPT_VERSION = 413;

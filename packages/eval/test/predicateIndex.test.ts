@@ -105,6 +105,7 @@ import * as allyCopyWall from "@gladlog/analysis/src/utils/allyCopyWall";
 import * as auraEndCause from "@gladlog/analysis/src/utils/auraEndCause";
 import * as auraIntervals from "@gladlog/analysis/src/utils/auraIntervals";
 import * as bracketKey from "@gladlog/analysis/src/utils/bracketKey";
+import * as brokenRowBreaker from "@gladlog/analysis/src/utils/brokenRowBreaker";
 import * as buffDuration from "@gladlog/analysis/src/utils/buffDuration";
 import * as burstHit from "@gladlog/analysis/src/utils/burstHit";
 import * as burstLedger from "@gladlog/analysis/src/utils/burstLedger";
@@ -2355,6 +2356,17 @@ const INDEX: PredicateRow[] = [
     file: `${E}/quality/promptQualityCheck.ts`,
     symbol: "checkDmgSpikeListCap",
     mod: promptQualityCheck,
+  },
+  // fact1215 R4 / C4: who broke an aura; the caster-side link aura
+  {
+    file: `${A}/utils/brokenRowBreaker.ts`,
+    symbol: "breakerOfBrokenRow",
+    mod: brokenRowBreaker,
+  },
+  {
+    file: `${A}/utils/brokenRowBreaker.ts`,
+    symbol: "isCasterSideLinkAura",
+    mod: brokenRowBreaker,
   },
   // user ruling P-FU-H23: the removal pairing has a fourth reader (cannot-cast)
   {

@@ -29,6 +29,7 @@ import {
 import { getEnglishSpellName } from "../data/spellEffectData";
 import spellIdLists from "../data/spellIdLists";
 import { buildAuraIntervals, type IAuraInterval } from "../utils/auraIntervals";
+import { isCasterSideLinkAura } from "../utils/brokenRowBreaker";
 
 /** external ∪ big-personal defensives — the two lists the product already
  * treats as "major"; small cooldowns (Fade, PW:S) are on neither */
@@ -93,7 +94,10 @@ export function majorWallIntervals(
     .filter(
       (iv) =>
         STACKED_DEFENSIVE_MAJOR_IDS.has(iv.spellId) &&
-        friendNames.has(iv.srcUnitName),
+        friendNames.has(iv.srcUnitName) &&
+        // a Blessing of Sacrifice's link on its own caster moves damage ONTO
+        // them — no protection (fact1215 C4, `isCasterSideLinkAura`)
+        !isCasterSideLinkAura(iv.spellId, iv.srcUnitName === target.name),
     )
     .sort((x, y) => x.fromS - y.fromS);
 }

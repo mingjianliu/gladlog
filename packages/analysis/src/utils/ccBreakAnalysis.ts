@@ -1,27 +1,29 @@
 import { ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
+import { SPELL_CATEGORIES } from "../data/spellCategories";
 import {
   getEnglishSpellName,
   OPPRESSING_ROAR_AURA_IDS,
 } from "../data/spellEffectData";
-import { SPELL_CATEGORIES } from "../data/spellCategories";
 import { dropAuraRebroadcasts } from "./auraIntervals";
+import { breakerOfBrokenRow } from "./brokenRowBreaker";
 import { ccFullDurationForApplication } from "./ccDuration";
 import {
   buildCcCategoryHistory,
-  drDurationFactor,
   ccRecastBetween,
+  drDurationFactor,
   getDRCategory,
-  matchPendingCcKey,
   getDRLevelAtTime,
+  matchPendingCcKey,
   reAppliedIsSameApplication,
 } from "./drAnalysis";
 
 /**
  * CC-break statistics (user request, 2026-08-02). The determination uses no
  * heuristics — the log carries the ground truth: a CC aura's removal event is
- * SPELL_AURA_BROKEN_SPELL (src = **the breaker**, params[11..12] = the
- * breaking spell) or SPELL_AURA_BROKEN (pure melee; ≈0 in modern logs).
+ * SPELL_AURA_BROKEN_SPELL (src = **the breaker** — but for the rows that
+ * name the holder or a Blessing of Sacrifice's protected ally, see
+ * `breakerOfBrokenRow`; params[11..12] = the breaking spell) or SPELL_AURA_BROKEN (pure melee; ≈0 in modern logs).
  * Corpus baseline (150 matches / 766 combats): 6.14 breaks per combat, 17.5%
  * of all hard-CC windows; the four quadrants split nearly in half — squander
  * (our own damage breaking CC our side put on an enemy) 48.2% vs enemy
@@ -41,8 +43,10 @@ export interface ICcBreakEvent {
   casterName: string;
   /** The breaker (whose damage broke it). */
   breakerName: string;
-  /** The breaking row's own source unit (GUID and name as logged) — a pet's
-   * break is the pet's row; `breakerName` above folds it into the owner. */
+  /** The unit that broke it (`breakerOfBrokenRow`: the row's source as
+   * logged, except where the log names the holder for another unit's hit or
+   * a Blessing's protected ally for the paladin's own spell) — a pet's break
+   * is the pet; `breakerName` above folds it into the owner. */
   breakerUnitId?: string;
   breakerUnitName?: string;
   breakerIsFriendly: boolean;
@@ -304,17 +308,26 @@ export function analyzeCcBreaks(
           continue;
         }
 
+        // The breaker: the row's source, except where the log names the
+        // holder for another unit's hit or a Blessing's protected ally for
+        // the paladin's own spell (`breakerOfBrokenRow`, fact1215 R4 / C4)
+        const by =
+          aura.logLine.event === LogEvent.SPELL_AURA_BROKEN_SPELL
+            ? breakerOfBrokenRow(holder, aura)
+            : undefined;
+        const breakerId = by?.unitId ?? aura.srcUnitId;
+        const breakerRowName = by?.name ?? aura.srcUnitName;
         // Pet breaks attributed to the owner: the side comes from the pet's
         // own side, and the display name becomes the owner plus a pet marker
-        const asFriendlyPet = friendlyPetById.get(aura.srcUnitId);
-        const asEnemyPet = enemyPetById.get(aura.srcUnitId);
+        const asFriendlyPet = friendlyPetById.get(breakerId);
+        const asEnemyPet = enemyPetById.get(breakerId);
         const breakerIsFriendly =
-          friendlyIds.has(aura.srcUnitId) || asFriendlyPet !== undefined;
+          friendlyIds.has(breakerId) || asFriendlyPet !== undefined;
         const pet = asFriendlyPet ?? asEnemyPet;
         const petOwner = pet ? playerById.get(pet.ownerId) : undefined;
         const breakerName = pet
           ? `${petOwner?.name ?? pet.name}(宠物)`
-          : aura.srcUnitName;
+          : breakerRowName;
         const params = aura.logLine.parameters;
         const breakSpellId =
           aura.logLine.event === LogEvent.SPELL_AURA_BROKEN_SPELL
@@ -347,8 +360,8 @@ export function analyzeCcBreaks(
           holderIsFriendly,
           casterName: entry.casterName,
           breakerName,
-          breakerUnitId: aura.srcUnitId,
-          breakerUnitName: aura.srcUnitName,
+          breakerUnitId: breakerId,
+          breakerUnitName: breakerRowName,
           breakerIsFriendly,
           breakSpellId,
           breakSpellName,

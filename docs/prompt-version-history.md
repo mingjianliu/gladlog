@@ -3501,3 +3501,18 @@ single-school locks used to be dropped as free. 605 files: no candidate added
 or removed; one menu fact changes — 192-3-1144 kick-eaten @103.3
 `ccInWindowS` 2.8 → 0.9 (the priest's UA backlash silence counted as hard CC;
 it now stops only silenceable casts, the Seduction 0.9 s remains).
+v413 (2026-10-18, F15 batch 9 — fact1215 R4 + C4, facts; user 「接受」 the
+605 preview): who broke an aura (`breakerOfBrokenRow`) — a
+SPELL_AURA_BROKEN_SPELL row naming the HOLDER takes the other unit whose hit
+of the breaking spell landed just before (a Desperate Soul's Wrath of
+Nathreza was "broken by 6(MMonk)'s Wrath of Nathreza") or the caster of that
+damage-over-time; a Blessing of Sacrifice DAMAGE_SPLIT onto a paladin whose
+own link is up is the paladin's spell (was credited to the protected ally).
+Readers: the control lines' `broken by`, [BUFF FADED], `endedBy`, [CC
+BROKEN]. And the paladin's own 6940 link aura is no protection on them
+(`isCasterSideLinkAura`): [STACKED DEFENSIVES], cd-hoarded's "already
+protected" abstain, crisis-no-response. 605 files: cd-hoarded +14 (dps +9,
+healer +5), crisis-no-response +1, 3 cd-hoarded rows move to an earlier
+crisis of the same context; 744 `broken by` lines change owner; +30 [CC
+BROKEN]; [STACKED DEFENSIVES] −21 / +7. breakFactScan `brokenByHolder` 115
+→ 0, `brokenBySplitAlly` 611 → 0.

@@ -36,6 +36,7 @@ import {
   HEALING_AMPLIFIER_SPELL_IDS,
   MANA_COOLDOWN_SPELL_IDS,
 } from "../context/timelineHelpers";
+import { CASTER_SIDE_LINK_AURA_IDS } from "../utils/brokenRowBreaker";
 import {
   NO_FIXED_DURATION_IDS,
   SPELL_DURATION_OVERRIDES,
@@ -702,6 +703,9 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   ),
   t("DRUID_FORM_BUFFS", "utils/ccTrinketAnalysis.ts", "aura", () =>
     set(DRUID_FORM_BUFFS.keys()),
+  ),
+  t("CASTER_SIDE_LINK_AURA_IDS", "utils/brokenRowBreaker.ts", "aura", () =>
+    set(CASTER_SIDE_LINK_AURA_IDS),
   ),
   t("BREAKABLE_CC_SPELL_IDS", "utils/ccTrinketAnalysis.ts", "aura", () =>
     set(BREAKABLE_CC_SPELL_IDS),
