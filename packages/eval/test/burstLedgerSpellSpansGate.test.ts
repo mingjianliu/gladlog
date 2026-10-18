@@ -12,6 +12,13 @@ describe("checkBurstLedgerSpellSpans", () => {
       ]),
     ).toHaveLength(2);
   });
+  it("fails spans that start before or end after the header (codex 20-F15-20)", () => {
+    expect(
+      checkBurstLedgerSpellSpans([
+        "  Burst #1 — 0:10–0:20 | Avatar 0:05–0:20 + Recklessness 0:10–0:25",
+      ]),
+    ).toHaveLength(2);
+  });
   it("passes spans inside the header, and a single bare-named CD", () => {
     expect(
       checkBurstLedgerSpellSpans([

@@ -757,7 +757,20 @@ export function crisisDecisionPoints(
     id: String(h.spellId ?? ""),
     a: Math.abs(h.effectiveAmount ?? h.amount ?? 0),
     periodic: h.logLine?.event === LogEvent.SPELL_PERIODIC_HEAL,
+    line: h.logLine?.lineIndex as number | undefined,
   }));
+  /** `x` was logged before `y`: an earlier ms, or the same ms with both line
+   * indexes saying so (codex 20-F15-20: a refresh logged after a tick in its
+   * ms must not claim that tick) */
+  const loggedBefore = (
+    x: { t: number; line?: number },
+    y: { t: number; line?: number },
+  ): boolean =>
+    x.t < y.t ||
+    (x.t === y.t &&
+      x.line !== undefined &&
+      y.line !== undefined &&
+      x.line < y.line);
   // codex post-hoc 60-POSTHOC-03 U3: a HoT tick on the owner belongs to the
   // owner's latest (re)application of that HoT ON THE OWNER — not to any
   // cast of the spell id. A self-Rejuvenation from before the window ticked
@@ -774,21 +787,52 @@ export function crisisDecisionPoints(
         (a.logLine?.event === LogEvent.SPELL_AURA_APPLIED ||
           a.logLine?.event === LogEvent.SPELL_AURA_REFRESH),
     )
-    .map((a) => ({ t: a.timestamp, id: String(a.spellId ?? "") }));
-  /** the (re)application of HoT `id` on the owner that a tick at `atMs`
-   * belongs to */
-  const hotAppliedAt = (id: string, atMs: number): number | undefined => {
-    let at: number | undefined;
+    .map((a) => ({
+      t: a.timestamp,
+      id: String(a.spellId ?? ""),
+      line: a.logLine?.lineIndex,
+    }));
+  /** the (re)application of HoT `h.id` on the owner that the tick `h`
+   * belongs to: the latest one logged before it */
+  const hotAppliedFor = (h: (typeof healIn)[number]) => {
+    let at: (typeof ownHotApplies)[number] | undefined;
     for (const a of ownHotApplies)
-      if (a.id === id && a.t <= atMs && (at === undefined || a.t > at))
-        at = a.t;
+      if (a.id === h.id && loggedBefore(a, h) && (!at || loggedBefore(at, a)))
+        at = a;
     return at;
   };
   const ownerCasts = ((owner.spellCastEvents ?? []) as any[]).map((c) => ({
     t: c.timestamp,
     id: String(c.spellId ?? ""),
     dest: c.destUnitId,
+    line: c.logLine?.lineIndex as number | undefined,
   }));
+  /**
+   * The press a heal on the owner belongs to (codex 20-F15-20): the owner's
+   * latest press of that spell before the heal's own evidence — a HoT tick's
+   * (re)application on the owner (`hotAppliedFor`; a press of the spell on
+   * an ally after it does not take it), a direct heal's own row (a Chain
+   * Heal or smart heal cast on an ally that lands on the owner is its
+   * press; a later press of the spell is not). One association for the
+   * fresh amount and the press count.
+   */
+  const pressOf = (h: (typeof healIn)[number]) => {
+    const evidence = h.periodic ? hotAppliedFor(h) : h;
+    if (!evidence) return undefined;
+    let press: (typeof ownerCasts)[number] | undefined;
+    // a press in the evidence's own ms counts whatever its line: the log
+    // writes an instant spell's aura and heal rows BEFORE its CAST_SUCCESS
+    // (103-5 2:31: Eternal Flame APPLIED / HEAL / CAST_SUCCESS on lines
+    // 18401–18403 of one ms)
+    for (const c of ownerCasts)
+      if (
+        c.id === h.id &&
+        c.t <= evidence.t &&
+        (!press || loggedBefore(press, c))
+      )
+        press = c;
+    return press;
+  };
   const deaths = ((owner.deathRecords ?? []) as any[]).map(
     (d) => d.timestamp as number,
   );
@@ -945,27 +989,19 @@ export function crisisDecisionPoints(
         .reduce((n, h) => n + h.a, 0) / x.max;
     // GH #93: only heals from spells the owner cast inside the window are a
     // press; the rest was already ticking
-    const castIdsInWin = new Set(castsIn.map((c) => c.id));
-    // a HoT tick is fresh only when the application it belongs to went on
-    // the owner inside the window (U3); a direct heal keeps the id test — a
-    // Chain Heal or a smart heal cast on an ally lands on the owner as one
-    const freshHeal = (h: (typeof healIn)[number]): boolean =>
-      castIdsInWin.has(h.id) &&
-      !procHealIds.has(h.id) &&
-      (!h.periodic || (hotAppliedAt(h.id, h.t) ?? -Infinity) >= w0);
-    const selfHealFresh =
-      ownHealInWin.filter(freshHeal).reduce((n, h) => n + h.a, 0) / x.max;
-    /** this press put the HoT that `h` ticks from on the owner: the
-     * application lies between it and the next press of the spell */
-    const pressBehind = (
-      c: (typeof castsIn)[number],
-      h: (typeof healIn)[number],
-    ): boolean => {
-      if (!h.periodic) return true;
-      const at = hotAppliedAt(h.id, h.t);
-      if (at === undefined || at < c.t) return false;
-      return !ownerCasts.some((o) => o.id === c.id && o.t > c.t && o.t <= at);
+    // a heal is fresh when the press it belongs to (`pressOf`) is one of
+    // the owner's presses inside the window (U3 + codex 20-F15-20)
+    const freshPressOf = (h: (typeof healIn)[number]) => {
+      if (procHealIds.has(h.id)) return undefined;
+      const p = pressOf(h);
+      return p && castsIn.some((c) => c.t === p.t && c.id === p.id)
+        ? p
+        : undefined;
     };
+    const freshHeals = ownHealInWin
+      .map((h) => ({ h, press: freshPressOf(h) }))
+      .filter((f) => f.press !== undefined);
+    const selfHealFresh = freshHeals.reduce((n, f) => n + f.h.a, 0) / x.max;
 
     // one kite predicate, shared with burstWindowDecisionPoints (see kitedAway)
     const attackerUnits = [...attackers].map((id) => unitById.get(id));
@@ -1119,13 +1155,9 @@ export function crisisDecisionPoints(
       procNames: [...new Set(procsIn.map((m) => m.name))],
       selfHealPct: Math.round(selfHeal * 100),
       selfHealFreshPct: Math.floor(selfHealFresh * 100),
-      selfHealCasts: castsIn.filter(
-        (c) =>
-          !procHealIds.has(c.id) &&
-          ownHealInWin.some(
-            (h) => h.id === c.id && freshHeal(h) && pressBehind(c, h),
-          ),
-      ).length,
+      selfHealCasts: new Set(
+        freshHeals.map((f) => `${f.press!.id}@${f.press!.t}`),
+      ).size,
       hasTool,
       feasible: !inCC && !lockedOut && !diedInWindow && hasTool,
     });

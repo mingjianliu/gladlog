@@ -1867,7 +1867,7 @@ export function burstWindowDecisionPoints(
         spend = [];
         for (const c of friendlyCasts) {
           if (c.tMs < w0) continue;
-          if (c.tMs > outcomeEndMs) break;
+          if (c.tMs > outcomeLastMs) break;
           const category: BurstSpendCast["category"] | null =
             PERSONAL_WALL_IDS.has(c.spellId)
               ? "wall"

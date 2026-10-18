@@ -5265,8 +5265,8 @@ export function checkOffensiveWindowHeaderSpan(lines: string[]): string[] {
  * HardFailure class (codex post-hoc 60-POSTHOC-03 U3, 2026-10-18): the spans
  * a multi-CD burst-ledger header gives each cooldown (`Burst #1 — 0:10–0:20 |
  * Avatar 0:10–0:20 + Recklessness 0:21–0:20`). Every span lies inside the
- * header's: it does not end before it starts, nor start after the header
- * ends. A press after the round's end used to join the burst it overlapped
+ * header's: it does not end before it starts, and it starts and ends within
+ * the header's span. A press after the round's end used to join the burst it overlapped
  * and print a span that started after the clipped header end
  * (`analyzeBurstLedger` drops it before grouping now). No tolerance: both
  * sides print the same seconds.
@@ -5277,6 +5277,7 @@ export function checkBurstLedgerSpellSpans(lines: string[]): string[] {
   lines.forEach((line, i) => {
     const h = line.match(BURST_LEDGER_LINE);
     if (!h) return;
+    const headerFrom = toS(h[2]!, h[3]!);
     const headerTo = toS(h[4]!, h[5]!);
     const spells = line.slice(line.indexOf("|") + 1).split(" + ");
     for (const sp of spells) {
@@ -5286,8 +5287,10 @@ export function checkBurstLedgerSpellSpans(lines: string[]): string[] {
       const to = toS(m[3]!, m[4]!);
       const at = `line ${i + 1}: Burst #${h[1]} 的 ${sp.trim()}`;
       if (to < from) failures.push(`${at} 结束早于开始`);
-      if (from > headerTo)
-        failures.push(`${at} 开始于整段结束(${h[4]}:${h[5]})之后`);
+      // inside the header's span (codex 20-F15-20: `0:05–0:20` under a
+      // `0:10–0:20` header passed)
+      if (from < headerFrom || from > headerTo || to > headerTo)
+        failures.push(`${at} 不在整段 ${h[2]}:${h[3]}–${h[4]}:${h[5]} 之内`);
     }
   });
   return failures;

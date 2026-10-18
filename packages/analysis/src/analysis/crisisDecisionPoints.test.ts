@@ -230,6 +230,101 @@ describe("crisisDecisionPoints", () => {
     expect(b.selfHealCasts).toBe(1);
   });
 
+  // codex 20-F15-20: one press association for the fresh amount and the count
+  describe("codex 20-F15-20 — a heal belongs to its own press", () => {
+    const heal = (
+      t: number,
+      id: string,
+      a: number,
+      periodic: boolean,
+      line?: number,
+    ) => ({
+      timestamp: T0 + t,
+      srcUnitId: "H",
+      spellId: id,
+      amount: a,
+      effectiveAmount: a,
+      logLine: {
+        event: periodic ? LogEvent.SPELL_PERIODIC_HEAL : LogEvent.SPELL_HEAL,
+        timestamp: T0 + t,
+        ...(line === undefined ? {} : { lineIndex: line }),
+      },
+    });
+    const cast = (t: number, id: string, dest: string, line?: number) => ({
+      timestamp: T0 + t,
+      spellId: id,
+      destUnitId: dest,
+      logLine: {
+        timestamp: T0 + t,
+        ...(line === undefined ? {} : { lineIndex: line }),
+      },
+    });
+    const selfAura = (t: number, event: LogEvent, line?: number) => ({
+      timestamp: T0 + t,
+      spellId: "774",
+      srcUnitId: "H",
+      destUnitId: "H",
+      logLine: {
+        event,
+        timestamp: T0 + t,
+        ...(line === undefined ? {} : { lineIndex: line }),
+      },
+    });
+    it("a HoT pressed before the window ticks inside it while a later press of it goes on an ally: not fresh", () => {
+      const o = unit({
+        // crisis at 2 s → window from 0.5 s: pressed 10 ms before it, landed
+        // 10 ms inside it (codex's repro)
+        spellCastEvents: [cast(490, "774", "H"), cast(3200, "774", "A")],
+        auraEvents: [selfAura(510, LogEvent.SPELL_AURA_APPLIED)],
+        healIn: [heal(2200, "774", 20, true)],
+      });
+      const p = crisisDecisionPoints(o, combat(o))[0]!;
+      expect(p.selfHealFreshPct).toBe(0);
+      expect(p.selfHealCasts).toBe(0);
+      expect(p.responses.selfHeal).toBe(false);
+    });
+    it("a refresh logged after a tick in its ms does not claim that tick", () => {
+      const o = unit({
+        spellCastEvents: [
+          cast(-5000, "774", "H", 10),
+          cast(2200, "774", "H", 101),
+        ],
+        auraEvents: [
+          selfAura(-4990, LogEvent.SPELL_AURA_APPLIED, 11),
+          selfAura(2200, LogEvent.SPELL_AURA_REFRESH, 102),
+        ],
+        healIn: [heal(2200, "774", 20, true, 100)],
+      });
+      const p = crisisDecisionPoints(o, combat(o))[0]!;
+      expect(p.selfHealFreshPct).toBe(0);
+      expect(p.selfHealCasts).toBe(0);
+    });
+    it("103-5 2:31: an instant self-heal's aura and heal rows logged before its CAST_SUCCESS in the same ms are that press's", () => {
+      const o = unit({
+        spellCastEvents: [cast(2100, "156322", "H", 403)],
+        auraEvents: [
+          {
+            ...selfAura(2100, LogEvent.SPELL_AURA_APPLIED, 401),
+            spellId: "156322",
+          },
+        ],
+        healIn: [heal(2100, "156322", 20, false, 402)],
+      });
+      const p = crisisDecisionPoints(o, combat(o))[0]!;
+      expect(p.selfHealFreshPct).toBe(20);
+      expect(p.selfHealCasts).toBe(1);
+    });
+    it("a direct heal belongs to the press before it, not to a later press of the spell on an ally", () => {
+      const o = unit({
+        spellCastEvents: [cast(2100, "2061", "H"), cast(3600, "2061", "A")],
+        healIn: [heal(2100, "2061", 20, false)],
+      });
+      const p = crisisDecisionPoints(o, combat(o))[0]!;
+      expect(p.selfHealFreshPct).toBe(20);
+      expect(p.selfHealCasts).toBe(1);
+    });
+  });
+
   // The rendered % sits on a line that names the 15 % bar, so it is floored:
   // 14.6 % is not a response and must not read 15.
   it("selfHealFreshPct is floored to the bar's grid: 14.6 % of max HP reads 14, and is not a selfHeal response", () => {
