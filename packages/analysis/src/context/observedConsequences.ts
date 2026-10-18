@@ -48,6 +48,7 @@ import {
   gridHpMinInWindow,
   gridHpPct,
   hpTroughInEventSpan,
+  isDeadAtRenderSecond,
   isHealerSpec,
 } from "../utils/cooldowns";
 import { kickLockoutSecondsFor } from "../utils/kickLockout";
@@ -139,15 +140,22 @@ function teamDrops(
   /** the event's own span, seconds since the round start (fractional) */
   fromS: number,
   toS: number,
-): { parts: string[]; measured: number } {
+): { parts: string[]; measured: number; complete: boolean } {
   const fromSec = Math.floor(fromS);
   const toSec = Math.floor(toS);
   const parts: string[] = [];
   let measured = 0;
   let unmeasured = 0;
   for (const mate of mates) {
+    // a teammate already dead when the span opened is not one the claim is
+    // about (its grid reads nothing from its death second on)
+    if (isDeadAtRenderSecond(mate, matchStartMs, fromSec)) continue;
     const hp = mateHpAcross(mate, matchStartMs, fromSec, toSec);
-    if (!hp) continue;
+    if (!hp) {
+      // no reading at all is no measurement either (codex 20-F15-10)
+      unmeasured++;
+      continue;
+    }
     // the printed low is the trough of the event's own span (FT-T03) —
     // `hpTroughInEventSpan`, the reading missed-sync-window's
     // enemyMinHpPct shares; `hp.lo` is the decision's
@@ -168,11 +176,7 @@ function teamDrops(
         `${label(mate.name)} ${Math.round(h0)}% → low ${Math.round(lo.pct)}% at ${fmtTime(lo.atSec)}`,
       );
   }
-  // "no teammate dropped" is a claim about every teammate: with one of them
-  // unread inside the span and no drop seen, nothing is claimed (codex
-  // 20-F15-09 — a measured drop is still printed)
-  if (unmeasured > 0 && parts.length === 0) measured = 0;
-  return { parts, measured };
+  return { parts, measured, complete: unmeasured === 0 };
 }
 
 function diedIn(
@@ -192,6 +196,23 @@ function diedIn(
   return died.length
     ? `; died inside it: ${died.map((u) => label(u.name)).join(", ")}`
     : "";
+}
+
+/**
+ * What a [CONSEQ] line says after its arrow, or null for no line (F15 /
+ * fact1215, codex 20-F15-09 / -10): the measured drops; else, when every
+ * teammate was read inside the span, that none dropped (`noDropBody`); else
+ * only a death inside it — "no (surviving) teammate dropped" is a claim
+ * about every teammate, and an unread one supports none of it.
+ */
+function consequenceTail(
+  drops: { parts: string[]; measured: number; complete: boolean },
+  died: string,
+): string | null {
+  if (drops.parts.length) return `${drops.parts.join(", ")}${died}`;
+  if (drops.complete && drops.measured > 0)
+    return `${noDropBody(died)}${died}`;
+  return died ? died.replace(/^; /, "") : null;
 }
 
 /** hp-state F-C1: with nobody under the drop threshold, a line that also
@@ -248,17 +269,17 @@ export function formatObservedConsequences(params: {
       const mates = team.filter((m) => m.id !== victim.id);
       // the lockout's readings stop at the round's end (#1)
       const lockEndS = Math.min(t + lockS, (roundEnd - start) / 1000);
-      const { parts, measured } = teamDrops(mates, label, start, t, lockEndS);
+      const drops = teamDrops(mates, label, start, t, lockEndS);
       const died = diedIn(mates, label, start, t, lockEndS);
-      if (!measured && !died) continue;
+      const tail = consequenceTail(drops, died);
+      if (tail === null) continue;
       const stopped =
         a.extraSpellId !== undefined
           ? getEnglishSpellName(a.extraSpellId, a.extraSpellName ?? "")
           : "a cast";
-      const body = parts.length ? parts.join(", ") : noDropBody(died);
       entries.push({
         atS: t,
-        line: `${fmtTime(t)}  [CONSEQ]   ${who} ${label(victim.name)} kicked (${stopped}; ${lockS}s school lockout) → inside the lockout: ${body}${died}`,
+        line: `${fmtTime(t)}  [CONSEQ]   ${who} ${label(victim.name)} kicked (${stopped}; ${lockS}s school lockout) → inside the lockout: ${tail}`,
       });
     }
   }
@@ -272,7 +293,7 @@ export function formatObservedConsequences(params: {
     const mates = team.filter((m) => m.id !== healer.id);
     for (const cc of summary.ccInstances) {
       if (cc.durationSeconds < HEALER_CC_MIN_S) continue;
-      const { parts, measured } = teamDrops(
+      const drops = teamDrops(
         mates,
         label,
         start,
@@ -286,15 +307,15 @@ export function formatObservedConsequences(params: {
         cc.atSeconds,
         cc.atSeconds + cc.durationSeconds,
       );
-      if (!measured && !died) continue;
-      const body = parts.length ? parts.join(", ") : noDropBody(died);
+      const tail = consequenceTail(drops, died);
+      if (tail === null) continue;
       // FT F22: a backlash that is a silence (Unstable Affliction's) says so,
       // as the silences of block 3 do
       const kind =
         BACKLASH_AURA_CC_TYPE.get(cc.spellId) === "silence" ? " (silence)" : "";
       entries.push({
         atS: cc.atSeconds,
-        line: `${fmtTime(cc.atSeconds)}  [CONSEQ]   ${who} ${label(healer.name)} in ${cc.spellName}${kind} for ${renderedCcSeconds(cc)}s → during it: ${body}${died}`,
+        line: `${fmtTime(cc.atSeconds)}  [CONSEQ]   ${who} ${label(healer.name)} in ${cc.spellName}${kind} for ${renderedCcSeconds(cc)}s → during it: ${tail}`,
       });
     }
   }
@@ -322,7 +343,7 @@ export function formatObservedConsequences(params: {
       const atS = (s.from - start) / 1000;
       const durS = (toMs - s.from) / 1000;
       if (atS < 0 || durS < HEALER_CC_MIN_S) continue;
-      const { parts, measured } = teamDrops(
+      const drops = teamDrops(
         mates,
         label,
         start,
@@ -330,11 +351,11 @@ export function formatObservedConsequences(params: {
         atS + durS,
       );
       const died = diedIn(mates, label, start, atS, atS + durS);
-      if (!measured && !died) continue;
-      const body = parts.length ? parts.join(", ") : noDropBody(died);
+      const tail = consequenceTail(drops, died);
+      if (tail === null) continue;
       entries.push({
         atS,
-        line: `${fmtTime(atS)}  [CONSEQ]   ${who} ${label(healer.name)} in ${getEnglishSpellName(s.spellId, s.spellName)} (silence) for ${renderedCcSeconds({ durationSeconds: durS })}s → during it: ${body}${died}`,
+        line: `${fmtTime(atS)}  [CONSEQ]   ${who} ${label(healer.name)} in ${getEnglishSpellName(s.spellId, s.spellName)} (silence) for ${renderedCcSeconds({ durationSeconds: durS })}s → during it: ${tail}`,
       });
     }
   }

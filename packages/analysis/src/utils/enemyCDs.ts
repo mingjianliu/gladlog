@@ -13,6 +13,7 @@ import {
 } from "../data/spellEffectData";
 import {
   buildAuraIntervals,
+  dropAuraRebroadcasts,
   type IAuraInterval,
   supersededAuraBreaks,
 } from "./auraIntervals";
@@ -319,7 +320,9 @@ export function observedEffectEndSeconds(
   // REMOVED").
   if (best !== null && best.end >= combatEndS - 0.001) {
     const fromMs = combat.startTime + best.lastFromS * 1000;
-    const closing = auraRowsOf(best.destId, true)
+    // re-broadcast pairs dropped first, as the interval builder does
+    // (codex 20-F15-10: a REMOVED + APPLIED at 26 s is not the close)
+    const closing = dropAuraRebroadcasts(auraRowsOf(best.destId, true))
       .filter(
         (a) =>
           a.logLine.event === LogEvent.SPELL_AURA_REMOVED &&
