@@ -10,10 +10,10 @@
  * to the caller. Output is pinned by the 605-file acceptanceCapture context hash.
  */
 import { buffFullDurationForCaster } from "../../utils/buffDuration";
-import { observedCastEndMs } from "../../utils/enemyCDs";
 import { castEndedCcWindow } from "../../utils/ccTrinketAnalysis";
 import { cdIsProcOnly } from "../../utils/cooldowns";
 import { isStunCcInstance } from "../../utils/drAnalysis";
+import { observedCastEndMs } from "../../utils/enemyCDs";
 import { interruptImmuneWindows as interruptImmuneWindowsOf } from "../../utils/talentBehaviors";
 import {
   computeHealingInWindow,
@@ -126,7 +126,13 @@ export function prepareOwnerCdContext(
   function ownerHardCcTagAt(timeSeconds: number): string {
     if (!ownerCCSummary) return "";
     for (const cc of ownerCCSummary.ccInstances) {
-      const verb = cc.drInfo ? CC_VERB[cc.drInfo.category] : undefined;
+      // a stun by mechanic with no DR family (Infernal Awakening) is
+      // "stunned" too — the one stun predicate (F15 C9, codex 20-F15-12)
+      const verb = isStunCcInstance(cc)
+        ? CC_VERB["Stun"]
+        : cc.drInfo
+          ? CC_VERB[cc.drInfo.category]
+          : undefined;
       if (!verb) continue;
       if (
         timeSeconds > cc.atSeconds &&

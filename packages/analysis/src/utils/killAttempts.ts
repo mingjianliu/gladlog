@@ -94,6 +94,7 @@ import {
   DRLevel,
   drResetMsAt,
   isStunCcInstance,
+  STUN_DR_CATEGORY,
 } from "./drAnalysis";
 import { reconstructEnemyCDTimeline } from "./enemyCDs";
 import {
@@ -380,6 +381,9 @@ interface StunApp {
   spellName: string;
   casterName: string;
   drLevel: DRLevel;
+  /** in the stun DR family (a stun by mechanic only — Infernal Awakening —
+   * is not, and does not extend a DR chain) */
+  drStun: boolean;
 }
 
 const TIER_RANK: Record<KillOpportunityTier, number> = {
@@ -545,6 +549,7 @@ export function extractKillAttempts(
         spellName: app.spellName,
         casterName: app.casterName,
         drLevel: app.drInfo.level,
+        drStun: app.drInfo.category === STUN_DR_CATEGORY,
       });
       stunsByTarget.set(chain.targetName, arr);
     }
@@ -577,7 +582,17 @@ export function extractKillAttempts(
     for (const stun of stuns) {
       const cur = groups[groups.length - 1];
       const prev = cur?.[cur.length - 1];
-      const prevEnd = prev ? prev.atSeconds + prev.durationSeconds : -Infinity;
+      // the chain is the stun DR family's (getDRLevel's walk): a stun with no
+      // DR family (Infernal Awakening, F15 C9) may join a go but does not
+      // carry the chain on to the next DR stun (codex 20-F15-12: it bridged
+      // two Kidney Shot chains 31 s apart into one attempt)
+      // (a group with no DR stun yet chains on its last stun, as before)
+      const lastDr = stun.drStun
+        ? ([...(cur ?? [])].reverse().find((x) => x.drStun) ?? prev)
+        : prev;
+      const prevEnd = lastDr
+        ? lastDr.atSeconds + lastDr.durationSeconds
+        : -Infinity;
       const formBetween =
         prev !== undefined &&
         forms.some(
