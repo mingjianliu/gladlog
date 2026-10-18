@@ -600,6 +600,7 @@ export function offensivePackItems(
       // prompt — item times must never fall outside it).
       if (inp.inWin(e.fromSeconds))
         for (const d of t.defensivesHit) {
+          if (d.viaLoggedAura) continue; // its cast-id predicate (F15 C10)
           raw.push({
             kind: d.isImmunity ? "immunity" : "enemy-defensive",
             spellId: d.spellId,

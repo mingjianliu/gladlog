@@ -77,6 +77,12 @@ export interface IBurstDefensiveHit {
   overlapSeconds: number;
   /** true = full immunity (Divine Shield / Turtle class); false = major damage reduction. */
   isImmunity: boolean;
+  /** Matched through the wall's logged aura id, not its cast id
+   * (`SELF_WALL_AURA_TO_CAST_ID`, F15 C10). The ledger line states it; the
+   * readers whose predicate and reference data were built on the cast-id set
+   * (deepDive's coaching pack, dpsMetrics' `burstIntoDefensiveRatio`) leave
+   * it out (codex 20-F15-13). */
+  viaLoggedAura?: true;
   /** true = the aura was applied by a unit OTHER than the target (a talent-shared
    * wall such as Flameshaper Obsidian Scales on an ally). Consumers price it
    * through `resolveMitigation(id, { carrierIsCaster: !appliedByOther })`. Optional so hand-built
@@ -388,6 +394,9 @@ export function analyzeBurstLedger(
           Math.min(iv.endMs, toMs) - Math.max(iv.startMs, fromMs);
         if (overlapMs / 1000 < MIN_DEFENSIVE_OVERLAP_S) continue;
         defensivesHit.push({
+          ...(DEF_OR_IMMUNE_CAST_IDS.has(iv.spellId)
+            ? {}
+            : { viaLoggedAura: true as const }),
           spellId: iv.spellId,
           // Aura names in a Chinese-client log are localized text — prompt/facts
           // must be English (lesson from the CJK leak audit)

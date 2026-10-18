@@ -97,7 +97,8 @@ export function computeDpsMetrics(
     const t = b.dominantTarget;
     const dropped = t !== null && isBurstConverted(t);
     if (dropped) converted++;
-    if (t && t.defensivesHit.length > 0) intoDefensive++;
+    // the reference vectors were built on the cast-id set (F15 C10)
+    if (t && t.defensivesHit.some((d) => !d.viaLoggedAura)) intoDefensive++;
     if (b.allyCDsOverlapping.length > 0) aligned++;
   }
 
