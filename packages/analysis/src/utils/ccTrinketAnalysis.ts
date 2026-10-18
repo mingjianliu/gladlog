@@ -3,6 +3,7 @@ import {
   CombatUnitClass,
   CombatUnitReaction,
   ICombatUnit,
+  type IMissEvent,
   LogEvent,
 } from "@gladlog/parser-compat";
 
@@ -48,6 +49,7 @@ import {
 } from "./auraIntervals";
 import { upperBound } from "./binarySearch";
 import { breakerOfBrokenRow } from "./brokenRowBreaker";
+import { buffFullDurationForCaster } from "./buffDuration";
 import {
   cannotCastIntervalsForSpells,
   castBlockingAuraAt,
@@ -278,6 +280,129 @@ export const DRUID_FORM_BUFFS = new Map<string, string>([
   ["783", "Travel Form"],
   ["24858", "Moonkin Form"],
 ]);
+
+/** One CC-avoidance aura up on a unit at an instant (`ccAvoidanceBuffsUpAt`). */
+export interface ICcAvoidanceBuffUp {
+  spellId: string;
+  name: string;
+  /** who applied it; "" for an aura the log lists as up at its start */
+  srcName: string;
+}
+
+/**
+ * F15 / fact1215 R5 + R6 (2026-10-18): which listed CC-avoidance auras
+ * (`CC_AVOIDANCE_BUFF_SPELLS`; with `withForms` the Druid forms too) were up
+ * on `unit` at the instant of one log row — the one reading for "was X up
+ * when the control hit": the `[IMMUNE — X was up]` / `[CC NOT LANDED] (X was
+ * up)` cause (`ccImmuneCauseOf`) and the `[CC AVOIDED?]` buff credit.
+ *
+ *  - In LOG ORDER: with `atLine` (the judged row's line index), a row of the
+ *    same millisecond logged after it is not read. A REMOVED there is the
+ *    aura the row consumed — 086019c0 1:12, 09195b87 0:35: Nullifying
+ *    Shroud REMOVED in the IMMUNE miss's own ms, lines after it, and the
+ *    miss read "no cause logged".
+ *  - An application the log never closes (its next row is no REMOVED — a
+ *    re-application, or nothing) holds only for its official length
+ *    (`buffFullDurationForCaster`, the cap the aura intervals use): 15b4d4ec
+ *    read a Phase Shift applied at 0:18 (≈1 s, no REMOVED — the priest went
+ *    into Mass Invisibility) as up at 1:14 and hid the DR reading. Unknown
+ *    length → no cap (as before).
+ *  - `logStartMs`: the auras the log lists as up at its start
+ *    (`interestingAurasJSON`) begin there.
+ */
+export function ccAvoidanceBuffsUpAt(
+  unit: Pick<ICombatUnit, "auraEvents"> & Partial<Pick<ICombatUnit, "info">>,
+  atMs: number,
+  opts: {
+    atLine?: number;
+    withForms?: boolean;
+    logStartMs?: number;
+    casterOf?: (unitId: string) => ICombatUnit | undefined;
+  } = {},
+): ICcAvoidanceBuffUp[] {
+  const nameOf = (id: string): string | undefined =>
+    CC_AVOIDANCE_BUFF_SPELLS.get(id) ??
+    (opts.withForms ? DRUID_FORM_BUFFS.get(id) : undefined);
+  const up = new Map<string, ICcAvoidanceBuffUp & { untilMs: number }>();
+  const open = (
+    id: string,
+    name: string,
+    srcName: string,
+    fromMs: number,
+    caster: ICombatUnit | undefined,
+  ) => {
+    const s = buffFullDurationForCaster(id, caster, fromMs);
+    up.delete(id);
+    // the forms exclude each other: a new one ends the one before, which
+    // the log does not always remove (a form the start list holds, then a
+    // shift to another — 129-1: a start-list Travel Form "up" beside the
+    // Bear Form the druid shifted into)
+    if (DRUID_FORM_BUFFS.has(id))
+      for (const f of DRUID_FORM_BUFFS.keys()) up.delete(f);
+    up.set(id, {
+      spellId: id,
+      name,
+      srcName,
+      untilMs: s === undefined ? Infinity : fromMs + s * 1000,
+    });
+  };
+  if (opts.logStartMs !== undefined && unit.info?.interestingAurasJSON) {
+    try {
+      const initial = JSON.parse(unit.info.interestingAurasJSON);
+      if (Array.isArray(initial))
+        for (const raw of initial) {
+          const id = String(raw);
+          const name = nameOf(id);
+          if (name) open(id, name, "", opts.logStartMs, undefined);
+        }
+    } catch {
+      // unreadable start list: nothing up at the start
+    }
+  }
+  const rows = unit.auraEvents ?? [];
+  let k = 0;
+  for (; k < rows.length; k++) {
+    const a = rows[k]!;
+    if (a.timestamp > atMs) break;
+    if (
+      a.timestamp === atMs &&
+      opts.atLine !== undefined &&
+      a.logLine.lineIndex !== undefined &&
+      a.logLine.lineIndex > opts.atLine
+    )
+      break;
+    const id = a.spellId;
+    const name = id ? nameOf(id) : undefined;
+    if (!id || !name) continue;
+    const ev = a.logLine.event;
+    if (
+      ev === LogEvent.SPELL_AURA_APPLIED ||
+      ev === LogEvent.SPELL_AURA_REFRESH
+    )
+      open(
+        id,
+        name,
+        a.srcUnitName ?? "",
+        a.timestamp,
+        opts.casterOf?.(a.srcUnitId),
+      );
+    else if (ev === LogEvent.SPELL_AURA_REMOVED) up.delete(id);
+  }
+  // the cap is for an application the log never closes: one whose own
+  // REMOVED comes later held until it, whatever its official length
+  const closedLater = new Set<string>();
+  const seenLater = new Set<string>();
+  for (; k < rows.length; k++) {
+    const a = rows[k]!;
+    if (!a.spellId || !up.has(a.spellId) || seenLater.has(a.spellId)) continue;
+    seenLater.add(a.spellId);
+    if ((a.logLine.event as string) === LogEvent.SPELL_AURA_REMOVED)
+      closedLater.add(a.spellId);
+  }
+  return [...up.values()]
+    .filter((b) => closedLater.has(b.spellId) || atMs <= b.untilMs)
+    .map(({ spellId, name, srcName }) => ({ spellId, name, srcName }));
+}
 
 /** @internal exported for data/curatedIdRegistry (corpus rot scan) */
 // 2026-08-21 S2 corpus scan (10,682 matches): removed Wyvern Sting 19386, Repentance 20066 — 0 occurrences, ability gone in 12.x (eval-private/reports/s2-health-2026-08-21)
@@ -1258,7 +1383,12 @@ export interface IInterruptInstance {
 }
 
 export interface ICCAvoidedInstance {
+  /** when the avoidance is read: the cast, or for a control that lands after
+   * its cast the instant it hit the player (`controlHitInstant`) */
   atSeconds: number;
+  /** the cast's own time — what a reader pairing the instance with its cast
+   * line matches on (`ccMissCauseOf`); absent on old fixtures = `atSeconds` */
+  castAtSeconds?: number;
   spellId: string;
   spellName: string;
   avoidanceSpellName: string;
@@ -3971,103 +4101,24 @@ export function analyzePlayerCCAndTrinket(
   // ─── CC Avoidance Correlation Logic ───────────────────────────────────────
   const ccAvoidedInstances: ICCAvoidedInstance[] = [];
 
-  // Track active buff intervals on the player
-  // srcName = who applied the avoidance aura (GH #103 A6: a teammate's Grounding
-  // Totem and your own read the same without it — "your Grounding" was written
-  // for a totem the other shaman dropped). "" when unknown (aura up at log start).
-  const activeBuffs: Array<{
-    spellId: string;
-    name: string;
-    applyMs: number;
-    removeMs: number;
-    srcName: string;
-  }> = [];
-  const pendingBuffs = new Map<
-    string,
-    { applyMs: number; name: string; srcName: string }
-  >();
-
-  if (player.info?.interestingAurasJSON) {
-    try {
-      const initialAuras = JSON.parse(player.info.interestingAurasJSON);
-      if (Array.isArray(initialAuras)) {
-        for (const auraId of initialAuras) {
-          const spellIdStr = String(auraId);
-          if (CC_AVOIDANCE_BUFF_SPELLS.has(spellIdStr)) {
-            pendingBuffs.set(spellIdStr, {
-              applyMs: combat.startTime,
-              name: CC_AVOIDANCE_BUFF_SPELLS.get(spellIdStr) ?? "",
-              srcName: "",
-            });
-          } else if (DRUID_FORM_BUFFS.has(spellIdStr)) {
-            pendingBuffs.set(spellIdStr, {
-              applyMs: combat.startTime,
-              name: DRUID_FORM_BUFFS.get(spellIdStr) ?? "",
-              srcName: "",
-            });
-          }
-        }
-      }
-    } catch {
-      // Ignore parse errors
-    }
-  }
-
-  for (const aura of player.auraEvents) {
-    const spellId = aura.spellId;
-    if (
-      !spellId ||
-      (!CC_AVOIDANCE_BUFF_SPELLS.has(spellId) && !DRUID_FORM_BUFFS.has(spellId))
-    )
-      continue;
-
-    const event = aura.logLine.event;
-    if (
-      event === LogEvent.SPELL_AURA_APPLIED ||
-      event === LogEvent.SPELL_AURA_REFRESH
-    ) {
-      const pending = pendingBuffs.get(spellId);
-      if (pending) {
-        activeBuffs.push({
-          spellId,
-          name: pending.name,
-          applyMs: pending.applyMs,
-          removeMs: aura.timestamp,
-          srcName: pending.srcName,
-        });
-      }
-      pendingBuffs.set(spellId, {
-        applyMs: aura.timestamp,
-        name:
-          CC_AVOIDANCE_BUFF_SPELLS.get(spellId) ??
-          DRUID_FORM_BUFFS.get(spellId) ??
-          "",
-        srcName: aura.srcUnitName ?? "",
-      });
-    } else if (event === LogEvent.SPELL_AURA_REMOVED) {
-      const pending = pendingBuffs.get(spellId);
-      if (pending) {
-        activeBuffs.push({
-          spellId,
-          name: pending.name,
-          applyMs: pending.applyMs,
-          removeMs: aura.timestamp,
-          srcName: pending.srcName,
-        });
-        pendingBuffs.delete(spellId);
-      }
-    }
-  }
-
-  for (const [spellId, pending] of pendingBuffs.entries()) {
-    activeBuffs.push({
-      spellId,
-      name: pending.name,
-      applyMs: pending.applyMs,
-      removeMs: combat.endTime,
-      srcName: pending.srcName,
+  // The avoidance auras up on the player at an instant: the one reading
+  // (`ccAvoidanceBuffsUpAt` — log order, official-length cap, the log's
+  // start list). srcName = who applied it (GH #103 A6: a teammate's
+  // Grounding Totem and your own read the same without it); "" for an aura
+  // up at the log's start.
+  const unitsById = new Map<string, ICombatUnit>(
+    (Array.isArray(combat.units)
+      ? (combat.units as ICombatUnit[])
+      : (Object.values(combat.units ?? {}) as ICombatUnit[])
+    ).map((u) => [u.id, u]),
+  );
+  const avoidanceBuffsAt = (atMs: number, atLine: number | undefined) =>
+    ccAvoidanceBuffsUpAt(player, atMs, {
+      atLine,
+      withForms: true,
+      logStartMs: combat.startTime,
+      casterOf: (id) => unitsById.get(id),
     });
-  }
 
   // GH #105: an "avoided" CC that nonetheless landed on the player is not an
   // avoidance — both paths below ask this one predicate. The landed aura may
@@ -4113,11 +4164,11 @@ export function analyzePlayerCCAndTrinket(
   // `landedOnPlayer` above gives it (WP-I, `ccLandedMatchWindowMs`). The row
   // must come from the casting enemy or one of its summons (a totem pulses
   // under its own GUID); anything else keeps "did not land".
-  const loggedMissTypeOf = (
+  const loggedMissRowOf = (
     enemy: ICombatUnit,
     cast: { spellId: string; srcUnitId: string; timestamp: number },
     castName: string,
-  ): string | undefined => {
+  ): IMissEvent | undefined => {
     const family = castAndEffectIds(cast.spellId);
     const sameSpellCastMs = [
       ...enemy.spellCastEvents,
@@ -4149,7 +4200,61 @@ export function analyzePlayerCCAndTrinket(
           m.timestamp,
           afterMs,
         ),
-    )?.missType;
+    );
+  };
+
+  /**
+   * The instant a control cast at / around the player hit them, for the
+   * avoidance-aura test (fact1215 R6, 2026-10-18): an instant control at its
+   * cast; one that lands after its cast (`AOE_CC_LANDING_WINDOW_S`) at the
+   * log's miss row on the player, else — for a one-pulse control (a window
+   * that opens after the cast: Capacitor Totem, Sigil of Misery) — at the
+   * pulse, its first landing (aura or miss row) on any unit from the caster
+   * or its summons inside the window. With neither — a ring that holds
+   * whoever walks in, a totem that stunned nobody — the cast is the only
+   * instant the log gives, as before (the avoidance line for a totem that
+   * stunned nobody stays, `ccAvoidedLandingDelay.test.ts`).
+   * 06aa443c: Capacitor Totem cast 0:59.449 in the owner's Nullifying Shroud
+   * (to 1:01.153), pulse 1:01.444 — the line said "Shroud active"; 06aa443c
+   * r3: the IMMUNE row on the owner was at the 2:56 pulse, the line at the
+   * 2:54 cast.
+   */
+  const controlHitInstant = (
+    enemy: ICombatUnit,
+    cast: ICombatUnit["spellCastEvents"][number],
+    missRow: IMissEvent | undefined,
+  ): { ms: number; line: number | undefined } => {
+    const landing = cast.spellId
+      ? AOE_CC_LANDING_WINDOW_S[cast.spellId]
+      : undefined;
+    if (!landing)
+      return { ms: cast.logLine.timestamp, line: cast.logLine.lineIndex };
+    if (missRow)
+      return { ms: missRow.timestamp, line: missRow.logLine?.lineIndex };
+    const atCast = { ms: cast.logLine.timestamp, line: cast.logLine.lineIndex };
+    if (landing.fromS <= 0) return atCast;
+    const family = castAndEffectIds(cast.spellId!);
+    const fromCaster = (srcId: string) =>
+      srcId === enemy.id ||
+      srcId === cast.srcUnitId ||
+      enemyPets.some((p) => p.id === srcId && p.ownerId === enemy.id);
+    const fromMs = cast.logLine.timestamp;
+    const toMs = fromMs + landing.toS * 1000;
+    let first: { ms: number; line: number | undefined } | undefined;
+    for (const u of unitsById.values())
+      for (const r of [
+        ...(u.auraEvents ?? []).filter(
+          (a) => a.logLine.event === LogEvent.SPELL_AURA_APPLIED,
+        ),
+        ...(u.missesIn ?? []),
+      ]) {
+        if (!r.spellId || !family.has(r.spellId)) continue;
+        if (r.timestamp < fromMs || r.timestamp > toMs) continue;
+        if (!fromCaster(r.srcUnitId)) continue;
+        if (!first || r.timestamp < first.ms)
+          first = { ms: r.timestamp, line: r.logLine?.lineIndex };
+      }
+    return first ?? atCast;
   };
 
   // 1. Unified Buff & Mobility CC Avoidance (targeted and ground CCs)
@@ -4177,7 +4282,7 @@ export function analyzePlayerCCAndTrinket(
         const castTimeMs = cast.logLine.timestamp;
         if (!landedOnPlayer(cast)) {
           const ccSpellName = getEnglishSpellName(cast.spellId, cast.spellName);
-          const loggedMissType = loggedMissTypeOf(
+          const missRow = loggedMissRowOf(
             enemy,
             {
               spellId: cast.spellId,
@@ -4186,6 +4291,7 @@ export function analyzePlayerCCAndTrinket(
             },
             ccSpellName,
           );
+          const loggedMissType = missRow?.missType;
           // Single-source predicate (2026-08-07, shared-predicate rule / CC
           // avoidance gating IS the spec): school gate (magic-only immunity
           // cannot explain a physical CC), Druid-form gate (forms only credited
@@ -4198,13 +4304,16 @@ export function analyzePlayerCCAndTrinket(
             ccSpellName,
           );
 
-          // A. Buff-Based Avoidance
-          const activeBuff = activeBuffs.find(
-            (b) => castTimeMs >= b.applyMs && castTimeMs <= b.removeMs,
+          // A. Buff-Based Avoidance — read at the instant the control hit
+          // the player (`controlHitInstant`), not at a delayed control's cast
+          const hit = controlHitInstant(enemy, cast, missRow);
+          const activeBuff = avoidanceBuffsAt(hit.ms, hit.line).find((b) =>
+            applicableIds.has(b.spellId),
           );
-          if (activeBuff && applicableIds.has(activeBuff.spellId)) {
+          if (activeBuff) {
             ccAvoidedInstances.push({
-              atSeconds: (castTimeMs - matchStartMs) / 1000,
+              atSeconds: (hit.ms - matchStartMs) / 1000,
+              castAtSeconds: (castTimeMs - matchStartMs) / 1000,
               spellId: cast.spellId,
               spellName: ccSpellName,
               avoidanceSpellName: activeBuff.name,
@@ -4226,7 +4335,9 @@ export function analyzePlayerCCAndTrinket(
               e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
               e.spellId &&
               REPOSITIONING_SPELL_IDS.has(e.spellId) &&
-              Math.abs(e.logLine.timestamp - castTimeMs) <= 1500 &&
+              // near the instant it hit (`controlHitInstant`, R6): a
+              // delayed control is dodged at its pulse, not at its cast
+              Math.abs(e.logLine.timestamp - hit.ms) <= 1500 &&
               // a target-bound mobility must have gone on the avoiding
               // player themselves (triage other F-O13)
               (!TARGET_BOUND_MOBILITY_IDS.has(e.spellId) ||
@@ -4240,7 +4351,8 @@ export function analyzePlayerCCAndTrinket(
             applicableIds.has(mobilityCast.spellId)
           ) {
             ccAvoidedInstances.push({
-              atSeconds: (castTimeMs - matchStartMs) / 1000,
+              atSeconds: (hit.ms - matchStartMs) / 1000,
+              castAtSeconds: (castTimeMs - matchStartMs) / 1000,
               spellId: cast.spellId,
               spellName: ccSpellName,
               avoidanceSpellName:

@@ -2357,6 +2357,12 @@ const INDEX: PredicateRow[] = [
     symbol: "checkDmgSpikeListCap",
     mod: promptQualityCheck,
   },
+  // fact1215 R5 / R6: which avoidance aura was up when a control hit
+  {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "ccAvoidanceBuffsUpAt",
+    mod: ccTrinketAnalysis,
+  },
   // fact1215 R4 / C4: who broke an aura; the caster-side link aura
   {
     file: `${A}/utils/brokenRowBreaker.ts`,

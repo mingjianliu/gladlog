@@ -177,5 +177,10 @@
  *  grouping; a HoT tick is a fresh self-heal only when the HoT went on the
  *  owner inside the window. 605 files: no candidate added or removed;
  *  [BURST ANSWERED] −14 / +20; gate checkBurstLedgerSpellSpans 4 → 0.
+ *  v415 (2026-10-18, F15 batch 11 — fact1215 R5 + R6, facts only): the
+ *  avoidance aura up when a control hit is read in log order, capped at its
+ *  length when never closed, forms exclusive (`ccAvoidanceBuffsUpAt`); a
+ *  delayed control is read at the instant it hit. 605 files: no candidate
+ *  added or removed; immuneCauseConsumed 100 → 0, delayedAvoidAtHit 28 → 0.
  */
-export const PROMPT_VERSION = 414;
+export const PROMPT_VERSION = 415;

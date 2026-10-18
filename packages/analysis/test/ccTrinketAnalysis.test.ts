@@ -513,6 +513,8 @@ describe("analyzePlayerCCAndTrinket — structured data contract (N4)", () => {
     expect(result.ccAvoidedInstances).toHaveLength(1);
     expect(result.ccAvoidedInstances[0]).toEqual({
       atSeconds: 15.2,
+      // an instant control: read at its cast (R6 `controlHitInstant`)
+      castAtSeconds: 15.2,
       spellId: "118",
       spellName: "Polymorph",
       avoidanceSpellName: "Phase Shift",

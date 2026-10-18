@@ -23,7 +23,6 @@ import { castAndEffectIds } from "../../data/castEffectAuras";
 import { getEnglishSpellName } from "../../data/spellEffectData";
 import { ccSpellIds } from "../../data/spellTags";
 import { buffFullDurationForCaster } from "../../utils/buffDuration";
-import { observedCastEndMs } from "../../utils/enemyCDs";
 import {
   EMPOWER_PRESS_MATCH_MS,
   empowerSpans,
@@ -35,7 +34,7 @@ import {
   missBelongsToCast as missRowBelongsToCast,
 } from "../../utils/castMissRows";
 import {
-  CC_AVOIDANCE_BUFF_SPELLS,
+  ccAvoidanceBuffsUpAt,
   GROUNDING_TOTEM_SPELL_ID,
   GROUNDING_TOTEM_WINDOW_S,
 } from "../../utils/ccTrinketAnalysis";
@@ -52,6 +51,7 @@ import {
   getDRLevel,
   OWNER_AOE_CC_NO_PLAYER_TAG,
 } from "../../utils/drAnalysis";
+import { observedCastEndMs } from "../../utils/enemyCDs";
 import { sumIncomingPressure } from "../../utils/incomingPressure";
 import { fmtTime, toRenderSecond } from "../../utils/renderGrid";
 import { resourceDeltaPct } from "../../utils/resourceAt";
@@ -654,24 +654,16 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
       allUnits?.find((u) => u.id === miss.destUnitId) ??
       allPlayers.find((u) => u.id === miss.destUnitId);
     if (target) {
-      const active = new Map<string, string>();
-      for (const a of target.auraEvents) {
-        if (a.timestamp > miss.timestamp) break;
-        if (!a.spellId || !CC_AVOIDANCE_BUFF_SPELLS.has(a.spellId)) continue;
-        const ev = a.logLine.event;
-        if (
-          ev === LogEvent.SPELL_AURA_APPLIED ||
-          ev === LogEvent.SPELL_AURA_REFRESH
-        ) {
-          active.set(
-            a.spellId,
-            CC_AVOIDANCE_BUFF_SPELLS.get(a.spellId) ?? a.spellName,
-          );
-        } else if (ev === LogEvent.SPELL_AURA_REMOVED) {
-          active.delete(a.spellId);
-        }
-      }
-      immunityName = [...active.values()][0] ?? "";
+      // the one "was it up when the control hit" reading, in log order up to
+      // the miss row (a Shroud the miss consumed is REMOVED after it in the
+      // same ms) and capped at the aura's own length (fact1215 R5)
+      immunityName =
+        ccAvoidanceBuffsUpAt(target, miss.timestamp, {
+          atLine: miss.logLine.lineIndex,
+          casterOf: (id) =>
+            allUnits?.find((u) => u.id === id) ??
+            allPlayers.find((u) => u.id === id),
+        })[0]?.name ?? "";
     }
     if (immunityName) return `${immunityName} was up`;
     // B-tier B17a (user ruling 2026-10-06, "三种都写；找不到原因不加注"): the
@@ -870,7 +862,7 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
         (a) =>
           a.sourceName === unit.name &&
           a.spellId === spellId &&
-          Math.abs(a.atSeconds - castTimeSeconds) < 0.01,
+          Math.abs((a.castAtSeconds ?? a.atSeconds) - castTimeSeconds) < 0.01,
       );
     return avoided ? `${avoided.avoidanceSpellName} was up` : "";
   }

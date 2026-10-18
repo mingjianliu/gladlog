@@ -3531,3 +3531,19 @@ removed; 2 ledger headers lose their post-round CD; [BURST ANSWERED] −14 /
 +20 lines (a control on an enemy that hit the pressured friendly in the last
 second now answers; one window newly listed). New gate
 checkBurstLedgerSpellSpans 4 → 0.
+v415 (2026-10-18, F15 batch 11 — fact1215 R5 + R6, facts only): which
+control-avoidance aura was up when a control hit (`ccAvoidanceBuffsUpAt`):
+read in log order up to the judged row (a Nullifying Shroud the IMMUNE miss
+consumed is REMOVED after it in the same ms — the cause was missing), an
+application the log never closes capped at its official length (a Phase
+Shift with no REMOVED was "up" 56 s later and hid the DR cause), Druid forms
+exclusive. A control that lands after its cast (Capacitor Totem, Sigil of
+Misery, Ring of Frost) is read at the instant it hit — the player's miss
+row, else a one-pulse control's first landing, else the cast — for the aura
+credit and the mobility credit, and its [CC AVOIDED?] line sits at that
+second (06aa443c: "Shroud active" for a pulse after the Shroud ran out).
+605 files: no candidate added or removed; [CC NOT LANDED] / cast-line
+`[IMMUNE — X was up]` causes added; [CC AVOIDED?] lines move to the hit
+second, some credits drop (aura / mobility not up at the hit) and some
+appear. breakFactScan `immuneCauseConsumed` 100/105 → 0, `delayedAvoidAtHit`
+28/426 → 0.

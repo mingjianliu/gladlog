@@ -38,6 +38,18 @@
  *    while the holder's own 6940 link aura is up (the damage the holder's
  *    Blessing moved onto them; the row names the protected ally). The line
  *    must not say `broken by <that ally>'s Blessing of Sacrifice`.
+ *  - `immuneCauseConsumed` (R5, 2026-10-18): an IMMUNE SPELL_MISSED of a
+ *    control (`ccSpellIds`) from our side on an enemy player, where a listed
+ *    avoidance aura (`CC_AVOIDANCE_BUFF_SPELLS`) applied on that player
+ *    before it is REMOVED in the miss's own millisecond, logged after the
+ *    miss row (the miss consumed it — Nullifying Shroud). Every `[CC NOT
+ *    LANDED]` line of that player at that second that says `logged IMMUNE`
+ *    must name a cause (`was up)`).
+ *  - `delayedAvoidAtHit` (R6): an enemy's Capacitor Totem / Sigil of Misery
+ *    cast whose effect wrote a miss row on one of our players from the
+ *    caster or its summon inside the control's landing window, in a later
+ *    second than the cast. No `[CC AVOIDED?]` line of that player and spell
+ *    may sit at the CAST second (the avoidance is read at the hit).
  *
  *   npx tsx packages/eval/scripts/breakFactScan.ts <captureDir>
  *     [--examples N] [--archive-dir <dir>]
@@ -53,9 +65,16 @@ import {
   disarmSpellIds,
 } from "@gladlog/analysis/src/data/spellTags";
 import { isSilenceOnlyAura } from "@gladlog/analysis/src/utils/cannotCastIntervals";
+import { CC_AVOIDANCE_BUFF_SPELLS } from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
 import { roundEndMs } from "@gladlog/analysis/src/utils/roundEnd";
 import { GladLogParser, type GladMatch } from "@gladlog/parser";
-import { LogEvent, toLegacyMatch } from "@gladlog/parser-compat";
+import {
+  type IAuraEvent,
+  type IMissEvent,
+  type ISpellEvent,
+  LogEvent,
+  toLegacyMatch,
+} from "@gladlog/parser-compat";
 
 const dir = process.argv[2];
 if (!dir) {
@@ -79,7 +98,9 @@ type Check =
   | "enemyTrinketOutOf"
   | "trinketAfterCause"
   | "brokenByHolder"
-  | "brokenBySplitAlly";
+  | "brokenBySplitAlly"
+  | "immuneCauseConsumed"
+  | "delayedAvoidAtHit";
 const expected = new Map<Check, number>();
 const bad = new Map<Check, string[]>();
 const unmapped: string[] = [];
@@ -299,6 +320,101 @@ for (const f of files) {
     }
   }
 
+  // ── immuneCauseConsumed (R5) ────────────────────────────────────────────
+  for (const u of units) {
+    const me = pidOf.get(u.name);
+    if (!me) continue;
+    const auras = (u.auraEvents ?? []) as IAuraEvent[];
+    for (const m of (u.missesIn ?? []) as IMissEvent[]) {
+      if (m.missType !== "IMMUNE" || !m.spellId || !ccSpellIds.has(m.spellId))
+        continue;
+      const ts = m.timestamp;
+      if (ts < start || ts > roundEnd) continue;
+      // [CC NOT LANDED] is our side's control on the other side
+      if (!me.enemy || !friendlyOrSummon(m.srcUnitId)) continue;
+      const line = m.logLine?.lineIndex;
+      if (line === undefined) continue;
+      const consumed = auras.some(
+        (r) =>
+          r.spellId &&
+          CC_AVOIDANCE_BUFF_SPELLS.has(r.spellId) &&
+          r.logLine.event === LogEvent.SPELL_AURA_REMOVED &&
+          r.logLine.timestamp === ts &&
+          (r.logLine.lineIndex ?? -1) > line &&
+          (() => {
+            let on = false;
+            for (const x of auras) {
+              if (x.logLine.timestamp > ts) break;
+              if ((x.logLine.lineIndex ?? 0) > line) break;
+              if (x.spellId !== r.spellId) continue;
+              if (
+                x.logLine.event === LogEvent.SPELL_AURA_APPLIED ||
+                x.logLine.event === LogEvent.SPELL_AURA_REFRESH
+              )
+                on = true;
+              else if (x.logLine.event === LogEvent.SPELL_AURA_REMOVED)
+                on = false;
+            }
+            return on;
+          })(),
+      );
+      if (!consumed) continue;
+      const t = at(ts);
+      const ccName = getEnglishSpellName(m.spellId, m.spellName);
+      const notLanded = lines.filter(
+        (l) =>
+          l.startsWith(`${t}  [CC NOT LANDED]   ${me.pid}(`) &&
+          l.includes(`← ${ccName} (`) &&
+          l.includes("logged IMMUNE"),
+      );
+      if (notLanded.length === 0) continue;
+      bump("immuneCauseConsumed");
+      if (notLanded.some((l) => !l.includes("was up)")))
+        fail("immuneCauseConsumed", `${where} ${t} ${u.name} ${m.spellName}`);
+    }
+  }
+
+  // ── delayedAvoidAtHit (R6) ──────────────────────────────────────────────
+  const DELAYED: Record<string, { toMs: number; effect: string }> = {
+    "192058": { toMs: 4500, effect: "118905" }, // Capacitor Totem → Static Charge
+    "207684": { toMs: 3000, effect: "207685" }, // Sigil of Misery
+  };
+  for (const e of units) {
+    const caster = pidOf.get(e.name);
+    if (!caster) continue;
+    for (const c of (e.spellCastEvents ?? []) as ISpellEvent[]) {
+      const d = c.spellId ? DELAYED[c.spellId] : undefined;
+      if (!d || c.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
+      const cts = c.logLine.timestamp;
+      if (cts < start || cts > roundEnd) continue;
+      for (const p of units) {
+        const me = pidOf.get(p.name);
+        if (!me || me.enemy === caster.enemy) continue;
+        const miss = ((p.missesIn ?? []) as IMissEvent[]).find(
+          (m) =>
+            (m.spellId === d.effect || m.spellId === c.spellId) &&
+            m.timestamp >= cts &&
+            m.timestamp <= cts + d.toMs &&
+            (m.srcUnitId === e.id || byId.get(m.srcUnitId)?.ownerId === e.id),
+        );
+        if (!miss) continue;
+        const tc = at(cts);
+        const tm = at(miss.timestamp);
+        if (tc === tm) continue;
+        bump("delayedAvoidAtHit");
+        const name = getEnglishSpellName(c.spellId, c.spellName);
+        if (
+          lines.some(
+            (l) =>
+              l.startsWith(`${tc}  [CC AVOIDED?]   ${me.pid}(`) &&
+              l.includes(`: ${name} (`),
+          )
+        )
+          fail("delayedAvoidAtHit", `${where} ${tc} → ${tm} ${p.name} ${name}`);
+      }
+    }
+  }
+
   // ── trinket presses ─────────────────────────────────────────────────────
   for (const u of units) {
     const me = pidOf.get(u.name);
@@ -404,6 +520,8 @@ for (const c of [
   "trinketAfterCause",
   "brokenByHolder",
   "brokenBySplitAlly",
+  "immuneCauseConsumed",
+  "delayedAvoidAtHit",
 ] as Check[]) {
   const b = bad.get(c) ?? [];
   console.log(`${c}: expected ${expected.get(c) ?? 0}, wrong ${b.length}`);
