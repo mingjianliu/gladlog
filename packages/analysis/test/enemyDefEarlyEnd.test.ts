@@ -26,7 +26,6 @@ function unit(id: string, over: Record<string, unknown> = {}): any {
     spec: "105",
     reaction: 1,
     info: {},
-    spellCastEvents: [],
     auraEvents: [],
     actionIn: [],
     damageOut: [],
@@ -35,6 +34,31 @@ function unit(id: string, over: Record<string, unknown> = {}): any {
     deathRecords: [],
     advancedActions: [],
     ...over,
+    // F15 C5: a wall aura the unit put on itself is a PRESS in these
+    // fixtures — the cast the log writes beside it (an aura with no press
+    // of it is a copy: `noPressLogged`)
+    spellCastEvents: [
+      ...((over.spellCastEvents as any[] | undefined) ?? []),
+      ...((over.auraEvents as any[] | undefined) ?? [])
+        .filter(
+          (a) =>
+            a.logLine?.event === LogEvent.SPELL_AURA_APPLIED &&
+            a.srcUnitId === id &&
+            (a.destUnitId ?? id) === id,
+        )
+        .map((a) => ({
+          spellId: a.spellId,
+          spellName: a.spellName,
+          srcUnitId: id,
+          destUnitId: id,
+          timestamp: a.timestamp,
+          logLine: {
+            event: LogEvent.SPELL_CAST_SUCCESS,
+            timestamp: a.logLine.timestamp,
+            parameters: [],
+          },
+        })),
+    ],
   };
 }
 const aura = (
@@ -252,22 +276,37 @@ describe("FT-T08 step 3b — [ENEMY DEF] early end: the cause the log gives", ()
     });
     const round = { startTime: ms(0), endTime: ms(55) };
     const [d] = enemyDefensiveEvents(pal, [pal], round);
-    expect(d).toMatchObject({ observedSeconds: 5, removedEarly: false, upAtRoundEnd: true });
+    expect(d).toMatchObject({
+      observedSeconds: 5,
+      removedEarly: false,
+      upAtRoundEnd: true,
+    });
     expect(d.earlyEnd).toBeUndefined();
-    expect(render([pal], 55)[0]).toContain("(immune, 5.0s — still up when the round ended)");
+    expect(render([pal], 55)[0]).toContain(
+      "(immune, 5.0s — still up when the round ended)",
+    );
     // a REMOVED logged AT the round's last ms is a real removal and is still read
     const atEnd = unit("e1", {
-      auraEvents: [applied(DIVINE_SHIELD, "e1", "e1", 50), removed(DIVINE_SHIELD, "e1", "e1", 55)],
+      auraEvents: [
+        applied(DIVINE_SHIELD, "e1", "e1", 50),
+        removed(DIVINE_SHIELD, "e1", "e1", 55),
+      ],
       actionIn: [taken(LogEvent.SPELL_DISPEL, DIVINE_SHIELD, "e1", 55)],
     });
-    expect(enemyDefensiveEvents(atEnd, [atEnd], round)[0].earlyEnd?.takenBy?.kind).toBe("dispelled");
+    expect(
+      enemyDefensiveEvents(atEnd, [atEnd], round)[0].earlyEnd?.takenBy?.kind,
+    ).toBe("dispelled");
   });
 
   it("codex post-hoc 3b P2-2: 日志里没写来源的 REMOVED 行也是这次施加的结束", () => {
     const pal = unit("e1", {
       auraEvents: [
         applied(DIVINE_SHIELD, "e1", "e1", 50),
-        { ...removed(DIVINE_SHIELD, "e1", "e1", 53), srcUnitId: "", srcUnitName: "" },
+        {
+          ...removed(DIVINE_SHIELD, "e1", "e1", 53),
+          srcUnitId: "",
+          srcUnitName: "",
+        },
       ],
       actionIn: [taken(LogEvent.SPELL_DISPEL, DIVINE_SHIELD, "e1", 53)],
     });
@@ -287,7 +326,9 @@ describe("FT-T08 step 3b — [ENEMY DEF] early end: the cause the log gives", ()
       ],
     });
     const round = { startTime: ms(0), endTime: ms(55) };
-    const ev = enemyDefensiveEvents(druidA, [druidA, druidB, mate], round).find((d) => d.kind === "external");
+    const ev = enemyDefensiveEvents(druidA, [druidA, druidB, mate], round).find(
+      (d) => d.kind === "external",
+    );
     expect(ev).toMatchObject({ removedEarly: false, upAtRoundEnd: true });
   });
 });

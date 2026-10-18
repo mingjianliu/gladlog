@@ -19,6 +19,20 @@
  *    no press); Metamorphosis' 200166 landing. Required: the owner's
  *    `[YOU] [CD]   <name>` or the teammate's `[TEAM] [CD]   <pid>(…): <name>`
  *    at that second.
+ *  - `noPressCopy` / `pressedNotTagged` (C5, 2026-10-18): an enemy's own
+ *    wall aura (`MITIGATION_AURA_IDS` by `wallTableIdOfAura`) APPLIED on
+ *    itself. With no SPELL_CAST_SUCCESS of the wall, the aura or a cast
+ *    whose effect it is (`castsOfEffectAura`) from 1 s before to 50 ms after
+ *    it, its `[ENEMY DEF]` line (aura second, pid, name) must read `[no press
+ *    logged]` and not `— removed early`; with one, it must not read `[no press
+ *    logged]`.
+ *  - `procWith` (C5): a friendly Radiant Glory Avenging Wrath activation
+ *    (454351 SUCCESS) in the ms of a Wake of Ashes 255937 press, when the
+ *    round has two or more such pairs. Its `[PROC]` line must read `(with
+ *    Wake of Ashes)`.
+ *  - `auraOnlyAW` (C5): an enemy's 454351 aura APPLIED, while none is up,
+ *    with no 454351 SUCCESS within ±0.5 s. An `[ENEMY CD]` line at its second must name
+ *    `Avenging Wrath (no press)`.
  *
  * The context file's first two lines are the archive path and the owner;
  * its name is `<fileNo>-<round>-<owner#>` (acceptanceCapture.ts). Pids are
@@ -31,12 +45,25 @@ import { join, resolve } from "node:path";
 import { gunzipSync } from "node:zlib";
 
 import { ensureAnalysisData } from "@gladlog/analysis";
+import { castsOfEffectAura } from "@gladlog/analysis/src/data/castEffectAuras";
+import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData";
+import {
+  MITIGATION_AURA_IDS,
+  wallTableIdOfAura,
+} from "@gladlog/analysis/src/utils/enemyDefensives";
 import { GladLogParser, type GladMatch } from "@gladlog/parser";
-import { LogEvent, toLegacyMatch } from "@gladlog/parser-compat";
+import {
+  type IAuraEvent,
+  type ISpellEvent,
+  LogEvent,
+  toLegacyMatch,
+} from "@gladlog/parser-compat";
 
 const dir = process.argv[2];
 if (!dir) {
-  console.error("usage: pressFactScan.ts <captureDir> [--examples N] [--archive-dir <dir>]");
+  console.error(
+    "usage: pressFactScan.ts <captureDir> [--examples N] [--archive-dir <dir>]",
+  );
   process.exit(2);
 }
 const exIdx = process.argv.indexOf("--examples");
@@ -56,7 +83,15 @@ const fmt = (s: number): string => {
   return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`;
 };
 
-type Check = "allyScales" | "timeStop" | "treeOfLife" | "havocMeta";
+type Check =
+  | "allyScales"
+  | "timeStop"
+  | "treeOfLife"
+  | "havocMeta"
+  | "noPressCopy"
+  | "pressedNotTagged"
+  | "procWith"
+  | "auraOnlyAW";
 const expected = new Map<Check, number>();
 const missing = new Map<Check, string[]>();
 const bump = (c: Check) => expected.set(c, (expected.get(c) ?? 0) + 1);
@@ -209,6 +244,120 @@ for (const f of files) {
         press("treeOfLife", "Incarnation: Tree of Life");
     }
   }
+
+  // ── C5: aura copies, proc triggers, aura-only Avenging Wrath ────────────
+  const successes = (u: { spellCastEvents?: ISpellEvent[] }) =>
+    (u.spellCastEvents ?? []).filter(
+      (c) => c.logLine.event === LogEvent.SPELL_CAST_SUCCESS,
+    );
+  for (const u of units) {
+    const me = pidOf.get(u.name);
+    if (!me) continue;
+    const casts = successes(u);
+    if (me.role === "enemy") {
+      for (const a of (u.auraEvents ?? []) as IAuraEvent[]) {
+        if (a.logLine.event !== LogEvent.SPELL_AURA_APPLIED) continue;
+        if (a.srcUnitId !== u.id || a.destUnitId !== u.id || !a.spellId)
+          continue;
+        const ts = a.logLine.timestamp;
+        if (ts < start || ts > legacy.endTime) continue;
+        const t = at(ts);
+        // aura-only Avenging Wrath — an APPLIED while no 454351 aura is up
+        // (one re-applied over an open one is that one: 92-4 0:56)
+        if (a.spellId === "454351") {
+          let open = false;
+          for (const x of (u.auraEvents ?? []) as IAuraEvent[]) {
+            if (x === a) break;
+            if (x.spellId !== "454351" || x.destUnitId !== u.id) continue;
+            if (x.logLine.event === LogEvent.SPELL_AURA_APPLIED) open = true;
+            else if (x.logLine.event === LogEvent.SPELL_AURA_REMOVED)
+              open = false;
+          }
+          if (open) continue;
+          const cast = casts.some(
+            (c) =>
+              c.spellId === "454351" &&
+              Math.abs(c.logLine.timestamp - ts) <= 500,
+          );
+          if (!cast) {
+            bump("auraOnlyAW");
+            if (
+              !has(
+                t,
+                (l) =>
+                  l.includes(`[ENEMY CD]`) &&
+                  l.includes(`${me.pid}(`) &&
+                  l.includes("Avenging Wrath (no press)"),
+              )
+            )
+              miss("auraOnlyAW", `${where} ${t} ${u.name}`);
+          }
+          continue;
+        }
+        const tableId = wallTableIdOfAura(a.spellId);
+        if (!MITIGATION_AURA_IDS.has(tableId)) continue;
+        const ids = new Set([
+          tableId,
+          a.spellId,
+          ...castsOfEffectAura(a.spellId),
+        ]);
+        const pressed = casts.some(
+          (c) =>
+            ids.has(c.spellId) &&
+            ts - c.logLine.timestamp <= 1000 &&
+            c.logLine.timestamp - ts <= 50,
+        );
+        const name = getEnglishSpellName(a.spellId, a.spellName);
+        const line = lines.find(
+          (l) =>
+            l.startsWith(`${t}  [ENEMY DEF]   ${me.pid}(`) &&
+            l.includes(`: ${name} (`),
+        );
+        if (!line) continue;
+        if (!pressed) {
+          bump("noPressCopy");
+          if (
+            !line.includes("[no press logged]") ||
+            line.includes("— removed early")
+          )
+            miss("noPressCopy", `${where} ${t} ${u.name} ${name}`);
+        } else {
+          bump("pressedNotTagged");
+          if (line.includes("[no press logged]"))
+            miss("pressedNotTagged", `${where} ${t} ${u.name} ${name}`);
+        }
+      }
+    } else {
+      const pairs = casts
+        .filter((c) => c.spellId === "454351")
+        .filter((c) =>
+          casts.some(
+            (w) =>
+              w.spellId === "255937" &&
+              Math.abs(w.logLine.timestamp - c.logLine.timestamp) <= 1,
+          ),
+        );
+      if (pairs.length < 2) continue;
+      for (const c of pairs) {
+        const ts = c.logLine.timestamp;
+        if (ts < start || ts > legacy.endTime) continue;
+        const t = at(ts);
+        const isOwner = u.name === ownerName;
+        const procLine = lines.find(
+          (l) =>
+            l.startsWith(`${t}  `) &&
+            (isOwner
+              ? l.includes("[YOU] [PROC]   Avenging Wrath")
+              : l.includes(`[TEAM] [PROC]   ${me.pid}(`) &&
+                l.includes(": Avenging Wrath")),
+        );
+        if (!procLine) continue;
+        bump("procWith");
+        if (!procLine.includes("(with Wake of Ashes)"))
+          miss("procWith", `${where} ${t} ${u.name}`);
+      }
+    }
+  }
 }
 
 console.log(`contexts: ${contexts}`);
@@ -217,6 +366,10 @@ for (const c of [
   "timeStop",
   "treeOfLife",
   "havocMeta",
+  "noPressCopy",
+  "pressedNotTagged",
+  "procWith",
+  "auraOnlyAW",
 ] as Check[]) {
   const m = missing.get(c) ?? [];
   console.log(`${c}: expected ${expected.get(c) ?? 0}, missing ${m.length}`);

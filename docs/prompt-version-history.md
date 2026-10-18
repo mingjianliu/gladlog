@@ -3563,3 +3563,16 @@ its own last tick, for missed-cleanse `ownerCastingS` and kick-priority's
 caster` ends (30 of them were `cause not logged`); `pressed during it`
 clauses −38 / +42; 18 menu facts (ownerCastingS up where Ray of Frost, Mind
 Flay: Insanity, Rapid Fire, Disintegrate … fell in the window).
+v417 (2026-10-18, F15 batch 13 — fact1215 C5, facts only): a wall aura with
+no press of it logged (not of the button, not of a cast whose effect it is —
+Vanish 1856 → 11327 now pairs) reads `[no press logged]` on its [ENEMY DEF]
+line and is never `— removed early` on length alone (Smoke Screen's 3 s
+Survival of the Fittest with Exhilaration read as a pressed 8 s SotF
+"removed early"); the KILL ATTEMPTS legend says `popped X` states that X
+went up. A friendly [PROC] activation says what it went out with, the enemy
+side's reading (`procTriggerOf`): `Avenging Wrath (with Wake of Ashes)`; the
+activation under another id is never its own trigger. Radiant Glory's
+Avenging Wrath with no cast is an `(no press)` occurrence (weight 0), so it
+has an [ENEMY CD] line. 605 files: no candidate added or removed;
+pressFactScan `noPressCopy` 126 → 0, `procWith` 1,152 → 0, `auraOnlyAW` 93 →
+0, `pressedNotTagged` 0 / 9,036.

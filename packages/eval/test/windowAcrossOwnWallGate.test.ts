@@ -275,7 +275,7 @@ describe("computeOffensiveWindows + [ENEMY DEF] ⇄ checkNoWindowAcrossOwnWall",
     ).toEqual([
       "0:02  [ENEMY DEF]   4(BMHunter) (Beast Mastery Hunter): Barkskin (20%, 8.0s)",
       "0:24  [ENEMY DEF]   4(BMHunter) (Beast Mastery Hunter): Survival of the Fittest (25%, 8.0s)",
-      "0:40  [ENEMY DEF]   4(BMHunter) (Beast Mastery Hunter): Ancient of Lore (30%, 3.8s — removed early)",
+      "0:40  [ENEMY DEF]   4(BMHunter) (Beast Mastery Hunter): Ancient of Lore (30%, 3.8s)", // a copy no press put up: never early on length (F15 C5)
       "0:50  [ENEMY DEF]   4(BMHunter) (Beast Mastery Hunter): Roar of Sacrifice (25%, 5.0s — removed early)",
     ]);
     expect(windows.map((w) => [w.fromSeconds, w.toSeconds])).toEqual([

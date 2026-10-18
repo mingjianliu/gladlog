@@ -19,6 +19,7 @@ import {
 import { isEnemyCdWindowSpell } from "../../utils/enemyCDs";
 import {
   ENEMY_DEF_END_NOT_LOGGED,
+  ENEMY_DEF_NO_PRESS_TAG,
   enemyDefensiveEvents,
   enemySaveEffectNote,
   immunitySchoolWords,
@@ -300,7 +301,9 @@ export function emitEnemyDefEntries(
                 : "immune"
               : `${d.pct}%`;
           const hpStr = hpPct !== null ? ` (at ${hpPct.toFixed(0)}% HP)` : "";
-          line = `${d.spellName} (${strength}${dur ? `, ${dur}` : ""})${burstStr}${hpStr}`;
+          // F15 C5: a copy no press put up says so
+          const noPress = d.noPressLogged ? ` ${ENEMY_DEF_NO_PRESS_TAG}` : "";
+          line = `${d.spellName} (${strength}${dur ? `, ${dur}` : ""})${noPress}${burstStr}${hpStr}`;
         }
         addEntry(
           d.atSeconds,

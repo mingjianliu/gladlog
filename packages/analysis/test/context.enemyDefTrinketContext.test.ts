@@ -510,6 +510,23 @@ describe("buildMatchTimeline — [ENEMY DEF] and [ENEMY TRINKET] context enrichm
       name: "EnemyRogue",
       reaction: CombatUnitReaction.Hostile,
       spec: CombatUnitSpec.Rogue_Subtlety,
+      // the press behind the aura (F15 C5: a wall with no press of it logged
+      // is a copy, `[no press logged]`)
+      spellCastEvents: [
+        {
+          spellId: "31224",
+          spellName: "Cloak of Shadows",
+          srcUnitId: "E1",
+          srcUnitName: "EnemyRogue",
+          destUnitId: "E1",
+          destUnitName: "EnemyRogue",
+          timestamp: T0 + 45_000,
+          logLine: {
+            event: LogEvent.SPELL_CAST_SUCCESS,
+            timestamp: T0 + 45_000,
+          },
+        },
+      ] as any,
       auraEvents: [
         {
           spellId: "31224",
@@ -732,6 +749,23 @@ describe("buildMatchTimeline — [ENEMY DEF] and [ENEMY TRINKET] context enrichm
       reaction: CombatUnitReaction.Hostile,
       spec: CombatUnitSpec.Rogue_Subtlety,
       advancedActions: [],
+      // the press behind the aura (F15 C5: a wall with no press of it logged
+      // is a copy, `[no press logged]`)
+      spellCastEvents: [
+        {
+          spellId: "31224",
+          spellName: "Cloak of Shadows",
+          srcUnitId: "E1",
+          srcUnitName: "EnemyRogue",
+          destUnitId: "E1",
+          destUnitName: "EnemyRogue",
+          timestamp: T0 + 45_000,
+          logLine: {
+            event: LogEvent.SPELL_CAST_SUCCESS,
+            timestamp: T0 + 45_000,
+          },
+        },
+      ] as any,
       auraEvents: [
         {
           spellId: "31224",

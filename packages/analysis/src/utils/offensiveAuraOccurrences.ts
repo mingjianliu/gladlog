@@ -57,6 +57,14 @@ export const OFFENSIVE_AURA_EVIDENCE: ReadonlyMap<
   ["111685", { cooldownId: "1122", name: "Summon Infernal", twin: true }],
   ["365362", { cooldownId: "365350", name: "Arcane Surge", twin: true }],
   ["1219480", { cooldownId: "114050", name: "Ascendance", twin: true }],
+  // F15 / fact1215 C5 (2026-10-18): Radiant Glory's Avenging Wrath. The log
+  // writes most activations as a 454351 SPELL_CAST_SUCCESS in the ms of a
+  // Wake of Ashes (the enemy timeline's `proc k of N`); the Holy-Power-spend
+  // proc puts the 454351 aura up with no cast at all (519781fd 5:56.596 →
+  // 6:05.600, no [ENEMY CD] line, no `enemy:` column at 6:01). A cast-backed
+  // aura folds into its cast as for the other twins; one with none is the
+  // `(no press)` occurrence — weight 0, never a window on its own.
+  ["454351", { cooldownId: "454351", name: "Avenging Wrath", twin: true }],
 ]);
 /** A twin's cast is logged at most this long before its aura (Infernal:
  * ≈ 1.0 s, the summon landing — p90 1.02 s on 207 pairs) or 0.5 s after

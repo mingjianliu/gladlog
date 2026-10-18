@@ -1174,7 +1174,7 @@ const KILL_ATTEMPT_PROC_WORD = "self-saved (";
  * keeps `self-saved (X)`, its names read from the predicate's own set.
  */
 export const KILL_ATTEMPTS_POPPED_LEGEND =
-  "  `popped X` = X went up on the target: a wall (a percentage damage reduction), or another defensive it pressed on itself — a shield, a heal, a dodge, a control immunity … (the timeline line of that press, where there is one, says which). The word states the press, not why it was pressed, and not that it saved anyone.";
+  "  `popped X` = X went up on the target: a wall (a percentage damage reduction), or another defensive it pressed on itself — a shield, a heal, a dodge, a control immunity … (the timeline line of that press, where there is one, says which; a wall a talent or proc put up with no press of it reads `[no press logged]` on its [ENEMY DEF] line). The word states that it went up — not why, and not that it saved anyone.";
 export const KILL_ATTEMPTS_PROC_LEGEND = `  \`self-saved (X)\` = a passive of the target fired (${[...ENEMY_PROC_SAVE_NAMES].join(" / ")}) — nobody pressed it.`;
 
 /**

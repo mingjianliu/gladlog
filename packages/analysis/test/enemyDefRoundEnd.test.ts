@@ -42,7 +42,6 @@ function unit(id: string, over: Record<string, unknown> = {}): any {
     spec: "105",
     reaction: 1,
     info: {},
-    spellCastEvents: [],
     auraEvents: [],
     actionIn: [],
     absorbsIn: [],
@@ -52,6 +51,31 @@ function unit(id: string, over: Record<string, unknown> = {}): any {
     deathRecords: [],
     advancedActions: [],
     ...over,
+    // F15 C5: a wall aura the unit put on itself is a PRESS in these
+    // fixtures — the cast the log writes beside it (an aura with no press
+    // of it is a copy: `noPressLogged`)
+    spellCastEvents: [
+      ...((over.spellCastEvents as any[] | undefined) ?? []),
+      ...((over.auraEvents as any[] | undefined) ?? [])
+        .filter(
+          (a) =>
+            a.logLine?.event === LogEvent.SPELL_AURA_APPLIED &&
+            a.srcUnitId === id &&
+            (a.destUnitId ?? id) === id,
+        )
+        .map((a) => ({
+          spellId: a.spellId,
+          spellName: a.spellName,
+          srcUnitId: id,
+          destUnitId: id,
+          timestamp: a.timestamp,
+          logLine: {
+            event: LogEvent.SPELL_CAST_SUCCESS,
+            timestamp: a.logLine.timestamp,
+            parameters: [],
+          },
+        })),
+    ],
   };
 }
 const aura = (

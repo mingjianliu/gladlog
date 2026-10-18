@@ -27,6 +27,7 @@ import { AOE_CC_LANDING_WINDOW_S } from "../../utils/drAnalysis";
 import { fmtTime, toRenderSecond } from "../../utils/renderGrid";
 import { ALTER_TIME_CAST_ID, alterTimeReturnSeconds } from "./alterTime";
 import type { TimelineCtx } from "./ctx";
+import { procTriggerOf } from "./enemyCd";
 
 export function emitTeamCdEntries(
   ctx: Pick<
@@ -69,6 +70,17 @@ export function emitTeamCdEntries(
       // Same as the owner loop: a proc-only entry's activations are not presses.
       const isProc = cdIsProcOnly(cd);
       if (isProc) procLinesEmitted = true;
+      // F15 C5: what a proc-only activation goes out with, as the enemy
+      // side says it (`procTriggerOf`)
+      const procWith = isProc
+        ? procTriggerOf(
+            player,
+            cd.spellId,
+            cd.casts.map((c) =>
+              Math.round(matchStartMs + c.timeSeconds * 1000),
+            ),
+          )
+        : undefined;
       for (const cast of cd.casts) {
         const groundingNote = groundingAbsorbNote(
           cd.spellId,
@@ -156,7 +168,7 @@ export function emitTeamCdEntries(
                   ? cast.targetName
                   : player.name,
               );
-          line = `${fmtTime(cast.timeSeconds)}  [TEAM] ${isProc ? "[PROC]" : "[CD]"}   ${pid(player.name)} (${spec}): ${cd.spellName}${recipientPart}${groundingNote}${immunePart}${saveNote}${unnecessaryNote}`;
+          line = `${fmtTime(cast.timeSeconds)}  [TEAM] ${isProc ? "[PROC]" : "[CD]"}   ${pid(player.name)} (${spec}): ${cd.spellName}${procWith ? ` (with ${procWith})` : ""}${recipientPart}${groundingNote}${immunePart}${saveNote}${unnecessaryNote}`;
         }
         addEntry(
           cast.timeSeconds,

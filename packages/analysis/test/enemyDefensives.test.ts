@@ -178,7 +178,9 @@ describe("enemyDefensiveEvents", () => {
         applied(BARKSKIN, "e1", "e1", 10),
         removed(BARKSKIN, "e1", "e1", 22),
       ],
-      spellCastEvents: [cast(IRONBARK, "e2", 30)],
+      // the presses behind the walls (an aura with no press of it is a
+      // copy — `noPressLogged`, F15 C5)
+      spellCastEvents: [cast(BARKSKIN, "e1", 10), cast(IRONBARK, "e2", 30)],
     });
     const pal = unit("e2", {
       auraEvents: [
@@ -187,6 +189,7 @@ describe("enemyDefensiveEvents", () => {
         applied(DIVINE_SHIELD, "e2", "e2", 50),
         removed(DIVINE_SHIELD, "e2", "e2", 53),
       ],
+      spellCastEvents: [cast(DIVINE_SHIELD, "e2", 50)],
     });
     const enemies = [druid, pal];
 
@@ -252,6 +255,34 @@ describe("enemyDefensiveEvents", () => {
     expect(isIntervalFrom(iv, unit("e2"))).toBe(false);
   });
 
+  it("F15 C5: a wall aura with no press of it logged is a copy — tagged, and never early on length alone", () => {
+    const SOTF = "264735"; // Survival of the Fittest, 8 s pressed; 3 s via Exhilaration
+    const hunter = unit("e1", {
+      auraEvents: [
+        applied(SOTF, "e1", "e1", 10),
+        removed(SOTF, "e1", "e1", 13),
+      ],
+      spellCastEvents: [cast("109304", "e1", 10)], // Exhilaration, same ms
+    });
+    const [ev] = enemyDefensiveEvents(hunter, [hunter], combat);
+    expect(ev).toMatchObject({
+      spellId: SOTF,
+      noPressLogged: true,
+      removedEarly: false,
+    });
+    // pressed, the same 3 s is early against its 8 s
+    const pressed = unit("e1", {
+      auraEvents: [
+        applied(SOTF, "e1", "e1", 10),
+        removed(SOTF, "e1", "e1", 13),
+      ],
+      spellCastEvents: [cast(SOTF, "e1", 10)],
+    });
+    const [p] = enemyDefensiveEvents(pressed, [pressed], combat);
+    expect(p.noPressLogged).toBeUndefined();
+    expect(p.removedEarly).toBe(true);
+  });
+
   it("removedEarly needs a real REMOVED event and more than the slack short", () => {
     // no REMOVED → the interval end is inferred (round end) → never "early"
     const inferred = unit("e1", {
@@ -267,6 +298,7 @@ describe("enemyDefensiveEvents", () => {
           applied(BARKSKIN, "e1", "e1", 10),
           removed(BARKSKIN, "e1", "e1", 10 + durS),
         ],
+        spellCastEvents: [cast(BARKSKIN, "e1", 10)],
       });
     const within = mk(12 - REMOVED_EARLY_SLACK_S);
     expect(enemyDefensiveEvents(within, [within], combat)[0].removedEarly).toBe(

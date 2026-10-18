@@ -21,6 +21,7 @@ import {
 } from "../../utils/cooldowns";
 import {
   ENEMY_DEF_END_NOT_LOGGED,
+  ENEMY_DEF_NO_PRESS_TAG,
   selfSaveReductionNames,
 } from "../../utils/enemyDefensives";
 import { ROUND_ENDED_WORDS, roundEndLegend } from "../../utils/roundEnd";
@@ -487,6 +488,8 @@ export function formatTimeline(
           "    An aura that ended before its full duration says why when the log does: `— dispelled by X's Spell` /",
           "    `— stolen by …`, `— ended at death` / `— its target died`, `— used up, absorbed Nk` / `— used up` (an absorb eaten through);",
           "    `— removed early` = it ended early and the log gives no cause (cancelled, broken or replaced);",
+          `    \`${ENEMY_DEF_NO_PRESS_TAG}\` = the aura went up with no press of it in the log — a copy a talent or proc put up (Exhilaration's 3 s`,
+          "    Survival of the Fittest, Ancient of Lore); its length is the copy's own, so it never reads `— removed early` on length alone.",
           "    `— still up when the round ended` = the round ended before it did;",
           "    `— its bolts hit X: Nk of the Mk damage they took over it` = a save that is a channel whose damage landed on our",
           "    player X (Ultimate Penitence; several units, largest first): Nk = what the channel dealt X, landed plus absorbed;",
@@ -674,7 +677,7 @@ export function formatTimeline(
     ...(drClashEntries.length > 0 ? DR_CLASH_LEGEND : []),
     ...(procLinesEmitted
       ? [
-          "[PROC] = an automatically applied effect (a passive or a talent-replaced button); no button was pressed at that second, so it is never a timing or choice to judge. `(cheat-death proc)` = Cauterize / Cheat Death refused a killing blow on that player — a passive, not a press, and they could still be hit.",
+          "[PROC] = an automatically applied effect (a passive or a talent-replaced button); no button of ITS OWN was pressed at that second. `(with X)` = it went out in the same millisecond as that player's press of X, as it did again and again this round (Radiant Glory's Avenging Wrath with Wake of Ashes) — its timing is X's press; without it, it is never a timing or choice to judge. `(cheat-death proc)` = Cauterize / Cheat Death refused a killing blow on that player — a passive, not a press, and they could still be hit.",
         ]
       : []),
     "",

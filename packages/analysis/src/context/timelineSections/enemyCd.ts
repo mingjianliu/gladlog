@@ -49,14 +49,20 @@ export function procOrdinal(
  * more of them than any other cast. One shared ms proves nothing — a trinket
  * macro'd to the press, an off-GCD strike (the first cut named `Gladiator's
  * Badge` and `Crusading Strikes` as triggers on 39 lines of the 605-file
- * capture). Undefined = the log does not single one out.
+ * capture). Undefined = the log does not single one out. Shared by the
+ * friendly `[TEAM]` / `[YOU] [PROC]` lines (fact1215 C5, 8cd58545: the
+ * friendly side dropped the `with Wake of Ashes` the enemy side prints).
  */
-function triggerOf(
+export function procTriggerOf(
   unit: ICombatUnit | undefined,
   activationSpellId: string,
   activationsMs: readonly number[],
 ): string | undefined {
   const counts = new Map<string, number>();
+  // the activation itself, under any id: the friendly ledger keys Radiant
+  // Glory's Avenging Wrath by the 31884 button while the log writes the
+  // activation as 454351 (F15 C5: `with Avenging Wrath` on 1,184 lines)
+  const selfName = getEnglishSpellName(activationSpellId);
   for (const atMs of activationsMs) {
     const names = new Set<string>();
     for (const e of unit?.spellCastEvents ?? []) {
@@ -64,6 +70,7 @@ function triggerOf(
         e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
         !!e.spellId &&
         e.spellId !== activationSpellId &&
+        getEnglishSpellName(e.spellId, e.spellName) !== selfName &&
         Math.abs(e.logLine.timestamp - atMs) <= AURA_REBROADCAST_GAP_MS
       )
         names.add(getEnglishSpellName(e.spellId, e.spellName));
@@ -117,7 +124,7 @@ export function emitEnemyCdEntries(
       if (!isActivationCd(cd) || triggerBySpell.has(cd.spellId)) continue;
       triggerBySpell.set(
         cd.spellId,
-        triggerOf(
+        procTriggerOf(
           enemyUnit,
           cd.spellId,
           shown

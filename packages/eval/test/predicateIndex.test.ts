@@ -59,6 +59,7 @@ import * as spellOutcomeLines from "@gladlog/analysis/src/context/spellOutcomeLi
 import * as stackedDefensivesContext from "@gladlog/analysis/src/context/stackedDefensives";
 import * as timelineHelpers from "@gladlog/analysis/src/context/timelineHelpers";
 import * as timelineCastStopped from "@gladlog/analysis/src/context/timelineSections/castStopped";
+import * as enemyCd from "@gladlog/analysis/src/context/timelineSections/enemyCd";
 import * as timelineSetup from "@gladlog/analysis/src/context/timelineSections/setup";
 import * as unitLabel from "@gladlog/analysis/src/context/unitLabel";
 import * as abilityProfileMod from "@gladlog/analysis/src/data/abilityProfile";
@@ -2356,6 +2357,12 @@ const INDEX: PredicateRow[] = [
     file: `${E}/quality/promptQualityCheck.ts`,
     symbol: "checkDmgSpikeListCap",
     mod: promptQualityCheck,
+  },
+  // fact1215 C5: what a proc-only activation went out with
+  {
+    file: `${A}/context/timelineSections/enemyCd.ts`,
+    symbol: "procTriggerOf",
+    mod: enemyCd,
   },
   // fact1215 R9 / R10: channels without an aura, a kick on a channelled
   // control's caster, a refused press's mechanic

@@ -10,6 +10,7 @@
 import { ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
 import { saveSchoolMask } from "../analysis/candidates/cooldownTiming";
+import { castsOfEffectAura } from "../data/castEffectAuras";
 import { wallDoorPct } from "../data/mitigationComponents";
 import {
   MITIGATION_TABLE,
@@ -413,6 +414,8 @@ export function enemySaveEffectNote(
  * (`checkEnemyDefEndNotLogged`).
  */
 export const ENEMY_DEF_END_NOT_LOGGED = "end not logged";
+/** fact1215 C5: an `[ENEMY DEF]` wall that no press put up (`noPressLogged`). */
+export const ENEMY_DEF_NO_PRESS_TAG = "[no press logged]";
 
 /**
  * The parenthesis that carries `ENEMY_DEF_END_NOT_LOGGED`, whole: the phrase
@@ -575,7 +578,15 @@ export function limitedImmunitySchoolMask(spellId: string): number | undefined {
 export function immunitySchoolWords(mask: number): string {
   if (mask === 0x01) return "physical";
   if ((mask & ALL_SCHOOLS) === 0x7e) return "magic";
-  const names = ["physical", "holy", "fire", "nature", "frost", "shadow", "arcane"];
+  const names = [
+    "physical",
+    "holy",
+    "fire",
+    "nature",
+    "frost",
+    "shadow",
+    "arcane",
+  ];
   return names.filter((_, i) => (mask & (1 << i)) !== 0).join("/");
 }
 
@@ -868,6 +879,13 @@ export interface IEnemyDefensiveEvent {
    * Undefined when no such cast is logged (a proc / an aura-only press):
    * the line falls back to `atSeconds`. */
   pressSeconds?: number;
+  /** fact1215 C5 (2026-10-18): a wall aura with no press of it logged — not
+   * of the button, not of a cast whose effect it is (`castsOfEffectAura`) —
+   * is a copy a talent or proc put up (Smoke Screen's 3 s Survival of the
+   * Fittest with Exhilaration, Ancient of Lore). Its line says so, and it is
+   * never `removed early` on length alone: its own length is not the
+   * pressed spell's. */
+  noPressLogged?: true;
   spellId: string;
   spellName: string;
   /** the enemy who pressed it */
@@ -1220,6 +1238,22 @@ export function enemyDefensiveEvents(
       ),
     };
   };
+  /** An aura copy no press produced (`noPressLogged`): its early end is
+   * said only when the log gives the cause — a dispel, a theft, the
+   * holder's death, an absorb eaten through; a shorter-than-official length
+   * alone is no early end (the pressed spell's length is not the copy's). */
+  const lengthFreeEnd = (
+    e: ReturnType<typeof earlyEndOf>,
+  ): ReturnType<typeof earlyEndOf> =>
+    e.removedEarly &&
+    !(
+      e.earlyEnd?.takenBy ||
+      e.earlyEnd?.holderDied ||
+      e.earlyEnd?.absorb?.left === 0 ||
+      e.earlyEnd?.takeUnclear
+    )
+      ? { ...e, removedEarly: false, earlyEnd: undefined }
+      : e;
   /** A unit's own SPELL_CAST_SUCCESS seconds of a spell — the press search
    * of an aura kind (`pressSeconds`, F-E11). */
   const castSecondsOf = (srcUnitName: string, spellId: string): number[] =>
@@ -1246,6 +1280,10 @@ export function enemyDefensiveEvents(
     const press = [
       ...castSecondsOf(enemy.name, tableId),
       ...(tableId === iv.spellId ? [] : castSecondsOf(enemy.name, iv.spellId)),
+      // a cast whose effect this aura is (Vanish 1856 → 11327)
+      ...castsOfEffectAura(iv.spellId)
+        .filter((id) => id !== tableId && id !== iv.spellId)
+        .flatMap((id) => castSecondsOf(enemy.name, id)),
     ]
       // the cast line can also be logged a few ms AFTER its aura (review of
       // F-E11, 2026-10-03: aura 10.000 s, SUCCESS 10.020 s); the nearest
@@ -1280,7 +1318,12 @@ export function enemyDefensiveEvents(
       // no pct — the line prints `immune` for it.
       pct: wallDoorPct(tableId, { carrierIsCaster: true, caster: enemy }),
       observedSeconds: observed,
-      ...earlyEndOf(enemy, iv, iv.spellId),
+      ...(Number.isFinite(press)
+        ? earlyEndOf(enemy, iv, iv.spellId)
+        : {
+            noPressLogged: true as const,
+            ...lengthFreeEnd(earlyEndOf(enemy, iv, iv.spellId)),
+          }),
     });
   }
 

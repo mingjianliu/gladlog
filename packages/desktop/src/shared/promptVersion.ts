@@ -187,5 +187,10 @@
  *  control ended by a kick on its caster says so; a channel with no caster
  *  aura counts as busy to its kick or last tick. 605 files: no candidate
  *  added or removed; +310 `on its caster` ends.
+ *  v417 (2026-10-18, F15 batch 13 — fact1215 C5, facts only): a wall copy
+ *  no press put up reads `[no press logged]` and is never early on length;
+ *  a friendly [PROC] says `(with X)`; Radiant Glory's cast-less Avenging
+ *  Wrath gets its `(no press)` [ENEMY CD] line. 605 files: no candidate added
+ *  or removed.
  */
-export const PROMPT_VERSION = 416;
+export const PROMPT_VERSION = 417;

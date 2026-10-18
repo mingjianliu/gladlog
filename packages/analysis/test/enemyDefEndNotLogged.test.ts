@@ -55,7 +55,6 @@ function unit(id: string, over: Record<string, unknown> = {}): any {
     spec: "105",
     reaction: 1,
     info: {},
-    spellCastEvents: [],
     auraEvents: [],
     actionIn: [],
     absorbsIn: [],
@@ -65,6 +64,31 @@ function unit(id: string, over: Record<string, unknown> = {}): any {
     deathRecords: [],
     advancedActions: [],
     ...over,
+    // F15 C5: a wall aura the unit put on itself is a PRESS in these
+    // fixtures — the cast the log writes beside it (an aura with no press
+    // of it is a copy: `noPressLogged`)
+    spellCastEvents: [
+      ...((over.spellCastEvents as any[] | undefined) ?? []),
+      ...((over.auraEvents as any[] | undefined) ?? [])
+        .filter(
+          (a) =>
+            a.logLine?.event === LogEvent.SPELL_AURA_APPLIED &&
+            a.srcUnitId === id &&
+            (a.destUnitId ?? id) === id,
+        )
+        .map((a) => ({
+          spellId: a.spellId,
+          spellName: a.spellName,
+          srcUnitId: id,
+          destUnitId: id,
+          timestamp: a.timestamp,
+          logLine: {
+            event: LogEvent.SPELL_CAST_SUCCESS,
+            timestamp: a.logLine.timestamp,
+            parameters: [],
+          },
+        })),
+    ],
   };
 }
 const aura = (
@@ -200,7 +224,7 @@ describe("[ENEMY DEF] — an aura the log never shows end prints `end not logged
     const mate = unit("e2", {
       auraEvents: [applied(IRONBARK, "e1", "e2", 20)],
     });
-    hunter.spellCastEvents = [cast(IRONBARK, "e2", 20)];
+    hunter.spellCastEvents.push(cast(IRONBARK, "e2", 20));
     // a friendly on the recipient before and during the external: with a
     // logged end the line measures it, without one there is no window
     const attacker = unit("f1", {

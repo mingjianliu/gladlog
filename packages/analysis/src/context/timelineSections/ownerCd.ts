@@ -54,6 +54,7 @@ import {
 import { ALTER_TIME_CAST_ID, alterTimeReturnSeconds } from "./alterTime";
 import type { DeferredSnapshot } from "./ctx";
 import type { TimelineCtx } from "./ctx";
+import { procTriggerOf } from "./enemyCd";
 
 const DIVINE_HYMN_ID = "64843";
 /** Spirit of Redemption, the pressed PvP-talent version (not the death proc). */
@@ -176,6 +177,14 @@ export function emitOwnerCdEntries(
     // judgement (cheaper alternative, [UNNECESSARY], CC tag, [HEALING]) is off.
     const isProc = cdIsProcOnly(cd);
     if (isProc) procLinesEmitted = true;
+    // F15 C5: what a proc-only activation goes out with (`procTriggerOf`)
+    const procWith = isProc
+      ? procTriggerOf(
+          owner,
+          cd.spellId,
+          cd.casts.map((c) => Math.round(matchStartMs + c.timeSeconds * 1000)),
+        )
+      : undefined;
     for (const cast of cd.casts) {
       // F15 C1: a talent-shared wall's press that put its copy on an ally
       // (Flameshaper Obsidian Scales) keeps that ally as its target.
@@ -584,7 +593,7 @@ export function emitOwnerCdEntries(
 
       addEntry(
         cast.timeSeconds,
-        `${fmtTime(cast.timeSeconds)}  ${prefix}   ${displayNameWithChannel}${effectiveTargetPart}${ownAuraNote}${outgoingDrNote}${immuneNote}${empowerNote}${healAbsorbNote}${guardianSaveNote}${dampeningNote}${cheaperNote}${groundingNote}${interruptNote}${returnNote}${isProc ? "" : ownerHardCcTagAt(cast.timeSeconds)}${unnecessaryNote}`,
+        `${fmtTime(cast.timeSeconds)}  ${prefix}   ${displayNameWithChannel}${procWith ? ` (with ${procWith})` : ""}${effectiveTargetPart}${ownAuraNote}${outgoingDrNote}${immuneNote}${empowerNote}${healAbsorbNote}${guardianSaveNote}${dampeningNote}${cheaperNote}${groundingNote}${interruptNote}${returnNote}${isProc ? "" : ownerHardCcTagAt(cast.timeSeconds)}${unnecessaryNote}`,
         ...extraLines,
       );
     }

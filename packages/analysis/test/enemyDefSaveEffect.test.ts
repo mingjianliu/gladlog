@@ -227,6 +227,8 @@ describe("[ENEMY DEF] names an effect save by its effect (FT-T07, ruling D8)", (
 
   it("a real immunity still reads `immune` with its duration", () => {
     const pal = unit("e1", {
+      // the press (F15 C5: no press logged would be a copy)
+      spellCastEvents: [cast(DIVINE_SHIELD, 50)],
       auraEvents: [applied(DIVINE_SHIELD, 50), removed(DIVINE_SHIELD, 58)],
     });
     expect(body(render([pal])[0])).toBe("Divine Shield (immune, 8.0s)");
