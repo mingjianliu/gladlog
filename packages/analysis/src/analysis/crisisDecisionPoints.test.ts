@@ -50,6 +50,16 @@ const withLogLine = (rows: any[]) =>
 function unit(over: Record<string, unknown> = {}) {
   const u: any = unitFields(over);
   u.damageIn = withLogLine(u.damageIn ?? []);
+  // a heal row with no log line is a direct heal in these fixtures (the
+  // product reads an unknown row kind as no fresh heal — codex 20-F15-23)
+  u.healIn = (u.healIn ?? []).map((h: any) =>
+    h.logLine
+      ? h
+      : {
+          ...h,
+          logLine: { event: LogEvent.SPELL_HEAL, timestamp: h.timestamp },
+        },
+  );
   return u;
 }
 function unitFields(over: Record<string, unknown> = {}) {
@@ -313,6 +323,39 @@ describe("crisisDecisionPoints", () => {
       const p = crisisDecisionPoints(o, combat(o))[0]!;
       expect(p.selfHealFreshPct).toBe(20);
       expect(p.selfHealCasts).toBe(1);
+    });
+    it("two presses of one spell in one ms keep their own heals (codex 20-F15-23)", () => {
+      const o = unit({
+        spellCastEvents: [
+          cast(2100, "2061", "H", 101),
+          cast(2100, "2061", "H", 103),
+        ],
+        healIn: [
+          heal(2100, "2061", 2, false, 100),
+          heal(2100, "2061", 2, false, 102),
+        ],
+      });
+      const p = crisisDecisionPoints(o, combat(o))[0]!;
+      expect(p.selfHealFreshPct).toBe(4);
+      expect(p.selfHealCasts).toBe(2);
+    });
+    it("a heal row whose kind is unknown is no fresh heal (codex 20-F15-23)", () => {
+      const o = unitFields({
+        spellCastEvents: [cast(1800, "774", "A")],
+        healIn: [
+          {
+            timestamp: T0 + 2200,
+            srcUnitId: "H",
+            spellId: "774",
+            amount: 20,
+            effectiveAmount: 20,
+          },
+        ],
+      }) as any;
+      o.damageIn = withLogLine(o.damageIn);
+      const p = crisisDecisionPoints(o, combat(o))[0]!;
+      expect(p.selfHealFreshPct).toBe(0);
+      expect(p.selfHealCasts).toBe(0);
     });
     it("a direct heal belongs to the press before it, not to a later press of the spell on an ally", () => {
       const o = unit({

@@ -757,6 +757,9 @@ export function crisisDecisionPoints(
     id: String(h.spellId ?? ""),
     a: Math.abs(h.effectiveAmount ?? h.amount ?? 0),
     periodic: h.logLine?.event === LogEvent.SPELL_PERIODIC_HEAL,
+    /** the row's event is known (codex 20-F15-23: a row with no log line
+     * is neither a known tick nor a known direct heal — never fresh) */
+    kindKnown: !!h.logLine?.event,
     line: h.logLine?.lineIndex as number | undefined,
   }));
   /** `x` was logged before `y`: an earlier ms, or the same ms with both line
@@ -817,17 +820,33 @@ export function crisisDecisionPoints(
    * fresh amount and the press count.
    */
   const pressOf = (h: (typeof healIn)[number]) => {
+    if (!h.kindKnown) return undefined;
     const evidence = h.periodic ? hotAppliedFor(h) : h;
     if (!evidence) return undefined;
+    const same = ownerCasts.filter((c) => c.id === h.id);
+    // the log writes an instant spell's aura and heal rows BEFORE its
+    // CAST_SUCCESS (103-5 2:31, Eternal Flame on lines 18401–18403): a press
+    // logged right after the evidence in its own ms is its press — the first
+    // one, so two presses of one ms keep their own heals (codex 20-F15-23)
+    const after = same
+      .filter(
+        (c) =>
+          c.t === evidence.t &&
+          c.line !== undefined &&
+          evidence.line !== undefined &&
+          c.line > evidence.line,
+      )
+      .sort((a, b) => a.line! - b.line!)[0];
+    if (after) return after;
+    // else the latest press before it (in its ms when the order is unknown)
     let press: (typeof ownerCasts)[number] | undefined;
-    // a press in the evidence's own ms counts whatever its line: the log
-    // writes an instant spell's aura and heal rows BEFORE its CAST_SUCCESS
-    // (103-5 2:31: Eternal Flame APPLIED / HEAL / CAST_SUCCESS on lines
-    // 18401–18403 of one ms)
-    for (const c of ownerCasts)
+    for (const c of same)
       if (
-        c.id === h.id &&
-        c.t <= evidence.t &&
+        (c.t < evidence.t ||
+          (c.t === evidence.t &&
+            (c.line === undefined ||
+              evidence.line === undefined ||
+              c.line < evidence.line))) &&
         (!press || loggedBefore(press, c))
       )
         press = c;
@@ -994,9 +1013,7 @@ export function crisisDecisionPoints(
     const freshPressOf = (h: (typeof healIn)[number]) => {
       if (procHealIds.has(h.id)) return undefined;
       const p = pressOf(h);
-      return p && castsIn.some((c) => c.t === p.t && c.id === p.id)
-        ? p
-        : undefined;
+      return p && castsIn.includes(p) ? p : undefined;
     };
     const freshHeals = ownHealInWin
       .map((h) => ({ h, press: freshPressOf(h) }))
@@ -1155,9 +1172,9 @@ export function crisisDecisionPoints(
       procNames: [...new Set(procsIn.map((m) => m.name))],
       selfHealPct: Math.round(selfHeal * 100),
       selfHealFreshPct: Math.floor(selfHealFresh * 100),
-      selfHealCasts: new Set(
-        freshHeals.map((f) => `${f.press!.id}@${f.press!.t}`),
-      ).size,
+      // distinct presses — the cast rows themselves, so two presses of one
+      // spell in one ms count twice (codex 20-F15-23)
+      selfHealCasts: new Set(freshHeals.map((f) => f.press)).size,
       hasTool,
       feasible: !inCC && !lockedOut && !diedInWindow && hasTool,
     });
