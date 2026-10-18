@@ -520,13 +520,18 @@ function clipToRuns(
 export function blockedForEverySpell(
   named: readonly NamedCannotCastInterval[],
   spellIds: readonly string[] | undefined,
+  /** "does this interval stop this spell" — `intervalBlocksSpell`, or
+   * `actWindowFor`'s reading that also lets a spell through a stun it can
+   * be pressed through (`stunLetsPress`), per spell */
+  blocks: (
+    iv: NamedCannotCastInterval,
+    spellId: string,
+  ) => boolean = intervalBlocksSpell,
 ): NamedCannotCastInterval[] {
   if (!spellIds?.length) return [...named];
   if (spellIds.length === 1)
-    return named.filter((iv) => intervalBlocksSpell(iv, spellIds[0]));
-  const perSpell = spellIds.map((id) =>
-    named.filter((iv) => intervalBlocksSpell(iv, id)),
-  );
+    return named.filter((iv) => blocks(iv, spellIds[0]!));
+  const perSpell = spellIds.map((id) => named.filter((iv) => blocks(iv, id)));
   return clipToRuns(
     named.filter((iv) => perSpell.some((list) => list.includes(iv))),
     commonRuns(perSpell),
@@ -538,12 +543,13 @@ function intervalsForSpells(
   ownNamed: readonly NamedCannotCastInterval[],
   split: ReturnType<typeof petBlockLists>,
   spellIds: readonly string[] | undefined,
+  blocks?: (iv: NamedCannotCastInterval, spellId: string) => boolean,
 ): NamedCannotCastInterval[] {
   if (split.petLists.length === 0)
-    return blockedForEverySpell(ownNamed, spellIds);
+    return blockedForEverySpell(ownNamed, spellIds, blocks);
   const lists = [
     ...(split.ownSpellIds.length
-      ? [blockedForEverySpell(ownNamed, split.ownSpellIds)]
+      ? [blockedForEverySpell(ownNamed, split.ownSpellIds, blocks)]
       : []),
     ...split.petLists,
   ];
@@ -777,11 +783,18 @@ export function castBlockingAuraIntervals(
     // `disarmIntervals`' rule): a BROKEN row names the BREAKER, a friendly
     // one too (a teammate's Blessing of Sacrifice) — dropped here, the CC
     // ran on to its official end (codex post-hoc 60-POSTHOC-02 U2: 16 s
-    // instead of 12 s). A removal only closes an open application, and only
-    // an enemy's (or a reflected one) opens one.
+    // instead of 12 s). A break only closes an open application, and only
+    // an enemy's (or a reflected one) opens one. A REMOVED keeps the filter:
+    // its source is the aura's own caster, and a friendly copy's REMOVED
+    // must not close an enemy's application through `matchPendingCcKey`'s
+    // same-spell fallback (codex 20-F15-17: an enemy stun 10–15 s read
+    // 10–12 s after a friendly copy's removal at 12 s).
     const isApplied = aura.logLine.event === LogEvent.SPELL_AURA_APPLIED;
+    const isBreakRow =
+      aura.logLine.event === LogEvent.SPELL_AURA_BROKEN ||
+      aura.logLine.event === LogEvent.SPELL_AURA_BROKEN_SPELL;
     if (
-      isApplied &&
+      !isBreakRow &&
       !enemyIds.has(aura.srcUnitId) &&
       aura.srcUnitId !== unit.id
     )
@@ -1338,21 +1351,21 @@ export function actWindowFor(
   let disarms: NamedCannotCastInterval[] | undefined;
   // the unit's own intervals minus the stuns one of its OWN spells asked
   // about can be pressed through (`stunLetsPress`) — "stops every spell"
-  const withoutPressableStuns = (
-    ownSpellIds: readonly string[],
-    through: { onSelf: boolean } | undefined,
-  ): NamedCannotCastInterval[] =>
-    through && stunPressable
-      ? named.filter(
-          (iv) =>
-            !ownSpellIds.some((id) =>
-              stunLetsPress(iv, id, {
-                pvpTalentIds: stunPressable.pvpTalentIds,
-                onSelf: through.onSelf,
-              }),
-            ),
-        )
-      : named;
+  // per spell (codex 20-F15-17): a stun Ice Block can be pressed through
+  // still stops Greater Invisibility — the set is free only while ONE of
+  // its spells is
+  const blocksThrough =
+    (through: { onSelf: boolean } | undefined) =>
+    (iv: NamedCannotCastInterval, spellId: string): boolean =>
+      intervalBlocksSpell(iv, spellId) &&
+      !(
+        through &&
+        stunPressable &&
+        stunLetsPress(iv, spellId, {
+          pvpTalentIds: stunPressable.pvpTalentIds,
+          onSelf: through.onSelf,
+        })
+      );
   const forSpells = (
     spellIds: readonly string[] | undefined,
     through?: { onSelf: boolean },
@@ -1366,15 +1379,13 @@ export function actWindowFor(
       // disarmed Die by the Sword holder as free)
       disarms ??= disarmIntervals(unit, enemyIds);
       return intervalsForSpells(
-        [...withoutPressableStuns(split.ownSpellIds, through), ...disarms],
+        [...named, ...disarms],
         split,
         spellIds,
+        blocksThrough(through),
       );
     } catch {
-      return blockedForEverySpell(
-        withoutPressableStuns(spellIds, through),
-        spellIds,
-      );
+      return blockedForEverySpell(named, spellIds, blocksThrough(through));
     }
   };
   // the one free-time count: gate and fact

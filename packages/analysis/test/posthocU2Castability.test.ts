@@ -15,6 +15,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { ensureAnalysisData } from "../src/data/ensure";
 import { spellSchoolMask } from "../src/data/spellSchools";
 import {
+  actWindowFor,
   cannotCastIntervalsForSpells,
   cannotCastRuns,
   castBlockingAuraAt,
@@ -152,5 +153,60 @@ describe("3 — a set of spells is stopped while every member is", () => {
     expect(
       cannotCastIntervalsForSpells(u, enemyIds, [BLINK], [u])[0],
     ).toMatchObject({ from: ivs[0]!.from, to: ivs[0]!.to });
+  });
+});
+
+describe("codex 20-F15-17 — the two review findings", () => {
+  it("a friendly copy's REMOVED does not close an enemy's application", () => {
+    const HOJ = "853";
+    const u = unitWith([
+      aura(HOJ, LogEvent.SPELL_AURA_APPLIED, 10),
+      aura(HOJ, LogEvent.SPELL_AURA_APPLIED, 11, "friend"),
+      aura(HOJ, LogEvent.SPELL_AURA_REMOVED, 12, "friend"),
+      aura(HOJ, LogEvent.SPELL_AURA_REMOVED, 15),
+    ]);
+    expect(castBlockingAuraIntervals(u, enemyIds)).toMatchObject([
+      { srcUnitId: "e", from: T0 + 10_000, to: T0 + 15_000 },
+    ]);
+  });
+  it("a stun one spell can be pressed through still stops the other spell of the set", () => {
+    const ICE_BLOCK = "45438"; // Frost, usable while stunned (U-T1)
+    const GREATER_INVIS = "110959"; // Arcane
+    const u = unitWith(
+      [
+        aura("853", LogEvent.SPELL_AURA_APPLIED, 11),
+        aura("853", LogEvent.SPELL_AURA_REMOVED, 14),
+      ],
+      [
+        {
+          logLine: { event: LogEvent.SPELL_INTERRUPT, timestamp: T0 + 10_000 },
+          timestamp: T0 + 10_000,
+          spellId: "6552",
+          extraSpellId: "116",
+          srcUnitId: "e",
+          destUnitId: "u",
+        },
+      ],
+    );
+    const act = actWindowFor(u, enemyIds, T0, Infinity, [u], {
+      pvpTalentIds: new Set(),
+    });
+    const frostLockEnd =
+      cannotCastRuns(
+        cannotCastIntervalsForSpells(u, enemyIds, [ICE_BLOCK], [u]).filter(
+          (iv) => iv.lockout,
+        ),
+      )[0]!.to - T0;
+    // both stopped from the stun's start to the Frost lock's end; Ice Block
+    // alone goes through the stun, Greater Invisibility alone through the lock
+    const bothBlockedS = (Math.min(frostLockEnd, 14_000) - 11_000) / 1000;
+    expect(bothBlockedS).toBeGreaterThan(0);
+    const state = act.stateIn(10, 15, 10, [ICE_BLOCK, GREATER_INVIS], true);
+    expect(state!.freeAfterS).toBeCloseTo(5 - bothBlockedS, 3);
+    // each alone: Ice Block free outside the lock, Greater Invisibility
+    // free outside the stun
+    expect(
+      act.stateIn(10, 15, 10, [GREATER_INVIS], true)!.freeAfterS,
+    ).toBeCloseTo(2, 3);
   });
 });
