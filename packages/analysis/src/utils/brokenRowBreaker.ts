@@ -1,5 +1,7 @@
 import { type ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
+import { buffFullDurationForCaster } from "./buffDuration";
+
 /**
  * F15 / fact1215 R4 + C4 (2026-10-18): who broke an aura, read from a
  * `SPELL_AURA_BROKEN_SPELL` row. The row's source is usually the breaker, but
@@ -74,15 +76,19 @@ export function breakerOfBrokenRow(
   if (!spellId) return asLogged;
   const atMs = brk.logLine.timestamp;
   const line = brk.logLine.lineIndex;
-  // the latest hit of the breaking spell on the holder at or before the row
+  // the latest hit of the breaking spell on the holder before the row: in
+  // the row's own millisecond only when both line indexes say it came first
+  // (codex 20-F15-19: without them, a hit logged after the row in that ms
+  // would be taken for the breaker)
   const hits = (holder.damageIn ?? []).filter(
     (d) =>
       d.spellId === spellId &&
-      d.logLine.timestamp <= atMs &&
       d.logLine.timestamp >= atMs - BREAKING_HIT_LOOKBACK_MS &&
-      (line === undefined ||
-        d.logLine.lineIndex === undefined ||
-        d.logLine.lineIndex < line),
+      (d.logLine.timestamp < atMs ||
+        (d.logLine.timestamp === atMs &&
+          line !== undefined &&
+          d.logLine.lineIndex !== undefined &&
+          d.logLine.lineIndex < line)),
   );
   const hit = hits[hits.length - 1];
   const auras = holder.auraEvents ?? [];
@@ -100,7 +106,13 @@ export function breakerOfBrokenRow(
   if (hit && !isNoSource(hit.srcUnitId) && hit.srcUnitId !== holder.id)
     return { unitId: hit.srcUnitId, name: hit.srcUnitName ?? "" };
   // … or the caster of the damage-over-time ticking on the holder
-  const dot = dotCasterUp(before, spellId, holder.id);
+  const dot = dotCasterUp(
+    before,
+    auras.slice(before.length + 1),
+    spellId,
+    holder.id,
+    atMs,
+  );
   return dot ?? asLogged;
 }
 
@@ -121,14 +133,20 @@ function linkUp(rows: readonly AuraRow[], spellId: string, holderId: string) {
   return up;
 }
 
-/** The latest other unit whose aura of `spellId` is up on the holder after
- * these rows. */
+/** The latest other unit whose aura of `spellId` is up on the holder at
+ * `atMs`, read over the rows before the break. An application the log never
+ * closes holds only for its official length (`buffFullDurationForCaster`,
+ * the cap the aura readers use; codex 20-F15-19: a Rune of Lingering applied
+ * at 1 s with its REMOVED missing named its caster for a break at 180 s);
+ * one its own REMOVED closes after the break was up until then. */
 function dotCasterUp(
   rows: readonly AuraRow[],
+  after: readonly AuraRow[],
   spellId: string,
   holderId: string,
+  atMs: number,
 ): IBrokenRowBreaker | undefined {
-  const up = new Map<string, IBrokenRowBreaker>();
+  const up = new Map<string, IBrokenRowBreaker & { fromMs: number }>();
   for (const a of rows) {
     if (a.spellId !== spellId || a.srcUnitId === holderId) continue;
     if (isNoSource(a.srcUnitId)) continue;
@@ -139,8 +157,24 @@ function dotCasterUp(
       ev === LogEvent.SPELL_AURA_APPLIED_DOSE
     ) {
       up.delete(a.srcUnitId);
-      up.set(a.srcUnitId, { unitId: a.srcUnitId, name: a.srcUnitName ?? "" });
+      up.set(a.srcUnitId, {
+        unitId: a.srcUnitId,
+        name: a.srcUnitName ?? "",
+        fromMs: a.logLine.timestamp,
+      });
     } else if (ev === LogEvent.SPELL_AURA_REMOVED) up.delete(a.srcUnitId);
   }
-  return [...up.values()].pop();
+  const closedAfter = (src: string): boolean => {
+    for (const a of after)
+      if (a.spellId === spellId && a.srcUnitId === src)
+        return (a.logLine.event as string) === LogEvent.SPELL_AURA_REMOVED;
+    return false;
+  };
+  const live = [...up.values()].filter((d) => {
+    if (closedAfter(d.unitId)) return true;
+    const s = buffFullDurationForCaster(spellId, undefined, d.fromMs);
+    return s === undefined || atMs <= d.fromMs + s * 1000;
+  });
+  const last = live.pop();
+  return last ? { unitId: last.unitId, name: last.name } : undefined;
 }

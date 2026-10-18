@@ -207,6 +207,56 @@ describe("breakerOfBrokenRow", () => {
   });
 });
 
+describe("codex 20-F15-19", () => {
+  const noLine = (r: any) => ({
+    ...r,
+    logLine: { ...r.logLine, lineIndex: undefined },
+  });
+  it("without line indexes, a hit in the row's own ms is not read (it may have come after the row)", () => {
+    const a = noLine(hit(5000, WRATH, ["A", "Caster A"]));
+    const brk = noLine(
+      row(LogEvent.SPELL_AURA_BROKEN_SPELL, 5000, HOWL, ["H", "Holder"], "H", [
+        WRATH,
+        "x",
+      ]),
+    );
+    const b = noLine(hit(5000, WRATH, ["B", "Caster B"]));
+    expect(breakerOfBrokenRow(holderWith([brk], [a, b]), brk)).toEqual({
+      unitId: "H",
+      name: "Holder",
+    });
+  });
+  it("a damage-over-time the log never closed is its caster's only for its official length", () => {
+    const DOT = "1287663"; // 8 s
+    const brk = row(
+      LogEvent.SPELL_AURA_BROKEN_SPELL,
+      180_000,
+      HOWL,
+      ["H", "Holder"],
+      "H",
+      [DOT, "Rune"],
+    );
+    const stale = holderWith([
+      row(LogEvent.SPELL_AURA_APPLIED, 1000, DOT, ["E", "Enemy"], "H"),
+      brk,
+    ]);
+    expect(breakerOfBrokenRow(stale, brk)).toEqual({
+      unitId: "H",
+      name: "Holder",
+    });
+    // closed by its own REMOVED after the break: it was up
+    const closed = holderWith([
+      row(LogEvent.SPELL_AURA_APPLIED, 1000, DOT, ["E", "Enemy"], "H"),
+      brk,
+      row(LogEvent.SPELL_AURA_REMOVED, 181_000, DOT, ["E", "Enemy"], "H"),
+    ]);
+    expect(breakerOfBrokenRow(closed, brk)).toEqual({
+      unitId: "E",
+      name: "Enemy",
+    });
+  });
+});
+
 describe("the two readers", () => {
   const brk = row(
     LogEvent.SPELL_AURA_BROKEN_SPELL,

@@ -255,18 +255,28 @@ for (const f of files) {
         .find(
           (d) =>
             d.spellId === breakId &&
-            d.logLine.timestamp <= ts &&
             ts - d.logLine.timestamp <= 100 &&
-            (d.logLine.lineIndex === undefined ||
-              b.logLine.lineIndex === undefined ||
-              d.logLine.lineIndex < b.logLine.lineIndex),
+            (d.logLine.timestamp < ts ||
+              (d.logLine.timestamp === ts &&
+                d.logLine.lineIndex !== undefined &&
+                b.logLine.lineIndex !== undefined &&
+                d.logLine.lineIndex < b.logLine.lineIndex)),
         );
       if (!hit) continue;
       let check: Check | undefined;
       let wrongPid: string | undefined;
+      // the pid the line must credit: the hitting unit's — its owner's for
+      // a pet / guardian / totem (the line's `N(SPEC)'s guardian's X`)
+      let rightPid: string | undefined;
       if (b.srcUnitId === u.id && hit.srcUnitId && hit.srcUnitId !== u.id) {
         check = "brokenByHolder";
         wrongPid = me.pid;
+        const hitter = byId.get(hit.srcUnitId);
+        const owner =
+          hitter?.ownerId && hitter.ownerId !== hitter.id
+            ? byId.get(hitter.ownerId)
+            : hitter;
+        rightPid = owner && pidOf.get(owner.name)?.pid;
       } else if (
         breakId === "6940" &&
         hit.logLine.event === LogEvent.DAMAGE_SPLIT &&
@@ -287,9 +297,10 @@ for (const f of files) {
         if (link && allyPid) {
           check = "brokenBySplitAlly";
           wrongPid = allyPid;
+          rightPid = me.pid;
         }
       }
-      if (!check || !wrongPid) continue;
+      if (!check || !wrongPid || !rightPid) continue;
       const applied = auras
         .slice(0, i)
         .reverse()
@@ -299,24 +310,32 @@ for (const f of files) {
             a.logLine.event === LogEvent.SPELL_AURA_APPLIED,
         );
       if (!applied) continue;
-      bump(check);
       const t = at(applied.logLine.timestamp);
       const ccName = getEnglishSpellName(b.spellId, b.spellName);
       const breakName = getEnglishSpellName(
         breakId,
         String(b.logLine.parameters?.[12] ?? ""),
       );
-      const wrong = lines.some(
+      // counted only where the control's line is there to read (codex
+      // 20-F15-19: a missing line must not pass as a correction), and right
+      // only when it credits the expected unit — not merely "not the wrong
+      // one"
+      const ccLines = lines.filter(
         (l) =>
           l.startsWith(`${t}  [CC ON `) &&
           l.includes(`${me.pid}(`) &&
           l.includes(ccName) &&
-          new RegExp(
-            `broken by ${wrongPid}\\([^)]*\\)'s ${breakName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`,
-          ).test(l),
+          l.includes(` | broken by `) &&
+          l.includes(breakName),
       );
-      if (wrong)
-        fail(check, `${where} ${t} ${u.name} ${ccName} broken by ${breakName}`);
+      if (ccLines.length === 0) continue;
+      bump(check);
+      const credits = new RegExp(`broken by ${rightPid}\\([^)]*\\)'s `);
+      if (!ccLines.some((l) => credits.test(l)))
+        fail(
+          check,
+          `${where} ${t} ${u.name} ${ccName} broken by ${breakName} (not ${rightPid}; wrong ${wrongPid})`,
+        );
     }
   }
 
