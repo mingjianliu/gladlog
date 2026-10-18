@@ -346,18 +346,21 @@ for (const f of files) {
       // 20-F15-19: a missing line must not pass as a correction), and right
       // only when it credits the expected unit — not merely "not the wrong
       // one"
+      // the holder in the line's TARGET field (codex 20-F15-22: `${pid}(`
+      // anywhere also matched the `(by …)` caster, and another target's line
+      // masked a wrong one)
       const ccLines = lines.filter(
         (l) =>
-          l.startsWith(`${t}  [CC ON `) &&
-          l.includes(`${me.pid}(`) &&
-          l.includes(ccName) &&
+          (l.startsWith(`${t}  [CC ON TEAM]   ${me.pid}(`) ||
+            l.startsWith(`${t}  [CC ON ENEMY]   ${me.pid}(`)) &&
+          l.includes(`← ${ccName} `) &&
           l.includes(` | broken by `) &&
           l.includes(breakName),
       );
       if (ccLines.length === 0) continue;
       bump(check);
       const credits = new RegExp(`broken by ${rightPid}\\([^)]*\\)'s `);
-      if (!ccLines.some((l) => credits.test(l)))
+      if (!ccLines.every((l) => credits.test(l)))
         fail(
           check,
           `${where} ${t} ${u.name} ${ccName} broken by ${breakName} (not ${rightPid}; wrong ${wrongPid})`,
@@ -492,9 +495,8 @@ for (const f of files) {
       const name = getEnglishSpellName(r.spellId, r.spellName);
       const ccLines = lines.filter(
         (l) =>
-          /^\d+:\d{2} {2}\[CC ON (TEAM|ENEMY)\]/.test(l) &&
-          l.startsWith(`${t}  `) &&
-          l.includes(`${me.pid}(`) &&
+          (l.startsWith(`${t}  [CC ON TEAM]   ${me.pid}(`) ||
+            l.startsWith(`${t}  [CC ON ENEMY]   ${me.pid}(`)) &&
           l.includes(`← ${name} `),
       );
       if (ccLines.length === 0) continue;
