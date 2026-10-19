@@ -126,6 +126,12 @@ export function buildCastMatchIndex(
       spellName?: string | null;
       timestamp: number;
     }>;
+    empowerEnds?: ReadonlyArray<{
+      srcUnitId?: string;
+      spellId?: string | null;
+      spellName?: string | null;
+      timestamp: number;
+    }>;
   }>,
 ): CastMatchIndex {
   const index = createCastMatchIndex();
@@ -140,6 +146,18 @@ export function buildCastMatchIndex(
         c.timestamp,
       );
     }
+    // an empowered cast logs its SUCCESS when the hold starts and acts at
+    // the release (SPELL_EMPOWER_END): its dispel comes with the release
+    // (fact1215 R11, 34204ef9: Fire Breath held 1.1 s and 1.3 s, six of
+    // its dispels read as `(passive)`)
+    for (const r of u.empowerEnds ?? [])
+      addCastToIndex(
+        index,
+        r.srcUnitId || u.id,
+        r.spellId,
+        r.spellName,
+        r.timestamp,
+      );
   }
   return index;
 }

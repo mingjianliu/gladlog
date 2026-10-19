@@ -2,12 +2,13 @@
  * Core benchmark metrics computation
  */
 
+import type { AtomicArenaCombat, IArenaMatch } from "@gladlog/parser-compat";
 import {
   CombatUnitReaction,
   CombatUnitType,
   LogEvent,
 } from "@gladlog/parser-compat";
-import type { AtomicArenaCombat, IArenaMatch } from "@gladlog/parser-compat";
+
 import { specToString } from "../utils/cooldowns";
 import {
   annotateDefensiveTimings,
@@ -268,7 +269,13 @@ function extractCombatStats(
     const bracket = (combat as IArenaMatch).startInfo?.bracket ?? "3v3";
     const players = [...friendlies, ...enemies];
     for (const death of unit.deathRecords) {
-      const dampPct = getDampeningPercentage(bracket, players, death.timestamp);
+      // the dead unit's own team's doses (fact1215 R11)
+      const dampPct = getDampeningPercentage(
+        bracket,
+        friendlies,
+        death.timestamp,
+        players,
+      );
       // null = none stated (a 2v2 round that logged no stack,
       // `getInitialDampening`): no sample, rather than a hand value.
       if (dampPct !== null) stats.dampeningAtDeathSamples.push(dampPct / 100);

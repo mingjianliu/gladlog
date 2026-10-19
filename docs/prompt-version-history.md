@@ -3639,3 +3639,24 @@ example: Rallying Cry 1:10 and Intervene 1:20 on the rogue, a 1:25.7 Healing
 Wave no longer inside a defenseless window); [KILL WINDOW] lines −3,953 /
 +4,614 (spans cut into more pieces), [VULNERABLE] −75 / +150; new gate
 checkNoWindowAcrossOwnSave 3,368 → 0.
+v421 (2026-10-18, F15 batch 17 — fact1215 R11 fact half, facts only): (1) a
+spam fold `(xN over Ns)` counts the casts printed one by one inside a
+friendly-death window, as its legend says (09dda3c6 r3: 13 Penance, the fold
+said x10). (2) The [RES] `cc:` slot names, of the controls on a unit then,
+the one that holds it longest (1120cb61 0:18: Blinding Sleet −<1s over a
+Capacitor Totem stun that ran 2.3 s longer). (3) A dispel is matched to its
+own press at an empowered cast's release (SPELL_EMPOWER_END) as well as at
+its SUCCESS, which the log writes when the hold starts
+(`buildCastMatchIndex`; 34204ef9: Fire Breath held 1.1–1.3 s, six dispels
+read `(passive)`). (4) Dampening is read on the line's own team — the owner
+side for the header, alerts, press lines, friendly deaths and [MATCH END],
+the enemy side for an enemy [DEATH] line; the 2v2 / 3v3 rules from the whole
+roster (3867e9ef: the enemy team ticks one stack ahead for seconds at a
+time). (5) The cc-avoidable menu legend states its predicate: the player free
+to act (off the GCD, not controlled) at some instant from one second into the
+bar until it landed (was "at least a second of that bar"; `castBarSeen`
+itself unchanged — a judgment item). 605 files: no candidate added or
+removed; 2,686 dampening lines re-read (DAMPENING ALERT 762 → 752); spam
+folds −555 / +574; dispel lines naming `(passive)` / `dispelled` −63 / +3; [RES] 1,195 lines;
+the cc-avoidable legend in 35 menus. Checks: unit tests (r11aFacts.test.ts,
+red on the parent) and the 605 diff; no new gate.

@@ -23,15 +23,18 @@ import type { TimelineCtx } from "./ctx";
 export function emitDampeningEntries(
   ctx: Pick<
     TimelineCtx,
-    "bracket" | "allPlayers" | "matchStartMs" | "addEntry"
+    "bracket" | "allPlayers" | "friends" | "matchStartMs" | "addEntry"
   >,
 ): void {
-  const { bracket, allPlayers, matchStartMs, addEntry } = ctx;
+  const { bracket, allPlayers, friends, matchStartMs, addEntry } = ctx;
 
+  // the owner team's doses (fact1215 R11: the teams tick apart), the
+  // roster's rules
   const initialDampening = getDampeningPercentage(
     bracket ?? "3v3",
-    allPlayers,
+    friends,
     matchStartMs,
+    allPlayers,
   );
   const emittedMilestones = new Set<number>();
   const milestones = [30, 50, 70, 90];
@@ -43,7 +46,7 @@ export function emitDampeningEntries(
     }
   }
 
-  const events = buildDampeningEvents(allPlayers);
+  const events = buildDampeningEvents(friends);
   const dampeningEvents = events.map((e) => ({
     timeSeconds: (e.timestamp - matchStartMs) / 1000,
     stacks: e.stacks,

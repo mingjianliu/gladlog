@@ -651,11 +651,13 @@ export function buildMatchContext(
   }
 
   tLines.push("");
+  // the owner team's doses, the roster's rules (fact1215 R11)
   formatDampeningForContext(
     combat.startInfo.bracket,
-    [...friends, ...enemies],
+    friends as ICombatUnit[],
     combat.startTime,
     combat.endTime,
+    [...friends, ...enemies] as ICombatUnit[],
   ).forEach((l) => tLines.push(l));
 
   // The timeline path returns early and never reaches the critical-moments render

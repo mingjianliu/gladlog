@@ -323,12 +323,15 @@ export function computeDampeningTimeline(
   players: ICombatUnit[],
   startTime: number,
   endTime: number,
+  /** the round's players, for the rules; `players` are the team whose doses
+   * are read (fact1215 R11) */
+  roster: readonly ICombatUnit[] = players,
 ): IDampeningSnapshot[] {
   const durationMs = endTime - startTime;
   // FIX 1: build event list once, reuse across all sample intervals
   const events = buildDampeningEvents(players);
   const fallback = initialDampeningOf(
-    dampeningRulesOf(bracket, players),
+    dampeningRulesOf(bracket, roster),
     events,
   );
   const snapshots: IDampeningSnapshot[] = [];
@@ -364,12 +367,14 @@ export function formatDampeningForContext(
   players: ICombatUnit[],
   startTime: number,
   endTime: number,
+  roster: readonly ICombatUnit[] = players,
 ): string[] {
   const timeline = computeDampeningTimeline(
     bracket,
     players,
     startTime,
     endTime,
+    roster,
   );
   const durationSeconds = (endTime - startTime) / 1000;
   // No value stated at any point of the round: a 2v2 round with no logged

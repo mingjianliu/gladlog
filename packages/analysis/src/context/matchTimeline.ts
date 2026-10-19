@@ -393,17 +393,28 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
   // (`allPlayers`), like the DAMPENING header, the alerts and [MATCH END];
   // the press lines and the [DEATH] lines used to read `_allUnits`, whose
   // pets tipped a 2v2 round into the 3v3 rules (`dampeningRulesOf`).
-  const dampeningAt = (atSeconds: number) =>
+  //
+  // fact1215 R11: Dampening is a per-unit aura whose doses tick per team —
+  // the two teams' stacks differ by one for seconds at a time (3867e9ef:
+  // owner side 16 at 1:14.262, enemy 17 at 1:14.668). A line reads its own
+  // team's doses (the owner's side; an enemy [DEATH] line the enemy's); the
+  // rules (2v2 / 3v3) still come from the whole roster.
+  const dampeningAt = (
+    atSeconds: number,
+    side: "friendly" | "enemy" = "friendly",
+  ) =>
     getDampeningPercentage(
       bracket ?? "3v3",
-      allPlayers,
+      side === "enemy" ? (enemies ?? []) : friends,
       matchStartMs + atSeconds * 1000,
+      allPlayers,
     );
 
   // ── Dampening Milestone Alerts (F149) ──────────────────────────────────────
   emitDampeningEntries({
     bracket,
     allPlayers,
+    friends,
     matchStartMs,
     addEntry,
   });
@@ -472,7 +483,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     summonOwners,
     unitNames,
     rosterSides,
-    dampeningAt,
+    dampeningAt: (atSeconds: number) => dampeningAt(atSeconds, "enemy"),
     requestSnapshotPlaceholder,
     addEntry,
   });

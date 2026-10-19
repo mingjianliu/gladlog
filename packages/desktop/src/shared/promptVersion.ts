@@ -204,5 +204,10 @@
  *  by the target's own immunity and absorb shield and by an area save whose
  *  aura it carried; a legend line says what the span reads (user approved:
  *  kick-priority-missed 45 → 38, kick-priority-team 67 → 58).
+ *  v421 (2026-10-18, F15 batch 17 — fact1215 R11 fact half): a spam fold
+ *  counts its death-window per-cast lines; [RES] cc: names the longest
+ *  control; an empowered cast's dispel comes with its release; Dampening is
+ *  read on the line's own team; the cc-avoidable legend states its
+ *  predicate. 605 files: no candidate added or removed.
  */
-export const PROMPT_VERSION = 420;
+export const PROMPT_VERSION = 421;

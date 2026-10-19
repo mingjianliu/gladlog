@@ -646,6 +646,15 @@ export function emitHealerCastGapFillerEntries(
         timeSeconds,
         `${fmtTime(timeSeconds)}  [YOU] [CAST]   ${displayName}${targetPart}${castTargetHpTag(e)}`,
       );
+      // … and the running fold still counts it, as the legend says
+      // (fact1215 R11, 09dda3c6 r3: 13 Penance casts, the fold said x10 and
+      // two printed per cast in the death window were in no count)
+      const f = spamFolds.get(displayName);
+      if (f && timeSeconds - f.lastTimeSeconds <= SPAM_FOLD_MAX_GAP_SECONDS) {
+        f.count++;
+        f.lastTimeSeconds = timeSeconds;
+        if (targetLabel) f.targets.add(targetLabel);
+      }
       continue;
     }
     // H19: the spam fold also steps aside for a cast on the crisis unit

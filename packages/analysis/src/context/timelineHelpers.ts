@@ -1786,7 +1786,10 @@ export function buildMatchEndBlock(params: {
 
   // Final dampening — only when bracket is available
   const finalDampPct = bracket
-    ? getDampeningPercentage(bracket, [...friends, ...enemies], matchEndMs)
+    ? getDampeningPercentage(bracket, friends, matchEndMs, [
+        ...friends,
+        ...enemies,
+      ])
     : null;
   const dampStr =
     finalDampPct !== null ? `   damp: ${Math.round(finalDampPct)}%` : "";

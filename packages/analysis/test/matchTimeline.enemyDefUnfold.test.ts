@@ -210,8 +210,9 @@ describe("GH #97 timeline flags", () => {
     expect(on).toContain("0:52  [YOU] [CAST]   Riptide → 2 (70% HP)");
     expect(on).toContain("0:55  [YOU] [CAST]   Riptide → 2 (40% HP)");
     expect(on).toContain("0:58  [YOU] [CAST]   Riptide → 2 (15% HP)");
-    // the fold still covers the pre-window spam
-    expect(on).toContain("0:02  [YOU] [CAST]   Riptide (x11 over 30s) → 2");
+    // the fold still covers the pre-window spam — and counts the three
+    // printed per cast, as the legend says (fact1215 R11: it said x11)
+    expect(on).toContain("0:02  [YOU] [CAST]   Riptide (x14 over 56s) → 2");
     expect(on).not.toContain("0:29  [YOU] [CAST]   Riptide");
     expect(DEATH_WINDOW_UNFOLD_CAP).toBeGreaterThanOrEqual(3);
     expect(DEATH_WINDOW_S).toBe(10);

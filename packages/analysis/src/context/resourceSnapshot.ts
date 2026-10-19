@@ -986,11 +986,24 @@ export function buildResourceSnapshot({
     const summary = summaryByName.get(name);
 
     // Hard CC (existing)
-    const activeCC = summary?.ccInstances.find(
-      (cc) =>
-        cc.atSeconds <= timeSeconds &&
-        timeSeconds < cc.atSeconds + cc.durationSeconds,
-    );
+    // of the controls on the unit then, the one that holds it longest
+    // (fact1215 R11, 1120cb61 0:18: Blinding Sleet −<1s was printed over a
+    // Capacitor Totem stun that ran 2.3 s longer)
+    const activeCC = summary?.ccInstances
+      .filter(
+        (cc) =>
+          cc.atSeconds <= timeSeconds &&
+          timeSeconds < cc.atSeconds + cc.durationSeconds,
+      )
+      .reduce<(typeof summary.ccInstances)[number] | undefined>(
+        (best, cc) =>
+          !best ||
+          cc.atSeconds + cc.durationSeconds >
+            best.atSeconds + best.durationSeconds
+            ? cc
+            : best,
+        undefined,
+      );
     if (activeCC) {
       const remaining = resCcRemainingText(
         activeCC.atSeconds + activeCC.durationSeconds - timeSeconds,
