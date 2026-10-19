@@ -4363,6 +4363,10 @@ export function analyzePlayerCCAndTrinket(
    * r3: the IMMUNE row on the owner was at the 2:56 pulse, the line at the
    * 2:54 cast.
    */
+  const pulseByCast = new Map<
+    string,
+    Map<number, { ms: number; line: number | undefined }>
+  >();
   const controlHitInstant = (
     enemy: ICombatUnit,
     cast: ICombatUnit["spellCastEvents"][number],
@@ -4382,43 +4386,56 @@ export function analyzePlayerCCAndTrinket(
       srcId === enemy.id ||
       srcId === cast.srcUnitId ||
       enemyPets.some((p) => p.id === srcId && p.ownerId === enemy.id);
-    // this cast's own pulse: inside its landing window, and not one a later
-    // cast of the spell can already have produced — that pulse is the later
-    // cast's (codex 20-F15-21: totems at 10 s and 12 s both read the 12 s
-    // pulse; 20-F15-28: cut at the next cast itself, the first totem lost
-    // its own 12 s pulse)
-    const castMs = cast.logLine.timestamp;
-    const nextSameMs = [
-      ...enemy.spellCastEvents,
-      ...(enemy.petSpellCastEvents ?? []),
-    ]
-      .filter(
-        (e) =>
-          e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
-          e.spellId === cast.spellId &&
-          e.logLine.timestamp > castMs,
-      )
-      .reduce((m, e) => Math.min(m, e.logLine.timestamp), Infinity);
-    const fromMs = castMs + landing.fromS * 1000;
-    const toMs = Math.min(
-      castMs + landing.toS * 1000,
-      nextSameMs + landing.fromS * 1000 - 1,
-    );
-    let first: { ms: number; line: number | undefined } | undefined;
-    for (const u of unitsById.values())
-      for (const r of [
-        ...(u.auraEvents ?? []).filter(
-          (a) => a.logLine.event === LogEvent.SPELL_AURA_APPLIED,
-        ),
-        ...(u.missesIn ?? []),
-      ]) {
-        if (!r.spellId || !family.has(r.spellId)) continue;
-        if (r.timestamp < fromMs || r.timestamp > toMs) continue;
-        if (!fromCaster(r.srcUnitId)) continue;
-        if (!first || r.timestamp < first.ms)
-          first = { ms: r.timestamp, line: r.logLine?.lineIndex };
+    // each cast's own pulse: the casts of the spell, in order, each take
+    // the earliest landing inside its own window that an earlier cast has
+    // not taken (codex 20-F15-21: totems at 10 s and 12 s both read the
+    // 12 s pulse; 20-F15-28 / 34: a window cut at the next cast lost the
+    // first totem's own pulse)
+    const key = `${enemy.id}:${cast.spellId}`;
+    let assigned = pulseByCast.get(key);
+    if (!assigned) {
+      assigned = new Map();
+      const casts = [
+        ...enemy.spellCastEvents,
+        ...(enemy.petSpellCastEvents ?? []),
+      ]
+        .filter(
+          (e) =>
+            e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+            e.spellId === cast.spellId,
+        )
+        .sort((a, b) => a.logLine.timestamp - b.logLine.timestamp);
+      const landings: Array<{ ms: number; line: number | undefined }> = [];
+      for (const u of unitsById.values())
+        for (const r of [
+          ...(u.auraEvents ?? []).filter(
+            (a) => a.logLine.event === LogEvent.SPELL_AURA_APPLIED,
+          ),
+          ...(u.missesIn ?? []),
+        ]) {
+          if (!r.spellId || !family.has(r.spellId)) continue;
+          if (!fromCaster(r.srcUnitId)) continue;
+          landings.push({ ms: r.timestamp, line: r.logLine?.lineIndex });
+        }
+      landings.sort((a, b) => a.ms - b.ms);
+      let takenUpTo = -Infinity;
+      for (const c of casts) {
+        const cMs = c.logLine.timestamp;
+        const hit = landings.find(
+          (l) =>
+            l.ms > takenUpTo &&
+            l.ms >= cMs + landing.fromS * 1000 &&
+            l.ms <= cMs + landing.toS * 1000,
+        );
+        if (hit) {
+          assigned.set(cMs, hit);
+          // one pulse lands on several units in one ms: all of it is taken
+          takenUpTo = hit.ms;
+        }
       }
-    return first ?? atCast;
+      pulseByCast.set(key, assigned);
+    }
+    return assigned.get(cast.logLine.timestamp) ?? atCast;
   };
 
   // 1. Unified Buff & Mobility CC Avoidance (targeted and ground CCs)

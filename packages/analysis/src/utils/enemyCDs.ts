@@ -481,18 +481,28 @@ export function reconstructEnemyCDTimeline(
     // (codex re-review: two source-unknown forms [10,11] and [12,17] merged
     // into one [10,17] when the second matched the first)
     const loggedCasts = [...offensiveCDs];
+    // one logged cast takes one aura occurrence, and an occurrence the
+    // helper found no press for (`unresolved` — a cast-less Avenging Wrath
+    // 2 s after a pressed one) is never folded into a press (codex
+    // 20-F15-34: its 12.5–20.5 s interval stretched the 10 s cast)
+    const mergedInto = new Set<IEnemyCDCast>();
     for (const o of aura.occurrences) {
       const castTimeSeconds = (o.startMs - matchStartMs) / 1000;
       // a LOGGED press of the same cooldown already stands for this effect
       // (a 191427 button cast, should one ever log): merge the aura's end
       // into it instead of adding a second occurrence (codex review)
-      const logged = loggedCasts.find(
-        (c) =>
-          c.spellId === o.spellId &&
-          Math.abs(c.castTimeSeconds - castTimeSeconds) <=
-            AURA_EVIDENCE_WINDOW_S,
-      );
+      const logged =
+        o.provenance === "unresolved"
+          ? undefined
+          : loggedCasts.find(
+              (c) =>
+                !mergedInto.has(c) &&
+                c.spellId === o.spellId &&
+                Math.abs(c.castTimeSeconds - castTimeSeconds) <=
+                  AURA_EVIDENCE_WINDOW_S,
+            );
       if (logged) {
+        mergedInto.add(logged);
         // an observed aura end replaces the estimate; an INFERRED one (the
         // aura's own official length — Summon Infernal's cast row is 0.25 s)
         // may only lengthen it: a re-application closes the interval early

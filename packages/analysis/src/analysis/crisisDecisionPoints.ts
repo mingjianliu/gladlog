@@ -865,6 +865,13 @@ export function crisisDecisionPoints(
         .sort((a, b) => a.line! - b.line!);
       const rank = peers.findIndex((x) => x.line === evidence.line);
       if (peers.length === inMs.length && rank >= 0) return inMs[rank];
+      // … the presses aimed at the owner (or at no one) when another went to
+      // an ally in that ms (codex 20-F15-34: a third Flash Heal on an ally
+      // took both self-heals' pairing away)
+      const aimed = inMs.filter(
+        (c) => !c.dest || /^0+$/.test(c.dest) || c.dest === owner.id,
+      );
+      if (peers.length === aimed.length && rank >= 0) return aimed[rank];
       // counts differ: the nearest press logged before it, else after it
       const before = inMs.filter((c) => c.line! < evidence.line!).pop();
       if (before) return before;

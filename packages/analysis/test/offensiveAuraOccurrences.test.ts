@@ -545,4 +545,25 @@ describe("aura twins pair one cast with one application (codex 20-F15-25)", () =
       ["Avenging Wrath (no press)", s(12.5), s(20.5)],
     ]);
   });
+  it("… and the enemy timeline keeps the two apart (codex 20-F15-34)", () => {
+    const ret = makeUnit("rp", {
+      name: "Ret",
+      spec: CombatUnitSpec.Paladin_Retribution,
+      spellCastEvents: [cast("454351", 10, "rp")],
+      auraEvents: [
+        aura(LogEvent.SPELL_AURA_APPLIED, "454351", 10, "rp"),
+        aura(LogEvent.SPELL_AURA_REMOVED, "454351", 10.5, "rp"),
+        aura(LogEvent.SPELL_AURA_APPLIED, "454351", 12.5, "rp"),
+        aura(LogEvent.SPELL_AURA_REMOVED, "454351", 20.5, "rp"),
+      ],
+    });
+    const tl = reconstructEnemyCDTimeline([ret], COMBAT);
+    const aw = (tl.players[0]?.offensiveCDs ?? []).filter(
+      (c) => c.spellId === "454351",
+    );
+    expect(aw.map((c) => [c.castTimeSeconds, c.buffEndSeconds])).toEqual([
+      [10, 10.5],
+      [12.5, 20.5],
+    ]);
+  });
 });

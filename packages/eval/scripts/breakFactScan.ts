@@ -573,18 +573,12 @@ for (const f of files) {
               x.logLine.event === LogEvent.SPELL_AURA_REFRESH),
         );
       if (!first) return;
-      const src = byId.get(r.srcUnitId);
-      const owner = src?.ownerId ? byId.get(src.ownerId) : undefined;
-      const ids = new Set([r.spellId, ...castsOfEffectAura(r.spellId)]);
-      const recast = [src, owner].some((c) =>
-        ((c?.spellCastEvents ?? []) as ISpellEvent[]).some(
-          (e) =>
-            e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
-            !!e.spellId &&
-            ids.has(e.spellId) &&
-            e.logLine.timestamp > first.logLine.timestamp + 100 &&
-            e.logLine.timestamp <= re.logLine.timestamp,
-        ),
+      // the producer's own reading of "a recast, not a re-send" (codex
+      // 20-F15-35: a hand copy with another skew and no target test failed
+      // valid output)
+      const recast = ccRecastSplitsResend(u.id, auras, (id) => byId.get(id))(
+        r,
+        re,
       );
       if (!recast) return;
       const ts = re.logLine.timestamp;

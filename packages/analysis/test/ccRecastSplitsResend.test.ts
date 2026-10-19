@@ -52,6 +52,26 @@ describe("ccRecastSplitsResend", () => {
     );
     expect(kept).toHaveLength(4);
   });
+  it("a re-send before the recast does not move the opening (codex 20-F15-35)", () => {
+    const withResend = [
+      aura(LogEvent.SPELL_AURA_APPLIED, 7118),
+      aura(LogEvent.SPELL_AURA_REMOVED, 10_999),
+      aura(LogEvent.SPELL_AURA_APPLIED, 11_000),
+      aura(LogEvent.SPELL_AURA_REMOVED, 11_131),
+      aura(LogEvent.SPELL_AURA_APPLIED, 11_132),
+      aura(LogEvent.SPELL_AURA_REMOVED, 12_015),
+    ];
+    const r = rogue([7100, 11_120]);
+    const kept = dropAuraRebroadcasts(
+      withResend,
+      ccRecastSplitsResend("H", withResend, (id) =>
+        id === "R" ? r : undefined,
+      ),
+    );
+    expect(kept.map((a) => a.timestamp - T0)).toEqual([
+      7118, 11_131, 11_132, 12_015,
+    ]);
+  });
   it("no recast: the same aura re-sent, the pair dropped as before", () => {
     const r = rogue([7100]);
     const kept = dropAuraRebroadcasts(

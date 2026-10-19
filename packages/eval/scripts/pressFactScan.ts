@@ -51,6 +51,7 @@ import { ensureAnalysisData } from "@gladlog/analysis";
 import { castsOfEffectAura } from "@gladlog/analysis/src/data/castEffectAuras";
 import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData";
 import { AURA_REBROADCAST_GAP_MS } from "@gladlog/analysis/src/utils/auraIntervals";
+import { buffFullDurationForCaster } from "@gladlog/analysis/src/utils/buffDuration";
 import {
   MITIGATION_AURA_IDS,
   wallTableIdOfAura,
@@ -319,11 +320,15 @@ for (const f of files) {
             else if (x.logLine.event === LogEvent.SPELL_AURA_REMOVED)
               lastRemoved = x.logLine.timestamp;
           }
+          // an application never seen to end holds only its official
+          // length (codex 20-F15-34: a Barkskin at 10 s with no REMOVED
+          // and another at 40 s are two)
+          const lenS = buffFullDurationForCaster(a.spellId, u, lastApplied);
           const continues =
             lastApplied !== undefined &&
-            (lastRemoved === undefined ||
-              lastRemoved < lastApplied ||
-              ts - lastRemoved <= AURA_REBROADCAST_GAP_MS);
+            (lastRemoved === undefined || lastRemoved < lastApplied
+              ? lenS === undefined || ts - lastApplied <= lenS * 1000
+              : ts - lastRemoved <= AURA_REBROADCAST_GAP_MS);
           const dead = ((u.deathRecords ?? []) as Array<{ timestamp: number }>)
             .some((d) => d.timestamp <= ts);
           if (continues || dead) continue;

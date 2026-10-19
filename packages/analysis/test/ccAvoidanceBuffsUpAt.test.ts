@@ -346,3 +346,64 @@ describe("[CC AVOIDED?] — each delayed cast reads its own pulse (codex 20-F15-
     expect(out.map((a) => a.atSeconds)).toEqual([12]);
   });
 });
+
+describe("[CC AVOIDED?] — overlapping landing windows (codex 20-F15-34)", () => {
+  it("totems at 10 s and 11 s, pulses at 12.5 s and 13 s, Shroud to 12.2 s: neither is credited", () => {
+    const cast = (atMs: number) =>
+      makeSpellCastEvent(
+        CAPACITOR_TOTEM,
+        T0 + atMs,
+        "0000000000000000",
+        "nil",
+        "enemy-1",
+        "Shaman",
+        0,
+        getEnglishSpellName(CAPACITOR_TOTEM),
+      );
+    const enemy = makeUnit("enemy-1", {
+      name: "Shaman",
+      spec: CombatUnitSpec.Shaman_Enhancement,
+      reaction: CombatUnitReaction.Hostile,
+      spellCastEvents: [cast(10_000), cast(11_000)],
+    });
+    const totem = makeUnit("totem-1", { name: "Totem", ownerId: "enemy-1" });
+    const own = (event: LogEvent, atMs: number, line: number) => ({
+      ...aura(event, SHROUD, atMs, line),
+      srcUnitId: "player-1",
+      destUnitId: "player-1",
+    });
+    const player = makeUnit("player-1", {
+      name: "Player",
+      spec: CombatUnitSpec.Evoker_Preservation,
+      reaction: CombatUnitReaction.Friendly,
+      auraEvents: [
+        own(LogEvent.SPELL_AURA_APPLIED, 9000, 1),
+        own(LogEvent.SPELL_AURA_REMOVED, 12_200, 600),
+      ],
+    });
+    const pulse = (atMs: number, line: number) => ({
+      ...aura(LogEvent.SPELL_AURA_APPLIED, STATIC_CHARGE, atMs, line),
+      srcUnitId: "totem-1",
+      destUnitId: "mate-1",
+    });
+    const mate = makeUnit("mate-1", {
+      name: "Mate",
+      auraEvents: [pulse(12_500, 700), pulse(13_000, 800)],
+    });
+    const combat = {
+      startTime: T0,
+      endTime: T0 + 60_000,
+      startInfo: { zoneId: "1672" },
+      units: {
+        [player.id]: player,
+        [enemy.id]: enemy,
+        [totem.id]: totem,
+        [mate.id]: mate,
+      },
+    };
+    const out = analyzePlayerCCAndTrinket(player, [enemy], combat as never, [
+      totem,
+    ]).ccAvoidedInstances;
+    expect(out).toEqual([]);
+  });
+});

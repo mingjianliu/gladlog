@@ -255,7 +255,9 @@ export function tickEndedChannelSpans(
     // Arcane Missiles 163.491, Arcane Barrage 164.869, a Missiles hit at
     // 165.441 read as 572 ms more channelling)
     // — an off-GCD press excepted: Shimmer mid-Missiles leaves the channel
-    // running (codex 20-F15-28: its ticks went on through 11.9 s)
+    // running (codex 20-F15-28: its ticks went on through 11.9 s) — unless
+    // that press is a channel of its own, which replaces this one (codex
+    // 20-F15-34: Breath of Jan'alai 1308728)
     const nextOther = [
       ...(unit.spellCastEvents ?? []),
       ...((unit as { castStartEvents?: typeof unit.spellCastEvents })
@@ -265,7 +267,11 @@ export function tickEndedChannelSpans(
         (e) =>
           e.spellId !== c.spellId &&
           e.timestamp > c.timestamp &&
-          !(e.spellId && OFF_GCD_SPELL_IDS.has(e.spellId)),
+          !(
+            e.spellId &&
+            OFF_GCD_SPELL_IDS.has(e.spellId) &&
+            !CHANNELED_SPELL_IDS.has(e.spellId)
+          ),
       )
       .reduce((m, e) => Math.min(m, e.timestamp), Infinity);
     const capMs = Math.min(

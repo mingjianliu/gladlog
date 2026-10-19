@@ -168,6 +168,16 @@ describe("R9 — a channel with no aura on its caster", () => {
     });
     expect(tickEndedChannelSpans(m)[0]?.endMs).toBe(T0 + 1900);
   });
+  it("… but an off-GCD press that is a channel itself replaces it (codex 20-F15-34)", () => {
+    const m = mage();
+    m.spellCastEvents.push({
+      spellId: "1308728",
+      spellName: "Breath of Jan'alai",
+      timestamp: T0 + 1000,
+      logLine: { event: LogEvent.SPELL_CAST_SUCCESS, timestamp: T0 + 1000 },
+    });
+    expect(tickEndedChannelSpans(m)[0]?.endMs).toBe(T0 + 800);
+  });
 });
 
 describe("R9 — a channelled control ended by a kick on its caster", () => {

@@ -32,6 +32,7 @@ import {
 } from "../data/spellEffectData";
 import { ccSpellIds } from "../data/spellTags";
 import {
+  AURA_REBROADCAST_GAP_MS,
   dropAuraRebroadcasts,
   officialDurationS,
   supersededAuraBreaks,
@@ -447,27 +448,44 @@ export function ccRecastSplitsResend<
   return (removed, applied) => {
     const sid = applied.spellId;
     if (!sid || !ccSpellIds.has(sid) || !applied.srcUnitId) return false;
-    let openedAtMs = -Infinity;
-    for (const x of holderAuras) {
-      if (x === removed) break;
-      if (
-        x.spellId === sid &&
-        x.srcUnitId === applied.srcUnitId &&
-        (x.logLine.event === LogEvent.SPELL_AURA_APPLIED ||
-          x.logLine.event === LogEvent.SPELL_AURA_REFRESH)
-      )
-        openedAtMs = x.timestamp;
-    }
     const src = casterOf(applied.srcUnitId);
     if (!src) return false;
     const owner = src.ownerId ? casterOf(src.ownerId) : undefined;
-    return ccRecastBetween(
-      [src, owner],
-      sid,
-      holderId,
-      openedAtMs,
-      applied.timestamp,
-    );
+    const recast = (fromMs: number, atMs: number) =>
+      ccRecastBetween([src, owner], sid, holderId, fromMs, atMs);
+    // the opening of the application `removed` closes: its APPLIED, moved
+    // only by a new application — an APPLIED after a real end, or a
+    // REFRESH / re-send its source recast for. A re-send with no recast or
+    // a bare REFRESH is the same application (codex 20-F15-35: a re-send at
+    // 11.000 moved the opening past the 11.120 recast's skew guard)
+    let openedAtMs = -Infinity;
+    let lastRemovedMs: number | undefined;
+    for (const x of holderAuras) {
+      if (x === removed) break;
+      if (x.spellId !== sid || x.srcUnitId !== applied.srcUnitId) continue;
+      const ev = x.logLine.event;
+      if (ev === LogEvent.SPELL_AURA_REMOVED) lastRemovedMs = x.timestamp;
+      else if (ev === LogEvent.SPELL_AURA_APPLIED) {
+        // a new application: the first, or one after a real end; a re-send
+        // (inside the gap) or a re-APPLIED over the open one only when
+        // recast
+        const afterRealEnd =
+          lastRemovedMs !== undefined &&
+          x.timestamp - lastRemovedMs > AURA_REBROADCAST_GAP_MS;
+        if (
+          openedAtMs === -Infinity ||
+          afterRealEnd ||
+          recast(openedAtMs, x.timestamp)
+        )
+          openedAtMs = x.timestamp;
+        lastRemovedMs = undefined;
+      } else if (
+        ev === LogEvent.SPELL_AURA_REFRESH &&
+        recast(openedAtMs, x.timestamp)
+      )
+        openedAtMs = x.timestamp;
+    }
+    return recast(openedAtMs, applied.timestamp);
   };
 }
 

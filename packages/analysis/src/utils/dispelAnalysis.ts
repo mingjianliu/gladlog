@@ -59,6 +59,7 @@ import {
 import {
   buildCcCategoryHistory,
   ccRecastBetween,
+  ccRecastSplitsResend,
   DR_CATEGORY_MAP,
   getDRCategory,
   getDRLevelAtTime,
@@ -3123,7 +3124,15 @@ export function reconstructDispelSummary(
     // WO3 Part 2 (readers.json fact 3): one re-broadcast is one
     // application (`dropAuraRebroadcasts`) — it used to end the window at
     // its own ms and pair the re-APPLIED with the same-ms REMOVED
-    for (const aura of dropAuraRebroadcasts(unit.auraEvents)) {
+    // … unless its source recast it (`ccRecastSplitsResend`, fact1215
+    // 112-1 — codex 20-F15-35: a Polymorph recast 1 ms after its expiry
+    // read as one 7 s control here and a late cleanse)
+    for (const aura of dropAuraRebroadcasts(
+      unit.auraEvents,
+      ccRecastSplitsResend(unit.id, unit.auraEvents, (id) =>
+        unitMap.get(id),
+      ),
+    )) {
       const spellId = aura.spellId;
       if (!spellId) continue;
 

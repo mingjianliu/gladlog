@@ -354,6 +354,22 @@ describe("crisisDecisionPoints", () => {
       expect(p.selfHealFreshPct).toBe(4);
       expect(p.selfHealCasts).toBe(2);
     });
+    it("… also with a third press of the spell on an ally in that ms (codex 20-F15-34)", () => {
+      const o = unit({
+        spellCastEvents: [
+          cast(2100, "2061", "H", 101),
+          cast(2100, "2061", "H", 103),
+          cast(2100, "2061", "A", 104),
+        ],
+        healIn: [
+          heal(2100, "2061", 2, false, 100),
+          heal(2100, "2061", 2, false, 102),
+        ],
+      });
+      const p = crisisDecisionPoints(o, combat(o))[0]!;
+      expect(p.selfHealFreshPct).toBe(4);
+      expect(p.selfHealCasts).toBe(2);
+    });
     it("an ally's cast of the HoT in the ms of the owner's own application is not its press (codex 20-F15-27, no line indexes)", () => {
       const o = unit({
         spellCastEvents: [cast(490, "774", "H"), cast(510, "774", "A")],
