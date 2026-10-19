@@ -3682,3 +3682,17 @@ warrior under Blessing of Protection). 605 files: cd-hoarded 1,273 → 1,249
 with the 111-1-598 example; no other candidate added or removed; 249
 `took … instead` notes. Checks: responseOnlySave.test.ts (red on the
 parent); the note is a render of `ourPurges`, no new gate.
+v423 (2026-10-19, F15 batch 19 — fact1215 112-1, facts only): a control's
+REMOVED and its APPLIED again inside the re-send gap (`AURA_REBROADCAST_GAP_MS`)
+are two controls when the source recast the spell between the two
+applications (`ccRecastSplitsResend`, drAnalysis.ts — ruling A51's cast-backed
+REFRESH rule, now for a re-send too), read by the CC windows
+(ccTrinketAnalysis), both DR histories (`buildCcCategoryHistory`, the
+outgoing CC chains) and the break analysis. 112-1 0:54: Cheap Shot 07.118 →
+11.131 ran its 4 s, the recast landed 11.132 and the Medallion took it at
+12.015 — merged, the recast read as having run its course; now `0:53 … Cheap
+Shot (1s) | ended by their PvP trinket` and `[ENEMY TRINKET] … out of Cheap
+Shot`. 605 files: no candidate added or removed; 54 control lines become two
+each (the second with its own DR: `Sleep Walk (1s) [DR: Disorient 50%]`); 27
+KILL ATTEMPTS lines (`1 stun` → `2 stuns` where the rogue recast); breakFactScan
+`recastResend` (new).

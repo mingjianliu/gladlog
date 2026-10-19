@@ -1,13 +1,13 @@
 import { ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
+// runtime-only use (inside buildAuraIntervals); drAnalysis → cooldowns →
+// auraIntervals is a cycle, safe because no module-level code calls across it
+import { isCastOrEffect } from "../data/castEffectAuras";
 import { analysisDataReady } from "../data/ensure";
 import { CC_DURATION_TALENT_MODIFIERS } from "../data/spellEffectData";
 import { buffFullDurationForCaster } from "./buffDuration";
 import type { CastParamCaster } from "./castParam";
 import { ccFullDurationForCaster } from "./ccDuration";
-// runtime-only use (inside buildAuraIntervals); drAnalysis → cooldowns →
-// auraIntervals is a cycle, safe because no module-level code calls across it
-import { isCastOrEffect } from "../data/castEffectAuras";
 
 
 /**
@@ -163,7 +163,12 @@ export function dropAuraRebroadcasts<
     timestamp: number;
     logLine: { event: string };
   },
->(events: readonly T[]): T[] {
+>(
+  events: readonly T[],
+  /** a REMOVED → APPLIED pair this says is a NEW application is kept (the
+   * control path: a recast its source logged — fact1215 112-1) */
+  isNewApplication?: (removed: T, applied: T) => boolean,
+): T[] {
   const key = (a: T) =>
     `${a.spellId}|${a.srcUnitId ?? ""}|${a.destUnitId ?? ""}`;
   // A rebroadcast is a REMOVED FOLLOWED BY an APPLIED (log order). An APPLIED
@@ -185,7 +190,10 @@ export function dropAuraRebroadcasts<
       const pending = (pendingRemoved.get(k) ?? []).filter(
         (r) => a.timestamp - r.timestamp <= AURA_REBROADCAST_GAP_MS,
       );
-      const at = pending.findIndex((r) => a.timestamp >= r.timestamp);
+      const at = pending.findIndex(
+        (r) =>
+          a.timestamp >= r.timestamp && !(isNewApplication?.(r, a) ?? false),
+      );
       if (at >= 0) {
         drop.add(pending[at]!);
         drop.add(a);

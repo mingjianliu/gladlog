@@ -77,6 +77,7 @@ import { ALLY_DISPEL_MATCH_TOLERANCE_S } from "./dispelAnalysis";
 import {
   AOE_CC_LANDING_WINDOW_S,
   ccRecastBetween,
+  ccRecastSplitsResend,
   computeIncomingDR,
   drDurationFactor,
   IDRInfo,
@@ -2711,7 +2712,17 @@ export function analyzePlayerCCAndTrinket(
   // line its aura's own REMOVED follows is not the end (FT-T08: Frost Nova,
   // Ice Nova and Freeze log one per damaging hit and stay on ~0.5 s longer)
   const notTheEnd = supersededAuraBreaks(player.auraEvents);
-  for (const aura of dropAuraRebroadcasts(player.auraEvents)) {
+  // … unless its source recast it: an expiry and a recast in one or two ms
+  // are two controls, as a cast-backed REFRESH is (ruling A51; fact1215
+  // 112-1 0:54: Cheap Shot 07.118 → 11.131, recast landing 11.132 and taken
+  // by the Medallion at 12.015 — one merged window read the recast as run
+  // its course)
+  const recastAt = ccRecastSplitsResend(
+    player.id,
+    player.auraEvents,
+    (id) => castersById.get(id),
+  );
+  for (const aura of dropAuraRebroadcasts(player.auraEvents, recastAt)) {
     const spellId = aura.spellId;
     if (!spellId) continue;
     if (notTheEnd.has(aura)) continue;

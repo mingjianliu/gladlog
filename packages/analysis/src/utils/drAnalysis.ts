@@ -421,6 +421,57 @@ export function ccRecastBetween(
 }
 
 /**
+ * fact1215 112-1 (2026-10-19): a REMOVED → APPLIED pair of a control inside
+ * the re-send gap (`AURA_REBROADCAST_GAP_MS`) is a NEW application when its
+ * source recast the spell for it (`ccRecastBetween`, the cast-backed REFRESH
+ * rule of ruling A51) — not a re-send. 112-1 0:54: Cheap Shot 07.118 →
+ * 11.131 ran its 4 s, the recast landed 11.132 and the Medallion took it at
+ * 12.015; merged, the 0.9 s recast read as having run its course. The
+ * `isNewApplication` every control reader of `dropAuraRebroadcasts` passes:
+ * the CC windows, the DR histories, the break analysis.
+ */
+export function ccRecastSplitsResend<
+  T extends {
+    spellId?: string | null;
+    srcUnitId?: string;
+    timestamp: number;
+    logLine: { event: string };
+  },
+>(
+  holderId: string,
+  holderAuras: readonly T[],
+  casterOf: (
+    id: string,
+  ) => Pick<ICombatUnit, "spellCastEvents" | "ownerId"> | undefined,
+): (removed: T, applied: T) => boolean {
+  return (removed, applied) => {
+    const sid = applied.spellId;
+    if (!sid || !ccSpellIds.has(sid) || !applied.srcUnitId) return false;
+    let openedAtMs = -Infinity;
+    for (const x of holderAuras) {
+      if (x === removed) break;
+      if (
+        x.spellId === sid &&
+        x.srcUnitId === applied.srcUnitId &&
+        (x.logLine.event === LogEvent.SPELL_AURA_APPLIED ||
+          x.logLine.event === LogEvent.SPELL_AURA_REFRESH)
+      )
+        openedAtMs = x.timestamp;
+    }
+    const src = casterOf(applied.srcUnitId);
+    if (!src) return false;
+    const owner = src.ownerId ? casterOf(src.ownerId) : undefined;
+    return ccRecastBetween(
+      [src, owner],
+      sid,
+      holderId,
+      openedAtMs,
+      applied.timestamp,
+    );
+  };
+}
+
+/**
  * Work order 2026-10-14d #1: a SPELL_AURA_APPLIED of a CC whose application
  * from the same source is still open — no REMOVED / BROKEN in between — is
  * the SAME application, unless its source recast it (`ccRecastBetween`: a new
@@ -512,7 +563,12 @@ export function buildCcCategoryHistory(
   // spell: a re-send was a second DR step, a lost REMOVED ran to a later
   // application's removal, an application never removed was skipped.
   const pending = new Map<string, { applyMs: number; spellId: string }>();
-  for (const aura of dropAuraRebroadcasts(relevant)) {
+  for (const aura of dropAuraRebroadcasts(
+    relevant,
+    unitById
+      ? ccRecastSplitsResend(unit.id, relevant, (id) => unitById.get(id))
+      : undefined,
+  )) {
     const sid = aura.spellId;
     if (!sid) continue;
     if (notTheEnd.has(aura)) continue;
@@ -906,9 +962,13 @@ export function analyzeOutgoingCCChains(
       // the pairing key, so the result is unchanged and the re-broadcast pass
       // keys a few CC auras instead of every aura on the enemy)
       const notTheEnd = supersededAuraBreaks(enemy.auraEvents);
+      const ccAuras = enemy.auraEvents.filter(
+        (a) => !!a.spellId && ccSpellIds.has(a.spellId),
+      );
       for (const aura of dropAuraRebroadcasts(
-        enemy.auraEvents.filter(
-          (a) => !!a.spellId && ccSpellIds.has(a.spellId),
+        ccAuras,
+        ccRecastSplitsResend(enemy.id, ccAuras, (id) =>
+          allUnits.find((u) => u.id === id),
         ),
       )) {
         const { spellId } = aura;

@@ -11,6 +11,7 @@ import { ccFullDurationForApplication } from "./ccDuration";
 import {
   buildCcCategoryHistory,
   ccRecastBetween,
+  ccRecastSplitsResend,
   drDurationFactor,
   getDRCategory,
   getDRLevelAtTime,
@@ -235,7 +236,13 @@ export function analyzeCcBreaks(
     let roarActive = false;
 
     // cc-dr F-RB1: a same-ms re-broadcast is not a break and a new CC
-    for (const aura of dropAuraRebroadcasts(holder.auraEvents)) {
+    // … and a recast its source logged is a new CC (`ccRecastSplitsResend`)
+    for (const aura of dropAuraRebroadcasts(
+      holder.auraEvents,
+      ccRecastSplitsResend(holder.id, holder.auraEvents, (id) =>
+        unitById.get(id),
+      ),
+    )) {
       const spellId = aura.spellId;
       if (!spellId) continue;
       const ev = aura.logLine.event;

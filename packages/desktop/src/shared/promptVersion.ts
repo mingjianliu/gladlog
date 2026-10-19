@@ -213,5 +213,9 @@
  *  owner pressed for the crisis unit answers cd-hoarded (user approved:
  *  cd-hoarded −24); a missed purge whose window saw our purge take another
  *  buff says so.
+ *  v423 (2026-10-19, F15 batch 19 — fact1215 112-1): a control's expiry and
+ *  its source's recast inside the re-send gap are two controls for the CC
+ *  windows, the DR histories and the break analysis (`ccRecastSplitsResend`).
+ *  605 files: no candidate added or removed.
  */
-export const PROMPT_VERSION = 422;
+export const PROMPT_VERSION = 423;

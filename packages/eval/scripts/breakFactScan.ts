@@ -100,10 +100,16 @@ import {
   ccSpellIds,
   disarmSpellIds,
 } from "@gladlog/analysis/src/data/spellTags";
-import { dropAuraRebroadcasts } from "@gladlog/analysis/src/utils/auraIntervals";
+import {
+  AURA_REBROADCAST_GAP_MS,
+  dropAuraRebroadcasts,
+} from "@gladlog/analysis/src/utils/auraIntervals";
 import { isSilenceOnlyAura } from "@gladlog/analysis/src/utils/cannotCastIntervals";
 import { CC_AVOIDANCE_BUFF_SPELLS } from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
-import { ccRecastBetween } from "@gladlog/analysis/src/utils/drAnalysis";
+import {
+  ccRecastBetween,
+  ccRecastSplitsResend,
+} from "@gladlog/analysis/src/utils/drAnalysis";
 import {
   parseRawStreamsAbsolute,
   type RawStreamsAbsolute,
@@ -148,7 +154,8 @@ type Check =
   | "delayedAvoidAtHit"
   | "casterKickEnd"
   | "refusedPressMechanic"
-  | "conditionalControlMiss";
+  | "conditionalControlMiss"
+  | "recastResend";
 const expected = new Map<Check, number>();
 const bad = new Map<Check, string[]>();
 const unmapped: string[] = [];
@@ -525,6 +532,76 @@ for (const f of files) {
     }
   }
 
+  // ── recastResend (112-1) ──────────────────────────────────────────────
+  // A control's REMOVED and its APPLIED again within the re-send gap, with a
+  // SUCCESS of the spell by the source (or its owner) between the two
+  // applications' starts: two controls. When the second starts in a later
+  // rendered second than the first, a control line of that holder and spell
+  // must sit at the second's start.
+  for (const u of units) {
+    const me = pidOf.get(u.name);
+    if (!me) continue;
+    const auras = (u.auraEvents ?? []) as IAuraEvent[];
+    auras.forEach((r, i) => {
+      if (r.logLine.event !== LogEvent.SPELL_AURA_REMOVED) return;
+      if (!r.spellId || !ccSpellIds.has(r.spellId)) return;
+      const re = auras
+        .slice(i + 1)
+        .find(
+          (x) =>
+            x.spellId === r.spellId &&
+            x.srcUnitId === r.srcUnitId &&
+            x.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
+            x.logLine.timestamp - r.logLine.timestamp <= AURA_REBROADCAST_GAP_MS,
+        );
+      if (!re) return;
+      // the application it closes: the last APPLIED, or a REFRESH (a
+      // cast-backed one is a control of its own, ruling A51)
+      const first = auras
+        .slice(0, i)
+        .reverse()
+        .find(
+          (x) =>
+            x.spellId === r.spellId &&
+            x.srcUnitId === r.srcUnitId &&
+            (x.logLine.event === LogEvent.SPELL_AURA_APPLIED ||
+              x.logLine.event === LogEvent.SPELL_AURA_REFRESH),
+        );
+      if (!first) return;
+      const src = byId.get(r.srcUnitId);
+      const owner = src?.ownerId ? byId.get(src.ownerId) : undefined;
+      const ids = new Set([r.spellId, ...castsOfEffectAura(r.spellId)]);
+      const recast = [src, owner].some((c) =>
+        ((c?.spellCastEvents ?? []) as ISpellEvent[]).some(
+          (e) =>
+            e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+            !!e.spellId &&
+            ids.has(e.spellId) &&
+            e.logLine.timestamp > first.logLine.timestamp + 100 &&
+            e.logLine.timestamp <= re.logLine.timestamp,
+        ),
+      );
+      if (!recast) return;
+      const ts = re.logLine.timestamp;
+      if (ts < start || ts > roundEnd) return;
+      const t1 = at(first.logLine.timestamp);
+      const t2 = at(ts);
+      if (t1 === t2) return;
+      const name = getEnglishSpellName(r.spellId, r.spellName);
+      const lineAt = (t: string) =>
+        lines.some(
+          (l) =>
+            (l.startsWith(`${t}  [CC ON TEAM]   ${me.pid}(`) ||
+              l.startsWith(`${t}  [CC ON ENEMY]   ${me.pid}(`)) &&
+            l.includes(`← ${name} `),
+        );
+      if (!lineAt(t1)) return; // the first control has no line to compare
+      bump("recastResend");
+      if (!lineAt(t2))
+        fail("recastResend", `${where} ${t1} → ${t2} ${u.name} ${name}`);
+    });
+  }
+
   // ── conditionalControlMiss (C10) ────────────────────────────────────────
   // A miss row of a cast id that is no control itself, whose control effects
   // (the cast→effect table) each followed fewer than half of its casts —
@@ -682,8 +759,12 @@ for (const f of files) {
           (!a.destUnitId || a.destUnitId === u.id),
       );
       // a REMOVED then APPLIED the game re-sent is one control, as the
-      // [CC ON TEAM] line reads it (the producer's own filter)
-      const kept = dropAuraRebroadcasts(own);
+      // [CC ON TEAM] line reads it — unless its source recast it (the
+      // producer's own filter and predicate, `ccRecastSplitsResend`)
+      const kept = dropAuraRebroadcasts(
+        own,
+        ccRecastSplitsResend(u.id, own, (id) => byId.get(id)),
+      );
       const close = (key: string, to: number) => {
         const o = open.get(key)!;
         open.delete(key);
@@ -884,6 +965,7 @@ for (const c of [
   "casterKickEnd",
   "refusedPressMechanic",
   "conditionalControlMiss",
+  "recastResend",
 ] as Check[]) {
   const b = bad.get(c) ?? [];
   console.log(`${c}: expected ${expected.get(c) ?? 0}, wrong ${b.length}`);

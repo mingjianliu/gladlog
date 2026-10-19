@@ -2409,6 +2409,12 @@ const INDEX: PredicateRow[] = [
     symbol: "enemyDefSpeaksForPress",
     mod: enemyDefensives,
   },
+  // fact1215 112-1: a recast inside the re-send gap is a new control
+  {
+    file: `${A}/utils/drAnalysis.ts`,
+    symbol: "ccRecastSplitsResend",
+    mod: drAnalysis,
+  },
   // fact1215 R7: the non-wall saves that cut a kill-window span
   {
     file: `${A}/utils/enemyDefensives.ts`,
