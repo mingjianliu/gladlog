@@ -27,6 +27,7 @@
  * both stages at a season refresh (docs/commands/update-wow-data.md).
  */
 import generated from "./castEffectAuraGenerated.json";
+import nominations from "./castEffectNominationsGenerated.json";
 
 interface Row {
   aura: string;
@@ -129,4 +130,20 @@ export function effectAuraHitShare(
     generated as unknown as { casts: Record<string, Row[]> }
   ).casts[castSpellId]?.find((r) => r.aura === auraSpellId);
   return row && row.casts > 0 ? row.hits / row.casts : undefined;
+}
+
+/** The aura ids DB2 nominates as a cast's effect (same SpellName or an
+ * EffectTriggerSpell chain — `genCastEffectNominations.ts`), whether or not
+ * the corpus ever logged them: the official reading for an effect the log
+ * writes no aura for (Solar Beam 78675 → its silence 81261, never logged). */
+export function nominatedEffectAurasOfCast(
+  castSpellId: string,
+): readonly string[] {
+  return (
+    (
+      nominations as unknown as {
+        nominations: Record<string, { aura: string }[]>;
+      }
+    ).nominations[castSpellId] ?? []
+  ).map((r) => r.aura);
 }

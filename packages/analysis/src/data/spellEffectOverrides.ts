@@ -24,6 +24,12 @@ const e = (
 export const SPELL_EFFECT_OVERRIDES: Record<string, IMinedSpell> =
   Object.fromEntries(
     [
+      // fact1215 R11 (2026-10-19): Solar Beam's silence aura. The log never
+      // writes it (0 rows in 1,215 logs), so no generator saw the id; DB2
+      // (build 12.1.0.69587): SpellMisc.DurationIndex 31 → SpellDuration
+      // 8000 ms, SpellCategories.Mechanic 9 (silence). Read by the
+      // `[SILENCE] … no aura logged` attribution window (silence.ts).
+      e("81261", "Solar Beam", undefined, 8),
       // ── Major defensive CDs ──
       e("642", "Divine Shield", 300, 8),
       e("498", "Divine Protection", 60, 8),

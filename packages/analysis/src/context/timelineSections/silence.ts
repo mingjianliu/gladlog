@@ -11,19 +11,30 @@
  * the threaded copy is exact). Output is pinned by the 605-file
  * acceptanceCapture context hash.
  */
-import type { ICombatUnit } from "@gladlog/parser-compat";
+import { type ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
-import { getEnglishSpellName } from "../../data/spellEffectData";
+import { BACKLASH_AURA_CC_TYPE } from "../../data/backlashCc";
+import { nominatedEffectAurasOfCast } from "../../data/castEffectAuras";
+import {
+  getEnglishSpellName,
+  spellEffectData,
+} from "../../data/spellEffectData";
 import { auraEndFromLog } from "../../utils/auraEndCause";
-import { silenceIntervals } from "../../utils/cannotCastIntervals";
+import { buildAuraIntervals } from "../../utils/auraIntervals";
+import {
+  isSilenceOnlyAura,
+  silenceIntervals,
+} from "../../utils/cannotCastIntervals";
 import {
   pressEndedSilence,
   renderedCcDuration,
   renderedCcSpan,
 } from "../../utils/ccTrinketAnalysis";
+import { getDRCategory } from "../../utils/drAnalysis";
 import { pvpTrinketUses } from "../../utils/pvpTrinketUses";
 import { fmtTime } from "../../utils/renderGrid";
 import {
+  controlRejectKindOf,
   formatPressedDuringNote,
   ownerControlPressKit,
   ownerPressesRejectedDuring,
@@ -87,8 +98,10 @@ export function emitSilenceEntries(
       // (the enemy side had none — 364e3201's Medallion ended Spider Venom
       // and Silence and the lines read a plain `| 1s`)
       const trinketTimes =
-        (side === "friendly" ? ccTrinketSummaries : (enemyCCSummaries ?? []))
-          .find((s) => s.playerName === u.name)?.trinketUseTimes ?? [];
+        (side === "friendly"
+          ? ccTrinketSummaries
+          : (enemyCCSummaries ?? [])
+        ).find((s) => s.playerName === u.name)?.trinketUseTimes ?? [];
       const intervals = silenceIntervals(u, attackerIds);
       // FT-T16 (D13): the owner's major cooldowns pressed into a silence and
       // refused as "silenced", on that silence's line — the `[CC ON TEAM]`
@@ -136,7 +149,9 @@ export function emitSilenceEntries(
         // this aura outright and is still read.
         const enemyTrinketed =
           side === "enemy" &&
-          pvpTrinketUses(u).some((t) => pressEndedSilence(s.from, endMs, t.atMs));
+          pvpTrinketUses(u).some((t) =>
+            pressEndedSilence(s.from, endMs, t.atMs),
+          );
         const end =
           trinketAt === undefined && !stillOnAtRoundEnd
             ? auraEndFromLog(
@@ -189,6 +204,111 @@ export function emitSilenceEntries(
   };
   renderSide(friends, enemyIds, "friendly");
   renderSide(enemies ?? [], friendIds, "enemy");
+
+  // fact1215 R11 (user approved 2026-10-19): a silence the log writes no
+  // aura for (Solar Beam: its 81261 never appears in 1,215 logs) is proven
+  // only by the owner's own press refused as silenced while no silence aura
+  // was on them (d64022ad 0:25.915: Flash Heal refused after a 0:25.340
+  // Solar Beam). Its source: the latest enemy cast whose official effect
+  // aura (`nominatedEffectAurasOfCast`) is a silence, inside that aura's
+  // official length. One line at the cast, no length — the log has none.
+  if (rawStreams?.available && owner) {
+    // every logged silence on the owner covers its refusals — the
+    // dispel-backlash one too, which `silenceIntervals` leaves to its own
+    // line (b47: 19 "Unstable Affliction … no aura logged" lines were the
+    // logged 196364 backlash)
+    const backlash = buildAuraIntervals(owner, {
+      startTime: matchStartMs,
+      endTime: roundEndAtMs,
+    })
+      .filter((iv) => BACKLASH_AURA_CC_TYPE.get(iv.spellId) === "silence")
+      .map((iv) => ({
+        from: matchStartMs + iv.fromS * 1000,
+        to: matchStartMs + iv.toS * 1000,
+      }));
+    const covered = [...silenceIntervals(owner, enemyIds), ...backlash];
+    const silenceCasts: Array<{
+      ms: number;
+      untilMs: number;
+      spellId: string;
+      spellName: string;
+      srcId: string;
+      srcName: string;
+    }> = [];
+    for (const u of allUnits ?? [])
+      if (enemyIds.has(u.id))
+        for (const c of u.spellCastEvents ?? []) {
+          if (c.logLine.event !== LogEvent.SPELL_CAST_SUCCESS || !c.spellId)
+            continue;
+
+          // a cast whose silence is a dispel backlash (Unstable Affliction:
+          // its name also nominates two old silence auras, 43523 / 65813)
+          // silences the dispeller through a logged aura with its own line
+          const nominated = nominatedEffectAurasOfCast(c.spellId);
+          if (nominated.some((a) => BACKLASH_AURA_CC_TYPE.has(a))) continue;
+          const aura = nominated.find(
+            (a) => isSilenceOnlyAura(a) || getDRCategory(a) === "Silence",
+          );
+          if (!aura) continue;
+          const lenS = spellEffectData[aura]?.durationSeconds;
+          if (!lenS) continue;
+          // … whose silence the log did NOT write — on anyone (b48–b52: a
+          // Strangulate on a teammate silenced that teammate, logged; a
+          // logged Strangulate on the owner removed early; Solar Beam is an
+          // area and is written on no one, whoever it was aimed at)
+          const logged = (allUnits ?? [])
+            .flatMap((x) => x.auraEvents ?? [])
+            .some(
+              (a) =>
+                !!a.spellId &&
+                (a.spellId === aura ||
+                  isSilenceOnlyAura(a.spellId) ||
+                  getDRCategory(a.spellId) === "Silence") &&
+                a.srcUnitId === c.srcUnitId &&
+                a.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
+                a.timestamp >= c.logLine.timestamp - 100 &&
+                a.timestamp <= c.logLine.timestamp + lenS * 1000,
+            );
+          if (logged) continue;
+          silenceCasts.push({
+            ms: c.logLine.timestamp,
+            untilMs: c.logLine.timestamp + lenS * 1000,
+            spellId: c.spellId,
+            spellName: getEnglishSpellName(c.spellId, c.spellName),
+            srcId: c.srcUnitId,
+            srcName: c.srcUnitName,
+          });
+        }
+    const firstRefusal = new Map<
+      (typeof silenceCasts)[number],
+      { ms: number; spellName: string }
+    >();
+    for (const h of rawStreams.castFailed) {
+      if (h.unitGuid !== owner.id) continue;
+      if (controlRejectKindOf(h.reason) !== "silence") continue;
+      const ms = matchStartMs + Math.round(h.tSeconds * 1000);
+      if (ms >= roundEndAtMs) continue;
+      if (covered.some((s) => s.from <= ms && ms <= s.to)) continue;
+      // one source only: a refusal two such casts could explain (a Solar
+      // Beam and a Wailing Arrow, both unlogged — 27-6 2:04) names neither
+      const open = silenceCasts.filter((c) => c.ms <= ms && ms <= c.untilMs);
+      if (new Set(open.map((c) => c.spellName)).size !== 1) continue;
+      const src = open.sort((a, b) => b.ms - a.ms)[0];
+      if (!src || firstRefusal.has(src)) continue;
+      firstRefusal.set(src, {
+        ms,
+        spellName: getEnglishSpellName(String(h.spellId), h.spellName),
+      });
+    }
+    for (const [c, r] of firstRefusal) {
+      const at = (c.ms - matchStartMs) / 1000;
+      addEntry(
+        at,
+        `${fmtTime(at)}  [SILENCE]   ${pid(owner.name)} ← ${c.spellName} (by ${actorLabel(c.srcName, "enemy", c.srcId)}) | no aura logged — silenced at ${fmtTime((r.ms - matchStartMs) / 1000)} (${r.spellName} refused); length not logged`,
+      );
+      silenceLineCount++;
+    }
+  }
 
   return { silenceLineCount };
 }

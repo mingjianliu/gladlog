@@ -3696,3 +3696,21 @@ Shot`. 605 files: no candidate added or removed; 54 control lines become two
 each (the second with its own DR: `Sleep Walk (1s) [DR: Disorient 50%]`); 27
 KILL ATTEMPTS lines (`1 stun` → `2 stuns` where the rogue recast); breakFactScan
 `recastResend` (new).
+v424 (2026-10-19, F15 batch 20 — fact1215 R11, Solar Beam): the log writes
+no aura for Solar Beam's silence (81261: 0 rows in 1,215 logs), so it had no
+[SILENCE] line. The only evidence is the owner's own press refused as
+silenced while no silence aura was on them (d64022ad 0:25.915: Flash Heal
+refused after a 0:25.340 Solar Beam). Such a refusal is attributed to the
+latest enemy cast whose official effect aura
+(`nominatedEffectAurasOfCast`, DB2) is a silence, inside that aura's official
+length (81261: DB2 SpellDuration 8000 ms, added to spellEffectOverrides), and
+whose silence the log wrote on no one (Solar Beam is an area and is written on
+no one, whoever it was aimed at); a cast whose silence is a
+dispel backlash is not one. One line at the cast, no length: `m:ss  [SILENCE]
+<pid> ← Solar Beam (by …) | no aura logged — silenced at m:ss (<press>
+refused); length not logged` — the owner only (refusals are the recorder's).
+User approved 2026-10-19. checkKickEatenKickSilence reads aura-backed silence
+lines only (`kickSilence` is a length). 605 files: 25 lines, all Solar Beam;
+no candidate added or removed; breakFactScan `solarBeamSilence` 25 → 0. A
+refusal two such unlogged casts could explain (a Solar Beam and a Wailing Arrow)
+names neither and gets no line.

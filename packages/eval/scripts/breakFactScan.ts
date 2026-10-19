@@ -85,11 +85,14 @@ import { ensureAnalysisData } from "@gladlog/analysis";
 import {
   CONTROL_REJECT_MECHANIC,
   CONTROL_REJECT_REASONS,
+  controlRejectKindOf,
 } from "@gladlog/analysis/src/context/controlRejectedPresses";
+import { BACKLASH_AURA_CC_TYPE } from "@gladlog/analysis/src/data/backlashCc";
 import {
   castsOfEffectAura,
   effectAuraHitShare,
   effectAurasOfCast,
+  nominatedEffectAurasOfCast,
 } from "@gladlog/analysis/src/data/castEffectAuras";
 import { CHANNELED_SPELL_IDS } from "@gladlog/analysis/src/data/channeledGenerated";
 import {
@@ -109,6 +112,7 @@ import { CC_AVOIDANCE_BUFF_SPELLS } from "@gladlog/analysis/src/utils/ccTrinketA
 import {
   ccRecastBetween,
   ccRecastSplitsResend,
+  getDRCategory,
 } from "@gladlog/analysis/src/utils/drAnalysis";
 import {
   parseRawStreamsAbsolute,
@@ -155,7 +159,8 @@ type Check =
   | "casterKickEnd"
   | "refusedPressMechanic"
   | "conditionalControlMiss"
-  | "recastResend";
+  | "recastResend"
+  | "solarBeamSilence";
 const expected = new Map<Check, number>();
 const bad = new Map<Check, string[]>();
 const unmapped: string[] = [];
@@ -602,6 +607,95 @@ for (const f of files) {
     });
   }
 
+  // ── solarBeamSilence (R11) ──────────────────────────────────────────────
+  // The owner's press refused "silenced" while no silence aura (or any
+  // aura-backed control) was on them, within 8 s (DB2) of an enemy Solar
+  // Beam 78675: a `[SILENCE] … ← Solar Beam … no aura logged` line at the
+  // Beam's second must say it.
+  {
+    const raw = cacheRaw as RawStreamsAbsolute | null;
+    const ownerRow = lines.find((l) =>
+      /<unit id="\d+" name="[^"]+"[^>]*role="log owner"/.test(l),
+    );
+    const ownerName = ownerRow && /name="([^"]+)"/.exec(ownerRow)?.[1];
+    const owner = units.find((u) => u.name === ownerName);
+    const me = owner && pidOf.get(owner.name);
+    if (raw?.available && owner && me) {
+      const refused = rawStreamsForRound(
+        raw,
+        start,
+        (legacy.endTime - start) / 1000,
+      ).castFailed.filter(
+        (x) =>
+          x.unitGuid === owner.id && controlRejectKindOf(x.reason) === "silence",
+      );
+      const beams = units
+        .filter((u) => pidOf.get(u.name)?.enemy)
+        .flatMap((u) =>
+          ((u.spellCastEvents ?? []) as ISpellEvent[])
+            .filter(
+              (c) =>
+                c.spellId === "78675" &&
+                c.logLine.event === LogEvent.SPELL_CAST_SUCCESS,
+            )
+            .map((c) => ({ ms: c.logLine.timestamp, u })),
+        );
+      const silencedAt = (ms: number) =>
+        ((owner.auraEvents ?? []) as IAuraEvent[]).some(
+          (a) =>
+            !!a.spellId &&
+            (isSilenceOnlyAura(a.spellId) ||
+              getDRCategory(a.spellId) === "Silence") &&
+            a.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
+            a.timestamp <= ms &&
+            ms - a.timestamp <= 8000,
+        );
+      // another enemy cast whose official effect is a silence, open at the
+      // refusal, makes it ambiguous: no source is named then
+      const otherSilencers = units
+        .filter((u) => pidOf.get(u.name)?.enemy)
+        .flatMap((u) =>
+          ((u.spellCastEvents ?? []) as ISpellEvent[])
+            .filter(
+              (c) =>
+                c.spellId !== "78675" &&
+                c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+                nominatedEffectAurasOfCast(c.spellId).some(
+                  (a) =>
+                    !BACKLASH_AURA_CC_TYPE.has(a) &&
+                    (isSilenceOnlyAura(a) || getDRCategory(a) === "Silence"),
+                ),
+            )
+            .map((c) => c.logLine.timestamp),
+        );
+      for (const b of beams) {
+        if (b.ms < start || b.ms > roundEnd) continue;
+        const hit = refused.find((x) => {
+          const ms = start + Math.round(x.tSeconds * 1000);
+          return (
+            ms >= b.ms &&
+            ms <= b.ms + 8000 &&
+            ms < roundEnd &&
+            !silencedAt(ms) &&
+            !otherSilencers.some((t) => t <= ms && ms - t <= 8000)
+          );
+        });
+        if (!hit) continue;
+        bump("solarBeamSilence");
+        const t = at(b.ms);
+        if (
+          !lines.some(
+            (l) =>
+              l.startsWith(`${t}  [SILENCE]   ${me.pid}(`) &&
+              l.includes("← Solar Beam (") &&
+              l.includes("no aura logged"),
+          )
+        )
+          fail("solarBeamSilence", `${where} ${t} ${owner.name}`);
+      }
+    }
+  }
+
   // ── conditionalControlMiss (C10) ────────────────────────────────────────
   // A miss row of a cast id that is no control itself, whose control effects
   // (the cast→effect table) each followed fewer than half of its casts —
@@ -966,6 +1060,7 @@ for (const c of [
   "refusedPressMechanic",
   "conditionalControlMiss",
   "recastResend",
+  "solarBeamSilence",
 ] as Check[]) {
   const b = bad.get(c) ?? [];
   console.log(`${c}: expected ${expected.get(c) ?? 0}, wrong ${b.length}`);

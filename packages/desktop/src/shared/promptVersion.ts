@@ -217,5 +217,10 @@
  *  its source's recast inside the re-send gap are two controls for the CC
  *  windows, the DR histories and the break analysis (`ccRecastSplitsResend`).
  *  605 files: no candidate added or removed.
+ *  v424 (2026-10-19, F15 batch 20 — fact1215 R11 Solar Beam): a silence
+ *  the log writes no aura for, proven by the owner's press refused as
+ *  silenced, gets a `[SILENCE] … | no aura logged — silenced at m:ss (X
+ *  refused); length not logged` line (user approved). 605 files: no
+ *  candidate added or removed.
  */
-export const PROMPT_VERSION = 423;
+export const PROMPT_VERSION = 424;

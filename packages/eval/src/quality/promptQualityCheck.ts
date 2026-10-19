@@ -5790,7 +5790,9 @@ export function checkKickEatenKickSilence(lines: string[]): string[] {
     const u = line.match(UNIT_LEGEND_LINE);
     if (u) idOfName.set(u[2]!, u[1]!);
     const sl = line.match(SILENCE_AT_LINE);
-    if (sl)
+    // a silence the log wrote no aura for (`| no aura logged — …`, fact1215
+    // R11: Solar Beam, also a kick) has no length for `kickSilence` to state
+    if (sl && !line.includes("| no aura logged — "))
       silences.push({
         at: Number(sl[1]) * 60 + Number(sl[2]),
         unitId: sl[3]!,
