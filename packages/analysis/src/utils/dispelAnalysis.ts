@@ -88,6 +88,7 @@ import {
   isLoadoutFullyResolved,
 } from "./talents";
 import { threatActiveAt } from "./threatAssessment";
+import { warlockRanPurgePet } from "./warlockPet";
 
 export type DispelPriority = "Critical" | "High" | "Medium" | "Low";
 import {
@@ -1220,7 +1221,12 @@ export function canRemoveFrom(
  * Returns true if the unit can actually perform an offensive purge, accounting for
  * talent gating (DH Consume Magic) and pet requirements (Warlock Felhunter).
  */
-export function canOffensivePurge(unit: ICombatUnit): boolean {
+export function canOffensivePurge(
+  unit: ICombatUnit,
+  /** the round's units, for the warlock's pet (`warlockRanPurgePet`); absent
+   *  = the pets the warlock's own pet casts name */
+  units?: Iterable<ICombatUnit>,
+): boolean {
   // B139: some specs gain an offensive purge only from a PvP talent — Preservation Evoker has no baseline
   // offensive purge (Naturalize is a defensive ally-dispel), but Scouring Flame gives Fire Breath one.
   if (hasOffensivePurgeTalent(unit.info?.pvpTalents)) return true;
@@ -1261,6 +1267,10 @@ export function canOffensivePurge(unit: ICombatUnit): boolean {
   // Summon Felhunter (30146) is in the talent tree; if the player has talent data and didn't
   // take it, they likely have a different pet. Fall back to cast evidence for the summon.
   if (WARLOCK_SPECS.has(unit.spec)) {
+    // the pet the log shows decides (the roster's predicate): a Sayaad /
+    // Felguard / Imp warlock has no Devour Magic, whatever the talent says
+    const purgePet = warlockRanPurgePet(unit, units);
+    if (purgePet !== undefined) return purgePet;
     if (talentTreeIds.has(SUMMON_FELHUNTER_SPELL_ID)) {
       if (talentedIds !== null && !talentedIds.has(SUMMON_FELHUNTER_SPELL_ID)) {
         // Didn't take Summon Felhunter talent — check cast evidence as final fallback
@@ -2849,7 +2859,9 @@ export function reconstructDispelSummary(
   // on them; only an offensive purge can, and only Magic (a5a8d31b: "your
   // Cleanse was available" on a Mind-Controlled rogue, a team with no
   // purge). Everything else keeps the defensive-cleanse capability.
-  const friendlyPurgers = friends.filter((f) => canOffensivePurge(f));
+  const friendlyPurgers = friends.filter((f) =>
+    canOffensivePurge(f, roundUnits.length > 0 ? roundUnits : undefined),
+  );
   const capableFor = (
     type: DispelType,
     target: ICombatUnit,

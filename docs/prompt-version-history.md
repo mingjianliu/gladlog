@@ -3592,3 +3592,22 @@ Avenging Wrath with no cast is an `(no press)` occurrence (weight 0), so it
 has an [ENEMY CD] line. 605 files: no candidate added or removed;
 pressFactScan `noPressCopy` 126 → 0, `procWith` 1,152 → 0, `auraOnlyAW` 93 →
 0, `pressedNotTagged` 0 / 9,036.
+v418 (2026-10-18, F15 batch 14 — fact1215 C10 rest, facts only): (1) a
+SPELL_MISSED row says a control did not land only for a control's own id or
+a cast whose control effect followed at least half of its corpus casts
+(`missReportsControl`, reading the cast→effect table's hits / casts): Wake of
+Ashes' stun 255941 takes demons and undead and follows 24 % of 255937's
+casts, so the IMMUNE / MISS of its damage on any other player was a false
+`[CC NOT LANDED]` (0f894aee 1:54). The cast-line `[IMMUNE …]` tags are
+unchanged (they say the cast hit an immune target). (2) A warlock's offensive
+purge follows the pet the log shows (`warlockRanPurgePet`, the roster's
+`warlockPetFunctions`): a Sayaad / Felguard / Imp / Voidwalker warlock is
+`CANNOT offensive purge`, is not a team purger and gets no missed purge
+(1120cb61). (3) Ice Nova 157997 is a root (DB2 root aura, Magic; the one
+official Magic root with no category entry): [ENEMY CLEANSE] / [CLEANSE]
+lines, the [RES] cc column, and a [BURST ANSWERED] control answer as Frost
+Nova (34204ef9 1:41). 605 files: slow-defensive-response 99 → 95 (−4, a burst
+answered with Ice Nova — user approved 2026-10-18); no other candidate added
+or removed; 60 `[CC NOT LANDED] … Wake of Ashes` lines removed; 68 [MISSED
+PURGE OPPORTUNITY] lines removed; new gate checkWarlockPurgeFollowsPet 209 →
+0; breakFactScan `conditionalControlMiss` 60/650 → 0.

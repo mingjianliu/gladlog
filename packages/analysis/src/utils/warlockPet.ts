@@ -108,3 +108,38 @@ export function warlockPetFunctions(
   }
   return out;
 }
+
+/**
+ * Did this warlock's logged pet(s) include one that purges — the Felhunter's
+ * Devour Magic? Read with the roster's own predicate (`warlockPetFunctions`):
+ * from the round's units when the caller has them, else from the pet units
+ * the warlock's own `petSpellCastEvents` name (a pet that cast something).
+ * `undefined` when no pet of theirs is logged at all (nothing says which pet
+ * it was). fact1215 C10 (1120cb61): a Sayaad warlock with no Felhunter row in
+ * the file was listed as a team purger.
+ */
+export function warlockRanPurgePet(
+  owner: Pick<ICombatUnit, "id" | "spec"> &
+    Partial<Pick<ICombatUnit, "petSpellCastEvents">>,
+  units?: Iterable<PetUnit>,
+): boolean | undefined {
+  if (!WARLOCK_SPEC_IDS.has(String(owner.spec))) return undefined;
+  let pool: Iterable<PetUnit> | undefined = units;
+  if (pool === undefined) {
+    const bySrc = new Map<string, PetUnit>();
+    for (const c of owner.petSpellCastEvents ?? []) {
+      if (!c.srcUnitId) continue;
+      const u = bySrc.get(c.srcUnitId) ?? {
+        id: c.srcUnitId,
+        ownerId: owner.id,
+        spellCastEvents: [],
+      };
+      u.spellCastEvents.push(c);
+      bySrc.set(c.srcUnitId, u);
+    }
+    pool = bySrc.values();
+  }
+  const pets = warlockPetFunctions(owner, pool, 0);
+  if (pets.length === 0) return undefined;
+  return pets.some((p) => p.fn.pet === WARLOCK_PET_FUNCTION["417"]!.pet);
+}

@@ -228,6 +228,7 @@ export const SPELL_CATEGORIES: Record<string, ISpellCategoryEntry> = {
   "233395": root(), // Deathchill (Frost Mage root variant)
   "370970": root(), // The Hunt (Demon Hunter root component)
   "386770": root(), // Freezing Cold (Frost Mage Ice Nova root)
+  "157997": root(), // Ice Nova (Mage talent; DB2: root aura, DispelType Magic). The one official Magic root (rootAuraGenerated × SpellCategories.DispelType 1) with no entry → priority Low → folded as a minor dispel while Frost Nova got [ENEMY CLEANSE] lines (fact1215 C10, 34204ef9 1:41; ×1193 in the dispel corpus).
   "454787": root(), // Ice Prison (Frost Mage root talent)
   "460614": root(), // Entangling Roots (Druid variant)
   "1258862": root(), // Encasing Cold (Frost Mage root)

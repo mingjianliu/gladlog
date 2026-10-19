@@ -2387,6 +2387,22 @@ const INDEX: PredicateRow[] = [
     symbol: "ccAvoidanceBuffsUpAt",
     mod: ccTrinketAnalysis,
   },
+  // fact1215 C10: a miss row that stands for a control; a warlock's purge pet
+  {
+    file: `${A}/utils/castMissRows.ts`,
+    symbol: "missReportsControl",
+    mod: castMissRows,
+  },
+  {
+    file: `${A}/utils/warlockPet.ts`,
+    symbol: "warlockRanPurgePet",
+    mod: warlockPet,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkWarlockPurgeFollowsPet",
+    mod: promptQualityCheck,
+  },
   // fact1215 R4 / C4: who broke an aura; the caster-side link aura
   {
     file: `${A}/utils/brokenRowBreaker.ts`,

@@ -2120,6 +2120,59 @@ export function checkCcAvoidedLandedConsistency(lines: string[]): string[] {
   return failures;
 }
 
+/**
+ * A warlock purges through the Felhunter's Devour Magic, so the PURGE
+ * RESPONSIBILITY header must follow the pet the roster prints (fact1215 C10,
+ * 1120cb61: a Sayaad warlock listed as a team purger). A warlock whose
+ * `[pet: …]` tag names no Devour Magic is never `CAN offensive purge` as the
+ * log owner, and a warlock spec in `Team purgers:` needs a non-owner warlock
+ * of that spec whose tag names it (or that has no tag — nothing logged says
+ * which pet). The producer reads the same pets (`warlockRanPurgePet`, the
+ * roster's predicate). 605 capture: 209 failures before the fix → 0.
+ */
+export function checkWarlockPurgeFollowsPet(lines: string[]): string[] {
+  const failures: string[] = [];
+  const ownerName = lines
+    .map((l) => /<unit id="\d+" name="([^"]+)"[^>]*role="log owner"/.exec(l))
+    .find(Boolean)?.[1];
+  const team = lines.find((l) => /^\s*My team: /.test(l));
+  if (!team) return failures;
+  const locks = [
+    ...team.matchAll(
+      /((?:Affliction|Demonology|Destruction) Warlock) \(([^)]+)\)( \[pet: [^\]]*\])?/g,
+    ),
+  ].map((m) => ({
+    spec: m[1]!,
+    name: m[2]!,
+    purges: m[3] === undefined ? undefined : m[3].includes("Devour Magic"),
+  }));
+  lines.forEach((line, i) => {
+    const own = /^\s*Log owner \(([^)]+ Warlock)\): CAN offensive purge/.exec(
+      line,
+    );
+    if (own) {
+      const me = locks.find((w) => w.name === ownerName);
+      if (me && me.purges === false)
+        failures.push(
+          `line ${i + 1}: 日志主人术士的宠物标签没有 Devour Magic,却写 CAN offensive purge —— ${line.trim().slice(0, 140)}`,
+        );
+    }
+    const tp = /^\s*Team purgers: (.+)$/.exec(line);
+    if (tp)
+      for (const spec of tp[1]!.split(", ")) {
+        if (!/ Warlock$/.test(spec)) continue;
+        const mates = locks.filter(
+          (w) => w.spec === spec && w.name !== ownerName,
+        );
+        if (mates.length > 0 && mates.every((w) => w.purges === false))
+          failures.push(
+            `line ${i + 1}: Team purgers 列了 ${spec},但该专精队友术士的宠物标签都没有 Devour Magic —— ${line.trim().slice(0, 140)}`,
+          );
+      }
+  });
+  return failures;
+}
+
 const CC_AVOIDED_DATA_LINE = /^\s*\d+:\d{2}\s+\[CC AVOIDED\?\]/;
 const CC_AVOIDED_OUTCOME = /\) (?:did not land|logged (\S+)); /;
 
@@ -7605,6 +7658,7 @@ export function checkMatch(
   hardFailures.push(...checkConseqHpStateConsistency(lines));
   hardFailures.push(...checkCcAvoidedLandedConsistency(lines));
   hardFailures.push(...checkCcAvoidedMissType(lines));
+  hardFailures.push(...checkWarlockPurgeFollowsPet(lines));
   hardFailures.push(...checkDeathTrinketCcConsistency(lines));
   hardFailures.push(...checkPressedDuringControlNote(lines));
   hardFailures.push(...checkKitUnusedNote(lines));

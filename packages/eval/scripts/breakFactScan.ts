@@ -65,6 +65,11 @@
  *    log owner's presses of their printed kit only. Every line's `pressed
  *    during it:` clause must list exactly the re-assignment's counts, a
  *    missing clause included.
+ *  - `conditionalControlMiss` (C10, 2026-10-18): a miss row from our side on
+ *    an enemy player of a cast id that is no control, whose control effects
+ *    each followed under half of its casts (Wake of Ashes' damage id). No
+ *    `[CC NOT LANDED]` line of that target and spell at its second, unless
+ *    the control's own id missed there too.
  *  - `casterKickEnd` also requires the line to say `… on its caster`,
  *    crediting the kicker, and counts only a kick of that channel
  *    (`extraSpellId` the control or a cast whose effect it is).
@@ -81,7 +86,11 @@ import {
   CONTROL_REJECT_MECHANIC,
   CONTROL_REJECT_REASONS,
 } from "@gladlog/analysis/src/context/controlRejectedPresses";
-import { castsOfEffectAura } from "@gladlog/analysis/src/data/castEffectAuras";
+import {
+  castsOfEffectAura,
+  effectAuraHitShare,
+  effectAurasOfCast,
+} from "@gladlog/analysis/src/data/castEffectAuras";
 import { CHANNELED_SPELL_IDS } from "@gladlog/analysis/src/data/channeledGenerated";
 import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData";
 import {
@@ -135,7 +144,8 @@ type Check =
   | "immuneCauseConsumed"
   | "delayedAvoidAtHit"
   | "casterKickEnd"
-  | "refusedPressMechanic";
+  | "refusedPressMechanic"
+  | "conditionalControlMiss";
 const expected = new Map<Check, number>();
 const bad = new Map<Check, string[]>();
 const unmapped: string[] = [];
@@ -508,6 +518,47 @@ for (const f of files) {
     }
   }
 
+  // ── conditionalControlMiss (C10) ────────────────────────────────────────
+  // A miss row of a cast id that is no control itself, whose control effects
+  // (the cast→effect table) each followed fewer than half of its casts —
+  // Wake of Ashes 255937 → 255941 (demons / undead only). No
+  // `[CC NOT LANDED]` line of that target and spell may sit at its second,
+  // unless the control's own id missed there too.
+  for (const c of units) {
+    if (!friendlyOrSummon(c.id)) continue;
+    for (const m of (c.missesOut ?? []) as IMissEvent[]) {
+      const id = m.spellId;
+      if (!id || ccSpellIds.has(id)) continue;
+      const effects = effectAurasOfCast(id).filter((a) => ccSpellIds.has(a));
+      if (effects.length === 0) continue;
+      if (effects.some((a) => (effectAuraHitShare(id, a) ?? 0) >= 0.5))
+        continue;
+      if (m.timestamp < start || m.timestamp > roundEnd) continue;
+      const tgt = byId.get(m.destUnitId);
+      const tp = tgt && pidOf.get(tgt.name);
+      if (!tp || !tp.enemy) continue;
+      const t = at(m.timestamp);
+      const ownMissThere = ((c.missesOut ?? []) as IMissEvent[]).some(
+        (x) =>
+          x.destUnitId === m.destUnitId &&
+          !!x.spellId &&
+          effects.includes(x.spellId) &&
+          at(x.timestamp) === t,
+      );
+      if (ownMissThere) continue;
+      bump("conditionalControlMiss");
+      const name = getEnglishSpellName(id, m.spellName);
+      if (
+        lines.some(
+          (l) =>
+            l.startsWith(`${t}  [CC NOT LANDED]   ${tp.pid}(`) &&
+            l.includes(`← ${name} (`),
+        )
+      )
+        fail("conditionalControlMiss", `${where} ${t} ${tgt.name} ${name}`);
+    }
+  }
+
   // ── casterKickEnd (R9) ──────────────────────────────────────────────────
   for (const u of units) {
     const me = pidOf.get(u.name);
@@ -817,6 +868,7 @@ for (const c of [
   "delayedAvoidAtHit",
   "casterKickEnd",
   "refusedPressMechanic",
+  "conditionalControlMiss",
 ] as Check[]) {
   const b = bad.get(c) ?? [];
   console.log(`${c}: expected ${expected.get(c) ?? 0}, wrong ${b.length}`);

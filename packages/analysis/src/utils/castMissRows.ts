@@ -11,6 +11,35 @@
  * Extracted from `setup.ts` when the second reader arrived (Shared-Predicate
  * Rule); the windows, the attribution rule and the type table are unchanged.
  */
+import { effectAuraHitShare, effectAurasOfCast } from "../data/castEffectAuras";
+import { ccSpellIds } from "../data/spellTags";
+
+/** How often a cast's control effect must follow the cast for a miss of the
+ * cast's own id to stand for that control (`missReportsControl`). */
+export const CONTROL_EFFECT_MIN_HIT_SHARE = 0.5;
+
+/**
+ * Does a SPELL_MISSED row of this id say a CONTROL did not land? Yes for a
+ * control's own id (`ccSpellIds`). For a cast whose control lives on another
+ * id (the cast→effect table), only when that control is the cast's usual
+ * result — it followed at least half of the corpus's casts. A control the
+ * game applies only to some targets is not: Wake of Ashes' stun 255941 takes
+ * demons and undead, after 1,240 of 5,228 casts (24 %), and the IMMUNE / MISS
+ * row of its damage id 255937 on any other player is a damage miss (fact1215
+ * C10, 0f894aee 1:54: 66 `[CC NOT LANDED] … Wake of Ashes` lines on the 605
+ * capture). The unconditional pairs sit well above the bar: Holy Word:
+ * Chastise → 200200 83 %, Capacitor Totem → 118905 84 %, Sigil of Misery →
+ * 207685 72 %, Storm Bolt → 132169 95 %.
+ */
+export function missReportsControl(missSpellId: string): boolean {
+  if (ccSpellIds.has(missSpellId)) return true;
+  return effectAurasOfCast(missSpellId).some(
+    (aura) =>
+      ccSpellIds.has(aura) &&
+      (effectAuraHitShare(missSpellId, aura) ?? 0) >=
+        CONTROL_EFFECT_MIN_HIT_SHARE,
+  );
+}
 
 /** A miss row can precede its cast's SPELL_CAST_SUCCESS by this much (same
  * instant, logged in either order). */

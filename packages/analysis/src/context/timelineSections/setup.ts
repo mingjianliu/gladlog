@@ -32,6 +32,7 @@ import {
   CC_MISS_TAG_WORD,
   CONTROL_FAILED_MISS_TYPES,
   missBelongsToCast as missRowBelongsToCast,
+  missReportsControl,
 } from "../../utils/castMissRows";
 import {
   ccAvoidanceBuffsUpAt,
@@ -976,8 +977,9 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
       for (const m of caster.missesOut ?? []) {
         if (m.logLine?.event !== LogEvent.SPELL_MISSED) continue;
         if (!m.spellId || !CONTROL_FAILED_MISS_TYPES.has(m.missType)) continue;
-        if (![...castAndEffectIds(m.spellId)].some((id) => ccSpellIds.has(id)))
-          continue;
+        // a miss that stands for a control (`missReportsControl`: not a
+        // damage miss of a cast whose control takes only some targets)
+        if (!missReportsControl(m.spellId)) continue;
         const target = (enemies ?? []).find((e) => e.id === m.destUnitId);
         if (!target) continue;
         const atSeconds = (m.timestamp - matchStartMs) / 1000;

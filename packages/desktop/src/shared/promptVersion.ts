@@ -192,5 +192,9 @@
  *  a friendly [PROC] says `(with X)`; Radiant Glory's cast-less Avenging
  *  Wrath gets its `(no press)` [ENEMY CD] line. 605 files: no candidate added
  *  or removed.
+ *  v418 (2026-10-18, F15 batch 14 — fact1215 C10 rest, facts only): a
+ *  damage miss of Wake of Ashes is no `[CC NOT LANDED]` (`missReportsControl`);
+ *  a warlock's purge follows the pet the log shows (`warlockRanPurgePet`);
+ *  Ice Nova 157997 is a root (user approved −4 slow-defensive-response).
  */
-export const PROMPT_VERSION = 417;
+export const PROMPT_VERSION = 418;

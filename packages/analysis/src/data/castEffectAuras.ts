@@ -117,3 +117,16 @@ export function castInAuraSet(
     effectAurasOfCast(castSpellId).some((a) => auraIds.has(a))
   );
 }
+
+/** The share of this cast's logged casts after which its caster applied the
+ * aura (the generated row's `hits / casts`); undefined when the pair is not in
+ * the table. */
+export function effectAuraHitShare(
+  castSpellId: string,
+  auraSpellId: string,
+): number | undefined {
+  const row = (
+    generated as unknown as { casts: Record<string, Row[]> }
+  ).casts[castSpellId]?.find((r) => r.aura === auraSpellId);
+  return row && row.casts > 0 ? row.hits / row.casts : undefined;
+}

@@ -58,6 +58,7 @@ import {
   checkSameSecondHpConsistency,
   checkSelfOnlyDefensiveClaims,
   checkSnapshotFactsConsistency,
+  checkWarlockPurgeFollowsPet,
 } from "../src/quality/promptQualityCheck";
 import { loadLegacyMatchFixture } from "./helpers/legacyFixture";
 
@@ -1812,6 +1813,39 @@ describe("checkCcAvoidedLandedConsistency — a CC that landed cannot also have 
       ]),
     ).toHaveLength(1);
     expect(checkCcAvoidedLandedConsistency([logged])).toEqual([]);
+  });
+});
+
+describe("checkWarlockPurgeFollowsPet — the purge header follows the warlock's pet (fact1215 C10)", () => {
+  const prompt = (owner: string, purgers: string, pet: string) => [
+    `  <unit id="1" name="Me-R" spec="Affliction Warlock" role="log owner">`,
+    `  My team: Affliction Warlock (Me-R)${pet}, Destruction Warlock (Mate-R) [pet: Sayaad — Seduction (disorient)], Holy Paladin (Pal-R)`,
+    `  Log owner (Affliction Warlock): ${owner}`,
+    `  Team purgers: ${purgers}`,
+  ];
+  const sayaad = " [pet: Sayaad — Seduction (disorient)]";
+  const felhunter =
+    " [pet: Felhunter — Spell Lock (kick), Devour Magic (purge)]";
+  it("1120cb61: a Sayaad warlock as owner purger and a Sayaad teammate as team purger", () => {
+    const out = checkWarlockPurgeFollowsPet(
+      prompt("CAN offensive purge", "Destruction Warlock", sayaad),
+    );
+    expect(out).toHaveLength(2);
+  });
+  it("passes the producer's words for each pet, and a warlock with no pet tag", () => {
+    expect(
+      checkWarlockPurgeFollowsPet(
+        prompt("CAN offensive purge", "none", felhunter),
+      ),
+    ).toEqual([]);
+    expect(
+      checkWarlockPurgeFollowsPet(
+        prompt("CANNOT offensive purge", "none", sayaad),
+      ),
+    ).toEqual([]);
+    expect(
+      checkWarlockPurgeFollowsPet(prompt("CAN offensive purge", "none", "")),
+    ).toEqual([]);
   });
 });
 

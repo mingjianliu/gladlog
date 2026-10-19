@@ -8,11 +8,11 @@ import {
   type BurstWindowDecisionPoint,
   burstWindowDecisionPoints,
 } from "../analysis/burstWindowDecisionPoints";
+import { CD_HOARD_RESPONSE_S } from "../analysis/candidates/cooldownTiming";
 import {
   type CdPriorHoldEpisode,
   cdPriorHoldEpisodes,
 } from "../analysis/cdTriggerPrior";
-import { CD_HOARD_RESPONSE_S } from "../analysis/candidates/cooldownTiming";
 import { crisisDecisionPoints } from "../analysis/crisisDecisionPoints";
 import {
   type StackedDefensivePair,
@@ -93,6 +93,7 @@ import {
   formatPositionEventsForContext,
   POSITIONING_BURST_ANSWERED_XREF,
 } from "../utils/positionAnalysis";
+import type { RawStreams } from "../utils/rawStreams";
 import { fmtTime, toRenderSecond } from "../utils/renderGrid";
 import {
   computeRootReachability,
@@ -107,22 +108,22 @@ import {
 } from "../utils/specBaselines";
 import { heroBuildGroupOf } from "../utils/talents";
 import { warlockPetFunctions } from "../utils/warlockPet";
-import { buildCriticalWindowSet } from "./criticalWindows";
-import { formatObservedConsequences } from "./observedConsequences";
+import { BURST_ANSWERED_POSITIONING_XREF } from "./burstAnswered";
 import { ccUseSummary, formatCcUse, ownerControlCastBars } from "./ccUse";
+import { buildCriticalWindowSet } from "./criticalWindows";
 import {
   forcedTrinketFollowUps,
   formatForcedTrinketFollowUps,
 } from "./forcedTrinket";
-import { formatPeelOptions, peelOptionsForDeaths } from "./peelOptions";
+import { buildMatchTimeline, BuildMatchTimelineParams } from "./matchTimeline";
 import {
   formatDecisiveCounterfactualLine,
   formatMitigationAuditLine,
   lowPressureUnusedDefensiveNote,
   MITIGATION_AUDIT_INDEPENDENT_NOTE,
 } from "./matchTimelineSections";
-import { BURST_ANSWERED_POSITIONING_XREF } from "./burstAnswered";
-import { buildMatchTimeline, BuildMatchTimelineParams } from "./matchTimeline";
+import { formatObservedConsequences } from "./observedConsequences";
+import { formatPeelOptions, peelOptionsForDeaths } from "./peelOptions";
 import { buildPlayerLoadout } from "./resourceSnapshot";
 import {
   DMG_SPIKE_THRESHOLD,
@@ -132,7 +133,6 @@ import {
   summonKindOf,
 } from "./timelineHelpers";
 import { abbrevSpec, unitLabeler } from "./unitLabel";
-import type { RawStreams } from "../utils/rawStreams";
 
 // ──────────────────────────────────────────────────────────────────────────────
 
@@ -583,14 +583,18 @@ export function buildMatchContext(
       .filter((t) => t.scope !== "enrage")
       .map((t) => `${t.name}: ${t.note}`)
       .join("; ");
-  const ownerCanPurge = canOffensivePurge(owner as ICombatUnit);
+  const ownerCanPurge = canOffensivePurge(
+    owner as ICombatUnit,
+    allUnitsForPets,
+  );
   const ownerScopedNote = ownerCanPurge
     ? ""
     : scopedPurgeNote(owner as ICombatUnit);
   const teamPurgers = friends
     .filter((p) => p.id !== owner.id)
     .flatMap((p) => {
-      if (canOffensivePurge(p as ICombatUnit)) return [specToString(p.spec)];
+      if (canOffensivePurge(p as ICombatUnit, allUnitsForPets))
+        return [specToString(p.spec)];
       const note = scopedPurgeNote(p as ICombatUnit);
       return note ? [`${specToString(p.spec)} (${note})`] : [];
     });
