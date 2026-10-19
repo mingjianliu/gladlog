@@ -1,4 +1,5 @@
 import { buildDampeningEvents, getInitialDampening } from "@gladlog/analysis";
+import { CombatUnitReaction } from "@gladlog/parser-compat";
 
 import { toLegacySafe } from "./legacySource";
 import type { ReportSource } from "./types";
@@ -50,8 +51,14 @@ export function deriveDampeningSeries(
       1,
       Math.floor((legacy.endTime - legacy.startTime) / 1000),
     );
-    const events = buildDampeningEvents(players); // sorted event table, built once
-    const fallback = getInitialDampening(bracket, players);
+    // the log owner's team's doses, the rules from the whole roster (the
+    // prompt's reading — fact1215 R11: the teams tick apart)
+    const ownSide = players.filter(
+      (u) => u.reaction === CombatUnitReaction.Friendly,
+    );
+    const team = ownSide.length > 0 ? ownSide : players;
+    const events = buildDampeningEvents(team); // sorted event table, built once
+    const fallback = getInitialDampening(bracket, team, players);
     const out: Array<{ tS: number; pct: number }> = [];
     let idx = 0;
     let cur = fallback;

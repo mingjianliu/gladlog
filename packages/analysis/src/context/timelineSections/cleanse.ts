@@ -104,8 +104,13 @@ export function emitCleanseEntries(
     // fact1215 R11 (519781fd 1:36): a purge of ours on that enemy inside
     // the window took another buff — a purge was pressed there, the
     // removal is the game's pick
+    // — a Magic purge that could have taken this buff (both Magic purge
+    // targets, `purgeableOnTarget`): a Shiv on an Enrage is no such pick
+    // (codex 20-F15-33)
     const tookOther = dispelSummary.ourPurges.find(
       (p) =>
+        miss.purgeableOnTarget !== undefined &&
+        p.purgeableOnTarget !== undefined &&
         p.targetName === miss.enemyName &&
         p.removedSpellId !== miss.spellId &&
         p.timeSeconds >= miss.timeSeconds &&

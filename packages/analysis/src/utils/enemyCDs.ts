@@ -626,14 +626,18 @@ export function reconstructEnemyCDTimeline(
       // stack (FT-T13 D11); it is what `dampeningPct` carries to anything
       // that prints it. The threat score needs a weight even there and takes
       // it from `dampeningForThreatWeight` (0 for such a round).
+      // the doses of the team the burst lands on — ours, when the caller
+      // passed it (fact1215 R11, codex 20-F15-32: the teams tick apart)
+      const dosesOf =
+        friendlies && friendlies.length > 0 ? friendlies : allPlayers;
       const dampening = computeDampening(
         windowStartAtMs,
         bracket,
-        allPlayers,
+        dosesOf,
         roster,
       );
       const dampeningMult = dampeningDangerMultiplier(
-        dampeningForThreatWeight(windowStartAtMs, bracket, allPlayers, roster),
+        dampeningForThreatWeight(windowStartAtMs, bracket, dosesOf, roster),
       );
 
       // Hoist window timestamps here so both the healer CC block and HP sampling share the same values

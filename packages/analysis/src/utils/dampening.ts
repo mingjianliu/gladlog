@@ -202,9 +202,12 @@ export function dampeningRulesOf(
 export function getInitialDampening(
   bracket: string,
   players: readonly ICombatUnit[],
+  /** the round's players, for the rules; `players` are the team whose doses
+   * are read (fact1215 R11) */
+  roster: readonly ICombatUnit[] = players,
 ): number | null {
   return initialDampeningOf(
-    dampeningRulesOf(bracket, players),
+    dampeningRulesOf(bracket, roster),
     buildDampeningEvents(players as ICombatUnit[]),
   );
 }
@@ -415,7 +418,7 @@ export function formatDampeningForContext(
   // capture) — the clause gives that first line and its second instead, and
   // no line before that second carries a number.
   const first =
-    dampeningRulesOf(bracket, players) === "2v2"
+    dampeningRulesOf(bracket, roster) === "2v2"
       ? firstLoggedDampening(players)
       : null;
   const firstAt = first

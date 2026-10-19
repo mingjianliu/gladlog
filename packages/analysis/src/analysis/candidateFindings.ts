@@ -3912,6 +3912,22 @@ function teamPlayEvents(
                   atS: (e.logLine.timestamp - combat.startTime) / 1000,
                   name: "Alter Time (return)",
                 })),
+              // fact1215 R11 (codex 20-F15-33): this unit's redirect saves
+              // — on no ledger — with whom they went to (none = itself)
+              redirects: ((f.spellCastEvents ?? []) as any[])
+                .filter(
+                  (e) =>
+                    e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+                    ENEMY_REDIRECT_SAVE_IDS.has(e.spellId),
+                )
+                .map((e) => ({
+                  atS: (e.logLine.timestamp - combat.startTime) / 1000,
+                  name: getEnglishSpellName(e.spellId, e.spellName),
+                  onUnitId:
+                    !e.destUnitId || /^0+$/.test(e.destUnitId)
+                      ? f.id
+                      : (e.destUnitId as string),
+                })),
               // fix 7: the press's own aura (cast or effect id) broken on
               // this unit before that application's REMOVED
               brokenAtS: (spellId: string, castS: number) => {
@@ -4323,7 +4339,7 @@ function teamPlayEvents(
             lookup: (dmg2s) => lookupBehaviorPrior(bracket, "healer", dmg2s),
             majorWalls: majorWallsOnFor(combat)(owner),
             dampeningAt: (tMs) =>
-              computeDampening(tMs, bracket, [...friends, ...enemies]),
+              computeDampening(tMs, bracket, friends, [...friends, ...enemies]),
           },
         ),
       );
@@ -4365,7 +4381,7 @@ function teamPlayEvents(
           {
             lookup: (dmg2s) => lookupBehaviorPrior(bracket, "dps", dmg2s),
             dampeningAt: (tMs) =>
-              computeDampening(tMs, bracket, [...friends, ...enemies]),
+              computeDampening(tMs, bracket, friends, [...friends, ...enemies]),
           },
         ),
       );

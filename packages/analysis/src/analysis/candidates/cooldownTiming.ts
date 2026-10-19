@@ -1766,6 +1766,11 @@ export function cdHoardedEvents(
      *  Time's return, 342247 (work order 2026-10-14b fix 7: 138e632d's mage
      *  snapped back from 33 % to 68 % at +0.1 s and the row did not say so). */
     returns?: ReadonlyArray<{ atS: number; name: string }>;
+    /** This unit's presses of the redirect saves (Roar of Sacrifice,
+     *  Intervene …), on no ledger: when, what, and whom they went to
+     *  (fact1215 R11, codex 20-F15-33). Stated, never credited, like the
+     *  ledger saves. */
+    redirects?: ReadonlyArray<{ atS: number; name: string; onUnitId: string }>;
     /** When the aura a press of `spellId` at `castS` put on this unit was
      *  broken (SPELL_AURA_BROKEN[_SPELL], seconds since round start), null
      *  when it was not (b12bfef4: a Greater Invisibility broken by a Moonfire
@@ -2295,6 +2300,14 @@ export function cdHoardedEvents(
               ...(l.returns ?? [])
                 .filter((r) => r.atS >= windowFromS && r.atS <= windowToS)
                 .map((r) => ({ at: r.atS, name: r.name, broken: null })),
+              ...(l.redirects ?? [])
+                .filter(
+                  (r) =>
+                    r.onUnitId === crisisUnit.id &&
+                    r.atS >= windowFromS &&
+                    r.atS <= windowToS,
+                )
+                .map((r) => ({ at: r.atS, name: r.name, broken: null })),
             ])
             .sort((a, b) => a.at - b.at)
             .map(
@@ -2325,9 +2338,17 @@ export function cdHoardedEvents(
         .join("; ");
       const teamAnswered = (teamLedgers ?? [])
         .filter((l) => l.unit.id !== crisisUnit.id && l.unit.id !== owner.id)
-        .flatMap((l) =>
-          pressedFor(l.cds, true).map((x) => ({ ...x, who: l.unit.name })),
-        )
+        .flatMap((l) => [
+          ...pressedFor(l.cds, true).map((x) => ({ ...x, who: l.unit.name })),
+          ...(l.redirects ?? [])
+            .filter(
+              (r) =>
+                r.onUnitId === crisisUnit.id &&
+                r.atS >= windowFromS &&
+                r.atS <= windowToS,
+            )
+            .map((r) => ({ at: r.atS, name: r.name, who: l.unit.name })),
+        ])
         .sort((a, b) => a.at - b.at)
         .map((x) => `${x.name} (${x.who}) ${off(x.at)}s`)
         .join("; ");

@@ -309,3 +309,21 @@ describe("checkDampeningStartConsistency — a derived start (2v2)", () => {
     ).toEqual([]);
   });
 });
+
+describe("checkDampeningStartConsistency — an enemy [DEATH] line reads the enemy team (fact1215 R11, codex 20-F15-32)", () => {
+  it("the enemy's first dose at 0:11 is not held to the owner's derived 41 % before 0:14", () => {
+    expect(
+      checkDampeningStartConsistency([
+        "DAMPENING (2v2): started at 41% (derived: one 1% step below the first logged stack, 42% at 0:14), ended at 44% at match end",
+        "0:12  [DEATH]  4(FMage) (Frost Mage — enemy) | dampening: 42%",
+      ]),
+    ).toEqual([]);
+    // a friendly line there still is
+    expect(
+      checkDampeningStartConsistency([
+        "DAMPENING (2v2): started at 41% (derived: one 1% step below the first logged stack, 42% at 0:14), ended at 44% at match end",
+        "0:12  [YOU] [CD]   Barkskin (self: 60% HP) | dampening: 42%",
+      ]),
+    ).toHaveLength(1);
+  });
+});

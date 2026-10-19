@@ -310,6 +310,8 @@ export function emitHealerCastGapFillerEntries(
       startTimeSeconds: number;
       lastTimeSeconds: number;
       count: number;
+      /** of `count`, the casts printed one by one (the death window) */
+      printed: number;
       targets: Set<string>;
     }
   >();
@@ -317,6 +319,8 @@ export function emitHealerCastGapFillerEntries(
     const f = spamFolds.get(displayName);
     if (!f) return;
     spamFolds.delete(displayName);
+    // every cast of it already has its own line: the fold adds nothing
+    if (f.printed === f.count) return;
     const target =
       f.targets.size === 1
         ? [...f.targets][0]
@@ -646,14 +650,26 @@ export function emitHealerCastGapFillerEntries(
         timeSeconds,
         `${fmtTime(timeSeconds)}  [YOU] [CAST]   ${displayName}${targetPart}${castTargetHpTag(e)}`,
       );
-      // … and the running fold still counts it, as the legend says
-      // (fact1215 R11, 09dda3c6 r3: 13 Penance casts, the fold said x10 and
-      // two printed per cast in the death window were in no count)
+      // … and a fold still counts it, as the legend says (fact1215 R11,
+      // 09dda3c6 r3: 13 Penance casts, the fold said x10 and two printed per
+      // cast in the death window were in no count) — the running one, or a
+      // new one from here when there is none (codex 20-F15-32: after a gap
+      // over 30 s three casts were in no count)
       const f = spamFolds.get(displayName);
       if (f && timeSeconds - f.lastTimeSeconds <= SPAM_FOLD_MAX_GAP_SECONDS) {
         f.count++;
+        f.printed++;
         f.lastTimeSeconds = timeSeconds;
         if (targetLabel) f.targets.add(targetLabel);
+      } else {
+        flushSpamFold(displayName);
+        spamFolds.set(displayName, {
+          startTimeSeconds: timeSeconds,
+          lastTimeSeconds: timeSeconds,
+          count: 1,
+          printed: 1,
+          targets: new Set(targetLabel ? [targetLabel] : []),
+        });
       }
       continue;
     }
@@ -685,6 +701,7 @@ export function emitHealerCastGapFillerEntries(
           startTimeSeconds: timeSeconds,
           lastTimeSeconds: timeSeconds,
           count: 1,
+          printed: 0,
           targets: new Set(targetLabel ? [targetLabel] : []),
         });
       }

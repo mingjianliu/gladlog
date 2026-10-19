@@ -1911,6 +1911,10 @@ const DAMPENING_FIRST_DROP_HEADER =
   /^DAMPENING \([^)]*\): first logged (\d+)% at (\d+):(\d{2}) \(a stack drop/;
 const DEATH_LINE = /^\d+:\d{2}\s+\[DEATH\]/;
 
+/** An enemy [DEATH] line's dampening is the ENEMY team's reading, not the
+ * owner's header (fact1215 R11, codex 20-F15-32: the teams tick apart). */
+const ENEMY_DEATH_DAMPENING_LINE = /\[DEATH\].*— enemy\)/;
+
 /**
  * One prompt states one dampening start, and says where it comes from
  * (FT-T13, D10 + D11).
@@ -1970,6 +1974,7 @@ export function checkDampeningStartConsistency(lines: string[]): string[] {
     .find((h) => h !== null);
   if (unstated) {
     lines.forEach((line, i) => {
+      if (ENEMY_DEATH_DAMPENING_LINE.test(line)) return;
       const s = secondOf(line);
       if (s === null || s >= unstated.untilS) return;
       const m = line.match(DAMPENING_NUMBER_ON_LINE);
@@ -2000,6 +2005,7 @@ export function checkDampeningStartConsistency(lines: string[]): string[] {
         `line ${h + 1}: DAMPENING 段首写 started at ${startPct}%,但它声称的推导是「第一次记录 ${firstPct}% 减一步 ${stepPct}%」(一步应为 ${DAMPENING_DOSE_PCT}%)—— ${l.trim().slice(0, 160)}`,
       );
     lines.forEach((line, i) => {
+      if (ENEMY_DEATH_DAMPENING_LINE.test(line)) return;
       const s = secondOf(line);
       if (s === null || s >= firstS) return;
       for (const m of line.matchAll(DAMPENING_VALUE_ON_LINE))
@@ -2026,6 +2032,7 @@ export function checkDampeningStartConsistency(lines: string[]): string[] {
     if (s !== null) firstDeathS = Math.min(firstDeathS, s);
   }
   lines.forEach((line, i) => {
+    if (ENEMY_DEATH_DAMPENING_LINE.test(line)) return;
     const s = secondOf(line);
     if (s === null || s >= firstDeathS || s < derivedUntilS) return;
     const m = line.match(DAMPENING_NOTE);
