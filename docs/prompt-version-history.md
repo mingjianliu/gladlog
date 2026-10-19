@@ -3546,7 +3546,14 @@ second (06aa443c: "Shroud active" for a pulse after the Shroud ran out).
 `[IMMUNE — X was up]` causes added; [CC AVOIDED?] lines move to the hit
 second, some credits drop (aura / mobility not up at the hit) and some
 appear. breakFactScan `immuneCauseConsumed` 100/105 → 0, `delayedAvoidAtHit`
-28/426 → 0.
+28/426 → 0. Folded in before push (codex 20-F15-21): a delayed control's
+[CC AVOIDED?] line stamps its cast — `(by X; cast m:ss)` — and
+checkCcAvoidedLandedConsistency anchors on that stamp (the producer's window
+is the cast's); each cast reads its own pulse (from its earliest landing to
+the caster's next cast of the spell); the aura reading skips dose rows,
+takes only its own source's rows, and reads a same-ms REMOVED with no line
+order as after the row. 605: 230 [CC AVOIDED?] lines gain the stamp, no
+other line and no candidate changes.
 v416 (2026-10-18, F15 batch 12 — fact1215 R9 + R10, facts only): (R10) a
 press the game refused inside two controls goes to the control of the
 mechanic its reason names (`CONTROL_REJECT_MECHANIC`, read off the 605
@@ -3562,7 +3569,16 @@ its own last tick, for missed-cleanse `ownerCastingS` and kick-priority's
 `youChannelling`. 605 files: no candidate added or removed; +310 `on its
 caster` ends (30 of them were `cause not logged`); `pressed during it`
 clauses −38 / +42; 18 menu facts (ownerCastingS up where Ray of Frost, Mind
-Flay: Insanity, Rapid Fire, Disintegrate … fell in the window).
+Flay: Insanity, Rapid Fire, Disintegrate … fell in the window). Folded in
+before push (codex 20-F15-24): a kick ends the channel only when it
+interrupted that channel (`extraSpellId`); a channel with no caster aura
+ends at its caster's next press of anything else; a refused press of a kit
+cooldown logged under a variant id (Stasis, Alter Time, Imprison, Stampeding
+Roar, Lay on Hands …) counts under the kit's printed name. 605: 4 menu facts
+(ownerCastingS 4.4 → 3.9 with a Mind Flay: Insanity tick past the next
+press; 0.8 s of Crackling Jade Lightning → none), 27 contexts (`pressed during it` −9 / +42
+and the clause's legend); no candidate added or removed; the two-way
+breakFactScan `refusedPressMechanic` 23 → 0.
 v417 (2026-10-18, F15 batch 13 — fact1215 C5, facts only): a wall aura with
 no press of it logged (not of the button, not of a cast whose effect it is —
 Vanish 1856 → 11327 now pairs) reads `[no press logged]` on its [ENEMY DEF]

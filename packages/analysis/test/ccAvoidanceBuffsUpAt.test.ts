@@ -201,3 +201,128 @@ describe("[CC AVOIDED?] — a delayed control is read at the instant it hit (R6,
     expect(run({}).map((a) => a.atSeconds)).toEqual([10]);
   });
 });
+
+describe("ccAvoidanceBuffsUpAt — one application's own rows (codex 20-F15-21)", () => {
+  const dose = (event: LogEvent, atMs: number, line: number) =>
+    aura(event, SHROUD, atMs, line);
+  it("a dose change neither opens nor closes it: up until its own REMOVED", () => {
+    for (const ev of [
+      LogEvent.SPELL_AURA_REMOVED_DOSE,
+      LogEvent.SPELL_AURA_APPLIED_DOSE,
+    ]) {
+      const u = unit([
+        aura(LogEvent.SPELL_AURA_APPLIED, SHROUD, 0, 1),
+        dose(ev, 5000, 2),
+        aura(LogEvent.SPELL_AURA_REMOVED, SHROUD, 10_000, 3),
+      ]);
+      expect(ccAvoidanceBuffsUpAt(u, T0 + 4000).map((b) => b.spellId), ev).toEqual([SHROUD]);
+      expect(ccAvoidanceBuffsUpAt(u, T0 + 6000).map((b) => b.spellId), ev).toEqual([SHROUD]);
+      expect(ccAvoidanceBuffsUpAt(u, T0 + 10_500), ev).toEqual([]);
+    }
+  });
+  it("another source's REMOVED of the id is not this application's end, now or later", () => {
+    const other = (event: LogEvent, atMs: number, line: number) => ({
+      ...aura(event, SHROUD, atMs, line),
+      srcUnitId: "Q",
+    });
+    // closes nothing now: up inside its 3 s
+    expect(
+      ccAvoidanceBuffsUpAt(
+        unit([
+          aura(LogEvent.SPELL_AURA_APPLIED, SHROUD, 0, 1),
+          other(LogEvent.SPELL_AURA_REMOVED, 1000, 2),
+        ]),
+        T0 + 2000,
+      ).map((b) => b.spellId),
+    ).toEqual([SHROUD]);
+    // and does not hold it open past its 3 s either
+    expect(
+      ccAvoidanceBuffsUpAt(
+        unit([
+          aura(LogEvent.SPELL_AURA_APPLIED, SHROUD, 0, 1),
+          other(LogEvent.SPELL_AURA_REMOVED, 10_000, 2),
+        ]),
+        T0 + 5000,
+      ),
+    ).toEqual([]);
+  });
+  it("without line indexes, a REMOVED in the judged ms is read as after the row (the interval endpoint)", () => {
+    const bare = (event: LogEvent, atMs: number) => {
+      const a = aura(event, SHROUD, atMs, 0);
+      delete a.logLine.lineIndex;
+      return a;
+    };
+    const u = unit([
+      bare(LogEvent.SPELL_AURA_APPLIED, 9000),
+      bare(LogEvent.SPELL_AURA_REMOVED, 10_000),
+    ]);
+    expect(
+      ccAvoidanceBuffsUpAt(u, T0 + 10_000).map((b) => b.spellId),
+    ).toEqual([SHROUD]);
+    expect(
+      ccAvoidanceBuffsUpAt(u, T0 + 10_000, { atLine: 5 }).map((b) => b.spellId),
+    ).toEqual([SHROUD]);
+    expect(ccAvoidanceBuffsUpAt(u, T0 + 10_001)).toEqual([]);
+  });
+});
+
+describe("[CC AVOIDED?] — each delayed cast reads its own pulse (codex 20-F15-21)", () => {
+  it("totems at 10 s and 12 s, pulses at 12 s and 14 s, Shroud to 13 s: only the first is credited", () => {
+    const cast = (atMs: number) =>
+      makeSpellCastEvent(
+        CAPACITOR_TOTEM,
+        T0 + atMs,
+        "0000000000000000",
+        "nil",
+        "enemy-1",
+        "Shaman",
+        0,
+        getEnglishSpellName(CAPACITOR_TOTEM),
+      );
+    const enemy = makeUnit("enemy-1", {
+      name: "Shaman",
+      spec: CombatUnitSpec.Shaman_Enhancement,
+      reaction: CombatUnitReaction.Hostile,
+      spellCastEvents: [cast(10_000), cast(12_000)],
+    });
+    const totem = makeUnit("totem-1", { name: "Totem", ownerId: "enemy-1" });
+    const own = (event: LogEvent, atMs: number, line: number) => ({
+      ...aura(event, SHROUD, atMs, line),
+      srcUnitId: "player-1",
+      destUnitId: "player-1",
+    });
+    const player = makeUnit("player-1", {
+      name: "Player",
+      spec: CombatUnitSpec.Evoker_Preservation,
+      reaction: CombatUnitReaction.Friendly,
+      auraEvents: [
+        own(LogEvent.SPELL_AURA_APPLIED, 9000, 1),
+        own(LogEvent.SPELL_AURA_REMOVED, 13_000, 600),
+      ],
+    });
+    const pulse = (atMs: number, line: number) => ({
+      ...aura(LogEvent.SPELL_AURA_APPLIED, STATIC_CHARGE, atMs, line),
+      srcUnitId: "totem-1",
+      destUnitId: "mate-1",
+    });
+    const mate = makeUnit("mate-1", {
+      name: "Mate",
+      auraEvents: [pulse(12_000, 500), pulse(14_000, 700)],
+    });
+    const combat = {
+      startTime: T0,
+      endTime: T0 + 60_000,
+      startInfo: { zoneId: "1672" },
+      units: {
+        [player.id]: player,
+        [enemy.id]: enemy,
+        [totem.id]: totem,
+        [mate.id]: mate,
+      },
+    };
+    const out = analyzePlayerCCAndTrinket(player, [enemy], combat as never, [
+      totem,
+    ]).ccAvoidedInstances;
+    expect(out.map((a) => a.castAtSeconds)).toEqual([10]);
+  });
+});

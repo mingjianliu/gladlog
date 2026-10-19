@@ -66,6 +66,25 @@ describe("R10 — a refused press goes to the control its reason names", () => {
     const out = run([press(71.1, "You are not in control of your actions")]);
     expect(out.get(stun as any)?.[0]?.count).toBe(1);
   });
+  it("a press logged under a variant id of a kit cooldown counts under the kit's name (605 b34: refused presses of Stasis, Alter Time, Stampeding Roar … missing from the clause)", () => {
+    const out = ownerPressesRejectedDuring(
+      [
+        { unitGuid: "O", spellId: "106898", spellName: "Stampeding Roar", tSeconds: 71, reason: "Can't do that while stunned" },
+        { unitGuid: "O", spellId: "77764", spellName: "Stampeding Roar", tSeconds: 71.5, reason: "Can't do that while stunned" },
+        // a button outside the kit is still not listed
+        { unitGuid: "O", spellId: "8936", spellName: "Regrowth", tSeconds: 72, reason: "Can't do that while stunned" },
+      ] as any,
+      "O",
+      new Map([["77764", "Stampeding Roar"]]),
+      "control",
+      [stun],
+      (w) => ({ fromSeconds: w.from, toSeconds: w.to }),
+      (w) => w.mech,
+    );
+    expect(out.get(stun as any)).toEqual([
+      { spellId: "106898", spellName: "Stampeding Roar", count: 2, firstSeconds: 71 },
+    ]);
+  });
 });
 
 describe("R9 — a channel with no aura on its caster", () => {
@@ -120,6 +139,25 @@ describe("R9 — a channel with no aura on its caster", () => {
   it("no tick and no kick: nothing guessed", () => {
     expect(tickEndedChannelSpans(mage({ damageOut: [] }))).toEqual([]);
   });
+  it("a tick after the caster's next press of another spell is no channelling (codex 20-F15-24, 0284fcd9 r3)", () => {
+    // Missiles 0 s, Arcane Barrage 1.378 s, a Missiles hit landing at 1.95 s
+    const m = mage({
+      damageOut: [0.4, 0.8, 1.2, 1.95].map((s) => ({
+        spellId: "7268",
+        spellName: "Arcane Missiles",
+        srcUnitId: "M",
+        timestamp: T0 + s * 1000,
+        logLine: { event: "SPELL_DAMAGE", timestamp: T0 + s * 1000 },
+      })),
+    });
+    m.spellCastEvents.push({
+      spellId: "44425",
+      spellName: "Arcane Barrage",
+      timestamp: T0 + 1378,
+      logLine: { event: LogEvent.SPELL_CAST_SUCCESS, timestamp: T0 + 1378 },
+    });
+    expect(tickEndedChannelSpans(m)[0]?.endMs).toBe(T0 + 1200);
+  });
 });
 
 describe("R9 — a channelled control ended by a kick on its caster", () => {
@@ -157,6 +195,30 @@ describe("R9 — a channelled control ended by a kick on its caster", () => {
     expect(formatCcLoggedEnd(end, (n) => n)).toBe(
       " | ended by Bheenom's Spell Lock on its caster",
     );
+    // a kick of another spell the caster started is not this channel's end
+    // (codex 20-F15-24: Counterspell on the priest's Flash Heal)
+    const flash = {
+      actionIn: [
+        { ...priest.actionIn[0], extraSpellId: "2061" },
+      ],
+    } as any;
+    expect(
+      ccEndedByCasterInterrupt(
+        holder,
+        { spellId: MC, atSeconds: 2.175, durationSeconds: 0.206, sourceId: "P" },
+        T0,
+        flash,
+      ),
+    ).toBeUndefined();
+    // … and one naming the channel is
+    expect(
+      ccEndedByCasterInterrupt(
+        holder,
+        { spellId: MC, atSeconds: 2.175, durationSeconds: 0.206, sourceId: "P" },
+        T0,
+        { actionIn: [{ ...priest.actionIn[0], extraSpellId: MC }] } as any,
+      ),
+    ).toMatchObject({ kind: "casterInterrupted" });
     // no kick on the caster: no cause
     expect(
       ccEndedByCasterInterrupt(

@@ -2064,6 +2064,7 @@ const CC_AVOIDED_LINE =
   /^\s*(\d+):(\d{2})\s+\[CC AVOIDED\?\]\s+(\S+): (.+?) \(by /;
 const CC_ON_TEAM_LINE =
   /^\s*(\d+):(\d{2})\s+\[CC ON TEAM\]\s+(\S+) ← (.+?) \(by /;
+const CC_AVOIDED_CAST_STAMP = /\(by [^;)]*(?:\([^)]*\)[^;)]*)*; cast (\d+):(\d{2})\)/;
 
 /**
  * `[CC AVOIDED?] … did not land` ⟺ no landed `[CC ON TEAM]` line (30th
@@ -2099,7 +2100,13 @@ export function checkCcAvoidedLandedConsistency(lines: string[]): string[] {
   lines.forEach((line, i) => {
     const m = line.match(CC_AVOIDED_LINE);
     if (!m) return;
-    const at = Number(m[1]) * 60 + Number(m[2]);
+    // the producer's window is the cast's: a delayed control's line prints
+    // its hit second and stamps the cast inside `(by …; cast m:ss)`
+    // (`ccAvoidedCastTag`, codex 20-F15-21)
+    const c = line.match(CC_AVOIDED_CAST_STAMP);
+    const at = c
+      ? Number(c[1]) * 60 + Number(c[2])
+      : Number(m[1]) * 60 + Number(m[2]);
     const { beforeMs, afterMs } = ccLandedMatchWindowMs(m[4]!);
     const twin = (landed.get(`${m[3]}\u0000${m[4]}`) ?? []).find((t) => {
       const d = t - at;

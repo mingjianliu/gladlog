@@ -20,6 +20,7 @@
  * `NOT_READY_REASONS`, 72–78 % of all refused presses, key repeat for the most
  * part) and any reason outside the table below.
  */
+import { getEnglishSpellName } from "../data/spellEffectData";
 import { cdIsProcOnly } from "../utils/cooldowns";
 import type { CastFailedEvent } from "../utils/rawStreams";
 
@@ -368,11 +369,23 @@ export function ownerPressesRejectedDuring<W>(
       return { w, fromMs: ms(span.fromSeconds), toMs: ms(span.toSeconds) };
     })
     .sort((a, b) => a.fromMs - b.fromMs);
+  // a kit cooldown by its id, else by the name the press prints: a refused
+  // press logs the button's own id, which for a variant is not the ledger's
+  // (Stasis, Alter Time, Imprison, Stampeding Roar, Lay on Hands … — 23
+  // lines short on the 605 capture, by refusedPressMechanic's two-way read)
+  const byName = new Set(kit.values());
+  const kitNameOf = (h: CastFailedEvent): string | undefined => {
+    const id = String(h.spellId);
+    const own = kit.get(id);
+    if (own !== undefined) return own;
+    const name = getEnglishSpellName(id, h.spellName);
+    return byName.has(name) ? name : undefined;
+  };
   const hits = castFailed
     .filter(
       (h) =>
         h.unitGuid === ownerId &&
-        kit.has(String(h.spellId)) &&
+        kitNameOf(h) !== undefined &&
         KIND_OF.get(h.reason) === kind,
     )
     .sort((a, b) => a.tSeconds - b.tSeconds);
@@ -386,7 +399,7 @@ export function ownerPressesRejectedDuring<W>(
         : undefined) ?? holding[0];
     if (!held) continue;
     const id = String(h.spellId);
-    const spellName = kit.get(id)!;
+    const spellName = kitNameOf(h)!;
     const list = out.get(held.w) ?? [];
     // by the printed name: two kit ids that print one name are one item (the
     // gate reads names)

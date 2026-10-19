@@ -8,7 +8,7 @@ import {
 } from "@gladlog/parser-compat";
 
 import { BACKLASH_AURA_CC_TYPE } from "../data/backlashCc";
-import { castAndEffectIds } from "../data/castEffectAuras";
+import { castAndEffectIds, castsOfEffectAura } from "../data/castEffectAuras";
 import {
   AURA_KEYED_BREAK_RACIALS,
   breakRemovesCc,
@@ -323,13 +323,18 @@ export function ccAvoidanceBuffsUpAt(
   const nameOf = (id: string): string | undefined =>
     CC_AVOIDANCE_BUFF_SPELLS.get(id) ??
     (opts.withForms ? DRUID_FORM_BUFFS.get(id) : undefined);
-  const up = new Map<string, ICcAvoidanceBuffUp & { untilMs: number }>();
+  const rows = unit.auraEvents ?? [];
+  const up = new Map<
+    string,
+    ICcAvoidanceBuffUp & { untilMs: number; srcId: string }
+  >();
   const open = (
     id: string,
     name: string,
     srcName: string,
     fromMs: number,
     caster: ICombatUnit | undefined,
+    srcId = "",
   ) => {
     const s = buffFullDurationForCaster(id, caster, fromMs);
     up.delete(id);
@@ -343,8 +348,20 @@ export function ccAvoidanceBuffsUpAt(
       spellId: id,
       name,
       srcName,
+      srcId,
       untilMs: s === undefined ? Infinity : fromMs + s * 1000,
     });
+  };
+  /** a row of THIS application's source (or one written with none) */
+  const ofOpen = (a: (typeof rows)[number]): boolean => {
+    const o = a.spellId ? up.get(a.spellId) : undefined;
+    return (
+      !!o &&
+      (!o.srcId ||
+        !a.srcUnitId ||
+        a.srcUnitId === "0000000000000000" ||
+        a.srcUnitId === o.srcId)
+    );
   };
   if (opts.logStartMs !== undefined && unit.info?.interestingAurasJSON) {
     try {
@@ -359,7 +376,6 @@ export function ccAvoidanceBuffsUpAt(
       // unreadable start list: nothing up at the start
     }
   }
-  const rows = unit.auraEvents ?? [];
   let k = 0;
   for (; k < rows.length; k++) {
     const a = rows[k]!;
@@ -385,19 +401,43 @@ export function ccAvoidanceBuffsUpAt(
         a.srcUnitName ?? "",
         a.timestamp,
         opts.casterOf?.(a.srcUnitId),
+        a.srcUnitId ?? "",
       );
-    else if (ev === LogEvent.SPELL_AURA_REMOVED) up.delete(id);
+    else if (ev === LogEvent.SPELL_AURA_REMOVED && ofOpen(a)) {
+      // a REMOVED in the judged row's own ms whose order the log does not
+      // give (no line indexes) is read as after it — the aura was up at
+      // that instant, as the interval reading always had it (codex
+      // 20-F15-21: an archive without line indexes lost the consumed
+      // Shroud)
+      const orderUnknown =
+        a.timestamp === atMs &&
+        (opts.atLine === undefined || a.logLine.lineIndex === undefined);
+      if (!orderUnknown) up.delete(id);
+    }
   }
   // the cap is for an application the log never closes: one whose own
-  // REMOVED comes later held until it, whatever its official length
+  // REMOVED comes later held until it, whatever its official length. Read
+  // off this application's own rows (its source, or none) and only the rows
+  // that open or close it — a dose change is neither (codex 20-F15-21)
   const closedLater = new Set<string>();
   const seenLater = new Set<string>();
   for (; k < rows.length; k++) {
     const a = rows[k]!;
     if (!a.spellId || !up.has(a.spellId) || seenLater.has(a.spellId)) continue;
-    seenLater.add(a.spellId);
-    if ((a.logLine.event as string) === LogEvent.SPELL_AURA_REMOVED)
+    if (!ofOpen(a)) continue;
+    const ev = a.logLine.event as string;
+    if (
+      ev === LogEvent.SPELL_AURA_REMOVED ||
+      ev === LogEvent.SPELL_AURA_BROKEN ||
+      ev === LogEvent.SPELL_AURA_BROKEN_SPELL
+    ) {
+      seenLater.add(a.spellId);
       closedLater.add(a.spellId);
+    } else if (
+      ev === LogEvent.SPELL_AURA_APPLIED ||
+      ev === LogEvent.SPELL_AURA_REFRESH
+    )
+      seenLater.add(a.spellId);
   }
   return [...up.values()]
     .filter((b) => closedLater.has(b.spellId) || atMs <= b.untilMs)
@@ -640,11 +680,19 @@ export function channelStopAtRemoval(
   removeMs: number,
 ): ICombatUnit["actionIn"][number] | undefined {
   if (!caster || !CHANNELED_SPELL_IDS.has(spellId)) return undefined;
+  // the kick stopped THIS channel: its interrupted spell is the control's
+  // own id or a cast whose effect the control is (Lightning Lasso 305483 →
+  // 305485); a row that names none is read as before (codex 20-F15-24: a
+  // Counterspell on the priest's Flash Heal 5 ms after Mind Control ended
+  // was named as its end)
+  const channelIds = new Set([spellId, ...castsOfEffectAura(spellId)]);
   return (caster.actionIn ?? []).find(
     (a) =>
       (a.logLine?.event as string) === LogEvent.SPELL_INTERRUPT &&
       a.timestamp >= removeMs - CHANNEL_STOP_LEAD_MS &&
-      a.timestamp <= removeMs + PRESS_ENDED_CC_LAG_MS,
+      a.timestamp <= removeMs + PRESS_ENDED_CC_LAG_MS &&
+      ((a as { extraSpellId?: string }).extraSpellId === undefined ||
+        channelIds.has((a as { extraSpellId?: string }).extraSpellId!)),
   );
 }
 
@@ -1474,6 +1522,25 @@ export function ccAvoidedOutcomeText(
   return avoided.loggedMissType
     ? `logged ${avoided.loggedMissType}`
     : "did not land";
+}
+
+/**
+ * `; cast m:ss` inside a `[CC AVOIDED?]` line's `(by …)` when the line's
+ * second (the instant the control would have hit) is not the cast's — a
+ * Capacitor Totem / Sigil / Ring of Frost resolves seconds after its press
+ * (R6). The landing window the producer matched against is the cast's, so
+ * the gate (`promptQualityCheck.checkCcAvoidedLandedConsistency`) anchors on
+ * this stamp when the line has one (codex 20-F15-21: anchored on the hit
+ * second it reported a landing the producer had rightly left to another
+ * cast).
+ */
+export function ccAvoidedCastTag(
+  avoided: Pick<ICCAvoidedInstance, "atSeconds" | "castAtSeconds">,
+): string {
+  const cast = avoided.castAtSeconds;
+  return cast !== undefined && fmtTime(cast) !== fmtTime(avoided.atSeconds)
+    ? `; cast ${fmtTime(cast)}`
+    : "";
 }
 
 /** The spacing, in seconds, of the two samples a unit's position at `ms` is
@@ -4294,8 +4361,23 @@ export function analyzePlayerCCAndTrinket(
       srcId === enemy.id ||
       srcId === cast.srcUnitId ||
       enemyPets.some((p) => p.id === srcId && p.ownerId === enemy.id);
-    const fromMs = cast.logLine.timestamp;
-    const toMs = fromMs + landing.toS * 1000;
+    // this cast's own pulse: not before it can land (`fromS`), and not past
+    // the caster's next cast of the spell — that pulse is the next cast's
+    // (codex 20-F15-21: totems at 10 s and 12 s both read the 12 s pulse)
+    const castMs = cast.logLine.timestamp;
+    const nextSameMs = [
+      ...enemy.spellCastEvents,
+      ...(enemy.petSpellCastEvents ?? []),
+    ]
+      .filter(
+        (e) =>
+          e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+          e.spellId === cast.spellId &&
+          e.logLine.timestamp > castMs,
+      )
+      .reduce((m, e) => Math.min(m, e.logLine.timestamp), Infinity);
+    const fromMs = castMs + landing.fromS * 1000;
+    const toMs = Math.min(castMs + landing.toS * 1000, nextSameMs - 1);
     let first: { ms: number; line: number | undefined } | undefined;
     for (const u of unitsById.values())
       for (const r of [

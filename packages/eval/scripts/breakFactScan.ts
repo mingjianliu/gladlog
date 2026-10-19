@@ -43,13 +43,15 @@
  *    avoidance aura (`CC_AVOIDANCE_BUFF_SPELLS`) applied on that player
  *    before it is REMOVED in the miss's own millisecond, logged after the
  *    miss row (the miss consumed it — Nullifying Shroud). Every `[CC NOT
- *    LANDED]` line of that player at that second that says `logged IMMUNE`
- *    must name a cause (`was up)`).
+ *    LANDED]` line of that player at that second, of that caster, that says
+ *    `logged IMMUNE` must name a cause (`was up)`).
  *  - `delayedAvoidAtHit` (R6): an enemy's Capacitor Totem / Sigil of Misery
  *    cast whose effect wrote a miss row on one of our players from the
  *    caster or its summon inside the control's landing window, in a later
- *    second than the cast. No `[CC AVOIDED?]` line of that player and spell
- *    may sit at the CAST second (the avoidance is read at the hit).
+ *    second than the cast. No unstamped `[CC AVOIDED?]` line of that player,
+ *    spell and caster may sit at the CAST second (the avoidance is read at
+ *    the hit; a line there stamped `; cast m:ss` is an earlier cast's), unless
+ *    another cast's miss renders in that second.
  *  - `casterKickEnd` (R9, 2026-10-18): a channelled control
  *    (`CHANNELED_SPELL_IDS`) on a player whose REMOVED sits within −50…+10 ms
  *    of a SPELL_INTERRUPT on its caster. The control's line (landing second,
@@ -58,8 +60,14 @@
  *    (SPELL_CAST_FAILED, raw stream, `control` reasons) re-assigned to the
  *    controls that have a `[CC ON TEAM]` line — the earliest-started one of
  *    the mechanic the reason names (`CONTROL_REJECT_MECHANIC` ×
- *    `ccMechanicOf`), else the earliest-started; every `pressed during it:`
- *    count must equal the re-assignment's.
+ *    `ccMechanicOf`), else the earliest-started — one control per spell and
+ *    source, split at a REFRESH its source cast for (`ccRecastBetween`); the
+ *    log owner's presses of their printed kit only. Every line's `pressed
+ *    during it:` clause must list exactly the re-assignment's counts, a
+ *    missing clause included.
+ *  - `casterKickEnd` also requires the line to say `… on its caster`,
+ *    crediting the kicker, and counts only a kick of that channel
+ *    (`extraSpellId` the control or a cast whose effect it is).
  *
  *   npx tsx packages/eval/scripts/breakFactScan.ts <captureDir>
  *     [--examples N] [--archive-dir <dir>]
@@ -73,14 +81,17 @@ import {
   CONTROL_REJECT_MECHANIC,
   CONTROL_REJECT_REASONS,
 } from "@gladlog/analysis/src/context/controlRejectedPresses";
+import { castsOfEffectAura } from "@gladlog/analysis/src/data/castEffectAuras";
 import { CHANNELED_SPELL_IDS } from "@gladlog/analysis/src/data/channeledGenerated";
 import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData";
 import {
   ccSpellIds,
   disarmSpellIds,
 } from "@gladlog/analysis/src/data/spellTags";
+import { dropAuraRebroadcasts } from "@gladlog/analysis/src/utils/auraIntervals";
 import { isSilenceOnlyAura } from "@gladlog/analysis/src/utils/cannotCastIntervals";
 import { CC_AVOIDANCE_BUFF_SPELLS } from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
+import { ccRecastBetween } from "@gladlog/analysis/src/utils/drAnalysis";
 import {
   parseRawStreamsAbsolute,
   type RawStreamsAbsolute,
@@ -219,6 +230,15 @@ for (const f of files) {
     const o = ownerId ? byId.get(ownerId) : undefined;
     const op = o && pidOf.get(o.name);
     return !!op && !op.enemy;
+  };
+  // the roster id a `(by …)` label starts with: the unit's own, else its
+  // owner's (`N(Spec)'s pet`)
+  const labelPidOf = (id: string | undefined): string | undefined => {
+    const u = id ? byId.get(id) : undefined;
+    const p = u && pidOf.get(u.name);
+    if (p) return p.pid;
+    const o = u?.ownerId ? byId.get(u.ownerId) : undefined;
+    return (o && pidOf.get(o.name))?.pid;
   };
   const start = legacy.startTime;
   // a Solo Shuffle round ends at its ending death; a press after it breaks
@@ -409,10 +429,14 @@ for (const f of files) {
       if (!consumed) continue;
       const t = at(ts);
       const ccName = getEnglishSpellName(m.spellId, m.spellName);
+      // this miss's own line: its caster too (codex 20-F15-21: another
+      // mage's DR-immune Polymorph in the same second is not "was up")
+      const by = labelPidOf(m.srcUnitId);
+      if (!by) continue;
       const notLanded = lines.filter(
         (l) =>
           l.startsWith(`${t}  [CC NOT LANDED]   ${me.pid}(`) &&
-          l.includes(`← ${ccName} (`) &&
+          l.includes(`← ${ccName} (by ${by}(`) &&
           l.includes("logged IMMUNE"),
       );
       if (notLanded.length === 0) continue;
@@ -449,13 +473,34 @@ for (const f of files) {
         const tc = at(cts);
         const tm = at(miss.timestamp);
         if (tc === tm) continue;
+        // another cast of the spell by this caster whose own miss on this
+        // player renders in second tc owns a line there (codex 20-F15-21)
+        const otherHitsAtTc = ((e.spellCastEvents ?? []) as ISpellEvent[]).some(
+          (o) =>
+            o !== c &&
+            o.spellId === c.spellId &&
+            o.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+            ((p.missesIn ?? []) as IMissEvent[]).some(
+              (x) =>
+                x !== miss &&
+                (x.spellId === d.effect || x.spellId === c.spellId) &&
+                x.timestamp >= o.logLine.timestamp &&
+                x.timestamp <= o.logLine.timestamp + d.toMs &&
+                at(x.timestamp) === tc,
+            ),
+        );
+        if (otherHitsAtTc) continue;
         bump("delayedAvoidAtHit");
         const name = getEnglishSpellName(c.spellId, c.spellName);
+        // a line at the cast second for this caster that carries no cast
+        // stamp claims the hit there; a stamped one is an earlier cast's
+        // delayed hit
         if (
           lines.some(
             (l) =>
               l.startsWith(`${tc}  [CC AVOIDED?]   ${me.pid}(`) &&
-              l.includes(`: ${name} (`),
+              l.includes(`: ${name} (by ${caster.pid}(`) &&
+              !/; cast \d+:\d{2}\)/.test(l),
           )
         )
           fail("delayedAvoidAtHit", `${where} ${tc} → ${tm} ${p.name} ${name}`);
@@ -475,13 +520,19 @@ for (const f of files) {
       const rms = r.logLine.timestamp;
       if (rms < start || rms > roundEnd) continue;
       const caster = byId.get(r.srcUnitId);
-      const kicked = ((caster?.actionIn ?? []) as ISpellEvent[]).some(
+      // the kick of THIS channel: its interrupted spell is the control or a
+      // cast whose effect it is (codex 20-F15-24: a Counterspell on the
+      // priest's Flash Heal is no end of Mind Control)
+      const channelIds = new Set([r.spellId, ...castsOfEffectAura(r.spellId)]);
+      const kick = ((caster?.actionIn ?? []) as ISpellEvent[]).find(
         (a) =>
           a.logLine?.event === LogEvent.SPELL_INTERRUPT &&
           a.timestamp >= rms - 50 &&
-          a.timestamp <= rms + 10,
+          a.timestamp <= rms + 10 &&
+          (a.extraSpellId === undefined || channelIds.has(a.extraSpellId)),
       );
-      if (!kicked) continue;
+      if (!kick) continue;
+      const kicker = labelPidOf(kick.srcUnitId);
       const applied = [...auras]
         .reverse()
         .find(
@@ -501,7 +552,12 @@ for (const f of files) {
       );
       if (ccLines.length === 0) continue;
       bump("casterKickEnd");
-      if (ccLines.some((l) => l.includes("ended early — cause not logged")))
+      // the line must SAY it (codex 20-F15-24: a bare line with the clause
+      // dropped passed), crediting the kicker
+      const says = (l: string) =>
+        l.includes(" on its caster") &&
+        (!kicker || l.includes(`| ended by ${kicker}(`));
+      if (!ccLines.every(says))
         fail("casterKickEnd", `${where} ${t} ${u.name} ${name}`);
     }
   }
@@ -511,9 +567,8 @@ for (const f of files) {
   // reason, inside the player's controls that have a [CC ON TEAM] line, goes
   // to the earliest-started one of the mechanic its reason names
   // (`CONTROL_REJECT_MECHANIC` × `ccMechanicOf`), else the earliest-started.
-  // Each line's `pressed during it:` count of a name must equal that
-  // re-assignment's count (names the clause does not list are not judged —
-  // the kit is the producer's).
+  // Only the log owner's presses of their printed `<cooldowns>` kit; each of
+  // the owner's lines must list exactly the re-assignment's counts.
   const raw = cacheRaw as RawStreamsAbsolute | null;
   if (raw?.available) {
     const failed = rawStreamsForRound(
@@ -521,20 +576,37 @@ for (const f of files) {
       start,
       (legacy.endTime - start) / 1000,
     ).castFailed;
+    // the log owner's kit as the prompt prints it (`<cooldowns>`, minus the
+    // passive entries): the only presses the clause may list, and the only
+    // unit whose lines carry it
+    const ownerRow = lines.findIndex((l) =>
+      /<unit id="\d+" name="[^"]+"[^>]*role="log owner"/.test(l),
+    );
+    const ownerName = /name="([^"]+)"/.exec(lines[ownerRow] ?? "")?.[1];
+    const kit = new Set(
+      (/<cooldowns>(.*)<\/cooldowns>/.exec(lines[ownerRow + 1] ?? "")?.[1] ?? "")
+        // an entry ends at its last `[…]` tag; a name may hold a comma
+        // (`Invoke Chi-Ji, the Red Crane`)
+        .split(/(?<=\]), /)
+        .filter((c) => !c.includes("[PASSIVE]"))
+        .map((c) => c.replace(/ \[.*$/, "")),
+    );
     for (const u of units) {
       const me = pidOf.get(u.name);
-      if (!me || me.enemy) continue;
+      if (!me || me.enemy || u.name !== ownerName) continue;
       const presses = failed.filter(
-        (x) => x.unitGuid === u.id && CONTROL_REASONS.has(x.reason),
+        (x) =>
+          x.unitGuid === u.id &&
+          CONTROL_REASONS.has(x.reason) &&
+          kit.has(getEnglishSpellName(String(x.spellId), x.spellName)),
       );
-      if (presses.length === 0) continue;
       const wins: Array<{
         id: string;
         from: number;
         to: number;
         line: string;
       }> = [];
-      const open = new Map<string, number>();
+      const open = new Map<string, { id: string; src: string; from: number }>();
       // one aura the game re-broadcast (REMOVED and APPLIED of one spell in
       // one ms) is one control, as the [CC ON TEAM] line reads it
       const own = ((u.auraEvents ?? []) as IAuraEvent[]).filter(
@@ -543,41 +615,51 @@ for (const f of files) {
           ccSpellIds.has(a.spellId) &&
           (!a.destUnitId || a.destUnitId === u.id),
       );
-      const rebroadcast = new Set<IAuraEvent>();
-      for (const r of own)
-        if (r.logLine.event === LogEvent.SPELL_AURA_REMOVED) {
-          const re = own.find(
-            (x) =>
-              x !== r &&
-              x.spellId === r.spellId &&
-              x.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
-              x.logLine.timestamp === r.logLine.timestamp,
-          );
-          if (re) {
-            rebroadcast.add(r);
-            rebroadcast.add(re);
-          }
-        }
-      for (const a of own) {
-        if (rebroadcast.has(a) || !a.spellId) continue;
+      // a REMOVED then APPLIED the game re-sent is one control, as the
+      // [CC ON TEAM] line reads it (the producer's own filter)
+      const kept = dropAuraRebroadcasts(own);
+      const close = (key: string, to: number) => {
+        const o = open.get(key)!;
+        open.delete(key);
+        const line = lines.find(
+          (l) =>
+            l.startsWith(`${at(o.from)}  [CC ON TEAM]   ${me.pid}(`) &&
+            l.includes(`← ${getEnglishSpellName(o.id)} `),
+        );
+        // cut at the round's end, as the line is (`still on them when the
+        // round ended`)
+        if (line)
+          wins.push({ id: o.id, from: o.from, to: Math.min(to, roundEnd), line });
+      };
+      // one control per spell and source, as the producer keys it; a
+      // REFRESH its source cast for is a new control (ruling A51 — codex
+      // 20-F15-24: Polymorph recast at 6 s over one from 3 s is two lines)
+      for (const a of kept) {
+        if (!a.spellId) continue;
+        const key = `${a.spellId}:${a.srcUnitId}`;
+        const ts = a.logLine.timestamp;
         if (a.logLine.event === LogEvent.SPELL_AURA_APPLIED) {
-          if (!open.has(a.spellId)) open.set(a.spellId, a.logLine.timestamp);
+          if (!open.has(key))
+            open.set(key, { id: a.spellId, src: a.srcUnitId, from: ts });
+        } else if (
+          a.logLine.event === LogEvent.SPELL_AURA_REFRESH &&
+          open.has(key)
+        ) {
+          const src = byId.get(a.srcUnitId);
+          const owner = src?.ownerId ? byId.get(src.ownerId) : undefined;
+          if (
+            ccRecastBetween([src, owner], a.spellId, u.id, open.get(key)!.from, ts)
+          ) {
+            close(key, ts);
+            open.set(key, { id: a.spellId, src: a.srcUnitId, from: ts });
+          }
         } else if (
           (a.logLine.event === LogEvent.SPELL_AURA_REMOVED ||
             a.logLine.event === LogEvent.SPELL_AURA_BROKEN ||
             a.logLine.event === LogEvent.SPELL_AURA_BROKEN_SPELL) &&
-          open.has(a.spellId)
-        ) {
-          const from = open.get(a.spellId)!;
-          open.delete(a.spellId);
-          const line = lines.find(
-            (l) =>
-              l.startsWith(`${at(from)}  [CC ON TEAM]   ${me.pid}(`) &&
-              l.includes(`← ${getEnglishSpellName(a.spellId!)} `),
-          );
-          if (line)
-            wins.push({ id: a.spellId, from, to: a.logLine.timestamp, line });
-        }
+          open.has(key)
+        )
+          close(key, ts);
       }
       if (wins.length === 0) continue;
       wins.sort((a, b) => a.from - b.from);
@@ -596,22 +678,31 @@ for (const f of files) {
         m.set(name, (m.get(name) ?? 0) + 1);
         counts.set(w.line, m);
       }
-      for (const w of wins) {
-        const k = w.line.indexOf(" | pressed during it: ");
-        if (k < 0) continue;
+      // both ways (codex 20-F15-24): every listed count is the re-read's,
+      // and every re-read press is listed — a line whose clause went missing
+      // fails
+      for (const w of new Set(wins.map((x) => x.line))) {
+        const k = w.indexOf(" | pressed during it: ");
+        const listed = new Map<string, number>();
+        if (k >= 0)
+          for (const it of w
+            .slice(k + " | pressed during it: ".length)
+            .matchAll(/(.+?) ×(\d+)(?:, |$)/g))
+            listed.set(it[1]!, Number(it[2]));
+        const want = counts.get(w) ?? new Map<string, number>();
+        if (listed.size === 0 && want.size === 0) continue;
         bump("refusedPressMechanic");
-        const listed = w.line.slice(k + " | pressed during it: ".length);
         const bad: string[] = [];
-        for (const it of listed.matchAll(/(.+?) ×(\d+)(?:, |$)/g)) {
-          const name = it[1]!;
-          const n = Number(it[2]);
-          const got = counts.get(w.line)?.get(name) ?? 0;
+        for (const name of new Set([...listed.keys(), ...want.keys()])) {
+          const n = listed.get(name) ?? 0;
+          const got = want.get(name) ?? 0;
           if (got !== n) bad.push(`${name} ×${n} (re-read ×${got})`);
         }
+        const wid = wins.find((x) => x.line === w)!;
         if (bad.length > 0)
           fail(
             "refusedPressMechanic",
-            `${where} ${at(w.from)} ${u.name} ${getEnglishSpellName(w.id)}: ${bad.join("; ")}`,
+            `${where} ${at(wid.from)} ${u.name} ${getEnglishSpellName(wid.id)}: ${bad.join("; ")}`,
           );
       }
     }

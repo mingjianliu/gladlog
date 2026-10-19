@@ -201,7 +201,8 @@ export function channelSpans(
  *    from the caster with the channel's English name (the tick's id is not
  *    the cast's, its name is).
  * Read inside the cast's official length (`buffFullDurationForCaster`) and
- * before the caster's next press of the same spell. With neither, or no
+ * before the caster's next press — of the same spell, or of anything else
+ * (a SUCCESS or a cast start). With neither, or no
  * official length, nothing is guessed. A lower bound like `channelSpans`:
  * the last tick is not later than the channel's end.
  *
@@ -248,9 +249,21 @@ export function tickEndedChannelSpans(
     );
     if (fullS === undefined || !(fullS > 0)) continue;
     const nextSame = casts.slice(i + 1).find((n) => n.spellId === c.spellId);
+    // the caster's next press of anything else ends the channel: a tick that
+    // lands after it is no channelling (codex 20-F15-24: 0284fcd9 r3,
+    // Arcane Missiles 163.491, Arcane Barrage 164.869, a Missiles hit at
+    // 165.441 read as 572 ms more channelling)
+    const nextOther = [
+      ...(unit.spellCastEvents ?? []),
+      ...((unit as { castStartEvents?: typeof unit.spellCastEvents })
+        .castStartEvents ?? []),
+    ]
+      .filter((e) => e.spellId !== c.spellId && e.timestamp > c.timestamp)
+      .reduce((m, e) => Math.min(m, e.timestamp), Infinity);
     const capMs = Math.min(
       c.timestamp + fullS * 1000,
       nextSame?.timestamp ?? Infinity,
+      nextOther,
     );
     const kick = (unit.actionIn ?? []).find(
       (a) =>

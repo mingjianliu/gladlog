@@ -24,6 +24,7 @@ import {
 import type { CastBarEnd } from "@gladlog/analysis/src/utils/castCancels";
 import { CONTROL_FAILED_MISS_TYPES } from "@gladlog/analysis/src/utils/castMissRows";
 import {
+  ccAvoidedCastTag,
   ccAvoidedOutcomeText,
   ccLandedMatchWindowMs,
 } from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
@@ -1777,6 +1778,29 @@ describe("checkCcAvoidedLandedConsistency — a CC that landed cannot also have 
         "6:58  [CC ON TEAM]   1(PEvoker) ← Hex (by 6(RShaman)) | 3s",
       ]),
     ).toEqual([]);
+  });
+
+  it("anchors on the cast stamp a delayed line carries, not its hit second (codex 20-F15-21)", () => {
+    // Ring of Frost cast at 0:10 misses at 0:18 while Shroud is up; another
+    // ring lands at 0:21 — past the first cast's 10.5 s window
+    const line = `0:18  [CC AVOIDED?]   1(PEvoker): Ring of Frost (by 6(FMage)${ccAvoidedCastTag({ atSeconds: 18.4, castAtSeconds: 10.2 })}) did not land; Nullifying Shroud (own) active`;
+    expect(line).toContain("(by 6(FMage); cast 0:10)");
+    const landed21 =
+      "0:21  [CC ON TEAM]   1(PEvoker) ← Ring of Frost (by 6(FMage)) | 3s";
+    expect(checkCcAvoidedLandedConsistency([line, landed21])).toEqual([]);
+    // the same landing inside the cast's window is still a contradiction
+    expect(
+      checkCcAvoidedLandedConsistency([
+        line,
+        "0:15  [CC ON TEAM]   1(PEvoker) ← Ring of Frost (by 6(FMage)) | 3s",
+      ]),
+    ).toHaveLength(1);
+    // a pet caster's label keeps the stamp readable
+    const pet = line.replace("(by 6(FMage);", "(by 6(FMage)'s pet;");
+    expect(checkCcAvoidedLandedConsistency([pet, landed21])).toEqual([]);
+    // no stamp when the cast and the hit share a rendered second
+    expect(ccAvoidedCastTag({ atSeconds: 18.9, castAtSeconds: 18.1 })).toBe("");
+    expect(ccAvoidedCastTag({ atSeconds: 18.9 })).toBe("");
   });
 
   it("reads the `logged <TYPE>` form the same way (FT-T16 D15 3c)", () => {
