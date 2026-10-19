@@ -91,13 +91,19 @@ export function scopedMissedPurgeInstances(
   friends: ReadonlyArray<Parameters<typeof missedPurgesFor>[0]>,
   scopedWindows: IMissedPurgeWindow[],
   range?: TimeRange | null,
+  /** the round's units, for a warlock's pet (the prompt's reading) */
+  units?: Parameters<typeof missedPurgesFor>[2],
 ): DispelInstance[] {
   const out: DispelInstance[] = [];
   for (const f of friends) {
-    const mine = missedPurgesFor(f, {
-      missedPurgeWindows: [],
-      scopedMissedPurgeWindows: scopedWindows,
-    });
+    const mine = missedPurgesFor(
+      f,
+      {
+        missedPurgeWindows: [],
+        scopedMissedPurgeWindows: scopedWindows,
+      },
+      units,
+    );
     for (const w of mine) {
       if (!w.viaScopedTool || !tInRange(w.timeSeconds, range)) continue;
       const why = missedPurgeNotActionable(w);
@@ -235,6 +241,7 @@ export function deriveDispelDash(
         friends,
         ours.scopedMissedPurgeWindows ?? [],
         range,
+        Object.values(legacy.units),
       ),
     );
     missedPurges.sort((a, b) => a.tS - b.tS);

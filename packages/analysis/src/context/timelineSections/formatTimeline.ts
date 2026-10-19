@@ -617,7 +617,7 @@ export function formatTimeline(
     // F-C2 (triage res-readiness): the cast ordinal has its own notation
     ...(enemyCdRender.ordinalRendered
       ? [
-          "  `(cast k of N)` on [ENEMY CD] / [ENEMY HEAL CD] = the k-th of N casts of that spell this round (not charges).",
+          "  `(cast k of N)` on [ENEMY CD] / [ENEMY HEAL CD] / [ENEMY UTILITY] = the k-th of N casts of that spell this round (not charges).",
         ]
       : []),
     // FT-T06: an effect a talent triggers is not a cast

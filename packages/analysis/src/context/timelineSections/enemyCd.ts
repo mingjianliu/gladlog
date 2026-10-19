@@ -10,6 +10,7 @@
  */
 import { type ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
+import { castAndEffectIds } from "../../data/castEffectAuras";
 import { classMetadata } from "../../data/classSpells";
 import { ENEMY_HEAL_CD_IDS } from "../../data/enemyHealCds";
 import { getEnglishSpellName } from "../../data/spellEffectData";
@@ -17,7 +18,11 @@ import { SpellTag } from "../../data/spellTypes";
 import { AURA_REBROADCAST_GAP_MS } from "../../utils/auraIntervals";
 import { isFormReshiftCast } from "../../utils/castPress";
 import { specToString } from "../../utils/cooldowns";
-import { enemyDefSpeaksForPress } from "../../utils/enemyDefensives";
+import {
+  AURA_BEFORE_CAST_MAX_S,
+  enemyDefSpeaksForPress,
+  PRESS_TO_AURA_MAX_S,
+} from "../../utils/enemyDefensives";
 import { fmtTime } from "../../utils/renderGrid";
 import { OFFENSIVE_CD_SPELL_IDS } from "../../utils/spellDanger";
 import type { TimelineCtx } from "./ctx";
@@ -156,6 +161,7 @@ export function emitEnemyCdEntries(
     | "enemyPid"
     | "enemies"
     | "matchStartMs"
+    | "matchEndSeconds"
   >,
 ): {
   ordinalRendered: boolean;
@@ -274,18 +280,33 @@ export function emitEnemyCdEntries(
         (ab) =>
           ab.tags.includes(SpellTag.Utility) &&
           !ENEMY_HEAL_CD_IDS.has(ab.spellId) &&
-          !OFFENSIVE_CD_SPELL_IDS.has(ab.spellId) &&
-          !enemyDefSpeaksForPress(ab.spellId),
+          !OFFENSIVE_CD_SPELL_IDS.has(ab.spellId),
       );
     if (!rows || rows.length === 0) continue;
     const ids = new Set(rows.map((ab) => ab.spellId));
+    /** [ENEMY DEF] speaks for THIS press: its spell is one of that family's
+     * and its effect aura went up with it (codex 20-F15-30: a Vanish whose
+     * aura the log never wrote had neither line) */
+    const defSpeaksFor = (c: (typeof enemy.spellCastEvents)[number]) =>
+      enemyDefSpeaksForPress(c.spellId) &&
+      (enemy.auraEvents ?? []).some(
+        (a) =>
+          !!a.spellId &&
+          castAndEffectIds(c.spellId).has(a.spellId) &&
+          a.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
+          a.timestamp >= c.logLine.timestamp - AURA_BEFORE_CAST_MAX_S * 1000 &&
+          a.timestamp <= c.logLine.timestamp + PRESS_TO_AURA_MAX_S * 1000,
+      );
+    // inside the timeline's span only, so the ordinal counts what prints
+    // (codex 20-F15-30: a pre-gate press printed `-1:-2` and shifted `cast
+    // k of N`)
     const casts = (enemy.spellCastEvents ?? [])
-      .filter(
-        (c) =>
-          c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
-          !!c.spellId &&
-          ids.has(c.spellId),
-      )
+      .filter((c) => {
+        if (c.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) return false;
+        if (!c.spellId || !ids.has(c.spellId)) return false;
+        const t = (c.logLine.timestamp - ctx.matchStartMs) / 1000;
+        return t >= 0 && t <= ctx.matchEndSeconds && !defSpeaksFor(c);
+      })
       .sort((a, b) => a.logLine.timestamp - b.logLine.timestamp);
     const totalBy = new Map<string, number>();
     for (const c of casts)
@@ -297,11 +318,13 @@ export function emitEnemyCdEntries(
       const ordinal = castOrdinal(seq, totalBy.get(c.spellId) ?? 1);
       if (ordinal) ordinalRendered = true;
       const t = (c.logLine.timestamp - ctx.matchStartMs) / 1000;
-      utilityRendered = true;
-      addEntry(
-        t,
-        `${fmtTime(t)}  ${ENEMY_UTILITY_TAG}   ${enemyPid(enemy.name)} (${specToString(enemy.spec)}): ${getEnglishSpellName(c.spellId, c.spellName)}${ordinal}`,
-      );
+      if (
+        addEntry(
+          t,
+          `${fmtTime(t)}  ${ENEMY_UTILITY_TAG}   ${enemyPid(enemy.name)} (${specToString(enemy.spec)}): ${getEnglishSpellName(c.spellId, c.spellName)}${ordinal}`,
+        )
+      )
+        utilityRendered = true;
     }
   }
   return { ordinalRendered, healCdRendered, procRendered, utilityRendered };

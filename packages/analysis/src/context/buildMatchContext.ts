@@ -579,7 +579,7 @@ export function buildMatchContext(
   // Shiv's enrage scope is not stated (ruling P-P5b-land, 2026-10-02: it
   // never carries a line, so the clause was noise in every Rogue header).
   const scopedPurgeNote = (p: ICombatUnit): string =>
-    scopedPurgeToolsOf(p)
+    scopedPurgeToolsOf(p, allUnitsForPets)
       .filter((t) => t.scope !== "enrage")
       .map((t) => `${t.name}: ${t.note}`)
       .join("; ");

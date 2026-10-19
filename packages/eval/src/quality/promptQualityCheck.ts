@@ -2132,43 +2132,60 @@ export function checkCcAvoidedLandedConsistency(lines: string[]): string[] {
  */
 export function checkWarlockPurgeFollowsPet(lines: string[]): string[] {
   const failures: string[] = [];
-  const ownerName = lines
-    .map((l) => /<unit id="\d+" name="([^"]+)"[^>]*role="log owner"/.exec(l))
-    .find(Boolean)?.[1];
   const team = lines.find((l) => /^\s*My team: /.test(l));
   if (!team) return failures;
-  const locks = [
-    ...team.matchAll(
-      /((?:Affliction|Demonology|Destruction) Warlock) \(([^)]+)\)( \[pet: [^\]]*\])?/g,
-    ),
-  ].map((m) => ({
-    spec: m[1]!,
-    name: m[2]!,
-    purges: m[3] === undefined ? undefined : m[3].includes("Devour Magic"),
-  }));
+  // the warlocks by the roster's own names (`<unit … name="…" spec="…
+  // Warlock" role="…">`): a name may hold parentheses (codex 20-F15-29:
+  // `Me (EU)-R` broke a pattern that stopped at the first `)`)
+  const locks: Array<{
+    spec: string;
+    name: string;
+    owner: boolean;
+    purges: boolean | undefined;
+  }> = [];
+  for (const l of lines) {
+    const u =
+      /<unit id="\d+" name="([^"]+)" spec="((?:Affliction|Demonology|Destruction) Warlock)" role="([^"]+)"/.exec(
+        l,
+      );
+    if (!u || u[3] === "enemy") continue;
+    const at = team.indexOf(`${u[2]} (${u[1]})`);
+    if (at < 0) continue;
+    const after = team.slice(at + `${u[2]} (${u[1]})`.length);
+    const pet = /^ \[pet: ([^\]]*)\]/.exec(after);
+    locks.push({
+      spec: u[2]!,
+      name: u[1]!,
+      owner: u[3] === "log owner",
+      purges: pet ? pet[1]!.includes("Devour Magic") : undefined,
+    });
+  }
   lines.forEach((line, i) => {
-    const own = /^\s*Log owner \(([^)]+ Warlock)\): CAN offensive purge/.exec(
-      line,
-    );
-    if (own) {
-      const me = locks.find((w) => w.name === ownerName);
+    if (/^\s*Log owner \([^)]+ Warlock\): CAN offensive purge/.test(line)) {
+      const me = locks.find((w) => w.owner);
       if (me && me.purges === false)
         failures.push(
           `line ${i + 1}: 日志主人术士的宠物标签没有 Devour Magic,却写 CAN offensive purge —— ${line.trim().slice(0, 140)}`,
         );
     }
     const tp = /^\s*Team purgers: (.+)$/.exec(line);
-    if (tp)
-      for (const spec of tp[1]!.split(", ")) {
-        if (!/ Warlock$/.test(spec)) continue;
-        const mates = locks.filter(
-          (w) => w.spec === spec && w.name !== ownerName,
+    if (!tp) return;
+    // each listed warlock spec needs its own capable (or untagged) teammate
+    // of that spec — one capable warlock does not vouch for two entries
+    // (codex 20-F15-29)
+    const listed = new Map<string, number>();
+    for (const spec of tp[1]!.split(", "))
+      if (/ Warlock$/.test(spec))
+        listed.set(spec, (listed.get(spec) ?? 0) + 1);
+    for (const [spec, n] of listed) {
+      const mates = locks.filter((w) => w.spec === spec && !w.owner);
+      if (mates.length === 0) continue;
+      const able = mates.filter((w) => w.purges !== false).length;
+      if (n > able)
+        failures.push(
+          `line ${i + 1}: Team purgers 列了 ${n} 个 ${spec},但该专精能驱散(或未标宠物)的队友术士只有 ${able} 个 —— ${line.trim().slice(0, 140)}`,
         );
-        if (mates.length > 0 && mates.every((w) => w.purges === false))
-          failures.push(
-            `line ${i + 1}: Team purgers 列了 ${spec},但该专精队友术士的宠物标签都没有 Devour Magic —— ${line.trim().slice(0, 140)}`,
-          );
-      }
+    }
   });
   return failures;
 }
@@ -4414,7 +4431,7 @@ function windowsAcrossOwnLines(
  * `(absorb, 2.0s` / `(absorb 494k, 3.5s` — with its length, or the
  * official-length cap the producer cut at when the end was never logged. */
 const ENEMY_DEF_OWN_SAVE_LABEL = new RegExp(
-  String.raw`^\((?:immune(?: to [a-z]+(?:\/[a-z]+)*)?|absorb(?: [\d.]+k)?), (?:${ENEMY_DEF_END_NOT_LOGGED}|(\d+(?:\.\d+)?)s)`,
+  String.raw`^\((?:immune(?: to [a-z]+(?:\/[a-z]+)*)?|absorb(?: (?:<1k|\d+k))?), (?:${ENEMY_DEF_END_NOT_LOGGED}|(\d+(?:\.\d+)?)s)`,
 );
 
 /**

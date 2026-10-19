@@ -1188,8 +1188,12 @@ export function missedCleanseEvents(
     /** WO3 #11: the owner's ledger rows WITH the spec-baseline ones — the
      * `[RES]` reading (`cdAvailableAt`) for `ownerSelfRemoval`. */
     ownerCds?: readonly IMajorCooldownInfo[];
+    /** the round's units, for a warlock's pet (`canRemoveFrom` →
+     * `canOffensivePurge`; codex 20-F15-29) */
+    roundUnits?: readonly ICombatUnit[];
   },
 ): CandidateEvent[] {
+  const roundUnitsForPurge = extra?.roundUnits;
   return windows
     .filter(
       (w) =>
@@ -1209,7 +1213,13 @@ export function missedCleanseEvents(
         !w.dispellersLockedOut &&
         w.losReachable !== false &&
         // Owner capability gate: solo shuffle has nobody to hand this off to.
-        (canRemoveFrom(owner, w.dispelType, w.targetCharmed, w.targetName) ||
+        (canRemoveFrom(
+          owner,
+          w.dispelType,
+          w.targetCharmed,
+          w.targetName,
+          roundUnitsForPurge,
+        ) ||
           !isShuffle),
     )
     .sort((a, b) => b.postCcDamage - a.postCcDamage)
@@ -1220,6 +1230,7 @@ export function missedCleanseEvents(
         w.dispelType,
         w.targetCharmed,
         w.targetName,
+        roundUnitsForPurge,
       );
       // F-C11 (A43 = B): one occupancy predicate — hard casts, a channel
       // shown only as a self-aura, drinking — for the owner and for the
@@ -1240,7 +1251,13 @@ export function missedCleanseEvents(
       const eligible = friends.filter(
         (f) =>
           f.id !== owner.id &&
-          canRemoveFrom(f, w.dispelType, w.targetCharmed, w.targetName) &&
+          canRemoveFrom(
+            f,
+            w.dispelType,
+            w.targetCharmed,
+            w.targetName,
+            roundUnitsForPurge,
+          ) &&
           (occupancy?.matchStartMs === undefined ||
             !((f.deathRecords ?? []) as any[]).some(
               (d) => d.timestamp <= winFrom,
@@ -3469,7 +3486,11 @@ function teamPlayEvents(
                 : undefined,
             }
           : undefined,
-        { rootReach: rootReachFor(combat), ownerCds: ownerCdsWithBaseline },
+        {
+          rootReach: rootReachFor(combat),
+          ownerCds: ownerCdsWithBaseline,
+          roundUnits: Object.values(combat.units ?? {}) as ICombatUnit[],
+        },
       ),
     );
     if (CANDIDATE_TYPE_FLAGS.missedPurge) {

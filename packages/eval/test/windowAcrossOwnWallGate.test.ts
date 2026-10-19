@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { ensureAnalysisData } from "@gladlog/analysis";
 import { emitEnemyDefEntries } from "@gladlog/analysis/src/context/timelineSections/enemyDef";
+import { enemySaveEffectNote } from "@gladlog/analysis/src/utils/enemyDefensives";
 import {
   buildDpsKillWindowLines,
   createKillWindowFactsComputer,
@@ -324,6 +325,19 @@ describe("checkNoWindowAcrossOwnSave", () => {
         own("2:30", "Cloak of Shadows (immune to magic, 5.0s)"),
       ]),
     ).toHaveLength(1);
+    // the producer's `<1k` amount and `end not logged` (codex 20-F15-31)
+    for (const label of [
+      `Anti-Magic Shell (${enemySaveEffectNote("absorb", 100, "3.5s")})`,
+      `Anti-Magic Shell (${enemySaveEffectNote("absorb", 494_000, "end not logged")})`,
+    ])
+      expect(
+        checkNoWindowAcrossOwnSave([
+          ...ROSTER,
+          vulnerable("1:35–2:51"),
+          own("2:04", label),
+        ]),
+        label,
+      ).toHaveLength(1);
   });
   it("passes: the cut spans; a heal, a rewind, an external and another unit's save", () => {
     expect(

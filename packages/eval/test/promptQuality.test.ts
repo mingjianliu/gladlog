@@ -1819,6 +1819,7 @@ describe("checkCcAvoidedLandedConsistency — a CC that landed cannot also have 
 describe("checkWarlockPurgeFollowsPet — the purge header follows the warlock's pet (fact1215 C10)", () => {
   const prompt = (owner: string, purgers: string, pet: string) => [
     `  <unit id="1" name="Me-R" spec="Affliction Warlock" role="log owner">`,
+    `  <unit id="2" name="Mate-R" spec="Destruction Warlock" role="teammate">`,
     `  My team: Affliction Warlock (Me-R)${pet}, Destruction Warlock (Mate-R) [pet: Sayaad — Seduction (disorient)], Holy Paladin (Pal-R)`,
     `  Log owner (Affliction Warlock): ${owner}`,
     `  Team purgers: ${purgers}`,
@@ -1845,6 +1846,30 @@ describe("checkWarlockPurgeFollowsPet — the purge header follows the warlock's
     ).toEqual([]);
     expect(
       checkWarlockPurgeFollowsPet(prompt("CAN offensive purge", "none", "")),
+    ).toEqual([]);
+  });
+  it("a name with parentheses, and one capable warlock listed twice (codex 20-F15-29)", () => {
+    expect(
+      checkWarlockPurgeFollowsPet([
+        `  <unit id="1" name="Me (EU)-R" spec="Affliction Warlock" role="log owner">`,
+        `  My team: Affliction Warlock (Me (EU)-R) [pet: Sayaad — Seduction (disorient)], Holy Paladin (Pal-R)`,
+        `  Log owner (Affliction Warlock): CAN offensive purge`,
+      ]),
+    ).toHaveLength(1);
+    const two = [
+      `  <unit id="1" name="Pri-R" spec="Holy Priest" role="log owner">`,
+      `  <unit id="2" name="A-R" spec="Affliction Warlock" role="teammate">`,
+      `  <unit id="3" name="B-R" spec="Affliction Warlock" role="teammate">`,
+      `  My team: Holy Priest (Pri-R), Affliction Warlock (A-R) [pet: Felhunter — Spell Lock (kick), Devour Magic (purge)], Affliction Warlock (B-R) [pet: Sayaad — Seduction (disorient)]`,
+    ];
+    expect(
+      checkWarlockPurgeFollowsPet([
+        ...two,
+        `  Team purgers: Affliction Warlock, Affliction Warlock`,
+      ]),
+    ).toHaveLength(1);
+    expect(
+      checkWarlockPurgeFollowsPet([...two, `  Team purgers: Affliction Warlock`]),
     ).toEqual([]);
   });
 });

@@ -252,7 +252,7 @@ function extractCombatStats(
     }
 
     // ── 5. Purge rate ─────────────────────────────────────────────────────
-    if (canOffensivePurge(unit)) {
+    if (canOffensivePurge(unit, allUnits)) {
       const enemyIds = new Set(enemies.map((e) => e.id));
       const purgeCount = unit.actionOut.filter(
         (a) =>

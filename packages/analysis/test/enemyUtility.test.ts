@@ -37,6 +37,7 @@ const run = (enemies: unknown[]) => {
     },
     enemyPid: (n: string) => `5(${n})`,
     matchStartMs: T0,
+    matchEndSeconds: 3600,
     enemies: enemies as never,
   });
   return { lines, out };
@@ -72,7 +73,12 @@ describe("[ENEMY UTILITY]", () => {
     ]);
     expect(out.utilityRendered).toBe(true);
   });
-  it("Vanish and Lichborne keep their [ENEMY DEF] line and get no utility line", () => {
+  const auraAt = (spellId: string, s: number) => ({
+    spellId,
+    timestamp: T0 + s * 1000,
+    logLine: { event: LogEvent.SPELL_AURA_APPLIED, timestamp: T0 + s * 1000 },
+  });
+  it("Vanish and Lichborne whose aura went up keep their [ENEMY DEF] line and get no utility line", () => {
     expect(enemyDefSpeaksForPress("1856")).toBe(true);
     expect(enemyDefSpeaksForPress("49039")).toBe(true);
     expect(enemyDefSpeaksForPress("376079")).toBe(false);
@@ -82,15 +88,43 @@ describe("[ENEMY UTILITY]", () => {
         class: CombatUnitClass.Rogue,
         spec: CombatUnitSpec.Rogue_Subtlety,
         spellCastEvents: [cast("1856", 10)],
+        auraEvents: [auraAt("11327", 10.004)],
       },
       {
         name: "Dk",
         class: CombatUnitClass.DeathKnight,
         spec: CombatUnitSpec.DeathKnight_Unholy,
         spellCastEvents: [cast("49039", 12)],
+        auraEvents: [auraAt("49039", 12)],
       },
     ]);
     expect(lines).toEqual([]);
     expect(out.utilityRendered).toBe(false);
+  });
+  it("a Vanish the log wrote no aura for has no [ENEMY DEF] line, so it gets this one (codex 20-F15-30)", () => {
+    const { lines } = run([
+      {
+        name: "Rog",
+        class: CombatUnitClass.Rogue,
+        spec: CombatUnitSpec.Rogue_Subtlety,
+        spellCastEvents: [cast("1856", 10)],
+        auraEvents: [],
+      },
+    ]);
+    expect(lines).toEqual(["0:10  [ENEMY UTILITY]   5(Rog) (Subtlety Rogue): Vanish"]);
+  });
+  it("a press before the gates or after the timeline's end neither prints nor counts (codex 20-F15-30)", () => {
+    const { lines, out } = run([
+      {
+        name: "War",
+        class: CombatUnitClass.Warrior,
+        spec: CombatUnitSpec.Warrior_Arms,
+        spellCastEvents: [cast("376079", -2), cast("376079", 40), cast("376079", 4000)],
+      },
+    ]);
+    expect(lines).toEqual([
+      "0:40  [ENEMY UTILITY]   5(War) (Arms Warrior): Champion's Spear",
+    ]);
+    expect(out.utilityRendered).toBe(true);
   });
 });

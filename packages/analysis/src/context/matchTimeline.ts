@@ -656,6 +656,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     cdPurgeAnnotations,
     consumedMissedPurges,
   } = foldMissedPurges({
+    allUnits,
     enemyPid,
     owner,
     dispelSummary,
@@ -680,6 +681,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
   // so the model can't collapse short-interval repeats of the same CD into one window.
 
   const enemyCdRender = emitEnemyCdEntries({
+    matchEndSeconds,
     enemyCDTimeline,
     cdPurgeAnnotations,
     addEntry,
@@ -891,6 +893,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
   // ── [UNCLEANSED DEBUFF] and [CLEANSE] events ──────────────────────────────────
 
   emitCleanseEntries({
+    allUnits,
     dispelSummary,
     owner,
     addEntry,
@@ -1009,6 +1012,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     friendlyDeathAtByName,
     enemyDeathAtByName,
   } = prepareStateInputs({
+    allUnits,
     friendlyDeaths,
     enemyDeaths,
     ownerCDs,

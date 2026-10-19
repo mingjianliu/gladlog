@@ -46,6 +46,7 @@ describe("G7-P3", () => {
       },
       enemyPid: (n: string) => `5(${n})`,
       matchStartMs: T0,
+      matchEndSeconds: 3600,
       enemies: [
         {
           name: "Misanthropy",
@@ -123,6 +124,7 @@ describe("G7-P3", () => {
       },
       enemyPid: (n: string) => `4(${n})`,
       matchStartMs: T0,
+      matchEndSeconds: 3600,
       enemies: [
         {
           name: "Dev",

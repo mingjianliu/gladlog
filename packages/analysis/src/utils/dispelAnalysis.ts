@@ -754,7 +754,11 @@ export function scopedToolReachYards(
  *    of their own → one Magic buff, enemies within its radius (the log has no
  *    race field, so an unpressed racial is not asserted).
  */
-export function scopedPurgeToolsOf(unit: ICombatUnit): IScopedPurgeTool[] {
+export function scopedPurgeToolsOf(
+  unit: ICombatUnit,
+  /** the round's units, for a warlock's pet (`canOffensivePurge`) */
+  units?: Iterable<ICombatUnit>,
+): IScopedPurgeTool[] {
   const tools: IScopedPurgeTool[] = [];
   const cast = unitCastSpellIds(unit);
   if (
@@ -777,7 +781,7 @@ export function scopedPurgeToolsOf(unit: ICombatUnit): IScopedPurgeTool[] {
       note: "enrage effects only",
       castSeconds: 0,
     });
-  if (!canOffensivePurge(unit)) {
+  if (!canOffensivePurge(unit, units)) {
     const torrent = [...cast].find(
       (id) => racialName(id) === ARCANE_TORRENT_NAME,
     );
@@ -1207,13 +1211,15 @@ export function canRemoveFrom(
   dispelType: DispelType,
   targetCharmed: boolean | undefined,
   targetName?: string,
+  /** the round's units, for a warlock's pet (`canOffensivePurge`) */
+  units?: Iterable<ICombatUnit>,
 ): boolean {
   // the charmed player is under enemy control: never their own dispeller
   // (509-1-3009: a Scouring-Flame Devastation Evoker "able to purge" the
   // Mind Control he was under)
   if (targetCharmed && unit.name === targetName) return false;
   return targetCharmed
-    ? dispelType === "Magic" && canOffensivePurge(unit)
+    ? dispelType === "Magic" && canOffensivePurge(unit, units)
     : canDefensiveCleanse(unit, dispelType);
 }
 
@@ -1570,8 +1576,11 @@ export function missedPurgesFor(
     IDispelSummary,
     "missedPurgeWindows" | "scopedMissedPurgeWindows"
   >,
+  /** the round's units, for a warlock's pet (`canOffensivePurge`; codex
+   * 20-F15-29: the header and this list read different pets) */
+  units?: Iterable<ICombatUnit>,
 ): IMissedPurgeWindow[] {
-  if (canOffensivePurge(unit)) return summary.missedPurgeWindows;
+  if (canOffensivePurge(unit, units)) return summary.missedPurgeWindows;
   return [
     ...summary.missedPurgeWindows,
     ...(summary.scopedMissedPurgeWindows ?? []),
@@ -3808,7 +3817,13 @@ export function reconstructDispelSummary(
   // scope covers, and only Shattering Throw answers at all
   // (`scopedToolAnswers`).
   const scopedHolders = friends
-    .map((unit) => ({ unit, tools: scopedPurgeToolsOf(unit) }))
+    .map((unit) => ({
+      unit,
+      tools: scopedPurgeToolsOf(
+        unit,
+        roundUnits.length > 0 ? roundUnits : undefined,
+      ),
+    }))
     .filter((h) => h.tools.length > 0);
   /** the scoped tool this holder would answer `spellId` with; like any purge
    *  with a cooldown it answers Critical buffs only (A19 = C) */

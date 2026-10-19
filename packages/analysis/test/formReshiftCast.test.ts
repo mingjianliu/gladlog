@@ -135,6 +135,7 @@ describe("[ENEMY HEAL CD] Incarnation: Tree of Life", () => {
       addEntry: ((_: number, line: string) => lines.push(line)) as never,
       enemyPid: () => "4(RDruid)",
       enemies: [u as never],
+      matchEndSeconds: 3600,
       matchStartMs: T0,
     });
     expect(lines).toEqual([

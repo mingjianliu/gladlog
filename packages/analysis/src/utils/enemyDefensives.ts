@@ -898,28 +898,37 @@ export function ownSaveSpanS(
 
 /**
  * fact1215 R7: an area save (kind "area", anchored on its cast — ruling A15)
- * cuts the span of a unit that CARRIES its aura: the cast's effect aura
- * (`effectAurasOfCast`: Rallying Cry 97462 → 97463, Spirit Link Totem 98008
- * → 325174) on `holder`, applied from just before the cast to
- * `SAVE_CAST_AURA_PAIR_S` after it, for as long as that aura was up
- * (1120cb61: Rallying Cry on the Death Knight 0:29.5–0:42.5 inside
- * `defenseless 0:29–0:55`). A save with no aura on the unit (Darkness, an
- * Anti-Magic Zone the log writes no aura for) cuts nothing here.
+ * cuts the span of a unit that CARRIES its aura: every interval of the cast's
+ * effect aura (`effectAurasOfCast`: Rallying Cry 97462 → 97463, Spirit Link
+ * Totem 98008 → 325174) on `holder`, applied by that caster or its summon
+ * (the totem) any time inside the save's lifetime — a unit that walks into
+ * Spirit Link late, or leaves and comes back, is covered for each visit
+ * (codex 20-F15-31) — for as long as each was up (1120cb61: Rallying Cry on
+ * the Death Knight 0:29.5–0:42.5 inside `defenseless 0:29–0:55`). Two
+ * warriors' Rallying Cries each read their own aura. A save with no aura on
+ * the unit (Darkness, an Anti-Magic Zone the log writes no aura for) cuts
+ * nothing here.
  */
-export function areaSaveSpanOnS(
-  d: Pick<IEnemyDefensiveEvent, "kind" | "spellId" | "atSeconds">,
+export function areaSaveSpansOnS(
+  d: Pick<IEnemyDefensiveEvent, "kind" | "spellId" | "atSeconds" | "casterId">,
   holderIntervals: readonly ISaveAuraInterval[],
-): { from: number; to: number } | undefined {
-  if (d.kind !== "area") return undefined;
+  /** is this aura source the save's caster or a summon of it */
+  fromCaster: (srcUnitId: string | undefined) => boolean,
+  lifetimeS: number,
+): Array<{ from: number; to: number }> {
+  if (d.kind !== "area") return [];
   const effects = new Set(effectAurasOfCast(d.spellId));
-  if (effects.size === 0) return undefined;
-  const iv = holderIntervals.find(
-    (x) =>
-      effects.has(x.spellId) &&
-      x.fromS >= d.atSeconds - 0.5 &&
-      x.fromS <= d.atSeconds + SAVE_CAST_AURA_PAIR_S,
-  );
-  return iv && iv.toS > iv.fromS ? { from: iv.fromS, to: iv.toS } : undefined;
+  if (effects.size === 0) return [];
+  return holderIntervals
+    .filter(
+      (x) =>
+        effects.has(x.spellId) &&
+        fromCaster(x.srcUnitId) &&
+        x.fromS >= d.atSeconds - 0.5 &&
+        x.fromS <= d.atSeconds + Math.max(lifetimeS, SAVE_CAST_AURA_PAIR_S) &&
+        x.toS > x.fromS,
+    )
+    .map((x) => ({ from: x.fromS, to: x.toS }));
 }
 
 /**

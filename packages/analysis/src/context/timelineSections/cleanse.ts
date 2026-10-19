@@ -34,6 +34,7 @@ export function emitCleanseEntries(
     | "enemyPid"
     | "enemies"
     | "matchStartMs"
+    | "allUnits"
   >,
 ): void {
   const {
@@ -57,6 +58,7 @@ export function emitCleanseEntries(
         miss.dispelType,
         miss.targetCharmed,
         miss.targetName,
+        ctx.allUnits,
       )
     )
       continue;

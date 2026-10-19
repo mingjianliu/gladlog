@@ -23,13 +23,14 @@ import {
   unitCooldownOf,
 } from "./cooldowns";
 import {
-  areaSaveSpanOnS,
+  areaSaveSpansOnS,
   enemyDefensiveEvents,
   type ISaveAuraInterval,
   isBelowWallFloorExternal,
   ownSaveSpanS,
   ownWallSpanS,
   renderedExternalSpanS,
+  SAVE_CAST_AURA_PAIR_S,
   saveAuraIntervals,
   wallTableIdOfAura,
 } from "./enemyDefensives";
@@ -447,8 +448,20 @@ export function computeOffensiveWindows(
       // F15 C1: a 15 % ally copy cuts no span, as a 15 % own aura does not
       if (isBelowWallFloorExternal(d)) continue;
       if (d.kind === "area") {
+        const lifetimeS =
+          buffFullDurationForCaster(d.spellId, caster, matchStartMs) ??
+          SAVE_CAST_AURA_PAIR_S;
+        const fromCaster = (src: string | undefined) =>
+          src === caster.id ||
+          (!!src && allUnits.some((u) => u.id === src && u.ownerId === caster.id));
         for (const holder of enemies)
-          addSave(holder.id, areaSaveSpanOnS(d, holderIntervals(holder)));
+          for (const span of areaSaveSpansOnS(
+            d,
+            holderIntervals(holder),
+            fromCaster,
+            lifetimeS,
+          ))
+            addSave(holder.id, span);
         continue;
       }
       const timed = timesCastOf(wallTableIdOfAura(d.spellId));

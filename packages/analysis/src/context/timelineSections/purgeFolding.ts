@@ -31,6 +31,7 @@ export function foldMissedPurges(
     | "owner"
     | "dispelSummary"
     | "enemyBuffIntervals"
+    | "allUnits"
     | "enemyCDTimeline"
   >,
 ) {
@@ -54,7 +55,7 @@ export function foldMissedPurges(
   // C: Shattering Throw) gets the ones that tool answers, with that tool's
   // cooldown and reach. An immunity shield is worth the line by
   // itself; everything else stays behind the high-value whitelist.
-  const qualifyingMissedPurges = missedPurgesFor(owner, dispelSummary).filter(
+  const qualifyingMissedPurges = missedPurgesFor(owner, dispelSummary, ctx.allUnits).filter(
     (m) =>
       HIGH_VALUE_PURGEABLE_BUFFS.has(m.spellId) ||
       m.viaScopedTool?.scope === "immunity",
@@ -103,7 +104,7 @@ export function foldMissedPurges(
 
       const purgeAnnotation = matchedMiss
         ? formatPurgeAnnotationWithMiss(matchedMiss)
-        : interval.purgeable && canOffensivePurge(owner)
+        : interval.purgeable && canOffensivePurge(owner, ctx.allUnits)
           ? " (purgeable)"
           : "";
 

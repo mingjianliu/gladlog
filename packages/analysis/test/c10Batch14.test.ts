@@ -13,7 +13,10 @@ import {
   CONTROL_EFFECT_MIN_HIT_SHARE,
   missReportsControl,
 } from "../src/utils/castMissRows";
-import { canOffensivePurge } from "../src/utils/dispelAnalysis";
+import {
+  canOffensivePurge,
+  missedPurgesFor,
+} from "../src/utils/dispelAnalysis";
 import { warlockRanPurgePet } from "../src/utils/warlockPet";
 import { makeSpellCastEvent, makeUnit } from "./ported/testHelpers";
 
@@ -65,6 +68,15 @@ describe("warlock purge follows the logged pet (1120cb61: a Sayaad warlock liste
     const sayaad = makeUnit("Pet-0-1-1-1-1863-03", { ownerId: u.id });
     expect(warlockRanPurgePet(u, [u, sayaad])).toBe(false);
     expect(canOffensivePurge(u, [u, sayaad])).toBe(false);
+  });
+  it("the missed-purge list reads the same pets as the header when given the round (codex 20-F15-29)", () => {
+    // a Sayaad that cast, then a Felhunter the log shows only as a unit
+    const u = lock([petCast("Pet-0-1-1-1-1863-01", "6358")]);
+    const felhunter = makeUnit("Pet-0-1-1-1-417-02", { ownerId: u.id });
+    const w = { timeSeconds: 10, spellId: "1022" } as any;
+    const summary = { missedPurgeWindows: [w], scopedMissedPurgeWindows: [] };
+    expect(canOffensivePurge(u, [u, felhunter])).toBe(true);
+    expect(missedPurgesFor(u, summary, [u, felhunter])).toEqual([w]);
   });
   it("no pet logged: nothing said, the talent reading stands", () => {
     expect(warlockRanPurgePet(lock([]))).toBeUndefined();

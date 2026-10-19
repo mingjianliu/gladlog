@@ -26,6 +26,7 @@ export function prepareStateInputs(
     | "ccTrinketSummaries"
     | "pressureWindows"
     | "dispelSummary"
+    | "allUnits"
     | "owner"
     | "outgoingCCChains"
     | "playerIdMap"
@@ -87,7 +88,13 @@ export function prepareStateInputs(
   }
   for (const miss of dispelSummary.missedCleanseWindows) {
     if (
-      canRemoveFrom(owner, miss.dispelType, miss.targetCharmed, miss.targetName)
+      canRemoveFrom(
+        owner,
+        miss.dispelType,
+        miss.targetCharmed,
+        miss.targetName,
+        ctx.allUnits,
+      )
     )
       keyMomentSeconds.add(Math.floor(miss.timeSeconds));
   }

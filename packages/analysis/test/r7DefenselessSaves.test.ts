@@ -9,7 +9,7 @@
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { ensureAnalysisData } from "../src/data/ensure";
-import { areaSaveSpanOnS, ownSaveSpanS } from "../src/utils/enemyDefensives";
+import { areaSaveSpansOnS, ownSaveSpanS } from "../src/utils/enemyDefensives";
 
 beforeAll(async () => {
   await ensureAnalysisData();
@@ -58,23 +58,47 @@ describe("ownSaveSpanS", () => {
   });
 });
 
-describe("areaSaveSpanOnS", () => {
+describe("areaSaveSpansOnS", () => {
   const rc = { kind: "area", spellId: "97462", atSeconds: 29.4 } as any;
-  const iv = (spellId: string, fromS: number, toS: number) =>
-    ({ spellId, fromS, toS }) as any;
+  const iv = (spellId: string, fromS: number, toS: number, src = "W") =>
+    ({ spellId, fromS, toS, srcUnitId: src }) as any;
+  const fromW = (src: string | undefined) => src === "W";
   it("Rallying Cry's aura 97463 on the holder, applied with the cast: its interval", () => {
-    expect(areaSaveSpanOnS(rc, [iv("97463", 29.5, 42.5)])).toEqual({
-      from: 29.5,
-      to: 42.5,
-    });
+    expect(areaSaveSpansOnS(rc, [iv("97463", 29.5, 42.5)], fromW, 10)).toEqual([
+      { from: 29.5, to: 42.5 },
+    ]);
   });
-  it("no aura on the holder, an aura from another cast, another save's aura: nothing", () => {
-    expect(areaSaveSpanOnS(rc, [])).toBe(undefined);
-    expect(areaSaveSpanOnS(rc, [iv("97463", 60, 70)])).toBe(undefined);
-    expect(areaSaveSpanOnS(rc, [iv("325174", 29.5, 35)])).toBe(undefined);
+  it("no aura on the holder, one after the save's life, another save's aura, another caster's: nothing", () => {
+    expect(areaSaveSpansOnS(rc, [], fromW, 10)).toEqual([]);
+    expect(areaSaveSpansOnS(rc, [iv("97463", 60, 70)], fromW, 10)).toEqual([]);
+    expect(areaSaveSpansOnS(rc, [iv("325174", 29.5, 35)], fromW, 10)).toEqual(
+      [],
+    );
+    expect(
+      areaSaveSpansOnS(rc, [iv("97463", 29.5, 40, "X")], fromW, 10),
+    ).toEqual([]);
     // Darkness has no effect aura in the table
     expect(
-      areaSaveSpanOnS({ ...rc, spellId: "196718" }, [iv("209426", 29.5, 37)]),
-    ).toBe(undefined);
+      areaSaveSpansOnS(
+        { ...rc, spellId: "196718" },
+        [iv("209426", 29.5, 37)],
+        fromW,
+        8,
+      ),
+    ).toEqual([]);
+  });
+  it("Spirit Link entered late and re-entered: every visit inside the totem's life (codex 20-F15-31)", () => {
+    const slt = { kind: "area", spellId: "98008", atSeconds: 30 } as any;
+    expect(
+      areaSaveSpansOnS(
+        slt,
+        [iv("325174", 30, 31, "T"), iv("325174", 33, 36, "T")],
+        (src) => src === "T",
+        6,
+      ),
+    ).toEqual([
+      { from: 30, to: 31 },
+      { from: 33, to: 36 },
+    ]);
   });
 });
