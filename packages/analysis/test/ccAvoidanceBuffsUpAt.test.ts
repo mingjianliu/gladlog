@@ -264,6 +264,23 @@ describe("ccAvoidanceBuffsUpAt — one application's own rows (codex 20-F15-21)"
     ).toEqual([SHROUD]);
     expect(ccAvoidanceBuffsUpAt(u, T0 + 10_001)).toEqual([]);
   });
+  it("… also past the official length: the unindexed REMOVED is its observed end (codex 20-F15-28)", () => {
+    const bare = (event: LogEvent, atMs: number) => {
+      const a = aura(event, SHROUD, atMs, 0);
+      delete a.logLine.lineIndex;
+      return a;
+    };
+    const u = unit([
+      bare(LogEvent.SPELL_AURA_APPLIED, 0),
+      bare(LogEvent.SPELL_AURA_REMOVED, 10_000),
+    ]);
+    expect(ccAvoidanceBuffsUpAt(u, T0 + 9999).map((b) => b.spellId)).toEqual([
+      SHROUD,
+    ]);
+    expect(
+      ccAvoidanceBuffsUpAt(u, T0 + 10_000).map((b) => b.spellId),
+    ).toEqual([SHROUD]);
+  });
 });
 
 describe("[CC AVOIDED?] — each delayed cast reads its own pulse (codex 20-F15-21)", () => {
@@ -324,5 +341,8 @@ describe("[CC AVOIDED?] — each delayed cast reads its own pulse (codex 20-F15-
       totem,
     ]).ccAvoidedInstances;
     expect(out.map((a) => a.castAtSeconds)).toEqual([10]);
+    // … read at its own 12 s pulse, the instant the next cast was pressed
+    // (codex 20-F15-28: cut at that cast, it fell back to the 10 s cast)
+    expect(out.map((a) => a.atSeconds)).toEqual([12]);
   });
 });

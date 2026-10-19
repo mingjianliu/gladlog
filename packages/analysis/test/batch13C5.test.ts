@@ -7,7 +7,10 @@
 import { LogEvent } from "@gladlog/parser-compat";
 import { beforeAll, describe, expect, it } from "vitest";
 
-import { procTriggerOf } from "../src/context/timelineSections/enemyCd";
+import {
+  procTriggerAt,
+  procTriggerOf,
+} from "../src/context/timelineSections/enemyCd";
 import { ensureAnalysisData } from "../src/data/ensure";
 
 const T0 = 1_000_000;
@@ -39,5 +42,39 @@ describe("procTriggerOf", () => {
   });
   it("one shared ms proves nothing", () => {
     expect(procTriggerOf(paladin, "31884", [T0 + 18_000])).toBeUndefined();
+  });
+});
+
+describe("procTriggerAt / ledger anchoring (codex 20-F15-25)", () => {
+  const paladin = {
+    spellCastEvents: [
+      ...[10_000, 40_000].flatMap((t) => [
+        cast("255937", "Wake of Ashes", t),
+        cast("454351", "Avenging Wrath", t),
+      ]),
+      // a cast-less activation between them is in the ledger at 25 s
+    ],
+  } as any;
+  it("an activation with no Wake press in its ms does not read `with Wake of Ashes`", () => {
+    const round = procTriggerOf(paladin, "31884", [
+      T0 + 10_000,
+      T0 + 25_000,
+      T0 + 40_000,
+    ]);
+    expect(round).toBe("Wake of Ashes");
+    expect(procTriggerAt(paladin, "31884", T0 + 25_000, round)).toBe(
+      undefined,
+    );
+    expect(procTriggerAt(paladin, "31884", T0 + 10_000, round)).toBe(
+      "Wake of Ashes",
+    );
+  });
+  it("a ledger time 2 ms before the cast row still finds its pairing", () => {
+    expect(
+      procTriggerOf(paladin, "31884", [T0 + 9998, T0 + 39_998]),
+    ).toBe("Wake of Ashes");
+    expect(
+      procTriggerAt(paladin, "31884", T0 + 9998, "Wake of Ashes"),
+    ).toBe("Wake of Ashes");
   });
 });

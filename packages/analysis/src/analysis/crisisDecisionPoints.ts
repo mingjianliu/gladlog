@@ -14,6 +14,7 @@
 import { type IAuraEvent, LogEvent } from "@gladlog/parser-compat";
 
 import { type CrisisRole } from "../data/behaviorPrior";
+import { castEffectPairs } from "../data/castEffectAuras";
 import { BREAK_RACIAL_SPELL_IDS } from "../data/racialAbilities";
 import spellIdLists from "../data/spellIdLists";
 import {
@@ -22,6 +23,10 @@ import {
   rootSpellIds,
   spells as spellMeta,
 } from "../data/spellTags";
+import {
+  isSilenceOnlyAura,
+  namedCannotCastIntervals,
+} from "../utils/cannotCastIntervals";
 import {
   cdIsProcOnly,
   cdReadyInTimeAt,
@@ -37,7 +42,6 @@ import {
   // ...and its companion, the [STATE] tick's `unit:dead` predicate.
   isDeadAtRenderSecond,
 } from "../utils/cooldowns";
-import { castEffectPairs } from "../data/castEffectAuras";
 import { isEnemyCdWindowSpell } from "../utils/enemyCDs";
 import {
   documentRecordsAttackSpell,
@@ -49,10 +53,6 @@ import { rootIntervalsOf } from "../utils/rootReachability";
 import { buildRosterSides } from "../utils/rosterSide";
 import { OFFENSIVE_CD_SPELL_IDS } from "../utils/spellDanger";
 import { buildFilteredAuraIntervals } from "../utils/utils";
-import {
-  isSilenceOnlyAura,
-  namedCannotCastIntervals,
-} from "../utils/cannotCastIntervals";
 
 /** Re-exported from data/behaviorPrior.ts (the non-cyclic home for this
  * type — see its doc comment) so callers of this module don't need a second
@@ -823,30 +823,61 @@ export function crisisDecisionPoints(
     if (!h.kindKnown) return undefined;
     const evidence = h.periodic ? hotAppliedFor(h) : h;
     if (!evidence) return undefined;
-    const same = ownerCasts.filter((c) => c.id === h.id);
-    // the log writes an instant spell's aura and heal rows BEFORE its
-    // CAST_SUCCESS (103-5 2:31, Eternal Flame on lines 18401–18403): a press
-    // logged right after the evidence in its own ms is its press — the first
-    // one, so two presses of one ms keep their own heals (codex 20-F15-23)
-    const after = same
+    // a HoT's application on the owner comes from a press aimed at the
+    // owner (or at no one): an ally's cast of the spell in the same ms is
+    // not it (codex 20-F15-27, no line indexes: self-Rejuvenation at 490 ms,
+    // its application and an ally's Rejuvenation cast both at 510 ms)
+    const same = ownerCasts.filter(
+      (c) =>
+        c.id === h.id &&
+        (!h.periodic ||
+          !c.dest ||
+          /^0+$/.test(c.dest) ||
+          c.dest === owner.id),
+    );
+    const inMs = same
       .filter(
         (c) =>
           c.t === evidence.t &&
           c.line !== undefined &&
-          evidence.line !== undefined &&
-          c.line > evidence.line,
+          evidence.line !== undefined,
       )
-      .sort((a, b) => a.line! - b.line!)[0];
-    if (after) return after;
+      .sort((a, b) => a.line! - b.line!);
+    if (inMs.length > 0) {
+      // in its own ms, with the log's order, presses and their evidence pair
+      // one to one in order — the log writes an instant spell's aura and heal
+      // rows before its CAST_SUCCESS (103-5 2:31, Eternal Flame on lines
+      // 18401–18403) or after it, and two presses of one ms keep their own
+      // heals either way (codex 20-F15-23: heal 100, cast 101, heal 102,
+      // cast 103; 20-F15-27: cast 100, heal 101, cast 102, heal 103)
+      const peers = (
+        h.periodic
+          ? ownHotApplies.filter((a) => a.id === h.id)
+          : healIn.filter(
+              (x) =>
+                x.id === h.id &&
+                x.src === owner.id &&
+                !x.periodic &&
+                x.kindKnown,
+            )
+      )
+        .filter((x) => x.t === evidence.t && x.line !== undefined)
+        .sort((a, b) => a.line! - b.line!);
+      const rank = peers.findIndex((x) => x.line === evidence.line);
+      if (peers.length === inMs.length && rank >= 0) return inMs[rank];
+      // counts differ: the nearest press logged before it, else after it
+      const before = inMs.filter((c) => c.line! < evidence.line!).pop();
+      if (before) return before;
+      const after = inMs.find((c) => c.line! > evidence.line!);
+      if (after) return after;
+    }
     // else the latest press before it (in its ms when the order is unknown)
     let press: (typeof ownerCasts)[number] | undefined;
     for (const c of same)
       if (
         (c.t < evidence.t ||
           (c.t === evidence.t &&
-            (c.line === undefined ||
-              evidence.line === undefined ||
-              c.line < evidence.line))) &&
+            (c.line === undefined || evidence.line === undefined))) &&
         (!press || loggedBefore(press, c))
       )
         press = c;

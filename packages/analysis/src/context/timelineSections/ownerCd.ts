@@ -54,7 +54,7 @@ import {
 import { ALTER_TIME_CAST_ID, alterTimeReturnSeconds } from "./alterTime";
 import type { DeferredSnapshot } from "./ctx";
 import type { TimelineCtx } from "./ctx";
-import { procTriggerOf } from "./enemyCd";
+import { procTriggerAt, procTriggerOf } from "./enemyCd";
 
 const DIVINE_HYMN_ID = "64843";
 /** Spirit of Redemption, the pressed PvP-talent version (not the death proc). */
@@ -186,6 +186,14 @@ export function emitOwnerCdEntries(
         )
       : undefined;
     for (const cast of cd.casts) {
+      // the round's trigger, only where this activation went out with it
+      // (codex 20-F15-25)
+      const castProcWith = procTriggerAt(
+        owner,
+        cd.spellId,
+        Math.round(matchStartMs + cast.timeSeconds * 1000),
+        procWith,
+      );
       // F15 C1: a talent-shared wall's press that put its copy on an ally
       // (Flameshaper Obsidian Scales) keeps that ally as its target.
       const forceSelf = selfOnlyId && !cast.allyCopyOn;
@@ -593,7 +601,7 @@ export function emitOwnerCdEntries(
 
       addEntry(
         cast.timeSeconds,
-        `${fmtTime(cast.timeSeconds)}  ${prefix}   ${displayNameWithChannel}${procWith ? ` (with ${procWith})` : ""}${effectiveTargetPart}${ownAuraNote}${outgoingDrNote}${immuneNote}${empowerNote}${healAbsorbNote}${guardianSaveNote}${dampeningNote}${cheaperNote}${groundingNote}${interruptNote}${returnNote}${isProc ? "" : ownerHardCcTagAt(cast.timeSeconds)}${unnecessaryNote}`,
+        `${fmtTime(cast.timeSeconds)}  ${prefix}   ${displayNameWithChannel}${castProcWith ? ` (with ${castProcWith})` : ""}${effectiveTargetPart}${ownAuraNote}${outgoingDrNote}${immuneNote}${empowerNote}${healAbsorbNote}${guardianSaveNote}${dampeningNote}${cheaperNote}${groundingNote}${interruptNote}${returnNote}${isProc ? "" : ownerHardCcTagAt(cast.timeSeconds)}${unnecessaryNote}`,
         ...extraLines,
       );
     }

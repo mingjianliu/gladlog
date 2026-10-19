@@ -523,3 +523,26 @@ describe("consumers read the same occurrences", () => {
     expect(hasOffensiveSpellActive(u, s(100), null)).toBe(false);
   });
 });
+
+describe("aura twins pair one cast with one application (codex 20-F15-25)", () => {
+  it("454351 cast at 10 s (removed 10.5 s) and a cast-less one at 12.5 s: two occurrences, the second `(no press)`", () => {
+    const ret = makeUnit("rp", {
+      name: "Ret",
+      spec: CombatUnitSpec.Paladin_Retribution,
+      spellCastEvents: [cast("454351", 10, "rp")],
+      auraEvents: [
+        aura(LogEvent.SPELL_AURA_APPLIED, "454351", 10, "rp"),
+        aura(LogEvent.SPELL_AURA_REMOVED, "454351", 10.5, "rp"),
+        aura(LogEvent.SPELL_AURA_APPLIED, "454351", 12.5, "rp"),
+        aura(LogEvent.SPELL_AURA_REMOVED, "454351", 20.5, "rp"),
+      ],
+    });
+    const occ = auraOffensiveOccurrences(ret, COMBAT).occurrences.filter(
+      (o) => o.spellId === "454351",
+    );
+    expect(occ.map((o) => [o.spellName, o.startMs, o.endMs])).toEqual([
+      ["Avenging Wrath", s(10), s(10.5)],
+      ["Avenging Wrath (no press)", s(12.5), s(20.5)],
+    ]);
+  });
+});

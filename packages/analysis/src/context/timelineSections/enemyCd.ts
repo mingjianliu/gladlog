@@ -67,7 +67,8 @@ export function procTriggerOf(
   // Glory's Avenging Wrath by the 31884 button while the log writes the
   // activation as 454351 (F15 C5: `with Avenging Wrath` on 1,184 lines)
   const selfName = getEnglishSpellName(activationSpellId);
-  for (const atMs of activationsMs) {
+  for (const ledgerMs of activationsMs) {
+    const atMs = activationCastMs(unit, activationSpellId, ledgerMs);
     const names = new Set<string>();
     for (const e of unit?.spellCastEvents ?? []) {
       if (
@@ -84,6 +85,65 @@ export function procTriggerOf(
   const ranked = [...counts.entries()].sort((a, b) => b[1] - a[1]);
   const [top, next] = ranked;
   return top && top[1] >= 2 && (!next || next[1] < top[1]) ? top[0] : undefined;
+}
+
+/** How far from a ledger activation its own cast row may be logged (the
+ * ledger can carry the aura's ms, 2 ms before the row — codex 20-F15-25). */
+const ACTIVATION_CAST_ANCHOR_MS = 100;
+
+/**
+ * The instant an activation's own cast row is logged: the unit's nearest
+ * SUCCESS printing the activation's name (the friendly ledger keys Radiant
+ * Glory's Avenging Wrath by 31884, the log writes 454351) within
+ * `ACTIVATION_CAST_ANCHOR_MS` of the ledger's time; that time when none.
+ */
+export function activationCastMs(
+  unit: ICombatUnit | undefined,
+  activationSpellId: string,
+  ledgerMs: number,
+): number {
+  const name = getEnglishSpellName(activationSpellId);
+  let best: number | undefined;
+  for (const e of unit?.spellCastEvents ?? []) {
+    if (e.logLine.event !== LogEvent.SPELL_CAST_SUCCESS || !e.spellId) continue;
+    if (
+      e.spellId !== activationSpellId &&
+      getEnglishSpellName(e.spellId, e.spellName) !== name
+    )
+      continue;
+    const d = Math.abs(e.logLine.timestamp - ledgerMs);
+    if (
+      d <= ACTIVATION_CAST_ANCHOR_MS &&
+      (best === undefined || d < Math.abs(best - ledgerMs))
+    )
+      best = e.logLine.timestamp;
+  }
+  return best ?? ledgerMs;
+}
+
+/**
+ * Did THIS activation go out with `triggerName` — a cast of it by the unit in
+ * the activation's own ms (`procTriggerOf`'s reading, at one activation)?
+ * The round-level trigger is printed only where it holds (codex 20-F15-25: a
+ * cast-less Avenging Wrath between two Wake pairs read `with Wake of Ashes`).
+ */
+export function procTriggerAt(
+  unit: ICombatUnit | undefined,
+  activationSpellId: string,
+  ledgerMs: number,
+  triggerName: string | undefined,
+): string | undefined {
+  if (!triggerName) return undefined;
+  const atMs = activationCastMs(unit, activationSpellId, ledgerMs);
+  return (unit?.spellCastEvents ?? []).some(
+    (e) =>
+      e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+      !!e.spellId &&
+      getEnglishSpellName(e.spellId, e.spellName) === triggerName &&
+      Math.abs(e.logLine.timestamp - atMs) <= AURA_REBROADCAST_GAP_MS,
+  )
+    ? triggerName
+    : undefined;
 }
 
 /** Returns whether any line carried a cast ordinal (its legend line). */
@@ -147,7 +207,16 @@ export function emitEnemyCdEntries(
       seqBySpell.set(cd.spellName, seq);
       const isActivation = isActivationCd(cd);
       const seqAnnotation = isActivation
-        ? procOrdinal(seq, total, triggerBySpell.get(cd.spellId))
+        ? procOrdinal(
+            seq,
+            total,
+            procTriggerAt(
+              enemyUnit,
+              cd.spellId,
+              Math.round(ctx.matchStartMs + cd.castTimeSeconds * 1000),
+              triggerBySpell.get(cd.spellId),
+            ),
+          )
         : castOrdinal(seq, total);
       if (isActivation) procRendered = true;
       else if (seqAnnotation) ordinalRendered = true;

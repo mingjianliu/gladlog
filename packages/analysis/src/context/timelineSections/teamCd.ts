@@ -27,7 +27,7 @@ import { AOE_CC_LANDING_WINDOW_S } from "../../utils/drAnalysis";
 import { fmtTime, toRenderSecond } from "../../utils/renderGrid";
 import { ALTER_TIME_CAST_ID, alterTimeReturnSeconds } from "./alterTime";
 import type { TimelineCtx } from "./ctx";
-import { procTriggerOf } from "./enemyCd";
+import { procTriggerAt, procTriggerOf } from "./enemyCd";
 
 export function emitTeamCdEntries(
   ctx: Pick<
@@ -82,6 +82,14 @@ export function emitTeamCdEntries(
           )
         : undefined;
       for (const cast of cd.casts) {
+        // the round's trigger, only where this activation went out with it
+        // (codex 20-F15-25)
+        const castProcWith = procTriggerAt(
+          player,
+          cd.spellId,
+          Math.round(matchStartMs + cast.timeSeconds * 1000),
+          procWith,
+        );
         const groundingNote = groundingAbsorbNote(
           cd.spellId,
           cd.spellName,
@@ -168,7 +176,7 @@ export function emitTeamCdEntries(
                   ? cast.targetName
                   : player.name,
               );
-          line = `${fmtTime(cast.timeSeconds)}  [TEAM] ${isProc ? "[PROC]" : "[CD]"}   ${pid(player.name)} (${spec}): ${cd.spellName}${procWith ? ` (with ${procWith})` : ""}${recipientPart}${groundingNote}${immunePart}${saveNote}${unnecessaryNote}`;
+          line = `${fmtTime(cast.timeSeconds)}  [TEAM] ${isProc ? "[PROC]" : "[CD]"}   ${pid(player.name)} (${spec}): ${cd.spellName}${castProcWith ? ` (with ${castProcWith})` : ""}${recipientPart}${groundingNote}${immunePart}${saveNote}${unnecessaryNote}`;
         }
         addEntry(
           cast.timeSeconds,

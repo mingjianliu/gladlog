@@ -1,6 +1,7 @@
 import { type ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
 import { CHANNELED_SPELL_IDS } from "../data/channeledGenerated";
+import { OFF_GCD_SPELL_IDS } from "../data/offGcdGenerated";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import { dropAuraRebroadcasts, supersededAuraBreaks } from "./auraIntervals";
 import { buffFullDurationForCaster } from "./buffDuration";
@@ -253,12 +254,19 @@ export function tickEndedChannelSpans(
     // lands after it is no channelling (codex 20-F15-24: 0284fcd9 r3,
     // Arcane Missiles 163.491, Arcane Barrage 164.869, a Missiles hit at
     // 165.441 read as 572 ms more channelling)
+    // — an off-GCD press excepted: Shimmer mid-Missiles leaves the channel
+    // running (codex 20-F15-28: its ticks went on through 11.9 s)
     const nextOther = [
       ...(unit.spellCastEvents ?? []),
       ...((unit as { castStartEvents?: typeof unit.spellCastEvents })
         .castStartEvents ?? []),
     ]
-      .filter((e) => e.spellId !== c.spellId && e.timestamp > c.timestamp)
+      .filter(
+        (e) =>
+          e.spellId !== c.spellId &&
+          e.timestamp > c.timestamp &&
+          !(e.spellId && OFF_GCD_SPELL_IDS.has(e.spellId)),
+      )
       .reduce((m, e) => Math.min(m, e.timestamp), Infinity);
     const capMs = Math.min(
       c.timestamp + fullS * 1000,

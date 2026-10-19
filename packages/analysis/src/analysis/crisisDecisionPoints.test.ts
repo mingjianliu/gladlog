@@ -339,6 +339,31 @@ describe("crisisDecisionPoints", () => {
       expect(p.selfHealFreshPct).toBe(4);
       expect(p.selfHealCasts).toBe(2);
     });
+    it("… also with each press logged before its heal (codex 20-F15-27)", () => {
+      const o = unit({
+        spellCastEvents: [
+          cast(2100, "2061", "H", 100),
+          cast(2100, "2061", "H", 102),
+        ],
+        healIn: [
+          heal(2100, "2061", 2, false, 101),
+          heal(2100, "2061", 2, false, 103),
+        ],
+      });
+      const p = crisisDecisionPoints(o, combat(o))[0]!;
+      expect(p.selfHealFreshPct).toBe(4);
+      expect(p.selfHealCasts).toBe(2);
+    });
+    it("an ally's cast of the HoT in the ms of the owner's own application is not its press (codex 20-F15-27, no line indexes)", () => {
+      const o = unit({
+        spellCastEvents: [cast(490, "774", "H"), cast(510, "774", "A")],
+        auraEvents: [selfAura(510, LogEvent.SPELL_AURA_APPLIED)],
+        healIn: [heal(2200, "774", 20, true)],
+      });
+      const p = crisisDecisionPoints(o, combat(o))[0]!;
+      expect(p.selfHealFreshPct).toBe(0);
+      expect(p.selfHealCasts).toBe(0);
+    });
     it("a heal row whose kind is unknown is no fresh heal (codex 20-F15-23)", () => {
       const o = unitFields({
         spellCastEvents: [cast(1800, "774", "A")],

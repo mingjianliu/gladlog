@@ -376,6 +376,7 @@ export function ccAvoidanceBuffsUpAt(
       // unreadable start list: nothing up at the start
     }
   }
+  const closedAtJudged = new Set<string>();
   let k = 0;
   for (; k < rows.length; k++) {
     const a = rows[k]!;
@@ -412,7 +413,11 @@ export function ccAvoidanceBuffsUpAt(
       const orderUnknown =
         a.timestamp === atMs &&
         (opts.atLine === undefined || a.logLine.lineIndex === undefined);
+      // … and that REMOVED is the application's own observed end: no cap
+      // on its official length (codex 20-F15-28: a 10 s Shroud removed at
+      // 10.000 read up at 9.999 and gone at 10.000)
       if (!orderUnknown) up.delete(id);
+      else closedAtJudged.add(id);
     }
   }
   // the cap is for an application the log never closes: one whose own
@@ -440,7 +445,12 @@ export function ccAvoidanceBuffsUpAt(
       seenLater.add(a.spellId);
   }
   return [...up.values()]
-    .filter((b) => closedLater.has(b.spellId) || atMs <= b.untilMs)
+    .filter(
+      (b) =>
+        closedLater.has(b.spellId) ||
+        closedAtJudged.has(b.spellId) ||
+        atMs <= b.untilMs,
+    )
     .map(({ spellId, name, srcName }) => ({ spellId, name, srcName }));
 }
 
@@ -4361,9 +4371,11 @@ export function analyzePlayerCCAndTrinket(
       srcId === enemy.id ||
       srcId === cast.srcUnitId ||
       enemyPets.some((p) => p.id === srcId && p.ownerId === enemy.id);
-    // this cast's own pulse: not before it can land (`fromS`), and not past
-    // the caster's next cast of the spell — that pulse is the next cast's
-    // (codex 20-F15-21: totems at 10 s and 12 s both read the 12 s pulse)
+    // this cast's own pulse: inside its landing window, and not one a later
+    // cast of the spell can already have produced — that pulse is the later
+    // cast's (codex 20-F15-21: totems at 10 s and 12 s both read the 12 s
+    // pulse; 20-F15-28: cut at the next cast itself, the first totem lost
+    // its own 12 s pulse)
     const castMs = cast.logLine.timestamp;
     const nextSameMs = [
       ...enemy.spellCastEvents,
@@ -4377,7 +4389,10 @@ export function analyzePlayerCCAndTrinket(
       )
       .reduce((m, e) => Math.min(m, e.logLine.timestamp), Infinity);
     const fromMs = castMs + landing.fromS * 1000;
-    const toMs = Math.min(castMs + landing.toS * 1000, nextSameMs - 1);
+    const toMs = Math.min(
+      castMs + landing.toS * 1000,
+      nextSameMs + landing.fromS * 1000 - 1,
+    );
     let first: { ms: number; line: number | undefined } | undefined;
     for (const u of unitsById.values())
       for (const r of [

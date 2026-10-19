@@ -3591,7 +3591,14 @@ activation under another id is never its own trigger. Radiant Glory's
 Avenging Wrath with no cast is an `(no press)` occurrence (weight 0), so it
 has an [ENEMY CD] line. 605 files: no candidate added or removed;
 pressFactScan `noPressCopy` 126 → 0, `procWith` 1,152 → 0, `auraOnlyAW` 93 →
-0, `pressedNotTagged` 0 / 9,036.
+0, `pressedNotTagged` 0 / 9,036. Folded in before push (codex 20-F15-25):
+the round's trigger is printed only on an activation whose own ms has a cast
+of it (`procTriggerAt`), each ledger activation anchored on its own cast row
+(`activationCastMs`; the ledger can carry the aura's ms); an aura twin pairs
+one cast with one application. 605: 391 `with X` labels removed (on [ENEMY
+CD], [TEAM] / [YOU] [PROC]: activations with no such cast in their ms); no
+candidate changes; the strict scans `noPressCopy` 3 / 126 (one Mass
+Invisibility re-send the product joins), `procWith` 0 / 1,468.
 v418 (2026-10-18, F15 batch 14 — fact1215 C10 rest, facts only): (1) a
 SPELL_MISSED row says a control did not land only for a control's own id or
 a cast whose control effect followed at least half of its corpus casts

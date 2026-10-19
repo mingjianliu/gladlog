@@ -158,6 +158,16 @@ describe("R9 — a channel with no aura on its caster", () => {
     });
     expect(tickEndedChannelSpans(m)[0]?.endMs).toBe(T0 + 1200);
   });
+  it("an off-GCD press mid-channel leaves it running: Shimmer, ticks on (codex 20-F15-28)", () => {
+    const m = mage();
+    m.spellCastEvents.push({
+      spellId: "212653",
+      spellName: "Shimmer",
+      timestamp: T0 + 1000,
+      logLine: { event: LogEvent.SPELL_CAST_SUCCESS, timestamp: T0 + 1000 },
+    });
+    expect(tickEndedChannelSpans(m)[0]?.endMs).toBe(T0 + 1900);
+  });
 });
 
 describe("R9 — a channelled control ended by a kick on its caster", () => {

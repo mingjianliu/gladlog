@@ -232,6 +232,7 @@ export function auraOffensiveOccurrences(
     (id) => effectiveCooldownSeconds(id) ?? 0,
   );
 
+  const usedTwinCasts = new Set<string>();
   for (const iv of intervals) {
     const startMs = bounds.startTime + iv.fromS * 1000;
     const endMs = bounds.startTime + iv.toS * 1000;
@@ -328,12 +329,20 @@ export function auraOffensiveOccurrences(
     const twin = OFFENSIVE_AURA_EVIDENCE.get(iv.spellId);
     if (twin?.twin) {
       const cdId = twin.cooldownId;
+      // one cast pairs with one application: a later cast-less application
+      // inside the pairing reach is its own `(no press)` occurrence, not a
+      // second interval of the cast before it (codex 20-F15-25: a 454351
+      // cast at 10 s, removed 10.5 s, and a cast-less one at 12.5 s were
+      // merged into one 10–20.5 s Avenging Wrath)
       const cast = near(
-        castTimes(unit, new Set([cdId])),
+        castTimes(unit, new Set([cdId])).filter(
+          (x) => !usedTwinCasts.has(`${cdId}:${x}`),
+        ),
         startMs,
         -TWIN_CAST_BEFORE_S * 1000,
         TWIN_CAST_AFTER_S * 1000,
       );
+      if (cast !== undefined) usedTwinCasts.add(`${cdId}:${cast}`);
       const cd = effectiveCooldownSeconds(cdId) ?? 0;
       if (cast !== undefined) {
         // the press: anchored AT THE CAST (agy review: the Infernal aura lands

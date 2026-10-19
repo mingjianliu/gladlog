@@ -50,6 +50,7 @@ import { gunzipSync } from "node:zlib";
 import { ensureAnalysisData } from "@gladlog/analysis";
 import { castsOfEffectAura } from "@gladlog/analysis/src/data/castEffectAuras";
 import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData";
+import { AURA_REBROADCAST_GAP_MS } from "@gladlog/analysis/src/utils/auraIntervals";
 import {
   MITIGATION_AURA_IDS,
   wallTableIdOfAura,
@@ -303,6 +304,30 @@ for (const f of files) {
         }
         const tableId = wallTableIdOfAura(a.spellId);
         if (!MITIGATION_AURA_IDS.has(tableId)) continue;
+        // an application that continues an aura already up — no REMOVED
+        // since the last APPLIED, or one within the re-send gap — is that
+        // aura's, which its own line speaks for (2:52 Barkskin press, the
+        // aura re-sent at 2:53); also after the unit's death
+        {
+          let lastApplied: number | undefined;
+          let lastRemoved: number | undefined;
+          for (const x of (u.auraEvents ?? []) as IAuraEvent[]) {
+            if (x === a) break;
+            if (x.spellId !== a.spellId || x.destUnitId !== u.id) continue;
+            if (x.logLine.event === LogEvent.SPELL_AURA_APPLIED)
+              lastApplied = x.logLine.timestamp;
+            else if (x.logLine.event === LogEvent.SPELL_AURA_REMOVED)
+              lastRemoved = x.logLine.timestamp;
+          }
+          const continues =
+            lastApplied !== undefined &&
+            (lastRemoved === undefined ||
+              lastRemoved < lastApplied ||
+              ts - lastRemoved <= AURA_REBROADCAST_GAP_MS);
+          const dead = ((u.deathRecords ?? []) as Array<{ timestamp: number }>)
+            .some((d) => d.timestamp <= ts);
+          if (continues || dead) continue;
+        }
         const ids = new Set([
           tableId,
           a.spellId,
@@ -320,15 +345,20 @@ for (const f of files) {
             l.startsWith(`${t}  [ENEMY DEF]   ${me.pid}(`) &&
             l.includes(`: ${name} (`),
         );
-        if (!line) continue;
+        // counted whether or not its line is there (codex 20-F15-25: a
+        // deleted line left the denominator) — a missing line is a miss
         if (!pressed) {
           bump("noPressCopy");
           if (
+            !line ||
             !line.includes("[no press logged]") ||
             line.includes("— removed early")
           )
-            miss("noPressCopy", `${where} ${t} ${u.name} ${name}`);
-        } else {
+            miss(
+              "noPressCopy",
+              `${where} ${t} ${u.name} ${name}${line ? "" : " (no line)"}`,
+            );
+        } else if (line) {
           bump("pressedNotTagged");
           if (line.includes("[no press logged]"))
             miss("pressedNotTagged", `${where} ${t} ${u.name} ${name}`);
@@ -345,12 +375,30 @@ for (const f of files) {
           ),
         );
       if (pairs.length < 2) continue;
-      for (const c of pairs) {
-        const ts = c.logLine.timestamp;
-        if (ts < start || ts > legacy.endTime) continue;
-        const t = at(ts);
-        const isOwner = u.name === ownerName;
-        const procLine = lines.find(
+      // Wake must be the one cast that shares the most activations' ms,
+      // strictly (codex 20-F15-25: a Gladiator's Badge macro'd into every
+      // pair ties it, and no trigger is named then)
+      const activations = casts.filter((c) => c.spellId === "454351");
+      const shared = new Map<string, number>();
+      for (const act of activations) {
+        const names = new Set(
+          casts
+            .filter(
+              (o) =>
+                o !== act &&
+                o.spellId !== "454351" &&
+                Math.abs(o.logLine.timestamp - act.logLine.timestamp) <= 1,
+            )
+            .map((o) => getEnglishSpellName(o.spellId, o.spellName)),
+        );
+        for (const n of names) shared.set(n, (shared.get(n) ?? 0) + 1);
+      }
+      const wake = shared.get("Wake of Ashes") ?? 0;
+      if ([...shared].some(([n, k]) => n !== "Wake of Ashes" && k >= wake))
+        continue;
+      const isOwner = u.name === ownerName;
+      const procLineAt = (t: string) =>
+        lines.find(
           (l) =>
             l.startsWith(`${t}  `) &&
             (isOwner
@@ -358,10 +406,23 @@ for (const f of files) {
               : l.includes(`[TEAM] [PROC]   ${me.pid}(`) &&
                 l.includes(": Avenging Wrath")),
         );
-        if (!procLine) continue;
+      for (const c of activations) {
+        const ts = c.logLine.timestamp;
+        if (ts < start || ts > legacy.endTime) continue;
+        const t = at(ts);
+        const procLine = procLineAt(t);
         bump("procWith");
-        if (!procLine.includes("(with Wake of Ashes)"))
-          miss("procWith", `${where} ${t} ${u.name}`);
+        // a paired activation says it, an unpaired one does not (codex
+        // 20-F15-25); a missing line is a miss
+        const shouldSay = pairs.includes(c);
+        if (
+          !procLine ||
+          procLine.includes("(with Wake of Ashes)") !== shouldSay
+        )
+          miss(
+            "procWith",
+            `${where} ${t} ${u.name}${procLine ? "" : " (no line)"}${shouldSay ? "" : " (unpaired)"}`,
+          );
       }
     }
   }

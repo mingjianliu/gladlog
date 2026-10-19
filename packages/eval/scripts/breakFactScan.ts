@@ -92,7 +92,10 @@ import {
   effectAurasOfCast,
 } from "@gladlog/analysis/src/data/castEffectAuras";
 import { CHANNELED_SPELL_IDS } from "@gladlog/analysis/src/data/channeledGenerated";
-import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData";
+import {
+  getEnglishSpellName,
+  spellEffectData,
+} from "@gladlog/analysis/src/data/spellEffectData";
 import {
   ccSpellIds,
   disarmSpellIds,
@@ -379,17 +382,21 @@ for (const f of files) {
       // the holder in the line's TARGET field (codex 20-F15-22: `${pid}(`
       // anywhere also matched the `(by …)` caster, and another target's line
       // masked a wrong one)
+      // the control's lines by identity alone (codex 20-F15-26: filtering
+      // on the clause first let a line that dropped it, or credited someone
+      // else's spell, fall out of the check) — every one must credit the
+      // expected unit and spell
       const ccLines = lines.filter(
         (l) =>
           (l.startsWith(`${t}  [CC ON TEAM]   ${me.pid}(`) ||
             l.startsWith(`${t}  [CC ON ENEMY]   ${me.pid}(`)) &&
-          l.includes(`← ${ccName} `) &&
-          l.includes(` | broken by `) &&
-          l.includes(breakName),
+          l.includes(`← ${ccName} `),
       );
       if (ccLines.length === 0) continue;
       bump(check);
-      const credits = new RegExp(`broken by ${rightPid}\\([^)]*\\)'s `);
+      const credits = new RegExp(
+        `broken by ${rightPid}\\([^)]*\\)(?:'s [a-z]+)?'s ${breakName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`,
+      );
       if (!ccLines.every((l) => credits.test(l)))
         fail(
           check,
@@ -642,6 +649,14 @@ for (const f of files) {
         .filter((c) => !c.includes("[PASSIVE]"))
         .map((c) => c.replace(/ \[.*$/, "")),
     );
+    // the name the kit prints a press under: the roster's own (231895 is
+    // `Crusade` there and `Avenging Wrath` in getEnglishSpellName — codex
+    // 20-F15-28), else the English name
+    const kitName = (x: { spellId: number | string; spellName?: string }) =>
+      [
+        spellEffectData[String(x.spellId)]?.name,
+        getEnglishSpellName(String(x.spellId), x.spellName ?? ""),
+      ].find((n): n is string => !!n && kit.has(n));
     for (const u of units) {
       const me = pidOf.get(u.name);
       if (!me || me.enemy || u.name !== ownerName) continue;
@@ -649,7 +664,7 @@ for (const f of files) {
         (x) =>
           x.unitGuid === u.id &&
           CONTROL_REASONS.has(x.reason) &&
-          kit.has(getEnglishSpellName(String(x.spellId), x.spellName)),
+          kitName(x) !== undefined,
       );
       const wins: Array<{
         id: string;
@@ -724,7 +739,7 @@ for (const f of files) {
           (want !== undefined
             ? holding.find((h) => ccMechanicOf(h.id) === want)
             : undefined) ?? holding[0]!;
-        const name = getEnglishSpellName(String(x.spellId), x.spellName);
+        const name = kitName(x)!;
         const m = counts.get(w.line) ?? new Map<string, number>();
         m.set(name, (m.get(name) ?? 0) + 1);
         counts.set(w.line, m);
