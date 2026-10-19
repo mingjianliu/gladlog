@@ -99,9 +99,22 @@ export function emitCleanseEntries(
       miss.purgeableOnTarget !== undefined
         ? ` | ${purgeableCountText(miss.purgeableOnTarget)} on it then`
         : "";
+    // fact1215 R11 (519781fd 1:36): a purge of ours on that enemy inside
+    // the window took another buff — a purge was pressed there, the
+    // removal is the game's pick
+    const tookOther = dispelSummary.ourPurges.find(
+      (p) =>
+        p.targetName === miss.enemyName &&
+        p.removedSpellId !== miss.spellId &&
+        p.timeSeconds >= miss.timeSeconds &&
+        p.timeSeconds <= miss.timeSeconds + miss.durationSeconds,
+    );
+    const tookOtherNote = tookOther
+      ? ` | ${pid(tookOther.sourceName)}'s ${tookOther.dispelSpellName} at ${fmtTime(tookOther.timeSeconds)} took ${tookOther.removedSpellName} instead`
+      : "";
     addEntry(
       miss.timeSeconds,
-      `${fmtTime(miss.timeSeconds)}  [MISSED PURGE OPPORTUNITY]   ${miss.spellName} active on ${enemyPid(miss.enemyName)} (${unpurgedForText(miss)})${formatMissedPurgeExemption(miss)}${countNote}${otherNote}`,
+      `${fmtTime(miss.timeSeconds)}  [MISSED PURGE OPPORTUNITY]   ${miss.spellName} active on ${enemyPid(miss.enemyName)} (${unpurgedForText(miss)})${formatMissedPurgeExemption(miss)}${countNote}${otherNote}${tookOtherNote}`,
     );
   }
 

@@ -3660,3 +3660,18 @@ removed; 2,686 dampening lines re-read (DAMPENING ALERT 762 → 752); spam
 folds −555 / +574; dispel lines naming `(passive)` / `dispelled` −63 / +3; [RES] 1,195 lines;
 the cc-avoidable legend in 35 menus. Checks: unit tests (r11aFacts.test.ts,
 red on the parent) and the 605 diff; no new gate.
+v422 (2026-10-19, F15 batch 18 — fact1215 R11 rest): (1) cd-hoarded's
+response set ("did they answer") reads the owner's redirect saves for the
+crisis unit — Roar of Sacrifice, Master's Call, Intervene, Leap of Faith
+(`teamAnswers.ownerRedirectSaves`, cast on that unit, or on no one else when
+it is the owner). They are never accused (rulings A20 + U3) and are outside
+the ledger, so a press of one did not count as an answer either (5dd3d2d6
+@86; 111-1-598 0:34: an Intervene on the rogue at 34 % beside "Rallying Cry
+left in hand"). (2) A [MISSED PURGE OPPORTUNITY] line whose window saw a
+purge of ours on that enemy take another buff says so — `| <pid>'s <purge>
+at m:ss took <buff> instead` (519781fd 1:36: Devour Magic took Renew off the
+warrior under Blessing of Protection). 605 files: cd-hoarded 1,273 → 1,249
+(dps 663 → 648, healer 610 → 601; one re-timed) — user approved 2026-10-19
+with the 111-1-598 example; no other candidate added or removed; 249
+`took … instead` notes. Checks: responseOnlySave.test.ts (red on the
+parent); the note is a render of `ourPurges`, no new gate.

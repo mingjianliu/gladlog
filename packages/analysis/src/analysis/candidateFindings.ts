@@ -27,6 +27,7 @@ import { resolveMitigation, wallDoorPct } from "../data/mitigationComponents";
 import { OFF_GCD_SPELL_IDS } from "../data/offGcdGenerated";
 import { SELF_REMOVAL_BY_TYPE } from "../data/selfRemovals";
 import { getEnglishSpellName } from "../data/spellEffectData";
+import { ENEMY_REDIRECT_SAVE_IDS } from "../data/spellIdLists";
 import { schoolLockedBy, spellSchoolMask } from "../data/spellSchools";
 import { ccSpellIds } from "../data/spellTags";
 import { lookupSyncWindowPrior } from "../data/syncWindowPrior";
@@ -3829,6 +3830,25 @@ function teamPlayEvents(
                   ccSpellIds.has(e.spellId),
               )
               .map((e: any) => (e.logLine.timestamp - combat.startTime) / 1000),
+            // fact1215 R11: the owner's redirect saves (the signed
+            // redirects, never accused) for the crisis unit — cast on it, or
+            // on no one else when the unit is the owner
+            ownerRedirectSaves: (unitId: string) =>
+              (owner.spellCastEvents ?? [])
+                .filter(
+                  (e: any) =>
+                    e.logLine.event === "SPELL_CAST_SUCCESS" &&
+                    e.spellId &&
+                    ENEMY_REDIRECT_SAVE_IDS.has(e.spellId) &&
+                    (e.destUnitId === unitId ||
+                      (unitId === owner.id &&
+                        (!e.destUnitId ||
+                          /^0+$/.test(e.destUnitId) ||
+                          e.destUnitId === owner.id))),
+                )
+                .map(
+                  (e: any) => (e.logLine.timestamp - combat.startTime) / 1000,
+                ),
             teamSaveCastSeconds: friends.flatMap((f: any) =>
               (f.spellCastEvents ?? [])
                 .filter(

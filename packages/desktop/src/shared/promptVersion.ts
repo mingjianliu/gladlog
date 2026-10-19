@@ -209,5 +209,9 @@
  *  control; an empowered cast's dispel comes with its release; Dampening is
  *  read on the line's own team; the cc-avoidable legend states its
  *  predicate. 605 files: no candidate added or removed.
+ *  v422 (2026-10-19, F15 batch 18 — fact1215 R11 rest): a redirect save the
+ *  owner pressed for the crisis unit answers cd-hoarded (user approved:
+ *  cd-hoarded −24); a missed purge whose window saw our purge take another
+ *  buff says so.
  */
-export const PROMPT_VERSION = 421;
+export const PROMPT_VERSION = 422;

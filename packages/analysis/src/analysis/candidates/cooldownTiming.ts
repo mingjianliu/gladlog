@@ -1735,6 +1735,9 @@ export function cdHoardedEvents(
   teamAnswers?: {
     ownerPeelCastSeconds: readonly number[];
     teamSaveCastSeconds: readonly number[];
+    /** fact1215 R11: the owner's redirect-save presses for a unit
+     * (`ownerRedirectSaveFor`) */
+    ownerRedirectSaves?: (unitId: string) => readonly number[];
   },
   /** Triage 2026-09-29 H1: what the owner gate saw — `actWindowFor(...)
    * .stateIn` over the SAME inputs as `ownerCouldRespond`. The gate passes an
@@ -2060,7 +2063,16 @@ export function cdHoardedEvents(
             ),
           ) ||
         (teamAnswers?.ownerPeelCastSeconds ?? []).some(inWindow) ||
-        (teamAnswers?.teamSaveCastSeconds ?? []).some(inWindow);
+        (teamAnswers?.teamSaveCastSeconds ?? []).some(inWindow) ||
+        // fact1215 R11 (5dd3d2d6 @86): a redirect save the owner pressed for
+        // this unit — Roar of Sacrifice, Master's Call, Intervene, Leap of
+        // Faith (`ownerRedirectSaves`). It is never accused (rulings A20 +
+        // U3) and is outside the ledger, so the response set did not see it
+        // either; keeping a save out of the accusation set must not take it
+        // out of the answers.
+        (teamAnswers?.ownerRedirectSaves?.(src.crisisUnit.id) ?? []).some(
+          inWindow,
+        );
       if (spent) {
         if (tracing)
           trace.push({

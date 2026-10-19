@@ -74,3 +74,33 @@ describe("response-only saves", () => {
     expect(cdWasteEvents([fr([])], OWNER, 30)).toEqual([]);
   });
 });
+
+describe("a redirect save the owner pressed answers the crisis (fact1215 R11, user approved 2026-10-18)", () => {
+  // 111-1-598 0:34: the warrior's Intervene on the rogue at 34 %; the row
+  // said Rallying Cry was left in hand. Never accused, so outside the ledger
+  // — and so outside the response set too.
+  const answers = (redirectAt: number[]) => ({
+    ownerPeelCastSeconds: [],
+    teamSaveCastSeconds: [],
+    ownerRedirectSaves: (unitId: string) =>
+      unitId === OWNER.id ? redirectAt : [],
+  });
+  const run = (redirectAt: number[]) =>
+    cdHoardedEvents(
+      [{ crisisUnit: OWNER, own: true, points: [point] }],
+      [tranq],
+      OWNER,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      answers(redirectAt),
+    );
+  it("pressed inside the window: no row", () => {
+    expect(run([61.4])).toEqual([]);
+  });
+  it("none pressed, or pressed for another unit, or long after: the row stands", () => {
+    expect(run([])).toHaveLength(1);
+    expect(run([90])).toHaveLength(1);
+  });
+});
