@@ -200,5 +200,9 @@
  *  of a roster Utility row no other enemy family prints (Champion's Spear,
  *  Smoke Bomb, Tremor Totem) gets an `[ENEMY UTILITY]` line (user ruling: a
  *  new tag). 605 files: no candidate added or removed.
+ *  v420 (2026-10-18, F15 batch 16 — fact1215 R7): `defenseless a–b` is cut
+ *  by the target's own immunity and absorb shield and by an area save whose
+ *  aura it carried; a legend line says what the span reads (user approved:
+ *  kick-priority-missed 45 → 38, kick-priority-team 67 → 58).
  */
-export const PROMPT_VERSION = 419;
+export const PROMPT_VERSION = 420;

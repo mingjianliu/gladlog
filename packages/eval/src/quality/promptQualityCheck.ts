@@ -4342,7 +4342,6 @@ const ENEMY_DEF_OWN_PCT_LABEL = new RegExp(
  * Survival of the Fittest line sits at 2:04.
  */
 export function checkNoWindowAcrossOwnWall(lines: string[]): string[] {
-  const failures: string[] = [];
   const wallNames = ownWallLineNames();
   /** rendered unit id → the seconds and names of its own wall lines */
   const wallsOf = new Map<string, Array<{ second: number; spell: string }>>();
@@ -4363,22 +4362,35 @@ export function checkNoWindowAcrossOwnWall(lines: string[]): string[] {
       { second: Number(m[1]) * 60 + Number(m[2]), spell: m[3]! },
     ]);
   }
-  if (wallsOf.size === 0) return failures;
+  return windowsAcrossOwnLines(lines, wallsOf, "自己开了 20–99% 的墙");
+}
+
+/** The window half of the own-line gates: every `[KILL WINDOW]` /
+ * `[VULNERABLE]` span of a target — the line's own and the `defenseless a–b`
+ * it names — must not hold the second of one of `ownOf`'s lines of that
+ * target (`spanHoldsOwnWallSecond`, the producer's reading). */
+function windowsAcrossOwnLines(
+  lines: string[],
+  ownOf: ReadonlyMap<string, Array<{ second: number; spell: string }>>,
+  what: string,
+): string[] {
+  const failures: string[] = [];
+  if (ownOf.size === 0) return failures;
   const idOf = unitIdsByName(lines);
   lines.forEach((line, i) => {
     const w = line.match(KILL_WINDOW_SPAN);
     const target = w ? line.match(KILL_WINDOW_TARGET)?.[1] : undefined;
     if (!w || target === undefined) return;
     const id = idOf.get(target);
-    const walls = id === undefined ? undefined : wallsOf.get(id);
-    if (!walls) return;
-    const check = (what: string, from: number, to: number) => {
-      const held = walls
+    const own = id === undefined ? undefined : ownOf.get(id);
+    if (!own) return;
+    const check = (span: string, from: number, to: number) => {
+      const held = own
         .filter((x) => spanHoldsOwnWallSecond(from, to, x.second))
         .sort((a, b) => a.second - b.second);
       if (held.length > 0)
         failures.push(
-          `line ${i + 1}: ${what} ${fmtTime(from)}–${fmtTime(to)} 的目标 ${target} 在其中 ${held.map((x) => `${fmtTime(x.second)} ${x.spell}`).join("、")} 自己开了 20–99% 的墙([ENEMY DEF] 行)—— ${line.trim().slice(0, 140)}`,
+          `line ${i + 1}: ${span} ${fmtTime(from)}–${fmtTime(to)} 的目标 ${target} 在其中 ${held.map((x) => `${fmtTime(x.second)} ${x.spell}`).join("、")} ${what}([ENEMY DEF] 行)—— ${line.trim().slice(0, 140)}`,
         );
     };
     check(
@@ -4395,6 +4407,41 @@ export function checkNoWindowAcrossOwnWall(lines: string[]): string[] {
       );
   });
   return failures;
+}
+
+/** What follows the ability's name on an own `[ENEMY DEF]` immunity or
+ * absorb line: `(immune, 3.0s`, `(immune to magic, end not logged`,
+ * `(absorb, 2.0s` / `(absorb 494k, 3.5s` — with its length, or the
+ * official-length cap the producer cut at when the end was never logged. */
+const ENEMY_DEF_OWN_SAVE_LABEL = new RegExp(
+  String.raw`^\((?:immune(?: to [a-z]+(?:\/[a-z]+)*)?|absorb(?: [\d.]+k)?), (?:${ENEMY_DEF_END_NOT_LOGGED}|(\d+(?:\.\d+)?)s)`,
+);
+
+/**
+ * fact1215 R7 (2026-10-18, user approved): the own-wall invariant for the
+ * target's own immunity and absorb shield — "defenseless" says nothing was
+ * up, so no `[KILL WINDOW]` / `[VULNERABLE]` span runs across the target's
+ * own `[ENEMY DEF]` line labelled `immune …` / `absorb …` (`ownSaveSpanS`,
+ * the producer's cut). A line of no length (`0.0s`) cuts nothing. 605
+ * capture before the cut: see docs/prompt-version-history.md v420.
+ */
+export function checkNoWindowAcrossOwnSave(lines: string[]): string[] {
+  const savesOf = new Map<string, Array<{ second: number; spell: string }>>();
+  for (const line of lines) {
+    const m = ENEMY_DEF_LINE.exec(line);
+    if (!m || !m[0].endsWith("(")) continue;
+    const label = ENEMY_DEF_OWN_SAVE_LABEL.exec(
+      line.slice(m.index + m[0].length - 1),
+    );
+    const id = ENEMY_DEF_CASTER_ID.exec(line)?.[1];
+    if (!label || id === undefined) continue;
+    if (label[1] !== undefined && Number(label[1]) <= 0) continue;
+    savesOf.set(id, [
+      ...(savesOf.get(id) ?? []),
+      { second: Number(m[1]) * 60 + Number(m[2]), spell: m[3]! },
+    ]);
+  }
+  return windowsAcrossOwnLines(lines, savesOf, "自己开着免疫 / 吸收盾");
 }
 
 /** `softer target then: <unit> — PRIME` / `— gated, A/B in hand` inside an
@@ -7682,6 +7729,7 @@ export function checkMatch(
   hardFailures.push(...checkKillAttemptOwnControlClause(lines));
   hardFailures.push(...checkNoWindowAcrossSpiritOfRedemption(lines));
   hardFailures.push(...checkNoWindowAcrossOwnWall(lines));
+  hardFailures.push(...checkNoWindowAcrossOwnSave(lines));
   hardFailures.push(...checkKillTierWallOwnership(lines));
   hardFailures.push(...checkGuardianSpiritSaveClause(lines));
   hardFailures.push(...checkKarmaFedClause(lines));

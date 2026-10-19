@@ -10,7 +10,11 @@
 import { ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
 import { saveSchoolMask } from "../analysis/candidates/cooldownTiming";
-import { castAndEffectIds, castsOfEffectAura } from "../data/castEffectAuras";
+import {
+  castAndEffectIds,
+  castsOfEffectAura,
+  effectAurasOfCast,
+} from "../data/castEffectAuras";
 import { wallDoorPct } from "../data/mitigationComponents";
 import {
   MITIGATION_TABLE,
@@ -857,6 +861,65 @@ export function ownWallSpanS(
       : undefined;
   if (d.observedSeconds === undefined) return undefined;
   return { from: d.atSeconds, to: d.atSeconds + d.observedSeconds };
+}
+
+/**
+ * fact1215 R7 (2026-10-18, user approved): the unit's OWN immunity (kind
+ * "immune": Vanish, Ice Block, a school immunity …) or absorb shield (a
+ * self-save whose effect or mechanism is an absorb: Anti-Magic Shell)
+ * cuts a kill-window span as its own 20–99 % wall does — "defenseless"
+ * says nothing was up (3867e9ef: Vanish inside `defenseless 1:27–2:21`;
+ * 1120cb61: a 494k Anti-Magic Shell inside 0:29–0:55). A heal, a rewind, a
+ * heal or cheat-death proc is no defense that was up (the 1215 verification:
+ * Crimson Vial / Healthstone, Alter Time) and cuts nothing. The same reading
+ * as `ownWallSpanS` (a press the state machine times keeps its
+ * official-length hold; an end the log never showed is the interval
+ * builder's official-length cap).
+ */
+export function ownSaveSpanS(
+  d: Pick<
+    IEnemyDefensiveEvent,
+    | "kind"
+    | "atSeconds"
+    | "pressSeconds"
+    | "observedSeconds"
+    | "effect"
+    | "mechanism"
+  >,
+  pressIsTimed: boolean,
+): { from: number; to: number } | undefined {
+  const cuts =
+    d.kind === "immune" ||
+    (d.kind === "self-save" &&
+      (d.effect === "absorb" || d.mechanism?.kind === "absorb"));
+  if (!cuts) return undefined;
+  return ownWallSpanS({ ...d, kind: "self" }, pressIsTimed);
+}
+
+/**
+ * fact1215 R7: an area save (kind "area", anchored on its cast — ruling A15)
+ * cuts the span of a unit that CARRIES its aura: the cast's effect aura
+ * (`effectAurasOfCast`: Rallying Cry 97462 → 97463, Spirit Link Totem 98008
+ * → 325174) on `holder`, applied from just before the cast to
+ * `SAVE_CAST_AURA_PAIR_S` after it, for as long as that aura was up
+ * (1120cb61: Rallying Cry on the Death Knight 0:29.5–0:42.5 inside
+ * `defenseless 0:29–0:55`). A save with no aura on the unit (Darkness, an
+ * Anti-Magic Zone the log writes no aura for) cuts nothing here.
+ */
+export function areaSaveSpanOnS(
+  d: Pick<IEnemyDefensiveEvent, "kind" | "spellId" | "atSeconds">,
+  holderIntervals: readonly ISaveAuraInterval[],
+): { from: number; to: number } | undefined {
+  if (d.kind !== "area") return undefined;
+  const effects = new Set(effectAurasOfCast(d.spellId));
+  if (effects.size === 0) return undefined;
+  const iv = holderIntervals.find(
+    (x) =>
+      effects.has(x.spellId) &&
+      x.fromS >= d.atSeconds - 0.5 &&
+      x.fromS <= d.atSeconds + SAVE_CAST_AURA_PAIR_S,
+  );
+  return iv && iv.toS > iv.fromS ? { from: iv.fromS, to: iv.toS } : undefined;
 }
 
 /**

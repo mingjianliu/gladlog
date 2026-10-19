@@ -2409,6 +2409,17 @@ const INDEX: PredicateRow[] = [
     symbol: "enemyDefSpeaksForPress",
     mod: enemyDefensives,
   },
+  // fact1215 R7: the non-wall saves that cut a kill-window span
+  {
+    file: `${A}/utils/enemyDefensives.ts`,
+    symbol: "ownSaveSpanS",
+    mod: enemyDefensives,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkNoWindowAcrossOwnSave",
+    mod: promptQualityCheck,
+  },
   // fact1215 R4 / C4: who broke an aura; the caster-side link aura
   {
     file: `${A}/utils/brokenRowBreaker.ts`,

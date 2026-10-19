@@ -23,10 +23,14 @@ import {
   unitCooldownOf,
 } from "./cooldowns";
 import {
+  areaSaveSpanOnS,
   enemyDefensiveEvents,
+  type ISaveAuraInterval,
   isBelowWallFloorExternal,
+  ownSaveSpanS,
   ownWallSpanS,
   renderedExternalSpanS,
+  saveAuraIntervals,
   wallTableIdOfAura,
 } from "./enemyDefensives";
 import { fmtTime, renderedWindowSeconds } from "./renderGrid";
@@ -418,20 +422,44 @@ export function computeOffensiveWindows(
   // The roster is NOT widened: a roster member also OPENS spans (a unit that
   // pressed only that spell reads "defenseless" once it is spent), which is
   // the owned-but-unpressed question — docs/predicate-index "Not yet unified".
+  // fact1215 R7 (2026-10-18): the unit's own immunities and self-saves cut
+  // it too (`ownSaveSpanS`), and an area save cuts every unit that carries
+  // its aura (`areaSaveSpanOnS`) — a Vanish, a 494k Anti-Magic Shell, a
+  // Rallying Cry sat inside spans that said nothing was up.
   const savesUpOn = new Map<string, Array<{ from: number; to: number }>>();
+  const addSave = (holderId: string | undefined, span?: { from: number; to: number }) => {
+    if (!holderId || !span) return;
+    const list = savesUpOn.get(holderId) ?? [];
+    list.push(span);
+    savesUpOn.set(holderId, list);
+  };
+  const intervalsOf = new Map<string, ISaveAuraInterval[]>();
+  const holderIntervals = (u: ICombatUnit) => {
+    let ivs = intervalsOf.get(u.id);
+    if (!ivs) {
+      ivs = saveAuraIntervals(u, enemies, combat);
+      intervalsOf.set(u.id, ivs);
+    }
+    return ivs;
+  };
   for (const caster of enemies) {
     for (const d of enemyDefensiveEvents(caster, enemies, combat)) {
       // F15 C1: a 15 % ally copy cuts no span, as a 15 % own aura does not
       if (isBelowWallFloorExternal(d)) continue;
-      const holderId = d.kind === "external" ? d.recipientId : caster.id;
-      const span =
+      if (d.kind === "area") {
+        for (const holder of enemies)
+          addSave(holder.id, areaSaveSpanOnS(d, holderIntervals(holder)));
+        continue;
+      }
+      const timed = timesCastOf(wallTableIdOfAura(d.spellId));
+      addSave(
+        d.kind === "external" ? d.recipientId : caster.id,
         d.kind === "external"
           ? renderedExternalSpanS(d)
-          : ownWallSpanS(d, timesCastOf(wallTableIdOfAura(d.spellId)));
-      if (!holderId || !span) continue;
-      const list = savesUpOn.get(holderId) ?? [];
-      list.push(span);
-      savesUpOn.set(holderId, list);
+          : d.kind === "self"
+            ? ownWallSpanS(d, timed)
+            : ownSaveSpanS(d, timed),
+      );
     }
   }
 

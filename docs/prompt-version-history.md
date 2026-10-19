@@ -3622,3 +3622,20 @@ line (`enemyDefSpeaksForPress`). 605 files: 2,604 lines (Champion's Spear
 1,316, Smoke Bomb 666, Tremor Totem 622) in 1,529 contexts with the legend;
 no candidate added or removed; pressFactScan `enemyUtilityPress` 2,604 missing
 → 0.
+v420 (2026-10-18, F15 batch 16 — fact1215 R7): "defenseless" says nothing was
+up, and three kinds of save were up inside spans that said so. The span is now
+also cut by the target's own immunity (`[ENEMY DEF] … (immune …)`: Vanish
+inside `defenseless 1:27–2:21`, 3867e9ef) and absorb shield (a 494k
+Anti-Magic Shell inside 0:29–0:55, 1120cb61) — `ownSaveSpanS`, the own-wall
+reading — and by an area save whose effect aura the target carried (Rallying
+Cry 97463 on the Death Knight 0:29.5–0:42.5, same round) — `areaSaveSpanOnS`.
+A heal, a rewind or a proc save cuts nothing (the 1215 verification: Crimson
+Vial / Healthstone, Alter Time). Unchanged on purpose (2026-10-13): a
+defensive the target owns and never pressed does not end the span; a new
+legend line under KILL WINDOWS says so (`a defensive it never pressed may
+still have been in hand`). 605 files: kick-priority-missed 45 → 38,
+kick-priority-team 67 → 58 (user approved 2026-10-18 with the 174-5-940
+example: Rallying Cry 1:10 and Intervene 1:20 on the rogue, a 1:25.7 Healing
+Wave no longer inside a defenseless window); [KILL WINDOW] lines −3,953 /
++4,614 (spans cut into more pieces), [VULNERABLE] −75 / +150; new gate
+checkNoWindowAcrossOwnSave 3,368 → 0.

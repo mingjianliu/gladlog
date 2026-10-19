@@ -13,7 +13,10 @@ import {
 } from "@gladlog/parser-compat";
 import { beforeAll, describe, expect, it } from "vitest";
 
-import { checkNoWindowAcrossOwnWall } from "../src/quality/promptQualityCheck";
+import {
+  checkNoWindowAcrossOwnSave,
+  checkNoWindowAcrossOwnWall,
+} from "../src/quality/promptQualityCheck";
 
 // R08 (d), gap 1 (2026-10-13): "defenseless" says nothing was up — no kill
 // window on a unit runs across a 20–99 % wall that unit put up itself. The
@@ -297,5 +300,42 @@ describe("computeOffensiveWindows + [ENEMY DEF] ⇄ checkNoWindowAcrossOwnWall",
       "0:24 Survival of the Fittest、0:40 Ancient of Lore 自己开了",
     );
     expect(fails[0]).not.toContain("Roar of Sacrifice");
+  });
+});
+
+// fact1215 R7 (2026-10-18, user approved): the same invariant for the
+// target's own immunity and absorb shield — 3867e9ef's Vanish inside
+// `defenseless 1:27–2:21`, 1120cb61's 494k Anti-Magic Shell.
+describe("checkNoWindowAcrossOwnSave", () => {
+  const VANISH = own("2:04", "Vanish (immune, end not logged)");
+  it("fails: an immunity and an absorb shield inside the spans", () => {
+    expect(
+      checkNoWindowAcrossOwnSave([
+        ...ROSTER,
+        killWindow("1:58–2:12", "1:35–2:51"),
+        VANISH,
+      ]),
+    ).toHaveLength(2);
+    expect(
+      checkNoWindowAcrossOwnSave([
+        ...ROSTER,
+        vulnerable("1:35–2:51"),
+        own("2:04", "Anti-Magic Shell (absorb 494k, 3.5s)"),
+        own("2:30", "Cloak of Shadows (immune to magic, 5.0s)"),
+      ]),
+    ).toHaveLength(1);
+  });
+  it("passes: the cut spans; a heal, a rewind, an external and another unit's save", () => {
+    expect(
+      checkNoWindowAcrossOwnSave([
+        ...ROSTER,
+        vulnerable("1:35–2:04"),
+        killWindow("2:13–2:26", "2:07–2:51"),
+        VANISH,
+        own("2:30", "Crimson Vial (heal, 4.0s)"),
+        own("2:31", "Alter Time (rewind, 3.0s)"),
+        vulnerable("1:35–2:51", DRUID),
+      ]),
+    ).toEqual([]);
   });
 });

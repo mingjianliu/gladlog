@@ -741,6 +741,11 @@ export function buildMatchContext(
       tLines.push(
         "KILL WINDOWS (enemy vulnerability spans — team facts, not verdicts):",
       );
+      // fact1215 R7: what "defenseless" reads (2026-10-13: it says nothing
+      // was UP, not that nothing was owned — the wording stays)
+      tLines.push(
+        "  `defenseless a–b` = nothing of these was up on the target: its own wall, immunity or absorb shield, an ally's external on it, an area save it carried; and every major defensive it pressed this round was still on cooldown. A defensive it never pressed may still have been in hand (its kit's [UNUSED]); a heal is not counted.",
+      );
       kwLines.forEach((l) => tLines.push(l));
       tLines.push("</kill_windows>");
     }
