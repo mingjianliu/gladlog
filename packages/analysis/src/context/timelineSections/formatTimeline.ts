@@ -627,6 +627,13 @@ export function formatTimeline(
           "    own; `with X` = the cast it came with. It is still a burst effect on that unit.",
         ]
       : []),
+    // fact1215 C7: an enemy's utility press, a fact line only
+    ...(enemyCdRender.utilityRendered
+      ? [
+          "  [ENEMY UTILITY] = an enemy pressed a utility cooldown (Champion's Spear, Smoke Bomb, Tremor Totem, …): when it",
+          "    was pressed, nothing more. It is not an offensive burst or a defensive and opens no [OFFENSIVE WINDOW].",
+        ]
+      : []),
     // F-E8 (A26 = A): the healer throughput tag, outside the burst windows
     ...(enemyCdRender.healCdRendered
       ? [

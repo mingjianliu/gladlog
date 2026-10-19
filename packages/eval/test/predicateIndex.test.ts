@@ -2403,6 +2403,12 @@ const INDEX: PredicateRow[] = [
     symbol: "checkWarlockPurgeFollowsPet",
     mod: promptQualityCheck,
   },
+  // fact1215 C7: which enemy presses [ENEMY DEF] already speaks for
+  {
+    file: `${A}/utils/enemyDefensives.ts`,
+    symbol: "enemyDefSpeaksForPress",
+    mod: enemyDefensives,
+  },
   // fact1215 R4 / C4: who broke an aura; the caster-side link aura
   {
     file: `${A}/utils/brokenRowBreaker.ts`,

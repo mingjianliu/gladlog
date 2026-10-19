@@ -30,6 +30,9 @@
  *    (454351 SUCCESS) in the ms of a Wake of Ashes 255937 press, when the
  *    round has two or more such pairs. Its `[PROC]` line must read `(with
  *    Wake of Ashes)`.
+ *  - `enemyUtilityPress` (C7, 2026-10-18): an enemy's SUCCESS of Champion's
+ *    Spear 376079, Smoke Bomb 212182 or Tremor Totem 8143 inside the round.
+ *    An `[ENEMY UTILITY]` line at its second (pid, name) must say it.
  *  - `auraOnlyAW` (C5): an enemy's 454351 aura APPLIED, while none is up,
  *    with no 454351 SUCCESS within ±0.5 s. An `[ENEMY CD]` line at its second must name
  *    `Avenging Wrath (no press)`.
@@ -83,6 +86,9 @@ const fmt = (s: number): string => {
   return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`;
 };
 
+/** Champion's Spear, Smoke Bomb, Tremor Totem (fact1215 C7) */
+const ENEMY_UTILITY_IDS = new Set(["376079", "212182", "8143"]);
+
 type Check =
   | "allyScales"
   | "timeStop"
@@ -91,7 +97,8 @@ type Check =
   | "noPressCopy"
   | "pressedNotTagged"
   | "procWith"
-  | "auraOnlyAW";
+  | "auraOnlyAW"
+  | "enemyUtilityPress";
 const expected = new Map<Check, number>();
 const missing = new Map<Check, string[]>();
 const bump = (c: Check) => expected.set(c, (expected.get(c) ?? 0) + 1);
@@ -358,6 +365,31 @@ for (const f of files) {
       }
     }
   }
+
+  // enemyUtilityPress (C7): an enemy's press of a roster Utility row no
+  // other enemy family prints (the three the audit found)
+  for (const u of units) {
+    const me = pidOf.get(u.name);
+    if (!me || me.role !== "enemy") continue;
+    for (const c of u.spellCastEvents ?? []) {
+      if (c.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
+      if (!ENEMY_UTILITY_IDS.has(c.spellId)) continue;
+      const ts = c.logLine.timestamp;
+      if (ts < start || ts > legacy.endTime) continue;
+      const t = at(ts);
+      bump("enemyUtilityPress");
+      const name = getEnglishSpellName(c.spellId, c.spellName);
+      if (
+        !has(
+          t,
+          (l) =>
+            l.startsWith(`${t}  [ENEMY UTILITY]   ${me.pid}(`) &&
+            l.includes(`: ${name}`),
+        )
+      )
+        miss("enemyUtilityPress", `${where} ${t} ${u.name} ${name}`);
+    }
+  }
 }
 
 console.log(`contexts: ${contexts}`);
@@ -370,6 +402,7 @@ for (const c of [
   "pressedNotTagged",
   "procWith",
   "auraOnlyAW",
+  "enemyUtilityPress",
 ] as Check[]) {
   const m = missing.get(c) ?? [];
   console.log(`${c}: expected ${expected.get(c) ?? 0}, missing ${m.length}`);

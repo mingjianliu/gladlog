@@ -10,7 +10,7 @@
 import { ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
 import { saveSchoolMask } from "../analysis/candidates/cooldownTiming";
-import { castsOfEffectAura } from "../data/castEffectAuras";
+import { castAndEffectIds, castsOfEffectAura } from "../data/castEffectAuras";
 import { wallDoorPct } from "../data/mitigationComponents";
 import {
   MITIGATION_TABLE,
@@ -619,6 +619,24 @@ export function isExternalSaveId(spellId: string): boolean {
     ENEMY_ALLY_SAVE_IDS.has(spellId) ||
     ENEMY_REDIRECT_SAVE_IDS.has(spellId) ||
     spellId in ENEMY_IMMUNITY_EXTERNAL_CASTS
+  );
+}
+
+/**
+ * Does `[ENEMY DEF]` speak for an enemy press of this spell — its own id or an
+ * effect aura it leaves is a wall, an immunity, a self-save or an external in
+ * this module's sets? Asked by the `[ENEMY UTILITY]` line (fact1215 C7), which
+ * prints only the presses no other enemy family prints (Vanish → 11327 and
+ * Lichborne already read `[ENEMY DEF]`).
+ */
+export function enemyDefSpeaksForPress(spellId: string): boolean {
+  return [...castAndEffectIds(spellId)].some(
+    (id) =>
+      MITIGATION_AURA_IDS.has(wallTableIdOfAura(id)) ||
+      IMMUNITY_IDS.has(id) ||
+      isImmunitySaveAura(id) ||
+      SELF_SAVE_IDS.has(id) ||
+      isExternalSaveId(id),
   );
 }
 

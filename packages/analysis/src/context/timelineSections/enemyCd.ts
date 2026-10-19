@@ -10,12 +10,16 @@
  */
 import { type ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
+import { classMetadata } from "../../data/classSpells";
 import { ENEMY_HEAL_CD_IDS } from "../../data/enemyHealCds";
 import { getEnglishSpellName } from "../../data/spellEffectData";
+import { SpellTag } from "../../data/spellTypes";
 import { AURA_REBROADCAST_GAP_MS } from "../../utils/auraIntervals";
 import { isFormReshiftCast } from "../../utils/castPress";
 import { specToString } from "../../utils/cooldowns";
+import { enemyDefSpeaksForPress } from "../../utils/enemyDefensives";
 import { fmtTime } from "../../utils/renderGrid";
+import { OFFENSIVE_CD_SPELL_IDS } from "../../utils/spellDanger";
 import type { TimelineCtx } from "./ctx";
 
 /** The per-spell cast ordinal (triage res-readiness F-C2): `[k/N]` is the
@@ -97,6 +101,7 @@ export function emitEnemyCdEntries(
   ordinalRendered: boolean;
   healCdRendered: boolean;
   procRendered: boolean;
+  utilityRendered: boolean;
 } {
   const { enemyCDTimeline, cdPurgeAnnotations, addEntry, enemyPid } = ctx;
   let ordinalRendered = false;
@@ -186,5 +191,52 @@ export function emitEnemyCdEntries(
       );
     }
   }
-  return { ordinalRendered, healCdRendered, procRendered };
+  // [ENEMY UTILITY] (fact1215 C7, user ruling 2026-10-18: a new tag, a fact
+  // line only): an enemy's press of a roster Utility row (`SpellTag.Utility`
+  // — Champion's Spear, Smoke Bomb, Tremor Totem) that no other enemy family
+  // prints. The friendly side has always had its press line; the enemy side
+  // had none (3867e9ef 0:23 Smoke Bomb, 1120cb61 0:36 Champion's Spear). It
+  // opens no window and feeds no reader: not [ENEMY CD], not [RES].
+  let utilityRendered = false;
+  for (const enemy of ctx.enemies ?? []) {
+    const rows = classMetadata
+      .find((c) => c.unitClass === enemy.class)
+      ?.abilities.filter(
+        (ab) =>
+          ab.tags.includes(SpellTag.Utility) &&
+          !ENEMY_HEAL_CD_IDS.has(ab.spellId) &&
+          !OFFENSIVE_CD_SPELL_IDS.has(ab.spellId) &&
+          !enemyDefSpeaksForPress(ab.spellId),
+      );
+    if (!rows || rows.length === 0) continue;
+    const ids = new Set(rows.map((ab) => ab.spellId));
+    const casts = (enemy.spellCastEvents ?? [])
+      .filter(
+        (c) =>
+          c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+          !!c.spellId &&
+          ids.has(c.spellId),
+      )
+      .sort((a, b) => a.logLine.timestamp - b.logLine.timestamp);
+    const totalBy = new Map<string, number>();
+    for (const c of casts)
+      totalBy.set(c.spellId, (totalBy.get(c.spellId) ?? 0) + 1);
+    const seqBy = new Map<string, number>();
+    for (const c of casts) {
+      const seq = (seqBy.get(c.spellId) ?? 0) + 1;
+      seqBy.set(c.spellId, seq);
+      const ordinal = castOrdinal(seq, totalBy.get(c.spellId) ?? 1);
+      if (ordinal) ordinalRendered = true;
+      const t = (c.logLine.timestamp - ctx.matchStartMs) / 1000;
+      utilityRendered = true;
+      addEntry(
+        t,
+        `${fmtTime(t)}  ${ENEMY_UTILITY_TAG}   ${enemyPid(enemy.name)} (${specToString(enemy.spec)}): ${getEnglishSpellName(c.spellId, c.spellName)}${ordinal}`,
+      );
+    }
+  }
+  return { ordinalRendered, healCdRendered, procRendered, utilityRendered };
 }
+
+/** The tag of an enemy's utility press line (fact1215 C7). */
+export const ENEMY_UTILITY_TAG = "[ENEMY UTILITY]";

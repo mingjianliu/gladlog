@@ -3611,3 +3611,14 @@ answered with Ice Nova — user approved 2026-10-18); no other candidate added
 or removed; 60 `[CC NOT LANDED] … Wake of Ashes` lines removed; 68 [MISSED
 PURGE OPPORTUNITY] lines removed; new gate checkWarlockPurgeFollowsPet 209 →
 0; breakFactScan `conditionalControlMiss` 60/650 → 0.
+v419 (2026-10-18, F15 batch 15 — fact1215 C7 fact half): an enemy's press of a
+roster Utility row (`SpellTag.Utility`) that no other enemy family prints —
+Champion's Spear, Smoke Bomb, Tremor Totem — gets a line,
+`m:ss  [ENEMY UTILITY]   <pid> (<spec>): <Spell>[ (cast k of N)]` (user ruling
+2026-10-18: a new tag, a fact line only; Champion's Spear stays a Utility row,
+it opens no [OFFENSIVE WINDOW] and feeds no [ENEMY CD] / [RES] reader). Vanish
+and Lichborne keep their [ENEMY DEF] line, Tree of Life its [ENEMY HEAL CD]
+line (`enemyDefSpeaksForPress`). 605 files: 2,604 lines (Champion's Spear
+1,316, Smoke Bomb 666, Tremor Totem 622) in 1,529 contexts with the legend;
+no candidate added or removed; pressFactScan `enemyUtilityPress` 2,604 missing
+→ 0.

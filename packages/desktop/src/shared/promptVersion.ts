@@ -196,5 +196,9 @@
  *  damage miss of Wake of Ashes is no `[CC NOT LANDED]` (`missReportsControl`);
  *  a warlock's purge follows the pet the log shows (`warlockRanPurgePet`);
  *  Ice Nova 157997 is a root (user approved −4 slow-defensive-response).
+ *  v419 (2026-10-18, F15 batch 15 — fact1215 C7 fact half): an enemy's press
+ *  of a roster Utility row no other enemy family prints (Champion's Spear,
+ *  Smoke Bomb, Tremor Totem) gets an `[ENEMY UTILITY]` line (user ruling: a
+ *  new tag). 605 files: no candidate added or removed.
  */
-export const PROMPT_VERSION = 418;
+export const PROMPT_VERSION = 419;
