@@ -6,6 +6,289 @@ One section per release, listing every change and the commit behind it (on the
 `git log v<prev>..v<new>` basis; release and docs-only commits go under "Other").
 The release procedure is documented in `.claude/skills/release`.
 
+## v0.1.36 (2026-10-20)
+
+A month of fact-layer work. The coach's timeline was checked line by line against what the log actually shows and rewritten to state the real game state: a printed HP low is the true lowest point at the second it happened; a control says who or what broke it and how it ended; a PvP trinket press lists every CC it removed; a pet's dispel names the pet; an enemy wall no press put up reads `[no press logged]`; enemy Champion's Spear, Smoke Bomb and Tremor Totem presses get an `[ENEMY UTILITY]` line; a kill window closes when the target puts up its own wall, immunity or absorb; and a silence the log writes no aura for (Solar Beam) shows when a refused press proves it. A kick lockout now stops only the school it locked, kill windows end at the target's death and at the round's end, and the cooldown ledger sees the defensives players actually press. Every change that adds or removes an accusation was previewed on a 605-file capture and approved by the user before landing.
+
+The work went through many cross-AI review rounds, each finding pinned by a failing test. The reference tables were regenerated in batches at pinned commits (GH #115), and the WoW data was refreshed to 12.1.5.70391. On the desktop, an opt-in AI self-review re-checks the findings against their own prompt (wrong statements 48 → 15 in the offline experiment), and Claude Opus 5.5 is the default model.
+
+### AI coaching — what the report says about you
+
+#### Kicks and interrupts
+
+- `21070935` `1fd9fffb` `11a6872c` `796d9cb8` `d3a28634` `1cc1bb6c` `b849da7c` `25047a2a` `2dc4fa7d` `73c5dd26` `6408863a` `6b3665db` **A kick lockout stops only the school it locked.** Every reader treated any interrupt as locking every spell (1,199 presses outside the locked school happened inside a lockout on 605 files). cd-hoarded and the sync-window ready gate ask per spell and print the locked school (**candidates added**: cd-hoarded +2, missed-sync-window +9); missed purge / cleanse, kick priority, cc-avoidable, `[CD PRIOR]`, burst-window feasibility, the death block's missed options and `[DEFENSIVE AVAILABLE]` followed, each after a 605-file preview, and say which spell the number is about
+- `d7d3cfff` **kick-eaten judges a kick by both sides' pressure during the lockout** (user rulings, GH #113): each line states the lowest HP, any death and both sides' cooldowns, and a kick with both sides calm and no burst of ours ready is dropped (dps 1,030 → 998, healer 506 → 475)
+- `de3aeb57` `9c65b55b` `c28fab1b` **kick-eaten adds candidates**: the per-round cap orders kicks by pressure and the first two kicks at a death or crisis HP do not count toward it (1,450 → 1,850 lines, user-approved). Pressure counts only a cooldown already running at the kick, and a unit inside a full immunity is not "low" (−36 +12, then +4)
+- `78b46830` `36908dcd` `1c523fc9` `4ce68664` kick-eaten reads rejected presses — no "did nothing" or "waited out the lockout" while the game refused the casts (≥ 162 → 0); a trinket or racial out of a stun is a CC break (24 → 0); the line names the locked school ("instant or channel" 804 → 0) and suggests out-ranging only when the spell reaches farther than the kick
+- `ea2790f6` `508307f0` After the kick, a spell is locked only when all its schools are; the "switched" line shows rejected presses with their offsets, key repeats are not presses, and the lockout ends at the first success in a locked school (switched / acted 1,924 / 809 → 2,111 / 622)
+- `9a39c98c` `b1b0cf48` A kick on a channel after the spell already went out is marked `phase=channel` (273 of 1,536 lines); a multi-school lock lists its schools, and "burst ready" no longer claims the kick slowed your tempo
+- `cf27fc9c` **New: the recording player's own cast control.** kick-eaten states how many hardcasts you stopped yourself and how many enemy kicks you baited; the kick dashboard gains a strip with the same counts (corpus: 66 % of hardcasts completed, 17 % self-stopped, 6 % kicked)
+- `44ab92a8` `1935dc0f` `aab9a5c2` `fb759123` `2818d271` The cancel count reads cast bars exactly as `[CAST STOPPED]` does (126 of 1,869 rows), and a bar broken by your death or the round's end is not a cancel. "JUKED by fake X" names the last bar begun before the kick, only when nothing else ended it (970 → 782); `kickDepthPct` is measured against your own completed bars and never clamped to 100 (75 → 10 rows)
+- `b7e92ac3` `dd3d5541` `63fc9df6` `68a609b8` kick-eaten rows state a press refused for another reason (202 rows), a kick that also silences, no 50,000 yd placeholder range, `kickLandedFromYd` (196 rows), and an interpolated distance as approximate
+- `0e71f311` `0f2d9e2b` "Our low" and "their low" are read only inside the lockout's printed seconds (166 → 0), and a hard cast that logs a companion cast first (Chrono Flames) is the switch press (`0e71f311` went out with a placeholder title; `0f2d9e2b` records it)
+- `c5a20f11` `a7197940` `e8305ed2` `9eb859c9` Kick distances read the castable spell (Skull Bash 13 yd, not 100; Mind Control 34.5, not 134.5). A kick is "missed" only if the kicker could have reached the healer before the heal landed — a root cuts the run (the root list gains Ice Nova and Harpoon)
+- `d0956fe0` `96c98c0a` `e5b2d663` Who could have kicked is read at cast start: free kickers, gap-closers, an immobile owner; a dead or controlled enemy's interrupt is not "UP"; `outRangeable=yes` needs a kicker too far to walk in during the cast (76 → 10 rows)
+- `1d352ea8` `1293c3ed` `b73689fe` `036170bd` kick-priority states the span it judged, the kick's range and reach, how long the kick had been back, calls a root a root, and says how many casts a heal figure sums (kick range on 0 → 91). kick-eaten counts the round's kicks by the same kicker (0 → 1,225), kick-priority-missed says what the player was casting, and a kick after a just-stopped channel is juked by it
+- `76db805e` `7b149088` The kick audit gives one kick one entry; a silence that landed is not "hit nothing". A reflected CC or silence locks its holder, dispel backlash locks the dispeller, and a Storm Conduit holder's kick lockout is ×0.6 (cc-avoidable −1, missed-cleanse +1, user-approved)
+- `a024f160` `24ce73b7` `05e976d5` A spell a controlled pet casts (Spell Lock, Devour Magic …) is asked of the pet's own controls and lockouts, not the owner's; totems and guardians stay on the owner (0 candidates moved)
+
+#### Cooldowns and saves
+
+- `efc522b4` `28cbee6f` **The ledger sees the defensives players actually press.** A forward-completeness scan added Survival of the Fittest, Greater Invisibility, Alter Time, Retribution's Divine Protection, Lay on Hands, Spellwarden's Anti-Magic Shell and Transcendence: Transfer; 13 wrong spec exclusions are gone and a shared DB2 charge pool spends both spells (cd-hoarded −177 / +187, cd-waste +158). User-signed: Greater Invisibility (60 %) and Divine Protection (20 %) become priced walls, Lay on Hands a burst answer
+- `cc7ab31a` `bb2b48c9` `024c9af3` `cb36a1aa` A spec's baseline defensives stay in the ledger in a round they were not pressed (cd-hoarded 1,245 → 1,266), and a talent whose entry carries another spell id proves the button it grants (Fortifying Brew, Avenging Crusader, Incarnation / Celestial Alignment, Berserk, Lay on Hands)
+- `cb8b7729` `1fce5ef6` `d5f0d915` cd-hoarded counts a save pressed just before the crossing and stays silent when a major wall is already up (2,241 → 1,858); a save given to another teammate does not answer this unit's crisis; a school-limited save is named only when it covers most of the crisis damage
+- `20edc688` `59fd92cf` cd-hoarded judges a school-limited save by what was aimed at the crisis unit, landed and absorbed — the `[KILL ATTEMPTS]` predicate (+1); Anti-Magic Shell counts only when at least half the crisis damage is magic (−7)
+- `f81ab360` **Accusations need an owner who could act.** cd-hoarded, cc-avoidable and missed-cleanse do not fire while the player was silenced, kicked, stunned or trapped; a dead teammate is not an eligible dispeller; Solo Shuffle findings after a round's first death are dropped (123 entries removed)
+- `31836ea2` `ae41cd54` `4ed039df` `bfe5eff1` `33a41478` The owner gate pairs auras in log order, counts enemy pets and totems and stops at the round end; cd-hoarded states `ownerCc` and `ownerFreeS`. The free span starts at the crisis second, and a stun counts only if it stops that cooldown (Icebound Fortitude under Shockwave: 5.0 s free, not 3.0)
+- `cfce4256` `f337f942` Divine Shield, Ice Block, Icebound Fortitude and a self-cast Blessing of Protection are usable while stunned (DB2 immunity route); a CC removal pairs with its own caster's application (−3)
+- `2478cb35` `985741e9` `639b6fb4` `41e9b29c` cd-hoarded states when a rejected press happened and how long you could still act (634 of 1,313 lines); a ready cooldown rejected inside the GCD counts as an attempt. cd-waste says "never successfully cast", and the kit reads `[UNUSED — pressed N×, refused: …]`
+- `e0012b99` A crisis point's "damage in the prior 2 s" ends at its HP reading, so the crossing hit is counted (cd-hoarded +16 / −11)
+- `02d64099` `bbbc4eee` `e105bbd3` `fc4d2f3b` One decision, one card: external-unused wins over cd-hoarded for the same victim within 5 s (−63). cd-hoarded never names a cooldown you could not pay for — the cost the unit's own cast rows state, which the parser now keeps (Innervate exempt)
+- `bd321b4f` `972e47b5` `ad41d1fd` `a7fc4db5` Emerald Communion is a team save (+9 / −10). **Candidate added:** Mass Invisibility is an accusable defensive, reaching a teammate only with Improved Mass Invisibility (+31 / −13), but not in cd-waste. Feign Death is a response only, never accused (635 → 617)
+- `4c501cb1` `e5f4375e` `4117f97b` `17d05417` `fe55309a` Death Pact joins the Death Knight ledger (+5 −2), Lichborne and Smoke Bomb as utility; Time Stop, Tree of Life and Havoc Metamorphosis get rows, and a Flameshaper's Obsidian Scales names the ally it landed on (user-approved)
+- `5b6f4465` `c1ced674` "Never pressed" counts a press from the same charge pool (cd-waste 983 → 938), and one cd-waste row names a shared pool's buttons together (25 → 22); the low-pressure NOTE names only self-only defensives
+- `17b85fa5` `87026ad2` `592e3e63` "Cheaper available" offers only team-capable tools for a team save, only stun-usable ones to a stunned owner, and never Avenging Wrath (3,143 → 2,711 over two passes); `[DEATH] … Unused` reads the same rule
+- `55f81a65` `e4532584` Barkskin and Frenzied Regeneration are Restoration Druid saves for the druid's own crisis, never accused; crisis-no-response stays silent under a major wall (12 → 9)
+- `471649ce` `1d1c1747` slow-defensive-response says when your ally save was rejected; crisis-no-response says what you pressed instead of "did NOTHING"
+- `10272d40` `7315f4fd` cd-hoarded says when you had just pressed your own burst and which defensives you pressed that were still on cooldown; missed-sync-window says when a held cooldown went into the next healer lock
+- `2547c4a5` `bd5a6e19` `af1ad016` Who broke an aura is read from the hit behind the break row; a Blessing of Sacrifice split is the paladin's own spell (cd-hoarded +14, crisis-no-response +1). A redirect save pressed for the unit in crisis answers cd-hoarded (−24)
+- `a19623f7` burst-into-mitigation fires only when a wall covered more than 60 % of the burst, a door read from data (163 → 35; 2v2 left alone, user ruling)
+- `9b99eb04` `1f199ca8` **A one-second reaction window for "ready and not pressed"**: a cooldown back less than a second before a death or crisis is not unused (35 `[DEATH] (Unused: …)` entries removed); `[CD PRIOR]` and burst-answer feasibility read the same rule
+
+#### Sync windows, bursts and kill windows
+
+- `b72807af` `d8b6240b` `d938a685` `3a426dfb` missed-sync-window: an Immune CC is not a window, one continuous healer lock is one window, a "ready" cooldown needs a free owner, a running burst counts as entered, and a healer's cooldown counts only if it is Power Infusion (dps 1,100 → 642, healer 550 → 321)
+- `d75a3d95` `e8834062` `fdf3e198` `ab13c330` A lock's length uses the control lines' formatter, cut at the round's end, and only its in-round part is ranked (756 → 726). Each ready cooldown says whose it is; in Solo Shuffle a row reaches you only when a cooldown or the control is yours (42 → 25)
+- `ce125136` `905d1c86` missed-sync-window states when the cooldowns were pressed and came back, why the holder could not press, the enemy at the lowest HP and what ended the lock (+12)
+- `bd097f52` `2d36e612` `169491be` An offensive cooldown is "running" only while its buff is up on a player — no 10 s floor, not on a pet copy (Stormkeeper median span 15 → 5.5 s). **Adds and removes candidates** across kick-eaten, position-mistake, slow-defensive-response, burst-into-mitigation and questionable-external
+- `07ab3c83` `2b7ea99a` **Empower Rune Weapon is no longer an offensive cooldown** (lines naming it 3,099 → 30; +13 −8, user-approved). Your press of a cooldown the enemy side prints counts as pressed (1,719 of 1,826 had no line; missed-sync-window 807 → 747)
+- `8db675ae` `b0fb637b` `9904cb96` **Kill windows end at the target's death and at the round's end** (53 of 765 `[VULNERABLE]` lines started on a corpse; 3,926 Solo Shuffle spans ran past the round → 0). Kick-priority rows at a dead target are **removed** (−6); two new gates hold both
+- `24181198` `937b9dc4` `df5744b7` `c71c308d` `a855704d` **A "defenseless" span ends at the target's own save**: an external, Blur, Greater Invisibility, Burrow, Time Stop (−119 / +10), its own 20–99 % wall, immunity, absorb or area save (kick-priority-missed 45 → 38, team 67 → 58), and a priest's Spirit of Redemption form (241 failures → 0), all user-approved
+- `19538fe6` A 20–99 % wall the unit owns and has not pressed counts as in hand for the kill-opportunity tier (prime 4,712 → 3,734)
+- `8ffcb686` `5930b49d` A dead player holds no cooldown — one dead-at predicate. Kill-window team burst counts owned pets (68 `[VULNERABLE]` lines become kill windows, user-approved)
+- `45ae2188` `e45b3877` `e6de661c` A control answers a burst only when it lands on a unit hitting the pressured teammate (252 of 1,552 were on the healer). The pressured friendly is the one who died inside the window, ahead of any survivor; a dead friendly has no self-save after its death
+
+#### Dispels and purges
+
+- `4b72b713` **Candidates removed:** missed-cleanse tiers read the signed dispel-verdict matrix (16 new rows; 418 → 342 items)
+- `8ca286ee` Dispel reach is swept from the rendered second, and line of sight is actually evaluated — the zone id was read from the wrong field, so the check had been range-only (missed-cleanse 438 → 422)
+- `e018e7b7` `fbf1266c` **Candidates added:** Hunters and the Devourer Demon Hunter can purge (`[MISSED PURGE OPPORTUNITY]` +540 / −241); Shattering Throw answers immunity shields, Shiv and Arcane Torrent stay scoped, a purge at the buff's end counts (+19 −24, user-approved)
+- `4820dfd0` `43e58265` `87bede27` `7e5a0f60` `4629caba` A missed-purge window ends at the round's end (59 → 0 past it) and a re-logged aura opens no second window; a refreshing press reads its aura's end (user-approved)
+- `722c4d35` `ca8aa68e` `40924fde` missed-cleanse: no "mid hard cast" for a cancelled bar (34 lines); a form shift dropping a root is not a cleanse (`[CLEANSE]` 4,858 → 4,522); a Mind-Controlled teammate can only be purged
+- `e1e2eedc` `adff9faa` `abb54e1f` A CC an enemy pet broke is broken by damage, not uncleansed (+1 / −2); every BROKEN line counts, whoever it names
+- `296e4b25` `1f748efe` `40ca9059` `056fe589` `c937e58a` `9dab5701` missed-cleanse names your dispel, a backlash debuff it would remove, your rejected attempts, DR risk only for a CC with DR, proven-reachable seconds for a root, the cleanse's real recovery; occupancy counts bars, channels, drinking and empowered holds; post-CC damage leaves out Void Leech and Spirit Link
+
+#### Deaths, positioning and controls
+
+- `89ff539b` `4bd49a86` **Candidates removed:** death-setup's trinket-early and defensive-early shapes — a later death cannot show an earlier press was early (dps 907 → 579). healer-locked needs ≥ 3 s of CC inside the kill window and a victim who took damage (869 → 525)
+- `90252b88` **Six fixes from the user's own 3v3 loss review**: 3v3 candidates stop at the first friendly death (user ruling; 126 dps death cards removed), `[IMMUNE]` only for players (2,372 → 1,679), "free Ns of Ms" never exceeds the window, and one malformed finding no longer fails the run
+- `85c4f38f` `dd91ca98` `3197a11a` `e8744d52` STAYED IN / KITED and position-mistake measure to the enemy that hit you most (974 of 2,156 lines; **removed**: 294 → 176), never on your own corpse, and read HP on the printed window (532 gate failures → 0)
+- `dd8249dc` `beccfcfa` A POSITIONING line names its span's burst target and the top damage dealer, how long the owner was CC'd, and skips windows the owner had no say in (+10 −16)
+- `a09c498b` `ab72caed` cc-avoidable offers only a tool you could have pressed — no Divine Shield or Ice Block, a free GCD ≥ 1 s into the bar (89 → 62); an interrupted bar is not a free moment (−3)
+- `4f32e742` `50f5ba8d` `408e3636` `6828e3eb` **New: PEEL OPTIONS** — before a friendly death, an instant CC ready on the main attacker for ≥ 3 s, as an option, never a verdict (28 % of friendly deaths)
+- `8a6e8bfa` `43355cfd` **New: CC USE** — control counts for every CC you own and up to two `[CC BOOKMARK]` moments, never a missed cast (PEEL OPTIONS 235 → 208); both read DR through the applied aura
+- `5c1ecc2f` **New: `[FORCED TRINKET]`** — your CC landing within 3 s of an enemy trinket inside your kill attempt is credited for timing (never the forcing, never a kill)
+- `d06a86c5` `e927b9e3` **New: observed consequences.** `[CONSEQ]` shows a team's HP while its healer was kicked or CC'd; the coach may state what happened next, not counterfactuals (supported sentences 14 → 49 on 100 rounds)
+- `9daf0a44` One round end: CC windows, uncleansed windows and healing gaps stop at a Solo Shuffle round's ending death (−12)
+- `d111a142` `7b113bb4` `68dbabd9` `f040b861` `687bdc81` Death setup names the lock nearest the death with its locked and free seconds; missed options ask the cannot-cast predicate and say the caster's longest free stretch; KILL SEQUENCE names the healer's lock chain; deaths after the owner's leave the menu
+- `63f3dfbd` `04a3eebc` `419882bb` `ac7478eb` User-approved fact fixes that move rows: Deep Breath and Dream Flight cannot cast, a disarm stops weapon spells, the sync window is entered by the observed end, a cast bar's start ends a kick lock, Summon Infernal lasts 30 s, Ice Nova is a root, Wake of Ashes misses are no `[CC NOT LANDED]` (slow-defensive-response 99 → 95)
+
+#### Reliability leftovers (GH #107, #109)
+
+- `91f065e1` `72bddd8f` Talent replacements from official data (cd-waste on Nature's Swiftness 12 → 0), Astral Shift and Psychic Scream no longer reduced twice, proc-only activations render as `[PROC]`, not presses; a druid-form buff ended by your own shapeshift says so; SPEC BASELINES show your rating and, below 2100, read as what higher-rated players do; the Chinese request asks for Chinese fact strings
+- `86d71d4f` `[ENEMY HARD CAST]` only for bars that landed (13,297 → 2,302 — instant Hot Streak Pyroblasts read as hardcasts); a teammate's CC rejected as IMMUNE is tagged (0 → 1,450); Blessing of Sacrifice on its caster is not a defensive on the target; enemy window durations read talents (Demonic Tyrant 20 s with Reign of Tyranny)
+- `a75d53a2` `8513a101` `b19b851f` A crisis is answered by a control peel or any team save (cd-hoarded dps 893 → 666); Cauterizing Flame leaves the save roster; missed-sync-window needs you free for half the lock; external-unused needs reach (Darkness is an 8 yd zone) and an enemy pet kicker is measured from the pet; a trinket binds to a CC only within 50 ms of its end ("out of X" 11,191 → 10,975)
+- `ec984045` `c0c94505` The death line names the killing blow and the top damage in the final 5 s, including absorbed parts and deferred damage (Time Dilation); the team-save set includes Spirit Link, Barrier, Aura Mastery, Rallying Cry, Darkness and Zephyr (cd-hoarded dps 666 → 642); burst-into-mitigation accuses only a wall already up (dps 44 → 7); an enemy `[KILL]` line printed raw character names on 433 lines — now the roster label
+- `fe8bf626` `f53203f1` `c5af5985` `d062116f` `[BURST ANSWERED]` credits the first response that reached the unit; "off-target" windows 3,559 → 579; a re-broadcast aura is one aura; KITED needs you to open the distance (1,965 → 1,556); HEALER TRAINED names a camper who hit the healer (2,579 → 1,399); summons are named through their owner (bare "[pet]" 4,305 → 5); not-ready presses are recognised in all five corpus locales; missed-sync-window needs the target in reach and folds repeated locks (dps 604 → 506)
+- `f5f7798b` `58c87398` **New timeline facts** `[GROUNDED]`, `[REFLECTED]`, `[CC REMOVED]` and `[REJECTED]`; `[RES]` lists your own interrupt and Death Grip (0 → 4,408)
+- `8cc7d09b` `27a822c9` `5f30b5c1` `2bef1356` `6b0dacfd` `b5e16700` Post-hoc codex / agy reviews of batches 7–14, each finding pinned by a test: fully absorbed hits name their attacker ("Unknown — absorbed" 1,228 → 11), group externals answer a burst, one latency clock, one `[REFLECTED]` line per channel (728 → 642), `[GROUNDED]` reads "was redirected into", KITED credits your Shapley share of the gap, "you moved N yd" shared with gate G4b, `[RES]` shows charges and talent-reduced kick cooldowns
+
+#### Menu, prompt and wording rules
+
+- `68c3bc36` No "the only cooldown left" or "the whole time" claims the ledger contradicts (32 → 8 on 50 responses)
+- `a59903bc` The menu header states the citation rule instead of claiming every row "provably happened" (47.3 % of rows are facts about something that did not happen)
+- `0de6f51b` `1f599438` The findings prompt asks for "up to N, at most one per menu event" for a small menu, and the audit drops a finding citing the same events as an earlier one (195 → 178)
+- `973fbd42` cd-waste says "this round", not "the entire match" (in Solo Shuffle 64 % of rows had it pressed in another round)
+- `be89bc59` `f3cb4f94` Every time fact floors onto the timeline's second — a trap at 113.957 s read "114.0s"; a syntax-tree test blocks the next one
+- `2903812c` `cae10531` `15afb214` `3479acae` `a382c929` `9d6d0cd5` `dfe1dfa3` `74cffe18` `14bad33d` Legends: whole-second `[DMG SPIKE]` bounds, KILL ATTEMPTS "ran into" instead of "cause", legends for facts that had none, the `attempted` wrapper in English, kick-eaten's burst fact as "a cooldown was running", no pointer to an unprinted legend, healer-only lines hidden from DPS
+- `e413993c` The `[MATCH PATTERN]` header is off until its labels come from the model's own run — 7 of 8 were wrong (2,742 → 0)
+
+### AI coaching — the timeline facts
+
+#### HP and damage
+
+- `09b5b629` `dadebbc0` `9bc547e8` `49cdcf55` `d080f5bd` `46f708bf` `f1237fb7` `46603a80` `2b76a9bd` `92b1341c` `7745fa86` **A printed "low" is the real lowest point, at the second it happened** (user ruling). `[DMG SPIKE]`, `[CONSEQ]`, the burst ledger, `[BURST ANSWERED] bottomed at`, kick-eaten, STAYED IN, slow-defensive-response, `[KILL WINDOW]` team min and `[CD PRIOR]` read the true minimum (815 of 6,845 lows sat 10+ points above it; lows below the log 310 → 0). Decisions stay on the grid; kick-eaten −9
+- `b0cca85f` `7141a674` `18305d6e` The `[STATE]` tick gets a legend; a `[DMG SPIKE]` closes at its victim's death or the round's end and reads 0 % at a death (165 of 16,613 buckets ran past the match)
+- `0985a884` `efc05f62` The HP on a press line is the HP at the press — one signed exception to the grid; the owner's lowest HP "this match" is read inside the round
+- `cc944a73` A `[STATE]` tick at every crisis second (735 / 1,322 lines without one → 0, new gate), your casts on the crisis unit unfolded, and Alter Time's return (0 → 553)
+- `650fb921` `2cefc738` `d665a3a3` The `[DMG SPIKE]` legend says only the 5 largest windows are listed and counts the dropped ones; ABILITIES INTO IMMUNITY/DR keeps spells above 5 % (845 → 1,829 prompts); `Top sources` names an ability once
+- `57b0e994` `779f84ae` A damage source's side is its roster's, and redistribution is not incoming pressure; mitigation-audit lines say their overlap is in the final 10 s
+
+#### Controls, DR and breaks
+
+- `d1137675` `31af1368` **One cast → effect-aura table** from DB2, verified on the corpus (69 pairs the hand map missed): an IMMUNE or MISS logged under the effect id tags the cast, and a CC line names who it hit
+- `e8a53b47` `6d4bdcde` **New: `[SILENCE]` lines** on either side (11,276 lines) — before, the healer read as free to cast. A silence the log writes no aura for (Solar Beam), proven by a press refused as silenced, gets `[SILENCE] … no aura logged` (25 lines)
+- `5d6347e3` `c72b10fa` `e9bd4209` Infernal Awakening is a CC and a stun by its official mechanic, with no DR chain (1,048 lines)
+- `b75e1db0` A CC with no logged end closes at its full duration, not at match end (a pre-gate Sap read "(276s)")
+- `b200ce8e` `84be4c59` `ef20116e` `1e60e698` `77ec7356` `c59b8f65` `ffa6801f` DR follows application order and credits a summon's CC to its owner (`[DR CLASH]` 7,964 → 8,261); a recast REFRESH is a new CC; a control recast inside the re-send gap is two, a re-applied open CC is one
+- `11056c0c` `54526a66` `9f4d03c8` `18e53c47` **What a PvP trinket removed**: the CC with the most official time left, falling back to a silence or disarm, no credit after a logged break or dispel, and every CC it ended; our team gets a `[DISARM]` line
+- `0f973729` `d2517991` `36069698` **Who broke a control**: racials and class abilities render as `used X out of <CC>`; a damage break names the `breaking hit`; an unexplained sub-second end says `cause not logged`, or `ended by their Bladestorm`
+- `d3412823` `8a64a74c` `c3fac0e0` `09d48d68` Control lines say how and when the control ended, `<1s` instead of `0s`, a refresh (`refreshed at m:ss`), and a press that removed it (474 → 204 with no stated end)
+- `e5c6ff88` `6aa23656` `ff86facc` `ae27703c` A REMOVED → APPLIED re-broadcast within 1 ms is one aura, and an aura ends at its REMOVED, not a BROKEN line before it (1,352 intervals cut short → 0)
+- `6d70a38c` `78d8b1d3` `f94611fa` `0bc690cf` `708d3dc1` `3a66d0c4` `5956f7a6` CC lines: one duration formatter, per-target DR for an AoE CC, `[ROOT]` says what the unit cast, `[CC REMOVED]` says what was left, `[DR CLASH]` keeps your own clashes first, a merged healer lock reads `Fear ×2`
+- `e2374e37` `b5327bf4` `dce81a4b` `6a1e4e26` A CC that missed is `[MISSED on X]` / `[REFLECTED by X]` with its cause; a landed CC is never `[CC AVOIDED?]` (334 → 0); `[CC AVOIDED?]` states the log's miss type (1,504 lines)
+- `0099a96d` `a639a290` `f8ce87ae` **New: `[CAST STOPPED]`** (1,402 lines) and **`[CC NOT LANDED]`** (3,138 lines)
+- `c575e25c` `c091d676` `505ef887` `80de07aa` A control that lands seconds after its cast (Capacitor Totem, Sigil of Misery, Ring of Frost) pairs with its landing instead of reading "did not land" (`[CC AVOIDED?]` −103) and is read at the instant it hit; a refused press goes to the control its reason names; a channelled control ended by a kick on its caster says so
+- `5ce10e10` `da1eb024` `d3b58433` Area controls list who they landed on (bare `[YOU] [CC]` 1,905 → 28)
+- `dc6b5898` `207753df` A control under Oppressing Roar runs 30 % longer (47 → 8 outliving their label)
+- `3088ee93` `[CC ON TEAM]` / `[SILENCE]` list the cooldowns you pressed into it and the game refused (1,226 lines)
+- `1f59f00a` `86b775da` CC USE says how many bars started and went off (`Cyclone … 4×, went off 0×`)
+- `18a7eb50` `5ef309b7` `bf7a347b` `c91f39f6` `aebdb9e6` Castability reads a dispel backlash as control and a friendly breaker's BROKEN as the CC's end; a silence stops only what DB2 says it can prevent; DR history and uncleansed windows use the shared re-applied reading; disarms are paired; KILL ATTEMPTS ignores auras the attacking side put on the target
+
+#### Kicks and casts
+
+- `23e6e20d` `3b45d56d` `00e61aa8` A kick that interrupted nothing says the log's miss — IMMUNE with the immunity named (0 → 333), reflected or missed (0 → 108); your kick gets its audit result (0 → 1,580); an enemy Death Grip gets a line
+- `3d7b3610` `05e8623a` `48851c12` A channel is "interrupted" only by a kick or control that ended it (67 → 31); `[channel cut by CC after N.Ns]` (0 → 107)
+- `fb5bf4a0` Rejected casts near a teammate's death always show, Smoke Bomb has its own reject kind, a friendly death names an execute
+- `35ee9a43` Rejected-press reasons cover zh-TW, es-MX, fr-FR and ru-RU (unmapped 583 → 0)
+- `0fa2399d` `6b4eadc4` `55160c70` `fa0c21c8` Re-evaluation audit fixes, no candidate change: refused presses worded and stated (unworded 28,671 → 4,486), one HP trough per lock, cast bars cut at the next GCD press, self-removal, dispeller-CC, snare and friendly cheat-death facts, the Penitence target, and legends that cross-reference a line family only when it is present
+
+#### Cooldowns and defensives
+
+- `29c97c29` `c7a38dac` `ad4df655` `746db8e0` `3c220cb6` `2a1b6cbf` **An enemy defensive prints what it does**: `(absorb Nk, Ts)`, `(heal)`, `(dodge)`, `(cheat-death proc)` … instead of `(self-save)` or `immune` (13,068 lines replaced; damage landed inside 510 of 697 Feign Death "immunities"); Ultimate Penitence gets a line (0 → 372)
+- `fefb6b48` `469be80d` `4d95151d` Enemy self-saves (Desperate Prayer, Touch of Karma, a self-cast Guardian Spirit …) got their own `[ENEMY DEF]` lines (4,332) and a kill attempt they survived reads "self-saved (X)"; a self wall is priced with talents (Barkskin 20 → 30 %); your own Touch of Karma is not the target's defensive
+- `2a4e0fc7` `961129c6` `54e99854` **Enemy self-saves, heals and grips count**: Death Pact, Evasion, Healthstone, Ice Barrier and more, Leap of Faith as an external, Vanish and Cheat Death as immunities; Blur and Greater Invisibility found under their logged ids; areas render as "X (area)" (`[ENEMY DEF]` 16,645 → 37,714)
+- `583ef4ca` `1b1a6762` `97afdcef` `4e5259a5` An aura-only enemy external gets its line (442); dispel backlash reads one table (6,397 false CC lines gone); `[ENEMY DEF] … | during it:` says what your attackers did (2,103 lines)
+- `e81b5ff2` `9a9fd81d` `b2f3f642` `6d1fac16` `6d8dfe48` No logged end prints `end not logged` (1,302 lines); a school immunity names its schools; Fortifying Brew is found (0 → 275); Blessing of Sacrifice is one button
+- `7793ee2f` **A wall with no press**: a copy no press put up reads `[no press logged]` and is never called early on length; a friendly `[PROC]` says what it went out with; Radiant Glory's cast-less Avenging Wrath gets a `(no press)` line
+- `40563ec5` `f84e161b` `8ebec13b` `4cca243b` `25c3ad3c` **New: `[ENEMY HEAL CD]`** (5,741 presses), with Tree of Life (0 → 334); shifting back into it is not a press; Time Spiral is not one
+- `c1813046` **New: `[ENEMY UTILITY]`** for an enemy Champion's Spear, Smoke Bomb or Tremor Totem press (2,604 lines)
+- `a0871050` `e3bcccd5` `4c4fb104` `78e81225` `a09e94ed` `a4e91136` `cb7c5e58` `[BUFF FADED]` and `[ENEMY DEF]` state the log's end cause ("ended early" 1,871 → 969); everything is cut at the round's end, not the log's (360 of 432 → 0), and a buff still up then gets no end line
+- `97a68209` `7c4898f6` `63addfac` `589e5613` A buff stripped by your death says so (230); a caster-only defensive renders "self" with your HP (474); Guardian Spirit says when it triggered (0 → 218); Power Infusion says `also on you`
+- `864e9fd5` `592be42b` `c994cbd4` `b4908ad6` `859883a6` `93c02c05` `b12f6910` `1892a2f2` `82e48250` `[RES]`: an unaffordable ready cooldown is tagged; Darkness is named for another unit only inside its zone; out-of-reach positionals leave `rdy:`; every round starts on a full row (182 → 0); `-0s` 10,644 → 0; Forbearance and Hypothermia read off the log (Ice Block not ready on 94 rows); a press is spent from its rendered second (289 → 3)
+- `b7c8ab0f` Your own press of a save the enemy's press already prints gets a line (1,743 → 0)
+- `709aaeb9` `ab68f275` `aa374425` `317593a0` A Stasis is released when its ready aura ends (`[STASIS RELEASE]` 77 → 138); a passive proc such as Reclamation is not a button press for eight "did the player act?" readers; a talent-triggered effect is a proc on `[ENEMY CD]`; a proc's trigger is named only where it was cast, and an off-GCD press leaves a channel running
+- `67a8ace6` `3c9d0c7d` `e3732171` `56cb3c91` `ec29cab1` Extra burst cooldowns name their caster (2,272 of 8,315 `[BURST ANSWERED]` lines); `[BUFF FADED]` reads the copy on the unit it was pressed on; death-setup and `[HEALER CC]` chains show their gaps and kick lockouts; a refreshed buff prints no invented "expired, estimated" end
+- `bddf75c2` `4fb54724` The burst ledger sees walls logged under another aura id (Greater Invisibility, Blur, Fortifying Brew)
+
+#### Enemy bursts, kill windows and kill attempts
+
+- `9c2b67d8` `348f723a` `a65101ae` `4ed48d16` **Bursts the product could not see** (GH #115, #119): bursts are also read from their auras — Havoc Metamorphosis (0 → 1,447 lines; cooldown 120 s, the DB2 value), Doom Winds (37 → 132), Summon Infernal (30 s, 16 → 1,283), Radiant Glory's proc Avenging Wrath (user ruling)
+- `97d06e0c` `f79f6ecd` PvP Heroism is an offensive cooldown; **candidates added**: Army of the Dead, Dark Transformation, Bloodlust and Heroism (+23 / −13, user-approved)
+- `911ddbac` `a870133e` `c853e2de` `960d9656` `1023be26` A landed ground or AoE control answers a burst (unanswered windows 73,183 → 49,755); `[BURST ANSWERED]` says when the bottom came, credits nothing after the teammate died, and names who a control hit
+- `47585d12` `dd7bbf98` `f6410727` `c1313fc8` Healer offense and `[BURST ANSWERED]` read the owner's CC through the cast → effect table, so a control that never landed does not answer; a burst's outcome readings share one end, presses after the round end are dropped, and a HoT tick is a fresh self-heal only when the HoT went on inside the window
+- `c3543503` `0e06477e` `ae8010e3` `59548cc0` `b02d677e` `ca978ef3` The burst ledger: own spans, the grid's HP, IMMUNE only under full immunity, absorbed damage and a second target; `Aligned with:` becomes `Ally CDs overlapping:` (4,557 of 7,538 touched nobody's target)
+- `11402ca6` `0763cb1f` `757c54ac` `e2f0f092` `df754ec6` `6aa3bbc2` `8e29559e` `[OFFENSIVE WINDOW]` headers end at the round's end, never `0:42–0:40`, and name only a spike that overlaps them (444 of 8,154 → 0)
+- `4e8fc0a0` `7423398c` Kill-window readiness says when it was read and what changed; "unreachable" is decided second by second
+- `093da6e3` `2592b371` `c988c09e` `5b68c084` `[KILL ATTEMPTS]`: a failure cause is a save inside the attempt or one already up when it began (Anti-Magic Shell now on `[ENEMY DEF]`, +1,547); a burst that alone reached the kill is kept, one death credits one row (double credits 57 → 0; KILL rows 1,578 → 1,819); brackets end at the round's end or the death (714 ran 2 s+ past it); the line prints the damage inside its bracket
+- `b502d70d` `e4c597a6` `a933f6b8` Burrow, Vanish and Mass Invisibility count when the aura end was seen; both a save and an external are named; our Holy Paladin's Avenging Wrath anchors no attempt
+- `c10bc1a5` `45cae8df` KILL ATTEMPTS says which wall was up at the start, and our own Cyclone on the target (373 lines → 0 silent)
+
+#### Dispels and purges
+
+- `61113052` `f955ee54` Your purges render as `[PURGE]` (+616) with the enemy's purgeable buff count; minor dispels fold with names
+- `58728dc8` A `[MINOR DISPELS]` rider from its own press reads `(side effect of the cast)` (3,687 lines)
+- `9f4d03c8` A pet's dispel names the pet, guardian or totem
+
+#### Positioning, deaths and round end
+
+- `7c6488e1` **"Offensive cooldown out of range" uses that spell's own reach** — one 15 yd ruler had accused a Grimoire: Imp Lord at 21 yd (516 → 2)
+- `d4e352da` `3120cd2f` `c2e87b6a` STAYED IN / KITED name who distance was measured to (gate G4: 350 → 0); `[PEEL OPTION]` is stamped "at m:ss"; a Death Grip is not your own movement
+- `1226d3c9` `6300ad89` `7e4ef3c4` `4164e920` `da6b30e8` `c3cd1cbd` `[HEALER EXPOSURE]` measures each CC's real reach (26,099 → 18,555 threats); a landed cast proves LoS; summon CC is the owner's; HEALER OFFENSE free time excludes silences
+- `6e1c49cb` `19d63efa` `bbdcaa9b` **One PvP-trinket predicate**: the Medallion from 36 DB2 item ids (74 false "available"), Will to Survive locks 60 s, Adaptation recognised (0 → 51 / 51); "no breakable CC in the last 10 s" (547 tags)
+- `80b0fe94` `e5cac2ed` Facts the coach used to guess are printed: dampening on `[DEATH]`, when an enemy kick comes back, the team's minimum HP in `[SLACK]`, a defensive's duration, the nearest enemy's range over a STAYED IN window; HEALER TRAINED prints how long the healer was really CC'd (857 of 1,331 "no CC on the healer" lines were false)
+- `fd02c30c` `e582b916` `53516969` `[CONSEQ]` never says "no teammate dropped" beside a death and a healer silence gets its own line; a spell eaten by a Grounding Totem is one predicate, so traps show as `[GROUNDED]`; an enemy Touch of Karma says who fed it and where the damage went
+- `22f2b151` `fdc3a84a` `cfc1958a` `468180cb` `ba951f9e` `64b002cf` **One 2v2 dampening start**, derived from the first logged stack (159 prompts disagreed); stack decreases read; dampening for the line's own team
+- `73c4d952` `c2386096` `3ff85c97` `1bdfd501` `6c89928b` `[UNIT DESTROYED]` says how long a summon stood and covers killed pets (0 → 155); summons are named as the log says (totem 0 → 3,494); the roster lists every warlock pet; a pet's break is the pet's (433 → 0)
+- `1d5378f1` `1cd95ae9` `ba00e2cf` `ded32c36` Context lines use roster labels (10,570 bare names → 0); MATCH FACTS prints the lobby MMR and baselines say "personal rating"
+- `312518e5` `28c354df` `d3576d4b` `294b9c61` Spirit of Redemption reads `:ghost` (0 → 9,247); a summon `[ROOT]` names the right caster; `[STACKED DEFENSIVES]` labels match (4 → 0); `[RES]` rows that changed nothing are dropped (717)
+- `8ed8bd30` `852b68e3` `99191d08` `[CONTESTED]` states cast risk and ready enemy interrupts only for a control with a cast to interrupt; ENEMY CC KIT lists every control that landed on its unit, `(landed N×)`; full-length auras are read in whole milliseconds and SPLIT PUSH is not claimed over unknown positions
+- `9443b697` `e297224a` `f6a680cc` `67be227b` Equidistant HP samples resolve by one rule (2.46 % of readings); a druid's mana skips form samples
+- `b2e7d29e` `f1ec20d1` `830d23d9` `ad5981ae` Review follow-ups: every purge reader sees the round's pets; an area save cuts every visit its aura covers; dampening is read on the reader's own team everywhere; a purge "took X instead" only for a Magic purge of a Magic buff; the stated saves include redirects; the enemy timeline keeps a cast-less aura apart from the press before it; the no-aura silence names a source only through a class-owned effect and stops at the owner's death. No candidate added or removed
+
+### Combat-log parsing
+
+- `2576b626` `b266718d` **Melee swings are counted correctly.** A swing logged only as SWING_DAMAGE_LANDED is a damage event (5,767 lines / 3.9 M damage missing → 0), and a swing's damage event is its victim-side line (1,501 swings misattributed → 0)
+- `b999ce1c` `77060686` `bb6ca55e` A damage event's effective amount is the health it removed — amount minus overkill, without subtracting the absorbed part again (user ruling; candidates +22 −17); a hit a shield ate is damage to the unit hit, not the shield's owner (+1); damage a deferral shield only delayed counts once (30 M in 6,070 events double-counted → 0)
+- `20ebf165` A guardian with no summon event in the round takes its owner from its own advanced block (3,063 ownerless guardians → 1)
+- `bdb440e1` Falling damage (`ENVIRONMENTAL_DAMAGE`) is decoded at its own offsets instead of producing NaN amounts (65 → 0 violations on 57 files)
+
+### Cooldown, talent and spell data
+
+- `6c1ff1e0` **WoW data refreshed to 12.1.5.70391** (hotfixes through 2026-10-15): PvP taunt talents 20 → 15 s, Merithra's Blessing 60 → 30 s and now Arcane, Improved Mass Dispel 60 → 75 s, Ice Block +30 s in PvP via Winter's Protection, new DR entries. Can add or remove candidate rows
+- `18b648ea` **Talents the product read wrong.** A full audit of 3,491 talents found consumers that bypassed the talent-aware ledger (enemy interrupts, vulnerability windows, death block, healer CC readiness, kill-window reach …), missing per-rank and scripted cooldown talents, and dispel / interrupt mechanics. Impossible presses across the ledger 752 → 311 (Alter Time 266 → 0)
+- `357715dd` `cb328d3b` Arena cooldowns pick up PvP scaling of cooldown talents, spec passives (healer PvP trinket −30 s, Holy Divine Toll …) and per-rank talents (gaps shorter than the model by over 1 s: 6,816 → 5,762 of 32,243). The ledger counts only button presses — no procs, channel ticks or talent-replaced spells
+- `a21d066c` `f2d27fd3` `3eb635fb` `a4c86367` **Cooldowns that combat shortens print a range** — `(a–Ns)` or `(≤Ns)` from a table of measured recast floors (Recklessness, Pain Suppression …; held out, "certainly on cooldown" just before a real press 11.2 % → 1.3 %). One predicate for Storm Conduit holders and others; a press is no longer stamped before its low bound (124 → 78 rows)
+- `a3a23a04` `6c4ae9a4` `a7835127` `e8e41992` An unsaved Guardian Spirit comes back 60 s after the buff ends (ledger contradictions 26 → 0) and the kit says how its cooldown depends on the press; Alter Time lasts 10 s, not 20 (1,512 loadout lines); Bladestorm's two ids are one entry (1,188 duplicate lines → 0)
+- `218b0739` `a5d8f1b9` `730f00e1` `4d0a6bd1` `f9435bad` `b058d094` Buff durations: 27 more talent modifiers found through SpellLabel, durations set by the producing ability (Shadow Blades 20 → 16 s, Trick Shots via Volley) or by empower level and combo points (Rip, Rupture, Envenom, Fire Breath); tiered talent nodes read their rank per entry
+- `759d8e4e` `71d43abf` `da32344d` 55 control spells seen this season join the spell categories (gap 55 → 0); Cyclone and Incapacitating Roar follow their official DR categories; six control cooldowns listed by aura id enter the ledger by cast id, 14 missing ones are added, and an unknown DR family reads "DR n/a" (`[CC BOOKMARK]` 412 → 733; a disarm only against melee, user ruling)
+- `35c55d4a` `b3e24b29` `30564f79` Every reach is the caster's own — base range plus held range talents and spec passives (Discipline 46 yd, Preservation +5 yd); a triggered spell's 100 yd placeholder yields to its cast's. Checked against the game's verdict on 732,037 targeted casts
+- `881766ac` `a637d104` Line-of-sight geometry checked against the game's own verdicts (false "blocked" on hold-out 10.6 % → 2.8 % and 3.5 % → 0.9 %); Beast Mastery Hunter is ranged (SPLIT PUSH 56 → 32)
+- `11984194` `27e5a0b5` Quell, Silence and Counterspell cool down for the official time, sooner for a Coldthirst or Light of the Sun holder (a `[KICK] … back m:ss` contradicted by the same unit's next kick: 85 → 3 of 4,471)
+- `a580825a` `1c876685` `a6ea331a` `0c0aa906` `72cc5d20` Cooldown numbers held as **can add accusations** until the user adopted them: Boomstick (Lethal Calibration), Born To Be Wild (Aspect of the Turtle 120 s at rank 2, cd-hoarded +1), Ardent Defender 90 s (flagged, thin corpus); Spellwarding recovers with its shared pool, 300 s not 180
+- `23c4ba38` `b27998f6` `c25f08e8` `d90baeac` `3008c60c` `5c283dd5` `ebb689de` Storm Conduit is read by the log's date around the 2026-08-18 hotfix: 4 s then 2 s per cast for a Restoration Shaman (recasts "not ready" 27 → 1 of 59), an interrupted Lightning Bolt locks ×0.35 then ×0.6; the parser can read the instant a raw line states
+- `c48cbdf9` `1cbc7228` Champion's Spear gets a ledger row (**flagged: new ledger row**; [TEAM] +720, [YOU] +385 lines), and its optional re-press is not a second press
+- `6ba6d2bb` `76707699` `91f40fc8` Roar of Sacrifice pressed on oneself prints its official 25 % reduction once a corpus split confirmed it; its legend says it is not a wall
+- `e5a9e213` `1e2fe9a4` `73a1bfc9` Wildfire Bomb is counted once per bomb (hits within 0.3 s); a patch-dated number takes its old value only 14 h clear of the cutover
+- `39007a52` `3d6e1a34` `7ea75f9a` No unproven cooldown for a unit whose talents are unknown; Quaking Palm is an incapacitate as in DB2; one "is this a kick" predicate — a silence with no school lockout is control (249 Strangulate entries leave `Kicks:`, user ruling)
+
+### Reference tables
+
+- `1fcec5e9` `41ef7d55` `0078f5e5` `4a46b355` `22f705ae` `ccb3db74` `8a9cfd85` `8d6d832a` The sync-window table is regenerated for the new missed-sync-window rules, finally over the full 63,303-file archive (windows 118,267 → 107,357, every cell above the 3 pp door); burst-window, cdTriggerPrior and kick-priority follow the ledger changes (nothing moved beyond sample size)
+- `c330552f` `867447ba` `8b3c0076` `854cc12f` Three batched regenerations at pinned commits (GH #115): nine reference tables, the reference vectors, the cd-hoarded outcome reference and the recast floors, the last at PROMPT_VERSION 381 (Boomstick's floor gone, 39 → 38)
+- `b0885605` A fourth batch on the finished fact-layer code (PROMPT_VERSION 425): eleven tables, the reference vectors and the cd-hoarded reference — one slow-defensive-response line traded for another across the 3 pp door, the rest are cited numbers; Restoration Druid's Tree of Life and Nature's Swiftness cooldowns show a range where players recast them early (GH #154)
+
+### Desktop
+
+- `e88e08c1` `fc1b36ec` `9c7deae9` `5dcfa1dc` **AI self-review (opt-in, off by default).** After the first analysis, one more call on the same backend and model re-checks the findings against their own prompt and keeps, corrects, weakens or deletes statements — never adds. Offline: wrong statements 48 → 15 (accuracy 90.7 % → 95.9 %). Numbers keep their sign and size, a deadline aborts the request, and coach chat follows the reviewed result
+- `566c04d4` `2fe1bcab` `6c9a7c49` **Claude Opus 5.5 is the default model** for the Anthropic API and Claude CLI backends; Opus 5 stays selectable and Sonnet 5.5 joins the dropdown (a hand-set id had silently fallen back to Opus 5.5)
+- `1018f1bf` API-key users no longer lose the analysis to a truncated answer: output budgets fit adaptive thinking (over budget 3/8 → 0/8)
+- `48e83e07` `8762b5ab` Two match ids can no longer overwrite each other's library folder; an empty result says the analysis found nothing worth a note, not the stale-cache message
+- `8521e4af` `43d980a6` `3b4dea9e` The dispel panel, the missed-purge card, the stats table, the replay's control spans and the death recap end at the round's end and build their summary as the prompt does (rows differing: 12 of 483 → 0, 17 of 1,447 → 0)
+- `2094fd5e` `361a07bc` The dispel panel lists missed scoped removals (Shattering Throw); the missed-sync-window card says whose each cooldown is
+- `287a6229` `3b301ae7` A long rating history no longer overflows the stats dashboard; death recaps are computed once per match
+- `fdc3a84a` `468180cb` `cfc1958a` `44ab92a8` `aab9a5c2` `fb759123` The 2v2 dampening lane starts at 0:00 with the derived value; the kick dashboard's cast-control strip and missed-kick cards follow the corrected cancel and juke readings
+
+### Performance
+
+- `698fc588` `9d3de0dd` Aura intervals are memoised per stream: building a match's context is 33–37 % faster, output identical
+- `ae52c335` `c48e7a00` Library-wide scans run asynchronously, so a large library no longer freezes the window (longest stall 176–213 ms → 14–21 ms on 500 matches)
+- `32650c89` The CC break and chain dashboards derive fast again (81 → 24 ms), output byte-identical
+
+### Evaluation and verification tooling
+
+- `03f66f67` `57fefb23` `cafc2afb` `baacbf99` Eval builds the menu the way the app does (198 lines had differed); buildCorpus reads gzip archives (had yielded 0 matches); every prompt script waits for talent data (25 → 0 on degraded data)
+- `37109f5b` `8b568c9b` `f0e22947` `8847a76c` `ea892153` `d99a57a0` Gates: "free Xs of Ys" within the window (193 → 0); CC distance over the rendered second (mutation detection 61.3 % → 95.3 %); a full line-gate run caught two own regressions (580 failures → 0); no `unpurged for Ns` past the round's end (143 → 0); the break scan credits the right breaker
+- `8607b996` `8a495cf1` `bf985839` `e98b7f09` The eval responder gets causal and focus discipline (unsupported causal sentences 57 → 0 on 50); responseQuoteScan; consequenceProbe, the two-arm probe behind `[CONSEQ]`
+- `b312d34f` `07e7c66f` `16177786` `80872aee` logCensus counts the archive: 63,303 files, 108,060 rounds, 0 parse failures; a field-coverage ledger from raw log to prompt and an HP-tie scan
+- `664536a6` `f03f6bf8` `0c349fe2` `3266ce62` The talent impact audit as three re-runnable scans and a generated talent-coverage-gaps doc; an offensive-effect completeness scan (found Havoc Metamorphosis and Doom Winds)
+- `b900dc62` `1a5c4c73` `e297224a` `b7a559b7` `77f02fb1` `5b52d41d` `1dc110b1` `ac3c8e13` Probes: healer reach and its ground-truth check, trinket discipline (closed for a context fact), ablationVocabJoin, summonExampleGen, candidateCastContext, auraCooldownModScan, an uncapped kick-eaten scan
+- `3cac0b05` `0b262c7a` `4b2f87e1` `3680dbed` `a5e9d256` `936303f2` Scan scripts hardened; one shared `fmtTime` and CLI flag helpers; four unreferenced probes archived
+- `8368b411` `dd817aa4` The review prescreen hands mana queries the raw streams (false mismatches 75 / 307 → 0); match-explore `mana` walks the full series
+- `bce5fdf7` The first-paint gate judges the heavy scene against a same-run control (ratio 6.7)
+- `2fc6b3bc` `ed715f31` `1df73618` `122d9e67` `db09291d` Tests for cast bars, displacement, fact-vs-raw scans and four unnamed gates; the parsed library is shared (22.3 s → 1.7 s) and a raw log read once per file
+
+### Internal refactors (no output change)
+
+- `00519c5c` `cd56547c` `f09fcf80` `3717cb46` `20b60255` `e4969f1b` `dc78c1df` `d9358e01` `527a130e` `60398f62` `b294b73e` `e021efdd` `92077542` `21b96098` The 4,125-line timeline builder is split into section emitters and is now orchestration only (`matchTimeline.ts` → 995 lines), each batch byte-identical on 605 files; side-effect-free bare imports dropped (GH #116)
+- `5036227a` `410b88da` `172b4498` Raw-log reading goes through the parser's own functions, spec tables move to analysis, and the spec-to-string table is built once (5,221 → 11 ms)
+- `fe5c1714` `c2de0254` Two latent predicate fixes with no rendered change: a merged press recovers from its cast's time; an immunity cast on others is not its own CC breaker
+- `f2996af1` `ed0ce01e` `4bb48bde` `39bde8b9` `d0193dc0` `14c3b853` `25d21721` `186cdd52` `528c93a6` **Candidates removed:** the unwired cc-locked, wasted-trinket and death-unused-defensive emitters and other dead code (prompts byte-identical); deleted deep-dive routes, duplicate helpers, the retired archiver plist and 22 one-off probes
+
+### Other
+
+- `fa651376` `ce36485a` `1d532a67` Tests: a CI flake fixed with fake timers; JSON tables parsed with JSON.parse (analysis tests 389 s → 72 s); a scan no longer re-sorts a shared array
+- `a701227b` Renderer and preload may import only allow-listed analysis modules; log-pipeline tests no longer pass on zero files (GH #117)
+- `5f860cd9` An expired session at the log-grant step exits with the re-login prompt
+- `cc8b22e8` `09415732` `daddeb01` Lint: eslint --fix and a warning ratchet (2,042 → 1,572); merge fix-ups and import order
+- `74bc1345` `0de04a31` `eb3e93ec` `86c0a959` `ed626748` `9511e7d3` `9225021c` `11770d42` `4bf36b08` `7e2a3c95` `43bc6174` `506b8d28` `5f2060a0` Visual baselines refreshed after analysis changes and the new self-review setting row
+- `6407b687` `97538e11` `10345334` `8c3275fa` `8596c4a8` `ae42aa6f` `344deb59` `94388b0f` `a5bd8635` `47563ecc` `5cb5bd43` `f6263447` `d511b212` `235f4d38` Prompt-version records 368–382, each with its 605-file before / after
+- `0856709c` `06858c5d` `2f1ff8d3` `3f6c084c` `ff0a9fa9` `465294db` `6bb408a1` `e667437a` `032ec2f3` `f59319c2` `a30af24a` `207b6943` `b219ccef` `c44179f2` `d41cc770` `2541e184` `47d0f1b6` Predicate index rows, pins and "not yet unified" notes; CLAUDE.md records the trough exception
+- `4db3c3e0` `858375f2` `cf5dac13` `155b473b` `deb58cf0` `40511920` `c8f6bc75` `4ee16e5f` `f1c03464` `58d59c61` `9b7f3e27` `d5fe89ba` `7c5ebb39` `580b2c1e` `2445a303` `4de7d683` `34e8e732` `30be3f46` `c1d5fc6e` `998c29e1` `faebc736` Docs: rulings, backlog, judge calibration, the runbook, stale rules removed from CLAUDE.md and skills
+- `30b36740` `bc30ae5e` `17339051` `3ba4e656` `5d2931fe` `91b9704c` `468a108e` `6fa414ab` `84234d11` `a006cb7f` `47f4279b` `32e29ffb` `0c5af4f5` Docs: rule history out of CLAUDE.md, a docs map and language policy, package READMEs, data and script indexes, the prompt-version history in its own doc
+- `59d08ceb` `1451001e` `b4ce74a9` `c19bb16f` `c0a332dd` `1d869d95` `22d4c284` `8340c1bb` Docs: predicate-index rows, knowledge notes and rulings, curated public knowledge notes, a plan for the next abstraction-layer work
+- `fcde27b1` Open items moved to GitHub issues (GH #123–#152); the docs point there
+
 ## v0.1.35 (2026-09-22)
 
 A fix release driven by two user reports and one week of prompt work. The kill-attempt facts no longer scold an opener for hitting a target whose trinket was up — at the gates everyone's trinket is up — and a coaching finding that names a class or spec nobody in the lobby plays is dropped before it reaches the report. Underneath, the enemy's defensives, trinkets and summons are described with their context (what they answered, who was in range to kill the totem, which spell the Grounding ate), pet and totem deaths are visible again on 12.x logs, and the offensive-cooldown table went through a completeness scan that found the burst the product had been blind to.
