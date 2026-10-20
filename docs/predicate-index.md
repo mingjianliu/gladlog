@@ -596,6 +596,24 @@ at a glance; `F142_OFFENSIVE_DISPEL_SUMMARY` was one of them and was deleted on
 
 ## Not yet unified
 
+> **Open entries are tracked on GitHub (2026-10-20).** This section stays the record of what is not shared and why (CLAUDE.md: register new duplicates here), but the work on the OPEN entries is tracked by theme in GitHub issues:
+> - CC windows and control state: GH #132
+> - cast bars, channels and empowers: GH #133
+> - kick lockouts: GH #134
+> - ability ownership and the kit: GH #135
+> - aura intervals: GH #136
+> - round end: GH #137
+> - HP lows and damage shares: GH #138
+> - parser drops: GH #139
+> - desktop panels: GH #140
+> - positioning, LoS and kill windows: GH #141
+> - time zones, locale and labels: GH #142
+> - trinkets, breaks and roots: GH #143
+> - summons: GH #128
+> - the F15 entries of 2026-10-16 / 10-17: GH #122
+>
+> When an entry is closed here, tick it there.
+
 **Recorded 2026-10-17, OPEN — deliberate (F15, user ruling 2026-10-17 「只读事件开始之后」)** — the ruling is that an event span's minimum reads only what happened inside it, and `hpTroughInWindow`'s span mode now counts a tick only when its sample lies inside the span (kick-eaten `ourLow` / `theirLow`, `[CONSEQ]`, msw `enemyMinHpPct`, `[KILL WINDOW]` team min). STAYED IN (`positionAnalysis.ts`) keeps reading its window's ticks regardless (`ticksRegardless`): its line prints `your HP A%→B% (min over window)` with A the start second's tick — a point reading — and `checkStayedInHpConsistency` (2026-10-11) holds A equal to that tick and B not above any tick of the window. Moving B alone made it print above A on 58 owner contexts of the 605 capture (a burst span opening inside a second whose tick was taken before it); moving A too changes a point reading and that gate's invariant. The ruling named lockout / control spans; a burst span is left as it was pending the user.
 
 **Recorded 2026-10-16, OPEN (F15 batch 3, agy review 20-F15-05)** — "a CC that ran its full official length ended on its own" is read off `officialEndMs = applyMs + expected`, and a CC window the builder merged across a same-ms REMOVED + APPLIED re-application (112-1 0:54: Cheap Shot 07.118 → 11.131 ran 4 s, the recast landed 11.132 and the Medallion took it 12.015) keeps the FIRST landing as `applyMs`, so the 0.9 s recast reads as having run its course. The break-ability path (`breakAbilityPresses` binding) has carried this rule since 2026-10-03; `ccsRemovedByPress` now does for a secondary CC. The trinket binder itself (`bindBreakToWindow`) does NOT, so a stun that expires in the press's ms can still be named over the CC the press was for — tried and reverted in batch 3 because of the merged-window case (605: 6 KILL ATTEMPTS lines and 3 `out of` moved, at least one wrongly). Closing it needs the window builder to record the last re-application (fact1215 R8). **2026-10-19 (112-1), narrowed**: the CC window builder now keeps a cast-backed re-send as two controls (`ccRecastSplitsResend`), so 112-1's recast is its own window and its trinket line reads `out of Cheap Shot`; the binder's official-end rule is still not applied (an un-recast stun expiring in the press's ms).

@@ -8,6 +8,18 @@ data is already gladlog-native).
 
 ---
 
+> **2026-10-20: every open item below is now a GitHub issue; this file is the background record only.** Mapping:
+> - talent durations (#41 item 2, #44, #46 item 3, #53, part of #63): GH #123
+> - talent cooldowns (#45, #58, #62, part of #63): GH #124
+> - talent mitigation (part of #63): GH #125
+> - talent mechanisms (#46 item 4, part of #63): GH #126
+> - healing reduction (#50): GH #127
+> - summons (#51): GH #128
+> - parked strategy (#49, #61): GH #130
+> - judge rubric (#54 (e) item 2): GH #131
+> - earlier mirrors: #47 → GH #95, #48 → GH #68/#69/#82/#84/#85/#87, #55 → GH #104, #56 → GH #69, #60 → GH #119
+> - done: #57 (GH #108 closed), #59 (fix landed; table regen tracked on GH #115), #41 item 8 (`USABLE_WHILE_FEARED_SPELL_IDS` is read)
+>
 > **Frozen since 2026-10-08.** No entry has been added or updated here since the
 > 2026-10-07 fact-layer direction; the live backlog is GitHub issues
 > (`mingjianliu/gladlog`), and the maintainer's rulings and lessons are in

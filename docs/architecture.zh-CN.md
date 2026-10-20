@@ -521,7 +521,7 @@ interface AnalysisSlot<T> {
 | 视觉套件总耗时 | 3.0 分钟   | 22 秒      |
 | E2E 套件总耗时 | 1.3 分钟   | 14.5 秒    |
 
-这个失效模式**完全不报错** —— 只表现为「应用很慢」—— 所以它靠预算把门,而不是靠人肉察觉:`packages/desktop/qa/budgets.ts` 把 `parse` / `firstPaint` / `coldStart` 锁在 4900 / 3300 / 2600 ms(CI 采样最大值 × 1.5)。修复前这三个预算是 5100 / 41000 / 36000。放宽任何一个都要把理由写进 commit message。
+这个失效模式**完全不报错** —— 只表现为「应用很慢」—— 所以它靠预算把门,而不是靠人肉察觉:`packages/desktop/qa/budgets.ts` 当时把 `parse` / `firstPaint` / `coldStart` 锁在 4900 / 3300 / 2600 ms(CI 采样最大值 × 1.5);修复前这三个预算是 5100 / 41000 / 36000。此后 `firstPaint` 随 CI runner 构成变化重锁过几次(2026-10 为 12800 ms,历史见该文件注释),`firstPaintRatio` 在攒够 ≥ 10 个 CI 样本前只测不卡。放宽任何一个都要把理由写进 commit message。
 
 生成的数据模块遵循同一规则:`spellIconsGenerated.ts` 与 `spellEffectGenerated.ts` 是薄薄的 `.ts` 包装,负载放在同名 `.json` 里。`spellIconsGenerated.json` 还额外做了字典编码 —— 41,707 条只用到 7,110 个不同图标名,平铺 `Record` 有 48% 是重复字符串(1.5 MB → 780 KB);包装层再展开回去,消费方 API 不变。
 
