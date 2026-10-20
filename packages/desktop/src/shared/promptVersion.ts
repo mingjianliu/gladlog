@@ -228,5 +228,11 @@
  *  response +1 / −1 (two burst-window cells crossed the 3-point contrast
  *  door); Restoration Druid's Tree of Life and Nature's Swiftness `[RES]`
  *  cooldowns read a range (new / lower recast floor).
+ *  v426 (2026-10-20, GH #154): Druid cooldown talents the ledger missed —
+ *  Control of the Dream (the time a spell sat ready comes off its next
+ *  cooldown, ≤ 15 s), Cenarius' Guidance (Tree of Life −5 s per Grove
+ *  Guardian fade; Restoration Convoke −60 s), Call of Ohn'ahra dated by the
+ *  log (+30 s before the 2026-09-22 hotfix). 605 files: missed-sync-window
+ *  +7 (Balance Force of Nature back inside the window; user approved).
  */
-export const PROMPT_VERSION = 425;
+export const PROMPT_VERSION = 426;

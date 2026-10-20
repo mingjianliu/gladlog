@@ -5743,6 +5743,11 @@
       "effect": "reduce_cd_pct",
       "value": 50,
       "sourceRowId": "1033285"
+    },
+    {
+      "talentSpellId": "393371",
+      "effect": "reduce_cd",
+      "value": 60
     }
   ],
   "392268": [

@@ -17,6 +17,10 @@
  *    a press is the fixed point R = press + cd − seconds × #triggers in
  *    (press, R); `remaining(t)` is monotone and reaches 0 exactly at R, so
  *    "available at t" ⇔ R ≤ t — no event after t can change the answer at t.
+ *
+ * Two more below, each with its own header: ON_INTERRUPT_COOLDOWN_REDUCTIONS
+ * (the press's own cooldown, when it interrupts) and IDLE_COOLDOWN_CREDITS
+ * (the time a spell sat ready comes off its next cooldown).
  */
 import {
   CombatUnitSpec,
@@ -75,6 +79,11 @@ export interface IEventCooldownReduction {
   /** With `triggerHitIds`: at most this many hits of one use count (the
    * talent's "up to N sec" cap ÷ `seconds`). */
   maxHitsPerUse?: number;
+  /** A talent worded "when X fades": the unit's own SPELL_SUMMON rows of
+   * these ids drop it, `summonFadeMs` after the summon (`eventTriggerTimesMs`). */
+  triggerSummonIds?: readonly string[];
+  /** With `triggerSummonIds`: how long the summon lives (its DB2 duration). */
+  summonFadeMs?: number;
   /** What one trigger gives back. Not always one number, so no reader takes
    * it from here: `eventTriggersFor` hands every trigger out with its own
    * seconds (`eventReductionSecondsAt`). */
@@ -244,6 +253,27 @@ export const EVENT_COOLDOWN_REDUCTIONS: Readonly<
     seconds: 2,
     note: "Lethal Calibration — each enemy hit by Wildfire Bomb −2 s (≤ 5 hits a bomb)",
   },
+  // Cenarius' Guidance (Restoration, GH #154, 2026-10-20): "During
+  // Incarnation: Tree of Life, you summon a Grove Guardian every 10 sec. The
+  // cooldown of Incarnation: Tree of Life is reduced by 5.0 sec when Grove
+  // Guardians fade." DB2 12.1.5.70391: 393381 dummy −5000 (no class mask, a
+  // server script), 393418 the 10 s summon pulse; a Grove Guardian (102693)
+  // lives 8 s. Every guardian counts — pressed, summoned by the pulse, or by
+  // Reforestation's free Tree of Life. The fade is read as summon + 8 s: a
+  // killed guardian may fade sooner, never later, so the model's ready
+  // instant is never before the game's. 98 % of Restoration Druids take it.
+  // Corpus, 2,000 new-season files (every 3rd of the 08-28 manifest), 317
+  // Tree of Life recast pairs (form re-shifts dropped): the bare 180 s holds
+  // for few of them; 180 − 5 × (guardians summoned in the gap) − 15 ×
+  // (holds Control of the Dream, below) holds for 307, the worst miss 9.1 s.
+  "393371": {
+    targets: ["33891"],
+    triggerCastIds: [],
+    triggerSummonIds: ["102693"],
+    summonFadeMs: 8000,
+    seconds: 5,
+    note: "Cenarius' Guidance — Incarnation: Tree of Life −5 s as each Grove Guardian fades",
+  },
 };
 
 /** Hits of one use land together; rows of `triggerHitIds` further apart than
@@ -266,13 +296,20 @@ export const EVENT_HIT_SAME_USE_MS = 300;
  * (`interruptReadyAtMs`), which all get it through `eventTriggersFor`: the
  * unit's own successful casts of `triggerCastIds`, plus, for a per-hit
  * talent, its damage rows of `triggerHitIds` (and the hits a shield soaked
- * whole, logged as an ABSORB miss), at most `maxHitsPerUse` per use.
+ * whole, logged as an ABSORB miss), at most `maxHitsPerUse` per use; for a
+ * fade talent, each of its summons of `triggerSummonIds` `summonFadeMs` after
+ * the summon.
  */
 export function eventTriggerTimesMs(
-  unit: Pick<ICombatUnit, "spellCastEvents" | "damageOut" | "missesOut">,
+  unit: Pick<ICombatUnit, "spellCastEvents" | "damageOut" | "missesOut"> &
+    Partial<Pick<ICombatUnit, "actionOut">>,
   r: Pick<
     IEventCooldownReduction,
-    "triggerCastIds" | "triggerHitIds" | "maxHitsPerUse"
+    | "triggerCastIds"
+    | "triggerHitIds"
+    | "maxHitsPerUse"
+    | "triggerSummonIds"
+    | "summonFadeMs"
   >,
 ): number[] {
   const out = unit.spellCastEvents
@@ -282,6 +319,14 @@ export function eventTriggerTimesMs(
         r.triggerCastIds.includes(String(e.spellId)),
     )
     .map((e) => e.logLine.timestamp);
+  const summonIds = r.triggerSummonIds;
+  if (summonIds?.length)
+    for (const e of unit.actionOut ?? [])
+      if (
+        e.logLine.event === LogEvent.SPELL_SUMMON &&
+        summonIds.includes(String(e.spellId))
+      )
+        out.push(e.logLine.timestamp + (r.summonFadeMs ?? 0));
   const hitIds = r.triggerHitIds;
   if (hitIds?.length) {
     const hits = [
@@ -372,7 +417,8 @@ export function eventTriggersFor(
   unit: Pick<
     ICombatUnit,
     "spec" | "spellCastEvents" | "damageOut" | "missesOut"
-  >,
+  > &
+    Partial<Pick<ICombatUnit, "actionOut">>,
   reductions: readonly IEventCooldownReduction[],
 ): IEventTrigger[] {
   const holderSpec = unit.spec === undefined ? undefined : String(unit.spec);
@@ -443,6 +489,71 @@ export function onInterruptReductionFor(
   for (const [talent, r] of Object.entries(ON_INTERRUPT_COOLDOWN_REDUCTIONS))
     if (r.spellId === spellId && holds(talent)) seconds += r.seconds;
   return seconds;
+}
+
+export interface IIdleCooldownCredit {
+  /** spells whose next cooldown the idle time comes off */
+  targets: readonly string[];
+  /** at most this many seconds a press */
+  capSeconds: number;
+  note: string;
+}
+
+/**
+ * A fourth shape (GH #154, 2026-10-20): the time a spell sat READY before a
+ * press comes off the cooldown that press starts, up to a cap. Keyed by the
+ * talent, hand table, registered in curatedIdRegistry; applied by the
+ * ledger's `applyEventReductions`, press by press (each press's idle time
+ * starts at the previous press's ready instant, credit and event reductions
+ * included).
+ *
+ * Control of the Dream (Keeper of the Grove, 434249): "Time elapsed while
+ * your major abilities are available to be used or at maximum charges is
+ * subtracted from that ability's cooldown after the next time you use it, up
+ * to 15 seconds. Affects Nature's Swiftness, Incarnation: Tree of Life,
+ * [Force of Nature,] [Incarnation: Chosen of Elune | Celestial Alignment,]
+ * and Convoke the Spirits" (Restoration the first two, Balance the bracketed
+ * ones). DB2 12.1.5.70391: one dummy aura, base points 15, no class mask —
+ * a server script, invisible to the mask-keyed talent tables; the log shows
+ * no buff for it either, so the idle time is the ledger's own.
+ * Targets are the ids the ledger keys (Celestial Alignment 194223 and
+ * Chosen of Elune 102560 also log as 383410 / 390414, which the ledger reads
+ * as the same entry). A multi-charge target (two charges of Celestial
+ * Alignment) gets nothing — the charge simulation takes no per-press
+ * override, the side on which the model claims less.
+ * Corpus, 2,000 new-season files (every 3rd of the 08-28 manifest),
+ * Restoration, Nature's Swiftness recast gaps of players without Call of
+ * Ohn'ahra, talents from COMBATANT_INFO (entry 117894): with the talent 34 %
+ * come back before the modelled cooldown and none more than 15 s before it;
+ * without it 0 %.
+ * A round's first press gets the whole cap: the spell sat ready through the
+ * preparation phase. Counted from the round's start instead, the ledger's
+ * own scan (`ledgerImpossibleCastScan`, the same 2,000 files plus 240
+ * downloaded ones) called 55 Balance Force of Nature presses impossible —
+ * nearly all the round's second press, 30.0–31.2 s after a first one made
+ * well inside 15 s of the gates, on a 45 s cooldown: 45 − 15.
+ */
+export const IDLE_COOLDOWN_CREDITS: Readonly<
+  Record<string, IIdleCooldownCredit>
+> = {
+  "434249": {
+    targets: ["132158", "33891", "391528", "205636", "102560", "194223"],
+    capSeconds: 15,
+    note: "Control of the Dream — the time a target sat ready comes off its next cooldown, ≤ 15 s",
+  },
+};
+
+/** The idle-credit cap a holder of these talents has on `spellId`; 0 when
+ * none applies. */
+export function idleCreditCapFor(
+  spellId: string,
+  holds: (talentSpellId: string) => boolean,
+): number {
+  let cap = 0;
+  for (const [talent, r] of Object.entries(IDLE_COOLDOWN_CREDITS))
+    if (r.targets.includes(spellId) && holds(talent))
+      cap = Math.max(cap, r.capSeconds);
+  return cap;
 }
 
 /** The free-recast window a spell has for a holder of these talents. */

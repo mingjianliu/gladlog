@@ -34,6 +34,7 @@ import { TALENT_MITIGATION_MODIFIERS } from "@gladlog/analysis/src/data/talentMi
 import {
   EVENT_COOLDOWN_REDUCTIONS,
   FREE_RECAST_WINDOWS,
+  IDLE_COOLDOWN_CREDITS,
   ON_INTERRUPT_COOLDOWN_REDUCTIONS,
 } from "@gladlog/analysis/src/data/talentScriptedCooldowns";
 import {
@@ -213,7 +214,9 @@ async function main(): Promise<void> {
         EVENT_COOLDOWN_REDUCTIONS[talent]!.targets.includes(i),
       )) ||
     (ON_INTERRUPT_COOLDOWN_REDUCTIONS[talent] &&
-      ids.includes(ON_INTERRUPT_COOLDOWN_REDUCTIONS[talent]!.spellId));
+      ids.includes(ON_INTERRUPT_COOLDOWN_REDUCTIONS[talent]!.spellId)) ||
+    (IDLE_COOLDOWN_CREDITS[talent] &&
+      ids.some((i) => IDLE_COOLDOWN_CREDITS[talent]!.targets.includes(i)));
   const durationCarried = (target: string, talent: string) =>
     [
       ...(BUFF_DURATION_TALENT_MODIFIERS[target] ?? []),
@@ -440,6 +443,7 @@ async function main(): Promise<void> {
     "- 正义召唤 → 复仇十字军(模型 30 秒,语料地板 45 秒):BACKLOG §62,用户自查。",
     "- 闪避 / 佯攻 + 飘忽不定 20%:语料确凿,待减伤裁定(BACKLOG §63)。",
     "- 碎玉闪电击退算控制应对、地震击倒:用户裁不做。",
+    "- 恢复德鲁伊的冷却天赋(GH #154,2026-10-20,用户指出「不按的话之后的冷却会减」):Control of the Dream 434249 —— 技能闲置可用的时间从下一次按下开始的冷却里扣,最多 15 秒(`IDLE_COOLDOWN_CREDITS`,逐次计算;一轮第一次按下直接扣满 15 秒 —— 准备阶段技能也是好的,平衡德自然之力开局后第二次按下最早 30.0 秒 = 45 − 15;多充能的超凡之盟不扣);Cenarius' Guidance 393371 —— 每只林地守护者(102693)消失时生命之树 −5 秒,消失按召唤后 8 秒算(`EVENT_COOLDOWN_REDUCTIONS`,`triggerSummonIds`);Call of Ohn'ahra 1246126 —— 自然迅捷 +30 秒(2026-09-22 hotfix 之前的日志)/ +60 秒(之后,DB2 现值)(`DATED_COOLDOWN_VALUES`,按单位第一条事件的时间经 `logDatedNumberAt` 取)。证据写在各表注释里。",
     "- 参照表过期(未逐次重跑,GH #115):`behaviorPriorGenerated`、打断优先级参照、爆发 / 同步窗口参照。",
     "- **FLAG** Storm Conduit 1217092(恢复萨满,FT F20 2026-10-11;**用户裁决 2026-10-11:按日志日期建模**):恢复专精的持有者每次闪电箭 / 闪电链,日志时间早于 2026-08-18 00:00 UTC 的返还 4 秒,此后 2 秒(`STORM_CONDUIT_HOTFIX_EPOCH_MS`,经 `logIsFrom` 问,取触发那一行自己的时间戳;不是数字的时间戳取现行的 2 秒);其他持有者(元素)仍是 DB2 dummy 1000 ms 的 1 秒。**不是三方证据,保持 FLAG**:秒数不在 DB2 里(服务器脚本,无掩码无标签,不分专精);DB2 只显示这个天赋那时被改过 —— 伴随光环 1223529(被打断时长)在 12.1.0.69382 → 69404 之间由 −65 变 −40;日期和「恢复 4 秒 → 2 秒」来自社区 wiki(warcraft.wiki.gg/wiki/Storm_Conduit,读的是抓取摘要而非原页);数值由语料承担 —— 605 场(`fix-FT/scripts/n6_storm_conduit_fit.py` → `n6-stormConduit-fit-605.txt`):11 个持有者文件有 Healing Tide / Capacitor / Spirit Link / Astral Shift 的复放对(78 对),其中 9 个文件(70 对)有短于未减冷却的间隔;按 1 秒有 28 对早于模型就绪时刻(早 0.5 秒以上);08-18 之前的日志(4 个文件 50 对)按 2 秒 19 对早,全在两个 08-14 文件(要 ≥ 3.56 / 4.26 秒 / 次),按 4 秒 1 对早 2.4 秒(未解释);08-18 及之后(5 个文件 20 对)按 2 秒 0 对早(最紧的文件要 ≥ 1.95 秒)。产品自己的谓词(`ledgerImpossibleCastScan`,其中五个文件,持有者对目标技能的 59 次复放):「台账说没好却按了」27 → 1,同文件其他台账条目 2 / 933 不变。**元素量过了(2026-10-11),证据太薄,不动,仍是 1 秒**(Game-Behaviour Rule 第 7 条:只凭语料往上调):同样的拟合放到每个单冷却目标上、按专精和切点两侧分开(`fix-FT/scripts/scl_elemental_fit.ts` → `scl-elemental-fit-605.txt`),605 场里元素持有者只有**一个人**、hotfix 之后同一晚的三个文件,28 对复放,5 对短于未减冷却;其中 4 对按 1 秒说得通(按键落在 1 秒模型就绪之后 0.4–1.4 秒),1 对早了 1.2 秒 —— 20 秒冷却的 Gust of Wind 隔 17.8 秒再放,中间只有一发闪电箭。这一对按「每次 2 秒」说得通,按「每次 1 秒、那发闪电箭打出的两次闪电箭过载各再 1 秒」也同样说得通(那是另一种**触发**,恢复专精没有过载,它的拟合对此无话可说)。hotfix 之前没有元素持有者;对照:元素非持有者 804 对,没有一对短于冷却。增强点不了这个天赋(PvP 天赋池;语料 113 个单位回合里 0 个)。同一次扫描里恢复专精的全部目标:切点之前 281 对,按 2 秒 52 对早、按 4 秒 3 对早(同一个文件的两对 Grounding Totem 要 6.7 秒 / 次,另有来源,没查;以及已知的那对 Healing Tide 2.4 秒);切点之后 124 对,按 1 秒 2 对早、按 2 秒 0 对。Wind Shear、Earthgrab、Grounding、Static Field 已在这些计数里(切点之前 Wind Shear 32 对:按 2 秒 4 对早、按 4 秒 0 对)。**仍没量过**:Healing Stream / Stormstream Totem(充能制,没有单一冷却可拟合);语料里早于 08-13 的日志 —— 语料之外读过的一场 07-27 恢复专精对局按 4 秒说得通(29 对,按 2 秒 5 对早、按 4 秒 0 对)。切点取该日 UTC 零点:日期来自社区来源,小时未知;日志行带有带符号的 UTC 偏移时是精确时刻,否则按解析器的时区读(`utils/logEra.ts`)。同一个 hotfix 还动了被打断锁定的倍率(DB2 光环 1223529:−65 → −40),那一半 2026-10-11 也按同一个切点建模了(`kickLockout.ts`:之前 ×0.35、此后 ×0.6)。605 场里持有者被打断闪电箭的 15 对:切点之前 8 对在 ×0.344–×0.456,切点之后 7 对里 6 对在 ×0.622 以上、1 对在 ×0.351 —— 那一对是 hotfix 当天的大洋洲日志(08-18 18:56,UTC+10,即 08:56 UTC),说明 hotfix 实际上线晚于这个切点(该日 UTC 零点)、不晚于 08-19 04:37 UTC。切点两半共用,没有挪;小时仍未知,记在 `docs/predicate-index.md`「Not yet unified」。",
     "- **FLAG** Anger Management 152278(Colossus Smash / Bladestorm / Avatar / Shockwave,605 场 40 次「不可能施放」):全部是持有者,且全部落在最早可用下限之下 —— 下限是 p2 分位,按定义放过约 2 %(Bladestorm 13 / 1,000,Colossus Smash 13 / 1,444)。不是新机制;精确建模要逐次怒气消耗账;日志的消耗字段 parser 自 2026-10-11 起存了(`casts[].powerCosts`,见下面法力一条),但它写的是百分比减免之前的消耗,不一定是实扣。没改码。",

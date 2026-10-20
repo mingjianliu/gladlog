@@ -7,6 +7,8 @@ import {
   eventReductionSecondsAt,
   eventTriggersFor,
   eventTriggerTimesMs,
+  IDLE_COOLDOWN_CREDITS,
+  idleCreditCapFor,
   ON_INTERRUPT_COOLDOWN_REDUCTIONS,
 } from "../src/data/talentScriptedCooldowns";
 import {
@@ -18,7 +20,9 @@ import {
   warpClock,
 } from "../src/utils/cooldowns";
 import {
+  CALL_OF_OHNAHRA_HOTFIX_EPOCH_MS,
   CD_TALENT_MODIFIERS,
+  DATED_COOLDOWN_VALUES,
   PER_RANK_COOLDOWN_TALENTS,
 } from "../src/utils/talentModifiers";
 
@@ -414,5 +418,107 @@ describe('eventTriggerTimesMs — one reading of "a trigger happened" (FT F20)',
         })),
       ),
     ).toBe(29);
+  });
+});
+
+describe("Restoration Druid cooldown talents (GH #154)", () => {
+  const CONTROL_OF_THE_DREAM = "434249";
+  const NATURES_SWIFTNESS = "132158";
+  const TREE_OF_LIFE = "33891";
+  const holder = (t: string) => t === CONTROL_OF_THE_DREAM;
+
+  it("Control of the Dream: ≤ 15 s on its targets, only for a holder", () => {
+    expect(IDLE_COOLDOWN_CREDITS[CONTROL_OF_THE_DREAM]).toMatchObject({
+      capSeconds: 15,
+    });
+    expect(idleCreditCapFor(NATURES_SWIFTNESS, holder)).toBe(15);
+    expect(idleCreditCapFor(TREE_OF_LIFE, holder)).toBe(15);
+    expect(idleCreditCapFor(NATURES_SWIFTNESS, () => false)).toBe(0);
+    expect(idleCreditCapFor("102342", holder)).toBe(0); // Ironbark
+  });
+
+  it("the time the spell sat ready comes off the press's cooldown — the whole cap on a round's first press (ready through the preparation phase), then from each ready instant", () => {
+    const casts: Array<{
+      timeSeconds: number;
+      cooldownSecondsOverride?: number;
+      idleCreditSeconds?: number;
+    }> = [{ timeSeconds: 10 }, { timeSeconds: 60 }, { timeSeconds: 200 }];
+    applyEventReductions(casts, 60, [], 15);
+    // first press → 45, ready at 55; pressed at 60 → 5 s idle → 55, ready
+    // at 115; pressed at 200 → capped at 15
+    expect(casts.map((c) => c.cooldownSecondsOverride)).toEqual([45, 55, 45]);
+    expect(casts.map((c) => c.idleCreditSeconds)).toEqual([15, 5, 15]);
+  });
+
+  it("the credit comes first, the event reductions act on what is left", () => {
+    const casts: Array<{
+      timeSeconds: number;
+      cooldownSecondsOverride?: number;
+      reductions?: ReadonlyArray<{ atSeconds: number; seconds: number }>;
+      idleCreditSeconds?: number;
+    }> = [{ timeSeconds: 20 }];
+    applyEventReductions(casts, 180, giveBacks([50, 60, 400], 5), 15);
+    expect(casts[0]).toMatchObject({
+      cooldownSecondsOverride: 155,
+      idleCreditSeconds: 15,
+      reductions: giveBacks([50, 60], 5),
+    });
+    const cd = { casts, cooldownSeconds: 180, neverUsed: false };
+    // before either trigger: 20 + 165 − 30 = 155 s away
+    expect(cdSecondsUntilReady(cd, 30)).toBeCloseTo(155, 6);
+    // after the first: 185 − 5 − 55
+    expect(cdSecondsUntilReady(cd, 55)).toBeCloseTo(125, 6);
+    expect(cdAvailableAt(cd, 174)).toBe(false);
+    expect(cdAvailableAt(cd, 175)).toBe(true);
+  });
+
+  it("Cenarius' Guidance: Tree of Life −5 s as each Grove Guardian fades, 8 s after its summon", () => {
+    const r = EVENT_COOLDOWN_REDUCTIONS["393371"]!;
+    expect(r).toMatchObject({
+      targets: [TREE_OF_LIFE],
+      triggerSummonIds: ["102693"],
+      summonFadeMs: 8000,
+      seconds: 5,
+    });
+    const T0 = 1_000_000;
+    const row = (event: string, spellId: string, atMs: number) => ({
+      spellId,
+      logLine: { event, timestamp: T0 + atMs },
+    });
+    const u = {
+      spellCastEvents: [row("SPELL_CAST_SUCCESS", "102693", 1000)],
+      damageOut: [],
+      actionOut: [
+        row("SPELL_CAST_SUCCESS", "102693", 1000),
+        row("SPELL_SUMMON", "102693", 1000),
+        row("SPELL_SUMMON", "102693", 12_000),
+        row("SPELL_SUMMON", "1232285", 3000), // Efflorescence
+      ],
+    } as never;
+    expect(eventTriggerTimesMs(u, r).map((t) => (t - T0) / 1000)).toEqual([
+      9, 20,
+    ]);
+  });
+
+  it("Call of Ohn'ahra: Nature's Swiftness +30 s in a log before the 2026-09-22 hotfix, +60 s after or undated", () => {
+    const row = CD_TALENT_MODIFIERS[NATURES_SWIFTNESS]!.find(
+      (m) => m.talentSpellId === "1246126",
+    )!;
+    // today's number is the generated DB2 row's
+    expect(DATED_COOLDOWN_VALUES["1246126"]!.value.since).toBe(row.value);
+    const at = (logEpochMs?: number) =>
+      applyCdModifiers(
+        CD_TALENT_MODIFIERS[NATURES_SWIFTNESS],
+        60,
+        1,
+        new Set(),
+        new Set(["1246126"]),
+        logEpochMs === undefined ? {} : { logEpochMs },
+      ).cooldownSeconds;
+    const DAY = 86_400_000;
+    expect(at(CALL_OF_OHNAHRA_HOTFIX_EPOCH_MS - 20 * DAY)).toBe(90);
+    expect(at(CALL_OF_OHNAHRA_HOTFIX_EPOCH_MS + 14 * DAY)).toBe(120);
+    expect(at(undefined)).toBe(120);
+    expect(at(Number.NaN)).toBe(120);
   });
 });

@@ -47,7 +47,24 @@ export const CUSTOM_TALENT_MODIFIERS: Record<string, ICDModifier[]> = {
   // (already −30 at 12.1.0.69587, where the identical hand row hid it), and the
   // 2026-09-22 hotfix ("increases the cooldown of Nature's Swiftness by 60 sec
   // (was 30 sec)") reached 12.1.5.70391 as −60. Keeping the hand row would have
-  // stacked −30 on top of DB2's −60.
+  // stacked −30 on top of DB2's −60. A log from before the hotfix gets −30
+  // (`DATED_COOLDOWN_VALUES`, src/utils/talentModifiers.ts).
+  //
+  // Convoke the Spirits 391528 ← Cenarius' Guidance 393371 (Restoration),
+  // GH #154. The tooltip's "cooldown is reduced by 50%" is $393374s4 / 120 s:
+  // effect 3 of 393374 is a dummy aura (4), −60 000 ms, no class mask — a
+  // server script the mask reader cannot see, while Feral's and Balance's
+  // −50 % (393414 / 393991) are masked rows and already generated. Corpus,
+  // ledgerImpossibleCastScan, 2,000 new-season files + 240 downloaded:
+  // Restoration holders' Convoke recasts on the modelled 120 s come back
+  // from 45.0 s on (36 presses under it), 60 − 15 with Control of the Dream.
+  "391528": [
+    {
+      talentSpellId: "393371", // Cenarius' Guidance
+      effect: "reduce_cd",
+      value: 60,
+    },
+  ],
 
   // --- Mage ---
   // Ice Block 45438 ← Ice Cold 414658 (`pressedAs`: Ice Cold's presses are Ice

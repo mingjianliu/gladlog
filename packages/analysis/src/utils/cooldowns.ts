@@ -39,6 +39,7 @@ import {
   eventReductionsFor,
   eventTriggersFor,
   freeRecastWindowFor,
+  idleCreditCapFor,
 } from "../data/talentScriptedCooldowns";
 import {
   STUN_PURGE_GENERATED,
@@ -56,6 +57,7 @@ import { binarySearchClosest } from "./binarySearch";
 import { buffFullDurationForCaster } from "./buffDuration";
 import { COPY_CAST_IDS, isFormReshiftCast } from "./castPress";
 import { incomingPressureEvents } from "./incomingPressure";
+import { logDatedNumberAt } from "./logEra";
 import {
   auraOffensiveActiveAt,
   METAMORPHOSIS_PRESS_CAST_IDS,
@@ -67,6 +69,7 @@ import { roundEndMs } from "./roundEnd";
 import { isOffensiveSpell, OFFENSIVE_CD_SPELL_IDS } from "./spellDanger";
 import {
   CD_TALENT_MODIFIERS,
+  DATED_COOLDOWN_VALUES,
   type ICDModifier,
   PER_RANK_COOLDOWN_TALENTS,
   RULED_COOLDOWN_VALUES,
@@ -1416,6 +1419,11 @@ export interface ICooldownCast {
    * must subtract only the reductions that had happened by t (agy review
    * 2026-09-26 — the override alone counts later bolts early). */
   reductions?: ReadonlyArray<{ atSeconds: number; seconds: number }>;
+  /** Seconds the spell sat ready before this press that came off its
+   * cooldown (`IDLE_COOLDOWN_CREDITS`, Control of the Dream). Already in
+   * `cooldownSecondsOverride`; with `reductions`, "seconds until ready"
+   * starts from cooldown − credit. */
+  idleCreditSeconds?: number;
   /** Timing classification relative to enemy burst activity. Only set for Defensive/External CDs. */
   timingLabel?: DefensiveTimingLabel;
   /** One-line reason for the timing label */
@@ -2370,15 +2378,22 @@ export function cdMaybeAvailableAt(
   // its override; the corpus floor still bounds it from below, so the "maybe"
   // view takes the shorter of the two (talent impact audit 2026-09-26: the
   // override alone silenced the floor on 12 Healing Tide Totem presses).
+  // So does an idle-credited press (Control of the Dream): the credit is
+  // exact, but other unmodelled sources still shorten the spell.
   const earliest = earliestCd;
-  if (last?.cooldownSecondsOverride !== undefined && !last.reductions)
+  if (
+    last?.cooldownSecondsOverride !== undefined &&
+    !last.reductions &&
+    last.idleCreditSeconds === undefined
+  )
     return false;
   return cdAvailableAt(
     {
       ...cd,
       cooldownSeconds: earliest,
       casts: cd.casts.map((c) =>
-        c.reductions && c.cooldownSecondsOverride !== undefined
+        (c.reductions || c.idleCreditSeconds !== undefined) &&
+        c.cooldownSecondsOverride !== undefined
           ? {
               ...c,
               cooldownSecondsOverride: Math.min(
@@ -2463,7 +2478,10 @@ function cdSecondsUntilReadyConsumed(
   // (a–Ns) range can never invert on such a cast
   if (last.reductions?.length) {
     // event-reduced press: only the reductions that happened by t count
-    let ready = last.timeSeconds + cooldown;
+    // (an idle credit was known at the press — never past the given bound)
+    let ready =
+      last.timeSeconds +
+      Math.min(cooldown, cd.cooldownSeconds - (last.idleCreditSeconds ?? 0));
     for (const r of last.reductions) {
       if (r.atSeconds > tSeconds || r.atSeconds >= ready) break;
       ready = Math.max(r.atSeconds, ready - r.seconds);
@@ -2487,31 +2505,54 @@ function cdSecondsUntilReadyConsumed(
  * Wind Shear (later bolts counted early, 1b930c17 1:39 `Wind Shear(15s)`)
  * while the ledger printed Healing Tide Totem's as-of-now 119 s as if exact
  * (pressed again 93 s later).
+ *
+ * `idleCapSeconds` (`IDLE_COOLDOWN_CREDITS`, Control of the Dream, GH #154):
+ * the time the spell sat ready before a press — from the previous press's
+ * ready instant; a round's first press gets the whole cap, the spell having
+ * sat ready through the preparation phase — comes off that press's
+ * cooldown, up to the cap, before the event reductions act on it. It is
+ * known at the press, so it is in `idleCreditSeconds`, not in `reductions`.
  */
 export function applyEventReductions(
   casts: Array<
     Pick<
       ICooldownCast,
-      "timeSeconds" | "cooldownSecondsOverride" | "reductions"
+      | "timeSeconds"
+      | "cooldownSecondsOverride"
+      | "reductions"
+      | "idleCreditSeconds"
     >
   >,
   cooldownSeconds: number,
   triggers: ReadonlyArray<{ atSeconds: number; seconds: number }>,
+  idleCapSeconds = 0,
 ): void {
+  // ready since the preparation phase: the first press gets the whole cap
+  let prevReady = Number.NEGATIVE_INFINITY;
   for (const c of casts) {
-    if (c.cooldownSecondsOverride !== undefined) continue;
+    if (c.cooldownSecondsOverride !== undefined) {
+      prevReady = c.timeSeconds + c.cooldownSecondsOverride;
+      continue;
+    }
+    const credit = Math.min(
+      idleCapSeconds,
+      Math.max(0, c.timeSeconds - prevReady),
+    );
     const eff = eventReducedCooldownSeconds(
       c.timeSeconds,
-      cooldownSeconds,
+      cooldownSeconds - credit,
       triggers,
     );
+    prevReady = c.timeSeconds + eff;
     if (eff < cooldownSeconds) {
       c.cooldownSecondsOverride = eff;
-      c.reductions = triggers.filter(
+      if (credit > 0) c.idleCreditSeconds = credit;
+      const pulledIn = triggers.filter(
         (g) =>
           g.atSeconds > c.timeSeconds &&
           g.atSeconds < c.timeSeconds + eff + 1e-9,
       );
+      if (pulledIn.length) c.reductions = pulledIn;
     }
   }
 }
@@ -3309,6 +3350,9 @@ export function applyCdModifiers(
   owner?: {
     specId?: string;
     talentRanks?: ReadonlyMap<string, number> | null;
+    /** When the match was played (`DATED_COOLDOWN_VALUES`); absent → the
+     * current numbers. */
+    logEpochMs?: number;
   },
 ): { cooldownSeconds: number; charges: number } {
   const specId = owner?.specId;
@@ -3332,9 +3376,14 @@ export function applyCdModifiers(
       const rank = PER_RANK_COOLDOWN_TALENTS.has(mod.talentSpellId)
         ? Math.max(1, owner?.talentRanks?.get(mod.talentSpellId) ?? 1)
         : 1;
-      // a user-ruled per-rank value replaces the DB2 row's number
+      // a user-ruled per-rank value replaces the DB2 row's number, and so
+      // does the number of the log's date for a value the game changed
+      const dated = DATED_COOLDOWN_VALUES[mod.talentSpellId];
       const value =
-        RULED_COOLDOWN_VALUES[mod.talentSpellId]?.secondsPerRank ?? mod.value;
+        RULED_COOLDOWN_VALUES[mod.talentSpellId]?.secondsPerRank ??
+        (dated
+          ? logDatedNumberAt(dated.value, owner?.logEpochMs ?? Number.NaN)
+          : mod.value);
       flatReduceSeconds += value * rank;
     } else if (mod.effect === "reduce_cd_pct") {
       pctMultiplier *= 1 - mod.value / 100;
@@ -3523,8 +3572,21 @@ interface IPlayerTalentIdSets {
   specId: string | undefined;
   /** COMBATANT_INFO ranks, for `PER_RANK_COOLDOWN_TALENTS` (GH #106) */
   talentRanks: ReadonlyMap<string, number> | null;
+  /** The unit's first logged event — the date `DATED_COOLDOWN_VALUES` is
+   * asked with; NaN for a unit with none (→ the current numbers). */
+  logEpochMs: number;
 }
 const talentIdSetsCache = new WeakMap<ICombatUnit, IPlayerTalentIdSets>();
+
+/** The earliest timestamp among a unit's own casts and auras, NaN if none. */
+function unitFirstEventMs(unit: ICombatUnit): number {
+  let first = Number.POSITIVE_INFINITY;
+  for (const e of unit.spellCastEvents ?? [])
+    first = Math.min(first, e.logLine.timestamp);
+  for (const e of unit.auraEvents ?? [])
+    first = Math.min(first, e.logLine.timestamp);
+  return Number.isFinite(first) ? first : Number.NaN;
+}
 
 export function playerTalentIdSets(unit: ICombatUnit): IPlayerTalentIdSets {
   const cached = talentIdSetsCache.get(unit);
@@ -3549,6 +3611,7 @@ export function playerTalentIdSets(unit: ICombatUnit): IPlayerTalentIdSets {
     talentRanks: unit.info?.talents
       ? getPlayerTalentRanks(specIdNum, unit.info.talents)
       : null,
+    logEpochMs: unitFirstEventMs(unit),
   };
   talentIdSetsCache.set(unit, result);
   return result;
@@ -4305,8 +4368,10 @@ function extractMajorCooldownsAll(
     // (`eventTriggersFor` — the seconds can depend on the holder's spec and
     // on the date of the log). Single-charge spells only — a charge
     // simulation takes no per-press override.
+    // Control of the Dream's idle credit rides the same per-press pass.
     const reductions = eventReductionsFor(spell.spellId, holds);
-    if (reductions.length && baselineCharges <= 1) {
+    const idleCap = idleCreditCapFor(spell.spellId, holds);
+    if ((reductions.length || idleCap > 0) && baselineCharges <= 1) {
       applyEventReductions(
         casts,
         cooldownSeconds,
@@ -4314,6 +4379,7 @@ function extractMajorCooldownsAll(
           atSeconds: (g.atMs - matchStartMs) / 1000,
           seconds: g.seconds,
         })),
+        idleCap,
       );
     }
     // Free recast (Escape from Reality): the press that opens the window

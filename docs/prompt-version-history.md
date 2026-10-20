@@ -3741,3 +3741,26 @@ backlash-dispel 62, kick-priority-team 58, kick-priority-missed 38,
 crisis-no-response 5; contexts: 2,907 `[RES]` lines in 526 files (Tree of
 Life / Nature's Swiftness cooldowns read a range). Gates: baseline residue
 only. gate:full: 1,244 pairs, 0 new diffs.
+v426 (2026-10-20, GH #154 — Druid cooldown talents): three scripted talent
+effects the cooldown ledger did not model (user: "if you don't press them,
+the cooldown afterwards gets shorter"). Control of the Dream 434249
+(`IDLE_COOLDOWN_CREDITS`): the time Nature's Swiftness, Tree of Life,
+Convoke, Force of Nature, Celestial Alignment / Chosen of Elune sat ready
+comes off the cooldown of the next press, ≤ 15 s, press by press; a
+round's first press gets the full 15 (ready through preparation);
+multi-charge targets get nothing. Cenarius' Guidance 393371: Tree of Life
+−5 s as each Grove Guardian fades (summon + 8 s, `triggerSummonIds`), and
+Restoration Convoke −60 s (393374 dummy; hand row in
+customTalentModifiers). Call of Ohn'ahra 1246126: Nature's Swiftness +30 s
+in a log before 2026-09-22, +60 s after (`DATED_COOLDOWN_VALUES`).
+ledgerImpossibleCastScan, 2,240 files / 405,569 presses (presses the
+static model called not ready — impossible + floor-explained): Nature's
+Swiftness 10 + 492 → 0 + 0, Force of Nature 0 + 736 → 0 + 0, Tree of Life
+5 + 460 → 2 + 13, Convoke 18 + 148 → 7 + 0 (all Feral, pre-existing);
+total impossible 612 → 588, no other spell changed. 605 files
+(b62-regen5b → b63-druid154): missed-sync-window +7 (dps 366 → 371,
+healer 135 → 137; Balance Force of Nature back inside a CC window — user
+approved), none removed, two cd-hoarded findings list one more ready
+cooldown (Convoke / Nature's Swiftness); 878 context files change in
+readiness facts only. Gates: baseline residue only. cdRecastFloor still
+carries the pre-fix Tree of Life / Nature's Swiftness floors (GH #115).

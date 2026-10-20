@@ -153,6 +153,7 @@ import {
   TALENT_BEHAVIORS,
 } from "../utils/talentBehaviors";
 import {
+  DATED_COOLDOWN_VALUES,
   PER_RANK_COOLDOWN_TALENTS,
   RULED_COOLDOWN_VALUES,
 } from "../utils/talentModifiers";
@@ -238,6 +239,7 @@ import { TALENT_REPLACES } from "./talentReplaces";
 import {
   EVENT_COOLDOWN_REDUCTIONS,
   FREE_RECAST_WINDOWS,
+  IDLE_COOLDOWN_CREDITS,
   ON_INTERRUPT_COOLDOWN_REDUCTIONS,
 } from "./talentScriptedCooldowns";
 import { WARLOCK_PET_CAST_FUNCTION } from "./warlockPets";
@@ -940,6 +942,9 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   t("RULED_COOLDOWN_VALUES", "utils/talentModifiers.ts", "talent", () =>
     Object.keys(RULED_COOLDOWN_VALUES),
   ),
+  t("DATED_COOLDOWN_VALUES", "utils/talentModifiers.ts", "talent", () =>
+    Object.keys(DATED_COOLDOWN_VALUES),
+  ),
   // Talent impact audit (2026-09-26): scripted cooldown effects — the talents
   // (vouched by COMBATANT_INFO) and the spells they act on (vouched by casts).
   t("FREE_RECAST_WINDOWS", "data/talentScriptedCooldowns.ts", "mixed", () => [
@@ -956,9 +961,14 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
         ...r.targets,
         ...r.triggerCastIds,
         ...(r.triggerHitIds ?? []),
+        ...(r.triggerSummonIds ?? []),
       ]),
     ],
   ),
+  t("IDLE_COOLDOWN_CREDITS", "data/talentScriptedCooldowns.ts", "mixed", () => [
+    ...Object.keys(IDLE_COOLDOWN_CREDITS),
+    ...Object.values(IDLE_COOLDOWN_CREDITS).flatMap((r) => r.targets),
+  ]),
   t(
     "ON_INTERRUPT_COOLDOWN_REDUCTIONS",
     "data/talentScriptedCooldowns.ts",

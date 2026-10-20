@@ -1,4 +1,5 @@
 import talentModifiersJson from "../data/talentModifiers.json";
+import { type ILogDatedNumber } from "./logEra";
 
 /**
  * Mapping of base spell IDs to talent-driven modifications, organized by class.
@@ -132,5 +133,41 @@ export const RULED_COOLDOWN_VALUES: Readonly<
   "265046": {
     secondsPerRank: 10,
     note: "Static Charge — user ruling 2026-09-26: 10 s per rank",
+  },
+};
+
+/**
+ * Call of Ohn'ahra's hotfix: Nature's Swiftness +30 s → +60 s. The day is the
+ * hotfix note's (2026-09-22: "increases the cooldown of Nature's Swiftness
+ * by 60 sec (was 30 sec)"), the hour is not known, so the instant is the
+ * start of that day in UTC, the way `STORM_CONDUIT_HOTFIX_EPOCH_MS` is.
+ */
+export const CALL_OF_OHNAHRA_HOTFIX_EPOCH_MS = Date.UTC(2026, 8, 22, 0, 0, 0);
+
+/**
+ * DB2 `reduce_cd` values the game changed on a date — the row carries only
+ * today's number, a log from before the change has the old one. Read by
+ * `applyCdModifiers` (asked with the owner's `logEpochMs`, through
+ * `logDatedNumberAt`: no date → today's number). `since` must equal the
+ * generated row's value (test/talentScriptedCooldowns.test.ts).
+ */
+export const DATED_COOLDOWN_VALUES: Readonly<
+  Record<string, { value: ILogDatedNumber; note: string }>
+> = {
+  // Call of Ohn'ahra 1246126 (PvP, Restoration Druid) on Nature's Swiftness
+  // 132158, row 1247559: −30 000 ms at 12.1.0.69587, −60 000 ms at
+  // 12.1.5.70391 (scripts/datagen/customTalentModifiers.ts has the history).
+  // Corpus, GH #154 (2026-10-20), Restoration holders without Control of the
+  // Dream, Nature's Swiftness recast gaps: logs of 08-13 … 09-05 (2,000
+  // new-season files) 123 gaps, 87 under the +60 s model's 105 s, the
+  // shortest 75.7 s (= 60 − 15 Passing Seasons + 30); logs of 10-06 … 10-16
+  // (240 downloaded files) 8 gaps, the shortest 123.8 s.
+  "1246126": {
+    value: {
+      cutoverEpochMs: CALL_OF_OHNAHRA_HOTFIX_EPOCH_MS,
+      before: -30,
+      since: -60,
+    },
+    note: "Call of Ohn'ahra — Nature's Swiftness +30 s before the 2026-09-22 hotfix, +60 s since",
   },
 };
