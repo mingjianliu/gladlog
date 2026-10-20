@@ -11,7 +11,6 @@
  * used by buildArchetypePrompts.ts. Any change to that vector must be mirrored here.
  */
 
-import { bracketKey } from "./bracketKey";
 import model3v3 from "../data/archetypes/archetype_model_3v3.json";
 import modelSoloShuffle from "../data/archetypes/archetype_model_solo_shuffle.json";
 import prompts3v3 from "../data/archetypes/archetype_prompts_3v3.json";
@@ -21,6 +20,7 @@ import {
   IArchetypeModel,
   IMatchDynamicFeatures,
 } from "./archetypeInference";
+import { bracketKey } from "./bracketKey";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 

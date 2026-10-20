@@ -4,9 +4,9 @@
 // make-report-fixture.mjs (CJK names, very long matches, shuffle rounds, no
 // coordinates); it does not open a browser to verify the render layer.
 //   npx tsx packages/desktop/scripts/smokeStressFixtures.ts
-/* eslint-disable no-console */
-import { readFileSync, readdirSync, existsSync } from "fs";
-import { join, dirname } from "path";
+ 
+import { existsSync,readdirSync, readFileSync } from "fs";
+import { dirname,join } from "path";
 import { fileURLToPath } from "url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));

@@ -1,4 +1,4 @@
-import { stratifiedSample, type SampleMeta } from "../src/benchmark/stratify";
+import { type SampleMeta,stratifiedSample } from "../src/benchmark/stratify";
 
 const meta = (spec: string, arch: string, id: string): SampleMeta => ({ id, spec, archetype: arch });
 

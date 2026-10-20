@@ -1,15 +1,15 @@
 import {
   deriveEventRows,
+  type DisplayRow,
   EMPTY_EVENTS_FILTER,
   eventNameOptions,
+  type EventSortKey,
   filterDisplayRows,
   formatRangeInput,
   groupEventRows,
   isGroupRow,
   parseRangeInput,
   sortDisplayRows,
-  type DisplayRow,
-  type EventSortKey,
 } from "../src/renderer/src/report/derive/eventsView";
 import { loadRealMatchFixture } from "./fixtures/loadFixture";
 

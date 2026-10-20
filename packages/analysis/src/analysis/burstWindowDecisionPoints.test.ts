@@ -22,9 +22,8 @@ import { ensureAnalysisData } from "../data/ensure";
 import { analyzePlayerCCAndTrinket } from "../utils/ccTrinketAnalysis";
 import { extractMajorCooldowns } from "../utils/cooldowns";
 import {
-  BURST_HEAL_CD_IDS,
   aimedControlUpAt,
-  landedPreOpenerStillUp,
+  BURST_HEAL_CD_IDS,
   BURST_LEAD_CD_EXCLUDED_IDS,
   BURST_OUTCOME_FIELDS,
   BURST_RESPONSE_WINDOW_MS,
@@ -32,6 +31,7 @@ import {
   burstExtrasLabel,
   burstWindowDecisionPoints,
   controlLandedResponses,
+  landedPreOpenerStillUp,
 } from "./burstWindowDecisionPoints";
 import { CRISIS_HP_PCT_RENDERED } from "./crisisDecisionPoints";
 

@@ -13,9 +13,9 @@ import { join } from "node:path";
 
 import {
   aggregateProbeRows,
-  spearman,
   type ProbeRow,
   type RunAgg,
+  spearman,
 } from "../src/explore/promptProbeAggregate";
 
 const specs = process.argv.slice(2).map((s) => {

@@ -1,18 +1,18 @@
 import {
   annotateMissedPurgesWithKillWindows,
   computeOffensiveWindows,
-  missedPurgeNotActionable,
-  missedPurgesFor,
   type ICCEfficiencyStat,
   type IDispelEvent,
   type IMissedPurgeWindow,
+  missedPurgeNotActionable,
+  missedPurgesFor,
 } from "@gladlog/analysis";
 import { CombatUnitReaction } from "@gladlog/parser-compat";
 
 import { dispelSummaryOf } from "./dispelSummary";
 import { toLegacySafe } from "./legacySource";
 import { displaySpellName } from "./spellDisplay";
-import { tInRange, type TimeRange } from "./timeRange";
+import { type TimeRange,tInRange } from "./timeRange";
 import type { ReportSource } from "./types";
 
 /** One dispel / missed-dispel instance (used by row expansion and lists);

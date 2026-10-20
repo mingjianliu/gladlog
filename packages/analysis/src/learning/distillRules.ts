@@ -5,9 +5,9 @@
  * the text, the only two legal numbers being {{hits}} and {{windowMatches}},
  * which code interpolates from stats at render time.
  */
-import { claimChecker, PLACEHOLDER } from "../compare/claimChecker";
 import { causalLint } from "../analysis/causalLint";
 import { repairSpellNameZh } from "../analysis/spellNameZhLint";
+import { claimChecker, PLACEHOLDER } from "../compare/claimChecker";
 import type { StablePattern } from "./types";
 
 export function distillFacts(p: {

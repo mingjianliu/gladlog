@@ -4,9 +4,9 @@ import {
   ensureSpellNames,
   getSpellNamesSnapshot,
 } from "../data/spellEffectData";
+import { SPELL_NAMES_ZH_GENERATED } from "../data/spellNamesZh";
 import { SPELL_NAME_ZH_LINT_STOPWORDS } from "../data/spellNameZhLintStopwords";
 import { SPELL_NAME_ZH_TO_EN } from "../data/spellNameZhLintTable";
-import { SPELL_NAMES_ZH_GENERATED } from "../data/spellNamesZh";
 import { repairSpellNameZh, spellNameZhLint } from "./spellNameZhLint";
 
 describe("spellNameZhLint (flags official-zh-localization spell names in EN-required output)", () => {

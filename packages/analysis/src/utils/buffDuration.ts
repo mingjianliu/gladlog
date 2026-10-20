@@ -1,10 +1,10 @@
 import { ICombatUnit } from "@gladlog/parser-compat";
 
+import { triggeredEffectAurasOfCast } from "../data/castEffectAuras";
 import {
   BUFF_DURATION_TALENT_MODIFIERS,
   spellEffectData,
 } from "../data/spellEffectData";
-import { triggeredEffectAurasOfCast } from "../data/castEffectAuras";
 import { castParamBaseSeconds, type CastParamCaster } from "./castParam";
 import { talentModifierOwnershipOf, talentRankOf } from "./talentOwnership";
 

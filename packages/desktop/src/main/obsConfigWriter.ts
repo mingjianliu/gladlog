@@ -6,6 +6,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
+
 import {
   OBS_API_VERSION,
   PINNED_AUDIO_ENCODER,

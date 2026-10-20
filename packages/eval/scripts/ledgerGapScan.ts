@@ -12,6 +12,9 @@
  *
  *   npx tsx packages/eval/scripts/ledgerGapScan.ts --manifest <m> [--every 30] [--min-rounds 5]
  */
+import { readFileSync } from "node:fs";
+import { gunzipSync } from "node:zlib";
+
 import { ensureAnalysisData, extractMajorCooldowns } from "@gladlog/analysis";
 import {
   abilityProfile,
@@ -25,8 +28,6 @@ import {
 } from "@gladlog/analysis/src/utils/cooldowns";
 import { GladLogParser } from "@gladlog/parser";
 import { toLegacyMatch, toLegacyShuffle } from "@gladlog/parser-compat";
-import { readFileSync } from "node:fs";
-import { gunzipSync } from "node:zlib";
 
 import { arg, argOf } from "./lib/cli";
 

@@ -1,7 +1,8 @@
-import { mkdtempSync, writeFileSync, existsSync, readFileSync } from "fs";
+import { existsSync, mkdtempSync, readFileSync,writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { vi } from "vitest";
+
 import { createIconCache } from "../src/main/iconCache";
 
 const PNG_BYTES = Buffer.from([0x89, 0x50, 0x4e, 0x47]);

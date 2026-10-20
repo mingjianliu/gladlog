@@ -1,11 +1,12 @@
 // packages/analysis/src/compare/cellLookup.test.ts
 import { describe, expect, it } from "vitest";
+
 import {
-  lookupCell,
   assignBuildGroup,
   corpusHasBuildGroup,
+  lookupCell,
 } from "./cellLookup";
-import type { ReferenceCorpus, ReferenceCell } from "./corpusTypes";
+import type { ReferenceCell,ReferenceCorpus } from "./corpusTypes";
 
 function cell(p: Partial<ReferenceCell>): ReferenceCell {
   return {

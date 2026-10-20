@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+
 import { cdAvailableAt } from "../src/utils/cooldowns";
 
 const cast = (timeSeconds: number) => ({ timeSeconds });

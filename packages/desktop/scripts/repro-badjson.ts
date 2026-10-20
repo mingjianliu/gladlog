@@ -16,23 +16,22 @@ import { join } from "node:path";
 
 import {
   buildFindingsPrompt,
-  parseModelJsonArray,
   buildMatchContext,
+  ensureAnalysisData,
   extractCandidateFindings,
   isHealerSpec,
+  parseModelJsonArray,
   specToString,
-  ensureAnalysisData,
 } from "@gladlog/analysis";
 import { CombatUnitReaction } from "@gladlog/parser-compat";
 
-import { toLegacySafe } from "../src/renderer/src/report/derive/legacySource";
-
 import { buildCoachSystemPrompt } from "../src/main/ai";
-import { AI_DEFAULT_MODEL } from "../src/shared/aiModels";
 import {
   agyClientFactory,
   claudeCliClientFactory,
 } from "../src/main/localAiBackends";
+import { toLegacySafe } from "../src/renderer/src/report/derive/legacySource";
+import { AI_DEFAULT_MODEL } from "../src/shared/aiModels";
 
 const MATCH_DIR = join(
   homedir(),

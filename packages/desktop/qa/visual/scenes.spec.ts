@@ -1,14 +1,13 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 
-import { isExempt } from "../axe-allowlist";
-import { isolateExternalRequests } from "../support/stubExternal";
-
 // Import from the dependency-free leaf modules, not from appShell — the latter
 // would drag fixtureBridge's JSON imports into Playwright's Node process and
 // fail outright with an import-attribute error.
 import { FIXED_NOW } from "../../dev/fixtures/fixedNow";
 import { SCENE_NAMES, type SceneName } from "../../dev/scenes";
+import { isExempt } from "../axe-allowlist";
+import { isolateExternalRequests } from "../support/stubExternal";
 
 /** Per-scene "render complete" anchor: wait for it before screenshotting so we
  * never capture a half-rendered frame. */

@@ -1,12 +1,13 @@
-import { GladLogParser } from "@gladlog/parser";
 import type { GladMatch, GladShuffle } from "@gladlog/parser";
+import { GladLogParser } from "@gladlog/parser";
+
 import { toLegacyMatch, toLegacyShuffle } from "../src/convert";
 import {
+  CombatResult,
   CombatUnitClass,
   CombatUnitReaction,
-  CombatUnitType,
   CombatUnitSpec,
-  CombatResult,
+  CombatUnitType,
   LogEvent,
 } from "../src/enums";
 

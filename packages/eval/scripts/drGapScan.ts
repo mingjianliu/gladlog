@@ -9,8 +9,9 @@
  * Usage: tsx packages/eval/scripts/drGapScan.ts <observedIds.json>
  *   (observedIds.json = observedSpellIds.ts output over the corpus of interest)
  */
+import { getEnglishSpellName,SPELL_CATEGORIES } from "@gladlog/analysis";
 import { readFileSync } from "fs";
-import { SPELL_CATEGORIES, getEnglishSpellName } from "@gladlog/analysis";
+
 import { DR_CATEGORIES_GENERATED } from "../../analysis/src/data/drCategoriesGenerated";
 const observed = new Set((JSON.parse(readFileSync(process.argv[2], "utf8")) as number[]).map(String));
 let total = 0;

@@ -1,5 +1,5 @@
+import { splitLine,splitTopLevel } from "../src/l1/splitTopLevel";
 import { parseTimestamp } from "../src/l1/timestamp";
-import { splitTopLevel, splitLine } from "../src/l1/splitTopLevel";
 
 describe("parseTimestamp", () => {
   it("parses current-format timestamp with year to epoch ms (UTC given)", () => {

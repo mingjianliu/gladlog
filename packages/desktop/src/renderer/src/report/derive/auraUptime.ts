@@ -1,7 +1,7 @@
 import {
   buildAuraIntervals,
-  SPELL_CATEGORIES,
   type IAuraInterval,
+  SPELL_CATEGORIES,
 } from "@gladlog/analysis";
 import { CombatUnitReaction } from "@gladlog/parser-compat";
 

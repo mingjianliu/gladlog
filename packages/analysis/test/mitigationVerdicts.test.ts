@@ -10,8 +10,8 @@ import {
   KILL_LIVE_HP_PCT,
   MITIGATION_VERDICTS,
   MITIGATION_VERDICTS_SIGNED_ON,
-  mitigationVerdictOf,
   type MitigationVerdict,
+  mitigationVerdictOf,
 } from "../src/data/mitigationVerdicts";
 
 const SIGNED = /^\d{4}-\d{2}-\d{2} user$/;

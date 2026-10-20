@@ -18,9 +18,9 @@ import fs from "fs-extra";
 import { writeArtifact } from "./lib/emit";
 import {
   assertColumns,
-  resolveBuild,
   fetchTable,
   parseCsv,
+  resolveBuild,
 } from "./lib/wagoCsv";
 
 export const IS_CHANNELLED_BIT = 2; // Attributes_1

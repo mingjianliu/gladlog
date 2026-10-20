@@ -1,6 +1,6 @@
+import { ensureHeroTalents } from "../utils/talents";
 import { ensureSpellNames } from "./spellEffectData";
 import { ensureTalentData, talentDataReady } from "./talentStrings";
-import { ensureHeroTalents } from "../utils/talents";
 
 /** The large data tables (spellNames 12MB / talentIdMap 1.6MB) load in the
  * background: module evaluation kicks the load off without blocking the module

@@ -4,27 +4,27 @@
 // falls inside the death window. Core question: of the windows the current gate
 // skips, how many can a "positioning mistake" rescue? Do low-scoring specs get
 // rescued more often?
-import { readdirSync, readFileSync } from "fs";
-import { join } from "path";
-import { GladLogParser, type GladMatch } from "@gladlog/parser";
-import { toLegacyMatch, CombatUnitReaction } from "@gladlog/parser-compat";
 import {
+  analyzePlayerCCAndTrinket,
+  annotateDefensiveTimings,
+  buildDeepDivePack,
+  ensureAnalysisData,
   extractCandidateFindings,
+  extractMajorCooldowns,
+  type Finding,
+  hasCoachableSignal,
   isHealerSpec,
   isMeleeSpec,
-  buildDeepDivePack,
-  hasCoachableSignal,
   reconstructEnemyCDTimeline,
-  extractMajorCooldowns,
-  annotateDefensiveTimings,
-  analyzePlayerCCAndTrinket,
   specToString,
-  type Finding,
-  ensureAnalysisData,
 } from "@gladlog/analysis";
 // Not exported from index (this is an investigation probe; the production API
 // will not be changed for it): import via the deep source path.
 import { computeOwnerPositionEvents } from "@gladlog/analysis/src/utils/positionAnalysis";
+import { GladLogParser, type GladMatch } from "@gladlog/parser";
+import { CombatUnitReaction,toLegacyMatch } from "@gladlog/parser-compat";
+import { readdirSync, readFileSync } from "fs";
+import { join } from "path";
 
 // Prompt builders read the background-loaded talent / spell-name tables
 // (data/ensure.ts contract) — without this the first combats are degraded.

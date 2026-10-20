@@ -1,6 +1,6 @@
-import { readFileSync } from "fs";
 import type { GladMatch } from "@gladlog/parser";
-import { toLegacyMatch, type IArenaMatch } from "@gladlog/parser-compat";
+import { type IArenaMatch,toLegacyMatch } from "@gladlog/parser-compat";
+import { readFileSync } from "fs";
 
 /** desktop's anonymized fixture (a GladMatch with rawLines stripped) → the
  *  compat legacy shape */

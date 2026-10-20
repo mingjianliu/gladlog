@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { verifiedComparison, percentileRank } from "./verifiedComparison";
+
 import type { ReferenceCell } from "./corpusTypes";
+import { percentileRank,verifiedComparison } from "./verifiedComparison";
 
 describe("percentileRank (piecewise-linear over p10/p50/p90)", () => {
   const d = { p10: 0.2, p50: 0.49, p90: 0.7 };

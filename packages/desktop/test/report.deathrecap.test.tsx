@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen } from "@testing-library/react";
-
 import { COUNTERFACTUAL_WINDOW_S } from "@gladlog/analysis";
+import { fireEvent, render, screen } from "@testing-library/react";
 
 import { DeathRecapCard } from "../src/renderer/src/report/components/DeathRecapCard";
 import { MatchReport } from "../src/renderer/src/report/components/MatchReport";

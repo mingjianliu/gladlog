@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import fixture from "../../../../../test/fixtures/report-match.json";
-import type { ReportSource } from "./types";
 import { deriveMatchArc } from "./matchArc";
+import type { ReportSource } from "./types";
 
 // #10 T4: deriveMatchArc only assembles the arguments for
 // buildMatchArcStructured (the same legacy/owner/friends/enemies assembly

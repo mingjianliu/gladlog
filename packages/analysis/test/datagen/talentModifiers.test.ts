@@ -1,14 +1,15 @@
 import { describe, expect, it } from "vitest";
+
 import { extractTalentModifiers } from "../../scripts/datagen/genTalentModifiers";
-import {
-  applyCdTalentModifiers,
-  applyCdModifiers,
-  isVariantPress,
-} from "../../src/utils/cooldowns";
 import {
   effectiveCooldownSeconds,
   spellEffectData,
 } from "../../src/data/spellEffectData";
+import {
+  applyCdModifiers,
+  applyCdTalentModifiers,
+  isVariantPress,
+} from "../../src/utils/cooldowns";
 import { CD_TALENT_MODIFIERS } from "../../src/utils/talentModifiers";
 
 // Uses the canonical effectiveCooldownSeconds predicate (unified 2026-09-18) and

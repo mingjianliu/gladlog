@@ -9,8 +9,8 @@
  */
 import {
   mkdirSync,
-  readFileSync,
   readdirSync,
+  readFileSync,
   statSync,
   writeFileSync,
 } from "node:fs";

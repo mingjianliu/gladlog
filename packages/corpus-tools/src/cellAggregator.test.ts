@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
 import { lookupCell } from "@gladlog/analysis";
+import { describe, expect, it } from "vitest";
 
 import { aggregateCells, PerMatchRecord } from "./cellAggregator";
 import type { KeystoneGate } from "./keystoneGates";

@@ -46,13 +46,14 @@ vi.mock("@gladlog/analysis", async (importOriginal) => {
   };
 });
 
-import fixture from "../../../../../test/fixtures/report-match.json";
 import {
   analyzePlayerCCAndTrinket,
   computeOwnerPositionEvents,
 } from "@gladlog/analysis";
-import type { ReportSource } from "./types";
+
+import fixture from "../../../../../test/fixtures/report-match.json";
 import { deriveKeyMoments } from "./keyMoments";
+import type { ReportSource } from "./types";
 
 const source = fixture as unknown as ReportSource;
 

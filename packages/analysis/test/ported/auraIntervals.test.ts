@@ -1,7 +1,7 @@
+import type { ICombatUnit } from "@gladlog/parser-compat";
 import { describe, expect, it } from "vitest";
 
 import { buildAuraIntervals } from "../../src/utils/auraIntervals";
-import type { ICombatUnit } from "@gladlog/parser-compat";
 
 const T0 = 1_000_000;
 const combat = { startTime: T0, endTime: T0 + 90_000 };

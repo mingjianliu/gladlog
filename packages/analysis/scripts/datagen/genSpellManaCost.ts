@@ -58,17 +58,16 @@
  * ~5700 rows, no separate healing-spell whitelist needed (a spell nobody in
  * the corpus has cast cannot feed a real candidate anyway).
  */
-import fs from "fs-extra";
-
 import { CombatUnitSpec } from "@gladlog/parser-compat";
+import fs from "fs-extra";
 
 import { writeArtifact } from "./lib/emit";
 import {
   assertColumns,
   assertMinRows,
-  resolveBuild,
   fetchTable,
   parseCsv,
+  resolveBuild,
 } from "./lib/wagoCsv";
 
 export interface ISpellManaCostRaw {

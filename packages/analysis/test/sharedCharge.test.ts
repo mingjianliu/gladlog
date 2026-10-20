@@ -14,8 +14,8 @@ import {
 } from "@gladlog/parser-compat";
 import { beforeAll, describe, expect, it } from "vitest";
 
-import { SHARED_CHARGE_CATEGORY } from "../src/data/sharedChargeGenerated";
 import { ensureAnalysisData } from "../src/data/ensure";
+import { SHARED_CHARGE_CATEGORY } from "../src/data/sharedChargeGenerated";
 import {
   effectiveCooldownSeconds,
   spellEffectData,

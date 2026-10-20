@@ -1,7 +1,5 @@
 import { describe, expect, it } from "vitest";
 
-import { FeedError, LogQuotaExceededError } from "./feedClient";
-
 import {
   classifyExit,
   DAILY_SHUFFLE_SHARE,
@@ -11,6 +9,7 @@ import {
   planSteps,
   remainingToday,
 } from "./dailyPull";
+import { FeedError, LogQuotaExceededError } from "./feedClient";
 
 describe("remainingToday", () => {
   const now = new Date("2026-09-15T18:30:00Z");

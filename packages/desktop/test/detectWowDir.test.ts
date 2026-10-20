@@ -1,7 +1,7 @@
 import {
   detectWowDirCandidates,
-  resolveLogsDir,
   type FsProbe,
+  resolveLogsDir,
 } from "../src/main/detectWowDir";
 
 const probeOf = (existing: string[]): FsProbe => ({

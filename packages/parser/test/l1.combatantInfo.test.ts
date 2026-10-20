@@ -1,7 +1,8 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { splitLine } from "../src/l1/splitTopLevel";
+
 import { decodeCombatantInfo } from "../src/l1/combatantInfo";
+import { splitLine } from "../src/l1/splitTopLevel";
 
 const lines = readFileSync(
   join(__dirname, "fixtures", "combatant_info_sample.txt"),

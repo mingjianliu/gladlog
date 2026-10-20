@@ -38,7 +38,6 @@ import {
   distanceBetween,
   drinkingSegments,
   extractMajorCooldowns,
-  selfCastNoopAnnotatedName,
   fmtTime,
   formatHealingGapsForContext,
   getHpPercentAtTime,
@@ -50,6 +49,7 @@ import {
   LOS_SWEEP_GAP_MS,
   MANA_PRESSURE_LOW_PCT,
   type RawStreams,
+  selfCastNoopAnnotatedName,
   specToString,
   toRenderSecond,
 } from "@gladlog/analysis";

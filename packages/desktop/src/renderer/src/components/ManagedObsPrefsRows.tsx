@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 
-import type { GladlogSettings } from "../../../main/settingsStore";
 import type { ObsAudioDevice } from "../../../main/managedObsBackend";
+import type { GladlogSettings } from "../../../main/settingsStore";
 import {
   DEFAULT_AUDIO_DEVICE_ID,
   type ManagedObsPrefs,

@@ -1,33 +1,34 @@
 import { type Finding, fmtTime } from "@gladlog/analysis";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { bridge } from "../../bridge";
-import { buildAnalysisInput } from "../derive/analysisInput";
-import { resolveJumpTarget } from "../derive/jumpTarget";
-import type { ReportSource } from "../derive/types";
-import {
-  deriveVideoMoments,
-  type AiChipLike,
-  type VideoMoment,
-} from "../derive/videoMoments";
-import type { TimelineData } from "../derive/timeline";
-import type { VulnBand } from "../derive/vulnWindows";
+
 import {
   computeVideoWindow,
   seekTargetS,
   toBattleSeconds,
   toVideoSeconds,
 } from "../../../../shared/videoTime";
+import { bridge } from "../../bridge";
+import { buildAnalysisInput } from "../derive/analysisInput";
+import { resolveJumpTarget } from "../derive/jumpTarget";
+import type { TimelineData } from "../derive/timeline";
+import type { ReportSource } from "../derive/types";
+import {
+  type AiChipLike,
+  deriveVideoMoments,
+  type VideoMoment,
+} from "../derive/videoMoments";
+import type { VulnBand } from "../derive/vulnWindows";
+import { VideoBattleTimeline } from "./VideoBattleTimeline";
 import {
   advanceFeed,
   FEED_CAPACITY_FALLBACK,
   FEED_OUT_MS,
+  type FeedState,
   initialFeed,
   VideoFeed,
-  type FeedState,
 } from "./VideoFeed";
-import { VideoBattleTimeline } from "./VideoBattleTimeline";
 import { VideoMomentList } from "./VideoMomentList";
-import { VideoMomentStrip, type StripMark } from "./VideoMomentStrip";
+import { type StripMark,VideoMomentStrip } from "./VideoMomentStrip";
 
 /** Remembered tab of the right-hand card (2a: the feed toggle became three
  * tabs, the old FEED_PREF_KEY is retired). Written only when the user clicks a
@@ -339,7 +340,7 @@ export function VideoTab({
     // neither of which should remount this effect — a remount re-seeks and
     // snaps playback back to offsetS, and neither input has anything to do
     // with which second the player should be at.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [source, startedAt, offsetS, endS, startBoundS]);
 
   // Feed eviction heartbeat: an item pushed out is first marked `out` to play

@@ -1,7 +1,7 @@
 import { parseLine } from "../src/l1/parseLine";
-import { buildRoster } from "../src/l3/roster";
-import { collectEvents } from "../src/l3/collect";
 import type { ParsedLine } from "../src/l1/types";
+import { collectEvents } from "../src/l3/collect";
+import { buildRoster } from "../src/l3/roster";
 
 const TZ = { timezone: "UTC" } as const;
 const L = (s: string, i = 0) =>

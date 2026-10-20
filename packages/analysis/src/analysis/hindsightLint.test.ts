@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+
 import {
   HINDSIGHT_CLUSTER_SLACK_S,
   hindsightViolations,

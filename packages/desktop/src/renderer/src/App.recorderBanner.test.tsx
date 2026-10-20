@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { render, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+
 import App from "./App";
 import { bridge } from "./bridge";
 

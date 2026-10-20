@@ -2,7 +2,8 @@ import { protocol } from "electron";
 import { createReadStream, statSync } from "fs";
 import { extname } from "path";
 import { Readable } from "stream";
-import { parseRange, vodUrlToPath, VOD_SCHEME } from "../shared/vod";
+
+import { parseRange, VOD_SCHEME,vodUrlToPath } from "../shared/vod";
 
 /** Must be called before app ready (at the top level of index.ts). */
 export function registerVodScheme(): void {

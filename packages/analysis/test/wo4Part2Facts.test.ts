@@ -16,8 +16,8 @@ import {
 } from "@gladlog/parser-compat";
 import { beforeAll, describe, expect, it } from "vitest";
 
-import { actionBlockedAt } from "../src/analysis/crisisDecisionPoints";
 import { evaluateSyncWindow } from "../src/analysis/candidates/cooldownTiming";
+import { actionBlockedAt } from "../src/analysis/crisisDecisionPoints";
 import { ensureAnalysisData } from "../src/data/ensure";
 import { OWN_FLIGHT_AURA_IDS } from "../src/data/occupancyAuras";
 import {

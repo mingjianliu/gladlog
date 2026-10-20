@@ -1,6 +1,7 @@
 import { createReadStream, existsSync } from "node:fs";
-import { createInterface } from "node:readline";
 import { join } from "node:path";
+import { createInterface } from "node:readline";
+
 import { GladLogParser } from "../src/api";
 import type { GladMatch, GladShuffle } from "../src/l3/model";
 

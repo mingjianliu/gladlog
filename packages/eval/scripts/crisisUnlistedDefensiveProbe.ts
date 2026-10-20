@@ -47,10 +47,10 @@ import {
 import { abilityProfile } from "@gladlog/analysis/src/data/abilityProfile";
 import { classMetadata } from "@gladlog/analysis/src/data/classSpells";
 import { PVP_TALENT_POOL_GENERATED } from "@gladlog/analysis/src/data/pvpTalentPoolGenerated";
+import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData";
 import spellIdLists from "@gladlog/analysis/src/data/spellIdLists";
 import talentMitigationGenerated from "@gladlog/analysis/src/data/talentMitigationGenerated.json";
 import { isHealerSpec } from "@gladlog/analysis/src/utils/cooldowns";
-import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData";
 import { getSpecTalentTreeSpellInfo } from "@gladlog/analysis/src/utils/talents";
 import { GladLogParser, type GladMatch } from "@gladlog/parser";
 import { LogEvent, toLegacyMatch } from "@gladlog/parser-compat";

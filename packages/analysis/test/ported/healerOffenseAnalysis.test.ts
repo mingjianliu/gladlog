@@ -40,7 +40,7 @@ function makeFriend(
 ): ICombatUnit {
   return makeUnit(id, {
     reaction: CombatUnitReaction.Friendly,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     advancedActions: fullHpActions() as any[],
     ...overrides,
   });
@@ -96,7 +96,7 @@ describe("computeSlackSegments", () => {
       const hp = s >= 20 && s < 40 ? 300_000 : 500_000;
       mateActions.push(makeAdvancedAction(T0 + s * 1000, 0, 0, 500_000, hp));
     }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const mate = makeUnit("mate", {
       reaction: CombatUnitReaction.Friendly,
       advancedActions: mateActions as any[],
@@ -190,7 +190,7 @@ describe("computeSlackSegments", () => {
       mateActions.push(makeAdvancedAction(T0 + s * 1000, 0, 0, 500_000, hp));
     }
     const owner = makeFriend("owner");
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const mate = makeUnit("mate", {
       reaction: CombatUnitReaction.Friendly,
       advancedActions: mateActions as any[],
@@ -504,7 +504,7 @@ describe("healer view: `your damage on it` is measured on the window's target (T
   });
   const contributions = (damageOut: unknown[], unpunished = false) => {
     const owner = makeFriend("owner");
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     (owner as any).damageOut = damageOut;
     return computeWindowContributions(
       combat,
@@ -1355,7 +1355,7 @@ describe("F193 V2 — contested trade facts", () => {
         makeAdvancedAction(T0 + s * 1000, 0, 0, 500_000, 375_000),
       );
     }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const mate = makeFriend("mate", {
       advancedActions: partialHpActions as any[],
     });
@@ -1472,7 +1472,7 @@ describe("F193 V2 — contested trade facts", () => {
         makeAdvancedAction(T0 + s * 1000, 0, 0, 500_000, 300_000),
       );
     }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const mate = makeFriend("mate", {
       advancedActions: partialHpActions as any[],
     });
@@ -1511,7 +1511,7 @@ describe("F193 V2 — contested trade facts", () => {
         makeAdvancedAction(T0 + s * 1000, 0, 0, 500_000, 375_000),
       );
     }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const mate = makeFriend("mate", {
       advancedActions: partialHpActions as any[],
     });
@@ -1545,7 +1545,7 @@ describe("F193 V2 — contested trade facts", () => {
       [],
       emptyEnemyTimeline(),
       [],
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       enemyHealerCCInstances as any[],
       [],
     );
@@ -1596,7 +1596,7 @@ describe("F193 V2 — contested trade facts", () => {
       mateActions.push(makeAdvancedAction(T0 + s * 1000, 0, 0, 200_000, hp));
     }
     const mate = makeFriend("mate", {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       advancedActions: mateActions as any[],
     });
 

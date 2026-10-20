@@ -1,5 +1,5 @@
+import { readFileSync, renameSync,writeFileSync } from "fs";
 import { parentPort, workerData } from "worker_threads";
-import { readFileSync, writeFileSync, renameSync } from "fs";
 
 import { slimStoredDoc } from "../shared/slimDoc";
 

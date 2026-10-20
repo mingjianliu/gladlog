@@ -1,4 +1,4 @@
-/* eslint-disable no-console */
+ 
 /**
  * CLI: Measure inter-judge variance on the calibration suite.
  *
@@ -21,13 +21,14 @@
  *   tsx packages/eval/scripts/judgeVariance.ts --run <runId> --dirs scores,scores-det,scores-det2
  */
 
-import path from "path";
 import fs from "fs-extra";
-import {
-  measureJudgeVariance,
-  formatVarianceReport,
-} from "../src/judge/judgeVariance";
+import path from "path";
+
 import { resolveEvalHome, runDir } from "../src/evalHome";
+import {
+  formatVarianceReport,
+  measureJudgeVariance,
+} from "../src/judge/judgeVariance";
 
 function parseArgs(): { run: string; dirs: string[] } {
   const args = process.argv.slice(2);

@@ -3,20 +3,20 @@ import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { createRecorderService, type RecorderService } from "./recorder";
+import { MANAGED_OBS_PREF_DEFAULTS } from "../shared/managedObsPrefs";
+import type { CaptureBackend, CaptureChunk } from "./captureBackend";
 import {
   assembleManagedRecording,
-  createManagedAssemblyState,
-  teardownManagedRecording,
   type AssembleManagedRecordingDeps,
+  createManagedAssemblyState,
   type ManagedAssemblyState,
+  teardownManagedRecording,
   type TeardownManagedRecordingDeps,
 } from "./managedAssembly";
-import { MANAGED_OBS_PREF_DEFAULTS } from "../shared/managedObsPrefs";
-import { RecordingsStore } from "./recordingsStore";
-import type { CaptureBackend, CaptureChunk } from "./captureBackend";
 import type { ManagedObsBackend } from "./managedObsBackend";
 import type { ManagedObsHandle } from "./managedObsProcess";
+import { createRecorderService, type RecorderService } from "./recorder";
+import { RecordingsStore } from "./recordingsStore";
 
 /**
  * Task-5b review round 2 (C1/C2): the reviewer's core finding was that

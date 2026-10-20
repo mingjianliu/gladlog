@@ -1,8 +1,9 @@
+import { execSync } from "child_process";
 import { mkdtempSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { execSync } from "child_process";
-import { resolveEvalHome, runDir, abDir } from "../src/evalHome";
+
+import { abDir,resolveEvalHome, runDir } from "../src/evalHome";
 
 describe("resolveEvalHome", () => {
   it("env 指向合法 git 目录 → 返回该路径", () => {

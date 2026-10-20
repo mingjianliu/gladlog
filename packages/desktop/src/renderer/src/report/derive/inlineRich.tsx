@@ -1,13 +1,12 @@
-import type { ReactNode } from "react";
-
 import {
+  englishNameIndex,
   OBSERVED_SPELL_IDS,
   SPELL_NAMES_ZH_GENERATED,
-  englishNameIndex,
 } from "@gladlog/analysis";
+import type { ReactNode } from "react";
 
-import { SPEC_ID_BY_EN, SPEC_NAMES_ZH } from "../data/specNames";
 import { SpecInline, SpellInline } from "../components/SpellInline";
+import { SPEC_ID_BY_EN, SPEC_NAMES_ZH } from "../data/specNames";
 import type { ReportSource } from "./types";
 
 export interface RichDeps {

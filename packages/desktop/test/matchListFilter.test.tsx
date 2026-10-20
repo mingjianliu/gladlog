@@ -1,13 +1,13 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen } from "@testing-library/react";
 
+import type { StoredMatchMeta } from "../src/main/matchStore";
 import {
   applyFilter,
   EMPTY_FILTER,
-  MatchListFilter,
   type ListFilter,
+  MatchListFilter,
 } from "../src/renderer/src/components/MatchListFilter";
-import type { StoredMatchMeta } from "../src/main/matchStore";
 
 const meta = (over: Partial<StoredMatchMeta>): StoredMatchMeta => ({
   id: Math.random().toString(36).slice(2),

@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 
 import { chargeStateAt } from "../../utils/cooldowns";
 import { distinctDispelPressSeconds } from "../../utils/dispelAnalysis";
-
 import {
   BACKLASH_UA_MAX_STACKS,
   BACKLASH_UA_SAFE_HP_PCT,

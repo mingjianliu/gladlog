@@ -1,6 +1,7 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { CombatUnitSpec, type ICombatUnit,LogEvent } from "@gladlog/parser-compat";
+import { beforeEach,describe, expect, it, vi } from "vitest";
+
 import { summonReach } from "./summonReachability";
-import { LogEvent, CombatUnitSpec, type ICombatUnit } from "@gladlog/parser-compat";
 
 vi.mock("../data/spellEffectData", () => ({
   spellEffectData: {
@@ -31,9 +32,9 @@ vi.mock("./rootReachability", () => ({
 }));
 
 // Mock modules so we can change implementations
+import { buildCannotCastIntervals } from "./cannotCastIntervals";
 import { getUnitPositionAtTime } from "./losAnalysis";
 import { canReachTargetAt } from "./rootReachability";
-import { buildCannotCastIntervals } from "./cannotCastIntervals";
 
 const mockGetUnitPositionAtTime = getUnitPositionAtTime as any;
 const mockCanReachTargetAt = canReachTargetAt as any;

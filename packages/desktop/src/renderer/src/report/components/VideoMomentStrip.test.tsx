@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 import { fireEvent, render } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+
+import type { VideoMoment } from "../derive/videoMoments";
 import type { StripMark } from "./VideoMomentStrip";
 import { VideoMomentStrip } from "./VideoMomentStrip";
-import type { VideoMoment } from "../derive/videoMoments";
 
 const mm = (kind: VideoMoment["kind"], weight: VideoMoment["weight"]) =>
   ({ tS: 0, kind, weight, label: "x", unitNames: [] }) as VideoMoment;

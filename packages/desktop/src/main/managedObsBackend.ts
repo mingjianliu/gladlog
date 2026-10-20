@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -9,14 +9,14 @@ import type {
   CaptureBackend,
   CaptureChunk,
 } from "./captureBackend";
+import type { ManagedObsWs } from "./managedObsClient";
+import { realManagedObsWs } from "./managedObsClient";
 import {
   DESKTOP_AUDIO_INPUT_KIND,
   MANAGED_CANVAS,
   MIC_AUDIO_INPUT_KIND,
   SCENE_NAME,
 } from "./obsConfigWriter";
-import type { ManagedObsWs } from "./managedObsClient";
-import { realManagedObsWs } from "./managedObsClient";
 
 /** 每次 websocket 调用的超时(task-4 brief 规则 4)。 */
 const CALL_TIMEOUT_MS = 15_000;

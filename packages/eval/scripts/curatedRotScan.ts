@@ -27,13 +27,12 @@
  * week's corpus. The scan ranks; a human (or the next patch-notes audit)
  * adjudicates. Output is a Markdown report, one row per stale id.
  */
-import { readFileSync, writeFileSync } from "fs";
-
 import {
   AURA_ONLY_ACTIVATION_IDS,
   CURATED_ID_TABLES,
   getEnglishSpellName,
 } from "@gladlog/analysis";
+import { readFileSync, writeFileSync } from "fs";
 
 function arg(flag: string): string | undefined {
   const i = process.argv.indexOf(flag);

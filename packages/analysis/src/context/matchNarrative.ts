@@ -1,8 +1,8 @@
 import { ICombatUnit } from "@gladlog/parser-compat";
 
 import { IMajorCooldownInfo, specToString } from "../utils/cooldowns";
-import { fmtTime } from "../utils/renderGrid";
 import { IEnemyCDTimeline } from "../utils/enemyCDs";
+import { fmtTime } from "../utils/renderGrid";
 
 /**
  * Structured phase of `buildMatchArc`. `prose` is the exact sentence

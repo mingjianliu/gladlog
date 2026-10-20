@@ -12,11 +12,11 @@ import {
 } from "@gladlog/parser-compat";
 import { describe, expect, it } from "vitest";
 
+import { isEnemyCdWindowSpell } from "../utils/enemyCDs";
 import {
   CRISIS_EXTERNAL_IDS,
   CRISIS_OFFENSIVE_CD_IDS,
 } from "./crisisDecisionPoints";
-import { isEnemyCdWindowSpell } from "../utils/enemyCDs";
 import {
   TEAMMATE_CRISIS_CUE_MIN_S,
   TEAMMATE_CRISIS_REACH_YARDS,

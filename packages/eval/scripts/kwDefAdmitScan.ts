@@ -2,12 +2,12 @@
  * (+cd>=30s) admit as major defensives that the 39-id hand list lacks? */
 import { ensureAnalysisData } from "@gladlog/analysis";
 import { abilityProfile, isSurvivalWall } from "@gladlog/analysis/src/data/abilityProfile";
+import observed from "@gladlog/analysis/src/data/observedSpellIdsGenerated.json";
 import {
   effectiveCooldownSeconds,
   spellEffectData,
 } from "@gladlog/analysis/src/data/spellEffectData";
 import spellIdListsData from "@gladlog/analysis/src/data/spellIdLists";
-import observed from "@gladlog/analysis/src/data/observedSpellIdsGenerated.json";
 async function main() {
   await ensureAnalysisData();
   const hand = new Set<string>((spellIdListsData as any).externalOrBigDefensiveSpellIds);

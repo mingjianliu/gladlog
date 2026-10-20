@@ -1,7 +1,7 @@
 import { copyFileSync, existsSync, mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
 
-import { listAiDebug, type AiDebugEntry } from "./aiDebugLog";
+import { type AiDebugEntry,listAiDebug } from "./aiDebugLog";
 
 /**
  * In-app bug reporting (user request, 2026-08-02): bundles three things — the

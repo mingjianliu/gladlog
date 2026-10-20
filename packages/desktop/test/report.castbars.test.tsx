@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import {
+  CAST_BAR_MAX_MS,
   castBarAt,
   deriveCastBars,
-  CAST_BAR_MAX_MS,
 } from "../src/renderer/src/report/derive/castBars";
 import type { ReportSource } from "../src/renderer/src/report/derive/types";
 

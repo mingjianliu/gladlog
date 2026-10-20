@@ -1,5 +1,7 @@
-import { describe, expect, it } from "vitest";
 import { CombatUnitReaction, CombatUnitSpec } from "@gladlog/parser-compat";
+import { describe, expect, it } from "vitest";
+
+import { CLOSE_RANGE_YARDS } from "../src/utils/positionAnalysis";
 import {
   computeRootReachability,
   formatRootReachabilityEntries,
@@ -7,7 +9,6 @@ import {
   ROOT_UNREACHABLE_MIN_S,
   rootReachProvenFact,
 } from "../src/utils/rootReachability";
-import { CLOSE_RANGE_YARDS } from "../src/utils/positionAnalysis";
 
 const T0 = 1_000_000;
 function unit(

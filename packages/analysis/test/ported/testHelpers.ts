@@ -15,7 +15,7 @@ import {
   LogEvent,
 } from "@gladlog/parser-compat";
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 type AnyObj = Record<string, any>;
 
 /** Minimal damage-taken event (CombatHpUpdateAction shape). */

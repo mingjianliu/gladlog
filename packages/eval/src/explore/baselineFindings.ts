@@ -17,8 +17,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
-  candidateTypeOfId,
   type CandidateEvent,
+  candidateTypeOfId,
   type Finding,
   toRenderSecond,
 } from "@gladlog/analysis";

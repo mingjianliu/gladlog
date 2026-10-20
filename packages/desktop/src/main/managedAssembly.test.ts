@@ -5,17 +5,17 @@ import {
   type ManagedObsPrefs,
 } from "../shared/managedObsPrefs";
 import type { CaptureBackend, CaptureChunk } from "./captureBackend";
+import {
+  assembleManagedRecording,
+  type AssembleManagedRecordingDeps,
+  createManagedAssemblyState,
+  createManagedRestartCoordinator,
+  reactToManagedToggle,
+  teardownManagedRecording,
+} from "./managedAssembly";
 import type { ManagedObsBackend } from "./managedObsBackend";
 import type { ObsConfigSpec } from "./obsConfigWriter";
 import type { RecorderStatus } from "./recorder";
-import {
-  assembleManagedRecording,
-  createManagedRestartCoordinator,
-  createManagedAssemblyState,
-  reactToManagedToggle,
-  teardownManagedRecording,
-  type AssembleManagedRecordingDeps,
-} from "./managedAssembly";
 
 /** Resolves/rejects on demand -- lets a test hold `assemble`/`teardown` open
  * to observe reactToManagedToggle's timing without a real setTimeout race. */

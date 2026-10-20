@@ -15,8 +15,8 @@ import {
   AURA_ONLY_ACTIVATION_IDS,
   cdAvailableAt,
   cdIsProcOnly,
-  PROC_ONLY_ACTIVATION_IDS,
   isProcOnlyActivation,
+  PROC_ONLY_ACTIVATION_IDS,
 } from "../src/utils/cooldowns";
 
 describe("PROC_ONLY_ACTIVATION_IDS", () => {

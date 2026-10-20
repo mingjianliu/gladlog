@@ -1,8 +1,9 @@
 // Full-pipeline throughput benchmark + soak test: GladLogParser (L1+L2+L3),
 // reporting line rate / match count / diagnostics
 import { createReadStream } from "node:fs";
-import { createInterface } from "node:readline";
 import { readFileSync } from "node:fs";
+import { createInterface } from "node:readline";
+
 import { GladLogParser } from "../src/api";
 
 async function main() {

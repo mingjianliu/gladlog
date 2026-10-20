@@ -47,9 +47,9 @@ import { fmtTime } from "../../utils/renderGrid";
 import type { IControlCastBar } from "../ccUse";
 import {
   REFUSAL_WHY_WORDS,
+  refusalWhy,
   REJECT_WHY_BAR_STOPPED,
   REJECT_WHY_UNWORDED,
-  refusalWhy,
 } from "../spellOutcomeLines";
 import type { TimelineCtx } from "./ctx";
 

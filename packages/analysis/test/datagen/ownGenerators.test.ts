@@ -1,7 +1,8 @@
 import { readFileSync } from "fs";
-import { parseCsv } from "../../scripts/datagen/lib/wagoCsv";
-import { extractTrinketIds } from "../../scripts/datagen/genTrinketItemIds";
+
 import { CUSTOM_TALENT_MODIFIERS } from "../../scripts/datagen/customTalentModifiers";
+import { extractTrinketIds } from "../../scripts/datagen/genTrinketItemIds";
+import { parseCsv } from "../../scripts/datagen/lib/wagoCsv";
 
 const itemSparse = parseCsv(
   readFileSync(

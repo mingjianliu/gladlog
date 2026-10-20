@@ -6,8 +6,8 @@
 import { CombatUnitSpec, LogEvent } from "@gladlog/parser-compat";
 import { beforeAll, describe, expect, it } from "vitest";
 
-import { ownerResUtilityCds } from "../src/context/resUtilityCds";
 import { buildResourceSnapshot } from "../src/context/resourceSnapshot";
+import { ownerResUtilityCds } from "../src/context/resUtilityCds";
 import { ensureAnalysisData } from "../src/data/ensure";
 
 beforeAll(async () => {

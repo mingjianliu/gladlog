@@ -17,6 +17,7 @@
  */
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join, normalize, relative } from "node:path";
+
 import { describe, expect, it } from "vitest";
 
 const REPO_ROOT = join(__dirname, "../../..");

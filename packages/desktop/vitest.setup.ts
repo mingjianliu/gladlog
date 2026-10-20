@@ -2,9 +2,8 @@
 // loading (analysis' data/ensure.ts), an import no longer guarantees they are
 // ready — name/talent assertions would go red at random depending on load
 // timing. Wait for them once, here, for everyone.
-import { configure } from "@testing-library/react";
-
 import { ensureAnalysisData } from "@gladlog/analysis";
+import { configure } from "@testing-library/react";
 
 // GH #26 flaky ledger. This 5 s wait was the 2026-08-28 "slow runner" theory
 // and it was wrong: the flakes reproduced at 5019 ms too. Root cause found

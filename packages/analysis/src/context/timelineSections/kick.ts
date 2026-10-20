@@ -18,9 +18,9 @@ import { getEnglishSpellName } from "../../data/spellEffectData";
 import { buildAuraIntervals } from "../../utils/auraIntervals";
 import {
   INTERRUPT_SPELL_IDS,
+  interruptBackAtMs,
   interruptCooldownSeconds,
   interruptForUnit,
-  interruptBackAtMs,
   kickCastSpellId,
 } from "../../utils/enemyInterrupts";
 import {

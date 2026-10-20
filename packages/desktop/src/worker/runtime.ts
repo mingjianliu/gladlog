@@ -1,5 +1,6 @@
 import { readdirSync, statSync } from "fs";
 import { basename, join } from "path";
+
 import type {
   FileStatus,
   MainToWorker,
@@ -7,12 +8,12 @@ import type {
   WorkerToMain,
 } from "../shared/protocol";
 import {
+  type CheckpointRegistry,
   loadCheckpoints,
   saveCheckpoints,
-  type CheckpointRegistry,
 } from "./checkpoints";
 import { FilePipeline, type ParserLike } from "./pipeline";
-import { startLogWatcher, type LogWatcher } from "./watcher";
+import { type LogWatcher,startLogWatcher } from "./watcher";
 
 export interface WorkerTransport {
   post(msg: WorkerToMain): void;

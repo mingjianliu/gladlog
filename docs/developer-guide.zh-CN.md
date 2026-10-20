@@ -69,6 +69,8 @@ npm run presubmit
 
 `npm run presubmit` 是 CI `test` 工作流中 `static` 和 `unit` 任务的超集——`verify:doc-commands` 只在本地跑（根目录 `eslint .` + `verify:doc-commands` + `typecheck` + 全工作区单测 + `verify:vision` + `electron-vite build`）。**切勿手敲旧版三件套**（`npm test --workspace=packages/desktop && npm run typecheck && npx eslint .`）：它会跳过 `verify:vision` 和生产构建，而生产构建是本地唯一能拦截 renderer 误从 `src/main/*` 导入值的手段（开发模式和 vitest 都会放行直到打包崩溃）。push 后用 `gh run watch <显式 run id> --exit-status` 盯绿。
 
+lint 警告数有棘轮：`npm run lint` 带着当前计数跑 `--max-warnings`（2026-10-20 为 1,572——1,570 条 `no-explicit-any`、2 条 `react-hooks/exhaustive-deps`），新增一条警告就会让 lint、presubmit 和 CI 失败。修掉警告，不要调大这个数；减少了警告，就在同一个提交里把根目录 `package.json` 的数字调低。`npm run lint:fix` 会排序 import，但会把副作用 import（`import "./x.css"`）提到最前，可能改变执行顺序和 CSS 层叠；import 顺序有讲究的文件在开头禁用 `simple-import-sort/imports` 并写明原因（`packages/desktop/src/renderer/src/main.tsx`）。
+
 **`analysis` 与 `eval` 的本地测试隔离。** 本地在这两个包里跑 `npm test` 分两遍:列在包内 `vitest.shared.json` 里的测试文件在每个 worker 里共用一份模块缓存(大数据表只加载一次而不是每个文件一次 —— 2026-09-12 交替实测三轮,analysis + eval 的 `npm test` 中位数 146 s → 52 s,内存峰值也更低),其余文件照旧隔离运行。CI 始终全量隔离。准入是 fail-closed:新测试文件在加进 `vitest.shared.json` 之前都隔离运行,只有它不改模块、全局或进程状态时才应加入;已在名单里的文件一旦开始这么做(`vi.mock`、`vi.spyOn`、写 `process.env` ……)会被自动否决。开关单例(`CANDIDATE_TYPE_FLAGS`、`DISPEL_FEATURE_FLAGS`、`HEALER_OFFENSE_FLAGS`)必须用保存的副本还原 —— 守卫会让任何没还原的测试失败。某个失败只在本地出现时,用 `GLADLOG_TEST_ISOLATE=all npm test --workspace=packages/analysis` 重跑,区分状态泄漏和真 bug。细节见 `packages/analysis/test/support/testIsolation.ts`。
 
 **desktop 代码约定**(数据流三通路、seekReq nonce 模式、fixture 合成注入测试法等)集中在 `.claude/skills/desktop-dev/SKILL.md` —— 改 `packages/desktop` 前先读。

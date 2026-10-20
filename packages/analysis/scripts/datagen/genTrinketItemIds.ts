@@ -1,10 +1,10 @@
+import { writeArtifact } from "./lib/emit";
 import {
+  assertColumns,
+  fetchTable,
   parseCsv,
   resolveBuild,
-  fetchTable,
-  assertColumns,
 } from "./lib/wagoCsv";
-import { writeArtifact } from "./lib/emit";
 
 export const ADAPTATION_NAME_FRAGMENT = "Sigil of Adaptation";
 export const RELENTLESS_NAME_FRAGMENT = "Relentless";

@@ -1,4 +1,4 @@
-/* eslint-disable no-console */
+ 
 /**
  * hpTieScan.ts — how often the `[STATE]` HP sampler has to choose between
  * equally near advanced samples that disagree (GH #100 field ledger,
@@ -28,13 +28,13 @@
  * Manifest lines are absolute paths to .txt or .txt.gz logs. One process,
  * one file in memory at a time.
  */
-import { GladLogParser, type GladMatch } from "@gladlog/parser";
-import { toLegacyMatch } from "@gladlog/parser-compat";
+import { getSortedAdvancedActions } from "@gladlog/analysis/src/utils/advancedActions";
 import {
   gridHpPct,
   HP_SAMPLE_RADIUS_MS,
 } from "@gladlog/analysis/src/utils/cooldowns";
-import { getSortedAdvancedActions } from "@gladlog/analysis/src/utils/advancedActions";
+import { GladLogParser, type GladMatch } from "@gladlog/parser";
+import { toLegacyMatch } from "@gladlog/parser-compat";
 import { readFileSync } from "fs";
 import { gunzipSync } from "zlib";
 const files = readFileSync(process.argv[2]!, "utf8")

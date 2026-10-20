@@ -1,8 +1,7 @@
 // @vitest-environment jsdom
-import { beforeAll, describe, expect, it, vi } from "vitest";
-import { fireEvent, render } from "@testing-library/react";
-
 import { ensureAnalysisData, fmtTime } from "@gladlog/analysis";
+import { fireEvent, render } from "@testing-library/react";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import { MatchReport } from "../src/renderer/src/report/components/MatchReport";
 import { ReplayView } from "../src/renderer/src/report/components/ReplayView";

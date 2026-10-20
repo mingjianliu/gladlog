@@ -1,8 +1,9 @@
 import { fmtTime } from "@gladlog/analysis";
+
 import { displaySpellName } from "./spellDisplay";
-import { tInRange, type TimeRange } from "./timeRange";
-import type { ReportSource } from "./types";
 import { shortUnitName } from "./teamSide";
+import { type TimeRange,tInRange } from "./timeRange";
+import type { ReportSource } from "./types";
 
 /**
  * Events view (phase four ②, a structured-filter take on WCL Events — no

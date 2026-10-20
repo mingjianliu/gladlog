@@ -10,14 +10,14 @@
  * 官方表也要实测)。当前全仓**零消费者**,保留是因为数据本身没错、重新生成要重拉
  * DB2;真要用它之前必须先补完备性,否则「查不到 = 不是这个职业的」会直接错。
  */
+import { collectCandidateIds } from "./lib/candidates";
+import { writeArtifact } from "./lib/emit";
 import {
+  assertColumns,
+  fetchTable,
   parseCsv,
   resolveBuild,
-  fetchTable,
-  assertColumns,
 } from "./lib/wagoCsv";
-import { writeArtifact } from "./lib/emit";
-import { collectCandidateIds } from "./lib/candidates";
 
 export function classesForMask(mask: number): number[] {
   const result: number[] = [];

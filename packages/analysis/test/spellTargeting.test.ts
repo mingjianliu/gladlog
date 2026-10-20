@@ -9,12 +9,12 @@
  */
 import { beforeAll, describe, expect, it } from "vitest";
 
-import { ensureAnalysisData } from "../src/data/ensure";
 import { classMetadata } from "../src/data/classSpells";
+import { ensureAnalysisData } from "../src/data/ensure";
 import spellIdLists from "../src/data/spellIdLists";
-import { SpellTag } from "../src/data/spellTypes";
 import { hasOfficialTargeting, reachesAlly } from "../src/data/spellTargeting";
 import { SPELL_REACHES_OTHERS_GENERATED } from "../src/data/spellTargetingGenerated";
+import { SpellTag } from "../src/data/spellTypes";
 
 // 数据改为动态载入(见 spellTargetingGenerated.ts 头部):测试必须先 await
 // 聚合入口,否则读到的是空表 —— 这正是生产 prompt 路径的同一条契约。

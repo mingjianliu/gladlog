@@ -11,8 +11,8 @@ import {
   eventInRange,
   overlapSeconds,
   rangeDurationS,
-  tInRange,
   type TimeRange,
+  tInRange,
 } from "./timeRange";
 import type { ReportSource } from "./types";
 

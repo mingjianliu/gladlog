@@ -20,12 +20,12 @@
  * Local .txt files are never touched — this adds a copy, it does not move one.
  */
 import { spawnSync } from "child_process";
+import { statfsSync } from "fs";
 import fs from "fs-extra";
 import os from "os";
 import path from "path";
-import { createGzip } from "zlib";
 import { pipeline } from "stream/promises";
-import { statfsSync } from "fs";
+import { createGzip } from "zlib";
 
 import { buildRcloneCopyArgs, parseListRemotes } from "../src/driveSync";
 import {

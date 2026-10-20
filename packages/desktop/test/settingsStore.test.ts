@@ -1,12 +1,13 @@
 import { mkdtempSync, readFileSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
+
 import {
-  SettingsStore,
   API_KEY_REDACTED,
   MANAGED_WS_PASSWORD_REDACTED,
   redactSettings,
   sanitizeSettingsPatch,
+  SettingsStore,
 } from "../src/main/settingsStore";
 
 const dir = () => mkdtempSync(join(tmpdir(), "gl-settings-"));

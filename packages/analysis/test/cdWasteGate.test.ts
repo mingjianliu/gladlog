@@ -1,8 +1,8 @@
+import { buildFindingsPrompt } from "../src/analysis/buildFindingsPrompt";
 import {
   CD_WASTE_PRESSURE_HP_PCT,
   cdWasteEvents,
 } from "../src/analysis/candidateFindings";
-import { buildFindingsPrompt } from "../src/analysis/buildFindingsPrompt";
 import { lowPressureUnusedDefensiveNote } from "../src/context/matchTimelineSections";
 import { matchMinHpPct } from "../src/utils/killWindowTargetSelection";
 import { makeUnit } from "./ported/testHelpers";

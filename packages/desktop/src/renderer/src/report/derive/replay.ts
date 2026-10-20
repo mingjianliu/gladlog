@@ -1,5 +1,5 @@
-import type { ReportSource } from "./types";
 import { sideOfUnit, type TeamSide } from "./teamSide";
+import type { ReportSource } from "./types";
 
 export interface ReplaySample {
   t: number;

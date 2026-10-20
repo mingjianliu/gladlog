@@ -41,6 +41,7 @@ export * from "./utils/burstLedger";
 // the hostile-source set every cannot-cast reader passes (death-kill F-M1:
 // the desktop death recap asks the same predicate as the prompt)
 export { enemySourceIds } from "./utils/cannotCastIntervals";
+export * from "./utils/castCancels";
 export * from "./utils/ccBreakAnalysis";
 export * from "./utils/ccTrinketAnalysis";
 export * from "./utils/cooldowns";
@@ -57,7 +58,6 @@ export * from "./utils/healerExposureAnalysis";
 export * from "./utils/healerOffenseAnalysis";
 export * from "./utils/healingGaps";
 export * from "./utils/incomingPressure";
-export * from "./utils/castCancels";
 export * from "./utils/kickAudit";
 export * from "./utils/killAttempts";
 export * from "./utils/killWindowTargetSelection";
@@ -136,9 +136,9 @@ export { OFF_GCD_SPELL_IDS } from "./data/offGcdGenerated";
 // the prompt and the lanes (single-source, see context/timelineHelpers.ts).
 export * from "./context/peakSpikePlacement";
 export * from "./context/resLedgerPrune";
-export * from "./utils/externalDamage";
 export {
   DMG_SPIKE_THRESHOLD,
   dmgSpikeWindowsOf,
 } from "./context/timelineHelpers";
 export * from "./data/kickedSpellCategories";
+export * from "./utils/externalDamage";

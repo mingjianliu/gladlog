@@ -1,16 +1,16 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 
 import { deriveDetailBreakdown } from "../derive/detailBreakdown";
-import { type MeterMode, meterGroups, meterRows } from "../derive/meterRows";
-import { TEAM_SIDE_LABEL, type TeamSide } from "../derive/teamSide";
+import { meterGroups, type MeterMode, meterRows } from "../derive/meterRows";
 import type { StatsRow } from "../derive/statsTable";
 import type { UnitTotals } from "../derive/summary";
+import { TEAM_SIDE_LABEL, type TeamSide } from "../derive/teamSide";
 import type { TimeRange } from "../derive/timeRange";
 import type { ReportSource } from "../derive/types";
 import { BreakdownTable } from "./BreakdownTable";
 import { MeterUnitRow } from "./MeterUnitRow";
-import { TeamDot } from "./TeamDot";
 import { StatsTable } from "./StatsTable";
+import { TeamDot } from "./TeamDot";
 
 const MODE_LABEL: Record<MeterMode, string> = {
   damage: "伤害",

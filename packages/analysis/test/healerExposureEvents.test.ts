@@ -6,7 +6,7 @@ import {
 } from "@gladlog/parser-compat";
 import { describe, expect, it } from "vitest";
 
-import { DMG_SPIKE_THRESHOLD, computeHealerExposureEvents } from "../src";
+import { computeHealerExposureEvents,DMG_SPIKE_THRESHOLD } from "../src";
 
 // An ICombatUnit stub with every field correctly named (mirrors mkFullUnit in
 // deepDive.window.test.ts — computeHealerExposureEvents' self-computing path has

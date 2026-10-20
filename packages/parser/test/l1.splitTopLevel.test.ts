@@ -1,4 +1,4 @@
-import { splitTopLevel, splitLine } from "../src/l1/splitTopLevel";
+import { splitLine,splitTopLevel } from "../src/l1/splitTopLevel";
 
 describe("splitTopLevel", () => {
   it("splits simple comma separated values", () => {

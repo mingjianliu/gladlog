@@ -1,7 +1,7 @@
 import { parseLine } from "../src/l1/parseLine";
 import { Segmenter } from "../src/l2/segmenter";
-import { buildMatch, buildShuffle } from "../src/l3/compose";
 import type { Segment, ShuffleClose } from "../src/l2/types";
+import { buildMatch, buildShuffle } from "../src/l3/compose";
 import type { GladMatch, GladShuffle } from "../src/l3/model";
 
 const TZ = { timezone: "UTC" } as const;

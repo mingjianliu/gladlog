@@ -1,5 +1,6 @@
+import { CombatUnitSpec,CombatUnitType } from "@gladlog/parser-compat";
 import { describe, expect, it } from "vitest";
-import { CombatUnitType, CombatUnitSpec } from "@gladlog/parser-compat";
+
 import { extractRotations } from "./crisisEvents";
 
 function stubUnit(): any {

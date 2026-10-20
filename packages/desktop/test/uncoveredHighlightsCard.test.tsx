@@ -1,8 +1,7 @@
 // @vitest-environment jsdom
-import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, waitFor } from "@testing-library/react";
-
 import { ensureAnalysisData } from "@gladlog/analysis";
+import { fireEvent, render, waitFor } from "@testing-library/react";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { MatchReport } from "../src/renderer/src/report/components/MatchReport";
 import { UncoveredHighlightsCard } from "../src/renderer/src/report/components/UncoveredHighlightsCard";

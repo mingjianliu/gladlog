@@ -50,6 +50,9 @@
  *   npx tsx packages/eval/scripts/talentReplaceScan.ts --manifest <m> [--every 30]
  *       [--min-n 8] [--holder-cast 0.1] [--other-cast 0.5] [--talent <id>]
  */
+import { readFileSync } from "node:fs";
+import { gunzipSync } from "node:zlib";
+
 import { ensureAnalysisData, specToString } from "@gladlog/analysis";
 import {
   effectiveCooldownSeconds,
@@ -60,15 +63,13 @@ import { TALENT_REPLACES_GENERATED } from "@gladlog/analysis/src/data/talentRepl
 import {
   canonicalSpellId,
   MIN_CD_SECONDS,
-  PVP_TALENT_REPLACES,
   playerTalentIdSets,
+  PVP_TALENT_REPLACES,
 } from "@gladlog/analysis/src/utils/cooldowns";
 import { getSpecTalentTreeSpellIds } from "@gladlog/analysis/src/utils/talents";
 import { GladLogParser } from "@gladlog/parser";
 import type { CombatUnitSpec } from "@gladlog/parser-compat";
 import { toLegacyMatch, toLegacyShuffle } from "@gladlog/parser-compat";
-import { readFileSync } from "node:fs";
-import { gunzipSync } from "node:zlib";
 
 import { arg, argOf } from "./lib/cli";
 

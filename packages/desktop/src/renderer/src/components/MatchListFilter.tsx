@@ -1,10 +1,9 @@
+import { zoneMetadata } from "@gladlog/analysis";
 import { useMemo } from "react";
 
-import { zoneMetadata } from "@gladlog/analysis";
-
 import type { StoredMatchMeta } from "../../../main/matchStore";
-import { specIconName, specName } from "../report/data/gameConstants";
 import { useIconDataUrls } from "../report/components/useIconDataUrl";
+import { specIconName, specName } from "../report/data/gameConstants";
 
 export interface ListFilter {
   result: "all" | "win" | "loss";

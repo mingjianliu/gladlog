@@ -7,8 +7,17 @@ import {
 import type { LearnedRule } from "@gladlog/analysis/src/learning/types";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import {
+  AI_BACKENDS,
+  AI_MODELS,
+  type AiBackend,
+  BACKEND_CLI_TOOL,
+  resolveAiModel,
+} from "../../../../shared/aiModels";
+import type { AnalysisFallbackReason } from "../../../../shared/analysisFallback";
 import { bridge } from "../../bridge";
 import { DEMO_ANALYSIS } from "../data/demoAnalysis";
+import { cliWaitHint, fmtElapsed } from "../derive/aiRunStatus";
 import { buildAnalysisInput, buildDeepenPacks } from "../derive/analysisInput";
 import { categoryLabel, severityLabel } from "../derive/findingDisplay";
 import { makeRichText } from "../derive/inlineRich";
@@ -16,21 +25,12 @@ import { resolveJumpTarget } from "../derive/jumpTarget";
 import { deriveKeyMoments } from "../derive/keyMoments";
 import { selfReviewNote, type SelfReviewView } from "../derive/selfReviewNote";
 import { backendModelLabel, slotLabel } from "../derive/slotLabel";
-import { cliWaitHint, fmtElapsed } from "../derive/aiRunStatus";
-import { useElapsedSince } from "./useElapsedSince";
 import type { ReportSource } from "../derive/types";
 import { zeroFindingText } from "../derive/zeroFindingText";
-import type { AnalysisFallbackReason } from "../../../../shared/analysisFallback";
-import {
-  AI_BACKENDS,
-  AI_MODELS,
-  BACKEND_CLI_TOOL,
-  resolveAiModel,
-  type AiBackend,
-} from "../../../../shared/aiModels";
 import { ExportButtons } from "./ExportButtons";
 import { FindingsList } from "./FindingsList";
 import { KeyMomentAxis } from "./KeyMomentAxis";
+import { useElapsedSince } from "./useElapsedSince";
 
 type AnalysisResult = {
   findings: Finding[];
@@ -761,7 +761,7 @@ export function StructuredAnalysisPanel({
   const anyBackend = AI_BACKENDS.some(isBackendAvailable);
   useEffect(() => {
     if (aiSettings) probeCliOnce();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [aiSettings]);
 
   const defaultBackend: AiBackend = aiSettings?.aiBackend ?? "anthropic";

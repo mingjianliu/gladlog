@@ -2,9 +2,9 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { vi } from "vitest";
 
-import { SettingsPanel } from "../src/renderer/src/components/SettingsPanel";
 import { API_KEY_REDACTED } from "../src/main/settingsStore";
 import type { UpdateState } from "../src/main/updater";
+import { SettingsPanel } from "../src/renderer/src/components/SettingsPanel";
 
 function mockBridge(
   over: Record<string, unknown> = {},

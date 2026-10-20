@@ -1,4 +1,5 @@
 import type { ICombatUnit } from "@gladlog/parser-compat";
+
 import { isHealerSpec, isMeleeSpec } from "./cooldowns";
 
 /**

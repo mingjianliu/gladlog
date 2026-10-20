@@ -1,7 +1,6 @@
+import type { IKillWindowTargetEval } from "@gladlog/analysis";
 import { fmtTime, ON_TARGET_GOOD_PCT } from "@gladlog/analysis";
 import { useContext, useMemo, useState } from "react";
-
-import type { IKillWindowTargetEval } from "@gladlog/analysis";
 
 import { classColor } from "../data/gameConstants";
 import type { LedgerPlayer } from "../derive/burstLedger";

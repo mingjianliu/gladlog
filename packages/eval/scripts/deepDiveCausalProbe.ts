@@ -1,4 +1,4 @@
-/* eslint-disable no-console */
+ 
 /**
  * deepDiveCausalProbe.ts — GH #70 tail: align the deep-dive round's causation
  * rule with the findings prompt's (PROMPT_VERSION 109), measured the same
@@ -22,26 +22,6 @@
  *   judge-prep --run OUT / judge --run OUT / report --run OUT
  */
 import {
-  auditFindings,
-  ensureAnalysisData,
-  parseModelJsonArray,
-} from "@gladlog/analysis";
-import { extractCandidateFindings } from "@gladlog/analysis/src/analysis/candidateFindings";
-import {
-  type AuditDropInfo,
-  auditDeepDives,
-  buildDeepDivePack,
-  buildDeepDivePrompt,
-  DEEP_DIVE_MAX,
-  type DeepDivePack,
-  hasCoachableSignal,
-} from "@gladlog/analysis/src/analysis/deepDive";
-import type { Finding, RawFinding } from "@gladlog/analysis/src/analysis/types";
-import { SEVERITY_RANK } from "@gladlog/analysis";
-import { specToString } from "@gladlog/analysis/src/utils/cooldowns";
-import { GladLogParser } from "@gladlog/parser";
-import { toLegacyMatch, toLegacyShuffle } from "@gladlog/parser-compat";
-import {
   existsSync,
   mkdirSync,
   readdirSync,
@@ -51,12 +31,33 @@ import {
 import { join } from "node:path";
 import { gunzipSync } from "node:zlib";
 
+import {
+  auditFindings,
+  ensureAnalysisData,
+  parseModelJsonArray,
+} from "@gladlog/analysis";
+import { SEVERITY_RANK } from "@gladlog/analysis";
+import { extractCandidateFindings } from "@gladlog/analysis/src/analysis/candidateFindings";
+import {
+  auditDeepDives,
+  type AuditDropInfo,
+  buildDeepDivePack,
+  buildDeepDivePrompt,
+  DEEP_DIVE_MAX,
+  type DeepDivePack,
+  hasCoachableSignal,
+} from "@gladlog/analysis/src/analysis/deepDive";
+import type { Finding, RawFinding } from "@gladlog/analysis/src/analysis/types";
+import { specToString } from "@gladlog/analysis/src/utils/cooldowns";
+import { GladLogParser } from "@gladlog/parser";
+import { toLegacyMatch, toLegacyShuffle } from "@gladlog/parser-compat";
+
 import { selectCorpusOwner } from "../src/corpus/buildCorpus";
 import {
   callClaude,
   coachSystemPrompt,
-  type JudgeItem,
   judgeInstructions,
+  type JudgeItem,
   sentencesOf,
   shuffled,
 } from "../src/explore/sentenceJudge";

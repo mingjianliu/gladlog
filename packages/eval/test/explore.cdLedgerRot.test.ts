@@ -10,7 +10,7 @@
  * `findSelfAuraEvidence`'s self-cast filter (the independent evidence signal
  * the whole scan is built on).
  */
-import { LogEvent, type ICombatUnit } from "@gladlog/parser-compat";
+import { type ICombatUnit,LogEvent } from "@gladlog/parser-compat";
 import { describe, expect, it } from "vitest";
 
 import {

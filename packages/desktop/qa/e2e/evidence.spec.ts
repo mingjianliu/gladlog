@@ -1,8 +1,7 @@
+import { expect, test } from "@playwright/test";
 import { mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-
-import { expect, test } from "@playwright/test";
 
 import { synthArenaLog } from "../../../parser/src/testing/synthLog";
 import {

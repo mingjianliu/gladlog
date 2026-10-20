@@ -10,9 +10,8 @@ import {
   type FlowSeriesData,
 } from "../derive/flowSeries";
 import { abbrevAmount } from "../derive/meterRows";
-import { shortUnitName, type TeamSide } from "../derive/teamSide";
 import type { ExposureMark, PressureBand } from "../derive/pressureLanes";
-import { TeamDot } from "./TeamDot";
+import { shortUnitName, type TeamSide } from "../derive/teamSide";
 import {
   activeRuns,
   type HpPoint,
@@ -20,6 +19,7 @@ import {
 } from "../derive/timeline";
 import type { TimeRange } from "../derive/timeRange";
 import type { VulnBand } from "../derive/vulnWindows";
+import { TeamDot } from "./TeamDot";
 
 /** A drag must span at least this many viewBox pixels to count as a window
  * selection; anything shorter is treated as a plain click (the onClick of

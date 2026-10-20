@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+
 import type { StoredShuffle } from "../derive/types";
 import { MatchReport } from "./MatchReport";
 

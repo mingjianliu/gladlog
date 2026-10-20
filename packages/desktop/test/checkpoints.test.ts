@@ -1,6 +1,7 @@
 import { mkdtempSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
+
 import { loadCheckpoints, saveCheckpoints } from "../src/worker/checkpoints";
 
 const p = () => join(mkdtempSync(join(tmpdir(), "gl-cp-")), "checkpoints.json");

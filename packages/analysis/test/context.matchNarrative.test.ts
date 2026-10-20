@@ -1,9 +1,10 @@
-import { describe, it, expect } from "vitest";
-import { buildMatchArc } from "../src/context/matchNarrative";
 import { CombatUnitSpec } from "@gladlog/parser-compat";
-import { makeUnit } from "./ported/testHelpers";
-import { IEnemyCDTimeline } from "../src/utils/enemyCDs";
+import { describe, expect,it } from "vitest";
+
+import { buildMatchArc } from "../src/context/matchNarrative";
 import { IMajorCooldownInfo } from "../src/utils/cooldowns";
+import { IEnemyCDTimeline } from "../src/utils/enemyCDs";
+import { makeUnit } from "./ported/testHelpers";
 
 describe("buildMatchArc", () => {
   // Helpers to construct mock inputs

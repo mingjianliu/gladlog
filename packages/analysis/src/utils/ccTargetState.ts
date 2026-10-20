@@ -52,8 +52,8 @@ import {
   USABLE_WHILE_FEARED_SPELL_IDS,
 } from "./cooldowns";
 import {
-  drCategoryKnown,
   auraIdsAppliedBy,
+  drCategoryKnown,
   drCategoryOfCast,
   getDRCategory,
   getDRLevel,

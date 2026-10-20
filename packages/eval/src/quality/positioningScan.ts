@@ -71,7 +71,6 @@
  * recomputed (no coordinate samples) is not a violation; it is counted
  * separately as unverifiable and listed in the report.
  */
-import type { ICombatUnit } from "@gladlog/parser-compat";
 import {
   arenaObstacles,
   burstSpanSampledAfterDeath,
@@ -89,6 +88,7 @@ import {
   spanMeasuredEnemy,
   topEnemyDamagerInSpan,
 } from "@gladlog/analysis";
+import type { ICombatUnit } from "@gladlog/parser-compat";
 
 type GeoClaimKind =
   | "CC_DISTANCE"

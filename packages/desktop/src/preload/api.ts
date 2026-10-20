@@ -3,14 +3,14 @@ import type { RawStreams } from "@gladlog/analysis/src/utils/rawStreams";
 
 import type { ChatSendResult, ChatState } from "../main/coachChat";
 import type { LearningState } from "../main/learning";
-import type { StoredMatchMeta } from "../main/matchStore";
-import type { RecorderStatus } from "../main/recorder";
 import type { ObsAudioDevice } from "../main/managedObsBackend";
-import type { ManagedObsPrefs } from "../shared/managedObsPrefs";
+import type { StoredMatchMeta } from "../main/matchStore";
 import type { ObsInstallProgress } from "../main/obsAssets";
+import type { RecorderStatus } from "../main/recorder";
 import type { GladlogSettings } from "../main/settingsStore";
 import type { UpdateState } from "../main/updater";
 import type { AiBackend } from "../shared/aiModels";
+import type { ManagedObsPrefs } from "../shared/managedObsPrefs";
 import type { FileStatus } from "../shared/protocol";
 
 export interface LogsStatusSnapshot {

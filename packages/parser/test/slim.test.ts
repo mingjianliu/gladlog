@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import { GladLogParser, slimMatchParams } from "../src";
-import { synthArenaLog } from "../src/testing/synthLog";
 import type { GladMatch } from "../src/l3/model";
+import { synthArenaLog } from "../src/testing/synthLog";
 
 function parseSynth(): GladMatch {
   const parser = new GladLogParser();

@@ -15,8 +15,8 @@
 import { SPELL_CATEGORIES } from "../src/data/spellCategories";
 import {
   ccFullDurationSeconds,
-  OPPRESSING_ROAR_PVP_CC_DURATION_MULT,
   OPPRESSING_ROAR_AURA_IDS,
+  OPPRESSING_ROAR_PVP_CC_DURATION_MULT,
   OPPRESSING_ROAR_SPELL_ID,
   spellEffectData,
 } from "../src/data/spellEffectData";

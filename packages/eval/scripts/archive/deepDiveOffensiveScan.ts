@@ -2,18 +2,18 @@
 // buildOffensiveDeepDivePack + hasOffensiveCoachableSignal over every non-death
 // candidate, asserts the invariants, reports the per-type gate pass rate, and
 // catches crashes / leftover digits. No model calls.
+import {
+  buildOffensiveDeepDivePack,
+  ensureAnalysisData,
+  extractCandidateFindings,
+  type Finding,
+  hasOffensiveCoachableSignal,
+  isHealerSpec,
+} from "@gladlog/analysis";
+import { GladLogParser, type GladMatch } from "@gladlog/parser";
+import { CombatUnitReaction,toLegacyMatch } from "@gladlog/parser-compat";
 import { readdirSync, readFileSync } from "fs";
 import { join } from "path";
-import { GladLogParser, type GladMatch } from "@gladlog/parser";
-import { toLegacyMatch, CombatUnitReaction } from "@gladlog/parser-compat";
-import {
-  extractCandidateFindings,
-  isHealerSpec,
-  buildOffensiveDeepDivePack,
-  hasOffensiveCoachableSignal,
-  type Finding,
-  ensureAnalysisData,
-} from "@gladlog/analysis";
 
 // Prompt builders read the background-loaded talent / spell-name tables
 // (data/ensure.ts contract) — without this the first combats are degraded.

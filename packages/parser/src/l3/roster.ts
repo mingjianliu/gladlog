@@ -1,5 +1,5 @@
-import { decodeFlags } from "./flags";
 import type { ParsedLine } from "../l1/types";
+import { decodeFlags } from "./flags";
 
 export interface RosterUnit {
   id: string;

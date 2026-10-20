@@ -1,7 +1,7 @@
+import { readFileSync, renameSync, statSync,writeFileSync } from "fs";
 import { parentPort, workerData } from "worker_threads";
-import { readFileSync, writeFileSync, renameSync, statSync } from "fs";
 
-import { scanRoundOffsets, buildShellText } from "../shared/roundOffsets";
+import { buildShellText,scanRoundOffsets } from "../shared/roundOffsets";
 
 /**
  * One-shot sidecar builder (perf-1): byte-scan match.json for the per-round

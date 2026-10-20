@@ -9,15 +9,18 @@ import {
 } from "react";
 
 import { bridge } from "../../bridge";
-import { ChipIcon } from "./SpellInline";
-import { TeamDot } from "./TeamDot";
 import {
   DEFAULT_EVENT_KINDS,
   DEFAULT_EVENT_SORT,
   deriveEventRows,
+  type DisplayRow,
   EMPTY_EVENTS_FILTER,
   EVENT_KIND_LABEL,
+  type EventKind,
   eventNameOptions,
+  type EventRow,
+  type EventSort,
+  type EventSortKey,
   filterDisplayRows,
   fmtEventAmt,
   formatRangeInput,
@@ -26,16 +29,13 @@ import {
   parseRangeInput,
   sameKinds,
   sortDisplayRows,
-  type DisplayRow,
-  type EventKind,
-  type EventRow,
-  type EventSort,
-  type EventSortKey,
 } from "../derive/eventsView";
 import { shortUnitName, teamSideByName } from "../derive/teamSide";
 import type { TimeRange } from "../derive/timeRange";
 import type { ReportSource } from "../derive/types";
 import type { VulnBand } from "../derive/vulnWindows";
+import { ChipIcon } from "./SpellInline";
+import { TeamDot } from "./TeamDot";
 
 /** Spell icon on an event row: if the id is not in the generated table, render
  * nothing (an empty label keeps the fallback initial from duplicating the spell
@@ -569,7 +569,7 @@ export function EventsPanel({
       }
     });
     return out;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [sorted, expandedGroups]);
 
   const winFrom = Math.max(0, Math.floor(scrollAnchor / ROW_H) - OVERSCAN_ROWS);

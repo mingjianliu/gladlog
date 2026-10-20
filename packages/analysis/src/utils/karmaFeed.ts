@@ -22,8 +22,8 @@ import type { ICombatUnit } from "@gladlog/parser-compat";
 
 import { REACTION_WINDOW_S } from "./cooldowns";
 import {
-  type PressCaster,
   pressBehindDamage,
+  type PressCaster,
   spellTicksFor,
 } from "./damagePress";
 

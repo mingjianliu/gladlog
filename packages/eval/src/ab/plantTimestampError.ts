@@ -6,8 +6,8 @@
 import fs from "fs-extra";
 import path from "path";
 
-import { makeRng } from "./abCompareStats.js";
 import type { IndexEntry } from "../corpus/buildCorpus";
+import { makeRng } from "./abCompareStats.js";
 
 const TIMESTAMP_RE = /\b(\d+):([0-5]\d)\b/;
 

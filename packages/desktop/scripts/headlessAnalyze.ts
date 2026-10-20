@@ -18,13 +18,15 @@
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+
 import {
   buildMatchContext,
+  ensureAnalysisData,
   extractCandidateFindings,
   parseRawStreams,
   specToString,
-  ensureAnalysisData,
 } from "@gladlog/analysis";
+
 import { createAnalysisService } from "../src/main/analysis";
 import { resolveOwner } from "../src/renderer/src/report/derive/analysisInput";
 import { toLegacySafe } from "../src/renderer/src/report/derive/legacySource";

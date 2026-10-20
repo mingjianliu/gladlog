@@ -2,12 +2,12 @@ import { useEffect, useState } from "react";
 
 import type { StoredMatchMeta } from "../../../main/matchStore";
 import {
+  type BatchStatus,
   cancelBatch,
   dismissBatchSummary,
   getBatchStatus,
   startBatch,
   subscribeBatch,
-  type BatchStatus,
 } from "../batch/batchAnalysis";
 import { bridge } from "../bridge";
 

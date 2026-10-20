@@ -1,6 +1,7 @@
+import { vi } from "vitest";
+
 import { GladLogParser } from "../src/api";
 import type { Segment, ShuffleClose } from "../src/l2/types";
-import { vi } from "vitest";
 import * as compose from "../src/l3/compose";
 
 const LINES = [

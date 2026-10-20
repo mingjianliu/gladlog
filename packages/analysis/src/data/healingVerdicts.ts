@@ -79,10 +79,10 @@
  *     和圣盾术同为 burst-answer。要区分「挡得住多大的爆发」需要新的一维,
  *     不是把它降档。
  */
+import { abilityProfile } from "./abilityProfile";
 import { classMetadata } from "./classSpells";
 import { SPELL_NAMES_ZH_GENERATED } from "./spellNamesZh";
 import { SpellTag } from "./spellTypes";
-import { abilityProfile } from "./abilityProfile";
 
 export type HealingVerdict =
   /** 爆发打在脸上时按下去能改变这一波的结果(免疫/大额瞬发/免死/吸收顶住)。 */

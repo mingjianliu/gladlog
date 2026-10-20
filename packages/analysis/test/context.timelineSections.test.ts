@@ -1,42 +1,43 @@
-import { describe, it, expect } from "vitest";
-import {
-  emitRotPressureEntries,
-  emitDmgSpikeEntries,
-  emitManaMarkerEntries,
-  emitFriendlyDeathEntries,
-  emitEnemyDeathEntries,
-  formatMitigationAuditLine,
-  formatDecisiveCounterfactualLine,
-  MITIGATION_AUDIT_INDEPENDENT_NOTE,
-} from "../src/context/matchTimelineSections";
-import { buildMatchTimeline } from "../src/context/matchTimeline";
 import {
   CombatUnitClass,
+  CombatUnitPowerType,
   CombatUnitReaction,
   CombatUnitSpec,
-  CombatUnitPowerType,
-  LogEvent,
   ICombatUnit,
+  LogEvent,
 } from "@gladlog/parser-compat";
+import { describe, expect,it } from "vitest";
+
+import { buildMatchTimeline } from "../src/context/matchTimeline";
 import {
-  makeUnit,
-  makeAdvancedAction,
-  makeAuraEvent,
-} from "./ported/testHelpers";
+  emitDmgSpikeEntries,
+  emitEnemyDeathEntries,
+  emitFriendlyDeathEntries,
+  emitManaMarkerEntries,
+  emitRotPressureEntries,
+  formatDecisiveCounterfactualLine,
+  formatMitigationAuditLine,
+  MITIGATION_AUDIT_INDEPENDENT_NOTE,
+} from "../src/context/matchTimelineSections";
 import { DMG_SPIKE_THRESHOLD } from "../src/context/timelineHelpers";
+import { IPlayerCCTrinketSummary } from "../src/utils/ccTrinketAnalysis";
 import {
-  specToString,
   IMajorCooldownInfo,
+  specToString,
   USABLE_WHILE_CC_SPELL_IDS,
 } from "../src/utils/cooldowns";
-import { fmtTime } from "../src/utils/renderGrid";
-import { IPlayerCCTrinketSummary } from "../src/utils/ccTrinketAnalysis";
 import {
   COUNTERFACTUAL_WINDOW_S,
   DECISIVE_MARGIN_PCT,
   ICounterfactualHit,
   IMitigationAuditRow,
 } from "../src/utils/counterfactual";
+import { fmtTime } from "../src/utils/renderGrid";
+import {
+  makeAdvancedAction,
+  makeAuraEvent,
+  makeUnit,
+} from "./ported/testHelpers";
 
 describe("context.timelineSections.test.ts", () => {
   // ── 1. emitRotPressureEntries ──────────────────────────────────────────────

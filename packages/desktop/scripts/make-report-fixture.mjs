@@ -5,6 +5,7 @@
 // → 玩家名脱敏(--keep-names 跳过;仅用于 gitignored 的 dev/local 压测样本,
 //    CN/特殊字符原名本身就是渲染边界测试对象)→ 写 JSON。
 import { readFileSync, writeFileSync } from "fs";
+
 import { GladLogParser } from "../../parser/src/index.ts";
 // 脱敏逻辑单源:开发者页「导出脱敏 fixture」用的是同一个函数。
 import { anonymizeMatchDoc } from "../src/shared/anonymizeFixture.ts";

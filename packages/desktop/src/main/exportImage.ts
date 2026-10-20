@@ -1,5 +1,6 @@
-import { BrowserWindow, dialog } from "electron";
 import { writeFileSync } from "node:fs";
+
+import { BrowserWindow, dialog } from "electron";
 
 /**
  * C3 image export: an offscreen window loads **the same renderer** (hash

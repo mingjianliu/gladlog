@@ -44,6 +44,7 @@ import {
   type BacklashWorthRef,
 } from "../../data/backlashDispelPrior";
 import { getEnglishSpellName } from "../../data/spellEffectData";
+import { dropAuraRebroadcasts } from "../../utils/auraIntervals";
 import {
   chargeStateAt,
   gridHpPct,
@@ -61,7 +62,6 @@ import {
   reconstructDispelSummary,
 } from "../../utils/dispelAnalysis";
 import { analyzeOutgoingCCChains, getDRCategory } from "../../utils/drAnalysis";
-import { dropAuraRebroadcasts } from "../../utils/auraIntervals";
 import { toRenderSecond } from "../../utils/renderGrid";
 import { roundEndMs } from "../../utils/roundEnd";
 import { fmtFactNum as fmt, fmtFactTime } from "../factFormat";

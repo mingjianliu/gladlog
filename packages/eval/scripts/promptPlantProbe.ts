@@ -26,20 +26,20 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { gunzipSync } from "node:zlib";
 
-import { CombatUnitReaction } from "@gladlog/parser-compat";
 import {
   buildMatchContext,
   ensureAnalysisData,
   isHealerSpec,
 } from "@gladlog/analysis";
+import { CombatUnitReaction } from "@gladlog/parser-compat";
 
 import { parseLogCombats } from "../src/corpus/candidateMenu";
+import { Breaker, callCli, type CliBackend } from "../src/explore/cliDriver";
 import {
   parseFindings,
   STRUCTURED_SUFFIX,
   type StructuredFinding,
 } from "../src/explore/promptLineTypes";
-import { Breaker, callCli, type CliBackend } from "../src/explore/cliDriver";
 import {
   buildResponderMessages,
   callDeepseek,

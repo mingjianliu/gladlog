@@ -38,8 +38,8 @@ import {
   RESPONSE_PRE_MS,
   RESPONSE_WINDOW_MS,
 } from "@gladlog/analysis/src/analysis/crisisDecisionPoints";
-import spellIdLists from "@gladlog/analysis/src/data/spellIdLists";
 import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData";
+import spellIdLists from "@gladlog/analysis/src/data/spellIdLists";
 import { ccSpellIds, rootSpellIds } from "@gladlog/analysis/src/data/spellTags";
 import { isHealerSpec } from "@gladlog/analysis/src/utils/cooldowns";
 import { GladLogParser, type GladMatch } from "@gladlog/parser";

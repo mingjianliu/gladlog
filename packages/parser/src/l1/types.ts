@@ -1,19 +1,19 @@
-import {
-  decodeBaseUnits,
-  decodeSpell,
-  decodeDamage,
-  decodeHeal,
-  decodeAdvanced,
-  decodeCastCosts,
-  decodeAura,
-  decodeExtraSpell,
-  decodeAbsorbed,
-  decodeArenaStart,
-  decodeArenaEnd,
-  decodeMissed,
-  decodeHealAbsorbed,
-} from "./decoders";
 import { decodeCombatantInfo } from "./combatantInfo";
+import {
+  decodeAbsorbed,
+  decodeAdvanced,
+  decodeArenaEnd,
+  decodeArenaStart,
+  decodeAura,
+  decodeBaseUnits,
+  decodeCastCosts,
+  decodeDamage,
+  decodeExtraSpell,
+  decodeHeal,
+  decodeHealAbsorbed,
+  decodeMissed,
+  decodeSpell,
+} from "./decoders";
 
 export interface ParsedLine {
   timestamp: number;

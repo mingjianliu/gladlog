@@ -1,33 +1,34 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import type { ReportSource } from "../derive/types";
-import { cohortDims } from "../derive/cohortDims";
-import { CohortDimsTable } from "./CohortDimsTable";
-import { bridge } from "../../bridge";
 import {
-  ensureHeroTalents,
-  heroBuildGroupOf,
   analysisDataReady,
   computeDpsMetrics,
   computeHealerMetrics,
-  ensureAnalysisData,
-  enemyCompSignature,
-  specToString,
-  isHealerSpec,
   enemyCompArchetype,
+  enemyCompSignature,
+  ensureAnalysisData,
+  ensureHeroTalents,
+  heroBuildGroupOf,
+  isHealerSpec,
+  specToString,
 } from "@gladlog/analysis";
 import datagenManifest from "@gladlog/analysis/src/data/datagen-manifest.json";
-import { SPEC_NAMES_ZH } from "../data/specNames";
-import { toLegacySafe } from "../derive/legacySource";
-import { resolveOwner } from "../derive/analysisInput";
-import { makeRichText } from "../derive/inlineRich";
-import { backendModelLabel } from "../derive/slotLabel";
-import { cliWaitHint, fmtElapsed } from "../derive/aiRunStatus";
-import { useElapsedSince } from "./useElapsedSince";
+import { useEffect, useMemo, useRef, useState } from "react";
+
 import {
-  resolveAiModel,
   type AiBackend,
   type AiModelSelection,
+  resolveAiModel,
 } from "../../../../shared/aiModels";
+import { bridge } from "../../bridge";
+import { SPEC_NAMES_ZH } from "../data/specNames";
+import { cliWaitHint, fmtElapsed } from "../derive/aiRunStatus";
+import { resolveOwner } from "../derive/analysisInput";
+import { cohortDims } from "../derive/cohortDims";
+import { makeRichText } from "../derive/inlineRich";
+import { toLegacySafe } from "../derive/legacySource";
+import { backendModelLabel } from "../derive/slotLabel";
+import type { ReportSource } from "../derive/types";
+import { CohortDimsTable } from "./CohortDimsTable";
+import { useElapsedSince } from "./useElapsedSince";
 
 type CompareResult = {
   verifiedComparison: {

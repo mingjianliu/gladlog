@@ -1,8 +1,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { LogEvent } from "@gladlog/parser-compat";
 
-import { analyzeKickAudit } from "../../src/utils/kickAudit";
 import { formatBurstLedgerForContext } from "../../src/utils/burstLedger";
+import { analyzeKickAudit } from "../../src/utils/kickAudit";
 import type { RawStreams } from "../../src/utils/rawStreams";
 import {
   makeInterruptEvent,

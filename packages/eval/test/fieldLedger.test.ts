@@ -13,10 +13,6 @@
  * Adding a decoder field or a unit array therefore means adding its row:
  * where it goes after L1, who reads it, and which class it is in.
  */
-import { readFileSync } from "fs";
-import { resolve } from "path";
-import { describe, expect, it } from "vitest";
-
 import {
   decodeCombatantInfo,
   GladLogParser,
@@ -38,6 +34,9 @@ import {
   decodeSpell,
 } from "@gladlog/parser/src/l1/decoders";
 import { synthArenaLog } from "@gladlog/parser/src/testing/synthLog";
+import { readFileSync } from "fs";
+import { resolve } from "path";
+import { describe, expect, it } from "vitest";
 
 const ROOT = resolve(__dirname, "../../..");
 

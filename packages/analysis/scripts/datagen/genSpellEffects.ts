@@ -1,14 +1,14 @@
-import {
-  parseCsv,
-  resolveBuild,
-  fetchTable,
-  assertColumns,
-} from "./lib/wagoCsv";
 import fs from "node:fs";
 
-import { writeArtifact } from "./lib/emit";
-import { collectCandidateIds } from "./lib/candidates";
 import type { IMinedSpell } from "../../src/data/spellEffectData";
+import { collectCandidateIds } from "./lib/candidates";
+import { writeArtifact } from "./lib/emit";
+import {
+  assertColumns,
+  fetchTable,
+  parseCsv,
+  resolveBuild,
+} from "./lib/wagoCsv";
 
 export function mineSpellEffects(
   csv: {

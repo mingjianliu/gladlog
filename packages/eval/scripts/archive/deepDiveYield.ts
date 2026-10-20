@@ -6,10 +6,10 @@
 // dig deeper at the mechanical level.
 import {
   buildDeepDivePack,
+  ensureAnalysisData,
   extractCandidateFindings,
   type Finding,
   isHealerSpec,
-  ensureAnalysisData,
 } from "@gladlog/analysis";
 import { GladLogParser, type GladMatch } from "@gladlog/parser";
 import { CombatUnitReaction, toLegacyMatch } from "@gladlog/parser-compat";

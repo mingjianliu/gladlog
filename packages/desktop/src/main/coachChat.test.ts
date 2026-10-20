@@ -1,10 +1,12 @@
-import { mkdtempSync, writeFileSync, mkdirSync } from "node:fs";
+import { mkdirSync,mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { expect, it, vi } from "vitest";
-import { createCoachChatService } from "./coachChat";
+
 import { SELF_REVIEW_PROMPT_VERSION } from "@gladlog/analysis/src/analysis/selfReview";
+import { expect, it, vi } from "vitest";
+
 import { PROMPT_VERSION } from "../shared/promptVersion";
+import { createCoachChatService } from "./coachChat";
 
 function seedAnalysisCache(
   dir: string,

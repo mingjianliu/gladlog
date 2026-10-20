@@ -40,8 +40,9 @@
  */
 import {
   analyzePlayerCCAndTrinket,
-  cdCanHelpAnotherUnit,
   cdAvailableAt,
+  cdCanHelpAnotherUnit,
+  cdIsProcOnly,
   classMetadata,
   DEFENSIVE_TAGS,
   detectHealingGaps,
@@ -50,7 +51,6 @@ import {
   extractMajorCooldowns,
   type IMajorCooldownInfo,
   isHealerSpec,
-  cdIsProcOnly,
   matchThreatLevel,
   specToString,
   SpellTag,

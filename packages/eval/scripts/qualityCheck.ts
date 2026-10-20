@@ -1,5 +1,5 @@
-import { main } from "../src/quality/promptQualityCheck";
 import { resolveEvalHome, runDir } from "../src/evalHome";
+import { main } from "../src/quality/promptQualityCheck";
 
 async function run() {
   // Parse --run <runId> from argv; consistent with the other CLIs: the BASE_DIR

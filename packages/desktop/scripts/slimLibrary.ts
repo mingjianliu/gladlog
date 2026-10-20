@@ -19,10 +19,10 @@
  *   default matchesDir = ~/Library/Application Support/gladlog/matches
  *   GLADLOG_SLIM_LIMIT=N processes only the first N matches (for a trial run).
  */
-import { readFileSync, writeFileSync, renameSync, statSync } from "fs";
-import { readdirSync, existsSync } from "fs";
-import { join } from "path";
+import { readFileSync, renameSync, statSync,writeFileSync } from "fs";
+import { existsSync,readdirSync } from "fs";
 import { homedir } from "os";
+import { join } from "path";
 
 import { slimStoredDoc } from "../src/shared/slimDoc";
 

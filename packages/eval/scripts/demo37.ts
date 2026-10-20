@@ -9,7 +9,7 @@
  *
  * Usage: npx tsx packages/eval/scripts/demo37.ts <archiveRoot> [files]
  */
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { gunzipSync } from "node:zlib";
 
@@ -18,6 +18,7 @@ import {
   ensureAnalysisData,
   ensureHeroTalents,
 } from "@gladlog/analysis";
+
 import { aggregateCells } from "../../corpus-tools/src/cellAggregator";
 import { buildPerMatchRecords } from "../../corpus-tools/src/perMatchRecord";
 

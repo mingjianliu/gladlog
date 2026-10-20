@@ -12,7 +12,6 @@ import {
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { ensureAnalysisData } from "../src/data/ensure";
-
 import {
   cdCanHelpAnotherUnit,
   extractMajorCooldowns,

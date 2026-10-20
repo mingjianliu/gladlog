@@ -35,10 +35,10 @@ import {
 } from "@gladlog/analysis";
 import {
   countsAsTeamBurst,
-  syncWindowCdFor,
   enemyHealerCcWindows,
   evaluateSyncWindow,
   mergeHealerCcWindows,
+  syncWindowCdFor,
   syncWindowEligible,
 } from "@gladlog/analysis/src/analysis/candidates/cooldownTiming";
 import { PATCH_121_GOLIVE_EPOCH_MS } from "@gladlog/analysis/src/utils/drAnalysis";

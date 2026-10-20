@@ -1,7 +1,7 @@
 import {
-  DMG_SPIKE_THRESHOLD,
   computeHealerExposureEvents,
   computePressureWindows,
+  DMG_SPIKE_THRESHOLD,
 } from "@gladlog/analysis";
 import { CombatUnitReaction } from "@gladlog/parser-compat";
 

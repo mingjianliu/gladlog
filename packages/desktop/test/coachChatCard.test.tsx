@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
-import { render, screen, fireEvent } from "@testing-library/react";
+import { fireEvent,render, screen } from "@testing-library/react";
 import { expect, it } from "vitest";
+
 import { CoachChatCard } from "../src/renderer/src/report/components/CoachChatCard";
 
 const src = { units: {} } as never;

@@ -1,15 +1,16 @@
 import { createHash } from "crypto";
-import { mkdtempSync, mkdirSync, writeFileSync } from "fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "fs";
 import fs from "fs-extra";
 import { tmpdir } from "os";
 import os from "os";
 import { join } from "path";
 import path from "path";
+
 import {
-  FACT_AUDIT_MAX,
-  FACT_AUDIT_MIN,
   checkScoreProvenance,
   computeAccuracyFromFactAudit,
+  FACT_AUDIT_MAX,
+  FACT_AUDIT_MIN,
 } from "../src/provenance/checkScoreProvenance";
 
 const sha256 = (s: string) => createHash("sha256").update(s).digest("hex");

@@ -14,19 +14,18 @@
  */
 
 import {
+  ccSpellIds,
+  getEnglishSpellName,
+  MOVEMENT_ROOT_BREAK_DISPEL_IDS,
+  specToString,
+  trinketSpellIds,
+} from "@gladlog/analysis";
+import type { IArenaMatch, IShuffleRound } from "@gladlog/parser-compat";
+import {
   CombatUnitReaction,
   CombatUnitType,
   ICombatUnit,
 } from "@gladlog/parser-compat";
-import type { IArenaMatch, IShuffleRound } from "@gladlog/parser-compat";
-
-import {
-  ccSpellIds,
-  trinketSpellIds,
-  specToString,
-  getEnglishSpellName,
-  MOVEMENT_ROOT_BREAK_DISPEL_IDS,
-} from "@gladlog/analysis";
 
 export type ParsedCombat = IArenaMatch | IShuffleRound;
 

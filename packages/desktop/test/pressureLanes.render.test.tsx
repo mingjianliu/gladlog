@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { fireEvent, render } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+
 import { Timeline } from "../src/renderer/src/report/components/Timeline";
 
 // Minimal data: neither series nor deaths are required -- only start/end need

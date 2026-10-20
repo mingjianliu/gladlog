@@ -25,6 +25,9 @@ import {
 import type { UpdaterService } from "./updater";
 
 type CoachChatService = ReturnType<typeof createCoachChatService>;
+import { vodUrl } from "../shared/vod";
+import type { ObsAudioDevice } from "./managedObsBackend";
+import type { ObsInstallProgress } from "./obsAssets";
 import {
   authUnknownHint,
   detectObsRecordingPrefs,
@@ -32,9 +35,6 @@ import {
   importedPrefsPatch,
   resolveAutoConfigPassword,
 } from "./obsAutoConfig";
-import type { ObsAudioDevice } from "./managedObsBackend";
-import { vodUrl } from "../shared/vod";
-import type { ObsInstallProgress } from "./obsAssets";
 
 export function registerIpc(deps: {
   store: MatchStore;

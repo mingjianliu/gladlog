@@ -1,20 +1,20 @@
 import { CombatUnitReaction, CombatUnitSpec } from "@gladlog/parser-compat";
 import { describe, expect, it } from "vitest";
 
+import type { IBurstLedgerEntry } from "../utils/burstLedger";
 import {
   auditDeepDives,
+  type AuditDropInfo,
   buildAuditRepairPrompt,
   buildDeepDivePack,
   buildDeepDivePrompt,
+  type DeepDivePack,
   hasCoachableSignal,
   hasOffensiveCoachableSignal,
   offensivePackItems,
   shouldAttemptAuditRepair,
-  type AuditDropInfo,
-  type DeepDivePack,
 } from "./deepDive";
 import type { CandidateEvent, Finding } from "./types";
-import type { IBurstLedgerEntry } from "../utils/burstLedger";
 
 const pack: DeepDivePack = {
   findingIndex: 0,

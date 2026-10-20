@@ -3,9 +3,10 @@
  * 回退渲染计数。看分母:小样本只报极端异常,结论性检查要攒够语料。
  * 用法:DOWNLOADS_DIR=<dir> npx tsx packages/eval/scripts/noneTrackedScan.mts
  * 首跑 2026-08-12(12.1 开服首日,30 场):22 专精 179 块全 0%、DR 回退 0。 */
+import { buildMatchContext, ensureAnalysisData } from "@gladlog/analysis";
 import { readFileSync } from "fs";
 import { join } from "path";
-import { buildMatchContext, ensureAnalysisData } from "@gladlog/analysis";
+
 import { parseLogCombats } from "../src/corpus/candidateMenu";
 
 const DIR =

@@ -1,11 +1,11 @@
-import { SPELL_EFFECT_OVERRIDES } from "../src/data/spellEffectOverrides";
+import { CANDIDATE_TYPE_FLAGS } from "../src/data/candidateTypeFlags";
+import { DISCOVERY_TAG_RULES } from "../src/data/discoveryRules";
 import {
   getEnglishSpellName,
   spellEffectData,
 } from "../src/data/spellEffectData";
+import { SPELL_EFFECT_OVERRIDES } from "../src/data/spellEffectOverrides";
 import { ccSpellIds } from "../src/data/spellTags";
-import { CANDIDATE_TYPE_FLAGS } from "../src/data/candidateTypeFlags";
-import { DISCOVERY_TAG_RULES } from "../src/data/discoveryRules";
 import { SpellTag } from "../src/data/spellTypes";
 
 describe("data layer", () => {

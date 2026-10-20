@@ -1,4 +1,4 @@
-/* eslint-disable no-console */
+ 
 /**
  * spellRangeGroundTruth.ts — every targeted cast's range model against the
  * game's own verdict (range audit, user 2026-09-26 "做更全面射程审查").
@@ -38,11 +38,11 @@
  *     [--spells 433895,375576] [--out <json>]
  */
 import { ensureAnalysisData } from "@gladlog/analysis";
+import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData";
 import { getSortedAdvancedActions } from "@gladlog/analysis/src/utils/advancedActions";
 import { binarySearchClosest } from "@gladlog/analysis/src/utils/binarySearch";
 import { specToString } from "@gladlog/analysis/src/utils/cooldowns";
 import { spellRangeForCaster } from "@gladlog/analysis/src/utils/spellRange";
-import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData";
 import { GladLogParser } from "@gladlog/parser";
 import {
   LogEvent,

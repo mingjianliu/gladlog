@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen } from "@testing-library/react";
 
-import { MatchListRow } from "../src/renderer/src/components/MatchListRow";
 import type { StoredMatchMeta } from "../src/main/matchStore";
+import { MatchListRow } from "../src/renderer/src/components/MatchListRow";
 
 const base: StoredMatchMeta = {
   id: "m1",

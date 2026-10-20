@@ -9,6 +9,7 @@ import fs from "fs-extra";
 import os from "os";
 import path from "path";
 
+import { EXIT_AUTH, fetchErrorExitCode } from "../src/dailyPull";
 import {
   decodeRawPayload,
   downloadRaw,
@@ -18,7 +19,6 @@ import {
   requestLogGrant,
   sessionCookieHeader,
 } from "../src/feedClient";
-import { EXIT_AUTH, fetchErrorExitCode } from "../src/dailyPull";
 import {
   buildCompQueryString,
   buildGcsMeta,

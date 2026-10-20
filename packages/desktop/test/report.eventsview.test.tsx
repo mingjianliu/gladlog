@@ -5,11 +5,11 @@ import { MatchReport } from "../src/renderer/src/report/components/MatchReport";
 import {
   deriveEventRows,
   EMPTY_EVENTS_FILTER,
+  type EventRow,
   filterDisplayRows,
   filterEventRows,
   groupEventRows,
   isGroupRow,
-  type EventRow,
 } from "../src/renderer/src/report/derive/eventsView";
 import { deriveSummary } from "../src/renderer/src/report/derive/summary";
 import { loadRealMatchFixture } from "./fixtures/loadFixture";

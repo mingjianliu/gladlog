@@ -6,6 +6,8 @@ import {
   LogEvent,
 } from "@gladlog/parser-compat";
 
+import { ensureAnalysisData } from "../../src/data/ensure";
+import { hardcastHealSpell } from "../../src/data/kickPriorityHealSpells";
 import {
   analyzePlayerCCAndTrinket,
   applicableCCAvoidanceIds,
@@ -19,8 +21,6 @@ import {
   makeSpellCastEvent,
   makeUnit,
 } from "./testHelpers";
-import { ensureAnalysisData } from "../../src/data/ensure";
-import { hardcastHealSpell } from "../../src/data/kickPriorityHealSpells";
 
 // Mock the generated JSON so tests never depend on real item IDs.
 vi.mock("../../src/data/trinketItemIds.json", () => ({

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+
 import {
   MANAGED_WS_PORT,
   OBS_VERSION,

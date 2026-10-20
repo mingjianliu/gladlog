@@ -7,9 +7,9 @@
  */
 import { describe, expect, it } from "vitest";
 
+import { effectiveCooldownSeconds } from "../src/data/spellEffectData";
 import { SPELL_EFFECTS_GENERATED } from "../src/data/spellEffectGenerated";
 import { SPELL_EFFECT_OVERRIDES } from "../src/data/spellEffectOverrides";
-import { effectiveCooldownSeconds } from "../src/data/spellEffectData";
 
 describe("hand overrides never shadow an official value with undefined", () => {
   it("no override row has an own cooldownSeconds key set to undefined while DB2 has a value", () => {

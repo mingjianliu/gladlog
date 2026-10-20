@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 
+import type { ObsInstallProgress } from "../../../main/obsAssets";
 import type { AiLanguage, GladlogSettings } from "../../../main/settingsStore";
 import type { UpdateState } from "../../../main/updater";
 import {
@@ -8,6 +9,7 @@ import {
   BACKEND_CLI_TOOL,
   resolveAiModel,
 } from "../../../shared/aiModels";
+import { OBS_ZIP_BYTES, OBS_ZIP_URL } from "../../../shared/obsAsset";
 import {
   API_KEY_REDACTED,
   DEEPSEEK_KEY_REDACTED,
@@ -15,8 +17,6 @@ import {
   OBS_PASSWORD_REDACTED,
 } from "../../../shared/protocol";
 import { clampUiZoom, UI_ZOOM_LEVELS } from "../../../shared/uiZoom";
-import { OBS_ZIP_BYTES, OBS_ZIP_URL } from "../../../shared/obsAsset";
-import type { ObsInstallProgress } from "../../../main/obsAssets";
 import {
   CHECK_INTERVAL_MS,
   FIRST_CHECK_DELAY_MS,

@@ -1,6 +1,6 @@
+import { CombatResult, CombatUnitSpec } from "../src/enums";
 import { WoWCombatLogParser } from "../src/shim";
 import type { IArenaMatch, IShuffleMatch } from "../src/types";
-import { CombatResult, CombatUnitSpec } from "../src/enums";
 
 const CI = (guid: string, team: number, spec: number) =>
   `COMBATANT_INFO,${guid},${team},1,2,3,4,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,${spec},[(1,2,1)],(0,1,2,3),[(100,200,())],[],248,41,2400,13`;

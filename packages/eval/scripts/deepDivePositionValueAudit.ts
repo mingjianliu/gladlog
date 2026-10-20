@@ -4,9 +4,9 @@
 // auditDeepDives used in production (placeholder resolution + bare-number /
 // causality / cited ⊆ pack checks), and survivors are interpolated into text.
 // The judge scores blind; unblinding goes through key.json.
-import { readFileSync, readdirSync, writeFileSync } from "fs";
-import { join } from "path";
 import { auditDeepDives, type DeepDivePack } from "@gladlog/analysis";
+import { readdirSync, readFileSync, writeFileSync } from "fs";
+import { join } from "path";
 
 const dir = process.argv[2]!;
 const promptsDir = join(dir, "prompts");

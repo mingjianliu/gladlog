@@ -1,11 +1,12 @@
 // packages/analysis/src/compare/buildExemplarLedPrompt.test.ts
 import { describe, expect, it } from "vitest";
+
 import {
   buildExemplarLedPrompt,
   buildRetryPrompt,
 } from "./buildExemplarLedPrompt";
-import type { VerifiedComparison } from "./verifiedComparison";
 import type { ReferenceCell } from "./corpusTypes";
+import type { VerifiedComparison } from "./verifiedComparison";
 
 const vc: VerifiedComparison = {
   dims: [

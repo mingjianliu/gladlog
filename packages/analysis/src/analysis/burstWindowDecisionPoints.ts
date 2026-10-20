@@ -28,7 +28,6 @@
  * live to see. `tSec`/`endSec` are the seconds `fmtTime` will display.
  */
 import { type ICombatUnit } from "@gladlog/parser-compat";
-import { damageTakenBetween, hitByAttackers } from "../utils/burstHit";
 
 import { castAndEffectIds, isCastOrEffect } from "../data/castEffectAuras";
 import { HEALING_VERDICTS } from "../data/healingVerdicts";
@@ -41,6 +40,7 @@ import {
 } from "../data/spellTags";
 import { supersededAuraBreaks } from "../utils/auraIntervals";
 import { buffFullDurationForCaster } from "../utils/buffDuration";
+import { damageTakenBetween, hitByAttackers } from "../utils/burstHit";
 import {
   cannotCastIntervalsForSpells,
   petCastersOf,

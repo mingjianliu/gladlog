@@ -3,21 +3,21 @@
 // no owner anchoring, no permission to leave things out) vs after (v10: the
 // current buildDeepDivePrompt). Same pack, only the instructions change, which
 // isolates the value contributed by the prompt change.
-import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "fs";
-import { join } from "path";
-import { GladLogParser, type GladMatch } from "@gladlog/parser";
-import { toLegacyMatch, CombatUnitReaction } from "@gladlog/parser-compat";
 import {
-  extractCandidateFindings,
-  isHealerSpec,
   buildDeepDivePack,
   buildDeepDivePrompt,
-  hasCoachableSignal,
-  specToString,
   type DeepDivePack,
-  type Finding,
   ensureAnalysisData,
+  extractCandidateFindings,
+  type Finding,
+  hasCoachableSignal,
+  isHealerSpec,
+  specToString,
 } from "@gladlog/analysis";
+import { GladLogParser, type GladMatch } from "@gladlog/parser";
+import { CombatUnitReaction,toLegacyMatch } from "@gladlog/parser-compat";
+import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "fs";
+import { join } from "path";
 
 // Prompt builders read the background-loaded talent / spell-name tables
 // (data/ensure.ts contract) — without this the first combats are degraded.

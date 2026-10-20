@@ -7,8 +7,8 @@
  * 多一行是没签字就进表,两个方向都得红。
  */
 import {
-  DISPEL_VERDICTS,
   DISPEL_VERDICT_IDS,
+  DISPEL_VERDICTS,
   DISPEL_VERDICTS_SIGNED_ON,
   dispelVerdictOf,
   type DispelWorth,

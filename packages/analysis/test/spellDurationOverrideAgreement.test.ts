@@ -19,12 +19,12 @@
  *    Recklessness, and three with <50 corpus samples). Those stay as they are
  *    and are NOT pinned, so nobody reads this test as blessing them.
  */
+import { spellEffectData } from "../src/data/spellEffectData";
 import { SPELL_EFFECTS_GENERATED } from "../src/data/spellEffectGenerated";
 import {
   CORPUS_DURATION_PATCHES,
   SPELL_EFFECT_OVERRIDES,
 } from "../src/data/spellEffectOverrides";
-import { spellEffectData } from "../src/data/spellEffectData";
 
 const gen = SPELL_EFFECTS_GENERATED as Record<
   string,

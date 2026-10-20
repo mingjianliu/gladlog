@@ -1,7 +1,7 @@
-import { decodeFlags } from "../src/l3/flags";
-import { buildRoster } from "../src/l3/roster";
 import { parseLine } from "../src/l1/parseLine";
 import type { ParsedLine } from "../src/l1/types";
+import { decodeFlags } from "../src/l3/flags";
+import { buildRoster } from "../src/l3/roster";
 
 const TZ = { timezone: "UTC" } as const;
 const L = (s: string, i = 0) =>

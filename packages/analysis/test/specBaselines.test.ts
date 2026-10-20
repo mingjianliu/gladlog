@@ -4,10 +4,10 @@ import { IMajorCooldownInfo } from "../src/utils/cooldowns";
 import {
   benchmarks,
   formatDTPSBaselines,
-  INCOMING_BASELINE_DEFINITION_NOTE,
   formatLobbyMmrFact,
   formatSpecBaselines,
   IBenchmarkData,
+  INCOMING_BASELINE_DEFINITION_NOTE,
 } from "../src/utils/specBaselines";
 
 describe("specBaselines — formatSpecBaselines", () => {

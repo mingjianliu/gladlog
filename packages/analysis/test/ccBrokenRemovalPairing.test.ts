@@ -16,8 +16,8 @@ import {
   LogEvent,
 } from "@gladlog/parser-compat";
 
-import { analyzeOutgoingCCChains } from "../src/utils/drAnalysis";
 import { analyzePlayerCCAndTrinket } from "../src/utils/ccTrinketAnalysis";
+import { analyzeOutgoingCCChains } from "../src/utils/drAnalysis";
 import { makeUnit } from "./ported/testHelpers";
 
 const MATCH_START = 1_000_000;

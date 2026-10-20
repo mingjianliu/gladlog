@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+
 import { toLegacySafe } from "../src/renderer/src/report/derive/legacySource";
 import type { ReportSource } from "../src/renderer/src/report/derive/types";
 

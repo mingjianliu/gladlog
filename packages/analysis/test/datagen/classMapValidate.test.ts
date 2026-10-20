@@ -1,9 +1,10 @@
 import { readFileSync } from "fs";
-import { parseCsv } from "../../scripts/datagen/lib/wagoCsv";
+
 import {
-  classesForMask,
   buildSpellClassMap,
+  classesForMask,
 } from "../../scripts/datagen/genSpellClassMap";
+import { parseCsv } from "../../scripts/datagen/lib/wagoCsv";
 import { validateCatalogs } from "../../scripts/datagen/validateCatalogs";
 
 describe("genSpellClassMap", () => {

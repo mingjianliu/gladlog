@@ -60,9 +60,10 @@ describe("external-unused needs the external to reach the victim (round 3 W1f, 4
   });
 });
 
-import { getTopDamageSourcesInWindow, playerKillingBlow } from "../src/context/timelineHelpers";
-import { formatMitigationAuditLine } from "../src/context/matchTimelineSections";
 import { CombatUnitReaction, LogEvent as LE } from "@gladlog/parser-compat";
+
+import { formatMitigationAuditLine } from "../src/context/matchTimelineSections";
+import { getTopDamageSourcesInWindow, playerKillingBlow } from "../src/context/timelineHelpers";
 
 describe("death block (round 3 N13)", () => {
   const dmg = (ms: number, src: string, srcName: string, spellId: string, spellName: string, eff: number, overkill?: number) => ({

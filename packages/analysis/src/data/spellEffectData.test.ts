@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
+import { spellEffectData } from "./spellEffectData";
 import { SPELL_EFFECTS_GENERATED } from "./spellEffectGenerated";
 import { SPELL_EFFECT_OVERRIDES } from "./spellEffectOverrides";
-import { spellEffectData } from "./spellEffectData";
 
 /**
  * 双层合并的字段级契约(2026-08-19,GH 见 12.1 电池报告)。

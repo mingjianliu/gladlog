@@ -1,12 +1,13 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { ReviewPanel } from "./ReviewPanel";
+
 import type {
   ReviewAnswer,
   ReviewCard,
   ReviewSession,
 } from "../../../eval/src/explore/reviewTypes";
+import { ReviewPanel } from "./ReviewPanel";
 
 // session 复用 summary.test 的构造思路:2 卡(deep, baseline),evidence 各 1 条
 // verdict: "verified" — the verdict/source must never surface until every

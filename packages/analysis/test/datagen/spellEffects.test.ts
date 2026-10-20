@@ -1,7 +1,8 @@
 import { readFileSync } from "fs";
-import { parseCsv } from "../../scripts/datagen/lib/wagoCsv";
-import { collectCandidateIds } from "../../scripts/datagen/lib/candidates";
+
 import { mineSpellEffects } from "../../scripts/datagen/genSpellEffects";
+import { collectCandidateIds } from "../../scripts/datagen/lib/candidates";
+import { parseCsv } from "../../scripts/datagen/lib/wagoCsv";
 
 const fx = (name: string) =>
   parseCsv(

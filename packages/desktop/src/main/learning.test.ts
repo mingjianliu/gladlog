@@ -1,9 +1,9 @@
+import type { RulesDoc } from "@gladlog/analysis/src/learning/types";
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { describe, expect, it } from "vitest";
 
-import type { RulesDoc } from "@gladlog/analysis/src/learning/types";
 import type { AnthropicLike } from "./ai";
 import { createLearningService } from "./learning";
 

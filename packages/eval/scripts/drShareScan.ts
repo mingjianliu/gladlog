@@ -32,12 +32,12 @@
  *     --manifest $GLADLOG_EVAL_HOME/corpus/manifest-archive-<date>.txt [--every 30] [--spells 33786,99]
  */
 import { DR_CATEGORIES_GENERATED } from "@gladlog/analysis/src/data/drCategoriesGenerated";
+import { ensureAnalysisData } from "@gladlog/analysis/src/data/ensure";
 import {
   ccFullDurationSeconds,
   getEnglishSpellName,
 } from "@gladlog/analysis/src/data/spellEffectData";
 import { ccSpellIds } from "@gladlog/analysis/src/data/spellTags";
-import { ensureAnalysisData } from "@gladlog/analysis/src/data/ensure";
 import { drResetMsAt } from "@gladlog/analysis/src/utils/drAnalysis";
 import { readFileSync } from "fs";
 import { gunzipSync } from "zlib";

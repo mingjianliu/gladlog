@@ -1,8 +1,8 @@
 // packages/analysis/src/compare/cellLookup.ts
 import type {
-  ReferenceCorpus,
-  ReferenceCell,
   BuildGroupDecl,
+  ReferenceCell,
+  ReferenceCorpus,
 } from "./corpusTypes";
 
 /** Boolean keystone assignment — the read-side twin of the corpus builder's gate. */

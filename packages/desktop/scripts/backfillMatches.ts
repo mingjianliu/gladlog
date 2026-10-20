@@ -1,4 +1,4 @@
-/* eslint-disable no-console */
+ 
 /**
  * CLI: bulk-backfill historical logs into the app's match library (without
  * going through Electron).
@@ -19,18 +19,17 @@
  *
  * --store defaults to macOS's ~/Library/Application Support/gladlog/matches.
  */
+import {
+  GladLogParser,
+  type GladMatch,
+  type GladShuffle,
+} from "@gladlog/parser";
 import { execFileSync } from "child_process";
 import { createReadStream } from "fs";
 import { readdir, stat } from "fs/promises";
 import { homedir } from "os";
 import { join } from "path";
 import { createInterface } from "readline";
-
-import {
-  GladLogParser,
-  type GladMatch,
-  type GladShuffle,
-} from "@gladlog/parser";
 
 import { MatchStore } from "../src/main/matchStore";
 

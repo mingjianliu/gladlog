@@ -1,3 +1,4 @@
+/* eslint-disable simple-import-sort/imports -- the deepDive pre-warm stays where it is documented (the sorter would hoist side-effect imports) */
 import type { CandidateEvent } from "@gladlog/analysis";
 // Pre-warm deepDive: production code does an on-demand `await import` inside
 // deepenInner (so main no longer loads the 12MB spellNames table at startup).

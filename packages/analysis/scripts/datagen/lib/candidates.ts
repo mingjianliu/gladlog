@@ -1,11 +1,11 @@
-import { SPELL_CATEGORIES } from "../../../src/data/spellCategories";
-import observedSpellIds from "../../../src/data/observedSpellIdsGenerated.json";
 import { classMetadata } from "../../../src/data/classSpells";
-import spellIdLists from "../../../src/data/spellIdLists";
 import { spellClassMap } from "../../../src/data/drCategories";
-import { SPELL_EFFECT_OVERRIDES } from "../../../src/data/spellEffectOverrides";
-import talentIdMap from "../../../src/data/talentIdMap.json";
+import observedSpellIds from "../../../src/data/observedSpellIdsGenerated.json";
 import { RACIAL_ABILITIES } from "../../../src/data/racialAbilities";
+import { SPELL_CATEGORIES } from "../../../src/data/spellCategories";
+import { SPELL_EFFECT_OVERRIDES } from "../../../src/data/spellEffectOverrides";
+import spellIdLists from "../../../src/data/spellIdLists";
+import talentIdMap from "../../../src/data/talentIdMap.json";
 
 export function collectCandidateIds(
   pvpTalentRows: Record<string, string>[],

@@ -9,7 +9,6 @@
 import { CombatUnitClass, CombatUnitReaction } from "@gladlog/parser-compat";
 
 import { WARLOCK_PET_FUNCTION } from "../../data/warlockPets";
-
 import { fmtTime } from "../../utils/renderGrid";
 import {
   SUMMON_REACH_MIN_S,

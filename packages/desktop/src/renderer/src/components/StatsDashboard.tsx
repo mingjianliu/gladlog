@@ -1,24 +1,24 @@
-import { useEffect, useMemo, useRef, useState } from "react";
 import { fmtTime, zoneMetadata } from "@gladlog/analysis";
 import { interpolate } from "@gladlog/analysis/src/compare/claimChecker";
 import { distillFacts } from "@gladlog/analysis/src/learning/distillRules";
 import { habitBadgeText } from "@gladlog/analysis/src/learning/matchRules";
 import {
-  PATTERN_WINDOW_MATCHES,
   PATTERN_MIN_HITS,
+  PATTERN_WINDOW_MATCHES,
   TREND_BUCKET_MATCHES,
 } from "@gladlog/analysis/src/learning/patternScan";
 import type {
   LearnedRule,
   RulesDoc,
 } from "@gladlog/analysis/src/learning/types";
+import { useEffect, useMemo, useRef, useState } from "react";
 
-import type { StoredMatchMeta } from "../../../main/matchStore";
 import type { LearningState } from "../../../main/learning";
+import type { StoredMatchMeta } from "../../../main/matchStore";
 import { bridge } from "../bridge";
 import { specName } from "../report/data/gameConstants";
 import { categoryLabel } from "../report/derive/findingDisplay";
-import { MatchListRow, SpecDot } from "./MatchListRow";
+import { shortUnitName } from "../report/derive/teamSide";
 import {
   type DashPeriod,
   deriveCurrentRating,
@@ -30,7 +30,7 @@ import {
   RATE_MIN_N_TOTAL,
   rateDisplay,
 } from "./dashboard";
-import { shortUnitName } from "../report/derive/teamSide";
+import { MatchListRow, SpecDot } from "./MatchListRow";
 
 const PERIOD_LABEL: Record<DashPeriod, string> = {
   today: "今天",

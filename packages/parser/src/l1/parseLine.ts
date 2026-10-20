@@ -1,20 +1,20 @@
+import { decodeCombatantInfo } from "./combatantInfo";
 import {
-  decodeBaseUnits,
-  decodeSpell,
-  decodeDamage,
-  decodeHeal,
-  decodeAdvanced,
-  decodeCastCosts,
-  decodeAura,
-  decodeExtraSpell,
   decodeAbsorbed,
-  decodeArenaStart,
+  decodeAdvanced,
   decodeArenaEnd,
-  decodeMissed,
+  decodeArenaStart,
+  decodeAura,
+  decodeBaseUnits,
+  decodeCastCosts,
+  decodeDamage,
+  decodeExtraSpell,
+  decodeHeal,
   decodeHealAbsorbed,
+  decodeMissed,
+  decodeSpell,
   hpTailSlice,
 } from "./decoders";
-import { decodeCombatantInfo } from "./combatantInfo";
 import { splitLine } from "./splitTopLevel";
 import { parseTimestamp } from "./timestamp";
 import type { ParsedLine } from "./types";

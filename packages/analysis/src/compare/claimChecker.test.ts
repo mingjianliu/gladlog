@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { interpolate, claimChecker, scrubExemplar } from "./claimChecker";
+
+import { claimChecker, interpolate, scrubExemplar } from "./claimChecker";
 
 const facts = {
   offensiveIndex: "0.31",

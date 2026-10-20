@@ -15,27 +15,25 @@
 
 import { CombatUnitReaction, LogEvent } from "@gladlog/parser-compat";
 
+import { buildAuraIntervals } from "../utils/auraIntervals";
 import {
   cdAvailableAt,
   cdIsProcOnly,
   cdMaybeAvailableAt,
   extractMajorCooldowns,
+  type IMajorCooldownInfo,
   isHealerSpec,
+  isPassiveProcCast,
   MAJOR_DEFENSIVE_IDS,
   selfCastNoopAnnotatedName,
   specToString,
-  type IMajorCooldownInfo,
-  isPassiveProcCast,
 } from "../utils/cooldowns";
-import { fmtTime } from "../utils/renderGrid";
 import { analyzeOutgoingCCChains, DR_CATEGORY_MAP } from "../utils/drAnalysis";
 import { detectHealingGaps, type IHealingGap } from "../utils/healingGaps";
 import {
   getHpPercentAtTime,
   getLowestHpPercentInWindow,
 } from "../utils/killWindowTargetSelection";
-import { buildAuraIntervals } from "../utils/auraIntervals";
-import { OFFENSIVE_CD_SPELL_IDS } from "../utils/spellDanger";
 import {
   distanceBetween,
   getUnitPositionAtTime,
@@ -43,6 +41,8 @@ import {
   hasLineOfSight,
 } from "../utils/losAnalysis";
 import { INTERP_MAX_GAP_MS, LOS_SWEEP_GAP_MS } from "../utils/positionSampling";
+import { fmtTime } from "../utils/renderGrid";
+import { OFFENSIVE_CD_SPELL_IDS } from "../utils/spellDanger";
 import type { PackItem } from "./deepDive";
 
 /** Short name (realm stripped): same style as deepDive's `sn()`, copied here

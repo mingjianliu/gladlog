@@ -25,15 +25,14 @@ import type { IEnemyCDCast } from "../../utils/enemyCDs";
 import type { buildRosterSides } from "../../utils/rosterSide";
 import type { BuildMatchTimelineParams } from "../matchTimeline";
 import type { buildResourceSnapshot } from "../resourceSnapshot";
-import type { emitContextFactEntries } from "./contextFacts";
-import type { emitEnemyCdEntries } from "./enemyCd";
-
 import type {
   buildSummonOwnerNames,
   extractEnemyMajorBuffIntervals,
   extractOwnerCDBuffExpiry,
   IEnemyBuffInterval,
 } from "../timelineHelpers";
+import type { emitContextFactEntries } from "./contextFacts";
+import type { emitEnemyCdEntries } from "./enemyCd";
 
 /** A [STATE]/[RES] snapshot requested at a time; resolved after all sections
  * have run (it can be debounced away or forced full). */

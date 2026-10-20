@@ -25,9 +25,9 @@ import {
   buildCastMatchIndex,
   classifyDispel,
   type DispelKind,
+  ensureAnalysisData,
   extractCandidateFindings,
   isHealerSpec,
-  ensureAnalysisData,
 } from "@gladlog/analysis";
 import { GladLogParser, type GladMatch } from "@gladlog/parser";
 import {

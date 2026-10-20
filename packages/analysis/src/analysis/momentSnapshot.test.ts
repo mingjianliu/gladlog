@@ -7,6 +7,7 @@ import {
 } from "@gladlog/parser-compat";
 import { describe, expect, it } from "vitest";
 
+import type { PackItem } from "./deepDive";
 import {
   ACTIVITY_GAP_MIN_S,
   aurasActiveAt,
@@ -15,7 +16,6 @@ import {
   largestCastGap,
   MOMENT_PACK_MAX,
 } from "./momentSnapshot";
-import type { PackItem } from "./deepDive";
 
 // Copies the mkUnit style used by deepDive.window.test.ts (~24-49): a plain
 // object literal shaped like ICombatUnit, cast through `as any` at call sites

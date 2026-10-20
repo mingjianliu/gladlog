@@ -1,8 +1,8 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect,it } from "vitest";
 
+import { decodeAdvanced } from "../src/l1/decoders";
 import { parseLine } from "../src/l1/parseLine";
 import { splitLine } from "../src/l1/splitTopLevel";
-import { decodeAdvanced } from "../src/l1/decoders";
 
 /**
  * The five event classes the product used to discard (BACKLOG #36). Every

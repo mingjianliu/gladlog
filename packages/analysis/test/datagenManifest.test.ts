@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
 import { readdirSync, readFileSync, statSync } from "fs";
 import path from "path";
+import { describe, expect, it } from "vitest";
 
 /**
  * Anti-rot test: every "generated artifact" under

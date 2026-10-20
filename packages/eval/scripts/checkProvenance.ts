@@ -1,5 +1,5 @@
-import { checkScoreProvenance } from "../src/provenance/checkScoreProvenance";
 import { resolveEvalHome, runDir } from "../src/evalHome";
+import { checkScoreProvenance } from "../src/provenance/checkScoreProvenance";
 
 async function main() {
   const args = process.argv.slice(2);

@@ -49,14 +49,14 @@ import { GladLogParser } from "@gladlog/parser";
 import { toLegacyMatch, toLegacyShuffle } from "@gladlog/parser-compat";
 import {
   appendFileSync,
+  closeSync,
   copyFileSync,
   existsSync,
   mkdirSync,
-  readdirSync,
-  closeSync,
   openSync,
-  readSync,
+  readdirSync,
   readFileSync,
+  readSync,
   writeFileSync,
 } from "fs";
 import { basename, dirname, join } from "path";

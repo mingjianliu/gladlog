@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
+
 import {
   detectCliForBackend,
   detectLocalCli,
-  parseCliVersionOutput,
   isWindowsBatchFile,
+  parseCliVersionOutput,
   pickCliPathFromLookupOutput,
   probeCliVersion,
   probeCliVersionCached,

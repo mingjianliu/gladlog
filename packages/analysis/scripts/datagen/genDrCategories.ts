@@ -12,9 +12,9 @@
 import { writeArtifact } from "./lib/emit";
 import {
   assertColumns,
-  resolveBuild,
   fetchTable,
   parseCsv,
+  resolveBuild,
 } from "./lib/wagoCsv";
 
 const DIM_TO_CATEGORY: Record<number, string> = {

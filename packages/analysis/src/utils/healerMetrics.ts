@@ -4,6 +4,7 @@ import {
   IShuffleRound,
   LogEvent,
 } from "@gladlog/parser-compat";
+
 import { ccSpellIds } from "../data/spellTags";
 import { analyzePlayerCCAndTrinket } from "./ccTrinketAnalysis";
 import {
@@ -11,8 +12,8 @@ import {
   detectOverlappedDefensives,
   extractMajorCooldowns,
   IMajorCooldownInfo,
-  MAJOR_DEFENSIVE_IDS,
   isPassiveProcCast,
+  MAJOR_DEFENSIVE_IDS,
 } from "./cooldowns";
 import { reconstructEnemyCDTimeline } from "./enemyCDs";
 import { detectHealingGaps } from "./healingGaps";

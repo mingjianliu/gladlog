@@ -1,5 +1,8 @@
 import { ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
+import { PVP_TALENT_POOL_GENERATED } from "../data/pvpTalentPoolGenerated";
+import { PVP_TALENT_REPLACES_GENERATED } from "../data/pvpTalentReplacesGenerated";
+import { replacedSpellIds } from "../data/talentReplaces";
 import {
   choiceSelectionResolved,
   getPlayerTalentedSpellInfo,
@@ -10,10 +13,6 @@ import {
   getSpecTalentTreeSpellInfo,
   isLoadoutFullyResolved,
 } from "./talents";
-
-import { PVP_TALENT_POOL_GENERATED } from "../data/pvpTalentPoolGenerated";
-import { PVP_TALENT_REPLACES_GENERATED } from "../data/pvpTalentReplacesGenerated";
-import { replacedSpellIds } from "../data/talentReplaces";
 
 /**
  * Three-state verdict of "does THIS player actually have spell X in THIS

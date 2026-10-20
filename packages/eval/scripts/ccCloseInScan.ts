@@ -1,4 +1,4 @@
-/* eslint-disable no-console */
+ 
 /**
  * ccCloseInScan.ts — how far a crowd-control caster closes in before the CC
  * lands (GH #83, user 2026-09-23: "距离都可以算进来").

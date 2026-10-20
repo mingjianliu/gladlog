@@ -2,7 +2,7 @@ import { analyzeKickAudit, type IKickAuditEntry } from "@gladlog/analysis";
 import { CombatUnitReaction } from "@gladlog/parser-compat";
 
 import { toLegacySafe } from "./legacySource";
-import { tInRange, type TimeRange } from "./timeRange";
+import { type TimeRange,tInRange } from "./timeRange";
 import type { ReportSource } from "./types";
 
 export interface KickDashRow {

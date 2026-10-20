@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { summarize } from "./summary";
+
 import type {
   ReviewAnswer,
   ReviewCard,
   ReviewSession,
 } from "../../../eval/src/explore/reviewTypes";
+import { summarize } from "./summary";
 
 const card = (cardId: string, source: "deep" | "baseline"): ReviewCard => ({
   cardId,

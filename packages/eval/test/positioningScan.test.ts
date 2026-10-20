@@ -10,6 +10,7 @@ import {
   formatPositionEventsForContext,
 } from "@gladlog/analysis";
 import { describe, expect, it } from "vitest";
+
 import {
   checkGeoClaims,
   extractGeoClaims,

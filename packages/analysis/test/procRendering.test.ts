@@ -80,7 +80,7 @@ const baseTimelineParams = {
   enemyCDTimeline: { players: [], alignedBurstWindows: [] } as any,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   ccTrinketSummaries: [] as any[],
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   dispelSummary: {
     allyCleanse: [],
     ourPurges: [],
@@ -88,7 +88,7 @@ const baseTimelineParams = {
     missedCleanseWindows: [],
     missedPurgeWindows: [],
   } as any,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   enemyDispelSummary: {
     allyCleanse: [],
     ourPurges: [],

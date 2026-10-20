@@ -22,6 +22,7 @@
  * bound. Nothing here is a new spell list; an aura none of them classifies is
  * reported as unclassified, never dropped as irrelevant.
  */
+import { ENEMY_BURST_LOOKBACK_MS } from "@gladlog/analysis/src/analysis/crisisDecisionPoints";
 import { abilityProfile } from "@gladlog/analysis/src/data/abilityProfile";
 import {
   resolveMitigation,
@@ -30,7 +31,6 @@ import {
 import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData";
 import { ccSpellIds } from "@gladlog/analysis/src/data/spellTags";
 import { buildAuraIntervals } from "@gladlog/analysis/src/utils/auraIntervals";
-import { ENEMY_BURST_LOOKBACK_MS } from "@gladlog/analysis/src/analysis/crisisDecisionPoints";
 import {
   getUnitPositionAtTime,
   getUnitRawPositionAtTime,

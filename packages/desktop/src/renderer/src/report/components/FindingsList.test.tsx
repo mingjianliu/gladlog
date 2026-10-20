@@ -5,7 +5,7 @@ import { describe, expect, it, test } from "vitest";
 import type { RichDeps } from "../derive/inlineRich";
 import { makeRichText } from "../derive/inlineRich";
 import type { ReportSource } from "../derive/types";
-import { FindingsList, findingKey } from "./FindingsList";
+import { findingKey,FindingsList } from "./FindingsList";
 
 const findings = [
   {

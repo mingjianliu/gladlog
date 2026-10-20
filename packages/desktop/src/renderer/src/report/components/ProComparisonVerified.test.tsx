@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
-import { describe, expect, it, test, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
 import { ensureAnalysisData } from "@gladlog/analysis";
+import { render, screen } from "@testing-library/react";
+import { beforeEach,describe, expect, it, test, vi } from "vitest";
+
 import { ProComparisonVerified } from "./ProComparisonVerified";
 
 const result = {

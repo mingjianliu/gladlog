@@ -2,22 +2,22 @@
  * codex post-hoc review of reliability leftovers batches 11–14 (2026-09-27,
  * after agy's pass): each confirmed finding pinned by its counterexample.
  */
-import { CombatUnitReaction, LogEvent } from "@gladlog/parser-compat";
 import type { ICombatUnit } from "@gladlog/parser-compat";
+import { CombatUnitReaction, LogEvent } from "@gladlog/parser-compat";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { trimFoldedLocksAfter } from "../src/analysis/candidateFindings";
 import { evaluateSyncWindow } from "../src/analysis/candidates/cooldownTiming";
-import {
-  damageEventLabel,
-  getTopDamageSourcesInWindow,
-} from "../src/context/timelineHelpers";
 import {
   groundedControls,
   ownerRejectRuns,
   reflectedSpells,
   sanctuaryRemovals,
 } from "../src/context/spellOutcomeLines";
+import {
+  damageEventLabel,
+  getTopDamageSourcesInWindow,
+} from "../src/context/timelineHelpers";
 import { ensureAnalysisData } from "../src/data/ensure";
 import { wallTimingPhrase, wallUpAtOpen } from "../src/utils/burstLedger";
 

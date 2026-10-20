@@ -1,12 +1,13 @@
 // @vitest-environment jsdom
 import { render } from "@testing-library/react";
 import { describe, expect, test } from "vitest";
-import type { ReportSource } from "./types";
+
 import {
   buildMatchSpellIndex,
   makeRichText,
   type RichDeps,
 } from "./inlineRich";
+import type { ReportSource } from "./types";
 
 const deps: RichDeps = {
   nameIndex: new Map<string, readonly string[]>([

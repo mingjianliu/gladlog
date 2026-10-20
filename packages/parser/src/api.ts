@@ -1,7 +1,7 @@
 import { parseLine } from "./l1/parseLine";
 import {
-  Segmenter,
   type SegmentCloseInfo,
+  Segmenter,
   type SegmentOpenInfo,
 } from "./l2/segmenter";
 import { Segment, ShuffleClose } from "./l2/types";

@@ -7,10 +7,10 @@ import {
   isOwnerMissedKick,
   KICK_MELEE_BASE_YD,
   KICK_MELEE_REACH_YD,
-  meleeKickReachYd,
   type KickPriorityFriend,
   kickPriorityMissedEvents,
   kickPriorityTeamEvents,
+  meleeKickReachYd,
 } from "./kickPriority";
 
 const owner = { id: "P1", name: "Rogue" };

@@ -16,8 +16,8 @@
 import { ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
 import {
-  GROUNDING_TOTEM_NPC_ID,
   getNpcIdFromGuid,
+  GROUNDING_TOTEM_NPC_ID,
 } from "../context/timelineHelpers";
 import { getEnglishSpellName } from "../data/spellEffectData";
 

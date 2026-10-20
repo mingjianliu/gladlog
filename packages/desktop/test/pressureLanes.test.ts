@@ -1,10 +1,10 @@
-import { beforeAll, describe, expect, it } from "vitest";
 import { DMG_SPIKE_THRESHOLD, ensureAnalysisData } from "@gladlog/analysis";
+import { beforeAll, describe, expect, it } from "vitest";
 
-import realMatch from "./fixtures/real-match-sample.json";
 import { buildAnalysisInput } from "../src/renderer/src/report/derive/analysisInput";
 import { derivePressureLanes } from "../src/renderer/src/report/derive/pressureLanes";
 import type { ReportSource } from "../src/renderer/src/report/derive/types";
+import realMatch from "./fixtures/real-match-sample.json";
 
 const src = realMatch as unknown as ReportSource;
 

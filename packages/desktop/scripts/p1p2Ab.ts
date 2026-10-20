@@ -73,10 +73,10 @@
  * override) — see storeAccess.ts's `DEFAULT_MATCH_DIR` doc comment.
  */
 import {
-  readFileSync,
+  appendFileSync,
   existsSync,
   mkdirSync,
-  appendFileSync,
+  readFileSync,
   writeFileSync,
 } from "node:fs";
 import { homedir } from "node:os";
@@ -87,24 +87,24 @@ import {
   buildFindingsPrompt,
   buildMatchContext,
   CANDIDATE_TYPE_FLAGS,
+  type CandidateEvent,
+  ensureAnalysisData,
   extractCandidateFindings,
   parseModelJsonArray,
   parseRawStreams,
-  roundDurationSOf,
-  specToString,
-  type CandidateEvent,
   type RawFinding,
   type RawStreams,
-  ensureAnalysisData,
+  roundDurationSOf,
+  specToString,
 } from "@gladlog/analysis";
 
-import { resolveOwner } from "../src/renderer/src/report/derive/analysisInput";
-import { toLegacySafe } from "../src/renderer/src/report/derive/legacySource";
-import { buildCoachSystemPrompt } from "../src/main/ai";
-import { claudeCliClientFactory } from "../src/main/localAiBackends";
-import { AI_DEFAULT_MODEL } from "../src/shared/aiModels";
 import { seededShuffle } from "../../eval/src/explore/buildSession";
 import { readRawText } from "../../eval/src/explore/storeAccess";
+import { buildCoachSystemPrompt } from "../src/main/ai";
+import { claudeCliClientFactory } from "../src/main/localAiBackends";
+import { resolveOwner } from "../src/renderer/src/report/derive/analysisInput";
+import { toLegacySafe } from "../src/renderer/src/report/derive/legacySource";
+import { AI_DEFAULT_MODEL } from "../src/shared/aiModels";
 
 const MATCH_DIR =
   process.env.GLADLOG_MATCH_DIR ||

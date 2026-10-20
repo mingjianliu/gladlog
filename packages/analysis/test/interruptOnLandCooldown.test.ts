@@ -14,8 +14,8 @@ import {
   onInterruptReductionFor,
 } from "../src/data/talentScriptedCooldowns";
 import {
-  interruptCooldownRemainingMs,
   interruptBackAtMs,
+  interruptCooldownRemainingMs,
   interruptCooldownSeconds,
   interruptPressCooldownSeconds,
   LANDED_PAIR_MS,

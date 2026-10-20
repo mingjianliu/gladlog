@@ -1,26 +1,27 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+
+import type { StoredMatchMeta } from "../../main/matchStore";
+import { startAutoAnalyzeListener } from "./batch/autoAnalyze";
+import { bridge } from "./bridge";
 import { BatchAnalyzeBar } from "./components/BatchAnalyzeBar";
+import { deriveRatingDeltas } from "./components/dashboard";
 import { DevPanel } from "./components/DevPanel";
+import { ImportButton } from "./components/ImportButton";
+import {
+  applyFilter,
+  EMPTY_FILTER,
+  type ListFilter,
+  MatchListFilter,
+} from "./components/MatchListFilter";
+import { MatchListRow } from "./components/MatchListRow";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { SidebarSplitter } from "./components/SidebarSplitter";
 import { StatsDashboard } from "./components/StatsDashboard";
 import { UpdateBanner } from "./components/UpdateBanner";
-import { deriveRatingDeltas } from "./components/dashboard";
-import { ImportButton } from "./components/ImportButton";
-import { MatchListRow } from "./components/MatchListRow";
-import {
-  applyFilter,
-  EMPTY_FILTER,
-  MatchListFilter,
-  type ListFilter,
-} from "./components/MatchListFilter";
 import { MatchReport } from "./report/components/MatchReport";
 import { ShuffleReport } from "./report/components/ShuffleReport";
-import type { StoredMatchMeta } from "../../main/matchStore";
-import { bridge } from "./bridge";
-import { applyUiZoom } from "./uiZoom";
 import { useSidebarWidth } from "./sidebarWidth";
-import { startAutoAnalyzeListener } from "./batch/autoAnalyze";
+import { applyUiZoom } from "./uiZoom";
 
 type AppView = "matches" | "stats" | "settings" | "dev";
 const APP_VIEW_LABEL: Record<AppView, string> = {

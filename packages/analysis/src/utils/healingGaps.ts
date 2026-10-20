@@ -2,8 +2,8 @@ import { ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
 import {
   buildCannotCastIntervals,
-  enemySourceIds,
   coveredMsWithin,
+  enemySourceIds,
 } from "./cannotCastIntervals";
 import { isHealerSpec, isPassiveProcCast, specToString } from "./cooldowns";
 import { getLowestHpPercentInWindow } from "./killWindowTargetSelection";

@@ -5,10 +5,10 @@ import {
 } from "@gladlog/parser-compat";
 
 import { manaCostForCast, manaCostIsPercentage } from "../data/spellManaCost";
+import { getSortedAdvancedActions } from "./advancedActions";
 import { buildAuraIntervals } from "./auraIntervals";
 import { binarySearchClosest } from "./binarySearch";
 import { HP_SAMPLE_RADIUS_MS } from "./cooldowns";
-import { getSortedAdvancedActions } from "./advancedActions";
 import type { ManaSample, RawStreams } from "./rawStreams";
 
 /**

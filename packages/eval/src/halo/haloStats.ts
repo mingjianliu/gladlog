@@ -10,11 +10,11 @@ import path from "path";
 
 import {
   BOOTSTRAP_SEED,
-  DIMENSIONS,
-  type ScoreFile,
   bootstrapCI,
+  DIMENSIONS,
   dimensionScore,
   makeRng,
+  type ScoreFile,
   signTestP,
 } from "../ab/abCompareStats.js";
 import type { IndexEntry } from "../corpus/buildCorpus";

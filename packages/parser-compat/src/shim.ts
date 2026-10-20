@@ -1,4 +1,5 @@
 import { GladLogParser } from "@gladlog/parser";
+
 import { toLegacyMatch, toLegacyShuffle } from "./convert";
 import type { IArenaMatch, IShuffleMatch } from "./types";
 

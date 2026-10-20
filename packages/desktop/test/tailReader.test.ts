@@ -1,6 +1,7 @@
 import { appendFileSync, mkdtempSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
+
 import { initialTailState, readTail } from "../src/worker/tailReader";
 
 const dir = () => mkdtempSync(join(tmpdir(), "gl-tail-"));

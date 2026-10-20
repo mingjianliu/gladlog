@@ -1,11 +1,11 @@
-import { slimMatchParams } from "../slim";
+import type { ParsedLine } from "../l1/types";
 import type { Segment, ShuffleClose } from "../l2/types";
-import type { GladMatch, GladShuffle, GladShuffleRound } from "./model";
-import { buildRoster } from "./roster";
+import { slimMatchParams } from "../slim";
 import { collectEvents } from "./collect";
 import { classIdOf } from "./data/specToClass";
+import type { GladMatch, GladShuffle, GladShuffleRound } from "./model";
 import { matchResult, roundWinner } from "./outcome";
-import type { ParsedLine } from "../l1/types";
+import { buildRoster } from "./roster";
 
 // FNV-1a 32-bit rolling hash
 function calculateFnv1a32(lines: string[]): string {

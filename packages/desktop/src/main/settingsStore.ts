@@ -150,14 +150,14 @@ function migrateLegacyModel(raw: Partial<GladlogSettings> & LegacySettings): {
 export {
   API_KEY_REDACTED,
   DEEPSEEK_KEY_REDACTED,
-  OBS_PASSWORD_REDACTED,
   MANAGED_WS_PASSWORD_REDACTED,
+  OBS_PASSWORD_REDACTED,
 } from "../shared/protocol";
 import {
   API_KEY_REDACTED,
   DEEPSEEK_KEY_REDACTED,
-  OBS_PASSWORD_REDACTED,
   MANAGED_WS_PASSWORD_REDACTED,
+  OBS_PASSWORD_REDACTED,
 } from "../shared/protocol";
 
 export function redactSettings(s: GladlogSettings): GladlogSettings {

@@ -1,6 +1,5 @@
-import { describe, expect, it } from "vitest";
-
 import { PRESS_HP_LINE_TAGS } from "@gladlog/analysis/src/utils/cooldowns";
+import { describe, expect, it } from "vitest";
 
 import { checkSameSecondHpConsistency } from "./promptQualityCheck";
 

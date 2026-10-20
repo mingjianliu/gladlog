@@ -9,11 +9,11 @@
  */
 import { SPELL_MANA_COST_TABLE } from "../../data/spellManaCost";
 import {
+  type CastFailedEvent,
   castFailedInWindow,
   manaAt,
   manaPct,
   oomWindows,
-  type CastFailedEvent,
   type RawStreams,
 } from "../../utils/rawStreams";
 import { toRenderSecond } from "../../utils/renderGrid";

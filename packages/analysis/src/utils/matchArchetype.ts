@@ -16,10 +16,10 @@ import { AtomicArenaCombat, ICombatUnit } from "@gladlog/parser-compat";
 
 import { IPlayerCCTrinketSummary } from "./ccTrinketAnalysis";
 import { isHealerSpec, isMeleeSpec, specToString } from "./cooldowns";
-import { incomingPressureEvents } from "./incomingPressure";
-import { buildRosterSides, type RosterSides } from "./rosterSide";
 import { IAlignedBurstWindow } from "./enemyCDs";
 import { IHealerBurstExposure } from "./healerExposureAnalysis";
+import { incomingPressureEvents } from "./incomingPressure";
+import { buildRosterSides, type RosterSides } from "./rosterSide";
 
 // ---------------------------------------------------------------------------
 // Types

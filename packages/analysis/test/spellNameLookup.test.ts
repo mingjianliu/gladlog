@@ -1,9 +1,10 @@
 import { describe, expect, test } from "vitest";
+
+import { OBSERVED_SPELL_IDS } from "../src/data/observedSpellIds";
 import { ensureSpellNames } from "../src/data/spellEffectData";
 import { englishNameIndex } from "../src/data/spellNameLookup";
 import { SPELL_NAME_STOPWORDS } from "../src/data/spellNameStopwords";
 import { SPELL_NAMES_ZH_GENERATED } from "../src/data/spellNamesZh";
-import { OBSERVED_SPELL_IDS } from "../src/data/observedSpellIds";
 
 describe("spellNameLookup", () => {
   test("英文名倒排:载入后可查,仅图标集,id 升序", async () => {

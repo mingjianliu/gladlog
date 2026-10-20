@@ -1,9 +1,9 @@
-import { mkdtempSync, readFileSync, appendFileSync } from "fs";
+import type { LedgerRun } from "@gladlog/analysis/src/learning/types";
+import { appendFileSync,mkdtempSync, readFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { describe, expect, it } from "vitest";
 
-import type { LedgerRun } from "@gladlog/analysis/src/learning/types";
 import { createLearningLedger } from "./learningLedger";
 
 const run = (

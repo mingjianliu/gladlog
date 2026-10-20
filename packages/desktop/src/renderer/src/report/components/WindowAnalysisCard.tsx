@@ -1,6 +1,5 @@
-import type { ReactNode } from "react";
-
 import { fmtTime } from "@gladlog/analysis";
+import type { ReactNode } from "react";
 
 import { ChipIcon } from "./SpellInline";
 

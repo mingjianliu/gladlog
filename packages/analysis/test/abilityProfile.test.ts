@@ -6,10 +6,10 @@
  * undefined、isSurvivalWall 恒为 false。是一张「已知答案逐行对」的表当场看出来的,
  * 不是靠读代码。所以这里钉的是**答案已知的那些技能**,不是随便挑的。
  */
-import { ensureAnalysisData } from "../src/data/ensure";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { abilityProfile, isSurvivalWall } from "../src/data/abilityProfile";
+import { ensureAnalysisData } from "../src/data/ensure";
 
 // 官方数据动态载入:先 await 聚合入口(与 prompt 路径同一契约)
 beforeAll(async () => {

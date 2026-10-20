@@ -1,3 +1,4 @@
+/* eslint-disable simple-import-sort/imports -- the stylesheets load after the components, as in the app (the sorter would hoist side-effect imports and change the CSS cascade) */
 import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 

@@ -13,6 +13,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import readline from "node:readline";
+
 import { parseLine } from "@gladlog/parser";
 
 const MAX_GAP_MS = 5000;

@@ -1,6 +1,7 @@
-import { describe, expect, it } from "vitest";
-import { enemyCompArchetype } from "./enemyCompArchetype";
 import { CombatUnitSpec } from "@gladlog/parser-compat";
+import { describe, expect, it } from "vitest";
+
+import { enemyCompArchetype } from "./enemyCompArchetype";
 
 // Build enemy units from spec ids; isMeleeSpec/isHealerSpec decide based on
 // gladlog's CombatUnitSpec. The spec constants come from CombatUnitSpec in

@@ -13,14 +13,15 @@
  *
  *   tsx cdPriorAblationCueCheck.ts --raw <raw.json> --list <files.txt> --matches 24
  */
+import { readFileSync } from "node:fs";
+import { gunzipSync } from "node:zlib";
+
 import {
   buildMatchContext,
   ensureAnalysisData,
   isHealerSpec,
 } from "@gladlog/analysis";
 import { CombatUnitReaction } from "@gladlog/parser-compat";
-import { readFileSync } from "node:fs";
-import { gunzipSync } from "node:zlib";
 
 import { parseLogCombats } from "../src/corpus/candidateMenu";
 import { jaccard } from "../src/explore/promptLineTypes";

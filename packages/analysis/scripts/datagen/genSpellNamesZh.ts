@@ -1,11 +1,12 @@
 import { readFileSync } from "fs";
+
+import { writeArtifact } from "./lib/emit";
 import {
-  parseCsv,
+  assertMinRows,
   fetchLatestBuild,
   fetchTable,
-  assertMinRows,
+  parseCsv,
 } from "./lib/wagoCsv";
-import { writeArtifact } from "./lib/emit";
 
 /** The zhCN spell-name table: only keep entries that "have an icon AND differ
  * from the enUS name". wago falls back to English in the same column for

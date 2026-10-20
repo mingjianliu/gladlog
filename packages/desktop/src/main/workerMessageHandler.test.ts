@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { createWorkerMessageHandler } from "./workerMessageHandler";
 import type { WorkerToMain } from "../shared/protocol";
 import type { StoredMatchMeta } from "./matchStore";
+import { createWorkerMessageHandler } from "./workerMessageHandler";
 
 const META: StoredMatchMeta = {
   id: "m1",

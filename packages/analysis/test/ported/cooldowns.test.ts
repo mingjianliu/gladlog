@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-non-null-assertion */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import {
   CombatUnitClass,
   CombatUnitReaction,
@@ -6,9 +6,11 @@ import {
   LogEvent,
 } from "@gladlog/parser-compat";
 
+import { ensureAnalysisData } from "../../src/data/ensure";
 import {
   annotateDefensiveTimings,
   canHelpAnotherUnit,
+  castRecovery,
   CD_ROLE_TAGS,
   cdAvailableAt,
   cdRoleTag,
@@ -18,11 +20,10 @@ import {
   extractMajorCooldowns,
   findCheaperDefensiveAlternatives,
   getPressureThreshold,
-  castRecovery,
+  getUnitHpAtTimestamp,
   GUARDIAN_SPIRIT_SAVE_HEAL_ID,
   guardianSpiritCastCooldownSeconds,
   guardianSpiritSaved,
-  getUnitHpAtTimestamp,
   IEnemyCDTimelineForTiming,
   IMajorCooldownInfo,
   isHealerSpec,
@@ -43,7 +44,6 @@ import {
   makeSpellCastEvent,
   makeUnit,
 } from "./testHelpers";
-import { ensureAnalysisData } from "../../src/data/ensure";
 
 // ─── fmtTime ──────────────────────────────────────────────────────────────────
 

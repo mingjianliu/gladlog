@@ -9,6 +9,10 @@
  * memory is not hostage to the analysis cache invalidation policy, which is
  * the core reason it exists separately from analysis-v2.*.json.
  */
+import type {
+  LedgerMatch,
+  LedgerRun,
+} from "@gladlog/analysis/src/learning/types";
 import {
   appendFileSync,
   mkdirSync,
@@ -17,11 +21,6 @@ import {
   writeFileSync,
 } from "fs";
 import { join } from "path";
-
-import type {
-  LedgerMatch,
-  LedgerRun,
-} from "@gladlog/analysis/src/learning/types";
 
 /** Only rewrite when the line count exceeds 1.2x the merged match count
  * (>20% redundancy) -- spec §6. */

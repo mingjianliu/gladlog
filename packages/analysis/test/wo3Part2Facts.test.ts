@@ -25,8 +25,8 @@ import { spellEffectData } from "../src/data/spellEffectData";
 import { buffFullDurationForCaster } from "../src/utils/buffDuration";
 import {
   analyzePlayerCCAndTrinket,
-  CHANNEL_STOP_LEAD_MS,
   ccEndedByOwnPress,
+  CHANNEL_STOP_LEAD_MS,
   channelStoppedAtRemoval,
 } from "../src/utils/ccTrinketAnalysis";
 import { reconstructDispelSummary } from "../src/utils/dispelAnalysis";
