@@ -81,7 +81,7 @@ export function procTriggerOf(
         !!e.spellId &&
         e.spellId !== activationSpellId &&
         getEnglishSpellName(e.spellId, e.spellName) !== selfName &&
-        Math.abs(e.logLine.timestamp - atMs) <= AURA_REBROADCAST_GAP_MS
+        triggerBeside(e.logLine.timestamp, atMs)
       )
         names.add(getEnglishSpellName(e.spellId, e.spellName));
     }
@@ -90,6 +90,20 @@ export function procTriggerOf(
   const ranked = [...counts.entries()].sort((a, b) => b[1] - a[1]);
   const [top, next] = ranked;
   return top && top[1] >= 2 && (!next || next[1] < top[1]) ? top[0] : undefined;
+}
+
+/** Round-1 retest (fact1215 idx 79): how far BEFORE an activation's cast
+ * row the press that procced it may be logged. Measured on the 29 fact2
+ * logs: of 223 Radiant Glory Avenging Wraths after a Wake of Ashes, 165
+ * came within 1 ms, 57 at 2–50 ms (12–14 ms in 519781fd's procs 9 and 11,
+ * which the same-ms rule dropped), 1 later. After it, the rebroadcast gap
+ * (`AURA_REBROADCAST_GAP_MS`) as before. */
+export const PROC_TRIGGER_LEAD_MS = 50;
+function triggerBeside(castMs: number, activationMs: number): boolean {
+  return (
+    castMs >= activationMs - PROC_TRIGGER_LEAD_MS &&
+    castMs <= activationMs + AURA_REBROADCAST_GAP_MS
+  );
 }
 
 /** How far from a ledger activation its own cast row may be logged (the
@@ -145,7 +159,7 @@ export function procTriggerAt(
       e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
       !!e.spellId &&
       getEnglishSpellName(e.spellId, e.spellName) === triggerName &&
-      Math.abs(e.logLine.timestamp - atMs) <= AURA_REBROADCAST_GAP_MS,
+      triggerBeside(e.logLine.timestamp, atMs),
   )
     ? triggerName
     : undefined;

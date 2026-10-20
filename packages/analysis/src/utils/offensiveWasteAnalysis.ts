@@ -4,7 +4,7 @@ import {
   LogEvent,
 } from "@gladlog/parser-compat";
 
-import { castKeyOfAura } from "../data/castEffectAuras";
+import { castAndEffectIds, castKeyOfAura } from "../data/castEffectAuras";
 import {
   KILL_LIVE_HP_PCT,
   type MitigationVerdict,
@@ -218,6 +218,12 @@ export function buildOffensiveWasteSummary(
           const t = (e.logLine.timestamp - matchStartMs) / 1000;
           if (t < window.fromSeconds || t > window.toSeconds) return false;
           if (e.spellId === null) return false;
+          // round-1 retest (fact1215 idx 107): a cast the target REFLECTED
+          // went back at its caster — it did not land inside the window
+          // (c3398b15 0:55: a Mortal Coil reflected by Spell Reflection was
+          // listed "into" Die by the Sword)
+          if (reflectedBack(friend, e.spellId, window.unitId, e.logLine.timestamp))
+            return false;
           // B28: for immunity windows, also count high-value CC/utility spells that do no damage
           // (e.g. Mindgames, HoJ, Silence) which would otherwise be filtered by the damage threshold.
           const isHighValueCC =
@@ -260,6 +266,27 @@ export function buildOffensiveWasteSummary(
   }
 
   return { events };
+}
+
+/** The cast's own REFLECT miss on `targetId` (its id or an effect aura of
+ * it, logged up to `REFLECT_ROW_LAG_MS` after the press). */
+const REFLECT_ROW_LAG_MS = 1500;
+function reflectedBack(
+  caster: ICombatUnit,
+  spellId: string,
+  targetId: string,
+  castMs: number,
+): boolean {
+  const family = castAndEffectIds(spellId);
+  return (caster.missesOut ?? []).some(
+    (m) =>
+      m.missType === "REFLECT" &&
+      m.destUnitId === targetId &&
+      !!m.spellId &&
+      family.has(m.spellId) &&
+      m.timestamp >= castMs &&
+      m.timestamp <= castMs + REFLECT_ROW_LAG_MS,
+  );
 }
 
 /** Render an ability sequence with canonical English names and run-length

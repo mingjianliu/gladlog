@@ -555,8 +555,9 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
     spellId: string,
     castTimeSeconds: number,
     named?: ReadonlySet<string>,
+    onlyNamed = false,
   ): string {
-    return ccImmuneTagFor(owner, spellId, castTimeSeconds, named);
+    return ccImmuneTagFor(owner, spellId, castTimeSeconds, named, onlyNamed);
   }
   // Reliability round 3 N10 (483f): a teammate's Storm Bolt the game rejected
   // as IMMUNE rendered as a plain [TEAM] [CC] cast — same predicate as the
@@ -575,11 +576,16 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
   //    the Death Knight); a miss on anything else says nothing (its
   //    Intimidating Shout was immune only on summons and a pet). Without
   //    `named` (a line that names no one) the rule is as before.
+  //  - fact2 (2026-10-20): `onlyNamed` = a press that reaches an ALLY
+  //    (Intervene, an external): only an IMMUNE on the unit the line names
+  //    is the press's — the game refused it on that ally (a2e71187 2:27:
+  //    Intervene IMMUNE on an Evoker in Time Stop, the line said nothing)
   function ccImmuneTagFor(
     unit: ICombatUnit,
     spellId: string,
     castTimeSeconds: number,
     named?: ReadonlySet<string>,
+    onlyNamed = false,
   ): string {
     const misses = unit.missesOut;
     if (!misses || misses.length === 0) return "";
@@ -627,8 +633,8 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
       const onPlayer = candidates.find((m) =>
         allPlayers.some((p) => p.id === m.destUnitId),
       );
-      miss = onNamed ?? onPlayer;
-      if (!onNamed && onPlayer) {
+      miss = onlyNamed ? onNamed : (onNamed ?? onPlayer);
+      if (!onNamed && onPlayer && !onlyNamed) {
         // the roster label, resolved by id on the player's own side (a bare
         // character name never prints — 605: `[IMMUNE: Mashiyyds]`)
         const pl = allPlayers.find((p) => p.id === onPlayer.destUnitId)!;

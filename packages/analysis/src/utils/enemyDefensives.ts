@@ -1079,8 +1079,13 @@ export function saveAuraIntervals(
       )
       .map((c) => (c.logLine.timestamp - combat.startTime) / 1000);
   };
-  return joinReappliedIntervals(
-    buildAuraIntervals(unit, combat, castersById),
+  return splitAtRepressRefresh(
+    joinReappliedIntervals(
+      buildAuraIntervals(unit, combat, castersById),
+      castSecondsOf,
+    ),
+    unit,
+    combat.startTime,
     castSecondsOf,
   ).map((iv) => {
     const srcUnitId = srcIdByName.get(iv.srcUnitName);
@@ -1088,9 +1093,66 @@ export function saveAuraIntervals(
   });
 }
 
+/**
+ * Round-1 retest (fact1215 idx 55, R8 family): a SPELL_AURA_REFRESH its
+ * source logged with a cast of that spell (within `SAVE_CAST_AURA_PAIR_S`)
+ * is a second PRESS — the first one ends there and the second starts (the
+ * rule ruling A51 gave controls: a cast-backed REFRESH is a new
+ * application). `buildAuraIntervals` extends through every REFRESH, which is
+ * right for coverage ("was it up") and wrong for a press's length: 332b9b2f's
+ * Obsidian Scales printed `(30%, 22.7s)` for a press at 0:12.98 refreshed by
+ * a second press at 0:23.64. A REFRESH with no cast beside it (a talent, a
+ * proc) stays part of the press.
+ */
+export function splitAtRepressRefresh(
+  intervals: readonly IAuraInterval[],
+  unit: ICombatUnit,
+  startTime: number,
+  castSecondsOf: (srcUnitName: string, spellId: string) => readonly number[],
+): ISaveAuraInterval[] {
+  const out: ISaveAuraInterval[] = [];
+  for (const iv of intervals) {
+    const refreshS = (unit.auraEvents ?? [])
+      .filter(
+        (a) =>
+          a.spellId === iv.spellId &&
+          a.srcUnitName === iv.srcUnitName &&
+          a.logLine.event === LogEvent.SPELL_AURA_REFRESH,
+      )
+      .map((a) => (a.timestamp - startTime) / 1000)
+      .filter((t) => t > iv.fromS + SAVE_CAST_AURA_PAIR_S && t < iv.toS);
+    const casts = castSecondsOf(iv.srcUnitName, iv.spellId);
+    const cuts = refreshS
+      .filter((t) => casts.some((c) => Math.abs(c - t) <= SAVE_CAST_AURA_PAIR_S))
+      .sort((a, b) => a - b);
+    let from = iv.fromS;
+    let inferredStart = iv.inferredStart;
+    for (const cut of cuts) {
+      if (cut <= from) continue;
+      out.push({
+        ...iv,
+        fromS: from,
+        toS: cut,
+        inferredStart,
+        inferredEnd: false,
+        endedByRepress: true,
+      });
+      from = cut;
+      inferredStart = false;
+    }
+    out.push(from === iv.fromS ? { ...iv } : { ...iv, fromS: from, inferredStart });
+  }
+  return out;
+}
+
 /** An aura interval that also carries its source's unit id (the builder's
  * `IAuraInterval` has the logged name only). */
-export type ISaveAuraInterval = IAuraInterval & { srcUnitId?: string };
+export type ISaveAuraInterval = IAuraInterval & {
+  srcUnitId?: string;
+  /** the press ended where the same source pressed it again (a cast-backed
+   * REFRESH, `splitAtRepressRefresh`) — not removed early */
+  endedByRepress?: true;
+};
 
 /**
  * Did `unit` apply this aura? By unit id — the logged name is compared only
@@ -1258,6 +1320,7 @@ export function enemyDefensiveEvents(
               observedSeconds: roundEndS - iv.fromS,
             };
     }
+    if (iv.endedByRepress) return { removedEarly: false };
     if (iv.inferredEnd) {
       // The log has no end for this application: the interval builder closed
       // it at its official length, and that number is no observation (ruling

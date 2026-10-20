@@ -42,6 +42,7 @@ import {
   isImmunitySaveAura,
   isIntervalFrom,
   joinReappliedIntervals,
+  splitAtRepressRefresh,
   limitedAbsorbSchoolMask,
   limitedImmunitySchoolMask,
   MITIGATION_AURA_IDS,
@@ -1395,5 +1396,42 @@ describe("Blessing of Sacrifice 199448 (Ultimate Sacrifice)", () => {
     expect(evs).toHaveLength(1);
     expect(evs[0]).toMatchObject({ kind: "external", recipientId: "e2" });
     expect(evs[0].observedSeconds).toBeCloseTo(6, 5);
+  });
+});
+
+describe("splitAtRepressRefresh — a cast-backed REFRESH is a second press (round-1 retest idx 55)", () => {
+  // 332b9b2f: Obsidian Scales pressed 0:12.98, refreshed by a second press
+  // at 0:23.64, removed 0:35.64 — one 22.7 s interval
+  const iv = {
+    spellId: "363916",
+    spellName: "Obsidian Scales",
+    srcUnitName: "Evoker",
+    fromS: 12.98,
+    toS: 35.64,
+    inferredStart: false,
+    inferredEnd: false,
+  };
+  const unit = (refreshAt: number) =>
+    ({
+      id: "e",
+      auraEvents: [
+        {
+          spellId: "363916",
+          srcUnitName: "Evoker",
+          timestamp: refreshAt * 1000,
+          logLine: { event: LogEvent.SPELL_AURA_REFRESH, timestamp: refreshAt * 1000 },
+        },
+      ],
+    }) as never;
+  it("splits at the REFRESH its source cast beside", () => {
+    const out = splitAtRepressRefresh([iv], unit(23.64), 0, () => [12.98, 23.639]);
+    expect(out.map((x) => [x.fromS, x.toS, !!x.endedByRepress])).toEqual([
+      [12.98, 23.64, true],
+      [23.64, 35.64, false],
+    ]);
+  });
+  it("control: a REFRESH with no cast beside it (a talent) stays one press", () => {
+    const out = splitAtRepressRefresh([iv], unit(23.64), 0, () => [12.98]);
+    expect(out.map((x) => [x.fromS, x.toS])).toEqual([[12.98, 35.64]]);
   });
 });

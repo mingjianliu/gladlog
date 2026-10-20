@@ -17,7 +17,11 @@ import {
   isHpTroughWorthPrinting,
 } from "./cooldowns";
 import { IEnemyCDCast, reconstructEnemyCDTimeline } from "./enemyCDs";
-import { FULL_IMMUNITY_IDS, MITIGATION_AURA_MIN_PCT } from "./enemyDefensives";
+import {
+  FULL_IMMUNITY_IDS,
+  MITIGATION_AURA_MIN_PCT,
+  SAVE_AURA_END_UNSEEN_IDS,
+} from "./enemyDefensives";
 import {
   type IKickAuditEntry,
   jukedByFakeText,
@@ -411,8 +415,22 @@ export function analyzeBurstLedger(
         // (fact2 C4: the one caster-side-link predicate, `isCasterSideLinkAura`)
         if (isCasterSideLinkAura(iv.spellId, iv.srcUnitName === target.name))
           continue;
+        // round-1 retest (62fdbf2e-r0, D6's unseen-end auras): an
+        // invisibility / stealth whose end the log does not show is over by
+        // the time its holder deals damage — Greater Invisibility 110960
+        // logs no REMOVED, the builder closed it at 20 s, and the mage hit
+        // at 0:25.3 before a burst at 0:28.4 read "active ON THE TARGET
+        // 15.1s"
+        const endMs = SAVE_AURA_END_UNSEEN_IDS.has(iv.spellId)
+          ? Math.min(
+              iv.endMs,
+              ...(target.damageOut ?? [])
+                .map((d) => d.logLine.timestamp)
+                .filter((t) => t > iv.startMs && t < iv.endMs),
+            )
+          : iv.endMs;
         const overlapMs =
-          Math.min(iv.endMs, toMs) - Math.max(iv.startMs, fromMs);
+          Math.min(endMs, toMs) - Math.max(iv.startMs, fromMs);
         if (overlapMs / 1000 < MIN_DEFENSIVE_OVERLAP_S) continue;
         defensivesHit.push({
           ...(DEF_OR_IMMUNE_CAST_IDS.has(iv.spellId)

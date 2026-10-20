@@ -2365,6 +2365,11 @@ const INDEX: PredicateRow[] = [
     symbol: "procTriggerOf",
     mod: enemyCd,
   },
+  {
+    file: `${A}/context/timelineSections/enemyCd.ts`,
+    symbol: "PROC_TRIGGER_LEAD_MS",
+    mod: enemyCd,
+  },
   // fact1215 R9 / R10: channels without an aura, a kick on a channelled
   // control's caster, a refused press's mechanic
   {

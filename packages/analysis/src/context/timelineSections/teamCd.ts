@@ -159,9 +159,20 @@ export function emitTeamCdEntries(
           // is not a press, and a spell that reaches allies is not aimed at
           // the enemy its stray miss names (Mass Invisibility logs IMMUNE on
           // enemies standing in it).
-          const immunePart =
-            isProc || reachesAlly(cd.spellId)
-              ? ""
+          // fact2: a press that reaches an ally says when the game refused
+          // it on the ally the line names (an IMMUNE row on that ally)
+          const immunePart = isProc
+            ? ""
+            : reachesAlly(cd.spellId)
+              ? cast.targetName && cast.targetName !== "nil"
+                ? ccImmuneTagFor(
+                    player,
+                    cd.spellId,
+                    cast.timeSeconds,
+                    new Set([cast.targetName]),
+                    true,
+                  )
+                : ""
               : ccImmuneTagFor(player, cd.spellId, cast.timeSeconds, named);
           // B18: a Guardian Spirit whose save triggered says so (the same
           // heal the ledger's recovery reads)

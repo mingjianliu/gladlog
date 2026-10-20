@@ -27,7 +27,9 @@
  *    logged]` and not `— removed early`; with one, it must not read `[no press
  *    logged]`.
  *  - `procWith` (C5): a friendly Radiant Glory Avenging Wrath activation
- *    (454351 SUCCESS) in the ms of a Wake of Ashes 255937 press, when the
+ *    (454351 SUCCESS) with a Wake of Ashes 255937 press from
+ *    `PROC_TRIGGER_LEAD_MS` before it to 1 ms after (round-1 retest idx 79:
+ *    12–14 ms leads are real triggers), when the
  *    round has two or more such pairs. Its `[PROC]` line must read `(with
  *    Wake of Ashes)`.
  *  - `enemyUtilityPress` (C7, 2026-10-18): an enemy's SUCCESS of Champion's
@@ -48,6 +50,7 @@ import { join, resolve } from "node:path";
 import { gunzipSync } from "node:zlib";
 
 import { ensureAnalysisData } from "@gladlog/analysis";
+import { PROC_TRIGGER_LEAD_MS } from "@gladlog/analysis/src/context/timelineSections/enemyCd";
 import { castsOfEffectAura } from "@gladlog/analysis/src/data/castEffectAuras";
 import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData";
 import { AURA_REBROADCAST_GAP_MS } from "@gladlog/analysis/src/utils/auraIntervals";
@@ -121,6 +124,12 @@ function parseFile(path: string): GladMatch[] {
   parser.end();
   return items;
 }
+
+/** a trigger press up to `PROC_TRIGGER_LEAD_MS` before the activation, or
+ * in its ms */
+const besideProc = (triggerMs: number, actMs: number): boolean =>
+  triggerMs >= actMs - PROC_TRIGGER_LEAD_MS &&
+  triggerMs <= actMs + AURA_REBROADCAST_GAP_MS;
 
 await ensureAnalysisData();
 const files: Array<{
@@ -376,7 +385,7 @@ for (const f of files) {
           casts.some(
             (w) =>
               w.spellId === "255937" &&
-              Math.abs(w.logLine.timestamp - c.logLine.timestamp) <= 1,
+              besideProc(w.logLine.timestamp, c.logLine.timestamp),
           ),
         );
       if (pairs.length < 2) continue;
@@ -392,7 +401,7 @@ for (const f of files) {
               (o) =>
                 o !== act &&
                 o.spellId !== "454351" &&
-                Math.abs(o.logLine.timestamp - act.logLine.timestamp) <= 1,
+                besideProc(o.logLine.timestamp, act.logLine.timestamp),
             )
             .map((o) => getEnglishSpellName(o.spellId, o.spellName)),
         );

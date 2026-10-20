@@ -180,6 +180,20 @@
  *    unit whose [RES] rows print that cooldown as a range (`Name(a–bs)`,
  *    the ledger's earliest–official reading) is wrong — the kit must print
  *    the same range.
+ *  - `allyRefused` (round-1 retest idx 103): a `[YOU] [CD]   X → <pid>(` /
+ *    `[TEAM] [CD]   <pid>(…): X → <pid>(` press on an ally whose caster
+ *    logged an IMMUNE miss of X on that ally within 1 s of the press must
+ *    carry an `[IMMUNE` tag.
+ *  - `repressLength` (round-1 retest idx 55): an `[ENEMY DEF]   <pid>(…):
+ *    X (…, N.Ns` self line whose caster REFRESHed X on itself inside (press
+ *    + 1.5 s, press + N) beside its own cast of X (± 1.5 s) joins two
+ *    presses into one length.
+ *  - `invisAfterAction` (round-1 retest 62fdbf2e): a burst ledger `Target
+ *    had a major defensive up: <unseen-end aura> active ON THE TARGET Ns`
+ *    (Greater Invisibility, Vanish, Mass Invisibility, Burrow — the
+ *    auras whose end the log does not show). N may not exceed the time from
+ *    the aura's APPLIED (inside the burst, or the last before it) to the
+ *    target's first damage after it, clipped to the burst (± 1 s).
  *
  *   npx tsx packages/eval/scripts/fact2Scan.ts <captureDir> [--examples N] [--archive-dir <dir>]
  */
@@ -270,6 +284,9 @@ const CHECKS = [
   "nonControlCount",
   "kickedHeldNote",
   "kitRange",
+  "allyRefused",
+  "repressLength",
+  "invisAfterAction",
 ] as const;
 
 /** cast → the auras that are its own effect under another id (read straight
@@ -1322,6 +1339,96 @@ for (const f of files) {
           );
           if (started) miss("kickedHeldNote", `${where} ${name}: a cast bar was started`);
         }
+      }
+    }
+    for (const l of lines) {
+      const am = /^(\d+:\d\d) {2}\[(YOU|TEAM)\] \[CD\] {3}(?:(\d+)\([^)]*\) \([^)]*\): )?(.+?) → (\d+)\(/.exec(l);
+      if (!am) continue;
+      const caster = am[2] === "YOU" ? owner : byName.get(pidName.get(am[3] ?? "") ?? "");
+      const ally = byName.get(pidName.get(am[5]!) ?? "");
+      if (!caster || !ally || ally.reaction !== owner.reaction) continue;
+      const t = start + secOf(am[1]!) * 1000;
+      const succ = succOf(caster, am[4]!, t, t + 1000);
+      if (!succ) continue;
+      const refused = ((caster.missesOut ?? []) as any[]).some(
+        (m) =>
+          m.missType === "IMMUNE" &&
+          m.destUnitId === ally.id &&
+          m.spellId &&
+          isOf(m.spellId, am[4]!) &&
+          m.timestamp >= succ.logLine.timestamp - 100 &&
+          m.timestamp <= succ.logLine.timestamp + 1000,
+      );
+      if (!refused) continue;
+      bump("allyRefused");
+      if (!l.includes("[IMMUNE"))
+        miss("allyRefused", `${where} ${am[1]} ${caster.name} ${am[4]} → ${ally.name}: IMMUNE row, no tag`);
+    }
+    for (const l of lines) {
+      const dm = /^(\d+:\d\d) {2}\[ENEMY DEF\] {3}(\d+)\([^)]*\) \([^)]*\): ([^(→]+?) \([^)]*?(\d+\.\d)s/.exec(l);
+      if (!dm) continue;
+      const caster = byName.get(pidName.get(dm[2]!) ?? "");
+      if (!caster) continue;
+      const t = start + secOf(dm[1]!) * 1000;
+      const succ = succOf(caster, dm[3]!.trim(), t - 1500, t + 1000);
+      if (!succ) continue;
+      const pMs = succ.logLine.timestamp;
+      const endMs = pMs + Number(dm[4]) * 1000;
+      const refreshed = ((caster.auraEvents ?? []) as any[]).some(
+        (a) =>
+          a.srcUnitId === caster.id &&
+          a.destUnitId === caster.id &&
+          a.logLine.event === LogEvent.SPELL_AURA_REFRESH &&
+          a.spellId &&
+          isOf(a.spellId, dm[3]!.trim()) &&
+          a.timestamp > pMs + 1500 &&
+          a.timestamp < endMs - 100 &&
+          ((caster.spellCastEvents ?? []) as any[]).some(
+            (c) =>
+              c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+              c.spellId === succ.spellId &&
+              Math.abs(c.logLine.timestamp - a.timestamp) <= 1500,
+          ),
+      );
+      bump("repressLength");
+      if (refreshed)
+        miss("repressLength", `${where} ${dm[1]} ${caster.name} ${dm[3]!.trim()} ${dm[4]}s spans a re-press`);
+    }
+    {
+      let bFrom = 0;
+      let bTo = 0;
+      let tgt: any;
+      for (const l of lines) {
+        const bm = /^ {2}Burst #\d+ — (\d+:\d\d)–(\d+:\d\d)/.exec(l);
+        if (bm) {
+          bFrom = start + secOf(bm[1]!) * 1000;
+          bTo = start + (secOf(bm[2]!) + 1) * 1000;
+        }
+        const tm = /^ {4}Target: (\S+) /.exec(l);
+        if (tm) tgt = byName.get(tm[1]!);
+        const im = /Target had a major defensive up: (Greater Invisibility|Vanish|Mass Invisibility|Burrow) active ON THE TARGET (\d+\.\d)s of this burst \((already up|pressed (\d+\.\d)s after)/.exec(l);
+        if (!im || !tgt) continue;
+        const applies = ((tgt.auraEvents ?? []) as any[])
+          .filter(
+            (a) =>
+              a.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
+              getEnglishSpellName(a.spellId, "") === im[1],
+          )
+          .map((a) => a.timestamp as number);
+        const apply =
+          im[3] === "already up"
+            ? applies.filter((t) => t <= bFrom).at(-1)
+            : applies.find((t) => Math.abs(t - (bFrom + Number(im[4]) * 1000)) <= 1500);
+        if (apply === undefined) continue;
+        const firstHit = ((tgt.damageOut ?? []) as any[])
+          .map((d) => d.logLine.timestamp as number)
+          .filter((t) => t > apply)
+          .sort((a, b) => a - b)[0];
+        const end = Math.min(firstHit ?? Infinity, bTo);
+        const maxS = Math.max(0, (end - Math.max(apply, bFrom)) / 1000);
+        bump("invisAfterAction");
+        if (Number(im[2]) > maxS + 1)
+          miss("invisAfterAction", `${where} ${tgt.name} ${im[1]} ${im[2]}s, holder acted after ${maxS.toFixed(1)}s`);
       }
     }
     // loadout single-value cooldowns vs the [RES] rows' own range for them

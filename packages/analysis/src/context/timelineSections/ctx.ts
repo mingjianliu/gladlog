@@ -256,6 +256,7 @@ export interface TimelineCtx {
     spellId: string,
     castTimeSeconds: number,
     named?: ReadonlySet<string>,
+    onlyNamed?: boolean,
   ) => string;
   /** cc-dr F-TM1: MISS / REFLECT / … on that caster's CC cast */
   ccMissTagFor: (
@@ -286,6 +287,7 @@ export interface TimelineCtx {
     spellId: string,
     castTimeSeconds: number,
     named?: ReadonlySet<string>,
+    onlyNamed?: boolean,
   ) => string;
   ownerCcMissTag: (spellId: string, castTimeSeconds: number) => string;
   /** FT-T14: ` [hit no enemy player]` for an un-aimed area control

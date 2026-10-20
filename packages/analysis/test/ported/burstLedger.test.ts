@@ -163,6 +163,28 @@ describe("burstLedger — burst grouping and audit", () => {
     expect(entries[0].damageByTarget).toHaveLength(2);
   });
 
+  it("round-1 retest 62fdbf2e: an unseen-end invisibility is over once its holder deals damage", () => {
+    const player = makeUnit("p1", {
+      name: "Ret",
+      spec: CombatUnitSpec.Paladin_Retribution,
+      info,
+      spellCastEvents: [
+        makeSpellCastEvent("31884", MATCH_START + 10_000, "p1", "Self", "p1", "Ret", 0, "Avenging Wrath"),
+      ],
+      damageOut: [dmgOut(MATCH_START + 12_000, -50_000, "e1")],
+    } as any);
+    // Greater Invisibility 110960 at 5 s, no REMOVED (closed at 20 s by the
+    // builder); the mage hits someone at 9 s — before the 10 s burst
+    const e1 = makeUnit("e1", {
+      name: "Mage",
+      info,
+      auraEvents: [makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, "110960", MATCH_START + 5_000, "e1", "e1", "BUFF")],
+      damageOut: [dmgOut(MATCH_START + 9_000, -20_000, "p1")],
+    } as any);
+    const entries = analyzeBurstLedger(player, [], [e1], makeCombat());
+    expect(entries[0].dominantTarget?.defensivesHit ?? []).toEqual([]);
+  });
+
   it("flags immunity/defensive auras active on the dominant target (D1-B3)", () => {
     const player = makeUnit("p1", {
       name: "Ret",

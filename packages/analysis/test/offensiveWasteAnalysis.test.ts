@@ -157,6 +157,35 @@ describe("offensiveWasteAnalysis — buildOffensiveWasteSummary", () => {
     expect(ev.wasteCasts[0]!.spellId).toBe("12294");
   });
 
+  it("round-1 retest idx 107: a cast the target REFLECTED did not land inside the window", () => {
+    const friend = makeUnit("warrior-1", {
+      name: "Ares",
+      spec: CombatUnitSpec.Warrior_Arms,
+      class: CombatUnitClass.Warrior,
+      reaction: CombatUnitReaction.Friendly,
+      spellCastEvents: [
+        makeSpellCastEvent("12294", matchStart + 11_000, "enemy-1", "EnemyPaladin", "warrior-1", "Ares", 0, "Mortal Strike"),
+        makeSpellCastEvent("12294", matchStart + 13_000, "enemy-1", "EnemyPaladin", "warrior-1", "Ares", 0, "Mortal Strike"),
+      ],
+    });
+    friend.damageOut = [{ ...makeDamageEvent(matchStart + 5_000, 100_000, "enemy-1"), spellId: "12294" }] as never;
+    (friend as { missesOut?: unknown[] }).missesOut = [
+      { spellId: "12294", destUnitId: "enemy-1", missType: "REFLECT", timestamp: matchStart + 13_050 },
+    ];
+    const enemy = makeUnit("enemy-1", {
+      name: "EnemyPaladin",
+      spec: CombatUnitSpec.Paladin_Holy,
+      class: CombatUnitClass.Paladin,
+      reaction: CombatUnitReaction.Hostile,
+      auraEvents: [
+        makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, "642", matchStart + 10_000, "enemy-1", "enemy-1", "BUFF"),
+        makeAuraEvent(LogEvent.SPELL_AURA_REMOVED, "642", matchStart + 18_000, "enemy-1", "enemy-1", "BUFF"),
+      ],
+    });
+    // one of the two presses bounced: below the 2-cast threshold
+    expect(buildOffensiveWasteSummary(combat, [friend], [enemy]).events).toHaveLength(0);
+  });
+
   it("does NOT flag unconditional immunity if only 1 cast was pressed (threshold is 2)", () => {
     const friend = makeUnit("warrior-1", {
       name: "Ares",

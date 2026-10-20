@@ -21,6 +21,7 @@ import {
 } from "../../utils/dispelAnalysis";
 import { isRiderDispel } from "../../utils/dispelKind";
 import { fmtTime } from "../../utils/renderGrid";
+import { dispelActorLabel } from "../timelineHelpers";
 import type { TimelineCtx } from "./ctx";
 
 export function emitCleanseEntries(
@@ -117,8 +118,11 @@ export function emitCleanseEntries(
         p.timeSeconds >= miss.timeSeconds &&
         p.timeSeconds <= miss.timeSeconds + miss.durationSeconds,
     );
+    // round-1 retest (fact1215 idx 75): a summon's purge is named as the
+    // summon's, as [MINOR DISPELS] / [PURGE] name it (`dispelActorLabel`) —
+    // the Felhunter's Devour Magic read as the warlock's
     const tookOtherNote = tookOther
-      ? ` | ${pid(tookOther.sourceName)}'s ${tookOther.dispelSpellName} at ${fmtTime(tookOther.timeSeconds)} took ${tookOther.removedSpellName} instead`
+      ? ` | ${dispelActorLabel(tookOther, pid, ctx.allUnits ?? [])}'s ${tookOther.dispelSpellName} at ${fmtTime(tookOther.timeSeconds)} took ${tookOther.removedSpellName} instead`
       : "";
     addEntry(
       miss.timeSeconds,

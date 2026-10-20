@@ -78,3 +78,24 @@ describe("procTriggerAt / ledger anchoring (codex 20-F15-25)", () => {
     ).toBe("Wake of Ashes");
   });
 });
+
+describe("procTriggerAt — a trigger logged just before its proc (round-1 retest idx 79)", () => {
+  // 519781fd procs 9 and 11: Wake of Ashes 12–14 ms before the Avenging Wrath row
+  const paladin = {
+    spellCastEvents: [10_000, 40_000, 70_000].flatMap((t, i) => [
+      cast("255937", "Wake of Ashes", t - (i === 2 ? 13 : 0)),
+      cast("454351", "Avenging Wrath", t),
+    ]),
+  } as any;
+  it("counts toward the round's trigger and names it at that activation", () => {
+    const round = procTriggerOf(paladin, "454351", [T0 + 10_000, T0 + 40_000, T0 + 70_000]);
+    expect(round).toBe("Wake of Ashes");
+    expect(procTriggerAt(paladin, "454351", T0 + 70_000, round)).toBe("Wake of Ashes");
+  });
+  it("control: a press logged 2 ms AFTER the activation is not its trigger", () => {
+    const late = {
+      spellCastEvents: [cast("454351", "Avenging Wrath", 70_000), cast("255937", "Wake of Ashes", 70_002)],
+    } as any;
+    expect(procTriggerAt(late, "454351", T0 + 70_000, "Wake of Ashes")).toBeUndefined();
+  });
+});

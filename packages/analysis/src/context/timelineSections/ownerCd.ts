@@ -321,7 +321,15 @@ export function emitOwnerCdEntries(
           ? ownerCcImmuneTag(cd.spellId, cast.timeSeconds, named) +
             ownerCcMissTag(cd.spellId, cast.timeSeconds)
           : reachesAlly(cd.spellId)
-            ? ""
+            ? // fact2: refused on the ally the line names (an IMMUNE row)
+              cast.targetName && cast.targetName !== "nil"
+              ? ownerCcImmuneTag(
+                  cd.spellId,
+                  cast.timeSeconds,
+                  new Set([cast.targetName]),
+                  true,
+                )
+              : ""
             : ownerCcImmuneTag(cd.spellId, cast.timeSeconds, named);
       // cc-dr F-NE1 (wording ruling A55): an aimed CC cast that left no CC
       // aura on its target and no miss either is said to have no logged
