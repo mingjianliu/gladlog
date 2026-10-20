@@ -2,7 +2,6 @@ import { ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
 import {
   castEffectPairs,
-  castInAuraSet,
   castsOfEffectAura,
   effectAurasOfCast,
 } from "../data/castEffectAuras";
@@ -16,6 +15,7 @@ import {
   buildCannotCastIntervals,
   enemySourceIds,
 } from "./cannotCastIntervals";
+import { isControlCast } from "./castMissRows";
 import {
   chargesAvailableAt,
   hpTroughInEventSpan,
@@ -43,6 +43,7 @@ import {
   type IKillWindowGateFacts,
   killWindowAcquittal,
   killWindowFactsSuffix,
+  teamDamageTotalClause,
 } from "./killWindowFacts";
 import {
   getHpPercentAtTime,
@@ -65,7 +66,7 @@ import { type InterruptibleCast, interruptibleCastOf } from "./spellMechanics";
  * the per-segment CC counts.
  */
 function isOwnerCcCast(spellId: string): boolean {
-  return castInAuraSet(spellId, ccSpellIds);
+  return isControlCast(spellId);
 }
 
 type SpellEntry = { type: string };
@@ -629,6 +630,9 @@ export interface IWindowContribution {
   unpunished: boolean;
   /** Total team damage to the target over the full vulnerability span. */
   teamDamageInVulnSpan: number;
+  /** What the target's shields absorbed of the team's hits over the span
+   * (fact2 R7), printed beside the total. */
+  teamAbsorbedInVulnSpan: number;
   targetName: string;
   targetSpec: string;
   enemyHealerName: string | null;
@@ -848,6 +852,7 @@ export function computeWindowContributions(
       vulnToSeconds: w.toSeconds,
       unpunished,
       teamDamageInVulnSpan: w.friendlyDamageInWindow,
+      teamAbsorbedInVulnSpan: w.friendlyAbsorbedInWindow,
       targetName: w.targetName,
       targetSpec: w.targetSpec,
       enemyHealerName: enemyHealer?.name ?? null,
@@ -1086,7 +1091,7 @@ function healerWindowOwnerDamage(
 /** A healer-view `[VULNERABLE]` line's two damage figures, as the gate
  * (`checkVulnerableOwnerDamage`) reads them back: 1 = the team's on the
  * window's target, 2 = the owner's on it. */
-export const VULNERABLE_OWNER_DAMAGE_RE_SRC = String.raw`\[VULNERABLE\] .*\(team damage (\d+)k total\).*; your damage on it (\d+)k`;
+export const VULNERABLE_OWNER_DAMAGE_RE_SRC = String.raw`\[VULNERABLE\] .*\(team damage (\d+)k total(?:, \+\d+k absorbed)?\).*; your damage on it (\d+)k`;
 
 export function formatHealerOffenseForContext(
   summary: IHealerOffenseSummary,
@@ -1166,7 +1171,7 @@ export function formatHealerOffenseForContext(
   if (windowContributions.length > 0)
     lines.push(
       // (no bracket tags in this line: readers count the window lines by tag)
-      "  `your damage on it Nk` on a window line below = the health that window's target lost to your hits in the printed span — the measure of `team damage … total`; `(+Ak absorbed)` = what its shields absorbed of your hits on top. Your damage on other enemies is not in it.",
+      "  `your damage on it Nk` on a window line below = the health that window's target lost to your hits in the printed span — the measure of `team damage … total`; `(+Ak absorbed)` = what its shields absorbed of your hits on top (`, +Ak absorbed` after `team damage … total`: of the team's). Your damage on other enemies is not in it.",
     );
 
   // Cap the per-window lines; keep the highest-free-time windows (printed chronologically) and
@@ -1234,7 +1239,7 @@ export function formatHealerOffenseForContext(
         ? "never punished"
         : `not punished — not accountable (${killWindowAcquittal(w.gateFacts)})`;
       lines.push(
-        `  [VULNERABLE] ${fmtTime(w.fromSeconds)}–${fmtTime(w.toSeconds)} (${renderedWindowSeconds(w.fromSeconds, w.toSeconds)}s) on ${w.targetSpec} (${w.targetName}): no major defensives, ${verdict} (team damage ${(w.teamDamageInVulnSpan / 1000).toFixed(0)}k total); ${killWindowFactsSuffix(w.gateFacts)}; ${ready}; ${cast}; ${dmg}; ${free}${teamHp}.`,
+        `  [VULNERABLE] ${fmtTime(w.fromSeconds)}–${fmtTime(w.toSeconds)} (${renderedWindowSeconds(w.fromSeconds, w.toSeconds)}s) on ${w.targetSpec} (${w.targetName}): no major defensives, ${verdict} (${teamDamageTotalClause(w.teamDamageInVulnSpan, w.teamAbsorbedInVulnSpan)}); ${killWindowFactsSuffix(w.gateFacts)}; ${ready}; ${cast}; ${dmg}; ${free}${teamHp}.`,
       );
     } else {
       // Kill windows are team-damage bursts inside the vulnerability span; the

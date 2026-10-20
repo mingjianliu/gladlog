@@ -31,6 +31,9 @@ import {
 import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData";
 import { ccSpellIds } from "@gladlog/analysis/src/data/spellTags";
 import { buildAuraIntervals } from "@gladlog/analysis/src/utils/auraIntervals";
+import { isControlCast } from "@gladlog/analysis/src/utils/castMissRows";
+import { offensiveCdOfAura } from "@gladlog/analysis/src/utils/cooldowns";
+import { wallTableIdOfAura } from "@gladlog/analysis/src/utils/enemyDefensives";
 import {
   getUnitPositionAtTime,
   getUnitRawPositionAtTime,
@@ -180,7 +183,7 @@ function functionOf(spellId: string): string[] {
   if (p.healingReceivedPct !== undefined)
     f.push(`+${p.healingReceivedPct}% healing received`);
   if (p.healsSelf || p.healsOthers) f.push("heals");
-  if (ccSpellIds.has(spellId)) f.push("crowd control");
+  if (isControlCast(spellId)) f.push("crowd control");
   if (p.dealsDamage) f.push("damage");
   return f;
 }
@@ -294,7 +297,9 @@ export function buildCrisisAnswerEvidence(
       spellId: iv.spellId,
       srcName: src,
     };
-    const mit = resolveMitigation(iv.spellId, { carrierIsCaster: fromSelf });
+    const mit = resolveMitigation(wallTableIdOfAura(iv.spellId), {
+      carrierIsCaster: fromSelf,
+    });
     const prof = abilityProfile(iv.spellId);
     const srcIsEnemy = [...enemyIds].some((id) => nameById.get(id) === src);
     if (
@@ -391,7 +396,7 @@ export function buildCrisisAnswerEvidence(
     iv: ReturnType<typeof buildAuraIntervals>[number],
     recipient: string,
   ) => {
-    if (!isOffensiveSpell(iv.spellId)) return;
+    if (offensiveCdOfAura(iv.spellId) === undefined) return;
     if (!(iv.fromS <= tRel && iv.toS >= tRel)) return;
     const key = `${iv.spellId}|${iv.srcUnitName}|${recipient}`;
     if (seenOff.has(key)) return;

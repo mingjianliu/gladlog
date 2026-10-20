@@ -344,6 +344,34 @@ export function killWindowAcquittal(f: IKillWindowGateFacts): string {
   return reasons.join(" and ");
 }
 
+/** `team damage Lk total[, +Ak absorbed]` / `team burst Lk[ (+Ak absorbed)]`
+ * — a kill-window line's team figure on its target: the health it lost, and
+ * what its shields ate of the same hits beside it, printed when it has a
+ * figure at the line's precision (not `0k`), as the healer view's owner
+ * clause does. fact2 R7 (2026-10-20, user ruling 3): `never punished (team
+ * damage 0k total)` on a rogue whose shields had taken 381k of the team's
+ * hits. One writer for both views. */
+export function teamDamageTotalClause(landed: number, absorbed: number): string {
+  const k = (n: number) => (n / 1000).toFixed(0);
+  const a = k(absorbed);
+  return `team damage ${k(landed)}k total${a === "0" ? "" : `, +${a}k absorbed`}`;
+}
+export function teamBurstClause(landed: number, absorbed: number): string {
+  const k = (n: number) => (n / 1000).toFixed(0);
+  const a = k(absorbed);
+  return `team burst ${k(landed)}k${a === "0" ? "" : ` (+${a}k absorbed)`}`;
+}
+
+/** The legend of `teamDamageTotalClause` / `teamBurstClause`'s absorbed
+ * part — written only when a line carries one. */
+export const TEAM_DAMAGE_ABSORBED_LEGEND =
+  "  `team burst Nk` / `team damage Nk total` = the health the target lost to your team's hits; `+Ak absorbed` beside it = what the target's shields ate of the same hits. A burst is found on both together.";
+/** Does a kill-window line print an absorbed part (the legend's door). */
+export const hasTeamAbsorbedClause = (line: string): boolean =>
+  /team burst \d+k \(\+\d+k absorbed\)|team damage \d+k total, \+\d+k absorbed/.test(
+    line,
+  );
+
 /** The lean DPS-view lines (<kill_windows> block, GH #31 ③): burst-anchored
  * [KILL WINDOW] facts plus gated [VULNERABLE] accusations, same spans and
  * same facts as the healer view, without the healer-only owner fields. */
@@ -355,7 +383,13 @@ export function buildDpsKillWindowLines(
     fromSeconds: number;
     toSeconds: number;
     friendlyDamageInWindow: number;
-    bursts: Array<{ fromSeconds: number; toSeconds: number; damage: number }>;
+    friendlyAbsorbedInWindow: number;
+    bursts: Array<{
+      fromSeconds: number;
+      toSeconds: number;
+      damage: number;
+      absorbed: number;
+    }>;
   }>,
   enemies: ICombatUnit[],
   computer: IKillWindowFactsComputer,
@@ -368,7 +402,7 @@ export function buildDpsKillWindowLines(
       for (const b of w.bursts) {
         const f = computer.facts(target, b.fromSeconds, b.toSeconds);
         lines.push(
-          `  [KILL WINDOW] ${fmtTime(b.fromSeconds)}–${fmtTime(b.toSeconds)} on ${w.targetSpec} (${w.targetName}): team burst ${(b.damage / 1000).toFixed(0)}k (defenseless ${fmtTime(w.fromSeconds)}–${fmtTime(w.toSeconds)}); ${killWindowFactsSuffix(f)}.`,
+          `  [KILL WINDOW] ${fmtTime(b.fromSeconds)}–${fmtTime(b.toSeconds)} on ${w.targetSpec} (${w.targetName}): ${teamBurstClause(b.damage, b.absorbed)} (defenseless ${fmtTime(w.fromSeconds)}–${fmtTime(w.toSeconds)}); ${killWindowFactsSuffix(f)}.`,
         );
       }
     } else {
@@ -377,7 +411,7 @@ export function buildDpsKillWindowLines(
         ? "never punished"
         : `not punished — not accountable (${killWindowAcquittal(f)})`;
       lines.push(
-        `  [VULNERABLE] ${fmtTime(w.fromSeconds)}–${fmtTime(w.toSeconds)} on ${w.targetSpec} (${w.targetName}): no major defensives, ${verdict} (team damage ${(w.friendlyDamageInWindow / 1000).toFixed(0)}k total); ${killWindowFactsSuffix(f)}.`,
+        `  [VULNERABLE] ${fmtTime(w.fromSeconds)}–${fmtTime(w.toSeconds)} on ${w.targetSpec} (${w.targetName}): no major defensives, ${verdict} (${teamDamageTotalClause(w.friendlyDamageInWindow, w.friendlyAbsorbedInWindow)}); ${killWindowFactsSuffix(f)}.`,
       );
     }
   }

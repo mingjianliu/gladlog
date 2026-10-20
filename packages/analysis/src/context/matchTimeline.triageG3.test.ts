@@ -430,11 +430,28 @@ describe("FT-T14 — an un-aimed area control that hit no enemy player says so",
     expect(lineWith(t, "Psychic Scream")).toContain(OWNER_AOE_CC_NO_PLAYER_TAG);
   });
 
-  it("延迟生效的 Sigil of Misery(施放 207684 → 光环 207685,约 2 秒后)不在窗口里判「没打到」:不标", () => {
+  it("延迟生效的 Sigil of Misery(施放 207684 → 光环 207685,约 2 秒后)在它自己的落地窗口里读:2 秒后中了不标", () => {
+    const sigil = ledger("207684", "Sigil of Misery", "CC", 30);
+    const hit = hostile(ENEMY, {
+      auraEvents: [
+        ev(LogEvent.SPELL_AURA_APPLIED, "207685", 69_537 + 2_050, ME, ENEMY, {
+          auraType: "DEBUFF",
+        }),
+      ] as never,
+    });
+    expect(lineWith(render({}, [hit], sigil), "Sigil of Misery")).not.toContain(
+      "[hit no enemy",
+    );
+    // fact2 C10: the cast id now asks (`isControlCast`) — nobody in its
+    // window is the logged absence
+    expect(
+      lineWith(render({}, [hostile(ENEMY)], sigil), "Sigil of Misery"),
+    ).toContain(OWNER_AOE_CC_NO_PLAYER_TAG);
+    // …except for a Lay In Wait sigil, which may wait 90 s
     const t = render(
-      {},
+      { info: { pvpTalents: ["1235091"] } as never },
       [hostile(ENEMY)],
-      ledger("207684", "Sigil of Misery", "CC", 30),
+      sigil,
     );
     expect(lineWith(t, "Sigil of Misery")).not.toContain("[hit no enemy");
   });

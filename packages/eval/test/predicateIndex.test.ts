@@ -2683,6 +2683,56 @@ const INDEX: PredicateRow[] = [
     mod: castEffectAuras,
   },
   {
+    file: `${A}/data/castEffectAuras.ts`,
+    symbol: "castKeyOfAura",
+    mod: castEffectAuras,
+  },
+  {
+    file: `${A}/data/castEffectAuras.ts`,
+    symbol: "castsOwningEffectAura",
+    mod: castEffectAuras,
+  },
+  {
+    file: `${A}/data/castEffectAuras.ts`,
+    symbol: "ownEffectAurasOfCast",
+    mod: castEffectAuras,
+  },
+  {
+    file: `${A}/data/castEffectAuras.ts`,
+    symbol: "ownEffectAurasKeyedBy",
+    mod: castEffectAuras,
+  },
+  {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "offensiveCdOfAura",
+    mod: cooldowns,
+  },
+  {
+    file: `${A}/utils/castMissRows.ts`,
+    symbol: "isControlCast",
+    mod: castMissRows,
+  },
+  {
+    file: `${A}/utils/castMissRows.ts`,
+    symbol: "castControlsIn",
+    mod: castMissRows,
+  },
+  {
+    file: `${A}/utils/killWindowFacts.ts`,
+    symbol: "teamDamageTotalClause",
+    mod: killWindowFactsMod,
+  },
+  {
+    file: `${A}/utils/killWindowFacts.ts`,
+    symbol: "teamBurstClause",
+    mod: killWindowFactsMod,
+  },
+  {
+    file: `${A}/utils/offensiveWindows.ts`,
+    symbol: "computeBurstSubWindows",
+    mod: offensiveWindows,
+  },
+  {
     file: `${A}/utils/cooldowns.ts`,
     symbol: "spendsSharedChargeOf",
     mod: cooldowns,

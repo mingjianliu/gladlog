@@ -68,6 +68,7 @@ import { isDamageImmuneControl } from "../analysis/candidates/massDispel";
 import { schoolShareCoveredBy } from "../analysis/crisisDecisionPoints";
 import { fmtFactTime } from "../analysis/factFormat";
 import { CandidateEvent } from "../analysis/types";
+import { castKeyOfAura } from "../data/castEffectAuras";
 import {
   resolveMitigation,
   strongestComponentPct,
@@ -1742,9 +1743,12 @@ function attributeFailure(
     const castMs = matchStartMs + c.atSeconds * 1000;
     if (!inSave(castMs)) {
       if (castMs >= fromMs) continue; // after the span: not its cause
+      // the save's aura by the one cast→effect resolution (fact2 C10: Alter
+      // Time is pressed as 342245 and runs as 342246 — `healed through` on a
+      // mage whose rewind landed inside the attempt, 83219f2b)
       const stillUp = targetIntervals.some(
         (iv) =>
-          iv.spellId === c.spellId &&
+          castKeyOfAura(iv.spellId, (id) => id === c.spellId) !== undefined &&
           isIntervalFrom(iv, target) &&
           Math.abs(iv.fromS - c.atSeconds) <= SAVE_CAST_AURA_PAIR_S &&
           // an aura that only starts after the span is no save of it (codex

@@ -982,6 +982,7 @@ describe("burstLedger — window targeting audit", () => {
     toSeconds: 30,
     durationSeconds: 10,
     friendlyDamageInWindow: 0,
+    friendlyAbsorbedInWindow: 0,
     friendlyOffensives: [],
     bursts: [],
   };
@@ -1041,6 +1042,7 @@ describe("auditWindowTargeting — 目标死亡截断(2026-07-16 baseline 修复
       toSeconds: 60,
       durationSeconds: 40,
       friendlyDamageInWindow: 0,
+      friendlyAbsorbedInWindow: 0,
       friendlyOffensives: [],
       bursts: [],
     };
@@ -1079,6 +1081,7 @@ describe("auditWindowTargeting — 目标死亡截断(2026-07-16 baseline 修复
       toSeconds: 60,
       durationSeconds: 40,
       friendlyDamageInWindow: 0,
+      friendlyAbsorbedInWindow: 0,
       friendlyOffensives: [],
       bursts: [],
     };
@@ -1117,6 +1120,7 @@ describe("auditWindowTargeting — 目标死亡截断(2026-07-16 baseline 修复
       toSeconds: 60,
       durationSeconds: 40,
       friendlyDamageInWindow: 0,
+      friendlyAbsorbedInWindow: 0,
       friendlyOffensives: [],
       bursts: [],
     };

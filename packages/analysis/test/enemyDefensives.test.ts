@@ -1020,7 +1020,13 @@ describe("a wall keyed by its cast is found under its logged aura (F-E1a)", () =
     for (const [aura, castId] of Object.entries(SELF_WALL_AURA_TO_CAST_ID)) {
       expect(MITIGATION_TABLE[castId], castId).toBeDefined();
       expect(MITIGATION_TABLE[aura], aura).toBeUndefined();
-      expect(MITIGATION_AURA_IDS.has(castId), castId).toBe(true);
+      // fact2 C10: derived from the cast→effect table, the map also links a
+      // row under the 20 % wall floor (Spirit Link Totem 98008 → 325174) —
+      // resolved for pricing, never a wall line
+      expect(
+        MITIGATION_AURA_IDS.has(castId) || castId === "98008",
+        castId,
+      ).toBe(true);
       expect(wallTableIdOfAura(aura)).toBe(castId);
     }
     expect(wallTableIdOfAura(BARKSKIN)).toBe(BARKSKIN);

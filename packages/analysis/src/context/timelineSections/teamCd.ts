@@ -14,8 +14,8 @@
  * the caller passes its current value and assigns back the returned one. Output
  * is pinned by the 605-file acceptanceCapture context hash.
  */
-import { ccSpellIds } from "../../data/spellTags";
 import { reachesAlly } from "../../data/spellTargeting";
+import { isControlCast } from "../../utils/castMissRows";
 import {
   cdIsProcOnly,
   gridHpPct,
@@ -66,7 +66,7 @@ export function emitTeamCdEntries(
 
   for (const { player, spec, cds } of teammateCDs) {
     for (const cd of cds) {
-      const isCC = ccSpellIds.has(cd.spellId);
+      const isCC = isControlCast(cd.spellId);
       // Same as the owner loop: a proc-only entry's activations are not presses.
       const isProc = cdIsProcOnly(cd);
       if (isProc) procLinesEmitted = true;

@@ -27,6 +27,7 @@ import {
   isSilenceOnlyAura,
   namedCannotCastIntervals,
 } from "../utils/cannotCastIntervals";
+import { castControlsIn } from "../utils/castMissRows";
 import {
   cdIsProcOnly,
   cdReadyInTimeAt,
@@ -316,11 +317,15 @@ const CONTROL_AURA_IDS = new Set<string>([
 // the one cast→effect table (castEffectAuras.ts). Talent impact audit
 // 2026-09-26: a Holy Paladin who pressed Blinding Light was told "no CC on an
 // enemy".
+// fact2 C10 (2026-10-20): through the one cast→control reading
+// (`castControlsIn`): the effect must be the cast's own same-named control and
+// its usual result — not Summon Infernal's triggered Infernal Awakening, not
+// Wake of Ashes' demon-and-undead stun.
 const CONTROL_IDS = new Set<string>([
   ...CONTROL_AURA_IDS,
   ...castEffectPairs()
-    .filter(([, aura]) => CONTROL_AURA_IDS.has(aura))
-    .map(([cast]) => cast),
+    .map(([cast]) => cast)
+    .filter((cast) => castControlsIn(cast, CONTROL_AURA_IDS)),
 ]);
 // C1 (2026-08-29): the hand-typed `interrupts` set alone covered 3/61 of the
 // official DR `silence` category (measured) — Strangulate 47476,

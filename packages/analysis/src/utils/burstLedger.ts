@@ -4,7 +4,7 @@ import {
   LogEvent,
 } from "@gladlog/parser-compat";
 
-import { SELF_WALL_AURA_TO_CAST_ID } from "../data/mitigationData";
+import { ownEffectAurasKeyedBy } from "../data/castEffectAuras";
 import { SPELL_CATEGORIES as spellsData } from "../data/spellCategories";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import {
@@ -44,16 +44,19 @@ const DEF_OR_IMMUNE_CAST_IDS = new Set<string>([
   ...Object.keys(spellEffectData).filter(isKillWindowMajorDefensive),
   ...Object.keys(SPELLS).filter((id) => SPELLS[id]?.type === "immunities"),
 ]);
-/** …and the AURA a wall logs under when it is not its cast id
- * (`SELF_WALL_AURA_TO_CAST_ID`: Greater Invisibility 110959 → aura 110960,
- * Blur, Fortifying Brew) — the ledger matches aura intervals (F15 /
- * fact1215 C10: 62fdbf2e Burst #2 missed Vizine's Greater Invisibility that
- * KILL ATTEMPTS named). */
+/** …and the AURA a wall logs under when it is not its cast id — the ledger
+ * matches aura intervals (F15 / fact1215 C10: 62fdbf2e Burst #2 missed
+ * Vizine's Greater Invisibility 110959 → 110960 that KILL ATTEMPTS named).
+ * fact2 C10 (2026-10-20): every cast's own same-named effect aura from the
+ * one cast→effect table (`ownEffectAurasKeyedBy`), not the three of the
+ * mitigation table's hand map — Rallying Cry 97462 → 97463 and Spirit Link
+ * Totem 98008 → 325174 are kill-window major defensives the ledger never
+ * named. */
 const DEF_OR_IMMUNE_IDS = new Set<string>([
   ...DEF_OR_IMMUNE_CAST_IDS,
-  ...Object.entries(SELF_WALL_AURA_TO_CAST_ID)
-    .filter(([, castId]) => DEF_OR_IMMUNE_CAST_IDS.has(castId))
-    .map(([auraId]) => auraId),
+  ...Object.keys(
+    ownEffectAurasKeyedBy((id) => DEF_OR_IMMUNE_CAST_IDS.has(id)),
+  ),
 ]);
 
 /** A target death up to this long after the burst ends still credits the burst. */
@@ -78,7 +81,7 @@ export interface IBurstDefensiveHit {
   /** true = full immunity (Divine Shield / Turtle class); false = major damage reduction. */
   isImmunity: boolean;
   /** Matched through the wall's logged aura id, not its cast id
-   * (`SELF_WALL_AURA_TO_CAST_ID`, F15 C10). The ledger line states it; the
+   * (`ownEffectAurasKeyedBy`, F15 C10 / fact2 C10). The ledger line states it; the
    * readers whose predicate and reference data were built on the cast-id set
    * (deepDive's coaching pack, dpsMetrics' `burstIntoDefensiveRatio`) leave
    * it out (codex 20-F15-13). */

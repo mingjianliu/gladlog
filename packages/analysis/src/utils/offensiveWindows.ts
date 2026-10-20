@@ -86,9 +86,21 @@ export const KW_BURST_SOFT_MAX_S = 20;
 export interface IBurstSubWindow {
   fromSeconds: number;
   toSeconds: number;
-  /** Total friendly damage to the target inside this burst. */
+  /** Total friendly damage to the target inside this burst — the health it
+   * lost. */
   damage: number;
+  /** What the target's shields absorbed of the team's hits inside this burst
+   * (fact2 R7). A burst is found, floored and ranked on `damage + absorbed`
+   * — the measure KILL ATTEMPTS' floor reads. */
+  absorbed: number;
 }
+
+// TEMPORARY (F16 batch-1 605 preview, removed before commit): landed-only
+// bursts for the A/B preview when GLADLOG_F16_PREVIEW_LANDED_ONLY is set.
+const COUNT_ABSORBED_IN_BURSTS = !(
+  typeof process !== "undefined" &&
+  process.env?.["GLADLOG_F16_PREVIEW_LANDED_ONLY"]
+);
 
 /**
  * Clusters friendly damage events on the window's target into bursts
@@ -97,15 +109,18 @@ export interface IBurstSubWindow {
  * KW_MAX_BURSTS by damage, returned chronologically).
  */
 export function computeBurstSubWindows(
-  damageEvents: Array<{ t: number; amount: number }>,
+  damageEvents: Array<{ t: number; amount: number; absorbed?: true }>,
   spanFrom: number,
   spanTo: number,
 ): IBurstSubWindow[] {
-  if (damageEvents.length === 0) return [];
-  const sorted = [...damageEvents].sort((a, b) => a.t - b.t);
+  const counted = COUNT_ABSORBED_IN_BURSTS
+    ? damageEvents
+    : damageEvents.filter((e) => !e.absorbed);
+  if (counted.length === 0) return [];
+  const sorted = [...counted].sort((a, b) => a.t - b.t);
 
   // Gap-based clustering, keeping the event lists for recursive splitting.
-  type Ev = { t: number; amount: number };
+  type Ev = { t: number; amount: number; absorbed?: true };
   const rawClusters: Ev[][] = [];
   let cur: Ev[] = [sorted[0]];
   for (let i = 1; i < sorted.length; i++) {
@@ -144,19 +159,28 @@ export function computeBurstSubWindows(
     .map((evs) => ({
       fromSeconds: evs[0].t,
       toSeconds: evs[evs.length - 1].t,
-      damage: evs.reduce((s, e) => s + e.amount, 0),
+      damage: evs.reduce((s, e) => s + (e.absorbed ? 0 : e.amount), 0),
+      absorbed: evs.reduce((s, e) => s + (e.absorbed ? e.amount : 0), 0),
     }));
+  const hit = (c: IBurstSubWindow) => c.damage + c.absorbed;
 
   return (
     clusters
-      .filter((c) => c.damage >= KW_BURST_MIN_DAMAGE)
-      .sort((a, b) => b.damage - a.damage)
+      .filter((c) => hit(c) >= KW_BURST_MIN_DAMAGE)
+      .sort((a, b) => hit(b) - hit(a))
       .slice(0, KW_MAX_BURSTS)
       .sort((a, b) => a.fromSeconds - b.fromSeconds)
       // Widen to at least ~2s (single-hit clusters would render zero-width),
       // clamped to the vulnerability span.
       .map((c) => ({
         ...c,
+        // the absorbed part over the cluster's own hits — the same stretch
+        // `damage` sums — whether or not it counted toward finding it
+        absorbed: damageEvents
+          .filter(
+            (e) => e.absorbed && e.t >= c.fromSeconds && e.t <= c.toSeconds,
+          )
+          .reduce((s, e) => s + e.amount, 0),
         fromSeconds: Math.max(spanFrom, c.fromSeconds - 0.5),
         toSeconds: Math.min(
           spanTo,
@@ -199,8 +223,12 @@ export interface IOffensiveWindow {
   fromSeconds: number;
   toSeconds: number;
   durationSeconds: number;
-  /** Total friendly damage dealt to this enemy during the window */
+  /** Total friendly damage dealt to this enemy during the window — the health
+   * it lost (absorbed hits not counted) */
   friendlyDamageInWindow: number;
+  /** What the enemy's shields absorbed of the same team's hits in the window
+   * (fact2 R7) — printed beside the total, never folded into it */
+  friendlyAbsorbedInWindow: number;
   /** friendlyDamageInWindow / expected damage for same duration at match average rate */
   // damageRatio / capitalized removed 2026-08-19 — see the note where
   // CAPITALIZE_RATIO used to live.
@@ -428,7 +456,10 @@ export function computeOffensiveWindows(
   // its aura (`areaSaveSpanOnS`) — a Vanish, a 494k Anti-Magic Shell, a
   // Rallying Cry sat inside spans that said nothing was up.
   const savesUpOn = new Map<string, Array<{ from: number; to: number }>>();
-  const addSave = (holderId: string | undefined, span?: { from: number; to: number }) => {
+  const addSave = (
+    holderId: string | undefined,
+    span?: { from: number; to: number },
+  ) => {
     if (!holderId || !span) return;
     const list = savesUpOn.get(holderId) ?? [];
     list.push(span);
@@ -453,7 +484,8 @@ export function computeOffensiveWindows(
           SAVE_CAST_AURA_PAIR_S;
         const fromCaster = (src: string | undefined) =>
           src === caster.id ||
-          (!!src && allUnits.some((u) => u.id === src && u.ownerId === caster.id));
+          (!!src &&
+            allUnits.some((u) => u.id === src && u.ownerId === caster.id));
         for (const holder of enemies)
           for (const span of areaSaveSpansOnS(
             d,
@@ -686,15 +718,44 @@ export function computeOffensiveWindows(
     for (const vw of cutWindows) {
       const windowDuration = vw.to - vw.from;
 
-      // Friendly damage dealt to this specific enemy during the window
-      const windowDmgEvents: Array<{ t: number; amount: number }> = [];
+      // Friendly damage dealt to this specific enemy during the window: the
+      // health it lost, and — beside it — what its shields ate of the same
+      // team's hits (`absorbsIn`, the victim-keyed SPELL_ABSORBED stream).
+      // fact2 R7 (2026-10-20, user ruling 3): `[VULNERABLE] … never punished
+      // (team damage 0k total)` on a rogue whose shields took 381k of the
+      // team's hits in the span (8a820ea3). The bursts are found on both, the
+      // measure KILL ATTEMPTS' `KW_BURST_MIN_DAMAGE` floor already reads
+      // (`damageOut` carries the SPELL_ABSORBED rows); the printed total keeps
+      // the health lost and states the absorbed part apart.
+      const windowDmgEvents: Array<{
+        t: number;
+        amount: number;
+        absorbed?: true;
+      }> = [];
       for (const d of enemy.damageIn) {
         if (!friendlySources.has(d.srcUnitId)) continue;
         const t = (d.logLine.timestamp - matchStartMs) / 1000;
         if (t < vw.from || t > vw.to) continue;
         windowDmgEvents.push({ t, amount: Math.abs(d.effectiveAmount) });
       }
-      const windowDmg = windowDmgEvents.reduce((sum, e) => sum + e.amount, 0);
+      for (const a of enemy.absorbsIn ?? []) {
+        if (!a.attackerId || !friendlySources.has(a.attackerId)) continue;
+        const t = (a.logLine.timestamp - matchStartMs) / 1000;
+        if (t < vw.from || t > vw.to) continue;
+        windowDmgEvents.push({
+          t,
+          amount: Math.abs(a.absorbedAmount),
+          absorbed: true,
+        });
+      }
+      const windowDmg = windowDmgEvents.reduce(
+        (sum, e) => sum + (e.absorbed ? 0 : e.amount),
+        0,
+      );
+      const windowAbsorbed = windowDmgEvents.reduce(
+        (sum, e) => sum + (e.absorbed ? e.amount : 0),
+        0,
+      );
 
       // ── 4. Friendly offensive CD state w/ CC context ─────────────────────────
 
@@ -737,6 +798,7 @@ export function computeOffensiveWindows(
         toSeconds: vw.to,
         durationSeconds: windowDuration,
         friendlyDamageInWindow: windowDmg,
+        friendlyAbsorbedInWindow: windowAbsorbed,
         friendlyOffensives,
         bursts: computeBurstSubWindows(windowDmgEvents, vw.from, vw.to),
       });

@@ -29,7 +29,7 @@ import {
   HIGH_VALUE_PURGEABLE_BUFFS,
   PURGE_WHITELIST_DATA_BLOCKED,
 } from "../data/purgeWhitelist";
-import { ccSpellIds } from "../data/spellTags";
+import { isControlCast } from "../utils/castMissRows";
 import type { ICcBreakEvent } from "../utils/ccBreakAnalysis";
 import {
   findBrokenCC,
@@ -815,7 +815,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
   // a tail of 11 DPS-baseline matches with <80% CC coverage. Teammate/pet
   // sources are filled in as usual.
   const ownerRenderedCcIds = new Set(
-    ownerCDs.filter((cd) => ccSpellIds.has(cd.spellId)).map((cd) => cd.spellId),
+    ownerCDs.filter((cd) => isControlCast(cd.spellId)).map((cd) => cd.spellId),
   );
   let enemyTrinketCount = 0;
   ({ enemyTrinketCount, silenceLineCount } = emitCcOnEnemyEntries({

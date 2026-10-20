@@ -1,3 +1,4 @@
+import { ownEffectAurasKeyedBy } from "./castEffectAuras";
 import generated from "./mitigationGenerated.json";
 
 export interface IMitigationEntry {
@@ -68,32 +69,6 @@ export const MITIGATION_OVERRIDES: Record<string, IMitigationEntry> = {
   "31821": { pct: 24, schoolMask: 0x7f }, // Aura Mastery: **2026-09-04 用户改裁「是我错了,是 24」** —— 官方 PvP 链路:虔诚光环 465 aura87 −3 + 光环大师 31821 aura107 −9 × PvpMultiplier 2.34 = −21.06 → 3 + 21 = 24%(talentMitigationGenerated 同日 9 → 21)。原 2026-08-22 裁定「光掌是大技能,20% 全团」时官方链路只能推到 12%(虔诚光环 465 的 aura87 = -3/127,光环大师 31821 自己没有减伤行,只有 aura107 pts=-9 misc=3 的平坦修正,3+9=12);**没能验证的一环**是 SpellModOp 码 3 是否指「光环的效果数值」,DB2 里也没有任何一个 -12 的可观测 id 可以对账 —— 这正是 Darkness(196718)那条「用户推翻推导值」的同类先例。语料实证(250 场):光环大师施放 192 次,虔诚光环 465 的光环事件 2,729 次 vs 专注光环 317920 的 170 次,即这套语料里跑的基本都是减伤那一路;另一路(专注光环 → 大师给的是 317929,aura77 misc=9/26 免沉默+免打断,根本不是减伤)只占约 10%,不进这张表
   // —— Conditional mitigation (only in specific positions/conditions; consumers must evaluate the condition themselves) ——
   "196718": { pct: 40, schoolMask: 0x7f, positional: true }, // Darkness: 2026-07-30 user reversal — count it as 40% (a major cooldown cannot count as 0), but position MUST be evaluated: not standing in the Darkness means it doesn't count. The dividing line is whether the condition is decidable from the log: Darkness's condition (position) is, hence a value + positional; Zephyr's (374227) condition (whether the damage is AoE) is not, so it stays omitted
-};
-
-/**
- * A personal wall whose table row is keyed by the CAST id while the log
- * carries a different AURA id on the caster (logged aura → table key). The
- * enemy-save predicate (`utils/enemyDefensives.ts`) matches aura intervals,
- * so without this link an enemy Blur or Greater Invisibility never rendered
- * and never counted in KILL ATTEMPTS (triage 2026-09-29, enemy-def F-E1a).
- * Both aura ids are observed (605-file capture: 212800 428 applications for
- * 448 casts of 198589; 110960 714 for 713 of 110959). Greater Invisibility's
- * 60 % is the user's kept verdict, see the FLAG on its row above.
- * FT-T05 (2026-10-09): Fortifying Brew was the third and was missing — its
- * row is keyed by the cast 115203, the buff on the monk is 120954
- * (`castEffectAuraGenerated.json`: 562 of 563 casts; the 60 re-eval logs: 29
- * casts, 28 applications of 120954, none of 115203), so an enemy monk's brew
- * never rendered: 605-file capture, 217 friendly cast lines against 0
- * `[ENEMY DEF]` lines. `test/enemyDefensives.test.ts` now checks the whole
- * table against the generated cast→aura table, so a fourth cannot hide.
- * Read by the enemy predicate only: the friendly pricing readers
- * (burst-into-mitigation's door, the death-window audit) still do not see
- * these auras — widening them changes accusations and is its own decision.
- */
-export const SELF_WALL_AURA_TO_CAST_ID: Readonly<Record<string, string>> = {
-  "212800": "198589", // Blur
-  "110960": "110959", // Greater Invisibility
-  "120954": "115203", // Fortifying Brew
 };
 
 /**
@@ -173,3 +148,32 @@ export function mitigationPctFor(
   if (appliedToCaster || entry.pctOnOthers === undefined) return entry.pct;
   return entry.pctOnOthers;
 }
+
+/**
+ * A personal wall whose table row is keyed by the CAST id while the log
+ * carries a different AURA id on the caster (logged aura → table key). The
+ * enemy-save predicate (`utils/enemyDefensives.ts`) matches aura intervals,
+ * so without this link an enemy Blur or Greater Invisibility never rendered
+ * and never counted in KILL ATTEMPTS (triage 2026-09-29, enemy-def F-E1a).
+ * Both aura ids are observed (605-file capture: 212800 428 applications for
+ * 448 casts of 198589; 110960 714 for 713 of 110959). Greater Invisibility's
+ * 60 % is the user's kept verdict, see the FLAG on its row above.
+ * FT-T05 (2026-10-09): Fortifying Brew was the third and was missing — its
+ * row is keyed by the cast 115203, the buff on the monk is 120954
+ * (`castEffectAuraGenerated.json`: 562 of 563 casts; the 60 re-eval logs: 29
+ * casts, 28 applications of 120954, none of 115203), so an enemy monk's brew
+ * never rendered: 605-file capture, 217 friendly cast lines against 0
+ * `[ENEMY DEF]` lines. `test/enemyDefensives.test.ts` now checks the whole
+ * table against the generated cast→aura table, so a fourth cannot hide.
+ * fact2 C10 (2026-10-20): no longer a hand list. It is DERIVED from the one
+ * cast→effect table — every aura that is a row's own same-named effect
+ * (`ownEffectAurasKeyedBy`, the rule the FT-T05 forward test already used),
+ * so a fourth cannot be missed: Blur, Greater Invisibility, Fortifying Brew
+ * and Spirit Link Totem's 325174 (an area save: no `[ENEMY DEF]` wall line —
+ * its row is under the 20 % wall floor — but priced by the readers that
+ * resolve an aura through `castKeyOfAura`). The friendly pricing readers
+ * (the death-window audit, the stacked-defensives record, the burst ledger)
+ * resolve the same way since fact2 C10.
+ */
+export const SELF_WALL_AURA_TO_CAST_ID: Readonly<Record<string, string>> =
+  ownEffectAurasKeyedBy((id) => id in MITIGATION_TABLE);

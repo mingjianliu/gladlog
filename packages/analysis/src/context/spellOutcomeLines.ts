@@ -12,10 +12,10 @@ import { ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 import { BREAK_RACIAL_SPELL_IDS } from "../data/racialAbilities";
 import { ROOT_SPELL_IDS } from "../data/rootSpells";
 import { getEnglishSpellName } from "../data/spellEffectData";
-import { ccSpellIds } from "../data/spellTags";
 import { getSortedAdvancedActions } from "../utils/advancedActions";
 import { binarySearchClosest } from "../utils/binarySearch";
 import { CAST_INTERRUPTED_REASONS } from "../utils/castCancels";
+import { castControlsIn, isControlCast } from "../utils/castMissRows";
 import {
   ccRemainingSeconds,
   oppressingRoarOnAt,
@@ -30,7 +30,9 @@ import {
 
 /** A control: the official hard-CC set or a root ("控制要写"). */
 export function isControlSpell(spellId: string): boolean {
-  return ccSpellIds.has(spellId) || ROOT_SPELL_IDS.has(spellId);
+  // a press's control under its effect aura's id counts (fact2 C10:
+  // `isControlCast`, the one cast→control reading)
+  return isControlCast(spellId) || castControlsIn(spellId, ROOT_SPELL_IDS);
 }
 
 // ── Grounding ────────────────────────────────────────────────────────────────

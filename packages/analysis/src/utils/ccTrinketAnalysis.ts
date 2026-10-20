@@ -8,7 +8,12 @@ import {
 } from "@gladlog/parser-compat";
 
 import { BACKLASH_AURA_CC_TYPE } from "../data/backlashCc";
-import { castAndEffectIds, castsOfEffectAura } from "../data/castEffectAuras";
+import {
+  castAndEffectIds,
+  castsOfEffectAura,
+  effectAurasOfCast,
+  effectAuraViaName,
+} from "../data/castEffectAuras";
 import {
   AURA_KEYED_BREAK_RACIALS,
   breakRemovesCc,
@@ -57,9 +62,9 @@ import {
   hardCcAuraAt,
   silenceIntervals,
 } from "./cannotCastIntervals";
-import {
-  CAST_MISS_WINDOW_MS,
+import {   CAST_MISS_WINDOW_MS,
   CONTROL_FAILED_MISS_TYPES,
+isControlCast,
   missBelongsToCast,
 } from "./castMissRows";
 import { oppressingRoarOnAt } from "./ccBreakAnalysis";
@@ -528,6 +533,32 @@ export const GROUND_CC_SPELL_IDS = new Set<string>([
   "113724", // Ring of Frost (Mage)
 ]);
 
+/**
+ * fact2 C10 (2026-10-20): is this id a ground control — the list's own id, or
+ * a cast / an aura the one cast→effect table ties to one of them under the
+ * same spell name. The list mixes the Freezing Trap AURA 3355 with the
+ * Capacitor Totem / Sigil of Misery / Ring of Frost CASTS, and it is asked
+ * with both: a press (a whiffed Freezing Trap is the cast 187650, in neither
+ * this list nor `ccSpellIds`) and a landed control's aura (Ring of Frost
+ * 82691, Sigil of Misery 207685, Capacitor Totem 118905 — read as targeted
+ * controls, so cc-avoidable offered only the dodge tools).
+ */
+export const isGroundCc = (spellId: string): boolean =>
+  GROUND_CC_FAMILY.has(spellId);
+const GROUND_CC_FAMILY: ReadonlySet<string> = (() => {
+  const out = new Set<string>(GROUND_CC_SPELL_IDS);
+  // two hops: a listed aura → its casts → their other same-named effects
+  // (Freezing Trap 3355 → 187650 → 203337, the Diamond Ice trap)
+  for (let hop = 0; hop < 2; hop++)
+    for (const id of [...out]) {
+      for (const a of effectAurasOfCast(id))
+        if (effectAuraViaName(id, a)) out.add(a);
+      for (const c of castsOfEffectAura(id))
+        if (effectAuraViaName(c, id)) out.add(c);
+    }
+  return out;
+})();
+
 // Magic-only immunities block magic-school effects but NOT physical CC. Don't credit them for a
 // physical CC (Kidney/Cheap Shot/Blind/etc.) they could not have prevented. (Phase Shift and
 // Psychic Shroud are general untargetable / next-CC immunities, so they CAN dodge physical — excluded.)
@@ -835,7 +866,7 @@ export function applicableCCAvoidanceIds(
   ccSpellName: string,
 ): Set<string> {
   const out = new Set<string>();
-  const isGroundCC = GROUND_CC_SPELL_IDS.has(ccSpellId);
+  const isGroundCC = isGroundCc(ccSpellId);
   const isPolyOrHex = /polymorph|hex/i.test(ccSpellName);
 
   // A. Buff-based avoidance. 官方优先(GH #29 阶段 1):学派掩码知道两边时直接
@@ -4450,14 +4481,14 @@ export function analyzePlayerCCAndTrinket(
       if (cast.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
       if (
         !cast.spellId ||
-        (!ccSpellIds.has(cast.spellId) &&
-          !GROUND_CC_SPELL_IDS.has(cast.spellId))
+        (!isControlCast(cast.spellId) &&
+          !isGroundCc(cast.spellId))
       )
         continue;
 
       const isTargeted =
         cast.destUnitId === player.id || cast.destUnitName === player.name;
-      const isGroundCC = GROUND_CC_SPELL_IDS.has(cast.spellId);
+      const isGroundCC = isGroundCc(cast.spellId);
 
       if (isTargeted || isGroundCC) {
         const castTimeMs = cast.logLine.timestamp;

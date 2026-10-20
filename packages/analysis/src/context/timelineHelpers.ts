@@ -8,6 +8,7 @@ import {
 } from "@gladlog/parser-compat";
 
 import { DEATH_CC_LOOKBACK_S } from "../analysis/candidates/death";
+import { ownEffectAurasOfCast } from "../data/castEffectAuras";
 import { DRUID_FORM_AURA_IDS, FORM_BOUND_BUFF_IDS } from "../data/druidForms";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import {
@@ -497,17 +498,43 @@ export function extractOwnerCDBuffExpiry(
     //    「日志里看不看得到」这个问题;
     //  · 现在直接问日志:这一局里,friends 身上出现过这个光环吗?没有就别估。
     //    Control CC 天然落在这一侧,原来的 tag 短路因此成了多余,一并删掉。
+    //  · fact2 C10 (2026-10-20): the cooldown's own aura may carry another id
+    //    (Alter Time 342245 → 342246, Fortifying Brew 115203 → 120954, Blur
+    //    198589 → 212800) — asked through the one cast→effect resolution, it
+    //    had no fade line at all.
+    const ownAuraIds = new Set([cd.spellId, ...ownEffectAurasOfCast(cd.spellId)]);
+    const seenAuraId = (id: string) =>
+      friends.some((friend) =>
+        friend.auraEvents.some(
+          (event) =>
+            event.spellId === id &&
+            event.srcUnitId === ownerId &&
+            ((event.logLine.event as LogEvent) ===
+              LogEvent.SPELL_AURA_APPLIED ||
+              (event.logLine.event as LogEvent) ===
+                LogEvent.SPELL_AURA_REMOVED),
+        ),
+      );
     const seenOnFriendly = friends.some((friend) =>
       friend.auraEvents.some(
         (event) =>
-          event.spellId === cd.spellId &&
+          ownAuraIds.has(event.spellId) &&
           event.srcUnitId === ownerId &&
           ((event.logLine.event as LogEvent) === LogEvent.SPELL_AURA_APPLIED ||
             (event.logLine.event as LogEvent) === LogEvent.SPELL_AURA_REMOVED),
       ),
     );
     if (!seenOnFriendly) continue;
-    const duration = buffFullDurationForCaster(cd.spellId, owner);
+    // the aura the log shows for it: the cast's own id first, else its own
+    // effect aura — timed by THAT aura's official length (Alter Time's cast
+    // row says 20 s, its 342246 aura 10 s), as the kill-window state machine
+    // times a cast-keyed wall
+    const runAuraId = seenAuraId(cd.spellId)
+      ? cd.spellId
+      : (ownEffectAurasOfCast(cd.spellId).find(seenAuraId) ?? cd.spellId);
+    const duration =
+      buffFullDurationForCaster(runAuraId, owner) ??
+      buffFullDurationForCaster(cd.spellId, owner);
     if (!duration || duration <= 0) continue;
     // F02a: the aura whose REMOVED is this cooldown's end. Touch of Karma is
     // an absorb with an aura of its own (`TOUCH_OF_KARMA_ABSORB_ID`); the
@@ -525,7 +552,7 @@ export function extractOwnerCDBuffExpiry(
         ),
       )
         ? TOUCH_OF_KARMA_ABSORB_ID
-        : cd.spellId;
+        : runAuraId;
 
     // Collect all SPELL_AURA_REMOVED timestamps for this spell cast by the owner,
     // across all friendly units, sorted ascending.

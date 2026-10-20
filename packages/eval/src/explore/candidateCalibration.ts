@@ -30,7 +30,6 @@
  * only `countsAtThresholds` (pure, cheap) runs per cell.
  */
 import {
-  ccSpellIds,
   cdAvailableAt,
   cdHoardedEvents,
   cdSpentIdleEvents,
@@ -54,6 +53,7 @@ import {
 // crisis-no-response uses.
 import { crisisDecisionPoints } from "@gladlog/analysis/src/analysis/crisisDecisionPoints";
 import { lookupSyncWindowPrior } from "@gladlog/analysis/src/data/syncWindowPrior";
+import { isControlCast } from "@gladlog/analysis/src/utils/castMissRows";
 import type { ICombatUnit } from "@gladlog/parser-compat";
 
 import { type LegacyRound, splitTeams } from "./storeAccess.js";
@@ -195,7 +195,7 @@ export function buildRoundContext(
   for (const f of friends) {
     try {
       for (const cd of extractMajorCooldowns(f, legacy)) {
-        if (ccSpellIds.has(cd.spellId)) teamCcCds.push(cd);
+        if (isControlCast(cd.spellId)) teamCcCds.push(cd);
         if (!cd.isThroughput) continue;
         teamOffensiveCds.push({ ...cd, ownerName: f.name });
       }

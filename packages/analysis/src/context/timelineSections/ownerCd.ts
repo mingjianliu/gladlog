@@ -13,9 +13,9 @@
  */
 
 import { saveCoversPressureOn } from "../../analysis/candidates/cooldownTiming";
-import { ccSpellIds } from "../../data/spellTags";
 import { reachesAlly } from "../../data/spellTargeting";
 import { buffFullDurationForCaster } from "../../utils/buffDuration";
+import { isControlCast } from "../../utils/castMissRows";
 import {
   cdIsProcOnly,
   cdRoleTag,
@@ -208,7 +208,7 @@ export function emitOwnerCdEntries(
         forceSelf,
       );
 
-      const isCC = ccSpellIds.has(cd.spellId);
+      const isCC = isControlCast(cd.spellId);
       const extraLines: (string | DeferredSnapshot)[] = [
         // T3: delta form (non-CC used to force a full snapshot, the main source of
         // [RES] tokens; full snapshots are reserved for death snapshots and the
@@ -282,7 +282,7 @@ export function emitOwnerCdEntries(
 
       const prefix = isProc
         ? "[YOU] [PROC]"
-        : ccSpellIds.has(cd.spellId)
+        : isControlCast(cd.spellId)
           ? "[YOU] [CC]"
           : "[YOU] [CD]";
       let effectiveTargetPart = targetPart;

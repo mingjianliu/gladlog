@@ -38,7 +38,7 @@
  */
 import type { AtomicArenaCombat, ICombatUnit } from "@gladlog/parser-compat";
 
-import { ccSpellIds } from "../data/spellTags";
+import { isControlCast } from "../utils/castMissRows";
 import { ccSamplerFor, pvpTrinketReadyAtSecond } from "../utils/ccTargetState";
 import type { IPlayerCCTrinketSummary } from "../utils/ccTrinketAnalysis";
 import { extractMajorCooldowns } from "../utils/cooldowns";
@@ -127,7 +127,7 @@ export function peelOptionsForDeaths(params: {
       let cds: ReturnType<typeof extractMajorCooldowns> = [];
       try {
         cds = extractMajorCooldowns(o, combat).filter(
-          (cd) => ccSpellIds.has(cd.spellId) && isInstantCast(cd.spellId),
+          (cd) => isControlCast(cd.spellId) && isInstantCast(cd.spellId),
         );
       } catch {
         continue;

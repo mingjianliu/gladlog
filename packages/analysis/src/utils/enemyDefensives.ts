@@ -12,6 +12,7 @@ import { ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 import { saveSchoolMask } from "../analysis/candidates/cooldownTiming";
 import {
   castAndEffectIds,
+  castKeyOfAura,
   castsOfEffectAura,
   effectAurasOfCast,
 } from "../data/castEffectAuras";
@@ -1146,7 +1147,10 @@ function auraPairedToCast(
 ): ISaveAuraInterval | undefined {
   let best: ISaveAuraInterval | undefined;
   for (const iv of holderIntervals) {
-    if (iv.spellId !== auraId) continue;
+    // the id itself, or the cast's own effect under another id (fact2 C10 —
+    // a self-save pressed as 342245 runs as 342246)
+    if (castKeyOfAura(iv.spellId, (id) => id === auraId) === undefined)
+      continue;
     const gap = Math.abs(iv.fromS - castAtSeconds);
     if (gap > SAVE_CAST_AURA_PAIR_S) continue;
     if (

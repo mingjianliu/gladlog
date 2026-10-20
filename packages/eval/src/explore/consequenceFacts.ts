@@ -34,6 +34,7 @@ import {
 import {
   MITIGATION_AURA_IDS,
   MITIGATION_AURA_MIN_PCT,
+  wallTableIdOfAura,
 } from "@gladlog/analysis/src/utils/enemyDefensives";
 import { kickLockoutSecondsFor } from "@gladlog/analysis/src/utils/kickLockout";
 import { extractKillAttempts } from "@gladlog/analysis/src/utils/killAttempts";
@@ -356,7 +357,10 @@ export function buildConsequenceLines(
     for (const aura of (e.auraEvents ?? []) as any[]) {
       if (aura.destUnitId !== e.id || aura.srcUnitId !== e.id) continue;
       if (aura.logLine?.event !== LogEvent.SPELL_AURA_APPLIED) continue;
-      const id = aura.spellId;
+      // killAttempts resolves the aura to its table row first
+      // (`wallTableIdOfAura`; fact2 C10: Blur / Greater Invisibility /
+      // Fortifying Brew run under their own aura ids)
+      const id = aura.spellId ? wallTableIdOfAura(aura.spellId) : aura.spellId;
       if (!id || !(MITIGATION_AURA_IDS.has(id) || WALL_IN_HAND_MIT_IDS.has(id)))
         continue;
       const comp = resolveMitigation(id, { carrierIsCaster: true, caster: e });

@@ -1,5 +1,6 @@
 import { CombatUnitType, ICombatUnit } from "@gladlog/parser-compat";
 
+import { castKeyOfAura } from "../data/castEffectAuras";
 import { resolveMitigation } from "../data/mitigationComponents";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import spellIdLists from "../data/spellIdLists";
@@ -85,6 +86,12 @@ const WHITELIST_IDS: ReadonlySet<string> = new Set<string>([
   // list's own comment for why it is separate from the other two.
   ...spellIdLists.attributedMitigationSpellIds,
 ]);
+/** The whitelist key an aura on the victim stands for — its own id or the
+ * cast whose own effect it is (fact2 C10, `castKeyOfAura`): Rallying Cry
+ * 97462 runs as 97463, Fortifying Brew 115203 as 120954, Blur 198589 as
+ * 212800 — rows the audit never wrote. Priced by the key. */
+const whitelistKeyOf = (auraSpellId: string): string | undefined =>
+  castKeyOfAura(auraSpellId, (id) => WHITELIST_IDS.has(id));
 
 /**
  * Direct absolute-HP sampling: `getUnitHpAtTimestamp` returns a percentage and
@@ -278,7 +285,7 @@ export function whitelistedIntervalsInDeathWindow(
       .map((u) => u.name),
   );
   for (const iv of buildAuraIntervals(victim, combat, selfCaster)) {
-    if (!WHITELIST_IDS.has(iv.spellId)) continue;
+    if (whitelistKeyOf(iv.spellId) === undefined) continue;
     if (opposing.has(iv.srcUnitName)) continue;
     const overlapFrom = Math.max(iv.fromS, windowStartS);
     const overlapTo = Math.min(iv.toS, deathInstantS);
@@ -336,7 +343,7 @@ export function computeMitigationAudit(
     const spellName = getEnglishSpellName(iv.spellId, iv.spellName);
     // GH #96 M3a: every pricing goes through the component resolver; carrier =
     // an ally-applied Flameshaper Obsidian Scales is 15 %, the Evoker's own 30 %.
-    const res = resolveMitigation(iv.spellId, {
+    const res = resolveMitigation(whitelistKeyOf(iv.spellId) ?? iv.spellId, {
       carrierIsCaster: iv.srcUnitName === victim.name,
       // the caster by name from the round's roster (talent impact audit
       // 2026-09-26: an ally-cast external was priced without its caster's

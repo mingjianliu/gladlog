@@ -17,7 +17,6 @@ import {
   effectiveCooldownSeconds,
   getEnglishSpellName,
 } from "../../data/spellEffectData";
-import { ccSpellIds } from "../../data/spellTags";
 import {
   DEATH_WINDOW_S,
   DEATH_WINDOW_UNFOLD_CAP,
@@ -25,6 +24,7 @@ import {
 } from "../../data/timelineLineFlags";
 import { allyCopyRecipient } from "../../utils/allyCopyWall";
 import { dropAuraRebroadcasts } from "../../utils/auraIntervals";
+import { isControlCast } from "../../utils/castMissRows";
 import { COPY_CAST_IDS, isFormReshiftCast } from "../../utils/castPress";
 import { isControlledPlayerFlags } from "../../utils/charmedPlayer";
 import { cdRoleTag, hpAtPress, rendersOnCaster } from "../../utils/cooldowns";
@@ -529,7 +529,7 @@ export function emitHealerCastGapFillerEntries(
     const empowerNote = ownerEmpowerTag(e.spellId, timeSeconds);
 
     // F95: Offensive CC casts should carry a CC annotation or use an [YOU] [CC] prefix.
-    if (ccSpellIds.has(e.spellId)) {
+    if (isControlCast(e.spellId)) {
       flushFold();
       let effectiveTargetPart = targetPart;
       // enemy-def F-E26: the units this line names, for the IMMUNE tag (the

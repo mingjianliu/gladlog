@@ -184,7 +184,6 @@ import {
 import {
   MITIGATION_OVERRIDES,
   NO_MITIGATION_IDS,
-  SELF_WALL_AURA_TO_CAST_ID,
 } from "./mitigationData";
 import { MITIGATION_VERDICTS } from "./mitigationVerdicts";
 import {
@@ -385,11 +384,8 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   t("AURA_KEYED_BREAK_RACIALS", "data/ccBreakAbilities.ts", "aura", () =>
     keys(AURA_KEYED_BREAK_RACIALS),
   ),
-  // enemy-def F-E1a: logged aura id → the cast id its wall row is keyed by.
-  t("SELF_WALL_AURA_TO_CAST_ID", "data/mitigationData.ts", "mixed", () => [
-    ...keys(SELF_WALL_AURA_TO_CAST_ID),
-    ...Object.values(SELF_WALL_AURA_TO_CAST_ID),
-  ]),
+  // enemy-def F-E1a's SELF_WALL_AURA_TO_CAST_ID left the registry with fact2
+  // C10 (2026-10-20): it is derived from the generated cast→effect table now.
   // enemy-def F-E1b / crisis-external F-A1b (ruling A15): cast-anchored area saves.
   t("spellIdLists.ENEMY_AREA_SAVE_IDS", "data/spellIdLists.ts", "cast", () =>
     set(ENEMY_AREA_SAVE_IDS),

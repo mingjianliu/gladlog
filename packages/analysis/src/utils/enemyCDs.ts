@@ -21,8 +21,8 @@ import { buffFullDurationForCaster } from "./buffDuration";
 import {
   getUnitHpAtTimestamp,
   HP_SAMPLE_RADIUS_MS,
+  isEnemyCdWindowSpell,
   isHealerSpec,
-  MIN_CD_SECONDS,
   specToString,
   unitCooldownOf,
 } from "./cooldowns";
@@ -137,32 +137,11 @@ export interface IEnemyCDTimeline {
   readonly alignedBurstWindows: readonly IAlignedBurstWindow[];
 }
 
-/** Max CD to consider a "real" cooldown (filters out 999.999s passive procs) */
-export const ENEMY_CD_MAX_SECONDS = 360;
-
-/**
- * "The enemy opened a cooldown" — ONE predicate for every consumer that
- * turns an enemy cast into a burst / threat fact: this builder's enemy-CD
- * windows, `crisisDecisionPoints`' `enemyBurst` and the teammate-crisis
- * cards' burst fact (2026-09-17, GH #95 hand-read). Membership in the
- * canonical `OFFENSIVE_CD_SPELL_IDS` is necessary but not sufficient — that
- * table also admits `debuffs_offensive` rows with no cooldown at all (Curse
- * of Weakness 702, Curse of Tongues 1714, Ignite 12654), which are not
- * something a cooldown tracker shows. Official cooldown (or charge recharge)
- * inside [MIN_CD_SECONDS, ENEMY_CD_MAX_SECONDS] — of the EFFECT's cooldown:
- * a registered activation (`OFFENSIVE_EFFECT_ACTIVATION_IDS`, Radiant Glory's
- * Avenging Wrath 454351) is admitted on its canonical cooldown (GH #115).
- */
-export function isEnemyCdWindowSpell(spellId: string): boolean {
-  const cdId = offensiveEffectCdId(spellId);
-  if (cdId === undefined) return false;
-  const effectData = spellEffectData[spellId];
-  if (!effectData) return false;
-  const cooldownSeconds = effectiveCooldownSeconds(cdId) ?? 0;
-  return (
-    cooldownSeconds >= MIN_CD_SECONDS && cooldownSeconds <= ENEMY_CD_MAX_SECONDS
-  );
-}
+// `ENEMY_CD_MAX_SECONDS` and `isEnemyCdWindowSpell` live in `cooldowns.ts`
+// since fact2 C10 (2026-10-20): the aura-evidence reader there
+// (`offensiveCdOfAura`) admits an effect aura on the same window test, and
+// `cooldowns.ts` cannot import this module (it imports `cooldowns.ts`).
+export { ENEMY_CD_MAX_SECONDS, isEnemyCdWindowSpell } from "./cooldowns";
 
 /**
  * For each enemy player, reconstruct when their offensive cooldowns (>= 30s) were cast

@@ -4,15 +4,16 @@ import {
   LogEvent,
 } from "@gladlog/parser-compat";
 
+import { castKeyOfAura } from "../data/castEffectAuras";
 import {
   KILL_LIVE_HP_PCT,
   type MitigationVerdict,
   mitigationVerdictOf,
 } from "../data/mitigationVerdicts";
 import { getEnglishSpellName } from "../data/spellEffectData";
-import { ccSpellIds } from "../data/spellTags";
 import { isAllyCopyWallId } from "./allyCopyWall";
 import { buildAuraIntervals } from "./auraIntervals";
+import { isControlCast } from "./castMissRows";
 import {
   getUnitHpAtTimestamp,
   HP_SAMPLE_RADIUS_MS,
@@ -99,7 +100,13 @@ function buildDefenseWindows(
       (srcIdByName.get(srcUnitName) ?? null) === enemy.id ||
       srcUnitName === enemy.name;
     for (const iv of buildAuraIntervals(enemy, combat)) {
-      const verdict = mitigationVerdictOf(iv.spellId);
+      // the verdict table is keyed by the cast; the wall runs under its own
+      // aura id (fact2 C10: Fortifying Brew 120954, Greater Invisibility
+      // 110960 never opened a window)
+      const verdict = mitigationVerdictOf(
+        castKeyOfAura(iv.spellId, (id) => mitigationVerdictOf(id) !== null) ??
+          iv.spellId,
+      );
       // "never"(不构成真实阻碍)与 "unresolved"(裁定人未遇到过)都不出面。
       if (verdict !== "unconditional" && verdict !== "kill-live-gated")
         continue;
@@ -214,7 +221,8 @@ export function buildOffensiveWasteSummary(
           // B28: for immunity windows, also count high-value CC/utility spells that do no damage
           // (e.g. Mindgames, HoJ, Silence) which would otherwise be filtered by the damage threshold.
           const isHighValueCC =
-            window.verdict === "unconditional" && ccSpellIds.has(e.spellId);
+            window.verdict === "unconditional" &&
+            isControlCast(e.spellId);
           return (
             isHighValueCC ||
             highValueIds.size === 0 ||

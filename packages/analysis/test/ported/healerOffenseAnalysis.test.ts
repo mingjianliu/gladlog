@@ -285,10 +285,11 @@ function makeWindow(
     toSeconds,
     durationSeconds: toSeconds - fromSeconds,
     friendlyDamageInWindow: 0,
+    friendlyAbsorbedInWindow: 0,
     friendlyOffensives: [],
     // Default: one burst spanning the whole window, so existing expectations
     // (contribution span == window span, [KILL WINDOW] label) keep holding.
-    bursts: bursts ?? [{ fromSeconds, toSeconds, damage: 50_000 }],
+    bursts: bursts ?? [{ fromSeconds, toSeconds, damage: 50_000, absorbed: 0 }],
   };
 }
 
@@ -1176,8 +1177,8 @@ describe("burst sub-windows (2026-07-17 kill-window redesign)", () => {
       name: "Edk",
     });
     const withBursts = makeWindow(40, 140, [
-      { fromSeconds: 50, toSeconds: 55, damage: 90_000 },
-      { fromSeconds: 100, toSeconds: 108, damage: 60_000 },
+      { fromSeconds: 50, toSeconds: 55, damage: 90_000, absorbed: 0 },
+      { fromSeconds: 100, toSeconds: 108, damage: 60_000, absorbed: 0 },
     ]);
     const punished = computeWindowContributions(
       combat,
@@ -1242,6 +1243,7 @@ describe("burst sub-windows (2026-07-17 kill-window redesign)", () => {
           vulnToSeconds: 140,
           unpunished: false,
           teamDamageInVulnSpan: 90_000,
+          teamAbsorbedInVulnSpan: 0,
           gateFacts: stubFactsComputer.facts(),
         },
         {
@@ -1252,6 +1254,7 @@ describe("burst sub-windows (2026-07-17 kill-window redesign)", () => {
           vulnToSeconds: 260,
           unpunished: true,
           teamDamageInVulnSpan: 8_000,
+          teamAbsorbedInVulnSpan: 0,
           gateFacts: stubFactsComputer.facts(),
         },
       ],
@@ -1278,6 +1281,7 @@ describe("formatHealerOffenseForContext KILL WINDOW cap", () => {
       vulnToSeconds: i * 20 + 10,
       unpunished: false,
       teamDamageInVulnSpan: 50_000,
+      teamAbsorbedInVulnSpan: 0,
       targetName: `Enemy${i}`,
       targetSpec: "Frost Death Knight",
       enemyHealerName: "Rsham",

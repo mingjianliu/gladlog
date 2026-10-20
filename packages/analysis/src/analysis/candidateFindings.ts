@@ -19,7 +19,7 @@ import {
   BRACKET_TYPE_ALLOWLIST,
   CANDIDATE_TYPE_FLAGS,
 } from "../data/candidateTypeFlags";
-import { castAndEffectIds } from "../data/castEffectAuras";
+import { castAndEffectIds,castsOwningEffectAura } from "../data/castEffectAuras";
 import { costNormPhrase } from "../data/curatedAbilityFacts";
 import { CORPUS_OBSERVED_DISPEL_IDS } from "../data/dispelObservedGenerated";
 import { lookupKickPriorityPrior } from "../data/kickPriorityPrior";
@@ -29,7 +29,6 @@ import { SELF_REMOVAL_BY_TYPE } from "../data/selfRemovals";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import { ENEMY_REDIRECT_SAVE_IDS } from "../data/spellIdLists";
 import { schoolLockedBy, spellSchoolMask } from "../data/spellSchools";
-import { ccSpellIds } from "../data/spellTags";
 import { lookupSyncWindowPrior } from "../data/syncWindowPrior";
 import {
   type DecisionRecord,
@@ -46,6 +45,7 @@ import {
   namedCannotCastIntervals,
 } from "../utils/cannotCastIntervals";
 import { type OwnerCastCancels, ownerCastCancels } from "../utils/castCancels";
+import { isControlCast } from "../utils/castMissRows";
 import { STOPPED_JUST_BEFORE_S } from "../utils/castStopEvidence";
 import {
   analyzePlayerCCAndTrinket,
@@ -104,7 +104,10 @@ import {
 } from "../utils/dispelAnalysis";
 import { drResetMsAt } from "../utils/drAnalysis";
 import { reconstructEnemyCDTimeline } from "../utils/enemyCDs";
-import { SCHOOL_LIMITED_IMMUNITY_IDS } from "../utils/enemyDefensives";
+import {
+  SCHOOL_LIMITED_IMMUNITY_IDS,
+  wallTableIdOfAura,
+} from "../utils/enemyDefensives";
 import { kickCastSpellId } from "../utils/enemyInterrupts";
 import {
   externalDamageForApplication,
@@ -3001,7 +3004,7 @@ export function ccHeldEvents(
     window: IAvailableWindow;
   }> = [];
   for (const cd of cds) {
-    if (!ccSpellIds.has(cd.spellId)) continue;
+    if (!isControlCast(cd.spellId)) continue;
     for (const w of cd.availableWindows) {
       if (w.durationSeconds >= CC_HELD_MIN_S) {
         candidates.push({
@@ -3121,7 +3124,13 @@ export function ccAvoidanceOptionsAt(
     // on the sign-off book is never offered here; with no other tool left
     // there is no accusation (reliability audit A4).
     if (costNormPhrase(id) !== null) continue;
-    const resolvedIds = proc?.triggerSpellIds ?? [id];
+    // an avoidance buff is pressed under its cast's id when the two differ
+    // (fact2 C10: Anti-Magic Shell 444740 → 444741, 10,710 of 10,711 casts —
+    // the buff id has no cast evidence, so the dominant AMS was never offered)
+    const resolvedIds = proc?.triggerSpellIds ?? [
+      id,
+      ...castsOwningEffectAura(id),
+    ];
     if (couldReactWith && !couldReactWith(resolvedIds)) continue;
     // Kit evidence, talent-aware cooldown, charges and the reaction window all
     // live in the shared `kitSpellReadyAt` (GH #77 made it a second consumer).
@@ -3754,7 +3763,7 @@ function teamPlayEvents(
           for (const f of friends) {
             try {
               for (const cd of extractMajorCooldowns(f, combat))
-                if (ccSpellIds.has(cd.spellId)) teamCcCds.push(cd);
+                if (isControlCast(cd.spellId)) teamCcCds.push(cd);
             } catch {
               /* this friend's ledger not computable → their CC absent */
             }
@@ -3848,7 +3857,7 @@ function teamPlayEvents(
                 (e: any) =>
                   e.logLine.event === "SPELL_CAST_SUCCESS" &&
                   e.spellId &&
-                  ccSpellIds.has(e.spellId),
+                  isControlCast(e.spellId),
               )
               .map((e: any) => (e.logLine.timestamp - combat.startTime) / 1000),
             // fact1215 R11: the owner's redirect saves (the signed
@@ -4748,12 +4757,16 @@ function dpsOwnerEvents(
             carrierIsCaster: !d.appliedByOther,
             caster: players.find((u) => u.name === d.casterName),
           };
-          const res = resolveMitigation(d.spellId, ctx);
+          // a wall matched through its own aura id prices as its table row
+          // (fact2 C10: Greater Invisibility 110959 → 110960, Blur, Fortifying
+          // Brew — dropped here by an undefined lookup, not by a decision)
+          const key = wallTableIdOfAura(d.spellId);
+          const res = resolveMitigation(key, ctx);
           return {
             d,
             res,
             // GH #114: the same helper prices the [ENEMY DEF] line
-            pct: wallDoorPct(d.spellId, ctx) ?? 0,
+            pct: wallDoorPct(key, ctx) ?? 0,
           };
         })
         .filter(

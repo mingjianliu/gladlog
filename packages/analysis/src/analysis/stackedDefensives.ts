@@ -22,6 +22,7 @@
  * Only pairs the OWNER took part in (cast A or B, or is the target) are
  * returned — the card is owner-anchored like every other context line.
  */
+import { castKeyOfAura } from "../data/castEffectAuras";
 import {
   resolveMitigation,
   strongestComponentPct,
@@ -39,6 +40,14 @@ export const STACKED_DEFENSIVE_MAJOR_IDS: ReadonlySet<string> = new Set<string>(
     ...spellIdLists.bigDefensiveSpellIds.map(String),
   ],
 );
+/** The `STACKED_DEFENSIVE_MAJOR_IDS` key an aura stands for: its own id, or
+ * the cast whose own effect it is (fact2 C10, `castKeyOfAura`: Rallying Cry
+ * 97462 runs as 97463, Fortifying Brew 115203 as 120954, Spirit Link Totem
+ * 98008 as 325174, Greater Invisibility 110959 as 110960 — none was ever
+ * "already protected"). Pricing reads the key; the line names the aura. */
+export function stackedDefensiveKeyOf(auraSpellId: string): string | undefined {
+  return castKeyOfAura(auraSpellId, (id) => STACKED_DEFENSIVE_MAJOR_IDS.has(id));
+}
 /** overlaps shorter than this are aura-refresh noise, not a stack */
 export const STACKED_DEFENSIVE_MIN_OVERLAP_S = 0.5;
 
@@ -93,7 +102,7 @@ export function majorWallIntervals(
   return buildAuraIntervals(target, combat, playersById)
     .filter(
       (iv) =>
-        STACKED_DEFENSIVE_MAJOR_IDS.has(iv.spellId) &&
+        stackedDefensiveKeyOf(iv.spellId) !== undefined &&
         friendNames.has(iv.srcUnitName) &&
         // a Blessing of Sacrifice's link on its own caster moves damage ONTO
         // them — no protection (fact1215 C4, `isCasterSideLinkAura`)
@@ -145,7 +154,7 @@ export function stackedDefensivePairs(
           second.srcUnitName === owner.name;
         if (!involvesOwner) continue;
         const caster2 = byName.get(second.srcUnitName);
-        const res = resolveMitigation(second.spellId, {
+        const res = resolveMitigation(stackedDefensiveKeyOf(second.spellId)!, {
           carrierIsCaster: second.srcUnitName === target.name,
           caster: caster2,
         });

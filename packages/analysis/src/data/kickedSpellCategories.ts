@@ -14,10 +14,10 @@
  * Single-source predicate: all kick-analysis, coach probes, and timeline annotations
  * query this function to know what a kick prevented.
  */
+import { isControlCast } from "../utils/castMissRows";
 import { abilityProfile } from "./abilityProfile";
 import { HARDCAST_HEAL_SPELL_IDS } from "./kickPriorityHealSpells";
 import { SPELL_CATEGORIES } from "./spellCategories";
-import { ccSpellIds } from "./spellTags";
 
 export type KickedSpellCategory =
   | "heal"
@@ -61,7 +61,7 @@ export function classifyKickedSpell(spellId: string): KickedSpellCategory {
   if (KICKED_OTHER_OVERRIDE_IDS.has(spellId)) return "other";
 
   const cat = SPELL_CATEGORIES[spellId]?.type;
-  if (cat === "cc" || cat === "roots" || ccSpellIds.has(spellId)) {
+  if (cat === "cc" || cat === "roots" || isControlCast(spellId)) {
     return "control";
   }
 

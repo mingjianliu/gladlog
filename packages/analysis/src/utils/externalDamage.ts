@@ -60,6 +60,7 @@
  */
 import { type ICombatUnit,LogEvent } from "@gladlog/parser-compat";
 
+import { castKeyOfAura } from "../data/castEffectAuras";
 import { MITIGATION_TABLE, NO_MITIGATION_IDS } from "../data/mitigationData";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import { buildAuraIntervals, type IAuraInterval } from "./auraIntervals";
@@ -214,7 +215,12 @@ export function externalDamageForApplication(
   enemies: readonly ICombatUnit[],
   combat: { startTime: number; endTime: number },
 ): IExternalDamageObservation[] {
-  const mit = eligibleExternalMitigation(iv.spellId);
+  // an external's own aura under another id prices as its cast (fact2 C10:
+  // Spirit Link Totem 98008 runs as 325174)
+  const mit = eligibleExternalMitigation(
+    castKeyOfAura(iv.spellId, (id) => eligibleExternalMitigation(id) !== null) ??
+      iv.spellId,
+  );
   if (!mit) return [];
   if (iv.inferredStart || iv.inferredEnd) return [];
   if (iv.srcUnitName === target.name) return []; // self-applied → not an external

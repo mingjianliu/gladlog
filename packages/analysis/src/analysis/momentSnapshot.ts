@@ -15,6 +15,7 @@
 
 import { CombatUnitReaction, LogEvent } from "@gladlog/parser-compat";
 
+import { castKeyOfAura } from "../data/castEffectAuras";
 import { buildAuraIntervals } from "../utils/auraIntervals";
 import {
   cdAvailableAt,
@@ -25,6 +26,7 @@ import {
   isHealerSpec,
   isPassiveProcCast,
   MAJOR_DEFENSIVE_IDS,
+  offensiveCdOfAura,
   selfCastNoopAnnotatedName,
   specToString,
 } from "../utils/cooldowns";
@@ -42,7 +44,6 @@ import {
 } from "../utils/losAnalysis";
 import { INTERP_MAX_GAP_MS, LOS_SWEEP_GAP_MS } from "../utils/positionSampling";
 import { fmtTime } from "../utils/renderGrid";
-import { OFFENSIVE_CD_SPELL_IDS } from "../utils/spellDanger";
 import type { PackItem } from "./deepDive";
 
 /** Short name (realm stripped): same style as deepDive's `sn()`, copied here
@@ -83,7 +84,8 @@ function roleOf(u: any, ownerName?: string): Role {
  *     Shield 642, Ice Block 45438, Dispersion 47585, Aspect of the Turtle
  *     186265, …) is already inside `externalOrBigDefensiveSpellIds`, so
  *     `MAJOR_DEFENSIVE_IDS` alone covers both without a second set.
- *  2. Offensive cooldowns — `spellId` ∈ `OFFENSIVE_CD_SPELL_IDS`
+ *  2. Offensive cooldowns — `offensiveCdOfAura` (`OFFENSIVE_CD_SPELL_IDS`, an
+ *     effect aura resolved to its cast)
  *     (spellDanger.ts, the enemy-CD timeline's own set): an enemy's
  *     Deathmark / Kingsbane on the victim, a burst buff on its caster.
  *  3. Everything else, original `buildAuraIntervals` order.
@@ -98,8 +100,11 @@ function roleOf(u: any, ownerName?: string): Role {
  */
 function auraPriority(spellId: string): 0 | 1 | 2 | 3 {
   if (spellId in DR_CATEGORY_MAP) return 0;
-  if (MAJOR_DEFENSIVE_IDS.has(spellId)) return 1;
-  if (OFFENSIVE_CD_SPELL_IDS.has(spellId)) return 2;
+  // a cooldown's own aura under another id resolves to its cast (fact2 C10:
+  // Kingsbane runs as 394095, Fortifying Brew as 120954)
+  if (castKeyOfAura(spellId, (id) => MAJOR_DEFENSIVE_IDS.has(id)) !== undefined)
+    return 1;
+  if (offensiveCdOfAura(spellId) !== undefined) return 2;
   return 3;
 }
 

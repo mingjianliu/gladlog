@@ -265,6 +265,25 @@ export const AOE_CC_SPELL_IDS = new Set<string>([
  *    freezes on players between 0.10 and 9.40 s after the cast — none past
  *    the ring's 10 s. The window is the ring's life plus 0.5 s of log slack.
  */
+/** Lay In Wait (PvP talent 1235091): +88 s on Sigil of Misery's arming
+ * duration (DB2, the mask covers 207684) — see the OPEN note above. */
+export const LAY_IN_WAIT_TALENT_ID = "1235091";
+/**
+ * The landing window of `castSpellId` for THIS caster: the table's, except
+ * that a Sigil of Misery from a Lay In Wait holder may land up to 90 s later
+ * — `null`, an absence that cannot be called (fact2 C10, 2026-10-20: the
+ * cast id now reaches the owner's `[hit no enemy player]` test through
+ * `isControlCast`, and a waiting sigil is no miss).
+ */
+export function aoeCcLandingWindowFor(
+  castSpellId: string,
+  casterPvpTalentIds: ReadonlySet<string>,
+): { fromS: number; toS: number } | null | undefined {
+  if (castSpellId === "207684" && casterPvpTalentIds.has(LAY_IN_WAIT_TALENT_ID))
+    return null;
+  return AOE_CC_LANDING_WINDOW_S[castSpellId];
+}
+
 export const AOE_CC_LANDING_WINDOW_S: Readonly<
   Record<string, { fromS: number; toS: number } | null>
 > = {

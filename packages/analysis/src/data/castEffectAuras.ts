@@ -78,6 +78,76 @@ export function castsOfEffectAura(auraSpellId: string): readonly string[] {
   return byAura.get(auraSpellId) ?? NONE;
 }
 
+/** fact2 C10 (2026-10-20): an effect aura is the cast's OWN effect under
+ * another id — the buff the cooldown runs as, not a side effect — when DB2
+ * nominates it by the cast's own name (`via` holds "name") and the corpus
+ * shows it after at least this share of the cast's casts. 1,814 files: Blur
+ * 1,663 / 1,665, Fortifying Brew 562 / 563, Rallying Cry 969 / 969, Spirit
+ * Link Totem 476 / 478, Alter Time 2,337 / 2,337, Colossus Smash 4,223 /
+ * 4,254, Kingsbane 2,156 / 2,224. It leaves out what is not the cooldown
+ * itself: Aura Mastery's immunity variant 317929 (63 / 1,164 — the
+ * concentration-aura branch, no mitigation), Unending Resolve's Aura of
+ * Enfeeblement 449587 (by trigger, 154 / 795), Infernal Awakening's stun
+ * 22703 (by trigger), a Force of Nature treant buff 205644 (69 / 1,185). */
+export const OWN_EFFECT_MIN_HIT_SHARE = 0.9;
+
+const ownByAura = new Map<string, string[]>();
+for (const [cast, rows] of Object.entries(
+  (generated as unknown as { casts: Record<string, Row[]> }).casts,
+)) {
+  for (const r of rows) {
+    if (!r.via?.includes("name")) continue;
+    if (r.casts <= 0 || r.hits < OWN_EFFECT_MIN_HIT_SHARE * r.casts) continue;
+    if (!ownByAura.has(r.aura)) ownByAura.set(r.aura, []);
+    ownByAura.get(r.aura)!.push(cast);
+  }
+}
+
+/** The auras that are this cast's OWN effect under another id
+ * (`OWN_EFFECT_MIN_HIT_SHARE`), most-applied first — the forward view of
+ * `castsOwningEffectAura`. */
+export function ownEffectAurasOfCast(castSpellId: string): readonly string[] {
+  return effectAurasOfCast(castSpellId).filter((a) =>
+    castsOwningEffectAura(a).includes(castSpellId),
+  );
+}
+
+/** The casts whose OWN effect this aura is (`OWN_EFFECT_MIN_HIT_SHARE`). */
+export function castsOwningEffectAura(auraSpellId: string): readonly string[] {
+  return ownByAura.get(auraSpellId) ?? NONE;
+}
+
+/** fact2 C10: the key a CAST-keyed table knows this AURA by — the aura's own
+ * id when the table has it, else the cast whose own effect it is
+ * (`castsOwningEffectAura`) when the table has that. The one resolution for
+ * every reader that holds an aura id and asks a table keyed by casts
+ * (`MITIGATION_TABLE`, the defensive lists, the offensive-cooldown table):
+ * Alter Time is pressed as 342245 and runs as 342246, Rallying Cry 97462 as
+ * 97463, Colossus Smash 167105 as 208086. Undefined = the table knows
+ * neither. */
+export function castKeyOfAura(
+  auraSpellId: string,
+  isKey: (id: string) => boolean,
+): string | undefined {
+  if (isKey(auraSpellId)) return auraSpellId;
+  return castsOwningEffectAura(auraSpellId).find(isKey);
+}
+
+/** Every [own-effect aura, cast] pair whose cast `isKey` admits and whose aura
+ * it does not — the derived form of the hand map a cast-keyed table used to
+ * carry beside it (`SELF_WALL_AURA_TO_CAST_ID`). */
+export function ownEffectAurasKeyedBy(
+  isKey: (id: string) => boolean,
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [aura, casts] of ownByAura) {
+    if (isKey(aura)) continue;
+    const cast = casts.find(isKey);
+    if (cast !== undefined) out[aura] = cast;
+  }
+  return out;
+}
+
 /** The cast's own id and every effect aura it applies — "is this aura / miss
  * this cast's?" in one set. */
 export function castAndEffectIds(castSpellId: string): ReadonlySet<string> {
@@ -130,6 +200,20 @@ export function effectAuraHitShare(
     generated as unknown as { casts: Record<string, Row[]> }
   ).casts[castSpellId]?.find((r) => r.aura === auraSpellId);
   return row && row.casts > 0 ? row.hits / row.casts : undefined;
+}
+
+/** Did DB2 nominate this pair by the cast's own name (`via` holds "name")
+ * — the aura is that spell's own effect, not a triggered spell of another
+ * name. False when the pair is not in the table. */
+export function effectAuraViaName(
+  castSpellId: string,
+  auraSpellId: string,
+): boolean {
+  return !!(
+    generated as unknown as { casts: Record<string, Row[]> }
+  ).casts[castSpellId]
+    ?.find((r) => r.aura === auraSpellId)
+    ?.via?.includes("name");
 }
 
 /** The aura ids DB2 nominates as a cast's effect (same SpellName or an

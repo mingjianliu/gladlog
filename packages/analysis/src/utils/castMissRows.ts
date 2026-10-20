@@ -11,7 +11,11 @@
  * Extracted from `setup.ts` when the second reader arrived (Shared-Predicate
  * Rule); the windows, the attribution rule and the type table are unchanged.
  */
-import { effectAuraHitShare, effectAurasOfCast } from "../data/castEffectAuras";
+import {
+  effectAuraHitShare,
+  effectAurasOfCast,
+  effectAuraViaName,
+} from "../data/castEffectAuras";
 import { ccSpellIds } from "../data/spellTags";
 
 /** How often a cast's control effect must follow the cast for a miss of the
@@ -32,11 +36,43 @@ export const CONTROL_EFFECT_MIN_HIT_SHARE = 0.5;
  * 207685 72 %, Storm Bolt → 132169 95 %.
  */
 export function missReportsControl(missSpellId: string): boolean {
-  if (ccSpellIds.has(missSpellId)) return true;
-  return effectAurasOfCast(missSpellId).some(
+  return isControlCast(missSpellId);
+}
+
+/**
+ * fact2 C10 (2026-10-20): is this CAST id a control — the one answer for every
+ * reader that holds a press and asks the aura-keyed hard-CC set
+ * (`ccSpellIds` lists Ring of Frost by its 82691, Freezing Trap by 3355,
+ * Intimidation by 24394, Song of Chi-Ji by 198909, Sigil of Misery by 207685,
+ * Lightning Lasso by 305485 …): the `[YOU] [CC]` / `[TEAM]` line kind,
+ * cc-held, the team's control cooldowns, peel options, the healer's CC
+ * counts, the crisis control answers, the miss rows above. Yes for a
+ * control's own id; for a cast whose control lives on another id, when that
+ * control is the cast's own effect — DB2 names it after the cast (`via`
+ * "name") — and its usual result (`CONTROL_EFFECT_MIN_HIT_SHARE` of the
+ * casts). Not Wake of Ashes' demon-and-undead stun (24 %), not Summon
+ * Infernal's Infernal Awakening (a triggered spell of another name: the
+ * press is the offensive cooldown, the stun is what its summon does on
+ * landing).
+ */
+export function isControlCast(castSpellId: string): boolean {
+  return castControlsIn(castSpellId, ccSpellIds);
+}
+
+/** `isControlCast` over another aura-keyed control set (the crisis answers'
+ * hard CC ∪ roots ∪ interrupts): the cast's own id is in it, or its own
+ * same-named effect aura is, after at least `CONTROL_EFFECT_MIN_HIT_SHARE`
+ * of its casts. */
+export function castControlsIn(
+  castSpellId: string,
+  auraIds: ReadonlySet<string>,
+): boolean {
+  if (auraIds.has(castSpellId)) return true;
+  return effectAurasOfCast(castSpellId).some(
     (aura) =>
-      ccSpellIds.has(aura) &&
-      (effectAuraHitShare(missSpellId, aura) ?? 0) >=
+      auraIds.has(aura) &&
+      effectAuraViaName(castSpellId, aura) &&
+      (effectAuraHitShare(castSpellId, aura) ?? 0) >=
         CONTROL_EFFECT_MIN_HIT_SHARE,
   );
 }

@@ -27,10 +27,10 @@ import {
   EMPOWER_PRESS_MATCH_MS,
   empowerSpans,
 } from "../../utils/castCommitSpans";
-import {
-  CAST_MISS_LEAD_MS,
+import {   CAST_MISS_LEAD_MS,
   CC_MISS_TAG_WORD,
   CONTROL_FAILED_MISS_TYPES,
+isControlCast,
   missBelongsToCast as missRowBelongsToCast,
   missReportsControl,
 } from "../../utils/castMissRows";
@@ -44,10 +44,11 @@ import {
   HP_SAMPLE_RADIUS_MS,
   hpAtPress,
   isTeamHealCD,
+  playerTalentIdSets,
 } from "../../utils/cooldowns";
 import {
-  AOE_CC_LANDING_WINDOW_S,
   AOE_CC_SPELL_IDS,
+  aoeCcLandingWindowFor,
   getDRCategory,
   getDRLevel,
   OWNER_AOE_CC_NO_PLAYER_TAG,
@@ -798,10 +799,15 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
       // the cast is read in its own landing window (Capacitor Totem: the
       // stun comes ~2 s later, `AOE_CC_LANDING_WINDOW_S`); one the table
       // lists with a `null` window keeps a bare line — an absence can not
-      // be called (no entry is `null` since FT-T16; Sigil of Misery's cast
-      // id is not in `ccSpellIds`, so its cast line never asks here).
+      // be called (no entry is `null` since FT-T16). Since fact2 C10 the
+      // cast lines of Sigil of Misery and Ring of Frost ask here too
+      // (`isControlCast`); a Lay In Wait sigil keeps a bare line
+      // (`aoeCcLandingWindowFor`).
       if (![...own].some((id) => AOE_CC_SPELL_IDS.has(id))) return "";
-      const landing = AOE_CC_LANDING_WINDOW_S[spellId];
+      const landing = aoeCcLandingWindowFor(
+        spellId,
+        playerTalentIdSets(owner).pvpTalentIds,
+      );
       if (landing === null) return "";
       const inLanding = landing
         ? (ms: number) =>
@@ -1130,7 +1136,7 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
       !isSelf && targetUnit?.reaction === CombatUnitReaction.Hostile;
 
     let velocityStr = "";
-    if (targetUnit && !targetIsEnemy && !ccSpellIds.has(spellId)) {
+    if (targetUnit && !targetIsEnemy && !isControlCast(spellId)) {
       const hpNow = hpAtPress(targetUnit, castMs, press);
       const hpBefore = getUnitHpAtTimestamp(
         targetUnit,

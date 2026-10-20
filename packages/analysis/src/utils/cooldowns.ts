@@ -8,6 +8,7 @@ import {
 
 import { isSurvivalWall } from "../data/abilityProfile";
 import baselineDefensivesGenerated from "../data/baselineDefensivesGenerated.json";
+import { castsOwningEffectAura } from "../data/castEffectAuras";
 import CD_RECAST_FLOORS from "../data/cdRecastFloorGenerated.json";
 import { classMetadata } from "../data/classSpells";
 import CONDITIONAL_COOLDOWNS from "../data/conditionalCooldownsGenerated.json";
@@ -66,7 +67,7 @@ import {
 import { fmtTime, toRenderSecond } from "./renderGrid";
 import { buildRosterSides } from "./rosterSide";
 import { roundEndMs } from "./roundEnd";
-import { isOffensiveSpell, OFFENSIVE_CD_SPELL_IDS } from "./spellDanger";
+import { OFFENSIVE_CD_SPELL_IDS, offensiveEffectCdId } from "./spellDanger";
 import {
   CD_TALENT_MODIFIERS,
   DATED_COOLDOWN_VALUES,
@@ -999,7 +1000,9 @@ export function ownPressLockout(
 // export, so the aura evidence (`hasOffensiveSpellActive` → `threatActiveAt`,
 // panic-press) and the enemy-CD window builder can no longer drift apart.
 // Since GH #115 both read `isOffensiveSpell`, which also admits a registered
-// activation of a cooldown's effect (Radiant Glory's Avenging Wrath 454351).
+// activation of a cooldown's effect (Radiant Glory's Avenging Wrath 454351);
+// since fact2 C10 the aura side resolves an effect aura to its cast first
+// (`offensiveCdOfAura`, below).
 
 /** Only track cooldowns at or above this threshold.
  *
@@ -1013,6 +1016,60 @@ export function ownPressLockout(
 // uncommented copy of the same floor for the ENEMY offensive-CD timeline —
 // one fact ("what counts as a major cooldown"), one predicate.
 export const MIN_CD_SECONDS = 30;
+
+/** Max CD to consider a "real" cooldown (filters out 999.999s passive procs) */
+export const ENEMY_CD_MAX_SECONDS = 360;
+
+/**
+ * "The enemy opened a cooldown" — ONE predicate for every consumer that
+ * turns an enemy cast into a burst / threat fact: this builder's enemy-CD
+ * windows, `crisisDecisionPoints`' `enemyBurst` and the teammate-crisis
+ * cards' burst fact (2026-09-17, GH #95 hand-read). Membership in the
+ * canonical `OFFENSIVE_CD_SPELL_IDS` is necessary but not sufficient — that
+ * table also admits `debuffs_offensive` rows with no cooldown at all (Curse
+ * of Weakness 702, Curse of Tongues 1714, Ignite 12654), which are not
+ * something a cooldown tracker shows. Official cooldown (or charge recharge)
+ * inside [MIN_CD_SECONDS, ENEMY_CD_MAX_SECONDS] — of the EFFECT's cooldown:
+ * a registered activation (`OFFENSIVE_EFFECT_ACTIVATION_IDS`, Radiant Glory's
+ * Avenging Wrath 454351) is admitted on its canonical cooldown (GH #115).
+ */
+export function isEnemyCdWindowSpell(spellId: string): boolean {
+  const cdId = offensiveEffectCdId(spellId);
+  if (cdId === undefined) return false;
+  const effectData = spellEffectData[spellId];
+  if (!effectData) return false;
+  const cooldownSeconds = effectiveCooldownSeconds(cdId) ?? 0;
+  return (
+    cooldownSeconds >= MIN_CD_SECONDS && cooldownSeconds <= ENEMY_CD_MAX_SECONDS
+  );
+}
+
+
+/**
+ * fact2 C10 (2026-10-20): the offensive cooldown an AURA is the effect of.
+ * `OFFENSIVE_CD_SPELL_IDS` is keyed mostly by CAST ids, and a cast often
+ * leaves its effect under another id — Colossus Smash 167105 runs as 208086
+ * (a buff on the warrior and a debuff on the target), Feral Frenzy 274837 as
+ * 274838, Touch of the Magi 321507 as 210824, Kingsbane 385627 as 394095.
+ * An aura reader that asked `isOffensiveSpell(aura)` never saw them
+ * (aff36b44: no `[friendly offensive CD active]` on three enemy presses
+ * inside a running Colossus Smash). The aura is resolved to the cast whose
+ * own effect it is (`castsOwningEffectAura`: the one cast→effect table, the
+ * family the cast-side span already reads — `observedEffectEndSeconds` →
+ * `burstCastSpan` — kept to the cast's same-name buff), and a cast found
+ * that way is admitted on the enemy-CD window test
+ * (`isEnemyCdWindowSpell`), so a short effect that rides another cooldown
+ * stays out as the GH #119 ruling keeps it out (Shadow Dance 185313 → 185422,
+ * 20 s). An id in the table itself answers as before (`offensiveEffectCdId`).
+ * The aura-only effects `OFFENSIVE_AURA_EVIDENCE` answers for keep their own
+ * reader and are not resolved here. Undefined = not an offensive effect.
+ */
+export function offensiveCdOfAura(auraSpellId: string): string | undefined {
+  const own = offensiveEffectCdId(auraSpellId);
+  if (own !== undefined) return own;
+  if (OFFENSIVE_AURA_EVIDENCE.has(auraSpellId)) return undefined;
+  return castsOwningEffectAura(auraSpellId).find((c) => isEnemyCdWindowSpell(c));
+}
 
 /** Two presses of a multi-charge spell closer than this are one press logged
  *  twice, not two charges (extractMajorCooldowns' 2 s dedupe; W1e). */
@@ -5545,7 +5602,8 @@ export interface IPanicDefensive {
  * - Pass the `enemyIds` set to restrict to enemy-sourced auras (used for debuffs on friendlies).
  *
  * Exported (was panic-press-private) for `threatAssessment.ts`'s `threatActiveAt`
- * — real aura-interval evidence off the same `isOffensiveSpell` table, not a
+ * — real aura-interval evidence off the same `isOffensiveSpell` table (an
+ * effect aura resolved to its cast by `offensiveCdOfAura`), not a
  * second cast+duration estimate (predicate-index.md: "Threat / pressure").
  */
 export function hasOffensiveSpellActive(
@@ -5575,12 +5633,20 @@ export function hasOffensiveSpellActive(
   const notTheEnd = supersededAuraBreaks(unit.auraEvents);
   for (const aura of unit.auraEvents) {
     const spellId = aura.spellId;
-    if (!spellId || !isOffensiveSpell(spellId)) continue;
+    // the aura's own id or the cast it is the effect of (fact2 C10:
+    // Colossus Smash runs as 208086) — the filter asks about the cooldown
+    const cdId = spellId ? offensiveCdOfAura(spellId) : undefined;
+    if (!spellId || cdId === undefined) continue;
     if (notTheEnd.has(aura)) continue;
     if (OFFENSIVE_AURA_EVIDENCE.has(spellId)) continue;
     if (requiredSourceIds !== null && !requiredSourceIds.has(aura.srcUnitId))
       continue;
-    if (spellIdFilter !== undefined && !spellIdFilter(spellId)) continue;
+    if (
+      spellIdFilter !== undefined &&
+      !spellIdFilter(spellId) &&
+      !spellIdFilter(cdId)
+    )
+      continue;
 
     if (aura.logLine.event === LogEvent.SPELL_AURA_APPLIED) {
       const b = applied.get(spellId) ?? [];
@@ -5642,14 +5708,16 @@ function offensiveThreatStartedAfter(
   for (const enemy of enemies) {
     for (const aura of enemy.auraEvents) {
       if (aura.logLine.event !== LogEvent.SPELL_AURA_APPLIED) continue;
-      if (!aura.spellId || !isOffensiveSpell(aura.spellId)) continue;
+      if (!aura.spellId || offensiveCdOfAura(aura.spellId) === undefined)
+        continue;
       if (aura.timestamp > castMs && aura.timestamp <= windowEnd) return true;
     }
   }
 
   for (const aura of target.auraEvents) {
     if (aura.logLine.event !== LogEvent.SPELL_AURA_APPLIED) continue;
-    if (!aura.spellId || !isOffensiveSpell(aura.spellId)) continue;
+    if (!aura.spellId || offensiveCdOfAura(aura.spellId) === undefined)
+      continue;
     if (!enemyIds.has(aura.srcUnitId)) continue;
     if (aura.timestamp > castMs && aura.timestamp <= windowEnd) return true;
   }

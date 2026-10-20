@@ -61,10 +61,12 @@ describe("killWindowFacts (GH #31 ①)", () => {
       fromSeconds: 40,
       toSeconds: 100,
       friendlyDamageInWindow: 8_000,
+      friendlyAbsorbedInWindow: 0,
       bursts: [] as Array<{
         fromSeconds: number;
         toSeconds: number;
         damage: number;
+        absorbed: number;
       }>,
     };
     // accountable unpunished span → accusation stands
@@ -85,7 +87,7 @@ describe("killWindowFacts (GH #31 ①)", () => {
     // burst itself is the capability evidence, facts are never a gate here)
     const burstWin = {
       ...win,
-      bursts: [{ fromSeconds: 50, toSeconds: 55, damage: 900_000 }],
+      bursts: [{ fromSeconds: 50, toSeconds: 55, damage: 900_000, absorbed: 0 }],
     };
     const killLines = buildDpsKillWindowLines(
       [burstWin],

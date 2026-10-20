@@ -5,7 +5,7 @@ import {
   LogEvent,
 } from "@gladlog/parser-compat";
 
-import { ccSpellIds } from "../data/spellTags";
+import { isControlCast } from "./castMissRows";
 import { analyzePlayerCCAndTrinket } from "./ccTrinketAnalysis";
 import {
   annotateDefensiveTimings,
@@ -107,7 +107,7 @@ export function computeHealerMetrics(
   const ccCasts = healerUnit.spellCastEvents.filter(
     (e: any) =>
       e.logLine.event === "SPELL_CAST_SUCCESS" &&
-      ccSpellIds.has(String(e.spellId)),
+      isControlCast(String(e.spellId)),
   );
   const durationSeconds = (combat.endTime - combat.startTime) / 1000;
   const ccDensity =

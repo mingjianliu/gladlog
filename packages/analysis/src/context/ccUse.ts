@@ -43,15 +43,14 @@
  */
 import type { AtomicArenaCombat, ICombatUnit } from "@gladlog/parser-compat";
 
-import { castAndEffectIds } from "../data/castEffectAuras";
 import { getEnglishSpellName } from "../data/spellEffectData";
-import { ccSpellIds } from "../data/spellTags";
 import type { IBurstLedgerEntry } from "../utils/burstLedger";
 import {
   castBarsOfCooldown,
   type CastBarStart,
   castBarStartsInRound,
 } from "../utils/castCancels";
+import { isControlCast } from "../utils/castMissRows";
 import { ccSamplerFor, pvpTrinketReadyAtSecond } from "../utils/ccTargetState";
 import type { IPlayerCCTrinketSummary } from "../utils/ccTrinketAnalysis";
 import {
@@ -135,7 +134,7 @@ function ccUseCooldowns(
 ): ControlCooldown[] | null {
   try {
     return extractMajorCooldowns(owner, combat).filter(
-      (cd) => cd.tag === "Control" || ccSpellIds.has(cd.spellId),
+      (cd) => cd.tag === "Control" || isControlCast(cd.spellId),
     );
   } catch {
     return null;
@@ -187,8 +186,8 @@ function sortControlCastBars(
       // a control by the hard-CC set, asked of the cast's own id and of its
       // effect auras (a cast id is often not the id of the aura it leaves —
       // data/castEffectAuras.ts)
-      if (![...castAndEffectIds(s.id)].some((id) => ccSpellIds.has(id)))
-        continue;
+      // (fact2 C10: the one cast→control reading, `isControlCast`)
+      if (!isControlCast(s.id)) continue;
       entry = { spellId: s.id, spellName: name, bars: [] };
       offLedger.set(name, entry);
     }

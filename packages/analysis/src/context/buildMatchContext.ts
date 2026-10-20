@@ -80,6 +80,8 @@ import {
 import {
   buildDpsKillWindowLines,
   createKillWindowFactsComputer,
+  hasTeamAbsorbedClause,
+  TEAM_DAMAGE_ABSORBED_LEGEND,
 } from "../utils/killWindowFacts";
 import { matchMinHpPct } from "../utils/killWindowTargetSelection";
 import { computeMatchArchetype } from "../utils/matchArchetype";
@@ -748,6 +750,8 @@ export function buildMatchContext(
       tLines.push(
         "  `defenseless a–b` = nothing of these was up on the target: its own wall, immunity or absorb shield, an ally's external on it, an area save it carried; and every major defensive it pressed this round was still on cooldown. A defensive it never pressed may still have been in hand (its kit's [UNUSED]); a heal is not counted.",
       );
+      if (kwLines.some(hasTeamAbsorbedClause))
+        tLines.push(TEAM_DAMAGE_ABSORBED_LEGEND);
       kwLines.forEach((l) => tLines.push(l));
       tLines.push("</kill_windows>");
     }
