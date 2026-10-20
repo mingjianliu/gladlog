@@ -37,6 +37,10 @@ export interface IHpEvent extends ICombatEvent {
   amount: number;
   effectiveAmount: number;
   spellSchoolId?: string;
+  /** The school the damage was dealt in (the hp tail's field, hex like
+   * `spellSchoolId`) when the parser kept it — see `GladHpEvent.school`.
+   * Read through analysis `hitSchoolId`. */
+  damageSchoolId?: string;
   /**
    * Damage past the target's remaining health (positive), present ONLY when
    * > 0 — i.e. this event is a killing blow. Needed as its own field because

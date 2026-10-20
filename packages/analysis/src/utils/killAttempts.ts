@@ -61,6 +61,7 @@ import {
   IArenaMatch,
   ICombatUnit,
   IShuffleRound,
+  LogEvent,
 } from "@gladlog/parser-compat";
 
 import { SCHOOL_SAVE_MIN_SHARE } from "../analysis/candidates/cooldownTiming";
@@ -68,7 +69,7 @@ import { isDamageImmuneControl } from "../analysis/candidates/massDispel";
 import { schoolShareCoveredBy } from "../analysis/crisisDecisionPoints";
 import { fmtFactTime } from "../analysis/factFormat";
 import { CandidateEvent } from "../analysis/types";
-import { castKeyOfAura } from "../data/castEffectAuras";
+import { castAndEffectIds, castKeyOfAura } from "../data/castEffectAuras";
 import {
   resolveMitigation,
   strongestComponentPct,
@@ -687,35 +688,100 @@ export function extractKillAttempts(
   //    target is already covered by an overlapping stun-anchored attempt is
   //    skipped — the stun anchor carries richer DR/chain attribution.
   {
-    const teamCasts: Array<{ cast: number; to: number; spellName: string }> =
-      [];
+    type TeamCast = {
+      cast: number;
+      to: number;
+      spellName: string;
+      spellId: string;
+      caster: ICombatUnit;
+      /** the cast row's dest unit (fact2: the anchor names a press that
+       * went into the target) */
+      destId?: string;
+    };
+    const teamCasts: TeamCast[] = [];
     for (const f of friendlies) {
       const cds =
         reconstructEnemyCDTimeline([f], combat).players[0]?.offensiveCDs ?? [];
       for (const cd of cds) {
         if (!anchorsKillAttempt(f, cd.spellId)) continue;
         const span = burstCastSpan(cd);
+        const castMs = matchStartMs + cd.castTimeSeconds * 1000;
+        const row = (f.spellCastEvents ?? []).find(
+          (e) =>
+            e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+            e.spellId === cd.spellId &&
+            Math.abs(e.logLine.timestamp - castMs) <= 1,
+        );
         teamCasts.push({
           cast: cd.castTimeSeconds,
           to: span.to,
           spellName: cd.spellName,
+          spellId: cd.spellId,
+          caster: f,
+          ...(row?.destUnitId ? { destId: row.destUnitId } : {}),
         });
       }
     }
     teamCasts.sort((a, b) => a.cast - b.cast);
-    const clusters: Array<{ from: number; to: number; opener: string }> = [];
+    const clusters: Array<{
+      from: number;
+      to: number;
+      opener: string;
+      casts: TeamCast[];
+    }> = [];
     {
-      let cur: { from: number; to: number; opener: string } | null = null;
+      let cur: (typeof clusters)[number] | null = null;
       for (const c of teamCasts) {
         if (cur && c.cast <= cur.to) {
           cur.to = Math.max(cur.to, c.to);
+          cur.casts.push(c);
         } else {
           if (cur) clusters.push(cur);
-          cur = { from: c.cast, to: c.to, opener: c.spellName };
+          cur = { from: c.cast, to: c.to, opener: c.spellName, casts: [c] };
         }
       }
       if (cur) clusters.push(cur);
     }
+    /** fact2 (2026-10-20, kill-attempt anchor): the press the line names —
+     * the first of the cluster that went into the target (its cast row's
+     * dest, else a hit of it — or of its effect — on the target inside the
+     * bracket and the slack). 0d08dd90 1:26: `Feral Frenzy burst` on Kalshi
+     * for a Feral Frenzy cast into Calculator. With none, the opener, and
+     * where it went. */
+    const anchorNameOf = (
+      cl: (typeof clusters)[number],
+      target: ICombatUnit,
+      toMs: number,
+    ): string => {
+      const hitTarget = (c: TeamCast) => {
+        if (c.destId !== undefined && c.destId !== "0000000000000000")
+          return c.destId === target.id;
+        const ids = castAndEffectIds(c.spellId);
+        return (c.caster.damageOut ?? []).some(
+          (d) =>
+            d.destUnitId === target.id &&
+            !!d.spellId &&
+            ids.has(d.spellId) &&
+            d.logLine.timestamp >= matchStartMs + c.cast * 1000 &&
+            d.logLine.timestamp <= toMs,
+        );
+      };
+      const into = cl.casts.find(hitTarget);
+      if (into) return into.spellName;
+      const first = cl.casts[0]!;
+      // an enemy player or any unit of theirs (a pet: 691a7f31 1:13, a Ray
+      // of Frost into the hunter's pet)
+      const elsewhere =
+        first.destId !== undefined &&
+        !friendlies.some((f) => f.id === first.destId)
+          ? (combat.units as Record<string, ICombatUnit> | undefined)?.[
+              first.destId
+            ]
+          : undefined;
+      return elsewhere && elsewhere.reaction !== first.caster.reaction
+        ? `${first.spellName} (cast into ${elsewhere.name})`
+        : first.spellName;
+    };
     const enemyIds = new Set(enemies.map((e) => e.id));
     /** Team damage per enemy inside [fromMs, toMs] (one pass). */
     const damageOver = (
@@ -744,14 +810,31 @@ export function extractKillAttempts(
         matchStartMs + cl.from * 1000,
         matchStartMs + clusterTo * 1000 + slackMs,
       );
-      let target: ICombatUnit | null = null;
-      let most = 0;
-      for (const [id, dmg] of whole.byEnemy) {
-        if (dmg > most) {
-          most = dmg;
-          target = enemies.find((e) => e.id === id) ?? null;
+      // fact2 (2026-10-20): the target is who the team hit INSIDE the
+      // bracket — the slack after it is for crediting a late kill, not for
+      // choosing whom the go was on (6292fa5b 1:15: Frosh took 98 % of a
+      // 1 s Ray of Frost cluster, and the line named Wapowsx, who led only
+      // over the 5 s after it). A bracket under the floor keeps the reading
+      // over bracket + slack, as before.
+      const inside = damageOver(
+        matchStartMs + cl.from * 1000,
+        matchStartMs + clusterTo * 1000,
+      );
+      const topOf = (byEnemy: Map<string, number>) => {
+        let best: { unit: ICombatUnit; dmg: number } | null = null;
+        for (const [id, dmg] of byEnemy) {
+          const unit = enemies.find((e) => e.id === id);
+          if (unit && (!best || dmg > best.dmg)) best = { unit, dmg };
         }
-      }
+        return best;
+      };
+      const insideTop = topOf(inside.byEnemy);
+      const pick =
+        insideTop && insideTop.dmg >= KW_BURST_MIN_DAMAGE
+          ? insideTop
+          : topOf(whole.byEnemy);
+      const target: ICombatUnit | null = pick?.unit ?? null;
+      const most = pick ? (whole.byEnemy.get(pick.unit.id) ?? 0) : 0;
       if (!target || most < KW_BURST_MIN_DAMAGE) continue;
       // F17 (user ruling 2026-10-11): the bracket on a priest ends where its
       // Spirit of Redemption form begins (and starts where a form it opened
@@ -801,7 +884,7 @@ export function extractKillAttempts(
         targetUnitId: target.id,
         targetName: target.name,
         anchor: "burst",
-        anchorSpellName: cl.opener,
+        anchorSpellName: anchorNameOf(cl, target, spanToMs),
         fromSeconds,
         toSeconds,
         stuns: [],

@@ -84,8 +84,9 @@ describe("killWindowTargetSelection — HP helpers", () => {
         makeAdvancedAction(MATCH_START + 10000, 0, 0, 100, 80), // 80%
       ],
     });
-    // t=8s: nearest is the 10s sample (2s away) — two-sided nearest, same basis as [STATE]
-    expect(getHpPercentAtTime(unit, 8, MATCH_START)).toBe(80);
+    // t=8s: the last reading at or before it (5s, 3s away) — fact2: a later
+    // reading is not the state at 8s; same basis as [STATE]
+    expect(getHpPercentAtTime(unit, 8, MATCH_START)).toBe(50);
     expect(getHpPercentAtTime(unit, 12, MATCH_START)).toBe(80);
     // t=2s: the 5s sample is exactly 3s away — inside the radius
     expect(getHpPercentAtTime(unit, 2, MATCH_START)).toBe(50);

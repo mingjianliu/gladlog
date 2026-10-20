@@ -202,6 +202,15 @@ function isPetOrGuardian(
   return destId.startsWith("Pet-");
 }
 
+/** `IHpEvent.damageSchoolId` from the L3 damage event's tail school. */
+function damageSchoolField(event: { school?: number }): {
+  damageSchoolId?: string;
+} {
+  return event.school !== undefined && event.school > 0
+    ? { damageSchoolId: `0x${event.school.toString(16)}` }
+    : {};
+}
+
 function getSpellSchoolId(
   eventName: string,
   params: string[] | undefined,
@@ -337,6 +346,7 @@ function convertUnit(
         effectiveAmount: isPetDest ? -0 : -hpLost(event),
         ...overkillField(event),
         spellSchoolId: getSpellSchoolId(event.eventName, event.params),
+        ...damageSchoolField(event),
         logLine: {
           event: event.eventName as LogEvent,
           timestamp: event.timestamp,
@@ -399,6 +409,7 @@ function convertUnit(
         effectiveAmount: isPetDest ? -0 : -hpLost(event),
         ...overkillField(event),
         spellSchoolId: getSpellSchoolId(event.eventName, event.params),
+        ...damageSchoolField(event),
         logLine: {
           event: event.eventName as LogEvent,
           timestamp: event.timestamp,

@@ -92,6 +92,7 @@ export function collectEvents(
         effectiveAmount: record.damage.effectiveAmount,
         absorbed: record.damage.absorbed,
         crit: record.damage.critical,
+        ...(record.damage.school > 0 ? { school: record.damage.school } : {}),
       };
 
       // DAMAGE_SPLIT's src is the unit whose damage is being redirected AWAY

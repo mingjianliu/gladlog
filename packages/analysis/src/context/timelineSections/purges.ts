@@ -15,6 +15,7 @@ import {
   type IDispelEvent,
   purgeableCountText,
 } from "../../utils/dispelAnalysis";
+import { isRiderDispel } from "../../utils/dispelKind";
 import { fmtTime } from "../../utils/renderGrid";
 import { dispelActorLabel } from "../timelineHelpers";
 import type { TimelineCtx } from "./ctx";
@@ -72,6 +73,7 @@ export function emitPurgeEntries(
     )
       continue;
     if (purge.priority !== "Critical" && purge.priority !== "High") continue;
+    if (isRiderDispel(purge)) continue;
     const key = `${Math.round(purge.timeSeconds)}|${purge.sourceName}|${purge.isPetDispel}`;
     const group = purgeGroups.get(key) ?? [];
     group.push(purge);
@@ -96,6 +98,7 @@ export function emitPurgeEntries(
   const hostileGroups = new Map<string, IDispelEvent[]>();
   for (const purge of dispelSummary.hostilePurges) {
     if (purge.priority !== "Critical" && purge.priority !== "High") continue;
+    if (isRiderDispel(purge)) continue;
     const key = `${Math.round(purge.timeSeconds)}|${purge.sourceName}|${purge.isPetDispel}`;
     const group = hostileGroups.get(key) ?? [];
     group.push(purge);
@@ -125,6 +128,9 @@ export function emitPurgeEntries(
     const enemyCleanseGroups = new Map<string, IDispelEvent[]>();
     for (const c of enemyDispelSummary.allyCleanse) {
       if (c.priority !== "Critical" && c.priority !== "High") continue;
+      // a form shift's / movement ability's root break is no cleanse
+      // (`isRiderDispel`, the friendly [CLEANSE]'s own test)
+      if (isRiderDispel(c)) continue;
       const key = `${Math.round(c.timeSeconds)}|${c.sourceName}|${c.isPetDispel}`;
       const group = enemyCleanseGroups.get(key) ?? [];
       group.push(c);

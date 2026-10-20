@@ -449,6 +449,10 @@ function lockoutKey(displayName: string, lock: ResPressLockout): string {
   return `${displayName}@${lock.debuff.toLowerCase()}${Math.round(lock.untilS * 10) / 10}`;
 }
 
+/** A never-pressed cooldown makes no [RES] row on its own in the round's
+ * first seconds up to this one (`resStateOf`'s `skip`). */
+export const RES_OPENER_SKIP_S = 5;
+
 /**
  * One cooldown's state on a [RES] line, through the shared predicate
  * (`cdAvailableAt`, GH #106 step 3 — the ledger used to run its own parallel
@@ -464,7 +468,7 @@ function resStateOf(
   const pressed = lockCastsOf(cd).some((c) =>
     pressSpentBy(c.timeSeconds, timeSeconds),
   );
-  if (!pressed) return timeSeconds > 5 ? "ready" : "skip";
+  if (!pressed) return timeSeconds > RES_OPENER_SKIP_S ? "ready" : "skip";
   return cdAvailableAt(cd, timeSeconds) ? "ready" : "onCd";
 }
 
@@ -642,11 +646,17 @@ export function computeReadyNames(
   ownerCDs: IMajorCooldownInfo[],
   teammateCDs: ResTeammateCds[],
   deaths?: ResHolderDeaths,
+  /** the row prints although it is in the first 5 s: a never-pressed
+   * cooldown is ready on it (fact2, `ResourceSnapshotParams.openerPrints`) */
+  openerPrints = false,
 ): string[] {
   const readyNames: string[] = [];
-  for (const e of friendlyResCds(timeSeconds, ownerCDs, teammateCDs, deaths))
-    if (!e.holderDead && resEntryState(e, timeSeconds) === "ready")
+  for (const e of friendlyResCds(timeSeconds, ownerCDs, teammateCDs, deaths)) {
+    if (e.holderDead) continue;
+    const state = resEntryState(e, timeSeconds);
+    if (state === "ready" || (openerPrints && state === "skip"))
       readyNames.push(e.displayName);
+  }
   return readyNames;
 }
 
@@ -718,9 +728,32 @@ interface ResourceSnapshotParams {
    * (no `prevReadyNames`): a delta would print the drop as a spent `-X`.
    */
   outOfReachOf?: { victim: ICombatUnit; atMs: number };
+  /** fact2 (2026-10-20): a row in the first 5 s that prints at all lists
+   * the never-pressed cooldowns as ready (`resStateOf`'s `skip` is for
+   * whether such a row prints, not for what it says). Set by the builder on
+   * its own second pass; the resolver reads the same through
+   * `computeReadyNames(…, openerPrints)`. */
+  openerPrints?: boolean;
 }
 
-export function buildResourceSnapshot({
+export function buildResourceSnapshot(
+  params: ResourceSnapshotParams,
+): string {
+  const line = buildResourceSnapshotOnce(params);
+  // fact2 (2026-10-20): a first-5-s row that prints says what was ready on
+  // it — every untouched cooldown — instead of `rdy:—` (0c8b1932 0:02:
+  // `rdy:—  cd:3:Stampeding Roar(60s)`, then `+Pain Suppression +…` at 0:13
+  // as if they had just come back)
+  if (
+    line !== "" &&
+    !params.openerPrints &&
+    toRenderSecond(params.timeSeconds) <= RES_OPENER_SKIP_S
+  )
+    return buildResourceSnapshotOnce({ ...params, openerPrints: true });
+  return line;
+}
+
+function buildResourceSnapshotOnce({
   timeSeconds: rawTimeSeconds,
   ownerCDs,
   ownerName,
@@ -737,6 +770,7 @@ export function buildResourceSnapshot({
   manaFallback,
   roundBounds,
   outOfReachOf,
+  openerPrints,
 }: ResourceSnapshotParams): string {
   // Render-grid anchor (CLAUDE.md shared-predicate rule; GH #63, 2026-09-04):
   // callers hand in the cast's fractional instant, but the line is printed
@@ -777,6 +811,7 @@ export function buildResourceSnapshot({
     ownerCDs,
     labelledTeammates,
     deaths,
+    openerPrints,
   ).filter((n) => !outOfReach.has(n));
 
   // Build on-CD display list with player attribution (B34) and delta filtering (B35).

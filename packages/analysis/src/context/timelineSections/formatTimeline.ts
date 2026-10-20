@@ -81,7 +81,7 @@ const STATE_TICK_LINE_RE = /^\d+:\d{2}\s+\[STATE\]\s/;
  * optional `unit:?` token is deliberately NOT implemented.
  */
 export const STATE_LEGEND = [
-  "  [STATE] `m:ss … unit:N` = that unit's HP % at the START of second m:ss (the log reading nearest m:ss.0). The other lines",
+  `  [STATE] \`m:ss … unit:N\` = that unit's HP % at the START of second m:ss (the last log reading at or before m:ss.0; with none in the ${HP_SAMPLE_RADIUS_MS / 1000} s before it, the first one after). The other lines`,
   "    printed under the same `m:ss` happen during that second, AFTER the tick: a hit or a heal inside it is not in the tick's",
   "    number. A later tick shows where the unit ended up; a `low N%` on a window line is the lowest point in between.",
   `    A unit missing from a printed half is at full health or has no HP reading within ${HP_SAMPLE_RADIUS_MS / 1000} s of that second — not necessarily at`,

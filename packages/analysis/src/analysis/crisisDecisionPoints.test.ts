@@ -1129,8 +1129,10 @@ describe("crisisDecisionPoints — role='dps' gate 3 (spec §1d, GH #59)", () =>
  * change to either side can only move both together.
  */
 describe("crisisDecisionPoints — render-grid anchoring", () => {
-  // triage 2026-09-29 H3 (95127ab4 @23: sample 23.093, dmg2s 12 % → 33 %)
-  it("dmg2s is the damage in the 2 s before the HP reading, which can sit after the whole second", () => {
+  // triage 2026-09-29 H3 (95127ab4 @23: sample 23.093, dmg2s 12 % → 33 %).
+  // fact2 (2026-10-20): the tick reads the last sample at or before its
+  // second, so the 2.09 s reading is the 3 s tick's — the crossing is at 3
+  it("dmg2s is the damage in the 2 s before the HP reading the tick took", () => {
     const o = unit({
       advancedActions: [hp(0, 100), hp(1000, 70), hp(2090, 38), hp(4000, 35)],
       damageIn: [
@@ -1150,7 +1152,7 @@ describe("crisisDecisionPoints — render-grid anchoring", () => {
       ],
     });
     const p = crisisDecisionPoints(o, combat(o, [enemy()]))[0]!;
-    expect(p.tSec).toBe(2);
+    expect(p.tSec).toBe(3);
     expect(p.hpPct).toBe(38);
     expect(p.dmg2s).toBe(0.32);
   });
@@ -1176,8 +1178,12 @@ describe("crisisDecisionPoints — render-grid anchoring", () => {
       ],
     });
     const p = crisisDecisionPoints(o, combat(o, [enemy()]))[0]!;
-    expect(p.tSec).toBeLessThan(4);
-    expect(p.dmg2s).toBeLessThan(0.32);
+    // fact2: the 0.8 s dip is gone by the 0.9 s reading before any tick;
+    // the 4 s tick has no reading within the radius before it and takes the
+    // 4.7 s one; the 4.6 s hit sits inside that anchor second, so it is the
+    // reading's prior damage — and nothing after the second is
+    expect(p.tSec).toBe(4);
+    expect(p.dmg2s).toBe(0.32);
   });
 
   it("a crossing sampled between two whole seconds reports the grid second, not the raw instant", () => {
@@ -1185,10 +1191,11 @@ describe("crisisDecisionPoints — render-grid anchoring", () => {
       advancedActions: [hp(0, 100), hp(1000, 70), hp(2400, 38), hp(3000, 35)],
     });
     const p = crisisDecisionPoints(o, combat(o, [enemy()]))[0]!;
-    // raw crossing is at 2.4s; the rendered second is 2
-    expect(p.tSec).toBe(2);
+    // raw crossing is at 2.4s; the first tick that reads it is 3 (fact2:
+    // a tick reads the last sample at or before its second)
+    expect(p.tSec).toBe(3);
     expect(Number.isInteger(p.tSec)).toBe(true);
-    expect(p.tMs).toBe(T0 + 2000);
+    expect(p.tMs).toBe(T0 + 3000);
   });
 
   it("hpPct IS the [STATE] tick's own reading at tSec (same sampler, same instant)", () => {

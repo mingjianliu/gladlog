@@ -64,7 +64,7 @@ import { castKeyOfAura } from "../data/castEffectAuras";
 import { MITIGATION_TABLE, NO_MITIGATION_IDS } from "../data/mitigationData";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import { buildAuraIntervals, type IAuraInterval } from "./auraIntervals";
-import { isDeferralAbsorb } from "./incomingPressure";
+import { hitSchoolId, isDeferralAbsorb,logSchoolMask } from "./incomingPressure";
 
 /** Seconds before the application in which a hit on the target makes an ally
  *  "qualifying". Direct or periodic (user ruling 2026-09-30, A30 / triage
@@ -284,7 +284,7 @@ export function externalDamageForApplication(
       if (DIRECT_EVENTS.has(ev)) nDirect += amt;
       else if (ev === PERIODIC_EVENT) nPeriodic += amt;
       else continue;
-      if ((Number(d.spellSchoolId ?? "0x0") & mit.schoolMask) !== 0)
+      if ((logSchoolMask(hitSchoolId(d)) & mit.schoolMask) !== 0)
         inSchool += amt;
       if (amt >= EXTERNAL_DAMAGE_BIN_MIN_HIT) bins.add(Math.floor(tS));
     }

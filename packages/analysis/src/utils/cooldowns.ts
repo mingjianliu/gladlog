@@ -1560,6 +1560,22 @@ export function getUnitHpAtTimestamp(
   return unitHpSampleAt(unit, timestampMs, maxDtMs)?.pct ?? null;
 }
 
+/** The unit's last advanced reading at or before `tMs` (the last line of
+ * that instant, GH #100's tie rule), when it lies within `maxDtMs`. */
+function lastAtOrBefore<
+  T extends { logLine: { timestamp: number } },
+>(sorted: readonly T[], tMs: number, maxDtMs: number): T | null {
+  let lo = 0;
+  let hi = sorted.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    if (sorted[mid]!.logLine.timestamp <= tMs) lo = mid + 1;
+    else hi = mid;
+  }
+  const a = lo > 0 ? sorted[lo - 1]! : null;
+  return a && tMs - a.logLine.timestamp <= maxDtMs ? a : null;
+}
+
 /**
  * `getUnitHpAtTimestamp` plus WHEN the reading was taken: the advanced action
  * it picked can sit up to `maxDtMs` either side of the asked instant. A fact
@@ -1573,11 +1589,18 @@ export function unitHpSampleAt(
   timestampMs: number,
   maxDtMs = HP_SAMPLE_RADIUS_MS,
 ): { pct: number; sampleMs: number } | null {
-  const closestAction = binarySearchClosest(
-    getSortedAdvancedActions(unit),
-    timestampMs,
-    (a) => a.logLine.timestamp,
-  );
+  // fact2 (2026-10-20, the [STATE] sampler): the state AT an instant is the
+  // last reading at or before it — a hit or a heal later in that second is
+  // not in it (the [STATE] legend's own rule). Nearest-either-side took a
+  // reading up to `maxDtMs` AFTER the instant: 83219f2b 0:31 printed 55
+  // (a Shadowstrike at 0:31.395) for a unit the log read at 58 through
+  // 0:31.021; 280d1cbb 0:28 printed 82 (0:28.545) beside the same
+  // second's `self: 100% HP` press line. With no reading before it inside
+  // the radius, the first one after it stands, as before.
+  const actions = getSortedAdvancedActions(unit);
+  const closestAction =
+    lastAtOrBefore(actions, timestampMs, maxDtMs) ??
+    binarySearchClosest(actions, timestampMs, (a) => a.logLine.timestamp);
 
   if (!closestAction) {
     return null;

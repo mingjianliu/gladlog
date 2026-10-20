@@ -346,6 +346,13 @@ export const ENEMY_IMMUNITY_SAVE_AURAS: Readonly<Record<string, string>> = {
   "414664": "Mass Invisibility", // 465 casts; the aura lands on the mage and on allies
   "11327": "Vanish", // 1,084, one per 1856 cast
   "228050": "Guardian of the Forgotten Queen", // 2 — applied by the summoned guardian, see the cast map below
+  // fact2 (user ruling 5, 2026-10-20: 「算免疫形态」): the PRESSED Spirit of
+  // Redemption (Spirit of the Redeemer, PvP) — the unit cannot be hit while
+  // the form lasts (the F17 span cut's own reading: 81 logs, 300 pressed
+  // forms, no damage row later than 1.47 s after the aura went up;
+  // 17b44099 0:33: 26 hits IMMUNE in the form). The on-death form 27827 is
+  // no press and stays out.
+  "215769": "Spirit of Redemption",
 };
 
 /** What a proc save does, as its `[ENEMY DEF]` line says it. */

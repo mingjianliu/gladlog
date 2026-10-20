@@ -42,6 +42,7 @@ import { allyCopyRecipient } from "./allyCopyWall";
 import { auraEndFromLog, type IAuraEndFromLog } from "./auraEndCause";
 import { buildAuraIntervals, type IAuraInterval } from "./auraIntervals";
 import { buffFullDurationForCaster } from "./buffDuration";
+import { PRESSED_SPIRIT_OF_REDEMPTION_AURA_IDS } from "./combatStates";
 import { AURA_ONLY_ACTIVATION_IDS } from "./cooldowns";
 import { TOUCH_OF_KARMA_ID } from "./karmaFeed";
 import { toRenderSecond } from "./renderGrid";
@@ -196,6 +197,9 @@ export function immunityLastsItsAura(spellId: string): boolean {
   return (
     IMMUNITY_SAVE_AURA_NAMES.has(spellId) &&
     (ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS.has(spellId) ||
+      // the pressed Spirit of Redemption form (fact2, user ruling 5): its
+      // carrier stays in sight, so it is not on the unseen-carrier list
+      PRESSED_SPIRIT_OF_REDEMPTION_AURA_IDS.has(spellId) ||
       ((immunitySchoolMask(spellId) ?? 0) & ALL_SCHOOLS) === ALL_SCHOOLS)
   );
 }

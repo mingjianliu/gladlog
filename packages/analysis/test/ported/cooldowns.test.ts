@@ -1905,9 +1905,9 @@ describe("extractMajorCooldowns", () => {
       expect(getUnitHpAtTimestamp(unit, 2100)).toBe(50);
     });
 
-    it("should find the closest HP after the timestamp", () => {
-      // Target 2900, closest is 3000
-      expect(getUnitHpAtTimestamp(unit, 2900)).toBe(20);
+    it("fact2: the last reading at or before the timestamp, not a nearer one after it", () => {
+      // Target 2900: 3000 is nearer, but the state at 2900 is the 2000 reading
+      expect(getUnitHpAtTimestamp(unit, 2900)).toBe(50);
     });
 
     it("should handle timestamp before the first action", () => {

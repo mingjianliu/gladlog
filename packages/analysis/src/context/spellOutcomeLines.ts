@@ -124,6 +124,17 @@ function maxHpNear(unit: ICombatUnit, tMs: number): number | null {
  *  REFLECT; 0051f0c9-style four identical "came back for 59k" lines. */
 export const REFLECT_CHAIN_GAP_MS = 3000;
 
+/** The ids a reflect's damage comes back under when not the reflected
+ * spell's own: Spell Reflection 23920. The 29 fact2 logs hold 392 such
+ * SPELL_DAMAGE rows; 387 have a REFLECT row of the hit unit's spell on that
+ * reflector within 3 s (the other 5 none) — 238 logged after it (up to
+ * 2.9 s: the projectile's flight), the rest before it, at most 487 ms
+ * (median 7 ms). */
+export const REFLECT_OWN_DAMAGE_IDS: ReadonlySet<string> = new Set(["23920"]);
+/** How far ahead of its REFLECT row such a row can be logged (measured max
+ * 487 ms, above). */
+export const REFLECT_OWN_ID_LEAD_MS = 500;
+
 export function reflectedSpells(
   units: readonly ICombatUnit[],
   matchStartMs: number,
@@ -177,13 +188,34 @@ export function reflectedSpells(
       const c = owning(spellId, src, ts);
       if (c) back.set(c, (back.get(c) ?? 0) + amt);
     };
-    for (const d of caster.damageIn ?? [])
+    for (const d of caster.damageIn ?? []) {
+      // fact2 (2026-10-20, Spell Reflection): a Warrior's reflect comes back
+      // as a damage row of the reflector's own Spell Reflection id, logged a
+      // few ms BEFORE the REFLECT row (08acb188 0:32: 67k under 23920, 6 ms
+      // ahead; 0c8b1932: 17k landed under 23920 beside 122k absorbed under
+      // the Pyroblast) — the reflector's latest chain within
+      // `REFLECT_OWN_ID_LEAD_MS` of it owns it
+      if (d.spellId && REFLECT_OWN_DAMAGE_IDS.has(d.spellId)) {
+        const ts = d.logLine.timestamp;
+        let best: (typeof chains)[number] | undefined;
+        for (const c of chains) {
+          if (c.first.destUnitId !== d.srcUnitId) continue;
+          const t0 = c.first.logLine.timestamp;
+          if (ts < t0 - REFLECT_OWN_ID_LEAD_MS) continue;
+          if (ts - t0 > REFLECT_DAMAGE_WINDOW_S * 1000) continue;
+          if (!best || t0 > best.first.logLine.timestamp) best = c;
+        }
+        if (best)
+          back.set(best, (back.get(best) ?? 0) + Math.abs(d.effectiveAmount));
+        continue;
+      }
       credit(
         d.spellId ?? undefined,
         d.srcUnitId,
         d.logLine.timestamp,
         Math.abs(d.effectiveAmount),
       );
+    }
     for (const a of caster.absorbsIn ?? [])
       credit(
         a.attackSpellId,

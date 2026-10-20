@@ -19,7 +19,7 @@ import {
   IMissedExternal,
   wasLockedOutThroughWindow,
 } from "./deathOutcomeAnalysis";
-import { DEFERRAL_SHIELD_DAMAGE_IDS } from "./incomingPressure";
+import { DEFERRAL_SHIELD_DAMAGE_IDS,hitSchoolId, logSchoolMask } from "./incomingPressure";
 
 /**
  * counterfactual.ts — mitigation counterfactual accounting (#17b): the
@@ -168,7 +168,7 @@ export function windowDamage(
   for (const d of unit.damageIn) {
     const ts = d.logLine.timestamp;
     if (ts < fromMs || ts > toMs) continue;
-    const school = Number.parseInt(d.spellSchoolId ?? "0x0", 16);
+    const school = logSchoolMask(hitSchoolId(d));
     if ((school & schoolMask) === 0) continue;
     sum += Math.abs(d.effectiveAmount);
   }

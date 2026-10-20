@@ -14,6 +14,7 @@ import {
   computeOnCDDisplayNames,
   computeReadyNames,
   positionalOutOfReachNames,
+  RES_OPENER_SKIP_S,
 } from "../resourceSnapshot";
 import type { TimelineCtx } from "./ctx";
 import { type DeferredSnapshot, isDeferredSnapshot } from "./ctx";
@@ -206,6 +207,16 @@ export function resolveDeferredSnapshots(
       prevOnCDNamesState = stateBefore.onCd;
       lastFullSnapshotTime = stateBefore.full;
     }
+    // fact2: a first-5-s row that printed lists the never-pressed cooldowns
+    // as ready (the builder's second pass) — so does the delta state
+    if (snapshotStr !== "" && stateSeconds <= RES_OPENER_SKIP_S)
+      prevReadyNamesState = computeReadyNames(
+        stateSeconds,
+        resOwnerCDs,
+        teammateCDsWithLabel,
+        resDeaths,
+        true,
+      );
     snapshotResults.set(req.id, snapshotStr);
   }
 

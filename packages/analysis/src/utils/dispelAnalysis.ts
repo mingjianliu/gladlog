@@ -96,8 +96,9 @@ import {
   buildCastMatchIndex,
   classifyDispel,
   dispelCameWithOwnCast,
-  dispelRodeOwnPress,
   type DispelKind,
+  dispelRodeOwnPress,
+  isRiderDispel,
 } from "./dispelKind";
 
 type SpellEntry = { type: string; priority?: boolean };
@@ -2591,7 +2592,7 @@ export function wasRemovedByAllyDispel(
   // dispel. Same predicate the desktop dispel dash already uses.
   return allyCleanse.some(
     (d) =>
-      d.dispelKind !== "rider" &&
+      !isRiderDispel(d) &&
       d.removedSpellId === spellId &&
       d.targetName === targetName &&
       Math.abs(d.timeSeconds - removalSeconds) <= ALLY_DISPEL_MATCH_TOLERANCE_S,

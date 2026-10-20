@@ -92,6 +92,44 @@
  *    a SPELL_CAST_SUCCESS of that same unit (Phantasm on Fade): a press made
  *    them, so the part is not passive.
  *
+ *  - `killAnchorInto` (new: kill-attempt anchor): a KILL ATTEMPTS `[a–b] on
+ *    X — <Spell> burst (no stun)` line. Some friendly cast of <Spell> in
+ *    [a, b + 1) went into X (its cast row's dest, or a damage row of that
+ *    spell on X); a line that names where the opener went
+ *    (`(cast into …)`) is not checked.
+ *  - `killTargetInside` (new): the same lines' X took the most of the team's
+ *    damage (landed + absorbed, friendly `damageOut`) inside the printed
+ *    bracket [a, b + 1) when that most is at least 30k.
+ *
+ *  - `reflectedLine` (new: Spell Reflection): a REFLECT miss of a damage
+ *    spell whose reflector then hit the caster with Spell Reflection 23920
+ *    rows (−0.5 s … +3 s around it) worth ≥ 5 % of the caster's max HP. A
+ *    `[REFLECTED] <caster pid>'s … reflected by <reflector pid>` line at its
+ *    second must say it.
+ *  - `reflectSchool` (new): a `Top damage` entry `— Spell Reflection
+ *    [Physical]` while every 23920 row on that unit in its last 10 s carries
+ *    another damage school in its tail.
+ *
+ *  - `stateTick` (new: the [STATE] sampler — the gate shares the product's
+ *    sampler, so this is the independent reading): every `pid:N` of a
+ *    `[STATE]` line equals the unit's last advanced reading at or before
+ *    m:ss.0 within 3 s (the first after it when there is none), rounded.
+ *
+ *  - `resOpener` (new: [RES] first 5 s): the round's first [RES] row, when
+ *    it sits under a line of 0:00–0:05, says `rdy:` with something on it
+ *    unless every tracked cooldown of the team was pressed by then — read as
+ *    the next delta row adding nothing it calls `+`… back: a `rdy:—` first
+ *    row followed by a `rdy:Δ +` row is wrong.
+ *
+ *  - `riderAsCleanse` (new: rider dispels): an `[ENEMY CLEANSE]` / `[PURGE]`
+ *    / `[ENEMY PURGE]` line whose `(via)` is a form / movement / defensive
+ *    rider (`MOVEMENT_ROOT_BREAK_DISPEL_IDS`, by English name) is wrong.
+ *
+ *  - `sorImmune` (ruling 5): an enemy's pressed Spirit of Redemption (aura
+ *    215769 APPLIED on itself) needs an `[ENEMY DEF] … Spirit of Redemption
+ *    (immune…` line at its second; a KILL ATTEMPTS line on that unit whose
+ *    bracket + 5 s holds the form's start must not end `not enough damage`.
+ *
  *   npx tsx packages/eval/scripts/fact2Scan.ts <captureDir> [--examples N] [--archive-dir <dir>]
  */
 import { readdirSync, readFileSync } from "node:fs";
@@ -106,12 +144,13 @@ import {
   extractMajorCooldowns,
   isEnemyCdWindowSpell,
 } from "@gladlog/analysis/src/utils/cooldowns";
-import { isDeadAt } from "@gladlog/analysis/src/utils/unitDeath";
+import { MOVEMENT_ROOT_BREAK_DISPEL_IDS } from "@gladlog/analysis/src/utils/dispelKind";
 import {
   isExternalSaveId,
   SELF_SAVE_IDS,
 } from "@gladlog/analysis/src/utils/enemyDefensives";
 import { OFFENSIVE_CD_SPELL_IDS } from "@gladlog/analysis/src/utils/spellDanger";
+import { isDeadAt } from "@gladlog/analysis/src/utils/unitDeath";
 import { GladLogParser, type GladMatch } from "@gladlog/parser";
 import {
   CombatUnitReaction,
@@ -151,6 +190,14 @@ const CHECKS = [
   "trinketOutOf",
   "deferredBreaker",
   "riderPassive",
+  "killAnchorInto",
+  "killTargetInside",
+  "reflectedLine",
+  "reflectSchool",
+  "stateTick",
+  "resOpener",
+  "riderAsCleanse",
+  "sorImmune",
 ] as const;
 
 /** cast → the auras that are its own effect under another id (read straight
@@ -700,6 +747,204 @@ for (const f of files) {
         .map((c) => c.logLine.timestamp);
       if (rows.every((r) => presses.some((p) => Math.abs(p - r.logLine.timestamp) <= 50)))
         miss("riderPassive", `${where} ${unit.name} ${name} (passive), every removal with a press`);
+    }
+  }
+  for (const l of lines) {
+    const km = /^ {2}\[(\d+:\d\d)–(\d+:\d\d)\] on (\S+) — (.+?) burst \(no stun\)/.exec(l);
+    if (!km) continue;
+    const target = byName.get(km[3]!);
+    if (!target) continue;
+    const a = start + secOf(km[1]!) * 1000;
+    const b = start + (secOf(km[2]!) + 1) * 1000;
+    if (!km[4]!.includes("(cast into")) {
+      const name = km[4]!;
+      const hostile = (id: string | undefined) =>
+        !!id && units.some((u) => u.id === id && u.reaction !== owner.reaction);
+      // a buff / self cooldown (Power Infusion, Avatar …) goes into nobody:
+      // only an opener whose cast row names a hostile unit is checked
+      const castsOfName = ours.flatMap((f) =>
+        ((f.spellCastEvents ?? []) as any[]).filter(
+          (c) =>
+            c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+            getEnglishSpellName(c.spellId ?? "", c.spellName) === name &&
+            c.logLine.timestamp >= a - 1000 &&
+            c.logLine.timestamp < b,
+        ),
+      );
+      // (an aura-only occurrence — Demonic's Metamorphosis — has no cast row)
+      if (!castsOfName.some((c) => hostile(c.destUnitId))) continue;
+      bump("killAnchorInto");
+      const into = ours.some(
+        (f) =>
+          ((f.spellCastEvents ?? []) as any[]).some(
+            (c) =>
+              c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+              getEnglishSpellName(c.spellId ?? "", c.spellName) === name &&
+              c.logLine.timestamp >= a - 1000 &&
+              c.logLine.timestamp < b &&
+              c.destUnitId === target.id,
+          ) ||
+          ((f.damageOut ?? []) as any[]).some(
+            (d) =>
+              d.destUnitId === target.id &&
+              getEnglishSpellName(d.spellId ?? "", d.spellName) === name &&
+              d.logLine.timestamp >= a - 1000 &&
+              d.logLine.timestamp < b + 5000,
+          ),
+      );
+      if (!into) miss("killAnchorInto", `${where} ${km[1]} on ${target.name}: ${name} never went into it`);
+    }
+    const byEnemy = new Map<string, number>();
+    for (const f of ours)
+      for (const d of (f.damageOut ?? []) as any[]) {
+        const ts = d.logLine.timestamp;
+        if (ts < a || ts >= b) continue;
+        byEnemy.set(d.destUnitId, (byEnemy.get(d.destUnitId) ?? 0) + Math.abs(d.effectiveAmount));
+      }
+    const top = [...byEnemy].filter(([id]) => units.find((u) => u.id === id && u.reaction !== owner.reaction && u.info)).sort((x, y) => y[1] - x[1])[0];
+    if (!top || top[1] < 30_000) continue;
+    bump("killTargetInside");
+    if (top[0] !== target.id && (byEnemy.get(target.id) ?? 0) < 0.8 * top[1])
+      miss("killTargetInside", `${where} ${km[1]}–${km[2]} on ${target.name}: inside the bracket ${Math.round((byEnemy.get(target.id) ?? 0) / 1000)}k vs ${byName.size ? units.find((u) => u.id === top[0])?.name : ""} ${Math.round(top[1] / 1000)}k`);
+  }
+  // Spell Reflection 23920 returns
+  for (const caster of players) {
+    const cp = pidOf.get(caster.name);
+    if (!cp) continue;
+    for (const m of (caster.missesOut ?? []) as any[]) {
+      if (m.missType !== "REFLECT" || !m.spellId) continue;
+      const t0 = m.logLine.timestamp;
+      if (t0 < start || t0 > legacy.endTime) continue;
+      const reflector = units.find((u) => u.id === m.destUnitId);
+      const rp = reflector && pidOf.get(reflector.name);
+      if (!rp) continue;
+      const back = ((caster.damageIn ?? []) as any[])
+        .filter(
+          (d) =>
+            d.spellId === "23920" &&
+            d.srcUnitId === reflector.id &&
+            d.logLine.timestamp >= t0 - 500 &&
+            d.logLine.timestamp <= t0 + 3000,
+        )
+        .reduce((x, d) => x + Math.abs(d.effectiveAmount), 0);
+      const maxHp = Math.max(
+        0,
+        ...((caster.advancedActions ?? []) as any[]).map((a) => a.advancedActorMaxHp ?? 0),
+      );
+      if (maxHp <= 0 || back < 0.05 * maxHp) continue;
+      bump("reflectedLine");
+      const t = fmtS((t0 - start) / 1000);
+      // one reflector's returns can belong to a sibling reflect of the same
+      // caster logged up to a few seconds later (a Searing Light and a
+      // Penance 0.34 s apart, the return 1.5 s after both): a line for
+      // either covers it
+      const near = [0, 1, 2, 3].map((k) => fmtS((t0 - start) / 1000 + k));
+      if (
+        !lines.some(
+          (l) =>
+            near.some((nt) => l.startsWith(`${nt}  [REFLECTED]`)) &&
+            l.includes(`${cp}(`) &&
+            l.includes(`reflected by ${rp}(`),
+        )
+      )
+        miss("reflectedLine", `${where} ${t} ${caster.name}'s ${getEnglishSpellName(m.spellId, m.spellName)} by ${reflector.name}: ${Math.round(back / 1000)}k back, no line`);
+    }
+  }
+  {
+    let deathUnit: any;
+    let deathSec = 0;
+    for (const l of lines) {
+      const dm = /^(\d+:\d\d) {2}\[DEATH\] {2}(\d+)\(/.exec(l);
+      if (dm) {
+        deathUnit = byName.get(pidName.get(dm[2]!) ?? "");
+        deathSec = secOf(dm[1]!);
+        continue;
+      }
+      if (!deathUnit || !/Top damage in final 10s:.*Spell Reflection \[Physical\]/.test(l)) continue;
+      const rows = ((deathUnit.damageIn ?? []) as any[]).filter(
+        (d) =>
+          d.spellId === "23920" &&
+          d.logLine.timestamp >= start + (deathSec - 10) * 1000 &&
+          d.logLine.timestamp <= start + (deathSec + 1) * 1000,
+      );
+      if (rows.length === 0) continue;
+      bump("reflectSchool");
+      if (rows.every((d) => d.damageSchoolId && d.damageSchoolId !== "0x1"))
+        miss("reflectSchool", `${where} death ${fmtS(deathSec)} ${deathUnit.name}: Spell Reflection [Physical], tail schools ${[...new Set(rows.map((d) => d.damageSchoolId))].join("/")}`);
+    }
+  }
+  for (const l of lines) {
+    const sm = /^(\d+:\d\d) {2}\[STATE\] {3}(.*)$/.exec(l);
+    if (!sm) continue;
+    const tMs = start + secOf(sm[1]!) * 1000;
+    for (const pm of sm[2]!.matchAll(/(\d+)\([^)]*\):(\d+)/g)) {
+      const unit = byName.get(pidName.get(pm[1]!) ?? "");
+      if (!unit) continue;
+      const acts = ((unit.advancedActions ?? []) as any[])
+        .filter((a) => a.advancedActorId === unit.id && a.advancedActorMaxHp > 0)
+        .sort((x, y) => x.logLine.timestamp - y.logLine.timestamp);
+      let pick: any;
+      for (const a of acts) if (a.logLine.timestamp <= tMs) pick = a;
+      if (pick && tMs - pick.logLine.timestamp > 3000) pick = undefined;
+      if (!pick) pick = acts.find((a) => a.logLine.timestamp > tMs && a.logLine.timestamp - tMs <= 3000);
+      if (!pick) continue;
+      bump("stateTick");
+      const want = Math.min(100, Math.round((pick.advancedActorCurrentHp / pick.advancedActorMaxHp) * 100));
+      if (Number(pm[2]) !== want)
+        miss("stateTick", `${where} ${sm[1]} ${unit.name}: printed ${pm[2]}, last reading at/before ${want}`);
+    }
+  }
+  {
+    let lastT = "";
+    const resRows: Array<{ t: string; row: string }> = [];
+    for (const l of lines) {
+      const tm = /^(\d+:\d\d) {2}/.exec(l);
+      if (tm) lastT = tm[1]!;
+      // a timeline row (under a `m:ss` line), not the legend's own `[RES]`
+      const rm = /^ {6}\[RES\] (rdy:.*)$/.exec(l);
+      if (rm && lastT) resRows.push({ t: lastT, row: rm[1]! });
+    }
+    const first = resRows[0];
+    if (first && secOf(first.t || "9:59") <= 5) {
+      bump("resOpener");
+      if (/^rdy:— /.test(first.row) && resRows[1] && /^rdy:Δ \+/.test(resRows[1].row))
+        miss("resOpener", `${where} ${first.t} ${first.row.slice(0, 60)} → ${resRows[1].t} ${resRows[1].row.slice(0, 50)}`);
+    }
+  }
+  {
+    const riderNames = new Set(
+      [...MOVEMENT_ROOT_BREAK_DISPEL_IDS].map((id) => getEnglishSpellName(id, "")),
+    );
+    for (const l of lines) {
+      const dm = /^\d+:\d\d {2}\[(?:ENEMY CLEANSE|PURGE|ENEMY PURGE)\] .* \(([^()]+)\)$/.exec(l);
+      if (!dm) continue;
+      bump("riderAsCleanse");
+      if (riderNames.has(dm[1]!)) miss("riderAsCleanse", `${where} ${l.slice(0, 110)}`);
+    }
+  }
+  for (const u of players) {
+    if (u.reaction === owner.reaction) continue;
+    const me = pidOf.get(u.name);
+    if (!me) continue;
+    for (const a of (u.auraEvents ?? []) as any[]) {
+      if (a.spellId !== "215769" || a.destUnitId !== u.id) continue;
+      if (a.logLine.event !== LogEvent.SPELL_AURA_APPLIED) continue;
+      const ts = a.logLine.timestamp;
+      if (ts < start || ts > legacy.endTime) continue;
+      const t = fmtS((ts - start) / 1000);
+      bump("sorImmune");
+      if (!lines.some((l) => l.startsWith(`${t}  [ENEMY DEF]   ${me}(`) && /Spirit of Redemption \(immune/.test(l)))
+        miss("sorImmune", `${where} ${t} ${u.name}: no [ENEMY DEF] immune line`);
+      for (const l of lines) {
+        const km = /^ {2}\[(\d+:\d\d)–(\d+:\d\d)\] on (\S+) — .*not enough damage/.exec(l);
+        if (!km || km[3] !== u.name) continue;
+        const from = start + secOf(km[1]!) * 1000;
+        const to = start + (secOf(km[2]!) + 1 + 5) * 1000;
+        if (ts >= from && ts < to) {
+          bump("sorImmune");
+          miss("sorImmune", `${where} ${km[1]}–${km[2]} on ${u.name}: not enough damage, form at ${t}`);
+        }
+      }
     }
   }
   let ledgerTarget: any;

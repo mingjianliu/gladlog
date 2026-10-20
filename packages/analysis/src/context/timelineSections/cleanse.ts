@@ -19,6 +19,7 @@ import {
   purgeableCountText,
   unpurgedForText,
 } from "../../utils/dispelAnalysis";
+import { isRiderDispel } from "../../utils/dispelKind";
 import { fmtTime } from "../../utils/renderGrid";
 import type { TimelineCtx } from "./ctx";
 
@@ -134,7 +135,7 @@ export function emitCleanseEntries(
         continue;
       // D1 (2026-09-25): a rider (form shift, movement ability) is not a
       // cleanse — it folds into the tagged minor line below instead.
-      if (cleanse.dispelKind === "rider") continue;
+      if (isRiderDispel(cleanse)) continue;
       const key = `${Math.round(cleanse.timeSeconds)}|${cleanse.sourceName}`;
       const group = cleanseGroups.get(key) ?? [];
       group.push(cleanse);

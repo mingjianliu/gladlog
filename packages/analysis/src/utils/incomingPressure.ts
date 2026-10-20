@@ -276,6 +276,20 @@ export function logSchoolMask(spellSchoolId: string | undefined): number {
   return Number.parseInt(String(spellSchoolId ?? "0x0"), 16) || 0;
 }
 
+/** fact2 (2026-10-20): the school a damage row hit in — the hp tail's own
+ * school when the parser kept it (`damageSchoolId`), else the spell field.
+ * A reflect comes back as Spell Reflection 23920 with 0x1 in the spell field
+ * and the reflected spell's school in the tail (a5df6bff 2:49: a Holy Hammer
+ * of Wrath printed `Spell Reflection [Physical]`; 392 such rows in the 29
+ * fact2 logs, schools 2 / 4 / 106). The one reading of every reader that
+ * asks a hit's school. */
+export function hitSchoolId(d: {
+  spellSchoolId?: string;
+  damageSchoolId?: string;
+}): string | undefined {
+  return d.damageSchoolId ?? d.spellSchoolId;
+}
+
 /**
  * Incoming pressure in [fromMs, toMs] per school mask, with the same
  * redistribution rule as `incomingPressureEvents` — the shape
@@ -339,7 +353,7 @@ export function incomingPressureBySchool(
     // a deferred tick has no school of its own; the hit is below, under the
     // school it was thrown in (`DEFERRAL_SHIELD_DAMAGE_IDS`)
     if (isDeferredTickId(d.spellId)) continue;
-    add(logSchoolMask(d.spellSchoolId), Math.abs(d.effectiveAmount));
+    add(logSchoolMask(hitSchoolId(d)), Math.abs(d.effectiveAmount));
   }
   const absorbs = unit.absorbsIn ?? [];
   // A missing attackSpellId means a swing only on documents that record the

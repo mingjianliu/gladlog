@@ -37,6 +37,12 @@ export interface GladHpEvent extends GladEventBase {
   /** Critical hit (materialized by the L1 hp-tail decode; after params
    * slimming the tail is no longer persisted with the doc). */
   crit?: boolean;
+  /** The school the DAMAGE was dealt in — the hp tail's own school field,
+   * which can differ from the spell's (a reflect logged under Spell
+   * Reflection 23920 carries 0x1 in the spell field and the reflected
+   * spell's school in the tail; fact2, 2026-10-20). Damage events only;
+   * absent on documents stored before it. */
+  school?: number;
 }
 
 export interface GladAbsorbEvent extends GladEventBase {

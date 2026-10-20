@@ -101,15 +101,15 @@ describe("resolveDeferredSnapshots — the delta state is the printed row's", ()
     expect(rdy(second)).toContain("Icebound Fortitude");
   });
 
-  it("a press in the 6th second prints second 5 (only that press is on it); the next row ADDS what the ledger had not reported", () => {
+  it("fact2: a press in the 6th second prints second 5 with what was ready then; the next row is a delta against it", () => {
     const [first, second] = rows({ ibf: [5.5], ams: [20] }, [5.5, 20]);
-    // second 5: the press is spent, nothing else is reported yet
-    expect(rdy(first)).toMatch(/rdy:—$/);
+    // second 5: the press is spent, the untouched cooldowns are ready on it
+    // (it used to read `rdy:—`, and the next row re-announced them `+…`)
+    expect(rdy(first)).toContain("Anti-Magic Zone");
+    expect(rdy(first)).toContain("Anti-Magic Shell");
     expect(cd(first)).toContain("Icebound Fortitude");
-    // the cooldown never pressed appears as newly ready — the reader had not
-    // been told; the one pressed at 0:20 goes straight to `cd:`
-    expect(second).toContain("rdy:Δ +Anti-Magic Zone");
-    expect(second).not.toContain("-Anti-Magic Shell");
+    expect(second).not.toContain("+Anti-Magic Zone");
+    expect(second).toContain("rdy:Δ -Anti-Magic Shell");
     expect(cd(second)).toContain("Anti-Magic Shell");
   });
 

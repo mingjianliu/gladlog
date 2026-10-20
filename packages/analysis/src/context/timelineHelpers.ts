@@ -56,8 +56,8 @@ import {
   AURA_BEFORE_CAST_MAX_S,
   SAVE_CAST_AURA_PAIR_S,
 } from "../utils/enemyDefensives";
-import {
-  DEFERRAL_SHIELD_DAMAGE_IDS,
+import {   DEFERRAL_SHIELD_DAMAGE_IDS,
+hitSchoolId,
   isDeferralAbsorb,
 } from "../utils/incomingPressure";
 import {
@@ -1398,7 +1398,7 @@ export function damageEventParts(
 
   return {
     ability: `${srcName} — ${baseSpellLabel}`,
-    school: getSpellSchoolName(d.spellSchoolId),
+    school: getSpellSchoolName(hitSchoolId(d)),
   };
 }
 

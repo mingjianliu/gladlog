@@ -234,5 +234,15 @@ export function classifyDispel(
   return dispelCameWithOwnCast(index, d) ? "deliberate" : "proc";
 }
 
+/** A removal that is a side effect of a form / movement / defensive action
+ * (`MOVEMENT_ROOT_BREAK_DISPEL_IDS`) — no cleanse, purge or steal decision.
+ * The one test of every reader that lists dispels as such: the friendly
+ * [CLEANSE] (D1, 2026-09-25), `wasRemovedByAllyDispel`, and since fact2
+ * (2026-10-20) the [ENEMY CLEANSE] / [PURGE] / [ENEMY PURGE] lines
+ * (08acb188 1:24: `cleansed The Hunt off 5(FWarrior) (Escape Artist)`;
+ * 179b83ac: a Travel Form root break as an enemy cleanse). */
+export const isRiderDispel = (d: { dispelKind?: DispelKind }): boolean =>
+  d.dispelKind === "rider";
+
 export const isDeliberateDispel = (k: DispelKind): boolean =>
   k === "deliberate";
