@@ -160,6 +160,33 @@ export const OFFENSIVE_RACIAL_SPELL_IDS: ReadonlySet<string> =
   idsOfKind("offensive");
 
 /**
+ * The offensive racials whose press puts a damage buff on the caster — a
+ * WINDOW (DB2 duration 12–15 s), the shape every `OFFENSIVE_CD_SPELL_IDS`
+ * consumer renders. User ruling 2026-10-20 (fact1215 retest idx 50,
+ * 「我觉得都算」): they are offensive cooldowns like any class cooldown — the
+ * ledger printed an owner's Blood Fury as a `[YOU] [CD]` while the kill
+ * window's "team offensive CDs ready / back inside / pressed inside" and the
+ * `[friendly offensive CD active]` tag left it out. Ancestral Call 274738
+ * runs as one of four auras (raw 8/20 03:27:14.6249: 274742 Might of the
+ * Blackrock APPLIED with the cast, REMOVED 15.0 s later), listed beside it so
+ * the aura-side readers see it. NOT the nukes (Light's Judgment, Arcane
+ * Pulse, Rocket Barrage, Bag of Tricks, Thorn Bloom: no duration; Azerite
+ * Surge: 2.5 s) — the same reason Meteor is not in the table (spellDanger.ts):
+ * a nuke that has landed is no window. Registered in curatedIdRegistry.
+ */
+export const OFFENSIVE_RACIAL_WINDOW_IDS: ReadonlySet<string> = new Set([
+  "20572", // Blood Fury — 15 s
+  "33697", // Blood Fury — 15 s
+  "33702", // Blood Fury — 15 s
+  "26297", // Berserking — 12 s
+  "274738", // Ancestral Call — 15 s, runs as one of:
+  "274739", // Rictus of the Laughing Skull
+  "274740", // Zeal of the Burning Blade
+  "274741", // Ferocity of the Frostwolf
+  "274742", // Might of the Blackrock
+]);
+
+/**
  * Racials that share a cooldown lockout with the PvP trinket — official DB2
  * `SpellCategories.Category` 1166 ("PvP Trinket/WOTF", build 12.1.0.69273).
  * Escape Artist is deliberately absent: its Category is 0, i.e. the official

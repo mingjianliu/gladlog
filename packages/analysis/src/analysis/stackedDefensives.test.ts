@@ -109,6 +109,46 @@ describe("stackedDefensivePairs", () => {
     );
   });
 
+  it("a later Time Dilation is priced by what the log says it held back, not D × b / (1 − b) over its own delayed ticks (fact1215 retest idx 10)", () => {
+    const TD = "357170";
+    const owner = unit("H", "Heals-R", {
+      spec: CombatUnitSpec.Evoker_Preservation,
+    });
+    const held = (t: number, amt: number) => ({
+      timestamp: T0 + t,
+      spellId: TD,
+      srcUnitId: "H",
+      srcUnitName: "Heals-R",
+      absorbedAmount: amt,
+    });
+    const mate = unit("M", "Mate-R", {
+      auraEvents: [
+        aura(10_000, LogEvent.SPELL_AURA_APPLIED, PS, "P", "Priest-R"),
+        aura(12_000, LogEvent.SPELL_AURA_APPLIED, TD, "H", "Heals-R"),
+        aura(15_000, LogEvent.SPELL_AURA_REMOVED, PS, "P", "Priest-R"),
+        aura(20_000, LogEvent.SPELL_AURA_REMOVED, TD, "H", "Heals-R"),
+      ],
+      // the delayed half landing as the unit's own damage (361029) — what the
+      // back-computation read as damage Time Dilation then "blocked"
+      damageIn: [
+        { timestamp: T0 + 13_000, amount: -40, effectiveAmount: -40, spellId: "361029" },
+      ],
+      absorbsIn: [held(12_500, 10), held(14_000, 5), held(18_000, 20)],
+    });
+    const priest = unit("P", "Priest-R");
+    const pairs = stackedDefensivePairs(owner, combat([owner, mate, priest]));
+    expect(pairs).toHaveLength(1);
+    const p = pairs[0]!;
+    expect(p.second.spellId).toBe(TD);
+    expect(p.pricing).toBe("deferred");
+    expect(p.blockedOverlapPct).toBe(15);
+    expect(p.blockedFullPct).toBe(35);
+    const [e] = formatStackedDefensiveLines(pairs);
+    expect(e!.line).toContain(
+      "the later one, Time Dilation, held back ~15% of their max HP during the overlap (~35% over its full 8s run), which lands later as their own damage",
+    );
+  });
+
   it("two auras from the SAME caster, or an overlap under 0.5 s, are not a stack", () => {
     const owner = unit("H", "Heals-R", {
       spec: CombatUnitSpec.Priest_Discipline,

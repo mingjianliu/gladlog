@@ -15,6 +15,13 @@
  * talent- and carrier-aware; multiplicative stacking, measured 2026-09-13):
  *  - percentage aura: D × b / (1 − b) with D = damage the target actually
  *    took while both were up, b = pctMin of B; the same over B's full run;
+ *  - deferral shield (`DEFERRAL_SHIELD_DAMAGE_IDS`: Time Dilation, Stretch
+ *    Time): what the log records it held back (its own SPELL_ABSORBED rows,
+ *    `isDeferralAbsorb`) — the 50 % the mitigation table prices Time
+ *    Dilation at (user rulings 2026-07-30, kept 2026-10-20), measured
+ *    instead of back-computed from damage that includes its own delayed
+ *    ticks (fact1215 retest idx 10: `~20%` read the 361029 ticks as damage
+ *    Time Dilation then "blocked");
  *  - absorb aura: the absorbs the log credits to B's spell AND B's caster
  *    (codex R2: dropping the caster credited another player's same-spell
  *    shield to B);
@@ -31,6 +38,7 @@ import { getEnglishSpellName } from "../data/spellEffectData";
 import spellIdLists from "../data/spellIdLists";
 import { buildAuraIntervals, type IAuraInterval } from "../utils/auraIntervals";
 import { isCasterSideLinkAura } from "../utils/brokenRowBreaker";
+import { isDeferralAbsorb } from "../utils/incomingPressure";
 
 /** external ∪ big-personal defensives — the two lists the product already
  * treats as "major"; small cooldowns (Fade, PW:S) are on neither */
@@ -73,12 +81,12 @@ export interface StackedDefensivePair {
   /** rounded to 1 dp */
   overlapSeconds: number;
   /** how B was priced; `unpriced` carries the reason in `unpricedReason` */
-  pricing: "pct" | "absorb" | "unpriced";
+  pricing: "pct" | "absorb" | "deferred" | "unpriced";
   unpricedReason: "immunity" | "positional" | "off-table" | null;
   /** B's extra blocked damage during the overlap, integer % of target max HP */
   blockedOverlapPct: number | null;
   /** B's blocked damage over its full run (from the overlap start to B's
-   * end), integer % — only for percentage auras */
+   * end), integer % — only for percentage auras and deferral shields */
   blockedFullPct: number | null;
   /** B's full run length in whole seconds */
   secondRunSeconds: number;
@@ -171,21 +179,29 @@ export function stackedDefensivePairs(
               (n, d) => n + Math.abs(d.effectiveAmount ?? d.amount ?? 0),
               0,
             );
-        const absorbed = ((target.absorbsIn ?? []) as any[])
-          .filter(
-            (e) =>
-              e.timestamp >= fromMs &&
-              e.timestamp <= toMs &&
-              String(e.spellId) === second.spellId &&
-              (e.srcUnitName === second.srcUnitName ||
-                e.srcUnitId === caster2?.id),
-          )
-          .reduce((n, e) => n + (e.absorbedAmount ?? 0), 0);
+        const absorbedBetween = (a: number, b: number) =>
+          ((target.absorbsIn ?? []) as any[])
+            .filter(
+              (e) =>
+                e.timestamp >= a &&
+                e.timestamp <= b &&
+                String(e.spellId) === second.spellId &&
+                (e.srcUnitName === second.srcUnitName ||
+                  e.srcUnitId === caster2?.id),
+            )
+            .reduce((n, e) => n + (e.absorbedAmount ?? 0), 0);
+        const absorbed = absorbedBetween(fromMs, toMs);
         let pricing: StackedDefensivePair["pricing"] = "unpriced";
         let unpricedReason: StackedDefensivePair["unpricedReason"] = null;
         let blockedOverlapPct: number | null = null;
         let blockedFullPct: number | null = null;
-        if (res && res.positional) unpricedReason = "positional";
+        if (isDeferralAbsorb({ spellId: second.spellId })) {
+          pricing = "deferred";
+          blockedOverlapPct = Math.round((absorbed / maxHp) * 100);
+          blockedFullPct = Math.round(
+            (absorbedBetween(fromMs, bEndMs) / maxHp) * 100,
+          );
+        } else if (res && res.positional) unpricedReason = "positional";
         else if (pct && pct.pctMin >= 100) unpricedReason = "immunity";
         else if (res && pct && pct.pctMin > 0) {
           const b = pct.pctMin / 100;

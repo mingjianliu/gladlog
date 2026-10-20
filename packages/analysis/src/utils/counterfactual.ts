@@ -203,7 +203,7 @@ export interface IMitigationAuditRow {
   /** kind=deferred: what a deferral shield (`DEFERRAL_SHIELD_DAMAGE_IDS`:
    * Time Dilation, Stretch Time) DELAYED inside the overlap — the log's own
    * SPELL_ABSORBED rows of that shield, a measured amount — and its share of
-   * maxHp. Delayed, not prevented: it lands later as the unit's own damage. */
+   * maxHp. It lands later as the unit's own damage. */
   deferredAmount?: number;
   deferredPctMaxHp?: number;
   /** kind=immunity: ALL damage taken during the immunity coverage (reported as-is). */
@@ -361,9 +361,11 @@ export function computeMitigationAudit(
           : unitByName(combat.units, iv.srcUnitName),
     });
 
-    // A deferral shield prevents nothing — whether the mitigation table
-    // prices it (Time Dilation) or not (Stretch Time, which would otherwise
-    // be read as an off-table ABSORB shield below; agy review of FT-T02b).
+    // A deferral shield is priced by what it held back — whether the
+    // mitigation table prices it (Time Dilation, 50 %: user rulings
+    // 2026-07-30, kept 2026-10-20 「我觉得都算」 — the row no longer says
+    // "not prevented") or not (Stretch Time, which would otherwise be read as
+    // an off-table ABSORB shield below; agy review of FT-T02b).
     // The back-computation would price it from damage that includes its own
     // delayed ticks; the log records what it delayed (FT-T02b, user ruling 2026-10-09; the table's
     // 50 % for Time Dilation still prices kill windows — ruling 2026-07-30).

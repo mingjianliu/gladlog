@@ -204,3 +204,28 @@ export function isKillWindowMajorDefensive(spellId: string): boolean {
     kwCooldownSeconds(spellId) >= KW_MAJOR_DEF_MIN_CD_S
   );
 }
+
+/**
+ * Major defensives that count while IN HAND but are no defense that is UP
+ * (user ruling 2026-10-20, fact1215 retest idx 54 「我觉得都算」: a ready
+ * Alter Time is a major defensive in hand — `defenseless 2:28–2:34` on a
+ * mage whose Alter Time had been back since ~1:03). The pressed half keeps
+ * fact1215 R7 (2026-10-18): a rewind is no defense that was up and cuts
+ * nothing, so these never enter `KW_MAJOR_DEFENSIVE_IDS` (whose members also
+ * read "Target had a major defensive up" in the burst ledger). Logged CAST
+ * ids, cooldown ≥ `KW_MAJOR_DEF_MIN_CD_S` in DB2.
+ */
+export const KW_IN_HAND_ONLY_DEFENSIVE_IDS: ReadonlySet<string> = new Set([
+  "342245", // Alter Time — 60 s (runs as 342246)
+]);
+
+/** Does a READY charge of this spell mean the unit still holds a major
+ * defensive (kill-window family: the span state machine, target selection's
+ * defensive state)? The roster plus the in-hand-only rewinds. */
+export function countsAsKillWindowDefensiveInHand(spellId: string): boolean {
+  return (
+    isKillWindowMajorDefensive(spellId) ||
+    (KW_IN_HAND_ONLY_DEFENSIVE_IDS.has(spellId) &&
+      kwCooldownSeconds(spellId) >= KW_MAJOR_DEF_MIN_CD_S)
+  );
+}

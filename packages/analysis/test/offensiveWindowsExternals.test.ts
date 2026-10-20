@@ -12,7 +12,9 @@ import {
 import { beforeAll, describe, expect, it } from "vitest";
 
 import {
+  countsAsKillWindowDefensiveInHand,
   isKillWindowMajorDefensive,
+  KW_IN_HAND_ONLY_DEFENSIVE_IDS,
   KW_MAJOR_DEFENSIVE_IDS,
   kwCooldownSeconds,
 } from "../src/data/abilityProfile";
@@ -646,5 +648,49 @@ describe("the wall slice has one source (R08 d)", () => {
       expect(names.has(n), n).toBe(false);
     expect(names.has("Divine Shield")).toBe(false);
     expect(names.has("Mass Invisibility")).toBe(false);
+  });
+});
+
+// User ruling 2026-10-20 (fact1215 retest idx 54, 「我觉得都算」): a ready
+// Alter Time is a major defensive in hand, so the span closes while it is
+// back; pressed, it is no defense that was up (fact1215 R7) and holds
+// nothing — the span reopens at the press.
+describe("computeOffensiveWindows — a ready Alter Time is a defensive in hand", () => {
+  const ICE_BLOCK = "45438";
+  const ALTER_TIME = "342245";
+  const combat = { startTime: T0, endTime: at(120), units: {} } as never;
+  const mage = (casts: Array<[string, number]>) =>
+    makeUnit("e1", {
+      name: "EnemyMage",
+      spec: CombatUnitSpec.Mage_Frost,
+      reaction: CombatUnitReaction.Hostile,
+      spellCastEvents: casts.map(([id, s]) =>
+        makeSpellCastEvent(id, at(s), "e1", "EnemyMage", "e1", "EnemyMage"),
+      ),
+    });
+
+  it("is in hand only: never a roster wall, counted while ready", () => {
+    expect(isKillWindowMajorDefensive(ICE_BLOCK)).toBe(true);
+    expect(isKillWindowMajorDefensive(ALTER_TIME)).toBe(false);
+    expect(KW_IN_HAND_ONLY_DEFENSIVE_IDS.has(ALTER_TIME)).toBe(true);
+    expect(countsAsKillWindowDefensiveInHand(ALTER_TIME)).toBe(true);
+  });
+
+  it("the span stops while Alter Time is back (65 s) and reopens at its press (70 s)", () => {
+    const ws = computeOffensiveWindows(
+      [
+        mage([
+          [ICE_BLOCK, 2],
+          [ALTER_TIME, 5],
+          [ALTER_TIME, 70],
+        ]),
+      ] as never,
+      [],
+      combat,
+    );
+    expect(ws.map((w) => [w.fromSeconds, w.toSeconds])).toEqual([
+      [12, 65],
+      [70, 120],
+    ]);
   });
 });

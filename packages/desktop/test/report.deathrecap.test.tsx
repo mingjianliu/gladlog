@@ -1243,7 +1243,7 @@ describe("#10 T5: 恐慌性使用 + 更省替代", () => {
       expect(text).not.toContain("转移/反弹");
     });
 
-    it("DeathRecapCard: deferred 行(Time Dilation / Stretch Time)写「推迟」和日志里的量,不写「挡了」或「吸收」(FT-T02b)", () => {
+    it("DeathRecapCard: deferred 行(Time Dilation / Stretch Time)写「暂时挡下」和日志里的量,不写「挡了」或「吸收」(FT-T02b;10-20 裁定算减伤)", () => {
       const recap: DeathRecap = {
         unitId: "victim-1",
         unitName: "Victim",
@@ -1268,7 +1268,7 @@ describe("#10 T5: 恐慌性使用 + 更省替代", () => {
         <DeathRecapCard recap={recap} onClose={() => {}} />,
       );
       const text = container.textContent ?? "";
-      expect(text).toContain("Time Dilation 推迟了 ~171k");
+      expect(text).toContain("Time Dilation 暂时挡下 ~171k");
       expect(text).toContain("18.8% maxHp");
       expect(text).toContain("覆盖 5.4s");
       expect(text).not.toContain("挡了");

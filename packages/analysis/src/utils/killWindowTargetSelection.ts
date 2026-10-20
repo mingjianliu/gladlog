@@ -8,7 +8,7 @@ import {
 // Constants
 // ---------------------------------------------------------------------------
 // GH #31 ② (2026-09-02): shared official-face predicate replaces the hand set.
-import { isKillWindowMajorDefensive } from "../data/abilityProfile";
+import { countsAsKillWindowDefensiveInHand } from "../data/abilityProfile";
 import { classMetadata } from "../data/classSpells";
 import { MITIGATION_WALL_IDS } from "../data/mitigationData";
 import {
@@ -255,7 +255,7 @@ function getDefensiveStateAtTime(
   for (const cast of enemy.spellCastEvents) {
     if (cast.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
     const { spellId } = cast;
-    if (!spellId || !isKillWindowMajorDefensive(spellId)) continue;
+    if (!spellId || !countsAsKillWindowDefensiveInHand(spellId)) continue;
 
     const castSeconds = (cast.logLine.timestamp - matchStartMs) / 1000;
     if (castSeconds >= windowStartSeconds) continue; // after our snapshot time

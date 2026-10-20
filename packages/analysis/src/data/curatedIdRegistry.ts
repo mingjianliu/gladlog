@@ -157,7 +157,10 @@ import {
   PER_RANK_COOLDOWN_TALENTS,
   RULED_COOLDOWN_VALUES,
 } from "../utils/talentModifiers";
-import { KW_MAJOR_DEFENSIVE_IDS } from "./abilityProfile";
+import {
+  KW_IN_HAND_ONLY_DEFENSIVE_IDS,
+  KW_MAJOR_DEFENSIVE_IDS,
+} from "./abilityProfile";
 import { castEffectPairs } from "./castEffectAuras";
 import { CAST_PARAM_DURATIONS } from "./castParamDurations";
 import {
@@ -196,6 +199,7 @@ import {
   PURGE_WHITELIST_DATA_BLOCKED,
 } from "./purgeWhitelist";
 import {
+  OFFENSIVE_RACIAL_WINDOW_IDS,
   RACIAL_ABILITIES,
   SHARED_CD_RACIAL_SPELL_IDS,
 } from "./racialAbilities";
@@ -417,6 +421,22 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
     "data/abilityProfile.ts",
     "cast",
     () => [...KW_MAJOR_DEFENSIVE_IDS],
+  ),
+  // 10-20 用户裁定(fact1215 复测 idx 54):就绪的 Alter Time 算手里的大减伤,
+  // 按下后不算「身上有」(R7)。
+  t(
+    "abilityProfile.KW_IN_HAND_ONLY_DEFENSIVE_IDS",
+    "data/abilityProfile.ts",
+    "cast",
+    () => [...KW_IN_HAND_ONLY_DEFENSIVE_IDS],
+  ),
+  // 10-20 用户裁定(fact1215 复测 idx 50):种族的进攻 buff 算进攻大招,并入
+  // OFFENSIVE_CD_SPELL_IDS(Ancestral Call 的四个光环一起登记)。
+  t(
+    "OFFENSIVE_RACIAL_WINDOW_IDS",
+    "data/racialAbilities.ts",
+    "mixed",
+    () => [...OFFENSIVE_RACIAL_WINDOW_IDS],
   ),
   t("RACIAL_ABILITIES", "data/racialAbilities.ts", "cast", () =>
     keys(RACIAL_ABILITIES),

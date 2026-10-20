@@ -1442,7 +1442,7 @@ describe("context.timelineSections.test.ts", () => {
           deferredPctMaxHp: 18.8,
         }),
       ).toBe(
-        "Mitigation audit: Time Dilation deferred ~171k (≈18.8% max HP) over 6.0s active in the final 10s — delayed, not prevented: it lands later as the unit's own damage",
+        "Mitigation audit: Time Dilation held back ~171k (≈18.8% max HP) over 6.0s active in the final 10s — it lands later as the unit's own damage",
       );
     });
 

@@ -290,6 +290,8 @@ const CHECKS = [
   "allyRefused",
   "repressLength",
   "invisAfterAction",
+  "inHandRewind",
+  "stackedDeferral",
 ] as const;
 
 /** cast → the auras that are its own effect under another id (read straight
@@ -1516,6 +1518,54 @@ for (const f of files) {
     bump("ledgerCopyLabel");
     if (l.includes("Target had a major defensive up"))
       miss("ledgerCopyLabel", `${where} ${ledgerTarget.name}: ${l.trim().slice(0, 90)}`);
+  }
+  // user ruling 2026-10-20: a ready Alter Time is a major defensive in hand.
+  // The target's press inside a `defenseless` span (not at its opening
+  // second, not at its closing one) proves it was in hand inside the span.
+  for (const l of lines) {
+    const head =
+      /^ {2}\[(?:KILL WINDOW|VULNERABLE)\] (\d+:\d\d)–(\d+:\d\d)(?: \(\d+s\))? on [^(]+\(([^)]+)\)/.exec(l);
+    if (!head) continue;
+    const target =
+      byName.get(head[3]!) ?? byName.get(pidName.get(head[3]!) ?? "");
+    if (!target || !/Mage/.test(l)) continue;
+    const span = /\bdefenseless (\d+:\d\d)–(\d+:\d\d)/.exec(l) ?? head;
+    const a = secOf(span[1]!);
+    const b = secOf(span[2]!);
+    bump("inHandRewind");
+    const press = ((target.spellCastEvents ?? []) as any[]).find((c) => {
+      if (c.logLine.event !== LogEvent.SPELL_CAST_SUCCESS || c.spellId !== "342245")
+        return false;
+      const s = Math.floor((c.logLine.timestamp - start) / 1000);
+      return s > a && s < b;
+    });
+    if (press)
+      miss("inHandRewind", `${where} ${span[1]}–${span[2]} ${target.name}: Alter Time pressed at ${Math.floor((press.logLine.timestamp - start) / 1000)}s inside`);
+  }
+  // [STACKED DEFENSIVES] whose later aura is a deferral shield: the printed
+  // overlap share is what the log records it held back (its own absorb rows)
+  for (const l of lines) {
+    const m =
+      /\[STACKED DEFENSIVES\] +(.+?) (?:\(you\) )?had .* up together (\d+:\d\d)–(\d+:\d\d).*the later one, (Time Dilation|Stretch Time), (?:blocked|held back) ~(\d+)%/.exec(l);
+    if (!m) continue;
+    const who = m[1]!.replace(/ \(you\)$/, "");
+    const pid = /^(\d+)\(/.exec(who)?.[1];
+    const target = byName.get(pid ? (pidName.get(pid) ?? "") : who);
+    if (!target) continue;
+    const a = secOf(m[2]!);
+    const b = secOf(m[3]!);
+    const shield = m[4] === "Time Dilation" ? "357170" : "410355";
+    const maxHp = Math.max(1, ...((target.advancedActions ?? []) as any[]).map((x) => x.advancedActorMaxHp ?? 0));
+    const held = (from: number, to: number) =>
+      ((target.absorbsIn ?? []) as any[])
+        .filter((e) => String(e.spellId) === shield && e.timestamp >= start + from * 1000 && e.timestamp < start + to * 1000)
+        .reduce((n, e) => n + (e.absorbedAmount ?? 0), 0);
+    bump("stackedDeferral");
+    const lo = Math.round((held(a + 1, b) / maxHp) * 100);
+    const hi = Math.round((held(a, b + 1) / maxHp) * 100);
+    const p = Number(m[5]);
+    if (p < lo - 1 || p > hi + 1)
+      miss("stackedDeferral", `${where} ${m[2]}–${m[3]} ${target.name}: printed ${p}%, log ${lo}–${hi}%`);
   }
   for (const l of lines) {
     for (const [check, re] of [

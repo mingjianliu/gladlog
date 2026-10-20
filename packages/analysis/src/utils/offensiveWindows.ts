@@ -5,6 +5,7 @@ import {
 } from "@gladlog/parser-compat";
 
 import {
+  countsAsKillWindowDefensiveInHand,
   isKillWindowMajorDefensive,
   KW_MAJOR_DEF_MIN_CD_S,
   kwCooldownSeconds,
@@ -196,6 +197,9 @@ interface IStateEvent {
   /** CD_USED only: this press spent the spell's LAST charge in hand (−1 to
    * the available count); a press with a charge left keeps it available. */
   spendsLast?: boolean;
+  /** CD_USED only: the press puts up nothing the span counts as a defense
+   * (`KW_IN_HAND_ONLY_DEFENSIVE_IDS`: a rewind) — it only spends the charge. */
+  holdsNothing?: boolean;
 }
 
 // ── Public interface ──────────────────────────────────────────────────────────
@@ -512,7 +516,18 @@ export function computeOffensiveWindows(
     for (const cast of enemy.spellCastEvents) {
       if (cast.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
       const { spellId } = cast;
-      if (!spellId || !timesCastOf(spellId)) continue;
+      // the roster's presses, and the rewinds that count only while in hand
+      // (user ruling 2026-10-20: a ready Alter Time is a major defensive in
+      // hand; pressed, it is no defense that was up — fact1215 R7)
+      if (
+        !spellId ||
+        !(
+          timesCastOf(spellId) ||
+          (countsAsKillWindowDefensiveInHand(spellId) &&
+            !!spellEffectData[spellId])
+        )
+      )
+        continue;
       const list = castsBySpell.get(spellId) ?? [];
       list.push((cast.logLine.timestamp - matchStartMs) / 1000);
       castsBySpell.set(spellId, list);
@@ -551,7 +566,19 @@ export function computeOffensiveWindows(
       for (const f of flips)
         if (!f.available)
           emptiedAt.set(f.atSeconds, (emptiedAt.get(f.atSeconds) ?? 0) + 1);
+      const holdsNothing = !timesCastOf(spellId);
       for (const castTimeSeconds of casts) {
+        if (holdsNothing) {
+          events.push({
+            time: castTimeSeconds,
+            kind: "CD_USED",
+            spellId,
+            spellName: effectData.name,
+            spendsLast: takeFlip(emptiedAt, castTimeSeconds),
+            holdsNothing,
+          });
+          continue;
+        }
         // A wall whose DB2 duration sits on its logged aura, not on the cast
         // (Greater Invisibility 110959 → 110960, 20 s), is timed by that
         // aura's OFFICIAL length. This state machine never reads the aura
@@ -631,7 +658,7 @@ export function computeOffensiveWindows(
       switch (ev.kind) {
         case "CD_USED":
           if (ev.spendsLast) available = Math.max(0, available - 1);
-          active++;
+          if (!ev.holdsNothing) active++;
           break;
         case "BUFF_EXPIRED":
           active = Math.max(0, active - 1);

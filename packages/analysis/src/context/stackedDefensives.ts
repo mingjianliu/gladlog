@@ -21,7 +21,7 @@ export const STACKED_DEFENSIVES_TAG = "[STACKED DEFENSIVES]";
 export const STACKED_DEFENSIVES_CAP = 2;
 
 export const STACKED_DEFENSIVES_LEGEND = [
-  `  ${STACKED_DEFENSIVES_TAG} = two major defensives from two different players were up on the same friendly at once; the line says who cast each and what the later one blocked — a fact about the stack, not a verdict (the later aura often keeps working after the first expires).`,
+  `  ${STACKED_DEFENSIVES_TAG} = two major defensives from two different players were up on the same friendly at once; the line says who cast each and what the later one blocked (a Time Dilation / Stretch Time: what it held back, which lands later) — a fact about the stack, not a verdict (the later aura often keeps working after the first expires).`,
   `    At most ${STACKED_DEFENSIVES_CAP} per round.`,
 ];
 
@@ -56,6 +56,8 @@ export function formatStackedDefensiveLines(
       let priced: string;
       if (s.pricing === "pct")
         priced = `blocked ~${s.blockedOverlapPct}% of their max HP during the overlap (~${s.blockedFullPct}% over its full ${s.secondRunSeconds}s run)`;
+      else if (s.pricing === "deferred")
+        priced = `held back ~${s.blockedOverlapPct}% of their max HP during the overlap (~${s.blockedFullPct}% over its full ${s.secondRunSeconds}s run), which lands later as their own damage`;
       else if (s.pricing === "absorb")
         priced = `absorbed ${s.blockedOverlapPct}% of their max HP during the overlap`;
       else priced = `is not priced here (${s.unpricedReason})`;

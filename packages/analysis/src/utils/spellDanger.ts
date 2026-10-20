@@ -1,4 +1,5 @@
 import { classMetadata } from '../data/classSpells';
+import { OFFENSIVE_RACIAL_WINDOW_IDS } from '../data/racialAbilities';
 import { spells } from '../data/spellTags';
 import { SpellTag } from '../data/spellTypes';
 
@@ -94,9 +95,11 @@ export const OFFENSIVE_CD_DEAD_IDS: ReadonlySet<string> = new Set([
  *     and no identified effect aura — added, then removed the same day; a
  *     window cannot be stated from official data, and a hand-guessed one is
  *     what the Game-Behaviour Rule forbids.
- *   - Gladiator's Badge 345228 / Blood Fury / Berserking: item and racials,
- *     coPressed 47–98 % (they ride a class cooldown); racials have their own
- *     table.
+ *   - Gladiator's Badge 345228: an item, coPressed 47–98 % (it rides a class
+ *     cooldown). The racial windows Blood Fury / Berserking / Ancestral Call
+ *     ARE members since the user ruling of 2026-10-20 (`OFFENSIVE_RACIAL_WINDOW_IDS`:
+ *     "racials count as offensive cooldowns"), read from their own table in
+ *     racialAbilities.ts.
  *   - Reaper's Mark, Goremaw's Bite, Execution Sentence, Tip the Scales,
  *     Champion's Spear: coPressed 67–90 % or lift < 1.5 — the scan cannot
  *     separate them from the cooldown they are pressed with.
@@ -140,6 +143,14 @@ export const OFFENSIVE_CD_SPELL_IDS: ReadonlySet<string> = new Set(
         .filter((a) => a.tags.includes(SpellTag.Offensive))
         .map((a) => String(a.spellId)),
     ),
+    ...OFFENSIVE_RACIAL_WINDOW_IDS,
+    // Ultimate Penitence (Discipline, 240 s): its bolts are a kill cooldown as
+    // well as the caster's absorb — user ruling 2026-10-20 (fact1215 retest
+    // idx 69, 「我觉得都算」: an enemy Ultimate Penitence is an enemy offensive
+    // cooldown; 465k + 422k of its bolts on two players, the [ENEMY DEF] line
+    // its only record). The 6.5 s window is the channel's aura on the caster
+    // (`buffDuration.ts`); the save half stays where it is (`[ENEMY DEF]`).
+    '421453',
   ].filter((id) => !OFFENSIVE_CD_DEAD_IDS.has(id)),
 );
 
