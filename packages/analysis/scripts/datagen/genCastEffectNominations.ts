@@ -25,6 +25,13 @@
  * does carry — Solar Beam's silence 81261 is absent from it (an observed-list
  * completeness gap, Curated-List rule), and an effect-side filter dropped the
  * one pair sync-burst F-B1 needs.
+ *
+ * Each nomination carries its effect's `SpellClassOptions.SpellClassSet`
+ * (`cls`, absent when DB2 gives it no class row): a same-name aura no class
+ * owns is a legacy or creature spell — Arcane Torrent 28730's name nominates
+ * the TBC silence 33390, while the racial today only dispels and restores
+ * (codex 20-F15-36). Readers that take a nomination as the effect itself, with
+ * no logged aura to confirm it, keep only class-owned ones.
  */
 import fs from "fs-extra";
 
@@ -62,6 +69,18 @@ async function main() {
   );
   const names = parseCsv(await fetchTable("SpellName", build, cacheDir));
   assertColumns(names.header, ["ID", "Name_lang"], "SpellName");
+  const classOpts = parseCsv(
+    await fetchTable("SpellClassOptions", build, cacheDir),
+  );
+  assertColumns(
+    classOpts.header,
+    ["SpellID", "SpellClassSet"],
+    "SpellClassOptions",
+  );
+  const classSetOf = new Map<string, number>();
+  for (const r of classOpts.rows)
+    if (r.SpellID && r.SpellClassSet && r.SpellClassSet !== "0")
+      classSetOf.set(r.SpellID, Number(r.SpellClassSet));
 
   const auraBearing = new Set<string>();
   const triggers = new Map<string, Set<string>>();
@@ -86,7 +105,10 @@ async function main() {
     auraByName.get(n)!.push(id);
   }
 
-  const nominations: Record<string, Array<{ aura: string; via: string }>> = {};
+  const nominations: Record<
+    string,
+    Array<{ aura: string; via: string; cls?: number }>
+  > = {};
   let pairs = 0;
   for (const c of [...observed].sort((a, b) => Number(a) - Number(b))) {
     const via = new Map<string, Set<string>>();
@@ -113,7 +135,11 @@ async function main() {
     if (via.size === 0) continue;
     nominations[c] = [...via.entries()]
       .sort((a, b) => Number(a[0]) - Number(b[0]))
-      .map(([aura, how]) => ({ aura, via: [...how].sort().join("+") }));
+      .map(([aura, how]) => ({
+        aura,
+        via: [...how].sort().join("+"),
+        ...(classSetOf.has(aura) ? { cls: classSetOf.get(aura) } : {}),
+      }));
     pairs += via.size;
   }
 
@@ -128,7 +154,7 @@ async function main() {
         build,
         generatedAt: new Date().toISOString(),
         source:
-          "SpellEffect.EffectTriggerSpell (<= 3 hops) or same SpellName.Name_lang, to an aura-bearing spell (EffectAura != 0); the cast end in observedSpellIdsGenerated.json",
+          "SpellEffect.EffectTriggerSpell (<= 3 hops) or same SpellName.Name_lang, to an aura-bearing spell (EffectAura != 0); the cast end in observedSpellIdsGenerated.json; cls = the effect's SpellClassOptions.SpellClassSet",
         casts: Object.keys(nominations).length,
         pairs,
         nominations,

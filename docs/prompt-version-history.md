@@ -3713,4 +3713,10 @@ User approved 2026-10-19. checkKickEatenKickSilence reads aura-backed silence
 lines only (`kickSilence` is a length). 605 files: 25 lines, all Solar Beam;
 no candidate added or removed; breakFactScan `solarBeamSilence` 25 → 0. A
 refusal two such unlogged casts could explain (a Solar Beam and a Wailing Arrow)
-names neither and gets no line.
+names neither and gets no line. (Unpushed, folded in — codex 20-F15-36:) a source
+counts only through a class-owned effect (`nominatedEffectAurasOfCast(…,
+{ classOwned: true })`, the effect's DB2 SpellClassOptions: Arcane Torrent's
+name nominated the TBC silence 33390); a refusal is covered, and a cast ruled
+logged, by one silence reading (`isSilenceEffectAura` — a logged 81261 now
+covers); two casters of the same spell are two sources; a refusal after the
+owner's death in the round is none. 605: zero lines changed (b59).

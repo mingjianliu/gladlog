@@ -2415,6 +2415,12 @@ const INDEX: PredicateRow[] = [
     symbol: "ccRecastSplitsResend",
     mod: drAnalysis,
   },
+  // fact1215 R11: the silence reading of the no-aura [SILENCE] line
+  {
+    file: `${A}/utils/cannotCastIntervals.ts`,
+    symbol: "isSilenceEffectAura",
+    mod: cannotCastIntervals,
+  },
   // fact1215 R7: the non-wall saves that cut a kill-window span
   {
     file: `${A}/utils/enemyDefensives.ts`,

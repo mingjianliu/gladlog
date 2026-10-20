@@ -144,9 +144,11 @@ for (const f of files) {
         spells: new Map<string, number>(),
       };
       e.removals++;
-      const tools = toolsOf.get(u.id) ?? scopedPurgeToolsOf(u);
+      // the round's units: a warlock's pet that logged no cast of its own
+      // (codex 20-F15-37)
+      const tools = toolsOf.get(u.id) ?? scopedPurgeToolsOf(u, units);
       toolsOf.set(u.id, tools);
-      if (canOffensivePurge(u)) e.roster++;
+      if (canOffensivePurge(u, units)) e.roster++;
       else if (tools.some((t) => scopedToolRemoves(t, p.removedSpellId)))
         e.scoped++;
       else if (isOwnTypeCleanse(u, p.dispelSpellId, p.removedSpellId))

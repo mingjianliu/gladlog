@@ -135,15 +135,22 @@ export function effectAuraHitShare(
 /** The aura ids DB2 nominates as a cast's effect (same SpellName or an
  * EffectTriggerSpell chain — `genCastEffectNominations.ts`), whether or not
  * the corpus ever logged them: the official reading for an effect the log
- * writes no aura for (Solar Beam 78675 → its silence 81261, never logged). */
+ * writes no aura for (Solar Beam 78675 → its silence 81261, never logged).
+ * `classOwned` keeps only effects DB2 gives a class (`SpellClassOptions`): a
+ * reader with no logged aura to confirm the effect drops the legacy and
+ * creature namesakes (Arcane Torrent 28730 → the TBC silence 33390 — codex
+ * 20-F15-36). */
 export function nominatedEffectAurasOfCast(
   castSpellId: string,
+  opts: { classOwned?: boolean } = {},
 ): readonly string[] {
   return (
     (
       nominations as unknown as {
-        nominations: Record<string, { aura: string }[]>;
+        nominations: Record<string, { aura: string; cls?: number }[]>;
       }
     ).nominations[castSpellId] ?? []
-  ).map((r) => r.aura);
+  )
+    .filter((r) => !opts.classOwned || r.cls !== undefined)
+    .map((r) => r.aura);
 }

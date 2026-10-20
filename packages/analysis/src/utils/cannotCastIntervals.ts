@@ -20,6 +20,7 @@ import { dropAuraRebroadcasts, supersededAuraBreaks } from "./auraIntervals";
 import { buffFullDurationForCaster } from "./buffDuration";
 import { REACTION_WINDOW_S, usableWhileStunned } from "./cooldowns";
 import {
+  getDRCategory,
   isStunDrAura,
   matchPendingCcKey,
   reAppliedIsSameApplication,
@@ -926,6 +927,15 @@ export const isSilenceOnlyAura = (auraId: string): boolean =>
   !isHardCcAura(auraId) &&
   (officialSilenceIds.has(auraId) ||
     BACKLASH_AURA_CC_TYPE.get(auraId) === "silence");
+
+/** An aura whose effect is a silence by any official reading: the silence
+ * family above, or the DR Silence category — Solar Beam's 81261, which the log
+ * never writes, has only that (codex 20-F15-36: the no-aura reader nominated
+ * with it but covered with `silenceIntervals`, so a logged 81261 left the
+ * refusal "unexplained"). The no-aura `[SILENCE]` reader nominates, rules out
+ * and covers with it; `breakFactScan` solarBeamSilence checks with it. */
+export const isSilenceEffectAura = (auraId: string): boolean =>
+  isSilenceOnlyAura(auraId) || getDRCategory(auraId) === "Silence";
 
 /**
  * "Could this unit press `spellId` at `tMs`, as far as auras go?" — the

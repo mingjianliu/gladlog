@@ -107,12 +107,14 @@ import {
   AURA_REBROADCAST_GAP_MS,
   dropAuraRebroadcasts,
 } from "@gladlog/analysis/src/utils/auraIntervals";
-import { isSilenceOnlyAura } from "@gladlog/analysis/src/utils/cannotCastIntervals";
+import {
+  isSilenceEffectAura,
+  isSilenceOnlyAura,
+} from "@gladlog/analysis/src/utils/cannotCastIntervals";
 import { CC_AVOIDANCE_BUFF_SPELLS } from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
 import {
   ccRecastBetween,
   ccRecastSplitsResend,
-  getDRCategory,
 } from "@gladlog/analysis/src/utils/drAnalysis";
 import {
   parseRawStreamsAbsolute,
@@ -638,40 +640,64 @@ for (const f of files) {
         ((owner.auraEvents ?? []) as IAuraEvent[]).some(
           (a) =>
             !!a.spellId &&
-            (isSilenceOnlyAura(a.spellId) ||
-              getDRCategory(a.spellId) === "Silence") &&
+            isSilenceEffectAura(a.spellId) &&
             a.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
             a.timestamp <= ms &&
             ms - a.timestamp <= 8000,
         );
-      // another enemy cast whose official effect is a silence, open at the
-      // refusal, makes it ambiguous: no source is named then
+      // a Beam whose silence the log wrote — on anyone — has its own line
+      const beamLogged = (b: (typeof beams)[number]) =>
+        units.some((x) =>
+          ((x.auraEvents ?? []) as IAuraEvent[]).some(
+            (a) =>
+              !!a.spellId &&
+              isSilenceEffectAura(a.spellId) &&
+              a.srcUnitId === b.u.id &&
+              a.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
+              a.timestamp >= b.ms - 100 &&
+              a.timestamp <= b.ms + 8000,
+          ),
+        );
+      // another enemy cast whose class-owned official effect is a silence —
+      // another druid's Beam too — open at the refusal, makes it ambiguous:
+      // no source is named then
       const otherSilencers = units
         .filter((u) => pidOf.get(u.name)?.enemy)
         .flatMap((u) =>
           ((u.spellCastEvents ?? []) as ISpellEvent[])
             .filter(
               (c) =>
-                c.spellId !== "78675" &&
                 c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
-                nominatedEffectAurasOfCast(c.spellId).some(
-                  (a) =>
-                    !BACKLASH_AURA_CC_TYPE.has(a) &&
-                    (isSilenceOnlyAura(a) || getDRCategory(a) === "Silence"),
-                ),
+                !nominatedEffectAurasOfCast(c.spellId).some((a) =>
+                  BACKLASH_AURA_CC_TYPE.has(a),
+                ) &&
+                nominatedEffectAurasOfCast(c.spellId, {
+                  classOwned: true,
+                }).some(isSilenceEffectAura),
             )
-            .map((c) => c.logLine.timestamp),
+            .map((c) => ({ t: c.logLine.timestamp, u, id: c.spellId })),
         );
+      const ownerDeathMs = Math.min(
+        ...((owner.deathRecords ?? []) as Array<{ timestamp: number }>)
+          .map((d) => d.timestamp)
+          .filter((t) => t >= start),
+      );
       for (const b of beams) {
-        if (b.ms < start || b.ms > roundEnd) continue;
+        if (b.ms < start || b.ms > roundEnd || beamLogged(b)) continue;
         const hit = refused.find((x) => {
           const ms = start + Math.round(x.tSeconds * 1000);
           return (
             ms >= b.ms &&
             ms <= b.ms + 8000 &&
             ms < roundEnd &&
+            ms < ownerDeathMs &&
             !silencedAt(ms) &&
-            !otherSilencers.some((t) => t <= ms && ms - t <= 8000)
+            !otherSilencers.some(
+              (o) =>
+                !(o.u === b.u && o.id === "78675") &&
+                o.t <= ms &&
+                ms - o.t <= 8000,
+            )
           );
         });
         if (!hit) continue;
