@@ -1353,9 +1353,26 @@ export function damageEventParts(
   // lasts (`isControlledPlayerFlags`): it is that player, not somebody's pet
   // (605-file slice: "[pet] — Rune of Unleashed Fire" for a charmed teammate).
   const charmed = isControlledPlayerFlags(d.srcUnitId, d.srcUnitFlags);
+  // round-1 retest idx 39: a summon is one by its GUID's owner, whatever
+  // type flag a row carries — a Death Knight's Lesser Ghouls logged 0xa28
+  // (NPC) on 36 rows and 0x2148 (Guardian) on 12, and the NPC rows formed a
+  // bucket of their own beside `4's guardian — Death Order`
+  const ownedSummon =
+    !charmed &&
+    srcType !== CombatUnitType.Player &&
+    !!d.srcUnitId &&
+    !!summonOwners?.has(d.srcUnitId);
   const isPet =
     !charmed &&
-    (srcType === CombatUnitType.Pet || srcType === CombatUnitType.Guardian);
+    (srcType === CombatUnitType.Pet ||
+      srcType === CombatUnitType.Guardian ||
+      ownedSummon);
+  const summonType =
+    ownedSummon &&
+    srcType !== CombatUnitType.Pet &&
+    srcType !== CombatUnitType.Guardian
+      ? CombatUnitType.Guardian
+      : srcType;
 
   let srcName = "Unknown";
   if (!isPet && d.srcUnitName) {
@@ -1393,10 +1410,10 @@ export function damageEventParts(
     )
       srcName = "[pet]";
   } else if (isPet) {
-    srcName = summonLabel(d, srcType, playerIdMap, enemyIdMap, summonOwners);
+    srcName = summonLabel(d, summonType, playerIdMap, enemyIdMap, summonOwners);
   }
   if (srcName === "[pet]" && !isPet && !charmed)
-    srcName = summonLabel(d, srcType, playerIdMap, enemyIdMap, summonOwners);
+    srcName = summonLabel(d, summonType, playerIdMap, enemyIdMap, summonOwners);
   if (charmed) srcName = `${srcName} (mind-controlled)`;
 
   const baseSpellLabel = d.spellId
@@ -1713,7 +1730,27 @@ export function getTopDamageSourcesInWindow(
   );
   for (const a of unit.absorbsIn ?? []) {
     if (a.timestamp < startMs || a.timestamp > endMs) continue;
-    if (!a.attackerId || a.attackerId === unit.id) continue;
+    if (!a.attackerId) continue;
+    // round-1 retest idx 32: the unit's own damage a shield of its ate is
+    // part of its `(own)` entry, as the hits that landed are (15b4d4ec: a
+    // Refraction 100k landed + 41k eaten by its own Prismatic Barrier read
+    // `Refraction (own) (100k)`)
+    if (a.attackerId === unit.id) {
+      if (isDeferralAbsorb(a)) continue;
+      const amt = Math.abs(a.absorbedAmount);
+      const spellKey = hitSpellKey(a.attackSpellId);
+      if (amt <= 0 || spellKey === "") continue;
+      const selfName = getEnglishSpellName(
+        a.attackSpellId ?? "",
+        a.attackSpellName ?? "",
+      );
+      const ability = DEFERRED_DAMAGE_SPELL_IDS.has(a.attackSpellId ?? "")
+        ? `deferred ${selfName} (own)`
+        : `${selfName} (own)`;
+      add(ability, null, amt);
+      absorbedIn.set(ability, (absorbedIn.get(ability) ?? 0) + amt);
+      continue;
+    }
     if (
       isSameSideSource(
         unit,

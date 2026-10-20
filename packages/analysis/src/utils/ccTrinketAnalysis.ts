@@ -35,6 +35,7 @@ import {
 } from "../data/spellEffectData";
 import {
   immunityCoversSpell,
+  immunityMechanics,
   isPhysicalSpell,
   schoolLockedBy,
   spellSchoolMask,
@@ -118,7 +119,11 @@ import {
 import { fmtTime, fmtWholeSeconds } from "./renderGrid";
 import { rootIntervalsOf } from "./rootReachability";
 import { roundEndMs } from "./roundEnd";
-import { baseCastSeconds, isSilenceableCast } from "./spellMechanics";
+import {
+  baseCastSeconds,
+  ccMechanicOf,
+  isSilenceableCast,
+} from "./spellMechanics";
 import {
   RANGE_HITBOX_SLACK_YD,
   spellRangeForCaster,
@@ -273,6 +278,20 @@ export const CC_AVOIDANCE_BUFF_SPELLS = new Map<string, string>([
   ["410355", "Stretch Time"], // immuneRate 93.1% (67/5), aura on players
   ["443028", "Celestial Conduit"], // Monk channel immunity (same shape as Ultimate Penitence), immuneRate 62.5% (20/12); real 90s CD
 ]);
+/**
+ * Round-1 retest idx 51 (2026-10-20): avoidance buffs that stop only some
+ * control MECHANICS — listed, but applicable only to a control whose official
+ * mechanic (`ccMechanicOf`) is among the buff's own DB2 mechanic immunities
+ * (`immunityMechanics`, aura 77). The Beast Within 212704 (Bestial Wrath's
+ * PvP talent): Fear and Horror only ([5, 24]). Its all-CC immune rate is why
+ * 357140 stayed off the table above; gated by mechanic it is exact
+ * (5dd3d2d6 0:55: a Fear logged IMMUNE on the hunter under it, no line).
+ */
+export const MECHANIC_LIMITED_AVOIDANCE_BUFFS: ReadonlyMap<string, string> =
+  new Map([["212704", "The Beast Within"]]);
+for (const [buffId, name] of MECHANIC_LIMITED_AVOIDANCE_BUFFS)
+  CC_AVOIDANCE_BUFF_SPELLS.set(buffId, name);
+
 // B139: merge the talent-granted CC/magic-immunity avoidance buffs from the behavioral catalog. Self-gating
 // (each buff aura only exists when its talent is taken). Adds Peaceweaver (353319) and Phase Shift (408558),
 // Nullifying Shroud (378464), Psychic Shroud (1246965), Blessing of Spellwarding (204018).
@@ -887,6 +906,12 @@ export function applicableCCAvoidanceIds(
   // PHYSICAL_CC_IDS 只在官方没有该 id 时兜底:那 9 条本身没写错,但漏了制裁之锤
   // (神圣)、暗影之怒(暗影)、混沌新星(多学派)这些魔法控 —— 手工名单证不了全。
   for (const buffId of CC_AVOIDANCE_BUFF_SPELLS.keys()) {
+    if (MECHANIC_LIMITED_AVOIDANCE_BUFFS.has(buffId)) {
+      const mech = ccMechanicOf(ccSpellId);
+      if (mech !== undefined && immunityMechanics(buffId)?.includes(mech))
+        out.add(buffId);
+      continue;
+    }
     const covers = immunityCoversSpell(buffId, ccSpellId);
     if (covers === false) continue; // 官方判定:挡不住
     if (covers === undefined) {

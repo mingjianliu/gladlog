@@ -461,11 +461,20 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
           app.spellId === spellId &&
           app.casterName === caster &&
           app.drInfo &&
+          isDrFamilyCategory(app.drInfo.category) &&
           toRenderSecond(app.atSeconds) === t
         )
           return ` [DR: ${app.drInfo.category} ${app.drInfo.level}]`;
     }
     return "";
+  }
+
+  /** A DR family the tag can name — not the chain builder's placeholders
+   * (`Unknown`, `spell:<id>` for a control that shares no family, e.g.
+   * Infernal Awakening): round-1 retest idx 30 printed `[DR: Unknown Full]`;
+   * the [CC ON TEAM] line has always had this guard */
+  function isDrFamilyCategory(category: string): boolean {
+    return category !== "Unknown" && !category.startsWith("spell:");
   }
 
   function outgoingDrTag(
@@ -484,6 +493,7 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
         if (app.spellId !== spellId) continue;
         if (toRenderSecond(app.atSeconds) !== t) continue;
         if (!app.drInfo || app.casterName !== owner.name) continue;
+        if (!isDrFamilyCategory(app.drInfo.category)) continue;
         hits.push({
           target: chain.targetName,
           category: app.drInfo.category,

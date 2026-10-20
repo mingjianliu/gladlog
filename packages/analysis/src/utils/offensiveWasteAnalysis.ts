@@ -11,6 +11,7 @@ import {
   mitigationVerdictOf,
 } from "../data/mitigationVerdicts";
 import { getEnglishSpellName } from "../data/spellEffectData";
+import { immunityCoversSpell } from "../data/spellSchools";
 import { isAllyCopyWallId } from "./allyCopyWall";
 import { buildAuraIntervals } from "./auraIntervals";
 import { isControlCast } from "./castMissRows";
@@ -224,10 +225,21 @@ export function buildOffensiveWasteSummary(
           // listed "into" Die by the Sword)
           if (reflectedBack(friend, e.spellId, window.unitId, e.logLine.timestamp))
             return false;
+          // round-1 retest idx 43 / 13: a school-limited immunity does not
+          // stop the schools it does not cover — a Chaos Bolt into Blessing
+          // of Protection, a Sinister Strike into Spellwarding LANDED (the
+          // prompt's own legend says so). The official school masks decide
+          // (`immunityCoversSpell`); a wall with no immunity mask (Die by the
+          // Sword, signed unconditional — ruling C3) keeps its verdict.
+          const covers = immunityCoversSpell(window.spellId, e.spellId);
+          if (covers === false) return false;
           // B28: for immunity windows, also count high-value CC/utility spells that do no damage
           // (e.g. Mindgames, HoJ, Silence) which would otherwise be filtered by the damage threshold.
+          // Round-1 retest idx 44: only into an immunity that covers it — a
+          // Mortal Coil into Die by the Sword (no control immunity) landed.
           const isHighValueCC =
             window.verdict === "unconditional" &&
+            covers === true &&
             isControlCast(e.spellId);
           return (
             isHighValueCC ||

@@ -9,11 +9,12 @@
  * [ENEMY TRINKET] legend reads it). Output is pinned by the 605-file
  * acceptanceCapture context hash.
  */
-import { CombatUnitReaction } from "@gladlog/parser-compat";
+import { CombatUnitReaction, LogEvent } from "@gladlog/parser-compat";
 
 import { BACKLASH_AURA_CC_TYPE, backlashCcTag } from "../../data/backlashCc";
 import { BREAK_RACIAL_SPELL_IDS } from "../../data/racialAbilities";
 import { getEnglishSpellName } from "../../data/spellEffectData";
+import { ccSpellIds } from "../../data/spellTags";
 import { silenceIntervals } from "../../utils/cannotCastIntervals";
 import {
   ccEndedByCasterInterrupt,
@@ -31,6 +32,7 @@ import {
   renderedCcDuration,
   renderedCcSpan,
   tremorTotemBreak,
+  TRINKET_BREAK_AFTER_REMOVAL_MS,
 } from "../../utils/ccTrinketAnalysis";
 import { hasOffensiveSpellActive, hpAtPress } from "../../utils/cooldowns";
 import { wasRemovedByAllyDispel } from "../../utils/dispelAnalysis";
@@ -109,7 +111,10 @@ export function emitCcOnEnemyEntries(
         const tSec = toRenderSecond(t);
         const tMs = matchStartMs + tSec * 1000;
         const ccPart = brokenCC
-          ? ` out of ${brokenCC.spellName} (by ${actorLabel(brokenCC.sourceName, "friendly", brokenCC.sourceId)})`
+          ? brokenCC.sourceId !== undefined &&
+            brokenCC.sourceId === enemyUnit?.id
+            ? ` out of ${brokenCC.spellName} (reflected back)`
+            : ` out of ${brokenCC.spellName} (by ${actorLabel(brokenCC.sourceName, "friendly", brokenCC.sourceId)})`
           : "";
         const hasBurst =
           friends.some((f) =>
@@ -152,6 +157,32 @@ export function emitCcOnEnemyEntries(
       const silences = enemyUnit
         ? silenceIntervals(enemyUnit, friendAndSummonIds)
         : [];
+      // round-1 retest idx 12: the enemy's own control sent back onto it
+      // (Cyclone REFLECTED, source = holder) is no `ccInstances` member on the
+      // enemy side (ruling A52 = A keeps the [CC ON ENEMY] line off it), so
+      // the press that ended it named nothing (086019c0 3:14: the Medallion
+      // and the reflected Cyclone's REMOVED in one ms) — read off the aura
+      const reflectedCcEndedBy = (pressMs: number) => {
+        if (!enemyUnit) return undefined;
+        const removed = (enemyUnit.auraEvents ?? []).find(
+          (a) =>
+            !!a.spellId &&
+            ccSpellIds.has(a.spellId) &&
+            a.srcUnitId === enemyUnit.id &&
+            a.logLine.event === LogEvent.SPELL_AURA_REMOVED &&
+            Math.abs(a.timestamp - pressMs) <= TRINKET_BREAK_AFTER_REMOVAL_MS,
+        );
+        return removed
+          ? {
+              spellName: getEnglishSpellName(
+                removed.spellId!,
+                removed.spellName,
+              ),
+              sourceName: enemyUnit.name,
+              sourceId: enemyUnit.id,
+            }
+          : undefined;
+      };
       for (const t of summary.trinketUseTimes) {
         enemyTrinketCount++;
         const pressMs = matchStartMs + Math.round(t * 1000);
@@ -177,7 +208,8 @@ export function emitCcOnEnemyEntries(
                   sourceName: silence.srcUnitName,
                   sourceId: silence.srcUnitId,
                 }
-              : undefined),
+              : undefined) ??
+            reflectedCcEndedBy(pressMs),
         );
       }
       // F-E21 / ruling A′15: the same line for a break that was not the

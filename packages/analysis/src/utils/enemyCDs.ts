@@ -274,6 +274,11 @@ export function observedEffectEndSeconds(
     let lastFromS = ivs[first]!.fromS;
     for (const iv of ivs.slice(first + 1)) {
       if (iv.fromS > chainEnd + EFFECT_CHAIN_GAP_S) break;
+      // a re-application of the SAME aura continues the chain; another of
+      // the cast's effect ids on this unit does not (round-1 retest idx 46:
+      // Kingsbane 385627 ended at 2:25.13, and its same-named stacking buff
+      // 394095 — nominated by name only — stretched the span to 2:29.7)
+      if (iv.spellId !== ivs[first]!.spellId) continue;
       if (iv.toS > chainEnd) {
         chainEnd = iv.toS;
         observed = !iv.inferredEnd;
@@ -308,7 +313,16 @@ export function observedEffectEndSeconds(
           a.logLine.timestamp >= fromMs,
       )
       .sort((x, y) => x.logLine.timestamp - y.logLine.timestamp)[0];
-    if (closing && closing.logLine.timestamp > combat.endTime) return null;
+    if (closing && closing.logLine.timestamp > combat.endTime) {
+      // …unless the log shows it outliving its official length: still up
+      // when the combat ended, past `cast + official`, it ran at least to the
+      // combat's end (round-1 retest idx 64, a2e71187: a talent-lengthened
+      // Dragonrage up 29.5 s against 18 s read as ending at cast + 18 s). A
+      // clamp before the official end leaves the official end standing (the
+      // Kingsbane case).
+      const full = buffFullDurationForCaster(castSpellId, caster);
+      return full !== undefined && castS + full < combatEndS ? combatEndS : null;
+    }
   }
   return best?.observed ? best.end : null;
 }

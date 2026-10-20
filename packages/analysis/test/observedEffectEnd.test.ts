@@ -87,6 +87,37 @@ describe("observedEffectEndSeconds", () => {
     );
   });
 
+  it("round-1 retest idx 64: removed after the combat's end and past its official length → still up at the end", () => {
+    // Avatar 20 s pressed at 150 s, REMOVED at 201 s (after the 200 s end):
+    // the log shows it outliving 170 s, so it ran at least to 200
+    const { caster, combat } = scene([
+      [LogEvent.SPELL_AURA_APPLIED, 150],
+      [LogEvent.SPELL_AURA_REMOVED, 201],
+    ]);
+    expect(observedEffectEndSeconds(caster, AVATAR, 150, Infinity, combat)).toBe(200);
+    // control (the Kingsbane case): pressed at 190 s, its official end 210 s
+    // lies past the combat's end — the clamp says nothing, the official stands
+    const late = scene([
+      [LogEvent.SPELL_AURA_APPLIED, 190],
+      [LogEvent.SPELL_AURA_REMOVED, 205],
+    ]);
+    expect(observedEffectEndSeconds(late.caster, AVATAR, 190, Infinity, late.combat)).toBeNull();
+  });
+
+  it("round-1 retest idx 46: another effect id of the cast on the same unit does not continue the chain (Kingsbane 385627 / 394095)", () => {
+    const caster = makeUnit("c1", {
+      name: "Caster",
+      auraEvents: [
+        { ...makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, "385627", T0 + 131_000, "c1", "c1", "BUFF"), srcUnitName: "Caster" },
+        { ...makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, "394095", T0 + 142_000, "c1", "c1", "BUFF"), srcUnitName: "Caster" },
+        { ...makeAuraEvent(LogEvent.SPELL_AURA_REMOVED, "385627", T0 + 145_000, "c1", "c1", "BUFF"), srcUnitName: "Caster" },
+        { ...makeAuraEvent(LogEvent.SPELL_AURA_REMOVED, "394095", T0 + 149_700, "c1", "c1", "BUFF"), srcUnitName: "Caster" },
+      ],
+    } as never);
+    const combat = { startTime: T0, endTime: T0 + 200_000, units: { c1: caster } } as never;
+    expect(observedEffectEndSeconds(caster, "385627", 131, Infinity, combat)).toBe(145);
+  });
+
   it("no logged removal is no observation: null, the official length stands", () => {
     const { caster, combat } = scene([[LogEvent.SPELL_AURA_APPLIED, 10]]);
     expect(

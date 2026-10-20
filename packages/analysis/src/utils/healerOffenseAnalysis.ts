@@ -18,6 +18,7 @@ import {
 import { isControlCast } from "./castMissRows";
 import {
   chargesAvailableAt,
+  extractMajorCooldowns,
   hpTroughInEventSpan,
   hpTroughInWindow,
   isHealerSpec,
@@ -674,8 +675,22 @@ interface IOwnerCCSpell {
 function collectOwnerCCSpells(
   owner: ICombatUnit,
   matchStartMs: number,
+  /** the owner's kit controls (the ledger the [RES] rows and the loadout
+   * read), pressed or not: round-1 retest idx 28 — "your CC on cooldown"
+   * while the kit's Maim, never pressed, was ready on the [RES] row */
+  kitControls: ReadonlyArray<{ spellId: string; spellName: string }> = [],
 ): IOwnerCCSpell[] {
   const bySpell = new Map<string, IOwnerCCSpell>();
+  for (const k of kitControls) {
+    const own = unitCooldownOf(owner, k.spellId);
+    bySpell.set(k.spellId, {
+      spellId: k.spellId,
+      spellName: getEnglishSpellName(k.spellId, k.spellName),
+      cooldownSeconds: own?.cooldownSeconds ?? 0,
+      charges: own?.charges ?? 1,
+      castTimesSeconds: [],
+    });
+  }
   for (const e of owner.spellCastEvents) {
     if (e.logLine.event !== LogEvent.SPELL_CAST_SUCCESS || !e.spellId) continue;
     if (!isOwnerCcCast(e.spellId)) continue;
@@ -744,7 +759,15 @@ export function computeWindowContributions(
 ): IWindowContribution[] {
   const matchStartMs = combat.startTime;
   const enemyHealer = enemies.find((e) => isHealerSpec(e.spec)) ?? null;
-  const ccSpells = collectOwnerCCSpells(owner, matchStartMs);
+  // the kit's controls, when the caller handed a combat with its units (the
+  // ledger needs one); a bare clock keeps the cast-history reading
+  const kitControls =
+    "units" in combat && combat.units
+      ? extractMajorCooldowns(owner, combat as never, {
+          withBaselineOnly: true,
+        }).filter((cd) => isOwnerCcCast(cd.spellId))
+      : [];
+  const ccSpells = collectOwnerCCSpells(owner, matchStartMs, kitControls);
   // the caster evidence for a CC cast with variants in different DR
   // families (Chastise: stun / incapacitate)
   const ownerApplied = auraIdsAppliedBy(owner.id, enemies);

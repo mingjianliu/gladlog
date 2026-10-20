@@ -18,7 +18,7 @@
  * hit of a press made just before the cut lands there too, not under
  * `pressed before that`. Both are parts no player is named for.
  */
-import type { ICombatUnit } from "@gladlog/parser-compat";
+import { type ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
 import { REACTION_WINDOW_S } from "./cooldowns";
 import {
@@ -59,6 +59,10 @@ const KARMA_ABSORB_WINDOW_S = 10;
  * (b711d4ac: pressed 55.4, last tick 68.7). */
 const KARMA_REDIRECT_TAIL_S = 6;
 const SLACK_MS = 50;
+/** How long after its press a redirect debuff's REMOVED is still this
+ * press's: the 10 s buff plus a DoT refreshed to its end (well inside the
+ * 90 s cooldown). */
+const KARMA_REDIRECT_MAX_S = 30;
 
 export interface IKarmaFeed {
   /** our players' damage it absorbed from spells pressed REACTION_WINDOW_S or
@@ -145,8 +149,27 @@ export function karmaFeedOf(
       pressedBefore += a.absorbedAmount;
     }
   }
+  // round-1 retest idx 59: the redirect DoT ends where the log says it does
+  // — its debuff's REMOVED on the unit carrying it (8cd58545: refreshed to
+  // 2:18.8 and ticking to 2:25.05, past the press + 16 s estimate, whose
+  // last 32k tick fell outside) — the estimate only when none is logged
+  let loggedEndMs: number | undefined;
+  for (const p of ourPlayers)
+    for (const a of (p as { auraEvents?: ICombatUnit["auraEvents"] })
+      .auraEvents ?? []) {
+      if (a.spellId !== TOUCH_OF_KARMA_REDIRECT_ID) continue;
+      if (a.logLine.event !== LogEvent.SPELL_AURA_REMOVED) continue;
+      if (a.timestamp < pressMs || a.timestamp >= nextMs) continue;
+      if (a.timestamp > pressMs + KARMA_REDIRECT_MAX_S * 1000) continue;
+      if (loggedEndMs === undefined || a.timestamp > loggedEndMs)
+        loggedEndMs = a.timestamp;
+    }
   const redirectEndMs = Math.min(
-    pressMs + (KARMA_ABSORB_WINDOW_S + KARMA_REDIRECT_TAIL_S) * 1000 + SLACK_MS,
+    loggedEndMs !== undefined
+      ? loggedEndMs + SLACK_MS
+      : pressMs +
+          (KARMA_ABSORB_WINDOW_S + KARMA_REDIRECT_TAIL_S) * 1000 +
+          SLACK_MS,
     nextMs - SLACK_MS,
   );
   const back = new Map<string, { unitName: string; amount: number }>();

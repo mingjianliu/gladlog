@@ -178,3 +178,32 @@ describe("FT-T06 — Stasis release", () => {
     expect(events[0]!.storedBeforeRound).toBeUndefined();
   });
 });
+
+describe("round-1 retest idx 18 — an unreleased empower stores nothing", () => {
+  it("a Dream Breath whose hold ended in SPELL_EMPOWER_INTERRUPT is not a stored spell", () => {
+    const empower = (event: string, ms: number): any => ({
+      logLine: { event, timestamp: ms },
+      timestamp: ms,
+      spellId: "355936",
+      spellName: "Dream Breath",
+    });
+    const u = {
+      ...unit(
+        [...storing, aura(LogEvent.SPELL_AURA_REMOVED, "370562", 111_900)],
+        [
+          cast("370537", "Stasis", 99_901),
+          cast("366155", "Reversion", 101_300),
+          cast("355936", "Dream Breath", 100_500), // the cut hold
+          cast("355936", "Dream Breath", 101_800),
+          cast("364343", "Echo", 102_900),
+          ...replays(111_900),
+        ],
+      ),
+      empowerStarts: [empower("SPELL_EMPOWER_START", 100_500), empower("SPELL_EMPOWER_START", 101_800)],
+      empowerInterrupts: [empower("SPELL_EMPOWER_INTERRUPT", 100_700)],
+      empowerEnds: [empower("SPELL_EMPOWER_END", 102_000)],
+    };
+    const [e] = extractStasisEvents(u, combat);
+    expect(e!.spells).toEqual(["Reversion", "Dream Breath", "Echo"]);
+  });
+});

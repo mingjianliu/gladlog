@@ -7,6 +7,7 @@ import {
 
 import { getEnglishSpellName } from "../data/spellEffectData";
 import { dropAuraRebroadcasts, officialDurationS } from "./auraIntervals";
+import { empowerSpans } from "./castCommitSpans";
 
 export interface IFormInterval {
   form: "Bear" | "Cat";
@@ -426,6 +427,15 @@ export function extractStasisEvents(
   let bufferedSpells: string[] = [];
   let doseRemovals = 0;
   let lastStasisCastTimestamp = 0;
+  // round-1 retest idx 18: an empowered spell logs its SUCCESS at the start
+  // of the hold; a hold that ended in SPELL_EMPOWER_INTERRUPT released
+  // nothing and stored nothing (0f894aee 4:22.965: a Dream Breath cut at
+  // 4:23.30, no dose taken — read as a stored Dream Breath)
+  const unreleased = (empowerSpans(unit) ?? []).filter((h) => h.interrupted);
+  const unreleasedEmpowerAt = (spellId: string, ms: number): boolean =>
+    unreleased.some(
+      (h) => h.spellId === spellId && Math.abs(h.startMs - ms) <= 50,
+    );
 
   // We scan aura events (for boundaries and stored-spell doses) and cast events
   // (for the buffered spell names).
@@ -520,7 +530,8 @@ export function extractStasisEvents(
       e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
       e.spellId &&
       STASIS_STORABLE_HEAL_IDS.has(e.spellId) &&
-      bufferedSpells.length < 3
+      bufferedSpells.length < 3 &&
+      !unreleasedEmpowerAt(e.spellId, e.logLine.timestamp)
     ) {
       const name = getEnglishSpellName(e.spellId, e.spellName ?? "Unknown");
       const twin =

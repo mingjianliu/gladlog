@@ -2299,7 +2299,7 @@ describe("rendersOnCaster", () => {
 
 describe("cdRoleTag", () => {
   it("returns the tagged role descriptor for a known throughput/modifier CD", () => {
-    expect(cdRoleTag("388615")).toBe("mana+heal CD"); // Restoral
+    expect(cdRoleTag("388615")).toBe("heal+cleanse CD"); // Restoral (round-1 retest idx 0)
     expect(cdRoleTag("325197")).toBe("healing CD"); // Invoke Chi-Ji
     expect(cdRoleTag("116680")).toBe("heal amplifier"); // Thunder Focus Tea
     // Time Dilation — FT F01: not "ally heal-over-time", it heals nothing

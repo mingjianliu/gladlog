@@ -157,6 +157,29 @@ describe("offensiveWasteAnalysis — buildOffensiveWasteSummary", () => {
     expect(ev.wasteCasts[0]!.spellId).toBe("12294");
   });
 
+  it("round-1 retest idx 43: a spell of a school the immunity does not cover is no waste (Chaos Bolt into Blessing of Protection)", () => {
+    const friend = makeUnit("lock-1", {
+      name: "Lock",
+      spec: CombatUnitSpec.Warlock_Destruction,
+      class: CombatUnitClass.Warlock,
+      reaction: CombatUnitReaction.Friendly,
+      spellCastEvents: [
+        makeSpellCastEvent("116858", matchStart + 11_000, "enemy-1", "EnemyDK", "lock-1", "Lock", 0, "Chaos Bolt"),
+        makeSpellCastEvent("116858", matchStart + 13_000, "enemy-1", "EnemyDK", "lock-1", "Lock", 0, "Chaos Bolt"),
+      ],
+    });
+    friend.damageOut = [{ ...makeDamageEvent(matchStart + 5_000, 100_000, "enemy-1"), spellId: "116858" }] as never;
+    const enemy = makeUnit("enemy-1", {
+      name: "EnemyDK",
+      reaction: CombatUnitReaction.Hostile,
+      auraEvents: [
+        makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, "1022", matchStart + 10_000, "enemy-2", "enemy-1", "BUFF"),
+        makeAuraEvent(LogEvent.SPELL_AURA_REMOVED, "1022", matchStart + 18_000, "enemy-2", "enemy-1", "BUFF"),
+      ],
+    });
+    expect(buildOffensiveWasteSummary(combat, [friend], [enemy]).events).toHaveLength(0);
+  });
+
   it("round-1 retest idx 107: a cast the target REFLECTED did not land inside the window", () => {
     const friend = makeUnit("warrior-1", {
       name: "Ares",

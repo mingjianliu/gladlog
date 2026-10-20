@@ -19,6 +19,7 @@ import { ensureAnalysisData } from "../src/data/ensure";
 import { getEnglishSpellName } from "../src/data/spellEffectData";
 import {
   analyzePlayerCCAndTrinket,
+  applicableCCAvoidanceIds,
   ccAvoidanceBuffsUpAt,
 } from "../src/utils/ccTrinketAnalysis";
 import { makeSpellCastEvent, makeUnit } from "./ported/testHelpers";
@@ -451,5 +452,12 @@ describe("[CC AVOIDED?] — overlapping landing windows (codex 20-F15-34)", () =
       totem,
     ]).ccAvoidedInstances;
     expect(out).toEqual([]);
+  });
+});
+
+describe("applicableCCAvoidanceIds — a mechanic-limited avoidance (round-1 retest idx 51)", () => {
+  it("The Beast Within 212704 avoids a Fear (mechanic 5), never a stun", () => {
+    expect(applicableCCAvoidanceIds("5782", "Fear").has("212704")).toBe(true);
+    expect(applicableCCAvoidanceIds("853", "Hammer of Justice").has("212704")).toBe(false);
   });
 });

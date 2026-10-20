@@ -687,17 +687,23 @@ export function ownerRejectRuns(
   friendlyDeathSeconds: readonly number[] = [],
 ): IRejectRun[] {
   const runs: IRejectRun[] = [];
-  let cur: IRejectRun | null = null;
+  // one open run PER SPELL (round-1 retest idx 2 / 37): another spell's
+  // refusal between two of this spell's presses is no break in this spell's
+  // run — a Sleep Walk "out of range" inside five Echo "out of range"
+  // presses cut them to ×4 + a dropped 1, a Dispatch "out of range" split a
+  // ×4 Exsanguinate run into a dropped 1 and a ×3
+  const open = new Map<string, IRejectRun>();
   const nearDeath = (r: IRejectRun) =>
     friendlyDeathSeconds.some(
       (d) => r.fromSeconds <= d && r.toSeconds >= d - REJECT_NEAR_DEATH_S,
     );
-  const flush = () => {
+  const flush = (id: string) => {
+    const cur = open.get(id);
     if (cur && (cur.count >= REJECT_RUN_MIN || nearDeath(cur))) runs.push(cur);
-    cur = null;
+    open.delete(id);
   };
   // every owner failure takes part — the same spell refused for a reason
-  // outside the three kinds ends the run instead of vanishing from between
+  // outside the three kinds ends its run instead of vanishing from between
   // two that match
   // (codex review of batch 13: Out of range / Not yet recovered / Out of
   // range … read as three consecutive out-of-range presses)
@@ -706,17 +712,15 @@ export function ownerRejectRuns(
     .sort((a, b) => a.tSeconds - b.tSeconds);
   for (const h of hits) {
     const kind = KIND_OF.get(h.reason);
+    const id = String(h.spellId);
     if (!kind) {
-      // the same spell refused for another reason splits its run; another
-      // spell's not-ready press does not (it never did for a matching kind
-      // either — only a different spell/kind WITH a kind flushed)
-      if (cur && cur.spellId === String(h.spellId)) flush();
+      // the same spell refused for another reason splits its run
+      flush(id);
       continue;
     }
-    const id = String(h.spellId);
+    const cur = open.get(id);
     if (
       cur &&
-      cur.spellId === id &&
       cur.kind === kind &&
       h.tSeconds - cur.toSeconds <= REJECT_RUN_GAP_S
     ) {
@@ -724,18 +728,18 @@ export function ownerRejectRuns(
       cur.count++;
       continue;
     }
-    flush();
-    cur = {
+    flush(id);
+    open.set(id, {
       fromSeconds: h.tSeconds,
       toSeconds: h.tSeconds,
       spellId: id,
       spellName: getEnglishSpellName(id, h.spellName),
       kind,
       count: 1,
-    };
+    });
   }
-  flush();
-  return runs;
+  for (const id of [...open.keys()]) flush(id);
+  return runs.sort((a, b) => a.fromSeconds - b.fromSeconds);
 }
 
 /** `row` is one of the presses `run` counts: the owner's failure of that

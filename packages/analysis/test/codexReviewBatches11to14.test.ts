@@ -370,6 +370,19 @@ describe("batch 13 — outcome lines need their own evidence (codex P2)", () => 
       f(12, "Out of range"),
     ];
     expect(ownerRejectRuns(other, "Player-O")[0]?.count).toBe(3);
+    // round-1 retest idx 2: another spell's refusal OF A KIND does not
+    // split it either (a Sleep Walk "out of range" inside five Echoes)
+    const echoes = [
+      f(53.7, "Out of range", 364343),
+      f(53.9, "Out of range", 364343),
+      f(54.4, "Out of range", 364343),
+      f(54.5, "Out of range", 364343),
+      f(54.6, "Out of range", 360806),
+      f(54.7, "Out of range", 364343),
+    ];
+    expect(ownerRejectRuns(echoes, "Player-O").map((r) => [r.spellId, r.count])).toEqual([
+      ["364343", 5],
+    ]);
   });
 
   it("reads the fr / ru / es / zh-TW clients' texts (triage position F-J1)", () => {

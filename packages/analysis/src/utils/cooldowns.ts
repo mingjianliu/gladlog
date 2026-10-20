@@ -214,14 +214,18 @@ export const DEFERRAL_ROLE_TAG = "delays damage on its target";
 /**
  * B113/B130: role tags for throughput / mana / mobility / modifier cooldowns that reach the timeline
  * (often via the B38 [YOU] [CD] promotion) without a survival/defensive context. Absent a role, the
- * model invents mechanics — e.g. calling Restoral (a mana+heal CD) a "stun break", or equating a cheap
+ * model invents mechanics — e.g. calling Restoral (a heal+cleanse CD) a "stun break", or equating a cheap
  * modifier (Tip the Scales) with a 90–240s emergency CD. Each tag is a short, factual role descriptor
  * appended to the CD's timeline line so the model reasons about what the CD actually does. Keep these
  * conservative and correct — a wrong role is worse than none.
  */
 export const CD_ROLE_TAGS: Record<string, string> = {
   // Mistweaver Monk (B113)
-  "388615": "mana+heal CD", // Restoral — restores team mana and heals; NOT a defensive/CC
+  // Restoral — a team heal that also cleanses poison and disease (DB2
+  // healsOthers; round-1 retest idx 0: 8 heals, 4 poison dispels and no
+  // ENERGIZE in 06356dd9 — "mana" was the 2026-07 port's guess); NOT a
+  // defensive/CC
+  "388615": "heal+cleanse CD",
   "325197": "healing CD", // Invoke Chi-Ji, the Red Crane — healing throughput
   "116680": "heal amplifier", // Thunder Focus Tea — empowers the next heal; not a defensive
   // Preservation Evoker (B130)
@@ -1712,7 +1716,10 @@ export function hpAtPress(
       h.logLine.event === LogEvent.SPELL_PERIODIC_HEAL &&
       !(unit.auraEvents ?? []).some(
         (a) =>
-          a.spellId === h.spellId &&
+          // the heal's own aura, or the press's (a channel: Emerald
+          // Communion's first tick 3 ms before its cast row — round-1
+          // retest idx 41; Rewind idx 19)
+          (a.spellId === h.spellId || a.spellId === cast.spellId) &&
           a.srcUnitId === cast.srcUnitId &&
           // fresh, or refreshed by this press (a second charge pressed while
           // the first is up: 7-2 1:56, REFRESH and tick at .644, cast .647

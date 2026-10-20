@@ -4107,9 +4107,17 @@ function teamPlayEvents(
               friendlyCrisisMomentInWindow(friends, combat, from, to),
             enemyAttemptOverlapping: (from, to) => {
               enemyAttempts ??= extractKillAttempts(enemies, friends, combat);
-              const a = enemyAttempts.find(
-                (k) => k.fromSeconds <= to && k.toSeconds >= from,
-              );
+              // of the attempts overlapping the span, the one the enemy put
+              // the most damage into (round-1 retest idx 68: one Leg Sweep
+              // stunned two units and opened two attempts; the first found
+              // named the one that took ~100k, not the one that fell to 12 %)
+              const a = enemyAttempts
+                .filter((k) => k.fromSeconds <= to && k.toSeconds >= from)
+                .sort(
+                  (x, y) =>
+                    y.teamDamageToTarget - x.teamDamageToTarget ||
+                    x.fromSeconds - y.fromSeconds,
+                )[0];
               return a
                 ? `enemy kill attempt on ${a.targetName} at ${toRenderSecond(a.fromSeconds)}s`
                 : null;
