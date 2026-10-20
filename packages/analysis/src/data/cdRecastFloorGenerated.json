@@ -1,6 +1,6 @@
 {
   "meta": {
-    "generatedAt": "2026-10-14",
+    "generatedAt": "2026-10-20",
     "manifest": "manifest-archive-2026-08-28-newseason.txt",
     "every": 3,
     "offset": 1,
@@ -32,8 +32,8 @@
       "name": "Ice Block",
       "quantile": 0.02,
       "floorRatio": 0.151,
-      "staticBreak": 0.089,
-      "holdoutStaticBreak": 0.046,
+      "staticBreak": 0.554,
+      "holdoutStaticBreak": 0.538,
       "nTrain": 56,
       "nHoldout": 65,
       "holdoutBelow": 0
@@ -108,6 +108,16 @@
       "nHoldout": 221,
       "holdoutBelow": 0.023
     },
+    "33891|105": {
+      "name": "Incarnation: Tree of Life",
+      "quantile": 0.02,
+      "floorRatio": 0.463,
+      "staticBreak": 0.993,
+      "holdoutStaticBreak": 0.988,
+      "nTrain": 592,
+      "nHoldout": 578,
+      "holdoutBelow": 0.014
+    },
     "471195|65": {
       "name": "Lay on Hands",
       "quantile": 0.02,
@@ -137,6 +147,16 @@
       "nTrain": 271,
       "nHoldout": 219,
       "holdoutBelow": 0.014
+    },
+    "132158|105": {
+      "name": "Nature's Swiftness",
+      "quantile": 0.02,
+      "floorRatio": 0.59,
+      "staticBreak": 0.656,
+      "holdoutStaticBreak": 0.702,
+      "nTrain": 1080,
+      "nHoldout": 1088,
+      "holdoutBelow": 0.019
     },
     "1241937|1480": {
       "name": "Soul Immolation",
@@ -257,16 +277,6 @@
       "nTrain": 188,
       "nHoldout": 285,
       "holdoutBelow": 0.011
-    },
-    "132158|105": {
-      "name": "Nature's Swiftness",
-      "quantile": 0.02,
-      "floorRatio": 0.803,
-      "staticBreak": 0.285,
-      "holdoutStaticBreak": 0.323,
-      "nTrain": 1080,
-      "nHoldout": 1088,
-      "holdoutBelow": 0.015
     },
     "5384|255": {
       "name": "Feign Death",

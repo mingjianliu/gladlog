@@ -222,5 +222,11 @@
  *  silenced, gets a `[SILENCE] … | no aura logged — silenced at m:ss (X
  *  refused); length not logged` line (user approved). 605 files: no
  *  candidate added or removed.
+ *  v425 (2026-10-20, GH #115 batched regen #5): the reference tables, the
+ *  reference vectors and CD_HOARDED_OUTCOME_REF regenerated on the fact1215
+ *  code (cc8b22e8c) — printed reference rates and n move; slow-defensive-
+ *  response +1 / −1 (two burst-window cells crossed the 3-point contrast
+ *  door); Restoration Druid's Tree of Life and Nature's Swiftness `[RES]`
+ *  cooldowns read a range (new / lower recast floor).
  */
-export const PROMPT_VERSION = 424;
+export const PROMPT_VERSION = 425;

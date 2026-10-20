@@ -1504,11 +1504,11 @@ export function saveCoversPressureOn(
  * crisisDecisionPoints.ts) at which the owner had >=1 usable major
  * Defensive cooldown ready (a personal wall or a self-castable external for
  * the owner's own crisis; any cooldown `canHelpAnotherUnit` says can reach
- * the crisis unit for a teammate's). Across 15,656 such decision points,
+ * the crisis unit for a teammate's). Across 15,653 such decision points,
  * the crisis unit died within 10s **5.8%** of the time when a ready
  * cooldown was spent within `CD_HOARD_RESPONSE_S` vs **13.0%** when every
- * ready cooldown was held (share acted 27%; 2v2 7.1% vs 16.6%; Solo Shuffle
- * 5.3% vs 11.6%; own-crisis 7.0% vs 19.6%; teammate-crisis 5.5% vs 11.8%).
+ * ready cooldown was held (share acted 27%; 2v2 7.0% vs 16.7%; Solo Shuffle
+ * 5.3% vs 11.6%; own-crisis 6.9% vs 19.7%; teammate-crisis 5.5% vs 11.8%).
  * The 2026-08-30 run (16,960 points: 4.5% vs 11.4%) recorded only "3,000
  * matches"; its 2v2 / Solo Shuffle point counts (4,485 / 11,943) are close
  * to this slice's (4,359 / 11,274) but not equal, and its 3v3 count (532) is
@@ -1529,12 +1529,14 @@ export function saveCoversPressureOn(
  * The 2026-10-13 re-run (pinned code d511b212, after the ledger gained the
  * buttons a talent grants under another id and the owner-feasibility
  * changes of 2026-10-11) moved the point count 15,645 → 15,656 and no
- * printed rate, overall or per slice.
+ * printed rate, overall or per slice. The 2026-10-20 re-run (code cc8b22e8c,
+ * after the fact1215 fixes) moved it 15,656 → 15,653 and no printed rate;
+ * four per-slice rates moved by 0.1 pp (2v2 and own-crisis, both sides).
  */
 export const CD_HOARDED_OUTCOME_REF = {
   refDeathSpent: "5.8",
   refDeathHeld: "13.0",
-  refN: "15656",
+  refN: "15653",
 } as const;
 
 /** One crisis-decision-point SOURCE cd-hoarded scans: the unit in crisis

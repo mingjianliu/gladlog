@@ -246,10 +246,10 @@ describe("cd-hoarded 决策点门(2026-08-30,GH #34)", () => {
       [cd("642", "Divine Shield")],
       OWNER,
     );
-    // GH #115 regen 2026-10-08 (was 4.5 / 11.4 / 16960, 2026-08-30)
+    // GH #115 regen 2026-10-20 (refN 15656 → 15653; was 4.5 / 11.4 / 16960, 2026-08-30)
     expect(evts[0]!.facts["refDeathSpent"]).toBe("5.8");
     expect(evts[0]!.facts["refDeathHeld"]).toBe("13.0");
-    expect(evts[0]!.facts["refN"]).toBe("15656");
+    expect(evts[0]!.facts["refN"]).toBe("15653");
   });
 });
 

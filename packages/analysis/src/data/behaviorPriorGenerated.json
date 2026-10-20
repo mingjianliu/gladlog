@@ -1,7 +1,7 @@
 {
   "meta": {
-    "generatedAt": "2026-10-14",
-    "corpus": "wowarenalogs archive, GH #115 regen 2026-10-13",
+    "generatedAt": "2026-10-20",
+    "corpus": "wowarenalogs archive, GH #115 regen 2026-10-20",
     "weeks": [
       "2026-W33",
       "2026-W34",
@@ -19,16 +19,16 @@
       "deathResp": 0.1,
       "top": [
         [
+          "carriedHeal",
+          0.33
+        ],
+        [
           "protective",
           0.26
         ],
         [
-          "carriedHeal",
-          0.24
-        ],
-        [
-          "selfHeal",
-          0.22
+          "proc",
+          0.21
         ]
       ],
       "outcome": "ownDeath10s"
@@ -40,12 +40,12 @@
       "deathResp": 0.08,
       "top": [
         [
-          "protective",
-          0.27
+          "carriedHeal",
+          0.3
         ],
         [
-          "carriedHeal",
-          0.23
+          "protective",
+          0.27
         ],
         [
           "control",
@@ -61,16 +61,16 @@
       "deathResp": 0.11,
       "top": [
         [
-          "selfHeal",
-          0.26
+          "carriedHeal",
+          0.35
         ],
         [
           "protective",
           0.26
         ],
         [
-          "carriedHeal",
-          0.25
+          "proc",
+          0.24
         ]
       ],
       "outcome": "ownDeath10s"
@@ -82,12 +82,12 @@
       "deathResp": 0.1,
       "top": [
         [
-          "selfHeal",
-          0.49
+          "carriedHeal",
+          0.38
         ],
         [
-          "carriedHeal",
-          0.24
+          "selfHeal",
+          0.36
         ],
         [
           "wall",
@@ -103,12 +103,12 @@
       "deathResp": 0.09,
       "top": [
         [
-          "selfHeal",
-          0.41
+          "carriedHeal",
+          0.4
         ],
         [
-          "carriedHeal",
-          0.28
+          "selfHeal",
+          0.29
         ],
         [
           "wall",
@@ -125,15 +125,15 @@
       "top": [
         [
           "selfHeal",
-          0.52
+          0.38
+        ],
+        [
+          "carriedHeal",
+          0.37
         ],
         [
           "wall",
           0.25
-        ],
-        [
-          "proc",
-          0.24
         ]
       ],
       "outcome": "ownDeath10s"
@@ -145,16 +145,16 @@
       "deathResp": 0.15,
       "top": [
         [
-          "selfHeal",
-          0.4
+          "carriedHeal",
+          0.36
         ],
         [
           "wall",
           0.3
         ],
         [
-          "carriedHeal",
-          0.24
+          "selfHeal",
+          0.28
         ]
       ],
       "outcome": "teamDeath15s"
@@ -166,16 +166,16 @@
       "deathResp": 0.16,
       "top": [
         [
-          "selfHeal",
-          0.31
+          "carriedHeal",
+          0.34
         ],
         [
           "wall",
           0.26
         ],
         [
-          "carriedHeal",
-          0.25
+          "selfHeal",
+          0.22
         ]
       ],
       "outcome": "teamDeath15s"
@@ -187,16 +187,16 @@
       "deathResp": 0.15,
       "top": [
         [
-          "selfHeal",
-          0.45
+          "carriedHeal",
+          0.37
         ],
         [
           "wall",
           0.31
         ],
         [
-          "carriedHeal",
-          0.23
+          "selfHeal",
+          0.31
         ]
       ],
       "outcome": "teamDeath15s"

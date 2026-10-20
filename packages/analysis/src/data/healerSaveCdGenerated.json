@@ -1,6 +1,6 @@
 {
   "meta": {
-    "generatedAt": "2026-10-14",
+    "generatedAt": "2026-10-20",
     "corpus": "1814 archived files (12.1+ rounds only)",
     "command": "npx tsx packages/eval/scripts/healerSaveCdScan.ts emit-table --in <counts.json> --out <file.json>",
     "minShare": 0.02,

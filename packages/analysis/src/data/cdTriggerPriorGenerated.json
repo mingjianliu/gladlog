@@ -1,11 +1,11 @@
 {
   "meta": {
-    "generatedAt": "2026-10-14",
-    "corpus": "wowarenalogs archive, GH #115 regen 2026-10-13",
+    "generatedAt": "2026-10-20",
+    "corpus": "wowarenalogs archive, GH #115 regen 2026-10-20",
     "command": "npx tsx packages/eval/scripts/cdTriggerPriorScan.ts emit-table --in <scan.jsonl> --out <file.json>",
     "cohort": "all",
     "cohortRule": "all 12.1+ healer rounds in the archive",
-    "rows": 300198,
+    "rows": 300236,
     "nFloor": 50,
     "predicateVersion": 1
   },
@@ -485,6 +485,11 @@
       "medianHpPct": 47,
       "spellName": "Zephyr"
     },
+    "Preservation Evoker|*|378441": {
+      "n": 38,
+      "medianHpPct": 43,
+      "spellName": "Time Stop"
+    },
     "Preservation Evoker|Chronowarden|357170": {
       "n": 4025,
       "medianHpPct": 49,
@@ -520,6 +525,11 @@
       "medianHpPct": 44,
       "spellName": "Zephyr"
     },
+    "Preservation Evoker|Chronowarden|378441": {
+      "n": 34,
+      "medianHpPct": 38,
+      "spellName": "Time Stop"
+    },
     "Preservation Evoker|Flameshaper|357170": {
       "n": 2848,
       "medianHpPct": 51,
@@ -554,6 +564,11 @@
       "n": 6,
       "medianHpPct": 57,
       "spellName": "Zephyr"
+    },
+    "Preservation Evoker|Flameshaper|378441": {
+      "n": 4,
+      "medianHpPct": 72,
+      "spellName": "Time Stop"
     },
     "Restoration Druid|*|102342": {
       "n": 11452,

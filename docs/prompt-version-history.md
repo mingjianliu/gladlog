@@ -3720,3 +3720,24 @@ name nominated the TBC silence 33390); a refusal is covered, and a cast ruled
 logged, by one silence reading (`isSilenceEffectAura` — a logged 81261 now
 covers); two casters of the same spell are two sources; a refusal after the
 owner's death in the round is none. 605: zero lines changed (b59).
+v425 (2026-10-20, GH #115 batched regen #5 — data only): the reference
+tables went stale across the fact1215 batches (PV389–PV424: re-broadcast
+merges, ledger rows for Time Stop / Tree of Life / Havoc Metamorphosis,
+kill-window cuts, kick and silence readings). Regenerated on the same
+corpora as the 2026-10-13 regen at code cc8b22e8c: burstWindowPrior,
+syncWindowPrior, behaviorPrior, cdTriggerPrior (Time Stop rows added),
+kickPriorityPrior + heal spells, kickLockoutObserved, healerSaveCd,
+backlashDispelPrior (opportunities 231,948 → 95,555 on the same 21,101
+rounds — PV389's one-application-per-re-broadcast), dispelObserved,
+cdRecastFloor (Tree of Life gains a floor of 0.463, Nature's Swiftness
+0.803 → 0.59 — GH #154 tracks the missing mechanism), the reference
+vectors, and CD_HOARDED_OUTCOME_REF's n (15,656 → 15,653; 5.8 / 13.0
+unchanged). 605 files (b60-lint → b62-regen5b): slow-defensive-response
++1 / −1 (3v3 Avenging Wrath 8 vs 10 → 7 vs 10 crosses the 3-point
+contrast door; the Solo Shuffle fallback cell 8 vs 11 → 8 vs 10 falls
+under it), every other candidate unchanged; reference facts only:
+cd-hoarded 1,249, missed-sync-window 501, slow-defensive-response 94,
+backlash-dispel 62, kick-priority-team 58, kick-priority-missed 38,
+crisis-no-response 5; contexts: 2,907 `[RES]` lines in 526 files (Tree of
+Life / Nature's Swiftness cooldowns read a range). Gates: baseline residue
+only. gate:full: 1,244 pairs, 0 new diffs.
