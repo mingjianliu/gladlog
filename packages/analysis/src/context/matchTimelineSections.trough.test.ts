@@ -287,20 +287,29 @@ describe("hpTroughInWindow — the true minimum, on the grid sampler's own valid
     expect(hpTroughInWindow(u as never, T0, 10, 20)!.pct).toBe(66);
   });
 
-  it("nothing is read from the death second on — the killing blow is a death, not a low", () => {
-    // dies at 16.5: the 0:16 tick reads `dead`, so 16.2 s (3 %) is not a low
+  it("the death second's live samples count, up to the death; the killing blow's 0 does not (user ruling 2026-10-20)", () => {
+    // dies at 16.5: the 0:16 tick reads `dead`, but at 16.2 s the unit was
+    // alive at 3 % — the true minimum (e49b7c3b: 3.3 % at 3:30.570, dead at
+    // 3:30.827); the killing blow's own row reads 0 and is no live low
     const u = friend(
       { 0: 81, 14: 40 },
       [16.5],
       [
         [15.7, 12],
         [16.2, 3],
+        [16.5, 0],
+        [17.0, 50],
       ],
     );
     expect(hpTroughInWindow(u as never, T0, 10, 20)).toEqual({
+      pct: 3,
+      atSec: 16,
+      atMs: T0 + 16_200,
+    });
+    // a window that ends before the death second reads none of it
+    expect(hpTroughInWindow(u as never, T0, 10, 15)).toMatchObject({
       pct: 12,
       atSec: 15,
-      atMs: T0 + 15_700,
     });
   });
 

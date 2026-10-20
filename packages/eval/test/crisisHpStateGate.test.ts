@@ -175,7 +175,7 @@ describe("checkCrisisHpStateConsistency — a trough fact is not a point reading
     ).toHaveLength(1);
   });
 
-  it("kick-eaten: a tick below the low → red; a `dead` tick → red", () => {
+  it("kick-eaten: a tick below the low → red; a `dead` tick after the death second → red, on it → passes (ruling 2026-10-20)", () => {
     // 0:28 — strictly inside the 26.4 s + 3 s lockout, not an edge second
     const fails = checkCrisisHpStateConsistency([
       ...ROSTER,
@@ -186,9 +186,20 @@ describe("checkCrisisHpStateConsistency — a trough fact is not a point reading
     expect(fails[0]).toContain("kick-eaten");
     expect(fails[0]).toContain("40%");
     expect(fails[0]).toContain("38%");
+    // 0:28 is the unit's first `dead` tick — its death second, whose live
+    // samples belong to the trough
     expect(
       checkCrisisHpStateConsistency([
         ...ROSTER,
+        "0:28  [STATE]   friends 1(RShaman):71 2(FWarrior):dead",
+        kickEaten("12", "28"),
+      ]),
+    ).toEqual([]);
+    // dead already at 0:27: a trough at 0:28 is after the death
+    expect(
+      checkCrisisHpStateConsistency([
+        ...ROSTER,
+        "0:27  [STATE]   friends 1(RShaman):71 2(FWarrior):dead",
         "0:28  [STATE]   friends 1(RShaman):71 2(FWarrior):dead",
         kickEaten("12", "28"),
       ]),

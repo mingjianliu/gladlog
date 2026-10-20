@@ -2285,7 +2285,7 @@ describe("checkBurstAnsweredBottomConsistency — the credit line's bottom secon
       ]),
     ).toHaveLength(1);
   });
-  it("FT-T03: no tick from the line's second to the bottom's second reads below it; `dead` at the bottom's second fails; later ticks are not judged", () => {
+  it("FT-T03: no tick from the line's second to the bottom's second reads below it; a bottom after the death second fails, on it passes (ruling 2026-10-20); later ticks are not judged", () => {
     const tick = (at: string, v: number | "dead") =>
       `${at}  [STATE]   friends 1(WMonk):${v} / enemies 4(HDHunter):90`;
     const f = checkBurstAnsweredBottomConsistency([
@@ -2295,9 +2295,19 @@ describe("checkBurstAnsweredBottomConsistency — the credit line's bottom secon
     ]);
     expect(f).toHaveLength(1);
     expect(f[0]).toContain("0:30 的 [STATE] 为 35");
+    // 0:55 is the monk's death second: its live samples are the trough's
     expect(
       checkBurstAnsweredBottomConsistency([
         roster,
+        tick("0:55", "dead"),
+        line("0:55"),
+      ]),
+    ).toEqual([]);
+    // dead already at 0:54: a bottom at 0:55 is after the death
+    expect(
+      checkBurstAnsweredBottomConsistency([
+        roster,
+        tick("0:54", "dead"),
         tick("0:55", "dead"),
         line("0:55"),
       ]),

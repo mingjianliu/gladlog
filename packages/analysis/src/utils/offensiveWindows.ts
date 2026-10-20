@@ -95,13 +95,6 @@ export interface IBurstSubWindow {
   absorbed: number;
 }
 
-// TEMPORARY (F16 batch-1 605 preview, removed before commit): landed-only
-// bursts for the A/B preview when GLADLOG_F16_PREVIEW_LANDED_ONLY is set.
-const COUNT_ABSORBED_IN_BURSTS = !(
-  typeof process !== "undefined" &&
-  process.env?.["GLADLOG_F16_PREVIEW_LANDED_ONLY"]
-);
-
 /**
  * Clusters friendly damage events on the window's target into bursts
  * (gap > KW_BURST_GAP_S splits; clusters over KW_BURST_SOFT_MAX_S re-split at
@@ -113,11 +106,12 @@ export function computeBurstSubWindows(
   spanFrom: number,
   spanTo: number,
 ): IBurstSubWindow[] {
-  const counted = COUNT_ABSORBED_IN_BURSTS
-    ? damageEvents
-    : damageEvents.filter((e) => !e.absorbed);
-  if (counted.length === 0) return [];
-  const sorted = [...counted].sort((a, b) => a.t - b.t);
+  // fact2 R7, user ruling 2026-10-20 (option A): absorbed hits count — the
+  // burst is found and floored on what the team's hits did, landed or eaten
+  // by a shield (605 against landed-only: +412 [KILL WINDOW], −217
+  // [VULNERABLE] "not punished", no candidate moved)
+  if (damageEvents.length === 0) return [];
+  const sorted = [...damageEvents].sort((a, b) => a.t - b.t);
 
   // Gap-based clustering, keeping the event lists for recursive splitting.
   type Ev = { t: number; amount: number; absorbed?: true };

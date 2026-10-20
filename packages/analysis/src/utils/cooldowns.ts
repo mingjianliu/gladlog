@@ -1847,9 +1847,11 @@ export function gridHpMinInWindow(
  *    readings keep GH #100's "last line of the instant"); a line with no max
  *    HP gives no reading;
  *  - rounded to a whole percent, clamped at 100 (`gridHpSample`);
- *  - nothing is read from the unit's death second on (`isDeadAtRenderSecond`
- *    — the `[STATE]` tick prints `dead` there), and `skipSec` leaves out the
- *    samples of a rendered second exactly as it leaves out that second's tick.
+ *  - the unit's death second contributes its live samples up to the death
+ *    (user ruling 2026-10-20) but not its tick (`isDeadAtRenderSecond` — the
+ *    `[STATE]` tick prints `dead` there); nothing after it is read; a 0-HP
+ *    sample is no live reading. `skipSec` leaves out the samples of a
+ *    rendered second exactly as it leaves out that second's tick.
  *
  * The window's own `[STATE]` ticks are part of the minimum
  * (`gridHpMinInWindow`): a tick can read a sample up to `HP_SAMPLE_RADIUS_MS`
@@ -1936,7 +1938,17 @@ export function hpTroughInWindow(
     if (isDeadAtRenderSecond(unit, matchStartMs, s)) break;
     lastSec = s;
   }
-  const endMs = matchStartMs + (lastSec + 1) * 1000; // exclusive
+  // User ruling 2026-10-20 (fact2 R1, D7 read to the end): a window that
+  // reaches the unit's death second reads that second's LIVE samples up to
+  // the death — the unit was in them (e49b7c3b: 3.3 % at 3:30.570, dead at
+  // 3:30.827; the line said `16% at 3:29`). Its tick still prints `dead`;
+  // the gates accept a trough stamped at the death second.
+  const deathMs = lastSec + 1 <= toSec ? lastDeathMs(unit) : undefined;
+  const endMs =
+    deathMs !== undefined &&
+    toRenderSecond((deathMs - matchStartMs) / 1000) === lastSec + 1
+      ? deathMs
+      : matchStartMs + (lastSec + 1) * 1000; // exclusive
   const spanToMs = span?.toMs ?? Infinity; // inclusive
   const actions = getSortedAdvancedActions(unit);
   // first index at or after `fromMs`
@@ -1957,6 +1969,8 @@ export function hpTroughInWindow(
     // a printed 43 %). The last-line rule stays the POINT reading's
     // (`unitHpSampleAt`, GH #100 / 2026-09-23).
     if (a.advancedActorId !== unit.id || a.advancedActorMaxHp <= 0) continue;
+    // the killing blow's own row reads 0: not a live reading
+    if (a.advancedActorCurrentHp <= 0) continue;
     const sec = toRenderSecond((ts - matchStartMs) / 1000);
     if (skipSec?.(sec)) continue;
     const pct = Math.min(
@@ -2108,6 +2122,16 @@ export function isSpikeHealedThrough(
  * matchTimeline.ts's per-name map (built from ascending-sorted deaths, so the
  * last write wins).
  */
+/** The unit's last death record (the one `isDeadAtRenderSecond` reads),
+ * undefined when it did not die. */
+function lastDeathMs(unit: ICombatUnit): number | undefined {
+  const records = unit.deathRecords ?? [];
+  if (records.length === 0) return undefined;
+  let lastMs = -Infinity;
+  for (const d of records) lastMs = Math.max(lastMs, d.timestamp);
+  return lastMs;
+}
+
 export function isDeadAtRenderSecond(
   unit: ICombatUnit,
   matchStartMs: number,

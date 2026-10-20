@@ -6,8 +6,9 @@
  * capture (`<dir>/s<k>/context/`; file layout as `pressFactScan.ts`).
  *
  * Read straight from the parsed advanced-log lines (every line whose actor
- * is the unit, max HP > 0, rounded to a whole percent — a living 0 % counts
- * — before the unit's death second), never through `hpTroughInWindow`:
+ * is the unit, max HP > 0, current HP > 0, rounded to a whole percent — a
+ * living 0 % counts — before the unit's death, its death second's live lines
+ * included since the 2026-10-20 ruling), never through `hpTroughInWindow`:
  *
  *  - `dmgSpikeLow`: `M:SS–M:SS  [DMG SPIKE]   <pid>(…) … low N% @M:SS` — no
  *    line of the unit inside the window's displayed seconds
@@ -71,9 +72,11 @@ function parseFile(path: string): GladMatch[] {
   return items;
 }
 
-/** The unit's own HP lines in [fromMs, toMs), before its death SECOND (the
- * `[STATE]` tick prints `dead` from there; `isDeadAtRenderSecond` reads the
- * last death record). */
+/** The unit's own HP lines in [fromMs, toMs), before its death (user ruling
+ * 2026-10-20: the death second's live lines count — the `[STATE]` tick of
+ * that second prints `dead`, the unit was alive until the death record; the
+ * last death record, as `isDeadAtRenderSecond` reads it). A line at 0 HP is
+ * no live reading. */
 function minPct(
   u: any,
   start: number,
@@ -81,14 +84,13 @@ function minPct(
   toMs: number,
 ): { pct: number; ms: number } | null {
   const deaths = ((u.deathRecords ?? []) as any[]).map((d) => d.timestamp);
-  const deathMs = deaths.length
-    ? start + Math.floor((Math.max(...deaths) - start) / 1000) * 1000
-    : Infinity;
+  const deathMs = deaths.length ? Math.max(...deaths) : Infinity;
   let best: { pct: number; ms: number } | null = null;
   for (const a of u.advancedActions ?? []) {
     const ts = a.logLine.timestamp;
     if (ts < fromMs || ts >= toMs || ts >= deathMs) continue;
     if (a.advancedActorId !== u.id || !(a.advancedActorMaxHp > 0)) continue;
+    if (!(a.advancedActorCurrentHp > 0)) continue;
     const pct = Math.min(
       Math.round((a.advancedActorCurrentHp / a.advancedActorMaxHp) * 100),
       100,

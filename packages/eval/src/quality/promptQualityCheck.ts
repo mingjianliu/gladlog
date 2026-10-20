@@ -6655,6 +6655,9 @@ export interface CrisisHpStateProbe {
    * kick or after the lock (user ruling 2026-10-17, F15: an event span reads only its own
    * samples), so it says nothing about the trough */
   spanEdge?: true;
+  /** the tick at `tSecond` is the unit's FIRST `dead` tick — its death
+   * second, whose live samples belong to a trough (user ruling 2026-10-20) */
+  deathSecond?: true;
 }
 
 /**
@@ -6714,9 +6717,16 @@ export function crisisHpStateProbes(lines: string[]): CrisisHpStateProbe[] {
             // sample until 27.8 s does the same) — no cutoff on the fraction
             tSecond === Math.floor(kickT) + 1 ||
             tSecond === Math.floor(kickT + lock));
+        const deathSecond =
+          tick === "dead" &&
+          unitId !== null &&
+          ![...stateAt].some(
+            ([s, units]) => s < tSecond && units.get(unitId) === "dead",
+          );
         probes.push({
           type: type as CrisisHpFactType,
           ...(spanEdge ? { spanEdge: true as const } : {}),
+          ...(deathSecond ? { deathSecond: true as const } : {}),
           trough: keys.trough === true,
           lineIndex: i,
           tSecond,
@@ -6771,7 +6781,9 @@ export function checkFreeOfWindowConsistency(lines: string[]): string[] {
  * had to print the same number). What the text certifies now:
  *  - its second can never precede the line's own second (the window opens
  *    there);
- *  - it is not on a second that unit's tick reads `dead`;
+ *  - it is not after the unit's death second: a tick BEFORE its second may
+ *    not read `dead` (user ruling 2026-10-20 — the death second's own live
+ *    samples belong to the trough, so its own tick may);
  *  - no `[STATE]` tick of that unit from the line's second to the bottom's
  *    second reads below it (`isTickBelowTrough`) — those seconds are inside
  *    the window for sure; the window's end is not printed, so later ticks
@@ -6779,6 +6791,18 @@ export function checkFreeOfWindowConsistency(lines: string[]): string[] {
  */
 const BURST_ANSWERED_BOTTOM =
   /^\s*(\d+):(\d{2})\s+\[BURST ANSWERED\].*;\s+(\S+) bottomed at (\d+)% at (\d+):(\d{2})/;
+/** A `[STATE]` tick of unit `id` before second `sec` already read `dead`:
+ * a trough stamped at `sec` would come after the death second (user ruling
+ * 2026-10-20 — the death second itself carries its live samples). */
+function diedBefore(
+  stateAt: ReadonlyMap<number, ReadonlyMap<number, number | "dead" | "ghost">>,
+  id: number,
+  sec: number,
+): boolean {
+  for (const [s, units] of stateAt)
+    if (s < sec && units.get(id) === "dead") return true;
+  return false;
+}
 export function checkBurstAnsweredBottomConsistency(lines: string[]): string[] {
   const idByName = new Map<string, number>();
   const stateAt = new Map<number, Map<number, number | "dead" | "ghost">>();
@@ -6813,9 +6837,12 @@ export function checkBurstAnsweredBottomConsistency(lines: string[]): string[] {
     const byLabel = m[3]!.match(/^(\d+)\(/);
     const id = byLabel ? Number(byLabel[1]) : idByName.get(m[3]!);
     if (id === undefined) return;
-    if (stateAt.get(b)?.get(id) === "dead")
+    // user ruling 2026-10-20 (fact2 R1): the death second's live samples
+    // are part of the trough, so a bottom stamped at the death second — the
+    // first tick that reads `dead` — is allowed; one after it is not
+    if (diedBefore(stateAt, id, b))
       failures.push(
-        `line ${i + 1}: [BURST ANSWERED] 说 ${m[3]} 在 ${fmtTime(b)} 触底 ${pct}%,同秒 [STATE] 为 dead`,
+        `line ${i + 1}: [BURST ANSWERED] 说 ${m[3]} 在 ${fmtTime(b)} 触底 ${pct}%,此前 [STATE] 已为 dead`,
       );
     for (let s = t; s <= b; s++) {
       const tick = stateAt.get(s)?.get(id);
@@ -6937,7 +6964,9 @@ export function checkStayedInHpConsistency(lines: string[]): string[] {
  */
 export function crisisHpProbeMismatch(p: CrisisHpStateProbe): boolean {
   if (p.stateHp === null) return false;
-  if (p.stateHp === "dead") return true;
+  // a trough may sit in its unit's death second (user ruling 2026-10-20:
+  // the live samples of that second are part of it); a point reading may not
+  if (p.stateHp === "dead") return !(p.trough && p.deathSecond);
   return p.trough
     ? !p.spanEdge && isTickBelowTrough(p.stateHp, p.factHp)
     : p.stateHp !== p.factHp;
@@ -7080,8 +7109,10 @@ export function checkBurstAnsweredControlSpan(lines: string[]): string[] {
  * `ourLowPct` / `theirLowPct`, slow-defensive-response's `pressuredHpPct`)
  * is the true minimum inside its window and may
  * sit below its second's tick; for those the failure is a tick BELOW the
- * fact, or `dead` (`crisisHpProbeMismatch`). The point readings — cd-hoarded,
- * crisis-no-response — keep exact equality.
+ * fact, or `dead` after the unit's death second (`crisisHpProbeMismatch`; user
+ * ruling 2026-10-20: the death second's own live samples belong to the
+ * trough). The point readings — cd-hoarded, crisis-no-response — keep exact
+ * equality.
  */
 export function checkCrisisHpStateConsistency(lines: string[]): string[] {
   const failures: string[] = [];
