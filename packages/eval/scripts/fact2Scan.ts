@@ -1247,6 +1247,17 @@ for (const f of files) {
         if (succ) {
           const sMs = succ.logLine.timestamp;
           const dest = succ.destUnitId;
+          // only an unambiguous completion is judged: another completion of
+          // the spell at that target within 2.5 s either side makes the
+          // pairing of hits to throws a choice, not a reading
+          const crowded = ((caster.spellCastEvents ?? []) as any[]).some(
+            (c) =>
+              c !== succ &&
+              c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+              c.spellId === succ.spellId &&
+              c.destUnitId === dest &&
+              Math.abs(c.logLine.timestamp - sMs) <= 2500,
+          );
           const inR = (ms: number) => ms >= sMs && ms <= sMs + 2500;
           const hit =
             ((caster.damageOut ?? []) as any[]).some(
@@ -1255,6 +1266,7 @@ for (const f of files) {
             ((units.find((u) => u.id === dest)?.absorbsIn ?? []) as any[]).some(
               (a) => a.attackerId === caster.id && a.attackSpellId === succ.spellId && inR(a.timestamp),
             );
+          if (crowded) continue;
           bump("hardCastLanded");
           if (hit !== (hm[5] === "landed"))
             miss("hardCastLanded", `${where} ${hm[1]} ${caster.name} ${hm[3]}: printed ${hm[5]}, log ${hit ? "hit" : "no hit"}`);

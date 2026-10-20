@@ -173,7 +173,9 @@ export function emitTeamCdEntries(
                     true,
                   )
                 : ""
-              : ccImmuneTagFor(player, cd.spellId, cast.timeSeconds, named);
+              : named.size > 0
+                ? ccImmuneTagFor(player, cd.spellId, cast.timeSeconds, named)
+                : "";
           // B18: a Guardian Spirit whose save triggered says so (the same
           // heal the ledger's recovery reads)
           const saveNote = isProc

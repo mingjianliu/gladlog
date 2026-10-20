@@ -330,7 +330,13 @@ export function emitOwnerCdEntries(
                   true,
                 )
               : ""
-            : ownerCcImmuneTag(cd.spellId, cast.timeSeconds, named);
+            : // round-1 retest idx 34: a non-control press with no target is
+              // not aimed at anyone — a stray IMMUNE on a player standing in
+              // our own Imprison is no immunity it was pressed into
+              // (26bfd4f3 0:39 Summon Darkglare `[IMMUNE]`)
+              named.size > 0
+              ? ownerCcImmuneTag(cd.spellId, cast.timeSeconds, named)
+              : "";
       // cc-dr F-NE1 (wording ruling A55): an aimed CC cast that left no CC
       // aura on its target and no miss either is said to have no logged
       // effect — an absence of evidence, never "it missed". Probe p12's rule:
