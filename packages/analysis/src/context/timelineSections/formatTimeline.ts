@@ -381,7 +381,7 @@ export function formatTimeline(
       : []),
     // WO6 #6 (n34, 9e9f9565): the row is read at its floored second (GH #63)
     // — "at that instant" let a press 0.33 s later read as made inside it
-    "  [RES] = the ledger as of m:ss.0, the START of its second: a press or a cooldown coming back later in that second is not in it.",
+    "  [RES] = the ledger at its second m:ss: a press anywhere in that second is already spent on it (the row printed under a press shows that press on cooldown), while a cooldown coming back later in that second is not yet ready on it.",
     "    `cc:N/<spell>-Rs` = friendly N was under that control then, about R s of it left (`[stun]` a stun, `[trinketed]` a stun",
     "    they pressed a PvP trinket within 1 s of, `[root]` a root — they could still cast, `[disarm]` a disarm, `[kick]` a school",
     "    lockout); several are comma-separated.",
@@ -469,7 +469,7 @@ export function formatTimeline(
     "    to this window. `(runs past window)` = that sub-window ends after the offensive window; it can also begin before it — read",
     `    the printed bounds. \`${NO_CREDITED_SPIKE_CLAUSE}\` = none of this timeline's [DMG SPIKE] lines overlaps the window, or the`,
     "    one that does overlaps another window longer — a statement about the listed lines, not that no damage landed.",
-    "    The full [RES] row under an [OFFENSIVE WINDOW] header = what your team had ready at the whole second the window opened;",
+    "    The full [RES] row under an [OFFENSIVE WINDOW] header = what your team had ready at the whole second the window opened (a press of your team's inside that second is already spent on it);",
     "    the opener itself, pressed inside that second, is on the header's `CDs:` list and may be missing from that row's `enemy:` column.",
     ...(TIMELINE_LINE_FLAGS.enemyDef === "timeline"
       ? [

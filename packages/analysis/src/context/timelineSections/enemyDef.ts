@@ -225,8 +225,11 @@ export function emitEnemyDefEntries(
           line = `${d.spellName} → ${enemyPid(d.recipientName ?? "")}${dur ? ` (${dur})` : ""}${burstStr}${hpStr}${saveStr}${duringStr}`;
         } else if (d.kind === "area") {
           // Ruling A15 (2026-09-30): who pressed it and when — no %, no
-          // recipients, no duration, no HP (nobody is "the target").
-          line = `${d.spellName} (area)`;
+          // recipients, no duration, no HP (nobody is "the target"). fact2
+          // (2026-10-20): the second's `[friendly offensive CD active]` tag
+          // is a fact of the second, not of the save — its absence read as
+          // "nothing of ours was running" (0deb726b 0:47 Spirit Link Totem)
+          line = `${d.spellName} (area)${burstStr}`;
         } else if (d.kind === "self-save") {
           // The unit's own defensive outside the wall table, labelled by what
           // it DOES — never by why it was pressed (user ruling 2026-10-11;

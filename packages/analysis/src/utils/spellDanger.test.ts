@@ -128,6 +128,27 @@ describe("both consumers read the canonical table", () => {
     expect(hasOffensiveSpellActive(unit, 2_000, null)).toBe(true);
   });
 
+  it("fact2: asked of any source, an opponent's offensive DEBUFF on the unit is not the unit's own cooldown", () => {
+    // Feral Frenzy's bleed 274838 (its cast 274837) put on an enemy rogue by
+    // the friendly druid — ab7fbe2e 0:17
+    const unit = (auraType: string) =>
+      ({
+        id: "E1",
+        auraEvents: [
+          {
+            spellId: "274838",
+            srcUnitId: "F1",
+            auraType,
+            timestamp: 1_000,
+            logLine: { event: LogEvent.SPELL_AURA_APPLIED, timestamp: 1_000 },
+          },
+        ],
+      }) as any;
+    expect(hasOffensiveSpellActive(unit("DEBUFF"), 2_000, null)).toBe(false);
+    // asked for those sources by name, the debuff is still read
+    expect(hasOffensiveSpellActive(unit("DEBUFF"), 2_000, new Set(["F1"]))).toBe(true);
+  });
+
   it("…and no longer reacts to a dead id's aura", () => {
     const unit = {
       auraEvents: [

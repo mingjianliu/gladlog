@@ -215,3 +215,47 @@ describe("[CC AVOIDED?] — a delayed control that landed is not an avoidance", 
     ]);
   });
 });
+
+describe("fact2 — an untargeted area control that missed the player under an avoidance buff", () => {
+  beforeAll(async () => {
+    await ensureAnalysisData();
+  });
+  it("0b72c44e 1:05: Psychic Scream (no destination) MISS on the player while Bladestorm is up → avoided", () => {
+    const enemy = makeUnit("enemy-1", {
+      name: "Enemy",
+      spec: CombatUnitSpec.Priest_Discipline,
+      reaction: CombatUnitReaction.Hostile,
+      spellCastEvents: [
+        makeSpellCastEvent("8122", CAST_AT, "0000000000000000", "nil", "enemy-1", "Enemy", 0, "Psychic Scream"),
+      ],
+    });
+    const player = makeUnit("player-1", {
+      name: "PlayerWarrior",
+      spec: CombatUnitSpec.Warrior_Arms,
+      reaction: CombatUnitReaction.Friendly,
+      auraEvents: [
+        makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, BLADESTORM, CAST_AT - 1_000, "player-1", "player-1", "BUFF"),
+        makeAuraEvent(LogEvent.SPELL_AURA_REMOVED, BLADESTORM, CAST_AT + 5_000, "player-1", "player-1", "BUFF"),
+      ],
+    });
+    const miss = (missType: string) => ({
+      spellId: "8122",
+      spellName: "Psychic Scream",
+      srcUnitId: "enemy-1",
+      srcUnitName: "Enemy",
+      destUnitId: "player-1",
+      destUnitName: "PlayerWarrior",
+      timestamp: CAST_AT + 169,
+      missType,
+      logLine: { timestamp: CAST_AT + 169, event: LogEvent.SPELL_MISSED },
+    });
+    (player as { missesIn?: unknown[] }).missesIn = [miss("IMMUNE")];
+    const r = analyzePlayerCCAndTrinket(player, [enemy], combat as never);
+    expect(r.ccAvoidedInstances.map((a) => a.spellName)).toEqual(["Psychic Scream"]);
+    // control: no miss row on the player → it never reached them, nothing avoided
+    (player as { missesIn?: unknown[] }).missesIn = [];
+    expect(
+      analyzePlayerCCAndTrinket(player, [enemy], combat as never).ccAvoidedInstances,
+    ).toEqual([]);
+  });
+});

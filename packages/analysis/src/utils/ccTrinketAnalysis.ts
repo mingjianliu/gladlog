@@ -628,6 +628,12 @@ export const REPOSITIONING_SPELL_IDS = new Map<string, string>([
   ["24858", "Moonkin Form"],
 ]);
 
+/** the repositions by name — a buff they leave carries its own id
+ * (Angel's Feather 121536 → 121557) */
+const REPOSITIONING_NAMES: ReadonlySet<string> = new Set(
+  REPOSITIONING_SPELL_IDS.values(),
+);
+
 export const TARGETED_CC_DODGE_SPELLS = new Set<string>([
   "119996", // Transcendence: Transfer
   "58984", // Shadowmeld
@@ -2811,10 +2817,21 @@ export function analyzePlayerCCAndTrinket(
       aura.srcUnitId === player.id &&
       player.reaction === CombatUnitReaction.Friendly &&
       ccSpellIds.has(spellId);
+    // fact2 (2026-10-20): a dispel backlash (`BACKLASH_AURA_CC_TYPE`: Sin
+    // and Punishment's horror) is logged with the dispelled DoT's caster as
+    // its source — a TEAMMATE when the DoT was a teammate's (e49b7c3b 1:28:
+    // the healer horrified 3.0 s by its own Shadow Priest's, four presses
+    // refused "while horrified", and no [CC ON TEAM] line). On a friendly
+    // holder it is a CC on it whoever the row names.
+    const backlashOntoFriend =
+      !isRemovalEvent &&
+      player.reaction === CombatUnitReaction.Friendly &&
+      BACKLASH_AURA_CC_TYPE.has(spellId);
     if (
       !isRemovalEvent &&
       !enemyIds.has(aura.srcUnitId) &&
-      !reflectedOntoHolder
+      !reflectedOntoHolder &&
+      !backlashOntoFriend
     )
       continue;
 
@@ -4527,6 +4544,36 @@ export function analyzePlayerCCAndTrinket(
     });
   };
 
+  /** The cast's control (its own id or an effect aura of it, from the
+   * caster or its summons) went on a unit other than the player inside the
+   * cast's landing match window (`ccLandedMatchWindowMs`). */
+  const landedOnAnotherUnit = (
+    enemy: ICombatUnit,
+    cast: ICombatUnit["spellCastEvents"][number],
+  ): boolean => {
+    if (!cast.spellId) return false;
+    const family = castAndEffectIds(cast.spellId);
+    const castMs = cast.logLine.timestamp;
+    const { beforeMs, afterMs } = ccLandedMatchWindowMs(
+      getEnglishSpellName(cast.spellId, cast.spellName),
+    );
+    const fromCaster = (srcId: string) =>
+      srcId === enemy.id ||
+      srcId === cast.srcUnitId ||
+      enemyPets.some((p) => p.id === srcId && p.ownerId === enemy.id);
+    for (const u of unitsById.values()) {
+      if (u.id === player.id) continue;
+      for (const a of u.auraEvents ?? []) {
+        if (a.logLine.event !== LogEvent.SPELL_AURA_APPLIED) continue;
+        if (!a.spellId || !family.has(a.spellId)) continue;
+        if (!fromCaster(a.srcUnitId)) continue;
+        const d = a.timestamp - castMs;
+        if (d >= -beforeMs && d <= afterMs) return true;
+      }
+    }
+    return false;
+  };
+
   // 1. Unified Buff & Mobility CC Avoidance (targeted and ground CCs)
   for (const enemy of enemies) {
     // F134: include the enemy's pet/guardian casts so a whiffed pet CC (Water Elemental Freeze,
@@ -4547,8 +4594,28 @@ export function analyzePlayerCCAndTrinket(
       const isTargeted =
         cast.destUnitId === player.id || cast.destUnitName === player.name;
       const isGroundCC = isGroundCc(cast.spellId);
+      // fact2 (2026-10-20): an untargeted area control (Psychic Scream,
+      // Intimidating Shout — no destination on the cast row) that logged a
+      // failed-control miss on the player reached them and was avoided
+      // (0b72c44e 1:05: Psychic Scream MISS on the healer under Phase Shift,
+      // no line, while the 2:26 Ring of Frost under the same buff had one).
+      // Only the buff path below can explain it — the miss row proves it
+      // was in reach, so no mobility press dodged it.
+      const untargetedMissOnPlayer =
+        !isTargeted &&
+        !isGroundCC &&
+        (!cast.destUnitId || cast.destUnitId === "0000000000000000") &&
+        loggedMissRowOf(
+          enemy,
+          {
+            spellId: cast.spellId,
+            srcUnitId: cast.srcUnitId,
+            timestamp: cast.logLine.timestamp,
+          },
+          getEnglishSpellName(cast.spellId, cast.spellName),
+        ) !== undefined;
 
-      if (isTargeted || isGroundCC) {
+      if (isTargeted || isGroundCC || untargetedMissOnPlayer) {
         const castTimeMs = cast.logLine.timestamp;
         if (!landedOnPlayer(cast)) {
           const ccSpellName = getEnglishSpellName(cast.spellId, cast.spellName);
@@ -4579,11 +4646,27 @@ export function analyzePlayerCCAndTrinket(
           // avoided (0deb726b 0:12: the Capacitor Totem died 1.1 s after its
           // summon, and the paladin's Divine Steed was credited)
           if (!missRow && summonKilledBeforeLanding(enemy, cast)) continue;
+          // fact2 (2026-10-20): an untargeted / ground control that went
+          // off on ANOTHER unit and logged no miss on this player caught
+          // someone else. A player in it under an immunity logs the miss
+          // (06aa443c r3: the IMMUNE row at the pulse), so no immunity-type
+          // buff explains it — only a reposition that may have carried the
+          // player out of it (605 after C10 resolved trap / totem casts to
+          // their auras: 198 of 402 new Freezing Trap lines and 134 of 206
+          // Capacitor Totem lines named a control that landed on a
+          // teammate). One that landed on nobody keeps its line
+          // (`ccAvoidedLandingDelay.test`).
+          const wentOffElsewhere =
+            !isTargeted && !missRow && landedOnAnotherUnit(enemy, cast);
           // A. Buff-Based Avoidance — read at the instant the control hit
           // the player (`controlHitInstant`), not at a delayed control's cast
           const hit = controlHitInstant(enemy, cast, missRow);
-          const activeBuff = avoidanceBuffsAt(hit.ms, hit.line).find((b) =>
-            applicableIds.has(b.spellId),
+          const activeBuff = avoidanceBuffsAt(hit.ms, hit.line).find(
+            (b) =>
+              applicableIds.has(b.spellId) &&
+              (!wentOffElsewhere ||
+                REPOSITIONING_SPELL_IDS.has(b.spellId) ||
+                REPOSITIONING_NAMES.has(b.name)),
           );
           if (activeBuff) {
             ccAvoidedInstances.push({
@@ -4605,6 +4688,7 @@ export function analyzePlayerCCAndTrinket(
           }
 
           // B. Mobility-Based Avoidance
+          if (untargetedMissOnPlayer) continue;
           const mobilityCast = player.spellCastEvents.find(
             (e) =>
               e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&

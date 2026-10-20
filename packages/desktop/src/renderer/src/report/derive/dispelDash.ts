@@ -1,5 +1,6 @@
 import {
   annotateMissedPurgesWithKillWindows,
+  blockedSecondsText,
   computeOffensiveWindows,
   type ICCEfficiencyStat,
   type IDispelEvent,
@@ -14,6 +15,13 @@ import { toLegacySafe } from "./legacySource";
 import { displaySpellName } from "./spellDisplay";
 import { type TimeRange,tInRange } from "./timeRange";
 import type { ReportSource } from "./types";
+
+/** fact2: the measured blocked seconds behind a "被控/被锁" tag — the same
+ * number the prompt's exemption prints (`blockedSecondsText`). */
+function lockedSecondsSuffix(blockedS: number | undefined): string {
+  const s = blockedSecondsText(blockedS);
+  return s === undefined ? "" : ` ${s} 秒`;
+}
 
 /** One dispel / missed-dispel instance (used by row expansion and lists);
  * tS = relative seconds. */
@@ -114,7 +122,7 @@ export function scopedMissedPurgeInstances(
         label: `${fmtName(w.spellId, w.spellName)} 挂在 ${w.enemyName} 身上 ${Math.round(
           w.durationSeconds,
         )}s 未被打掉 · 可用 ${w.viaScopedTool.name}(${f.name})${
-          why.lockedOut ? "(持有者被控/被锁)" : ""
+          why.lockedOut ? `(持有者被控/被锁${lockedSecondsSuffix(w.purgersBlockedS)})` : ""
         }${why.noReach ? "(无视线/超射程)" : ""}${
           why.onCooldownThroughout ? "(技能全程在 CD)" : ""
         }${notActionable ? " · 当时做不到" : ""}`,
@@ -230,7 +238,7 @@ export function deriveDispelDash(
           w.durationSeconds,
         )}s 未被驱散${w.duringKillWindow ? "(我方击杀窗口内)" : ""}${
           w.purgeWasOnCD ? "(驱散在 CD)" : ""
-        }${w.purgersLockedOut ? "(驱散者被控/被锁)" : ""}${
+        }${w.purgersLockedOut ? `(驱散者被控/被锁${lockedSecondsSuffix(w.purgersBlockedS)})` : ""}${
           w.losReachable === false ? "(无视线/超射程)" : ""
         }`,
         unitName: w.enemyName,
@@ -253,7 +261,9 @@ export function deriveDispelDash(
         label: `${w.targetName} 挂 ${fmtName(w.spellId, w.spellName)} ${Math.round(
           w.durationSeconds,
         )}s 未被解${w.cleanseWasOnCD ? "(解法在 CD)" : ""}${
-          w.dispellersLockedOut ? "(驱散者被控/被锁)" : ""
+          w.dispellersLockedOut
+            ? `(驱散者被控/被锁${lockedSecondsSuffix(w.dispellersBlockedS)})`
+            : ""
         }${w.losReachable === false ? "(无视线/超射程)" : ""}${
           w.drChainRisk ? "(对方 DR 未递减,解了易被续控)" : ""
         }`,

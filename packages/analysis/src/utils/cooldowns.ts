@@ -8,7 +8,12 @@ import {
 
 import { isSurvivalWall } from "../data/abilityProfile";
 import baselineDefensivesGenerated from "../data/baselineDefensivesGenerated.json";
-import { castsOwningEffectAura } from "../data/castEffectAuras";
+import {
+  castsOwningEffectAura,
+  effectAuraHitShare,
+  effectAurasOfCast,
+  effectAuraViaName,
+} from "../data/castEffectAuras";
 import CD_RECAST_FLOORS from "../data/cdRecastFloorGenerated.json";
 import { classMetadata } from "../data/classSpells";
 import CONDITIONAL_COOLDOWNS from "../data/conditionalCooldownsGenerated.json";
@@ -56,6 +61,7 @@ import {
 } from "./auraIntervals";
 import { binarySearchClosest } from "./binarySearch";
 import { buffFullDurationForCaster } from "./buffDuration";
+import { CONTROL_EFFECT_MIN_HIT_SHARE, isControlCast } from "./castMissRows";
 import { COPY_CAST_IDS, isFormReshiftCast } from "./castPress";
 import { incomingPressureEvents } from "./incomingPressure";
 import { logDatedNumberAt } from "./logEra";
@@ -68,6 +74,7 @@ import { fmtTime, toRenderSecond } from "./renderGrid";
 import { buildRosterSides } from "./rosterSide";
 import { roundEndMs } from "./roundEnd";
 import { OFFENSIVE_CD_SPELL_IDS, offensiveEffectCdId } from "./spellDanger";
+import { ccMechanicOf } from "./spellMechanics";
 import {
   CD_TALENT_MODIFIERS,
   DATED_COOLDOWN_VALUES,
@@ -1681,11 +1688,33 @@ export function hpAtPress(
   for (const h of unit.healIn ?? []) {
     const t = h.logLine.timestamp;
     if (t < pressMs - PRESS_EFFECT_LEAD_MS || t > pressMs) continue;
-    if (h.spellId !== cast.spellId || h.srcUnitId !== cast.srcUnitId) continue;
+    // the press's own heal may carry its effect's id (fact2 C10: Dream
+    // Breath is pressed as 355936 and heals as 355941, its DB2-named effect)
+    const ownEffect =
+      h.spellId === cast.spellId ||
+      (!!h.spellId && effectAuraViaName(cast.spellId, h.spellId));
+    if (!ownEffect || h.srcUnitId !== cast.srcUnitId) continue;
     // the press's OWN heal is a direct one; a periodic tick of an earlier
     // application of the same spell is not this press (review of F-R8,
-    // 2026-10-03: a refresh 30 ms after a HoT tick read the pre-tick HP)
-    if (h.logLine.event === LogEvent.SPELL_PERIODIC_HEAL) continue;
+    // 2026-10-03: a refresh 30 ms after a HoT tick read the pre-tick HP).
+    // fact2 (2026-10-20): a tick that follows its own aura's fresh APPLIED
+    // by the caster on the unit, inside the same lead before the cast line,
+    // IS this press's first tick (Frenzied Regeneration: APPLIED and the
+    // first PERIODIC_HEAL at 2:32.333, the cast row at .334 — e49b7c3b read
+    // 75 % for a 60.5 % press; 0457a45e 1:21: APPLIED .804, tick .805,
+    // cast .806)
+    if (
+      h.logLine.event === LogEvent.SPELL_PERIODIC_HEAL &&
+      !(unit.auraEvents ?? []).some(
+        (a) =>
+          a.spellId === h.spellId &&
+          a.srcUnitId === cast.srcUnitId &&
+          a.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
+          a.logLine.timestamp <= t &&
+          a.logLine.timestamp >= pressMs - PRESS_EFFECT_LEAD_MS,
+      )
+    )
+      continue;
     if (t < cutMs) cutMs = t;
   }
   const actions = getSortedAdvancedActions(unit);
@@ -3358,6 +3387,54 @@ export function spendsSharedChargeOf(
  * signal there ever was, exactly the Renewing Blaze/Avenging-Wrath-proc/
  * Ascendance-proc case this table is for.
  */
+/**
+ * fact2 (2026-10-20): the presses a cooldown's own effect proves when the
+ * round logs no cast row of it — the APPLIED rows of its effect auras
+ * (the cast → effect table: DB2 names the aura after the cast, and the
+ * corpus shows it after at least half the casts — `isControlCast`'s reading)
+ * from the unit or a unit it owns, one press per cooldown's length of them
+ * (the first application of each stretch). Empty when nothing shows.
+ */
+export function effectEvidenceCastSeconds(
+  unit: ICombatUnit,
+  spellId: string,
+  cooldownSeconds: number,
+  combat: Pick<AtomicArenaCombat, "startTime" | "units">,
+): number[] {
+  const effects = effectAurasOfCast(spellId).filter(
+    (a) =>
+      a !== spellId &&
+      effectAuraViaName(spellId, a) &&
+      (effectAuraHitShare(spellId, a) ?? 0) >= CONTROL_EFFECT_MIN_HIT_SHARE,
+  );
+  if (effects.length === 0) return [];
+  const units = Object.values(combat.units ?? {}) as ICombatUnit[];
+  const sources = new Set([
+    unit.id,
+    ...units.filter((u) => u.ownerId === unit.id).map((u) => u.id),
+  ]);
+  const applied = units
+    .flatMap((u) => u.auraEvents ?? [])
+    .filter(
+      (a) =>
+        a.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
+        !!a.spellId &&
+        effects.includes(a.spellId) &&
+        sources.has(a.srcUnitId) &&
+        a.logLine.timestamp >= combat.startTime,
+    )
+    .map((a) => a.logLine.timestamp)
+    .sort((a, b) => a - b);
+  const out: number[] = [];
+  let lastMs = -Infinity;
+  for (const ms of applied) {
+    if (ms - lastMs < Math.max(cooldownSeconds, 1) * 1000) continue;
+    lastMs = ms;
+    out.push((ms - combat.startTime) / 1000);
+  }
+  return out;
+}
+
 export function auraOnlyActivationSeconds(
   unit: ICombatUnit,
   spellId: string,
@@ -4093,7 +4170,21 @@ function extractMajorCooldownsAll(
 
         for (const rule of DISCOVERY_TAG_RULES) {
           if (rule.pattern.test(name)) {
-            tags.push(...rule.tags);
+            // fact2 (2026-10-20): a name is no control — the Control tag
+            // stands only with official evidence of one (a DB2 control
+            // mechanic, or a control effect `isControlCast` reads); without
+            // it the cooldown stays on the ledger as Utility. Stampeding Roar
+            // matched /roar/ and printed under "your control cooldowns"
+            // (0457a45e: an ally movement buff, no mechanic)
+            const officialControl =
+              isControlCast(spellId) || ccMechanicOf(spellId) !== undefined;
+            tags.push(
+              ...rule.tags.map((t) =>
+                t === SpellTag.Control && !officialControl
+                  ? SpellTag.Utility
+                  : t,
+              ),
+            );
           }
         }
 
@@ -4375,7 +4466,25 @@ function extractMajorCooldownsAll(
     // (27 presses in 27 of 1,270 rounds on every 30th archive file, mostly
     // Stasis; GH #106. parser/src/l3/compose.ts clamps endTime, the events
     // stay).
-    const rawCasts: ICooldownCast[] = [...castRawCasts, ...auraRawCasts]
+    // fact2 (2026-10-20): a cooldown the round logs no cast row of, whose
+    // own effect the unit (or its pet) put on someone — the cast row is
+    // missing, the press is not (95f031ca: Binding Shot's tether and stun on
+    // three of our players from the hunter, no SPELL_CAST_SUCCESS 109248 in
+    // the round, and the kit said `[UNUSED]`)
+    const effectRawCasts: ICooldownCast[] =
+      castRawCasts.length === 0 && auraRawCasts.length === 0
+        ? effectEvidenceCastSeconds(
+            unit,
+            spell.spellId,
+            cooldownSeconds,
+            combat,
+          ).map((timeSeconds) => ({ timeSeconds }))
+        : [];
+    const rawCasts: ICooldownCast[] = [
+      ...castRawCasts,
+      ...auraRawCasts,
+      ...effectRawCasts,
+    ]
       .filter((c) => c.timeSeconds <= matchDurationSeconds)
       .sort((a, b) => a.timeSeconds - b.timeSeconds);
 
@@ -5680,6 +5789,12 @@ export function hasOffensiveSpellActive(
     if (OFFENSIVE_AURA_EVIDENCE.has(spellId)) continue;
     if (requiredSourceIds !== null && !requiredSourceIds.has(aura.srcUnitId))
       continue;
+    // fact2 (2026-10-20): asked of ANY source, the unit's own offensive
+    // cooldown is a buff on it — a DEBUFF is an opponent's (once C10 resolved
+    // Feral Frenzy's 274838 to its cast, the friendly druid's bleed on the
+    // enemy rogue read as the rogue's burst and the threat gate dropped two
+    // uncleansed fears, ab7fbe2e 0:17)
+    if (requiredSourceIds === null && aura.auraType === "DEBUFF") continue;
     if (
       spellIdFilter !== undefined &&
       !spellIdFilter(spellId) &&

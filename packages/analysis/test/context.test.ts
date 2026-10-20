@@ -253,7 +253,9 @@ describe("buildMatchContext on real fixture", () => {
 
   it("GH #103 A5: Defensive loadout entries state how long the effect lasts", () => {
     const ctx = buildMatchContext(match, friends, enemies, {});
-    expect(ctx).toContain("Pain Suppression [180s, 2 Charges, lasts 8s]");
+    // fact2 (kit range): the loadout prints the ledger's earliest–official
+    // cooldown range, the one the [RES] rows read (`earliestCooldownSeconds`)
+    expect(ctx).toContain("Pain Suppression [123–180s, 2 Charges, lasts 8s]");
     // Winter's Protection counts per rank (GH #106). 12.1.5.70391 set its row
     // 1013746 PvpMultiplier 1 → 0.5 (not in the patch notes): rank 2 = −30 in
     // PvP, so 240 − 30 − 30 (Glacial Bulwark 1265517) = 180 (was 150).

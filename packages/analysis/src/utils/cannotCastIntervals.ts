@@ -794,10 +794,17 @@ export function castBlockingAuraIntervals(
     const isBreakRow =
       aura.logLine.event === LogEvent.SPELL_AURA_BROKEN ||
       aura.logLine.event === LogEvent.SPELL_AURA_BROKEN_SPELL;
+    // fact2 (2026-10-20): a dispel backlash locks its holder whoever the
+    // row names as its source — the dispelled DoT's caster, a teammate when
+    // the DoT was a teammate's (e49b7c3b 1:28: four Innervate presses
+    // refused "while horrified" under a Sin and Punishment sourced to the
+    // healer's own Shadow Priest). `ccInstances` takes it on a friendly
+    // holder the same way.
     if (
       !isBreakRow &&
       !enemyIds.has(aura.srcUnitId) &&
-      aura.srcUnitId !== unit.id
+      aura.srcUnitId !== unit.id &&
+      !BACKLASH_AURA_CC_TYPE.has(spellId)
     )
       continue;
     // cc-dr F-BK1: the dispel-backlash auras (Unstable Affliction's silence

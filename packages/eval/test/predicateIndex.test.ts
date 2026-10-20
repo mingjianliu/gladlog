@@ -2734,6 +2734,11 @@ const INDEX: PredicateRow[] = [
     mod: offensiveWindows,
   },
   {
+    file: `${A}/utils/dispelAnalysis.ts`,
+    symbol: "blockedSecondsText",
+    mod: dispelAnalysis,
+  },
+  {
     file: `${A}/utils/cooldowns.ts`,
     symbol: "spendsSharedChargeOf",
     mod: cooldowns,

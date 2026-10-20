@@ -607,6 +607,10 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
         m.spellId !== undefined &&
         family.has(m.spellId) &&
         counts(m.destUnitId) &&
+        // fact2 (2026-10-20): a later DoT tick's IMMUNE is not the press
+        // going into an immunity (15c06404 1:54: Kingsbane's own hit
+        // landed; its ticks at +2.0 s met a Spellwarding thrown 1.7 s later)
+        (m.logLine?.event as string) !== LogEvent.SPELL_PERIODIC_MISSED &&
         !consumedImmuneMisses.has(m) &&
         missBelongsToCast(unit, spellId, castMs, m.timestamp),
     );

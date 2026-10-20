@@ -7,7 +7,7 @@
  * its closure inputs now arrive through `ctx`. Output is pinned by the 605-file
  * acceptanceCapture context hash.
  */
-import { LogEvent } from "@gladlog/parser-compat";
+import { type ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
 import { getEnglishSpellName } from "../../data/spellEffectData";
 import { fmtTime } from "../../utils/renderGrid";
@@ -17,6 +17,7 @@ export function emitEnemyHardCastEntries(
   ctx: Pick<
     TimelineCtx,
     | "enemies"
+    | "friends"
     | "matchStartMs"
     | "matchEndSeconds"
     | "pid"
@@ -24,9 +25,19 @@ export function emitEnemyHardCastEntries(
     | "enemyPid"
   >,
 ): void {
-  const { enemies, matchStartMs, matchEndSeconds, pid, addEntry, enemyPid } =
-    ctx;
+  const {
+    enemies,
+    friends,
+    matchStartMs,
+    matchEndSeconds,
+    pid,
+    addEntry,
+    enemyPid,
+  } = ctx;
 
+  /** how long after the completed cast its projectile's row can come
+   * (Pyroblast's flight: 0:47.390 → MISS 0:48.381) */
+  const HARD_CAST_RESULT_MS = 2500;
   const HARD_CAST_KILL_SPELLS = new Set(["116858", "11366", "1254294"]); // Chaos Bolt, Pyroblast
   /** below this a START→SUCCESS pair is an instant (Hot Streak), not a bar */
   const HARD_CAST_MIN_MS = 300;
@@ -97,10 +108,104 @@ export function emitEnemyHardCastEntries(
       const spellName = getEnglishSpellName(event.spellId, event.spellName);
       const target = event.destUnitName ? ` → ${pid(event.destUnitName)}` : "";
       const castS = ((landed.timestamp - event.timestamp) / 1000).toFixed(1);
+      // fact2 (2026-10-20): a completed cast is not a hit — what it did is
+      // the projectile's row on its target (0d08dd90 0:47: a Pyroblast into
+      // Phase Shift logged MISS and no damage, and the line said `landed`).
+      // The caster's completions of the spell at that target take the
+      // result rows inside `HARD_CAST_RESULT_MS` first in, first out
+      // (`hardCastResultOf`): a damage row, or a SPELL_ABSORBED row a shield
+      // ate whole → `landed`; a miss row → `went off, <TYPE>`; none → `went
+      // off`. FIFO, not "before the next completion": a Hot Streak instant
+      // 1 ms after the bar flies behind it (01502819-style 5-1 0:54: bar
+      // .795, instant .796, the two hits at .999 and 1.013)
+      const destId = landed.destUnitId || event.destUnitId;
+      const outcome = hardCastResultOf(
+        enemy,
+        event.spellId,
+        destId,
+        landed,
+        friends.find((f) => f.id === destId),
+        HARD_CAST_RESULT_MS,
+      );
       addEntry(
         timeSeconds,
-        `${fmtTime(timeSeconds)}  [ENEMY HARD CAST]   ${enemyPid(enemy.name)}: ${spellName}${target} (${castS}s cast, landed)`,
+        `${fmtTime(timeSeconds)}  [ENEMY HARD CAST]   ${enemyPid(enemy.name)}: ${spellName}${target} (${castS}s cast, ${outcome})`,
       );
     }
   }
+}
+
+/** The result row a completion of `spellId` at `destId` takes: the
+ * completions in order each take the first result row (a damage row, a
+ * SPELL_ABSORBED row with no damage row of that hit — a hit a shield ate
+ * whole — or a miss row) at or after them and inside `windowMs` that an
+ * earlier completion has not taken. */
+function hardCastResultOf(
+  enemy: ICombatUnit,
+  spellId: string,
+  destId: string | undefined,
+  completion: { timestamp: number },
+  destUnit: ICombatUnit | undefined,
+  windowMs: number,
+): string {
+  if (!destId) return "went off";
+  const completions = enemy.spellCastEvents
+    .filter(
+      (e) =>
+        e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+        e.spellId === spellId &&
+        e.destUnitId === destId,
+    )
+    .map((e) => e.timestamp)
+    .sort((a, b) => a - b);
+  const damageMs = (enemy.damageOut ?? [])
+    .filter((d) => d.spellId === spellId && d.destUnitId === destId)
+    .map((d) => d.logLine.timestamp);
+  // a hit the shield ate whole: its MISS ABSORB row stands for it, so its
+  // SPELL_ABSORBED row is not a second hit
+  const absorbMissMs = (enemy.missesOut ?? [])
+    .filter(
+      (m) =>
+        m.spellId === spellId &&
+        m.destUnitId === destId &&
+        m.missType === "ABSORB",
+    )
+    .map((m) => m.timestamp);
+  const rows: Array<{ ms: number; outcome: string }> = [
+    ...damageMs.map((ms) => ({ ms, outcome: "landed" })),
+    ...(destUnit?.absorbsIn ?? [])
+      .filter(
+        (a) =>
+          a.attackerId === enemy.id &&
+          a.attackSpellId === spellId &&
+          ![...damageMs, ...absorbMissMs].some(
+            (ms) => Math.abs(ms - a.timestamp) <= 1,
+          ),
+      )
+      .map((a) => ({ ms: a.timestamp, outcome: "landed" })),
+    ...(enemy.missesOut ?? [])
+      .filter((m) => m.spellId === spellId && m.destUnitId === destId)
+      .map((m) => ({
+        ms: m.timestamp,
+        // a `MISS … ABSORB` row is the hit a shield ate whole, logged again
+        // (its SPELL_ABSORBED row carries it) — it landed
+        outcome:
+          m.missType === "ABSORB"
+            ? "landed"
+            : m.missType
+              ? `went off, ${m.missType}`
+              : "went off",
+      })),
+  ].sort((a, b) => a.ms - b.ms);
+  // one partly absorbed hit logs its SPELL_ABSORBED rows beside its damage
+  // row; distinct hits only
+  const taken = new Set<number>();
+  for (const c of completions) {
+    const k = rows.findIndex(
+      (r, idx) => !taken.has(idx) && r.ms >= c && r.ms <= c + windowMs,
+    );
+    if (k >= 0) taken.add(k);
+    if (c === completion.timestamp) return k >= 0 ? rows[k]!.outcome : "went off";
+  }
+  return "went off";
 }

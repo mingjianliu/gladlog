@@ -773,6 +773,12 @@ export function lowPressureUnusedDefensiveNote(
       isProcOnly?: boolean;
     })[],
   minHpPct: number | null,
+  /** cast bars the owner began of a cooldown this round
+   * (`castBarsOfCooldown`): a press started and stopped — kicked — was no
+   * hold (fact2, 2026-10-20: 0d08dd90 Ultimate Penitence kicked at 1:41,
+   * the kit `[UNUSED — started 1×, never finished]`, the NOTE "correctly
+   * HELD") */
+  barsStarted?: (cd: Pick<IMajorCooldownInfo, "spellId" | "spellName">) => number,
 ): string | null {
   if (minHpPct === null || minHpPct < CD_WASTE_PRESSURE_HP_PCT) return null;
   // 这句注印的是「他没用的 **defensive** cooldowns 是正确留着的」,所以触发它的
@@ -798,7 +804,8 @@ export function lowPressureUnusedDefensiveNote(
       !cdIsProcOnly(cd) &&
       !cd.isThroughput &&
       (cd.tag === undefined || DEFENSIVE_TAGS.has(cd.tag)) &&
-      !cdCanHelpAnotherUnit(cd),
+      !cdCanHelpAnotherUnit(cd) &&
+      (barsStarted?.(cd) ?? 0) === 0,
   );
   if (held.length === 0) return null;
   return `  NOTE: the log owner's lowest HP this match was ${Math.floor(minHpPct)}% — they were never under meaningful pressure themselves. Their never-used self-only defensive cooldowns (${held.map((cd) => cd.spellName).join(", ")}) were correctly HELD, not wasted.`;

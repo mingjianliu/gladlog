@@ -68,7 +68,7 @@ describe("cc-dr F-BK1 — a dispel backlash locks the dispeller", () => {
   it.each([
     ["196364", "Unstable Affliction silence"],
     ["87204", "Sin and Punishment horror"],
-  ])("%s (%s) from the enemy is an interval; from a friend it is not", (id) => {
+  ])("%s (%s) from the enemy is an interval; from a friend it is too (fact2)", (id) => {
     const enemySourced = makeUnit("player-1", {
       auraEvents: [
         aura(LogEvent.SPELL_AURA_APPLIED, id, 254.142, "enemy-1", "player-1"),
@@ -84,7 +84,12 @@ describe("cc-dr F-BK1 — a dispel backlash locks the dispeller", () => {
         aura(LogEvent.SPELL_AURA_REMOVED, id, 258.153, "friend-1", "player-1"),
       ],
     });
-    expect(buildCannotCastIntervals(friendSourced, enemies)).toEqual([]);
+    // fact2 (2026-10-20): a backlash sourced to a teammate (the dispelled
+    // DoT was the teammate's) locks the dispeller all the same — e49b7c3b
+    // logged "Can't do that while horrified" under one
+    expect(buildCannotCastIntervals(friendSourced, enemies)).toEqual([
+      { from: START + 254_142, to: START + 258_153 },
+    ]);
   });
 });
 
@@ -159,6 +164,26 @@ describe("cc-dr F-SR1 — a CC sent back onto its caster locks the caster", () =
       combat,
     ).ccInstances;
     expect(hostile).toEqual([]);
+  });
+});
+
+describe("fact2 — a dispel backlash sourced to a teammate is a CC on the friendly holder", () => {
+  it("e49b7c3b 1:28: Sin and Punishment from the healer's own Shadow Priest", () => {
+    const healer = makeUnit("player-1", {
+      reaction: CombatUnitReaction.Friendly,
+      auraEvents: [
+        aura(LogEvent.SPELL_AURA_APPLIED, "87204", 88.908, "friend-1", "player-1"),
+        aura(LogEvent.SPELL_AURA_REMOVED, "87204", 91.918, "friend-1", "player-1"),
+      ],
+    });
+    const r = analyzePlayerCCAndTrinket(
+      healer,
+      [makeUnit("enemy-1", { reaction: CombatUnitReaction.Hostile })],
+      { startTime: START, endTime: START + 300_000, startInfo: { zoneId: "1672" } },
+    );
+    expect(r.ccInstances.map((c) => [c.spellId, c.sourceId])).toEqual([
+      ["87204", "friend-1"],
+    ]);
   });
 });
 

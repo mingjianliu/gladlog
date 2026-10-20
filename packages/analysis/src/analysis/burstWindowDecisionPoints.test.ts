@@ -1263,6 +1263,23 @@ describe("controlLandedResponses — which cast times a landed control (F-B8)", 
       },
     ],
   });
+  it("fact2 e49b7c3b: an untargeted press that makes its own control (Freezing Trap) never times another (Binding Shot armed 5 s before its stun)", () => {
+    const casts = [
+      { unitId: "F1", spellId: "109248", dest: undefined, tMs: 7_080 },
+      { unitId: "F1", spellId: "187650", dest: undefined, tMs: 9_905 },
+    ];
+    const out = controlLandedResponses(
+      [auraOn("117526", 12_150)],
+      new Set(["E1"]),
+      (id) => id,
+      casts,
+      0,
+      40_000,
+    );
+    // past the fuse: the aura's own time, not the trap's press
+    expect(out).toMatchObject([{ unitId: "F1", spellId: "117526", tMs: 12_150 }]);
+  });
+
   it("7d1f14af: the cast that produced the aura beats an earlier untargeted press", () => {
     const casts = [
       { unitId: "F1", spellId: "1223412", dest: undefined, tMs: 28_014 },

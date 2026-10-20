@@ -226,6 +226,39 @@ describe('healerExposureAnalysis — exposure calculation', () => {
     expect(res[0].threats[0].ccCategory).toBe('Incapacitate');
   });
 
+  it('fact2: an enemy control on cooldown at the window is no threat; off cooldown it is', () => {
+    const healer = makeUnit('h', {
+      advancedActions: [makeAdvancedAction(MATCH_START + 6_000, 0, 0), makeAdvancedAction(MATCH_START + 62_000, 0, 0)],
+    });
+    for (const a of healer.advancedActions) (a as any).advancedActorId = 'h';
+    const enemy = makeUnit('e', {
+      name: 'E1',
+      spec: CombatUnitSpec.Druid_Feral,
+      info: { talents: [], pvpTalents: [] },
+      // Mighty Bash (60 s) pressed at 0:02
+      spellCastEvents: [makeSpellCastEvent('5211', MATCH_START + 2_000, 'x', 'X', 'e', 'E1')],
+      advancedActions: [makeAdvancedAction(MATCH_START + 6_000, 5, 0), makeAdvancedAction(MATCH_START + 62_000, 5, 0)],
+    });
+    for (const a of enemy.advancedActions) (a as any).advancedActorId = 'e';
+    const friendCCSummary: any = {
+      ccInstances: [{ sourceName: 'E1', sourceId: 'e', spellId: '5211', spellName: 'Mighty Bash' }],
+    };
+    const run = (fromSeconds: number) =>
+      analyzeHealerExposureAtBurst(
+        [{ fromSeconds }] as any,
+        [enemy],
+        healer,
+        { trinketUseTimes: [], ccInstances: [] } as any,
+        [friendCCSummary],
+        '1505',
+        MATCH_START,
+      );
+    // 0:06 — four seconds into a 60 s cooldown
+    expect(run(6).flatMap((r) => r.threats.map((t) => t.ccSpellName))).toEqual([]);
+    // 1:02 — back
+    expect(run(62).flatMap((r) => r.threats.map((t) => t.ccSpellName))).toEqual(['Mighty Bash']);
+  });
+
   it('handles null LoS result by assuming unblocked (B50)', () => {
     const healer = makeUnit('h', { advancedActions: [makeAdvancedAction(MATCH_START, 0, 0)] });
     (healer.advancedActions[0] as any).advancedActorId = 'h';

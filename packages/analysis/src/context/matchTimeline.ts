@@ -716,6 +716,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
   // ── F170: [ENEMY HARD CAST] — hard-cast kill spells (Chaos Bolt, Pyroblast) ─
   emitEnemyHardCastEntries({
     enemies,
+    friends,
     matchStartMs,
     matchEndSeconds,
     pid,

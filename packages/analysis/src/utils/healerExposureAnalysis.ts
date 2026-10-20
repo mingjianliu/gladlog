@@ -21,6 +21,7 @@ import {
   LogEvent,
 } from "@gladlog/parser-compat";
 
+import { effectAuraViaName } from "../data/castEffectAuras";
 import { ccSpellIds } from "../data/spellTags";
 import {
   analyzePlayerCCAndTrinket,
@@ -30,6 +31,7 @@ import {
 } from "./ccTrinketAnalysis";
 import {
   chargeAvailabilityTransitions,
+  earliestCooldownSecondsFor,
   isHealerSpec,
   specToString,
   unitCooldownOf,
@@ -258,7 +260,11 @@ export function buildEnemyCCHistory(
         summonOwnerById(allUnits, cc.sourceId, enemies);
       if (!owner) continue;
       const existing = result.get(owner.name) ?? [];
-      if (!existing.some((e) => e.category === category)) {
+      // every distinct control, in landing order: the threat list keeps the
+      // first of each DR category that is off cooldown at the window
+      // (`enemyCcOnCooldownAt`, fact2), so a second stun of the same enemy
+      // stands in when the first is spent
+      if (!existing.some((e) => e.spellId === cc.spellId)) {
         existing.push({
           spellName: cc.spellName,
           spellId: cc.spellId,
@@ -384,7 +390,15 @@ export function analyzeHealerExposureAtBurst(
       const ccSources =
         observedCCs.length > 0 ? observedCCs : primaryCC ? [primaryCC] : [];
 
+      const renderedSecond = Math.floor(window.fromSeconds);
+      const listedCategories = new Set<string>();
       for (const { spellName, spellId, category } of ccSources) {
+        if (listedCategories.has(category)) continue;
+        if (
+          enemyCcOnCooldownAt(enemy, spellId, matchStartMs, renderedSecond)
+        )
+          continue;
+        listedCategories.add(category);
         if (distance > ccThreatRadiusYards(enemy, spellId)) continue;
         const healerDRLevel = getDRLevelAtTime(
           healerCCSummary.ccInstances,
@@ -995,6 +1009,60 @@ function avoidanceCastSeconds(
     .map((e) => (e.logLine.timestamp - matchStartMs) / 1000)
     .filter((t) => t <= atSeconds)
     .sort((a, b) => a - b);
+}
+
+/**
+ * fact2 (2026-10-20): whether the enemy's control `ccSpellId` (the landed
+ * aura id, or the spec template's) is certainly on cooldown at the window's
+ * rendered second — the threat list named Mighty Bash 4 s after a press with
+ * a 60 s cooldown, and Sigil of Misery 33 s into its 120 s. The press is the
+ * enemy's own SPELL_CAST_SUCCESS of that id or of a cast whose effect the
+ * aura is by the cast's own DB2 name (`effectAuraViaName`: Sigil of Misery
+ * 207684 → 207685, Ring of Frost 113724 → 82691);
+ * the cooldown and charges are the enemy's talent-resolved ones
+ * (`unitCooldownOf`) and the charge timeline is the shared one
+ * (`inHandSince`). A press inside the rendered second itself still counts as
+ * a threat (it is the control being thrown); without talents the base
+ * cooldown could overstate the wait, so nothing is dropped then. A summon's
+ * control pressed by the summon is never on the owner's cast list → kept.
+ */
+function enemyCcOnCooldownAt(
+  enemy: ICombatUnit,
+  ccSpellId: string,
+  matchStartMs: number,
+  renderedSecond: number,
+): boolean {
+  // the casts this enemy pressed whose own effect (same DB2 name) the
+  // control is — Ring of Frost 113724 → 82691 lands on under 90 % of its
+  // casts, so the own-effect share test cannot be asked here
+  const castIds = new Set(
+    (enemy.spellCastEvents ?? [])
+      .filter((e) => e.logLine.event === LogEvent.SPELL_CAST_SUCCESS)
+      .map((e) => e.spellId)
+      .filter(
+        (id): id is string =>
+          !!id && (id === ccSpellId || effectAuraViaName(id, ccSpellId)),
+      ),
+  );
+  for (const id of castIds) {
+    const presses = avoidanceCastSeconds(
+      enemy,
+      id,
+      matchStartMs,
+      renderedSecond,
+    ).filter((t) => t < renderedSecond);
+    if (presses.length === 0) continue;
+    const cd = unitCooldownOf(enemy, id);
+    if (!cd || !cd.talentsKnown || !(cd.cooldownSeconds > 0)) return false;
+    // a cooldown the game shortens on the fly (Holy Words by Smite) is
+    // certainly down only until its measured recast floor — the reading the
+    // [RES] rows' `a–b s` range gives (`earliestCooldownSecondsFor`)
+    const certainS =
+      earliestCooldownSecondsFor(id, enemy.spec, cd.cooldownSeconds) ??
+      cd.cooldownSeconds;
+    return inHandSince(presses, certainS, cd.charges, renderedSecond) === null;
+  }
+  return false;
 }
 
 /** Since when a tool has had a charge in hand at `atSeconds` (0 = since the

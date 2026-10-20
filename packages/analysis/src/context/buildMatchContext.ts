@@ -28,6 +28,7 @@ import {
   formatBurstLedgerForContext,
 } from "../utils/burstLedger";
 import { enemySourceIds } from "../utils/cannotCastIntervals";
+import { castBarsOfCooldown, castBarStartsInRound } from "../utils/castCancels";
 import { analyzeCcBreaks } from "../utils/ccBreakAnalysis";
 import { analyzePlayerCCAndTrinket } from "../utils/ccTrinketAnalysis";
 import {
@@ -800,9 +801,12 @@ export function buildMatchContext(
   // the [UNUSED] defensive tags in the loadout are not a teaching point (same
   // predicate as the cd-waste candidate gate, see
   // lowPressureUnusedDefensiveNote).
+  const ownerBars = castBarStartsInRound(owner as ICombatUnit, combat);
   const unusedNoteTimeline = lowPressureUnusedDefensiveNote(
     cooldowns,
     matchMinHpPct(owner as ICombatUnit, combat),
+    (cd) =>
+      castBarsOfCooldown(ownerBars, owner as ICombatUnit, cd as never).length,
   );
   if (unusedNoteTimeline) tLines.push(unusedNoteTimeline);
 

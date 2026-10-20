@@ -221,7 +221,7 @@ describe("战报的驱散读者:窗口止于回合结束(与 prompt 同一个 ro
           r.unitName,
           r.label.includes("(我方击杀窗口内)"),
           r.label.includes("(驱散在 CD)"),
-          r.label.includes("(驱散者被控/被锁)"),
+          r.label.includes("(驱散者被控/被锁"),
           r.label.includes("(无视线/超射程)"),
         ]),
       ).toEqual(
@@ -241,7 +241,7 @@ describe("战报的驱散读者:窗口止于回合结束(与 prompt 同一个 ro
           r.tS.toFixed(3),
           r.unitName,
           r.label.includes("(解法在 CD)"),
-          r.label.includes("(驱散者被控/被锁)"),
+          r.label.includes("(驱散者被控/被锁"),
           r.label.includes("(无视线/超射程)"),
           r.label.includes("(对方 DR 未递减,解了易被续控)"),
         ]),

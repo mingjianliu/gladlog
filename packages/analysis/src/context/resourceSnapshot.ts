@@ -198,13 +198,39 @@ export function buildPlayerLoadout(
   // after a save (`guardianSpiritCastCooldownSeconds`); the kit printed
   // `[60s, lasts 12s]` while the [RES] row of a press read `(71s)` — 2,121
   // `cd:` entries of the 605-file capture sat above the kit's own number.
+  let shortenedPrinted = false;
   const cdSecondsLabel = (cd: IMajorCooldownInfo): string => {
     const official = spellEffectData[cd.spellId]?.cooldownSeconds;
-    return cd.spellId === GUARDIAN_SPIRIT_SPELL_ID &&
+    if (
+      cd.spellId === GUARDIAN_SPIRIT_SPELL_ID &&
       official !== undefined &&
       cd.cooldownSeconds < official
-      ? `${cd.cooldownSeconds}s from when it expires unused, ${official}s after a save`
-      : `${cd.cooldownSeconds}s`;
+    )
+      return `${cd.cooldownSeconds}s from when it expires unused, ${official}s after a save`;
+    // fact2 (2026-10-20): a cooldown combat shortens (Anger Management,
+    // `earliestCooldownSeconds`, the corpus floor) prints its range, as the
+    // [RES] rows do — `[90s]` stood beside Bladestorm presses 68.5 s apart
+    // (0b72c44e)
+    // … and so does one whose presses this round came back early by events
+    // (`reductions`, Storm Conduit's bolts — the [RES] rows' realised
+    // reading): the most any press was shortened
+    const eventShortest = Math.max(
+      0,
+      ...(cd.casts ?? []).map((c) =>
+        (c.reductions ?? []).reduce((sum, r) => sum + r.seconds, 0),
+      ),
+    );
+    const soonest = Math.floor(
+      Math.min(
+        cd.earliestCooldownSeconds ?? cd.cooldownSeconds,
+        cd.cooldownSeconds - eventShortest,
+      ),
+    );
+    if (soonest < cd.cooldownSeconds) {
+      shortenedPrinted = true;
+      return `${Math.max(0, soonest)}–${cd.cooldownSeconds}s`;
+    }
+    return `${cd.cooldownSeconds}s`;
   };
   const fmtCDLabel = (cd: IMajorCooldownInfo, caster?: ICombatUnit) =>
     // a proc-only entry's "charges" are inferred from how often it procced
@@ -353,6 +379,7 @@ export function buildPlayerLoadout(
     lines.push("  </unit>");
   }
 
+  if (shortenedPrinted) lines.push(KIT_SHORTENED_CD_LEGEND);
   lines.push("</player_loadout>");
 
   // playerIdMap carries only friendly (owner + teammate) name→ID entries; pid() in
@@ -452,6 +479,10 @@ function lockoutKey(displayName: string, lock: ResPressLockout): string {
 /** A never-pressed cooldown makes no [RES] row on its own in the round's
  * first seconds up to this one (`resStateOf`'s `skip`). */
 export const RES_OPENER_SKIP_S = 5;
+
+/** The kit's `[a–Ns]` (fact2, 2026-10-20): written when a kit carries one. */
+export const KIT_SHORTENED_CD_LEGEND =
+  "  NOTE: `[a–Ns]` on a kit = a cooldown that combat shortens (a talent like Anger Management, or presses this round brought back early by events): it is back N s after a press at the latest, and has been seen back after a s at the soonest — the same range the [RES] rows print.";
 
 /**
  * One cooldown's state on a [RES] line, through the shared predicate

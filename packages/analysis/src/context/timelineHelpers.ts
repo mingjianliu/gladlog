@@ -509,11 +509,17 @@ export function extractOwnerCDBuffExpiry(
     //    198589 → 212800) — asked through the one cast→effect resolution, it
     //    had no fade line at all.
     const ownAuraIds = new Set([cd.spellId, ...ownEffectAurasOfCast(cd.spellId)]);
+    // fact2 (2026-10-20): a BUFF — the owner's control reflected back onto
+    // the owner lands as the owner's own DEBUFF (3f21c5db 0:24: Mortal Coil
+    // 6789, Dekayla > Dekayla) and is no cooldown buff of the owner's
+    const isOwnBuffRow = (event: { auraType?: string }) =>
+      event.auraType !== "DEBUFF";
     const seenAuraId = (id: string) =>
       friends.some((friend) =>
         friend.auraEvents.some(
           (event) =>
             event.spellId === id &&
+            isOwnBuffRow(event) &&
             event.srcUnitId === ownerId &&
             ((event.logLine.event as LogEvent) ===
               LogEvent.SPELL_AURA_APPLIED ||
@@ -525,6 +531,7 @@ export function extractOwnerCDBuffExpiry(
       friend.auraEvents.some(
         (event) =>
           ownAuraIds.has(event.spellId) &&
+          isOwnBuffRow(event) &&
           event.srcUnitId === ownerId &&
           ((event.logLine.event as LogEvent) === LogEvent.SPELL_AURA_APPLIED ||
             (event.logLine.event as LogEvent) === LogEvent.SPELL_AURA_REMOVED),
@@ -569,7 +576,7 @@ export function extractOwnerCDBuffExpiry(
       // a same-ms REMOVED→APPLIED re-broadcast is not the buff ending (3306:
       // "Obsidian Scales ended early" on a Dracthyr visage swap)
       for (const event of dropAuraRebroadcasts(friend.auraEvents)) {
-        const isMatch = event.spellId === endAuraId;
+        const isMatch = event.spellId === endAuraId && isOwnBuffRow(event);
         if (
           isMatch &&
           event.srcUnitId === ownerId &&

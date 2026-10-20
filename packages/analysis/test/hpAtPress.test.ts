@@ -70,6 +70,24 @@ describe("hpAtPress", () => {
     expect(getUnitHpAtTimestamp(u, pressMs)).toBe(89);
   });
 
+  it("fact2: a HoT's first tick right after its own fresh APPLIED is the press's heal (0457a45e Frenzied Regeneration)", () => {
+    const FR = "22842";
+    const tick = { ...heal(FR, "P", 49.805), logLine: { timestamp: T0 + 49_805, parameters: [], event: LogEvent.SPELL_PERIODIC_HEAL } };
+    const applied = { spellId: FR, srcUnitId: "P", logLine: { timestamp: T0 + 49_804, event: LogEvent.SPELL_AURA_APPLIED } };
+    const mk = (withApplied: boolean) => ({
+      ...unit([sample("P", 49.7, 587), sample("P", 49.805, 620)], [tick]),
+      auraEvents: (withApplied ? [applied] : []) as never,
+    });
+    expect(hpAtPress(mk(true), T0 + 49_806, { spellId: FR, srcUnitId: "P" })).toBe(59);
+    // control: a tick of an earlier application is not this press
+    expect(hpAtPress(mk(false), T0 + 49_806, { spellId: FR, srcUnitId: "P" })).toBe(62);
+  });
+
+  it("fact2 C10: the press's heal under its effect id (Dream Breath 355936 heals as 355941)", () => {
+    const u = unit([sample("P", 10.9, 860), sample("P", 11.0, 910)], [heal("355941", "P", 11.0)]);
+    expect(hpAtPress(u, T0 + 11_001, { spellId: "355936", srcUnitId: "P" })).toBe(86);
+  });
+
   it("without an own heal: the last sample strictly before the press", () => {
     const u = unit([
       sample("P", 10.0, 500),

@@ -130,6 +130,57 @@
  *    (immune…` line at its second; a KILL ATTEMPTS line on that unit whose
  *    bracket + 5 s holds the form's start must not end `not enough damage`.
  *
+ *  - `areaWallPopped` (new: Darkness): a KILL ATTEMPTS line on X whose
+ *    bracket holds X's own Darkness 196718 press, with a SPELL_ABSORBED row
+ *    of its 209426 on X in the bracket + 5 s, must not end `healed through` /
+ *    `not enough damage`.
+ *  - `effectProvesUse` (new: cast row missing): a loadout `X [..] [UNUSED]`
+ *    of a unit that (or whose pet) applied X's own effect aura this round
+ *    (castEffectAuraGenerated, same name, ≥ 50 % of casts) while the round
+ *    has no cast row of X.
+ *
+ *  - `exposureOnCd` (new: healer exposure): a `[HEALER EXPOSURE]` line's `IN
+ *    LoS: <enemy>: <control> <DR>` entry. When that enemy pressed the
+ *    control (a SPELL_CAST_SUCCESS whose English name is the control's, or
+ *    whose own-effect aura's is) before the line's second, and its
+ *    talent-resolved single-charge cooldown (`unitCooldownOf`, the shared
+ *    cooldown fact) has not run out by then, the entry is wrong.
+ *  - `lockedShare` (new: dispel feasibility): a missed-purge / uncleansed
+ *    exemption `CC'd/locked out` (line or folded note) must state the
+ *    measured share, `for N.Ns of it` — the gate is "free time < the
+ *    reaction bar", which a 2.2 s Sleep Walk in a 5 s window meets.
+ *  - `friendlyBacklash` (new: friendly-sourced control): a dispel backlash
+ *    (Sin and Punishment 87204 / 196364) APPLIED on a player of the owner's
+ *    side by a unit of the owner's side needs a `[CC ON TEAM]   <pid> ←
+ *    <name>` line at its second.
+ *  - `aoeMissAvoided` (new: untargeted area control): a failed-control miss
+ *    (`CONTROL_FAILED_MISS_TYPES`) of a control (`isControlCast`) on a
+ *    player of the owner's side, from an enemy cast of it with no
+ *    destination within 1 s before, while that player had an avoidance buff
+ *    up that `applicableCCAvoidanceIds` admits for it, needs a `[CC
+ *    AVOIDED?]   <pid>: <name>` line at its second.
+ *  - `hardCastLanded` (new: hard-cast outcome): an `[ENEMY HARD CAST]` line
+ *    says `landed` iff the completed cast (the caster's SUCCESS of that
+ *    spell after the line's second) has a damage row of it on its target,
+ *    or a SPELL_ABSORBED row of it on that target, inside 2.5 s.
+ *  - `periodicImmune` (new: DoT ticks): a `[YOU]` / `[TEAM]` press line
+ *    tagged `[IMMUNE…` whose spell's IMMUNE rows inside 3 s of the press are
+ *    all SPELL_PERIODIC_MISSED (later ticks) is wrong.
+ *  - `hotPressHp` (new: press HP): a `[YOU] [CD]   <Spell> (self: N% HP`
+ *    line whose press has its own heal row on the owner within 50 ms: N is
+ *    the owner's last reading strictly before that heal (± 1).
+ *  - `fadedDebuff` (new: reflected control): a `[BUFF FADED]   X` line while
+ *    the owner's only X rows that round are DEBUFFs it put on itself.
+ *  - `nonControlCount` (new: CC USE): a `Counts:` entry whose spell, when the
+ *    owner pressed it, put auras only on the owner's side (BUFFs) and none
+ *    on an enemy, is no control.
+ *  - `kickedHeldNote` (new: loadout NOTE): a cooldown the NOTE calls
+ *    `correctly HELD` must have no SPELL_CAST_START of the owner's.
+ *  - `kitRange` (new: kit cooldown): a loadout `Name [Ns` single value of a
+ *    unit whose [RES] rows print that cooldown as a range (`Name(a–bs)`,
+ *    the ledger's earliest–official reading) is wrong — the kit must print
+ *    the same range.
+ *
  *   npx tsx packages/eval/scripts/fact2Scan.ts <captureDir> [--examples N] [--archive-dir <dir>]
  */
 import { readdirSync, readFileSync } from "node:fs";
@@ -141,9 +192,17 @@ import castEffectAuraGenerated from "@gladlog/analysis/src/data/castEffectAuraGe
 import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData";
 import {
   cdAvailableAt,
+  earliestCooldownSecondsFor,
   extractMajorCooldowns,
   isEnemyCdWindowSpell,
+  specToString,
+  unitCooldownOf,
 } from "@gladlog/analysis/src/utils/cooldowns";
+import {
+  CONTROL_FAILED_MISS_TYPES,
+  isControlCast,
+} from "@gladlog/analysis/src/utils/castMissRows";
+import { applicableCCAvoidanceIds } from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
 import { MOVEMENT_ROOT_BREAK_DISPEL_IDS } from "@gladlog/analysis/src/utils/dispelKind";
 import {
   isExternalSaveId,
@@ -198,6 +257,19 @@ const CHECKS = [
   "resOpener",
   "riderAsCleanse",
   "sorImmune",
+  "areaWallPopped",
+  "effectProvesUse",
+  "exposureOnCd",
+  "lockedShare",
+  "friendlyBacklash",
+  "aoeMissAvoided",
+  "hardCastLanded",
+  "periodicImmune",
+  "hotPressHp",
+  "fadedDebuff",
+  "nonControlCount",
+  "kickedHeldNote",
+  "kitRange",
 ] as const;
 
 /** cast → the auras that are its own effect under another id (read straight
@@ -369,8 +441,7 @@ for (const f of files) {
     }
   for (const l of lines) {
     const m = /^(\d+:\d\d) {2}\[ENEMY (?:DEF|TRINKET)\]/.exec(l);
-    // an area save's line carries no tags at all (ruling A15)
-    if (!m || l.endsWith(" (area)")) continue;
+    if (!m) continue;
     const ms = start + secOf(m[1]!) * 1000;
     if (!offensiveRuns.some(([a, b]) => a <= ms && ms < b)) continue;
     bump("offensiveTag");
@@ -945,6 +1016,344 @@ for (const f of files) {
           miss("sorImmune", `${where} ${km[1]}–${km[2]} on ${u.name}: not enough damage, form at ${t}`);
         }
       }
+    }
+  }
+  // Darkness pressed by the attempt's own target
+  for (const l of lines) {
+    const km = /^ {2}\[(\d+:\d\d)–(\d+:\d\d)\] on (\S+) — .*\| (?:FAILED: )?(.*)$/.exec(l);
+    if (!km) continue;
+    const target = byName.get(km[3]!);
+    if (!target) continue;
+    const from = start + secOf(km[1]!) * 1000;
+    const to = start + (secOf(km[2]!) + 1) * 1000;
+    const press = ((target.spellCastEvents ?? []) as any[]).find(
+      (c) =>
+        c.spellId === "196718" &&
+        c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+        c.logLine.timestamp >= from &&
+        c.logLine.timestamp < to,
+    );
+    if (!press) continue;
+    const ate = ((target.absorbsIn ?? []) as any[]).some(
+      (a) =>
+        a.spellId === "209426" &&
+        a.logLine.timestamp >= press.logLine.timestamp &&
+        a.logLine.timestamp <= to + 5000,
+    );
+    if (!ate) continue;
+    bump("areaWallPopped");
+    if (/^(healed through|not enough damage)/.test(km[4]!))
+      miss("areaWallPopped", `${where} ${km[1]}–${km[2]} on ${target.name}: ${km[4]!.slice(0, 40)} with its own Darkness`);
+  }
+  // a cooldown whose own effect proves a press the round has no row of
+  {
+    const casts = (castEffectAuraGenerated as any).casts as Record<string, any[]>;
+    let cur: any;
+    for (const l of lines) {
+      const um = /<unit id="(\d+)" name="([^"]+)"/.exec(l);
+      if (um) cur = byName.get(um[2]!);
+      if (!cur || !l.includes("<cooldowns>")) continue;
+      for (const m of l.matchAll(/(?:<cooldowns>|, )([^,<[]+?) \[[^\]]*\](?: \[[^\]]*\])* ?\[UNUSED\]/g)) {
+        const name = m[1]!.trim();
+        for (const [cast, rows] of Object.entries(casts)) {
+          if (getEnglishSpellName(cast, "") !== name) continue;
+          if (((cur.spellCastEvents ?? []) as any[]).some((c) => c.spellId === cast && c.logLine.event === LogEvent.SPELL_CAST_SUCCESS && c.logLine.timestamp >= start && c.logLine.timestamp <= legacy.endTime)) continue;
+          const effects = rows.filter((r) => r.aura !== cast && r.via?.includes("name") && r.hits >= 0.5 * r.casts).map((r) => r.aura);
+          if (effects.length === 0) continue;
+          const src = new Set([cur.id, ...units.filter((u) => u.ownerId === cur.id).map((u) => u.id)]);
+          const seen = units.some((u) =>
+            ((u.auraEvents ?? []) as any[]).some(
+              (a) =>
+                a.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
+                effects.includes(a.spellId) &&
+                src.has(a.srcUnitId) &&
+                a.logLine.timestamp >= start &&
+                a.logLine.timestamp <= legacy.endTime,
+            ),
+          );
+          bump("effectProvesUse");
+          if (seen) miss("effectProvesUse", `${where} ${cur.name} ${name} [UNUSED] but its effect went out`);
+        }
+      }
+    }
+  }
+  // enemy controls the exposure list names while they are on cooldown
+  {
+    const enemies = units.filter(
+      (u) => u.type === 1 && u.reaction !== owner.reaction,
+    );
+    const enemyOfRef = (ref: string): any => {
+      const named = /^(.*) \(([^)]+)\)$/.exec(ref);
+      if (named) return byName.get(named[2]!) ?? byName.get(pidName.get(named[2]!) ?? "");
+      const bySpec = enemies.filter((u) => specToString(u.spec) === ref);
+      return bySpec.length === 1 ? bySpec[0] : undefined;
+    };
+    for (const l of lines) {
+      const em = /^(\d+:\d\d) {2}\[HEALER EXPOSURE\] .*? \| IN LoS: (.*?)(?: \| |$)/.exec(l);
+      if (!em) continue;
+      const tMs = start + secOf(em[1]!) * 1000;
+      for (const group of em[2]!.split("; ")) {
+        const gi = group.indexOf(": ");
+        const enemy = enemyOfRef(group.slice(0, gi));
+        if (!enemy) continue;
+        for (const item of group.slice(gi + 2).split(", ")) {
+          const name = item.replace(/ (?:Full|50%) DR$/, "");
+          const presses = ((enemy.spellCastEvents ?? []) as any[]).filter(
+            (c) =>
+              c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+              c.logLine.timestamp < tMs &&
+              (getEnglishSpellName(c.spellId, "") === name ||
+                (OWN_SPLIT.get(c.spellId) ?? []).some(
+                  (a) => getEnglishSpellName(a, "") === name,
+                )),
+          );
+          const last = presses.at(-1);
+          if (!last) continue;
+          const cd = unitCooldownOf(enemy, last.spellId);
+          if (!cd || !cd.talentsKnown || cd.charges !== 1 || !(cd.cooldownSeconds > 0))
+            continue;
+          // the press is matched by name: a different id of the same name
+          // (Chastise's cast and its stun) reads the press's own cooldown
+          bump("exposureOnCd");
+          const certainS =
+            earliestCooldownSecondsFor(last.spellId, enemy.spec, cd.cooldownSeconds) ??
+            cd.cooldownSeconds;
+          if (last.logLine.timestamp + certainS * 1000 > tMs)
+            miss(
+              "exposureOnCd",
+              `${where} ${em[1]} ${enemy.name} ${name}: pressed ${fmtS((last.logLine.timestamp - start) / 1000)}, cd ${cd.cooldownSeconds}s`,
+            );
+        }
+      }
+    }
+  }
+  for (const u of units) {
+    if (u.reaction !== owner.reaction || u.type !== 1) continue;
+    const me = pidOf.get(u.name);
+    if (!me) continue;
+    for (const a of (u.auraEvents ?? []) as any[]) {
+      if (a.spellId !== "87204" && a.spellId !== "196364") continue;
+      if (a.logLine.event !== LogEvent.SPELL_AURA_APPLIED) continue;
+      if (!ourSide.has(a.srcUnitId) || a.srcUnitId === u.id) continue;
+      const ts = a.logLine.timestamp;
+      if (ts < start || ts > legacy.endTime) continue;
+      const t = fmtS((ts - start) / 1000);
+      const name = getEnglishSpellName(a.spellId, "");
+      bump("friendlyBacklash");
+      if (!lines.some((l) => l.startsWith(`${t}  [CC ON TEAM]   ${me}(`) && l.includes(`← ${name} `)))
+        miss("friendlyBacklash", `${where} ${t} ${u.name}: ${name} from a teammate, no [CC ON TEAM]`);
+    }
+  }
+  for (const u of units) {
+    if (u.reaction !== owner.reaction || u.type !== 1) continue;
+    const me = pidOf.get(u.name);
+    if (!me) continue;
+    for (const m of (u.missesIn ?? []) as any[]) {
+      if (!m.spellId || !CONTROL_FAILED_MISS_TYPES.has(m.missType)) continue;
+      if (!isControlCast(m.spellId)) continue;
+      const src = units.find((x) => x.id === m.srcUnitId);
+      if (!src || src.reaction === owner.reaction) continue;
+      const cast = ((src.spellCastEvents ?? []) as any[]).find(
+        (c) =>
+          c.spellId === m.spellId &&
+          c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+          c.logLine.timestamp <= m.timestamp &&
+          c.logLine.timestamp >= m.timestamp - 1000,
+      );
+      if (!cast || (cast.destUnitId && cast.destUnitId !== "0000000000000000")) continue;
+      if (m.timestamp < start || m.timestamp > legacy.endTime) continue;
+      const name = getEnglishSpellName(m.spellId, "");
+      const ok = applicableCCAvoidanceIds(m.spellId, name);
+      const up = ((u.auraEvents ?? []) as any[]).some((a) => {
+        if (!ok.has(a.spellId) || a.logLine.event !== LogEvent.SPELL_AURA_APPLIED) return false;
+        if (a.logLine.timestamp > m.timestamp) return false;
+        return !((u.auraEvents ?? []) as any[]).some(
+          (r) =>
+            r.spellId === a.spellId &&
+            r.logLine.event === LogEvent.SPELL_AURA_REMOVED &&
+            r.logLine.timestamp >= a.logLine.timestamp &&
+            r.logLine.timestamp < m.timestamp,
+        );
+      });
+      if (!up) continue;
+      const t = fmtS((m.timestamp - start) / 1000);
+      bump("aoeMissAvoided");
+      if (!lines.some((l) => l.startsWith(`${t}  [CC AVOIDED?]   ${me}(`) && l.includes(`: ${name} (by `)))
+        miss("aoeMissAvoided", `${where} ${t} ${u.name}: ${name} ${m.missType}, no [CC AVOIDED?]`);
+    }
+  }
+  {
+    const nameOf = (id: string) => getEnglishSpellName(id, "");
+    const isOf = (id: string, name: string) =>
+      nameOf(id) === name || (OWN_SPLIT.get(id) ?? []).some((a) => nameOf(a) === name);
+    const succOf = (u: any, name: string, fromMs: number, toMs: number) =>
+      ((u.spellCastEvents ?? []) as any[]).find(
+        (c) =>
+          c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+          c.logLine.timestamp >= fromMs &&
+          c.logLine.timestamp < toMs &&
+          nameOf(c.spellId) === name,
+      );
+    for (const l of lines) {
+      // [ENEMY HARD CAST]
+      const hm = /^(\d+:\d\d) {2}\[ENEMY HARD CAST\] {3}(\d+)\([^)]*\): (.+?)(?: → [^ ]+)? \((\d+\.\d)s cast, (landed|went off[^)]*)\)/.exec(l);
+      if (hm) {
+        const caster = byName.get(pidName.get(hm[2]!) ?? "");
+        const t = start + secOf(hm[1]!) * 1000;
+        // the bar started inside the line's second and ran the printed
+        // length: its SUCCESS sits in [t + cast, t + 1 + cast] (± rounding)
+        const castMs = Number(hm[4]) * 1000;
+        const succ = caster && succOf(caster, hm[3]!, t + castMs - 100, t + 1000 + castMs + 100);
+        if (succ) {
+          const sMs = succ.logLine.timestamp;
+          const dest = succ.destUnitId;
+          const inR = (ms: number) => ms >= sMs && ms <= sMs + 2500;
+          const hit =
+            ((caster.damageOut ?? []) as any[]).some(
+              (d) => d.spellId === succ.spellId && d.destUnitId === dest && inR(d.logLine.timestamp),
+            ) ||
+            ((units.find((u) => u.id === dest)?.absorbsIn ?? []) as any[]).some(
+              (a) => a.attackerId === caster.id && a.attackSpellId === succ.spellId && inR(a.timestamp),
+            );
+          bump("hardCastLanded");
+          if (hit !== (hm[5] === "landed"))
+            miss("hardCastLanded", `${where} ${hm[1]} ${caster.name} ${hm[3]}: printed ${hm[5]}, log ${hit ? "hit" : "no hit"}`);
+        }
+      }
+      // [IMMUNE on a press line
+      const im = /^(\d+:\d\d) {2}\[(YOU|TEAM)\] \[[A-Z]+\] {3}(?:(\d+)\([^)]*\)(?: \([^)]*\))?: )?(.+?)(?: →| \(| \[)[^\n]*\[IMMUNE/.exec(l);
+      if (im) {
+        const caster = im[2] === "YOU" ? owner : byName.get(pidName.get(im[3] ?? "") ?? "");
+        const t = start + secOf(im[1]!) * 1000;
+        const succ = caster && succOf(caster, im[4]!, t, t + 1000);
+        if (succ) {
+          const rows = ((caster.missesOut ?? []) as any[]).filter(
+            (m) =>
+              m.missType === "IMMUNE" &&
+              m.spellId &&
+              isOf(m.spellId, im[4]!) &&
+              m.timestamp >= succ.logLine.timestamp - 100 &&
+              m.timestamp <= succ.logLine.timestamp + 3000,
+          );
+          if (rows.length > 0) {
+            bump("periodicImmune");
+            if (rows.every((m) => m.logLine?.event === LogEvent.SPELL_PERIODIC_MISSED))
+              miss("periodicImmune", `${where} ${im[1]} ${caster.name} ${im[4]}: only DoT ticks were IMMUNE`);
+          }
+        }
+      }
+      // press HP under the press's own first heal
+      const pm = /^(\d+:\d\d) {2}\[YOU\] \[CD\] {3}(.+?) \(self: (\d+)% HP/.exec(l);
+      if (pm) {
+        const t = start + secOf(pm[1]!) * 1000;
+        const succ = succOf(owner, pm[2]!, t, t + 1000);
+        if (succ) {
+          const sMs = succ.logLine.timestamp;
+          const heals = ((owner.healIn ?? []) as any[]).filter(
+            (h) =>
+              h.srcUnitId === owner.id &&
+              h.spellId &&
+              isOf(h.spellId, pm[2]!) &&
+              Math.abs(h.logLine.timestamp - sMs) <= 50,
+          );
+          if (heals.length > 0) {
+            const hMs = Math.min(...heals.map((h) => h.logLine.timestamp));
+            const acts = ((owner.advancedActions ?? []) as any[])
+              .filter((a) => a.advancedActorId === owner.id && a.advancedActorMaxHp > 0 && a.logLine.timestamp < hMs)
+              .sort((x, y) => x.logLine.timestamp - y.logLine.timestamp);
+            const before = acts.at(-1);
+            if (before) {
+              const want = (before.advancedActorCurrentHp / before.advancedActorMaxHp) * 100;
+              bump("hotPressHp");
+              if (Math.abs(Number(pm[3]) - want) > 1.5)
+                miss("hotPressHp", `${where} ${pm[1]} ${pm[2]}: printed ${pm[3]}%, before its heal ${want.toFixed(1)}%`);
+            }
+          }
+        }
+      }
+      // [BUFF FADED] of a reflected control
+      const fm = /^(\d+:\d\d) {2}\[BUFF FADED\] {3}(.+?) \(/.exec(l);
+      if (fm) {
+        const rows = ((owner.auraEvents ?? []) as any[]).filter(
+          (a) => a.srcUnitId === owner.id && a.spellId && isOf(a.spellId, fm[2]!),
+        );
+        if (rows.some((a) => a.auraType === "DEBUFF")) {
+          bump("fadedDebuff");
+          if (rows.every((a) => a.auraType === "DEBUFF"))
+            miss("fadedDebuff", `${where} ${fm[1]} ${fm[2]}: the owner's only rows are its own DEBUFF`);
+        }
+      }
+      // CC USE Counts
+      const cm = /^\s*Counts: (.*)$/.exec(l);
+      if (cm) {
+        for (const part of cm[1]!.split(" · ")) {
+          const name = /^(.+?) cast /.exec(part)?.[1];
+          if (!name) continue;
+          const presses = ((owner.spellCastEvents ?? []) as any[]).filter(
+            (c) => c.logLine.event === LogEvent.SPELL_CAST_SUCCESS && nameOf(c.spellId) === name,
+          );
+          if (presses.length === 0) continue;
+          const ids = new Set(presses.flatMap((c) => [c.spellId, ...(OWN_SPLIT.get(c.spellId) ?? [])]));
+          let ours = 0;
+          let theirs = 0;
+          for (const u of units)
+            for (const a of (u.auraEvents ?? []) as any[]) {
+              if (a.srcUnitId !== owner.id || !ids.has(a.spellId)) continue;
+              if (a.logLine.event !== LogEvent.SPELL_AURA_APPLIED) continue;
+              if (u.reaction === owner.reaction) ours++;
+              else theirs++;
+            }
+          if (ours + theirs === 0) continue;
+          bump("nonControlCount");
+          if (theirs === 0)
+            miss("nonControlCount", `${where} ${name}: ${ours} applications, all on the owner's side`);
+        }
+      }
+      // the low-pressure NOTE
+      const nm = /never-used self-only defensive cooldowns \((.+?)\) were correctly HELD/.exec(l);
+      if (nm) {
+        for (const name of nm[1]!.split(", ")) {
+          bump("kickedHeldNote");
+          const started = ((owner.castStartEvents ?? []) as any[]).some(
+            (c) =>
+              nameOf(c.spellId) === name &&
+              c.logLine.timestamp >= start &&
+              c.logLine.timestamp <= legacy.endTime,
+          );
+          if (started) miss("kickedHeldNote", `${where} ${name}: a cast bar was started`);
+        }
+      }
+    }
+    // loadout single-value cooldowns vs the [RES] rows' own range for them
+    const ranged = new Set<string>();
+    for (const l of lines) {
+      if (!/^ {6}\[RES\]/.test(l)) continue;
+      const cdPart = / cd:(\S+)/.exec(l)?.[1];
+      if (!cdPart) continue;
+      for (const e of cdPart.split(",")) {
+        const rm = /^(?:(\d+):)?(.+?)\(\d+–\d+s\)/.exec(e);
+        if (rm) ranged.add(`${rm[1] ?? "1"}|${rm[2]}`);
+      }
+    }
+    let curPid = "";
+    for (const l of lines) {
+      const um = /<unit id="(\d+)" name="([^"]+)"/.exec(l);
+      if (um) curPid = um[1]!;
+      if (!curPid || !l.includes("<cooldowns>")) continue;
+      for (const m of l.matchAll(/(?:<cooldowns>|, )([^,<[]+?) \[(\d+(?:–\d+)?)s/g)) {
+        const name = m[1]!.trim();
+        if (!ranged.has(`${curPid}|${name}`)) continue;
+        bump("kitRange");
+        if (!m[2]!.includes("–"))
+          miss("kitRange", `${where} ${curPid}:${name} [${m[2]}s] while [RES] prints a range`);
+      }
+    }
+  }
+  for (const l of lines) {
+    for (const m of l.matchAll(/CC'd\/locked out([^—;|)]*)/g)) {
+      bump("lockedShare");
+      if (!/^ for \d+\.\ds of it\s*$/.test(m[1]!))
+        miss("lockedShare", `${where} ${l.trim().slice(0, 100)}`);
     }
   }
   let ledgerTarget: any;

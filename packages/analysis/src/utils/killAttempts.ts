@@ -69,13 +69,18 @@ import { isDamageImmuneControl } from "../analysis/candidates/massDispel";
 import { schoolShareCoveredBy } from "../analysis/crisisDecisionPoints";
 import { fmtFactTime } from "../analysis/factFormat";
 import { CandidateEvent } from "../analysis/types";
-import { castAndEffectIds, castKeyOfAura } from "../data/castEffectAuras";
+import {
+  castAndEffectIds,
+  castKeyOfAura,
+  nominatedEffectAurasOfCast,
+} from "../data/castEffectAuras";
 import {
   resolveMitigation,
   strongestComponentPct,
 } from "../data/mitigationComponents";
 import { ATTEMPT_INTO_TRINKET_OUTCOME_REF } from "../data/outcomeRefs";
 import { getEnglishSpellName } from "../data/spellEffectData";
+import { ENEMY_AREA_SAVE_IDS } from "../data/spellIdLists";
 import { TIMELINE_LINE_FLAGS } from "../data/timelineLineFlags";
 import { burstCastSpan, KILL_CREDIT_SLACK_S } from "./burstLedger";
 import {
@@ -1763,6 +1768,45 @@ function attributeFailure(
       defensivePopped.push(getEnglishSpellName(iv.spellId, iv.spellName));
       defensivePoppedAtS.push(iv.fromS);
     }
+  }
+
+  // fact2 (2026-10-20, Darkness): the target's own press of an AREA save
+  // that is a wall (`ENEMY_AREA_SAVE_IDS` ∩ the wall rows) inside the span,
+  // whose effect the log shows on the target — an aura of it, or a shield
+  // row of its DB2 effect (`nominatedEffectAurasOfCast`, class-owned) eating
+  // a hit. Darkness never APPLIES an aura (only SPELL_ABSORBED rows of
+  // 209426), so the aura loop above never saw it: e49b7c3b 2:40, pressed
+  // 41 ms into the attempt, 625k absorbed, `FAILED: healed through`.
+  for (const c of target.spellCastEvents ?? []) {
+    if (c.logLine.event !== LogEvent.SPELL_CAST_SUCCESS || !c.spellId) continue;
+    if (!ENEMY_AREA_SAVE_IDS.has(c.spellId)) continue;
+    if (!MITIGATION_AURA_IDS.has(c.spellId) && !WALL_IN_HAND_MIT_IDS.has(c.spellId))
+      continue;
+    const castMs = c.logLine.timestamp;
+    if (!inSave(castMs) || poppedIds.has(c.spellId)) continue;
+    const effects = new Set([
+      ...castAndEffectIds(c.spellId),
+      ...nominatedEffectAurasOfCast(c.spellId, { classOwned: true }),
+    ]);
+    const endMs = creditToMs;
+    const onTarget =
+      targetIntervals.some(
+        (iv) =>
+          effects.has(iv.spellId) &&
+          iv.fromS * 1000 + matchStartMs >= castMs - 500 &&
+          iv.fromS * 1000 + matchStartMs <= endMs,
+      ) ||
+      (target.absorbsIn ?? []).some(
+        (a) =>
+          !!a.spellId &&
+          effects.has(a.spellId) &&
+          a.logLine.timestamp >= castMs &&
+          a.logLine.timestamp <= endMs,
+      );
+    if (!onTarget) continue;
+    poppedIds.add(c.spellId);
+    defensivePopped.push(getEnglishSpellName(c.spellId, c.spellName));
+    defensivePoppedAtS.push((castMs - matchStartMs) / 1000);
   }
 
   const externalReceived: string[] = [];

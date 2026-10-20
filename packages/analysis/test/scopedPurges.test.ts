@@ -311,7 +311,7 @@ describe("Shattering Throw against an immunity shield", () => {
       true,
     );
     expect(purgeLines(late, [late], enemyWith("45438", 10, 20))).toEqual([
-      "0:10  [MISSED PURGE OPPORTUNITY]   Ice Block active on 2(FMage) (unpurged for 10s) | your removal for it: Shattering Throw (immunity shields only, 1.5s cast) | purgers were CC'd/locked out — not actionable",
+      "0:10  [MISSED PURGE OPPORTUNITY]   Ice Block active on 2(FMage) (unpurged for 10s) | your removal for it: Shattering Throw (immunity shields only, 1.5s cast) | purgers were CC'd/locked out for 6.5s of it — not actionable",
     ]);
     const early = stunnedUntil(15.4); // 4.6 s free
     const earlyDs = summary([early], enemyWith("45438", 10, 20));
@@ -404,6 +404,7 @@ describe("a general purger's window is untouched by a scoped teammate", () => {
         },
         purgeReadyAtSeconds: 185,
         lockedOut: false,
+        blockedS: 0,
         losReachable: null,
       },
     ]);

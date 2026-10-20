@@ -863,6 +863,16 @@ export function controlLandedResponses(
         castId === sid ||
         isCastOrEffect(castId, sid) ||
         (sidName !== "" && getEnglishSpellName(castId, "") === sidName);
+      // fact2 (2026-10-20): an untargeted press that makes a control of its
+      // own (its cast→effect family holds a control aura — Freezing Trap
+      // 187650 → 3355) is that control's cause, never this one's
+      // (e49b7c3b 0:12: Binding Shot, armed 5.1 s before its stun, was
+      // timed from a Freezing Trap thrown 1.2 s after the opener — the aura
+      // time is the fallback the fuse comment above names)
+      const producesAControl = (castId: string): boolean =>
+        [...castAndEffectIds(castId)].some(
+          (id) => ccSpellIds.has(id) || rootSpellIds.has(id),
+        );
       let family: (typeof friendlyCasts)[number] | undefined;
       let aimedControl: (typeof friendlyCasts)[number] | undefined;
       let untargeted: (typeof friendlyCasts)[number] | undefined;
@@ -879,7 +889,8 @@ export function controlLandedResponses(
             rootSpellIds.has(c.spellId))
         )
           aimedControl = c;
-        else if (isNoDest(c.dest)) untargeted = c;
+        else if (isNoDest(c.dest) && !producesAControl(c.spellId))
+          untargeted = c;
       }
       const cast = family ?? aimedControl ?? untargeted;
       // the cast-side test already counted an aimed control from this

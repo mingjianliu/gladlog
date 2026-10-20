@@ -317,15 +317,20 @@ describe("[CC AVOIDED?] — each delayed cast reads its own pulse (codex 20-F15-
         own(LogEvent.SPELL_AURA_REMOVED, 13_000, 600),
       ],
     });
+    // the pulses are IMMUNE misses on a mate: a pulse that STUNNED another
+    // unit while no miss fell on the player says the player was not in it,
+    // and an immunity buff then avoided nothing (fact2, 2026-10-20)
     const pulse = (atMs: number, line: number) => ({
-      ...aura(LogEvent.SPELL_AURA_APPLIED, STATIC_CHARGE, atMs, line),
+      spellId: STATIC_CHARGE,
+      spellName: "Static Charge",
       srcUnitId: "totem-1",
       destUnitId: "mate-1",
+      missType: "IMMUNE",
+      timestamp: T0 + atMs,
+      logLine: { event: LogEvent.SPELL_MISSED, timestamp: T0 + atMs, lineIndex: line },
     });
-    const mate = makeUnit("mate-1", {
-      name: "Mate",
-      auraEvents: [pulse(12_000, 500), pulse(14_000, 700)],
-    });
+    const mate = makeUnit("mate-1", { name: "Mate" });
+    (mate as { missesIn?: unknown[] }).missesIn = [pulse(12_000, 500), pulse(14_000, 700)];
     const combat = {
       startTime: T0,
       endTime: T0 + 60_000,
@@ -344,6 +349,47 @@ describe("[CC AVOIDED?] — each delayed cast reads its own pulse (codex 20-F15-
     // … read at its own 12 s pulse, the instant the next cast was pressed
     // (codex 20-F15-28: cut at that cast, it fell back to the 10 s cast)
     expect(out.map((a) => a.atSeconds)).toEqual([12]);
+  });
+});
+
+describe("[CC AVOIDED?] — a control that went off on another unit (fact2)", () => {
+  const run = (pulseStunsMate: boolean, buff: string) => {
+    const enemy = makeUnit("enemy-1", {
+      name: "Shaman",
+      spec: CombatUnitSpec.Shaman_Enhancement,
+      reaction: CombatUnitReaction.Hostile,
+      spellCastEvents: [
+        makeSpellCastEvent(CAPACITOR_TOTEM, T0 + 10_000, "0000000000000000", "nil", "enemy-1", "Shaman", 0, getEnglishSpellName(CAPACITOR_TOTEM)),
+      ],
+    });
+    const totem = makeUnit("totem-1", { name: "Totem", ownerId: "enemy-1" });
+    const player = makeUnit("player-1", {
+      name: "Player",
+      spec: CombatUnitSpec.Evoker_Preservation,
+      reaction: CombatUnitReaction.Friendly,
+      auraEvents: [
+        { ...aura(LogEvent.SPELL_AURA_APPLIED, buff, 9000, 1), srcUnitId: "player-1", destUnitId: "player-1" },
+        { ...aura(LogEvent.SPELL_AURA_REMOVED, buff, 15_000, 900), srcUnitId: "player-1", destUnitId: "player-1" },
+      ],
+    });
+    const mate = makeUnit("mate-1", {
+      name: "Mate",
+      auraEvents: pulseStunsMate
+        ? [{ ...aura(LogEvent.SPELL_AURA_APPLIED, STATIC_CHARGE, 12_000, 500), srcUnitId: "totem-1", destUnitId: "mate-1" }]
+        : [],
+    });
+    const combat = {
+      startTime: T0,
+      endTime: T0 + 60_000,
+      startInfo: { zoneId: "1672" },
+      units: { [player.id]: player, [enemy.id]: enemy, [totem.id]: totem, [mate.id]: mate },
+    };
+    return analyzePlayerCCAndTrinket(player, [enemy], combat as never, [totem]).ccAvoidedInstances.length;
+  };
+  it("the pulse stunned a mate and no miss fell on the player: Nullifying Shroud avoided nothing", () => {
+    expect(run(true, SHROUD)).toBe(0);
+    // control: a totem that stunned nobody keeps its line
+    expect(run(false, SHROUD)).toBe(1);
   });
 });
 

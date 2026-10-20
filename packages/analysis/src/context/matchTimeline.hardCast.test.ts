@@ -153,11 +153,40 @@ describe("F170 [ENEMY HARD CAST]", () => {
       },
     );
 
+    // fact2: a completed bar with no row of it on the target went off — it
+    // did not land (a Pyroblast into Phase Shift logged MISS, no damage)
+    expect(buildMatchTimeline(baseParams(owner, enemy))).toContain(
+      "(2.5s cast, went off)",
+    );
+    (enemy.missesOut as unknown[]) = [
+      { spellId: CHAOS_BOLT_ID, destUnitId: "o", timestamp: MATCH_START_MS + 7_900, missType: "IMMUNE" },
+    ];
+    expect(buildMatchTimeline(baseParams(owner, enemy))).toContain(
+      "(2.5s cast, went off, IMMUNE)",
+    );
+    (enemy.damageOut as unknown[]) = [
+      { spellId: CHAOS_BOLT_ID, destUnitId: "o", logLine: { timestamp: MATCH_START_MS + 7_900 } },
+    ];
     const timeline = buildMatchTimeline(baseParams(owner, enemy));
 
     expect(timeline).toContain("[ENEMY HARD CAST]");
     expect(timeline).toContain("Chaos Bolt");
     expect(timeline).toContain("(2.5s cast, landed)");
+
+    // fact2: an instant of the same spell 1 ms after the bar flies behind
+    // it — the results pair first in, first out, so the bar's hit is the
+    // first row even though it comes after the instant's completion
+    const instant = { ...(enemy.spellCastEvents[0] as object), timestamp: MATCH_START_MS + 7_501 } as never;
+    (instant as { logLine: object }).logLine = {
+      event: LogEvent.SPELL_CAST_SUCCESS,
+      timestamp: MATCH_START_MS + 7_501,
+      parameters: [],
+      lineIndex: 2,
+    };
+    enemy.spellCastEvents.push(instant);
+    expect(buildMatchTimeline(baseParams(owner, enemy))).toContain(
+      "(2.5s cast, landed)",
+    );
   });
 
   it("an instant (SUCCESS 20 ms after START) or an aborted bar (no SUCCESS) is not a hard cast", () => {

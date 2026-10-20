@@ -1539,6 +1539,11 @@ export interface IMissedPurgeWindow {
    * purger was hard-CC'd/kick-locked down to free time < the reaction
    * threshold. */
   purgersLockedOut: boolean;
+  /** fact2: seconds of the window during which every purger the gate above
+   * asks was unable to cast (`dispellersBlockedMsInWindow`, the gate's own
+   * intersection) — the exemption prints it, so "CC'd/locked out" is a
+   * measured share, not a bare claim. Absent when there is no purger. */
+  purgersBlockedS?: number;
   /** Feasibility gate a (tri-state, same semantics as the cleanse side). */
   losReachable: boolean | null;
   /**
@@ -1565,6 +1570,9 @@ export interface IScopedPurgerFacts {
   /** when the tool came back, only when it was on cooldown at application */
   purgeReadyAtSeconds?: number;
   lockedOut: boolean;
+  /** fact2: the seconds `lockedOut` measured (`purgersBlockedS`, this purger
+   * and its tool alone) */
+  blockedS?: number;
   losReachable: boolean | null;
 }
 
@@ -1597,6 +1605,7 @@ export function missedPurgesFor(
       const {
         purgeReadyAtSeconds: _teamReadyAt,
         cdBurnedOn: _teamBurn,
+        purgersBlockedS: _teamBlocked,
         ...rest
       } = w;
       return [
@@ -1607,6 +1616,9 @@ export function missedPurgesFor(
             ? { purgeReadyAtSeconds: mine.purgeReadyAtSeconds }
             : {}),
           purgersLockedOut: mine.lockedOut,
+          ...(mine.blockedS !== undefined
+            ? { purgersBlockedS: mine.blockedS }
+            : {}),
           losReachable: mine.losReachable,
           viaScopedTool: mine.tool,
         },
@@ -2653,6 +2665,7 @@ export function formatMissedCleanseExemption(
     | "cleanseWasOnCD"
     | "cdBurnedOn"
     | "dispellersLockedOut"
+    | "dispellersBlockedS"
     | "losReachable"
     | "drChainRisk"
   >,
@@ -2668,8 +2681,7 @@ export function formatMissedCleanseExemption(
   // fact layer hides nothing), but carry explicit exemption context so the
   // model stops calling an impossible dispel a mistake.
   if (w.dispellersLockedOut)
-    out +=
-      " | dispellers were CC'd/locked out for most of this — not actionable";
+    out += ` | dispellers were CC'd/locked out${blockedForText(w.dispellersBlockedS)} — not actionable`;
   if (w.losReachable === false)
     out += " | no dispeller had range/line of sight — not actionable";
   if (w.drChainRisk)
@@ -2775,12 +2787,31 @@ export function missedPurgeNotActionable(
   };
 }
 
+/** fact2 (2026-10-20): the measured share behind a "CC'd/locked out"
+ *  exemption — ` for N.Ns of it` (the desktop dispel list prints the same
+ *  number through `blockedSecondsText`), floored to 0.1 s like the menu's
+ *  `dispellersCcS`. The gate is free time < the reaction bar, so the blocked
+ *  part can be well under half the window (a 2.2 s Sleep Walk in a 5 s
+ *  Blessing of Sanctuary); the old wording ("for most of this", or nothing)
+ *  claimed more than the log shows. Empty when unmeasured. */
+export function blockedSecondsText(
+  blockedS: number | undefined,
+): string | undefined {
+  if (blockedS === undefined) return undefined;
+  return (Math.floor(blockedS * 10 + 1e-9) / 10).toFixed(1);
+}
+function blockedForText(blockedS: number | undefined): string {
+  const s = blockedSecondsText(blockedS);
+  return s === undefined ? "" : ` for ${s}s of it`;
+}
+
 /** Feasibility-exemption suffix for the [MISSED PURGE OPPORTUNITY] line (same
  *  treatment as the cleanse side). */
 export function formatMissedPurgeExemption(
   w: Pick<
     IMissedPurgeWindow,
     | "purgersLockedOut"
+    | "purgersBlockedS"
     | "losReachable"
     | "purgeReadyAtSeconds"
     | "timeSeconds"
@@ -2794,7 +2825,8 @@ export function formatMissedPurgeExemption(
   if (w.viaScopedTool)
     out += ` | your removal for it: ${w.viaScopedTool.name} (${w.viaScopedTool.note})`;
   const why = missedPurgeNotActionable(w);
-  if (why.lockedOut) out += " | purgers were CC'd/locked out — not actionable";
+  if (why.lockedOut)
+    out += ` | purgers were CC'd/locked out${blockedForText(w.purgersBlockedS)} — not actionable`;
   if (why.noReach)
     out += " | no purger had range/line of sight — not actionable";
   // F-P7 (codex r2 09-30): say WHEN the purge came back — "on cooldown at
@@ -4116,6 +4148,27 @@ export function reconstructDispelSummary(
                 teamUnderPressure,
                 // FT-T10: each purger's lockouts are asked for its own
                 // purge / scoped tool (the spells the gate above asks about)
+                ...(() => {
+                  const b = generalOpen
+                    ? dispellersBlockedMsInWindow(
+                        eligiblePurgers,
+                        applyTs,
+                        windowEndMs,
+                        cannotCastSrc,
+                        (p) => [...purgeSpellIdsOf(p)],
+                      )
+                    : dispellersBlockedMsInWindow(
+                        scoped.map(({ unit }) => unit),
+                        applyTs,
+                        windowEndMs,
+                        cannotCastSrc,
+                        (u) =>
+                          scoped
+                            .filter((x) => x.unit === u)
+                            .map((x) => x.tool.castSpellId),
+                      );
+                  return b === null ? {} : { purgersBlockedS: b / 1000 };
+                })(),
                 purgersLockedOut: generalOpen
                   ? dispellersLockedOutForWindow(
                       eligiblePurgers,
@@ -4174,6 +4227,16 @@ export function reconstructDispelSummary(
                             freeBarMs(tool),
                             () => [tool.castSpellId],
                           ),
+                          ...(() => {
+                            const b = dispellersBlockedMsInWindow(
+                              [unit],
+                              applyTs,
+                              windowEndMs,
+                              cannotCastSrc,
+                              () => [tool.castSpellId],
+                            );
+                            return b === null ? {} : { blockedS: b / 1000 };
+                          })(),
                           losReachable: anyDispellerReachable(
                             [unit],
                             enemy,
