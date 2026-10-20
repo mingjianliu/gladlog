@@ -47,6 +47,7 @@ import {
   cdReadyInTimeAt,
   extractMajorCooldowns,
   gridHpPct,
+  gridHpSample,
   hpTroughInWindow,
   type IMajorCooldownInfo,
   isDeadAtRenderSecond,
@@ -310,7 +311,16 @@ export function cdPriorHoldEpisodes(
     gridPct: number,
     gridSec: number,
   ): { troughHpPct: number; troughSec: number } => {
-    const t = hpTroughInWindow(unit as any, startMs, fromSec, toSec);
+    // fact2 R1 (2026-10-20): the dip starts after the last tick that read
+    // above the line, not at the crossing tick — the readings between the
+    // two ticks are this episode's (e49b7c3b: 37.3 % at 1:58.902, the 1:59
+    // tick 41 %, printed `bottomed at 41%`). The crossing second itself stays
+    // the grid's (the ruling: decisions read the grid).
+    const prevTick = gridHpSample(unit as any, startMs + (fromSec - 1) * 1000);
+    const t = hpTroughInWindow(unit as any, startMs, fromSec, toSec, undefined, {
+      fromMs: prevTick ? prevTick.sampleMs + 1 : startMs + fromSec * 1000,
+      toMs: startMs + (toSec + 1) * 1000 - 1,
+    });
     return t && t.pct < gridPct
       ? { troughHpPct: t.pct, troughSec: t.atSec }
       : { troughHpPct: gridPct, troughSec: gridSec };

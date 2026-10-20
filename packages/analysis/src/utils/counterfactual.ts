@@ -8,6 +8,7 @@ import { absorbContributionsInWindow } from "./absorbShields";
 import { getSortedAdvancedActions } from "./advancedActions";
 import { buildAuraIntervals, IAuraInterval } from "./auraIntervals";
 import { binarySearchClosest } from "./binarySearch";
+import { isCasterSideLinkAura } from "./brokenRowBreaker";
 import { IPlayerCCTrinketSummary } from "./ccTrinketAnalysis";
 import {
   cdReadyInTimeAt,
@@ -287,6 +288,12 @@ export function whitelistedIntervalsInDeathWindow(
   for (const iv of buildAuraIntervals(victim, combat, selfCaster)) {
     if (whitelistKeyOf(iv.spellId) === undefined) continue;
     if (opposing.has(iv.srcUnitName)) continue;
+    // fact2 C4 (2026-10-20): a damage-transfer external's link on its own
+    // caster moves damage ONTO the victim — no mitigation of theirs
+    // (a5df6bff 2:45: the paladin's own Blessing of Sacrifice link listed in
+    // his death's audit; `isCasterSideLinkAura`, the stacked-defensives rule)
+    if (isCasterSideLinkAura(iv.spellId, iv.srcUnitName === victim.name))
+      continue;
     const overlapFrom = Math.max(iv.fromS, windowStartS);
     const overlapTo = Math.min(iv.toS, deathInstantS);
     if (overlapTo <= overlapFrom) continue; // no overlap, emit no row

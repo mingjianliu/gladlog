@@ -1379,6 +1379,7 @@ export const SPEC_EXCLUSIVE_SPELLS: Record<string, CombatUnitSpec[]> = {
   // 被这条 Holy-only 排除掉的专精,那些牧师的绝望祷言对整条大 CD 台账完全不可见(GH #28 附带发现)。
   "196762": [CombatUnitSpec.Priest_Holy], // Inner Focus
   "200183": [CombatUnitSpec.Priest_Holy], // Apotheosis
+  "88625": [CombatUnitSpec.Priest_Holy], // Holy Word: Chastise (fact2 C6, 2026-10-20)
   "47788": [CombatUnitSpec.Priest_Holy], // Guardian Spirit
   "64843": [CombatUnitSpec.Priest_Holy], // Divine Hymn
   "47585": [CombatUnitSpec.Priest_Shadow], // Dispersion
@@ -4310,9 +4311,24 @@ function extractMajorCooldownsAll(
         const allyCopy = allyCopyRecipient(
           unit.id,
           e,
-          (id) => combat.units[id],
+          Object.values(combat.units ?? {}),
         );
-        if (allyCopy) cast.allyCopyOn = allyCopy.name;
+        if (allyCopy) {
+          cast.allyCopyOn = allyCopy.name;
+          // fact2 C1: the press reached the unit its copy is on, whatever the
+          // cast's dest named (the caster itself, or an enemy it had
+          // targeted — 0457a45e 0:48, 691a7f31 2:21); its target and the
+          // press's HP are that unit's
+          if (cast.targetName !== allyCopy.name) {
+            cast.targetName = allyCopy.name;
+            const hp = hpAtPress(allyCopy, e.logLine.timestamp, {
+              spellId: String(e.spellId ?? spell.spellId),
+              srcUnitId: unit.id,
+            });
+            if (hp !== null) cast.targetHpPct = hp;
+            else delete cast.targetHpPct;
+          }
+        }
         return cast;
       });
 

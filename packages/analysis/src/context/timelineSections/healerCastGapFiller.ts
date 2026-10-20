@@ -573,15 +573,14 @@ export function emitHealerCastGapFillerEntries(
       flushFold();
       // B112/B127: apply the same self-only override here (this promotion path is where MW/Evoker
       // throughput CDs render). B113/B130: append the role tag so the model does not invent mechanics.
+      // F15 C1 / fact2 C1: a press whose copy the log shows on an ally is
+      // that ally's, whatever unit the cast's dest named
+      const promotedCopy = allyCopyRecipient(owner.id, e, _allUnits);
       const promotedTargetPart = getCDTargetAndVelocityPart(
         e.spellId,
         timeSeconds,
-        e.destUnitName,
-        // F15 C1: a press whose copy the log shows on an ally keeps it
-        rendersOnCaster(e.spellId) &&
-          !allyCopyRecipient(owner.id, e, (id) =>
-            _allUnits.find((u) => u.id === id),
-          ),
+        promotedCopy?.name ?? e.destUnitName,
+        rendersOnCaster(e.spellId) && !promotedCopy,
       );
       const promotedRole = cdRoleTag(e.spellId);
       const promotedDisplayName = promotedRole

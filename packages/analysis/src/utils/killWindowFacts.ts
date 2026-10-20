@@ -41,6 +41,15 @@ import { OFFENSIVE_CD_SPELL_IDS } from "./spellDanger";
 import { RANGE_HITBOX_SLACK_YD, spellRangeForCaster } from "./spellRange";
 import { isDeadAt } from "./unitDeath";
 
+/** The mark a press-only offensive cooldown carries on a kill-window line
+ * (fact2 C8) and its legend, written when a line carries one. */
+export const PRESS_ONLY_TAG = "[press-only]";
+export const PRESS_ONLY_LEGEND =
+  "  `[press-only]` after a cooldown name = one this player has on record only through its presses (not on the class roster): ready / back by the same reading as the [RES] rows, and never counted for `never punished`.";
+/** Does a kill-window line name a press-only cooldown (the legend's door). */
+export const hasPressOnlyTag = (line: string): boolean =>
+  line.includes(` ${PRESS_ONLY_TAG}`);
+
 /** Caster reach for "some attacker could reach the target" — the caster end
  * of the melee-12 / caster-40 convention [ROOT] uses. */
 export const KW_REACH_YARDS = 40;
@@ -90,6 +99,12 @@ export interface IKillWindowGateFacts {
    * the span/burst start's rendered second, holders dead by then left out.
    * The accusation side reads this list and nothing else. */
   readyOffCds: string[];
+  /** fact2 C8 (user ruling 2, 2026-10-20): press-only offensive cooldowns
+   * (`IMajorCooldownInfo.responseOnly` — on the ledger by their presses
+   * alone, ruling 2026-10-09 ②) certainly ready at the same second. The SAME
+   * reading the [RES] rows take (`cdAvailableAt`); printed with the ready
+   * list, marked `[press-only]`, and never read by `accountable`. */
+  readyPressOnlyCds?: string[];
   /** The rendered second `readyOffCds` was sampled at — `toRenderSecond` of
    * the span start (ruling A46, 2026-09-30: the line prints that floored
    * second, so "ready" is read on it; the GH #31 start instant is unchanged
@@ -175,23 +190,31 @@ export function createKillWindowFactsComputer(
       // dead-at predicate (missed-sync-window's ready filter and [RES] read
       // the same one). It filters every clause: a dead holder's cooldown is
       // neither ready, nor maybe back, nor back inside.
-      // A response-only row (`IMajorCooldownInfo.responseOnly`) is on the
-      // `pressed` lists below and on none of the ready ones: `accountable`
-      // reads the certain list, and no accusation may name such a row.
-      const living = teamCds.filter(
-        ({ cd, holder }) => !cd.responseOnly && !isDeadAt(holder, tMs),
-      );
+      // A response-only row (`IMajorCooldownInfo.responseOnly`, a press-only
+      // offensive cooldown) is a fact on every list, as on the [RES] rows
+      // (fact2 C8, user ruling 2, 2026-10-20: `ready at 0:22: none` beside
+      // a [RES] row listing Malevolence ready) — named `[press-only]`, and
+      // kept out of `readyOffCds`: `accountable` reads that list alone, and
+      // no accusation may name such a row (ruling 2026-10-09).
+      const living = teamCds.filter(({ holder }) => !isDeadAt(holder, tMs));
+      const label = (cd: { spellName: string; responseOnly?: boolean }) =>
+        cd.responseOnly ? `${cd.spellName} ${PRESS_ONLY_TAG}` : cd.spellName;
       const certain = living.filter(({ cd }) =>
         cdAvailableAt(cd, readyAtSecond),
       );
-      const readyOffCds = certain.map(({ cd }) => cd.spellName);
+      const readyOffCds = certain
+        .filter(({ cd }) => !cd.responseOnly)
+        .map(({ cd }) => cd.spellName);
+      const readyPressOnlyCds = certain
+        .filter(({ cd }) => cd.responseOnly)
+        .map(({ cd }) => label(cd));
       const notCertain = living.filter((x) => !certain.includes(x));
       // F-C8 (GH #106 step 3): "no CD ready" must not state certain
       // unavailability for a cooldown combat shortens.
       const maybeOffCds = notCertain
         .filter(({ cd }) => cdMaybeAvailableAt(cd, readyAtSecond))
         .map(({ cd }) => ({
-          name: cd.spellName,
+          name: label(cd),
           withinSeconds: cdLatestRemainingSeconds(cd, readyAtSecond),
         }));
       // F-KW1: the first WHOLE second inside the span at which a CD that was
@@ -202,7 +225,7 @@ export function createKillWindowFactsComputer(
         for (let s = readyAtSecond + 1; s <= lastSecond; s++) {
           if (isDeadAt(holder, startMs + s * 1000)) break;
           if (cdAvailableAt(cd, s)) {
-            backInside.push({ name: cd.spellName, atSeconds: s });
+            backInside.push({ name: label(cd), atSeconds: s });
             break;
           }
         }
@@ -253,6 +276,7 @@ export function createKillWindowFactsComputer(
       }
       return {
         readyOffCds,
+        ...(readyPressOnlyCds.length > 0 ? { readyPressOnlyCds } : {}),
         readyAtSecond,
         maybeOffCds,
         pressedAtStart,
@@ -315,9 +339,10 @@ export function killWindowFactsSuffix(f: IKillWindowGateFacts): string {
     ]
       .filter(([, body]) => body !== "")
       .map(([label, body]) => `${label}: ${body}`);
+    const ready = [...f.readyOffCds, ...(f.readyPressOnlyCds ?? [])];
     parts.push(
       `team offensive CDs ready at ${fmtTime(f.readyAtSecond)}: ${
-        f.readyOffCds.length > 0 ? f.readyOffCds.join("、") : "none"
+        ready.length > 0 ? ready.join("、") : "none"
       }${clauses.length > 0 ? ` (${clauses.join("; ")})` : ""}`,
     );
   }
@@ -334,11 +359,16 @@ export function killWindowAcquittal(f: IKillWindowGateFacts): string {
   // F-C8: with a maybe-ready cooldown the acquittal is "none CERTAINLY
   // ready" — the gate itself (`accountable`) still reads the certain list.
   const maybe = maybeClause(f);
+  // fact2 C8: a press-only cooldown ready at the start is printed in the
+  // ready list but never makes the span accountable — the reason says so
+  const pressOnly = (f.readyPressOnlyCds ?? []).length > 0;
   if (f.readyOffCds.length === 0)
     reasons.push(
       maybe
         ? `no offensive CD certainly ready (may already be back: ${maybe})`
-        : "no offensive CD was ready",
+        : pressOnly
+          ? `no offensive CD was ready but ${PRESS_ONLY_TAG} ones, which are never counted`
+          : "no offensive CD was ready",
     );
   if (f.reachable === false) reasons.push("target unreachable");
   return reasons.join(" and ");

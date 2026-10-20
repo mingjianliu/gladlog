@@ -5,17 +5,19 @@ import {
 } from "@gladlog/parser-compat";
 
 import { ownEffectAurasKeyedBy } from "../data/castEffectAuras";
+import { MITIGATION_TABLE } from "../data/mitigationData";
 import { SPELL_CATEGORIES as spellsData } from "../data/spellCategories";
 import { getEnglishSpellName } from "../data/spellEffectData";
+import { isAllyCopyWallId } from "./allyCopyWall";
+import { isCasterSideLinkAura } from "./brokenRowBreaker";
 import {
   gridEndpointHpPct,
   hpTroughInWindow,
   isDeadAtRenderSecond,
   isHpTroughWorthPrinting,
-  SELF_CAST_NOOP_EXTERNAL_IDS,
 } from "./cooldowns";
 import { IEnemyCDCast, reconstructEnemyCDTimeline } from "./enemyCDs";
-import { FULL_IMMUNITY_IDS } from "./enemyDefensives";
+import { FULL_IMMUNITY_IDS, MITIGATION_AURA_MIN_PCT } from "./enemyDefensives";
 import {
   type IKickAuditEntry,
   jukedByFakeText,
@@ -58,6 +60,17 @@ const DEF_OR_IMMUNE_IDS = new Set<string>([
     ownEffectAurasKeyedBy((id) => DEF_OR_IMMUNE_CAST_IDS.has(id)),
   ),
 ]);
+
+/** The percentage of an ally's copy of a talent-shared wall on the target
+ * (`isAllyCopyWallId` + `pctOnOthers`), undefined for anything else — the
+ * caster's own copy is its own wall. */
+export function allyCopyPctOf(
+  d: Pick<IBurstDefensiveHit, "spellId" | "appliedByOther">,
+): number | undefined {
+  if (!d.appliedByOther || !isAllyCopyWallId(d.spellId)) return undefined;
+  const pct = MITIGATION_TABLE[d.spellId]?.pctOnOthers;
+  return pct !== undefined && pct < MITIGATION_AURA_MIN_PCT ? pct : undefined;
+}
 
 /** A target death up to this long after the burst ends still credits the burst. */
 /** Death within this many seconds after a span still credits the span as the
@@ -395,10 +408,8 @@ export function analyzeBurstLedger(
         // CASTER — that copy means the caster is taking extra damage, not
         // mitigating (reliability round 3 N4, 483f: the Ret who gave BoSac to
         // the hunter read as "a major defensive up ON THE TARGET").
-        if (
-          SELF_CAST_NOOP_EXTERNAL_IDS.has(iv.spellId) &&
-          iv.srcUnitName === target.name
-        )
+        // (fact2 C4: the one caster-side-link predicate, `isCasterSideLinkAura`)
+        if (isCasterSideLinkAura(iv.spellId, iv.srcUnitName === target.name))
           continue;
         const overlapMs =
           Math.min(iv.endMs, toMs) - Math.max(iv.startMs, fromMs);
@@ -839,8 +850,19 @@ export function formatBurstLedgerForContext(
         // responder misreads this as one of our own externals (Pain Suppression
         // can only be cast on a teammate → it reasons "so it is not target
         // mitigation"). The subject must be explicit.
+        // fact2 C1 (2026-10-20, user ruling 4): an ally's copy of a
+        // talent-shared wall (Flameshaper Obsidian Scales, 15 %) is under
+        // the 20 % wall floor — KILL WINDOWS' `defenseless` and KILL
+        // ATTEMPTS do not count it (`isBelowWallFloorExternal`), so the
+        // ledger does not call it a major defensive either
+        const copyPct = allyCopyPctOf(d);
+        const what = d.isImmunity
+          ? "⚠ Target was IMMUNE"
+          : copyPct !== undefined
+            ? `Target had an ally's ${copyPct}% copy up (below the ${MITIGATION_AURA_MIN_PCT}% wall floor, not a major defensive)`
+            : "Target had a major defensive up";
         lines.push(
-          `    ${d.isImmunity ? "⚠ Target was IMMUNE" : "Target had a major defensive up"}: ${d.spellName} active ON THE TARGET ${d.overlapSeconds.toFixed(1)}s of this burst${wallUpAtOpen(d) !== undefined ? ` (${wallTimingPhrase(d)})` : ""}`,
+          `    ${what}: ${d.spellName} active ON THE TARGET ${d.overlapSeconds.toFixed(1)}s of this burst${wallUpAtOpen(d) !== undefined ? ` (${wallTimingPhrase(d)})` : ""}`,
         );
       }
     } else if (b.toSeconds > b.fromSeconds) {

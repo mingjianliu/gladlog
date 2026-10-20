@@ -172,6 +172,11 @@ export const classMetadata: IClassSpellMetadata[] = [
       a("10060", "Power Infusion", O),
       a("391109", "Dark Ascension", O),
       a("8122", "Psychic Scream", C),
+      // fact2 C6 (2026-10-20): Holy Word: Chastise (DB2 60 s; incapacitate /
+      // stun 200196 / 200200, 3 s). Its control has no DB2 mechanic on the
+      // cast, so the W1g scan (keyed on one) never nominated it; 01502819's
+      // owner pressed it 16 times and CC USE counted only Psychic Scream.
+      a("88625", "Holy Word: Chastise", C),
       a("605", "Mind Control", C),
       a("9484", "Shackle Undead", C),
       a("1234195", "Void Nova", C), // W1g 2026-09-25: control kit a player cast in the corpus (DB2 control mechanic, ≥ 30 s cooldown) that no roster listed

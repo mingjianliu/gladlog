@@ -2069,6 +2069,21 @@ export function cdHoardedEvents(
               (c) => inWindow(c.timeSeconds) && reachedThisUnit(cd, c),
             ),
           ) ||
+        // fact2 C1 (user ruling 4, 2026-10-20): the owner's own self wall
+        // whose copy the log shows on THIS teammate answered it (Flameshaper
+        // Obsidian Scales — `allyCopyOn`, the same reading the teammates'
+        // answered set takes; 94e93f63 @110: the copy landed on the crisis
+        // unit 2.2 s after t and the event read "no save spent")
+        (!src.own &&
+          ownerCds
+            .filter((cd) => isSpendableDefensiveCd(cd))
+            .some((cd) =>
+              cd.casts.some(
+                (c) =>
+                  inWindow(c.timeSeconds) &&
+                  c.allyCopyOn === src.crisisUnit.name,
+              ),
+            )) ||
         (teamAnswers?.ownerPeelCastSeconds ?? []).some(inWindow) ||
         (teamAnswers?.teamSaveCastSeconds ?? []).some(inWindow) ||
         // fact1215 R11 (5dd3d2d6 @86): a redirect save the owner pressed for
@@ -2176,22 +2191,33 @@ export function cdHoardedEvents(
       // owner pressed in this window on ANOTHER unit did not answer this
       // crisis — but it WAS pressed, so the line says where it went, or the
       // model reads "ready" as "held the whole time".
+      // fact2 C1: a self wall's ally copy went where the log shows it
+      // (`allyCopyOn`), not to the cast's named target
+      const recipientOf = (
+        cd: CdHoardCandidateCd,
+        c: { targetName?: string; allyCopyOn?: string },
+      ): string | undefined =>
+        cdCanHelpAnotherUnit(cd) ? c.targetName : c.allyCopyOn;
       const spentElsewhere = ownerCds
-        .filter((cd) => isSpendableDefensiveCd(cd) && cdCanHelpAnotherUnit(cd))
+        .filter(
+          (cd) =>
+            isSpendableDefensiveCd(cd) &&
+            (cdCanHelpAnotherUnit(cd) || cd.casts.some((c) => c.allyCopyOn)),
+        )
         .flatMap((cd) =>
           cd.casts
             .filter(
               (c) =>
                 c.timeSeconds >= windowFromS &&
                 c.timeSeconds <= windowToS &&
-                c.targetName !== undefined &&
-                c.targetName !== crisisUnit.name,
+                recipientOf(cd, c) !== undefined &&
+                recipientOf(cd, c) !== crisisUnit.name,
             )
             .map((c) => {
               const dt = c.timeSeconds - point.tSec;
               return {
                 at: c.timeSeconds,
-                text: `${cd.spellName} → ${c.targetName} ${dt >= 0 ? "+" : ""}${dt.toFixed(1)}s`,
+                text: `${cd.spellName} → ${recipientOf(cd, c)} ${dt >= 0 ? "+" : ""}${dt.toFixed(1)}s`,
               };
             }),
         )

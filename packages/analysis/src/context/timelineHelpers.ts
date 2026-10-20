@@ -43,6 +43,7 @@ import {
   lockoutDebuffStopsPress,
   PASSIVE_SPELL_BLOCKLIST,
   pressSpentBy,
+  rendersOnCaster,
   specToString,
 } from "../utils/cooldowns";
 import { getDampeningPercentage } from "../utils/dampening";
@@ -69,6 +70,11 @@ import { fmtTime } from "../utils/renderGrid";
 import { isSameSideSource, type RosterSides } from "../utils/rosterSide";
 import { getSpellSchoolName } from "../utils/spellSchools";
 import { type SummonKindWord, summonKindWord } from "../utils/summonKind";
+import {
+  type INonPlayerUnitKill,
+  nonPlayerUnitKill,
+  summonedAtMs,
+} from "../utils/summonLife";
 import { summonOwnerById } from "../utils/summonOwner";
 
 export { isPassiveProcCast, PASSIVE_SPELL_BLOCKLIST };
@@ -589,10 +595,22 @@ export function extractOwnerCDBuffExpiry(
     // the unit a press was on: its friendly target, else (no target) the
     // owner; a target that is no friendly unit (a pet) prefers no copy —
     // agy 40-FT-98
+    // fact2 R8 (2026-10-20): a cast row that names a HOSTILE unit is a
+    // self-buff pressed with an enemy targeted (Survival of the Fittest's
+    // SUCCESS names the hunter's target) — its copy is the owner's; read as
+    // "no holder", the refresh rule below never fired and a refreshed press
+    // printed `expired, estimated` (8a820ea3 0:32)
+    // …and a self-only wall's press stays on its caster whoever the row
+    // names, unless the log shows its copy on the ally (`allyCopyOn`): an
+    // Obsidian Scales cast row naming a teammate without Lifecinders put
+    // nothing there (4-3-31 0:07 → 0:19 `expired, estimated` while the
+    // evoker's own copy, refreshed by the next press, ran to 0:28)
     const holderOf = (c: (typeof cd.casts)[number]): string | undefined =>
-      c.targetName !== undefined
-        ? friends.find((f) => f.name === c.targetName)?.id
-        : (owner?.id ?? ownerId);
+      c.targetName === undefined ||
+      enemies.some((e) => e.name === c.targetName) ||
+      (rendersOnCaster(cd.spellId) && !c.allyCopyOn)
+        ? (owner?.id ?? ownerId)
+        : friends.find((f) => f.name === c.targetName)?.id;
     for (let i = 0; i < cd.casts.length; i++) {
       const cast = cd.casts[i]!;
       const castMs = matchStartMs + cast.timeSeconds * 1000;
@@ -1516,13 +1534,6 @@ export function dispelActorLabel(
   return `${label}'s ${summonKindOf(e.summonUnitId, src)}`;
 }
 
-/** When the unit was summoned (its own SPELL_SUMMON), or null. */
-export function summonedAtMs(unit: ICombatUnit): number | null {
-  const e = unit.actionIn.find(
-    (a) => a.logLine.event === LogEvent.SPELL_SUMMON,
-  );
-  return e ? e.logLine.timestamp : null;
-}
 
 /**
  * Damage events on `unit` from the side opposing `unitSide` — "did the other
@@ -1553,43 +1564,15 @@ export function opposingHitsOnUnit(
   };
 }
 
-/** How a non-player unit's death is known. */
-export interface INonPlayerUnitKill {
-  timestamp: number;
-  /** The killing blow, when the evidence is a damage event (absent when the
-   * log only gave a bare `UNIT_DIED`). */
-  finalBlow?: ICombatUnit["damageIn"][number];
-}
-
-/**
- * When — and by what — a non-player unit was killed, or null when its end is
- * UNKNOWN (expired, replaced, owner died, despawned: the log does not say, and
- * "no kill evidence" must never be read as "survived").
- *
- * Evidence, earliest wins, at most one per unit (a GUID dies once):
- *  - a damage event with `overkill > 0` — the only evidence 12.x logs carry for
- *    totems and guardians (`UNIT_DIED` on 5 of 13,439 listed summoned units;
- *    `PARTY_KILL` is a strict subset of overkill, same millisecond, 134/134 —
- *    docs/log-observability-audit.md direction 4). This is a unit being
- *    ATTACKED; a spell a Grounding Totem eats is a separate SPELL_ABSORBED and
- *    is not a kill;
- *  - a `UNIT_DIED` death record, still honoured for the units that get one.
- */
 // `playerKillingBlow` lives in utils/killingBlow.ts (one predicate with the
 // death block's execute line); re-exported for this module's importers.
 export { playerKillingBlow };
 
-export function nonPlayerUnitKill(
-  unit: ICombatUnit,
-): INonPlayerUnitKill | null {
-  const finalBlow = unit.damageIn.find((d) => (d.overkill ?? 0) > 0);
-  const died = unit.deathRecords?.[0]?.timestamp;
-  if (finalBlow && (died === undefined || finalBlow.timestamp <= died))
-    return { timestamp: finalBlow.timestamp, finalBlow };
-  if (died !== undefined)
-    return { timestamp: died, ...(finalBlow ? { finalBlow } : {}) };
-  return null;
-}
+// `summonedAtMs`, `INonPlayerUnitKill` and `nonPlayerUnitKill` live in
+// utils/summonLife.ts since fact2 R6 (ccTrinketAnalysis reads them and
+// cannot import this module); re-exported for this module's importers.
+export { nonPlayerUnitKill, summonedAtMs };
+export type { INonPlayerUnitKill };
 
 /**
  * How long a non-player unit stood before the blow that killed it: its own

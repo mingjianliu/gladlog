@@ -96,6 +96,7 @@ import {
   buildCastMatchIndex,
   classifyDispel,
   dispelCameWithOwnCast,
+  dispelRodeOwnPress,
   type DispelKind,
 } from "./dispelKind";
 
@@ -1397,7 +1398,9 @@ export interface IDispelEvent {
    * utils/dispelKind.ts — the desktop counts and the prompt fold read this. */
   dispelKind: DispelKind;
   /** A `rider` whose own source logged the cast of the dispelling spell at
-   * the removal (`dispelCameWithOwnCast`): a side effect of a press, which
+   * the removal (`dispelCameWithOwnCast`), or (fact2 C5) any non-deliberate
+   * removal its source made with a press of another button at that instant
+   * (`dispelRodeOwnPress`: Phantasm on Fade): a side effect of a press, which
    * the [MINOR DISPELS] fold must not call passive. Absent otherwise. */
   riderOfOwnCast?: true;
   /** B13e, our purges of a Magic buff only: how many purgeable buffs
@@ -2984,8 +2987,13 @@ export function reconstructDispelSummary(
           ? { summonUnitId: isPetUnit ? unit.id : action.srcUnitId }
           : {}),
         dispelKind,
-        ...(dispelKind === "rider" &&
-        dispelCameWithOwnCast(castIndex, dispelToClassify)
+        // a removal a press of its source made: the dispelling spell's own
+        // cast, or (fact2 C5) any press at that instant — a talent's rider
+        // on a differently named button
+        ...((dispelKind === "rider" &&
+          dispelCameWithOwnCast(castIndex, dispelToClassify)) ||
+        (dispelKind !== "deliberate" &&
+          dispelRodeOwnPress(castIndex, dispelToClassify))
           ? { riderOfOwnCast: true as const }
           : {}),
         wasFatal: false,

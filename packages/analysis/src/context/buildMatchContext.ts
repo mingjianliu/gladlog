@@ -20,6 +20,7 @@ import {
 } from "../analysis/stackedDefensives";
 import { lookupCdTriggerPrior } from "../data/cdTriggerPrior";
 import { zoneMetadata } from "../data/zoneMetadata";
+import { allyCopyLegendPhrase } from "../utils/allyCopyWall";
 import { buildArchetypeInjectionHeader } from "../utils/archetypeInjection";
 import {
   analyzeBurstLedger,
@@ -61,6 +62,7 @@ import {
 } from "../utils/dispelAnalysis";
 import { analyzeOutgoingCCChains } from "../utils/drAnalysis";
 import { reconstructEnemyCDTimeline } from "../utils/enemyCDs";
+import { MITIGATION_AURA_MIN_PCT } from "../utils/enemyDefensives";
 import {
   computeHealerExposureEvents,
   formatEnemyCCKitHeader,
@@ -80,7 +82,9 @@ import {
 import {
   buildDpsKillWindowLines,
   createKillWindowFactsComputer,
+  hasPressOnlyTag,
   hasTeamAbsorbedClause,
+  PRESS_ONLY_LEGEND,
   TEAM_DAMAGE_ABSORBED_LEGEND,
 } from "../utils/killWindowFacts";
 import { matchMinHpPct } from "../utils/killWindowTargetSelection";
@@ -746,12 +750,15 @@ export function buildMatchContext(
         "KILL WINDOWS (enemy vulnerability spans — team facts, not verdicts):",
       );
       // fact1215 R7: what "defenseless" reads (2026-10-13: it says nothing
-      // was UP, not that nothing was owned — the wording stays)
+      // was UP, not that nothing was owned — the wording stays). fact2 C1
+      // (user ruling 4, 2026-10-20): the floor the span applies to an ally's
+      // external (`isBelowWallFloorExternal`) is said.
       tLines.push(
-        "  `defenseless a–b` = nothing of these was up on the target: its own wall, immunity or absorb shield, an ally's external on it, an area save it carried; and every major defensive it pressed this round was still on cooldown. A defensive it never pressed may still have been in hand (its kit's [UNUSED]); a heal is not counted.",
+        `  \`defenseless a–b\` = nothing of these was up on the target: its own wall, immunity or absorb shield, an ally's external on it (not one under the ${MITIGATION_AURA_MIN_PCT}% wall floor — ${allyCopyLegendPhrase()} does not count), an area save it carried; and every major defensive it pressed this round was still on cooldown. A defensive it never pressed may still have been in hand (its kit's [UNUSED]); a heal is not counted.`,
       );
       if (kwLines.some(hasTeamAbsorbedClause))
         tLines.push(TEAM_DAMAGE_ABSORBED_LEGEND);
+      if (kwLines.some(hasPressOnlyTag)) tLines.push(PRESS_ONLY_LEGEND);
       kwLines.forEach((l) => tLines.push(l));
       tLines.push("</kill_windows>");
     }

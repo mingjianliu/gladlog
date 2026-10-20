@@ -1,6 +1,7 @@
 import { type ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
 import { buffFullDurationForCaster } from "./buffDuration";
+import { DEFERRAL_SHIELD_DAMAGE_IDS } from "./incomingPressure";
 
 /**
  * F15 / fact1215 R4 + C4 (2026-10-18): who broke an aura, read from a
@@ -113,7 +114,29 @@ export function breakerOfBrokenRow(
     holder.id,
     atMs,
   );
-  return dot ?? asLogged;
+  if (dot) return dot;
+  // … or, for a deferral shield's delayed damage (Time Dilation's 361029 —
+  // `DEFERRAL_SHIELD_DAMAGE_IDS`), the caster of the latest such shield put
+  // on the holder: the delayed damage keeps landing after the shield is
+  // gone (fact2 R4, 2026-10-20: 06474ef2 0:29 read `broken by 3(BDruid)'s
+  // Time Dilation` — the holder, for the evoker's Time Dilation 357170 on
+  // him from 0:16.7)
+  const shields = Object.entries(DEFERRAL_SHIELD_DAMAGE_IDS)
+    .filter(([, tick]) => tick === spellId)
+    .map(([shield]) => shield);
+  if (shields.length > 0)
+    for (let i = before.length - 1; i >= 0; i--) {
+      const a = before[i]!;
+      if (!a.spellId || !shields.includes(a.spellId)) continue;
+      if (a.srcUnitId === holder.id || isNoSource(a.srcUnitId)) continue;
+      const ev = a.logLine.event as string;
+      if (
+        ev === LogEvent.SPELL_AURA_APPLIED ||
+        ev === LogEvent.SPELL_AURA_REFRESH
+      )
+        return { unitId: a.srcUnitId, name: a.srcUnitName ?? "" };
+    }
+  return asLogged;
 }
 
 /** The holder's own link aura of `spellId` (source = holder) is up after

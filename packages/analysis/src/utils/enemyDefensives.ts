@@ -1455,9 +1455,7 @@ export function enemyDefensiveEvents(
     // that ally as well — the caster's own copy keeps its self line above.
     // Before, the ally copy had no line at all (four presses on teammates in
     // 086019c0, a press whose caster copy was only REFRESHed in 332b9b2f).
-    const allyCopy = allyCopyRecipient(enemy.id, cast, (id) =>
-      enemies.find((e) => e.id === id),
-    );
+    const allyCopy = allyCopyRecipient(enemy.id, cast, enemies);
     if (!cast.spellId || (!isExternalSaveId(cast.spellId) && !allyCopy))
       continue;
     const atSeconds = (cast.logLine.timestamp - combat.startTime) / 1000;
@@ -1504,9 +1502,11 @@ export function enemyDefensiveEvents(
       }
       continue;
     }
-    const recipient = enemies.find(
-      (e) => e.id === cast.destUnitId && e.id !== enemy.id,
-    );
+    // fact2 C1: a talent-shared wall reached the ally its copy is on, not
+    // the cast's dest (`allyCopyRecipient` looks on every unit)
+    const recipient =
+      allyCopy ??
+      enemies.find((e) => e.id === cast.destUnitId && e.id !== enemy.id);
     if (!recipient) continue;
     // A grip / redirect is the move itself: no duration to report or to call
     // "removed early", and nothing was "done during it" (`externalAuraOf`).

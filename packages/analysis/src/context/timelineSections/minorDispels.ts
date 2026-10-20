@@ -105,8 +105,10 @@ export function emitMinorDispelEntries(
  * a rider the log shows no cast of (the snare an Incarnation: Tree of Life
  * sheds when the druid leaves the form). */
 export const MINOR_DISPEL_PASSIVE_TAG = "(passive)";
-/** A fold part of removals that came with a cast of the spell itself, pressed
- * for something else (`IDispelEvent.riderOfOwnCast`). */
+/** A fold part of removals that came with a press of their source — a cast
+ * of the spell itself pressed for something else, or (fact2 C5) a talent's
+ * removal riding a differently named button, Phantasm on Fade
+ * (`IDispelEvent.riderOfOwnCast`). */
 export const MINOR_DISPEL_RIDER_TAG = "(side effect of the cast)";
 
 /** The tag a non-deliberate fold part carries; undefined for a deliberate
@@ -115,9 +117,7 @@ export function minorDispelPartTag(
   e: Pick<IDispelEvent, "dispelKind" | "riderOfOwnCast">,
 ): string | undefined {
   if (e.dispelKind === "deliberate") return undefined;
-  return e.dispelKind === "rider" && e.riderOfOwnCast
-    ? MINOR_DISPEL_RIDER_TAG
-    : MINOR_DISPEL_PASSIVE_TAG;
+  return e.riderOfOwnCast ? MINOR_DISPEL_RIDER_TAG : MINOR_DISPEL_PASSIVE_TAG;
 }
 
 /** Removals of one source + dispel spell this close together are one cast. */

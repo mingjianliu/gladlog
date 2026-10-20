@@ -167,6 +167,7 @@ import * as spellMechanics from "@gladlog/analysis/src/utils/spellMechanics";
 import * as spellRange from "@gladlog/analysis/src/utils/spellRange";
 import * as stats from "@gladlog/analysis/src/utils/stats";
 import * as summonKind from "@gladlog/analysis/src/utils/summonKind";
+import * as summonLife from "@gladlog/analysis/src/utils/summonLife";
 import * as summonOwner from "@gladlog/analysis/src/utils/summonOwner";
 import * as summonReachability from "@gladlog/analysis/src/utils/summonReachability";
 import * as talentBehaviors from "@gladlog/analysis/src/utils/talentBehaviors";
@@ -1272,9 +1273,9 @@ const INDEX: PredicateRow[] = [
   },
   // GH #100: kill evidence for totems / guardians (12.x logs carry no UNIT_DIED)
   {
-    file: `${A}/context/timelineHelpers.ts`,
+    file: `${A}/utils/summonLife.ts`,
     symbol: "nonPlayerUnitKill",
-    mod: timelineHelpers,
+    mod: summonLife,
   },
   {
     file: `${A}/context/timelineHelpers.ts`,

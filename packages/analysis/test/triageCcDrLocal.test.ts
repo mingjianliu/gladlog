@@ -231,6 +231,17 @@ describe("cc-dr F-CR1 — a Sanctuary removal says held and left", () => {
     expect(r.heldSeconds).toBeCloseTo(3, 3);
     expect(r.leftSeconds).toBeCloseTo(1, 2);
   });
+  it("fact2 R8: a server re-apply inside the control (same-ms REMOVED + APPLIED) is not its start", () => {
+    // 94e93f63 3:53: Mighty Bash 3:51.76, re-applied 3:53.17, Sanctuary 3:53.81
+    const r = run([
+      aura(LogEvent.SPELL_AURA_APPLIED, "1833", 10_000),
+      aura(LogEvent.SPELL_AURA_REMOVED, "1833", 11_500),
+      aura(LogEvent.SPELL_AURA_APPLIED, "1833", 11_500),
+      aura(LogEvent.SPELL_AURA_REMOVED, "1833", 13_000),
+    ]);
+    expect(r.heldSeconds).toBeCloseTo(3, 3);
+    expect(r.leftSeconds).toBeCloseTo(1, 2);
+  });
   it("a Roar removed after the application at the same ms still lengthens it", () => {
     const r = run([
       aura(LogEvent.SPELL_AURA_APPLIED, "372048", 9_000),

@@ -42,7 +42,9 @@ import {
   type IKillWindowFactsComputer,
   type IKillWindowGateFacts,
   killWindowAcquittal,
+  hasPressOnlyTag,
   killWindowFactsSuffix,
+  PRESS_ONLY_LEGEND,
   teamDamageTotalClause,
 } from "./killWindowFacts";
 import {
@@ -1277,5 +1279,11 @@ export function formatHealerOffenseForContext(
   // already in the system prompt's healer-offense rules — repeating it here cost ~35 tok/match
   // (2026-07-09 week-eval tokens.md #4). "Outranks" is NOT in the system prompt, so it stays.
   lines.push("  Note: healing under pressure always outranks offense.");
+  // fact2 C8: a press-only cooldown named on a window line says what it is
+  const firstWindow = lines.findIndex(
+    (l) => l.startsWith("  [KILL WINDOW]") || l.startsWith("  [VULNERABLE]"),
+  );
+  if (firstWindow >= 0 && lines.some(hasPressOnlyTag))
+    lines.splice(firstWindow, 0, PRESS_ONLY_LEGEND);
   return lines;
 }

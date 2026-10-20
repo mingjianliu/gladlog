@@ -81,10 +81,12 @@ export interface CastMatchIndex {
   byId: Map<string, number[]>;
   /** `${srcUnitId}|${spellName}` → timestamps (insertion order) */
   byName: Map<string, number[]>;
+  /** `srcUnitId` → every press's timestamp, any spell (fact2 C5) */
+  bySource: Map<string, number[]>;
 }
 
 export function createCastMatchIndex(): CastMatchIndex {
-  return { byId: new Map(), byName: new Map() };
+  return { byId: new Map(), byName: new Map(), bySource: new Map() };
 }
 
 export function addCastToIndex(
@@ -106,6 +108,31 @@ export function addCastToIndex(
     list.push(timestamp);
     index.byName.set(k, list);
   }
+  const bySrc = index.bySource.get(srcUnitId) ?? [];
+  bySrc.push(timestamp);
+  index.bySource.set(srcUnitId, bySrc);
+}
+
+/** A press and a removal it caused share their instant; the log can split
+ * them by a few ms (the [MINOR DISPELS] fold's one-cast merge,
+ * `MINOR_DISPEL_CAST_MERGE_S`, is the same 50 ms). */
+export const DISPEL_RIDES_PRESS_MS = 50;
+
+/**
+ * fact2 C5 (2026-10-20): did the dispel's source press ANY spell at the
+ * removal — a talent's dispel riding a differently named button (Phantasm
+ * 114239 on Fade 586, Spreading the Word: Freedom 199508 on Blessing of
+ * Freedom 1044; 0deb726b 0:06 / 0:39). The [MINOR DISPELS] fold calls such a
+ * removal a side effect of the cast, not `(passive)`: a press made it.
+ * Says nothing about the dispel kind (`classifyDispel` is unchanged).
+ */
+export function dispelRodeOwnPress(
+  index: CastMatchIndex,
+  d: Pick<IDispelToClassify, "srcUnitId" | "timestamp">,
+): boolean {
+  return (index.bySource.get(d.srcUnitId) ?? []).some(
+    (t) => Math.abs(t - d.timestamp) <= DISPEL_RIDES_PRESS_MS,
+  );
 }
 
 /**

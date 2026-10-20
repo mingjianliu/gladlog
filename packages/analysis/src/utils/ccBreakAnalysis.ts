@@ -4,6 +4,7 @@ import { SPELL_CATEGORIES } from "../data/spellCategories";
 import {
   getEnglishSpellName,
   OPPRESSING_ROAR_AURA_IDS,
+  spellEffectData,
 } from "../data/spellEffectData";
 import { dropAuraRebroadcasts } from "./auraIntervals";
 import { breakerOfBrokenRow } from "./brokenRowBreaker";
@@ -146,6 +147,40 @@ export function ccRemainingSeconds(p: {
   return Math.max(0, tableDuration * factor - (p.endMs - p.applyMs) / 1000);
 }
 
+/**
+ * fact2 R5 (2026-10-20): Oppressing Roar's state along a holder's aura
+ * stream — on from an APPLIED / REFRESH, off at its REMOVED, and off at its
+ * official end (DB2: 372048, 10 s) when the log never shows the REMOVED
+ * (the round-1 R5 rule, `ccAvoidanceBuffsUpAt`). 179b83ac: the rogue
+ * Vanished 9 s into a Roar, its REMOVED was never logged, and a Shout 95 s
+ * later still read +30 % (`4.4s of CC wasted` for 2.6).
+ */
+export function oppressingRoarTracker(): {
+  step(a: ICombatUnit["auraEvents"][number]): boolean;
+  onAt(ms: number): boolean;
+} {
+  let until = -Infinity;
+  return {
+    /** feed one aura event; true when it was a Roar row */
+    step(a) {
+      if (!a.spellId || !OPPRESSING_ROAR_AURA_IDS.has(a.spellId)) return false;
+      const ev = a.logLine.event;
+      if (
+        ev === LogEvent.SPELL_AURA_APPLIED ||
+        ev === LogEvent.SPELL_AURA_REFRESH
+      ) {
+        const dur = spellEffectData[a.spellId]?.durationSeconds;
+        until =
+          dur !== undefined && dur > 0
+            ? a.logLine.timestamp + dur * 1000
+            : Infinity;
+      } else if (ev === LogEvent.SPELL_AURA_REMOVED) until = -Infinity;
+      return true;
+    },
+    onAt: (ms) => ms <= until,
+  };
+}
+
 /** Was the Oppressing Roar debuff on `holder` when the CC application
  * `applied` (one of `holder.auraEvents`) landed — the +30 % CC duration
  * `ccRemainingSeconds` applies? Walks the stream up to that event, so a Roar
@@ -155,19 +190,12 @@ export function oppressingRoarOnAt(
   holder: Pick<ICombatUnit, "auraEvents">,
   applied: ICombatUnit["auraEvents"][number],
 ): boolean {
-  let on = false;
+  const roar = oppressingRoarTracker();
   for (const a of holder.auraEvents) {
     if (a === applied) break;
-    if (!a.spellId || !OPPRESSING_ROAR_AURA_IDS.has(a.spellId)) continue;
-    const ev = a.logLine.event;
-    if (
-      ev === LogEvent.SPELL_AURA_APPLIED ||
-      ev === LogEvent.SPELL_AURA_REFRESH
-    )
-      on = true;
-    else if (ev === LogEvent.SPELL_AURA_REMOVED) on = false;
+    roar.step(a);
   }
-  return on;
+  return roar.onAt(applied.logLine.timestamp);
 }
 
 /** `oppressingRoarOnAt` for a caller that holds the application's time, not
@@ -233,7 +261,7 @@ export function analyzeCcBreaks(
     // Oppressing Roar debuff on the holder lengthens every CC applied while it
     // is up (+30 % in PvP, official) — tracked from the holder's own aura
     // stream so the remaining-duration estimate uses the lengthened base.
-    let roarActive = false;
+    const roar = oppressingRoarTracker();
 
     // cc-dr F-RB1: a same-ms re-broadcast is not a break and a new CC
     // … and a recast its source logged is a new CC (`ccRecastSplitsResend`)
@@ -246,15 +274,7 @@ export function analyzeCcBreaks(
       const spellId = aura.spellId;
       if (!spellId) continue;
       const ev = aura.logLine.event;
-      if (OPPRESSING_ROAR_AURA_IDS.has(spellId)) {
-        if (
-          ev === LogEvent.SPELL_AURA_APPLIED ||
-          ev === LogEvent.SPELL_AURA_REFRESH
-        )
-          roarActive = true;
-        else if (ev === LogEvent.SPELL_AURA_REMOVED) roarActive = false;
-        continue;
-      }
+      if (roar.step(aura)) continue;
       const cc = isCcType(spellId);
       const root = isRootType(spellId);
       if (!cc && !root) continue;
@@ -293,7 +313,7 @@ export function analyzeCcBreaks(
           applyMs: aura.timestamp,
           casterId: aura.srcUnitId,
           casterName: aura.srcUnitName,
-          roarAtApply: roarActive,
+          roarAtApply: roar.onAt(aura.timestamp),
         });
       } else if (ev === LogEvent.SPELL_AURA_REMOVED) {
         pending.delete(key);

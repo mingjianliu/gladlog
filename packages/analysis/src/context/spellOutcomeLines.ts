@@ -13,6 +13,7 @@ import { BREAK_RACIAL_SPELL_IDS } from "../data/racialAbilities";
 import { ROOT_SPELL_IDS } from "../data/rootSpells";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import { getSortedAdvancedActions } from "../utils/advancedActions";
+import { dropAuraRebroadcasts } from "../utils/auraIntervals";
 import { binarySearchClosest } from "../utils/binarySearch";
 import { CAST_INTERRUPTED_REASONS } from "../utils/castCancels";
 import { castControlsIn, isControlCast } from "../utils/castMissRows";
@@ -20,6 +21,7 @@ import {
   ccRemainingSeconds,
   oppressingRoarOnAt,
 } from "../utils/ccBreakAnalysis";
+import { ccRecastSplitsResend } from "../utils/drAnalysis";
 import { groundingRedirects } from "../utils/groundingRedirects";
 import { pvpTrinketUses } from "../utils/pvpTrinketUses";
 import type { CastFailedEvent } from "../utils/rawStreams";
@@ -259,10 +261,28 @@ function heldAndLeft(
   const spellId = removed.spellId;
   const srcId = removed.srcUnitId;
   const removedMs = removed.logLine.timestamp;
-  const stream = target.auraEvents ?? [];
+  // fact2 R8 (2026-10-20): the application is read on the same stream every
+  // CC reader reads — a same-ms REMOVED → APPLIED re-broadcast is no new
+  // control, a recast its source logged is (`dropAuraRebroadcasts` with
+  // `ccRecastSplitsResend`, as `analyzeCcBreaks`). 94e93f63 3:53: a server
+  // re-apply 0.64 s before Sanctuary read `after 1s (~1s of it left)` for a
+  // stun held 2.05 s.
+  const unitById = new Map(units.map((u) => [u.id, u]));
+  const all = target.auraEvents ?? [];
+  const kept = new Set(
+    dropAuraRebroadcasts(
+      all,
+      ccRecastSplitsResend(target.id, all, (id) => unitById.get(id)),
+    ),
+  );
+  // walked on the original order, over the rows the filter keeps (the
+  // removal itself may be the REMOVED of a pair it drops — a Sanctuary
+  // removal the source re-applied in the same ms)
+  const stream = all;
   let applied: (typeof stream)[number] | undefined;
   for (let i = stream.indexOf(removed) - 1; i >= 0; i--) {
     const x = stream[i]!;
+    if (!kept.has(x)) continue;
     if (
       x.spellId === spellId &&
       x.srcUnitId === srcId &&
@@ -288,7 +308,7 @@ function heldAndLeft(
       opponentIds,
       matchStartMs,
       roarAtApply: oppressingRoarOnAt(target, applied),
-      unitById: new Map(units.map((u) => [u.id, u])),
+      unitById,
     }),
   };
 }

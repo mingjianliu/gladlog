@@ -39,4 +39,9 @@ export const ENEMY_HEAL_CD_IDS: ReadonlySet<string> = new Set<string>([
   // The line takes presses only: a shift back into the form is not one
   // (`isFormReshiftCast`).
   "33891",
+  // fact2 C6 (2026-10-20): Ascendance — Restoration Shaman (DB2 15 s / 180 s;
+  // HEALING_AMPLIFIER_SPELL_IDS already lists it). 280d1cbb: hard-cast at
+  // 0:29.143, buff to 0:44.1, no enemy line at all — 114052 is in neither
+  // `OFFENSIVE_CD_SPELL_IDS` (114050 / 114051 are) nor this set.
+  "114052",
 ]);

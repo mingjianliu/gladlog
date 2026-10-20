@@ -126,6 +126,7 @@ import {
 } from "./spellRange";
 import { medianFinite } from "./stats";
 import { summonKindWord } from "./summonKind";
+import { nonPlayerUnitKill, summonedAtMs } from "./summonLife";
 import { interruptImmuneWindows } from "./talentBehaviors";
 import { getTalentAvoidanceBuffs } from "./talentBehaviors";
 import { DPS_TRINKET_CD_S, HEALER_TRINKET_CD_S } from "./trinketCooldown";
@@ -960,6 +961,8 @@ export interface ICCInstance {
   /** The log records a damage break or a dispel at this CC's removal
    * (`ccEndedByLoggedCause`, F15 R3) — no later press ended it. */
   endedByLoggedCause?: true;
+  /** The log has no REMOVED for it (its end is the official length). */
+  noRemoved?: true;
   damageTakenDuring: number;
   /**
    * `racial_break` (2026-08-12): the CC was removed by a racial that does what
@@ -1013,6 +1016,9 @@ export interface ICCBreakableWindow {
   /** The log records another cause at the removal (`ccEndedByLoggedCause`):
    * a press logged after `removeMs` cannot have ended it. */
   endedByLoggedCause?: boolean;
+  /** The log has no REMOVED for it: `removeMs` is the official length the
+   * window was closed at, not an observed end. */
+  noRemoved?: boolean;
 }
 
 /**
@@ -1051,6 +1057,21 @@ export interface ICCBreakableWindow {
  * review of this change). With every candidate in one tier the ranking is
  * the time-left rule alone.
  */
+/** A control window whose removal came at or after its official end (DR
+ * included): it ran out, nothing broke it. */
+export function ranFullLength(
+  w: Pick<
+    ICCBreakableWindow,
+    "applyMs" | "removeMs" | "officialEndMs" | "noRemoved"
+  >,
+): boolean {
+  return (
+    !w.noRemoved &&
+    w.officialEndMs !== undefined &&
+    w.removeMs >= w.officialEndMs
+  );
+}
+
 export function bindBreakToWindow<T extends ICCBreakableWindow>(
   windows: T[],
   castTs: number,
@@ -1068,6 +1089,12 @@ export function bindBreakToWindow<T extends ICCBreakableWindow>(
     if (!activeAtCast) continue;
     // a removal the log gives another cause for, before the press (F15 R3)
     if (w.endedByLoggedCause && castTs > w.removeMs) continue;
+    // fact2 R3 (2026-10-20): one that ran its full official length (DR
+    // included) ended on its own — `ccsRemovedByPress`' rule, now the
+    // binder's too (179b83ac 5:31: a Mortal Coil landing 204 ms after the
+    // Medallion and lasting its 3.003 s took the press from the Dismantle it
+    // removed)
+    if (ranFullLength(w)) continue;
     // 2 = ended at the cast; 1 = on the unit when the cast was made (it may
     // have been removed up to `afterRemovalMs` earlier); 0 = landed after it.
     const tier = castEndedCcWindow(w, castTs) ? 2 : w.applyMs <= castTs ? 1 : 0;
@@ -1105,6 +1132,7 @@ export function findBrokenCC(
         ? { officialEndMs: applyMs + cc.expectedDurationSeconds * 1000 }
         : {}),
       ...(cc.endedByLoggedCause ? { endedByLoggedCause: true } : {}),
+      ...(cc.noRemoved ? { noRemoved: true } : {}),
     };
   });
   return bindBreakToWindow(breakable, castTsMs)?.cc;
@@ -1136,8 +1164,14 @@ export function ccsRemovedByPress(
     // included) ended on its own, whatever was pressed in that ms — the
     // break-ability path's rule (agy review 20-F15-05)
     if (
-      cc.expectedDurationSeconds !== undefined &&
-      removeMs >= applyMs + cc.expectedDurationSeconds * 1000
+      ranFullLength({
+        applyMs,
+        removeMs,
+        ...(cc.noRemoved ? { noRemoved: true } : {}),
+        ...(cc.expectedDurationSeconds !== undefined
+          ? { officialEndMs: applyMs + cc.expectedDurationSeconds * 1000 }
+          : {}),
+      })
     )
       continue;
     if (castEndedCcWindow({ applyMs, removeMs }, castTsMs)) out.push(cc);
@@ -3375,6 +3409,7 @@ export function analyzePlayerCCAndTrinket(
         sourceId: w.srcUnitId,
         sourceSpec: enemySpecMap.get(w.srcUnitId) ?? "Unknown",
         ...(loggedEndOfIdx[idx] ? { endedByLoggedCause: true as const } : {}),
+        ...(w.noRemoved ? { noRemoved: true as const } : {}),
         damageTakenDuring,
         trinketState,
         trinketCDSecondsLeft,
@@ -4469,6 +4504,29 @@ export function analyzePlayerCCAndTrinket(
     return assigned.get(cast.logLine.timestamp) ?? atCast;
   };
 
+  /** The summon this cast put down (its SPELL_SUMMON within the cast's
+   * instant, a unit the caster owns) was killed (`nonPlayerUnitKill`, the
+   * [UNIT DESTROYED] predicate) before the cast's landing window opened
+   * (`AOE_CC_LANDING_WINDOW_S`, `fromS` > 0). */
+  const summonKilledBeforeLanding = (
+    enemy: ICombatUnit,
+    cast: ICombatUnit["spellCastEvents"][number],
+  ): boolean => {
+    const landing = cast.spellId
+      ? AOE_CC_LANDING_WINDOW_S[cast.spellId]
+      : undefined;
+    if (!landing || landing.fromS <= 0) return false;
+    const castMs = cast.logLine.timestamp;
+    const opensMs = castMs + landing.fromS * 1000;
+    return enemyPets.some((u) => {
+      if (u.ownerId !== enemy.id) return false;
+      const at = summonedAtMs(u);
+      if (at === null || at < castMs - 100 || at > castMs + 500) return false;
+      const kill = nonPlayerUnitKill(u);
+      return kill !== null && kill.timestamp < opensMs;
+    });
+  };
+
   // 1. Unified Buff & Mobility CC Avoidance (targeted and ground CCs)
   for (const enemy of enemies) {
     // F134: include the enemy's pet/guardian casts so a whiffed pet CC (Water Elemental Freeze,
@@ -4516,6 +4574,11 @@ export function analyzePlayerCCAndTrinket(
             ccSpellName,
           );
 
+          // fact2 R6 (2026-10-20): a delayed control whose summon was killed
+          // before its landing window opened never went off — nothing was
+          // avoided (0deb726b 0:12: the Capacitor Totem died 1.1 s after its
+          // summon, and the paladin's Divine Steed was credited)
+          if (!missRow && summonKilledBeforeLanding(enemy, cast)) continue;
           // A. Buff-Based Avoidance — read at the instant the control hit
           // the player (`controlHitInstant`), not at a delayed control's cast
           const hit = controlHitInstant(enemy, cast, missRow);

@@ -201,8 +201,10 @@ describe("extractKillAttempts", () => {
   });
 
   it("归因优先级:span 内交徽章 → trinketed 压过其余全部", () => {
+    // the Medallion at 12 s ends the stun in that ms (fact2 R3: a stun that
+    // ran its full length was not broken by a press inside it)
     const e1 = unit("e1", {
-      auraEvents: stunAuras("e1", KIDNEY, 10, 5),
+      auraEvents: stunAuras("e1", KIDNEY, 10, 2),
       spellCastEvents: [
         {
           spellId: "336126",

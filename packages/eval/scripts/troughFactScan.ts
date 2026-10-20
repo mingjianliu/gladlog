@@ -47,7 +47,9 @@ type Check =
   | "dmgSpikeLow"
   | "killWindowTeamMin"
   | "slackTeamMin"
-  | "kickLowInSpan";
+  | "kickLowInSpan"
+  | "consequenceLow"
+  | "cdPriorBottom";
 const checked = new Map<Check, number>();
 const bad = new Map<Check, string[]>();
 const count = (c: Check) => checked.set(c, (checked.get(c) ?? 0) + 1);
@@ -119,6 +121,14 @@ const KW = /\[KILL WINDOW\] (\d+):(\d{2})–(\d+):(\d{2}) .*team min HP (\d+)%/;
 const SLACK =
   /^ {2}\[(SLACK|CONTESTED)\] (\d+):(\d{2})–(\d+):(\d{2}) \(\d+s, team min HP (\d+)%\)/;
 const KICK_ROW = /type=kick-eaten t=\S+ units=\S+ facts=\{(.*)\}/;
+// fact2 R1: `[CONSEQ] … for Ns → during it: <pid>(…) A% → low B% at M:SS`
+const CONSEQ =
+  /^(\d+):(\d{2}) {2}\[CONSEQ\] .* for (\d+)s → during it: (.*)$/;
+const CONSEQ_LOW = /(\d+)\([^)]*\) \d+% → low (\d+)% at (\d+):(\d{2})/g;
+// `[CD PRIOR] … median lowest-friendly HP of L% …; <pid>(…) fell below that
+// at M:SS (N%) and bottomed at B% by M:SS`
+const CD_PRIOR =
+  /\[CD PRIOR\] .*HP of (\d+)% .*; (\d+)\([^)]*\) fell below that at (\d+):(\d{2}) \(\d+%\) and bottomed at (\d+)% by (\d+):(\d{2})/;
 
 let cacheKey = "";
 let cacheItems: GladMatch[] = [];
@@ -138,6 +148,8 @@ for (const f of files) {
   if (
     !text.includes("[DMG SPIKE]") &&
     !text.includes("team min HP") &&
+    !text.includes("[CONSEQ]") &&
+    !text.includes("[CD PRIOR]") &&
     !menu.includes("type=kick-eaten")
   )
     continue;
@@ -216,6 +228,54 @@ for (const f of files) {
           `${where} [${sl[1]}] ${sl[2]}:${sl[3]}–${sl[4]}:${sl[5]}: printed ${printed}%, log ${low.pct}% (${low.name})`,
         );
     }
+    // [CONSEQ]: the span starts inside second t and lasts N s rounded, so
+    // [t + 1, t + N − 0.5) is certainly inside it; no reading there may sit
+    // below the printed low
+    const cq = CONSEQ.exec(l);
+    if (cq) {
+      const t = secOf(cq[1]!, cq[2]!);
+      const dur = Number(cq[3]);
+      for (const m of cq[4]!.matchAll(CONSEQ_LOW)) {
+        const unit = pidUnit.get(m[1]!);
+        if (!unit) continue;
+        count("consequenceLow");
+        const printed = Number(m[2]);
+        const low = minPct(unit, start, start + (t + 1) * 1000, start + (t + dur - 0.5) * 1000);
+        if (low && low.pct < printed)
+          fail(
+            "consequenceLow",
+            `${where} ${cq[1]}:${cq[2]} ${unit.name}: printed low ${printed}%, log ${low.pct}% at +${((low.ms - start) / 1000).toFixed(3)}s`,
+          );
+      }
+    }
+    // [CD PRIOR]: the dip runs from the last reading above the line before
+    // the crossing second to the end of the second it bottomed in
+    const cp = CD_PRIOR.exec(l);
+    if (cp) {
+      const unit = pidUnit.get(cp[2]!);
+      if (unit) {
+        count("cdPriorBottom");
+        const line = Number(cp[1]);
+        const cross = secOf(cp[3]!, cp[4]!);
+        const printed = Number(cp[5]);
+        const bottom = secOf(cp[6]!, cp[7]!);
+        let dipFrom = start + cross * 1000;
+        for (const a of (unit.advancedActions ?? []) as any[]) {
+          const ts = a.logLine.timestamp;
+          if (ts >= start + cross * 1000) break;
+          if (ts < start + (cross - 1) * 1000) continue;
+          if (a.advancedActorId !== unit.id || !(a.advancedActorMaxHp > 0)) continue;
+          const pct = Math.round((a.advancedActorCurrentHp / a.advancedActorMaxHp) * 100);
+          if (pct > line) dipFrom = ts + 1;
+        }
+        const low = minPct(unit, start, dipFrom, start + (Math.max(bottom, cross) + 1) * 1000);
+        if (low && low.pct < printed)
+          fail(
+            "cdPriorBottom",
+            `${where} ${cp[3]}:${cp[4]} ${unit.name}: printed bottomed ${printed}%, log ${low.pct}% at +${((low.ms - start) / 1000).toFixed(3)}s`,
+          );
+      }
+    }
     const k = KW.exec(l);
     if (k) {
       count("killWindowTeamMin");
@@ -278,6 +338,8 @@ for (const c of [
   "killWindowTeamMin",
   "slackTeamMin",
   "kickLowInSpan",
+  "consequenceLow",
+  "cdPriorBottom",
 ] as Check[]) {
   const b = bad.get(c) ?? [];
   console.log(`${c}: lines ${checked.get(c) ?? 0}, below-printed ${b.length}`);

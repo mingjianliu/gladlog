@@ -90,7 +90,7 @@ describe("allyCopyWall", () => {
   });
 
   it("names the ally only when the ally's copy is in the log", () => {
-    const by = (units: any[]) => (id: string) => units.find((u) => u.id === id);
+    const by = (units: any[]) => units;
     const ally = unit("a1", { auraEvents: [applied("ev", "a1", 10)] });
     expect(allyCopyRecipient("ev", cast("a1", 10), by([ally]))?.id).toBe("a1");
     // a REFRESH of an ally copy still up is the same press landing
@@ -117,6 +117,25 @@ describe("allyCopyWall", () => {
     // cast on oneself
     const self = unit("ev", { auraEvents: [applied("ev", "ev", 10)] });
     expect(allyCopyRecipient("ev", cast("ev", 10), by([self]))).toBeUndefined();
+  });
+
+  it("fact2 C1: the copy is found on whichever ally carries it — dest the caster, or dest another unit", () => {
+    const self = unit("ev", { auraEvents: [applied("ev", "ev", 10)] });
+    const ally = unit("a1", { auraEvents: [applied("ev", "a1", 10.027)] });
+    // 0457a45e 0:48: the press names the evoker itself, the copy is on Tupi
+    expect(
+      allyCopyRecipient("ev", cast("ev", 10), [self, ally])?.id,
+    ).toBe("a1");
+    // 691a7f31 2:21: aimed at an enemy, the copy is on a teammate
+    const enemy = unit("x1");
+    expect(
+      allyCopyRecipient("ev", cast("x1", 10), [self, enemy, ally])?.id,
+    ).toBe("a1");
+    // two carriers: the cast's dest wins over a closer one
+    const a2 = unit("a2", { auraEvents: [applied("ev", "a2", 10)] });
+    expect(
+      allyCopyRecipient("ev", cast("a1", 10), [self, a2, ally])?.id,
+    ).toBe("a1");
   });
 
   it("[ENEMY DEF]: the ally copy is an external at 15 %, below the wall floor; the caster keeps its self line", () => {
