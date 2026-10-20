@@ -22,6 +22,7 @@ import {
 } from "@gladlog/parser-compat";
 
 import { effectAuraViaName } from "../data/castEffectAuras";
+import { getEnglishSpellName } from "../data/spellEffectData";
 import { ccSpellIds } from "../data/spellTags";
 import {
   analyzePlayerCCAndTrinket,
@@ -1032,37 +1033,46 @@ function enemyCcOnCooldownAt(
   matchStartMs: number,
   renderedSecond: number,
 ): boolean {
-  // the casts this enemy pressed whose own effect (same DB2 name) the
-  // control is — Ring of Frost 113724 → 82691 lands on under 90 % of its
-  // casts, so the own-effect share test cannot be asked here
+  // the casts this enemy pressed that ARE this control's button: its own
+  // id, a cast whose effect it is by DB2 name (Ring of Frost 113724 →
+  // 82691, which lands on under 90 % of its casts, so the own-effect share
+  // test cannot be asked here), or a same-named variant (Hex 51514 and
+  // 269352 are one button — 26-4 1:47 listed a Hex pressed 2 s earlier)
+  const ccName = getEnglishSpellName(ccSpellId, "");
   const castIds = new Set(
     (enemy.spellCastEvents ?? [])
       .filter((e) => e.logLine.event === LogEvent.SPELL_CAST_SUCCESS)
       .map((e) => e.spellId)
       .filter(
         (id): id is string =>
-          !!id && (id === ccSpellId || effectAuraViaName(id, ccSpellId)),
+          !!id &&
+          (id === ccSpellId ||
+            effectAuraViaName(id, ccSpellId) ||
+            (ccName !== "" && getEnglishSpellName(id, "") === ccName)),
       ),
   );
-  for (const id of castIds) {
-    const presses = avoidanceCastSeconds(
-      enemy,
-      id,
-      matchStartMs,
-      renderedSecond,
-    ).filter((t) => t < renderedSecond);
-    if (presses.length === 0) continue;
-    const cd = unitCooldownOf(enemy, id);
-    if (!cd || !cd.talentsKnown || !(cd.cooldownSeconds > 0)) return false;
-    // a cooldown the game shortens on the fly (Holy Words by Smite) is
-    // certainly down only until its measured recast floor — the reading the
-    // [RES] rows' `a–b s` range gives (`earliestCooldownSecondsFor`)
-    const certainS =
-      earliestCooldownSecondsFor(id, enemy.spec, cd.cooldownSeconds) ??
-      cd.cooldownSeconds;
-    return inHandSince(presses, certainS, cd.charges, renderedSecond) === null;
-  }
-  return false;
+  const presses = [...castIds]
+    .flatMap((id) =>
+      avoidanceCastSeconds(enemy, id, matchStartMs, renderedSecond),
+    )
+    .filter((t) => t < renderedSecond)
+    .sort((a, b) => a - b);
+  if (presses.length === 0) return false;
+  // the button's cooldown: a pressed id's first, else the control's own —
+  // the first that has one (Maim's stun aura 203123 has a row with no
+  // cooldown; its button 22570 carries the 30 s)
+  const cdId = [...castIds, ccSpellId].find(
+    (id) => (unitCooldownOf(enemy, id)?.cooldownSeconds ?? 0) > 0,
+  );
+  const cd = cdId === undefined ? undefined : unitCooldownOf(enemy, cdId);
+  if (!cd || !cd.talentsKnown || !(cd.cooldownSeconds > 0)) return false;
+  // a cooldown the game shortens on the fly (Holy Words by Smite) is
+  // certainly down only until its measured recast floor — the reading the
+  // [RES] rows' `a–b s` range gives (`earliestCooldownSecondsFor`)
+  const certainS =
+    earliestCooldownSecondsFor(cdId!, enemy.spec, cd.cooldownSeconds) ??
+    cd.cooldownSeconds;
+  return inHandSince(presses, certainS, cd.charges, renderedSecond) === null;
 }
 
 /** Since when a tool has had a charge in hand at `atSeconds` (0 = since the

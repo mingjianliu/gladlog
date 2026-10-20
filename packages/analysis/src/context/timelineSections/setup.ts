@@ -320,7 +320,12 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
     targetName: string,
   ): string {
     if (!sourceName) return "";
-    return sourceName === targetName ? " (own)" : ` (from ${pid(sourceName)})`;
+    // a summon's buff (a Death Knight's Rider of the Apocalypse casting
+    // Anti-Magic Shell) is named as its owner's summon, never by its
+    // client-locale name (605 at fact2: `(from 索拉斯·托尔贝恩国王)`, 6 lines)
+    return sourceName === targetName
+      ? " (own)"
+      : ` (from ${actorLabel(sourceName, "friendly")})`;
   }
 
   /** Returns the short numeric ID for an *enemy* player name, falling back to name. */

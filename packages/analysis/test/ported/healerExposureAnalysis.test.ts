@@ -259,6 +259,29 @@ describe('healerExposureAnalysis — exposure calculation', () => {
     expect(run(62).flatMap((r) => r.threats.map((t) => t.ccSpellName))).toEqual(['Mighty Bash']);
   });
 
+  it('fact2 605: a same-named variant is the same button (Hex 269352 pressed, Hex 51514 landed)', () => {
+    const healer = makeUnit('h', {
+      advancedActions: [makeAdvancedAction(MATCH_START + 4_000, 0, 0), makeAdvancedAction(MATCH_START + 40_000, 0, 0)],
+    });
+    for (const a of healer.advancedActions) (a as any).advancedActorId = 'h';
+    const enemy = makeUnit('e', {
+      name: 'E1',
+      spec: CombatUnitSpec.Shaman_Elemental,
+      info: { talents: [], pvpTalents: [] },
+      spellCastEvents: [makeSpellCastEvent('269352', MATCH_START + 2_000, 'x', 'X', 'e', 'E1', 0, 'Hex')],
+      advancedActions: [makeAdvancedAction(MATCH_START + 4_000, 5, 0), makeAdvancedAction(MATCH_START + 40_000, 5, 0)],
+    });
+    for (const a of enemy.advancedActions) (a as any).advancedActorId = 'e';
+    const friendCCSummary: any = {
+      ccInstances: [{ sourceName: 'E1', sourceId: 'e', spellId: '51514', spellName: 'Hex' }],
+    };
+    const run = (fromSeconds: number) =>
+      analyzeHealerExposureAtBurst([{ fromSeconds }] as any, [enemy], healer, { trinketUseTimes: [], ccInstances: [] } as any, [friendCCSummary], '1505', MATCH_START)
+        .flatMap((r) => r.threats.map((t) => t.ccSpellName));
+    expect(run(4)).toEqual([]);
+    expect(run(40)).toEqual(['Hex']);
+  });
+
   it('handles null LoS result by assuming unblocked (B50)', () => {
     const healer = makeUnit('h', { advancedActions: [makeAdvancedAction(MATCH_START, 0, 0)] });
     (healer.advancedActions[0] as any).advancedActorId = 'h';

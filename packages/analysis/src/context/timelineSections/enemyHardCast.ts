@@ -111,13 +111,13 @@ export function emitEnemyHardCastEntries(
       // fact2 (2026-10-20): a completed cast is not a hit — what it did is
       // the projectile's row on its target (0d08dd90 0:47: a Pyroblast into
       // Phase Shift logged MISS and no damage, and the line said `landed`).
-      // The caster's completions of the spell at that target take the
-      // result rows inside `HARD_CAST_RESULT_MS` first in, first out
-      // (`hardCastResultOf`): a damage row, or a SPELL_ABSORBED row a shield
+      // The caster's completions of the spell at that target get the result
+      // rows inside `HARD_CAST_RESULT_MS` (`hardCastResultOf`): a damage row, or a SPELL_ABSORBED row a shield
       // ate whole → `landed`; a miss row → `went off, <TYPE>`; none → `went
-      // off`. FIFO, not "before the next completion": a Hot Streak instant
-      // 1 ms after the bar flies behind it (01502819-style 5-1 0:54: bar
-      // .795, instant .796, the two hits at .999 and 1.013)
+      // off`. Each row goes to the latest completion before it that has none
+      // yet, not "the first row before the next completion": a Hot Streak
+      // instant 1 ms after the bar flies behind it (5-1 0:54: bar .795,
+      // instant .796, the two hits at .999 and 1.013)
       const destId = landed.destUnitId || event.destUnitId;
       const outcome = hardCastResultOf(
         enemy,
@@ -135,11 +135,9 @@ export function emitEnemyHardCastEntries(
   }
 }
 
-/** The result row a completion of `spellId` at `destId` takes: the
- * completions in order each take the first result row (a damage row, a
- * SPELL_ABSORBED row with no damage row of that hit — a hit a shield ate
- * whole — or a miss row) at or after them and inside `windowMs` that an
- * earlier completion has not taken. */
+/** The result row a completion of `spellId` at `destId` gets — a damage
+ * row, a SPELL_ABSORBED row with no damage row of that hit (a hit a shield
+ * ate whole), or a miss row — paired with the latest completion before it. */
 function hardCastResultOf(
   enemy: ICombatUnit,
   spellId: string,
@@ -197,15 +195,22 @@ function hardCastResultOf(
               : "went off",
       })),
   ].sort((a, b) => a.ms - b.ms);
-  // one partly absorbed hit logs its SPELL_ABSORBED rows beside its damage
-  // row; distinct hits only
-  const taken = new Set<number>();
-  for (const c of completions) {
-    const k = rows.findIndex(
-      (r, idx) => !taken.has(idx) && r.ms >= c && r.ms <= c + windowMs,
-    );
-    if (k >= 0) taken.add(k);
-    if (c === completion.timestamp) return k >= 0 ? rows[k]!.outcome : "went off";
+  // each result row, in time order, belongs to the latest completion at or
+  // before it (inside `windowMs`) that has none yet: a projectile flies
+  // after the press that threw it — two Chaos Bolts 1.4 s apart with one hit
+  // 71 ms after the second (84-3 1:42/1:43), and a Hot Streak instant 1 ms
+  // after a bar both hit 0.2 s later
+  const resultOf = new Map<number, string>();
+  for (const r of rows) {
+    for (let k = completions.length - 1; k >= 0; k--) {
+      const c = completions[k]!;
+      if (c > r.ms) continue;
+      if (r.ms - c > windowMs) break;
+      if (resultOf.has(k)) continue;
+      resultOf.set(k, r.outcome);
+      break;
+    }
   }
-  return "went off";
+  const idx = completions.indexOf(completion.timestamp);
+  return (idx >= 0 ? resultOf.get(idx) : undefined) ?? "went off";
 }

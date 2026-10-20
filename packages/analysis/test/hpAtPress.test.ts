@@ -83,6 +83,23 @@ describe("hpAtPress", () => {
     expect(hpAtPress(mk(false), T0 + 49_806, { spellId: FR, srcUnitId: "P" })).toBe(62);
   });
 
+  it("fact2: a second charge refreshes the HoT — the REFRESH and its tick in the press's lead are the press's (7-2 1:56)", () => {
+    const FR = "22842";
+    const u = {
+      ...unit(
+        [sample("P", 57.5, 204), sample("P", 57.644, 243)],
+        [{ ...heal(FR, "P", 57.644), logLine: { timestamp: T0 + 57_644, parameters: [], event: LogEvent.SPELL_PERIODIC_HEAL } }],
+      ),
+      auraEvents: [{ spellId: FR, srcUnitId: "P", logLine: { timestamp: T0 + 57_644, event: LogEvent.SPELL_AURA_REFRESH } }] as never,
+    };
+    expect(hpAtPress(u, T0 + 57_647, { spellId: FR, srcUnitId: "P" })).toBe(20);
+  });
+
+  it("fact2: a direct heal of the press's own name (Holy Prism 114165 heals as 114871)", () => {
+    const u = unit([sample("P", 21.9, 731), sample("P", 22.0, 800)], [heal("114871", "P", 22.0)]);
+    expect(hpAtPress(u, T0 + 22_001, { spellId: "114165", srcUnitId: "P" })).toBe(73);
+  });
+
   it("fact2 C10: the press's heal under its effect id (Dream Breath 355936 heals as 355941)", () => {
     const u = unit([sample("P", 10.9, 860), sample("P", 11.0, 910)], [heal("355941", "P", 11.0)]);
     expect(hpAtPress(u, T0 + 11_001, { spellId: "355936", srcUnitId: "P" })).toBe(86);

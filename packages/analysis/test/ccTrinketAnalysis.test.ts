@@ -52,8 +52,13 @@ describe("bindBreakToWindow and findBrokenCC", () => {
 
     it("binds a break cast up to 250 ms before the apply and up to 50 ms after the removal (trinketBreakOrderScan 2026-09-26)", () => {
       const window: ICCBreakableWindow = { applyMs: 10_000, removeMs: 16_000 };
-      // 200ms before apply
-      expect(bindBreakToWindow([window], 9_800)).toBe(window);
+      // 200ms before apply — a control logged after the press that the press
+      // ended (its REMOVED beside the APPLIED)
+      const lagged: ICCBreakableWindow = { applyMs: 10_000, removeMs: 10_000 };
+      expect(bindBreakToWindow([lagged], 9_800)).toBe(lagged);
+      // fact2 605: one that stayed on long after landing was not ended by it
+      // (148-6 0:39: a Maim landing 105 ms after the Medallion ran 4.5 s)
+      expect(bindBreakToWindow([window], 9_800)).toBeUndefined();
       // 40ms after remove — the trinket's own removal lands within ±25 ms
       expect(bindBreakToWindow([window], 16_040)).toBe(window);
       // 200ms after remove — the CC had already ended some other way (dece)
@@ -155,8 +160,9 @@ describe("bindBreakToWindow and findBrokenCC", () => {
       expect(bindBreakToWindow([cheapShot, kidney], 59_000)).toBe(kidney);
       expect(castEndedCcWindow(kidney, 59_000)).toBe(true);
       expect(castEndedCcWindow(cheapShot, 59_000)).toBe(false);
-      // nothing ended at the cast → the ranking alone, as before
-      expect(bindBreakToWindow([cheapShot], 59_000)).toBe(cheapShot);
+      // nothing ended at the cast, and the Cheap Shot landed after the press
+      // and stayed on 2.2 s: the press ended neither (fact2 605)
+      expect(bindBreakToWindow([cheapShot], 59_000)).toBeUndefined();
     });
 
     // Review finding: the 10–50 ms band. A Maim removed 30 ms before the press
@@ -186,11 +192,14 @@ describe("bindBreakToWindow and findBrokenCC", () => {
 
     it("matches exactly at the 250 ms before-apply boundary (not 251), and at 50 ms after the removal (not 51)", () => {
       const window: ICCBreakableWindow = { applyMs: 10_000, removeMs: 16_000 };
+      // the before-apply side: a control logged after the press and removed
+      // in its own ms (one that stays on is no press's — fact2 605)
+      const lagged: ICCBreakableWindow = { applyMs: 10_000, removeMs: 10_000 };
 
       // Exactly at -250ms (9_750ms) -> matches
-      expect(bindBreakToWindow([window], 9_750)).toBe(window);
+      expect(bindBreakToWindow([lagged], 9_750)).toBe(lagged);
       // At -251ms (9_749ms) -> undefined
-      expect(bindBreakToWindow([window], 9_749)).toBeUndefined();
+      expect(bindBreakToWindow([lagged], 9_749)).toBeUndefined();
 
       // After the removal the bound is 50 ms (TRINKET_BREAK_AFTER_REMOVAL_MS)
       expect(bindBreakToWindow([window], 16_050)).toBe(window);

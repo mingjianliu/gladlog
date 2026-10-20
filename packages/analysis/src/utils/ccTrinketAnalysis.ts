@@ -1101,6 +1101,13 @@ export function bindBreakToWindow<T extends ICCBreakableWindow>(
     // Medallion and lasting its 3.003 s took the press from the Dismantle it
     // removed)
     if (ranFullLength(w)) continue;
+    // fact2 605: one that landed AFTER the press and stayed on past the
+    // tolerance was not ended by it — a length that depends on the press
+    // that applied it (Maim's combo points) never reaches its table length,
+    // so the full-length test cannot see it (148-6 0:39: the Medallion
+    // removed a Water Elemental's Freeze; a Maim landing 105 ms later ran
+    // 4.5 s and took the press)
+    if (w.applyMs > castTs && w.removeMs > castTs + toleranceMs) continue;
     // 2 = ended at the cast; 1 = on the unit when the cast was made (it may
     // have been removed up to `afterRemovalMs` earlier); 0 = landed after it.
     const tier = castEndedCcWindow(w, castTs) ? 2 : w.applyMs <= castTs ? 1 : 0;

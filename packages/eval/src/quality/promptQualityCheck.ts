@@ -7237,7 +7237,9 @@ const CONSEQ_DROP = /(\d+)\([^)]*\) (\d+)% → low (\d+)% at (\d+):(\d+)/g;
  *  - `A% → low B% at m:ss`: the tick at the line's second reads A; the tick
  *    at m:ss does not read below B (it no longer has to EQUAL B — the tick
  *    is the start of that second, the low the lowest sample inside it); and
- *    no tick of that unit inside the span reads below B (`isTickBelowTrough`);
+ *    no tick of that unit inside the span reads below B (`isTickBelowTrough`)
+ *    — from the span's third rendered second on: the first two can read a
+ *    sample from before the CC landed (the `spanEdge` of kick-eaten);
  *  - `no teammate dropped 10% or more`: no teammate of that healer (same side
  *    of the [STATE] line) reads 10+ points below its tick at the line's second
  *    anywhere inside the span (the trough is at or below every such tick, so
@@ -7302,7 +7304,13 @@ export function checkConseqHpStateConsistency(lines: string[]): string[] {
         failures.push(
           `${where} 低点写 ${id} 在 ${fmtMmSs(lowSec)} 为 ${b}%,同秒 [STATE] 报 ${tl}%`,
         );
-      for (let s = start; s <= lastSure; s++) {
+      // the span's first rendered second and the one after it: their ticks
+      // read the last sample at or before the second (the [STATE] sampler
+      // since fact2, 59cd11023), which can predate the CC's landing — and an
+      // event span reads only its own samples (user ruling 2026-10-17), the
+      // kick-eaten gate's `spanEdge`. 605 at fact2: 177-6 3:20, a Fear from
+      // 3:20.x, the 3:21 tick read 85 % from before it, the low 86 %.
+      for (let s = start + 2; s <= lastSure; s++) {
         const v = tick(s, side, id);
         if (v !== undefined && isTickBelowTrough(v, b))
           failures.push(

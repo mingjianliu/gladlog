@@ -174,8 +174,15 @@ describe("F170 [ENEMY HARD CAST]", () => {
     expect(timeline).toContain("(2.5s cast, landed)");
 
     // fact2: an instant of the same spell 1 ms after the bar flies behind
-    // it — the results pair first in, first out, so the bar's hit is the
-    // first row even though it comes after the instant's completion
+    // it: each hit goes to the latest completion before it that has none,
+    // so with two hits after both, the bar keeps one even though both come
+    // after the instant's completion
+    (enemy.missesOut as unknown[]) = [];
+    (enemy.damageOut as unknown[]).push({
+      spellId: CHAOS_BOLT_ID,
+      destUnitId: "o",
+      logLine: { timestamp: MATCH_START_MS + 7_910 },
+    });
     const instant = { ...(enemy.spellCastEvents[0] as object), timestamp: MATCH_START_MS + 7_501 } as never;
     (instant as { logLine: object }).logLine = {
       event: LogEvent.SPELL_CAST_SUCCESS,
@@ -186,6 +193,12 @@ describe("F170 [ENEMY HARD CAST]", () => {
     enemy.spellCastEvents.push(instant);
     expect(buildMatchTimeline(baseParams(owner, enemy))).toContain(
       "(2.5s cast, landed)",
+    );
+    // …and with one hit only, it is the later throw's (84-3 1:42/1:43: two
+    // Chaos Bolts 1.4 s apart, the one hit 71 ms after the second)
+    (enemy.damageOut as unknown[]).pop();
+    expect(buildMatchTimeline(baseParams(owner, enemy))).toContain(
+      "(2.5s cast, went off)",
     );
   });
 

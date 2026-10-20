@@ -32,10 +32,15 @@ describe("checkConseqHpStateConsistency (GH #70 — [CONSEQ] ⟺ [STATE] grid)",
   });
   it("a tick below the printed low inside the span → red", () => {
     const f = checkConseqHpStateConsistency([
-      state("1:01", "2(AWarrior):41"),
+      state("1:02", "2(AWarrior):41"),
       CC,
     ]);
     expect(f.some((x) => x.includes("41%"))).toBe(true);
+  });
+  it("the span's second rendered second is an edge: its tick can read a sample from before the CC landed (fact2)", () => {
+    expect(
+      checkConseqHpStateConsistency([state("1:01", "2(AWarrior):41"), CC]),
+    ).toEqual([]);
   });
   it("enemy side reads the enemies half of [STATE]", () => {
     expect(

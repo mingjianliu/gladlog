@@ -1690,9 +1690,14 @@ export function hpAtPress(
     if (t < pressMs - PRESS_EFFECT_LEAD_MS || t > pressMs) continue;
     // the press's own heal may carry its effect's id (fact2 C10: Dream
     // Breath is pressed as 355936 and heals as 355941, its DB2-named effect)
+    // or a heal of the press's own name (Holy Prism 114165 heals as 114871,
+    // no aura of it in the cast→effect table)
     const ownEffect =
       h.spellId === cast.spellId ||
-      (!!h.spellId && effectAuraViaName(cast.spellId, h.spellId));
+      (!!h.spellId &&
+        (effectAuraViaName(cast.spellId, h.spellId) ||
+          getEnglishSpellName(h.spellId, "") ===
+            getEnglishSpellName(cast.spellId, "")));
     if (!ownEffect || h.srcUnitId !== cast.srcUnitId) continue;
     // the press's OWN heal is a direct one; a periodic tick of an earlier
     // application of the same spell is not this press (review of F-R8,
@@ -1709,7 +1714,11 @@ export function hpAtPress(
         (a) =>
           a.spellId === h.spellId &&
           a.srcUnitId === cast.srcUnitId &&
-          a.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
+          // fresh, or refreshed by this press (a second charge pressed while
+          // the first is up: 7-2 1:56, REFRESH and tick at .644, cast .647
+          // — ruling A51's cast-backed REFRESH)
+          (a.logLine.event === LogEvent.SPELL_AURA_APPLIED ||
+            a.logLine.event === LogEvent.SPELL_AURA_REFRESH) &&
           a.logLine.timestamp <= t &&
           a.logLine.timestamp >= pressMs - PRESS_EFFECT_LEAD_MS,
       )
@@ -3416,7 +3425,7 @@ export function spendsSharedChargeOf(
  * round logs no cast row of it — the APPLIED rows of its effect auras
  * (the cast → effect table: DB2 names the aura after the cast, and the
  * corpus shows it after at least half the casts — `isControlCast`'s reading)
- * from the unit or a unit it owns, one press per cooldown's length of them
+ * from the unit itself, one press per cooldown's length of them
  * (the first application of each stretch). Empty when nothing shows.
  */
 export function effectEvidenceCastSeconds(
@@ -3433,10 +3442,10 @@ export function effectEvidenceCastSeconds(
   );
   if (effects.length === 0) return [];
   const units = Object.values(combat.units ?? {}) as ICombatUnit[];
-  const sources = new Set([
-    unit.id,
-    ...units.filter((u) => u.ownerId === unit.id).map((u) => u.id),
-  ]);
+  // the unit's own applications: a summon can cast the same spell itself
+  // (a Rider of the Apocalypse's Anti-Magic Shell on its Death Knight is no
+  // press of the Death Knight's)
+  const sources = new Set([unit.id]);
   const applied = units
     .flatMap((u) => u.auraEvents ?? [])
     .filter(

@@ -601,9 +601,22 @@ export function emitHealerCastGapFillerEntries(
         owner.id,
         timeSeconds,
       );
+      // round-1 retest idx 103 (fact2 605): the press refused by the unit
+      // it was cast on — an IMMUNE row on that unit (a Holy Word: Serenity
+      // into a Cycloned ally) — says so, as the ledger lines do
+      // (`ccImmuneTagFor(…, onlyNamed)`)
+      const promotedRefused =
+        e.destUnitName && e.destUnitName !== "nil"
+          ? ownerCcImmuneTag(
+              e.spellId,
+              timeSeconds,
+              new Set([e.destUnitName]),
+              true,
+            )
+          : "";
       addEntry(
         timeSeconds,
-        `${fmtTime(timeSeconds)}  [YOU] [CD]   ${promotedDisplayName}${promotedTargetPart}${totemNote}${promotedGroundingNote}${purgeNote}${empowerNote}${ownerHardCcTagAt(timeSeconds)}`,
+        `${fmtTime(timeSeconds)}  [YOU] [CD]   ${promotedDisplayName}${promotedTargetPart}${promotedRefused}${totemNote}${promotedGroundingNote}${purgeNote}${empowerNote}${ownerHardCcTagAt(timeSeconds)}`,
         // T3: delta form (same as the ownerCDs path; full snapshots are reserved
         // for death snapshots and the periodic 60s refresh)
         requestSnapshotPlaceholder(timeSeconds),

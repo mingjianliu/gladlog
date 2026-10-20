@@ -216,7 +216,10 @@ import {
   CONTROL_FAILED_MISS_TYPES,
   isControlCast,
 } from "@gladlog/analysis/src/utils/castMissRows";
-import { applicableCCAvoidanceIds } from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
+import {
+  applicableCCAvoidanceIds,
+  CC_AVOIDANCE_BUFF_SPELLS,
+} from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
 import { MOVEMENT_ROOT_BREAK_DISPEL_IDS } from "@gladlog/analysis/src/utils/dispelKind";
 import {
   isExternalSaveId,
@@ -399,6 +402,10 @@ for (const f of files) {
       .filter((u) => u.reaction === owner.reaction)
       .map((u) => u.id as string),
   );
+  // a summon whose own reaction flag is unset (a Death Knight's Lesser Ghoul
+  // logs 0) is its owner's
+  for (const u of units)
+    if (u.ownerId && ourSide.has(u.ownerId)) ourSide.add(u.id as string);
   const start = legacy.startTime;
   const where = `${f.shard}/${f.name}`;
   /** team-absorbed on the target over [fromS, toS) seconds */
@@ -891,6 +898,10 @@ for (const f of files) {
       }
     const top = [...byEnemy].filter(([id]) => units.find((u) => u.id === id && u.reaction !== owner.reaction && u.info)).sort((x, y) => y[1] - x[1])[0];
     if (!top || top[1] < 30_000) continue;
+    // a one-second bracket (`[m:ss–m:ss]`, one press) holds no span to
+    // measure on the grid: the line itself says `0.00M on target inside
+    // it` and the target is the 5 s slack's
+    if (km[1] === km[2]) continue;
     bump("killTargetInside");
     if (top[0] !== target.id && (byEnemy.get(target.id) ?? 0) < 0.8 * top[1])
       miss("killTargetInside", `${where} ${km[1]}–${km[2]} on ${target.name}: inside the bracket ${Math.round((byEnemy.get(target.id) ?? 0) / 1000)}k vs ${byName.size ? units.find((u) => u.id === top[0])?.name : ""} ${Math.round(top[1] / 1000)}k`);
@@ -926,7 +937,9 @@ for (const f of files) {
       // caster logged up to a few seconds later (a Searing Light and a
       // Penance 0.34 s apart, the return 1.5 s after both): a line for
       // either covers it
-      const near = [0, 1, 2, 3].map((k) => fmtS((t0 - start) / 1000 + k));
+      // (or 1 s before: the line sits at the cast's second, the miss row
+      // can be logged in the next — 145-5 1:10 / 1:11)
+      const near = [-1, 0, 1, 2, 3].map((k) => fmtS((t0 - start) / 1000 + k));
       if (
         !lines.some(
           (l) =>
@@ -1077,7 +1090,10 @@ for (const f of files) {
           if (((cur.spellCastEvents ?? []) as any[]).some((c) => c.spellId === cast && c.logLine.event === LogEvent.SPELL_CAST_SUCCESS && c.logLine.timestamp >= start && c.logLine.timestamp <= legacy.endTime)) continue;
           const effects = rows.filter((r) => r.aura !== cast && r.via?.includes("name") && r.hits >= 0.5 * r.casts).map((r) => r.aura);
           if (effects.length === 0) continue;
-          const src = new Set([cur.id, ...units.filter((u) => u.ownerId === cur.id).map((u) => u.id)]);
+          // the unit's own applications only: a summon can cast the same
+          // spell itself (a Rider of the Apocalypse's Anti-Magic Shell on
+          // its Death Knight is no press of the Death Knight's)
+          const src = new Set([cur.id]);
           const seen = units.some((u) =>
             ((u.auraEvents ?? []) as any[]).some(
               (a) =>
@@ -1180,7 +1196,14 @@ for (const f of files) {
       if (!cast || (cast.destUnitId && cast.destUnitId !== "0000000000000000")) continue;
       if (m.timestamp < start || m.timestamp > legacy.endTime) continue;
       const name = getEnglishSpellName(m.spellId, "");
-      const ok = applicableCCAvoidanceIds(m.spellId, name);
+      // a buff-kind avoidance (the miss row proves the control reached the
+      // player, so a reposition explains nothing — Spirit Walk pressed 7 s
+      // earlier is no immunity to a Shadowfury)
+      const ok = new Set(
+        [...applicableCCAvoidanceIds(m.spellId, name)].filter((id) =>
+          CC_AVOIDANCE_BUFF_SPELLS.has(id),
+        ),
+      );
       const up = ((u.auraEvents ?? []) as any[]).some((a) => {
         if (!ok.has(a.spellId) || a.logLine.event !== LogEvent.SPELL_AURA_APPLIED) return false;
         if (a.logLine.timestamp > m.timestamp) return false;
@@ -1370,7 +1393,12 @@ for (const f of files) {
       const caster = byName.get(pidName.get(dm[2]!) ?? "");
       if (!caster) continue;
       const t = start + secOf(dm[1]!) * 1000;
-      const succ = succOf(caster, dm[3]!.trim(), t - 1500, t + 1000);
+      // the press in the line's own second first (an aura line sits at the
+      // aura's second; a press 1.5 s earlier is another line's — 129-5 1:31
+      // and 1:33 are two Ice Barrier presses)
+      const succ =
+        succOf(caster, dm[3]!.trim(), t, t + 1000) ??
+        succOf(caster, dm[3]!.trim(), t - 1500, t);
       if (!succ) continue;
       const pMs = succ.logLine.timestamp;
       const endMs = pMs + Number(dm[4]) * 1000;
