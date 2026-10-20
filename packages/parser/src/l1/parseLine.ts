@@ -19,6 +19,16 @@ import { splitLine } from "./splitTopLevel";
 import { parseTimestamp } from "./timestamp";
 import type { ParsedLine } from "./types";
 
+/** Rows whose only reading here is the advanced block (fact2, 2026-10-20). */
+const ADVANCED_ONLY_EVENTS: ReadonlySet<string> = new Set([
+  "SPELL_ENERGIZE",
+  "SPELL_PERIODIC_ENERGIZE",
+  "SPELL_DRAIN",
+  "SPELL_PERIODIC_DRAIN",
+  "SPELL_LEECH",
+  "SPELL_PERIODIC_LEECH",
+]);
+
 export function parseLine(
   line: string,
   opts?: { timezone?: string },
@@ -176,6 +186,22 @@ export function parseLine(
         const level = parseInt(params[params.length - 1] ?? "", 10);
         if (!Number.isNaN(level)) result.empowerLevel = level;
       }
+    } else if (ADVANCED_ONLY_EVENTS.has(eventName)) {
+      // fact2 (2026-10-20): ENERGIZE / DRAIN / LEECH rows carry the same
+      // advanced block as a heal (actor, HP, max HP, powers, position — from
+      // field 11; measured on raw rows of five fact2 logs). Unread, they
+      // were 0.6–8.2 % of a log's advanced rows, HP readings and positions
+      // the samplers never saw (83219f2b: Anti-Magic Shell's energize at
+      // 0:31.021 was the reading nearest the [STATE] tick). The non-periodic
+      // ones keep their spell-event reading; the periodic ones stay
+      // otherwise unread — only the sample is taken.
+      if (!eventName.includes("PERIODIC")) {
+        result.base = decodeBaseUnits(params);
+        result.spell = decodeSpell(params, 8);
+      } else {
+        isKnown = false;
+      }
+      result.advanced = decodeAdvanced(params, 11);
     } else if (
       eventName.startsWith("SPELL_") ||
       eventName.startsWith("RANGE_")

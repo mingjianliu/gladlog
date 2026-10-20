@@ -153,3 +153,30 @@ describe("ENVIRONMENTAL_DAMAGE (GH #100 field ledger)", () => {
     expect(r.advanced!.x).toBeCloseTo(1259.63, 2);
   });
 });
+
+// fact2 (2026-10-20): verbatim fact2 rows — an energize and a periodic one
+const ENERGIZE =
+  '10/16/2026 17:45:30.737-6  SPELL_ENERGIZE,Player-96-0EBA5958,"Læne-Gul\'dan-US",0x512,0x80000002,Player-96-0EBA5958,"Læne-Gul\'dan-US",0x512,0x80000002,453334,"Combat Wisdom",0x1,Player-96-0EBA5958,0000000000000000,1057720,1057720,4351,742,1252,2944,0,0,3,150,150,0,531.52,630.91,0,6.2831,344,1.0000,0.0000,12,6';
+const PERIODIC_ENERGIZE =
+  '10/16/2026 17:45:48.116-6  SPELL_PERIODIC_ENERGIZE,Player-1427-0E8CC4DF,"Tupi-Ragnaros-US",0x10548,0x80000000,Player-1427-0E8CC4DF,"Tupi-Ragnaros-US",0x10548,0x80000000,202430,"Nature\'s Balance",0x1,Player-1427-0E8CC4DF,0000000000000000,1002588,1030200,4286,4121,2774,3819,0,202704,8,510,1400,0,572.04,645.75,0,5.9768,340,1.0000,0.0000,8,1400';
+const DRAIN =
+  '10/16/2026 17:45:53.108-6  SPELL_DRAIN,Player-57-0D954ACC,"Jekkell-Illidan-US",0x511,0x80000020,Player-57-0D954ACC,"Jekkell-Illidan-US",0x511,0x80000020,22568,"Ferocious Bite",0x1,Player-57-0D954ACC,0000000000000000,1047640,1047640,4545,744,1327,2581,0,5664,3,125,140,0,565.71,631.70,0,5.8255,344,19,3,0,140';
+
+describe("ENERGIZE / DRAIN rows carry an advanced sample (fact2)", () => {
+  it.each([
+    ["SPELL_ENERGIZE", ENERGIZE, "Player-96-0EBA5958", 1057720, 1057720, 531.52],
+    ["SPELL_PERIODIC_ENERGIZE", PERIODIC_ENERGIZE, "Player-1427-0E8CC4DF", 1002588, 1030200, 572.04],
+    ["SPELL_DRAIN", DRAIN, "Player-57-0D954ACC", 1047640, 1047640, 565.71],
+  ])("%s", (_, line, actor, hp, maxHp, x) => {
+    const r = parseLine(line)!;
+    expect(r.advanced?.actorGuid).toBe(actor);
+    expect(r.advanced?.hp).toBe(hp);
+    expect(r.advanced?.maxHp).toBe(maxHp);
+    expect(r.advanced?.x).toBeCloseTo(x, 2);
+  });
+  it("the periodic row stays otherwise unread (no spell event mirrored)", () => {
+    const r = parseLine(PERIODIC_ENERGIZE)!;
+    expect(r.spell).toBeUndefined();
+    expect(r.known).toBe(false);
+  });
+});
