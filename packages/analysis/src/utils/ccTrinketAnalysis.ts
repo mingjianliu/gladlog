@@ -4223,6 +4223,9 @@ export function analyzePlayerCCAndTrinket(
       spellId: e.spellId ?? "",
     }));
     const castSpellIds = [...new Set(castTimes.map((c) => c.spellId))];
+    const roundUnitList: ICombatUnit[] = Array.isArray(combat.units)
+      ? (combat.units as ICombatUnit[])
+      : (Object.values(combat.units ?? {}) as ICombatUnit[]);
     const deathS = (firstDeathMs(player) - matchStartMs) / 1000;
     for (const inst of interruptInstances) {
       // a death in the kick's own millisecond closes the window too (codex
@@ -4251,11 +4254,14 @@ export function analyzePlayerCCAndTrinket(
         // second kick on the other school overlapping this one's lock would
         // otherwise count as time neither spell could go out
         const kickMs = matchStartMs + inst.atSeconds * 1000;
+        // the round's units: a later kick's lockout is its kicker's own
+        // (codex 20-F16-12: a non-talented mage's Counterspell read 6 s
+        // here, 5 s on its own instance)
         const cannotCast = cannotCastIntervalsForSpells(
           player,
           enemyIds,
           castSpellIds,
-          undefined,
+          roundUnitList,
           (iv) => Math.abs(iv.from - kickMs) <= 1,
         );
         const ccMs = coveredMsWithin(

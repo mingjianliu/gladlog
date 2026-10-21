@@ -45,6 +45,7 @@ import {
 import {
   makeAuraEvent,
   makeInterruptEvent,
+  makeSpellCastEvent,
   makeUnit,
 } from "./ported/testHelpers";
 
@@ -69,29 +70,44 @@ describe("cc-dr F-BK1 — a dispel backlash locks the dispeller", () => {
   it.each([
     ["196364", "Unstable Affliction silence"],
     ["87204", "Sin and Punishment horror"],
-  ])("%s (%s) from the enemy is an interval; from a friend it is too (fact2)", (id) => {
-    const enemySourced = makeUnit("player-1", {
-      auraEvents: [
-        aura(LogEvent.SPELL_AURA_APPLIED, id, 254.142, "enemy-1", "player-1"),
-        aura(LogEvent.SPELL_AURA_REMOVED, id, 258.153, "enemy-1", "player-1"),
-      ],
-    });
-    expect(buildCannotCastIntervals(enemySourced, enemies)).toEqual([
-      { from: START + 254_142, to: START + 258_153 },
-    ]);
-    const friendSourced = makeUnit("player-1", {
-      auraEvents: [
-        aura(LogEvent.SPELL_AURA_APPLIED, id, 254.142, "friend-1", "player-1"),
-        aura(LogEvent.SPELL_AURA_REMOVED, id, 258.153, "friend-1", "player-1"),
-      ],
-    });
-    // fact2 (2026-10-20): a backlash sourced to a teammate (the dispelled
-    // DoT was the teammate's) locks the dispeller all the same — e49b7c3b
-    // logged "Can't do that while horrified" under one
-    expect(buildCannotCastIntervals(friendSourced, enemies)).toEqual([
-      { from: START + 254_142, to: START + 258_153 },
-    ]);
-  });
+  ])(
+    "%s (%s) from the enemy is an interval; from a friend it is too (fact2)",
+    (id) => {
+      const enemySourced = makeUnit("player-1", {
+        auraEvents: [
+          aura(LogEvent.SPELL_AURA_APPLIED, id, 254.142, "enemy-1", "player-1"),
+          aura(LogEvent.SPELL_AURA_REMOVED, id, 258.153, "enemy-1", "player-1"),
+        ],
+      });
+      expect(buildCannotCastIntervals(enemySourced, enemies)).toEqual([
+        { from: START + 254_142, to: START + 258_153 },
+      ]);
+      const friendSourced = makeUnit("player-1", {
+        auraEvents: [
+          aura(
+            LogEvent.SPELL_AURA_APPLIED,
+            id,
+            254.142,
+            "friend-1",
+            "player-1",
+          ),
+          aura(
+            LogEvent.SPELL_AURA_REMOVED,
+            id,
+            258.153,
+            "friend-1",
+            "player-1",
+          ),
+        ],
+      });
+      // fact2 (2026-10-20): a backlash sourced to a teammate (the dispelled
+      // DoT was the teammate's) locks the dispeller all the same — e49b7c3b
+      // logged "Can't do that while horrified" under one
+      expect(buildCannotCastIntervals(friendSourced, enemies)).toEqual([
+        { from: START + 254_142, to: START + 258_153 },
+      ]);
+    },
+  );
 });
 
 describe("cc-dr F-SR1 — a CC sent back onto its caster locks the caster", () => {
@@ -173,14 +189,30 @@ describe("fact2 — a dispel backlash sourced to a teammate is a CC on the frien
     const healer = makeUnit("player-1", {
       reaction: CombatUnitReaction.Friendly,
       auraEvents: [
-        aura(LogEvent.SPELL_AURA_APPLIED, "87204", 88.908, "friend-1", "player-1"),
-        aura(LogEvent.SPELL_AURA_REMOVED, "87204", 91.918, "friend-1", "player-1"),
+        aura(
+          LogEvent.SPELL_AURA_APPLIED,
+          "87204",
+          88.908,
+          "friend-1",
+          "player-1",
+        ),
+        aura(
+          LogEvent.SPELL_AURA_REMOVED,
+          "87204",
+          91.918,
+          "friend-1",
+          "player-1",
+        ),
       ],
     });
     const r = analyzePlayerCCAndTrinket(
       healer,
       [makeUnit("enemy-1", { reaction: CombatUnitReaction.Hostile })],
-      { startTime: START, endTime: START + 300_000, startInfo: { zoneId: "1672" } },
+      {
+        startTime: START,
+        endTime: START + 300_000,
+        startInfo: { zoneId: "1672" },
+      },
     );
     expect(r.ccInstances.map((c) => [c.spellId, c.sourceId])).toEqual([
       ["87204", "friend-1"],
@@ -415,7 +447,88 @@ describe("kickLockoutSecondsFor — the kicker's Improved Counterspell", () => {
 
   // a real Frost mage loadout without the node (605-file capture, one of
   // the four non-holder Counterspells), as COMBATANT_INFO lists it
-  const NON_HOLDER = ([[62084,80140,1],[62086,80142,1],[62088,80144,1],[62091,80147,1],[62096,80153,1],[62098,80155,1],[62100,80157,1],[62102,80159,2],[62104,80161,1],[62114,80173,2],[62115,80174,1],[62116,80175,1],[62122,80181,1],[62123,80182,2],[62127,80187,1],[62129,80189,1],[62153,80216,1],[62157,80220,1],[62163,80226,1],[62164,80227,1],[62170,80234,1],[62176,80241,1],[62177,80242,1],[62178,80243,1],[62179,80244,1],[62180,80245,1],[62182,80248,1],[62184,80250,1],[81468,102429,1],[93524,115877,1],[62092,115878,1],[94654,117257,1],[94655,117258,1],[94656,117259,1],[94658,117261,1],[94659,117262,1],[94660,117263,1],[94661,117264,1],[94662,117265,1],[94663,117266,1],[99828,123339,1],[101883,125819,1],[62094,126060,1],[94657,128267,1],[108653,134180,1],[108654,134182,1],[108655,134185,1],[108657,134187,1],[108658,134188,1],[108659,134189,1],[108660,134190,1],[108661,134191,1],[62105,134197,1],[62087,134199,1],[108851,134407,1],[108852,134408,2],[108855,134411,1],[108858,134414,2],[108859,134415,1],[103771,134418,1],[108864,134421,1],[62150,134540,1],[109667,135918,1],[109668,135919,1],[109669,135946,1],[109915,136182,1],[109916,136183,1],[62110,136466,1],[110081,136579,1],[110258,136796,1],[110283,136837,1],[108850,136839,1],[62173,136880,1],[110422,137032,1],[110422,137033,2],[110422,137034,1],[62117,80176,1],[94664,117267,1]] as const).map(([id1, id2, count]) => ({
+  const NON_HOLDER = (
+    [
+      [62084, 80140, 1],
+      [62086, 80142, 1],
+      [62088, 80144, 1],
+      [62091, 80147, 1],
+      [62096, 80153, 1],
+      [62098, 80155, 1],
+      [62100, 80157, 1],
+      [62102, 80159, 2],
+      [62104, 80161, 1],
+      [62114, 80173, 2],
+      [62115, 80174, 1],
+      [62116, 80175, 1],
+      [62122, 80181, 1],
+      [62123, 80182, 2],
+      [62127, 80187, 1],
+      [62129, 80189, 1],
+      [62153, 80216, 1],
+      [62157, 80220, 1],
+      [62163, 80226, 1],
+      [62164, 80227, 1],
+      [62170, 80234, 1],
+      [62176, 80241, 1],
+      [62177, 80242, 1],
+      [62178, 80243, 1],
+      [62179, 80244, 1],
+      [62180, 80245, 1],
+      [62182, 80248, 1],
+      [62184, 80250, 1],
+      [81468, 102429, 1],
+      [93524, 115877, 1],
+      [62092, 115878, 1],
+      [94654, 117257, 1],
+      [94655, 117258, 1],
+      [94656, 117259, 1],
+      [94658, 117261, 1],
+      [94659, 117262, 1],
+      [94660, 117263, 1],
+      [94661, 117264, 1],
+      [94662, 117265, 1],
+      [94663, 117266, 1],
+      [99828, 123339, 1],
+      [101883, 125819, 1],
+      [62094, 126060, 1],
+      [94657, 128267, 1],
+      [108653, 134180, 1],
+      [108654, 134182, 1],
+      [108655, 134185, 1],
+      [108657, 134187, 1],
+      [108658, 134188, 1],
+      [108659, 134189, 1],
+      [108660, 134190, 1],
+      [108661, 134191, 1],
+      [62105, 134197, 1],
+      [62087, 134199, 1],
+      [108851, 134407, 1],
+      [108852, 134408, 2],
+      [108855, 134411, 1],
+      [108858, 134414, 2],
+      [108859, 134415, 1],
+      [103771, 134418, 1],
+      [108864, 134421, 1],
+      [62150, 134540, 1],
+      [109667, 135918, 1],
+      [109668, 135919, 1],
+      [109669, 135946, 1],
+      [109915, 136182, 1],
+      [109916, 136183, 1],
+      [62110, 136466, 1],
+      [110081, 136579, 1],
+      [110258, 136796, 1],
+      [110283, 136837, 1],
+      [108850, 136839, 1],
+      [62173, 136880, 1],
+      [110422, 137032, 1],
+      [110422, 137033, 2],
+      [110422, 137034, 1],
+      [62117, 80176, 1],
+      [94664, 117267, 1],
+    ] as const
+  ).map(([id1, id2, count]) => ({
     id1,
     id2,
     count,
@@ -424,7 +537,13 @@ describe("kickLockoutSecondsFor — the kicker's Improved Counterspell", () => {
   it("a kicker without the talent locks 5 s; an unknown kicker keeps the ruled 6", () => {
     expect(kickLockoutSeconds(COUNTERSPELL)).toBe(6);
     expect(
-      kickLockoutSecondsFor(COUNTERSPELL, victim, FROSTBOLT, 0, mage(NON_HOLDER)),
+      kickLockoutSecondsFor(
+        COUNTERSPELL,
+        victim,
+        FROSTBOLT,
+        0,
+        mage(NON_HOLDER),
+      ),
     ).toBe(5);
     // an empty loadout proves nothing either way
     expect(
@@ -444,5 +563,74 @@ describe("kickLockoutSecondsFor — the kicker's Improved Counterspell", () => {
     expect(
       kickLockoutSecondsFor("1766", victim, FROSTBOLT, 0, mage(NON_HOLDER)),
     ).toBe(kickLockoutSeconds("1766"));
+  });
+
+  // codex 20-F16-12: kick-eaten's `ccInWindowS` read the other kicks'
+  // lockouts with no round units — a non-holder's Counterspell counted 6 s
+  it("kick-eaten ccInWindowS reads an earlier Counterspell at its kicker's length", () => {
+    const T = 1_000_000;
+    const FLASH_HEAL = "2061";
+    const caster = mage(NON_HOLDER);
+    const rogue = makeUnit("enemy-rogue", {
+      class: CombatUnitClass.Rogue,
+      spec: CombatUnitSpec.Rogue_Subtlety,
+      reaction: CombatUnitReaction.Hostile,
+      info: { pvpTalents: [], talents: [] } as never,
+    });
+    const priest = makeUnit("player-1", {
+      name: "Owner",
+      class: CombatUnitClass.Priest,
+      spec: CombatUnitSpec.Priest_Holy,
+      reaction: CombatUnitReaction.Friendly,
+      info: { pvpTalents: [], talents: [] } as never,
+      spellCastEvents: [
+        makeSpellCastEvent(
+          FLASH_HEAL,
+          T + 5_000,
+          "player-1",
+          "Owner",
+          "player-1",
+          "Owner",
+          0,
+          "Flash Heal",
+        ),
+      ],
+      actionIn: [
+        {
+          ...makeInterruptEvent(
+            COUNTERSPELL,
+            "Counterspell",
+            FLASH_HEAL,
+            "Flash Heal",
+            T + 10_000,
+            "enemy-mage",
+            "Mage",
+          ),
+          destUnitId: "player-1",
+        },
+        {
+          ...makeInterruptEvent(
+            "1766",
+            "Kick",
+            "605",
+            "Mind Control",
+            T + 12_000,
+            "enemy-rogue",
+            "Rogue",
+          ),
+          destUnitId: "player-1",
+        },
+      ],
+    });
+    const r = analyzePlayerCCAndTrinket(priest, [caster, rogue], {
+      startTime: T,
+      endTime: T + 60_000,
+      startInfo: { zoneId: "1672" },
+      units: { "player-1": priest, "enemy-mage": caster, "enemy-rogue": rogue },
+    } as never);
+    const kick = r.interruptInstances.find((k) => k.kickSpellId === "1766");
+    // the Counterspell's Holy lockout stops every spell cast this round,
+    // 12 → 15 (its 5 s), not 12 → 16
+    expect(kick?.ccInWindowS).toBe(3);
   });
 });
