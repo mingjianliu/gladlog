@@ -6,6 +6,73 @@
 口径,release/纯文档 commit 归入「其他」)。发版流程见
 `.claude/skills/release`。
 
+## v0.1.37(2026-10-21)
+
+两块工作。fact2 第二轮审计(GH #153)逐个事实类对照原始日志核对时间线,并修好每个事实的所有读者:光环解析回产生它的那次施法,击杀窗口的爆发计入被护盾吸收的命中,法术反射的回弹是反射者的伤害,ENERGIZE / DRAIN / LEECH 行作为 HP 与位置样本,谷值读到该单位死亡那一秒、直到死亡为止。冷却台账现在按天赋的真实效果建模:DB2 里按等级、按专精的天赋点数,说明文字里的专精分支,事件型冷却缩减(消耗资源、打断、命中、重置),按热修日期区分的数值,以及从天赋说明文字读出、再经语料确认的增益持续时间(GH #154、#155)。2,240 个文件上台账里「不可能的重按」从 5,240 降到 229。每一处增删指控的改动都先在 605 文件采集上预览、经用户批准后才落地。
+
+随后对审计过的 30 个回合做了同局复审:第二轮的 67 条修好了 66 条;复审新发现的问题,发版前已修好或列在 GH #153。
+
+已知审稿欠账(GH #144):五个冷却提交 `dec9626b` `c4a5a61d` `d2f2c08f` `01643393` `5dcd31c5`,以及撞到审稿额度上限的三个排队单元(复测第 1 组后续、2026-10-20 的裁定、GH #155 持续时间),还没有经过跨 AI 审稿;复审修复这一批 `c4291be6` 也还没有。
+
+### AI 分析 —— 战报对你说的话
+
+#### 冷却
+
+- `dec9626b` **台账漏掉的德鲁伊冷却天赋**(GH #154):Control of the Dream 把冷却就绪闲置的时间抵扣掉,Cenarius' Guidance 每个 Grove Guardian 消失时让 Tree of Life 减 5 秒、让恢复 Convoke 减 60 秒,Call of Ohn'ahra 按日志日期取值(Nature's Swiftness 的不可能 + 下限解释重按 502 → 0)。**候选增加**:missed-sync-window +7(平衡德 Force of Nature 在窗口内回来),用户批准
+- `c4a5a61d` 多个专精共用的天赋每个专精各有一条效果行,只有说明文字写明哪条归谁;现在由说明文字的专精分支给这些行设门(17 个天赋的 45 行)。火法的 Dragon's Breath 是 40 秒而不是 28 秒;Improved Feign Death 按等级读(25 → 20 秒);野性 Convoke 是 60 秒。没有候选增删;3 条在冷却中仍提议 Dragon's Breath 的 `[PEEL OPTION]` 行消失
+- `d2f2c08f` 天赋点数按已购等级、按专精从 DB2 读取(此前两张表都没人读):神圣骑的 Blessing of Sacrifice 是 105 秒,Avenging Crusader 按等级 52.5 / 45 秒。**候选删除**:cd-hoarded −14 +1、external-unused −7、slow-defensive-response −2,用户批准
+- `01643393` 台账之外的所有读者共用一套冷却模型(`unitCooldownEntry`):技能栏就绪、对面冷却时间线、击杀窗口的减伤状态、无防窗口、死亡回顾和对拼交换。Power Infusion 一次按键的两条 SUCCESS 行不再被读成两次按键(6,678 次「不可能」重按 → 0)。kick-priority-missed / -team 各 −1、kick-eaten −2,用户批准
+- `5dcd31c5` **事件型冷却缩减纳入建模**(用户裁定 2026-10-20,取代 #124):消耗资源、打断、命中、消耗的增益、承受的攻击、光环结束和重置;充能技能走同样的效果和速率窗口的扭曲时钟;Sacrifice of the Just、Unbreakable Spirit、Safeguard 等按热修日期取值。台账不可能重按 5,240 → 229。missed-sync-window dps 373 → 437 / 治疗 140 → 164、kick-eaten +7、external-unused −9 +5、cd-hoarded −4 +1,用户批准
+
+#### 击杀窗口、打断与保命
+
+- `c4291be6` **同局复审修复**(605 文件预览经用户批准):治疗在 Spirit of Redemption 形态里读的治疗不再算 kick-priority(这类读条 233 次、没有一次被打断;kick-priority-missed dps 35 → 29,kick-priority-team dps 27 → 23 / 治疗 30 → 25);爆发窗口也认危机读者早已认的回应 —— Bear Form、Frenzied Regeneration、Roar of Sacrifice、Void Shield、Fade……(slow-defensive-response 88 → 69);death-setup +3(被心控的治疗吃了自己术士的恐惧);burst-into-mitigation −1
+
+- `3d369bae` `2a9264c1` 用户对 v0.1.36 复测的裁定:Time Dilation 暂时挡下的伤害算减伤,就绪的 Alter Time 在击杀窗口里算手里有减伤,种族伤害增益(Blood Fury、Berserking、Ancestral Call)与 Ultimate Penitence 算进攻大招(kick-eaten +6 / +5、missed-sync-window +2 / +3、position-mistake −3 +1、slow-defensive-response +2)
+- `6c20acbb` `8f2e472f` `81146d03` **用户对复测剩下三个问题的裁定**:Counterspell 只有带 Improved Counterspell 的踢人者锁 6 秒,确知没有该天赋的锁 5 秒(605 文件:4 个非持有者 4.93–5.00 秒恢复,501 个持有者中位 6.01 秒)。Survival of the Fittest、惩戒骑的 Divine Protection 和 Dark Pact 加入击杀窗口名册;技能栏标 `[UNUSED]` 的名册减伤整回合都算在手 —— 但没按的治疗或只能给队友的冷却不算(Desperate Prayer、Divine Hymn、Tranquility、Blessing of Sacrifice)。Shield of Vengeance 有了自己的 `[ENEMY DEF]` 行。`[KILL WINDOW]` 13,116 → 8,473、`[VULNERABLE]` 569 → 410;kick-priority-missed dps 38 → 35,kick-priority-team dps 26 → 27 / 治疗 31 → 30,用户批准
+- `81228bc8` 用户裁定 R7 选 A:找爆发和判下限时计入被护盾吸收的命中,即 `[KILL ATTEMPTS]` 的口径(`[KILL WINDOW]` +412、`[VULNERABLE]`「未被惩罚」−217;候选不动)
+- 下面整批 fact2 修复合计(基线 `fcde27b1` → 合并后):cd-hoarded dps 648 → 605 / 治疗 601 → 576(大多是主人在响应窗口内放的控制 —— Freezing Trap、Intimidation、Lightning Lasso…… —— 现在被认作已应对),missed-cleanse +29 / +21(敌人挂在我方的 DEBUFF 不再被读成我方的爆发威胁),菜单事件 7,559 → 7,560,用户批准
+
+### AI 分析 —— 时间线事实
+
+- `4da9c85e` **所有按施法 id 读的读者都把光环解析回它的施法**(施法 id ≠ 光环 id):KILL ATTEMPTS 自保(Alter Time)、叠加减伤、死亡窗口审计、爆发台账的墙(Rallying Cry、Spirit Link Totem)、`[BUFF FADED]`,以及按键放出的控制(Ring of Frost、Freezing Trap、Binding Shot、Sigil of Misery……)在每个施法侧读者上都算控制。击杀窗口团队伤害印出 `+Nk absorbed`
+- `043ae29c` 第一轮修复漏掉的第一轮类:Flameshaper 的复制跟着携带它的单位走,只有按键证据的进攻大招按 `[RES]` 读法标 `[press-only]` 列出,`[CD PRIOR]` 的谷底读真实低点,Command Demon 算宠物的控制,没有结束行的 Oppressing Roar 在 10 秒结束,跑满全程的控制不算被按键解掉,Time Dilation 的延后伤害点名护盾施放者
+- `827309cb` 击杀尝试点名团队在区间内打的人,锚在第一个打向他的按键;Spell Reflection 的回弹是反射者的伤害,并保留学派;每个时点 HP 读数取该时刻及之前的最后一条;`[RES]` 开局行把没动过的冷却列为就绪;附带驱散不印 `[ENEMY CLEANSE]` / `[PURGE]`;按出的 Spirit of Redemption 算免疫类保命
+- `933c2838` 第二部分,每类都由 29 个审计日志上的确定性检查归零:`[ENEMY HARD CAST]` 的「landed」需要伤害或吸收行,按键 HP 落在它自己的第一跳之下,被反射的控制不算主人的增益,`[HEALER EXPOSURE]` 去掉确定在冷却中的控制(1,149 → 0),技能栏冷却印出 `[a–Ns]` 区间(241 → 0),「被锁」豁免写明多久(37 → 0),规避增益下无目标 AoE 的 MISS 算 `[CC AVOIDED?]`(48 → 0),Stampeding Roar 不是控制
+- `7c14ff54` 第一轮复测遗留:Greater Invisibility 在持有者第一次出伤时结束,召唤物的驱散点名召唤物,触发可以比 proc 早 50 毫秒(223 对 Wake of Ashes → Avenging Wrath 中 165 对在 1 毫秒内、57 对在 2–50 毫秒),重按的 REFRESH 切开一面墙,被反射的施法不算「打进」免疫,对队友被拒的按键带 `[IMMUNE]`
+- `81228bc8` 用户裁定 R1:谷值读该单位死亡那一秒里死亡前的存活样本,门规接受它(29 个日志上 troughFactScan:killWindowTeamMin 5 → 0,consequenceLow 15 → 0)
+- `ef24bfdf` 605 全量的残留,逐条追到日志:召唤物的规避增益点名其主人,硬读条结果配到它之前最近的完成,按键 HP 算上自己的 REFRESH 或同名治疗,按键证据只取该单位自己的,饰品按下后仍持续的控制不算被它解掉,Hex 的变体是同一个按钮,提升上来的治疗冷却行带被拒目标的 `[IMMUNE]` 标记
+- `a866f317` `2499cc5b` v0.1.36 复测第 1 组:战斗结束后还在跑的 Dragonrage,引导 / REFRESH 的按键 HP,ABILITIES INTO 不再列入免疫不覆盖的学派或控制,The Beast Within 按机制判,击杀窗口的「你的控制就绪」读技能栏,Kingsbane 链,Stasis 里没放出的蓄力,饰品行上被反射的 Cyclone,`[REJECTED]` 按法术分段,食尸鬼按 GUID 主人贴标签,Touch of Karma 在其减益移除时结束;KILL ATTEMPTS 图例写明外援的 20% 下限,无目标的非控制按键不带 `[IMMUNE]` 标记
+- `db1b3956` `88fade8d` **增益持续时间从天赋说明文字读取**(GH #155):14 条说明文字写明、经语料确认的延长(Apotheosis、Cloak of Shadows、Zenith、Desperate Prayer、Power Word: Shield……),以及按每次施法计的 Spiritwalker's Momentum —— 技能栏印出「lasts 15–19s」。候选不动;1,875 份上下文
+- `c4291be6` **同局复审,事实层**:一次 Capacitor Totem 命中只印一条 `[CC AVOIDED?]`;被自己 Cheap Shot 打破的 Vanish、随变形结束的 Frenzied Regeneration 如实写出;治疗死后的击杀窗口不再算「能出手、控制就绪」;Shield of Vengeance 标 `[no press logged]`;爆发台账和 KILL ATTEMPTS 不再计入 Time Dilation 的推迟吸收;Nether Ward 的回伤算作反射伤害;术士只有 Felhunter 在场时才能驱散(头部写明到几点);被驱散的缴械在驱散行里点名;天赋带出的我方控制(Terror of the Skies)算「放了控制」;刷屏折叠计入每一次施放;被心控者吃到自己队伍的控制也算控制,标 `[from its own team, while charmed]`;Berserker Rage / Shout 与 Nullifying Shroud 按 DB2 机制判免疫;晕链按最晚结束的那个晕结束;被 Oppressing Roar 延长的沉默 / 缴械按实际长度判。**用户裁定 2026-10-21**:`[CONSEQ]` 的起点取控制落地那一刻的 HP(不再是更早的 `[STATE]` 整秒读数;没掉血的行列出各队友读数),带 Improved Frost Nova 的法师 Frost Nova 按 8 秒算
+- `fe557151` 跨 AI 审稿修复(15 条发现确认并修复 10 条,每条一个回归测试):延后类护盾的吸收行不进任何爆发与击杀读者,友方减益不算敌方威胁,Grounding 能看见施法 / 光环 id 不同的控制(Lightning Lasso),击杀窗口的开脱语同时写明两个限定,缴械或沉默跑满全程后才按的 Medallion 不算解掉它,开局 `[RES]` 行遵守 Forbearance,被压掉的 `[RES]` 行保留差量状态,反射回弹归到最近的伤害链(`[REFLECTED]` 42 → 52),效果证据的按键按效果时长分组,回合外的施法不再关掉推断。候选不动
+
+### 战斗日志解析
+
+- `d8978e39` SPELL_ENERGIZE / SPELL_DRAIN / SPELL_LEECH 行及其 PERIODIC 形式带有高级块(HP、最大 HP、位置);解析器现在把它们当作样本(占一个日志带高级块行数的 0.6–8.2%,此前 HP 与位置取样器从未见过)
+
+### 冷却、天赋与法术数据
+
+- `db1b3956` `82e7337a` `genTalentDurations` 从 zhCN 说明文字读取天赋持续时间延长(169 条:120 条固定、48 条按事件、1 条设定值;17 条未解析),已登记进 datagen manifest 和赛季手册
+
+### 桌面端
+
+- `3d369bae` 死亡回顾的减伤审计把 Time Dilation 写作「暂时挡下(之后以自身伤害落地)」,而不是「只是延后、没有挡住」
+- `e0a12561` `16eb842b` `5f7e2a64` 场景基线和测试夹具跟随修复:report-synth 死亡回顾列出爆发台账已点名的 Blur;真实样例里的对手手握没按的名册减伤(Ice Block、Evasion、Aspect of the Turtle……),因此他们的击杀窗口和窗口内的漏驱散都消失了
+
+### 性能
+
+- `a3fcff9e` 首屏重新回到预算内(CI 比值 5.7 → 2.6):驱散汇总按单位缓存不能施法区间,重按切分只索引一次 REFRESH 行。605 文件输出逐字节相同
+
+### 评测与验证工具
+
+- `933c2838` `2a9264c1` `81146d03` `88fade8d` `fact2Scan`(每个审计过的事实类一条确定性检查,新增 inHandRewind、stackedDeferral、racialPressedInside、kitInHand、riderShieldLine、ledgerRosterUp、kitTooltipLasts)与 `talentDurationVerify`(持有者与非持有者「跑满」寿命对比)
+
+### 其他
+
+- `c4645a92` `9901ccba` `4274bbc7` `2071437a` `5d4d76bb` PROMPT_VERSION 427、431、433、434、435
+- `bcd5ec8d` `7ac8ade0` lint 告警上限保持 1572
+
 ## v0.1.36(2026-10-20)
 
 一个月的事实层工作。教练时间线逐行对照日志实际所写核了一遍,改写成如实陈述真实的游戏状态:印出的 HP 低点是真正的最低点,印在它发生的那一秒;控制写明是谁或什么解掉了它、它怎么结束;PvP 饰品按键列出它解掉的每一个控制;宠物的驱散点名那只宠物;没有按键开出的对面减伤写作 `[no press logged]`;对面的 Champion's Spear、Smoke Bomb 和 Tremor Totem 按键有了 `[ENEMY UTILITY]` 行;目标开出自己的减伤、免疫或吸收盾时,击杀窗口随之关闭;日志不写光环的沉默(Solar Beam)在有被拒按键证明时显示出来。打断锁定现在只锁它锁住的那个学派,击杀窗口在目标死亡和回合结束时结束,冷却台账能看见玩家实际按下的减伤。每一处增删指控的改动都先在 605 文件采集上预览、经用户批准后才落地。
