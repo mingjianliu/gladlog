@@ -308,6 +308,10 @@ export type EnemySaveEffect = "absorb" | EnemyProcSaveEffect;
 export const ENEMY_SAVE_EFFECT_BY_NAME: ReadonlyMap<string, EnemySaveEffect> =
   new Map<string, EnemySaveEffect>([
     ["Feign Death", "absorb"],
+    // a rider absorb shield (`RIDER_ABSORB_SAVE_AURAS`, user ruling 2026-10-20)
+    ...[...RIDER_ABSORB_SAVE_AURAS.values()].map(
+      (n): [string, EnemySaveEffect] => [n, "absorb"],
+    ),
     ...Object.values(ENEMY_PROC_SAVES).map((p): [string, EnemySaveEffect] => [
       p.name,
       p.effect,

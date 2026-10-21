@@ -203,7 +203,13 @@ import { join, resolve } from "node:path";
 import { gunzipSync } from "node:zlib";
 
 import { ensureAnalysisData } from "@gladlog/analysis";
+import {
+  countsAsKillWindowDefensiveInHand,
+  KW_IN_HAND_ONLY_DEFENSIVE_IDS,
+  KW_MAJOR_DEFENSIVE_IDS,
+} from "@gladlog/analysis/src/data/abilityProfile";
 import castEffectAuraGenerated from "@gladlog/analysis/src/data/castEffectAuraGenerated.json";
+import { classMetadata } from "@gladlog/analysis/src/data/classSpells";
 import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData";
 import {
   CONTROL_FAILED_MISS_TYPES,
@@ -294,6 +300,9 @@ const CHECKS = [
   "inHandRewind",
   "stackedDeferral",
   "racialPressedInside",
+  "kitInHand",
+  "riderShieldLine",
+  "ledgerRosterUp",
 ] as const;
 
 /** cast → the auras that are its own effect under another id (read straight
@@ -319,6 +328,16 @@ const fmtS = (sec: number): string => {
   const t = Math.max(0, Math.floor(sec));
   return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`;
 };
+/** the names a kit line can print for a kill-window in-hand defensive
+ * (user rulings 2026-10-20: the roster, Alter Time, unpressed kit rows) */
+const KW_IN_HAND_NAMES = new Set<string>();
+for (const id of [...KW_MAJOR_DEFENSIVE_IDS, ...KW_IN_HAND_ONLY_DEFENSIVE_IDS]) {
+  if (!countsAsKillWindowDefensiveInHand(id)) continue;
+  const official = getEnglishSpellName(id, "");
+  if (official) KW_IN_HAND_NAMES.add(official);
+  for (const cls of classMetadata)
+    for (const a of cls.abilities) if (a.spellId === id) KW_IN_HAND_NAMES.add(a.name);
+}
 const secOf = (mss: string): number => {
   const [m, s] = mss.split(":");
   return Number(m) * 60 + Number(s);
@@ -1571,6 +1590,98 @@ for (const f of files) {
         if (!inside.includes(name))
           miss("racialPressedInside", `${where} ${m[1]}–${m[2]}: ${p.name} ${name} at ${sec}s not under pressed inside`);
       }
+  }
+  // user ruling 2026-10-20 (idx 60): a roster defensive the kit tags
+  // [UNUSED] is in hand all round — no `defenseless` span on that unit
+  const kitOf = new Map<string, string>();
+  for (let i = 0; i < lines.length; i++) {
+    const u = /<unit id="\d+" name="([^"]+)"/.exec(lines[i]!);
+    if (u && lines[i + 1]?.includes("<cooldowns>")) kitOf.set(u[1]!, lines[i + 1]!);
+  }
+  for (const l of lines) {
+    const m =
+      /^ {2}\[(?:KILL WINDOW|VULNERABLE)\] (\d+:\d\d)–(\d+:\d\d)(?: \(\d+s\))? on [^(]+\(([^)]+)\)/.exec(l);
+    if (!m) continue;
+    const name = pidName.get(m[3]!) ?? m[3]!;
+    const kit = kitOf.get(name);
+    if (!kit) continue;
+    bump("kitInHand");
+    const held = [...kit.matchAll(/(?:<cooldowns>|, )([^,[<]+?) \[[^\]]*\](?: \[[^\]]*\])* \[UNUSED\]/g)]
+      .map((x) => x[1]!.trim())
+      .filter((n) => KW_IN_HAND_NAMES.has(n));
+    if (held.length > 0)
+      miss("kitInHand", `${where} ${m[1]}–${m[2]} ${name}: kit holds ${held.join("/")} [UNUSED]`);
+  }
+  // user ruling 2026-10-20 (idx 22): every Shield of Vengeance on an enemy
+  // gets its own [ENEMY DEF] line at its second
+  for (const u of players) {
+    if (ourSide.has(u.id)) continue;
+    for (const a of (u.auraEvents ?? []) as any[]) {
+      if (a.spellId !== "184662" || a.logLine.event !== LogEvent.SPELL_AURA_APPLIED) continue;
+      const sec = Math.floor((a.logLine.timestamp - start) / 1000);
+      if (sec < 0 || a.logLine.timestamp >= (legacy as any).endTime) continue;
+      bump("riderShieldLine");
+      const stamp = `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")}`;
+      // a re-application inside a printed one is that line's (the aura
+      // join, `joinReappliedIntervals`): `(absorb Nk, T.Ts` covers it
+      const covered = lines.some((l) => {
+        const m = /^(\d+):(\d\d) {2}\[ENEMY DEF\].*Shield of Vengeance \(absorb[^,]*, (\d+(?:\.\d)?)s/.exec(l);
+        if (!m) return false;
+        const at = Number(m[1]) * 60 + Number(m[2]);
+        return at === sec || (at <= sec && sec <= at + Number(m[3]));
+      });
+      if (!covered)
+        miss("riderShieldLine", `${where} ${stamp} ${u.name}: no [ENEMY DEF] Shield of Vengeance line`);
+    }
+  }
+  // user ruling 2026-10-20 (idx 45 / 48): the burst ledger names Retribution's
+  // Divine Protection, Survival of the Fittest and Dark Pact when they were
+  // up on the burst target for at least 0.5 s of the burst
+  {
+    const ROSTER_UP = new Map([
+      ["403876", "Divine Protection"],
+      ["264735", "Survival of the Fittest"],
+      ["108416", "Dark Pact"],
+    ]);
+    let burst: [number, number] | undefined;
+    let tgt: any;
+    let named = "";
+    const flush = () => {
+      if (!burst || !tgt) return;
+      for (const [id, nm] of ROSTER_UP) {
+        const evs = ((tgt.auraEvents ?? []) as any[]).filter((a) => a.spellId === id);
+        let overlap = 0;
+        for (const a of evs) {
+          if (a.logLine.event !== LogEvent.SPELL_AURA_APPLIED) continue;
+          const rm = evs.find((r) => r.logLine.event === LogEvent.SPELL_AURA_REMOVED && r.logLine.timestamp >= a.logLine.timestamp);
+          const from = (a.logLine.timestamp - start) / 1000;
+          const to = rm ? (rm.logLine.timestamp - start) / 1000 : from;
+          overlap += Math.max(0, Math.min(to, burst[1] + 1) - Math.max(from, burst[0] + 1));
+        }
+        if (overlap < 1.5) continue; // well clear of the 0.5 s floor on the grid
+        bump("ledgerRosterUp");
+        if (!named.includes(nm))
+          miss("ledgerRosterUp", `${where} burst ${burst[0]}–${burst[1]} ${tgt.name}: ${nm} up ${overlap.toFixed(1)}s, not named`);
+      }
+    };
+    for (const l of lines) {
+      const b = /^ {2}Burst #\d+ — (\d+:\d\d)–(\d+:\d\d)/.exec(l);
+      if (b) {
+        flush();
+        burst = [secOf(b[1]!), secOf(b[2]!)];
+        tgt = undefined;
+        named = "";
+        continue;
+      }
+      const t = /^ {4}Target: (\S+) /.exec(l);
+      if (t && burst && !tgt) tgt = byName.get(t[1]!);
+      if (/^ {4}Target had /.test(l)) named += l;
+      if (/^\S/.test(l)) {
+        flush();
+        burst = undefined;
+      }
+    }
+    flush();
   }
   // [STACKED DEFENSIVES] whose later aura is a deferral shield: the printed
   // overlap share is what the log records it held back (its own absorb rows)
