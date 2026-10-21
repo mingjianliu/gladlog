@@ -3930,3 +3930,25 @@ Elune, Soul Immolation), external-unused −9 (Blessing of Sacrifice after
 its hotfix) +5 (Pain Suppression with Protector of the Frail, Time
 Dilation under rate windows), cd-hoarded −4 +1 — user approved. Gates:
 baseline residue only.
+
+v433 (2026-10-21, GH #155 — user correction 「你们完全没有去读天赋……我们只需要
+验证就行，不需要盲猜」): talent duration extensions are read off the talent
+tooltips (`genTalentDurations.ts`: every talent whose zhCN tooltip says a
+duration is extended, placeholders and spec branches resolved — 169 entries,
+120 fixed / 48 per-event / 1 set, 17 sentences left unparsed rather than
+guessed) and verified on the 605-file corpus (`talentDurationVerify.ts`:
+holders' lifetimes that ran their course at base + extension, non-holders'
+at the base). 43 entries confirmed; 24 of them the hand table already priced
+(tooltip and table agree), 14 fixed rows the product priced at the base now
+come from the tooltip (`TOOLTIP_DURATION_ROWS`: Apotheosis +12 s, Havoc +5,
+Power Surge +5, Power Word: Shield +5 (Discipline), Immolate +3, Zenith +5,
+Renew +40 % (Holy) / Atonement +4 (Discipline), Remorseless Winter +2,
+450342 +3, Cloak of Shadows +2, Renewing Mist +2, Desperate Prayer +10,
+Lightning Rod +4), and Spiritwalker's Momentum is priced per press
+(`TOOLTIP_PER_EVENT_DURATIONS`: each press of a spell with a DB2 cast time
+while the buff is up adds 1 s, up to 4 s — 131 of 159 holder applications
+within 0.5 s; the loadout prints `lasts 15–19s`). Frost Nova +2 s (343183,
+confirmed) is a control and stays official. 605 files (main 5dcd31c51 → this):
+no candidate added or removed; 1,875 contexts change (loadout `lasts`, 25
+kill-window lines shorter by the longer Cloak of Shadows); fact2Scan
+kitTooltipLasts 2,484 → 0. Gates: baseline residue only.

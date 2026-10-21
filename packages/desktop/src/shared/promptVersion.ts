@@ -279,5 +279,11 @@
  *  Spirit dated to their hotfixes (user ruling); the 12.1.0 talent map for
  *  12.1.0 logs. 605 files: missed-sync-window +88, kick-eaten +7,
  *  external-unused −9 +5, cd-hoarded −4 +1 (user approved).
+ *  v433 (2026-10-21, GH #155): talent duration extensions read off the talent
+ *  tooltips and confirmed on the corpus (`TOOLTIP_DURATION_ROWS` — Apotheosis
+ *  +12 s, Cloak of Shadows +2, Zenith +5, Desperate Prayer +10, Power Word:
+ *  Shield +5 …; Spiritwalker's Momentum per press, loadout `lasts 15–19s`).
+ *  605 files: no candidate added or removed; 1,875 contexts change in the
+ *  loadout's `lasts` and in 25 kill-window lines.
  */
-export const PROMPT_VERSION = 432;
+export const PROMPT_VERSION = 433;
