@@ -1,7 +1,7 @@
 import { ICombatUnit } from "@gladlog/parser-compat";
 
 import { spellEffectData } from "../data/spellEffectData";
-import { buffFullDurationForCaster } from "../utils/buffDuration";
+import { buffDurationRangeForCaster } from "../utils/buffDuration";
 import { castBarsOfCooldown, castBarStartsInRound } from "../utils/castCancels";
 import { IPlayerCCTrinketSummary } from "../utils/ccTrinketAnalysis";
 import {
@@ -147,10 +147,14 @@ export function buildPlayerLoadout(
   // the prompt. No duration known → nothing rendered.
   const lastsPart = (cd: IMajorCooldownInfo, caster?: ICombatUnit): string => {
     if (cd.tag !== "Defensive") return "";
-    const d = buffFullDurationForCaster(cd.spellId, caster);
-    return d !== undefined && d > 0
-      ? `, lasts ${Math.round(d * 10) / 10}s`
-      : "";
+    // GH #155: a per-event talent makes it a range (Spiritwalker's Grace
+    // `lasts 15–19s` for a Spiritwalker's Momentum holder)
+    const r = buffDurationRangeForCaster(cd.spellId, caster);
+    if (r === undefined || !(r.min > 0)) return "";
+    const fmt = (x: number) => Math.round(x * 10) / 10;
+    return r.max > r.min
+      ? `, lasts ${fmt(r.min)}–${fmt(r.max)}s`
+      : `, lasts ${fmt(r.min)}s`;
   };
   // FT-T06: "never spent" is not "never tried". A cast bar that was started
   // and never finished (kicked, cancelled, CC'd) is in the log —

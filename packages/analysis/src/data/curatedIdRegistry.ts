@@ -242,6 +242,10 @@ import spellIdLists, {
   ENEMY_STEALTH_WALL_AURAS,
 } from "./spellIdLists";
 import { trinketSpellIds } from "./spellTags";
+import {
+  TOOLTIP_DURATION_ROWS,
+  TOOLTIP_PER_EVENT_DURATIONS,
+} from "./talentDurationTooltips";
 import { TALENT_MITIGATION_MODIFIERS } from "./talentMitigationModifiers";
 import { TALENT_REPLACES } from "./talentReplaces";
 import {
@@ -467,6 +471,22 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   t("RIDER_ABSORB_SAVE_AURAS", "utils/enemyDefensives.ts", "aura", () => [
     ...RIDER_ABSORB_SAVE_AURAS.keys(),
   ]),
+  // GH #155(10-21):天赋 tooltip 写明、语料验证过的持续时间延长。
+  t("TOOLTIP_DURATION_ROWS", "data/talentDurationTooltips.ts", "mixed", () => [
+    ...Object.keys(TOOLTIP_DURATION_ROWS),
+    ...Object.values(TOOLTIP_DURATION_ROWS).flatMap((rs) =>
+      rs.map((r) => r.talentSpellId),
+    ),
+  ]),
+  t(
+    "TOOLTIP_PER_EVENT_DURATIONS",
+    "data/talentDurationTooltips.ts",
+    "mixed",
+    () => [
+      ...Object.keys(TOOLTIP_PER_EVENT_DURATIONS),
+      ...Object.values(TOOLTIP_PER_EVENT_DURATIONS).map((p) => p.talentSpellId),
+    ],
+  ),
   t("RACIAL_ABILITIES", "data/racialAbilities.ts", "cast", () =>
     keys(RACIAL_ABILITIES),
   ),

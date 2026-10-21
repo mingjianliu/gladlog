@@ -5,6 +5,10 @@ import {
   BUFF_DURATION_TALENT_MODIFIERS,
   spellEffectData,
 } from "../data/spellEffectData";
+import {
+  TOOLTIP_DURATION_ROWS,
+  TOOLTIP_PER_EVENT_DURATIONS,
+} from "../data/talentDurationTooltips";
 import { castParamBaseSeconds, type CastParamCaster } from "./castParam";
 import { talentModifierOwnershipOf, talentRankOf } from "./talentOwnership";
 
@@ -110,9 +114,22 @@ export function buffFullDurationForCaster(
     spellEffectData[spellId]?.durationSeconds;
   const paramBase =
     atMs === undefined ? null : castParamBaseSeconds(caster, spellId, atMs);
-  const mods = BUFF_DURATION_TALENT_MODIFIERS[spellId];
-  if (!caster || mods === undefined || mods.length === 0)
-    return paramBase ?? noCasterValue;
+  // GH #155 (2026-10-21): the hand table, plus the tooltip-stated and
+  // corpus-confirmed rows (`TOOLTIP_DURATION_ROWS`) for talents it does not
+  // already price
+  const hand = BUFF_DURATION_TALENT_MODIFIERS[spellId] ?? [];
+  const mods = [
+    ...hand,
+    ...(TOOLTIP_DURATION_ROWS[spellId] ?? []).filter(
+      (r) => !hand.some((h) => h.talentSpellId === r.talentSpellId),
+    ),
+  ];
+  if (!caster || mods.length === 0) {
+    const plain = paramBase ?? noCasterValue;
+    return plain === undefined || !caster
+      ? plain
+      : plain + perEventExtensionSeconds(spellId, caster, plain, atMs);
+  }
 
   // With a caster we can price the talents exactly, so we start from the
   // UNTALENTED base rather than from `noCasterValue` — the latter already
@@ -164,5 +181,66 @@ export function buffFullDurationForCaster(
     if (m.addSeconds !== undefined) seconds += m.addSeconds * rank;
     if (m.pct !== undefined) mult *= 1 + (m.pct / 100) * rank;
   }
-  return seconds * mult;
+  const fixed = seconds * mult;
+  return fixed + perEventExtensionSeconds(spellId, caster, fixed, atMs);
+}
+
+/** Does `caster` hold the per-event talent on this aura (spec and talent)? */
+function perEventFor(
+  spellId: string,
+  caster: Pick<ICombatUnit, "spec" | "info" | "spellCastEvents">,
+) {
+  const p = TOOLTIP_PER_EVENT_DURATIONS[spellId];
+  if (!p || !p.specs.includes(caster.spec)) return undefined;
+  return talentModifierOwnershipOf(caster, p.talentSpellId) === "yes"
+    ? p
+    : undefined;
+}
+
+/**
+ * GH #155: the seconds a per-event talent added to one application
+ * (`TOOLTIP_PER_EVENT_DURATIONS` — Spiritwalker's Momentum: each qualifying
+ * press while the aura is up adds 1 s, up to 4 s). Read off the caster's own
+ * presses from `atMs`: each press inside the (growing) duration extends it,
+ * so the window is walked press by press. 0 without `atMs`, without the
+ * talent, or with no qualifying press.
+ */
+function perEventExtensionSeconds(
+  spellId: string,
+  caster: Pick<ICombatUnit, "spec" | "info" | "spellCastEvents">,
+  baseSeconds: number,
+  atMs: number | undefined,
+): number {
+  if (atMs === undefined) return 0;
+  const p = perEventFor(spellId, caster);
+  if (!p) return 0;
+  let ext = 0;
+  for (const c of caster.spellCastEvents ?? []) {
+    const t = c.logLine.timestamp;
+    if (t < atMs) continue;
+    if (t > atMs + (baseSeconds + ext) * 1000) break;
+    if (c.logLine.event !== "SPELL_CAST_SUCCESS") continue;
+    if (!p.qualifyingSpellIds.has(c.spellId ?? "")) continue;
+    ext = Math.min(p.capSeconds, ext + p.addSecondsPerEvent);
+    if (ext >= p.capSeconds) break;
+  }
+  return ext;
+}
+
+/**
+ * The span a caster's application of this aura can last, for a reader that
+ * has no application time (the loadout's `lasts Ns`): `buffFullDurationForCaster`
+ * without `atMs`, and — for a holder of a per-event talent — up to that
+ * plus its cap (Spiritwalker's Grace `lasts 15–19s`).
+ */
+export function buffDurationRangeForCaster(
+  spellId: string,
+  caster:
+    | (Pick<ICombatUnit, "spec" | "info" | "spellCastEvents"> & CastParamCaster)
+    | undefined,
+): { min: number; max: number } | undefined {
+  const min = buffFullDurationForCaster(spellId, caster);
+  if (min === undefined) return undefined;
+  const p = caster ? perEventFor(spellId, caster) : undefined;
+  return { min, max: p ? min + p.capSeconds : min };
 }

@@ -35,7 +35,10 @@ import { PVP_TALENT_POOL_GENERATED } from "../../src/data/pvpTalentPoolGenerated
 import talentIdMap from "../../src/data/talentIdMap.json";
 import { writeArtifact } from "./lib/emit";
 import { pvpBasePoints } from "./lib/pvpMultiplier";
-import { talentClassMapOf } from "./lib/talentInventory";
+import {
+  CLASS_ID_TO_FAMILY_FALLBACK,
+  talentClassMapOf,
+} from "./lib/talentInventory";
 import {
   expandForSpec,
   type IDurationClause,
@@ -60,6 +63,9 @@ export interface ITalentDurationEntry {
   cap?: number;
   capUnit?: IDurationClause["capUnit"];
   trigger?: string;
+  /** a trigger 「使用带有施法时间的法术」: the observed spells whose own DB2
+   * cast time is > 0 — the events that count, for the verifier */
+  qualifyingSpellIds?: string[];
   sentence: string;
   /** some spec's rendering had a branch condition that could not be decided */
   undecidedBranch?: true;
@@ -91,6 +97,8 @@ async function main(): Promise<void> {
     durRaw,
     specSpellsRaw,
     chrSpecRaw,
+    castTimesRaw,
+    classOptionsRaw,
   ] = await Promise.all([
     fetchTable("Spell", build, cache, "zhCN"),
     fetchTable("SpellName", build, cache, "zhCN"),
@@ -99,7 +107,12 @@ async function main(): Promise<void> {
     fetchTable("SpellDuration", build, cache),
     fetchTable("SpecializationSpells", build, cache),
     fetchTable("ChrSpecialization", build, cache),
+    fetchTable("SpellCastTimes", build, cache),
+    fetchTable("SpellClassOptions", build, cache),
   ]);
+  const classSetOf = new Map<string, number>();
+  for (const r of parseCsv(classOptionsRaw).rows)
+    classSetOf.set(r.SpellID!, Number(r.SpellClassSet));
 
   const spell = parseCsv(spellZh);
   assertColumns(spell.header, ["ID", "Description_lang"], "Spell(zhCN)");
@@ -121,11 +134,19 @@ async function main(): Promise<void> {
   const durationMsOfIndex = new Map<string, number>();
   for (const r of parseCsv(durRaw).rows)
     durationMsOfIndex.set(r.ID!, Number(r.Duration));
+  const castMsOfIndex = new Map<string, number>();
+  for (const r of parseCsv(castTimesRaw).rows)
+    castMsOfIndex.set(r.ID!, Number(r.Base));
   const durationS = new Map<string, number>();
+  /** spells whose own DB2 cast time is > 0 — 「带有施法时间的法术」, whether
+   * or not a proc made one press instant */
+  const hasCastTime = new Set<string>();
   for (const r of parseCsv(miscRaw).rows) {
     if (r.DifficultyID !== "0") continue;
     const ms = durationMsOfIndex.get(r.DurationIndex ?? "") ?? 0;
     if (ms > 0) durationS.set(r.SpellID!, ms / 1000);
+    if ((castMsOfIndex.get(r.CastingTimeIndex ?? "") ?? 0) > 0)
+      hasCastTime.add(r.SpellID!);
   }
 
   const idsOfName = new Map<string, string[]>();
@@ -332,6 +353,19 @@ async function main(): Promise<void> {
           amount: Math.round(c.amount * 1000) / 1000,
           ...(c.cap !== undefined ? { cap: c.cap, capUnit: c.capUnit } : {}),
           ...(c.trigger ? { trigger: c.trigger } : {}),
+          ...(c.trigger && /施法时间/.test(c.trigger)
+            ? {
+                // the talent's own class's spells (SpellClassOptions.SpellClassSet)
+                qualifyingSpellIds: [...hasCastTime]
+                  .filter(
+                    (id) =>
+                      observed.has(id) &&
+                      classId !== undefined &&
+                      classSetOf.get(id) === CLASS_ID_TO_FAMILY_FALLBACK[classId],
+                  )
+                  .sort((a, b) => Number(a) - Number(b)),
+              }
+            : {}),
           sentence: c.sentence,
           ...(unknown ? { undecidedBranch: true as const } : {}),
           targets,

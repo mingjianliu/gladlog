@@ -211,6 +211,7 @@ import {
 import castEffectAuraGenerated from "@gladlog/analysis/src/data/castEffectAuraGenerated.json";
 import { classMetadata } from "@gladlog/analysis/src/data/classSpells";
 import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData";
+import talentDurationTooltips from "@gladlog/analysis/src/data/talentDurationTooltipsGenerated.json";
 import {
   CONTROL_FAILED_MISS_TYPES,
   isControlCast,
@@ -233,6 +234,7 @@ import {
   SELF_SAVE_IDS,
 } from "@gladlog/analysis/src/utils/enemyDefensives";
 import { OFFENSIVE_CD_SPELL_IDS } from "@gladlog/analysis/src/utils/spellDanger";
+import { talentRankOf } from "@gladlog/analysis/src/utils/talentOwnership";
 import { isDeadAt } from "@gladlog/analysis/src/utils/unitDeath";
 import { GladLogParser, type GladMatch } from "@gladlog/parser";
 import {
@@ -302,6 +304,7 @@ const CHECKS = [
   "racialPressedInside",
   "kitInHand",
   "riderShieldLine",
+  "kitTooltipLasts",
   "ledgerRosterUp",
 ] as const;
 
@@ -330,6 +333,35 @@ const fmtS = (sec: number): string => {
 };
 /** the names a kit line can print for a kill-window in-hand defensive
  * (user rulings 2026-10-20: the roster, Alter Time, unpressed kit rows) */
+/** GH #155: the tooltip-stated extensions the 605 verification confirmed,
+ * by the aura's English name (the loadout prints it) — read off the
+ * GENERATED tooltip table, not the product's copy of it */
+const TOOLTIP_CONFIRMED: Array<[string, string]> = [
+  ["1215245", "200183"], ["1244460", "80240"], ["1272308", "453113"],
+  ["238135", "17"], ["388832", "157736"], ["391370", "1249625"],
+  ["440671", "139"], ["440671", "194384"], ["444099", "1233152"],
+  ["450514", "450342"], ["457022", "31224"], ["458431", "119611"],
+  ["458718", "19236"], ["468625", "197209"], ["443425", "79206"],
+];
+const tooltipLasts = new Map<
+  string,
+  Array<{ talent: string; specs: string[]; min: number; max: number }>
+>();
+for (const [talent, aura] of TOOLTIP_CONFIRMED) {
+  for (const e of (talentDurationTooltips as { entries: any[] }).entries) {
+    if (e.talentSpellId !== talent) continue;
+    const t = e.targets.find((x: any) => x.spellIds.includes(aura));
+    if (!t) continue;
+    const base = t.baseSeconds[aura] as number;
+    const min =
+      e.kind === "per-event" ? base : e.unit === "pct" ? base * (1 + e.amount / 100) : base + e.amount;
+    const max = e.kind === "per-event" ? base + (e.cap ?? 0) : min;
+    const name = getEnglishSpellName(aura, "");
+    const l = tooltipLasts.get(name) ?? [];
+    l.push({ talent, specs: e.specs, min, max });
+    tooltipLasts.set(name, l);
+  }
+}
 const KW_IN_HAND_NAMES = new Set<string>();
 for (const id of [...KW_MAJOR_DEFENSIVE_IDS, ...KW_IN_HAND_ONLY_DEFENSIVE_IDS]) {
   if (!unpressedKitDefensiveInHand(id)) continue;
@@ -1611,6 +1643,29 @@ for (const f of files) {
       .filter((n) => KW_IN_HAND_NAMES.has(n));
     if (held.length > 0)
       miss("kitInHand", `${where} ${m[1]}–${m[2]} ${name}: kit holds ${held.join("/")} [UNUSED]`);
+  }
+  // GH #155: a loadout's `lasts Ns` for a holder of a tooltip-stated,
+  // corpus-confirmed duration talent is what the tooltip says
+  for (let i = 0; i < lines.length; i++) {
+    const u = /<unit id="\d+" name="([^"]+)"/.exec(lines[i]!);
+    const kit = lines[i + 1];
+    if (!u || !kit?.includes("<cooldowns>")) continue;
+    const unit = byName.get(u[1]!);
+    if (!unit) continue;
+    for (const m of kit.matchAll(/(?:<cooldowns>|, )([^,[<]+?) \[[^\]]*?lasts ([\d.]+)(?:–([\d.]+))?s\]/g)) {
+      for (const r of tooltipLasts.get(m[1]!.trim()) ?? []) {
+        if (!r.specs.includes(String(unit.spec))) continue;
+        if (talentRankOf(unit, r.talent) <= 0) continue;
+        bump("kitTooltipLasts");
+        const lo = Number(m[2]);
+        const hi = m[3] ? Number(m[3]) : lo;
+        if (Math.abs(lo - r.min) > 0.05 || Math.abs(hi - r.max) > 0.05)
+          miss(
+            "kitTooltipLasts",
+            `${where} ${u[1]} ${m[1]!.trim()}: printed lasts ${m[2]}${m[3] ? `–${m[3]}` : ""}s, the tooltip ${r.min}${r.max > r.min ? `–${r.max}` : ""}s (${r.talent})`,
+          );
+      }
+    }
   }
   // user ruling 2026-10-20 (idx 22): every Shield of Vengeance on an enemy
   // gets its own [ENEMY DEF] line at its second
