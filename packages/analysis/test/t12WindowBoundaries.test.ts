@@ -94,6 +94,51 @@ describe("① a — a kill window ends at its target's death (computeOffensiveWi
     );
   });
 
+  // User rulings 2026-10-21 (F16 retest): the target's own Power Word:
+  // Shield / Void Shield, and an Intervene on it, end the span while up
+  it("an own Void Shield / an Intervene aura on the target cuts the span; a teammate's PW:S on it does not", () => {
+    const alive = computeOffensiveWindows([druid(50)] as never, [], combat);
+    const from = alive[0]!.fromSeconds;
+    const withAura = (spellId: string, src: string) => {
+      const u = druid(50);
+      u.auraEvents.push(
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_APPLIED,
+          spellId,
+          at(from + 2),
+          src,
+          "e1",
+          "BUFF",
+        ) as never,
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_REMOVED,
+          spellId,
+          at(from + 20),
+          src,
+          "e1",
+          "BUFF",
+        ) as never,
+      );
+      return computeOffensiveWindows([u] as never, [], combat);
+    };
+    for (const [id, src] of [
+      ["1253593", "e1"],
+      ["17", "e1"],
+      ["147833", "e2"],
+    ] as const) {
+      const w = withAura(id, src);
+      // no span covers the seconds the aura was up
+      for (const x of w)
+        expect(
+          x.toSeconds <= from + 2.001 || x.fromSeconds >= from + 19.999,
+          `${id} ${x.fromSeconds}–${x.toSeconds}`,
+        ).toBe(true);
+    }
+    // a Power Word: Shield from a teammate is no own shield (and no external
+    // either — it is not in the external list): the span runs on
+    expect(withAura("17", "e2")[0]!.toSeconds).toBe(alive[0]!.toSeconds);
+  });
+
   // 1bad0a5c: the wall's nominal end fell after the death at 95.797 s — the
   // prompt read `[VULNERABLE] 1:38–1:50` on a shaman dead at 1:35.
   it("a span that would start at or after the death does not exist", () => {
@@ -222,8 +267,22 @@ describe("① a — a kill window ends at its target's death (computeOffensiveWi
       const enemies = [druid(50, 77.08, hp), healerWithCast(70)];
       const priest = enemies[1]!;
       priest.auraEvents.push(
-        makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, "215769", at(69.5), "e2", "e2", "BUFF") as never,
-        makeAuraEvent(LogEvent.SPELL_AURA_REMOVED, "215769", at(78), "e2", "e2", "BUFF") as never,
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_APPLIED,
+          "215769",
+          at(69.5),
+          "e2",
+          "e2",
+          "BUFF",
+        ) as never,
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_REMOVED,
+          "215769",
+          at(78),
+          "e2",
+          "e2",
+          "BUFF",
+        ) as never,
       );
       expect(
         kickPriorityDecisionPoints(
@@ -232,7 +291,9 @@ describe("① a — a kill window ends at its target's death (computeOffensiveWi
           {
             startTime: T0,
             endTime: at(107),
-            units: Object.fromEntries([friend, ...enemies].map((u) => [u.id, u])),
+            units: Object.fromEntries(
+              [friend, ...enemies].map((u) => [u.id, u]),
+            ),
           },
           { eligibility: "bootstrap" },
         ),

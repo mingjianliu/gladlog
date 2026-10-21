@@ -144,6 +144,28 @@ export const RIDER_ABSORB_SAVE_AURAS: ReadonlyMap<string, string> = new Map([
   ["184662", "Shield of Vengeance"],
 ]);
 
+/**
+ * User rulings 2026-10-21 on the F16 same-round retest — auras that end a
+ * kill window's `defenseless` span while they are on the target, without an
+ * `[ENEMY DEF]` line of their own (a rotational press is no defensive line):
+ *  - (1) 「算」: the target's OWN rotational absorb shield — Power Word:
+ *    Shield 17 and its Master the Darkness form Void Shield 1253593, applied
+ *    by the target itself (3f21c5db: a Void Shield 0:51–1:43 ate every hit of
+ *    `team burst 0k (+167k absorbed)` inside `defenseless 1:06–2:08`);
+ *  - (3) option A: Intervene 147833 on the target — its melee and ranged
+ *    attacks go to the warrior for as long as the aura is up (0457a45e 0:48:
+ *    KILL ATTEMPTS said `saved by external (Intervene)` beside
+ *    `defenseless 0:48–1:19`). Still never an accusation (rulings A20 + U3).
+ * Registered in curatedIdRegistry.
+ */
+export const KW_OWN_ROTATIONAL_ABSORB_AURA_IDS: ReadonlySet<string> = new Set([
+  "17",
+  "1253593",
+]);
+export const KW_REDIRECT_PROTECTION_AURA_IDS: ReadonlySet<string> = new Set([
+  "147833",
+]);
+
 /** Enemy-def F-E5 / F-E6 (user ruling A25, 2026-09-30, narrowed by D8,
  * 2026-10-10): auras the `[ENEMY DEF]` line prints as `immune` and KILL
  * ATTEMPTS reads as "forced a full immunity" although they are no pct-100
@@ -1160,7 +1182,9 @@ export function splitAtRepressRefresh(
     ).filter((t) => t > iv.fromS + SAVE_CAST_AURA_PAIR_S && t < iv.toS);
     const casts = castSecondsOf(iv.srcUnitName, iv.spellId);
     const cuts = refreshS
-      .filter((t) => casts.some((c) => Math.abs(c - t) <= SAVE_CAST_AURA_PAIR_S))
+      .filter((t) =>
+        casts.some((c) => Math.abs(c - t) <= SAVE_CAST_AURA_PAIR_S),
+      )
       .sort((a, b) => a - b);
     let from = iv.fromS;
     let inferredStart = iv.inferredStart;
@@ -1177,7 +1201,9 @@ export function splitAtRepressRefresh(
       from = cut;
       inferredStart = false;
     }
-    out.push(from === iv.fromS ? { ...iv } : { ...iv, fromS: from, inferredStart });
+    out.push(
+      from === iv.fromS ? { ...iv } : { ...iv, fromS: from, inferredStart },
+    );
   }
   return out;
 }

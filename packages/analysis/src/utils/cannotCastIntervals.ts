@@ -18,6 +18,7 @@ import {
 } from "../data/spellTags";
 import { dropAuraRebroadcasts, supersededAuraBreaks } from "./auraIntervals";
 import { buffFullDurationForCaster } from "./buffDuration";
+import { castingLockIntervalsOf } from "./castingLocks";
 import { REACTION_WINDOW_S, usableWhileStunned } from "./cooldowns";
 import {
   getDRCategory,
@@ -467,9 +468,10 @@ function petBlockLists(
   return {
     ownSpellIds,
     petLists: [...spellsByPet].map(([pet, ids]) =>
-      blockedForEverySpell(namedCannotCastIntervals(pet, enemyIds, units), ids).map(
-        (iv) => ({ ...iv, onPetId: pet.id }),
-      ),
+      blockedForEverySpell(
+        namedCannotCastIntervals(pet, enemyIds, units),
+        ids,
+      ).map((iv) => ({ ...iv, onPetId: pet.id })),
     ),
   };
 }
@@ -978,6 +980,57 @@ export const isSilenceEffectAura = (auraId: string): boolean =>
  * Lock while stunned). `hostileIds` = the ids that may have applied the aura
  * (the other side's players and their summons, `enemySourceIds`).
  */
+const castingLockMemo = new WeakMap<
+  ICombatUnit,
+  Map<string, Array<{ from: number; to: number; spellId: string }>>
+>();
+/** The casting-lock aura on `unit` at `tMs` for the ability `spellId`
+ * (`castingLockIntervalsOf`, read over the unit's whole log), memoised per
+ * unit and ability. */
+function castingLockAuraAt(
+  unit: ICombatUnit,
+  tMs: number,
+  spellId: string | undefined,
+): CastBlockingAura | undefined {
+  let byId = castingLockMemo.get(unit);
+  if (!byId) {
+    byId = new Map();
+    castingLockMemo.set(unit, byId);
+  }
+  const key = spellId ?? "";
+  let ivs = byId.get(key);
+  if (!ivs) {
+    // the unit's own logged span stands in for the round: an aura open
+    // before its first event starts there, one never closed is capped at its
+    // official length by the interval builder
+    let first = Infinity;
+    let last = -Infinity;
+    for (const a of unit.auraEvents ?? []) {
+      if (a.timestamp < first) first = a.timestamp;
+      if (a.timestamp > last) last = a.timestamp;
+    }
+    ivs = Number.isFinite(first)
+      ? castingLockIntervalsOf(
+          unit,
+          { startTime: first, endTime: last },
+          spellId,
+        )
+      : [];
+    byId.set(key, ivs);
+  }
+  const iv = ivs.find((x) => x.from <= tMs && tMs < x.to);
+  return iv
+    ? {
+        spellId: iv.spellId,
+        spellName: getEnglishSpellName(iv.spellId),
+        srcUnitId: unit.id,
+        srcUnitName: unit.name,
+        from: iv.from,
+        to: iv.to,
+      }
+    : undefined;
+}
+
 export function castBlockingAuraAt(
   unit: ICombatUnit,
   hostileIds: Set<string>,
@@ -999,6 +1052,14 @@ export function castBlockingAuraAt(
         (silenceStops && isSilenceOnlyAura(a.spellId))),
   );
   if (held) return held;
+  // …or an aura that forbids its holder's casting (official `locksCasting`:
+  // Ice Block, Dispersion, Bladestorm — with Unrelenting Onslaught's Pummel /
+  // Storm Bolt exemption; `castingLockIntervalsOf`, kick-priority's reading).
+  // User ruling 2026-10-21 (F16 retest idx 11): a mage in Ice Block is no
+  // ready kicker, though the block can be cancelled (0b72c44e 2:01: Vizine
+  // 4.6 yd away read as the nearest kicker inside his block).
+  const lock = castingLockAuraAt(unit, tMs, spellId);
+  if (lock) return lock;
   // …or the unit's own flying breath (work order 2026-10-14d #10: an enemy
   // Evoker inside Deep Breath read as a ready kicker)
   const flight = ownFlightIntervals(unit).find(

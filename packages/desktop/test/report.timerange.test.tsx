@@ -6,9 +6,11 @@ import { deriveDetailBreakdown } from "../src/renderer/src/report/derive/detailB
 import { deriveStatsTable } from "../src/renderer/src/report/derive/statsTable";
 import { deriveSummary } from "../src/renderer/src/report/derive/summary";
 import { deriveVulnBands } from "../src/renderer/src/report/derive/vulnWindows";
-import { loadRealMatchFixture } from "./fixtures/loadFixture";
+import { loadRealMatchFixtureWithKillWindow } from "./fixtures/loadFixture";
 
-const m = loadRealMatchFixture();
+// the real fixture minus the enemy priest's own shields: since the
+// 2026-10-21 ruling they end its only kill window (see the loader)
+const m = loadRealMatchFixtureWithKillWindow();
 const fullS = (m.endTime - m.startTime) / 1000;
 
 describe("时间窗联动(第四阶段①)— derive 层", () => {

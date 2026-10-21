@@ -31,7 +31,7 @@ export function castingLockIntervalsOf(
   combat: { startTime: number; endTime: number },
   /** the ability the caller asks about; omitted → every lock counts */
   forSpellId?: string,
-): Array<{ from: number; to: number }> {
+): Array<{ from: number; to: number; spellId: string }> {
   const exempt =
     forSpellId !== undefined &&
     USABLE_IN_BLADESTORM_WITH_TALENT.has(forSpellId) &&
@@ -42,5 +42,6 @@ export function castingLockIntervalsOf(
     .map((iv) => ({
       from: combat.startTime + iv.fromS * 1000,
       to: combat.startTime + iv.toS * 1000,
+      spellId: iv.spellId,
     }));
 }

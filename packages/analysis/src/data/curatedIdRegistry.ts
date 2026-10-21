@@ -115,7 +115,11 @@ import {
 } from "../utils/dispelAnalysis";
 import { MOVEMENT_ROOT_BREAK_DISPEL_IDS } from "../utils/dispelKind";
 import { AOE_CC_LANDING_WINDOW_S, AOE_CC_SPELL_IDS } from "../utils/drAnalysis";
-import { RIDER_ABSORB_SAVE_AURAS } from "../utils/enemyDefensives";
+import {
+  KW_OWN_ROTATIONAL_ABSORB_AURA_IDS,
+  KW_REDIRECT_PROTECTION_AURA_IDS,
+  RIDER_ABSORB_SAVE_AURAS,
+} from "../utils/enemyDefensives";
 import { NON_PLAYER_INTERRUPT_IDS } from "../utils/enemyInterrupts";
 import { EXTERNAL_DAMAGE_SHIELD_IDS } from "../utils/externalDamage";
 import { GAP_CLOSER_SPELL_IDS } from "../utils/gapClosers";
@@ -189,10 +193,7 @@ import {
   KICKED_HEAL_OVERRIDE_IDS,
   KICKED_OTHER_OVERRIDE_IDS,
 } from "./kickedSpellCategories";
-import {
-  MITIGATION_OVERRIDES,
-  NO_MITIGATION_IDS,
-} from "./mitigationData";
+import { MITIGATION_OVERRIDES, NO_MITIGATION_IDS } from "./mitigationData";
 import { MITIGATION_VERDICTS } from "./mitigationVerdicts";
 import {
   CHANNEL_PROXY_IDS,
@@ -449,25 +450,26 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   ),
   // 10-20 用户裁定(fact1215 复测 idx 50):种族的进攻 buff 算进攻大招,并入
   // OFFENSIVE_CD_SPELL_IDS(Ancestral Call 的四个光环一起登记)。
-  t(
-    "OFFENSIVE_RACIAL_WINDOW_IDS",
-    "data/racialAbilities.ts",
-    "mixed",
-    () => [...OFFENSIVE_RACIAL_WINDOW_IDS],
-  ),
+  t("OFFENSIVE_RACIAL_WINDOW_IDS", "data/racialAbilities.ts", "mixed", () => [
+    ...OFFENSIVE_RACIAL_WINDOW_IDS,
+  ]),
   // 10-20 用户裁定(fact1215 复测 idx 11):Counterspell 6 秒是 Improved
   // Counterspell 持有者的值;天赋明确没有的踢人者锁 5 秒。
-  t(
-    "KICK_LOCKOUT_KICKER_TALENTS",
-    "utils/kickLockout.ts",
-    "mixed",
-    () => [
-      ...Object.keys(KICK_LOCKOUT_KICKER_TALENTS),
-      ...Object.values(KICK_LOCKOUT_KICKER_TALENTS).map((t) => t.talentSpellId),
-    ],
-  ),
+  t("KICK_LOCKOUT_KICKER_TALENTS", "utils/kickLockout.ts", "mixed", () => [
+    ...Object.keys(KICK_LOCKOUT_KICKER_TALENTS),
+    ...Object.values(KICK_LOCKOUT_KICKER_TALENTS).map((t) => t.talentSpellId),
+  ]),
   // 10-20 用户裁定(fact1215 复测 idx 22):随别的按键出现的吸收盾单独写
   // [ENEMY DEF](Shield of Vengeance 跟着 Ret 的 Divine Protection)。
+  t(
+    "KW_OWN_ROTATIONAL_ABSORB_AURA_IDS",
+    "utils/enemyDefensives.ts",
+    "aura",
+    () => set(KW_OWN_ROTATIONAL_ABSORB_AURA_IDS),
+  ),
+  t("KW_REDIRECT_PROTECTION_AURA_IDS", "utils/enemyDefensives.ts", "aura", () =>
+    set(KW_REDIRECT_PROTECTION_AURA_IDS),
+  ),
   t("RIDER_ABSORB_SAVE_AURAS", "utils/enemyDefensives.ts", "aura", () => [
     ...RIDER_ABSORB_SAVE_AURAS.keys(),
   ]),

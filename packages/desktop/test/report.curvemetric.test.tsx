@@ -2,9 +2,11 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 
 import { MatchReport } from "../src/renderer/src/report/components/MatchReport";
-import { loadRealMatchFixture } from "./fixtures/loadFixture";
+import { loadRealMatchFixtureWithKillWindow } from "./fixtures/loadFixture";
 
-const m = loadRealMatchFixture();
+// the real fixture minus the enemy priest's own shields: since the
+// 2026-10-21 ruling they end its only kill window (see the loader)
+const m = loadRealMatchFixtureWithKillWindow();
 
 const metricSelect = (): HTMLSelectElement =>
   screen.getByTestId("tl-metric") as HTMLSelectElement;
