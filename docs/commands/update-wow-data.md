@@ -335,6 +335,9 @@ npx tsx packages/analysis/scripts/datagen/genMitigation.ts
 #      the line — the manifest records artifacts, only this file drives regeneration.)
 #      Percentages PvP-scaled through lib/pvpMultiplier.ts too (Roar of Sacrifice 15 → 25, 百战之创 5 → 3).
 npx tsx packages/analysis/scripts/datagen/genTalentMitigation.ts
+# GH #155: talent duration extensions read off the tooltips; verify them on
+# the corpus before trusting a changed entry (talentDurationVerify, §7b)
+npx tsx packages/analysis/scripts/datagen/genTalentDurations.ts
 # 6h. Usable while CC'd table (SpellMisc NAMED attribute bits since 2026-09-04, BACKLOG #41 (8): stunned = 163 ∪ 378,
 #     feared = 177, confused = 178 — names from SimulationCraft's sc_spell_info.cpp attribute table / TrinityCore
 #     SharedDefines.h; the 2026-08-14 bit SEARCH had picked 10#13 "Reset Cooldown on Encounter End" as the second stun

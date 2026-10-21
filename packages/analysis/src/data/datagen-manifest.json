@@ -52,6 +52,11 @@
       "pendingRuling": 0,
       "bytes": 15069
     },
+    "talentDurationTooltipsGenerated.json": {
+      "entries": 169,
+      "unparsed": 17,
+      "bytes": 168104
+    },
     "offGcdGenerated.ts": {
       "entries": 422
     },

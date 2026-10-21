@@ -153,6 +153,14 @@ export async function main(): Promise<void> {
           .length,
         bytes: statSync(dataDir + "talentMitigationGenerated.json").size,
       },
+      // GH #155: talent duration extensions read off the tooltips; the
+      // unparsed sentences tracked like talentMitigation's pendingRuling
+      "talentDurationTooltipsGenerated.json": {
+        entries: readJson("talentDurationTooltipsGenerated.json").entries.length,
+        unparsed: readJson("talentDurationTooltipsGenerated.json").unparsed
+          .length,
+        bytes: statSync(dataDir + "talentDurationTooltipsGenerated.json").size,
+      },
       "offGcdGenerated.ts": {
         entries: countQuotedIds("offGcdGenerated.ts"),
       },
