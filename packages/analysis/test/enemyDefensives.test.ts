@@ -921,6 +921,8 @@ describe("immunity-kind saves (Burrow, Time Stop, Vanish, Guardian of the Forgot
       ["Cheat Death", "cheat-death proc"],
       ["Feign Death", "absorb"],
       ["Nature's Guardian", "heal proc"],
+      // a rider absorb shield (RIDER_ABSORB_SAVE_AURAS, user ruling 2026-10-20)
+      ["Shield of Vengeance", "absorb"],
     ]);
   });
 });

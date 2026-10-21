@@ -116,13 +116,15 @@ describe("战报的驱散读者:窗口止于回合结束(与 prompt 同一个 ro
   });
 
   it("单排:missed-purge-kill-window 卡片跟着同一个窗口", () => {
+    // User ruling 2026-10-20 (an unpressed kit defensive is in hand): the
+    // fixture's kill windows before 70 s are gone (their targets hold one),
+    // so the cards the round keeps are none; the cut is still the round end —
+    // the same match read as 3v3 has cards past 70 s, the round has none
     const got = cards(shuffle);
-    expect(at(got, 66.385, "Player2-Test")!.detail).toContain(
-      "身上 4s 未被驱散",
-    );
-    expect(at(got, 67.143, "Player4-Test")).toBeUndefined();
     expect(got.filter((c) => c.tS >= ROUND_END_DEATH_S)).toEqual([]);
-    expect(got.length).toBeGreaterThan(5);
+    expect(
+      cards(threes).filter((c) => c.tS >= ROUND_END_DEATH_S).length,
+    ).toBeGreaterThan(0);
   });
 
   it("其他赛制不变:3v3 里的死亡不是回合结束,行与卡片就是只给 {startTime, endTime} 时的那些", () => {
@@ -132,8 +134,9 @@ describe("战报的驱散读者:窗口止于回合结束(与 prompt 同一个 ro
     expect(at(rows, 67.143, "Player4-Test")!.label).toContain("身上 7s");
     expect(rows.filter((r) => r.tS >= ROUND_END_DEATH_S)).toHaveLength(6);
     expect(cleanseRows(threes)[0]!.label).toContain("Fear 8s 未被解");
-    expect(at(cards(threes), 66.385, "Player2-Test")!.detail).toContain(
-      "身上 20s",
+    // a card past the death (81.303 s) stays: in 3v3 the death ends nothing
+    expect(at(cards(threes), 81.303, "Player2-Test")!.detail).toContain(
+      "Prayer of Mending",
     );
 
     // what the two readers handed the function before they handed the round

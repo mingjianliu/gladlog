@@ -295,11 +295,14 @@ describe("[ENEMY DEF] names an effect save by its effect (FT-T07, ruling D8)", (
         removed("87023", 56),
         applied(ULTIMATE_PENITENCE, 90, 1000),
         removed(ULTIMATE_PENITENCE, 96.5, 1000),
+        // Shield of Vengeance, the rider absorb (user ruling 2026-10-20)
+        applied("184662", 100, 1000),
+        removed("184662", 104, 1000),
       ],
       healIn: [selfHeal("31616", 77)],
     });
     const lines = render([all]);
-    // the four effect saves, and the one PRESSED shield of the fixture
+    // the effect saves, and the one PRESSED shield of the fixture
     expect(lines).toHaveLength(ENEMY_SAVE_EFFECT_BY_NAME.size + 1);
     for (const line of lines) {
       const b = body(line);
