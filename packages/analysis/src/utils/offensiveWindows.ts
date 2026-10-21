@@ -43,6 +43,7 @@ import { roundEndMs } from "./roundEnd";
 // predicate; the curated remainder lives as its registered fallback floor.
 import { summonOwnerById } from "./summonOwner";
 import { firstDeathMs } from "./unitDeath";
+import { unusedKitRows } from "./unusedKitRows";
 
 type SpellEntry = { type: string };
 const SPELLS = spellsData as Record<string, SpellEntry>;
@@ -448,9 +449,10 @@ export function computeOffensiveWindows(
   // whatever the roster holds; a pressed self defensive that is no wall is
   // not an event of this kind (Roar of Sacrifice — a redirect, rulings A20 +
   // U3). A press the machine times keeps its reading (ruling D6).
-  // The roster is NOT widened: a roster member also OPENS spans (a unit that
-  // pressed only that spell reads "defenseless" once it is spent), which is
-  // the owned-but-unpressed question — docs/predicate-index "Not yet unified".
+  // The roster was widened by user ruling (2026-10-20: Survival of the
+  // Fittest, Retribution's Divine Protection, Dark Pact), together with the
+  // owned-but-unpressed half (an `[UNUSED]` roster defensive in the kit keeps
+  // the unit out of every span, the check before step 2) — docs/predicate-index R08 d.
   // fact1215 R7 (2026-10-18): the unit's own immunities and self-saves cut
   // it too (`ownSaveSpanS`), and an area save cuts every unit that carries
   // its aura (`areaSaveSpanOnS`) — a Vanish, a 494k Anti-Magic Shell, a
@@ -630,6 +632,22 @@ export function computeOffensiveWindows(
         });
       }
     }
+
+    // A roster defensive in the kit and never pressed this round is in hand
+    // the whole round (user ruling 2026-10-20, fact1215 retest idx 60
+    // 「都要」: `target defenseless 0:49–1:47` on a Restoration Druid whose
+    // kit printed `Barkskin [60s, lasts 12s] [UNUSED]` — KILL ATTEMPTS said
+    // `gated (Barkskin in hand)` of the same unit). Such a unit is never
+    // defenseless. The kit row is the ledger's ownership rule
+    // (`unusedKitRows`, the one KILL ATTEMPTS' wall tier reads).
+    if (
+      unusedKitRows(enemy, combat).some(
+        (r) =>
+          countsAsKillWindowDefensiveInHand(r.spellId) &&
+          !castsBySpell.has(r.spellId),
+      )
+    )
+      continue;
 
     // Count distinct tracked defensive spells this enemy actually used
     const trackedSpellIds = new Set(events.map((e) => e.spellId));

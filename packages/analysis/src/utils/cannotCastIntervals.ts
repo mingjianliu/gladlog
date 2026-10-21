@@ -69,8 +69,11 @@ import { firstDeathMs } from "./unitDeath";
 export function buildCannotCastIntervals(
   unit: ICombatUnit,
   enemyIds: Set<string>,
+  /** the round's units — a kick's lockout reads its kicker's talents
+   * (`kickLockoutSecondsFor`); without them the ruled holder value */
+  units?: RoundUnits,
 ): Array<{ from: number; to: number }> {
-  return namedCannotCastIntervals(unit, enemyIds).map((iv) => ({
+  return namedCannotCastIntervals(unit, enemyIds, units).map((iv) => ({
     from: iv.from,
     to: iv.to,
   }));
@@ -358,11 +361,11 @@ export function cannotCastIntervalsForSpells(
   // work order 2026-10-14d Part 2 (preview): a disarm stops the weapon-
   // requiring spells asked about — only when spells are named (an unasked
   // reader would read a disarm as stopping everything)
-  const named = namedCannotCastIntervals(unit, enemyIds);
+  const named = namedCannotCastIntervals(unit, enemyIds, units);
   const own = exclude ? named.filter((iv) => !exclude(iv)) : named;
   return intervalsForSpells(
     spellIds?.length ? [...own, ...disarmIntervals(unit, enemyIds)] : own,
-    petBlockLists(enemyIds, spellIds, petCastersBySpell(unit, units)),
+    petBlockLists(enemyIds, spellIds, petCastersBySpell(unit, units), units),
     spellIds,
   );
 }
@@ -446,6 +449,7 @@ function petBlockLists(
   enemyIds: Set<string>,
   spellIds: readonly string[] | undefined,
   casters: PetCasters,
+  units?: RoundUnits,
 ): { ownSpellIds: readonly string[]; petLists: NamedCannotCastInterval[][] } {
   if (!spellIds?.length || casters.size === 0)
     return { ownSpellIds: spellIds ?? [], petLists: [] };
@@ -463,7 +467,7 @@ function petBlockLists(
   return {
     ownSpellIds,
     petLists: [...spellsByPet].map(([pet, ids]) =>
-      blockedForEverySpell(namedCannotCastIntervals(pet, enemyIds), ids).map(
+      blockedForEverySpell(namedCannotCastIntervals(pet, enemyIds, units), ids).map(
         (iv) => ({ ...iv, onPetId: pet.id }),
       ),
     ),
@@ -597,6 +601,9 @@ export function lockedSchoolsText(mask: number | undefined): string {
 export function namedCannotCastIntervals(
   unit: ICombatUnit,
   enemyIds: Set<string>,
+  /** the round's units — a kick's lockout reads its kicker's talents
+   * (`kickLockoutSecondsFor`); without them the ruled holder value */
+  units?: RoundUnits,
 ): NamedCannotCastInterval[] {
   const intervals: NamedCannotCastInterval[] = castBlockingAuraIntervals(
     unit,
@@ -634,6 +641,7 @@ export function namedCannotCastIntervals(
           unit,
           interrupted,
           action.timestamp,
+          units?.find((u) => u.id === action.srcUnitId),
         ) *
           1000,
       spellId: kickSpellId,
@@ -1354,7 +1362,7 @@ export function actWindowFor(
 } {
   let named: NamedCannotCastInterval[];
   try {
-    named = namedCannotCastIntervals(unit, enemyIds);
+    named = namedCannotCastIntervals(unit, enemyIds, units);
   } catch {
     return { couldRespond: () => true, stateIn: () => null };
   }
@@ -1390,7 +1398,7 @@ export function actWindowFor(
     if (!spellIds?.length) return named;
     try {
       casters ??= petCastersBySpell(unit, units);
-      const split = petBlockLists(enemyIds, spellIds, casters);
+      const split = petBlockLists(enemyIds, spellIds, casters, units);
       // work order 2026-10-15 Part 2 (user 「好」): a disarm stops a named
       // weapon-requiring spell here too (cd-hoarded's owner gate read a
       // disarmed Die by the Sword holder as free)

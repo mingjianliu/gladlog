@@ -138,6 +138,7 @@ export function buildConsequenceLines(
         victim,
         a.extraSpellId,
         a.timestamp,
+        kicker,
       );
       const next = ((victim.spellCastEvents ?? []) as any[]).find(
         (c) =>

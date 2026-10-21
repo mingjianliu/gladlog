@@ -176,6 +176,15 @@ export const KW_MAJOR_DEFENSIVE_IDS: ReadonlySet<string> = new Set(
     "110959", // Greater Invisibility — 120 s
     "409293", // Burrow — 120 s
     "378441", // Time Stop — 45 s
+    // User ruling 2026-10-20 (fact1215 retest idx 45 / 47 / 48 「都要」):
+    // the two 20–99 % walls signed in W1g (2026-09-26) went into
+    // `bigDefensiveSpellIds` and the mitigation table but never into this
+    // list, so the burst ledger never said "a major defensive up" for them
+    // and the span never timed their cooldown; Dark Pact's cooldown was
+    // never timed either (`defenseless 1:59–2:07` with it back since 1:58).
+    "403876", // Divine Protection (Retribution) — 60 s
+    "264735", // Survival of the Fittest — 90 s
+    "108416", // Dark Pact — 60 s
   ].filter((id) => id !== "200183"),
 ); // Apotheosis dropped
 

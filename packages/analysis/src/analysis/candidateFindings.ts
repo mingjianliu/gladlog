@@ -4549,6 +4549,7 @@ function extractDeathSetups(
             cannotCast: namedCannotCastIntervals(
               healer,
               enemySourceIds(enemies, units),
+              units,
             ),
             roots: healerSummary.rootInstances,
             matchStartMs: start,

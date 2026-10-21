@@ -85,7 +85,7 @@ export function summonReach(
   for (const f of friends) {
     if (isHealerSpec(f.spec)) continue;
     const melee = isMeleeSpec(f.spec);
-    const blocked = buildCannotCastIntervals(f, enemyIds);
+    const blocked = buildCannotCastIntervals(f, enemyIds, enemies);
     let ok = 0;
     for (const w of windows) {
       if (isDeadAt(f, w.t)) continue;

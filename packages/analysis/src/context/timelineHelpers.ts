@@ -2006,7 +2006,11 @@ export function buildKillSequenceBlock(params: {
           params.allUnits ?? [],
         );
         const lockChain = deathLockChain(
-          namedCannotCastIntervals(dyingHealer as ICombatUnit, lockSources),
+          namedCannotCastIntervals(
+            dyingHealer as ICombatUnit,
+            lockSources,
+            (params.allUnits ?? []) as readonly ICombatUnit[],
+          ),
           deathMs,
           KILL_SEQ_LOCK_LOOKBACK_S * 1000,
         );

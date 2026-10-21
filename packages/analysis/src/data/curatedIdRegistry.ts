@@ -115,6 +115,7 @@ import {
 } from "../utils/dispelAnalysis";
 import { MOVEMENT_ROOT_BREAK_DISPEL_IDS } from "../utils/dispelKind";
 import { AOE_CC_LANDING_WINDOW_S, AOE_CC_SPELL_IDS } from "../utils/drAnalysis";
+import { RIDER_ABSORB_SAVE_AURAS } from "../utils/enemyDefensives";
 import { NON_PLAYER_INTERRUPT_IDS } from "../utils/enemyInterrupts";
 import { EXTERNAL_DAMAGE_SHIELD_IDS } from "../utils/externalDamage";
 import { GAP_CLOSER_SPELL_IDS } from "../utils/gapClosers";
@@ -126,7 +127,10 @@ import {
   REDISTRIBUTION_DAMAGE_IDS,
 } from "../utils/incomingPressure";
 import { TOUCH_OF_KARMA_FEED_IDS } from "../utils/karmaFeed";
-import { KICK_LOCKOUT_VICTIM_MODIFIERS } from "../utils/kickLockout";
+import {
+  KICK_LOCKOUT_KICKER_TALENTS,
+  KICK_LOCKOUT_VICTIM_MODIFIERS,
+} from "../utils/kickLockout";
 import { KILL_ATTEMPT_NON_ANCHOR_CDS } from "../utils/killAttempts";
 import { EXECUTE_KILLING_BLOW_IDS } from "../utils/killingBlow";
 import { PVP_TRINKET_SPELL_IDS } from "../utils/killWindowTargetSelection";
@@ -438,6 +442,22 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
     "mixed",
     () => [...OFFENSIVE_RACIAL_WINDOW_IDS],
   ),
+  // 10-20 用户裁定(fact1215 复测 idx 11):Counterspell 6 秒是 Improved
+  // Counterspell 持有者的值;天赋明确没有的踢人者锁 5 秒。
+  t(
+    "KICK_LOCKOUT_KICKER_TALENTS",
+    "utils/kickLockout.ts",
+    "mixed",
+    () => [
+      ...Object.keys(KICK_LOCKOUT_KICKER_TALENTS),
+      ...Object.values(KICK_LOCKOUT_KICKER_TALENTS).map((t) => t.talentSpellId),
+    ],
+  ),
+  // 10-20 用户裁定(fact1215 复测 idx 22):随别的按键出现的吸收盾单独写
+  // [ENEMY DEF](Shield of Vengeance 跟着 Ret 的 Divine Protection)。
+  t("RIDER_ABSORB_SAVE_AURAS", "utils/enemyDefensives.ts", "aura", () => [
+    ...RIDER_ABSORB_SAVE_AURAS.keys(),
+  ]),
   t("RACIAL_ABILITIES", "data/racialAbilities.ts", "cast", () =>
     keys(RACIAL_ABILITIES),
   ),

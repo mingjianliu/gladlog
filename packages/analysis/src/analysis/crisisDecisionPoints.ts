@@ -691,7 +691,7 @@ export function actionBlockedAt(
       .filter((u) => u.id !== unit.id && u.reaction !== unit.reaction)
       .map((u) => u.id as string),
   );
-  const at = namedCannotCastIntervals(unit, hostile).filter(
+  const at = namedCannotCastIntervals(unit, hostile, units).filter(
     (iv) => iv.from <= tMs && tMs < iv.to,
   );
   const inCC = at.some(

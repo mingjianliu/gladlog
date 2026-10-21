@@ -1119,6 +1119,7 @@ export function buildHealerOffenseSummary(
       buildCannotCastIntervals(
         owner,
         enemySourceIds(enemies, Object.values(combat.units ?? {})),
+        Object.values(combat.units ?? {}),
       ),
       enemyHealerCCInstances,
       createKillWindowFactsComputer(combat, friends, enemies),

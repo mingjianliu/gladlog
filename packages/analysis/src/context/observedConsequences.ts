@@ -264,6 +264,7 @@ export function formatObservedConsequences(params: {
         victim,
         (a as { extraSpellId?: string }).extraSpellId,
         a.timestamp,
+        unit,
       );
       const { team, label, who } = sideOf(victim);
       const mates = team.filter((m) => m.id !== victim.id);

@@ -47,6 +47,7 @@ import {
   MITIGATION_AURA_IDS,
   MITIGATION_AURA_MIN_PCT,
   REMOVED_EARLY_SLACK_S,
+  RIDER_ABSORB_SAVE_AURAS,
   SAVE_AURA_END_UNSEEN_IDS,
   SAVE_AURA_END_UNSEEN_NAMES,
   saveAuraCountsWhenAlreadyUp,
@@ -1433,5 +1434,52 @@ describe("splitAtRepressRefresh — a cast-backed REFRESH is a second press (rou
   it("control: a REFRESH with no cast beside it (a talent) stays one press", () => {
     const out = splitAtRepressRefresh([iv], unit(23.64), 0, () => [12.98]);
     expect(out.map((x) => [x.fromS, x.toS])).toEqual([[12.98, 35.64]]);
+  });
+});
+
+// User ruling 2026-10-20 (fact1215 retest idx 22, 「都要」): an absorb shield
+// that rides another press — Shield of Vengeance with every Retribution
+// Divine Protection, no cast of its own — gets its own `[ENEMY DEF]` event,
+// printed like Feign Death's shield.
+describe("enemyDefensiveEvents — a press-less rider absorb shield", () => {
+  const SHIELD_OF_VENGEANCE = "184662";
+  const DIVINE_PROTECTION_RET = "403876";
+
+  it("is registered, and reads as an absorb self-save with what it absorbed", () => {
+    expect(RIDER_ABSORB_SAVE_AURAS.get(SHIELD_OF_VENGEANCE)).toBe(
+      "Shield of Vengeance",
+    );
+    const absorbed = (atS: number, amount: number): any => ({
+      spellId: SHIELD_OF_VENGEANCE,
+      spellName: "Shield of Vengeance",
+      srcUnitId: "e1",
+      srcUnitName: "e1",
+      destUnitId: "e1",
+      destUnitName: "e1",
+      attackerId: "f1",
+      absorbedAmount: amount,
+      timestamp: ms(atS),
+      logLine: { event: LogEvent.SPELL_ABSORBED, timestamp: ms(atS), parameters: [] },
+    });
+    const paladin = unit("e1", {
+      auraEvents: [
+        applied(DIVINE_PROTECTION_RET, "e1", "e1", 10.768),
+        { ...applied(SHIELD_OF_VENGEANCE, "e1", "e1", 10.768), amount: 310_082 },
+        { ...removed(SHIELD_OF_VENGEANCE, "e1", "e1", 12.344), amount: 0 },
+        removed(DIVINE_PROTECTION_RET, "e1", "e1", 18.768),
+      ],
+      absorbsIn: [absorbed(11.0, 200_000), absorbed(12.2, 110_082)],
+      spellCastEvents: [cast(DIVINE_PROTECTION_RET, "e1", 10.768)],
+    });
+    const sov = enemyDefensiveEvents(paladin, [paladin], combat).find(
+      (e) => e.spellId === SHIELD_OF_VENGEANCE,
+    );
+    expect(sov).toMatchObject({
+      kind: "self-save",
+      effect: "absorb",
+      spellName: "Shield of Vengeance",
+      absorbedAmount: 310_082,
+    });
+    expect(sov!.observedSeconds).toBeCloseTo(1.576, 3);
   });
 });

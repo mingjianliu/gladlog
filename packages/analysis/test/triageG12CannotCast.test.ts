@@ -33,6 +33,7 @@ import {
 } from "../src/utils/cannotCastIntervals";
 import { analyzePlayerCCAndTrinket } from "../src/utils/ccTrinketAnalysis";
 import {
+  KICK_LOCKOUT_KICKER_TALENTS,
   KICK_LOCKOUT_VICTIM_MODIFIERS,
   kickLockoutSecondsFor,
   kickLockoutVictimMultiplierAt,
@@ -384,4 +385,64 @@ describe("kick-eaten F-K8 — Storm Conduit shortens an interrupted Lightning Bo
       ]);
     },
   );
+});
+
+// User ruling 2026-10-20 (fact1215 retest idx 11, 「都要」): Counterspell's
+// ruled 6 s is the Improved Counterspell holder's value; a mage whose talents
+// show the node missing locks for DB2's 5. 605 files: the 4 non-holder
+// Counterspells were followed by a cast in the locked school at 4.93–5.00 s,
+// the 501 holder ones at p50 6.01 s.
+describe("kickLockoutSecondsFor — the kicker's Improved Counterspell", () => {
+  const COUNTERSPELL = "2139";
+  const FROSTBOLT = "116";
+  const mage = (talents: unknown[]) =>
+    makeUnit("enemy-mage", {
+      class: CombatUnitClass.Mage,
+      spec: CombatUnitSpec.Mage_Frost,
+      info: { pvpTalents: [], talents } as never,
+    });
+  const victim = makeUnit("player-1", {
+    class: CombatUnitClass.Priest,
+    spec: CombatUnitSpec.Priest_Discipline,
+    info: { pvpTalents: [], talents: [] } as never,
+  });
+
+  it("is registered for Counterspell only, as one second", () => {
+    expect(KICK_LOCKOUT_KICKER_TALENTS).toEqual({
+      [COUNTERSPELL]: { talentSpellId: "1270865", seconds: 1 },
+    });
+  });
+
+  // a real Frost mage loadout without the node (605-file capture, one of
+  // the four non-holder Counterspells), as COMBATANT_INFO lists it
+  const NON_HOLDER = ([[62084,80140,1],[62086,80142,1],[62088,80144,1],[62091,80147,1],[62096,80153,1],[62098,80155,1],[62100,80157,1],[62102,80159,2],[62104,80161,1],[62114,80173,2],[62115,80174,1],[62116,80175,1],[62122,80181,1],[62123,80182,2],[62127,80187,1],[62129,80189,1],[62153,80216,1],[62157,80220,1],[62163,80226,1],[62164,80227,1],[62170,80234,1],[62176,80241,1],[62177,80242,1],[62178,80243,1],[62179,80244,1],[62180,80245,1],[62182,80248,1],[62184,80250,1],[81468,102429,1],[93524,115877,1],[62092,115878,1],[94654,117257,1],[94655,117258,1],[94656,117259,1],[94658,117261,1],[94659,117262,1],[94660,117263,1],[94661,117264,1],[94662,117265,1],[94663,117266,1],[99828,123339,1],[101883,125819,1],[62094,126060,1],[94657,128267,1],[108653,134180,1],[108654,134182,1],[108655,134185,1],[108657,134187,1],[108658,134188,1],[108659,134189,1],[108660,134190,1],[108661,134191,1],[62105,134197,1],[62087,134199,1],[108851,134407,1],[108852,134408,2],[108855,134411,1],[108858,134414,2],[108859,134415,1],[103771,134418,1],[108864,134421,1],[62150,134540,1],[109667,135918,1],[109668,135919,1],[109669,135946,1],[109915,136182,1],[109916,136183,1],[62110,136466,1],[110081,136579,1],[110258,136796,1],[110283,136837,1],[108850,136839,1],[62173,136880,1],[110422,137032,1],[110422,137033,2],[110422,137034,1],[62117,80176,1],[94664,117267,1]] as const).map(([id1, id2, count]) => ({
+    id1,
+    id2,
+    count,
+  }));
+
+  it("a kicker without the talent locks 5 s; an unknown kicker keeps the ruled 6", () => {
+    expect(kickLockoutSeconds(COUNTERSPELL)).toBe(6);
+    expect(
+      kickLockoutSecondsFor(COUNTERSPELL, victim, FROSTBOLT, 0, mage(NON_HOLDER)),
+    ).toBe(5);
+    // an empty loadout proves nothing either way
+    expect(
+      kickLockoutSecondsFor(COUNTERSPELL, victim, FROSTBOLT, 0, mage([])),
+    ).toBe(6);
+    expect(kickLockoutSecondsFor(COUNTERSPELL, victim, FROSTBOLT, 0)).toBe(6);
+    expect(
+      kickLockoutSecondsFor(
+        COUNTERSPELL,
+        victim,
+        FROSTBOLT,
+        0,
+        mage([{ id1: 110079, id2: 136577, count: 1 }]),
+      ),
+    ).toBe(6);
+    // another kick is never touched
+    expect(
+      kickLockoutSecondsFor("1766", victim, FROSTBOLT, 0, mage(NON_HOLDER)),
+    ).toBe(kickLockoutSeconds("1766"));
+  });
 });

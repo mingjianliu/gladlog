@@ -33,6 +33,7 @@ import { pvpTrinketUses, trinketUseRemainingSeconds } from "./pvpTrinketUses";
 import { fmtTime } from "./renderGrid";
 import { roundEndMs } from "./roundEnd";
 import { DPS_TRINKET_CD_S, HEALER_TRINKET_CD_S } from "./trinketCooldown";
+import { unusedKitRows } from "./unusedKitRows";
 
 /** PvP trinket spell IDs that break CC / grant freedom. Exported 2026-08-18:
  * killAttempts.ts detects "target trinketed OUT of the stun" from the same id
@@ -339,6 +340,15 @@ function getDefensiveStateAtTime(
       available.push(effectData.name);
     }
   }
+  // a roster defensive in the kit and never pressed is in hand the whole
+  // round (user ruling 2026-10-20, fact1215 retest idx 60 — the span's
+  // reading, `computeOffensiveWindows`)
+  for (const r of combat ? unusedKitRows(enemy, combat) : [])
+    if (
+      countsAsKillWindowDefensiveInHand(r.spellId) &&
+      !castsBySpell.has(r.spellId)
+    )
+      available.push(r.name);
 
   return { available, unavailable };
 }
@@ -498,20 +508,22 @@ export function killOpportunityAt(
  * undecoded (fix-FT/wp-kill-attempt-judgments/r08_tierPaired-605.txt).
  */
 const unpressedWallsCache = new WeakMap<
-  ICombatUnit,
-  { combat: AtomicArenaCombat; rows: { spellId: string; name: string }[] }
+  ReadonlyArray<{ spellId: string; name: string }>,
+  ReadonlyArray<{ spellId: string; name: string }>
 >();
 export function unpressedWallsOwned(
   unit: ICombatUnit,
   combat: AtomicArenaCombat,
 ): ReadonlyArray<{ spellId: string; name: string }> {
-  const hit = unpressedWallsCache.get(unit);
-  if (hit && hit.combat === combat) return hit.rows;
-  const rows = extractMajorCooldowns(unit, combat, { withBaselineOnly: true })
-    .filter((cd) => WALL_IN_HAND_MIT_IDS.has(cd.spellId) && kitRowUnused(cd))
-    .map((cd) => ({ spellId: cd.spellId, name: cd.spellName }));
-  unpressedWallsCache.set(unit, { combat, rows });
-  return rows;
+  // keyed by the memoised kit rows: the same round answers with the same
+  // array (the tier is asked per attempt and per window)
+  const rows = unusedKitRows(unit, combat);
+  let walls = unpressedWallsCache.get(rows);
+  if (!walls) {
+    walls = rows.filter((r) => WALL_IN_HAND_MIT_IDS.has(r.spellId));
+    unpressedWallsCache.set(rows, walls);
+  }
+  return walls;
 }
 
 /**

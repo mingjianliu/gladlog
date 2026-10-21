@@ -3666,6 +3666,7 @@ export function analyzePlayerCCAndTrinket(
       player,
       interruptedSpellId,
       action.timestamp,
+      enemies.find((u) => u.id === action.srcUnitId),
     );
 
     // F21: an interrupt whose own spell also silences (Shield of Virtue)

@@ -88,6 +88,7 @@ import { kickLockoutSeconds } from "../data/spellEffectData";
 import { STORM_CONDUIT_HOTFIX_EPOCH_MS } from "../data/talentScriptedCooldowns";
 import { playerTalentIdSets } from "./cooldowns";
 import { type ILogDatedNumber, logDatedNumberAt } from "./logEra";
+import { talentModifierOwnershipOf } from "./talentOwnership";
 
 export interface KickLockoutVictimModifier {
   /** the victim's talent (PvP talent spell id, as COMBATANT_INFO lists it) */
@@ -117,6 +118,38 @@ export const KICK_LOCKOUT_VICTIM_MODIFIERS: readonly KickLockoutVictimModifier[]
   ];
 
 /**
+ * Kicker talents a kick's lockout already INCLUDES (user ruling 2026-10-20,
+ * fact1215 retest idx 11, 「都要」): Counterspell's 6 s (ruling 2026-09-18,
+ * `SPELL_EFFECT_OVERRIDES`) is the Improved Counterspell 1270865 holder's
+ * value — "the target cannot cast for 1 sec longer", taken by 94.6 % of mages
+ * (talent impact audit 2026-09-26); DB2's own lockout is 5 s. A mage whose
+ * talents show the node missing locks for 5 (raw 1:38.927: Echo, Arcane,
+ * refused up to +4.80 s and cast at +5.17 s after a non-holder's
+ * Counterspell). Only a definite "no" shortens — an unknown kicker keeps the
+ * ruled holder value (the `ccFullDurationForCaster` rule for a talent the
+ * typical base already carries). Registered in curatedIdRegistry.
+ */
+export const KICK_LOCKOUT_KICKER_TALENTS: Readonly<
+  Record<string, { talentSpellId: string; seconds: number }>
+> = {
+  "2139": { talentSpellId: "1270865", seconds: 1 }, // Counterspell ← Improved Counterspell
+};
+
+/** `kickLockoutSeconds` for this kicker: the ruled lockout, less what a
+ * talent it definitely lacks would have added. */
+export function kickLockoutSecondsOfKicker(
+  kickSpellId: string,
+  kicker: ICombatUnit | undefined,
+): number {
+  const base = kickLockoutSeconds(kickSpellId);
+  const t = KICK_LOCKOUT_KICKER_TALENTS[kickSpellId];
+  if (!t || !kicker) return base;
+  return talentModifierOwnershipOf(kicker, t.talentSpellId) === "no"
+    ? base - t.seconds
+    : base;
+}
+
+/**
  * What `m` multiplies a lockout by for an interrupt logged at `logEpochMs` —
  * the one reading of a modifier's number (the scan that re-checks it against
  * the corpus asks here too). A timestamp that is not a number takes the
@@ -144,8 +177,11 @@ export function kickLockoutSecondsFor(
   victim: ICombatUnit | undefined,
   interruptedSpellId: string | undefined,
   interruptEpochMs: number,
+  /** the interrupt's source: a kicker whose talents show it lacks a talent
+   * the kick's lockout includes locks for less (`KICK_LOCKOUT_KICKER_TALENTS`) */
+  kicker?: ICombatUnit,
 ): number {
-  const base = kickLockoutSeconds(kickSpellId);
+  const base = kickLockoutSecondsOfKicker(kickSpellId, kicker);
   if (!victim || !interruptedSpellId) return base;
   let held: Set<string>;
   try {

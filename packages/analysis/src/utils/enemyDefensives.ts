@@ -129,6 +129,21 @@ export const FEIGN_DEATH_ABSORB_AURA_IDS: ReadonlySet<string> = new Set(
   AURA_ONLY_ACTIVATION_IDS[FEIGN_DEATH_CAST_ID] ?? [],
 );
 
+/**
+ * Absorb shields that ride another of the unit's presses — no cast of their
+ * own — keyed by the logged aura id → the name the line prints. User ruling
+ * 2026-10-20 (fact1215 retest idx 22, 「都要」): a 310,082 Shield of
+ * Vengeance went up with a Retribution Divine Protection at 0:10.768, ate 20
+ * hits and was used up at 0:12.344, and no line said so. 605 new-season
+ * files: 654 SPELL_AURA_APPLIED of 184662 and 654 of Divine Protection
+ * 403876, 653 casts of 403876 and none of 184662 — it comes with every press.
+ * Printed like Feign Death's shield (`effect: "absorb"`): what it absorbed
+ * and how it ended. Registered in curatedIdRegistry.
+ */
+export const RIDER_ABSORB_SAVE_AURAS: ReadonlyMap<string, string> = new Map([
+  ["184662", "Shield of Vengeance"],
+]);
+
 /** Enemy-def F-E5 / F-E6 (user ruling A25, 2026-09-30, narrowed by D8,
  * 2026-10-10): auras the `[ENEMY DEF]` line prints as `immune` and KILL
  * ATTEMPTS reads as "forced a full immunity" although they are no pct-100
@@ -342,6 +357,17 @@ export function effectSaves(
         atSeconds: iv.fromS,
         spellId: iv.spellId,
         spellName: "Feign Death",
+        effect: "absorb",
+        interval: iv,
+      });
+      continue;
+    }
+    const rider = RIDER_ABSORB_SAVE_AURAS.get(iv.spellId);
+    if (rider) {
+      out.push({
+        atSeconds: iv.fromS,
+        spellId: iv.spellId,
+        spellName: rider,
         effect: "absorb",
         interval: iv,
       });

@@ -847,6 +847,7 @@ export function computeOwnerPositionEvents(params: {
   const ownerCannotCast = buildCannotCastIntervals(
     owner,
     enemySourceIds(enemies, combatUnits),
+    combatUnits,
   );
   // baseline-only rows are cd-hoarded's alone (ruling P-W6): "a defensive CD
   // was available" reads only buttons the owner showed this round

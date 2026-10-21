@@ -261,11 +261,13 @@ describe("computeOffensiveWindows + [ENEMY DEF] ⇄ checkNoWindowAcrossOwnWall",
     ];
     return { windows, def, lines };
   };
-  // a pressed wall the roster does not hold, an aura of a roster wall with
-  // no cast behind it, and a redirect that is no wall
+  // a pressed roster wall (Survival of the Fittest since the user ruling of
+  // 2026-10-20 — timed by the machine for its official 6 s and in hand
+  // before its press), an aura of a roster wall with no cast behind it, and
+  // a redirect that is no wall
   const pressed = hunter(
     [
-      ...up(SURVIVAL_OF_THE_FITTEST, 24.6, 32.6),
+      ...up(SURVIVAL_OF_THE_FITTEST, 24.6, 30.6),
       ...up(ANCIENT_OF_LORE, 40.4, 44.2),
       ...up(ROAR_OF_SACRIFICE, 50, 55),
     ],
@@ -278,13 +280,12 @@ describe("computeOffensiveWindows + [ENEMY DEF] ⇄ checkNoWindowAcrossOwnWall",
       def.map((l) => l.slice(0, l.indexOf(")", l.indexOf("): ") + 3) + 1)),
     ).toEqual([
       "0:02  [ENEMY DEF]   4(BMHunter) (Beast Mastery Hunter): Barkskin (20%, 8.0s)",
-      "0:24  [ENEMY DEF]   4(BMHunter) (Beast Mastery Hunter): Survival of the Fittest (25%, 8.0s)",
+      "0:24  [ENEMY DEF]   4(BMHunter) (Beast Mastery Hunter): Survival of the Fittest (25%, 6.0s)",
       "0:40  [ENEMY DEF]   4(BMHunter) (Beast Mastery Hunter): Ancient of Lore (30%, 3.8s)", // a copy no press put up: never early on length (F15 C5)
       "0:50  [ENEMY DEF]   4(BMHunter) (Beast Mastery Hunter): Roar of Sacrifice (25%, 5.0s — removed early)",
     ]);
     expect(windows.map((w) => [w.fromSeconds, w.toSeconds])).toEqual([
-      [10, 24.6],
-      [32.6, 40.4],
+      [30.6, 40.4],
       [44.2, 60],
     ]);
     expect(checkNoWindowAcrossOwnWall(lines)).toEqual([]);

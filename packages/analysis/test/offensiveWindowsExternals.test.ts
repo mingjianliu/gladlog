@@ -5,6 +5,7 @@
  * Invisibility is not (ruling P-b8): its aura outlasts the invisibility.
  */
 import {
+  CombatUnitClass,
   CombatUnitReaction,
   CombatUnitSpec,
   LogEvent,
@@ -40,6 +41,7 @@ import {
   computeOffensiveWindows,
   subtractIntervals,
 } from "../src/utils/offensiveWindows";
+import { unusedKitRows } from "../src/utils/unusedKitRows";
 import {
   makeAuraEvent,
   makeSpellCastEvent,
@@ -433,28 +435,26 @@ describe("computeOffensiveWindows — the target's own 20–99 % wall cuts the s
       w.toSeconds,
     ]);
 
-  it("the two walls the roster does not hold are still not roster members — the cut does not come from the roster", () => {
-    // roster membership also OPENS spans (a unit that pressed only that
-    // spell); registered as open in docs/predicate-index "Not yet unified"
+  it("the two W1g walls are roster members since the user ruling of 2026-10-20 (fact1215 retest idx 45 / 47 / 48)", () => {
     for (const id of [SURVIVAL_OF_THE_FITTEST, DIVINE_PROTECTION_RET]) {
       expect(MITIGATION_WALL_IDS.has(id), id).toBe(true);
-      expect(isKillWindowMajorDefensive(id), id).toBe(false);
+      expect(isKillWindowMajorDefensive(id), id).toBe(true);
     }
   });
 
-  it("f4da82c5 round 5's shape: a pressed wall outside the roster splits the span at the aura's own instants", () => {
-    const [[fromSeconds, toSeconds]] = spans(hunter()) as [[number, number]];
-    expect(toSeconds - fromSeconds).toBeGreaterThan(30);
-    // pressed at 24.6 s, up 8.0 s: the line reads `0:24 … (25%, 8.0s)`
+  it("f4da82c5 round 5's shape: a pressed roster wall is timed — in hand before its press, up for its length, then the span opens", () => {
+    const [[, toSeconds]] = spans(hunter()) as [[number, number]];
+    // pressed at 24.6 s; before the press it was in hand, so no span opens
+    // until the press has run its official 6 s (a press the machine times
+    // holds for its official length, ruling D6)
     const cut = spans(
-      hunter(up(SURVIVAL_OF_THE_FITTEST, 24.6, 32.6), [
+      hunter(up(SURVIVAL_OF_THE_FITTEST, 24.6, 30.6), [
         press(SURVIVAL_OF_THE_FITTEST, 24.6),
       ]),
     );
-    expect(cut).toHaveLength(2);
-    expect(cut[0]).toEqual([fromSeconds, 24.6]);
-    expect(cut[1]![0]).toBeCloseTo(32.6, 6);
-    expect(cut[1]![1]).toBe(toSeconds);
+    expect(cut).toHaveLength(1);
+    expect(cut[0]![0]).toBeCloseTo(30.6, 6);
+    expect(cut[0]![1]).toBe(toSeconds);
     // Retribution's Divine Protection the same
     expect(
       spans(
@@ -462,10 +462,7 @@ describe("computeOffensiveWindows — the target's own 20–99 % wall cuts the s
           press(DIVINE_PROTECTION_RET, 30),
         ]),
       ),
-    ).toEqual([
-      [fromSeconds, 30],
-      [38, toSeconds],
-    ]);
+    ).toEqual([[38, toSeconds]]);
   });
 
   it("310e5c6d's shape: a wall's aura with no cast of its id behind it cuts the span too", () => {
@@ -692,5 +689,48 @@ describe("computeOffensiveWindows — a ready Alter Time is a defensive in hand"
       [12, 65],
       [70, 120],
     ]);
+  });
+});
+
+// User ruling 2026-10-20 (fact1215 retest idx 60, 「都要」): a roster
+// defensive in the unit's kit that it never pressed is in hand the whole
+// round — `target defenseless 0:49–1:47` on a Restoration Druid whose kit
+// printed `Barkskin [60s, lasts 12s] [UNUSED]`.
+describe("computeOffensiveWindows — an unpressed kit defensive is in hand", () => {
+  const IRONBARK = "102342";
+  const BARKSKIN = "22812";
+  const combat = { startTime: T0, endTime: at(120), units: {} } as never;
+  const druid = (casts: Array<[string, number]>) =>
+    makeUnit("e1", {
+      name: "EnemyDruid",
+      class: CombatUnitClass.Druid,
+      spec: CombatUnitSpec.Druid_Restoration,
+      reaction: CombatUnitReaction.Hostile,
+      info: { talents: [], pvpTalents: [] } as never,
+      spellCastEvents: casts.map(([id, s]) =>
+        makeSpellCastEvent(id, at(s), "e1", "EnemyDruid", "e1", "EnemyDruid"),
+      ),
+    });
+
+  it("Barkskin is in the Restoration kit: pressed Ironbark alone opens no span", () => {
+    const u = druid([[IRONBARK, 2]]);
+    expect(
+      unusedKitRows(u as never, combat).map((r) => r.spellId),
+    ).toContain(BARKSKIN);
+    expect(computeOffensiveWindows([u] as never, [], combat)).toEqual([]);
+  });
+
+  it("once Barkskin is pressed too, the span is the machine's again", () => {
+    const ws = computeOffensiveWindows(
+      [
+        druid([
+          [IRONBARK, 2],
+          [BARKSKIN, 3],
+        ]),
+      ] as never,
+      [],
+      combat,
+    );
+    expect(ws.length).toBeGreaterThan(0);
   });
 });

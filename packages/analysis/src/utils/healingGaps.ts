@@ -134,6 +134,7 @@ export function detectHealingGaps(
   const cannotCast = buildCannotCastIntervals(
     healer,
     enemySourceIds(enemies, Object.values(combat.units ?? {})),
+    Object.values(combat.units ?? {}) as ICombatUnit[],
   );
   const teammates = friends.filter((u) => u.id !== healer.id);
   const matchStartMs = combat.startTime;

@@ -756,11 +756,12 @@ export function buildMatchContext(
         "KILL WINDOWS (enemy vulnerability spans — team facts, not verdicts):",
       );
       // fact1215 R7: what "defenseless" reads (2026-10-13: it says nothing
-      // was UP, not that nothing was owned — the wording stays). fact2 C1
+      // was UP). User rulings 2026-10-20 (fact1215 retest idx 54 / 60): a
+      // ready Alter Time and an unpressed kit defensive are in hand. fact2 C1
       // (user ruling 4, 2026-10-20): the floor the span applies to an ally's
       // external (`isBelowWallFloorExternal`) is said.
       tLines.push(
-        `  \`defenseless a–b\` = nothing of these was up on the target: its own wall, immunity or absorb shield, an ally's external on it (not one under the ${MITIGATION_AURA_MIN_PCT}% wall floor — ${allyCopyLegendPhrase()} does not count), an area save it carried; and every major defensive it pressed this round was still on cooldown. A defensive it never pressed may still have been in hand (its kit's [UNUSED]); a heal is not counted.`,
+        `  \`defenseless a–b\` = nothing of these was up on the target: its own wall, immunity or absorb shield, an ally's external on it (not one under the ${MITIGATION_AURA_MIN_PCT}% wall floor — ${allyCopyLegendPhrase()} does not count), an area save it carried; and every major defensive it held was on cooldown — each one it pressed this round, a rewind (Alter Time) counting while it is back. A unit whose kit holds a major defensive it never pressed ([UNUSED]) has it in hand all round and is never defenseless. A heal is not counted.`,
       );
       if (kwLines.some(hasTeamAbsorbedClause))
         tLines.push(TEAM_DAMAGE_ABSORBED_LEGEND);
