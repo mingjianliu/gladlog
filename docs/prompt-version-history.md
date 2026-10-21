@@ -4014,3 +4014,13 @@ kickers and "enemy interrupts UP". 605 files (v435 → this): kick-priority-miss
 +1, kick-priority-team +2 (one event: a Discipline Priest's own shield cut her
 span, the windows re-split) — user approved; [KILL WINDOW] 8,443 → 8,338
 lines, [VULNERABLE] 411 → 435. Gates: baseline residue only.
+
+v437 (2026-10-21, codex 20-F16-09 — the v0.1.36 retest group 1 review, 4 of
+4 findings confirmed and fixed): a mechanic-limited avoidance (The Beast
+Within) is named as an IMMUNE cause only for a control it stops; Touch of
+Karma's window ends at the pressing monk's own redirect removal; a reflected
+control the log shows broken by damage is not credited to a Medallion pressed
+just after; controls into Aspect of the Turtle (no school mask) stay in
+ABILITIES INTO IMMUNITY. 605 files (b22 → b23): no candidate added or
+removed; 14 contexts change ([IMMUNE — The Beast Within was up] 27 → 24,
+Turtle lines 79 → 81). Gates: baseline residue only.

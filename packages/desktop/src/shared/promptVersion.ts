@@ -305,5 +305,10 @@
  *  `defenseless` while up; a mage in Ice Block is no ready kicker. 605
  *  files: kick-priority-missed +1, kick-priority-team +2 (one event), user
  *  approved; [KILL WINDOW] 8,443 → 8,338, [VULNERABLE] 411 → 435.
+ *  v437 (2026-10-21, codex 20-F16-09): a mechanic-limited avoidance names
+ *  only a control it stops; Karma's window ends at its own monk's redirect
+ *  removal; a reflected control broken by damage is no trinket's; controls
+ *  into Aspect of the Turtle count. 605 files: no candidate added or
+ *  removed; 14 contexts change.
  */
-export const PROMPT_VERSION = 436;
+export const PROMPT_VERSION = 437;
