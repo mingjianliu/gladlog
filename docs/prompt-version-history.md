@@ -3820,3 +3820,28 @@ gone (a Fire mage's "Dragon's Breath usable 4 s, not used" — it was on
 cooldown), 10 `[DEATH]` lines gain "Unused: Feign Death". Gates: baseline
 residue only. New re-runnable scan: packages/eval/scripts/cooldownRecastScan.ts
 (every cooldown read outside the ledger, against `unitCooldownOf`).
+v429 (2026-10-20, cooldown mastery batch 1b — GH #124): the cooldown
+generator reads the points DB2 really gives a talent effect
+(scripts/datagen/lib/talentRankPoints.ts). TraitDefinitionEffectPoints +
+CurvePoint: per purchased rank (operation 0 sets the curve value, 1
+multiplies the base — "per rank"); emitted as `valueByRank`, read at the
+unit's COMBATANT_INFO rank (unknown → rank 1). A spec passive's aura 218 /
+219 with a PointsIndex op rewrites effect N of every spell carrying its
+label: `valueBySpec`. Holy Paladin 1258016 effect 22 (+45 000 on label 2651
+= Sacrifice of the Just): Holy's Blessing of Sacrifice 60 → 105 s (corpus
+floor 104.0–105.0 s, 581 recasts; Retribution keeps 60). Call of the
+Righteous 1241511: Avenging Crusader −7.5 / −15 s by rank (52.5 / 45 s, the
+corpus floors exactly; was 30), Avenging Wrath −15 / −30. The DB2 tables
+confirm every hand per-rank entry (PER_RANK_COOLDOWN_TALENTS, Static
+Charge's user-ruled 10 s a rank) and add per-rank for Survival of the
+Fittest, Born To Be Wild, Erratic Felheart and three more. 605 files (b65
+clean base after F16 → b66): cd-hoarded 576 → 563 (−14 "Blessing of
+Sacrifice was ready" that were not, +1 a Lay on Hands never pressed till
+3:23 at a 1:50 crisis), external-unused 87 → 80, slow-defensive-response
+−2 — user approved; 1,316 context files change in cooldown facts. Gates:
+baseline residue only. Known and left: Safeguard's Arms / Fury rewrite
+(+10 s on Intervene's recharge) is 12.1.5-only — the August (12.1.0)
+corpus floors at 36.0 s, the October logs at ≥ 45 — so 39 August Intervene
+recasts now read impossible (the safe side); Retribution's Blessing of
+Sacrifice floors at 90 s in October logs (60 in August) with nothing in
+DB2 70391 to explain it — open, needs a ruling.

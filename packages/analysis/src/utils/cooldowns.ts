@@ -3572,24 +3572,40 @@ export function applyCdModifiers(
     // longer cooldown
     if (mod.onlySpecIds && !(specId && mod.onlySpecIds.includes(specId)))
       continue;
+    // The DB2 value at the held rank (TraitDefinitionEffectPoints), for this
+    // spec when its passive rewrites the points (Holy's Sacrifice of the
+    // Just: −15, not −60) — the generator's `valueBySpec` / `valueByRank`.
+    // Unknown rank → rank 1, the smaller give-back.
+    const heldRank = Math.max(1, owner?.talentRanks?.get(mod.talentSpellId) ?? 1);
+    const table =
+      (specId !== undefined ? mod.valueBySpec?.[specId] : undefined) ??
+      mod.valueByRank;
+    const tabled = table?.length
+      ? table[Math.min(heldRank, table.length) - 1]
+      : undefined;
     if (mod.effect === "extra_charge") {
-      charges += mod.value;
+      charges += tabled ?? mod.value;
     } else if (mod.effect === "reduce_cd") {
-      // unknown rank → counted once, the value-once reading
-      const rank = PER_RANK_COOLDOWN_TALENTS.has(mod.talentSpellId)
-        ? Math.max(1, owner?.talentRanks?.get(mod.talentSpellId) ?? 1)
-        : 1;
       // a user-ruled per-rank value replaces the DB2 row's number, and so
       // does the number of the log's date for a value the game changed
+      const ruled = RULED_COOLDOWN_VALUES[mod.talentSpellId]?.secondsPerRank;
       const dated = DATED_COOLDOWN_VALUES[mod.talentSpellId];
+      if (ruled === undefined && dated === undefined && tabled !== undefined) {
+        flatReduceSeconds += tabled;
+        continue;
+      }
+      // unknown rank → counted once, the value-once reading
+      const rank = PER_RANK_COOLDOWN_TALENTS.has(mod.talentSpellId)
+        ? heldRank
+        : 1;
       const value =
-        RULED_COOLDOWN_VALUES[mod.talentSpellId]?.secondsPerRank ??
+        ruled ??
         (dated
           ? logDatedNumberAt(dated.value, owner?.logEpochMs ?? Number.NaN)
           : mod.value);
       flatReduceSeconds += value * rank;
     } else if (mod.effect === "reduce_cd_pct") {
-      pctMultiplier *= 1 - mod.value / 100;
+      pctMultiplier *= 1 - (tabled ?? mod.value) / 100;
     }
   }
 

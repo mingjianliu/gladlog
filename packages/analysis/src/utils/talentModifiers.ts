@@ -29,6 +29,12 @@ export interface ICDModifier {
    * scripts/datagen/lib/tooltipSpecGates.ts): a holder of another spec —
    * or of an unknown one — does not get it. */
   onlySpecIds?: string[];
+  /** The value at ranks 1..max (DB2 TraitDefinitionEffectPoints), in the
+   * unit of `value`; read at the unit's COMBATANT_INFO rank. */
+  valueByRank?: number[];
+  /** The same for a spec whose passive rewrites the talent's points by label
+   * (Holy Paladin's 1258016 on Sacrifice of the Just). */
+  valueBySpec?: Record<string, number[]>;
 }
 
 export const CD_TALENT_MODIFIERS: Record<string, ICDModifier[]> =

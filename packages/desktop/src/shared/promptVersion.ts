@@ -251,5 +251,12 @@
  *  Improved Feign Death per rank (25 → 20 s); Feral Convoke 120 → 60 s
  *  (Ashamane's Guidance). 605 files (measured on the pre-F16 base): no
  *  candidate added or removed.
+ *  v429 (2026-10-20, cooldown mastery batch 1b): talent points as DB2 really
+ *  has them — per purchased rank (TraitDefinitionEffectPoints + CurvePoint)
+ *  and per spec where a spec passive rewrites them by label: Holy Paladin's
+ *  Blessing of Sacrifice with Sacrifice of the Just is 105 s, not 60
+ *  (corpus floor 104–105 s over 581 recasts); Avenging Crusader with Call
+ *  of the Righteous 52.5 / 45 s by rank, not 30. 605 files: cd-hoarded
+ *  −14 +1, external-unused −7, slow-defensive-response −2 (user approved).
  */
-export const PROMPT_VERSION = 428;
+export const PROMPT_VERSION = 429;

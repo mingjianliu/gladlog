@@ -24,6 +24,7 @@
  */
 import { CUSTOM_TALENT_MODIFIERS } from "../customTalentModifiers";
 import { pvpMultiplierOf } from "./pvpMultiplier";
+import { adjustPoints, type ISpecPointsAdjust } from "./talentRankPoints";
 
 export const EFFECT_MOD_CHARGES = 121;
 export const EFFECT_MOD_COOLDOWN = 148;
@@ -89,6 +90,10 @@ export interface ICDModifier {
   /** a talent row the tooltip gives to these specs only (`$?cN[…$sK…]`,
    * lib/tooltipSpecGates.ts): a holder of another spec does not get it */
   onlySpecIds?: string[];
+  /** the value at ranks 1..max (TraitDefinitionEffectPoints) */
+  valueByRank?: number[];
+  /** the value at ranks 1..max for a spec whose passive rewrites the points */
+  valueBySpec?: Record<string, number[]>;
 }
 
 export type TargetVia =
@@ -470,6 +475,18 @@ export function compileCooldownModifiers(
     talentSpellId: string,
     effectIndex: number,
   ) => string[] | "unreferenced" | undefined,
+  /** Per-rank and per-spec points (lib/talentRankPoints.ts). */
+  pointsOf?: {
+    byRank: (
+      talentSpellId: string,
+      effectIndex: number,
+      basePoints: number,
+    ) => number[] | undefined;
+    specAdjusts: (
+      talentSpellId: string,
+      effectIndex: number,
+    ) => readonly ISpecPointsAdjust[];
+  },
 ): Record<string, ICDModifier[]> {
   const hop0 = new Set(
     inv.edges.filter((e) => e.hop === 0).map((e) => e.spellId),
@@ -536,21 +553,22 @@ export function compileCooldownModifiers(
     if (!hop0.has(row.spellId)) continue;
     const { effect, aura, misc0 } = row;
     let type: ICDModifier["effect"] | null = null;
-    let value = row.basePoints;
-    // Cooldown numbers are PvP-scaled like every other generated number
-    // (lib/pvpMultiplier.ts, user ruling 2026-09-04 "the PvP value IS the
-    // official value"); until GH #106 this compiler read the bare base points.
-    // Chrysalis 202424 −45 s × 0.667 = −30 s is what makes Life Cocoon's
-    // modelled 75 s match the 90 s the corpus shows; Improved Conjuration
-    // −30 s × 0.5, Bounding Stride −15 s × 0.7. Charges are counts, never scaled.
-    const pvpValue =
-      Math.round(row.basePoints * row.pvpMultiplier * 1000) / 1000;
+    // Points → the modifier's value. Cooldown numbers are PvP-scaled like
+    // every other generated number (lib/pvpMultiplier.ts, user ruling
+    // 2026-09-04 "the PvP value IS the official value"); until GH #106 this
+    // compiler read the bare base points. Chrysalis 202424 −45 s × 0.667 =
+    // −30 s is what makes Life Cocoon's modelled 75 s match the 90 s the
+    // corpus shows; Improved Conjuration −30 s × 0.5, Bounding Stride −15 s ×
+    // 0.7. Charges are counts, never scaled. One conversion for the base, the
+    // per-rank and the per-spec points (lib/talentRankPoints.ts).
+    let convert: (points: number) => number = (p) => p;
+    const pvpOf = (p: number) => Math.round(p * row.pvpMultiplier * 1000) / 1000;
     if (
       effect === EFFECT_MOD_CHARGES ||
       (effect === EFFECT_APPLY_AURA && aura === AURA_MOD_MAX_CHARGES)
     ) {
       type = "extra_charge";
-      value = Math.abs(value);
+      convert = (p) => Math.abs(p);
     } else if (
       effect === EFFECT_APPLY_AURA &&
       (aura === AURA_ADD_PCT_MODIFIER ||
@@ -558,13 +576,13 @@ export function compileCooldownModifiers(
       misc0 === SPELLMOD_COOLDOWN
     ) {
       type = "reduce_cd_pct";
-      value = Math.abs(pvpValue);
+      convert = (p) => Math.abs(pvpOf(p));
     } else if (
       effect === EFFECT_APPLY_AURA &&
       aura === AURA_CHARGE_RECOVERY_MULTIPLIER
     ) {
       type = "reduce_cd_pct";
-      value = -pvpValue;
+      convert = (p) => -pvpOf(p);
     } else if (
       effect === EFFECT_MOD_COOLDOWN ||
       (effect === EFFECT_APPLY_AURA && aura === AURA_MOD_CATEGORY_COOLDOWN) ||
@@ -576,16 +594,19 @@ export function compileCooldownModifiers(
         misc0 === SPELLMOD_COOLDOWN)
     ) {
       type = "reduce_cd";
-      value = -pvpValue;
-      // milliseconds → seconds, kept to 0.1 s: a PvP-scaled −10.5 s must not
-      // round to 11 (that is a half-second the model would claim is ready early)
-      if (Math.abs(value) > 500) value = Math.round(value / 100) / 10;
+      convert = (p) => {
+        const v = -pvpOf(p);
+        // milliseconds → seconds, kept to 0.1 s: a PvP-scaled −10.5 s must not
+        // round to 11 (that is a half-second the model would claim is ready early)
+        return Math.abs(v) > 500 ? Math.round(v / 100) / 10 : v;
+      };
     } else if (
       effect === EFFECT_APPLY_AURA &&
       aura === AURA_OVERRIDE_ACTION_SPELL
     ) {
       type = "replace_spell";
     }
+    const value = convert(row.basePoints);
     if (!type) continue;
     if (
       type === "replace_spell" &&
@@ -604,6 +625,25 @@ export function compileCooldownModifiers(
     const onlySpecIds = specIdsOf.has(row.spellId)
       ? undefined
       : rowSpecGate(row);
+    // The points the game really uses: per purchased rank
+    // (TraitDefinitionEffectPoints) and per spec where a spec passive
+    // rewrites them by label — lib/talentRankPoints.ts.
+    const rankPoints =
+      type === "replace_spell"
+        ? undefined
+        : pointsOf?.byRank(row.spellId, row.effectIndex, row.basePoints);
+    const valueByRank = rankPoints?.map(convert);
+    const adjusts =
+      type === "replace_spell"
+        ? []
+        : (pointsOf?.specAdjusts(row.spellId, row.effectIndex) ?? []);
+    let valueBySpec: Record<string, number[]> | undefined;
+    for (const specId of new Set(adjusts.flatMap((x) => x.specIds))) {
+      const mine = adjusts.filter((x) => x.specIds.includes(specId));
+      (valueBySpec ??= {})[specId] = (rankPoints ?? [row.basePoints]).map(
+        (pt) => convert(adjustPoints(pt, mine)),
+      );
+    }
     for (const t of row.targets) {
       add(
         t.spellId,
@@ -616,6 +656,8 @@ export function compileCooldownModifiers(
             ? { specIds: specIdsOf.get(row.spellId) }
             : {}),
           ...(onlySpecIds ? { onlySpecIds } : {}),
+          ...(valueByRank ? { valueByRank } : {}),
+          ...(valueBySpec ? { valueBySpec } : {}),
           // a replacement that only holds while a finite buff is up (Zenith →
           // Zenith Stomp) is not the talent taking the button away (GH #106)
           ...(type === "replace_spell" && row.activation === "whileAura"
