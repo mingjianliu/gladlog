@@ -15,6 +15,7 @@ import { immunityCoversSpell } from "../data/spellSchools";
 import { isAllyCopyWallId } from "./allyCopyWall";
 import { buildAuraIntervals } from "./auraIntervals";
 import { isControlCast } from "./castMissRows";
+import { applicableCCAvoidanceIds } from "./ccTrinketAnalysis";
 import {
   getUnitHpAtTimestamp,
   HP_SAMPLE_RADIUS_MS,
@@ -95,7 +96,11 @@ function buildDefenseWindows(
     // (`saveAuraIntervals`' mapping)
     const srcIdByName = new Map<string, string>();
     for (const a of enemy.auraEvents ?? [])
-      if (a.destUnitId === enemy.id && a.srcUnitId && !srcIdByName.has(a.srcUnitName))
+      if (
+        a.destUnitId === enemy.id &&
+        a.srcUnitId &&
+        !srcIdByName.has(a.srcUnitName)
+      )
         srcIdByName.set(a.srcUnitName, a.srcUnitId);
     const isOwn = (srcUnitName: string) =>
       (srcIdByName.get(srcUnitName) ?? null) === enemy.id ||
@@ -223,7 +228,9 @@ export function buildOffensiveWasteSummary(
           // went back at its caster — it did not land inside the window
           // (c3398b15 0:55: a Mortal Coil reflected by Spell Reflection was
           // listed "into" Die by the Sword)
-          if (reflectedBack(friend, e.spellId, window.unitId, e.logLine.timestamp))
+          if (
+            reflectedBack(friend, e.spellId, window.unitId, e.logLine.timestamp)
+          )
             return false;
           // round-1 retest idx 43 / 13: a school-limited immunity does not
           // stop the schools it does not cover — a Chaos Bolt into Blessing
@@ -237,10 +244,18 @@ export function buildOffensiveWasteSummary(
           // (e.g. Mindgames, HoJ, Silence) which would otherwise be filtered by the damage threshold.
           // Round-1 retest idx 44: only into an immunity that covers it — a
           // Mortal Coil into Die by the Sword (no control immunity) landed.
+          // codex 20-F16-09 #4: an immunity with no school mask (Aspect of
+          // the Turtle) stops the controls the avoidance table says it does
+          // (`applicableCCAvoidanceIds`) — unknown is no "does not cover"
           const isHighValueCC =
             window.verdict === "unconditional" &&
-            covers === true &&
-            isControlCast(e.spellId);
+            isControlCast(e.spellId) &&
+            (covers === true ||
+              (covers === undefined &&
+                applicableCCAvoidanceIds(
+                  e.spellId,
+                  getEnglishSpellName(e.spellId, e.spellName),
+                ).has(window.spellId)));
           return (
             isHighValueCC ||
             highValueIds.size === 0 ||

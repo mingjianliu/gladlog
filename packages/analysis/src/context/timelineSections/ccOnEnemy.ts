@@ -165,13 +165,25 @@ export function emitCcOnEnemyEntries(
       // and the reflected Cyclone's REMOVED in one ms) — read off the aura
       const reflectedCcEndedBy = (pressMs: number) => {
         if (!enemyUnit) return undefined;
-        const removed = (enemyUnit.auraEvents ?? []).find(
+        const auras = enemyUnit.auraEvents ?? [];
+        const removed = auras.find(
           (a) =>
             !!a.spellId &&
             ccSpellIds.has(a.spellId) &&
             a.srcUnitId === enemyUnit.id &&
             a.logLine.event === LogEvent.SPELL_AURA_REMOVED &&
-            Math.abs(a.timestamp - pressMs) <= TRINKET_BREAK_AFTER_REMOVAL_MS,
+            Math.abs(a.timestamp - pressMs) <= TRINKET_BREAK_AFTER_REMOVAL_MS &&
+            // a removal the log already explains (a BROKEN row of that aura
+            // just before it — damage broke it) is not the press's (codex
+            // 20-F16-09 #3)
+            !auras.some(
+              (b) =>
+                b.spellId === a.spellId &&
+                (b.logLine.event === LogEvent.SPELL_AURA_BROKEN ||
+                  b.logLine.event === LogEvent.SPELL_AURA_BROKEN_SPELL) &&
+                b.timestamp <= a.timestamp &&
+                a.timestamp - b.timestamp <= TRINKET_BREAK_AFTER_REMOVAL_MS,
+            ),
         );
         return removed
           ? {

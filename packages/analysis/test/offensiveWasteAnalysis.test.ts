@@ -78,7 +78,9 @@ describe("offensiveWasteAnalysis — buildOffensiveWasteSummary", () => {
   const combat = makeCombat(matchStart, matchStart + 60_000);
 
   it("returns empty events when there are no defense windows or casts", () => {
-    const friend = makeUnit("friend-1", { reaction: CombatUnitReaction.Friendly });
+    const friend = makeUnit("friend-1", {
+      reaction: CombatUnitReaction.Friendly,
+    });
     const enemy = makeUnit("enemy-1", { reaction: CombatUnitReaction.Hostile });
 
     const summary = buildOffensiveWasteSummary(combat, [friend], [enemy]);
@@ -99,10 +101,38 @@ describe("offensiveWasteAnalysis — buildOffensiveWasteSummary", () => {
     const enemy = makeUnit("enemy-1", {
       reaction: CombatUnitReaction.Hostile,
       auraEvents: [
-        makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, "62618", matchStart + 10_000, "enemy-1", "enemy-1", "BUFF"),
-        makeAuraEvent(LogEvent.SPELL_AURA_REMOVED, "62618", matchStart + 22_000, "enemy-1", "enemy-1", "BUFF"),
-        makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, "99999999", matchStart + 10_000, "enemy-1", "enemy-1", "BUFF"),
-        makeAuraEvent(LogEvent.SPELL_AURA_REMOVED, "99999999", matchStart + 22_000, "enemy-1", "enemy-1", "BUFF"),
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_APPLIED,
+          "62618",
+          matchStart + 10_000,
+          "enemy-1",
+          "enemy-1",
+          "BUFF",
+        ),
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_REMOVED,
+          "62618",
+          matchStart + 22_000,
+          "enemy-1",
+          "enemy-1",
+          "BUFF",
+        ),
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_APPLIED,
+          "99999999",
+          matchStart + 10_000,
+          "enemy-1",
+          "enemy-1",
+          "BUFF",
+        ),
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_REMOVED,
+          "99999999",
+          matchStart + 22_000,
+          "enemy-1",
+          "enemy-1",
+          "BUFF",
+        ),
       ],
     });
 
@@ -116,12 +146,28 @@ describe("offensiveWasteAnalysis — buildOffensiveWasteSummary", () => {
       spec: CombatUnitSpec.Warrior_Arms,
       class: CombatUnitClass.Warrior,
       reaction: CombatUnitReaction.Friendly,
-      damageOut: [
-        makeDamageEvent(matchStart + 5_000, 100_000, "enemy-1"),
-      ],
+      damageOut: [makeDamageEvent(matchStart + 5_000, 100_000, "enemy-1")],
       spellCastEvents: [
-        makeSpellCastEvent("12294", matchStart + 11_000, "enemy-1", "EnemyPaladin", "warrior-1", "Ares", 0, "Mortal Strike"),
-        makeSpellCastEvent("12294", matchStart + 13_000, "enemy-1", "EnemyPaladin", "warrior-1", "Ares", 0, "Mortal Strike"),
+        makeSpellCastEvent(
+          "12294",
+          matchStart + 11_000,
+          "enemy-1",
+          "EnemyPaladin",
+          "warrior-1",
+          "Ares",
+          0,
+          "Mortal Strike",
+        ),
+        makeSpellCastEvent(
+          "12294",
+          matchStart + 13_000,
+          "enemy-1",
+          "EnemyPaladin",
+          "warrior-1",
+          "Ares",
+          0,
+          "Mortal Strike",
+        ),
       ],
     });
     // 12294 was not in damageOut, but damageOut has spellId: "1" (TestSpell).
@@ -141,8 +187,22 @@ describe("offensiveWasteAnalysis — buildOffensiveWasteSummary", () => {
       class: CombatUnitClass.Paladin,
       reaction: CombatUnitReaction.Hostile,
       auraEvents: [
-        makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, "642", matchStart + 10_000, "enemy-1", "enemy-1", "BUFF"),
-        makeAuraEvent(LogEvent.SPELL_AURA_REMOVED, "642", matchStart + 18_000, "enemy-1", "enemy-1", "BUFF"),
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_APPLIED,
+          "642",
+          matchStart + 10_000,
+          "enemy-1",
+          "enemy-1",
+          "BUFF",
+        ),
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_REMOVED,
+          "642",
+          matchStart + 18_000,
+          "enemy-1",
+          "enemy-1",
+          "BUFF",
+        ),
       ],
     });
 
@@ -164,20 +224,59 @@ describe("offensiveWasteAnalysis — buildOffensiveWasteSummary", () => {
       class: CombatUnitClass.Warlock,
       reaction: CombatUnitReaction.Friendly,
       spellCastEvents: [
-        makeSpellCastEvent("116858", matchStart + 11_000, "enemy-1", "EnemyDK", "lock-1", "Lock", 0, "Chaos Bolt"),
-        makeSpellCastEvent("116858", matchStart + 13_000, "enemy-1", "EnemyDK", "lock-1", "Lock", 0, "Chaos Bolt"),
+        makeSpellCastEvent(
+          "116858",
+          matchStart + 11_000,
+          "enemy-1",
+          "EnemyDK",
+          "lock-1",
+          "Lock",
+          0,
+          "Chaos Bolt",
+        ),
+        makeSpellCastEvent(
+          "116858",
+          matchStart + 13_000,
+          "enemy-1",
+          "EnemyDK",
+          "lock-1",
+          "Lock",
+          0,
+          "Chaos Bolt",
+        ),
       ],
     });
-    friend.damageOut = [{ ...makeDamageEvent(matchStart + 5_000, 100_000, "enemy-1"), spellId: "116858" }] as never;
+    friend.damageOut = [
+      {
+        ...makeDamageEvent(matchStart + 5_000, 100_000, "enemy-1"),
+        spellId: "116858",
+      },
+    ] as never;
     const enemy = makeUnit("enemy-1", {
       name: "EnemyDK",
       reaction: CombatUnitReaction.Hostile,
       auraEvents: [
-        makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, "1022", matchStart + 10_000, "enemy-2", "enemy-1", "BUFF"),
-        makeAuraEvent(LogEvent.SPELL_AURA_REMOVED, "1022", matchStart + 18_000, "enemy-2", "enemy-1", "BUFF"),
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_APPLIED,
+          "1022",
+          matchStart + 10_000,
+          "enemy-2",
+          "enemy-1",
+          "BUFF",
+        ),
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_REMOVED,
+          "1022",
+          matchStart + 18_000,
+          "enemy-2",
+          "enemy-1",
+          "BUFF",
+        ),
       ],
     });
-    expect(buildOffensiveWasteSummary(combat, [friend], [enemy]).events).toHaveLength(0);
+    expect(
+      buildOffensiveWasteSummary(combat, [friend], [enemy]).events,
+    ).toHaveLength(0);
   });
 
   it("round-1 retest idx 107: a cast the target REFLECTED did not land inside the window", () => {
@@ -187,13 +286,41 @@ describe("offensiveWasteAnalysis — buildOffensiveWasteSummary", () => {
       class: CombatUnitClass.Warrior,
       reaction: CombatUnitReaction.Friendly,
       spellCastEvents: [
-        makeSpellCastEvent("12294", matchStart + 11_000, "enemy-1", "EnemyPaladin", "warrior-1", "Ares", 0, "Mortal Strike"),
-        makeSpellCastEvent("12294", matchStart + 13_000, "enemy-1", "EnemyPaladin", "warrior-1", "Ares", 0, "Mortal Strike"),
+        makeSpellCastEvent(
+          "12294",
+          matchStart + 11_000,
+          "enemy-1",
+          "EnemyPaladin",
+          "warrior-1",
+          "Ares",
+          0,
+          "Mortal Strike",
+        ),
+        makeSpellCastEvent(
+          "12294",
+          matchStart + 13_000,
+          "enemy-1",
+          "EnemyPaladin",
+          "warrior-1",
+          "Ares",
+          0,
+          "Mortal Strike",
+        ),
       ],
     });
-    friend.damageOut = [{ ...makeDamageEvent(matchStart + 5_000, 100_000, "enemy-1"), spellId: "12294" }] as never;
+    friend.damageOut = [
+      {
+        ...makeDamageEvent(matchStart + 5_000, 100_000, "enemy-1"),
+        spellId: "12294",
+      },
+    ] as never;
     (friend as { missesOut?: unknown[] }).missesOut = [
-      { spellId: "12294", destUnitId: "enemy-1", missType: "REFLECT", timestamp: matchStart + 13_050 },
+      {
+        spellId: "12294",
+        destUnitId: "enemy-1",
+        missType: "REFLECT",
+        timestamp: matchStart + 13_050,
+      },
     ];
     const enemy = makeUnit("enemy-1", {
       name: "EnemyPaladin",
@@ -201,12 +328,28 @@ describe("offensiveWasteAnalysis — buildOffensiveWasteSummary", () => {
       class: CombatUnitClass.Paladin,
       reaction: CombatUnitReaction.Hostile,
       auraEvents: [
-        makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, "642", matchStart + 10_000, "enemy-1", "enemy-1", "BUFF"),
-        makeAuraEvent(LogEvent.SPELL_AURA_REMOVED, "642", matchStart + 18_000, "enemy-1", "enemy-1", "BUFF"),
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_APPLIED,
+          "642",
+          matchStart + 10_000,
+          "enemy-1",
+          "enemy-1",
+          "BUFF",
+        ),
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_REMOVED,
+          "642",
+          matchStart + 18_000,
+          "enemy-1",
+          "enemy-1",
+          "BUFF",
+        ),
       ],
     });
     // one of the two presses bounced: below the 2-cast threshold
-    expect(buildOffensiveWasteSummary(combat, [friend], [enemy]).events).toHaveLength(0);
+    expect(
+      buildOffensiveWasteSummary(combat, [friend], [enemy]).events,
+    ).toHaveLength(0);
   });
 
   it("does NOT flag unconditional immunity if only 1 cast was pressed (threshold is 2)", () => {
@@ -215,7 +358,12 @@ describe("offensiveWasteAnalysis — buildOffensiveWasteSummary", () => {
       spec: CombatUnitSpec.Warrior_Arms,
       reaction: CombatUnitReaction.Friendly,
       spellCastEvents: [
-        makeSpellCastEvent("12294", matchStart + 11_000, "enemy-1", "EnemyPaladin"),
+        makeSpellCastEvent(
+          "12294",
+          matchStart + 11_000,
+          "enemy-1",
+          "EnemyPaladin",
+        ),
       ],
     });
 
@@ -223,8 +371,22 @@ describe("offensiveWasteAnalysis — buildOffensiveWasteSummary", () => {
       name: "EnemyPaladin",
       reaction: CombatUnitReaction.Hostile,
       auraEvents: [
-        makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, "642", matchStart + 10_000, "enemy-1", "enemy-1", "BUFF"),
-        makeAuraEvent(LogEvent.SPELL_AURA_REMOVED, "642", matchStart + 18_000, "enemy-1", "enemy-1", "BUFF"),
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_APPLIED,
+          "642",
+          matchStart + 10_000,
+          "enemy-1",
+          "enemy-1",
+          "BUFF",
+        ),
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_REMOVED,
+          "642",
+          matchStart + 18_000,
+          "enemy-1",
+          "enemy-1",
+          "BUFF",
+        ),
       ],
     });
 
@@ -245,8 +407,26 @@ describe("offensiveWasteAnalysis — buildOffensiveWasteSummary", () => {
       ],
       spellCastEvents: [
         // 408 is Kidney Shot (stun CC) — deals no or little damage, but is in ccSpellIds
-        makeSpellCastEvent("408", matchStart + 11_000, "enemy-1", "EnemyPaladin", "rogue-1", "Sneaky", 0, "Kidney Shot"),
-        makeSpellCastEvent("408", matchStart + 12_000, "enemy-1", "EnemyPaladin", "rogue-1", "Sneaky", 0, "Kidney Shot"),
+        makeSpellCastEvent(
+          "408",
+          matchStart + 11_000,
+          "enemy-1",
+          "EnemyPaladin",
+          "rogue-1",
+          "Sneaky",
+          0,
+          "Kidney Shot",
+        ),
+        makeSpellCastEvent(
+          "408",
+          matchStart + 12_000,
+          "enemy-1",
+          "EnemyPaladin",
+          "rogue-1",
+          "Sneaky",
+          0,
+          "Kidney Shot",
+        ),
       ],
     });
 
@@ -254,11 +434,86 @@ describe("offensiveWasteAnalysis — buildOffensiveWasteSummary", () => {
       name: "EnemyPaladin",
       reaction: CombatUnitReaction.Hostile,
       auraEvents: [
-        makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, "642", matchStart + 10_000, "enemy-1", "enemy-1", "BUFF"),
-        makeAuraEvent(LogEvent.SPELL_AURA_REMOVED, "642", matchStart + 18_000, "enemy-1", "enemy-1", "BUFF"),
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_APPLIED,
+          "642",
+          matchStart + 10_000,
+          "enemy-1",
+          "enemy-1",
+          "BUFF",
+        ),
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_REMOVED,
+          "642",
+          matchStart + 18_000,
+          "enemy-1",
+          "enemy-1",
+          "BUFF",
+        ),
       ],
     });
 
+    const summary = buildOffensiveWasteSummary(combat, [friend], [enemy]);
+    expect(summary.events).toHaveLength(1);
+    expect(summary.events[0]!.wasteCasts).toHaveLength(2);
+  });
+
+  it("codex 20-F16-09 #4: Polymorphs into Aspect of the Turtle (no school mask) still count — the avoidance table says it stops them", () => {
+    const friend = makeUnit("mage-1", {
+      name: "Mage",
+      spec: CombatUnitSpec.Mage_Frost,
+      reaction: CombatUnitReaction.Friendly,
+      damageOut: [
+        {
+          ...makeDamageEvent(matchStart + 5_000, 200_000, "enemy-1"),
+          spellId: "116",
+        },
+      ],
+      spellCastEvents: [
+        makeSpellCastEvent(
+          "118",
+          matchStart + 11_000,
+          "enemy-1",
+          "EnemyHunter",
+          "mage-1",
+          "Mage",
+          0,
+          "Polymorph",
+        ),
+        makeSpellCastEvent(
+          "118",
+          matchStart + 13_000,
+          "enemy-1",
+          "EnemyHunter",
+          "mage-1",
+          "Mage",
+          0,
+          "Polymorph",
+        ),
+      ],
+    });
+    const enemy = makeUnit("enemy-1", {
+      name: "EnemyHunter",
+      reaction: CombatUnitReaction.Hostile,
+      auraEvents: [
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_APPLIED,
+          "186265",
+          matchStart + 10_000,
+          "enemy-1",
+          "enemy-1",
+          "BUFF",
+        ),
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_REMOVED,
+          "186265",
+          matchStart + 18_000,
+          "enemy-1",
+          "enemy-1",
+          "BUFF",
+        ),
+      ],
+    });
     const summary = buildOffensiveWasteSummary(combat, [friend], [enemy]);
     expect(summary.events).toHaveLength(1);
     expect(summary.events[0]!.wasteCasts).toHaveLength(2);
@@ -280,8 +535,22 @@ describe("offensiveWasteAnalysis — buildOffensiveWasteSummary", () => {
       spec: CombatUnitSpec.Druid_Feral,
       reaction: CombatUnitReaction.Hostile,
       auraEvents: [
-        makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, "61336", matchStart + 10_000, "enemy-1", "enemy-1", "BUFF"),
-        makeAuraEvent(LogEvent.SPELL_AURA_REMOVED, "61336", matchStart + 16_000, "enemy-1", "enemy-1", "BUFF"),
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_APPLIED,
+          "61336",
+          matchStart + 10_000,
+          "enemy-1",
+          "enemy-1",
+          "BUFF",
+        ),
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_REMOVED,
+          "61336",
+          matchStart + 16_000,
+          "enemy-1",
+          "enemy-1",
+          "BUFF",
+        ),
       ],
     });
 
@@ -316,8 +585,22 @@ describe("offensiveWasteAnalysis — buildOffensiveWasteSummary", () => {
       spec: CombatUnitSpec.Druid_Feral,
       reaction: CombatUnitReaction.Hostile,
       auraEvents: [
-        makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, "61336", matchStart + 10_000, "enemy-1", "enemy-1", "BUFF"),
-        makeAuraEvent(LogEvent.SPELL_AURA_REMOVED, "61336", matchStart + 16_000, "enemy-1", "enemy-1", "BUFF"),
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_APPLIED,
+          "61336",
+          matchStart + 10_000,
+          "enemy-1",
+          "enemy-1",
+          "BUFF",
+        ),
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_REMOVED,
+          "61336",
+          matchStart + 16_000,
+          "enemy-1",
+          "enemy-1",
+          "BUFF",
+        ),
       ],
       advancedActions: [
         makeAdvancedAction(matchStart + 12_000, 0, 0, 100_000, 15_000),
@@ -353,18 +636,27 @@ describe("offensiveWasteAnalysis — formatOffensiveWasteForContext", () => {
 
     const formatted = formatOffensiveWasteForContext(summary);
     expect(formatted).toContain("ABILITIES INTO IMMUNITY/DR");
-    expect(formatted).toContain("[1:05] Arms Warrior (Ares): Mortal Strike ×2 + Bloodthirst into EnemyPaladin's Divine Shield");
+    expect(formatted).toContain(
+      "[1:05] Arms Warrior (Ares): Mortal Strike ×2 + Bloodthirst into EnemyPaladin's Divine Shield",
+    );
     // FT-T15 M5: the section defines itself — its "DR" is damage reduction
     // (the timeline legend's `[DR: …]` is diminishing returns), and the
     // listing rule is stated with the predicate's own numbers.
     const lines = formatted.split("\n");
     expect(lines[0]).toBe("ABILITIES INTO IMMUNITY/DR");
     const isEventLine = (l: string) => /^\s*\[\d+:\d\d\]/.test(l);
-    const definition = lines.slice(1).filter((l) => !isEventLine(l)).join(" ");
-    expect(definition).toContain("DR here = damage reduction, not the timeline's `[DR: …]` diminishing returns");
+    const definition = lines
+      .slice(1)
+      .filter((l) => !isEventLine(l))
+      .join(" ");
+    expect(definition).toContain(
+      "DR here = damage reduction, not the timeline's `[DR: …]` diminishing returns",
+    );
     expect(definition).toContain("from 2 casts");
     expect(definition).toContain("from 3 casts");
-    expect(definition).toContain(`${KILL_LIVE_HP_PCT}% HP or lower while it was up`);
+    expect(definition).toContain(
+      `${KILL_LIVE_HP_PCT}% HP or lower while it was up`,
+    );
     expect(definition).toContain("at least 5% of their damage this");
     // one event → one event line, whatever the definition's length
     expect(lines.filter(isEventLine)).toHaveLength(1);

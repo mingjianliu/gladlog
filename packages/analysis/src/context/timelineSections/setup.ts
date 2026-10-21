@@ -27,17 +27,20 @@ import {
   EMPOWER_PRESS_MATCH_MS,
   empowerSpans,
 } from "../../utils/castCommitSpans";
-import {   CAST_MISS_LEAD_MS,
+import {
+  CAST_MISS_LEAD_MS,
   CC_MISS_TAG_WORD,
   CONTROL_FAILED_MISS_TYPES,
-isControlCast,
+  isControlCast,
   missBelongsToCast as missRowBelongsToCast,
   missReportsControl,
 } from "../../utils/castMissRows";
 import {
+  applicableCCAvoidanceIds,
   ccAvoidanceBuffsUpAt,
   GROUNDING_TOTEM_SPELL_ID,
   GROUNDING_TOTEM_WINDOW_S,
+  MECHANIC_LIMITED_AVOIDANCE_BUFFS,
 } from "../../utils/ccTrinketAnalysis";
 import {
   getUnitHpAtTimestamp,
@@ -684,13 +687,22 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
       // the one "was it up when the control hit" reading, in log order up to
       // the miss row (a Shroud the miss consumed is REMOVED after it in the
       // same ms) and capped at the aura's own length (fact1215 R5)
+      // a mechanic-limited avoidance (The Beast Within, Berserker Rage …)
+      // names only a control of a mechanic it stops — the avoidance sweep's
+      // own applicability (codex 20-F16-09 #1: The Beast Within read as the
+      // cause of an IMMUNE Hammer of Justice at stun DR Immune)
+      const ccName = getEnglishSpellName(miss.spellId ?? "", miss.spellName);
       immunityName =
         ccAvoidanceBuffsUpAt(target, miss.timestamp, {
           atLine: miss.logLine.lineIndex,
           casterOf: (id) =>
             allUnits?.find((u) => u.id === id) ??
             allPlayers.find((u) => u.id === id),
-        })[0]?.name ?? "";
+        }).find(
+          (b) =>
+            !MECHANIC_LIMITED_AVOIDANCE_BUFFS.has(b.spellId) ||
+            applicableCCAvoidanceIds(miss.spellId ?? "", ccName).has(b.spellId),
+        )?.name ?? "";
     }
     if (immunityName) return `${immunityName} was up`;
     // B-tier B17a (user ruling 2026-10-06, "三种都写；找不到原因不加注"): the

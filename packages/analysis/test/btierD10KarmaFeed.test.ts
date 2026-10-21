@@ -302,6 +302,33 @@ describe("karmaFeedOf / karmaFeedClause", () => {
     );
   });
 
+  it("the redirect ends at THIS monk's logged removal; another monk's removal cuts nothing (codex 20-F16-09 #2)", () => {
+    const removed = (s: number, src: string): any => ({
+      spellId: TOUCH_OF_KARMA_REDIRECT_ID,
+      srcUnitId: src,
+      timestamp: at(s),
+      logLine: { event: LogEvent.SPELL_AURA_REMOVED, timestamp: at(s) },
+    });
+    const monkA: any = {
+      id: "m",
+      absorbsIn: [],
+      damageOut: [back(56.7, "d", 10_000), back(60.5, "d", 10_000)],
+    };
+    const total = (druidAuras: any[]) =>
+      karmaFeedOf(
+        monkA,
+        55.4,
+        undefined,
+        [{ ...druid, auraEvents: druidAuras }, rogue],
+        [druid, rogue, pet],
+        START,
+      ).sentBack.reduce((n, x) => n + x.amount, 0);
+    // another monk's redirect came off at 58: both of A's ticks count
+    expect(total([removed(58, "m2")])).toBe(20_000);
+    // A's own came off at 58: the 60.5 tick is past it
+    expect(total([removed(58, "m")])).toBe(10_000);
+  });
+
   it("a press exactly at the cut counts; a re-applied DoT pressed after the cut is fed, not `already ticking`", () => {
     const lateMoonfire: any = {
       ...druid,

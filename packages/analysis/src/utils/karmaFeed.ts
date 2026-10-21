@@ -91,7 +91,7 @@ export interface IKarmaFeed {
  * `allUnits` resolves a pet to its owner.
  */
 export function karmaFeedOf(
-  monk: Pick<ICombatUnit, "absorbsIn" | "damageOut">,
+  monk: Pick<ICombatUnit, "id" | "absorbsIn" | "damageOut">,
   pressSeconds: number,
   nextPressSeconds: number | undefined,
   // `PressCaster`: the press rule reads cast starts and empower holds too —
@@ -159,6 +159,9 @@ export function karmaFeedOf(
       .auraEvents ?? []) {
       if (a.spellId !== TOUCH_OF_KARMA_REDIRECT_ID) continue;
       if (a.logLine.event !== LogEvent.SPELL_AURA_REMOVED) continue;
+      // this monk's redirect only (codex 20-F16-09 #2: another monk's
+      // removal cut this press's window)
+      if (a.srcUnitId !== monk.id) continue;
       if (a.timestamp < pressMs || a.timestamp >= nextMs) continue;
       if (a.timestamp > pressMs + KARMA_REDIRECT_MAX_S * 1000) continue;
       if (loggedEndMs === undefined || a.timestamp > loggedEndMs)
