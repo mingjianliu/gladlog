@@ -300,5 +300,10 @@
  *  returns; a warlock purges only while the Felhunter is out. 605 files:
  *  kick-priority-missed −6, kick-priority-team −9, slow-defensive-response
  *  −19, death-setup +3, burst-into-mitigation −1 (user approved).
+ *  v436 (2026-10-21, user rulings on the retest's open questions): the
+ *  target's own Power Word: Shield / Void Shield and an Intervene on it end
+ *  `defenseless` while up; a mage in Ice Block is no ready kicker. 605
+ *  files: kick-priority-missed +1, kick-priority-team +2 (one event), user
+ *  approved; [KILL WINDOW] 8,443 → 8,338, [VULNERABLE] 411 → 435.
  */
-export const PROMPT_VERSION = 435;
+export const PROMPT_VERSION = 436;

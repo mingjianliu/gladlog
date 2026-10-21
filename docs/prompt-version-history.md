@@ -3999,3 +3999,18 @@ Frost Nova holder. 605 files (v434 → this): kick-priority-missed dps 35 → 29
 kick-priority-team dps 27 → 23 / healer 30 → 25, slow-defensive-response
 88 → 69, death-setup +3 (one event), burst-into-mitigation −1 — user
 approved; every context changes (legends). Gates: baseline residue only.
+
+v436 (2026-10-21, user rulings on the F16 retest's three open questions):
+(1) 「算」 — the target's own rotational absorb shield (Power Word: Shield 17,
+Void Shield 1253593, applied by itself) ends a kill window's `defenseless`
+span while its aura is up; (3) option A — an Intervene 147833 on the target
+does too, for the aura's logged lifetime (still never an accusation, rulings
+A20 + U3); both `KW_OWN_ROTATIONAL_ABSORB_AURA_IDS` /
+`KW_REDIRECT_PROTECTION_AURA_IDS`, read in `computeOffensiveWindows`, no
+`[ENEMY DEF]` line of their own; legend updated. (2) 「不算」 — a mage in Ice
+Block is no ready kicker: `castBlockingAuraAt` reads the unit's casting
+locks (`castingLockIntervalsOf`, kick-priority's reading) for kick-eaten's
+kickers and "enemy interrupts UP". 605 files (v435 → this): kick-priority-missed
++1, kick-priority-team +2 (one event: a Discipline Priest's own shield cut her
+span, the windows re-split) — user approved; [KILL WINDOW] 8,443 → 8,338
+lines, [VULNERABLE] 411 → 435. Gates: baseline residue only.
