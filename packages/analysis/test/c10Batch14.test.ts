@@ -17,7 +17,10 @@ import {
   canOffensivePurge,
   missedPurgesFor,
 } from "../src/utils/dispelAnalysis";
-import { warlockRanPurgePet } from "../src/utils/warlockPet";
+import {
+  warlockPurgePetSpans,
+  warlockRanPurgePet,
+} from "../src/utils/warlockPet";
 import { makeSpellCastEvent, makeUnit } from "./ported/testHelpers";
 
 beforeAll(async () => {
@@ -80,6 +83,38 @@ describe("warlock purge follows the logged pet (1120cb61: a Sayaad warlock liste
   });
   it("no pet logged: nothing said, the talent reading stands", () => {
     expect(warlockRanPurgePet(lock([]))).toBeUndefined();
+  });
+  // F16 retest idx 50 (d2ebcb94): the Felhunter until 0:17, a Sayaad after
+  it("the Felhunter's span ends where the next pet first shows up", () => {
+    const T0 = 1_000_000;
+    const u = lock([
+      makeSpellCastEvent("19647", T0 + 5_000, "Player-1-T", "Target", "Pet-0-1-1-1-417-02", "Pet"),
+      makeSpellCastEvent("6358", T0 + 17_380, "Player-1-T", "Target", "Pet-0-1-1-1-1863-01", "Pet"),
+    ]);
+    const felhunter = makeUnit("Pet-0-1-1-1-417-02", {
+      ownerId: u.id,
+      spellCastEvents: [u.petSpellCastEvents![0]!],
+    });
+    const sayaad = makeUnit("Pet-0-1-1-1-1863-01", {
+      ownerId: u.id,
+      spellCastEvents: [u.petSpellCastEvents![1]!],
+    });
+    expect(warlockPurgePetSpans(u, [u, felhunter, sayaad], T0)).toEqual([
+      { fromSeconds: -Infinity, toSeconds: 17.38 },
+    ]);
+    // the reverse swap: from the Felhunter's first event on
+    const late = makeUnit("Pet-0-1-1-1-417-03", {
+      ownerId: u.id,
+      spellCastEvents: [
+        makeSpellCastEvent("19647", T0 + 40_000, "Player-1-T", "Target", "Pet-0-1-1-1-417-03", "Pet"),
+      ],
+    });
+    expect(warlockPurgePetSpans(u, [u, sayaad, late], T0)).toEqual([
+      { fromSeconds: 40, toSeconds: Infinity },
+    ]);
+    // no Felhunter at all: no span; no pet logged: no answer
+    expect(warlockPurgePetSpans(u, [u, sayaad], T0)).toEqual([]);
+    expect(warlockPurgePetSpans(lock([]), [], T0)).toBeUndefined();
   });
 });
 

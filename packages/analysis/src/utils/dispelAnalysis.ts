@@ -90,7 +90,7 @@ import {
   talentsOf,
 } from "./talents";
 import { threatActiveAt } from "./threatAssessment";
-import { warlockRanPurgePet } from "./warlockPet";
+import { warlockPurgePetSpans, warlockRanPurgePet } from "./warlockPet";
 
 export type DispelPriority = "Critical" | "High" | "Medium" | "Low";
 import {
@@ -1725,6 +1725,12 @@ function ownTeamNeedsSnares(ownTeam: readonly ICombatUnit[]): boolean {
   return ownTeam.some((u) => SNARE_DEPENDENT_SPECS.has(u.spec));
 }
 
+/** The tier of a dispel that HAPPENED (the [ENEMY CLEANSE] / [PURGE] line's
+ * pick): `getPriority`, with a disarm raised to High. */
+export function removedDispelPriority(spellId: string): DispelPriority {
+  return SPELLS[spellId]?.type === "disarms" ? "High" : getPriority(spellId);
+}
+
 /** Exported for tests only: the comp-dependent gate is a ruling that must be
  * pinned directly, not inferred from a whole-summary assertion. */
 export function purgePriorityForTest(
@@ -2250,7 +2256,12 @@ function cannotCastOf(
   spellIds: readonly string[] | undefined,
 ): CannotCastIntervals {
   if (!src.memo)
-    return cannotCastIntervalsForSpells(unit, src.enemyIds, spellIds, src.units);
+    return cannotCastIntervalsForSpells(
+      unit,
+      src.enemyIds,
+      spellIds,
+      src.units,
+    );
   let byUnit = src.memo.get(unit);
   if (!byUnit) src.memo.set(unit, (byUnit = new Map()));
   const key = spellIds === undefined ? "*" : spellIds.join(",");
@@ -2355,9 +2366,7 @@ export function dispellersBlockedMsInWindow(
   // intersect the unions.
   let intersection: Array<{ from: number; to: number }> | null = null;
   for (const d of dispellers) {
-    const merged = mergeIntervals(
-      cannotCastOf(src, d, spellIdsOf?.(d)),
-    );
+    const merged = mergeIntervals(cannotCastOf(src, d, spellIdsOf?.(d)));
     intersection =
       intersection === null
         ? merged
@@ -2936,6 +2945,34 @@ export function reconstructDispelSummary(
   const friendlyPurgers = friends.filter((f) =>
     canOffensivePurge(f, roundUnits.length > 0 ? roundUnits : undefined),
   );
+  // a warlock purges only while the Felhunter is the pet out (F16 retest
+  // idx 50: a mid-round swap to a Sayaad) — the window must leave it the
+  // reaction bar of Felhunter time
+  const purgePetSpanCache = new Map<
+    string,
+    ReturnType<typeof warlockPurgePetSpans>
+  >();
+  const purgePetOutDuring = (
+    u: ICombatUnit,
+    fromMs: number,
+    toMs: number,
+  ): boolean => {
+    if (roundUnits.length === 0) return true;
+    if (!purgePetSpanCache.has(u.id))
+      purgePetSpanCache.set(
+        u.id,
+        warlockPurgePetSpans(u, roundUnits, combat.startTime),
+      );
+    const spans = purgePetSpanCache.get(u.id);
+    if (spans === undefined) return true;
+    const fromS = (fromMs - combat.startTime) / 1000;
+    const toS = (toMs - combat.startTime) / 1000;
+    return spans.some(
+      (sp) =>
+        Math.min(toS, sp.toSeconds) - Math.max(fromS, sp.fromSeconds) >=
+        MISSED_PURGE_THRESHOLD_S,
+    );
+  };
   const capableFor = (
     type: DispelType,
     target: ICombatUnit,
@@ -2948,7 +2985,10 @@ export function reconstructDispelSummary(
       ? {
           units:
             type === "Magic"
-              ? friendlyPurgers.filter((u) => u.id !== target.id)
+              ? friendlyPurgers.filter(
+                  (u) =>
+                    u.id !== target.id && purgePetOutDuring(u, fromMs, toMs),
+                )
               : [],
           charmed: true,
         }
@@ -2988,7 +3028,12 @@ export function reconstructDispelSummary(
       const removedSpellId = action.extraSpellId;
       if (!removedSpellId) continue;
 
-      const priority = getPriority(removedSpellId);
+      // F16 retest (2026-10-21, idx 13): a removed disarm is a control on a
+      // melee — filed Low it fell into the [MINOR DISPELS] fold below a DoT
+      // (0c8b1932 1:11: one Purify took Faerie Swarm and Ignite; the line
+      // named Ignite). The removal's tier only: an uncleansed disarm is no
+      // missed-cleanse (the signed verdict matrix has no disarm row).
+      const priority = removedDispelPriority(removedSpellId);
       const destUnit = unitMap.get(action.destUnitId);
       const dispelToClassify = {
         srcUnitId: action.srcUnitId,
@@ -3198,9 +3243,7 @@ export function reconstructDispelSummary(
     // read as one 7 s control here and a late cleanse)
     for (const aura of dropAuraRebroadcasts(
       unit.auraEvents,
-      ccRecastSplitsResend(unit.id, unit.auraEvents, (id) =>
-        unitMap.get(id),
-      ),
+      ccRecastSplitsResend(unit.id, unit.auraEvents, (id) => unitMap.get(id)),
     )) {
       const spellId = aura.spellId;
       if (!spellId) continue;
@@ -4027,7 +4070,9 @@ export function reconstructDispelSummary(
             // only get flagged for Critical misses — they can't spam purge every GCD).
             const generalPurgers = isMagicPurgeTarget(spellId)
               ? friendlyPurgers.filter(
-                  (p) => priority === "Critical" || !isCdGatedPurger(p),
+                  (p) =>
+                    (priority === "Critical" || !isCdGatedPurger(p)) &&
+                    purgePetOutDuring(p, applyTs, windowEndMs),
                 )
               : [];
             const generalOpen =

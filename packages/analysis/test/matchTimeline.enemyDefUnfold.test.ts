@@ -96,6 +96,7 @@ function render(
     pressureWindows?: any[];
     /** advanced samples of the owner (mana readings for the F-C3 legend) */
     ownerAdvancedActions?: any[];
+    ccTrinketSummaries?: any[];
   } = {},
 ): string {
   // 14 Riptides ≥ SPAM_FOLD_THRESHOLD (12) so the fold engages; the last
@@ -153,7 +154,7 @@ function render(
     ownerCDs: over.ownerCDs ?? [],
     teammateCDs: [],
     enemyCDTimeline: { players: [], alignedBurstWindows: [] } as any,
-    ccTrinketSummaries: [],
+    ccTrinketSummaries: over.ccTrinketSummaries ?? [],
     dispelSummary: empty,
     enemyDispelSummary: empty,
     enemyCCSummaries: [],
@@ -222,6 +223,44 @@ describe("GH #97 timeline flags", () => {
     expect(off).not.toContain("0:55  [YOU] [CAST]   Riptide");
     expect(off).not.toMatch(/\[CAST\].*\(\d+% HP\)/);
     expect(off).not.toContain("[YOU] [HEALS]");
+  });
+
+  it("F16 retest idx 22: an annotated cast of the folded spell prints alone and the fold still counts it", () => {
+    TIMELINE_LINE_FLAGS.deathWindowUnfold = "perCast";
+    const text = render({
+      ccTrinketSummaries: [
+        {
+          playerName: "PlayerYou",
+          ccInstances: [
+            {
+              atSeconds: 20.4,
+              durationSeconds: 3,
+              spellId: "853",
+              spellName: "Hammer of Justice",
+              sourceName: "Enemy1",
+              sourceId: "Enemy1",
+              sourceSpec: "Restoration Druid",
+              damageTakenDuring: 0,
+              trinketState: "available_unused",
+              drInfo: null,
+              distanceYards: null,
+              losBlocked: null,
+              applyMs: ms(20.4),
+              removeMs: ms(23.4),
+            },
+          ],
+          trinketUseTimes: [],
+          missedTrinketWindows: [],
+          rootInstances: [],
+          disarmInstances: [],
+          interruptInstances: [],
+          ccAvoidedInstances: [],
+        },
+      ],
+    });
+    expect(text).toMatch(/0:20 {2}\[YOU\] \[CAST\] {3}Riptide → 2 \[cast succeeded before CC landed\]/);
+    // all 14 presses in the count, the annotated one among them
+    expect(text).toContain("0:02  [YOU] [CAST]   Riptide (x14 over 56s) → 2");
   });
 
   it("death-window unfold: summary prints one counted [YOU] [HEALS] line per window", () => {

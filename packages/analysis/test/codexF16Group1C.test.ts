@@ -245,3 +245,102 @@ describe("C3: a between-round cast does not switch off in-round evidence", () =>
     expect(e!.casts.map((c) => c.timeSeconds)).toEqual([12]);
   });
 });
+
+describe("F16 retest idx 0: a Nether Ward 212295 return is the reflector's damage back too", () => {
+  it("01502819 2:42: Smite reflected by Nether Ward, 51,390 landed under 212295 + 5,616 absorbed under the Smite → 57,006 back", () => {
+    const T0 = 1_000_000;
+    const raw = (id: string, over: Record<string, unknown> = {}): any => ({
+      id,
+      name: `${id}-R-US`,
+      spellCastEvents: [],
+      auraEvents: [],
+      missesOut: [],
+      damageIn: [],
+      absorbsIn: [],
+      advancedActions: [],
+      ...over,
+    });
+    const caster = raw("Player-P", {
+      missesOut: [
+        {
+          spellId: "585",
+          spellName: "Smite",
+          missType: "REFLECT",
+          destUnitId: "Player-L",
+          logLine: { timestamp: T0 + 10_000 },
+        },
+      ],
+      damageIn: [
+        {
+          spellId: "212295",
+          srcUnitId: "Player-L",
+          effectiveAmount: -51_390,
+          logLine: { timestamp: T0 + 10_120 },
+        },
+      ],
+      absorbsIn: [
+        {
+          attackSpellId: "585",
+          attackerId: "Player-L",
+          absorbedAmount: 5_616,
+          timestamp: T0 + 10_120,
+        },
+      ],
+      advancedActions: [0, 10_000, 20_000].map((ms) => ({
+        advancedActorId: "Player-P",
+        advancedActorMaxHp: 1_000_000,
+        advancedActorCurrentHp: 1_000_000,
+        logLine: { timestamp: T0 + ms },
+      })),
+    });
+    const out = reflectedSpells([caster, raw("Player-L")], T0);
+    expect(out.map((r) => [r.spellId, r.damageBack])).toEqual([
+      ["585", 57_006],
+    ]);
+  });
+});
+
+describe("codex 20-F16-08 #1: a reflected return a deferral shield took is not damage back yet", () => {
+  it("Fireball reflected, its 40k return eaten whole by Stretch Time → no damage back", () => {
+    const T0 = 1_000_000;
+    const raw = (id: string, over: Record<string, unknown> = {}): any => ({
+      id,
+      name: `${id}-R-US`,
+      spellCastEvents: [],
+      auraEvents: [],
+      missesOut: [],
+      damageIn: [],
+      absorbsIn: [],
+      advancedActions: [],
+      ...over,
+    });
+    const caster = raw("Player-P", {
+      missesOut: [
+        {
+          spellId: "133",
+          spellName: "Fireball",
+          missType: "REFLECT",
+          destUnitId: "Player-W",
+          logLine: { timestamp: T0 + 10_000 },
+        },
+      ],
+      absorbsIn: [
+        {
+          spellId: "410355", // Stretch Time — the shield
+          attackSpellId: "133",
+          attackerId: "Player-W",
+          absorbedAmount: 40_000,
+          timestamp: T0 + 10_100,
+        },
+      ],
+      advancedActions: [0, 10_000, 20_000].map((ms) => ({
+        advancedActorId: "Player-P",
+        advancedActorMaxHp: 100_000,
+        advancedActorCurrentHp: 100_000,
+        logLine: { timestamp: T0 + ms },
+      })),
+    });
+    const out = reflectedSpells([caster, raw("Player-W")], T0);
+    expect(out.find((r) => r.spellId === "133")?.damageBack ?? 0).toBe(0);
+  });
+});

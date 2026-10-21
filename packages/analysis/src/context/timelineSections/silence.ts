@@ -136,7 +136,13 @@ export function emitSilenceEntries(
         // after the removal it caused (dfcccbf2: silence removed 21.020,
         // trinket 21.021) — the CC binder's `TRINKET_BREAK_AFTER_REMOVAL_MS`
         const trinketAt = trinketTimes.find((t) =>
-          pressEndedSilence(s.from, endMs, matchStartMs + t * 1000, s.spellId),
+          pressEndedSilence(
+            s.from,
+            endMs,
+            matchStartMs + t * 1000,
+            s.spellId,
+            u,
+          ),
         );
         // FT-T08 step 3c: a dispel of the silence, or the unit's death at
         // its removal, is in the log (`auraEndFromLog`) — stated when no
@@ -149,7 +155,7 @@ export function emitSilenceEntries(
         const enemyTrinketed =
           side === "enemy" &&
           pvpTrinketUses(u).some((t) =>
-            pressEndedSilence(s.from, endMs, t.atMs, s.spellId),
+            pressEndedSilence(s.from, endMs, t.atMs, s.spellId, u),
           );
         const end =
           trinketAt === undefined && !stillOnAtRoundEnd

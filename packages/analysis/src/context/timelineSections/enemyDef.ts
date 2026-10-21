@@ -291,7 +291,11 @@ export function emitEnemyDefEntries(
             roundEndAtMs,
             pid,
           );
-          line = `${d.spellName}${label ? ` (${label})` : ""}${burstStr}${hpStr}${selfSaveStr}${karmaStr}${channelStr}`;
+          // F16 retest: a rider shield no press of its own put up
+          // (Shield of Vengeance with Divine Protection) says so, as a wall
+          // copy does (F15 C5)
+          const noPress = d.noPressLogged ? ` ${ENEMY_DEF_NO_PRESS_TAG}` : "";
+          line = `${d.spellName}${label ? ` (${label})` : ""}${noPress}${burstStr}${hpStr}${selfSaveStr}${karmaStr}${channelStr}`;
         } else {
           // F15 C2: a school-limited immunity says which schools it stops
           const limited =

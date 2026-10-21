@@ -124,14 +124,14 @@ describe("[CONSEQ] — the low is the true minimum inside the lockout / CC (FT-T
     expect(render(mate([]))).toContain("Mate-R 66% → low 32% at 1:02");
   });
 
-  it("the event's own span bounds the samples: a dip in the same second BEFORE the CC landed, or after it ended, is not `during it`", () => {
-    // 60.1 s is before the Fear (60.3); 63.8 s is after it ended (63.5) —
-    // both inside the displayed seconds 1:00–1:03
-    const m = mate([
-      [60.1, 5],
-      [63.8, 4],
-    ]);
-    expect(render(m)).toContain("Mate-R 66% → low 32% at 1:02");
+  it("the event's own span bounds the samples: a dip after it ended is not `during it`; one just before it landed is the START (user ruling 2026-10-21)", () => {
+    // 63.8 s is after the Fear ended (63.5), inside the displayed 1:03
+    expect(render(mate([[63.8, 4]]))).toContain("Mate-R 66% → low 32% at 1:02");
+    // 60.1 s is before the Fear (60.3): the last reading at its landing —
+    // the unit was at 5 % when it landed, and never lower inside it
+    expect(render(mate([[60.1, 5]]))).toContain(
+      "no teammate dropped 10% or more (Mate-R 5% → low 5% at 1:00)",
+    );
   });
 
   it("a drop only the trough sees is named — and no tick of the span reads below it", () => {
@@ -142,7 +142,7 @@ describe("[CONSEQ] — the low is the true minimum inside the lockout / CC (FT-T
     });
     const text = render(m);
     expect(text).toContain("Mate-R 66% → low 40% at 1:01");
-    expect(text).not.toContain("no teammate dropped");
+    expect(text).not.toMatch(/\[CONSEQ\].*no teammate dropped/);
     for (let s = 60; s <= 63; s++)
       expect(isTickBelowTrough(gridHpPct(m, T0 + s * 1000)!, 40)).toBe(false);
   });
@@ -157,7 +157,7 @@ describe("[CONSEQ] — the low is the true minimum inside the lockout / CC (FT-T
     // …and a drop the grid sees is one the line names too (trough ≤ grid low)
     const dropped = mate([]);
     expect(mateHitDuringCc(dropped, T0, cc)).toBe(true);
-    expect(render(dropped)).not.toContain("no teammate dropped");
+    expect(render(dropped)).not.toMatch(/\[CONSEQ\].*no teammate dropped/);
   });
 });
 
@@ -418,18 +418,11 @@ describe("missed-sync-window enemyMinHpPct — the lock's trough, as its [CONSEQ
     });
   });
   it("a dip after the lock ended is not inside it", () => {
-    expect(
-      lowestHpTroughInEventSpan([b, a], T0, 78.746, 81.7)?.pct,
-    ).toBe(80);
+    expect(lowestHpTroughInEventSpan([b, a], T0, 78.746, 81.7)?.pct).toBe(80);
   });
   it("no samples at all → null (the fact is omitted, never 0)", () => {
     expect(
-      lowestHpTroughInEventSpan(
-        [makeUnit("c", { name: "None" })],
-        T0,
-        10,
-        12,
-      ),
+      lowestHpTroughInEventSpan([makeUnit("c", { name: "None" })], T0, 10, 12),
     ).toBeNull();
   });
 });

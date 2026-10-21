@@ -93,7 +93,6 @@ export function emitHealerCastGapFillerEntries(
     | "addEntry"
     | "friendlyDeaths"
     | "_allUnits"
-    | "stasisEvents"
     | "resolveTarget"
     | "ownerEmpowerTag"
     | "findAndConsumeAoeCC"
@@ -119,7 +118,6 @@ export function emitHealerCastGapFillerEntries(
     addEntry,
     friendlyDeaths,
     _allUnits,
-    stasisEvents,
     resolveTarget,
     ownerEmpowerTag,
     findAndConsumeAoeCC,
@@ -262,6 +260,32 @@ export function emitHealerCastGapFillerEntries(
     (typeof crisisUnfoldWindows)[number],
     number
   >();
+  // A cast of a spam-folded spell printed on its own line: the running fold
+  // counts it as printed — or a new fold starts from it when none runs
+  // (fact1215 R11, codex 20-F15-32). One rule for every branch that prints
+  // such a cast, so the fold's `xN` is every cast in its span.
+  const countPrintedInFold = (
+    displayName: string,
+    timeSeconds: number,
+    targetLabel: string | undefined,
+  ) => {
+    const f = spamFolds.get(displayName);
+    if (f && timeSeconds - f.lastTimeSeconds <= SPAM_FOLD_MAX_GAP_SECONDS) {
+      f.count++;
+      f.printed++;
+      f.lastTimeSeconds = timeSeconds;
+      if (targetLabel) f.targets.add(targetLabel);
+    } else {
+      flushSpamFold(displayName);
+      spamFolds.set(displayName, {
+        startTimeSeconds: timeSeconds,
+        lastTimeSeconds: timeSeconds,
+        count: 1,
+        printed: 1,
+        targets: new Set(targetLabel ? [targetLabel] : []),
+      });
+    }
+  };
   const takeCrisisUnfold = (t: number, destUnitName: string | undefined) => {
     const w = crisisWindowFor(t, destUnitName);
     if (!w) return false;
@@ -412,12 +436,10 @@ export function emitHealerCastGapFillerEntries(
     )
       continue;
 
-    const activeStasis = stasisEvents.find(
-      // the storing window — the spells are replayed later, at the release
-      (s) => timeSeconds >= s.startSeconds && timeSeconds < s.storedSeconds,
-    );
-    // Suppress buffered heals — a stasis-stored cast renders at release, not here.
-    if (activeStasis && activeStasis.spells.includes(displayName)) continue;
+    // A cast made while Stasis was storing went out and healed: Stasis
+    // stores a COPY, replayed at the release (F16 retest idx 10, 06474ef2
+    // 0:28: the Echo aura applied in the cast's own ms). It renders here like
+    // any other press; the [STASIS RELEASE] line names the copies.
 
     // F68/F89/B32: find nearest CC *on the owner* within 1s — annotate ordering
     // so Claude knows the cast completed before or after incoming CC.
@@ -667,22 +689,7 @@ export function emitHealerCastGapFillerEntries(
       // cast in the death window were in no count) — the running one, or a
       // new one from here when there is none (codex 20-F15-32: after a gap
       // over 30 s three casts were in no count)
-      const f = spamFolds.get(displayName);
-      if (f && timeSeconds - f.lastTimeSeconds <= SPAM_FOLD_MAX_GAP_SECONDS) {
-        f.count++;
-        f.printed++;
-        f.lastTimeSeconds = timeSeconds;
-        if (targetLabel) f.targets.add(targetLabel);
-      } else {
-        flushSpamFold(displayName);
-        spamFolds.set(displayName, {
-          startTimeSeconds: timeSeconds,
-          lastTimeSeconds: timeSeconds,
-          count: 1,
-          printed: 1,
-          targets: new Set(targetLabel ? [targetLabel] : []),
-        });
-      }
+      countPrintedInFold(displayName, timeSeconds, targetLabel);
       continue;
     }
     // H19: the spam fold also steps aside for a cast on the crisis unit
@@ -696,6 +703,8 @@ export function emitHealerCastGapFillerEntries(
         timeSeconds,
         `${fmtTime(timeSeconds)}  [YOU] [CAST]   ${displayName}${targetPart}`,
       );
+      // the fold still counts it (F16 retest idx 22: Riptide x13 for 15)
+      countPrintedInFold(displayName, timeSeconds, targetLabel);
       continue;
     }
     if (
@@ -758,6 +767,11 @@ export function emitHealerCastGapFillerEntries(
         timeSeconds,
         `${fmtTime(timeSeconds)}  [YOU] [CAST]   ${displayName}${targetPart}${windowHpTag}${totemNote}${orderNote}${purgeNote}${empowerNote}`,
       );
+      // an annotated cast of a spam-folded spell prints on its own line and
+      // the fold still counts it (F16 retest idx 22: 0deb726b's 1:08 Riptide
+      // `[cast succeeded before CC landed]` was in no count)
+      if ((ownerCastCountByName.get(displayName) ?? 0) >= SPAM_FOLD_THRESHOLD)
+        countPrintedInFold(displayName, timeSeconds, targetLabel);
     }
   }
 

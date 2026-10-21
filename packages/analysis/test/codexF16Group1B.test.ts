@@ -88,6 +88,36 @@ describe("codex F16 group 1 B", () => {
     expect(pressEndedSilence(at(10), at(12), at(12.001), SILENCE)).toBe(true);
   });
 
+  it("codex 20-F16-08 #2: under Oppressing Roar the length as it landed decides (Silence 5.2 s, Dismantle 6.5 s)", () => {
+    const ROAR = "372048";
+    const holder = {
+      auraEvents: [
+        makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, ROAR, at(9), "ev", "h"),
+        makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, SILENCE, at(10), "e1", "h"),
+      ],
+    } as any;
+    // removed 4.5 s in — past the base 4 s, inside the Roar's 5.2 s: broken
+    expect(
+      pressEndedSilence(at(10), at(14.5), at(14.501), SILENCE, holder),
+    ).toBe(true);
+    // no Roar on the holder: the base 4 s ran out
+    expect(pressEndedSilence(at(10), at(14.5), at(14.501), SILENCE)).toBe(
+      false,
+    );
+    // a disarm instance carrying its as-landed length
+    const roared: IRootInstance = {
+      atSeconds: 10,
+      durationSeconds: 5.5,
+      spellId: DISMANTLE,
+      spellName: "Dismantle",
+      sourceName: "Rogue-Realm",
+      sourceId: "e1",
+      sourceSpec: "Rogue_Subtlety",
+      fullDurationSeconds: 6.5,
+    };
+    expect(findBrokenDisarm([roared], T0, at(15.501))).toBe(roared);
+  });
+
   it("B3: Divine Shield is not rdy: at 0:02 after Lay on Hands put Forbearance on the paladin", () => {
     const FORBEARANCE = "25771";
     const owner = makeUnit("P", {

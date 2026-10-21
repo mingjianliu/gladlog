@@ -33,6 +33,7 @@ import {
   renderedCcSpan,
   tremorTotemBreak,
   TRINKET_BREAK_AFTER_REMOVAL_MS,
+  CC_FROM_OWN_TEAM_TAG,
 } from "../../utils/ccTrinketAnalysis";
 import { hasOffensiveSpellActive, hpAtPress } from "../../utils/cooldowns";
 import { wasRemovedByAllyDispel } from "../../utils/dispelAnalysis";
@@ -187,7 +188,7 @@ export function emitCcOnEnemyEntries(
         enemyTrinketCount++;
         const pressMs = matchStartMs + Math.round(t * 1000);
         const silence = silences.find((x) =>
-          pressEndedSilence(x.from, x.to, pressMs, x.spellId),
+          pressEndedSilence(x.from, x.to, pressMs, x.spellId, enemyUnit),
         );
         addEnemyBreakLine(
           t,
@@ -357,7 +358,7 @@ export function emitCcOnEnemyEntries(
           : ` (${renderedCcSpan(cc)})${drTag}${refreshNote}${endNote}`;
         addEntry(
           cc.atSeconds,
-          `${fmtTime(cc.atSeconds)}  [CC ON ENEMY]   ${enemyPid(summary.playerName)} ← ${cc.spellName} (by ${actorLabel(cc.sourceName, "friendly", cc.sourceId)})${durStr}`,
+          `${fmtTime(cc.atSeconds)}  [CC ON ENEMY]   ${enemyPid(summary.playerName)} ← ${cc.spellName} (by ${actorLabel(cc.sourceName, cc.fromOwnTeamWhileCharmed ? "enemy" : "friendly", cc.sourceId)})${cc.fromOwnTeamWhileCharmed ? ` ${CC_FROM_OWN_TEAM_TAG}` : ""}${durStr}`,
         );
       }
     }

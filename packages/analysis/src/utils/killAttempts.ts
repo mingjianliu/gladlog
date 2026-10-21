@@ -614,16 +614,19 @@ export function extractKillAttempts(
 
     for (const group of groups) {
       if (group[0].atSeconds >= roundEndS) continue;
-      const last = group[group.length - 1];
+      // the chain ends with its LATEST-ending stun, not its last-applied
+      // one (F16 retest idx 5, 0457a45e 0:28: Leg Sweep to 0:32.156, a
+      // Terror of the Skies applied after it ended 0:30.271 — the bracket
+      // and its team focus were read over 0:28–0:30)
+      const chainEndS = Math.max(
+        ...group.map((g) => g.atSeconds + g.durationSeconds),
+      );
       // F17: the bracket does not run into the form either (a stun still
       // counted as running when the form began)
       const span = attemptSpanOutsideForm(
         forms,
         group[0].atSeconds,
-        Math.max(
-          Math.min(last.atSeconds + last.durationSeconds, roundEndS),
-          group[0].atSeconds,
-        ),
+        Math.max(Math.min(chainEndS, roundEndS), group[0].atSeconds),
       );
       if (!span) continue;
       const { fromSeconds, toSeconds } = span;
@@ -808,6 +811,13 @@ export function extractKillAttempts(
           const ts = d.logLine.timestamp;
           if (ts < fromMs || ts > toMs) continue;
           if (!enemyIds.has(d.destUnitId)) continue;
+          // the burst floor's measure, as the bracket sum above reads it: a
+          // deferral shield's row is no damage yet (codex 20-F16-08 #1)
+          if (
+            (d.logLine.event as string) === LogEvent.SPELL_ABSORBED &&
+            isDeferralAbsorb(d)
+          )
+            continue;
           const amount = Math.abs(d.effectiveAmount);
           total += amount;
           byEnemy.set(d.destUnitId, (byEnemy.get(d.destUnitId) ?? 0) + amount);
@@ -989,6 +999,14 @@ export function extractKillAttempts(
       for (const d of f.damageOut) {
         const ts = d.logLine.timestamp;
         if (ts < fromMs || ts > toMs) continue;
+        // same events as `teamDamageToTarget`: no deferral row (codex
+        // 20-F16-08 #1: `0.07M on target inside it, 0.04M incl. the 5 s
+        // after`)
+        if (
+          (d.logLine.event as string) === LogEvent.SPELL_ABSORBED &&
+          isDeferralAbsorb(d)
+        )
+          continue;
         if (d.destUnitId === a.targetUnitId)
           inBracket += Math.abs(d.effectiveAmount);
       }
@@ -1615,18 +1633,21 @@ function attributeFailure(
   // Rule 1: the trinket, bound to the CC it broke. The uses come from the
   // shared predicate (G7-P2: an Adaptation proc is a trinket use too).
   /** Is this CC — the one a break was bound to — a control of THIS attempt:
-   * one of its stuns, or for a burst anchor a CC active inside [from, to]. */
+   * one of its stuns, or any CC active inside [from, to] — a Fear or a trap
+   * the team layered inside a stun bracket too (F16 retest idx 37, 3f21c5db
+   * 1:00: the Medallion took Fear + Freezing Trap 0.25 s after Intimidation
+   * ended, and the attempt read "not enough damage"). */
   const ofThisAttempt = (
     cc: Pick<ICCInstance, "atSeconds" | "durationSeconds" | "spellId">,
   ): boolean =>
-    anchor.kind === "stun"
-      ? anchor.stuns.some(
-          (st) =>
-            st.spellId === cc.spellId &&
-            Math.abs(st.atSeconds - cc.atSeconds) < 0.01,
-        )
-      : matchStartMs + cc.atSeconds * 1000 <= toMs &&
-        matchStartMs + (cc.atSeconds + cc.durationSeconds) * 1000 >= fromMs;
+    (anchor.kind === "stun" &&
+      anchor.stuns.some(
+        (st) =>
+          st.spellId === cc.spellId &&
+          Math.abs(st.atSeconds - cc.atSeconds) < 0.01,
+      )) ||
+    (matchStartMs + cc.atSeconds * 1000 <= toMs &&
+      matchStartMs + (cc.atSeconds + cc.durationSeconds) * 1000 >= fromMs);
 
   let trinketed = false;
   for (const use of pvpTrinketUses(target)) {
@@ -1788,7 +1809,10 @@ function attributeFailure(
   for (const c of target.spellCastEvents ?? []) {
     if (c.logLine.event !== LogEvent.SPELL_CAST_SUCCESS || !c.spellId) continue;
     if (!ENEMY_AREA_SAVE_IDS.has(c.spellId)) continue;
-    if (!MITIGATION_AURA_IDS.has(c.spellId) && !WALL_IN_HAND_MIT_IDS.has(c.spellId))
+    if (
+      !MITIGATION_AURA_IDS.has(c.spellId) &&
+      !WALL_IN_HAND_MIT_IDS.has(c.spellId)
+    )
       continue;
     const castMs = c.logLine.timestamp;
     if (!inSave(castMs) || poppedIds.has(c.spellId)) continue;

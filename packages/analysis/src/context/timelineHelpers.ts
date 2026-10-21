@@ -735,10 +735,18 @@ export function extractOwnerCDBuffExpiry(
       // Channels are never dispelled; whether one was interrupted is stated on
       // the [YOU] line from kick/CC evidence (matchTimeline), so here they
       // always read "expired".
+      // F16 retest (2026-10-21): the slack is never more than half the
+      // buff's own length — Vanish 11327 lasts 1.5 s, so a 1.5 s slack put
+      // the "early" line at the press itself and a Vanish broken by its own
+      // Cheap Shot 0.39 s in read "(expired)" (19c03171 0:38 / 0:59)
+      const earlyToleranceS = Math.min(
+        BUFF_FADE_EARLY_TOLERANCE_S,
+        duration / 2,
+      );
       let cause: ICDExpiryEvent["cause"] =
         !CHANNELED_CD_SPELL_IDS.has(cd.spellId) &&
         !isEstimated &&
-        expiresAtSeconds < naturalEndSeconds - BUFF_FADE_EARLY_TOLERANCE_S
+        expiresAtSeconds < naturalEndSeconds - earlyToleranceS
           ? "ended_early"
           : "expired";
       // F-B1 (triage death-kill): removed from the owner and the owner died
@@ -759,7 +767,18 @@ export function extractOwnerCDBuffExpiry(
       // owner's own aura events (dest = owner) and the spell one that cannot
       // outlive the form (FORM_BOUND_BUFF_IDS); then a form removal within
       // FORM_SHIFT_PAIR_MS explains it.
-      if (cause === "ended_early" && FORM_BOUND_BUFF_IDS.has(cd.spellId)) {
+      // F16 retest (2026-10-21): a form shift is read off the log, so it
+      // needs no early-end slack — only a removal before the buff's end
+      // (4b2e238d 1:43: Frenzied Regeneration removed 0.68 s early, 10 ms
+      // after Bear Form came off, read "(expired)")
+      if (
+        (cause === "ended_early" ||
+          (cause === "expired" &&
+            !isEstimated &&
+            expiresAtSeconds <
+              naturalEndSeconds - FORM_SHIFT_PAIR_MS / 1000)) &&
+        FORM_BOUND_BUFF_IDS.has(cd.spellId)
+      ) {
         const removedMs = matchStartMs + expiresAtSeconds * 1000;
         const onOwner = (owner?.auraEvents ?? []).some(
           (a) =>

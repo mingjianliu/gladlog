@@ -94,6 +94,24 @@ describe("ccFullDurationForCaster — 天赋条件时长", () => {
     expect(ccFullDurationForCaster("117526", priest)).toBe(2);
   });
 
+  // user ruling 2026-10-21: Improved Frost Nova 343183, +2 s (tooltip,
+  // corpus-confirmed) — the holder's Frost Nova is priced at 8 s
+  it("Improved Frost Nova holder: Frost Nova 6 s + 2 s = 8 s; unknown stays 6 s", () => {
+    const mage = makeUnit("m1", {
+      spec: CombatUnitSpec.Mage_Frost,
+      info: { talents: [{ id1: 62110, id2: 80168, count: 1 }], pvpTalents: [] },
+    });
+    expect(talentOwnershipOf(mage, "343183")).toBe("yes");
+    expect(ccFullDurationSeconds("122")).toBe(6);
+    expect(ccFullDurationForCaster("122", mage)).toBe(8);
+    expect(
+      ccFullDurationForCaster(
+        "122",
+        makeUnit("m2", { spec: CombatUnitSpec.Mage_Frost }),
+      ),
+    ).toBe(6);
+  });
+
   // GH #96 M5: Boneshaker 429639 — flat +1 s on the Shockwave stun (DB2 aura
   // 107), a hero talent Arms / Protection can take and Fury cannot.
   const SHOCKWAVE_STUN = "132168";

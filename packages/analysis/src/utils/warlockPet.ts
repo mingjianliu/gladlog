@@ -143,3 +143,34 @@ export function warlockRanPurgePet(
   if (pets.length === 0) return undefined;
   return pets.some((p) => p.fn.pet === WARLOCK_PET_FUNCTION["417"]!.pet);
 }
+
+/**
+ * When this warlock's purge pet (the Felhunter) was the one out, seconds
+ * since `matchStartMs`: from its first logged event — the round's start when
+ * it is the first pet — to the next pet's first event. A warlock runs one
+ * permanent pet at a time, so a later pet's first appearance is the swap.
+ * F16 retest (2026-10-21, idx 50): d2ebcb94 swapped the Felhunter for a
+ * Sayaad at 0:17 of a 2:02 round and read "CAN offensive purge" for every
+ * buff after it. `undefined` when `warlockRanPurgePet` has no answer (no pet
+ * logged, a non-warlock); `[]` when the pets logged include no Felhunter.
+ */
+export function warlockPurgePetSpans(
+  owner: Pick<ICombatUnit, "id" | "spec">,
+  units: Iterable<PetUnit>,
+  matchStartMs: number,
+): Array<{ fromSeconds: number; toSeconds: number }> | undefined {
+  const pets = warlockPetFunctions(owner, units, matchStartMs);
+  if (pets.length === 0) return undefined;
+  const felhunter = WARLOCK_PET_FUNCTION["417"]!.pet;
+  const out: Array<{ fromSeconds: number; toSeconds: number }> = [];
+  pets.forEach((p, i) => {
+    if (p.fn.pet !== felhunter) return;
+    const from = i === 0 ? -Infinity : (p.fromSeconds ?? Infinity);
+    const next = pets.slice(i + 1).find((q) => q.fromSeconds !== null);
+    out.push({
+      fromSeconds: from,
+      toSeconds: next?.fromSeconds ?? Infinity,
+    });
+  });
+  return out;
+}

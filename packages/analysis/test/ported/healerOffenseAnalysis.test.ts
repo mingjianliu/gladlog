@@ -344,6 +344,66 @@ describe("computeWindowContributions", () => {
     expect(result[0].teamMinHpPct).toBe(100);
   });
 
+  it("F16 retest idx 26 (179b83ac 2:53): a control aura the owner's press applied is CC cast in the window", () => {
+    const owner = makeFriend("owner", {
+      spellCastEvents: [
+        makeSpellCastEvent("357210", T0 + 42_000, "", "", "owner", "Owner"),
+      ],
+    });
+    const stunned = makeUnit("enemy-1", {
+      reaction: CombatUnitReaction.Hostile,
+      name: "Edk",
+      auraEvents: [
+        makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, "372245", T0 + 42_790, "owner", "enemy-1"),
+        makeAuraEvent(LogEvent.SPELL_AURA_REMOVED, "372245", T0 + 45_790, "owner", "enemy-1"),
+      ],
+    });
+    const run = (from: number, to: number) =>
+      computeWindowContributions(
+        combat,
+        owner,
+        [owner],
+        [stunned, enemyHealer],
+        [makeWindow(from, to)],
+        [],
+        [],
+        stubFactsComputer,
+      )[0]!.ownerCastCCInWindow;
+    expect(run(40, 50)).toBe(true);
+    // control: the stun before the window is not in it
+    expect(run(44, 50)).toBe(false);
+  });
+
+  it("F16 retest (e49b7c3b 3:39): a dead owner is not free and holds no ready CC", () => {
+    const owner = makeFriend("owner", {
+      spellCastEvents: [
+        makeSpellCastEvent("8122", T0 + 100_000, "enemy-h", "Rsham", "owner", "Owner"),
+      ],
+      deathRecords: [{ timestamp: T0 + 44_000 } as never],
+    });
+    const run = (from: number, to: number) =>
+      computeWindowContributions(
+        combat,
+        owner,
+        [owner],
+        [enemyDk, enemyHealer],
+        [makeWindow(from, to)],
+        [],
+        [],
+        stubFactsComputer,
+      )[0];
+    // dead from 44 s: the window 40–50 is free 40–43 only
+    const across = run(40, 50);
+    expect(across.ownerFreeSeconds).toBe(4);
+    expect(across.ownerCCReady).toEqual([
+      { spellName: "Psychic Scream", enemyHealerDR: "Full" },
+    ]);
+    // a window opening after the death: nothing ready, nothing free
+    const after = run(46, 53);
+    expect(after.ownerFreeSeconds).toBe(0);
+    expect(after.ownerCCReady).toEqual([]);
+  });
+
   it("flags CC as NOT ready when inside its cooldown, and detects an in-window cast", () => {
     const owner = makeFriend("owner", {
       spellCastEvents: [

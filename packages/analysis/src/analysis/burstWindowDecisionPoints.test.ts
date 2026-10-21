@@ -302,6 +302,46 @@ describe("burstWindowDecisionPoints — response classification", () => {
     expect(onSomeoneElse[0]!.responded).toBe(false);
   });
 
+  // F16 retest idx 51 (e49b7c3b 3:24): Bear Form, a pressed Frenzied
+  // Regeneration and a hunter's Roar of Sacrifice on the dying druid — the
+  // crisis side's answers, absent from the burst window's
+  it("the crisis readers' answers count: Bear Form / Frenzied Regeneration (own), Roar of Sacrifice (a mate's, on the pressured friend)", () => {
+    for (const id of ["5487", "22842"]) {
+      const pts = burstWindowDecisionPoints(
+        combat([pressuredFriend({ spellCastEvents: [cast(id, 13)] }), enemyWithBurst()]),
+      );
+      // Bear Form a wall; Frenzied Regeneration a heal (DB2 can reach
+      // others' reading), held to its caster by `answersPressured`
+      expect(pts[0]!.responseCasts.map((r) => r.category), id).toEqual([
+        id === "5487" ? "wall" : "healCd",
+      ]);
+      expect(pts[0]!.responded, id).toBe(true);
+    }
+    const hunter = friendly({
+      id: "F2",
+      name: "Hunter-R",
+      advancedActions: hpTrack("F2", 0, 40, 100),
+      spellCastEvents: [cast("53480", 14, "F1")],
+    });
+    const pts = burstWindowDecisionPoints(
+      combat([pressuredFriend(), hunter, enemyWithBurst()]),
+    );
+    expect(pts[0]!.responses.external).toBe(true);
+    expect(pts[0]!.responded).toBe(true);
+    // control: a Roar the hunter kept for itself is the hunter's own wall,
+    // which `answersPressured` holds to its caster — still a press, so
+    // `responded` (any friendly) is true, as for a teammate's Barkskin
+    const selfRoar = burstWindowDecisionPoints(
+      combat([
+        pressuredFriend(),
+        friendly({ ...hunter, spellCastEvents: [cast("53480", 14, "F2")] }),
+        enemyWithBurst(),
+      ]),
+    );
+    expect(selfRoar[0]!.responses.external).toBe(false);
+    expect(selfRoar[0]!.responses.wall).toBe(true);
+  });
+
   it("a wall pressed just BEFORE the opener still counts (pre-wall allowance)", () => {
     const pts = burstWindowDecisionPoints(
       combat([

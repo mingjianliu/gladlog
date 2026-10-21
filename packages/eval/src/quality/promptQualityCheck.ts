@@ -165,6 +165,7 @@ import {
 import {
   CC_END_CAUSE_NOT_LOGGED,
   CC_ENDED_BY_LEAD,
+  CC_FROM_OWN_TEAM_TAG,
   CC_LOGGED_END_NOTE_RE_SRC,
   CC_REFRESHED_LEAD,
   CC_REFRESHED_NOTE_RE_SRC,
@@ -2071,7 +2072,8 @@ const CC_AVOIDED_LINE =
   /^\s*(\d+):(\d{2})\s+\[CC AVOIDED\?\]\s+(\S+): (.+?) \(by /;
 const CC_ON_TEAM_LINE =
   /^\s*(\d+):(\d{2})\s+\[CC ON TEAM\]\s+(\S+) ← (.+?) \(by /;
-const CC_AVOIDED_CAST_STAMP = /\(by [^;)]*(?:\([^)]*\)[^;)]*)*; cast (\d+):(\d{2})\)/;
+const CC_AVOIDED_CAST_STAMP =
+  /\(by [^;)]*(?:\([^)]*\)[^;)]*)*; cast (\d+):(\d{2})\)/;
 
 /**
  * `[CC AVOIDED?] … did not land` ⟺ no landed `[CC ON TEAM]` line (30th
@@ -2181,9 +2183,11 @@ export function checkWarlockPurgeFollowsPet(lines: string[]): string[] {
     // of that spec — one capable warlock does not vouch for two entries
     // (codex 20-F15-29)
     const listed = new Map<string, number>();
-    for (const spec of tp[1]!.split(", "))
-      if (/ Warlock$/.test(spec))
-        listed.set(spec, (listed.get(spec) ?? 0) + 1);
+    // a swap mid-round prints `(Felhunter out until m:ss)` after the spec
+    for (const entry of tp[1]!.split(/, (?![^(]*\))/)) {
+      const spec = entry.replace(/ \(Felhunter out [^)]*\)$/, "");
+      if (/ Warlock$/.test(spec)) listed.set(spec, (listed.get(spec) ?? 0) + 1);
+    }
     for (const [spec, n] of listed) {
       const mates = locks.filter((w) => w.spec === spec && !w.owner);
       if (mates.length === 0) continue;
@@ -3993,6 +3997,9 @@ export function checkPetCreditSide(lines: string[]): string[] {
   lines.forEach((line, i) => {
     const m = line.match(CC_PET_CREDIT);
     if (!m) return;
+    // a control from the holder's own team while it was charmed names that
+    // team's unit, and says so (F16 retest idx 21)
+    if (line.includes(CC_FROM_OWN_TEAM_TAG)) return;
     const want = m[1] === "CC ON TEAM" ? "enemy" : "friendly";
     const got = side.get(m[2]!);
     if (got !== undefined && got !== want) {
@@ -7229,9 +7236,10 @@ const CONSEQ_LINE =
 const CONSEQ_DROP = /(\d+)\([^)]*\) (\d+)% → low (\d+)% at (\d+):(\d+)/g;
 
 /**
- * Hard invariant (GH #70, 2026-09-24): an `[CONSEQ]` line's START HP is a
- * `[STATE]` grid reading (`gridHpPct`, the sampler behind every [STATE]
- * tick), and its LOW is a trough (`hpTroughInWindow`, the true minimum
+ * Hard invariant (GH #70, 2026-09-24): an `[CONSEQ]` line's START HP is the
+ * reading at the event's own instant (user ruling 2026-10-21 — no longer the
+ * [STATE] tick of its second; the text is checked only for agreeing with the
+ * line's own claim about it), and its LOW is a trough (`hpTroughInWindow`, the true minimum
  * inside the lockout / CC — FT-T03, user ruling 2026-10-10, D7), so wherever
  * the timeline also printed a tick:
  *  - `A% → low B% at m:ss`: the tick at the line's second reads A; the tick
@@ -7284,15 +7292,26 @@ export function checkConseqHpStateConsistency(lines: string[]): string[] {
     const lastSure = start + Math.max(0, spanS - 1);
     const body = m[7]!;
     const where = `line ${i + 1}: [CONSEQ] ${fmtMmSs(start)}`;
+    // `no (surviving) teammate dropped 10% or more (<readings>)`
+    const heldPart =
+      /^no (?:surviving )?teammate dropped \d+% or more \((.*?)\)(?:;|$)/.exec(
+        body,
+      )?.[1];
     const drops = [...body.matchAll(CONSEQ_DROP)];
     for (const d of drops) {
       const id = Number(d[1]);
       const a = Number(d[2]);
       const b = Number(d[3]);
       const lowSec = Number(d[4]) * 60 + Number(d[5]);
-      const t0 = tick(start, side, id);
-      if (t0 !== undefined && t0 !== a)
-        failures.push(`${where} 起点写 ${id} 为 ${a}%,同秒 [STATE] 报 ${t0}%`);
+      // the start is the reading at the event's own instant (user ruling
+      // 2026-10-21), inside the line's second and not that second's tick:
+      // the text cannot re-derive it — it must agree with the claim the
+      // line makes about it (a drop part ≥ 10, a held reading under 10)
+      const inHeld = heldPart !== undefined && heldPart.includes(d[0]!);
+      if (inHeld ? a - b >= 10 : a - b < 10)
+        failures.push(
+          `${where} ${id} ${a}% → ${b}% 与「${inHeld ? "没掉 10%" : "掉了 10%+"}」的说法不符`,
+        );
       // the low's own second lies inside the analysis's span even when it
       // is past `lastSure`, so its tick is checked on its own
       const tl = tick(lowSec, side, id);
@@ -7319,8 +7338,14 @@ export function checkConseqHpStateConsistency(lines: string[]): string[] {
       }
     }
     // hp-state F-C1: "no surviving teammate dropped" is the same claim for the
-    // living (the dead ids carry no numeric tick and are skipped)
-    if (drops.length === 0 && /^no (surviving )?teammate dropped/.test(body)) {
+    // living (the dead ids carry no numeric tick and are skipped). A line
+    // that prints its readings (user ruling 2026-10-21) is checked on them
+    // above; this tick-based reading is for one that does not
+    if (
+      heldPart === undefined &&
+      drops.length === 0 &&
+      /^no (surviving )?teammate dropped/.test(body)
+    ) {
       const startTicks = stateAt.get(start)?.[side];
       if (!startTicks) return;
       for (const [id, v0] of startTicks) {

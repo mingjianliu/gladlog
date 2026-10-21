@@ -337,6 +337,8 @@ export interface IEffectSave {
   effect: EnemySaveEffect;
   /** the aura the save is read from; absent for a heal proc, which leaves none */
   interval?: ISaveAuraInterval;
+  /** a rider shield no press of its own put up (`RIDER_ABSORB_SAVE_AURAS`) */
+  noPressLogged?: true;
 }
 
 /**
@@ -374,6 +376,7 @@ export function effectSaves(
         spellName: rider,
         effect: "absorb",
         interval: iv,
+        noPressLogged: true,
       });
       continue;
     }
@@ -1539,6 +1542,7 @@ export function enemyDefensiveEvents(
       casterId: enemy.id,
       kind: "self-save",
       effect: s.effect,
+      ...(s.noPressLogged ? { noPressLogged: true as const } : {}),
       ...(shield
         ? {
             observedSeconds: shield.toS - shield.fromS,

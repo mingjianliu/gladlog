@@ -33,6 +33,7 @@ import {
   enemySourceIds,
 } from "../../utils/cannotCastIntervals";
 import { castingLockIntervalsOf } from "../../utils/castingLocks";
+import { auraBlocksInterrupt } from "../../utils/combatStates";
 import { gridHpPct, isHealerSpec } from "../../utils/cooldowns";
 import {
   interruptCooldownRemainingMs,
@@ -50,7 +51,6 @@ import {
   canReachTargetAt,
   rootIntervalsOf,
 } from "../../utils/rootReachability";
-import { auraBlocksMechanic } from "../../utils/spellMechanics";
 import {
   RANGE_HITBOX_SLACK_YD,
   spellRangeForCaster,
@@ -238,9 +238,6 @@ interface UnitLike {
   advancedActions: any[];
 }
 
-/** SpellMechanic 26 — interrupted (DB2 SpellMechanic table). */
-const MECH_INTERRUPT = 26;
-
 export function kickPriorityDecisionPoints(
   friends: any[],
   enemies: any[],
@@ -302,15 +299,16 @@ export function kickPriorityDecisionPoints(
   // aura (official DB2 aura 77 mechanic 26, or a full school immunity —
   // Spiritwalker's Aegis 378078, Zen Focus Tea, Precognition, Obsidian
   // Mettle's Obsidian Scales, Unending Resolve …) cannot be kicked, so no
-  // one "could have kicked" that cast. `auraBlocksMechanic` is the same
-  // official table the CC-immunity predicates read.
+  // one "could have kicked" that cast. `auraBlocksInterrupt` reads the same
+  // official table the CC-immunity predicates read, plus the Spirit of
+  // Redemption form (F16 retest idx 42).
   const immuneCache = new Map<string, Array<{ from: number; to: number }>>();
   const interruptImmuneAt = (u: UnitLike, ms: number): boolean => {
     let iv = immuneCache.get(u.id);
     if (!iv) {
       try {
         iv = buildAuraIntervals(u as never, combat)
-          .filter((a) => auraBlocksMechanic(a.spellId, MECH_INTERRUPT) === true)
+          .filter((a) => auraBlocksInterrupt(a.spellId))
           .map((a) => ({
             from: startMs + a.fromS * 1000,
             to: startMs + a.toS * 1000,

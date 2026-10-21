@@ -29,6 +29,7 @@ import {
   renderedCcSpan,
   rendersCcOnTeamLine,
   tremorTotemBreak,
+  CC_FROM_OWN_TEAM_TAG,
 } from "../../utils/ccTrinketAnalysis";
 import { wasRemovedByAllyDispel } from "../../utils/dispelAnalysis";
 import { fmtTime } from "../../utils/renderGrid";
@@ -326,13 +327,13 @@ export function emitTrinketCcOnTeamEntries(
       }
       const byStr = reflectedBack
         ? "(reflected back)"
-        : `(by ${actorLabel(cc.sourceName, "enemy", cc.sourceId)})`;
+        : `(by ${actorLabel(cc.sourceName, cc.fromOwnTeamWhileCharmed ? "friendly" : "enemy", cc.sourceId)})`;
 
       // passive_trinket → player has no active trinket, no annotation
       addEntry(
         cc.atSeconds,
         // B112: "(by N)" not "(N)" — the bare "(6)" caster-id was misread as a "6s" duration.
-        `${fmtTime(cc.atSeconds)}  [CC ON TEAM]   ${pid(summary.playerName)} ← ${cc.spellName} ${byStr}${durStr}${drStr}${backlashStr}${posStr}${formatCcRefreshed(cc, fmtTime, drStr !== "")}${trinketNote}${tremorNote}${immunityNote}${endNote}${unloggedNote}${cleansedNote}${formatPressedDuringNote(pressedDuring?.get(cc))}`,
+        `${fmtTime(cc.atSeconds)}  [CC ON TEAM]   ${pid(summary.playerName)} ← ${cc.spellName} ${byStr}${cc.fromOwnTeamWhileCharmed ? ` ${CC_FROM_OWN_TEAM_TAG}` : ""}${durStr}${drStr}${backlashStr}${posStr}${formatCcRefreshed(cc, fmtTime, drStr !== "")}${trinketNote}${tremorNote}${immunityNote}${endNote}${unloggedNote}${cleansedNote}${formatPressedDuringNote(pressedDuring?.get(cc))}`,
       );
     }
 

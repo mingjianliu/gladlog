@@ -32,7 +32,8 @@ import { type ICombatUnit } from "@gladlog/parser-compat";
 import { castAndEffectIds, isCastOrEffect } from "../data/castEffectAuras";
 import { HEALING_VERDICTS } from "../data/healingVerdicts";
 import { getEnglishSpellName } from "../data/spellEffectData";
-import spellIdLists from "../data/spellIdLists";
+import { CURATED_ABILITY_FACTS } from "../data/curatedAbilityFacts";
+import spellIdLists, { ENEMY_REDIRECT_SAVE_IDS } from "../data/spellIdLists";
 import {
   ccSpellIds,
   rootSpellIds,
@@ -46,6 +47,7 @@ import {
   petCastersOf,
 } from "../utils/cannotCastIntervals";
 import {
+  canHelpAnotherUnit,
   cdCanHelpAnotherUnit,
   cdIsProcOnly,
   cdReadyInTimeAt,
@@ -54,6 +56,7 @@ import {
   hpTroughInWindow,
   type IMajorCooldownInfo,
   isDeadAtRenderSecond,
+  RESPONSE_ONLY_DEFENSIVE_IDS,
   SELF_CAST_NOOP_EXTERNAL_IDS,
   specToString,
   TEAM_HEAL_CD_IDS,
@@ -76,6 +79,7 @@ import { isDeadAt } from "../utils/unitDeath";
 import { buildFilteredAuraIntervals } from "../utils/utils";
 import {
   CRISIS_HP_PCT_RENDERED,
+  CRISIS_PROTECTIVE_ANSWER_IDS,
   KITE_GAIN_YARDS,
   kiteAttribution,
   kitedAway,
@@ -745,6 +749,33 @@ export const BURST_HEAL_CD_IDS = new Set<string>([
         (v.official.healsSelf || v.official.healsOthers),
     )
     .map(([id]) => id),
+]);
+
+/**
+ * F16 retest (2026-10-21, idx 51): presses that answer a crisis on the
+ * crisis side but sat in none of the three lists above, so
+ * slow-defensive-response said "no friendly answered within 8 s" over a
+ * Bear Form, a Frenzied Regeneration and a Roar of Sacrifice on the dying
+ * druid (e49b7c3b 3:24–3:32). The same signed sets the crisis readers take
+ * as answers — never as accusations (the accusation side, `feasible`, keeps
+ * the three lists):
+ *  - `CRISIS_PROTECTIVE_ANSWER_IDS` (user rulings 2026-09-14),
+ *  - the response-only saves: `RESPONSE_ONLY_DEFENSIVE_IDS` and the healer
+ *    roster's `responseOnly` facts (Barkskin, Frenzied Regeneration —
+ *    ruling 2026-09-25),
+ *  - the redirects `ENEMY_REDIRECT_SAVE_IDS` (rulings A20 + U3; fact1215
+ *    R11 counted them for cd-hoarded).
+ * A press on another friendly is an `external`, an untargeted / self press
+ * a `wall` — `answersPressured` then holds each to the caster or the
+ * destination it reached.
+ */
+export const BURST_EXTRA_ANSWER_IDS: ReadonlySet<string> = new Set([
+  ...CRISIS_PROTECTIVE_ANSWER_IDS,
+  ...RESPONSE_ONLY_DEFENSIVE_IDS,
+  ...CURATED_ABILITY_FACTS.filter(
+    (f) => f.kind === "save_role" && f.responseOnly,
+  ).map((f) => f.id),
+  ...ENEMY_REDIRECT_SAVE_IDS,
 ]);
 
 const INTERRUPT_IDS = new Set<string>(
@@ -1420,6 +1451,19 @@ export function burstWindowDecisionPoints(
       // the raw instant each response counts at (its `latencySec` origin) —
       // read once more below, against the pressured friendly's death
       const responseAtMs = new Map<BurstResponseCast, number>();
+      // a press on another friendly is an external; an untargeted press
+      // that can reach others (Tree of Life, Ancient of Lore) a group heal;
+      // one on its caster — or on an enemy (Ultimate Penitence) — a wall
+      const extraAnswerCategory = (
+        c: FriendlyCast,
+      ): BurstResponseCast["category"] =>
+        c.dest &&
+        c.dest !== c.unitId &&
+        friendlies.some((f) => f.id === c.dest)
+          ? "external"
+          : isNoDest(c.dest) && canHelpAnotherUnit(c.spellId)
+            ? "healCd"
+            : "wall";
       for (const c of friendlyCasts) {
         if (c.tMs < w0) continue;
         if (c.tMs > w1) break;
@@ -1434,7 +1478,9 @@ export function burstWindowDecisionPoints(
                     c.dest != null &&
                     casterIdSet.has(c.dest)
                   ? "control"
-                  : null;
+                  : BURST_EXTRA_ANSWER_IDS.has(c.spellId)
+                    ? extraAnswerCategory(c)
+                    : null;
         if (!category) continue;
         const casterUnit = units.find((u) => u.id === c.unitId);
         const dur = casterUnit

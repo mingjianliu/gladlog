@@ -8,6 +8,7 @@ import {
 import { getEnglishSpellName } from "../data/spellEffectData";
 import { dropAuraRebroadcasts, officialDurationS } from "./auraIntervals";
 import { empowerSpans } from "./castCommitSpans";
+import { auraBlocksMechanic, INTERRUPT_MECHANIC } from "./spellMechanics";
 
 export interface IFormInterval {
   form: "Bear" | "Cat";
@@ -75,6 +76,23 @@ export const SPIRIT_OF_REDEMPTION_AURA_IDS: ReadonlySet<string> = new Set([
  */
 export const PRESSED_SPIRIT_OF_REDEMPTION_AURA_IDS: ReadonlySet<string> =
   new Set(["215769"]);
+
+/**
+ * Does this aura make its carrier's casts unkickable — an official interrupt
+ * immunity (DB2 aura 77 mechanic 26, or every school: `auraBlocksMechanic`),
+ * or the Spirit of Redemption form, which DB2 does not encode that way.
+ * F16 retest (2026-10-21, idx 42): 233 priest cast starts inside a pressed
+ * form across 71 raw files, 0 interrupted (2.8 % of the same priests' casts
+ * outside it); kick-priority-missed said Wind Shear could kick a Flash Heal
+ * cast wholly inside the form (691a7f31 2:35). The form is an immunity form
+ * (user ruling 2026-10-20, fact2 ruling 5).
+ */
+export function auraBlocksInterrupt(auraId: string): boolean {
+  return (
+    SPIRIT_OF_REDEMPTION_AURA_IDS.has(auraId) ||
+    auraBlocksMechanic(auraId, INTERRUPT_MECHANIC) === true
+  );
+}
 
 /**
  * When `unit` was in Spirit of Redemption form — the `unit:ghost` token of a

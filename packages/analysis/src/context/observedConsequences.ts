@@ -14,8 +14,10 @@
  * Both teams' healers: an enemy healer locked while their DPS dropped is the
  * praise side of the same fact.
  *
- * The start HP is the `[STATE]` grid reading (`gridHpPct` at the span's first
- * render second). The LOW is a trough since FT-T03 (user ruling 2026-10-10,
+ * The start HP is the unit's HP when the event began — `gridHpPct` at the
+ * event's own instant, not its second's [STATE] tick (user ruling
+ * 2026-10-21, a third signed exception to "point readings read the grid").
+ * The LOW is a trough since FT-T03 (user ruling 2026-10-10,
  * D7): the true minimum of every sample inside the lockout / CC itself
  * (`hpTroughInWindow` with the event's own span), printed at the second it
  * happened — 121c7e15 read `66% → low 32% at 1:30` over a 22 % reading half
@@ -61,7 +63,7 @@ export const HEALER_CC_MIN_S = 2;
 export const CONSEQ_DROP_MIN_PCT = 10;
 
 export const CONSEQ_SECTION_HEADER =
-  "OBSERVED CONSEQUENCES — what the log shows happened to a team's HP while its healer was kicked (inside the school lockout) or CC'd. `A% → low B% at m:ss` = that unit's [STATE] reading at the start, and the lowest HP the log shows for it inside the span, at the second it happened (the true minimum between the ticks: it can sit below every [STATE] number of the span). Measurements, not verdicts: they say what happened, not why the round went the way it did.";
+  "OBSERVED CONSEQUENCES — what the log shows happened to a team's HP while its healer was kicked (inside the school lockout) or CC'd. `A% → low B% at m:ss` = that unit's HP when the kick or control landed (the last reading at or before that instant — it can differ from the [STATE] tick of that second, which may be read before it), and the lowest HP the log shows for it inside the span, at the second it happened (the true minimum between the ticks: it can sit below every [STATE] number of the span). `no teammate dropped 10% or more (…)` lists those readings for every teammate. Measurements, not verdicts: they say what happened, not why the round went the way it did.";
 
 interface Labels {
   friendly: (name: string) => string;
@@ -140,26 +142,38 @@ function teamDrops(
   /** the event's own span, seconds since the round start (fractional) */
   fromS: number,
   toS: number,
-): { parts: string[]; measured: number; complete: boolean } {
+): {
+  parts: string[];
+  /** the teammates measured under the threshold, in the same form */
+  held: string[];
+  measured: number;
+  complete: boolean;
+} {
   const fromSec = Math.floor(fromS);
-  const toSec = Math.floor(toS);
   const parts: string[] = [];
+  const held: string[] = [];
   let measured = 0;
   let unmeasured = 0;
   for (const mate of mates) {
     // a teammate already dead when the span opened is not one the claim is
     // about (its grid reads nothing from its death second on)
     if (isDeadAtRenderSecond(mate, matchStartMs, fromSec)) continue;
-    const hp = mateHpAcross(mate, matchStartMs, fromSec, toSec);
-    if (!hp) {
+    // User ruling 2026-10-21 (F16 retest idx 15): the START is the unit's
+    // HP when the event began — the last reading at or before that instant
+    // (`gridHpPct` at the event's own ms), not the [STATE] tick of its
+    // second, which can be read before it. 0c8b1932 0:43: the 0:43.0 tick
+    // read the druid at 47 %, Radiance had lifted it to 64 % by the Blind's
+    // landing 0.8 s later, and it fell to 38 % inside — "no teammate dropped
+    // 10% or more". The DECISION (`mateHitDuringCc`) stays on the grid.
+    const h0 = gridHpPct(mate, matchStartMs + Math.round(fromS * 1000));
+    if (h0 === null) {
       // no reading at all is no measurement either (codex 20-F15-10)
       unmeasured++;
       continue;
     }
     // the printed low is the trough of the event's own span (FT-T03) —
     // `hpTroughInEventSpan`, the reading missed-sync-window's
-    // enemyMinHpPct shares; `hp.lo` is the decision's
-    const { h0 } = hp;
+    // enemyMinHpPct shares
     // no reading inside the span → no low (user ruling 2026-10-17: the
     // span reads only its own samples; codex 20-F15-07: the grid fallback
     // printed a reading from after the control ended)
@@ -171,12 +185,18 @@ function teamDrops(
       continue;
     }
     measured++;
-    if (h0 - lo.pct >= CONSEQ_DROP_MIN_PCT)
-      parts.push(
-        `${label(mate.name)} ${Math.round(h0)}% → low ${Math.round(lo.pct)}% at ${fmtTime(lo.atSec)}`,
-      );
+    // the start is a state the unit was in at the landing: a span whose own
+    // samples all read higher bottoms at the start (605: `79% → low 84%`
+    // beside a later tick still reading the 79 % sample)
+    const low =
+      Math.round(lo.pct) <= Math.round(h0)
+        ? lo
+        : { pct: h0, atSec: Math.floor(fromS) };
+    const reading = `${label(mate.name)} ${Math.round(h0)}% → low ${Math.round(low.pct)}% at ${fmtTime(low.atSec)}`;
+    if (h0 - low.pct >= CONSEQ_DROP_MIN_PCT) parts.push(reading);
+    else held.push(reading);
   }
-  return { parts, measured, complete: unmeasured === 0 };
+  return { parts, held, measured, complete: unmeasured === 0 };
 }
 
 function diedIn(
@@ -206,12 +226,19 @@ function diedIn(
  * about every teammate, and an unread one supports none of it.
  */
 function consequenceTail(
-  drops: { parts: string[]; measured: number; complete: boolean },
+  drops: {
+    parts: string[];
+    held: string[];
+    measured: number;
+    complete: boolean;
+  },
   died: string,
 ): string | null {
   if (drops.parts.length) return `${drops.parts.join(", ")}${died}`;
+  // the readings the claim rests on (user ruling 2026-10-21: the start is
+  // printed) — what the gate checks the claim against
   if (drops.complete && drops.measured > 0)
-    return `${noDropBody(died)}${died}`;
+    return `${noDropBody(died)} (${drops.held.join(", ")})${died}`;
   return died ? died.replace(/^; /, "") : null;
 }
 
@@ -344,13 +371,7 @@ export function formatObservedConsequences(params: {
       const atS = (s.from - start) / 1000;
       const durS = (toMs - s.from) / 1000;
       if (atS < 0 || durS < HEALER_CC_MIN_S) continue;
-      const drops = teamDrops(
-        mates,
-        label,
-        start,
-        atS,
-        atS + durS,
-      );
+      const drops = teamDrops(mates, label, start, atS, atS + durS);
       const died = diedIn(mates, label, start, atS, atS + durS);
       const tail = consequenceTail(drops, died);
       if (tail === null) continue;

@@ -473,6 +473,15 @@ describe("checkPetCreditSide — a summon-cast CC credited to the wrong side (GH
     expect(out[0]).toContain("CC ON TEAM");
   });
 
+  it("F16 retest idx 21: a charmed holder's own team's control says so and passes", () => {
+    expect(
+      checkPetCreditSide([
+        ...roster,
+        "4:25  [CC ON TEAM]   1(RShaman) ← Capacitor Totem (by 3(EShaman)'s totem) [from its own team, while charmed] | 3s [DR: Stun Full]",
+      ]),
+    ).toEqual([]);
+  });
+
   it("flags a [CC ON ENEMY] line credited to an enemy's summon", () => {
     const out = checkPetCreditSide([
       ...roster,
@@ -1870,6 +1879,24 @@ describe("checkWarlockPurgeFollowsPet — the purge header follows the warlock's
     ).toHaveLength(1);
     expect(
       checkWarlockPurgeFollowsPet([...two, `  Team purgers: Affliction Warlock`]),
+    ).toEqual([]);
+  });
+  it("F16 retest idx 50: a swap's `(Felhunter out until m:ss)` suffix keeps the entry checked", () => {
+    const two = [
+      `  <unit id="1" name="Pri-R" spec="Holy Priest" role="log owner">`,
+      `  <unit id="2" name="B-R" spec="Affliction Warlock" role="teammate">`,
+      `  My team: Holy Priest (Pri-R), Affliction Warlock (B-R) [pet: Sayaad — Seduction (disorient)]`,
+    ];
+    expect(
+      checkWarlockPurgeFollowsPet([
+        ...two,
+        `  Team purgers: Affliction Warlock (Felhunter out until 0:17), Holy Priest`,
+      ]),
+    ).toHaveLength(1);
+    expect(
+      checkWarlockPurgeFollowsPet(
+        prompt("CAN offensive purge (Felhunter out until 0:17)", "none", felhunter),
+      ),
     ).toEqual([]);
   });
 });

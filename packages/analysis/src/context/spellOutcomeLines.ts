@@ -24,6 +24,7 @@ import {
 } from "../utils/ccBreakAnalysis";
 import { ccRecastSplitsResend } from "../utils/drAnalysis";
 import { groundingRedirects } from "../utils/groundingRedirects";
+import { isDeferralAbsorb } from "../utils/incomingPressure";
 import { pvpTrinketUses } from "../utils/pvpTrinketUses";
 import type { CastFailedEvent } from "../utils/rawStreams";
 import {
@@ -131,7 +132,14 @@ export const REFLECT_CHAIN_GAP_MS = 3000;
  * reflector within 3 s (the other 5 none) — 238 logged after it (up to
  * 2.9 s: the projectile's flight), the rest before it, at most 487 ms
  * (median 7 ms). */
-export const REFLECT_OWN_DAMAGE_IDS: ReadonlySet<string> = new Set(["23920"]);
+export const REFLECT_OWN_DAMAGE_IDS: ReadonlySet<string> = new Set([
+  "23920", // Spell Reflection
+  // Nether Ward (F16 retest 2026-10-21, idx 0): 01502819 2:42 — the second
+  // reflected Smite landed 51,390 under 212295 and only the absorbed parts
+  // (kept under the Smite's id) were counted; at 5:57 a fully landed
+  // 58,770 under 212295 left no [REFLECTED] line at all
+  "212295",
+]);
 /** How far ahead of its REFLECT row such a row can be logged (measured max
  * 487 ms, above). */
 export const REFLECT_OWN_ID_LEAD_MS = 500;
@@ -189,6 +197,29 @@ export function reflectedSpells(
       const c = owning(spellId, src, ts);
       if (c) back.set(c, (back.get(c) ?? 0) + amt);
     };
+    // a return logged under the reflector's own id → the reflector's
+    // nearest damaging chain: a reflected control that deals no damage
+    // cannot own a damage return (codex 20-F16-03 #3: a Polymorph reflected
+    // 190 ms after a Fireball took the Fireball's 100k, and the Fireball's
+    // [REFLECTED] line went)
+    const creditOwnId = (src: string | undefined, ts: number, amt: number) => {
+      let best: (typeof chains)[number] | undefined;
+      let bestGap = Infinity;
+      for (const c of chains) {
+        if (c.first.destUnitId !== src) continue;
+        const t0 = c.first.logLine.timestamp;
+        if (ts < t0 - REFLECT_OWN_ID_LEAD_MS) continue;
+        if (ts - t0 > REFLECT_DAMAGE_WINDOW_S * 1000) continue;
+        const id = c.first.spellId ?? "";
+        if (isControlSpell(id) && !abilityProfile(id).dealsDamage) continue;
+        const gap = Math.abs(ts - t0);
+        if (gap < bestGap) {
+          best = c;
+          bestGap = gap;
+        }
+      }
+      if (best) back.set(best, (back.get(best) ?? 0) + amt);
+    };
     for (const d of caster.damageIn ?? []) {
       // fact2 (2026-10-20, Spell Reflection): a Warrior's reflect comes back
       // as a damage row of the reflector's own Spell Reflection id, logged a
@@ -197,28 +228,11 @@ export function reflectedSpells(
       // the Pyroblast) — the reflector's latest chain within
       // `REFLECT_OWN_ID_LEAD_MS` of it owns it
       if (d.spellId && REFLECT_OWN_DAMAGE_IDS.has(d.spellId)) {
-        const ts = d.logLine.timestamp;
-        // the nearest damaging chain: a reflected control that deals no
-        // damage cannot own a damage return (codex 20-F16-03 #3: a Polymorph
-        // reflected 190 ms after a Fireball took the Fireball's 100k, and the
-        // Fireball's [REFLECTED] line went)
-        let best: (typeof chains)[number] | undefined;
-        let bestGap = Infinity;
-        for (const c of chains) {
-          if (c.first.destUnitId !== d.srcUnitId) continue;
-          const t0 = c.first.logLine.timestamp;
-          if (ts < t0 - REFLECT_OWN_ID_LEAD_MS) continue;
-          if (ts - t0 > REFLECT_DAMAGE_WINDOW_S * 1000) continue;
-          const id = c.first.spellId ?? "";
-          if (isControlSpell(id) && !abilityProfile(id).dealsDamage) continue;
-          const gap = Math.abs(ts - t0);
-          if (gap < bestGap) {
-            best = c;
-            bestGap = gap;
-          }
-        }
-        if (best)
-          back.set(best, (back.get(best) ?? 0) + Math.abs(d.effectiveAmount));
+        creditOwnId(
+          d.srcUnitId,
+          d.logLine.timestamp,
+          Math.abs(d.effectiveAmount),
+        );
         continue;
       }
       credit(
@@ -229,12 +243,18 @@ export function reflectedSpells(
       );
     }
     for (const a of caster.absorbsIn ?? [])
-      credit(
-        a.attackSpellId,
-        a.attackerId,
-        a.timestamp,
-        Math.abs(a.absorbedAmount),
-      );
+      // a deferral shield only delayed the return — its tick lands later as
+      // the shield caster's own damage (FT-T02b; codex 20-F16-08 #1)
+      if (isDeferralAbsorb(a)) continue;
+      else if (a.attackSpellId && REFLECT_OWN_DAMAGE_IDS.has(a.attackSpellId))
+        creditOwnId(a.attackerId, a.timestamp, Math.abs(a.absorbedAmount));
+      else
+        credit(
+          a.attackSpellId,
+          a.attackerId,
+          a.timestamp,
+          Math.abs(a.absorbedAmount),
+        );
     for (const chain of chains) {
       const m = chain.first;
       const reflector = byId.get(m.destUnitId ?? "");

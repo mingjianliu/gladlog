@@ -88,7 +88,9 @@ function minPct(
   let best: { pct: number; ms: number } | null = null;
   for (const a of u.advancedActions ?? []) {
     const ts = a.logLine.timestamp;
-    if (ts < fromMs || ts >= toMs || ts >= deathMs) continue;
+    // up to the death inclusive (codex 20-F16-07 #1): the 0-HP row is
+    // skipped below
+    if (ts < fromMs || ts >= toMs || ts > deathMs) continue;
     if (a.advancedActorId !== u.id || !(a.advancedActorMaxHp > 0)) continue;
     if (!(a.advancedActorCurrentHp > 0)) continue;
     const pct = Math.min(

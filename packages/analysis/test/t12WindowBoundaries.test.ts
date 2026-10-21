@@ -32,6 +32,7 @@ import {
 import { computeOffensiveWindows } from "../src/utils/offensiveWindows";
 import {
   makeAdvancedAction,
+  makeAuraEvent,
   makeDamageEvent,
   makeSpellCastEvent,
   makeUnit,
@@ -213,6 +214,29 @@ describe("① a — a kill window ends at its target's death (computeOffensiveWi
 
     it("a heal started 2.3 s after the target's death is not", () => {
       expect(points(79.4)).toEqual([]);
+    });
+
+    // F16 retest idx 42 (691a7f31 2:35): a Flash Heal cast wholly inside the
+    // pressed Spirit of Redemption form — no one could have kicked it
+    it("a heal cast inside the healer's Spirit of Redemption form is not", () => {
+      const enemies = [druid(50, 77.08, hp), healerWithCast(70)];
+      const priest = enemies[1]!;
+      priest.auraEvents.push(
+        makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, "215769", at(69.5), "e2", "e2", "BUFF") as never,
+        makeAuraEvent(LogEvent.SPELL_AURA_REMOVED, "215769", at(78), "e2", "e2", "BUFF") as never,
+      );
+      expect(
+        kickPriorityDecisionPoints(
+          [friend],
+          enemies,
+          {
+            startTime: T0,
+            endTime: at(107),
+            units: Object.fromEntries([friend, ...enemies].map((u) => [u.id, u])),
+          },
+          { eligibility: "bootstrap" },
+        ),
+      ).toEqual([]);
     });
   });
 });

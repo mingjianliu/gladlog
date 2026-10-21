@@ -64,12 +64,14 @@ import {
   hardCcAuraAt,
   silenceIntervals,
 } from "./cannotCastIntervals";
-import {   CAST_MISS_WINDOW_MS,
+import {
+  CAST_MISS_WINDOW_MS,
   CONTROL_FAILED_MISS_TYPES,
-isControlCast,
+  isControlCast,
   missBelongsToCast,
 } from "./castMissRows";
-import { oppressingRoarOnAt } from "./ccBreakAnalysis";
+import { oppressingRoarOnAt, oppressingRoarOnAtMs } from "./ccBreakAnalysis";
+import { charmedSpans } from "./charmedPlayer";
 import {
   ccFullDurationForApplication,
   ccFullDurationForCaster,
@@ -288,8 +290,27 @@ export const CC_AVOIDANCE_BUFF_SPELLS = new Map<string, string>([
  * 357140 stayed off the table above; gated by mechanic it is exact
  * (5dd3d2d6 0:55: a Fear logged IMMUNE on the hunter under it, no line).
  */
+/** The tag of a `[CC ON TEAM]` / `[CC ON ENEMY]` line whose control came
+ * from the holder's own team while the holder was charmed
+ * (`ICCInstance.fromOwnTeamWhileCharmed`); `checkPetCreditSide` reads it. */
+export const CC_FROM_OWN_TEAM_TAG = "[from its own team, while charmed]";
+
 export const MECHANIC_LIMITED_AVOIDANCE_BUFFS: ReadonlyMap<string, string> =
-  new Map([["212704", "The Beast Within"]]);
+  new Map([
+    ["212704", "The Beast Within"],
+    // F16 retest (2026-10-21, idx 34 — 280d1cbb 0:32: a Fear logged IMMUNE
+    // 0.13 s after Berserker Shout, the line said "the log gives no
+    // cause"). DB2 aura 77: Fear, Incapacitate, Sap and mechanic 23 (both
+    // ids; 384102, the group copy, Fear only). Already designed breakers in
+    // ccBreakAbilities.
+    ["18499", "Berserker Rage"],
+    ["384100", "Berserker Shout"],
+    ["384102", "Berserker Shout"],
+    // F16 retest idx 49 (aff36b44 2:36): a physical Shockwave logged IMMUNE
+    // and used up the Shroud — it is no magic-only immunity; DB2 lists the
+    // eleven loss-of-control mechanics it stops (stun 12 among them)
+    ["378464", "Nullifying Shroud"],
+  ]);
 for (const [buffId, name] of MECHANIC_LIMITED_AVOIDANCE_BUFFS)
   CC_AVOIDANCE_BUFF_SPELLS.set(buffId, name);
 
@@ -584,7 +605,8 @@ const GROUND_CC_FAMILY: ReadonlySet<string> = (() => {
 // physical CC (Kidney/Cheap Shot/Blind/etc.) they could not have prevented. (Phase Shift and
 // Psychic Shroud are general untargetable / next-CC immunities, so they CAN dodge physical — excluded.)
 export const MAGIC_ONLY_IMMUNITY_IDS = new Set<string>([
-  "378464", // Nullifying Shroud
+  // (Nullifying Shroud 378464 left on 2026-10-21: its DB2 mechanics decide —
+  // MECHANIC_LIMITED_AVOIDANCE_BUFFS)
   "353319", // Peaceweaver
   "204018", // Blessing of Spellwarding
   "48707", // Anti-Magic Shell
@@ -990,6 +1012,10 @@ export interface ICCInstance {
    */
   sourceId: string;
   sourceSpec: string;
+  /** F16 retest idx 21: the source is the holder's OWN teammate (or that
+   * teammate's summon), whose control reached the holder while it was charmed
+   * (Mind Controlled) — the line says so (`CC_FROM_OWN_TEAM_TAG`). */
+  fromOwnTeamWhileCharmed?: true;
   /** The log records a damage break or a dispel at this CC's removal
    * (`ccEndedByLoggedCause`, F15 R3) — no later press ended it. */
   endedByLoggedCause?: true;
@@ -1235,10 +1261,18 @@ export function pressEndedSilence(
   /** the silence aura: one that lasted its official length ran out — no
    * press broke it (codex 20-F16-02 #2; the CC binder's `ranFullLength`) */
   spellId?: string,
+  /** the silenced unit: an Oppressing Roar on it at the landing lengthens
+   * the silence (codex 20-F16-08 #2: 5.2 s, trinketed at 4.5 s) */
+  holder?: Pick<ICombatUnit, "auraEvents">,
 ): boolean {
-  const official = spellId ? ccFullDurationSeconds(spellId) : undefined;
-  if (official !== undefined && endMs - fromMs >= official * 1000)
-    return false;
+  const official = spellId
+    ? ccFullDurationForApplication(
+        spellId,
+        undefined,
+        holder ? oppressingRoarOnAtMs(holder, spellId, fromMs) : false,
+      )
+    : undefined;
+  if (official !== undefined && endMs - fromMs >= official * 1000) return false;
   return (
     pressMs >= fromMs &&
     pressMs <= endMs + TRINKET_BREAK_AFTER_REMOVAL_MS &&
@@ -1260,8 +1294,9 @@ export function findBrokenDisarm(
     const applyMs = matchStartMs + Math.round(d.atSeconds * 1000);
     // a disarm that lasted its official length ran out (codex 20-F16-02 #2:
     // Dismantle 10–15 s then a Medallion at 15.001 read `out of Dismantle`);
-    // undiminished, so a DR-shortened one is still read as before
-    const official = ccFullDurationSeconds(d.spellId);
+    // undiminished, so a DR-shortened one is still read as before. The
+    // length as it landed when the instance carries it (codex 20-F16-08 #2)
+    const official = d.fullDurationSeconds ?? ccFullDurationSeconds(d.spellId);
     return {
       d,
       applyMs,
@@ -1290,6 +1325,10 @@ export interface IRootInstance {
    */
   sourceId: string;
   sourceSpec: string;
+  /** A disarm's full length as it landed (`ccFullDurationForApplication`:
+   * the caster's talents, an Oppressing Roar on the holder), undiminished —
+   * what `findBrokenDisarm` reads as "ran out" */
+  fullDurationSeconds?: number;
   /** A disarm the round ended on (`ICCInstance.stillOnAtRoundEnd`, same
    * rule — F02b): `durationSeconds` is then landing → round end. Roots are
    * not cut here. */
@@ -2838,11 +2877,11 @@ export function analyzePlayerCCAndTrinket(
   // 112-1 0:54: Cheap Shot 07.118 → 11.131, recast landing 11.132 and taken
   // by the Medallion at 12.015 — one merged window read the recast as run
   // its course)
-  const recastAt = ccRecastSplitsResend(
-    player.id,
-    player.auraEvents,
-    (id) => castersById.get(id),
+  const recastAt = ccRecastSplitsResend(player.id, player.auraEvents, (id) =>
+    castersById.get(id),
   );
+  let charmedSpansMemo: Array<{ from: number; to: number }> | undefined;
+  const holderCharmedSpans = () => (charmedSpansMemo ??= charmedSpans(player));
   for (const aura of dropAuraRebroadcasts(player.auraEvents, recastAt)) {
     const spellId = aura.spellId;
     if (!spellId) continue;
@@ -2877,11 +2916,25 @@ export function analyzePlayerCCAndTrinket(
       !isRemovalEvent &&
       player.reaction === CombatUnitReaction.Friendly &&
       BACKLASH_AURA_CC_TYPE.has(spellId);
+    // F16 retest (2026-10-21, idx 21): a control the holder's OWN teammate
+    // put on it while it was charmed (Mind Controlled — hostile to its team
+    // for the span) is a control on it: 0d08dd90 r3 0:17, the mage under our
+    // Mind Control took its warlock's Mortal Coil and trinketed out of it at
+    // 0:18.842 — the [ENEMY TRINKET] line said no `out of`.
+    const controlOnCharmedHolder =
+      !isRemovalEvent &&
+      aura.srcUnitId !== player.id &&
+      !enemyIds.has(aura.srcUnitId) &&
+      ccSpellIds.has(spellId) &&
+      holderCharmedSpans().some(
+        (sp) => sp.from <= aura.timestamp && aura.timestamp <= sp.to,
+      );
     if (
       !isRemovalEvent &&
       !enemyIds.has(aura.srcUnitId) &&
       !reflectedOntoHolder &&
-      !backlashOntoFriend
+      !backlashOntoFriend &&
+      !controlOnCharmedHolder
     )
       continue;
 
@@ -3475,6 +3528,11 @@ export function analyzePlayerCCAndTrinket(
         sourceName: w.srcName,
         sourceId: w.srcUnitId,
         sourceSpec: enemySpecMap.get(w.srcUnitId) ?? "Unknown",
+        ...(!enemyIds.has(w.srcUnitId) &&
+        w.srcUnitId !== player.id &&
+        !BACKLASH_AURA_CC_TYPE.has(w.spellId)
+          ? { fromOwnTeamWhileCharmed: true as const }
+          : {}),
         ...(loggedEndOfIdx[idx] ? { endedByLoggedCause: true as const } : {}),
         ...(w.noRemoved ? { noRemoved: true as const } : {}),
         damageTakenDuring,
@@ -3529,6 +3587,17 @@ export function analyzePlayerCCAndTrinket(
       sourceId: w.srcId,
       sourceSpec: enemySpecMap.get(w.srcId) ?? "Unknown",
       ...(w.removeMs > roundEnd ? { stillOnAtRoundEnd: true as const } : {}),
+      // its full length as it landed — the caster's talents and an
+      // Oppressing Roar on the holder (codex 20-F16-08 #2: a Roar-lengthened
+      // 6.5 s Dismantle trinketed at 5.5 s read as having run out)
+      ...((): { fullDurationSeconds?: number } => {
+        const full = ccFullDurationForApplication(
+          w.spellId,
+          [...enemies, ...enemyPets].find((u) => u.id === w.srcId),
+          oppressingRoarOnAtMs(player, w.spellId, w.applyMs),
+        );
+        return full !== undefined ? { fullDurationSeconds: full } : {};
+      })(),
     }))
     .sort((a, b) => a.atSeconds - b.atSeconds);
 
@@ -4626,6 +4695,18 @@ export function analyzePlayerCCAndTrinket(
   };
 
   // 1. Unified Buff & Mobility CC Avoidance (targeted and ground CCs)
+  // F16 retest (2026-10-21): a ground control's press and its summon's own
+  // pulse cast (Capacitor Totem 192058 → the totem's 118905, both ground
+  // controls since C10) resolve to the same hit; one hit is one avoidance
+  // (0d08dd90 0:18: one MISS row printed two lines). The owner's press comes
+  // first in the sweep, so the kept instance carries its cast second.
+  const groundHitsTaken = new Set<string>();
+  const takeGroundHit = (enemyId: string, hitMs: number): boolean => {
+    const key = `${enemyId}:${hitMs}`;
+    if (groundHitsTaken.has(key)) return false;
+    groundHitsTaken.add(key);
+    return true;
+  };
   for (const enemy of enemies) {
     // F134: include the enemy's pet/guardian casts so a whiffed pet CC (Water Elemental Freeze,
     // Felhunter Spell Lock, Succubus Seduction, Hunter-pet Intimidation) is credited as an avoidance.
@@ -4637,8 +4718,7 @@ export function analyzePlayerCCAndTrinket(
       if (cast.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
       if (
         !cast.spellId ||
-        (!isControlCast(cast.spellId) &&
-          !isGroundCc(cast.spellId))
+        (!isControlCast(cast.spellId) && !isGroundCc(cast.spellId))
       )
         continue;
 
@@ -4720,6 +4800,7 @@ export function analyzePlayerCCAndTrinket(
                 REPOSITIONING_NAMES.has(b.name)),
           );
           if (activeBuff) {
+            if (isGroundCC && !takeGroundHit(enemy.id, hit.ms)) continue;
             ccAvoidedInstances.push({
               atSeconds: (hit.ms - matchStartMs) / 1000,
               castAtSeconds: (castTimeMs - matchStartMs) / 1000,
@@ -4758,7 +4839,8 @@ export function analyzePlayerCCAndTrinket(
           if (
             mobilityCast &&
             mobilityCast.spellId &&
-            applicableIds.has(mobilityCast.spellId)
+            applicableIds.has(mobilityCast.spellId) &&
+            (!isGroundCC || takeGroundHit(enemy.id, hit.ms))
           ) {
             ccAvoidedInstances.push({
               atSeconds: (hit.ms - matchStartMs) / 1000,

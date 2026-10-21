@@ -313,6 +313,24 @@ describe("hpTroughInWindow — the true minimum, on the grid sampler's own valid
     });
   });
 
+  it("a live row in the death's own millisecond counts (codex 20-F16-07 #1)", () => {
+    // 3 % then the 0-HP killing blow, both at 16.5 — the death record's ms
+    const u = friend(
+      { 0: 81, 14: 40 },
+      [16.5],
+      [
+        [15.7, 12],
+        [16.5, 3],
+        [16.5, 0],
+      ],
+    );
+    expect(hpTroughInWindow(u as never, T0, 10, 20)).toEqual({
+      pct: 3,
+      atSec: 16,
+      atMs: T0 + 16_500,
+    });
+  });
+
   it("`skipSec` leaves out a second's samples exactly as it leaves out its tick", () => {
     const u = friend({ 0: 90, 13: 50 }, [], [[12.5, 20]]);
     // second 12 skipped: neither its tick nor the 12.5 s sample is read

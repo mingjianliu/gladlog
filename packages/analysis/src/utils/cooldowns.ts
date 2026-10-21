@@ -1965,11 +1965,13 @@ export function hpTroughInWindow(
   // 3:30.827; the line said `16% at 3:29`). Its tick still prints `dead`;
   // the gates accept a trough stamped at the death second.
   const deathMs = lastSec + 1 <= toSec ? lastDeathMs(unit) : undefined;
-  const endMs =
+  // up to the death INCLUSIVE: a live row logged in the death's own
+  // millisecond is a state the unit was in (codex 20-F16-07 #1; the 0-HP
+  // killing-blow row is skipped below either way)
+  const toDeath =
     deathMs !== undefined &&
-    toRenderSecond((deathMs - matchStartMs) / 1000) === lastSec + 1
-      ? deathMs
-      : matchStartMs + (lastSec + 1) * 1000; // exclusive
+    toRenderSecond((deathMs - matchStartMs) / 1000) === lastSec + 1;
+  const endMs = toDeath ? deathMs + 1 : matchStartMs + (lastSec + 1) * 1000; // exclusive
   const spanToMs = span?.toMs ?? Infinity; // inclusive
   const actions = getSortedAdvancedActions(unit);
   // first index at or after `fromMs`

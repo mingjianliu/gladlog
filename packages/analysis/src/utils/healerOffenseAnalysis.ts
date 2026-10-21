@@ -67,6 +67,7 @@ import {
   renderedWindowSeconds,
 } from "./renderGrid";
 import { type InterruptibleCast, interruptibleCastOf } from "./spellMechanics";
+import { firstDeathMs } from "./unitDeath";
 
 /**
  * Is this owner CAST a CC — by its own id, or through the one cast → effect
@@ -274,8 +275,8 @@ export function computeSlackSegments(
       const ownerCCCasts = casts.filter((e) =>
         isOwnerCcCast(e.spellId as string),
       ).length;
-      const ownerKickCasts = casts.filter(
-        (e) => isKickSpellId(e.spellId as string),
+      const ownerKickCasts = casts.filter((e) =>
+        isKickSpellId(e.spellId as string),
       ).length;
       const ownerPurgeCasts = ownerPurgeTimesSeconds.filter(
         (t) => t >= s.fromSeconds && t < s.toSeconds,
@@ -383,8 +384,8 @@ export function computeContestedSegments(
       const ownerCCCasts = casts.filter((e) =>
         isOwnerCcCast(e.spellId as string),
       ).length;
-      const ownerKickCasts = casts.filter(
-        (e) => isKickSpellId(e.spellId as string),
+      const ownerKickCasts = casts.filter((e) =>
+        isKickSpellId(e.spellId as string),
       ).length;
       const ownerPurgeCasts = ownerPurgeTimesSeconds.filter(
         (t) => t >= s.fromSeconds && t < s.toSeconds,
@@ -569,8 +570,11 @@ export function computeContestedTradeFacts(
     );
 
   const facts: IContestedTradeFact[] = [];
+  // a dead owner holds no control (`isDeadAt`, the one dead-at predicate)
+  const ownerDeathMs = firstDeathMs(owner);
   for (const seg of contestedSegments) {
     if (overlapsKillWindow(seg)) continue;
+    if (matchStartMs + seg.fromSeconds * 1000 >= ownerDeathMs) continue;
 
     // an unknown DR family (Chastise without caster evidence) is never "at
     // Full DR" (codex 35-CD-13b: getDRLevelAtTime reads no history as Full)
@@ -808,6 +812,11 @@ export function computeWindowContributions(
   // the caster evidence for a CC cast with variants in different DR
   // families (Chastise: stun / incapacitate)
   const ownerApplied = auraIdsAppliedBy(owner.id, enemies);
+  // F16 retest (2026-10-21): a dead owner is not free and holds no control
+  // (e49b7c3b 3:39–3:46: "your CC ready: Mighty Bash, Maim, Cyclone … free
+  // 7s of 7s" for a druid dead at 3:30) — the death joins the cannot-cast
+  // intervals, as `cooldownTiming`'s owner gate reads them
+  const ownerDeathMs = firstDeathMs(owner);
 
   // One contribution per damage burst (kill attempt) inside each vulnerability
   // span; spans with no qualifying burst yield a single unpunished contribution
@@ -819,8 +828,9 @@ export function computeWindowContributions(
     toSeconds: number,
     unpunished: boolean,
   ): IWindowContribution => {
+    const ownerDeadAtStart = matchStartMs + fromSeconds * 1000 >= ownerDeathMs;
     const ownerCCReady = ccSpells
-      .filter((s) => isCCReadyAt(s, fromSeconds))
+      .filter((s) => !ownerDeadAtStart && isCCReadyAt(s, fromSeconds))
       .map((s) => ({
         spellName: s.spellName,
         // unknown DR family → no DR said (codex 35-CD-13b), never "Full"
@@ -835,24 +845,44 @@ export function computeWindowContributions(
             : null,
       }));
 
-    const ownerCastCCInWindow = owner.spellCastEvents.some((e) => {
-      if (
-        e.logLine.event !== LogEvent.SPELL_CAST_SUCCESS ||
-        !e.spellId ||
-        !isOwnerCcCast(e.spellId)
-      )
-        return false;
-      const t = (e.logLine.timestamp - matchStartMs) / 1000;
-      // Rendered-grid rule (invariant sweep I2, 2026-07-16): the window header
-      // and the timeline [YOU] [CC] lines both render floored seconds, so the
-      // membership test must use the same grid — fractional boundaries made
-      // "you cast no CC" coexist with a [YOU] [CC] line at the rendered
-      // window edge in 12/1245 prompts.
-      return (
-        Math.floor(t) >= Math.floor(fromSeconds) &&
-        Math.floor(t) <= Math.floor(toSeconds)
-      );
-    });
+    // F16 retest (2026-10-21, idx 26): a control the owner's press applied
+    // under an id the cast→effect table does not tie to it — Deep Breath's
+    // talent stun Terror of the Skies 372245 on the kill target and the
+    // enemy healer read "you cast no CC" (179b83ac 2:53). The control aura
+    // itself, sourced from the owner, inside the window's rendered seconds.
+    const ownerControlLandedInWindow = enemies.some((en) =>
+      (en.auraEvents ?? []).some((a) => {
+        if (
+          a.logLine.event !== LogEvent.SPELL_AURA_APPLIED ||
+          a.srcUnitId !== owner.id ||
+          !a.spellId ||
+          !ccSpellIds.has(a.spellId)
+        )
+          return false;
+        const t = Math.floor((a.logLine.timestamp - matchStartMs) / 1000);
+        return t >= Math.floor(fromSeconds) && t <= Math.floor(toSeconds);
+      }),
+    );
+    const ownerCastCCInWindow =
+      ownerControlLandedInWindow ||
+      owner.spellCastEvents.some((e) => {
+        if (
+          e.logLine.event !== LogEvent.SPELL_CAST_SUCCESS ||
+          !e.spellId ||
+          !isOwnerCcCast(e.spellId)
+        )
+          return false;
+        const t = (e.logLine.timestamp - matchStartMs) / 1000;
+        // Rendered-grid rule (invariant sweep I2, 2026-07-16): the window header
+        // and the timeline [YOU] [CC] lines both render floored seconds, so the
+        // membership test must use the same grid — fractional boundaries made
+        // "you cast no CC" coexist with a [YOU] [CC] line at the rendered
+        // window edge in 12/1245 prompts.
+        return (
+          Math.floor(t) >= Math.floor(fromSeconds) &&
+          Math.floor(t) <= Math.floor(toSeconds)
+        );
+      });
 
     // T12 ⑤ (user ruling 2026-10-10): the owner's damage on THIS window's
     // target. The line is a window on one enemy and prints the team's damage
@@ -869,9 +899,9 @@ export function computeWindowContributions(
       if (t < fromSeconds || t >= toSeconds) continue;
       if ((d.logLine.event as string) === LogEvent.SPELL_ABSORBED) {
         // a deferral shield's row is no absorb (FT-T02b, `isDeferralAbsorb`)
-        if (!isDeferralAbsorb(d)) ownerAbsorbedOnTarget += Math.abs(d.effectiveAmount);
-      }
-      else ownerDamageOnTarget += Math.abs(d.effectiveAmount);
+        if (!isDeferralAbsorb(d))
+          ownerAbsorbedOnTarget += Math.abs(d.effectiveAmount);
+      } else ownerDamageOnTarget += Math.abs(d.effectiveAmount);
     }
 
     // Sampled per whole second, as the CC instances were before F-O12: a
@@ -879,7 +909,10 @@ export function computeWindowContributions(
     let blockedSeconds = 0;
     for (let t = Math.floor(fromSeconds); t < toSeconds; t++) {
       const ms = matchStartMs + t * 1000;
-      if (ownerCannotCast.some((iv) => iv.from <= ms && ms < iv.to))
+      if (
+        ms >= ownerDeathMs ||
+        ownerCannotCast.some((iv) => iv.from <= ms && ms < iv.to)
+      )
         blockedSeconds++;
     }
     const ownerFreeSeconds = Math.max(

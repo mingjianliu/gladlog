@@ -163,6 +163,68 @@ describe("extractKillAttempts", () => {
     expect(attempts[1].stuns).toHaveLength(1);
   });
 
+  it("F16 retest idx 5: a shorter stun applied inside a longer one does not cut the bracket — it ends at the latest end", () => {
+    const e1 = unit("e1", {
+      auraEvents: [
+        ...stunAuras("e1", "119381", 28.178, 3.978), // Leg Sweep to 32.156
+        ...stunAuras("e1", "372245", 28.767, 1.504), // Terror of the Skies to 30.271
+      ],
+    });
+    const f1 = unit("f1", {
+      reaction: 1,
+      damageOut: [dmg("f1", "e1", 29, 40_000)],
+    });
+    const [a] = extractKillAttempts([f1], [e1], makeCombat(f1, e1));
+    expect(a!.stuns).toHaveLength(2);
+    expect(a!.toSeconds).toBeCloseTo(32.156, 3);
+  });
+
+  it("F16 retest idx 37: a trinket that broke a Fear layered inside a stun bracket is this attempt's trinket", () => {
+    const FEAR = "5782";
+    const e1 = unit("e1", {
+      auraEvents: [
+        ...stunAuras("e1", KIDNEY, 10, 3), // 10–13
+        ...stunAuras("e1", FEAR, 11.5, 2.5), // to 14.0, taken by the Medallion
+        ...stunAuras("e1", KIDNEY, 18, 2), // 18–20, same chain
+      ],
+      spellCastEvents: [
+        {
+          spellId: "336126",
+          logLine: {
+            event: LogEvent.SPELL_CAST_SUCCESS,
+            timestamp: ms(14),
+            parameters: [],
+          },
+        },
+      ],
+    });
+    const f1 = unit("f1", {
+      reaction: 1,
+      damageOut: [dmg("f1", "e1", 12, 50_000)],
+    });
+    const a = extractKillAttempts([f1], [e1], makeCombat(f1, e1))[0];
+    expect(a!.attribution?.trinketed).toBe(true);
+  });
+
+  it("codex 20-F16-08 #1: a deferral shield's absorb row is not in the bracket figure", () => {
+    const e1 = unit("e1", { auraEvents: stunAuras("e1", KIDNEY, 10, 4) });
+    const deferred = {
+      ...dmg("f1", "e1", 12, 40_000),
+      spellId: "410355",
+      logLine: {
+        event: LogEvent.SPELL_ABSORBED,
+        timestamp: ms(12),
+        parameters: [],
+      },
+    };
+    const f1 = unit("f1", {
+      reaction: 1,
+      damageOut: [dmg("f1", "e1", 11, 35_000), deferred],
+    });
+    const [a] = extractKillAttempts([f1], [e1], makeCombat(f1, e1));
+    expect(a!.teamDamageToTargetInBracket).toBe(35_000);
+  });
+
   it("伤害地板:控住了但团队伤害 < 30k → 不算尝试(那是 peel/铺垫)", () => {
     const e1 = unit("e1", { auraEvents: stunAuras("e1", KIDNEY, 10, 5) });
     const f1 = unit("f1", {

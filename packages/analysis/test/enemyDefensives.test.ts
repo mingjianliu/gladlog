@@ -1481,7 +1481,15 @@ describe("enemyDefensiveEvents — a press-less rider absorb shield", () => {
       effect: "absorb",
       spellName: "Shield of Vengeance",
       absorbedAmount: 310_082,
+      // F16 retest idx 53 (e49b7c3b): no press of its own — the line says so
+      noPressLogged: true,
     });
     expect(sov!.observedSeconds).toBeCloseTo(1.576, 3);
+    // control: Feign Death's shield, the other effect save, carries no tag
+    expect(
+      enemyDefensiveEvents(paladin, [paladin], combat).filter(
+        (e) => e.noPressLogged && e.spellId !== SHIELD_OF_VENGEANCE,
+      ),
+    ).toEqual([]);
   });
 });

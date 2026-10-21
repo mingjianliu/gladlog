@@ -17,6 +17,7 @@ import {
   isHpTroughWorthPrinting,
 } from "./cooldowns";
 import { IEnemyCDCast, reconstructEnemyCDTimeline } from "./enemyCDs";
+import { isDeferralAbsorb } from "./incomingPressure";
 import {
   FULL_IMMUNITY_IDS,
   MITIGATION_AURA_MIN_PCT,
@@ -372,6 +373,14 @@ export function analyzeBurstLedger(
     for (const d of player.damageOut) {
       if (d.logLine.timestamp < fromMs || d.logLine.timestamp > toMs) continue;
       if (!enemyById.has(d.destUnitId)) continue;
+      // a deferral shield's row is no absorb (FT-T02b, `isDeferralAbsorb`;
+      // F16 retest idx 2: 0457a45e's `0.40M of it absorbed` was two-thirds
+      // Time Dilation — the other burst readers already skip it)
+      if (
+        (d.logLine.event as string) === LogEvent.SPELL_ABSORBED &&
+        isDeferralAbsorb(d)
+      )
+        continue;
       const amount = Math.abs(d.effectiveAmount);
       damageMap.set(d.destUnitId, (damageMap.get(d.destUnitId) ?? 0) + amount);
       if ((d.logLine.event as string) === LogEvent.SPELL_ABSORBED)

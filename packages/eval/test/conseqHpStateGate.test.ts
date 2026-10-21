@@ -22,13 +22,28 @@ describe("checkConseqHpStateConsistency (GH #70 — [CONSEQ] ⟺ [STATE] grid)",
       ]),
     ).toEqual([]);
   });
-  it("a start that disagrees with the same-second tick → red", () => {
-    const f = checkConseqHpStateConsistency([
-      state("1:00", "2(AWarrior):84"),
-      CC,
-    ]);
-    expect(f).toHaveLength(1);
-    expect(f[0]).toContain("起点");
+  // user ruling 2026-10-21 (F16 retest idx 15): the start is the reading at
+  // the event's own instant, not its second's tick — a different tick is no
+  // contradiction; the start must agree with the line's own claim
+  it("a start other than the same-second tick passes (0c8b1932: tick 47, landing 64)", () => {
+    expect(
+      checkConseqHpStateConsistency([state("1:00", "2(AWarrior):84"), CC]),
+    ).toEqual([]);
+  });
+  it("the printed readings must agree with the claim: a drop part under 10, a held reading of 10+ → red", () => {
+    const under =
+      "1:00  [CONSEQ]   friendly healer 1(HPriest) in Fear for 3s → during it: 2(AWarrior) 80% → low 75% at 1:02";
+    expect(checkConseqHpStateConsistency([under])).toHaveLength(1);
+    const heldTooFar =
+      "1:00  [CONSEQ]   friendly healer 1(HPriest) in Fear for 3s → during it: no teammate dropped 10% or more (2(AWarrior) 64% → low 38% at 1:02)";
+    expect(checkConseqHpStateConsistency([heldTooFar])).toHaveLength(1);
+    const held =
+      "1:00  [CONSEQ]   friendly healer 1(HPriest) in Fear for 3s → during it: no teammate dropped 10% or more (2(AWarrior) 64% → low 58% at 1:02)";
+    expect(checkConseqHpStateConsistency([held])).toEqual([]);
+    // a held reading's low is a trough too: a tick inside the span below it
+    expect(
+      checkConseqHpStateConsistency([state("1:02", "2(AWarrior):50"), held]),
+    ).toHaveLength(1);
   });
   it("a tick below the printed low inside the span → red", () => {
     const f = checkConseqHpStateConsistency([

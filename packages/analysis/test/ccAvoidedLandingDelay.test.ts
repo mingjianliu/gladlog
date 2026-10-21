@@ -259,3 +259,70 @@ describe("fact2 — an untargeted area control that missed the player under an a
     ).toEqual([]);
   });
 });
+
+describe("F16 retest — a ground control's press and its summon's pulse are one avoidance", () => {
+  beforeAll(async () => {
+    await ensureAnalysisData();
+  });
+  it("0d08dd90 0:18: Capacitor Totem 192058 pressed, the totem's 118905 pulse MISSes the player once → one line, stamped with the press", () => {
+    const pulseAt = CAST_AT + 2_008;
+    const enemy = makeUnit("enemy-1", {
+      name: "Enemy",
+      spec: CombatUnitSpec.Shaman_Restoration,
+      reaction: CombatUnitReaction.Hostile,
+      spellCastEvents: [
+        makeSpellCastEvent(CAPACITOR_TOTEM, CAST_AT, "0000000000000000", "nil", "enemy-1", "Enemy", 0, "Capacitor Totem"),
+      ],
+    });
+    (enemy as { petSpellCastEvents?: unknown[] }).petSpellCastEvents = [
+      makeSpellCastEvent(STATIC_CHARGE, pulseAt, "0000000000000000", "nil", "enemy-1", "Enemy", 0, "Static Charge"),
+    ];
+    const player = makeUnit("player-1", {
+      name: "PlayerWarrior",
+      spec: CombatUnitSpec.Warrior_Arms,
+      reaction: CombatUnitReaction.Friendly,
+      auraEvents: [
+        makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, BLADESTORM, CAST_AT - 1_000, "player-1", "player-1", "BUFF"),
+        makeAuraEvent(LogEvent.SPELL_AURA_REMOVED, BLADESTORM, CAST_AT + 5_000, "player-1", "player-1", "BUFF"),
+      ],
+    });
+    (player as { missesIn?: unknown[] }).missesIn = [
+      {
+        spellId: STATIC_CHARGE,
+        spellName: "Static Charge",
+        srcUnitId: "enemy-1",
+        srcUnitName: "Enemy",
+        destUnitId: "player-1",
+        destUnitName: "PlayerWarrior",
+        timestamp: pulseAt,
+        missType: "MISS",
+        logLine: { timestamp: pulseAt, event: LogEvent.SPELL_MISSED },
+      },
+    ];
+    const r = analyzePlayerCCAndTrinket(player, [enemy], combat as never);
+    expect(r.ccAvoidedInstances).toHaveLength(1);
+    expect(r.ccAvoidedInstances[0].castAtSeconds).toBeCloseTo(60, 3);
+    expect(r.ccAvoidedInstances[0].atSeconds).toBeCloseTo(62.008, 3);
+    // control: a second press with its own pulse and miss is a second line
+    const later = CAST_AT + 30_000;
+    enemy.spellCastEvents.push(
+      makeSpellCastEvent(CAPACITOR_TOTEM, later, "0000000000000000", "nil", "enemy-1", "Enemy", 0, "Capacitor Totem") as never,
+    );
+    (enemy as { petSpellCastEvents: unknown[] }).petSpellCastEvents.push(
+      makeSpellCastEvent(STATIC_CHARGE, later + 2_008, "0000000000000000", "nil", "enemy-1", "Enemy", 0, "Static Charge"),
+    );
+    player.auraEvents.push(
+      makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, BLADESTORM, later - 1_000, "player-1", "player-1", "BUFF") as never,
+      makeAuraEvent(LogEvent.SPELL_AURA_REMOVED, BLADESTORM, later + 5_000, "player-1", "player-1", "BUFF") as never,
+    );
+    const misses = (player as unknown as { missesIn: Array<Record<string, unknown>> }).missesIn;
+    misses.push({
+      ...misses[0],
+      timestamp: later + 2_008,
+      logLine: { timestamp: later + 2_008, event: LogEvent.SPELL_MISSED },
+    });
+    expect(
+      analyzePlayerCCAndTrinket(player, [enemy], combat as never).ccAvoidedInstances,
+    ).toHaveLength(2);
+  });
+});

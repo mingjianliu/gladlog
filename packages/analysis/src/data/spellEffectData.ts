@@ -265,6 +265,13 @@ export const CC_DURATION_TALENT_MODIFIERS: Record<
       note: "Boneshaker — DB2 aura 107 +1000 ms on Shockwave (46968 / stun aura 132168), Warrior hero tree for Arms and Protection (choice node, maxRanks 1); durationTalentScan (GH #96 M5, rule predeclared a76aabda), S2 archive every 5: 3,627 files / 7,387 rounds: 76 of 97 holder cells at 3.0 s against 891 of 1,065 non-holder cells at 2.0 s; 2 + 1 = 3.",
     },
   ],
+  "122": [
+    {
+      talentSpellId: "343183",
+      addSeconds: 2,
+      note: "Improved Frost Nova — tooltip 「冰霜新星的持续时间延长${$s1/1000}秒」 = +2 s (talentDurationTooltipsGenerated, GH #155); talentDurationVerify on 605 files: holders' full-run Frost Novas 60 at 8 s / 5 at 6 s, non-holders 1,155 at 6 s / 0 at 8 s. User ruling 2026-10-21: a control lengthened by the caster's talent is priced at that length (the official-duration rule stays for everything else)",
+    },
+  ],
   "5246": [
     {
       talentSpellId: "1243660",

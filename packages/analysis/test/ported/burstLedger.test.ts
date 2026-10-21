@@ -812,6 +812,26 @@ describe("burstLedger — the second target and the absorbed part (T12 ⑤)", ()
     expect(m?.slice(1)).toEqual(["0.70", "0.40", "Shalamayne", "0.67", "0.03"]);
   });
 
+  // F16 retest idx 2 (0457a45e Burst #1): Time Dilation's rows are no
+  // absorb — the delayed hit lands later as the shield caster's tick
+  it("a deferral shield's absorb row is not part of the figure (FT-T02b)", () => {
+    const td = {
+      ...absorbedOut(MATCH_START + 14_500, 250_000, "e1"),
+      spellId: "357170",
+    };
+    const [b] = analyzeBurstLedger(
+      mage([
+        dmgOut(MATCH_START + 13_000, -301_000, "e1"),
+        absorbedOut(MATCH_START + 14_000, 103_000, "e1"),
+        td,
+      ]),
+      [],
+      [paladin(), warrior()],
+      makeCombat(),
+    );
+    expect(b.dominantTarget).toMatchObject({ damage: 404_000, absorbed: 103_000 });
+  });
+
   it("one enemy damaged, nothing absorbed: the line is as it was", () => {
     const bursts = analyzeBurstLedger(
       mage([dmgOut(MATCH_START + 13_000, -520_000, "e1")]),

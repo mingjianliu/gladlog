@@ -115,7 +115,10 @@ import {
   formatSpecBaselines,
 } from "../utils/specBaselines";
 import { heroBuildGroupOf } from "../utils/talents";
-import { warlockPetFunctions } from "../utils/warlockPet";
+import {
+  warlockPetFunctions,
+  warlockPurgePetSpans,
+} from "../utils/warlockPet";
 import { BURST_ANSWERED_POSITIONING_XREF } from "./burstAnswered";
 import { ccUseSummary, formatCcUse, ownerControlCastBars } from "./ccUse";
 import { buildCriticalWindowSet } from "./criticalWindows";
@@ -595,6 +598,24 @@ export function buildMatchContext(
       .filter((t) => t.scope !== "enrage")
       .map((t) => `${t.name}: ${t.note}`)
       .join("; ");
+  // F16 retest (idx 50): a warlock's purge lasts while the Felhunter is the
+  // pet out — a swap mid-round says when (`warlockPurgePetSpans`, the
+  // missed-purge gate's own reading)
+  const purgePetNote = (p: ICombatUnit): string => {
+    const spans = warlockPurgePetSpans(p, allUnitsForPets, combat.startTime);
+    if (!spans || spans.length === 0) return "";
+    const whole = spans.some(
+      (sp) => sp.fromSeconds <= 0 && sp.toSeconds >= durationSeconds,
+    );
+    if (whole) return "";
+    const part = (sp: { fromSeconds: number; toSeconds: number }) =>
+      sp.fromSeconds <= 0
+        ? `until ${fmtTime(sp.toSeconds)}`
+        : sp.toSeconds >= durationSeconds
+          ? `from ${fmtTime(sp.fromSeconds)}`
+          : `${fmtTime(sp.fromSeconds)}–${fmtTime(sp.toSeconds)}`;
+    return ` (Felhunter out ${spans.map(part).join(", ")})`;
+  };
   const ownerCanPurge = canOffensivePurge(
     owner as ICombatUnit,
     allUnitsForPets,
@@ -606,7 +627,7 @@ export function buildMatchContext(
     .filter((p) => p.id !== owner.id)
     .flatMap((p) => {
       if (canOffensivePurge(p as ICombatUnit, allUnitsForPets))
-        return [specToString(p.spec)];
+        return [`${specToString(p.spec)}${purgePetNote(p as ICombatUnit)}`];
       const note = scopedPurgeNote(p as ICombatUnit);
       return note ? [`${specToString(p.spec)} (${note})`] : [];
     });
@@ -636,7 +657,7 @@ export function buildMatchContext(
 
   tLines.push("PURGE RESPONSIBILITY");
   tLines.push(
-    `  Log owner (${ownerSpec}): ${ownerCanPurge ? "CAN offensive purge" : ownerScopedNote ? `CANNOT offensive purge, except ${ownerScopedNote}` : "CANNOT offensive purge"}`,
+    `  Log owner (${ownerSpec}): ${ownerCanPurge ? `CAN offensive purge${purgePetNote(owner as ICombatUnit)}` : ownerScopedNote ? `CANNOT offensive purge, except ${ownerScopedNote}` : "CANNOT offensive purge"}`,
   );
   tLines.push(
     `  Team purgers: ${teamPurgers.length > 0 ? teamPurgers.join(", ") : "none"}`,

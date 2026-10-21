@@ -461,3 +461,17 @@ describe("applicableCCAvoidanceIds — a mechanic-limited avoidance (round-1 ret
     expect(applicableCCAvoidanceIds("853", "Hammer of Justice").has("212704")).toBe(false);
   });
 });
+
+describe("applicableCCAvoidanceIds — F16 retest idx 34 / 49: Berserker Rage / Shout, Nullifying Shroud by their DB2 mechanics", () => {
+  it("Berserker Rage 18499 / Shout 384100 avoid a Fear and a Sap, never a stun", () => {
+    for (const id of ["18499", "384100"]) {
+      expect(applicableCCAvoidanceIds("5782", "Fear").has(id), id).toBe(true);
+      expect(applicableCCAvoidanceIds("6770", "Sap").has(id), id).toBe(true);
+      expect(applicableCCAvoidanceIds("853", "Hammer of Justice").has(id), id).toBe(false);
+    }
+  });
+  it("Nullifying Shroud 378464 avoids a physical stun (Shockwave), and a Polymorph", () => {
+    expect(applicableCCAvoidanceIds("132168", "Shockwave").has("378464")).toBe(true);
+    expect(applicableCCAvoidanceIds("118", "Polymorph").has("378464")).toBe(true);
+  });
+});

@@ -588,7 +588,6 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
       addEntry,
       friendlyDeaths,
       _allUnits,
-      stasisEvents,
       resolveTarget,
       ownerEmpowerTag,
       findAndConsumeAoeCC,
