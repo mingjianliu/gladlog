@@ -3845,3 +3845,29 @@ corpus floors at 36.0 s, the October logs at ≥ 45 — so 39 August Intervene
 recasts now read impossible (the safe side); Retribution's Blessing of
 Sacrifice floors at 90 s in October logs (60 in August) with nothing in
 DB2 70391 to explain it — open, needs a ruling.
+v430 (2026-10-20, cooldown mastery batch 2 — GH #124): the readers outside
+the major-cooldown ledger read one cooldown model. `buildCooldownEntry` is
+the ledger's per-spell builder lifted out of `extractMajorCooldownsAll`
+(press identification — variants, form re-shifts, passive procs, echo
+copies, duplicates, the round end —, the talent-resolved cooldown and
+charges, every per-press effect); `unitCooldownEntry(unit, combat, id)`
+answers with the ledger's entry or the same builder on any spell, for any
+unit (memoised). Migrated: `kitSpellReadyAt` (cc-avoidable options, kick
+pressure's "burst ready", the CC sampler's target breaker), the enemy
+cooldown timeline's "available again" (`pressReadyAgainAtSeconds`), kill-
+window defensive state and walls in hand (`unitCooldownAvailableAt`),
+defenseless windows (`entryAvailabilityTransitions`), the death recap's
+fallback resolver (prompt, deep dive, desktop), contested-trade CC
+readiness. Not migrated, for stated reasons: gap closers (priced per
+button group), the Mass Dispel window (its own Cold Snap reset), the
+interrupt family (its own on-interrupt give-back), cleanse / purge, trinket
+and racials. Before, these readers paired their own cast lists with the
+static `unitCooldownOf`: Power Infusion's two SUCCESS rows per press read as
+two presses (6,678 "impossible" recasts on 2,240 files; 0 under the shared
+model), and no per-press talent effect reached the enemy side.
+cooldownRecastScan now reports both readings. 605 files (b66 → b67):
+kick-priority-missed 39 → 38, kick-priority-team 27 → 26 (one match out,
+another in), kick-eaten −2 ("The Hunt ready" while Predator's Wake had just
+spent its shared cooldown; a Doom Winds press only the aura logs) — user
+approved; 552 context files change in enemy cooldown / kill-window /
+defenseless facts. Gates: baseline residue only.

@@ -23,7 +23,9 @@ import {
   HP_SAMPLE_RADIUS_MS,
   isEnemyCdWindowSpell,
   isHealerSpec,
+  pressReadyAgainAtSeconds,
   specToString,
+  unitCooldownEntry,
   unitCooldownOf,
 } from "./cooldowns";
 import { fmtTime } from "./renderGrid";
@@ -423,6 +425,12 @@ export function reconstructEnemyCDTimeline(
       );
       if (isDuplicate) continue;
 
+      // back in hand: the shared cooldown model's realised instant for this
+      // press (`unitCooldownEntry` — per-press talent effects, charges);
+      // the static sum only for a cast the model does not count as a press
+      const entry = isActivation
+        ? undefined
+        : unitCooldownEntry(enemy, combat, spellId);
       offensiveCDs.push({
         spellId,
         spellName: effectData.name,
@@ -430,7 +438,8 @@ export function reconstructEnemyCDTimeline(
         cooldownSeconds,
         availableAgainAtSeconds: isActivation
           ? null
-          : castTimeSeconds + cooldownSeconds,
+          : ((entry && pressReadyAgainAtSeconds(entry, castTimeSeconds)) ??
+            castTimeSeconds + cooldownSeconds),
         buffEndSeconds: castTimeSeconds + buffDuration,
         dangerWeight: offensiveDangerWeight(
           spellId,

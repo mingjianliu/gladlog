@@ -258,5 +258,11 @@
  *  (corpus floor 104–105 s over 581 recasts); Avenging Crusader with Call
  *  of the Righteous 52.5 / 45 s by rank, not 30. 605 files: cd-hoarded
  *  −14 +1, external-unused −7, slow-defensive-response −2 (user approved).
+ *  v430 (2026-10-20, cooldown mastery batch 2): one cooldown model for the
+ *  readers outside the ledger (`unitCooldownEntry`): kit readiness, the
+ *  enemy cooldown timeline, kill-window defensives, defenseless windows,
+ *  the death recap fallback and contested-trade CC now read the ledger's
+ *  press identification and per-press effects. 605 files:
+ *  kick-priority-missed / -team −1 each, kick-eaten −2 (user approved).
  */
-export const PROMPT_VERSION = 429;
+export const PROMPT_VERSION = 430;

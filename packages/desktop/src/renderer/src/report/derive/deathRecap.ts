@@ -15,6 +15,7 @@ import {
   IMitigationAuditRow,
   reconstructDispelSummary,
   SPELL_CATEGORIES,
+  unitCooldownEntry,
 } from "@gladlog/analysis";
 import { CombatUnitReaction, LogEvent } from "@gladlog/parser-compat";
 
@@ -225,8 +226,13 @@ export function deriveDeathRecaps(source: ReportSource): DeathRecap[] {
     // (buildMatchContext): without it the card priced externals from the hand
     // table (Ironbark 45 s against the ledger's 90) — the 2026-07-20 class of
     // bug, fixed on the prompt path only (talent impact audit 2026-09-26).
+    // the ledger entry, or the same cooldown model for a spell outside it
+    // (`unitCooldownEntry`, cooldown mastery round 2026-10-20)
     const resolved = (unit: { id: string }, spellId: string) =>
-      cdsByUnit.get(unit.id)?.find((c) => c.spellId === spellId);
+      cdsByUnit.get(unit.id)?.find((c) => c.spellId === spellId) ??
+      (legacy.units[unit.id]
+        ? unitCooldownEntry(legacy.units[unit.id]!, legacy, spellId)
+        : undefined);
     const outcomeEvents = [
       ...buildDeathOutcomeSummary(
         outcomeCombat,

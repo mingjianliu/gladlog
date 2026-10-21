@@ -1,4 +1,4 @@
-import type { ICombatUnit } from "@gladlog/parser-compat";
+import type { AtomicArenaCombat, ICombatUnit } from "@gladlog/parser-compat";
 import {
   CombatUnitClass,
   CombatUnitReaction,
@@ -3072,6 +3072,9 @@ export function ccAvoidanceOptionsAt(
    * triggers)? Wired to `ownerCouldReactWith` in production; absent = no
    * reaction gate (hand-built fixtures, the pre-A4 behaviour). */
   couldReactWith?: (pressIds: string[]) => boolean,
+  /** the round, for the shared cooldown model (`kitSpellReadyAt`); absent in
+   * hand-built fixtures */
+  combat?: AtomicArenaCombat,
 ): string[] {
   // Talent-aware cooldowns (2026-08-18, user ruling 「这些数值要做成活的,根据
   // 玩家的天赋适应」). This used to read the RAW base cooldown out of
@@ -3141,6 +3144,7 @@ export function ccAvoidanceOptionsAt(
         cc.atSeconds,
         matchStartMs,
         talentSets ?? { talentedSpellIds, pvpTalentIds },
+        combat,
       ),
     );
     if (!available) continue;
@@ -4301,6 +4305,7 @@ function teamPlayEvents(
                   ownerBlockedSFor(pressIds),
                   pressIds.some(usableWhileCc),
                 ),
+              combat,
             );
           },
           (inst) => wasCcHardCastAt(enemies, enemyPets, inst, combat.startTime),

@@ -2925,6 +2925,13 @@ export function cdReadyInTimeAt(
  *     2026-09-23: a tool that came back within 1 s was not a real option),
  *     through the sequential-recharge simulation `chargesAvailableAt`.
  * `talents` absent (hand-built fixtures without a spec) → base values.
+ *
+ * With `combat` (every production caller since the cooldown mastery round,
+ * 2026-10-20) the answer is the shared model's: the unit's entry from
+ * `unitCooldownEntry` (press identification, per-press talent effects,
+ * charges) under `cdReadyInTimeAt` — the same three conditions, read off the
+ * one cooldown model every other reader uses. Without it (hand-built
+ * fixtures) the cast list and `applyCdTalentModifiers` below.
  */
 export function kitSpellReadyAt(
   unit: {
@@ -2940,9 +2947,16 @@ export function kitSpellReadyAt(
     talentedSpellIds: Set<string> | null;
     pvpTalentIds: Set<string>;
   } & NonNullable<Parameters<typeof applyCdModifiers>[5]>,
+  combat?: AtomicArenaCombat,
 ): boolean {
   const baseCd = effectiveCooldownSeconds(spellId) ?? null;
   if (baseCd === null) return false; // unknown CD, don't guess
+  if (combat) {
+    const entry = unitCooldownEntry(unit as ICombatUnit, combat, spellId);
+    // kit evidence: a press of it this round
+    if (!entry || entry.isProcOnly || entry.casts.length === 0) return false;
+    return cdReadyInTimeAt(entry, tSeconds);
+  }
   const { cooldownSeconds, charges } = applyCdTalentModifiers(
     spellId,
     baseCd,
@@ -4413,411 +4427,623 @@ function extractMajorCooldownsAll(
     }
   }
 
-  return dedupedMajorSpells.flatMap((spell) => {
-    const effectData = spellEffectData[spell.spellId];
-    if (!effectData) return [];
+  const ctx: ICooldownEntryContext = {
+    matchStartMs,
+    matchDurationSeconds,
+    specIdNum,
+    talentedSpellIds,
+    pvpTalentIds,
+    replacements,
+    saveRoster,
+    pressOnlyOffensiveIds,
+    baselineOnlyIds,
+  };
+  return dedupedMajorSpells.flatMap((spell) =>
+    buildCooldownEntry(unit, combat, spell, ctx),
+  );
+}
 
-    // Talent-resolved cooldown + charge cap: the one per-spell arithmetic,
-    // shared with every consumer outside the ledger (`unitCooldownOf`).
-    const { cooldownSeconds, charges: baselineCharges } = unitCooldownOf(
+/**
+ * The ONE answer to "what does unit X's cooldown Y look like": its ledger
+ * entry when the ledger carries Y (aliases included), otherwise the same
+ * builder run on Y alone (`buildCooldownEntry`) — the same press
+ * identification, talent-resolved cooldown and charges, and per-press
+ * effects. Readers outside the ledger (enemy cooldown windows, kill-window
+ * defensives, kit readiness, CC breakers …) ask this instead of pairing
+ * their own cast list with the static `unitCooldownOf` (cooldown mastery
+ * round 2026-10-20: 24 such readers; Power Infusion's two SUCCESS lines per
+ * press read as two presses there — 6,678 "impossible" recasts on 2,240
+ * files — and no per-press talent effect reached them). Undefined when DB2
+ * has no row for Y. Memoised per (unit, combat).
+ */
+export function unitCooldownEntry(
+  unit: ICombatUnit,
+  combat: AtomicArenaCombat,
+  spellId: string,
+): IMajorCooldownInfo | undefined {
+  let memo = unitCooldownEntryCache.get(unit);
+  if (!memo || memo.combat !== combat) {
+    memo = {
+      combat,
+      ledger: extractMajorCooldowns(unit, combat, { withBaselineOnly: true }),
+      byId: new Map(),
+    };
+    unitCooldownEntryCache.set(unit, memo);
+  }
+  if (memo.byId.has(spellId)) return memo.byId.get(spellId);
+  const fromLedger = memo.ledger.find(
+    (cd) => cd.spellId === spellId || spellAliasIds(cd.spellId).includes(spellId),
+  );
+  let entry = fromLedger;
+  if (!entry && spellEffectData[spellId]) {
+    const specIdNum = parseInt(unit.spec, 10);
+    const { talentedSpellIds, pvpTalentIds } = playerTalentIdSets(unit);
+    entry = buildCooldownEntry(
       unit,
-      spell.spellId,
-    )!;
+      combat,
+      {
+        spellId,
+        name: spellEffectData[spellId]!.name,
+        tags: [SpellTag.Utility],
+      },
+      {
+        matchStartMs: combat.startTime,
+        matchDurationSeconds: (combat.endTime - combat.startTime) / 1000,
+        specIdNum,
+        talentedSpellIds,
+        pvpTalentIds,
+        replacements: talentReplacementsOf(unit),
+        saveRoster: healerSaveCdRoster(specToString(unit.spec)),
+        pressOnlyOffensiveIds: new Set(),
+        baselineOnlyIds: new Set(),
+      },
+    )[0];
+  }
+  memo.byId.set(spellId, entry);
+  return entry;
+}
+/**
+ * When the press of `entry` at `pressSeconds` was back in hand — its
+ * realised ready instant under the shared model (charges, per-press talent
+ * effects, every reduction that happened, rate windows): the instant the
+ * enemy cooldown timeline prints as "available again". Null when the entry
+ * has no press at that instant (within 0.05 s).
+ */
+export function pressReadyAgainAtSeconds(
+  entry: IMajorCooldownInfo,
+  pressSeconds: number,
+): number | null {
+  if (!entry.casts.some((c) => Math.abs(c.timeSeconds - pressSeconds) < 0.05))
+    return null;
+  return pressSeconds + cdRealisedSecondsUntilReady(entry, pressSeconds);
+}
+/**
+ * "Did `unit` have `spellId` in hand at `tSeconds`" under the shared model
+ * (`unitCooldownEntry` + `cdAvailableAt`); `before` drops presses at or
+ * after t (a snapshot taken just before a window). Undefined when DB2 has no
+ * row for the spell.
+ */
+export function unitCooldownAvailableAt(
+  unit: ICombatUnit,
+  combat: AtomicArenaCombat,
+  spellId: string,
+  tSeconds: number,
+  opts?: { before?: boolean },
+): boolean | undefined {
+  const entry = unitCooldownEntry(unit, combat, spellId);
+  if (!entry) return undefined;
+  const view = opts?.before
+    ? {
+        ...entry,
+        casts: entry.casts.filter((c) => c.timeSeconds < tSeconds),
+        ...(entry.sharedCasts
+          ? {
+              sharedCasts: entry.sharedCasts.filter(
+                (c) => c.timeSeconds < tSeconds,
+              ),
+            }
+          : {}),
+      }
+    : entry;
+  return cdAvailableAt(view, tSeconds);
+}
+/**
+ * Availability flips of an entry up to `untilSeconds` under the shared model:
+ * a single-charge entry goes out at a press made while in hand and comes
+ * back at that press's realised ready instant (`pressReadyAgainAtSeconds` —
+ * per-press talent effects, reductions, rate windows; a press made while
+ * the model had it out re-anchors, like `chargesAvailableAt`); a
+ * multi-charge one runs the sequential recharge (`chargeAvailabilityTransitions`
+ * — no per-press effect touches a charge spell).
+ */
+export function entryAvailabilityTransitions(
+  entry: IMajorCooldownInfo,
+  untilSeconds: number,
+): Array<{ atSeconds: number; available: boolean }> {
+  const presses = lockCastsOf(entry)
+    .map((c) => c.timeSeconds)
+    .filter((t) => t <= untilSeconds)
+    .sort((a, b) => a - b);
+  if ((entry.charges ?? 1) > 1)
+    return chargeAvailabilityTransitions(
+      presses,
+      entry.cooldownSeconds,
+      entry.charges ?? 1,
+      untilSeconds,
+    );
+  const out: Array<{ atSeconds: number; available: boolean }> = [];
+  let readyAt = Number.NEGATIVE_INFINITY;
+  for (const t of presses) {
+    if (readyAt < Number.POSITIVE_INFINITY && readyAt > t) {
+      // pressed while out: re-anchor on this press
+    } else {
+      if (readyAt > Number.NEGATIVE_INFINITY && readyAt <= t)
+        out.push({ atSeconds: readyAt, available: true });
+      out.push({ atSeconds: t, available: false });
+    }
+    readyAt =
+      pressReadyAgainAtSeconds(entry, t) ?? t + entry.cooldownSeconds;
+  }
+  if (readyAt > Number.NEGATIVE_INFINITY && readyAt <= untilSeconds)
+    out.push({ atSeconds: readyAt, available: true });
+  return out;
+}
+const unitCooldownEntryCache = new WeakMap<
+  ICombatUnit,
+  {
+    combat: AtomicArenaCombat;
+    ledger: IMajorCooldownInfo[];
+    byId: Map<string, IMajorCooldownInfo | undefined>;
+  }
+>();
 
-    // A shift back into Tree of Life form while its buff runs logs a cast of
-    // the cooldown's id and is no press (`isFormReshiftCast`; F15 C6 gave
-    // 33891 a roster row, so the ledger reads its casts now).
-    const castEvents = unit.spellCastEvents.filter(
-      (e) =>
-        isPressOfCooldown(e, spell.spellId, spell.name, replacements) &&
-        !isFormReshiftCast(unit, e),
+/** What one ledger entry needs from its unit besides the spell
+ * (`buildCooldownEntry`): computed once per unit by `extractMajorCooldownsAll`,
+ * or by `cooldownEntryContextOf` for a spell outside the ledger. */
+interface ICooldownEntryContext {
+  matchStartMs: number;
+  matchDurationSeconds: number;
+  specIdNum: number;
+  talentedSpellIds: Set<string> | null;
+  pvpTalentIds: Set<string>;
+  replacements: ReturnType<typeof talentReplacementsOf>;
+  saveRoster: ReturnType<typeof healerSaveCdRoster>;
+  /** ledger-only: ids whose entry answers presses, not readiness */
+  pressOnlyOffensiveIds: ReadonlySet<string>;
+  /** ledger-only: ids admitted only through the spec baseline */
+  baselineOnlyIds: ReadonlySet<string>;
+}
+
+/**
+ * ONE cooldown entry: the unit's presses of `spell` (press identification —
+ * variants, form re-shifts, passive procs, echo copies, duplicates, the
+ * Solo Shuffle round end), the talent-resolved cooldown and charges, and
+ * every per-press effect (Guardian Angel, event reductions, idle credit,
+ * free recasts, buff-conditional modifiers). The ledger builds its entries
+ * with it, and `unitCooldownEntry` builds the same entry for a spell the
+ * ledger does not carry — so every reader of "is X back" reads one model.
+ */
+function buildCooldownEntry(
+  unit: ICombatUnit,
+  combat: AtomicArenaCombat,
+  spell: { spellId: string; name: string; tags: SpellTag[] },
+  ctx: ICooldownEntryContext,
+): IMajorCooldownInfo[] {
+  const {
+    matchStartMs,
+    matchDurationSeconds,
+    specIdNum,
+    talentedSpellIds,
+    pvpTalentIds,
+    replacements,
+    saveRoster,
+    pressOnlyOffensiveIds,
+    baselineOnlyIds,
+  } = ctx;
+  const procOnlyForUnit = replacements.procOnly;
+  const effectData = spellEffectData[spell.spellId];
+  if (!effectData) return [];
+
+  // Talent-resolved cooldown + charge cap: the one per-spell arithmetic,
+  // shared with every consumer outside the ledger (`unitCooldownOf`).
+  const { cooldownSeconds, charges: baselineCharges } = unitCooldownOf(
+    unit,
+    spell.spellId,
+  )!;
+
+  // A shift back into Tree of Life form while its buff runs logs a cast of
+  // the cooldown's id and is no press (`isFormReshiftCast`; F15 C6 gave
+  // 33891 a roster row, so the ledger reads its casts now).
+  const castEvents = unit.spellCastEvents.filter(
+    (e) =>
+      isPressOfCooldown(e, spell.spellId, spell.name, replacements) &&
+      !isFormReshiftCast(unit, e),
+  );
+
+  const isDefOrExternal = spell.tags.includes(SpellTag.Defensive);
+  const isControl = spell.tags.includes(SpellTag.Control);
+  // GH #29 阶段 2b:这个门决定「这次施放要不要记下目标和目标血量」,真正想问的是
+  // **这次施放有没有作用在别人身上**,而三值 tag 只能表达防御/控制两类。后果实测:
+  // 强化(Power Infusion,10060)是给队友的产出 buff 却挂 Offensive tag,250 场 /
+  // 312 治疗轮里 **59 条 [YOU][CD] 行全部丢掉受益人**,还印着施法者自己的血量 ——
+  // 模型看不出这个大 CD 给了谁。官方 targeting 正好回答这个问题(reachesAlly),
+  // 补成第三个分支即可,对原有两类逐字节无影响(纯增补)。
+  const reachesSomeoneElse = reachesAlly(spell.spellId);
+
+  const castRawCasts: ICooldownCast[] = castEvents
+    .filter((e) => !isPassiveProcCast(e))
+    // #36(a): an echo copy (Dream Breath 355941 etc.) is not a press — as a
+    // ledger cast it would fabricate cooldown usage and corrupt
+    // cdAvailableAt/chargesAvailableAt for the real spell's variants.
+    .filter((e) => !COPY_CAST_IDS.has(String(e.spellId ?? "")))
+    .map((e) => {
+      const timeSeconds = (e.logLine.timestamp - matchStartMs) / 1000;
+      const cast: ICooldownCast = { timeSeconds };
+      if (
+        (isDefOrExternal || isControl || reachesSomeoneElse) &&
+        e.destUnitId &&
+        e.destUnitName &&
+        e.destUnitName !== "nil"
+      ) {
+        cast.targetName = e.destUnitName;
+        const targetUnit = combat.units?.[e.destUnitId];
+        if (targetUnit) {
+          // The target's HP AT THE PRESS (`hpAtPress`: the last reading
+          // before the press and before the press's own heal) — user ruling
+          // 2026-10-01, the A21 extension (hp-state F-R8): the two readers
+          // of this field, the [UNNECESSARY] threshold
+          // (`UNNECESSARY_TARGET_HP_PCT`, and the "at N% HP" it prints) and
+          // the questionable-external facts, judge the press, so they read
+          // the press's HP like the press line itself. It was the [STATE]
+          // grid reading of the displayed second — the sample NEAREST the
+          // whole second, which inside a fast drop or a heal-up can sit up
+          // to a second away from the press on either side (605 files: 3
+          // casts read 90 → 87, 87 → 85, 94 → 97). The heal cut of
+          // `hpAtPress` never fires in this layer: no external in
+          // `externalDefensiveSpellIds` lands a same-id heal at its press.
+          // `→ X (N% HP)` on the cast's own line reads the same predicate;
+          // the gate `checkUnnecessaryNoteHpAgreement` holds the two equal.
+          const hp = hpAtPress(targetUnit, e.logLine.timestamp, {
+            spellId: String(e.spellId ?? spell.spellId),
+            srcUnitId: unit.id,
+          });
+          if (hp !== null) cast.targetHpPct = hp;
+        }
+      }
+      const allyCopy = allyCopyRecipient(
+        unit.id,
+        e,
+        Object.values(combat.units ?? {}),
+      );
+      if (allyCopy) {
+        cast.allyCopyOn = allyCopy.name;
+        // fact2 C1: the press reached the unit its copy is on, whatever the
+        // cast's dest named (the caster itself, or an enemy it had
+        // targeted — 0457a45e 0:48, 691a7f31 2:21); its target and the
+        // press's HP are that unit's
+        if (cast.targetName !== allyCopy.name) {
+          cast.targetName = allyCopy.name;
+          const hp = hpAtPress(allyCopy, e.logLine.timestamp, {
+            spellId: String(e.spellId ?? spell.spellId),
+            srcUnitId: unit.id,
+          });
+          if (hp !== null) cast.targetHpPct = hp;
+          else delete cast.targetHpPct;
+        }
+      }
+      return cast;
+    });
+
+  // Aura-only activations (AURA_ONLY_ACTIVATION_IDS): spells with no
+  // SPELL_CAST_SUCCESS line at all — the self-applied buff aura is the
+  // only evidence the ability fired. Without this, `castRawCasts` above is
+  // permanently empty for these ids and the ledger reports `neverUsed`
+  // even when the aura is visibly up in the log (cd-ledger-rot class of
+  // bug; see the constant's doc comment for the confirmed case).
+  const auraRawCasts: ICooldownCast[] = auraOnlyActivationSeconds(
+    unit,
+    spell.spellId,
+    matchStartMs,
+  ).map((timeSeconds) => ({ timeSeconds }));
+
+  // A Solo Shuffle round's endTime is its deciding death + 2 s, but its
+  // units keep the whole between-round gap — including the NEXT round's
+  // preparation phase, whose pre-gate presses (Stasis stocked before the
+  // gates, Blessing of the Bronze) come back reset at the gate. Counted
+  // here they were presses of this round, often 15–30 s after the real one
+  // (27 presses in 27 of 1,270 rounds on every 30th archive file, mostly
+  // Stasis; GH #106. parser/src/l3/compose.ts clamps endTime, the events
+  // stay).
+  // fact2 (2026-10-20): a cooldown the round logs no cast row of, whose
+  // own effect the unit (or its pet) put on someone — the cast row is
+  // missing, the press is not (95f031ca: Binding Shot's tether and stun on
+  // three of our players from the hunter, no SPELL_CAST_SUCCESS 109248 in
+  // the round, and the kit said `[UNUSED]`)
+  const effectRawCasts: ICooldownCast[] =
+    castRawCasts.length === 0 && auraRawCasts.length === 0
+      ? effectEvidenceCastSeconds(
+          unit,
+          spell.spellId,
+          cooldownSeconds,
+          combat,
+        ).map((timeSeconds) => ({ timeSeconds }))
+      : [];
+  const rawCasts: ICooldownCast[] = [
+    ...castRawCasts,
+    ...auraRawCasts,
+    ...effectRawCasts,
+  ]
+    .filter((c) => c.timeSeconds <= matchDurationSeconds)
+    .sort((a, b) => a.timeSeconds - b.timeSeconds);
+
+  // Collapse duplicates within 2 s (an aura activation logged next to its
+  // cast, a double-logged press) — except a genuine second press of a
+  // multi-charge spell: two SPELL_CAST_SUCCESS lines inside the window are
+  // two charges when the talent-resolved cap allows it (reliability round 3
+  // W1e, f4da: Ice Barrier's second charge at +0.73 s was dropped, so the
+  // model kept a charge that was spent and cd-hoarded called it ready).
+  // Scripted talent effects on this cooldown (data/talentScriptedCooldowns,
+  // talent impact audit 2026-09-26). Talents unknown → neither applies. A
+  // talent on a choice node counts only when the loadout says WHICH entry
+  // was taken (`choiceSelectionResolved`): an unresolved choice lists both
+  // entries, and these effects strengthen a fact (codex review 40-FT-46:
+  // node 94675 with no entry id read as Save the Day over Divine Feathers).
+  const holds = (t: string) =>
+    (!!talentedSpellIds?.has(t) &&
+      (!unit.info?.talents ||
+        choiceSelectionResolved(specIdNum, unit.info.talents, t))) ||
+    pvpTalentIds.has(t);
+  const freeWindow = freeRecastWindowFor(spell.spellId, holds);
+  const pressed = new Set<ICooldownCast>(castRawCasts);
+  const casts: ICooldownCast[] = [];
+  for (const c of rawCasts) {
+    const last = casts[casts.length - 1];
+    if (!last || c.timeSeconds - last.timeSeconds > 2) {
+      casts.push(c);
+      continue;
+    }
+    const pressesInWindow = casts.filter(
+      (k) => pressed.has(k) && c.timeSeconds - k.timeSeconds <= 2,
+    ).length;
+    // A duplicate line at the same instant is one press, not two charges
+    // (codex astra review): a human's second press lands ≥ 0.485 s later
+    // on the corpus (33 kept pairs, none under 0.05 s).
+    // A free-recast holder's second press is genuine too (codex review
+    // 40-FT-46): Save the Day's second Leap of Faith comes 1–2 s after the
+    // first in 25 of 64 raw pairs (605 files; shortest 0.05–1 s twice),
+    // and a non-holder never logs two inside 30 s. One extra press per
+    // 2 s — the window grants one.
+    if (
+      pressed.has(c) &&
+      pressed.has(last) &&
+      c.timeSeconds - last.timeSeconds >= MULTI_CHARGE_MIN_GAP_S &&
+      ((baselineCharges > 1 && pressesInWindow < baselineCharges) ||
+        (freeWindow !== undefined && pressesInWindow < 2))
+    )
+      casts.push(c);
+  }
+
+  // Presses of another spell from the same DB2 charge pool
+  // (`spendsSharedChargeOf`): not X's casts, but they spend X's charge.
+  const sharedCasts: ICooldownCast[] = unit.spellCastEvents
+    .filter((e) => spendsSharedChargeOf(e, spell.spellId))
+    .map((e) => ({
+      timeSeconds: (e.logLine.timestamp - matchStartMs) / 1000,
+    }))
+    .filter(
+      (c) =>
+        c.timeSeconds <= matchDurationSeconds &&
+        !casts.some((k) => Math.abs(k.timeSeconds - c.timeSeconds) < 0.05),
     );
 
-    const isDefOrExternal = spell.tags.includes(SpellTag.Defensive);
-    const isControl = spell.tags.includes(SpellTag.Control);
-    // GH #29 阶段 2b:这个门决定「这次施放要不要记下目标和目标血量」,真正想问的是
-    // **这次施放有没有作用在别人身上**,而三值 tag 只能表达防御/控制两类。后果实测:
-    // 强化(Power Infusion,10060)是给队友的产出 buff 却挂 Offensive tag,250 场 /
-    // 312 治疗轮里 **59 条 [YOU][CD] 行全部丢掉受益人**,还印着施法者自己的血量 ——
-    // 模型看不出这个大 CD 给了谁。官方 targeting 正好回答这个问题(reachesAlly),
-    // 补成第三个分支即可,对原有两类逐字节无影响(纯增补)。
-    const reachesSomeoneElse = reachesAlly(spell.spellId);
+  // Guardian Angel (see CUSTOM_TALENT_MODIFIERS["47788"]): every press gets
+  // its own cooldown — the saved one the untouched official value, the
+  // expired one 60 s from the buff's END (guardianSpiritCastCooldownSeconds).
+  if (
+    spell.spellId === GUARDIAN_SPIRIT_SPELL_ID &&
+    talentedSpellIds?.has(GUARDIAN_ANGEL_TALENT_ID)
+  ) {
+    const units = Object.values(combat.units ?? {});
+    for (const c of casts) {
+      c.cooldownSecondsOverride = guardianSpiritCastCooldownSeconds(
+        unit,
+        units,
+        c.timeSeconds,
+        matchStartMs,
+        effectiveCooldownSeconds(spell.spellId) ?? 0,
+        cooldownSeconds,
+      );
+    }
+  }
 
-    const castRawCasts: ICooldownCast[] = castEvents
-      .filter((e) => !isPassiveProcCast(e))
-      // #36(a): an echo copy (Dream Breath 355941 etc.) is not a press — as a
-      // ledger cast it would fabricate cooldown usage and corrupt
-      // cdAvailableAt/chargesAvailableAt for the real spell's variants.
-      .filter((e) => !COPY_CAST_IDS.has(String(e.spellId ?? "")))
-      .map((e) => {
-        const timeSeconds = (e.logLine.timestamp - matchStartMs) / 1000;
-        const cast: ICooldownCast = { timeSeconds };
-        if (
-          (isDefOrExternal || isControl || reachesSomeoneElse) &&
-          e.destUnitId &&
-          e.destUnitName &&
-          e.destUnitName !== "nil"
-        ) {
-          cast.targetName = e.destUnitName;
-          const targetUnit = combat.units[e.destUnitId];
-          if (targetUnit) {
-            // The target's HP AT THE PRESS (`hpAtPress`: the last reading
-            // before the press and before the press's own heal) — user ruling
-            // 2026-10-01, the A21 extension (hp-state F-R8): the two readers
-            // of this field, the [UNNECESSARY] threshold
-            // (`UNNECESSARY_TARGET_HP_PCT`, and the "at N% HP" it prints) and
-            // the questionable-external facts, judge the press, so they read
-            // the press's HP like the press line itself. It was the [STATE]
-            // grid reading of the displayed second — the sample NEAREST the
-            // whole second, which inside a fast drop or a heal-up can sit up
-            // to a second away from the press on either side (605 files: 3
-            // casts read 90 → 87, 87 → 85, 94 → 97). The heal cut of
-            // `hpAtPress` never fires in this layer: no external in
-            // `externalDefensiveSpellIds` lands a same-id heal at its press.
-            // `→ X (N% HP)` on the cast's own line reads the same predicate;
-            // the gate `checkUnnecessaryNoteHpAgreement` holds the two equal.
-            const hp = hpAtPress(targetUnit, e.logLine.timestamp, {
-              spellId: String(e.spellId ?? spell.spellId),
-              srcUnitId: unit.id,
-            });
-            if (hp !== null) cast.targetHpPct = hp;
-          }
-        }
-        const allyCopy = allyCopyRecipient(
-          unit.id,
-          e,
-          Object.values(combat.units ?? {}),
-        );
-        if (allyCopy) {
-          cast.allyCopyOn = allyCopy.name;
-          // fact2 C1: the press reached the unit its copy is on, whatever the
-          // cast's dest named (the caster itself, or an enemy it had
-          // targeted — 0457a45e 0:48, 691a7f31 2:21); its target and the
-          // press's HP are that unit's
-          if (cast.targetName !== allyCopy.name) {
-            cast.targetName = allyCopy.name;
-            const hp = hpAtPress(allyCopy, e.logLine.timestamp, {
-              spellId: String(e.spellId ?? spell.spellId),
-              srcUnitId: unit.id,
-            });
-            if (hp !== null) cast.targetHpPct = hp;
-            else delete cast.targetHpPct;
-          }
-        }
-        return cast;
-      });
-
-    // Aura-only activations (AURA_ONLY_ACTIVATION_IDS): spells with no
-    // SPELL_CAST_SUCCESS line at all — the self-applied buff aura is the
-    // only evidence the ability fired. Without this, `castRawCasts` above is
-    // permanently empty for these ids and the ledger reports `neverUsed`
-    // even when the aura is visibly up in the log (cd-ledger-rot class of
-    // bug; see the constant's doc comment for the confirmed case).
-    const auraRawCasts: ICooldownCast[] = auraOnlyActivationSeconds(
-      unit,
-      spell.spellId,
-      matchStartMs,
-    ).map((timeSeconds) => ({ timeSeconds }));
-
-    // A Solo Shuffle round's endTime is its deciding death + 2 s, but its
-    // units keep the whole between-round gap — including the NEXT round's
-    // preparation phase, whose pre-gate presses (Stasis stocked before the
-    // gates, Blessing of the Bronze) come back reset at the gate. Counted
-    // here they were presses of this round, often 15–30 s after the real one
-    // (27 presses in 27 of 1,270 rounds on every 30th archive file, mostly
-    // Stasis; GH #106. parser/src/l3/compose.ts clamps endTime, the events
-    // stay).
-    // fact2 (2026-10-20): a cooldown the round logs no cast row of, whose
-    // own effect the unit (or its pet) put on someone — the cast row is
-    // missing, the press is not (95f031ca: Binding Shot's tether and stun on
-    // three of our players from the hunter, no SPELL_CAST_SUCCESS 109248 in
-    // the round, and the kit said `[UNUSED]`)
-    const effectRawCasts: ICooldownCast[] =
-      castRawCasts.length === 0 && auraRawCasts.length === 0
-        ? effectEvidenceCastSeconds(
-            unit,
-            spell.spellId,
-            cooldownSeconds,
-            combat,
-          ).map((timeSeconds) => ({ timeSeconds }))
-        : [];
-    const rawCasts: ICooldownCast[] = [
-      ...castRawCasts,
-      ...auraRawCasts,
-      ...effectRawCasts,
-    ]
-      .filter((c) => c.timeSeconds <= matchDurationSeconds)
-      .sort((a, b) => a.timeSeconds - b.timeSeconds);
-
-    // Collapse duplicates within 2 s (an aura activation logged next to its
-    // cast, a double-logged press) — except a genuine second press of a
-    // multi-charge spell: two SPELL_CAST_SUCCESS lines inside the window are
-    // two charges when the talent-resolved cap allows it (reliability round 3
-    // W1e, f4da: Ice Barrier's second charge at +0.73 s was dropped, so the
-    // model kept a charge that was spent and cd-hoarded called it ready).
-    // Scripted talent effects on this cooldown (data/talentScriptedCooldowns,
-    // talent impact audit 2026-09-26). Talents unknown → neither applies. A
-    // talent on a choice node counts only when the loadout says WHICH entry
-    // was taken (`choiceSelectionResolved`): an unresolved choice lists both
-    // entries, and these effects strengthen a fact (codex review 40-FT-46:
-    // node 94675 with no entry id read as Save the Day over Divine Feathers).
-    const holds = (t: string) =>
-      (!!talentedSpellIds?.has(t) &&
-        (!unit.info?.talents ||
-          choiceSelectionResolved(specIdNum, unit.info.talents, t))) ||
-      pvpTalentIds.has(t);
-    const freeWindow = freeRecastWindowFor(spell.spellId, holds);
-    const pressed = new Set<ICooldownCast>(castRawCasts);
-    const casts: ICooldownCast[] = [];
-    for (const c of rawCasts) {
-      const last = casts[casts.length - 1];
-      if (!last || c.timeSeconds - last.timeSeconds > 2) {
-        casts.push(c);
+  // Event reductions (Storm Conduit, Lethal Calibration): each press's real
+  // ready instant, from the holder's triggers and what each one gave back
+  // (`eventTriggersFor` — the seconds can depend on the holder's spec and
+  // on the date of the log). Single-charge spells only — a charge
+  // simulation takes no per-press override.
+  // Control of the Dream's idle credit rides the same per-press pass.
+  const reductions = eventReductionsFor(spell.spellId, holds);
+  const idleCap = idleCreditCapFor(spell.spellId, holds);
+  if ((reductions.length || idleCap > 0) && baselineCharges <= 1) {
+    applyEventReductions(
+      casts,
+      cooldownSeconds,
+      eventTriggersFor(unit, reductions).map((g) => ({
+        atSeconds: (g.atMs - matchStartMs) / 1000,
+        seconds: g.seconds,
+      })),
+      idleCap,
+    );
+  }
+  // Free recast (Escape from Reality): the press that opens the window
+  // carries it; a press inside an unused window is free and stays anchored
+  // on the opener's cooldown.
+  if (freeWindow) {
+    let opener: ICooldownCast | undefined;
+    let used = false;
+    for (const c of casts) {
+      if (
+        opener?.freeRecastUntil !== undefined &&
+        !used &&
+        c.timeSeconds <= opener.freeRecastUntil
+      ) {
+        c.freeRecast = true;
+        c.cooldownSecondsOverride =
+          opener.timeSeconds +
+          (opener.cooldownSecondsOverride ?? cooldownSeconds) -
+          c.timeSeconds;
+        used = true;
         continue;
       }
-      const pressesInWindow = casts.filter(
-        (k) => pressed.has(k) && c.timeSeconds - k.timeSeconds <= 2,
-      ).length;
-      // A duplicate line at the same instant is one press, not two charges
-      // (codex astra review): a human's second press lands ≥ 0.485 s later
-      // on the corpus (33 kept pairs, none under 0.05 s).
-      // A free-recast holder's second press is genuine too (codex review
-      // 40-FT-46): Save the Day's second Leap of Faith comes 1–2 s after the
-      // first in 25 of 64 raw pairs (605 files; shortest 0.05–1 s twice),
-      // and a non-holder never logs two inside 30 s. One extra press per
-      // 2 s — the window grants one.
-      if (
-        pressed.has(c) &&
-        pressed.has(last) &&
-        c.timeSeconds - last.timeSeconds >= MULTI_CHARGE_MIN_GAP_S &&
-        ((baselineCharges > 1 && pressesInWindow < baselineCharges) ||
-          (freeWindow !== undefined && pressesInWindow < 2))
-      )
-        casts.push(c);
+      opener = c;
+      used = false;
+      c.freeRecastUntil = c.timeSeconds + freeWindow.windowS;
     }
+  }
 
-    // Presses of another spell from the same DB2 charge pool
-    // (`spendsSharedChargeOf`): not X's casts, but they spend X's charge.
-    const sharedCasts: ICooldownCast[] = unit.spellCastEvents
-      .filter((e) => spendsSharedChargeOf(e, spell.spellId))
-      .map((e) => ({
-        timeSeconds: (e.logLine.timestamp - matchStartMs) / 1000,
-      }))
-      .filter(
-        (c) =>
-          c.timeSeconds <= matchDurationSeconds &&
-          !casts.some((k) => Math.abs(k.timeSeconds - c.timeSeconds) < 0.05),
-      );
-
-    // Guardian Angel (see CUSTOM_TALENT_MODIFIERS["47788"]): every press gets
-    // its own cooldown — the saved one the untouched official value, the
-    // expired one 60 s from the buff's END (guardianSpiritCastCooldownSeconds).
-    if (
-      spell.spellId === GUARDIAN_SPIRIT_SPELL_ID &&
-      talentedSpellIds?.has(GUARDIAN_ANGEL_TALENT_ID)
-    ) {
-      const units = Object.values(combat.units);
-      for (const c of casts) {
-        c.cooldownSecondsOverride = guardianSpiritCastCooldownSeconds(
-          unit,
-          units,
-          c.timeSeconds,
-          matchStartMs,
-          effectiveCooldownSeconds(spell.spellId) ?? 0,
-          cooldownSeconds,
-        );
-      }
-    }
-
-    // Event reductions (Storm Conduit, Lethal Calibration): each press's real
-    // ready instant, from the holder's triggers and what each one gave back
-    // (`eventTriggersFor` — the seconds can depend on the holder's spec and
-    // on the date of the log). Single-charge spells only — a charge
-    // simulation takes no per-press override.
-    // Control of the Dream's idle credit rides the same per-press pass.
-    const reductions = eventReductionsFor(spell.spellId, holds);
-    const idleCap = idleCreditCapFor(spell.spellId, holds);
-    if ((reductions.length || idleCap > 0) && baselineCharges <= 1) {
-      applyEventReductions(
-        casts,
-        cooldownSeconds,
-        eventTriggersFor(unit, reductions).map((g) => ({
-          atSeconds: (g.atMs - matchStartMs) / 1000,
-          seconds: g.seconds,
-        })),
-        idleCap,
-      );
-    }
-    // Free recast (Escape from Reality): the press that opens the window
-    // carries it; a press inside an unused window is free and stays anchored
-    // on the opener's cooldown.
-    if (freeWindow) {
-      let opener: ICooldownCast | undefined;
-      let used = false;
-      for (const c of casts) {
-        if (
-          opener?.freeRecastUntil !== undefined &&
-          !used &&
-          c.timeSeconds <= opener.freeRecastUntil
-        ) {
-          c.freeRecast = true;
-          c.cooldownSecondsOverride =
-            opener.timeSeconds +
-            (opener.cooldownSecondsOverride ?? cooldownSeconds) -
-            c.timeSeconds;
-          used = true;
-          continue;
-        }
-        opener = c;
-        used = false;
-        c.freeRecastUntil = c.timeSeconds + freeWindow.windowS;
-      }
-    }
-
-    // Batch C: modifiers that hold only while one of the unit's own buffs is
-    // up (conditionalCooldownsGenerated.json). Snapshot rows price a press
-    // made under the buff (single-charge spells); rate rows warp the clock.
-    const conditional = conditionalCooldownsOf(spell.spellId);
-    let rateWindows: IRateWindow[] | undefined;
-    if (conditional.length) {
-      const carriers = selfBuffIntervalsOf(unit, combat);
-      for (const m of conditional) {
-        const ivs = carriers.get(m.carrier) ?? [];
-        if (!ivs.length) continue;
-        if (m.kind === "rate") {
-          rateWindows = [
-            ...(rateWindows ?? []),
-            ...ivs.map((iv) => ({
-              fromSeconds: iv.fromS,
-              toSeconds: iv.toS,
-              mult: m.mult,
-            })),
-          ];
-        } else if (baselineCharges <= 1) {
-          for (const c of casts) {
-            if (c.cooldownSecondsOverride !== undefined) continue;
-            if (
-              !ivs.some(
-                (iv) => iv.fromS <= c.timeSeconds && c.timeSeconds <= iv.toS,
-              )
+  // Batch C: modifiers that hold only while one of the unit's own buffs is
+  // up (conditionalCooldownsGenerated.json). Snapshot rows price a press
+  // made under the buff (single-charge spells); rate rows warp the clock.
+  const conditional = conditionalCooldownsOf(spell.spellId);
+  let rateWindows: IRateWindow[] | undefined;
+  if (conditional.length) {
+    const carriers = selfBuffIntervalsOf(unit, combat);
+    for (const m of conditional) {
+      const ivs = carriers.get(m.carrier) ?? [];
+      if (!ivs.length) continue;
+      if (m.kind === "rate") {
+        rateWindows = [
+          ...(rateWindows ?? []),
+          ...ivs.map((iv) => ({
+            fromSeconds: iv.fromS,
+            toSeconds: iv.toS,
+            mult: m.mult,
+          })),
+        ];
+      } else if (baselineCharges <= 1) {
+        for (const c of casts) {
+          if (c.cooldownSecondsOverride !== undefined) continue;
+          if (
+            !ivs.some(
+              (iv) => iv.fromS <= c.timeSeconds && c.timeSeconds <= iv.toS,
             )
-              continue;
-            c.cooldownSecondsOverride = Math.max(
-              0,
-              (cooldownSeconds - (m.flatS ?? 0)) * (1 - (m.pct ?? 0) / 100),
+          )
+            continue;
+          c.cooldownSecondsOverride = Math.max(
+            0,
+            (cooldownSeconds - (m.flatS ?? 0)) * (1 - (m.pct ?? 0) / 100),
+          );
+        }
+      }
+    }
+  }
+  const readyAfter = (c: ICooldownCast): number => {
+    const own = c.cooldownSecondsOverride ?? cooldownSeconds;
+    if (!rateWindows) return c.timeSeconds + own;
+    const { tau, inverse } = warpClock(rateWindows);
+    return inverse(tau(c.timeSeconds) + own);
+  };
+
+  const availableWindows: IAvailableWindow[] = [];
+  const procOnly =
+    PROC_ONLY_ACTIVATION_IDS.has(spell.spellId) ||
+    procOnlyForUnit.has(spell.spellId);
+
+  const pushWindow = (from: number, to: number) => {
+    const duration = to - from;
+    // No button → never an "available" window (agy review of GH #106 step
+    // 2: findCheaperDefensiveAlternatives, offensiveWindows and
+    // positionAnalysis read these windows directly).
+    if (procOnly) return;
+    if (duration > GRACE_SECONDS) {
+      availableWindows.push({
+        fromSeconds: from,
+        toSeconds: to,
+        durationSeconds: duration,
+      });
+    }
+  };
+
+  // A shared-pool press closes X's window like X's own press would.
+  const lockCasts = lockCastsOf({ casts, sharedCasts });
+  if (lockCasts.length === 0) {
+    // Never used — available the entire match
+    pushWindow(0, matchDurationSeconds);
+  } else {
+    // Window before first cast
+    if (lockCasts[0]!.timeSeconds > GRACE_SECONDS) {
+      pushWindow(0, lockCasts[0]!.timeSeconds);
+    }
+    // Windows between casts (and from last cast to match end)
+    for (let i = 0; i < lockCasts.length; i++) {
+      const cdReadyAt = readyAfter(lockCasts[i]!);
+      const nextCastAt =
+        i + 1 < lockCasts.length
+          ? lockCasts[i + 1]!.timeSeconds
+          : matchDurationSeconds;
+      if (cdReadyAt < matchDurationSeconds - GRACE_SECONDS) {
+        pushWindow(cdReadyAt, nextCastAt);
+      }
+    }
+  }
+
+  // Detect observed charge count: if any two consecutive casts are closer than the CD,
+  // the player must have had at least 2 charges (e.g. double Pain Suppression via PvP talent).
+  let maxChargesDetected = Math.max(1, baselineCharges);
+  for (let i = 1; i < casts.length; i++) {
+    if (casts[i].freeRecast) continue; // a free recast is not a charge
+    const prevCd = casts[i - 1].cooldownSecondsOverride ?? cooldownSeconds;
+    if (casts[i].timeSeconds - casts[i - 1].timeSeconds < prevCd) {
+      maxChargesDetected = Math.max(maxChargesDetected, 2);
+    }
+  }
+
+  return [
+    {
+      spellId: spell.spellId,
+      spellName: spell.name,
+      tag: spell.tags[0] as string,
+      cooldownSeconds,
+      maxChargesDetected,
+      charges: baselineCharges,
+      casts,
+      ...(sharedCasts.length > 0 ? { sharedCasts } : {}),
+      availableWindows,
+      ...(rateWindows ? { rateWindows } : {}),
+      neverUsed: casts.length === 0,
+      isThroughput: spell.tags.includes(SpellTag.Offensive),
+      isProcOnly: procOnly,
+      // A9-2: an ally effect gated on a PvP talent the log shows the
+      // player did not take (talents unknown → no gate)
+      // PvP talents known = COMBATANT_INFO carried the list (agy review:
+      // an info object without it must not read as "talent absent")
+      ...(Array.isArray(unit.info?.pvpTalents) &&
+      ALLY_REACH_REQUIRES_PVP_TALENT[spell.spellId] !== undefined &&
+      !pvpTalentIds.has(ALLY_REACH_REQUIRES_PVP_TALENT[spell.spellId]!)
+        ? { allyReach: false as const }
+        : {}),
+      ...(spellAliasIds(spell.spellId).some(
+        (id) => saveRoster?.get(id)?.responseOnly,
+      ) ||
+      RESPONSE_ONLY_DEFENSIVE_IDS.has(spell.spellId) ||
+      pressOnlyOffensiveIds.has(spell.spellId)
+        ? { responseOnly: true }
+        : {}),
+      ...(baselineOnlyIds.has(spell.spellId) ? { baselineOnly: true } : {}),
+      ...(procOnly
+        ? {}
+        : (() => {
+            const e = earliestCooldownSecondsFor(
+              spell.spellId,
+              unit.spec,
+              cooldownSeconds,
             );
-          }
-        }
-      }
-    }
-    const readyAfter = (c: ICooldownCast): number => {
-      const own = c.cooldownSecondsOverride ?? cooldownSeconds;
-      if (!rateWindows) return c.timeSeconds + own;
-      const { tau, inverse } = warpClock(rateWindows);
-      return inverse(tau(c.timeSeconds) + own);
-    };
-
-    const availableWindows: IAvailableWindow[] = [];
-    const procOnly =
-      PROC_ONLY_ACTIVATION_IDS.has(spell.spellId) ||
-      procOnlyForUnit.has(spell.spellId);
-
-    const pushWindow = (from: number, to: number) => {
-      const duration = to - from;
-      // No button → never an "available" window (agy review of GH #106 step
-      // 2: findCheaperDefensiveAlternatives, offensiveWindows and
-      // positionAnalysis read these windows directly).
-      if (procOnly) return;
-      if (duration > GRACE_SECONDS) {
-        availableWindows.push({
-          fromSeconds: from,
-          toSeconds: to,
-          durationSeconds: duration,
-        });
-      }
-    };
-
-    // A shared-pool press closes X's window like X's own press would.
-    const lockCasts = lockCastsOf({ casts, sharedCasts });
-    if (lockCasts.length === 0) {
-      // Never used — available the entire match
-      pushWindow(0, matchDurationSeconds);
-    } else {
-      // Window before first cast
-      if (lockCasts[0]!.timeSeconds > GRACE_SECONDS) {
-        pushWindow(0, lockCasts[0]!.timeSeconds);
-      }
-      // Windows between casts (and from last cast to match end)
-      for (let i = 0; i < lockCasts.length; i++) {
-        const cdReadyAt = readyAfter(lockCasts[i]!);
-        const nextCastAt =
-          i + 1 < lockCasts.length
-            ? lockCasts[i + 1]!.timeSeconds
-            : matchDurationSeconds;
-        if (cdReadyAt < matchDurationSeconds - GRACE_SECONDS) {
-          pushWindow(cdReadyAt, nextCastAt);
-        }
-      }
-    }
-
-    // Detect observed charge count: if any two consecutive casts are closer than the CD,
-    // the player must have had at least 2 charges (e.g. double Pain Suppression via PvP talent).
-    let maxChargesDetected = Math.max(1, baselineCharges);
-    for (let i = 1; i < casts.length; i++) {
-      if (casts[i].freeRecast) continue; // a free recast is not a charge
-      const prevCd = casts[i - 1].cooldownSecondsOverride ?? cooldownSeconds;
-      if (casts[i].timeSeconds - casts[i - 1].timeSeconds < prevCd) {
-        maxChargesDetected = Math.max(maxChargesDetected, 2);
-      }
-    }
-
-    return [
-      {
-        spellId: spell.spellId,
-        spellName: spell.name,
-        tag: spell.tags[0] as string,
-        cooldownSeconds,
-        maxChargesDetected,
-        charges: baselineCharges,
-        casts,
-        ...(sharedCasts.length > 0 ? { sharedCasts } : {}),
-        availableWindows,
-        ...(rateWindows ? { rateWindows } : {}),
-        neverUsed: casts.length === 0,
-        isThroughput: spell.tags.includes(SpellTag.Offensive),
-        isProcOnly: procOnly,
-        // A9-2: an ally effect gated on a PvP talent the log shows the
-        // player did not take (talents unknown → no gate)
-        // PvP talents known = COMBATANT_INFO carried the list (agy review:
-        // an info object without it must not read as "talent absent")
-        ...(Array.isArray(unit.info?.pvpTalents) &&
-        ALLY_REACH_REQUIRES_PVP_TALENT[spell.spellId] !== undefined &&
-        !pvpTalentIds.has(ALLY_REACH_REQUIRES_PVP_TALENT[spell.spellId]!)
-          ? { allyReach: false as const }
-          : {}),
-        ...(spellAliasIds(spell.spellId).some(
-          (id) => saveRoster?.get(id)?.responseOnly,
-        ) ||
-        RESPONSE_ONLY_DEFENSIVE_IDS.has(spell.spellId) ||
-        pressOnlyOffensiveIds.has(spell.spellId)
-          ? { responseOnly: true }
-          : {}),
-        ...(baselineOnlyIds.has(spell.spellId) ? { baselineOnly: true } : {}),
-        ...(procOnly
-          ? {}
-          : (() => {
-              const e = earliestCooldownSecondsFor(
-                spell.spellId,
-                unit.spec,
-                cooldownSeconds,
-              );
-              return e !== undefined && e < cooldownSeconds
-                ? { earliestCooldownSeconds: e }
-                : {};
-            })()),
-      },
-    ];
-  });
+            return e !== undefined && e < cooldownSeconds
+              ? { earliestCooldownSeconds: e }
+              : {};
+          })()),
+    },
+  ];
 }
 
 /**

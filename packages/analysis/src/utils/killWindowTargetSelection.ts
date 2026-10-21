@@ -18,7 +18,6 @@ import {
 import { getSortedAdvancedActions } from "./advancedActions";
 import { buffFullDurationForCaster } from "./buffDuration";
 import {
-  cdAvailableAt,
   chargesAvailableAt,
   extractMajorCooldowns,
   getUnitHpAtTimestamp,
@@ -26,6 +25,7 @@ import {
   isHealerSpec,
   kitRowUnused,
   specToString,
+  unitCooldownAvailableAt,
   unitCooldownOf,
 } from "./cooldowns";
 import { IOffensiveWindow } from "./offensiveWindows";
@@ -244,6 +244,7 @@ function getDefensiveStateAtTime(
   enemy: ICombatUnit,
   windowStartSeconds: number,
   matchStartMs: number,
+  combat?: AtomicArenaCombat,
 ): { available: string[]; unavailable: string[] } {
   const available: string[] = [];
   const unavailable: string[] = [];
@@ -322,7 +323,15 @@ function getDefensiveStateAtTime(
 
     const buffActive =
       casts[casts.length - 1].castSeconds + buffSeconds > windowStartSeconds;
-    const cdOnCooldown = currentCharges === 0;
+    // the shared cooldown model's answer (per-press talent effects, press
+    // identification — cooldown mastery round 2026-10-20) when the round is
+    // known; the cast list above only for a hand-built caller
+    const inHand = combat
+      ? unitCooldownAvailableAt(enemy, combat, spellId, windowStartSeconds, {
+          before: true,
+        })
+      : undefined;
+    const cdOnCooldown = inHand === undefined ? currentCharges === 0 : !inHand;
 
     if (buffActive || cdOnCooldown) {
       unavailable.push(effectData.name);
@@ -401,6 +410,7 @@ function snapshotEnemy(
     enemy,
     windowStartSeconds,
     matchStartMs,
+    combat,
   );
   // 2026-08-17(审计 §D2 同族):此处原本写死 false,注释称「做基于专精的治疗
   // 判断需要 import cooldowns」—— 而本文件第一行就在 import cooldowns,
@@ -565,7 +575,7 @@ function wallsInHandAt(
     castsBySpell.set(spellId, arr);
   }
   const ready: string[] = [];
-  for (const [spellId, casts] of castsBySpell) {
+  for (const spellId of castsBySpell.keys()) {
     const effectData = spellEffectData[spellId];
     // admission on the official number, like every other ≥ 30 s gate
     if ((effectiveCooldownSeconds(spellId) ?? 0) < 30) continue;
@@ -573,19 +583,10 @@ function wallsInHandAt(
     // getDefensiveStateAtTime reads them: a second charge or a talented
     // cooldown was read as "spent" and the tier went prime instead of gated
     // (talent impact audit 2026-09-26).
-    const own = unitCooldownOf(enemy, spellId);
-    if (!own) continue;
-    if (
-      cdAvailableAt(
-        {
-          casts,
-          cooldownSeconds: own.cooldownSeconds,
-          charges: own.charges,
-          neverUsed: false,
-        },
-        atSeconds,
-      )
-    ) {
+    // the shared cooldown model (`unitCooldownAvailableAt`, cooldown mastery
+    // round 2026-10-20) — the enemy's own presses with their per-press
+    // talent effects
+    if (unitCooldownAvailableAt(enemy, combat, spellId, atSeconds)) {
       ready.push(effectData?.name ?? spellId);
     }
   }

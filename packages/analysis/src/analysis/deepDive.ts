@@ -23,6 +23,7 @@ import {
   type IMajorCooldownInfo,
   isHealerSpec,
   isMeleeSpec,
+  unitCooldownEntry,
 } from "../utils/cooldowns";
 import { buildDeathOutcomeSummary } from "../utils/deathOutcomeAnalysis";
 import { reconstructDispelSummary } from "../utils/dispelAnalysis";
@@ -398,7 +399,9 @@ export function buildDeepDivePack(
       { startTime: combat.startTime ?? 0, zoneId: combat.startInfo?.zoneId },
       friends,
       ccSummaries,
-      (unit, spellId) => resolvedCdByUnit.get(unit.id)?.get(spellId),
+      (unit, spellId) =>
+        resolvedCdByUnit.get(unit.id)?.get(spellId) ??
+        (combat?.units ? unitCooldownEntry(unit, combat, spellId) : undefined),
       // death-kill F-M1: the missed-options tags ask the cannot-cast predicate
       enemySourceIds(enemies, [...enemyPets]),
       // an option the holder's pet casts is asked of the pet

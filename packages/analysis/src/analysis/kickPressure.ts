@@ -245,7 +245,8 @@ export function kickPressureFor(params: {
         );
         for (const id of kit) {
           if (!OFFENSIVE_CD_SPELL_IDS.has(id)) continue;
-          if (!kitSpellReadyAt(u, id, s, start, talents.get(u.id)!)) continue;
+          if (!kitSpellReadyAt(u, id, s, start, talents.get(u.id)!, combat))
+            continue;
           // readiness is read on the rendered second (`s` = floor of the
           // kick); a cooldown pressed between that second and the kick is
           // spent, not ready. Unreachable while every span ran at least

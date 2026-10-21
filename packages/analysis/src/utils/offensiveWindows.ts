@@ -19,8 +19,10 @@ import { buffFullDurationForCaster } from "./buffDuration";
 import { extractSpiritOfRedemptionIntervals } from "./combatStates";
 import {
   chargeAvailabilityTransitions,
+  entryAvailabilityTransitions,
   extractMajorCooldowns,
   specToString,
+  unitCooldownEntry,
   unitCooldownOf,
 } from "./cooldowns";
 import {
@@ -545,14 +547,30 @@ export function computeOffensiveWindows(
       const cooldownSeconds =
         own?.cooldownSeconds ?? kwCooldownSeconds(spellId);
       const cap = Math.max(1, own?.charges ?? 1);
-      // Charge-state transitions — the shared sequential-recharge timeline
-      // (`chargeAvailabilityTransitions`, chargesAvailableAt's rules).
-      const flips = chargeAvailabilityTransitions(
-        casts,
-        cooldownSeconds,
-        cap,
-        matchDurationSeconds,
-      );
+      // Charge-state transitions under the shared cooldown model
+      // (`unitCooldownEntry` → `entryAvailabilityTransitions`: the enemy's
+      // presses as the ledger identifies them, per-press talent effects —
+      // cooldown mastery round 2026-10-20); the static sequential-recharge
+      // timeline only for a spell DB2 has no row for.
+      const entry = unitCooldownEntry(enemy, combat, spellId);
+      if (entry) {
+        casts.splice(
+          0,
+          casts.length,
+          ...entry.casts
+            .map((c) => c.timeSeconds)
+            .filter((t) => t <= matchDurationSeconds)
+            .sort((a, b) => a - b),
+        );
+      }
+      const flips = entry
+        ? entryAvailabilityTransitions(entry, matchDurationSeconds)
+        : chargeAvailabilityTransitions(
+            casts,
+            cooldownSeconds,
+            cap,
+            matchDurationSeconds,
+          );
       for (const f of flips)
         if (f.available && f.atSeconds < matchDurationSeconds)
           events.push({

@@ -43,6 +43,7 @@ import {
   isHealerSpec,
   selectPressureWindows,
   specToString,
+  unitCooldownEntry,
 } from "../utils/cooldowns";
 import { isMeleeSpec } from "../utils/cooldowns";
 import {
@@ -458,7 +459,11 @@ export function buildMatchContext(
     { startTime: combat.startTime, zoneId: combat.startInfo?.zoneId },
     friends as ICombatUnit[],
     ccTrinketSummaries,
-    (unit, spellId) => resolvedCdByUnit.get(unit.id)?.get(spellId),
+    // the ledger entry, or the same model for a spell outside it
+    // (`unitCooldownEntry`, cooldown mastery round 2026-10-20)
+    (unit, spellId) =>
+      resolvedCdByUnit.get(unit.id)?.get(spellId) ??
+      unitCooldownEntry(unit, combat, spellId),
     // death-kill F-M1: the missed-options tags ask the cannot-cast predicate
     enemySourceIds(enemies, allUnitsForPets),
     // an option the holder's pet casts is asked of the pet

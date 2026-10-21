@@ -302,7 +302,9 @@ export function ccSamplerFor(params: {
         : "n/a";
       if (dr === "Immune") return { ok: false, reason: "dr-immune" };
       if (
-        f.tools.some((id) => kitSpellReadyAt(target, id, s, start, f.talents))
+        f.tools.some((id) =>
+          kitSpellReadyAt(target, id, s, start, f.talents, combat),
+        )
       )
         return { ok: false, reason: "target-breaker" };
       return {

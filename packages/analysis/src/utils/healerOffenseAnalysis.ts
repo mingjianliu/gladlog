@@ -1,4 +1,8 @@
-import { ICombatUnit, LogEvent } from "@gladlog/parser-compat";
+import {
+  type AtomicArenaCombat,
+  ICombatUnit,
+  LogEvent,
+} from "@gladlog/parser-compat";
 
 import {
   castEffectPairs,
@@ -17,12 +21,15 @@ import {
 } from "./cannotCastIntervals";
 import { isControlCast } from "./castMissRows";
 import {
+  cdAvailableAt,
   chargesAvailableAt,
   extractMajorCooldowns,
   hpTroughInEventSpan,
   hpTroughInWindow,
+  type IMajorCooldownInfo,
   isHealerSpec,
   specToString,
+  unitCooldownEntry,
   unitCooldownOf,
 } from "./cooldowns";
 import {
@@ -549,7 +556,7 @@ export function computeContestedTradeFacts(
   const matchStartMs = combat.startTime;
   const enemyHealer = enemies.find((e) => isHealerSpec(e.spec));
   if (!enemyHealer) return [];
-  const ccSpells = collectOwnerCCSpells(owner, matchStartMs);
+  const ccSpells = collectOwnerCCSpells(owner, matchStartMs, [], combat);
   // the caster evidence for a CC cast with variants in different DR
   // families (Chastise: stun / incapacitate)
   const ownerApplied = auraIdsAppliedBy(owner.id, enemies);
@@ -669,6 +676,9 @@ interface IOwnerCCSpell {
   /** talent-resolved charge cap (1 for most CC) */
   charges: number;
   castTimesSeconds: number[];
+  /** the shared cooldown model's entry (`unitCooldownEntry`, cooldown
+   * mastery round 2026-10-20) when the round's units are known */
+  model?: IMajorCooldownInfo;
 }
 
 /** Owner CC spells observed at least once in cast history (honest availability: never-cast spells are unknowable). */
@@ -679,6 +689,9 @@ function collectOwnerCCSpells(
    * read), pressed or not: round-1 retest idx 28 — "your CC on cooldown"
    * while the kit's Maim, never pressed, was ready on the [RES] row */
   kitControls: ReadonlyArray<{ spellId: string; spellName: string }> = [],
+  /** the round, for the shared cooldown model; absent or without units =
+   * the cast list and the static cooldown below */
+  combat?: { units?: Record<string, ICombatUnit> },
 ): IOwnerCCSpell[] {
   const bySpell = new Map<string, IOwnerCCSpell>();
   for (const k of kitControls) {
@@ -709,14 +722,37 @@ function collectOwnerCCSpells(
     entry.castTimesSeconds.push((e.logLine.timestamp - matchStartMs) / 1000);
     bySpell.set(e.spellId, entry);
   }
-  return [...bySpell.values()].map((s) => ({
-    ...s,
-    castTimesSeconds: s.castTimesSeconds.sort((a, b) => a - b),
-  }));
+  const model = (id: string) =>
+    combat?.units
+      ? unitCooldownEntry(owner, combat as AtomicArenaCombat, id)
+      : undefined;
+  return [...bySpell.values()].map((s) => {
+    const m = model(s.spellId);
+    return {
+      ...s,
+      castTimesSeconds: s.castTimesSeconds.sort((a, b) => a - b),
+      ...(m ? { model: m } : {}),
+    };
+  });
 }
 
 function isCCReadyAt(spell: IOwnerCCSpell, atSeconds: number): boolean {
   if (spell.cooldownSeconds <= 0) return true; // spammable CC (no CD data) is always ready
+  if (spell.model)
+    return cdAvailableAt(
+      {
+        ...spell.model,
+        casts: spell.model.casts.filter((c) => c.timeSeconds < atSeconds),
+        ...(spell.model.sharedCasts
+          ? {
+              sharedCasts: spell.model.sharedCasts.filter(
+                (c) => c.timeSeconds < atSeconds,
+              ),
+            }
+          : {}),
+      },
+      atSeconds,
+    );
   if (spell.charges > 1)
     return (
       chargesAvailableAt(
