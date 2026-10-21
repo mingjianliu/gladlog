@@ -130,6 +130,7 @@ import {
 import {
   documentRecordsAttackSpell,
   incomingPressureBySchool,
+  isDeferralAbsorb,
 } from "./incomingPressure";
 import {
   getHpPercentAtTime,
@@ -638,6 +639,13 @@ export function extractKillAttempts(
           const ts = d.logLine.timestamp;
           if (ts < spanFromMs || ts > spanToMs) continue;
           if (!enemyIds.has(d.destUnitId)) continue;
+          // a deferral shield's SPELL_ABSORBED row only delayed the hit: it
+          // is counted when it lands (FT-T02b, `isDeferralAbsorb`)
+          if (
+            (d.logLine.event as string) === LogEvent.SPELL_ABSORBED &&
+            isDeferralAbsorb(d)
+          )
+            continue;
           const amount = Math.abs(d.effectiveAmount);
           teamDamageTotal += amount;
           if (d.destUnitId === target.id) teamDamageToTarget += amount;

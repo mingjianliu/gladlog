@@ -233,6 +233,7 @@ import {
   isExternalSaveId,
   SELF_SAVE_IDS,
 } from "@gladlog/analysis/src/utils/enemyDefensives";
+import { isDeferralAbsorb } from "@gladlog/analysis/src/utils/incomingPressure";
 import { OFFENSIVE_CD_SPELL_IDS } from "@gladlog/analysis/src/utils/spellDanger";
 import { talentRankOf } from "@gladlog/analysis/src/utils/talentOwnership";
 import { isDeadAt } from "@gladlog/analysis/src/utils/unitDeath";
@@ -467,6 +468,8 @@ for (const f of files) {
   const absorbedOn = (target: any, fromS: number, toS: number): number =>
     ((target.absorbsIn ?? []) as any[])
       .filter((a) => a.attackerId && ourSide.has(a.attackerId))
+      // a deferral shield's row is no absorb (FT-T02b) — the product's rule
+      .filter((a) => !isDeferralAbsorb(a))
       .filter((a) => {
         const t = (a.logLine.timestamp - start) / 1000;
         return t >= fromS && t < toS;

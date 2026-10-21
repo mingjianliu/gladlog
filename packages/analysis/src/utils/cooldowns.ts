@@ -3509,10 +3509,24 @@ export function effectEvidenceCastSeconds(
     )
     .map((a) => a.logLine.timestamp)
     .sort((a, b) => a - b);
+  // One press's applications span its effect's own length — the longest
+  // official duration of the cast and its effect auras, +1 s — never more
+  // than the cooldown (codex 20-F16-04 #1: grouped by the nominal 60 s, a
+  // Holy Word: Chastise reduced by Holy Word casts and landed again at 40 s
+  // read as one press and "certainly ready at 75 s"; Binding Shot's 10 s
+  // ground effect, stunning more than once, stays one press)
+  const spanS =
+    Math.max(
+      0,
+      ...[spellId, ...effects].map(
+        (id) => spellEffectData[id]?.durationSeconds ?? 0,
+      ),
+    ) + 1;
+  const groupS = Math.min(Math.max(cooldownSeconds, 1), Math.max(spanS, 1));
   const out: number[] = [];
   let lastMs = -Infinity;
   for (const ms of applied) {
-    if (ms - lastMs < Math.max(cooldownSeconds, 1) * 1000) continue;
+    if (ms - lastMs < groupS * 1000) continue;
     lastMs = ms;
     out.push((ms - combat.startTime) / 1000);
   }
@@ -3523,12 +3537,17 @@ export function auraOnlyActivationSeconds(
   unit: ICombatUnit,
   spellId: string,
   matchStartMs: number,
+  /** the round's end: a cast after it (the next Solo Shuffle round's
+   * preparation) is no cast of this round (codex 20-F16-04 #2) */
+  roundEndMs: number = Infinity,
 ): number[] {
   const auraIds = AURA_ONLY_ACTIVATION_IDS[spellId];
   if (!auraIds) return [];
   const hasRealCast = unit.spellCastEvents.some(
     (e) =>
-      e.logLine.event === LogEvent.SPELL_CAST_SUCCESS && e.spellId === spellId,
+      e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+      e.spellId === spellId &&
+      e.logLine.timestamp <= roundEndMs,
   );
   if (hasRealCast && !AURA_IS_THE_PRESS_IDS.has(spellId)) return [];
   // An APPLIED while the same buff is still up (no REMOVED since the last
@@ -4180,7 +4199,7 @@ function extractMajorCooldownsAll(
     if (METAMORPHOSIS_PRESS_CAST_IDS.has(id))
       activatedSpellIds.add(canonicalSpellId(id));
   for (const id of AURA_ACTIVATION_PROVES_BUTTON_IDS)
-    if (auraOnlyActivationSeconds(unit, id, matchStartMs).length > 0)
+    if (auraOnlyActivationSeconds(unit, id, matchStartMs, matchEndMs).length > 0)
       activatedSpellIds.add(id);
   // A talent whose entry carries ANOTHER id than the button it grants proves
   // that button (`grantedButtonIds`, the official TraitDefinition
@@ -4871,6 +4890,7 @@ function buildCooldownEntry(
     unit,
     spell.spellId,
     matchStartMs,
+    matchStartMs + matchDurationSeconds * 1000,
   ).map((timeSeconds) => ({ timeSeconds }));
 
   // A Solo Shuffle round's endTime is its deciding death + 2 s, but its
@@ -4886,8 +4906,12 @@ function buildCooldownEntry(
   // missing, the press is not (95f031ca: Binding Shot's tether and stun on
   // three of our players from the hunter, no SPELL_CAST_SUCCESS 109248 in
   // the round, and the kit said `[UNUSED]`)
+  // the round's own presses decide (codex 20-F16-04 #2: a press in the next
+  // round's preparation, filtered out below, switched the effect reading off
+  // and the kit read `[UNUSED]`)
+  const inRound = (c: ICooldownCast) => c.timeSeconds <= matchDurationSeconds;
   const effectRawCasts: ICooldownCast[] =
-    castRawCasts.length === 0 && auraRawCasts.length === 0
+    !castRawCasts.some(inRound) && !auraRawCasts.some(inRound)
       ? effectEvidenceCastSeconds(
           unit,
           spell.spellId,
@@ -4900,7 +4924,7 @@ function buildCooldownEntry(
     ...auraRawCasts,
     ...effectRawCasts,
   ]
-    .filter((c) => c.timeSeconds <= matchDurationSeconds)
+    .filter(inRound)
     .sort((a, b) => a.timeSeconds - b.timeSeconds);
 
   // Collapse duplicates within 2 s (an aura activation logged next to its
@@ -6299,6 +6323,11 @@ function offensiveThreatStartedAfter(
       if (aura.logLine.event !== LogEvent.SPELL_AURA_APPLIED) continue;
       if (!aura.spellId || offensiveCdOfAura(aura.spellId) === undefined)
         continue;
+      // an enemy's own offensive cooldown is a buff on it — a DEBUFF there is
+      // ours (a friendly mage's Touch of the Magi 210824), the rule
+      // `hasOffensiveSpellActive` applies to the same question (codex
+      // 20-F16-01 #1)
+      if (aura.auraType === "DEBUFF") continue;
       if (aura.timestamp > castMs && aura.timestamp <= windowEnd) return true;
     }
   }

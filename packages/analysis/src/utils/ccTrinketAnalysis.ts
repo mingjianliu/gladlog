@@ -30,6 +30,7 @@ import {
   TRINKET_RACIAL_SHARED_LOCKOUT_MS,
 } from "../data/racialAbilities";
 import {
+  ccFullDurationSeconds,
   effectiveCooldownSeconds,
   getEnglishSpellName,
 } from "../data/spellEffectData";
@@ -1231,7 +1232,13 @@ export function pressEndedSilence(
   fromMs: number,
   endMs: number,
   pressMs: number,
+  /** the silence aura: one that lasted its official length ran out — no
+   * press broke it (codex 20-F16-02 #2; the CC binder's `ranFullLength`) */
+  spellId?: string,
 ): boolean {
+  const official = spellId ? ccFullDurationSeconds(spellId) : undefined;
+  if (official !== undefined && endMs - fromMs >= official * 1000)
+    return false;
   return (
     pressMs >= fromMs &&
     pressMs <= endMs + TRINKET_BREAK_AFTER_REMOVAL_MS &&
@@ -1249,12 +1256,23 @@ export function findBrokenDisarm(
   matchStartMs: number,
   castTsMs: number,
 ): IRootInstance | undefined {
-  const breakable = instances.map((d) => ({
-    d,
-    applyMs: matchStartMs + Math.round(d.atSeconds * 1000),
-    removeMs:
-      matchStartMs + Math.round((d.atSeconds + d.durationSeconds) * 1000),
-  }));
+  const breakable = instances.map((d) => {
+    const applyMs = matchStartMs + Math.round(d.atSeconds * 1000);
+    // a disarm that lasted its official length ran out (codex 20-F16-02 #2:
+    // Dismantle 10–15 s then a Medallion at 15.001 read `out of Dismantle`);
+    // undiminished, so a DR-shortened one is still read as before
+    const official = ccFullDurationSeconds(d.spellId);
+    return {
+      d,
+      applyMs,
+      removeMs:
+        matchStartMs + Math.round((d.atSeconds + d.durationSeconds) * 1000),
+      ...(official !== undefined
+        ? { officialEndMs: applyMs + official * 1000 }
+        : {}),
+      ...(d.stillOnAtRoundEnd ? { noRemoved: true as const } : {}),
+    };
+  });
   return bindBreakToWindow(breakable, castTsMs)?.d;
 }
 
@@ -4778,7 +4796,10 @@ export function analyzePlayerCCAndTrinket(
       // F-E27: the shared redirect predicate — a cast aimed at the totem, or
       // an IMMUNE miss on it with no such cast (a trap has no destination).
       for (const g of groundingRedirectsOf(enemy)) {
-        if (!ccSpellIds.has(g.spellId)) continue;
+        // the cast's control, under its own id or its effect aura's
+        // (`isControlCast`; Lightning Lasso casts 305483 and lands 305485 —
+        // codex 20-F16-01 #3: `groundedControls` saw it, this did not)
+        if (!isControlCast(g.spellId)) continue;
         const cast = {
           spellId: g.spellId,
           spellName: g.spellName,

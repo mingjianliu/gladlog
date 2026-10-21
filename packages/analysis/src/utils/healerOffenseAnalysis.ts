@@ -45,6 +45,7 @@ import {
   computeEnemyInterruptAvailability,
   isInterruptUsable,
 } from "./enemyInterrupts";
+import { isDeferralAbsorb } from "./incomingPressure";
 import {
   createKillWindowFactsComputer,
   hasPressOnlyTag,
@@ -866,8 +867,10 @@ export function computeWindowContributions(
       if (d.destUnitId !== w.targetUnitId) continue;
       const t = (d.logLine.timestamp - matchStartMs) / 1000;
       if (t < fromSeconds || t >= toSeconds) continue;
-      if ((d.logLine.event as string) === LogEvent.SPELL_ABSORBED)
-        ownerAbsorbedOnTarget += Math.abs(d.effectiveAmount);
+      if ((d.logLine.event as string) === LogEvent.SPELL_ABSORBED) {
+        // a deferral shield's row is no absorb (FT-T02b, `isDeferralAbsorb`)
+        if (!isDeferralAbsorb(d)) ownerAbsorbedOnTarget += Math.abs(d.effectiveAmount);
+      }
       else ownerDamageOnTarget += Math.abs(d.effectiveAmount);
     }
 

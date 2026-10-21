@@ -187,7 +187,7 @@ export function emitCcOnEnemyEntries(
         enemyTrinketCount++;
         const pressMs = matchStartMs + Math.round(t * 1000);
         const silence = silences.find((x) =>
-          pressEndedSilence(x.from, x.to, pressMs),
+          pressEndedSilence(x.from, x.to, pressMs, x.spellId),
         );
         addEnemyBreakLine(
           t,

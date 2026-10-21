@@ -362,14 +362,18 @@ export function killWindowAcquittal(f: IKillWindowGateFacts): string {
   // fact2 C8: a press-only cooldown ready at the start is printed in the
   // ready list but never makes the span accountable — the reason says so
   const pressOnly = (f.readyPressOnlyCds ?? []).length > 0;
-  if (f.readyOffCds.length === 0)
-    reasons.push(
-      maybe
-        ? `no offensive CD certainly ready (may already be back: ${maybe})`
-        : pressOnly
-          ? `no offensive CD was ready but ${PRESS_ONLY_TAG} ones, which are never counted`
-          : "no offensive CD was ready",
-    );
+  if (f.readyOffCds.length === 0) {
+    // the two qualifications together (codex 20-F16-02 #4: with a press-only
+    // one certainly ready, "no offensive CD certainly ready" contradicted the
+    // ready list printed beside it)
+    const head = maybe
+      ? "no offensive CD certainly ready"
+      : "no offensive CD was ready";
+    const reason = pressOnly
+      ? `${head} but ${PRESS_ONLY_TAG} ones, which are never counted`
+      : head;
+    reasons.push(maybe ? `${reason} (may already be back: ${maybe})` : reason);
+  }
   if (f.reachable === false) reasons.push("target unreachable");
   return reasons.join(" and ");
 }

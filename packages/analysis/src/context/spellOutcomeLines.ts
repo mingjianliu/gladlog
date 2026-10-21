@@ -9,6 +9,7 @@
  */
 import { ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
+import { abilityProfile } from "../data/abilityProfile";
 import { BREAK_RACIAL_SPELL_IDS } from "../data/racialAbilities";
 import { ROOT_SPELL_IDS } from "../data/rootSpells";
 import { getEnglishSpellName } from "../data/spellEffectData";
@@ -197,13 +198,24 @@ export function reflectedSpells(
       // `REFLECT_OWN_ID_LEAD_MS` of it owns it
       if (d.spellId && REFLECT_OWN_DAMAGE_IDS.has(d.spellId)) {
         const ts = d.logLine.timestamp;
+        // the nearest damaging chain: a reflected control that deals no
+        // damage cannot own a damage return (codex 20-F16-03 #3: a Polymorph
+        // reflected 190 ms after a Fireball took the Fireball's 100k, and the
+        // Fireball's [REFLECTED] line went)
         let best: (typeof chains)[number] | undefined;
+        let bestGap = Infinity;
         for (const c of chains) {
           if (c.first.destUnitId !== d.srcUnitId) continue;
           const t0 = c.first.logLine.timestamp;
           if (ts < t0 - REFLECT_OWN_ID_LEAD_MS) continue;
           if (ts - t0 > REFLECT_DAMAGE_WINDOW_S * 1000) continue;
-          if (!best || t0 > best.first.logLine.timestamp) best = c;
+          const id = c.first.spellId ?? "";
+          if (isControlSpell(id) && !abilityProfile(id).dealsDamage) continue;
+          const gap = Math.abs(ts - t0);
+          if (gap < bestGap) {
+            best = c;
+            bestGap = gap;
+          }
         }
         if (best)
           back.set(best, (back.get(best) ?? 0) + Math.abs(d.effectiveAmount));

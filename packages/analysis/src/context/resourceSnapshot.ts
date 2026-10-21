@@ -624,7 +624,12 @@ function resEntryState(
   timeSeconds: number,
 ): "ready" | "onCd" | "skip" | "locked" {
   const state = resStateOf(e.cd, timeSeconds);
-  return state === "ready" && e.lockout !== undefined ? "locked" : state;
+  // a lockout (Forbearance, Hypothermia) locks an unpressed opener entry too:
+  // the opener rows promote "skip" to ready (codex 20-F16-03 #1: Lay on Hands
+  // at 1 s, `rdy:Divine Shield` at 2 s)
+  return (state === "ready" || state === "skip") && e.lockout !== undefined
+    ? "locked"
+    : state;
 }
 
 /**

@@ -202,10 +202,15 @@ export function resolveDeferredSnapshots(
     // state (605-file capture: the first [RES] row of 182 of 3,520 prompts
     // was a delta). The delta state and the full-refresh clock go back; the
     // debounce still counts from it.
-    if (snapshotStr === "" && forceFullRefresh) {
+    if (snapshotStr === "" && forceFullRefresh)
+      lastFullSnapshotTime = stateBefore.full;
+    // Any row that printed nothing leaves the delta state where the last
+    // PRINTED row left it (codex 20-F16-03 #2: a suppressed opener row at 4 s
+    // stored an empty ready set, and the 20 s row then printed `+Anti-Magic
+    // Zone` — ready since 2 s — and dropped `-Anti-Magic Shell`)
+    if (snapshotStr === "") {
       prevReadyNamesState = stateBefore.ready;
       prevOnCDNamesState = stateBefore.onCd;
-      lastFullSnapshotTime = stateBefore.full;
     }
     // fact2: a first-5-s row that printed lists the never-pressed cooldowns
     // as ready (the builder's second pass) — so does the delta state

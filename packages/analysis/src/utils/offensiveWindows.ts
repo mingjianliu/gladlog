@@ -38,6 +38,7 @@ import {
   saveAuraIntervals,
   wallTableIdOfAura,
 } from "./enemyDefensives";
+import { isDeferralAbsorb } from "./incomingPressure";
 import { fmtTime, renderedWindowSeconds } from "./renderGrid";
 import { roundEndMs } from "./roundEnd";
 // GH #31 ② (2026-09-02): the hand list is replaced by the shared official-face
@@ -798,6 +799,10 @@ export function computeOffensiveWindows(
       }
       for (const a of enemy.absorbsIn ?? []) {
         if (!a.attackerId || !friendlySources.has(a.attackerId)) continue;
+        // a deferral shield only delayed the hit (Time Dilation, Stretch
+        // Time): counted when it lands, never as absorbed (FT-T02b,
+        // `isDeferralAbsorb`; codex 20-F16-01 #2)
+        if (isDeferralAbsorb(a)) continue;
         const t = (a.logLine.timestamp - matchStartMs) / 1000;
         if (t < vw.from || t > vw.to) continue;
         windowDmgEvents.push({

@@ -31,6 +31,7 @@ import {
   externalDamageForApplication,
   formatDuringExternal,
 } from "../../utils/externalDamage";
+import { isDeferralAbsorb } from "../../utils/incomingPressure";
 import {
   karmaFeedClause,
   karmaFeedOf,
@@ -379,6 +380,7 @@ export function channelTargetClause(
     for (const a of f.absorbsIn ?? []) {
       if (a.timestamp < fromMs || a.timestamp > toMs) continue;
       if (!a.attackerId || a.attackerId === f.id) continue;
+      if (isDeferralAbsorb(a)) continue; // delayed, counted when it lands
       const amount = Math.abs(a.absorbedAmount);
       took += amount;
       if (
