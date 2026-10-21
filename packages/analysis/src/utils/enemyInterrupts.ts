@@ -254,6 +254,7 @@ function singleChargeReadyMs(
   const reductions = eventReductionsFor(
     spellId,
     (t) => !!sets.talentedSpellIds?.has(t) || sets.pvpTalentIds.has(t),
+    unit.spec === undefined ? undefined : String(unit.spec),
   );
   let readyMs =
     lastCastMs +

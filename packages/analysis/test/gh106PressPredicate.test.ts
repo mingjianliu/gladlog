@@ -131,6 +131,20 @@ describe("aura evidence", () => {
     ]);
   });
 
+  it("Doom Winds: a re-application while the buff is up extends it — no press (cooldown mastery 2026-10-20)", () => {
+    const shaman = makeUnit("p1", {
+      class: CombatUnitClass.Shaman,
+      spec: CombatUnitSpec.Shaman_Enhancement,
+      auraEvents: [
+        makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, "466772", at(10), "p1", "p1", "BUFF"),
+        makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, "466772", at(15), "p1", "p1", "BUFF"),
+        makeAuraEvent(LogEvent.SPELL_AURA_REMOVED, "466772", at(25), "p1", "p1", "BUFF"),
+        makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, "466772", at(70), "p1", "p1", "BUFF"),
+      ],
+    });
+    expect(auraOnlyActivationSeconds(shaman, "384352", START)).toEqual([10, 70]);
+  });
+
   it("a proc-only entry has no availability windows (Renewing Blaze)", () => {
     const evoker = makeUnit("p1", {
       class: CombatUnitClass.Evoker,

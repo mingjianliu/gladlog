@@ -89,6 +89,8 @@ import {
   getPlayerTalentGrantedButtonIds,
   getPlayerTalentRanks,
   getSpecTalentTreeSpellInfo,
+  talentsOf,
+  unitLogEpochMs,
 } from "./talents";
 import { DEATH_CASCADE_MS, firstDeathMs } from "./unitDeath";
 
@@ -1055,7 +1057,6 @@ export function isEnemyCdWindowSpell(spellId: string): boolean {
   );
 }
 
-
 /**
  * fact2 C10 (2026-10-20): the offensive cooldown an AURA is the effect of.
  * `OFFENSIVE_CD_SPELL_IDS` is keyed mostly by CAST ids, and a cast often
@@ -1079,7 +1080,9 @@ export function offensiveCdOfAura(auraSpellId: string): string | undefined {
   const own = offensiveEffectCdId(auraSpellId);
   if (own !== undefined) return own;
   if (OFFENSIVE_AURA_EVIDENCE.has(auraSpellId)) return undefined;
-  return castsOwningEffectAura(auraSpellId).find((c) => isEnemyCdWindowSpell(c));
+  return castsOwningEffectAura(auraSpellId).find((c) =>
+    isEnemyCdWindowSpell(c),
+  );
 }
 
 /** Two presses of a multi-charge spell closer than this are one press logged
@@ -1573,9 +1576,11 @@ export function getUnitHpAtTimestamp(
 
 /** The unit's last advanced reading at or before `tMs` (the last line of
  * that instant, GH #100's tie rule), when it lies within `maxDtMs`. */
-function lastAtOrBefore<
-  T extends { logLine: { timestamp: number } },
->(sorted: readonly T[], tMs: number, maxDtMs: number): T | null {
+function lastAtOrBefore<T extends { logLine: { timestamp: number } }>(
+  sorted: readonly T[],
+  tMs: number,
+  maxDtMs: number,
+): T | null {
   let lo = 0;
   let hi = sorted.length;
   while (lo < hi) {
@@ -2302,6 +2307,10 @@ export interface IMajorCooldownInfo {
    *  Obsidian Scales, Berserk → Frenzied Regeneration). Every availability
    *  question runs on the warped clock (`warpClock`). */
   rateWindows?: ReadonlyArray<IRateWindow>;
+  /** A multi-charge entry's per-press effects (event give-backs, idle
+   * credit) — the charge simulation's input (`IChargeEffects`); single-charge
+   * entries carry theirs on each press instead. */
+  chargeEffects?: IChargeEffects;
 }
 
 export interface IRateWindow {
@@ -2357,12 +2366,30 @@ function warpedView<
       ? { freeRecastUntil: tau(c.freeRecastUntil) }
       : {}),
   });
+  const effects = chargeEffectsOf(cd);
   return {
     ...cd,
     rateWindows: undefined,
     casts: cd.casts.map(w),
     ...(cd.sharedCasts ? { sharedCasts: cd.sharedCasts.map(w) } : {}),
+    ...(effects?.reductions
+      ? {
+          chargeEffects: {
+            ...effects,
+            reductions: effects.reductions.map((r) => ({
+              ...r,
+              atSeconds: tau(r.atSeconds),
+            })),
+          },
+        }
+      : {}),
   };
+}
+
+/** A charge entry's per-press effects (`IMajorCooldownInfo.chargeEffects`),
+ * read off any view of it. */
+function chargeEffectsOf(cd: object): IChargeEffects | undefined {
+  return (cd as { chargeEffects?: IChargeEffects }).chargeEffects;
 }
 
 /**
@@ -2478,6 +2505,7 @@ function cdAvailableAtConsumed(
         cd.cooldownSeconds,
         cd.charges as number,
         t,
+        chargeEffectsOf(cd),
       ) > 0
     );
   }
@@ -2618,6 +2646,7 @@ function cdSecondsUntilReadyConsumed(
       cooldown,
       cd.charges as number,
       t,
+      chargeEffectsOf(cd),
     );
     return Number.isFinite(nextRecharge) ? nextRecharge - tSeconds : 0;
   }
@@ -2793,6 +2822,7 @@ function cdChargesReadyAtConsumed(
     cooldown,
     cd.charges ?? 1,
     tSeconds + CD_INSTANT_SLACK_S,
+    chargeEffectsOf(cd),
   );
 }
 
@@ -3501,17 +3531,40 @@ export function auraOnlyActivationSeconds(
       e.logLine.event === LogEvent.SPELL_CAST_SUCCESS && e.spellId === spellId,
   );
   if (hasRealCast && !AURA_IS_THE_PRESS_IDS.has(spellId)) return [];
-  return unit.auraEvents
-    .filter(
-      (a) =>
-        a.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
-        !!a.spellId &&
-        auraIds.includes(a.spellId) &&
-        a.srcUnitId === unit.id &&
-        a.destUnitId === unit.id,
+  // An APPLIED while the same buff is still up (no REMOVED since the last
+  // one, and that one within AURA_PRESS_EXTENSION_WINDOW_S) is the buff
+  // being extended, not a press — cooldown mastery round 2026-10-20: Doom
+  // Winds' +7 s re-application read as 4 impossible presses. The window
+  // keeps a log that dropped a REMOVED from merging two real presses.
+  const upSince = new Map<string, number>();
+  const out: number[] = [];
+  for (const a of unit.auraEvents) {
+    if (
+      !a.spellId ||
+      !auraIds.includes(a.spellId) ||
+      a.srcUnitId !== unit.id ||
+      a.destUnitId !== unit.id
     )
-    .map((a) => (a.timestamp - matchStartMs) / 1000);
+      continue;
+    if (a.logLine.event === LogEvent.SPELL_AURA_REMOVED)
+      upSince.delete(a.spellId);
+    else if (a.logLine.event === LogEvent.SPELL_AURA_APPLIED) {
+      const since = upSince.get(a.spellId);
+      if (
+        since === undefined ||
+        a.timestamp - since > AURA_PRESS_EXTENSION_WINDOW_S * 1000
+      )
+        out.push((a.timestamp - matchStartMs) / 1000);
+      upSince.set(a.spellId, a.timestamp);
+    }
+  }
+  return out;
 }
+
+/** How long after an aura-evidenced press a second APPLIED of the same buff,
+ * with no REMOVED between, is read as the buff extended (Doom Winds' +7 s)
+ * rather than a new press. Every such buff lasts under 30 s. */
+export const AURA_PRESS_EXTENSION_WINDOW_S = 30;
 
 /**
  * Applies a spellId's `CD_TALENT_MODIFIERS` entries to a base cooldown +
@@ -3590,36 +3643,48 @@ export function applyCdModifiers(
     // spec when its passive rewrites the points (Holy's Sacrifice of the
     // Just: −15, not −60) — the generator's `valueBySpec` / `valueByRank`.
     // Unknown rank → rank 1, the smaller give-back.
-    const heldRank = Math.max(1, owner?.talentRanks?.get(mod.talentSpellId) ?? 1);
+    const heldRank = Math.max(
+      1,
+      owner?.talentRanks?.get(mod.talentSpellId) ?? 1,
+    );
     const table =
       (specId !== undefined ? mod.valueBySpec?.[specId] : undefined) ??
       mod.valueByRank;
     const tabled = table?.length
       ? table[Math.min(heldRank, table.length) - 1]
       : undefined;
+    // the number of the log's date for a value a hotfix changed
+    // (`DATED_COOLDOWN_VALUES`: per spec, per rank, which row)
+    const datedEntry = DATED_COOLDOWN_VALUES[mod.talentSpellId];
+    const datedNumber =
+      datedEntry?.effect === mod.effect
+        ? ((specId !== undefined ? datedEntry.bySpec?.[specId] : undefined) ??
+          datedEntry.value)
+        : undefined;
+    const dated =
+      datedNumber === undefined
+        ? undefined
+        : logDatedNumberAt(datedNumber, owner?.logEpochMs ?? Number.NaN) *
+          (datedEntry!.perRank ? heldRank : 1);
     if (mod.effect === "extra_charge") {
       charges += tabled ?? mod.value;
     } else if (mod.effect === "reduce_cd") {
-      // a user-ruled per-rank value replaces the DB2 row's number, and so
-      // does the number of the log's date for a value the game changed
+      // a user-ruled per-rank value replaces the DB2 row's number
       const ruled = RULED_COOLDOWN_VALUES[mod.talentSpellId]?.secondsPerRank;
-      const dated = DATED_COOLDOWN_VALUES[mod.talentSpellId];
-      if (ruled === undefined && dated === undefined && tabled !== undefined) {
-        flatReduceSeconds += tabled;
-        continue;
+      if (ruled === undefined) {
+        const v = dated ?? tabled;
+        if (v !== undefined) {
+          flatReduceSeconds += v;
+          continue;
+        }
       }
       // unknown rank → counted once, the value-once reading
       const rank = PER_RANK_COOLDOWN_TALENTS.has(mod.talentSpellId)
         ? heldRank
         : 1;
-      const value =
-        ruled ??
-        (dated
-          ? logDatedNumberAt(dated.value, owner?.logEpochMs ?? Number.NaN)
-          : mod.value);
-      flatReduceSeconds += value * rank;
+      flatReduceSeconds += (ruled ?? mod.value) * rank;
     } else if (mod.effect === "reduce_cd_pct") {
-      pctMultiplier *= 1 - (tabled ?? mod.value) / 100;
+      pctMultiplier *= 1 - (dated ?? tabled ?? mod.value) / 100;
     }
   }
 
@@ -3663,43 +3728,105 @@ export function chargesAvailableAt(
   rechargeSeconds: number,
   maxCharges: number,
   atSeconds: number,
+  effects?: IChargeEffects,
 ): number {
-  return chargeStateAt(castSeconds, rechargeSeconds, maxCharges, atSeconds)
-    .charges;
+  return chargeStateAt(
+    castSeconds,
+    rechargeSeconds,
+    maxCharges,
+    atSeconds,
+    effects,
+  ).charges;
 }
 
-/** `chargesAvailableAt`'s simulation, also returning when the next charge
- *  lands (+∞ at full charges) — GH #106 step 3's "seconds until ready". */
-export function chargeStateAt(
+/** Per-press effects a charge simulation can carry (cooldown mastery
+ * round 2026-10-20): event give-backs that pull the recharging charge in,
+ * and Control of the Dream's credit for the time spent at full charges. */
+export interface IChargeEffects {
+  /** a trigger at `atSeconds` takes `seconds` off the charge recharging
+   * then (none recharging → nothing) */
+  reductions?: ReadonlyArray<{ atSeconds: number; seconds: number }>;
+  /** the time spent at full charges before a press, up to this cap, comes
+   * off the recharge that press starts (a round starts full) */
+  idleCapSeconds?: number;
+}
+
+/**
+ * The one sequential-recharge simulation (one timer; a press with nothing in
+ * hand is the log's proof a charge existed and re-anchors the timer) up to
+ * `untilSeconds`: the charges in hand, when the next lands, and the flips
+ * between "a charge in hand" and "nothing in hand". `chargeStateAt` and
+ * `chargeAvailabilityTransitions` are its two readings.
+ */
+function simulateCharges(
   castSeconds: readonly number[],
   rechargeSeconds: number,
   maxCharges: number,
-  atSeconds: number,
-): { charges: number; nextRecharge: number } {
+  untilSeconds: number,
+  effects?: IChargeEffects,
+): {
+  charges: number;
+  nextRecharge: number;
+  flips: Array<{ atSeconds: number; available: boolean }>;
+} {
   const cap = Math.max(1, Math.floor(maxCharges));
+  const flips: Array<{ atSeconds: number; available: boolean }> = [];
   if (!(rechargeSeconds > 0))
-    return { charges: cap, nextRecharge: Number.POSITIVE_INFINITY };
+    return { charges: cap, nextRecharge: Number.POSITIVE_INFINITY, flips };
   const casts = [...castSeconds]
-    .filter((t) => t <= atSeconds)
+    .filter((t) => t <= untilSeconds)
     .sort((a, b) => a - b);
+  const reductions = [...(effects?.reductions ?? [])]
+    .filter((r) => r.atSeconds <= untilSeconds)
+    .sort((a, b) => a.atSeconds - b.atSeconds);
+  const idleCap = effects?.idleCapSeconds ?? 0;
   let charges = cap;
   let nextRecharge = Number.POSITIVE_INFINITY;
+  // full since (the round starts full — the preparation phase counts)
+  let fullSince = Number.NEGATIVE_INFINITY;
   const advanceTo = (t: number): void => {
     while (charges < cap && nextRecharge <= t) {
+      if (charges === 0)
+        flips.push({ atSeconds: nextRecharge, available: true });
       charges++;
-      nextRecharge =
-        charges < cap
-          ? nextRecharge + rechargeSeconds
-          : Number.POSITIVE_INFINITY;
+      if (charges < cap) nextRecharge = nextRecharge + rechargeSeconds;
+      else {
+        fullSince = nextRecharge;
+        nextRecharge = Number.POSITIVE_INFINITY;
+      }
+    }
+  };
+  let ri = 0;
+  const reduceTo = (t: number): void => {
+    while (ri < reductions.length && reductions[ri]!.atSeconds <= t) {
+      const r = reductions[ri++]!;
+      advanceTo(r.atSeconds);
+      if (charges >= cap) continue;
+      if (r.seconds === Number.POSITIVE_INFINITY) {
+        // a reset: every charge back at once
+        if (charges === 0)
+          flips.push({ atSeconds: r.atSeconds, available: true });
+        charges = cap;
+        fullSince = r.atSeconds;
+        nextRecharge = Number.POSITIVE_INFINITY;
+        continue;
+      }
+      nextRecharge = Math.max(r.atSeconds, nextRecharge - r.seconds);
     }
   };
   for (const c of casts) {
+    reduceTo(c);
     advanceTo(c);
     if (charges > 0) {
+      const wasFull = charges === cap;
       charges--;
+      if (charges === 0) flips.push({ atSeconds: c, available: false });
       // A timer already running is NOT restarted by spending another charge.
       if (charges < cap && nextRecharge === Number.POSITIVE_INFINITY) {
-        nextRecharge = c + rechargeSeconds;
+        const credit = wasFull
+          ? Math.min(idleCap, Math.max(0, c - fullSince))
+          : 0;
+        nextRecharge = c + rechargeSeconds - credit;
       }
     } else {
       // The log says it was cast with nothing in hand by our reckoning — an
@@ -3709,7 +3836,27 @@ export function chargeStateAt(
       nextRecharge = c + rechargeSeconds;
     }
   }
-  advanceTo(atSeconds);
+  reduceTo(untilSeconds);
+  advanceTo(untilSeconds);
+  return { charges, nextRecharge, flips };
+}
+
+/** `chargesAvailableAt`'s simulation, also returning when the next charge
+ *  lands (+∞ at full charges) — GH #106 step 3's "seconds until ready". */
+export function chargeStateAt(
+  castSeconds: readonly number[],
+  rechargeSeconds: number,
+  maxCharges: number,
+  atSeconds: number,
+  effects?: IChargeEffects,
+): { charges: number; nextRecharge: number } {
+  const { charges, nextRecharge } = simulateCharges(
+    castSeconds,
+    rechargeSeconds,
+    maxCharges,
+    atSeconds,
+    effects,
+  );
   return { charges, nextRecharge };
 }
 
@@ -3729,39 +3876,15 @@ export function chargeAvailabilityTransitions(
   rechargeSeconds: number,
   maxCharges: number,
   untilSeconds: number,
+  effects?: IChargeEffects,
 ): Array<{ atSeconds: number; available: boolean }> {
-  const cap = Math.max(1, Math.floor(maxCharges));
-  const out: Array<{ atSeconds: number; available: boolean }> = [];
-  if (!(rechargeSeconds > 0)) return out;
-  const casts = [...castSeconds]
-    .filter((t) => t <= untilSeconds)
-    .sort((a, b) => a - b);
-  let charges = cap;
-  let nextRecharge = Number.POSITIVE_INFINITY;
-  const advanceTo = (t: number): void => {
-    while (charges < cap && nextRecharge <= t) {
-      if (charges === 0) out.push({ atSeconds: nextRecharge, available: true });
-      charges++;
-      nextRecharge =
-        charges < cap
-          ? nextRecharge + rechargeSeconds
-          : Number.POSITIVE_INFINITY;
-    }
-  };
-  for (const c of casts) {
-    advanceTo(c);
-    if (charges > 0) {
-      charges--;
-      if (charges === 0) out.push({ atSeconds: c, available: false });
-      if (charges < cap && nextRecharge === Number.POSITIVE_INFINITY) {
-        nextRecharge = c + rechargeSeconds;
-      }
-    } else {
-      nextRecharge = c + rechargeSeconds;
-    }
-  }
-  advanceTo(untilSeconds);
-  return out;
+  return simulateCharges(
+    castSeconds,
+    rechargeSeconds,
+    maxCharges,
+    untilSeconds,
+    effects,
+  ).flips;
 }
 
 /**
@@ -3811,40 +3934,30 @@ interface IPlayerTalentIdSets {
 }
 const talentIdSetsCache = new WeakMap<ICombatUnit, IPlayerTalentIdSets>();
 
-/** The earliest timestamp among a unit's own casts and auras, NaN if none. */
-function unitFirstEventMs(unit: ICombatUnit): number {
-  let first = Number.POSITIVE_INFINITY;
-  for (const e of unit.spellCastEvents ?? [])
-    first = Math.min(first, e.logLine.timestamp);
-  for (const e of unit.auraEvents ?? [])
-    first = Math.min(first, e.logLine.timestamp);
-  return Number.isFinite(first) ? first : Number.NaN;
-}
-
 export function playerTalentIdSets(unit: ICombatUnit): IPlayerTalentIdSets {
   const cached = talentIdSetsCache.get(unit);
   if (cached !== undefined) return cached;
 
   const specIdNum = parseInt(unit.spec, 10);
-  const talentedSpellInfo = unit.info?.talents
-    ? getPlayerTalentedSpellInfo(specIdNum, unit.info.talents)
+  const talentedSpellInfo = talentsOf(unit)
+    ? getPlayerTalentedSpellInfo(specIdNum, talentsOf(unit)!)
     : null;
   const result = {
     talentedSpellIds: talentedSpellInfo
       ? new Set(talentedSpellInfo.keys())
       : null,
     grantedButtonIds:
-      (talentedSpellInfo && unit.info?.talents
-        ? getPlayerTalentGrantedButtonIds(specIdNum, unit.info.talents)
+      (talentedSpellInfo && talentsOf(unit)
+        ? getPlayerTalentGrantedButtonIds(specIdNum, talentsOf(unit)!)
         : null) ?? new Set<string>(),
     // PvP talents selected by this player (spell IDs). Available when
     // COMBATANT_INFO is present.
     pvpTalentIds: new Set<string>(unit.info?.pvpTalents ?? []),
     specId: Number.isFinite(specIdNum) && specIdNum > 0 ? unit.spec : undefined,
-    talentRanks: unit.info?.talents
-      ? getPlayerTalentRanks(specIdNum, unit.info.talents)
+    talentRanks: talentsOf(unit)
+      ? getPlayerTalentRanks(specIdNum, talentsOf(unit)!)
       : null,
-    logEpochMs: unitFirstEventMs(unit),
+    logEpochMs: unitLogEpochMs(unit),
   };
   talentIdSetsCache.set(unit, result);
   return result;
@@ -4008,8 +4121,8 @@ function extractMajorCooldownsAll(
   const specIdNum = parseInt(unit.spec, 10);
   const specTalentTreeSpellInfo = getSpecTalentTreeSpellInfo(specIdNum);
   const specTalentTreeSpellIds = new Set(specTalentTreeSpellInfo.keys());
-  const talentedSpellInfo = unit.info?.talents
-    ? getPlayerTalentedSpellInfo(specIdNum, unit.info.talents)
+  const talentedSpellInfo = talentsOf(unit)
+    ? getPlayerTalentedSpellInfo(specIdNum, talentsOf(unit)!)
     : null;
   const talentSets = playerTalentIdSets(unit);
   const { talentedSpellIds, pvpTalentIds } = talentSets;
@@ -4101,7 +4214,7 @@ function extractMajorCooldownsAll(
           alias !== spellId &&
           !rosterIds.has(alias) &&
           talentedSpellIds.has(alias) &&
-          choiceSelectionResolved(specIdNum, unit.info?.talents ?? [], alias),
+          choiceSelectionResolved(specIdNum, talentsOf(unit) ?? [], alias),
       ));
 
   // Keep only tagged spells with cooldown data >= MIN_CD_SECONDS that belong to the owner's spec
@@ -4472,7 +4585,8 @@ export function unitCooldownEntry(
   }
   if (memo.byId.has(spellId)) return memo.byId.get(spellId);
   const fromLedger = memo.ledger.find(
-    (cd) => cd.spellId === spellId || spellAliasIds(cd.spellId).includes(spellId),
+    (cd) =>
+      cd.spellId === spellId || spellAliasIds(cd.spellId).includes(spellId),
   );
   let entry = fromLedger;
   if (!entry && spellEffectData[spellId]) {
@@ -4554,7 +4668,7 @@ export function unitCooldownAvailableAt(
  * per-press talent effects, reductions, rate windows; a press made while
  * the model had it out re-anchors, like `chargesAvailableAt`); a
  * multi-charge one runs the sequential recharge (`chargeAvailabilityTransitions`
- * — no per-press effect touches a charge spell).
+ * with the entry's `chargeEffects`: event reductions, resets, idle credit).
  */
 export function entryAvailabilityTransitions(
   entry: IMajorCooldownInfo,
@@ -4564,13 +4678,27 @@ export function entryAvailabilityTransitions(
     .map((c) => c.timeSeconds)
     .filter((t) => t <= untilSeconds)
     .sort((a, b) => a - b);
-  if ((entry.charges ?? 1) > 1)
+  if ((entry.charges ?? 1) > 1) {
+    // on the rate windows' warped clock, like `cdAvailableAt`, and back
+    if (entry.rateWindows?.length) {
+      const { tau, inverse } = warpClock(entry.rateWindows);
+      const view = warpedView(entry, tau);
+      return chargeAvailabilityTransitions(
+        presses.map(tau),
+        view.cooldownSeconds,
+        view.charges ?? 1,
+        tau(untilSeconds),
+        view.chargeEffects,
+      ).map((f) => ({ ...f, atSeconds: inverse(f.atSeconds) }));
+    }
     return chargeAvailabilityTransitions(
       presses,
       entry.cooldownSeconds,
       entry.charges ?? 1,
       untilSeconds,
+      entry.chargeEffects,
     );
+  }
   const out: Array<{ atSeconds: number; available: boolean }> = [];
   let readyAt = Number.NEGATIVE_INFINITY;
   for (const t of presses) {
@@ -4581,8 +4709,7 @@ export function entryAvailabilityTransitions(
         out.push({ atSeconds: readyAt, available: true });
       out.push({ atSeconds: t, available: false });
     }
-    readyAt =
-      pressReadyAgainAtSeconds(entry, t) ?? t + entry.cooldownSeconds;
+    readyAt = pressReadyAgainAtSeconds(entry, t) ?? t + entry.cooldownSeconds;
   }
   if (readyAt > Number.NEGATIVE_INFINITY && readyAt <= untilSeconds)
     out.push({ atSeconds: readyAt, available: true });
@@ -4790,8 +4917,8 @@ function buildCooldownEntry(
   // node 94675 with no entry id read as Save the Day over Divine Feathers).
   const holds = (t: string) =>
     (!!talentedSpellIds?.has(t) &&
-      (!unit.info?.talents ||
-        choiceSelectionResolved(specIdNum, unit.info.talents, t))) ||
+      (!talentsOf(unit) ||
+        choiceSelectionResolved(specIdNum, talentsOf(unit)!, t))) ||
     pvpTalentIds.has(t);
   const freeWindow = freeRecastWindowFor(spell.spellId, holds);
   const pressed = new Set<ICooldownCast>(castRawCasts);
@@ -4862,18 +4989,38 @@ function buildCooldownEntry(
   // on the date of the log). Single-charge spells only — a charge
   // simulation takes no per-press override.
   // Control of the Dream's idle credit rides the same per-press pass.
-  const reductions = eventReductionsFor(spell.spellId, holds);
+  const reductions = eventReductionsFor(
+    spell.spellId,
+    holds,
+    String(specIdNum),
+  );
   const idleCap = idleCreditCapFor(spell.spellId, holds);
+  const ranks = playerTalentIdSets(unit).talentRanks;
+  const rankOf = (t: string) => ranks?.get(t) ?? (holds(t) ? 1 : 0);
+  let chargeEffects: IChargeEffects | undefined;
   if ((reductions.length || idleCap > 0) && baselineCharges <= 1) {
     applyEventReductions(
       casts,
       cooldownSeconds,
-      eventTriggersFor(unit, reductions).map((g) => ({
+      eventTriggersFor(unit, reductions, holds, rankOf).map((g) => ({
         atSeconds: (g.atMs - matchStartMs) / 1000,
         seconds: g.seconds,
       })),
       idleCap,
     );
+  } else if (reductions.length || idleCap > 0) {
+    // a charge spell: the same triggers and credit, run through the charge
+    // simulation (`IChargeEffects`) — the give-back pulls in the charge
+    // recharging then; the idle credit is the time spent at full charges
+    chargeEffects = {
+      reductions: eventTriggersFor(unit, reductions, holds, rankOf).map(
+        (g) => ({
+          atSeconds: (g.atMs - matchStartMs) / 1000,
+          seconds: g.seconds,
+        }),
+      ),
+      ...(idleCap > 0 ? { idleCapSeconds: idleCap } : {}),
+    };
   }
   // Free recast (Escape from Reality): the press that opens the window
   // carries it; a press inside an unused window is free and stays anchored
@@ -5010,6 +5157,7 @@ function buildCooldownEntry(
       ...(sharedCasts.length > 0 ? { sharedCasts } : {}),
       availableWindows,
       ...(rateWindows ? { rateWindows } : {}),
+      ...(chargeEffects ? { chargeEffects } : {}),
       neverUsed: casts.length === 0,
       isThroughput: spell.tags.includes(SpellTag.Offensive),
       isProcOnly: procOnly,

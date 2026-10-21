@@ -271,5 +271,13 @@
  *  a heal, not ally-only) keeps its owner out of every `defenseless` span;
  *  Shield of Vengeance gets its own [ENEMY DEF] line. 605 files:
  *  kick-priority-missed −3, kick-priority-team +1 / −1 (user approved).
+ *  v432 (2026-10-21, cooldown mastery batch 3 — GH #124): event-based
+ *  cooldown reductions are modelled (user ruling 2026-10-20) — power spent,
+ *  interrupts, hits, consumed buffs, attacks taken, own aura ends, resets —
+ *  on single and charge spells; rate windows from carriers outside the
+ *  talent inventory; Ret / Prot Sacrifice of the Just and Ret Unbreakable
+ *  Spirit dated to their hotfixes (user ruling); the 12.1.0 talent map for
+ *  12.1.0 logs. 605 files: missed-sync-window +88, kick-eaten +7,
+ *  external-unused −9 +5, cd-hoarded −4 +1 (user approved).
  */
-export const PROMPT_VERSION = 431;
+export const PROMPT_VERSION = 432;

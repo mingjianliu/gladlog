@@ -87,6 +87,7 @@ import {
   getSpecFreeOrEntrySpellIds,
   getSpecTalentTreeSpellIds,
   isLoadoutFullyResolved,
+  talentsOf,
 } from "./talents";
 import { threatActiveAt } from "./threatAssessment";
 import { warlockRanPurgePet } from "./warlockPet";
@@ -1021,8 +1022,8 @@ function hasTalentedAbility(unit: ICombatUnit, spellId: string): boolean {
   const talentTreeIds = getSpecTalentTreeSpellIds(specIdNum);
   if (!talentTreeIds.has(spellId)) return false; // not a talent for this spec
 
-  const talentedIds = unit.info?.talents
-    ? getPlayerTalentedSpellIds(specIdNum, unit.info.talents)
+  const talentedIds = talentsOf(unit)
+    ? getPlayerTalentedSpellIds(specIdNum, talentsOf(unit)!)
     : null;
   if (talentedIds !== null) return talentedIds.has(spellId);
 
@@ -1125,7 +1126,7 @@ function passesDispelTalentGate(
   // the talentOwnership "unknown" guards (codex review 2026-09-26): an empty
   // loadout, a loadout with node ids this build cannot resolve, or an
   // unreadable choice selection proves nothing about the gate talent
-  const talents = unit.info?.talents;
+  const talents = talentsOf(unit);
   if (!talents || talents.length === 0) return true;
   if (!isLoadoutFullyResolved(specIdNum, talents)) return true;
   if (gate.some((t) => !choiceSelectionResolved(specIdNum, talents, t)))
@@ -1243,8 +1244,8 @@ export function canOffensivePurge(
 
   const specIdNum = parseInt(unit.spec, 10);
   const talentTreeIds = getSpecTalentTreeSpellIds(specIdNum);
-  const talentedIds = unit.info?.talents
-    ? getPlayerTalentedSpellIds(specIdNum, unit.info.talents)
+  const talentedIds = talentsOf(unit)
+    ? getPlayerTalentedSpellIds(specIdNum, talentsOf(unit)!)
     : null;
   const hasCombatantInfo = unit.info !== undefined;
   // castSpellIds is computed lazily (only when talentedIds is null) to avoid iterating

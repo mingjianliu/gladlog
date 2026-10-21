@@ -256,10 +256,12 @@ describe("buildMatchContext on real fixture", () => {
     // fact2 (kit range): the loadout prints the ledger's earliest–official
     // cooldown range, the one the [RES] rows read (`earliestCooldownSeconds`)
     expect(ctx).toContain("Pain Suppression [123–180s, 2 Charges, lasts 8s]");
-    // Winter's Protection counts per rank (GH #106). 12.1.5.70391 set its row
-    // 1013746 PvpMultiplier 1 → 0.5 (not in the patch notes): rank 2 = −30 in
-    // PvP, so 240 − 30 − 30 (Glacial Bulwark 1265517) = 180 (was 150).
-    expect(ctx).toContain("Ice Block [180s, lasts 10s]");
+    // Winter's Protection counts per rank (GH #106) and by the log's date:
+    // the 2026-09-01 hotfix halved it in PvP (row 1013746 PvpMultiplier
+    // 1 → 0.5, in DB2 from 70391; `DATED_COOLDOWN_VALUES`). This fixture is an
+    // August log: rank 2 = −60, so 240 − 60 − 30 (Glacial Bulwark 1265517) =
+    // 150; a log from after the hotfix reads 180.
+    expect(ctx).toContain("Ice Block [150s, lasts 10s]");
     // offensive / control cooldowns keep the old shape
     expect(ctx).toContain("Combustion [60s]");
     // 2026-09-26: 30 s = DB2 40 − Psychic Voice 10, applied once (the hand override used to hold 30 and the talent took 10 again → 20).

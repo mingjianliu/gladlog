@@ -69,6 +69,7 @@ function withEventReductions(
   const reductions = eventReductionsFor(
     spellId,
     (t) => !!sets.talentedSpellIds?.has(t) || sets.pvpTalentIds.has(t),
+    owner.spec === undefined ? undefined : String(owner.spec),
   );
   // FT-T11c: the press's own cooldown first — an on-interrupt talent
   // (Coldthirst, Light of the Sun) shortens a press that interrupted a cast

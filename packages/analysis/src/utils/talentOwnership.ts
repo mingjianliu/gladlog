@@ -12,6 +12,7 @@ import {
   getSpecTalentButtonGrants,
   getSpecTalentTreeSpellInfo,
   isLoadoutFullyResolved,
+  talentsOf,
 } from "./talents";
 
 /**
@@ -86,7 +87,7 @@ export function talentOwnershipFromTables(
 
   // 4. Talent-gated spell: judge by the player's actual selection
   // (choice/subtree nodes count only the chosen entry).
-  const talents = unit.info?.talents;
+  const talents = talentsOf(unit);
   const selected =
     talents && talents.length > 0
       ? getPlayerTalentedSpellInfo(specId, talents)
@@ -234,8 +235,8 @@ export function talentModifierOwnershipOf(
   );
   if (
     !cast &&
-    unit.info?.talents?.length &&
-    !choiceSelectionResolved(specId, unit.info.talents, talentSpellId)
+    talentsOf(unit)?.length &&
+    !choiceSelectionResolved(specId, talentsOf(unit)!, talentSpellId)
   )
     return "unknown";
   return verdict;
@@ -275,7 +276,7 @@ export function talentRankOf(
 
   const specId = parseInt(unit.spec, 10);
   if (Number.isNaN(specId)) return 0;
-  const talents = unit.info?.talents;
+  const talents = talentsOf(unit);
   if (!talents || talents.length === 0) return 0;
   return getPlayerTalentRanks(specId, talents)?.get(talentSpellId) ?? 0;
 }

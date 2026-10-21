@@ -163,14 +163,42 @@ export const RULED_COOLDOWN_VALUES: Readonly<
 export const CALL_OF_OHNAHRA_HOTFIX_EPOCH_MS = Date.UTC(2026, 8, 22, 0, 0, 0);
 
 /**
- * DB2 `reduce_cd` values the game changed on a date — the row carries only
- * today's number, a log from before the change has the old one. Read by
- * `applyCdModifiers` (asked with the owner's `logEpochMs`, through
- * `logDatedNumberAt`: no date → today's number). `since` must equal the
- * generated row's value (test/talentScriptedCooldowns.test.ts).
+ * 12.1.0 hotfix instants (Blizzard's rolling hotfix article, dated sections;
+ * cooldown mastery round 2026-10-20, eval-private research/builds.md). A
+ * hotfix lands on US realms first — the corpus flips between 07:26 and
+ * 17:45 UTC on 08-18 — and EU about a day later, so the instant is the US
+ * day at 15:00 UTC; `logDatedNumberAt` reads an instant near it (and any log
+ * of unknown date) as the CURRENT value.
+ */
+export const HOTFIX_2026_08_18_EPOCH_MS = Date.UTC(2026, 7, 18, 15, 0, 0);
+export const HOTFIX_2026_08_25_EPOCH_MS = Date.UTC(2026, 7, 25, 15, 0, 0);
+export const HOTFIX_2026_09_01_EPOCH_MS = Date.UTC(2026, 8, 1, 15, 0, 0);
+
+export interface IDatedCooldownValue {
+  /** which of the talent's rows the dated number replaces */
+  effect: "reduce_cd" | "reduce_cd_pct";
+  /** for every holder … */
+  value?: ILogDatedNumber;
+  /** … or per holder spec (a spec not listed keeps the generated value) */
+  bySpec?: Readonly<Record<string, ILogDatedNumber>>;
+  /** the number is per purchased rank (× the COMBATANT_INFO rank) */
+  perRank?: boolean;
+  note: string;
+}
+
+/**
+ * Talent cooldown numbers the game changed on a date — by a hotfix, which
+ * DB2 picks up weeks later or (server-side changes) never. The generated row
+ * carries today's number; a log from before the change has the old one.
+ * Read by `applyCdModifiers` with the owner's `logEpochMs`, through
+ * `logDatedNumberAt` (no date → today's number). Where DB2 has the change,
+ * `since` equals the generated value (test/talentScriptedCooldowns.test.ts);
+ * where it never did, `since` is the hotfix's and the entry is FLAGged
+ * (Game-Behaviour Rule: the official hotfix text + a corpus that flips on
+ * the hotfix day; user ruling 2026-10-20 「三条都按日期覆盖」).
  */
 export const DATED_COOLDOWN_VALUES: Readonly<
-  Record<string, { value: ILogDatedNumber; note: string }>
+  Record<string, IDatedCooldownValue>
 > = {
   // Call of Ohn'ahra 1246126 (PvP, Restoration Druid) on Nature's Swiftness
   // 132158, row 1247559: −30 000 ms at 12.1.0.69587, −60 000 ms at
@@ -181,11 +209,71 @@ export const DATED_COOLDOWN_VALUES: Readonly<
   // shortest 75.7 s (= 60 − 15 Passing Seasons + 30); logs of 10-06 … 10-16
   // (240 downloaded files) 8 gaps, the shortest 123.8 s.
   "1246126": {
+    effect: "reduce_cd",
     value: {
       cutoverEpochMs: CALL_OF_OHNAHRA_HOTFIX_EPOCH_MS,
       before: -30,
       since: -60,
     },
     note: "Call of Ohn'ahra — Nature's Swiftness +30 s before the 2026-09-22 hotfix, +60 s since",
+  },
+  // FLAG — server-side, never in DB2 (69273 … 70448: row 1017694 stays
+  // −60 000, PvP 1). Sacrifice of the Just 384820 on Blessing of Sacrifice:
+  // hotfix 2026-08-18, Retribution (PvP): "now reduces Blessing of
+  // Sacrifice's cooldown by 30 seconds in PvP combat (was 60 seconds)";
+  // 2026-08-25 the same for Protection. Holy keeps its passive's −15
+  // (`valueBySpec`). Corpus, Retribution holders: before 07:26 UTC 08-18
+  // floor 60.0 s (70 recasts), from 17:45 on ≥ 89.9 (284), October 90.0
+  // (84). Protection: one recast — official text only.
+  "384820": {
+    effect: "reduce_cd",
+    bySpec: {
+      "70": { cutoverEpochMs: HOTFIX_2026_08_18_EPOCH_MS, before: 60, since: 30 },
+      "66": { cutoverEpochMs: HOTFIX_2026_08_25_EPOCH_MS, before: 60, since: 30 },
+    },
+    note: "Sacrifice of the Just — Retribution −30 s since the 2026-08-18 hotfix, Protection since 08-25 (were −60); not in DB2 (FLAG)",
+  },
+  // FLAG — server-side, never in DB2. Unbreakable Spirit 114154: hotfix
+  // 2026-08-18, Retribution (PvP), 30 % → 20 % (Divine Shield / Divine
+  // Protection / Shield of Vengeance / Lay on Hands). Corpus, Retribution's
+  // Divine Protection 403876: August before the hotfix floor 63.0 s (210),
+  // October 72.0 (O0 28, O1 83, O2 122) — (90 × 0.8 = 72, × 0.7 = 63).
+  "114154": {
+    effect: "reduce_cd_pct",
+    bySpec: {
+      "70": { cutoverEpochMs: HOTFIX_2026_08_18_EPOCH_MS, before: 30, since: 20 },
+    },
+    note: "Unbreakable Spirit — Retribution 20 % since the 2026-08-18 hotfix (was 30 %); not in DB2 (FLAG)",
+  },
+  // Safeguard 424654, the Arms / Fury rewrite of its Intervene recharge
+  // (+10 → +20 s): hotfix 2026-09-01 ("now increases the cooldown of
+  // Intervene by 20 seconds"), DB2 from 69933. August Arms recasts floor at
+  // 36.0 s = (30 + 10) × 0.9 Honed Reflexes (162 recasts).
+  "424654": {
+    effect: "reduce_cd",
+    bySpec: {
+      "71": { cutoverEpochMs: HOTFIX_2026_09_01_EPOCH_MS, before: -10, since: -20 },
+      "72": { cutoverEpochMs: HOTFIX_2026_09_01_EPOCH_MS, before: -10, since: -20 },
+    },
+    note: "Safeguard — Arms / Fury Intervene +10 s before the 2026-09-01 hotfix, +20 s since",
+  },
+  // Winter's Protection 382424 on Ice Block / Ice Cold: hotfix 2026-09-01
+  // ("15/30 sec in PvP combat" — PvpMultiplier 1 → 0.5), DB2 from 70391.
+  // August holders' floors fit 30 a rank (Arcane 180.1 = 240 − 60); the
+  // October corpus has one recast — not verifiable after.
+  "382424": {
+    effect: "reduce_cd",
+    perRank: true,
+    value: { cutoverEpochMs: HOTFIX_2026_09_01_EPOCH_MS, before: 30, since: 15 },
+    note: "Winter's Protection — Ice Block −30 s a rank before the 2026-09-01 hotfix, −15 since",
+  },
+  // Improved Conjuration 1244025 on Mirror Image: hotfix 2026-09-01
+  // (PvpMultiplier 1 → 0.5), DB2 from 69933. Rank 2 holders: August floor
+  // 60.0 s (223 recasts) = 120 − 2 × 30; October 90.5 / 92.9 (11 / 11).
+  "1244025": {
+    effect: "reduce_cd",
+    perRank: true,
+    value: { cutoverEpochMs: HOTFIX_2026_09_01_EPOCH_MS, before: 30, since: 15 },
+    note: "Improved Conjuration — Mirror Image −30 s a rank before the 2026-09-01 hotfix, −15 since",
   },
 };

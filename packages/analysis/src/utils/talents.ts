@@ -1,5 +1,87 @@
 import { nodeMaps, talentDataReady } from "../data/talentStrings";
+import { logDatedNumberAt } from "./logEra";
 import { memoizeWhenReady } from "./memoize";
+
+/**
+ * 12.1.5 go-live: NA maintenance 2026-10-13 (≈ 15:00–23:00 UTC), EU 10-14
+ * (cooldown mastery round, eval-private research/builds.md: no file before
+ * 10-13 23:17 UTC carries a 12.1.5-only spell id; 20 after).
+ */
+export const PATCH_1215_GOLIVE_EPOCH_MS = Date.UTC(2026, 9, 13, 15, 0, 0);
+
+/**
+ * Talent definitions whose spell traded places at 12.1.5 (TraitDefinition
+ * SpellID 12.1.0.69587 → 12.1.5.70391): on a 12.1.0 log the (node, entry)
+ * on the left is the talent the map (12.1.5) files under the right, and the
+ * reverse. Holy Priest, research/holyword.md: definition 108738 (node 103900
+ * entry 103733) was Ultimate Serenity and is Holy Celerity, 108750 (node
+ * 82612 entry 103745) the other way round. Corpus: Ultimate Serenity
+ * replaces Holy Word: Sanctify, yet 262 of 340 August units the 12.1.5 map
+ * calls "Ultimate Serenity only" press Sanctify, 0 of 19 "Holy Celerity
+ * only" do; in October files after the patch the map is right (8 of 9).
+ */
+const PRE_1215_ENTRY_SWAPS: ReadonlyArray<
+  readonly [readonly [number, number], readonly [number, number]]
+> = [
+  [
+    [103900, 103733],
+    [82612, 103745],
+  ],
+];
+
+/** The unit's first logged event — "when was this match" for a unit (NaN
+ * when it logged nothing). */
+export function unitLogEpochMs(unit: {
+  spellCastEvents?: ReadonlyArray<{ logLine: { timestamp: number } }>;
+  auraEvents?: ReadonlyArray<{ logLine: { timestamp: number } }>;
+}): number {
+  let first = Number.POSITIVE_INFINITY;
+  for (const e of unit.spellCastEvents ?? [])
+    first = Math.min(first, e.logLine.timestamp);
+  for (const e of unit.auraEvents ?? [])
+    first = Math.min(first, e.logLine.timestamp);
+  return Number.isFinite(first) ? first : Number.NaN;
+}
+
+type TalentTuple = { id1: number; id2: number; count: number } | null;
+const talentsOfCache = new WeakMap<object, TalentTuple[] | undefined>();
+
+/**
+ * The unit's COMBATANT_INFO talents as the talent map (12.1.5) reads them:
+ * on a log from before 12.1.5 went live, the entries whose definition
+ * traded spells are swapped (`PRE_1215_ENTRY_SWAPS`). A log of unknown date,
+ * or within the zone uncertainty of the cutover, is read as 12.1.5
+ * (`logDatedNumberAt`). Every talent reader asks this, never
+ * `unit.info.talents` directly.
+ */
+export function talentsOf(unit: {
+  info?: { talents?: TalentTuple[] };
+  spellCastEvents?: ReadonlyArray<{ logLine: { timestamp: number } }>;
+  auraEvents?: ReadonlyArray<{ logLine: { timestamp: number } }>;
+}): TalentTuple[] | undefined {
+  if (talentsOfCache.has(unit)) return talentsOfCache.get(unit);
+  const talents = unit.info?.talents;
+  let out = talents;
+  if (
+    talents &&
+    logDatedNumberAt(
+      { cutoverEpochMs: PATCH_1215_GOLIVE_EPOCH_MS, before: 1, since: 0 },
+      unitLogEpochMs(unit),
+    ) === 1
+  )
+    out = talents.map((t) => {
+      if (!t) return t;
+      for (const [a, b] of PRE_1215_ENTRY_SWAPS) {
+        if (t.id1 === a[0] && t.id2 === a[1])
+          return { ...t, id1: b[0], id2: b[1] };
+        if (t.id1 === b[0] && t.id2 === b[1])
+          return { ...t, id1: a[0], id2: a[1] };
+      }
+      return t;
+    });
+  talentsOfCache.set(unit, out);
+  return out;
+}
 
 type HeroTalent = {
   id: number;

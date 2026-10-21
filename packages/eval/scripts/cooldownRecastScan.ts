@@ -29,7 +29,9 @@
  * uses (`cdAvailableAt` on the presses before, then `cdMaybeAvailableAt`).
  * A model ratio is a recast gap over that press's realised cooldown
  * (single-charge entries), so its minimum well above 1 over many pairs says
- * the model's number is too short.
+ * the model's number is too short. A charge entry's ratio (`modelCharge…`)
+ * runs from the press that spent its last charge: the next press over the
+ * model's time to a charge back.
  *
  * Usage:
  *   npx tsx packages/eval/scripts/cooldownRecastScan.ts --manifest <m> [--every 1] [--min-cd 8] --out <file.jsonl> > summary.json
@@ -42,6 +44,7 @@ import {
   CD_INSTANT_SLACK_S,
   cdAvailableAt,
   cdMaybeAvailableAt,
+  entryAvailabilityTransitions,
   extractMajorCooldowns,
   playerTalentIdSets,
   pressReadyAgainAtSeconds,
@@ -85,6 +88,7 @@ interface Agg {
   modelImpossible: number;
   modelFloorExplained: number;
   modelRatios: number[];
+  modelChargeRatios: number[];
   specs: Record<string, number>;
   cooldowns: Record<string, number>;
 }
@@ -161,6 +165,7 @@ for (const f of files) {
           modelImpossible: 0,
           modelFloorExplained: 0,
           modelRatios: [],
+          modelChargeRatios: [],
           specs: {},
           cooldowns: {},
         };
@@ -176,6 +181,7 @@ for (const f of files) {
         const modelImpossibleAt: number[] = [];
         let modelFloorExplained = 0;
         const modelRatios: number[] = [];
+        const modelChargeRatios: number[] = [];
         if (entry && !entry.isProcOnly) {
           const presses = entry.casts
             .map((c) => c.timeSeconds)
@@ -203,10 +209,39 @@ for (const f of files) {
               if (own && own > 0)
                 modelRatios.push((presses[i]! - presses[i - 1]!) / own);
             }
+          else {
+            // a charge spell: from the press that spent the last charge to
+            // the model's next charge back, against the next press. The
+            // charge back is read off the presses up to that one only — a
+            // next press a hair before it (inside the slack) re-anchors the
+            // full history's recharge and would push its flip far later.
+            const horizon = entry.cooldownSeconds * (entry.charges ?? 1);
+            const outs = entryAvailabilityTransitions(
+              entry,
+              presses[presses.length - 1]! + horizon,
+            ).filter((x) => !x.available);
+            for (const o of outs) {
+              const next = presses.find((x) => x > o.atSeconds + 0.05);
+              if (next === undefined) continue;
+              const upTo = (c: { timeSeconds: number }) =>
+                c.timeSeconds <= o.atSeconds + 0.05;
+              const back = entryAvailabilityTransitions(
+                {
+                  ...entry,
+                  casts: entry.casts.filter(upTo),
+                  sharedCasts: (entry.sharedCasts ?? []).filter(upTo),
+                },
+                o.atSeconds + horizon,
+              ).find((x) => x.available && x.atSeconds > o.atSeconds);
+              const own = back ? back.atSeconds - o.atSeconds : 0;
+              if (own > 0) modelChargeRatios.push((next - o.atSeconds) / own);
+            }
+          }
         }
         a.modelImpossible += modelImpossibleAt.length;
         a.modelFloorExplained += modelFloorExplained;
         a.modelRatios.push(...modelRatios);
+        a.modelChargeRatios.push(...modelChargeRatios);
         a.records++;
         a.impossible += impossibleAt.length;
         a.specs[u.spec] = (a.specs[u.spec] ?? 0) + 1;
@@ -231,6 +266,9 @@ for (const f of files) {
             modelMinRatio: modelRatios.length
               ? Math.round(Math.min(...modelRatios) * 1000) / 1000
               : null,
+            modelChargeMinRatio: modelChargeRatios.length
+              ? Math.round(Math.min(...modelChargeRatios) * 1000) / 1000
+              : null,
             talents: [
               ...(sets.talentedSpellIds ?? []),
               ...sets.pvpTalentIds,
@@ -250,7 +288,13 @@ const rows = [...agg.entries()]
   .map(([id, a]) => {
     const r = [...a.ratios].sort((x, y) => x - y);
     const mr = [...a.modelRatios].sort((x, y) => x - y);
-    const { ratios: _ratios, modelRatios: _modelRatios, ...rest } = a;
+    const mc = [...a.modelChargeRatios].sort((x, y) => x - y);
+    const {
+      ratios: _ratios,
+      modelRatios: _modelRatios,
+      modelChargeRatios: _modelChargeRatios,
+      ...rest
+    } = a;
     return {
       id,
       ...rest,
@@ -260,6 +304,13 @@ const rows = [...agg.entries()]
       modelPairs: mr.length,
       modelMinRatio: mr.length ? Math.round(q(mr, 0) * 1000) / 1000 : null,
       modelP05Ratio: mr.length ? Math.round(q(mr, 0.05) * 1000) / 1000 : null,
+      modelChargePairs: mc.length,
+      modelChargeMinRatio: mc.length
+        ? Math.round(q(mc, 0) * 1000) / 1000
+        : null,
+      modelChargeP05Ratio: mc.length
+        ? Math.round(q(mc, 0.05) * 1000) / 1000
+        : null,
     };
   })
   .sort((x, y) => y.impossible - x.impossible);

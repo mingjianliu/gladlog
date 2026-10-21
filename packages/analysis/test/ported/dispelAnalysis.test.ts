@@ -20,6 +20,10 @@ import { makeAuraEvent, makeDispelAction, makeUnit } from "./testHelpers";
 
 // Mock talents module to bypass complex lookups
 vi.mock("../../src/utils/talents", () => ({
+  // the era-aware talent list (cooldown mastery round 2026-10-20) — this
+  // file's synthetic units read as they are
+  talentsOf: (u: { info?: { talents?: unknown } }) => u.info?.talents,
+  unitLogEpochMs: () => Number.NaN,
   getPlayerTalentedSpellIds: (_spec: any, talents: any) => {
     if (talents === "HAS_DISEASE") return new Set(["213634"]);
     if (talents === "HAS_FELHUNTER") return new Set(["30146"]);

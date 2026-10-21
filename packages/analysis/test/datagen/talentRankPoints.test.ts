@@ -81,10 +81,11 @@ describe("talent points per rank and per spec (cooldown mastery 2026-10-20)", ()
     expect(adjustPoints(-60000, a)).toBe(-15000);
   });
 
-  it("generated: Holy's Blessing of Sacrifice is 105 s with Sacrifice of the Just, Retribution's 60 s", () => {
+  it("generated: Holy's Blessing of Sacrifice is 105 s with Sacrifice of the Just, Retribution's 60 s (a log before its 2026-08-18 hotfix)", () => {
     const cd = (specId: string) =>
       applyCdModifiers(mods["6940"], 120, 1, new Set(["384820"]), new Set(), {
         specId,
+        logEpochMs: Date.UTC(2026, 7, 17),
       }).cooldownSeconds;
     // corpus floors (2,240 files): Holy 104.0–105.0 over 581 recasts,
     // Retribution 60.0

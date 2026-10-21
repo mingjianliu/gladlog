@@ -21,6 +21,19 @@
  * misc0 is a ChargeCategory the inventory does not resolve. Carrier = the
  * row's spell (the buff's aura id). Only targets the inventory tracks.
  *
+ * A second pass (cooldown mastery round, 2026-10-20) reads EVERY SpellEffect
+ * row of the three recovery-rate auras, whatever spell carries it — the
+ * buffs that speed a cooldown are mostly procs no talent reaches within the
+ * inventory's two hops (Heart of the Jade Serpent's 443421 / 443616 and its
+ * PvP 1238904 on Life Cocoon and Strike of the Windlord, Flow State's 390148
+ * on Obsidian Scales): aura 148 by SpellCategory (the cooldown category or
+ * the charge category), 143 by SpellLabel, 286 by class mask (the carrier's
+ * own SpellClassSet). mult = 1 + points × PvpMultiplier / 100. The runtime
+ * applies a carrier only over the intervals the log shows it on the unit,
+ * and only carriers the corpus has ever shown are kept
+ * (observedSpellIdsGenerated.json — 15 of 64; the rest are raid and item
+ * auras an arena log never carries, 20,000 rows of dead weight).
+ *
  * Output: src/data/conditionalCooldownsGenerated.json
  *   { [targetSpellId]: [{ carrier, kind: "rate", mult } | { carrier, kind:
  *     "snapshot", flatS?, pct? }] }
@@ -78,6 +91,56 @@ async function main() {
   const tracked = new Set(
     inv.rows.flatMap((r) => r.targets.map((t) => t.spellId)),
   );
+  // the second pass's tables
+  const effects = parseCsv(await fetchTable("SpellEffect", build, cacheDir));
+  const classOpts = parseCsv(
+    await fetchTable("SpellClassOptions", build, cacheDir),
+  );
+  const labels = parseCsv(await fetchTable("SpellLabel", build, cacheDir));
+  const spellEffectData = JSON.parse(
+    fs.readFileSync(`${dataDir}spellEffectGenerated.json`, "utf8"),
+  ) as Record<
+    string,
+    { cooldownSeconds?: number | null; charges?: unknown } | undefined
+  >;
+  const hasCooldown = (id: string) =>
+    !!spellEffectData[id] &&
+    (!!spellEffectData[id]!.cooldownSeconds || !!spellEffectData[id]!.charges);
+  const cooldownCat = new Map<number, string[]>();
+  for (const r of cats.rows) {
+    if (r.DifficultyID !== "0" || !r.SpellID) continue;
+    const c = Number(r.Category ?? 0);
+    if (!c) continue;
+    const l = cooldownCat.get(c) ?? [];
+    if (!l.includes(r.SpellID)) l.push(r.SpellID);
+    cooldownCat.set(c, l);
+  }
+  const familyOf = new Map<string, number>();
+  const byFamily = new Map<number, Array<{ id: string; masks: number[] }>>();
+  for (const r of classOpts.rows) {
+    if (!r.SpellID) continue;
+    const fam = Number(r.SpellClassSet ?? 0);
+    familyOf.set(r.SpellID, fam);
+    const l = byFamily.get(fam) ?? [];
+    l.push({
+      id: r.SpellID,
+      masks: [0, 1, 2, 3].map((i) => Number(r[`SpellClassMask_${i}`] ?? 0)),
+    });
+    byFamily.set(fam, l);
+  }
+  const observed = new Set(
+    (
+      JSON.parse(
+        fs.readFileSync(`${dataDir}observedSpellIdsGenerated.json`, "utf8"),
+      ) as number[]
+    ).map(String),
+  );
+  const labelSpells = new Map<number, string[]>();
+  for (const r of labels.rows) {
+    const l = labelSpells.get(Number(r.LabelID)) ?? [];
+    l.push(r.SpellID ?? "");
+    labelSpells.set(Number(r.LabelID), l);
+  }
 
   const out: Record<string, Mod[]> = {};
   const add = (target: string, m: Mod) => {
@@ -119,6 +182,39 @@ async function main() {
         );
       }
     }
+  }
+  for (const r of effects.rows) {
+    const aura = Number(r.EffectAura ?? 0);
+    if (Number(r.Effect ?? 0) !== 6 || ![143, 148, 286].includes(aura))
+      continue;
+    if (r.DifficultyID && r.DifficultyID !== "0") continue;
+    if (!observed.has(r.SpellID ?? "")) continue;
+    const pvp = r.PvpMultiplier === undefined ? 1 : Number(r.PvpMultiplier);
+    const v =
+      Math.round(Number(r.EffectBasePointsF ?? 0) * (pvp || 1) * 1000) / 1000;
+    const mult = Math.min(RATE_CAP, 1 + v / 100);
+    if (!(mult > 1)) continue;
+    const misc0 = Number(r.EffectMiscValue_0 ?? 0);
+    let targets: string[] = [];
+    if (aura === 148)
+      targets = [
+        ...(cooldownCat.get(misc0) ?? []),
+        ...(chargeCat.get(misc0) ?? []),
+      ];
+    else if (aura === 143) targets = labelSpells.get(misc0) ?? [];
+    else {
+      const masks = [0, 1, 2, 3].map((i) =>
+        Number(r[`EffectSpellClassMask_${i}`] ?? 0),
+      );
+      const fam = familyOf.get(r.SpellID ?? "");
+      if (fam !== undefined && masks.some((m) => m !== 0))
+        targets = (byFamily.get(fam) ?? [])
+          .filter((t) => masks.some((m, i) => (m & t.masks[i]!) !== 0))
+          .map((t) => t.id);
+    }
+    for (const t of new Set(targets))
+      if (hasCooldown(t))
+        add(t, { carrier: r.SpellID!, kind: "rate", mult });
   }
   const sorted = Object.fromEntries(
     Object.entries(out).sort((a, b) => Number(a[0]) - Number(b[0])),

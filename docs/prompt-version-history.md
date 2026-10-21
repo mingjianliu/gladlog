@@ -3896,3 +3896,37 @@ holding an unpressed defensive go, and the per-round slots and window
 attribution move) — user approved. fact2Scan: kitInHand 6,250 → 0,
 ledgerRosterUp 844 → 0, riderShieldLine 996 → 0. Gates: baseline residue
 only.
+v432 (2026-10-21, cooldown mastery batch 3 — GH #124): cooldown reductions
+driven by events are modelled (user ruling 2026-10-20, superseding #124's
+"do not model"). New trigger kinds in `EVENT_COOLDOWN_REDUCTIONS`
+(data/talentScriptedCooldowns.ts): interrupts, casts of a school, per-row
+hits and a minimum hit count per use, power spent (with known cost
+reductions; Anger Management, Red Thirst, Restless Blades), a consumed buff
+× its stacks, the owner's aura ending, a self aura applied, attacks taken
+(internal cooldown, not while an aura is up; Driven to Madness), and a
+credit bonus while an aura is up or per talent rank (Apotheosis, Light of
+the Naaru on the Holy Words); resets (Apotheosis, Cold Snap, Preparation,
+Demonic Intensity, Violent Transformation). Charge spells run one
+simulation with those reductions, resets and idle credit
+(`simulateCharges`), and their availability flips run on the rate windows'
+warped clock like `cdAvailableAt` (they did not: a charge spell under a
+rate window read out longer on the defenseless-window path). Rate windows
+come from carriers outside the talent inventory too (aura 148 by cooldown
+or charge category, 143, 286; carriers observed in the corpus). Dated
+values (`DATED_COOLDOWN_VALUES`): Retribution's Sacrifice of the Just and
+Unbreakable Spirit from 2026-08-18, Protection's Sacrifice of the Just from
+2026-08-25 (user ruling, FLAG), Safeguard, Winter's Protection and Improved
+Conjuration per rank. 12.1.0 logs read the 12.1.0 talent map
+(`talentsOf`: Holy Celerity / Ultimate Serenity traded definitions at
+12.1.5). Doom Winds' re-applied aura is not a press. Ledger, 2,240 files /
+416,091 presses: impossible 5,240 → 229, floor-explained 13,861 → 1,335
+(spells with any 28 → 18). Too-short check — earliest recast over the
+modelled recharge: Colossus Smash 0.998, Avatar 0.999, Voidform 1.005,
+Recklessness 1.009; charge spells (new in cooldownRecastScan) at most 1.002
+over 80 spells. 605 files: missed-sync-window dps 373 → 437 / healer
+140 → 164 and kick-eaten +7 (cooldowns now ready on time: Colossus Smash,
+Avatar, Bladestorm, Recklessness, Voidform, Adrenaline Rush, Chosen of
+Elune, Soul Immolation), external-unused −9 (Blessing of Sacrifice after
+its hotfix) +5 (Pain Suppression with Protector of the Frail, Time
+Dilation under rate windows), cd-hoarded −4 +1 — user approved. Gates:
+baseline residue only.

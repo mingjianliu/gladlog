@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  auraConsumedTriggers,
   EVENT_COOLDOWN_REDUCTIONS,
   EVENT_HIT_SAME_USE_MS,
   eventReducedCooldownSeconds,
@@ -10,6 +11,7 @@ import {
   IDLE_COOLDOWN_CREDITS,
   idleCreditCapFor,
   ON_INTERRUPT_COOLDOWN_REDUCTIONS,
+  powerSpendTriggers,
 } from "../src/data/talentScriptedCooldowns";
 import {
   applyCdModifiers,
@@ -17,6 +19,9 @@ import {
   cdAvailableAt,
   cdRealisedSecondsUntilReady,
   cdSecondsUntilReady,
+  chargesAvailableAt,
+  chargeStateAt,
+  entryAvailabilityTransitions,
   warpClock,
 } from "../src/utils/cooldowns";
 import {
@@ -25,6 +30,7 @@ import {
   DATED_COOLDOWN_VALUES,
   PER_RANK_COOLDOWN_TALENTS,
 } from "../src/utils/talentModifiers";
+import { talentsOf } from "../src/utils/talents";
 
 describe("RULED_COOLDOWN_VALUES — 静电充能每级 10 秒(用户裁 2026-09-26)", () => {
   const mods = [
@@ -264,6 +270,23 @@ describe("warpClock — buff 期间冷却加速(batch C)", () => {
       rateWindows: [{ fromSeconds: 50, toSeconds: 60, mult: 11 }],
     };
     expect(cdSecondsUntilReady(cd, 40)).toBeCloseTo(50, 6);
+  });
+  it("两层:可用翻转点与可用判定走同一加速时钟(时间膨胀 2026-10-21)", () => {
+    // 0 / 1 两次按光两层,20–30 s ×11:第一层 r + 10(r−20) = 90 → 290/11 ≈ 26.36 s 回来
+    const cd = {
+      spellId: "357170",
+      casts: [{ timeSeconds: 0 }, { timeSeconds: 1 }],
+      cooldownSeconds: 90,
+      charges: 2,
+      neverUsed: false,
+      rateWindows: [{ fromSeconds: 20, toSeconds: 30, mult: 11 }],
+    } as unknown as Parameters<typeof entryAvailabilityTransitions>[0];
+    const flips = entryAvailabilityTransitions(cd, 60);
+    expect(flips[0]).toEqual({ atSeconds: 1, available: false });
+    expect(flips[1]!.available).toBe(true);
+    expect(flips[1]!.atSeconds).toBeCloseTo(290 / 11, 6);
+    expect(cdAvailableAt(cd, 25.5)).toBe(false);
+    expect(cdAvailableAt(cd, 27)).toBe(true);
   });
 });
 
@@ -505,7 +528,7 @@ describe("Restoration Druid cooldown talents (GH #154)", () => {
       (m) => m.talentSpellId === "1246126",
     )!;
     // today's number is the generated DB2 row's
-    expect(DATED_COOLDOWN_VALUES["1246126"]!.value.since).toBe(row.value);
+    expect(DATED_COOLDOWN_VALUES["1246126"]!.value!.since).toBe(row.value);
     const at = (logEpochMs?: number) =>
       applyCdModifiers(
         CD_TALENT_MODIFIERS[NATURES_SWIFTNESS],
@@ -520,5 +543,352 @@ describe("Restoration Druid cooldown talents (GH #154)", () => {
     expect(at(CALL_OF_OHNAHRA_HOTFIX_EPOCH_MS + 14 * DAY)).toBe(120);
     expect(at(undefined)).toBe(120);
     expect(at(Number.NaN)).toBe(120);
+  });
+});
+
+describe("event-reduction triggers: interrupts, school casts, per-row hits, minimum hits (cooldown mastery 2026-10-20)", () => {
+  const T0 = 1_000_000;
+  const row = (
+    event: string,
+    spellId: string,
+    atMs: number,
+    extra: Record<string, unknown> = {},
+  ) => ({ spellId, logLine: { event, timestamp: T0 + atMs }, ...extra });
+  const seconds = (u: never, id: string) =>
+    eventTriggerTimesMs(u, EVENT_COOLDOWN_REDUCTIONS[id]!).map(
+      (t) => (t - T0) / 1000,
+    );
+
+  it("Savage Momentum: the unit's own SPELL_INTERRUPT of Skull Bash's interrupt id", () => {
+    const u = {
+      spellCastEvents: [row("SPELL_CAST_SUCCESS", "106839", 1000)],
+      damageOut: [],
+      actionOut: [
+        row("SPELL_CAST_SUCCESS", "106839", 1000),
+        row("SPELL_INTERRUPT", "93985", 1000),
+        row("SPELL_INTERRUPT", "116705", 5000),
+      ],
+    } as never;
+    expect(seconds(u, "205673")).toEqual([1]);
+  });
+
+  it("Lunation: every own successful cast of an Arcane-school spell", () => {
+    const u = {
+      spellCastEvents: [
+        row("SPELL_CAST_SUCCESS", "78674", 1000), // Starsurge, Astral
+        row("SPELL_CAST_SUCCESS", "190984", 2000), // Wrath, Nature
+        row("SPELL_CAST_START", "194153", 2500),
+      ],
+      damageOut: [],
+    } as never;
+    expect(seconds(u, "429539")).toEqual([1]);
+  });
+
+  it("Spellfrost Teachings: every Frost Splinter row, the same enemy twice included", () => {
+    const u = {
+      spellCastEvents: [],
+      damageOut: [
+        row("SPELL_DAMAGE", "443722", 1000, { destUnitId: "e1" }),
+        row("SPELL_DAMAGE", "443722", 1050, { destUnitId: "e1" }),
+        row("SPELL_DAMAGE", "444487", 1060, { destUnitId: "e2" }),
+      ],
+      missesOut: [
+        row("SPELL_MISSED", "443722", 1100, {
+          destUnitId: "e2",
+          missType: "ABSORB",
+        }),
+        row("SPELL_MISSED", "443722", 1150, {
+          destUnitId: "e2",
+          missType: "IMMUNE",
+        }),
+      ],
+    } as never;
+    expect(seconds(u, "444986")).toEqual([1, 1.05, 1.1]);
+  });
+
+  it("Rumbling Earth: one trigger for a Shockwave that struck 3+ units, none for 2", () => {
+    const hit = (at: number, dest: string) =>
+      row("SPELL_DAMAGE", "46968", at, { destUnitId: dest });
+    const u = {
+      spellCastEvents: [],
+      damageOut: [
+        hit(1000, "a"),
+        hit(1010, "b"),
+        hit(1020, "c"),
+        hit(41000, "a"),
+        hit(41010, "b"),
+      ],
+    } as never;
+    expect(seconds(u, "275339")).toEqual([1]);
+  });
+});
+
+describe("power-spend give-backs (Anger Management, Red Thirst, Restless Blades)", () => {
+  const T0 = 1_000_000;
+  const cast = (
+    spellId: string,
+    atMs: number,
+    costs?: Array<[number, number]>,
+  ) => ({
+    spellId,
+    logLine: { event: "SPELL_CAST_SUCCESS", timestamp: T0 + atMs },
+    ...(costs
+      ? { powerCosts: costs.map(([type, cost]) => ({ type, cost })) }
+      : {}),
+  });
+  const aura = (spellId: string, event: string, atMs: number) => ({
+    spellId,
+    logLine: { event, timestamp: T0 + atMs },
+  });
+  const am = EVENT_COOLDOWN_REDUCTIONS["152278"]!.triggerPowerSpend!;
+
+  it("Arms: spent Rage ÷ 20, Ignore Pain is no attack, a row without a cost gives nothing", () => {
+    const u = {
+      spellCastEvents: [
+        cast("12294", 1000, [[1, 300]]), // Mortal Strike, 30 Rage
+        cast("190456", 2000, [[1, 400]]), // Ignore Pain
+        cast("1464", 3000), // Slam, no cost stated
+      ],
+    } as never;
+    expect(
+      powerSpendTriggers(u, am, "71", () => false).map((g) => g.seconds),
+    ).toEqual([1.5]);
+  });
+
+  it("Fury gives back 1 s per 10 Rage; Rampaging Berserker's −15 Rage only during Recklessness, only for a holder", () => {
+    const u = {
+      spellCastEvents: [
+        cast("184367", 1000, [[1, 800]]),
+        cast("184367", 5000, [[1, 800]]),
+      ],
+      auraEvents: [
+        aura("1719", "SPELL_AURA_APPLIED", 4000),
+        aura("1719", "SPELL_AURA_REMOVED", 9000),
+      ],
+    } as never;
+    const holder = (t: string) => t === "1269309";
+    expect(
+      powerSpendTriggers(u, am, "72", holder).map((g) => g.seconds),
+    ).toEqual([8, 6.5]);
+    expect(
+      powerSpendTriggers(u, am, "72", () => false).map((g) => g.seconds),
+    ).toEqual([8, 8]);
+  });
+
+  it("Battlelord: the Mortal Strike that consumes the buff (removed at the cast) costs a third less", () => {
+    const u = {
+      spellCastEvents: [cast("12294", 2000, [[1, 300]])],
+      auraEvents: [
+        aura("386631", "SPELL_AURA_APPLIED", 1000),
+        aura("386631", "SPELL_AURA_REMOVED", 2000),
+      ],
+    } as never;
+    expect(
+      powerSpendTriggers(u, am, "71", () => false)[0]!.seconds,
+    ).toBeCloseTo((300 * 0.67) / 200, 6);
+  });
+
+  it("Restless Blades is an Outlaw baseline: 0.8 s per combo point", () => {
+    const r = EVENT_COOLDOWN_REDUCTIONS["79096"]!;
+    expect(r.ownedBySpecIds).toEqual(["260"]);
+    const u = {
+      spellCastEvents: [
+        cast("315341", 1000, [
+          [3, 25],
+          [4, 6],
+        ]),
+      ],
+    } as never;
+    expect(
+      powerSpendTriggers(u, r.triggerPowerSpend!, "260")[0]!.seconds,
+    ).toBeCloseTo(4.8, 6);
+  });
+});
+
+describe("Unrelenting Onslaught: Sudden Death used × Executioner stacks", () => {
+  const T0 = 1_000_000;
+  const ev = (
+    event: string,
+    spellId: string,
+    atMs: number,
+    amount?: number,
+  ) => ({
+    spellId,
+    logLine: { event, timestamp: T0 + atMs },
+    ...(amount !== undefined ? { amount } : {}),
+  });
+  const r = EVENT_COOLDOWN_REDUCTIONS["444780"]!;
+  it("a use with 2 stacks gives 10 s; an expiry gives nothing; a stack gained at the use itself is not counted", () => {
+    const u = {
+      spellCastEvents: [
+        ev("SPELL_CAST_SUCCESS", "163201", 10_000),
+        ev("SPELL_CAST_SUCCESS", "163201", 30_000),
+      ],
+      auraEvents: [
+        ev("SPELL_AURA_APPLIED", "445584", 1000),
+        ev("SPELL_AURA_APPLIED_DOSE", "445584", 2000, 2),
+        ev("SPELL_AURA_APPLIED", "52437", 9000),
+        ev("SPELL_AURA_REMOVED", "52437", 10_050), // used by the 10 s Execute
+        ev("SPELL_AURA_APPLIED", "52437", 15_000),
+        ev("SPELL_AURA_REMOVED", "52437", 25_000), // expired: no Execute near
+        ev("SPELL_AURA_REMOVED", "445584", 26_000),
+        ev("SPELL_AURA_APPLIED", "52437", 29_000),
+        ev("SPELL_AURA_APPLIED", "445584", 30_000), // same instant: not before
+        ev("SPELL_AURA_REMOVED", "52437", 30_000), // used, 0 stacks before
+      ],
+    } as never;
+    expect(
+      auraConsumedTriggers(u, r).map((g) => [(g.atMs - T0) / 1000, g.seconds]),
+    ).toEqual([[10.05, 10]]);
+  });
+});
+
+describe("charge simulation with per-press effects (IChargeEffects)", () => {
+  it("a give-back pulls in the charge recharging; at full charges it does nothing", () => {
+    // 2 charges / 30 s: presses at 0 and 1 → both spent, first back at 30
+    const casts = [0, 1];
+    expect(chargesAvailableAt(casts, 30, 2, 25)).toBe(0);
+    // a 2.5 s give-back at 10 and at 20 → first charge back at 25
+    const effects = {
+      reductions: [
+        { atSeconds: 10, seconds: 2.5 },
+        { atSeconds: 20, seconds: 2.5 },
+      ],
+    };
+    expect(chargesAvailableAt(casts, 30, 2, 24.9, effects)).toBe(0);
+    expect(chargesAvailableAt(casts, 30, 2, 25, effects)).toBe(1);
+    // a give-back while full is lost
+    expect(
+      chargeStateAt([50], 30, 2, 50, {
+        reductions: [{ atSeconds: 40, seconds: 10 }],
+      }).nextRecharge,
+    ).toBe(80);
+  });
+
+  it("idle credit: the time at full charges (from the round's start) comes off the recharge a press starts, ≤ cap", () => {
+    // full since the start: a press at 40 gets the whole 15
+    expect(
+      chargeStateAt([40], 120, 2, 40, { idleCapSeconds: 15 }).nextRecharge,
+    ).toBe(145);
+    // second charge spent while the first recharges: no new timer, no credit
+    expect(
+      chargeStateAt([40, 41], 120, 2, 41, { idleCapSeconds: 15 }).nextRecharge,
+    ).toBe(145);
+  });
+});
+
+describe("hotfix-dated talent numbers (cooldown mastery 2026-10-20)", () => {
+  const DAY = 86_400_000;
+  const AUG17 = Date.UTC(2026, 7, 17, 12);
+  const OCT10 = Date.UTC(2026, 9, 10, 12);
+  const cd = (
+    target: string,
+    base: number,
+    talents: string[],
+    specId: string,
+    logEpochMs: number,
+    ranks: Array<[string, number]> = [],
+  ) =>
+    applyCdModifiers(
+      CD_TALENT_MODIFIERS[target],
+      base,
+      1,
+      new Set(talents),
+      new Set(),
+      { specId, logEpochMs, talentRanks: new Map(ranks) },
+    ).cooldownSeconds;
+
+  it("where DB2 has the change, today's dated number is the generated one", () => {
+    const row = (target: string, talent: string) =>
+      CD_TALENT_MODIFIERS[target]!.find(
+        (m) => m.talentSpellId === talent && m.effect === "reduce_cd",
+      )!;
+    expect(DATED_COOLDOWN_VALUES["424654"]!.bySpec!["71"]!.since).toBe(
+      row("3411", "424654").valueBySpec!["71"]![0],
+    );
+    expect(DATED_COOLDOWN_VALUES["382424"]!.value!.since).toBe(
+      row("45438", "382424").valueByRank![0],
+    );
+    expect(DATED_COOLDOWN_VALUES["1244025"]!.value!.since).toBe(
+      row("55342", "1244025").valueByRank![0],
+    );
+  });
+
+  it("Retribution's Blessing of Sacrifice: 60 s before the 2026-08-18 hotfix, 90 s after; Holy 105 either side", () => {
+    expect(cd("6940", 120, ["384820"], "70", AUG17)).toBe(60);
+    expect(cd("6940", 120, ["384820"], "70", OCT10)).toBe(90);
+    expect(cd("6940", 120, ["384820"], "70", Number.NaN)).toBe(90);
+    expect(cd("6940", 120, ["384820"], "65", AUG17)).toBe(105);
+    expect(cd("6940", 120, ["384820"], "65", OCT10)).toBe(105);
+    // Protection's hotfix came a week later
+    expect(cd("6940", 120, ["384820"], "66", AUG17 + 5 * DAY)).toBe(60);
+    expect(cd("6940", 120, ["384820"], "66", OCT10)).toBe(90);
+  });
+
+  it("Retribution's Divine Protection with Unbreakable Spirit: 63 s before the hotfix, 72 s after", () => {
+    // base 60 + Retribution's spec passive +30 = 90, × 0.7 / × 0.8
+    expect(cd("403876", 60, ["114154"], "70", AUG17)).toBe(63);
+    expect(cd("403876", 60, ["114154"], "70", OCT10)).toBe(72);
+  });
+
+  it("Winter's Protection rank 2: −60 s before the 2026-09-01 hotfix, −30 after", () => {
+    const ranks: Array<[string, number]> = [["382424", 2]];
+    expect(cd("45438", 240, ["382424"], "62", AUG17, ranks)).toBe(180);
+    expect(cd("45438", 240, ["382424"], "62", OCT10, ranks)).toBe(210);
+  });
+});
+
+describe("12.1.0 talent map: entries whose definition traded spells at 12.1.5", () => {
+  const ev = (ms: number) => ({ logLine: { timestamp: ms } });
+  const talents = [
+    { id1: 103900, id2: 103733, count: 1 }, // 12.1.0: Ultimate Serenity
+    { id1: 82612, id2: 103745, count: 1 }, // 12.1.0: Holy Celerity
+    { id1: 1, id2: 2, count: 1 },
+  ];
+  it("an August log has the two Holy Priest entries swapped; a log after 12.1.5, or undated, reads them as they are", () => {
+    const aug = {
+      info: { talents },
+      spellCastEvents: [ev(Date.UTC(2026, 7, 15))],
+    };
+    expect(talentsOf(aug)).toEqual([
+      { id1: 82612, id2: 103745, count: 1 },
+      { id1: 103900, id2: 103733, count: 1 },
+      { id1: 1, id2: 2, count: 1 },
+    ]);
+    const oct = {
+      info: { talents },
+      spellCastEvents: [ev(Date.UTC(2026, 9, 16))],
+    };
+    expect(talentsOf(oct)).toBe(talents);
+    expect(talentsOf({ info: { talents } })).toBe(talents);
+  });
+});
+
+describe("credit bonuses: Apotheosis ×3, Light of the Naaru +10 % a rank", () => {
+  const T0 = 1_000_000;
+  const ev = (event: string, spellId: string, atMs: number) => ({
+    spellId,
+    logLine: { event, timestamp: T0 + atMs },
+  });
+  it("a Smite gives 4 s, 12 s under Apotheosis, + 20 % at Light of the Naaru rank 2", () => {
+    const u = {
+      spec: "257",
+      spellCastEvents: [
+        ev("SPELL_CAST_SUCCESS", "585", 1000),
+        ev("SPELL_CAST_SUCCESS", "585", 6000),
+      ],
+      damageOut: [],
+      auraEvents: [
+        ev("SPELL_AURA_APPLIED", "200183", 5000),
+        ev("SPELL_AURA_REMOVED", "200183", 25_000),
+      ],
+    } as never;
+    const r = [EVENT_COOLDOWN_REDUCTIONS["63733"]!];
+    expect(eventTriggersFor(u, r).map((g) => g.seconds)).toEqual([4, 12]);
+    expect(
+      eventTriggersFor(u, r, undefined, (t) => (t === "196985" ? 2 : 0)).map(
+        (g) => Math.round(g.seconds * 100) / 100,
+      ),
+    ).toEqual([4.8, 12.8]);
   });
 });
