@@ -3567,6 +3567,11 @@ export function applyCdModifiers(
       : !!talentedSpellIds?.has(mod.talentSpellId) ||
         pvpTalentIds.has(mod.talentSpellId);
     if (!owned) continue;
+    // a spec-gated talent row (Elemental Affinity: Fire's row for Frost
+    // spells, Frost's for Fire spells) — unknown spec gets neither, the
+    // longer cooldown
+    if (mod.onlySpecIds && !(specId && mod.onlySpecIds.includes(specId)))
+      continue;
     if (mod.effect === "extra_charge") {
       charges += mod.value;
     } else if (mod.effect === "reduce_cd") {

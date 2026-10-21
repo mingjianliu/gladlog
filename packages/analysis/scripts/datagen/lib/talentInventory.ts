@@ -86,6 +86,9 @@ export interface ICDModifier {
   /** set when the source is a spec passive (SpecializationSpells), not a
    * talent: every player of these specs owns it */
   specIds?: string[];
+  /** a talent row the tooltip gives to these specs only (`$?cN[…$sK…]`,
+   * lib/tooltipSpecGates.ts): a holder of another spec does not get it */
+  onlySpecIds?: string[];
 }
 
 export type TargetVia =
@@ -460,6 +463,13 @@ export function compileCooldownModifiers(
    * button, although the corpus shows 6,947 presses with the 60 s cooldown.
    */
   knownSpellIds?: ReadonlySet<string>,
+  /** The specs a talent's effect row applies to, from its tooltip's spec
+   * branches (`lib/tooltipSpecGates.ts`); undefined = every holder;
+   * "unreferenced" = the tooltip never names the effect. */
+  specGateOf?: (
+    talentSpellId: string,
+    effectIndex: number,
+  ) => string[] | "unreferenced" | undefined,
 ): Record<string, ICDModifier[]> {
   const hop0 = new Set(
     inv.edges.filter((e) => e.hop === 0).map((e) => e.spellId),
@@ -470,6 +480,31 @@ export function compileCooldownModifiers(
       specIdsOf.set(e.spellId, e.specIds.map(String));
   const results: Record<string, ICDModifier[]> = {};
   const mechanismOf = new WeakMap<ICDModifier, "cooldown" | "charge">();
+
+  // An effect the tooltip never names takes the gate of a named sibling row
+  // of the same talent whose targets it shares (Elemental Affinity effect 4,
+  // Frost Nova's charge category, is the Fire mage's like effect 0, which
+  // masks Frost Nova); with no such sibling, or two disagreeing, no gate.
+  const rowsOfTalent = new Map<string, IInventoryRow[]>();
+  for (const r of inv.rows) {
+    if (!hop0.has(r.spellId)) continue;
+    const l = rowsOfTalent.get(r.spellId) ?? [];
+    l.push(r);
+    rowsOfTalent.set(r.spellId, l);
+  }
+  const rowSpecGate = (row: IInventoryRow): string[] | undefined => {
+    const own = specGateOf?.(row.spellId, row.effectIndex);
+    if (own !== "unreferenced") return own;
+    const mine = new Set(row.targets.map((t) => t.spellId));
+    const found = new Set<string>();
+    for (const sib of rowsOfTalent.get(row.spellId) ?? []) {
+      if (sib === row || !sib.targets.some((t) => mine.has(t.spellId)))
+        continue;
+      const g = specGateOf?.(sib.spellId, sib.effectIndex);
+      if (Array.isArray(g)) found.add(g.join(","));
+    }
+    return found.size === 1 ? [...found][0]!.split(",") : undefined;
+  };
 
   const add = (
     targetId: string,
@@ -566,6 +601,9 @@ export function compileCooldownModifiers(
     // a no-op in the arena (base 0, or PvpMultiplier 0 = "off in PvP")
     if ((type === "reduce_cd" || type === "reduce_cd_pct") && value === 0)
       continue;
+    const onlySpecIds = specIdsOf.has(row.spellId)
+      ? undefined
+      : rowSpecGate(row);
     for (const t of row.targets) {
       add(
         t.spellId,
@@ -577,6 +615,7 @@ export function compileCooldownModifiers(
           ...(specIdsOf.has(row.spellId)
             ? { specIds: specIdsOf.get(row.spellId) }
             : {}),
+          ...(onlySpecIds ? { onlySpecIds } : {}),
           // a replacement that only holds while a finite buff is up (Zenith →
           // Zenith Stomp) is not the talent taking the button away (GH #106)
           ...(type === "replace_spell" && row.activation === "whileAura"

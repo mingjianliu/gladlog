@@ -243,5 +243,13 @@
  *  damage buffs and Ultimate Penitence are offensive cooldowns). 605 files:
  *  cd-hoarded −43 / −25, missed-cleanse +29 / +21, other types ±1–4 (user
  *  approved the preview).
+ *  v428 (2026-10-20, cooldown mastery batch 1): talent rows the tooltip
+ *  gives to one spec only (`$?c3[…$s3…]`) now apply to that spec only —
+ *  Elemental Affinity's Fire-spell row is the Frost mage's, its Frost-spell
+ *  rows the Fire mage's (Fire Dragon's Breath 28 → 40 s, Frost Ring of Frost
+ *  / Frost Nova back to unreduced; 45 rows of 17 talents gated);
+ *  Improved Feign Death per rank (25 → 20 s); Feral Convoke 120 → 60 s
+ *  (Ashamane's Guidance). 605 files (measured on the pre-F16 base): no
+ *  candidate added or removed.
  */
-export const PROMPT_VERSION = 427;
+export const PROMPT_VERSION = 428;

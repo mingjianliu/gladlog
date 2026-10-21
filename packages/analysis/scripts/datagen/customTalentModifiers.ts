@@ -58,11 +58,23 @@ export const CUSTOM_TALENT_MODIFIERS: Record<string, ICDModifier[]> = {
   // ledgerImpossibleCastScan, 2,000 new-season files + 240 downloaded:
   // Restoration holders' Convoke recasts on the modelled 120 s come back
   // from 45.0 s on (36 presses under it), 60 − 15 with Control of the Dream.
+  //
+  // Feral's Ashamane's Guidance 391548 has the same split (cooldown mastery
+  // round, 2026-10-20): the talent itself is a dummy (effect 3) and its −50 %
+  // sits on 391538 (aura 108, misc 11, mask 0x10000 — Convoke), which no
+  // talent node names, so the generator never reached it. Corpus (2,240
+  // files): Feral holders' Convoke recasts on the modelled 120 s are 60.6,
+  // 66.2, 70.3, 74.1, 76.8, 80 and 94.1 s — all ≥ 60.
   "391528": [
     {
       talentSpellId: "393371", // Cenarius' Guidance
       effect: "reduce_cd",
       value: 60,
+    },
+    {
+      talentSpellId: "391548", // Ashamane's Guidance (row on 391538)
+      effect: "reduce_cd_pct",
+      value: 50,
     },
   ],
 

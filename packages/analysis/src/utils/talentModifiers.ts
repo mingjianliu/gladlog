@@ -25,6 +25,10 @@ export interface ICDModifier {
    * every player of these specs owns it (GH #106 — e.g. the "Holy Paladin"
    * aura 1258016, Divine Toll −15 s). */
   specIds?: string[];
+  /** A talent row its tooltip gives to these specs only (`$?cN[…$sK…]`,
+   * scripts/datagen/lib/tooltipSpecGates.ts): a holder of another spec —
+   * or of an unknown one — does not get it. */
+  onlySpecIds?: string[];
 }
 
 export const CD_TALENT_MODIFIERS: Record<string, ICDModifier[]> =
@@ -75,6 +79,14 @@ export function specPassiveOwned(
 export const PER_RANK_COOLDOWN_TALENTS: ReadonlySet<string> = new Set([
   "390670", // Improved Fade
   "270581", // Natural Mending
+  // Improved Feign Death 1258486 (−5 s per rank). Cooldown mastery round,
+  // 2026-10-20 — DB2: aura 107, misc 11, −5 000 ms, the class mask covers
+  // Feign Death 5384; the node has 2 ranks. Corpus, 2,240 files
+  // (ledgerImpossibleCastScan): every holder is rank 2 (2,105 / 2,105), the
+  // value-once 25 s left 1,086 of 4,090 recasts under it, and the floor is
+  // sharp at 20.1–20.2 s on all three specs (0 gaps under 20.0 = 30 − 2 × 5;
+  // 79 between 19.9 and 20.5). Non-holders 0 of 66 under 30.
+  "1258486",
   "382424", // Winter's Protection
   "1270900", // Eternal Hunt
   // Master of Time (Alter Time −5/rank). Talent impact audit 2026-09-26,

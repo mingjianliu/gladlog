@@ -3797,3 +3797,26 @@ base): 28 read 0; residuals stateTick 169, killTargetInside 12,
 aoeMissAvoided 10, reflectedLine 6, repressLength 6, burstAbsorbed 4,
 offensiveTag 3, riderPassive 3, hotPressHp 3, nonControlCount 3, sorImmune 2
 (GH #153).
+v428 (2026-10-20, cooldown mastery batch 1 — GH #124): a talent several
+specs take carries one SpellEffect row per spec's version and only the
+TOOLTIP says which is whose (`$?c2[… $s1 …]?c3[… $s3 …]`). The generator
+now reads the branches (scripts/datagen/lib/tooltipSpecGates.ts: cN by
+ChrSpecialization.OrderIndex, spec-passive auras definite, other conditions
+unknown; an effect the text never names takes a sibling row's gate through
+shared targets) and writes `onlySpecIds`; `applyCdModifiers` gives such a
+row to those specs only (unknown spec: none — the longer cooldown). 45 rows
+of 17 talents gated. Elemental Affinity 431067: Fire Dragon's Breath was
+modelled 28 s against a corpus floor of 40.0 s (372 recasts, 2,240 files)
+— now 40; Frost holders' Ring of Frost / Frost Nova / Ice Nova / Cone of
+Cold no longer take the Fire mage's −30 %. Improved Feign Death 1258486 is
+per rank (every holder rank 2; floor 20.1–20.2 s, none under 20.0): 25 →
+20 s. Feral Convoke: Ashamane's Guidance's −50 % sits on 391538, which no
+node names — hand row on 391548 (gaps 60.6–94.1 s): 120 → 60 s.
+ledgerImpossibleCastScan (2,240 files): Feign Death floor-explained 1,058
+→ 0, Convoke impossible 7 → 0, total impossible 588 → 581. 605 files
+(b63 → b64, measured before F16 merged): no candidate added or removed; 1,337 context files change in
+cooldown facts (kit seconds, `[RES]`, `[UNUSED]`); 3 `[PEEL OPTION]` lines
+gone (a Fire mage's "Dragon's Breath usable 4 s, not used" — it was on
+cooldown), 10 `[DEATH]` lines gain "Unused: Feign Death". Gates: baseline
+residue only. New re-runnable scan: packages/eval/scripts/cooldownRecastScan.ts
+(every cooldown read outside the ledger, against `unitCooldownOf`).
