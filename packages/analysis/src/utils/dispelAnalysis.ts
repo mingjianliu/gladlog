@@ -2233,6 +2233,32 @@ export function occupancyWithin(
 interface CannotCastSrc {
   enemyIds: Set<string>;
   units: ICombatUnit[];
+  /** a unit's cannot-cast intervals per spell set, built once per summary —
+   * they are whole-round facts, asked again for every window (the ×12
+   * first-paint fixture spent seconds rebuilding them per render) */
+  memo?: Map<ICombatUnit, Map<string, CannotCastIntervals>>;
+}
+
+type CannotCastIntervals = ReturnType<typeof cannotCastIntervalsForSpells>;
+
+/** `cannotCastIntervalsForSpells` through the summary's memo. Readers never
+ * mutate the returned intervals. */
+function cannotCastOf(
+  src: CannotCastSrc,
+  unit: ICombatUnit,
+  spellIds: readonly string[] | undefined,
+): CannotCastIntervals {
+  if (!src.memo)
+    return cannotCastIntervalsForSpells(unit, src.enemyIds, spellIds, src.units);
+  let byUnit = src.memo.get(unit);
+  if (!byUnit) src.memo.set(unit, (byUnit = new Map()));
+  const key = spellIds === undefined ? "*" : spellIds.join(",");
+  let ivs = byUnit.get(key);
+  if (!ivs) {
+    ivs = cannotCastIntervalsForSpells(unit, src.enemyIds, spellIds, src.units);
+    byUnit.set(key, ivs);
+  }
+  return ivs;
 }
 
 /**
@@ -2252,7 +2278,7 @@ function isPurgerFullyBlockedDuringWindow(
   spellIds?: readonly string[],
 ): boolean {
   return isWindowFullyCovered(
-    cannotCastIntervalsForSpells(purger, src.enemyIds, spellIds, src.units),
+    cannotCastOf(src, purger, spellIds),
     windowStartMs,
     windowEndMs,
   );
@@ -2329,7 +2355,7 @@ export function dispellersBlockedMsInWindow(
   let intersection: Array<{ from: number; to: number }> | null = null;
   for (const d of dispellers) {
     const merged = mergeIntervals(
-      cannotCastIntervalsForSpells(d, src.enemyIds, spellIdsOf?.(d), src.units),
+      cannotCastOf(src, d, spellIdsOf?.(d)),
     );
     intersection =
       intersection === null
@@ -2893,6 +2919,7 @@ export function reconstructDispelSummary(
   const cannotCastSrc: CannotCastSrc = {
     enemyIds: new Set([...enemyIds, ...enemyPetIds]),
     units: rosterUnits,
+    memo: new Map(),
   };
   const friendlyPlayerById = new Map(friends.map((u) => [u.id, u]));
   const enemyPlayerById = new Map(enemies.map((u) => [u.id, u]));

@@ -1111,16 +1111,20 @@ export function splitAtRepressRefresh(
   castSecondsOf: (srcUnitName: string, spellId: string) => readonly number[],
 ): ISaveAuraInterval[] {
   const out: ISaveAuraInterval[] = [];
+  // the unit's REFRESH rows, indexed once (one pass per interval read every
+  // aura event: the ×12 first-paint fixture spent ~7 s per render here)
+  const refreshesOf = new Map<string, number[]>();
+  for (const a of unit.auraEvents ?? []) {
+    if (a.logLine.event !== LogEvent.SPELL_AURA_REFRESH) continue;
+    const key = `${a.spellId}\u0000${a.srcUnitName}`;
+    const list = refreshesOf.get(key) ?? [];
+    list.push((a.timestamp - startTime) / 1000);
+    refreshesOf.set(key, list);
+  }
   for (const iv of intervals) {
-    const refreshS = (unit.auraEvents ?? [])
-      .filter(
-        (a) =>
-          a.spellId === iv.spellId &&
-          a.srcUnitName === iv.srcUnitName &&
-          a.logLine.event === LogEvent.SPELL_AURA_REFRESH,
-      )
-      .map((a) => (a.timestamp - startTime) / 1000)
-      .filter((t) => t > iv.fromS + SAVE_CAST_AURA_PAIR_S && t < iv.toS);
+    const refreshS = (
+      refreshesOf.get(`${iv.spellId}\u0000${iv.srcUnitName}`) ?? []
+    ).filter((t) => t > iv.fromS + SAVE_CAST_AURA_PAIR_S && t < iv.toS);
     const casts = castSecondsOf(iv.srcUnitName, iv.spellId);
     const cuts = refreshS
       .filter((t) => casts.some((c) => Math.abs(c - t) <= SAVE_CAST_AURA_PAIR_S))
