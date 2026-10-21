@@ -285,5 +285,11 @@
  *  Shield +5 …; Spiritwalker's Momentum per press, loadout `lasts 15–19s`).
  *  605 files: no candidate added or removed; 1,875 contexts change in the
  *  loadout's `lasts` and in 25 kill-window lines.
+ *  v434 (2026-10-21, codex 20-F16-01..04): a deferral shield's absorb is
+ *  out of every burst / kill reader, a Spell Reflection return goes to the
+ *  nearest damaging reflected spell, a disarm or silence that ran its
+ *  official length is not "broken" by a later Medallion, opener [RES] rows
+ *  honour Forbearance, suppressed [RES] rows keep the delta state. 605
+ *  files: no candidate added or removed; 220 contexts change.
  */
-export const PROMPT_VERSION = 433;
+export const PROMPT_VERSION = 434;

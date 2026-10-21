@@ -3952,3 +3952,20 @@ confirmed) is a control and stays official. 605 files (main 5dcd31c51 → this):
 no candidate added or removed; 1,875 contexts change (loadout `lasts`, 25
 kill-window lines shorter by the longer Cloak of Shadows); fact2Scan
 kitTooltipLasts 2,484 → 0. Gates: baseline residue only.
+
+v434 (2026-10-21, codex 20-F16-01..04 — 15 findings, 10 confirmed on main and
+fixed, each with a regression test and an over-fixing control,
+codexF16Group1A/B/C): a deferral shield's SPELL_ABSORBED (Time Dilation,
+Stretch Time) is out of the kill-window bursts, the healer view's owner
+absorbed figure, KILL ATTEMPTS' team damage and the channel's took figure
+(`isDeferralAbsorb`); a friendly debuff is no enemy offensive threat after a
+press; Grounding's `[CC AVOIDED?]` reads split-id controls (Lightning Lasso);
+the kill-window acquittal states press-only and maybe-ready together; a
+disarm or silence that ran its official length is not credited to a later
+Medallion; opener [RES] rows honour Forbearance / Hypothermia; a suppressed
+[RES] row keeps the delta state; a Spell Reflection return goes to the
+nearest damaging reflected spell; effect-evidence presses group by the
+effect's length; out-of-round casts no longer switch effect inference off.
+605 files (main 82e7337a4 → this): no candidate added or removed; 220
+contexts change ([REFLECTED] 42 → 52 lines, kill-window / KILL ATTEMPTS
+team figures, [RES], [SILENCE] tails).
