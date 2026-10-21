@@ -3764,3 +3764,36 @@ approved), none removed, two cd-hoarded findings list one more ready
 cooldown (Convoke / Nature's Swiftness); 878 context files change in
 readiness facts only. Gates: baseline residue only. cdRecastFloor still
 carries the pre-fix Tree of Life / Nature's Swiftness floors (GH #115).
+
+v427 (2026-10-20, F16 — fact2 round-2 audit, 67 confirmed defects by fact
+class, and the v0.1.36 same-match retest): every cast-keyed reader resolves
+an aura to the cast whose own effect it is (`castKeyOfAura`, fact2 C10);
+kill-window team damage states absorbed hits, and they count in burst
+detection (user ruling R7 option A: [KILL WINDOW] +412, [VULNERABLE] −217,
+no candidate change); the [STATE] sampler reads the last row before the
+second; ENERGIZE / DRAIN / LEECH rows carry an HP / position sample (parser);
+a trough reads its unit's death second up to the death (user ruling R1,
+gates relaxed to match); press HP under a HoT's first tick, a refresh and a
+same-named heal; hard-cast outcomes paired to the latest completion;
+kill-attempt target and anchor; Spell Reflection returns and their school;
+school-limited immunities in ABILITIES INTO; kit controls in "your CC
+ready"; [REJECTED] runs per spell. User rulings 2026-10-20 on the retest
+(「我觉得都算」): Time Dilation's held-back damage is mitigation
+([STACKED DEFENSIVES] prices it from its own absorb rows, the audit row no
+longer says "not prevented"); a ready Alter Time is a major defensive in
+hand for the kill-window span (`KW_IN_HAND_ONLY_DEFENSIVE_IDS`; pressed it
+holds nothing, fact1215 R7); racial damage buffs (Blood Fury, Berserking,
+Ancestral Call) and Ultimate Penitence are offensive cooldowns
+(`OFFENSIVE_RACIAL_WINDOW_IDS`). 605 files (base fcde27b10 → b8 455fcfd51,
+7,559 → 7,560 menu events): cd-hoarded dps 648 → 605 / healer 601 → 576
+(owner controls recognised through C10 answer the crisis, ruling fa5e; an
+owner's own 15 % Obsidian Scales copy), missed-cleanse dps 147 → 176 / healer
+187 → 208 (an enemy-applied offensive DEBUFF no longer reads as the unit's
+own threat), kick-eaten +4 / +2, missed-sync-window +2 / +3 and
+slow-defensive-response +1 (racials and Ultimate Penitence as offensive
+cooldowns), kick-priority −1 / +2, position-mistake −2 / +2, death-setup
++2 / +1, crisis-no-response +1. fact2Scan (605, 39 checks firing on the
+base): 28 read 0; residuals stateTick 169, killTargetInside 12,
+aoeMissAvoided 10, reflectedLine 6, repressLength 6, burstAbsorbed 4,
+offensiveTag 3, riderPassive 3, hotPressHp 3, nonControlCount 3, sorImmune 2
+(GH #153).

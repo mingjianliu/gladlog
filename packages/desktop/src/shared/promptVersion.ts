@@ -234,5 +234,14 @@
  *  Guardian fade; Restoration Convoke −60 s), Call of Ohn'ahra dated by the
  *  log (+30 s before the 2026-09-22 hotfix). 605 files: missed-sync-window
  *  +7 (Balance Force of Nature back inside the window; user approved).
+ *  v427 (2026-10-20, F16 — fact2 round-2 audit + v0.1.36 retest): every
+ *  cast-keyed reader resolves an aura to its cast; the [STATE] sampler,
+ *  trough and press-HP readings; kill-attempt target / anchor; hard-cast
+ *  outcomes; user rulings 2026-10-20 (absorbed hits count in burst
+ *  detection; a trough reads its death second; Time Dilation's held-back
+ *  damage is mitigation; a ready Alter Time is a defensive in hand; racial
+ *  damage buffs and Ultimate Penitence are offensive cooldowns). 605 files:
+ *  cd-hoarded −43 / −25, missed-cleanse +29 / +21, other types ±1–4 (user
+ *  approved the preview).
  */
-export const PROMPT_VERSION = 426;
+export const PROMPT_VERSION = 427;
