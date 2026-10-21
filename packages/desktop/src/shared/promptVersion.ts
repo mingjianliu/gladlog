@@ -291,5 +291,14 @@
  *  official length is not "broken" by a later Medallion, opener [RES] rows
  *  honour Forbearance, suppressed [RES] rows keep the delta state. 605
  *  files: no candidate added or removed; 220 contexts change.
+ *  v435 (2026-10-21, F16 same-round retest + codex 20-F16-07/08 + user
+ *  rulings): no kick of a cast inside Spirit of Redemption; the burst
+ *  window's answers include the crisis side's (Bear Form, Frenzied
+ *  Regeneration, Roar of Sacrifice …); [CONSEQ] starts at the landing
+ *  instant and a quiet line prints its readings; Frost Nova 8 s with
+ *  Improved Frost Nova; one avoidance per ground-control hit; Nether Ward
+ *  returns; a warlock purges only while the Felhunter is out. 605 files:
+ *  kick-priority-missed −6, kick-priority-team −9, slow-defensive-response
+ *  −19, death-setup +3, burst-into-mitigation −1 (user approved).
  */
-export const PROMPT_VERSION = 434;
+export const PROMPT_VERSION = 435;

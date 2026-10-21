@@ -3969,3 +3969,33 @@ effect's length; out-of-round casts no longer switch effect inference off.
 605 files (main 82e7337a4 → this): no candidate added or removed; 220
 contexts change ([REFLECTED] 42 → 52 lines, kill-window / KILL ATTEMPTS
 team figures, [RES], [SILENCE] tails).
+
+v435 (2026-10-21, the F16 same-round retest — round1+2's re-audit of the 30
+fact2 rounds at v434: 66 of 67 fixed, 32 confirmed on the same yardstick, 5 of
+them from F16 — plus codex 20-F16-07 / -08 and three user rulings). Fixed:
+one `[CC AVOIDED?]` per ground-control hit (a Capacitor Totem's press and its
+totem's pulse shared one MISS); a buff's early-end slack is at most half its
+length (Vanish) and a form-bound buff ended by a shift reads so; a dead owner
+holds no ready CC in a kill window and is not free; a rider shield
+(Shield of Vengeance) is `[no press logged]`; kick-priority skips a cast
+inside the Spirit of Redemption form (`auraBlocksInterrupt`; 233 casts in the
+form, 0 kicked); the burst window's answers include the crisis readers'
+(`BURST_EXTRA_ANSWER_IDS`); the burst ledger, KILL ATTEMPTS' bracket and
+burst floor and the reflected return leave out deferral absorbs; Nether Ward
+returns are the reflector's damage; a warlock purges only while the Felhunter
+is out (`warlockPurgePetSpans`, the header says when); a removed disarm is a
+High removal on the cleanse lines (not a missed-cleanse); an owner control
+read by its aura (Terror of the Skies) is "CC cast" in HEALER OFFENSE; the
+spam fold counts printed casts and Stasis-storing casts; a control from a
+charmed holder's own team is a CC on it, tagged `[from its own team, while
+charmed]`; Berserker Rage / Shout and Nullifying Shroud avoid by their DB2
+mechanics; a stun chain ends at its latest-ending stun; a trinket that broke
+any control inside a stun bracket is that attempt's; a trough reads a live
+row in the death's own ms; a Roar-lengthened silence / disarm is judged on
+its length as landed. User rulings 2026-10-21: [CONSEQ]'s start is the HP at
+the landing instant (a third signed exception to "point readings read the
+grid"), a quiet line prints its readings; Frost Nova is 8 s for an Improved
+Frost Nova holder. 605 files (v434 → this): kick-priority-missed dps 35 → 29,
+kick-priority-team dps 27 → 23 / healer 30 → 25, slow-defensive-response
+88 → 69, death-setup +3 (one event), burst-into-mitigation −1 — user
+approved; every context changes (legends). Gates: baseline residue only.
