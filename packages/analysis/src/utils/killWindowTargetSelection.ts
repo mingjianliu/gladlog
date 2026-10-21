@@ -8,7 +8,10 @@ import {
 // Constants
 // ---------------------------------------------------------------------------
 // GH #31 ② (2026-09-02): shared official-face predicate replaces the hand set.
-import { countsAsKillWindowDefensiveInHand } from "../data/abilityProfile";
+import {
+  countsAsKillWindowDefensiveInHand,
+  unpressedKitDefensiveInHand,
+} from "../data/abilityProfile";
 import { classMetadata } from "../data/classSpells";
 import { MITIGATION_WALL_IDS } from "../data/mitigationData";
 import {
@@ -345,7 +348,7 @@ function getDefensiveStateAtTime(
   // reading, `computeOffensiveWindows`)
   for (const r of combat ? unusedKitRows(enemy, combat) : [])
     if (
-      countsAsKillWindowDefensiveInHand(r.spellId) &&
+      unpressedKitDefensiveInHand(r.spellId) &&
       !castsBySpell.has(r.spellId)
     )
       available.push(r.name);

@@ -17,7 +17,9 @@ import {
   isKillWindowMajorDefensive,
   KW_IN_HAND_ONLY_DEFENSIVE_IDS,
   KW_MAJOR_DEFENSIVE_IDS,
+  KW_UNPRESSED_NOT_IN_HAND_IDS,
   kwCooldownSeconds,
+  unpressedKitDefensiveInHand,
 } from "../src/data/abilityProfile";
 import { ensureAnalysisData } from "../src/data/ensure";
 import { MITIGATION_WALL_IDS } from "../src/data/mitigationData";
@@ -732,5 +734,21 @@ describe("computeOffensiveWindows — an unpressed kit defensive is in hand", ()
       combat,
     );
     expect(ws.length).toBeGreaterThan(0);
+  });
+});
+
+// User ruling 2026-10-20 (「去掉治疗和只能给队友的」): an unpressed heal or
+// ally-only cooldown does not keep its owner out of a span.
+describe("unpressedKitDefensiveInHand — an unpressed heal or ally-only cooldown is not in hand", () => {
+  it("heals and Blessing of Sacrifice are out; walls, immunities and self-castable externals stay", () => {
+    for (const id of ["19236", "64843", "740", "6940"]) {
+      expect(isKillWindowMajorDefensive(id), id).toBe(true);
+      expect(unpressedKitDefensiveInHand(id), id).toBe(false);
+    }
+    for (const id of ["22812", "642", "1022", "33206", "342245"])
+      expect(unpressedKitDefensiveInHand(id), id).toBe(true);
+    expect([...KW_UNPRESSED_NOT_IN_HAND_IDS].sort()).toEqual(
+      ["19236", "64843", "6940", "740"],
+    );
   });
 });

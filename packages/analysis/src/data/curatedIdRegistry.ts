@@ -164,6 +164,7 @@ import {
 import {
   KW_IN_HAND_ONLY_DEFENSIVE_IDS,
   KW_MAJOR_DEFENSIVE_IDS,
+  KW_UNPRESSED_NOT_IN_HAND_IDS,
 } from "./abilityProfile";
 import { castEffectPairs } from "./castEffectAuras";
 import { CAST_PARAM_DURATIONS } from "./castParamDurations";
@@ -433,6 +434,14 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
     "data/abilityProfile.ts",
     "cast",
     () => [...KW_IN_HAND_ONLY_DEFENSIVE_IDS],
+  ),
+  // 10-20 用户裁定:没按过的治疗(Desperate Prayer、Divine Hymn、Tranquility)
+  // 和只能给队友的(Blessing of Sacrifice)不算「手里有」。
+  t(
+    "abilityProfile.KW_UNPRESSED_NOT_IN_HAND_IDS",
+    "data/abilityProfile.ts",
+    "cast",
+    () => [...KW_UNPRESSED_NOT_IN_HAND_IDS],
   ),
   // 10-20 用户裁定(fact1215 复测 idx 50):种族的进攻 buff 算进攻大招,并入
   // OFFENSIVE_CD_SPELL_IDS(Ancestral Call 的四个光环一起登记)。

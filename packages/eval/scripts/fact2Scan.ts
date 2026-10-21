@@ -204,9 +204,9 @@ import { gunzipSync } from "node:zlib";
 
 import { ensureAnalysisData } from "@gladlog/analysis";
 import {
-  countsAsKillWindowDefensiveInHand,
   KW_IN_HAND_ONLY_DEFENSIVE_IDS,
   KW_MAJOR_DEFENSIVE_IDS,
+  unpressedKitDefensiveInHand,
 } from "@gladlog/analysis/src/data/abilityProfile";
 import castEffectAuraGenerated from "@gladlog/analysis/src/data/castEffectAuraGenerated.json";
 import { classMetadata } from "@gladlog/analysis/src/data/classSpells";
@@ -332,7 +332,7 @@ const fmtS = (sec: number): string => {
  * (user rulings 2026-10-20: the roster, Alter Time, unpressed kit rows) */
 const KW_IN_HAND_NAMES = new Set<string>();
 for (const id of [...KW_MAJOR_DEFENSIVE_IDS, ...KW_IN_HAND_ONLY_DEFENSIVE_IDS]) {
-  if (!countsAsKillWindowDefensiveInHand(id)) continue;
+  if (!unpressedKitDefensiveInHand(id)) continue;
   const official = getEnglishSpellName(id, "");
   if (official) KW_IN_HAND_NAMES.add(official);
   for (const cls of classMetadata)

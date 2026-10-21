@@ -9,6 +9,7 @@ import {
   isKillWindowMajorDefensive,
   KW_MAJOR_DEF_MIN_CD_S,
   kwCooldownSeconds,
+  unpressedKitDefensiveInHand,
 } from "../data/abilityProfile";
 import { SELF_WALL_AURA_TO_CAST_ID } from "../data/mitigationData";
 import { SPELL_CATEGORIES as spellsData } from "../data/spellCategories";
@@ -643,7 +644,7 @@ export function computeOffensiveWindows(
     if (
       unusedKitRows(enemy, combat).some(
         (r) =>
-          countsAsKillWindowDefensiveInHand(r.spellId) &&
+          unpressedKitDefensiveInHand(r.spellId) &&
           !castsBySpell.has(r.spellId),
       )
     )

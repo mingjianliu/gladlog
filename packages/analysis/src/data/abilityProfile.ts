@@ -228,6 +228,38 @@ export const KW_IN_HAND_ONLY_DEFENSIVE_IDS: ReadonlySet<string> = new Set([
   "342245", // Alter Time — 60 s (runs as 342246)
 ]);
 
+/**
+ * Roster members that do NOT keep their owner out of a span while unpressed
+ * in its kit (user ruling 2026-10-20, 「去掉治疗和只能给队友的」 — the 605
+ * preview read 2,002 lines off an unpressed Desperate Prayer): a heal, which
+ * the `defenseless` legend already says is not counted, and a cooldown that
+ * only reaches an ally. Pressed, they keep the machine's reading. Evidence:
+ *  - heals: Desperate Prayer 19236 (`NO_MITIGATION_IDS`: pure healing + max
+ *    health), Divine Hymn 64843 and Tranquility 740 (DB2 `healsOthers`, no
+ *    mitigation-table row);
+ *  - ally-only: Blessing of Sacrifice 6940 — 0 of 948 casts in the 605
+ *    new-season files named the caster (Pain Suppression 75 of 592, Guardian
+ *    Spirit 70 of 1,239, Ironbark 37 of 460, Time Dilation 29 of 383, Life
+ *    Cocoon 16 of 187, Blessing of Protection 56 of 235 — those reach the
+ *    caster and stay).
+ * Registered in curatedIdRegistry.
+ */
+export const KW_UNPRESSED_NOT_IN_HAND_IDS: ReadonlySet<string> = new Set([
+  "19236", // Desperate Prayer — a heal
+  "64843", // Divine Hymn — a heal
+  "740", // Tranquility — a heal
+  "6940", // Blessing of Sacrifice — an ally only
+]);
+
+/** Does a roster defensive the unit OWNS and never pressed keep it out of
+ * every span (`unusedKitRows`; user rulings 2026-10-20)? */
+export function unpressedKitDefensiveInHand(spellId: string): boolean {
+  return (
+    countsAsKillWindowDefensiveInHand(spellId) &&
+    !KW_UNPRESSED_NOT_IN_HAND_IDS.has(spellId)
+  );
+}
+
 /** Does a READY charge of this spell mean the unit still holds a major
  * defensive (kill-window family: the span state machine, target selection's
  * defensive state)? The roster plus the in-hand-only rewinds. */
