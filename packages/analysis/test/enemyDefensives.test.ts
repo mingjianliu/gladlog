@@ -42,7 +42,6 @@ import {
   isImmunitySaveAura,
   isIntervalFrom,
   joinReappliedIntervals,
-  splitAtRepressRefresh,
   limitedAbsorbSchoolMask,
   limitedImmunitySchoolMask,
   MITIGATION_AURA_IDS,
@@ -53,6 +52,7 @@ import {
   saveAuraCountsWhenAlreadyUp,
   saveAuraIntervals,
   SELF_SAVE_IDS,
+  splitAtRepressRefresh,
   wallTableIdOfAura,
 } from "../src/utils/enemyDefensives";
 

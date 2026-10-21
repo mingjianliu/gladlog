@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- the scan walks the untyped legacy parse objects (match.units, auraEvents, absorbsIn) by the hundred */
 /**
  * fact2Scan.ts — F16 (fact2 round-2 audit, 2026-10-20): re-derive facts from
  * the parsed log and hold the rendered lines to them, over an existing
@@ -205,14 +206,6 @@ import { ensureAnalysisData } from "@gladlog/analysis";
 import castEffectAuraGenerated from "@gladlog/analysis/src/data/castEffectAuraGenerated.json";
 import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData";
 import {
-  cdAvailableAt,
-  earliestCooldownSecondsFor,
-  extractMajorCooldowns,
-  isEnemyCdWindowSpell,
-  specToString,
-  unitCooldownOf,
-} from "@gladlog/analysis/src/utils/cooldowns";
-import {
   CONTROL_FAILED_MISS_TYPES,
   isControlCast,
 } from "@gladlog/analysis/src/utils/castMissRows";
@@ -220,6 +213,14 @@ import {
   applicableCCAvoidanceIds,
   CC_AVOIDANCE_BUFF_SPELLS,
 } from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
+import {
+  cdAvailableAt,
+  earliestCooldownSecondsFor,
+  extractMajorCooldowns,
+  isEnemyCdWindowSpell,
+  specToString,
+  unitCooldownOf,
+} from "@gladlog/analysis/src/utils/cooldowns";
 import { MOVEMENT_ROOT_BREAK_DISPEL_IDS } from "@gladlog/analysis/src/utils/dispelKind";
 import {
   isExternalSaveId,

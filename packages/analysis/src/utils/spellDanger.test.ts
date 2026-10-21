@@ -148,7 +148,7 @@ describe("both consumers read the canonical table", () => {
             logLine: { event: LogEvent.SPELL_AURA_APPLIED, timestamp: 1_000 },
           },
         ],
-      }) as any;
+      }) as never;
     expect(hasOffensiveSpellActive(unit("DEBUFF"), 2_000, null)).toBe(false);
     // asked for those sources by name, the debuff is still read
     expect(hasOffensiveSpellActive(unit("DEBUFF"), 2_000, new Set(["F1"]))).toBe(true);

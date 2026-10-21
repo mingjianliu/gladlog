@@ -35,7 +35,7 @@
  * saying the same thing twice. `[CD PRIOR]` lives in the band between the
  * cohort's median and the crisis line.
  */
-import { CombatUnitReaction } from "@gladlog/parser-compat";
+import { CombatUnitReaction, type ICombatUnit } from "@gladlog/parser-compat";
 
 import type { CdTriggerPriorRef } from "../data/cdTriggerPrior";
 import {
@@ -316,8 +316,9 @@ export function cdPriorHoldEpisodes(
     // two ticks are this episode's (e49b7c3b: 37.3 % at 1:58.902, the 1:59
     // tick 41 %, printed `bottomed at 41%`). The crossing second itself stays
     // the grid's (the ruling: decisions read the grid).
-    const prevTick = gridHpSample(unit as any, startMs + (fromSec - 1) * 1000);
-    const t = hpTroughInWindow(unit as any, startMs, fromSec, toSec, undefined, {
+    const u = unit as unknown as ICombatUnit;
+    const prevTick = gridHpSample(u, startMs + (fromSec - 1) * 1000);
+    const t = hpTroughInWindow(u, startMs, fromSec, toSec, undefined, {
       fromMs: prevTick ? prevTick.sampleMs + 1 : startMs + fromSec * 1000,
       toMs: startMs + (toSec + 1) * 1000 - 1,
     });

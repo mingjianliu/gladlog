@@ -40,10 +40,10 @@ import {
 } from "./enemyInterrupts";
 import {
   createKillWindowFactsComputer,
+  hasPressOnlyTag,
   type IKillWindowFactsComputer,
   type IKillWindowGateFacts,
   killWindowAcquittal,
-  hasPressOnlyTag,
   killWindowFactsSuffix,
   PRESS_ONLY_LEGEND,
   teamDamageTotalClause,

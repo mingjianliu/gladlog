@@ -262,7 +262,12 @@ for (const f of files) {
         const printed = Number(cp[5]);
         const bottom = secOf(cp[6]!, cp[7]!);
         let dipFrom = start + cross * 1000;
-        for (const a of (unit.advancedActions ?? []) as any[]) {
+        for (const a of (unit.advancedActions ?? []) as Array<{
+          logLine: { timestamp: number };
+          advancedActorId: string;
+          advancedActorCurrentHp: number;
+          advancedActorMaxHp: number;
+        }>) {
           const ts = a.logLine.timestamp;
           if (ts >= start + cross * 1000) break;
           if (ts < start + (cross - 1) * 1000) continue;
