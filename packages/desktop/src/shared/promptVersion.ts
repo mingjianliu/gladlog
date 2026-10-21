@@ -264,5 +264,12 @@
  *  the death recap fallback and contested-trade CC now read the ledger's
  *  press identification and per-press effects. 605 files:
  *  kick-priority-missed / -team −1 each, kick-eaten −2 (user approved).
+ *  v431 (2026-10-21, F16 follow-up — user rulings 2026-10-20 「都要」):
+ *  Counterspell locks 5 s for a kicker without Improved Counterspell; the
+ *  kill-window roster gains Survival of the Fittest, Retribution's Divine
+ *  Protection and Dark Pact; a roster defensive the kit tags [UNUSED] (not
+ *  a heal, not ally-only) keeps its owner out of every `defenseless` span;
+ *  Shield of Vengeance gets its own [ENEMY DEF] line. 605 files:
+ *  kick-priority-missed −3, kick-priority-team +1 / −1 (user approved).
  */
-export const PROMPT_VERSION = 430;
+export const PROMPT_VERSION = 431;

@@ -3871,3 +3871,28 @@ another in), kick-eaten −2 ("The Hunt ready" while Predator's Wake had just
 spent its shared cooldown; a Doom Winds press only the aura logs) — user
 approved; 552 context files change in enemy cooldown / kill-window /
 defenseless facts. Gates: baseline residue only.
+
+v431 (2026-10-21, F16 follow-up — user rulings 2026-10-20 「都要」 on the
+three questions F16 left open, the unpressed-kit scope narrowed by a second
+ruling the same evening 「去掉治疗和只能给队友的」): Counterspell's ruled 6 s
+is the Improved Counterspell holder's value — a kicker whose talents show
+the node missing locks for DB2's 5 s (`KICK_LOCKOUT_KICKER_TALENTS`;
+`kickLockoutSecondsFor` takes the kicker, the cannot-cast family takes the
+round's units; 605 files: 4 non-holder Counterspells, the victim back in the
+locked school at 4.93–5.00 s, 501 holder ones at p50 6.01 s). The kill-window
+roster gains Survival of the Fittest 264735, Retribution's Divine Protection
+403876 and Dark Pact 108416 (R08 1b). A roster defensive the kit tags
+`[UNUSED]` keeps its owner out of every `defenseless` span (R08 2,
+`unusedKitRows` — the ledger reading KILL ATTEMPTS' wall tier already used),
+except a heal or an ally-only cooldown (`KW_UNPRESSED_NOT_IN_HAND_IDS`:
+Desperate Prayer, Divine Hymn, Tranquility, Blessing of Sacrifice — 0 of 948
+casts on the caster). Shield of Vengeance 184662, which rides every
+Retribution Divine Protection with no cast of its own (654 of 654), gets an
+`[ENEMY DEF]` absorb line (`RIDER_ABSORB_SAVE_AURAS`). 605 files (main
+01643393b → this): [KILL WINDOW] lines 13,116 → 8,473, [VULNERABLE] 569 →
+410, Shield of Vengeance lines 0 → 993; candidates kick-priority-missed dps
+38 → 35, kick-priority-team dps 26 → 27 / healer 31 → 30 (windows on targets
+holding an unpressed defensive go, and the per-round slots and window
+attribution move) — user approved. fact2Scan: kitInHand 6,250 → 0,
+ledgerRosterUp 844 → 0, riderShieldLine 996 → 0. Gates: baseline residue
+only.

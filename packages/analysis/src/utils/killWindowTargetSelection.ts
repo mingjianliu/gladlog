@@ -22,11 +22,9 @@ import { getSortedAdvancedActions } from "./advancedActions";
 import { buffFullDurationForCaster } from "./buffDuration";
 import {
   chargesAvailableAt,
-  extractMajorCooldowns,
   getUnitHpAtTimestamp,
   HP_SAMPLE_RADIUS_MS,
   isHealerSpec,
-  kitRowUnused,
   specToString,
   unitCooldownAvailableAt,
   unitCooldownOf,
