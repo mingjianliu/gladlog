@@ -71,11 +71,11 @@ import {
   missBelongsToCast,
 } from "./castMissRows";
 import { oppressingRoarOnAt, oppressingRoarOnAtMs } from "./ccBreakAnalysis";
-import { charmedSpans } from "./charmedPlayer";
 import {
   ccFullDurationForApplication,
   ccFullDurationForCaster,
 } from "./ccDuration";
+import { charmedSpans } from "./charmedPlayer";
 import {
   STASIS_RELEASE_SPELL_ID,
   stasisReleasePressesMs,

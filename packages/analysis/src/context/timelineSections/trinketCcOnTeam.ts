@@ -13,6 +13,7 @@ import { CombatUnitReaction } from "@gladlog/parser-compat";
 
 import { BACKLASH_AURA_CC_TYPE, backlashCcTag } from "../../data/backlashCc";
 import {
+  CC_FROM_OWN_TEAM_TAG,
   ccAvoidedCastTag,
   ccAvoidedOutcomeText,
   ccEndedByCasterInterrupt,
@@ -29,7 +30,6 @@ import {
   renderedCcSpan,
   rendersCcOnTeamLine,
   tremorTotemBreak,
-  CC_FROM_OWN_TEAM_TAG,
 } from "../../utils/ccTrinketAnalysis";
 import { wasRemovedByAllyDispel } from "../../utils/dispelAnalysis";
 import { fmtTime } from "../../utils/renderGrid";

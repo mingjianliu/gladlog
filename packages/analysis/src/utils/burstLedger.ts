@@ -17,12 +17,12 @@ import {
   isHpTroughWorthPrinting,
 } from "./cooldowns";
 import { IEnemyCDCast, reconstructEnemyCDTimeline } from "./enemyCDs";
-import { isDeferralAbsorb } from "./incomingPressure";
 import {
   FULL_IMMUNITY_IDS,
   MITIGATION_AURA_MIN_PCT,
   SAVE_AURA_END_UNSEEN_IDS,
 } from "./enemyDefensives";
+import { isDeferralAbsorb } from "./incomingPressure";
 import {
   type IKickAuditEntry,
   jukedByFakeText,

@@ -17,6 +17,7 @@ import { getEnglishSpellName } from "../../data/spellEffectData";
 import { ccSpellIds } from "../../data/spellTags";
 import { silenceIntervals } from "../../utils/cannotCastIntervals";
 import {
+  CC_FROM_OWN_TEAM_TAG,
   ccEndedByCasterInterrupt,
   ccEndedByImmunityAura,
   ccEndedByOwnPress,
@@ -33,7 +34,6 @@ import {
   renderedCcSpan,
   tremorTotemBreak,
   TRINKET_BREAK_AFTER_REMOVAL_MS,
-  CC_FROM_OWN_TEAM_TAG,
 } from "../../utils/ccTrinketAnalysis";
 import { hasOffensiveSpellActive, hpAtPress } from "../../utils/cooldowns";
 import { wasRemovedByAllyDispel } from "../../utils/dispelAnalysis";

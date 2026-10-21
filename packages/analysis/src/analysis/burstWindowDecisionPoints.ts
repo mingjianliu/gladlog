@@ -30,9 +30,9 @@
 import { type ICombatUnit } from "@gladlog/parser-compat";
 
 import { castAndEffectIds, isCastOrEffect } from "../data/castEffectAuras";
+import { CURATED_ABILITY_FACTS } from "../data/curatedAbilityFacts";
 import { HEALING_VERDICTS } from "../data/healingVerdicts";
 import { getEnglishSpellName } from "../data/spellEffectData";
-import { CURATED_ABILITY_FACTS } from "../data/curatedAbilityFacts";
 import spellIdLists, { ENEMY_REDIRECT_SAVE_IDS } from "../data/spellIdLists";
 import {
   ccSpellIds,
