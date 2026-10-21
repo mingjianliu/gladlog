@@ -292,6 +292,7 @@ const CHECKS = [
   "invisAfterAction",
   "inHandRewind",
   "stackedDeferral",
+  "racialPressedInside",
 ] as const;
 
 /** cast → the auras that are its own effect under another id (read straight
@@ -1541,6 +1542,34 @@ for (const f of files) {
     });
     if (press)
       miss("inHandRewind", `${where} ${span[1]}–${span[2]} ${target.name}: Alter Time pressed at ${Math.floor((press.logLine.timestamp - start) / 1000)}s inside`);
+  }
+  // user ruling 2026-10-20: racial damage buffs and Ultimate Penitence are
+  // offensive cooldowns — a friendly press strictly inside a [KILL WINDOW]
+  // (not its first or last second) is named under `pressed inside`
+  const RULED_OFFENSIVE = new Map([
+    ["20572", "Blood Fury"],
+    ["33697", "Blood Fury"],
+    ["33702", "Blood Fury"],
+    ["26297", "Berserking"],
+    ["274738", "Ancestral Call"],
+    ["421453", "Ultimate Penitence"],
+  ]);
+  for (const l of lines) {
+    const m = /^ {2}\[KILL WINDOW\] (\d+:\d\d)–(\d+:\d\d) on /.exec(l);
+    if (!m) continue;
+    const a = secOf(m[1]!);
+    const b = secOf(m[2]!);
+    for (const p of ours)
+      for (const c of (p.spellCastEvents ?? []) as any[]) {
+        const name = RULED_OFFENSIVE.get(c.spellId);
+        if (!name || c.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
+        const sec = Math.floor((c.logLine.timestamp - start) / 1000);
+        if (sec <= a || sec >= b) continue;
+        bump("racialPressedInside");
+        const inside = /pressed inside: ([^)]*)\)/.exec(l)?.[1] ?? "";
+        if (!inside.includes(name))
+          miss("racialPressedInside", `${where} ${m[1]}–${m[2]}: ${p.name} ${name} at ${sec}s not under pressed inside`);
+      }
   }
   // [STACKED DEFENSIVES] whose later aura is a deferral shield: the printed
   // overlap share is what the log records it held back (its own absorb rows)
