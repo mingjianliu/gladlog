@@ -105,11 +105,15 @@ export function hiddenPressMs(
   // ms of its first cast (51-4 0:08 Trueshot beside Moonlight Chakram,
   // 170-1 0:10 Incarnation beside Rake, 117-4 0:11 Shadow Blades beside
   // Shadow Dance)
+  // — the SAME aura id: a press's two same-named auras listed together
+  // (Incarnation: Avatar of Ashamane 252071 beside 102543 — b38, 50 feral
+  // re-listings lost their press) are not a re-statement
   const restated = (i: number) => {
     const ms = own[i]!.logLine.timestamp;
     for (let j = i + 1; j < own.length; j++) {
       const b = own[j]!;
       if (b.logLine.timestamp - ms > RESYNC_BATCH_SPAN_MS) return false;
+      if (b.spellId !== own[i]!.spellId) continue;
       if (b.logLine.event === LogEvent.SPELL_AURA_REMOVED) return false;
       if (b.logLine.event === LogEvent.SPELL_AURA_APPLIED) return true;
     }

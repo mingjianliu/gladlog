@@ -95,6 +95,14 @@ describe("hiddenPressMs", () => {
     );
     expect(hiddenPressMs(u, EVASION, T0)).toEqual([]);
   });
+  it("a press's second same-named aura in the batch is no re-statement (Incarnation: Avatar of Ashamane 252071 beside 102543)", () => {
+    const u = rogue([
+      aura(LogEvent.SPELL_AURA_APPLIED, "252071", BATCH_MS),
+      ...batch(30, false),
+      aura(LogEvent.SPELL_AURA_APPLIED, "102543", BATCH_MS),
+    ]);
+    expect(hiddenPressMs(u, "102543", T0)).toEqual([BATCH_MS]);
+  });
   it("a stealth opener's cast in the batch's ms leaves the hidden press (51-4 0:08 Trueshot beside Moonlight Chakram)", () => {
     const opener = {
       spellId: "1264949",
