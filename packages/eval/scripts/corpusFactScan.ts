@@ -578,6 +578,19 @@ for (const f of files) {
             ev(b) === APPLIED &&
             Math.abs(tsOf(b) - ta) <= 5,
         );
+        // fix-F16 (2026-10-21): Herald of the Sun's proc Avenging Wrath comes
+        // with its own bundle in the same ms — Blessing of An'she 445206,
+        // Hammer of Wrath 1241410, Born in Sunlight — four auras that are the
+        // proc, not a re-listing (`AURA_ONLY_ACTIVATION_IDS` note in
+        // cooldowns.ts; 155-5 1:07, 149-6 3:19: 6 s runs, 17 rows)
+        const HERALD_PROC_BUNDLE = new Set(["445206", "1241410"]);
+        const heraldProc =
+          (a.spellId === "31884" || a.spellId === "454351") &&
+          sameMs.some((b) => HERALD_PROC_BUNDLE.has(b.spellId));
+        if (heraldProc) {
+          bump("hiddenPressUnused:heraldProcSkipped");
+          continue;
+        }
         const relisting = sameMs.length >= 4;
         const trigger =
           casts.find(

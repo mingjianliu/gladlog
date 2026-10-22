@@ -27,6 +27,12 @@
  */
 import { type ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
+import {
+  castsOwningEffectAura,
+  effectAuraViaName,
+  ownEffectAurasOfCast,
+} from "../data/castEffectAuras";
+
 /** A re-stating batch: at least this many SPELL_AURA_APPLIED rows on the
  * unit in one millisecond (5f4142ec: 30; a press that applies several
  * auras at once — Deep Breath's five — stays under it). */
@@ -57,9 +63,19 @@ export function hiddenPressMs(
   const rows = (unit.auraEvents ?? []).filter(
     (a) => a.logLine.timestamp >= fromMs && a.logLine.timestamp <= toMs,
   );
+  // the press's own aura: its id, or its own same-named effect aura (Alter
+  // Time is pressed as 342245 and runs as 342246 — corpusFactScan
+  // hiddenPressUnused, 149-6 0:20)
+  const auraIds = new Set([
+    spellId,
+    ...ownEffectAurasOfCast(spellId).filter((a) =>
+      effectAuraViaName(spellId, a),
+    ),
+  ]);
   const own = rows.filter(
     (a) =>
-      a.spellId === spellId &&
+      !!a.spellId &&
+      auraIds.has(a.spellId) &&
       a.destUnitId === unit.id &&
       a.srcUnitId === unit.id,
   );
@@ -113,11 +129,7 @@ export function pressRowsWithHidden(
   keep: (spellId: string) => boolean,
   fromMs: number,
 ): IPressRow[] {
-  const ids = new Set(
-    (unit.auraEvents ?? [])
-      .map((a) => a.spellId)
-      .filter((id): id is string => !!id && keep(id)),
-  );
+  const ids = hiddenPressCandidates(unit, keep);
   return [
     ...(unit.spellCastEvents ?? []).map((c) => ({
       spellId: c.spellId ?? "",
@@ -133,4 +145,20 @@ export function pressRowsWithHidden(
       })),
     ),
   ].sort((a, b) => a.logLine.timestamp - b.logLine.timestamp);
+}
+
+/** The presses `keep` admits whose aura the unit carries — by the aura's own
+ * id, or the cast whose own effect it is (`castsOwningEffectAura`: Alter
+ * Time 342245 for its 342246). The ids `hiddenPressMs` is asked about. */
+export function hiddenPressCandidates(
+  unit: Pick<ICombatUnit, "auraEvents">,
+  keep: (spellId: string) => boolean,
+): Set<string> {
+  const out = new Set<string>();
+  for (const a of unit.auraEvents ?? []) {
+    if (!a.spellId) continue;
+    for (const id of [a.spellId, ...castsOwningEffectAura(a.spellId)])
+      if (keep(id)) out.add(id);
+  }
+  return out;
 }

@@ -77,6 +77,13 @@ describe("hiddenPressMs", () => {
     ]);
     expect(hiddenPressMs(u, EVASION, T0)).toEqual([BATCH_MS]);
   });
+  it("a press that runs as its own effect aura (Alter Time 342245 → 342246) is found by its aura", () => {
+    const u = rogue([
+      ...batch(30, false),
+      aura(LogEvent.SPELL_AURA_APPLIED, "342246", BATCH_MS),
+    ]);
+    expect(hiddenPressMs(u, "342245", T0)).toEqual([BATCH_MS]);
+  });
   it("a press row beside it, or no batch: no hidden press", () => {
     const cast = {
       spellId: EVASION,

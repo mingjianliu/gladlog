@@ -46,7 +46,7 @@ import { missBelongsToCast } from "./castMissRows";
 import { AURA_BEFORE_CAST_ROW_MAX_MS, CAST_ROW_LAG_MAX_MS } from "./castRowLag";
 import { PRESSED_SPIRIT_OF_REDEMPTION_AURA_IDS } from "./combatStates";
 import { AURA_ONLY_ACTIVATION_IDS } from "./cooldowns";
-import { hiddenPressMs } from "./hiddenPress";
+import { hiddenPressCandidates, hiddenPressMs } from "./hiddenPress";
 import { TOUCH_OF_KARMA_ID } from "./karmaFeed";
 import { toRenderSecond } from "./renderGrid";
 import {
@@ -794,12 +794,7 @@ export function selfSaveCasts(
   }
   // fact3 D35: a press made while the unit was unseen — no row, its aura new
   // in the batch that re-states the unit (`hiddenPressMs`), timed there
-  const auraIds = new Set(
-    (enemy.auraEvents ?? [])
-      .map((a) => a.spellId)
-      .filter((id): id is string => !!id && SELF_SAVE_IDS.has(id)),
-  );
-  for (const id of auraIds)
+  for (const id of hiddenPressCandidates(enemy, (x) => SELF_SAVE_IDS.has(x)))
     for (const ms of hiddenPressMs(enemy, id, matchStartMs))
       out.push({
         atSeconds: (ms - matchStartMs) / 1000,
