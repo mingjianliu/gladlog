@@ -6,6 +6,114 @@ One section per release, listing every change and the commit behind it (on the
 `git log v<prev>..v<new>` basis; release and docs-only commits go under "Other").
 The release procedure is documented in `.claude/skills/release`.
 
+## v0.1.38 (2026-10-22)
+
+The fact3 round-3 audit (GH #153) checked thirty new rounds against their raw logs with two independent auditors. Its 61 confirmed defects were fixed class by class, every reader of each fact included. Two corpus-wide fact scans followed and became the regression net (`corpusFactScan`, `corpusFactScan2`: one deterministic check per audited fact class, run on a 605-file capture before and after every batch). After this release, batch 1 reads 0 in every class, and batch 2's residue is listed on GH #153.
+
+Highlights:
+- A cooldown pressed while its holder was out of sight counts as a press, tagged `[pressed while unseen]`.
+- A reflected spell's return is measured from the reflector's actual hits.
+- An IMMUNE control on your team always gets a line, with the cause the log shows.
+- A kill window's `defenseless` span ends under the target's own pressed absorb shield, an Intervene, Mass Invisibility or Phase Shift.
+- Divine Toll counts as a heal that reaches allies.
+- Blessing of the Bronze speeds the movement cooldowns it names.
+
+Every change that adds or removes an accusation was previewed on the 605-file capture and approved by the user before landing.
+
+Known review debt (GH #144): no cross-AI review has run since the reviewer's weekly limit ran out (2026-10-21, about 17:00) — every code commit below from `9d24d307` on, about 31 commits. The five cooldown-mastery commits listed under v0.1.37 are also still unreviewed. All of it is queued for the next review window (codex from 2026-10-27, agy from 2026-10-24); in the meantime the corpus scans above gated each batch.
+
+### AI coaching — what the report says about you
+
+#### Kill windows, kicks and saves
+
+- `dfb4cca9` **User rulings 2026-10-21:**
+  - The target's own Power Word: Shield / Void Shield ends `defenseless` while it is up, and so does an Intervene on it — never an accusation.
+  - A mage in Ice Block is no ready kicker.
+  - 605 files: kick-priority-missed +1, kick-priority-team +2 (one event), user-approved. `[KILL WINDOW]` 8,443 → 8,338, `[VULNERABLE]` 411 → 435.
+- `03a355dc` **Round-3 audit, kill windows:**
+  - Vanish joins the kill-window roster (user ruling; rogue `[KILL WINDOW]` 1,203 → 752).
+  - Aspect of the Turtle deflects rather than being immune.
+  - Mass Invisibility, Phase Shift and Intervene end `defenseless` while up.
+  - kick-priority judges a heal against the lowest target of every overlapping window.
+  - 605 files: kick-priority-missed +17, kick-priority-team +22, kick-eaten +1, position-mistake +1, questionable-external −6, cd-waste −6, cd-hoarded −1 / +2, external-unused −9, backlash-dispel −1, user-approved.
+- `dd6fb6c6` `43be70b1` `023d857b` `45786610` **The target's own absorb shield ends `defenseless`** — any absorb it pressed (Holy Bulwark, Blazing / Prismatic Barrier, Ignore Pain, Reversion, the Holy Priest's proc Power Word: Shield). A shield counts within a minute of its press; a talent's passive absorb (Frost Shield, Fel Armor …) does not. corpusFactScan2 spans over an own pressed shield: 134 → 2. No candidate moved.
+- `127021a5` **Divine Toll reaches allies** (fact3 D7): its only non-dummy effect is the caster's Holy Power, which had hidden the ally-area rows. 605 files: healer cd-hoarded 566 → 574 — 14 added, all a Holy Paladin's Divine Toll ready while a teammate was in crisis; 9 removed, where a pressed Divine Toll now answers the crisis. Hints reading "cheaper available: … Divine Toll" went from 209 to 627. User-approved.
+- `5e0dd271` **cc-avoidable may name more of the player's own buttons** (user ruling 2026-10-22): Blink, Icebound Fortitude, Lichborne, Demolish, Aura Mastery, Unending Resolve, Obsidian Scales and Zen Focus Tea, each stopping only the control mechanics its DB2 rows list. No change on the 605 files.
+- `c5f8d4cb` **backlash-dispel reads the target's HP at the dispel itself**, not at that second's `[STATE]` tick (user ruling 2026-10-22, fact3 D45; the fourth signed exception to the render grid). 605 files: backlash-dispel −1 (two left the HP band, one entered); 39 HP facts re-read. User-approved.
+- `e46196d6` A monk's Touch of Karma window ends at that monk's own redirect removal. Controls into Aspect of the Turtle count in ABILITIES INTO IMMUNITY.
+- `35eb2125` kick-eaten reads the other kicks' lockouts with the round's units: a non-holder's Counterspell is 5 s there too.
+
+#### Cooldowns
+
+- `7a6cae8e` **Blessing of the Bronze speeds the movement cooldown it names** (fact3 D13: a Disc Priest's Leap of Faith back after 84 and 82 s under a 90 s kit).
+  - It works whoever applied it (an evoker ally), and when the round opened with it.
+  - The same pass adds Sylvan Beckoning and Spirit of the Thicket on Swiftmend, Mystic Knowledge on Riptide, and Ground Skimming on Surge Forward / Skyward Ascent.
+  - Evidence: DB2 aura 454 at −15 % on Leap of Faith's category. In the corpus, priests carrying it recast down to 51.3 s — Move with Grace's 60 s × 0.85.
+- `9d62c243` The kit prints the range of a cooldown a buff sped up this round, as the `[RES]` rows read it: Emerald Communion `[166–180s]`.
+- `03a355dc` Berserk and Celestial Alignment last DB2's 15 s.
+  - Intervene lasts 3 s in arena (user ruling; Protection's 6 s is not modelled).
+  - Anti-Magic Shell 444741 carries Anti-Magic Barrier (2,284 of 2,366 runs at 6.0 s).
+  - Axe Toss and Shambling Rush take their control effect's mechanic.
+
+### AI coaching — the timeline facts
+
+- `03a355dc` **Round-3 audit, facts** (each fix has a regression test and was checked on the audited rounds re-rendered from raw):
+  - **Presses made while the unit was unseen** — an aura new in the batch that re-states the unit, with no cast row — are presses for the cooldown ledger, the death analysis, `[ENEMY DEF]` / KILL ATTEMPTS and `[ENEMY CD]` / `[ENEMY HEAL CD]`, tagged `[pressed while unseen]`.
+  - An IMMUNE miss names only an avoidance that can stop that control.
+  - Spell Reflection explains a REFLECT, never an IMMUNE.
+  - No mobility credit once a miss row proves the control reached the player.
+  - A CC with no logged removal ends at its diminished length.
+  - A friendly dispel-backlash silence is a `[SILENCE]` line with the presses made during it.
+  - Spiritwalker's Grace is no defensive.
+  - The Hunt / Stormkeeper end on arrival or spent charges.
+  - An empower hold binds to its own press.
+  - Guardian Spirit that was unaffordable or refused is not "free".
+- `9d24d307` `168fe85a` `033c0335` **A reflected spell's return:**
+  - Excluded: a dispel backlash of the same name, and a reflector's own hits after the projectile's flight.
+  - Included: the copy the reflect itself put on the caster.
+  - One spell's REFLECT rows under its two ids are one return.
+  - A scripted damage spell (Fel Lance) keeps its return.
+  - A Nether Ward row goes to the nearest reflect.
+  - corpusFactScan reflect-return rows 202 → 0.
+- `5a0abd22` `8619569f` `c7dfcba0` `fa8c4bde` `33a656b5` **Hidden presses:**
+  - Found by the press's own effect aura (Alter Time).
+  - Vetoed by a copy the batch re-states, not by a stealth opener's cast or a press's second same-named aura.
+  - Herald of the Sun's proc bundle is no press.
+  - corpusFactScan hidden-press rows 288 → 0.
+- `a7ee20cf` A castless Blessing of Sacrifice is a press (605 files: cd-waste −1, cd-hoarded −1, user-approved).
+- `c7dfcba0` An enemy break racial names the reflected control it ended. An offensive aura's run is paired per source (two mages' Touch of the Magi on one target are two).
+- `8619569f` `0ed29933` A press in a removal's own millisecond does not take a control the log gives another cause for.
+- `7aec3189` A press's HP is read before its own first HoT tick, even when that tick leads the cast row by up to 150 ms (Frenzied Regeneration 42 % → 34 %).
+- `b9b3950f` `eebc1652` `8f155f17` **An IMMUNE control or silence on your team always gets a `[CC AVOIDED?]` line.** The line gives the cause the log shows: an avoidance aura, a Cyclone, diminishing returns at Immune, or none.
+  - The avoidance table gains the DB2-explained immunities: Freezing Trap / Imprison / Time Stop (all-school), Blink, Icebound Fortitude, Lichborne, Travel Form, Demolish, and the silence-immune Aura Mastery, Spiritwalker's Aegis, Unending Resolve, Obsidian Scales, Sanctified Ground, Zen Focus Tea.
+  - corpusFactScan2 IMMUNE rows with no line: 427 → 22.
+- `189b6ac8` A move pressed after a ground control went off did not dodge it (12 of 30 such credits; Capacitor Totem pulses, Freezing Traps that caught a teammate).
+- `f4c02f62` Mass Invisibility re-measured: nothing but area damage lands more than 2 s after it goes up. The user kept the ruling.
+
+### Desktop
+
+- `4d131ae3` Scene baselines follow the 2026-10-21 rulings: the real sample's enemy priest's own Power Word: Shield ends its kill window.
+
+### Evaluation and verification tooling
+
+- `a7e640ce` **`corpusFactScan` (batch 1):** four corpus-wide deterministic checks.
+  - Hidden presses with no line.
+  - Aura / cast-row gaps.
+  - A control "ended early" that ran its full length.
+  - Reflect returns.
+- `1d968d74` **`corpusFactScan2` (batch 2):** six checks.
+  - Immune causes.
+  - Unclosed diminished controls.
+  - Saves inside a `defenseless` span.
+  - Pet kicks.
+  - Duplicate lines.
+  - The immunity table's forward check.
+- `8619569f` `c7dfcba0` `033c0335` `0ed438a0` `4ce9f54d` The scans share the product's constants and predicates (`hiddenPressMs`, the reflect-return constants, `HERALD_PROC_BUNDLE_IDS`, the press-heal leads). Each pair is registered in the predicate index and pinned by its test.
+
+### Other
+
+- `9c75b19e` `cedc8c27` `82795e75` `d1593db7` `3b40263c` `5df0c066` PROMPT_VERSION 436, 437, 438, 439, 440, 441
+
 ## v0.1.37 (2026-10-21)
 
 Two pieces of work. The fact2 round-2 audit (GH #153) checked the timeline against the raw log class by class and fixed every reader of each fact: an aura is resolved to the cast that made it, kill-window bursts count hits a shield absorbed, a reflected spell's return is the reflector's damage, ENERGIZE / DRAIN / LEECH rows are HP and position samples, and a trough reads the unit's death second up to the death. The cooldown ledger now models what the talents actually do: per-rank and per-spec talent points from DB2, tooltip spec branches, event-based cooldown reductions (power spent, interrupts, hits, resets), hotfix-dated values, and buff durations read off the talent tooltips and confirmed on the corpus (GH #154, #155). Impossible recasts in the ledger fell from 5,240 to 229 over 2,240 files. Every change that adds or removes an accusation was previewed on a 605-file capture and approved by the user before landing.

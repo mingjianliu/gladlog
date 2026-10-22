@@ -6,6 +6,114 @@
 口径,release/纯文档 commit 归入「其他」)。发版流程见
 `.claude/skills/release`。
 
+## v0.1.38(2026-10-22)
+
+fact3 第三轮审计(GH #153)由两名独立审计员,对照原始日志核对了 30 个新回合。确认的 61 处缺陷按事实类逐一修复,每个事实的所有读者都一并修好。随后上了两轮全语料事实扫描,并把它们作为回归网(`corpusFactScan`、`corpusFactScan2`:每个审计过的事实类一项确定性检查,每批改动前后都在 605 文件采集上跑)。本版之后,第 1 轮全部为 0,第 2 轮的剩余项列在 GH #153。
+
+要点:
+- 持有者不在视野内时按下的冷却算作按键,并标 `[pressed while unseen]`。
+- 法术反射的回弹按反射者的真实命中计算。
+- 我方被控制但记为 IMMUNE 时一定有一行,并写出日志能看到的原因。
+- 击杀窗口的 `defenseless` 区间,会在目标自己按下的吸收盾、Intervene、Mass Invisibility 或 Phase Shift 挂着时结束。
+- Divine Toll 算作能惠及队友的治疗。
+- Blessing of the Bronze 会加快它所点名的位移技能冷却。
+
+每一处增删指控的改动,都先在 605 文件采集上预览、经用户批准后才落地。
+
+已知审稿欠账(GH #144):审稿方的周额度用完后(2026-10-21 约 17:00)没有跑过跨 AI 审稿 —— 下列从 `9d24d307` 起的全部代码提交,约 31 个。v0.1.37 列出的五个冷却提交也仍未审。这些都已排进下一个审稿窗口(codex 自 2026-10-27,agy 自 2026-10-24);在此之前,每一批都由上述语料扫描把关。
+
+### AI 教练 —— 战报对你的评价
+
+#### 击杀窗口、打断与保命
+
+- `dfb4cca9` **用户裁定 2026-10-21:**
+  - 目标自己的 Power Word: Shield / Void Shield 挂着时结束 `defenseless`,对它施放的 Intervene 同样如此 —— 永不构成指控。
+  - 处于 Ice Block 中的法师不算可用的打断者。
+  - 605 文件:kick-priority-missed +1、kick-priority-team +2(同一事件),用户已批准。`[KILL WINDOW]` 8,443 → 8,338,`[VULNERABLE]` 411 → 435。
+- `03a355dc` **第三轮审计,击杀窗口:**
+  - Vanish 加入击杀窗口名册(用户裁定;盗贼 `[KILL WINDOW]` 1,203 → 752)。
+  - Aspect of the Turtle 是偏转而非免疫。
+  - Mass Invisibility、Phase Shift 与 Intervene 挂着时结束 `defenseless`。
+  - kick-priority 以所有重叠窗口中最低的目标来判断一次治疗。
+  - 605 文件:kick-priority-missed +17、kick-priority-team +22、kick-eaten +1、position-mistake +1、questionable-external −6、cd-waste −6、cd-hoarded −1 / +2、external-unused −9、backlash-dispel −1,用户已批准。
+- `dd6fb6c6` `43be70b1` `023d857b` `45786610` **目标自己的吸收盾结束 `defenseless`** —— 任何它自己按下的吸收盾(Holy Bulwark、Blazing / Prismatic Barrier、Ignore Pain、Reversion、神牧触发的 Power Word: Shield)。一面盾在按下后一分钟内有效;天赋的被动吸收(Frost Shield、Fel Armor ……)不算。corpusFactScan2 覆盖在自己按下的盾上的区间:134 → 2。没有候选变化。
+- `127021a5` **Divine Toll 能惠及队友**(fact3 D7):它唯一的非 dummy 效果是给施法者回 Holy Power,这条把指向队友区域的效果行藏住了。605 文件:治疗 cd-hoarded 566 → 574 —— 新增 14 条,全是队友危机时神圣骑士的 Divine Toll 就绪却没按;撤下 9 条,是按过的 Divine Toll 现在算作应对。写着「cheaper available: … Divine Toll」的提示从 209 行增至 627 行。用户已批准。
+- `5e0dd271` **cc-avoidable 可点名更多玩家自己的按键**(用户裁定 2026-10-22):Blink、Icebound Fortitude、Lichborne、Demolish、Aura Mastery、Unending Resolve、Obsidian Scales、Zen Focus Tea,每个只挡它 DB2 行里列出的控制机制。605 文件上没有变化。
+- `c5f8d4cb` **backlash-dispel 按驱散那一刻读目标血量**,而不是那一秒的 `[STATE]` 读数(用户裁定 2026-10-22,fact3 D45;渲染网格的第四个签字例外)。605 文件:backlash-dispel −1(两条移出血量分档,一条移入);39 条血量事实重读。用户已批准。
+- `e46196d6` 武僧的 Touch of Karma 窗口在该武僧自己的转移被移除时结束。打进 Aspect of the Turtle 的控制计入 ABILITIES INTO IMMUNITY。
+- `35eb2125` kick-eaten 读其他打断的锁定时带上本回合单位:非天赋持有者的 Counterspell 在这里也是 5 秒。
+
+#### 冷却
+
+- `7a6cae8e` **Blessing of the Bronze 加快它所点名的位移冷却**(fact3 D13:一名戒律牧的 Leap of Faith 在 90 秒的装备栏下 84 秒、82 秒就回来了)。
+  - 不论是谁施加的(增辉龙队友),以及回合开局就带着的,都生效。
+  - 同一轮加入 Sylvan Beckoning 与 Spirit of the Thicket 对 Swiftmend、Mystic Knowledge 对 Riptide、Ground Skimming 对 Surge Forward / Skyward Ascent。
+  - 证据:DB2 aura 454,对 Leap of Faith 的类别 −15 %。语料里带着它的牧师重按最短到 51.3 秒 —— Move with Grace 的 60 秒 × 0.85。
+- `9d62c243` 装备栏按 `[RES]` 行的读法,印出本回合被增益加快过的冷却的范围:Emerald Communion `[166–180s]`。
+- `03a355dc` Berserk 与 Celestial Alignment 持续 DB2 的 15 秒。
+  - 竞技场里 Intervene 持续 3 秒(用户裁定;防护的 6 秒未建模)。
+  - Anti-Magic Shell 444741 带 Anti-Magic Barrier(2,366 次中 2,284 次为 6.0 秒)。
+  - Axe Toss 与 Shambling Rush 取其控制效果的机制。
+
+### AI 教练 —— 时间线事实
+
+- `03a355dc` **第三轮审计,事实**(每处修复都有回归测试,并在从原始日志重新渲染的审计回合上核对过):
+  - **单位不可见时做出的按键** —— 重新列出该单位的那一批里新出现、没有施法行的光环 —— 在冷却台账、死亡分析、`[ENEMY DEF]` / KILL ATTEMPTS 与 `[ENEMY CD]` / `[ENEMY HEAL CD]` 里都算按键,标 `[pressed while unseen]`。
+  - IMMUNE miss 只点名能挡住那个控制的免疫。
+  - Spell Reflection 解释 REFLECT,永不解释 IMMUNE。
+  - 一旦 miss 行证明控制已打到玩家,就不再记位移躲开。
+  - 日志没记移除的控制,在递减后的时长结束。
+  - 我方驱散反噬的沉默是一条 `[SILENCE]` 行,附上期间做出的按键。
+  - Spiritwalker's Grace 不算防御。
+  - The Hunt / Stormkeeper 在抵达或充能用尽时结束。
+  - 蓄力持握绑定到它自己那次按键。
+  - 买不起或被拒的 Guardian Spirit 不算「空闲可用」。
+- `9d24d307` `168fe85a` `033c0335` **法术反射的回弹:**
+  - 不计入:同名的驱散反噬伤害,以及弹道飞行时间之后反射者自己的命中。
+  - 计入:反射本身挂到施法者身上的那份副本。
+  - 一个法术在两个 id 下的 REFLECT 行算一次回弹。
+  - 脚本伤害法术(Fel Lance)保留它的回弹。
+  - Nether Ward 的行归给最近的那次反射。
+  - corpusFactScan 回弹行 202 → 0。
+- `5a0abd22` `8619569f` `c7dfcba0` `fa8c4bde` `33a656b5` **隐藏按键:**
+  - 通过按键自己的效果光环来识别(Alter Time)。
+  - 只被批次重述的副本否决,不被潜行起手的施法、也不被按键的第二个同名光环否决。
+  - Herald of the Sun 的触发包不算按键。
+  - corpusFactScan 隐藏按键行 288 → 0。
+- `a7ee20cf` 没有施法行的 Blessing of Sacrifice 算按键(605 文件:cd-waste −1、cd-hoarded −1,用户已批准)。
+- `c7dfcba0` 敌方的解控种族技能会点名它解掉的、被反射回来的控制。进攻光环的一段按来源配对(两个法师对同一目标的 Touch of the Magi 是两段)。
+- `8619569f` `0ed29933` 移除那一毫秒里的按键,不会抢走日志另有原因的那次控制。
+- `7aec3189` 按键血量读在它自己第一跳 HoT 治疗之前,即使这一跳比施法行早至多 150 ms(Frenzied Regeneration 42 % → 34 %)。
+- `b9b3950f` `eebc1652` `8f155f17` **我方被控制或沉默但记为 IMMUNE 时,一定有一行 `[CC AVOIDED?]`。** 这一行写出日志能看到的原因:免疫光环、Cyclone、递减已到免疫,或不注。
+  - 免疫表加入 DB2 能解释的免疫:Freezing Trap / Imprison / Time Stop(全系),Blink、Icebound Fortitude、Lichborne、Travel Form、Demolish,以及免沉默的 Aura Mastery、Spiritwalker's Aegis、Unending Resolve、Obsidian Scales、Sanctified Ground、Zen Focus Tea。
+  - corpusFactScan2 没有行的 IMMUNE:427 → 22。
+- `189b6ac8` 地面控制已经生效之后才按的位移,不算躲开(30 条此类记录中 12 条;Capacitor Totem 的脉冲,以及已经抓到队友的 Freezing Trap)。
+- `f4c02f62` Mass Invisibility 重新测量:挂上 2 秒之后只有区域伤害会命中。用户维持原裁定。
+
+### 桌面端
+
+- `4d131ae3` 场景基线跟随 2026-10-21 的裁定:真实样本里敌方牧师自己的 Power Word: Shield 结束了它的击杀窗口。
+
+### 评测与验证工具
+
+- `a7e640ce` **`corpusFactScan`(第 1 轮):** 四项全语料确定性检查。
+  - 没有行的隐藏按键。
+  - 光环与施法行的间隔。
+  - 跑满全程却被说成「提前结束」的控制。
+  - 反射回弹。
+- `1d968d74` **`corpusFactScan2`(第 2 轮):** 六项检查。
+  - 免疫原因。
+  - 未关闭的递减控制。
+  - `defenseless` 区间内的保命。
+  - 宠物打断。
+  - 重复行。
+  - 免疫表正向检查。
+- `8619569f` `c7dfcba0` `033c0335` `0ed438a0` `4ce9f54d` 扫描器与产品共用常量和谓词(`hiddenPressMs`、反射回弹常量、`HERALD_PROC_BUNDLE_IDS`、按键治疗提前量)。每一对都登记在谓词索引里,并由对应测试钉住。
+
+### 其他
+
+- `9c75b19e` `cedc8c27` `82795e75` `d1593db7` `3b40263c` `5df0c066` PROMPT_VERSION 436、437、438、439、440、441
+
 ## v0.1.37(2026-10-21)
 
 两块工作。fact2 第二轮审计(GH #153)逐个事实类对照原始日志核对时间线,并修好每个事实的所有读者:光环解析回产生它的那次施法,击杀窗口的爆发计入被护盾吸收的命中,法术反射的回弹是反射者的伤害,ENERGIZE / DRAIN / LEECH 行作为 HP 与位置样本,谷值读到该单位死亡那一秒、直到死亡为止。冷却台账现在按天赋的真实效果建模:DB2 里按等级、按专精的天赋点数,说明文字里的专精分支,事件型冷却缩减(消耗资源、打断、命中、重置),按热修日期区分的数值,以及从天赋说明文字读出、再经语料确认的增益持续时间(GH #154、#155)。2,240 个文件上台账里「不可能的重按」从 5,240 降到 229。每一处增删指控的改动都先在 605 文件采集上预览、经用户批准后才落地。
