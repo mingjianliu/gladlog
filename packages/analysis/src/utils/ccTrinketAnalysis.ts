@@ -4733,6 +4733,39 @@ export function analyzePlayerCCAndTrinket(
    * r3: the IMMUNE row on the owner was at the 2:56 pulse, the line at the
    * 2:54 cast.
    */
+  /** A ground control's first landing — an APPLIED of its own family or a
+   * failed-control miss row — from its caster (or the caster's summon) on
+   * any unit, within its landing window (else 12 s) after the cast. */
+  const firstGoOffMs = (
+    enemy: ICombatUnit,
+    cast: ICombatUnit["spellCastEvents"][number],
+  ): number | undefined => {
+    if (!cast.spellId) return undefined;
+    const family = castAndEffectIds(cast.spellId);
+    const fromCaster = (srcId: string) =>
+      srcId === enemy.id ||
+      srcId === cast.srcUnitId ||
+      enemyPets.some((p) => p.id === srcId && p.ownerId === enemy.id);
+    const castMs = cast.logLine.timestamp;
+    const toMs =
+      castMs + (AOE_CC_LANDING_WINDOW_S[cast.spellId]?.toS ?? 12) * 1000;
+    let first: number | undefined;
+    for (const u of unitsById.values())
+      for (const r of [
+        ...(u.auraEvents ?? []).filter(
+          (a) => a.logLine.event === LogEvent.SPELL_AURA_APPLIED,
+        ),
+        ...(u.missesIn ?? []).filter((m) =>
+          CONTROL_FAILED_MISS_TYPES.has(m.missType),
+        ),
+      ]) {
+        if (!r.spellId || !family.has(r.spellId)) continue;
+        if (!fromCaster(r.srcUnitId)) continue;
+        if (r.timestamp < castMs || r.timestamp > toMs) continue;
+        if (first === undefined || r.timestamp < first) first = r.timestamp;
+      }
+    return first;
+  };
   const pulseByCast = new Map<
     string,
     Map<number, { ms: number; line: number | undefined }>
@@ -5010,6 +5043,15 @@ export function analyzePlayerCCAndTrinket(
               });
             continue;
           }
+          // corpusFactScan2 immuneCause notUp:inResolveWindow (2026-10-22):
+          // a ground control that went off — its first landing (aura or
+          // miss row) from the caster on ANY unit after the cast — was not
+          // dodged by a move pressed after it: 12 of 30 such credits
+          // (Capacitor Totem's pulse 2.0 s after the cast, a move at 2.4–
+          // 3.1 s; a Freezing Trap that caught a teammate 0.2–0.7 s before
+          // the Roll / Shadowmeld). With no landing logged the ±1.5 s
+          // reading stands (the trap nobody stepped on: 8, undecidable).
+          const goOffMs = isGroundCC ? firstGoOffMs(enemy, cast) : undefined;
           const mobilityCast = player.spellCastEvents.find(
             (e) =>
               e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
@@ -5018,6 +5060,7 @@ export function analyzePlayerCCAndTrinket(
               // near the instant it hit (`controlHitInstant`, R6): a
               // delayed control is dodged at its pulse, not at its cast
               Math.abs(e.logLine.timestamp - hit.ms) <= 1500 &&
+              (goOffMs === undefined || e.logLine.timestamp <= goOffMs) &&
               // a target-bound mobility must have gone on the avoiding
               // player themselves (triage other F-O13)
               (!TARGET_BOUND_MOBILITY_IDS.has(e.spellId) ||
