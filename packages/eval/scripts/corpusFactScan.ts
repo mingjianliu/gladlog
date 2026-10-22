@@ -111,6 +111,7 @@ import {
 } from "@gladlog/analysis/src/data/spellEffectData";
 import spellEffectGenerated from "@gladlog/analysis/src/data/spellEffectGenerated.json";
 import { ccSpellIds } from "@gladlog/analysis/src/data/spellTags";
+import { HERALD_PROC_BUNDLE_IDS } from "@gladlog/analysis/src/utils/hiddenPress";
 import { GladLogParser, type GladMatch } from "@gladlog/parser";
 import { LogEvent, toLegacyMatch } from "@gladlog/parser-compat";
 
@@ -588,10 +589,9 @@ for (const f of files) {
         // Hammer of Wrath 1241410, Born in Sunlight — four auras that are the
         // proc, not a re-listing (`AURA_ONLY_ACTIVATION_IDS` note in
         // cooldowns.ts; 155-5 1:07, 149-6 3:19: 6 s runs, 17 rows)
-        const HERALD_PROC_BUNDLE = new Set(["445206", "1241410"]);
         const heraldProc =
           (a.spellId === "31884" || a.spellId === "454351") &&
-          sameMs.some((b) => HERALD_PROC_BUNDLE.has(b.spellId));
+          sameMs.some((b) => HERALD_PROC_BUNDLE_IDS.has(b.spellId));
         if (heraldProc) {
           bump("hiddenPressUnused:heraldProcSkipped");
           continue;

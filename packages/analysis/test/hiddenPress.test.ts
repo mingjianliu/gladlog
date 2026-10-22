@@ -103,6 +103,20 @@ describe("hiddenPressMs", () => {
     ]);
     expect(hiddenPressMs(u, "102543", T0)).toEqual([BATCH_MS]);
   });
+  it("Herald of the Sun's proc Avenging Wrath, its bundle in the batch, is no hidden press (136-1-737 2:12)", () => {
+    const u = rogue([
+      aura(LogEvent.SPELL_AURA_APPLIED, "1241410", BATCH_MS),
+      aura(LogEvent.SPELL_AURA_APPLIED, "454351", BATCH_MS),
+      ...batch(8, false),
+    ]);
+    expect(hiddenPressMs(u, "454351", T0)).toEqual([]);
+    // without the bundle, the same re-listing keeps it
+    const plain = rogue([
+      aura(LogEvent.SPELL_AURA_APPLIED, "454351", BATCH_MS),
+      ...batch(8, false),
+    ]);
+    expect(hiddenPressMs(plain, "454351", T0)).toEqual([BATCH_MS]);
+  });
   it("a stealth opener's cast in the batch's ms leaves the hidden press (51-4 0:08 Trueshot beside Moonlight Chakram)", () => {
     const opener = {
       spellId: "1264949",

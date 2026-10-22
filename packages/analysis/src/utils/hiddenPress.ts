@@ -42,6 +42,19 @@ export const RESYNC_BATCH_MIN_APPLIED = 6;
  * ten rows at .108, five at .109, Tranquility among the second five). */
 export const RESYNC_BATCH_SPAN_MS = 5;
 
+/** Herald of the Sun's proc Avenging Wrath comes with its own bundle in one
+ * ms — Blessing of An'she 445206, Hammer of Wrath 1241410 (Born in
+ * Sunlight, Empyrean Legacy beside them) — enough APPLIED rows to look like a
+ * re-listing; an Avenging Wrath (31884 / 454351) beside either is the proc,
+ * not a press made unseen (corpusFactScan2 duplicateLine, 136-1-737 2:12:
+ * `(proc 5 of 5) [pressed while unseen]` and `(no press)` for one APPLIED;
+ * corpusFactScan's heraldProcSkipped reads this set). */
+export const HERALD_PROC_BUNDLE_IDS: ReadonlySet<string> = new Set([
+  "445206",
+  "1241410",
+]);
+const AVENGING_WRATH_AURA_IDS = new Set(["31884", "454351"]);
+
 /** A press row this close to the aura is the aura's own press, not a lost
  * one. */
 const PRESS_ROW_PAIR_MS = 1000;
@@ -119,6 +132,16 @@ export function hiddenPressMs(
     }
     return false;
   };
+  const heraldProc = (id: string, ms: number) =>
+    AVENGING_WRATH_AURA_IDS.has(id) &&
+    rows.some(
+      (b) =>
+        !!b.spellId &&
+        HERALD_PROC_BUNDLE_IDS.has(b.spellId) &&
+        b.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
+        b.destUnitId === unit.id &&
+        Math.abs(b.logLine.timestamp - ms) <= RESYNC_BATCH_SPAN_MS,
+    );
   const out: number[] = [];
   let up = false;
   for (const [i, a] of own.entries()) {
@@ -129,7 +152,8 @@ export function hiddenPressMs(
         !up &&
         batchSize(ms) >= RESYNC_BATCH_MIN_APPLIED &&
         !pressMs.some((p) => Math.abs(p - ms) <= PRESS_ROW_PAIR_MS) &&
-        !restated(i)
+        !restated(i) &&
+        !heraldProc(a.spellId!, ms)
       )
         out.push(ms);
       up = true;
