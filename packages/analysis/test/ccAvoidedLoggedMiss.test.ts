@@ -215,7 +215,12 @@ describe("[CC AVOIDED?] — the log's own miss type for the avoided cast", () =>
         casts: [[HAMMER_OF_JUSTICE, 0]],
         misses: [{ spellId: POLYMORPH, missType: "IMMUNE", afterMs: 0 }],
       }),
-    ).toEqual([["Hammer of Justice", null]]);
+      // the Polymorph row is no Hammer of Justice's; it is its own fact
+      // (the miss-row sweep, corpusFactScan2 immunityTableForward)
+    ).toEqual([
+      ["Hammer of Justice", null],
+      ["Polymorph", "IMMUNE"],
+    ]);
     expect(
       avoided({
         casts: [[HAMMER_OF_JUSTICE, 0]],
@@ -277,7 +282,11 @@ describe("[CC AVOIDED?] — the log's own miss type for the avoided cast", () =>
         casts: [[POLYMORPH, 0]],
         misses: [{ spellId: POLYMORPH, missType: "IMMUNE", afterMs: 3_000 }],
       }),
-    ).toEqual([["Polymorph", null]]);
+      // not that cast's: the row 3 s later is stated on its own
+    ).toEqual([
+      ["Polymorph", null],
+      ["Polymorph", "IMMUNE"],
+    ]);
   });
 });
 

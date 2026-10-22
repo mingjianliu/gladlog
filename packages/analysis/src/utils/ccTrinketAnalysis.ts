@@ -5096,6 +5096,70 @@ export function analyzePlayerCCAndTrinket(
     }
   }
 
+  // 1b. corpusFactScan2 immunityTableForward (b42, 2026-10-22): an IMMUNE
+  // control row whose cast the sweep above never walks — a control riding a
+  // non-control cast (Garrote's silence 1330 off Garrote 703: 21 of the 48
+  // left), a secondary target of an area control, a hunter's Spider Venom —
+  // is still a row on the player. Each one no instance above already states
+  // (same control by name, within 1 s), from an enemy or its summon.
+  const enemyIdSet = new Set(enemies.map((e) => e.id));
+  const ownerEnemyOf = (srcId: string): ICombatUnit | undefined =>
+    enemies.find((e) => e.id === srcId) ??
+    enemies.find((e) => e.id === unitsById.get(srcId)?.ownerId);
+  for (const m of player.missesIn ?? []) {
+    if (m.missType !== "IMMUNE" || !m.spellId) continue;
+    // a control, or a silence (mechanic 9 — Garrote's 1330, Spider Venom:
+    // no hard CC, but an IMMUNE row of one is the same fact)
+    if (
+      !ccSpellIds.has(m.spellId) &&
+      !isControlCast(m.spellId) &&
+      ccMechanicOf(m.spellId) !== 9
+    )
+      continue;
+    const enemy = ownerEnemyOf(m.srcUnitId);
+    if (!enemy || !enemyIdSet.has(enemy.id)) continue;
+    if (m.timestamp < combat.startTime) continue;
+    const name = getEnglishSpellName(m.spellId, m.spellName);
+    const stated = [...ccAvoidedInstances, ...ccImmuneUncredited].some(
+      (x) =>
+        x.spellName === name &&
+        Math.abs(matchStartMs + x.atSeconds * 1000 - m.timestamp) <= 1000,
+    );
+    if (stated) continue;
+    // an avoidance the table explains is credited like the sweep's
+    const applicableIds = applicableCCAvoidanceIds(m.spellId, name);
+    const buff = avoidanceBuffsAt(m.timestamp, m.logLine?.lineIndex).find(
+      (b) =>
+        applicableIds.has(b.spellId) &&
+        avoidanceExplainsMissType(b.spellId, m.missType),
+    );
+    const atSeconds = (m.timestamp - matchStartMs) / 1000;
+    if (buff)
+      ccAvoidedInstances.push({
+        atSeconds,
+        castAtSeconds: atSeconds,
+        spellId: m.spellId,
+        spellName: name,
+        avoidanceSpellName: buff.name,
+        avoidanceSpellId: buff.spellId,
+        avoidanceSourceName: buff.srcName || undefined,
+        sourceName: enemy.name,
+        sourceId: enemy.id,
+        sourceSpec: enemySpecMap.get(enemy.id) ?? "Unknown",
+        loggedMissType: m.missType,
+      });
+    else
+      ccImmuneUncredited.push({
+        atSeconds,
+        castAtSeconds: atSeconds,
+        spellId: m.spellId,
+        spellName: name,
+        sourceName: enemy.name,
+        sourceId: enemy.id,
+        missMs: m.timestamp,
+      });
+  }
+
   // 2. Grounding Totem Redirects (only tracked on Shaman players to avoid multi-teammate duplication)
   if (player.class === CombatUnitClass.Shaman) {
     const groundingRedirects: ICCAvoidedInstance[] = [];
