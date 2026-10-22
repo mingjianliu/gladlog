@@ -98,6 +98,11 @@ import { join, resolve } from "node:path";
 import { gunzipSync } from "node:zlib";
 
 import { ensureAnalysisData } from "@gladlog/analysis";
+import {
+  REFLECT_CHAIN_GAP_MS,
+  REFLECT_DIRECT_RETURN_MS,
+  REFLECT_OWN_ID_LEAD_MS,
+} from "@gladlog/analysis/src/context/spellOutcomeLines";
 import { castsOfEffectAura } from "@gladlog/analysis/src/data/castEffectAuras";
 import { ROOT_SPELL_IDS } from "@gladlog/analysis/src/data/rootSpells";
 import {
@@ -968,7 +973,12 @@ for (const f of files) {
     const reflects = ((caster.missesOut ?? []) as any[])
       .filter((m) => m.missType === "REFLECT" && m.spellId)
       .sort((x, y) => tsOf(x) - tsOf(y));
-    const groups: Array<{ first: any; last: number; g?: IReflectGroup }> = [];
+    const groups: Array<{
+      first: any;
+      last: number;
+      rows: number[];
+      g?: IReflectGroup;
+    }> = [];
     for (const m of reflects) {
       const g = [...groups]
         .reverse()
@@ -978,8 +988,10 @@ for (const f of files) {
               nameOf(m.spellId, m.spellName) &&
             x.first.destUnitId === m.destUnitId,
         );
-      if (g && tsOf(m) - g.last <= 3000) g.last = tsOf(m);
-      else groups.push({ first: m, last: tsOf(m) });
+      if (g && tsOf(m) - g.last <= REFLECT_CHAIN_GAP_MS) {
+        g.last = tsOf(m);
+        g.rows.push(tsOf(m));
+      } else groups.push({ first: m, last: tsOf(m), rows: [tsOf(m)] });
     }
     const myGroups: IReflectGroup[] = [];
     for (const g of groups) {
@@ -1025,15 +1037,23 @@ for (const f of files) {
       const ownDot = (ts: number) =>
         sAuras.some(
           ([a, b, src]) =>
-            src !== caster.id && a < t0 - 500 && ts >= a && ts <= b,
+            src !== caster.id &&
+            a < t0 - REFLECT_OWN_ID_LEAD_MS &&
+            ts >= a &&
+            ts <= b,
         );
       const reflectedDot = (ts: number) =>
         sAuras.some(
-          ([a, b]) => a >= t0 - 500 && a <= g.last + 3000 && ts >= a && ts <= b,
+          ([a, b]) =>
+            a >= t0 - REFLECT_OWN_ID_LEAD_MS &&
+            a <= g.last + REFLECT_DIRECT_RETURN_MS &&
+            ts >= a &&
+            ts <= b,
         );
       /** a row of S on C from `src` at `ts` that is the reflect's return */
       const counts = (src: string, ts: number, periodic: boolean | null) => {
-        if (ts < t0 - 500 || ts > g.last + 20_000) return false;
+        if (ts < t0 - REFLECT_OWN_ID_LEAD_MS || ts > g.last + 20_000)
+          return false;
         if (srcs.has(src) && ownDot(ts)) return false;
         const inDot = reflectedDot(ts);
         // the caster's own row of S on itself: a reflected DoT's ticks, or
@@ -1042,11 +1062,15 @@ for (const f of files) {
         // within [−0.5 s, +3 s]
         // (a channel's ticks carry no aura on the caster: Disintegrate
         // 356995 C → C periodic rows 175-1-946 0:15 — inside the 3 s too)
-        if (src === caster.id) return inDot || ts <= g.last + 3000;
+        if (src === caster.id)
+          return inDot || ts <= g.last + REFLECT_DIRECT_RETURN_MS;
         if (!srcs.has(src)) return false;
         if (periodic === true) return inDot;
         // a direct hit (an absorb row carries no periodic flag: either)
-        return ts <= g.last + 3000 || (periodic === null && inDot);
+        return (
+          ts <= g.last + REFLECT_DIRECT_RETURN_MS ||
+          (periodic === null && inDot)
+        );
       };
       let direct = 0;
       for (const d of (caster.damageIn ?? []) as any[])
@@ -1107,18 +1131,24 @@ for (const f of files) {
     }
     // the reflector's own-id rows on C → candidate reflects (nearest damaging
     // one decided at the end)
+    // by the gap to the group's nearest REFLECT row (the product's
+    // `creditOwnId`: 50-1 2:17, two Wicked Reapings around a Demonbolt)
+    const rowGap = (g: (typeof groups)[number], ts: number) =>
+      Math.min(
+        ...g.rows
+          .filter((r) => ts >= r - REFLECT_OWN_ID_LEAD_MS)
+          .map((r) => Math.abs(ts - r)),
+      );
     const ownCands = (src: string, ts: number) =>
       groups
         .filter(
           (g) =>
             g.g &&
             g.first.destUnitId === src &&
-            ts >= tsOf(g.first) - 500 &&
-            ts <= g.last + 3000,
+            ts >= tsOf(g.first) - REFLECT_OWN_ID_LEAD_MS &&
+            ts <= g.last + REFLECT_DIRECT_RETURN_MS,
         )
-        .sort(
-          (x, y) => Math.abs(tsOf(x.first) - ts) - Math.abs(tsOf(y.first) - ts),
-        )
+        .sort((x, y) => rowGap(x, ts) - rowGap(y, ts))
         .map((g) => g.g!);
     for (const d of (caster.damageIn ?? []) as any[]) {
       if (!REFLECT_OWN_IDS.has(d.spellId)) continue;

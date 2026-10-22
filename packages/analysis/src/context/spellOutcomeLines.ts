@@ -144,6 +144,13 @@ export const REFLECT_OWN_DAMAGE_IDS: ReadonlySet<string> = new Set([
 /** How far ahead of its REFLECT row such a row can be logged (measured max
  * 487 ms, above). */
 export const REFLECT_OWN_ID_LEAD_MS = 500;
+/** How long after its REFLECT row a reflected hit can land: the projectile's
+ * flight (measured up to 2.9 s, above). A hit of the spell the reflector
+ * sends later is its own cast or proc — unless it ticks inside the copy the
+ * reflect put on the caster (136-1 2:28: a Shadow of Nathreza mirror, the
+ * reflecting warlock's own pulses on the caster for 20 s printed 107k of
+ * four 5.6k returns; corpusFactScan reflectReturn shares it). */
+export const REFLECT_DIRECT_RETURN_MS = 3000;
 
 export function reflectedSpells(
   units: readonly ICombatUnit[],
@@ -157,8 +164,12 @@ export function reflectedSpells(
       .sort((a, b) => a.logLine.timestamp - b.logLine.timestamp);
     // chains: same spell, same reflector, ≤ REFLECT_CHAIN_GAP_MS apart (this
     // also folds one reflect logged once per effect at the same ms)
-    const chains: Array<{ first: (typeof reflects)[number]; last: number }> =
-      [];
+    const chains: Array<{
+      first: (typeof reflects)[number];
+      last: number;
+      /** every REFLECT row's ms in the chain */
+      rows: number[];
+    }> = [];
     for (const m of reflects) {
       const c = [...chains].reverse().find(
         (x) =>
@@ -174,9 +185,15 @@ export function reflectedSpells(
                 getEnglishSpellName(m.spellId, ""))) &&
           x.first.destUnitId === m.destUnitId,
       );
-      if (c && m.logLine.timestamp - c.last <= REFLECT_CHAIN_GAP_MS)
+      if (c && m.logLine.timestamp - c.last <= REFLECT_CHAIN_GAP_MS) {
         c.last = m.logLine.timestamp;
-      else chains.push({ first: m, last: m.logLine.timestamp });
+        c.rows.push(m.logLine.timestamp);
+      } else
+        chains.push({
+          first: m,
+          last: m.logLine.timestamp,
+          rows: [m.logLine.timestamp],
+        });
     }
     // Each hit of the spell on its caster goes to ONE chain (codex reviews
     // of batch 13): a hit sourced from a reflector → that reflector's latest
@@ -188,19 +205,29 @@ export function reflectedSpells(
     // copy of the spell on the caster — its ticks are its own damage, not
     // the return (8888b780 0:42: 136k of a reflected Agony's "223k" was the
     // reflecting warlock's own Agony, up on the caster before the reflect).
-    // The reflected copy ticks as the caster's own (caster → caster).
+    // The reflected copy ticks as the caster's own (caster → caster) — or
+    // as the reflector's, applied by the reflect itself: only a run of the
+    // reflector's that started before the REFLECT row (less
+    // `REFLECT_OWN_ID_LEAD_MS`) is its own (70-1 1:11: a Wither Nether Ward
+    // sent back, 445474 Scallington → Shadowfist from 147 ms after the row,
+    // Scallington's own gone 2 s before and never recast — its ticks were
+    // dropped, 75k printed of 139.6k; corpusFactScan reflectReturn)
     const reflectorsOwnAuraUp = (
       spellId: string,
       reflectorId: string,
       ts: number,
+      reflectMs: number,
     ): boolean => {
-      let up = false;
+      let since: number | undefined;
       for (const a of caster.auraEvents ?? []) {
         if (a.logLine.timestamp > ts) break;
         if (a.spellId !== spellId || a.srcUnitId !== reflectorId) continue;
-        up = a.logLine.event !== LogEvent.SPELL_AURA_REMOVED;
+        if (a.logLine.event === LogEvent.SPELL_AURA_REMOVED) since = undefined;
+        else if (a.logLine.event === LogEvent.SPELL_AURA_APPLIED)
+          since ??= a.logLine.timestamp;
+        else since ??= a.logLine.timestamp; // a REFRESH / dose: up
       }
-      return up;
+      return since !== undefined && since < reflectMs - REFLECT_OWN_ID_LEAD_MS;
     };
     // corpusFactScan reflectReturn (2026-10-21): the reflected spell's damage
     // can come back under its damage id, not the cast id the REFLECT row
@@ -211,6 +238,30 @@ export function reflectedSpells(
     // dispel backlash of the same name: Unstable Affliction's 196364 is the
     // damage the caster took dispelling the reflected copy off itself, not
     // the copy's own (11-1 0:44: 127.7k of a printed 189k)
+    // the copy the reflect itself put on the caster, from the reflector:
+    // a run of the hit's aura that started with the reflect (from
+    // `REFLECT_OWN_ID_LEAD_MS` before its first row to the projectile's
+    // flight after its last) and is up at `ts`
+    const reflectedCopyUp = (
+      spellId: string,
+      reflectorId: string,
+      ts: number,
+      firstMs: number,
+      lastMs: number,
+    ): boolean => {
+      let since: number | undefined;
+      for (const a of caster.auraEvents ?? []) {
+        if (a.logLine.timestamp > ts) break;
+        if (a.spellId !== spellId || a.srcUnitId !== reflectorId) continue;
+        if (a.logLine.event === LogEvent.SPELL_AURA_REMOVED) since = undefined;
+        else since ??= a.logLine.timestamp;
+      }
+      return (
+        since !== undefined &&
+        since >= firstMs - REFLECT_OWN_ID_LEAD_MS &&
+        since <= lastMs + REFLECT_DIRECT_RETURN_MS
+      );
+    };
     const sameSpell = (reflected: string, hit: string) =>
       reflected === hit ||
       (!BACKLASH_AURA_CC_TYPE.has(hit) &&
@@ -231,7 +282,9 @@ export function reflectedSpells(
         if (
           src === c.first.destUnitId &&
           src !== caster.id &&
-          reflectorsOwnAuraUp(spellId, src, ts)
+          (reflectorsOwnAuraUp(spellId, src, ts, t0) ||
+            (ts > c.last + REFLECT_DIRECT_RETURN_MS &&
+              !reflectedCopyUp(spellId, src, ts, t0, c.last)))
         )
           continue;
         if (!best || t0 > best.first.logLine.timestamp) best = c;
@@ -279,12 +332,21 @@ export function reflectedSpells(
         const t0 = c.first.logLine.timestamp;
         if (ts < t0 - REFLECT_OWN_ID_LEAD_MS) continue;
         if (ts - t0 > REFLECT_DAMAGE_WINDOW_S * 1000) continue;
+        // the gap to the chain's nearest REFLECT row, not its first: two
+        // Wicked Reapings reflected 1.1 s apart are one chain, and the
+        // second's 59.5k under Nether Ward in its own row's ms went to a
+        // Demonbolt reflected 335 ms before it (50-1 2:17)
+        const rowGap = Math.min(
+          ...c.rows
+            .filter((r) => ts >= r - REFLECT_OWN_ID_LEAD_MS)
+            .map((r) => Math.abs(ts - r)),
+        );
         // a reflected spell that deals no damage owns no damage return —
         // a control (codex 20-F16-03 #3) or anything else (fact3 D6 / D25:
         // a Spellsteal reflected 0.6 s after a Pyroblast took its 145k)
         const id = c.first.spellId ?? "";
         if (!dealsDamage(id)) continue;
-        const gap = Math.abs(ts - t0);
+        const gap = rowGap;
         if (gap < bestGap) {
           best = c;
           bestGap = gap;

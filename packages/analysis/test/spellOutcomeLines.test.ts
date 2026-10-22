@@ -253,6 +253,85 @@ describe("reflectedSpells (0051f0c9)", () => {
     const [r] = reflectedSpells([caster, unit("Player-W")], T0);
     expect(r!.damageBack).toBe(40_000);
   });
+  it("a copy the reflect itself applied, logged reflector → caster (Wither 445474 147 ms after the row), is the return, not the reflector's own", () => {
+    const WITHER = "445474";
+    const tick = (amt: number, ms: number) => ({
+      spellId: WITHER,
+      srcUnitId: "Player-W",
+      effectiveAmount: -amt,
+      logLine: { event: LogEvent.SPELL_PERIODIC_DAMAGE, timestamp: T0 + ms },
+    });
+    const aura = (event: LogEvent, ms: number) => ({
+      spellId: WITHER,
+      srcUnitId: "Player-W",
+      destUnitId: "Player-P",
+      logLine: { event, timestamp: T0 + ms },
+    });
+    const caster = unit("Player-P", {
+      missesOut: [miss(WITHER)],
+      auraEvents: [
+        // the reflector's own Wither, gone 2 s before the reflect
+        aura(LogEvent.SPELL_AURA_APPLIED, 0),
+        aura(LogEvent.SPELL_AURA_REMOVED, 3_000),
+        // the reflected copy
+        aura(LogEvent.SPELL_AURA_APPLIED, 5_147),
+      ],
+      damageIn: [tick(30_000, 2_000), tick(6_000, 7_500), tick(6_000, 8_700)],
+      advancedActions: advanced(200_000),
+    });
+    const [r] = reflectedSpells([caster, unit("Player-W")], T0);
+    expect(r!.damageBack).toBe(12_000);
+  });
+  it("a hit of the spell the reflector sends after the projectile's flight, outside a copy the reflect put up, is its own (Shadow of Nathreza mirror)", () => {
+    const SON = "1262710";
+    const hit = (amt: number, ms: number) => ({
+      spellId: SON,
+      srcUnitId: "Player-W",
+      effectiveAmount: -amt,
+      logLine: { event: LogEvent.SPELL_DAMAGE, timestamp: T0 + ms },
+    });
+    const caster = unit("Player-P", {
+      missesOut: [miss(SON)],
+      damageIn: [
+        hit(5_553, 5_000), // the return, in the REFLECT row's ms
+        hit(5_925, 9_000), // the reflector's own pulses
+        hit(5_925, 10_000),
+      ],
+      advancedActions: advanced(100_000),
+    });
+    const [r] = reflectedSpells([caster, unit("Player-W")], T0);
+    expect(r!.damageBack).toBe(5_553);
+  });
+  it("an own-id return goes to the chain whose nearest REFLECT row is closest, not the chain's first row (two Wicked Reapings, a Demonbolt between)", () => {
+    const WR = "449826";
+    const DB = "264178";
+    const reflect = (spellId: string, ms: number) => ({
+      ...miss(spellId),
+      logLine: { timestamp: T0 + ms },
+    });
+    const nw = (amt: number, ms: number) => ({
+      spellId: "212295",
+      srcUnitId: "Player-W",
+      effectiveAmount: -amt,
+      logLine: { event: LogEvent.SPELL_DAMAGE, timestamp: T0 + ms },
+    });
+    const caster = unit("Player-P", {
+      // 50-1 2:17's timings: WR 44.788 / 45.874, Demonbolt 45.539 / 46.643;
+      // Nether Ward rows 44.789, 45.874, 46.289
+      missesOut: [
+        reflect(WR, 5_000),
+        reflect(DB, 5_751),
+        reflect(WR, 6_086),
+        reflect(DB, 6_855),
+      ],
+      damageIn: [nw(59_508, 5_001), nw(59_508, 6_086), nw(60_696, 6_501)],
+      advancedActions: advanced(300_000),
+    });
+    const out = reflectedSpells([caster, unit("Player-W")], T0);
+    const back = (id: string) => out.find((x) => x.spellId === id)!.damageBack;
+    expect(back(WR)).toBe(119_016);
+    expect(back(DB)).toBe(60_696);
+  });
 });
 
 describe("sanctuaryRemovals (0035285c)", () => {
