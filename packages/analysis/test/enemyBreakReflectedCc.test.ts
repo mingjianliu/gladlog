@@ -23,7 +23,7 @@ const selfAura = (event: LogEvent, spellId: string, ms: number) =>
     srcUnitName: "Enemy",
     destUnitId: "e",
     destUnitName: "Enemy",
-  }) as any;
+  }) as never;
 
 function trinketLine(controlId: string) {
   const owner = makeUnit("o", { name: "Me" });
@@ -42,13 +42,13 @@ function trinketLine(controlId: string) {
     hostilePurges: [],
     missedCleanseWindows: [],
     missedPurgeWindows: [],
-  } as any;
+  } as never;
   return buildMatchTimeline({
     owner,
     ownerSpec: "Fury Warrior",
     ownerCDs: [],
     teammateCDs: [],
-    enemyCDTimeline: { players: [], alignedBurstWindows: [] } as any,
+    enemyCDTimeline: { players: [], alignedBurstWindows: [] } as never,
     ccTrinketSummaries: [],
     enemyCCSummaries: [
       {
@@ -80,7 +80,7 @@ function trinketLine(controlId: string) {
     isHealer: false,
     outgoingCCChains: [],
     criticalWindowSeconds: new Set<number>(),
-  } as any)
+  } as never)
     .split("\n")
     .find((l) => /^\d+:\d\d {2}\[ENEMY TRINKET\]/.test(l));
 }

@@ -57,12 +57,12 @@ import { castsOfEffectAura } from "@gladlog/analysis/src/data/castEffectAuras";
 import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData";
 import { AURA_REBROADCAST_GAP_MS } from "@gladlog/analysis/src/utils/auraIntervals";
 import { buffFullDurationForCaster } from "@gladlog/analysis/src/utils/buffDuration";
-import { hiddenPressMs } from "@gladlog/analysis/src/utils/hiddenPress";
 import {
   AURA_BEFORE_CAST_MAX_S,
   MITIGATION_AURA_IDS,
   wallTableIdOfAura,
 } from "@gladlog/analysis/src/utils/enemyDefensives";
+import { hiddenPressMs } from "@gladlog/analysis/src/utils/hiddenPress";
 import { GladLogParser, type GladMatch } from "@gladlog/parser";
 import {
   type IAuraEvent,

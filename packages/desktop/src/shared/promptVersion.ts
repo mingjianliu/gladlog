@@ -323,5 +323,16 @@
  *  6 s. 605 files vs v437: kick-priority-missed +17, kick-priority-team
  *  +22, kick-eaten +1, position-mistake +1, questionable-external −6,
  *  cd-waste −6, cd-hoarded +1, external-unused −9, backlash-dispel −1.
+ *
+ * v439 (2026-10-22, fix-F16 regression net + corpusFactScan residue):
+ *  reflect returns (backlash excluded, one chain per spell by id or name,
+ *  the reflected copy logged reflector → caster, a reflector's own hits
+ *  after the projectile's flight, own-id rows by the nearest REFLECT row,
+ *  Fel Lance's return); hidden presses vetoed only by a same-id
+ *  re-statement, found by the press's own effect aura (Alter Time);
+ *  castless Blessing of Sacrifice; an enemy break racial out of a
+ *  reflected control; offensive aura runs paired per source; a trinket
+ *  after a logged cause in the removal's ms. 605 files vs v438: cd-waste
+ *  −1, cd-hoarded −1 (one castless Blessing of Sacrifice, 103-2 0:58).
  */
-export const PROMPT_VERSION = 438;
+export const PROMPT_VERSION = 439;
