@@ -136,6 +136,7 @@ import {
   TALENT_TRIGGERED_CONTROL_BUTTONS,
 } from "../utils/healerExposureAnalysis";
 import { HEALER_AVOIDANCE_SPELLS } from "../utils/healerExposureAnalysis";
+import { HERALD_PROC_BUNDLE_IDS } from "../utils/hiddenPress";
 import {
   DEFERRAL_SHIELD_DAMAGE_IDS,
   REDISTRIBUTION_DAMAGE_IDS,
@@ -798,6 +799,9 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   // utils/ccTrinketAnalysis.ts
   t("CC_AVOIDANCE_BUFF_SPELLS", "utils/ccTrinketAnalysis.ts", "aura", () =>
     set(CC_AVOIDANCE_BUFF_SPELLS.keys()),
+  ),
+  t("HERALD_PROC_BUNDLE_IDS", "utils/hiddenPress.ts", "aura", () =>
+    set(HERALD_PROC_BUNDLE_IDS),
   ),
   t("CC_AVOIDANCE_FACT_ONLY_IDS", "utils/ccTrinketAnalysis.ts", "aura", () =>
     set(CC_AVOIDANCE_FACT_ONLY_IDS),

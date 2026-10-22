@@ -118,6 +118,7 @@ import * as castingLocks from "@gladlog/analysis/src/utils/castingLocks";
 import * as castMissRows from "@gladlog/analysis/src/utils/castMissRows";
 import * as castParam from "@gladlog/analysis/src/utils/castParam";
 import * as castPress from "@gladlog/analysis/src/utils/castPress";
+import * as castRowLag from "@gladlog/analysis/src/utils/castRowLag";
 import * as ccBreakAnalysis from "@gladlog/analysis/src/utils/ccBreakAnalysis";
 import * as ccDuration from "@gladlog/analysis/src/utils/ccDuration";
 import * as ccTargetState from "@gladlog/analysis/src/utils/ccTargetState";
@@ -3624,6 +3625,21 @@ const INDEX: PredicateRow[] = [
     file: `${A}/utils/hiddenPress.ts`,
     symbol: "hiddenPressMs",
     mod: hiddenPress,
+  },
+  {
+    file: `${A}/utils/hiddenPress.ts`,
+    symbol: "HERALD_PROC_BUNDLE_IDS",
+    mod: hiddenPress,
+  },
+  {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "PRESS_EFFECT_LEAD_MS",
+    mod: cooldowns,
+  },
+  {
+    file: `${A}/utils/castRowLag.ts`,
+    symbol: "AURA_BEFORE_CAST_ROW_MAX_MS",
+    mod: castRowLag,
   },
   {
     file: `${A}/context/spellOutcomeLines.ts`,
