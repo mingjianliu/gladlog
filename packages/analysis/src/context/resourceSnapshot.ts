@@ -28,6 +28,7 @@ import {
   type PressLockoutDebuff,
   pressSpentBy,
   specToString,
+  warpClock,
 } from "../utils/cooldowns";
 import { positionalWallReach } from "../utils/deathOutcomeAnalysis";
 import { isStunCcInstance } from "../utils/drAnalysis";
@@ -248,10 +249,27 @@ export function buildPlayerLoadout(
         (c.reductions ?? []).reduce((sum, r) => sum + r.seconds, 0),
       ),
     );
+    // … and one whose recovery a buff of the unit's own sped up this round
+    // (`rateWindows`, the warped clock every [RES] row reads): the real time
+    // its quickest press took to come back (fact2-retest idx 25: Emerald
+    // Communion `[180s]` above `+Emerald Communion` rows and two presses
+    // 175.0 s apart)
+    const warp = cd.rateWindows?.length ? warpClock(cd.rateWindows) : null;
+    const rateShortest = warp
+      ? Math.min(
+          cd.cooldownSeconds,
+          ...(cd.casts ?? []).map(
+            (c) =>
+              warp.inverse(warp.tau(c.timeSeconds) + cd.cooldownSeconds) -
+              c.timeSeconds,
+          ),
+        )
+      : cd.cooldownSeconds;
     const soonest = Math.floor(
       Math.min(
         cd.earliestCooldownSeconds ?? cd.cooldownSeconds,
         cd.cooldownSeconds - eventShortest,
+        rateShortest,
       ),
     );
     if (soonest < cd.cooldownSeconds) {

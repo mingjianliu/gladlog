@@ -201,6 +201,7 @@
     "test/kickLockout.test.ts",
     "test/kickPressure.test.ts",
     "test/killAttempts.test.ts",
+    "test/kitRateWindowRange.test.ts",
     "test/kitUnusedNote.test.ts",
     "test/ledgerEnemyOnlySaves.test.ts",
     "test/logEra.test.ts",
