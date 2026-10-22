@@ -62,7 +62,6 @@ import {
   reconstructDispelSummary,
 } from "../../utils/dispelAnalysis";
 import { analyzeOutgoingCCChains, getDRCategory } from "../../utils/drAnalysis";
-import { toRenderSecond } from "../../utils/renderGrid";
 import { roundEndMs } from "../../utils/roundEnd";
 import { fmtFactNum as fmt, fmtFactTime } from "../factFormat";
 import type { CandidateEvent } from "../types";
@@ -507,10 +506,12 @@ export function backlashDispelDecisionPoints(
         coRemovedCritical: coRemoved.some(
           (c) => c.priority === "Critical" || c.priority === "High",
         ),
-        targetHpPct: gridHpPct(
-          target as never,
-          startMs + toRenderSecond(t0S) * 1000,
-        ),
+        // the target's HP at the decision instant itself — the dispel's ms,
+        // or the left-on reading's — not its second's [STATE] tick: user
+        // ruling 2026-10-22 (fact3 D45, the fourth signed exception in
+        // CLAUDE.md's Shared-Predicate Rule; 8888b780-r3: the tick read 82 %
+        // for a dispel at 77 %)
+        targetHpPct: gridHpPct(target as never, t0Ms),
         backlashLanded,
         immuneBuffIds,
         refDispellerId: refHealer?.id ?? null,
