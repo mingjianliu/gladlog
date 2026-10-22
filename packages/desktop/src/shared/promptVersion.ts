@@ -334,5 +334,18 @@
  *  reflected control; offensive aura runs paired per source; a trinket
  *  after a logged cause in the removal's ms. 605 files vs v438: cd-waste
  *  −1, cd-hoarded −1 (one castless Blessing of Sacrifice, 103-2 0:58).
+ *
+ * v440 (2026-10-22, GH #153 leftovers + corpusFactScan2 batch-2 inputs):
+ *  press HP reads a HoT's first tick up to the aura-before-cast lag; the
+ *  kit's rate-warped range; Divine Toll reaches allies; Blessing of the
+ *  Bronze speeds Leap of Faith (aura-454 category carriers, ally-applied,
+ *  from COMBATANT_INFO); defenseless ends under an own PRESSED absorb shield
+ *  within a minute of its press; an IMMUNE control / silence row on our
+ *  player is stated with its log cause; DB2-explained avoidance auras
+ *  (facts only); Herald's proc bundle is no hidden press; a ground
+ *  control's go-off bounds the move credited with dodging it. 605 files vs
+ *  v439 (b39 → b45): healer cd-hoarded +8 (14 new, all Holy Paladin
+ *  Divine Toll ready while a teammate was in crisis; 9 removed where the
+ *  pressed Divine Toll now answers it).
  */
-export const PROMPT_VERSION = 439;
+export const PROMPT_VERSION = 440;
