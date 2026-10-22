@@ -219,6 +219,7 @@
     "test/offensiveRunPerSource.test.ts",
     "test/offensiveWindowsExternals.test.ts",
     "test/outgoingCcPairing.test.ts",
+    "test/ownAbsorbShieldDefenseless.test.ts",
     "test/ported/archetypeInference.test.ts",
     "test/ported/auraIntervals.test.ts",
     "test/ported/binarySearch.test.ts",

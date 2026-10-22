@@ -10,6 +10,7 @@
 import { ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
 import { saveSchoolMask } from "../analysis/candidates/cooldownTiming";
+import { abilityProfile } from "../data/abilityProfile";
 import {
   castAndEffectIds,
   castKeyOfAura,
@@ -171,6 +172,33 @@ export const KW_OWN_ROTATIONAL_ABSORB_AURA_IDS: ReadonlySet<string> = new Set([
 export const KW_REDIRECT_PROTECTION_AURA_IDS: ReadonlySet<string> = new Set([
   "147833",
 ]);
+
+/**
+ * The target's own absorb shields that end `defenseless` while up — the
+ * legend's "its own … absorb shield", beyond ruling (1)'s two
+ * (`KW_OWN_ROTATIONAL_ABSORB_AURA_IDS`, always): an aura DB2 calls an absorb
+ * (`abilityProfile().absorbs`, SCHOOL_ABSORB) that the log shows absorbing
+ * for this unit as its own shield this round (an `absorbsIn` row of that id
+ * the unit owns). corpusFactScan2 defenselessSaveUp ownAbsorb (2026-10-22):
+ * 134 kill windows / [VULNERABLE] spans ran over an own shield that ate hits
+ * — Power Word: Shield 1246768 (no cast row) 79, Holy Bulwark 21, Blazing
+ * Barrier 18, Prismatic Barrier 7, Reversion 5, Ignore Pain 2. The absorb
+ * row is the evidence: Reversion's aura-69 effect carries 0 points (a
+ * talent's), so an untalented Reversion is no shield and never counts.
+ */
+export function ownAbsorbShieldAuraIdsOf(
+  holder: Pick<ICombatUnit, "id" | "absorbsIn">,
+): Set<string> {
+  const out = new Set<string>(KW_OWN_ROTATIONAL_ABSORB_AURA_IDS);
+  for (const a of holder.absorbsIn ?? [])
+    if (
+      a.spellId &&
+      a.srcUnitId === holder.id &&
+      abilityProfile(a.spellId).absorbs
+    )
+      out.add(a.spellId);
+  return out;
+}
 /**
  * User ruling 2026-10-21 (round-3 q6, 「修」 — settle it with the log): a
  * unit under Mass Invisibility is not hit. 605 archive files (`NR%60`): 425

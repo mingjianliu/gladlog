@@ -31,9 +31,9 @@ import {
   enemyDefensiveEvents,
   type ISaveAuraInterval,
   isBelowWallFloorExternal,
-  KW_OWN_ROTATIONAL_ABSORB_AURA_IDS,
   KW_REDIRECT_PROTECTION_AURA_IDS,
   KW_UNTARGETABLE_AURA_IDS,
+  ownAbsorbShieldAuraIdsOf,
   ownSaveSpanS,
   ownWallSpanS,
   renderedExternalSpanS,
@@ -534,11 +534,13 @@ export function computeOffensiveWindows(
   // User rulings 2026-10-21: the target's own Power Word: Shield / Void
   // Shield and an Intervene on it end the span while their aura is up
   // (`KW_OWN_ROTATIONAL_ABSORB_AURA_IDS`, `KW_REDIRECT_PROTECTION_AURA_IDS`)
-  for (const holder of enemies)
+  // …and every other own absorb shield the log shows absorbing for it
+  // (`ownAbsorbShieldAuraIdsOf`, corpusFactScan2 defenselessSaveUp)
+  for (const holder of enemies) {
+    const ownShields = ownAbsorbShieldAuraIdsOf(holder);
     for (const iv of holderIntervals(holder))
       if (
-        (KW_OWN_ROTATIONAL_ABSORB_AURA_IDS.has(iv.spellId) &&
-          iv.srcUnitId === holder.id) ||
+        (ownShields.has(iv.spellId) && iv.srcUnitId === holder.id) ||
         KW_REDIRECT_PROTECTION_AURA_IDS.has(iv.spellId)
       )
         addSave(holder.id, { from: iv.fromS, to: iv.toS });
@@ -551,6 +553,7 @@ export function computeOffensiveWindows(
             ? Math.min(iv.toS, firstActionAfterS(holder, iv.fromS))
             : iv.toS,
         });
+  }
 
   for (const enemy of enemies) {
     // ── 1. Build event list for this enemy's major defensives ─────────────────
