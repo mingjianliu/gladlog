@@ -36,15 +36,19 @@ const cc = (
   }) as ICCInstance;
 
 describe("break binding (F15 R3)", () => {
-  it("a press logged after a removal the log gives another cause for does not take it (62fdbf2e: Detox 33 ms before the Medallion)", () => {
+  it("a press logged at or after a removal the log gives another cause for does not take it (62fdbf2e: Detox 33 ms before the Medallion)", () => {
     const w = { applyMs: 1000, removeMs: 2000 };
     expect(bindBreakToWindow([w], 2033)).toBe(w);
     expect(bindBreakToWindow([{ ...w, endedByLoggedCause: true }], 2033)).toBe(
       undefined,
     );
-    // at or before the removal it still can
+    // before the removal it still can; in the removal's own ms it cannot —
+    // a press timed at its aura (the Medallion's 336126) lands there after
+    // the cause (173-1 0:14: Howl of Terror BROKEN_SPELL by a Pyroblast at
+    // .808, REMOVED .811, the Medallion's aura .811 after it, its cast .812)
     const caused = { ...w, endedByLoggedCause: true };
-    expect(bindBreakToWindow([caused], 2000)).toBe(caused);
+    expect(bindBreakToWindow([caused], 1999)).toBe(caused);
+    expect(bindBreakToWindow([caused], 2000)).toBe(undefined);
   });
 
   it("every CC that ended at the press, not only the bound one (6bf253f2 2:16: Hammer of Justice + Polymorph)", () => {
@@ -103,7 +107,11 @@ describe("dispel actor label (F15 R2)", () => {
       ),
     ).toBe("5(AWarlock)'s pet");
     expect(
-      dispelActorLabel({ sourceName: "AWarlock", isPetDispel: false }, label, []),
+      dispelActorLabel(
+        { sourceName: "AWarlock", isPetDispel: false },
+        label,
+        [],
+      ),
     ).toBe("5(AWarlock)");
   });
 });
