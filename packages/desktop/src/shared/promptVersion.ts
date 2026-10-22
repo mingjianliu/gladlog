@@ -347,5 +347,13 @@
  *  v439 (b39 → b45): healer cd-hoarded +8 (14 new, all Holy Paladin
  *  Divine Toll ready while a teammate was in crisis; 9 removed where the
  *  pressed Divine Toll now answers it).
+ *
+ * v441 (2026-10-22, user rulings 「可以」): the DB2-explained avoidance
+ *  buttons (Blink, Icebound Fortitude, Lichborne, Demolish, Aura Mastery,
+ *  Unending Resolve, Obsidian Scales, Zen Focus Tea) are cc-avoidable tools;
+ *  backlash-dispel's target HP is read at the decision instant (fact3 D45,
+ *  the fourth signed exception). 605 files vs v440 (b45 → b46):
+ *  backlash-dispel −1 (two crossed out of the HP band, one in), 39 HP facts
+ *  re-read; cc-avoidable unchanged.
  */
-export const PROMPT_VERSION = 440;
+export const PROMPT_VERSION = 441;
