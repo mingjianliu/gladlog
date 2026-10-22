@@ -171,8 +171,10 @@
  *    tagged `[IMMUNE…` whose spell's IMMUNE rows inside 3 s of the press are
  *    all SPELL_PERIODIC_MISSED (later ticks) is wrong.
  *  - `hotPressHp` (new: press HP): a `[YOU] [CD]   <Spell> (self: N% HP`
- *    line whose press has its own heal row on the owner within 50 ms: N is
- *    the owner's last reading strictly before that heal (± 1).
+ *    line whose press has its own heal row on the owner (a direct heal within
+ *    PRESS_EFFECT_LEAD_MS of the cast row, a first HoT tick on its own fresh
+ *    aura within AURA_BEFORE_CAST_ROW_MAX_MS; up to 50 ms after): N is the
+ *    owner's last reading strictly before that heal (± 1).
  *  - `fadedDebuff` (new: reflected control): a `[BUFF FADED]   X` line while
  *    the owner's only X rows that round are DEBUFFs it put on itself.
  *  - `nonControlCount` (new: CC USE): a `Counts:` entry whose spell, when the
@@ -219,6 +221,7 @@ import {
   CONTROL_FAILED_MISS_TYPES,
   isControlCast,
 } from "@gladlog/analysis/src/utils/castMissRows";
+import { AURA_BEFORE_CAST_ROW_MAX_MS } from "@gladlog/analysis/src/utils/castRowLag";
 import {
   applicableCCAvoidanceIds,
   CC_AVOIDANCE_BUFF_SPELLS,
@@ -228,6 +231,7 @@ import {
   earliestCooldownSecondsFor,
   extractMajorCooldowns,
   isEnemyCdWindowSpell,
+  PRESS_EFFECT_LEAD_MS,
   specToString,
   unitCooldownOf,
 } from "@gladlog/analysis/src/utils/cooldowns";
@@ -1642,13 +1646,29 @@ for (const f of files) {
         const succ = succOf(owner, pm[2]!, t, t + 1000);
         if (succ) {
           const sMs = succ.logLine.timestamp;
-          const heals = ((owner.healIn ?? []) as any[]).filter(
-            (h) =>
-              h.srcUnitId === owner.id &&
-              h.spellId &&
-              isOf(h.spellId, pm[2]!) &&
-              Math.abs(h.logLine.timestamp - sMs) <= 50,
-          );
+          // the product's lead (`hpAtPress`): a direct heal within
+          // PRESS_EFFECT_LEAD_MS of the cast row; a HoT's first tick riding
+          // its own fresh APPLIED / REFRESH up to AURA_BEFORE_CAST_ROW_MAX_MS
+          // ahead of it (fact2-retest idx 6: 55 ms)
+          const freshAuraBy = (h: any) =>
+            ((owner.auraEvents ?? []) as any[]).some(
+              (a) =>
+                a.spellId === h.spellId &&
+                a.srcUnitId === owner.id &&
+                (a.logLine.event === LogEvent.SPELL_AURA_APPLIED ||
+                  a.logLine.event === LogEvent.SPELL_AURA_REFRESH) &&
+                a.logLine.timestamp <= h.logLine.timestamp &&
+                a.logLine.timestamp >= sMs - AURA_BEFORE_CAST_ROW_MAX_MS,
+            );
+          const heals = ((owner.healIn ?? []) as any[]).filter((h) => {
+            if (h.srcUnitId !== owner.id || !h.spellId) return false;
+            if (!isOf(h.spellId, pm[2]!)) return false;
+            const d = h.logLine.timestamp - sMs;
+            if (d > 50) return false;
+            return h.logLine.event === LogEvent.SPELL_PERIODIC_HEAL
+              ? d >= -AURA_BEFORE_CAST_ROW_MAX_MS && freshAuraBy(h)
+              : d >= -PRESS_EFFECT_LEAD_MS;
+          });
           if (heals.length > 0) {
             const hMs = Math.min(...heals.map((h) => h.logLine.timestamp));
             const acts = ((owner.advancedActions ?? []) as any[])

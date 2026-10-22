@@ -6,6 +6,7 @@ import {
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { ensureAnalysisData } from "../src/data/ensure";
+import { AURA_BEFORE_CAST_ROW_MAX_MS } from "../src/utils/castRowLag";
 import {
   annotateDefensiveTimings,
   extractMajorCooldowns,
@@ -81,6 +82,22 @@ describe("hpAtPress", () => {
     expect(hpAtPress(mk(true), T0 + 49_806, { spellId: FR, srcUnitId: "P" })).toBe(59);
     // control: a tick of an earlier application is not this press
     expect(hpAtPress(mk(false), T0 + 49_806, { spellId: FR, srcUnitId: "P" })).toBe(62);
+  });
+
+  it("fact2-retest idx 6: the first tick rides its aura up to the aura-before-cast lag ahead of the cast row (Frenzied Regeneration 55 ms)", () => {
+    const FR = "22842";
+    const at = (ms: number, event: LogEvent) => ({ timestamp: T0 + ms, parameters: [], event });
+    const tick = { ...heal(FR, "P", 31.49), logLine: at(31_490, LogEvent.SPELL_PERIODIC_HEAL) };
+    const applied = { spellId: FR, srcUnitId: "P", logLine: at(31_490, LogEvent.SPELL_AURA_APPLIED) };
+    const u = {
+      ...unit([sample("P", 31.3, 337), sample("P", 31.49, 424)], [tick]),
+      auraEvents: [applied] as never,
+    };
+    const fr = { spellId: FR, srcUnitId: "P" };
+    // cast row 55 ms after the tick: the press read before its own heal
+    expect(hpAtPress(u, T0 + 31_545, fr)).toBe(34);
+    // past the lag the tick is no longer this press's
+    expect(hpAtPress(u, T0 + 31_490 + AURA_BEFORE_CAST_ROW_MAX_MS + 1, fr)).toBe(42);
   });
 
   it("fact2: a second charge refreshes the HoT — the REFRESH and its tick in the press's lead are the press's (7-2 1:56)", () => {

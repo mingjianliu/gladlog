@@ -63,6 +63,7 @@ import { binarySearchClosest } from "./binarySearch";
 import { buffFullDurationForCaster } from "./buffDuration";
 import { CONTROL_EFFECT_MIN_HIT_SHARE, isControlCast } from "./castMissRows";
 import { COPY_CAST_IDS, isFormReshiftCast } from "./castPress";
+import { AURA_BEFORE_CAST_ROW_MAX_MS } from "./castRowLag";
 import { hiddenPressMs } from "./hiddenPress";
 import { incomingPressureEvents } from "./incomingPressure";
 import { logDatedNumberAt } from "./logEra";
@@ -1697,7 +1698,16 @@ export function hpAtPress(
   let cutMs = pressMs;
   for (const h of unit.healIn ?? []) {
     const t = h.logLine.timestamp;
-    if (t < pressMs - PRESS_EFFECT_LEAD_MS || t > pressMs) continue;
+    // a press's first HoT tick rides its aura, which can lead the cast row
+    // by the aura-before-cast lag (`AURA_BEFORE_CAST_ROW_MAX_MS`); a direct
+    // heal keeps `PRESS_EFFECT_LEAD_MS` (fact2-retest idx 6: Frenzied
+    // Regeneration APPLIED + first tick at .490, cast row .545 — 55 ms, the
+    // line read the post-tick 42 % for a 33.7 % press)
+    const periodic = h.logLine.event === LogEvent.SPELL_PERIODIC_HEAL;
+    const leadMs = periodic
+      ? AURA_BEFORE_CAST_ROW_MAX_MS
+      : PRESS_EFFECT_LEAD_MS;
+    if (t < pressMs - leadMs || t > pressMs) continue;
     // the press's own heal may carry its effect's id (fact2 C10: Dream
     // Breath is pressed as 355936 and heals as 355941, its DB2-named effect)
     // or a heal of the press's own name (Holy Prism 114165 heals as 114871,
@@ -1719,7 +1729,7 @@ export function hpAtPress(
     // 75 % for a 60.5 % press; 0457a45e 1:21: APPLIED .804, tick .805,
     // cast .806)
     if (
-      h.logLine.event === LogEvent.SPELL_PERIODIC_HEAL &&
+      periodic &&
       !(unit.auraEvents ?? []).some(
         (a) =>
           // the heal's own aura, or the press's (a channel: Emerald
@@ -1733,7 +1743,7 @@ export function hpAtPress(
           (a.logLine.event === LogEvent.SPELL_AURA_APPLIED ||
             a.logLine.event === LogEvent.SPELL_AURA_REFRESH) &&
           a.logLine.timestamp <= t &&
-          a.logLine.timestamp >= pressMs - PRESS_EFFECT_LEAD_MS,
+          a.logLine.timestamp >= pressMs - AURA_BEFORE_CAST_ROW_MAX_MS,
       )
     )
       continue;
