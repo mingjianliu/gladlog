@@ -1180,7 +1180,12 @@ export function bindBreakToWindow<T extends ICCBreakableWindow>(
       castTs <= w.removeMs + afterRemovalMs;
     if (!activeAtCast) continue;
     // a removal the log gives another cause for, before the press (F15 R3)
-    if (w.endedByLoggedCause && castTs > w.removeMs) continue;
+    // in the removal's own ms too: a press timed at its own aura lands in
+    // the ms the control came off, and a BROKEN / dispel row there is the
+    // log naming another cause (breakFactScan trinketAfterCause, 173-1 0:14:
+    // Howl of Terror broken by a reflected Pyroblast, the Medallion's aura
+    // in the same ms)
+    if (w.endedByLoggedCause && castTs >= w.removeMs) continue;
     // fact2 R3 (2026-10-20): one that ran its full official length (DR
     // included) ended on its own — `ccsRemovedByPress`' rule, now the
     // binder's too (179b83ac 5:31: a Mortal Coil landing 204 ms after the

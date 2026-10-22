@@ -96,6 +96,20 @@ export function hiddenPressMs(
         e.spellId === spellId,
     )
     .map((e) => e.logLine.timestamp);
+  // a press of ANOTHER spell just before is a visible unit triggering a
+  // copy, not a re-listing after being unseen (71-5 0:35: Exhilaration put
+  // up Smoke Screen's 3 s Survival of the Fittest among its own auras — the
+  // `[no press logged]` copy read as a hidden press); corpusFactScan's
+  // proc-trigger reading, 0–100 ms before
+  const otherPressMs = (unit.spellCastEvents ?? [])
+    .filter(
+      (e) =>
+        e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+        !!e.spellId &&
+        !auraIds.has(e.spellId) &&
+        e.spellId !== spellId,
+    )
+    .map((e) => e.logLine.timestamp);
   const out: number[] = [];
   let up = false;
   for (const a of own) {
@@ -105,7 +119,8 @@ export function hiddenPressMs(
       if (
         !up &&
         batchSize(ms) >= RESYNC_BATCH_MIN_APPLIED &&
-        !pressMs.some((p) => Math.abs(p - ms) <= PRESS_ROW_PAIR_MS)
+        !pressMs.some((p) => Math.abs(p - ms) <= PRESS_ROW_PAIR_MS) &&
+        !otherPressMs.some((p) => p <= ms + 5 && ms - p <= 100)
       )
         out.push(ms);
       up = true;

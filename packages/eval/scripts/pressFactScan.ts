@@ -22,7 +22,7 @@
  *  - `noPressCopy` / `pressedNotTagged` (C5, 2026-10-18): an enemy's own
  *    wall aura (`MITIGATION_AURA_IDS` by `wallTableIdOfAura`) APPLIED on
  *    itself. With no SPELL_CAST_SUCCESS of the wall, the aura or a cast
- *    whose effect it is (`castsOfEffectAura`) from 1 s before to 50 ms after
+ *    whose effect it is (`castsOfEffectAura`) from 1 s before to `AURA_BEFORE_CAST_MAX_S` after
  *    it, its `[ENEMY DEF]` line (aura second, pid, name) must read `[no press
  *    logged]` and not `— removed early`; with one, it must not read `[no press
  *    logged]`.
@@ -56,6 +56,7 @@ import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData"
 import { AURA_REBROADCAST_GAP_MS } from "@gladlog/analysis/src/utils/auraIntervals";
 import { buffFullDurationForCaster } from "@gladlog/analysis/src/utils/buffDuration";
 import {
+  AURA_BEFORE_CAST_MAX_S,
   MITIGATION_AURA_IDS,
   wallTableIdOfAura,
 } from "@gladlog/analysis/src/utils/enemyDefensives";
@@ -338,8 +339,9 @@ for (const f of files) {
             (lastRemoved === undefined || lastRemoved < lastApplied
               ? lenS === undefined || ts - lastApplied <= lenS * 1000
               : ts - lastRemoved <= AURA_REBROADCAST_GAP_MS);
-          const dead = ((u.deathRecords ?? []) as Array<{ timestamp: number }>)
-            .some((d) => d.timestamp <= ts);
+          const dead = (
+            (u.deathRecords ?? []) as Array<{ timestamp: number }>
+          ).some((d) => d.timestamp <= ts);
           if (continues || dead) continue;
         }
         const ids = new Set([
@@ -351,7 +353,9 @@ for (const f of files) {
           (c) =>
             ids.has(c.spellId) &&
             ts - c.logLine.timestamp <= 1000 &&
-            c.logLine.timestamp - ts <= 50,
+            // the product's own aura-before-cast lag (shared predicate:
+            // 150 ms since corpusFactScan batch 1)
+            c.logLine.timestamp - ts <= AURA_BEFORE_CAST_MAX_S * 1000,
         );
         const name = getEnglishSpellName(a.spellId, a.spellName);
         const line = lines.find(

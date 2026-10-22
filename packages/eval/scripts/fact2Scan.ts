@@ -24,6 +24,8 @@
  *    an aura A ≠ C that `castEffectAuraGenerated.json` lists for C by name
  *    after ≥ 90 % of its casts, A not REMOVED (same source and unit) before
  *    the second — the line must carry `[friendly offensive CD active]`.
+ *    Since 2026-10-21 the tag is read at the press instant (GH #91, user
+ *    call): only a run covering the whole second owes it.
  *  - `selfSaveUp` (C10): a KILL ATTEMPTS `[a–b] on <name> — … FAILED: healed
  *    through | not enough damage` line. When the target pressed a self-save
  *    (`SELF_SAVE_IDS`) whose own aura carries another id (same JSON rule),
@@ -153,7 +155,8 @@
  *  - `friendlyBacklash` (new: friendly-sourced control): a dispel backlash
  *    (Sin and Punishment 87204 / 196364) APPLIED on a player of the owner's
  *    side by a unit of the owner's side needs a `[CC ON TEAM]   <pid> ←
- *    <name>` line at its second.
+ *    <name>` line at its second (`[SILENCE]` for the silence 196364 since
+ *    fact3 D30).
  *  - `aoeMissAvoided` (new: untargeted area control): a failed-control miss
  *    (`CONTROL_FAILED_MISS_TYPES`) of a control (`isControlCast`) on a
  *    player of the owner's side, from an enemy cast of it with no
@@ -338,11 +341,21 @@ const fmtS = (sec: number): string => {
  * by the aura's English name (the loadout prints it) — read off the
  * GENERATED tooltip table, not the product's copy of it */
 const TOOLTIP_CONFIRMED: Array<[string, string]> = [
-  ["1215245", "200183"], ["1244460", "80240"], ["1272308", "453113"],
-  ["238135", "17"], ["388832", "157736"], ["391370", "1249625"],
-  ["440671", "139"], ["440671", "194384"], ["444099", "1233152"],
-  ["450514", "450342"], ["457022", "31224"], ["458431", "119611"],
-  ["458718", "19236"], ["468625", "197209"], ["443425", "79206"],
+  ["1215245", "200183"],
+  ["1244460", "80240"],
+  ["1272308", "453113"],
+  ["238135", "17"],
+  ["388832", "157736"],
+  ["391370", "1249625"],
+  ["440671", "139"],
+  ["440671", "194384"],
+  ["444099", "1233152"],
+  ["450514", "450342"],
+  ["457022", "31224"],
+  ["458431", "119611"],
+  ["458718", "19236"],
+  ["468625", "197209"],
+  ["443425", "79206"],
 ];
 const tooltipLasts = new Map<
   string,
@@ -355,7 +368,11 @@ for (const [talent, aura] of TOOLTIP_CONFIRMED) {
     if (!t) continue;
     const base = t.baseSeconds[aura] as number;
     const min =
-      e.kind === "per-event" ? base : e.unit === "pct" ? base * (1 + e.amount / 100) : base + e.amount;
+      e.kind === "per-event"
+        ? base
+        : e.unit === "pct"
+          ? base * (1 + e.amount / 100)
+          : base + e.amount;
     const max = e.kind === "per-event" ? base + (e.cap ?? 0) : min;
     const name = getEnglishSpellName(aura, "");
     const l = tooltipLasts.get(name) ?? [];
@@ -364,12 +381,16 @@ for (const [talent, aura] of TOOLTIP_CONFIRMED) {
   }
 }
 const KW_IN_HAND_NAMES = new Set<string>();
-for (const id of [...KW_MAJOR_DEFENSIVE_IDS, ...KW_IN_HAND_ONLY_DEFENSIVE_IDS]) {
+for (const id of [
+  ...KW_MAJOR_DEFENSIVE_IDS,
+  ...KW_IN_HAND_ONLY_DEFENSIVE_IDS,
+]) {
   if (!unpressedKitDefensiveInHand(id)) continue;
   const official = getEnglishSpellName(id, "");
   if (official) KW_IN_HAND_NAMES.add(official);
   for (const cls of classMetadata)
-    for (const a of cls.abilities) if (a.spellId === id) KW_IN_HAND_NAMES.add(a.name);
+    for (const a of cls.abilities)
+      if (a.spellId === id) KW_IN_HAND_NAMES.add(a.name);
 }
 const secOf = (mss: string): number => {
   const [m, s] = mss.split(":");
@@ -488,7 +509,8 @@ for (const f of files) {
     const out: Array<[number, number]> = [];
     for (const u of holders) {
       const evs = ((u.auraEvents ?? []) as any[]).filter(
-        (a) => a.spellId === aura && a.srcUnitId === src && a.destUnitId === u.id,
+        (a) =>
+          a.spellId === aura && a.srcUnitId === src && a.destUnitId === u.id,
       );
       for (const a of evs) {
         if (a.logLine.event !== LogEvent.SPELL_AURA_APPLIED) continue;
@@ -525,7 +547,11 @@ for (const f of files) {
     const m = /^(\d+:\d\d) {2}\[ENEMY (?:DEF|TRINKET)\]/.exec(l);
     if (!m) continue;
     const ms = start + secOf(m[1]!) * 1000;
-    if (!offensiveRuns.some(([a, b]) => a <= ms && ms < b)) continue;
+    // fix-F16 (2026-10-21, user call on GH #91: the tag is read at the
+    // press instant, legend and code agree): the line's second only bounds
+    // the press, so a run must cover the whole second for the tag to be
+    // owed
+    if (!offensiveRuns.some(([a, b]) => a <= ms && ms + 1000 <= b)) continue;
     bump("offensiveTag");
     if (!l.includes("[friendly offensive CD active]"))
       miss("offensiveTag", `${where} ${l.slice(0, 110)}`);
@@ -536,8 +562,7 @@ for (const f of files) {
         l,
       );
     if (!m) continue;
-    const target =
-      byName.get(m[3]!) ?? byName.get(pidName.get(m[3]!) ?? "");
+    const target = byName.get(m[3]!) ?? byName.get(pidName.get(m[3]!) ?? "");
     if (!target) continue;
     const fromMs = start + secOf(m[1]!) * 1000;
     for (const c of target.spellCastEvents ?? []) {
@@ -563,7 +588,10 @@ for (const f of files) {
       // `healed through` / `not enough damage`); an attempt that killed, or
       // met a wall, an immunity, a trinket, says that
       const name = getEnglishSpellName(c.spellId, c.spellName);
-      if (!/healed through|not enough damage/.test(m[4]!) && !m[4]!.includes(name))
+      if (
+        !/healed through|not enough damage/.test(m[4]!) &&
+        !m[4]!.includes(name)
+      )
         continue;
       bump("selfSaveUp");
       if (!m[4]!.includes(name))
@@ -620,14 +648,19 @@ for (const f of files) {
   const pressOnly = ours.flatMap((f) => {
     try {
       return extractMajorCooldowns(f, legacy as any)
-        .filter((cd) => cd.responseOnly && OFFENSIVE_CD_SPELL_IDS.has(cd.spellId))
+        .filter(
+          (cd) => cd.responseOnly && OFFENSIVE_CD_SPELL_IDS.has(cd.spellId),
+        )
         .map((cd) => ({ cd, f }));
     } catch {
       return [];
     }
   });
   for (const l of lines) {
-    const m = /^ {2}\[(?:KILL WINDOW|VULNERABLE)\] .*team offensive CDs ready at (\d+:\d\d): ([^(;]*)/.exec(l);
+    const m =
+      /^ {2}\[(?:KILL WINDOW|VULNERABLE)\] .*team offensive CDs ready at (\d+:\d\d): ([^(;]*)/.exec(
+        l,
+      );
     if (!m) continue;
     const sec = secOf(m[1]!);
     for (const { cd, f } of pressOnly) {
@@ -635,7 +668,10 @@ for (const f of files) {
       if (!cdAvailableAt(cd, sec)) continue;
       bump("pressOnlyReady");
       if (!m[2]!.includes(cd.spellName))
-        miss("pressOnlyReady", `${where} ${m[1]} ${f.name} ${cd.spellName}: "${m[2]!.trim().slice(0, 60)}"`);
+        miss(
+          "pressOnlyReady",
+          `${where} ${m[1]} ${f.name} ${cd.spellName}: "${m[2]!.trim().slice(0, 60)}"`,
+        );
     }
   }
   // C4: the death audit's Blessing of Sacrifice row on its own caster
@@ -647,7 +683,8 @@ for (const f of files) {
       deathOf = u ? { unit: u, sec: secOf(dm[1]!) } : undefined;
       continue;
     }
-    if (!deathOf || !/^ +Mitigation audit: Blessing of Sacrifice /.test(l)) continue;
+    if (!deathOf || !/^ +Mitigation audit: Blessing of Sacrifice /.test(l))
+      continue;
     const { unit, sec } = deathOf;
     const fromMs = start + (sec - 10) * 1000;
     const toMs = start + (sec + 1) * 1000;
@@ -661,7 +698,10 @@ for (const f of files) {
     if (rows.length === 0) continue;
     bump("linkAuraAudit");
     if (rows.every((a) => a.srcUnitId === unit.id))
-      miss("linkAuraAudit", `${where} ${unit.name} death ${fmtS(sec)}: audit lists its own Blessing link`);
+      miss(
+        "linkAuraAudit",
+        `${where} ${unit.name} death ${fmtS(sec)}: audit lists its own Blessing link`,
+      );
   }
   // C6
   for (const u of players) {
@@ -674,13 +714,30 @@ for (const f of files) {
       const t = fmtS((ts - start) / 1000);
       if (c.spellId === "114052" && u.reaction !== owner.reaction) {
         bump("rosterMajor");
-        if (!lines.some((l) => l.startsWith(`${t}  [ENEMY HEAL CD]`) && l.includes(`${me}(`) && l.includes("Ascendance")))
-          miss("rosterMajor", `${where} ${t} ${u.name} Ascendance: no [ENEMY HEAL CD]`);
+        if (
+          !lines.some(
+            (l) =>
+              l.startsWith(`${t}  [ENEMY HEAL CD]`) &&
+              l.includes(`${me}(`) &&
+              l.includes("Ascendance"),
+          )
+        )
+          miss(
+            "rosterMajor",
+            `${where} ${t} ${u.name} Ascendance: no [ENEMY HEAL CD]`,
+          );
       }
       if (c.spellId === "88625" && u.name === ownerName) {
         bump("rosterMajor");
-        if (!lines.some((l) => l.includes("Counts:") && l.includes("Holy Word: Chastise")))
-          miss("rosterMajor", `${where} ${t} ${u.name} Chastise: not in CC USE`);
+        if (
+          !lines.some(
+            (l) => l.includes("Counts:") && l.includes("Holy Word: Chastise"),
+          )
+        )
+          miss(
+            "rosterMajor",
+            `${where} ${t} ${u.name} Chastise: not in CC USE`,
+          );
       }
     }
   }
@@ -689,15 +746,24 @@ for (const f of files) {
     const summons = units.filter(
       (x) => x.ownerId === owner.id && String(x.id).startsWith("Pet-"),
     );
-    const nameOf = (e: any) => getEnglishSpellName(e.spellId ?? "", e.spellName);
+    const nameOf = (e: any) =>
+      getEnglishSpellName(e.spellId ?? "", e.spellName);
     const petRows = summons.flatMap((p: any) =>
-      [...(p.castStartEvents ?? []), ...(p.spellCastEvents ?? [])].map((e: any) => ({ p, e })),
+      [...(p.castStartEvents ?? []), ...(p.spellCastEvents ?? [])].map(
+        (e: any) => ({ p, e }),
+      ),
     );
     const commanded = new Map<string, number>();
     for (const e of (owner.spellCastEvents ?? []) as any[]) {
       if (e.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
       const n = nameOf(e);
-      if (petRows.some(({ e: r }) => nameOf(r) === n && Math.abs(r.logLine.timestamp - e.logLine.timestamp) <= 500))
+      if (
+        petRows.some(
+          ({ e: r }) =>
+            nameOf(r) === n &&
+            Math.abs(r.logLine.timestamp - e.logLine.timestamp) <= 500,
+        )
+      )
         commanded.set(n, (commanded.get(n) ?? 0) + 1);
     }
     for (const [n, ownerCount] of commanded) {
@@ -710,12 +776,17 @@ for (const f of files) {
       ).length;
       const cl = lines.find((l) => l.includes("Counts:"));
       if (!cl) continue;
-      const m = new RegExp(`${n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} (?:cast (\\d+)×|cast bar started \\d+×, went off (\\d+)×)`).exec(cl);
+      const m = new RegExp(
+        `${n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} (?:cast (\\d+)×|cast bar started \\d+×, went off (\\d+)×)`,
+      ).exec(cl);
       if (!m) continue;
       bump("petCommandCount");
       const printed = Number(m[1] ?? m[2]);
       if (printed !== petOk)
-        miss("petCommandCount", `${where} ${n}: printed ${printed} (the owner's command rows ${ownerCount}), the pet's successes ${petOk}`);
+        miss(
+          "petCommandCount",
+          `${where} ${n}: printed ${printed} (the owner's command rows ${ownerCount}), the pet's successes ${petOk}`,
+        );
     }
   }
   // R6: a delayed control whose summon died before its window
@@ -725,7 +796,8 @@ for (const f of files) {
     if (!me) continue;
     for (const c of u.spellCastEvents ?? []) {
       if (c.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
-      const opensS = c.spellId === "192058" ? 1.5 : c.spellId === "207684" ? 0.5 : null;
+      const opensS =
+        c.spellId === "192058" ? 1.5 : c.spellId === "207684" ? 0.5 : null;
       if (opensS === null) continue;
       const ts = c.logLine.timestamp;
       const summon = units.find(
@@ -755,12 +827,17 @@ for (const f of files) {
           l.includes(`${name} (by ${me}(`) &&
           (l.includes(`cast ${castT})`) || l.startsWith(`${castT}  `)),
       );
-      if (bad) miss("deadSummonAvoid", `${where} ${castT} ${u.name} ${name}: ${bad.slice(0, 120)}`);
+      if (bad)
+        miss(
+          "deadSummonAvoid",
+          `${where} ${castT} ${u.name} ${name}: ${bad.slice(0, 120)}`,
+        );
     }
   }
   // R8a: [BUFF FADED] estimated while the owner's copy is up
   for (const l of lines) {
-    const fm = /^(\d+:\d\d) {2}\[BUFF FADED\] {3}(.+?) \(expired, estimated\)/.exec(l);
+    const fm =
+      /^(\d+:\d\d) {2}\[BUFF FADED\] {3}(.+?) \(expired, estimated\)/.exec(l);
     if (!fm) continue;
     const tMs = start + secOf(fm[1]!) * 1000;
     const rows = ((owner.auraEvents ?? []) as any[]).filter(
@@ -786,11 +863,17 @@ for (const f of files) {
     if (!nextOff) continue;
     bump("fadedWhileUp");
     if (nextOff.logLine.timestamp >= tMs + 1000)
-      miss("fadedWhileUp", `${where} ${fm[1]} ${fm[2]}: owner's copy up until ${fmtS((nextOff.logLine.timestamp - start) / 1000)}`);
+      miss(
+        "fadedWhileUp",
+        `${where} ${fm[1]} ${fm[2]}: owner's copy up until ${fmtS((nextOff.logLine.timestamp - start) / 1000)}`,
+      );
   }
   // R8b: [CC REMOVED] held seconds across a server re-apply
   for (const l of lines) {
-    const rm = /^(\d+:\d\d) {2}\[CC REMOVED\] .* removed (\d+)\([^)]*\)'s (.+?) from (\d+)\([^)]*\) after (\d+)s/.exec(l);
+    const rm =
+      /^(\d+:\d\d) {2}\[CC REMOVED\] .* removed (\d+)\([^)]*\)'s (.+?) from (\d+)\([^)]*\) after (\d+)s/.exec(
+        l,
+      );
     if (!rm) continue;
     const caster = byName.get(pidName.get(rm[2]!) ?? "");
     const target = byName.get(pidName.get(rm[4]!) ?? "");
@@ -832,13 +915,22 @@ for (const f of files) {
     bump("ccHeldRebroadcast");
     const held = (removal.logLine.timestamp - applyMs) / 1000;
     if (Math.abs(Number(rm[5]) - held) >= 1)
-      miss("ccHeldRebroadcast", `${where} ${rm[1]} ${rm[3]}: printed after ${rm[5]}s, log ${held.toFixed(2)}s`);
+      miss(
+        "ccHeldRebroadcast",
+        `${where} ${rm[1]} ${rm[3]}: printed after ${rm[5]}s, log ${held.toFixed(2)}s`,
+      );
   }
   // R3: what the Medallion broke
   const trinketChecked = new Set<string>();
   for (const l of lines) {
-    const em = /^(\d+:\d\d) {2}\[ENEMY TRINKET\] {3}(\d+)\([^)]*\) used PvP trinket out of (.+?) \(by /.exec(l);
-    const fm = /^\d+:\d\d {2}\[CC ON TEAM\] {3}(\d+)\(.*last used (\d+:\d\d) on (.+?)\)/.exec(l);
+    const em =
+      /^(\d+:\d\d) {2}\[ENEMY TRINKET\] {3}(\d+)\([^)]*\) used PvP trinket out of (.+?) \(by /.exec(
+        l,
+      );
+    const fm =
+      /^\d+:\d\d {2}\[CC ON TEAM\] {3}(\d+)\(.*last used (\d+:\d\d) on (.+?)\)/.exec(
+        l,
+      );
     const at = em ? em[1]! : fm ? fm[2]! : undefined;
     const pid = em ? em[2]! : fm ? fm[1]! : undefined;
     const x = em ? em[3]! : fm ? fm[3]! : undefined;
@@ -867,23 +959,38 @@ for (const f of files) {
       )
       .map((a) => a.logLine.timestamp);
     bump("trinketOutOf");
-    const ended = removals.some((r) => presses.some((p) => Math.abs(r - p) <= 300));
-    const ranOn = removals.some((r) => presses.every((p) => r > p + 1000) && r < presses[0]! + 60_000);
+    const ended = removals.some((r) =>
+      presses.some((p) => Math.abs(r - p) <= 300),
+    );
+    const ranOn = removals.some(
+      (r) => presses.every((p) => r > p + 1000) && r < presses[0]! + 60_000,
+    );
     if (!ended && ranOn)
-      miss("trinketOutOf", `${where} ${at} ${unit.name}: bound to ${x}, which ran on past the press`);
+      miss(
+        "trinketOutOf",
+        `${where} ${at} ${unit.name}: bound to ${x}, which ran on past the press`,
+      );
   }
   for (const l of lines) {
-    const bm = /\[CC ON (?:TEAM|ENEMY)\] {3}(\d+)\(.*broken by (\d+)\([^)]*\)'s Time Dilation/.exec(l);
+    const bm =
+      /\[CC ON (?:TEAM|ENEMY)\] {3}(\d+)\(.*broken by (\d+)\([^)]*\)'s Time Dilation/.exec(
+        l,
+      );
     if (!bm) continue;
     bump("deferredBreaker");
     if (bm[1] === bm[2]) miss("deferredBreaker", `${where} ${l.slice(0, 120)}`);
   }
   for (const l of lines) {
-    const mm = /^\d+:\d\d {2}\[MINOR DISPELS\] {3}(\d+)\([^)]*\)(?:'s \w+)?: (.*)$/.exec(l);
+    const mm =
+      /^\d+:\d\d {2}\[MINOR DISPELS\] {3}(\d+)\([^)]*\)(?:'s \w+)?: (.*)$/.exec(
+        l,
+      );
     if (!mm || /'s (?:pet|guardian|totem)/.test(l.slice(0, 40))) continue;
     const unit = byName.get(pidName.get(mm[1]!) ?? "");
     if (!unit) continue;
-    for (const pm of mm[2]!.matchAll(/(?:^|, )([^,(]+?) (?:×\d+ )?\(passive\)/g)) {
+    for (const pm of mm[2]!.matchAll(
+      /(?:^|, )([^,(]+?) (?:×\d+ )?\(passive\)/g,
+    )) {
       const name = pm[1]!.trim();
       const rows = ((unit.actionOut ?? []) as any[]).filter(
         (a) =>
@@ -898,12 +1005,22 @@ for (const f of files) {
       const presses = ((unit.spellCastEvents ?? []) as any[])
         .filter((c) => c.logLine.event === LogEvent.SPELL_CAST_SUCCESS)
         .map((c) => c.logLine.timestamp);
-      if (rows.every((r) => presses.some((p) => Math.abs(p - r.logLine.timestamp) <= 50)))
-        miss("riderPassive", `${where} ${unit.name} ${name} (passive), every removal with a press`);
+      if (
+        rows.every((r) =>
+          presses.some((p) => Math.abs(p - r.logLine.timestamp) <= 50),
+        )
+      )
+        miss(
+          "riderPassive",
+          `${where} ${unit.name} ${name} (passive), every removal with a press`,
+        );
     }
   }
   for (const l of lines) {
-    const km = /^ {2}\[(\d+:\d\d)–(\d+:\d\d)\] on (\S+) — (.+?) burst \(no stun\)/.exec(l);
+    const km =
+      /^ {2}\[(\d+:\d\d)–(\d+:\d\d)\] on (\S+) — (.+?) burst \(no stun\)/.exec(
+        l,
+      );
     if (!km) continue;
     const target = byName.get(km[3]!);
     if (!target) continue;
@@ -945,16 +1062,29 @@ for (const f of files) {
               d.logLine.timestamp < b + 5000,
           ),
       );
-      if (!into) miss("killAnchorInto", `${where} ${km[1]} on ${target.name}: ${name} never went into it`);
+      if (!into)
+        miss(
+          "killAnchorInto",
+          `${where} ${km[1]} on ${target.name}: ${name} never went into it`,
+        );
     }
     const byEnemy = new Map<string, number>();
     for (const f of ours)
       for (const d of (f.damageOut ?? []) as any[]) {
         const ts = d.logLine.timestamp;
         if (ts < a || ts >= b) continue;
-        byEnemy.set(d.destUnitId, (byEnemy.get(d.destUnitId) ?? 0) + Math.abs(d.effectiveAmount));
+        byEnemy.set(
+          d.destUnitId,
+          (byEnemy.get(d.destUnitId) ?? 0) + Math.abs(d.effectiveAmount),
+        );
       }
-    const top = [...byEnemy].filter(([id]) => units.find((u) => u.id === id && u.reaction !== owner.reaction && u.info)).sort((x, y) => y[1] - x[1])[0];
+    const top = [...byEnemy]
+      .filter(([id]) =>
+        units.find(
+          (u) => u.id === id && u.reaction !== owner.reaction && u.info,
+        ),
+      )
+      .sort((x, y) => y[1] - x[1])[0];
     if (!top || top[1] < 30_000) continue;
     // a one-second bracket (`[m:ss–m:ss]`, one press) holds no span to
     // measure on the grid: the line itself says `0.00M on target inside
@@ -962,7 +1092,10 @@ for (const f of files) {
     if (km[1] === km[2]) continue;
     bump("killTargetInside");
     if (top[0] !== target.id && (byEnemy.get(target.id) ?? 0) < 0.8 * top[1])
-      miss("killTargetInside", `${where} ${km[1]}–${km[2]} on ${target.name}: inside the bracket ${Math.round((byEnemy.get(target.id) ?? 0) / 1000)}k vs ${byName.size ? units.find((u) => u.id === top[0])?.name : ""} ${Math.round(top[1] / 1000)}k`);
+      miss(
+        "killTargetInside",
+        `${where} ${km[1]}–${km[2]} on ${target.name}: inside the bracket ${Math.round((byEnemy.get(target.id) ?? 0) / 1000)}k vs ${byName.size ? units.find((u) => u.id === top[0])?.name : ""} ${Math.round(top[1] / 1000)}k`,
+      );
   }
   // Spell Reflection 23920 returns
   for (const caster of players) {
@@ -986,7 +1119,9 @@ for (const f of files) {
         .reduce((x, d) => x + Math.abs(d.effectiveAmount), 0);
       const maxHp = Math.max(
         0,
-        ...((caster.advancedActions ?? []) as any[]).map((a) => a.advancedActorMaxHp ?? 0),
+        ...((caster.advancedActions ?? []) as any[]).map(
+          (a) => a.advancedActorMaxHp ?? 0,
+        ),
       );
       if (maxHp <= 0 || back < 0.05 * maxHp) continue;
       bump("reflectedLine");
@@ -1006,7 +1141,10 @@ for (const f of files) {
             l.includes(`reflected by ${rp}(`),
         )
       )
-        miss("reflectedLine", `${where} ${t} ${caster.name}'s ${getEnglishSpellName(m.spellId, m.spellName)} by ${reflector.name}: ${Math.round(back / 1000)}k back, no line`);
+        miss(
+          "reflectedLine",
+          `${where} ${t} ${caster.name}'s ${getEnglishSpellName(m.spellId, m.spellName)} by ${reflector.name}: ${Math.round(back / 1000)}k back, no line`,
+        );
     }
   }
   {
@@ -1019,7 +1157,11 @@ for (const f of files) {
         deathSec = secOf(dm[1]!);
         continue;
       }
-      if (!deathUnit || !/Top damage in final 10s:.*Spell Reflection \[Physical\]/.test(l)) continue;
+      if (
+        !deathUnit ||
+        !/Top damage in final 10s:.*Spell Reflection \[Physical\]/.test(l)
+      )
+        continue;
       const rows = ((deathUnit.damageIn ?? []) as any[]).filter(
         (d) =>
           d.spellId === "23920" &&
@@ -1029,7 +1171,10 @@ for (const f of files) {
       if (rows.length === 0) continue;
       bump("reflectSchool");
       if (rows.every((d) => d.damageSchoolId && d.damageSchoolId !== "0x1"))
-        miss("reflectSchool", `${where} death ${fmtS(deathSec)} ${deathUnit.name}: Spell Reflection [Physical], tail schools ${[...new Set(rows.map((d) => d.damageSchoolId))].join("/")}`);
+        miss(
+          "reflectSchool",
+          `${where} death ${fmtS(deathSec)} ${deathUnit.name}: Spell Reflection [Physical], tail schools ${[...new Set(rows.map((d) => d.damageSchoolId))].join("/")}`,
+        );
     }
   }
   for (const l of lines) {
@@ -1040,17 +1185,30 @@ for (const f of files) {
       const unit = byName.get(pidName.get(pm[1]!) ?? "");
       if (!unit) continue;
       const acts = ((unit.advancedActions ?? []) as any[])
-        .filter((a) => a.advancedActorId === unit.id && a.advancedActorMaxHp > 0)
+        .filter(
+          (a) => a.advancedActorId === unit.id && a.advancedActorMaxHp > 0,
+        )
         .sort((x, y) => x.logLine.timestamp - y.logLine.timestamp);
       let pick: any;
       for (const a of acts) if (a.logLine.timestamp <= tMs) pick = a;
       if (pick && tMs - pick.logLine.timestamp > 3000) pick = undefined;
-      if (!pick) pick = acts.find((a) => a.logLine.timestamp > tMs && a.logLine.timestamp - tMs <= 3000);
+      if (!pick)
+        pick = acts.find(
+          (a) => a.logLine.timestamp > tMs && a.logLine.timestamp - tMs <= 3000,
+        );
       if (!pick) continue;
       bump("stateTick");
-      const want = Math.min(100, Math.round((pick.advancedActorCurrentHp / pick.advancedActorMaxHp) * 100));
+      const want = Math.min(
+        100,
+        Math.round(
+          (pick.advancedActorCurrentHp / pick.advancedActorMaxHp) * 100,
+        ),
+      );
       if (Number(pm[2]) !== want)
-        miss("stateTick", `${where} ${sm[1]} ${unit.name}: printed ${pm[2]}, last reading at/before ${want}`);
+        miss(
+          "stateTick",
+          `${where} ${sm[1]} ${unit.name}: printed ${pm[2]}, last reading at/before ${want}`,
+        );
     }
   }
   {
@@ -1066,19 +1224,32 @@ for (const f of files) {
     const first = resRows[0];
     if (first && secOf(first.t || "9:59") <= 5) {
       bump("resOpener");
-      if (/^rdy:— /.test(first.row) && resRows[1] && /^rdy:Δ \+/.test(resRows[1].row))
-        miss("resOpener", `${where} ${first.t} ${first.row.slice(0, 60)} → ${resRows[1].t} ${resRows[1].row.slice(0, 50)}`);
+      if (
+        /^rdy:— /.test(first.row) &&
+        resRows[1] &&
+        /^rdy:Δ \+/.test(resRows[1].row)
+      )
+        miss(
+          "resOpener",
+          `${where} ${first.t} ${first.row.slice(0, 60)} → ${resRows[1].t} ${resRows[1].row.slice(0, 50)}`,
+        );
     }
   }
   {
     const riderNames = new Set(
-      [...MOVEMENT_ROOT_BREAK_DISPEL_IDS].map((id) => getEnglishSpellName(id, "")),
+      [...MOVEMENT_ROOT_BREAK_DISPEL_IDS].map((id) =>
+        getEnglishSpellName(id, ""),
+      ),
     );
     for (const l of lines) {
-      const dm = /^\d+:\d\d {2}\[(?:ENEMY CLEANSE|PURGE|ENEMY PURGE)\] .* \(([^()]+)\)$/.exec(l);
+      const dm =
+        /^\d+:\d\d {2}\[(?:ENEMY CLEANSE|PURGE|ENEMY PURGE)\] .* \(([^()]+)\)$/.exec(
+          l,
+        );
       if (!dm) continue;
       bump("riderAsCleanse");
-      if (riderNames.has(dm[1]!)) miss("riderAsCleanse", `${where} ${l.slice(0, 110)}`);
+      if (riderNames.has(dm[1]!))
+        miss("riderAsCleanse", `${where} ${l.slice(0, 110)}`);
     }
   }
   for (const u of players) {
@@ -1092,23 +1263,41 @@ for (const f of files) {
       if (ts < start || ts > legacy.endTime) continue;
       const t = fmtS((ts - start) / 1000);
       bump("sorImmune");
-      if (!lines.some((l) => l.startsWith(`${t}  [ENEMY DEF]   ${me}(`) && /Spirit of Redemption \(immune/.test(l)))
-        miss("sorImmune", `${where} ${t} ${u.name}: no [ENEMY DEF] immune line`);
+      if (
+        !lines.some(
+          (l) =>
+            l.startsWith(`${t}  [ENEMY DEF]   ${me}(`) &&
+            /Spirit of Redemption \(immune/.test(l),
+        )
+      )
+        miss(
+          "sorImmune",
+          `${where} ${t} ${u.name}: no [ENEMY DEF] immune line`,
+        );
       for (const l of lines) {
-        const km = /^ {2}\[(\d+:\d\d)–(\d+:\d\d)\] on (\S+) — .*not enough damage/.exec(l);
+        const km =
+          /^ {2}\[(\d+:\d\d)–(\d+:\d\d)\] on (\S+) — .*not enough damage/.exec(
+            l,
+          );
         if (!km || km[3] !== u.name) continue;
         const from = start + secOf(km[1]!) * 1000;
         const to = start + (secOf(km[2]!) + 1 + 5) * 1000;
         if (ts >= from && ts < to) {
           bump("sorImmune");
-          miss("sorImmune", `${where} ${km[1]}–${km[2]} on ${u.name}: not enough damage, form at ${t}`);
+          miss(
+            "sorImmune",
+            `${where} ${km[1]}–${km[2]} on ${u.name}: not enough damage, form at ${t}`,
+          );
         }
       }
     }
   }
   // Darkness pressed by the attempt's own target
   for (const l of lines) {
-    const km = /^ {2}\[(\d+:\d\d)–(\d+:\d\d)\] on (\S+) — .*\| (?:FAILED: )?(.*)$/.exec(l);
+    const km =
+      /^ {2}\[(\d+:\d\d)–(\d+:\d\d)\] on (\S+) — .*\| (?:FAILED: )?(.*)$/.exec(
+        l,
+      );
     if (!km) continue;
     const target = byName.get(km[3]!);
     if (!target) continue;
@@ -1131,22 +1320,46 @@ for (const f of files) {
     if (!ate) continue;
     bump("areaWallPopped");
     if (/^(healed through|not enough damage)/.test(km[4]!))
-      miss("areaWallPopped", `${where} ${km[1]}–${km[2]} on ${target.name}: ${km[4]!.slice(0, 40)} with its own Darkness`);
+      miss(
+        "areaWallPopped",
+        `${where} ${km[1]}–${km[2]} on ${target.name}: ${km[4]!.slice(0, 40)} with its own Darkness`,
+      );
   }
   // a cooldown whose own effect proves a press the round has no row of
   {
-    const casts = (castEffectAuraGenerated as any).casts as Record<string, any[]>;
+    const casts = (castEffectAuraGenerated as any).casts as Record<
+      string,
+      any[]
+    >;
     let cur: any;
     for (const l of lines) {
       const um = /<unit id="(\d+)" name="([^"]+)"/.exec(l);
       if (um) cur = byName.get(um[2]!);
       if (!cur || !l.includes("<cooldowns>")) continue;
-      for (const m of l.matchAll(/(?:<cooldowns>|, )([^,<[]+?) \[[^\]]*\](?: \[[^\]]*\])* ?\[UNUSED\]/g)) {
+      for (const m of l.matchAll(
+        /(?:<cooldowns>|, )([^,<[]+?) \[[^\]]*\](?: \[[^\]]*\])* ?\[UNUSED\]/g,
+      )) {
         const name = m[1]!.trim();
         for (const [cast, rows] of Object.entries(casts)) {
           if (getEnglishSpellName(cast, "") !== name) continue;
-          if (((cur.spellCastEvents ?? []) as any[]).some((c) => c.spellId === cast && c.logLine.event === LogEvent.SPELL_CAST_SUCCESS && c.logLine.timestamp >= start && c.logLine.timestamp <= legacy.endTime)) continue;
-          const effects = rows.filter((r) => r.aura !== cast && r.via?.includes("name") && r.hits >= 0.5 * r.casts).map((r) => r.aura);
+          if (
+            ((cur.spellCastEvents ?? []) as any[]).some(
+              (c) =>
+                c.spellId === cast &&
+                c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+                c.logLine.timestamp >= start &&
+                c.logLine.timestamp <= legacy.endTime,
+            )
+          )
+            continue;
+          const effects = rows
+            .filter(
+              (r) =>
+                r.aura !== cast &&
+                r.via?.includes("name") &&
+                r.hits >= 0.5 * r.casts,
+            )
+            .map((r) => r.aura);
           if (effects.length === 0) continue;
           // the unit's own applications only: a summon can cast the same
           // spell itself (a Rider of the Apocalypse's Anti-Magic Shell on
@@ -1163,7 +1376,11 @@ for (const f of files) {
             ),
           );
           bump("effectProvesUse");
-          if (seen) miss("effectProvesUse", `${where} ${cur.name} ${name} [UNUSED] but its effect went out`);
+          if (seen)
+            miss(
+              "effectProvesUse",
+              `${where} ${cur.name} ${name} [UNUSED] but its effect went out`,
+            );
         }
       }
     }
@@ -1175,12 +1392,18 @@ for (const f of files) {
     );
     const enemyOfRef = (ref: string): any => {
       const named = /^(.*) \(([^)]+)\)$/.exec(ref);
-      if (named) return byName.get(named[2]!) ?? byName.get(pidName.get(named[2]!) ?? "");
+      if (named)
+        return (
+          byName.get(named[2]!) ?? byName.get(pidName.get(named[2]!) ?? "")
+        );
       const bySpec = enemies.filter((u) => specToString(u.spec) === ref);
       return bySpec.length === 1 ? bySpec[0] : undefined;
     };
     for (const l of lines) {
-      const em = /^(\d+:\d\d) {2}\[HEALER EXPOSURE\] .*? \| IN LoS: (.*?)(?: \| |$)/.exec(l);
+      const em =
+        /^(\d+:\d\d) {2}\[HEALER EXPOSURE\] .*? \| IN LoS: (.*?)(?: \| |$)/.exec(
+          l,
+        );
       if (!em) continue;
       const tMs = start + secOf(em[1]!) * 1000;
       for (const group of em[2]!.split("; ")) {
@@ -1201,14 +1424,22 @@ for (const f of files) {
           const last = presses.at(-1);
           if (!last) continue;
           const cd = unitCooldownOf(enemy, last.spellId);
-          if (!cd || !cd.talentsKnown || cd.charges !== 1 || !(cd.cooldownSeconds > 0))
+          if (
+            !cd ||
+            !cd.talentsKnown ||
+            cd.charges !== 1 ||
+            !(cd.cooldownSeconds > 0)
+          )
             continue;
           // the press is matched by name: a different id of the same name
           // (Chastise's cast and its stun) reads the press's own cooldown
           bump("exposureOnCd");
           const certainS =
-            earliestCooldownSecondsFor(last.spellId, enemy.spec, cd.cooldownSeconds) ??
-            cd.cooldownSeconds;
+            earliestCooldownSecondsFor(
+              last.spellId,
+              enemy.spec,
+              cd.cooldownSeconds,
+            ) ?? cd.cooldownSeconds;
           if (last.logLine.timestamp + certainS * 1000 > tMs)
             miss(
               "exposureOnCd",
@@ -1231,8 +1462,19 @@ for (const f of files) {
       const t = fmtS((ts - start) / 1000);
       const name = getEnglishSpellName(a.spellId, "");
       bump("friendlyBacklash");
-      if (!lines.some((l) => l.startsWith(`${t}  [CC ON TEAM]   ${me}(`) && l.includes(`← ${name} `)))
-        miss("friendlyBacklash", `${where} ${t} ${u.name}: ${name} from a teammate, no [CC ON TEAM]`);
+      // a silence backlash (196364) is a [SILENCE] line since fact3 D30
+      // (2026-10-21); the horror (87204) stays [CC ON TEAM]
+      const tag = a.spellId === "196364" ? "[SILENCE]" : "[CC ON TEAM]";
+      if (
+        !lines.some(
+          (l) =>
+            l.startsWith(`${t}  ${tag}   ${me}(`) && l.includes(`← ${name} `),
+        )
+      )
+        miss(
+          "friendlyBacklash",
+          `${where} ${t} ${u.name}: ${name} from a teammate, no ${tag}`,
+        );
     }
   }
   for (const u of units) {
@@ -1251,7 +1493,8 @@ for (const f of files) {
           c.logLine.timestamp <= m.timestamp &&
           c.logLine.timestamp >= m.timestamp - 1000,
       );
-      if (!cast || (cast.destUnitId && cast.destUnitId !== "0000000000000000")) continue;
+      if (!cast || (cast.destUnitId && cast.destUnitId !== "0000000000000000"))
+        continue;
       if (m.timestamp < start || m.timestamp > legacy.endTime) continue;
       const name = getEnglishSpellName(m.spellId, "");
       // a buff-kind avoidance (the miss row proves the control reached the
@@ -1263,7 +1506,11 @@ for (const f of files) {
         ),
       );
       const up = ((u.auraEvents ?? []) as any[]).some((a) => {
-        if (!ok.has(a.spellId) || a.logLine.event !== LogEvent.SPELL_AURA_APPLIED) return false;
+        if (
+          !ok.has(a.spellId) ||
+          a.logLine.event !== LogEvent.SPELL_AURA_APPLIED
+        )
+          return false;
         if (a.logLine.timestamp > m.timestamp) return false;
         return !((u.auraEvents ?? []) as any[]).some(
           (r) =>
@@ -1276,14 +1523,24 @@ for (const f of files) {
       if (!up) continue;
       const t = fmtS((m.timestamp - start) / 1000);
       bump("aoeMissAvoided");
-      if (!lines.some((l) => l.startsWith(`${t}  [CC AVOIDED?]   ${me}(`) && l.includes(`: ${name} (by `)))
-        miss("aoeMissAvoided", `${where} ${t} ${u.name}: ${name} ${m.missType}, no [CC AVOIDED?]`);
+      if (
+        !lines.some(
+          (l) =>
+            l.startsWith(`${t}  [CC AVOIDED?]   ${me}(`) &&
+            l.includes(`: ${name} (by `),
+        )
+      )
+        miss(
+          "aoeMissAvoided",
+          `${where} ${t} ${u.name}: ${name} ${m.missType}, no [CC AVOIDED?]`,
+        );
     }
   }
   {
     const nameOf = (id: string) => getEnglishSpellName(id, "");
     const isOf = (id: string, name: string) =>
-      nameOf(id) === name || (OWN_SPLIT.get(id) ?? []).some((a) => nameOf(a) === name);
+      nameOf(id) === name ||
+      (OWN_SPLIT.get(id) ?? []).some((a) => nameOf(a) === name);
     const succOf = (u: any, name: string, fromMs: number, toMs: number) =>
       ((u.spellCastEvents ?? []) as any[]).find(
         (c) =>
@@ -1294,14 +1551,19 @@ for (const f of files) {
       );
     for (const l of lines) {
       // [ENEMY HARD CAST]
-      const hm = /^(\d+:\d\d) {2}\[ENEMY HARD CAST\] {3}(\d+)\([^)]*\): (.+?)(?: → [^ ]+)? \((\d+\.\d)s cast, (landed|went off[^)]*)\)/.exec(l);
+      const hm =
+        /^(\d+:\d\d) {2}\[ENEMY HARD CAST\] {3}(\d+)\([^)]*\): (.+?)(?: → [^ ]+)? \((\d+\.\d)s cast, (landed|went off[^)]*)\)/.exec(
+          l,
+        );
       if (hm) {
         const caster = byName.get(pidName.get(hm[2]!) ?? "");
         const t = start + secOf(hm[1]!) * 1000;
         // the bar started inside the line's second and ran the printed
         // length: its SUCCESS sits in [t + cast, t + 1 + cast] (± rounding)
         const castMs = Number(hm[4]) * 1000;
-        const succ = caster && succOf(caster, hm[3]!, t + castMs - 100, t + 1000 + castMs + 100);
+        const succ =
+          caster &&
+          succOf(caster, hm[3]!, t + castMs - 100, t + 1000 + castMs + 100);
         if (succ) {
           const sMs = succ.logLine.timestamp;
           const dest = succ.destUnitId;
@@ -1319,21 +1581,34 @@ for (const f of files) {
           const inR = (ms: number) => ms >= sMs && ms <= sMs + 2500;
           const hit =
             ((caster.damageOut ?? []) as any[]).some(
-              (d) => d.spellId === succ.spellId && d.destUnitId === dest && inR(d.logLine.timestamp),
+              (d) =>
+                d.spellId === succ.spellId &&
+                d.destUnitId === dest &&
+                inR(d.logLine.timestamp),
             ) ||
             ((units.find((u) => u.id === dest)?.absorbsIn ?? []) as any[]).some(
-              (a) => a.attackerId === caster.id && a.attackSpellId === succ.spellId && inR(a.timestamp),
+              (a) =>
+                a.attackerId === caster.id &&
+                a.attackSpellId === succ.spellId &&
+                inR(a.timestamp),
             );
           if (crowded) continue;
           bump("hardCastLanded");
           if (hit !== (hm[5] === "landed"))
-            miss("hardCastLanded", `${where} ${hm[1]} ${caster.name} ${hm[3]}: printed ${hm[5]}, log ${hit ? "hit" : "no hit"}`);
+            miss(
+              "hardCastLanded",
+              `${where} ${hm[1]} ${caster.name} ${hm[3]}: printed ${hm[5]}, log ${hit ? "hit" : "no hit"}`,
+            );
         }
       }
       // [IMMUNE on a press line
-      const im = /^(\d+:\d\d) {2}\[(YOU|TEAM)\] \[[A-Z]+\] {3}(?:(\d+)\([^)]*\)(?: \([^)]*\))?: )?(.+?)(?: →| \(| \[)[^\n]*\[IMMUNE/.exec(l);
+      const im =
+        /^(\d+:\d\d) {2}\[(YOU|TEAM)\] \[[A-Z]+\] {3}(?:(\d+)\([^)]*\)(?: \([^)]*\))?: )?(.+?)(?: →| \(| \[)[^\n]*\[IMMUNE/.exec(
+          l,
+        );
       if (im) {
-        const caster = im[2] === "YOU" ? owner : byName.get(pidName.get(im[3] ?? "") ?? "");
+        const caster =
+          im[2] === "YOU" ? owner : byName.get(pidName.get(im[3] ?? "") ?? "");
         const t = start + secOf(im[1]!) * 1000;
         const succ = caster && succOf(caster, im[4]!, t, t + 1000);
         if (succ) {
@@ -1347,13 +1622,21 @@ for (const f of files) {
           );
           if (rows.length > 0) {
             bump("periodicImmune");
-            if (rows.every((m) => m.logLine?.event === LogEvent.SPELL_PERIODIC_MISSED))
-              miss("periodicImmune", `${where} ${im[1]} ${caster.name} ${im[4]}: only DoT ticks were IMMUNE`);
+            if (
+              rows.every(
+                (m) => m.logLine?.event === LogEvent.SPELL_PERIODIC_MISSED,
+              )
+            )
+              miss(
+                "periodicImmune",
+                `${where} ${im[1]} ${caster.name} ${im[4]}: only DoT ticks were IMMUNE`,
+              );
           }
         }
       }
       // press HP under the press's own first heal
-      const pm = /^(\d+:\d\d) {2}\[YOU\] \[CD\] {3}(.+?) \(self: (\d+)% HP/.exec(l);
+      const pm =
+        /^(\d+:\d\d) {2}\[YOU\] \[CD\] {3}(.+?) \(self: (\d+)% HP/.exec(l);
       if (pm) {
         const t = start + secOf(pm[1]!) * 1000;
         const succ = succOf(owner, pm[2]!, t, t + 1000);
@@ -1369,14 +1652,24 @@ for (const f of files) {
           if (heals.length > 0) {
             const hMs = Math.min(...heals.map((h) => h.logLine.timestamp));
             const acts = ((owner.advancedActions ?? []) as any[])
-              .filter((a) => a.advancedActorId === owner.id && a.advancedActorMaxHp > 0 && a.logLine.timestamp < hMs)
+              .filter(
+                (a) =>
+                  a.advancedActorId === owner.id &&
+                  a.advancedActorMaxHp > 0 &&
+                  a.logLine.timestamp < hMs,
+              )
               .sort((x, y) => x.logLine.timestamp - y.logLine.timestamp);
             const before = acts.at(-1);
             if (before) {
-              const want = (before.advancedActorCurrentHp / before.advancedActorMaxHp) * 100;
+              const want =
+                (before.advancedActorCurrentHp / before.advancedActorMaxHp) *
+                100;
               bump("hotPressHp");
               if (Math.abs(Number(pm[3]) - want) > 1.5)
-                miss("hotPressHp", `${where} ${pm[1]} ${pm[2]}: printed ${pm[3]}%, before its heal ${want.toFixed(1)}%`);
+                miss(
+                  "hotPressHp",
+                  `${where} ${pm[1]} ${pm[2]}: printed ${pm[3]}%, before its heal ${want.toFixed(1)}%`,
+                );
             }
           }
         }
@@ -1385,12 +1678,16 @@ for (const f of files) {
       const fm = /^(\d+:\d\d) {2}\[BUFF FADED\] {3}(.+?) \(/.exec(l);
       if (fm) {
         const rows = ((owner.auraEvents ?? []) as any[]).filter(
-          (a) => a.srcUnitId === owner.id && a.spellId && isOf(a.spellId, fm[2]!),
+          (a) =>
+            a.srcUnitId === owner.id && a.spellId && isOf(a.spellId, fm[2]!),
         );
         if (rows.some((a) => a.auraType === "DEBUFF")) {
           bump("fadedDebuff");
           if (rows.every((a) => a.auraType === "DEBUFF"))
-            miss("fadedDebuff", `${where} ${fm[1]} ${fm[2]}: the owner's only rows are its own DEBUFF`);
+            miss(
+              "fadedDebuff",
+              `${where} ${fm[1]} ${fm[2]}: the owner's only rows are its own DEBUFF`,
+            );
         }
       }
       // CC USE Counts
@@ -1400,10 +1697,17 @@ for (const f of files) {
           const name = /^(.+?) cast /.exec(part)?.[1];
           if (!name) continue;
           const presses = ((owner.spellCastEvents ?? []) as any[]).filter(
-            (c) => c.logLine.event === LogEvent.SPELL_CAST_SUCCESS && nameOf(c.spellId) === name,
+            (c) =>
+              c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+              nameOf(c.spellId) === name,
           );
           if (presses.length === 0) continue;
-          const ids = new Set(presses.flatMap((c) => [c.spellId, ...(OWN_SPLIT.get(c.spellId) ?? [])]));
+          const ids = new Set(
+            presses.flatMap((c) => [
+              c.spellId,
+              ...(OWN_SPLIT.get(c.spellId) ?? []),
+            ]),
+          );
           let ours = 0;
           let theirs = 0;
           for (const u of units)
@@ -1416,11 +1720,17 @@ for (const f of files) {
           if (ours + theirs === 0) continue;
           bump("nonControlCount");
           if (theirs === 0)
-            miss("nonControlCount", `${where} ${name}: ${ours} applications, all on the owner's side`);
+            miss(
+              "nonControlCount",
+              `${where} ${name}: ${ours} applications, all on the owner's side`,
+            );
         }
       }
       // the low-pressure NOTE
-      const nm = /never-used self-only defensive cooldowns \((.+?)\) were correctly HELD/.exec(l);
+      const nm =
+        /never-used self-only defensive cooldowns \((.+?)\) were correctly HELD/.exec(
+          l,
+        );
       if (nm) {
         for (const name of nm[1]!.split(", ")) {
           bump("kickedHeldNote");
@@ -1430,14 +1740,19 @@ for (const f of files) {
               c.logLine.timestamp >= start &&
               c.logLine.timestamp <= legacy.endTime,
           );
-          if (started) miss("kickedHeldNote", `${where} ${name}: a cast bar was started`);
+          if (started)
+            miss("kickedHeldNote", `${where} ${name}: a cast bar was started`);
         }
       }
     }
     for (const l of lines) {
-      const am = /^(\d+:\d\d) {2}\[(YOU|TEAM)\] \[CD\] {3}(?:(\d+)\([^)]*\) \([^)]*\): )?(.+?) → (\d+)\(/.exec(l);
+      const am =
+        /^(\d+:\d\d) {2}\[(YOU|TEAM)\] \[CD\] {3}(?:(\d+)\([^)]*\) \([^)]*\): )?(.+?) → (\d+)\(/.exec(
+          l,
+        );
       if (!am) continue;
-      const caster = am[2] === "YOU" ? owner : byName.get(pidName.get(am[3] ?? "") ?? "");
+      const caster =
+        am[2] === "YOU" ? owner : byName.get(pidName.get(am[3] ?? "") ?? "");
       const ally = byName.get(pidName.get(am[5]!) ?? "");
       if (!caster || !ally || ally.reaction !== owner.reaction) continue;
       const t = start + secOf(am[1]!) * 1000;
@@ -1455,10 +1770,16 @@ for (const f of files) {
       if (!refused) continue;
       bump("allyRefused");
       if (!l.includes("[IMMUNE"))
-        miss("allyRefused", `${where} ${am[1]} ${caster.name} ${am[4]} → ${ally.name}: IMMUNE row, no tag`);
+        miss(
+          "allyRefused",
+          `${where} ${am[1]} ${caster.name} ${am[4]} → ${ally.name}: IMMUNE row, no tag`,
+        );
     }
     for (const l of lines) {
-      const dm = /^(\d+:\d\d) {2}\[ENEMY DEF\] {3}(\d+)\([^)]*\) \([^)]*\): ([^(→]+?) \([^)]*?(\d+\.\d)s/.exec(l);
+      const dm =
+        /^(\d+:\d\d) {2}\[ENEMY DEF\] {3}(\d+)\([^)]*\) \([^)]*\): ([^(→]+?) \([^)]*?(\d+\.\d)s/.exec(
+          l,
+        );
       if (!dm) continue;
       const caster = byName.get(pidName.get(dm[2]!) ?? "");
       if (!caster) continue;
@@ -1490,7 +1811,10 @@ for (const f of files) {
       );
       bump("repressLength");
       if (refreshed)
-        miss("repressLength", `${where} ${dm[1]} ${caster.name} ${dm[3]!.trim()} ${dm[4]}s spans a re-press`);
+        miss(
+          "repressLength",
+          `${where} ${dm[1]} ${caster.name} ${dm[3]!.trim()} ${dm[4]}s spans a re-press`,
+        );
     }
     {
       let bFrom = 0;
@@ -1504,7 +1828,10 @@ for (const f of files) {
         }
         const tm = /^ {4}Target: (\S+) /.exec(l);
         if (tm) tgt = byName.get(tm[1]!);
-        const im = /Target had a major defensive up: (Greater Invisibility|Vanish|Mass Invisibility|Burrow) active ON THE TARGET (\d+\.\d)s of this burst \((already up|pressed (\d+\.\d)s after)/.exec(l);
+        const im =
+          /Target had a major defensive up: (Greater Invisibility|Vanish|Mass Invisibility|Burrow) active ON THE TARGET (\d+\.\d)s of this burst \((already up|pressed (\d+\.\d)s after)/.exec(
+            l,
+          );
         if (!im || !tgt) continue;
         const applies = ((tgt.auraEvents ?? []) as any[])
           .filter(
@@ -1516,7 +1843,9 @@ for (const f of files) {
         const apply =
           im[3] === "already up"
             ? applies.filter((t) => t <= bFrom).at(-1)
-            : applies.find((t) => Math.abs(t - (bFrom + Number(im[4]) * 1000)) <= 1500);
+            : applies.find(
+                (t) => Math.abs(t - (bFrom + Number(im[4]) * 1000)) <= 1500,
+              );
         if (apply === undefined) continue;
         const firstHit = ((tgt.damageOut ?? []) as any[])
           .map((d) => d.logLine.timestamp as number)
@@ -1526,7 +1855,10 @@ for (const f of files) {
         const maxS = Math.max(0, (end - Math.max(apply, bFrom)) / 1000);
         bump("invisAfterAction");
         if (Number(im[2]) > maxS + 1)
-          miss("invisAfterAction", `${where} ${tgt.name} ${im[1]} ${im[2]}s, holder acted after ${maxS.toFixed(1)}s`);
+          miss(
+            "invisAfterAction",
+            `${where} ${tgt.name} ${im[1]} ${im[2]}s, holder acted after ${maxS.toFixed(1)}s`,
+          );
       }
     }
     // loadout single-value cooldowns vs the [RES] rows' own range for them
@@ -1545,12 +1877,17 @@ for (const f of files) {
       const um = /<unit id="(\d+)" name="([^"]+)"/.exec(l);
       if (um) curPid = um[1]!;
       if (!curPid || !l.includes("<cooldowns>")) continue;
-      for (const m of l.matchAll(/(?:<cooldowns>|, )([^,<[]+?) \[(\d+(?:–\d+)?)s/g)) {
+      for (const m of l.matchAll(
+        /(?:<cooldowns>|, )([^,<[]+?) \[(\d+(?:–\d+)?)s/g,
+      )) {
         const name = m[1]!.trim();
         if (!ranged.has(`${curPid}|${name}`)) continue;
         bump("kitRange");
         if (!m[2]!.includes("–"))
-          miss("kitRange", `${where} ${curPid}:${name} [${m[2]}s] while [RES] prints a range`);
+          miss(
+            "kitRange",
+            `${where} ${curPid}:${name} [${m[2]}s] while [RES] prints a range`,
+          );
       }
     }
   }
@@ -1569,18 +1906,26 @@ for (const f of files) {
     if (!l.includes(": Obsidian Scales active ON THE TARGET")) continue;
     // an Evoker carries its own 30 % copy: only a non-Evoker target's copy is
     // necessarily an ally's (spec ids 1467 / 1468 / 1473)
-    if (!ledgerTarget || ["1467", "1468", "1473"].includes(String(ledgerTarget.spec)))
+    if (
+      !ledgerTarget ||
+      ["1467", "1468", "1473"].includes(String(ledgerTarget.spec))
+    )
       continue;
     bump("ledgerCopyLabel");
     if (l.includes("Target had a major defensive up"))
-      miss("ledgerCopyLabel", `${where} ${ledgerTarget.name}: ${l.trim().slice(0, 90)}`);
+      miss(
+        "ledgerCopyLabel",
+        `${where} ${ledgerTarget.name}: ${l.trim().slice(0, 90)}`,
+      );
   }
   // user ruling 2026-10-20: a ready Alter Time is a major defensive in hand.
   // The target's press inside a `defenseless` span (not at its opening
   // second, not at its closing one) proves it was in hand inside the span.
   for (const l of lines) {
     const head =
-      /^ {2}\[(?:KILL WINDOW|VULNERABLE)\] (\d+:\d\d)–(\d+:\d\d)(?: \(\d+s\))? on [^(]+\(([^)]+)\)/.exec(l);
+      /^ {2}\[(?:KILL WINDOW|VULNERABLE)\] (\d+:\d\d)–(\d+:\d\d)(?: \(\d+s\))? on [^(]+\(([^)]+)\)/.exec(
+        l,
+      );
     if (!head) continue;
     const target =
       byName.get(head[3]!) ?? byName.get(pidName.get(head[3]!) ?? "");
@@ -1590,13 +1935,19 @@ for (const f of files) {
     const b = secOf(span[2]!);
     bump("inHandRewind");
     const press = ((target.spellCastEvents ?? []) as any[]).find((c) => {
-      if (c.logLine.event !== LogEvent.SPELL_CAST_SUCCESS || c.spellId !== "342245")
+      if (
+        c.logLine.event !== LogEvent.SPELL_CAST_SUCCESS ||
+        c.spellId !== "342245"
+      )
         return false;
       const s = Math.floor((c.logLine.timestamp - start) / 1000);
       return s > a && s < b;
     });
     if (press)
-      miss("inHandRewind", `${where} ${span[1]}–${span[2]} ${target.name}: Alter Time pressed at ${Math.floor((press.logLine.timestamp - start) / 1000)}s inside`);
+      miss(
+        "inHandRewind",
+        `${where} ${span[1]}–${span[2]} ${target.name}: Alter Time pressed at ${Math.floor((press.logLine.timestamp - start) / 1000)}s inside`,
+      );
   }
   // user ruling 2026-10-20: racial damage buffs and Ultimate Penitence are
   // offensive cooldowns — a friendly press strictly inside a [KILL WINDOW]
@@ -1623,7 +1974,10 @@ for (const f of files) {
         bump("racialPressedInside");
         const inside = /pressed inside: ([^)]*)\)/.exec(l)?.[1] ?? "";
         if (!inside.includes(name))
-          miss("racialPressedInside", `${where} ${m[1]}–${m[2]}: ${p.name} ${name} at ${sec}s not under pressed inside`);
+          miss(
+            "racialPressedInside",
+            `${where} ${m[1]}–${m[2]}: ${p.name} ${name} at ${sec}s not under pressed inside`,
+          );
       }
   }
   // user ruling 2026-10-20 (idx 60): a roster defensive the kit tags
@@ -1631,21 +1985,31 @@ for (const f of files) {
   const kitOf = new Map<string, string>();
   for (let i = 0; i < lines.length; i++) {
     const u = /<unit id="\d+" name="([^"]+)"/.exec(lines[i]!);
-    if (u && lines[i + 1]?.includes("<cooldowns>")) kitOf.set(u[1]!, lines[i + 1]!);
+    if (u && lines[i + 1]?.includes("<cooldowns>"))
+      kitOf.set(u[1]!, lines[i + 1]!);
   }
   for (const l of lines) {
     const m =
-      /^ {2}\[(?:KILL WINDOW|VULNERABLE)\] (\d+:\d\d)–(\d+:\d\d)(?: \(\d+s\))? on [^(]+\(([^)]+)\)/.exec(l);
+      /^ {2}\[(?:KILL WINDOW|VULNERABLE)\] (\d+:\d\d)–(\d+:\d\d)(?: \(\d+s\))? on [^(]+\(([^)]+)\)/.exec(
+        l,
+      );
     if (!m) continue;
     const name = pidName.get(m[3]!) ?? m[3]!;
     const kit = kitOf.get(name);
     if (!kit) continue;
     bump("kitInHand");
-    const held = [...kit.matchAll(/(?:<cooldowns>|, )([^,[<]+?) \[[^\]]*\](?: \[[^\]]*\])* \[UNUSED\]/g)]
+    const held = [
+      ...kit.matchAll(
+        /(?:<cooldowns>|, )([^,[<]+?) \[[^\]]*\](?: \[[^\]]*\])* \[UNUSED\]/g,
+      ),
+    ]
       .map((x) => x[1]!.trim())
       .filter((n) => KW_IN_HAND_NAMES.has(n));
     if (held.length > 0)
-      miss("kitInHand", `${where} ${m[1]}–${m[2]} ${name}: kit holds ${held.join("/")} [UNUSED]`);
+      miss(
+        "kitInHand",
+        `${where} ${m[1]}–${m[2]} ${name}: kit holds ${held.join("/")} [UNUSED]`,
+      );
   }
   // GH #155: a loadout's `lasts Ns` for a holder of a tooltip-stated,
   // corpus-confirmed duration talent is what the tooltip says
@@ -1655,7 +2019,9 @@ for (const f of files) {
     if (!u || !kit?.includes("<cooldowns>")) continue;
     const unit = byName.get(u[1]!);
     if (!unit) continue;
-    for (const m of kit.matchAll(/(?:<cooldowns>|, )([^,[<]+?) \[[^\]]*?lasts ([\d.]+)(?:–([\d.]+))?s\]/g)) {
+    for (const m of kit.matchAll(
+      /(?:<cooldowns>|, )([^,[<]+?) \[[^\]]*?lasts ([\d.]+)(?:–([\d.]+))?s\]/g,
+    )) {
       for (const r of tooltipLasts.get(m[1]!.trim()) ?? []) {
         if (!r.specs.includes(String(unit.spec))) continue;
         if (talentRankOf(unit, r.talent) <= 0) continue;
@@ -1675,7 +2041,11 @@ for (const f of files) {
   for (const u of players) {
     if (ourSide.has(u.id)) continue;
     for (const a of (u.auraEvents ?? []) as any[]) {
-      if (a.spellId !== "184662" || a.logLine.event !== LogEvent.SPELL_AURA_APPLIED) continue;
+      if (
+        a.spellId !== "184662" ||
+        a.logLine.event !== LogEvent.SPELL_AURA_APPLIED
+      )
+        continue;
       const sec = Math.floor((a.logLine.timestamp - start) / 1000);
       if (sec < 0 || a.logLine.timestamp >= (legacy as any).endTime) continue;
       bump("riderShieldLine");
@@ -1683,13 +2053,19 @@ for (const f of files) {
       // a re-application inside a printed one is that line's (the aura
       // join, `joinReappliedIntervals`): `(absorb Nk, T.Ts` covers it
       const covered = lines.some((l) => {
-        const m = /^(\d+):(\d\d) {2}\[ENEMY DEF\].*Shield of Vengeance \(absorb[^,]*, (\d+(?:\.\d)?)s/.exec(l);
+        const m =
+          /^(\d+):(\d\d) {2}\[ENEMY DEF\].*Shield of Vengeance \(absorb[^,]*, (\d+(?:\.\d)?)s/.exec(
+            l,
+          );
         if (!m) return false;
         const at = Number(m[1]) * 60 + Number(m[2]);
         return at === sec || (at <= sec && sec <= at + Number(m[3]));
       });
       if (!covered)
-        miss("riderShieldLine", `${where} ${stamp} ${u.name}: no [ENEMY DEF] Shield of Vengeance line`);
+        miss(
+          "riderShieldLine",
+          `${where} ${stamp} ${u.name}: no [ENEMY DEF] Shield of Vengeance line`,
+        );
     }
   }
   // user ruling 2026-10-20 (idx 45 / 48): the burst ledger names Retribution's
@@ -1707,19 +2083,31 @@ for (const f of files) {
     const flush = () => {
       if (!burst || !tgt) return;
       for (const [id, nm] of ROSTER_UP) {
-        const evs = ((tgt.auraEvents ?? []) as any[]).filter((a) => a.spellId === id);
+        const evs = ((tgt.auraEvents ?? []) as any[]).filter(
+          (a) => a.spellId === id,
+        );
         let overlap = 0;
         for (const a of evs) {
           if (a.logLine.event !== LogEvent.SPELL_AURA_APPLIED) continue;
-          const rm = evs.find((r) => r.logLine.event === LogEvent.SPELL_AURA_REMOVED && r.logLine.timestamp >= a.logLine.timestamp);
+          const rm = evs.find(
+            (r) =>
+              r.logLine.event === LogEvent.SPELL_AURA_REMOVED &&
+              r.logLine.timestamp >= a.logLine.timestamp,
+          );
           const from = (a.logLine.timestamp - start) / 1000;
           const to = rm ? (rm.logLine.timestamp - start) / 1000 : from;
-          overlap += Math.max(0, Math.min(to, burst[1] + 1) - Math.max(from, burst[0] + 1));
+          overlap += Math.max(
+            0,
+            Math.min(to, burst[1] + 1) - Math.max(from, burst[0] + 1),
+          );
         }
         if (overlap < 1.5) continue; // well clear of the 0.5 s floor on the grid
         bump("ledgerRosterUp");
         if (!named.includes(nm))
-          miss("ledgerRosterUp", `${where} burst ${burst[0]}–${burst[1]} ${tgt.name}: ${nm} up ${overlap.toFixed(1)}s, not named`);
+          miss(
+            "ledgerRosterUp",
+            `${where} burst ${burst[0]}–${burst[1]} ${tgt.name}: ${nm} up ${overlap.toFixed(1)}s, not named`,
+          );
       }
     };
     for (const l of lines) {
@@ -1745,7 +2133,9 @@ for (const f of files) {
   // overlap share is what the log records it held back (its own absorb rows)
   for (const l of lines) {
     const m =
-      /\[STACKED DEFENSIVES\] +(.+?) (?:\(you\) )?had .* up together (\d+:\d\d)–(\d+:\d\d).*the later one, (Time Dilation|Stretch Time), (?:blocked|held back) ~(\d+)%/.exec(l);
+      /\[STACKED DEFENSIVES\] +(.+?) (?:\(you\) )?had .* up together (\d+:\d\d)–(\d+:\d\d).*the later one, (Time Dilation|Stretch Time), (?:blocked|held back) ~(\d+)%/.exec(
+        l,
+      );
     if (!m) continue;
     const who = m[1]!.replace(/ \(you\)$/, "");
     const pid = /^(\d+)\(/.exec(who)?.[1];
@@ -1754,17 +2144,30 @@ for (const f of files) {
     const a = secOf(m[2]!);
     const b = secOf(m[3]!);
     const shield = m[4] === "Time Dilation" ? "357170" : "410355";
-    const maxHp = Math.max(1, ...((target.advancedActions ?? []) as any[]).map((x) => x.advancedActorMaxHp ?? 0));
+    const maxHp = Math.max(
+      1,
+      ...((target.advancedActions ?? []) as any[]).map(
+        (x) => x.advancedActorMaxHp ?? 0,
+      ),
+    );
     const held = (from: number, to: number) =>
       ((target.absorbsIn ?? []) as any[])
-        .filter((e) => String(e.spellId) === shield && e.timestamp >= start + from * 1000 && e.timestamp < start + to * 1000)
+        .filter(
+          (e) =>
+            String(e.spellId) === shield &&
+            e.timestamp >= start + from * 1000 &&
+            e.timestamp < start + to * 1000,
+        )
         .reduce((n, e) => n + (e.absorbedAmount ?? 0), 0);
     bump("stackedDeferral");
     const lo = Math.round((held(a + 1, b) / maxHp) * 100);
     const hi = Math.round((held(a, b + 1) / maxHp) * 100);
     const p = Number(m[5]);
     if (p < lo - 1 || p > hi + 1)
-      miss("stackedDeferral", `${where} ${m[2]}–${m[3]} ${target.name}: printed ${p}%, log ${lo}–${hi}%`);
+      miss(
+        "stackedDeferral",
+        `${where} ${m[2]}–${m[3]} ${target.name}: printed ${p}%, log ${lo}–${hi}%`,
+      );
   }
   for (const l of lines) {
     for (const [check, re] of [

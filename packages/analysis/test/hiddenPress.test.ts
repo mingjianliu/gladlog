@@ -84,6 +84,13 @@ describe("hiddenPressMs", () => {
     ]);
     expect(hiddenPressMs(u, "342245", T0)).toEqual([BATCH_MS]);
   });
+  it("a copy another press of the unit put up (Exhilaration → Smoke Screen's Survival of the Fittest) is no hidden press", () => {
+    const exhil = {
+      spellId: "109304",
+      logLine: { event: LogEvent.SPELL_CAST_SUCCESS, timestamp: BATCH_MS - 2 },
+    };
+    expect(hiddenPressMs(rogue(batch(30), [exhil]), EVASION, T0)).toEqual([]);
+  });
   it("a press row beside it, or no batch: no hidden press", () => {
     const cast = {
       spellId: EVASION,
