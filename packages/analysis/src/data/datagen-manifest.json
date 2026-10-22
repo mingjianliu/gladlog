@@ -39,8 +39,8 @@
       "bytes": 3704312
     },
     "conditionalCooldownsGenerated.json": {
-      "entries": 19,
-      "modifiers": 26
+      "entries": 113,
+      "modifiers": 260
     },
     "mitigationGenerated.json": {
       "entries": 20,

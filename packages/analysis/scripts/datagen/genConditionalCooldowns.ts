@@ -28,7 +28,11 @@
  * PvP 1238904 on Life Cocoon and Strike of the Windlord, Flow State's 390148
  * on Obsidian Scales): aura 148 by SpellCategory (the cooldown category or
  * the charge category), 143 by SpellLabel, 286 by class mask (the carrier's
- * own SpellClassSet). mult = 1 + points × PvpMultiplier / 100. The runtime
+ * own SpellClassSet). mult = 1 + points × PvpMultiplier / 100. And aura 454
+ * by SpellCategory, mult = 1 / (1 − p) (fix-F16, 2026-10-22: Blessing of
+ * the Bronze 381753, −15 % on "Class - Priest - Leap of Faith" 2308 — an
+ * evoker ally's raid buff on the priest; fact3 D13, recasts 84.3 / 81.6 s
+ * under a [90s] kit). A carrier is an aura ON the unit, whoever applied it. The runtime
  * applies a carrier only over the intervals the log shows it on the unit,
  * and only carriers the corpus has ever shown are kept
  * (observedSpellIdsGenerated.json — 15 of 64; the rest are raid and item
@@ -185,18 +189,26 @@ async function main() {
   }
   for (const r of effects.rows) {
     const aura = Number(r.EffectAura ?? 0);
-    if (Number(r.Effect ?? 0) !== 6 || ![143, 148, 286].includes(aura))
+    if (Number(r.Effect ?? 0) !== 6 || ![143, 148, 286, 454].includes(aura))
       continue;
     if (r.DifficultyID && r.DifficultyID !== "0") continue;
     if (!observed.has(r.SpellID ?? "")) continue;
     const pvp = r.PvpMultiplier === undefined ? 1 : Number(r.PvpMultiplier);
     const v =
       Math.round(Number(r.EffectBasePointsF ?? 0) * (pvp || 1) * 1000) / 1000;
-    const mult = Math.min(RATE_CAP, 1 + v / 100);
+    // 454 is a charge-recovery MULTIPLIER (−15 → 1 / 0.85), the others a
+    // rate bonus (+100 → ×2) — the first pass's two formulas
+    const p = -v / 100;
+    const mult =
+      aura === 454
+        ? p >= 1
+          ? RATE_CAP
+          : Math.min(RATE_CAP, 1 / (1 - p))
+        : Math.min(RATE_CAP, 1 + v / 100);
     if (!(mult > 1)) continue;
     const misc0 = Number(r.EffectMiscValue_0 ?? 0);
     let targets: string[] = [];
-    if (aura === 148)
+    if (aura === 148 || aura === 454)
       targets = [
         ...(cooldownCat.get(misc0) ?? []),
         ...(chargeCat.get(misc0) ?? []),

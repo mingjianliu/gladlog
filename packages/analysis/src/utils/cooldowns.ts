@@ -4092,8 +4092,12 @@ function conditionalCooldownsOf(spellId: string): readonly ConditionalMod[] {
   );
 }
 
-/** Self-applied buff intervals of a unit, by aura id — the carriers of the
- * batch C modifiers. Memoised per (unit, combat). */
+/** Buff intervals ON a unit, by aura id — the carriers of the batch C
+ * modifiers. Memoised per (unit, combat). Whoever applied it: an aura's
+ * effect is its holder's (fix-F16, 2026-10-22: Blessing of the Bronze
+ * 381753 is an evoker ally's raid buff on the priest, −15 % on Leap of
+ * Faith's category — fact3 D13; read as self-applied only, it never
+ * carried). */
 const selfBuffCache = new WeakMap<
   ICombatUnit,
   { combat: AtomicArenaCombat; byId: Map<string, IAuraInterval[]> }
@@ -4106,10 +4110,48 @@ function selfBuffIntervalsOf(
   if (hit && hit.combat === combat) return hit.byId;
   const byId = new Map<string, IAuraInterval[]>();
   for (const iv of buildAuraIntervals(unit, combat)) {
-    if (iv.srcUnitName !== unit.name) continue;
     const l = byId.get(iv.spellId) ?? [];
     l.push(iv);
     byId.set(iv.spellId, l);
+  }
+  // an aura the round opened with is listed on COMBATANT_INFO and writes no
+  // APPLIED (`interestingAurasJSON`: casterGuid, spellId, 1 per aura) — a
+  // carrier up from the start, to its first REMOVED or the round's end
+  // (Blessing of the Bronze: 35 COMBATANT_INFO listings, 30 APPLIED rows in
+  // the 605-file capture)
+  if (unit.info?.interestingAurasJSON) {
+    let flat: unknown[] = [];
+    try {
+      const parsed: unknown = JSON.parse(unit.info.interestingAurasJSON);
+      if (Array.isArray(parsed)) flat = parsed;
+    } catch {
+      // unreadable start list: nothing up at the start
+    }
+    const durationS = (combat.endTime - combat.startTime) / 1000;
+    for (let i = 0; i + 1 < flat.length; i += 3) {
+      const id = String(flat[i + 1]);
+      if (byId.has(id)) continue;
+      const removed = (unit.auraEvents ?? []).find(
+        (a) =>
+          a.spellId === id &&
+          a.destUnitId === unit.id &&
+          a.logLine.event === LogEvent.SPELL_AURA_REMOVED &&
+          a.timestamp >= combat.startTime,
+      );
+      byId.set(id, [
+        {
+          spellId: id,
+          spellName: "",
+          srcUnitName: "",
+          fromS: 0,
+          toS: removed
+            ? Math.min(durationS, (removed.timestamp - combat.startTime) / 1000)
+            : durationS,
+          inferredStart: true,
+          inferredEnd: !removed,
+        },
+      ]);
+    }
   }
   selfBuffCache.set(unit, { combat, byId });
   return byId;
