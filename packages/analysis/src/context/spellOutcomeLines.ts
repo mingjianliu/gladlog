@@ -253,6 +253,24 @@ export function reflectedSpells(
     // cannot own a damage return (codex 20-F16-03 #3: a Polymorph reflected
     // 190 ms after a Fireball took the Fireball's 100k, and the Fireball's
     // [REFLECTED] line went)
+    // deals damage: the official profile says so, or the caster's own hits
+    // of it (by id or English name) are in this round — a scripted damage
+    // spell the profile misses (Fel Lance 206966: effects 165 + dummy;
+    // 55-1 0:40 lost its 133k [REFLECTED] line), never a Spellsteal or a
+    // control, which leave no hit of their own
+    const dealsDamage = (id: string): boolean => {
+      if (abilityProfile(id).dealsDamage) return true;
+      const name = getEnglishSpellName(id, "");
+      return units.some((t) =>
+        (t.damageIn ?? []).some(
+          (d) =>
+            d.srcUnitId === caster.id &&
+            !!d.spellId &&
+            (d.spellId === id ||
+              (name !== "" && getEnglishSpellName(d.spellId, "") === name)),
+        ),
+      );
+    };
     const creditOwnId = (src: string | undefined, ts: number, amt: number) => {
       let best: (typeof chains)[number] | undefined;
       let bestGap = Infinity;
@@ -265,7 +283,7 @@ export function reflectedSpells(
         // a control (codex 20-F16-03 #3) or anything else (fact3 D6 / D25:
         // a Spellsteal reflected 0.6 s after a Pyroblast took its 145k)
         const id = c.first.spellId ?? "";
-        if (!abilityProfile(id).dealsDamage) continue;
+        if (!dealsDamage(id)) continue;
         const gap = Math.abs(ts - t0);
         if (gap < bestGap) {
           best = c;

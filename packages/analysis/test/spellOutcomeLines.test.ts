@@ -177,6 +177,33 @@ describe("reflectedSpells (0051f0c9)", () => {
     const [r] = reflectedSpells([caster, unit("Player-W")], T0);
     expect(r!.damageBack).toBe(112_000);
   });
+  it("a scripted damage spell the profile misses (Fel Lance) owns the reflector's own-id return when its caster's hits of it are in the round", () => {
+    const FEL_LANCE = "206966";
+    const caster = unit("Player-P", {
+      missesOut: [miss(FEL_LANCE)],
+      damageIn: [
+        {
+          spellId: "23920",
+          srcUnitId: "Player-W",
+          effectiveAmount: -133_000,
+          logLine: { timestamp: T0 + 6_200 },
+        },
+      ],
+      advancedActions: advanced(500_000),
+    });
+    const mate = unit("Player-M", {
+      damageIn: [
+        {
+          spellId: FEL_LANCE,
+          srcUnitId: "Player-P",
+          effectiveAmount: -40_000,
+          logLine: { timestamp: T0 + 2_000 },
+        },
+      ],
+    });
+    const [r] = reflectedSpells([caster, unit("Player-W"), mate], T0);
+    expect(r!.damageBack).toBe(133_000);
+  });
   it("a dispel backlash of the reflected spell's name (Unstable Affliction 196364) is not the return", () => {
     const UA = "1259790";
     const caster = unit("Player-P", {
