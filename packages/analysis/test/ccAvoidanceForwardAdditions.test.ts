@@ -37,8 +37,17 @@ describe("avoidance table — DB2-explained forward additions", () => {
       true,
     );
   });
-  it("every addition is a fact-only id (no new cc-avoidable tool)", () => {
-    for (const id of ["48792", "49039", "289655", "203337", "1953"])
-      expect(CC_AVOIDANCE_FACT_ONLY_IDS.has(id)).toBe(true);
+  it("the player's own buttons are tools now (ruling 2026-10-22); enemy controls, talent procs and the duplicate form stay facts", () => {
+    for (const id of ["48792", "49039", "1953", "104773", "363916"])
+      expect(CC_AVOIDANCE_FACT_ONLY_IDS.has(id), id).toBe(false);
+    for (const id of [
+      "203337",
+      "221527",
+      "378441",
+      "378078",
+      "289655",
+      "165961",
+    ])
+      expect(CC_AVOIDANCE_FACT_ONLY_IDS.has(id), id).toBe(true);
   });
 });

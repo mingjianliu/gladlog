@@ -354,28 +354,26 @@ for (const [buffId, name] of MECHANIC_LIMITED_AVOIDANCE_BUFFS)
   CC_AVOIDANCE_BUFF_SPELLS.set(buffId, name);
 
 /**
- * The 2026-10-22 additions (corpusFactScan2 immunityTableForward, above):
- * facts only — they name an IMMUNE row's cause on `[CC AVOIDED?]` /
- * `[CC NOT LANDED]` / `[IMMUNE — …]`, but cc-avoidable does not offer them
- * as a tool the player could have pressed (a new accusation shape — the
- * user's call first). Registered in curatedIdRegistry.
+ * The 2026-10-22 additions (corpusFactScan2 immunityTableForward, above)
+ * that name an IMMUNE row's cause on `[CC AVOIDED?]` / `[CC NOT LANDED]` /
+ * `[IMMUNE — …]` but that cc-avoidable does not offer as a tool the player
+ * could have pressed. User ruling 2026-10-22 (「可以」) made the rest tools —
+ * the player's own buttons whose immunity sits on the aura's own DB2 rows
+ * (Blink, Icebound Fortitude, Lichborne, Demolish, Aura Mastery, Unending
+ * Resolve, Obsidian Scales, Zen Focus Tea). Kept facts only: the enemy's
+ * own controls (Freezing Trap, Imprison, Time Stop — no button of the
+ * player's), talent-procced auras (Spiritwalker's Aegis on Spiritwalker's
+ * Grace, Sanctified Ground — the talent is not confirmed by the press), and
+ * Travel Form 165961 (the druid-form path already offers Travel Form for a
+ * Polymorph / Hex). Registered in curatedIdRegistry.
  */
 export const CC_AVOIDANCE_FACT_ONLY_IDS: ReadonlySet<string> = new Set([
   "203337",
   "221527",
   "378441",
-  "1953",
-  "119415",
-  "48792",
-  "49039",
-  "165961",
-  "436358",
-  "317929",
   "378078",
-  "104773",
-  "363916",
   "289655",
-  "209584",
+  "165961",
 ]);
 
 // B139: merge the talent-granted CC/magic-immunity avoidance buffs from the behavioral catalog. Self-gating
