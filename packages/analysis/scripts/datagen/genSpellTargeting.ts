@@ -103,8 +103,18 @@ type EffectRow = {
   targets: string[];
 };
 
+/** An ENERGIZE (Effect 30) on the caster alone: the press's resource gain,
+ *  not what the spell does. Divine Toll (375576) carries one (Holy Power,
+ *  target 1) beside dummy rows aimed at UNIT_DEST_AREA_ALLY / _ENEMY — its
+ *  real effect is the scripted Holy Shock on up to 5 units; read off the
+ *  energize alone it was "self-only" and the NOTE called it a correctly
+ *  HELD self defensive (fact3 D7, 0c796c56-r3 P:74). */
+function isCasterEnergize(r: EffectRow): boolean {
+  return r.effect === "30" && r.targets.every((t) => t === "1");
+}
+
 function considered(rows: EffectRow[]): EffectRow[] {
-  const real = rows.filter((r) => r.effect !== "3");
+  const real = rows.filter((r) => r.effect !== "3" && !isCasterEnergize(r));
   return real.length > 0 ? real : rows;
 }
 

@@ -55,6 +55,9 @@ describe("reachesAlly(官方 ImplicitTarget)", () => {
     expect(reachesAlly("64843")).toBe(true); // 神圣赞美诗(64844)
     expect(reachesAlly("31821")).toBe(true); // 光环大师(目标 56 = 团队光环)
     expect(reachesAlly("97462")).toBe(true); // 集结呐喊 —— 全是 dummy 效果行的反向陷阱
+    // 圣洁鸣钟 —— 唯一的真实行是给自己回圣能(Effect 30,目标 1),真正的效果在
+    // 指向区域友方/敌方(31/16)的 dummy 行里;fact3 D7(0c796c56-r3 P:74)
+    expect(reachesAlly("375576")).toBe(true);
     // 宁静与神圣赞美诗至今不在手工外放表里 —— 官方 targeting 是它们被认出来的
     // 唯一途径。光环大师原本也在这一列,2026-08-22 用户裁定它 20% 全团减伤后
     // 补登记进了手工表(见 spellIdLists.ts 该条注释),所以它不再是这条断言的
