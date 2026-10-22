@@ -167,6 +167,9 @@ export const RIDER_ABSORB_SAVE_AURAS: ReadonlyMap<string, string> = new Map([
  */
 export const KW_OWN_ROTATIONAL_ABSORB_AURA_IDS: ReadonlySet<string> = new Set([
   "17",
+  // the Holy Priest's proc Power Word: Shield (no cast row) — the ruling's
+  // shield by name (corpusFactScan2 E6; 148-2-818 2:08)
+  "1246768",
   "1253593",
 ]);
 export const KW_REDIRECT_PROTECTION_AURA_IDS: ReadonlySet<string> = new Set([
@@ -175,29 +178,45 @@ export const KW_REDIRECT_PROTECTION_AURA_IDS: ReadonlySet<string> = new Set([
 
 /**
  * The target's own absorb shields that end `defenseless` while up — the
- * legend's "its own … absorb shield", beyond ruling (1)'s two
- * (`KW_OWN_ROTATIONAL_ABSORB_AURA_IDS`, always): an aura DB2 calls an absorb
- * (`abilityProfile().absorbs`, SCHOOL_ABSORB) that the log shows absorbing
- * for this unit as its own shield this round (an `absorbsIn` row of that id
- * the unit owns). corpusFactScan2 defenselessSaveUp ownAbsorb (2026-10-22):
- * 134 kill windows / [VULNERABLE] spans ran over an own shield that ate hits
- * — Power Word: Shield 1246768 (no cast row) 79, Holy Bulwark 21, Blazing
- * Barrier 18, Prismatic Barrier 7, Reversion 5, Ignore Pain 2. The absorb
- * row is the evidence: Reversion's aura-69 effect carries 0 points (a
- * talent's), so an untalented Reversion is no shield and never counts.
+ * legend's "its own … absorb shield", beyond ruling (1)'s ids
+ * (`KW_OWN_ROTATIONAL_ABSORB_AURA_IDS`, pressed or not): a run of an aura DB2
+ * calls an absorb (`abilityProfile().absorbs`, SCHOOL_ABSORB) that the log
+ * shows absorbing for the unit as its own shield this round (an `absorbsIn`
+ * row of that id it owns), and that it PRESSED — an own SUCCESS of the aura's
+ * id, a cast it is the effect of, or one of its name, from 1 s before the
+ * run's start to the aura-before-cast lag after it (corpusFactScan2's E6
+ * reading: a talent's passive absorb — Frost Shield, Will of the Necropolis,
+ * Fel Armor, Soul Leech, Danger Sense — is no shield it applied on itself).
+ * corpusFactScan2 defenselessSaveUp ownAbsorb (2026-10-22): 134 kill windows
+ * / [VULNERABLE] spans ran over a pressed own shield that ate hits — first
+ * shield PW:S 1246768 79, Holy Bulwark 21, Blazing Barrier 18, Prismatic
+ * Barrier 7, Reversion 5, Ignore Pain 2. The absorb row stays part of the
+ * evidence: Reversion's aura-69 effect carries 0 points (a talent's).
  */
-export function ownAbsorbShieldAuraIdsOf(
-  holder: Pick<ICombatUnit, "id" | "absorbsIn">,
-): Set<string> {
-  const out = new Set<string>(KW_OWN_ROTATIONAL_ABSORB_AURA_IDS);
-  for (const a of holder.absorbsIn ?? [])
-    if (
-      a.spellId &&
-      a.srcUnitId === holder.id &&
-      abilityProfile(a.spellId).absorbs
+export function isOwnPressedShieldRun(
+  holder: Pick<ICombatUnit, "id" | "absorbsIn" | "spellCastEvents">,
+  spellId: string,
+  runStartMs: number,
+): boolean {
+  if (KW_OWN_ROTATIONAL_ABSORB_AURA_IDS.has(spellId)) return true;
+  if (!abilityProfile(spellId).absorbs) return false;
+  if (
+    !(holder.absorbsIn ?? []).some(
+      (a) => a.spellId === spellId && a.srcUnitId === holder.id,
     )
-      out.add(a.spellId);
-  return out;
+  )
+    return false;
+  const name = getEnglishSpellName(spellId, "");
+  const castIds = new Set([spellId, ...castsOfEffectAura(spellId)]);
+  return (holder.spellCastEvents ?? []).some(
+    (c) =>
+      c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+      !!c.spellId &&
+      c.logLine.timestamp >= runStartMs - 1000 &&
+      c.logLine.timestamp <= runStartMs + AURA_BEFORE_CAST_ROW_MAX_MS &&
+      (castIds.has(c.spellId) ||
+        (name !== "" && getEnglishSpellName(c.spellId, "") === name)),
+  );
 }
 /**
  * User ruling 2026-10-21 (round-3 q6, 「修」 — settle it with the log): a
