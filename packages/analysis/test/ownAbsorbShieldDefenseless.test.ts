@@ -10,7 +10,10 @@ import { LogEvent } from "@gladlog/parser-compat";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { ensureAnalysisData } from "../src/data/ensure";
-import { isOwnPressedShieldRun } from "../src/utils/enemyDefensives";
+import {
+  isOwnPressedShieldRun,
+  ownPressedShieldSpansMs,
+} from "../src/utils/enemyDefensives";
 
 beforeAll(async () => {
   await ensureAnalysisData();
@@ -57,6 +60,21 @@ describe("isOwnPressedShieldRun", () => {
     expect(
       isOwnPressedShieldRun(unit([absorb(HB)], [cast(HB, T - 61_000)]), HB, T),
     ).toBe(false);
+  });
+  it("a run kept up by REFRESH counts only within a minute of a press (b42: Holy Bulwark 6:33–6:43)", () => {
+    const HB = "432607";
+    const spans = ownPressedShieldSpansMs(
+      unit([absorb(HB)], [cast(HB, T)]),
+      HB,
+      T - 5_000,
+      T + 90_000,
+    );
+    expect(spans).toHaveLength(1);
+    expect(spans[0]!.toMs).toBe(T + 60_000);
+    // the ruling's shields: the whole run
+    expect(ownPressedShieldSpansMs(unit([]), "17", T, T + 90_000)).toEqual([
+      { fromMs: T, toMs: T + 90_000 },
+    ]);
   });
   it("a passive talent absorb (Frost Shield 207203) never counts — no press", () => {
     expect(isOwnPressedShieldRun(unit([absorb("207203")]), "207203", T)).toBe(

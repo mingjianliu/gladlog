@@ -31,9 +31,9 @@ import {
   enemyDefensiveEvents,
   type ISaveAuraInterval,
   isBelowWallFloorExternal,
-  isOwnPressedShieldRun,
   KW_REDIRECT_PROTECTION_AURA_IDS,
   KW_UNTARGETABLE_AURA_IDS,
+  ownPressedShieldSpansMs,
   ownSaveSpanS,
   ownWallSpanS,
   renderedExternalSpanS,
@@ -535,21 +535,30 @@ export function computeOffensiveWindows(
   // Shield and an Intervene on it end the span while their aura is up
   // (`KW_OWN_ROTATIONAL_ABSORB_AURA_IDS`, `KW_REDIRECT_PROTECTION_AURA_IDS`)
   // …and every other own absorb shield it pressed that the log shows
-  // absorbing for it (`isOwnPressedShieldRun`, corpusFactScan2
-  // defenselessSaveUp / E6)
+  // absorbing for it, within a minute of a press of it
+  // (`ownPressedShieldSpansMs`, corpusFactScan2 defenselessSaveUp / E6)
   for (const holder of enemies) {
-    for (const iv of holderIntervals(holder))
-      if (
-        (iv.srcUnitId === holder.id &&
-          isOwnPressedShieldRun(
-            holder,
-            iv.spellId,
-            matchStartMs + iv.fromS * 1000,
-          )) ||
-        KW_REDIRECT_PROTECTION_AURA_IDS.has(iv.spellId)
-      )
+    for (const iv of holderIntervals(holder)) {
+      if (KW_REDIRECT_PROTECTION_AURA_IDS.has(iv.spellId)) {
         addSave(holder.id, { from: iv.fromS, to: iv.toS });
-      else if (KW_UNTARGETABLE_AURA_IDS.has(iv.spellId))
+        continue;
+      }
+      const shieldSpans =
+        iv.srcUnitId === holder.id
+          ? ownPressedShieldSpansMs(
+              holder,
+              iv.spellId,
+              matchStartMs + iv.fromS * 1000,
+              matchStartMs + iv.toS * 1000,
+            )
+          : [];
+      for (const sp of shieldSpans)
+        addSave(holder.id, {
+          from: (sp.fromMs - matchStartMs) / 1000,
+          to: (sp.toMs - matchStartMs) / 1000,
+        });
+      if (shieldSpans.length > 0) continue;
+      if (KW_UNTARGETABLE_AURA_IDS.has(iv.spellId))
         // round-3 q6 / fact3 D54: Mass Invisibility and Phase Shift; an end
         // the log never showed is the holder's first action after it
         addSave(holder.id, {
@@ -558,6 +567,7 @@ export function computeOffensiveWindows(
             ? Math.min(iv.toS, firstActionAfterS(holder, iv.fromS))
             : iv.toS,
         });
+    }
   }
 
   for (const enemy of enemies) {

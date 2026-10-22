@@ -197,34 +197,70 @@ export const KW_REDIRECT_PROTECTION_AURA_IDS: ReadonlySet<string> = new Set([
  * Barrier 7, Reversion 5, Ignore Pain 2. The absorb row stays part of the
  * evidence: Reversion's aura-69 effect carries 0 points (a talent's).
  */
-/** How far before an own absorb shield's run its press may lie — the
- * corpusFactScan2 E6 window (60 s). */
+/** How long after its press an own absorb shield still counts as the one
+ * it applied — the corpusFactScan2 E6 window (60 s before the absorb row). */
 export const OWN_SHIELD_PRESS_LOOKBACK_MS = 60_000;
 
-export function isOwnPressedShieldRun(
+/**
+ * The parts of one run of an aura on `holder` (ms) during which it is an own
+ * pressed absorb shield: the whole run for ruling (1)'s ids; for any other
+ * DB2 absorb the log shows absorbing as the unit's own shield, the run ∩
+ * [press, press + `OWN_SHIELD_PRESS_LOOKBACK_MS`] for each own press of it
+ * (its id, a cast it is the effect of, or one of its name) — the scan's own
+ * per-absorb-row reading, so a run kept up by REFRESH far past its press
+ * (b42: Holy Bulwark 432607 6:33–6:43, Reversion's echo, Darkness) stops
+ * counting where the scan stops. [] when none.
+ */
+export function ownPressedShieldSpansMs(
   holder: Pick<ICombatUnit, "id" | "absorbsIn" | "spellCastEvents">,
   spellId: string,
   runStartMs: number,
-): boolean {
-  if (KW_OWN_ROTATIONAL_ABSORB_AURA_IDS.has(spellId)) return true;
-  if (!abilityProfile(spellId).absorbs) return false;
+  runEndMs: number,
+): Array<{ fromMs: number; toMs: number }> {
+  if (KW_OWN_ROTATIONAL_ABSORB_AURA_IDS.has(spellId))
+    return [{ fromMs: runStartMs, toMs: runEndMs }];
+  if (!abilityProfile(spellId).absorbs) return [];
   if (
     !(holder.absorbsIn ?? []).some(
       (a) => a.spellId === spellId && a.srcUnitId === holder.id,
     )
   )
-    return false;
+    return [];
   const name = getEnglishSpellName(spellId, "");
   const castIds = new Set([spellId, ...castsOfEffectAura(spellId)]);
-  return (holder.spellCastEvents ?? []).some(
-    (c) =>
-      c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
-      !!c.spellId &&
-      c.logLine.timestamp >= runStartMs - OWN_SHIELD_PRESS_LOOKBACK_MS &&
-      c.logLine.timestamp <= runStartMs + AURA_BEFORE_CAST_ROW_MAX_MS &&
-      (castIds.has(c.spellId) ||
-        (name !== "" && getEnglishSpellName(c.spellId, "") === name)),
-  );
+  const out: Array<{ fromMs: number; toMs: number }> = [];
+  for (const c of holder.spellCastEvents ?? []) {
+    if (c.logLine.event !== LogEvent.SPELL_CAST_SUCCESS || !c.spellId) continue;
+    if (
+      !castIds.has(c.spellId) &&
+      !(name !== "" && getEnglishSpellName(c.spellId, "") === name)
+    )
+      continue;
+    // the press's aura can be logged a few ms before its cast row
+    const pressMs = c.logLine.timestamp - AURA_BEFORE_CAST_ROW_MAX_MS;
+    const fromMs = Math.max(runStartMs, pressMs);
+    const toMs = Math.min(
+      runEndMs,
+      c.logLine.timestamp + OWN_SHIELD_PRESS_LOOKBACK_MS,
+    );
+    if (fromMs < toMs) out.push({ fromMs, toMs });
+  }
+  return out;
+}
+
+/** Is `spellId`'s run starting at `runStartMs` an own pressed shield at its
+ * start (`ownPressedShieldSpansMs`) — the point reading. */
+export function isOwnPressedShieldRun(
+  holder: Pick<ICombatUnit, "id" | "absorbsIn" | "spellCastEvents">,
+  spellId: string,
+  runStartMs: number,
+): boolean {
+  return ownPressedShieldSpansMs(
+    holder,
+    spellId,
+    runStartMs,
+    runStartMs + 1,
+  ).some((s) => s.fromMs <= runStartMs);
 }
 /**
  * User ruling 2026-10-21 (round-3 q6, 「修」 — settle it with the log): a
