@@ -84,12 +84,25 @@ describe("hiddenPressMs", () => {
     ]);
     expect(hiddenPressMs(u, "342245", T0)).toEqual([BATCH_MS]);
   });
-  it("a copy another press of the unit put up (Exhilaration → Smoke Screen's Survival of the Fittest) is no hidden press", () => {
+  it("a copy applied while seen and re-stated by the batch (Exhilaration → Smoke Screen's Survival of the Fittest) is no hidden press", () => {
     const exhil = {
       spellId: "109304",
-      logLine: { event: LogEvent.SPELL_CAST_SUCCESS, timestamp: BATCH_MS - 2 },
+      logLine: { event: LogEvent.SPELL_CAST_SUCCESS, timestamp: BATCH_MS - 1 },
     };
-    expect(hiddenPressMs(rogue(batch(30), [exhil]), EVASION, T0)).toEqual([]);
+    const u = rogue(
+      [aura(LogEvent.SPELL_AURA_APPLIED, EVASION, BATCH_MS - 1), ...batch(30)],
+      [exhil],
+    );
+    expect(hiddenPressMs(u, EVASION, T0)).toEqual([]);
+  });
+  it("a stealth opener's cast in the batch's ms leaves the hidden press (51-4 0:08 Trueshot beside Moonlight Chakram)", () => {
+    const opener = {
+      spellId: "1264949",
+      logLine: { event: LogEvent.SPELL_CAST_SUCCESS, timestamp: BATCH_MS },
+    };
+    expect(hiddenPressMs(rogue(batch(30), [opener]), EVASION, T0)).toEqual([
+      BATCH_MS,
+    ]);
   });
   it("a press row beside it, or no batch: no hidden press", () => {
     const cast = {

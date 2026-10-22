@@ -25,7 +25,9 @@
  *    whose effect it is (`castsOfEffectAura`) from 1 s before to `AURA_BEFORE_CAST_MAX_S` after
  *    it, its `[ENEMY DEF]` line (aura second, pid, name) must read `[no press
  *    logged]` and not `— removed early`; with one, it must not read `[no press
- *    logged]`.
+ *    logged]`. `unseenPressTagged` (fix-F16, 2026-10-21): an application the
+ *    product's `hiddenPressMs` reads as a press made while unseen must read
+ *    `[pressed while unseen]` instead.
  *  - `procWith` (C5): a friendly Radiant Glory Avenging Wrath activation
  *    (454351 SUCCESS) with a Wake of Ashes 255937 press from
  *    `PROC_TRIGGER_LEAD_MS` before it to 1 ms after (round-1 retest idx 79:
@@ -55,6 +57,7 @@ import { castsOfEffectAura } from "@gladlog/analysis/src/data/castEffectAuras";
 import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData";
 import { AURA_REBROADCAST_GAP_MS } from "@gladlog/analysis/src/utils/auraIntervals";
 import { buffFullDurationForCaster } from "@gladlog/analysis/src/utils/buffDuration";
+import { hiddenPressMs } from "@gladlog/analysis/src/utils/hiddenPress";
 import {
   AURA_BEFORE_CAST_MAX_S,
   MITIGATION_AURA_IDS,
@@ -102,6 +105,7 @@ type Check =
   | "havocMeta"
   | "noPressCopy"
   | "pressedNotTagged"
+  | "unseenPressTagged"
   | "procWith"
   | "auraOnlyAW"
   | "enemyUtilityPress";
@@ -365,7 +369,28 @@ for (const f of files) {
         );
         // counted whether or not its line is there (codex 20-F15-25: a
         // deleted line left the denominator) — a missing line is a miss
-        if (!pressed) {
+        // a press the unit made while unseen (D35, the product's own
+        // `hiddenPressMs`: an aura new in the batch that re-states the unit)
+        // is a press, tagged `[pressed while unseen]` — not a copy (23-2
+        // 1:35: Aura Mastery 31821 in a 20-row re-listing with Dampening,
+        // ran its 8 s)
+        const unseen =
+          !pressed &&
+          [...ids].some((id) =>
+            hiddenPressMs(u, id, start).some((ms) => Math.abs(ms - ts) <= 5),
+          );
+        if (unseen) {
+          bump("unseenPressTagged");
+          if (
+            !line ||
+            !line.includes("[pressed while unseen]") ||
+            line.includes("[no press logged]")
+          )
+            miss(
+              "unseenPressTagged",
+              `${where} ${t} ${u.name} ${name}${line ? "" : " (no line)"}`,
+            );
+        } else if (!pressed) {
           bump("noPressCopy");
           if (
             !line ||
@@ -479,6 +504,7 @@ for (const c of [
   "havocMeta",
   "noPressCopy",
   "pressedNotTagged",
+  "unseenPressTagged",
   "procWith",
   "auraOnlyAW",
   "enemyUtilityPress",

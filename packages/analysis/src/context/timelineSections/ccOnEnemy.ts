@@ -12,6 +12,7 @@
 import { CombatUnitReaction, LogEvent } from "@gladlog/parser-compat";
 
 import { BACKLASH_AURA_CC_TYPE, backlashCcTag } from "../../data/backlashCc";
+import { breakRemovesCc } from "../../data/ccBreakAbilities";
 import { BREAK_RACIAL_SPELL_IDS } from "../../data/racialAbilities";
 import { getEnglishSpellName } from "../../data/spellEffectData";
 import { ccSpellIds } from "../../data/spellTags";
@@ -164,8 +165,13 @@ export function emitCcOnEnemyEntries(
       // (Cyclone REFLECTED, source = holder) is no `ccInstances` member on the
       // enemy side (ruling A52 = A keeps the [CC ON ENEMY] line off it), so
       // the press that ended it named nothing (086019c0 3:14: the Medallion
-      // and the reflected Cyclone's REMOVED in one ms) — read off the aura
-      const reflectedCcEndedBy = (pressMs: number) => {
+      // and the reflected Cyclone's REMOVED in one ms) — read off the aura.
+      // A break racial reads it too, for the controls it removes
+      // (`breakRemovesCc`): 173-1 2:34 / 93-2 1:02, a Retribution Paladin's
+      // Hammer of Justice reflected by Spell Reflection, ended by Will to
+      // Survive in its REMOVED's ms, named nothing (corpusFactScan
+      // trinketOutOf)
+      const reflectedCcEndedBy = (pressMs: number, breakSpellId?: string) => {
         if (!enemyUnit) return undefined;
         const auras = enemyUnit.auraEvents ?? [];
         const removed = auras.find(
@@ -173,6 +179,8 @@ export function emitCcOnEnemyEntries(
             !!a.spellId &&
             ccSpellIds.has(a.spellId) &&
             a.srcUnitId === enemyUnit.id &&
+            (breakSpellId === undefined ||
+              breakRemovesCc(breakSpellId, a.spellId)) &&
             a.logLine.event === LogEvent.SPELL_AURA_REMOVED &&
             Math.abs(a.timestamp - pressMs) <= TRINKET_BREAK_AFTER_REMOVAL_MS &&
             // a removal the log already explains (a BROKEN row of that aura
@@ -238,7 +246,18 @@ export function emitCcOnEnemyEntries(
         if (u.atSeconds < 0 || u.atSeconds > matchEndSeconds) continue;
         if (!BREAK_RACIAL_SPELL_IDS.has(u.spellId) && !u.brokenCc) continue;
         enemyTrinketCount++; // keeps the [ENEMY TRINKET] legend in the prompt
-        addEnemyBreakLine(u.atSeconds, u.name, u.spellId, u.brokenCc);
+        addEnemyBreakLine(
+          u.atSeconds,
+          u.name,
+          u.spellId,
+          u.brokenCc ??
+            (BREAK_RACIAL_SPELL_IDS.has(u.spellId)
+              ? reflectedCcEndedBy(
+                  matchStartMs + Math.round(u.atSeconds * 1000),
+                  u.spellId,
+                )
+              : undefined),
+        );
       }
       for (const cc of summary.ccInstances) {
         // F148: Cleanse Success Verification — check if this CC was removed by an enemy dispel

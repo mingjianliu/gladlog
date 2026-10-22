@@ -96,23 +96,28 @@ export function hiddenPressMs(
         e.spellId === spellId,
     )
     .map((e) => e.logLine.timestamp);
-  // a press of ANOTHER spell just before is a visible unit triggering a
-  // copy, not a re-listing after being unseen (71-5 0:35: Exhilaration put
-  // up Smoke Screen's 3 s Survival of the Fittest among its own auras — the
-  // `[no press logged]` copy read as a hidden press); corpusFactScan's
-  // proc-trigger reading, 0–100 ms before
-  const otherPressMs = (unit.spellCastEvents ?? [])
-    .filter(
-      (e) =>
-        e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
-        !!e.spellId &&
-        !auraIds.has(e.spellId) &&
-        e.spellId !== spellId,
-    )
-    .map((e) => e.logLine.timestamp);
+  // an application the batch then re-states (a second APPLIED of it inside
+  // the batch's span, no REMOVED between) was made while the unit was still
+  // seen — a copy another logged press put up, not a press lost while unseen
+  // (71-5 0:35: Exhilaration's Smoke Screen Survival of the Fittest at
+  // .200, re-stated with Dampening at .201). A press of another spell in the
+  // batch's ms is no such sign: a stealth opener re-lists the unit in the
+  // ms of its first cast (51-4 0:08 Trueshot beside Moonlight Chakram,
+  // 170-1 0:10 Incarnation beside Rake, 117-4 0:11 Shadow Blades beside
+  // Shadow Dance)
+  const restated = (i: number) => {
+    const ms = own[i]!.logLine.timestamp;
+    for (let j = i + 1; j < own.length; j++) {
+      const b = own[j]!;
+      if (b.logLine.timestamp - ms > RESYNC_BATCH_SPAN_MS) return false;
+      if (b.logLine.event === LogEvent.SPELL_AURA_REMOVED) return false;
+      if (b.logLine.event === LogEvent.SPELL_AURA_APPLIED) return true;
+    }
+    return false;
+  };
   const out: number[] = [];
   let up = false;
-  for (const a of own) {
+  for (const [i, a] of own.entries()) {
     const ms = a.logLine.timestamp;
     if (a.logLine.event === LogEvent.SPELL_AURA_REMOVED) up = false;
     else if (a.logLine.event === LogEvent.SPELL_AURA_APPLIED) {
@@ -120,7 +125,7 @@ export function hiddenPressMs(
         !up &&
         batchSize(ms) >= RESYNC_BATCH_MIN_APPLIED &&
         !pressMs.some((p) => Math.abs(p - ms) <= PRESS_ROW_PAIR_MS) &&
-        !otherPressMs.some((p) => p <= ms + 5 && ms - p <= 100)
+        !restated(i)
       )
         out.push(ms);
       up = true;

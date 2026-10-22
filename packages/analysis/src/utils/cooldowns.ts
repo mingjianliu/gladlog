@@ -6302,21 +6302,27 @@ export function hasOffensiveSpellActive(
     )
       continue;
 
+    // one run per aura AND source: two mages' Touch of the Magi on one
+    // target are two debuffs, and the first one's REMOVED does not end the
+    // second (5-2 2:55: Blãýsiêß's 210824 removed at 2:55.25 ended
+    // Thermia's, up to 3:01.0, and Touch of Karma's press lost its
+    // `[friendly offensive CD active]` — fact2Scan offensiveTag)
+    const runKey = `${spellId}|${aura.srcUnitId ?? ""}`;
     if (aura.logLine.event === LogEvent.SPELL_AURA_APPLIED) {
-      const b = applied.get(spellId) ?? [];
-      applied.set(spellId, [...b, aura.timestamp]);
+      const b = applied.get(runKey) ?? [];
+      applied.set(runKey, [...b, aura.timestamp]);
     } else if (
       aura.logLine.event === LogEvent.SPELL_AURA_REMOVED ||
       aura.logLine.event === LogEvent.SPELL_AURA_BROKEN ||
       aura.logLine.event === LogEvent.SPELL_AURA_BROKEN_SPELL
     ) {
-      const b = removed.get(spellId) ?? [];
-      removed.set(spellId, [...b, aura.timestamp]);
+      const b = removed.get(runKey) ?? [];
+      removed.set(runKey, [...b, aura.timestamp]);
     }
   }
 
-  for (const [spellId, applications] of Array.from(applied)) {
-    const removals = removed.get(spellId) ?? [];
+  for (const [runKey, applications] of Array.from(applied)) {
+    const removals = removed.get(runKey) ?? [];
     for (const applyTs of applications) {
       if (applyTs > timestampMs) continue;
       const removeTs = removals.find((r) => r > applyTs);
