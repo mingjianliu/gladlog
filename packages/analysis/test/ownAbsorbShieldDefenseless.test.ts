@@ -48,6 +48,16 @@ describe("isOwnPressedShieldRun", () => {
       isOwnPressedShieldRun(unit([absorb(BB, "ally")], [cast(BB, T)]), BB, T),
     ).toBe(false);
   });
+  it("a shield re-applied by its own buff long after the press still counts (Holy Bulwark 432607, 12 s after it)", () => {
+    const HB = "432607";
+    expect(
+      isOwnPressedShieldRun(unit([absorb(HB)], [cast(HB, T - 12_000)]), HB, T),
+    ).toBe(true);
+    // past the 60 s lookback it is no longer that press's
+    expect(
+      isOwnPressedShieldRun(unit([absorb(HB)], [cast(HB, T - 61_000)]), HB, T),
+    ).toBe(false);
+  });
   it("a passive talent absorb (Frost Shield 207203) never counts — no press", () => {
     expect(isOwnPressedShieldRun(unit([absorb("207203")]), "207203", T)).toBe(
       false,

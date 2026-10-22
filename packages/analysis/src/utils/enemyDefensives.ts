@@ -183,16 +183,24 @@ export const KW_REDIRECT_PROTECTION_AURA_IDS: ReadonlySet<string> = new Set([
  * calls an absorb (`abilityProfile().absorbs`, SCHOOL_ABSORB) that the log
  * shows absorbing for the unit as its own shield this round (an `absorbsIn`
  * row of that id it owns), and that it PRESSED — an own SUCCESS of the aura's
- * id, a cast it is the effect of, or one of its name, from 1 s before the
- * run's start to the aura-before-cast lag after it (corpusFactScan2's E6
- * reading: a talent's passive absorb — Frost Shield, Will of the Necropolis,
- * Fel Armor, Soul Leech, Danger Sense — is no shield it applied on itself).
+ * id, a cast it is the effect of, or one of its name, in the
+ * `OWN_SHIELD_PRESS_LOOKBACK_MS` before the run's start (to the
+ * aura-before-cast lag after it): corpusFactScan2's E6 reading. A pressed
+ * shield can re-apply on its own (Holy Bulwark's 432607 every 2 s of the
+ * buff, Reversion's echo 367364, Darkness's pulses — b41: 22 spans whose run
+ * started with no press beside it); a talent's passive absorb (Frost Shield,
+ * Will of the Necropolis, Fel Armor, Soul Leech, Danger Sense) has no press
+ * at all and is no shield it applied on itself.
  * corpusFactScan2 defenselessSaveUp ownAbsorb (2026-10-22): 134 kill windows
  * / [VULNERABLE] spans ran over a pressed own shield that ate hits — first
  * shield PW:S 1246768 79, Holy Bulwark 21, Blazing Barrier 18, Prismatic
  * Barrier 7, Reversion 5, Ignore Pain 2. The absorb row stays part of the
  * evidence: Reversion's aura-69 effect carries 0 points (a talent's).
  */
+/** How far before an own absorb shield's run its press may lie — the
+ * corpusFactScan2 E6 window (60 s). */
+export const OWN_SHIELD_PRESS_LOOKBACK_MS = 60_000;
+
 export function isOwnPressedShieldRun(
   holder: Pick<ICombatUnit, "id" | "absorbsIn" | "spellCastEvents">,
   spellId: string,
@@ -212,7 +220,7 @@ export function isOwnPressedShieldRun(
     (c) =>
       c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
       !!c.spellId &&
-      c.logLine.timestamp >= runStartMs - 1000 &&
+      c.logLine.timestamp >= runStartMs - OWN_SHIELD_PRESS_LOOKBACK_MS &&
       c.logLine.timestamp <= runStartMs + AURA_BEFORE_CAST_ROW_MAX_MS &&
       (castIds.has(c.spellId) ||
         (name !== "" && getEnglishSpellName(c.spellId, "") === name)),
