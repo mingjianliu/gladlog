@@ -177,6 +177,11 @@ export const KW_REDIRECT_PROTECTION_AURA_IDS: ReadonlySet<string> = new Set([
  * Mass Invisibility spans, 564 s in all — 0 melee swings, 1 ranged hit, 98
  * direct spell hits (79 within 0.5 s of the aura going up, the rest by 2 s,
  * none after: already in flight), 175 periodic ticks (DoTs keep ticking).
+ * Re-measured 2026-10-22 on the every-30th new-season files (911 aura runs,
+ * mage and allies, median 0.63 s): landed direct hits ≤ 0.5 s after it went
+ * up 273, 0.5–2 s 75, > 2 s 8 — all area damage (Bladestorm, Wake of Ashes,
+ * Consecration, a guardian's Wrath of Nathreza), no melee / ranged / single
+ * target spell; the user kept the ruling (「都不改」).
  * Phase Shift 408558 (Fade's talent: every attack and spell avoided for its
  * second) the same (fact3 D54). Both end `defenseless` while up; an aura
  * whose REMOVED the log never shows (an opponent who went unseen takes the
