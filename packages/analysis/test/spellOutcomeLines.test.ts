@@ -177,6 +177,29 @@ describe("reflectedSpells (0051f0c9)", () => {
     const [r] = reflectedSpells([caster, unit("Player-W")], T0);
     expect(r!.damageBack).toBe(112_000);
   });
+  it("a dispel backlash of the reflected spell's name (Unstable Affliction 196364) is not the return", () => {
+    const UA = "1259790";
+    const caster = unit("Player-P", {
+      missesOut: [miss(UA)],
+      damageIn: [
+        {
+          spellId: UA,
+          srcUnitId: "Player-P",
+          effectiveAmount: -61_500,
+          logLine: { timestamp: T0 + 6_000 },
+        },
+        {
+          spellId: "196364",
+          srcUnitId: "Player-P",
+          effectiveAmount: -127_700,
+          logLine: { timestamp: T0 + 9_000 },
+        },
+      ],
+      advancedActions: advanced(500_000),
+    });
+    const [r] = reflectedSpells([caster, unit("Player-W")], T0);
+    expect(r!.damageBack).toBe(61_500);
+  });
   it("fact3 D15 / D40: the reflector's own copy of the DoT on the caster is not the return; the copy ticking caster → caster is", () => {
     const AGONY = "980";
     const tick = (src: string, amt: number, ms: number) => ({

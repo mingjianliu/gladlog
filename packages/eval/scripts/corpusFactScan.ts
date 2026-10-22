@@ -55,7 +55,10 @@
  *    line (`… broke this CC` / `ended by their …`; the `[TRINKET]` line
  *    prints `out of` only for a disarm), so there the check reads the last
  *    such line at or before the trinket's second (one that says the control
- *    outlived the round is not judged).
+ *    outlived the round is not judged). Not judged either (fix-F16,
+ *    2026-10-21): a control whose line says the round ended on it, and one
+ *    that ran its full official length × DR share — it expired in the
+ *    trinket's ms.
  *  - `fullRunEndedEarly` — measurement: per aura id, the clean runs (APPLIED
  *    → REMOVED, same source and dest, no REFRESH / re-APPLIED between, both
  *    inside the round). Ids with ≥ 20 runs of which ≥ 80 % end within ±0.1 s
@@ -97,7 +100,10 @@ import { gunzipSync } from "node:zlib";
 import { ensureAnalysisData } from "@gladlog/analysis";
 import { castsOfEffectAura } from "@gladlog/analysis/src/data/castEffectAuras";
 import { ROOT_SPELL_IDS } from "@gladlog/analysis/src/data/rootSpells";
-import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData";
+import {
+  ccFullDurationSeconds,
+  getEnglishSpellName,
+} from "@gladlog/analysis/src/data/spellEffectData";
 import spellEffectGenerated from "@gladlog/analysis/src/data/spellEffectGenerated.json";
 import { ccSpellIds } from "@gladlog/analysis/src/data/spellTags";
 import { GladLogParser, type GladMatch } from "@gladlog/parser";
@@ -722,6 +728,49 @@ for (const f of files) {
         bump("auraCastGap:trinket skipped (log names another breaker)");
         continue;
       }
+      // Excluded shapes (fix-F16, 2026-10-21 — the batch-1 residue, read by
+      // hand): (1) the round was over — the control's line says it outlived
+      // or was cut by the round's end (a press after the deciding death,
+      // 84-4 2:12 / 1-5 2:20); (2) the control ran its full length — its
+      // removal is at or past landing + official length × the line's DR
+      // share (−100 ms): it expired in the trinket's ms and no press broke
+      // it (93-1 0:42: a 6 s Full-DR Polymorph removed at 6.0 s)
+      const DR_SHARE: Record<string, number> = {
+        Full: 1,
+        "50%": 0.5,
+        "25%": 0.25,
+      };
+      const ranFull = (b: any): boolean => {
+        const line = ccLineOf(b) ?? "";
+        const full = ccFullDurationSeconds(b.spellId);
+        const share =
+          DR_SHARE[/\[DR: [^\]]* (Full|50%|25%)\]/.exec(line)?.[1] ?? "Full"];
+        const k = rows.indexOf(b);
+        let landed: number | undefined;
+        for (let j = k - 1; j >= 0; j--)
+          if (
+            rows[j].spellId === b.spellId &&
+            rows[j].srcUnitId === b.srcUnitId &&
+            ev(rows[j]) === APPLIED
+          ) {
+            landed = tsOf(rows[j]);
+            break;
+          }
+        return (
+          full !== undefined &&
+          landed !== undefined &&
+          share !== undefined &&
+          tsOf(b) - landed >= full * share * 1000 - 100
+        );
+      };
+      const roundOver = (b: any) =>
+        (ccLineOf(b) ?? "").includes("when the round ended");
+      if (ended.every((b) => otherBreaker(b) || roundOver(b) || ranFull(b))) {
+        bump(
+          "auraCastGap:trinket skipped (round over / control ran its length)",
+        );
+        continue;
+      }
       if (enemy) {
         // the line sits at the press's second: the aura's, or the next
         // when the cast row crosses it
@@ -745,7 +794,7 @@ for (const f of files) {
       } else {
         // the owner's side: the control's own [CC ON TEAM] line
         for (const b of ended) {
-          if (otherBreaker(b)) continue;
+          if (otherBreaker(b) || roundOver(b) || ranFull(b)) continue;
           const cc = nameOf(b.spellId, b.spellName);
           const last = ccLineOf(b);
           // a control the line says outlived the round (the trinket came

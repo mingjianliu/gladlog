@@ -10,6 +10,7 @@
 import { ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
 import { abilityProfile } from "../data/abilityProfile";
+import { BACKLASH_AURA_CC_TYPE } from "../data/backlashCc";
 import { BREAK_RACIAL_SPELL_IDS } from "../data/racialAbilities";
 import { ROOT_SPELL_IDS } from "../data/rootSpells";
 import { getEnglishSpellName } from "../data/spellEffectData";
@@ -159,13 +160,20 @@ export function reflectedSpells(
     const chains: Array<{ first: (typeof reflects)[number]; last: number }> =
       [];
     for (const m of reflects) {
-      const c = [...chains]
-        .reverse()
-        .find(
-          (x) =>
-            x.first.spellId === m.spellId &&
-            x.first.destUnitId === m.destUnitId,
-        );
+      const c = [...chains].reverse().find(
+        (x) =>
+          // one spell by id or English name: a reflected Frostbolt logs a
+          // REFLECT under its damage id 228597 and, 0.5 s later, under its
+          // cast id 116 (111-1 8:15: the two halves of 96k split into two
+          // chains and the line printed 47k)
+          (x.first.spellId === m.spellId ||
+            (!!x.first.spellId &&
+              !!m.spellId &&
+              getEnglishSpellName(x.first.spellId, "") !== "" &&
+              getEnglishSpellName(x.first.spellId, "") ===
+                getEnglishSpellName(m.spellId, ""))) &&
+          x.first.destUnitId === m.destUnitId,
+      );
       if (c && m.logLine.timestamp - c.last <= REFLECT_CHAIN_GAP_MS)
         c.last = m.logLine.timestamp;
       else chains.push({ first: m, last: m.logLine.timestamp });
@@ -199,9 +207,14 @@ export function reflectedSpells(
     // names (Frostfire Bolt: cast 431044, damage 468655 — 112k back with no
     // line), and a hit from the reflector can be logged a few ms before the
     // REFLECT row, as the own-id rows are (`REFLECT_OWN_ID_LEAD_MS`)
+    // — the same id or English name (`damagePress`' rule) — but never a
+    // dispel backlash of the same name: Unstable Affliction's 196364 is the
+    // damage the caster took dispelling the reflected copy off itself, not
+    // the copy's own (11-1 0:44: 127.7k of a printed 189k)
     const sameSpell = (reflected: string, hit: string) =>
       reflected === hit ||
-      (getEnglishSpellName(reflected, "") !== "" &&
+      (!BACKLASH_AURA_CC_TYPE.has(hit) &&
+        getEnglishSpellName(reflected, "") !== "" &&
         getEnglishSpellName(reflected, "") === getEnglishSpellName(hit, ""));
     const owning = (spellId: string, src: string | undefined, ts: number) => {
       let best: (typeof chains)[number] | undefined;
