@@ -75,6 +75,7 @@ describe("G7-P3", () => {
       healCdRendered: true,
       procRendered: false,
       utilityRendered: false,
+      unseenRendered: false,
     });
   });
   it("the heal-CD set never overlaps the burst-window set", () => {

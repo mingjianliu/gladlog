@@ -97,6 +97,8 @@ function render(
     /** advanced samples of the owner (mana readings for the F-C3 legend) */
     ownerAdvancedActions?: any[];
     ccTrinketSummaries?: any[];
+    /** indices of the casts that go to an unnamed pet (non-ASCII name) */
+    petCasts?: number[];
   } = {},
 ): string {
   // 14 Riptides ≥ SPAM_FOLD_THRESHOLD (12) so the fold engages; the last
@@ -104,7 +106,11 @@ function render(
   const castTimes = [2, 5, 8, 11, 14, 17, 20, 23, 26, 29, 32, 52, 55, 58];
   const owner = makeUnit("PlayerYou", {
     spec: CombatUnitSpec.Shaman_Restoration,
-    spellCastEvents: castTimes.map((t) => cast(t, "Alice")),
+    spellCastEvents: castTimes.map((t, i) =>
+      over.petCasts?.includes(i)
+        ? { ...cast(t, "Pet-0-1-1-1-416-0104D28E67"), destUnitName: "塔洛特" }
+        : cast(t, "Alice"),
+    ),
     ...(over.ownerAdvancedActions
       ? { advancedActions: over.ownerAdvancedActions }
       : {}),
@@ -258,9 +264,23 @@ describe("GH #97 timeline flags", () => {
         },
       ],
     });
-    expect(text).toMatch(/0:20 {2}\[YOU\] \[CAST\] {3}Riptide → 2 \[cast succeeded before CC landed\]/);
+    expect(text).toMatch(
+      /0:20 {2}\[YOU\] \[CAST\] {3}Riptide → 2 \[cast succeeded before CC landed\]/,
+    );
     // all 14 presses in the count, the annotated one among them
     expect(text).toContain("0:02  [YOU] [CAST]   Riptide (x14 over 56s) → 2");
+  });
+
+  it("fact3 D21: casts on a unit the label cannot name make the fold say `various`, not claim the named target", () => {
+    TIMELINE_LINE_FLAGS.deathWindowUnfold = "perCast";
+    const text = render({ petCasts: [1, 2, 3] });
+    expect(text).toContain(
+      "0:02  [YOU] [CAST]   Riptide (x14 over 56s) → various",
+    );
+    // control: all on Alice → the one named target
+    expect(render()).toContain(
+      "0:02  [YOU] [CAST]   Riptide (x14 over 56s) → 2",
+    );
   });
 
   it("death-window unfold: summary prints one counted [YOU] [HEALS] line per window", () => {

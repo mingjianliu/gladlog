@@ -190,7 +190,7 @@ describe("bindBreakToWindow and findBrokenCC", () => {
       expect(bindBreakToWindow([window], 17_000)).toBeUndefined();
     });
 
-    it("matches exactly at the 250 ms before-apply boundary (not 251), and at 50 ms after the removal (not 51)", () => {
+    it("matches exactly at the 250 ms before-apply boundary (not 251), and at 100 ms after the removal (not 101)", () => {
       const window: ICCBreakableWindow = { applyMs: 10_000, removeMs: 16_000 };
       // the before-apply side: a control logged after the press and removed
       // in its own ms (one that stays on is no press's — fact2 605)
@@ -201,9 +201,11 @@ describe("bindBreakToWindow and findBrokenCC", () => {
       // At -251ms (9_749ms) -> undefined
       expect(bindBreakToWindow([lagged], 9_749)).toBeUndefined();
 
-      // After the removal the bound is 50 ms (TRINKET_BREAK_AFTER_REMOVAL_MS)
-      expect(bindBreakToWindow([window], 16_050)).toBe(window);
-      expect(bindBreakToWindow([window], 16_051)).toBeUndefined();
+      // After the removal the bound is 100 ms (TRINKET_BREAK_AFTER_REMOVAL_MS
+      // = CAST_ROW_LAG_MAX_MS; fact3 D23 / D39: 72 / 85 ms lags)
+      expect(bindBreakToWindow([window], 16_085)).toBe(window);
+      expect(bindBreakToWindow([window], 16_100)).toBe(window);
+      expect(bindBreakToWindow([window], 16_101)).toBeUndefined();
     });
   });
 

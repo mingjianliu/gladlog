@@ -2,7 +2,8 @@
  * The one "this unit used its PvP trinket" predicate (triage 2026-09-29
  * enemy-def F-E19 + res-readiness F-C15, G7-P2). Two log shapes:
  *
- *  - Gladiator's Medallion: a SPELL_CAST_SUCCESS of 336126 (the press);
+ *  - Gladiator's Medallion: a SPELL_CAST_SUCCESS of 336126 (the press), timed
+ *    at its own self-aura's APPLIED when that is logged just before it;
  *  - Adaptation: no cast at all — the logged trigger is the self-aura
  *    283167 ("PvP Trinket", DB2 0.1 s, CD 120 s; observed), followed by the
  *    lockout debuff 336139. The product used to read Adaptation from
@@ -37,12 +38,40 @@ export interface IPvpTrinketUse {
   kind: "medallion" | "adaptation";
 }
 
+/** How far before its SPELL_CAST_SUCCESS the Medallion's own 336126 aura
+ * can be logged and still be that press's (fact3 D23 / D39, corpusFactScan
+ * trinketOutOf): 605 new-season files, every 30th — all 6,017 casts have the
+ * self-aura before them; gap p99 2 ms, 5 over 50 ms, max 150 ms. */
+export const MEDALLION_AURA_BEFORE_CAST_MS = 300;
+
 export function pvpTrinketUses(unit: ICombatUnit): IPvpTrinketUse[] {
   const out: IPvpTrinketUse[] = [];
+  // the press instant is its own aura's APPLIED — logged in the same ms as
+  // the control it broke came off, the cast row up to 150 ms later
+  // (3c1a9208 0:12: 85 ms; 8888b780 0:16: 72 ms — the break bound nothing)
+  const medallionAuras = (unit.auraEvents ?? []).filter(
+    (a) =>
+      a.spellId === MEDALLION_SPELL_ID &&
+      a.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
+      a.srcUnitId === unit.id &&
+      (a.destUnitId === undefined || a.destUnitId === unit.id),
+  );
+  const usedAura = new Set<(typeof medallionAuras)[number]>();
   for (const c of unit.spellCastEvents ?? []) {
     if (c.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
     if (c.spellId !== MEDALLION_SPELL_ID) continue;
-    out.push({ atMs: c.logLine.timestamp, kind: "medallion" });
+    const castMs = c.logLine.timestamp;
+    const aura = medallionAuras.find(
+      (a) =>
+        !usedAura.has(a) &&
+        a.logLine.timestamp <= castMs &&
+        castMs - a.logLine.timestamp <= MEDALLION_AURA_BEFORE_CAST_MS,
+    );
+    if (aura) usedAura.add(aura);
+    out.push({
+      atMs: aura ? aura.logLine.timestamp : castMs,
+      kind: "medallion",
+    });
   }
   const auras = (unit.auraEvents ?? []).filter(
     (a) => a.srcUnitId === unit.id || a.destUnitId === unit.id,

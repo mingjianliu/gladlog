@@ -21,6 +21,7 @@ import {
   LogEvent,
 } from "@gladlog/parser-compat";
 
+import { BACKLASH_AURA_CC_TYPE } from "../data/backlashCc";
 import { effectAuraViaName } from "../data/castEffectAuras";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import { ccSpellIds } from "../data/spellTags";
@@ -396,7 +397,13 @@ export function analyzeHealerExposureAtBurst(
       for (const { spellName, spellId, category } of ccSources) {
         if (listedCategories.has(category)) continue;
         if (
-          enemyCcOnCooldownAt(enemy, spellId, matchStartMs, renderedSecond)
+          enemyCcOnCooldownAt(
+            enemy,
+            spellId,
+            matchStartMs,
+            renderedSecond,
+            allUnits ?? [healer],
+          )
         )
           continue;
         listedCategories.add(category);
@@ -573,6 +580,9 @@ export function landedControlsForKit(
     (a, b) => a.atSeconds - b.atSeconds,
   )) {
     if (!rendersCcOnTeamLine(cc)) continue;
+    // fact3 D37: a dispel-backlash silence is a [SILENCE] line, not a
+    // control that landed (Unstable Affliction "landed 3×" in the kit)
+    if (BACKLASH_AURA_CC_TYPE.get(cc.spellId) === "silence") continue;
     const enemy =
       enemies.find((e) => e.id === cc.sourceId) ??
       summonOwnerById(units, cc.sourceId, enemies);
@@ -1013,6 +1023,44 @@ function avoidanceCastSeconds(
 }
 
 /**
+ * fact3 D44 (2026-10-21): controls a talent triggers off another button —
+ * the control is ready only when that button is. Terror of the Skies 372245:
+ * DB2 puts it on the talent 371032 (aura 4, trigger 372245), whose tooltip
+ * ties it to Deep Breath. 605 capture (every 30th new-season file): of 1,014
+ * 372245 landings, 534 followed a 433874 Deep Breath press and 290 a 357210
+ * one, 8 a 403631 Breath of Eons, all within 3.6 s (median 1.1 s); 178 had no
+ * press row of either at all. [HEALER EXPOSURE] listed it as an in-LoS
+ * threat 45 s into Deep Breath's 120 s (8888b780 r3 1:03).
+ */
+export const TALENT_TRIGGERED_CONTROL_BUTTONS: Readonly<
+  Record<string, readonly string[]>
+> = {
+  "372245": ["433874", "357210", "403631"], // Terror of the Skies ← Deep Breath / Breath of Eons
+};
+/** A landing within this of a press (or of an earlier landing) is that
+ * press's: 3.6 s measured max, one flight stunning several units. */
+const TRIGGERED_CONTROL_LANDING_S = 5;
+
+/** Match seconds of `auraId` APPLIED rows from `enemy` on `units`. */
+function auraLandingsFrom(
+  enemy: ICombatUnit,
+  auraId: string,
+  units: Iterable<ICombatUnit>,
+  matchStartMs: number,
+): number[] {
+  return [...units]
+    .flatMap((u) => u.auraEvents ?? [])
+    .filter(
+      (a) =>
+        a.spellId === auraId &&
+        a.srcUnitId === enemy.id &&
+        a.logLine.event === LogEvent.SPELL_AURA_APPLIED,
+    )
+    .map((a) => (a.logLine.timestamp - matchStartMs) / 1000)
+    .sort((a, b) => a - b);
+}
+
+/**
  * fact2 (2026-10-20): whether the enemy's control `ccSpellId` (the landed
  * aura id, or the spec template's) is certainly on cooldown at the window's
  * rendered second — the threat list named Mighty Bash 4 s after a press with
@@ -1032,6 +1080,8 @@ function enemyCcOnCooldownAt(
   ccSpellId: string,
   matchStartMs: number,
   renderedSecond: number,
+  /** the units a triggered control can have landed on */
+  landingUnits: Iterable<ICombatUnit>,
 ): boolean {
   // the casts this enemy pressed that ARE this control's button: its own
   // id, a cast whose effect it is by DB2 name (Ring of Frost 113724 →
@@ -1051,17 +1101,44 @@ function enemyCcOnCooldownAt(
             (ccName !== "" && getEnglishSpellName(id, "") === ccName)),
       ),
   );
-  const presses = [...castIds]
-    .flatMap((id) =>
-      avoidanceCastSeconds(enemy, id, matchStartMs, renderedSecond),
+  // fact3 D44: a control a talent triggers off another button (Terror of
+  // the Skies off Deep Breath) — that button's presses, and the control's
+  // own landings from this enemy where no press row is logged
+  const buttons = TALENT_TRIGGERED_CONTROL_BUTTONS[ccSpellId] ?? [];
+  for (const e of enemy.spellCastEvents ?? [])
+    if (
+      e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+      e.spellId &&
+      buttons.includes(e.spellId)
     )
+      castIds.add(e.spellId);
+  const castPresses = [...castIds].flatMap((id) =>
+    avoidanceCastSeconds(enemy, id, matchStartMs, renderedSecond),
+  );
+  const landingPresses: number[] = [];
+  if (buttons.length > 0) {
+    const landings = auraLandingsFrom(
+      enemy,
+      ccSpellId,
+      landingUnits,
+      matchStartMs,
+    );
+    for (const t of landings)
+      if (
+        ![...castPresses, ...landingPresses].some(
+          (p) => t >= p && t - p <= TRIGGERED_CONTROL_LANDING_S,
+        )
+      )
+        landingPresses.push(t);
+  }
+  const presses = [...castPresses, ...landingPresses]
     .filter((t) => t < renderedSecond)
     .sort((a, b) => a - b);
   if (presses.length === 0) return false;
   // the button's cooldown: a pressed id's first, else the control's own —
   // the first that has one (Maim's stun aura 203123 has a row with no
   // cooldown; its button 22570 carries the 30 s)
-  const cdId = [...castIds, ccSpellId].find(
+  const cdId = [...castIds, ...buttons, ccSpellId].find(
     (id) => (unitCooldownOf(enemy, id)?.cooldownSeconds ?? 0) > 0,
   );
   const cd = cdId === undefined ? undefined : unitCooldownOf(enemy, cdId);

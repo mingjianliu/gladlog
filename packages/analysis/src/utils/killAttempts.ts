@@ -1764,6 +1764,24 @@ function attributeFailure(
       else immunityUpSinceS = Math.max(immunityUpSinceS ?? 0, iv.fromS);
     }
     if (!inSave(startMs) && !upAtStart) continue;
+    // fact3 D19 (2cc2373a 0:49): a school-limited immunity the target put on
+    // ITSELF inside the attempt and the school share does not reach the
+    // floor is still a defensive it popped — the self-cast mirror of A30's
+    // "still an external if an ally cast it inside the span" (Blessing of
+    // Spellwarding at 0:49.9 against a go that was 38 % magic read "healed
+    // through", its Holy hits coming back IMMUNE)
+    if (
+      isImmunitySaveAura(iv.spellId) &&
+      bySelf &&
+      inSave(startMs) &&
+      !immunityCovers(iv.spellId) &&
+      !poppedIds.has(iv.spellId)
+    ) {
+      poppedIds.add(iv.spellId);
+      defensivePopped.push(getEnglishSpellName(iv.spellId, iv.spellName));
+      defensivePoppedAtS.push(iv.fromS);
+      continue;
+    }
     // work order 2026-10-15 Part 2 (user 「好」): an aura the ATTACKING side put
     // on the target is not the target's defensive (an attacker's Touch of
     // Karma tether) — the mitigation audit's side rule, by unit

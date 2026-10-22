@@ -63,6 +63,7 @@ import { binarySearchClosest } from "./binarySearch";
 import { buffFullDurationForCaster } from "./buffDuration";
 import { CONTROL_EFFECT_MIN_HIT_SHARE, isControlCast } from "./castMissRows";
 import { COPY_CAST_IDS, isFormReshiftCast } from "./castPress";
+import { hiddenPressMs } from "./hiddenPress";
 import { incomingPressureEvents } from "./incomingPressure";
 import { logDatedNumberAt } from "./logEra";
 import {
@@ -4201,7 +4202,9 @@ function extractMajorCooldownsAll(
     if (METAMORPHOSIS_PRESS_CAST_IDS.has(id))
       activatedSpellIds.add(canonicalSpellId(id));
   for (const id of AURA_ACTIVATION_PROVES_BUTTON_IDS)
-    if (auraOnlyActivationSeconds(unit, id, matchStartMs, matchEndMs).length > 0)
+    if (
+      auraOnlyActivationSeconds(unit, id, matchStartMs, matchEndMs).length > 0
+    )
       activatedSpellIds.add(id);
   // A talent whose entry carries ANOTHER id than the button it grants proves
   // that button (`grantedButtonIds`, the official TraitDefinition
@@ -4389,7 +4392,9 @@ function extractMajorCooldownsAll(
               isControlCast(spellId) || ccMechanicOf(spellId) !== undefined;
             tags.push(
               ...rule.tags.map((t) =>
-                t === SpellTag.Control && !officialControl
+                (t === SpellTag.Control && !officialControl) ||
+                (t === SpellTag.Defensive &&
+                  NOT_DEFENSIVE_BY_NAME_IDS.has(spellId))
                   ? SpellTag.Utility
                   : t,
               ),
@@ -4894,6 +4899,16 @@ function buildCooldownEntry(
     matchStartMs,
     matchStartMs + matchDurationSeconds * 1000,
   ).map((timeSeconds) => ({ timeSeconds }));
+  // A press made while the unit was unseen: its row is lost, its aura shows
+  // up new in the batch that re-states the unit (`hiddenPressMs`, fact3
+  // D35 — an enemy rogue's Evasion under Mass Invisibility read [UNUSED]).
+  // Timed at that batch, the latest it can have been.
+  const hiddenRawCasts: ICooldownCast[] = hiddenPressMs(
+    unit,
+    spell.spellId,
+    matchStartMs,
+    matchStartMs + matchDurationSeconds * 1000,
+  ).map((ms) => ({ timeSeconds: (ms - matchStartMs) / 1000 }));
 
   // A Solo Shuffle round's endTime is its deciding death + 2 s, but its
   // units keep the whole between-round gap — including the NEXT round's
@@ -4913,7 +4928,9 @@ function buildCooldownEntry(
   // and the kit read `[UNUSED]`)
   const inRound = (c: ICooldownCast) => c.timeSeconds <= matchDurationSeconds;
   const effectRawCasts: ICooldownCast[] =
-    !castRawCasts.some(inRound) && !auraRawCasts.some(inRound)
+    !castRawCasts.some(inRound) &&
+    !auraRawCasts.some(inRound) &&
+    !hiddenRawCasts.some(inRound)
       ? effectEvidenceCastSeconds(
           unit,
           spell.spellId,
@@ -4924,6 +4941,7 @@ function buildCooldownEntry(
   const rawCasts: ICooldownCast[] = [
     ...castRawCasts,
     ...auraRawCasts,
+    ...hiddenRawCasts,
     ...effectRawCasts,
   ]
     .filter(inRound)
@@ -5229,6 +5247,20 @@ function buildCooldownEntry(
  * answers "cheaper substitute for a wall", the save roster answers "save cooldown at all"; Stasis is in
  * both on purpose (user-signed save_role 2026-09-04, never a substitute).
  */
+/**
+ * fact3 D56 / D57 (2026-10-21): buttons the discovery name rule tags
+ * Defensive (`DISCOVERY_TAG_RULES`, `/spirit/`) that do nothing defensive —
+ * they stay on the ledger as Utility. Spiritwalker's Grace 79206: DB2 casts
+ * while moving and nothing else (no reduction, absorb, immunity or heal —
+ * `isSurvivalWall` false); the healer save roster already strips it for
+ * Restoration (`healerSaveCdStripDefensive`). An Elemental Shaman's
+ * cd-hoarded listed it as a ready major defensive and its press read
+ * `cheaper available: Astral Shift` (dff2c7a6 r3 2:44).
+ */
+export const NOT_DEFENSIVE_BY_NAME_IDS: ReadonlySet<string> = new Set([
+  "79206", // Spiritwalker's Grace
+]);
+
 /** @internal exported for data/curatedIdRegistry (corpus rot scan) */
 // 2026-08-21 S2 corpus scan (10,682 matches): removed 8178 old Grounding Totem id (204336 kept) — 0 occurrences, ability gone in 12.x (eval-private/reports/s2-health-2026-08-21)
 export const NON_SUBSTITUTE_DEFENSIVE_IDS = new Set<string>([

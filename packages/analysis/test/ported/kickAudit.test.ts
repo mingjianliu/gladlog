@@ -54,6 +54,58 @@ function makeKicker(kickTs: number, destUnitId = "e1") {
   } as any);
 }
 
+describe("kickAudit — a pet's own kick (fact3 D28)", () => {
+  const SPELL_LOCK_PET = "19647";
+  const COMMAND_DEMON = "119910";
+  const pet = (kickTs: number) =>
+    makeUnit("pet1", {
+      name: "Felhunter",
+      ownerId: "p1",
+      spellCastEvents: [
+        makeSpellCastEvent(
+          SPELL_LOCK_PET,
+          kickTs,
+          "e1",
+          "Enemy",
+          "pet1",
+          "Felhunter",
+          0,
+          "Spell Lock",
+        ),
+      ],
+    } as any);
+  const run = (ownerRows: any[], kickTs: number) => {
+    const player = makeUnit("p1", {
+      name: "Warlock",
+      info,
+      spellCastEvents: ownerRows,
+    } as any);
+    const enemy = makeUnit("e1", { name: "Enemy", info } as any);
+    const combat = {
+      ...makeCombat(),
+      units: { p1: player, pet1: pet(kickTs), e1: enemy },
+    };
+    return analyzeKickAudit(player, [enemy], combat);
+  };
+  it("an autocast Spell Lock with no owner press is audited", () => {
+    expect(run([], MATCH_START + 29_728)).toHaveLength(1);
+  });
+  it("beside the owner's Command Demon row it is that press, counted once", () => {
+    const t = MATCH_START + 29_728;
+    const ownerRow = makeSpellCastEvent(
+      COMMAND_DEMON,
+      t,
+      "e1",
+      "Enemy",
+      "p1",
+      "Warlock",
+      0,
+      "Spell Lock",
+    );
+    expect(run([ownerRow], t)).toHaveLength(1);
+  });
+});
+
 describe("kickAudit", () => {
   it("labels a kick landed when SPELL_INTERRUPT confirms it (D1-K1)", () => {
     const kickTs = MATCH_START + 20_000;

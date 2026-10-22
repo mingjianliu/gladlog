@@ -60,8 +60,10 @@ import { buffFullDurationForCaster } from "./buffDuration";
 import {
   cannotCastIntervalsForSpells,
   castBlockingAuraAt,
+  castBlockingAuraIntervals,
   coveredMsWithin,
   hardCcAuraAt,
+  isSilenceOnlyAura,
   silenceIntervals,
 } from "./cannotCastIntervals";
 import {
@@ -70,6 +72,7 @@ import {
   isControlCast,
   missBelongsToCast,
 } from "./castMissRows";
+import { AURA_BEFORE_CAST_ROW_MAX_MS, CAST_ROW_LAG_MAX_MS } from "./castRowLag";
 import { oppressingRoarOnAt, oppressingRoarOnAtMs } from "./ccBreakAnalysis";
 import {
   ccFullDurationForApplication,
@@ -208,9 +211,12 @@ export const TRINKET_BREAK_TOLERANCE_MS = 250;
  * 219 damage breaks (SPELL_AURA_BROKEN / _SPELL) fall before the cast, 91 %
  * of them by more than 25 ms. The symmetric 250 ms let "used PvP trinket out
  * of Howl of Terror" name a Howl that Starsurge broke 152 ms earlier (round 2
- * W2f, dece). 50 ms keeps every bin the trinket's own removal lands in.
+ * W2f, dece). 50 ms kept every bin the trinket's own removal lands in;
+ * the round-3 audit found 72 / 85 ms lags (fact3 D23 / D39) — the shared
+ * `CAST_ROW_LAG_MAX_MS` (100 ms, measured), with a damage-broken or dispelled
+ * removal excluded by the binder (`endedByLoggedCause`).
  */
-export const TRINKET_BREAK_AFTER_REMOVAL_MS = 50;
+export const TRINKET_BREAK_AFTER_REMOVAL_MS = CAST_ROW_LAG_MAX_MS;
 
 // Position snapshots are event-driven; beyond this gap to the nearest snapshot
 // the interpolated position is fabricated (unit idle/stealthed — worst in openers).
@@ -275,10 +281,13 @@ export const CC_AVOIDANCE_BUFF_SPELLS = new Map<string, string>([
   // (51.2% at n=41 was noise) — deliberately NOT listed.
   ["433874", "Deep Breath"], // Evoker flight, unstoppable while airborne; immuneRate 93.8% (76/5)
   ["357210", "Deep Breath"], // variant id, immuneRate 85.4% (41/7)
-  ["1252613", "Command Squadron"], // immuneRate 92.9% (65/5), aura on players
-  ["1261393", "Command Squadron"], // variant id, immuneRate 93.8% (76/5)
-  ["1261395", "Command Squadron"], // variant id, immuneRate 93.8% (76/5)
-  ["410355", "Stretch Time"], // immuneRate 93.1% (67/5), aura on players
+  // fact3 D27 (2026-10-21): Command Squadron 1252613 / 1261393 / 1261395
+  // and Stretch Time 410355 are NOT listed — their immune rates (92.9–93.8%)
+  // were Deep Breath's: one Deep Breath press applies all of them with
+  // 433874, and DB2 gives them no immunity (no aura-77 mechanic mask, only
+  // 433874 / 357210 carry 2360). Listed, Command Squadron (applied 1 ms
+  // first) was named as the cause of a Fear the flight made immune
+  // (422ba114-r0 0:49).
   ["443028", "Celestial Conduit"], // Monk channel immunity (same shape as Ultimate Penitence), immuneRate 62.5% (20/12); real 90s CD
 ]);
 /**
@@ -614,6 +623,31 @@ export const MAGIC_ONLY_IMMUNITY_IDS = new Set<string>([
   "410358", // Anti-Magic Shell (Spellwarden ally-cast — same magic-only semantics)
   "23920", // Spell Reflection
 ]);
+/**
+ * fact3 D3 (2026-10-21): avoidances that turn a spell back — the miss row they
+ * cause is REFLECT, never IMMUNE. Spell Reflection 23920 (DB2 SpellEffect
+ * 12.1.5.70391): aura 28 REFLECT_SPELLS, plus a trigger of 385391 (aura 87,
+ * −20 % magic damage taken) — no immunity effect. 605 capture: misses on a
+ * unit under 23920 were REFLECT 1,350 vs IMMUNE 75; 02b930cd 1:43: a
+ * Terror of the Skies at stun DR Immune read "Spell Reflection was up". An
+ * IMMUNE miss is never credited to one (`ccImmuneCauseOf`, the
+ * `[CC AVOIDED?]` buff credit).
+ */
+export const REFLECT_ONLY_AVOIDANCE_IDS: ReadonlySet<string> = new Set([
+  "23920", // Spell Reflection
+]);
+
+/** Can this avoidance explain a control whose miss row logged `missType`?
+ * A reflect-only one explains no logged IMMUNE (`REFLECT_ONLY_AVOIDANCE_IDS`). */
+export function avoidanceExplainsMissType(
+  avoidanceId: string,
+  missType: string | undefined,
+): boolean {
+  return !(
+    missType === "IMMUNE" && REFLECT_ONLY_AVOIDANCE_IDS.has(avoidanceId)
+  );
+}
+
 export const PHYSICAL_CC_IDS = new Set<string>([
   "408", // Kidney Shot
   "1833", // Cheap Shot
@@ -1846,10 +1880,28 @@ export function breakAbilityPresses(
   player: Pick<ICombatUnit, "id" | "spellCastEvents" | "auraEvents">,
 ): Array<{ ts: number; spellId: string }> {
   const out: Array<{ ts: number; spellId: string }> = [];
+  // corpusFactScan trinketOutOf (2026-10-21): a press is timed at its own
+  // self-aura when that is logged just before the cast row — the aura lands
+  // in the ms the control came off, the row up to 150 ms later
+  // (`AURA_BEFORE_CAST_ROW_MAX_MS`; 82-4 0:25: Will to Survive out of Axe
+  // Toss bound nothing), as the Medallion is (`pvpTrinketUses`)
+  const ownAuraMs = (spellId: string, castMs: number) =>
+    (player.auraEvents ?? []).find(
+      (a) =>
+        a.spellId === spellId &&
+        (a.logLine.event as string) === LogEvent.SPELL_AURA_APPLIED &&
+        a.srcUnitId === player.id &&
+        a.destUnitId === player.id &&
+        a.logLine.timestamp <= castMs &&
+        castMs - a.logLine.timestamp <= AURA_BEFORE_CAST_ROW_MAX_MS,
+    )?.logLine.timestamp;
   for (const e of player.spellCastEvents ?? []) {
     if (e.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
     if (e.spellId && CC_BREAK_CAST_IDS.has(e.spellId))
-      out.push({ ts: e.logLine.timestamp, spellId: e.spellId });
+      out.push({
+        ts: ownAuraMs(e.spellId, e.logLine.timestamp) ?? e.logLine.timestamp,
+        spellId: e.spellId,
+      });
   }
   for (const a of player.auraEvents ?? []) {
     if ((a.logLine.event as string) !== LogEvent.SPELL_AURA_APPLIED) continue;
@@ -3221,18 +3273,22 @@ export function analyzePlayerCCAndTrinket(
   // (`ccFullDurationForApplication`, FT-T07) — × its DR level's share. The DR
   // levels come from the same `computeIncomingDR` walk, over the same
   // chronological order, that annotates the instances below.
-  const byApply = filteredCCWindows
-    .map((w, idx) => ({ w, idx }))
-    .sort((a, b) => a.w.applyMs - b.w.applyMs);
   const drLevelOfIdx = new Map<number, IDRInfo | null>();
-  computeIncomingDR(
-    byApply.map(({ w }) => ({
-      atSeconds: (w.applyMs - matchStartMs) / 1000,
-      durationSeconds: (w.removeMs - w.applyMs) / 1000,
-      spellId: w.spellId,
-    })),
-    matchStartMs,
-  ).forEach((dr, k) => drLevelOfIdx.set(byApply[k]!.idx, dr));
+  const walkDr = () => {
+    const byApply = filteredCCWindows
+      .map((w, idx) => ({ w, idx }))
+      .sort((a, b) => a.w.applyMs - b.w.applyMs);
+    drLevelOfIdx.clear();
+    computeIncomingDR(
+      byApply.map(({ w }) => ({
+        atSeconds: (w.applyMs - matchStartMs) / 1000,
+        durationSeconds: (w.removeMs - w.applyMs) / 1000,
+        spellId: w.spellId,
+      })),
+      matchStartMs,
+    ).forEach((dr, k) => drLevelOfIdx.set(byApply[k]!.idx, dr));
+  };
+  walkDr();
   const expectedDurationS = (
     w: { spellId: string; srcUnitId: string; roarAtApply: boolean },
     idx: number,
@@ -3246,6 +3302,26 @@ export function analyzePlayerCCAndTrinket(
     const dr = drLevelOfIdx.get(idx);
     return full * (dr ? drDurationFactor(dr.level) : 1);
   };
+  // fact3 D33 (5f4142ec r1 1:06): a window the log never closed ends at the
+  // length it was going to run — its DR share included — not at the full
+  // length (`pendingEnd`): a Leg Sweep at stun DR 50 % whose REMOVED Mass
+  // Invisibility swallowed printed `(4s)` beside its own `[DR: Stun 50%]`;
+  // the priest's re-listed auras 2.15 s later no longer held it. The DR walk
+  // reads the windows' ends, so it is walked again over the shortened ones.
+  let shortened = false;
+  filteredCCWindows.forEach((w, idx) => {
+    if (!w.noRemoved) return;
+    const exp = expectedDurationS(w, idx);
+    if (exp === undefined) return;
+    const endMs = w.applyMs + exp * 1000;
+    if (endMs >= w.removeMs) return;
+    // ended before the round did (every window ends by the round's end)
+    const ended = { ...w, removeMs: endMs };
+    delete ended.stillOnAtRoundEnd;
+    filteredCCWindows[idx] = ended;
+    shortened = true;
+  });
+  if (shortened) walkDr();
   // WO3 Part 2 (r1014-173): a CHANNELLED control (Mind Control)
   // ends when its caster's channel is interrupted — that, not a break the
   // CC'd player pressed a few ms later, is what ended it (9c6ab747: Pummel
@@ -4264,8 +4340,15 @@ export function analyzePlayerCCAndTrinket(
           roundUnitList,
           (iv) => Math.abs(iv.from - kickMs) <= 1,
         );
+        // User ruling 2026-10-21 (round-3 question 7, 「选a」): silenced
+        // time counts as controlled, as the legend says — a silence stops
+        // the healer even while a physical button is still free (fact3 A10,
+        // 12d734cd: 3.5 s printed, ~4.3 s with the Garrote silence)
+        const silenced = castBlockingAuraIntervals(player, enemyIds).filter(
+          (a) => isSilenceOnlyAura(a.spellId),
+        );
         const ccMs = coveredMsWithin(
-          cannotCast,
+          [...cannotCast, ...silenced],
           kickMs,
           kickMs + POST_KICK_WINDOW_S * 1000,
         );
@@ -4801,6 +4884,7 @@ export function analyzePlayerCCAndTrinket(
           const activeBuff = avoidanceBuffsAt(hit.ms, hit.line).find(
             (b) =>
               applicableIds.has(b.spellId) &&
+              avoidanceExplainsMissType(b.spellId, loggedMissType) &&
               (!wentOffElsewhere ||
                 REPOSITIONING_SPELL_IDS.has(b.spellId) ||
                 REPOSITIONING_NAMES.has(b.name)),
@@ -4825,8 +4909,12 @@ export function analyzePlayerCCAndTrinket(
             continue; // Avoid double counting
           }
 
-          // B. Mobility-Based Avoidance
-          if (untargetedMissOnPlayer) continue;
+          // B. Mobility-Based Avoidance — never for a control that logged a
+          // failed-control miss on the player: the miss row proves it
+          // reached them, so no repositioning dodged it (fact3 D9, 12d734cd
+          // 2:07: a Freezing Trap IMMUNE on the evoker credited to a Hover
+          // pressed 0.25 s after the miss)
+          if (untargetedMissOnPlayer || missRow) continue;
           const mobilityCast = player.spellCastEvents.find(
             (e) =>
               e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&

@@ -38,8 +38,11 @@
  *   qualifying ally = landed a same-target DIRECT hit in the PRE_HIT_S before
  *                     the application (a sampling choice, not a reaction
  *                     standard)
- *   window W        = [ceil(apply), floor(remove)) on the render grid,
- *                     truncated at either combatant's death / round end
+ *   window W        = [apply, remove) — the aura's own logged span (2026-10-21,
+ *                     round-3 audit D31: the old render-grid window
+ *                     [ceil(apply), floor(remove)) dropped the press second),
+ *                     truncated at either combatant's death / round end;
+ *                     K / M count the rendered seconds it touches
  *   N = damage on the target inside W · D = damage on all enemy players
  *   inside W · X = 100·N/D (undefined when D = 0) · direct / periodic
  *   reported separately · K/M = 1 s bins with damage / |W| · G = longest
@@ -228,15 +231,19 @@ export function externalDamageForApplication(
   const endS = (combat.endTime - startMs) / 1000;
   const enemyIds = new Set(enemies.map((e) => e.id));
   const tDeath = deathSecondOf(target, startMs);
-  const wToTarget = Math.floor(Math.min(iv.toS, endS, tDeath ?? Infinity));
-  const wFrom = Math.ceil(iv.fromS);
+  // the aura's own logged span (round-3 audit, 2026-10-21, a call the user
+  // left to us: fact3 D31 — the grid window [ceil(apply), floor(remove))
+  // dropped the press second, where half of a Pain Suppression's absorbs
+  // landed); the seconds it touches are the K / M bins
+  const wToTarget = Math.min(iv.toS, endS, tDeath ?? Infinity);
+  const wFrom = iv.fromS;
   if (wToTarget <= wFrom) return [];
   const out: IExternalDamageObservation[] = [];
   for (const ally of friends) {
     if (!ally.damageOut) continue;
     const aDeath = deathSecondOf(ally, startMs);
     // Per-ally truncation (the ally's own death); the target-side bound stays.
-    const wTo = Math.min(wToTarget, Math.floor(aDeath ?? Infinity));
+    const wTo = Math.min(wToTarget, aDeath ?? Infinity);
     if (wTo <= wFrom) continue;
     let preDirect = 0;
     let prePeriodic = 0;
@@ -289,10 +296,13 @@ export function externalDamageForApplication(
       if (amt >= EXTERNAL_DAMAGE_BIN_MIN_HIT) bins.add(Math.floor(tS));
     }
     if (preDirect + prePeriodic <= 0) continue; // not a qualifying ally
-    const M = wTo - wFrom;
+    // the rendered seconds the window touches
+    const firstSec = Math.floor(wFrom);
+    const lastSec = Math.ceil(wTo) - 1;
+    const M = lastSec - firstSec + 1;
     let G = 0;
     let run = 0;
-    for (let s = wFrom; s < wTo; s++) {
+    for (let s = firstSec; s <= lastSec; s++) {
       if (bins.has(s)) run = 0;
       else G = Math.max(G, ++run);
     }

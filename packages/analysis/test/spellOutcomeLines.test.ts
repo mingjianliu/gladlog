@@ -161,6 +161,48 @@ describe("reflectedSpells (0051f0c9)", () => {
     expect(out).toHaveLength(1);
     expect(out[0]!.damageBack).toBe(300_000);
   });
+  it("corpusFactScan reflectReturn: the return under the spell's damage id (Frostfire Bolt 431044 → 468655), logged just before the REFLECT row", () => {
+    const caster = unit("Player-P", {
+      missesOut: [miss("431044")],
+      damageIn: [
+        {
+          spellId: "468655",
+          srcUnitId: "Player-W",
+          effectiveAmount: -112_000,
+          logLine: { timestamp: T0 + 4_990 },
+        },
+      ],
+      advancedActions: advanced(500_000),
+    });
+    const [r] = reflectedSpells([caster, unit("Player-W")], T0);
+    expect(r!.damageBack).toBe(112_000);
+  });
+  it("fact3 D15 / D40: the reflector's own copy of the DoT on the caster is not the return; the copy ticking caster → caster is", () => {
+    const AGONY = "980";
+    const tick = (src: string, amt: number, ms: number) => ({
+      spellId: AGONY,
+      srcUnitId: src,
+      effectiveAmount: -amt,
+      logLine: { event: LogEvent.SPELL_PERIODIC_DAMAGE, timestamp: T0 + ms },
+    });
+    const ownAgony = {
+      spellId: AGONY,
+      srcUnitId: "Player-W",
+      destUnitId: "Player-P",
+      logLine: { event: LogEvent.SPELL_AURA_APPLIED, timestamp: T0 + 1_000 },
+    };
+    const caster = unit("Player-P", {
+      missesOut: [miss(AGONY)],
+      auraEvents: [ownAgony],
+      damageIn: [
+        tick("Player-P", 40_000, 7_000), // the reflected copy
+        tick("Player-W", 60_000, 8_000), // the reflector's own Agony
+      ],
+      advancedActions: advanced(500_000),
+    });
+    const [r] = reflectedSpells([caster, unit("Player-W")], T0);
+    expect(r!.damageBack).toBe(40_000);
+  });
 });
 
 describe("sanctuaryRemovals (0035285c)", () => {

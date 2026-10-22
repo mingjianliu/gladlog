@@ -374,6 +374,33 @@ describe("computeWindowContributions", () => {
     expect(run(44, 50)).toBe(false);
   });
 
+  it("fact3 D14/D16 (270ef58d): a kit control cast under another id (Hex 210873 vs kit 51514) is one entry, on cooldown after the press", () => {
+    const shaman = makeFriend("owner", {
+      spec: CombatUnitSpec.Shaman_Restoration,
+      class: CombatUnitClass.Shaman,
+      // Hex 51514 taken (class node 103623) — the kit's control
+      info: { talents: [{ id1: 103623, id2: 127903, count: 1 }], pvpTalents: [] },
+      spellCastEvents: [
+        makeSpellCastEvent("210873", T0 + 77_360, "enemy-h", "Rsham", "owner", "Owner", 0, "Hex"),
+      ],
+    } as never);
+    const w = computeWindowContributions(
+      { ...combat, units: { owner: shaman, "enemy-1": enemyDk, "enemy-h": enemyHealer } } as never,
+      shaman,
+      [shaman],
+      [enemyDk, enemyHealer],
+      [makeWindow(85, 105), makeWindow(115, 125)],
+      [],
+      [],
+      stubFactsComputer,
+    );
+    const hexIn = (i: number) =>
+      w[i]!.ownerCCReady.filter((c) => c.spellName === "Hex").length;
+    // back at 107.4 (30 s): not ready at 85, ready once at 115
+    expect(hexIn(0)).toBe(0);
+    expect(hexIn(1)).toBe(1);
+  });
+
   it("F16 retest (e49b7c3b 3:39): a dead owner is not free and holds no ready CC", () => {
     const owner = makeFriend("owner", {
       spellCastEvents: [

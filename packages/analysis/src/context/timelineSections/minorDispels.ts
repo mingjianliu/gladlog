@@ -27,8 +27,14 @@ export function emitMinorDispelEntries(
     | "_allUnits"
   >,
 ): void {
-  const { dispelSummary, pid, enemyPid, enemyDispelSummary, addEntry, _allUnits } =
-    ctx;
+  const {
+    dispelSummary,
+    pid,
+    enemyPid,
+    enemyDispelSummary,
+    addEntry,
+    _allUnits,
+  } = ctx;
 
   const minor = new Map<
     string,
@@ -131,7 +137,7 @@ export const MINOR_DISPEL_CASTS_SHOWN = 4;
  * …)`, at most MINOR_DISPEL_CASTS_SHOWN then `+N` — so a purge inside a kill
  * window no longer reads as happening at the line's first second, and `×N`
  * counts casts, not removed effects (f4647408: two Greater Purges removed
- * three buffs and read `x3`). A passive part keeps the bare count.
+ * three buffs and read `x3`). A passive part counts its instants.
  */
 export function formatMinorDispelPart(m: {
   spellName: string;
@@ -141,10 +147,21 @@ export function formatMinorDispelPart(m: {
       Partial<Pick<IDispelEvent, "hasDispelPenalty" | "backlashCcSpellId">>
   >;
 }): string {
-  if (m.passive)
-    return m.events.length > 1
-      ? `${m.spellName} x${m.events.length}`
+  if (m.passive) {
+    // one instant is one proc / one press it rode (fact3 D61, fe64d179 r1
+    // 0:17: one Fade's Phantasm removed two effects in one ms and read `x2`)
+    const instants: number[] = [];
+    for (const e of [...m.events].sort((a, b) => a.timeSeconds - b.timeSeconds))
+      if (
+        !instants.some(
+          (t) => Math.abs(t - e.timeSeconds) <= MINOR_DISPEL_CAST_MERGE_S,
+        )
+      )
+        instants.push(e.timeSeconds);
+    return instants.length > 1
+      ? `${m.spellName} x${instants.length}`
       : m.spellName;
+  }
   const casts: Array<{ t: number; names: string[]; backlash?: string }> = [];
   for (const e of [...m.events].sort((a, b) => a.timeSeconds - b.timeSeconds)) {
     const name = getEnglishSpellName(e.removedSpellId, e.removedSpellName);

@@ -230,9 +230,9 @@ describe("kickPressureFor", () => {
       )({ atSeconds: 72.5, lockoutDurationSeconds: 3 });
       expect(p.ours.low).toEqual({ unit: "Mage", pct: low, atSec: 73 });
     }
-    // and every full immunity skips, Aspect of the Turtle and Divine Shield
-    // like Ice Block
-    for (const id of ["186265", "642"]) {
+    // and every full immunity skips, Divine Shield like Ice Block (Aspect of
+    // the Turtle left the set 2026-10-21: DoTs land under it)
+    for (const id of ["642"]) {
       expect(FULL_IMMUNITY_IDS.has(id)).toBe(true);
       const p = pressure(
         friendlyMage({ 0: 100, 72: low, 76: 80 }, [69.559, 75.865], id),

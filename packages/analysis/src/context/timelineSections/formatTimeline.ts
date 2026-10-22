@@ -20,8 +20,10 @@ import {
   HP_TROUGH_MIN_DROP_PTS,
 } from "../../utils/cooldowns";
 import {
+  ENEMY_DEF_DEFLECTS_WORDS,
   ENEMY_DEF_END_NOT_LOGGED,
   ENEMY_DEF_NO_PRESS_TAG,
+  ENEMY_DEF_UNSEEN_PRESS_TAG,
   selfSaveReductionNames,
 } from "../../utils/enemyDefensives";
 import { ROUND_ENDED_WORDS, roundEndLegend } from "../../utils/roundEnd";
@@ -479,6 +481,7 @@ export function formatTimeline(
           `    \`${ENEMY_DEF_END_NOT_LOGGED}\` in place of Ts = the log never shows that aura end (an enemy who goes invisible takes the`,
           "    line with them) — how long it lasted is unknown: it is NOT the full duration, and the unit may have been hit seconds later.",
           "    `immune` = full immunity, or the unit could not be hit while it lasted (Burrow, Time Stop, Mass Invisibility, Vanish);",
+          `    \`${ENEMY_DEF_DEFLECTS_WORDS}\` = Aspect of the Turtle: no immunity — attacks and spells aimed at the unit are deflected, damage already ticking on it lands;`,
           "    `immune to magic` / `immune to physical` = an immunity to those schools only — the other school still hits (Cloak of Shadows, Blessing of Protection, Blessing of Spellwarding);",
           "    `(absorb Nk, Ts)` = a shield, not an immunity — the unit can still be hit; Nk = what it absorbed while up (no",
           "    figure = the log shows none; a bare `(absorb)` states the mechanism only). `(heal proc)` = Nature's Guardian",
@@ -491,6 +494,8 @@ export function formatTimeline(
           `    \`${ENEMY_DEF_NO_PRESS_TAG}\` = the aura went up with no press of it in the log — a copy a talent or proc put up (Exhilaration's 3 s`,
           "    Survival of the Fittest, Ancient of Lore), or a shield that rides another press (Shield of Vengeance with Divine Protection);",
           "    a copy's length is its own, so it never reads `— removed early` on length alone.",
+          `    \`${ENEMY_DEF_UNSEEN_PRESS_TAG}\` = pressed while the unit was out of the log's sight (the press row is lost); the line stands where`,
+          "    the log showed the aura again, the latest the press can have been.",
           "    `— still up when the round ended` = the round ended before it did;",
           "    `— its bolts hit X: Nk of the Mk damage they took over it` = a save that is a channel whose damage landed on our",
           "    player X (Ultimate Penitence; several units, largest first): Nk = what the channel dealt X, landed plus absorbed;",
@@ -511,13 +516,13 @@ export function formatTimeline(
             enemyDefLines,
             selfSaveReductionNames(),
           ).map((l) => `    ${l}`),
-          "    `[friendly offensive CD active]` indicates at least one friendly offensive cooldown was active at that displayed second.",
+          "    `[friendly offensive CD active]` indicates at least one friendly offensive cooldown was active at the instant of the press.",
           "    `(at N% HP)` / `(target at N% HP)` reflects the target's HP at the press (just before the press's own",
           "    heal), not the [STATE] reading of that second.",
           ...(TIMELINE_LINE_FLAGS.duringExternal === "annotate"
             ? [
                 "    `| during it: A Nk on target · X% of their enemy-player damage · direct/periodic · damage in K of M s` = what each",
-                "    friendly who had hit that unit in the 3 s before the external kept doing while it was up (damage on it, share of",
+                "    friendly who had hit that unit in the 3 s before the external kept doing while it was up — from the aura going up to its removal (damage on it, share of",
                 "    their damage on enemy players, seconds with damage; `(+Ak absorbed)` = eaten by the target's shields;",
                 "    `+Dk deferred` = held back by a Time Dilation / Stretch Time on the target — it lands later as that unit's",
                 "    own damage; for a school-limited wall, how much of it was in the wall's school; `N hits immune` = hits the",
@@ -611,7 +616,7 @@ export function formatTimeline(
           "    `used <ability>` in place of `PvP trinket` = a racial press (Will to Survive, Will of the Forsaken, Stoneform and",
           "    Fireblood also lock the trinket for 30–60 s; Escape Artist locks nothing) or a class ability (Blink, Berserker",
           "    Shout, Icebound Fortitude …) that removed that CC.",
-          "    `[friendly offensive CD active]` indicates at least one friendly offensive cooldown was active at that displayed second.",
+          "    `[friendly offensive CD active]` indicates at least one friendly offensive cooldown was active at the instant of the press.",
           "    `(target at N% HP)` reflects the target's HP at the press, not the [STATE] reading of that second.",
         ]
       : []),
@@ -626,6 +631,12 @@ export function formatTimeline(
       ? [
           "  `(proc k of N[, with X])` on [ENEMY CD] = an effect a talent triggers: it has no button and no cooldown of its",
           "    own; `with X` = the cast it came with. It is still a burst effect on that unit.",
+        ]
+      : []),
+    // corpusFactScan hiddenPressUnused: a press made while the enemy was unseen
+    ...(enemyCdRender.unseenRendered
+      ? [
+          `  \`${ENEMY_DEF_UNSEEN_PRESS_TAG}\` on [ENEMY CD] / [ENEMY HEAL CD] = pressed while the enemy was out of the log's sight (the press row is lost); the line stands where the log showed its aura again, the latest the press can have been.`,
         ]
       : []),
     // fact1215 C7: an enemy's utility press, a fact line only

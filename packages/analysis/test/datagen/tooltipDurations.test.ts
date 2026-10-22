@@ -110,7 +110,12 @@ describe("parseDurationClauses — the shapes the 157 tooltips use", () => {
       "当冰霜之柱激活时，你的自动攻击爆击会使其持续时间延长$s1秒，最多可达$s2秒。",
       ctx("456240", { "456240:0": 1, "456240:1": 6 }),
     ).clauses;
-    expect(frost).toMatchObject({ targets: [], kind: "per-event", amount: 1, cap: 6 });
+    expect(frost).toMatchObject({
+      targets: [],
+      kind: "per-event",
+      amount: 1,
+      cap: 6,
+    });
     expect(frost!.subjectText).toContain("冰霜之柱");
   });
 });
@@ -129,5 +134,41 @@ describe("expandForSpec", () => {
 
   it("an undecidable aura condition marks the rendering unknown", () => {
     expect(expandForSpec("$?a999[A][B]", 0, "1", noSpecs).unknown).toBe(true);
+  });
+});
+
+describe("parseDurationClauses — codex 20-F16-13 #2–#5", () => {
+  it("#3: 「X使Y的持续时间延长」 is an event-triggered extension (472361)", () => {
+    const { clauses } = parseDurationClauses(
+      "惩击使一个激活的救赎的持续时间延长${$s1/1000}.1秒。",
+      ctx("472361", { "472361:0": 1000 }),
+    );
+    expect(clauses[0]).toMatchObject({
+      kind: "per-event",
+      amount: 1,
+      targets: ["救赎"],
+    });
+  });
+  it("#2: 「X施加的Y效果」 extends Y, not X (373049)", () => {
+    const { clauses } = parseDurationClauses(
+      "真言术：盾施加的救赎效果持续时间延长$s1秒。",
+      ctx("373049", { "373049:0": 4 }),
+    );
+    expect(clauses[0]?.targets).toEqual(["救赎"]);
+  });
+  it("#4: an hour / minute unit is no second — unparsed (441403)", () => {
+    const { clauses, unparsed } = parseDurationClauses(
+      "持续时间延长至$m1$L小时:分钟;。",
+      ctx("441403", { "441403:0": 1 }),
+    );
+    expect(clauses).toEqual([]);
+    expect(unparsed).toHaveLength(1);
+  });
+  it("#5: 「至多」 is a cap (441829)", () => {
+    const { clauses } = parseDurationClauses(
+      "每次施放治疗法术会使其持续时间延长${$s1/1000}.1秒，至多$s3秒。",
+      ctx("441829", { "441829:0": 600, "441829:2": 8 }),
+    );
+    expect(clauses[0]).toMatchObject({ cap: 8 });
   });
 });

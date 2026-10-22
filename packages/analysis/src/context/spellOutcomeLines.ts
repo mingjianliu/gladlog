@@ -176,13 +176,51 @@ export function reflectedSpells(
     // before it; never past REFLECT_DAMAGE_WINDOW_S. A later reflector no
     // longer cuts off an earlier reflector's explicitly attributed damage.
     const back = new Map<(typeof chains)[number], number>();
+    // fact3 D15 / D40: a reflector of the caster's own class can have its own
+    // copy of the spell on the caster — its ticks are its own damage, not
+    // the return (8888b780 0:42: 136k of a reflected Agony's "223k" was the
+    // reflecting warlock's own Agony, up on the caster before the reflect).
+    // The reflected copy ticks as the caster's own (caster → caster).
+    const reflectorsOwnAuraUp = (
+      spellId: string,
+      reflectorId: string,
+      ts: number,
+    ): boolean => {
+      let up = false;
+      for (const a of caster.auraEvents ?? []) {
+        if (a.logLine.timestamp > ts) break;
+        if (a.spellId !== spellId || a.srcUnitId !== reflectorId) continue;
+        up = a.logLine.event !== LogEvent.SPELL_AURA_REMOVED;
+      }
+      return up;
+    };
+    // corpusFactScan reflectReturn (2026-10-21): the reflected spell's damage
+    // can come back under its damage id, not the cast id the REFLECT row
+    // names (Frostfire Bolt: cast 431044, damage 468655 — 112k back with no
+    // line), and a hit from the reflector can be logged a few ms before the
+    // REFLECT row, as the own-id rows are (`REFLECT_OWN_ID_LEAD_MS`)
+    const sameSpell = (reflected: string, hit: string) =>
+      reflected === hit ||
+      (getEnglishSpellName(reflected, "") !== "" &&
+        getEnglishSpellName(reflected, "") === getEnglishSpellName(hit, ""));
     const owning = (spellId: string, src: string | undefined, ts: number) => {
       let best: (typeof chains)[number] | undefined;
       for (const c of chains) {
-        if (c.first.spellId !== spellId) continue;
+        if (!sameSpell(c.first.spellId ?? "", spellId)) continue;
         const t0 = c.first.logLine.timestamp;
-        if (t0 > ts || ts - t0 > REFLECT_DAMAGE_WINDOW_S * 1000) continue;
+        // either source: the copy that came back can hit the caster as the
+        // caster's own (105-3 0:17: a reflected Frostfire Bolt's 106k under
+        // 468655, caster → caster, 23 ms before the REFLECT row)
+        const lead = REFLECT_OWN_ID_LEAD_MS;
+        if (t0 - lead > ts || ts - t0 > REFLECT_DAMAGE_WINDOW_S * 1000)
+          continue;
         if (src !== caster.id && src !== c.first.destUnitId) continue;
+        if (
+          src === c.first.destUnitId &&
+          src !== caster.id &&
+          reflectorsOwnAuraUp(spellId, src, ts)
+        )
+          continue;
         if (!best || t0 > best.first.logLine.timestamp) best = c;
       }
       return best;
@@ -210,8 +248,11 @@ export function reflectedSpells(
         const t0 = c.first.logLine.timestamp;
         if (ts < t0 - REFLECT_OWN_ID_LEAD_MS) continue;
         if (ts - t0 > REFLECT_DAMAGE_WINDOW_S * 1000) continue;
+        // a reflected spell that deals no damage owns no damage return —
+        // a control (codex 20-F16-03 #3) or anything else (fact3 D6 / D25:
+        // a Spellsteal reflected 0.6 s after a Pyroblast took its 145k)
         const id = c.first.spellId ?? "";
-        if (isControlSpell(id) && !abilityProfile(id).dealsDamage) continue;
+        if (!abilityProfile(id).dealsDamage) continue;
         const gap = Math.abs(ts - t0);
         if (gap < bestGap) {
           best = c;

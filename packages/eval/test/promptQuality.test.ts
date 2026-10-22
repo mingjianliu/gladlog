@@ -2191,8 +2191,15 @@ describe("checkDuringExternalConsistency — the [ENEMY DEF] during-it annotatio
       ]),
     ).toHaveLength(2);
     expect(
-      checkDuringExternalConsistency([ok.replace("(11.0s)", "(9.0s)")]),
+      checkDuringExternalConsistency([ok.replace("(11.0s)", "(8.0s)")]),
     ).toHaveLength(2); // both segments' M=11 > 10
+  });
+  it("round-3 D31: M counts the rendered seconds the aura's span touches — 8.0 s printed (≤ 8.05 s) can touch ten", () => {
+    const eight = ok
+      .replace("(11.0s)", "(8.0s)")
+      .replaceAll("of 11 s", "of 10 s")
+      .replace("longest gap 6 s", "longest gap 5 s");
+    expect(checkDuringExternalConsistency([eight])).toEqual([]);
   });
   it("accepts the absorbed tag (Touch of Karma shape) as part of the total field", () => {
     expect(

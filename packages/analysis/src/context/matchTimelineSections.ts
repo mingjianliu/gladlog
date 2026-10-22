@@ -2,6 +2,7 @@ import { ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
 import { CD_WASTE_PRESSURE_HP_PCT } from "../analysis/candidateFindings";
 import { saveCoversPressureOn } from "../analysis/candidates/cooldownTiming";
+import { BACKLASH_AURA_CC_TYPE } from "../data/backlashCc";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import {
   breakableCcBeforeDeath,
@@ -606,6 +607,9 @@ export function emitDmgSpikeEntries(params: {
             cc.atSeconds + cc.durationSeconds <= pw.fromSeconds
           )
             continue;
+          // fact3 D30: a dispel-backlash silence is a [SILENCE] line, not
+          // enemy CC (the [CC ON TEAM] lines this list mirrors)
+          if (BACKLASH_AURA_CC_TYPE.get(cc.spellId) === "silence") continue;
           const isTarget = summary.playerName === pw.targetName;
           const isOwner =
             ownerName !== undefined && summary.playerName === ownerName;

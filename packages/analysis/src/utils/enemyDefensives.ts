@@ -42,8 +42,11 @@ import { allyCopyRecipient } from "./allyCopyWall";
 import { auraEndFromLog, type IAuraEndFromLog } from "./auraEndCause";
 import { buildAuraIntervals, type IAuraInterval } from "./auraIntervals";
 import { buffFullDurationForCaster } from "./buffDuration";
+import { missBelongsToCast } from "./castMissRows";
+import { AURA_BEFORE_CAST_ROW_MAX_MS, CAST_ROW_LAG_MAX_MS } from "./castRowLag";
 import { PRESSED_SPIRIT_OF_REDEMPTION_AURA_IDS } from "./combatStates";
 import { AURA_ONLY_ACTIVATION_IDS } from "./cooldowns";
+import { hiddenPressMs } from "./hiddenPress";
 import { TOUCH_OF_KARMA_ID } from "./karmaFeed";
 import { toRenderSecond } from "./renderGrid";
 import {
@@ -63,7 +66,9 @@ export const EXTERNAL_DEF_IDS = new Set<string>(
  * 不管,交了也算我们赚") — so it is its own attribution, never a reproach. */
 export const IMMUNITY_IDS = new Set<string>(
   Object.entries(MITIGATION_TABLE)
-    .filter(([, e]) => e.pct === 100)
+    // a deflection is no immunity (Aspect of the Turtle, user ruling
+    // 2026-10-21: DoTs land under it — `deflectsDirectAttacks`)
+    .filter(([, e]) => e.pct === 100 && !e.deflectsDirectAttacks)
     .map(([id]) => id),
 );
 
@@ -88,6 +93,7 @@ export const FULL_IMMUNITY_IDS: ReadonlySet<string> = new Set(
     .filter(
       ([, e]) =>
         e.pct === 100 &&
+        !e.deflectsDirectAttacks &&
         (e.schoolMask & EVERY_SCHOOL_MASK) === EVERY_SCHOOL_MASK,
     )
     .map(([id]) => id),
@@ -164,6 +170,22 @@ export const KW_OWN_ROTATIONAL_ABSORB_AURA_IDS: ReadonlySet<string> = new Set([
 ]);
 export const KW_REDIRECT_PROTECTION_AURA_IDS: ReadonlySet<string> = new Set([
   "147833",
+]);
+/**
+ * User ruling 2026-10-21 (round-3 q6, 「修」 — settle it with the log): a
+ * unit under Mass Invisibility is not hit. 605 archive files (`NR%60`): 425
+ * Mass Invisibility spans, 564 s in all — 0 melee swings, 1 ranged hit, 98
+ * direct spell hits (79 within 0.5 s of the aura going up, the rest by 2 s,
+ * none after: already in flight), 175 periodic ticks (DoTs keep ticking).
+ * Phase Shift 408558 (Fade's talent: every attack and spell avoided for its
+ * second) the same (fact3 D54). Both end `defenseless` while up; an aura
+ * whose REMOVED the log never shows (an opponent who went unseen takes the
+ * line with them) is over at the holder's first action after it, as
+ * Greater Invisibility's is (`SAVE_AURA_END_UNSEEN_IDS`).
+ */
+export const KW_UNTARGETABLE_AURA_IDS: ReadonlySet<string> = new Set([
+  "414664",
+  "408558",
 ]);
 
 /** Enemy-def F-E5 / F-E6 (user ruling A25, 2026-09-30, narrowed by D8,
@@ -478,8 +500,16 @@ export function enemySaveEffectNote(
  * (`checkEnemyDefEndNotLogged`).
  */
 export const ENEMY_DEF_END_NOT_LOGGED = "end not logged";
+/** What an `[ENEMY DEF]` line says of a deflection in place of `immune` /
+ * `N%` (`IMitigationEntry.deflectsDirectAttacks`: Aspect of the Turtle). */
+export const ENEMY_DEF_DEFLECTS_WORDS =
+  "deflects direct attacks; periodic damage still lands";
 /** fact1215 C5: an `[ENEMY DEF]` wall that no press put up (`noPressLogged`). */
 export const ENEMY_DEF_NO_PRESS_TAG = "[no press logged]";
+/** fact3 D35: an `[ENEMY DEF]` save pressed while its holder was unseen
+ * (`unseenPress`, `hiddenPressMs`) — the line stands at the instant the log
+ * showed its aura again. */
+export const ENEMY_DEF_UNSEEN_PRESS_TAG = "[pressed while unseen]";
 
 /**
  * The parenthesis that carries `ENEMY_DEF_END_NOT_LOGGED`, whole: the phrase
@@ -739,9 +769,18 @@ export const SELF_SAVE_IDS: ReadonlySet<string> = new Set<string>([
 export function selfSaveCasts(
   enemy: ICombatUnit,
   matchStartMs: number,
-): Array<{ atSeconds: number; spellId: string; spellName: string }> {
-  const out: Array<{ atSeconds: number; spellId: string; spellName: string }> =
-    [];
+): Array<{
+  atSeconds: number;
+  spellId: string;
+  spellName: string;
+  unseenPress?: true;
+}> {
+  const out: Array<{
+    atSeconds: number;
+    spellId: string;
+    spellName: string;
+    unseenPress?: true;
+  }> = [];
   for (const cast of enemy.spellCastEvents ?? []) {
     if (cast.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
     if (!cast.spellId || !SELF_SAVE_IDS.has(cast.spellId)) continue;
@@ -753,7 +792,22 @@ export function selfSaveCasts(
       spellName: getEnglishSpellName(cast.spellId, cast.spellName),
     });
   }
-  return out;
+  // fact3 D35: a press made while the unit was unseen — no row, its aura new
+  // in the batch that re-states the unit (`hiddenPressMs`), timed there
+  const auraIds = new Set(
+    (enemy.auraEvents ?? [])
+      .map((a) => a.spellId)
+      .filter((id): id is string => !!id && SELF_SAVE_IDS.has(id)),
+  );
+  for (const id of auraIds)
+    for (const ms of hiddenPressMs(enemy, id, matchStartMs))
+      out.push({
+        atSeconds: (ms - matchStartMs) / 1000,
+        spellId: id,
+        spellName: getEnglishSpellName(id, ""),
+        unseenPress: true,
+      });
+  return out.sort((a, b) => a.atSeconds - b.atSeconds);
 }
 
 /**
@@ -846,8 +900,11 @@ export function joinReappliedIntervals(
 /** How long before its aura a logged cast can still be the press that put
  * it up (an `[ENEMY DEF]` aura kind's `pressSeconds`). */
 export const PRESS_TO_AURA_MAX_S = 1;
-/** …and how long AFTER its aura the press's own cast line may be logged. */
-export const AURA_BEFORE_CAST_MAX_S = 0.05;
+/** …and how long AFTER its aura the press's own cast line may be logged —
+ * the shared measured lag (`AURA_BEFORE_CAST_ROW_MAX_MS`; fact3 D32: a
+ * Vanish cast 53 ms after its aura read `[no press logged]` beside a second
+ * `[ENEMY UTILITY]` line; corpusFactScan: Die by the Sword at 104 ms). */
+export const AURA_BEFORE_CAST_MAX_S = AURA_BEFORE_CAST_ROW_MAX_MS / 1000;
 
 /** An observed duration as the `[ENEMY DEF]` line prints it: one decimal. */
 export function renderedObservedSeconds(observedSeconds: number): number {
@@ -1036,6 +1093,10 @@ export interface IEnemyDefensiveEvent {
    * never `removed early` on length alone: its own length is not the
    * pressed spell's. */
   noPressLogged?: true;
+  /** fact3 D35: pressed while the holder was unseen (`hiddenPressMs`) — the
+   * press row is lost; `atSeconds` is the instant the log showed its aura,
+   * the latest the press can have been. */
+  unseenPress?: true;
   spellId: string;
   spellName: string;
   /** the enemy who pressed it */
@@ -1293,6 +1354,36 @@ function auraPairedToCast(
   return best;
 }
 
+/** The press logged its own miss row (IMMUNE, MISS, REFLECT …) on the
+ * ally it was cast at, within the cast-row lag (`CAST_ROW_LAG_MAX_MS`) —
+ * the external never reached it. */
+function externalPressMissed(
+  caster: ICombatUnit,
+  cast: ICombatUnit["spellCastEvents"][number],
+  recipientId: string,
+): boolean {
+  const castMs = cast.logLine.timestamp;
+  const sameSpellCastMs = (caster.spellCastEvents ?? [])
+    .filter(
+      (e) =>
+        e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+        e.spellId === cast.spellId,
+    )
+    .map((e) => e.logLine.timestamp);
+  return (caster.missesOut ?? []).some(
+    (m) =>
+      m.spellId === cast.spellId &&
+      m.destUnitId === recipientId &&
+      m.missType !== "ABSORB" &&
+      missBelongsToCast(
+        sameSpellCastMs,
+        castMs,
+        m.timestamp,
+        CAST_ROW_LAG_MAX_MS,
+      ),
+  );
+}
+
 /**
  * Every defensive an enemy unit pressed this round, in cast order — the
  * events the `[ENEMY DEF]` line renders. Self-mitigation and immunities come
@@ -1494,6 +1585,12 @@ export function enemyDefensiveEvents(
       )
       .map((c) => (c.logLine.timestamp - combat.startTime) / 1000);
 
+  // fact3 D35: a wall pressed while its holder was unseen is a press, not
+  // a copy a talent put up (`hiddenPressMs`)
+  const unseenPressed = (iv: ISaveAuraInterval): boolean =>
+    hiddenPressMs(enemy, iv.spellId, combat.startTime).some(
+      (ms) => Math.round(ms - combat.startTime) === Math.round(iv.fromS * 1000),
+    );
   for (const iv of intervalsOf(enemy)) {
     if (!isIntervalFrom(iv, enemy)) continue;
     const immune = isImmunitySaveAura(iv.spellId);
@@ -1544,10 +1641,12 @@ export function enemyDefensiveEvents(
       observedSeconds: observed,
       ...(Number.isFinite(press)
         ? earlyEndOf(enemy, iv, iv.spellId)
-        : {
-            noPressLogged: true as const,
-            ...lengthFreeEnd(earlyEndOf(enemy, iv, iv.spellId)),
-          }),
+        : unseenPressed(iv)
+          ? { unseenPress: true as const, ...earlyEndOf(enemy, iv, iv.spellId) }
+          : {
+              noPressLogged: true as const,
+              ...lengthFreeEnd(earlyEndOf(enemy, iv, iv.spellId)),
+            }),
     });
   }
 
@@ -1648,6 +1747,11 @@ export function enemyDefensiveEvents(
       intervalsOf(recipient),
       enemy.id,
     );
+    // fact3 D24 (3cf004cb 0:46): a press whose own miss row says it never
+    // reached the ally (Pain Suppression IMMUNE on a cycloned DK, no aura
+    // ever applied) put nothing on it. An unpaired press with no miss row
+    // keeps its line — Lay on Hands leaves no aura.
+    if (!paired && externalPressMissed(enemy, cast, recipient.id)) continue;
     const observed = paired ? paired.toS - paired.fromS : undefined;
     out.push({
       atSeconds,
@@ -1718,6 +1822,7 @@ export function enemyDefensiveEvents(
       casterName: enemy.name,
       casterId: enemy.id,
       kind: "self-save",
+      ...(c.unseenPress ? { unseenPress: true as const } : {}),
       ...(mechanism ? { mechanism } : {}),
       ...(mechanism?.kind === "absorb" ? { effect: "absorb" as const } : {}),
       ...(own

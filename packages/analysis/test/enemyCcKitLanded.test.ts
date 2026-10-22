@@ -102,6 +102,7 @@ describe("landedControlsForKit — the [CC ON TEAM] instances, per enemy and con
       "8122",
       "24394",
       "196364",
+      "22703",
     ])
       expect(seen.has(id), id).toBe(true);
   });
@@ -167,16 +168,26 @@ describe("landedControlsForKit — the [CC ON TEAM] instances, per enemy and con
 
   it("a control no DR family claims is listed without one", () => {
     const [ua] = landedControlsForKit(
-      summary([cc(16, "196364", "Unstable Affliction", priest)]),
+      summary([cc(16, "22703", "Infernal Awakening", priest)]),
       enemies,
       allUnits,
     );
     expect(ua).toEqual({
       enemyName: priest.name,
       enemySpec: "Holy Priest",
-      spellName: "Unstable Affliction",
+      spellName: "Infernal Awakening",
       count: 1,
     });
+  });
+
+  it("fact3 D37: a dispel-backlash silence is a [SILENCE] line, not a landed control", () => {
+    expect(
+      landedControlsForKit(
+        summary([cc(16, "196364", "Unstable Affliction", priest)]),
+        enemies,
+        allUnits,
+      ),
+    ).toEqual([]);
   });
 
   it("shares the emitter's test: an instance that prints no line is not counted", () => {
@@ -240,13 +251,13 @@ describe("formatEnemyCCKitHeader — burst-window threats ∪ what landed", () =
         withDefault,
         "3(RDruid)",
         landedControlsForKit(
-          summary([cc(16, "196364", "Unstable Affliction", priest)]),
+          summary([cc(16, "22703", "Infernal Awakening", priest)]),
           enemies,
           allUnits,
         ),
       )[0],
     ).toContain(
-      "): Holy Priest (Pozzi-EmeraldDream-US): Psychic Scream [Disorient] (spec default, not seen), Unstable Affliction (landed 1×)",
+      "): Holy Priest (Pozzi-EmeraldDream-US): Psychic Scream [Disorient] (spec default, not seen), Infernal Awakening (landed 1×)",
     );
   });
 

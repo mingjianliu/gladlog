@@ -280,9 +280,9 @@ export function backlashDispelDecisionPoints(
       const { cooldownSeconds, charges } = cleanseRecoveryOf(
         spellId,
         new Set(
-          ((f.info as { pvpTalents?: unknown[] } | undefined)?.pvpTalents ?? []).map(
-            String,
-          ),
+          (
+            (f.info as { pvpTalents?: unknown[] } | undefined)?.pvpTalents ?? []
+          ).map(String),
         ),
         String(f.spec),
         playerTalentIdSets(f as never),
@@ -321,6 +321,13 @@ export function backlashDispelDecisionPoints(
   // round ends at its first death) and one aura re-broadcast is one
   // application — `roundEndMs` / `dropAuraRebroadcasts`, the shared readings
   const roundEnd = roundEndMs(combat);
+  const usedDispels: Array<{ sourceName: string; timeSeconds: number }> = [];
+  const sameDispelCast = (c: { sourceName: string; timeSeconds: number }) =>
+    usedDispels.some(
+      (u) =>
+        u.sourceName === c.sourceName &&
+        Math.abs(u.timeSeconds - c.timeSeconds) <= CO_REMOVE_PAIR_S,
+    );
   for (const target of friendPlayers) {
     const auras = dropAuraRebroadcasts(target.auraEvents ?? []);
     for (let i = 0; i < auras.length; i++) {
@@ -333,11 +340,15 @@ export function backlashDispelDecisionPoints(
       if (!enemyIds.has(casterId)) continue;
       const applyMs: number = a.timestamp;
       if (applyMs >= roundEnd) continue;
+      // fact3 D46 (8888b780 r3 0:56): this caster's application — two
+      // warlocks' Unstable Afflictions on one target are two auras, and the
+      // second one's APPLIED is no end of the first
       const removed = auras
         .slice(i + 1)
         .find(
           (b: any) =>
             b.spellId === sid &&
+            b.srcUnitId === casterId &&
             (b.logLine.event === "SPELL_AURA_REMOVED" ||
               b.logLine.event === "SPELL_AURA_APPLIED"),
         );
@@ -359,6 +370,11 @@ export function backlashDispelDecisionPoints(
           c.timeSeconds >= applyRel - 0.05 &&
           c.timeSeconds <= rel(endMs) + 0.15,
       );
+      // one dispel cast that took two applications (two casters' copies) is
+      // one decision: the earlier application's, the other copy among what
+      // it co-removed
+      if (dispel && sameDispelCast(dispel)) continue;
+      if (dispel) usedDispels.push(dispel);
       const dispeller = dispel ? byName.get(dispel.sourceName) : undefined;
       const t0S = dispel
         ? dispel.timeSeconds
@@ -373,7 +389,7 @@ export function backlashDispelDecisionPoints(
       let stacks = 1;
       for (const b of auras.slice(i + 1)) {
         if (b.timestamp > Math.min(endMs, t0Ms)) break;
-        if (b.spellId !== sid) continue;
+        if (b.spellId !== sid || b.srcUnitId !== casterId) continue;
         const ev = b.logLine.event;
         if (
           ev === "SPELL_AURA_APPLIED_DOSE" ||
@@ -393,7 +409,7 @@ export function backlashDispelDecisionPoints(
                 c.sourceName === dispel.sourceName &&
                 Math.abs(c.timeSeconds - dispel.timeSeconds) <=
                   CO_REMOVE_PAIR_S &&
-                !(c.removedSpellId === sid && c.targetName === target.name),
+                c !== dispel,
             )
             .map((c) => ({
               spellName: c.removedSpellName,
@@ -614,7 +630,10 @@ export function backlashDispelEvents(
         // responses in the A/B carried 2.37 audited claims per finding vs
         // 1.83 in control, on the same old-line error rate.
         healTrend: trendK(p.healerHealBefore, p.healerHealAfter),
-        selfDmgTrend: trendK(p.dispellerDmgBefore ?? 0, p.dispellerDmgAfter ?? 0),
+        selfDmgTrend: trendK(
+          p.dispellerDmgBefore ?? 0,
+          p.dispellerDmgAfter ?? 0,
+        ),
         coRemoved: p.coRemoved.length
           ? joinNames(p.coRemoved.map((c) => c.spellName))
           : "none",

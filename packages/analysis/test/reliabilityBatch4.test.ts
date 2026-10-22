@@ -58,6 +58,16 @@ describe("external-unused needs the external to reach the victim (round 3 W1f, 4
     expect(externalUnusedEvents({ ...base, canReachVictim: () => true })).toHaveLength(1);
     expect(externalUnusedEvents(base)).toHaveLength(1);
   });
+  // fact3 D12 (20e0f243 5:57): Guardian Spirit "free to cast 2.2 s" while
+  // the priest could not pay for it, then pressed it into a refusal
+  it("time the owner could not pay for the external is not free; a refused press is no held one", () => {
+    // unaffordable 87–90.5: the largest free gap left is 90.5–91 (0.5 s)
+    expect(externalUnusedEvents({ ...base, unaffordable: () => [{ atSeconds: 87, durationSeconds: 3.5 }] })).toEqual([]);
+    // pressed and refused inside the window
+    expect(externalUnusedEvents({ ...base, attempted: () => true })).toEqual([]);
+    // control: affordable all along, never pressed — as before
+    expect(externalUnusedEvents({ ...base, unaffordable: () => [], attempted: () => false })).toHaveLength(1);
+  });
 });
 
 import { CombatUnitReaction, LogEvent as LE } from "@gladlog/parser-compat";

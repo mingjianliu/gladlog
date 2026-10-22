@@ -235,6 +235,26 @@ describe("burstLedger — burst grouping and audit", () => {
     expect(hits[0].overlapSeconds).toBeCloseTo(6, 0);
   });
 
+  it("fact3 D59: Divine Hymn's heal-taken buff 64844 on the target is no major defensive", () => {
+    const player = makeUnit("p1", {
+      name: "Ret",
+      spec: CombatUnitSpec.Paladin_Retribution,
+      info,
+      spellCastEvents: [makeSpellCastEvent("31884", MATCH_START + 10_000, "p1", "Ret", "p1", "Ret", 0, "Avenging Wrath")],
+      damageOut: [dmgOut(MATCH_START + 12_000, -50_000, "e1")],
+    } as any);
+    const e1 = makeUnit("e1", {
+      name: "Pally",
+      info,
+      auraEvents: [
+        makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, "64844", MATCH_START + 11_000, "e2", "e1", "BUFF"),
+        makeAuraEvent(LogEvent.SPELL_AURA_REMOVED, "64844", MATCH_START + 15_000, "e2", "e1", "BUFF"),
+      ],
+    } as any);
+    const entries = analyzeBurstLedger(player, [], [e1], makeCombat());
+    expect(entries[0].dominantTarget?.defensivesHit ?? []).toEqual([]);
+  });
+
   it("appliedByOther:别人给目标上的墙(塑焰者黑曜鳞片给队友)和目标自己开的墙分开标记", () => {
     const mkPlayer = () =>
       makeUnit("p1", {

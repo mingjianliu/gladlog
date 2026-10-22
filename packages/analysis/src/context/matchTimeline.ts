@@ -602,6 +602,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
       ownerHardCcTagAt,
       criticalWindowSet,
       crisisUnfoldWindows: params.crisisUnfoldWindows ?? [],
+      roundEndAtMs,
     });
 
   // ── [TEAM] [CD] events ────────────────────────────────────────────────────
@@ -749,25 +750,28 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
   };
   let disarmLineCount = 0;
   let trinketLastUsedCount = 0;
-  ({ disarmLineCount, trinketLastUsedCount } = emitTrinketCcOnTeamEntries({
-    ccTrinketSummaries,
-    trinketBrokenDisarm,
-    actorLabel,
-    addEntry,
-    pid,
-    disarmLineCount,
-    trinketLastUsedCount,
-    dispelSummary,
-    matchStartMs,
-    friends,
-    enemies,
-    rosterSides,
-    avoidanceSourceTag,
-    owner,
-    ownerCDs,
-    rawStreams,
-    allUnits,
-  }));
+  let silenceLineCount = 0;
+  ({ disarmLineCount, trinketLastUsedCount, silenceLineCount } =
+    emitTrinketCcOnTeamEntries({
+      ccTrinketSummaries,
+      trinketBrokenDisarm,
+      actorLabel,
+      addEntry,
+      pid,
+      disarmLineCount,
+      trinketLastUsedCount,
+      dispelSummary,
+      matchStartMs,
+      friends,
+      enemies,
+      rosterSides,
+      avoidanceSourceTag,
+      owner,
+      ownerCDs,
+      rawStreams,
+      allUnits,
+      silenceLineCount,
+    }));
 
   // ── [SILENCE]: silences on players (reliability round 2 W1b, 2026-09-25) ───
   // Garrote - Silence / Strangulate / Spider Venom are cast-blocking auras
@@ -789,7 +793,6 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     gripLineCount,
   }));
 
-  let silenceLineCount = 0;
   ({ silenceLineCount } = emitSilenceEntries({
     allUnits,
     friends,

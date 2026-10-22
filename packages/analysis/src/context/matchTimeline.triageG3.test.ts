@@ -300,6 +300,31 @@ describe("F-NE1 — an aimed CC with no aura and no miss", () => {
       }),
     );
     expect(lineWith(t, "Hammer of Justice")).toContain("[no CC aura logged]");
+
+    // fact3 D29: a miss of ANOTHER spell on the target in the window (a DoT
+    // tick a shield ate) says nothing about this control — still tagged
+    const withOtherMiss = mkUnit(ME[0], ME[1], {
+      spellCastEvents: [castEvent] as never,
+      missesOut: [
+        {
+          spellId: "703",
+          spellName: "Garrote",
+          srcUnitId: ME[0],
+          destUnitId: ENEMY[0],
+          missType: "ABSORB",
+          timestamp: 30_500,
+          logLine: { timestamp: 30_500, event: LogEvent.SPELL_MISSED },
+        },
+      ] as never,
+    });
+    const t2 = buildMatchTimeline(
+      params(withOtherMiss, [hostile(ENEMY)], {
+        ownerCDs: [
+          { ...hoj, casts: [{ timeSeconds: 30, targetName: ENEMY[1] }] },
+        ] as never,
+      }),
+    );
+    expect(lineWith(t2, "Hammer of Justice")).toContain("[no CC aura logged]");
   });
   it("control: the stun landed → no tag", () => {
     const castEvent = ev(

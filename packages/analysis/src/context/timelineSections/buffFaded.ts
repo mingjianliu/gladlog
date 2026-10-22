@@ -72,17 +72,19 @@ export function emitBuffFadedEntries(
                       ` (broken by ${expiry.brokenBy!.unitName ? `${actorLabel(expiry.brokenBy!.unitName, "enemy", expiry.brokenBy!.unitId)}'s ` : ""}${expiry.brokenBy!.spellName}${took ? `; ${took}` : ""}${unclear})`
                     : expiry.cause === "absorbed"
                       ? ` (used up — absorbed ${k(a!.absorbed)}${unclear})`
-                      : expiry.dispelUnclear
-                        ? ` (a dispel of this spell is logged at that moment — not which copy it took${took ? `; ${took}` : ""})`
-                        : expiry.cause === "ended_early"
-                          ? took
-                            ? ` (ended early — ${took}; no dispel logged)`
-                            : " (ended early — no dispel logged)"
-                          : expiry.isEstimated
-                            ? " (expired, estimated)"
-                            : took
-                              ? ` (expired; ${took})`
-                              : " (expired)";
+                      : expiry.cause === "charges_spent"
+                        ? ` (used up — its charges spent${unclear})`
+                        : expiry.dispelUnclear
+                          ? ` (a dispel of this spell is logged at that moment — not which copy it took${took ? `; ${took}` : ""})`
+                          : expiry.cause === "ended_early"
+                            ? took
+                              ? ` (ended early — ${took}; no dispel logged)`
+                              : " (ended early — no dispel logged)"
+                            : expiry.isEstimated
+                              ? " (expired, estimated)"
+                              : took
+                                ? ` (expired; ${took})`
+                                : " (expired)";
     addEntry(
       expiry.expiresAtSeconds,
       `${fmtTime(expiry.expiresAtSeconds)}  [BUFF FADED]   ${expiry.spellName}${causeNote}`,

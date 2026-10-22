@@ -41,8 +41,10 @@ import {
  * 侧跟随,不是反向。
  */
 describe("免疫三表一致性(权威 = MITIGATION_TABLE pct=100)", () => {
+  // a deflection is no immunity (Aspect of the Turtle, user ruling
+  // 2026-10-21 — `deflectsDirectAttacks`)
   const authority = Object.entries(MITIGATION_TABLE).filter(
-    ([, e]) => e.pct === 100,
+    ([, e]) => e.pct === 100 && !e.deflectsDirectAttacks,
   );
   const fullSchool = authority
     .filter(([, e]) => e.schoolMask === 0x7f)
@@ -71,7 +73,9 @@ describe("免疫三表一致性(权威 = MITIGATION_TABLE pct=100)", () => {
       expect(FULL_IMMUNITY_IDS.has(id)).toBe(false);
     // the six rows as ruled: a seventh pct-100 row must be looked at before
     // it lands on either side
-    expect([...FULL_IMMUNITY_IDS].sort()).toEqual(["186265", "45438", "642"]);
+    expect([...FULL_IMMUNITY_IDS].sort()).toEqual(["45438", "642"]);
+    // Aspect of the Turtle is a deflection (DoTs land), in neither half
+    expect(IMMUNITY_IDS.has("186265")).toBe(false);
     expect([...SCHOOL_LIMITED_IMMUNITY_IDS].sort()).toEqual([
       "1022",
       "204018",

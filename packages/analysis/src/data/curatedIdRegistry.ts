@@ -28,7 +28,10 @@ import {
   CRISIS_PROTECTIVE_ANSWER_IDS,
 } from "../analysis/crisisDecisionPoints";
 import { DOT_SPELL_IDS } from "../context/matchTimelineSections";
-import { DEFERRED_DAMAGE_SPELL_IDS } from "../context/timelineHelpers";
+import {
+  DEFERRED_DAMAGE_SPELL_IDS,
+  ENDS_WITH_ITS_CHARGE_IDS,
+} from "../context/timelineHelpers";
 import {
   CHANNELED_CD_SPELL_IDS,
   ENEMY_MAJOR_BUFF_SPELL_IDS,
@@ -42,6 +45,7 @@ import {
   SPELL_DURATION_OVERRIDES,
 } from "../utils/buffDuration";
 import {
+  ATTACK_LOCK_AURA_IDS,
   BLADESTORM_AURA_IDS,
   UNRELENTING_ONSLAUGHT_TALENT_ID,
   USABLE_IN_BLADESTORM_WITH_TALENT,
@@ -79,6 +83,7 @@ import {
   HYPOTHERMIA_AURA_ID,
   HYPOTHERMIA_GATED_IDS,
   NON_SUBSTITUTE_DEFENSIVE_IDS,
+  NOT_DEFENSIVE_BY_NAME_IDS,
   PASSIVE_PROC_CAST_IDS,
   PROC_ONLY_ACTIVATION_IDS,
   RESPONSE_ONLY_DEFENSIVE_IDS,
@@ -118,13 +123,17 @@ import { AOE_CC_LANDING_WINDOW_S, AOE_CC_SPELL_IDS } from "../utils/drAnalysis";
 import {
   KW_OWN_ROTATIONAL_ABSORB_AURA_IDS,
   KW_REDIRECT_PROTECTION_AURA_IDS,
+  KW_UNTARGETABLE_AURA_IDS,
   RIDER_ABSORB_SAVE_AURAS,
 } from "../utils/enemyDefensives";
 import { NON_PLAYER_INTERRUPT_IDS } from "../utils/enemyInterrupts";
 import { EXTERNAL_DAMAGE_SHIELD_IDS } from "../utils/externalDamage";
 import { GAP_CLOSER_SPELL_IDS } from "../utils/gapClosers";
 import { HEAL_ABSORB_SELF_SAVE_IDS } from "../utils/healAbsorbSave";
-import { SPEC_PRIMARY_CC } from "../utils/healerExposureAnalysis";
+import {
+  SPEC_PRIMARY_CC,
+  TALENT_TRIGGERED_CONTROL_BUTTONS,
+} from "../utils/healerExposureAnalysis";
 import { HEALER_AVOIDANCE_SPELLS } from "../utils/healerExposureAnalysis";
 import {
   DEFERRAL_SHIELD_DAMAGE_IDS,
@@ -225,6 +234,7 @@ import {
   OPPRESSING_ROAR_AURA_IDS,
 } from "./spellEffectData";
 import {
+  ARENA_DURATION_RULINGS,
   CORPUS_COOLDOWN_PATCHES,
   CORPUS_DURATION_PATCHES,
   DISPEL_TYPES,
@@ -467,6 +477,9 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
     "aura",
     () => set(KW_OWN_ROTATIONAL_ABSORB_AURA_IDS),
   ),
+  t("KW_UNTARGETABLE_AURA_IDS", "utils/enemyDefensives.ts", "aura", () =>
+    set(KW_UNTARGETABLE_AURA_IDS),
+  ),
   t("KW_REDIRECT_PROTECTION_AURA_IDS", "utils/enemyDefensives.ts", "aura", () =>
     set(KW_REDIRECT_PROTECTION_AURA_IDS),
   ),
@@ -622,6 +635,9 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   t("NON_SUBSTITUTE_DEFENSIVE_IDS", "utils/cooldowns.ts", "cast", () =>
     set(NON_SUBSTITUTE_DEFENSIVE_IDS),
   ),
+  t("NOT_DEFENSIVE_BY_NAME_IDS", "utils/cooldowns.ts", "cast", () =>
+    set(NOT_DEFENSIVE_BY_NAME_IDS),
+  ),
   t("SELF_CAST_NOOP_EXTERNAL_IDS", "utils/cooldowns.ts", "cast", () =>
     set(SELF_CAST_NOOP_EXTERNAL_IDS),
   ),
@@ -646,6 +662,9 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
     set(DISPEL_COOLDOWNS_BY_SPELL.keys()),
   ),
   // talent impact audit 2026-09-26: dispel types that need a talent
+  t("ATTACK_LOCK_AURA_IDS", "utils/castingLocks.ts", "aura", () =>
+    set(ATTACK_LOCK_AURA_IDS),
+  ),
   t("BLADESTORM_AURA_IDS", "utils/castingLocks.ts", "aura", () =>
     set(BLADESTORM_AURA_IDS),
   ),
@@ -697,6 +716,12 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   // GH #83: the fallback CC per class for enemies not yet seen casting one
   t("SPEC_PRIMARY_CC", "utils/healerExposureAnalysis.ts", "aura", () =>
     SPEC_PRIMARY_CC.map((e) => e.spellId),
+  ),
+  t(
+    "TALENT_TRIGGERED_CONTROL_BUTTONS",
+    "utils/healerExposureAnalysis.ts",
+    "cast",
+    () => Object.values(TALENT_TRIGGERED_CONTROL_BUTTONS).flat(),
   ),
   // Triage 2026-09-29 F-K10b (ruling A′17): enemy displacements that break a
   // cast bar — the knockback family plus Typhoon's daze aura.
@@ -756,6 +781,9 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   ),
   t("DEFERRED_DAMAGE_SPELL_IDS", "context/timelineHelpers.ts", "cast", () =>
     set(DEFERRED_DAMAGE_SPELL_IDS),
+  ),
+  t("ENDS_WITH_ITS_CHARGE_IDS", "context/timelineHelpers.ts", "cast", () =>
+    set(ENDS_WITH_ITS_CHARGE_IDS),
   ),
   t("REDISTRIBUTION_DAMAGE_IDS", "utils/incomingPressure.ts", "cast", () =>
     set(REDISTRIBUTION_DAMAGE_IDS),
@@ -985,6 +1013,9 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   // CC full-duration predicate (GH #44 tail, 2026-09-02): the corpus-vs-DB2
   // duration corrections and the one aura that lengthens CC in arena. Both are
   // hand-keyed ids a patch can renumber, so both sit under the rot scans.
+  t("ARENA_DURATION_RULINGS", "data/spellEffectOverrides.ts", "aura", () =>
+    keys(ARENA_DURATION_RULINGS),
+  ),
   t("CORPUS_DURATION_PATCHES", "data/spellEffectOverrides.ts", "aura", () =>
     keys(CORPUS_DURATION_PATCHES),
   ),

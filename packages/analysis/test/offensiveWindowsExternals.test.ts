@@ -437,6 +437,10 @@ describe("computeOffensiveWindows — the target's own 20–99 % wall cuts the s
       w.toSeconds,
     ]);
 
+  it("Vanish is a roster member since the user ruling of 2026-10-21 (fact3 D49): a charge in hand is no defenseless span", () => {
+    expect(isKillWindowMajorDefensive("1856")).toBe(true);
+  });
+
   it("the two W1g walls are roster members since the user ruling of 2026-10-20 (fact1215 retest idx 45 / 47 / 48)", () => {
     for (const id of [SURVIVAL_OF_THE_FITTEST, DIVINE_PROTECTION_RET]) {
       expect(MITIGATION_WALL_IDS.has(id), id).toBe(true);

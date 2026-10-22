@@ -43,7 +43,10 @@ const SPELLS = spellsData as Record<string, SpellEntry>;
 // GH #31 ② (2026-09-02): shared official-face predicate replaces the hand set
 // (immunities stay — immuneSchools covers most, the category term keeps parity
 // for entries the face lacks).
-import { isKillWindowMajorDefensive } from "../data/abilityProfile";
+import {
+  abilityProfile,
+  isKillWindowMajorDefensive,
+} from "../data/abilityProfile";
 import { spellEffectData } from "../data/spellEffectData";
 const DEF_OR_IMMUNE_CAST_IDS = new Set<string>([
   // Enumerate the official universe through the shared predicate — the same
@@ -63,8 +66,21 @@ const DEF_OR_IMMUNE_IDS = new Set<string>([
   ...DEF_OR_IMMUNE_CAST_IDS,
   ...Object.keys(
     ownEffectAurasKeyedBy((id) => DEF_OR_IMMUNE_CAST_IDS.has(id)),
-  ),
+  ).filter((aura) => !isHealOnlyAura(aura)),
 ]);
+
+/** fact3 D59 (fe64d179): an effect aura whose official profile only heals
+ * (Divine Hymn 64844, +4 % healing received on every ally of the channel)
+ * is no defensive on its holder — no mitigation, no absorb, no immunity. */
+function isHealOnlyAura(aura: string): boolean {
+  const p = abilityProfile(aura);
+  return (
+    (p.healsSelf || p.healsOthers || p.healingReceivedPct !== undefined) &&
+    p.mitigationPct === undefined &&
+    !p.absorbs &&
+    p.immuneSchools === undefined
+  );
+}
 
 /** The percentage of an ally's copy of a talent-shared wall on the target
  * (`isAllyCopyWallId` + `pctOnOthers`), undefined for anything else — the

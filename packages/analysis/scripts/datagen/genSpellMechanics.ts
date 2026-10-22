@@ -166,11 +166,15 @@ async function main() {
       entry(r.SpellID).castMs = ms;
   }
   const hasCategoriesRow = new Set<string>();
+  const categoryMech = new Set<string>();
   for (const r of cats.rows) {
     if (r.DifficultyID !== "0" || !observed.has(r.SpellID)) continue;
     hasCategoriesRow.add(r.SpellID);
     const m = Number(r.Mechanic);
-    if (m > 0) entry(r.SpellID).mech = m;
+    if (m > 0) {
+      entry(r.SpellID).mech = m;
+      categoryMech.add(r.SpellID);
+    }
     if ((Number(r.PreventionType) & PREVENTION_TYPE_SILENCE) !== 0)
       entry(r.SpellID).silenceable = true;
   }
@@ -189,7 +193,19 @@ async function main() {
     if (r.DifficultyID !== "0" || !observed.has(r.SpellID)) continue;
     const e = entry(r.SpellID);
     const mech = Number(r.EffectMechanic);
-    if (mech > 0 && e.mech === undefined) e.mech = mech;
+    // the control's own effect names the CC's mechanic: a loss-of-control
+    // one wins over another effect's (corpusFactScan trinketOutOf, 82-4
+    // 0:25: Axe Toss 89766 — effect 0 interrupt 26, effect 1 the stun aura,
+    // 12 — read as an interrupt, so no stun-breaker could end it). A
+    // SpellCategories mechanic stays authoritative.
+    if (
+      mech > 0 &&
+      (e.mech === undefined ||
+        (!categoryMech.has(r.SpellID) &&
+          !LOSS_OF_CONTROL_MECHANICS.has(e.mech) &&
+          LOSS_OF_CONTROL_MECHANICS.has(mech)))
+    )
+      e.mech = mech;
     const misc0 = Number(r.EffectMiscValue_0);
     switch (r.EffectAura) {
       case AURA_MECHANIC_IMMUNITY:
@@ -276,6 +292,10 @@ async function main() {
     "Storm Bolt cast 107570 resolves its stun through its same-named aura",
   );
   expect(out["46968"]?.mech === 12, "Shockwave cast 46968 resolves to stun");
+  expect(
+    out["89766"]?.mech === 12,
+    "Axe Toss 89766 is a stun (12), not its interrupt effect's 26",
+  );
   expect(
     !!out["18499"]?.immuneMech?.includes(5),
     "Berserker Rage 18499 grants fear (5) immunity",

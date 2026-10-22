@@ -144,9 +144,13 @@ export const SPELL_EFFECT_OVERRIDES: Record<string, IMinedSpell> =
       // legs a + c; ruling C7). The DB2 row now stands on its own.
       e("275699", "Apocalypse", 90, 15),
       e("207289", "Unholy Assault", 90, 20),
-      e("106951", "Berserk", 180, 20),
+      // corpusFactScan fullRunEndedEarly (2026-10-21): Berserk and Celestial
+      // Alignment run DB2's 15 s (605 every 30th: 5 / 5 and 3 / 3 removals at
+      // exactly 15.0 s); the hand 20 was their Incarnations' and read every
+      // full run "ended early"
+      e("106951", "Berserk", 180, 15),
       e("102560", "Incarnation: Chosen of Elune", 180, 20), // 2026-09-06: hand 30 shadowed the official DB2 20; corpus 20.0 s in 88 % of 1,147 lifetimes
-      e("194223", "Celestial Alignment", 180, 20),
+      e("194223", "Celestial Alignment", 180, 15),
       e("391528", "Convoke the Spirits", 120, 4),
       e("288613", "Trueshot", 120, 15),
       e("19574", "Bestial Wrath", 90, 15),
@@ -394,7 +398,32 @@ export const CORPUS_DURATION_PATCHES: Record<string, number> = {
   // allowed because it carries that mechanism (Rule 7), 2026-09-22 GH #65 item 5.
   "257622": 6,
 };
-for (const [id, durationSeconds] of Object.entries(CORPUS_DURATION_PATCHES)) {
+/**
+ * Arena durations SHORTER than DB2 that a user ruling sets — a downward
+ * change needs a mechanism (Game-Behaviour Rule 7); here the ruling and the
+ * corpus are it, the client tables carry none. Registered in curatedIdRegistry.
+ *
+ * Intervene 147833 — FLAG, user ruling 2026-10-21: 「我觉得我们可以先这样
+ * 告诉他们：统一写成 3 秒。虽然防战这个专精是 6秒，但因为玩的人很少，高分段也
+ * 没有，所以不是很重要」 (and 「竞技场一律 3 秒」). Protection is 6 s per the
+ * user, deliberately not modelled. DB2
+ * (12.1.5.70391): SpellMisc DurationIndex 32 = 6 s, PvPDurationIndex 0 (the
+ * field is live — 126 observed spells use it, Vanish 3 → 1.5 s); the only
+ * class-mask duration modifier on it is 106080 Last Defender of Azeroth
+ * (+100 %), referenced by nothing; no SpellLabel modifier. Corpus, every 6th
+ * new-season file, split by COMBATANT_INFO spec: Arms 2,141 / 2,210 runs at
+ * 3.0 s, Fury 480 / 503, Protection 3 / 3 — none near 6. The audit libraries:
+ * at the end, 213 of 375 runs still had the warrior within 10 yd of the ally
+ * (no range break). Every 3.0 s run read "(ended early — no dispel logged)".
+ */
+export const ARENA_DURATION_RULINGS: Record<string, number> = {
+  "147833": 3, // Intervene
+};
+
+for (const [id, durationSeconds] of [
+  ...Object.entries(CORPUS_DURATION_PATCHES),
+  ...Object.entries(ARENA_DURATION_RULINGS),
+]) {
   const cur = SPELL_EFFECT_OVERRIDES[id];
   if (cur)
     (cur as { durationSeconds?: number }).durationSeconds = durationSeconds;

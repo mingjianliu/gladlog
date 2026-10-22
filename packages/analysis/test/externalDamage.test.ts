@@ -256,9 +256,18 @@ describe("externalDamage — damage kept on a target under an ally-applied exter
       deathRecords: [{ timestamp: ms(24.6) }],
     });
     const [o] = externalDamageObservations(e1, [a1], [e1], combat);
-    expect(o).toMatchObject({ wFrom: 20, wTo: 24, M: 4 });
+    // the aura's own span, cut at the death (24.6 s): seconds 20–24 touched
+    expect(o).toMatchObject({ wFrom: 20, wTo: 24.6, M: 5 });
     const dead = makeUnit("A1", { spec: CombatUnitSpec.Warrior_Arms, damageOut: a1.damageOut, deathRecords: [{ timestamp: ms(23.2) }] });
     const [o2] = externalDamageObservations(enemy("E1", psOn("E1")), [dead], [enemy("E1")], combat);
-    expect(o2).toMatchObject({ wFrom: 20, wTo: 23, M: 3 });
+    expect(o2).toMatchObject({ wFrom: 20, wTo: 23.2, M: 4 });
+  });
+
+  // round-3 audit D31 (46a55085 0:15): the press second is inside the window
+  it("a hit in the aura's first (press) second counts", () => {
+    const a1 = ally("A1", [dmg(LogEvent.SPELL_DAMAGE, 19, "E1", 40_000), dmg(LogEvent.SPELL_DAMAGE, 20.5, "E1", 30_000)]);
+    const [o] = externalDamageObservations(enemy("E1", psOn("E1", "E2", 20.03, 28.04)), [a1], [enemy("E1")], combat);
+    expect(o!.nDirect).toBe(30_000);
+    expect(o!.M).toBe(9);
   });
 });

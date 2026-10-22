@@ -244,13 +244,29 @@ export function analyzeKickAudit(
   }
   const kickerMisses = kickerUnits.flatMap((u) => u.missesOut ?? []);
 
-  const kickRows = player.spellCastEvents
+  const isKickRow = (e: ICombatUnit["spellCastEvents"][number]) =>
+    e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+    isKickSpellId(e.spellId ?? "");
+  const ownKickRows = player.spellCastEvents.filter(isKickRow);
+  // fact3 D28 (422ba114 r3 0:29): a pet's own kick with no press of the
+  // owner beside it — an autocast Spell Lock — is the owner's kick too (the
+  // Felhunter's 15 Spell Locks there, 7 of them beside the warlock's
+  // Command Demon row in the same ms); one beside the owner's row is that
+  // press, already counted
+  const petKickRows = kickerUnits
+    .filter((u) => u.id !== player.id)
+    .flatMap((u) => u.spellCastEvents.filter(isKickRow))
     .filter(
       (e) =>
-        e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
-        isKickSpellId(e.spellId ?? ""),
-    )
-    .sort((a, b) => a.logLine.timestamp - b.logLine.timestamp);
+        !ownKickRows.some(
+          (o) =>
+            Math.abs(o.logLine.timestamp - e.logLine.timestamp) <=
+            DUPLICATE_KICK_ID_MS,
+        ),
+    );
+  const kickRows = [...ownKickRows, ...petKickRows].sort(
+    (a, b) => a.logLine.timestamp - b.logLine.timestamp,
+  );
   if (kickRows.length === 0) return [];
   // 1. One kick, one entry. The rows themselves stay in `spellCastEvents`
   // (the cooldown ledger keys on 106839); only the audit collapses them. Of a

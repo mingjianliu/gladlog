@@ -61,8 +61,12 @@ export function emitTrinketCcOnTeamEntries(
     | "ownerCDs"
     | "rawStreams"
     | "allUnits"
+    | "silenceLineCount"
   >,
-): Pick<TimelineCtx, "disarmLineCount" | "trinketLastUsedCount"> {
+): Pick<
+  TimelineCtx,
+  "disarmLineCount" | "trinketLastUsedCount" | "silenceLineCount"
+> {
   const {
     ccTrinketSummaries,
     trinketBrokenDisarm,
@@ -88,7 +92,7 @@ export function emitTrinketCcOnTeamEntries(
       : ((allUnits ?? []).find((u) => u.id === id) ??
         (enemies ?? []).find((e) => e.id === id));
   // threaded: read from ctx, returned to the caller (GH #116)
-  let { disarmLineCount, trinketLastUsedCount } = ctx;
+  let { disarmLineCount, trinketLastUsedCount, silenceLineCount } = ctx;
 
   for (const summary of ccTrinketSummaries) {
     // FT-T16 (D13): the owner's major cooldowns pressed into a control and
@@ -114,6 +118,26 @@ export function emitTrinketCcOnTeamEntries(
               toSeconds: cc.atSeconds + cc.durationSeconds,
             }),
             (cc) => ccMechanicOf(cc.spellId),
+          )
+        : undefined;
+    // fact3 D5: the presses a dispel-backlash SILENCE refused, read as a
+    // silence's (its [SILENCE] line, below)
+    const pressedDuringSilence =
+      rawStreams?.available && summary.playerName === owner.name
+        ? ownerPressesRejectedDuring(
+            rawStreams.castFailed,
+            owner.id,
+            ownerControlPressKit(ownerCDs),
+            "silence",
+            summary.ccInstances.filter(
+              (cc) =>
+                rendersCcOnTeamLine(cc) &&
+                BACKLASH_AURA_CC_TYPE.get(cc.spellId) === "silence",
+            ),
+            (cc) => ({
+              fromSeconds: cc.atSeconds,
+              toSeconds: cc.atSeconds + cc.durationSeconds,
+            }),
           )
         : undefined;
 
@@ -329,6 +353,19 @@ export function emitTrinketCcOnTeamEntries(
         ? "(reflected back)"
         : `(by ${actorLabel(cc.sourceName, cc.fromOwnTeamWhileCharmed ? "friendly" : "enemy", cc.sourceId)})`;
 
+      // fact3 D30 / D37 (the friendly mirror of FT F22): a dispel backlash
+      // that is a SILENCE (Unstable Affliction's 196364) is a silence on our
+      // player, not hard CC — the [SILENCE] line, with the backlash tag, and
+      // the presses it refused (D5: Divine Toll "can't do that while
+      // silenced" at 2:27, stated nowhere)
+      if (backlashType === "silence" && !tremor) {
+        addEntry(
+          cc.atSeconds,
+          `${fmtTime(cc.atSeconds)}  [SILENCE]   ${pid(summary.playerName)} ← ${cc.spellName} ${byStr} | ${renderedCcSpan(cc)}${backlashStr}${endNote}${cleansedNote}${formatPressedDuringNote(pressedDuringSilence?.get(cc))}`,
+        );
+        silenceLineCount++;
+        continue;
+      }
       // passive_trinket → player has no active trinket, no annotation
       addEntry(
         cc.atSeconds,
@@ -352,5 +389,5 @@ export function emitTrinketCcOnTeamEntries(
     }
   }
 
-  return { disarmLineCount, trinketLastUsedCount };
+  return { disarmLineCount, trinketLastUsedCount, silenceLineCount };
 }

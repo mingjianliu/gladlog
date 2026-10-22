@@ -3875,8 +3875,13 @@ const DURING_EMPTY_SEG =
  * re-parses every segment and checks the arithmetic the renderer promised:
  * direct + periodic = the on-target total (±1k rounding), the round-2
  * in-school amount ≤ the total, K ≤ M, G ≤ M − K, 0 ≤ X ≤ 100, and
- * M ≤ ⌈observed duration⌉ + 1 when the line carries one — the window can
- * never be longer than the aura was seen on the target.
+ * M ≤ ⌈observed duration + 0.05⌉ + 1 when the line carries one — the window
+ * can never be longer than the aura was seen on the target. M counts the
+ * rendered seconds the aura's own span touches (round-3 audit D31,
+ * 2026-10-21): a span of L s touches at most ⌈L⌉ + 1 of them, and the line
+ * prints L to 0.1 s, so the true L is below the printed value + 0.05
+ * (105-4-585 0:21: a Pain Suppression printed 8.0 s, 20.98–29.03, touches
+ * ten seconds).
  */
 export function checkDuringExternalConsistency(lines: string[]): string[] {
   const failures: string[] = [];
@@ -3886,7 +3891,7 @@ export function checkDuringExternalConsistency(lines: string[]): string[] {
     if (at < 0) return;
     const observed = line.match(ENEMY_DEF_EXTERNAL_DUR)?.[1];
     const maxM =
-      observed !== undefined ? Math.ceil(Number(observed)) + 1 : null;
+      observed !== undefined ? Math.ceil(Number(observed) + 0.05) + 1 : null;
     const fail = (why: string) =>
       failures.push(
         `line ${i + 1}: [ENEMY DEF] during-it 标注自相矛盾(${why})—— ${line.trim().slice(0, 160)}`,

@@ -20,6 +20,7 @@ import { getEnglishSpellName } from "../src/data/spellEffectData";
 import {
   analyzePlayerCCAndTrinket,
   applicableCCAvoidanceIds,
+  avoidanceExplainsMissType,
   ccAvoidanceBuffsUpAt,
 } from "../src/utils/ccTrinketAnalysis";
 import { makeSpellCastEvent, makeUnit } from "./ported/testHelpers";
@@ -473,5 +474,88 @@ describe("applicableCCAvoidanceIds — F16 retest idx 34 / 49: Berserker Rage / 
   it("Nullifying Shroud 378464 avoids a physical stun (Shockwave), and a Polymorph", () => {
     expect(applicableCCAvoidanceIds("132168", "Shockwave").has("378464")).toBe(true);
     expect(applicableCCAvoidanceIds("118", "Polymorph").has("378464")).toBe(true);
+  });
+});
+
+describe("fact3 D2 / D9 / D27 — what an IMMUNE miss is attributed to", () => {
+  it("D2: Spell Reflection (magic only) is no avoidance for a physical Shockwave", () => {
+    expect(applicableCCAvoidanceIds("46968", "Shockwave").has("23920")).toBe(false);
+    expect(applicableCCAvoidanceIds("118", "Polymorph").has("23920")).toBe(true);
+  });
+  it("D3: Spell Reflection explains a REFLECT, never a logged IMMUNE (DB2: aura 28 + a −20 % trigger, no immunity)", () => {
+    expect(avoidanceExplainsMissType("23920", "IMMUNE")).toBe(false);
+    expect(avoidanceExplainsMissType("23920", "REFLECT")).toBe(true);
+    expect(avoidanceExplainsMissType("45438", "IMMUNE")).toBe(true);
+  });
+  it("D27: Command Squadron / Stretch Time are no immunity (DB2: no mechanic mask) — Deep Breath is", () => {
+    const u = unit(
+      ["1261393", "1261395", "1252613", "410355", "433874"].map((id, i) =>
+        aura(LogEvent.SPELL_AURA_APPLIED, id, i, i + 1),
+      ),
+    );
+    expect(ccAvoidanceBuffsUpAt(u, T0 + 500).map((b) => b.name)).toEqual([
+      "Deep Breath",
+    ]);
+  });
+  it("D9: a Hover pressed 0.25 s after a Freezing Trap's IMMUNE miss on the player dodged nothing", () => {
+    const FREEZING_TRAP = "187650";
+    const enemy = makeUnit("enemy-1", {
+      name: "Hunter",
+      spec: CombatUnitSpec.Hunter_Survival,
+      reaction: CombatUnitReaction.Hostile,
+      spellCastEvents: [
+        makeSpellCastEvent(
+          FREEZING_TRAP,
+          T0 + 10_000,
+          "0000000000000000",
+          "nil",
+          "enemy-1",
+          "Hunter",
+          0,
+          getEnglishSpellName(FREEZING_TRAP),
+        ),
+      ],
+    });
+    const player = makeUnit("player-1", {
+      name: "Player",
+      spec: CombatUnitSpec.Evoker_Preservation,
+      reaction: CombatUnitReaction.Friendly,
+      spellCastEvents: [
+        makeSpellCastEvent(
+          "358267",
+          T0 + 10_720,
+          "0000000000000000",
+          "nil",
+          "player-1",
+          "Player",
+          0,
+          "Hover",
+        ),
+      ],
+    });
+    player.missesIn = [
+      {
+        timestamp: T0 + 10_470,
+        spellId: "3355",
+        srcUnitId: "enemy-1",
+        destUnitId: "player-1",
+        missType: "IMMUNE",
+        amount: 0,
+        logLine: {
+          event: LogEvent.SPELL_MISSED,
+          timestamp: T0 + 10_470,
+          lineIndex: 500,
+        },
+      },
+    ] as never;
+    const combat = {
+      startTime: T0,
+      endTime: T0 + 60_000,
+      startInfo: { zoneId: "1672" },
+      units: { [player.id]: player, [enemy.id]: enemy },
+    };
+    const avoided = analyzePlayerCCAndTrinket(player, [enemy], combat as never, [])
+      .ccAvoidedInstances;
+    expect(avoided.filter((a) => a.avoidanceSpellName === "Hover")).toEqual([]);
   });
 });

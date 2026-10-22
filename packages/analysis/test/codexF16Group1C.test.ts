@@ -344,3 +344,47 @@ describe("codex 20-F16-08 #1: a reflected return a deferral shield took is not d
     expect(out.find((r) => r.spellId === "133")?.damageBack ?? 0).toBe(0);
   });
 });
+
+describe("fact3 D6 / D25: a non-damaging reflected spell owns no damage return", () => {
+  it("Pyroblast reflected at 10.0, Spellsteal at 10.6, 145k under Nether Ward at 10.8 → Pyroblast's", () => {
+    const T0 = 1_000_000;
+    const raw = (id: string, over: Record<string, unknown> = {}): any => ({
+      id,
+      name: `${id}-R-US`,
+      spellCastEvents: [],
+      auraEvents: [],
+      missesOut: [],
+      damageIn: [],
+      absorbsIn: [],
+      advancedActions: [],
+      ...over,
+    });
+    const reflect = (spellId: string, ms: number) => ({
+      spellId,
+      spellName: "x",
+      missType: "REFLECT",
+      destUnitId: "Player-L",
+      logLine: { timestamp: T0 + ms },
+    });
+    const caster = raw("Player-M", {
+      missesOut: [reflect("11366", 10_000), reflect("1270828", 10_636)],
+      damageIn: [
+        {
+          spellId: "212295",
+          srcUnitId: "Player-L",
+          effectiveAmount: -144_646,
+          logLine: { timestamp: T0 + 10_806 },
+        },
+      ],
+      advancedActions: [0, 10_000, 20_000].map((ms) => ({
+        advancedActorId: "Player-M",
+        advancedActorMaxHp: 1_000_000,
+        advancedActorCurrentHp: 1_000_000,
+        logLine: { timestamp: T0 + ms },
+      })),
+    });
+    const out = reflectedSpells([caster, raw("Player-L")], T0);
+    expect(out.find((r) => r.spellId === "11366")?.damageBack).toBe(144_646);
+    expect(out.find((r) => r.spellId === "1270828")?.damageBack ?? 0).toBe(0);
+  });
+});

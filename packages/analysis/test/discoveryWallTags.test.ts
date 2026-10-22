@@ -106,3 +106,25 @@ describe("walls never ledger as Offensive (F-MC1)", () => {
     expect(cd!.neverUsed).toBe(true);
   });
 });
+
+describe("a name is no defensive — fact3 D56 / D57", () => {
+  it("an Elemental Shaman's Spiritwalker's Grace (/spirit/) ledgers as Utility", () => {
+    const owner = makeUnit("player-1", {
+      class: CombatUnitClass.Shaman,
+      spec: CombatUnitSpec.Shaman_Elemental,
+      info: {
+        talents: [{ id1: 103584, id2: 127857, count: 1 }],
+        pvpTalents: [],
+      } as any,
+    });
+    const combat = {
+      startTime: T0,
+      endTime: T0 + 300_000,
+      units: { "player-1": owner },
+    } as unknown as import("@gladlog/parser-compat").AtomicArenaCombat;
+    const cd = extractMajorCooldowns(owner, combat).find(
+      (c) => c.spellId === "79206",
+    );
+    expect(cd?.tag).toBe(SpellTag.Utility);
+  });
+});

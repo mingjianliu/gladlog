@@ -285,6 +285,26 @@ describe("enemyDefensiveEvents", () => {
     expect(p.removedEarly).toBe(true);
   });
 
+  it("fact3 D32 / corpusFactScan: a press logged up to the aura-before-cast lag (150 ms) after its aura is the press — no `[no press logged]`", () => {
+    const SOTF = "264735";
+    const at = (lagS: number) =>
+      enemyDefensiveEvents(
+        unit("e1", {
+          auraEvents: [
+            applied(SOTF, "e1", "e1", 10),
+            removed(SOTF, "e1", "e1", 18),
+          ],
+          spellCastEvents: [cast(SOTF, "e1", 10 + lagS)],
+        }),
+        [],
+        combat,
+      )[0]!;
+    expect(at(0.053).noPressLogged).toBeUndefined();
+    expect(at(0.104).noPressLogged).toBeUndefined(); // Die by the Sword, 82-5 1:48
+    expect(at(0.15).noPressLogged).toBeUndefined();
+    expect(at(0.2).noPressLogged).toBe(true);
+  });
+
   it("removedEarly needs a real REMOVED event and more than the slack short", () => {
     // no REMOVED → the interval end is inferred (round end) → never "early"
     const inferred = unit("e1", {
@@ -1422,12 +1442,17 @@ describe("splitAtRepressRefresh — a cast-backed REFRESH is a second press (rou
           spellId: "363916",
           srcUnitName: "Evoker",
           timestamp: refreshAt * 1000,
-          logLine: { event: LogEvent.SPELL_AURA_REFRESH, timestamp: refreshAt * 1000 },
+          logLine: {
+            event: LogEvent.SPELL_AURA_REFRESH,
+            timestamp: refreshAt * 1000,
+          },
         },
       ],
     }) as never;
   it("splits at the REFRESH its source cast beside", () => {
-    const out = splitAtRepressRefresh([iv], unit(23.64), 0, () => [12.98, 23.639]);
+    const out = splitAtRepressRefresh([iv], unit(23.64), 0, () => [
+      12.98, 23.639,
+    ]);
     expect(out.map((x) => [x.fromS, x.toS, !!x.endedByRepress])).toEqual([
       [12.98, 23.64, true],
       [23.64, 35.64, false],
@@ -1461,12 +1486,19 @@ describe("enemyDefensiveEvents — a press-less rider absorb shield", () => {
       attackerId: "f1",
       absorbedAmount: amount,
       timestamp: ms(atS),
-      logLine: { event: LogEvent.SPELL_ABSORBED, timestamp: ms(atS), parameters: [] },
+      logLine: {
+        event: LogEvent.SPELL_ABSORBED,
+        timestamp: ms(atS),
+        parameters: [],
+      },
     });
     const paladin = unit("e1", {
       auraEvents: [
         applied(DIVINE_PROTECTION_RET, "e1", "e1", 10.768),
-        { ...applied(SHIELD_OF_VENGEANCE, "e1", "e1", 10.768), amount: 310_082 },
+        {
+          ...applied(SHIELD_OF_VENGEANCE, "e1", "e1", 10.768),
+          amount: 310_082,
+        },
         { ...removed(SHIELD_OF_VENGEANCE, "e1", "e1", 12.344), amount: 0 },
         removed(DIVINE_PROTECTION_RET, "e1", "e1", 18.768),
       ],

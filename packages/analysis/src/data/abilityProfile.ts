@@ -185,6 +185,12 @@ export const KW_MAJOR_DEFENSIVE_IDS: ReadonlySet<string> = new Set(
     "403876", // Divine Protection (Retribution) — 60 s
     "264735", // Survival of the Fittest — 90 s
     "108416", // Dark Pact — 60 s
+    // User ruling 2026-10-21 (fact3 D49, 605 preview approved): Vanish, an
+    // immunity-kind save (ENEMY_IMMUNITY_SAVE_AURAS) — a charge in hand keeps
+    // the rogue out of `defenseless` (b3aa876f r0: `defenseless 1:10–1:31`
+    // with the second charge pressed at 1:31.9). Preview: rogue [KILL
+    // WINDOW] lines 1,203 → 752; kick-priority −6; 56 burst lines name it.
+    "1856", // Vanish — 120 s
   ].filter((id) => id !== "200183"),
 ); // Apotheosis dropped
 

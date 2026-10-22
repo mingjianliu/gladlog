@@ -717,7 +717,19 @@ function collectOwnerCCSpells(
     // ignored, and a charge-only CC row (no plain cooldown) read 0 = "always
     // ready" (talent impact audit 2026-09-26).
     const own = unitCooldownOf(owner, e.spellId);
-    const entry = bySpell.get(e.spellId) ?? {
+    // a cast logged under another id of a kit control (Hex 210873, the
+    // Compy variant, against the kit's 51514) is a press of that control
+    // (fact3 D14 / D16: the kit entry had no casts and read "ready" in
+    // every window, and Hex printed twice)
+    const name = getEnglishSpellName(e.spellId, e.spellName);
+    const kitKey = bySpell.has(e.spellId)
+      ? e.spellId
+      : [...bySpell.values()].find(
+          (k) =>
+            kitControls.some((c) => c.spellId === k.spellId) &&
+            k.spellName === name,
+        )?.spellId;
+    const entry = (kitKey !== undefined ? bySpell.get(kitKey) : undefined) ?? {
       spellId: e.spellId,
       spellName: getEnglishSpellName(e.spellId, e.spellName),
       cooldownSeconds: own?.cooldownSeconds ?? 0,
@@ -725,7 +737,7 @@ function collectOwnerCCSpells(
       castTimesSeconds: [],
     };
     entry.castTimesSeconds.push((e.logLine.timestamp - matchStartMs) / 1000);
-    bySpell.set(e.spellId, entry);
+    bySpell.set(kitKey ?? e.spellId, entry);
   }
   const model = (id: string) =>
     combat?.units

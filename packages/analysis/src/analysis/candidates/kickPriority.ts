@@ -120,6 +120,33 @@ const CAST_PAIR_MAX_MS = 10_000;
 /** SPELL_HEAL from the healer on the target within this after SPELL_CAST_SUCCESS. */
 const HEAL_LAND_PAIR_MS = 500;
 /**
+ * Of the kill windows a heal cast started in (`startS` inside), the one whose
+ * target was lowest at the cast, at or under `hpGate`; undefined when none.
+ * Two targets' windows can overlap, and the first in list order alone made
+ * the answer depend on how the windows sort (fact3, 605: 49643222 2:30 — a
+ * Flash Heal on the 46 % hunter, inside both the hunter's span and the
+ * priest's, was judged on the priest's 2:04 span until a Phase Shift cut
+ * moved that span after the hunter's).
+ */
+export function lowestTargetWindowAt<
+  W extends { targetUnitId: string; fromSeconds: number; toSeconds: number },
+>(
+  windows: readonly W[],
+  startS: number,
+  hpGate: number,
+  hpOf: (targetUnitId: string) => number | null | undefined,
+): { w: W; hp: number } | undefined {
+  let pick: { w: W; hp: number } | undefined;
+  for (const w of windows) {
+    if (startS < w.fromSeconds || startS > w.toSeconds) continue;
+    const hp = hpOf(w.targetUnitId);
+    if (hp == null || hp > hpGate) continue;
+    if (!pick || hp < pick.hp) pick = { w, hp };
+  }
+  return pick;
+}
+
+/**
  * How many casts of `sid` the heal pairing of a hardcast that finished at
  * `endMs` sums: the hardcast itself plus every later SPELL_CAST_SUCCESS of
  * the same spell inside the window the SPELL_HEAL rows are paired in
@@ -496,17 +523,15 @@ export function kickPriorityDecisionPoints(
       if (outcome === "completed" && durationS > KICK_PRIORITY_MAX_CAST_S)
         continue;
       const startS = rel(sMs);
-      const w = windows.find(
-        (x) => startS >= x.fromSeconds && startS <= x.toSeconds,
-      );
-      if (!w) continue;
-      const target = enemyById.get(w.targetUnitId);
-      if (!target) continue;
-      const hp = gridHpPct(
-        target as never,
-        startMs + toRenderSecond(startS) * 1000,
-      );
-      if (hp == null || hp > hpGate) continue;
+      const pick = lowestTargetWindowAt(windows, startS, hpGate, (id) => {
+        const t = enemyById.get(id);
+        return t
+          ? gridHpPct(t as never, startMs + toRenderSecond(startS) * 1000)
+          : null;
+      });
+      if (!pick) continue;
+      const target = enemyById.get(pick.w.targetUnitId)!;
+      const { w, hp } = pick;
       if (interruptImmuneAt(healer, sMs)) continue;
 
       // Both arms: eligibility comes from the corpus table (or the bootstrap

@@ -533,7 +533,7 @@ export const BUFF_DURATION_TALENT_MODIFIERS: Record<
       specs: ["65"], // Paladin_Holy
       untalentedBaseSeconds: 15,
       pct: 50,
-      note: "Sanctified Wrath — corpus is unambiguous and matches Avenging Wrath's ×1.5 exactly: 102 of 102 caster-cells at 22.5 s hold it, the 15 s group 2 of 5 (15 × 1.5 = 22.5). DB2 only accounts for HALF of it here — 216331's class mask is 0/0/0/64 and the second +25 % row (171648) carries 0/256/0/0, so only the talent's own +25 % legally reaches it. Registered on corpus evidence with DB2 partially disagreeing, the same standing as CORPUS_DURATION_PATCHES' Binding Shot 2 → 3 s; if a future build's mask data lines up, fold it back to two +25 % rows.",
+      note: "Sanctified Wrath — corpus is unambiguous and matches Avenging Wrath's ×1.5 exactly: 102 of 102 caster-cells at 22.5 s hold it, the 15 s group 2 of 5 (15 × 1.5 = 22.5). DB2 only accounts for HALF of it here — 216331's class mask is 0/0/0/64 and the second +25 % row (171648) carries 0/256/0/0, so only the talent's own +25 % legally reaches it. Mechanism (user-supplied research, 2026-10-21): Patch 12.0.0 notes — 'Sanctified Wrath … now increases the duration of Avenging Wrath by 50% (was 25%)', and its Holy text names Avenging Crusader too ($?c1 branch of 53376); the client's effect row still carries 25 (Wowhead's spell details show the same), so the +50 % is the live server value, not a second talent. Do not look for another +25 % row.",
     },
   ],
   "358267": [
@@ -997,6 +997,14 @@ export const BUFF_DURATION_TALENT_MODIFIERS: Record<
       untalentedBaseSeconds: 5,
       pct: 20,
       note: "Anti-Magic Barrier — DB2 aura 108 +40 % with PvpMultiplier bringing it to +20 % in PvP (the PvP value is the official one, user ruling 2026-09-04), Death Knight class tree all three specs (maxRanks 1), mask covers both Anti-Magic Shell ids; GAP row 2026-09-22: 6.0 s in 247 caster-cells, modal lifetime 6.0 s = 69 % of 1,991. Split: 129 of 137 holder cells at 6.0 s across Unholy/Frost × Aug/Sep; NO non-holder cell exists — the talent is universally taken, and Rule 3 says a control group is not required; 5 × 1.2 = 6.",
+    },
+  ],
+  "444741": [
+    {
+      talentSpellId: "205727",
+      untalentedBaseSeconds: 5,
+      pct: 20,
+      note: "Anti-Magic Barrier on the DOMINANT Anti-Magic Shell aura (cast 444740 → aura 444741) — same DB2 row (205727 eff1 aura 108 +40, PvpMultiplier 0.5) and mask (131072); corpusFactScan 2026-10-21: 2,284 of 2,366 runs at 6.0 s on the 605-file capture. It had no entry, so every reader of it (the kit's `lasts`, the expiry) priced the DB2 5 s; 5 × 1.2 = 6.",
     },
   ],
   "48707": [

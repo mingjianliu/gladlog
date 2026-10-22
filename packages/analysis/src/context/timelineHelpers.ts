@@ -56,8 +56,9 @@ import {
   AURA_BEFORE_CAST_MAX_S,
   SAVE_CAST_AURA_PAIR_S,
 } from "../utils/enemyDefensives";
-import {   DEFERRAL_SHIELD_DAMAGE_IDS,
-hitSchoolId,
+import {
+  DEFERRAL_SHIELD_DAMAGE_IDS,
+  hitSchoolId,
   isDeferralAbsorb,
 } from "../utils/incomingPressure";
 import {
@@ -383,6 +384,7 @@ export interface ICDExpiryEvent {
     | "broken"
     | "target_debuff_off"
     | "absorbed"
+    | "charges_spent"
     | "round_end";
   /** cause dispelled / stolen: who did it, with what */
   endedBy?: { unitId: string; unitName: string; spellName: string };
@@ -435,6 +437,16 @@ export const CHANNELED_CD_SPELL_IDS = new Set<string>([
 // corpus exactly. Avenging Wrath's Holy 30 s and the two channels remain open — see the
 // "NOT registered" list on BUFF_DURATION_TALENT_MODIFIERS.
 const BUFF_EXPIRY_PAIRING_TOLERANCE_S = 2;
+
+/**
+ * fact3 D42 / D48 (2026-10-21): a charge's aura — it ends when the charge
+ * lands, so its removal is never "ended early" on length. The Hunt 370965:
+ * APPLIED at the press, REMOVED 2 ms after the impact (8888b780 r0 0:14:
+ * 0.155 s; 1:18: 0.044 s), against a 6 s hand override that is the DoT's.
+ */
+export const ENDS_WITH_ITS_CHARGE_IDS: ReadonlySet<string> = new Set([
+  "370965", // The Hunt
+]);
 
 // B129: a removal within this slack of the natural end still counts as a normal expiry (server-tick
 // latency); earlier than this means the buff was ended early (consumed/dispelled/cancelled).
@@ -508,7 +520,10 @@ export function extractOwnerCDBuffExpiry(
     //    (Alter Time 342245 → 342246, Fortifying Brew 115203 → 120954, Blur
     //    198589 → 212800) — asked through the one cast→effect resolution, it
     //    had no fade line at all.
-    const ownAuraIds = new Set([cd.spellId, ...ownEffectAurasOfCast(cd.spellId)]);
+    const ownAuraIds = new Set([
+      cd.spellId,
+      ...ownEffectAurasOfCast(cd.spellId),
+    ]);
     // fact2 (2026-10-20): a BUFF — the owner's control reflected back onto
     // the owner lands as the owner's own DEBUFF (3f21c5db 0:24: Mortal Coil
     // 6789, Dekayla > Dekayla) and is no cooldown buff of the owner's
@@ -545,10 +560,10 @@ export function extractOwnerCDBuffExpiry(
     const runAuraId = seenAuraId(cd.spellId)
       ? cd.spellId
       : (ownEffectAurasOfCast(cd.spellId).find(seenAuraId) ?? cd.spellId);
-    const duration =
+    const baseDuration =
       buffFullDurationForCaster(runAuraId, owner) ??
       buffFullDurationForCaster(cd.spellId, owner);
-    if (!duration || duration <= 0) continue;
+    if (!baseDuration || baseDuration <= 0) continue;
     // F02a: the aura whose REMOVED is this cooldown's end. Touch of Karma is
     // an absorb with an aura of its own (`TOUCH_OF_KARMA_ABSORB_ID`); the
     // cast id's buff is a 10 s marker that outlives it — 2abc9185 read
@@ -621,6 +636,13 @@ export function extractOwnerCDBuffExpiry(
     for (let i = 0; i < cd.casts.length; i++) {
       const cast = cd.casts[i]!;
       const castMs = matchStartMs + cast.timeSeconds * 1000;
+      // this press's own length: a per-event extension (Spiritwalker's
+      // Momentum) grows with the casts after it (codex 20-F16-13 #1: the
+      // owner's expiry read 15 s, the aura builder 19 s)
+      const duration =
+        buffFullDurationForCaster(runAuraId, owner, castMs) ??
+        buffFullDurationForCaster(cd.spellId, owner, castMs) ??
+        baseDuration;
       if (castMs >= roundEnd) break;
 
       let expiresAtSeconds: number;
@@ -745,6 +767,7 @@ export function extractOwnerCDBuffExpiry(
       );
       let cause: ICDExpiryEvent["cause"] =
         !CHANNELED_CD_SPELL_IDS.has(cd.spellId) &&
+        !ENDS_WITH_ITS_CHARGE_IDS.has(cd.spellId) &&
         !isEstimated &&
         expiresAtSeconds < naturalEndSeconds - earlyToleranceS
           ? "ended_early"
@@ -892,6 +915,22 @@ export function extractOwnerCDBuffExpiry(
             cause = "absorbed";
           }
         }
+        // fact3 D55 (dff2c7a6 r0): a buff spent by its charges — a dose came
+        // off it during this application and the last one took it
+        // (Stormkeeper's two Lightning Bolts: REMOVED_DOSE at the first,
+        // REMOVED 2 ms after the second) — was used up, not ended early
+        if (
+          cause === "ended_early" &&
+          holder.auraEvents.some(
+            (a) =>
+              a.spellId === endAuraId &&
+              (a.logLine.event as LogEvent) ===
+                LogEvent.SPELL_AURA_REMOVED_DOSE &&
+              (a.logLine.timestamp as number) >= span.fromMs &&
+              (a.logLine.timestamp as number) <= span.removedMs,
+          )
+        )
+          cause = "charges_spent";
         // WO6 #3 (n45): a BROKEN line ended it — enemy damage broke the
         // aura (Mass Invisibility broken by Refining Fire), which the log
         // names: the shared break reader of the CC lines
@@ -1576,7 +1615,6 @@ export function dispelActorLabel(
   const src = allUnits.find((u) => u.id === e.summonUnitId);
   return `${label}'s ${summonKindOf(e.summonUnitId, src)}`;
 }
-
 
 /**
  * Damage events on `unit` from the side opposing `unitSide` — "did the other

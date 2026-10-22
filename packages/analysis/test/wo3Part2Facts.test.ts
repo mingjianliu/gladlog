@@ -269,6 +269,27 @@ describe("G4 — ccInWindowS counts only what stops every spell cast this round"
   });
 });
 
+describe("user ruling 2026-10-21 (round-3 q7): silenced time counts in ccInWindowS", () => {
+  it("a Garrote silence while a physical button was still free counts (fact3 A10)", () => {
+    const silence = (event: LogEvent, dt: number) =>
+      makeAuraEvent(event, "1330", T0 + 10_000 + dt * 1000, "enemy-1");
+    const [k] = kicked({
+      spec: CombatUnitSpec.Druid_Feral,
+      interrupted: ["8936", "Regrowth"],
+      // Shred (physical) and Regrowth (nature): a silence stops one of them
+      casts: [
+        ["5221", -5],
+        ["8936", -2],
+      ],
+      auras: [
+        silence(LogEvent.SPELL_AURA_APPLIED, 1),
+        silence(LogEvent.SPELL_AURA_REMOVED, 3),
+      ],
+    });
+    expect(k!.ccInWindowS).toBe(2);
+  });
+});
+
 describe("G5 — a channel stopped at the removal ended the control", () => {
   const MIND_CONTROL = "605";
   const REMOVE_MS = T0 + 18_000;

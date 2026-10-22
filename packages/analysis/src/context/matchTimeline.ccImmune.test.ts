@@ -187,7 +187,9 @@ describe("[IMMUNE] on the owner's CC casts", () => {
         },
       ]),
     );
-    expect(timeline).toContain("[IMMUNE — Divine Shield was up]");
+    // fact3 D58: the line names nobody (Psychic Scream has no target), so
+    // the tag says whose immunity it was
+    expect(timeline).toMatch(/\[IMMUNE: \S+ — Divine Shield was up\]/);
   });
 
   it("general-cast path (no ledger entry): Polymorph-class CC gets the tag too", () => {
@@ -265,7 +267,7 @@ describe("[IMMUNE] on the owner's CC casts", () => {
         ledger,
       ),
     );
-    expect(onPlayer).toContain("[IMMUNE]");
+    expect(onPlayer).toMatch(/\[IMMUNE: \S+\]/);
   });
 
   it("a single-target CC aimed at a pet keeps its IMMUNE tag", () => {

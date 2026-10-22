@@ -107,6 +107,7 @@ export function emitHealerCastGapFillerEntries(
     | "ownerHardCcTagAt"
     | "criticalWindowSet"
     | "crisisUnfoldWindows"
+    | "roundEndAtMs"
   >,
 ): void {
   const {
@@ -132,7 +133,13 @@ export function emitHealerCastGapFillerEntries(
     ownerHardCcTagAt,
     criticalWindowSet,
     crisisUnfoldWindows,
+    roundEndAtMs,
   } = ctx;
+  // fact3 D11 (12d734cd r0): a cast after the round's end — the next Solo
+  // Shuffle round's preparation — is no cast of this round ("Echo x31 over
+  // 140s" counted one at 2:21, after the deciding death at 2:15)
+  const inRound = (e: { logLine: { timestamp: number } }) =>
+    e.logLine.timestamp <= roundEndAtMs;
 
   const trackedCastsBySpellId = new Map<string, Set<number>>();
   for (const cd of ownerCDs) {
@@ -157,6 +164,22 @@ export function emitHealerCastGapFillerEntries(
     .flatMap((s) =>
       s.ccInstances.map((cc) => Math.round(matchStartMs + cc.atSeconds * 1000)),
     );
+  /** each owner CC's landing → its end (ms) */
+  const ownerCCEndMs = new Map<number, number>(
+    ccTrinketSummaries
+      .filter((s) => s.playerName === owner.name)
+      .flatMap((s) =>
+        s.ccInstances.map(
+          (cc) =>
+            [
+              Math.round(matchStartMs + cc.atSeconds * 1000),
+              Math.round(
+                matchStartMs + (cc.atSeconds + cc.durationSeconds) * 1000,
+              ),
+            ] as [number, number],
+        ),
+      ),
+  );
 
   /** Seconds a channel ran before an owner CC cut it, or null (F-O14). */
   const CHANNEL_AURA_AT_CAST_MS = 250;
@@ -322,12 +345,14 @@ export function emitHealerCastGapFillerEntries(
   const ownerCastCountByName = new Map<string, number>();
   for (const e of owner.spellCastEvents ?? []) {
     if (e.logLine.event !== LogEvent.SPELL_CAST_SUCCESS || !e.spellId) continue;
+    if (!inRound(e)) continue;
     const n =
       HEALER_CAST_SPELL_ID_TO_NAME[e.spellId] ??
       getEnglishSpellName(e.spellId, e.spellName);
     if (!n) continue;
     ownerCastCountByName.set(n, (ownerCastCountByName.get(n) ?? 0) + 1);
   }
+  const UNNAMED_FOLD_TARGET = "\u0000unnamed:";
   const spamFolds = new Map<
     string,
     {
@@ -345,11 +370,14 @@ export function emitHealerCastGapFillerEntries(
     spamFolds.delete(displayName);
     // every cast of it already has its own line: the fold adds nothing
     if (f.printed === f.count) return;
+    // one target the fold can name → it; several → "various"; only units
+    // the label cannot name → no target
     const target =
-      f.targets.size === 1
-        ? [...f.targets][0]
-        : f.targets.size > 1
-          ? "various"
+      f.targets.size > 1
+        ? "various"
+        : f.targets.size === 1 &&
+            !([...f.targets][0] ?? "").startsWith(UNNAMED_FOLD_TARGET)
+          ? [...f.targets][0]
           : "";
     const targetPart = target ? ` → ${target}` : "";
     const spanSeconds = Math.round(f.lastTimeSeconds - f.startTimeSeconds);
@@ -382,6 +410,7 @@ export function emitHealerCastGapFillerEntries(
   for (const e of owner.spellCastEvents ?? []) {
     if (e.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
     if (!e.spellId) continue;
+    if (!inRound(e)) continue;
     const englishName = getEnglishSpellName(e.spellId, e.spellName);
     if (isPassiveProcCast(e)) continue;
     // #36(a): echo copies / set procs / channel ticks under their own id are
@@ -449,6 +478,10 @@ export function emitHealerCastGapFillerEntries(
     let minDiff = Infinity;
     for (const ccMs of ownerCCMsTimestamps) {
       const diff = Math.abs(ccMs - tsMs);
+      // fact3 D1 (02b930cd 0:48): a cast after the CC had already ended
+      // (Execute broke the Fear 0.26 s before the Reversion) is not one
+      // that "succeeded after CC arrived"
+      if (tsMs > (ownerCCEndMs.get(ccMs) ?? Infinity)) continue;
       if (diff <= CC_PROXIMITY_MS && diff < minDiff) {
         minDiff = diff;
         nearestCC = ccMs;
@@ -482,6 +515,15 @@ export function emitHealerCastGapFillerEntries(
     }
 
     const targetLabel = resolveTarget(e.destUnitName);
+    // the spam fold's target: the label, or — for a real destination the
+    // label cannot name (a pet with a non-ASCII name) — a key that makes
+    // the fold say "various" rather than claim every cast went to the one
+    // named target (fact3 D21: `Provoke (x12) → 5`, 10 of 12 on an Imp)
+    const foldTarget =
+      targetLabel ||
+      (e.destUnitId && !/^0+$/.test(e.destUnitId)
+        ? `${UNNAMED_FOLD_TARGET}${e.destUnitId}`
+        : undefined);
 
     // B21: Dedup same-target, same-name casts within a 0.5s sliding window
     // Prevents arbitrary second-flooring boundaries (Math.floor) from over-collapsing or under-collapsing.
@@ -689,7 +731,7 @@ export function emitHealerCastGapFillerEntries(
       // cast in the death window were in no count) — the running one, or a
       // new one from here when there is none (codex 20-F15-32: after a gap
       // over 30 s three casts were in no count)
-      countPrintedInFold(displayName, timeSeconds, targetLabel);
+      countPrintedInFold(displayName, timeSeconds, foldTarget);
       continue;
     }
     // H19: the spam fold also steps aside for a cast on the crisis unit
@@ -704,7 +746,7 @@ export function emitHealerCastGapFillerEntries(
         `${fmtTime(timeSeconds)}  [YOU] [CAST]   ${displayName}${targetPart}`,
       );
       // the fold still counts it (F16 retest idx 22: Riptide x13 for 15)
-      countPrintedInFold(displayName, timeSeconds, targetLabel);
+      countPrintedInFold(displayName, timeSeconds, foldTarget);
       continue;
     }
     if (
@@ -715,7 +757,7 @@ export function emitHealerCastGapFillerEntries(
       if (f && timeSeconds - f.lastTimeSeconds <= SPAM_FOLD_MAX_GAP_SECONDS) {
         f.count++;
         f.lastTimeSeconds = timeSeconds;
-        if (targetLabel) f.targets.add(targetLabel);
+        if (foldTarget) f.targets.add(foldTarget);
       } else {
         flushSpamFold(displayName);
         spamFolds.set(displayName, {
@@ -723,7 +765,7 @@ export function emitHealerCastGapFillerEntries(
           lastTimeSeconds: timeSeconds,
           count: 1,
           printed: 0,
-          targets: new Set(targetLabel ? [targetLabel] : []),
+          targets: new Set(foldTarget ? [foldTarget] : []),
         });
       }
       continue;
@@ -771,7 +813,7 @@ export function emitHealerCastGapFillerEntries(
       // the fold still counts it (F16 retest idx 22: 0deb726b's 1:08 Riptide
       // `[cast succeeded before CC landed]` was in no count)
       if ((ownerCastCountByName.get(displayName) ?? 0) >= SPAM_FOLD_THRESHOLD)
-        countPrintedInFold(displayName, timeSeconds, targetLabel);
+        countPrintedInFold(displayName, timeSeconds, foldTarget);
     }
   }
 

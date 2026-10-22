@@ -235,6 +235,19 @@ function manaSamplesWithin(
   toMs: number,
   fallback?: ManaFallback,
 ): Array<{ current: number; max: number }> {
+  return timedManaSamplesWithin(unit, fromMs, toMs, fallback).map((s) => ({
+    current: s.current,
+    max: s.max,
+  }));
+}
+
+/** `manaSamplesWithin` with each sample's own instant (epoch ms). */
+function timedManaSamplesWithin(
+  unit: Pick<ICombatUnit, "id" | "advancedActions">,
+  fromMs: number,
+  toMs: number,
+  fallback?: ManaFallback,
+): Array<{ ms: number; current: number; max: number }> {
   const advanced = samplesBearing(
     unit.id,
     getSortedAdvancedActions(unit),
@@ -245,9 +258,12 @@ function manaSamplesWithin(
       .filter(
         (a) => a.logLine.timestamp >= fromMs && a.logLine.timestamp <= toMs,
       )
-      .map((a) => powerEntry(a, MANA_POWER_TYPE)!)
-      .filter((e) => e && e.max > 0 && Number.isFinite(e.current))
-      .map((e) => ({ current: e.current, max: e.max }));
+      .map((a) => ({
+        ms: a.logLine.timestamp,
+        e: powerEntry(a, MANA_POWER_TYPE)!,
+      }))
+      .filter(({ e }) => e && e.max > 0 && Number.isFinite(e.current))
+      .map(({ ms, e }) => ({ ms, current: e.current, max: e.max }));
   const fromS = (fromMs - fallback.matchStartMs) / 1000;
   const toS = (toMs - fallback.matchStartMs) / 1000;
   return rawManaSamplesOf(fallback.rawStreams, unit.id)
@@ -255,7 +271,11 @@ function manaSamplesWithin(
       (m) =>
         m.tSeconds >= fromS && m.tSeconds <= toS && Number.isFinite(m.mana),
     )
-    .map((m) => ({ current: m.mana, max: m.manaMax }));
+    .map((m) => ({
+      ms: fallback.matchStartMs + m.tSeconds * 1000,
+      current: m.mana,
+      max: m.manaMax,
+    }));
 }
 
 /**
@@ -399,6 +419,38 @@ export function affordableAt(
   const cost = costFor(unit, spellId, r.max, combat);
   if (cost === null || !(cost > 0)) return null;
   return { affordable: r.current >= cost, mana: r.current, cost };
+}
+
+/**
+ * The stretches of [fromMs, toMs] the unit could NOT pay for `spellId`: from
+ * a mana sample under the cost to the next sample (the reading holds until
+ * it changes) — the same cost, samples and comparison as `affordableWithin`.
+ * Empty when unknown (no cost row, no sample, a free-cast aura): no gate.
+ * fact3 D12 (20e0f243 5:57): the priest's Guardian Spirit was "free to cast
+ * 2.2 s" while 169 mana sat under its 2.3k cost.
+ */
+export function unaffordableIntervals(
+  unit: ICombatUnit,
+  spellId: string,
+  fromMs: number,
+  toMs: number,
+  fallback?: ManaFallback,
+  combat?: { startTime: number; endTime: number },
+): Array<{ from: number; to: number }> {
+  if (freeCastWithin(unit, fromMs, toMs, combat)) return [];
+  // the reading in force at the window's start too
+  const samples = timedManaSamplesWithin(unit, fromMs - 5000, toMs, fallback);
+  const out: Array<{ from: number; to: number }> = [];
+  for (let i = 0; i < samples.length; i++) {
+    const smp = samples[i]!;
+    const next = samples[i + 1]?.ms ?? toMs;
+    if (next <= fromMs) continue;
+    const cost = costFor(unit, spellId, smp.max, combat);
+    if (cost === null || !(cost > 0)) return [];
+    if (smp.current < cost)
+      out.push({ from: Math.max(fromMs, smp.ms), to: Math.min(toMs, next) });
+  }
+  return out;
 }
 
 /**

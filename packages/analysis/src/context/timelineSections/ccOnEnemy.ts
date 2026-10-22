@@ -39,7 +39,7 @@ import { hasOffensiveSpellActive, hpAtPress } from "../../utils/cooldowns";
 import { wasRemovedByAllyDispel } from "../../utils/dispelAnalysis";
 import { isEnemyCdWindowSpell } from "../../utils/enemyCDs";
 import { MEDALLION_SPELL_ID } from "../../utils/pvpTrinketUses";
-import { fmtTime, toRenderSecond } from "../../utils/renderGrid";
+import { fmtTime } from "../../utils/renderGrid";
 import type { TimelineCtx } from "./ctx";
 
 export function emitCcOnEnemyEntries(
@@ -109,19 +109,21 @@ export function emitCcOnEnemyEntries(
           | Pick<ICCInstance, "spellName" | "sourceName" | "sourceId">
           | undefined,
       ) => {
-        const tSec = toRenderSecond(t);
-        const tMs = matchStartMs + tSec * 1000;
         const ccPart = brokenCC
           ? brokenCC.sourceId !== undefined &&
             brokenCC.sourceId === enemyUnit?.id
             ? ` out of ${brokenCC.spellName} (reflected back)`
             : ` out of ${brokenCC.spellName} (by ${actorLabel(brokenCC.sourceName, "friendly", brokenCC.sourceId)})`
           : "";
+        // the tag is a fact of the PRESS instant (round-3 audit, a call the
+        // user left to us: fact3 D8 — read at m:ss.0 it missed a burst
+        // started earlier in the same second, and kept one that had ended)
+        const pressMs = matchStartMs + Math.round(t * 1000);
         const hasBurst =
           friends.some((f) =>
             hasOffensiveSpellActive(
               f,
-              tMs,
+              pressMs,
               friendlyIds,
               undefined,
               roundBounds,
@@ -130,7 +132,7 @@ export function emitCcOnEnemyEntries(
           (enemies ?? []).some((e) =>
             hasOffensiveSpellActive(
               e,
-              tMs,
+              pressMs,
               friendlyIds,
               isEnemyCdWindowSpell,
               roundBounds,

@@ -37,10 +37,10 @@ import {
 } from "../../utils/castMissRows";
 import {
   applicableCCAvoidanceIds,
+  avoidanceExplainsMissType,
   ccAvoidanceBuffsUpAt,
   GROUNDING_TOTEM_SPELL_ID,
   GROUNDING_TOTEM_WINDOW_S,
-  MECHANIC_LIMITED_AVOIDANCE_BUFFS,
 } from "../../utils/ccTrinketAnalysis";
 import {
   getUnitHpAtTimestamp,
@@ -663,6 +663,17 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
       }
     }
     if (!miss) return "";
+    // fact3 D58 (dff2c7a6 r3 0:53): a line that names nobody (a ground
+    // control — Binding Shot stunned two and met one immune mage) says whose
+    // immunity it was, or the cast reads as wholly immune
+    if (!unnamedLabel && (!named || named.size === 0)) {
+      const pl = allPlayers.find((p) => p.id === miss!.destUnitId);
+      if (pl && miss.destUnitId !== aimedAt)
+        unnamedLabel =
+          pl.reaction === CombatUnitReaction.Friendly
+            ? pid(pl.name)
+            : enemyPid(pl.name);
+    }
     consumedImmuneMisses.add(miss);
     const word = unnamedLabel ? `IMMUNE: ${unnamedLabel}` : "IMMUNE";
     const cause = ccImmuneCauseOf(miss);
@@ -687,11 +698,15 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
       // the one "was it up when the control hit" reading, in log order up to
       // the miss row (a Shroud the miss consumed is REMOVED after it in the
       // same ms) and capped at the aura's own length (fact1215 R5)
-      // a mechanic-limited avoidance (The Beast Within, Berserker Rage …)
-      // names only a control of a mechanic it stops — the avoidance sweep's
-      // own applicability (codex 20-F16-09 #1: The Beast Within read as the
-      // cause of an IMMUNE Hammer of Justice at stun DR Immune)
+      // only an avoidance that can stop THIS control is named — the
+      // avoidance sweep's own applicability (`applicableCCAvoidanceIds`):
+      // a mechanic-limited one (The Beast Within, Berserker Rage …) by
+      // mechanic (codex 20-F16-09 #1: The Beast Within read as the cause of
+      // an IMMUNE Hammer of Justice at stun DR Immune), a magic-only one by
+      // school (fact3 D2, 02b930cd 1:42: Spell Reflection named for a
+      // physical Shockwave at stun DR Immune)
       const ccName = getEnglishSpellName(miss.spellId ?? "", miss.spellName);
+      const applicable = applicableCCAvoidanceIds(miss.spellId ?? "", ccName);
       immunityName =
         ccAvoidanceBuffsUpAt(target, miss.timestamp, {
           atLine: miss.logLine.lineIndex,
@@ -700,8 +715,8 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
             allPlayers.find((u) => u.id === id),
         }).find(
           (b) =>
-            !MECHANIC_LIMITED_AVOIDANCE_BUFFS.has(b.spellId) ||
-            applicableCCAvoidanceIds(miss.spellId ?? "", ccName).has(b.spellId),
+            applicable.has(b.spellId) &&
+            avoidanceExplainsMissType(b.spellId, miss.missType),
         )?.name ?? "";
     }
     if (immunityName) return `${immunityName} was up`;
@@ -818,9 +833,17 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
             x.logLine.event === LogEvent.SPELL_AURA_REFRESH) &&
           inWindow(x.timestamp),
       );
+    // a miss of THIS cast (its own id or an effect aura's): any miss on the
+    // target — a DoT tick a shield ate — said nothing about the control
+    // (fact3 D29, 46a55085 3:28: a Kidney Shot into Phase Shift, no aura
+    // and no miss row of its own, printed bare)
     const missedOn = (u: ICombatUnit) =>
       (owner.missesOut ?? []).some(
-        (m) => m.destUnitId === u.id && inWindow(m.timestamp),
+        (m) =>
+          m.destUnitId === u.id &&
+          m.spellId !== undefined &&
+          own.has(m.spellId) &&
+          inWindow(m.timestamp),
       );
     if (!dest) {
       // FT-T14: an un-aimed area control (the `AOE_CC_SPELL_IDS` the cast
@@ -1114,11 +1137,30 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
   function ownerEmpowerTag(spellId: string, castTimeSeconds: number): string {
     const ends = owner.empowerEnds;
     const castMs = matchStartMs + castTimeSeconds * 1000;
+    // fact3 D18 (2cc2373a 0:12): a hold is the press its own SUCCESS row
+    // sits beside — after Tip the Scales an instant Fire Breath and a second
+    // press 0.44 s later (EMPOWER_START 13.236, SUCCESS 13.237, cut 13.290)
+    // are two presses inside EMPOWER_PRESS_MATCH_MS, and the ledger keeps one
+    // line: the cut hold is not the instant one's
+    const pressMs = owner.spellCastEvents
+      .filter(
+        (e) =>
+          e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+          e.spellId === spellId,
+      )
+      .map((e) => e.logLine.timestamp);
+    const nearestPressIsThis = (startMs: number) => {
+      let best = castMs;
+      for (const t of pressMs)
+        if (Math.abs(t - startMs) < Math.abs(best - startMs)) best = t;
+      return Math.abs(best - castMs) <= 1;
+    };
     const cut = ownerInterruptedEmpowers.find(
       (s) =>
         s.spellId === spellId &&
         !consumedEmpowerInterrupts.has(s) &&
-        Math.abs(s.startMs - castMs) <= EMPOWER_PRESS_MATCH_MS,
+        Math.abs(s.startMs - castMs) <= EMPOWER_PRESS_MATCH_MS &&
+        nearestPressIsThis(s.startMs),
     );
     if (cut) {
       consumedEmpowerInterrupts.add(cut);

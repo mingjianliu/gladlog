@@ -4,6 +4,7 @@
 import { CombatUnitSpec, LogEvent } from "@gladlog/parser-compat";
 import { beforeAll, describe, expect, it } from "vitest";
 
+import { extractOwnerCDBuffExpiry } from "../src/context/timelineHelpers";
 import { ensureAnalysisData } from "../src/data/ensure";
 import { BUFF_DURATION_TALENT_MODIFIERS } from "../src/data/spellEffectData";
 import {
@@ -150,6 +151,45 @@ describe("buffFullDurationForCaster — Spiritwalker's Momentum per press", () =
       buffFullDurationForCaster("79206", shaman([press("8042", 3)]), AT),
     ).toBe(15);
   });
+  // codex 20-F16-13 #1: the owner's [BUFF FADED] reader read 15 s while the
+  // aura builder read 19 — each press is priced at its own instant
+  it("the owner's expiry reader prices the press with the casts after it (no REMOVED → estimated at 19 s)", () => {
+    const owner = {
+      ...(shaman([3, 5, 7, 9].map((s) => press("51505", s))) as object),
+      id: "sh",
+      name: "Sh",
+      auraEvents: [
+        {
+          spellId: "79206",
+          srcUnitId: "sh",
+          destUnitId: "sh",
+          timestamp: AT,
+          logLine: { event: LogEvent.SPELL_AURA_APPLIED, timestamp: AT },
+        },
+      ],
+    } as never;
+    const ev = extractOwnerCDBuffExpiry(
+      [
+        {
+          spellId: "79206",
+          spellName: "Spiritwalker's Grace",
+          tag: "Utility",
+          casts: [{ timeSeconds: 0 }],
+          cooldownSeconds: 120,
+          neverUsed: false,
+          availableWindows: [],
+        },
+      ] as never,
+      "sh",
+      [owner],
+      AT,
+      owner,
+      [],
+      AT + 300_000,
+    );
+    expect(ev[0]?.expiresAtSeconds).toBeCloseTo(19, 3);
+  });
+
   it("the loadout reads the span for a holder", () => {
     expect(buffDurationRangeForCaster("79206", shaman([]))).toEqual({
       min: 15,

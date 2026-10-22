@@ -77,10 +77,10 @@ describe("break binding (F15 R3)", () => {
     ).toEqual(["Kidney Shot"]);
   });
 
-  it("pressEndedSilence: within 300 ms before the removal or 50 ms after it", () => {
+  it("pressEndedSilence: within 300 ms before the removal or 100 ms after it (the shared cast-row lag)", () => {
     expect(pressEndedSilence(1000, 2000, 2000)).toBe(true);
-    expect(pressEndedSilence(1000, 2000, 2050)).toBe(true);
-    expect(pressEndedSilence(1000, 2000, 2051)).toBe(false);
+    expect(pressEndedSilence(1000, 2000, 2100)).toBe(true);
+    expect(pressEndedSilence(1000, 2000, 2101)).toBe(false);
     expect(pressEndedSilence(1000, 2000, 1700)).toBe(true);
     expect(pressEndedSilence(1000, 2000, 1699)).toBe(false);
     expect(pressEndedSilence(1000, 2000, 999)).toBe(false);

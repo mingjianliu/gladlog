@@ -326,31 +326,47 @@ export function externalUnusedEvents(input: {
    * window (reliability round 3 W1f)? Built by the caller from positions and
    * the external's reach; absent or unknown ⇒ reachable (the pre-W1f test). */
   canReachVictim?: (spellId: string) => boolean;
+  /** fact3 D12: the seconds the owner could not PAY for this external (mana
+   * under its cost, `unaffordableIntervals`) — not free to cast it either;
+   * absent ⇒ none */
+  unaffordable?: (
+    spellId: string,
+  ) => Array<{ atSeconds: number; durationSeconds: number }>;
+  /** fact3 D12: the owner pressed this external inside the window and the
+   * game refused it (no mana, frozen …) — tried, not held; absent ⇒ never */
+  attempted?: (spellId: string, fromS: number, toS: number) => boolean;
 }): CandidateEvent[] {
   const { deathT, victim, owner } = input;
   if (!input.ownerAliveAt(deathT)) return [];
 
-  // Owner's free gap: the largest contiguous gap left in the window
-  // [deathT-5, deathT] after subtracting CC coverage
+  // Owner's free gap for one external: the largest contiguous gap left in
+  // the window [deathT-5, deathT] after subtracting CC coverage and the time
+  // the owner could not pay for it
   const from = Math.max(0, deathT - EXTERNAL_FREE_WINDOW_S);
-  const covers = input.ownerCC
-    .map((c) => [c.atSeconds, c.atSeconds + c.durationSeconds] as const)
-    .filter(([a, b]) => b > from && a < deathT)
-    .sort((a, b) => a[0] - b[0]);
-  let cursor = from;
-  let maxGap = 0;
-  for (const [a, b] of covers) {
-    maxGap = Math.max(maxGap, a - cursor);
-    cursor = Math.max(cursor, b);
-  }
-  maxGap = Math.max(maxGap, deathT - cursor);
-  if (maxGap < EXTERNAL_FREE_MIN_GAP_S) return [];
+  const freeGapFor = (spellId: string): number => {
+    const covers = [...input.ownerCC, ...(input.unaffordable?.(spellId) ?? [])]
+      .map((c) => [c.atSeconds, c.atSeconds + c.durationSeconds] as const)
+      .filter(([a, b]) => b > from && a < deathT)
+      .sort((a, b) => a[0] - b[0]);
+    let cursor = from;
+    let maxGap = 0;
+    for (const [a, b] of covers) {
+      maxGap = Math.max(maxGap, a - cursor);
+      cursor = Math.max(cursor, b);
+    }
+    return Math.max(maxGap, deathT - cursor);
+  };
 
-  const avail = input.ownerExternals.find(
-    (cd) =>
-      cdReadyInTimeAt(cd, deathT) &&
-      (input.canReachVictim?.(cd.spellId) ?? true),
-  );
+  let maxGap = 0;
+  const avail = input.ownerExternals.find((cd) => {
+    if (!cdReadyInTimeAt(cd, deathT)) return false;
+    if (!(input.canReachVictim?.(cd.spellId) ?? true)) return false;
+    if (input.attempted?.(cd.spellId, from, deathT)) return false;
+    const gap = freeGapFor(cd.spellId);
+    if (gap < EXTERNAL_FREE_MIN_GAP_S) return false;
+    maxGap = gap;
+    return true;
+  });
   if (!avail) return [];
   return [
     {

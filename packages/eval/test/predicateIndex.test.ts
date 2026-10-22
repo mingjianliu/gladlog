@@ -140,6 +140,7 @@ import * as forcedDisplacement from "@gladlog/analysis/src/utils/forcedDisplacem
 import * as gapClosers from "@gladlog/analysis/src/utils/gapClosers";
 import * as healerExposureAnalysis from "@gladlog/analysis/src/utils/healerExposureAnalysis";
 import * as healerOffenseAnalysis from "@gladlog/analysis/src/utils/healerOffenseAnalysis";
+import * as hiddenPress from "@gladlog/analysis/src/utils/hiddenPress";
 import * as incomingPressure from "@gladlog/analysis/src/utils/incomingPressure";
 import * as karmaFeed from "@gladlog/analysis/src/utils/karmaFeed";
 import * as kickAudit from "@gladlog/analysis/src/utils/kickAudit";
@@ -3618,6 +3619,16 @@ const INDEX: PredicateRow[] = [
     file: `${A}/utils/cooldowns.ts`,
     symbol: "kitSpellReadyAt",
     mod: cooldowns,
+  },
+  {
+    file: `${A}/utils/hiddenPress.ts`,
+    symbol: "hiddenPressMs",
+    mod: hiddenPress,
+  },
+  {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "avoidanceExplainsMissType",
+    mod: ccTrinketAnalysis,
   },
   {
     file: `${A}/utils/spellMechanics.ts`,

@@ -125,6 +125,8 @@ describe("① a — a kill window ends at its target's death (computeOffensiveWi
       ["1253593", "e1"],
       ["17", "e1"],
       ["147833", "e2"],
+      ["414664", "e2"],
+      ["408558", "e1"],
     ] as const) {
       const w = withAura(id, src);
       // no span covers the seconds the aura was up
@@ -133,6 +135,37 @@ describe("① a — a kill window ends at its target's death (computeOffensiveWi
           x.toSeconds <= from + 2.001 || x.fromSeconds >= from + 19.999,
           `${id} ${x.fromSeconds}–${x.toSeconds}`,
         ).toBe(true);
+    }
+    // a Mass Invisibility whose end the log never showed is over at the
+    // holder's first press after it
+    {
+      const u = druid(50);
+      u.auraEvents.push(
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_APPLIED,
+          "414664",
+          at(from + 2),
+          "e2",
+          "e1",
+          "BUFF",
+        ) as never,
+      );
+      u.spellCastEvents.push(
+        makeSpellCastEvent(
+          "8921",
+          at(from + 9),
+          "x",
+          "X",
+          "e1",
+          "EnemyDruid",
+        ) as never,
+      );
+      const w = computeOffensiveWindows([u] as never, [], combat);
+      expect(
+        w.some(
+          (x) => x.fromSeconds >= from + 8.9 && x.fromSeconds <= from + 9.1,
+        ),
+      ).toBe(true);
     }
     // a Power Word: Shield from a teammate is no own shield (and no external
     // either — it is not in the external list): the span runs on

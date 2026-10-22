@@ -20,9 +20,11 @@ import { isFormReshiftCast } from "../../utils/castPress";
 import { specToString } from "../../utils/cooldowns";
 import {
   AURA_BEFORE_CAST_MAX_S,
+  ENEMY_DEF_UNSEEN_PRESS_TAG,
   enemyDefSpeaksForPress,
   PRESS_TO_AURA_MAX_S,
 } from "../../utils/enemyDefensives";
+import { pressRowsWithHidden } from "../../utils/hiddenPress";
 import { fmtTime } from "../../utils/renderGrid";
 import { OFFENSIVE_CD_SPELL_IDS } from "../../utils/spellDanger";
 import type { TimelineCtx } from "./ctx";
@@ -181,11 +183,14 @@ export function emitEnemyCdEntries(
   ordinalRendered: boolean;
   healCdRendered: boolean;
   procRendered: boolean;
+  /** a line carries `[pressed while unseen]` */
+  unseenRendered: boolean;
   utilityRendered: boolean;
 } {
   const { enemyCDTimeline, cdPurgeAnnotations, addEntry, enemyPid } = ctx;
   let ordinalRendered = false;
   let procRendered = false;
+  let unseenRendered = false;
 
   for (const player of enemyCDTimeline.players) {
     // GH #119: timeline-only facts (a Demonic Metamorphosis form) render here
@@ -239,11 +244,12 @@ export function emitEnemyCdEntries(
           )
         : castOrdinal(seq, total);
       if (isActivation) procRendered = true;
+      if (cd.unseenPress) unseenRendered = true;
       else if (seqAnnotation) ordinalRendered = true;
       const purgeNote = cdPurgeAnnotations.get(cd) ?? "";
       addEntry(
         cd.castTimeSeconds,
-        `${fmtTime(cd.castTimeSeconds)}  [ENEMY CD]   ${enemyPid(player.playerName)} (${player.specName}): ${cd.spellName}${seqAnnotation}${purgeNote}`,
+        `${fmtTime(cd.castTimeSeconds)}  [ENEMY CD]   ${enemyPid(player.playerName)} (${player.specName}): ${cd.spellName}${seqAnnotation}${cd.unseenPress ? ` ${ENEMY_DEF_UNSEEN_PRESS_TAG}` : ""}${purgeNote}`,
       );
     }
   }
@@ -253,16 +259,20 @@ export function emitEnemyCdEntries(
   // tag — they never reach the burst-window builder.
   let healCdRendered = false;
   for (const enemy of ctx.enemies ?? []) {
-    const casts = (enemy.spellCastEvents ?? [])
-      .filter(
-        (c) =>
-          c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
-          !!c.spellId &&
-          ENEMY_HEAL_CD_IDS.has(c.spellId) &&
-          // a shift back into Tree of Life form is no second press
-          !isFormReshiftCast(enemy, c),
-      )
-      .sort((a, b) => a.logLine.timestamp - b.logLine.timestamp);
+    // corpusFactScan hiddenPressUnused: and the presses made while unseen
+    // (`pressRowsWithHidden` — 0284fcd9 r1 0:12, a Tranquility with no row)
+    const casts = pressRowsWithHidden(
+      enemy,
+      (id) => ENEMY_HEAL_CD_IDS.has(id),
+      ctx.matchStartMs,
+    ).filter(
+      (c) =>
+        c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+        !!c.spellId &&
+        ENEMY_HEAL_CD_IDS.has(c.spellId) &&
+        // a shift back into Tree of Life form is no second press
+        (c.unseenPress || !isFormReshiftCast(enemy, c as never)),
+    );
     const totalBy = new Map<string, number>();
     for (const c of casts)
       totalBy.set(c.spellId, (totalBy.get(c.spellId) ?? 0) + 1);
@@ -274,9 +284,10 @@ export function emitEnemyCdEntries(
       if (ordinal) ordinalRendered = true;
       const t = (c.logLine.timestamp - ctx.matchStartMs) / 1000;
       healCdRendered = true;
+      if (c.unseenPress) unseenRendered = true;
       addEntry(
         t,
-        `${fmtTime(t)}  [ENEMY HEAL CD]   ${enemyPid(enemy.name)} (${specToString(enemy.spec)}): ${getEnglishSpellName(c.spellId, c.spellName)}${ordinal}`,
+        `${fmtTime(t)}  [ENEMY HEAL CD]   ${enemyPid(enemy.name)} (${specToString(enemy.spec)}): ${getEnglishSpellName(c.spellId, c.spellName)}${ordinal}${c.unseenPress ? ` ${ENEMY_DEF_UNSEEN_PRESS_TAG}` : ""}`,
       );
     }
   }
@@ -341,7 +352,13 @@ export function emitEnemyCdEntries(
         utilityRendered = true;
     }
   }
-  return { ordinalRendered, healCdRendered, procRendered, utilityRendered };
+  return {
+    ordinalRendered,
+    healCdRendered,
+    procRendered,
+    utilityRendered,
+    unseenRendered,
+  };
 }
 
 /** The tag of an enemy's utility press line (fact1215 C7). */

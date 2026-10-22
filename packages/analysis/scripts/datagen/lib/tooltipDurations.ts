@@ -192,7 +192,8 @@ const EXTEND_RE = new RegExp(
     String.raw`\s*(秒|%|分钟)?`,
 );
 const CAP_RE = new RegExp(
-  String.raw`最多(?:可)?(?:延长|达|至|提高|延长至)?(?:至)?\s*` +
+  // 至多 too (codex 20-F16-13 #5: 441829 「至多$s3秒」 was dropped)
+  String.raw`(?:最多|至多)(?:可)?(?:延长|达|至|提高|延长至)?(?:至)?\s*` +
     AMOUNT +
     String.raw`\s*(秒|%)?`,
 );
@@ -238,6 +239,15 @@ export function parseDurationClauses(
       continue;
     }
     const unitWord = m[4];
+    // a unit the regex does not know (`$L小时:分钟;`, an hour / minute
+    // switch) is no second (codex 20-F16-13 #4: 441403 read `set 1s`)
+    if (
+      unitWord === undefined &&
+      /^\s*(?:\$L|小时|分|天)/.test(sentence.slice(m.index + m[0].length))
+    ) {
+      unparsed.push({ sentence, reason: "duration unit not resolvable" });
+      continue;
+    }
     const unit: IDurationClause["unit"] = unitWord === "%" ? "pct" : "s";
     const value = unitWord === "分钟" ? amount * 60 : amount;
     // the subject: the words before 「的持续时间」 (or before 「持续时间」)
@@ -254,9 +264,26 @@ export function parseDurationClauses(
     if (cut >= 0) {
       const before = head.slice(0, cut);
       if (TRIGGER_RE.test(head.slice(0, cut + 2))) trigger = before.trim();
+      // 「X使Y的持续时间延长」: X is the event (codex 20-F16-13 #3: 472361
+      // 「惩击使一个激活的救赎的持续时间延长」 read as a fixed bonus)
+      else if (
+        head.slice(cut).startsWith("使") &&
+        !head.slice(cut).startsWith("使用") &&
+        before.trim() !== "" &&
+        !/(?:并|且)$/.test(before.trim()) &&
+        // a bare event subject, not a clause (「…后，使你的下一个…」 is a
+        // one-off; 「…内使影响他们的…」 a debuff's standing effect)
+        !/[，,]/.test(before)
+      )
+        trigger = before.trim();
       head = head.slice(cut).replace(/^(?:会使|使|，|,)/, "");
     }
     head = head.replace(/的$/, "");
+    // 「X施加的Y效果」: the aura extended is Y, applied by X (codex
+    // 20-F16-13 #2: 373049 「真言术：盾施加的救赎效果」 targeted Power Word:
+    // Shield)
+    if (head.includes("施加的"))
+      head = head.slice(head.lastIndexOf("施加的") + 3).replace(/效果$/, "");
     const targets = head
       .split(NAME_SPLIT_RE)
       .map((n) => n.replace(NAME_PREFIX_RE, "").replace(/的$/, "").trim())

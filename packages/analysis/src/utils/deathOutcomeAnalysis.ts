@@ -33,6 +33,7 @@ import {
   unitCooldownOf,
 } from "./cooldowns";
 import { isStunCcInstance } from "./drAnalysis";
+import { hiddenPressMs } from "./hiddenPress";
 import {
   distanceBetween,
   getUnitPositionAtTime,
@@ -40,6 +41,7 @@ import {
 } from "./losAnalysis";
 import { LOS_SWEEP_GAP_MS } from "./positionSampling";
 import { fmtTime } from "./renderGrid";
+import { unaffordableIntervals } from "./resourceAt";
 import { spellReachForCaster } from "./spellRange";
 import { talentOwnershipOf } from "./talentOwnership";
 import { isDeadAt } from "./unitDeath";
@@ -87,15 +89,8 @@ export const IMMUNITY_SPELLS: Record<string, IImmunitySpell> = {
   // MITIGATION_TABLE pct=100 ∧ schoolMask=0x7f 的全学派免疫(共识测试
   // immunityTables.test.ts 钉死);学派限定免疫(BoP/斗篷/护佑)刻意不进
   // 本表 —— 无击杀学派判定就断言「BoP 可救」会对魔法死亡撒谎。
-  "186265": {
-    name: "Aspect of the Turtle",
-    cooldownSeconds: 180,
-    specs: [
-      CombatUnitSpec.Hunter_BeastMastery,
-      CombatUnitSpec.Hunter_Marksmanship,
-      CombatUnitSpec.Hunter_Survival,
-    ],
-  },
+  // Aspect of the Turtle left 2026-10-21: a deflection, no immunity (user
+  // ruling — DoTs land under it; `deflectsDirectAttacks`)
 };
 
 // The key set must be identical to spellIdLists.externalDefensiveSpellIds
@@ -353,7 +348,13 @@ function pressSeconds(
     )
     .map((e) => (e.logLine.timestamp - matchStartMs) / 1000);
   const auraSeconds = auraOnlyActivationSeconds(unit, spellId, matchStartMs);
-  return [...castSeconds, ...auraSeconds].sort((a, b) => a - b);
+  // the ledger's hidden presses too (`hiddenPressMs`, fact3 D35)
+  const hiddenSeconds = hiddenPressMs(unit, spellId, matchStartMs).map(
+    (ms) => (ms - matchStartMs) / 1000,
+  );
+  return [...castSeconds, ...auraSeconds, ...hiddenSeconds].sort(
+    (a, b) => a - b,
+  );
 }
 
 /** A plain number (a table constant), or the ledger's resolved entry — whose
@@ -540,7 +541,7 @@ export function offCooldownForLastSeconds(
   for (let k = 1; atSeconds - k / 10 >= windowStart - 1e-9; k++) {
     const t = atSeconds - k / 10;
     if (!isAvailableAt(unit, spellId, cooldown, t, matchStartMs, resetSpellIds))
-      return Math.max(0, Math.round((k - 1) - CD_INSTANT_SLACK_S * 10) / 10);
+      return Math.max(0, Math.round(k - 1 - CD_INSTANT_SLACK_S * 10) / 10);
   }
   return undefined;
 }
@@ -736,8 +737,20 @@ export function deathWindowFreedom(
     optionSpellId === undefined ? undefined : [optionSpellId],
     roundUnits,
   );
+  // fact3 D12 (20e0f243 5:57): a stretch the unit could not pay for the
+  // option is no stretch free to cast it (`unaffordableIntervals`, the
+  // [RES] row's `no mana` reading)
+  const unpaid =
+    optionSpellId === undefined
+      ? []
+      : unaffordableIntervals(
+          unit,
+          optionSpellId,
+          matchStartMs + windowStart * 1000,
+          matchStartMs + deathSeconds * 1000,
+        );
   const result = freeGapCore(
-    named.map((iv) => ({
+    [...named, ...unpaid].map((iv) => ({
       start: (iv.from - matchStartMs) / 1000,
       end: (iv.to - matchStartMs) / 1000,
       isStun: false,

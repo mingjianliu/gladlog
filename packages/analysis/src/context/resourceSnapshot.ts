@@ -1,7 +1,14 @@
 import { ICombatUnit } from "@gladlog/parser-compat";
 
+import {
+  effectAuraViaName,
+  ownEffectAurasOfCast,
+} from "../data/castEffectAuras";
 import { spellEffectData } from "../data/spellEffectData";
-import { buffDurationRangeForCaster } from "../utils/buffDuration";
+import {
+  buffDurationRangeForCaster,
+  buffFullDurationForCaster,
+} from "../utils/buffDuration";
 import { castBarsOfCooldown, castBarStartsInRound } from "../utils/castCancels";
 import { IPlayerCCTrinketSummary } from "../utils/ccTrinketAnalysis";
 import {
@@ -149,7 +156,24 @@ export function buildPlayerLoadout(
     if (cd.tag !== "Defensive") return "";
     // GH #155: a per-event talent makes it a range (Spiritwalker's Grace
     // `lasts 15–19s` for a Spiritwalker's Momentum holder)
-    const r = buffDurationRangeForCaster(cd.spellId, caster);
+    // fact3 D53 (b3aa876f r3): a press that runs as its own same-named
+    // effect aura of the same base length is timed by that aura, whose
+    // talents are registered there — Rallying Cry 97462 runs as 97463,
+    // (10 + 3) × 1.2 = 15.6 s with Battlefield Commander and Resonant Voice,
+    // as its [BUFF FADED] reads; the cast id knew none and the kit said 10 s.
+    // A different base length is a different effect (Divine Hymn's 15 s
+    // healing buff beside its 8 s channel) and keeps the cast's.
+    const base = buffFullDurationForCaster(cd.spellId, undefined);
+    const runAuraId =
+      ownEffectAurasOfCast(cd.spellId).find(
+        (a) =>
+          effectAuraViaName(cd.spellId, a) &&
+          base !== undefined &&
+          buffFullDurationForCaster(a, undefined) === base,
+      ) ?? cd.spellId;
+    const r =
+      buffDurationRangeForCaster(runAuraId, caster) ??
+      buffDurationRangeForCaster(cd.spellId, caster);
     if (r === undefined || !(r.min > 0)) return "";
     const fmt = (x: number) => Math.round(x * 10) / 10;
     return r.max > r.min
@@ -776,9 +800,7 @@ interface ResourceSnapshotParams {
   openerPrints?: boolean;
 }
 
-export function buildResourceSnapshot(
-  params: ResourceSnapshotParams,
-): string {
+export function buildResourceSnapshot(params: ResourceSnapshotParams): string {
   const line = buildResourceSnapshotOnce(params);
   // fact2 (2026-10-20): a first-5-s row that prints says what was ready on
   // it — every untouched cooldown — instead of `rdy:—` (0c8b1932 0:02:

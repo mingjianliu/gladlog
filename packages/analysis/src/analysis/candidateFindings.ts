@@ -19,7 +19,10 @@ import {
   BRACKET_TYPE_ALLOWLIST,
   CANDIDATE_TYPE_FLAGS,
 } from "../data/candidateTypeFlags";
-import { castAndEffectIds,castsOwningEffectAura } from "../data/castEffectAuras";
+import {
+  castAndEffectIds,
+  castsOwningEffectAura,
+} from "../data/castEffectAuras";
 import { costNormPhrase } from "../data/curatedAbilityFacts";
 import { CORPUS_OBSERVED_DISPEL_IDS } from "../data/dispelObservedGenerated";
 import { lookupKickPriorityPrior } from "../data/kickPriorityPrior";
@@ -137,7 +140,7 @@ import {
   type RawStreams,
 } from "../utils/rawStreams";
 import { toRenderSecond } from "../utils/renderGrid";
-import { affordableWithin } from "../utils/resourceAt";
+import { affordableWithin, unaffordableIntervals } from "../utils/resourceAt";
 import {
   computeRootReachability,
   type IRootInstance,
@@ -1085,7 +1088,11 @@ const BURST_INTO_MITIGATION_CAP = 2;
 function selfRemovalFacts(
   w: Pick<
     IMissedCleanseWindow,
-    "timeSeconds" | "durationSeconds" | "dispelType" | "targetName" | "targetSelfBlockedS"
+    | "timeSeconds"
+    | "durationSeconds"
+    | "dispelType"
+    | "targetName"
+    | "targetSelfBlockedS"
   >,
   owner: any,
   friends: any[],
@@ -1408,7 +1415,14 @@ export function missedCleanseEvents(
           ...(w.lateDispelSeconds !== undefined
             ? { latencyS: String(Math.round(w.lateDispelSeconds)) }
             : {}),
-          ...selfRemovalFacts(w, owner, friends, ownerCanDispel, occupancy, extra),
+          ...selfRemovalFacts(
+            w,
+            owner,
+            friends,
+            ownerCanDispel,
+            occupancy,
+            extra,
+          ),
           ...(ownerCanDispel
             ? {}
             : {
@@ -2963,7 +2977,10 @@ export function positionMistakeEvents(
         if (e.ownerRootSeconds !== undefined)
           facts.rootS = String(Math.round(e.ownerRootSeconds));
         // WO3 #15: slowed (free to move), only when it rounds to a second
-        if (e.ownerSnaredSeconds !== undefined && Math.round(e.ownerSnaredSeconds) > 0)
+        if (
+          e.ownerSnaredSeconds !== undefined &&
+          Math.round(e.ownerSnaredSeconds) > 0
+        )
           facts.snaredS = String(Math.round(e.ownerSnaredSeconds));
         const refused =
           refusedIn && e.toSeconds !== undefined
@@ -4604,6 +4621,32 @@ function extractDeathSetups(
                 !(ownerUnit.deathRecords ?? []).some(
                   (dr: any) => (dr.timestamp - start) / 1000 <= t,
                 ),
+              // fact3 D12 (20e0f243 5:57): the mana the external costs, and
+              // the presses the game refused — a Guardian Spirit pressed 8×
+              // and refused for mana, then while frozen, was no held one
+              unaffordable: (spellId: string) =>
+                unaffordableIntervals(
+                  ownerUnit,
+                  spellId,
+                  start + Math.max(0, deathT - EXTERNAL_FREE_WINDOW_S) * 1000,
+                  start + deathT * 1000,
+                  rawStreams?.available
+                    ? { rawStreams, matchStartMs: start }
+                    : undefined,
+                  combat,
+                ).map((iv) => ({
+                  atSeconds: (iv.from - start) / 1000,
+                  durationSeconds: (iv.to - iv.from) / 1000,
+                })),
+              attempted: (spellId: string, fromS: number, toS: number) =>
+                !!rawStreams?.available &&
+                castFailedInWindow(
+                  rawStreams,
+                  ownerUnit.id,
+                  fromS,
+                  toS,
+                  Number(spellId),
+                ).length > 0,
               // W1f: the external must reach the victim at some sampled
               // second of the free window — a zone external by its radius
               // around the owner, a targeted one by its cast reach; no

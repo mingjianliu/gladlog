@@ -263,7 +263,7 @@ export const SPELL_CATEGORIES: Record<string, ISpellCategoryEntry> = {
   // -- Immunities --
   "642": { type: "immunities" }, // Divine Shield
   "45438": { type: "immunities" }, // Ice Block
-  "186265": { type: "immunities" }, // Aspect of the Turtle
+  "186265": { type: "buffs_defensive" }, // Aspect of the Turtle — a deflection, no immunity (user ruling 2026-10-21: DoTs land under it)
   "31224": { type: "immunities" }, // Cloak of Shadows
   "1022": { type: "immunities" }, // Blessing of Protection
   // 2026-08-21(GH #17/D1 尾巴,免疫三表一致性测试上线时补):官方减伤表

@@ -22,6 +22,15 @@ export interface IMitigationEntry {
    * so every consumer that prices an aura found ON a unit agrees.
    */
   pctOnOthers?: number;
+  /**
+   * The aura deflects every DIRECT attack and spell aimed at its carrier, and
+   * nothing else: periodic damage already on the unit keeps landing. No
+   * immunity — `IMMUNITY_IDS` / `FULL_IMMUNITY_IDS` leave it out, its
+   * `[ENEMY DEF]` line says what it does. User ruling 2026-10-21 (round-3
+   * q2, 「dot的确不免疫」) on Aspect of the Turtle: fact3 D38, 35 DoT
+   * ticks (~152k) landed during one.
+   */
+  deflectsDirectAttacks?: true;
 }
 
 /**
@@ -49,7 +58,7 @@ export const MITIGATION_OVERRIDES: Record<string, IMitigationEntry> = {
   "1022": { pct: 100, schoolMask: 0x1 }, // Blessing of Protection: physical immunity only; DB2 aura39 misc0=1 (its aura87 points=0 row is a leftover dead slot, Task 1 unresolved)
   "204018": { pct: 100, schoolMask: 0x7e }, // Blessing of Spellwarding: magic immunity only; DB2 aura39 misc0=126
   "31224": { pct: 100, schoolMask: 0x7e }, // Cloak of Shadows: magic immunity only; DB2 aura186 points=-200 (spell hit -200%); spec decision; the aura87 0 row is a dead slot
-  "186265": { pct: 100, schoolMask: 0x7f }, // Aspect of the Turtle: deflection = immunity (DB2 aura184/185/186 are all -200% hit); the spec decision overrides the generation layer's 30 with immunity semantics (that 30 is the residual mitigation on damage that isn't deflected)
+  "186265": { pct: 100, schoolMask: 0x7f, deflectsDirectAttacks: true }, // Aspect of the Turtle (user ruling 2026-10-21: no immunity — direct attacks deflected, DoTs land; `deflectsDirectAttacks`): deflection = immunity (DB2 aura184/185/186 are all -200% hit); the spec decision overrides the generation layer's 30 with immunity semantics (that 30 is the residual mitigation on damage that isn't deflected)
 
   // —— The mitigation aura hangs off a different id (the generation layer can't find it by cast id) ——
   "51052": { pct: 30, schoolMask: 0x7e }, // Anti-Magic Zone: DR aura 145629 (observed), aura87 −15/126 × PvpMultiplier 2 = 30 % in PvP (2026-09-04 user ruling "PvP 值为官方值", BACKLOG #41; was 15 = the PvE number); the same-named 332831 (-20) is not observed and judged not live

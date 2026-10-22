@@ -9,6 +9,7 @@
  */
 import { type ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
+import { MITIGATION_TABLE } from "../../data/mitigationData";
 import { TIMELINE_LINE_FLAGS } from "../../data/timelineLineFlags";
 import {
   guardianSpiritSaveClause,
@@ -18,8 +19,10 @@ import {
 } from "../../utils/cooldowns";
 import { isEnemyCdWindowSpell } from "../../utils/enemyCDs";
 import {
+  ENEMY_DEF_DEFLECTS_WORDS,
   ENEMY_DEF_END_NOT_LOGGED,
   ENEMY_DEF_NO_PRESS_TAG,
+  ENEMY_DEF_UNSEEN_PRESS_TAG,
   enemyDefensiveEvents,
   enemySaveEffectNote,
   immunitySchoolWords,
@@ -37,7 +40,7 @@ import {
   karmaFeedOf,
   TOUCH_OF_KARMA_ID,
 } from "../../utils/karmaFeed";
-import { fmtTime, toRenderSecond } from "../../utils/renderGrid";
+import { fmtTime } from "../../utils/renderGrid";
 import { AURA_STILL_UP_AT_ROUND_END } from "../../utils/roundEnd";
 import { selfDefensiveLabelWords } from "../../utils/selfDefensiveMechanism";
 import type { TimelineCtx } from "./ctx";
@@ -143,14 +146,17 @@ export function emitEnemyDefEntries(
           : d.observedSeconds !== undefined
             ? `${renderedObservedSeconds(d.observedSeconds).toFixed(1)}s${earlyNote}`
             : "";
-        const tSec = toRenderSecond(d.atSeconds);
-        const tMs = matchStartMs + tSec * 1000;
         const friendlyIds = new Set(friends.map((f) => f.id));
+        // the tag is a fact of the PRESS instant (round-3 audit D8: at
+        // m:ss.0 it missed a Dark Transformation started 0.13 s before an
+        // Obsidian Scales in the same second)
+        const pressMs =
+          matchStartMs + Math.round((d.pressSeconds ?? d.atSeconds) * 1000);
         const hasBurst =
           friends.some((f) =>
             hasOffensiveSpellActive(
               f,
-              tMs,
+              pressMs,
               friendlyIds,
               undefined,
               roundBounds,
@@ -159,7 +165,7 @@ export function emitEnemyDefEntries(
           (enemies ?? []).some((e) =>
             hasOffensiveSpellActive(
               e,
-              tMs,
+              pressMs,
               friendlyIds,
               isEnemyCdWindowSpell,
               roundBounds,
@@ -294,7 +300,11 @@ export function emitEnemyDefEntries(
           // F16 retest: a rider shield no press of its own put up
           // (Shield of Vengeance with Divine Protection) says so, as a wall
           // copy does (F15 C5)
-          const noPress = d.noPressLogged ? ` ${ENEMY_DEF_NO_PRESS_TAG}` : "";
+          const noPress = d.noPressLogged
+            ? ` ${ENEMY_DEF_NO_PRESS_TAG}`
+            : d.unseenPress
+              ? ` ${ENEMY_DEF_UNSEEN_PRESS_TAG}`
+              : "";
           line = `${d.spellName}${label ? ` (${label})` : ""}${noPress}${burstStr}${hpStr}${selfSaveStr}${karmaStr}${channelStr}`;
         } else {
           // F15 C2: a school-limited immunity says which schools it stops
@@ -302,15 +312,26 @@ export function emitEnemyDefEntries(
             d.kind === "immune"
               ? limitedImmunitySchoolMask(wallTableIdOfAura(d.spellId))
               : undefined;
-          const strength =
-            d.kind === "immune"
+          // Aspect of the Turtle (user ruling 2026-10-21): no immunity, no
+          // percentage — what the log shows it doing
+          const deflects =
+            MITIGATION_TABLE[wallTableIdOfAura(d.spellId)]
+              ?.deflectsDirectAttacks === true;
+          const strength = deflects
+            ? ENEMY_DEF_DEFLECTS_WORDS
+            : d.kind === "immune"
               ? limited !== undefined
                 ? `immune to ${immunitySchoolWords(limited)}`
                 : "immune"
               : `${d.pct}%`;
           const hpStr = hpPct !== null ? ` (at ${hpPct.toFixed(0)}% HP)` : "";
-          // F15 C5: a copy no press put up says so
-          const noPress = d.noPressLogged ? ` ${ENEMY_DEF_NO_PRESS_TAG}` : "";
+          // F15 C5: a copy no press put up says so; fact3 D35: a press made
+          // while the unit was unseen, too
+          const noPress = d.noPressLogged
+            ? ` ${ENEMY_DEF_NO_PRESS_TAG}`
+            : d.unseenPress
+              ? ` ${ENEMY_DEF_UNSEEN_PRESS_TAG}`
+              : "";
           line = `${d.spellName} (${strength}${dur ? `, ${dur}` : ""})${noPress}${burstStr}${hpStr}`;
         }
         addEntry(

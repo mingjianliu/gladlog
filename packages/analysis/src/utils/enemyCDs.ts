@@ -28,6 +28,7 @@ import {
   unitCooldownEntry,
   unitCooldownOf,
 } from "./cooldowns";
+import { pressRowsWithHidden } from "./hiddenPress";
 import { fmtTime } from "./renderGrid";
 
 type SpellEntry = { type: string };
@@ -63,6 +64,9 @@ export interface IEnemyCDCast {
   spellId: string;
   spellName: string;
   castTimeSeconds: number;
+  /** pressed while the enemy was unseen (`hiddenPressMs`): the instant the
+   * log showed its aura again, the latest the press can have been */
+  unseenPress?: true;
   /** this id's own cooldown; 0 for an activation of another cooldown's
    * effect (Radiant Glory's 454351 has none — GH #115) */
   cooldownSeconds: number;
@@ -323,7 +327,9 @@ export function observedEffectEndSeconds(
       // clamp before the official end leaves the official end standing (the
       // Kingsbane case).
       const full = buffFullDurationForCaster(castSpellId, caster);
-      return full !== undefined && castS + full < combatEndS ? combatEndS : null;
+      return full !== undefined && castS + full < combatEndS
+        ? combatEndS
+        : null;
     }
   }
   return best?.observed ? best.end : null;
@@ -390,7 +396,15 @@ export function reconstructEnemyCDTimeline(
   for (const enemy of enemies) {
     const offensiveCDs: IEnemyCDCast[] = [];
 
-    for (const cast of enemy.spellCastEvents) {
+    // corpusFactScan hiddenPressUnused (2026-10-21): a press made while the
+    // enemy was unseen (`hiddenPressMs`) is a press too (0284fcd9 r1 0:12:
+    // Tranquility; 4-3 r3 0:06: Takedown — no line, kit [UNUSED])
+    const presses = pressRowsWithHidden(
+      enemy,
+      isEnemyCdWindowSpell,
+      matchStartMs,
+    );
+    for (const cast of presses) {
       if (cast.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
       const { spellId } = cast;
       if (!spellId) continue;
@@ -441,6 +455,7 @@ export function reconstructEnemyCDTimeline(
           : ((entry && pressReadyAgainAtSeconds(entry, castTimeSeconds)) ??
             castTimeSeconds + cooldownSeconds),
         buffEndSeconds: castTimeSeconds + buffDuration,
+        ...(cast.unseenPress ? { unseenPress: true as const } : {}),
         dangerWeight: offensiveDangerWeight(
           spellId,
           (id) => effectiveCooldownSeconds(id) ?? 0,
