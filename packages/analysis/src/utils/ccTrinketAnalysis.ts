@@ -5126,6 +5126,17 @@ export function analyzePlayerCCAndTrinket(
         Math.abs(matchStartMs + x.atSeconds * 1000 - m.timestamp) <= 1000,
     );
     if (stated) continue;
+    // the same control landed on them in that second: the IMMUNE row is one
+    // component's (Axe Toss's interrupt under Obsidian Scales, its stun
+    // landed — 149-2 1:31; a second totem pulse at stun DR Immune beside
+    // the first's stun — 145-5 0:22), not the control failing
+    // (checkCcAvoidedLandedConsistency)
+    const landedThen = ccInstances.some(
+      (c) =>
+        c.spellName === name &&
+        Math.abs(matchStartMs + c.atSeconds * 1000 - m.timestamp) <= 1000,
+    );
+    if (landedThen) continue;
     // an avoidance the table explains is credited like the sweep's
     const applicableIds = applicableCCAvoidanceIds(m.spellId, name);
     const buff = avoidanceBuffsAt(m.timestamp, m.logLine?.lineIndex).find(

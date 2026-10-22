@@ -12,7 +12,11 @@ import { beforeAll, describe, expect, it } from "vitest";
 
 import { ensureAnalysisData } from "../src/data/ensure";
 import { analyzePlayerCCAndTrinket } from "../src/utils/ccTrinketAnalysis";
-import { makeSpellCastEvent, makeUnit } from "./ported/testHelpers";
+import {
+  makeAuraEvent,
+  makeSpellCastEvent,
+  makeUnit,
+} from "./ported/testHelpers";
 
 const MATCH_START = 1_000_000;
 const AT = MATCH_START + 60_000;
@@ -56,5 +60,56 @@ describe("IMMUNE control rows the cast sweep never walks", () => {
     expect(r.ccImmuneUncredited?.map((x) => x.spellName)).toEqual([
       "Garrote - Silence",
     ]);
+  });
+  it("an IMMUNE row of a control that landed on them in that second is one component's, not stated (Axe Toss's interrupt, its stun landed)", () => {
+    const HOJ = "853";
+    const pal = makeUnit("enemy-1", {
+      name: "Paladin",
+      spec: CombatUnitSpec.Paladin_Retribution,
+      reaction: CombatUnitReaction.Hostile,
+    });
+    const player = makeUnit("player-1", {
+      name: "Priest",
+      spec: CombatUnitSpec.Priest_Holy,
+      reaction: CombatUnitReaction.Friendly,
+      auraEvents: [
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_APPLIED,
+          HOJ,
+          AT,
+          "enemy-1",
+          "player-1",
+        ),
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_REMOVED,
+          HOJ,
+          AT + 5_000,
+          "enemy-1",
+          "player-1",
+        ),
+      ],
+    });
+    (player as unknown as { missesIn: unknown[] }).missesIn = [
+      {
+        spellId: HOJ,
+        spellName: "Hammer of Justice",
+        srcUnitId: "enemy-1",
+        destUnitId: "player-1",
+        missType: "IMMUNE",
+        timestamp: AT + 3,
+        logLine: { event: LogEvent.SPELL_MISSED, timestamp: AT + 3 },
+      },
+    ];
+    const combat = {
+      startTime: MATCH_START,
+      endTime: MATCH_START + 300_000,
+      startInfo: { zoneId: "1672" },
+      units: { "enemy-1": pal, "player-1": player },
+    };
+    const r = analyzePlayerCCAndTrinket(player, [pal], combat as never);
+    expect(r.ccInstances.map((c) => c.spellName)).toEqual([
+      "Hammer of Justice",
+    ]);
+    expect(r.ccImmuneUncredited ?? []).toEqual([]);
   });
 });
