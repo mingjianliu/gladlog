@@ -310,5 +310,18 @@
  *  removal; a reflected control broken by damage is no trinket's; controls
  *  into Aspect of the Turtle count. 605 files: no candidate added or
  *  removed; 14 contexts change.
+ *  v438 (2026-10-21, round-3 fact audit fix batch + corpusFactScan batch 1
+ *  + user rulings): IMMUNE causes (no magic-only / reflect-only avoidance
+ *  for a control it cannot stop, no mobility credit once a miss row proves
+ *  the hit, Command Squadron off the avoidance list); presses made while
+ *  unseen are presses (`[pressed while unseen]`); DR'd no-REMOVED ends;
+ *  reflect returns (own DoT out, damage-id / pre-REFLECT rows in); Turtle,
+ *  Mass Invisibility, Phase Shift, Intervene, Vanish in the kill windows
+ *  (user rulings); kick-priority judges every overlapping window; dispel
+ *  backlash silences as [SILENCE]; Medallion / break presses at their own
+ *  aura; Intervene 3 s, Berserk / Celestial Alignment 15 s, AMS 444741
+ *  6 s. 605 files vs v437: kick-priority-missed +17, kick-priority-team
+ *  +22, kick-eaten +1, position-mistake +1, questionable-external −6,
+ *  cd-waste −6, cd-hoarded +1, external-unused −9, backlash-dispel −1.
  */
-export const PROMPT_VERSION = 437;
+export const PROMPT_VERSION = 438;
