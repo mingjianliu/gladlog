@@ -9,8 +9,9 @@
  * and is passed in. Output is pinned by the 605-file acceptanceCapture context
  * hash.
  */
-import { CombatUnitReaction } from "@gladlog/parser-compat";
+import { CombatUnitReaction, LogEvent } from "@gladlog/parser-compat";
 
+import { isDamageImmuneControl } from "../../analysis/candidates/massDispel";
 import { BACKLASH_AURA_CC_TYPE, backlashCcTag } from "../../data/backlashCc";
 import {
   CC_FROM_OWN_TEAM_TAG,
@@ -32,6 +33,7 @@ import {
   tremorTotemBreak,
 } from "../../utils/ccTrinketAnalysis";
 import { wasRemovedByAllyDispel } from "../../utils/dispelAnalysis";
+import { getDRCategory, getDRLevel } from "../../utils/drAnalysis";
 import { fmtTime } from "../../utils/renderGrid";
 import { ccMechanicOf } from "../../utils/spellMechanics";
 import {
@@ -386,6 +388,48 @@ export function emitTrinketCcOnTeamEntries(
           `${fmtTime(avoided.atSeconds)}  [CC AVOIDED?]   ${pid(summary.playerName)}: ${avoided.spellName} (by ${actorLabel(avoided.sourceName, "enemy", avoided.sourceId)}${ccAvoidedCastTag(avoided)}) ${ccAvoidedOutcomeText(avoided)}; ${avoided.avoidanceSpellName}${avoidanceSourceTag(avoided.avoidanceSourceName, summary.playerName)} active`,
         );
       }
+    }
+    // corpusFactScan2 immunityTableForward noLine (2026-10-22): an enemy
+    // control the log wrote IMMUNE on our player with nothing the sweep can
+    // credit still gets its line — with the cause the log shows, the
+    // [CC NOT LANDED] reading mirrored (B17a, "三种都写；找不到原因不加注"): a
+    // Cyclone on them at the miss, else diminishing returns at Immune over
+    // the controls that landed on them; nothing when neither
+    const holder = friends.find((f) => f.name === summary.playerName);
+    for (const imm of summary.ccImmuneUncredited ?? []) {
+      let cycloneBy: string | undefined;
+      for (const a of holder?.auraEvents ?? []) {
+        if (a.timestamp > imm.missMs) break;
+        if (!isDamageImmuneControl(a.spellId)) continue;
+        const ev = a.logLine.event;
+        if (
+          ev === LogEvent.SPELL_AURA_APPLIED ||
+          ev === LogEvent.SPELL_AURA_REFRESH
+        )
+          cycloneBy = a.srcUnitId;
+        else if (ev === LogEvent.SPELL_AURA_REMOVED) cycloneBy = undefined;
+      }
+      let cause = "";
+      if (cycloneBy !== undefined) cause = " (a Cyclone was on them)";
+      else {
+        const category = getDRCategory(imm.spellId);
+        if (!category.startsWith("spell:") && category !== "Unknown") {
+          const history = summary.ccInstances
+            .filter((c) => getDRCategory(c.spellId) === category)
+            .map((c) => ({
+              applyMs: matchStartMs + c.atSeconds * 1000,
+              removeMs: matchStartMs + (c.atSeconds + c.durationSeconds) * 1000,
+              spellId: c.spellId,
+            }))
+            .sort((a, b) => a.applyMs - b.applyMs);
+          if (getDRLevel(history, imm.missMs).level === "Immune")
+            cause = ` (DR: ${category} Immune)`;
+        }
+      }
+      addEntry(
+        imm.atSeconds,
+        `${fmtTime(imm.atSeconds)}  [CC AVOIDED?]   ${pid(summary.playerName)}: ${imm.spellName} (by ${actorLabel(imm.sourceName, "enemy", imm.sourceId)}${ccAvoidedCastTag(imm)}) logged IMMUNE${cause}`,
+      );
     }
   }
 

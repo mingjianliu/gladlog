@@ -2202,7 +2202,12 @@ export function checkWarlockPurgeFollowsPet(lines: string[]): string[] {
 }
 
 const CC_AVOIDED_DATA_LINE = /^\s*\d+:\d{2}\s+\[CC AVOIDED\?\]/;
-const CC_AVOIDED_OUTCOME = /\) (?:did not land|logged (\S+)); /;
+// the second half: `; <avoidance> active`, or — an IMMUNE row the sweep
+// could credit to nothing (corpusFactScan2 immunityTableForward, 2026-10-22)
+// — the line ends at the miss, with the log's own cause when it shows one
+// (`(DR: … Immune)` / `(a Cyclone was on them)`)
+const CC_AVOIDED_OUTCOME =
+  /\) (?:(?:did not land|logged (\S+)); |logged (IMMUNE)(?: \((?:DR: [^)]+ Immune|a Cyclone was on them)\))?$)/;
 
 /**
  * The first half of a `[CC AVOIDED?]` line (FT-T16 D15 "3c", user approval
@@ -2229,6 +2234,7 @@ export function checkCcAvoidedMissType(lines: string[]): string[] {
       failures.push(
         `line ${i + 1}: [CC AVOIDED?] 写 logged ${m[1]},但 ${m[1]} 不是能断定控制没落地的 miss 类型 —— ${line.trim().slice(0, 140)}`,
       );
+    // m[2]: the uncredited IMMUNE form — IMMUNE is in the set by construction
   });
   return failures;
 }

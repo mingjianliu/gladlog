@@ -289,6 +289,14 @@ export const CC_AVOIDANCE_BUFF_SPELLS = new Map<string, string>([
   // first) was named as the cause of a Fear the flight made immune
   // (422ba114-r0 0:49).
   ["443028", "Celestial Conduit"], // Monk channel immunity (same shape as Ultimate Penitence), immuneRate 62.5% (20/12); real 90s CD
+  // corpusFactScan2 immunityTableForward (2026-10-22): auras up on a player
+  // whose control logged IMMUNE with nothing listed explaining it, kept only
+  // where DB2 gives the aura an all-school SCHOOL_IMMUNITY (aura 39, mask
+  // 127): the unit inside a Freezing Trap / Imprison / Time Stop is immune
+  // to the next control (rates n 4 / 3 / 3, 0 landed under them)
+  ["203337", "Freezing Trap"],
+  ["221527", "Imprison"],
+  ["378441", "Time Stop"],
 ]);
 /**
  * Round-1 retest idx 51 (2026-10-20): avoidance buffs that stop only some
@@ -319,9 +327,56 @@ export const MECHANIC_LIMITED_AVOIDANCE_BUFFS: ReadonlyMap<string, string> =
     // and used up the Shroud — it is no magic-only immunity; DB2 lists the
     // eleven loss-of-control mechanics it stops (stun 12 among them)
     ["378464", "Nullifying Shroud"],
+    // corpusFactScan2 immunityTableForward (2026-10-22): the candidates its
+    // forward scan ranked whose own DB2 rows carry aura 77 — applicable only
+    // to a control of a listed mechanic. Stun / root: Blink 1953 / 119415
+    // ([7, 12]); stun: Icebound Fortitude ([12]); charm / fear / sleep /
+    // horror: Lichborne ([1, 5, 10, 23]); polymorph: Travel Form 165961
+    // ([17]); grip / stun: Demolish ([6, 12]); silence / interrupt: Aura
+    // Mastery's 317929, Spiritwalker's Aegis, Unending Resolve, Obsidian
+    // Scales, Sanctified Ground, Zen Focus Tea ([9, 26]). The ranked auras
+    // with no immunity row (Scorpid Venom, Volatile Instinct, Suppression,
+    // Void Metamorphosis …) are co-occurrence, not cause — not listed.
+    ["1953", "Blink"],
+    ["119415", "Blink"],
+    ["48792", "Icebound Fortitude"],
+    ["49039", "Lichborne"],
+    ["165961", "Travel Form"],
+    ["436358", "Demolish"],
+    ["317929", "Aura Mastery"],
+    ["378078", "Spiritwalker's Aegis"],
+    ["104773", "Unending Resolve"],
+    ["363916", "Obsidian Scales"],
+    ["289655", "Sanctified Ground"],
+    ["209584", "Zen Focus Tea"],
   ]);
 for (const [buffId, name] of MECHANIC_LIMITED_AVOIDANCE_BUFFS)
   CC_AVOIDANCE_BUFF_SPELLS.set(buffId, name);
+
+/**
+ * The 2026-10-22 additions (corpusFactScan2 immunityTableForward, above):
+ * facts only — they name an IMMUNE row's cause on `[CC AVOIDED?]` /
+ * `[CC NOT LANDED]` / `[IMMUNE — …]`, but cc-avoidable does not offer them
+ * as a tool the player could have pressed (a new accusation shape — the
+ * user's call first). Registered in curatedIdRegistry.
+ */
+export const CC_AVOIDANCE_FACT_ONLY_IDS: ReadonlySet<string> = new Set([
+  "203337",
+  "221527",
+  "378441",
+  "1953",
+  "119415",
+  "48792",
+  "49039",
+  "165961",
+  "436358",
+  "317929",
+  "378078",
+  "104773",
+  "363916",
+  "289655",
+  "209584",
+]);
 
 // B139: merge the talent-granted CC/magic-immunity avoidance buffs from the behavioral catalog. Self-gating
 // (each buff aura only exists when its talent is taken). Adds Peaceweaver (353319) and Phase Shift (408558),
@@ -2535,6 +2590,21 @@ export interface IPlayerCCTrinketSummary {
   /** CC avoidance/mitigation/breaks. Always populated by analyzePlayerCCAndTrinket
    * (empty array when none) — part of the summary contract. */
   ccAvoidedInstances: ICCAvoidedInstance[];
+  /** An enemy control the log wrote IMMUNE on this player with no avoidance
+   * the sweep could credit — the `[CC AVOIDED?]` line still states the miss
+   * (corpusFactScan2 immunityTableForward noLine, 2026-10-22: 427 distinct
+   * IMMUNE rows had no line at all). Not in `ccAvoidedInstances`: nothing
+   * was credited, so no avoided count reads it. Optional on old fixtures. */
+  ccImmuneUncredited?: Array<{
+    atSeconds: number;
+    castAtSeconds: number;
+    spellId: string;
+    spellName: string;
+    sourceName: string;
+    sourceId: string;
+    /** the miss row's own ms (the cause readers' instant) */
+    missMs: number;
+  }>;
 }
 
 // ---------------------------------------------------------------------------
@@ -4541,6 +4611,9 @@ export function analyzePlayerCCAndTrinket(
 
   // ─── CC Avoidance Correlation Logic ───────────────────────────────────────
   const ccAvoidedInstances: ICCAvoidedInstance[] = [];
+  const ccImmuneUncredited: NonNullable<
+    IPlayerCCTrinketSummary["ccImmuneUncredited"]
+  > = [];
 
   // The avoidance auras up on the player at an instant: the one reading
   // (`ccAvoidanceBuffsUpAt` — log order, official-length cap, the log's
@@ -4919,7 +4992,24 @@ export function analyzePlayerCCAndTrinket(
           // reached them, so no repositioning dodged it (fact3 D9, 12d734cd
           // 2:07: a Freezing Trap IMMUNE on the evoker credited to a Hover
           // pressed 0.25 s after the miss)
-          if (untargetedMissOnPlayer || missRow) continue;
+          if (untargetedMissOnPlayer || missRow) {
+            // the IMMUNE row is still a fact the timeline states, with
+            // whatever cause the log shows (the renderer's B17a reading)
+            if (
+              missRow?.missType === "IMMUNE" &&
+              (!isGroundCC || takeGroundHit(enemy.id, hit.ms))
+            )
+              ccImmuneUncredited.push({
+                atSeconds: (hit.ms - matchStartMs) / 1000,
+                castAtSeconds: (castTimeMs - matchStartMs) / 1000,
+                spellId: cast.spellId,
+                spellName: ccSpellName,
+                sourceName: enemy.name,
+                sourceId: enemy.id,
+                missMs: missRow.timestamp,
+              });
+            continue;
+          }
           const mobilityCast = player.spellCastEvents.find(
             (e) =>
               e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
@@ -5069,6 +5159,7 @@ export function analyzePlayerCCAndTrinket(
     disarmInstances,
     interruptInstances,
     ccAvoidedInstances,
+    ccImmuneUncredited,
   };
 }
 

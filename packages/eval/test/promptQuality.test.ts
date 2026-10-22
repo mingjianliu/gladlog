@@ -1936,6 +1936,24 @@ describe("checkCcAvoidedMissType — `[CC AVOIDED?] … logged <TYPE>` names a m
     for (const bad of ["was avoided", "logged", "landed"])
       expect(checkCcAvoidedMissType([line(bad)]), bad).toHaveLength(1);
   });
+  it("an uncredited IMMUNE row ends at the miss, with the log's cause or none (corpusFactScan2 immunityTableForward)", () => {
+    const bare = (tail: string) =>
+      `0:48  [CC AVOIDED?]   2(RShaman): Polymorph (by 4(AMage)) ${tail}`;
+    expect(
+      checkCcAvoidedMissType([
+        bare("logged IMMUNE"),
+        bare("logged IMMUNE (DR: Incapacitate Immune)"),
+        bare("logged IMMUNE (a Cyclone was on them)"),
+      ]),
+    ).toEqual([]);
+    // only IMMUNE ends a line there; "did not land" and another cause do not
+    for (const bad of [
+      "did not land",
+      "logged MISS",
+      "logged IMMUNE (Ice Block was up)",
+    ])
+      expect(checkCcAvoidedMissType([bare(bad)]), bad).toHaveLength(1);
+  });
   it("says nothing about other lines", () => {
     expect(
       checkCcAvoidedMissType([

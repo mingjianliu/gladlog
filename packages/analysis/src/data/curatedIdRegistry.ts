@@ -55,6 +55,7 @@ import { DISPLACEMENT_EVIDENCE_IDS } from "../utils/castStopEvidence";
 import {
   BREAKABLE_CC_SPELL_IDS,
   CC_AVOIDANCE_BUFF_SPELLS,
+  CC_AVOIDANCE_FACT_ONLY_IDS,
   DRUID_FORM_BUFFS,
   GROUND_CC_SPELL_IDS,
   LOCK_IGNORING_CAST_IDS,
@@ -797,6 +798,9 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   // utils/ccTrinketAnalysis.ts
   t("CC_AVOIDANCE_BUFF_SPELLS", "utils/ccTrinketAnalysis.ts", "aura", () =>
     set(CC_AVOIDANCE_BUFF_SPELLS.keys()),
+  ),
+  t("CC_AVOIDANCE_FACT_ONLY_IDS", "utils/ccTrinketAnalysis.ts", "aura", () =>
+    set(CC_AVOIDANCE_FACT_ONLY_IDS),
   ),
   t("DRUID_FORM_BUFFS", "utils/ccTrinketAnalysis.ts", "aura", () =>
     set(DRUID_FORM_BUFFS.keys()),

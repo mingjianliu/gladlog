@@ -54,6 +54,7 @@ import {
   analyzePlayerCCAndTrinket,
   applicableCCAvoidanceIds,
   CC_AVOIDANCE_BUFF_SPELLS,
+  CC_AVOIDANCE_FACT_ONLY_IDS,
   type ICCInstance,
   type IInterruptInstance,
   POST_KICK_WINDOW_S,
@@ -3134,6 +3135,8 @@ export function ccAvoidanceOptionsAt(
     // presence in `pvpTalents` — absent COMBATANT_INFO reads as "cannot
     // confirm" and withholds the tool, since crediting a tool the player may
     // not own turns straight into an accusation.
+    // the 2026-10-22 table additions state causes only (no new tool yet)
+    if (CC_AVOIDANCE_FACT_ONLY_IDS.has(id)) continue;
     const proc = triggers.get(id);
     if (proc && !pvpTalentIds.has(proc.talentSpellId)) continue;
     // cost_norm (user ruling 2026-08-14, curatedAbilityFacts 642 / 45438):
