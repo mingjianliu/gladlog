@@ -3626,6 +3626,21 @@ const INDEX: PredicateRow[] = [
     mod: hiddenPress,
   },
   {
+    file: `${A}/context/spellOutcomeLines.ts`,
+    symbol: "REFLECT_OWN_ID_LEAD_MS",
+    mod: spellOutcomeLines,
+  },
+  {
+    file: `${A}/context/spellOutcomeLines.ts`,
+    symbol: "REFLECT_DIRECT_RETURN_MS",
+    mod: spellOutcomeLines,
+  },
+  {
+    file: `${A}/context/spellOutcomeLines.ts`,
+    symbol: "REFLECT_CHAIN_GAP_MS",
+    mod: spellOutcomeLines,
+  },
+  {
     file: `${A}/utils/ccTrinketAnalysis.ts`,
     symbol: "avoidanceExplainsMissType",
     mod: ccTrinketAnalysis,
