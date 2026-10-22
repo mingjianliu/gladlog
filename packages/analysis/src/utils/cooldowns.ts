@@ -3188,6 +3188,13 @@ export const AURA_ONLY_ACTIVATION_IDS: Record<string, string[]> = {
   // evidence: 20,704 activations in the every-6 archive, 20,166 with the aura
   // (A9-EVIDENCE §3). Hunters without Survival Tactics stay invisible here.
   "5384": ["202748"],
+  // Blessing of Sacrifice (Paladin, 120 s): a caster whose presses log no
+  // SPELL_CAST_SUCCESS at all — the press shows as its pair of 6940 auras,
+  // one on the paladin (self → self) and one on the ally, removed together
+  // 12 s later (corpusFactScan hiddenPressUnused, 103-2 0:58: two such
+  // presses in one round, the kit read `[UNUSED]`; castless in 9 of 957
+  // presses on the 605-file capture). The self copy only a press puts up.
+  "6940": ["6940"],
 };
 
 /**
