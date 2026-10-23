@@ -19,6 +19,7 @@ import {
 } from "../data/castEffectAuras";
 import { wallDoorPct } from "../data/mitigationComponents";
 import {
+  DEFLECTION_IDS,
   MITIGATION_TABLE,
   MITIGATION_WALL_IDS,
   MITIGATION_WALL_MIN_PCT,
@@ -600,6 +601,16 @@ export const ENEMY_DEF_END_NOT_LOGGED = "end not logged";
  * `N%` (`IMitigationEntry.deflectsDirectAttacks`: Aspect of the Turtle). */
 export const ENEMY_DEF_DEFLECTS_WORDS =
   "deflects direct attacks; periodic damage still lands";
+
+/** The names a deflection's `[ENEMY DEF]` line prints (`DEFLECTION_IDS`) —
+ * the gate's "only a deflection reads the deflect words" (fact4 D6). */
+export function deflectionNames(): ReadonlySet<string> {
+  return new Set(
+    [...DEFLECTION_IDS]
+      .map((id) => getEnglishSpellName(id, ""))
+      .filter((n) => n !== ""),
+  );
+}
 /** fact1215 C5: an `[ENEMY DEF]` wall that no press put up (`noPressLogged`). */
 export const ENEMY_DEF_NO_PRESS_TAG = "[no press logged]";
 /** fact3 D35: an `[ENEMY DEF]` save pressed while its holder was unseen
@@ -711,9 +722,13 @@ export function isBelowWallFloorExternal(
 }
 
 /** 20–99% self-mitigation aura ids (the non-immune official table slice,
- * `MITIGATION_WALL_IDS`) — "the target popped a real defensive during the
+ * `MITIGATION_WALL_IDS`) and the deflections (`DEFLECTION_IDS`: Aspect of
+ * the Turtle, fact4 D6) — "the target popped a real defensive during the
  * attempt". */
-export const MITIGATION_AURA_IDS = new Set<string>(MITIGATION_WALL_IDS);
+export const MITIGATION_AURA_IDS = new Set<string>([
+  ...MITIGATION_WALL_IDS,
+  ...DEFLECTION_IDS,
+]);
 
 /** The `MITIGATION_TABLE` key behind an aura found on a unit: the aura id
  * itself, or — for a wall whose row is keyed by its cast (Blur 198589 logs

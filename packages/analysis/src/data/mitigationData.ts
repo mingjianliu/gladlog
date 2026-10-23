@@ -143,6 +143,22 @@ export const MITIGATION_WALL_IDS: ReadonlySet<string> = new Set(
 );
 
 /**
+ * The deflections — `MITIGATION_TABLE` rows marked `deflectsDirectAttacks`
+ * (Aspect of the Turtle). Neither an immunity (`IMMUNITY_IDS` leaves them
+ * out, user ruling 2026-10-21) nor a 20–99 % wall, so until fact4 D6 / D62
+ * (2026-10-22) they fell out of both and the enemy's press had no
+ * `[ENEMY DEF]` line and no KILL ATTEMPTS `popped` (30 rounds, 0 Turtle
+ * lines). `MITIGATION_AURA_IDS` (the `[ENEMY DEF]` / KILL ATTEMPTS slice)
+ * takes them as an own defensive; `WALL_IN_HAND_MIT_IDS` does not — the
+ * kill-opportunity tier is "a 20–99 % wall in hand".
+ */
+export const DEFLECTION_IDS: ReadonlySet<string> = new Set(
+  Object.entries(MITIGATION_TABLE)
+    .filter(([, e]) => e.deflectsDirectAttacks === true)
+    .map(([id]) => id),
+);
+
+/**
  * The percentage an aura is worth on the unit that carries it — the single
  * predicate for pricing a mitigation aura found ON a unit (burst ledger
  * `defensivesHit`, the kill-attempt "popped a defensive" attribution, the

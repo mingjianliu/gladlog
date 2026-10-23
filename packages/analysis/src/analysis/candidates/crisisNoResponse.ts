@@ -81,6 +81,8 @@ export function crisisNoResponseEvents(
     dmg2s: p.dmg2s,
     inCC: p.inCC,
     lockedOut: p.lockedOut,
+    couldActInWindow: p.couldActInWindow,
+    freeInWindowS: p.freeInWindowS,
     diedInWindow: p.diedInWindow,
     hasTool: p.hasTool,
     responses: p.responses,
@@ -95,13 +97,16 @@ export function crisisNoResponseEvents(
           verdict: "ineligible",
           reason: !p.dangerous
             ? "not-dangerous"
-            : p.inCC
-              ? "owner-in-cc"
-              : p.lockedOut
-                ? "owner-locked-out"
-                : p.diedInWindow
-                  ? "died-in-window"
-                  : "no-tool",
+            : p.couldActInWindow === false
+              ? // fact4 D28: CC / lockout over the response window
+                p.inCC
+                ? "owner-in-cc"
+                : p.lockedOut
+                  ? "owner-locked-out"
+                  : "owner-could-not-act"
+              : p.diedInWindow
+                ? "died-in-window"
+                : "no-tool",
           facts: facts(p),
           candidateIds: [],
         });

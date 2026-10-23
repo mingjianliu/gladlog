@@ -2164,6 +2164,11 @@ const INDEX: PredicateRow[] = [
     mod: mitigationData,
   },
   {
+    file: `${A}/data/mitigationData.ts`,
+    symbol: "DEFLECTION_IDS",
+    mod: mitigationData,
+  },
+  {
     file: `${E}/quality/promptQualityCheck.ts`,
     symbol: "checkNoWindowAcrossOwnWall",
     mod: promptQualityCheck,

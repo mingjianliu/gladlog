@@ -355,5 +355,17 @@
  *  the fourth signed exception). 605 files vs v440 (b45 → b46):
  *  backlash-dispel −1 (two crossed out of the HP band, one in), 39 HP facts
  *  re-read; cc-avoidable unchanged.
+ *
+ * v442 (2026-10-22, fact4 F17 batch 1 — the round-4 regressions and D28,
+ *  user approved 「A」/「批准」): Aspect of the Turtle is an own defensive
+ *  again (a deflection: `[ENEMY DEF]`, KILL ATTEMPTS `popped`); a channel
+ *  tick (Divine Hymn 64844) is no burst answer; hard-cast results pair in
+ *  throw order; crisis-no-response's "could act" is the cd-hoarded owner
+ *  gate's (≥ 1 s free of the cannot-cast intervals in [t, t + 3 s], legend
+ *  reworded) and its `burst` is an enemy burst running at t. 605 files vs
+ *  v441 (b46 → f1): healer crisis-no-response +2 (silenced / stunned at the
+ *  crossing, 1.5–2 s free after it); cd-hoarded 28 points swapped under the
+ *  cap by the enemy-burst ordering, net −1 (the new pick failed the intent
+ *  guard after the cap).
  */
-export const PROMPT_VERSION = 441;
+export const PROMPT_VERSION = 442;

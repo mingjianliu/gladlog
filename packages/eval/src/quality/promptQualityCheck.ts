@@ -187,6 +187,8 @@ import {
 } from "@gladlog/analysis/src/utils/cooldowns";
 import { UNPURGED_FOR_RE_SRC } from "@gladlog/analysis/src/utils/dispelAnalysis";
 import {
+  deflectionNames,
+  ENEMY_DEF_DEFLECTS_WORDS,
   ENEMY_DEF_END_NOT_LOGGED,
   ENEMY_DEF_END_NOT_LOGGED_SLOT_RE,
   ENEMY_DEF_IMMUNE_LABEL_RE_SRC,
@@ -4682,6 +4684,8 @@ const ENEMY_DEF_WALL_LABEL = new RegExp(
  *    carries the `[ENEMY DEF]` legend must carry that press's own entry
  *    (`selfReductionLegend`, the producer's sentence), or the line reads as
  *    a wall and KILL ATTEMPTS' `popped X` as a wall's;
+ *  - a deflection (`DEFLECTION_IDS`: Aspect of the Turtle, fact4 D6) opens
+ *    with the producer's `ENEMY_DEF_DEFLECTS_WORDS`, and nothing else does;
  *  - any other ability opens with a wall's, an immunity's or an area save's
  *    label, and carries no effect note — so a press nobody classified cannot
  *    print without a label;
@@ -4742,6 +4746,18 @@ export function checkEnemyDefSaveEffect(lines: string[]): string[] {
       }
       return;
     }
+    // a deflection (Aspect of the Turtle, fact4 D6) reads the producer's
+    // deflect words, and only a deflection does
+    const deflectLabel = after.startsWith(`(${ENEMY_DEF_DEFLECTS_WORDS}`);
+    if (deflectLabel !== deflectionNames().has(spell)) {
+      failures.push(
+        deflectLabel
+          ? `line ${i + 1}: [ENEMY DEF] prints ${spell} as a deflection, which it is not: ${quoted}`
+          : `line ${i + 1}: [ENEMY DEF] prints the deflection ${spell} without its deflect label: ${quoted}`,
+      );
+      return;
+    }
+    if (deflectLabel) return;
     if (stated !== undefined)
       failures.push(
         `line ${i + 1}: [ENEMY DEF] gives ${spell} an effect note (${stated}) it has no claim to: ${quoted}`,

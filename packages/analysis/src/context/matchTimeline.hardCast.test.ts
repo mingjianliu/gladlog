@@ -174,9 +174,8 @@ describe("F170 [ENEMY HARD CAST]", () => {
     expect(timeline).toContain("(2.5s cast, landed)");
 
     // fact2: an instant of the same spell 1 ms after the bar flies behind
-    // it: each hit goes to the latest completion before it that has none,
-    // so with two hits after both, the bar keeps one even though both come
-    // after the instant's completion
+    // it: each hit goes to the earliest completion before it that has none
+    // (throw order), so with two hits after both, the bar keeps one
     (enemy.missesOut as unknown[]) = [];
     (enemy.damageOut as unknown[]).push({
       spellId: CHAOS_BOLT_ID,
@@ -194,12 +193,48 @@ describe("F170 [ENEMY HARD CAST]", () => {
     expect(buildMatchTimeline(baseParams(owner, enemy))).toContain(
       "(2.5s cast, landed)",
     );
-    // …and with one hit only, it is the later throw's (84-3 1:42/1:43: two
-    // Chaos Bolts 1.4 s apart, the one hit 71 ms after the second)
+    // …and with one hit only, it is the earlier throw's: one caster's bolts
+    // at one target arrive in throw order (fact4 D21; until then the
+    // "latest completion" rule gave it to the instant and the bar read
+    // `went off`)
     (enemy.damageOut as unknown[]).pop();
     expect(buildMatchTimeline(baseParams(owner, enemy))).toContain(
-      "(2.5s cast, went off)",
+      "(2.5s cast, landed)",
     );
+    // fact4 D21 (3ab80597 r3 2:13): two bars done 2:15.221 / 2:16.467, hits
+    // 2:16.513 / 2:18.132 — the first hit is the first bolt's, the second
+    // the second's: both landed (the first read `went off`, its hit given to
+    // the bolt done 46 ms before it)
+    enemy.spellCastEvents.pop();
+    const secondBar = {
+      ...(enemy.spellCastEvents[0] as object),
+      timestamp: MATCH_START_MS + 8_746,
+    } as never;
+    (secondBar as { logLine: object }).logLine = {
+      event: LogEvent.SPELL_CAST_SUCCESS,
+      timestamp: MATCH_START_MS + 8_746,
+      parameters: [],
+      lineIndex: 4,
+    };
+    enemy.spellCastEvents.push(secondBar);
+    enemy.castStartEvents!.push({
+      ...(enemy.castStartEvents![0] as object),
+      timestamp: MATCH_START_MS + 7_500,
+      logLine: {
+        event: LogEvent.SPELL_CAST_START,
+        timestamp: MATCH_START_MS + 7_500,
+        parameters: [],
+        lineIndex: 3,
+      },
+    } as never);
+    (enemy.damageOut as unknown[]) = [
+      { spellId: CHAOS_BOLT_ID, destUnitId: "o", logLine: { timestamp: MATCH_START_MS + 8_792 } },
+      { spellId: CHAOS_BOLT_ID, destUnitId: "o", logLine: { timestamp: MATCH_START_MS + 10_411 } },
+    ];
+    const twoBars = buildMatchTimeline(baseParams(owner, enemy));
+    expect(twoBars).toContain("(2.5s cast, landed)");
+    expect(twoBars).toContain("(1.2s cast, landed)");
+    expect(twoBars).not.toContain("went off");
   });
 
   it("an instant (SUCCESS 20 ms after START) or an aborted bar (no SUCCESS) is not a hard cast", () => {

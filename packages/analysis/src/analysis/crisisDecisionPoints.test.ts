@@ -1,6 +1,7 @@
 import {
   CombatUnitClass,
   CombatUnitReaction,
+  CombatUnitType,
   LogEvent,
 } from "@gladlog/parser-compat";
 import { describe, expect, it } from "vitest";
@@ -704,9 +705,43 @@ describe("crisisDecisionPoints", () => {
         },
       ],
     });
-    const p = crisisDecisionPoints(o, combat(o))[0]!;
+    const p = crisisDecisionPoints(o, combat(o, [enemy()]))[0]!;
     expect(p.inCC).toBe(true);
     expect(p.feasible).toBe(false);
+  });
+
+  it("fact4 D28: a CC landing just after the crossing that holds the owner for the response window → couldActInWindow=false, feasible=false (4184d534 1:54: Void Nova 79 ms after t, 4 s)", () => {
+    const at = (ms: number, event: string) => ({
+      timestamp: T0 + ms,
+      spellId: "408",
+      srcUnitId: "E1",
+      destUnitId: "H",
+      auraType: "DEBUFF",
+      logLine: { event },
+    });
+    // crossing second = 2 s; the stun lands 79 ms in and runs past t + 3 s
+    const o = unit({
+      auraEvents: [at(2079, "SPELL_AURA_APPLIED"), at(6096, "SPELL_AURA_REMOVED")],
+    });
+    const p = crisisDecisionPoints(o, combat(o, [enemy()]))[0]!;
+    expect(p.tSec).toBe(2);
+    expect(p.inCC).toBe(false); // free at the instant…
+    expect(p.couldActInWindow).toBe(false); // …0.08 s of the 3 s window
+    expect(p.freeInWindowS).toBe(0.1);
+    expect(p.feasible).toBe(false);
+    // the same stun from a FRIEND is no cannot-cast interval (the predicate
+    // cd-hoarded reads counts enemy sources only)
+    const f = unit({
+      auraEvents: [at(2079, "SPELL_AURA_APPLIED"), at(6096, "SPELL_AURA_REMOVED")],
+    });
+    expect(crisisDecisionPoints(f, combat(f))[0]!.feasible).toBe(true);
+    // a stun of 1.5 s inside the window leaves the 1 s REACTION_WINDOW_S free
+    const short = unit({
+      auraEvents: [at(2079, "SPELL_AURA_APPLIED"), at(3579, "SPELL_AURA_REMOVED")],
+    });
+    const ps = crisisDecisionPoints(short, combat(short, [enemy()]))[0]!;
+    expect(ps.couldActInWindow).toBe(true);
+    expect(ps.feasible).toBe(true);
   });
 
   it("C1: official DR silence category locks the school — Strangulate 47476 and Garrote-Silence 1330 (only 3/61 of the official category was covered by the hand `interrupts` set before this fix)", () => {
@@ -787,10 +822,15 @@ describe("crisisDecisionPoints", () => {
   it("gate 2: SPELL_INTERRUPT on the owner ≤1.5s before the crossing → lockedOut", () => {
     const o = unit({
       actionIn: [
-        { timestamp: T0 + 1000, logLine: { event: LogEvent.SPELL_INTERRUPT } },
+        {
+          timestamp: T0 + 1000,
+          srcUnitId: "E1",
+          spellId: "2139", // Counterspell
+          logLine: { event: LogEvent.SPELL_INTERRUPT },
+        },
       ],
     });
-    const p = crisisDecisionPoints(o, combat(o))[0]!;
+    const p = crisisDecisionPoints(o, combat(o, [enemy()]))[0]!;
     expect(p.lockedOut).toBe(true);
     expect(p.feasible).toBe(false);
   });
@@ -804,12 +844,43 @@ describe("crisisDecisionPoints", () => {
     expect(p.feasible).toBe(false);
   });
 
-  it("enemyBurst: an enemy offensive major CD cast within 8s before the crossing", () => {
-    const e = enemy("E1", {
-      spellCastEvents: [{ timestamp: T0 + 500, spellId: "31884" }],
-    }); // Avenging Wrath
+  it("enemyBurst: an enemy offensive major CD RUNNING at the crossing (fact4 D9: `burstCastSpan`, not a press in the last 8 s)", () => {
+    const cast = (ms: number) => ({
+      timestamp: T0 + ms,
+      spellId: "31884", // Avenging Wrath
+      spellName: "Avenging Wrath",
+      srcUnitId: "E1",
+      destUnitId: "E1",
+      logLine: { event: LogEvent.SPELL_CAST_SUCCESS, timestamp: T0 + ms },
+    });
+    const aura = (ms: number, event: string) => ({
+      timestamp: T0 + ms,
+      spellId: "31884",
+      spellName: "Avenging Wrath",
+      srcUnitId: "E1",
+      srcUnitName: "E1",
+      destUnitId: "E1",
+      destUnitName: "E1",
+      auraType: "BUFF",
+      logLine: { event, timestamp: T0 + ms },
+    });
     const o = unit();
+    // pressed 0.5 s, its aura up to 30 s: running at the 2 s crossing
+    const e = enemy("E1", {
+      spellCastEvents: [cast(500)],
+      auraEvents: [aura(500, "SPELL_AURA_APPLIED"), aura(30_000, "SPELL_AURA_REMOVED")],
+    });
     expect(crisisDecisionPoints(o, combat(o, [e]))[0]!.enemyBurst).toBe(true);
+    // pressed 0.5 s, its aura gone at 1.5 s: inside the old 8 s lookback,
+    // no longer running
+    const ended = enemy("E1", {
+      type: CombatUnitType.Player, // the effect-end index reads player units
+      spellCastEvents: [cast(500)],
+      auraEvents: [aura(500, "SPELL_AURA_APPLIED"), aura(1_500, "SPELL_AURA_REMOVED")],
+    });
+    expect(crisisDecisionPoints(o, combat(o, [ended]))[0]!.enemyBurst).toBe(
+      false,
+    );
   });
 
   it("no advanced HP samples → no points", () => {

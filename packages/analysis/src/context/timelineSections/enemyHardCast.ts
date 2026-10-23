@@ -114,10 +114,10 @@ export function emitEnemyHardCastEntries(
       // The caster's completions of the spell at that target get the result
       // rows inside `HARD_CAST_RESULT_MS` (`hardCastResultOf`): a damage row, or a SPELL_ABSORBED row a shield
       // ate whole → `landed`; a miss row → `went off, <TYPE>`; none → `went
-      // off`. Each row goes to the latest completion before it that has none
-      // yet, not "the first row before the next completion": a Hot Streak
-      // instant 1 ms after the bar flies behind it (5-1 0:54: bar .795,
-      // instant .796, the two hits at .999 and 1.013)
+      // off`. Each row goes to the earliest completion before it that has
+      // none yet (throw order), not "the first row before the next
+      // completion": a Hot Streak instant 1 ms after the bar flies behind it
+      // (5-1 0:54: bar .795, instant .796, the two hits at .999 and 1.013)
       const destId = landed.destUnitId || event.destUnitId;
       const outcome = hardCastResultOf(
         enemy,
@@ -137,7 +137,7 @@ export function emitEnemyHardCastEntries(
 
 /** The result row a completion of `spellId` at `destId` gets — a damage
  * row, a SPELL_ABSORBED row with no damage row of that hit (a hit a shield
- * ate whole), or a miss row — paired with the latest completion before it. */
+ * ate whole), or a miss row — paired in throw order (fact4 D21). */
 function hardCastResultOf(
   enemy: ICombatUnit,
   spellId: string,
@@ -195,17 +195,23 @@ function hardCastResultOf(
               : "went off",
       })),
   ].sort((a, b) => a.ms - b.ms);
-  // each result row, in time order, belongs to the latest completion at or
-  // before it (inside `windowMs`) that has none yet: a projectile flies
-  // after the press that threw it — two Chaos Bolts 1.4 s apart with one hit
-  // 71 ms after the second (84-3 1:42/1:43), and a Hot Streak instant 1 ms
-  // after a bar both hit 0.2 s later
+  // each result row, in time order, belongs to the EARLIEST completion at or
+  // before it (inside `windowMs`) that has none yet: one caster's
+  // projectiles of one spell at one target fly at one speed, so they arrive
+  // in the order they were thrown — a Hot Streak instant 1 ms after a bar
+  // (bar .795, instant .796, hits .999 / 1.013), and fact4 D21 (3ab80597 r3
+  // 2:13): bolts done 2:15.221 / 2:16.467 at ~32 yd, hits 2:16.513 /
+  // 2:18.132 — the "latest completion" rule (ef24bfdfe) gave the first hit
+  // to the bolt done 46 ms before it and the first bolt read `went off`.
+  // Flight measured on 605 new-season files (isolated completions, one row
+  // inside 3 s): Chaos Bolt p50 852 ms / p95 1.79 s (n 597), Pyroblast p50
+  // 455 ms / p95 0.99 s (n 1,188)
   const resultOf = new Map<number, string>();
   for (const r of rows) {
-    for (let k = completions.length - 1; k >= 0; k--) {
+    for (let k = 0; k < completions.length; k++) {
       const c = completions[k]!;
-      if (c > r.ms) continue;
-      if (r.ms - c > windowMs) break;
+      if (c > r.ms) break;
+      if (r.ms - c > windowMs) continue;
       if (resultOf.has(k)) continue;
       resultOf.set(k, r.outcome);
       break;

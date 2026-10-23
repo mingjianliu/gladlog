@@ -450,6 +450,27 @@ describe("checkEnemyDefSaveEffect (FT-T07, ruling D8)", () => {
     expect(f[0]).toContain("something other than its effect");
   });
 
+  it("fact4 D6: a deflection reads the producer's deflect words, and nothing else does", () => {
+    expect(
+      checkEnemyDefSaveEffect([
+        D(
+          HUNTER,
+          "Aspect of the Turtle (deflects direct attacks; periodic damage still lands, 7.5s) [friendly offensive CD active] (at 29% HP)",
+        ),
+      ]),
+    ).toEqual([]);
+    const f = checkEnemyDefSaveEffect([
+      D(HUNTER, "Aspect of the Turtle (immune, 7.5s) (at 29% HP)"),
+      D(
+        "4(FMage) (Fire Mage)",
+        "Ice Block (deflects direct attacks; periodic damage still lands, 10.0s)",
+      ),
+    ]);
+    expect(f).toHaveLength(2);
+    expect(f[0]).toContain("without its deflect label");
+    expect(f[1]).toContain("which it is not");
+  });
+
   it("fails an effect note on an ability that has none", () => {
     const f = checkEnemyDefSaveEffect([
       D("4(FMage) (Fire Mage)", "Ice Block (absorb 12k, 10.0s)"),

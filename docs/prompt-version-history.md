@@ -4024,3 +4024,18 @@ just after; controls into Aspect of the Turtle (no school mask) stay in
 ABILITIES INTO IMMUNITY. 605 files (b22 → b23): no candidate added or
 removed; 14 contexts change ([IMMUNE — The Beast Within was up] 27 → 24,
 Turtle lines 79 → 81). Gates: baseline residue only.
+
+v442 (2026-10-22, fact4 F17 batch 1 — the round-4 regressions and D28, user
+approved 「A」/「批准」): Aspect of the Turtle is an own defensive again (a
+deflection, `DEFLECTION_IDS`: `[ENEMY DEF]`, KILL ATTEMPTS `popped`; 03a355dcd
+had left it in neither the immunity nor the wall set); a channel tick (Divine
+Hymn 64844, `COPY_CAST_IDS`) is no burst answer; hard-cast results pair in
+throw order (fact4 D21); crisis-no-response's "could act" is the cd-hoarded
+owner gate's (`couldReactWithin` over `buildCannotCastIntervals` in
+[t, t + 3 s]; was CC / lockout at the crossing instant — fact4 D28, legend
+reworded) and its `burst` is an enemy burst RUNNING at t (`burstCastSpan`;
+was a press in the last 8 s — D9). 605 files vs v441 (b46 → f1): healer
+crisis-no-response +2 (silenced / stunned at the crossing, 1.5–2 s free after
+it); cd-hoarded 28 points swapped under the cap by the enemy-burst ordering,
+net −1 (the new pick failed the intent guard after the cap). Family diff:
+`[ENEMY DEF]` Aspect of the Turtle 0 → 328, KILL ATTEMPTS 0 → 109.

@@ -22,7 +22,8 @@ import {
   unpressedKitDefensiveInHand,
 } from "../src/data/abilityProfile";
 import { ensureAnalysisData } from "../src/data/ensure";
-import { MITIGATION_WALL_IDS } from "../src/data/mitigationData";
+import { DEFLECTION_IDS,
+  MITIGATION_WALL_IDS } from "../src/data/mitigationData";
 import {
   extractSpiritOfRedemptionIntervals,
   isGhostAtRenderSecond,
@@ -628,9 +629,13 @@ describe("computeOffensiveWindows — the target's own 20–99 % wall cuts the s
 describe("the wall slice has one source (R08 d)", () => {
   it("the tier's walls, the [ENEMY DEF] wall auras and the table's 20–99 % rows are the same ids", () => {
     expect(WALL_IN_HAND_MIT_IDS).toBe(MITIGATION_WALL_IDS);
+    // the [ENEMY DEF] / KILL ATTEMPTS slice adds the deflections (Aspect of
+    // the Turtle, fact4 D6) — never to the tier's "20–99 % wall in hand"
     expect([...MITIGATION_AURA_IDS].sort()).toEqual(
-      [...MITIGATION_WALL_IDS].sort(),
+      [...MITIGATION_WALL_IDS, ...DEFLECTION_IDS].sort(),
     );
+    expect(DEFLECTION_IDS.has("186265")).toBe(true);
+    expect(WALL_IN_HAND_MIT_IDS.has("186265")).toBe(false);
     expect(MITIGATION_WALL_IDS.size).toBeGreaterThanOrEqual(26);
   });
 

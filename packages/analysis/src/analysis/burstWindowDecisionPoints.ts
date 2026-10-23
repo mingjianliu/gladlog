@@ -46,6 +46,7 @@ import {
   cannotCastIntervalsForSpells,
   petCastersOf,
 } from "../utils/cannotCastIntervals";
+import { COPY_CAST_IDS } from "../utils/castPress";
 import {
   canHelpAnotherUnit,
   cdCanHelpAnotherUnit,
@@ -1248,6 +1249,11 @@ export function burstWindowDecisionPoints(
     for (const c of (u.spellCastEvents ?? []) as any[]) {
       const sid = String(c.spellId ?? "");
       if (!sid) continue;
+      // fact4 D32 (4accb068 r3): a row of the one not-a-press table
+      // (`COPY_CAST_IDS` — a channel tick, a proc copy) is no press: Divine
+      // Hymn's last 64844 tick, 1.2 s before Zenith, was read as the answer
+      // although the hymn was pressed 5.0 s before and had already ended
+      if (COPY_CAST_IDS.has(sid)) continue;
       friendlyCasts.push({
         unitId: u.id,
         unitName: u.name,

@@ -146,8 +146,13 @@ describe("enemyDefensiveEvents", () => {
     for (const id of MITIGATION_AURA_IDS) {
       const pct = MITIGATION_TABLE[id].pct;
       expect(pct).toBeGreaterThanOrEqual(MITIGATION_AURA_MIN_PCT);
+      // fact4 D6: a deflection (Aspect of the Turtle) is the one pct-100 row
+      // here — an own defensive, no immunity
+      if (MITIGATION_TABLE[id].deflectsDirectAttacks) continue;
       expect(pct).toBeLessThan(100);
     }
+    expect(MITIGATION_AURA_IDS.has("186265")).toBe(true);
+    expect(IMMUNITY_IDS.has("186265")).toBe(false);
     for (const id of IMMUNITY_IDS) expect(MITIGATION_TABLE[id].pct).toBe(100);
   });
 

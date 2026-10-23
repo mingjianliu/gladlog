@@ -23,7 +23,12 @@ import {
   rootSpellIds,
   spells as spellMeta,
 } from "../data/spellTags";
+import { burstCastSpan } from "../utils/burstLedger";
 import {
+  buildCannotCastIntervals,
+  couldReactWithin,
+  enemySourceIds,
+  freeMsWithin,
   isSilenceOnlyAura,
   namedCannotCastIntervals,
 } from "../utils/cannotCastIntervals";
@@ -43,13 +48,12 @@ import {
   // ...and its companion, the [STATE] tick's `unit:dead` predicate.
   isDeadAtRenderSecond,
 } from "../utils/cooldowns";
-import { isEnemyCdWindowSpell } from "../utils/enemyCDs";
+import { reconstructEnemyCDTimeline } from "../utils/enemyCDs";
 import {
   documentRecordsAttackSpell,
   incomingPressureBySchool,
 } from "../utils/incomingPressure";
 import { PVP_TRINKET_SPELL_IDS } from "../utils/killWindowTargetSelection";
-import { auraOffensiveOccurrences } from "../utils/offensiveAuraOccurrences";
 import { rootIntervalsOf } from "../utils/rootReachability";
 import { buildRosterSides } from "../utils/rosterSide";
 import { OFFENSIVE_CD_SPELL_IDS } from "../utils/spellDanger";
@@ -93,6 +97,9 @@ export function schoolShareCoveredBy(
   }
   return total > 0 ? covered / total : null;
 }
+/** teammate-crisis's "an enemy burst was PRESSED this close before the
+ * crossing" (its legend says pressed). The crisis point's own `enemyBurst`
+ * reads a running span since fact4 D9 (`burstCastSpan`). */
 export const ENEMY_BURST_LOOKBACK_MS = 8000;
 /** Gate 2: an interrupt landing on the owner this close before the crossing
  * means the school is locked — handed to `kick-eaten`, never double-charged. */
@@ -185,9 +192,23 @@ export interface DecisionPoint {
    */
   dmg2sBySchool?: Record<string, number>;
   attackers2s: number;
+  /** an enemy burst cooldown RUNNING at the crossing (`burstCastSpan`, fact4
+   * D9) — not "pressed in the last 8 s" */
   enemyBurst: boolean;
+  /** the owner was in hard CC / a silence at the crossing instant `t` (what
+   * cd-hoarded's crisis-unit gate and the context read) */
   inCC: boolean;
+  /** the owner was kicked within `LOCKOUT_LOOKBACK_MS` before `t`, or
+   * silenced at `t` */
   lockedOut: boolean;
+  /** fact4 D28: the owner could act inside the response window — at least
+   * REACTION_WINDOW_S of [t, t + RESPONSE_WINDOW_MS] outside every
+   * cannot-cast interval (`couldReactWithin` over `buildCannotCastIntervals`,
+   * the predicate cd-hoarded's owner gate reads). Gate 1 + 2 of `feasible`.
+   * Optional (as `dmg2sBySchool`) so hand-built fixtures need not carry it. */
+  couldActInWindow?: boolean;
+  /** seconds of that window the owner was free (`freeMsWithin`) */
+  freeInWindowS?: number;
   diedInWindow: boolean;
   responses: DecisionPointResponses;
   /** owner's own active answer: selfHeal ∨ wall ∨ external ∨ control ∨ kite
@@ -213,7 +234,8 @@ export interface DecisionPoint {
    * controlReady` — not rooted (still free to move/act), or a personal wall
    * is off cooldown, or a Control-tagged major CD is off cooldown. */
   hasTool: boolean;
-  /** gates 1, 2, 3 and 4 all pass */
+  /** gates 1, 2, 3 and 4 all pass: `couldActInWindow`, alive through the
+   * window, a tool */
   feasible: boolean;
   /** gate 5: dmg2s >= CRISIS_MIN_DMG2S (spec §1b). Independent of `feasible`
    * — a point can be dangerous but infeasible (e.g. CC'd), or feasible but
@@ -912,6 +934,50 @@ export function crisisDecisionPoints(
   // over it, already used by candidateFindings.ts's burst-ledger path.
   const cc = buildFilteredAuraIntervals(owner, ccSpellIds, combat);
   const silence = buildFilteredAuraIntervals(owner, SILENCE_IDS, combat);
+  // fact4 D28 (2026-10-22): could the owner act inside the response window?
+  // The one cannot-cast predicate cd-hoarded's owner gate reads
+  // (`buildCannotCastIntervals`: enemy hard CC and silences — pets' and
+  // totems' included — a kick's school lockout for its kicker's length, the
+  // owner's own flight), with the one reaction standard (`couldReactWithin`:
+  // REACTION_WINDOW_S free inside [t, t + RESPONSE_WINDOW_MS]). Until then
+  // CC and lockout were read at the crossing instant only: 4184d534 1:54, a
+  // Void Nova landing 79 ms after t held the healer 4 s, five Rewind presses
+  // refused "can't do that while stunned", and the menu said the player was
+  // free. Null when the intervals cannot be built: the instant reading then.
+  const enemyPlayers = players.filter((u) => !friendIds.has(u.id));
+  let cannotCast: Array<{ from: number; to: number }> | null = null;
+  try {
+    cannotCast = buildCannotCastIntervals(
+      owner,
+      enemySourceIds(enemyPlayers, units),
+      units,
+    );
+  } catch {
+    cannotCast = null;
+  }
+  const roundEndAt: number =
+    typeof combat?.endTime === "number" && combat.endTime > 0
+      ? combat.endTime
+      : Infinity;
+  // fact4 D9: an enemy burst RUNNING at the crossing — the span the burst
+  // ledger, kick-eaten's `enemyBurst` and KILL ATTEMPTS read
+  // (`burstCastSpan`: cast → observed effect end). The 8 s press lookback it
+  // replaces printed `burst=no` under a 24 s Avenging Wrath pressed 19 s
+  // earlier (2d25d01a 4:34), against a legend that says "active".
+  let enemyBurstSpansMs: Array<{ from: number; to: number }> = [];
+  try {
+    enemyBurstSpansMs = reconstructEnemyCDTimeline(
+      enemyPlayers,
+      combat,
+    ).players.flatMap((pl) =>
+      pl.offensiveCDs.map((cd) => {
+        const sp = burstCastSpan(cd);
+        return { from: start + sp.from * 1000, to: start + sp.to * 1000 };
+      }),
+    );
+  } catch {
+    enemyBurstSpansMs = [];
+  }
 
   // Gate 3 for a DPS owner (spec §1d, GH #59): rooted intervals + the
   // owner's Defensive-wall / Control-CD ledger, both computed once for the
@@ -945,21 +1011,13 @@ export function crisisDecisionPoints(
     controlCds = cds.filter((cd) => cd.tag === "Control");
   }
 
-  const enemyBurstCasts: number[] = [];
   const friendControlCasts: { t: number; dest: string }[] = [];
   for (const u of players) {
     for (const c of (u.spellCastEvents ?? []) as any[]) {
       const sid = String(c.spellId ?? "");
-      if (!friendIds.has(u.id) && isEnemyCdWindowSpell(sid))
-        enemyBurstCasts.push(c.timestamp);
       if (friendIds.has(u.id) && u.id !== owner.id && CONTROL_IDS.has(sid))
         friendControlCasts.push({ t: c.timestamp, dest: c.destUnitId });
     }
-    // GH #119: aura-evidenced bursts (Havoc Metamorphosis, an unlogged Doom
-    // Winds press) — the same occurrences the enemy-CD timeline shows
-    if (!friendIds.has(u.id))
-      for (const o of auraOffensiveOccurrences(u, combat).occurrences)
-        if (o.burstRole === "burst") enemyBurstCasts.push(o.startMs);
   }
 
   // BACKLOG #43: proc marker auras applied to the owner (self-sourced)
@@ -1148,6 +1206,15 @@ export function crisisDecisionPoints(
         (it) => it >= t - LOCKOUT_LOOKBACK_MS && it <= t,
       ) || silence.some((i) => i.startMs <= t && i.endMs >= t);
     const diedInWindow = deaths.some((d) => d >= t && d < w1);
+    const actTo = Math.min(w1, roundEndAt);
+    const freeInWindowMs = cannotCast
+      ? freeMsWithin(cannotCast, t, actTo)
+      : inCC || lockedOut
+        ? 0
+        : actTo - t;
+    const couldActInWindow = cannotCast
+      ? couldReactWithin(cannotCast, t, actTo)
+      : !inCC && !lockedOut;
     // Table-only outcome (spec §1b): a death strictly after t, within
     // DEATH_LOOKAHEAD_MS. `(t, t+10000]` — t itself is excluded (that's
     // diedInWindow's job at a shorter horizon), the far edge is inclusive.
@@ -1201,11 +1268,11 @@ export function crisisDecisionPoints(
         true,
       ),
       attackers2s: attackers.size,
-      enemyBurst: enemyBurstCasts.some(
-        (b) => b > t - ENEMY_BURST_LOOKBACK_MS && b <= t,
-      ),
+      enemyBurst: enemyBurstSpansMs.some((sp) => sp.from <= t && t < sp.to),
       inCC,
       lockedOut,
+      couldActInWindow,
+      freeInWindowS: Math.round(freeInWindowMs / 100) / 10,
       diedInWindow,
       dangerous,
       diedWithin10s,
@@ -1219,7 +1286,7 @@ export function crisisDecisionPoints(
       // spell in one ms count twice (codex 20-F15-23)
       selfHealCasts: new Set(freshHeals.map((f) => f.press)).size,
       hasTool,
-      feasible: !inCC && !lockedOut && !diedInWindow && hasTool,
+      feasible: couldActInWindow && !diedInWindow && hasTool,
     });
   }
   return out;
