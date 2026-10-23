@@ -188,6 +188,7 @@ import {
   splitLine as parserSplitLine,
 } from "@gladlog/parser";
 import { CombatUnitSpec } from "@gladlog/parser-compat";
+import * as maxHpLagMod from "@gladlog/parser-compat/src/maxHpLag";
 import { readdirSync, readFileSync } from "fs";
 import { join } from "path";
 
@@ -1977,11 +1978,6 @@ const INDEX: PredicateRow[] = [
     mod: dampening,
   },
   {
-    file: `${A}/utils/dampening.ts`,
-    symbol: "getDampeningPercentage",
-    mod: dampening,
-  },
-  {
     file: `${E}/quality/promptQualityCheck.ts`,
     symbol: "checkDampeningStartConsistency",
     mod: promptQualityCheck,
@@ -2179,6 +2175,21 @@ const INDEX: PredicateRow[] = [
     file: `${A}/utils/petCommands.ts`,
     symbol: "petCommands",
     mod: petCommandsMod,
+  },
+  {
+    file: `${A}/utils/castPress.ts`,
+    symbol: "isNoPressRow",
+    mod: castPress,
+  },
+  {
+    file: "packages/parser-compat/src/maxHpLag.ts",
+    symbol: "laggingMaxHpCorrected",
+    mod: maxHpLagMod,
+  },
+  {
+    file: `${A}/utils/dampening.ts`,
+    symbol: "getDampeningPercentage",
+    mod: dampening,
   },
   {
     file: `${E}/quality/promptQualityCheck.ts`,

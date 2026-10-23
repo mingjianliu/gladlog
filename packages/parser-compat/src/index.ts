@@ -1,5 +1,6 @@
 export * from "./convert";
 export * from "./enums";
+export * from "./maxHpLag";
 export * from "./shim";
 export * from "./types";
 

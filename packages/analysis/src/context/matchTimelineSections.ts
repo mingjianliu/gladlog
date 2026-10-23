@@ -731,10 +731,14 @@ export function emitManaMarkerEntries(params: {
 /** ` | dampening: N%` on a `[DEATH]` line — nothing where no value is stated
  * (a 2v2 round that logged no stack; `getInitialDampening`, FT-T13 D11). */
 function dampeningSuffix(
-  dampeningAt: ((atSeconds: number) => number | null) | undefined,
+  dampeningAt:
+    | ((atSeconds: number, unit?: ICombatUnit) => number | null)
+    | undefined,
   atSeconds: number,
+  unit?: ICombatUnit,
 ): string {
-  const pct = dampeningAt ? dampeningAt(atSeconds) : null;
+  // the dying unit's own doses (fact4 D53)
+  const pct = dampeningAt ? dampeningAt(atSeconds, unit) : null;
   return pct === null ? "" : ` | dampening: ${pct}%`;
 }
 
@@ -927,7 +931,7 @@ export function emitFriendlyDeathEntries<S>(params: {
    * of a neighbouring line ("died at 3:15 at 66%" — 66% was 3:16's). Omitted,
    * or `null` at that instant (a 2v2 round that logged no stack) → no
    * suffix. */
-  dampeningAt?: (atSeconds: number) => number | null;
+  dampeningAt?: (atSeconds: number, unit?: ICombatUnit) => number | null;
   /**
    * Mitigation audit / counterfactual (#17b Task4): given (victim name, death
    * instant), return a set of already-formatted lines (auditLines /
@@ -1123,7 +1127,7 @@ export function emitFriendlyDeathEntries<S>(params: {
         : ` (PvP Trinket available; no breakable CC in the last ${DEATH_BREAKABLE_CC_LOOKBACK_S} s)`;
     const notePart = death.note ? ` [${death.note}]` : "";
     const deathLines: (string | S)[] = [
-      `${fmtTime(death.atSeconds)}  [DEATH]  ${pid(death.name)} (${death.spec} — friendly)${unusedDefensives}${trinketPart}${notePart}${dampeningSuffix(params.dampeningAt, death.atSeconds)}`,
+      `${fmtTime(death.atSeconds)}  [DEATH]  ${pid(death.name)} (${death.spec} — friendly)${unusedDefensives}${trinketPart}${notePart}${dampeningSuffix(params.dampeningAt, death.atSeconds, unitsByName.get(death.name))}`,
       // Anchored at the rendered instant: this [RES] sits directly under the
       // [DEATH] line above and carries no timestamp of its own, so a reader
       // (and the gate) can only read it as the same instant as the death.
@@ -1280,7 +1284,7 @@ export function emitEnemyDeathEntries<S>(params: {
    * of a neighbouring line ("died at 3:15 at 66%" — 66% was 3:16's). Omitted,
    * or `null` at that instant (a 2v2 round that logged no stack) → no
    * suffix. */
-  dampeningAt?: (atSeconds: number) => number | null;
+  dampeningAt?: (atSeconds: number, unit?: ICombatUnit) => number | null;
   requestSnapshotPlaceholder: (
     timeSeconds: number,
     forceFull?: boolean,
@@ -1306,7 +1310,7 @@ export function emitEnemyDeathEntries<S>(params: {
   for (const death of enemyDeaths) {
     const dyingUnit = unitsByName.get(death.name);
     const deathLines: (string | S)[] = [
-      `${fmtTime(death.atSeconds)}  [DEATH]  ${enemyPid(death.name)} (${death.spec} — enemy)${dampeningSuffix(dampeningAt, death.atSeconds)}`,
+      `${fmtTime(death.atSeconds)}  [DEATH]  ${enemyPid(death.name)} (${death.spec} — enemy)${dampeningSuffix(dampeningAt, death.atSeconds, dyingUnit)}`,
       `${fmtTime(death.atSeconds)}  [ROSTER]  enemy ${enemyPid(death.name)} removed (dead)`,
       // Anchored at the rendered instant: this [RES] sits directly under the
       // [DEATH] line above and carries no timestamp of its own, so a reader

@@ -654,6 +654,9 @@ type ResPressLockout = { debuff: PressLockoutDebuff; untilS: number };
  * Shield(Forbearance 12s)` (FT-T04), `Ice Block(Hypothermia 12s)` (FT F22). */
 export const RES_FORBEARANCE_RE_SRC = String.raw`\(Forbearance \d+s\)`;
 export const RES_HYPOTHERMIA_RE_SRC = String.raw`\(Hypothermia \d+s\)`;
+/** fact4 D18: a cooldown that MAY be back (`≤Ns`) while its holder is under
+ * the lockout debuff — `Ice Block(≤83s; Hypothermia 30s)` */
+export const RES_MAYBE_LOCKED_RE_SRC = String.raw`\(≤\d+s; (?:Forbearance|Hypothermia) \d+s\)`;
 function lockoutText(lock: ResPressLockout, timeSeconds: number): string {
   return `${lock.debuff} ${Math.max(1, Math.floor(lock.untilS - timeSeconds))}s`;
 }
@@ -664,14 +667,23 @@ function lockoutText(lock: ResPressLockout, timeSeconds: number): string {
 function resEntryState(
   e: { cd: IMajorCooldownInfo; lockout?: ResPressLockout },
   timeSeconds: number,
-): "ready" | "onCd" | "skip" | "locked" {
+): "ready" | "onCd" | "skip" | "locked" | "maybeLocked" {
   const state = resStateOf(e.cd, timeSeconds);
   // a lockout (Forbearance, Hypothermia) locks an unpressed opener entry too:
   // the opener rows promote "skip" to ready (codex 20-F16-03 #1: Lay on Hands
   // at 1 s, `rdy:Divine Shield` at 2 s)
-  return (state === "ready" || state === "skip") && e.lockout !== undefined
-    ? "locked"
-    : state;
+  if ((state === "ready" || state === "skip") && e.lockout !== undefined)
+    return "locked";
+  // fact4 D18 (353ad51a r3 2:50 / 3:16): a cooldown that may already be back
+  // (`≤Ns`) is still refused while the lockout runs — `≤Ns` alone read "may
+  // be pressable" under 30 s of Hypothermia
+  if (
+    state === "onCd" &&
+    e.lockout !== undefined &&
+    cdMaybeAvailableAt(e.cd, timeSeconds)
+  )
+    return "maybeLocked";
+  return state;
 }
 
 /**
@@ -763,6 +775,10 @@ export function computeOnCDDisplayNames(
       onCDNames.push(onCdKey(e.displayName, e.cd, timeSeconds));
     else if (state === "locked")
       onCDNames.push(lockoutKey(e.displayName, e.lockout!));
+    else if (state === "maybeLocked")
+      onCDNames.push(
+        `${onCdKey(e.displayName, e.cd, timeSeconds)}${lockoutKey("", e.lockout!)}`,
+      );
   }
   return onCDNames;
 }
@@ -944,6 +960,15 @@ function buildResourceSnapshotOnce({
       if (prevOnCDSet === null || !prevOnCDSet.has(key))
         onCDParts.push(
           `${displayName}(${lockoutText(e.lockout!, timeSeconds)})`,
+        );
+      continue;
+    }
+    if (state === "maybeLocked") {
+      const key = `${onCdKey(displayName, cd, timeSeconds)}${lockoutKey("", e.lockout!)}`;
+      currentOnCDNames.push(key);
+      if (prevOnCDSet === null || !prevOnCDSet.has(key))
+        onCDParts.push(
+          `${displayName}(${remainingText(cd, timeSeconds)}; ${lockoutText(e.lockout!, timeSeconds)})${chargeSuffix.get(displayName) ?? ""}`,
         );
       continue;
     }

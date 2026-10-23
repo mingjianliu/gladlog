@@ -674,6 +674,18 @@ export const CRISIS_PROC_ANSWERS: ReadonlyMap<string, CrisisProcAnswer> =
         triggers: new Set(["87023", "108843"]),
       },
     ],
+    // …and its own heal 1286444: the burn aura is not always written (fact4
+    // D61 — 211 of 1,011 procs on 605 files every 3rd had the heal and no
+    // 87023); one proc's two markers name it once (`procNames`)
+    [
+      "1286444",
+      {
+        name: "Cauterize",
+        kind: "cheatDeath",
+        via: "heal",
+        triggers: new Set(["1286444"]),
+      },
+    ],
     // Cheat Death (Rogue, 5 %): a killing blow leaves the rogue at 7 % with
     // 85 % damage reduction for 3 s; 45182 = that reduction.
     [

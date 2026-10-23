@@ -534,6 +534,11 @@ export function effectSaves(
   for (const h of unit.healIn ?? []) {
     const proc = h.spellId ? ENEMY_PROC_SAVES[h.spellId] : undefined;
     if (proc?.via !== "heal" || h.srcUnitId !== unit.id) continue;
+    // one proc, one event: a heal beside the same proc's aura (Cauterize's
+    // 1286444 next to its 87023, fact4 D61) is that aura's
+    const atS = (h.logLine.timestamp - matchStartMs) / 1000;
+    if (out.some((o) => o.spellName === proc.name && Math.abs(o.atSeconds - atS) <= 1))
+      continue;
     out.push({
       atSeconds: (h.logLine.timestamp - matchStartMs) / 1000,
       spellId: h.spellId!,

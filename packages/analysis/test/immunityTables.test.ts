@@ -125,8 +125,14 @@ describe("ruling D8: the effect saves sit in no immunity / wall set another read
     await ensureAnalysisData();
   });
 
-  it("the four logged ids are the ones the ruling names", () => {
-    expect([...LOGGED].sort()).toEqual(["202748", "31616", "45182", "87023"]);
+  it("the logged ids are the ones the ruling names (+ Cauterize's own heal, fact4 D61)", () => {
+    expect([...LOGGED].sort()).toEqual([
+      "1286444",
+      "202748",
+      "31616",
+      "45182",
+      "87023",
+    ]);
   });
 
   it.each([...LOGGED, ...UNLOGGED])("%s is in none of them", (id) => {

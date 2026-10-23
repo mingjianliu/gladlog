@@ -392,6 +392,13 @@ export const ENEMY_PROC_SAVES: Readonly<
   "31616": { name: "Nature's Guardian", effect: "heal proc", via: "heal" }, // 306 heals in 107 files, no cast, no aura
   "45182": { name: "Cheat Death", effect: "cheat-death proc", via: "aura" }, // 10 ("Cheating Death")
   "87023": { name: "Cauterize", effect: "cheat-death proc", via: "aura" }, // 77
+  // fact4 D61 (2026-10-22): Cauterize's own heal — the burn aura 87023 is
+  // not always written (bb7e1d9f r0 0:58.745: heal 1286444 + Cauterized
+  // 87024 + an absorb under 86949, no 87023). 605 files every 3rd, per unit
+  // and 2 s: 1,011 procs with the heal, 211 of them without 87023; 87023
+  // never without the heal but 31 times. One proc is one event
+  // (the heal folds into an 87023 aura of the same instant).
+  "1286444": { name: "Cauterize", effect: "cheat-death proc", via: "heal" },
 };
 
 /**

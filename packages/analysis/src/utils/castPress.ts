@@ -141,6 +141,13 @@ export const COPY_CAST_IDS: ReadonlyMap<string, string> = new Map([
   // with a target and inside the 6 s after a press of its caster
   // (`runs/fact4-2026-10-22/fix/probes/snowdriftRows.py`). Read as presses
   // they printed one `[CC AVOIDED?]` line per pulse (190-2-1034 0:19–0:22).
+  // fact4 D24 (3ec01728 r0 0:12): Mutilate's off-hand strike, logged under
+  // its own id beside the press. 605 files every 6th: 44,962 rows, 44,611 of
+  // them within 5 ms of a 1329 row of the same caster at the same target.
+  [
+    "27576",
+    "Mutilate off-hand row (44,611 of 44,962 within 5 ms of the 1329 press, same target; the press is 1329)",
+  ],
   [
     "389823",
     "Snowdrift pulse on a target (slow; 3,484 rows vs 628 presses, all with a target inside the 6 s channel; the press is 389794)",
@@ -169,6 +176,57 @@ export const COPY_CAST_IDS: ReadonlyMap<string, string> = new Map([
   ],
 ]);
 
+/**
+ * A row of an id that is a press of its own — except beside another press it
+ * accompanies (fact4 D47, 63d13f66 r3 0:47): one Germination press writes
+ * 155777 "Rejuvenation (Germination)" and, 0–1 ms later at the same target,
+ * a 774 "Rejuvenation" row whose aura is never applied. 605 files every 6th:
+ * 10,051 of 27,116 Rejuvenation 774 rows sit within 5 ms of a 155777 row of
+ * the same caster at the same target; the other 17,065 are presses.
+ * Companion id → the press it rides on.
+ */
+export const COMPANION_CAST_ROWS: ReadonlyMap<string, string> = new Map([
+  ["774", "155777"],
+]);
+/** How far a companion row may sit from its press. */
+export const COMPANION_CAST_ROW_MS = 5;
+
+/** Is this cast row the companion of another press of its unit
+ * (`COMPANION_CAST_ROWS`)? `rows` are the unit's cast rows. */
+export function isCompanionCastRow<
+  T extends {
+    spellId?: string;
+    destUnitId?: string;
+    logLine: { timestamp: number; event?: string };
+  },
+>(e: T, rows: readonly T[]): boolean {
+  const pressId = e.spellId ? COMPANION_CAST_ROWS.get(e.spellId) : undefined;
+  if (!pressId) return false;
+  return rows.some(
+    (o) =>
+      o.spellId === pressId &&
+      o.destUnitId === e.destUnitId &&
+      Math.abs(o.logLine.timestamp - e.logLine.timestamp) <=
+        COMPANION_CAST_ROW_MS,
+  );
+}
+
+/** Is this cast row no press of its own — a copy (`COPY_CAST_IDS`) or the
+ * companion of another press (`COMPANION_CAST_ROWS`)? The row-level half of
+ * `filterRealPresses`, for a reader that must keep two quick presses of one
+ * spell apart (a second Throw Glaive charge 1.0 s after the first). */
+export function isNoPressRow<
+  T extends {
+    spellId?: string;
+    destUnitId?: string;
+    logLine: { timestamp: number; event?: string };
+  },
+>(e: T, rows: readonly T[]): boolean {
+  return (
+    (!!e.spellId && COPY_CAST_IDS.has(e.spellId)) || isCompanionCastRow(e, rows)
+  );
+}
+
 /** Same-spellId events closer than this are ticks of one channel, not two
  * presses. 1.05s clears the observed tick spacings (0.80–1.00s) while staying
  * under the 1.4s cadence of real filler spam — do not loosen. */
@@ -195,6 +253,13 @@ export function filterRealPresses<
   for (const { e, i } of sorted) {
     const id = String(e.spellId ?? "");
     if (COPY_CAST_IDS.has(id)) continue;
+    if (
+      isCompanionCastRow(
+        e as never,
+        events as never,
+      )
+    )
+      continue;
     const t = e.logLine.timestamp;
     const prev = prevEventBySpell.get(id);
     prevEventBySpell.set(id, t);

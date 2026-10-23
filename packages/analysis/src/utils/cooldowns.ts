@@ -35,7 +35,10 @@ import {
   spellEffectData,
 } from "../data/spellEffectData";
 import { CORPUS_COOLDOWN_PATCHES } from "../data/spellEffectOverrides";
-import spellIdListsData, { ENEMY_ONLY_SAVE_IDS } from "../data/spellIdLists";
+import spellIdListsData, {
+  ENEMY_IMMUNITY_SAVE_AURAS,
+  ENEMY_ONLY_SAVE_IDS,
+} from "../data/spellIdLists";
 import { spellSchoolMask } from "../data/spellSchools";
 import { hasOfficialTargeting, reachesAlly } from "../data/spellTargeting";
 import { SpellTag } from "../data/spellTypes";
@@ -917,6 +920,16 @@ export function hypothermiaUntil(
     if (a.timestamp <= atMs) {
       if (applies) openMs ??= a.timestamp;
       else if (removes) openMs = undefined;
+    } else if (
+      applies &&
+      openMs === undefined &&
+      a.timestamp < atMs + 1000
+    ) {
+      // fact4 D17 (353ad51a r3 1:43): put on by a press later in the
+      // rendered second — "a press anywhere in that second is already spent
+      // on it" (the [RES] legend), so is its debuff; the row under the
+      // 1:43.94 Ice Block kept `2:Ice Block` ready
+      openMs = a.timestamp;
     } else if (openMs !== undefined && removes) {
       removedMs = a.timestamp;
       break;
@@ -4549,7 +4562,7 @@ function extractMajorCooldownsAll(
   }
 
   // --- What the enemy side prints, pressed by this player (FT board item 1) ---
-  // Two catalogs render a line when an ENEMY presses a member, and had no
+  // Three catalogs render a line when an ENEMY presses a member, and had no
   // row here for this player's own press of the same spell — so no press
   // line, no kit row and no [RES] entry:
   //  - `ENEMY_ONLY_SAVE_IDS` (`[ENEMY DEF]`): a Rogue at 3 % pressing Crimson
@@ -4574,7 +4587,15 @@ function extractMajorCooldownsAll(
   for (const spellId of castSpellIds) {
     if (seen.has(spellId) || replacedByTalent.has(spellId)) continue;
     const offensive = OFFENSIVE_CD_SPELL_IDS.has(spellId);
-    if (!offensive && !ENEMY_ONLY_SAVE_IDS.has(spellId)) continue;
+    // fact4 D38 (4dee936a 0:18): the immunity-kind saves the enemy side
+    // prints `immune` (Burrow — a friendly Restoration Shaman's 5 s of 30
+    // misses had no press line and no kit row) are the third catalog
+    if (
+      !offensive &&
+      !ENEMY_ONLY_SAVE_IDS.has(spellId) &&
+      !(spellId in ENEMY_IMMUNITY_SAVE_AURAS)
+    )
+      continue;
     if (rosterIds.has(spellId)) continue;
     const effectData = spellEffectData[spellId];
     if (!effectData) continue;

@@ -4055,3 +4055,20 @@ are one control and one kick (`petCommands`, moved to utils). 605 files vs v442
 (f1 → f2c): healer slow-defensive-response −1. corpusFactScan3 f1 → f2c:
 avoidedImmuneRows 129 → 0, trapNotLanded 27 → 0, sanctuaryKillAttempt 170 → 0,
 sanctuarySilenceLine 96 → 0, burstAnswerPress tick 6 → 0.
+
+v444 (2026-10-23, fact4 F17 batch 3, user approved 「批准」): an advanced
+sample's max HP that lags a max-HP change is read at the new max
+(`laggingMaxHpCorrected`, parser-compat — every HP reader; 152 files: 1,784
+lag runs, corrected reading within 0.05 pp of the row before at p50); a
+Hypothermia applied later in the [RES] row's own second counts (D17), and a
+`≤Ns` cooldown under Forbearance / Hypothermia prints `(≤Ns; <debuff> Ms)`
+(D18); the [RES] legend states the ledger's half-second slack (D64); a line
+about one unit reads that unit's Dampening (D53); Cauterize's own heal 1286444
+marks its proc when the burn aura 87023 is not logged (D61; 211 of 1,011
+procs); Burrow enters the friendly ledger (D38); a control family's snare-copy
+miss is no control failing (D51 / D56); Mutilate's off-hand 27576 and
+Germination's 774 companion are no presses (D24 / D47). 605 files vs v443
+(f2c → f3b): dps cd-hoarded −1 (the crisis unit's own Cauterize, logged with
+no burn aura, saved it). Gates = b15; corpusFactScan 1/2/3 unchanged or 0.
+Family diff: Burrow 0 → 599 [RES] / 65 [TEAM] [CD] / 34 [YOU] [CD]; [CC
+AVOIDED?] Metamorphosis 38 → 0 — all intended.

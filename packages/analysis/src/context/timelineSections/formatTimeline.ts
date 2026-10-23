@@ -44,6 +44,7 @@ import { pruneZeroLossResRows } from "../resLedgerPrune";
 import {
   RES_FORBEARANCE_RE_SRC,
   RES_HYPOTHERMIA_RE_SRC,
+  RES_MAYBE_LOCKED_RE_SRC,
 } from "../resourceSnapshot";
 import { STACKED_DEFENSIVES_LEGEND } from "../stackedDefensives";
 import {
@@ -241,6 +242,11 @@ export function formatTimeline(
   const hypothermiaRendered = entries.some((e) =>
     e.lines.some((l) => typeof l === "string" && RES_HYPOTHERMIA_RE.test(l)),
   );
+  // fact4 D18: `cd:Ice Block(≤Ns; Hypothermia Ms)`, the same convention
+  const RES_MAYBE_LOCKED_RE = new RegExp(RES_MAYBE_LOCKED_RE_SRC);
+  const maybeLockedRendered = entries.some((e) =>
+    e.lines.some((l) => typeof l === "string" && RES_MAYBE_LOCKED_RE.test(l)),
+  );
   // FT F22: a `Top sources` entry summed over an ability's spell ids names
   // every school its damage came in — legended when one is printed.
   const mixedSchoolSourceRendered = entries.some((e) =>
@@ -383,7 +389,7 @@ export function formatTimeline(
       : []),
     // WO6 #6 (n34, 9e9f9565): the row is read at its floored second (GH #63)
     // — "at that instant" let a press 0.33 s later read as made inside it
-    "  [RES] = the ledger at its second m:ss: a press anywhere in that second is already spent on it (the row printed under a press shows that press on cooldown), while a cooldown coming back later in that second is not yet ready on it.",
+    "  [RES] = the ledger at its second m:ss: a press anywhere in that second is already spent on it (the row printed under a press shows that press on cooldown), while a cooldown is ready on it when it is back by half a second into that second — one coming back later in that second is not yet ready on it.",
     "    `cc:N/<spell>-Rs` = friendly N was under that control then, about R s of it left (`[stun]` a stun, `[trinketed]` a stun",
     "    they pressed a PvP trinket within 1 s of, `[root]` a root — they could still cast, `[disarm]` a disarm, `[kick]` a school",
     "    lockout); several are comma-separated.",
@@ -412,6 +418,12 @@ export function formatTimeline(
       ? [
           "    `cd:<spell>(Hypothermia Ns)` = <spell> is off cooldown, but its holder is under Hypothermia for N more seconds and",
           "    cannot press it until then.",
+        ]
+      : []),
+    ...(maybeLockedRendered
+      ? [
+          "    `cd:<spell>(≤Ns; Hypothermia Ms)` / `(≤Ns; Forbearance Ms)` = <spell> may already be off cooldown, but its holder",
+          "    is under that debuff for M more seconds and cannot press it until then.",
         ]
       : []),
     // GH #99 item 5: a bare `rdy:Δ  cd:—` row survives only when it states a

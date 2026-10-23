@@ -173,7 +173,9 @@ export interface TimelineCtx {
    * DAMPENING header, the alerts and `[MATCH END]` read (FT-T13, D10).
    * `null` = none stated (a 2v2 round that logged no stack, D11): the line
    * prints no note. */
-  dampeningAt: (atSeconds: number) => number | null;
+  /** the side's Dampening at an instant; with `unit`, that unit's own doses
+   * (fact4 D53) */
+  dampeningAt: (atSeconds: number, unit?: ICombatUnit) => number | null;
   /** AoE CC casts from outgoingCCChains; [] when there are none */
   aoeCCEvents: IAoeCCEvent[];
   /** AoE CC events already folded into a cast line (shared: owner casts,

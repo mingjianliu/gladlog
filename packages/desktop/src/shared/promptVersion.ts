@@ -378,5 +378,17 @@
  *  and its pet's cast are one control / one kick. 605 files vs v442 (f1 →
  *  f2c): healer slow-defensive-response −1 (a Snowdrift stun that landed on
  *  the burst caster now answers it).
+ *
+ * v444 (2026-10-23, fact4 F17 batch 3, user approved 「批准」): an advanced
+ *  sample's max HP that lags a max-HP change reads the new max (bear exit,
+ *  Ursine Vigor falling off — a full-HP druid read 75 / 87 / 76 %; parser-
+ *  compat, every HP reader); Hypothermia put on later in the [RES] row's
+ *  second counts, and a `≤Ns` cooldown under the debuff prints
+ *  `(≤Ns; Hypothermia Ms)`; the [RES] legend states the half-second slack;
+ *  Dampening on a unit's own line is its own; Cauterize's heal 1286444 is
+ *  its proc when the burn aura is not logged; Burrow is on the friendly
+ *  ledger; a snare copy's miss is no control failing; Mutilate's off-hand
+ *  and Germination's 774 companion are no presses. 605 files vs v443 (f2c →
+ *  f3b): dps cd-hoarded −1 (the crisis unit's own Cauterize saved it).
  */
-export const PROMPT_VERSION = 443;
+export const PROMPT_VERSION = 444;

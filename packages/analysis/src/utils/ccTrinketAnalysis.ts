@@ -131,6 +131,7 @@ import {
   baseCastSeconds,
   ccMechanicOf,
   isSilenceableCast,
+  SNARED_MECHANIC,
 } from "./spellMechanics";
 import {
   RANGE_HITBOX_SLACK_YD,
@@ -4718,6 +4719,10 @@ export function analyzePlayerCCAndTrinket(
         CONTROL_FAILED_MISS_TYPES.has(m.missType) &&
         m.spellId !== undefined &&
         family.has(m.spellId) &&
+        // a miss of the family's SNARE copy is no control failing (fact4
+        // D51 / D56: Metamorphosis' 247121, DB2 mechanic 11, IMMUNE on a
+        // paladin while its stun 200166 went on pets only)
+        ccMechanicOf(m.spellId) !== SNARED_MECHANIC &&
         fromCaster(m.srcUnitId) &&
         missBelongsToCast(
           sameSpellCastMs,

@@ -37,6 +37,7 @@ import {
   castBlockingAuraIntervals,
   coveredMsWithin,
 } from "./cannotCastIntervals";
+import { isNoPressRow } from "./castPress";
 import { isHealerSpec, isMeleeSpec } from "./cooldowns";
 import {
   distanceBetween,
@@ -378,7 +379,12 @@ export function computeRootReachability(
           // cc-dr F-RT1: casts at another player inside the root
           const fromMs = combat.startTime + iv.fromS * 1000;
           const toMs = combat.startTime + iv.toS * 1000;
-          const casts = (X.spellCastEvents ?? [])
+          // presses, not rows (fact4 D24: one Mutilate press is 1329 +
+          // its off-hand 27576 — `isNoPressRow`); two quick presses of one
+          // spell stay two (Throw Glaive's second charge 1.0 s later)
+          const rows = X.spellCastEvents ?? [];
+          const casts = rows
+            .filter((e) => !isNoPressRow(e, rows))
             .filter(
               (e) =>
                 e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&

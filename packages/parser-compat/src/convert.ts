@@ -15,6 +15,7 @@ import {
   CombatUnitType,
   LogEvent,
 } from "./enums";
+import { laggingMaxHpCorrected } from "./maxHpLag";
 import type {
   CombatantInfo,
   IAbsorbEvent,
@@ -307,11 +308,16 @@ function convertUnit(
     lineIndex: death.lineIndex,
   }));
 
-  const advancedActions: IAdvancedAction[] = [...unit.advancedSamples]
-    .sort((a, b) => a.timestamp - b.timestamp)
-    .map((sample) => ({
+  const sortedSamples = [...unit.advancedSamples].sort(
+    (a, b) => a.timestamp - b.timestamp,
+  );
+  // a max HP the log writes late after a max-HP change (fact4 D13 / D14 /
+  // D50: a bear form exit read 75 % for a druid at 98 %) — `maxHpLag.ts`
+  const maxHpOf = laggingMaxHpCorrected(sortedSamples);
+  const advancedActions: IAdvancedAction[] = sortedSamples.map(
+    (sample, i) => ({
       advancedActorCurrentHp: sample.hp,
-      advancedActorMaxHp: sample.maxHp,
+      advancedActorMaxHp: maxHpOf[i]!,
       advancedActorPositionX: sample.x,
       advancedActorPositionY: sample.y,
       advanced: true,

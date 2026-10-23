@@ -25,7 +25,11 @@ import {
 import { allyCopyRecipient } from "../../utils/allyCopyWall";
 import { dropAuraRebroadcasts } from "../../utils/auraIntervals";
 import { isControlCast } from "../../utils/castMissRows";
-import { COPY_CAST_IDS, isFormReshiftCast } from "../../utils/castPress";
+import {
+  COPY_CAST_IDS,
+  isCompanionCastRow,
+  isFormReshiftCast,
+} from "../../utils/castPress";
 import { isControlledPlayerFlags } from "../../utils/charmedPlayer";
 import { cdRoleTag, hpAtPress, rendersOnCaster } from "../../utils/cooldowns";
 import { purgeableCountText } from "../../utils/dispelAnalysis";
@@ -417,6 +421,8 @@ export function emitHealerCastGapFillerEntries(
     // not presses; rendering them doubles the apparent APM of the specs that
     // have them (Preservation Evoker nearly 2×).
     if (COPY_CAST_IDS.has(e.spellId)) continue;
+    // a companion row of another press (Germination's 774, fact4 D47)
+    if (isCompanionCastRow(e, owner.spellCastEvents ?? [])) continue;
 
     const displayName = HEALER_CAST_SPELL_ID_TO_NAME[e.spellId] ?? englishName;
     if (!displayName) continue;

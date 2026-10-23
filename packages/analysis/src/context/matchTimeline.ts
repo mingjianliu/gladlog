@@ -46,7 +46,10 @@ import {
   IMajorCooldownInfo,
   isHealerSpec,
 } from "../utils/cooldowns";
-import { getDampeningPercentage } from "../utils/dampening";
+import {
+  buildDampeningEvents,
+  getDampeningPercentage,
+} from "../utils/dampening";
 import { IDispelSummary } from "../utils/dispelAnalysis";
 import { IOutgoingCCChain } from "../utils/drAnalysis";
 import { IEnemyCDTimeline } from "../utils/enemyCDs";
@@ -399,16 +402,27 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
   // owner side 16 at 1:14.262, enemy 17 at 1:14.668). A line reads its own
   // team's doses (the owner's side; an enemy [DEATH] line the enemy's); the
   // rules (2v2 / 3v3) still come from the whole roster.
+  // fact4 D53 (a8056a0f r0 2:16): a line about ONE unit reads that unit's
+  // own doses — a teammate ticks up to ~2.4 s ahead, and the owner's Dark
+  // Pact printed the teammate's 42 % beside its own 41; a unit with no dose
+  // logged reads its side's.
   const dampeningAt = (
     atSeconds: number,
     side: "friendly" | "enemy" = "friendly",
-  ) =>
-    getDampeningPercentage(
+    unit?: ICombatUnit,
+  ) => {
+    const sideUnits = side === "enemy" ? (enemies ?? []) : friends;
+    const own =
+      unit !== undefined && buildDampeningEvents([unit]).length > 0
+        ? [unit]
+        : sideUnits;
+    return getDampeningPercentage(
       bracket ?? "3v3",
-      side === "enemy" ? (enemies ?? []) : friends,
+      own,
       matchStartMs + atSeconds * 1000,
       allPlayers,
     );
+  };
 
   // ── Dampening Milestone Alerts (F149) ──────────────────────────────────────
   emitDampeningEntries({
@@ -468,7 +482,8 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     unitNames,
     rosterSides,
     counterfactualOf,
-    dampeningAt,
+    dampeningAt: (atSeconds: number, unit?: ICombatUnit) =>
+      dampeningAt(atSeconds, "friendly", unit),
     requestSnapshotPlaceholder,
     addEntry,
   });
@@ -483,7 +498,8 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     summonOwners,
     unitNames,
     rosterSides,
-    dampeningAt: (atSeconds: number) => dampeningAt(atSeconds, "enemy"),
+    dampeningAt: (atSeconds: number, unit?: ICombatUnit) =>
+      dampeningAt(atSeconds, "enemy", unit),
     requestSnapshotPlaceholder,
     addEntry,
   });
@@ -554,7 +570,8 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     groundingAbsorbNote,
     params,
     _allUnits,
-    dampeningAt,
+    dampeningAt: (atSeconds: number, unit?: ICombatUnit) =>
+      dampeningAt(atSeconds, "friendly", unit),
     pressureWindows,
     pid,
     cdExpiryEvents,

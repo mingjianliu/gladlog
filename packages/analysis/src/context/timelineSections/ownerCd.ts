@@ -373,7 +373,7 @@ export function emitOwnerCdEntries(
       // alone: ` | next spike in Ns on X`.
       let dampeningNote = "";
       if (!isCC) {
-        const dampPct = dampeningAt(cast.timeSeconds);
+        const dampPct = dampeningAt(cast.timeSeconds, owner);
         const noteParts = dampPct === null ? [] : [`dampening: ${dampPct}%`];
         // pressureWindows is sorted by totalDamage descending (see computePressureWindows),
         // so Array.find() would return the biggest future spike rather than the nearest one.
