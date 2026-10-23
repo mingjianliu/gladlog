@@ -143,6 +143,17 @@ describe("eventReducedCooldownSeconds — 事件减 CD 的不动点", () => {
   it("按下之前的触发不算", () => {
     expect(eventReducedCooldownSeconds(50, 90, giveBacks([10, 20]))).toBe(90);
   });
+  it("与按下同一时刻的触发算(Rumbling Earth:Shockwave 自己那 ms 的命中)", () => {
+    // 5b724629 r2: 40 s Shockwave, its hits in the press's own ms, 5 s each
+    // (≤ 3 counted) → 25 s
+    expect(
+      eventReducedCooldownSeconds(
+        21.844,
+        40,
+        giveBacks([21.844, 21.844, 21.844], 5),
+      ),
+    ).toBeCloseTo(25, 6);
+  });
   it("each trigger gives back its OWN seconds (a round across a dated change)", () => {
     // 4 s at 10 and 20, 2 s at 30 and 40: 90 − 4 − 4 − 2 − 2 = 78
     expect(

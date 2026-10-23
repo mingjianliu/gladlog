@@ -46,7 +46,7 @@ import {
   rendersOnCaster,
   specToString,
 } from "../utils/cooldowns";
-import { getDampeningPercentage } from "../utils/dampening";
+import { doseStackCount, getDampeningPercentage } from "../utils/dampening";
 import {
   enemyTargetReaches,
   positionalWallReaches,
@@ -928,27 +928,36 @@ export function extractOwnerCDBuffExpiry(
           (holder.spellCastEvents ?? [])
             .filter(
               (c) =>
-                (c.logLine.event as LogEvent) ===
-                  LogEvent.SPELL_CAST_SUCCESS &&
+                (c.logLine.event as LogEvent) === LogEvent.SPELL_CAST_SUCCESS &&
                 c.logLine.timestamp <= ms &&
                 ms - c.logLine.timestamp <= CHARGE_CAST_MS,
             )
             .map((c) => c.spellId);
-        const spenders = new Set(
-          holder.auraEvents
-            .filter(
-              (a) =>
-                a.spellId === endAuraId &&
-                (a.logLine.event as LogEvent) ===
-                  LogEvent.SPELL_AURA_REMOVED_DOSE &&
-                (a.logLine.timestamp as number) >= span.fromMs &&
-                (a.logLine.timestamp as number) <= span.removedMs,
-            )
-            .flatMap((a) => castsBefore(a.logLine.timestamp as number)),
+        const doseRows = holder.auraEvents.filter(
+          (a) =>
+            a.spellId === endAuraId &&
+            (a.logLine.event as LogEvent) ===
+              LogEvent.SPELL_AURA_REMOVED_DOSE &&
+            (a.logLine.timestamp as number) >= span.fromMs &&
+            (a.logLine.timestamp as number) <= span.removedMs,
         );
+        const spenders = new Set(
+          doseRows.flatMap((a) => castsBefore(a.logLine.timestamp as number)),
+        );
+        // …or, by another spell that spends it, the LAST charge: the last
+        // dose row left one (codex 20-F17-04 #4: Stormkeeper's Lightning
+        // Bolt, then Chain Lightning took the last charge — read
+        // `ended_early`)
+        const lastDose = doseRows.at(-1);
+        const onLastCharge =
+          lastDose !== undefined &&
+          doseStackCount(lastDose.logLine.parameters?.[12]) === 1;
+        const finalCasts = castsBefore(span.removedMs).filter((id) => !!id);
         if (
           cause === "ended_early" &&
-          castsBefore(span.removedMs).some((id) => !!id && spenders.has(id))
+          finalCasts.length > 0 &&
+          (finalCasts.some((id) => spenders.has(id)) ||
+            (onLastCharge && spenders.size > 0))
         )
           cause = "charges_spent";
         // WO6 #3 (n45): a BROKEN line ended it — enemy damage broke the

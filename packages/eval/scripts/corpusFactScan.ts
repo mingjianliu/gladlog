@@ -555,7 +555,23 @@ for (const f of files) {
         for (let j = 0; j < k; j++) {
           const b = rows[j];
           if (b.spellId !== a.spellId) continue;
-          if (ev(b) === APPLIED) upUntil = tsOf(b) + hiddenAuraLifeMs(b.spellId);
+          if (ev(b) === APPLIED) {
+            // its own REMOVED, when logged (before another APPLIED), ends it
+            // even past the official length; the length caps a lost one
+            let ownEnd = false;
+            for (let x = j + 1; x < rows.length; x++) {
+              const c = rows[x];
+              if (c.spellId !== b.spellId) continue;
+              if (ev(c) === REMOVED) {
+                ownEnd = true;
+                break;
+              }
+              if (ev(c) === APPLIED) break;
+            }
+            upUntil = ownEnd
+              ? Infinity
+              : tsOf(b) + hiddenAuraLifeMs(b.spellId, u, tsOf(b));
+          }
           else if (ev(b) === REMOVED) {
             upUntil = -Infinity;
             if (ta - tsOf(b) <= 50) reapply = true;

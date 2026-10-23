@@ -820,7 +820,15 @@ export function computeWindowContributions(
           withBaselineOnly: true,
         }).filter((cd) => isOwnerCcCast(cd.spellId))
       : [];
-  const ccSpells = collectOwnerCCSpells(owner, matchStartMs, kitControls);
+  // the round for the shared cooldown model (codex 59-POSTHOC-11d #2: only
+  // the contested facts passed it — a Capacitor Totem Storm Conduit brought
+  // back read "on cooldown" here)
+  const ccSpells = collectOwnerCCSpells(
+    owner,
+    matchStartMs,
+    kitControls,
+    combat as { units?: Record<string, ICombatUnit> },
+  );
   // the caster evidence for a CC cast with variants in different DR
   // families (Chastise: stun / incapacitate)
   const ownerApplied = auraIdsAppliedBy(owner.id, enemies);
@@ -1017,7 +1025,12 @@ export function computeWindowCreationFacts(
   const matchStartMs = combat.startTime;
   const enemyHealer = enemies.find((e) => isHealerSpec(e.spec));
   if (!enemyHealer) return [];
-  const ccSpells = collectOwnerCCSpells(owner, matchStartMs);
+  const ccSpells = collectOwnerCCSpells(
+    owner,
+    matchStartMs,
+    [],
+    combat as { units?: Record<string, ICombatUnit> },
+  );
   // the caster evidence for a CC cast with variants in different DR
   // families (Chastise: stun / incapacitate)
   const ownerApplied = auraIdsAppliedBy(owner.id, enemies);
@@ -1181,9 +1194,12 @@ export function buildHealerOffenseSummary(
       enemyHealerCCInstances,
     ),
     contestedTradeFacts,
-    ownerCCSpellsObserved: collectOwnerCCSpells(owner, combat.startTime).map(
-      (s) => s.spellName,
-    ),
+    ownerCCSpellsObserved: collectOwnerCCSpells(
+      owner,
+      combat.startTime,
+      [],
+      combat as { units?: Record<string, ICombatUnit> },
+    ).map((s) => s.spellName),
   };
 }
 

@@ -81,7 +81,7 @@ export function buildDampeningEvents(players: ICombatUnit[]): DampeningEvent[] {
  * plain non-negative integer is accepted; anything else is still not a
  * count.
  */
-function doseStackCount(raw: unknown): number | null {
+export function doseStackCount(raw: unknown): number | null {
   if (typeof raw === "number") return raw;
   if (typeof raw !== "string") return null;
   const trimmed = raw.trim();

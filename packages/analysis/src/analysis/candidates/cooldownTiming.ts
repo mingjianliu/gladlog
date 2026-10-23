@@ -43,9 +43,9 @@ import {
   CD_INSTANT_SLACK_S,
   cdAvailableAt,
   cdCanHelpAnotherUnit,
+  cdChargeStateAt,
   cdIsProcOnly,
   cdReadyInTimeAt,
-  chargeStateAt,
   DEFENSIVE_TAGS,
   getUnitHpAtTimestamp,
   HP_SAMPLE_RADIUS_MS,
@@ -773,10 +773,11 @@ function rawReturnAfter(cd: SyncWindowCd, probeS: number): number | null {
     (c) => c.timeSeconds <= probeS,
   );
   if ((cd.charges ?? 1) > 1) {
-    const st = chargeStateAt(
+    // the entry's own per-press effects (codex 60-POSTHOC-04b #2: an
+    // Incarnation under Control of the Dream read back at 130 s, not 115)
+    const st = cdChargeStateAt(
+      cd as IMajorCooldownInfo,
       lock.map((c) => c.timeSeconds),
-      cd.cooldownSeconds,
-      cd.charges as number,
       probeS,
     );
     return st.charges > 0 ? null : st.nextRecharge;

@@ -565,6 +565,7 @@
 | 某单位在某时刻是否被心控 —— 此时它**自己**队伍给它上的控制也算控制 | `packages/analysis/src/utils/charmedPlayer.ts` → `charmedAt`(基于 `charmedSpans`) | `utils/ccTrinketAnalysis.ts`(`ccInstances` 的准入)、`utils/cannotCastIntervals.ts`(不能施法的来源过滤,以及该控制的 REMOVED 关闭它) | Codex 21-R12-b #1(2026-10-23):不能施法区间仍丢掉被心控法师身上队友的 Mortal Coil,敌方打断可用性和 kick-eaten 把它读成可打断者。 |
 | 术士的驱散宠物(地狱犬)何时在场、其驱散何时放不出来 | `packages/analysis/src/utils/warlockPet.ts` → `warlockPetChronology`(每个宠物单位一条)→ `warlockPurgePetSpans`;`packages/analysis/src/utils/dispelAnalysis.ts` → `purgePetAbsentSpansMs` | 漏驱散的在场过滤(`purgePetOutDuring`)及其可行性(`cannotCastOf` 把不在场时段当作 Devour Magic 19505 的锁定时间) | Codex 21-R12-b #2 / #3(2026-10-23):按种类的名册丢掉了回来的地狱犬,可行性把地狱犬被换下之后的时间算成空闲。 |
 | 日志丢了 REMOVED 的自身光环还算「在」多久 | `packages/analysis/src/utils/hiddenPress.ts` → `hiddenAuraLifeMs` | `hiddenPressMs`(看不见的按键)、corpusFactScan `hiddenPressUnused` | Codex 21-R12-a #3(2026-10-23):一个没有 REMOVED 的 Evasion 让整回合之后看不见的按键都被藏住。 |
+| 冷却台账条目在调用方自行筛过的按键之后手里还有几层充能,带条目自身的逐次按键效果(事件减 CD、重置、空闲抵扣) | `packages/analysis/src/utils/cooldowns.ts` → `cdChargesAvailableAt`(+ `cdChargeStateAt`) | `utils/deathOutcomeAnalysis.ts`(多充能救人技能的死亡时就绪)、`analysis/candidates/cooldownTiming.ts` → `rawReturnAfter`(同步窗口的回来时刻);条目自己的多充能 `availableWindows` 以同样的效果采样 `cdAvailableAt` | Codex 20-F17-04 #2 / 60-POSTHOC-04b #2 / 07c #2(2026-10-23):只交出条目的数字、不带效果,被 Protector of the Frail 提前带回的 Pain Suppression 读成已用掉(90c57b63 r3:155 s 已就绪,唯一的可用时段在 64 s 关闭)。 |
 
 <!-- predicate-index:end -->
 

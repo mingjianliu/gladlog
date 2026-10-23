@@ -4123,5 +4123,31 @@ deflect label. 605 files vs v445 (f4 → f5b): healer crisis-no-response 8 → 7
 unchanged (740). Gates = f4 (the first capture, f5, showed 58
 checkCcAvoidedLandedConsistency failures from the landing-attribution change
 applied to unlogged lines and a gate keyed without the caster — both fixed
-before f5b). Scans unchanged or 0; regression net aoeMissAvoided 8 → 3. Family diff: `[CD PRIOR]` Stasis 0 → 13, Tip the Scales 0 → 5
+before f5b). Scans unchanged or 0; regression net aoeMissAvoided 8 → 3.
+
+v447 (2026-10-23, fact4 F17 batch 6a — the cooldown model on one reading,
+external review follow-ups): `cdRealisedSecondsUntilReady` counts the rate
+windows after t (the warped ready instant's inverse), so a press's "back in
+hand" (`pressReadyAgainAtSeconds`, `entryAvailabilityTransitions`, the enemy
+cooldown timeline) and the [RES] row's low end agree with `cdAvailableAt`
+(fact4 D10 / D12, 2d25d01a: `Emerald Communion(129s)` → `(119–129s)`,
+`Rewind(163s)` → `(151–163s)`, both pressed inside the new range); event
+reductions and resets are priced on the warped clock (`applyEventReductions`
+with the entry's rate windows; `warpedView` maps a press's reductions — a
+Preparation no longer resets Adrenaline Rush early); a charge entry's own
+effects reach its multi-charge windows, death readiness and the sync
+window's return (`cdChargesAvailableAt`); event triggers in the press's own
+ms count (Rumbling Earth, 5b724629 r2: 40 s → 25 s); the trinket → Will to
+Survive lock is the racial's own 60 s; the healer-offense facts hand the
+round to the shared cooldown model (Holy Word: Chastise reductions); an own
+shield's absorb evidence stops at its next application; a hidden-press or
+self-aura run whose REMOVED was lost ends at its caster-resolved official
+length, a logged REMOVED is its end even past it (an extended Voidform);
+Stormkeeper's last charge spent by another spender is `charges_spent`;
+crisis / DPS / benchmark Dampening read the unit's own doses; benchmark
+purge rates count pets. 605 files vs v446 (f5b → f6b): no candidate added or
+removed (the first capture, f6a, showed missed-sync-window +10 from a
+self-aura cap that ignored a later REMOVED — fixed before f6b);
+`[OPPORTUNITY] … Holy Word: Chastise ready` 17 → 37 (pressed again inside
+the new readiness: 131-1-750 1:34 → 2:10). Gates = f5b; scans unchanged. Family diff: `[CD PRIOR]` Stasis 0 → 13, Tip the Scales 0 → 5
 — intended.

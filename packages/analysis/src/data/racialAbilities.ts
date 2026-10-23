@@ -235,7 +235,12 @@ export const TRINKET_RACIAL_SHARED_LOCKOUT_MS = 30_000;
  */
 export const WILL_TO_SURVIVE_TRINKET_LOCKOUT_MS = 60_000;
 
-/** How long pressing this racial locks the PvP trinket. */
+/** How long pressing this racial locks the PvP trinket — and how long a
+ * PvP trinket press locks this racial: the lock is one number both ways
+ * (ruling A′15 "and vice versa"; codex 62-POSTHOC-13d #1, 2026-10-23: the
+ * trinket → Will to Survive direction read the flat 30 s, while 30 such
+ * presses on the 2,240-file manifest all came ≥ 60.012 s after the trinket
+ * and one refused "Not yet recovered" at +46.7 s). */
 export function racialTrinketLockoutMs(spellId: string): number {
   return spellId === "59752"
     ? WILL_TO_SURVIVE_TRINKET_LOCKOUT_MS

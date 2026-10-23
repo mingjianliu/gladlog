@@ -2218,6 +2218,11 @@ const INDEX: PredicateRow[] = [
     mod: hiddenPress,
   },
   {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "cdChargesAvailableAt",
+    mod: cooldowns,
+  },
+  {
     file: "packages/parser-compat/src/maxHpLag.ts",
     symbol: "laggingMaxHpCorrected",
     mod: maxHpLagMod,

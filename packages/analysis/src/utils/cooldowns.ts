@@ -921,11 +921,7 @@ export function hypothermiaUntil(
     if (a.timestamp <= atMs) {
       if (applies) openMs ??= a.timestamp;
       else if (removes) openMs = undefined;
-    } else if (
-      applies &&
-      openMs === undefined &&
-      a.timestamp < atMs + 1000
-    ) {
+    } else if (applies && openMs === undefined && a.timestamp < atMs + 1000) {
       // fact4 D17 (353ad51a r3 1:43): put on by a press later in the
       // rendered second — "a press anywhere in that second is already spent
       // on it" (the [RES] legend), so is its debuff; the row under the
@@ -2392,6 +2388,17 @@ function warpedView<
     ...(c.freeRecastUntil !== undefined
       ? { freeRecastUntil: tau(c.freeRecastUntil) }
       : {}),
+    // a press's reductions and resets happen at real instants too (codex
+    // 59-POSTHOC-11e #5: a Preparation at 40 s, compared unwarped with a
+    // warped clock already past 40, reset Adrenaline Rush at 31 s)
+    ...(c.reductions
+      ? {
+          reductions: c.reductions.map((r) => ({
+            ...r,
+            atSeconds: tau(r.atSeconds),
+          })),
+        }
+      : {}),
   });
   const effects = chargeEffectsOf(cd);
   return {
@@ -2417,6 +2424,47 @@ function warpedView<
  * read off any view of it. */
 function chargeEffectsOf(cd: object): IChargeEffects | undefined {
   return (cd as { chargeEffects?: IChargeEffects }).chargeEffects;
+}
+
+/**
+ * Charges of a ledger entry in hand at `atSeconds` after `presses` — the
+ * sequential-recharge simulation with the ENTRY's own per-press effects
+ * (event reductions, resets, idle credit). The one reading for a caller that
+ * filters or clamps the presses itself (death readiness, the sync window's
+ * raw return): handing `chargesAvailableAt` the entry's numbers without its
+ * effects left a Pain Suppression that Protector of the Frail brought back
+ * "on cooldown" (codex 20-F17-04 #2 / 04b #2 / 07c #2).
+ */
+export function cdChargesAvailableAt(
+  cd: Pick<IMajorCooldownInfo, "cooldownSeconds" | "charges"> &
+    Partial<Pick<IMajorCooldownInfo, "chargeEffects">>,
+  presses: readonly number[],
+  atSeconds: number,
+): number {
+  return chargesAvailableAt(
+    presses,
+    cd.cooldownSeconds,
+    cd.charges ?? 1,
+    atSeconds,
+    chargeEffectsOf(cd),
+  );
+}
+
+/** `chargeStateAt` of a ledger entry with its own per-press effects (see
+ * `cdChargesAvailableAt`). */
+export function cdChargeStateAt(
+  cd: Pick<IMajorCooldownInfo, "cooldownSeconds" | "charges"> &
+    Partial<Pick<IMajorCooldownInfo, "chargeEffects">>,
+  presses: readonly number[],
+  atSeconds: number,
+): ReturnType<typeof chargeStateAt> {
+  return chargeStateAt(
+    presses,
+    cd.cooldownSeconds,
+    cd.charges ?? 1,
+    atSeconds,
+    chargeEffectsOf(cd),
+  );
 }
 
 /**
@@ -2698,6 +2746,22 @@ function cdSecondsUntilReadyConsumed(
     }
     return Math.max(0, ready - tSeconds);
   }
+  // an idle-credited press with no event reduction (Control of the Dream
+  // alone): the credit is exact, the given bound still applies on top of it
+  // — the reading the reduced branch above and `cdMaybeAvailableAt` give it
+  // (codex 59-POSTHOC-11a P2: Nature's Swiftness printed `(20s)` at 0:10 and
+  // `≤3s` at 0:27; the model said 17–20 s)
+  if (last.idleCreditSeconds !== undefined && last.idleCreditSeconds > 0)
+    return Math.max(
+      0,
+      last.timeSeconds +
+        Math.min(
+          cooldown,
+          last.cooldownSecondsOverride ??
+            cd.cooldownSeconds - last.idleCreditSeconds,
+        ) -
+        tSeconds,
+    );
   const own = last.cooldownSecondsOverride ?? cooldown;
   return Math.max(0, last.timeSeconds + own - tSeconds);
 }
@@ -2736,32 +2800,40 @@ export function applyEventReductions(
   cooldownSeconds: number,
   triggers: ReadonlyArray<{ atSeconds: number; seconds: number }>,
   idleCapSeconds = 0,
+  /** the entry's rate windows' clock (`warpClock`): the reductions act on
+   * the warped clock the override is read on (`readyAfter`, `cdAvailableAt`);
+   * `reductions` keep their real instants (`warpedView` maps them). Codex
+   * 59-POSTHOC-11e #5: a Preparation at 40 s, priced on the real clock and
+   * read on the warped one, brought Adrenaline Rush back at 31 s. */
+  clock?: { tau: (x: number) => number },
 ): void {
+  const tau = clock?.tau ?? ((x: number) => x);
+  const warped = triggers.map((g) => ({
+    atSeconds: tau(g.atSeconds),
+    seconds: g.seconds,
+    real: g,
+  }));
   // ready since the preparation phase: the first press gets the whole cap
   let prevReady = Number.NEGATIVE_INFINITY;
   for (const c of casts) {
+    const at = tau(c.timeSeconds);
     if (c.cooldownSecondsOverride !== undefined) {
-      prevReady = c.timeSeconds + c.cooldownSecondsOverride;
+      prevReady = at + c.cooldownSecondsOverride;
       continue;
     }
-    const credit = Math.min(
-      idleCapSeconds,
-      Math.max(0, c.timeSeconds - prevReady),
-    );
+    const credit = Math.min(idleCapSeconds, Math.max(0, at - prevReady));
     const eff = eventReducedCooldownSeconds(
-      c.timeSeconds,
+      at,
       cooldownSeconds - credit,
-      triggers,
+      warped,
     );
-    prevReady = c.timeSeconds + eff;
+    prevReady = at + eff;
     if (eff < cooldownSeconds) {
       c.cooldownSecondsOverride = eff;
       if (credit > 0) c.idleCreditSeconds = credit;
-      const pulledIn = triggers.filter(
-        (g) =>
-          g.atSeconds > c.timeSeconds &&
-          g.atSeconds < c.timeSeconds + eff + 1e-9,
-      );
+      const pulledIn = warped
+        .filter((g) => g.atSeconds > at && g.atSeconds < at + eff + 1e-9)
+        .map((g) => g.real);
       if (pulledIn.length) c.reductions = pulledIn;
     }
   }
@@ -2779,14 +2851,21 @@ export function cdRealisedSecondsUntilReady(
 ): number {
   const realised = (c: ICooldownCast): ICooldownCast =>
     c.reductions ? { ...c, reductions: undefined } : c;
-  return cdSecondsUntilReady(
-    {
-      ...cd,
-      casts: cd.casts.map(realised),
-      ...(cd.sharedCasts ? { sharedCasts: cd.sharedCasts.map(realised) } : {}),
-    },
-    tSeconds,
-  );
+  const view = {
+    ...cd,
+    casts: cd.casts.map(realised),
+    ...(cd.sharedCasts ? { sharedCasts: cd.sharedCasts.map(realised) } : {}),
+  };
+  const latest = cdSecondsUntilReady(view, tSeconds);
+  if (!cd.rateWindows?.length || latest <= 0) return latest;
+  // …and every rate window that happened, the later ones too: the warped
+  // reading counts no buff after t, so its ready instant on the warped clock
+  // is τ(t) + latest, and the real one that clock's inverse (codex
+  // 59-POSTHOC-11d #1 / 60-POSTHOC-10a #1: Scales under a Time Skip read back
+  // at 1:40 instead of 1:10; fact4 D10 / D12: Emerald Communion and Rewind
+  // printed as exact `(Ns)` 7 s past their real return)
+  const { tau, inverse } = warpClock(cd.rateWindows);
+  return Math.max(0, inverse(tau(tSeconds) + latest) - tSeconds);
 }
 
 /**
@@ -5126,6 +5205,27 @@ function buildCooldownEntry(
   const idleCap = idleCreditCapFor(spell.spellId, holds);
   const ranks = playerTalentIdSets(unit).talentRanks;
   const rankOf = (t: string) => ranks?.get(t) ?? (holds(t) ? 1 : 0);
+  // Batch C rate rows (conditionalCooldownsGenerated.json): a buff of the
+  // unit's own that speeds the recovery warps the clock — read before the
+  // event reductions, which act on that clock
+  const conditional = conditionalCooldownsOf(spell.spellId);
+  const carriers = conditional.length
+    ? selfBuffIntervalsOf(unit, combat)
+    : undefined;
+  let rateWindows: IRateWindow[] | undefined;
+  for (const m of conditional) {
+    if (m.kind !== "rate") continue;
+    const ivs = carriers?.get(m.carrier) ?? [];
+    if (!ivs.length) continue;
+    rateWindows = [
+      ...(rateWindows ?? []),
+      ...ivs.map((iv) => ({
+        fromSeconds: iv.fromS,
+        toSeconds: iv.toS,
+        mult: m.mult,
+      })),
+    ];
+  }
   let chargeEffects: IChargeEffects | undefined;
   if ((reductions.length || idleCap > 0) && baselineCharges <= 1) {
     applyEventReductions(
@@ -5136,6 +5236,7 @@ function buildCooldownEntry(
         seconds: g.seconds,
       })),
       idleCap,
+      rateWindows ? warpClock(rateWindows) : undefined,
     );
   } else if (reductions.length || idleCap > 0) {
     // a charge spell: the same triggers and credit, run through the charge
@@ -5179,24 +5280,14 @@ function buildCooldownEntry(
 
   // Batch C: modifiers that hold only while one of the unit's own buffs is
   // up (conditionalCooldownsGenerated.json). Snapshot rows price a press
-  // made under the buff (single-charge spells); rate rows warp the clock.
-  const conditional = conditionalCooldownsOf(spell.spellId);
-  let rateWindows: IRateWindow[] | undefined;
-  if (conditional.length) {
-    const carriers = selfBuffIntervalsOf(unit, combat);
+  // made under the buff (single-charge spells); rate rows (read above) warp
+  // the clock.
+  if (carriers) {
     for (const m of conditional) {
       const ivs = carriers.get(m.carrier) ?? [];
       if (!ivs.length) continue;
-      if (m.kind === "rate") {
-        rateWindows = [
-          ...(rateWindows ?? []),
-          ...ivs.map((iv) => ({
-            fromSeconds: iv.fromS,
-            toSeconds: iv.toS,
-            mult: m.mult,
-          })),
-        ];
-      } else if (baselineCharges <= 1) {
+      if (m.kind === "rate") continue;
+      if (baselineCharges <= 1) {
         for (const c of casts) {
           if (c.cooldownSecondsOverride !== undefined) continue;
           if (
@@ -5290,7 +5381,11 @@ function buildCooldownEntry(
       isProcOnly: false,
       ...(sharedCasts.length > 0 ? { sharedCasts } : {}),
       ...(rateWindows ? { rateWindows } : {}),
-    };
+      // the entry's own per-press effects (codex 20-F17-04 #2, 90c57b63 r3:
+      // Pain Suppression back at 155 s by Protector of the Frail, its only
+      // window closed at 64 s)
+      ...(chargeEffects ? { chargeEffects } : {}),
+    } as CdAvailabilityInput;
     availableWindows.length = 0;
     let from: number | undefined;
     for (let t = 0; t <= matchDurationSeconds; t += CHARGE_WINDOW_STEP_S) {
@@ -5467,7 +5562,9 @@ const SAVE_ROLE_NOT_RESPONSE_ONLY_IDS: ReadonlySet<string> = new Set(
 /** Asked at call time: `isSurvivalWall` reads the official profile, which
  * is loaded after this module (`ensureAnalysisData`). */
 export function saveRoleReachesAlly(spellId: string): boolean {
-  return SAVE_ROLE_NOT_RESPONSE_ONLY_IDS.has(spellId) && !isSurvivalWall(spellId);
+  return (
+    SAVE_ROLE_NOT_RESPONSE_ONLY_IDS.has(spellId) && !isSurvivalWall(spellId)
+  );
 }
 
 /**

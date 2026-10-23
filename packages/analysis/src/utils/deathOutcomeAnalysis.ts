@@ -14,7 +14,7 @@ import {
   auraOnlyActivationSeconds,
   castRecovery,
   CD_INSTANT_SLACK_S,
-  chargesAvailableAt,
+  cdChargesAvailableAt,
   ENEMY_TARGET_DEFENSIVE_IDS,
   FORBEARANCE_AURA_ID,
   forbearanceBlocks,
@@ -448,7 +448,9 @@ export function isAvailableAt(
       .map((c) => c.timeSeconds)
       .filter((t) => pressSpentBy(t, atSeconds))
       .map((t) => Math.min(t, at));
-    if (chargesAvailableAt(presses, cooldown.cooldownSeconds, charges, at) > 0)
+    // …with the entry's own per-press effects (codex 60-POSTHOC-07c #2:
+    // Pain Suppression back early by Protector of the Frail read spent)
+    if (cdChargesAvailableAt({ ...cooldown, charges }, presses, at) > 0)
       return true;
   } else {
     // The core predicate is shared with cdAvailableAt in cooldowns.ts

@@ -417,5 +417,17 @@
  *  unclosed casting lock runs its official length. 605 files vs v445 (f4 →
  *  f5b): healer crisis-no-response 8 → 7 (a crossing in a Solo Shuffle
  *  round's last second); `[CC AVOIDED?] … logged` lines 6,354 → 6,416.
+ *
+ * v447 (2026-10-23, fact4 F17 batch 6a — the cooldown model on one
+ *  reading): a press's realised return counts the rate windows after it,
+ *  and its event reductions and resets act on the warped clock (Emerald
+ *  Communion / Rewind print `(a–Ns)` with their real return as a); a charge
+ *  entry's own reductions reach every reader; event triggers in the press's
+ *  own instant count (Rumbling Earth); a trinket locks Will to Survive 60 s;
+ *  the healer-offense facts read the shared cooldown model (Holy Word:
+ *  Chastise brought back early); a buff whose REMOVED was lost ends at its
+ *  official length, a logged one is its end; Dampening probes read the
+ *  unit's own doses. 605 files vs v446 (f5b → f6b): no candidate added or
+ *  removed; `[OPPORTUNITY] … Holy Word: Chastise ready` 17 → 37.
  */
-export const PROMPT_VERSION = 446;
+export const PROMPT_VERSION = 447;

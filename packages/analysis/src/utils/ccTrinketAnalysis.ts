@@ -27,7 +27,6 @@ import {
   BREAK_RACIAL_SPELL_IDS,
   racialTrinketLockoutMs,
   SHARED_CD_RACIAL_SPELL_IDS,
-  TRINKET_RACIAL_SHARED_LOCKOUT_MS,
 } from "../data/racialAbilities";
 import {
   ccFullDurationSeconds,
@@ -3654,7 +3653,14 @@ export function analyzePlayerCCAndTrinket(
         }
         for (const ts of trinketCastTimestamps) {
           if (ts > w.applyMs) break;
-          readyMs = Math.max(readyMs, ts + TRINKET_RACIAL_SHARED_LOCKOUT_MS);
+          // the same per-racial lock both ways (codex 62-POSTHOC-13d #1,
+          // 285aa6d2 r6: Will to Survive read 16 s left 44 s after a
+          // Medallion — 30 reverse presses all ≥ 60.0 s, a refusal "Not yet
+          // recovered" at +46.7 s)
+          readyMs = Math.max(
+            readyMs,
+            ts + racialTrinketLockoutMs(ownedTrinketRacialId),
+          );
         }
         const leftMs = readyMs - w.applyMs;
         if (leftMs > 0)

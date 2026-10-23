@@ -91,7 +91,7 @@ import {
   USABLE_WHILE_CONFUSED_SPELL_IDS,
   USABLE_WHILE_FEARED_SPELL_IDS,
 } from "../utils/cooldowns";
-import { computeDampening } from "../utils/dampening";
+import { computeDampening, dampeningReadersAt } from "../utils/dampening";
 import {
   enemyTargetReaches,
   positionalWallReaches,
@@ -4368,8 +4368,15 @@ function teamPlayEvents(
           {
             lookup: (dmg2s) => lookupBehaviorPrior(bracket, "healer", dmg2s),
             majorWalls: majorWallsOnFor(combat)(owner),
+            // the crisis unit's own doses (the owner's), its side's before
+            // its first (`dampeningReadersAt`, codex 60-POSTHOC-04d)
             dampeningAt: (tMs) =>
-              computeDampening(tMs, bracket, friends, [...friends, ...enemies]),
+              computeDampening(
+                tMs,
+                bracket,
+                dampeningReadersAt(owner, friends, tMs),
+                [...friends, ...enemies],
+              ),
           },
         ),
       );
@@ -4410,8 +4417,15 @@ function teamPlayEvents(
           bracket,
           {
             lookup: (dmg2s) => lookupBehaviorPrior(bracket, "dps", dmg2s),
+            // the crisis unit's own doses (the owner's), its side's before
+            // its first (`dampeningReadersAt`, codex 60-POSTHOC-04d)
             dampeningAt: (tMs) =>
-              computeDampening(tMs, bracket, friends, [...friends, ...enemies]),
+              computeDampening(
+                tMs,
+                bracket,
+                dampeningReadersAt(owner, friends, tMs),
+                [...friends, ...enemies],
+              ),
           },
         ),
       );

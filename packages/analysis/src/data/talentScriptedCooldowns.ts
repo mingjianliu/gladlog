@@ -28,7 +28,9 @@ import {
   LogEvent,
 } from "@gladlog/parser-compat";
 
+import { buffFullDurationForCaster } from "../utils/buffDuration";
 import { type ILogDatedNumber, logDatedNumberAt } from "../utils/logEra";
+import { spellEffectData } from "./spellEffectData";
 import { spellSchoolMask } from "./spellSchools";
 
 export interface IFreeRecastWindow {
@@ -894,8 +896,7 @@ export function eventTriggersFor(
       : 0;
     return gs.map((g) => {
       const auraPct =
-        b.whileSelfAura &&
-        selfAuraUpAt(unit, b.whileSelfAura.auraId, g.atMs)
+        b.whileSelfAura && selfAuraUpAt(unit, b.whileSelfAura.auraId, g.atMs)
           ? b.whileSelfAura.pct
           : 0;
       return g.seconds === Number.POSITIVE_INFINITY
@@ -904,17 +905,19 @@ export function eventTriggersFor(
     });
   };
   return reductions
-    .flatMap((r) => bonused(r, [
-      ...eventTriggerTimesMs(unit, r).map((atMs) => ({
-        atMs,
-        seconds: eventReductionSecondsAt(r, holderSpec, atMs),
-      })),
-      ...(r.triggerPowerSpend
-        ? powerSpendTriggers(unit, r.triggerPowerSpend, holderSpec, holds)
-        : []),
-      ...(r.triggerAuraConsumed ? auraConsumedTriggers(unit, r) : []),
-      ...(r.triggerHostileTaken ? hostileTakenTriggers(unit, r) : []),
-    ]))
+    .flatMap((r) =>
+      bonused(r, [
+        ...eventTriggerTimesMs(unit, r).map((atMs) => ({
+          atMs,
+          seconds: eventReductionSecondsAt(r, holderSpec, atMs),
+        })),
+        ...(r.triggerPowerSpend
+          ? powerSpendTriggers(unit, r.triggerPowerSpend, holderSpec, holds)
+          : []),
+        ...(r.triggerAuraConsumed ? auraConsumedTriggers(unit, r) : []),
+        ...(r.triggerHostileTaken ? hostileTakenTriggers(unit, r) : []),
+      ]),
+    )
     .sort((a, b) => a.atMs - b.atMs);
 }
 
@@ -1025,21 +1028,50 @@ export function auraConsumedTriggers(
 /** Is the unit's own buff `auraId` up at `atMs` (a removal at that very
  * instant still counts — a cost reduction is consumed by the cast it
  * reduces)? */
-function selfAuraUpAt(
+/** @internal exported for test/fact4Batch6a.test.ts */
+export function selfAuraUpAt(
   unit: Partial<Pick<ICombatUnit, "auraEvents" | "id">>,
   auraId: string,
   atMs: number,
 ): boolean {
-  let up = false;
-  for (const e of unit.auraEvents ?? []) {
-    if (String(e.spellId) !== auraId) continue;
-    const t = e.logLine.timestamp;
-    const ev = e.logLine.event;
-    if (ev === LogEvent.SPELL_AURA_REMOVED) {
-      if (t < atMs) up = false;
-    } else if (t <= atMs) up = true;
+  // up from an APPLIED / REFRESH until its REMOVED — or, only when the log
+  // lost that REMOVED (none before the next application), until the aura's
+  // caster-resolved official length after that row: `buildAuraIntervals`'
+  // cap (codex 59-POSTHOC-11e #6 / 60-POSTHOC-08d #1: an Apotheosis with no
+  // REMOVED gave Smite 12 s of Chastise reduction instead of 4). A logged
+  // REMOVED is the end even past the official length (Voidform, extended,
+  // ran 0:21–0:57 on a 20 s row).
+  const rows = (unit.auraEvents ?? []).filter(
+    (e) => String(e.spellId) === auraId,
+  );
+  let lastOn: number | undefined;
+  let k = -1;
+  for (let i = 0; i < rows.length; i++) {
+    const t = rows[i]!.logLine.timestamp;
+    if (t > atMs) break;
+    if (rows[i]!.logLine.event === LogEvent.SPELL_AURA_REMOVED) {
+      if (t < atMs) lastOn = undefined;
+    } else {
+      lastOn = t;
+      k = i;
+    }
   }
-  return up;
+  if (lastOn === undefined) return false;
+  // its own end: the first REMOVED after it, before another APPLIED
+  for (let i = k + 1; i < rows.length; i++) {
+    const ev = rows[i]!.logLine.event;
+    if (ev === LogEvent.SPELL_AURA_REMOVED) return true;
+    if (ev === LogEvent.SPELL_AURA_APPLIED) break;
+  }
+  const d =
+    buffFullDurationForCaster(
+      auraId,
+      (unit as { spellCastEvents?: unknown }).spellCastEvents !== undefined
+        ? (unit as never)
+        : undefined,
+      lastOn,
+    ) ?? spellEffectData[auraId]?.durationSeconds;
+  return !(typeof d === "number" && d > 0) || atMs <= lastOn + d * 1000;
 }
 
 /**
@@ -1056,8 +1088,9 @@ export function powerSpendTriggers(
   holds?: (talentSpellId: string) => boolean,
 ): IEventTrigger[] {
   const units =
-    (holderSpec !== undefined ? p.unitsPerSecond.bySpec?.[holderSpec] : undefined) ??
-    p.unitsPerSecond.base;
+    (holderSpec !== undefined
+      ? p.unitsPerSecond.bySpec?.[holderSpec]
+      : undefined) ?? p.unitsPerSecond.base;
   const out: IEventTrigger[] = [];
   for (const e of unit.spellCastEvents) {
     if (e.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
@@ -1253,8 +1286,11 @@ export function eventReducedCooldownSeconds(
   triggers: ReadonlyArray<{ atSeconds: number; seconds: number }>,
 ): number {
   if (!triggers.length || !(cooldownSeconds > 0)) return cooldownSeconds;
+  // a trigger in the press's own instant counts (codex 59-POSTHOC-11e #7 /
+  // 60-POSTHOC-08d #2, 5b724629 r2: a Shockwave's six hits in its own ms —
+  // Rumbling Earth — were dropped, and the ledger kept 40 s instead of 25)
   const events = triggers
-    .filter((g) => g.atSeconds > pressSeconds)
+    .filter((g) => g.atSeconds >= pressSeconds)
     .sort((a, b) => a.atSeconds - b.atSeconds);
   // walk forward: each trigger before the (current) ready instant pulls it in
   let ready = pressSeconds + cooldownSeconds;

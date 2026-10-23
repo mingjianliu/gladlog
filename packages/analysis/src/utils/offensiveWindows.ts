@@ -548,6 +548,15 @@ export function computeOffensiveWindows(
       // holder (codex 20-F16-15 #1, 2d35e62f r1: Holy Bulwark pressed
       // 373.457 s, inferred to 393.457 s, its own absorbs at 398.3–402.8 s
       // — the span read defenseless 393.5–403.0 s)
+      // …up to the shield's next application, whose own absorbs they are
+      // (codex 20-F17-04 #1: a shield at 10 s with no REMOVED, re-applied
+      // at 100 s, read 10–102 s off the second one's absorb)
+      const nextApplicationMs = Math.min(
+        Infinity,
+        ...holderIntervals(holder)
+          .filter((o) => o.spellId === iv.spellId && o.fromS > iv.fromS)
+          .map((o) => matchStartMs + o.fromS * 1000),
+      );
       const lastOwnAbsorbMs = iv.inferredEnd
         ? Math.max(
             -Infinity,
@@ -556,7 +565,8 @@ export function computeOffensiveWindows(
                 (a) =>
                   a.spellId === iv.spellId &&
                   a.srcUnitId === holder.id &&
-                  a.timestamp > matchStartMs + iv.toS * 1000,
+                  a.timestamp > matchStartMs + iv.toS * 1000 &&
+                  a.timestamp < nextApplicationMs,
               )
               .map((a) => a.timestamp),
           )

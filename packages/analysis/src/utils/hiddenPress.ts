@@ -33,6 +33,8 @@ import {
   ownEffectAurasOfCast,
 } from "../data/castEffectAuras";
 import { spellEffectData } from "../data/spellEffectData";
+import { dropAuraRebroadcasts } from "./auraIntervals";
+import { buffFullDurationForCaster } from "./buffDuration";
 
 /** A re-stating batch: at least this many SPELL_AURA_APPLIED rows on the
  * unit in one millisecond (5f4142ec: 30; a press that applies several
@@ -63,8 +65,21 @@ const PRESS_ROW_PAIR_MS = 1000;
 /** How long an own aura whose REMOVED the log lost is still read as up
  * after its last (re)application: its official length + 1 s, else for good
  * (codex 21-R12-a #3). The corpus scan's `hiddenPressUnused` reads it too. */
-export function hiddenAuraLifeMs(spellId: string): number {
-  const d = spellEffectData[spellId]?.durationSeconds;
+export function hiddenAuraLifeMs(
+  spellId: string,
+  /** the aura's caster, when known: its talents lengthen it (codex
+   * 20-F17-04 #3 / 62-POSTHOC-13f #2: Invigorating Fury's 11 s Enraged
+   * Regeneration expired at the base 9 s + 1, and a re-listing at 20 s read
+   * as a second press) */
+  caster?: unknown,
+  atMs?: number,
+): number {
+  const talented =
+    caster !== undefined &&
+    (caster as { spellCastEvents?: unknown }).spellCastEvents !== undefined
+      ? buffFullDurationForCaster(spellId, caster as never, atMs)
+      : null;
+  const d = talented ?? spellEffectData[spellId]?.durationSeconds;
   return typeof d === "number" && d > 0 ? (d + 1) * 1000 : Infinity;
 }
 
@@ -157,8 +172,25 @@ export function hiddenPressMs(
   // 21-R12-a #3: an Evasion APPLIED at 10 s with no REMOVED kept `up` true
   // for the round and hid a fresh unseen press at 140 s)
   let upUntilMs = -Infinity;
-  const lifeMs = hiddenAuraLifeMs;
+  // a same-ms REMOVED → APPLIED re-broadcast is the aura staying up, not a
+  // new application (codex 62-POSTHOC-13f #1: a second Evasion "press")
+  const kept = new Set(dropAuraRebroadcasts(own));
+  const lifeMs = (id: string, ms: number) => hiddenAuraLifeMs(id, unit, ms);
+  // up to its own REMOVED when the log has one (before another APPLIED of
+  // it) — even past the official length (an extended Voidform); the
+  // length caps only a run whose REMOVED was lost
+  const untilOf = (i: number, ms: number): number => {
+    const id = own[i]!.spellId;
+    for (let j = i + 1; j < own.length; j++) {
+      const b = own[j]!;
+      if (b.spellId !== id || !kept.has(b)) continue;
+      if (b.logLine.event === LogEvent.SPELL_AURA_REMOVED) return Infinity;
+      if (b.logLine.event === LogEvent.SPELL_AURA_APPLIED) break;
+    }
+    return ms + lifeMs(id!, ms);
+  };
   for (const [i, a] of own.entries()) {
+    if (!kept.has(a)) continue;
     const ms = a.logLine.timestamp;
     const up = ms <= upUntilMs;
     if (a.logLine.event === LogEvent.SPELL_AURA_REMOVED) upUntilMs = -Infinity;
@@ -171,8 +203,8 @@ export function hiddenPressMs(
         !heraldProc(a.spellId!, ms)
       )
         out.push(ms);
-      upUntilMs = ms + lifeMs(a.spellId!);
-    } else upUntilMs = ms + lifeMs(a.spellId!); // a REFRESH / dose row: it is up
+      upUntilMs = untilOf(i, ms);
+    } else upUntilMs = untilOf(i, ms); // a REFRESH / dose row: it is up
   }
   return out;
 }
