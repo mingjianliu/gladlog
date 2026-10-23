@@ -11,11 +11,45 @@
  * English names, cast ↔ effect aura (`castEffectAuras`), the DR category of
  * an id (`getDRCategory` / `drCategoryOfCast`), the official control length
  * (`ccFullDurationSeconds`), DB2 mechanic immunities
- * (`spellMechanicsGenerated.json`), and the id sets of the curated
+ * (`spellMechanicsGenerated.json`), DB2 school masks
+ * (`spellSchoolsGenerated.json`), and the id sets of the curated
  * avoidance / immunity tables.
  *
+ * Codex 21-R12-c (2026-10-23) — three false negatives fixed, each pinned by
+ * a synthetic case in `test/corpusFactScan2.test.ts` through the exported
+ * readers (`cannotCauseOf`, `upAtRows` + `CAPPED_UNCLOSED`,
+ * `controlApplications`); the run itself is `main()`:
+ *  #1 (1b) a curated-table aura used to skip the immunity check by name:
+ *     The Beast Within (DB2 [5, 24]) passed as the cause of an IMMUNE Hammer
+ *     of Justice (mechanic 12) and `auraAlsoExplains` then hid its DR
+ *     reading. A listed aura is now judged by `listedAvoidanceVerdict` —
+ *     production `applicableCCAvoidanceIds`' buff leg, re-derived from the
+ *     DB2 lookups (mechanic-limited by mechanic, others by school, magic-only
+ *     vs physical, a Druid form only for Polymorph / Hex):
+ *     `cannotCause:listed:<reason>`. A same-ms miss row of the line's name
+ *     from the same source counts too (Metamorphosis 247121 beside its stun
+ *     200166: Icebound Fortitude stops the stun).
+ *  Printed for the record: `dr:castBackedRefreshApps`,
+ *  `immunityTableForward:capDroppedTableAura`, and `fixExamples` in the
+ *  JSON.
+ *  #2 (1a, 1c, 6) an application with no REMOVED used to hold forever (a
+ *     Divine Shield APPLIED at 0:01 explained an IMMUNE at 0:30): every
+ *     "was X up" read of checks 1 and 6, and check 6's landed baseline, now
+ *     caps an application the log never closes (its next row is no REMOVED)
+ *     at its official length + 1 s (`CAPPED_UNCLOSED`; unknown length → no
+ *     cap), as production `ccAvoidanceBuffsUpAt` does. Check 3 keeps its own
+ *     cap reading.
+ *  #3 (1c, 2, 6) a SPELL_AURA_REFRESH its source (or the source's owner)
+ *     cast for — the aura id or a cast of it, at the holder or untargeted,
+ *     > 250 ms after the open application began and ≤ 3 s before the row
+ *     (`OPENING_CAST_SKEW_MS` / `CAST_BACKED_REFRESH_MS`, ruling A51) — is a
+ *     new control application, and the one it replaces ends there; a bare
+ *     REFRESH stays the same application (Polymorph 0:01, recast with a
+ *     logged REFRESH 0:04: the diminished second was never judged).
+ *
  * DR, read from the log (checks 1c, 2, 6): the unit's control applications
- * — DEBUFF APPLIED rows from another unit whose id has a DR family
+ * — DEBUFF APPLIED rows (and cast-backed REFRESH rows, #3) from another
+ * unit whose id has a DR family
  * (`getDRCategory`, a lookup), each ending at its REMOVED (capped at the
  * official length + 1 s) — walked back from the instant as a chain: a
  * predecessor joins while it ended less than 18 s (the brief's window) before
@@ -90,7 +124,8 @@
  *     the named unit for `from` / `'s X`) not up on the target at the miss
  *     row — APPLIED before it in log order, no REMOVED between (a REMOVED
  *     in the same ms logged after the miss still counts as up; a REMOVED
- *     with no APPLIED before it = up from the log's start); E7–E9. A `did
+ *     with no APPLIED before it = up from the log's start; an APPLIED the
+ *     log never closes holds its official length + 1 s, #2); E7–E9. A `did
  *     not land` line has no row: X must be up somewhere in [s − 1, s + 1)
  *     of the line's second s. Sub-kind `neverOnUnit` when X (aura or press)
  *     is never on the target this round.
@@ -100,9 +135,10 @@
  *     on every id of that name the target carried — and not in a curated
  *     avoidance / immunity table, not a Druid form, not Cyclone): the
  *     movement buffs; an aura whose only immunity is an explicit DB2
- *     mechanic list that lacks the control's mechanic. Not judged for `did
- *     not land` (an area control a movement buff walked out of is a fair
- *     "avoided?").
+ *     mechanic list that lacks the control's mechanic; a LISTED aura none of
+ *     whose listed ids can stop this control (`listed:<reason>`, #1). Not
+ *     judged for `did not land` (an area control a movement buff walked out
+ *     of is a fair "avoided?").
  *     (c) `drImmune`: an IMMUNE row whose control is at least the 3rd
  *     application of its DR family on the unit (a chain of ≥ 2 before it),
  *     yet the line names an aura — except E1.
@@ -149,7 +185,8 @@
  *     control (its own id in `ccSpellIds` or a DR family — not through its
  *     cast's effect auras: Wake of Ashes 255937 is a damage spell whose
  *     separate stun aura has the family) on a player, inside the round,
- *     with no aura of the curated tables up on the target (`CC_AVOIDANCE_
+ *     with no aura of the curated tables up on the target (an unclosed
+ *     application capped at its official length + 1 s, #2; `CC_AVOIDANCE_
  *     BUFF_SPELLS` — talent and mechanic-limited buffs included —
  *     `IMMUNITY_IDS`, `FULL_IMMUNITY_IDS`, the Druid forms, Cyclone) and not
  *     DR-immune by (1c): the auras up on the target there, by id, with the
@@ -178,16 +215,22 @@ import {
 } from "@gladlog/analysis/src/data/spellEffectData";
 import spellEffectGenerated from "@gladlog/analysis/src/data/spellEffectGenerated.json";
 import spellMechanicsGenerated from "@gladlog/analysis/src/data/spellMechanicsGenerated.json";
+import spellSchoolsGenerated from "@gladlog/analysis/src/data/spellSchoolsGenerated.json";
 import { ccSpellIds } from "@gladlog/analysis/src/data/spellTags";
 import {
   CC_AVOIDANCE_BUFF_SPELLS,
   DRUID_FORM_BUFFS,
+  MAGIC_ONLY_IMMUNITY_IDS,
+  MECHANIC_LIMITED_AVOIDANCE_BUFFS,
+  PHYSICAL_CC_IDS,
   REPOSITIONING_SPELL_IDS,
 } from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
 import { IMMUNITY_SPELLS } from "@gladlog/analysis/src/utils/deathOutcomeAnalysis";
 import {
+  CAST_BACKED_REFRESH_MS,
   drCategoryOfCast,
   getDRCategory,
+  OPENING_CAST_SKEW_MS,
 } from "@gladlog/analysis/src/utils/drAnalysis";
 import {
   FULL_IMMUNITY_IDS,
@@ -196,22 +239,6 @@ import {
 import { ccMechanicOf } from "@gladlog/analysis/src/utils/spellMechanics";
 import { GladLogParser, type GladMatch } from "@gladlog/parser";
 import { LogEvent, toLegacyMatch } from "@gladlog/parser-compat";
-
-const dir = process.argv[2];
-if (!dir) {
-  console.error(
-    "usage: corpusFactScan2.ts <captureDir> [--examples N] [--archive-dir <dir>] [--json <path>]",
-  );
-  process.exit(2);
-}
-const argOf = (flag: string): string | undefined => {
-  const i = process.argv.indexOf(flag);
-  return i > 0 ? process.argv[i + 1] : undefined;
-};
-const ARCHIVE_DIR = argOf("--archive-dir") ?? "";
-const EXAMPLES = Number(argOf("--examples") ?? 5);
-const JSON_OUT = argOf("--json");
-const unmapped: string[] = [];
 
 const CHECKS = [
   "immuneCause",
@@ -228,9 +255,6 @@ const OUT_OF_TOTAL = new Set([
   "defenselessSaveUp|massInvis",
   "defenselessSaveUp|ownAbsorb:passive",
 ]);
-/** E6: passive own absorbs inside a defenseless span, by shield name */
-const passiveAbsorbNames = new Map<string, number>();
-const pressedAbsorbNames = new Map<string, number>();
 /** user ruling 10-21 「算」 names these two */
 const RULED_OWN_SHIELDS = new Set(["Power Word: Shield", "Void Shield"]);
 interface IViolation {
@@ -251,9 +275,6 @@ interface IViolation {
   /** the raw log row(s) the fact rests on */
   raw?: string[];
 }
-const checked = new Map<string, number>();
-const violations: IViolation[] = [];
-const bump = (c: string, n = 1) => checked.set(c, (checked.get(c) ?? 0) + n);
 
 const official = spellEffectGenerated as Record<
   string,
@@ -392,1357 +413,1700 @@ function parseFile(path: string): GladMatch[] {
   return items;
 }
 
-await ensureAnalysisData();
-const files: Array<{
-  shard: string;
-  name: string;
-  fileNo: number;
-  round: number;
-}> = [];
-for (const shard of readdirSync(dir).filter((d) => /^s\d+$/.test(d))) {
-  const cdir = join(dir, shard, "context");
-  for (const name of readdirSync(cdir)) {
-    const m = /^(\d+)-(\d+)-(\d+)\.txt$/.exec(name);
-    if (m) files.push({ shard, name, fileNo: +m[1]!, round: +m[2]! });
-  }
+// ── pure readers (exported: test/corpusFactScan2.test.ts drives them on
+// synthetic rows; codex 21-R12-c #1–#3) ──
+
+/** strictly before the instant (ts, line) in log order */
+const before = (a: any, ts: number, li: number) =>
+  tsOf(a) < ts || (tsOf(a) === ts && li >= 0 && liOf(a) < li);
+
+export interface IUpOpts {
+  /** an application not closed by the instant holds only this long (s) */
+  capS?: (id: string) => number | undefined;
+  /** cap only an application the log never closes — its next row of that
+   * id / source is no REMOVED (a re-application, or nothing): production
+   * `ccAvoidanceBuffsUpAt`'s reading. Without it every application older
+   * than the cap is dropped (check 3's reading). */
+  unclosedOnly?: boolean;
 }
-files.sort((a, b) =>
-  a.shard === b.shard ? a.fileNo - b.fileNo : a.shard < b.shard ? -1 : 1,
-);
 
-// ── round-level measurements (each round once) ──
-const measuredRounds = new Set<string>();
-/** DR reading's own FP rate: landed controls by prior count */
-const landedByPrior = [0, 0, 0];
-/** check 2: aura id → clean run lengths (s) at Full DR */
-const fullRunsById = new Map<string, number[]>();
-/** check 6: aura id → [immune cases with it up, landed controls with it up] */
-const fwdAura = new Map<string, { immune: number; landed: number }>();
-const fwdSeen = new Set<string>();
-let fwdCases = 0;
-let fwdImmuneRows = 0;
-let fwdTableExplained = 0;
-let fwdDrExplained = 0;
-const fwdBySpell = new Map<string, number>();
-
-interface IEndCand {
-  where: string;
-  archive: string;
-  round: number;
-  startMs: number;
-  ts: number;
-  auraId: string;
-  unitName: string;
-  prior: number;
-  L: number;
-  line: string;
-  raw: string[];
+/**
+ * The auras up at the instant (ts, li) among the rows `pred` accepts: per
+ * id / source, the last row before the instant is an APPLIED / REFRESH /
+ * dose (up) or a REMOVED (down); no row before and the first after is a
+ * REMOVED / REFRESH: listed as up at the log's start.
+ */
+export function upAtRows(
+  rows: readonly any[],
+  pred: (a: any) => boolean,
+  ts: number,
+  li: number,
+  opts: IUpOpts = {},
+): any[] {
+  const last = new Map<string, any>();
+  const firstAfter = new Map<string, any>();
+  for (const a of rows) {
+    if (!pred(a)) continue;
+    const k = `${a.spellId}|${a.srcUnitId}`;
+    if (before(a, ts, li)) last.set(k, a);
+    else if (!firstAfter.has(k)) firstAfter.set(k, a);
+  }
+  const out: any[] = [];
+  for (const [k, a] of last) {
+    if (!UP_EVENTS.has(ev(a))) continue;
+    const cap = opts.capS?.(a.spellId);
+    const next = firstAfter.get(k);
+    const closed = !!next && ev(next) === REMOVED;
+    if (
+      cap !== undefined &&
+      ts - tsOf(a) > cap * 1000 &&
+      !(opts.unclosedOnly && closed)
+    )
+      continue;
+    out.push(a);
+  }
+  for (const [k, a] of firstAfter)
+    if (!last.has(k) && (ev(a) === REMOVED || ev(a) === REFRESH)) out.push(a);
+  return out;
 }
-const endCands: IEndCand[] = [];
-/** every judged (diminished) unclosed control, for the record */
-const ccEndJudged: Array<Record<string, unknown>> = [];
-/** check 4 control: own kicks of players, with / without a line */
-const playerKick = { n: 0, lined: 0 };
 
-let cacheKey = "";
-let cacheItems: GladMatch[] = [];
-let contexts = 0;
-for (const f of files) {
-  const text = readFileSync(join(dir, f.shard, "context", f.name), "utf8");
-  const [archive, ownerName] = text.split("\n", 2);
-  if (!archive || !ownerName) continue;
-  const key = `${f.shard}:${archive}`;
-  if (key !== cacheKey) {
-    try {
-      cacheItems = parseFile(
-        archive.startsWith("/") ? archive : resolve(ARCHIVE_DIR, archive),
-      );
-    } catch {
-      cacheItems = [];
-    }
-    cacheKey = key;
-  }
-  const item = cacheItems[f.round - 1];
-  if (!item) {
-    unmapped.push(`${f.shard}/${f.name} (${archive})`);
-    continue;
-  }
-  const rawLines: string[] = ((item as any).rawLines ?? []) as string[];
-  let legacy: ReturnType<typeof toLegacyMatch>;
-  try {
-    legacy = toLegacyMatch({ ...item, rawLines: [] } as GladMatch);
-  } catch {
-    unmapped.push(`${f.shard}/${f.name} (toLegacyMatch threw)`);
-    continue;
-  }
-  contexts++;
-  const lines = text.split("\n");
-  const units = Object.values(legacy.units ?? {}) as any[];
-  const byName = new Map(units.map((u) => [u.name, u]));
-  const byId = new Map(units.map((u) => [u.id as string, u]));
-  const pidName = new Map<string, string>();
-  for (const l of lines) {
-    const u = /<unit id="(\d+)" name="([^"]+)"/.exec(l);
-    if (u) pidName.set(u[1]!, u[2]!);
-  }
-  const pidOf = new Map<string, string>();
-  for (const [pid, name] of pidName) pidOf.set(name, pid);
-  const unitOfPid = (pid: string | undefined): any =>
-    pid ? byName.get(pidName.get(pid) ?? "") : undefined;
-  const owner = byName.get(ownerName);
-  if (!owner) continue;
-  const start: number = legacy.startTime;
-  const end: number = legacy.endTime;
-  const inRound = (ms: number) => ms >= start && ms <= end;
-  const where = `${f.shard}/${f.name}`;
-  const roundKey = `${archive}#${f.round}`;
-  const players = units.filter((u) => u.type === 1 || u.info);
-  const playerIds = new Set(players.map((u) => u.id as string));
-  const rawOf = (row: any): string => {
-    const li = liOf(row);
-    return li >= 0 && rawLines[li] !== undefined
-      ? `#${li} ${rawLines[li]!.slice(0, 260)}`
-      : `#? ${ev(row)} @${tsOf(row)}`;
-  };
-  /** the unit's own id plus the ids of the units it owns (pets, totems) */
-  const familyOf = (u: any): Set<string> =>
-    new Set([
-      u.id as string,
-      ...units.filter((x) => x.ownerId === u.id).map((x) => x.id as string),
-    ]);
-  const auraIn = (u: any): any[] =>
-    ((u.auraEvents ?? []) as any[]).filter((a) => a.destUnitId === u.id);
-  const successes = (u: any): any[] =>
-    ((u.spellCastEvents ?? []) as any[]).filter((c) => ev(c) === SUCCESS);
-  const violate = (
-    check: Check,
-    kind: string,
-    atMs: number,
-    factId: string,
-    detail: string,
-    extra: { line?: string; raw?: string[] } = {},
-  ) =>
-    violations.push({
-      check,
-      kind,
-      where,
-      archive,
-      round: f.round,
-      atMs,
-      offMs: atMs - start,
-      fact: `${roundKey}#${check}#${kind}#${factId}`,
-      detail,
-      ...extra,
-    });
-  const linesAt = (sec: number) => {
-    const p = `${fmtS(sec)}  `;
-    return lines.filter((l) => l.startsWith(p));
-  };
-  /** strictly before the instant (ts, line) in log order */
-  const before = (a: any, ts: number, li: number) =>
-    tsOf(a) < ts || (tsOf(a) === ts && li >= 0 && liOf(a) < li);
-
-  /**
-   * The auras up on `u` at the instant (ts, li) among the rows `pred`
-   * accepts: per id / source, the last row before the instant is an
-   * APPLIED / REFRESH / dose (up) or a REMOVED (down); no row before and the
-   * first after is a REMOVED / REFRESH: listed as up at the log's start.
-   * `capS`: an application not closed by then holds only that long.
-   */
-  const upAt = (
-    u: any,
-    pred: (a: any) => boolean,
-    ts: number,
-    li: number,
-    capS?: (id: string) => number | undefined,
-  ): any[] => {
-    const last = new Map<string, any>();
-    const firstAfter = new Map<string, any>();
-    for (const a of auraIn(u)) {
-      if (!pred(a)) continue;
-      const k = `${a.spellId}|${a.srcUnitId}`;
-      if (before(a, ts, li)) last.set(k, a);
-      else if (!firstAfter.has(k)) firstAfter.set(k, a);
-    }
-    const out: any[] = [];
-    for (const [k, a] of last) {
-      if (!UP_EVENTS.has(ev(a))) continue;
-      const cap = capS?.(a.spellId);
-      if (cap !== undefined && ts - tsOf(a) > cap * 1000) continue;
+/** up at any instant of [from, to) */
+export function upDuringRows(
+  rows: readonly any[],
+  pred: (a: any) => boolean,
+  from: number,
+  to: number,
+  opts: IUpOpts = {},
+): any[] {
+  const out = upAtRows(rows, pred, from, -1, opts);
+  for (const a of rows)
+    if (
+      pred(a) &&
+      (ev(a) === APPLIED || ev(a) === REFRESH) &&
+      tsOf(a) >= from &&
+      tsOf(a) < to
+    )
       out.push(a);
-      void k;
-    }
-    for (const [k, a] of firstAfter)
-      if (!last.has(k) && (ev(a) === REMOVED || ev(a) === REFRESH)) out.push(a);
-    return out;
-  };
-  /** up at any instant of [from, to) */
-  const upDuring = (
-    u: any,
-    pred: (a: any) => boolean,
-    from: number,
-    to: number,
-    capS?: (id: string) => number | undefined,
-  ): any[] => {
-    const out = upAt(u, pred, from, -1, capS);
-    for (const a of auraIn(u))
+  return out;
+}
+
+/** codex 21-R12-c #2: an application the log never closes holds for its
+ * official length + 1 s; unknown length → no cap (as production) */
+export const unclosedAuraCapS = (id: string): number | undefined => {
+  const s = officialS(id);
+  return s === undefined ? undefined : s + 1;
+};
+/** the "was X up" reading of checks 1 and 6 (and check 6's landed
+ * baseline): an unclosed application capped at `unclosedAuraCapS` — a
+ * Divine Shield APPLIED at 0:01 with no later row is no cause at 0:30 */
+export const CAPPED_UNCLOSED: IUpOpts = {
+  capS: unclosedAuraCapS,
+  unclosedOnly: true,
+};
+
+/** one control application on a unit (`controlApplications`) */
+export interface IControlApp {
+  row: any;
+  ts: number;
+  end: number;
+  cat: string;
+  src: string;
+  /** a cast-backed SPELL_AURA_REFRESH (codex 21-R12-c #3) */
+  refresh?: boolean;
+}
+
+/**
+ * Did the aura's source (or its owner) CAST this control for the row —
+ * the aura id or a cast whose effect aura it is, at the holder or
+ * untargeted, after the open application began (+ `OPENING_CAST_SKEW_MS`)
+ * and at most `CAST_BACKED_REFRESH_MS` before the row? Re-derived here
+ * (the window constants are shared with production's `ccRecastBetween`,
+ * ruling A51): `castsOf` gives the SUCCESS rows of the source and its
+ * owner.
+ */
+export function castBackedAt(
+  row: any,
+  holderId: string,
+  openedAtMs: number,
+  castsOf: (srcUnitId: string) => readonly any[],
+): boolean {
+  const castIds = new Set<string>([
+    row.spellId,
+    ...castsOfEffectAura(row.spellId),
+  ]);
+  const at = tsOf(row);
+  return castsOf(row.srcUnitId).some(
+    (c) =>
+      ev(c) === SUCCESS &&
+      castIds.has(c.spellId) &&
+      (!c.destUnitId ||
+        /^0+$/.test(c.destUnitId) ||
+        c.destUnitId === holderId) &&
+      tsOf(c) > openedAtMs + OPENING_CAST_SKEW_MS &&
+      tsOf(c) <= at &&
+      tsOf(c) >= at - CAST_BACKED_REFRESH_MS,
+  );
+}
+
+/**
+ * The unit's control applications (one per application) from its aura rows
+ * (`rows`: the rows ON it, log order) — DEBUFF APPLIED rows from another
+ * unit whose id has a DR family. A re-broadcast (REMOVED → APPLIED ≤ 50 ms)
+ * and a re-APPLIED inside the official length are the same application. A
+ * SPELL_AURA_REFRESH its source cast for (`castBackedAt`) is a NEW one
+ * (codex 21-R12-c #3: Polymorph 0:01, recast with a logged REFRESH 0:04 —
+ * the second, diminished application was invisible to checks 1, 2 and 6);
+ * the application it replaces ends there. A bare REFRESH is the same
+ * application. Each ends at its REMOVED (not followed within 50 ms by a
+ * re-APPLIED), capped at the official length + 1 s.
+ */
+export function controlApplications(
+  rows: readonly any[],
+  unitId: string,
+  castsOf: (srcUnitId: string) => readonly any[],
+): IControlApp[] {
+  const apps: IControlApp[] = [];
+  const lastByKey = new Map<string, any>();
+  const openByKey = new Map<string, IControlApp>();
+  for (let i = 0; i < rows.length; i++) {
+    const a = rows[i];
+    const k = `${a.spellId}|${a.srcUnitId}`;
+    const prev = lastByKey.get(k);
+    lastByKey.set(k, a);
+    const e = ev(a);
+    if ((e !== APPLIED && e !== REFRESH) || a.auraType !== "DEBUFF") continue;
+    if (a.srcUnitId === unitId) continue;
+    const cat = drCatOf(a.spellId);
+    if (!cat) continue;
+    const open = openByKey.get(k);
+    if (e === REFRESH) {
+      if (!castBackedAt(a, unitId, open?.ts ?? -Infinity, castsOf)) continue;
+    } else if (prev) {
+      if (ev(prev) === REMOVED && tsOf(a) - tsOf(prev) <= 50) continue;
       if (
-        pred(a) &&
-        (ev(a) === APPLIED || ev(a) === REFRESH) &&
-        tsOf(a) >= from &&
-        tsOf(a) < to
+        ev(prev) !== REMOVED &&
+        tsOf(a) - tsOf(prev) < (ccFullDurationSeconds(a.spellId) ?? 8) * 1000
       )
-        out.push(a);
-    return out;
-  };
-
-  /** up over the whole of [from, to): up at its first and its last ms (the
-   * same id / source) — a span bound is floored, so an aura that ends a few
-   * ms into the span's first interior second is the bound, not a save */
-  const upWhole = (
-    u: any,
-    pred: (a: any) => boolean,
-    from: number,
-    to: number,
-    capS?: (id: string) => number | undefined,
-  ): any[] => {
-    const end = new Set(
-      upAt(u, pred, to - 1, -1, capS).map((a) => `${a.spellId}|${a.srcUnitId}`),
-    );
-    return upAt(u, pred, from, -1, capS).filter((a) =>
-      end.has(`${a.spellId}|${a.srcUnitId}`),
-    );
-  };
-
-  // ── DR from the log ──
-  const appsCache = new Map<string, any[]>();
-  /** the unit's control applications (one per application) */
-  const ccApps = (u: any): any[] => {
-    let apps = appsCache.get(u.id);
-    if (apps) return apps;
-    apps = [];
-    const rows = auraIn(u);
-    const lastByKey = new Map<string, any>();
-    for (const a of rows) {
-      const k = `${a.spellId}|${a.srcUnitId}`;
-      const prev = lastByKey.get(k);
-      lastByKey.set(k, a);
-      if (ev(a) !== APPLIED || a.auraType !== "DEBUFF") continue;
-      if (a.srcUnitId === u.id) continue;
-      const cat = drCatOf(a.spellId);
-      if (!cat) continue;
-      if (prev) {
-        if (ev(prev) === REMOVED && tsOf(a) - tsOf(prev) <= 50) continue;
-        if (
-          ev(prev) !== REMOVED &&
-          tsOf(a) - tsOf(prev) < (ccFullDurationSeconds(a.spellId) ?? 8) * 1000
-        )
-          continue;
-      }
-      // its end: the REMOVED of that id / source not followed within 50 ms
-      // by a re-APPLIED (a re-broadcast), capped at the official length + 1 s
-      const i = rows.indexOf(a);
-      const capMs = tsOf(a) + ((ccFullDurationSeconds(a.spellId) ?? 8) + 1) * 1000;
-      let endMs = capMs;
-      for (let j = i + 1; j < rows.length; j++) {
-        const b = rows[j];
-        if (b.spellId !== a.spellId || b.srcUnitId !== a.srcUnitId) continue;
-        if (tsOf(b) > capMs) break;
-        if (ev(b) !== REMOVED) continue;
-        const again = rows.some(
-          (c, q) =>
-            q > j &&
-            c.spellId === a.spellId &&
-            c.srcUnitId === a.srcUnitId &&
-            ev(c) === APPLIED &&
-            tsOf(c) - tsOf(b) <= 50,
-        );
-        if (again) continue;
-        endMs = tsOf(b);
-        break;
-      }
-      apps.push({
-        row: a,
-        ts: tsOf(a),
-        end: endMs,
-        cat,
-        src: a.srcUnitId as string,
-      });
-    }
-    appsCache.set(u.id, apps);
-    return apps;
-  };
-  /** the chain of same-family applications on `u` before `ts`, walked back
-   * from it: a predecessor joins while it ended less than 18 s before the
-   * chain's earliest start (or still ran then) — the brief's 18 s, below
-   * the 12.1 era's 20 s reset (every capture log is from 2026-08-13 on), so
-   * the reading can only under-count. Not the same cast: a predecessor of
-   * the same source ≤ 300 ms before. */
-  const drPrior = (u: any, cat: string, ts: number, src?: string): any[] => {
-    const prior = ccApps(u)
-      .filter(
-        (x) =>
-          x.cat === cat &&
-          x.ts < ts - 50 &&
-          !(src !== undefined && x.src === src && ts - x.ts <= 300),
-      )
-      .sort((a, b) => b.ts - a.ts);
-    const chain: any[] = [];
-    let head = ts;
-    for (const p of prior) {
-      if (p.end >= head || head - p.end < DR_WINDOW_MS) {
-        chain.push(p);
-        head = Math.min(head, p.ts);
-      } else break;
-    }
-    return chain;
-  };
-  /** the DR families a control row can count in: its own id's, its effect
-   * auras' (Holy Word: Chastise 88625 → a stun or an incapacitate) */
-  const drPriorAny = (u: any, id: string, ts: number): any[] => {
-    const cats = new Set<string>(
-      [id, ...effectAurasOfCast(id)]
-        .map((x) => drCatOf(x))
-        .filter((x): x is string => !!x),
-    );
-    return [...cats]
-      .map((c) => drPrior(u, c, ts))
-      .sort((a, b) => b.length - a.length)[0] ?? [];
-  };
-
-  // ── round-level measurements ──
-  if (!measuredRounds.has(roundKey)) {
-    measuredRounds.add(roundKey);
-    for (const u of players) {
-      const rows = auraIn(u);
-      for (const x of ccApps(u)) {
-        if (!inRound(x.ts)) continue;
-        const k = drPrior(u, x.cat, x.ts, x.src).length;
-        landedByPrior[Math.min(2, k)]!++;
-        // clean Full-DR run lengths (check 2's base)
-        if (k === 0) {
-          const i = rows.indexOf(x.row);
-          for (let j = i + 1; j < rows.length; j++) {
-            const b = rows[j];
-            if (b.spellId !== x.row.spellId || b.srcUnitId !== x.src) continue;
-            if (ev(b) === REMOVED && inRound(tsOf(b))) {
-              const l = fullRunsById.get(x.row.spellId) ?? [];
-              l.push((tsOf(b) - x.ts) / 1000);
-              fullRunsById.set(x.row.spellId, l);
-            }
-            break;
-          }
-        }
-        // check 6's baseline: the auras up on a player a control LANDED on
-        if (isControl(x.row.spellId)) {
-          const ids = new Set(
-            upAt(u, () => true, x.ts, liOf(x.row)).map((a) => a.spellId),
-          );
-          for (const id of ids) {
-            const t = fwdAura.get(id) ?? { immune: 0, landed: 0 };
-            t.landed++;
-            fwdAura.set(id, t);
-          }
-        }
-      }
-    }
-  }
-
-  // ── 6. immunityTableForward ──
-  const roundFirst = !fwdSeen.has(roundKey);
-  if (roundFirst) fwdSeen.add(roundKey);
-  for (const u of players) {
-    const pid = pidOf.get(u.name);
-    for (const m of (u.missesIn ?? []) as any[]) {
-      if (m.missType !== "IMMUNE" || ev(m) !== MISSED) continue;
-      if (!isControl(m.spellId) || !inRound(tsOf(m))) continue;
-      if (m.srcUnitId === u.id) continue;
-      if (roundFirst) fwdImmuneRows++;
-      const ts = tsOf(m);
-      const li = liOf(m);
-      const upAll = upAt(u, () => true, ts, li);
-      if (upAll.some((a) => AVOID_TABLE_IDS.has(a.spellId))) {
-        if (roundFirst) fwdTableExplained++;
         continue;
-      }
-      if (drPriorAny(u, m.spellId, ts).length >= 2) {
-        if (roundFirst) fwdDrExplained++;
-        continue;
-      }
-      const ccName = nameOf(m.spellId, m.spellName);
-      if (roundFirst) {
-        fwdCases++;
-        fwdBySpell.set(ccName, (fwdBySpell.get(ccName) ?? 0) + 1);
-        for (const id of new Set(upAll.map((a) => a.spellId))) {
-          const t = fwdAura.get(id) ?? { immune: 0, landed: 0 };
-          t.immune++;
-          fwdAura.set(id, t);
-        }
-      }
-      // the prompt's line for it
-      if (!pid) continue;
-      bump("immunityTableForward");
-      const sec = Math.floor((ts - start) / 1000);
-      const names = aliasesOf(m.spellId, m.spellName);
-      const names2 = [...names];
-      const near = [sec - 1, sec, sec + 1].flatMap((s) => linesAt(s));
-      const hasNear = near.some(
-        (l) => l.includes(`${pid}(`) && names2.some((n) => l.includes(n)),
+    }
+    // its end: the REMOVED of that id / source not followed within 50 ms
+    // by a re-APPLIED (a re-broadcast), capped at the official length + 1 s
+    const capMs =
+      tsOf(a) + ((ccFullDurationSeconds(a.spellId) ?? 8) + 1) * 1000;
+    let endMs = capMs;
+    for (let j = i + 1; j < rows.length; j++) {
+      const b = rows[j];
+      if (b.spellId !== a.spellId || b.srcUnitId !== a.srcUnitId) continue;
+      if (tsOf(b) > capMs) break;
+      if (ev(b) !== REMOVED) continue;
+      const again = rows.some(
+        (c, q) =>
+          q > j &&
+          c.spellId === a.spellId &&
+          c.srcUnitId === a.srcUnitId &&
+          ev(c) === APPLIED &&
+          tsOf(c) - tsOf(b) <= 50,
       );
-      const hasEarlier =
-        !hasNear &&
-        Array.from({ length: 21 }, (_, k) => sec - k)
-          .flatMap((s) => linesAt(s))
-          .some(
-            (l) =>
-              l.includes("IMMUNE") &&
-              l.includes(`${pid}(`) &&
-              names2.some((n) => l.includes(n)),
-          );
-      if (!hasNear && !hasEarlier) {
-        const src = byId.get(m.srcUnitId);
-        violate(
-          "immunityTableForward",
-          "noLine",
-          ts,
-          `${u.name}|${ccName}|${ts}`,
-          `${fmtS(sec)} ${pid}(${u.name}) ← ${ccName} ${m.spellId} (by ${src?.name ?? m.srcUnitName}) logged IMMUNE, no table aura up, not DR-immune; no line names it (auras up: ${[...new Set(upAll.map((a) => nameOf(a.spellId, a.spellName)))].slice(0, 12).join(", ")})`,
-          { raw: [rawOf(m)] },
-        );
-      }
+      if (again) continue;
+      endMs = tsOf(b);
+      break;
+    }
+    const app: IControlApp = {
+      row: a,
+      ts: tsOf(a),
+      end: endMs,
+      cat,
+      src: a.srcUnitId as string,
+      ...(e === REFRESH ? { refresh: true } : {}),
+    };
+    // the recast replaced the open application
+    if (e === REFRESH && open && open.end > app.ts) open.end = app.ts;
+    openByKey.set(k, app);
+    apps.push(app);
+  }
+  return apps;
+}
+
+/** the chain of same-family applications before `ts`, walked back from it:
+ * a predecessor joins while it ended less than 18 s before the chain's
+ * earliest start (or still ran then) — the brief's 18 s, below the 12.1
+ * era's 20 s reset (every capture log is from 2026-08-13 on), so the
+ * reading can only under-count. Not the same cast: a predecessor of the
+ * same source ≤ 300 ms before. */
+export function drChain(
+  apps: readonly IControlApp[],
+  cat: string,
+  ts: number,
+  src?: string,
+): IControlApp[] {
+  const prior = apps
+    .filter(
+      (x) =>
+        x.cat === cat &&
+        x.ts < ts - 50 &&
+        !(src !== undefined && x.src === src && ts - x.ts <= 300),
+    )
+    .sort((a, b) => b.ts - a.ts);
+  const chain: IControlApp[] = [];
+  let head = ts;
+  for (const p of prior) {
+    if (p.end >= head || head - p.end < DR_WINDOW_MS) {
+      chain.push(p);
+      head = Math.min(head, p.ts);
+    } else break;
+  }
+  return chain;
+}
+
+/** check 2: the application is never closed — no later row of that id /
+ * source on the unit, or the next is an APPLIED past the control's length */
+export function isUnclosedApp(rows: readonly any[], x: IControlApp): boolean {
+  const i = rows.indexOf(x.row);
+  const base = ccFullDurationSeconds(x.row.spellId) ?? 8;
+  let next: any;
+  for (let j = i + 1; j < rows.length; j++)
+    if (rows[j].spellId === x.row.spellId && rows[j].srcUnitId === x.src) {
+      next = rows[j];
+      break;
+    }
+  const closed =
+    next && (ev(next) !== APPLIED || tsOf(next) - x.ts <= base * 1000 + 500);
+  return !closed;
+}
+
+/** check 2's bound on a diminished application's printed length */
+export const diminishedBoundS = (base: number, prior: number): number =>
+  base * (prior >= 2 ? 0.25 : 0.5) + 0.5;
+
+const SCHOOLS = spellSchoolsGenerated as unknown as Record<
+  string,
+  { school?: number; immuneSchools?: number } | undefined
+>;
+/** the control's official mechanic: its own id's, else an effect aura's */
+const controlMechanic = (ccSpellId: string): number | undefined =>
+  ccMechanicOf(ccSpellId) ??
+  effectAurasOfCast(ccSpellId)
+    .map((a) => ccMechanicOf(a))
+    .find((x) => x !== undefined);
+
+/**
+ * codex 21-R12-c #1: can a LISTED avoidance aura stop this control?
+ * Re-derived from DB2 lookups after production `applicableCCAvoidanceIds`'
+ * buff leg (what it checks, not its code): a mechanic-limited buff
+ * (`MECHANIC_LIMITED_AVOIDANCE_BUFFS`) only a control whose mechanic is in
+ * its own aura-77 list; another listed buff by school when DB2 knows both
+ * masks (full cover), else a magic-only one (`MAGIC_ONLY_IMMUNITY_IDS`) no
+ * physical control; a Druid form only a Polymorph / Hex. "unknown" (not
+ * judged): the control's mechanic unknown, an immunity-table / Cyclone id
+ * outside the avoidance table, an unlisted variant id of a listed name.
+ */
+export function listedAvoidanceVerdict(
+  buffId: string,
+  ccSpellId: string,
+  ccName: string,
+): "applies" | "unknown" | "mechanic" | "school" | "magicOnly" | "form" {
+  if (MECHANIC_LIMITED_AVOIDANCE_BUFFS.has(buffId)) {
+    const mech = controlMechanic(ccSpellId);
+    if (mech === undefined) return "unknown";
+    return (MECH[buffId]?.immuneMech ?? []).includes(mech)
+      ? "applies"
+      : "mechanic";
+  }
+  if (CC_AVOIDANCE_BUFF_SPELLS.has(buffId)) {
+    const imm = SCHOOLS[buffId]?.immuneSchools;
+    const sch = SCHOOLS[ccSpellId]?.school;
+    if (imm !== undefined && sch !== undefined)
+      return (sch & ~imm) === 0 ? "applies" : "school";
+    const physical =
+      sch !== undefined ? sch === 1 : PHYSICAL_CC_IDS.has(ccSpellId);
+    return MAGIC_ONLY_IMMUNITY_IDS.has(buffId) && physical
+      ? "magicOnly"
+      : "applies";
+  }
+  if (DRUID_FORM_BUFFS.has(buffId))
+    return /polymorph|hex/i.test(ccName) ? "applies" : "form";
+  return "unknown";
+}
+
+/**
+ * Check 1 (b): why the aura named X cannot have produced the miss row, or
+ * undefined. `ids`: X's ids (the auras of that name on the target, its
+ * repositioning casts and their effect auras). An unlisted X: no DB2
+ * immunity on any id (`noImmunity`), or only explicit mechanic lists that
+ * lack the control's mechanic (`mechanic`). A listed X (codex 21-R12-c #1:
+ * membership used to skip this): every listed id fails
+ * `listedAvoidanceVerdict` — `listed:<reason>` (The Beast Within [5, 24]
+ * named for a Hammer of Justice, mechanic 12). `twinIds`: the other miss
+ * rows the line's name can mean in that ms (183-1-1098 0:22: Metamorphosis
+ * 247121, mechanic 11, beside its stun 200166, mechanic 12) — a listed id
+ * that can stop any of them can stop the control the line names.
+ */
+export function cannotCauseOf(
+  X: string,
+  outcome: "IMMUNE" | "MISS" | "REFLECT" | "didNotLand",
+  ids: ReadonlySet<string>,
+  missSpellId: string,
+  missSpellName: string,
+  twinIds: readonly string[] = [],
+): string | undefined {
+  if (outcome === "didNotLand") return undefined;
+  if (REFLECT_ONLY_NAMES.has(X) && outcome !== "REFLECT") return "reflectOnly";
+  if (AVOID_TABLE_NAMES.has(X)) {
+    const ccName = nameOf(missSpellId, missSpellName);
+    const ccIds = [...new Set([missSpellId, ...twinIds])];
+    const vs = [...ids].map((id) => {
+      const per = ccIds.map((cc) => listedAvoidanceVerdict(id, cc, ccName));
+      return per.find((v) => v === "applies" || v === "unknown") ?? per[0]!;
+    });
+    return vs.length > 0 && vs.every((v) => v !== "applies" && v !== "unknown")
+      ? `listed:${vs[0]}`
+      : undefined;
+  }
+  const imm = [...ids].map(db2Immunity);
+  const mech = controlMechanic(missSpellId);
+  if (ids.size > 0 && imm.every((x) => x === undefined)) return "noImmunity";
+  if (
+    mech !== undefined &&
+    imm.length > 0 &&
+    imm.every((x) => Array.isArray(x) && !x.includes(mech))
+  )
+    return "mechanic";
+  return undefined;
+}
+
+async function main(): Promise<void> {
+  const dir = process.argv[2];
+  if (!dir) {
+    console.error(
+      "usage: corpusFactScan2.ts <captureDir> [--examples N] [--archive-dir <dir>] [--json <path>]",
+    );
+    process.exit(2);
+  }
+  const argOf = (flag: string): string | undefined => {
+    const i = process.argv.indexOf(flag);
+    return i > 0 ? process.argv[i + 1] : undefined;
+  };
+  const ARCHIVE_DIR = argOf("--archive-dir") ?? "";
+  const EXAMPLES = Number(argOf("--examples") ?? 5);
+  const JSON_OUT = argOf("--json");
+  const unmapped: string[] = [];
+  /** E6: passive own absorbs inside a defenseless span, by shield name */
+  const passiveAbsorbNames = new Map<string, number>();
+  const pressedAbsorbNames = new Map<string, number>();
+  const checked = new Map<string, number>();
+  const violations: IViolation[] = [];
+  const bump = (c: string, n = 1) => checked.set(c, (checked.get(c) ?? 0) + n);
+
+  await ensureAnalysisData();
+  const files: Array<{
+    shard: string;
+    name: string;
+    fileNo: number;
+    round: number;
+  }> = [];
+  for (const shard of readdirSync(dir).filter((d) => /^s\d+$/.test(d))) {
+    const cdir = join(dir, shard, "context");
+    for (const name of readdirSync(cdir)) {
+      const m = /^(\d+)-(\d+)-(\d+)\.txt$/.exec(name);
+      if (m) files.push({ shard, name, fileNo: +m[1]!, round: +m[2]! });
     }
   }
+  files.sort((a, b) =>
+    a.shard === b.shard ? a.fileNo - b.fileNo : a.shard < b.shard ? -1 : 1,
+  );
 
-  // ── 1. immuneCause ──
-  interface ICause {
-    sec: number;
+  // ── round-level measurements (each round once) ──
+  const measuredRounds = new Set<string>();
+  /** DR reading's own FP rate: landed controls by prior count */
+  const landedByPrior = [0, 0, 0];
+  /** check 2: aura id → clean run lengths (s) at Full DR */
+  const fullRunsById = new Map<string, number[]>();
+  /** check 6: aura id → [immune cases with it up, landed controls with it up] */
+  const fwdAura = new Map<string, { immune: number; landed: number }>();
+  const fwdSeen = new Set<string>();
+  let fwdCases = 0;
+  let fwdImmuneRows = 0;
+  let fwdTableExplained = 0;
+  let fwdDrExplained = 0;
+  const fwdBySpell = new Map<string, number>();
+
+  interface IEndCand {
+    where: string;
+    archive: string;
+    round: number;
+    startMs: number;
+    ts: number;
+    auraId: string;
+    unitName: string;
+    prior: number;
+    L: number;
     line: string;
-    family: string;
-    targetPid: string;
-    srcPid?: string;
-    spell: string;
-    outcome: "IMMUNE" | "MISS" | "REFLECT" | "didNotLand";
-    aura?: string;
-    auraSrcPid?: string;
-    /** `from <pid>'s guardian / pet / totem`: a unit that pid owns */
-    auraSrcSummon?: boolean;
-    auraOwn?: boolean;
+    raw: string[];
   }
-  const causes: ICause[] = [];
-  const firstPid = (s: string | undefined) =>
-    s ? /(\d+)\(/.exec(s)?.[1] : undefined;
-  const outcomeOf = (t: string): ICause["outcome"] =>
-    t === "IMMUNE" ? "IMMUNE" : t === "REFLECT" ? "REFLECT" : "MISS";
-  for (const l of lines) {
-    const av =
-      /^(\d+:\d\d) {2}\[CC AVOIDED\?\] {3}(\d+)\([^)]*\): (.+?) \(by (.+?)(?:; cast \d+:\d\d)?\) (?:logged (\w+)|did not land); (.+) \((own|from (.+))\) active$/.exec(
-        l,
-      );
-    if (av) {
-      causes.push({
-        sec: secOf(av[1]!),
-        line: l,
-        family: "[CC AVOIDED?]",
-        targetPid: av[2]!,
-        srcPid: firstPid(av[4]),
-        spell: av[3]!,
-        outcome: av[5] ? outcomeOf(av[5]) : "didNotLand",
-        aura: av[6]!,
-        auraOwn: av[7] === "own",
-        auraSrcPid: av[8] ? firstPid(av[8]) : undefined,
-        auraSrcSummon: !!av[8] && /\)'s (?:guardian|pet|totem)/.test(av[8]),
-      });
-      continue;
-    }
-    const nl =
-      /^(\d+:\d\d) {2}\[CC NOT LANDED\] {3}(\d+)\([^)]*\) ← (.+?) \(by (.+?)\) — logged (\w+) \((.+)\)$/.exec(
-        l,
-      );
-    if (nl) {
-      const c = nl[6]!;
-      if (c.startsWith("DR:")) continue;
-      const own = /^(\d+)\([^)]*\)'s (.+) was on the target$/.exec(c);
-      const up = /^(.+) was up$/.exec(c);
-      if (!own && !up) continue;
-      causes.push({
-        sec: secOf(nl[1]!),
-        line: l,
-        family: "[CC NOT LANDED]",
-        targetPid: nl[2]!,
-        srcPid: firstPid(nl[4]),
-        spell: nl[3]!,
-        outcome: outcomeOf(nl[5]!),
-        aura: own ? own[2]! : up![1]!,
-        auraSrcPid: own ? own[1] : undefined,
-      });
-      continue;
-    }
-    const yt = /^(\d+:\d\d) {2}\[(YOU|TEAM)\] \[(CC|CD)\] {3}(.*)$/.exec(l);
-    if (yt) {
-      const rest = yt[4]!;
-      let srcPid: string | undefined;
-      let spell: string | undefined;
-      if (yt[2] === "YOU") {
-        srcPid = pidOf.get(owner.name);
-        spell = /^(.+?)(?: →| \[| \(| \||$)/.exec(rest)?.[1];
-      } else if (yt[3] === "CC") {
-        const m = /^(\d+)\([^)]*\) \([^)]*\) cast (.+?)(?: →| \[|$)/.exec(rest);
-        srcPid = m?.[1];
-        spell = m?.[2];
-      } else {
-        const m = /^(\d+)\([^)]*\) \([^)]*\): (.+?)(?: →| \[| \(|$)/.exec(rest);
-        srcPid = m?.[1];
-        spell = m?.[2];
-      }
-      if (!spell) continue;
-      const arrows = /→ ((?:\d+\([^)]*\)(?:, )?)+)/.exec(rest);
-      const arrowPids = arrows
-        ? [...arrows[1]!.matchAll(/(\d+)\(/g)].map((x) => x[1]!)
-        : [];
-      for (const b of rest.matchAll(
-        /\[(IMMUNE|MISSED on (\d+)\([^)]*\)(?!'s)|REFLECTED by (\d+)\([^)]*\))(?:: ((?:\d+\([^)]*\)(?:, )?)+))? — ([^\]]+)\]/g,
-      )) {
-        const cause = b[5]!;
-        if (cause.startsWith("DR:")) continue;
-        const own = /^(\d+)\([^)]*\)'s (.+) was on the target$/.exec(cause);
-        const up = /^(.+) was up$/.exec(cause);
-        if (!own && !up) continue;
-        const outcome: ICause["outcome"] = b[1]!.startsWith("IMMUNE")
-          ? "IMMUNE"
-          : b[1]!.startsWith("MISSED")
-            ? "MISS"
-            : "REFLECT";
-        const targets = b[2]
-          ? [b[2]]
-          : b[3]
-            ? [b[3]]
-            : b[4]
-              ? [...b[4].matchAll(/(\d+)\(/g)].map((x) => x[1]!)
-              : arrowPids.length === 1
-                ? arrowPids
-                : [];
-        if (targets.length === 0) {
-          bump("immuneCause:bracketNoTarget");
-          continue;
-        }
-        for (const t of targets)
-          causes.push({
-            sec: secOf(yt[1]!),
-            line: l,
-            family: `[${yt[2]}] [${yt[3]}]`,
-            targetPid: t,
-            srcPid,
-            spell: spell.trim(),
-            outcome,
-            aura: own ? own[2]! : up![1]!,
-            auraSrcPid: own ? own[1] : undefined,
-          });
-      }
-    }
-  }
-  for (const c of causes) {
-    const T = unitOfPid(c.targetPid);
-    if (!T || !c.aura) continue;
-    const S = unitOfPid(c.srcPid);
-    const sFam = S ? familyOf(S) : undefined;
-    const lineMs = start + c.sec * 1000;
-    const atCast =
-      c.family.startsWith("[YOU]") || c.family.startsWith("[TEAM]");
-    const X = c.aura;
-    const auraSrcU = c.auraSrcPid ? unitOfPid(c.auraSrcPid) : undefined;
-    const auraFam =
-      c.auraSrcSummon && auraSrcU
-        ? new Set([...familyOf(auraSrcU)].filter((id) => id !== auraSrcU.id))
-        : undefined;
-    const auraSrcOk = (id: string) =>
-      auraFam ? auraFam.has(id) : id === auraSrc;
-    const auraSrc = c.auraOwn
-      ? T.id
-      : c.auraSrcPid
-        ? unitOfPid(c.auraSrcPid)?.id
-        : undefined;
-    const isX = (a: any) =>
-      nameOf(a.spellId, a.spellName) === X &&
-      (auraSrc === undefined || auraSrcOk(a.srcUnitId));
-    // the miss row it describes
-    let miss: any;
-    if (c.outcome !== "didNotLand") {
-      const typeOk = (m: any) =>
-        c.outcome === "IMMUNE"
-          ? m.missType === "IMMUNE"
-          : c.outcome === "REFLECT"
-            ? m.missType === "REFLECT"
-            : m.missType !== "IMMUNE" && m.missType !== "REFLECT";
-      const lo = lineMs - 1000;
-      const hi = atCast ? lineMs + 20_000 : lineMs + 2000;
-      const cands = ((T.missesIn ?? []) as any[]).filter(
-        (m) =>
-          ev(m) === MISSED &&
-          typeOk(m) &&
-          tsOf(m) >= lo &&
-          tsOf(m) < hi &&
-          (!sFam || sFam.has(m.srcUnitId)),
-      );
-      const named = cands.filter((m) =>
-        aliasesOf(m.spellId, m.spellName).has(c.spell),
-      );
-      const pool = named.length > 0 ? named : cands.length === 1 ? cands : [];
-      const score = (m: any) => {
-        const d = tsOf(m) - lineMs;
-        return d >= 0 && d < 1000 ? d - 1e6 : Math.abs(d - 500);
-      };
-      miss = [...pool].sort((a, b) => score(a) - score(b))[0];
-      if (!miss) {
-        bump("immuneCause:noMissRow");
-        continue;
-      }
-      if (named.length === 0) bump("immuneCause:matchedByUniqueness");
-    }
-    bump("immuneCause");
-    const ts = miss ? tsOf(miss) : lineMs;
-    const factId = `${T.name}|${c.spell}|${miss ? ts : `s${c.sec}`}|${X}`;
-    const rawMiss = miss ? [rawOf(miss)] : [];
-    // X's ids: the auras of that name on the target, the repositioning
-    // casts of that name (a lookup: `REPOSITIONING_SPELL_IDS`) and their
-    // effect auras (Angel's Feather 121536 → Angelic Feather 121557)
-    const xCastIds = new Set<string>(REPOSITION_IDS_BY_NAME.get(X) ?? []);
-    const xEffectIds = new Set<string>(
-      [...xCastIds].flatMap((id) => [...effectAurasOfCast(id)]),
-    );
-    const isXAura = (a: any) =>
-      (isX(a) || xEffectIds.has(a.spellId)) &&
-      (auraSrc === undefined || auraSrcOk(a.srcUnitId));
-    const xRows = auraIn(T).filter(isXAura);
-    let xUp = miss
-      ? upAt(T, isXAura, ts, liOf(miss))
-      : upDuring(T, isXAura, lineMs - 1000, lineMs + 1000);
-    // E8: an avoidance consumed by the control is REMOVED in the ms of the
-    // control's CAST, and the miss row follows up to ~0.7 s later (29-5-197
-    // 1:08: Kidney Shot SUCCESS 24.460, Nullifying Shroud REMOVED 24.461,
-    // IMMUNE row 24.607) — X up at the source's last cast of the control
-    // (≤ 3 s before the row) counts
-    if (miss && xUp.length === 0 && sFam) {
-      const cast = [...sFam]
-        .flatMap((id) => successes(byId.get(id)))
-        .filter(
-          (cc) =>
-            tsOf(cc) <= ts &&
-            tsOf(cc) >= ts - 3000 &&
-            (cc.destUnitId === T.id || !cc.destUnitId || cc.destUnitId === "0000000000000000") &&
-            [...aliasesOf(cc.spellId, cc.spellName)].some((n) =>
-              aliasesOf(miss.spellId, miss.spellName).has(n),
-            ),
-        )
-        .sort((a, b) => tsOf(b) - tsOf(a))[0];
-      if (cast && upAt(T, isXAura, tsOf(cast), liOf(cast)).length > 0) {
-        xUp = [cast];
-        bump("immuneCause:upAtCast");
-      }
-    }
-    // E7: Grounding Totem is a summon, not an aura on its owner: "up" = the
-    // control's cast went into a Grounding Totem of the target's (± 1.5 s),
-    // or the target summoned one in the 3.5 s before (its life is 3 s)
-    if (X === "Grounding Totem" && xUp.length === 0) {
-      const totems = new Set(
-        units
-          .filter((u) => u.ownerId === T.id && u.name === "Grounding Totem")
-          .map((u) => u.id as string),
-      );
-      const redirected = sFam
-        ? [...sFam].some((id) =>
-            successes(byId.get(id)).some(
-              (cc) =>
-                totems.has(cc.destUnitId) &&
-                tsOf(cc) >= ts - 1500 &&
-                tsOf(cc) <= ts + 1500,
-            ),
-          )
-        : false;
-      const summoned = successes(T).some(
-        (cc) =>
-          nameOf(cc.spellId, cc.spellName) === "Grounding Totem" &&
-          tsOf(cc) >= ts - 3500 &&
-          tsOf(cc) <= ts + 1000,
-      );
-      if (redirected || summoned) xUp = [{ grounding: true }];
-      if (redirected) bump("immuneCause:groundingRedirect");
-      else if (summoned) bump("immuneCause:groundingSummoned");
-    }
-    // E9: a repositioning the product credits by its PRESS (Roll, Transcendence:
-    // Transfer, Wind Rush Totem — no aura on the unit): a SUCCESS of it by
-    // the aura's owner in the 2 s before the instant (or inside its second)
-    if (xUp.length === 0 && xCastIds.size > 0) {
-      const who = auraSrc ? byId.get(auraSrc) : T;
-      const press = successes(who ?? T).find(
-        (cc) =>
-          (xCastIds.has(cc.spellId) || nameOf(cc.spellId, cc.spellName) === X) &&
-          tsOf(cc) >= (miss ? ts : lineMs) - 2000 &&
-          tsOf(cc) < (miss ? ts + 1 : lineMs + 1000),
-      );
-      if (press) {
-        xUp = [press];
-        bump("immuneCause:pressedReposition");
-      }
-    }
-    // (a) notUp
-    const notUp = xUp.length === 0;
-    if (notUp) {
-      const who = auraSrc ? byId.get(auraSrc) : T;
-      const xCasts = successes(who ?? T).filter(
-        (cc) => xCastIds.has(cc.spellId) || nameOf(cc.spellId, cc.spellName) === X,
-      );
-      const nearest = [...xRows, ...xCasts].sort(
-        (a, b) => Math.abs(tsOf(a) - ts) - Math.abs(tsOf(b) - ts),
-      )[0];
-      // E11: a `did not land` line of a ground / delayed control sits at its
-      // CAST second (no `; cast` tag), while the control resolves later
-      // (Sigil of Misery: 161-5-960 2:58, cast 29.482, Divine Steed 30.333,
-      // the sigil goes off ~2 s after its cast). X up after the line's
-      // second but inside the resolve window — the source's cast of it + 3 s
-      // — is `notUp:inResolveWindow`, out of the total: round 3 D52 (a
-      // feather 1.4 s after a Freezing Trap) has this shape and was ruled a
-      // defect, a Sigil / Capacitor Totem dodged on its delay is not; it
-      // needs a ruling per control, not a verdict from this check.
-      let inResolve = false;
-      if (!miss) {
-        const cast = sFam
-          ? [...sFam]
-              .flatMap((id) => successes(byId.get(id)))
-              .filter(
-                (cc) =>
-                  tsOf(cc) >= lineMs - 3000 &&
-                  tsOf(cc) < lineMs + 1000 &&
-                  aliasesOf(cc.spellId, cc.spellName).has(c.spell),
-              )
-              .sort((a, b) => tsOf(b) - tsOf(a))[0]
-          : undefined;
-        const until = Math.max(lineMs + 1000, (cast ? tsOf(cast) : lineMs) + 3000);
-        inResolve =
-          upDuring(T, isXAura, lineMs + 1000, until).length > 0 ||
-          (xCastIds.size > 0 &&
-            successes(who ?? T).some(
-              (cc) =>
-                (xCastIds.has(cc.spellId) ||
-                  nameOf(cc.spellId, cc.spellName) === X) &&
-                tsOf(cc) >= lineMs + 1000 &&
-                tsOf(cc) < until,
-            ));
-      }
-      violate(
-        "immuneCause",
-        inResolve
-          ? "notUp:inResolveWindow"
-          : !nearest && X !== "Grounding Totem"
-            ? "notUp:neverOnUnit"
-            : "notUp",
-        ts,
-        factId,
-        `${fmtS(c.sec)} ${c.targetPid}(${T.name}) ${c.spell} ${miss ? `${miss.missType} row ${miss.spellId}` : "did not land"}: "${X}" not up on the target at ${miss ? "the miss" : "that second"}${nearest ? ` (nearest ${X} row: ${ev(nearest)} ${((tsOf(nearest) - ts) / 1000).toFixed(2)}s from it)` : ""}`,
-        {
-          line: c.line.slice(0, 240),
-          raw: [...rawMiss, ...(nearest ? [rawOf(nearest)] : [])],
-        },
-      );
-    }
-    // (b) cannotCause
-    let cannot: string | undefined;
-    if (c.outcome !== "didNotLand") {
-      if (REFLECT_ONLY_NAMES.has(X) && c.outcome !== "REFLECT")
-        cannot = "reflectOnly";
-      else if (!AVOID_TABLE_NAMES.has(X)) {
-        const ids = new Set<string>([
-          ...xRows.map((a) => a.spellId as string),
-          ...xCastIds,
-          ...xEffectIds,
-        ]);
-        const imm = [...ids].map(db2Immunity);
-        const mech =
-          ccMechanicOf(miss.spellId) ??
-          effectAurasOfCast(miss.spellId)
-            .map((a) => ccMechanicOf(a))
-            .find((x) => x !== undefined);
-        if (ids.size > 0 && imm.every((x) => x === undefined))
-          cannot = "noImmunity";
-        else if (
-          mech !== undefined &&
-          imm.length > 0 &&
-          imm.every((x) => Array.isArray(x) && !x.includes(mech))
-        )
-          cannot = "mechanic";
-      }
-    }
-    if (cannot)
-      violate(
-        "immuneCause",
-        `cannotCause:${cannot}`,
-        ts,
-        factId,
-        `${fmtS(c.sec)} ${c.targetPid}(${T.name}) ${c.spell} ${miss.missType} row ${miss.spellId}: "${X}" cannot produce it (${cannot})`,
-        { line: c.line.slice(0, 240), raw: rawMiss },
-      );
-    // (c) drImmune
-    if (c.outcome === "IMMUNE" && miss) {
-      const prior = drPriorAny(T, miss.spellId, ts);
-      const cat = prior[0]?.cat as string | undefined;
-      if (cat && prior.length >= 2) {
-        if (!notUp && !cannot) bump("immuneCause:drImmune:auraAlsoExplains");
-        else
-          violate(
-            "immuneCause",
-            "drImmune",
-            ts,
-            factId,
-            `${fmtS(c.sec)} ${c.targetPid}(${T.name}) ${c.spell} IMMUNE at ${cat} DR immune (before it in 18 s: ${prior.map((x) => `${nameOf(x.row.spellId)} ${((x.ts - ts) / 1000).toFixed(1)}s`).join(", ")}), line names "${X}"`,
-            {
-              line: c.line.slice(0, 240),
-              raw: [...rawMiss, ...prior.map((x) => rawOf(x.row))],
-            },
-          );
-      }
-    }
-  }
+  const endCands: IEndCand[] = [];
+  /** every judged (diminished) unclosed control, for the record */
+  const ccEndJudged: Array<Record<string, unknown>> = [];
+  /** codex 21-R12-c #2 / #3, for the record: cast-backed REFRESH
+   * applications, and IMMUNE rows a table aura explained only uncapped */
+  const fixExamples: Record<string, Array<Record<string, unknown>>> = {
+    castBackedRefresh: [],
+    capDroppedTableAura: [],
+  };
+  const keepExample = (k: string, e: Record<string, unknown>) => {
+    if (fixExamples[k]!.length < 10) fixExamples[k]!.push(e);
+  };
+  /** check 4 control: own kicks of players, with / without a line */
+  const playerKick = { n: 0, lined: 0 };
 
-  // ── 2. ccEndUndiminished ──
-  const ccLines = lines
-    .map((l) => ({
-      l,
-      m: /^(\d+:\d\d) {2}\[CC ON (?:TEAM|ENEMY)\] {3}(\d+)\([^)]*\) ← (.+?) \(by (.+?)\)( .*)?$/.exec(
-        l,
-      ),
-    }))
-    .filter((x) => !!x.m);
-  for (const u of players) {
-    const pid = pidOf.get(u.name);
-    if (!pid) continue;
-    const rows = auraIn(u);
-    for (const x of ccApps(u)) {
-      if (!inRound(x.ts)) continue;
-      const i = rows.indexOf(x.row);
-      const base = ccFullDurationSeconds(x.row.spellId) ?? 8;
-      let next: any;
-      for (let j = i + 1; j < rows.length; j++)
-        if (rows[j].spellId === x.row.spellId && rows[j].srcUnitId === x.src) {
-          next = rows[j];
-          break;
-        }
-      const closed =
-        next &&
-        (ev(next) !== APPLIED || tsOf(next) - x.ts <= base * 1000 + 500);
-      if (closed) continue;
-      bump("ccEndUndiminished:unclosed");
-      const sec = Math.floor((x.ts - start) / 1000);
-      const names = aliasesOf(x.row.spellId, x.row.spellName);
-      const srcU = byId.get(x.src);
-      const srcOwner = srcU?.ownerId ? byId.get(srcU.ownerId) : undefined;
-      const srcPids = new Set(
-        [srcU, srcOwner]
-          .filter(Boolean)
-          .map((s: any) => pidOf.get(s.name))
-          .filter(Boolean) as string[],
-      );
-      const hit = ccLines.find(
-        ({ m }) =>
-          m![2] === pid &&
-          names.has(m![3]!) &&
-          Math.abs(secOf(m![1]!) - sec) <= 1 &&
-          srcPids.has(firstPid(m![4]) ?? ""),
-      );
-      if (!hit) {
-        bump("ccEndUndiminished:noLine");
-        continue;
+  let cacheKey = "";
+  let cacheItems: GladMatch[] = [];
+  let contexts = 0;
+  for (const f of files) {
+    const text = readFileSync(join(dir, f.shard, "context", f.name), "utf8");
+    const [archive, ownerName] = text.split("\n", 2);
+    if (!archive || !ownerName) continue;
+    const key = `${f.shard}:${archive}`;
+    if (key !== cacheKey) {
+      try {
+        cacheItems = parseFile(
+          archive.startsWith("/") ? archive : resolve(ARCHIVE_DIR, archive),
+        );
+      } catch {
+        cacheItems = [];
       }
-      const rest = hit.m![5] ?? "";
-      if (rest.includes("still on them when the round ended")) {
-        bump("ccEndUndiminished:roundEndedNoLength");
-        continue;
-      }
-      const lm = /^ (?:\((\d+)s\)|\| (\d+)s\b)/.exec(rest);
-      if (!lm) {
-        bump("ccEndUndiminished:noLength");
-        continue;
-      }
-      const L = Number(lm[1] ?? lm[2]);
-      const prior = drPrior(u, x.cat, x.ts, x.src);
-      bump("ccEndUndiminished");
-      if (prior.length === 0) continue;
-      endCands.push({
+      cacheKey = key;
+    }
+    const item = cacheItems[f.round - 1];
+    if (!item) {
+      unmapped.push(`${f.shard}/${f.name} (${archive})`);
+      continue;
+    }
+    const rawLines: string[] = ((item as any).rawLines ?? []) as string[];
+    let legacy: ReturnType<typeof toLegacyMatch>;
+    try {
+      legacy = toLegacyMatch({ ...item, rawLines: [] } as GladMatch);
+    } catch {
+      unmapped.push(`${f.shard}/${f.name} (toLegacyMatch threw)`);
+      continue;
+    }
+    contexts++;
+    const lines = text.split("\n");
+    const units = Object.values(legacy.units ?? {}) as any[];
+    const byName = new Map(units.map((u) => [u.name, u]));
+    const byId = new Map(units.map((u) => [u.id as string, u]));
+    const pidName = new Map<string, string>();
+    for (const l of lines) {
+      const u = /<unit id="(\d+)" name="([^"]+)"/.exec(l);
+      if (u) pidName.set(u[1]!, u[2]!);
+    }
+    const pidOf = new Map<string, string>();
+    for (const [pid, name] of pidName) pidOf.set(name, pid);
+    const unitOfPid = (pid: string | undefined): any =>
+      pid ? byName.get(pidName.get(pid) ?? "") : undefined;
+    const owner = byName.get(ownerName);
+    if (!owner) continue;
+    const start: number = legacy.startTime;
+    const end: number = legacy.endTime;
+    const inRound = (ms: number) => ms >= start && ms <= end;
+    const where = `${f.shard}/${f.name}`;
+    const roundKey = `${archive}#${f.round}`;
+    const players = units.filter((u) => u.type === 1 || u.info);
+    const playerIds = new Set(players.map((u) => u.id as string));
+    const rawOf = (row: any): string => {
+      const li = liOf(row);
+      return li >= 0 && rawLines[li] !== undefined
+        ? `#${li} ${rawLines[li]!.slice(0, 260)}`
+        : `#? ${ev(row)} @${tsOf(row)}`;
+    };
+    /** the unit's own id plus the ids of the units it owns (pets, totems) */
+    const familyOf = (u: any): Set<string> =>
+      new Set([
+        u.id as string,
+        ...units.filter((x) => x.ownerId === u.id).map((x) => x.id as string),
+      ]);
+    const auraIn = (u: any): any[] =>
+      ((u.auraEvents ?? []) as any[]).filter((a) => a.destUnitId === u.id);
+    const successes = (u: any): any[] =>
+      ((u.spellCastEvents ?? []) as any[]).filter((c) => ev(c) === SUCCESS);
+    const violate = (
+      check: Check,
+      kind: string,
+      atMs: number,
+      factId: string,
+      detail: string,
+      extra: { line?: string; raw?: string[] } = {},
+    ) =>
+      violations.push({
+        check,
+        kind,
         where,
         archive,
         round: f.round,
-        startMs: start,
-        ts: x.ts,
-        auraId: x.row.spellId,
-        unitName: u.name,
-        prior: prior.length,
-        L,
-        line: hit.l.slice(0, 220),
-        raw: [rawOf(x.row), ...prior.map((p) => rawOf(p.row))],
+        atMs,
+        offMs: atMs - start,
+        fact: `${roundKey}#${check}#${kind}#${factId}`,
+        detail,
+        ...extra,
       });
-    }
-  }
-
-  // ── 3. defenselessSaveUp ──
-  const spans = new Map<
-    string,
-    { a: number; b: number; name: string; l: string }
-  >();
-  for (const l of lines) {
-    const kw = /\[KILL WINDOW\] \S+ on [^(]+\(([^)]+)\)/.exec(l);
-    const kd = kw ? /defenseless (\d+:\d\d)–(\d+:\d\d)/.exec(l) : null;
-    const vu =
-      /\[VULNERABLE\] (\d+:\d\d)–(\d+:\d\d)(?: \(\d+s\))? on [^(]+\(([^)]+)\)/.exec(
-        l,
-      );
-    const s = kd
-      ? { a: secOf(kd[1]!), b: secOf(kd[2]!), name: kw![1]!, l }
-      : vu
-        ? { a: secOf(vu[1]!), b: secOf(vu[2]!), name: vu[3]!, l }
-        : undefined;
-    if (!s) continue;
-    const k = `${s.name}|${s.a}|${s.b}|${kd ? "KW" : "VU"}`;
-    if (!spans.has(k)) spans.set(k, s);
-  }
-  for (const [k, s] of spans) {
-    const T = byName.get(s.name);
-    if (!T) continue;
-    bump("defenselessSaveUp");
-    const tag = k.endsWith("KW") ? "KILL WINDOW" : "VULNERABLE";
-    const hits: Record<string, string[]> = {};
-    const raws: Record<string, string[]> = {};
-    const firstMs: Record<string, number> = {};
-    const add = (kind: string, s0: number, what: string, row: any) => {
-      (hits[kind] ??= []).push(`${fmtS(s0)} ${what}`);
-      const r = (raws[kind] ??= []);
-      if (r.length < 4) r.push(rawOf(row));
-      firstMs[kind] ??= tsOf(row);
+    const linesAt = (sec: number) => {
+      const p = `${fmtS(sec)}  `;
+      return lines.filter((l) => l.startsWith(p));
     };
-    const immPred = (a: any) =>
-      IMMUNE_SAVE_IDS.has(a.spellId) &&
-      !(a.spellId === OBSIDIAN_SCALES && a.srcUnitId !== T.id);
-    const capS = (id: string) => (officialS(id) ?? 10) + 1;
-    const miPred = (a: any) =>
-      nameOf(a.spellId, a.spellName) === "Mass Invisibility" &&
-      a.srcUnitId !== T.id;
-    for (let s0 = s.a + 1; s0 <= s.b - 1; s0++) {
-      const from = start + s0 * 1000;
-      const to = from + 1000;
-      if (!inRound(from)) continue;
-      const imm = upWhole(T, immPred, from, to, capS);
-      if (imm[0])
-        add(
-          "immunity",
-          s0,
-          `${nameOf(imm[0].spellId, imm[0].spellName)} ${imm[0].spellId}${imm[0].srcUnitId === T.id ? "" : ` (from ${byId.get(imm[0].srcUnitId)?.name ?? "?"})`}`,
-          imm[0],
-        );
-      const abs = ((T.absorbsIn ?? []) as any[]).filter(
-        (a) =>
-          a.srcUnitId === T.id &&
-          a.destUnitId === T.id &&
-          tsOf(a) >= from &&
-          tsOf(a) < to &&
-          Math.abs(a.absorbedAmount) > 0 &&
-          !ALTER_TIME.has(String(a.spellId)) &&
-          String(a.spellId) !== OBSIDIAN_SCALES,
-      );
-      // E6: a shield it APPLIED = one it pressed (an own cast of the shield,
-      // by id / cast ↔ effect / name, in the 60 s before the absorb row) — a
-      // talent's passive absorb (Danger Sense, First In Last Out, Don't Look
-      // Back, Saved by the Light …) is no "shield it applied on itself"
-      const pressed = (a: any) => {
-        const sid = String(a.spellId);
-        const nm = nameOf(sid, a.spellName);
-        return successes(T).some(
-          (cc) =>
-            tsOf(cc) <= tsOf(a) &&
-            tsOf(cc) >= tsOf(a) - 60_000 &&
-            (cc.spellId === sid ||
-              castsOfEffectAura(sid).includes(cc.spellId) ||
-              nameOf(cc.spellId, cc.spellName) === nm),
-        );
-      };
-      // the ruling names them: an own PW:S / Void Shield counts pressed or
-      // not (a Holy Priest's proc PW:S 1246768 has no cast row)
-      const ab = abs.find(
-        (a) =>
-          RULED_OWN_SHIELDS.has(nameOf(String(a.spellId), a.spellName)) ||
-          pressed(a),
-      );
-      const abP = ab ? undefined : abs[0];
-      if (ab) {
-        const nm = nameOf(String(ab.spellId), ab.spellName);
-        pressedAbsorbNames.set(nm, (pressedAbsorbNames.get(nm) ?? 0) + 1);
-      }
-      if (ab)
-        add(
-          "ownAbsorb",
-          s0,
-          `${nameOf(String(ab.spellId), ab.spellName)} ${ab.spellId} ate ${Math.abs(ab.absorbedAmount)}`,
-          ab,
-        );
-      if (abP) {
-        const nm = nameOf(String(abP.spellId), abP.spellName);
-        passiveAbsorbNames.set(nm, (passiveAbsorbNames.get(nm) ?? 0) + 1);
-        add(
-          "ownAbsorb:passive",
-          s0,
-          `${nm} ${abP.spellId} ate ${Math.abs(abP.absorbedAmount)}`,
-          abP,
-        );
-      }
-      const mi = upWhole(T, miPred, from, to, capS);
-      if (mi[0])
-        add(
-          "massInvis",
-          s0,
-          `Mass Invisibility from ${byId.get(mi[0].srcUnitId)?.name ?? "?"}`,
-          mi[0],
-        );
-    }
-    for (const [kind, hs] of Object.entries(hits)) {
-      const first = hs[0]!.split(" ").slice(1).join(" ");
-      violate(
-        "defenselessSaveUp",
-        kind,
-        firstMs[kind] ?? start + s.a * 1000,
-        `${s.name}|${s.a}|${s.b}|${tag}`,
-        `[${tag}] ${fmtS(s.a)}–${fmtS(s.b)} on ${s.name}: ${hs.length} interior second(s) with ${kind} — first ${hs[0]!.split(" ")[0]} ${first}${hs.length > 1 ? `; last ${hs.at(-1)}` : ""}`,
-        { line: s.l.trim().slice(0, 240), raw: raws[kind] },
-      );
-    }
-  }
+    /** the auras up on `u` at the instant (`upAtRows`) */
+    const upAt = (
+      u: any,
+      pred: (a: any) => boolean,
+      ts: number,
+      li: number,
+      opts?: IUpOpts,
+    ): any[] => upAtRows(auraIn(u), pred, ts, li, opts);
+    /** up at any instant of [from, to) (`upDuringRows`) */
+    const upDuring = (
+      u: any,
+      pred: (a: any) => boolean,
+      from: number,
+      to: number,
+      opts?: IUpOpts,
+    ): any[] => upDuringRows(auraIn(u), pred, from, to, opts);
 
-  // ── 4. petInterrupt ──
-  const kickLines = lines.filter((l) => /^\d+:\d\d {2}\[KICK\] /.test(l));
-  for (const u of units) {
-    const kicks = ((u.actionOut ?? []) as any[]).filter(
-      (a) => ev(a) === INTERRUPT && inRound(tsOf(a)),
-    );
-    if (kicks.length === 0) continue;
-    const isPlayer = playerIds.has(u.id);
-    const ownerU = isPlayer ? undefined : byId.get(u.ownerId);
-    if (!isPlayer && !(ownerU && playerIds.has(ownerU.id))) continue;
-    const creditPid = pidOf.get((isPlayer ? u : ownerU).name);
-    if (!creditPid) continue;
-    for (const k of kicks) {
-      const V = byId.get(k.destUnitId);
-      const vPid = V && playerIds.has(V.id) ? pidOf.get(V.name) : undefined;
-      if (!vPid) continue;
-      const ts = tsOf(k);
-      const sec = Math.floor((ts - start) / 1000);
-      const spell = nameOf(k.extraSpellId, k.extraSpellName);
-      const at = kickLines.filter((l) => {
-        const s = secOf(/^(\d+:\d\d)/.exec(l)![1]!);
-        return Math.abs(s - sec) <= 1;
-      });
-      const naming = at.filter(
-        (l) =>
-          l.includes(`interrupted ${vPid}(`) && l.includes(`'s ${spell} (`),
+    /** up over the whole of [from, to): up at its first and its last ms (the
+     * same id / source) — a span bound is floored, so an aura that ends a few
+     * ms into the span's first interior second is the bound, not a save */
+    const upWhole = (
+      u: any,
+      pred: (a: any) => boolean,
+      from: number,
+      to: number,
+      capS?: (id: string) => number | undefined,
+    ): any[] => {
+      const end = new Set(
+        upAt(u, pred, to - 1, -1, { capS }).map(
+          (a) => `${a.spellId}|${a.srcUnitId}`,
+        ),
       );
-      const credit = isPlayer
-        ? new RegExp(`\\[KICK\\] {3}${creditPid}\\([^)]*\\) interrupted`)
-        : new RegExp(`\\[KICK\\] {3}${creditPid}\\([^)]*\\)'s pet interrupted`);
-      const ok = naming.some((l) => credit.test(l));
-      if (isPlayer) {
-        playerKick.n++;
-        if (ok) playerKick.lined++;
+      return upAt(u, pred, from, -1, { capS }).filter((a) =>
+        end.has(`${a.spellId}|${a.srcUnitId}`),
+      );
+    };
+
+    // ── DR from the log ──
+    const appsCache = new Map<string, IControlApp[]>();
+    /** the SUCCESS rows of a unit and of its owner (a pet's control) */
+    const castsOfSrc = (srcId: string): any[] => {
+      const s = byId.get(srcId);
+      const o = s?.ownerId ? byId.get(s.ownerId) : undefined;
+      return [s, o].flatMap((x) => (x ? successes(x) : []));
+    };
+    /** the unit's control applications (`controlApplications`) */
+    const ccApps = (u: any): IControlApp[] => {
+      let apps = appsCache.get(u.id);
+      if (!apps) {
+        apps = controlApplications(auraIn(u), u.id, castsOfSrc);
+        appsCache.set(u.id, apps);
+      }
+      return apps;
+    };
+    /** the DR chain on `u` before `ts` (`drChain`) */
+    const drPrior = (
+      u: any,
+      cat: string,
+      ts: number,
+      src?: string,
+    ): IControlApp[] => drChain(ccApps(u), cat, ts, src);
+    /** the DR families a control row can count in: its own id's, its effect
+     * auras' (Holy Word: Chastise 88625 → a stun or an incapacitate) */
+    const drPriorAny = (u: any, id: string, ts: number): any[] => {
+      const cats = new Set<string>(
+        [id, ...effectAurasOfCast(id)]
+          .map((x) => drCatOf(x))
+          .filter((x): x is string => !!x),
+      );
+      return (
+        [...cats]
+          .map((c) => drPrior(u, c, ts))
+          .sort((a, b) => b.length - a.length)[0] ?? []
+      );
+    };
+
+    // ── round-level measurements ──
+    if (!measuredRounds.has(roundKey)) {
+      measuredRounds.add(roundKey);
+      for (const u of players) {
+        const rows = auraIn(u);
+        for (const x of ccApps(u)) {
+          if (!inRound(x.ts)) continue;
+          const k = drPrior(u, x.cat, x.ts, x.src).length;
+          landedByPrior[Math.min(2, k)]!++;
+          if (x.refresh) {
+            bump("dr:castBackedRefreshApps");
+            keepExample("castBackedRefresh", {
+              where,
+              offMs: x.ts - start,
+              unit: u.name,
+              prior: k,
+              raw: rawOf(x.row),
+            });
+          }
+          // clean Full-DR run lengths (check 2's base)
+          if (k === 0) {
+            const i = rows.indexOf(x.row);
+            for (let j = i + 1; j < rows.length; j++) {
+              const b = rows[j];
+              if (b.spellId !== x.row.spellId || b.srcUnitId !== x.src)
+                continue;
+              if (ev(b) === REMOVED && inRound(tsOf(b))) {
+                const l = fullRunsById.get(x.row.spellId) ?? [];
+                l.push((tsOf(b) - x.ts) / 1000);
+                fullRunsById.set(x.row.spellId, l);
+              }
+              break;
+            }
+          }
+          // check 6's baseline: the auras up on a player a control LANDED on
+          if (isControl(x.row.spellId)) {
+            const ids = new Set(
+              upAt(u, () => true, x.ts, liOf(x.row), CAPPED_UNCLOSED).map(
+                (a) => a.spellId,
+              ),
+            );
+            for (const id of ids) {
+              const t = fwdAura.get(id) ?? { immune: 0, landed: 0 };
+              t.landed++;
+              fwdAura.set(id, t);
+            }
+          }
+        }
+      }
+    }
+
+    // ── 6. immunityTableForward ──
+    const roundFirst = !fwdSeen.has(roundKey);
+    if (roundFirst) fwdSeen.add(roundKey);
+    for (const u of players) {
+      const pid = pidOf.get(u.name);
+      for (const m of (u.missesIn ?? []) as any[]) {
+        if (m.missType !== "IMMUNE" || ev(m) !== MISSED) continue;
+        if (!isControl(m.spellId) || !inRound(tsOf(m))) continue;
+        if (m.srcUnitId === u.id) continue;
+        if (roundFirst) fwdImmuneRows++;
+        const ts = tsOf(m);
+        const li = liOf(m);
+        const upAll = upAt(u, () => true, ts, li, CAPPED_UNCLOSED);
+        if (roundFirst && !upAll.some((a) => AVOID_TABLE_IDS.has(a.spellId))) {
+          const was = upAt(u, (a) => AVOID_TABLE_IDS.has(a.spellId), ts, li);
+          if (was.length > 0) {
+            bump("immunityTableForward:capDroppedTableAura");
+            keepExample("capDroppedTableAura", {
+              where,
+              offMs: ts - start,
+              unit: u.name,
+              miss: rawOf(m),
+              aura: rawOf(was[0]),
+            });
+          }
+        }
+        if (upAll.some((a) => AVOID_TABLE_IDS.has(a.spellId))) {
+          if (roundFirst) fwdTableExplained++;
+          continue;
+        }
+        if (drPriorAny(u, m.spellId, ts).length >= 2) {
+          if (roundFirst) fwdDrExplained++;
+          continue;
+        }
+        const ccName = nameOf(m.spellId, m.spellName);
+        if (roundFirst) {
+          fwdCases++;
+          fwdBySpell.set(ccName, (fwdBySpell.get(ccName) ?? 0) + 1);
+          for (const id of new Set(upAll.map((a) => a.spellId))) {
+            const t = fwdAura.get(id) ?? { immune: 0, landed: 0 };
+            t.immune++;
+            fwdAura.set(id, t);
+          }
+        }
+        // the prompt's line for it
+        if (!pid) continue;
+        bump("immunityTableForward");
+        const sec = Math.floor((ts - start) / 1000);
+        const names = aliasesOf(m.spellId, m.spellName);
+        const names2 = [...names];
+        const near = [sec - 1, sec, sec + 1].flatMap((s) => linesAt(s));
+        const hasNear = near.some(
+          (l) => l.includes(`${pid}(`) && names2.some((n) => l.includes(n)),
+        );
+        const hasEarlier =
+          !hasNear &&
+          Array.from({ length: 21 }, (_, k) => sec - k)
+            .flatMap((s) => linesAt(s))
+            .some(
+              (l) =>
+                l.includes("IMMUNE") &&
+                l.includes(`${pid}(`) &&
+                names2.some((n) => l.includes(n)),
+            );
+        if (!hasNear && !hasEarlier) {
+          const src = byId.get(m.srcUnitId);
+          violate(
+            "immunityTableForward",
+            "noLine",
+            ts,
+            `${u.name}|${ccName}|${ts}`,
+            `${fmtS(sec)} ${pid}(${u.name}) ← ${ccName} ${m.spellId} (by ${src?.name ?? m.srcUnitName}) logged IMMUNE, no table aura up, not DR-immune; no line names it (auras up: ${[...new Set(upAll.map((a) => nameOf(a.spellId, a.spellName)))].slice(0, 12).join(", ")})`,
+            { raw: [rawOf(m)] },
+          );
+        }
+      }
+    }
+
+    // ── 1. immuneCause ──
+    interface ICause {
+      sec: number;
+      line: string;
+      family: string;
+      targetPid: string;
+      srcPid?: string;
+      spell: string;
+      outcome: "IMMUNE" | "MISS" | "REFLECT" | "didNotLand";
+      aura?: string;
+      auraSrcPid?: string;
+      /** `from <pid>'s guardian / pet / totem`: a unit that pid owns */
+      auraSrcSummon?: boolean;
+      auraOwn?: boolean;
+    }
+    const causes: ICause[] = [];
+    const firstPid = (s: string | undefined) =>
+      s ? /(\d+)\(/.exec(s)?.[1] : undefined;
+    const outcomeOf = (t: string): ICause["outcome"] =>
+      t === "IMMUNE" ? "IMMUNE" : t === "REFLECT" ? "REFLECT" : "MISS";
+    for (const l of lines) {
+      const av =
+        /^(\d+:\d\d) {2}\[CC AVOIDED\?\] {3}(\d+)\([^)]*\): (.+?) \(by (.+?)(?:; cast \d+:\d\d)?\) (?:logged (\w+)|did not land); (.+) \((own|from (.+))\) active$/.exec(
+          l,
+        );
+      if (av) {
+        causes.push({
+          sec: secOf(av[1]!),
+          line: l,
+          family: "[CC AVOIDED?]",
+          targetPid: av[2]!,
+          srcPid: firstPid(av[4]),
+          spell: av[3]!,
+          outcome: av[5] ? outcomeOf(av[5]) : "didNotLand",
+          aura: av[6]!,
+          auraOwn: av[7] === "own",
+          auraSrcPid: av[8] ? firstPid(av[8]) : undefined,
+          auraSrcSummon: !!av[8] && /\)'s (?:guardian|pet|totem)/.test(av[8]),
+        });
         continue;
       }
-      bump("petInterrupt");
-      if (ok) continue;
+      const nl =
+        /^(\d+:\d\d) {2}\[CC NOT LANDED\] {3}(\d+)\([^)]*\) ← (.+?) \(by (.+?)\) — logged (\w+) \((.+)\)$/.exec(
+          l,
+        );
+      if (nl) {
+        const c = nl[6]!;
+        if (c.startsWith("DR:")) continue;
+        const own = /^(\d+)\([^)]*\)'s (.+) was on the target$/.exec(c);
+        const up = /^(.+) was up$/.exec(c);
+        if (!own && !up) continue;
+        causes.push({
+          sec: secOf(nl[1]!),
+          line: l,
+          family: "[CC NOT LANDED]",
+          targetPid: nl[2]!,
+          srcPid: firstPid(nl[4]),
+          spell: nl[3]!,
+          outcome: outcomeOf(nl[5]!),
+          aura: own ? own[2]! : up![1]!,
+          auraSrcPid: own ? own[1] : undefined,
+        });
+        continue;
+      }
+      const yt = /^(\d+:\d\d) {2}\[(YOU|TEAM)\] \[(CC|CD)\] {3}(.*)$/.exec(l);
+      if (yt) {
+        const rest = yt[4]!;
+        let srcPid: string | undefined;
+        let spell: string | undefined;
+        if (yt[2] === "YOU") {
+          srcPid = pidOf.get(owner.name);
+          spell = /^(.+?)(?: →| \[| \(| \||$)/.exec(rest)?.[1];
+        } else if (yt[3] === "CC") {
+          const m = /^(\d+)\([^)]*\) \([^)]*\) cast (.+?)(?: →| \[|$)/.exec(
+            rest,
+          );
+          srcPid = m?.[1];
+          spell = m?.[2];
+        } else {
+          const m = /^(\d+)\([^)]*\) \([^)]*\): (.+?)(?: →| \[| \(|$)/.exec(
+            rest,
+          );
+          srcPid = m?.[1];
+          spell = m?.[2];
+        }
+        if (!spell) continue;
+        const arrows = /→ ((?:\d+\([^)]*\)(?:, )?)+)/.exec(rest);
+        const arrowPids = arrows
+          ? [...arrows[1]!.matchAll(/(\d+)\(/g)].map((x) => x[1]!)
+          : [];
+        for (const b of rest.matchAll(
+          /\[(IMMUNE|MISSED on (\d+)\([^)]*\)(?!'s)|REFLECTED by (\d+)\([^)]*\))(?:: ((?:\d+\([^)]*\)(?:, )?)+))? — ([^\]]+)\]/g,
+        )) {
+          const cause = b[5]!;
+          if (cause.startsWith("DR:")) continue;
+          const own = /^(\d+)\([^)]*\)'s (.+) was on the target$/.exec(cause);
+          const up = /^(.+) was up$/.exec(cause);
+          if (!own && !up) continue;
+          const outcome: ICause["outcome"] = b[1]!.startsWith("IMMUNE")
+            ? "IMMUNE"
+            : b[1]!.startsWith("MISSED")
+              ? "MISS"
+              : "REFLECT";
+          const targets = b[2]
+            ? [b[2]]
+            : b[3]
+              ? [b[3]]
+              : b[4]
+                ? [...b[4].matchAll(/(\d+)\(/g)].map((x) => x[1]!)
+                : arrowPids.length === 1
+                  ? arrowPids
+                  : [];
+          if (targets.length === 0) {
+            bump("immuneCause:bracketNoTarget");
+            continue;
+          }
+          for (const t of targets)
+            causes.push({
+              sec: secOf(yt[1]!),
+              line: l,
+              family: `[${yt[2]}] [${yt[3]}]`,
+              targetPid: t,
+              srcPid,
+              spell: spell.trim(),
+              outcome,
+              aura: own ? own[2]! : up![1]!,
+              auraSrcPid: own ? own[1] : undefined,
+            });
+        }
+      }
+    }
+    for (const c of causes) {
+      const T = unitOfPid(c.targetPid);
+      if (!T || !c.aura) continue;
+      const S = unitOfPid(c.srcPid);
+      const sFam = S ? familyOf(S) : undefined;
+      const lineMs = start + c.sec * 1000;
+      const atCast =
+        c.family.startsWith("[YOU]") || c.family.startsWith("[TEAM]");
+      const X = c.aura;
+      const auraSrcU = c.auraSrcPid ? unitOfPid(c.auraSrcPid) : undefined;
+      const auraFam =
+        c.auraSrcSummon && auraSrcU
+          ? new Set([...familyOf(auraSrcU)].filter((id) => id !== auraSrcU.id))
+          : undefined;
+      const auraSrcOk = (id: string) =>
+        auraFam ? auraFam.has(id) : id === auraSrc;
+      const auraSrc = c.auraOwn
+        ? T.id
+        : c.auraSrcPid
+          ? unitOfPid(c.auraSrcPid)?.id
+          : undefined;
+      const isX = (a: any) =>
+        nameOf(a.spellId, a.spellName) === X &&
+        (auraSrc === undefined || auraSrcOk(a.srcUnitId));
+      // the miss row it describes
+      let miss: any;
+      /** the ids of the miss rows the line's name can mean at the chosen
+       * row's ms from its source (Metamorphosis: 247121 and its stun 200166
+       * miss together) */
+      let missTwins: string[] = [];
+      if (c.outcome !== "didNotLand") {
+        const typeOk = (m: any) =>
+          c.outcome === "IMMUNE"
+            ? m.missType === "IMMUNE"
+            : c.outcome === "REFLECT"
+              ? m.missType === "REFLECT"
+              : m.missType !== "IMMUNE" && m.missType !== "REFLECT";
+        const lo = lineMs - 1000;
+        const hi = atCast ? lineMs + 20_000 : lineMs + 2000;
+        const cands = ((T.missesIn ?? []) as any[]).filter(
+          (m) =>
+            ev(m) === MISSED &&
+            typeOk(m) &&
+            tsOf(m) >= lo &&
+            tsOf(m) < hi &&
+            (!sFam || sFam.has(m.srcUnitId)),
+        );
+        const named = cands.filter((m) =>
+          aliasesOf(m.spellId, m.spellName).has(c.spell),
+        );
+        const pool = named.length > 0 ? named : cands.length === 1 ? cands : [];
+        const score = (m: any) => {
+          const d = tsOf(m) - lineMs;
+          return d >= 0 && d < 1000 ? d - 1e6 : Math.abs(d - 500);
+        };
+        miss = [...pool].sort((a, b) => score(a) - score(b))[0];
+        if (!miss) {
+          bump("immuneCause:noMissRow");
+          continue;
+        }
+        if (named.length === 0) bump("immuneCause:matchedByUniqueness");
+        missTwins = named
+          .filter(
+            (m) => tsOf(m) === tsOf(miss) && m.srcUnitId === miss.srcUnitId,
+          )
+          .map((m) => m.spellId as string);
+      }
+      bump("immuneCause");
+      const ts = miss ? tsOf(miss) : lineMs;
+      const factId = `${T.name}|${c.spell}|${miss ? ts : `s${c.sec}`}|${X}`;
+      const rawMiss = miss ? [rawOf(miss)] : [];
+      // X's ids: the auras of that name on the target, the repositioning
+      // casts of that name (a lookup: `REPOSITIONING_SPELL_IDS`) and their
+      // effect auras (Angel's Feather 121536 → Angelic Feather 121557)
+      const xCastIds = new Set<string>(REPOSITION_IDS_BY_NAME.get(X) ?? []);
+      const xEffectIds = new Set<string>(
+        [...xCastIds].flatMap((id) => [...effectAurasOfCast(id)]),
+      );
+      const isXAura = (a: any) =>
+        (isX(a) || xEffectIds.has(a.spellId)) &&
+        (auraSrc === undefined || auraSrcOk(a.srcUnitId));
+      const xRows = auraIn(T).filter(isXAura);
+      let xUp = miss
+        ? upAt(T, isXAura, ts, liOf(miss), CAPPED_UNCLOSED)
+        : upDuring(T, isXAura, lineMs - 1000, lineMs + 1000, CAPPED_UNCLOSED);
+      // E8: an avoidance consumed by the control is REMOVED in the ms of the
+      // control's CAST, and the miss row follows up to ~0.7 s later (29-5-197
+      // 1:08: Kidney Shot SUCCESS 24.460, Nullifying Shroud REMOVED 24.461,
+      // IMMUNE row 24.607) — X up at the source's last cast of the control
+      // (≤ 3 s before the row) counts
+      if (miss && xUp.length === 0 && sFam) {
+        const cast = [...sFam]
+          .flatMap((id) => successes(byId.get(id)))
+          .filter(
+            (cc) =>
+              tsOf(cc) <= ts &&
+              tsOf(cc) >= ts - 3000 &&
+              (cc.destUnitId === T.id ||
+                !cc.destUnitId ||
+                cc.destUnitId === "0000000000000000") &&
+              [...aliasesOf(cc.spellId, cc.spellName)].some((n) =>
+                aliasesOf(miss.spellId, miss.spellName).has(n),
+              ),
+          )
+          .sort((a, b) => tsOf(b) - tsOf(a))[0];
+        if (
+          cast &&
+          upAt(T, isXAura, tsOf(cast), liOf(cast), CAPPED_UNCLOSED).length > 0
+        ) {
+          xUp = [cast];
+          bump("immuneCause:upAtCast");
+        }
+      }
+      // E7: Grounding Totem is a summon, not an aura on its owner: "up" = the
+      // control's cast went into a Grounding Totem of the target's (± 1.5 s),
+      // or the target summoned one in the 3.5 s before (its life is 3 s)
+      if (X === "Grounding Totem" && xUp.length === 0) {
+        const totems = new Set(
+          units
+            .filter((u) => u.ownerId === T.id && u.name === "Grounding Totem")
+            .map((u) => u.id as string),
+        );
+        const redirected = sFam
+          ? [...sFam].some((id) =>
+              successes(byId.get(id)).some(
+                (cc) =>
+                  totems.has(cc.destUnitId) &&
+                  tsOf(cc) >= ts - 1500 &&
+                  tsOf(cc) <= ts + 1500,
+              ),
+            )
+          : false;
+        const summoned = successes(T).some(
+          (cc) =>
+            nameOf(cc.spellId, cc.spellName) === "Grounding Totem" &&
+            tsOf(cc) >= ts - 3500 &&
+            tsOf(cc) <= ts + 1000,
+        );
+        if (redirected || summoned) xUp = [{ grounding: true }];
+        if (redirected) bump("immuneCause:groundingRedirect");
+        else if (summoned) bump("immuneCause:groundingSummoned");
+      }
+      // E9: a repositioning the product credits by its PRESS (Roll, Transcendence:
+      // Transfer, Wind Rush Totem — no aura on the unit): a SUCCESS of it by
+      // the aura's owner in the 2 s before the instant (or inside its second)
+      if (xUp.length === 0 && xCastIds.size > 0) {
+        const who = auraSrc ? byId.get(auraSrc) : T;
+        const press = successes(who ?? T).find(
+          (cc) =>
+            (xCastIds.has(cc.spellId) ||
+              nameOf(cc.spellId, cc.spellName) === X) &&
+            tsOf(cc) >= (miss ? ts : lineMs) - 2000 &&
+            tsOf(cc) < (miss ? ts + 1 : lineMs + 1000),
+        );
+        if (press) {
+          xUp = [press];
+          bump("immuneCause:pressedReposition");
+        }
+      }
+      // (a) notUp
+      const notUp = xUp.length === 0;
+      if (notUp) {
+        const who = auraSrc ? byId.get(auraSrc) : T;
+        const xCasts = successes(who ?? T).filter(
+          (cc) =>
+            xCastIds.has(cc.spellId) || nameOf(cc.spellId, cc.spellName) === X,
+        );
+        const nearest = [...xRows, ...xCasts].sort(
+          (a, b) => Math.abs(tsOf(a) - ts) - Math.abs(tsOf(b) - ts),
+        )[0];
+        // E11: a `did not land` line of a ground / delayed control sits at its
+        // CAST second (no `; cast` tag), while the control resolves later
+        // (Sigil of Misery: 161-5-960 2:58, cast 29.482, Divine Steed 30.333,
+        // the sigil goes off ~2 s after its cast). X up after the line's
+        // second but inside the resolve window — the source's cast of it + 3 s
+        // — is `notUp:inResolveWindow`, out of the total: round 3 D52 (a
+        // feather 1.4 s after a Freezing Trap) has this shape and was ruled a
+        // defect, a Sigil / Capacitor Totem dodged on its delay is not; it
+        // needs a ruling per control, not a verdict from this check.
+        let inResolve = false;
+        if (!miss) {
+          const cast = sFam
+            ? [...sFam]
+                .flatMap((id) => successes(byId.get(id)))
+                .filter(
+                  (cc) =>
+                    tsOf(cc) >= lineMs - 3000 &&
+                    tsOf(cc) < lineMs + 1000 &&
+                    aliasesOf(cc.spellId, cc.spellName).has(c.spell),
+                )
+                .sort((a, b) => tsOf(b) - tsOf(a))[0]
+            : undefined;
+          const until = Math.max(
+            lineMs + 1000,
+            (cast ? tsOf(cast) : lineMs) + 3000,
+          );
+          inResolve =
+            upDuring(T, isXAura, lineMs + 1000, until, CAPPED_UNCLOSED).length >
+              0 ||
+            (xCastIds.size > 0 &&
+              successes(who ?? T).some(
+                (cc) =>
+                  (xCastIds.has(cc.spellId) ||
+                    nameOf(cc.spellId, cc.spellName) === X) &&
+                  tsOf(cc) >= lineMs + 1000 &&
+                  tsOf(cc) < until,
+              ));
+        }
+        violate(
+          "immuneCause",
+          inResolve
+            ? "notUp:inResolveWindow"
+            : !nearest && X !== "Grounding Totem"
+              ? "notUp:neverOnUnit"
+              : "notUp",
+          ts,
+          factId,
+          `${fmtS(c.sec)} ${c.targetPid}(${T.name}) ${c.spell} ${miss ? `${miss.missType} row ${miss.spellId}` : "did not land"}: "${X}" not up on the target at ${miss ? "the miss" : "that second"}${nearest ? ` (nearest ${X} row: ${ev(nearest)} ${((tsOf(nearest) - ts) / 1000).toFixed(2)}s from it)` : ""}`,
+          {
+            line: c.line.slice(0, 240),
+            raw: [...rawMiss, ...(nearest ? [rawOf(nearest)] : [])],
+          },
+        );
+      }
+      // (b) cannotCause
+      const cannot = miss
+        ? cannotCauseOf(
+            X,
+            c.outcome,
+            new Set<string>([
+              ...xRows.map((a) => a.spellId as string),
+              ...xCastIds,
+              ...xEffectIds,
+            ]),
+            miss.spellId,
+            miss.spellName,
+            missTwins,
+          )
+        : undefined;
+      if (cannot)
+        violate(
+          "immuneCause",
+          `cannotCause:${cannot}`,
+          ts,
+          factId,
+          `${fmtS(c.sec)} ${c.targetPid}(${T.name}) ${c.spell} ${miss.missType} row ${miss.spellId}: "${X}" cannot produce it (${cannot})`,
+          { line: c.line.slice(0, 240), raw: rawMiss },
+        );
+      // (c) drImmune
+      if (c.outcome === "IMMUNE" && miss) {
+        const prior = drPriorAny(T, miss.spellId, ts);
+        const cat = prior[0]?.cat as string | undefined;
+        if (cat && prior.length >= 2) {
+          if (!notUp && !cannot) bump("immuneCause:drImmune:auraAlsoExplains");
+          else
+            violate(
+              "immuneCause",
+              "drImmune",
+              ts,
+              factId,
+              `${fmtS(c.sec)} ${c.targetPid}(${T.name}) ${c.spell} IMMUNE at ${cat} DR immune (before it in 18 s: ${prior.map((x) => `${nameOf(x.row.spellId)} ${((x.ts - ts) / 1000).toFixed(1)}s`).join(", ")}), line names "${X}"`,
+              {
+                line: c.line.slice(0, 240),
+                raw: [...rawMiss, ...prior.map((x) => rawOf(x.row))],
+              },
+            );
+        }
+      }
+    }
+
+    // ── 2. ccEndUndiminished ──
+    const ccLines = lines
+      .map((l) => ({
+        l,
+        m: /^(\d+:\d\d) {2}\[CC ON (?:TEAM|ENEMY)\] {3}(\d+)\([^)]*\) ← (.+?) \(by (.+?)\)( .*)?$/.exec(
+          l,
+        ),
+      }))
+      .filter((x) => !!x.m);
+    for (const u of players) {
+      const pid = pidOf.get(u.name);
+      if (!pid) continue;
+      const rows = auraIn(u);
+      for (const x of ccApps(u)) {
+        if (!inRound(x.ts)) continue;
+        if (!isUnclosedApp(rows, x)) continue;
+        bump("ccEndUndiminished:unclosed");
+        const sec = Math.floor((x.ts - start) / 1000);
+        const names = aliasesOf(x.row.spellId, x.row.spellName);
+        const srcU = byId.get(x.src);
+        const srcOwner = srcU?.ownerId ? byId.get(srcU.ownerId) : undefined;
+        const srcPids = new Set(
+          [srcU, srcOwner]
+            .filter(Boolean)
+            .map((s: any) => pidOf.get(s.name))
+            .filter(Boolean) as string[],
+        );
+        const hit = ccLines.find(
+          ({ m }) =>
+            m![2] === pid &&
+            names.has(m![3]!) &&
+            Math.abs(secOf(m![1]!) - sec) <= 1 &&
+            srcPids.has(firstPid(m![4]) ?? ""),
+        );
+        if (!hit) {
+          bump("ccEndUndiminished:noLine");
+          continue;
+        }
+        const rest = hit.m![5] ?? "";
+        if (rest.includes("still on them when the round ended")) {
+          bump("ccEndUndiminished:roundEndedNoLength");
+          continue;
+        }
+        const lm = /^ (?:\((\d+)s\)|\| (\d+)s\b)/.exec(rest);
+        if (!lm) {
+          bump("ccEndUndiminished:noLength");
+          continue;
+        }
+        const L = Number(lm[1] ?? lm[2]);
+        const prior = drPrior(u, x.cat, x.ts, x.src);
+        bump("ccEndUndiminished");
+        if (prior.length === 0) continue;
+        endCands.push({
+          where,
+          archive,
+          round: f.round,
+          startMs: start,
+          ts: x.ts,
+          auraId: x.row.spellId,
+          unitName: u.name,
+          prior: prior.length,
+          L,
+          line: hit.l.slice(0, 220),
+          raw: [rawOf(x.row), ...prior.map((p) => rawOf(p.row))],
+        });
+      }
+    }
+
+    // ── 3. defenselessSaveUp ──
+    const spans = new Map<
+      string,
+      { a: number; b: number; name: string; l: string }
+    >();
+    for (const l of lines) {
+      const kw = /\[KILL WINDOW\] \S+ on [^(]+\(([^)]+)\)/.exec(l);
+      const kd = kw ? /defenseless (\d+:\d\d)–(\d+:\d\d)/.exec(l) : null;
+      const vu =
+        /\[VULNERABLE\] (\d+:\d\d)–(\d+:\d\d)(?: \(\d+s\))? on [^(]+\(([^)]+)\)/.exec(
+          l,
+        );
+      const s = kd
+        ? { a: secOf(kd[1]!), b: secOf(kd[2]!), name: kw![1]!, l }
+        : vu
+          ? { a: secOf(vu[1]!), b: secOf(vu[2]!), name: vu[3]!, l }
+          : undefined;
+      if (!s) continue;
+      const k = `${s.name}|${s.a}|${s.b}|${kd ? "KW" : "VU"}`;
+      if (!spans.has(k)) spans.set(k, s);
+    }
+    for (const [k, s] of spans) {
+      const T = byName.get(s.name);
+      if (!T) continue;
+      bump("defenselessSaveUp");
+      const tag = k.endsWith("KW") ? "KILL WINDOW" : "VULNERABLE";
+      const hits: Record<string, string[]> = {};
+      const raws: Record<string, string[]> = {};
+      const firstMs: Record<string, number> = {};
+      const add = (kind: string, s0: number, what: string, row: any) => {
+        (hits[kind] ??= []).push(`${fmtS(s0)} ${what}`);
+        const r = (raws[kind] ??= []);
+        if (r.length < 4) r.push(rawOf(row));
+        firstMs[kind] ??= tsOf(row);
+      };
+      const immPred = (a: any) =>
+        IMMUNE_SAVE_IDS.has(a.spellId) &&
+        !(a.spellId === OBSIDIAN_SCALES && a.srcUnitId !== T.id);
+      const capS = (id: string) => (officialS(id) ?? 10) + 1;
+      const miPred = (a: any) =>
+        nameOf(a.spellId, a.spellName) === "Mass Invisibility" &&
+        a.srcUnitId !== T.id;
+      for (let s0 = s.a + 1; s0 <= s.b - 1; s0++) {
+        const from = start + s0 * 1000;
+        const to = from + 1000;
+        if (!inRound(from)) continue;
+        const imm = upWhole(T, immPred, from, to, capS);
+        if (imm[0])
+          add(
+            "immunity",
+            s0,
+            `${nameOf(imm[0].spellId, imm[0].spellName)} ${imm[0].spellId}${imm[0].srcUnitId === T.id ? "" : ` (from ${byId.get(imm[0].srcUnitId)?.name ?? "?"})`}`,
+            imm[0],
+          );
+        const abs = ((T.absorbsIn ?? []) as any[]).filter(
+          (a) =>
+            a.srcUnitId === T.id &&
+            a.destUnitId === T.id &&
+            tsOf(a) >= from &&
+            tsOf(a) < to &&
+            Math.abs(a.absorbedAmount) > 0 &&
+            !ALTER_TIME.has(String(a.spellId)) &&
+            String(a.spellId) !== OBSIDIAN_SCALES,
+        );
+        // E6: a shield it APPLIED = one it pressed (an own cast of the shield,
+        // by id / cast ↔ effect / name, in the 60 s before the absorb row) — a
+        // talent's passive absorb (Danger Sense, First In Last Out, Don't Look
+        // Back, Saved by the Light …) is no "shield it applied on itself"
+        const pressed = (a: any) => {
+          const sid = String(a.spellId);
+          const nm = nameOf(sid, a.spellName);
+          return successes(T).some(
+            (cc) =>
+              tsOf(cc) <= tsOf(a) &&
+              tsOf(cc) >= tsOf(a) - 60_000 &&
+              (cc.spellId === sid ||
+                castsOfEffectAura(sid).includes(cc.spellId) ||
+                nameOf(cc.spellId, cc.spellName) === nm),
+          );
+        };
+        // the ruling names them: an own PW:S / Void Shield counts pressed or
+        // not (a Holy Priest's proc PW:S 1246768 has no cast row)
+        const ab = abs.find(
+          (a) =>
+            RULED_OWN_SHIELDS.has(nameOf(String(a.spellId), a.spellName)) ||
+            pressed(a),
+        );
+        const abP = ab ? undefined : abs[0];
+        if (ab) {
+          const nm = nameOf(String(ab.spellId), ab.spellName);
+          pressedAbsorbNames.set(nm, (pressedAbsorbNames.get(nm) ?? 0) + 1);
+        }
+        if (ab)
+          add(
+            "ownAbsorb",
+            s0,
+            `${nameOf(String(ab.spellId), ab.spellName)} ${ab.spellId} ate ${Math.abs(ab.absorbedAmount)}`,
+            ab,
+          );
+        if (abP) {
+          const nm = nameOf(String(abP.spellId), abP.spellName);
+          passiveAbsorbNames.set(nm, (passiveAbsorbNames.get(nm) ?? 0) + 1);
+          add(
+            "ownAbsorb:passive",
+            s0,
+            `${nm} ${abP.spellId} ate ${Math.abs(abP.absorbedAmount)}`,
+            abP,
+          );
+        }
+        const mi = upWhole(T, miPred, from, to, capS);
+        if (mi[0])
+          add(
+            "massInvis",
+            s0,
+            `Mass Invisibility from ${byId.get(mi[0].srcUnitId)?.name ?? "?"}`,
+            mi[0],
+          );
+      }
+      for (const [kind, hs] of Object.entries(hits)) {
+        const first = hs[0]!.split(" ").slice(1).join(" ");
+        violate(
+          "defenselessSaveUp",
+          kind,
+          firstMs[kind] ?? start + s.a * 1000,
+          `${s.name}|${s.a}|${s.b}|${tag}`,
+          `[${tag}] ${fmtS(s.a)}–${fmtS(s.b)} on ${s.name}: ${hs.length} interior second(s) with ${kind} — first ${hs[0]!.split(" ")[0]} ${first}${hs.length > 1 ? `; last ${hs.at(-1)}` : ""}`,
+          { line: s.l.trim().slice(0, 240), raw: raws[kind] },
+        );
+      }
+    }
+
+    // ── 4. petInterrupt ──
+    const kickLines = lines.filter((l) => /^\d+:\d\d {2}\[KICK\] /.test(l));
+    for (const u of units) {
+      const kicks = ((u.actionOut ?? []) as any[]).filter(
+        (a) => ev(a) === INTERRUPT && inRound(tsOf(a)),
+      );
+      if (kicks.length === 0) continue;
+      const isPlayer = playerIds.has(u.id);
+      const ownerU = isPlayer ? undefined : byId.get(u.ownerId);
+      if (!isPlayer && !(ownerU && playerIds.has(ownerU.id))) continue;
+      const creditPid = pidOf.get((isPlayer ? u : ownerU).name);
+      if (!creditPid) continue;
+      for (const k of kicks) {
+        const V = byId.get(k.destUnitId);
+        const vPid = V && playerIds.has(V.id) ? pidOf.get(V.name) : undefined;
+        if (!vPid) continue;
+        const ts = tsOf(k);
+        const sec = Math.floor((ts - start) / 1000);
+        const spell = nameOf(k.extraSpellId, k.extraSpellName);
+        const at = kickLines.filter((l) => {
+          const s = secOf(/^(\d+:\d\d)/.exec(l)![1]!);
+          return Math.abs(s - sec) <= 1;
+        });
+        const naming = at.filter(
+          (l) =>
+            l.includes(`interrupted ${vPid}(`) && l.includes(`'s ${spell} (`),
+        );
+        const credit = isPlayer
+          ? new RegExp(`\\[KICK\\] {3}${creditPid}\\([^)]*\\) interrupted`)
+          : new RegExp(
+              `\\[KICK\\] {3}${creditPid}\\([^)]*\\)'s pet interrupted`,
+            );
+        const ok = naming.some((l) => credit.test(l));
+        if (isPlayer) {
+          playerKick.n++;
+          if (ok) playerKick.lined++;
+          continue;
+        }
+        bump("petInterrupt");
+        if (ok) continue;
+        violate(
+          "petInterrupt",
+          naming.length === 0 ? "noLine" : "notCredited",
+          ts,
+          `${u.name}|${V.name}|${spell}|${ts}`,
+          `${fmtS(sec)} ${u.name} (${nameOf(k.spellId, k.spellName)} ${k.spellId}, pet of ${creditPid}(${ownerU.name})) interrupted ${vPid}(${V.name})'s ${spell}${naming.length ? `; the line credits: ${naming[0]!.slice(0, 140)}` : "; no [KICK] line names it"}`,
+          { raw: [rawOf(k)], line: naming[0]?.slice(0, 200) },
+        );
+      }
+    }
+
+    // ── 5. duplicateLine ──
+    const famRe =
+      /^(\d+:\d\d) {2}(\[CC AVOIDED\?\]|\[ENEMY DEF\]|\[ENEMY UTILITY\]|\[ENEMY CD\]|\[TEAM\] \[CD\]|\[YOU\] \[CD\]) {3}(.*)$/;
+    const groups = new Map<string, Array<{ tag: string; l: string }>>();
+    for (const l of lines) {
+      const m = famRe.exec(l);
+      if (!m) continue;
+      const [, t, tag, rest] = m as unknown as [string, string, string, string];
+      let pid: string | undefined;
+      let name: string | undefined;
+      let dest = "";
+      let src = "";
+      if (tag === "[YOU] [CD]") {
+        pid = pidOf.get(owner.name);
+        name = /^(.+?)(?: →| \(| \[| \||$)/.exec(rest)?.[1];
+        dest = /^.+? → (\d+)\(/.exec(rest)?.[1] ?? "";
+      } else if (tag === "[CC AVOIDED?]") {
+        const mm =
+          /^(\d+)\([^)]*\): (.+?) \(by (.+?)(?:; cast \d+:\d\d)?\)/.exec(rest);
+        pid = mm?.[1];
+        name = mm?.[2];
+        src = firstPid(mm?.[3]) ?? "";
+      } else {
+        const mm = /^(\d+)\([^)]*\) \([^)]*\): (.+?)(?: →| \(| \[|$)/.exec(
+          rest,
+        );
+        pid = mm?.[1];
+        name = mm?.[2];
+        dest = /^\d+\([^)]*\) \([^)]*\): .+? → (\d+)\(/.exec(rest)?.[1] ?? "";
+      }
+      if (!pid || !name) continue;
+      const famKey = tag.startsWith("[ENEMY") ? "[ENEMY *]" : tag;
+      const gk = `${t}|${famKey}|${pid}|${name.trim()}|${dest}|${src}`;
+      const g = groups.get(gk) ?? [];
+      g.push({ tag, l });
+      groups.set(gk, g);
+    }
+    for (const [gk, g] of groups) {
+      if (g.length < 2) continue;
+      const [t, famKey, pid, name, dest, src] = gk.split("|") as [
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+      ];
+      const U = unitOfPid(pid);
+      if (!U) continue;
+      bump("duplicateLine");
+      const sec = secOf(t);
+      const from = start + sec * 1000;
+      const has = (id: string, fb: string) => aliasesOf(id, fb).has(name);
+      let single: boolean;
+      let what: string;
+      let raws: any[];
+      if (famKey === "[CC AVOIDED?]") {
+        const S = unitOfPid(src);
+        const sFam = S ? familyOf(S) : undefined;
+        const misses = ((U.missesIn ?? []) as any[]).filter(
+          (m) =>
+            tsOf(m) >= from &&
+            tsOf(m) < from + 1000 &&
+            has(m.spellId, m.spellName) &&
+            (!sFam || sFam.has(m.srcUnitId)),
+        );
+        const casts = S
+          ? [...sFam!]
+              .flatMap((id) => successes(byId.get(id)))
+              .filter(
+                (c) =>
+                  tsOf(c) >= from - 3000 &&
+                  tsOf(c) < from + 1000 &&
+                  has(c.spellId, c.spellName),
+              )
+          : [];
+        single = misses.length <= 1 && casts.length <= 1;
+        what = `${misses.length} miss row(s), ${casts.length} cast(s)`;
+        raws = [...misses, ...casts];
+      } else {
+        const D = dest ? unitOfPid(dest) : U;
+        const casts = successes(U).filter(
+          (c) =>
+            tsOf(c) >= from &&
+            tsOf(c) < from + 1000 &&
+            has(c.spellId, c.spellName),
+        );
+        const applied = D
+          ? auraIn(D).filter(
+              (a) =>
+                ev(a) === APPLIED &&
+                a.srcUnitId === U.id &&
+                tsOf(a) >= from &&
+                tsOf(a) < from + 1000 &&
+                has(a.spellId, a.spellName),
+            )
+          : [];
+        single = casts.length <= 1 && applied.length <= 1;
+        what = `${casts.length} cast(s), ${applied.length} APPLIED`;
+        raws = [...casts, ...applied];
+      }
+      if (!single) {
+        bump("duplicateLine:logHasTwo");
+        continue;
+      }
+      const tags = new Set(g.map((x) => x.tag));
       violate(
-        "petInterrupt",
-        naming.length === 0 ? "noLine" : "notCredited",
-        ts,
-        `${u.name}|${V.name}|${spell}|${ts}`,
-        `${fmtS(sec)} ${u.name} (${nameOf(k.spellId, k.spellName)} ${k.spellId}, pet of ${creditPid}(${ownerU.name})) interrupted ${vPid}(${V.name})'s ${spell}${naming.length ? `; the line credits: ${naming[0]!.slice(0, 140)}` : "; no [KICK] line names it"}`,
-        { raw: [rawOf(k)], line: naming[0]?.slice(0, 200) },
+        "duplicateLine",
+        tags.size > 1
+          ? `crossTag:${[...tags].sort().join("+")}`
+          : `sameTag:${famKey}`,
+        raws[0] ? tsOf(raws[0]) : from,
+        `${U.name}|${famKey}|${name}|${dest}|${sec}`,
+        `${t} ${pid}(${U.name}) ${name}${dest ? ` → ${dest}` : ""}: ${g.length} lines, the log has ${what}`,
+        {
+          line: g.map((x) => x.l.slice(0, 160)).join(" ‖ "),
+          raw: raws.slice(0, 3).map(rawOf),
+        },
       );
     }
   }
 
-  // ── 5. duplicateLine ──
-  const famRe =
-    /^(\d+:\d\d) {2}(\[CC AVOIDED\?\]|\[ENEMY DEF\]|\[ENEMY UTILITY\]|\[ENEMY CD\]|\[TEAM\] \[CD\]|\[YOU\] \[CD\]) {3}(.*)$/;
-  const groups = new Map<string, Array<{ tag: string; l: string }>>();
-  for (const l of lines) {
-    const m = famRe.exec(l);
-    if (!m) continue;
-    const [, t, tag, rest] = m as unknown as [string, string, string, string];
-    let pid: string | undefined;
-    let name: string | undefined;
-    let dest = "";
-    let src = "";
-    if (tag === "[YOU] [CD]") {
-      pid = pidOf.get(owner.name);
-      name = /^(.+?)(?: →| \(| \[| \||$)/.exec(rest)?.[1];
-      dest = /^.+? → (\d+)\(/.exec(rest)?.[1] ?? "";
-    } else if (tag === "[CC AVOIDED?]") {
-      const mm = /^(\d+)\([^)]*\): (.+?) \(by (.+?)(?:; cast \d+:\d\d)?\)/.exec(
-        rest,
-      );
-      pid = mm?.[1];
-      name = mm?.[2];
-      src = firstPid(mm?.[3]) ?? "";
-    } else {
-      const mm = /^(\d+)\([^)]*\) \([^)]*\): (.+?)(?: →| \(| \[|$)/.exec(rest);
-      pid = mm?.[1];
-      name = mm?.[2];
-      dest = /^\d+\([^)]*\) \([^)]*\): .+? → (\d+)\(/.exec(rest)?.[1] ?? "";
-    }
-    if (!pid || !name) continue;
-    const famKey = tag.startsWith("[ENEMY") ? "[ENEMY *]" : tag;
-    const gk = `${t}|${famKey}|${pid}|${name.trim()}|${dest}|${src}`;
-    const g = groups.get(gk) ?? [];
-    g.push({ tag, l });
-    groups.set(gk, g);
-  }
-  for (const [gk, g] of groups) {
-    if (g.length < 2) continue;
-    const [t, famKey, pid, name, dest, src] = gk.split("|") as [
-      string,
-      string,
-      string,
-      string,
-      string,
-      string,
-    ];
-    const U = unitOfPid(pid);
-    if (!U) continue;
-    bump("duplicateLine");
-    const sec = secOf(t);
-    const from = start + sec * 1000;
-    const has = (id: string, fb: string) => aliasesOf(id, fb).has(name);
-    let single: boolean;
-    let what: string;
-    let raws: any[];
-    if (famKey === "[CC AVOIDED?]") {
-      const S = unitOfPid(src);
-      const sFam = S ? familyOf(S) : undefined;
-      const misses = ((U.missesIn ?? []) as any[]).filter(
-        (m) =>
-          tsOf(m) >= from &&
-          tsOf(m) < from + 1000 &&
-          has(m.spellId, m.spellName) &&
-          (!sFam || sFam.has(m.srcUnitId)),
-      );
-      const casts = S
-        ? [...sFam!]
-            .flatMap((id) => successes(byId.get(id)))
-            .filter(
-              (c) =>
-                tsOf(c) >= from - 3000 &&
-                tsOf(c) < from + 1000 &&
-                has(c.spellId, c.spellName),
-            )
-        : [];
-      single = misses.length <= 1 && casts.length <= 1;
-      what = `${misses.length} miss row(s), ${casts.length} cast(s)`;
-      raws = [...misses, ...casts];
-    } else {
-      const D = dest ? unitOfPid(dest) : U;
-      const casts = successes(U).filter(
-        (c) =>
-          tsOf(c) >= from &&
-          tsOf(c) < from + 1000 &&
-          has(c.spellId, c.spellName),
-      );
-      const applied = D
-        ? auraIn(D).filter(
-            (a) =>
-              ev(a) === APPLIED &&
-              a.srcUnitId === U.id &&
-              tsOf(a) >= from &&
-              tsOf(a) < from + 1000 &&
-              has(a.spellId, a.spellName),
-          )
-        : [];
-      single = casts.length <= 1 && applied.length <= 1;
-      what = `${casts.length} cast(s), ${applied.length} APPLIED`;
-      raws = [...casts, ...applied];
-    }
-    if (!single) {
-      bump("duplicateLine:logHasTwo");
+  // ── corpus-wide resolution ──
+  // 2. the printed length of an unclosed control at a diminished step
+  const p90 = (xs: number[]) => {
+    const s = [...xs].sort((a, b) => a - b);
+    return s[Math.min(s.length - 1, Math.floor(0.9 * s.length))]!;
+  };
+  for (const c of endCands) {
+    const off = ccFullDurationSeconds(c.auraId) ?? officialS(c.auraId);
+    const runs = fullRunsById.get(c.auraId) ?? [];
+    const base = Math.max(off ?? 0, runs.length >= 5 ? p90(runs) : 0);
+    if (!base) {
+      bump("ccEndUndiminished:noBase");
       continue;
     }
-    const tags = new Set(g.map((x) => x.tag));
-    violate(
-      "duplicateLine",
-      tags.size > 1
-        ? `crossTag:${[...tags].sort().join("+")}`
-        : `sameTag:${famKey}`,
-      raws[0] ? tsOf(raws[0]) : from,
-      `${U.name}|${famKey}|${name}|${dest}|${sec}`,
-      `${t} ${pid}(${U.name}) ${name}${dest ? ` → ${dest}` : ""}: ${g.length} lines, the log has ${what}`,
-      {
-        line: g.map((x) => x.l.slice(0, 160)).join(" ‖ "),
-        raw: raws.slice(0, 3).map(rawOf),
-      },
-    );
-  }
-}
-
-// ── corpus-wide resolution ──
-// 2. the printed length of an unclosed control at a diminished step
-const p90 = (xs: number[]) => {
-  const s = [...xs].sort((a, b) => a - b);
-  return s[Math.min(s.length - 1, Math.floor(0.9 * s.length))]!;
-};
-for (const c of endCands) {
-  const off = ccFullDurationSeconds(c.auraId) ?? officialS(c.auraId);
-  const runs = fullRunsById.get(c.auraId) ?? [];
-  const base = Math.max(off ?? 0, runs.length >= 5 ? p90(runs) : 0);
-  if (!base) {
-    bump("ccEndUndiminished:noBase");
-    continue;
-  }
-  const factor = c.prior >= 2 ? 0.25 : 0.5;
-  bump("ccEndUndiminished:diminishedJudged");
-  ccEndJudged.push({
-    where: c.where,
-    offMs: c.ts - c.startMs,
-    aura: `${nameOf(c.auraId)} ${c.auraId}`,
-    prior: c.prior,
-    L: c.L,
-    bound: base * factor + 0.5,
-    line: c.line,
-  });
-  if (c.L > base * factor + 0.5)
-    violations.push({
-      check: "ccEndUndiminished",
-      kind: c.prior >= 2 ? "third" : "second",
+    const factor = c.prior >= 2 ? 0.25 : 0.5;
+    bump("ccEndUndiminished:diminishedJudged");
+    ccEndJudged.push({
       where: c.where,
-      archive: c.archive,
-      round: c.round,
-      atMs: c.ts,
       offMs: c.ts - c.startMs,
-      fact: `${c.archive}#${c.round}#ccEndUndiminished#${c.unitName}|${c.auraId}|${c.ts}`,
-      detail: `${nameOf(c.auraId)} ${c.auraId} on ${c.unitName}, never closed, application ${c.prior + 1} of its family in 18 s: printed ${c.L}s > ${base.toFixed(1)}s × ${factor} + 0.5 (official ${off ?? "?"}s, Full-DR p90 ${runs.length >= 5 ? p90(runs).toFixed(1) : "n<5"})`,
+      aura: `${nameOf(c.auraId)} ${c.auraId}`,
+      prior: c.prior,
+      L: c.L,
+      bound: diminishedBoundS(base, c.prior),
       line: c.line,
-      raw: c.raw,
     });
-}
+    if (c.L > diminishedBoundS(base, c.prior))
+      violations.push({
+        check: "ccEndUndiminished",
+        kind: c.prior >= 2 ? "third" : "second",
+        where: c.where,
+        archive: c.archive,
+        round: c.round,
+        atMs: c.ts,
+        offMs: c.ts - c.startMs,
+        fact: `${c.archive}#${c.round}#ccEndUndiminished#${c.unitName}|${c.auraId}|${c.ts}`,
+        detail: `${nameOf(c.auraId)} ${c.auraId} on ${c.unitName}, never closed, application ${c.prior + 1} of its family in 18 s: printed ${c.L}s > ${base.toFixed(1)}s × ${factor} + 0.5 (official ${off ?? "?"}s, Full-DR p90 ${runs.length >= 5 ? p90(runs).toFixed(1) : "n<5"})`,
+        line: c.line,
+        raw: c.raw,
+      });
+  }
 
-// ── report ──
-const out: string[] = [];
-const say = (s: string) => {
-  out.push(s);
-  console.log(s);
-};
-say(`capture: ${resolve(dir)}`);
-say(`contexts: ${contexts}  rounds measured: ${measuredRounds.size}`);
-say(
-  `DR reading (18 s, from the log) on LANDED controls: prior 0 → ${landedByPrior[0]}, 1 → ${landedByPrior[1]}, ≥ 2 → ${landedByPrior[2]} (a landed 3rd is impossible in 12.x: ${((landedByPrior[2]! / Math.max(1, landedByPrior[0]! + landedByPrior[1]! + landedByPrior[2]!)) * 100).toFixed(2)} % is the reading's over-count)`,
-);
-for (const c of CHECKS) {
-  const all = violations.filter((v) => v.check === c);
-  const vs = all.filter((v) => !OUT_OF_TOTAL.has(`${c}|${v.kind}`));
-  const distinct = new Set(vs.map((v) => v.fact));
-  const factLines = new Set(
-    vs.map((v) => v.fact.replace(/#[^#]*#([^#]*)$/, "#$1")),
+  // ── report ──
+  const out: string[] = [];
+  const say = (s: string) => {
+    out.push(s);
+    console.log(s);
+  };
+  say(`capture: ${resolve(dir)}`);
+  say(`contexts: ${contexts}  rounds measured: ${measuredRounds.size}`);
+  say(
+    `DR reading (18 s, from the log) on LANDED controls: prior 0 → ${landedByPrior[0]}, 1 → ${landedByPrior[1]}, ≥ 2 → ${landedByPrior[2]} (a landed 3rd is impossible in 12.x: ${((landedByPrior[2]! / Math.max(1, landedByPrior[0]! + landedByPrior[1]! + landedByPrior[2]!)) * 100).toFixed(2)} % is the reading's over-count)`,
+  );
+  for (const c of CHECKS) {
+    const all = violations.filter((v) => v.check === c);
+    const vs = all.filter((v) => !OUT_OF_TOTAL.has(`${c}|${v.kind}`));
+    const distinct = new Set(vs.map((v) => v.fact));
+    const factLines = new Set(
+      vs.map((v) => v.fact.replace(/#[^#]*#([^#]*)$/, "#$1")),
+    );
+    say(
+      `${c}: checked ${checked.get(c) ?? 0} / violations ${vs.length} (distinct facts ${distinct.size}, distinct by fact ignoring kind ${factLines.size})`,
+    );
+    const kinds = [...new Set(all.map((v) => v.kind))].sort();
+    for (const k of kinds) {
+      const ks = all.filter((v) => v.kind === k);
+      const kd = new Set(ks.map((v) => v.fact)).size;
+      say(
+        `  ${k}: ${ks.length} (distinct ${kd})${OUT_OF_TOTAL.has(`${c}|${k}`) ? "  [not in the total]" : ""}`,
+      );
+      for (const v of ks.slice(0, EXAMPLES))
+        say(`    ${v.where} r${v.round} +${v.offMs}ms ${v.detail}`);
+    }
+  }
+  for (const [k, n] of [...checked].sort())
+    if (k.includes(":")) say(`(${k}: ${n})`);
+  say(
+    `defenselessSaveUp counted own absorbs (span-seconds, by shield): ${[
+      ...pressedAbsorbNames,
+    ]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 15)
+      .map(([n, k]) => `${n} ${k}`)
+      .join(", ")}`,
   );
   say(
-    `${c}: checked ${checked.get(c) ?? 0} / violations ${vs.length} (distinct facts ${distinct.size}, distinct by fact ignoring kind ${factLines.size})`,
+    `defenselessSaveUp E6 passive own absorbs (span-seconds, by shield): ${[
+      ...passiveAbsorbNames,
+    ]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 15)
+      .map(([n, k]) => `${n} ${k}`)
+      .join(", ")}`,
   );
-  const kinds = [...new Set(all.map((v) => v.kind))].sort();
-  for (const k of kinds) {
-    const ks = all.filter((v) => v.kind === k);
-    const kd = new Set(ks.map((v) => v.fact)).size;
+  say(
+    `petInterrupt control — players' own kicks with a crediting [KICK] line: ${playerKick.lined}/${playerKick.n}`,
+  );
+
+  say("");
+  say(
+    `immunityTableForward measurement — IMMUNE rows of a control on a player (per round): ${fwdImmuneRows}; a table aura up ${fwdTableExplained}; DR-immune by the log ${fwdDrExplained}; unexplained ${fwdCases}`,
+  );
+  say(
+    `  unexplained by control: ${[...fwdBySpell]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 15)
+      .map(([n, k]) => `${n} ${k}`)
+      .join(", ")}`,
+  );
+  say(
+    "  auras up on the target in the unexplained cases (n ≥ 3, top 30 by n; landed = controls that LANDED on a player under it; rate = n / (n + landed)):",
+  );
+  const fwdRows = [...fwdAura]
+    .filter(([, t]) => t.immune >= 3)
+    .map(([id, t]) => ({
+      id,
+      name: nameOf(id),
+      n: t.immune,
+      landed: t.landed,
+      rate: t.immune / (t.immune + t.landed),
+      share: t.immune / Math.max(1, fwdCases),
+    }))
+    .sort((a, b) => b.n - a.n)
+    .slice(0, 30);
+  for (const r of fwdRows)
     say(
-      `  ${k}: ${ks.length} (distinct ${kd})${OUT_OF_TOTAL.has(`${c}|${k}`) ? "  [not in the total]" : ""}`,
+      `    ${r.id.padStart(7)} ${r.name.padEnd(30)} n ${String(r.n).padStart(4)} (${(r.share * 100).toFixed(0).padStart(3)}% of cases)  landed ${String(r.landed).padStart(5)}  rate ${(r.rate * 100).toFixed(1)}%`,
     );
-    for (const v of ks.slice(0, EXAMPLES))
-      say(`    ${v.where} r${v.round} +${v.offMs}ms ${v.detail}`);
+  const fwdByRate = [...fwdAura]
+    .filter(([, t]) => t.immune >= 3)
+    .map(([id, t]) => ({
+      id,
+      name: nameOf(id),
+      n: t.immune,
+      landed: t.landed,
+      rate: t.immune / (t.immune + t.landed),
+    }))
+    .sort((a, b) => b.rate - a.rate)
+    .slice(0, 30);
+  say("  the same, n ≥ 3, top 30 by rate:");
+  for (const r of fwdByRate)
+    say(
+      `    ${r.id.padStart(7)} ${r.name.padEnd(30)} n ${String(r.n).padStart(4)}  landed ${String(r.landed).padStart(5)}  rate ${(r.rate * 100).toFixed(1)}%`,
+    );
+
+  if (JSON_OUT) {
+    writeFileSync(
+      JSON_OUT,
+      JSON.stringify(
+        {
+          capture: resolve(dir),
+          contexts,
+          checked: Object.fromEntries(checked),
+          landedByPrior,
+          playerKick,
+          ccEndJudged,
+          fixExamples,
+          immunityTableForward: {
+            immuneRows: fwdImmuneRows,
+            tableExplained: fwdTableExplained,
+            drExplained: fwdDrExplained,
+            unexplained: fwdCases,
+            byN: fwdRows,
+            byRate: fwdByRate,
+          },
+          violations,
+        },
+        null,
+        1,
+      ),
+    );
+    say(`wrote ${JSON_OUT}`);
+  }
+  if (unmapped.length > 0) {
+    console.error(`UNMAPPED contexts: ${unmapped.length}`);
+    for (const u of unmapped.slice(0, 10)) console.error(`    ${u}`);
+    process.exit(1);
   }
 }
-for (const [k, n] of [...checked].sort())
-  if (k.includes(":")) say(`(${k}: ${n})`);
-say(
-  `defenselessSaveUp counted own absorbs (span-seconds, by shield): ${[...pressedAbsorbNames].sort((a, b) => b[1] - a[1]).slice(0, 15).map(([n, k]) => `${n} ${k}`).join(", ")}`,
-);
-say(
-  `defenselessSaveUp E6 passive own absorbs (span-seconds, by shield): ${[...passiveAbsorbNames].sort((a, b) => b[1] - a[1]).slice(0, 15).map(([n, k]) => `${n} ${k}`).join(", ")}`,
-);
-say(
-  `petInterrupt control — players' own kicks with a crediting [KICK] line: ${playerKick.lined}/${playerKick.n}`,
-);
 
-say("");
-say(
-  `immunityTableForward measurement — IMMUNE rows of a control on a player (per round): ${fwdImmuneRows}; a table aura up ${fwdTableExplained}; DR-immune by the log ${fwdDrExplained}; unexplained ${fwdCases}`,
-);
-say(
-  `  unexplained by control: ${[...fwdBySpell]
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 15)
-    .map(([n, k]) => `${n} ${k}`)
-    .join(", ")}`,
-);
-say(
-  "  auras up on the target in the unexplained cases (n ≥ 3, top 30 by n; landed = controls that LANDED on a player under it; rate = n / (n + landed)):",
-);
-const fwdRows = [...fwdAura]
-  .filter(([, t]) => t.immune >= 3)
-  .map(([id, t]) => ({
-    id,
-    name: nameOf(id),
-    n: t.immune,
-    landed: t.landed,
-    rate: t.immune / (t.immune + t.landed),
-    share: t.immune / Math.max(1, fwdCases),
-  }))
-  .sort((a, b) => b.n - a.n)
-  .slice(0, 30);
-for (const r of fwdRows)
-  say(
-    `    ${r.id.padStart(7)} ${r.name.padEnd(30)} n ${String(r.n).padStart(4)} (${(r.share * 100).toFixed(0).padStart(3)}% of cases)  landed ${String(r.landed).padStart(5)}  rate ${(r.rate * 100).toFixed(1)}%`,
-  );
-const fwdByRate = [...fwdAura]
-  .filter(([, t]) => t.immune >= 3)
-  .map(([id, t]) => ({
-    id,
-    name: nameOf(id),
-    n: t.immune,
-    landed: t.landed,
-    rate: t.immune / (t.immune + t.landed),
-  }))
-  .sort((a, b) => b.rate - a.rate)
-  .slice(0, 30);
-say("  the same, n ≥ 3, top 30 by rate:");
-for (const r of fwdByRate)
-  say(
-    `    ${r.id.padStart(7)} ${r.name.padEnd(30)} n ${String(r.n).padStart(4)}  landed ${String(r.landed).padStart(5)}  rate ${(r.rate * 100).toFixed(1)}%`,
-  );
-
-if (JSON_OUT) {
-  writeFileSync(
-    JSON_OUT,
-    JSON.stringify(
-      {
-        capture: resolve(dir),
-        contexts,
-        checked: Object.fromEntries(checked),
-        landedByPrior,
-        playerKick,
-        ccEndJudged,
-        immunityTableForward: {
-          immuneRows: fwdImmuneRows,
-          tableExplained: fwdTableExplained,
-          drExplained: fwdDrExplained,
-          unexplained: fwdCases,
-          byN: fwdRows,
-          byRate: fwdByRate,
-        },
-        violations,
-      },
-      null,
-      1,
-    ),
-  );
-  say(`wrote ${JSON_OUT}`);
-}
-if (unmapped.length > 0) {
-  console.error(`UNMAPPED contexts: ${unmapped.length}`);
-  for (const u of unmapped.slice(0, 10)) console.error(`    ${u}`);
-  process.exit(1);
-}
+if (process.argv[1]?.includes("corpusFactScan2")) await main();
