@@ -195,15 +195,7 @@ export async function collect(limit: number): Promise<{
       // Which cast made production say "switched"? Production's own rule,
       // production's own mask function — re-asked here only to NAME the cast,
       // never to re-decide the label.
-      const lockedMask = spellSchoolMask(inst.interruptedSpellId);
-      const trigger = casts.find(
-        (c) =>
-          c.t > inst.atSeconds &&
-          c.t <= inst.atSeconds + WINDOW_S &&
-          lockedMask !== undefined &&
-          spellSchoolMask(c.spellId) !== undefined &&
-          !schoolLockedBy(spellSchoolMask(c.spellId)!, lockedMask),
-      );
+      const trigger = switchTrigger(casts, inst);
       if (!trigger) { row.unknown++; continue; }
       if (!haveStarts) { row.unknown++; continue; }
       const isHard = starts.some(
@@ -242,6 +234,34 @@ export async function collect(limit: number): Promise<{
 
 /** 真实 prompt 前后对照:菜单行原文由 production 的 buildFindingsPrompt 产出,
  * 本脚本只按候选 id 把它抓出来 —— 绝不自己拼菜单字符串。 */
+/**
+ * The switching cast to NAME for a "switched" instance: the one production
+ * named (`switchSpellName`) first — it already folds a companion SUCCESS row
+ * into the hard cast it belongs to (an Evoker's Living Flame row 2 ms before
+ * its Chrono Flames SUCCESS; codex 61-POSTHOC-12b #2: the first off-school
+ * row alone read hard=0 / instant=1). The mask search only when production
+ * named none.
+ */
+function switchTrigger<T extends { t: number; spellId: string; spellName: string }>(
+  casts: readonly T[],
+  inst: { atSeconds: number; interruptedSpellId: string; switchSpellName: string | null },
+): T | undefined {
+  const lockedMask = spellSchoolMask(inst.interruptedSpellId);
+  const inWin = (c: T) => c.t > inst.atSeconds && c.t <= inst.atSeconds + WINDOW_S;
+  return (
+    (inst.switchSpellName !== null
+      ? casts.find((c) => inWin(c) && c.spellName === inst.switchSpellName)
+      : undefined) ??
+    casts.find(
+      (c) =>
+        inWin(c) &&
+        lockedMask !== undefined &&
+        spellSchoolMask(c.spellId) !== undefined &&
+        !schoolLockedBy(spellSchoolMask(c.spellId)!, lockedMask),
+    )
+  );
+}
+
 async function examples(limit: number, want: number): Promise<void> {
   await ensureAnalysisData();
   const rows = pickRows(loadIndex(DEFAULT_MATCH_DIR), { minDurationS: 60 }).slice(
@@ -299,15 +319,7 @@ async function examples(limit: number, want: number): Promise<void> {
         (i) => Math.abs(i.atSeconds - k.t) < 1.5 && i.postKick === "switched",
       );
       if (!inst) continue;
-      const lockedMask = spellSchoolMask(inst.interruptedSpellId);
-      const trigger = casts.find(
-        (c) =>
-          c.t > inst.atSeconds &&
-          c.t <= inst.atSeconds + WINDOW_S &&
-          lockedMask !== undefined &&
-          spellSchoolMask(c.spellId) !== undefined &&
-          !schoolLockedBy(spellSchoolMask(c.spellId)!, lockedMask),
-      );
+      const trigger = switchTrigger(casts, inst);
       if (!trigger) continue;
       const isHard = starts.some(
         (st) =>
