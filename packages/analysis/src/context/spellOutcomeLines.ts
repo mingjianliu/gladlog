@@ -11,7 +11,6 @@ import { ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
 import { abilityProfile } from "../data/abilityProfile";
 import { BACKLASH_AURA_CC_TYPE } from "../data/backlashCc";
-import { BREAK_RACIAL_SPELL_IDS } from "../data/racialAbilities";
 import { ROOT_SPELL_IDS } from "../data/rootSpells";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import { getSortedAdvancedActions } from "../utils/advancedActions";
@@ -26,8 +25,8 @@ import {
 import { ccRecastSplitsResend } from "../utils/drAnalysis";
 import { groundingRedirects } from "../utils/groundingRedirects";
 import { isDeferralAbsorb } from "../utils/incomingPressure";
-import { pvpTrinketUses } from "../utils/pvpTrinketUses";
 import type { CastFailedEvent } from "../utils/rawStreams";
+import { sanctuaryRemovalPairs } from "../utils/sanctuaryRemovals";
 import {
   CONTROL_REJECT_WHY,
   controlRejectKindOf,
@@ -422,9 +421,7 @@ export function reflectedSpells(
 
 // ── Blessing of Sanctuary ────────────────────────────────────────────────────
 
-export const BLESSING_OF_SANCTUARY_ID = "210256";
-/** Same-instant pairing, the TRINKET_BREAK_AFTER_REMOVAL_MS scale. */
-const SANCTUARY_PAIR_MS = 50;
+export { BLESSING_OF_SANCTUARY_ID } from "../utils/sanctuaryRemovals";
 
 export interface ICcRemovedBySanctuary {
   atSeconds: number;
@@ -511,58 +508,25 @@ function heldAndLeft(
   };
 }
 
-/** A control that left its target within 50 ms AFTER Blessing of Sanctuary
- *  landed on it (0035285c: Kidney Shot removed at the Sanctuary's ms), with
- *  no competing cause: a removal before the landing, or at an instant the
- *  target itself pressed a PvP trinket / break racial, is not the
- *  Sanctuary's (codex review of batch 13 — a trinket at 10.000 s credited to
- *  a Sanctuary at 10.030 s). */
+/** The controls Blessing of Sanctuary removed (`sanctuaryRemovalPairs`, the
+ *  one pairing KILL ATTEMPTS reads too — fact4 D11 / D40), with what the
+ *  control had run and had left. */
 export function sanctuaryRemovals(
   units: readonly ICombatUnit[],
   matchStartMs: number,
 ): ICcRemovedBySanctuary[] {
-  const byId = new Map(units.map((u) => [u.id, u]));
-  const out: ICcRemovedBySanctuary[] = [];
-  for (const pal of units) {
-    for (const c of pal.spellCastEvents ?? []) {
-      if (c.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
-      if (c.spellId !== BLESSING_OF_SANCTUARY_ID) continue;
-      const target = byId.get(c.destUnitId ?? "");
-      if (!target) continue;
-      const t = c.logLine.timestamp;
-      for (const a of target.auraEvents ?? []) {
-        if (a.logLine.event !== LogEvent.SPELL_AURA_REMOVED) continue;
-        if (!a.spellId || !isControlSpell(a.spellId)) continue;
-        const rm = a.logLine.timestamp;
-        if (rm < t || rm - t > SANCTUARY_PAIR_MS) continue;
-        const selfBreak =
-          pvpTrinketUses(target).some(
-            (u) => Math.abs(u.atMs - rm) <= SANCTUARY_PAIR_MS,
-          ) ||
-          (target.spellCastEvents ?? []).some(
-            (s) =>
-              s.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
-              !!s.spellId &&
-              BREAK_RACIAL_SPELL_IDS.has(s.spellId) &&
-              Math.abs(s.logLine.timestamp - rm) <= SANCTUARY_PAIR_MS,
-          );
-        if (selfBreak) continue;
-        out.push({
-          atSeconds: (t - matchStartMs) / 1000,
-          paladinId: pal.id,
-          paladinName: pal.name,
-          targetId: target.id,
-          targetName: target.name,
-          ccSpellId: a.spellId,
-          ccSpellName: getEnglishSpellName(a.spellId, a.spellName),
-          ccSourceName: a.srcUnitName ?? "",
-          ...(a.srcUnitId ? { ccSourceId: a.srcUnitId } : {}),
-          ...heldAndLeft(target, a, units, matchStartMs),
-        });
-      }
-    }
-  }
-  return out.sort((a, b) => a.atSeconds - b.atSeconds);
+  return sanctuaryRemovalPairs(units).map(({ castMs, paladin, target, removed: a }) => ({
+    atSeconds: (castMs - matchStartMs) / 1000,
+    paladinId: paladin.id,
+    paladinName: paladin.name,
+    targetId: target.id,
+    targetName: target.name,
+    ccSpellId: a.spellId!,
+    ccSpellName: getEnglishSpellName(a.spellId!, a.spellName),
+    ccSourceName: a.srcUnitName ?? "",
+    ...(a.srcUnitId ? { ccSourceId: a.srcUnitId } : {}),
+    ...heldAndLeft(target, a, units, matchStartMs),
+  }));
 }
 
 // ── Owner's rejected presses outside CC ──────────────────────────────────────

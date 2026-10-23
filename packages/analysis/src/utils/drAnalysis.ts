@@ -264,6 +264,22 @@ export const AOE_CC_SPELL_IDS = new Set<string>([
  *    later; four raw logs read (4f36fe3a, 8af36676, 1b7f19cc, 2b380381), 12
  *    freezes on players between 0.10 and 9.40 s after the cast — none past
  *    the ring's 10 s. The window is the ring's life plus 0.5 s of log slack.
+ *  - Freezing Trap 187650 → 3355 and Binding Shot 109248 → 117526 (fact4
+ *    D29 / D4 / D5 / D63, 2026-10-22: a trap timed at its placement printed
+ *    "did not land; Bladestorm active" for the trap that caught the paladin
+ *    8.2 s later). DB2: the trap is a missile (effect 32 → 187651) whose
+ *    area trigger (effect 179) lasts 60 s (SpellDuration 3); Binding Shot's
+ *    area trigger (effect 179, 1524) lasts 10 s (SpellDuration 1) and stuns
+ *    a unit that leaves its tether. Corpus (605 new-season files, every 6th;
+ *    the hunter's first 3355 / 117526 APPLIED or miss row on a player before
+ *    his next cast, `runs/fact4-2026-10-22/fix/probes/trapDelay.py`): trap
+ *    n 7,716, p50 0.51 s, p99 23.2 s, 7,711 within 60.5 s; Binding Shot n
+ *    5,028, p50 0.98 s, p99 9.1 s, 5,011 within 10.5 s. The windows are the
+ *    area's life plus 0.5 s of log slack.
+ *  - Snowdrift 389794 (same date, fact4 D16): DB2 the press is a 6 s area
+ *    (SpellDuration 6000, aura 395) whose pulses slow (389823) and then stun
+ *    (389831) whoever stays in it; the pulse rows land 0–6 s after the press
+ *    (605 files every 6th, `snowdriftRows.py`). Window: the area plus 0.5 s.
  */
 /** Lay In Wait (PvP talent 1235091): +88 s on Sigil of Misery's arming
  * duration (DB2, the mask covers 207684) — see the OPEN note above. */
@@ -290,6 +306,9 @@ export const AOE_CC_LANDING_WINDOW_S: Readonly<
   "192058": { fromS: 1.5, toS: 4.5 },
   "207684": { fromS: 0.5, toS: 3 },
   "113724": { fromS: 0, toS: 10.5 },
+  "187650": { fromS: 0, toS: 60.5 },
+  "109248": { fromS: 0, toS: 10.5 },
+  "389794": { fromS: 0, toS: 6.5 },
 };
 
 /** What the owner's cast line says when one of these, cast un-aimed, put its

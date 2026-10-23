@@ -367,5 +367,16 @@
  *  crossing, 1.5–2 s free after it); cd-hoarded 28 points swapped under the
  *  cap by the enemy-burst ordering, net −1 (the new pick failed the intent
  *  guard after the cap).
+ *
+ * v443 (2026-10-22/23, fact4 F17 batch 2 — controls removed and delayed,
+ *  user approved 「批准」): an ally's Blessing of Sanctuary removes Fear /
+ *  Silence / Stun / Horror (DB2 aura-232 mechanics) — `[CC REMOVED]` names
+ *  silences, KILL ATTEMPTS reads `broke out (Blessing of Sanctuary)`;
+ *  Freezing Trap / Binding Shot / Snowdrift land over their area's life;
+ *  Snowdrift's pulse rows are no presses; one failed-control row is one
+ *  line; a pet's or guardian's control names the pet; a Command Demon press
+ *  and its pet's cast are one control / one kick. 605 files vs v442 (f1 →
+ *  f2c): healer slow-defensive-response −1 (a Snowdrift stun that landed on
+ *  the burst caster now answers it).
  */
-export const PROMPT_VERSION = 442;
+export const PROMPT_VERSION = 443;

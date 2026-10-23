@@ -72,6 +72,7 @@ import {
   isControlCast,
   missBelongsToCast,
 } from "./castMissRows";
+import { COPY_CAST_IDS } from "./castPress";
 import { AURA_BEFORE_CAST_ROW_MAX_MS, CAST_ROW_LAG_MAX_MS } from "./castRowLag";
 import { oppressingRoarOnAt, oppressingRoarOnAtMs } from "./ccBreakAnalysis";
 import {
@@ -111,6 +112,7 @@ import {
   hasLineOfSight,
   positionSampleSpanMs,
 } from "./losAnalysis";
+import { petCommands } from "./petCommands";
 import {
   CC_MAX_PLAUSIBLE_RANGE_YARDS,
   INTERP_MAX_GAP_MS,
@@ -4682,16 +4684,27 @@ export function analyzePlayerCCAndTrinket(
     castName: string,
   ): IMissEvent | undefined => {
     const family = castAndEffectIds(cast.spellId);
+    // the casts a later one of which takes the row: the caster's own casts
+    // of the control's family, not its own id only (fact4 D16, 353ad51a r3
+    // 0:55: the Snowdrift press 389794, and its effect casts 389823 /
+    // 390171 at 0:57, each claimed the one 0:57.578 IMMUNE row — three
+    // lines); a summon's casts by id, as before (a Capacitor Totem's own
+    // 118905 pulse is the press's hit, one avoidance stamped with the press
+    // — `takeGroundHit`)
+    const ownFamily = (e: ICombatUnit["spellCastEvents"][number]) =>
+      !!e.spellId &&
+      !COPY_CAST_IDS.has(e.spellId) &&
+      (family.has(e.spellId) || castAndEffectIds(e.spellId).has(cast.spellId));
     const sameSpellCastMs = [
-      ...enemy.spellCastEvents,
-      ...(enemy.petSpellCastEvents ?? []),
-    ]
-      .filter(
+      ...enemy.spellCastEvents.filter(
+        (e) => e.logLine.event === LogEvent.SPELL_CAST_SUCCESS && ownFamily(e),
+      ),
+      ...(enemy.petSpellCastEvents ?? []).filter(
         (e) =>
           e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
           e.spellId === cast.spellId,
-      )
-      .map((e) => e.logLine.timestamp);
+      ),
+    ].map((e) => e.logLine.timestamp);
     const afterMs = Math.max(
       CAST_MISS_WINDOW_MS,
       ccLandedMatchWindowMs(castName).afterMs,
@@ -4881,8 +4894,18 @@ export function analyzePlayerCCAndTrinket(
       enemyPets.some((p) => p.id === srcId && p.ownerId === enemy.id);
     for (const u of unitsById.values()) {
       if (u.id === player.id) continue;
-      for (const a of u.auraEvents ?? []) {
-        if (a.logLine.event !== LogEvent.SPELL_AURA_APPLIED) continue;
+      // an APPLIED, or a failed-control miss row — the control went off on
+      // that unit as the go-off reading (`firstGoOffMs`) has it (fact4 D66,
+      // ecfb3a7f 0:38: the one Freezing Trap logged IMMUNE on the Evoker and
+      // the sweep still built an avoidance for the paladin)
+      for (const a of [
+        ...(u.auraEvents ?? []).filter(
+          (x) => x.logLine.event === LogEvent.SPELL_AURA_APPLIED,
+        ),
+        ...(u.missesIn ?? []).filter((m) =>
+          CONTROL_FAILED_MISS_TYPES.has(m.missType),
+        ),
+      ]) {
         if (!a.spellId || !family.has(a.spellId)) continue;
         if (!fromCaster(a.srcUnitId)) continue;
         const d = a.timestamp - castMs;
@@ -4899,6 +4922,15 @@ export function analyzePlayerCCAndTrinket(
   // (0d08dd90 0:18: one MISS row printed two lines). The owner's press comes
   // first in the sweep, so the kept instance carries its cast second.
   const groundHitsTaken = new Set<string>();
+  /** a miss row is one control's: two casts of one family in one ms (the
+   * Snowdrift effect casts 389823 + 390171) claim it once (fact4 D16) */
+  const missRowsTaken = new Set<IMissEvent>();
+  const takeMissRow = (m: IMissEvent | undefined): boolean => {
+    if (!m) return true;
+    if (missRowsTaken.has(m)) return false;
+    missRowsTaken.add(m);
+    return true;
+  };
   const takeGroundHit = (enemyId: string, hitMs: number): boolean => {
     const key = `${enemyId}:${hitMs}`;
     if (groundHitsTaken.has(key)) return false;
@@ -4909,10 +4941,18 @@ export function analyzePlayerCCAndTrinket(
     // F134: include the enemy's pet/guardian casts so a whiffed pet CC (Water Elemental Freeze,
     // Felhunter Spell Lock, Succubus Seduction, Hunter-pet Intimidation) is credited as an avoidance.
     // Landed CC is already counted aura-side in ccInstances, so this only affects the avoided numerator.
+    // fact4 D8: an owner's command to the pet (Command Demon) is no control
+    // of its own — the pet's cast is (`petCommands`, the CC USE reading)
+    const commands = petCommands(enemy, combat).commandRows;
     for (const cast of [
-      ...enemy.spellCastEvents,
+      ...enemy.spellCastEvents.filter(
+        (e) => !commands.has(`${e.logLine.timestamp}|${e.spellId}`),
+      ),
       ...(enemy.petSpellCastEvents ?? []),
     ]) {
+      // a row that is no press (`COPY_CAST_IDS`: a channel's per-target
+      // pulse — Snowdrift 389823 / 390171) is its press's effect
+      if (cast.spellId && COPY_CAST_IDS.has(cast.spellId)) continue;
       if (cast.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
       if (
         !cast.spellId ||
@@ -5000,6 +5040,7 @@ export function analyzePlayerCCAndTrinket(
           );
           if (activeBuff) {
             if (isGroundCC && !takeGroundHit(enemy.id, hit.ms)) continue;
+            if (!takeMissRow(missRow)) continue;
             ccAvoidedInstances.push({
               atSeconds: (hit.ms - matchStartMs) / 1000,
               castAtSeconds: (castTimeMs - matchStartMs) / 1000,
@@ -5009,9 +5050,11 @@ export function analyzePlayerCCAndTrinket(
               avoidanceSpellId: activeBuff.spellId,
               avoidanceSourceName: activeBuff.srcName || undefined,
               sourceName: enemy.name,
-              // The avoided sweep already attributes a pet cast to its owning
-              // player (F134), so the owner's own id is the right source here.
-              sourceId: enemy.id,
+              // the event's own caster (fact4 D2 / D34): a pet or guardian
+              // cast — folded into its owner's sweep (F134) — resolves to
+              // "X's pet" through its GUID (`actorLabel`); the owner's name
+              // and spec stay the instance's
+              sourceId: cast.srcUnitId || enemy.id,
               sourceSpec: enemySpecMap.get(enemy.id) ?? "Unknown",
               ...(loggedMissType ? { loggedMissType } : {}),
             });
@@ -5028,7 +5071,8 @@ export function analyzePlayerCCAndTrinket(
             // whatever cause the log shows (the renderer's B17a reading)
             if (
               missRow?.missType === "IMMUNE" &&
-              (!isGroundCC || takeGroundHit(enemy.id, hit.ms))
+              (!isGroundCC || takeGroundHit(enemy.id, hit.ms)) &&
+              takeMissRow(missRow)
             )
               ccImmuneUncredited.push({
                 atSeconds: (hit.ms - matchStartMs) / 1000,
@@ -5036,7 +5080,9 @@ export function analyzePlayerCCAndTrinket(
                 spellId: cast.spellId,
                 spellName: ccSpellName,
                 sourceName: enemy.name,
-                sourceId: enemy.id,
+                // fact4 D2 / D34: the event's own caster — a pet or guardian
+                // resolves to "X's pet" through its GUID (`actorLabel`)
+                sourceId: cast.srcUnitId || enemy.id,
                 missMs: missRow.timestamp,
               });
             continue;
@@ -5082,9 +5128,11 @@ export function analyzePlayerCCAndTrinket(
               avoidanceSpellId: mobilityCast.spellId,
               avoidanceSourceName: player.name,
               sourceName: enemy.name,
-              // The avoided sweep already attributes a pet cast to its owning
-              // player (F134), so the owner's own id is the right source here.
-              sourceId: enemy.id,
+              // the event's own caster (fact4 D2 / D34): a pet or guardian
+              // cast — folded into its owner's sweep (F134) — resolves to
+              // "X's pet" through its GUID (`actorLabel`); the owner's name
+              // and spec stay the instance's
+              sourceId: cast.srcUnitId || enemy.id,
               sourceSpec: enemySpecMap.get(enemy.id) ?? "Unknown",
               ...(loggedMissType ? { loggedMissType } : {}),
             });
@@ -5117,6 +5165,10 @@ export function analyzePlayerCCAndTrinket(
     const enemy = ownerEnemyOf(m.srcUnitId);
     if (!enemy || !enemyIdSet.has(enemy.id)) continue;
     if (m.timestamp < combat.startTime) continue;
+    // a row the sweep above already stated through its cast (a projectile's
+    // IMMUNE 1.2 s after the cast line — b46 s2/33-5-237: one Mortal Coil,
+    // two lines) is not stated again (`takeMissRow`)
+    if (missRowsTaken.has(m)) continue;
     const name = getEnglishSpellName(m.spellId, m.spellName);
     const stated = [...ccAvoidedInstances, ...ccImmuneUncredited].some(
       (x) =>
@@ -5153,7 +5205,9 @@ export function analyzePlayerCCAndTrinket(
         avoidanceSpellId: buff.spellId,
         avoidanceSourceName: buff.srcName || undefined,
         sourceName: enemy.name,
-        sourceId: enemy.id,
+        // fact4 D2 / D34: the event's own caster — a pet or guardian
+        // resolves to "X's pet" through its GUID (`actorLabel`)
+        sourceId: m.srcUnitId || enemy.id,
         sourceSpec: enemySpecMap.get(enemy.id) ?? "Unknown",
         loggedMissType: m.missType,
       });
@@ -5164,7 +5218,9 @@ export function analyzePlayerCCAndTrinket(
         spellId: m.spellId,
         spellName: name,
         sourceName: enemy.name,
-        sourceId: enemy.id,
+        // fact4 D2 / D34: the event's own caster — a pet or guardian
+        // resolves to "X's pet" through its GUID (`actorLabel`)
+        sourceId: m.srcUnitId || enemy.id,
         missMs: m.timestamp,
       });
   }

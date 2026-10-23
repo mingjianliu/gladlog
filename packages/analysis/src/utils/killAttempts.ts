@@ -144,6 +144,10 @@ import { pvpTrinketUses } from "./pvpTrinketUses";
 import { fmtTime, toRenderSecond } from "./renderGrid";
 import { buildRosterSides, type RosterSides } from "./rosterSide";
 import { roundEndMs } from "./roundEnd";
+import {
+  BLESSING_OF_SANCTUARY_ID,
+  sanctuaryRemovalPairs,
+} from "./sanctuaryRemovals";
 import { offensiveEffectCdId } from "./spellDanger";
 
 // The defensive sets live in enemyDefensives.ts since GH #97 (2026-09-15):
@@ -1336,7 +1340,7 @@ export function formatKillAttemptsForContext(
   // cause — the legend states that order and no longer says "cause" /
   // "reason". The selection itself is untouched (A29 / A′4 / B16b).
   lines.push(
-    "  `FAILED: X` names what the attempt ran into — the first that applies, in this fixed order: the target's trinket, a break ability, a full immunity, a wall, an external, another defensive of the target's own, `healed through` (over the attempt and the next 5 s the target received more healing than damage), `not enough damage` (none of the above). It is what was pressed or up, picked in that order — not a measurement of what stopped the kill. A wall / external / own defensive is named when it went up inside the attempt, or was already up when it began (`[up since m:ss]`) — one pressed after the attempt was over is not named; an immunity, the trinket or a break in the next 5 s still is. An external under the 20% wall floor (an ally's 15% copy of Obsidian Scales) is not named. An immunity met along with the trinket or a break is named beside it, and so is an external beside the target's own defensive (`popped X; saved by external (Y)`): the attempt met both. `target trinketed out` / `broke out (X)` = the trinket / a racial or class ability removed a control of this attempt.",
+    "  `FAILED: X` names what the attempt ran into — the first that applies, in this fixed order: the target's trinket, a break ability, a full immunity, a wall, an external, another defensive of the target's own, `healed through` (over the attempt and the next 5 s the target received more healing than damage), `not enough damage` (none of the above). It is what was pressed or up, picked in that order — not a measurement of what stopped the kill. A wall / external / own defensive is named when it went up inside the attempt, or was already up when it began (`[up since m:ss]`) — one pressed after the attempt was over is not named; an immunity, the trinket or a break in the next 5 s still is. An external under the 20% wall floor (an ally's 15% copy of Obsidian Scales) is not named. An immunity met along with the trinket or a break is named beside it, and so is an external beside the target's own defensive (`popped X; saved by external (Y)`): the attempt met both. `target trinketed out` / `broke out (X)` = the trinket / a racial or class ability removed a control of this attempt — the target's own, or an ally's Blessing of Sanctuary on it (`broke out (Blessing of Sanctuary)`).",
   );
   // User ruling 2026-10-11: the two words for the target's own defensive,
   // each explained only when a line of this block carries it.
@@ -1679,6 +1683,36 @@ function attributeFailure(
       if (ofThisAttempt(u.brokenCc) && !brokeOut.includes(u.name))
         brokeOut.push(u.name);
     }
+  }
+
+  // fact4 D11 / D41 / D43 / D46 (2026-10-22): an ALLY's Blessing of
+  // Sanctuary that removed a control of this attempt — the [CC REMOVED]
+  // line's own pairing (`sanctuaryRemovalPairs`). Until then only the
+  // target's own presses could break out, and five attempts of 2d25d01a
+  // whose Hammer of Justice the ally's Sanctuary took off with ~3 s left read
+  // `not enough damage`.
+  for (const r of sanctuaryRemovalPairs([target, ...enemies, ...friendlies])) {
+    if (r.target.id !== target.id || !inCredit(r.castMs)) continue;
+    const id = r.removed.spellId!;
+    const removedMs = r.removed.logLine.timestamp;
+    let appliedMs: number | undefined;
+    for (const a of target.auraEvents ?? [])
+      if (
+        a.spellId === id &&
+        a.srcUnitId === r.removed.srcUnitId &&
+        (a.logLine.event === LogEvent.SPELL_AURA_APPLIED ||
+          a.logLine.event === LogEvent.SPELL_AURA_REFRESH) &&
+        a.logLine.timestamp <= removedMs
+      )
+        appliedMs = a.logLine.timestamp;
+    if (appliedMs === undefined) continue;
+    const cc = {
+      spellId: id,
+      atSeconds: (appliedMs - matchStartMs) / 1000,
+      durationSeconds: (removedMs - appliedMs) / 1000,
+    };
+    const name = getEnglishSpellName(BLESSING_OF_SANCTUARY_ID, "Blessing of Sanctuary");
+    if (ofThisAttempt(cc) && !brokeOut.includes(name)) brokeOut.push(name);
   }
 
   // A30 / A7-补: is a school-limited save's school what was aimed at the

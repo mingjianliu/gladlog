@@ -69,6 +69,7 @@ import {
   getDRCategory,
 } from "@gladlog/analysis/src/utils/drAnalysis";
 import { OFFENSIVE_CD_SPELL_IDS } from "@gladlog/analysis/src/utils/spellDanger";
+import { ccMechanicOf } from "@gladlog/analysis/src/utils/spellMechanics";
 import { GladLogParser, type GladMatch } from "@gladlog/parser";
 import { LogEvent, toLegacyMatch } from "@gladlog/parser-compat";
 
@@ -94,6 +95,11 @@ const CHECKS = [
   "hardCastOrder",
   "crisisCc",
   "crisisBurst",
+  "avoidedImmuneRows",
+  "avoidedOwnerForPet",
+  "trapNotLanded",
+  "sanctuaryKillAttempt",
+  "sanctuarySilenceLine",
 ] as const;
 type Check = (typeof CHECKS)[number];
 /** kinds counted but kept out of a check's violation total */
@@ -568,6 +574,216 @@ for (const f of files) {
         t,
         `${owner.id}:${m[1]}`,
         `t=${m[1]}: burst=no while ${up.map((i) => nameOf(i.id)).join(", ")} up`,
+      );
+  }
+
+  // ── batch 2 (fact4 D4 / D5 / D63 / D16 / D8, D2 / D34, D29, D11, D40) ──
+  const AVOIDED_RE =
+    /^(\d+:\d\d)\s+\[CC AVOIDED\?\]\s+(\d+)\([A-Za-z]+\): (.+?) \(by (\d+)\([A-Za-z]+\)('s (?:pet|guardian))?(?:; cast (\d+:\d\d))?\) (logged IMMUNE|did not land)/;
+  const ownedBy = (u: any, casterId: string) =>
+    u.id === casterId || u.ownerId === casterId;
+  const unitById = new Map(units.map((u) => [u.id as string, u]));
+  const immuneLines = new Map<string, number>();
+  for (const l of lines) {
+    const m = AVOIDED_RE.exec(l);
+    if (!m) continue;
+    const player = unitOfPid(m[2]);
+    const caster = unitOfPid(m[4]);
+    if (!player || !caster) continue;
+    const spell = m[3]!;
+    const S = secOf(m[1]!);
+    const rowsOf = (pred: (r: any) => boolean) =>
+      ((player.missesIn ?? []) as any[]).filter(
+        (r) =>
+          nameOf(String(r.spellId ?? ""), r.spellName) === spell &&
+          ownedBy(unitById.get(r.srcUnitId) ?? { id: r.srcUnitId }, caster.id) &&
+          pred(r),
+      );
+    if (m[7] === "logged IMMUNE") {
+      const k = `${m[2]}|${spell}|${m[4]}`;
+      immuneLines.set(k, (immuneLines.get(k) ?? 0) + 1);
+      // the rows the line stands on: IMMUNE rows of the spell from the
+      // caster's side inside its second ± 2
+      const near = rowsOf(
+        (r) =>
+          r.missType === "IMMUNE" &&
+          Math.abs((tsOf(r) - start) / 1000 - S) <= 2.5,
+      );
+      bump("avoidedOwnerForPet");
+      // the owner's own press of the spell just before the row (a Capacitor
+      // Totem the shaman put down, Intimidation the hunter pressed) makes it
+      // the owner's control; a summon's own cast with no press behind it
+      // (a ghoul's Monstrous Blow, an Incessant Screams guardian) does not;
+      // 8 s: a hunter pet runs to its Intimidation target first
+      const ownerPressed = (r: any) =>
+        ((caster.spellCastEvents ?? []) as any[]).some(
+          (c) =>
+            ev(c) === SUCCESS &&
+            nameOf(String(c.spellId ?? ""), c.spellName) === spell &&
+            // the press row can be written just after the pet's (1 ms,
+            // b46 s2/58-5-431 1:43)
+            tsOf(c) <= tsOf(r) + 500 &&
+            tsOf(r) - tsOf(c) <= 8000,
+        );
+      if (
+        near.length > 0 &&
+        !m[5] &&
+        near.every((r) => r.srcUnitId !== caster.id && !ownerPressed(r))
+      )
+        violate(
+          "avoidedOwnerForPet",
+          "owner",
+          tsOf(near[0]),
+          `${m[2]}:${spell}:${S}`,
+          `${m[1]} ${spell} on ${m[2]} printed "by ${m[4]}" — every IMMUNE row came from a unit it owns`,
+          l,
+        );
+    }
+    if (
+      m[7] === "did not land" &&
+      (spell === "Freezing Trap" || spell === "Binding Shot")
+    ) {
+      bump("trapNotLanded");
+      // DB2: the trap's area lasts 60 s (SpellDuration 3), Binding Shot's
+      // 10 s (SpellDuration 1)
+      const life = spell === "Freezing Trap" ? 60.5 : 10.5;
+      const castS = m[6] ? secOf(m[6]) : S;
+      const landed = ((player.auraEvents ?? []) as any[]).find(
+        (a) =>
+          ev(a) === APPLIED &&
+          a.destUnitId === player.id &&
+          nameOf(String(a.spellId ?? ""), a.spellName) === spell &&
+          ownedBy(unitById.get(a.srcUnitId) ?? { id: a.srcUnitId }, caster.id) &&
+          (tsOf(a) - start) / 1000 >= castS &&
+          (tsOf(a) - start) / 1000 <= castS + 1 + life &&
+          // no later cast of the spell by the caster before it (that one's)
+          !((caster.spellCastEvents ?? []) as any[]).some(
+            (c) =>
+              ev(c) === SUCCESS &&
+              nameOf(String(c.spellId ?? ""), c.spellName) === spell &&
+              (tsOf(c) - start) / 1000 >= castS + 1 &&
+              tsOf(c) < tsOf(a),
+          ),
+      );
+      if (landed)
+        violate(
+          "trapNotLanded",
+          "landedLater",
+          tsOf(landed),
+          `${m[2]}:${spell}:${castS}`,
+          `${m[1]} ${spell} "did not land" on ${m[2]}; it landed at ${fmtS((tsOf(landed) - start) / 1000)}`,
+          l,
+        );
+    }
+  }
+  for (const [k, n] of immuneLines) {
+    const [pPid, spell, cPid] = k.split("|") as [string, string, string];
+    const player = unitOfPid(pPid);
+    const caster = unitOfPid(cPid);
+    bump("avoidedImmuneRows");
+    const rows = ((player?.missesIn ?? []) as any[]).filter(
+      (r) =>
+        r.missType === "IMMUNE" &&
+        nameOf(String(r.spellId ?? ""), r.spellName) === spell &&
+        ownedBy(unitById.get(r.srcUnitId) ?? { id: r.srcUnitId }, caster.id) &&
+        tsOf(r) >= start &&
+        tsOf(r) <= end,
+    ).length;
+    if (n > rows)
+      violate(
+        "avoidedImmuneRows",
+        "moreLinesThanRows",
+        start,
+        k,
+        `${pPid} ${spell} by ${cPid}: ${n} "logged IMMUNE" lines, ${rows} IMMUNE row(s) in the round`,
+      );
+  }
+  // Blessing of Sanctuary removals: a control of mechanic 5 / 9 / 12 / 24
+  // (DB2 210256's aura-232 rows) REMOVED ≤ 50 ms after the Sanctuary on its
+  // holder, no trinket of the holder in that ms
+  const sanct: Array<{ ms: number; holder: any; id: string; appliedMs: number }> = [];
+  for (const pal of players)
+    for (const c of ((pal.spellCastEvents ?? []) as any[]).filter(
+      (x) => ev(x) === SUCCESS && String(x.spellId) === "210256",
+    )) {
+      const holder = unitById.get(c.destUnitId);
+      if (!holder) continue;
+      for (const a of (holder.auraEvents ?? []) as any[]) {
+        if (ev(a) !== REMOVED || a.destUnitId !== holder.id) continue;
+        const d = tsOf(a) - tsOf(c);
+        if (d < 0 || d > 50) continue;
+        const mech = ccMechanicOf(String(a.spellId ?? ""));
+        if (mech === undefined || ![5, 9, 12, 24].includes(mech)) continue;
+        const trinket = ((holder.spellCastEvents ?? []) as any[]).some(
+          (x) =>
+            ev(x) === SUCCESS &&
+            ["336126", "208683", "195710", "59752", "7744", "20594"].includes(
+              String(x.spellId),
+            ) &&
+            Math.abs(tsOf(x) - tsOf(a)) <= 50,
+        );
+        if (trinket) continue;
+        let appliedMs = tsOf(a);
+        for (const b of (holder.auraEvents ?? []) as any[])
+          if (
+            ev(b) === APPLIED &&
+            b.spellId === a.spellId &&
+            b.srcUnitId === a.srcUnitId &&
+            tsOf(b) <= tsOf(a)
+          )
+            appliedMs = tsOf(b);
+        sanct.push({ ms: tsOf(c), holder, id: String(a.spellId), appliedMs });
+      }
+    }
+  for (const x of sanct) {
+    if (x.ms < start || x.ms > end) continue;
+    const S = Math.floor((x.ms - start) / 1000);
+    if (ccMechanicOf(x.id) === 9 && pidOf.has(x.holder.name)) {
+      bump("sanctuarySilenceLine");
+      const ok = [S - 1, S, S + 1].some((s) =>
+        lines.some(
+          (l) =>
+            l.startsWith(`${fmtS(s)}  [CC REMOVED]`) &&
+            l.includes("Blessing of Sanctuary") &&
+            l.includes(nameOf(x.id)),
+        ),
+      );
+      if (!ok)
+        violate(
+          "sanctuarySilenceLine",
+          "noLine",
+          x.ms,
+          `${x.holder.id}:${x.id}:${S}`,
+          `${fmtS(S)} Sanctuary removed the silence ${nameOf(x.id)} from ${x.holder.name} — no [CC REMOVED] line`,
+        );
+    }
+  }
+  const KA_RE =
+    /^\s+\[(\d+):(\d\d)–(\d+):(\d\d)\] on (\S+) — .*\| FAILED: (.+)$/;
+  for (const l of lines) {
+    const m = KA_RE.exec(l);
+    if (!m) continue;
+    if (/^(broke out|target trinketed out)/.test(m[6]!)) continue;
+    const target = byName.get(m[5]!);
+    if (!target) continue;
+    const a = start + (Number(m[1]) * 60 + Number(m[2])) * 1000;
+    const b = start + (Number(m[3]) * 60 + Number(m[4]) + 1) * 1000;
+    bump("sanctuaryKillAttempt");
+    const hit = sanct.find(
+      (x) =>
+        x.holder.id === target.id &&
+        x.ms >= a &&
+        x.ms <= b + 5000 &&
+        x.appliedMs <= b,
+    );
+    if (hit)
+      violate(
+        "sanctuaryKillAttempt",
+        "notBrokeOut",
+        hit.ms,
+        `${target.id}:${m[1]}:${m[2]}`,
+        `[${m[1]}:${m[2]}–${m[3]}:${m[4]}] on ${m[5]}: an ally's Sanctuary removed ${nameOf(hit.id)} at ${fmtS((hit.ms - start) / 1000)}, line says "${m[6]!.slice(0, 40)}"`,
+        l,
       );
   }
 }

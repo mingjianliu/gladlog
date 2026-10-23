@@ -166,6 +166,7 @@ import {
   CC_END_CAUSE_NOT_LOGGED,
   CC_ENDED_BY_LEAD,
   CC_FROM_OWN_TEAM_TAG,
+  CC_LANDED_MATCH_WINDOW_MS,
   CC_LOGGED_END_NOTE_RE_SRC,
   CC_REFRESHED_LEAD,
   CC_REFRESHED_NOTE_RE_SRC,
@@ -2118,7 +2119,17 @@ export function checkCcAvoidedLandedConsistency(lines: string[]): string[] {
     const at = c
       ? Number(c[1]) * 60 + Number(c[2])
       : Number(m[1]) * 60 + Number(m[2]);
-    const { beforeMs, afterMs } = ccLandedMatchWindowMs(m[4]!);
+    // a line resting on the log's own failed-control row (`logged IMMUNE`,
+    // `logged MISSED` …) is that trigger's outcome: a landing after it is
+    // another trigger — a later trap, 41 s on (fact4 batch 2, cap-f2
+    // 118-1-655 7:31 → 8:12, once the trap's landing window became its 60 s
+    // area) — so only the same-instant window applies to it
+    const { beforeMs, afterMs } = / logged [A-Z]/.test(line)
+      ? {
+          beforeMs: CC_LANDED_MATCH_WINDOW_MS,
+          afterMs: CC_LANDED_MATCH_WINDOW_MS,
+        }
+      : ccLandedMatchWindowMs(m[4]!);
     const twin = (landed.get(`${m[3]}\u0000${m[4]}`) ?? []).find((t) => {
       const d = t - at;
       return d >= 0 ? d + 1 <= afterMs / 1000 : -d + 1 <= beforeMs / 1000;
@@ -4901,8 +4912,14 @@ const KILL_ATTEMPT_BROKE_OUT =
 const ENEMY_BREAK_LINE =
   /^(\d+):(\d\d) {2}\[ENEMY TRINKET\] {3}(\S+) used (.+?)(?: out of | \[| \(|$)/;
 
+/** `m:ss  [CC REMOVED]   <pid>'s Blessing of Sanctuary removed … from <pid>` */
+const SANCTUARY_REMOVED_LINE =
+  /^(\d+):(\d\d) {2}\[CC REMOVED\] {3}\S+ Blessing of Sanctuary removed .* from (\S+?)(?: after |$)/;
+
 /**
  * KILL ATTEMPTS `broke out (X)` ⇒ an `[ENEMY TRINKET] … used X out of …` line
+ * — or, for `Blessing of Sanctuary`, its `[CC REMOVED]` line on the target
+ * (fact4 D11, an ally's removal) —
  * inside the attempt's credit window `[from, to + KILL_CREDIT_SLACK_S]` — the
  * window `attributeFailure` reads a break over (the trinket's window; triage
  * enemy-def F-E21). Both render from `analyzePlayerCCAndTrinket`'s
@@ -4924,6 +4941,18 @@ export function checkBrokeOutRefConsistency(lines: string[]): string[] {
         atS: Number(m[1]) * 60 + Number(m[2]),
         what: m[4]!,
         outOf: line.includes(" out of "),
+        byId: /^(\d+)\(/.exec(m[3]!)?.[1],
+      });
+  }
+  // fact4 D11: an ally's Blessing of Sanctuary is a break of its own — its
+  // `[CC REMOVED] … Blessing of Sanctuary removed … from <unit>` line
+  for (const line of lines) {
+    const m = SANCTUARY_REMOVED_LINE.exec(line);
+    if (m)
+      breaks.push({
+        atS: Number(m[1]) * 60 + Number(m[2]),
+        what: "Blessing of Sanctuary",
+        outOf: true,
         byId: /^(\d+)\(/.exec(m[3]!)?.[1],
       });
   }

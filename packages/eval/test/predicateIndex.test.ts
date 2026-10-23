@@ -153,6 +153,7 @@ import * as logEra from "@gladlog/analysis/src/utils/logEra";
 import * as losAnalysis from "@gladlog/analysis/src/utils/losAnalysis";
 import * as offensiveAuraOccurrences from "@gladlog/analysis/src/utils/offensiveAuraOccurrences";
 import * as offensiveWindows from "@gladlog/analysis/src/utils/offensiveWindows";
+import * as petCommandsMod from "@gladlog/analysis/src/utils/petCommands";
 import * as positionAnalysis from "@gladlog/analysis/src/utils/positionAnalysis";
 import * as positionSampling from "@gladlog/analysis/src/utils/positionSampling";
 import * as pvpTrinketUsesMod from "@gladlog/analysis/src/utils/pvpTrinketUses";
@@ -162,6 +163,7 @@ import * as resourceAt from "@gladlog/analysis/src/utils/resourceAt";
 import * as rootReachability from "@gladlog/analysis/src/utils/rootReachability";
 import * as rosterSide from "@gladlog/analysis/src/utils/rosterSide";
 import * as roundEnd from "@gladlog/analysis/src/utils/roundEnd";
+import * as sanctuaryRemovalsMod from "@gladlog/analysis/src/utils/sanctuaryRemovals";
 import * as selfDefensiveMechanismMod from "@gladlog/analysis/src/utils/selfDefensiveMechanism";
 import * as specBaselines from "@gladlog/analysis/src/utils/specBaselines";
 import * as spellDanger from "@gladlog/analysis/src/utils/spellDanger";
@@ -2167,6 +2169,16 @@ const INDEX: PredicateRow[] = [
     file: `${A}/data/mitigationData.ts`,
     symbol: "DEFLECTION_IDS",
     mod: mitigationData,
+  },
+  {
+    file: `${A}/utils/sanctuaryRemovals.ts`,
+    symbol: "sanctuaryRemovalPairs",
+    mod: sanctuaryRemovalsMod,
+  },
+  {
+    file: `${A}/utils/petCommands.ts`,
+    symbol: "petCommands",
+    mod: petCommandsMod,
   },
   {
     file: `${E}/quality/promptQualityCheck.ts`,

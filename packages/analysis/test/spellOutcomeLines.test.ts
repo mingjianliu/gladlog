@@ -13,6 +13,7 @@ import {
   sanctuaryRemovals,
 } from "../src/context/spellOutcomeLines";
 import { ensureAnalysisData } from "../src/data/ensure";
+import { sanctuaryRemovesControl } from "../src/utils/sanctuaryRemovals";
 
 beforeAll(async () => {
   await ensureAnalysisData();
@@ -357,6 +358,30 @@ describe("sanctuaryRemovals (0035285c)", () => {
       ccSpellId: "408",
       ccSourceName: "Rogue-R-US",
     });
+  });
+});
+
+describe("sanctuaryRemovals — the mechanics Blessing of Sanctuary removes (fact4 D40)", () => {
+  it("a silence (Strangulate) is removed; an incapacitate (Polymorph) or a root (Earthbind) at the same ms is not", () => {
+    const pal = unit("Player-Pal", {
+      spellCastEvents: [cast("210256", 10, "Player-H")],
+    });
+    const aura = (spellId: string) => ({
+      spellId,
+      spellName: "x",
+      srcUnitName: "Enemy-R-US",
+      logLine: { event: LogEvent.SPELL_AURA_REMOVED, timestamp: T0 + 10_000 },
+    });
+    const holder = unit("Player-H", {
+      auraEvents: [aura("47476"), aura("118"), aura("116947")],
+    });
+    expect(sanctuaryRemovals([pal, holder], T0).map((r) => r.ccSpellId)).toEqual([
+      "47476",
+    ]);
+    expect(sanctuaryRemovesControl("853")).toBe(true); // Hammer of Justice, stun
+    expect(sanctuaryRemovesControl("8122")).toBe(true); // Psychic Scream, fear
+    expect(sanctuaryRemovesControl("6789")).toBe(true); // Mortal Coil, horror
+    expect(sanctuaryRemovesControl("2094")).toBe(false); // Blind, disorient
   });
 });
 

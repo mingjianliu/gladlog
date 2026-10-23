@@ -4039,3 +4039,19 @@ crisis-no-response +2 (silenced / stunned at the crossing, 1.5–2 s free after
 it); cd-hoarded 28 points swapped under the cap by the enemy-burst ordering,
 net −1 (the new pick failed the intent guard after the cap). Family diff:
 `[ENEMY DEF]` Aspect of the Turtle 0 → 328, KILL ATTEMPTS 0 → 109.
+
+v443 (2026-10-22/23, fact4 F17 batch 2 — controls removed and delayed, user
+approved 「批准」): an ally's Blessing of Sanctuary removes the controls of DB2
+mechanic Fear / Silence / Stun / Horror (210256's aura-232 rows;
+`sanctuaryRemovalPairs`, shared) — `[CC REMOVED]` now names silences (was hard
+CC + roots) and KILL ATTEMPTS reads an attempt whose control it removed as
+`broke out (Blessing of Sanctuary)` (was `not enough damage` / `healed
+through`); Freezing Trap (60.5 s), Binding Shot (10.5 s) and Snowdrift (6.5 s)
+land over their area's life (`AOE_CC_LANDING_WINDOW_S`); Snowdrift's per-target
+pulse rows 389823 / 390171 are no presses (`COPY_CAST_IDS`); one failed-control
+row is claimed once (a family's casts, the backfill); a pet's or guardian's
+control names its caster ("X's pet"); a Command Demon press and its pet's cast
+are one control and one kick (`petCommands`, moved to utils). 605 files vs v442
+(f1 → f2c): healer slow-defensive-response −1. corpusFactScan3 f1 → f2c:
+avoidedImmuneRows 129 → 0, trapNotLanded 27 → 0, sanctuaryKillAttempt 170 → 0,
+sanctuarySilenceLine 96 → 0, burstAnswerPress tick 6 → 0.

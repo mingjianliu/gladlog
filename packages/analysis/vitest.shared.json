@@ -184,6 +184,7 @@
     "test/enemyDefensives.test.ts",
     "test/externalDamage.test.ts",
     "test/externalReach.test.ts",
+    "test/fact4Batch2Data.test.ts",
     "test/forbearance.test.ts",
     "test/formReshiftCast.test.ts",
     "test/friendlyCheatDeath.test.ts",

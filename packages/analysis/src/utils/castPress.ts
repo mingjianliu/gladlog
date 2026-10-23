@@ -133,6 +133,22 @@ export const COPY_CAST_IDS: ReadonlyMap<string, string> = new Map([
   ["157982", "Tranquility channel tick (0.80s spacing; the press is 740)"],
   ["64844", "Divine Hymn channel tick (1.00s spacing; the press is 64843)"],
   ["450215", "Void Blast channel tick (1.00s spacing)"],
+  // fact4 D16 / batch 2 (2026-10-22): Snowdrift's per-target rows. The press
+  // is 389794 (no target; DB2 a 6 s area, aura 395); the channel then logs a
+  // SPELL_CAST_SUCCESS per target per pulse — 389823 (DB2 a 2 s slow, aura
+  // 33) and 390171 (a 1 s periodic, aura 3). 605 new-season files, every
+  // 6th: 628 presses, 3,484 × 389823 and 6,109 × 390171 rows, every one
+  // with a target and inside the 6 s after a press of its caster
+  // (`runs/fact4-2026-10-22/fix/probes/snowdriftRows.py`). Read as presses
+  // they printed one `[CC AVOIDED?]` line per pulse (190-2-1034 0:19–0:22).
+  [
+    "389823",
+    "Snowdrift pulse on a target (slow; 3,484 rows vs 628 presses, all with a target inside the 6 s channel; the press is 389794)",
+  ],
+  [
+    "390171",
+    "Snowdrift pulse on a target (periodic; 6,109 rows vs 628 presses, all with a target inside the 6 s channel; the press is 389794)",
+  ],
   // The second stage of a Champion's Spear press, not a press of the 90 s
   // cooldown (2026-10-11). The throw is 376079; 1271980 is the optional
   // re-press while the spear stands (DB2: its own 6 s cooldown, 40 yd range,

@@ -103,6 +103,10 @@ describe("kickAudit — a pet's own kick (fact3 D28)", () => {
       "Spell Lock",
     );
     expect(run([ownerRow], t)).toHaveLength(1);
+    // fact4 (b46 s2/159-1-983 0:57): the Felhunter's row 476 ms after the
+    // command is still that press (`PET_COMMAND_MS`); one 2 s later is not
+    expect(run([ownerRow], t + 476)).toHaveLength(1);
+    expect(run([ownerRow], t + 2000)).toHaveLength(2);
   });
 });
 

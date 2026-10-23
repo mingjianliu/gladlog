@@ -26,6 +26,7 @@ import {
   STOPPED_JUST_BEFORE_S,
 } from "./castStopEvidence";
 import { kickCastSpellId, LANDED_PAIR_MS } from "./enemyInterrupts";
+import { PET_COMMAND_MS } from "./petCommands";
 import type { RawStreams } from "./rawStreams";
 
 // `LANDED_PAIR_MS` (a landed kick's SPELL_INTERRUPT pairs with the cast
@@ -260,8 +261,14 @@ export function analyzeKickAudit(
       (e) =>
         !ownKickRows.some(
           (o) =>
+            // the command's own window (`PET_COMMAND_MS`, the CC USE
+            // reading): the Felhunter's Spell Lock 476 ms after the
+            // warlock's Command Demon row is that press (fact4, b46
+            // s2/159-1-983 0:57 — two `[KICK] … hit nothing` lines)
             Math.abs(o.logLine.timestamp - e.logLine.timestamp) <=
-            DUPLICATE_KICK_ID_MS,
+              Math.max(DUPLICATE_KICK_ID_MS, PET_COMMAND_MS) &&
+            kickCastSpellId(o.spellId ?? "") ===
+              kickCastSpellId(e.spellId ?? ""),
         ),
     );
   const kickRows = [...ownKickRows, ...petKickRows].sort(

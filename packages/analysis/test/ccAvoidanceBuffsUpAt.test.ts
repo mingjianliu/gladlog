@@ -27,6 +27,7 @@ import { makeSpellCastEvent, makeUnit } from "./ported/testHelpers";
 
 const T0 = 1_000_000;
 const SHROUD = "378464"; // Nullifying Shroud, 3 s
+const HOVER = "358267"; // Hover (a reposition)
 const PHASE_SHIFT = "408558"; // 1 s
 const CAPACITOR_TOTEM = "192058";
 const STATIC_CHARGE = "118905";
@@ -286,7 +287,12 @@ describe("ccAvoidanceBuffsUpAt — one application's own rows (codex 20-F15-21)"
 });
 
 describe("[CC AVOIDED?] — each delayed cast reads its own pulse (codex 20-F15-21)", () => {
-  it("totems at 10 s and 12 s, pulses at 12 s and 14 s, Shroud to 13 s: only the first is credited", () => {
+  // fact4 D66 (2026-10-22): a pulse that went off on a mate — an APPLIED or,
+  // since then, an IMMUNE miss row — says the player was not in it, so no
+  // immunity buff explains it; the per-cast pulse is asked of the move
+  // pressed near it (a Hover at 11.5 s: 0.5 s from the first totem's 12 s
+  // pulse, 2.5 s from the second's 14 s one)
+  it("totems at 10 s and 12 s, pulses at 12 s and 14 s, Hover pressed at 11.5 s: only the first is credited", () => {
     const cast = (atMs: number) =>
       makeSpellCastEvent(
         CAPACITOR_TOTEM,
@@ -305,18 +311,12 @@ describe("[CC AVOIDED?] — each delayed cast reads its own pulse (codex 20-F15-
       spellCastEvents: [cast(10_000), cast(12_000)],
     });
     const totem = makeUnit("totem-1", { name: "Totem", ownerId: "enemy-1" });
-    const own = (event: LogEvent, atMs: number, line: number) => ({
-      ...aura(event, SHROUD, atMs, line),
-      srcUnitId: "player-1",
-      destUnitId: "player-1",
-    });
     const player = makeUnit("player-1", {
       name: "Player",
       spec: CombatUnitSpec.Evoker_Preservation,
       reaction: CombatUnitReaction.Friendly,
-      auraEvents: [
-        own(LogEvent.SPELL_AURA_APPLIED, 9000, 1),
-        own(LogEvent.SPELL_AURA_REMOVED, 13_000, 600),
+      spellCastEvents: [
+        makeSpellCastEvent(HOVER, T0 + 11_500, "0000000000000000", "nil", "player-1", "Player", 0, "Hover"),
       ],
     });
     // the pulses are IMMUNE misses on a mate: a pulse that STUNNED another
