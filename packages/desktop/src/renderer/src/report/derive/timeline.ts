@@ -1,3 +1,5 @@
+import { correctedAdvancedSamples } from "@gladlog/parser-compat";
+
 import type { ReportSource } from "./types";
 
 export interface HpPoint {
@@ -112,7 +114,7 @@ export function deriveTimeline(m: ReportSource): TimelineData {
           classId: u.classId,
           teamId: u.info!.teamId,
           points: downsampleMinMax(
-            u.advancedSamples.map((s) => ({
+            correctedAdvancedSamples(u, m.units).map((s) => ({
               t: s.timestamp,
               hp: s.hp,
               maxHp: s.maxHp,

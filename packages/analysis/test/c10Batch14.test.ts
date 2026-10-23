@@ -16,6 +16,7 @@ import {
 import {
   canOffensivePurge,
   missedPurgesFor,
+  purgePetAbsentSpansMs,
 } from "../src/utils/dispelAnalysis";
 import {
   warlockPurgePetSpans,
@@ -112,6 +113,31 @@ describe("warlock purge follows the logged pet (1120cb61: a Sayaad warlock liste
     expect(warlockPurgePetSpans(u, [u, sayaad, late], T0)).toEqual([
       { fromSeconds: 40, toSeconds: Infinity },
     ]);
+    // codex 21-R12-b #3: one entry per pet UNIT — a returning Felhunter
+    // (a new unit) opens a span again, and a Sayaad after it closes it
+    expect(warlockPurgePetSpans(u, [u, felhunter, sayaad, late], T0)).toEqual([
+      { fromSeconds: -Infinity, toSeconds: 17.38 },
+      { fromSeconds: 40, toSeconds: Infinity },
+    ]);
+    const sayaad2 = makeUnit("Pet-0-1-1-1-1863-04", {
+      ownerId: u.id,
+      spellCastEvents: [
+        makeSpellCastEvent("6358", T0 + 60_000, "Player-1-T", "Target", "Pet-0-1-1-1-1863-04", "Pet"),
+      ],
+    });
+    expect(warlockPurgePetSpans(u, [u, sayaad, late, sayaad2], T0)).toEqual([
+      { fromSeconds: 40, toSeconds: 60 },
+    ]);
+    // codex 21-R12-b #2: outside them the purge is locked
+    expect(
+      purgePetAbsentSpansMs([{ fromSeconds: 40, toSeconds: 60 }], T0),
+    ).toEqual([
+      { from: -Infinity, to: T0 + 40_000 },
+      { from: T0 + 60_000, to: Infinity },
+    ]);
+    expect(
+      purgePetAbsentSpansMs([{ fromSeconds: -Infinity, toSeconds: Infinity }], T0),
+    ).toEqual([]);
     // no Felhunter at all: no span; no pet logged: no answer
     expect(warlockPurgePetSpans(u, [u, sayaad], T0)).toEqual([]);
     expect(warlockPurgePetSpans(lock([]), [], T0)).toBeUndefined();

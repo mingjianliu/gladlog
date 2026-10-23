@@ -79,7 +79,7 @@ import {
   ccFullDurationForApplication,
   ccFullDurationForCaster,
 } from "./ccDuration";
-import { charmedSpans } from "./charmedPlayer";
+import { charmedAt } from "./charmedPlayer";
 import {
   STASIS_RELEASE_SPELL_ID,
   stasisReleasePressesMs,
@@ -3008,8 +3008,6 @@ export function analyzePlayerCCAndTrinket(
   const recastAt = ccRecastSplitsResend(player.id, player.auraEvents, (id) =>
     castersById.get(id),
   );
-  let charmedSpansMemo: Array<{ from: number; to: number }> | undefined;
-  const holderCharmedSpans = () => (charmedSpansMemo ??= charmedSpans(player));
   for (const aura of dropAuraRebroadcasts(player.auraEvents, recastAt)) {
     const spellId = aura.spellId;
     if (!spellId) continue;
@@ -3054,9 +3052,7 @@ export function analyzePlayerCCAndTrinket(
       aura.srcUnitId !== player.id &&
       !enemyIds.has(aura.srcUnitId) &&
       ccSpellIds.has(spellId) &&
-      holderCharmedSpans().some(
-        (sp) => sp.from <= aura.timestamp && aura.timestamp <= sp.to,
-      );
+      charmedAt(player, aura.timestamp);
     if (
       !isRemovalEvent &&
       !enemyIds.has(aura.srcUnitId) &&
@@ -4654,11 +4650,21 @@ export function analyzePlayerCCAndTrinket(
   // "did not land" on id alone). A cast logged onto a Grounding Totem can
   // still land on its shaman (Mortal Coil, S2 archive 2026-08-18, dispelled
   // 48 ms later).
-  const landedOnPlayer = (cast: {
-    spellId?: string | null;
-    spellName?: string | null;
-    logLine: { timestamp: number };
-  }): boolean => {
+  const landedOnPlayer = (
+    cast: {
+      spellId?: string | null;
+      spellName?: string | null;
+      srcUnitId?: string;
+      logLine: { timestamp: number };
+    },
+    /** the cast logged its own failed-control row on the player: only a
+     * landing that is THIS cast's — its caster's (or the caster's summon's),
+     * no later cast of it by that caster before — answers it. The rendered
+     * `logged <TYPE>` line is that trigger's outcome, and the gate reads it
+     * per caster at its own instant (`checkCcAvoidedLandedConsistency`). A
+     * cast with no row keeps the window's any-landing reading. */
+    ownTrigger = false,
+  ): boolean => {
     const atMs = cast.logLine.timestamp - matchStartMs;
     const castName = getEnglishSpellName(
       cast.spellId ?? "",
@@ -4667,13 +4673,41 @@ export function analyzePlayerCCAndTrinket(
     // FT-T16 (D14): a control with a landing delay is matched as far after
     // the cast as it can land (`ccLandedMatchWindowMs`)
     const { beforeMs, afterMs } = ccLandedMatchWindowMs(castName);
+    const sameControl = (id: string | undefined, name: string | undefined) =>
+      !!id &&
+      (id === cast.spellId || getEnglishSpellName(id, name ?? "") === castName);
+    // a landing a LATER cast of the control by the same caster precedes is
+    // that cast's (codex 20-F17-02 #1, fb198a1a r1: a trap at 53.8 s missed
+    // under Phase Shift at 54.1, the next trap landed at 92.1 — inside the
+    // first one's 60.5 s window, and the avoidance was lost)
+    const byThisCaster = (cc: ICCInstance) =>
+      cast.srcUnitId === undefined ||
+      cc.sourceId === cast.srcUnitId ||
+      [...enemies, ...enemyPets].some(
+        (u) => u.id === cc.sourceId && u.ownerId === cast.srcUnitId,
+      ) ||
+      unitsById.get(cc.sourceId)?.ownerId === cast.srcUnitId;
+    const laterCastOwns = (cc: ICCInstance) => {
+      const src =
+        unitsById.get(cc.sourceId) ??
+        [...enemies, ...enemyPets].find((u) => u.id === cc.sourceId);
+      const ccMs = matchStartMs + cc.atSeconds * 1000;
+      return (src?.spellCastEvents ?? []).some(
+        (e) =>
+          e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+          e.logLine.timestamp > cast.logLine.timestamp &&
+          e.logLine.timestamp <= ccMs &&
+          !COPY_CAST_IDS.has(e.spellId ?? "") &&
+          sameControl(e.spellId, e.spellName),
+      );
+    };
     return ccInstances.some((cc) => {
       const afterCastMs = cc.atSeconds * 1000 - atMs;
       return (
         afterCastMs >= -beforeMs &&
         afterCastMs <= afterMs &&
-        (cc.spellId === cast.spellId ||
-          getEnglishSpellName(cc.spellId, cc.spellName) === castName)
+        sameControl(cc.spellId, cc.spellName) &&
+        (!ownTrigger || (byThisCaster(cc) && !laterCastOwns(cc)))
       );
     });
   };
@@ -5002,17 +5036,17 @@ export function analyzePlayerCCAndTrinket(
 
       if (isTargeted || isGroundCC || untargetedMissOnPlayer) {
         const castTimeMs = cast.logLine.timestamp;
-        if (!landedOnPlayer(cast)) {
-          const ccSpellName = getEnglishSpellName(cast.spellId, cast.spellName);
-          const missRow = loggedMissRowOf(
-            enemy,
-            {
-              spellId: cast.spellId,
-              srcUnitId: cast.srcUnitId,
-              timestamp: castTimeMs,
-            },
-            ccSpellName,
-          );
+        const ccSpellName = getEnglishSpellName(cast.spellId, cast.spellName);
+        const missRow = loggedMissRowOf(
+          enemy,
+          {
+            spellId: cast.spellId,
+            srcUnitId: cast.srcUnitId,
+            timestamp: castTimeMs,
+          },
+          ccSpellName,
+        );
+        if (!landedOnPlayer(cast, missRow !== undefined)) {
           const loggedMissType = missRow?.missType;
           // Single-source predicate (2026-08-07, shared-predicate rule / CC
           // avoidance gating IS the spec): school gate (magic-only immunity

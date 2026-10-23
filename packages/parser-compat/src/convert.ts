@@ -296,6 +296,52 @@ function buildAbsorbsByVictim(
   return byVictim;
 }
 
+/**
+ * A unit's advanced samples sorted by time, each read with the max HP
+ * `laggingMaxHpCorrected` gives it (fact4 D13 / D14 / D50) — every HP reader:
+ * the analysis (through `advancedActions`) and the report's HP timeline and
+ * replay (codex 20-F17-03 #3: those two read the raw `maxHp`, 90.9 % where
+ * the prompt read 100 %). A heal or hit that moves current HP by the max's
+ * ratio is no lag (codex 20-F17-03 #1), so the unit's own heals and hits go
+ * along.
+ */
+export function correctedAdvancedSamples<
+  S extends { timestamp: number; hp: number; maxHp: number },
+>(
+  unit: Pick<GladUnit, "id" | "healIn" | "damageIn"> & {
+    advancedSamples: readonly S[];
+  },
+  allUnits?: Record<string, GladUnit>,
+): S[] {
+  const sorted = [...unit.advancedSamples].sort(
+    (a, b) => a.timestamp - b.timestamp,
+  );
+  const maxHpOf = laggingMaxHpCorrected(sorted, hpEventsOf(unit, allUnits));
+  return sorted.map((sample, i) =>
+    maxHpOf[i] === sample.maxHp ? sample : { ...sample, maxHp: maxHpOf[i]! },
+  );
+}
+
+/** A unit's heals (+) and hits (−) by effective amount, sorted by time —
+ * what `laggingMaxHpCorrected` reconciles a current-HP jump against. */
+function hpEventsOf(
+  unit: Pick<GladUnit, "id" | "healIn" | "damageIn">,
+  allUnits?: Record<string, GladUnit>,
+): Array<{ timestamp: number; amount: number }> {
+  if (isPetOrGuardian(unit.id, allUnits)) return [];
+  return [
+    // (a hand-built report fixture can carry samples without the streams)
+    ...(unit.healIn ?? []).map((e) => ({
+      timestamp: e.timestamp,
+      amount: Math.abs(e.effectiveAmount),
+    })),
+    ...(unit.damageIn ?? []).map((e) => ({
+      timestamp: e.timestamp,
+      amount: -Math.abs(hpLost(e)),
+    })),
+  ].sort((a, b) => a.timestamp - b.timestamp);
+}
+
 function convertUnit(
   unit: GladUnit,
   allUnits?: Record<string, GladUnit>,
@@ -308,16 +354,14 @@ function convertUnit(
     lineIndex: death.lineIndex,
   }));
 
-  const sortedSamples = [...unit.advancedSamples].sort(
-    (a, b) => a.timestamp - b.timestamp,
-  );
   // a max HP the log writes late after a max-HP change (fact4 D13 / D14 /
-  // D50: a bear form exit read 75 % for a druid at 98 %) — `maxHpLag.ts`
-  const maxHpOf = laggingMaxHpCorrected(sortedSamples);
+  // D50: a bear form exit read 75 % for a druid at 98 %) — the one reading
+  // the report's timeline and replay take too
+  const sortedSamples = correctedAdvancedSamples(unit, allUnits);
   const advancedActions: IAdvancedAction[] = sortedSamples.map(
-    (sample, i) => ({
+    (sample) => ({
       advancedActorCurrentHp: sample.hp,
-      advancedActorMaxHp: maxHpOf[i]!,
+      advancedActorMaxHp: sample.maxHp,
       advancedActorPositionX: sample.x,
       advancedActorPositionY: sample.y,
       advanced: true,

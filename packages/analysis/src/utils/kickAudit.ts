@@ -254,23 +254,28 @@ export function analyzeKickAudit(
   // Felhunter's 15 Spell Locks there, 7 of them beside the warlock's
   // Command Demon row in the same ms); one beside the owner's row is that
   // press, already counted
+  // an owner's kick row → the instant its pet carried it out (codex
+  // 20-F17-02 #2: the pet's IMMUNE row 476 ms after the command is that
+  // kick's outcome — the miss is paired at the pet's instant too)
+  const petExecMsOf = new Map<(typeof ownKickRows)[number], number>();
   const petKickRows = kickerUnits
     .filter((u) => u.id !== player.id)
     .flatMap((u) => u.spellCastEvents.filter(isKickRow))
-    .filter(
-      (e) =>
-        !ownKickRows.some(
-          (o) =>
-            // the command's own window (`PET_COMMAND_MS`, the CC USE
-            // reading): the Felhunter's Spell Lock 476 ms after the
-            // warlock's Command Demon row is that press (fact4, b46
-            // s2/159-1-983 0:57 — two `[KICK] … hit nothing` lines)
-            Math.abs(o.logLine.timestamp - e.logLine.timestamp) <=
-              Math.max(DUPLICATE_KICK_ID_MS, PET_COMMAND_MS) &&
-            kickCastSpellId(o.spellId ?? "") ===
-              kickCastSpellId(e.spellId ?? ""),
-        ),
-    );
+    .filter((e) => {
+      const press = ownKickRows.find(
+        (o) =>
+          // the command's own window (`PET_COMMAND_MS`, the CC USE
+          // reading): the Felhunter's Spell Lock 476 ms after the
+          // warlock's Command Demon row is that press (fact4, b46
+          // s2/159-1-983 0:57 — two `[KICK] … hit nothing` lines)
+          Math.abs(o.logLine.timestamp - e.logLine.timestamp) <=
+            Math.max(DUPLICATE_KICK_ID_MS, PET_COMMAND_MS) &&
+          kickCastSpellId(o.spellId ?? "") === kickCastSpellId(e.spellId ?? ""),
+      );
+      if (press && !petExecMsOf.has(press))
+        petExecMsOf.set(press, e.logLine.timestamp);
+      return press === undefined;
+    });
   const kickRows = [...ownKickRows, ...petKickRows].sort(
     (a, b) => a.logLine.timestamp - b.logLine.timestamp,
   );
@@ -431,6 +436,7 @@ export function analyzeKickAudit(
 
   for (const kick of kicks) {
     const kickMs = kick.logLine.timestamp;
+    const petExecMs = petExecMsOf.get(kick);
     const base = {
       atSeconds: (kickMs - matchStartMs) / 1000,
       kickSpellId: kick.spellId ?? "",
@@ -469,8 +475,15 @@ export function analyzeKickAudit(
     // aimed at (first) or on an enemy player. An ABSORB is no miss of a kick.
     const missLines = kickerMisses.filter(
       (m) =>
-        isCastOrEffect(kick.spellId ?? "", m.spellId ?? "") &&
-        Math.abs(m.timestamp - kickMs) <= KICK_MISS_PAIR_MS &&
+        (isCastOrEffect(kick.spellId ?? "", m.spellId ?? "") ||
+          // the pet's own row of a commanded kick (Command Demon 119910 →
+          // the Felhunter's Spell Lock 19647)
+          (petExecMs !== undefined &&
+            kickCastSpellId(m.spellId ?? "") ===
+              kickCastSpellId(kick.spellId ?? ""))) &&
+        (Math.abs(m.timestamp - kickMs) <= KICK_MISS_PAIR_MS ||
+          (petExecMs !== undefined &&
+            Math.abs(m.timestamp - petExecMs) <= KICK_MISS_PAIR_MS)) &&
         m.missType !== "ABSORB" &&
         !!m.destUnitId &&
         (m.destUnitId === kick.destUnitId ||

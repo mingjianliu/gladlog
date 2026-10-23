@@ -56,6 +56,7 @@ import {
 import { PVP_TRINKET_SPELL_IDS } from "../utils/killWindowTargetSelection";
 import { rootIntervalsOf } from "../utils/rootReachability";
 import { buildRosterSides } from "../utils/rosterSide";
+import { playableEndMs } from "../utils/roundEnd";
 import { OFFENSIVE_CD_SPELL_IDS } from "../utils/spellDanger";
 import { buildFilteredAuraIntervals } from "../utils/utils";
 
@@ -967,10 +968,15 @@ export function crisisDecisionPoints(
   } catch {
     cannotCast = null;
   }
-  const roundEndAt: number =
+  // the last playable instant (codex 20-F17-01 #1): a Solo Shuffle round's
+  // ending death or a 3v3's deciding friendly death, else the log's end — a
+  // crossing 0.5 s before the round ended read 2 s free off the log's tail
+  const roundEndAt: number = Math.min(
     typeof combat?.endTime === "number" && combat.endTime > 0
       ? combat.endTime
-      : Infinity;
+      : Infinity,
+    playableEndMs(combat, units) ?? Infinity,
+  );
   // fact4 D9: an enemy burst RUNNING at the crossing — the span the burst
   // ledger, kick-eaten's `enemyBurst` and KILL ATTEMPTS read
   // (`burstCastSpan`: cast → observed effect end). The 8 s press lookback it

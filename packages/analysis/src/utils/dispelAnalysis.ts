@@ -2244,7 +2244,33 @@ interface CannotCastSrc {
    * they are whole-round facts, asked again for every window (the ×12
    * first-paint fixture spent seconds rebuilding them per render) */
   memo?: Map<ICombatUnit, Map<string, CannotCastIntervals>>;
+  /** a warlock's spans with no purge pet out (the Felhunter's Devour Magic
+   * cannot be cast then) — locked time for that purge, the way a stun is
+   * (codex 21-R12-b #2) */
+  purgePetAbsentOf?: (unit: ICombatUnit) => Array<{ from: number; to: number }>;
 }
+
+/** The complement of a warlock's purge-pet spans (`warlockPurgePetSpans`,
+ * seconds from `startMs`), epoch ms — when its purge cannot be cast. */
+export function purgePetAbsentSpansMs(
+  spans: ReadonlyArray<{ fromSeconds: number; toSeconds: number }>,
+  startMs: number,
+): Array<{ from: number; to: number }> {
+  const ms = (sec: number) =>
+    Number.isFinite(sec) ? startMs + sec * 1000 : sec;
+  const out: Array<{ from: number; to: number }> = [];
+  let cursor = -Infinity;
+  for (const sp of [...spans].sort((a, b) => a.fromSeconds - b.fromSeconds)) {
+    const from = ms(sp.fromSeconds);
+    if (from > cursor) out.push({ from: cursor, to: from });
+    cursor = Math.max(cursor, ms(sp.toSeconds));
+  }
+  if (cursor < Infinity) out.push({ from: cursor, to: Infinity });
+  return out.filter((a) => a.to > a.from);
+}
+
+/** The Felhunter's Devour Magic — the purge a warlock's pet must be out for. */
+const DEVOUR_MAGIC_ID = "19505";
 
 type CannotCastIntervals = ReturnType<typeof cannotCastIntervalsForSpells>;
 
@@ -2255,19 +2281,40 @@ function cannotCastOf(
   unit: ICombatUnit,
   spellIds: readonly string[] | undefined,
 ): CannotCastIntervals {
-  if (!src.memo)
-    return cannotCastIntervalsForSpells(
+  const build = () => {
+    const ivs = cannotCastIntervalsForSpells(
       unit,
       src.enemyIds,
       spellIds,
       src.units,
     );
+    // a purge only the pet casts, asked of a warlock whose Felhunter was
+    // not the pet out: that time is locked too (codex 21-R12-b #2: the
+    // presence filter and the feasibility read different spans — a
+    // Felhunter stunned 25–30 s and replaced at 30 s left 30–35 s "free")
+    const absent =
+      spellIds?.length && spellIds.every((id) => id === DEVOUR_MAGIC_ID)
+        ? (src.purgePetAbsentOf?.(unit) ?? [])
+        : [];
+    return absent.length === 0
+      ? ivs
+      : [
+          ...ivs,
+          ...absent.map((a) => ({
+            ...a,
+            spellId: DEVOUR_MAGIC_ID,
+            lockout: false,
+            self: true as const,
+          })),
+        ];
+  };
+  if (!src.memo) return build();
   let byUnit = src.memo.get(unit);
   if (!byUnit) src.memo.set(unit, (byUnit = new Map()));
   const key = spellIds === undefined ? "*" : spellIds.join(",");
   let ivs = byUnit.get(key);
   if (!ivs) {
-    ivs = cannotCastIntervalsForSpells(unit, src.enemyIds, spellIds, src.units);
+    ivs = build();
     byUnit.set(key, ivs);
   }
   return ivs;
@@ -2972,6 +3019,20 @@ export function reconstructDispelSummary(
         Math.min(toS, sp.toSeconds) - Math.max(fromS, sp.fromSeconds) >=
         MISSED_PURGE_THRESHOLD_S,
     );
+  };
+  // …and the feasibility reads the same spans: outside them the warlock's
+  // purge is locked (`cannotCastOf`)
+  cannotCastSrc.purgePetAbsentOf = (u) => {
+    if (roundUnits.length === 0) return [];
+    if (!purgePetSpanCache.has(u.id))
+      purgePetSpanCache.set(
+        u.id,
+        warlockPurgePetSpans(u, roundUnits, combat.startTime),
+      );
+    const spans = purgePetSpanCache.get(u.id);
+    return spans === undefined
+      ? []
+      : purgePetAbsentSpansMs(spans, combat.startTime);
   };
   const capableFor = (
     type: DispelType,

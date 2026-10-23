@@ -72,6 +72,28 @@ export function warlockPetFunctions(
   units: Iterable<PetUnit>,
   matchStartMs: number,
 ): Array<{ fn: IWarlockPetFunction; fromSeconds: number | null }> {
+  const out: Array<{ fn: IWarlockPetFunction; fromSeconds: number | null }> =
+    [];
+  for (const p of warlockPetChronology(owner, units, matchStartMs)) {
+    if (out.some((o) => o.fn.pet === p.fn.pet)) continue;
+    out.push(p);
+  }
+  return out;
+}
+
+/**
+ * Every permanent pet unit of this warlock in order of its first logged
+ * event — one entry per pet UNIT, not per kind (codex 21-R12-b #3: a
+ * Felhunter → Sayaad → Felhunter round lost the returning Felhunter in the
+ * per-kind roster, and a Sayaad → Felhunter → Sayaad one read the Felhunter
+ * out to the end). The availability timeline reads this; the roster
+ * (`warlockPetFunctions`) keeps the first of each kind.
+ */
+export function warlockPetChronology(
+  owner: Pick<ICombatUnit, "id" | "spec">,
+  units: Iterable<PetUnit>,
+  matchStartMs: number,
+): Array<{ fn: IWarlockPetFunction; fromSeconds: number | null }> {
   if (!WARLOCK_SPEC_IDS.has(String(owner.spec))) return [];
   const pets: Array<{ fn: IWarlockPetFunction; firstMs: number }> = [];
   for (const u of units) {
@@ -95,18 +117,12 @@ export function warlockPetFunctions(
   }
   // (two silent pets: Infinity − Infinity is NaN, which is not an order)
   pets.sort((a, b) => (a.firstMs === b.firstMs ? 0 : a.firstMs - b.firstMs));
-  const out: Array<{ fn: IWarlockPetFunction; fromSeconds: number | null }> =
-    [];
-  for (const p of pets) {
-    if (out.some((o) => o.fn.pet === p.fn.pet)) continue;
-    out.push({
-      fn: p.fn,
-      fromSeconds: Number.isFinite(p.firstMs)
-        ? (p.firstMs - matchStartMs) / 1000
-        : null,
-    });
-  }
-  return out;
+  return pets.map((p) => ({
+    fn: p.fn,
+    fromSeconds: Number.isFinite(p.firstMs)
+      ? (p.firstMs - matchStartMs) / 1000
+      : null,
+  }));
 }
 
 /**
@@ -159,7 +175,7 @@ export function warlockPurgePetSpans(
   units: Iterable<PetUnit>,
   matchStartMs: number,
 ): Array<{ fromSeconds: number; toSeconds: number }> | undefined {
-  const pets = warlockPetFunctions(owner, units, matchStartMs);
+  const pets = warlockPetChronology(owner, units, matchStartMs);
   if (pets.length === 0) return undefined;
   const felhunter = WARLOCK_PET_FUNCTION["417"]!.pet;
   const out: Array<{ fromSeconds: number; toSeconds: number }> = [];

@@ -2075,6 +2075,8 @@ const CC_AVOIDED_LINE =
   /^\s*(\d+):(\d{2})\s+\[CC AVOIDED\?\]\s+(\S+): (.+?) \(by /;
 const CC_ON_TEAM_LINE =
   /^\s*(\d+):(\d{2})\s+\[CC ON TEAM\]\s+(\S+) ← (.+?) \(by /;
+/** The caster's roster id inside a control line's `(by N(Spec)…`. */
+const CC_LINE_CASTER_ID = /\(by (\d+)\(/;
 const CC_AVOIDED_CAST_STAMP =
   /\(by [^;)]*(?:\([^)]*\)[^;)]*)*; cast (\d+):(\d{2})\)/;
 
@@ -2100,13 +2102,16 @@ const CC_AVOIDED_CAST_STAMP =
  * Frost 6 inside 4 s) and this gate, reading the same 1.5 s, passed them all.
  */
 export function checkCcAvoidedLandedConsistency(lines: string[]): string[] {
-  const landed = new Map<string, number[]>();
+  const landed = new Map<string, Array<{ at: number; caster?: string }>>();
   for (const line of lines) {
     const m = line.match(CC_ON_TEAM_LINE);
     if (!m) continue;
     const key = `${m[3]}\u0000${m[4]}`;
     const at = Number(m[1]) * 60 + Number(m[2]);
-    landed.set(key, [...(landed.get(key) ?? []), at]);
+    landed.set(key, [
+      ...(landed.get(key) ?? []),
+      { at, caster: CC_LINE_CASTER_ID.exec(line)?.[1] },
+    ]);
   }
   const failures: string[] = [];
   lines.forEach((line, i) => {
@@ -2115,25 +2120,40 @@ export function checkCcAvoidedLandedConsistency(lines: string[]): string[] {
     // the producer's window is the cast's: a delayed control's line prints
     // its hit second and stamps the cast inside `(by …; cast m:ss)`
     // (`ccAvoidedCastTag`, codex 20-F15-21)
-    const c = line.match(CC_AVOIDED_CAST_STAMP);
-    const at = c
-      ? Number(c[1]) * 60 + Number(c[2])
-      : Number(m[1]) * 60 + Number(m[2]);
     // a line resting on the log's own failed-control row (`logged IMMUNE`,
     // `logged MISSED` …) is that trigger's outcome: a landing after it is
     // another trigger — a later trap, 41 s on (fact4 batch 2, cap-f2
     // 118-1-655 7:31 → 8:12, once the trap's landing window became its 60 s
-    // area) — so only the same-instant window applies to it
-    const { beforeMs, afterMs } = / logged [A-Z]/.test(line)
+    // area) — so only the same-instant window applies to it, centred on the
+    // line's own (hit) second, not the cast's (codex 20-F17-02 #3: a
+    // Capacitor Totem `cast 0:10` logged IMMUNE at 0:12 beside a 0:12
+    // landing passed)
+    const logged = / logged [A-Z]/.test(line);
+    const c = logged ? null : line.match(CC_AVOIDED_CAST_STAMP);
+    const at = c
+      ? Number(c[1]) * 60 + Number(c[2])
+      : Number(m[1]) * 60 + Number(m[2]);
+    const { beforeMs, afterMs } = logged
       ? {
           beforeMs: CC_LANDED_MATCH_WINDOW_MS,
           afterMs: CC_LANDED_MATCH_WINDOW_MS,
         }
       : ccLandedMatchWindowMs(m[4]!);
-    const twin = (landed.get(`${m[3]}\u0000${m[4]}`) ?? []).find((t) => {
-      const d = t - at;
-      return d >= 0 ? d + 1 <= afterMs / 1000 : -d + 1 <= beforeMs / 1000;
-    });
+    // …and only its own caster's landing answers it (the producer's
+    // `landedOnPlayer(…, ownTrigger)`: a second shaman's Capacitor Totem
+    // stunning the mage in the second the first one's logged IMMUNE is no
+    // contradiction)
+    const caster = logged ? CC_LINE_CASTER_ID.exec(line)?.[1] : undefined;
+    const twin = (landed.get(`${m[3]}\u0000${m[4]}`) ?? [])
+      .filter(
+        (l) =>
+          caster === undefined || l.caster === undefined || l.caster === caster,
+      )
+      .map((l) => l.at)
+      .find((t) => {
+        const d = t - at;
+        return d >= 0 ? d + 1 <= afterMs / 1000 : -d + 1 <= beforeMs / 1000;
+      });
     if (twin !== undefined)
       failures.push(
         `line ${i + 1}: [CC AVOIDED?] 说 ${m[4]} 没落在 ${m[3]} 身上,但 ${fmtTime(twin)} 有同名 [CC ON TEAM] 落地行 —— ${line.trim().slice(0, 140)}`,
@@ -4359,11 +4379,14 @@ export function checkKillAttemptAlreadyUpStated(lines: string[]): string[] {
   return failures;
 }
 
-/** What follows the ability's name on an own `[ENEMY DEF]` percentage line:
+/** What follows the ability's name on an own `[ENEMY DEF]` wall line:
  * `(N%)`, `(N%, 8.0s…`, `(N%, end not logged…` — the percentage and, when
- * the line prints one, its length in seconds. */
+ * the line prints one, its length in seconds — or a deflection's label in
+ * the percentage's place (`(deflects direct attacks; …, 8.0s)`: Aspect of
+ * the Turtle, a wall of the producer's cut since fact4 batch 1 — codex
+ * 20-F17-01 #3: the gate skipped it). The words hold no regex metacharacter. */
 const ENEMY_DEF_OWN_PCT_LABEL = new RegExp(
-  String.raw`^\((\d+)%(?:, (?:${ENEMY_DEF_END_NOT_LOGGED}|(\d+(?:\.\d+)?)s))?`,
+  String.raw`^\((?:(\d+)%|${ENEMY_DEF_DEFLECTS_WORDS})(?:, (?:${ENEMY_DEF_END_NOT_LOGGED}|(\d+(?:\.\d+)?)s))?`,
 );
 
 /**

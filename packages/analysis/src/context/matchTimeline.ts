@@ -47,7 +47,7 @@ import {
   isHealerSpec,
 } from "../utils/cooldowns";
 import {
-  buildDampeningEvents,
+  dampeningReadersAt,
   getDampeningPercentage,
 } from "../utils/dampening";
 import { IDispelSummary } from "../utils/dispelAnalysis";
@@ -405,21 +405,21 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
   // fact4 D53 (a8056a0f r0 2:16): a line about ONE unit reads that unit's
   // own doses — a teammate ticks up to ~2.4 s ahead, and the owner's Dark
   // Pact printed the teammate's 42 % beside its own 41; a unit with no dose
-  // logged reads its side's.
+  // logged reads its side's. Only from the unit's first dose on (codex
+  // 20-F17-03 #2, 306d0a57: a first own dose of 43 % at 23.3 s, read at
+  // 0:03, derived a 42 % opening where the side's own first dose — and the
+  // DAMPENING header — said 41).
   const dampeningAt = (
     atSeconds: number,
     side: "friendly" | "enemy" = "friendly",
     unit?: ICombatUnit,
   ) => {
     const sideUnits = side === "enemy" ? (enemies ?? []) : friends;
-    const own =
-      unit !== undefined && buildDampeningEvents([unit]).length > 0
-        ? [unit]
-        : sideUnits;
+    const atMs = matchStartMs + atSeconds * 1000;
     return getDampeningPercentage(
       bracket ?? "3v3",
-      own,
-      matchStartMs + atSeconds * 1000,
+      dampeningReadersAt(unit, sideUnits, atMs),
+      atMs,
       allPlayers,
     );
   };

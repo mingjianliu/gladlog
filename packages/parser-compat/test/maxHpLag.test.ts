@@ -47,3 +47,41 @@ describe("laggingMaxHpCorrected (fact4 D13 / D14 / D50)", () => {
     expect(laggingMaxHpCorrected(rows)).toEqual([1_000_000, 1_000_000, 900_000]);
   });
 });
+
+describe("laggingMaxHpCorrected — a real heal or hit is no lag (codex 20-F17-03 #1)", () => {
+  it("the max-change row's own HP moving by the ratio: the rescale is there", () => {
+    // 5c48e842 r1 127.4 s: a 73,971 heal to full, then cur and max both ×1.10
+    const rows = [
+      s(127_000, 669_809, 743_780),
+      s(127_402, 743_780, 743_780),
+      s(127_680, 818_158, 818_158),
+    ];
+    expect(laggingMaxHpCorrected(rows)).toEqual([
+      743_780, 743_780, 818_158,
+    ]);
+  });
+  it("a jump the unit's logged heals add up to stays", () => {
+    const rows = [
+      s(0, 669_809, 743_780),
+      s(400, 743_780, 743_780),
+      s(600, 743_780, 818_158), // the max moves alone (no rescale logged)
+    ];
+    const heal = [{ timestamp: 400, amount: 73_971 }];
+    expect(laggingMaxHpCorrected(rows, heal)).toEqual([
+      743_780, 743_780, 818_158,
+    ]);
+    // without the heal the same rows read as a lag run
+    expect(laggingMaxHpCorrected(rows)).toEqual([743_780, 818_158, 818_158]);
+  });
+  it("a hit that does not add up keeps the lag reading (bear exit with a tick)", () => {
+    const rows = [
+      s(0, 1_607_106, 1_644_592),
+      s(50, 1_239_524, 1_644_592),
+      s(310, 1_251_259, 1_265_069),
+    ];
+    const hits = [{ timestamp: 50, amount: -12_000 }];
+    expect(laggingMaxHpCorrected(rows, hits)).toEqual([
+      1_644_592, 1_265_069, 1_265_069,
+    ]);
+  });
+});

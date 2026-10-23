@@ -116,7 +116,10 @@ import {
 import spellEffectGenerated from "@gladlog/analysis/src/data/spellEffectGenerated.json";
 import { ccSpellIds } from "@gladlog/analysis/src/data/spellTags";
 import { buffFullDurationForCaster } from "@gladlog/analysis/src/utils/buffDuration";
-import { HERALD_PROC_BUNDLE_IDS } from "@gladlog/analysis/src/utils/hiddenPress";
+import {
+  HERALD_PROC_BUNDLE_IDS,
+  hiddenAuraLifeMs,
+} from "@gladlog/analysis/src/utils/hiddenPress";
 import { GladLogParser, type GladMatch } from "@gladlog/parser";
 import { LogEvent, toLegacyMatch } from "@gladlog/parser-compat";
 
@@ -544,18 +547,21 @@ for (const f of files) {
           continue;
         }
         // already up (a re-listing) / a server re-apply
-        let up = false;
+        // (an aura whose REMOVED the log lost is up for its official length
+        // + 1 s, the analysis' own reading — `hiddenAuraLifeMs`, codex
+        // 21-R12-a #3: a lost REMOVED hid every later unseen press)
+        let upUntil = -Infinity;
         let reapply = false;
         for (let j = 0; j < k; j++) {
           const b = rows[j];
           if (b.spellId !== a.spellId) continue;
-          if (ev(b) === APPLIED) up = true;
+          if (ev(b) === APPLIED) upUntil = tsOf(b) + hiddenAuraLifeMs(b.spellId);
           else if (ev(b) === REMOVED) {
-            up = false;
+            upUntil = -Infinity;
             if (ta - tsOf(b) <= 50) reapply = true;
           }
         }
-        if (up || reapply) continue;
+        if (ta <= upUntil || reapply) continue;
         // the copy's length (judged at the end against the pressed runs: a
         // talent / proc copy runs its own shorter one)
         const rm = rows.find(

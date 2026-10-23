@@ -19,6 +19,7 @@ import {
 import { dropAuraRebroadcasts, supersededAuraBreaks } from "./auraIntervals";
 import { buffFullDurationForCaster } from "./buffDuration";
 import { castingLockIntervalsOf } from "./castingLocks";
+import { charmedAt } from "./charmedPlayer";
 import { REACTION_WINDOW_S, usableWhileStunned } from "./cooldowns";
 import {
   getDRCategory,
@@ -810,11 +811,17 @@ export function castBlockingAuraIntervals(
     // refused "while horrified" under a Sin and Punishment sourced to the
     // healer's own Shadow Priest). `ccInstances` takes it on a friendly
     // holder the same way.
+    // codex 21-R12-b #1: a control the holder's OWN team put on it while it
+    // was charmed (Mind Controlled) is a control on it — `ccInstances`'
+    // admission (`charmedAt`); the APPLIED decides, as for an enemy's
     if (
       !isBreakRow &&
       !enemyIds.has(aura.srcUnitId) &&
       aura.srcUnitId !== unit.id &&
-      !BACKLASH_AURA_CC_TYPE.has(spellId)
+      !BACKLASH_AURA_CC_TYPE.has(spellId) &&
+      !(isApplied && charmedAt(unit, aura.timestamp)) &&
+      // …and its REMOVED closes it (the application is pending by its key)
+      !(!isApplied && pending.has(`${spellId}:${aura.srcUnitId}`))
     )
       continue;
     // cc-dr F-BK1: the dispel-backlash auras (Unstable Affliction's silence
@@ -980,6 +987,24 @@ export const isSilenceEffectAura = (auraId: string): boolean =>
  * Lock while stunned). `hostileIds` = the ids that may have applied the aura
  * (the other side's players and their summons, `enemySourceIds`).
  */
+/** How far past a unit's last aura event a casting lock it never closed is
+ * left open for the interval builder to cap at the lock's official length. */
+const CASTING_LOCK_OPEN_END_MS = 10 * 60_000;
+/** The unit's last logged event of any kind, epoch ms. */
+function lastLoggedEventMs(unit: ICombatUnit): number {
+  let last = -Infinity;
+  for (const stream of [
+    unit.auraEvents,
+    unit.spellCastEvents,
+    unit.damageIn,
+    unit.damageOut,
+    unit.healIn,
+    unit.healOut,
+    unit.advancedActions,
+  ] as ReadonlyArray<ReadonlyArray<{ timestamp: number }> | undefined>)
+    for (const e of stream ?? []) if (e.timestamp > last) last = e.timestamp;
+  return last;
+}
 const castingLockMemo = new WeakMap<
   ICombatUnit,
   Map<string, Array<{ from: number; to: number; spellId: string }>>
@@ -1001,21 +1026,30 @@ function castingLockAuraAt(
   let ivs = byId.get(key);
   if (!ivs) {
     // the unit's own logged span stands in for the round: an aura open
-    // before its first event starts there, one never closed is capped at its
-    // official length by the interval builder
+    // before its first event starts there; one never closed runs its
+    // official length (codex 21-R12-b #4: an Ice Block that was the mage's
+    // last aura event, its REMOVED lost, was capped at that event — a
+    // zero-length lock, and the blocked mage read a ready kicker). The span
+    // is left open past the last aura event so the builder's cap is the
+    // official length; a lock with no official length ends at the unit's
+    // last logged event of any kind.
     let first = Infinity;
     let last = -Infinity;
     for (const a of unit.auraEvents ?? []) {
       if (a.timestamp < first) first = a.timestamp;
       if (a.timestamp > last) last = a.timestamp;
     }
-    ivs = Number.isFinite(first)
-      ? castingLockIntervalsOf(
-          unit,
-          { startTime: first, endTime: last },
-          spellId,
-        )
-      : [];
+    if (Number.isFinite(first)) {
+      const openEnd = last + CASTING_LOCK_OPEN_END_MS;
+      const lastSeen = lastLoggedEventMs(unit);
+      ivs = castingLockIntervalsOf(
+        unit,
+        { startTime: first, endTime: openEnd },
+        spellId,
+      ).map((iv) =>
+        iv.to >= openEnd ? { ...iv, to: Math.max(iv.from, lastSeen) } : iv,
+      );
+    } else ivs = [];
     byId.set(key, ivs);
   }
   const iv = ivs.find((x) => x.from <= tMs && tMs < x.to);

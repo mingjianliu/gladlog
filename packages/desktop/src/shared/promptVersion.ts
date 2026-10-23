@@ -403,5 +403,19 @@
  *  with DR; an inferred-end own shield runs to its last absorb. 605 files
  *  vs v444 (f3b → f4): healer cd-hoarded 574 → 571 (35 answered by such a
  *  press, 32 new — 25 with only such a cooldown ready).
+ *
+ * v446 (2026-10-23, fact4 F17 batch 5 — review follow-ups, user approved
+ *  「批准」): a heal or hit that moves current HP by a max-HP change's ratio
+ *  is no max-HP lag, and the report's HP timeline and replay read the same
+ *  corrected max HP; a line's own Dampening only from its unit's first dose;
+ *  crisis feasibility ends at the last playable instant; a control with its
+ *  own logged miss row is answered only by its caster's landing of that
+ *  trigger (a later trap, another caster's Capacitor Totem no longer hide
+ *  it); a pet-executed kick's miss row is paired at the pet's instant; a
+ *  control the charmed holder's own team put on it locks its casting; a
+ *  warlock's purge is locked while no Felhunter is out, per pet unit; an
+ *  unclosed casting lock runs its official length. 605 files vs v445 (f4 →
+ *  f5b): healer crisis-no-response 8 → 7 (a crossing in a Solo Shuffle
+ *  round's last second); `[CC AVOIDED?] … logged` lines 6,354 → 6,416.
  */
-export const PROMPT_VERSION = 445;
+export const PROMPT_VERSION = 446;

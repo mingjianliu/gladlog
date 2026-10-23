@@ -108,6 +108,43 @@ describe("kickAudit — a pet's own kick (fact3 D28)", () => {
     expect(run([ownerRow], t + 476)).toHaveLength(1);
     expect(run([ownerRow], t + 2000)).toHaveLength(2);
   });
+  it("the pet's IMMUNE row at its own instant is that kick's outcome (codex 20-F17-02 #2)", () => {
+    const t = MATCH_START + 10_000;
+    const ownerRow = makeSpellCastEvent(
+      COMMAND_DEMON,
+      t,
+      "e1",
+      "Enemy",
+      "p1",
+      "Warlock",
+      0,
+      "Spell Lock",
+    );
+    const player = makeUnit("p1", {
+      name: "Warlock",
+      info,
+      spellCastEvents: [ownerRow],
+    } as any);
+    const felhunter = pet(t + 476);
+    felhunter.missesOut = [
+      {
+        timestamp: t + 476,
+        spellId: SPELL_LOCK_PET,
+        srcUnitId: "pet1",
+        destUnitId: "e1",
+        destUnitName: "Enemy",
+        missType: "IMMUNE",
+      },
+    ] as any;
+    const enemy = makeUnit("e1", { name: "Enemy", info } as any);
+    const combat = {
+      ...makeCombat(),
+      units: { p1: player, pet1: felhunter, e1: enemy },
+    };
+    const entries = analyzeKickAudit(player, [enemy], combat);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]!.kickMiss?.missType).toBe("IMMUNE");
+  });
 });
 
 describe("kickAudit", () => {

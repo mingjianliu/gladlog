@@ -188,6 +188,7 @@ import {
   splitLine as parserSplitLine,
 } from "@gladlog/parser";
 import { CombatUnitSpec } from "@gladlog/parser-compat";
+import * as convertMod from "@gladlog/parser-compat/src/convert";
 import * as maxHpLagMod from "@gladlog/parser-compat/src/maxHpLag";
 import { readdirSync, readFileSync } from "fs";
 import { join } from "path";
@@ -2192,9 +2193,39 @@ const INDEX: PredicateRow[] = [
     mod: cooldowns,
   },
   {
+    file: `${A}/utils/dampening.ts`,
+    symbol: "dampeningReadersAt",
+    mod: dampening,
+  },
+  {
+    file: `${A}/utils/charmedPlayer.ts`,
+    symbol: "charmedAt",
+    mod: charmedPlayer,
+  },
+  {
+    file: `${A}/utils/warlockPet.ts`,
+    symbol: "warlockPetChronology",
+    mod: warlockPet,
+  },
+  {
+    file: `${A}/utils/dispelAnalysis.ts`,
+    symbol: "purgePetAbsentSpansMs",
+    mod: dispelAnalysis,
+  },
+  {
+    file: `${A}/utils/hiddenPress.ts`,
+    symbol: "hiddenAuraLifeMs",
+    mod: hiddenPress,
+  },
+  {
     file: "packages/parser-compat/src/maxHpLag.ts",
     symbol: "laggingMaxHpCorrected",
     mod: maxHpLagMod,
+  },
+  {
+    file: "packages/parser-compat/src/convert.ts",
+    symbol: "correctedAdvancedSamples",
+    mod: convertMod,
   },
   {
     file: `${A}/utils/dampening.ts`,

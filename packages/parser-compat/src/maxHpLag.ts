@@ -16,12 +16,24 @@
  * the row where current HP changes by a factor within `MAX_HP_LAG_RATIO_TOL`
  * of new max / old max while the max stays put, to the row the max catches up
  * on (at most `MAX_HP_LAG_MS` later), the new maximum is the row's.
+ *
+ * Two readings rule a run out (codex 20-F17-03 #1, 5c48e842 r1 127.4 s: a
+ * logged 73,971 heal took a druid from 669,809 to 743,780 / 743,780, then
+ * current and max both became 818,158 — the heal's 1.11 matched the max's
+ * 1.10 and the full-HP heal row was rewritten to 90.9 %):
+ *  - the max-change row's own current HP moving by the ratio — the rescale
+ *    happened there, with the max, so nothing before it lags;
+ *  - the jump explained by the heals and hits the unit took between the two
+ *    rows (`hpEvents`, signed effective amounts) — a real heal or hit.
  */
 export const MAX_HP_LAG_MS = 1000;
 /** relative tolerance between the current-HP jump and the max-HP ratio
  * (the three audited cases: 0.7713 vs 0.7692, 0.8696 vs 0.8696, 0.7724 vs
  * 0.7692 — healing or a tick inside the lag moves the jump a little) */
 export const MAX_HP_LAG_RATIO_TOL = 0.01;
+/** how closely the logged heals / hits between two rows must add up to the
+ * current-HP change for the change to be theirs (relative to the change) */
+export const MAX_HP_LAG_EXPLAINED_TOL = 0.02;
 
 /**
  * The max HP each sample should be read with: its own, or — for a sample
@@ -30,13 +42,35 @@ export const MAX_HP_LAG_RATIO_TOL = 0.01;
  */
 export function laggingMaxHpCorrected(
   samples: ReadonlyArray<{ timestamp: number; hp: number; maxHp: number }>,
+  /** the unit's heals (+) and hits (−) by effective amount, sorted by time */
+  hpEvents: ReadonlyArray<{ timestamp: number; amount: number }> = [],
 ): number[] {
   const out = samples.map((s) => s.maxHp);
+  const explained = (fromMs: number, toMs: number, delta: number) => {
+    let sum = 0;
+    let any = false;
+    for (const e of hpEvents) {
+      if (e.timestamp <= fromMs) continue;
+      if (e.timestamp > toMs) break;
+      sum += e.amount;
+      any = true;
+    }
+    return (
+      any && Math.abs(sum - delta) <= MAX_HP_LAG_EXPLAINED_TOL * Math.abs(delta)
+    );
+  };
   for (let k = 1; k < samples.length; k++) {
     const oldMax = samples[k - 1]!.maxHp;
     const newMax = samples[k]!.maxHp;
     if (!(oldMax > 0) || !(newMax > 0) || oldMax === newMax) continue;
     const ratio = newMax / oldMax;
+    // the current HP rescaled on the max-change row itself: no lag
+    const hpBefore = samples[k - 1]!.hp;
+    if (
+      hpBefore > 0 &&
+      Math.abs(samples[k]!.hp / hpBefore - ratio) <= MAX_HP_LAG_RATIO_TOL * ratio
+    )
+      continue;
     // walk back over the rows still on the old maximum inside the lag window
     // for the current-HP jump by that ratio
     for (let i = k - 1; i >= 1; i--) {
@@ -47,6 +81,7 @@ export function laggingMaxHpCorrected(
       if (!(prev.hp > 0)) continue;
       const jump = s.hp / prev.hp;
       if (Math.abs(jump - ratio) <= MAX_HP_LAG_RATIO_TOL * ratio) {
+        if (explained(prev.timestamp, s.timestamp, s.hp - prev.hp)) break;
         for (let j = i; j < k; j++) out[j] = newMax;
         break;
       }

@@ -233,6 +233,24 @@ function initialDampeningOf(
 // ---------------------------------------------------------------------------
 
 /**
+ * Whose doses a line about `unit` reads at `atMs`: the unit's own once it has
+ * a dose logged at or before the instant (fact4 D53: a teammate ticks up to
+ * ~2.4 s ahead), else its side's (codex 20-F17-03 #2: a first own dose of
+ * 43 % at 23.3 s derived a 42 % opening at 0:03 where the side's — and the
+ * DAMPENING header — said 41).
+ */
+export function dampeningReadersAt(
+  unit: ICombatUnit | undefined,
+  sideUnits: ICombatUnit[],
+  atMs: number,
+): ICombatUnit[] {
+  return unit !== undefined &&
+    buildDampeningEvents([unit]).some((e) => e.timestamp <= atMs)
+    ? [unit]
+    : sideUnits;
+}
+
+/**
  * The dampening (0–100) at `timestamp` — `null` where none is stated: a 2v2
  * round that logged no stack (`getInitialDampening`). A caller that prints
  * the value prints nothing on `null`.

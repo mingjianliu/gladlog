@@ -4097,5 +4097,31 @@ such a cooldown ready: Nature's Swiftness 16, Evangelism 8, Convoke 1; 7 the
 round's next crisis once the first was answered), 46 keep their crisis with
 the amplifier added to `readyCds`. Gates = f3b; corpusFactScan2
 defenselessSaveUp 3 → 1 (own Holy Bulwark absorbs past the inferred end
-10 s → 0), corpusFactScan 1/2/3 otherwise unchanged or 0. Family diff: `[CD PRIOR]` Stasis 0 → 13, Tip the Scales 0 → 5
+10 s → 0), corpusFactScan 1/2/3 otherwise unchanged or 0.
+
+v446 (2026-10-23, fact4 F17 batch 5 — external review follow-ups, user
+approved 「批准」): `laggingMaxHpCorrected` no longer rewrites a real heal or
+hit — the max-change row's own current HP moving by the ratio, or a jump the
+unit's logged heals and hits add up to (±2 %), is no lag (5c48e842 r1: a
+73,971 heal to full read 90.9 %) — and the report's HP timeline and replay
+read the same corrected samples (`correctedAdvancedSamples`); a line about
+one unit reads its own Dampening only from its first own dose
+(`dampeningReadersAt`); crisis feasibility ends at the last playable instant
+(`playableEndMs`, moved to `utils/roundEnd.ts`); a control that logged its
+own failed-control row on the player is answered only by a landing of that
+trigger — its caster's (or the caster's summon's), with no later cast of it
+by that caster before (fb198a1a r1: a trap's MISS hidden by the next trap
+41 s on) — and the gate reads a `logged <TYPE>` line per caster at its own
+hit second; a pet-executed kick's miss row pairs at the pet's instant; a
+control the charmed holder's own team put on it locks its casting
+(`charmedAt`); a warlock's purge is locked while no Felhunter is out, per
+pet unit (`warlockPetChronology`, `purgePetAbsentSpansMs`); an unclosed
+casting lock runs its official length; an own-wall gate line may carry the
+deflect label. 605 files vs v445 (f4 → f5b): healer crisis-no-response 8 → 7
+(s2/32-4-217: a crossing at 2:59, the round-ending death in that second);
+`[CC AVOIDED?] … logged` lines 6,354 → 6,416, lines with no logged row
+unchanged (740). Gates = f4 (the first capture, f5, showed 58
+checkCcAvoidedLandedConsistency failures from the landing-attribution change
+applied to unlogged lines and a gate keyed without the caster — both fixed
+before f5b). Scans unchanged or 0; regression net aoeMissAvoided 8 → 3. Family diff: `[CD PRIOR]` Stasis 0 → 13, Tip the Scales 0 → 5
 — intended.

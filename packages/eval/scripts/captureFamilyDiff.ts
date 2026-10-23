@@ -67,7 +67,10 @@ for (const id of observedIds as number[]) {
 }
 const byFirstWord = new Map<string, string[]>();
 for (const n of names) {
-  const w = n.split(" ")[0]!;
+  // keyed as the lookup reads a word — a trailing colon dropped (codex
+  // 20-F17-01 #4: "Incarnation: Tree of Life" sat under "Incarnation:" and
+  // every Incarnation line matched the bare "Incarnation")
+  const w = n.split(" ")[0]!.replace(/:$/, "");
   const list = byFirstWord.get(w) ?? [];
   list.push(n);
   byFirstWord.set(w, list);

@@ -11,6 +11,10 @@
  * `healingGaps` and the candidate layer all read it.
  */
 
+import { CombatUnitReaction } from "@gladlog/parser-compat";
+
+import { bracketKey } from "./bracketKey";
+
 /** The bracket whose rounds end at their first player death, as
  * `startInfo.bracket` spells it — and as the prompt's header prints it
  * (`Bracket: Rated Solo Shuffle`), which is how the gate that re-reads a
@@ -119,4 +123,39 @@ export function roundEndMs(
       deathRecords?: ReadonlyArray<{ timestamp?: number }>;
     }>);
   return shuffleRoundEndMs(combat, all) ?? combat.endTime;
+}
+
+/** 3v3 only: the first friendly player death, epoch ms — the instant the
+ * match is decided (user ruling 2026-09-30) — or undefined for other brackets
+ * / a match with no friendly player death. "Friendly" is the log's own side,
+ * the same reaction the death candidates tag `side=friendly`. */
+export function threesDecidedMs(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  combat: any,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  units: any[],
+): number | undefined {
+  if (bracketKey(combat?.startInfo?.bracket) !== "3v3") return undefined;
+  let firstMs = Infinity;
+  for (const u of units) {
+    if (!u.info || u.reaction !== CombatUnitReaction.Friendly) continue;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    for (const d of (u.deathRecords ?? []) as any[])
+      firstMs = Math.min(firstMs, d.timestamp ?? Infinity);
+  }
+  return Number.isFinite(firstMs) ? firstMs : undefined;
+}
+
+/** The last playable instant, epoch ms: a Solo Shuffle round's ending death
+ * or a 3v3's deciding friendly death — the one definition behind the menu
+ * cut, the owner gate's `untilS`, the could-respond window's round end and
+ * crisis feasibility (codex 20-F17-01 #1). Moved from candidateFindings.ts,
+ * which re-exports it. */
+export function playableEndMs(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  combat: any,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  units: any[],
+): number | undefined {
+  return shuffleRoundEndMs(combat, units) ?? threesDecidedMs(combat, units);
 }

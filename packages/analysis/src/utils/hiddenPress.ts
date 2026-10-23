@@ -60,6 +60,14 @@ const AVENGING_WRATH_AURA_IDS = new Set(["31884", "454351"]);
  * one. */
 const PRESS_ROW_PAIR_MS = 1000;
 
+/** How long an own aura whose REMOVED the log lost is still read as up
+ * after its last (re)application: its official length + 1 s, else for good
+ * (codex 21-R12-a #3). The corpus scan's `hiddenPressUnused` reads it too. */
+export function hiddenAuraLifeMs(spellId: string): number {
+  const d = spellEffectData[spellId]?.durationSeconds;
+  return typeof d === "number" && d > 0 ? (d + 1) * 1000 : Infinity;
+}
+
 /**
  * The instants (ms) of `spellId`'s hidden presses by `unit` in
  * [fromMs, toMs]: an APPLIED of its own aura (same id) from the unit on
@@ -149,10 +157,7 @@ export function hiddenPressMs(
   // 21-R12-a #3: an Evasion APPLIED at 10 s with no REMOVED kept `up` true
   // for the round and hid a fresh unseen press at 140 s)
   let upUntilMs = -Infinity;
-  const lifeMs = (id: string): number => {
-    const d = spellEffectData[id]?.durationSeconds;
-    return typeof d === "number" && d > 0 ? (d + 1) * 1000 : Infinity;
-  };
+  const lifeMs = hiddenAuraLifeMs;
   for (const [i, a] of own.entries()) {
     const ms = a.logLine.timestamp;
     const up = ms <= upUntilMs;

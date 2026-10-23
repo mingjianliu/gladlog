@@ -147,7 +147,12 @@ import {
   type IRootInstance,
   rootReachProvenFact,
 } from "../utils/rootReachability";
-import { roundEndMs as roundEndOf, shuffleRoundEndMs } from "../utils/roundEnd";
+import {
+  playableEndMs,
+  roundEndMs as roundEndOf,
+  shuffleRoundEndMs,
+  threesDecidedMs,
+} from "../utils/roundEnd";
 import { RANGE_HITBOX_SLACK_YD, spellReachToAccuse } from "../utils/spellRange";
 import {
   isCasterCentredSpell,
@@ -815,27 +820,9 @@ export function afterShuffleRoundEnd(
  * CC windows, the uncleansed windows and the healing gaps). */
 export { shuffleRoundEndMs };
 
-/** 3v3 only: the first friendly player death, epoch ms — the instant the
- * match is decided (user ruling 2026-09-30) — or undefined for other brackets
- * / a match with no friendly player death. "Friendly" is the log's own side,
- * the same reaction the death candidates tag `side=friendly`. */
-export function threesDecidedMs(combat: any, units: any[]): number | undefined {
-  if (bracketKey(combat?.startInfo?.bracket) !== "3v3") return undefined;
-  let firstMs = Infinity;
-  for (const u of units) {
-    if (!u.info || u.reaction !== CombatUnitReaction.Friendly) continue;
-    for (const d of (u.deathRecords ?? []) as any[])
-      firstMs = Math.min(firstMs, d.timestamp ?? Infinity);
-  }
-  return Number.isFinite(firstMs) ? firstMs : undefined;
-}
-
-/** The last playable instant, epoch ms: a Solo Shuffle round's ending death
- * or a 3v3's deciding friendly death — the one definition behind the menu
- * cut, the owner gate's `untilS` and the could-respond window's round end. */
-export function playableEndMs(combat: any, units: any[]): number | undefined {
-  return shuffleRoundEndMs(combat, units) ?? threesDecidedMs(combat, units);
-}
+/** 3v3's deciding death and the last playable instant — defined in
+ * `utils/roundEnd.ts` (codex 20-F17-01 #1: crisis feasibility reads it too). */
+export { playableEndMs, threesDecidedMs };
 
 /** The latest instant a candidate is about: its `t`, or a later death it
  * names (`facts.deathT` — death-setup anchors at the healer lock before it). */

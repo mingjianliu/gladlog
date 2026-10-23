@@ -65,6 +65,23 @@ describe("checkNoWindowAcrossOwnWall", () => {
     expect(fails[5]).toContain("line 7: [VULNERABLE] 的区间 1:35–2:51");
   });
 
+  it("fails: Aspect of the Turtle's deflect line is a wall line too (codex 20-F17-01 #3)", () => {
+    const turtle = own(
+      "2:04",
+      "Aspect of the Turtle (deflects direct attacks; periodic damage still lands, 8.0s)",
+    );
+    expect(
+      checkNoWindowAcrossOwnWall([
+        ...ROSTER,
+        vulnerable("1:35–2:51"),
+        turtle,
+      ]),
+    ).toHaveLength(1);
+    expect(
+      checkNoWindowAcrossOwnWall([...ROSTER, vulnerable("1:35–2:04"), turtle]),
+    ).toEqual([]);
+  });
+
   it("passes: the spans as the cut leaves them — ending on the wall's second, starting again in the second the wall ended", () => {
     expect(
       checkNoWindowAcrossOwnWall([

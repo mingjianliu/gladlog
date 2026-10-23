@@ -1823,6 +1823,31 @@ describe("checkCcAvoidedLandedConsistency — a CC that landed cannot also have 
     ).toHaveLength(1);
     expect(checkCcAvoidedLandedConsistency([logged])).toEqual([]);
   });
+
+  it("a `logged <TYPE>` line with a cast stamp is read at its own hit second (codex 20-F17-02 #3)", () => {
+    const line =
+      "0:12  [CC AVOIDED?]   1(PEvoker): Capacitor Totem (by 6(RShaman); cast 0:10) logged IMMUNE; Nullifying Shroud (own) active";
+    expect(
+      checkCcAvoidedLandedConsistency([
+        line,
+        "0:12  [CC ON TEAM]   1(PEvoker) ← Capacitor Totem (by 6(RShaman)'s totem) | 3s",
+      ]),
+    ).toHaveLength(1);
+    // another caster's landing in that second is not this trigger's
+    expect(
+      checkCcAvoidedLandedConsistency([
+        line,
+        "0:12  [CC ON TEAM]   1(PEvoker) ← Capacitor Totem (by 5(EShaman)'s totem) | 3s",
+      ]),
+    ).toEqual([]);
+    // a landing at the cast's second is not this trigger's
+    expect(
+      checkCcAvoidedLandedConsistency([
+        line,
+        "0:10  [CC ON TEAM]   1(PEvoker) ← Capacitor Totem (by 6(RShaman)'s totem) | 3s",
+      ]),
+    ).toEqual([]);
+  });
 });
 
 describe("checkWarlockPurgeFollowsPet — the purge header follows the warlock's pet (fact1215 C10)", () => {
