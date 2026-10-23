@@ -3384,19 +3384,30 @@ export function analyzePlayerCCAndTrinket(
   // Invisibility swallowed printed `(4s)` beside its own `[DR: Stun 50%]`;
   // the priest's re-listed auras 2.15 s later no longer held it. The DR walk
   // reads the windows' ends, so it is walked again over the shortened ones.
+  // codex 21-R12-a #1: resolved in apply order — a window's DR reads only
+  // the windows before it, so each is settled on its predecessors' settled
+  // ends. One pass over every window at once read a later Kidney Shot as
+  // DR-immune off an earlier Leg Sweep still at its full length, cut it to
+  // 0 s, and the walk that followed relabelled it Full but left it 0 s long.
   let shortened = false;
-  filteredCCWindows.forEach((w, idx) => {
-    if (!w.noRemoved) return;
+  const applyOrder = filteredCCWindows
+    .map((w, idx) => ({ w, idx }))
+    .sort((a, b) => a.w.applyMs - b.w.applyMs)
+    .map(({ idx }) => idx);
+  for (const idx of applyOrder) {
+    const w = filteredCCWindows[idx]!;
+    if (!w.noRemoved) continue;
+    if (shortened) walkDr();
     const exp = expectedDurationS(w, idx);
-    if (exp === undefined) return;
+    if (exp === undefined) continue;
     const endMs = w.applyMs + exp * 1000;
-    if (endMs >= w.removeMs) return;
+    if (endMs >= w.removeMs) continue;
     // ended before the round did (every window ends by the round's end)
     const ended = { ...w, removeMs: endMs };
     delete ended.stillOnAtRoundEnd;
     filteredCCWindows[idx] = ended;
     shortened = true;
-  });
+  }
   if (shortened) walkDr();
   // WO3 Part 2 (r1014-173): a CHANNELLED control (Mind Control)
   // ends when its caster's channel is interrupted — that, not a break the

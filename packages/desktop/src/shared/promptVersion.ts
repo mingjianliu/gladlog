@@ -390,5 +390,18 @@
  *  ledger; a snare copy's miss is no control failing; Mutilate's off-hand
  *  and Germination's 774 companion are no presses. 605 files vs v443 (f2c →
  *  f3b): dps cd-hoarded −1 (the crisis unit's own Cauterize saved it).
+ *
+ * v445 (2026-10-23, fact4 F17 batch 4, user approved 「批准」): the healer
+ *  save roster's heal amplifiers (Nature's Swiftness, Evangelism, Stasis,
+ *  Tip the Scales, Convoke, Holy Avenging Wrath) help an ally — no longer
+ *  "self-only defensives correctly HELD", and a press of one answers a
+ *  teammate's crisis; the NOTE's hold test counts refused presses; a
+ *  multi-charge cooldown is available while one charge is (STAYED IN reads
+ *  the [RES] ledger); codex 21-R12-a: a death window ends at the round's
+ *  end, an un-removed hidden buff expires after its duration, `used up`
+ *  needs the spender cast, inferred control ends settle in apply order
+ *  with DR; an inferred-end own shield runs to its last absorb. 605 files
+ *  vs v444 (f3b → f4): healer cd-hoarded 574 → 571 (35 answered by such a
+ *  press, 32 new — 25 with only such a cooldown ready).
  */
-export const PROMPT_VERSION = 444;
+export const PROMPT_VERSION = 445;

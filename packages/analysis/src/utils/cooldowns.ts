@@ -187,6 +187,7 @@ export function canHelpAnotherUnit(spellId: string, tag?: string): boolean {
   if (reachesAlly(spellId)) return true;
   if (TEAM_HEAL_CD_IDS.has(spellId)) return true;
   if (THROUGHPUT_EMPOWER_DEFENSIVE_IDS.has(spellId)) return true;
+  if (saveRoleReachesAlly(spellId)) return true;
   // Layer 4. `tag` is the caller's own IMajorCooldownInfo.tag when it has one,
   // and it takes precedence over the id set — because the id set is built from
   // the STATIC classMetadata, and two paths add Defensive-tagged cooldowns at
@@ -2490,6 +2491,10 @@ type CdAvailabilityInput = Pick<
   | "sharedCasts"
   | "rateWindows"
 >;
+
+/** The sampling step of a multi-charge cooldown's availability windows
+ * (`availableWindows`, fact4 D55). */
+export const CHARGE_WINDOW_STEP_S = 0.25;
 
 export function cdAvailableAt(
   cd: CdAvailabilityInput,
@@ -5269,6 +5274,36 @@ function buildCooldownEntry(
     }
   }
 
+  // fact4 D55 (acf0e43d 1:53): a cooldown of more than one charge is
+  // available while one charge is — the [RES] ledger's own reading
+  // (`cdAvailableAt`, the sequential-recharge simulation), sampled every
+  // CHARGE_WINDOW_STEP_S. The cast-gap windows above are single-charge: a
+  // Survival of the Fittest pressed at 0:50.8 opened no window until 2:20.8,
+  // and STAYED IN said "no defensive CD available" beside a [RES] row
+  // listing `Survival of the Fittest[1/2]`.
+  if (baselineCharges > 1 && !procOnly && lockCasts.length > 0) {
+    const view: CdAvailabilityInput = {
+      cooldownSeconds,
+      charges: baselineCharges,
+      casts,
+      neverUsed: false,
+      isProcOnly: false,
+      ...(sharedCasts.length > 0 ? { sharedCasts } : {}),
+      ...(rateWindows ? { rateWindows } : {}),
+    };
+    availableWindows.length = 0;
+    let from: number | undefined;
+    for (let t = 0; t <= matchDurationSeconds; t += CHARGE_WINDOW_STEP_S) {
+      const ready = cdAvailableAt(view, t);
+      if (ready && from === undefined) from = t;
+      else if (!ready && from !== undefined) {
+        pushWindow(from, t);
+        from = undefined;
+      }
+    }
+    if (from !== undefined) pushWindow(from, matchDurationSeconds);
+  }
+
   return [
     {
       spellId: spell.spellId,
@@ -5412,6 +5447,28 @@ export const THROUGHPUT_EMPOWER_DEFENSIVE_IDS = new Set<string>(
     (f) => f.id,
   ),
 );
+
+/**
+ * fact4 D45 / D58 (2026-10-23): the healer save roster's heal amplifiers —
+ * a `save_role` cooldown whose official profile is silent because it
+ * empowers the next heal or casts another one (Nature's Swiftness,
+ * Evangelism, Stasis, Convoke the Spirits …) helps whoever that heal lands
+ * on, an ally included; read as self-only it was filed "a never-used
+ * self-only defensive, correctly HELD". Not the roster's self-only saves:
+ * a `responseOnly` entry (Barkskin, Frenzied Regeneration — user ruling
+ * 2026-09-24 「算救人 但是只能是自己」) or an official self wall
+ * (`isSurvivalWall`: Fortifying Brew).
+ */
+const SAVE_ROLE_NOT_RESPONSE_ONLY_IDS: ReadonlySet<string> = new Set(
+  CURATED_ABILITY_FACTS.filter(
+    (f) => f.kind === "save_role" && !f.responseOnly,
+  ).map((f) => f.id),
+);
+/** Asked at call time: `isSurvivalWall` reads the official profile, which
+ * is loaded after this module (`ensureAnalysisData`). */
+export function saveRoleReachesAlly(spellId: string): boolean {
+  return SAVE_ROLE_NOT_RESPONSE_ONLY_IDS.has(spellId) && !isSurvivalWall(spellId);
+}
 
 /**
  * F166 / review C2: given a defensive cast `cd`, return the names of strictly-cheaper

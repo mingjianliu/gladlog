@@ -396,7 +396,11 @@ export function buildDeepDivePack(
   // follow-up round.
   try {
     const outcome = buildDeathOutcomeSummary(
-      { startTime: combat.startTime ?? 0, zoneId: combat.startInfo?.zoneId },
+      {
+        startTime: combat.startTime ?? 0,
+        endTime: combat.endTime,
+        zoneId: combat.startInfo?.zoneId,
+      },
       friends,
       ccSummaries,
       (unit, spellId) =>

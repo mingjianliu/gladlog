@@ -19,6 +19,7 @@ import {
   stackedDefensivePairs,
 } from "../analysis/stackedDefensives";
 import { lookupCdTriggerPrior } from "../data/cdTriggerPrior";
+import { getEnglishSpellName } from "../data/spellEffectData";
 import { zoneMetadata } from "../data/zoneMetadata";
 import { allyCopyLegendPhrase } from "../utils/allyCopyWall";
 import { buildArchetypeInjectionHeader } from "../utils/archetypeInjection";
@@ -456,7 +457,11 @@ export function buildMatchContext(
   }
 
   const deathOutcome = buildDeathOutcomeSummary(
-    { startTime: combat.startTime, zoneId: combat.startInfo?.zoneId },
+    {
+      startTime: combat.startTime,
+      endTime: combat.endTime,
+      zoneId: combat.startInfo?.zoneId,
+    },
     friends as ICombatUnit[],
     ccTrinketSummaries,
     // the ledger entry, or the same model for a spell outside it
@@ -826,11 +831,23 @@ export function buildMatchContext(
   // predicate as the cd-waste candidate gate, see
   // lowPressureUnusedDefensiveNote).
   const ownerBars = castBarStartsInRound(owner as ICombatUnit, combat);
+  // fact4 D45 (63d13f66 r3): a press the game refused (Nature's Swiftness ×10,
+  // all "can't do that while stunned") is no hold either — the owner's own
+  // refused rows of the cooldown, by id or English name
+  const refusedPressesOf = (cd: { spellId: string; spellName: string }) =>
+    (options.rawStreams?.available ? options.rawStreams.castFailed : []).filter(
+      (h) =>
+        h.unitGuid === owner.id &&
+        (String(h.spellId) === cd.spellId ||
+          getEnglishSpellName(String(h.spellId), h.spellName) ===
+            cd.spellName),
+    ).length;
   const unusedNoteTimeline = lowPressureUnusedDefensiveNote(
     cooldowns,
     matchMinHpPct(owner as ICombatUnit, combat),
     (cd) =>
-      castBarsOfCooldown(ownerBars, owner as ICombatUnit, cd as never).length,
+      castBarsOfCooldown(ownerBars, owner as ICombatUnit, cd as never).length +
+      refusedPressesOf(cd),
   );
   if (unusedNoteTimeline) tLines.push(unusedNoteTimeline);
 

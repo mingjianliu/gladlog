@@ -68,7 +68,10 @@
  *    `[ENEMY DEF] … (…, N.Ns — removed early)`, `[CC ON …] … | ended early
  *    …` — on a clean run that lasted ≥ V − 0.1 s of a listed id (`atV`), or
  *    ≥ its official duration − 0.1 s for any id (`fullOfficial`) except one
- *    whose V lies above the official duration (a talent extends it there).
+ *    whose V lies above the official duration (a talent extends it there);
+ *    since codex 21-R12-a #5 (2026-10-23) the bar is the caster's own full
+ *    length when its talents make it longer (`buffFullDurationForCaster`): a
+ *    talented Rallying Cry cancelled at 12 s did end early.
  *  - `reflectReturn` — every REFLECT miss row (spell S, caster C, reflector
  *    R), rows of the same S / C / R within 3 s folded into one reflect. What
  *    came back: damage (landed + absorbed) on C under S (matched by English
@@ -103,6 +106,7 @@ import {
   REFLECT_DIRECT_RETURN_MS,
   REFLECT_OWN_ID_LEAD_MS,
 } from "@gladlog/analysis/src/context/spellOutcomeLines";
+import { BACKLASH_AURA_CC_TYPE } from "@gladlog/analysis/src/data/backlashCc";
 import { castsOfEffectAura } from "@gladlog/analysis/src/data/castEffectAuras";
 import { ROOT_SPELL_IDS } from "@gladlog/analysis/src/data/rootSpells";
 import {
@@ -111,6 +115,7 @@ import {
 } from "@gladlog/analysis/src/data/spellEffectData";
 import spellEffectGenerated from "@gladlog/analysis/src/data/spellEffectGenerated.json";
 import { ccSpellIds } from "@gladlog/analysis/src/data/spellTags";
+import { buffFullDurationForCaster } from "@gladlog/analysis/src/utils/buffDuration";
 import { HERALD_PROC_BUNDLE_IDS } from "@gladlog/analysis/src/utils/hiddenPress";
 import { GladLogParser, type GladMatch } from "@gladlog/parser";
 import { LogEvent, toLegacyMatch } from "@gladlog/parser-compat";
@@ -238,6 +243,8 @@ interface IEarlyClaim {
   atMs: number;
   auraId: string;
   runS: number;
+  /** the caster's own full length, talents included (undefined: unknown) */
+  talentedS?: number;
   line: string;
 }
 const earlyClaims: IEarlyClaim[] = [];
@@ -937,6 +944,14 @@ for (const f of files) {
       atMs: r.to,
       auraId: rows[idx].spellId,
       runS: (r.to - r.from) / 1000,
+      // the caster's own full length — its talents included (codex 21-R12-a
+      // #5: a talented Rallying Cry cancelled at 12 s did end early)
+      talentedS: (() => {
+        const caster = byId.get(rows[idx].srcUnitId);
+        return caster
+          ? buffFullDurationForCaster(rows[idx].spellId, caster, r.from)
+          : undefined;
+      })(),
       line: l.slice(0, 160),
     });
   }
@@ -1005,8 +1020,14 @@ for (const f of files) {
       // (Death Coil 47541 / 47632, Pyroblast 11366 / 460475, Cull 1245453 /
       // 1245455) — the product's line names the spell, not the id
       const sName = nameOf(S, g.first.spellName);
+      // a dispel backlash of the same name is no return (Unstable
+      // Affliction's 196364 — codex 20-F16-14 #3: the product's own rule,
+      // `BACKLASH_AURA_CC_TYPE`, which the scan's name match did not read)
       const isS = (id: string | undefined, fallback?: string) =>
-        !!id && (id === S || nameOf(id, fallback ?? "") === sName);
+        !!id &&
+        (id === S ||
+          (!BACKLASH_AURA_CC_TYPE.has(id) &&
+            nameOf(id, fallback ?? "") === sName));
       const srcs = new Set([reflector.id as string, ...petsOf(reflector.id)]);
       // S auras on C: [applied, removed, source]. A reflected DoT is logged
       // as the CASTER's own aura on itself (c5b55e06 r2 0:17: Flame Shock
@@ -1240,10 +1261,13 @@ for (const c of earlyClaims) {
   // an id whose runs settle ABOVE the official duration (a talent extends
   // it: Avenging Wrath 12 s vs 8 s) is judged at V only — a run past the
   // official length but short of V did end early
+  // …and against the caster's own talented length when it differs from
+  // the official one (codex 21-R12-a #5): Rallying Cry 10 s official, a
+  // talented 15.6 s cancelled at 12 s ended early
   else if (
     off !== undefined &&
     !(v !== undefined && v > off) &&
-    c.runS >= off - 0.1
+    c.runS >= Math.max(off, c.talentedS ?? off) - 0.1
   )
     violations.push({
       check: "fullRunEndedEarly",

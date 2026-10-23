@@ -4072,3 +4072,30 @@ Germination's 774 companion are no presses (D24 / D47). 605 files vs v443
 no burn aura, saved it). Gates = b15; corpusFactScan 1/2/3 unchanged or 0.
 Family diff: Burrow 0 → 599 [RES] / 65 [TEAM] [CD] / 34 [YOU] [CD]; [CC
 AVOIDED?] Metamorphosis 38 → 0 — all intended.
+
+v445 (2026-10-23, fact4 F17 batch 4, user approved 「批准」): the healer save
+roster's heal amplifiers — a `save_role` entry that is not `responseOnly` and
+not an official self wall (`saveRoleReachesAlly`: Nature's Swiftness,
+Evangelism, Stasis, Tip the Scales, Convoke the Spirits, Holy Avenging Wrath)
+— can help an ally (`canHelpAnotherUnit`, every reader), so the low-pressure
+NOTE no longer files them as `never-used self-only defensive cooldowns …
+correctly HELD` (D45 / D58) and a press of one answers a teammate's crisis;
+the NOTE's hold test counts the owner's refused presses too (D45: Nature's
+Swiftness ×10 under Psychic Scream); a multi-charge cooldown's
+`availableWindows` sample the [RES] ledger's `cdAvailableAt` every
+`CHARGE_WINDOW_STEP_S` (D55: STAYED IN said `no defensive CD available`
+beside `Survival of the Fittest[1/2]`). Codex 21-R12-a: the death window's
+freedom ends at the round's end (`deathWindowFreedom` combat bounds); a
+hidden buff never removed expires after its official duration + 1 s; a
+`used up` charge removal needs the spender cast ≤ 100 ms before it;
+inferred control ends settle in apply order with DR walked first. Codex
+20-F16-15 #1: an own shield whose end is inferred runs to its last own
+absorb row. 605 files vs v444 (f3b → f4): healer cd-hoarded 574 → 571 — 35
+were answered by such a press within the window (0:36 Holy Avenging Wrath,
+0:20 Nature's Swiftness, 0:35 Evangelism, 1:55 Stasis), 32 new (25 with only
+such a cooldown ready: Nature's Swiftness 16, Evangelism 8, Convoke 1; 7 the
+round's next crisis once the first was answered), 46 keep their crisis with
+the amplifier added to `readyCds`. Gates = f3b; corpusFactScan2
+defenselessSaveUp 3 → 1 (own Holy Bulwark absorbs past the inferred end
+10 s → 0), corpusFactScan 1/2/3 otherwise unchanged or 0. Family diff: `[CD PRIOR]` Stasis 0 → 13, Tip the Scales 0 → 5
+— intended.

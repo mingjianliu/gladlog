@@ -919,16 +919,36 @@ export function extractOwnerCDBuffExpiry(
         // off it during this application and the last one took it
         // (Stormkeeper's two Lightning Bolts: REMOVED_DOSE at the first,
         // REMOVED 2 ms after the second) — was used up, not ended early
+        // codex 21-R12-a #4: and the last one took it — the holder cast the
+        // spell that spent a dose (its cast ≤ 100 ms before the dose came
+        // off) again ≤ 100 ms before the removal; one dose spent, then the
+        // buff cancelled, is no charges spent
+        const CHARGE_CAST_MS = 100;
+        const castsBefore = (ms: number) =>
+          (holder.spellCastEvents ?? [])
+            .filter(
+              (c) =>
+                (c.logLine.event as LogEvent) ===
+                  LogEvent.SPELL_CAST_SUCCESS &&
+                c.logLine.timestamp <= ms &&
+                ms - c.logLine.timestamp <= CHARGE_CAST_MS,
+            )
+            .map((c) => c.spellId);
+        const spenders = new Set(
+          holder.auraEvents
+            .filter(
+              (a) =>
+                a.spellId === endAuraId &&
+                (a.logLine.event as LogEvent) ===
+                  LogEvent.SPELL_AURA_REMOVED_DOSE &&
+                (a.logLine.timestamp as number) >= span.fromMs &&
+                (a.logLine.timestamp as number) <= span.removedMs,
+            )
+            .flatMap((a) => castsBefore(a.logLine.timestamp as number)),
+        );
         if (
           cause === "ended_early" &&
-          holder.auraEvents.some(
-            (a) =>
-              a.spellId === endAuraId &&
-              (a.logLine.event as LogEvent) ===
-                LogEvent.SPELL_AURA_REMOVED_DOSE &&
-              (a.logLine.timestamp as number) >= span.fromMs &&
-              (a.logLine.timestamp as number) <= span.removedMs,
-          )
+          castsBefore(span.removedMs).some((id) => !!id && spenders.has(id))
         )
           cause = "charges_spent";
         // WO6 #3 (n45): a BROKEN line ended it — enemy damage broke the

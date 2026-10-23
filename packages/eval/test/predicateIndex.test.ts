@@ -2182,6 +2182,16 @@ const INDEX: PredicateRow[] = [
     mod: castPress,
   },
   {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "CHARGE_WINDOW_STEP_S",
+    mod: cooldowns,
+  },
+  {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "saveRoleReachesAlly",
+    mod: cooldowns,
+  },
+  {
     file: "packages/parser-compat/src/maxHpLag.ts",
     symbol: "laggingMaxHpCorrected",
     mod: maxHpLagMod,

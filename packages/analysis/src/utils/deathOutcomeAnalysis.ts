@@ -728,6 +728,11 @@ export function deathWindowFreedom(
   optionSpellId?: string,
   // the round's units: an option the unit's pet casts is asked of the pet
   roundUnits?: readonly ICombatUnit[],
+  // the round's bounds, for the affordability reading's free-cast auras and
+  // the round's logged cast costs (codex 21-R12-a #2: without them a priest
+  // under Innervate read Guardian Spirit as unaffordable; the [RES] row and
+  // external-unused pass them)
+  combatBounds?: { startTime: number; endTime: number },
 ): IDeathWindowFreedom | null {
   const windowStart = Math.max(0, deathSeconds - windowSeconds);
   if (deathSeconds <= windowStart) return null;
@@ -748,6 +753,8 @@ export function deathWindowFreedom(
           optionSpellId,
           matchStartMs + windowStart * 1000,
           matchStartMs + deathSeconds * 1000,
+          undefined,
+          combatBounds,
         );
   const result = freeGapCore(
     [...named, ...unpaid].map((iv) => ({
@@ -946,7 +953,10 @@ export function enemyTargetReaches(
 }
 
 export function buildDeathOutcomeSummary(
-  combat: Pick<AtomicArenaCombat, "startTime"> & { zoneId?: string },
+  combat: Pick<AtomicArenaCombat, "startTime"> & {
+    zoneId?: string;
+    endTime?: number;
+  },
   friends: ICombatUnit[],
   ccSummaries: Pick<IPlayerCCTrinketSummary, "playerName" | "ccInstances">[],
   /**
@@ -1009,6 +1019,9 @@ export function buildDeathOutcomeSummary(
         LETHAL_WINDOW_SECONDS,
         optionSpellId,
         roundUnits,
+        typeof combat.endTime === "number"
+          ? { startTime: combat.startTime, endTime: combat.endTime }
+          : undefined,
       );
       return freedom
         ? {

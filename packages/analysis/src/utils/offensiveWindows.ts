@@ -543,13 +543,32 @@ export function computeOffensiveWindows(
         addSave(holder.id, { from: iv.fromS, to: iv.toS });
         continue;
       }
+      // an end the builder inferred (the official length — no REMOVED) is
+      // no end while the log shows the shield still absorbing for its
+      // holder (codex 20-F16-15 #1, 2d35e62f r1: Holy Bulwark pressed
+      // 373.457 s, inferred to 393.457 s, its own absorbs at 398.3–402.8 s
+      // — the span read defenseless 393.5–403.0 s)
+      const lastOwnAbsorbMs = iv.inferredEnd
+        ? Math.max(
+            -Infinity,
+            ...(holder.absorbsIn ?? [])
+              .filter(
+                (a) =>
+                  a.spellId === iv.spellId &&
+                  a.srcUnitId === holder.id &&
+                  a.timestamp > matchStartMs + iv.toS * 1000,
+              )
+              .map((a) => a.timestamp),
+          )
+        : -Infinity;
+      const runEndMs = Math.max(matchStartMs + iv.toS * 1000, lastOwnAbsorbMs);
       const shieldSpans =
         iv.srcUnitId === holder.id
           ? ownPressedShieldSpansMs(
               holder,
               iv.spellId,
               matchStartMs + iv.fromS * 1000,
-              matchStartMs + iv.toS * 1000,
+              runEndMs,
             )
           : [];
       for (const sp of shieldSpans)

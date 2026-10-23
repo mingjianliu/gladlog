@@ -32,6 +32,7 @@ import {
   effectAuraViaName,
   ownEffectAurasOfCast,
 } from "../data/castEffectAuras";
+import { spellEffectData } from "../data/spellEffectData";
 
 /** A re-stating batch: at least this many SPELL_AURA_APPLIED rows on the
  * unit in one millisecond (5f4142ec: 30; a press that applies several
@@ -143,10 +144,19 @@ export function hiddenPressMs(
         Math.abs(b.logLine.timestamp - ms) <= RESYNC_BATCH_SPAN_MS,
     );
   const out: number[] = [];
-  let up = false;
+  // up until its REMOVED — or, when the log lost the REMOVED, until the
+  // aura's official length (+ 1 s) after its last (re)application (codex
+  // 21-R12-a #3: an Evasion APPLIED at 10 s with no REMOVED kept `up` true
+  // for the round and hid a fresh unseen press at 140 s)
+  let upUntilMs = -Infinity;
+  const lifeMs = (id: string): number => {
+    const d = spellEffectData[id]?.durationSeconds;
+    return typeof d === "number" && d > 0 ? (d + 1) * 1000 : Infinity;
+  };
   for (const [i, a] of own.entries()) {
     const ms = a.logLine.timestamp;
-    if (a.logLine.event === LogEvent.SPELL_AURA_REMOVED) up = false;
+    const up = ms <= upUntilMs;
+    if (a.logLine.event === LogEvent.SPELL_AURA_REMOVED) upUntilMs = -Infinity;
     else if (a.logLine.event === LogEvent.SPELL_AURA_APPLIED) {
       if (
         !up &&
@@ -156,8 +166,8 @@ export function hiddenPressMs(
         !heraldProc(a.spellId!, ms)
       )
         out.push(ms);
-      up = true;
-    } else up = true; // a REFRESH / dose row: it is up
+      upUntilMs = ms + lifeMs(a.spellId!);
+    } else upUntilMs = ms + lifeMs(a.spellId!); // a REFRESH / dose row: it is up
   }
   return out;
 }
