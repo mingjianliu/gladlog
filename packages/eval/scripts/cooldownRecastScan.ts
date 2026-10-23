@@ -7,8 +7,8 @@
  * readers ask `unitCooldownOf` instead — the talent-resolved static number,
  * with none of the ledger's per-press effects. This scan asks that function
  * the same question for every spell a player cast at least twice in a round:
- * for cast i, the cast `charges` presses earlier must be at least one
- * cooldown back (less `CD_INSTANT_SLACK_S`), or the press was impossible
+ * a press with no charge back under that number (charges recharge one at a
+ * time, `chargeImpossibleAt`; `CD_INSTANT_SLACK_S` of slack) was impossible
  * under the model — the modelled number is too LONG for that player.
  * The other direction rides along: per (spell, spec, cooldown) the smallest
  * recast ratio over many pairs well above 1 says the modelled number may be
@@ -36,7 +36,7 @@
  * Usage:
  *   npx tsx packages/eval/scripts/cooldownRecastScan.ts --manifest <m> [--every 1] [--min-cd 8] --out <file.jsonl> > summary.json
  * Output: one JSON line per (round, unit, spell) with ≥ 2 casts, and a
- * per-spell summary on stdout.
+ * summary on stdout per (spell, spec, cooldown, charges) — `recastAggKey`.
  */
 import { ensureAnalysisData } from "@gladlog/analysis";
 import { isFormReshiftCast } from "@gladlog/analysis/src/utils/castPress";
@@ -58,6 +58,7 @@ import { appendFileSync, readFileSync, writeFileSync } from "fs";
 import { resolve } from "path";
 import { gunzipSync } from "zlib";
 
+import { chargeImpossibleAt, recastAggKey } from "./lib/chargeRecast";
 import { arg } from "./lib/cli";
 
 const manifest = arg("--manifest", "");
@@ -80,7 +81,11 @@ const files = readFileSync(manifest, "utf8")
 writeFileSync(out, "");
 
 interface Agg {
+  spellId: string;
   name: string;
+  spec: string;
+  cooldownSeconds: number;
+  charges: number;
   records: number;
   pairs: number;
   impossible: number;
@@ -89,8 +94,6 @@ interface Agg {
   modelFloorExplained: number;
   modelRatios: number[];
   modelChargeRatios: number[];
-  specs: Record<string, number>;
-  cooldowns: Record<string, number>;
 }
 const agg = new Map<string, Agg>();
 let rounds = 0;
@@ -155,9 +158,13 @@ for (const f of files) {
         const cd = own.cooldownSeconds;
         const cap = Math.max(1, own.charges);
         const t = g.t.sort((a, b) => a - b);
-        const impossibleAt: number[] = [];
-        const a: Agg = agg.get(id) ?? {
+        const key = recastAggKey(id, String(u.spec), cd, cap);
+        const a: Agg = agg.get(key) ?? {
+          spellId: id,
           name: g.name,
+          spec: String(u.spec),
+          cooldownSeconds: cd,
+          charges: cap,
           records: 0,
           pairs: 0,
           impossible: 0,
@@ -166,16 +173,17 @@ for (const f of files) {
           modelFloorExplained: 0,
           modelRatios: [],
           modelChargeRatios: [],
-          specs: {},
-          cooldowns: {},
         };
         for (let i = cap; i < t.length; i++) {
-          const gap = t[i]! - t[i - cap]!;
           a.pairs++;
-          a.ratios.push(gap / cd);
-          if (gap < cd - CD_INSTANT_SLACK_S)
-            impossibleAt.push(Math.round(t[i]! * 10) / 10);
+          a.ratios.push((t[i]! - t[i - cap]!) / cd);
         }
+        const impossibleAt = chargeImpossibleAt(
+          t,
+          cd,
+          cap,
+          CD_INSTANT_SLACK_S,
+        ).map((x) => Math.round(x * 10) / 10);
         // the shared model's reading of the same unit and spell
         const entry = unitCooldownEntry(u, legacy, id);
         const modelImpossibleAt: number[] = [];
@@ -244,10 +252,7 @@ for (const f of files) {
         a.modelChargeRatios.push(...modelChargeRatios);
         a.records++;
         a.impossible += impossibleAt.length;
-        a.specs[u.spec] = (a.specs[u.spec] ?? 0) + 1;
-        const ck = `${cd}s×${cap}`;
-        a.cooldowns[ck] = (a.cooldowns[ck] ?? 0) + 1;
-        agg.set(id, a);
+        agg.set(key, a);
         lines.push(
           JSON.stringify({
             file: f,
@@ -285,7 +290,7 @@ for (const f of files) {
 
 const q = (v: number[], p: number) => v[Math.floor((v.length - 1) * p)] ?? 0;
 const rows = [...agg.entries()]
-  .map(([id, a]) => {
+  .map(([key, a]) => {
     const r = [...a.ratios].sort((x, y) => x - y);
     const mr = [...a.modelRatios].sort((x, y) => x - y);
     const mc = [...a.modelChargeRatios].sort((x, y) => x - y);
@@ -296,7 +301,7 @@ const rows = [...agg.entries()]
       ...rest
     } = a;
     return {
-      id,
+      key,
       ...rest,
       minRatio: Math.round(q(r, 0) * 1000) / 1000,
       p05Ratio: Math.round(q(r, 0.05) * 1000) / 1000,
