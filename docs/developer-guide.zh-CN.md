@@ -86,6 +86,15 @@ lint 警告数有棘轮：`npm run lint` 带着当前计数跑 `--max-warnings`�
   测死亡类路径用克隆 + 注入合成事件)。
 - `packages/eval` —— 覆盖门与评分契约的单测。
 
+### 真实日志、日志形态与测试的牙齿(2026-10-24)
+
+对三周修复做的一次根因复盘(299 个修复,没有一个是单测抓到的;被修的函数 86% 修之前就有直接单测)发现:测试只见过作者想象中的日志。下面四样工具是对此的回答,写任何读日志事件的新代码都要用上:
+
+- **真实日志。** wowarenalogs 的公开测试日志(第三方数据,绝不进仓库 —— [DATA-COMPLIANCE](DATA-COMPLIANCE.zh-CN.md) §4)在 CI 的 `real-logs` job 里按固定提交跑:parser 的真实日志套件、每一条 COMBATANT_INFO 都要能解码,以及每个竞技场回合 × 治疗 / DPS / 录像者三个视角 → prompt → 全部 hardFailure gate,零容忍(`packages/eval/test/realLogGates.test.ts`)。本地:`GLADLOG_FIXTURES=<放 .txt 日志的目录> npx vitest run --root packages/eval realLogGates`。
+- **日志形态矩阵。** `packages/analysis/test/support/logShapes.ts` 把一个合成场景按真实日志的怪癖做变形(丢 REMOVED、同毫秒重播、小数毫秒时间戳、宠物伤害并进主人、DoT 跳伤、aura 先于 cast 行的延迟、同毫秒行序反转),每一种都附了实测频率。新的读者要写明:哪些中性变形下结果必须不变,对它有影响的那种变形下结果有什么上界(`logShapeMatrix.test.ts`)。新发现的怪癖只需要加进列表一次。
+- **像真事件的 helper。** `test/ported/testHelpers.ts` 按生产约定写伤害符号、带 `logLine.lineIndex`,不带真实事件没有的字段;`testHelpersContract.test.ts` 用转换后的真实 fixture 把它们钉住。测试文件里自己写的 helper 也应当符合同样的形状。
+- **测试的牙齿。** `npx tsx packages/eval/scripts/mutationProbe.ts <源文件>` 对文件逐个变异运算符,列出没有任何测试杀掉的变异。说一个谓词的测试"写完了"之前先跑一遍。`packages/eval/test/gateWiring.test.ts` 保证每个 `check*` gate 都接进了 `checkMatch`。
+
 ## eval 体系(prompt/回复质量)
 
 eval 的 runbook 在 `docs/commands/`(全部十条、每条一句话的清单见 [`docs/README.zh-CN.md`](README.zh-CN.md)),产物落私有仓 `$GLADLOG_EVAL_HOME`。最常用的三条:

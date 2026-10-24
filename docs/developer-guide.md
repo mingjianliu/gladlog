@@ -82,6 +82,15 @@ Lint warnings are ratcheted: `npm run lint` passes `--max-warnings` with today's
 - `packages/desktop` (`test/` plus `*.test.tsx` beside the source) — derive pure functions, component rendering (jsdom), and a real anonymized fixture (`test/fixtures/real-match-sample.json`, trimmed to the first 90s with no player deaths — to test death-related paths, clone it and inject synthetic events).
 - `packages/eval` — unit tests for the coverage gates and the scoring contract.
 
+### Real logs, log shapes and teeth (2026-10-24)
+
+A root-cause pass over three weeks of fixes (299, none caught by a unit test, 86 % of the fixed functions already directly tested) found that tests met only the logs their authors imagined. Four tools answer that; use them for any new reader of log events:
+
+- **Real logs.** The public wowarenalogs testlogs (third-party data, never committed — [DATA-COMPLIANCE](DATA-COMPLIANCE.md) §4) run in CI's `real-logs` job at a pinned commit: the parser's real-log suites, every COMBATANT_INFO decoding, and every arena round × healer / dps / recorder view → prompt → every hardFailure gate, zero allowed (`packages/eval/test/realLogGates.test.ts`). Locally: `GLADLOG_FIXTURES=<dir of .txt logs> npx vitest run --root packages/eval realLogGates`.
+- **The log-shape matrix.** `packages/analysis/test/support/logShapes.ts` mutates a synthetic scenario through the quirks real logs have (lost REMOVED, same-ms re-broadcast, fractional-ms stamps, pet damage folded into the owner, DoT ticks, the aura-before-cast-row lag, reversed in-ms order), each with its measured frequency. A new reader states what must not change under the neutral shapes and what bounds it under the one that matters (`logShapeMatrix.test.ts`). A newly found quirk joins the list once.
+- **Helpers that look like the app's events.** `test/ported/testHelpers.ts` writes damage in the production sign, a `logLine.lineIndex`, and no field a real event lacks; `testHelpersContract.test.ts` holds them to the converted real fixtures. A local helper in a test file should match the same shape.
+- **Teeth.** `npx tsx packages/eval/scripts/mutationProbe.ts <src file>` mutates the file one operator at a time and lists the mutants no test kills. Run it on a predicate before calling its tests done. `packages/eval/test/gateWiring.test.ts` keeps every `check*` gate wired into `checkMatch`.
+
 ## The eval system (prompt/response quality)
 
 The eval runbooks live in `docs/commands/` (the full list of ten runbooks, one line each, is in [`docs/README.md`](README.md)); output lands in the private repo at `$GLADLOG_EVAL_HOME`. The three you will use most:
