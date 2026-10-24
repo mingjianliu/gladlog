@@ -39,7 +39,10 @@ function parseOuterSegment(s: string): string[] | null {
 }
 
 function decodeNested(s: string): unknown {
-  if ((s.startsWith("[") && s.endsWith("]")) || (s.startsWith("(") && s.endsWith(")"))) {
+  if (
+    (s.startsWith("[") && s.endsWith("]")) ||
+    (s.startsWith("(") && s.endsWith(")"))
+  ) {
     const inner = s.substring(1, s.length - 1);
     if (inner === "") return [];
     const tokens = splitTopLevel(inner);
@@ -58,7 +61,9 @@ function decodeNested(s: string): unknown {
   return s;
 }
 
-export function decodeCombatantInfo(params: string[]): GladCombatantInfoRaw | null {
+export function decodeCombatantInfo(
+  params: string[],
+): GladCombatantInfoRaw | null {
   if (params.length < 30) {
     return null;
   }
@@ -155,7 +160,11 @@ export function decodeCombatantInfo(params: string[]): GladCombatantInfoRaw | nu
   if (eqIdx === -1) return null;
 
   const equipmentStr = params[eqIdx];
-  if (equipmentStr === undefined || !equipmentStr.startsWith("[") || !equipmentStr.endsWith("]")) {
+  if (
+    equipmentStr === undefined ||
+    !equipmentStr.startsWith("[") ||
+    !equipmentStr.endsWith("]")
+  ) {
     return null;
   }
   const equipment = decodeNested(equipmentStr);
@@ -173,42 +182,30 @@ export function decodeCombatantInfo(params: string[]): GladCombatantInfoRaw | nu
     }
   }
 
-  let interestingAuras: { casterGuid: string; spellId: number }[] = [];
+  // interestingAuras is a flat list of either (casterGuid, spellId) pairs or
+  // (casterGuid, spellId, stacks) triples — both occur in real logs (public
+  // wowarenalogs testlogs 2024: 166 lists of pairs, 66 of triples). The
+  // format is read off the list's STRUCTURE, never its length: 3 pairs are
+  // 6 elements, which the old `length % 3` test took for 2 triples, read
+  // "1459" as a caster and dropped the whole COMBATANT_INFO — the player
+  // then fell out of the round's roster (21 of 165 lines across
+  // shuffle_reloads / shuffle_early_leaver). A list that is neither shape is
+  // dropped on its own: losing a player for an unreadable aura list costs
+  // far more than the auras.
+  const interestingAuras: { casterGuid: string; spellId: number }[] = [];
   if (interestingAurasIdx !== -1) {
     const interestingAurasStr = params[interestingAurasIdx];
-    if (interestingAurasStr === undefined) return null;
-    const auraParts = parseOuterSegment(interestingAurasStr);
-    if (!auraParts) return null;
-
-    if (auraParts.length === 0) {
-      interestingAuras = [];
-    } else if (auraParts.length % 3 === 0) {
-      for (let idx = 0; idx < auraParts.length; idx += 3) {
-        const caster = auraParts[idx];
-        const spellIdStr = auraParts[idx + 1];
-        if (caster === undefined || spellIdStr === undefined) return null;
-        const spellId = parseInt(spellIdStr, 10);
-        if (isNaN(spellId)) return null;
+    const auraParts =
+      interestingAurasStr !== undefined
+        ? parseOuterSegment(interestingAurasStr)
+        : null;
+    const stride = auraParts ? interestingAuraStride(auraParts) : null;
+    if (auraParts && stride !== null)
+      for (let idx = 0; idx < auraParts.length; idx += stride)
         interestingAuras.push({
-          casterGuid: caster,
-          spellId,
+          casterGuid: auraParts[idx]!,
+          spellId: parseInt(auraParts[idx + 1]!, 10),
         });
-      }
-    } else if (auraParts.length % 2 === 0) {
-      for (let idx = 0; idx < auraParts.length; idx += 2) {
-        const caster = auraParts[idx];
-        const spellIdStr = auraParts[idx + 1];
-        if (caster === undefined || spellIdStr === undefined) return null;
-        const spellId = parseInt(spellIdStr, 10);
-        if (isNaN(spellId)) return null;
-        interestingAuras.push({
-          casterGuid: caster,
-          spellId,
-        });
-      }
-    } else {
-      return null;
-    }
   }
 
   const personalRatingStr = params[params.length - 2];
@@ -226,4 +223,20 @@ export function decodeCombatantInfo(params: string[]): GladCombatantInfoRaw | nu
     personalRating,
     interestingAuras,
   };
+}
+
+const INTEGER_RE = /^-?\d+$/;
+
+/** The record size of an interesting-auras list: 3 for (caster, spellId,
+ * stacks) triples, 2 for (caster, spellId) pairs, null for neither. The two
+ * shapes exclude each other: a triple's third element is a number where a
+ * pair list has its next caster. */
+function interestingAuraStride(parts: string[]): 2 | 3 | null {
+  if (parts.length === 0) return 2;
+  const fits = (stride: 2 | 3) =>
+    parts.length % stride === 0 &&
+    parts.every((p, i) =>
+      i % stride === 0 ? !INTEGER_RE.test(p) : INTEGER_RE.test(p),
+    );
+  return fits(3) ? 3 : fits(2) ? 2 : null;
 }
