@@ -4025,6 +4025,53 @@ ABILITIES INTO IMMUNITY. 605 files (b22 → b23): no candidate added or
 removed; 14 contexts change ([IMMUNE — The Beast Within was up] 27 → 24,
 Turtle lines 79 → 81). Gates: baseline residue only.
 
+v438 (2026-10-21, round-3 fact audit fix batch + corpusFactScan batch 1 +
+user rulings): IMMUNE causes (no magic-only / reflect-only avoidance for a
+control it cannot stop, no mobility credit once a miss row proves the hit,
+Command Squadron off the avoidance list); presses made while unseen are
+presses (`[pressed while unseen]`); DR'd no-REMOVED ends; reflect returns
+(own DoT out, damage-id / pre-REFLECT rows in); Turtle, Mass Invisibility,
+Phase Shift, Intervene, Vanish in the kill windows (user rulings);
+kick-priority judges every overlapping window; dispel backlash silences as
+[SILENCE]; Medallion / break presses at their own aura; Intervene 3 s,
+Berserk / Celestial Alignment 15 s, AMS 444741 6 s. 605 files vs v437:
+kick-priority-missed +17, kick-priority-team +22, kick-eaten +1,
+position-mistake +1, questionable-external −6, cd-waste −6, cd-hoarded +1,
+external-unused −9, backlash-dispel −1. (Entry restored 2026-10-24 from the
+bump's inline note in promptVersion.ts — 82795e7 did not append it here.)
+
+v439 (2026-10-22, fix-F16 regression net + corpusFactScan residue): reflect
+returns (backlash excluded, one chain per spell by id or name, the reflected
+copy logged reflector → caster, a reflector's own hits after the
+projectile's flight, own-id rows by the nearest REFLECT row, Fel Lance's
+return); hidden presses vetoed only by a same-id re-statement, found by the
+press's own effect aura (Alter Time); castless Blessing of Sacrifice; an
+enemy break racial out of a reflected control; offensive aura runs paired
+per source; a trinket after a logged cause in the removal's ms. 605 files vs
+v438: cd-waste −1, cd-hoarded −1 (one castless Blessing of Sacrifice, 103-2
+0:58). (Entry restored 2026-10-24 from d1593db's inline note.)
+
+v440 (2026-10-22, GH #153 leftovers + corpusFactScan2 batch-2 inputs): press
+HP reads a HoT's first tick up to the aura-before-cast lag; the kit's
+rate-warped range; Divine Toll reaches allies; Blessing of the Bronze speeds
+Leap of Faith (aura-454 category carriers, ally-applied, from
+COMBATANT_INFO); defenseless ends under an own PRESSED absorb shield within
+a minute of its press; an IMMUNE control / silence row on our player is
+stated with its log cause; DB2-explained avoidance auras (facts only);
+Herald's proc bundle is no hidden press; a ground control's go-off bounds
+the move credited with dodging it. 605 files vs v439 (b39 → b45): healer
+cd-hoarded +8 (14 new, all Holy Paladin Divine Toll ready while a teammate
+was in crisis; 9 removed where the pressed Divine Toll now answers it).
+(Entry restored 2026-10-24 from 3b40263's inline note.)
+
+v441 (2026-10-22, user rulings 「可以」): the DB2-explained avoidance buttons
+(Blink, Icebound Fortitude, Lichborne, Demolish, Aura Mastery, Unending
+Resolve, Obsidian Scales, Zen Focus Tea) are cc-avoidable tools;
+backlash-dispel's target HP is read at the decision instant (fact3 D45, the
+fourth signed exception). 605 files vs v440 (b45 → b46): backlash-dispel −1
+(two crossed out of the HP band, one in), 39 HP facts re-read; cc-avoidable
+unchanged. (Entry restored 2026-10-24 from 5df0c06's inline note.)
+
 v442 (2026-10-22, fact4 F17 batch 1 — the round-4 regressions and D28, user
 approved 「A」/「批准」): Aspect of the Turtle is an own defensive again (a
 deflection, `DEFLECTION_IDS`: `[ENEMY DEF]`, KILL ATTEMPTS `popped`; 03a355dcd
