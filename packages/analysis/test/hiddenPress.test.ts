@@ -10,7 +10,12 @@ import { beforeAll, describe, expect, it } from "vitest";
 
 import { ensureAnalysisData } from "../src/data/ensure";
 import { selfSaveCasts } from "../src/utils/enemyDefensives";
-import { hiddenPressMs } from "../src/utils/hiddenPress";
+import {
+  hiddenAuraLifeMs,
+  hiddenPressMs,
+  RESYNC_BATCH_MIN_APPLIED,
+  RESYNC_BATCH_SPAN_MS,
+} from "../src/utils/hiddenPress";
 
 const T0 = 1_000_000;
 const EVASION = "5277";
@@ -146,5 +151,133 @@ describe("selfSaveCasts — a hidden press of a save", () => {
         unseenPress: true,
       },
     ]);
+  });
+});
+
+// mutationProbe.ts (2026-10-24): 16 of 34 mutants of hiddenPress.ts survived
+// every test in the repo — mostly the window bounds. Each case pins one; the
+// two left (`d > 0` / `&&` in `hiddenAuraLifeMs`) are equivalent on the real
+// data: no spell has a duration ≤ 0.
+describe("hiddenPressMs — the bounds no test pinned", () => {
+  const SPAN = RESYNC_BATCH_SPAN_MS;
+  const MIN = RESYNC_BATCH_MIN_APPLIED;
+  /** `n` APPLIED rows of other auras at `ms`, plus Evasion at `evasionMs` */
+  const batchAt = (n: number, ms: number, evasionMs = ms): any[] => [
+    ...Array.from({ length: n - 1 }, (_, i) =>
+      aura(LogEvent.SPELL_AURA_APPLIED, String(910_000 + i), ms, "x"),
+    ),
+    aura(LogEvent.SPELL_AURA_APPLIED, EVASION, evasionMs),
+  ];
+  const cast = (ms: number): any => ({
+    spellId: EVASION,
+    logLine: { event: LogEvent.SPELL_CAST_SUCCESS, timestamp: ms },
+  });
+
+  it("the window includes rows exactly at its start and at its end", () => {
+    const u = rogue(batchAt(30, BATCH_MS));
+    expect(hiddenPressMs(u, EVASION, BATCH_MS, BATCH_MS)).toEqual([BATCH_MS]);
+  });
+  it("a batch outside the window is not read", () => {
+    const u = rogue(batchAt(30, BATCH_MS));
+    expect(hiddenPressMs(u, EVASION, BATCH_MS + 1)).toEqual([]);
+    expect(hiddenPressMs(u, EVASION, T0, BATCH_MS - 1)).toEqual([]);
+  });
+  it("exactly the minimum batch size is a batch; one fewer is not", () => {
+    expect(hiddenPressMs(rogue(batchAt(MIN, BATCH_MS)), EVASION, T0)).toEqual([
+      BATCH_MS,
+    ]);
+    expect(
+      hiddenPressMs(rogue(batchAt(MIN - 1, BATCH_MS)), EVASION, T0),
+    ).toEqual([]);
+  });
+  it("a batch row exactly SPAN ms from the aura counts toward the batch", () => {
+    // MIN − 1 rows at the batch ms, the aura SPAN ms later: MIN in the span
+    const u = rogue(batchAt(MIN, BATCH_MS, BATCH_MS + SPAN));
+    expect(hiddenPressMs(u, EVASION, T0)).toEqual([BATCH_MS + SPAN]);
+  });
+  it("a press row exactly PAIR ms away is the aura's own press", () => {
+    const u = rogue(batchAt(30, BATCH_MS), [cast(BATCH_MS - 1000)]);
+    expect(hiddenPressMs(u, EVASION, T0)).toEqual([]);
+    const far = rogue(batchAt(30, BATCH_MS), [cast(BATCH_MS - 1001)]);
+    expect(hiddenPressMs(far, EVASION, T0)).toEqual([BATCH_MS]);
+  });
+  it("re-stated exactly SPAN ms later is a re-statement, not a press", () => {
+    const u = rogue([
+      ...batchAt(30, BATCH_MS),
+      aura(LogEvent.SPELL_AURA_APPLIED, EVASION, BATCH_MS + SPAN),
+    ]);
+    expect(hiddenPressMs(u, EVASION, T0)).toEqual([]);
+    const later = rogue([
+      ...batchAt(30, BATCH_MS),
+      aura(LogEvent.SPELL_AURA_APPLIED, EVASION, BATCH_MS + SPAN + 1),
+    ]);
+    expect(hiddenPressMs(later, EVASION, T0)).toEqual([BATCH_MS]);
+  });
+  it("up until exactly the official length + 1 s: a re-listing then is no new press", () => {
+    const life = hiddenAuraLifeMs(EVASION);
+    const first = T0 + 10_000;
+    const atEdge = rogue([
+      aura(LogEvent.SPELL_AURA_APPLIED, EVASION, first),
+      ...batchAt(30, first + life),
+    ]);
+    expect(hiddenPressMs(atEdge, EVASION, T0)).toEqual([]);
+    const past = rogue([
+      aura(LogEvent.SPELL_AURA_APPLIED, EVASION, first),
+      ...batchAt(30, first + life + 1),
+    ]);
+    expect(hiddenPressMs(past, EVASION, T0)).toEqual([first + life + 1]);
+  });
+  it("a press of two same-named auras: one's logged REMOVED keeps the press up across the other's re-listing (Alter Time 342245 / 342246)", () => {
+    // untilOf's "up to its own REMOVED" is only visible here: the run of
+    // 342246 is searched past the other id's rows to its REMOVED, so a
+    // re-listing of 342245 in between finds the press still up
+    const first = T0 + 10_000;
+    const listedAt = first + hiddenAuraLifeMs("342246") + 5_000;
+    const at = (event: LogEvent, id: string, ms: number) => ({
+      ...aura(event, id, ms),
+      destUnitId: "rogue",
+    });
+    const u = rogue([
+      at(LogEvent.SPELL_AURA_APPLIED, "342246", first),
+      ...Array.from({ length: 29 }, (_, i) =>
+        aura(LogEvent.SPELL_AURA_APPLIED, String(920_000 + i), listedAt, "x"),
+      ),
+      at(LogEvent.SPELL_AURA_APPLIED, "342245", listedAt),
+      at(LogEvent.SPELL_AURA_REMOVED, "342246", listedAt + 2_000),
+    ]);
+    expect(hiddenPressMs(u, "342245", T0)).toEqual([]);
+  });
+});
+
+describe("hiddenPressMs — Herald of the Sun's proc bundle bound", () => {
+  // the proc Avenging Wrath comes with its bundle in the same few ms: a
+  // bundle row exactly SPAN ms from it still marks the proc (no press)
+  const AW = "31884";
+  const at = (id: string, ms: number, src = "rogue") =>
+    aura(LogEvent.SPELL_AURA_APPLIED, id, ms, src);
+  const withBundleAt = (offset: number) =>
+    rogue([
+      ...Array.from({ length: 29 }, (_, i) =>
+        at(String(930_000 + i), BATCH_MS, "x"),
+      ),
+      at(AW, BATCH_MS),
+      at("445206", BATCH_MS + offset, "rogue"),
+    ]);
+  it("a bundle row exactly SPAN ms away is the proc's", () => {
+    expect(hiddenPressMs(withBundleAt(RESYNC_BATCH_SPAN_MS), AW, T0)).toEqual(
+      [],
+    );
+  });
+  it("one further away is not", () => {
+    expect(
+      hiddenPressMs(withBundleAt(RESYNC_BATCH_SPAN_MS + 1), AW, T0),
+    ).toEqual([BATCH_MS]);
+  });
+});
+
+describe("hiddenAuraLifeMs", () => {
+  it("reads the caster's own length when the caster is given (Recklessness 1719: DB2 18 s, played 12 s)", () => {
+    expect(hiddenAuraLifeMs("1719", { spellCastEvents: [] })).toBe(13_000);
+    expect(hiddenAuraLifeMs("1719")).toBe(19_000);
   });
 });
