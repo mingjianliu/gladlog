@@ -122,6 +122,69 @@ describe("hpAtPress", () => {
     expect(hpAtPress(u, T0 + 11_001, { spellId: "355936", srcUnitId: "P" })).toBe(86);
   });
 
+  describe("用户裁决 2026-10-23（fact4 D31）：按键那一毫秒、日志写在施法行之前的读数", () => {
+    const at = (s: number, line: number, cur: number) => ({
+      ...sample("P", s, cur),
+      logLine: {
+        timestamp: T0 + Math.round(s * 1000),
+        lineIndex: line,
+        parameters: [],
+      },
+    });
+    const withCast = (u: ReturnType<typeof unit>, line: number) => ({
+      ...u,
+      spellCastEvents: [
+        {
+          spellId: SPIRIT_WALK,
+          srcUnitId: "P",
+          logLine: {
+            event: "SPELL_CAST_SUCCESS",
+            timestamp: T0 + 8_000,
+            lineIndex: line,
+            parameters: [],
+          },
+        },
+      ] as never,
+    });
+    const SPIRIT_WALK = "58875";
+    const sw = { spellId: SPIRIT_WALK, srcUnitId: "P" };
+
+    it("没人治疗：同毫秒、写在施法行之前的读数就是按键 HP（4accb068 0:07.98：Shadow Word: Pain 一跳 94.9 %）", () => {
+      const u = withCast(
+        unit([at(7.27, 10, 960), at(8.0, 20, 949), at(8.0, 21, 949)]),
+        21,
+      );
+      expect(hpAtPress(u, T0 + 8_000, sw)).toBe(95);
+    });
+
+    it("施法行自己和它之后的读数不算——施法行带着按键自己的代价（Dark Pact 100 % → 88 %）", () => {
+      const u = withCast(
+        unit([at(7.5, 10, 1000), at(8.0, 21, 880), at(8.0, 22, 870)]),
+        21,
+      );
+      expect(hpAtPress(u, T0 + 8_000, sw)).toBe(100);
+    });
+
+    it("前置窗口里有任何人的治疗：仍取严格早于按键的样本", () => {
+      const u = withCast(
+        unit(
+          [at(7.27, 10, 960), at(8.0, 20, 949)],
+          [heal("2061", "Q", 7.99)],
+        ),
+        21,
+      );
+      expect(hpAtPress(u, T0 + 8_000, sw)).toBe(96);
+    });
+
+    it("样本没有行号（旧文档）：照旧取严格早于按键的样本", () => {
+      const u = withCast(
+        unit([sample("P", 7.27, 960), sample("P", 8.0, 949)]),
+        21,
+      );
+      expect(hpAtPress(u, T0 + 8_000, sw)).toBe(96);
+    });
+  });
+
   it("without an own heal: the last sample strictly before the press", () => {
     const u = unit([
       sample("P", 10.0, 500),

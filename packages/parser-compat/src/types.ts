@@ -245,6 +245,9 @@ export interface IAdvancedAction {
   logLine: {
     event: "ADVANCED_SAMPLE";
     timestamp: number;
+    /** the source line (`GladAdvancedSample.lineIndex`), when the document
+     * carries it */
+    lineIndex?: number;
   };
 }
 

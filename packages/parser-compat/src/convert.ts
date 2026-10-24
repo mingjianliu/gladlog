@@ -375,6 +375,9 @@ function convertUnit(
       logLine: {
         event: "ADVANCED_SAMPLE" as const,
         timestamp: sample.timestamp,
+        ...(sample.lineIndex !== undefined
+          ? { lineIndex: sample.lineIndex }
+          : {}),
         parameters: [],
       },
     }),

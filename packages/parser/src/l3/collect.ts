@@ -380,6 +380,7 @@ export function collectEvents(
         if (actorUnit) {
           actorUnit.advancedSamples.push({
             timestamp: record.timestamp,
+            lineIndex: record.lineIndex,
             hp: record.advanced.hp,
             maxHp: record.advanced.maxHp,
             x: record.advanced.x,

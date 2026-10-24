@@ -467,5 +467,12 @@
  *  over by its own re-cast was not cut by CC. 605 files vs v449 (f8 →
  *  f9b): cd-hoarded +2, slow-defensive-response +1 (each an evoker's
  *  Obsidian Scales in hand for a teammate), 10 rows list it ready.
+ *
+ * v451 (2026-10-24, fact4 F17 D31 — user ruling 2026-10-23): a press line's
+ *  HP may be a reading of the press's own millisecond logged before its cast
+ *  row, when nobody healed the unit in the lead (the parser now keeps each
+ *  advanced sample's line). 605 files vs v450 (f9b → f10): no candidate
+ *  added or removed; 226 press HPs lower (median −1), 58 [YOU] [CD] lines
+ *  gain one.
  */
-export const PROMPT_VERSION = 450;
+export const PROMPT_VERSION = 451;

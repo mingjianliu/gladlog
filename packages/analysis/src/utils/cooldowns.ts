@@ -1709,7 +1709,10 @@ export const PRESS_HP_LINE_TAGS: readonly string[] = [
  * Rule: the unit's last advanced sample strictly before the press — and, when
  * the press's own heal on that unit (same spell, same caster) is logged in
  * the `PRESS_EFFECT_LEAD_MS` before the cast line, before the earliest such
- * heal. NOT the nearest sample at the press ms: an instant heal's healed
+ * heal. With no heal of anyone's on the unit in that lead, a sample of the
+ * press's own ms logged before its cast row counts too (user ruling
+ * 2026-10-23, fact4 D31 — needs the samples' `lineIndex`). NOT the nearest
+ * sample at the press ms: an instant heal's healed
  * sample sits a millisecond before its own SUCCESS line, so the nearest
  * sample is the press's own effect (06bb9860 Lay on Hands 32 % → would read
  * 89 %). Bounded by `HP_SAMPLE_RADIUS_MS` like every other HP claim; null
@@ -1792,19 +1795,46 @@ export function hpAtPress(
     if (t < cutMs) cutMs = t;
   }
   const actions = getSortedAdvancedActions(unit);
-  // last index with timestamp < cutMs
+  // user ruling 2026-10-23 (fact4 D31, 4accb068 r0 0:07.98): with no heal
+  // of anyone's on the unit in the `PRESS_EFFECT_LEAD_MS` before its own
+  // press, a reading in the press's ms logged BEFORE the press's cast row is
+  // the HP at the press (a Shadow Word: Pain tick 94.9 %, where the last
+  // earlier sample was 0.7 s old at 96 %). The cast row and what follows
+  // carry the press's own cost (Dark Pact's row reads 88 % for a 100 %
+  // press), so they never count; neither does a document whose samples
+  // carry no line (stored before 2026-10-24).
+  const pressLine =
+    cutMs === pressMs && cast.srcUnitId === unit.id
+      ? (unit.spellCastEvents ?? []).find(
+          (c) =>
+            c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+            c.spellId === cast.spellId &&
+            c.logLine.timestamp === pressMs,
+        )?.logLine.lineIndex
+      : undefined;
+  const loggedBeforePress = (a: (typeof actions)[number]) =>
+    pressLine !== undefined &&
+    a.logLine.lineIndex !== undefined &&
+    a.logLine.lineIndex < pressLine &&
+    !(unit.healIn ?? []).some(
+      (h) =>
+        h.logLine.timestamp >= pressMs - PRESS_EFFECT_LEAD_MS &&
+        h.logLine.timestamp <= pressMs,
+    );
+  // last index with timestamp < cutMs, or at it and logged before the press
   let lo = 0;
   let hi = actions.length - 1;
   let k = -1;
   while (lo <= hi) {
     const mid = (lo + hi) >> 1;
-    if (actions[mid]!.logLine.timestamp < cutMs) {
+    if (actions[mid]!.logLine.timestamp <= cutMs) {
       k = mid;
       lo = mid + 1;
     } else hi = mid - 1;
   }
   for (let j = k; j >= 0; j--) {
     const a = actions[j]!;
+    if (a.logLine.timestamp >= cutMs && !loggedBeforePress(a)) continue;
     // freshness is measured from the press, not from the heal cut: a cut
     // must not let a sample older than the radius stand for the press
     if (pressMs - a.logLine.timestamp > HP_SAMPLE_RADIUS_MS) return null;

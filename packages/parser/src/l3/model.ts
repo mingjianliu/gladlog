@@ -83,6 +83,11 @@ export interface GladDeathEvent extends GladEventBase {
 
 export interface GladAdvancedSample {
   timestamp: number;
+  /** the log line the reading came from — the order of a millisecond's
+   * rows (fact4 D31: a reading logged before a press's own cast row is the
+   * HP at the press; the row itself carries its cost). Absent on documents
+   * stored before 2026-10-24. */
+  lineIndex?: number;
   hp: number;
   maxHp: number;
   x: number;

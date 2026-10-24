@@ -4240,3 +4240,19 @@ cd-hoarded rows list Obsidian Scales ready; gates = f8; scans and
 regression net unchanged. The press-HP ruling D31 is not in this version:
 reading the press's own millisecond needs the samples' log order (the
 first preview read Dark Pact's post-cost HP, 100 % → 88 %).
+
+v451 (2026-10-24, fact4 F17 D31 — user ruling 2026-10-23): the parser keeps
+each advanced sample's source line (`GladAdvancedSample.lineIndex`, optional;
+parser-compat `IAdvancedAction.logLine.lineIndex`; stored documents grow
+~0.7 %), and `hpAtPress` takes a reading of the press's own millisecond
+logged BEFORE the press's cast row when no one healed the unit in
+`PRESS_EFFECT_LEAD_MS` — the HP at the press where the last earlier sample
+was stale (4accb068 r0 0:07.98: Spirit Walk 96 % from a 0.7 s-old sample →
+95 %, the Shadow Word: Pain tick logged just before the cast row). The cast
+row itself and later rows carry the press's own cost and never count (the
+first preview, which took any same-ms reading, read Dark Pact's post-cost
+100 % → 88 % and moved 2,517 press HPs; reverted). A document without lines
+keeps the strict-before rule. 605 files vs v450 (f9b → f10): no candidate
+added or removed; gates, scans and regression net unchanged; 226 press HPs
+change, all lower (median −1, 12 by ≥ 5 points: a hit in that millisecond),
+and 58 [YOU] [CD] lines gain an HP they had no sample for.
