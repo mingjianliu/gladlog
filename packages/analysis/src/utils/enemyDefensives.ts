@@ -295,13 +295,14 @@ export const KW_UNTARGETABLE_AURA_IDS: ReadonlySet<string> = new Set([
  */
 export function untargetableEndS(
   holder: Pick<ICombatUnit, "id" | "spellCastEvents" | "damageOut">,
-  iv: { fromS: number; toS: number; inferredEnd?: boolean },
+  iv: { spellId?: string; fromS: number; toS: number; inferredEnd?: boolean },
   matchStartMs: number,
 ): number {
   if (!iv.inferredEnd) return iv.toS;
   const first = holderFirstOwnActionAfterMs(
     holder,
     matchStartMs + iv.fromS * 1000,
+    iv.spellId,
   );
   return Math.min(iv.toS, (first - matchStartMs) / 1000);
 }
@@ -314,16 +315,29 @@ export function untargetableEndS(
  * holder: a pet's or guardian's hit (parser-compat folds those into the
  * owner's `damageOut` — a Frost Mage's Water Elemental keeps attacking
  * through Greater Invisibility) and a periodic tick (DoTs keep ticking
- * through it, D6's 175 periodic ticks).
+ * through it, D6's 175 periodic ticks). Nor, when `auraId` names the aura
+ * that went up at `afterMs`, its own press's cast row logged up to
+ * `AURA_BEFORE_CAST_ROW_MAX_MS` after it (the measured aura-before-cast lag:
+ * a Greater Invisibility 110960 whose 110959 row came 120 ms later ended at
+ * its own press — found by the log-shape matrix, castRowLag).
  */
 export function holderFirstOwnActionAfterMs(
   holder: Pick<ICombatUnit, "id" | "spellCastEvents" | "damageOut">,
   afterMs: number,
+  auraId?: string,
 ): number {
+  const ownPress = auraId
+    ? new Set([auraId, ...castsOfEffectAura(auraId)])
+    : undefined;
   let first = Infinity;
   for (const c of holder.spellCastEvents ?? [])
     if (c.logLine.event === LogEvent.SPELL_CAST_SUCCESS) {
       const t = c.logLine.timestamp;
+      if (
+        ownPress?.has(c.spellId ?? "") &&
+        t <= afterMs + AURA_BEFORE_CAST_ROW_MAX_MS
+      )
+        continue;
       if (t > afterMs && t < first) first = t;
     }
   for (const d of holder.damageOut ?? []) {

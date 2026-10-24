@@ -453,11 +453,10 @@ export function analyzeBurstLedger(
           iv.inferredEnd && SAVE_AURA_END_UNSEEN_IDS.has(iv.spellId)
             ? Math.min(
                 iv.endMs,
-                holderFirstOwnActionAfterMs(target, iv.startMs),
+                holderFirstOwnActionAfterMs(target, iv.startMs, iv.spellId),
               )
             : iv.endMs;
-        const overlapMs =
-          Math.min(endMs, toMs) - Math.max(iv.startMs, fromMs);
+        const overlapMs = Math.min(endMs, toMs) - Math.max(iv.startMs, fromMs);
         if (overlapMs / 1000 < MIN_DEFENSIVE_OVERLAP_S) continue;
         defensivesHit.push({
           ...(DEF_OR_IMMUNE_CAST_IDS.has(iv.spellId)
