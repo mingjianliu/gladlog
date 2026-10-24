@@ -474,5 +474,15 @@
  *  advanced sample's line). 605 files vs v450 (f9b → f10): no candidate
  *  added or removed; 226 press HPs lower (median −1), 58 [YOU] [CD] lines
  *  gain one.
+ *
+ * v452 (2026-10-24, fact4 F17 review follow-ups — missed readers of the
+ *  unified facts): charges read on the recovery-rate clock; a same-ms event
+ *  reduction is in the countdown; reflected DR reaches the expected-length
+ *  walk; Spirit of Redemption's cap is the priest's own (Afterlife); the
+ *  enemy-defensive press HP finds its press by the aura; a re-cast channel
+ *  restarts at its REFRESH; "could not pay" reaches the deep dive and the
+ *  desktop card; a talent-shared wall given to an ally stays its caster's
+ *  wall; ready ∩ free reads every not-ready span; a max-HP lag is not ruled
+ *  out by a logged hit of the same ratio.
  */
-export const PROMPT_VERSION = 451;
+export const PROMPT_VERSION = 452;

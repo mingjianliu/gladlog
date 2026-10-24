@@ -84,4 +84,29 @@ describe("laggingMaxHpCorrected — a real heal or hit is no lag (codex 20-F17-0
       1_644_592, 1_265_069, 1_265_069,
     ]);
   });
+  it("codex 20-F17-05 #1：max 变化那一行的 HP 变动是一次记录在案的命中，不排除更早的滞后", () => {
+    // max 1,000,000 → 900,000 (×0.9); the rescale at 50 ms (×0.9), and a
+    // logged 90,000 hit on the max-change row that happens to be ×0.9 too
+    const rows = [
+      s(0, 1_000_000, 1_000_000),
+      s(50, 900_000, 1_000_000), // rescaled, max not yet
+      s(200, 810_000, 900_000), // the hit (−90,000 = ×0.9), max caught up
+    ];
+    const hits = [{ timestamp: 120, amount: -90_000 }];
+    expect(laggingMaxHpCorrected(rows, hits)).toEqual([
+      1_000_000, 900_000, 900_000,
+    ]);
+  });
+  it("codex 20-F17-05 #2：中间一跳被记录在案的命中解释掉时，继续往前找真正的缩放", () => {
+    const rows = [
+      s(0, 1_000_000, 1_000_000),
+      s(20, 909_091, 1_000_000), // the rescale (÷1.1)
+      s(60, 826_446, 1_000_000), // a logged hit of the same ratio
+      s(100, 826_446, 909_091), // max catches up
+    ];
+    const hits = [{ timestamp: 40, amount: -82_645 }];
+    expect(laggingMaxHpCorrected(rows, hits)).toEqual([
+      1_000_000, 909_091, 909_091, 909_091,
+    ]);
+  });
 });

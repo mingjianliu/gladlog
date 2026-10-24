@@ -102,7 +102,8 @@ export function auraBlocksInterrupt(auraId: string): boolean {
  * `buildMatchContext` for every player of the round.
  */
 export function extractSpiritOfRedemptionIntervals(
-  unit: Pick<ICombatUnit, "id" | "auraEvents">,
+  unit: Pick<ICombatUnit, "id" | "auraEvents"> &
+    Partial<Pick<ICombatUnit, "spec" | "info" | "spellCastEvents">>,
   combat: Pick<AtomicArenaCombat, "startTime" | "endTime">,
   auraIds: ReadonlySet<string> = SPIRIT_OF_REDEMPTION_AURA_IDS,
 ): ISpiritOfRedemptionInterval[] {
@@ -115,7 +116,16 @@ export function extractSpiritOfRedemptionIntervals(
   // official — and [STATE], offensive windows and kill attempts dropped
   // the rest of the round)
   const capped = (g: { startMs: number; spellId: string }, endMs: number) => {
-    const d = officialDurationS(g.spellId, undefined, g.startMs);
+    // the priest's own length — Afterlife's 9 s, not the base 6 s (codex
+    // 20-F17-07 #4: the cap read the form as over 3 s early); a unit
+    // without its kit falls back to the base
+    const d = officialDurationS(
+      g.spellId,
+      unit.spec !== undefined && unit.spellCastEvents !== undefined
+        ? (unit as Parameters<typeof officialDurationS>[1])
+        : undefined,
+      g.startMs,
+    );
     return d === null ? endMs : Math.min(endMs, g.startMs + d * 1000);
   };
 

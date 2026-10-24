@@ -2324,7 +2324,11 @@ export function cdHoardedEvents(
                   c.timeSeconds <= windowToS &&
                   (cdCanHelpAnotherUnit(cd)
                     ? c.targetName === undefined ||
-                      c.targetName === crisisUnit.name
+                      c.targetName === crisisUnit.name ||
+                      c.allyCopyOn === crisisUnit.name ||
+                      // the unit's own talent-shared wall given to an ally
+                      // lands on it too (codex 20-F17-09 #1)
+                      (!ally && isAllyCopyWallId(cd.spellId))
                     : // F15 C1: a self wall answers for a teammate only
                       // through the copy the log shows on that teammate
                       // (Flameshaper Obsidian Scales — `allyCopyOn`)

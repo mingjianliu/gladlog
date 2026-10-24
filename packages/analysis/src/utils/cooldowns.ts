@@ -13,6 +13,7 @@ import {
   effectAuraHitShare,
   effectAurasOfCast,
   effectAuraViaName,
+  isCastOrEffect,
 } from "../data/castEffectAuras";
 import CD_RECAST_FLOORS from "../data/cdRecastFloorGenerated.json";
 import { classMetadata } from "../data/classSpells";
@@ -1808,7 +1809,12 @@ export function hpAtPress(
       ? (unit.spellCastEvents ?? []).find(
           (c) =>
             c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
-            c.spellId === cast.spellId &&
+            !!c.spellId &&
+            // the press by its cast id, or by the aura it put up — the
+            // [ENEMY DEF] reader asks with the aura (codex 20-F17-10 #1,
+            // 9bf3a95f r3 1:27.448: Blur 198589 cast, 212800 aura — 62 %
+            // read for a 42 % press)
+            isCastOrEffect(c.spellId, cast.spellId) &&
             c.logLine.timestamp === pressMs,
         )?.logLine.lineIndex
       : undefined;
@@ -2501,16 +2507,17 @@ function chargeEffectsOf(cd: object): IChargeEffects | undefined {
  */
 export function cdChargesAvailableAt(
   cd: Pick<IMajorCooldownInfo, "cooldownSeconds" | "charges"> &
-    Partial<Pick<IMajorCooldownInfo, "chargeEffects">>,
+    Partial<Pick<IMajorCooldownInfo, "chargeEffects" | "rateWindows">>,
   presses: readonly number[],
   atSeconds: number,
 ): number {
+  const w = onWarpedClock(cd, presses, atSeconds);
   return chargesAvailableAt(
-    presses,
+    w.presses,
     cd.cooldownSeconds,
     cd.charges ?? 1,
-    atSeconds,
-    chargeEffectsOf(cd),
+    w.atSeconds,
+    w.effects,
   );
 }
 
@@ -2518,17 +2525,51 @@ export function cdChargesAvailableAt(
  * `cdChargesAvailableAt`). */
 export function cdChargeStateAt(
   cd: Pick<IMajorCooldownInfo, "cooldownSeconds" | "charges"> &
-    Partial<Pick<IMajorCooldownInfo, "chargeEffects">>,
+    Partial<Pick<IMajorCooldownInfo, "chargeEffects" | "rateWindows">>,
   presses: readonly number[],
   atSeconds: number,
 ): ReturnType<typeof chargeStateAt> {
+  const w = onWarpedClock(cd, presses, atSeconds);
   return chargeStateAt(
-    presses,
+    w.presses,
     cd.cooldownSeconds,
     cd.charges ?? 1,
-    atSeconds,
-    chargeEffectsOf(cd),
+    w.atSeconds,
+    w.effects,
   );
+}
+
+/** The two charge helpers on the entry's recovery-rate clock (`warpClock`,
+ * `cdAvailableAt`'s reading): presses, the instant and the per-press
+ * reductions all warped (codex 20-F17-06 #1, 002653dc r0 164 s: [RES]
+ * `Time Dilation[1/2]` while death readiness read 0 charges). A returned
+ * charge state's times stay on the warped clock — its callers compare
+ * counts, not instants. */
+function onWarpedClock(
+  cd: Partial<Pick<IMajorCooldownInfo, "chargeEffects" | "rateWindows">>,
+  presses: readonly number[],
+  atSeconds: number,
+): {
+  presses: readonly number[];
+  atSeconds: number;
+  effects: IChargeEffects | undefined;
+} {
+  const effects = chargeEffectsOf(cd);
+  if (!cd.rateWindows?.length) return { presses, atSeconds, effects };
+  const { tau } = warpClock(cd.rateWindows);
+  return {
+    presses: presses.map(tau),
+    atSeconds: tau(atSeconds),
+    effects: effects?.reductions
+      ? {
+          ...effects,
+          reductions: effects.reductions.map((r) => ({
+            ...r,
+            atSeconds: tau(r.atSeconds),
+          })),
+        }
+      : effects,
+  };
 }
 
 /**
@@ -2895,8 +2936,11 @@ export function applyEventReductions(
     if (eff < cooldownSeconds) {
       c.cooldownSecondsOverride = eff;
       if (credit > 0) c.idleCreditSeconds = credit;
+      // the same window `eventReducedCooldownSeconds` counts, the press's
+      // own ms included (codex 20-F17-06 #2, 711dfd7b r0 19.057 s:
+      // Stormkeeper's same-ms 3 s reduction left out — `(35–59s)` for 56)
       const pulledIn = warped
-        .filter((g) => g.atSeconds > at && g.atSeconds < at + eff + 1e-9)
+        .filter((g) => g.atSeconds >= at && g.atSeconds < at + eff + 1e-9)
         .map((g) => g.real);
       if (pulledIn.length) c.reductions = pulledIn;
     }

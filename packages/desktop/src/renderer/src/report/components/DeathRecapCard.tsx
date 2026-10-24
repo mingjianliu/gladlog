@@ -354,6 +354,7 @@ export function DeathRecapCard({
               <ChipIcon spellId={m.spellId} />
               {m.casterName}:{m.spellName}
               {m.casterWasInCC ? "(被控)" : ""}
+              {m.casterCouldNotPay ? "(蓝不够)" : ""}
             </span>
           ))}
         </p>

@@ -347,13 +347,27 @@ export function externalUnusedEvents(input: {
   // read at the death and freedom over the whole window — Pain Suppression
   // back at 180 s, the priest Cycloned 179–182 s, read free 177–179 s while
   // it was still on cooldown). Ready ∧ free at the same time.
+  // every span it was not ready, not only the one before it first was
+  // (codex 20-F17-07 #2: a charge back at 117 s and spent on another ally
+  // at 118 s read "free 5 s" for a death at 122 s)
   const notReadyFor = (
     cd: (typeof input.ownerExternals)[number],
   ): Array<{ atSeconds: number; durationSeconds: number }> => {
-    for (let t = from; t <= deathT; t += 0.1)
-      if (cdReadyInTimeAt(cd, t))
-        return t > from ? [{ atSeconds: from, durationSeconds: t - from }] : [];
-    return [{ atSeconds: from, durationSeconds: deathT - from }];
+    const out: Array<{ atSeconds: number; durationSeconds: number }> = [];
+    let openAt: number | null = null;
+    const steps = Math.round((deathT - from) / 0.1);
+    for (let i = 0; i <= steps; i++) {
+      const t = Math.min(deathT, from + i * 0.1);
+      const ready = cdReadyInTimeAt(cd, t);
+      if (!ready && openAt === null) openAt = t;
+      if (ready && openAt !== null) {
+        out.push({ atSeconds: openAt, durationSeconds: t - openAt });
+        openAt = null;
+      }
+    }
+    if (openAt !== null)
+      out.push({ atSeconds: openAt, durationSeconds: deathT - openAt });
+    return out;
   };
   const freeGapFor = (
     spellId: string,

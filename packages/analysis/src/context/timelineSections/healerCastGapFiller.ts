@@ -203,9 +203,13 @@ export function emitHealerCastGapFillerEntries(
     const own = ownerAuras.filter(
       (a) => a.spellId === spellId && a.srcUnitId === owner.id,
     );
+    // a re-cast restarts the channel with a REFRESH of its aura (codex
+    // 20-F17-09 #2, ecfb3a7f 141.287 s: the re-cast Disintegrate the Shout
+    // cut 0.609 s in had no APPLIED of its own)
     const applied = own.find(
       (a) =>
-        a.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
+        (a.logLine.event === LogEvent.SPELL_AURA_APPLIED ||
+          a.logLine.event === LogEvent.SPELL_AURA_REFRESH) &&
         Math.abs(a.logLine.timestamp - castMs) <= CHANNEL_AURA_AT_CAST_MS,
     );
     if (!applied) return null;

@@ -132,6 +132,9 @@ export interface DeathRecap {
     spellId: string;
     spellName: string;
     casterWasInCC: boolean;
+    /** the caster could not pay for it for long enough (the death fact's
+     * `casterCouldNotPay`, apart from control) */
+    casterCouldNotPay?: true;
   }>;
   /**
    * Mitigation audit (form A, #17b Task4): a row-by-row accounting of the
@@ -656,6 +659,7 @@ export function deriveDeathRecaps(source: ReportSource): DeathRecap[] {
             spellId: m.spellId,
             spellName: m.spellName,
             casterWasInCC: m.casterWasInCC,
+            ...(m.casterCouldNotPay ? { casterCouldNotPay: true as const } : {}),
           })),
           mitigationAudit,
           counterfactuals,

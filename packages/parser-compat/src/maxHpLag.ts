@@ -64,11 +64,20 @@ export function laggingMaxHpCorrected(
     const newMax = samples[k]!.maxHp;
     if (!(oldMax > 0) || !(newMax > 0) || oldMax === newMax) continue;
     const ratio = newMax / oldMax;
-    // the current HP rescaled on the max-change row itself: no lag
+    // the current HP rescaled on the max-change row itself: no lag — unless
+    // the logged heals / hits between the two rows account for that move
+    // (codex 20-F17-05 #1, 8e2dab45 r0 86.144 s: a 40,791 hit on the
+    // max-change row matched the ratio and hid the rescale at 85.823 s)
     const hpBefore = samples[k - 1]!.hp;
     if (
       hpBefore > 0 &&
-      Math.abs(samples[k]!.hp / hpBefore - ratio) <= MAX_HP_LAG_RATIO_TOL * ratio
+      Math.abs(samples[k]!.hp / hpBefore - ratio) <=
+        MAX_HP_LAG_RATIO_TOL * ratio &&
+      !explained(
+        samples[k - 1]!.timestamp,
+        samples[k]!.timestamp,
+        samples[k]!.hp - hpBefore,
+      )
     )
       continue;
     // walk back over the rows still on the old maximum inside the lag window
@@ -81,7 +90,10 @@ export function laggingMaxHpCorrected(
       if (!(prev.hp > 0)) continue;
       const jump = s.hp / prev.hp;
       if (Math.abs(jump - ratio) <= MAX_HP_LAG_RATIO_TOL * ratio) {
-        if (explained(prev.timestamp, s.timestamp, s.hp - prev.hp)) break;
+        // a real heal / hit of that size is no rescale: look further back
+        // (codex 20-F17-05 #2, 0284fcd9 r3 115.453 s: a 44,302 hit matched
+        // the ratio and the 115.417 s rescale was never reached)
+        if (explained(prev.timestamp, s.timestamp, s.hp - prev.hp)) continue;
         for (let j = i; j < k; j++) out[j] = newMax;
         break;
       }

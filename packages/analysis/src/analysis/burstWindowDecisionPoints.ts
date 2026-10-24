@@ -1262,14 +1262,26 @@ export function burstWindowDecisionPoints(
       // reading cd-hoarded's answered set and the press line take) went to
       // that teammate: an external aimed at it
       const allyCopy = allyCopyRecipient(u.id, c, units);
+      const tMs = c.timestamp ?? c.logLine?.timestamp;
       friendlyCasts.push({
         unitId: u.id,
         unitName: u.name,
         spellId: sid,
-        dest: allyCopy ? allyCopy.id : c.destUnitId,
-        tMs: c.timestamp ?? c.logLine?.timestamp,
-        ...(allyCopy ? { allyCopy: true as const } : {}),
+        // …and the caster keeps its own copy: the press is its wall too
+        // (codex 20-F17-08 #3: an evoker under burst giving one to an ally
+        // lost the credit for its own)
+        dest: allyCopy ? u.id : c.destUnitId,
+        tMs,
       });
+      if (allyCopy)
+        friendlyCasts.push({
+          unitId: u.id,
+          unitName: u.name,
+          spellId: sid,
+          dest: allyCopy.id,
+          tMs,
+          allyCopy: true,
+        });
     }
   friendlyCasts.sort((a, b) => a.tMs - b.tMs);
 

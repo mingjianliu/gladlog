@@ -444,6 +444,10 @@ export function buildDeepDivePack(
             holder: sn(ext.casterName),
             holderRole: friendlyRole(ext.casterName),
             holderCc: ext.casterWasInCC ? "yes" : "no",
+            // the death fact's own split (codex 20-F17-07 #1, 20e0f243
+            // 359.9 s: 0.75 s affordable of 2.2 s free — "可用未给,
+            // holderCc:no" said nothing of the mana)
+            ...(ext.casterCouldNotPay ? { holderCouldNotPay: "yes" } : {}),
           },
         });
       }
