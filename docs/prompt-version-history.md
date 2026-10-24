@@ -4339,3 +4339,20 @@ Cyclone walk (`damageImmuneControlUpAt`), lost-REMOVED cap included.
 only (burstLedger 3 → 0 failing, untargetableEnd 2 → 0,
 matchTimeline.ccImmuneCyclone 1 → 0); the kill-window reference tables
 were not regenerated.
+
+v454 (2026-10-24, the first run of the full pipeline over real logs — the
+public wowarenalogs testlogs, read at runtime, not committed): a
+COMBATANT_INFO whose interesting-auras list is three (caster, spellId) pairs
+decodes — `length % 3` had read it as two triples and dropped the player
+from the round's roster (21 of 165 lines; rounds ran 3v2, the missing
+player's lines printed a bare name); a client-locale (CJK) log name is never
+`getEnglishSpellName`'s fallback — the id is (`痛苦動盪` on [KICK] lines, the
+gate's own `CJK_LEAK`); a rider shield (Shield of Vengeance) prints `[no
+press logged]` only when the log has no press of it (an older patch logs
+one 1 ms after the aura); an unseen-end invisibility no longer ends at its
+own press's cast row logged after the aura (found by the log-shape matrix).
+13 public arena logs, every round, healer / dps / recorder owner views:
+checkMatch hardFailures 16 / 16 / 16 → 0 / 0 / 0; prompts built 35 / 39 /
+37 → 39 / 40 / 40; bare unmapped player names on prompt lines 21 → 0;
+corpusFactScan auraCastGap violations 27 → 0. No 605-file numbers — the
+session had no corpus; the reference tables were not regenerated.

@@ -493,5 +493,16 @@
  *  logged IMMUNE (a Cyclone was on them)` reads the [CC NOT LANDED] note's
  *  capped walk (`damageImmuneControlUpAt`). No corpus in the session that
  *  made it: no 605-file numbers, unit tests only.
+ *
+ * v454 (2026-10-24, real-log pass over the public wowarenalogs testlogs):
+ *  a COMBATANT_INFO whose interesting-auras list is three pairs decodes
+ *  (the player no longer falls out of the round's roster); a client-locale
+ *  (CJK) log name is never a spell name's fallback — the id is; a rider
+ *  shield's `[no press logged]` only when the log has no press of it; an
+ *  unseen-end invisibility no longer ends at its own press's cast row.
+ *  13 public arena logs, healer / dps / recorder views: hardFailures
+ *  16 / 16 / 16 → 0 / 0 / 0, prompts built 35 / 39 / 37 → 39 / 40 / 40,
+ *  bare unmapped names 21 → 0, corpusFactScan auraCastGap 27 → 0. No
+ *  605-file numbers (no corpus in the session).
  */
-export const PROMPT_VERSION = 453;
+export const PROMPT_VERSION = 454;
