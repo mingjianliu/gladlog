@@ -572,9 +572,21 @@ export function computeContestedTradeFacts(
   const facts: IContestedTradeFact[] = [];
   // a dead owner holds no control (`isDeadAt`, the one dead-at predicate)
   const ownerDeathMs = firstDeathMs(owner);
+  // fact4 D35 / D36 (4dc94d91 3:03–3:14): a span the enemy healer spent in
+  // our control offers no control on them — Freezing Trap 3:04.4–3:10.4,
+  // then Psychic Scream to 3:16.1, and the line offered Mighty Bash on him.
+  // The span needs MIN_SLACK_SECONDS of [STATE] seconds with the healer free.
+  const healerCcAt = (t: number) =>
+    enemyHealerCCInstances.some(
+      (c) => t >= c.atSeconds && t < c.atSeconds + c.durationSeconds,
+    );
   for (const seg of contestedSegments) {
     if (overlapsKillWindow(seg)) continue;
     if (matchStartMs + seg.fromSeconds * 1000 >= ownerDeathMs) continue;
+    let healerFreeSeconds = 0;
+    for (let t = seg.fromSeconds; t < seg.toSeconds; t++)
+      if (!healerCcAt(t)) healerFreeSeconds++;
+    if (healerFreeSeconds < MIN_SLACK_SECONDS) continue;
 
     // an unknown DR family (Chastise without caster evidence) is never "at
     // Full DR" (codex 35-CD-13b: getDRLevelAtTime reads no history as Full)

@@ -515,18 +515,20 @@ export function sanctuaryRemovals(
   units: readonly ICombatUnit[],
   matchStartMs: number,
 ): ICcRemovedBySanctuary[] {
-  return sanctuaryRemovalPairs(units).map(({ castMs, paladin, target, removed: a }) => ({
-    atSeconds: (castMs - matchStartMs) / 1000,
-    paladinId: paladin.id,
-    paladinName: paladin.name,
-    targetId: target.id,
-    targetName: target.name,
-    ccSpellId: a.spellId!,
-    ccSpellName: getEnglishSpellName(a.spellId!, a.spellName),
-    ccSourceName: a.srcUnitName ?? "",
-    ...(a.srcUnitId ? { ccSourceId: a.srcUnitId } : {}),
-    ...heldAndLeft(target, a, units, matchStartMs),
-  }));
+  return sanctuaryRemovalPairs(units).map(
+    ({ castMs, paladin, target, removed: a }) => ({
+      atSeconds: (castMs - matchStartMs) / 1000,
+      paladinId: paladin.id,
+      paladinName: paladin.name,
+      targetId: target.id,
+      targetName: target.name,
+      ccSpellId: a.spellId!,
+      ccSpellName: getEnglishSpellName(a.spellId!, a.spellName),
+      ccSourceName: a.srcUnitName ?? "",
+      ...(a.srcUnitId ? { ccSourceId: a.srcUnitId } : {}),
+      ...heldAndLeft(target, a, units, matchStartMs),
+    }),
+  );
 }
 
 // ── Owner's rejected presses outside CC ──────────────────────────────────────
@@ -843,6 +845,12 @@ export function ownerRejectRuns(
   for (const h of hits) {
     const kind = KIND_OF.get(h.reason);
     const id = String(h.spellId);
+    // a press refused by the global cooldown / an action in progress was
+    // refused before the game read range, sight or movement: it neither
+    // counts nor ends a run (fact4 D60, bb7e1d9f 0:58–0:59: six Execute
+    // "Out of range" with one "You can't do that yet" between them read
+    // `×4` and dropped the first two)
+    if (!kind && RUN_TRANSPARENT_REASONS.has(h.reason)) continue;
     if (!kind) {
       // the same spell refused for another reason splits its run
       flush(id);
@@ -871,6 +879,14 @@ export function ownerRejectRuns(
   for (const id of [...open.keys()]) flush(id);
   return runs.sort((a, b) => a.fromSeconds - b.fromSeconds);
 }
+
+/** Refusal texts a reject run steps over (`ownerRejectRuns`): the global
+ *  cooldown's and an action already in progress, every locale of
+ *  `OTHER_REFUSAL_REASONS`. */
+const RUN_TRANSPARENT_REASONS: ReadonlySet<string> = new Set([
+  ...OTHER_REFUSAL_REASONS["another action in progress"]!,
+  ...OTHER_REFUSAL_REASONS["can't do that yet"]!,
+]);
 
 /** `row` is one of the presses `run` counts: the owner's failure of that
  *  spell, for that kind of reason, inside the run's span. (A run takes every

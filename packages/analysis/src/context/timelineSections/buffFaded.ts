@@ -76,15 +76,21 @@ export function emitBuffFadedEntries(
                         ? ` (used up — its charges spent${unclear})`
                         : expiry.dispelUnclear
                           ? ` (a dispel of this spell is logged at that moment — not which copy it took${took ? `; ${took}` : ""})`
-                          : expiry.cause === "ended_early"
-                            ? took
-                              ? ` (ended early — ${took}; no dispel logged)`
-                              : " (ended early — no dispel logged)"
-                            : expiry.isEstimated
-                              ? " (expired, estimated)"
-                              : took
-                                ? ` (expired; ${took})`
-                                : " (expired)";
+                          : expiry.cause === "ended_early" &&
+                              expiry.endedByOwnPress
+                            ? ` (ended by your own ${expiry.endedByOwnPress}${took ? `; ${took}` : ""})`
+                            : expiry.cause === "ended_early" &&
+                                expiry.channelStoppedAfterS !== undefined
+                              ? ` (ended early — the channel stopped after ${expiry.channelStoppedAfterS.toFixed(1)}s${took ? `; ${took}` : ""})`
+                              : expiry.cause === "ended_early"
+                                ? took
+                                  ? ` (ended early — ${took}; no dispel logged)`
+                                  : " (ended early — no dispel logged)"
+                                : expiry.isEstimated
+                                  ? " (expired, estimated)"
+                                  : took
+                                    ? ` (expired; ${took})`
+                                    : " (expired)";
     addEntry(
       expiry.expiresAtSeconds,
       `${fmtTime(expiry.expiresAtSeconds)}  [BUFF FADED]   ${expiry.spellName}${causeNote}`,

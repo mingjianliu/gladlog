@@ -3720,7 +3720,52 @@ export function analyzePlayerCCAndTrinket(
   const sorted = [...ccInstancesUnsorted].sort(
     (a, b) => a.atSeconds - b.atSeconds,
   );
-  const drAnnotations = computeIncomingDR(sorted, matchStartMs);
+  // fact4 D7: an enemy's own control reflected back onto it is no
+  // `[CC ON ENEMY]` instance (it would name the enemy as its source) but is
+  // DR history on it — the outgoing chains' walk reads it the same way
+  const reflectedHistory: Array<{
+    applyMs: number;
+    removeMs: number;
+    spellId: string;
+  }> = [];
+  if (player.reaction !== CombatUnitReaction.Friendly) {
+    const open = new Map<string, number>();
+    for (const a of dropAuraRebroadcasts(player.auraEvents)) {
+      if (!a.spellId || !ccSpellIds.has(a.spellId)) continue;
+      const ev = a.logLine.event;
+      if (ev === LogEvent.SPELL_AURA_APPLIED && a.srcUnitId === player.id) {
+        if (!open.has(a.spellId)) open.set(a.spellId, a.timestamp);
+      } else if (
+        (ev === LogEvent.SPELL_AURA_REMOVED ||
+          ev === LogEvent.SPELL_AURA_BROKEN ||
+          ev === LogEvent.SPELL_AURA_BROKEN_SPELL) &&
+        open.has(a.spellId)
+      ) {
+        reflectedHistory.push({
+          applyMs: open.get(a.spellId)!,
+          removeMs: a.timestamp,
+          spellId: a.spellId,
+        });
+        open.delete(a.spellId);
+      }
+    }
+    for (const [spellId, applyMs] of open) {
+      const full = ccFullDurationForCaster(spellId, player);
+      reflectedHistory.push({
+        applyMs,
+        removeMs:
+          full === undefined
+            ? combat.endTime
+            : Math.min(combat.endTime, applyMs + full * 1000),
+        spellId,
+      });
+    }
+  }
+  const drAnnotations = computeIncomingDR(
+    sorted,
+    matchStartMs,
+    reflectedHistory,
+  );
   const ccInstances: ICCInstance[] = sorted.map((cc, i) => ({
     ...cc,
     drInfo: drAnnotations[i] ?? null,

@@ -218,7 +218,7 @@ export function emitKickEntries(
   const castersById = new Map(_allUnits.map((u) => [u.id, u]));
   const immuneAuraCache = new Map<
     string,
-    Array<{ fromMs: number; toMs: number; name: string }>
+    Array<{ spellId: string; fromMs: number; toMs: number; name: string }>
   >();
   /** The unit's interrupt-immune auras as [fromMs, toMs], through the shared
    * pairing (`buildAuraIntervals`: BROKEN closes too, an aura with no
@@ -244,6 +244,7 @@ export function emitKickEntries(
           (i) => auraBlocksMechanic(i.spellId, INTERRUPT_MECHANIC) === true,
         )
         .map((i) => ({
+          spellId: i.spellId,
           fromMs: originMs + i.fromS * 1000,
           toMs: originMs + i.toS * 1000,
           name: getEnglishSpellName(i.spellId, i.spellName),
@@ -252,6 +253,24 @@ export function emitKickEntries(
     }
     return hit;
   };
+  // …but one APPLIED in the miss's millisecond on a row AFTER it came with
+  // the kick, not before it: Precognition is triggered by being kicked
+  // (fact4 D48, 68ea5d79 2:07 — the round's first Precognition logged in the
+  // IMMUNE miss's ms, after its row; a later kick on the idle priest
+  // triggered it again with no miss)
+  const appliedAfterMissRow = (
+    unit: ICombatUnit,
+    i: { spellId: string; fromMs: number },
+    m: { timestamp: number; logLine: { lineIndex?: number } },
+  ) =>
+    Math.abs(i.fromMs - m.timestamp) <= 0.5 &&
+    (unit.auraEvents ?? []).some(
+      (a) =>
+        a.spellId === i.spellId &&
+        a.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
+        Math.abs(a.timestamp - m.timestamp) <= 0.5 &&
+        (a.logLine.lineIndex ?? 0) > (m.logLine.lineIndex ?? 0),
+    );
   const seenImmuneKicks: Array<{ key: string; ms: number }> = [];
   for (const friend of friends) {
     for (const m of friend.missesIn ?? []) {
@@ -280,7 +299,9 @@ export function emitKickEntries(
           immuneAurasOf(friend)
             .filter(
               (i) =>
-                i.fromMs - 0.5 <= m.timestamp && m.timestamp <= i.toMs + 0.5,
+                i.fromMs - 0.5 <= m.timestamp &&
+                m.timestamp <= i.toMs + 0.5 &&
+                !appliedAfterMissRow(friend, i, m),
             )
             .sort((a, b) => a.fromMs - b.fromMs)
             .map((i) => i.name),

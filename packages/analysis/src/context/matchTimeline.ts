@@ -891,6 +891,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
   // already states is not said twice.
   emitCastStoppedEntries({
     owner,
+    enemies: enemies ?? [],
     matchStartMs,
     // the round's end, not the log's (FT I11): a Solo Shuffle round is over
     // at its first player death — the one round end the ledger's cancels
@@ -956,6 +957,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     enemyDispelSummary,
     addEntry,
     _allUnits,
+    matchStartMs,
   });
 
   // ── [KICK] events ───────────────────────────────────────────────────────────

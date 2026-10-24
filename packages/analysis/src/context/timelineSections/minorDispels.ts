@@ -9,6 +9,8 @@
  * its closure inputs now arrive through `ctx`. Output is pinned by the 605-file
  * acceptanceCapture context hash.
  */
+import { LogEvent } from "@gladlog/parser-compat";
+
 import { BACKLASH_CC_SPELL_IDS } from "../../data/backlashCc";
 import { getEnglishSpellName } from "../../data/spellEffectData";
 import type { IDispelEvent } from "../../utils/dispelAnalysis";
@@ -25,7 +27,8 @@ export function emitMinorDispelEntries(
     | "enemyDispelSummary"
     | "addEntry"
     | "_allUnits"
-  >,
+  > &
+    Partial<Pick<TimelineCtx, "matchStartMs">>,
 ): void {
   const {
     dispelSummary,
@@ -34,7 +37,29 @@ export function emitMinorDispelEntries(
     enemyDispelSummary,
     addEntry,
     _allUnits,
+    matchStartMs = 0,
   } = ctx;
+  // the dispeller's own press each removal came from: its last
+  // SPELL_CAST_SUCCESS of the dispel spell at or before the removal (fact4
+  // D67, ecfb3a7f 2:45: one Tranquilizing Shot took two buffs 74 ms apart
+  // and the 50 ms merge counted two casts)
+  const castMsOf = (e: IDispelEvent): number | undefined => {
+    const unit = e.summonUnitId
+      ? _allUnits?.find((u) => u.id === e.summonUnitId)
+      : _allUnits?.find((u) => u.name === e.sourceName);
+    if (!unit) return undefined;
+    const atMs = matchStartMs + e.timeSeconds * 1000;
+    let best: number | undefined;
+    for (const c of unit.spellCastEvents ?? [])
+      if (
+        c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+        c.spellId === e.dispelSpellId &&
+        c.logLine.timestamp <= atMs + MINOR_DISPEL_CAST_MERGE_S * 1000 &&
+        (best === undefined || c.logLine.timestamp > best)
+      )
+        best = c.logLine.timestamp;
+    return best;
+  };
 
   const minor = new Map<
     string,
@@ -42,7 +67,7 @@ export function emitMinorDispelEntries(
       sourceLabel: string;
       spellName: string;
       passive: boolean;
-      events: IDispelEvent[];
+      events: Array<IDispelEvent & { castMs?: number }>;
       firstSeconds: number;
     }
   >();
@@ -50,7 +75,8 @@ export function emitMinorDispelEntries(
     events: IDispelEvent[],
     labelOf: (name: string) => string,
   ) => {
-    for (const e of events) {
+    for (const ev of events) {
+      let e: IDispelEvent & { castMs?: number } = ev;
       // High/Critical riders are NOT on a [CLEANSE] line (D1), so they fold
       // here under their tag instead of vanishing.
       if (
@@ -70,6 +96,8 @@ export function emitMinorDispelEntries(
       const sourceLabel = dispelActorLabel(e, labelOf, _allUnits);
       const key = `${sourceLabel}|${spellName}|${tag ?? "d"}`;
       const cur = minor.get(key);
+      const castMs = castMsOf(e);
+      if (castMs !== undefined) e = { ...e, castMs };
       if (cur) {
         cur.events.push(e);
         cur.firstSeconds = Math.min(cur.firstSeconds, e.timeSeconds);
@@ -144,7 +172,10 @@ export function formatMinorDispelPart(m: {
   passive: boolean;
   events: ReadonlyArray<
     Pick<IDispelEvent, "timeSeconds" | "removedSpellId" | "removedSpellName"> &
-      Partial<Pick<IDispelEvent, "hasDispelPenalty" | "backlashCcSpellId">>
+      Partial<Pick<IDispelEvent, "hasDispelPenalty" | "backlashCcSpellId">> & {
+        /** the dispeller's press it came from (epoch ms), when found */
+        castMs?: number;
+      }
   >;
 }): string {
   if (m.passive) {
@@ -162,14 +193,30 @@ export function formatMinorDispelPart(m: {
       ? `${m.spellName} x${instants.length}`
       : m.spellName;
   }
-  const casts: Array<{ t: number; names: string[]; backlash?: string }> = [];
+  const casts: Array<{
+    t: number;
+    castMs?: number;
+    names: string[];
+    backlash?: string;
+  }> = [];
   for (const e of [...m.events].sort((a, b) => a.timeSeconds - b.timeSeconds)) {
     const name = getEnglishSpellName(e.removedSpellId, e.removedSpellName);
-    let c = casts.find(
-      (k) => Math.abs(k.t - e.timeSeconds) <= MINOR_DISPEL_CAST_MERGE_S,
+    // one press, one cast: its removals by the press they came from, else
+    // (no press found) by the merge window
+    let c = casts.find((k) =>
+      e.castMs !== undefined && k.castMs !== undefined
+        ? k.castMs === e.castMs
+        : Math.abs(k.t - e.timeSeconds) <= MINOR_DISPEL_CAST_MERGE_S,
     );
     if (c) c.names.push(name);
-    else casts.push((c = { t: e.timeSeconds, names: [name] }));
+    else
+      casts.push(
+        (c = {
+          t: e.timeSeconds,
+          ...(e.castMs !== undefined ? { castMs: e.castMs } : {}),
+          names: [name],
+        }),
+      );
     // WO3 #18 (r1008-150, eb8041ce 2:20): removing a debuff whose dispel
     // puts a CC on the dispeller (`BACKLASH_CC_SPELL_IDS`) says whether that
     // CC landed — a fully absorbed Unstable Affliction silences nobody

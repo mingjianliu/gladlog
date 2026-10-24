@@ -104,7 +104,7 @@ export type CastBarEnd =
   | {
       kind: "stopped";
       atS: number;
-      near: "cc" | "displaced" | "death" | null;
+      near: "cc" | "displaced" | "death" | "dodged" | null;
     }
   | { kind: "refused"; atS: number; row: CastFailedEvent }
   | { kind: "none" };
@@ -164,8 +164,13 @@ export function castBarOutcomesOf(params: {
   >;
   startMs: number;
   failed: readonly CastFailedEvent[];
+  /** epoch ms of the other side's presses that drop a target
+   * (`TARGETED_CC_DODGE_SPELLS`: Shadowmeld, Transcendence: Transfer) —
+   * `near` = "dodged" for a stop one of them sits next to */
+  dodgeMs?: readonly number[];
 }): CastBarOutcome[] {
   const { unit, startMs, failed } = params;
+  const dodgeAt = (params.dodgeMs ?? []).map((ms) => (ms - startMs) / 1000);
   const sec = (ms: number) => (ms - startMs) / 1000;
   const capS = JUKE_LOOKBACK_MS / 1000;
   const successes = (unit.spellCastEvents ?? []).filter(
@@ -248,7 +253,12 @@ export function castBarOutcomesOf(params: {
               ? "displaced"
               : near(diedAt)
                 ? "death"
-                : null,
+                : // fact4 D52 (a8056a0f r0 0:51): the enemy the bar was on
+                  // went into Shadowmeld 1 ms before "Interrupted" — no
+                  // stop of the player's
+                  near(dodgeAt)
+                  ? "dodged"
+                  : null,
         },
         earlierFailure: first !== barFail,
       };

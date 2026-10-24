@@ -33,6 +33,7 @@ import {
   isBelowWallFloorExternal,
   KW_REDIRECT_PROTECTION_AURA_IDS,
   KW_UNTARGETABLE_AURA_IDS,
+  untargetableEndS,
   ownPressedShieldSpansMs,
   ownSaveSpanS,
   ownWallSpanS,
@@ -515,22 +516,6 @@ export function computeOffensiveWindows(
     }
   }
 
-  // the holder's first own press or hit after `fromS` (seconds; Infinity
-  // when none) — where an unseen aura's end is read
-  const firstActionAfterS = (u: ICombatUnit, fromS: number): number => {
-    let first = Infinity;
-    const after = (ms: number) => (ms - matchStartMs) / 1000;
-    for (const c of u.spellCastEvents ?? [])
-      if (c.logLine.event === LogEvent.SPELL_CAST_SUCCESS) {
-        const t = after(c.logLine.timestamp);
-        if (t > fromS && t < first) first = t;
-      }
-    for (const d of u.damageOut ?? []) {
-      const t = after(d.logLine.timestamp);
-      if (t > fromS && t < first) first = t;
-    }
-    return first;
-  };
   // User rulings 2026-10-21: the target's own Power Word: Shield / Void
   // Shield and an Intervene on it end the span while their aura is up
   // (`KW_OWN_ROTATIONAL_ABSORB_AURA_IDS`, `KW_REDIRECT_PROTECTION_AURA_IDS`)
@@ -592,9 +577,7 @@ export function computeOffensiveWindows(
         // the log never showed is the holder's first action after it
         addSave(holder.id, {
           from: iv.fromS,
-          to: iv.inferredEnd
-            ? Math.min(iv.toS, firstActionAfterS(holder, iv.fromS))
-            : iv.toS,
+          to: untargetableEndS(holder, iv, matchStartMs),
         });
     }
   }

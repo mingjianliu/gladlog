@@ -77,7 +77,13 @@ import {
   nonPlayerUnitKill,
   summonedAtMs,
 } from "../utils/summonLife";
+import { missBelongsToCast } from "../utils/castMissRows";
+import { CHANNEL_STOPPED_MAX_SHARE } from "../utils/kickAudit";
 import { summonOwnerById } from "../utils/summonOwner";
+import {
+  ALTER_TIME_CAST_ID,
+  ALTER_TIME_RETURN_ID,
+} from "./timelineSections/alterTime";
 
 export { isPassiveProcCast, PASSIVE_SPELL_BLOCKLIST };
 
@@ -347,7 +353,8 @@ export function extractEnemyMajorBuffIntervals(
           spellId,
           spellName: buffDef.name,
           startSeconds: (startMs - matchStartMs) / 1000,
-          endSeconds: (capOf(spellId, startMs, matchEndMs) - matchStartMs) / 1000,
+          endSeconds:
+            (capOf(spellId, startMs, matchEndMs) - matchStartMs) / 1000,
           purgeable: buffDef.purgeable,
           inferredEnd: true,
         });
@@ -430,6 +437,12 @@ export interface ICDExpiryEvent {
    * but not which copy it took (`IAuraEndFromLog.takeUnclear`): the line
    * must then not read "expired" or "no dispel logged". */
   dispelUnclear?: true;
+  /** cause ended_early: the owner's own press that ended it in the
+   * REMOVED's ms (Alter Time's return, 342247 — fact4 D23) */
+  endedByOwnPress?: string;
+  /** cause ended_early on a channel: how long it ran before it stopped
+   * (fact4 D44: a Tranquility cut 1.9 s into its 8 s read "expired") */
+  channelStoppedAfterS?: number;
 }
 
 const FORM_SHIFT_PAIR_MS = 250;
@@ -505,7 +518,9 @@ export function extractOwnerCDBuffExpiry(
    * dropping every talent-lengthened duration back to its base value.
    */
   owner?: Pick<ICombatUnit, "spec" | "info" | "spellCastEvents"> &
-    Partial<Pick<ICombatUnit, "auraEvents" | "deathRecords" | "id">>,
+    Partial<
+      Pick<ICombatUnit, "auraEvents" | "deathRecords" | "id" | "missesOut">
+    >,
   /** the other side's units: Touch of Karma's debuff sits on one of them */
   enemies: ReadonlyArray<
     Pick<ICombatUnit, "id" | "name" | "auraEvents"> &
@@ -772,6 +787,34 @@ export function extractOwnerCDBuffExpiry(
         removedFromId = removals[pick]!.unitId;
         used[pick] = true;
       } else {
+        // fact4 D1 (190bbc57 2:41): a press whose own row MISSED (IMMUNE —
+        // Time Stop) and whose aura never went up put no buff anywhere —
+        // no fade to estimate. Asked of the log: the owner's miss of this
+        // spell for the press (`missBelongsToCast`) and no application of
+        // its aura by the owner from the press to its length.
+        const sameSpellCastMs = cd.casts.map(
+          (c) => matchStartMs + c.timeSeconds * 1000,
+        );
+        const missed = (owner?.missesOut ?? []).some(
+          (m) =>
+            m.spellId === cd.spellId &&
+            missBelongsToCast(sameSpellCastMs, castMs, m.timestamp),
+        );
+        const applied = friends.some((f) =>
+          f.auraEvents.some(
+            (a) =>
+              ownAuraIds.has(a.spellId) &&
+              isOwnBuffRow(a) &&
+              a.srcUnitId === ownerId &&
+              ((a.logLine.event as LogEvent) === LogEvent.SPELL_AURA_APPLIED ||
+                (a.logLine.event as LogEvent) ===
+                  LogEvent.SPELL_AURA_REFRESH) &&
+              (a.logLine.timestamp as number) >=
+                castMs - AURA_BEFORE_CAST_MAX_S * 1000 &&
+              (a.logLine.timestamp as number) <= castMs + duration * 1000,
+          ),
+        );
+        if (missed && !applied) continue;
         expiresAtSeconds = cast.timeSeconds + duration;
         isEstimated = true;
       }
@@ -801,6 +844,41 @@ export function extractOwnerCDBuffExpiry(
         expiresAtSeconds < naturalEndSeconds - earlyToleranceS
           ? "ended_early"
           : "expired";
+      // fact4 D23 (3ec01728 r0 2:26): Alter Time's return press takes the
+      // aura in its own ms — 9 s of 10 is inside the early tolerance, and
+      // the line read "(expired)" for a buff the mage ended
+      let endedByOwnPress: string | undefined;
+      if (
+        !isEstimated &&
+        cd.spellId === ALTER_TIME_CAST_ID &&
+        (owner?.spellCastEvents ?? []).some(
+          (c) =>
+            c.spellId === ALTER_TIME_RETURN_ID &&
+            (c.logLine.event as LogEvent) === LogEvent.SPELL_CAST_SUCCESS &&
+            Math.abs(
+              (c.logLine.timestamp as number) -
+                (matchStartMs + expiresAtSeconds * 1000),
+            ) <= AURA_REBROADCAST_GAP_MS,
+        )
+      ) {
+        cause = "ended_early";
+        endedByOwnPress = "Alter Time return";
+      }
+      // fact4 D44 (63d13f66 r0 2:58): a channel that ran under
+      // `CHANNEL_STOPPED_MAX_SHARE` of its official length — kick audit's
+      // "the channel stopped" bound, far below any hasted natural end —
+      // ended early; above it the haste-dependent length keeps "expired"
+      // (GH #34 ①)
+      let channelStoppedAfterS: number | undefined;
+      if (
+        !isEstimated &&
+        CHANNELED_CD_SPELL_IDS.has(cd.spellId) &&
+        expiresAtSeconds - cast.timeSeconds <
+          duration * CHANNEL_STOPPED_MAX_SHARE
+      ) {
+        cause = "ended_early";
+        channelStoppedAfterS = expiresAtSeconds - cast.timeSeconds;
+      }
       // F-B1 (triage death-kill): removed from the owner and the owner died
       // within DEATH_CASCADE_MS after — the death stripped it. Checked before
       // the shapeshift reading.
@@ -1037,6 +1115,12 @@ export function extractOwnerCDBuffExpiry(
         ...(brokenBy ? { brokenBy } : {}),
         ...(absorb ? { absorb } : {}),
         ...(dispelUnclear ? { dispelUnclear: true as const } : {}),
+        ...(endedByOwnPress && cause === "ended_early"
+          ? { endedByOwnPress }
+          : {}),
+        ...(channelStoppedAfterS !== undefined && cause === "ended_early"
+          ? { channelStoppedAfterS }
+          : {}),
         spellId: cd.spellId,
         spellName: cd.spellName,
         castAtSeconds: cast.timeSeconds,

@@ -1232,6 +1232,11 @@ export function canRemoveFrom(
  * Returns true if the unit can actually perform an offensive purge, accounting for
  * talent gating (DH Consume Magic) and pet requirements (Warlock Felhunter).
  */
+/** Grimoire of Sacrifice: the warlock's buff, and the shadow damage it
+ * adds to their spells */
+const GRIMOIRE_OF_SACRIFICE_AURA_ID = "196099";
+const GRIMOIRE_OF_SACRIFICE_DAMAGE_ID = "196100";
+
 export function canOffensivePurge(
   unit: ICombatUnit,
   /** the round's units, for the warlock's pet (`warlockRanPurgePet`); absent
@@ -1282,6 +1287,20 @@ export function canOffensivePurge(
     // Felguard / Imp warlock has no Devour Magic, whatever the talent says
     const purgePet = warlockRanPurgePet(unit, units);
     if (purgePet !== undefined) return purgePet;
+    // no pet logged and Grimoire of Sacrifice in use (its aura 196099, or
+    // its damage 196100): the demon was sacrificed, and a sacrificed demon
+    // lends no Devour Magic (fact4 D37, 4dee936a: the warlock's only Command
+    // Demon press was the sacrificed Imp's Singe Magic, and the prompt read
+    // "CAN offensive purge")
+    if (
+      (unit.auraEvents ?? []).some(
+        (a) => a.spellId === GRIMOIRE_OF_SACRIFICE_AURA_ID,
+      ) ||
+      (unit.damageOut ?? []).some(
+        (d) => d.spellId === GRIMOIRE_OF_SACRIFICE_DAMAGE_ID,
+      )
+    )
+      return false;
     if (talentTreeIds.has(SUMMON_FELHUNTER_SPELL_ID)) {
       if (talentedIds !== null && !talentedIds.has(SUMMON_FELHUNTER_SPELL_ID)) {
         // Didn't take Summon Felhunter talent — check cast evidence as final fallback
@@ -4142,11 +4161,11 @@ export function reconstructDispelSummary(
             officialS === null
               ? undefined
               : applications.find(
-                  (a) =>
-                    a.srcUnitId === srcUnitId &&
-                    a.ts > applyTs + officialS * 1000 &&
-                    (ownRemoval === undefined || a.ts < ownRemoval),
-                )
+                    (a) =>
+                      a.srcUnitId === srcUnitId &&
+                      a.ts > applyTs + officialS * 1000 &&
+                      (ownRemoval === undefined || a.ts < ownRemoval),
+                  )
                 ? applyTs + officialS * 1000
                 : undefined;
           const removalTs = lostAt ?? ownRemoval;

@@ -883,11 +883,35 @@ export function computeIncomingDR(
     spellId: string;
   }>,
   matchStartMs: number,
+  /** controls that are DR history on the unit but none of its instances
+   * (its own control reflected back onto it — fact4 D7), epoch ms */
+  historyOnly: ReadonlyArray<{
+    applyMs: number;
+    removeMs: number;
+    spellId: string;
+  }> = [],
 ): Array<IDRInfo | null> {
   // Per DR-category history: list of resolved {applyMs, removeMs}
   const history: Map<string, CCEntry[]> = new Map();
+  let nextExtra = 0;
+  const extras = [...historyOnly]
+    .filter((h) => ccSpellIds.has(h.spellId))
+    .sort((a, b) => a.applyMs - b.applyMs);
 
   return ccInstances.map((cc) => {
+    // the history-only applications that landed before this one join first
+    const atMs = matchStartMs + cc.atSeconds * 1000;
+    while (nextExtra < extras.length && extras[nextExtra]!.applyMs < atMs) {
+      const h = extras[nextExtra++]!;
+      const hc = getDRCategory(h.spellId);
+      const list = history.get(hc) ?? [];
+      list.push({
+        applyMs: h.applyMs,
+        removeMs: h.removeMs,
+        spellId: h.spellId,
+      });
+      history.set(hc, list);
+    }
     if (!ccSpellIds.has(cc.spellId)) return null;
 
     const applyMs = matchStartMs + cc.atSeconds * 1000;
@@ -982,19 +1006,26 @@ export function analyzeOutgoingCCChains(
         { applyMs: number; spellName: string; srcId: string; srcName: string }
       > = new Map();
       const applications: IOutgoingCCApplication[] = [];
+      // fact4 D7 (2742ff5d 0:59–1:05): a control of the target's own,
+      // reflected back onto it (its source is the target — the Fear a Spell
+      // Reflection sent back), is DR history on it but no CC of ours: it
+      // feeds the DR walk below and leaves no application (the incoming
+      // path's reading, ruling A52 — `reflectedOntoHolder`)
+      const drOnly = new Set<IOutgoingCCApplication>();
 
       // Helper: close a pending CC entry and push it to applications + history
       const closePending = (key: string, removeMs: number) => {
         const p = pending.get(key);
         if (!p) return;
         pending.delete(key);
+        const reflected = p.srcId === enemy.id;
 
         const spellId = key.split(":")[0];
         if (!spellId) return;
         const durationSeconds = (removeMs - p.applyMs) / 1000;
 
         // DR is assigned below, in APPLY order, once every interval is closed.
-        applications.push({
+        const app: IOutgoingCCApplication = {
           atSeconds: (p.applyMs - matchStartMs) / 1000,
           durationSeconds,
           spellId,
@@ -1006,7 +1037,9 @@ export function analyzeOutgoingCCChains(
             level: "Full",
             sequenceIndex: 0,
           },
-        });
+        };
+        applications.push(app);
+        if (reflected) drOnly.add(app);
       };
 
       // cc-dr F-RB1 (ruling A50 = A): a same-ms REMOVED→APPLIED re-broadcast
@@ -1044,7 +1077,9 @@ export function analyzeOutgoingCCChains(
         // fix).
         const caster = isRemovalEvent
           ? undefined
-          : creditedCaster(aura.srcUnitId);
+          : aura.srcUnitId === enemy.id
+            ? enemy
+            : creditedCaster(aura.srcUnitId);
         if (!isRemovalEvent && !caster) continue;
 
         const key = `${spellId}:${aura.srcUnitId}`;
@@ -1166,7 +1201,7 @@ export function analyzeOutgoingCCChains(
       return {
         targetName: enemy.name,
         targetSpec: specToString(enemy.spec),
-        applications,
+        applications: applications.filter((a) => !drOnly.has(a)),
       };
     })
     .filter((chain) => chain.applications.length > 0);

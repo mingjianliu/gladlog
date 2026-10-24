@@ -4185,3 +4185,39 @@ only for the last 2.2s"). Hard-cast lines 1,260 → 1,239 (kicked bars).
 Gates = f6b (+0 after the summon-name fix; f7 showed 9 checkCjkLeak from
 a localized totem name); scans and regression net unchanged. Family diff:
 `[ENEMY HARD CAST] … → Grounding Totem` 0 → 24 — intended.
+
+v449 (2026-10-23, fact4 F17 batches 7+8 — fades, control state, counts):
+[BUFF FADED] — a press whose own row MISSED and whose aura never went up
+has no estimated fade (190bbc57 2:51, Roar of Sacrifice into Time Stop);
+Alter Time ended by its return press in the REMOVED's ms reads `(ended by
+your own Alter Time return)` (0 → 185 lines; they read `ended early — no
+dispel logged` or `expired`); a channel that ran under
+`CHANNEL_STOPPED_MAX_SHARE` of its official length reads `(ended early —
+the channel stopped after N.Ns)` (0 → 84: Divine Hymn 59, Tranquility 25).
+Divine Hymn and Tranquility lose their hand 8 s and read DB2's 5 s / 6 s
+(605 files: complete channels ≤ 4.7 s / ≤ 5.1 s; kit `lasts 8s` 12,836 →
+9,807), which also puts kick audit's "the channel stopped" bound on the
+real length. Control state — `ccSamplerFor` (CC bookmarks, peel options)
+reads an immunity the press line's `[IMMUNE — X was up]` names for that
+control (`applicableCCAvoidanceIds`, keyed by the cast and its control
+aura: Anti-Magic Shell against Freezing Trap 3355) and Mass Invisibility /
+Phase Shift to the kill windows' end (`untargetableEndS`, shared); an
+enemy's own control reflected back onto it is DR history on both DR walks
+(the paladin's reflected Hammer of Justice puts a later Terror of the
+Skies at 50 %); a [CONTESTED] span needs `MIN_SLACK_SECONDS` of [STATE]
+seconds with the enemy healer free (435 → 312); an interrupt-immune aura
+APPLIED in the IMMUNE miss's ms but after its row is not the reason
+(Precognition triggered by the kick). Counts — GCD / action-in-progress
+refusals neither count nor split a `[REJECTED]` run (`Execute ×4` →
+`×6`); [MINOR DISPELS] removals are grouped by the dispeller's own press
+(`Tranquilizing Shot ×9` → `×8`). Press HP — a direct heal the press
+triggers, logged in its aura's ms before it, is cut (Invigorating Fury,
+Holy Ritual: Blessing of Spellwarding `73 %` → `54 %`). Also: an
+ally-copied self wall answers a burst as an external (`answered with
+Obsidian Scales in 0.8s`); a cast bar stopped within `CANCEL_CC_NEAR_S` of
+an enemy Shadowmeld / Transcendence: Transfer reads so and is no cancel of
+the owner's (18 lines); a warlock with Grimoire of Sacrifice and no pet
+has no offensive purge; a control aura of the cast's own id put on another
+unit is press evidence (a stealthed Blind no longer `[UNUSED]`). 605 files
+vs v448 (f7 → f8): no candidate added or removed; gates = f7; scans and
+regression net unchanged.

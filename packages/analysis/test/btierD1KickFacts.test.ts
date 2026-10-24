@@ -276,11 +276,12 @@ describe("kickAudit: a channel the target stopped just before the kick (B21b)", 
 
   it("a channel that ran half its official duration or more is not a stop", () => {
     expect(CHANNEL_STOPPED_MAX_SHARE).toBe(0.5);
-    // official 8 s: 3.9 s is a stop, 4.1 s may be a hasted natural end
+    // official 5 s (DB2; the hand 8 s left with fact4 D30): 2.4 s is a
+    // stop, 2.6 s may be a hasted natural end
     const at = (toS: number) =>
       analyzeKickAudit(kicker(toS + 0.1), [priest(40, toS)], combat)[0]!;
-    expect(at(43.9).result).toBe("juked");
-    expect(at(44.1).result).toBe("missed");
+    expect(at(42.4).result).toBe("juked");
+    expect(at(42.6).result).toBe("missed");
   });
 
   it("a channel still running at the kick is not the bait", () => {

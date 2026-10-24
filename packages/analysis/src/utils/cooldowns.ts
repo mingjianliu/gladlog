@@ -40,6 +40,7 @@ import spellIdListsData, {
   ENEMY_ONLY_SAVE_IDS,
 } from "../data/spellIdLists";
 import { spellSchoolMask } from "../data/spellSchools";
+import { ccSpellIds } from "../data/spellTags";
 import { hasOfficialTargeting, reachesAlly } from "../data/spellTargeting";
 import { SpellTag } from "../data/spellTypes";
 import { replacedSpellIds } from "../data/talentReplaces";
@@ -1728,7 +1729,24 @@ export function hpAtPress(
         (effectAuraViaName(cast.spellId, h.spellId) ||
           getEnglishSpellName(h.spellId, "") ===
             getEnglishSpellName(cast.spellId, "")));
-    if (!ownEffect || h.srcUnitId !== cast.srcUnitId) continue;
+    // …or a direct heal its own aura's row follows in the same ms (a heal
+    // the press triggers under another id: Enraged Regeneration's
+    // Invigorating Fury 385174, logged in the same ms just before the
+    // 184364 APPLIED — fact4 D59, bb7e1d9f 1:57 read 66 % for a 59 % press)
+    const triggeredByPress =
+      !periodic &&
+      h.srcUnitId === cast.srcUnitId &&
+      (unit.auraEvents ?? []).some(
+        (a) =>
+          a.spellId === cast.spellId &&
+          a.srcUnitId === cast.srcUnitId &&
+          (a.logLine.event === LogEvent.SPELL_AURA_APPLIED ||
+            a.logLine.event === LogEvent.SPELL_AURA_REFRESH) &&
+          a.logLine.timestamp === t &&
+          (a.logLine.lineIndex ?? 0) > (h.logLine.lineIndex ?? 0),
+      );
+    if (!(ownEffect || triggeredByPress) || h.srcUnitId !== cast.srcUnitId)
+      continue;
     // the press's OWN heal is a direct one; a periodic tick of an earlier
     // application of the same spell is not this press (review of F-R8,
     // 2026-10-03: a refresh 30 ms after a HoT tick read the pre-tick HP).
@@ -3608,7 +3626,11 @@ export function effectEvidenceCastSeconds(
       effectAuraViaName(spellId, a) &&
       (effectAuraHitShare(spellId, a) ?? 0) >= CONTROL_EFFECT_MIN_HIT_SHARE,
   );
-  if (effects.length === 0) return [];
+  // …and a control's own id, put on ANOTHER unit: Blind's aura is 2094, its
+  // cast's id (fact4 D25, 3f433db1 0:21: a stealthed rogue's Blind landed
+  // on our healer with no cast row, and the kit read `Blind [UNUSED]`)
+  const ownIdOnOthers = ccSpellIds.has(spellId);
+  if (effects.length === 0 && !ownIdOnOthers) return [];
   const units = Object.values(combat.units ?? {}) as ICombatUnit[];
   // the unit's own applications: a summon can cast the same spell itself
   // (a Rider of the Apocalypse's Anti-Magic Shell on its Death Knight is no
@@ -3620,7 +3642,10 @@ export function effectEvidenceCastSeconds(
       (a) =>
         a.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
         !!a.spellId &&
-        effects.includes(a.spellId) &&
+        (effects.includes(a.spellId) ||
+          (ownIdOnOthers &&
+            a.spellId === spellId &&
+            a.destUnitId !== unit.id)) &&
         sources.has(a.srcUnitId) &&
         a.logLine.timestamp >= combat.startTime,
     )

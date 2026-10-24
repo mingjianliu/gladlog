@@ -37,11 +37,18 @@
 import type { AtomicArenaCombat, ICombatUnit } from "@gladlog/parser-compat";
 
 import { abilityProfile } from "../data/abilityProfile";
+import { getEnglishSpellName } from "../data/spellEffectData";
+import { effectAurasOfCast, effectAuraViaName } from "../data/castEffectAuras";
 import { ccSpellIds } from "../data/spellTags";
+import { KW_UNTARGETABLE_AURA_IDS, untargetableEndS } from "./enemyDefensives";
 import { buildAuraIntervals, type IAuraInterval } from "./auraIntervals";
 import { cannotCastIntervalsForSpells } from "./cannotCastIntervals";
 import { castingLockIntervalsOf } from "./castingLocks";
-import { pvpTrinketRemainingSecondsAt } from "./ccTrinketAnalysis";
+import {
+  applicableCCAvoidanceIds,
+  CC_AVOIDANCE_BUFF_SPELLS,
+  pvpTrinketRemainingSecondsAt,
+} from "./ccTrinketAnalysis";
 import {
   cdReadyInTimeAt,
   type IMajorCooldownInfo,
@@ -230,6 +237,21 @@ export function ccSamplerFor(params: {
       talents: ReturnType<typeof playerTalentIdSets>;
     }
   >();
+  // keyed by the cast AND the control aura it applies: Freezing Trap's
+  // cast 187650 is physical in DB2, its aura 3355 frost — the IMMUNE row
+  // names the aura
+  const avoidance = new Set<string>();
+  for (const id of [
+    cd.spellId,
+    ...effectAurasOfCast(cd.spellId).filter(
+      (a) => ccSpellIds.has(a) && effectAuraViaName(cd.spellId, a),
+    ),
+  ])
+    for (const b of applicableCCAvoidanceIds(
+      id,
+      getEnglishSpellName(cd.spellId, cd.spellName),
+    ))
+      avoidance.add(b);
   const factsOf = (t: ICombatUnit) => {
     let f = perTarget.get(t.id);
     if (!f) {
@@ -243,9 +265,25 @@ export function ccSamplerFor(params: {
         death: deathS(t),
         cc,
         renderedCc: rendered,
-        blockers: auras.filter(
-          (iv) => auraBlocksMechanic(iv.spellId, mech) !== false,
-        ),
+        // …or one the press line's `[IMMUNE — X was up]` names for this
+        // control (`applicableCCAvoidanceIds`, by school): fact4 D3
+        // (190bbc57 0:26–0:31) — Anti-Magic Shell blocks no freeze by
+        // mechanic, yet a Freezing Trap into it logged IMMUNE, and the
+        // bookmark counted those seconds "not immune"
+        blockers: auras
+          .filter(
+            (iv) =>
+              auraBlocksMechanic(iv.spellId, mech) !== false ||
+              (CC_AVOIDANCE_BUFF_SPELLS.has(iv.spellId) &&
+                avoidance.has(iv.spellId)),
+          )
+          // not a target at all: Mass Invisibility / Phase Shift, to the
+          // end the kill windows read (`untargetableEndS`)
+          .concat(
+            auras
+              .filter((iv) => KW_UNTARGETABLE_AURA_IDS.has(iv.spellId))
+              .map((iv) => ({ ...iv, toS: untargetableEndS(t, iv, start) })),
+          ),
         drHistory: cc
           .filter((iv) => getDRCategory(iv.spellId) === cat)
           .map((iv) => ({

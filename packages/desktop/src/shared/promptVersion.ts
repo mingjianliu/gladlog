@@ -443,5 +443,20 @@
  *  hard cast, and its target falls back to the completion (a summon by its
  *  English name). 605 files vs v447 (f6b → f7): external-unused 144 → 137
  *  (each back and its caster free together < 1.5 s of the last 5 s).
+ *
+ * v449 (2026-10-23, fact4 F17 batches 7+8 — fades, control state, counts):
+ *  a press that missed and put no aura up has no [BUFF FADED]; Alter Time
+ *  ended by its return says so, a channel stopped under half its DB2
+ *  length says "ended early" (Divine Hymn / Tranquility back to DB2 5 s /
+ *  6 s); a target is not CC-able under an immunity the press line names
+ *  for that control (Anti-Magic Shell vs a trap) nor under Mass
+ *  Invisibility; an enemy's own reflected control is DR history; a
+ *  [CONTESTED] span needs the enemy healer free; an aura applied after the
+ *  kick's IMMUNE row is no reason; GCD refusals do not split a [REJECTED]
+ *  run; minor dispels are counted by press; a heal the press itself
+ *  triggers is not in its HP; an ally-copied Obsidian Scales answers a
+ *  burst; a cast bar stopped as an enemy Shadowmelded says so; a sacrificed
+ *  demon lends no purge; a castless Blind is a press. 605 files vs v448
+ *  (f7 → f8): no candidate added or removed; [CONTESTED] 435 → 312.
  */
-export const PROMPT_VERSION = 448;
+export const PROMPT_VERSION = 449;

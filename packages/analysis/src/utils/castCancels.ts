@@ -71,6 +71,7 @@ import {
   DISPLACEMENT_EVIDENCE_IDS,
 } from "./castStopEvidence";
 import { isPressOfCooldown, talentReplacementsOf } from "./cooldowns";
+import { TARGETED_CC_DODGE_SPELLS } from "./ccTrinketAnalysis";
 import { analyzeKickAudit } from "./kickAudit";
 import type { RawStreams } from "./rawStreams";
 import { roundEndMs } from "./roundEnd";
@@ -173,12 +174,23 @@ export function ownerCastBarOutcomes(params: {
   owner: ICombatUnit;
   startMs: number;
   rawStreams?: RawStreams;
+  /** the other side: their target-dropping presses (`dodgeMs`) */
+  enemies?: readonly ICombatUnit[];
 }): CastBarOutcome[] | null {
   const { owner, startMs, rawStreams } = params;
   if (!rawStreams?.available) return null;
   const failed = rawStreams.castFailed.filter((e) => e.unitGuid === owner.id);
   if (failed.length === 0) return null; // not the recorder
-  return castBarOutcomesOf({ unit: owner, startMs, failed });
+  const dodgeMs = (params.enemies ?? []).flatMap((e) =>
+    (e.spellCastEvents ?? [])
+      .filter(
+        (c) =>
+          c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+          TARGETED_CC_DODGE_SPELLS.has(c.spellId ?? ""),
+      )
+      .map((c) => c.logLine.timestamp),
+  );
+  return castBarOutcomesOf({ unit: owner, startMs, failed, dodgeMs });
 }
 
 /**
@@ -254,6 +266,7 @@ export function ownerCastCancels(params: {
     owner,
     startMs: combat.startTime,
     rawStreams,
+    enemies,
   });
   if (!starts) return null;
   const roundEndS = (roundEndMs(combat) - combat.startTime) / 1000;

@@ -35,7 +35,10 @@ export const SPELL_EFFECT_OVERRIDES: Record<string, IMinedSpell> =
       e("498", "Divine Protection", 60, 8),
       e("216331", "Avenging Crusader", 60, 15),
       e("31821", "Aura Mastery", 180, 8),
-      e("64843", "Divine Hymn", 180, 8),
+      // Divine Hymn 64843 / Tranquility 740: no row — DB2's 5 s / 6 s
+      // (fact4 D30, 2026-10-23: the hand 8 s shadowed them; 605 files, the
+      // channels ran ≤ 4.7 s / ≤ 5.1 s complete, haste shortening the DB2
+      // length — `Divine Hymn [120s, lasts 8s]` beside `channeled 3.8s`)
       e("200183", "Apotheosis", 120, 20),
       e("45438", "Ice Block", 240, 10),
       e("31224", "Cloak of Shadows", 120, 5),
@@ -49,7 +52,6 @@ export const SPELL_EFFECT_OVERRIDES: Record<string, IMinedSpell> =
       e("62618", "Power Word: Barrier", 180, 10),
       e("98008", "Spirit Link Totem", 180, 6),
       e("102342", "Ironbark", 90, 12),
-      e("740", "Tranquility", 180, 8),
       e("22812", "Barkskin", 60, 12), // 12 = 8 (DB2) + Improved Barkskin, held by ~100 % of casters — see BUFF_DURATION_TALENT_MODIFIERS
       e("61336", "Survival Instincts", 180, 6),
       e("871", "Shield Wall", 210, 8),

@@ -40,6 +40,7 @@ import {
   spells as spellMeta,
 } from "../data/spellTags";
 import { supersededAuraBreaks } from "../utils/auraIntervals";
+import { allyCopyRecipient } from "../utils/allyCopyWall";
 import { buffFullDurationForCaster } from "../utils/buffDuration";
 import { damageTakenBetween, hitByAttackers } from "../utils/burstHit";
 import {
@@ -1243,6 +1244,8 @@ export function burstWindowDecisionPoints(
     spellId: string;
     dest: string | undefined;
     tMs: number;
+    /** a self wall the log shows on the teammate `dest` */
+    allyCopy?: true;
   }
   const friendlyCasts: FriendlyCast[] = [];
   for (const u of friendlies)
@@ -1254,12 +1257,18 @@ export function burstWindowDecisionPoints(
       // Hymn's last 64844 tick, 1.2 s before Zenith, was read as the answer
       // although the hymn was pressed 5.0 s before and had already ended
       if (COPY_CAST_IDS.has(sid)) continue;
+      // fact4 D68 (ecfb3a7f 1:42): a self wall whose copy the log shows on a
+      // teammate (Flameshaper Obsidian Scales — `allyCopyRecipient`, the
+      // reading cd-hoarded's answered set and the press line take) went to
+      // that teammate: an external aimed at it
+      const allyCopy = allyCopyRecipient(u.id, c, units);
       friendlyCasts.push({
         unitId: u.id,
         unitName: u.name,
         spellId: sid,
-        dest: c.destUnitId,
+        dest: allyCopy ? allyCopy.id : c.destUnitId,
         tMs: c.timestamp ?? c.logLine?.timestamp,
+        ...(allyCopy ? { allyCopy: true as const } : {}),
       });
     }
   friendlyCasts.sort((a, b) => a.tMs - b.tMs);
@@ -1463,9 +1472,7 @@ export function burstWindowDecisionPoints(
       const extraAnswerCategory = (
         c: FriendlyCast,
       ): BurstResponseCast["category"] =>
-        c.dest &&
-        c.dest !== c.unitId &&
-        friendlies.some((f) => f.id === c.dest)
+        c.dest && c.dest !== c.unitId && friendlies.some((f) => f.id === c.dest)
           ? "external"
           : isNoDest(c.dest) && canHelpAnotherUnit(c.spellId)
             ? "healCd"
@@ -1473,8 +1480,9 @@ export function burstWindowDecisionPoints(
       for (const c of friendlyCasts) {
         if (c.tMs < w0) continue;
         if (c.tMs > w1) break;
-        const category: BurstResponseCast["category"] | null =
-          PERSONAL_WALL_IDS.has(c.spellId)
+        const category: BurstResponseCast["category"] | null = c.allyCopy
+          ? "external"
+          : PERSONAL_WALL_IDS.has(c.spellId)
             ? "wall"
             : EXTERNAL_IDS.has(c.spellId)
               ? "external"

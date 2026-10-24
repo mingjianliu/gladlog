@@ -285,6 +285,34 @@ export const KW_UNTARGETABLE_AURA_IDS: ReadonlySet<string> = new Set([
   "408558",
 ]);
 
+/**
+ * When a `KW_UNTARGETABLE_AURA_IDS` interval stops the unit being a target,
+ * match seconds: its logged end, or — for an end the log never showed
+ * (`inferredEnd`) — the holder's first own press or hit after it went up.
+ * One reading for the kill-window saves and the CC samplers' "not immune"
+ * (fact4 D27, 3f433db1 0:23: a Blind counted usable on a mage 0.2 s into
+ * Mass Invisibility).
+ */
+export function untargetableEndS(
+  holder: Pick<ICombatUnit, "spellCastEvents" | "damageOut">,
+  iv: { fromS: number; toS: number; inferredEnd?: boolean },
+  matchStartMs: number,
+): number {
+  if (!iv.inferredEnd) return iv.toS;
+  let first = Infinity;
+  const after = (ms: number) => (ms - matchStartMs) / 1000;
+  for (const c of holder.spellCastEvents ?? [])
+    if (c.logLine.event === LogEvent.SPELL_CAST_SUCCESS) {
+      const t = after(c.logLine.timestamp);
+      if (t > iv.fromS && t < first) first = t;
+    }
+  for (const d of holder.damageOut ?? []) {
+    const t = after(d.logLine.timestamp);
+    if (t > iv.fromS && t < first) first = t;
+  }
+  return Math.min(iv.toS, first);
+}
+
 /** Enemy-def F-E5 / F-E6 (user ruling A25, 2026-09-30, narrowed by D8,
  * 2026-10-10): auras the `[ENEMY DEF]` line prints as `immune` and KILL
  * ATTEMPTS reads as "forced a full immunity" although they are no pct-100
@@ -537,7 +565,11 @@ export function effectSaves(
     // one proc, one event: a heal beside the same proc's aura (Cauterize's
     // 1286444 next to its 87023, fact4 D61) is that aura's
     const atS = (h.logLine.timestamp - matchStartMs) / 1000;
-    if (out.some((o) => o.spellName === proc.name && Math.abs(o.atSeconds - atS) <= 1))
+    if (
+      out.some(
+        (o) => o.spellName === proc.name && Math.abs(o.atSeconds - atS) <= 1,
+      )
+    )
       continue;
     out.push({
       atSeconds: (h.logLine.timestamp - matchStartMs) / 1000,
