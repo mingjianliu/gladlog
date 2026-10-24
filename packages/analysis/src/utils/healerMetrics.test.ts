@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { computeHealerMetrics } from "./healerMetrics";
+import { computeHealerMetrics, playerAvoidedCcCount } from "./healerMetrics";
 
 // Minimal synthetic combat: one healer unit, no damage and no healing →
 // offensiveIndex=0 and everything else in its domain.
@@ -133,5 +133,19 @@ describe("computeHealerMetrics", () => {
     expect(() => computeHealerMetrics(stubCombat(), "Nobody")).toThrow(
       /not found/,
     );
+  });
+});
+
+describe("playerAvoidedCcCount (ccAvoidanceRate's numerator)", () => {
+  // weekly review 2026-10-24: a Polymorph logged IMMUNE because the enemy's
+  // own Freezing Trap 203337 was on the healer read as a control the healer
+  // avoided
+  it("an avoidance kept facts-only (the enemy's own Freezing Trap) is not the player's", () => {
+    const at = (avoidanceSpellId: string) => ({ avoidanceSpellId }) as never;
+    expect(
+      playerAvoidedCcCount({
+        ccAvoidedInstances: [at("203337"), at("8178"), at("378441")],
+      }),
+    ).toBe(1);
   });
 });
