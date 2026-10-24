@@ -336,14 +336,28 @@ export const ALLY_REACH_REQUIRES_PVP_TALENT: Readonly<Record<string, string>> =
     "414664": "415945", // Mass Invisibility ← Improved Mass Invisibility
   };
 
+/**
+ * The other direction (user ruling 2026-10-23, fact4 D57): a self-only wall
+ * a talent lets its caster put on an ally — cast id → talent. Obsidian Scales
+ * 363916 ← Lifecinders 444322 (the Flameshaper node; `MITIGATION_TABLE`'s
+ * `pctOnOthers` note: 512 holders' cells put 48.9 % of their applications on
+ * others, 6 Draconic Instincts cells 0 %). Read by `extractMajorCooldowns`
+ * (per-player `allyReach: true`). Registered in curatedIdRegistry.
+ */
+export const ALLY_REACH_GRANTED_BY_TALENT: Readonly<Record<string, string>> = {
+  "363916": "444322", // Obsidian Scales ← Lifecinders
+};
+
 /** `canHelpAnotherUnit` for THIS player's cooldown: the id-level answer, and
  * not when the player lacks the talent that grants the ally effect
- * (`allyReach: false`). The one reader for a ledger entry. */
+ * (`allyReach: false`), and yes when a talent of theirs grants it
+ * (`allyReach: true`). The one reader for a ledger entry. */
 export function cdCanHelpAnotherUnit(cd: {
   spellId: string;
   tag?: string;
-  allyReach?: false;
+  allyReach?: boolean;
 }): boolean {
+  if (cd.allyReach === true) return true;
   return cd.allyReach !== false && canHelpAnotherUnit(cd.spellId, cd.tag);
 }
 
@@ -2303,8 +2317,10 @@ export interface IMajorCooldownInfo {
   /** `false` when THIS player's cooldown cannot reach an ally although the
    * spell id can (a talent-gated ally effect the player did not take —
    * `ALLY_REACH_REQUIRES_PVP_TALENT`). Absent = the id-level answer
-   * (`canHelpAnotherUnit`). Read through `cdCanHelpAnotherUnit`. */
-  allyReach?: false;
+   * (`canHelpAnotherUnit`). `true` when a talent of theirs lets a self-only
+   * wall reach an ally (`ALLY_REACH_GRANTED_BY_TALENT`). Read through
+   * `cdCanHelpAnotherUnit`. */
+  allyReach?: boolean;
   /** A healer save cooldown the user ruled RESPONSE-ONLY (Barkskin / Frenzied
    * Regeneration for Restoration Druid, 2026-09-25 「不指控」): pressing it
    * answers a crisis and it counts as a defensive the player has, but no
@@ -5448,7 +5464,12 @@ function buildCooldownEntry(
       ALLY_REACH_REQUIRES_PVP_TALENT[spell.spellId] !== undefined &&
       !pvpTalentIds.has(ALLY_REACH_REQUIRES_PVP_TALENT[spell.spellId]!)
         ? { allyReach: false as const }
-        : {}),
+        : ALLY_REACH_GRANTED_BY_TALENT[spell.spellId] !== undefined &&
+            !!talentedSpellIds?.has(
+              ALLY_REACH_GRANTED_BY_TALENT[spell.spellId]!,
+            )
+          ? { allyReach: true as const }
+          : {}),
       ...(spellAliasIds(spell.spellId).some(
         (id) => saveRoster?.get(id)?.responseOnly,
       ) ||

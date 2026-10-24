@@ -14,7 +14,7 @@ import {
   SPELL_CATEGORIES as spellsData,
 } from "../data/spellCategories";
 import { getEnglishSpellName, spellNamesReady } from "../data/spellEffectData";
-import { ccSpellIds } from "../data/spellTags";
+import { ccSpellIds, rootSpellIds } from "../data/spellTags";
 import {
   buildCannotCastIntervals,
   enemySourceIds,
@@ -252,6 +252,12 @@ export function computeSlackSegments(
     raw.push({ fromSeconds: segStart, toSeconds: durationSeconds });
 
   const enemyIds = new Set(enemies.map((e) => e.id));
+  // the owner's pets (a Water Elemental's Freeze, a Treant's root)
+  const ownerPetIds = new Set(
+    (owner.petSpellCastEvents ?? [])
+      .map((c) => c.srcUnitId)
+      .filter((id): id is string => !!id),
+  );
 
   const segments: ISlackSegment[] = raw
     .filter((s) => s.toSeconds - s.fromSeconds >= MIN_SLACK_SECONDS)
@@ -281,12 +287,27 @@ export function computeSlackSegments(
       const ownerPurgeCasts = ownerPurgeTimesSeconds.filter(
         (t) => t >= s.fromSeconds && t < s.toSeconds,
       ).length;
+      // user ruling 2026-10-23 (fact4 D26, 3f433db1 0:14–0:22): a root the
+      // owner landed on an enemy is offensive output — Landslide held the
+      // enemy healer 0:20.9–0:22.4 inside a span read "zero output"
+      const ownerRootLandings = enemies.filter((e) =>
+        (e.auraEvents ?? []).some(
+          (a) =>
+            a.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
+            !!a.spellId &&
+            rootSpellIds.has(a.spellId) &&
+            (a.srcUnitId === owner.id ||
+              ownerPetIds.has(a.srcUnitId ?? "")) &&
+            inSeg(a.logLine.timestamp),
+        ),
+      ).length;
 
       const idle =
         ownerDamage === 0 &&
         ownerCCCasts === 0 &&
         ownerKickCasts === 0 &&
-        ownerPurgeCasts === 0;
+        ownerPurgeCasts === 0 &&
+        ownerRootLandings === 0;
       return {
         fromSeconds: s.fromSeconds,
         toSeconds: s.toSeconds,
@@ -361,6 +382,12 @@ export function computeContestedSegments(
     raw.push({ fromSeconds: segStart, toSeconds: durationSeconds });
 
   const enemyIds = new Set(enemies.map((e) => e.id));
+  // the owner's pets (a Water Elemental's Freeze, a Treant's root)
+  const ownerPetIds = new Set(
+    (owner.petSpellCastEvents ?? [])
+      .map((c) => c.srcUnitId)
+      .filter((id): id is string => !!id),
+  );
 
   const segments: IContestedSegment[] = raw
     .filter((s) => s.toSeconds - s.fromSeconds >= MIN_SLACK_SECONDS)
@@ -390,12 +417,27 @@ export function computeContestedSegments(
       const ownerPurgeCasts = ownerPurgeTimesSeconds.filter(
         (t) => t >= s.fromSeconds && t < s.toSeconds,
       ).length;
+      // user ruling 2026-10-23 (fact4 D26, 3f433db1 0:14–0:22): a root the
+      // owner landed on an enemy is offensive output — Landslide held the
+      // enemy healer 0:20.9–0:22.4 inside a span read "zero output"
+      const ownerRootLandings = enemies.filter((e) =>
+        (e.auraEvents ?? []).some(
+          (a) =>
+            a.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
+            !!a.spellId &&
+            rootSpellIds.has(a.spellId) &&
+            (a.srcUnitId === owner.id ||
+              ownerPetIds.has(a.srcUnitId ?? "")) &&
+            inSeg(a.logLine.timestamp),
+        ),
+      ).length;
 
       const idle =
         ownerDamage === 0 &&
         ownerCCCasts === 0 &&
         ownerKickCasts === 0 &&
-        ownerPurgeCasts === 0;
+        ownerPurgeCasts === 0 &&
+        ownerRootLandings === 0;
 
       const ownerHealing = (owner.healOut ?? [])
         .filter((h) => inSeg(h.logLine.timestamp))

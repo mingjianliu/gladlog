@@ -217,6 +217,20 @@ export function emitHealerCastGapFillerEntries(
       )
       .reduce((min, a) => Math.min(min, a.logLine.timestamp), Infinity);
     if (!Number.isFinite(removeMs)) return null;
+    // a re-cast of it before that removal took the channel over (its
+    // SUCCESS + aura REFRESH): the removal ends the re-cast, not this one
+    // (fact4 D69, ecfb3a7f 2:19: Disintegrate re-cast 1.4 s in; the Shout
+    // that cut the re-cast read as cutting this one after 2.0 s)
+    if (
+      (owner.spellCastEvents ?? []).some(
+        (c) =>
+          c.spellId === spellId &&
+          c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+          c.logLine.timestamp > castMs + CHANNEL_AURA_AT_CAST_MS &&
+          c.logLine.timestamp < removeMs,
+      )
+    )
+      return null;
     // the one channel-cut predicate (`landingCutChannel`, FT-T08 step 5)
     const cutBy = ownerCCMsTimestamps.some((ccMs) =>
       landingCutChannel(ccMs, castMs, removeMs),

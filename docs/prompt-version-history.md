@@ -4221,3 +4221,22 @@ has no offensive purge; a control aura of the cast's own id put on another
 unit is press evidence (a stealthed Blind no longer `[UNUSED]`). 605 files
 vs v448 (f7 → f8): no candidate added or removed; gates = f7; scans and
 regression net unchanged.
+
+v450 (2026-10-24, fact4 F17 final batch — user rulings of 2026-10-23): a
+self-only wall a talent lets its caster put on an ally reaches allies for
+that player (`ALLY_REACH_GRANTED_BY_TALENT`: Obsidian Scales ← Lifecinders
+444322, registered in curatedIdRegistry; `cdCanHelpAnotherUnit` reads
+`allyReach: true`) — cd-hoarded counts it ready for a teammate's crisis
+(ruling D57), and an ally-copied press still answers the caster's own
+crisis (the log puts a copy on each; the first preview's 149-4-936 @129
+own-crisis row was that and is gone); a root the owner landed on an enemy
+is offensive output on [SLACK] / "zero offensive output" (ruling D26,
+3f433db1 0:14–0:22: 19 s → 11 s idle); a channel its own re-cast took over
+(SUCCESS + aura REFRESH before the removal) was not cut by CC (ecfb3a7f
+2:19 Disintegrate). 605 files vs v449 (f8 → f9b): healer cd-hoarded 571 →
+573, healer slow-defensive-response 68 → 69 (each an evoker's Obsidian
+Scales in hand for the teammate; user-approved preview), 10 existing
+cd-hoarded rows list Obsidian Scales ready; gates = f8; scans and
+regression net unchanged. The press-HP ruling D31 is not in this version:
+reading the press's own millisecond needs the samples' log order (the
+first preview read Dark Pact's post-cost HP, 100 % → 88 %).

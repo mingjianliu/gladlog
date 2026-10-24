@@ -458,5 +458,14 @@
  *  burst; a cast bar stopped as an enemy Shadowmelded says so; a sacrificed
  *  demon lends no purge; a castless Blind is a press. 605 files vs v448
  *  (f7 → f8): no candidate added or removed; [CONTESTED] 435 → 312.
+ *
+ * v450 (2026-10-24, fact4 F17 final batch — user rulings of 2026-10-23):
+ *  Obsidian Scales of a Lifecinders evoker can reach an ally
+ *  (`ALLY_REACH_GRANTED_BY_TALENT`): it is a ready save for a teammate's
+ *  crisis, and pressed on an ally it still answers the caster's own; a
+ *  root the owner landed is offensive output on [SLACK]; a channel taken
+ *  over by its own re-cast was not cut by CC. 605 files vs v449 (f8 →
+ *  f9b): cd-hoarded +2, slow-defensive-response +1 (each an evoker's
+ *  Obsidian Scales in hand for a teammate), 10 rows list it ready.
  */
-export const PROMPT_VERSION = 449;
+export const PROMPT_VERSION = 450;

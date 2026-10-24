@@ -23,6 +23,7 @@ import {
   isDecisionTraceActive,
   traceDecision,
 } from "../../facts/decisionTrace";
+import { isAllyCopyWallId } from "../../utils/allyCopyWall";
 import { buffFullDurationForCaster } from "../../utils/buffDuration";
 import { burstCastSpan } from "../../utils/burstLedger";
 import {
@@ -2070,7 +2071,13 @@ export function cdHoardedEvents(
       ) =>
         !cdCanHelpAnotherUnit(cd) ||
         c.targetName === undefined ||
-        c.targetName === src.crisisUnit.name;
+        c.targetName === src.crisisUnit.name ||
+        // a talent-shared wall put on an ally lands on its caster too (the
+        // log: an APPLIED on each, one instant — `MITIGATION_TABLE`'s
+        // `pctOnOthers` note), so it answers the caster's own crisis
+        // (fact4 D57 preview, 149-4-936 @129: Obsidian Scales on a teammate
+        // 2.2 s after the evoker's own crossing read "held")
+        (src.own && isAllyCopyWallId(cd.spellId));
       const inWindow = (t: number) =>
         t >= p.tSec - RESPONSE_PRE_MS / 1000 &&
         t <= p.tSec + CD_HOARD_RESPONSE_S;

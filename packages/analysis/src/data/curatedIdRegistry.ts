@@ -73,6 +73,7 @@ import {
 } from "../utils/combatStates";
 import {
   ADDITIONAL_OVERLAP_DEFENSIVE_IDS,
+  ALLY_REACH_GRANTED_BY_TALENT,
   ALLY_REACH_REQUIRES_PVP_TALENT,
   AURA_ACTIVATION_PROVES_BUTTON_IDS,
   AURA_IS_THE_PRESS_IDS,
@@ -585,6 +586,12 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
     "utils/cooldowns.ts",
     "talent",
     () => set(Object.values(ALLY_REACH_REQUIRES_PVP_TALENT)),
+  ),
+  t("ALLY_REACH_GRANTED_BY_TALENT", "utils/cooldowns.ts", "cast", () =>
+    keys(ALLY_REACH_GRANTED_BY_TALENT),
+  ),
+  t("ALLY_REACH_GRANTED_BY_TALENT.talent", "utils/cooldowns.ts", "talent", () =>
+    set(Object.values(ALLY_REACH_GRANTED_BY_TALENT)),
   ),
   t("ADDITIONAL_OVERLAP_DEFENSIVE_IDS", "utils/cooldowns.ts", "cast", () =>
     set(ADDITIONAL_OVERLAP_DEFENSIVE_IDS),
