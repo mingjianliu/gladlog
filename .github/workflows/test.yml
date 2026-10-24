@@ -94,6 +94,47 @@ jobs:
       - name: Unit tests
         run: ${{ matrix.run }}
 
+  # 真实日志:公开的 wowarenalogs 测试日志(第三方数据,**不进本仓库** ——
+  # docs/DATA-COMPLIANCE.md §4)在运行时按固定提交稀疏拉取,GLADLOG_FIXTURES
+  # 指向它。这样 parser 那几组一直 skip 的真实日志用例(l2.fixtures /
+  # l3.golden)和 buildCorpus 才真正跑起来,再加上全链路:每份日志、每一轮、
+  # 治疗 / DPS / 录像者三个视角 → prompt → 全部 hardFailure gate,零容忍。
+  # 2026-10-24 第一次这样跑就抓到两个单测从没见过的产品 bug(COMBATANT_INFO
+  # 解码丢人、繁中客户端技能名漏进 [KICK] 行)。升级 SHA = 换一批日志,先在
+  # 本地 GLADLOG_FIXTURES=… 跑通再改。
+  real-logs:
+    name: real logs (public wowarenalogs testlogs)
+    runs-on: ubuntu-latest
+    env:
+      WAL_TESTLOGS_SHA: fcd8f224487393c947177a52ae0113559b778e2e
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Fetch the public testlogs (pinned, not committed)
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/wal"
+          git init -q "$d"
+          git -C "$d" remote add origin https://github.com/wowarenalogs/wowarenalogs
+          git -C "$d" sparse-checkout set --no-cone 'packages/parser/test/testlogs/*'
+          git -C "$d" fetch -q --depth 1 --filter=blob:none origin "$WAL_TESTLOGS_SHA"
+          git -C "$d" checkout -q FETCH_HEAD
+          echo "GLADLOG_FIXTURES=$d/packages/parser/test/testlogs" >> "$GITHUB_ENV"
+          ls -la "$d/packages/parser/test/testlogs"
+
+      - name: Parser real-log suites
+        run: npx vitest run --root packages/parser l2.fixtures l3.golden realLogs
+
+      - name: Real logs through every gate
+        run: npx vitest run --root packages/eval realLogGates buildCorpus
+
   # 前端质检:视觉回归 + 无障碍。与 static / unit 并行,不拖慢快反馈。
   # 截图基线是 linux 单源 —— CI 既是生产者(visual-baseline.yml)也是判定者。
   frontend-qa:
