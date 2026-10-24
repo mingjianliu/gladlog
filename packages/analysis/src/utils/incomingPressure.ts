@@ -376,22 +376,40 @@ export function incomingPressureBySchool(
     )
       continue;
     if (isDeferredTickId(a.attackSpellId)) continue;
-    let mask: number | undefined;
-    if (a.attackSpellId === undefined) {
-      mask = swingWhenNoSpell ? SCHOOL_PHYSICAL : undefined;
-    } else {
-      const logged = a.logLine.parameters?.[10];
-      mask =
-        (typeof logged === "string" && /^0x/i.test(logged)
-          ? logSchoolMask(logged)
-          : 0) ||
-        spellSchoolMask(a.attackSpellId) ||
-        undefined;
-    }
+    const mask = absorbedHitSchoolMask(a, swingWhenNoSpell);
     if (mask === undefined) continue;
     add(mask, Math.abs(Number(a.absorbedAmount) || 0));
   }
   return by;
+}
+
+/**
+ * The school mask of an absorbed hit: the SPELL_ABSORBED line's own
+ * attack-school field (spell form, `parameters[10]`), else the attack
+ * spell's official SpellMisc.SchoolMask; a swing absorb (no attack spell, on
+ * a document that records it — `swingWhenNoSpell`) is physical; undefined
+ * when it cannot be told. One reading for the school split
+ * (`incomingPressureBySchool`) and the `Top sources` school tag
+ * (`getTopDamageSourcesInWindow`, predicate-index 2026-10-11: an absorbed
+ * hit's entry printed no school, or the other half's).
+ */
+export function absorbedHitSchoolMask(
+  a: {
+    attackSpellId?: string;
+    logLine: { parameters?: ReadonlyArray<unknown> };
+  },
+  swingWhenNoSpell: boolean,
+): number | undefined {
+  if (a.attackSpellId === undefined)
+    return swingWhenNoSpell ? SCHOOL_PHYSICAL : undefined;
+  const logged = a.logLine.parameters?.[10];
+  return (
+    (typeof logged === "string" && /^0x/i.test(logged)
+      ? logSchoolMask(logged)
+      : 0) ||
+    spellSchoolMask(a.attackSpellId) ||
+    undefined
+  );
 }
 
 /** Does this document record the absorbed attack's spell (parsed on or after

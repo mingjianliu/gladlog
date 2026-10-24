@@ -79,6 +79,7 @@
     "src/utils/spellDanger.test.ts",
     "test/abilityProfile.test.ts",
     "test/absorbShields.test.ts",
+    "test/absorbedHitSchool.test.ts",
     "test/advancedActions.test.ts",
     "test/allyCopyWall.test.ts",
     "test/aoeCcFolding.sameName.test.ts",

@@ -30,6 +30,7 @@ import {
   freeMsBefore,
   namedCannotCastIntervals,
 } from "../utils/cannotCastIntervals";
+import { missBelongsToCast } from "../utils/castMissRows";
 import {
   auraBreakAtRemoval,
   IPlayerCCTrinketSummary,
@@ -58,6 +59,7 @@ import {
   SAVE_CAST_AURA_PAIR_S,
 } from "../utils/enemyDefensives";
 import {
+  absorbedHitSchoolMask,
   DEFERRAL_SHIELD_DAMAGE_IDS,
   hitSchoolId,
   isDeferralAbsorb,
@@ -66,6 +68,7 @@ import {
   TOUCH_OF_KARMA_ABSORB_ID,
   TOUCH_OF_KARMA_ID,
 } from "../utils/karmaFeed";
+import { CHANNEL_STOPPED_MAX_SHARE } from "../utils/kickAudit";
 import { playerKillingBlow } from "../utils/killingBlow";
 import { getHpPercentAtTime } from "../utils/killWindowTargetSelection";
 import { fmtTime } from "../utils/renderGrid";
@@ -77,8 +80,6 @@ import {
   nonPlayerUnitKill,
   summonedAtMs,
 } from "../utils/summonLife";
-import { missBelongsToCast } from "../utils/castMissRows";
-import { CHANNEL_STOPPED_MAX_SHARE } from "../utils/kickAudit";
 import { summonOwnerById } from "../utils/summonOwner";
 import {
   ALTER_TIME_CAST_ID,
@@ -1432,11 +1433,9 @@ export function casterOwnAuraOfPress(
         a.logLine.timestamp >= from &&
         a.logLine.timestamp < (nextApplied ?? Infinity),
     )
-    .reduce<number | null>(
-      (lo, a) =>
-        lo === null || a.logLine.timestamp < lo ? a.logLine.timestamp : lo,
-      null,
-    );
+    .reduce<
+      number | null
+    >((lo, a) => (lo === null || a.logLine.timestamp < lo ? a.logLine.timestamp : lo), null);
   return { seconds: removedMs === null ? null : (removedMs - from) / 1000 };
 }
 
@@ -1992,7 +1991,13 @@ export function getTopDamageSourcesInWindow(
             : unknownAttack
               ? "unrecorded ability"
               : a.attackSpellName,
-          spellSchoolId: swing ? "0x1" : undefined,
+          // the absorbed hit's own school (`absorbedHitSchoolMask`, the
+          // school split's reading): the line's attack-school field, else
+          // the spell's official mask; a swing is physical
+          spellSchoolId: ((m) =>
+            m === undefined ? undefined : `0x${m.toString(16)}`)(
+            absorbedHitSchoolMask(a, recordsAttackSpell),
+          ),
         } as ICombatUnit["damageIn"][number],
         playerIdMap,
         enemyIdMap,
