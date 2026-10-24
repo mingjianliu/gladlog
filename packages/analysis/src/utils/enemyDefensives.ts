@@ -532,6 +532,24 @@ export interface IEffectSave {
   noPressLogged?: true;
 }
 
+/** Did the unit log a successful cast of the rider shield `spellId` itself
+ * around its aura going up at `auraMs` — the aura up to
+ * `AURA_BEFORE_CAST_ROW_MAX_MS` before its cast row, the cast up to
+ * `CAST_ROW_LAG_MAX_MS` before the aura (the two measured lags)? */
+function riderPressedAt(
+  unit: ICombatUnit,
+  spellId: string,
+  auraMs: number,
+): boolean {
+  return (unit.spellCastEvents ?? []).some(
+    (c) =>
+      c.spellId === spellId &&
+      c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+      c.logLine.timestamp >= auraMs - CAST_ROW_LAG_MAX_MS &&
+      c.logLine.timestamp <= auraMs + AURA_BEFORE_CAST_ROW_MAX_MS,
+  );
+}
+
 /**
  * The unit's own saves that are named by their EFFECT (user ruling D8,
  * 2026-10-10) — Feign Death's absorb shield, Nature's Guardian's heal, a
@@ -567,7 +585,13 @@ export function effectSaves(
         spellName: rider,
         effect: "absorb",
         interval: iv,
-        noPressLogged: true,
+        // the ruling's corpus (new season) logs no cast of the shield; an
+        // older patch's log does (2025-08 one_solo_shuffle: Shield of
+        // Vengeance's own SUCCESS 1 ms after its aura) — there it was
+        // pressed, and `[no press logged]` would contradict the log
+        ...(riderPressedAt(unit, iv.spellId, matchStartMs + iv.fromS * 1000)
+          ? {}
+          : { noPressLogged: true as const }),
       });
       continue;
     }

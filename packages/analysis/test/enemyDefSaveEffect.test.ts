@@ -11,6 +11,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { emitEnemyDefEntries } from "../src/context/timelineSections/enemyDef";
 import { ensureAnalysisData } from "../src/data/ensure";
 import {
+  ENEMY_DEF_NO_PRESS_TAG,
   ENEMY_SAVE_EFFECT_BY_NAME,
   enemySaveEffectOfNote,
   selfSaveMechanismOfName,
@@ -319,5 +320,38 @@ describe("[ENEMY DEF] names an effect save by its effect (FT-T07, ruling D8)", (
       expect(statesSelfDefensiveLabel(note, mechanism!), b).toBe(true);
       expect(enemySaveEffectOfNote(note), b).toBe("absorb");
     }
+  });
+});
+
+// Real-log regression (public wowarenalogs testlogs, one_solo_shuffle 2025-08):
+// the rider ruling (2026-10-20) rests on the new season, where Shield of
+// Vengeance logs no cast of its own and rides Divine Protection. On an older
+// patch it is pressed — its own SUCCESS 1 ms after the aura — and the line
+// still said `[no press logged]` (corpusFactScan auraCastGap noPress, 27 hits
+// over 116 contexts).
+describe("[ENEMY DEF] rider shield: `[no press logged]` only when the log has no press of it", () => {
+  beforeAll(async () => {
+    await ensureAnalysisData();
+  });
+  const sovLine = (casts: any[]) => {
+    const ret = unit("e1", {
+      spec: "70",
+      spellCastEvents: casts,
+      auraEvents: [applied("184662", 10, 300_000), removed("184662", 14, 0)],
+    });
+    return render([ret]).find((l) => l.includes("Shield of Vengeance"))!;
+  };
+  it("with no cast of the shield it rode another press", () => {
+    expect(sovLine([])).toContain(ENEMY_DEF_NO_PRESS_TAG);
+  });
+  it("its own cast 1 ms after the aura is its press", () => {
+    expect(sovLine([cast("184662", 10.001, "e1")])).not.toContain(
+      ENEMY_DEF_NO_PRESS_TAG,
+    );
+  });
+  it("a cast of it far from the aura is another press, not this one", () => {
+    expect(sovLine([cast("184662", 5, "e1")])).toContain(
+      ENEMY_DEF_NO_PRESS_TAG,
+    );
   });
 });
