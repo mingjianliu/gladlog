@@ -11,7 +11,7 @@
  * helper adds that no real event carries, or a sign it gets wrong, now turns
  * this red instead of quietly passing the next reader.
  */
-import { type GladMatch, GladLogParser } from "@gladlog/parser";
+import { GladLogParser,type GladMatch } from "@gladlog/parser";
 import { synthArenaLog } from "@gladlog/parser/src/testing/synthLog";
 import {
   type ICombatUnit,
