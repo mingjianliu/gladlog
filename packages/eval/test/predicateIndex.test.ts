@@ -149,6 +149,7 @@ import * as kickLockout from "@gladlog/analysis/src/utils/kickLockout";
 import * as killAttempts from "@gladlog/analysis/src/utils/killAttempts";
 import * as killWindowFactsMod from "@gladlog/analysis/src/utils/killWindowFacts";
 import * as killWindowTargetSelection from "@gladlog/analysis/src/utils/killWindowTargetSelection";
+import * as localizedText from "@gladlog/analysis/src/utils/localizedText";
 import * as logEra from "@gladlog/analysis/src/utils/logEra";
 import * as losAnalysis from "@gladlog/analysis/src/utils/losAnalysis";
 import * as offensiveAuraOccurrences from "@gladlog/analysis/src/utils/offensiveAuraOccurrences";
@@ -1827,6 +1828,16 @@ const INDEX: PredicateRow[] = [
     file: `${A}/utils/enemyDefensives.ts`,
     symbol: "holderFirstOwnActionAfterMs",
     mod: enemyDefensives,
+  },
+  {
+    file: `${A}/utils/localizedText.ts`,
+    symbol: "CJK_LEAK",
+    mod: localizedText,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkCjkLeak",
+    mod: promptQualityCheck,
   },
   {
     file: `${E}/quality/promptQualityCheck.ts`,

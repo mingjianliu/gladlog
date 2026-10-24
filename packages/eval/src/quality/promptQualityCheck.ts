@@ -225,6 +225,7 @@ import {
   killAttemptOwnControlClause,
 } from "@gladlog/analysis/src/utils/killAttempts";
 import { wallInHandKitNames } from "@gladlog/analysis/src/utils/killWindowTargetSelection";
+import { CJK_LEAK } from "@gladlog/analysis/src/utils/localizedText";
 import { STAYED_IN_NEAR_DEATH_PCT } from "@gladlog/analysis/src/utils/positionAnalysis";
 import { INTERP_MAX_GAP_MS } from "@gladlog/analysis/src/utils/positionSampling";
 import {
@@ -1820,9 +1821,11 @@ export function checkUnpurgedWithinRound(lines: string[]): string[] {
  * that was a one-off script, and the KILL ATTEMPTS block (v25) shipped after
  * it printing `aura.spellName` raw — 230 of 309 prompts in the 2026-09-15
  * Opus baseline carried CJK, unnoticed for two months. Shared with
- * `scripts/pipelineFuzz.ts`'s invariant (same regex object).
+ * `scripts/pipelineFuzz.ts`'s invariant and with the producer's
+ * `getEnglishSpellName` fallback guard (same regex object, defined in
+ * analysis `utils/localizedText.ts`).
  */
-export const CJK_LEAK = /[一-鿿぀-ヿ가-힯]/;
+export { CJK_LEAK };
 export function checkCjkLeak(lines: string[]): string[] {
   const names = new Set<string>();
   for (const line of lines) {

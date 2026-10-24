@@ -182,6 +182,7 @@
     "test/enemyDefRoundEnd.test.ts",
     "test/enemyDefSaveEffect.test.ts",
     "test/enemyDefensives.test.ts",
+    "test/englishSpellNameFallback.test.ts",
     "test/externalDamage.test.ts",
     "test/externalReach.test.ts",
     "test/fact4Batch2Data.test.ts",

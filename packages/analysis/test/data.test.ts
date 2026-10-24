@@ -28,7 +28,13 @@ describe("data layer", () => {
   });
   it("getEnglishSpellName:overrides 命中、spellNames 命中、fallback 链", () => {
     expect(getEnglishSpellName("642")).toBeTruthy();
-    expect(getEnglishSpellName("999999999", "回退名")).toBe("回退名");
+    // an English log name is the fallback; a client-locale (CJK) one is not —
+    // it falls back to the id like a missing one (real-log regression
+    // 2026-10-24, `痛苦動盪` on [KICK] lines; this line pinned the leak)
+    expect(getEnglishSpellName("999999999", "Fallback Name")).toBe(
+      "Fallback Name",
+    );
+    expect(getEnglishSpellName("999999999", "回退名")).toBe("999999999");
     expect(getEnglishSpellName("999999999")).toBe("999999999");
   });
   it("spellTags/discoveryRules/dispelFeatureFlags 形状保持", () => {

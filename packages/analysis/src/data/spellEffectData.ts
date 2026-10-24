@@ -1,3 +1,4 @@
+import { CJK_LEAK } from "../utils/localizedText";
 import { KICK_LOCKOUT_OBSERVED } from "./kickLockoutObservedGenerated";
 import { SPELL_CATEGORIES } from "./spellCategories";
 import { SPELL_EFFECTS_GENERATED } from "./spellEffectGenerated";
@@ -1279,7 +1280,12 @@ export function getEnglishSpellName(
   return (
     spellNamesMap[spellId] ??
     spellEffectData[spellId]?.name ??
-    fallback ??
+    // the log's own name is the recording client's: a zhCN / zhTW / koKR
+    // client writes it in its script, and an id the name table lacks (a
+    // renumbered or retired one — Unstable Affliction 316099 in 2024 zhTW
+    // logs) printed `痛苦動盪` on [KICK] lines. Such a name falls back to the
+    // id, as a missing one does (`CJK_LEAK`, the gate's own regex).
+    (fallback && !CJK_LEAK.test(fallback) ? fallback : undefined) ??
     spellId
   );
 }
