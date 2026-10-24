@@ -504,5 +504,14 @@
  *  16 / 16 / 16 → 0 / 0 / 0, prompts built 35 / 39 / 37 → 39 / 40 / 40,
  *  bare unmapped names 21 → 0, corpusFactScan auraCastGap 27 → 0. No
  *  605-file numbers (no corpus in the session).
+ *
+ * v455 (2026-10-24, predicate-index "Not yet unified" pass): an absorbed
+ *  hit's `Top sources` / `killed by` entry carries its school
+ *  (`absorbedHitSchoolMask`, the school split's reading); a channel is one
+ *  span per cast with the aura allowed the measured lead
+ *  (`channelSpans`, read by `[channel cut by CC]` too); the Oppressing
+ *  Roar and roster-label entries closed without output change. 13 public
+ *  logs: Top sources entries without a school 13 → 2, candidates
+ *  unchanged.
  */
-export const PROMPT_VERSION = 454;
+export const PROMPT_VERSION = 455;

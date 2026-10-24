@@ -4356,3 +4356,16 @@ checkMatch hardFailures 16 / 16 / 16 → 0 / 0 / 0; prompts built 35 / 39 /
 37 → 39 / 40 / 40; bare unmapped player names on prompt lines 21 → 0;
 corpusFactScan auraCastGap violations 27 → 0. No 605-file numbers — the
 session had no corpus; the reference tables were not regenerated.
+
+v455 (2026-10-24, the predicate-index "Not yet unified" pass): an absorbed
+hit's school has one reading (`absorbedHitSchoolMask`: the SPELL_ABSORBED
+line's attack-school field, else the attack spell's official mask) for the
+school split and the `Top sources` / `killed by` tag — `4 — Starsurge` now
+reads `4 — Starsurge [Nature/Arcane]`; a channel is one `channelSpans` span
+per cast (a re-cast ends the first as `recast`), its aura may lead the
+success by `AURA_BEFORE_CAST_ROW_MAX_MS`, and `[channel cut by CC after Ns]`
+reads it; the [HEALER EXPOSURE] / [ROOT] labels use `rosterLabelByName`.
+13 public wowarenalogs arena logs, every owner: Top sources entries without
+a school tag 13 → 2, 14 of 116 contexts change (school tags only),
+candidate counts unchanged; the channel and label changes are
+byte-identical there. No 605-file numbers.
