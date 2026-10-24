@@ -420,6 +420,13 @@ function parseFile(path: string): GladMatch[] {
 const before = (a: any, ts: number, li: number) =>
   tsOf(a) < ts || (tsOf(a) === ts && li >= 0 && liOf(a) < li);
 
+/** E6's window: an own shield counts as pressed when an own cast of it lies
+ * up to this far before its absorb row. Kept here, not imported — the scan
+ * re-derives what it audits — and held equal to the product's
+ * `OWN_SHIELD_PRESS_LOOKBACK_MS` by test/corpusFactScan2.test.ts (CLAUDE.md:
+ * a pair that cannot share an export gets an equality test). */
+export const E6_OWN_SHIELD_PRESS_WINDOW_MS = 60_000;
+
 export interface IUpOpts {
   /** an application not closed by the instant holds only this long (s) */
   capS?: (id: string) => number | undefined;
@@ -1700,7 +1707,7 @@ async function main(): Promise<void> {
           return successes(T).some(
             (cc) =>
               tsOf(cc) <= tsOf(a) &&
-              tsOf(cc) >= tsOf(a) - 60_000 &&
+              tsOf(cc) >= tsOf(a) - E6_OWN_SHIELD_PRESS_WINDOW_MS &&
               (cc.spellId === sid ||
                 castsOfEffectAura(sid).includes(cc.spellId) ||
                 nameOf(cc.spellId, cc.spellName) === nm),

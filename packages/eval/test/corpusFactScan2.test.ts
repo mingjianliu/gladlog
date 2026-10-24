@@ -7,6 +7,7 @@ import {
   MECHANIC_LIMITED_AVOIDANCE_BUFFS,
 } from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
 import { getDRCategory } from "@gladlog/analysis/src/utils/drAnalysis";
+import { OWN_SHIELD_PRESS_LOOKBACK_MS } from "@gladlog/analysis/src/utils/enemyDefensives";
 import { ccMechanicOf } from "@gladlog/analysis/src/utils/spellMechanics";
 import { LogEvent } from "@gladlog/parser-compat";
 import { describe, expect, it } from "vitest";
@@ -17,6 +18,7 @@ import {
   controlApplications,
   diminishedBoundS,
   drChain,
+  E6_OWN_SHIELD_PRESS_WINDOW_MS,
   isUnclosedApp,
   upAtRows,
 } from "../scripts/corpusFactScan2";
@@ -222,5 +224,14 @@ describe("codex 21-R12-c #3 — a cast-backed REFRESH is a new control applicati
       id === P ? [cast(4000, POLYMORPH, P, T)] : [mageCasts[0]!],
     );
     expect(apps).toHaveLength(1);
+  });
+});
+
+// weekly review 2026-10-24: the product's own-shield lookback is "the
+// corpusFactScan2 E6 window" by its own comment, but the scan held a bare
+// 60_000 — the two now drift only through a red test
+describe("E6 window ↔ product", () => {
+  it("the scan's own-shield press window equals OWN_SHIELD_PRESS_LOOKBACK_MS", () => {
+    expect(E6_OWN_SHIELD_PRESS_WINDOW_MS).toBe(OWN_SHIELD_PRESS_LOOKBACK_MS);
   });
 });
