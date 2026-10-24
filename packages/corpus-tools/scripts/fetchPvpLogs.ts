@@ -1,7 +1,8 @@
 // Download other players' raw PvP combat logs (wowarenalogs, signed in),
 // filtered by spec/rating. Since 2026-09-13 the upstream requires a Battle.net
 // session for search and hands out each raw log as a 10-minute signed URL
-// charged against a flat quota of 15 distinct logs per user per UTC day —
+// charged against a flat quota of distinct logs per user per UTC day (15,
+// 30 since 2026-10-20) —
 // this is a targeted-sampling tool, not a corpus collector.
 // See .claude/skills/fetch-pvp-logs for usage; typical invocation:
 //   WAL_COOKIE=<session token> SPEC=Shaman_Restoration MIN_RATING=2100 npx tsx scripts/fetchPvpLogs.ts
@@ -51,7 +52,7 @@ const SPEC = process.env.SPEC ?? ""; // Comma separated, numeric id or enum name
 const SPEC_ROLE = (process.env.SPEC_ROLE ?? "recorder") as SpecRole;
 // Default = the upstream's whole daily quota; the server's own counter is the
 // hard stop regardless of what is asked for here.
-const LIMIT = Number(process.env.LIMIT ?? 15);
+const LIMIT = Number(process.env.LIMIT ?? 30);
 // The feed only keeps the last ~7 days, and deep paging bills their Firestore
 // -- a backstop so we do not page forever
 const MAX_PAGES = Number(process.env.MAX_PAGES ?? 40);

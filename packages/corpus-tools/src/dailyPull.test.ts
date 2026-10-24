@@ -51,17 +51,25 @@ describe("remainingToday", () => {
 });
 
 describe("planSteps", () => {
-  it("gives Solo Shuffle its share first and 3v3 the rest (user ruling 2026-09-15: 10 + 5)", () => {
-    expect(planSteps(15)).toEqual([
+  it("gives Solo Shuffle its share first and 3v3 the rest (user ruling 2026-10-24: 20 + 10)", () => {
+    expect(planSteps(30)).toEqual([
       { bracket: "Rated Solo Shuffle", limit: DAILY_SHUFFLE_SHARE },
-      { bracket: "3v3", limit: 15 - DAILY_SHUFFLE_SHARE },
+      { bracket: "3v3", limit: 30 - DAILY_SHUFFLE_SHARE },
     ]);
-    expect(DAILY_SHUFFLE_SHARE).toBe(10);
+    expect(DAILY_SHUFFLE_SHARE).toBe(20);
+  });
+  it("plans a fresh UTC day against the 30-log quota (2026-10-20..24: 10 + 20, not 20 + 10)", () => {
+    // No state for today: the default quota sizes the first plan, so a stale
+    // 15 would cap the shuffle step at 15 before the server's 30 is ever seen.
+    expect(planSteps(remainingToday(undefined))).toEqual([
+      { bracket: "Rated Solo Shuffle", limit: 20 },
+      { bracket: "3v3", limit: 10 },
+    ]);
   });
   it("shrinks the shuffle share when little is left and drops empty steps", () => {
     expect(planSteps(3)).toEqual([{ bracket: "Rated Solo Shuffle", limit: 3 }]);
-    expect(planSteps(12)).toEqual([
-      { bracket: "Rated Solo Shuffle", limit: 10 },
+    expect(planSteps(22)).toEqual([
+      { bracket: "Rated Solo Shuffle", limit: 20 },
       { bracket: "3v3", limit: 2 },
     ]);
     expect(planSteps(0)).toEqual([]);

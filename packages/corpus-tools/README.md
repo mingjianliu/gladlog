@@ -53,7 +53,7 @@ rebuild anything any more, and it fails **silently** — zero stubs, no error.
 
 On 2026-09-13 the upstream reopened search behind Battle.net sign-in and put raw logs
 behind `logDownloadUrl` — a 10-minute signed URL charged against **15 distinct logs per
-user per UTC day**. That is a sampling budget, not a corpus one, so the archive mode below
+user per UTC day** (30 since 2026-10-20). That is a sampling budget, not a corpus one, so the archive mode below
 stays the way the reference corpus is built; the feed mode of `buildCorpus.ts` is not
 being taught the signed-in path.
 
@@ -124,7 +124,7 @@ The archetype dimension is only worth having when every archetype-cell can reach
 WAL_COOKIE=<Battle.net session token> SPEC=Shaman_Restoration MIN_RATING=2100 npx tsx scripts/fetchPvpLogs.ts
 ```
 
-Downloads raw logs from the signed-in feed by bracket/rating tier (server-side) + spec (compQueryString server-side pre-filter + recorder/any client-side refinement) into `$GLADLOG_EVAL_HOME/downloads/`, with a manifest (rating/MMR/everyone's spec/GCS timezone meta) and resumable downloads. Since 2026-09-13 each log is fetched through a `logDownloadUrl` grant and the upstream allows **15 distinct logs per user per UTC day**; the script prints the server's counter after every match, stops when it refuses, and remembers the day's usage so a rerun the same UTC day makes no request. The daily routine is `npm run logs:daily` (2100+, any spec: 10 Solo Shuffle objects then 3v3 for the rest of the 15, at most 3 feed pages per step; runs from launchd at 21:00 local; `npm run logs:daily:status` shows recent runs, today's quota and whether the session has expired). Session cookie, parameters, rating-tier semantics, the 7-day window and other pitfalls: see `.claude/skills/fetch-pvp-logs`.
+Downloads raw logs from the signed-in feed by bracket/rating tier (server-side) + spec (compQueryString server-side pre-filter + recorder/any client-side refinement) into `$GLADLOG_EVAL_HOME/downloads/`, with a manifest (rating/MMR/everyone's spec/GCS timezone meta) and resumable downloads. Since 2026-09-13 each log is fetched through a `logDownloadUrl` grant and the upstream allows **30 distinct logs per user per UTC day** (15 until 2026-10-20); the script prints the server's counter after every match, stops when it refuses, and remembers the day's usage so a rerun the same UTC day makes no request. The daily routine is `npm run logs:daily` (2100+, any spec: 20 Solo Shuffle objects then 3v3 for the rest of the 30, at most 3 feed pages per step; runs from launchd at 21:00 local; `npm run logs:daily:status` shows recent runs, today's quota and whether the session has expired). Session cookie, parameters, rating-tier semantics, the 7-day window and other pitfalls: see `.claude/skills/fetch-pvp-logs`.
 
 ## Smoke gate (go/no-go)
 
