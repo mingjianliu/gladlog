@@ -260,13 +260,20 @@ export function createKillWindowFactsComputer(
       // the target at 1:37. A friendly dead at a second (`isDeadAt`) is not
       // sampled there: a corpse keeps its last position.
       let reachable: boolean | null = null;
+      // a living friendly with no position at a second is unknown there:
+      // "unreachable" needs every one of them read out of reach (codex
+      // 62-POSTHOC-13f #4 — the [ROOT] reach reading, 13g #1)
+      let anyUnknown = false;
       const zoneId = combat.startInfo?.zoneId;
       scan: for (let s = readyAtSecond; s <= lastSecond; s++) {
         const sMs = startMs + s * 1000;
         for (const f of friends) {
           if (isDeadAt(f, sMs)) continue;
           const pos = getUnitPositionAtTime(f, sMs, LOS_SWEEP_GAP_MS);
-          if (!pos) continue;
+          if (!pos) {
+            anyUnknown = true;
+            continue;
+          }
           if (friendlyReachesAt(f, pos, target, sMs, zoneId) !== false) {
             reachable = true;
             break scan;
@@ -274,6 +281,7 @@ export function createKillWindowFactsComputer(
           reachable = false;
         }
       }
+      if (reachable === false && anyUnknown) reachable = null;
       return {
         readyOffCds,
         ...(readyPressOnlyCds.length > 0 ? { readyPressOnlyCds } : {}),

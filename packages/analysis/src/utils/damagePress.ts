@@ -121,11 +121,22 @@ export function pressBehindDamageOf(
   const successMs = byId ?? byName;
   let cast: IDamagePress | null = null;
   if (successMs !== null) {
+    // a bar an EARLIER success of the spell completed is that press's, not
+    // this one's (codex 62-POSTHOC-13e #1, 1bd3a2f9: an instant press reused
+    // the previous hard cast's start, and Karma fed read 52k for 151k)
+    let prevSuccessMs = -Infinity;
+    for (const c of caster.spellCastEvents ?? []) {
+      if (c.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
+      const t = c.logLine.timestamp;
+      if (t < successMs && t > prevSuccessMs && same(c.spellId, c.spellName))
+        prevSuccessMs = t;
+    }
     let startMs: number | null = null;
     for (const s of caster.castStartEvents ?? []) {
       const t = s.logLine.timestamp;
       if (t > successMs || successMs - t > CAST_START_LOOKBACK_S * 1000)
         continue;
+      if (t <= prevSuccessMs) continue;
       if (!same(s.spellId, s.spellName)) continue;
       if (startMs === null || t > startMs) startMs = t;
     }

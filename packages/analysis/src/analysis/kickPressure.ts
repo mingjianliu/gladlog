@@ -72,6 +72,7 @@ import {
 } from "../utils/cooldowns";
 import { reconstructEnemyCDTimeline } from "../utils/enemyCDs";
 import { fullImmunityIntervals } from "../utils/enemyDefensives";
+import { roundEndMs } from "../utils/roundEnd";
 import { OFFENSIVE_CD_SPELL_IDS } from "../utils/spellDanger";
 import { CRISIS_HP_PCT_RENDERED } from "./crisisDecisionPoints";
 
@@ -154,6 +155,7 @@ export function kickPressureFor(params: {
 }) => KickPressure {
   const { combat, owner, friends, enemies } = params;
   const start = combat.startTime;
+  const roundEndS = (roundEndMs(combat as never) - start) / 1000;
   const spans = (side: ICombatUnit[]) =>
     reconstructEnemyCDTimeline(side, combat).players.flatMap((pl) =>
       pl.offensiveCDs.map((cd) => ({ ...burstCastSpan(cd), spell: cd.spellName })),
@@ -231,9 +233,13 @@ export function kickPressureFor(params: {
     const t0 = k.atSeconds;
     // WO3 Part 2: the lock as the text reads it — ended early once
     // a spell of the locked school went out or began its bar
-    const t1 =
+    // …and never past the round's end (codex 60-POSTHOC-09h #2: ourLowPct
+    // read after a Solo Shuffle round's ending death; `roundEndMs`)
+    const t1 = Math.min(
       k.atSeconds +
-      Math.min(k.lockoutDurationSeconds, k.lockEndedBySuccessS ?? Infinity);
+        Math.min(k.lockoutDurationSeconds, k.lockEndedBySuccessS ?? Infinity),
+      roundEndS,
+    );
     const ours = side(friends, enemySpans, t0, t1);
     const theirs = side(enemies, ourSpans, t0, t1);
     const burstReady: string[] = [];

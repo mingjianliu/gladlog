@@ -429,5 +429,19 @@
  *  official length, a logged one is its end; Dampening probes read the
  *  unit's own doses. 605 files vs v446 (f5b → f6b): no candidate added or
  *  removed; `[OPPORTUNITY] … Holy Word: Chastise ready` 17 → 37.
+ *
+ * v448 (2026-10-23, fact4 F17 batch 6b+6c — round-end clips, lost
+ *  REMOVEDs, affordability): facts about a window stop at the round's end
+ *  (sync window, kick priority, Innervate, silence, [CD PRIOR] trough,
+ *  kick pressure, Psyfiend, stacked defensives, roots, disarm); a buff whose
+ *  REMOVED was lost ends at its official length (Spirit of Redemption,
+ *  Obsidian Mettle, Death Pact, Power Infusion, dispel windows, friendly
+ *  Cyclone) and an inferred end prints no [ENEMY BUFF END]; Innervate's
+ *  free casts count as affordable only while it is up, and "could not pay"
+ *  is its own fact apart from control; an external is unused only when it
+ *  was back AND the caster free at the same time; a kicked enemy bar is no
+ *  hard cast, and its target falls back to the completion (a summon by its
+ *  English name). 605 files vs v447 (f6b → f7): external-unused 144 → 137
+ *  (each back and its caster free together < 1.5 s of the last 5 s).
  */
-export const PROMPT_VERSION = 447;
+export const PROMPT_VERSION = 448;

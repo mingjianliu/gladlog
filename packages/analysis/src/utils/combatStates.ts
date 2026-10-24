@@ -107,7 +107,17 @@ export function extractSpiritOfRedemptionIntervals(
   auraIds: ReadonlySet<string> = SPIRIT_OF_REDEMPTION_AURA_IDS,
 ): ISpiritOfRedemptionInterval[] {
   const intervals: ISpiritOfRedemptionInterval[] = [];
-  let ghostStart: number | null = null;
+  let ghost: { startMs: number; spellId: string } | null = null;
+  const rel = (ms: number) => (ms - combat.startTime) / 1000;
+  // a form whose REMOVED the log lost ends at its official length (the
+  // `buildAuraIntervals` cap), not at the round's end (codex 60-POSTHOC-09f
+  // #1: a PvP Spirit of Redemption 215769 at 10 s read 10–180 s — 6 s
+  // official — and [STATE], offensive windows and kill attempts dropped
+  // the rest of the round)
+  const capped = (g: { startMs: number; spellId: string }, endMs: number) => {
+    const d = officialDurationS(g.spellId, undefined, g.startMs);
+    return d === null ? endMs : Math.min(endMs, g.startMs + d * 1000);
+  };
 
   for (const aura of unit.auraEvents) {
     const isGhost =
@@ -115,29 +125,31 @@ export function extractSpiritOfRedemptionIntervals(
       auraIds.has(aura.spellId) &&
       // on this unit (a unit's aura events can carry auras it put on others)
       (aura.destUnitId === undefined || aura.destUnitId === unit.id);
-
+    if (!isGhost) continue;
     if (aura.logLine.event === LogEvent.SPELL_AURA_APPLIED) {
-      if (isGhost) {
-        ghostStart = aura.logLine.timestamp;
-      }
-    } else if (aura.logLine.event === LogEvent.SPELL_AURA_REMOVED) {
-      if (isGhost && ghostStart !== null) {
+      // a second APPLIED with no REMOVED between: the first one's REMOVED was
+      // lost — it ended at its official length (or here, whichever is first)
+      if (ghost)
         intervals.push({
-          startSeconds: (ghostStart - combat.startTime) / 1000,
-          endSeconds: (aura.logLine.timestamp - combat.startTime) / 1000,
+          startSeconds: rel(ghost.startMs),
+          endSeconds: rel(capped(ghost, aura.logLine.timestamp)),
         });
-        ghostStart = null;
-      }
+      ghost = { startMs: aura.logLine.timestamp, spellId: aura.spellId! };
+    } else if (aura.logLine.event === LogEvent.SPELL_AURA_REMOVED && ghost) {
+      intervals.push({
+        startSeconds: rel(ghost.startMs),
+        endSeconds: rel(aura.logLine.timestamp),
+      });
+      ghost = null;
     }
   }
 
-  // Handle ghost form held until the end of the match
-  if (ghostStart !== null) {
+  // held to the end of the log, or to its official length if shorter
+  if (ghost)
     intervals.push({
-      startSeconds: (ghostStart - combat.startTime) / 1000,
-      endSeconds: (combat.endTime - combat.startTime) / 1000,
+      startSeconds: rel(ghost.startMs),
+      endSeconds: rel(capped(ghost, combat.endTime)),
     });
-  }
 
   return intervals;
 }

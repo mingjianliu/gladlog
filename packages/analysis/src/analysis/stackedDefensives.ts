@@ -39,6 +39,7 @@ import spellIdLists from "../data/spellIdLists";
 import { buildAuraIntervals, type IAuraInterval } from "../utils/auraIntervals";
 import { isCasterSideLinkAura } from "../utils/brokenRowBreaker";
 import { isDeferralAbsorb } from "../utils/incomingPressure";
+import { roundEndMs } from "../utils/roundEnd";
 
 /** external ∪ big-personal defensives — the two lists the product already
  * treats as "major"; small cooldowns (Fade, PW:S) are on neither */
@@ -131,6 +132,16 @@ export function stackedDefensivePairs(
   const byId = new Map<string, any>(players.map((u) => [u.id, u]));
   const nameOf = (id: string) => getEnglishSpellName(id, "") || id;
   const out: StackedDefensivePair[] = [];
+  // the round's end (`roundEndMs`): an aura still up at a Solo Shuffle
+  // round's deciding death is cut there, and the hits after it are not the
+  // round's (codex 62-POSTHOC-13a #1, 402b1816 r3: Scales + Pain
+  // Suppression "0:16–0:20 (4s)" and 36 % blocked counted post-death hits;
+  // the round ended at 18.3 s)
+  const roundEndS = (roundEndMs(combat) - combat.startTime) / 1000;
+  const inRound = (iv: IAuraInterval): IAuraInterval => ({
+    ...iv,
+    toS: Math.min(iv.toS, roundEndS),
+  });
   for (const target of players.filter((u) => u.reaction === owner.reaction)) {
     const friendNames = new Set(
       players.filter((u) => u.reaction === target.reaction).map((u) => u.name),
@@ -143,7 +154,9 @@ export function stackedDefensivePairs(
     );
     let ivs;
     try {
-      ivs = majorWallIntervals(target, combat, byId, friendNames);
+      ivs = majorWallIntervals(target, combat, byId, friendNames)
+        .filter((iv) => iv.fromS < roundEndS)
+        .map(inRound);
     } catch {
       continue;
     }

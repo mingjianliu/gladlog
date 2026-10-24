@@ -19,6 +19,7 @@ import {
 import {
   AURA_REBROADCAST_GAP_MS,
   dropAuraRebroadcasts,
+  officialDurationS,
 } from "../utils/auraIntervals";
 import { buffFullDurationForCaster } from "../utils/buffDuration";
 import {
@@ -239,6 +240,9 @@ export interface IEnemyBuffInterval {
   startSeconds: number;
   endSeconds: number;
   purgeable: boolean;
+  /** no REMOVED in the log: `endSeconds` is the official length's cap or the
+   * log's end — not an end the log states */
+  inferredEnd?: true;
 }
 
 /**
@@ -254,6 +258,14 @@ export function extractEnemyMajorBuffIntervals(
   // (an interval that reaches the round's end gets no `[ENEMY BUFF END]`
   // line — decided where the line is printed, `emitEnemyBuffEntries`)
   const result = new Map<string, IEnemyBuffInterval[]>();
+  // a buff whose REMOVED the log lost ends at its official length (the
+  // `buildAuraIntervals` cap); a buff seeded before the round has no length
+  // to anchor and keeps the end it is given
+  const capOf = (spellId: string, startMs: number, endMs: number) => {
+    if (startMs <= matchStartMs) return endMs;
+    const d = officialDurationS(spellId, undefined, startMs);
+    return d === null ? endMs : Math.min(endMs, startMs + d * 1000);
+  };
 
   for (const enemy of enemies) {
     const intervals: IEnemyBuffInterval[] = [];
@@ -292,6 +304,22 @@ export function extractEnemyMajorBuffIntervals(
       if (ts < matchStartMs) continue;
 
       if (event.logLine.event === LogEvent.SPELL_AURA_APPLIED) {
+        const open = openBuffs.get(stateKey);
+        // an APPLIED past the open buff's official length: that buff's
+        // REMOVED was lost — it ended at its length, this is a new one
+        // (codex 60-POSTHOC-06a #2: a Power Infusion at 10 s with no REMOVED
+        // and another at 140 s read as one 10–145 s buff)
+        if (open !== undefined && ts > capOf(spellId, open, Infinity)) {
+          intervals.push({
+            spellId,
+            spellName: buffDef.name,
+            startSeconds: (open - matchStartMs) / 1000,
+            endSeconds: (capOf(spellId, open, ts) - matchStartMs) / 1000,
+            purgeable: buffDef.purgeable,
+            inferredEnd: true,
+          });
+          openBuffs.delete(stateKey);
+        }
         if (!openBuffs.has(stateKey)) {
           openBuffs.set(stateKey, ts);
         }
@@ -319,8 +347,9 @@ export function extractEnemyMajorBuffIntervals(
           spellId,
           spellName: buffDef.name,
           startSeconds: (startMs - matchStartMs) / 1000,
-          endSeconds: (matchEndMs - matchStartMs) / 1000,
+          endSeconds: (capOf(spellId, startMs, matchEndMs) - matchStartMs) / 1000,
           purgeable: buffDef.purgeable,
+          inferredEnd: true,
         });
       }
     }
@@ -1304,11 +1333,20 @@ export function casterOwnAuraOfPress(
   }
   if (appliedMs === null) return null;
   const from = appliedMs;
+  // its own REMOVED: before the next application of it — a lost REMOVED is
+  // no end the next copy can lend (codex 60-POSTHOC-06a #2: "also on you for
+  // 135.0s" off a later Power Infusion's removal); none → no length stated
+  const nextApplied = mine.find(
+    (a) =>
+      a.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
+      a.logLine.timestamp > from,
+  )?.logLine.timestamp;
   const removedMs = mine
     .filter(
       (a) =>
         a.logLine.event === LogEvent.SPELL_AURA_REMOVED &&
-        a.logLine.timestamp >= from,
+        a.logLine.timestamp >= from &&
+        a.logLine.timestamp < (nextApplied ?? Infinity),
     )
     .reduce<number | null>(
       (lo, a) =>

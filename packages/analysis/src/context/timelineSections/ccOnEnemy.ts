@@ -14,8 +14,12 @@ import { CombatUnitReaction, LogEvent } from "@gladlog/parser-compat";
 import { BACKLASH_AURA_CC_TYPE, backlashCcTag } from "../../data/backlashCc";
 import { breakRemovesCc } from "../../data/ccBreakAbilities";
 import { BREAK_RACIAL_SPELL_IDS } from "../../data/racialAbilities";
-import { getEnglishSpellName } from "../../data/spellEffectData";
+import {
+  ccFullDurationSeconds,
+  getEnglishSpellName,
+} from "../../data/spellEffectData";
 import { ccSpellIds } from "../../data/spellTags";
+import { auraEndFromLog } from "../../utils/auraEndCause";
 import { silenceIntervals } from "../../utils/cannotCastIntervals";
 import {
   CC_FROM_OWN_TEAM_TAG,
@@ -31,6 +35,7 @@ import {
   formatCcUnloggedEnd,
   type ICCInstance,
   pressEndedSilence,
+  ranFullLength,
   renderedCcDuration,
   renderedCcSpan,
   tremorTotemBreak,
@@ -195,16 +200,48 @@ export function emitCcOnEnemyEntries(
                 a.timestamp - b.timestamp <= TRINKET_BREAK_AFTER_REMOVAL_MS,
             ),
         );
-        return removed
-          ? {
-              spellName: getEnglishSpellName(
-                removed.spellId!,
-                removed.spellName,
-              ),
-              sourceName: enemyUnit.name,
-              sourceId: enemyUnit.id,
-            }
-          : undefined;
+        if (!removed) return undefined;
+        // the removal is the press's only if the control was still meant to
+        // run, and the log names no dispel of it there (codex 60-POSTHOC-05b
+        // #2: a reflected Cyclone running its course at 25 s with a trinket
+        // at 25.050, and a reflected Hammer of Justice a Purify had removed,
+        // both read "used PvP trinket out of"; `ranFullLength` /
+        // `findBrokenCC`'s reading)
+        const applied = [...auras]
+          .reverse()
+          .find(
+            (a) =>
+              a.spellId === removed.spellId &&
+              a.srcUnitId === enemyUnit.id &&
+              a.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
+              a.timestamp <= removed.timestamp,
+          );
+        const fullS = ccFullDurationSeconds(removed.spellId!);
+        if (
+          applied &&
+          fullS !== undefined &&
+          ranFullLength({
+            applyMs: applied.timestamp,
+            removeMs: removed.timestamp,
+            officialEndMs: applied.timestamp + fullS * 1000,
+          })
+        )
+          return undefined;
+        if (
+          applied &&
+          auraEndFromLog(
+            enemyUnit,
+            removed.spellId!,
+            { fromMs: applied.timestamp, removedMs: removed.timestamp },
+            enemyUnit.id,
+          ).takenBy
+        )
+          return undefined;
+        return {
+          spellName: getEnglishSpellName(removed.spellId!, removed.spellName),
+          sourceName: enemyUnit.name,
+          sourceId: enemyUnit.id,
+        };
       };
       for (const t of summary.trinketUseTimes) {
         enemyTrinketCount++;

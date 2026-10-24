@@ -47,6 +47,7 @@ import {
 } from "./losAnalysis";
 import { CLOSE_RANGE_YARDS, isDeadAt } from "./positionAnalysis";
 import { CC_MAX_CAST_RANGE_YARDS, LOS_SWEEP_GAP_MS } from "./positionSampling";
+import { roundEndMs } from "./roundEnd";
 
 export { ROOT_SPELL_IDS } from "../data/rootSpells";
 
@@ -257,13 +258,19 @@ export function computeRootReachability(
 ): IRootInstance[] {
   const zoneId = combat.startInfo?.zoneId;
   const out: IRootInstance[] = [];
+  const roundEndS = (roundEndMs(combat as never) - combat.startTime) / 1000;
   for (const X of players) {
     const allies = players.filter(
       (u) => u.reaction === X.reaction && u.id !== X.id,
     );
     const enemies = players.filter((u) => u.reaction !== X.reaction);
     const role = roleOf(X);
-    const intervals = rootIntervalsOf(X, combat);
+    // the round's roots only, cut at its end (`roundEndMs` — codex
+    // 62-POSTHOC-13g #2, c6710c8b: a Void Tendrils printed 4.0 s, 2.6 s of
+    // it in the Shuffle round)
+    const intervals = rootIntervalsOf(X, combat)
+      .filter((iv) => iv.fromS < roundEndS)
+      .map((iv) => ({ ...iv, toS: Math.min(iv.toS, roundEndS) }));
     // U7: enemy hard CC on the rooted unit — the cannot-cast predicate's
     // auras filtered to the official hard-CC set (silences out).
     const hardCc = intervals.length
@@ -341,12 +348,17 @@ export function computeRootReachability(
             else sweep.unknown++;
           }
         } else {
-          const results = enemies.map(inReach).filter((r) => r !== null);
-          const bad = results.length > 0 && !results.some(Boolean);
+          // an enemy whose reach is unknown keeps the second unknown — "could
+          // not reach any" needs every one of them read out of reach (codex
+          // 62-POSTHOC-13g #1, 818c7c41 0:52: one unknown position turned a
+          // second into "could not attack"), the healer branch's reading
+          const results = enemies.map(inReach);
+          const bad =
+            results.length > 0 && results.every((r) => r === false);
           if (bad) unreachable++;
           if (!inHardCc) {
             if (bad) sweep.unreachable++;
-            else if (results.some(Boolean)) sweep.proven++;
+            else if (results.some((r) => r === true)) sweep.proven++;
             else sweep.unknown++;
           }
         }

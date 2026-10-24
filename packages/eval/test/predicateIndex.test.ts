@@ -4038,6 +4038,11 @@ const INDEX: PredicateRow[] = [
   },
   {
     file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkCdPriorCrossingHp",
+    mod: promptQualityCheck,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
     symbol: "checkTeammateCrisisRefConsistency",
     mod: promptQualityCheck,
   },

@@ -240,6 +240,11 @@ export { EXTERNAL_DEFENSIVE_SPELLS };
 export interface IDeathWindowFreedom {
   /** the longest contiguous free gap — the gap `MIN_FREE_GAP_SECONDS` tests */
   longestFreeS: number;
+  /** the same gap read on control and lockout alone, when the option's
+   * unpaid stretches (`unaffordableIntervals`) shortened it — "could not
+   * pay" is no control (codex 60-POSTHOC-07c #3: a priest with no mana read
+   * `holderCc=yes` and the death card 被控) */
+  controlFreeS?: number;
   /** the cannot-cast interval covering the death instant, if any (the
    * earliest-starting one). `onPet`: it sat on the unit's pet — the option
    * asked about is a spell that pet casts (`cannotCastIntervalsForSpells`) */
@@ -269,6 +274,8 @@ export interface IMissedExternal {
   spellId: string;
   spellName: string;
   casterWasInCC: boolean;
+  /** no free stretch but for the mana the option cost (`controlFreeS`) */
+  casterCouldNotPay?: true;
   /** death-kill F-M2; absent when the cannot-cast sources were not given */
   casterFreedom?: IDeathWindowFreedom;
   /** as `IDeathImmuneAvailable.offCooldownForLastS`, of the caster's spell */
@@ -767,12 +774,27 @@ export function deathWindowFreedom(
     windowStart,
     deathSeconds,
   );
+  const controlOnly =
+    unpaid.length > 0
+      ? freeGapCore(
+          named.map((iv) => ({
+            start: (iv.from - matchStartMs) / 1000,
+            end: (iv.to - matchStartMs) / 1000,
+            isStun: false,
+          })),
+          windowStart,
+          deathSeconds,
+        ).maxFreeGapSeconds
+      : undefined;
   const deathMs = matchStartMs + Math.round(deathSeconds * 1000);
   const cover = named
     .filter((iv) => iv.from < deathMs && iv.to >= deathMs)
     .sort((a, b) => a.from - b.from)[0];
   return {
     longestFreeS: result.maxFreeGapSeconds,
+    ...(controlOnly !== undefined && controlOnly !== result.maxFreeGapSeconds
+      ? { controlFreeS: controlOnly }
+      : {}),
     ...(cover
       ? {
           heldAtDeath: {
@@ -1219,8 +1241,17 @@ export function buildDeathOutcomeSummary(
             spellName: spell.name,
             ...(() => {
               const l = lockAt(teammate, teammateCCSummary, atSeconds, spellId);
+              // controlled = control and lockout alone; a stretch the
+              // caster could not pay for is its own fact (07c #3)
+              const controlled = l.freedom
+                ? (l.freedom.controlFreeS ?? l.freedom.longestFreeS) <
+                  MIN_FREE_GAP_SECONDS
+                : l.locked;
               return {
-                casterWasInCC: l.locked,
+                casterWasInCC: controlled,
+                ...(l.locked && !controlled
+                  ? { casterCouldNotPay: true as const }
+                  : {}),
                 ...(l.freedom ? { casterFreedom: l.freedom } : {}),
               };
             })(),

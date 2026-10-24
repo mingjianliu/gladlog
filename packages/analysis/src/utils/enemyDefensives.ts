@@ -648,8 +648,11 @@ export function schoolLimitedImmunityNames(): ReadonlySet<string> {
  * every gate that re-parses the label. */
 export const ENEMY_DEF_IMMUNE_LABEL_RE_SRC = String.raw`immune(?: to [a-z]+(?:\/[a-z]+)*)?`;
 
+// …a deflection's label too (codex 60-POSTHOC-10e #4: a Turtle with no
+// REMOVED, `(deflects direct attacks; …, end not logged)`, read as a line with
+// no slot — a false hard failure and `endNotLogged` false)
 export const ENEMY_DEF_END_NOT_LOGGED_SLOT_RE = new RegExp(
-  String.raw`\((?:(?:${ENEMY_DEF_IMMUNE_LABEL_RE_SRC}|\d+%|absorb(?: (?:\d+|<1)k)?), )?${ENEMY_DEF_END_NOT_LOGGED}\)`,
+  String.raw`\((?:(?:${ENEMY_DEF_IMMUNE_LABEL_RE_SRC}|${ENEMY_DEF_DEFLECTS_WORDS}|\d+%|absorb(?: (?:\d+|<1)k)?), )?${ENEMY_DEF_END_NOT_LOGGED}\)`,
 );
 
 /** The start of `enemySaveEffectNote`'s parenthesis, as rendered. */
@@ -1429,10 +1432,21 @@ export function externalAuraOf(
 ): ISaveAuraInterval | undefined {
   if (ENEMY_REDIRECT_SAVE_IDS.has(castSpellId)) return undefined;
   const summoned = castSpellId in ENEMY_IMMUNITY_EXTERNAL_CASTS;
+  // the summon's aura comes from the summon — never from another PLAYER: a
+  // player source other than the caster is another caster's press (codex
+  // 60-POSTHOC-10e #1: evoker B's Time Stop paired with evoker A's aura and
+  // read "removed early" after 0.08 s)
   return auraPairedToCast(
     ENEMY_IMMUNITY_EXTERNAL_CASTS[castSpellId] ?? castSpellId,
     castAtSeconds,
-    recipientIntervals,
+    summoned && casterId !== undefined
+      ? recipientIntervals.filter(
+          (iv) =>
+            iv.srcUnitId === undefined ||
+            iv.srcUnitId === casterId ||
+            !iv.srcUnitId.startsWith("Player-"),
+        )
+      : recipientIntervals,
     summoned ? undefined : casterId,
   );
 }

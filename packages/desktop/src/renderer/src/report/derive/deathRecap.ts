@@ -15,6 +15,7 @@ import {
   IMitigationAuditRow,
   reconstructDispelSummary,
   SPELL_CATEGORIES,
+  toRenderSecond,
   unitCooldownEntry,
 } from "@gladlog/analysis";
 import { CombatUnitReaction, LogEvent } from "@gladlog/parser-compat";
@@ -210,8 +211,12 @@ export function deriveDeathRecaps(source: ReportSource): DeathRecap[] {
     const hostilePlayers = players.filter(
       (p) => p.reaction === CombatUnitReaction.Hostile,
     );
+    // the round's end too: the death window's freedom reads the free-cast
+    // auras over the round (codex 60-POSTHOC-09e #2: without it the card
+    // said 被控 where the prompt said 5 s free)
     const outcomeCombat = {
       startTime: legacy.startTime,
+      endTime: legacy.endTime,
       zoneId: legacy.startInfo.zoneId,
     };
     // Mitigation audit / counterfactuals (#17b Task4): victimCds/ccSummary are
@@ -593,9 +598,15 @@ export function deriveDeathRecaps(source: ReportSource): DeathRecap[] {
         // it only consumes Task1's return values.
         const victimCds = cdsByUnit.get(unit.id) ?? [];
         const victimCcSummary = ccSummaryByUnit.get(unit.id);
+        // the prompt's own reading (`buildMatchContext` `counterfactualOf`):
+        // the death on the render grid, the audit also handed the exact
+        // instant (codex 60-POSTHOC-09e #1: the fractional second gave the
+        // card a decisive Pain Suppression the prompt did not print)
+        const renderDeathS = toRenderSecond(deathS);
         const mitigationAudit = computeMitigationAudit(
           unit,
           legacy,
+          renderDeathS,
           deathS,
         ).rows;
         const counterfactuals: ICounterfactualHit[] = [
@@ -605,14 +616,14 @@ export function deriveDeathRecaps(source: ReportSource): DeathRecap[] {
                 victimCds,
                 victimCcSummary,
                 legacy,
-                deathS,
+                renderDeathS,
               )
             : []),
           ...computeMissedExternalCounterfactuals(
             oc?.missedExternals ?? [],
             unit,
             legacy,
-            deathS,
+            renderDeathS,
           ),
         ];
 

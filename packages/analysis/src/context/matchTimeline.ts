@@ -511,6 +511,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
   // rendered 24 lines in 3,520 prompts — every one Xuen or Darkglare, zero
   // totems (GH #100; user ruling 2026-09-20: restore it, Grounding included).
   emitUnitDestroyedEntries({
+    bracket,
     allUnits,
     matchEndMs,
     matchStartMs,

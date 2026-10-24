@@ -1318,7 +1318,11 @@ export function ccsRemovedByPress(
     const applyMs = matchStartMs + Math.round(cc.atSeconds * 1000);
     const removeMs =
       matchStartMs + Math.round((cc.atSeconds + cc.durationSeconds) * 1000);
-    if (cc.endedByLoggedCause && castTsMs > removeMs) continue;
+    // the binder's own rule (`bindBreakToWindow`: `castTs >= removeMs`) — a
+    // press in the very ms a logged dispel removed it is not its cause
+    // (codex 60-POSTHOC-10b #1: dispel + Medallion in one ms read "trinketed
+    // out" on KILL ATTEMPTS)
+    if (cc.endedByLoggedCause && castTsMs >= removeMs) continue;
     // and it was cut short: one that ran its full official length (DR
     // included) ended on its own, whatever was pressed in that ms — the
     // break-ability path's rule (agy review 20-F15-05)
@@ -2953,6 +2957,8 @@ export function analyzePlayerCCAndTrinket(
     srcName: string;
     applyMs: number;
     removeMs: number;
+    /** no REMOVED in the log: `removeMs` is the estimate */
+    noRemoved?: true;
   }> = [];
 
   // cc-dr F-RF1: did the aura's source (or a pet's owner) cast this CC again
@@ -3294,6 +3300,7 @@ export function analyzePlayerCCAndTrinket(
       srcName: p.srcName,
       applyMs: p.applyMs,
       removeMs: pendingEnd(pendingSpellId, p.srcId, p.applyMs),
+      noRemoved: true,
     });
   }
 
@@ -3751,7 +3758,12 @@ export function analyzePlayerCCAndTrinket(
       sourceName: w.srcName,
       sourceId: w.srcId,
       sourceSpec: enemySpecMap.get(w.srcId) ?? "Unknown",
-      ...(w.removeMs > roundEnd ? { stillOnAtRoundEnd: true as const } : {}),
+      // …or an unclosed one whose estimate the round's end capped (codex
+      // 60-POSTHOC-10b #4: a Dismantle at 29 s, the round ending at 30, read
+      // "1s" — the hard-CC builder's `noRemoved` reading)
+      ...(w.removeMs > roundEnd || (w.noRemoved && w.removeMs >= roundEnd)
+        ? { stillOnAtRoundEnd: true as const }
+        : {}),
       // its full length as it landed — the caster's talents and an
       // Oppressing Roar on the holder (codex 20-F16-08 #2: a Roar-lengthened
       // 6.5 s Dismantle trinketed at 5.5 s read as having run out)

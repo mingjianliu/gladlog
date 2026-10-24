@@ -79,4 +79,8 @@ export const disarmSpellIds = new Set<string>(
   Object.keys(spells).filter((id) => spells[id].type === "disarms"),
 );
 
-export const trinketSpellIds = ["336126", "195756"];
+/** The PvP trinket's cast ids — the Medallion 336126 alone. Adaptation's old
+ * cast id 195756 is dead (0 rows in the corpus; Adaptation triggers off its
+ * self-aura 283167 — `pvpTrinketUses`), removed by the curated-list reverse
+ * check (2026-10-23). */
+export const trinketSpellIds = ["336126"];

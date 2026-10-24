@@ -45,6 +45,9 @@ export const KICKED_CONTROL_OVERRIDE_IDS = new Set<string>([
 export const KICKED_DAMAGE_OVERRIDE_IDS = new Set<string>([
   "2812", // Denounce (Holy Paladin offensive cast with mixed heal/damage flags)
   "323673", // Mindgames (Priest offensive cast with mixed heal/damage flags)
+  // Mindgames' current id — 323673 alone left 25 interrupt rows over 240
+  // files reading "heal" (codex 62-POSTHOC-13d #2, curated-list rot)
+  "375901", // Mindgames
   "191634", // Stormkeeper (Elemental Shaman burst cast)
   "228260", // Voidform (Shadow Priest burst cast)
   "265187", // Summon Demonic Tyrant (Warlock burst cast)

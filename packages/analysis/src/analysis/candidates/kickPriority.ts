@@ -51,10 +51,12 @@ import {
   canReachTargetAt,
   rootIntervalsOf,
 } from "../../utils/rootReachability";
+import { roundEndMs } from "../../utils/roundEnd";
 import {
   RANGE_HITBOX_SLACK_YD,
   spellRangeForCaster,
 } from "../../utils/spellRange";
+import { firstDeathMs } from "../../utils/unitDeath";
 import { fmtFactNum as fmt, fmtFactTime } from "../factFormat";
 import type { CandidateEvent } from "../types";
 
@@ -290,6 +292,9 @@ export function kickPriorityDecisionPoints(
   const enemyPlayers = (enemies as UnitLike[]).filter((e) => e.info);
   if (friendPlayers.length === 0 || enemyPlayers.length === 0) return out;
   const startMs = combat.startTime;
+  // the round's end (`roundEndMs`: a Solo Shuffle round's ending death,
+  // else the log's end)
+  const roundEndAt = roundEndMs(combat as never);
   const rel = (ms: number) => (ms - startMs) / 1000;
   const zoneId = combat.startInfo?.zoneId;
   const friendIds = new Set(friendPlayers.map((f) => f.id));
@@ -601,10 +606,17 @@ export function kickPriorityDecisionPoints(
         // Feasibility is judged on the NOMINAL cast (same for a kicked and a
         // completed cast of the same spell), on the longest continuous
         // castable stretch inside it.
-        const freeS = longestOutside(cannotCastOf(f), sMs, nominalEndMs);
+        // …up to the kicker's death and the round's end (codex
+        // 60-POSTHOC-04c #1: a rogue dying 0.1 s into a Flash Heal, the
+        // Shuffle round ending there, read as a kicker with the cast free)
+        const castEndMs = Math.max(
+          sMs,
+          Math.min(nominalEndMs, firstDeathMs(f as never), roundEndAt),
+        );
+        const freeS = longestOutside(cannotCastOf(f), sMs, castEndMs);
         const locked = freeS < Math.min(KICK_MIN_FREE_S, nominalS);
         const runBlocked = [...cannotCastOf(f), ...rootedOf(f)];
-        const runS = longestOutside(runBlocked, sMs, nominalEndMs);
+        const runS = longestOutside(runBlocked, sMs, castEndMs);
         const pos = getUnitPositionAtTime(f as never, sMs, LOS_SWEEP_GAP_MS);
         const hpos = getUnitPositionAtTime(
           healer as never,

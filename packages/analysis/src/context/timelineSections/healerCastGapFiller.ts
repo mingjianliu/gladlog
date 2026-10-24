@@ -154,10 +154,17 @@ export function emitHealerCastGapFillerEntries(
       ),
     );
   }
+  // the OWNER's trinket presses — a cast row of the owner's at one of them
+  // is that press; a teammate's trinket in the same second is no reason to
+  // drop the owner's cast (codex 60-POSTHOC-05a #2: a teammate's Medallion
+  // at 0:20 removed the owner's Dispel Magic there, and the PURGE row went
+  // with it)
   const trinketUseTimesMs = new Set(
-    ccTrinketSummaries.flatMap((s) =>
-      s.trinketUseTimes.map((t) => Math.round(matchStartMs + t * 1000)),
-    ),
+    ccTrinketSummaries
+      .filter((s) => s.playerName === owner.name)
+      .flatMap((s) =>
+        s.trinketUseTimes.map((t) => Math.round(matchStartMs + t * 1000)),
+      ),
   );
 
   // F68/B32: flat list of CC events targeting the owner only (not teammates).

@@ -107,11 +107,21 @@ export function healAbsorbUseOf(
   );
   const absorbAmount = Number((applied as { amount?: number })?.amount);
   if (!applied || !(absorbAmount > 0)) return null;
-  const removedMs = auras.find(
+  // its own REMOVED — before the next APPLIED of it; a REMOVED the log lost
+  // ends it at the next application (codex 62-POSTHOC-13f #3: a Death Pact
+  // with no REMOVED took the next press's heal absorbs, "ate 200k")
+  const nextApplied = auras.find(
     (a) =>
-      a.logLine.event === LogEvent.SPELL_AURA_REMOVED &&
+      a.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
       a.timestamp > applied.timestamp,
   )?.timestamp;
+  const removedMs =
+    auras.find(
+      (a) =>
+        a.logLine.event === LogEvent.SPELL_AURA_REMOVED &&
+        a.timestamp > applied.timestamp &&
+        a.timestamp < (nextApplied ?? Infinity),
+    )?.timestamp ?? nextApplied;
   const deathMs = (unit.deathRecords ?? [])
     .map((d) => d.timestamp)
     .filter((t) => t >= pressMs)

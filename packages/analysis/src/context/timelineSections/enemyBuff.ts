@@ -50,6 +50,9 @@ export function emitEnemyBuffEntries(
       // up` label.
       if (Math.round(matchStartMs + interval.endSeconds * 1000) >= roundEndAtMs)
         continue;
+      // …and one whose REMOVED the log lost has no end line either: its end
+      // is the official length's cap, not a logged fact
+      if (interval.inferredEnd) continue;
       addEntry(
         interval.endSeconds,
         `${fmtTime(interval.endSeconds)}  [ENEMY BUFF END]   ${enemyPid(enemyName)}: ${interval.spellName}`,

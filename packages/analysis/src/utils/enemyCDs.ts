@@ -271,9 +271,11 @@ export function observedEffectEndSeconds(
     // of one of the ids on this unit at the press (codex 20-F15-08: another
     // target's older copy merely overlapping the press is not this press's)
     if (first < 0 && refreshedAtCast(dest))
-      first = ivs.findIndex(
-        (iv) => iv.fromS < castS && iv.toS > castS + EFFECT_START_AFTER_S,
-      );
+      // …the interval the logged refresh lands in: open at the press, however
+      // soon it closed after (codex 60-POSTHOC-10d: a Malevolence refreshed
+      // at 20 s and removed at 21 read the official 20 s, 20–40 s, and made a
+      // false burst kill attempt)
+      first = ivs.findIndex((iv) => iv.fromS < castS && iv.toS >= castS);
     if (first < 0) continue;
     let chainEnd = ivs[first]!.toS;
     let observed = !ivs[first]!.inferredEnd;

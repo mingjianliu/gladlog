@@ -343,8 +343,27 @@ export function externalUnusedEvents(input: {
   // the window [deathT-5, deathT] after subtracting CC coverage and the time
   // the owner could not pay for it
   const from = Math.max(0, deathT - EXTERNAL_FREE_WINDOW_S);
-  const freeGapFor = (spellId: string): number => {
-    const covers = [...input.ownerCC, ...(input.unaffordable?.(spellId) ?? [])]
+  // …and before the external was back (codex 60-POSTHOC-04c #2: readiness
+  // read at the death and freedom over the whole window — Pain Suppression
+  // back at 180 s, the priest Cycloned 179–182 s, read free 177–179 s while
+  // it was still on cooldown). Ready ∧ free at the same time.
+  const notReadyFor = (
+    cd: (typeof input.ownerExternals)[number],
+  ): Array<{ atSeconds: number; durationSeconds: number }> => {
+    for (let t = from; t <= deathT; t += 0.1)
+      if (cdReadyInTimeAt(cd, t))
+        return t > from ? [{ atSeconds: from, durationSeconds: t - from }] : [];
+    return [{ atSeconds: from, durationSeconds: deathT - from }];
+  };
+  const freeGapFor = (
+    spellId: string,
+    cd?: (typeof input.ownerExternals)[number],
+  ): number => {
+    const covers = [
+      ...input.ownerCC,
+      ...(input.unaffordable?.(spellId) ?? []),
+      ...(cd ? notReadyFor(cd) : []),
+    ]
       .map((c) => [c.atSeconds, c.atSeconds + c.durationSeconds] as const)
       .filter(([a, b]) => b > from && a < deathT)
       .sort((a, b) => a[0] - b[0]);
@@ -362,7 +381,7 @@ export function externalUnusedEvents(input: {
     if (!cdReadyInTimeAt(cd, deathT)) return false;
     if (!(input.canReachVictim?.(cd.spellId) ?? true)) return false;
     if (input.attempted?.(cd.spellId, from, deathT)) return false;
-    const gap = freeGapFor(cd.spellId);
+    const gap = freeGapFor(cd.spellId, cd);
     if (gap < EXTERNAL_FREE_MIN_GAP_S) return false;
     maxGap = gap;
     return true;

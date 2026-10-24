@@ -43,11 +43,14 @@ export function foldMissedPurges(
     enemyCDTimeline,
   } = ctx;
 
+  // one unit: the same full name, or the same roster id — never the same
+  // name before the realm (codex 60-POSTHOC-05c #1: `Alex-Alpha` and
+  // `Alex-Beta` folded together, "unpurged for 20s" landed on the wrong
+  // enemy and the other's missed-purge record was consumed)
   function sameEnemyUnit(name1: string, name2: string): boolean {
     if (name1 === name2) return true;
-    if (name1.split("-")[0] === name2.split("-")[0]) return true;
-    if (enemyPid(name1) === enemyPid(name2)) return true;
-    return false;
+    const p1 = enemyPid(name1);
+    return /^\d+\(/.test(p1) && p1 === enemyPid(name2);
   }
 
   // The windows the OWNER could have answered (`missedPurgesFor`): a general

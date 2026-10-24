@@ -1,4 +1,5 @@
 import {
+  ADAPTATION_TRIGGER_AURA_ID,
   analyzeBurstLedger,
   analyzePlayerCCAndTrinket,
   computeOwnerPositionEvents,
@@ -14,6 +15,7 @@ import {
   isHealerSpec,
   isMeleeSpec,
   POSITION_MISTAKES,
+  pvpTrinketUses,
   reconstructDispelSummary,
   reconstructEnemyCDTimeline,
   stayedInHadRealCost,
@@ -61,7 +63,6 @@ const MAJOR_KINDS: ReadonlySet<KeyMomentKind> = new Set([
   "burst-band",
 ]);
 
-const TRINKETS = new Set<string>(trinketSpellIds);
 const CC_MIN_S = 3;
 
 /** DR-level suffix for cc details (#10 T2). Single-source predicate: use
@@ -226,16 +227,21 @@ export function deriveKeyMoments(
           });
         }
       }
-      for (const c of u.spellCastEvents ?? []) {
-        if (!c.spellId || !TRINKETS.has(c.spellId)) continue;
+      // the PvP trinket's uses as the prompt reads them (`pvpTrinketUses`):
+      // the Medallion, and Adaptation — which logs no cast, only its
+      // self-aura (round1+2, 13g #3 follow-up: Adaptation never showed)
+      for (const use of pvpTrinketUses(u)) {
         out.push({
-          t: rel(c.timestamp),
+          t: rel(use.atMs),
           kind: "defensive",
           side: "friendly",
           title: "交饰品",
-          spellId: c.spellId,
+          spellId:
+            use.kind === "adaptation"
+              ? ADAPTATION_TRIGGER_AURA_ID
+              : trinketSpellIds[0],
           unitNames: [u.name],
-          jumpT: rel(c.timestamp),
+          jumpT: rel(use.atMs),
         });
       }
     }

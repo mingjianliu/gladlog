@@ -30,6 +30,7 @@ import {
   buildAuraIntervals,
   dropAuraRebroadcasts,
   type IAuraInterval,
+  officialDurationS,
   supersededAuraBreaks,
 } from "./auraIntervals";
 import {
@@ -1453,6 +1454,8 @@ export interface IMissedCleanseWindow {
    * self-removal (`SELF_REMOVAL_BY_TYPE`) inside the window — facts only;
    * absent when the type has no self-removal. */
   targetSelfBlockedS?: number;
+  /** the same per self-removal button (`SELF_REMOVAL_BY_TYPE`), seconds */
+  targetSelfBlockedSById?: Record<string, number>;
   /** The target was charmed (Mind Control, `charmedThrough`) for the
    * window: only a friendly offensive purge could remove anything on them
    * (`canRemoveFrom`). Absent on hand-built fixtures = false. */
@@ -2432,7 +2435,10 @@ function targetSelfBlocked(
   startMs: number,
   endMs: number,
   src: CannotCastSrc,
-): { targetSelfBlockedS?: number } {
+): {
+  targetSelfBlockedS?: number;
+  targetSelfBlockedSById?: Record<string, number>;
+} {
   const ids = SELF_REMOVAL_BY_TYPE[dispelType];
   if (!ids?.length) return {};
   const b = dispellersBlockedMsInWindow(
@@ -2442,7 +2448,24 @@ function targetSelfBlocked(
     src,
     () => ids,
   );
-  return b === null ? {} : { targetSelfBlockedS: b / 1000 };
+  // per button too: a kick lockout of one school stops one of them, and the
+  // reader names only the button the target holds (codex 60-POSTHOC-10c #1:
+  // a Holy-locked Retribution Paladin read free 6.0 s through Cloak of
+  // Shadows / Ice Block, 1.0 s through its own Divine Shield)
+  const byId: Record<string, number> = {};
+  for (const id of ids) {
+    const one = dispellersBlockedMsInWindow(
+      [target],
+      startMs,
+      endMs,
+      src,
+      () => [id],
+    );
+    if (one !== null) byId[id] = one / 1000;
+  }
+  return b === null
+    ? {}
+    : { targetSelfBlockedS: b / 1000, targetSelfBlockedSById: byId };
 }
 
 /** The units still alive at `ms` (no death record at or before it). */
@@ -4027,7 +4050,10 @@ export function reconstructDispelSummary(
         string,
         { ts: number; spellName: string; srcUnitId: string }[]
       >();
-      const removedTimes = new Map<string, number[]>();
+      const removedTimes = new Map<
+        string,
+        Array<{ ts: number; src: string | undefined; broken: boolean }>
+      >();
 
       // one re-broadcast is one application (02c8e3ac: an Obsidian Scales
       // run cut to 3.3 s of its 12 s)
@@ -4065,7 +4091,15 @@ export function reconstructDispelSummary(
           aura.logLine.event === LogEvent.SPELL_AURA_BROKEN_SPELL
         ) {
           const bucket = removedTimes.get(spellId) ?? [];
-          removedTimes.set(spellId, [...bucket, aura.timestamp]);
+          removedTimes.set(spellId, [
+            ...bucket,
+            {
+              ts: aura.timestamp,
+              src: aura.srcUnitId || undefined,
+              // a BROKEN row names the breaker, not the aura's caster
+              broken: aura.logLine.event !== LogEvent.SPELL_AURA_REMOVED,
+            },
+          ]);
         }
       }
 
@@ -4090,7 +4124,32 @@ export function reconstructDispelSummary(
           // reaction floor, "purged by us", the purgers' lockouts, the
           // pressure reading) is asked of [applyTs, windowEndMs].
           if (applyTs >= roundEnd) continue;
-          const removalTs = removals.find((r) => r >= applyTs);
+          // its own removal: the caster's REMOVED (or a BROKEN / a row with
+          // no source) — two priests' shields on one target are two
+          // applications (codex 60-POSTHOC-10c #3: B's Power Word: Shield
+          // read 8 s off A's removal, 15 s in the log); and an application
+          // of it by the same caster past this one's official length means
+          // this one's REMOVED was lost — it ended at its length (10c #2: a
+          // Power Infusion at 10 s with no REMOVED took the 150 s one's
+          // removal, "unpurged for 145s")
+          const ownRemoval = removals.find(
+            (r) =>
+              r.ts >= applyTs &&
+              (r.broken || r.src === undefined || r.src === srcUnitId),
+          )?.ts;
+          const officialS = officialDurationS(spellId, undefined, applyTs);
+          const lostAt =
+            officialS === null
+              ? undefined
+              : applications.find(
+                  (a) =>
+                    a.srcUnitId === srcUnitId &&
+                    a.ts > applyTs + officialS * 1000 &&
+                    (ownRemoval === undefined || a.ts < ownRemoval),
+                )
+                ? applyTs + officialS * 1000
+                : undefined;
+          const removalTs = lostAt ?? ownRemoval;
           const windowEndMs = Math.min(removalTs ?? combat.endTime, roundEnd);
           const durationSeconds = (windowEndMs - applyTs) / 1000;
           // F15 / fact1215 R8: an APPLIED inside a window already emitted for

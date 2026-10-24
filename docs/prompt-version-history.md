@@ -4151,3 +4151,37 @@ self-aura cap that ignored a later REMOVED — fixed before f6b);
 `[OPPORTUNITY] … Holy Word: Chastise ready` 17 → 37 (pressed again inside
 the new readiness: 131-1-750 1:34 → 2:10). Gates = f5b; scans unchanged. Family diff: `[CD PRIOR]` Stasis 0 → 13, Tip the Scales 0 → 5
 — intended.
+
+v448 (2026-10-23, fact4 F17 batch 6b+6c — round-end clips, lost REMOVEDs,
+affordability, external review follow-ups): facts about a window stop at
+the round's end — the sync window's `ready` (`evaluateSyncWindow` on the
+in-round part), kick priority's cast end (first death / round end), the
+Innervate mana note, a silence's trinket and dispel reading, the
+[CD PRIOR] trough (its HP and second from the lowest unit's own crossing),
+offensive waste, kick pressure and its gate, Psyfiend reach, stacked
+defensives, root reachability and the disarm `stillOnAtRoundEnd`; a buff
+whose REMOVED was lost ends at its official length, a logged REMOVED is
+its end (Spirit of Redemption's loop, Obsidian Mettle, Death Pact's heal
+absorb, Power Infusion on the press line and enemy major buffs, dispel
+windows per caster, friendly Cyclone), and an inferred end prints no
+[ENEMY BUFF END]; Innervate's free casts make a spell affordable only while
+it is up (`freeCastSpansMs`), and the death outcome tells "could not pay"
+(`casterCouldNotPay`) from control (`controlFreeS`). Singles: a stun lets
+through only what the game lets through it (silence / fear / lockout stop
+a usable-while-stunned tool); an external is unused only when it was back
+AND its caster free at the same time; an ally's trinket no longer removes
+the owner's cast-gap lines; purge folding keys on the unit; a reflected
+control that ran full length was not ended by the reflect; a Malevolence
+refresh that ends at once; a kicked enemy bar is no hard cast, its target
+falls back to the completion row (a summon by its English name — a
+grounded bolt reads `→ Grounding Totem`); Mindgames 375901 kicks read
+damage; the desktop death recap reads the prompt's death second and Key
+Moments show Adaptation. New gate `checkCdPriorCrossingHp` ([CD PRIOR]'s
+HP against the same second's [STATE]; 2 on f6b → 0). 605 files vs v447
+(f6b → f7): external-unused 144 → 137 (dps 67 → 66, healer 77 → 71 —
+each external came back so late that it was back and its caster free
+together < 1.5 s of the last 5 s; one was already printed "off cooldown
+only for the last 2.2s"). Hard-cast lines 1,260 → 1,239 (kicked bars).
+Gates = f6b (+0 after the summon-name fix; f7 showed 9 checkCjkLeak from
+a localized totem name); scans and regression net unchanged. Family diff:
+`[ENEMY HARD CAST] … → Grounding Totem` 0 → 24 — intended.

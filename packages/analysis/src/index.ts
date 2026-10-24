@@ -38,7 +38,10 @@ export { nodeMaps } from "./data/talentStrings";
 export { zoneMetadata } from "./data/zoneMetadata";
 export * from "./utils/auraIntervals";
 export * from "./utils/burstLedger";
-export { ADAPTATION_TRIGGER_AURA_ID } from "./utils/pvpTrinketUses";
+export {
+  ADAPTATION_TRIGGER_AURA_ID,
+  pvpTrinketUses,
+} from "./utils/pvpTrinketUses";
 // the hostile-source set every cannot-cast reader passes (death-kill F-M1:
 // the desktop death recap asks the same predicate as the prompt)
 export { enemySourceIds } from "./utils/cannotCastIntervals";

@@ -135,15 +135,31 @@ export function emitSilenceEntries(
         // enemy-def F-E17: the Medallion cast is logged up to a few ms
         // after the removal it caused (dfcccbf2: silence removed 21.020,
         // trinket 21.021) — the CC binder's `TRINKET_BREAK_AFTER_REMOVAL_MS`
-        const trinketAt = trinketTimes.find((t) =>
-          pressEndedSilence(
-            s.from,
-            endMs,
-            matchStartMs + t * 1000,
-            s.spellId,
-            u,
-          ),
-        );
+        // read against the silence's own removal, never the round-end cut
+        // (codex 60-POSTHOC-05b #3: a Medallion 1 ms after the cut "broke"
+        // a silence that ran on), and a dispel the log names wins over a
+        // press that merely coincides (05b #1, the hard-CC binder's order:
+        // a Purify at 22 s and a trinket at 22.050 s read "trinket broke")
+        const dispelledEnd = stillOnAtRoundEnd
+          ? undefined
+          : auraEndFromLog(
+              u,
+              s.spellId,
+              { fromMs: s.from, removedMs: s.to },
+              s.srcUnitId,
+            );
+        const trinketAt =
+          stillOnAtRoundEnd || dispelledEnd?.takenBy
+            ? undefined
+            : trinketTimes.find((t) =>
+                pressEndedSilence(
+                  s.from,
+                  s.to,
+                  matchStartMs + t * 1000,
+                  s.spellId,
+                  u,
+                ),
+              );
         // FT-T08 step 3c: a dispel of the silence, or the unit's death at
         // its removal, is in the log (`auraEndFromLog`) — stated when no
         // trinket press already accounts for the end. Clamped to the round's
@@ -154,18 +170,12 @@ export function emitSilenceEntries(
         // this aura outright and is still read.
         const enemyTrinketed =
           side === "enemy" &&
+          !stillOnAtRoundEnd &&
+          !dispelledEnd?.takenBy &&
           pvpTrinketUses(u).some((t) =>
-            pressEndedSilence(s.from, endMs, t.atMs, s.spellId, u),
+            pressEndedSilence(s.from, s.to, t.atMs, s.spellId, u),
           );
-        const end =
-          trinketAt === undefined && !stillOnAtRoundEnd
-            ? auraEndFromLog(
-                u,
-                s.spellId,
-                { fromMs: s.from, removedMs: s.to },
-                s.srcUnitId,
-              )
-            : undefined;
+        const end = trinketAt === undefined ? dispelledEnd : undefined;
         const taker = end?.takenBy;
         const endNote = taker
           ? ` | dispelled by ${actorLabel(

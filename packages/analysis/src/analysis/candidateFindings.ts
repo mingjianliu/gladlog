@@ -46,6 +46,7 @@ import {
   cannotCastIntervalsForSpells,
   enemySourceIds,
   namedCannotCastIntervals,
+  stunLetsPress,
 } from "../utils/cannotCastIntervals";
 import { type OwnerCastCancels, ownerCastCancels } from "../utils/castCancels";
 import { isControlCast } from "../utils/castMissRows";
@@ -87,7 +88,6 @@ import {
   specToString,
   talentReplacementsOf,
   unitCooldownOf,
-  USABLE_WHILE_CC_SPELL_IDS,
   USABLE_WHILE_CONFUSED_SPELL_IDS,
   USABLE_WHILE_FEARED_SPELL_IDS,
 } from "../utils/cooldowns";
@@ -1081,6 +1081,7 @@ function selfRemovalFacts(
     | "dispelType"
     | "targetName"
     | "targetSelfBlockedS"
+    | "targetSelfBlockedSById"
   >,
   owner: any,
   friends: any[],
@@ -1105,9 +1106,19 @@ function selfRemovalFacts(
       ),
   );
   if (ready.length === 0) return {};
-  const free = Math.floor(
-    (w.durationSeconds - (w.targetSelfBlockedS ?? 0)) * 10 + 1e-9,
-  );
+  // blocked = the time every ready button was stopped (the one it holds,
+  // per button — codex 60-POSTHOC-10c #1)
+  const blockedS = w.targetSelfBlockedSById
+    ? Math.min(
+        ...ready.map(
+          (cd) =>
+            w.targetSelfBlockedSById![cd.spellId] ??
+            w.targetSelfBlockedS ??
+            0,
+        ),
+      )
+    : (w.targetSelfBlockedS ?? 0);
+  const free = Math.floor((w.durationSeconds - blockedS) * 10 + 1e-9);
   if (free <= 0) return {};
   return {
     ownerSelfRemoval: ready
@@ -4273,10 +4284,27 @@ function teamPlayEvents(
               cannotCastSrcIds,
               pressIds,
               units,
-            ).map((b) => ({
-              from: (b.from - combat.startTime) / 1000,
-              to: (b.to - combat.startTime) / 1000,
-            }));
+            )
+              // a stun lets through only what the game lets through it
+              // (`stunLetsPress`, cd-hoarded's reading) — a silence, a fear
+              // or a lockout stops a usable-while-stunned tool like any
+              // other (codex 60-POSTHOC-04a #1: a silenced Mistweaver read
+              // `avoidableWith=Peaceweaver`)
+              .filter(
+                (b) =>
+                  !pressIds.some((id) =>
+                    stunLetsPress(b, id, {
+                      onSelf: true,
+                      pvpTalentIds: new Set(
+                        (owner.info?.pvpTalents ?? []).map(String),
+                      ),
+                    }),
+                  ),
+              )
+              .map((b) => ({
+                from: (b.from - combat.startTime) / 1000,
+                to: (b.to - combat.startTime) / 1000,
+              }));
           } catch {
             blocked = [];
           }
@@ -4284,8 +4312,9 @@ function teamPlayEvents(
         }
         return blocked;
       };
+      // the fear / confuse tables still clear every control (the stun one
+      // is read per interval above)
       const usableWhileCc = (id: string) =>
-        USABLE_WHILE_CC_SPELL_IDS.has(id) ||
         USABLE_WHILE_FEARED_SPELL_IDS.has(id) ||
         USABLE_WHILE_CONFUSED_SPELL_IDS.has(id);
       out.push(
@@ -4666,11 +4695,25 @@ function extractDeathSetups(
                   return true;
                 // codex review of 8513a101: reachable AND free at the same
                 // sample — near while stunned, far once free is no chance
-                const ownerCcNow = (t: number) =>
-                  ccOf(ownerUnit).ccInstances.some(
-                    (c: { atSeconds: number; durationSeconds: number }) =>
-                      t >= c.atSeconds && t < c.atSeconds + c.durationSeconds,
+                // …free by the one cannot-cast reading the free-gap fact
+                // reads (codex 60-POSTHOC-04a #2: `ccInstances` leave out
+                // silences — a priest silenced 195–198 s, the ally in range
+                // only then, read external-unused with freeGapS=2)
+                let blocked: Array<{ from: number; to: number }>;
+                try {
+                  blocked = cannotCastIntervalsForSpells(
+                    ownerUnit,
+                    enemySourceIds(enemies, units),
+                    [spellId],
+                    units,
                   );
+                } catch {
+                  blocked = [];
+                }
+                const ownerCcNow = (t: number) => {
+                  const ms = start + t * 1000;
+                  return blocked.some((b) => b.from <= ms && ms < b.to);
+                };
                 let sampled = false;
                 for (
                   let t = Math.max(0, deathT - EXTERNAL_FREE_WINDOW_S);

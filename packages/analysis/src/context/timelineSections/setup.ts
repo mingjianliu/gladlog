@@ -35,6 +35,7 @@ import {
   missBelongsToCast as missRowBelongsToCast,
   missReportsControl,
 } from "../../utils/castMissRows";
+import { ccFullDurationForCaster } from "../../utils/ccDuration";
 import {
   applicableCCAvoidanceIds,
   avoidanceExplainsMissType,
@@ -240,7 +241,10 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
     const fromMs = matchStartMs + timeSeconds * 1000;
     // where the buff was seen to end, else the official length (work order
     // 2026-10-15 #8)
-    const toMs =
+    // …never past the round's end (codex 60-POSTHOC-05a #3: a Shuffle
+    // Innervate read `30% -> 100%`, the mana after the deciding death
+    // counted; `roundEndMs`, the one round end)
+    const toMs = Math.min(
       observedCastEndMs(
         owner,
         spellId,
@@ -248,7 +252,9 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
         allPlayers,
         matchStartMs,
         matchEndMs,
-      ) ?? fromMs + duration * 1000;
+      ) ?? fromMs + duration * 1000,
+      roundEndMs({ endTime: matchEndMs, startInfo: { bracket } }, allPlayers),
+    );
     const spanS = Math.round((toMs - fromMs) / 100) / 10;
     const delta = resourceDeltaPct(target, fromMs, toMs, manaFallback);
     const who = target.id === owner.id ? "self" : pid(target.name);
@@ -738,6 +744,8 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
   ): string | undefined {
     const friendIds = new Set(friends.map((f) => f.id));
     let by: string | undefined;
+    let onSince = 0;
+    let onId = "";
     for (const a of target.auraEvents ?? []) {
       if (a.timestamp > missMs) break;
       if (!isDamageImmuneControl(a.spellId)) continue;
@@ -745,11 +753,21 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
       if (
         ev === LogEvent.SPELL_AURA_APPLIED ||
         ev === LogEvent.SPELL_AURA_REFRESH
-      )
+      ) {
         by = friendIds.has(a.srcUnitId) ? a.srcUnitId : undefined;
-      else if (ev === LogEvent.SPELL_AURA_REMOVED) by = undefined;
+        onSince = a.timestamp;
+        onId = a.spellId!;
+      } else if (ev === LogEvent.SPELL_AURA_REMOVED) by = undefined;
     }
     if (!by) return undefined;
+    // a Cyclone whose REMOVED the log lost is over at its full length (the
+    // control readers' cap, `ccFullDurationForCaster` — codex 60-POSTHOC-05a
+    // #1: a 0:10 Cyclone blamed for a 0:44 IMMUNE)
+    const full = ccFullDurationForCaster(
+      onId,
+      friends.find((f) => f.id === by),
+    );
+    if (full !== undefined && missMs > onSince + full * 1000) return undefined;
     const druid = friends.find((f) => f.id === by)!;
     return `${pid(druid.name)}'s Cyclone was on the target`;
   }

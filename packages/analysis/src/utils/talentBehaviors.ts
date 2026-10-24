@@ -12,7 +12,7 @@
  * CC_AVOIDANCE_BUFF_SPELLS and CD_TALENT_MODIFIERS.
  */
 
-import { dropAuraRebroadcasts } from "./auraIntervals";
+import { dropAuraRebroadcasts, officialDurationS } from "./auraIntervals";
 
 export type TalentEffectKind =
   /** while buffSpellId is active, immune to magic damage/effects → credit a magic CC/damage avoidance */
@@ -438,6 +438,21 @@ export function interruptImmuneWindows(
       : cond.name;
     const auraName = cond.conditionName || cond.name;
     let openFrom: number | null = null;
+    // the aura's lost REMOVED ends it at its official length after its last
+    // (re)application — the `buildAuraIntervals` cap (codex 60-POSTHOC-09f
+    // #2: an Obsidian Scales with no REMOVED kept Obsidian Mettle's
+    // interrupt immunity to 180 s, 22 s official)
+    let lastSeen = 0;
+    const capAt = (endAt: number) => {
+      const d = officialDurationS(
+        cond.conditionAuraId,
+        (owner as { spellCastEvents?: unknown }).spellCastEvents
+          ? (owner as never)
+          : undefined,
+        lastSeen,
+      );
+      return d === null ? endAt : Math.min(endAt, lastSeen + d * 1000);
+    };
     // a re-broadcast's REMOVED is not the window's end (work order
     // 2026-10-14d #9 — `dropAuraRebroadcasts`)
     for (const a of dropAuraRebroadcasts(owner.auraEvents ?? [])) {
@@ -446,7 +461,13 @@ export function interruptImmuneWindows(
         a.logLine.event === "SPELL_AURA_APPLIED" ||
         a.logLine.event === "SPELL_AURA_REFRESH"
       ) {
+        if (openFrom !== null && a.timestamp > capAt(Infinity)) {
+          // the open run's REMOVED was lost: it ended at its length
+          out.push({ from: openFrom, to: capAt(a.timestamp), reason, auraName });
+          openFrom = null;
+        }
         if (openFrom === null) openFrom = a.timestamp;
+        lastSeen = a.timestamp;
       } else if (
         a.logLine.event === "SPELL_AURA_REMOVED" &&
         openFrom !== null
@@ -456,7 +477,7 @@ export function interruptImmuneWindows(
       }
     }
     if (openFrom !== null)
-      out.push({ from: openFrom, to: endMs, reason, auraName });
+      out.push({ from: openFrom, to: capAt(endMs), reason, auraName });
   }
   return out;
 }

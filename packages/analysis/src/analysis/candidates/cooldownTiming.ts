@@ -1019,7 +1019,19 @@ export function missedSyncWindowEvents(
     if (probes.roundEndS !== undefined && w.fromSeconds >= probes.roundEndS)
       continue;
     if (!syncWindowEligible(inRound(w), probes.enemyDeathS)) continue;
-    const ev = evaluateSyncWindow(w, offensiveCds);
+    // readiness is read on the lock up to the round's end (codex
+    // 60-POSTHOC-04b #1: a Cyclone running 0.6 s past a Shuffle round's
+    // ending death read `readyCds=The Hunt`, the log's tail counted) — the
+    // cd-hoarded owner gate's clip; whether the burst was entered is read on
+    // the whole lock, as before
+    const evAll = evaluateSyncWindow(w, offensiveCds);
+    const ev = {
+      ...evAll,
+      ready:
+        probes.roundEndS !== undefined && w.toSeconds > probes.roundEndS
+          ? evaluateSyncWindow(inRound(w), offensiveCds).ready
+          : evAll.ready,
+    };
     const ready = ev.ready.map((cd) => cd.spellName);
     if (ready.length === 0) continue;
     if (ev.entered) continue;

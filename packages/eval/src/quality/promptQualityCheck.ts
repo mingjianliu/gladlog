@@ -5519,6 +5519,42 @@ export function checkBurstLedgerSpellSpans(lines: string[]): string[] {
  * a line citing numbers that argue against its own accusation is a
  * hardFailure, not a style problem. */
 /**
+ * `[CD PRIOR]`'s crossing reads ONE unit: "<unit> fell below that at m:ss
+ * (N%)" is that unit's `[STATE]` reading at that second (the producer's
+ * `gridHpPct` of the named unit at its own crossing second — codex
+ * 60-POSTHOC-06c #1 / 07a #2: the name came from the dip's minimum and the
+ * second and HP from another friendly's crossing, "Bob fell below that at
+ * 0:02 (48%)" with 48 % Alice's). A second with no `[STATE]` line, or a
+ * unit the line does not list, is not read.
+ */
+export function checkCdPriorCrossingHp(lines: string[]): string[] {
+  const stateAt = new Map<number, Map<string, number>>();
+  for (const line of lines) {
+    const m = line.match(STATE_LINE);
+    if (!m) continue;
+    const units = new Map<string, number>();
+    for (const u of m[3]!.matchAll(/(\S+?):(\d+)\b/g))
+      units.set(u[1]!, Number(u[2]));
+    stateAt.set(Number(m[1]) * 60 + Number(m[2]), units);
+  }
+  const failures: string[] = [];
+  lines.forEach((line, i) => {
+    if (!/^\s*\d+:\d{2}\s+\[CD PRIOR\]/.test(line)) return;
+    const m = /;\s*(\d+\([^()]*\))(?: \(you\))? fell below that at (\d+):(\d{2}) \((\d+)%\)/.exec(
+      line,
+    );
+    if (!m) return;
+    const tick = stateAt.get(Number(m[2]) * 60 + Number(m[3]))?.get(m[1]!);
+    if (tick === undefined) return;
+    if (Math.abs(tick - Number(m[4])) > HP_AGREEMENT_TOLERANCE_PP)
+      failures.push(
+        `line ${i + 1}: [CD PRIOR] 说 ${m[1]} 在 ${m[2]}:${m[3]} 跌到 ${m[4]}%,但同秒 [STATE] 读 ${tick}%`,
+      );
+  });
+  return failures;
+}
+
+/**
  * 16th hardFailure class (2026-09-04, GH #54 (f) / BACKLOG #38 (a)(h)): a
  * `[CD PRIOR]` context line's cohort numbers equal the reference table's.
  * The producer (`context/cdPrior.ts`) renders `medianHpPct` / `n` and the
@@ -5857,7 +5893,10 @@ export function checkKickEatenLowInsideLockout(lines: string[]): string[] {
     const t = Number(f["t"]);
     const lockout = Number(f["lockout"]);
     if (!Number.isFinite(t) || !Number.isFinite(lockout)) continue;
-    const last = Math.floor(t + lockout + 1e-9);
+    // …and inside the round (codex 60-POSTHOC-09h #2: a low read after a
+    // Solo Shuffle round's ending death passed, still inside the lockout)
+    const roundEnd = statedRoundEnd(lines)?.second ?? Infinity;
+    const last = Math.min(Math.floor(t + lockout + 1e-9), roundEnd);
     for (const side of ["our", "their"]) {
       const atRaw = f[`${side}LowT`];
       if (atRaw === undefined) continue;
@@ -7841,6 +7880,7 @@ export function checkMatch(
   hardFailures.push(...checkBacklashRefConsistency(lines));
   hardFailures.push(...checkKickPriorityRefConsistency(lines));
   hardFailures.push(...checkCdPriorRefConsistency(lines));
+  hardFailures.push(...checkCdPriorCrossingHp(lines));
   hardFailures.push(...checkTeammateCrisisRefConsistency(lines));
   hardFailures.push(...checkCrisisHpStateConsistency(lines));
   hardFailures.push(...checkCrisisStateTickPresent(lines));

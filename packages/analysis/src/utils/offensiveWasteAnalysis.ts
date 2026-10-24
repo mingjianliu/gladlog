@@ -22,6 +22,7 @@ import {
   specToString,
 } from "./cooldowns";
 import { fmtTime, toRenderSecond } from "./renderGrid";
+import { roundEndMs } from "./roundEnd";
 
 /**
  * 2026-08-17:两张手打名单(IMMUNITY_AURAS 4 条 / MAJOR_DR_AURAS 5 条)已删除,
@@ -208,11 +209,20 @@ export function buildOffensiveWasteSummary(
   const matchStartMs = combat.startTime;
   const defenseWindows = buildDefenseWindows(enemies, combat);
   const events: IOffensiveWasteEvent[] = [];
+  // the round's casts only (`roundEndMs`: a Solo Shuffle round is over at its
+  // ending death — codex 60-POSTHOC-09h #1: a cast in the log's tail opened
+  // an ABILITIES INTO IMMUNITY row)
+  const roundEndAt = roundEndMs({
+    ...combat,
+    units: combat.units ?? {},
+  } as never);
 
   for (const friend of friends) {
     const highValueIds = getHighValueSpellIds(friend);
     const castEvents = friend.spellCastEvents.filter(
-      (e) => e.logLine.event === LogEvent.SPELL_CAST_SUCCESS,
+      (e) =>
+        e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+        e.logLine.timestamp < roundEndAt,
     );
 
     for (const window of defenseWindows) {

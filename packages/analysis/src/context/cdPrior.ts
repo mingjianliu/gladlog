@@ -66,7 +66,7 @@ export function formatCdPriorLines(
         atSeconds: e.tSec,
         line:
           `${CD_PRIOR_TAG}   ${cohortLabel} cohort spends ${e.spellName} at a median lowest-friendly HP of ${e.ref.medianHpPct}% (n=${e.ref.n}); ` +
-          `${who} fell below that at ${fmtTime(e.tSec)} (${e.hpAtCrossPct}%) and bottomed at ${e.troughHpPct}% by ${fmtTime(e.troughSec)} with ${e.spellName} ${e.readyFromSec > e.tSec ? `ready from ${fmtTime(e.readyFromSec)}` : "ready"} and unspent` +
+          `${who} fell below that at ${fmtTime(e.crossSec ?? e.tSec)} (${e.hpAtCrossPct}%) and bottomed at ${e.troughHpPct}% by ${fmtTime(e.troughSec)} with ${e.spellName} ${e.readyFromSec > e.tSec ? `ready from ${fmtTime(e.readyFromSec)}` : "ready"} and unspent` +
           (e.ownerLockedSecs > 0
             ? ` (you could not cast it for ${e.ownerLockedSecs}s of that dip)`
             : "") +

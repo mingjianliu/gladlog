@@ -106,8 +106,15 @@ export interface CdPriorHoldEpisode {
   spellName: string;
   /** rendered second the lowest friendly crossed below the cohort median */
   tSec: number;
-  /** that friendly's `gridHpPct` at `tSec` */
+  /** the reading the line pairs with its name (`minUnitName`): THAT
+   * friendly's `gridHpPct` at the second it fell below the median
+   * (`crossSec`) — the lowest friendly at `tSec` can be another unit
+   * (codex 60-POSTHOC-06c #1 / 07a #2: "Bob fell below that at 0:02 (48%)",
+   * the 48 % and the second Alice's) */
   hpAtCrossPct: number;
+  /** the second `minUnitName` itself fell below the median (≥ `tSec`;
+   * absent = `tSec`) */
+  crossSec?: number;
   /** the deepest lowest-friendly reading before HP came back above the
    * median (or the round ended) */
   minHpPct: number;
@@ -320,7 +327,9 @@ export function cdPriorHoldEpisodes(
     const prevTick = gridHpSample(u, startMs + (fromSec - 1) * 1000);
     const t = hpTroughInWindow(u, startMs, fromSec, toSec, undefined, {
       fromMs: prevTick ? prevTick.sampleMs + 1 : startMs + fromSec * 1000,
-      toMs: startMs + (toSec + 1) * 1000 - 1,
+      // …never past the round's end (codex 60-POSTHOC-07a #1: "bottomed
+      // at 10%" read after the deciding death; 50 % in the round)
+      toMs: Math.min(startMs + (toSec + 1) * 1000 - 1, endMs),
     });
     return t && t.pct < gridPct
       ? { troughHpPct: t.pct, troughSec: t.atSec }
@@ -418,7 +427,16 @@ export function cdPriorHoldEpisodes(
         spellId: cd.spellId,
         spellName: cd.spellName,
         tSec: s,
-        hpAtCrossPct: cur.hpPct,
+        ...(() => {
+          if (min.unit === cur.unit)
+            return { hpAtCrossPct: cur.hpPct, crossSec: s };
+          for (let r = s; r <= minSec; r++) {
+            const hp = gridHpPct(min.unit as never, startMs + r * 1000);
+            if (hp !== null && hp > 0 && hp <= line)
+              return { hpAtCrossPct: hp, crossSec: r };
+          }
+          return { hpAtCrossPct: min.hpPct, crossSec: minSec };
+        })(),
         minHpPct: min.hpPct,
         minSec,
         ...troughOf(min.unit, s, episodeEndSec, min.hpPct, minSec),

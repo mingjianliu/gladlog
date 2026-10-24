@@ -352,7 +352,8 @@ describe("computeOffensiveWindows — Spirit of Redemption form cuts the span (F
     );
     expect(early).toHaveLength(1);
     expect(early[0]!.fromSeconds).toBe(fromSeconds + 12);
-    // the on-death form (27827), never removed inside the log
+    // the on-death form (27827), its REMOVED lost: it ends at its official
+    // 15 s (codex 60-POSTHOC-09f #1 — a real log's death follows there)
     const held = computeOffensiveWindows(
       [priest([formAura(LogEvent.SPELL_AURA_APPLIED, 40, "27827")])] as never,
       [],
@@ -360,6 +361,7 @@ describe("computeOffensiveWindows — Spirit of Redemption form cuts the span (F
     );
     expect(held.map((w) => [w.fromSeconds, w.toSeconds])).toEqual([
       [fromSeconds, 40],
+      [55, 60],
     ]);
   });
 

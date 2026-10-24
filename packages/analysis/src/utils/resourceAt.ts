@@ -437,7 +437,12 @@ export function unaffordableIntervals(
   fallback?: ManaFallback,
   combat?: { startTime: number; endTime: number },
 ): Array<{ from: number; to: number }> {
-  if (freeCastWithin(unit, fromMs, toMs, combat)) return [];
+  // a free-cast aura (Innervate) pays only while it is up: its span comes
+  // out of the unpaid stretches, the rest stays unpaid (codex 60-POSTHOC-07c
+  // #1 / 09g #1: an Innervate overlapping any part of the window dropped all
+  // of it — Guardian Spirit "free 5.0s" where 0.5 s was affordable;
+  // `affordableAt` reads the aura at its own instant)
+  const free = freeCastSpansMs(unit, fromMs, toMs, combat);
   // the reading in force at the window's start too
   const samples = timedManaSamplesWithin(unit, fromMs - 5000, toMs, fallback);
   const out: Array<{ from: number; to: number }> = [];
@@ -449,6 +454,45 @@ export function unaffordableIntervals(
     if (cost === null || !(cost > 0)) return [];
     if (smp.current < cost)
       out.push({ from: Math.max(fromMs, smp.ms), to: Math.min(toMs, next) });
+  }
+  return subtractSpans(out, free);
+}
+
+/** The free-cast auras' spans (`FREE_CAST_AURA_IDS`) inside [fromMs, toMs],
+ * epoch ms — `freeCastWithin`'s reading as stretches. */
+function freeCastSpansMs(
+  unit: ICombatUnit,
+  fromMs: number,
+  toMs: number,
+  combat?: { startTime: number; endTime: number },
+): Array<{ from: number; to: number }> {
+  if (!combat) return [];
+  return buildAuraIntervals(unit, combat)
+    .filter((iv) => FREE_CAST_AURA_IDS.has(iv.spellId))
+    .map((iv) => ({
+      from: Math.max(fromMs, combat.startTime + iv.fromS * 1000),
+      to: Math.min(toMs, combat.startTime + iv.toS * 1000),
+    }))
+    .filter((x) => x.to > x.from);
+}
+
+/** `spans` minus `cut`, both epoch-ms stretches. */
+function subtractSpans(
+  spans: Array<{ from: number; to: number }>,
+  cut: Array<{ from: number; to: number }>,
+): Array<{ from: number; to: number }> {
+  let out = spans;
+  for (const c of cut) {
+    const next: Array<{ from: number; to: number }> = [];
+    for (const s of out) {
+      if (c.to <= s.from || c.from >= s.to) {
+        next.push(s);
+        continue;
+      }
+      if (c.from > s.from) next.push({ from: s.from, to: c.from });
+      if (c.to < s.to) next.push({ from: c.to, to: s.to });
+    }
+    out = next;
   }
   return out;
 }

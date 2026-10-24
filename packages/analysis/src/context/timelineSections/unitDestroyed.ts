@@ -46,9 +46,11 @@ export function emitUnitDestroyedEntries(
     | "summonOwners"
     | "unitNames"
     | "rosterSides"
+    | "bracket"
   >,
 ): void {
   const {
+    bracket,
     allUnits,
     matchEndMs,
     matchStartMs,
@@ -116,9 +118,17 @@ export function emitUnitDestroyedEntries(
         // and for how much of its official duration. Absent when nobody had
         // SUMMON_REACH_MIN_S in reach and free — the bare fact then accuses
         // no one.
+        // the round's units and bracket: `roundEndMs` ends a Solo Shuffle
+        // round at its deciding death (codex 60-POSTHOC-09i #2 / 62-POSTHOC-
+        // 13c, a0fb7722 r2: a Psyfiend read "free to act for 3s of its 5s",
+        // 1 s of 3 s in the round — below the naming threshold)
         const reach = summonReach(
           unit,
-          { endTime: matchEndMs, startInfo: { zoneId: params.zoneId } },
+          {
+            endTime: matchEndMs,
+            startInfo: { zoneId: params.zoneId, bracket },
+            units: allUnits ?? [],
+          },
           friends,
           enemies ?? [],
         );

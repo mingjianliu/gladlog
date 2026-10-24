@@ -42,7 +42,7 @@ describe("disarmSpellIds", () => {
 });
 
 describe("trinketSpellIds", () => {
-  it("holds canonical Gladiator's Medallion 336126 and Adaptation 195756", () => {
-    expect(trinketSpellIds).toEqual(["336126", "195756"]);
+  it("holds the Gladiator's Medallion 336126 — Adaptation's 195756 cast id is dead (0 corpus rows; it triggers off its aura 283167)", () => {
+    expect(trinketSpellIds).toEqual(["336126"]);
   });
 });

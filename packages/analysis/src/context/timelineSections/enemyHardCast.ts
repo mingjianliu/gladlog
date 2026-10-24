@@ -11,6 +11,10 @@ import { type ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
 import { getEnglishSpellName } from "../../data/spellEffectData";
 import { fmtTime } from "../../utils/renderGrid";
+import {
+  CRITICAL_NON_PLAYER_NPC_NAMES,
+  getNpcIdFromGuid,
+} from "../timelineHelpers";
 import type { TimelineCtx } from "./ctx";
 
 export function emitEnemyHardCastEntries(
@@ -101,12 +105,46 @@ export function emitEnemyHardCastEntries(
           beforeNextStart(e),
       );
       if (!first) continue;
+      // a kick of this bar before that success ended it — the success is a
+      // later cast's (codex 62-POSTHOC-13b #1, 22081a41 r5: a Pyroblast bar
+      // kicked at 103.759 s paired with an instant at 111.309 s, "9.5s cast,
+      // landed"; `castBarOutcomesOf` reads it kicked)
+      const kicked = (enemy.actionIn ?? []).some(
+        (a) =>
+          a.logLine.event === LogEvent.SPELL_INTERRUPT &&
+          String((a as { extraSpellId?: unknown }).extraSpellId) ===
+            String(event.spellId) &&
+          a.timestamp >= event.timestamp &&
+          a.timestamp <= first.timestamp,
+      );
+      if (kicked) continue;
       consumedSuccess.add(first);
       const castMs = first.timestamp - event.timestamp;
       if (castMs < HARD_CAST_MIN_MS || castMs > HARD_CAST_MAX_MS) continue;
       const landed = first;
       const spellName = getEnglishSpellName(event.spellId, event.spellName);
-      const target = event.destUnitName ? ` → ${pid(event.destUnitName)}` : "";
+      // the bar's target, else the completion's (a CAST_START often names
+      // none — codex 62-POSTHOC-13b #4: 666 lines over 100 logs lost one)
+      const named = (n: string | undefined) => (n && n !== "nil" ? n : "");
+      const fromBar = named(event.destUnitName);
+      const targetName = fromBar || named(landed.destUnitName);
+      const targetGuid = fromBar ? event.destUnitId : landed.destUnitId;
+      // a summon's logged name is client-localized (a grounded bolt's
+      // completion names the totem — 根基图腾 on CN logs): a listed npc reads
+      // its English name, any other non-ASCII one `[pet/NPC]` (setup.ts's
+      // F139 rule for offensive-CD targets)
+      const npcEnglish =
+        targetGuid && !targetGuid.startsWith("Player-")
+          ? CRITICAL_NON_PLAYER_NPC_NAMES[getNpcIdFromGuid(targetGuid) ?? ""]
+          : undefined;
+      const targetLabel =
+        npcEnglish ??
+        (targetName && [...targetName].some((c) => c.charCodeAt(0) > 127)
+          ? targetGuid?.startsWith("Player-")
+            ? pid(targetName)
+            : "[pet/NPC]"
+          : pid(targetName));
+      const target = targetName ? ` → ${targetLabel}` : "";
       const castS = ((landed.timestamp - event.timestamp) / 1000).toFixed(1);
       // fact2 (2026-10-20): a completed cast is not a hit — what it did is
       // the projectile's row on its target (0d08dd90 0:47: a Pyroblast into
