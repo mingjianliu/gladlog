@@ -141,7 +141,7 @@ import {
   resolveSummonOwner,
   summonKindOf,
 } from "./timelineHelpers";
-import { abbrevSpec, unitLabeler } from "./unitLabel";
+import { abbrevSpec, rosterLabelByName, unitLabeler } from "./unitLabel";
 
 // ──────────────────────────────────────────────────────────────────────────────
 
@@ -1080,18 +1080,22 @@ export function buildMatchContext(
   // FT board item (user ruling 2026-10-09): the roster label of a player
   // NAME (`4(RShaman)`) — the [HEALER EXPOSURE] pillar hint and the [ROOT]
   // line printed raw character names. An unknown name stays as it is.
+  // The timeline's own builder (`rosterLabelByName`, the tag keyed on the
+  // resolved id) — predicate-index 2026-10-09: this was a third builder
+  // that looked the full name up alone.
+  const rosterUnits = [
+    ...(friends as ICombatUnit[]),
+    ...(enemies as ICombatUnit[]),
+  ];
+  const friendlyLabel = rosterLabelByName(rosterUnits, playerIdMap);
+  const enemyLabel = rosterLabelByName(rosterUnits, enemyIdMap);
+  const rosterLabelOfUnit = (u: ICombatUnit): string =>
+    (u.reaction === CombatUnitReaction.Friendly ? friendlyLabel : enemyLabel)(
+      u.name,
+    ) ?? u.name.split("-")[0]!;
   const rosterLabelOfName = (name: string): string => {
-    const u = [
-      ...(friends as ICombatUnit[]),
-      ...(enemies as ICombatUnit[]),
-    ].find((x) => x.name === name);
-    if (!u) return name;
-    const map =
-      u.reaction === CombatUnitReaction.Friendly ? playerIdMap : enemyIdMap;
-    const n = map.get(u.name);
-    return n !== undefined
-      ? `${n}(${abbrevSpec(specToString(u.spec))})`
-      : u.name.split("-")[0]!;
+    const u = rosterUnits.find((x) => x.name === name);
+    return u ? rosterLabelOfUnit(u) : name;
   };
   const exposureInserts = formatHealerExposureEntries(
     healerExposures,
@@ -1113,17 +1117,8 @@ export function buildMatchContext(
       owner.id,
       // cc-dr F-RT1: the roster label of a cast target (`4(RShaman)`)
       (id) => {
-        const u = [
-          ...(friends as ICombatUnit[]),
-          ...(enemies as ICombatUnit[]),
-        ].find((x) => x.id === id);
-        if (!u) return id;
-        const map =
-          u.reaction === CombatUnitReaction.Friendly ? playerIdMap : enemyIdMap;
-        const n = map.get(u.name);
-        return n !== undefined
-          ? `${n}(${abbrevSpec(specToString(u.spec))})`
-          : u.name.split("-")[0]!;
+        const u = rosterUnits.find((x) => x.id === id);
+        return u ? rosterLabelOfUnit(u) : id;
       },
       rosterLabelOfName,
     ).map((entry) => ({
