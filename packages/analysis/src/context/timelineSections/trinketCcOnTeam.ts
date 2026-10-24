@@ -9,10 +9,11 @@
  * and is passed in. Output is pinned by the 605-file acceptanceCapture context
  * hash.
  */
-import { CombatUnitReaction, LogEvent } from "@gladlog/parser-compat";
+import { CombatUnitReaction } from "@gladlog/parser-compat";
 
-import { isDamageImmuneControl } from "../../analysis/candidates/massDispel";
+import { damageImmuneControlUpAt } from "../../analysis/candidates/massDispel";
 import { BACKLASH_AURA_CC_TYPE, backlashCcTag } from "../../data/backlashCc";
+import { ccFullDurationForCaster } from "../../utils/ccDuration";
 import {
   CC_FROM_OWN_TEAM_TAG,
   ccAvoidedCastTag,
@@ -397,20 +398,19 @@ export function emitTrinketCcOnTeamEntries(
     // the controls that landed on them; nothing when neither
     const holder = friends.find((f) => f.name === summary.playerName);
     for (const imm of summary.ccImmuneUncredited ?? []) {
-      let cycloneBy: string | undefined;
-      for (const a of holder?.auraEvents ?? []) {
-        if (a.timestamp > imm.missMs) break;
-        if (!isDamageImmuneControl(a.spellId)) continue;
-        const ev = a.logLine.event;
-        if (
-          ev === LogEvent.SPELL_AURA_APPLIED ||
-          ev === LogEvent.SPELL_AURA_REFRESH
-        )
-          cycloneBy = a.srcUnitId;
-        else if (ev === LogEvent.SPELL_AURA_REMOVED) cycloneBy = undefined;
-      }
+      // the [CC NOT LANDED] note's reading, its lost-REMOVED cap included
+      // (weekly review 2026-10-24: this copy had none, so a 0:10 Cyclone
+      // whose REMOVED was lost stood behind a 0:44 IMMUNE)
+      const cyclone =
+        holder &&
+        damageImmuneControlUpAt(holder, imm.missMs, (id, src) =>
+          ccFullDurationForCaster(
+            id,
+            [...friends, ...(enemies ?? [])].find((u) => u.id === src),
+          ),
+        );
       let cause = "";
-      if (cycloneBy !== undefined) cause = " (a Cyclone was on them)";
+      if (cyclone) cause = " (a Cyclone was on them)";
       else {
         const category = getDRCategory(imm.spellId);
         if (!category.startsWith("spell:") && category !== "Unknown") {

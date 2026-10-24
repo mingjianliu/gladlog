@@ -2096,6 +2096,11 @@ const INDEX: PredicateRow[] = [
     mod: massDispel,
   },
   {
+    file: `${A}/analysis/candidates/massDispel.ts`,
+    symbol: "damageImmuneControlUpAt",
+    mod: massDispel,
+  },
+  {
     file: `${A}/utils/killAttempts.ts`,
     symbol: "ownImmuneControlsOverBracket",
     mod: killAttempts,

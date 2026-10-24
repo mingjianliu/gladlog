@@ -18,7 +18,7 @@ import {
   LogEvent,
 } from "@gladlog/parser-compat";
 
-import { isDamageImmuneControl } from "../../analysis/candidates/massDispel";
+import { damageImmuneControlUpAt } from "../../analysis/candidates/massDispel";
 import { castAndEffectIds } from "../../data/castEffectAuras";
 import { getEnglishSpellName } from "../../data/spellEffectData";
 import { ccSpellIds } from "../../data/spellTags";
@@ -742,33 +742,16 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
     target: ICombatUnit,
     missMs: number,
   ): string | undefined {
-    const friendIds = new Set(friends.map((f) => f.id));
-    let by: string | undefined;
-    let onSince = 0;
-    let onId = "";
-    for (const a of target.auraEvents ?? []) {
-      if (a.timestamp > missMs) break;
-      if (!isDamageImmuneControl(a.spellId)) continue;
-      const ev = a.logLine.event;
-      if (
-        ev === LogEvent.SPELL_AURA_APPLIED ||
-        ev === LogEvent.SPELL_AURA_REFRESH
-      ) {
-        by = friendIds.has(a.srcUnitId) ? a.srcUnitId : undefined;
-        onSince = a.timestamp;
-        onId = a.spellId!;
-      } else if (ev === LogEvent.SPELL_AURA_REMOVED) by = undefined;
-    }
-    if (!by) return undefined;
-    // a Cyclone whose REMOVED the log lost is over at its full length (the
-    // control readers' cap, `ccFullDurationForCaster` — codex 60-POSTHOC-05a
-    // #1: a 0:10 Cyclone blamed for a 0:44 IMMUNE)
-    const full = ccFullDurationForCaster(
-      onId,
-      friends.find((f) => f.id === by),
+    // the shared reading, capped at the Cyclone's full length when its
+    // REMOVED was lost (`damageImmuneControlUpAt`)
+    const up = damageImmuneControlUpAt(target, missMs, (id, src) =>
+      ccFullDurationForCaster(
+        id,
+        friends.find((f) => f.id === src),
+      ),
     );
-    if (full !== undefined && missMs > onSince + full * 1000) return undefined;
-    const druid = friends.find((f) => f.id === by)!;
+    const druid = up && friends.find((f) => f.id === up.srcUnitId);
+    if (!druid) return undefined;
     return `${pid(druid.name)}'s Cyclone was on the target`;
   }
 
