@@ -128,6 +128,32 @@ describe("战报的驱散读者:窗口止于回合结束(与 prompt 同一个 ro
     expect(cards(threes)).toEqual([]);
   });
 
+  // weekly review 2026-10-24: with no card in either reading the case above
+  // pins nothing about the cut. Without the enemy priest's own shields
+  // (Power Word: Shield 17 / Void Shield 1253593 — what took the kill
+  // windows on 2026-10-21) the kill windows come back: read as 3v3 the match
+  // has cards past the injected death, read as the round none — the cut
+  // the cards share with the purge rows.
+  it("单排:去掉敌方牧师自己的盾后,3v3 读法在 70s 之后有卡片,回合读法一张也没有(截在回合结束)", () => {
+    const noOwnShields = (m: StoredMatch): StoredMatch => {
+      for (const u of Object.values(
+        m.units as unknown as Record<
+          string,
+          { auraEvents: Array<{ spellId: number }> }
+        >,
+      ))
+        u.auraEvents = u.auraEvents.filter(
+          (a) => a.spellId !== 17 && a.spellId !== 1253593,
+        );
+      return m;
+    };
+    const threesCards = cards(noOwnShields(roundEndFixture("3v3")));
+    expect(threesCards.length).toBeGreaterThan(0);
+    for (const c of threesCards)
+      expect(c.tS).toBeGreaterThanOrEqual(ROUND_END_DEATH_S);
+    expect(cards(noOwnShields(roundEndFixture(SOLO_SHUFFLE)))).toEqual([]);
+  });
+
   it("其他赛制不变:3v3 里的死亡不是回合结束,行与卡片就是只给 {startTime, endTime} 时的那些", () => {
     const rows = purgeRows(threes);
     expect(at(rows, 66.385, "Player2-Test")!.label).toContain("身上 20s");

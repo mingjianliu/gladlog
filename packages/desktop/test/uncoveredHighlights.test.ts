@@ -139,6 +139,31 @@ describe("deriveUncoveredHighlights —— 真实 fixture 集成", () => {
     expect(highlights.map((h) => h.range)).toEqual([{ fromS: 0, toS: 90 }]);
   });
 
+  // weekly review 2026-10-24: since the 2026-10-20 ruling this fixture's
+  // mistakes list has no timed anchor, so the case above no longer runs the
+  // dedup path on real data at all. One anchor placed by hand does: every
+  // window within ANCHOR_TOLERANCE_S of it leaves the highlight, the rest
+  // stay (the geometry itself is uncoveredHighlights.geometry.test.ts's).
+  it("去重(真实 fixture,手放锚点):锚点 ±容差内的滑窗退出高亮,其余保留", () => {
+    const durationS = (m.endTime - m.startTime) / 1000;
+    const anchor = 45;
+    const ranges = deriveUncoveredHighlights(m, durationS, [anchor]).map(
+      (h) => h.range,
+    );
+    for (const r of ranges)
+      expect(
+        r.toS <= anchor - ANCHOR_TOLERANCE_S ||
+          r.fromS >= anchor + ANCHOR_TOLERANCE_S,
+        `${r.fromS}-${r.toS} covers the anchor`,
+      ).toBe(true);
+    // the windows 20–40, 30–50, 40–60 and 50–70 are covered (45 within 5 s
+    // of each); 0–20 + 10–30 and 60–80 + 70–90 stay, merged
+    expect(ranges).toEqual([
+      { fromS: 60, toS: 90 },
+      { fromS: 0, toS: 30 },
+    ]);
+  });
+
   it("零亮点(零噪音):锚点每 10s 密布全场 → 每个滑窗 ±5s 容差内必有锚点,全丢", () => {
     const durationS = (m.endTime - m.startTime) / 1000;
     const denseAnchors = Array.from(
