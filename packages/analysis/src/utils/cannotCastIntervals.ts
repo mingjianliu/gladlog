@@ -961,32 +961,6 @@ export const isSilenceOnlyAura = (auraId: string): boolean =>
 export const isSilenceEffectAura = (auraId: string): boolean =>
   isSilenceOnlyAura(auraId) || getDRCategory(auraId) === "Silence";
 
-/**
- * "Could this unit press `spellId` at `tMs`, as far as auras go?" — the
- * cast-blocking aura (`castBlockingAuraIntervals`) that stops it at that
- * instant, or undefined when it was free.
- *
- *  - Hard CC stops everything.
- *  - A silence stops only a cast DB2 marks silenceable (`isSilenceableCast`).
- *    Kick, Pummel, Skull Bash, Rebuke, Disrupt, Counter Shot are not: on 605
- *    S2 files those were cast under a silence aura 31 times, the silenceable
- *    kicks (Counterspell, Wind Shear, Mind Freeze, Strangulate, Solar Beam,
- *    Spell Lock) twice in ~3,900 casts. 6062daf2 @32.7: a Feral Druid inside
- *    Garrote - Silence at cast start is still a kicker. Without `spellId`
- *    every cast-blocking aura counts.
- *  - The AURA half only, on purpose. `buildCannotCastIntervals` also carries
- *    school lockouts with no school on them, and an interrupt is rarely of
- *    the locked school: fa5e6c66's Frost-locked Mage (152.7–154.7) cast an
- *    Arcane Counterspell at 154.25. A kicker under a lockout is still a
- *    kicker.
- *
- * One predicate for "is this enemy's kick usable now": kick-eaten's
- * `kickersInRange` / `nearestKickerDistYd` (triage 2026-09-29 F-K5d) and the
- * `enemy interrupts UP` readers (res-readiness F-C5b). Ask it of the unit
- * that casts the kick — the pet for a pet kick (a Warlock commands Spell
- * Lock while stunned). `hostileIds` = the ids that may have applied the aura
- * (the other side's players and their summons, `enemySourceIds`).
- */
 /** How far past a unit's last aura event a casting lock it never closed is
  * left open for the interval builder to cap at the lock's official length. */
 const CASTING_LOCK_OPEN_END_MS = 10 * 60_000;
@@ -1065,6 +1039,32 @@ function castingLockAuraAt(
     : undefined;
 }
 
+/**
+ * "Could this unit press `spellId` at `tMs`, as far as auras go?" — the
+ * cast-blocking aura (`castBlockingAuraIntervals`) that stops it at that
+ * instant, or undefined when it was free.
+ *
+ *  - Hard CC stops everything.
+ *  - A silence stops only a cast DB2 marks silenceable (`isSilenceableCast`).
+ *    Kick, Pummel, Skull Bash, Rebuke, Disrupt, Counter Shot are not: on 605
+ *    S2 files those were cast under a silence aura 31 times, the silenceable
+ *    kicks (Counterspell, Wind Shear, Mind Freeze, Strangulate, Solar Beam,
+ *    Spell Lock) twice in ~3,900 casts. 6062daf2 @32.7: a Feral Druid inside
+ *    Garrote - Silence at cast start is still a kicker. Without `spellId`
+ *    every cast-blocking aura counts.
+ *  - The AURA half only, on purpose. `buildCannotCastIntervals` also carries
+ *    school lockouts with no school on them, and an interrupt is rarely of
+ *    the locked school: fa5e6c66's Frost-locked Mage (152.7–154.7) cast an
+ *    Arcane Counterspell at 154.25. A kicker under a lockout is still a
+ *    kicker.
+ *
+ * One predicate for "is this enemy's kick usable now": kick-eaten's
+ * `kickersInRange` / `nearestKickerDistYd` (triage 2026-09-29 F-K5d) and the
+ * `enemy interrupts UP` readers (res-readiness F-C5b). Ask it of the unit
+ * that casts the kick — the pet for a pet kick (a Warlock commands Spell
+ * Lock while stunned). `hostileIds` = the ids that may have applied the aura
+ * (the other side's players and their summons, `enemySourceIds`).
+ */
 export function castBlockingAuraAt(
   unit: ICombatUnit,
   hostileIds: Set<string>,

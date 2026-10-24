@@ -5198,7 +5198,8 @@ function buildCooldownEntry(
   // Stasis; GH #106. parser/src/l3/compose.ts clamps endTime, the events
   // stay).
   // fact2 (2026-10-20): a cooldown the round logs no cast row of, whose
-  // own effect the unit (or its pet) put on someone — the cast row is
+  // own effect the unit itself put on someone (ef24bfd: the unit only, not
+  // its pet — `effectEvidenceCastSeconds`) — the cast row is
   // missing, the press is not (95f031ca: Binding Shot's tether and stun on
   // three of our players from the hunter, no SPELL_CAST_SUCCESS 109248 in
   // the round, and the kit said `[UNUSED]`)

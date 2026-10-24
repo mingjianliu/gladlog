@@ -32,8 +32,10 @@
  * dispeller's 4 s damage window come from `reconstructDispelSummary`
  * (the same object the [DISPEL] context lines render from); cleanse
  * availability replays that summary's `cleanseWasOnCD` rule
- * (`canDefensiveCleanse` × `cleanseRecoveryOf`); HP facts are
- * `gridHpPct` at a whole rendered second; incoming CC with DR level is
+ * (`canDefensiveCleanse` × `cleanseRecoveryOf`); the target's HP is
+ * `gridHpPct` at the decision instant itself (`t0`'s own ms — CLAUDE.md's
+ * fourth signed exception, user ruling 2026-10-22, fact3 D45), every other
+ * HP fact at a whole rendered second; incoming CC with DR level is
  * `analyzeOutgoingCCChains` mirrored; hard-CC membership is
  * `HARD_CC_CATEGORIES`. The archive probe imports `backlashDispelDecisionPoints`
  * — never a second implementation.
@@ -144,7 +146,8 @@ export interface IBacklashDispelPoint {
   stacks: number;
   coRemoved: Array<{ spellName: string; priority: DispelPriority }>;
   coRemovedCritical: boolean;
-  /** `gridHpPct` of the target at the rendered second of t0. */
+  /** `gridHpPct` of the target at t0's own ms — the decision instant, not
+   * its second's tick (fourth signed exception, fact3 D45). */
   targetHpPct: number | null;
   /** Dispelled: the backlash aura landed on the dispeller within 3 s. */
   backlashLanded: boolean | null;

@@ -4859,23 +4859,6 @@ export function checkFormCooldownPressSpacing(lines: string[]): string[] {
 }
 
 /**
- * `[ENEMY DEF] … (…, end not logged)` — an aura whose end the log never
- * showed (user ruling D6, 2026-10-10: "prints `end not logged`, not the
- * official duration presented as OBSERVED"; 605 new-season files: 1,302 of
- * 7,541 lines with a duration had no logged end, 1,129 of them printed the
- * official maximum). What the rendered text can be held to:
- *  - the phrase stands in the duration's slot and closes the parenthesis
- *    (`ENEMY_DEF_END_NOT_LOGGED_SLOT_RE`, the producer's) — never beside a
- *    duration, never with an end note (`— removed early`, `— still up …`):
- *    an end the log never showed has no length and no cause;
- *  - the line carries no `| during it:` — what the attackers did "while it
- *    was up" cannot be measured on an aura with no end
- *    (`externalDamageForApplication` returns nothing for it);
- *  - a prompt that prints the phrase defines it in the `[ENEMY DEF]` legend.
- * Whether a given aura HAD a logged end is the log's to say, not the text's:
- * `test/enemyDefEndNotLogged.test.ts` (analysis) pins that side.
- */
-/**
  * HardFailure class (F15 / fact1215 C2, 2026-10-17): an `[ENEMY DEF]` line of
  * a school-limited immunity — Cloak of Shadows, Blessing of Protection,
  * Blessing of Spellwarding (`limitedImmunitySchoolMask`) — names the schools
@@ -4898,6 +4881,23 @@ export function checkSchoolLimitedImmuneLabel(lines: string[]): string[] {
   return failures;
 }
 
+/**
+ * `[ENEMY DEF] … (…, end not logged)` — an aura whose end the log never
+ * showed (user ruling D6, 2026-10-10: "prints `end not logged`, not the
+ * official duration presented as OBSERVED"; 605 new-season files: 1,302 of
+ * 7,541 lines with a duration had no logged end, 1,129 of them printed the
+ * official maximum). What the rendered text can be held to:
+ *  - the phrase stands in the duration's slot and closes the parenthesis
+ *    (`ENEMY_DEF_END_NOT_LOGGED_SLOT_RE`, the producer's) — never beside a
+ *    duration, never with an end note (`— removed early`, `— still up …`):
+ *    an end the log never showed has no length and no cause;
+ *  - the line carries no `| during it:` — what the attackers did "while it
+ *    was up" cannot be measured on an aura with no end
+ *    (`externalDamageForApplication` returns nothing for it);
+ *  - a prompt that prints the phrase defines it in the `[ENEMY DEF]` legend.
+ * Whether a given aura HAD a logged end is the log's to say, not the text's:
+ * `test/enemyDefEndNotLogged.test.ts` (analysis) pins that side.
+ */
 export function checkEnemyDefEndNotLogged(lines: string[]): string[] {
   const failures: string[] = [];
   let printed = false;
@@ -5513,11 +5513,6 @@ export function checkBurstLedgerSpellSpans(lines: string[]): string[] {
   return failures;
 }
 
-/** missed-sync-window (GH #13 resurrection, 2026-09-02): every rendered line
- * must quote exactly the bracket cell syncWindowPrior.ts holds, and the
- * quoted contrast must clear the same min-contrast door the producer used —
- * a line citing numbers that argue against its own accusation is a
- * hardFailure, not a style problem. */
 /**
  * `[CD PRIOR]`'s crossing reads ONE unit: "<unit> fell below that at m:ss
  * (N%)" is that unit's `[STATE]` reading at that second (the producer's
@@ -6480,6 +6475,11 @@ export function checkSyncWindowLockLength(lines: string[]): string[] {
   return failures;
 }
 
+/** missed-sync-window (GH #13 resurrection, 2026-09-02): every rendered line
+ * must quote exactly the bracket cell syncWindowPrior.ts holds, and the
+ * quoted contrast must clear the same min-contrast door the producer used —
+ * a line citing numbers that argue against its own accusation is a
+ * hardFailure, not a style problem. */
 export function checkSyncWindowRefConsistency(lines: string[]): string[] {
   const failures: string[] = [];
   for (let i = 0; i < lines.length; i++) {

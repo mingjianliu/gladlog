@@ -356,10 +356,12 @@ export interface IDRInfo {
  * candidateFindings.ts's instant-at-death check — that must not each redefine "Stun"). */
 export const STUN_DR_CATEGORY = SCM_CATEGORY_LABELS.stun;
 
-/** True iff this aura's DR category is stun (`getDRCategory`, the map a CC
- * instance's `drInfo.category` is read from — `isStunCcInstance` on an aura id).
- * An aura with no official DR category is not a stun here: the conservative
- * direction, as below. */
+/** True iff this aura is a stun: its DR category is stun (`getDRCategory`,
+ * the map a CC instance's `drInfo.category` is read from — `isStunCcInstance`
+ * on an aura id), or — with no DR family at all — its official mechanic is
+ * stunned (below, fact1215 C9: Infernal Awakening 22703). Despite the name it
+ * answers "is this a stun", not "is this in the stun DR family": a DR-chain
+ * reader wants `getDRCategory` itself. */
 export function isStunDrAura(auraSpellId: string): boolean {
   return (
     getDRCategory(auraSpellId) === STUN_DR_CATEGORY ||

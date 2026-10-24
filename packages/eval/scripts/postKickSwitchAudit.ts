@@ -232,8 +232,6 @@ export async function collect(limit: number): Promise<{
   };
 }
 
-/** 真实 prompt 前后对照:菜单行原文由 production 的 buildFindingsPrompt 产出,
- * 本脚本只按候选 id 把它抓出来 —— 绝不自己拼菜单字符串。 */
 /**
  * The switching cast to NAME for a "switched" instance: the one production
  * named (`switchSpellName`) first — it already folds a companion SUCCESS row
@@ -262,6 +260,8 @@ function switchTrigger<T extends { t: number; spellId: string; spellName: string
   );
 }
 
+/** 真实 prompt 前后对照:菜单行原文由 production 的 buildFindingsPrompt 产出,
+ * 本脚本只按候选 id 把它抓出来 —— 绝不自己拼菜单字符串。 */
 async function examples(limit: number, want: number): Promise<void> {
   await ensureAnalysisData();
   const rows = pickRows(loadIndex(DEFAULT_MATCH_DIR), { minDurationS: 60 }).slice(
