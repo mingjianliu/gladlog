@@ -1246,6 +1246,9 @@ export function burstWindowDecisionPoints(
     tMs: number;
     /** a self wall the log shows on the teammate `dest` */
     allyCopy?: true;
+    /** the one recipient whose copy this entry reads its end from (a
+     * talent-shared press split into its caster's and its ally's) */
+    copyOn?: string;
   }
   const friendlyCasts: FriendlyCast[] = [];
   for (const u of friendlies)
@@ -1272,6 +1275,7 @@ export function burstWindowDecisionPoints(
         // lost the credit for its own)
         dest: allyCopy ? u.id : c.destUnitId,
         tMs,
+        ...(allyCopy ? { copyOn: u.id } : {}),
       });
       if (allyCopy)
         friendlyCasts.push({
@@ -1281,6 +1285,7 @@ export function burstWindowDecisionPoints(
           dest: allyCopy.id,
           tMs,
           allyCopy: true,
+          copyOn: allyCopy.id,
         });
     }
   friendlyCasts.sort((a, b) => a.tMs - b.tMs);
@@ -1534,6 +1539,7 @@ export function burstWindowDecisionPoints(
                     .map((e) => (e.timestamp - start) / 1000),
                 ),
                 combat,
+                c.copyOn,
               )
             : null;
         const preOpenerStillUp =

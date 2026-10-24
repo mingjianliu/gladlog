@@ -4256,3 +4256,23 @@ keeps the strict-before rule. 605 files vs v450 (f9b → f10): no candidate
 added or removed; gates, scans and regression net unchanged; 226 press HPs
 change, all lower (median −1, 12 by ≥ 5 points: a hit in that millisecond),
 and 58 [YOU] [CD] lines gain an HP they had no sample for.
+
+v452 (2026-10-24, fact4 F17 — external review follow-ups 20-F17-05..11,
+the readers each unification had missed): the max-HP lag reading is not
+ruled out by a logged hit of the max's ratio on the max-change row, nor
+stopped by one in between (8e2dab45 r0 85.823 s 28.13 → 32.34 %, 0284fcd9
+r3 115.453 s 46.35 → 50.99 %); `cdChargesAvailableAt` / `cdChargeStateAt`
+read the recovery-rate clock (002653dc r0: Time Dilation 1 charge at 164 s,
+as [RES] said; death readiness had 0); the countdown's pulled-in triggers
+include the press's own ms (Stormkeeper); reflected DR reaches the
+expected-length walk (2742ff5d: Sleep Walk expected 3 s, not 6); Spirit of
+Redemption's lost-REMOVED cap is the priest's own (Afterlife 9 s); the
+[ENEMY DEF] press HP finds its press by cast or effect aura (9bf3a95f r3
+Blur 62 → 42 %); a re-cast channel starts at its REFRESH (ecfb3a7f 2:21
+`channel cut by CC after 0.6s`); `casterCouldNotPay` reaches the deep dive
+and the desktop death card; ready ∩ free reads every not-ready span; a
+talent-shared wall given to an ally stays its caster's wall (burst
+response, `crisisUnitSaved`), each half reading its own copy's end. 605
+files vs v451 (f10 → f11): no candidate added or removed; gates, scans and
+regression net unchanged; [RES] Stormkeeper ranges, `ghost` ticks, [ENEMY
+DEF] HPs and DEATHS WITH MISSED OPTIONS Time Dilation lines move as above.

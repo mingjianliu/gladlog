@@ -216,14 +216,19 @@ export function observedEffectEndSeconds(
   castS: number,
   nextSameCastS: number,
   combat: AtomicArenaCombat,
+  /** read only this recipient's copy (a press that put one on its caster
+   * and one on an ally answers for each with its own end — codex
+   * 20-F17-11 #1) */
+  onlyDestId?: string,
 ): number | null {
   const ids = castAndEffectIds(castSpellId);
   const mine = auraIndexOf(combat).filter(
-    ({ iv }) =>
+    ({ iv, destId }) =>
       ids.has(iv.spellId) &&
       iv.srcUnitName === caster.name &&
       !iv.inferredStart &&
-      iv.fromS < nextSameCastS,
+      iv.fromS < nextSameCastS &&
+      (onlyDestId === undefined || destId === onlyDestId),
   );
   const castMs = combat.startTime + castS * 1000;
   const auraRowsOf = (destId: string, orNoSource = false) =>
