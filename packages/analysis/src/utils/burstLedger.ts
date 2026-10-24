@@ -19,6 +19,7 @@ import {
 import { IEnemyCDCast, reconstructEnemyCDTimeline } from "./enemyCDs";
 import {
   FULL_IMMUNITY_IDS,
+  holderFirstOwnActionAfterMs,
   MITIGATION_AURA_MIN_PCT,
   SAVE_AURA_END_UNSEEN_IDS,
 } from "./enemyDefensives";
@@ -445,15 +446,16 @@ export function analyzeBurstLedger(
         // the time its holder deals damage — Greater Invisibility 110960
         // logs no REMOVED, the builder closed it at 20 s, and the mage hit
         // at 0:25.3 before a burst at 0:28.4 read "active ON THE TARGET
-        // 15.1s"
-        const endMs = SAVE_AURA_END_UNSEEN_IDS.has(iv.spellId)
-          ? Math.min(
-              iv.endMs,
-              ...(target.damageOut ?? [])
-                .map((d) => d.logLine.timestamp)
-                .filter((t) => t > iv.startMs && t < iv.endMs),
-            )
-          : iv.endMs;
+        // 15.1s". A logged end stands; the holder's own action is the one
+        // `untargetableEndS` reads (its pet's hits and its DoT ticks are
+        // not — a Water Elemental's swing cut a Greater Invisibility short)
+        const endMs =
+          iv.inferredEnd && SAVE_AURA_END_UNSEEN_IDS.has(iv.spellId)
+            ? Math.min(
+                iv.endMs,
+                holderFirstOwnActionAfterMs(target, iv.startMs),
+              )
+            : iv.endMs;
         const overlapMs =
           Math.min(endMs, toMs) - Math.max(iv.startMs, fromMs);
         if (overlapMs / 1000 < MIN_DEFENSIVE_OVERLAP_S) continue;

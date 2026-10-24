@@ -294,23 +294,45 @@ export const KW_UNTARGETABLE_AURA_IDS: ReadonlySet<string> = new Set([
  * Mass Invisibility).
  */
 export function untargetableEndS(
-  holder: Pick<ICombatUnit, "spellCastEvents" | "damageOut">,
+  holder: Pick<ICombatUnit, "id" | "spellCastEvents" | "damageOut">,
   iv: { fromS: number; toS: number; inferredEnd?: boolean },
   matchStartMs: number,
 ): number {
   if (!iv.inferredEnd) return iv.toS;
+  const first = holderFirstOwnActionAfterMs(
+    holder,
+    matchStartMs + iv.fromS * 1000,
+  );
+  return Math.min(iv.toS, (first - matchStartMs) / 1000);
+}
+
+/**
+ * The holder's first own action strictly after `afterMs` (log ms; Infinity
+ * when none): a successful press, or a direct hit the holder itself dealt.
+ * What ends an unseen-end invisibility / stealth (`untargetableEndS`, the
+ * burst ledger's `SAVE_AURA_END_UNSEEN_IDS` walls). Not an action of the
+ * holder: a pet's or guardian's hit (parser-compat folds those into the
+ * owner's `damageOut` — a Frost Mage's Water Elemental keeps attacking
+ * through Greater Invisibility) and a periodic tick (DoTs keep ticking
+ * through it, D6's 175 periodic ticks).
+ */
+export function holderFirstOwnActionAfterMs(
+  holder: Pick<ICombatUnit, "id" | "spellCastEvents" | "damageOut">,
+  afterMs: number,
+): number {
   let first = Infinity;
-  const after = (ms: number) => (ms - matchStartMs) / 1000;
   for (const c of holder.spellCastEvents ?? [])
     if (c.logLine.event === LogEvent.SPELL_CAST_SUCCESS) {
-      const t = after(c.logLine.timestamp);
-      if (t > iv.fromS && t < first) first = t;
+      const t = c.logLine.timestamp;
+      if (t > afterMs && t < first) first = t;
     }
   for (const d of holder.damageOut ?? []) {
-    const t = after(d.logLine.timestamp);
-    if (t > iv.fromS && t < first) first = t;
+    if (d.srcUnitId !== holder.id) continue;
+    if (d.logLine.event === LogEvent.SPELL_PERIODIC_DAMAGE) continue;
+    const t = d.logLine.timestamp;
+    if (t > afterMs && t < first) first = t;
   }
-  return Math.min(iv.toS, first);
+  return first;
 }
 
 /** Enemy-def F-E5 / F-E6 (user ruling A25, 2026-09-30, narrowed by D8,

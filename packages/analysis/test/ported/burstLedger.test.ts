@@ -179,10 +179,60 @@ describe("burstLedger — burst grouping and audit", () => {
       name: "Mage",
       info,
       auraEvents: [makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, "110960", MATCH_START + 5_000, "e1", "e1", "BUFF")],
-      damageOut: [dmgOut(MATCH_START + 9_000, -20_000, "p1")],
+      // the mage's own hit (the helper stamps `p1` as the source)
+      damageOut: [{ ...dmgOut(MATCH_START + 9_000, -20_000, "p1"), srcUnitId: "e1" }],
     } as any);
     const entries = analyzeBurstLedger(player, [], [e1], makeCombat());
     expect(entries[0].dominantTarget?.defensivesHit ?? []).toEqual([]);
+  });
+
+  // weekly review 2026-10-24: the holder's pet hit and DoT tick ended the
+  // unseen-end invisibility too (parser-compat folds pet damage into the
+  // owner's damageOut), and a logged REMOVED was cut as well
+  describe("an unseen-end invisibility ends at the holder's own action only", () => {
+    const burster = () =>
+      makeUnit("p1", {
+        name: "Ret",
+        spec: CombatUnitSpec.Paladin_Retribution,
+        info,
+        spellCastEvents: [
+          makeSpellCastEvent("31884", MATCH_START + 10_000, "p1", "Self", "p1", "Ret", 0, "Avenging Wrath"),
+        ],
+        damageOut: [dmgOut(MATCH_START + 12_000, -50_000, "e1")],
+      } as any);
+    const mage = (damageOut: any[], extraAuras: any[] = []) =>
+      makeUnit("e1", {
+        name: "Mage",
+        info,
+        auraEvents: [
+          makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, "110960", MATCH_START + 5_000, "e1", "e1", "BUFF"),
+          ...extraAuras,
+        ],
+        damageOut,
+      } as any);
+    const from = (src: string, at: number, event = LogEvent.SPELL_DAMAGE) => {
+      const d = dmgOut(MATCH_START + at, -20_000, "p1");
+      return { ...d, srcUnitId: src, logLine: { ...d.logLine, event } };
+    };
+    const walls = (e1: any) =>
+      (analyzeBurstLedger(burster(), [], [e1], makeCombat())[0].dominantTarget
+        ?.defensivesHit ?? []).map((d) => d.spellId);
+
+    it("its Water Elemental's hit before the burst does not end it", () => {
+      expect(walls(mage([from("pet-1", 9_000)]))).toEqual(["110960"]);
+    });
+    it("its DoT tick before the burst does not end it", () => {
+      expect(
+        walls(mage([from("e1", 9_000, LogEvent.SPELL_PERIODIC_DAMAGE)])),
+      ).toEqual(["110960"]);
+    });
+    it("its own direct hit before the burst still ends it", () => {
+      expect(walls(mage([from("e1", 9_000)]))).toEqual([]);
+    });
+    it("a logged REMOVED stands — the holder's hit inside does not cut it", () => {
+      const removed = makeAuraEvent(LogEvent.SPELL_AURA_REMOVED, "110960", MATCH_START + 15_000, "e1", "e1", "BUFF");
+      expect(walls(mage([from("e1", 9_000)], [removed]))).toEqual(["110960"]);
+    });
   });
 
   it("flags immunity/defensive auras active on the dominant target (D1-B3)", () => {

@@ -65,6 +65,8 @@ interface IAuraInterval {
   srcUnitName: string;
   startMs: number;
   endMs: number;
+  /** The log showed no end: the builder closed it at its official length. */
+  inferredEnd: boolean;
 }
 
 /**
@@ -92,6 +94,7 @@ export function buildFilteredAuraIntervals(
       srcUnitName: iv.srcUnitName,
       startMs: combat.startTime + iv.fromS * 1000,
       endMs: combat.startTime + iv.toS * 1000,
+      inferredEnd: iv.inferredEnd,
     }))
     .sort((x, y) => x.startMs - y.startMs);
 }

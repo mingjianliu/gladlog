@@ -1824,6 +1824,11 @@ const INDEX: PredicateRow[] = [
     mod: enemyDefensives,
   },
   {
+    file: `${A}/utils/enemyDefensives.ts`,
+    symbol: "holderFirstOwnActionAfterMs",
+    mod: enemyDefensives,
+  },
+  {
     file: `${E}/quality/promptQualityCheck.ts`,
     symbol: "checkKillAttemptUpSinceEndLogged",
     mod: promptQualityCheck,
