@@ -4323,3 +4323,19 @@ response, `crisisUnitSaved`), each half reading its own copy's end. 605
 files vs v451 (f10 → f11): no candidate added or removed; gates, scans and
 regression net unchanged; [RES] Stormkeeper ranges, `ghost` ticks, [ENEMY
 DEF] HPs and DEATHS WITH MISSED OPTIONS Time Dilation lines move as above.
+
+v453 (2026-10-24, weekly review of the 2026-10-17…10-24 commits): an
+unseen-end invisibility / stealth (`SAVE_AURA_END_UNSEEN_IDS`: Greater /
+Mass Invisibility, Vanish, Burrow) is over at its holder's own successful
+press or own direct hit (`holderFirstOwnActionAfterMs`) — no longer at a
+pet's hit (parser-compat folds those into the owner's `damageOut`) or a
+DoT tick — for the kill windows / CC samplers (`untargetableEndS`) and the
+burst ledger's "Target had a major defensive up", which also stops cutting
+an aura whose REMOVED the log showed. The uncredited `[CC AVOIDED?] …
+logged IMMUNE (a Cyclone was on them)` reads the `[CC NOT LANDED]` note's
+Cyclone walk (`damageImmuneControlUpAt`), lost-REMOVED cap included.
+`ccAvoidanceRate` drops the facts-only avoidances (not in the prompt). No
+605-file numbers: the session that made it had no corpus — unit tests
+only (burstLedger 3 → 0 failing, untargetableEnd 2 → 0,
+matchTimeline.ccImmuneCyclone 1 → 0); the kill-window reference tables
+were not regenerated.

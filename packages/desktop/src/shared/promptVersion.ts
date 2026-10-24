@@ -484,5 +484,14 @@
  *  desktop card; a talent-shared wall given to an ally stays its caster's
  *  wall; ready ∩ free reads every not-ready span; a max-HP lag is not ruled
  *  out by a logged hit of the same ratio.
+ *
+ * v453 (2026-10-24, weekly review of the 10-17…10-24 commits): an unseen-end
+ *  invisibility / stealth (Greater / Mass Invisibility, Vanish, Burrow)
+ *  ends at its holder's own press or direct hit — not its pet's hit or a
+ *  DoT tick — and in the burst ledger only when the log showed no end
+ *  (`holderFirstOwnActionAfterMs`); the uncredited `[CC AVOIDED?] …
+ *  logged IMMUNE (a Cyclone was on them)` reads the [CC NOT LANDED] note's
+ *  capped walk (`damageImmuneControlUpAt`). No corpus in the session that
+ *  made it: no 605-file numbers, unit tests only.
  */
-export const PROMPT_VERSION = 452;
+export const PROMPT_VERSION = 453;
