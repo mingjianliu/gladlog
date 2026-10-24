@@ -28,6 +28,7 @@ import {
   CRISIS_PROTECTIVE_ANSWER_IDS,
 } from "../analysis/crisisDecisionPoints";
 import { DOT_SPELL_IDS } from "../context/matchTimelineSections";
+import { REFLECT_OWN_DAMAGE_IDS } from "../context/spellOutcomeLines";
 import {
   DEFERRED_DAMAGE_SPELL_IDS,
   ENDS_WITH_ITS_CHARGE_IDS,
@@ -50,7 +51,7 @@ import {
   UNRELENTING_ONSLAUGHT_TALENT_ID,
   USABLE_IN_BLADESTORM_WITH_TALENT,
 } from "../utils/castingLocks";
-import { COPY_CAST_IDS } from "../utils/castPress";
+import { COMPANION_CAST_ROWS, COPY_CAST_IDS } from "../utils/castPress";
 import { DISPLACEMENT_EVIDENCE_IDS } from "../utils/castStopEvidence";
 import {
   BREAKABLE_CC_SPELL_IDS,
@@ -62,6 +63,7 @@ import {
   MAGIC_ONLY_IMMUNITY_IDS,
   PHYSICAL_CC_IDS,
   PRE_TELEPORT_POSITION_SPELL_IDS,
+  REFLECT_ONLY_AVOIDANCE_IDS,
   REPOSITIONING_SPELL_IDS,
   TARGET_BOUND_MOBILITY_IDS,
   TARGETED_CC_DODGE_SPELLS,
@@ -503,6 +505,11 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
     () => [
       ...Object.keys(TOOLTIP_PER_EVENT_DURATIONS),
       ...Object.values(TOOLTIP_PER_EVENT_DURATIONS).map((p) => p.talentSpellId),
+      // the casts that extend it (`SHAMAN_CAST_TIME_SPELLS`, weekly review
+      // 2026-10-24: hand-kept, decides Spiritwalker's Momentum's length)
+      ...Object.values(TOOLTIP_PER_EVENT_DURATIONS).flatMap((p) => [
+        ...p.qualifyingSpellIds,
+      ]),
     ],
   ),
   t("RACIAL_ABILITIES", "data/racialAbilities.ts", "cast", () =>
@@ -813,6 +820,17 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   t("CC_AVOIDANCE_FACT_ONLY_IDS", "utils/ccTrinketAnalysis.ts", "aura", () =>
     set(CC_AVOIDANCE_FACT_ONLY_IDS),
   ),
+  // weekly review 2026-10-24: three hand tables that had not registered
+  t("REFLECT_ONLY_AVOIDANCE_IDS", "utils/ccTrinketAnalysis.ts", "aura", () =>
+    set(REFLECT_ONLY_AVOIDANCE_IDS),
+  ),
+  t("REFLECT_OWN_DAMAGE_IDS", "context/spellOutcomeLines.ts", "cast", () =>
+    set(REFLECT_OWN_DAMAGE_IDS),
+  ),
+  t("COMPANION_CAST_ROWS", "utils/castPress.ts", "cast", () => [
+    ...COMPANION_CAST_ROWS.keys(),
+    ...COMPANION_CAST_ROWS.values(),
+  ]),
   t("DRUID_FORM_BUFFS", "utils/ccTrinketAnalysis.ts", "aura", () =>
     set(DRUID_FORM_BUFFS.keys()),
   ),
@@ -1078,6 +1096,27 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
         ...(r.triggerInterruptIds ?? []),
         ...(r.triggerOwnAuraEndIds ?? []),
         ...(r.triggerSelfAuraAppliedIds ?? []),
+        // weekly review 2026-10-24: the id fields 5dcd31c added — a
+        // renumbered Sudden Death aura silently dropped Unrelenting
+        // Onslaught's reductions with no scan seeing it
+        ...(r.triggerAuraConsumed?.auraIds ?? []),
+        ...(r.triggerAuraConsumed?.byCastIds ?? []),
+        ...(r.triggerAuraConsumed?.perStackOfAuraId
+          ? [r.triggerAuraConsumed.perStackOfAuraId]
+          : []),
+        ...(r.triggerPowerSpend?.exclude?.castIds ?? []),
+        ...(r.triggerPowerSpend?.costReductions ?? []).flatMap((c) => [
+          ...c.castIds,
+          ...(c.whileAuraId ? [c.whileAuraId] : []),
+          ...(c.talentId ? [c.talentId] : []),
+        ]),
+        ...(r.triggerHostileTaken?.notWhileSelfAuraId
+          ? [r.triggerHostileTaken.notWhileSelfAuraId]
+          : []),
+        ...(r.creditBonus?.whileSelfAura
+          ? [r.creditBonus.whileSelfAura.auraId]
+          : []),
+        ...(r.creditBonus?.perRank ? [r.creditBonus.perRank.talentId] : []),
       ]),
     ],
   ),
