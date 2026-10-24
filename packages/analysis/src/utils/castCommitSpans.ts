@@ -5,6 +5,7 @@ import { OFF_GCD_SPELL_IDS } from "../data/offGcdGenerated";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import { dropAuraRebroadcasts, supersededAuraBreaks } from "./auraIntervals";
 import { buffFullDurationForCaster } from "./buffDuration";
+import { AURA_BEFORE_CAST_ROW_MAX_MS } from "./castRowLag";
 
 /**
  * castCommitSpans.ts — the stretches a unit spent committed to a cast that
@@ -112,9 +113,12 @@ export function empowerSpans(unit: EmpowerSpanUnit): IEmpowerSpan[] | null {
   return out;
 }
 
-/** How far from a channel's SPELL_CAST_SUCCESS its own aura may start. The
- * two share a server tick; the aura line is sometimes written 1 ms first. */
-export const CHANNEL_AURA_LEAD_MS = 1;
+/** How far from a channel's SPELL_CAST_SUCCESS its own aura may start: the
+ * aura up to the shared measured aura-before-cast-row lag ahead of it
+ * (`AURA_BEFORE_CAST_ROW_MAX_MS`; the public wowarenalogs testlogs: 30 of 77
+ * channel auras 2–13 ms ahead of their success, which the old 1 ms lead
+ * left unpaired), up to 100 ms after it. */
+export const CHANNEL_AURA_LEAD_MS = AURA_BEFORE_CAST_ROW_MAX_MS;
 export const CHANNEL_AURA_LAG_MS = 100;
 
 export interface IChannelSpan {
@@ -122,6 +126,13 @@ export interface IChannelSpan {
   spellName: string;
   startMs: number;
   endMs: number;
+  /** the SPELL_CAST_SUCCESS this span is the channel of */
+  castMs: number;
+  /** what ended it: its aura's REMOVED / BROKEN, a re-cast of the spell
+   * that took the channel over (its own SUCCESS + the aura's REFRESH), or —
+   * for a channel with no aura of its own — a kick or its last tick
+   * (`inferred`) */
+  endedBy: "removed" | "broken" | "recast" | "inferred";
 }
 
 /**
@@ -129,7 +140,12 @@ export interface IChannelSpan {
  * officially channelled spell (`CHANNELED_SPELL_IDS`, DB2 "Is Channelled")
  * paired with the caster's own same-id aura starting within
  * [−CHANNEL_AURA_LEAD_MS, +CHANNEL_AURA_LAG_MS] of it; the span runs from the
- * success to that aura's removal.
+ * earlier of the two to that aura's removal. One span per cast: a re-cast
+ * mid-channel restarts it with a REFRESH of the aura and its own SUCCESS
+ * (codex 20-F17-09 #2, ecfb3a7f 141.287 s), which ends the first span
+ * (`endedBy: "recast"`) and opens the re-cast's. The one reading of "which
+ * channel, from when to when" — missed-cleanse's busy spans, kick-audit's
+ * stopped channels and the gap filler's `[channel cut by CC after Ns]`.
  *
  * A LOWER BOUND by construction: a channel that puts no same-id aura on its
  * caster (the aura sits on the target, or under another id) has no logged
@@ -145,7 +161,10 @@ export function channelSpans(
   );
   if (casts.length === 0) return [];
   const out: IChannelSpan[] = [];
-  const open = new Map<string, number>();
+  const open = new Map<
+    string,
+    { from: number; cast: (typeof casts)[number] }
+  >();
   // Re-broadcast REMOVED / APPLIED pairs (a Dracthyr visage swap mid-channel)
   // are one continuous aura, not the channel's end — the filter every aura
   // consumer goes through.
@@ -160,34 +179,54 @@ export function channelSpans(
         CHANNELED_SPELL_IDS.has(a.spellId),
     )
     .sort((a, b) => a.timestamp - b.timestamp);
+  const castOf = (spellId: string, auraMs: number) =>
+    casts.find(
+      (c) =>
+        c.spellId === spellId &&
+        auraMs - c.timestamp >= -CHANNEL_AURA_LEAD_MS &&
+        auraMs - c.timestamp <= CHANNEL_AURA_LAG_MS,
+    );
+  const close = (
+    spellId: string,
+    endMs: number,
+    endedBy: IChannelSpan["endedBy"],
+  ) => {
+    const o = open.get(spellId);
+    if (!o) return;
+    open.delete(spellId);
+    out.push({
+      spellId,
+      spellName: o.cast.spellName,
+      startMs: Math.min(o.cast.timestamp, o.from),
+      endMs,
+      castMs: o.cast.timestamp,
+      endedBy,
+    });
+  };
   for (const a of auras) {
     const ev = a.logLine.event;
-    if (ev === LogEvent.SPELL_AURA_APPLIED) {
-      open.set(a.spellId, a.timestamp);
+    if (
+      ev === LogEvent.SPELL_AURA_APPLIED ||
+      ev === LogEvent.SPELL_AURA_REFRESH
+    ) {
+      const cast = castOf(a.spellId, a.timestamp);
+      // a REFRESH no cast started is the running channel's own row
+      if (!cast) {
+        if (ev === LogEvent.SPELL_AURA_APPLIED) open.delete(a.spellId);
+        continue;
+      }
+      if (open.get(a.spellId)?.cast === cast) continue;
+      close(a.spellId, a.timestamp, "recast");
+      open.set(a.spellId, { from: a.timestamp, cast });
       continue;
     }
-    if (
-      ev !== LogEvent.SPELL_AURA_REMOVED &&
-      ev !== LogEvent.SPELL_AURA_BROKEN &&
-      ev !== LogEvent.SPELL_AURA_BROKEN_SPELL
+    if (ev === LogEvent.SPELL_AURA_REMOVED)
+      close(a.spellId, a.timestamp, "removed");
+    else if (
+      ev === LogEvent.SPELL_AURA_BROKEN ||
+      ev === LogEvent.SPELL_AURA_BROKEN_SPELL
     )
-      continue;
-    const from = open.get(a.spellId);
-    if (from === undefined) continue;
-    open.delete(a.spellId);
-    const cast = casts.find(
-      (c) =>
-        c.spellId === a.spellId &&
-        from - c.timestamp >= -CHANNEL_AURA_LEAD_MS &&
-        from - c.timestamp <= CHANNEL_AURA_LAG_MS,
-    );
-    if (!cast) continue;
-    out.push({
-      spellId: a.spellId,
-      spellName: cast.spellName,
-      startMs: Math.min(cast.timestamp, from),
-      endMs: a.timestamp,
-    });
+      close(a.spellId, a.timestamp, "broken");
   }
   return out;
 }
@@ -304,6 +343,8 @@ export function tickEndedChannelSpans(
       spellName: c.spellName,
       startMs: c.timestamp,
       endMs,
+      castMs: c.timestamp,
+      endedBy: "inferred",
     });
   }
   return out;

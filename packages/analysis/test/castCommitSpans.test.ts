@@ -102,7 +102,12 @@ describe("empowerSpans", () => {
   });
 
   it("a hold cut and re-pressed on the same millisecond: the INTERRUPT closes the first hold only, the re-press keeps its END", () => {
-    const at = (spellId: string, ms: number, lineIndex: number, level?: number) => ({
+    const at = (
+      spellId: string,
+      ms: number,
+      lineIndex: number,
+      level?: number,
+    ) => ({
       ...emp(spellId, ms, level),
       logLine: { lineIndex },
     });
@@ -224,6 +229,57 @@ describe("channelSpans", () => {
     ]);
   });
 
+  // predicate-index 2026-10-01 (two readers of a channel's start / end),
+  // closed 2026-10-24: one span per cast, its end kind, the measured lead
+  it("an aura written up to the aura-before-cast lag ahead of the success pairs (the public testlogs: 30 of 77 were 2–13 ms ahead)", () => {
+    const spans = channelSpans(
+      evoker({
+        casts: [{ spellId: DISINTEGRATE, ms: 61_971 }],
+        auras: [
+          selfAura(LogEvent.SPELL_AURA_APPLIED, DISINTEGRATE, 61_958),
+          selfAura(LogEvent.SPELL_AURA_REMOVED, DISINTEGRATE, 63_797),
+        ],
+      }),
+    );
+    expect(spans.map((s) => [s.startMs - T0, s.endMs - T0, s.endedBy])).toEqual(
+      [[61_958, 63_797, "removed"]],
+    );
+  });
+  it("a re-cast mid-channel (its SUCCESS + the aura's REFRESH) ends the first span and opens its own", () => {
+    const spans = channelSpans(
+      evoker({
+        casts: [
+          { spellId: DISINTEGRATE, ms: 10_000 },
+          { spellId: DISINTEGRATE, ms: 11_400 },
+        ],
+        auras: [
+          selfAura(LogEvent.SPELL_AURA_APPLIED, DISINTEGRATE, 10_000),
+          selfAura(LogEvent.SPELL_AURA_REFRESH, DISINTEGRATE, 11_400),
+          selfAura(LogEvent.SPELL_AURA_REMOVED, DISINTEGRATE, 12_009),
+        ],
+      }),
+    );
+    expect(spans.map((s) => [s.castMs - T0, s.endMs - T0, s.endedBy])).toEqual([
+      [10_000, 11_400, "recast"],
+      [11_400, 12_009, "removed"],
+    ]);
+  });
+  it("a REFRESH no cast started is the running channel's own row", () => {
+    const spans = channelSpans(
+      evoker({
+        casts: [{ spellId: DISINTEGRATE, ms: 10_000 }],
+        auras: [
+          selfAura(LogEvent.SPELL_AURA_APPLIED, DISINTEGRATE, 10_000),
+          selfAura(LogEvent.SPELL_AURA_REFRESH, DISINTEGRATE, 11_000),
+          selfAura(LogEvent.SPELL_AURA_REMOVED, DISINTEGRATE, 13_000),
+        ],
+      }),
+    );
+    expect(spans.map((s) => [s.endMs - T0, s.endedBy])).toEqual([
+      [13_000, "removed"],
+    ]);
+  });
+
   it("an instant self-buff outside the channelled list is ignored", () => {
     const spans = channelSpans(
       evoker({
@@ -263,12 +319,7 @@ describe("occupancyWithin counts empowered holds and channels", () => {
     });
 
   it("539fef93's window: 1.477 s of bars + 0.547 + 0.548 of breaths + 1.079 of Disintegrate (clipped) = 3.651 s", () => {
-    const occ = occupancyWithin(
-      owner(),
-      new Set(),
-      T0 + 47_052,
-      T0 + 63_050,
-    )!;
+    const occ = occupancyWithin(owner(), new Set(), T0 + 47_052, T0 + 63_050)!;
     expect(occ.occupiedMs).toBe(736 + 741 + 547 + 548 + 1_079);
     // English names (F-C17), whatever the log's locale wrote.
     expect(occ.spellNames).toEqual([
@@ -283,12 +334,7 @@ describe("occupancyWithin counts empowered holds and channels", () => {
   });
 
   it("a hold already running when the window opens is a pre-commitment", () => {
-    const occ = occupancyWithin(
-      owner(),
-      new Set(),
-      T0 + 50_000,
-      T0 + 51_000,
-    )!;
+    const occ = occupancyWithin(owner(), new Set(), T0 + 50_000, T0 + 51_000)!;
     expect(occ.occupiedMs).toBe(386);
     expect(occ.startedBeforeWindow).toBe(true);
   });
@@ -300,8 +346,7 @@ describe("occupancyWithin counts empowered holds and channels", () => {
       casts: [{ spellId: DREAM_BREATH, ms: 34_103 }],
     });
     expect(
-      occupancyWithin(u, new Set(), T0 + 30_000, T0 + 40_000)!
-        .occupiedMs,
+      occupancyWithin(u, new Set(), T0 + 30_000, T0 + 40_000)!.occupiedMs,
     ).toBe(417);
   });
 
@@ -310,9 +355,9 @@ describe("occupancyWithin counts empowered holds and channels", () => {
       starts: [emp(FIRE_BREATH, 1_000)],
       ends: [emp(FIRE_BREATH, 1_500, 1)],
     });
-    expect(
-      occupancyWithin(u, new Set(), T0, T0 + 10_000)!.occupiedMs,
-    ).toBe(500);
+    expect(occupancyWithin(u, new Set(), T0, T0 + 10_000)!.occupiedMs).toBe(
+      500,
+    );
   });
 
   it("an enemy CC ends the commitment: a hold is cut where the cannot-cast interval starts", () => {
@@ -337,12 +382,11 @@ describe("occupancyWithin counts empowered holds and channels", () => {
         ),
       ],
     });
+    expect(occupancyWithin(u, new Set(), T0, T0 + 10_000)!.occupiedMs).toBe(
+      2_000,
+    );
     expect(
-      occupancyWithin(u, new Set(), T0, T0 + 10_000)!.occupiedMs,
-    ).toBe(2_000);
-    expect(
-      occupancyWithin(u, new Set(["enemy-1"]), T0, T0 + 10_000)!
-        .occupiedMs,
+      occupancyWithin(u, new Set(["enemy-1"]), T0, T0 + 10_000)!.occupiedMs,
     ).toBe(800);
   });
 
@@ -426,8 +470,7 @@ describe("occupancyWithin counts empowered holds and channels", () => {
       ends: [emp(DREAM_BREATH, 50_386, 1)],
     });
     expect(
-      occupancyWithin(u, new Set(), T0 + 47_052, T0 + 63_050)!
-        .occupiedMs,
+      occupancyWithin(u, new Set(), T0 + 47_052, T0 + 63_050)!.occupiedMs,
     ).toBe(736);
   });
 });

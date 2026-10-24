@@ -119,6 +119,8 @@ describe("R9 — a channel with no aura on its caster", () => {
         spellName: "Arcane Missiles",
         startMs: T0,
         endMs: T0 + 1900,
+        castMs: T0,
+        endedBy: "inferred",
       },
     ]);
   });

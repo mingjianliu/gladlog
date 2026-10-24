@@ -411,6 +411,8 @@ export function analyzeKickAudit(
       );
     return channelSpans(enemy)
       .filter((ch) => {
+        // a re-cast that took the channel over did not stop it
+        if (ch.endedBy === "recast") return false;
         if (ch.endMs > kickMs) return false;
         if (kickMs - ch.endMs > STOPPED_JUST_BEFORE_S * 1000) return false;
         const fullS = buffFullDurationForCaster(ch.spellId, enemy, ch.startMs);

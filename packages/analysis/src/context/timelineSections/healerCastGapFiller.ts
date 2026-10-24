@@ -12,7 +12,6 @@
 import { CombatUnitType, getUnitType, LogEvent } from "@gladlog/parser-compat";
 
 import { fmtFactNum } from "../../analysis/factFormat";
-import { CHANNELED_SPELL_IDS } from "../../data/channeledGenerated";
 import {
   effectiveCooldownSeconds,
   getEnglishSpellName,
@@ -23,7 +22,7 @@ import {
   TIMELINE_LINE_FLAGS,
 } from "../../data/timelineLineFlags";
 import { allyCopyRecipient } from "../../utils/allyCopyWall";
-import { dropAuraRebroadcasts } from "../../utils/auraIntervals";
+import { channelSpans } from "../../utils/castCommitSpans";
 import { isControlCast } from "../../utils/castMissRows";
 import {
   COPY_CAST_IDS,
@@ -192,54 +191,23 @@ export function emitHealerCastGapFillerEntries(
       ),
   );
 
-  /** Seconds a channel ran before an owner CC cut it, or null (F-O14). */
-  const CHANNEL_AURA_AT_CAST_MS = 250;
-  // Re-broadcast REMOVED/APPLIED pairs dropped first (the one predicate
-  // every aura consumer filters through): a visage swap mid-channel must not
-  // read as the channel's end (agy review 2026-10-01).
-  const ownerAuras = dropAuraRebroadcasts(owner.auraEvents ?? []);
+  /** Seconds a channel ran before an owner CC cut it, or null (F-O14). The
+   * channel is `channelSpans`'s span of this cast — the one reading of where
+   * a channel starts and ends (predicate-index, 2026-10-01 entry: this
+   * reader paired its aura within ±250 ms where channelSpans took
+   * [−1, +100], and kept its own re-cast rules). A span a re-cast took over
+   * was cut by that re-cast, not by a control (fact4 D69, ecfb3a7f 2:19). */
+  const ownerChannels = channelSpans(owner);
   const channelCutByCc = (spellId: string, castMs: number): number | null => {
-    if (!CHANNELED_SPELL_IDS.has(spellId)) return null;
-    const own = ownerAuras.filter(
-      (a) => a.spellId === spellId && a.srcUnitId === owner.id,
+    const span = ownerChannels.find(
+      (s) => s.spellId === spellId && s.castMs === castMs,
     );
-    // a re-cast restarts the channel with a REFRESH of its aura (codex
-    // 20-F17-09 #2, ecfb3a7f 141.287 s: the re-cast Disintegrate the Shout
-    // cut 0.609 s in had no APPLIED of its own)
-    const applied = own.find(
-      (a) =>
-        (a.logLine.event === LogEvent.SPELL_AURA_APPLIED ||
-          a.logLine.event === LogEvent.SPELL_AURA_REFRESH) &&
-        Math.abs(a.logLine.timestamp - castMs) <= CHANNEL_AURA_AT_CAST_MS,
-    );
-    if (!applied) return null;
-    const removeMs = own
-      .filter(
-        (a) =>
-          a.logLine.event === LogEvent.SPELL_AURA_REMOVED &&
-          a.logLine.timestamp >= applied.logLine.timestamp,
-      )
-      .reduce((min, a) => Math.min(min, a.logLine.timestamp), Infinity);
-    if (!Number.isFinite(removeMs)) return null;
-    // a re-cast of it before that removal took the channel over (its
-    // SUCCESS + aura REFRESH): the removal ends the re-cast, not this one
-    // (fact4 D69, ecfb3a7f 2:19: Disintegrate re-cast 1.4 s in; the Shout
-    // that cut the re-cast read as cutting this one after 2.0 s)
-    if (
-      (owner.spellCastEvents ?? []).some(
-        (c) =>
-          c.spellId === spellId &&
-          c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
-          c.logLine.timestamp > castMs + CHANNEL_AURA_AT_CAST_MS &&
-          c.logLine.timestamp < removeMs,
-      )
-    )
-      return null;
+    if (!span || span.endedBy === "recast") return null;
     // the one channel-cut predicate (`landingCutChannel`, FT-T08 step 5)
     const cutBy = ownerCCMsTimestamps.some((ccMs) =>
-      landingCutChannel(ccMs, castMs, removeMs),
+      landingCutChannel(ccMs, castMs, span.endMs),
     );
-    return cutBy ? (removeMs - castMs) / 1000 : null;
+    return cutBy ? (span.endMs - castMs) / 1000 : null;
   };
 
   // F159: Track owner's successful offensive purges. Every removal is
