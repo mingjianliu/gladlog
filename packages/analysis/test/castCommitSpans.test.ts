@@ -68,9 +68,13 @@ function evoker(
     spellName: b.spellId,
     timestamp: T0 + b.ms,
   }));
+  // absent unless given: an old stored document has no such field
+  // (makeUnit writes [] like convert.ts does today)
   if (o.starts) any.empowerStarts = o.starts;
+  else delete any.empowerStarts;
   any.empowerEnds = o.ends ?? [];
   if (o.interrupts) any.empowerInterrupts = o.interrupts;
+  else delete any.empowerInterrupts;
   return u;
 }
 

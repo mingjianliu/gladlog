@@ -18,21 +18,39 @@ import {
  
 type AnyObj = Record<string, any>;
 
+/**
+ * Every event carries what parser-compat writes on a real one (weekly review
+ * 2026-10-24, audited against the converted public wowarenalogs testlogs):
+ * a `logLine.lineIndex` — the log order inside a millisecond, which
+ * same-ms readers decide on (press HP D31) — taken here from creation
+ * order; damage in the production sign (`amount` / `effectiveAmount`
+ * negative: convert.ts negates both — 2cefc73's 5 % filter was inverted
+ * because this helper wrote them positive); and no advanced HP / position
+ * fields on a damage or heal row — production keeps those on
+ * `advancedActions` only, so a reader that took them off a hit row passed
+ * here and read nothing in the app.
+ */
+let nextLineIndex = 0;
+const lineIndex = (): number => ++nextLineIndex;
+
 /** Minimal damage-taken event (CombatHpUpdateAction shape). */
 export function makeDamageEvent(
   timestamp: number,
   amount: number,
   destUnitId = "player-1",
 ): AnyObj {
+  // callers pass the hit's size; production stores damage negative
+  const signed = -Math.abs(amount);
   return {
-    logLine: { event: LogEvent.SPELL_DAMAGE, timestamp, parameters: [] },
+    logLine: {
+      event: LogEvent.SPELL_DAMAGE,
+      timestamp,
+      parameters: [],
+      lineIndex: lineIndex(),
+    },
     timestamp,
-    effectiveAmount: amount,
-    amount,
-    advancedActorMaxHp: 500_000,
-    advancedActorCurrentHp: 400_000,
-    advancedActorPositionX: 0,
-    advancedActorPositionY: 0,
+    effectiveAmount: signed,
+    amount: signed,
     srcUnitId: "enemy-1",
     srcUnitName: "Enemy",
     destUnitId,
@@ -50,7 +68,12 @@ export function makeHealEvent(
   overhealAmount = 0,
 ): AnyObj {
   return {
-    logLine: { event: LogEvent.SPELL_HEAL, timestamp, parameters: [] },
+    logLine: {
+      event: LogEvent.SPELL_HEAL,
+      timestamp,
+      parameters: [],
+      lineIndex: lineIndex(),
+    },
     timestamp,
     amount,
     effectiveAmount: amount - overhealAmount,
@@ -60,10 +83,6 @@ export function makeHealEvent(
     destUnitName: "Target",
     spellId: "1",
     spellName: "TestHeal",
-    advancedActorMaxHp: 500_000,
-    advancedActorCurrentHp: 400_000,
-    advancedActorPositionX: 0,
-    advancedActorPositionY: 0,
   };
 }
 
@@ -79,7 +98,12 @@ export function makeSpellCastEvent(
   spellName?: string,
 ): AnyObj {
   return {
-    logLine: { event: LogEvent.SPELL_CAST_SUCCESS, timestamp, parameters: [] },
+    logLine: {
+      event: LogEvent.SPELL_CAST_SUCCESS,
+      timestamp,
+      parameters: [],
+      lineIndex: lineIndex(),
+    },
     timestamp,
     spellId,
     spellName: spellName ?? spellId,
@@ -88,11 +112,6 @@ export function makeSpellCastEvent(
     destUnitId,
     destUnitName,
     destUnitFlags,
-    effectiveAmount: 0,
-    advancedActorMaxHp: 0,
-    advancedActorCurrentHp: 0,
-    advancedActorPositionX: 0,
-    advancedActorPositionY: 0,
   };
 }
 
@@ -108,7 +127,8 @@ export function makeAuraEvent(
   const parameters: (string | number)[] = [];
   parameters[11] = auraType;
   return {
-    logLine: { event, timestamp, parameters },
+    logLine: { event, timestamp, parameters, lineIndex: lineIndex() },
+    auraType,
     timestamp,
     spellId,
     spellName: spellId,
@@ -116,9 +136,6 @@ export function makeAuraEvent(
     srcUnitName: "Source",
     destUnitId,
     destUnitName: "Target",
-    effectiveAmount: 0,
-    advancedActorMaxHp: 0,
-    advancedActorCurrentHp: 0,
   };
 }
 
@@ -192,6 +209,12 @@ export function makeUnit(
     healOut: (overrides.healOut ?? []) as ICombatUnit["healOut"],
     absorbsIn: (overrides.absorbsIn ?? []) as ICombatUnit["absorbsIn"],
     absorbsOut: [],
+    healAbsorbsIn: [],
+    missesIn: [],
+    missesOut: [],
+    empowerStarts: [],
+    empowerEnds: [],
+    empowerInterrupts: [],
     actionIn: (overrides.actionIn ?? []) as ICombatUnit["actionIn"],
     actionOut: (overrides.actionOut ?? []) as ICombatUnit["actionOut"],
     auraEvents: (overrides.auraEvents ?? []) as ICombatUnit["auraEvents"],
@@ -232,7 +255,12 @@ export function makeInterruptEvent(
   // Raw SPELL_INTERRUPT semantics: spellId = the kick, extraSpellId = the
   // spell that was interrupted
   return {
-    logLine: { event: LogEvent.SPELL_INTERRUPT, timestamp, parameters: [] },
+    logLine: {
+      event: LogEvent.SPELL_INTERRUPT,
+      timestamp,
+      parameters: [],
+      lineIndex: lineIndex(),
+    },
     timestamp,
     spellId: kickSpellId,
     spellName: kickSpellName,
@@ -242,9 +270,6 @@ export function makeInterruptEvent(
     srcUnitName,
     destUnitId: "player-1",
     destUnitName: "Target",
-    effectiveAmount: 0,
-    advancedActorMaxHp: 0,
-    advancedActorCurrentHp: 0,
   };
 }
 
@@ -267,7 +292,12 @@ export function makeDispelAction(
   srcUnitName = "Source",
 ): AnyObj {
   return {
-    logLine: { event: LogEvent.SPELL_DISPEL, timestamp, parameters: [] },
+    logLine: {
+      event: LogEvent.SPELL_DISPEL,
+      timestamp,
+      parameters: [],
+      lineIndex: lineIndex(),
+    },
     timestamp,
     spellId: dispelSpellId,
     spellName: dispelSpellId,
@@ -277,10 +307,5 @@ export function makeDispelAction(
     srcUnitName,
     destUnitId,
     destUnitName,
-    effectiveAmount: 0,
-    advancedActorMaxHp: 0,
-    advancedActorCurrentHp: 0,
-    advancedActorPositionX: 0,
-    advancedActorPositionY: 0,
   };
 }
