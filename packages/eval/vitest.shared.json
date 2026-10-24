@@ -50,6 +50,7 @@
     "test/familyBias.test.ts",
     "test/findingsCountGate.test.ts",
     "test/ftLeftoverGates.test.ts",
+    "test/gateWiring.test.ts",
     "test/healedThroughGate.test.ts",
     "test/hindsightScan.test.ts",
     "test/judgeVariance.test.ts",
