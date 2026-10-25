@@ -10,6 +10,13 @@
  * 59-POSTHOC-11b #1). An impossible press is still a press the game took, so
  * the reading re-anchors on it: the recharge in progress restarts there, as
  * the pairwise check did for one charge (where both readings agree).
+ *
+ * `slackS` bends the verdict only, never the state: the recharge advances on
+ * the press's own second and a press with nothing in hand re-anchors there —
+ * `chargeStateAt`'s simulation step for step — and that press is impossible
+ * only when the next charge is more than `slackS` away. Advancing the state
+ * to `p + slackS` let an early press fill the pool and restart its timer, so
+ * the slack leaked into every later verdict (codex 30-RV-04 #1).
  */
 export function chargeImpossibleAt(
   presses: readonly number[],
@@ -23,12 +30,12 @@ export function chargeImpossibleAt(
   let left = cap;
   let rechargeEnd = Infinity;
   for (const p of t) {
-    while (left < cap && rechargeEnd <= p + slackS) {
+    while (left < cap && rechargeEnd <= p) {
       left++;
       rechargeEnd = left < cap ? rechargeEnd + cd : Infinity;
     }
     if (left <= 0) {
-      out.push(p);
+      if (rechargeEnd > p + slackS) out.push(p);
       rechargeEnd = p + cd;
       continue;
     }
