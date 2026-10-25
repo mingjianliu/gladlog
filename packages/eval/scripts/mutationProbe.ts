@@ -14,7 +14,8 @@
  *
  * Two passes. Pass 1 runs only the test files that import the module
  * (fast); a mutant that survives it is re-run against the package's whole
- * suite (pass 2), so a survivor is one NO test kills.
+ * suite (pass 2), so a survivor is one NO test kills. Both suites must pass
+ * on the unmutated file first, or the probe aborts without a score.
  *
  * The file is restored after every mutant and on exit / Ctrl-C. Do not run it
  * in a tree another session is editing (`.claude/skills/parallel-sessions`).
@@ -154,6 +155,16 @@ if (direct.length === 0)
   console.warn("no test file imports this module directly");
 if (!testsPass(direct)) {
   console.error("the direct tests fail on the unmutated file — fix that first");
+  process.exit(1);
+}
+// pass 2 reads any whole-suite failure as a kill, so a test that already
+// fails would turn every survivor into one ("mutation score 100.0 %" for a
+// mutant no test kills — codex 30-RV-01 #4): no score without a passing
+// whole-suite baseline
+if (!testsPass([])) {
+  console.error(
+    `the whole suite fails on the unmutated file (${relative(process.cwd(), pkgRoot)}) — no mutation score; fix the failing tests first`,
+  );
   process.exit(1);
 }
 const all = mutantsOf(original).slice(0, MAX);
