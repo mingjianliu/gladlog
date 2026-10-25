@@ -134,6 +134,27 @@ describe("FT-T06 — Stasis release", () => {
     expect(render(before)[0]).toContain("[YOU] [STASIS STORED] → stored before this round (not released before the round ended");
   });
 
+  it("A4 (user 2026-10-24): Solo Shuffle — a release in the log's tail after the round's deciding death is not the round's", () => {
+    const dead = { info: {}, deathRecords: [{ timestamp: 105_000 }] };
+    const shuffle = {
+      startTime: 0,
+      endTime: 107_000,
+      startInfo: { bracket: "Rated Solo Shuffle" },
+      units: { x: dead },
+    } as never;
+    const u = unit(
+      [...storing, aura(LogEvent.SPELL_AURA_REMOVED, "370562", 106_000)],
+      [...storedCasts, ...replays(106_000)],
+    );
+    expect(extractStasisEvents(u, shuffle)[0]).toMatchObject({
+      releaseSeconds: undefined,
+      unreleased: "held",
+    });
+    // the same release in a 3v3 (the round ends with the log) is one
+    const threes = { ...(shuffle as object), startInfo: { bracket: "3v3" } } as never;
+    expect(extractStasisEvents(u, threes)[0]!.releaseSeconds).toBe(106);
+  });
+
   it("日志里没有就绪光环:退回储存结束时刻(旧行为);一次按键写两个 id 只算一个", () => {
     const u = unit(storing.slice(0, 4), [
       cast("370537", "Stasis", 99_901),

@@ -71,6 +71,24 @@ describe("computeSlackSegments", () => {
     expect(segments[0].idle).toBe(true);
   });
 
+  it("A3 (user 2026-10-24): the sweep ends at a Solo Shuffle round's deciding death, not the log's end", () => {
+    const owner = makeFriend("owner", {
+      info: {} as any,
+      deathRecords: [{ timestamp: T0 + 100_000 } as any],
+    });
+    const { segments } = computeSlackSegments(
+      { ...combat, startInfo: { bracket: "Rated Solo Shuffle" } },
+      owner,
+      [owner],
+      [makeUnit("enemy-1", { reaction: CombatUnitReaction.Hostile })],
+      emptyEnemyTimeline(),
+      [],
+      [],
+    );
+    const last = segments[segments.length - 1]!;
+    expect(last.fromSeconds + last.durationSeconds).toBeLessThanOrEqual(100);
+  });
+
   it("disables entirely when a friendly unit has no advancedActions", () => {
     const owner = makeFriend("owner");
     const mate = makeUnit("mate", { reaction: CombatUnitReaction.Friendly }); // no advancedActions

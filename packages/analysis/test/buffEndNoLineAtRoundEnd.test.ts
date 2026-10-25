@@ -377,6 +377,20 @@ describe("the rendered timeline of a Solo Shuffle round", () => {
       expect(text).not.toContain(legend);
   });
 
+  it("A1 (user 2026-10-24): a press after the round's deciding death has no line — the log's ~2 s tail is not the round's", () => {
+    const text = render(
+      shaman(106, null),
+      "Restoration Shaman",
+      shift(106),
+      [],
+    );
+    expect(timed(text).filter((l) => l.includes("Astral Shift"))).toEqual(
+      [],
+    );
+    // the round's end is still stated where it was
+    expect(text).toContain("[MATCH END]");
+  });
+
   it("buffs that ended a second before it: their normal lines", () => {
     const text = render(shaman(92, 104), "Restoration Shaman", shift(92), [
       infused("e1", 85, 104),

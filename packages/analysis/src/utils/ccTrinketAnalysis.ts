@@ -1428,8 +1428,8 @@ export interface IRootInstance {
    * what `findBrokenDisarm` reads as "ran out" */
   fullDurationSeconds?: number;
   /** A disarm the round ended on (`ICCInstance.stillOnAtRoundEnd`, same
-   * rule — F02b): `durationSeconds` is then landing → round end. Roots are
-   * not cut here. */
+   * rule — F02b; a root too since A2, 2026-10-24): `durationSeconds` is
+   * then landing → round end. */
   stillOnAtRoundEnd?: true;
 }
 
@@ -2944,6 +2944,8 @@ export function analyzePlayerCCAndTrinket(
     srcName: string;
     applyMs: number;
     removeMs: number;
+    /** no REMOVED in the log: `removeMs` is the estimate */
+    noRemoved?: true;
   }> = [];
 
   const pendingDisarm = new Map<
@@ -3289,6 +3291,7 @@ export function analyzePlayerCCAndTrinket(
       srcName: p.srcName,
       applyMs: p.applyMs,
       removeMs: pendingEnd(pendingSpellId, p.srcId, p.applyMs),
+      noRemoved: true,
     });
   }
   for (const [key, p] of pendingDisarm) {
@@ -3781,10 +3784,17 @@ export function analyzePlayerCCAndTrinket(
       c.damageTakenDuring >= SIGNIFICANT_CC_DAMAGE,
   );
 
+  // A2 (user 2026-10-24): a root ends at the round's end like a CC and a
+  // disarm — the 31 desktop rounds had 6 running past it, by up to 5.2 s
+  // (dfcccbf2 r3: `Earthgrab 258.0–263.5 s` in a round over at 258.3 s).
   const rootInstances: IRootInstance[] = rootWindows
+    .filter((w) => w.applyMs < roundEnd)
     .map((w) => ({
       atSeconds: (w.applyMs - matchStartMs) / 1000,
-      durationSeconds: (w.removeMs - w.applyMs) / 1000,
+      durationSeconds: (Math.min(w.removeMs, roundEnd) - w.applyMs) / 1000,
+      ...(w.removeMs > roundEnd || (w.noRemoved && w.removeMs >= roundEnd)
+        ? { stillOnAtRoundEnd: true as const }
+        : {}),
       spellId: w.spellId,
       spellName: w.spellName,
       sourceName: w.srcName,

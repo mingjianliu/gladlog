@@ -66,6 +66,7 @@ import {
   fmtWholeSecondsOrZero,
   renderedWindowSeconds,
 } from "./renderGrid";
+import { roundEndMs } from "./roundEnd";
 import { type InterruptibleCast, interruptibleCastOf } from "./spellMechanics";
 import { firstDeathMs } from "./unitDeath";
 
@@ -204,7 +205,11 @@ function ownerMobilityCastTimes(
 }
 
 export function computeSlackSegments(
-  combat: { startTime: number; endTime: number },
+  combat: {
+    startTime: number;
+    endTime: number;
+    startInfo?: { bracket?: string };
+  },
   owner: ICombatUnit,
   friends: ICombatUnit[],
   enemies: ICombatUnit[],
@@ -213,8 +218,10 @@ export function computeSlackSegments(
   ownerPurgeTimesSeconds: ReadonlyArray<number>,
 ): { advancedLoggingAvailable: boolean; segments: ISlackSegment[] } {
   const matchStartMs = combat.startTime;
+  // A3 (user 2026-10-24): the sweep walks the round, not the log — a Solo
+  // Shuffle round is over at its deciding death (`roundEndMs`)
   const durationSeconds = Math.floor(
-    (combat.endTime - combat.startTime) / 1000,
+    (roundEndMs(combat, [...friends, ...enemies]) - combat.startTime) / 1000,
   );
 
   const advancedLoggingAvailable = friends.every(
@@ -330,7 +337,11 @@ export function computeSlackSegments(
 }
 
 export function computeContestedSegments(
-  combat: { startTime: number; endTime: number },
+  combat: {
+    startTime: number;
+    endTime: number;
+    startInfo?: { bracket?: string };
+  },
   owner: ICombatUnit,
   friends: ICombatUnit[],
   enemies: ICombatUnit[],
@@ -339,8 +350,10 @@ export function computeContestedSegments(
   ownerPurgeTimesSeconds: ReadonlyArray<number>,
 ): { advancedLoggingAvailable: boolean; segments: IContestedSegment[] } {
   const matchStartMs = combat.startTime;
+  // A3 (user 2026-10-24): the sweep walks the round, not the log — a Solo
+  // Shuffle round is over at its deciding death (`roundEndMs`)
   const durationSeconds = Math.floor(
-    (combat.endTime - combat.startTime) / 1000,
+    (roundEndMs(combat, [...friends, ...enemies]) - combat.startTime) / 1000,
   );
 
   const advancedLoggingAvailable = friends.every(
@@ -1170,7 +1183,7 @@ export function buildHealerOffenseSummary(
   combat: {
     startTime: number;
     endTime: number;
-    startInfo?: { zoneId?: string };
+    startInfo?: { zoneId?: string; bracket?: string };
     units?: Record<string, ICombatUnit>;
   },
   owner: ICombatUnit,

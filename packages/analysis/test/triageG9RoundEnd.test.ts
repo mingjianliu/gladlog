@@ -131,6 +131,25 @@ describe("cc-dr F-CI1 — CC windows end at the round end", () => {
     expect(plain.map((c) => Math.round(c.durationSeconds))).toEqual([6, 5]);
   });
 
+  it("A2 (user 2026-10-24): a root ends at the round's end like a CC — clipped and marked, one applied after it dropped", () => {
+    const ROOTS = "339"; // Entangling Roots
+    const victim = makeUnit("v", {
+      auraEvents: [
+        aura(LogEvent.SPELL_AURA_APPLIED, ROOTS, 46, "v"),
+        aura(LogEvent.SPELL_AURA_REMOVED, ROOTS, 51.5, "v"),
+        aura(LogEvent.SPELL_AURA_APPLIED, ROOTS, 49, "v"),
+      ],
+    });
+    const roots = analyzePlayerCCAndTrinket(
+      victim,
+      [enemy()],
+      shuffle(48.327),
+    ).rootInstances;
+    expect(roots).toHaveLength(1);
+    expect(roots[0]!.durationSeconds).toBeCloseTo(2.327, 3);
+    expect(roots[0]!.stillOnAtRoundEnd).toBe(true);
+  });
+
   it("FT R03: the ENEMY CC KIT line's landed controls are the round's — one applied after the round-ending death is not counted", () => {
     const victim = makeUnit("v", {
       auraEvents: [

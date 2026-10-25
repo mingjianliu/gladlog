@@ -378,9 +378,30 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     lines: (string | DeferredSnapshot)[];
   }> = [];
 
-  /** Adds a timeline entry; false when it was skipped (past the match
+  // A1 (user 2026-10-24, 「全按建议」): a Solo Shuffle round is over at its
+  // deciding death (`roundEndMs`), ~2 s before the log ends; an event after
+  // it is not the round's — `[TEAM] [CD]` 52, `[ENEMY DEF]` 43, `[CC BROKEN]`
+  // 24 such lines on the 605 capture (N4 F02b). Every other bracket's round
+  // end is the log's end, so this is the B103 cut there.
+  const roundEndSeconds = (roundEndAtMs - matchStartMs) / 1000;
+
+  /** Adds a timeline entry; false when it was skipped (past the round's
    * end), so a legend counter counts only lines that print. */
   function addEntry(
+    timeSeconds: number,
+    ...lines: (string | DeferredSnapshot)[]
+  ): boolean {
+    if (timeSeconds > roundEndSeconds) return false;
+
+    entries.push({ timeSeconds, lines: lines.filter(Boolean) });
+    return true;
+  }
+
+  /** A `[DEATH]` entry keeps the B103 cut only: a second death in the ~2 s
+   * after a Solo Shuffle round's deciding one is still a death on the log
+   * (the death candidates read it), and the round's end is stated by the
+   * first. */
+  function addDeathEntry(
     timeSeconds: number,
     ...lines: (string | DeferredSnapshot)[]
   ): boolean {
@@ -485,7 +506,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     dampeningAt: (atSeconds: number, unit?: ICombatUnit) =>
       dampeningAt(atSeconds, "friendly", unit),
     requestSnapshotPlaceholder,
-    addEntry,
+    addEntry: addDeathEntry,
   });
 
   emitEnemyDeathEntries({
@@ -501,7 +522,7 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     dampeningAt: (atSeconds: number, unit?: ICombatUnit) =>
       dampeningAt(atSeconds, "enemy", unit),
     requestSnapshotPlaceholder,
-    addEntry,
+    addEntry: addDeathEntry,
   });
 
   // ── [UNIT DESTROYED] Non-Player Deaths ────────────────────────────────────

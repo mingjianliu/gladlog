@@ -8,6 +8,7 @@ import {
 import { getEnglishSpellName } from "../data/spellEffectData";
 import { dropAuraRebroadcasts, officialDurationS } from "./auraIntervals";
 import { empowerSpans } from "./castCommitSpans";
+import { roundEndMs } from "./roundEnd";
 import { auraBlocksMechanic, INTERRUPT_MECHANIC } from "./spellMechanics";
 
 export interface IFormInterval {
@@ -459,6 +460,10 @@ export function extractStasisEvents(
 ): IStasisEvent[] {
   const events: IStasisEvent[] = [];
   const readyLives = stasisReadyLives(unit);
+  // A4 (user 2026-10-24): "held through the round" is read at the round's
+  // end — a Solo Shuffle round is over at its deciding death, ~2 s before
+  // the log ends, and a release in that gap is not the round's.
+  const endMs = roundEndMs(combat);
   // one press of a spell the log writes under two ids (Verdant Embrace
   // 360995 / 361195) is one stored spell (b12bfef4)
   let lastBuffered: { name: string; ms: number } | undefined;
@@ -552,7 +557,7 @@ export function extractStasisEvents(
             readyLives,
             e.logLine.timestamp,
             combat.startTime,
-            combat.endTime,
+            endMs,
           ),
           spells: [...bufferedSpells],
           storedCount,
@@ -593,7 +598,7 @@ export function extractStasisEvents(
         ? 0
         : Math.max(0, (life.appliedMs - combat.startTime) / 1000);
     const held =
-      life.removedMs === undefined || life.removedMs > combat.endTime;
+      life.removedMs === undefined || life.removedMs > endMs;
     // came off with nothing cast after it: the Evoker died holding it
     if (!held && stasisReplayCasts(unit, life.removedMs!).length === 0)
       continue;

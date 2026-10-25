@@ -1637,6 +1637,40 @@ const ENEMY_DEF_PRINTED_LENGTH = new RegExp(
 const TIMELINE_LEGEND_HEAD = /^MATCH TIMELINE$/;
 
 /**
+ * Hard invariant (A1, user 2026-10-24 「全按建议」): no timeline line is
+ * after the round's end AS THE PROMPT STATES IT (`statedRoundEnd`) — the
+ * timeline's `addEntry` drops an event past `roundEndMs`. Allowed after it:
+ * `[MATCH END]` itself (the log's end, ~2 s after a Solo Shuffle round's
+ * deciding death) and the block of a later `[DEATH]` (a death in that tail
+ * is still a death — every line of its second).
+ *
+ * Before (605 capture of 8c3275fa, N4 F02b): `[TEAM] [CD]` 52, `[ENEMY DEF]`
+ * 43, `[YOU] [CD]` 32, `[YOU] [CAST]` 26, `[CC BROKEN]` 24 … lines after a
+ * Solo Shuffle round's deciding death.
+ */
+export function checkNoEventAfterRoundEnd(lines: string[]): string[] {
+  const end = statedRoundEnd(lines);
+  if (end === null) return [];
+  const secondOf = (l: string) => {
+    const m = l.match(LEADING_TIME);
+    return m ? Number(m[1]) * 60 + Number(m[2]) : null;
+  };
+  const deathSeconds = new Set(
+    lines.filter((l) => DEATH_LINE.test(l)).map(secondOf),
+  );
+  const failures: string[] = [];
+  lines.forEach((line, i) => {
+    const sec = secondOf(line);
+    if (sec === null || sec <= end.second) return;
+    if (MATCH_END_LINE.test(line) || deathSeconds.has(sec)) return;
+    failures.push(
+      `line ${i + 1}: 时间线行在回合结束之后(${end.says}在 ${fmtTime(end.second)})—— ${line.trim().slice(0, 160)}`,
+    );
+  });
+  return failures;
+}
+
+/**
  * Hard invariant (F02b): no line states an aura's end, or a control's
  * length, past the round's end AS THE PROMPT STATES IT (`statedRoundEnd` —
  * `[MATCH END]`, and a Solo Shuffle round's first `[DEATH]` line; the
@@ -7865,6 +7899,7 @@ export function checkMatch(
   hardFailures.push(...checkEnemyCcKitLanded(lines));
   hardFailures.push(...checkKillWindowWithinRound(lines));
   hardFailures.push(...checkAuraEndWithinRound(lines));
+  hardFailures.push(...checkNoEventAfterRoundEnd(lines));
   hardFailures.push(...checkUnpurgedWithinRound(lines));
   hardFailures.push(...checkCcEndCauseNotLogged(lines));
   hardFailures.push(...checkCcRefreshedNote(lines));
