@@ -16,6 +16,15 @@
  *   GLADLOG_FIXTURES=<dir of .txt logs> npx vitest run --root packages/eval realLogGates
  * Without the variable the suite is skipped, as the parser's real-log
  * suites are.
+ *
+ * Each view is built twice: the bare context and the production findings
+ * prompt (candidate menu + legend + context) — the menu-reading gates
+ * (`checkMenuTRenderGrid`, …) only ever see a candidate row in the second
+ * (codex 30-RV-01 #2: one six-round file, 0 menu rows → 18). The build is
+ * `strict` and must write every round the parser yields that has an owner
+ * of the view (`expectedCorpusRoundIds`): a per-file catch used to let a
+ * generation error drop the file's remaining rounds and still pass (codex
+ * 30-RV-01 #3).
  */
 import { existsSync, mkdtempSync, readdirSync, readFileSync } from "fs";
 import { tmpdir } from "os";
@@ -25,6 +34,7 @@ import { describe, expect, it } from "vitest";
 import { buildCorpus, type IndexEntry } from "../src/corpus/buildCorpus";
 import type { CoverageManifest } from "../src/quality/coverageManifest";
 import { checkMatch } from "../src/quality/promptQualityCheck";
+import { expectedCorpusRoundIds } from "./helpers/corpusRounds";
 
 const FIX = process.env.GLADLOG_FIXTURES ?? "";
 const logs =
@@ -38,25 +48,42 @@ const logs =
 const d = logs.length > 0 ? describe : describe.skip;
 
 d("real logs → prompts → every hardFailure gate", () => {
-  for (const ownerFilter of ["healer", "dps", "recorder"] as const)
-    it(`${ownerFilter} view: no hardFailure on any round`, async () => {
-      const out = mkdtempSync(join(tmpdir(), `gl-real-${ownerFilter}-`));
-      const { entries } = await buildCorpus({
-        logPaths: logs,
-        outDir: out,
-        ownerFilter,
-      });
-      expect(entries.length).toBeGreaterThan(0);
-      const failures: string[] = [];
-      for (const e of entries as IndexEntry[]) {
-        const nnn = String(e.ordinal).padStart(3, "0");
-        const manifest = JSON.parse(
-          readFileSync(join(out, "manifests", `${nnn}.json`), "utf-8"),
-        ) as CoverageManifest;
-        const prompt = readFileSync(join(out, e.file), "utf-8");
-        for (const f of checkMatch(e, prompt, manifest).hardFailures)
-          failures.push(`${nnn} ${e.matchId.slice(0, 8)}: ${f}`);
-      }
-      expect(failures).toEqual([]);
-    }, 600_000);
+  for (const prompt of ["context", "findings"] as const)
+    for (const ownerFilter of ["healer", "dps", "recorder"] as const)
+      it(`${ownerFilter} view, ${prompt} prompt: every round built, no hardFailure`, async () => {
+        const out = mkdtempSync(
+          join(tmpdir(), `gl-real-${ownerFilter}-${prompt}-`),
+        );
+        const { entries } = await buildCorpus({
+          logPaths: logs,
+          outDir: out,
+          ownerFilter,
+          prompt,
+          strict: true,
+        });
+        expect(entries.length).toBeGreaterThan(0);
+        // every round of every file: the parser's own rounds, in order
+        expect(entries.map((e) => e.matchId)).toEqual(
+          logs.flatMap((l) => expectedCorpusRoundIds(l, ownerFilter)),
+        );
+        const failures: string[] = [];
+        let menuRows = 0;
+        for (const e of entries as IndexEntry[]) {
+          const nnn = String(e.ordinal).padStart(3, "0");
+          const manifest = JSON.parse(
+            readFileSync(join(out, "manifests", `${nnn}.json`), "utf-8"),
+          ) as CoverageManifest;
+          const text = readFileSync(join(out, e.file), "utf-8");
+          menuRows += text
+            .split("\n")
+            .filter((l) => l.trimStart().startsWith("- id=")).length;
+          for (const f of checkMatch(e, text, manifest).hardFailures)
+            failures.push(`${nnn} ${e.matchId.slice(0, 8)}: ${f}`);
+        }
+        // the findings prompt carries the candidate menu the gates read; the
+        // bare context never does
+        if (prompt === "findings") expect(menuRows).toBeGreaterThan(0);
+        else expect(menuRows).toBe(0);
+        expect(failures).toEqual([]);
+      }, 600_000);
 });

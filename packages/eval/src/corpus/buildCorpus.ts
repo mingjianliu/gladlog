@@ -81,8 +81,22 @@ export async function buildCorpus(opts: {
    * recorder themselves (same semantics as the product's
    * StructuredAnalysisPanel — use this for a true DPS-viewpoint corpus). */
   ownerFilter?: "healer" | "dps" | "recorder";
+  /** which prompt to write: `context` = the bare rich context, `findings` =
+   * the production single-shot prompt (candidate menu + legend + context).
+   * Unset: `GLADLOG_CORPUS_PROMPT=findings` → findings, else context. A gate
+   * run passes it explicitly — the bare context has no candidate rows, so a
+   * menu-reading gate never sees an input (codex 30-RV-01 #2). */
+  prompt?: "context" | "findings";
+  /** rethrow a log's parse / prompt-generation error instead of warning and
+   * moving on: the catch is per file, so one error silently drops that
+   * file's remaining rounds from whatever checks the corpus (codex
+   * 30-RV-01 #3: a throw on round 2 of six left 1 entry, 0 hardFailures) */
+  strict?: boolean;
 }): Promise<{ entries: IndexEntry[]; fingerprint: string }> {
   const { logPaths, outDir, ownerFilter } = opts;
+  const promptMode =
+    opts.prompt ??
+    (process.env.GLADLOG_CORPUS_PROMPT === "findings" ? "findings" : "context");
   // The spell-name / talent tables load in the background and the prompt must
   // never degrade — they have to be ready before any prompt is built (contract
   // in analysis' data/ensure.ts).
@@ -166,7 +180,7 @@ export async function buildCorpus(opts: {
             throw new Error(`GLADLOG_CANDIDATE_FLAGS_OFF: unknown flag ${key}`);
         }
         const prompt =
-          process.env.GLADLOG_CORPUS_PROMPT === "findings"
+          promptMode === "findings"
             ? buildFindingsPrompt(
                 candidatesAsTheAppRuns(combat, owner.id, content),
                 richContext,
@@ -209,6 +223,10 @@ export async function buildCorpus(opts: {
         ordinal++;
       }
     } catch (err) {
+      if (opts.strict)
+        throw new Error(`buildCorpus: ${logPath}: ${String(err)}`, {
+          cause: err,
+        });
       // Log error but continue processing other files
       console.warn(`WARN: ${logPath}: ${err}`);
     }
