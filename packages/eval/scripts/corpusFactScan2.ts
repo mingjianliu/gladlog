@@ -316,12 +316,11 @@ const REFRESH = LogEvent.SPELL_AURA_REFRESH as string;
 const SUCCESS = LogEvent.SPELL_CAST_SUCCESS as string;
 const MISSED = LogEvent.SPELL_MISSED as string;
 const INTERRUPT = LogEvent.SPELL_INTERRUPT as string;
-const UP_EVENTS = new Set([
-  APPLIED,
-  REFRESH,
+const DOSE_EVENTS = new Set([
   LogEvent.SPELL_AURA_APPLIED_DOSE as string,
   LogEvent.SPELL_AURA_REMOVED_DOSE as string,
 ]);
+const UP_EVENTS = new Set([APPLIED, REFRESH, ...DOSE_EVENTS]);
 
 /** the brief's DR window */
 const DR_WINDOW_MS = 18_000;
@@ -442,6 +441,14 @@ export interface IUpOpts {
  * id / source, the last row before the instant is an APPLIED / REFRESH /
  * dose (up) or a REMOVED (down); no row before and the first after is a
  * REMOVED / REFRESH: listed as up at the log's start.
+ *
+ * A dose row changes the stack, not the application (codex 30-RV-04 #2, as
+ * production `ccAvoidanceBuffsUpAt`): the cap runs from the APPLIED /
+ * REFRESH that opened it (a dose only when nothing opened it in the log),
+ * and "closed later" / "up at the start" read the first row after the
+ * instant that opens or closes one — a REMOVED_DOSE at 3 s no longer kept a
+ * 3 s Nullifying Shroud applied at 1 s up at 6.5 s, and one at 20 s no
+ * longer hid the REMOVED at 21 s.
  */
 export function upAtRows(
   rows: readonly any[],
@@ -451,12 +458,19 @@ export function upAtRows(
   opts: IUpOpts = {},
 ): any[] {
   const last = new Map<string, any>();
+  /** the row that opened the application `last` belongs to */
+  const opened = new Map<string, any>();
+  /** the first row after the instant that opens or closes an application */
   const firstAfter = new Map<string, any>();
   for (const a of rows) {
     if (!pred(a)) continue;
     const k = `${a.spellId}|${a.srcUnitId}`;
-    if (before(a, ts, li)) last.set(k, a);
-    else if (!firstAfter.has(k)) firstAfter.set(k, a);
+    const dose = DOSE_EVENTS.has(ev(a));
+    if (before(a, ts, li)) {
+      last.set(k, a);
+      const o = opened.get(k);
+      if (!dose || !o || !UP_EVENTS.has(ev(o))) opened.set(k, a);
+    } else if (!dose && !firstAfter.has(k)) firstAfter.set(k, a);
   }
   const out: any[] = [];
   for (const [k, a] of last) {
@@ -466,7 +480,7 @@ export function upAtRows(
     const closed = !!next && ev(next) === REMOVED;
     if (
       cap !== undefined &&
-      ts - tsOf(a) > cap * 1000 &&
+      ts - tsOf(opened.get(k) ?? a) > cap * 1000 &&
       !(opts.unclosedOnly && closed)
     )
       continue;

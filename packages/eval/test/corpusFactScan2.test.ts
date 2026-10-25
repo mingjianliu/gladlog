@@ -20,6 +20,7 @@ import {
   drChain,
   E6_OWN_SHIELD_PRESS_WINDOW_MS,
   isUnclosedApp,
+  unclosedAuraCapS,
   upAtRows,
 } from "../scripts/corpusFactScan2";
 
@@ -70,6 +71,7 @@ const cast = (ms: number, spellId: string, src: string, dst: string) => ({
 const APPLIED = LogEvent.SPELL_AURA_APPLIED as string;
 const REMOVED = LogEvent.SPELL_AURA_REMOVED as string;
 const REFRESH = LogEvent.SPELL_AURA_REFRESH as string;
+const REMOVED_DOSE = LogEvent.SPELL_AURA_REMOVED_DOSE as string;
 
 describe("premises — the ids the fixtures stand on, read off the committed data", () => {
   it("The Beast Within 212704 is a mechanic-limited listed avoidance with DB2 mechanics [5, 24]; Hammer of Justice is mechanic 12, Fear 5", () => {
@@ -187,6 +189,29 @@ describe("codex 21-R12-c #2 — an immunity the log never closes holds only its 
       aura(REMOVED, 40_000, DIVINE_SHIELD, T, T),
     ];
     expect(upAtRows(rows, isDS, 30_000, -1, CAPPED_UNCLOSED)).toHaveLength(1);
+  });
+});
+
+describe("codex 30-RV-04 #2 — a dose row neither restarts an application's cap nor closes it", () => {
+  const NULLIFYING_SHROUD = "378464";
+  const isNS = (a: any) => a.spellId === NULLIFYING_SHROUD;
+  it("Nullifying Shroud (3 s → cap 4 s): APPLIED 1 s, REMOVED_DOSE 3 s, no REMOVED — gone at 6.5 s", () => {
+    expect(unclosedAuraCapS(NULLIFYING_SHROUD)).toBe(4);
+    const rows = [
+      aura(APPLIED, 1000, NULLIFYING_SHROUD, T, T),
+      aura(REMOVED_DOSE, 3000, NULLIFYING_SHROUD, T, T),
+    ];
+    expect(upAtRows(rows, isNS, 6500, -1, CAPPED_UNCLOSED)).toEqual([]);
+    // still up inside its own length
+    expect(upAtRows(rows, isNS, 4500, -1, CAPPED_UNCLOSED)).toHaveLength(1);
+  });
+  it("APPLIED 1 s, REMOVED_DOSE 20 s, REMOVED 21 s: the REMOVED closes it, so it holds at 18 s", () => {
+    const rows = [
+      aura(APPLIED, 1000, NULLIFYING_SHROUD, T, T),
+      aura(REMOVED_DOSE, 20_000, NULLIFYING_SHROUD, T, T),
+      aura(REMOVED, 21_000, NULLIFYING_SHROUD, T, T),
+    ];
+    expect(upAtRows(rows, isNS, 18_000, -1, CAPPED_UNCLOSED)).toHaveLength(1);
   });
 });
 
