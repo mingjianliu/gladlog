@@ -565,7 +565,7 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   t("FREE_CAST_AURA_IDS", "utils/resourceAt.ts", "aura", () =>
     set(FREE_CAST_AURA_IDS),
   ),
-  t("AURA_ACTIVATION_PROVES_BUTTON_IDS", "utils/cooldowns.ts", "cast", () =>
+  t("AURA_ACTIVATION_PROVES_BUTTON_IDS", "data/auraActivation.ts", "cast", () =>
     set(AURA_ACTIVATION_PROVES_BUTTON_IDS),
   ),
   t("CD_WASTE_EXCLUDED_IDS", "analysis/candidateFindings.ts", "cast", () =>
@@ -636,10 +636,10 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   ),
   // GH #106 step 2 (2026-09-24): aura-only entries whose buff is the press
   // itself (read even when a real cast was logged).
-  t("AURA_IS_THE_PRESS_IDS", "utils/cooldowns.ts", "cast", () => [
+  t("AURA_IS_THE_PRESS_IDS", "data/auraActivation.ts", "cast", () => [
     ...AURA_IS_THE_PRESS_IDS,
   ]),
-  t("AURA_ONLY_ACTIVATION_IDS", "utils/cooldowns.ts", "mixed", () => [
+  t("AURA_ONLY_ACTIVATION_IDS", "data/auraActivation.ts", "mixed", () => [
     ...keys(AURA_ONLY_ACTIVATION_IDS),
     ...Object.values(AURA_ONLY_ACTIVATION_IDS).flat(),
   ]),

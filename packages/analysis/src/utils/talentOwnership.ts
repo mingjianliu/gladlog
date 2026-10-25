@@ -1,12 +1,12 @@
 import { ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
-import { PVP_TALENT_POOL_GENERATED } from "../data/pvpTalentPoolGenerated";
-import { PVP_TALENT_REPLACES_GENERATED } from "../data/pvpTalentReplacesGenerated";
-import { replacedSpellIds } from "../data/talentReplaces";
 import {
   AURA_ACTIVATION_PROVES_BUTTON_IDS,
   AURA_ONLY_ACTIVATION_IDS,
-} from "./cooldowns";
+} from "../data/auraActivation";
+import { PVP_TALENT_POOL_GENERATED } from "../data/pvpTalentPoolGenerated";
+import { PVP_TALENT_REPLACES_GENERATED } from "../data/pvpTalentReplacesGenerated";
+import { replacedSpellIds } from "../data/talentReplaces";
 import {
   choiceSelectionResolved,
   getPlayerTalentedSpellInfo,
