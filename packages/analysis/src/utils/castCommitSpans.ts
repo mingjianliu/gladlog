@@ -194,11 +194,27 @@ export function channelSpans(
     const o = open.get(spellId);
     if (!o) return;
     open.delete(spellId);
+    const startMs = Math.min(o.cast.timestamp, o.from);
+    // D1 (user 2026-10-24): a channel the next cast took over ends no later
+    // than its own official length — a lost REMOVED otherwise left it
+    // "channelling" until the next press, however much later. An end the
+    // log wrote (REMOVED / BROKEN) stands: a refreshed channel can run past
+    // its base length (a 24.8 s Soothing Mist on the 605 manifest).
+    let end = endMs;
+    if (endedBy === "recast") {
+      const fullS = buffFullDurationForCaster(
+        spellId,
+        unit as never,
+        o.cast.timestamp,
+      );
+      if (fullS !== undefined && fullS > 0)
+        end = Math.min(end, o.cast.timestamp + fullS * 1000);
+    }
     out.push({
       spellId,
       spellName: o.cast.spellName,
-      startMs: Math.min(o.cast.timestamp, o.from),
-      endMs,
+      startMs,
+      endMs: end,
       castMs: o.cast.timestamp,
       endedBy,
     });

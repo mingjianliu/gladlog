@@ -7,6 +7,7 @@ import {
   WARLOCK_PET_FUNCTION,
   WARLOCK_SPEC_IDS,
 } from "../data/warlockPets";
+import { firstDeathMs } from "./unitDeath";
 
 /**
  * Which pet a warlock ran this round, and what it does — the single predicate
@@ -50,7 +51,12 @@ type PetUnit = Pick<ICombatUnit, "id" | "ownerId" | "spellCastEvents"> &
   Partial<
     Pick<
       ICombatUnit,
-      "damageOut" | "damageIn" | "auraEvents" | "healIn" | "healOut"
+      | "damageOut"
+      | "damageIn"
+      | "auraEvents"
+      | "healIn"
+      | "healOut"
+      | "deathRecords"
     >
   >;
 
@@ -61,7 +67,8 @@ type PetUnit = Pick<ICombatUnit, "id" | "ownerId" | "spellCastEvents"> &
  * model never learned a Spell Lock was on the table. `fromSeconds` is the
  * pet's first logged event of any kind (null when it only ever appears as a
  * destination of nothing we keep — such a pet is listed last and gets no
- * time). No end time: the log cannot observe a despawn (GH #86).
+ * time). The log cannot observe a despawn (GH #86); a pet's death it does
+ * (`diedSeconds`, D7 2026-10-24).
  *
  * Permanent pets only (`Pet-` GUIDs): Demonology's temporary `Creature-`
  * summons share npc ids with real pets and would put a false "Imp" /
@@ -93,9 +100,19 @@ export function warlockPetChronology(
   owner: Pick<ICombatUnit, "id" | "spec">,
   units: Iterable<PetUnit>,
   matchStartMs: number,
-): Array<{ fn: IWarlockPetFunction; fromSeconds: number | null }> {
+): Array<{
+  fn: IWarlockPetFunction;
+  fromSeconds: number | null;
+  /** its UNIT_DIED, seconds since `matchStartMs` (D7: the pet's abilities
+   * go with it); null when the log shows none */
+  diedSeconds: number | null;
+}> {
   if (!WARLOCK_SPEC_IDS.has(String(owner.spec))) return [];
-  const pets: Array<{ fn: IWarlockPetFunction; firstMs: number }> = [];
+  const pets: Array<{
+    fn: IWarlockPetFunction;
+    firstMs: number;
+    diedMs: number;
+  }> = [];
   for (const u of units) {
     if (u.ownerId !== owner.id || !String(u.id).startsWith("Pet-")) continue;
     const fn = petFunctionOf(u);
@@ -113,7 +130,7 @@ export function warlockPetChronology(
         const t = e.logLine?.timestamp ?? e.timestamp;
         if (typeof t === "number" && t < firstMs) firstMs = t;
       }
-    pets.push({ fn, firstMs });
+    pets.push({ fn, firstMs, diedMs: firstDeathMs(u) });
   }
   // (two silent pets: Infinity − Infinity is NaN, which is not an order)
   pets.sort((a, b) => (a.firstMs === b.firstMs ? 0 : a.firstMs - b.firstMs));
@@ -121,6 +138,9 @@ export function warlockPetChronology(
     fn: p.fn,
     fromSeconds: Number.isFinite(p.firstMs)
       ? (p.firstMs - matchStartMs) / 1000
+      : null,
+    diedSeconds: Number.isFinite(p.diedMs)
+      ? (p.diedMs - matchStartMs) / 1000
       : null,
   }));
 }
@@ -183,9 +203,14 @@ export function warlockPurgePetSpans(
     if (p.fn.pet !== felhunter) return;
     const from = i === 0 ? -Infinity : (p.fromSeconds ?? Infinity);
     const next = pets.slice(i + 1).find((q) => q.fromSeconds !== null);
+    // D7 (user 2026-10-24): the Felhunter's purge ends with it — its
+    // UNIT_DIED, when that comes before the next pet
     out.push({
       fromSeconds: from,
-      toSeconds: next?.fromSeconds ?? Infinity,
+      toSeconds: Math.min(
+        next?.fromSeconds ?? Infinity,
+        p.diedSeconds ?? Infinity,
+      ),
     });
   });
   return out;

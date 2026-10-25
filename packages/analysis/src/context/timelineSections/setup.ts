@@ -420,13 +420,19 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
     const cleanDest = destUnitName.split("-")[0];
     const cleanOwner = owner.name.split("-")[0];
     if (destUnitName === owner.name || cleanDest === cleanOwner) return "self";
+    // D3 (user 2026-10-24): the roster label (`3(AWarrior)`), the one every
+    // other line prints — a bare `→ 6` sent the reader to the roster
     if (playerIdMap) {
       const id = playerIdMap.get(destUnitName) ?? playerIdMap.get(cleanDest);
-      if (id !== undefined) return String(id);
+      if (id !== undefined)
+        return (
+          friendLabel(destUnitName) ?? friendLabel(cleanDest) ?? String(id)
+        );
     }
     if (enemyIdMap) {
       const id = enemyIdMap.get(destUnitName) ?? enemyIdMap.get(cleanDest);
-      if (id !== undefined) return String(id);
+      if (id !== undefined)
+        return enemyLabel(destUnitName) ?? enemyLabel(cleanDest) ?? String(id);
     }
     // Unmapped target = totem/pet/NPC (not one of the arena players, who are all
     // pid-mapped above). Its name comes from the log in the client's locale — do
@@ -1111,11 +1117,11 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
    * The tag states the fact only; whether L1 was right (Flameshaper tap-spam
    * is a real style) is the model's call, not an accusation baked in here.
    *
-   * The END is matched to the press by spellId within ±1.5s, each END
-   * consumed once. KNOWN GAP (docs/predicate-index.md "Not yet unified"): the
-   * press's SPELL_CAST_SUCCESS is logged when the hold STARTS, the END when it
-   * is released, so this window reaches a tap and misses a full charge held
-   * longer than 1.5 s.
+   * The level is the released hold's (`empowerSpans`: START → END in log
+   * order), matched to the press on its START instant like the cut hold
+   * below, each hold consumed once (D2, 2026-10-24 — it used to look for an
+   * END within ±1.5 s of the press, which a full charge held longer misses:
+   * the SUCCESS is logged at the START, the END at the release).
    *
    * `[EMPOWER not released — cut short after Ns]` (triage other F-O6): a hold
    * that ended in SPELL_EMPOWER_INTERRUPT released nothing, yet its
@@ -1130,13 +1136,25 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
    * lookup: an interrupted press followed by a quick re-press must not take
    * the second press's END.
    */
-  const consumedEmpowerEnds = new Set<unknown>();
   const ownerInterruptedEmpowers = (empowerSpans(owner) ?? []).filter(
     (s) => s.interrupted,
   );
   const consumedEmpowerInterrupts = new Set<unknown>();
+  // D2 (user 2026-10-24): the released holds, START → END paired by
+  // `empowerSpans` with the level each one went out at. The tag used to
+  // look for an END within ±1.5 s of the press — but the press's SUCCESS
+  // is logged at the START and the END at the release, so a full charge
+  // (holds of 1.7–3.0 s on the 60 triage picks) was out of reach: all 4
+  // level-3 releases rendered no tag.
+  const ownerSpans = empowerSpans(owner);
+  const ownerReleasedEmpowers = (ownerSpans ?? []).filter(
+    (s) => !s.interrupted,
+  );
+  const consumedEmpowerReleases = new Set<unknown>();
+  // a document stored before the parser kept SPELL_EMPOWER_START has no
+  // spans: its ENDs are matched to the press as they used to be
+  const consumedEmpowerEnds = new Set<unknown>();
   function ownerEmpowerTag(spellId: string, castTimeSeconds: number): string {
-    const ends = owner.empowerEnds;
     const castMs = matchStartMs + castTimeSeconds * 1000;
     // fact3 D18 (2cc2373a 0:12): a hold is the press its own SUCCESS row
     // sits beside — after Tip the Scales an instant Fire Breath and a second
@@ -1167,16 +1185,27 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
       consumedEmpowerInterrupts.add(cut);
       return ` [EMPOWER not released — cut short after ${((cut.endMs - cut.startMs) / 1000).toFixed(1)}s]`;
     }
-    if (!ends || ends.length === 0) return "";
-    const end = ends.find(
-      (e) =>
-        e.spellId === spellId &&
-        !consumedEmpowerEnds.has(e) &&
-        Math.abs(e.timestamp - castMs) <= 1500,
+    if (ownerSpans === null) {
+      const end = (owner.empowerEnds ?? []).find(
+        (e) =>
+          e.spellId === spellId &&
+          !consumedEmpowerEnds.has(e) &&
+          Math.abs(e.timestamp - castMs) <= 1500,
+      );
+      if (!end) return "";
+      consumedEmpowerEnds.add(end);
+      return ` [EMPOWER L${end.level}]`;
+    }
+    const released = ownerReleasedEmpowers.find(
+      (s) =>
+        s.spellId === spellId &&
+        !consumedEmpowerReleases.has(s) &&
+        Math.abs(s.startMs - castMs) <= EMPOWER_PRESS_MATCH_MS &&
+        nearestPressIsThis(s.startMs),
     );
-    if (!end) return "";
-    consumedEmpowerEnds.add(end);
-    return ` [EMPOWER L${end.level}]`;
+    if (!released) return "";
+    consumedEmpowerReleases.add(released);
+    return ` [EMPOWER L${released.level}]`;
   }
 
   function getCDTargetAndVelocityPart(

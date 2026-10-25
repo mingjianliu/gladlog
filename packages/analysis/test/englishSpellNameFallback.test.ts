@@ -12,6 +12,11 @@ describe("getEnglishSpellName — a client-locale fallback is never printed", ()
     expect(getEnglishSpellName("999999901", "树皮术")).toBe("999999901");
     expect(getEnglishSpellName("999999902", "보호막")).toBe("999999902");
   });
+  it("D4 (user 2026-10-24): an accented Latin-script log name falls back to the id too", () => {
+    expect(getEnglishSpellName("999999904", "Écorce")).toBe("999999904");
+    expect(getEnglishSpellName("999999905", "Rindenhaut ß")).toBe("999999905");
+    expect(getEnglishSpellName("999999906", "Protección")).toBe("999999906");
+  });
   it("an English log name for an id the table lacks is still used", () => {
     expect(getEnglishSpellName("999999903", "Some New Spell")).toBe(
       "Some New Spell",

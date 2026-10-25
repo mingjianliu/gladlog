@@ -14,6 +14,7 @@ import {
   specToString,
   unitCooldownOf,
 } from "./cooldowns";
+import { ownerPetGoneAt } from "./petPresence";
 import { isDeadAt } from "./unitDeath";
 
 /**
@@ -501,6 +502,16 @@ export function computeEnemyInterruptAvailability(
         c.spellId === def.spellId &&
         c.logLine.event === LogEvent.SPELL_CAST_SUCCESS,
     );
+    // D7 (user 2026-10-24): a pet kick goes with the pet — dead or
+    // dismissed and not yet replaced (`ownerPetGoneAt`), the enemy has no
+    // interrupt at `atMs`
+    if (
+      petCasterIds.size > 0 &&
+      !ownCast &&
+      allUnits !== undefined &&
+      ownerPetGoneAt(enemy, allUnits, atMs)
+    )
+      continue;
     // the pet out at `atMs`: alive then, and the one last seen at or before
     // it — a pet that died earlier or was summoned later has no aura at
     // `atMs` and must not read "free" for the active one (codex review)

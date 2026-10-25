@@ -37,12 +37,36 @@ export function rosterLabelByName(
     const tag = abbrevSpec(specToString(u.spec as never));
     if (id !== undefined && tag && !tagById.has(id)) tagById.set(id, tag);
   }
+  if (idMap) {
+    const known = tagsByIdMap.get(idMap) ?? new Map<number, string>();
+    for (const [id, tag] of tagById) if (!known.has(id)) known.set(id, tag);
+    tagsByIdMap.set(idMap, known);
+  }
   return (name) => {
     const id = idMap?.get(name) ?? idMap?.get(name.split("-")[0]!);
     if (id === undefined) return undefined;
     const tag = tagById.get(id);
     return `${id}${tag ? `(${tag})` : ""}`;
   };
+}
+
+/** The spec tags `rosterLabelByName` built for an id map, by id — what
+ * `rosterLabelOfId` reads where only the map and a resolved id travel. */
+const tagsByIdMap = new WeakMap<Map<string, number>, Map<number, string>>();
+
+/**
+ * D3 (user 2026-10-24): the roster label of an id a map resolved — `N(Spec)`
+ * once `rosterLabelByName` has read that map's roster (the timeline's setup
+ * does, before any line is built), else the bare id. The damage rows (`Top
+ * sources`, `killing blow`, `killed by`) carry the maps, not the units; they
+ * printed a bare `N — Spell` beside every other line's `N(Spec)`.
+ */
+export function rosterLabelOfId(
+  idMap: Map<string, number> | undefined,
+  id: number,
+): string {
+  const tag = idMap ? tagsByIdMap.get(idMap)?.get(id) : undefined;
+  return `${id}${tag ? `(${tag})` : ""}`;
 }
 
 /**

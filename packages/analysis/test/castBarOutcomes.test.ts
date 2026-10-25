@@ -5,6 +5,8 @@ import { ensureAnalysisData } from "../src";
 import {
   CAST_QUEUE_TOLERANCE_MS,
   castBarOutcomesOf,
+  COMPLETED_BAR_MIN_S,
+  completedBarMedianS,
   JUKE_LOOKBACK_MS,
 } from "../src/utils/castBarOutcomes";
 import { CANCEL_CC_NEAR_S } from "../src/utils/castStopEvidence";
@@ -84,6 +86,29 @@ describe("castBarOutcomesOf — 读条怎么结束,六步顺序", () => {
     });
     expect(r[0]!.end).toEqual({ kind: "completed", atS: 1.5 });
     expect(r[1]!.end).toEqual({ kind: "none" });
+  });
+
+  it("D5 (user 2026-10-24): a SUCCESS of the bar's own ms logged BEFORE its START row is the previous cast's end — the bar did not complete", () => {
+    const withLine = (e: object, line: number) => {
+      const row = e as { logLine: object };
+      return { ...row, logLine: { ...row.logLine, lineIndex: line } };
+    };
+    const chained = outcomesOf({
+      castStartEvents: [
+        withLine(start(FLASH_HEAL, 0), 10),
+        withLine(start(FLASH_HEAL, 2), 21),
+      ],
+      spellCastEvents: [
+        withLine(success(FLASH_HEAL, 2), 20), // the first bar's end
+      ],
+    });
+    expect(chained.map((o) => o.end.kind)).toEqual(["completed", "none"]);
+    // the same rows the other way round: an instant cast, the bar went off
+    const instant = outcomesOf({
+      castStartEvents: [withLine(start(FLASH_HEAL, 2), 20)],
+      spellCastEvents: [withLine(success(FLASH_HEAL, 2), 21)],
+    });
+    expect(instant[0]!.end.kind).toBe("completed");
   });
 
   it("② SPELL_INTERRUPT 落在窗口内 = kicked(没有 SUCCESS 时)", () => {
@@ -237,5 +262,31 @@ describe("castBarOutcomesOf — 读条怎么结束,六步顺序", () => {
     );
     expect(r[0]!.end).toEqual({ kind: "none" });
     expect(r[0]!.earlierFailure).toBe(false);
+  });
+});
+
+describe("D6 (user 2026-10-24): completedBarMedianS — the one cast time of a spell in the round", () => {
+  it("the median of completed bars longer than the floor; kicked bars and other spells left out", () => {
+    const r = outcomesOf({
+      castStartEvents: [
+        start(FLASH_HEAL, 0),
+        start(FLASH_HEAL, 5),
+        start(FLASH_HEAL, 10),
+        start(FLASH_HEAL, 15), // instant-made: completes at once
+        start("2060", 20), // another spell
+      ],
+      spellCastEvents: [
+        success(FLASH_HEAL, 1.3),
+        success(FLASH_HEAL, 6.5),
+        success(FLASH_HEAL, 15.05),
+        success("2060", 22.5),
+      ],
+      actionIn: [makeInterruptEvent("1766", "Kick", FLASH_HEAL, "Flash Heal", at(10.8))],
+    });
+    expect(COMPLETED_BAR_MIN_S).toBe(0.2);
+    // 1.3 and 1.5 (the 0.05 s instant and the kicked bar out) → 1.4
+    expect(completedBarMedianS(r, FLASH_HEAL)).toBeCloseTo(1.4, 6);
+    expect(completedBarMedianS(r, "2060")).toBeCloseTo(2.5, 6);
+    expect(completedBarMedianS(r, "999")).toBeNull();
   });
 });

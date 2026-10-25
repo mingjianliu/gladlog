@@ -20,6 +20,7 @@ import type { ICombatUnit } from "@gladlog/parser-compat";
 import { NOT_READY_REASONS } from "../analysis/candidates/shared";
 import { CANCEL_CC_NEAR_S, forcedStopInstantsMs } from "./castStopEvidence";
 import type { CastFailedEvent } from "./rawStreams";
+import { medianFinite } from "./stats";
 
 /** Spell-queue tolerance: the next cast's SPELL_CAST_START is often logged
  * before this cast's SUCCESS (client-side queuing), so a SUCCESS may follow
@@ -53,6 +54,9 @@ export interface CastBarStart {
   name: string;
   /** Seconds since match start. */
   t: number;
+  /** The START row's place in the log (`logLine.lineIndex`); absent on
+   * documents stored before the parser kept it. */
+  line?: number;
 }
 
 /**
@@ -72,6 +76,9 @@ export function castBarStartsOf(
       id: e.spellId ?? "",
       name: e.spellName ?? "",
       t: (e.logLine.timestamp - startMs) / 1000,
+      ...(typeof e.logLine.lineIndex === "number"
+        ? { line: e.logLine.lineIndex }
+        : {}),
     }))
     .sort((a, b) => a.t - b.t);
 }
@@ -203,11 +210,22 @@ export function castBarOutcomesOf(params: {
     const endS = Math.min(s.t + capS, nextS);
     // Same window for all three endings (codex review 2026-09-26: a success
     // looked up past the next start was paired with two starts at once).
+    // D5 (user 2026-10-24): a SUCCESS row of the bar's own millisecond
+    // logged BEFORE its START row is the previous cast's end, written with
+    // the next bar's start — not this bar's (n7_chained_casts: 16 of 1,276
+    // other players' bars; it made a kick into such a bar a plain miss, not
+    // a juke). Without line indices on both rows, as before.
+    const loggedBeforeStart = (e: (typeof successes)[number]) =>
+      s.line !== undefined &&
+      typeof e.logLine.lineIndex === "number" &&
+      sec(e.logLine.timestamp) === s.t &&
+      e.logLine.lineIndex < s.line;
     const done = successes.find(
       (e) =>
         e.spellId === s.id &&
         sec(e.logLine.timestamp) >= s.t &&
-        sec(e.logLine.timestamp) <= endS,
+        sec(e.logLine.timestamp) <= endS &&
+        !loggedBeforeStart(e),
     );
     const fails = failed.filter(
       (e) =>
@@ -302,4 +320,32 @@ export function castBarOutcomesOf(params: {
       };
   }
   return outcomes;
+}
+
+/** A completed bar shorter than this is no cast time: an instant-made cast
+ * the client still wrote a START for (a proc), its SUCCESS in the same few
+ * ms. */
+export const COMPLETED_BAR_MIN_S = 0.2;
+
+/**
+ * D6 (user 2026-10-24): "this player's cast time of this spell in this
+ * round" — the median (`medianFinite`) of the round's `completed` bars of the
+ * spell (a `queued` completion included) longer than `COMPLETED_BAR_MIN_S`,
+ * or null with none. The one reading behind kick-eaten's `kickDepthPct` and
+ * its kick window (`castWindowS`) and the cancel ledger's `progressPct` /
+ * `yourCancelMedianPct` (`castCancels.ts`); they had three derivations with
+ * their own windows (the next cast start or 6 s / the next bar or 4 s),
+ * floors (0.5 / 0.2 s) and pairing.
+ */
+export function completedBarMedianS(
+  outcomes: readonly CastBarOutcome[],
+  spellId: string,
+): number | null {
+  const d: number[] = [];
+  for (const o of outcomes)
+    if (o.id === spellId && o.end.kind === "completed") {
+      const s = o.end.atS - o.t;
+      if (s > COMPLETED_BAR_MIN_S) d.push(s);
+    }
+  return d.length ? medianFinite(d) : null;
 }

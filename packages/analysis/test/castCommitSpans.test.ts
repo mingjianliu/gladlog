@@ -264,6 +264,27 @@ describe("channelSpans", () => {
       [11_400, 12_009, "removed"],
     ]);
   });
+  it("D1 (user 2026-10-24): a channel whose REMOVED was lost ends at its official length, not at the next cast's take-over", () => {
+    const spans = channelSpans(
+      evoker({
+        casts: [
+          { spellId: DISINTEGRATE, ms: 10_000 },
+          { spellId: DISINTEGRATE, ms: 40_000 },
+        ],
+        auras: [
+          selfAura(LogEvent.SPELL_AURA_APPLIED, DISINTEGRATE, 10_000),
+          // no REMOVED: the next cast's APPLIED 30 s later closes it
+          selfAura(LogEvent.SPELL_AURA_APPLIED, DISINTEGRATE, 40_000),
+          selfAura(LogEvent.SPELL_AURA_REMOVED, DISINTEGRATE, 42_000),
+        ],
+      }),
+    );
+    const first = spans[0]!;
+    expect(first.endedBy).toBe("recast");
+    // Disintegrate's DB2 channel is 3 s — far short of the 30 s gap
+    expect(first.endMs - first.startMs).toBeLessThanOrEqual(4_000);
+    expect(spans[1]!.endMs - T0).toBe(42_000);
+  });
   it("a REFRESH no cast started is the running channel's own row", () => {
     const spans = channelSpans(
       evoker({

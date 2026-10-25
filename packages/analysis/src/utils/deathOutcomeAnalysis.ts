@@ -27,6 +27,7 @@ import {
   lockCastsOf,
   pressSpentBy,
   REACTION_WINDOW_S,
+  selfForbearanceActiveAt,
   specToString,
   spendsSharedChargeOf,
   talentReplacementsOf,
@@ -1117,10 +1118,22 @@ export function buildDeathOutcomeSummary(
           // own death writes, a few ms before the death it is asked about.
           (spell.lockoutSpellId === HYPOTHERMIA_AURA_ID
             ? hypothermiaUntil(unit, atSeconds, matchStartMs) !== undefined
-            : isLockedOutAt(
-                getLockoutIntervals(unit, spell.lockoutSpellId),
-                atSeconds,
-              ))
+            : // FT F22's twin for Forbearance (predicate-index, 2026-10-24):
+              // `selfForbearanceActiveAt` ignores the REMOVED the death
+              // writes, so a paladin dying under a self Blessing of
+              // Protection's Forbearance no longer reads "died with Divine
+              // Shield available"
+              spell.lockoutSpellId === FORBEARANCE_AURA_ID
+              ? selfForbearanceActiveAt(
+                  unit,
+                  [...(roundUnits ?? [unit])],
+                  atSeconds,
+                  matchStartMs,
+                )
+              : isLockedOutAt(
+                  getLockoutIntervals(unit, spell.lockoutSpellId),
+                  atSeconds,
+                ))
         )
           continue;
         const immReadyFor = offCooldownForLastSeconds(

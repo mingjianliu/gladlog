@@ -53,7 +53,6 @@ import {
   dropAuraRebroadcasts,
   supersededAuraBreaks,
 } from "./auraIntervals";
-import { upperBound } from "./binarySearch";
 import { breakerOfBrokenRow } from "./brokenRowBreaker";
 import { buffFullDurationForCaster } from "./buffDuration";
 import {
@@ -65,6 +64,7 @@ import {
   isSilenceOnlyAura,
   silenceIntervals,
 } from "./cannotCastIntervals";
+import { castBarOutcomesOf, completedBarMedianS } from "./castBarOutcomes";
 import {
   CAST_MISS_WINDOW_MS,
   CONTROL_FAILED_MISS_TYPES,
@@ -137,7 +137,6 @@ import {
   spellRangeForCaster,
   spellReachForCaster,
 } from "./spellRange";
-import { medianFinite } from "./stats";
 import { summonKindWord } from "./summonKind";
 import { nonPlayerUnitKill, summonedAtMs } from "./summonLife";
 import { interruptImmuneWindows } from "./talentBehaviors";
@@ -3837,115 +3836,19 @@ export function analyzePlayerCCAndTrinket(
     }))
     .sort((a, b) => a.atSeconds - b.atSeconds);
 
-  const playerCompletedMedians = new Map<string, number | null>();
-  let sortedTimesCache: { allStartMs: number[]; pressMs: number[] } | null =
-    null;
-  /** Timestamps of every cast start, and of every non-passive cast success
-   * (a button press), each sorted ascending. Copies — never sorts the
-   * player's own arrays in place. */
-  const playerSortedTimes = () => {
-    if (sortedTimesCache) return sortedTimesCache;
-    const asc = (a: number, b: number) => a - b;
-    sortedTimesCache = {
-      allStartMs: (player.castStartEvents ?? [])
-        .map((e) => e.logLine.timestamp)
-        .sort(asc),
-      pressMs: player.spellCastEvents
-        .filter(
-          (c) =>
-            c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
-            !isPassiveProcCast(c),
-        )
-        .map((c) => c.logLine.timestamp)
-        .sort(asc),
-    };
-    return sortedTimesCache;
-  };
+  // D6 (user 2026-10-24): the player's cast time of a spell in this round
+  // is the cancel ledger's reading (`completedBarMedianS` over the round's
+  // cast bars, `castBarOutcomesOf`) — it was a third derivation here (the
+  // next cast start or 6 s, a 0.5 s floor, its own pairing)
+  let playerBars: ReturnType<typeof castBarOutcomesOf> | null = null;
   const getPlayerCompletedMedian = (spellId: string): number | null => {
     if (!spellId) return null;
-    if (playerCompletedMedians.has(spellId)) {
-      return playerCompletedMedians.get(spellId)!;
-    }
-    const starts = (player.castStartEvents ?? [])
-      .filter((e) => e.spellId === spellId)
-      .sort((a, b) => a.logLine.timestamp - b.logLine.timestamp);
-    if (starts.length === 0) {
-      playerCompletedMedians.set(spellId, null);
-      return null;
-    }
-    const successes = player.spellCastEvents
-      .filter(
-        (e) =>
-          e.spellId === spellId &&
-          e.logLine.event === LogEvent.SPELL_CAST_SUCCESS,
-      )
-      .sort((a, b) => a.logLine.timestamp - b.logLine.timestamp);
-    if (successes.length === 0) {
-      playerCompletedMedians.set(spellId, null);
-      return null;
-    }
-    const playerInterrupts = player.actionIn.filter(
-      (a) => a.logLine.event === LogEvent.SPELL_INTERRUPT,
-    );
-    // Sorted copies, built once per player: the shared arrays must not be
-    // re-ordered in place (every other reader sees the mutation), and the
-    // per-start lookups below walk these with a pointer instead of a full
-    // `find` per start — `starts` is a sorted subsequence of `allStartMs`.
-    const { allStartMs, pressMs } = playerSortedTimes();
-
-    const durations: number[] = [];
-    let nextStartIdx = 0;
-    let successIdx = 0;
-    for (let i = 0; i < starts.length; i++) {
-      const sMs = starts[i].logLine.timestamp;
-      // Any subsequent cast start of ANY spell ends the previous hardcast
-      while (
-        nextStartIdx < allStartMs.length &&
-        allStartMs[nextStartIdx] <= sMs
-      )
-        nextStartIdx++;
-      const nextAnyStartMs = allStartMs[nextStartIdx] ?? Infinity;
-      const maxMs = Math.min(nextAnyStartMs, sMs + 6_000);
-      while (
-        successIdx < successes.length &&
-        successes[successIdx].logLine.timestamp < sMs
-      )
-        successIdx++;
-      const match =
-        successIdx < successes.length &&
-        successes[successIdx].logLine.timestamp <= maxMs
-          ? successes[successIdx]
-          : undefined;
-      if (match) {
-        // Codex review P2: Reject start/success pairs crossed by an interruption
-        // on this spell, so an instant proc or later cast does not contaminate the median.
-        const wasInterrupted = playerInterrupts.some(
-          (a) =>
-            a.timestamp >= sMs &&
-            a.timestamp <= match.logLine.timestamp &&
-            (a as unknown as CombatExtraSpellAction).extraSpellId === spellId,
-        );
-        if (wasInterrupted) continue;
-
-        // An intervening cast success of any other spell also proves the hardcast was broken
-        // (GH #108: a passive proc during the bar does not break it — pressMs
-        // already excludes those). Open interval (sMs, matchMs).
-        const firstAfterStart = upperBound(pressMs, sMs);
-        const hadInterveningCast =
-          firstAfterStart < pressMs.length &&
-          pressMs[firstAfterStart] < match.logLine.timestamp;
-        if (hadInterveningCast) continue;
-
-        const durS = (match.logLine.timestamp - sMs) / 1000;
-        if (durS >= 0.5 && durS <= 6.0) {
-          durations.push(durS);
-        }
-      }
-    }
-    const med = medianFinite(durations);
-    const result = med > 0 ? med : null;
-    playerCompletedMedians.set(spellId, result);
-    return result;
+    playerBars ??= castBarOutcomesOf({
+      unit: player,
+      startMs: matchStartMs,
+      failed: [],
+    });
+    return completedBarMedianS(playerBars, spellId);
   };
 
   // Who may have put a cast-blocking aura on an enemy kicker: every source
@@ -4115,11 +4018,11 @@ export function analyzePlayerCCAndTrinket(
         const pct = Math.round((elapsedS / ownMedianS) * 100);
         kickDepthPct = pct <= 100 ? pct : null;
       }
-      // `castWindowS` keeps the reading it had (the corpus table first for a
-      // hardcast heal): it feeds kick-eaten's out-range verdict, which this
-      // change does not touch — predicate index, "Not yet unified".
+      // D6 (user 2026-10-24): the round's own bar first, as the comment
+      // below says — the corpus table of a hardcast heal only when the round
+      // has none (it used to come first)
       const nominalS =
-        hardcastHealSpell(interruptedSpellId)?.medianCastS ?? ownMedianS;
+        ownMedianS ?? hardcastHealSpell(interruptedSpellId)?.medianCastS;
       // X3: how long the kicker had to close in — the round's own bar when
       // it is known, else the official base cast (unhasted, so never too
       // short), and never less than the cast had already run at the kick.

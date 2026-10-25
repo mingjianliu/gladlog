@@ -1273,6 +1273,10 @@ export function getSpellNamesSnapshot(): Record<string, string> {
   return spellNamesMap;
 }
 
+/** Any character outside ASCII — a localized client's letter. */
+// eslint-disable-next-line no-control-regex
+const NON_ASCII = /[^\x00-\x7F]/;
+
 export function getEnglishSpellName(
   spellId: string,
   fallback?: string | null,
@@ -1284,8 +1288,15 @@ export function getEnglishSpellName(
     // client writes it in its script, and an id the name table lacks (a
     // renumbered or retired one — Unstable Affliction 316099 in 2024 zhTW
     // logs) printed `痛苦動盪` on [KICK] lines. Such a name falls back to the
-    // id, as a missing one does (`CJK_LEAK`, the gate's own regex).
-    (fallback && !CJK_LEAK.test(fallback) ? fallback : undefined) ??
+    // id, as a missing one does (`CJK_LEAK`, the gate's own regex). D4
+    // (user 2026-10-24): so does any name with a non-ASCII letter — a
+    // French / German / Spanish / Portuguese client's accented name passed
+    // `CJK_LEAK` unseen (the forward check found 6 of 5,362 observed ids
+    // with no English name). An unaccented localized name still cannot be
+    // told from English: the log does not say which locale wrote it.
+    (fallback && !CJK_LEAK.test(fallback) && !NON_ASCII.test(fallback)
+      ? fallback
+      : undefined) ??
     spellId
   );
 }

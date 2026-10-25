@@ -65,6 +65,7 @@ import {
   castBarOutcomesOf,
   type CastBarStart,
   castBarStartsOf,
+  completedBarMedianS,
 } from "./castBarOutcomes";
 import {
   CANCEL_CC_NEAR_S,
@@ -75,7 +76,6 @@ import { TARGETED_CC_DODGE_SPELLS } from "./ccTrinketAnalysis";
 import { analyzeKickAudit } from "./kickAudit";
 import type { RawStreams } from "./rawStreams";
 import { roundEndMs } from "./roundEnd";
-import { medianFinite } from "./stats";
 
 // The reading of how a cast bar ended, the rows it starts from and the
 // interruption reasons live in castBarOutcomes.ts (kickAudit reads them too);
@@ -271,28 +271,15 @@ export function ownerCastCancels(params: {
   if (!starts) return null;
   const roundEndS = (roundEndMs(combat) - combat.startTime) / 1000;
 
-  const completedDurations = new Map<string, number[]>();
   const pending: Array<{ id: string; name: string; t: number; failS: number }> =
     [];
   for (const s of starts) {
-    if (s.end.kind === "completed") {
-      const d = s.end.atS - s.t;
-      if (d > 0.2) {
-        const list = completedDurations.get(s.id) ?? [];
-        list.push(d);
-        completedDurations.set(s.id, list);
-      }
-    } else if (isCancelInRound(s, roundEndS)) {
+    if (s.end.kind !== "completed" && isCancelInRound(s, roundEndS))
       pending.push({ id: s.id, name: s.name, t: s.t, failS: s.end.atS });
-    }
   }
-  // the true median (`medianFinite`, the one kick depth reads) — the
-  // upper-middle element read high on an even count (work order 2026-10-14c
-  // #3: 12 of 30 rows of the 60 had one)
-  const median = (id: string) => {
-    const d = completedDurations.get(id) ?? [];
-    return d.length ? medianFinite(d) : null;
-  };
+  // the round's cast time of the spell — the one reading kick depth uses
+  // (`completedBarMedianS`, D6 2026-10-24)
+  const median = (id: string) => completedBarMedianS(starts, id);
   const cancels: CastCancel[] = pending.map((p) => {
     const m = median(p.id);
     const pct = m ? Math.round(((p.failS - p.t) / m) * 100) : null;

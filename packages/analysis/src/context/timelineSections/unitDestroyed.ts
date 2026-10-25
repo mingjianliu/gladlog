@@ -94,7 +94,11 @@ export function emitUnitDestroyedEntries(
         if (summonS < 0 || summonS > durationS) continue;
         const summoner = allUnits.find((u) => u.id === unit.ownerId);
         const by = summoner ? ` (by ${enemyPid(summoner.name)})` : "";
-        const { hits, hitters } = opposingHitsOnUnit(unit, unitSide);
+        const { hits, hitters } = opposingHitsOnUnit(
+          unit,
+          unitSide,
+          rosterSides,
+        );
         const resolveHitterLabel = (id: string): string => {
           const u = allUnits?.find((x) => x.id === id);
           if (!u) return "[pet]";

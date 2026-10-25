@@ -210,6 +210,34 @@ describe("[EMPOWER L?] on the owner's empowered casts", () => {
   });
 });
 
+describe("D2 (user 2026-10-24): the level is the released hold's (`empowerSpans`)", () => {
+  // the 60 triage picks: 4 level-3 releases held 1.74–3.04 s, none tagged —
+  // the SUCCESS is logged at the START, the END at the release
+  it("a full charge held 2.6 s is tagged L3; a tap L1", () => {
+    const owner = mkUnit("o", "Voker-Realm", {
+      spellCastEvents: [
+        cast(DREAM_BREATH, "Dream Breath", 30_001),
+        cast(DREAM_BREATH, "Dream Breath", 60_001),
+      ] as never,
+      empowerStarts: [
+        empowerStart(DREAM_BREATH, "Dream Breath", 30_000),
+        empowerStart(DREAM_BREATH, "Dream Breath", 60_000),
+      ] as never,
+      empowerEnds: [
+        empowerEnd(DREAM_BREATH, "Dream Breath", 32_600, 3),
+        empowerEnd(DREAM_BREATH, "Dream Breath", 60_400, 1),
+      ] as never,
+    });
+    const lines = buildMatchTimeline(baseParams(owner))
+      .split("\n")
+      .filter((l) => l.includes("[EMPOWER"));
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toContain("0:30");
+    expect(lines[0]).toContain("[EMPOWER L3]");
+    expect(lines[1]).toContain("[EMPOWER L1]");
+  });
+});
+
 describe("[EMPOWER not released — cut short after Ns] — a hold that ended in SPELL_EMPOWER_INTERRUPT", () => {
   // ba8c0510: Dream Breath START 34.102 (its SPELL_CAST_SUCCESS 1 ms later),
   // feared, SPELL_EMPOWER_INTERRUPT 34.519 — rendered as a plain release.

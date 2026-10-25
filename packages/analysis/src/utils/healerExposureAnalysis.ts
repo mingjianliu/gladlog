@@ -24,7 +24,7 @@ import {
 import { BACKLASH_AURA_CC_TYPE } from "../data/backlashCc";
 import { effectAuraViaName } from "../data/castEffectAuras";
 import { getEnglishSpellName } from "../data/spellEffectData";
-import { ccSpellIds } from "../data/spellTags";
+import { hardCcAuraAt } from "./cannotCastIntervals";
 import {
   analyzePlayerCCAndTrinket,
   IPlayerCCTrinketSummary,
@@ -74,17 +74,17 @@ import { summonOwnerById } from "./summonOwner";
 const POSITION_MAX_GAP_MS = INTERP_MAX_GAP_MS;
 
 /** Returns true if the enemy has an active CC aura at the given timestamp (ms). */
-function isEnemyInCC(enemy: ICombatUnit, atMs: number): boolean {
-  const active = new Map<string, boolean>();
-  for (const e of enemy.auraEvents) {
-    if (!e.spellId || !ccSpellIds.has(e.spellId)) continue;
-    if (e.logLine.timestamp > atMs) break;
-    if (e.logLine.event === LogEvent.SPELL_AURA_APPLIED)
-      active.set(e.spellId, true);
-    else if (e.logLine.event === LogEvent.SPELL_AURA_REMOVED)
-      active.set(e.spellId, false);
-  }
-  return [...active.values()].some(Boolean);
+/** Is `enemy` in hard CC at `atMs`? The shared pairing (`hardCcAuraAt`:
+ * by caster, a lost REMOVED capped at the control's official length) — the
+ * raw APPLIED / REMOVED replay this was kept a CC never removed "in CC" to
+ * the round's end (F-K5b, 69546267's Chastise). `ourSideIds` are the
+ * sources whose controls count: the healer's side and its summons. */
+function isEnemyInCC(
+  enemy: ICombatUnit,
+  atMs: number,
+  ourSideIds: Set<string>,
+): boolean {
+  return hardCcAuraAt(enemy, ourSideIds, atMs) !== undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -301,6 +301,18 @@ export function analyzeHealerExposureAtBurst(
     allUnits,
   );
   const results: IHealerBurstExposure[] = [];
+  const enemyIds = new Set(enemies.map((e) => e.id));
+  const ourSideIds = new Set<string>([healer.id]);
+  for (const u of allUnits ?? [])
+    if (!enemyIds.has(u.id) && !(u.ownerId && enemyIds.has(u.ownerId)))
+      ourSideIds.add(u.id);
+  // without the round's units: every source of a control on an enemy that is
+  // not an enemy (what the raw replay counted)
+  if (allUnits === undefined)
+    for (const e of enemies)
+      for (const a of e.auraEvents)
+        if (a.srcUnitId && !enemyIds.has(a.srcUnitId))
+          ourSideIds.add(a.srcUnitId);
 
   for (const window of burstWindows) {
     const windowMs = matchStartMs + window.fromSeconds * 1000;
@@ -362,7 +374,7 @@ export function analyzeHealerExposureAtBurst(
       // such casters close in); the flat bound stays as the outer limit.
       const distance = distanceBetween(healerPos, enemyPos);
       if (distance > CC_MAX_CAST_RANGE_YARDS) continue;
-      if (isEnemyInCC(enemy, windowMs)) continue;
+      if (isEnemyInCC(enemy, windowMs, ourSideIds)) continue;
 
       // Store the RAW position when one exists — the losBreak suggestion below
       // does pillar geometry and real samples beat interpolated points there.

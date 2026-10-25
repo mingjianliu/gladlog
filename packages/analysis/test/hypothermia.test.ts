@@ -375,3 +375,39 @@ describe("the immunity path (died with Ice Block available) asks hypothermiaUnti
     expect(died(true)).toEqual([]);
   });
 });
+
+// predicate-index 2026-10-11 (FT F22, item (1)), fixed 2026-10-24: the same
+// gap for Forbearance — the interval walk ended it at the REMOVED the
+// paladin's own death writes, so a death under a self Blessing of
+// Protection's Forbearance read "died with Divine Shield available".
+describe("the immunity path (died with Divine Shield available) asks selfForbearanceActiveAt", () => {
+  const died = (withAura: boolean) => {
+    const p = makeUnit("p1", {
+      spec: CombatUnitSpec.Paladin_Holy,
+      spellCastEvents: [
+        makeSpellCastEvent("1022", T0 + 10_000, "p1", "Self", "p1", "Pala"),
+      ],
+      auraEvents: withAura
+        ? [
+            makeAuraEvent(A, "25771", T0 + 10_000, "p1", "p1"),
+            makeAuraEvent(R, "25771", T0 + 24_986, "p1", "p1"),
+          ]
+        : [],
+    } as never);
+    (p as unknown as { deathRecords: unknown[] }).deathRecords = [
+      { timestamp: T0 + 25_000, event: LogEvent.UNIT_DIED, parameters: [] },
+    ];
+    return buildDeathOutcomeSummary(
+      {
+        startTime: T0,
+        endTime: T0 + 300_000,
+        startInfo: { zoneId: "1505" },
+      } as never,
+      [p],
+      [{ playerName: "p1", ccInstances: [] }] as never,
+    ).events.flatMap((e) => e.availableImmunities.map((i) => i.spellName));
+  };
+  it("under Forbearance (its REMOVED written by the death) Divine Shield is not named", () => {
+    expect(died(true)).not.toContain("Divine Shield");
+  });
+});

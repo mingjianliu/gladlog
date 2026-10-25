@@ -85,6 +85,7 @@ import {
   ALTER_TIME_CAST_ID,
   ALTER_TIME_RETURN_ID,
 } from "./timelineSections/alterTime";
+import { rosterLabelOfId } from "./unitLabel";
 
 export { isPassiveProcCast, PASSIVE_SPELL_BLOCKLIST };
 
@@ -1593,17 +1594,20 @@ export function damageEventParts(
     // (codex review of batch 12: enemy 4's Starsurge credited to friendly 1).
     const fullF = playerIdMap?.get(d.srcUnitName);
     const fullE = enemyIdMap?.get(d.srcUnitName);
+    // D3 (user 2026-10-24): the roster label, `N(Spec)` (`rosterLabelOfId`)
     if (fullF !== undefined && fullE === undefined) {
-      srcName = String(fullF);
+      srcName = rosterLabelOfId(playerIdMap, fullF);
     } else if (fullE !== undefined && fullF === undefined) {
-      srcName = String(fullE);
+      srcName = rosterLabelOfId(enemyIdMap, fullE);
     } else if (isSrcFriendly && playerIdMap) {
       const id =
         playerIdMap.get(d.srcUnitName) ?? playerIdMap.get(cleanSrcName);
-      srcName = id !== undefined ? String(id) : cleanSrcName;
+      srcName =
+        id !== undefined ? rosterLabelOfId(playerIdMap, id) : cleanSrcName;
     } else if (!isSrcFriendly && enemyIdMap) {
       const id = enemyIdMap.get(d.srcUnitName) ?? enemyIdMap.get(cleanSrcName);
-      srcName = id !== undefined ? String(id) : cleanSrcName;
+      srcName =
+        id !== undefined ? rosterLabelOfId(enemyIdMap, id) : cleanSrcName;
     } else {
       srcName = cleanSrcName;
     }
@@ -1613,7 +1617,7 @@ export function damageEventParts(
     // baseline (`次级食尸鬼 — Death Order`). Same last resort as
     // `actorLabel` / `rootSourceLabel`: not a player, not ASCII → [pet].
     if (
-      !/^\d+$/.test(srcName) &&
+      !/^\d+(?:\([A-Za-z]+\))?$/.test(srcName) &&
       [...srcName].some((c) => c.charCodeAt(0) > 127)
     )
       srcName = "[pet]";
@@ -1722,7 +1726,15 @@ function summonLabel(
         ? es
         : undefined);
   if (id === undefined) return "[pet]";
-  return `${id}'s ${summonKindOf(d.srcUnitId || undefined, undefined, srcType)}`;
+  const map =
+    full !== undefined
+      ? playerIdMap?.get(ownerName) !== undefined
+        ? playerIdMap
+        : enemyIdMap
+      : fs !== undefined
+        ? playerIdMap
+        : enemyIdMap;
+  return `${rosterLabelOfId(map, id)}'s ${summonKindOf(d.srcUnitId || undefined, undefined, srcType)}`;
 }
 
 /** `summonKindWord` with both kinds of evidence the timeline has: the unit's
@@ -1775,17 +1787,32 @@ export function dispelActorLabel(
 export function opposingHitsOnUnit(
   unit: ICombatUnit,
   unitSide: CombatUnitReaction,
+  /** the round's roster sides — while the recorder is charmed the log flips
+   * every reaction flag, and the flag test counted the wrong team's hits
+   * (`killed by:` beside it has read `isSameSideSource` since triage
+   * death-kill F-T1) */
+  sides?: RosterSides,
 ): {
   hits: number;
   hitters: string[];
   firstHit?: ICombatUnit["damageIn"][number];
 } {
+  const victim = { id: unit.id, reaction: unitSide };
   const mine = unit.damageIn.filter((d) => {
-    const side = getUnitReaction(d.srcUnitFlags);
+    if (d.srcUnitId === unit.id) return false;
+    const side =
+      (d.srcUnitId ? sides?.get(d.srcUnitId) : undefined) ??
+      getUnitReaction(d.srcUnitFlags);
     return (
       (side === CombatUnitReaction.Friendly ||
         side === CombatUnitReaction.Hostile) &&
-      side !== unitSide
+      !isSameSideSource(
+        victim,
+        d.srcUnitId,
+        d.srcUnitFlags,
+        sides,
+        d.destUnitFlags,
+      )
     );
   });
   return {
