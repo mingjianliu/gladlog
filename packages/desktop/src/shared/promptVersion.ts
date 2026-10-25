@@ -513,5 +513,15 @@
  *  Roar and roster-label entries closed without output change. 13 public
  *  logs: Top sources entries without a school 13 → 2, candidates
  *  unchanged.
+ *
+ * v456 (2026-10-24, the user's rulings on the predicate-index entries,
+ *  「全按建议」): no timeline event after a Solo Shuffle round's deciding
+ *  death (A1); roots, the slack sweep and Stasis end at the round (A2–A4);
+ *  the KILL ATTEMPTS Cyclone clause and its legend read the bracket and
+ *  the 5 s after it (B4); damage rows and cast targets carry the roster
+ *  label (`6(MHunter) — Bleak Arrows`, `→ 5(RPaladin)`, D3); a full-charge
+ *  release is tagged by its own level (D2). 13 public logs: 63 of 119
+ *  prompts change, 460 lines by the label and 9 lines gone after the
+ *  round's end; every gate passes. No 605-file numbers.
  */
-export const PROMPT_VERSION = 455;
+export const PROMPT_VERSION = 456;

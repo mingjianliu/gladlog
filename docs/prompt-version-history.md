@@ -4369,3 +4369,19 @@ reads it; the [HEALER EXPOSURE] / [ROOT] labels use `rosterLabelByName`.
 a school tag 13 → 2, 14 of 116 contexts change (school tags only),
 candidate counts unchanged; the channel and label changes are
 byte-identical there. No 605-file numbers.
+
+v456 (2026-10-24, the user's rulings on the predicate-index entries,
+「全按建议」): a Solo Shuffle round ends at its deciding death for every
+timeline event (A1, gate `checkNoEventAfterRoundEnd`), for roots (A2), the
+slack sweep (A3) and Stasis' "not released" (A4); the KILL ATTEMPTS `target
+in your team's Cyclone` clause and its legend read the bracket and the
+`KILL_CREDIT_SLACK_S` after it (B4); `Top sources` / `Top damage` /
+`killing blow` / `most damage` entries and `[YOU] [CAST]` / `[YOU] [CC]`
+targets carry the roster label (D3); `[EMPOWER Ln]` reads the released
+hold's level (D2); plus engine-side readings that leave the public logs'
+prompts unchanged (B1–B9, C1, C3, D1, D4–D7). 13 public wowarenalogs arena
+logs, healer / dps / recorder views: 63 of 119 prompts change — 460 lines
+by the roster label only, and 9 lines gone that sat in the deciding
+death's second after it; candidates unchanged; every checkMatch gate
+passes. No 605-file numbers; `behaviorPriorGenerated.json` was not
+regenerated after B5 (it needs the private corpus).
