@@ -1636,13 +1636,23 @@ const ENEMY_DEF_PRINTED_LENGTH = new RegExp(
  * only of a prompt that carries the timeline's legend at all. */
 const TIMELINE_LEGEND_HEAD = /^MATCH TIMELINE$/;
 
+/** The `[DEATH]` line's unit: `m:ss  [DEATH]  5(FMage) (…`. */
+const DEATH_LINE_PID = /^\d+:\d{2}\s+\[DEATH\]\s+(\S+)/;
+/** The one timestamped line a `[DEATH]` entry carries under it
+ *  (`emitEnemyDeathEntries`): `m:ss  [ROSTER]  enemy 5(FMage) removed (dead)`. */
+const DEATH_ROSTER_LINE = /^\d+:\d{2}\s+\[ROSTER\]\s+enemy (\S+) removed \(dead\)/;
+
 /**
  * Hard invariant (A1, user 2026-10-24 「全按建议」): no timeline line is
  * after the round's end AS THE PROMPT STATES IT (`statedRoundEnd`) — the
  * timeline's `addEntry` drops an event past `roundEndMs`. Allowed after it:
  * `[MATCH END]` itself (the log's end, ~2 s after a Solo Shuffle round's
  * deciding death) and the block of a later `[DEATH]` (a death in that tail
- * is still a death — every line of its second).
+ * is still a death — `addDeathEntry` keeps its entry). That block is what the
+ * entry prints: the `[DEATH]` line, the `[ROSTER] enemy N removed (dead)` line
+ * of the same unit and second directly under it, and untimestamped rows —
+ * not every line of its second: an Astral Shift press at 1:46 beside an
+ * unrelated 1:46 death is still past a 1:45 round end (codex 30-RV-02 #3).
  *
  * Before (605 capture of 8c3275fa, N4 F02b): `[TEAM] [CD]` 52, `[ENEMY DEF]`
  * 43, `[YOU] [CD]` 32, `[YOU] [CAST]` 26, `[CC BROKEN]` 24 … lines after a
@@ -1655,14 +1665,27 @@ export function checkNoEventAfterRoundEnd(lines: string[]): string[] {
     const m = l.match(LEADING_TIME);
     return m ? Number(m[1]) * 60 + Number(m[2]) : null;
   };
-  const deathSeconds = new Set(
-    lines.filter((l) => DEATH_LINE.test(l)).map(secondOf),
-  );
+  /** the `[DEATH]` entry the last timestamped line belongs to */
+  let death: { sec: number; pid: string | undefined } | null = null;
   const failures: string[] = [];
   lines.forEach((line, i) => {
     const sec = secondOf(line);
-    if (sec === null || sec <= end.second) return;
-    if (MATCH_END_LINE.test(line) || deathSeconds.has(sec)) return;
+    if (sec === null) return;
+    let inDeathBlock = false;
+    if (DEATH_LINE.test(line)) {
+      death = { sec, pid: line.match(DEATH_LINE_PID)?.[1] };
+      inDeathBlock = true;
+    } else {
+      const removed = line.match(DEATH_ROSTER_LINE)?.[1];
+      inDeathBlock =
+        death !== null &&
+        death.sec === sec &&
+        removed !== undefined &&
+        removed === death.pid;
+      if (!inDeathBlock) death = null;
+    }
+    if (sec <= end.second) return;
+    if (MATCH_END_LINE.test(line) || inDeathBlock) return;
     failures.push(
       `line ${i + 1}: 时间线行在回合结束之后(${end.says}在 ${fmtTime(end.second)})—— ${line.trim().slice(0, 160)}`,
     );
