@@ -1,4 +1,5 @@
 import { ensureAnalysisData } from "@gladlog/analysis";
+import { COMPANION_SUCCESS_MS } from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { switchTrigger } from "../scripts/postKickSwitchAudit";
@@ -35,5 +36,23 @@ describe("switchTrigger — production's English switchSpellName against localiz
       { t: 12, spellId: CHRONO_FLAMES, spellName: "Chrono Flames" },
     ];
     expect(switchTrigger(casts, inst)?.spellId).toBe(CHRONO_FLAMES);
+  });
+});
+
+describe("switchTrigger — the named companion may land past the window end (codex 30-RV-04 #4)", () => {
+  it("Living Flame 14.999 s, its Chrono Flames 15.001 s → Chrono Flames", () => {
+    const casts = [
+      { t: 14.999, spellId: LIVING_FLAME, spellName: "Living Flame" },
+      { t: 15.001, spellId: CHRONO_FLAMES, spellName: "Chrono Flames" },
+    ];
+    expect(switchTrigger(casts, inst)?.spellId).toBe(CHRONO_FLAMES);
+  });
+  it("…but no further than production's COMPANION_SUCCESS_MS past it", () => {
+    const tooLate = 15 + (COMPANION_SUCCESS_MS + 5) / 1000;
+    const casts = [
+      { t: 14.999, spellId: LIVING_FLAME, spellName: "Living Flame" },
+      { t: tooLate, spellId: CHRONO_FLAMES, spellName: "Chrono Flames" },
+    ];
+    expect(switchTrigger(casts, inst)?.spellId).toBe(LIVING_FLAME);
   });
 });

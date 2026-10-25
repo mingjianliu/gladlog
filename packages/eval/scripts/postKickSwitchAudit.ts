@@ -43,6 +43,7 @@ import {
 import {
   analyzePlayerCCAndTrinket,
   CAST_START_LOOKBACK_S,
+  COMPANION_SUCCESS_MS,
   type IInterruptInstance,
   postKickSeverityRank,
 } from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
@@ -242,7 +243,9 @@ export async function collect(limit: number): Promise<{
  * named none. Production's name is English (`getEnglishSpellName` by id), so
  * each cast is compared by its English name, never the logged one — a zhCN
  * log's localized Chrono Flames used to miss and fall back to the Living
- * Flame row (codex 30-RV-04 #3).
+ * Flame row (codex 30-RV-04 #3). The named cast may sit up to production's
+ * `COMPANION_SUCCESS_MS` past the window's end — a Living Flame row at
+ * 4.999 s, its Chrono Flames at 5.001 s (codex 30-RV-04 #4).
  */
 export function switchTrigger<T extends { t: number; spellId: string; spellName: string }>(
   casts: readonly T[],
@@ -250,11 +253,16 @@ export function switchTrigger<T extends { t: number; spellId: string; spellName:
 ): T | undefined {
   const lockedMask = spellSchoolMask(inst.interruptedSpellId);
   const inWin = (c: T) => c.t > inst.atSeconds && c.t <= inst.atSeconds + WINDOW_S;
+  // production's companion row may follow a switch cast at the window's end
+  // by up to COMPANION_SUCCESS_MS — and is then the cast it names
+  const inNamedWin = (c: T) =>
+    c.t > inst.atSeconds &&
+    c.t <= inst.atSeconds + WINDOW_S + COMPANION_SUCCESS_MS / 1000;
   return (
     (inst.switchSpellName !== null
       ? casts.find(
           (c) =>
-            inWin(c) &&
+            inNamedWin(c) &&
             getEnglishSpellName(c.spellId, c.spellName) ===
               inst.switchSpellName,
         )
