@@ -27,11 +27,15 @@ const pet = (
   deathRecords: diedS === undefined ? [] : [{ timestamp: at(diedS) }],
   ...extra,
 });
-const owner = (casts: Array<{ spellId: string; s: number }> = []) => ({
-  id: "owner",
-  spec: "265",
-  spellCastEvents: casts.map((c) => ({ spellId: c.spellId, timestamp: at(c.s) })),
-});
+const owner = (casts: Array<{ spellId: string; s: number }> = []) =>
+  ({
+    id: "owner",
+    spec: "265",
+    spellCastEvents: casts.map((c) => ({
+      spellId: c.spellId,
+      timestamp: at(c.s),
+    })),
+  }) as never;
 
 describe("ownerPetGoneAt", () => {
   const A = "Pet-0-1-1-1-417-0204BBD685";
