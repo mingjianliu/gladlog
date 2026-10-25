@@ -39,8 +39,8 @@ import {
   rootSpellIds,
   spells as spellMeta,
 } from "../data/spellTags";
-import { supersededAuraBreaks } from "../utils/auraIntervals";
 import { allyCopyRecipient } from "../utils/allyCopyWall";
+import { supersededAuraBreaks } from "../utils/auraIntervals";
 import { buffFullDurationForCaster } from "../utils/buffDuration";
 import {
   controlTargetHitPressured,

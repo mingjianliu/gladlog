@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { CombatUnitReaction } from "@gladlog/parser-compat";
 import { fireEvent, render, screen } from "@testing-library/react";
 
 import { MatchReport } from "../src/renderer/src/report/components/MatchReport";
@@ -88,10 +89,16 @@ describe("B1 (user 2026-10-24): the table's 解 / 驱散 are the dispel panel's"
     );
     const legacy = toLegacySafe(m);
     const players = Object.values(legacy.units).filter((u) => u.info);
-    const friends = players.filter((u) => u.reaction === "Friendly");
-    const enemies = players.filter((u) => u.reaction !== "Friendly");
+    const friends = players.filter(
+      (u) => u.reaction === CombatUnitReaction.Friendly,
+    );
+    const enemies = players.filter(
+      (u) => u.reaction !== CombatUnitReaction.Friendly,
+    );
     const ours = dispelSummaryOf(legacy, friends as never, enemies as never);
     const theirs = dispelSummaryOf(legacy, enemies as never, friends as never);
+    expect(friends.length).toBeGreaterThan(0);
+    expect(enemies.length).toBeGreaterThan(0);
     for (const r of deriveStatsTable(m)) {
       const s = r.reaction === "Friendly" ? ours : theirs;
       const mine = (rows: typeof s.ourPurges) =>
