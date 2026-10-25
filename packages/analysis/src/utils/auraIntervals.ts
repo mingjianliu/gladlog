@@ -8,6 +8,7 @@ import { CC_DURATION_TALENT_MODIFIERS } from "../data/spellEffectData";
 import { buffFullDurationForCaster } from "./buffDuration";
 import type { CastParamCaster } from "./castParam";
 import { ccFullDurationForCaster } from "./ccDuration";
+import { TOUCH_OF_KARMA_ABSORB_ID, TOUCH_OF_KARMA_ID } from "./karmaFeed";
 
 
 /**
@@ -556,9 +557,42 @@ export function buildAuraIntervalsUncached(
     });
   }
 
+  endKarmaAtItsShield(out);
   return out.sort(
     (a, b) => a.fromS - b.fromS || a.spellId.localeCompare(b.spellId),
   );
+}
+
+/** How far from the Touch of Karma buff's APPLIED its shield aura may go up
+ * and still be that press's — the log writes both in the cast's own ms. */
+const KARMA_SHIELD_PAIR_S = 0.2;
+
+/**
+ * B2 (user 2026-10-24, 「全按建议」): Touch of Karma is up while its shield
+ * is. The press puts two buffs on the monk — the cast id's 10 s marker
+ * (`TOUCH_OF_KARMA_ID`), which stays its full length whatever happens to the
+ * shield, and the absorb itself (`TOUCH_OF_KARMA_ABSORB_ID`), which leaves
+ * when the shield does (2abc9185: eaten through 3.0 s in, the marker up to
+ * 10.0 s). `[BUFF FADED]` already ended there (N4 F02a); every reader of the
+ * intervals — `[STACKED DEFENSIVES]`, the burst ledger's "Target had a major
+ * defensive up", the death block's mitigation audit — read the marker. Each
+ * marker interval of the holder ends with the shield the same press put up,
+ * when that ended first; a log with no shield aura keeps the marker's.
+ */
+function endKarmaAtItsShield(out: IAuraInterval[]): void {
+  const shields = out.filter((iv) => iv.spellId === TOUCH_OF_KARMA_ABSORB_ID);
+  if (shields.length === 0) return;
+  for (const iv of out) {
+    if (iv.spellId !== TOUCH_OF_KARMA_ID) continue;
+    const shield = shields.find(
+      (sh) =>
+        sh.srcUnitName === iv.srcUnitName &&
+        Math.abs(sh.fromS - iv.fromS) <= KARMA_SHIELD_PAIR_S,
+    );
+    if (!shield || shield.toS >= iv.toS) continue;
+    iv.toS = shield.toS;
+    iv.inferredEnd = shield.inferredEnd;
+  }
 }
 
 /**

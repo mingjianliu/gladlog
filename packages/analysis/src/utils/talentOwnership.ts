@@ -4,6 +4,10 @@ import { PVP_TALENT_POOL_GENERATED } from "../data/pvpTalentPoolGenerated";
 import { PVP_TALENT_REPLACES_GENERATED } from "../data/pvpTalentReplacesGenerated";
 import { replacedSpellIds } from "../data/talentReplaces";
 import {
+  AURA_ACTIVATION_PROVES_BUTTON_IDS,
+  AURA_ONLY_ACTIVATION_IDS,
+} from "./cooldowns";
+import {
   choiceSelectionResolved,
   getPlayerTalentedSpellInfo,
   getPlayerTalentGrantedButtonIds,
@@ -185,7 +189,10 @@ export function talentOwnershipFromTables(
  * pass the CURRENT round's unit, never a unit cached from another round.
  */
 export function talentOwnershipOf(
-  unit: Pick<ICombatUnit, "spec" | "info" | "spellCastEvents">,
+  unit: Pick<ICombatUnit, "spec" | "info" | "spellCastEvents"> & {
+    id?: string;
+    auraEvents?: ICombatUnit["auraEvents"];
+  },
   spellId: string,
 ): TalentOwnership {
   if (
@@ -193,6 +200,23 @@ export function talentOwnershipOf(
       (e) =>
         e.spellId === spellId &&
         e.logLine.event === LogEvent.SPELL_CAST_SUCCESS,
+    )
+  )
+    return "yes";
+  // B9 (user 2026-10-24): an activation only the press can make is cast
+  // evidence too — the ledger's reading (triage H15, ruling A9-3:
+  // `AURA_ACTIVATION_PROVES_BUTTON_IDS`; a Feign Death seen only through
+  // Survival Tactics' 202748 was owned in the ledger and `unknown` / `no`
+  // on the death path)
+  if (
+    AURA_ACTIVATION_PROVES_BUTTON_IDS.has(spellId) &&
+    (unit.auraEvents ?? []).some(
+      (a) =>
+        a.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
+        a.spellId !== undefined &&
+        (AURA_ONLY_ACTIVATION_IDS[spellId] ?? []).includes(a.spellId) &&
+        a.srcUnitId === unit.id &&
+        a.destUnitId === unit.id,
     )
   )
     return "yes";

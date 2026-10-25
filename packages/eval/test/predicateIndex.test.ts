@@ -2411,9 +2411,9 @@ const INDEX: PredicateRow[] = [
   // FT-T12 D3: which control answers a burst — one rule for `responded` and
   // the [BURST ANSWERED] credit
   {
-    file: `${A}/analysis/burstWindowDecisionPoints.ts`,
+    file: `${A}/utils/burstHit.ts`,
     symbol: "controlTargetHitPressured",
-    mod: burstWindowDecisionPoints,
+    mod: burstHit,
   },
   {
     file: `${E}/quality/promptQualityCheck.ts`,

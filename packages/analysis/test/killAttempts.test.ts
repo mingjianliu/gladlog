@@ -2348,7 +2348,11 @@ describe("our own Cyclone on the kill target: a fact clause after the outcome (I
     expect(killAttemptBracketMeetsControl(40, 45, 42, 47)).toBe(true);
     expect(killAttemptBracketMeetsControl(40, 45, 45, 50)).toBe(true); // shares 0:45
     expect(killAttemptBracketMeetsControl(40, 45, 35, 40)).toBe(true); // shares 0:40
-    expect(killAttemptBracketMeetsControl(40, 45, 46, 51)).toBe(false);
+    // B4 (user 2026-10-24): the 5 s after the bracket, where the outcome is
+    // read, count — a Cyclone that began at 0:46 … 0:50 meets it
+    expect(killAttemptBracketMeetsControl(40, 45, 46, 51)).toBe(true);
+    expect(killAttemptBracketMeetsControl(40, 45, 50, 55)).toBe(true);
+    expect(killAttemptBracketMeetsControl(40, 45, 51, 56)).toBe(false);
     expect(killAttemptBracketMeetsControl(40, 45, 34, 39)).toBe(false);
   });
 

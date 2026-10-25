@@ -1,10 +1,7 @@
-import {
-  analyzePlayerCCAndTrinket,
-  isKickSpellId,
-  reconstructDispelSummary,
-} from "@gladlog/analysis";
+import { analyzePlayerCCAndTrinket, isKickSpellId } from "@gladlog/analysis";
 import { CombatUnitReaction, LogEvent } from "@gladlog/parser-compat";
 
+import { dispelSummaryOf } from "./dispelSummary";
 import { toLegacySafe } from "./legacySource";
 import { displaySpellName } from "./spellDisplay";
 import {
@@ -87,9 +84,12 @@ export function deriveStatsTable(
     // (it is `startInfo.zoneId`), so always "".
 
     // Dispels both ways: build once from our perspective and once from the
-    // enemy's (same predicate, symmetric on both sides)
-    const ourDispels = reconstructDispelSummary(friends, enemies, legacy);
-    const theirDispels = reconstructDispelSummary(enemies, friends, legacy);
+    // enemy's (same predicate, symmetric on both sides). B1 (user
+    // 2026-10-24): the dispel panel's reading (`dispelSummaryOf`: both
+    // sides' pets, a pet's dispel credited to its owner, B45) — the table's
+    // 解 / 驱散 had left a Warlock's pet purges out (3 of 184 rows).
+    const ourDispels = dispelSummaryOf(legacy, friends, enemies);
+    const theirDispels = dispelSummaryOf(legacy, enemies, friends);
 
     const rows: StatsRow[] = [];
     for (const p of players) {

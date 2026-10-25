@@ -279,10 +279,15 @@ export interface IKillAttemptOwnControl {
 }
 
 /**
- * Does a control printed `ccFrom … ccTo` meet a bracket printed
- * `[bracketFrom–bracketTo]`? All four are whole render seconds, both ends
- * included — the numbers the two lines print, so the gate
- * (`checkKillAttemptOwnControlClause`) asks the same question of the text.
+ * Does a control printed `ccFrom … ccTo` meet the span a bracket printed
+ * `[bracketFrom–bracketTo]` is judged over — the bracket and the
+ * `KILL_CREDIT_SLACK_S` after it, where `team focus`, `healed through`, `not
+ * enough damage` and the KILL are read (B4, user 2026-10-24: a Cyclone of
+ * ours that began in those 5 s was not stated on 232 lines of the 605
+ * capture, 145 of them `not enough damage` / `healed through`)? All four are
+ * whole render seconds, both ends included — the numbers the two lines
+ * print, so the gate (`checkKillAttemptOwnControlClause`) asks the same
+ * question of the text.
  */
 export function killAttemptBracketMeetsControl(
   bracketFromSecond: number,
@@ -290,7 +295,10 @@ export function killAttemptBracketMeetsControl(
   ccFromSecond: number,
   ccToSecond: number,
 ): boolean {
-  return ccFromSecond <= bracketToSecond && ccToSecond >= bracketFromSecond;
+  return (
+    ccFromSecond <= bracketToSecond + KILL_CREDIT_SLACK_S &&
+    ccToSecond >= bracketFromSecond
+  );
 }
 
 /**
@@ -383,8 +391,7 @@ export function killAttemptOwnControlClause(
 }
 
 /** The legend sentence for the clause, printed only when a line carries it. */
-export const KILL_ATTEMPTS_OWN_CONTROL_LEGEND =
-  "  `| target in your team's Cyclone a–b` at the end of a line = your own team's Cyclone was on that target from a to b (its [CC ON ENEMY] line), and those seconds meet this attempt's bracket. A cycloned unit takes no damage from anyone while it lasts. It is a fact beside the outcome: `FAILED:` still names what its fixed order picked, and does not weigh the Cyclone.";
+export const KILL_ATTEMPTS_OWN_CONTROL_LEGEND = `  \`| target in your team's Cyclone a–b\` at the end of a line = your own team's Cyclone was on that target from a to b (its [CC ON ENEMY] line), and those seconds meet this attempt's bracket or the ${KILL_CREDIT_SLACK_S} s after it — the span the outcome is read over (a Cyclone that began after the bracket's last second is one of those). A cycloned unit takes no damage from anyone while it lasts. It is a fact beside the outcome: \`FAILED:\` still names what its fixed order picked, and does not weigh the Cyclone.`;
 
 interface StunApp {
   atSeconds: number;

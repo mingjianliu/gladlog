@@ -42,7 +42,11 @@ import {
 import { supersededAuraBreaks } from "../utils/auraIntervals";
 import { allyCopyRecipient } from "../utils/allyCopyWall";
 import { buffFullDurationForCaster } from "../utils/buffDuration";
-import { damageTakenBetween, hitByAttackers } from "../utils/burstHit";
+import {
+  controlTargetHitPressured,
+  damageTakenBetween,
+  hitByAttackers,
+} from "../utils/burstHit";
 import {
   cannotCastIntervalsForSpells,
   petCastersOf,
@@ -86,6 +90,10 @@ import {
   kiteAttribution,
   kitedAway,
 } from "./crisisDecisionPoints";
+
+// moved to utils/burstHit.ts (B5, 2026-10-24); the burst engine's callers
+// keep importing it from here
+export { controlTargetHitPressured };
 
 /** How long after the window start any friendly may answer and still count
  * (GH #60's agreed shape: "response = within 8 s of window start, by ANY
@@ -327,60 +335,6 @@ export interface BurstResponseCast {
   };
 }
 
-/**
- * FT-T12 D3 (user ruling 2026-10-10, T12 item 8 ii): what makes a friendly
- * CONTROL an answer to an enemy burst. The control's target — the unit an
- * aimed control was cast at, or the holder a ground / untargeted control
- * landed on (`BurstResponseCast.destId`) — or that target's pets / summons
- * must have dealt landed damage > 0 to the PRESSURED friendly inside the
- * burst window [fromMs, toMs] (the engine's `tMs` … `outcomeLastMs`, the span
- * and amounts `damageTakenBetween` reads for the window itself). No
- * threshold: one point of damage is "was hitting them".
- *
- * It narrows the rule it sits on, it does not replace it: the target must
- * still be one of the window's cooldown casters (`casterIdSet`). Before, that
- * was the whole rule, so a control on ANY enemy that pressed a cooldown in
- * the window counted — an enemy healer whose only press was Power Infusion
- * included (605 capture: 667 of 1,552 control answers were not on the opener,
- * 252 of them on the enemy healer). No pressured friendly ⇒ nobody was being
- * hit ⇒ no control answer.
- *
- * ONE rule, both signs: the engine drops a control that fails it from
- * `responseCasts`, the list `responded` (the slow-defensive-response
- * candidate's half) and `creditedAnswer` (the `[BURST ANSWERED]` line's
- * half) both read. Measured on the 605 capture (the preview, parent
- * session): slow-defensive-response 0 added / 0 removed; `[BURST ANSWERED]`
- * −143 / +91 lines.
- *
- * Known limit, not addressed (flagged with the preview, accepted with it): a
- * control that shut its target down for the WHOLE window leaves that target
- * with zero damage on the pressured friendly, and so does not count — the
- * most effective control of an attacker reads as no control. A hit from
- * before the window does not rescue it: the span is the window's.
- */
-export function controlTargetHitPressured(
-  pressuredUnit: unknown,
-  controlTargetId: string | undefined,
-  enemyPlayerOf: (srcUnitId: string) => string | undefined,
-  fromMs: number,
-  toMs: number,
-  /** the round's units — whose IMMUNE misses on the pressured friendly also
-   * count as hitting them (`hitByAttackers`, G6's reading; work order
-   * 2026-10-14d Part 2, preview) */
-  units: Iterable<unknown> = [],
-): boolean {
-  return (
-    pressuredUnit != null &&
-    controlTargetId !== undefined &&
-    hitByAttackers(
-      pressuredUnit,
-      units,
-      (src) => enemyPlayerOf(src) === controlTargetId,
-      fromMs,
-      toMs,
-    )
-  );
-}
 
 /** One aura application a control answer put on its target: the aura's own
  * id and the instant it went on — the key the `[CC ON ENEMY]` instance of the

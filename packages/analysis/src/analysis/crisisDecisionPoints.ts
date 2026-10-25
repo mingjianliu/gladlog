@@ -23,6 +23,7 @@ import {
   rootSpellIds,
   spells as spellMeta,
 } from "../data/spellTags";
+import { controlTargetHitPressured } from "../utils/burstHit";
 import { burstCastSpan } from "../utils/burstLedger";
 import {
   buildCannotCastIntervals,
@@ -33,6 +34,7 @@ import {
   namedCannotCastIntervals,
 } from "../utils/cannotCastIntervals";
 import { castControlsIn } from "../utils/castMissRows";
+import { isFormReshiftCast } from "../utils/castPress";
 import {
   cdIsProcOnly,
   cdReadyInTimeAt,
@@ -779,6 +781,19 @@ export function crisisDecisionPoints(
     }
   }
   const unitById = new Map(units.map((u) => [u.id, u]));
+  // A damage source → the enemy PLAYER behind it (itself, or its pet's /
+  // summon's owner) — the burst engine's reading, for the control answer
+  // below (`controlTargetHitPressured`)
+  const enemyPlayerIds = new Set(
+    players.filter((u) => !friendIds.has(u.id)).map((u) => u.id as string),
+  );
+  const enemyPlayerOf = (srcUnitId: string): string | undefined =>
+    enemyPlayerIds.has(srcUnitId)
+      ? srcUnitId
+      : unitById.get(srcUnitId)?.ownerId &&
+          enemyPlayerIds.has(unitById.get(srcUnitId).ownerId)
+        ? (unitById.get(srcUnitId).ownerId as string)
+        : undefined;
 
   const dmgIn = ((owner.damageIn ?? []) as any[]).map((d) => ({
     t: d.timestamp,
@@ -849,6 +864,10 @@ export function crisisDecisionPoints(
     id: String(c.spellId ?? ""),
     dest: c.destUnitId,
     line: c.logLine?.lineIndex as number | undefined,
+    // B6 (user 2026-10-24): a shift back into a form whose cooldown buff is
+    // still up (Incarnation: Tree of Life, `isFormReshiftCast`) presses
+    // nothing — it answers no crisis
+    reshift: isFormReshiftCast(owner, c),
   }));
   /**
    * The press a heal on the owner belongs to (codex 20-F15-20): the owner's
@@ -1155,11 +1174,29 @@ export function crisisDecisionPoints(
 
     // User ruling 2026-09-14: a break or mobility press inside the window gets
     // its own RESPONSE_WINDOW_MS to pay off (see CRISIS_MOBILITY_PRESS_IDS).
-    const credited = (c: { id: string; dest?: string }) => ({
+    // B5 (user 2026-10-24, 「全按建议」): a control answers the crisis only
+    // when its target, or the target's pets, was hitting the owner — the
+    // burst engine's rule (FT-T12 D3, `controlTargetHitPressured`), over
+    // this crisis's span: the 2 s of damage before the reading to the
+    // response window's end. Before, any control on a non-friendly unit
+    // counted, whoever it was hitting.
+    const controlAnswers = (c: { id: string; dest?: string }) =>
+      CONTROL_IDS.has(c.id) &&
+      !!c.dest &&
+      !friendIds.has(c.dest) &&
+      controlTargetHitPressured(
+        owner,
+        c.dest,
+        enemyPlayerOf,
+        dmgEnd - DMG_WINDOW_MS,
+        w1,
+        units,
+      );
+    const credited = (c: { id: string; dest?: string; reshift?: boolean }) => ({
       wall: PERSONAL_WALL_IDS.has(c.id),
-      protective: CRISIS_PROTECTIVE_ANSWER_IDS.has(c.id),
+      protective: CRISIS_PROTECTIVE_ANSWER_IDS.has(c.id) && !c.reshift,
       external: EXTERNAL_IDS.has(c.id),
-      control: CONTROL_IDS.has(c.id) && !!c.dest && !friendIds.has(c.dest),
+      control: controlAnswers(c),
     });
     const followUp = {
       selfHeal: false,
@@ -1207,14 +1244,12 @@ export function crisisDecisionPoints(
       attackerMoved: attackerMoved && !followUp.kite,
       wall: castsIn.some((c) => PERSONAL_WALL_IDS.has(c.id)) || followUp.wall,
       protective:
-        castsIn.some((c) => CRISIS_PROTECTIVE_ANSWER_IDS.has(c.id)) ||
-        followUp.protective,
+        castsIn.some(
+          (c) => CRISIS_PROTECTIVE_ANSWER_IDS.has(c.id) && !c.reshift,
+        ) || followUp.protective,
       external:
         castsIn.some((c) => EXTERNAL_IDS.has(c.id)) || followUp.external,
-      control:
-        castsIn.some(
-          (c) => CONTROL_IDS.has(c.id) && c.dest && !friendIds.has(c.dest),
-        ) || followUp.control,
+      control: castsIn.some(controlAnswers) || followUp.control,
       peel: friendControlCasts.some((c) => inWin(c.t) && attackers.has(c.dest)),
       kite: kite || followUp.kite,
     };

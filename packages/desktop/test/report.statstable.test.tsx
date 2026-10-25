@@ -77,3 +77,31 @@ describe("统计表行展开(#10 v2)", () => {
     expect(container.querySelector(".rpt-replay-scrub")).toBeTruthy();
   });
 });
+
+describe("B1 (user 2026-10-24): the table's 解 / 驱散 are the dispel panel's", () => {
+  it("each player's counts equal `dispelSummaryOf`'s deliberate rows of that player — pets credited to their owner", async () => {
+    const { dispelSummaryOf } = await import(
+      "../src/renderer/src/report/derive/dispelSummary"
+    );
+    const { toLegacySafe } = await import(
+      "../src/renderer/src/report/derive/legacySource"
+    );
+    const legacy = toLegacySafe(m);
+    const players = Object.values(legacy.units).filter((u) => u.info);
+    const friends = players.filter((u) => u.reaction === "Friendly");
+    const enemies = players.filter((u) => u.reaction !== "Friendly");
+    const ours = dispelSummaryOf(legacy, friends as never, enemies as never);
+    const theirs = dispelSummaryOf(legacy, enemies as never, friends as never);
+    for (const r of deriveStatsTable(m)) {
+      const s = r.reaction === "Friendly" ? ours : theirs;
+      const mine = (rows: typeof s.ourPurges) =>
+        rows.filter(
+          (d) => d.sourceName === r.name && d.dispelKind === "deliberate",
+        ).length;
+      expect([r.cleanses, r.purges]).toEqual([
+        mine(s.allyCleanse),
+        mine(s.ourPurges),
+      ]);
+    }
+  });
+});

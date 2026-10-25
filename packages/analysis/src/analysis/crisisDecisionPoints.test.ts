@@ -580,6 +580,64 @@ describe("crisisDecisionPoints", () => {
     ).toBe(true);
   });
 
+  it("B5 (user 2026-10-24): a control answers only when its target, or its pet, was hitting the owner", () => {
+    const scream = (dest: string) =>
+      unit({
+        spellCastEvents: [
+          { timestamp: T0 + 2800, spellId: "8122", destUnitId: dest },
+        ],
+      });
+    // E2 hit nobody: no answer
+    const o = scream("E2");
+    expect(
+      crisisDecisionPoints(o, combat(o, [enemy(), enemy("E2")]))[0]!.responses
+        .control,
+    ).toBe(false);
+    // E2's pet did the hitting: an answer
+    const p = scream("E2");
+    p.damageIn = p.damageIn.map((d: any) => ({ ...d, srcUnitId: "P2" }));
+    const pet = { ...enemy("P2"), info: undefined, ownerId: "E2" };
+    expect(
+      crisisDecisionPoints(p, combat(p, [enemy("E2"), pet]))[0]!.responses
+        .control,
+    ).toBe(true);
+  });
+
+  it("B6 (user 2026-10-24): a shift back into Tree of Life with Incarnation up answers nothing", () => {
+    const tree = (reshift: boolean) =>
+      unit({
+        spellCastEvents: [
+          {
+            timestamp: T0 + 2800,
+            spellId: "33891",
+            logLine: { event: LogEvent.SPELL_CAST_SUCCESS, timestamp: T0 + 2800 },
+          },
+        ],
+        auraEvents: [
+          {
+            timestamp: reshift ? T0 + 100 : T0 + 2800,
+            spellId: "117679",
+            srcUnitId: "H",
+            destUnitId: "H",
+            logLine: {
+              event: LogEvent.SPELL_AURA_APPLIED,
+              timestamp: reshift ? T0 + 100 : T0 + 2800,
+            },
+          },
+        ],
+      });
+    const fresh = tree(false);
+    expect(
+      crisisDecisionPoints(fresh, combat(fresh, [enemy()]))[0]!.responses
+        .protective,
+    ).toBe(true);
+    const back = tree(true);
+    expect(
+      crisisDecisionPoints(back, combat(back, [enemy()]))[0]!.responses
+        .protective,
+    ).toBe(false);
+  });
+
   it("peel: a teammate casts CC on the owner's attacker (does not count as responded)", () => {
     const mate = {
       ...enemy("M1"),

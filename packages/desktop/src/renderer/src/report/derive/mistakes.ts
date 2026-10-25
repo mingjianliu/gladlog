@@ -6,6 +6,7 @@ import {
   computeOffensiveWindows,
   extractCandidateFindings,
   MENU_ONLY_TYPES,
+  missedPurgeNotActionable,
   RETIRED_TYPES,
 } from "@gladlog/analysis";
 import { parseSyncReadyCdEntry } from "@gladlog/analysis/src/analysis/candidates/cooldownTiming";
@@ -567,6 +568,13 @@ export function deriveMistakes(
     );
     for (const w of dispels.missedPurgeWindows) {
       if (!w.duringKillWindow) continue;
+      // C3 (user 2026-10-24): a window nobody could have answered is no
+      // mistake — every purger locked out, none in range / line of sight,
+      // or the purge on cooldown for the whole buff: the prompt's `not
+      // actionable` (`missedPurgeNotActionable`, the dispel panel's notes).
+      // Before: 73 of 206 cards on 31 rounds sat on such a window.
+      const why = missedPurgeNotActionable(w);
+      if (why.lockedOut || why.noReach || why.onCooldownThroughout) continue;
       const rule = RULE_BY_TYPE.get("missed-purge-kill-window")!;
       out.push({
         tS: w.timeSeconds,
