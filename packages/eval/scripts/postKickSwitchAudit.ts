@@ -35,6 +35,7 @@
  */
 import { ensureAnalysisData, specToString } from "@gladlog/analysis";
 import { buildFindingsPrompt, extractCandidateFindings } from "@gladlog/analysis";
+import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData";
 import {
   schoolLockedBy,
   spellSchoolMask,
@@ -238,9 +239,12 @@ export async function collect(limit: number): Promise<{
  * into the hard cast it belongs to (an Evoker's Living Flame row 2 ms before
  * its Chrono Flames SUCCESS; codex 61-POSTHOC-12b #2: the first off-school
  * row alone read hard=0 / instant=1). The mask search only when production
- * named none.
+ * named none. Production's name is English (`getEnglishSpellName` by id), so
+ * each cast is compared by its English name, never the logged one — a zhCN
+ * log's localized Chrono Flames used to miss and fall back to the Living
+ * Flame row (codex 30-RV-04 #3).
  */
-function switchTrigger<T extends { t: number; spellId: string; spellName: string }>(
+export function switchTrigger<T extends { t: number; spellId: string; spellName: string }>(
   casts: readonly T[],
   inst: { atSeconds: number; interruptedSpellId: string; switchSpellName: string | null },
 ): T | undefined {
@@ -248,7 +252,12 @@ function switchTrigger<T extends { t: number; spellId: string; spellName: string
   const inWin = (c: T) => c.t > inst.atSeconds && c.t <= inst.atSeconds + WINDOW_S;
   return (
     (inst.switchSpellName !== null
-      ? casts.find((c) => inWin(c) && c.spellName === inst.switchSpellName)
+      ? casts.find(
+          (c) =>
+            inWin(c) &&
+            getEnglishSpellName(c.spellId, c.spellName) ===
+              inst.switchSpellName,
+        )
       : undefined) ??
     casts.find(
       (c) =>
