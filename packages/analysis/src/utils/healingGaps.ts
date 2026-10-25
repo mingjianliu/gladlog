@@ -7,6 +7,11 @@ import {
 } from "./cannotCastIntervals";
 import { isHealerSpec, isPassiveProcCast, specToString } from "./cooldowns";
 import { getLowestHpPercentInWindow } from "./killWindowTargetSelection";
+import {
+  type CastFailedEvent,
+  castFailedInWindow,
+  type RawStreams,
+} from "./rawStreams";
 import { fmtTime } from "./renderGrid";
 import { roundEndMs } from "./roundEnd";
 
@@ -64,6 +69,11 @@ export interface IHealingGap {
    * >70% 0.8%) — gap length is not the criterion, this is.
    */
   lowestFriendlyHpPct: number | null;
+  /** The healer's presses the game refused inside the gap (SPELL_CAST_FAILED,
+   * `castFailedInWindow`) — a gap with a refused press is not idle (fact5
+   * D12, ef3b61c9 r0 2:03: two Holy Shocks refused for line of sight).
+   * Present only when the caller passes the raw streams. */
+  refusedPresses?: CastFailedEvent[];
 }
 
 // ---------------------------------------------------------------------------
@@ -126,7 +136,7 @@ export function detectHealingGaps(
   /** The last playable instant, epoch ms (`playableEndMs`: a Solo Shuffle
    * round's ending death, a 3v3's deciding death) — gaps are bounded by it
    * exactly as by the healer's own death (B137). Absent = the match end. */
-  opts: { playableEndMs?: number } = {},
+  opts: { playableEndMs?: number; rawStreams?: RawStreams } = {},
 ): IHealingGap[] {
   // One predicate for "could not cast" (auras ∪ kick lockouts), built once
   // per healer and clipped per gap below; pets and totems count as sources
@@ -267,6 +277,16 @@ export function detectHealingGaps(
       mostDamagedSpec,
       mostDamagedAmount,
       lowestFriendlyHpPct,
+      ...(opts.rawStreams
+        ? {
+            refusedPresses: castFailedInWindow(
+              opts.rawStreams,
+              healer.id,
+              (fromMs - matchStartMs) / 1000,
+              (effectiveToMs - matchStartMs) / 1000,
+            ),
+          }
+        : {}),
     });
   }
 

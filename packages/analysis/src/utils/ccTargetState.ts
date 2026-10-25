@@ -160,6 +160,34 @@ function breakToolsFor(target: ICombatUnit, mech: number): string[] {
 }
 
 /**
+ * The geometry half of "could this owner put this CC on that target at this
+ * instant": both positions known (`INTERP_MAX_GAP_MS`), the distance within
+ * the CC's reach (`ccThreatReachYards` — cast range, else a caster-centred
+ * radius), LoS not falsified. Unknown position fails closed. One predicate
+ * for `ccSamplerFor` and the healer-offense "X ready on enemy healer" lines
+ * (fact5 D18 / D19, 5fb1039a r0: an Incapacitating Roar — 10 yd around the
+ * druid — "ready on enemy healer" 38–65 yd away).
+ */
+export function ccReachAt(
+  owner: ICombatUnit,
+  target: ICombatUnit,
+  reachYards: number,
+  zone: string,
+  ms: number,
+):
+  | { ok: true; distanceYards: number }
+  | { ok: false; reason: "no-position" | "out-of-range" | "los" } {
+  const po = getUnitPositionAtTime(owner, ms, INTERP_MAX_GAP_MS);
+  const pt = getUnitPositionAtTime(target, ms, INTERP_MAX_GAP_MS);
+  if (!po || !pt) return { ok: false, reason: "no-position" };
+  const dist = distanceBetween(po, pt);
+  if (dist > reachYards) return { ok: false, reason: "out-of-range" };
+  if (hasLineOfSight(zone, po, pt) === false)
+    return { ok: false, reason: "los" };
+  return { ok: true, distanceYards: dist };
+}
+
+/**
  * A sampler for one owner's one CC, or null when its mechanic or reach is
  * unknown (no line may be built on it). Per-target facts are computed once
  * and cached.
@@ -325,13 +353,9 @@ export function ccSamplerFor(params: {
         return { ok: false, reason: "target-cc" };
       if (f.blockers.some((iv) => overlapsSecond(iv, s)))
         return { ok: false, reason: "target-immune" };
-      const po = getUnitPositionAtTime(owner, ms, INTERP_MAX_GAP_MS);
-      const pt = getUnitPositionAtTime(target, ms, INTERP_MAX_GAP_MS);
-      if (!po || !pt) return { ok: false, reason: "no-position" };
-      const dist = distanceBetween(po, pt);
-      if (dist > reach) return { ok: false, reason: "out-of-range" };
-      if (hasLineOfSight(zone, po, pt) === false)
-        return { ok: false, reason: "los" };
+      const geo = ccReachAt(owner, target, reach, zone, ms);
+      if (!geo.ok) return { ok: false, reason: geo.reason };
+      const dist = geo.distanceYards;
       const dr = catKnown
         ? getDRLevel(
             f.drHistory.filter((h) => h.applyMs < ms),

@@ -35,7 +35,8 @@ import { isSameSideSource, type RosterSides } from "./rosterSide";
 /**
  * Damage ids that MOVE a teammate's health onto the unit instead of being an
  * enemy hitting it — user ruling 2026-09-30 (triage hp-state R2 / A22 = B:
- * "只排除灵魂链接 98021、虚空汲取 451963"). 5e8b11c1's healer "took a 1.10M
+ * "只排除灵魂链接 98021、虚空汲取 451963"; Tempered in Battle added
+ * 2026-10-25, below). 5e8b11c1's healer "took a 1.10M
  * spike" of which 685k was his own Spirit Link Totem, while the `Top sources`
  * of that very line (same-team sources excluded) listed 106k / 73k / 58k.
  * A row counts as redistribution only when its source is on the unit's own
@@ -52,6 +53,12 @@ import { isSameSideSource, type RosterSides } from "./rosterSide";
 export const REDISTRIBUTION_DAMAGE_IDS: ReadonlySet<string> = new Set([
   "98021", // Spirit Link (Spirit Link Totem's health redistribution)
   "451963", // Void Leech (Shadow Priest draining an ally)
+  // Tempered in Battle (Paladin) — user ruling 2026-10-25 (fact5 D10, F18:
+  // 「加」). Tooltip 469703 / 469704 「与你的盟友重新分配生命值」; each tick is
+  // a same-ms SPELL_HEAL on one of the pair and a SPELL_DAMAGE from the
+  // paladin on the other (ef3b61c9 r0 0:54–1:04: 497k of a "1.70M" spike on
+  // the Death Knight). 605 capture: 33 [DMG SPIKE] windows held it.
+  "469704",
 ]);
 
 /**
@@ -82,6 +89,18 @@ export const REDISTRIBUTION_DAMAGE_IDS: ReadonlySet<string> = new Set([
 export const DEFERRAL_SHIELD_DAMAGE_IDS: Readonly<Record<string, string>> = {
   "357170": "361029", // Time Dilation → its deferred damage
   "410355": "413924", // Stretch Time → its deferred damage
+  // Fel Armor (Warlock talent; fact5 D26, 2026-10-24). DB2: 386124 is an
+  // absorb aura (aura 69, all schools); tooltip 「灵魂榨取吸收伤害时，会将所受
+  // 伤害的$s1%吸收并分散在$387847d内」 — the held-back part runs as debuff
+  // 387847 and lands as the holder's own periodic 387846. Its absorb rows are
+  // both signs: a positive row holds damage back, a negative one hands held
+  // damage to another shield on a later hit (dfb06d44 0:48: −18,090 beside
+  // Dark Pact +24,279 on a 9,238 hit; the hit's MISSED ABSORB 7,635 is the
+  // signed sum). Corpus (the 15 fact5 rounds, 9 unit-rounds): +1,599k /
+  // −717k net 882k held back, 849k of 387846 ticks (96 %) — the shape of the
+  // two above. Read as absorbed, it counted the held damage once as a shield
+  // and again as the tick, and every negative row as a positive one.
+  "386124": "387846", // Fel Armor → its deferred damage
 };
 
 const DEFERRED_TICK_IDS: ReadonlySet<string> = new Set(

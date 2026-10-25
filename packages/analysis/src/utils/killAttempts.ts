@@ -96,6 +96,7 @@ import {
   type ISpiritOfRedemptionInterval,
   PRESSED_SPIRIT_OF_REDEMPTION_AURA_IDS,
 } from "./combatStates";
+import { isSameSpell } from "./damagePress";
 import {
   analyzeOutgoingCCChains,
   DRLevel,
@@ -788,7 +789,10 @@ export function extractKillAttempts(
           (d) =>
             d.destUnitId === target.id &&
             !!d.spellId &&
-            ids.has(d.spellId) &&
+            // an effect aura of the cast, or its damage under another id
+            // (`isSameSpell`: Execute 281000 → 260798)
+            (ids.has(d.spellId) ||
+              isSameSpell(d.spellId, d.spellName, c.spellId, c.spellName)) &&
             d.logLine.timestamp >= matchStartMs + c.cast * 1000 &&
             d.logLine.timestamp <= toMs,
         );

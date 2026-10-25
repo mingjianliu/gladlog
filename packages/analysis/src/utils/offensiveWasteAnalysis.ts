@@ -14,13 +14,16 @@ import { getEnglishSpellName } from "../data/spellEffectData";
 import { immunityCoversSpell } from "../data/spellSchools";
 import { isAllyCopyWallId } from "./allyCopyWall";
 import { buildAuraIntervals } from "./auraIntervals";
+import { empowerSpans, type EmpowerSpanUnit } from "./castCommitSpans";
 import { isControlCast } from "./castMissRows";
+import { COMPANION_CAST_ROW_MS, isNoPressRow } from "./castPress";
 import { applicableCCAvoidanceIds } from "./ccTrinketAnalysis";
 import {
   getUnitHpAtTimestamp,
   HP_SAMPLE_RADIUS_MS,
   specToString,
 } from "./cooldowns";
+import { spellNameKey } from "./damagePress";
 import { fmtTime, toRenderSecond } from "./renderGrid";
 import { roundEndMs } from "./roundEnd";
 
@@ -40,6 +43,9 @@ const WASTE_MIN_CASTS: Record<IDefenseWindow["verdict"], number> = {
 /** A spell is "high value" for a player when it made at least this share of
  * their damage this round. */
 const HIGH_VALUE_DAMAGE_SHARE = 0.05;
+/** A hold's own SPELL_CAST_SUCCESS sits this close to its EMPOWER_START —
+ * `pressBehindDamageOf`'s hold-start test. */
+const EMPOWER_HOLD_ROW_MS = 500;
 
 interface IOffensiveWasteCast {
   spellId: string;
@@ -149,6 +155,12 @@ function buildDefenseWindows(
  * exactly the spells BELOW a 5 % share — 82a2d681's Arms Warrior into Astral
  * Shift was listed as "Rend + Charge + Hamstring" while three Mortal Strikes
  * were dropped.
+ *
+ * Keyed by the spell, not the row's id (`spellNameKey`): the log writes many
+ * a spell's damage under another id than its cast, and the casts below are
+ * matched by the same key (fact5 D7 / D8: Execute's cast 281000 lands as
+ * 260798 — 17 % of an Arms Warrior's damage, never counted into Barkskin or
+ * Divine Protection).
  */
 export function getHighValueSpellIds(
   unit: Pick<ICombatUnit, "damageOut">,
@@ -161,7 +173,7 @@ export function getHighValueSpellIds(
     // spell id (convert.ts) — not a spell of this unit. The share is of landed
     // damage, spell by spell.
     if ((dmg.logLine?.event as string) === LogEvent.SPELL_ABSORBED) continue;
-    const id = dmg.spellId ?? "melee";
+    const id = dmg.spellId ? spellNameKey(dmg.spellId, dmg.spellName) : "melee";
     const amount = Math.abs(dmg.effectiveAmount ?? 0);
     totals[id] = (totals[id] ?? 0) + amount;
     grandTotal += amount;
@@ -219,10 +231,59 @@ export function buildOffensiveWasteSummary(
 
   for (const friend of friends) {
     const highValueIds = getHighValueSpellIds(friend);
-    const castEvents = friend.spellCastEvents.filter(
+    const successRows = friend.spellCastEvents.filter(
       (e) =>
         e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
         e.logLine.timestamp < roundEndAt,
+    );
+    // presses only: a copy / companion row is no press of its own, and one
+    // press the log writes under two ids of the spell in one instant (Flame
+    // Shock 470411 + 188389) is one cast — matched by the spell, both rows
+    // would count (fact5 D7 follow-up)
+    // An empowered spell's SPELL_CAST_SUCCESS is written when the hold
+    // BEGINS; the spell goes off at the release (`empowerSpans`, the rule
+    // `pressBehindDamageOf` reads). A hold never released fired nothing
+    // (codex 20-F18-01 #2, d15afa55 r0 2:16: an Eternity Surge held from
+    // 136.11 s into an Astral Shift that ran out at 136.54 s).
+    const holds = empowerSpans(friend as EmpowerSpanUnit) ?? [];
+    const firedAtMs = new Map<object, number | null>();
+    for (const e of successRows) {
+      const hold = holds.find(
+        (h) =>
+          spellNameKey(h.spellId, h.spellName) ===
+            spellNameKey(e.spellId, e.spellName) &&
+          Math.abs(h.startMs - e.logLine.timestamp) <= EMPOWER_HOLD_ROW_MS,
+      );
+      if (hold) firedAtMs.set(e, hold.interrupted ? null : hold.endMs);
+      // a hold the log shows begin and never shows released went off at no
+      // instant the log has (codex 20-F18-03 #1): not a cast into anything
+      else if (
+        ((friend as EmpowerSpanUnit).empowerStarts ?? []).some(
+          (st) =>
+            spellNameKey(st.spellId, st.spellName) ===
+              spellNameKey(e.spellId, e.spellName) &&
+            Math.abs(st.timestamp - e.logLine.timestamp) <= EMPOWER_HOLD_ROW_MS,
+        )
+      )
+        firedAtMs.set(e, null);
+    }
+    const castAtMs = (e: (typeof successRows)[number]): number | null =>
+      firedAtMs.has(e) ? firedAtMs.get(e)! : e.logLine.timestamp;
+    const castEvents = successRows.filter(
+      (e, i) =>
+        castAtMs(e) !== null &&
+        !isNoPressRow(e, successRows) &&
+        !successRows.some(
+          (o, j) =>
+            j < i &&
+            o.destUnitId === e.destUnitId &&
+            o.spellId !== e.spellId &&
+            Math.abs(o.logLine.timestamp - e.logLine.timestamp) <=
+              COMPANION_CAST_ROW_MS &&
+            !isNoPressRow(o, successRows) &&
+            spellNameKey(o.spellId, o.spellName) ===
+              spellNameKey(e.spellId, e.spellName),
+        ),
     );
 
     for (const window of defenseWindows) {
@@ -231,7 +292,7 @@ export function buildOffensiveWasteSummary(
       const wasteCasts: IOffensiveWasteCast[] = castEvents
         .filter((e) => {
           if (e.destUnitId !== window.unitId) return false;
-          const t = (e.logLine.timestamp - matchStartMs) / 1000;
+          const t = (castAtMs(e)! - matchStartMs) / 1000;
           if (t < window.fromSeconds || t > window.toSeconds) return false;
           if (e.spellId === null) return false;
           // round-1 retest (fact1215 idx 107): a cast the target REFLECTED
@@ -239,7 +300,7 @@ export function buildOffensiveWasteSummary(
           // (c3398b15 0:55: a Mortal Coil reflected by Spell Reflection was
           // listed "into" Die by the Sword)
           if (
-            reflectedBack(friend, e.spellId, window.unitId, e.logLine.timestamp)
+            reflectedBack(friend, e.spellId, window.unitId, castAtMs(e)!)
           )
             return false;
           // round-1 retest idx 43 / 13: a school-limited immunity does not
@@ -269,13 +330,13 @@ export function buildOffensiveWasteSummary(
           return (
             isHighValueCC ||
             highValueIds.size === 0 ||
-            highValueIds.has(e.spellId)
+            highValueIds.has(spellNameKey(e.spellId, e.spellName))
           );
         })
         .map((e) => ({
           spellId: e.spellId ?? "",
           spellName: e.spellName ?? "",
-          atSeconds: (e.logLine.timestamp - matchStartMs) / 1000,
+          atSeconds: (castAtMs(e)! - matchStartMs) / 1000,
         }));
 
       if (wasteCasts.length < threshold) continue;

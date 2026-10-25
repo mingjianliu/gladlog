@@ -11,11 +11,13 @@ import {
   kwCooldownSeconds,
   unpressedKitDefensiveInHand,
 } from "../data/abilityProfile";
+import { castAndEffectIds } from "../data/castEffectAuras";
 import { SELF_WALL_AURA_TO_CAST_ID } from "../data/mitigationData";
 import { SPELL_CATEGORIES as spellsData } from "../data/spellCategories";
 import { spellEffectData } from "../data/spellEffectData";
 import { SpellTag } from "../data/spellTypes";
 import { supersededAuraBreaks } from "./auraIntervals";
+import { isCasterSideLinkAura } from "./brokenRowBreaker";
 import { buffFullDurationForCaster } from "./buffDuration";
 import { extractSpiritOfRedemptionIntervals } from "./combatStates";
 import {
@@ -33,13 +35,13 @@ import {
   isBelowWallFloorExternal,
   KW_REDIRECT_PROTECTION_AURA_IDS,
   KW_UNTARGETABLE_AURA_IDS,
-  untargetableEndS,
   ownPressedShieldSpansMs,
   ownSaveSpanS,
   ownWallSpanS,
   renderedExternalSpanS,
   SAVE_CAST_AURA_PAIR_S,
   saveAuraIntervals,
+  untargetableEndS,
   wallTableIdOfAura,
 } from "./enemyDefensives";
 import { isDeferralAbsorb } from "./incomingPressure";
@@ -589,6 +591,12 @@ export function computeOffensiveWindows(
 
     // Scan spellCastEvents directly — do not use extractMajorCooldowns on enemies
     const castsBySpell = new Map<string, number[]>();
+    /** each roster press's target, by spell: the press that went on another
+     * unit is an external, no protection on its caster (fact5 D9) */
+    const castDestsBySpell = new Map<
+      string,
+      Array<{ t: number; destId: string | undefined }>
+    >();
     for (const cast of enemy.spellCastEvents) {
       if (cast.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
       const { spellId } = cast;
@@ -607,7 +615,37 @@ export function computeOffensiveWindows(
       const list = castsBySpell.get(spellId) ?? [];
       list.push((cast.logLine.timestamp - matchStartMs) / 1000);
       castsBySpell.set(spellId, list);
+      const dests = castDestsBySpell.get(spellId) ?? [];
+      dests.push({
+        t: (cast.logLine.timestamp - matchStartMs) / 1000,
+        destId: cast.destUnitId,
+      });
+      castDestsBySpell.set(spellId, dests);
     }
+    /** did this press of `spellId` at `t` go on another unit — and put
+     * nothing on its caster? A cast row can name an ally while the aura
+     * lands on the caster too (codex 20-F18-02 #1, 4501dd64 0:45.4: an
+     * Obsidian Scales naming a teammate, its aura on the evoker to 0:57.4) */
+    const castOnAnother = (spellId: string, t: number): boolean => {
+      const row = (castDestsBySpell.get(spellId) ?? []).find(
+        (d) => Math.abs(d.t - t) <= 0.05,
+      );
+      if (!row?.destId || row.destId === enemy.id || /^0+$/.test(row.destId))
+        return false;
+      const own = castAndEffectIds(spellId);
+      const castMs = matchStartMs + t * 1000;
+      return !(enemy.auraEvents ?? []).some(
+        (a) =>
+          !!a.spellId &&
+          own.has(a.spellId) &&
+          a.destUnitId === enemy.id &&
+          a.srcUnitId === enemy.id &&
+          !isCasterSideLinkAura(a.spellId, true) &&
+          (a.logLine.event === LogEvent.SPELL_AURA_APPLIED ||
+            a.logLine.event === LogEvent.SPELL_AURA_REFRESH) &&
+          Math.abs(a.logLine.timestamp - castMs) <= 500,
+      );
+    };
 
     for (const [spellId, casts] of castsBySpell) {
       const effectData = spellEffectData[spellId]!;
@@ -660,14 +698,17 @@ export function computeOffensiveWindows(
           emptiedAt.set(f.atSeconds, (emptiedAt.get(f.atSeconds) ?? 0) + 1);
       const holdsNothing = !timesCastOf(spellId);
       for (const castTimeSeconds of casts) {
-        if (holdsNothing) {
+        // an external pressed on a teammate spends the button and protects
+        // the teammate, not its caster (fact5 D9, 486b980e 4:30: Blessing
+        // of Sacrifice on an ally held its paladin "protected" 12 s)
+        if (holdsNothing || castOnAnother(spellId, castTimeSeconds)) {
           events.push({
             time: castTimeSeconds,
             kind: "CD_USED",
             spellId,
             spellName: effectData.name,
             spendsLast: takeFlip(emptiedAt, castTimeSeconds),
-            holdsNothing,
+            holdsNothing: true,
           });
           continue;
         }

@@ -763,3 +763,31 @@ describe("unpressedKitDefensiveInHand — an unpressed heal or ally-only cooldow
     );
   });
 });
+
+describe("computeOffensiveWindows — an external pressed on a teammate is no protection on its caster (fact5 D9)", () => {
+  const combat = { startTime: T0, endTime: at(60), units: {} } as never;
+  const druidPressing = (destId: string) =>
+    makeUnit("e1", {
+      name: "EnemyDruid",
+      spec: CombatUnitSpec.Druid_Restoration,
+      reaction: CombatUnitReaction.Hostile,
+      // Ironbark (90 s, 12 s buff) at 2 s
+      spellCastEvents: [
+        makeSpellCastEvent("102342", at(2), destId, "X", "e1", "EnemyDruid"),
+      ],
+    });
+  it("Ironbark on the druid itself holds the span off for the buff; on a teammate the span opens at the press", () => {
+    const self = computeOffensiveWindows([druidPressing("e1")] as never, [], combat);
+    const ally = computeOffensiveWindows([druidPressing("e2")] as never, [], combat);
+    expect(self[0]!.fromSeconds).toBeGreaterThanOrEqual(14);
+    expect(ally[0]!.fromSeconds).toBeLessThan(3);
+  });
+  it("codex 20-F18-02 #1: a cast row naming an ally whose aura also lands on the caster still protects the caster", () => {
+    const both = druidPressing("e2");
+    both.auraEvents = [
+      makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, "102342", at(2), "e1", "e1", "BUFF"),
+    ] as never;
+    const w = computeOffensiveWindows([both] as never, [], combat);
+    expect(w[0]!.fromSeconds).toBeGreaterThanOrEqual(14);
+  });
+});

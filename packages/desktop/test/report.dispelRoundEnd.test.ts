@@ -147,11 +147,18 @@ describe("战报的驱散读者:窗口止于回合结束(与 prompt 同一个 ro
         );
       return m;
     };
+    // (F18 batch 1, 2026-10-25: a kill window now also opens before the
+    // injected death, at 67.1 s — in both readings; what is pinned is the
+    // cut past the death)
     const threesCards = cards(noOwnShields(roundEndFixture("3v3")));
-    expect(threesCards.length).toBeGreaterThan(0);
-    for (const c of threesCards)
-      expect(c.tS).toBeGreaterThanOrEqual(ROUND_END_DEATH_S);
-    expect(cards(noOwnShields(roundEndFixture(SOLO_SHUFFLE)))).toEqual([]);
+    expect(
+      threesCards.filter((c) => c.tS >= ROUND_END_DEATH_S).length,
+    ).toBeGreaterThan(0);
+    expect(
+      cards(noOwnShields(roundEndFixture(SOLO_SHUFFLE))).filter(
+        (c) => c.tS >= ROUND_END_DEATH_S,
+      ),
+    ).toEqual([]);
   });
 
   it("其他赛制不变:3v3 里的死亡不是回合结束,行与卡片就是只给 {startTime, endTime} 时的那些", () => {

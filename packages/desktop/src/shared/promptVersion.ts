@@ -523,5 +523,22 @@
  *  release is tagged by its own level (D2). 13 public logs: 63 of 119
  *  prompts change, 460 lines by the label and 9 lines gone after the
  *  round's end; every gate passes. No 605-file numbers.
+ *
+ * v457 (2026-10-25, fact5 round-5 fixes F18 batch 1 — the recurring fact
+ *  classes, each with a corpusFactScan4 check): a spell is matched to its
+ *  damage by the spell, not the row id (Execute 281000 → 260798; an
+ *  empower counts at its release); Fel Armor is a deferral shield; Tempered
+ *  in Battle is redistribution; a GCD-refused press of a ready cooldown is
+ *  `attempted` on cd-waste / missed-cleanse / slow-defensive-response too
+ *  (ruling C1, extended 2026-10-25); a healing gap names its refused
+ *  presses; an enemy offensive cooldown's aura with no press is a `(no
+ *  press)` occurrence; an unseen press is read through its same-named
+ *  variants; an aura-only external of any kind is an [ENEMY DEF] line; "X
+ *  ready on enemy healer" needs the CC to reach the healer; an external
+ *  pressed on an ally is no protection on its caster; the pressed Spirit
+ *  of Redemption is a major defensive in hand; STAYED IN names a defensive
+ *  back inside the span. 605 capture (PV455 base → this batch): candidate
+ *  deltas kick-eaten +6, kick-priority +3, burst-into-mitigation +1,
+ *  position-mistake −3 (user-approved preview); gates unchanged.
  */
-export const PROMPT_VERSION = 456;
+export const PROMPT_VERSION = 457;

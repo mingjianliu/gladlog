@@ -231,7 +231,15 @@ export function emitEnemyCdEntries(
       const seq = (seqBySpell.get(cd.spellName) ?? 0) + 1;
       seqBySpell.set(cd.spellName, seq);
       const isActivation = isActivationCd(cd);
-      const seqAnnotation = isActivation
+      // an application with no press at all (`(no press)` / `(source
+      // unknown)`: no button the log shows, no known trigger) is no k-th
+      // cast of anything (fact5 D16 follow-up: `Recklessness (no press)
+      // (cast 1 of 5)`)
+      const noPress =
+        cd.availableAgainAtSeconds === null && !!cd.availabilityUnknown;
+      const seqAnnotation = noPress
+        ? ""
+        : isActivation
         ? procOrdinal(
             seq,
             total,

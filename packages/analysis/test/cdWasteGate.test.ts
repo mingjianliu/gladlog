@@ -101,7 +101,7 @@ describe("cd-waste — facts.attempted (F-W1)", () => {
       "pressed but rejected (under crowd control×1)",
     );
   });
-  it("a not-ready reject within 1.5 s after an own success is a GCD miss-press, not an attempt (fe1a9355 shape)", () => {
+  it("a not-ready reject within 1.5 s after an own success of the never-cast cooldown IS an attempt — ruling C1, extended to cd-waste 2026-10-25 (fact5 D6; it was the fe1a9355 GCD miss-press shape)", () => {
     const [e] = cdWasteEvents([LOH], me, 40, {
       rawStreams: {
         ...rawStreams,
@@ -110,7 +110,7 @@ describe("cd-waste — facts.attempted (F-W1)", () => {
       untilS: 200,
       ownCastSuccessSeconds: [167.783],
     });
-    expect(e!.facts!.attempted).toBeUndefined();
+    expect(e!.facts!.attempted).toBe("pressed but rejected (not ready yet×1)");
   });
   it("the legend says never successfully cast, with the intent-guard note", () => {
     const [e] = cdWasteEvents([LOH], me, 40, { rawStreams, untilS: 120.408 });

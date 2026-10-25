@@ -108,7 +108,7 @@ import {
   computeRootReachability,
   formatRootReachabilityEntries,
 } from "../utils/rootReachability";
-import { roundEndMs } from "../utils/roundEnd";
+import { playableEndMs, roundEndMs } from "../utils/roundEnd";
 import {
   benchmarks,
   formatDTPSBaselines,
@@ -339,7 +339,12 @@ export function buildMatchContext(
       notListedMinDamage: DMG_SPIKE_THRESHOLD,
     });
   const healingGaps = healer
-    ? detectHealingGaps(owner, friends, enemies, combat)
+    ? detectHealingGaps(owner, friends, enemies, combat, {
+        // the same bound as the healing-gap menu line (B137: no gap past the
+        // deciding death) — the timeline's [INACTIVITY] read the match end
+        playableEndMs: playableEndMs(combat, Object.values(combat.units ?? {})),
+        ...(options.rawStreams ? { rawStreams: options.rawStreams } : {}),
+      })
     : [];
   const offensiveWindows = computeOffensiveWindows(enemies, friends, combat);
   // Pets/guardians on both sides (ownerId ∈ the matching players): both the CC

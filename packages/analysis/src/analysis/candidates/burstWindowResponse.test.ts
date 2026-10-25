@@ -353,6 +353,37 @@ describe("burstWindowResponseEvents — facts.attempted (S1)", () => {
       "pressed but rejected (under crowd control×2)",
     );
   });
+  it("fact5 D6 (ruling C1, extended 2026-10-25): a GCD-refused press of a READY tool, never cast after, counts; of a tool not ready, it does not", () => {
+    const notReady = (tSeconds: number) => ({
+      ...fail(tSeconds),
+      reason: "Not yet recovered",
+    });
+    const gcd = {
+      rawStreams: {
+        available: true,
+        manaSamples: [],
+        castFailed: [notReady(158)],
+      },
+      ownerId: "h1",
+      // the owner's own cast 0.6 s before: the GCD was running
+      ownCastSuccessSeconds: [157.4],
+    };
+    const run = (readyAt?: (s: number) => boolean) =>
+      burstWindowResponseEvents(
+        [point({ tSec: 156 })],
+        owner,
+        probes(),
+        undefined,
+        {
+          ...gcd,
+          tools: [{ spellId: "6940", casts: [], ...(readyAt ? { readyAt } : {}) }],
+        },
+      )[0]!.facts!.attempted;
+    expect(run(() => true)).toBe("pressed but rejected (not ready yet×1)");
+    expect(run(() => false)).toBeUndefined();
+    // no readiness reading → dropped as before
+    expect(run()).toBeUndefined();
+  });
   it("no rejects, or no raw streams → no fact", () => {
     expect(
       burstWindowResponseEvents([point({ tSec: 156 })], owner, probes())[0]!

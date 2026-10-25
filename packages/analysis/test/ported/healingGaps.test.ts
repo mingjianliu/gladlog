@@ -65,6 +65,52 @@ describe("healingGaps — main detection", () => {
     expect(res[0].mostDamagedAmount).toBe(100_000);
   });
 
+  it("fact5 D12:空档里被拒的按键随空档带出(refusedPresses)——不是发呆", () => {
+    const healer = makeUnit("h", {
+      spec: CombatUnitSpec.Paladin_Holy,
+      spellCastEvents: [
+        makeSpellCastEvent("19750", MATCH_START + 10_000, "f1"),
+        makeSpellCastEvent("20473", MATCH_START + 20_000, "f1"),
+      ],
+    });
+    const friend = makeUnit("f1", {
+      damageIn: [
+        {
+          logLine: { timestamp: MATCH_START + 15_000 },
+          effectiveAmount: -100_000,
+        },
+      ] as any,
+    });
+    const refused = (tSeconds: number) => ({
+      tSeconds,
+      unitGuid: "h",
+      spellId: 20473,
+      spellName: "Holy Shock",
+      reason: "Target not in line of sight",
+    });
+    const rawStreams = {
+      available: true,
+      manaSamples: [],
+      castFailed: [refused(11.6), refused(11.8), { ...refused(12), unitGuid: "f1" }, refused(25)],
+    };
+    const [gap] = detectHealingGaps(
+      healer as any,
+      [healer, friend] as any,
+      [makeUnit("e1")] as any,
+      makeCombat(),
+      { rawStreams },
+    );
+    expect(gap!.refusedPresses?.map((r) => r.tSeconds)).toEqual([11.6, 11.8]);
+    // no raw streams → no field (the callers that cannot read them)
+    const [plain] = detectHealingGaps(
+      healer as any,
+      [healer, friend] as any,
+      [makeUnit("e1")] as any,
+      makeCombat(),
+    );
+    expect(plain!.refusedPresses).toBeUndefined();
+  });
+
   it("skips gaps where the healer is fully CCed (B81)", () => {
     const healer = makeUnit("h", {
       spellCastEvents: [

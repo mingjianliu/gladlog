@@ -10,6 +10,7 @@
 import { type ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
 import { getEnglishSpellName } from "../../data/spellEffectData";
+import { isSameSpell } from "../../utils/damagePress";
 import { fmtTime } from "../../utils/renderGrid";
 import {
   CRITICAL_NON_PLAYER_NPC_NAMES,
@@ -195,7 +196,11 @@ function hardCastResultOf(
     .map((e) => e.timestamp)
     .sort((a, b) => a - b);
   const damageMs = (enemy.damageOut ?? [])
-    .filter((d) => d.spellId === spellId && d.destUnitId === destId)
+    .filter(
+      (d) =>
+        isSameSpell(d.spellId, d.spellName, spellId, undefined) &&
+        d.destUnitId === destId,
+    )
     .map((d) => d.logLine.timestamp);
   // a hit the shield ate whole: its MISS ABSORB row stands for it, so its
   // SPELL_ABSORBED row is not a second hit

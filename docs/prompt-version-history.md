@@ -4385,3 +4385,26 @@ by the roster label only, and 9 lines gone that sat in the deciding
 death's second after it; candidates unchanged; every checkMatch gate
 passes. No 605-file numbers; `behaviorPriorGenerated.json` was not
 regenerated after B5 (it needs the private corpus).
+
+v457 (2026-10-25, fact5 round-5 fixes, batch 1 — the recurring fact classes):
+a spell's casts are matched to its damage share by the spell, not the row id
+(Execute's cast 281000 lands as 260798; an empowered cast counts at its
+release, a hold never released counts nowhere); Fel Armor joins the deferral
+shields (its absorb rows are delays, its 387846 ticks the damage); Tempered
+in Battle joins the redistribution ids (user ruling 2026-10-25); a
+GCD-refused press of a ready cooldown that is never cast afterwards is
+`attempted` on cd-waste, missed-cleanse and slow-defensive-response (ruling
+C1, extended 2026-10-25); `[INACTIVITY]` and the healing-gap row name the
+healer's refused presses inside the gap; an enemy offensive cooldown's own
+aura with no press is a `(no press)` `[ENEMY CD]` occurrence, weight 0 (ruling
+2026-10-25, the C5 precedent); an unseen press is read through its
+same-named press variants; every aura-only external save is an `[ENEMY DEF]`
+line (a redirect without a duration); `[CONTESTED]` / `[OPPORTUNITY]` "X ready
+on enemy healer" needs the CC to reach that healer at some second of the span;
+an external pressed on an ally no longer counts as protection on its caster;
+the pressed Spirit of Redemption is a kill-window major defensive in hand;
+STAYED IN `no defensive CD available` names a defensive back inside the span.
+605-file capture (PV455 base → batch): candidate deltas kick-eaten +6,
+kick-priority +3, burst-into-mitigation +1, position-mistake −3 (user-approved
+preview); gates unchanged; the new corpusFactScan4 checks read 0 except the
+residuals listed in the commit message.

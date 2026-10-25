@@ -83,6 +83,9 @@ export function burstWindowResponseEvents(
     tools: ReadonlyArray<{
       spellId: string;
       casts: ReadonlyArray<{ timeSeconds: number }>;
+      /** was the tool ready at that second — ruling C1 keeps a GCD-refused
+       * press of a READY tool; absent = the refusal is dropped as before */
+      readyAt?: (tSeconds: number) => boolean;
     }>;
     ownCastSuccessSeconds?: number[];
   },
@@ -209,8 +212,18 @@ export function burstWindowResponseEvents(
                 Number(tool.spellId),
               ),
               tool.casts.map((c) => c.timeSeconds),
+              // ruling C1's reading, extended by the user 2026-10-25 (fact5
+              // D6): a GCD-refused press of a ready tool, never cast later in
+              // the window, is an attempt
               {
                 ownCastSuccessSeconds: ownerAttempts.ownCastSuccessSeconds,
+                ...(tool.readyAt
+                  ? {
+                      keepGcdLockedUntilS:
+                        p.tSec + BURST_RESPONSE_WINDOW_MS / 1000,
+                      readyAt: tool.readyAt,
+                    }
+                  : {}),
               },
             ),
           ),

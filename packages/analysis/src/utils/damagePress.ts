@@ -72,6 +72,31 @@ export interface IDamagePress {
  * `caster`'s press behind a damage row of `spellId` at `atMs`, or null when
  * the rule finds none. `spellId` undefined = a swing.
  */
+/** One spell's identity across the ids the log writes it under: its English
+ * name (Execute's cast 281000 and its damage 260798, Deep Breath's cast
+ * 357210 and its damage 353759), else the id. The "same spell" rule of
+ * `pressBehindDamageOf`, for every reader that matches a damage row to a cast
+ * (fact5 D7 / D8). */
+export function spellNameKey(
+  spellId: string | null | undefined,
+  spellName?: string | null,
+): string {
+  if (!spellId) return "";
+  return getEnglishSpellName(spellId, spellName ?? "") || spellId;
+}
+
+/** Are two rows the same spell — the same id, or the same English name
+ * (`spellNameKey`)? */
+export function isSameSpell(
+  aId: string | null | undefined,
+  aName: string | null | undefined,
+  bId: string | null | undefined,
+  bName: string | null | undefined,
+): boolean {
+  if (!aId || !bId) return false;
+  return aId === bId || spellNameKey(aId, aName) === spellNameKey(bId, bName);
+}
+
 export function pressBehindDamageOf(
   caster: PressCaster,
   spellId: string | undefined,
@@ -79,13 +104,12 @@ export function pressBehindDamageOf(
   atMs: number,
 ): IDamagePress | null {
   if (!spellId || AUTO_ATTACK_REPLACEMENT_IDS.has(spellId)) return null;
-  const name = getEnglishSpellName(spellId, spellName ?? "");
   const same = (id: string | null | undefined, n?: string): 0 | 1 | 2 =>
     !id
       ? 0
       : id === spellId
         ? 2
-        : name !== "" && getEnglishSpellName(id, n ?? "") === name
+        : isSameSpell(id, n, spellId, spellName)
           ? 1
           : 0;
 

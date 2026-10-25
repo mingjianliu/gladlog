@@ -39,14 +39,24 @@ describe("offensiveWasteAnalysis — getHighValueSpellIds (FT-T02a)", () => {
         hit("1715", -20_000), // Hamstring — 2.1 %
       ],
     });
-    expect([...ids].sort()).toEqual(["12294", "7384"]);
+    expect([...ids].sort()).toEqual(["Mortal Strike", "Overpower"]);
+  });
+
+  it("按技能(英文名)计占比:施法 id 与伤害 id 不同的技能照样算(fact5 D7:Execute 281000 → 260798)", () => {
+    const ids = getHighValueSpellIds({
+      damageOut: [
+        hit("12294", -600_000), // Mortal Strike
+        hit("260798", -300_000), // Execute's damage row
+      ],
+    });
+    expect(ids.has("Execute")).toBe(true);
   });
 
   it("正数金额(旧文档 / 手工夹具)结果相同", () => {
     const ids = getHighValueSpellIds({
       damageOut: [hit("12294", 600_000), hit("1715", 20_000)],
     });
-    expect([...ids]).toEqual(["12294"]);
+    expect([...ids]).toEqual(["Mortal Strike"]);
   });
 
   it("被吸收的部分在 damageOut 里是按盾的法术 id 记的正数行:不进占比,也不抬高门槛", () => {
@@ -63,12 +73,12 @@ describe("offensiveWasteAnalysis — getHighValueSpellIds (FT-T02a)", () => {
         absorbed("17", 900_000), // Power Word: Shield ate 900k
       ],
     });
-    expect([...ids].sort()).toEqual(["12294", "7384"]);
+    expect([...ids].sort()).toEqual(["Mortal Strike", "Overpower"]);
   });
 
-  it("没有任何伤害时不过滤:返回全部 id", () => {
-    expect([...getHighValueSpellIds({ damageOut: [hit("1", 0)] })]).toEqual([
-      "1",
+  it("没有任何伤害时不过滤:返回全部技能", () => {
+    expect([...getHighValueSpellIds({ damageOut: [hit("12294", 0)] })]).toEqual([
+      "Mortal Strike",
     ]);
   });
 });
@@ -215,6 +225,50 @@ describe("offensiveWasteAnalysis — buildOffensiveWasteSummary", () => {
     expect(ev.defenseName).toBe("Divine Shield");
     expect(ev.wasteCasts).toHaveLength(2);
     expect(ev.wasteCasts[0]!.spellId).toBe("12294");
+  });
+
+  it("fact5 D7: Execute's cast 281000 lands as 260798 — the casts are matched to the damage share by the spell, so they count", () => {
+    const friend = makeUnit("warrior-1", {
+      name: "Ares",
+      spec: CombatUnitSpec.Warrior_Arms,
+      class: CombatUnitClass.Warrior,
+      reaction: CombatUnitReaction.Friendly,
+      spellCastEvents: [11_000, 13_000].map((dt) =>
+        makeSpellCastEvent(
+          "281000",
+          matchStart + dt,
+          "enemy-1",
+          "EnemyPaladin",
+          "warrior-1",
+          "Ares",
+          0,
+          "Execute",
+        ),
+      ),
+    });
+    friend.damageOut = [
+      {
+        ...makeDamageEvent(matchStart + 5_000, 100_000, "enemy-1"),
+        spellId: "260798",
+        spellName: "Execute",
+      },
+    ] as never;
+    const enemy = makeUnit("enemy-1", {
+      name: "EnemyPaladin",
+      spec: CombatUnitSpec.Paladin_Holy,
+      class: CombatUnitClass.Paladin,
+      reaction: CombatUnitReaction.Hostile,
+      auraEvents: [
+        makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, "642", matchStart + 10_000, "enemy-1", "enemy-1", "BUFF"),
+        makeAuraEvent(LogEvent.SPELL_AURA_REMOVED, "642", matchStart + 18_000, "enemy-1", "enemy-1", "BUFF"),
+      ],
+    });
+    const summary = buildOffensiveWasteSummary(combat, [friend], [enemy]);
+    expect(summary.events).toHaveLength(1);
+    expect(summary.events[0]!.wasteCasts.map((c) => c.spellId)).toEqual([
+      "281000",
+      "281000",
+    ]);
   });
 
   it("round-1 retest idx 43: a spell of a school the immunity does not cover is no waste (Chaos Bolt into Blessing of Protection)", () => {
@@ -660,5 +714,84 @@ describe("offensiveWasteAnalysis — formatOffensiveWasteForContext", () => {
     expect(definition).toContain("at least 5% of their damage this");
     // one event → one event line, whatever the definition's length
     expect(lines.filter(isEventLine)).toHaveLength(1);
+  });
+});
+
+describe("offensiveWasteAnalysis — an empowered cast goes off at its release (codex 20-F18-01 #2)", () => {
+  const matchStart = 1_000_000;
+  const combat = makeCombat(matchStart, matchStart + 60_000);
+  const hold = (event: string, t: number) =>
+    ({
+      spellId: "359073",
+      spellName: "Eternity Surge",
+      timestamp: matchStart + t,
+      logLine: { event, timestamp: matchStart + t, parameters: [] },
+    }) as never;
+  it("a hold begun inside the wall and released after it is no cast into it", () => {
+    const evoker = makeUnit("ev-1", {
+      name: "Ev",
+      spec: CombatUnitSpec.Evoker_Devastation,
+      class: CombatUnitClass.Evoker,
+      reaction: CombatUnitReaction.Friendly,
+      spellCastEvents: [11_000, 12_000].map((dt) =>
+        makeSpellCastEvent("359073", matchStart + dt, "enemy-1", "EnemyPaladin", "ev-1", "Ev", 0, "Eternity Surge"),
+      ),
+    });
+    Object.assign(evoker, {
+      empowerStarts: [hold("SPELL_EMPOWER_START", 11_000), hold("SPELL_EMPOWER_START", 12_000)],
+      // released at 19 s and 19.5 s — after the wall's 18 s end
+      empowerEnds: [hold("SPELL_EMPOWER_END", 19_000), hold("SPELL_EMPOWER_END", 19_500)],
+      empowerInterrupts: [],
+    });
+    evoker.damageOut = [
+      { ...makeDamageEvent(matchStart + 19_100, 100_000, "enemy-1"), spellId: "359077", spellName: "Eternity Surge" },
+    ] as never;
+    const enemy = makeUnit("enemy-1", {
+      name: "EnemyPaladin",
+      spec: CombatUnitSpec.Paladin_Holy,
+      class: CombatUnitClass.Paladin,
+      reaction: CombatUnitReaction.Hostile,
+      auraEvents: [
+        makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, "642", matchStart + 10_000, "enemy-1", "enemy-1", "BUFF"),
+        makeAuraEvent(LogEvent.SPELL_AURA_REMOVED, "642", matchStart + 18_000, "enemy-1", "enemy-1", "BUFF"),
+      ],
+    });
+    expect(buildOffensiveWasteSummary(combat, [evoker], [enemy]).events).toEqual([]);
+  });
+});
+
+describe("offensiveWasteAnalysis — a hold never released is no cast (codex 20-F18-03 #1)", () => {
+  const matchStart = 1_000_000;
+  const combat = makeCombat(matchStart, matchStart + 60_000);
+  it("an EMPOWER_START with no END / INTERRUPT before the log ends counts nowhere", () => {
+    const evoker = makeUnit("ev-1", {
+      name: "Ev",
+      reaction: CombatUnitReaction.Friendly,
+      spellCastEvents: [11_000, 17_800].map((dt) =>
+        makeSpellCastEvent("359073", matchStart + dt, "enemy-1", "EnemyPaladin", "ev-1", "Ev", 0, "Eternity Surge"),
+      ),
+    });
+    Object.assign(evoker, {
+      empowerStarts: [11_000, 17_800].map((t) => ({
+        spellId: "359073",
+        spellName: "Eternity Surge",
+        timestamp: matchStart + t,
+        logLine: { event: "SPELL_EMPOWER_START", timestamp: matchStart + t, parameters: [] },
+      })),
+      empowerEnds: [],
+      empowerInterrupts: [],
+    });
+    evoker.damageOut = [
+      { ...makeDamageEvent(matchStart + 5_000, 100_000, "enemy-1"), spellId: "359077", spellName: "Eternity Surge" },
+    ] as never;
+    const enemy = makeUnit("enemy-1", {
+      name: "EnemyPaladin",
+      reaction: CombatUnitReaction.Hostile,
+      auraEvents: [
+        makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, "642", matchStart + 10_000, "enemy-1", "enemy-1", "BUFF"),
+        makeAuraEvent(LogEvent.SPELL_AURA_REMOVED, "642", matchStart + 18_000, "enemy-1", "enemy-1", "BUFF"),
+      ],
+    });
+    expect(buildOffensiveWasteSummary(combat, [evoker], [enemy]).events).toEqual([]);
   });
 });

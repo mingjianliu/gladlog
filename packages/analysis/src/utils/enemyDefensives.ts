@@ -2065,16 +2065,13 @@ export function enemyDefensiveEvents(
     if (mate.id === enemy.id) continue;
     for (const iv of intervalsOf(mate)) {
       if (!isIntervalFrom(iv, enemy)) continue;
-      // The friendly roster plus the enemy-only ally saves (Anti-Magic Shell
-      // 410358 on an ally): the same aura evidence, the same missing cast.
-      if (
-        !(
-          EXTERNAL_DEF_IDS.has(iv.spellId) ||
-          ENEMY_ALLY_SAVE_IDS.has(iv.spellId)
-        ) ||
-        iv.inferredStart
-      )
-        continue;
+      // Every external save the cast branch admits (`isExternalSaveId`):
+      // the friendly roster, the enemy-only ally saves (Anti-Magic Shell
+      // 410358 on an ally), the grips / redirects and the immunity
+      // externals — the same aura evidence, the same missing cast (fact5
+      // D13, 12b865cc 3:36: a Leap of Faith from a priest in Shadowmeld, its
+      // interval built and no event out of it).
+      if (!isExternalSaveId(iv.spellId) || iv.inferredStart) continue;
       const paired = out.some(
         (d) =>
           d.kind === "external" &&
@@ -2084,6 +2081,24 @@ export function enemyDefensiveEvents(
             SAVE_CAST_AURA_PAIR_S,
       );
       if (paired) continue;
+      // a grip / redirect is the move itself — no duration, nothing "done
+      // during it", the cast branch's reading (`externalAuraOf`; codex
+      // 20-F18-02 #4: Leap of Faith read `(4.0s)`)
+      if (ENEMY_REDIRECT_SAVE_IDS.has(iv.spellId)) {
+        out.push({
+          atSeconds: iv.fromS,
+          spellId: iv.spellId,
+          spellName: getEnglishSpellName(iv.spellId, iv.spellName),
+          casterName: enemy.name,
+          casterId: enemy.id,
+          kind: "external",
+          recipientId: mate.id,
+          recipientName: mate.name,
+          observedSeconds: undefined,
+          removedEarly: false,
+        });
+        continue;
+      }
       const observed = iv.toS - iv.fromS;
       out.push({
         atSeconds: iv.fromS,

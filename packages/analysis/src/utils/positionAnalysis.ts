@@ -202,6 +202,11 @@ export interface IPositionEvent {
   /** STAYED_IN only: whether a defensive CD was off cooldown at window start.
    *  undefined when no defensive CDs are tracked for this spec. */
   ownerDefensiveAvailable?: boolean;
+  /** STAYED_IN only, with `ownerDefensiveAvailable` false: the first of the
+   *  owner's defensives back inside the span, and when (fact5 D23, 0c56ee06
+   *  2:42–2:52: Dark Pact back at 2:50.55 under `no defensive CD
+   *  available`). */
+  ownerDefensiveBack?: { spellName: string; atSeconds: number };
   /** STAYED_IN / KITED: whether the burst's most-pressured target was the owner.
    *  undefined when the window has no pressure-target attribution. */
   burstTargetsOwner?: boolean;
@@ -1229,6 +1234,20 @@ export function computeOwnerPositionEvents(params: {
           defensiveCDs.length > 0
             ? defensiveCDs.some((cd) => isAvailableAt(cd, w.fromSeconds))
             : undefined,
+        ...(() => {
+          if (defensiveCDs.some((cd) => isAvailableAt(cd, w.fromSeconds)))
+            return {};
+          let back: { spellName: string; atSeconds: number } | undefined;
+          for (const cd of defensiveCDs)
+            for (const aw of cd.availableWindows)
+              if (
+                aw.fromSeconds > w.fromSeconds &&
+                aw.fromSeconds <= evalEnd &&
+                (!back || aw.fromSeconds < back.atSeconds)
+              )
+                back = { spellName: cd.spellName, atSeconds: aw.fromSeconds };
+          return back ? { ownerDefensiveBack: back } : {};
+        })(),
         burstTargetsOwner,
         burstTargetName: burstTargetsOwner === false ? targetName : undefined,
         ownerHpStartPct: hpStart === null ? null : Math.round(hpStart),
@@ -1779,7 +1798,9 @@ export function formatPositionEventsForContext(
           ? ""
           : e.ownerDefensiveAvailable
             ? ` — a defensive CD was available${blockedS >= 1 ? ` (you could not cast for ${Math.round(blockedS)}s of it)` : ""}`
-            : " — no defensive CD available";
+            : e.ownerDefensiveBack
+              ? ` — no defensive CD available at the start (${e.ownerDefensiveBack.spellName} back at ${fmtTime(e.ownerDefensiveBack.atSeconds)})`
+              : " — no defensive CD available";
       const targetStr =
         e.burstTargetsOwner === true
           ? " — you were the burst target"

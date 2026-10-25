@@ -32,7 +32,10 @@ import {
   effectAuraViaName,
   ownEffectAurasOfCast,
 } from "../data/castEffectAuras";
-import { spellEffectData } from "../data/spellEffectData";
+import {
+  getEnglishSpellName,
+  spellEffectData,
+} from "../data/spellEffectData";
 import { dropAuraRebroadcasts } from "./auraIntervals";
 import { buffFullDurationForCaster } from "./buffDuration";
 
@@ -83,6 +86,22 @@ export function hiddenAuraLifeMs(
   return typeof d === "number" && d > 0 ? (d + 1) * 1000 : Infinity;
 }
 
+/** A same-named id that is a press of its own — the form variants of one
+ * button (Stampeding Roar 106898 / bear 77761 / cat 77764: each an 8 s aura
+ * with the 120 s cooldown in DB2). The ledger's variant-press rule
+ * (`isPressOfCooldown` → `isVariantPress`) read off the official cooldown;
+ * fact5 D25 (8d0ed9e9 r0 0:12): the cat-form roar pressed unseen came back
+ * as 77764 and the kit printed `[UNUSED]`. */
+function isPressVariantOf(id: string, spellId: string): boolean {
+  if (id === spellId) return false;
+  const name = getEnglishSpellName(spellId, "");
+  return (
+    name !== "" &&
+    getEnglishSpellName(id, "") === name &&
+    (spellEffectData[id]?.cooldownSeconds ?? 0) > 0
+  );
+}
+
 /**
  * The instants (ms) of `spellId`'s hidden presses by `unit` in
  * [fromMs, toMs]: an APPLIED of its own aura (same id) from the unit on
@@ -112,7 +131,7 @@ export function hiddenPressMs(
   const own = rows.filter(
     (a) =>
       !!a.spellId &&
-      auraIds.has(a.spellId) &&
+      (auraIds.has(a.spellId) || isPressVariantOf(a.spellId, spellId)) &&
       a.destUnitId === unit.id &&
       a.srcUnitId === unit.id,
   );
@@ -130,7 +149,8 @@ export function hiddenPressMs(
     .filter(
       (e) =>
         e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
-        e.spellId === spellId,
+        !!e.spellId &&
+        (e.spellId === spellId || isPressVariantOf(e.spellId, spellId)),
     )
     .map((e) => e.logLine.timestamp);
   // an application the batch then re-states (a second APPLIED of it inside

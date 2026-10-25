@@ -191,6 +191,13 @@ export const KW_MAJOR_DEFENSIVE_IDS: ReadonlySet<string> = new Set(
     // with the second charge pressed at 1:31.9). Preview: rogue [KILL
     // WINDOW] lines 1,203 → 752; kick-priority −6; 56 burst lines name it.
     "1856", // Vanish — 120 s
+    // fact5 D22 (F18, 2026-10-24): the PRESSED Spirit of Redemption (Spirit
+    // of the Redeemer, PvP), the immunity-kind save of fact2 ruling 5
+    // (`ENEMY_IMMUNITY_SAVE_AURAS`) — the one such save this roster lacked
+    // (Burrow, Time Stop and Vanish are here; Mass Invisibility is out by
+    // P-b8; Guardian of the Forgotten Queen goes on an ally). 0c56ee06:
+    // `defenseless 0:49–1:04` on a Holy Priest who pressed it at 1:04.8.
+    "215769", // Spirit of Redemption (pressed) — 120 s
   ].filter((id) => id !== "200183"),
 ); // Apotheosis dropped
 

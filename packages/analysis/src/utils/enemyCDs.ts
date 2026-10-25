@@ -42,6 +42,8 @@ import {
 import {
   AURA_EVIDENCE_WINDOW_S,
   auraOffensiveOccurrences,
+  GENERIC_PRESS_AFTER_MS,
+  TWIN_CAST_BEFORE_S,
 } from "./offensiveAuraOccurrences";
 import {
   dangerLabel,
@@ -512,6 +514,19 @@ export function reconstructEnemyCDTimeline(
     const mergedInto = new Set<IEnemyCDCast>();
     for (const o of aura.occurrences) {
       const castTimeSeconds = (o.startMs - matchStartMs) / 1000;
+      // a cast-less application beside a press the timeline has (a press
+      // made unseen, `hiddenPressMs`, re-stated with the unit) is that press
+      if (
+        o.generic &&
+        loggedCasts.some(
+          (c) =>
+            c.spellId === o.spellId &&
+            c.castTimeSeconds <=
+              castTimeSeconds + GENERIC_PRESS_AFTER_MS / 1000 &&
+            c.castTimeSeconds >= castTimeSeconds - TWIN_CAST_BEFORE_S,
+        )
+      )
+        continue;
       // a LOGGED press of the same cooldown already stands for this effect
       // (a 191427 button cast, should one ever log): merge the aura's end
       // into it instead of adding a second occurrence (codex review)

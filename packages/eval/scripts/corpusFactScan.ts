@@ -120,6 +120,7 @@ import {
   HERALD_PROC_BUNDLE_IDS,
   hiddenAuraLifeMs,
 } from "@gladlog/analysis/src/utils/hiddenPress";
+import { DEFERRAL_SHIELD_DAMAGE_IDS } from "@gladlog/analysis/src/utils/incomingPressure";
 import { GladLogParser, type GladMatch } from "@gladlog/parser";
 import { LogEvent, toLegacyMatch } from "@gladlog/parser-compat";
 
@@ -196,7 +197,9 @@ const TRINKET_AURAS = new Map([
 const REFLECT_OWN_IDS = new Set(["23920", "212295"]);
 /** deferral shields: what they held lands later as the shield caster's own
  * damage, not the reflector's */
-const DEFERRAL_SHIELDS = new Set(["357170", "410355"]);
+/** the deferral shields — the product's one table (`DEFERRAL_SHIELD_DAMAGE_IDS`,
+ * ruling FT-T02b): a hand copy here missed Fel Armor when it joined (F18) */
+const DEFERRAL_SHIELDS = new Set(Object.keys(DEFERRAL_SHIELD_DAMAGE_IDS));
 
 function parseFile(path: string): GladMatch[] {
   const raw = readFileSync(path);

@@ -173,8 +173,12 @@ const unit = (damageIn: unknown[], absorbsIn: unknown[] = []) =>
   ({ id: "victim", reaction: F, damageIn, absorbsIn }) as never;
 
 describe("incomingPressureEvents — redistribution (hp-state F-D1)", () => {
-  it("the table is the ruling's two ids", () => {
-    expect([...REDISTRIBUTION_DAMAGE_IDS].sort()).toEqual(["451963", "98021"]);
+  it("the table is the rulings' ids (A22 = B; Tempered in Battle 2026-10-25)", () => {
+    expect([...REDISTRIBUTION_DAMAGE_IDS].sort()).toEqual([
+      "451963",
+      "469704",
+      "98021",
+    ]);
   });
 
   it("drops a teammate's Spirit Link / Void Leech, damage and absorbed part alike", () => {

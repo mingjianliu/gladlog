@@ -29,7 +29,10 @@ import { lookupKickPriorityPrior } from "../data/kickPriorityPrior";
 import { resolveMitigation, wallDoorPct } from "../data/mitigationComponents";
 import { OFF_GCD_SPELL_IDS } from "../data/offGcdGenerated";
 import { SELF_REMOVAL_BY_TYPE } from "../data/selfRemovals";
-import { getEnglishSpellName } from "../data/spellEffectData";
+import {
+  effectiveCooldownSeconds,
+  getEnglishSpellName,
+} from "../data/spellEffectData";
 import { ENEMY_REDIRECT_SAVE_IDS } from "../data/spellIdLists";
 import { schoolLockedBy, spellSchoolMask } from "../data/spellSchools";
 import { lookupSyncWindowPrior } from "../data/syncWindowPrior";
@@ -65,6 +68,7 @@ import {
 } from "../utils/ccTrinketAnalysis";
 import {
   annotateDefensiveTimings,
+  CD_INSTANT_SLACK_S,
   cdAvailableAt,
   cdCanHelpAnotherUnit,
   cdIsProcOnly,
@@ -452,7 +456,16 @@ export function cdWasteEvents(
               ),
             ),
             [],
-            { ownCastSuccessSeconds: attempts.ownCastSuccessSeconds },
+            // ruling C1's reading (F-H12): a GCD-refused press of a ready
+            // cooldown that is never cast afterwards is an attempt — and a
+            // cd-waste cooldown is ready all round and never cast. The kit's
+            // `[UNUSED — pressed N×, refused …]` counts the same press (fact5
+            // D6, 34fc26a0 1:36: Blessing of Protection 0.87 s after Divine
+            // Toll).
+            {
+              ownCastSuccessSeconds: attempts.ownCastSuccessSeconds,
+              keepGcdLockedUntilS: attempts.untilS,
+            },
           ),
         )
       : undefined;
@@ -1470,7 +1483,11 @@ function cleanseAttemptedFact(
   owner: any,
   w: Pick<
     IMissedCleanseWindow,
-    "timeSeconds" | "durationSeconds" | "dispelType" | "targetCharmed"
+    | "timeSeconds"
+    | "durationSeconds"
+    | "dispelType"
+    | "targetCharmed"
+    | "cleanseWasOnCD"
   >,
   matchStartMs: number,
   rawStreams: RawStreams,
@@ -1492,7 +1509,25 @@ function cleanseAttemptedFact(
         Number(id),
       ),
       successes.filter((c) => c.spellId === id).map(sec),
-      { ownCastSuccessSeconds },
+      // ruling C1's reading, extended by the user 2026-10-25 (fact5 D6): a
+      // GCD-refused press of the ready cleanse, never cast later in the
+      // window, is an attempt. Ready AT THE PRESS: the window's own reading,
+      // and no cast of this cleanse inside its official cooldown before the
+      // press (codex 20-F18-01 #1, 2ae71234 r3 1:44: Purify cast at 104.11 s,
+      // refused at 104.12 / 104.29 / 106.55 s on its 8 s cooldown). A
+      // talent-shortened cooldown or a second charge reads "not ready" —
+      // the refusal is dropped, as before the extension.
+      {
+        ownCastSuccessSeconds,
+        keepGcdLockedUntilS: w.timeSeconds + w.durationSeconds,
+        readyAt: (s: number) => {
+          if (w.cleanseWasOnCD) return false;
+          const cd = effectiveCooldownSeconds(id) ?? 0;
+          return !successes.some(
+            (c) => c.spellId === id && sec(c) < s && sec(c) >= s - cd,
+          );
+        },
+      },
     ),
   );
   return formatAttemptedFact(hits);
@@ -2825,6 +2860,7 @@ export function healingGapEvents(
     | "mostDamagedSpec"
     | "mostDamagedAmount"
     | "lowestFriendlyHpPct"
+    | "refusedPresses"
   >[],
   owner: { id: string; name: string },
 ): CandidateEvent[] {
@@ -2838,8 +2874,11 @@ export function healingGapEvents(
     )
     .sort((a, b) => a.lowestFriendlyHpPct - b.lowestFriendlyHpPct)
     .slice(0, HEALING_GAP_CAP)
-    .map((g) => {
+    .map((g): CandidateEvent => {
       const t = toRenderSecond(g.fromSeconds);
+      // a refused press inside the gap: the healer tried (fact5 D12; the
+      // [INACTIVITY] line prints the same fact)
+      const attempted = formatAttemptedFact(g.refusedPresses ?? []);
       return {
         id: `healing-gap:${owner.id}:${t}`,
         type: "healing-gap",
@@ -2852,6 +2891,7 @@ export function healingGapEvents(
           pressured: g.mostDamagedName,
           pressuredSpec: g.mostDamagedSpec,
           lowestAllyHp: String(Math.round(g.lowestFriendlyHpPct)),
+          ...(attempted ? { attempted } : {}),
         },
       };
     });
@@ -4373,6 +4413,7 @@ function teamPlayEvents(
         ...healingGapEvents(
           detectHealingGaps(owner, friends, enemies, combat, {
             playableEndMs: playableEndMs(combat, units),
+            ...(rawStreams ? { rawStreams } : {}),
           }),
           owner,
         ),
@@ -4497,10 +4538,19 @@ function teamPlayEvents(
                 ownerId: owner.id,
                 // the owner's ally-reaching save tools (S1) — the same
                 // spendable ∩ help-another set cd-hoarded's teammate side uses
-                tools: ownerCds.filter(
-                  (cd: IMajorCooldownInfo) =>
-                    isSpendableDefensiveCd(cd) && cdCanHelpAnotherUnit(cd),
-                ),
+                tools: ownerCds
+                  .filter(
+                    (cd: IMajorCooldownInfo) =>
+                      isSpendableDefensiveCd(cd) && cdCanHelpAnotherUnit(cd),
+                  )
+                  // ruling C1's "ready at the press", cd-hoarded's reading
+                  // (the rendered-second slack taken off)
+                  .map((cd: IMajorCooldownInfo) => ({
+                    spellId: cd.spellId,
+                    casts: cd.casts,
+                    readyAt: (s: number) =>
+                      cdAvailableAt(cd, s - CD_INSTANT_SLACK_S),
+                  })),
                 // #29's gcd-locked exclusion input, as cd-hoarded passes it
                 // (presses only, `ownerPressEvents` — agy 40-FT-93)
                 ownCastSuccessSeconds: ownerPressEvents(owner as any).map(

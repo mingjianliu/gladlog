@@ -313,6 +313,8 @@ function makeWindow(
 
 describe("computeWindowContributions", () => {
   const enemyHealer = makeUnit("enemy-h", {
+    // a position beside the owner's (0, 0): the CC can reach (fact5 D18)
+    advancedActions: fullHpActions() as any[],
     reaction: CombatUnitReaction.Hostile,
     spec: CombatUnitSpec.Shaman_Restoration,
     name: "Rsham",
@@ -582,6 +584,8 @@ function slackSeg(fromSeconds: number, toSeconds: number): ISlackSegment {
 // damage beside it was his damage on every enemy, absorbs included.
 describe("healer view: `your damage on it` is measured on the window's target (T12 ⑤)", () => {
   const enemyHealer = makeUnit("enemy-h", {
+    // a position beside the owner's (0, 0): the CC can reach (fact5 D18)
+    advancedActions: fullHpActions() as any[],
     reaction: CombatUnitReaction.Hostile,
     spec: CombatUnitSpec.Shaman_Restoration,
     name: "Rsham",
@@ -706,6 +710,8 @@ describe("healer view: `your damage on it` is measured on the window's target (T
 
 describe("computeWindowCreationFacts", () => {
   const enemyHealerWithTrinketDown = makeUnit("enemy-h", {
+    // a position beside the owner's (0, 0): the CC can reach (fact5 D18)
+    advancedActions: fullHpActions() as any[],
     reaction: CombatUnitReaction.Hostile,
     spec: CombatUnitSpec.Shaman_Restoration,
     name: "Rsham",
@@ -778,6 +784,8 @@ describe("computeWindowCreationFacts", () => {
     // control: the priest's stun variant 200200 on record (after the
     // segment, so no DR history at 40 s) → the family is known → Full
     const withEvidence = makeUnit("enemy-h", {
+    // a position beside the owner's (0, 0): the CC can reach (fact5 D18)
+    advancedActions: fullHpActions() as any[],
       reaction: CombatUnitReaction.Hostile,
       spec: CombatUnitSpec.Shaman_Restoration,
       name: "Rsham",
@@ -888,6 +896,8 @@ describe("computeWindowCreationFacts", () => {
     // cooldowns reset at match start ⇒ never used means available ⇒ the enemy
     // healer can trinket out of the opener, so it is not a clean opportunity.
     const enemyHealerNoTrinket = makeUnit("enemy-h", {
+    // a position beside the owner's (0, 0): the CC can reach (fact5 D18)
+    advancedActions: fullHpActions() as any[],
       reaction: CombatUnitReaction.Hostile,
       spec: CombatUnitSpec.Shaman_Restoration,
       name: "Rsham",
@@ -939,6 +949,8 @@ describe("buildHealerOffenseSummary + formatHealerOffenseForContext", () => {
 
   it("renders header, aggregate slack line, idle segments, window and opportunity lines", () => {
     const enemyHealer = makeUnit("enemy-h", {
+    // a position beside the owner's (0, 0): the CC can reach (fact5 D18)
+    advancedActions: fullHpActions() as any[],
       reaction: CombatUnitReaction.Hostile,
       spec: CombatUnitSpec.Shaman_Restoration,
       name: "Rsham",
@@ -1027,6 +1039,8 @@ describe("[KILL WINDOW] free seconds vs the rendered window (2026-09-30)", () =>
     // 40.1–60.7: the rendered window floors to 60 − 40 = 20 s while the
     // continuous span is 20.6 s — the old line read "free 21s of 20s".
     const enemyHealer = makeUnit("enemy-h", {
+    // a position beside the owner's (0, 0): the CC can reach (fact5 D18)
+    advancedActions: fullHpActions() as any[],
       reaction: CombatUnitReaction.Hostile,
       spec: CombatUnitSpec.Shaman_Restoration,
       name: "Rsham",
@@ -1058,6 +1072,8 @@ describe("[KILL WINDOW] free seconds are castable seconds (triage other F-O12)",
     await ensureAnalysisData();
   });
   const enemyHealer = makeUnit("enemy-h", {
+    // a position beside the owner's (0, 0): the CC can reach (fact5 D18)
+    advancedActions: fullHpActions() as any[],
     reaction: CombatUnitReaction.Hostile,
     spec: CombatUnitSpec.Shaman_Restoration,
     name: "Rsham",
@@ -1166,6 +1182,8 @@ describe("[KILL WINDOW] `free` under half a second is `<1s`; no free second at a
     await ensureAnalysisData();
   });
   const enemyHealer = makeUnit("enemy-h", {
+    // a position beside the owner's (0, 0): the CC can reach (fact5 D18)
+    advancedActions: fullHpActions() as any[],
     reaction: CombatUnitReaction.Hostile,
     spec: CombatUnitSpec.Shaman_Restoration,
     name: "Rsham",
@@ -1452,6 +1470,8 @@ describe("formatHealerOffenseForContext KILL WINDOW cap", () => {
 
 describe("F193 V2 — contested trade facts", () => {
   const enemyHealer = makeUnit("enemy-h", {
+    // a position beside the owner's (0, 0): the CC can reach (fact5 D18)
+    advancedActions: fullHpActions() as any[],
     reaction: CombatUnitReaction.Hostile,
     spec: CombatUnitSpec.Shaman_Restoration,
     name: "Rsham",
@@ -1526,6 +1546,39 @@ describe("F193 V2 — contested trade facts", () => {
     );
     expect(text).not.toContain("cast risk");
     expect(text).not.toContain("enemy interrupts ready");
+  });
+
+  it("fact5 D18: a CC that cannot reach the enemy healer in the span (Psychic Scream 8 yd, healer 60 yd off) offers no contested trade", () => {
+    const partialHpActions = [];
+    for (let s = 0; s <= 120; s += 5)
+      partialHpActions.push(
+        makeAdvancedAction(T0 + s * 1000, 0, 0, 500_000, 375_000),
+      );
+    const mate = makeFriend("mate", {
+      advancedActions: partialHpActions as any[],
+    });
+    const owner = makeFriend("owner", {
+      spellCastEvents: [
+        makeSpellCastEvent("8122", T0 + 100_000, "enemy-h", "Rsham", "owner", "Owner"),
+      ],
+    });
+    const far = { ...enemyHealer, advancedActions: [] as unknown[] } as ICombatUnit;
+    for (let s = 0; s <= 120; s += 5)
+      far.advancedActions.push(makeAdvancedAction(T0 + s * 1000, 60, 0) as never);
+    const run = (healer: ICombatUnit) =>
+      buildHealerOffenseSummary(
+        combat,
+        owner,
+        [owner, mate],
+        [healer],
+        [],
+        emptyEnemyTimeline(),
+        [],
+        [],
+        [],
+      ).contestedTradeFacts.length;
+    expect(run(enemyHealer)).toBe(1);
+    expect(run(far)).toBe(0);
   });
 
   it("1b. a control with a cast time keeps the interrupt count and the cast-risk clause (FT I12)", () => {
@@ -1715,6 +1768,8 @@ describe("F193 V2 — contested trade facts", () => {
     });
 
     const enemyHealer = makeUnit("enemy-h", {
+    // a position beside the owner's (0, 0): the CC can reach (fact5 D18)
+    advancedActions: fullHpActions() as any[],
       reaction: CombatUnitReaction.Hostile,
       spec: CombatUnitSpec.Shaman_Restoration,
       name: "Rsham",

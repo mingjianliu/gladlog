@@ -250,10 +250,11 @@ describe("incomingPressure — a deferral shield delays damage, it does not abso
       srcUnitId: "enemy-1",
     }) as never;
 
-  it("表:Time Dilation 357170 → 361029,Stretch Time 410355 → 413924", () => {
+  it("表:Time Dilation 357170 → 361029,Stretch Time 410355 → 413924,Fel Armor 386124 → 387846", () => {
     expect(DEFERRAL_SHIELD_DAMAGE_IDS).toEqual({
       "357170": "361029",
       "410355": "413924",
+      "386124": "387846",
     });
     expect(isDeferralAbsorb({ spellId: "357170" })).toBe(true);
     expect(isDeferralAbsorb({ spellId: "17" })).toBe(false);
@@ -282,6 +283,22 @@ describe("incomingPressure — a deferral shield delays damage, it does not abso
     });
     expect(sumIncomingPressure(unit, 0, 10_000)).toBe(1000);
     expect(sumAbsorbedPressure(unit, 0, 10_000)).toBe(500);
+  });
+
+  it("fact5 D26:Fel Armor 的负数吸收行(把推迟的伤害交给别的盾)既不算吸收也不按绝对值加", () => {
+    const felArmor = (t: number, amount: number) =>
+      ({
+        ...(deferral(t, amount) as object),
+        spellId: "386124",
+        spellName: "Fel Armor",
+      }) as never;
+    const darkPact = { ...(abs(1000, 24_279) as object), spellId: "108416" } as never;
+    const unit = makeUnit("victim", {
+      damageIn: [],
+      // dfb06d44 0:48: Fel Armor −18,090 + Dark Pact 24,279 on one hit
+      absorbsIn: [felArmor(1000, -18_090), darkPact, felArmor(2000, 5_000)],
+    });
+    expect(sumAbsorbedPressure(unit, 0, 10_000)).toBe(24_279);
   });
 
   it("按学派的读法例外:受击按原学派在受击时计,延迟跳数(日志记成物理 0x1)不计", () => {

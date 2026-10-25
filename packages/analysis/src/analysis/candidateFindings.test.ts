@@ -457,6 +457,39 @@ describe("cdWasteEvents", () => {
     expect(evts[0].spell).toBe("Pain Suppression");
     expect(evts[0].facts).toEqual({ spell: "Pain Suppression", unit: "Me-R" });
   });
+  it("fact5 D6: a GCD-refused press of the never-cast cooldown is an attempt (ruling C1's reading; the kit counts it too)", () => {
+    const evts = cdWasteEvents(
+      [
+        {
+          spellId: "1022",
+          spellName: "Blessing of Protection",
+          neverUsed: true,
+          isThroughput: false,
+        },
+      ],
+      healer,
+      null,
+      {
+        rawStreams: {
+          available: true,
+          manaSamples: [],
+          castFailed: [
+            {
+              tSeconds: 96.2,
+              unitGuid: "a",
+              spellId: 1022,
+              spellName: "Blessing of Protection",
+              reason: "Not yet recovered",
+            },
+          ],
+        },
+        untilS: 200,
+        // Divine Toll 0.87 s before the press: the GCD was running
+        ownCastSuccessSeconds: [95.33],
+      },
+    );
+    expect(evts[0]!.facts["attempted"]).toBe("pressed but rejected (not ready yet×1)");
+  });
   it("skips a cooldown that was used", () => {
     const evts = cdWasteEvents(
       [
@@ -2555,6 +2588,22 @@ describe("healingGapEvents(HEAL-001,2026-08-30 HP-crisis 门 change 1/5)", () =>
 
   it("5s 空窗但全队 HP 都 >70% → 不报(gap 长度本身不再是判据)", () => {
     expect(healingGapEvents([gap(75, 50_000, "Ally", 5)], owner)).toEqual([]);
+  });
+
+  it("fact5 D12:空档里有被拒的按键 → facts.attempted(与 [INACTIVITY] 行同源)", () => {
+    const refused = {
+      tSeconds: 31,
+      unitGuid: "h1",
+      spellId: 20473,
+      spellName: "Holy Shock",
+      reason: "Target not in line of sight",
+    };
+    const [e] = healingGapEvents(
+      [{ ...gap(35, 50_000), refusedPresses: [refused, refused] }],
+      owner,
+    );
+    expect(e!.facts["attempted"]).toMatch(/^pressed but rejected \(.+×2\)$/);
+    expect(healingGapEvents([gap(35, 50_000)], owner)[0]!.facts["attempted"]).toBeUndefined();
   });
 
   it("lowestFriendlyHpPct === null(窗口内无采样)→ 不报", () => {

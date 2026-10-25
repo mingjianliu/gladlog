@@ -127,6 +127,7 @@ import * as charmedPlayer from "@gladlog/analysis/src/utils/charmedPlayer";
 import * as combatStates from "@gladlog/analysis/src/utils/combatStates";
 import * as cooldowns from "@gladlog/analysis/src/utils/cooldowns";
 import * as counterfactual from "@gladlog/analysis/src/utils/counterfactual";
+import * as damagePress from "@gladlog/analysis/src/utils/damagePress";
 import * as dampening from "@gladlog/analysis/src/utils/dampening";
 import * as deathOutcomeAnalysis from "@gladlog/analysis/src/utils/deathOutcomeAnalysis";
 import * as dispelAnalysis from "@gladlog/analysis/src/utils/dispelAnalysis";
@@ -802,6 +803,16 @@ const INDEX: PredicateRow[] = [
     file: `${A}/utils/incomingPressure.ts`,
     symbol: "isDeferralAbsorb",
     mod: incomingPressure,
+  },
+  {
+    file: `${A}/utils/damagePress.ts`,
+    symbol: "isSameSpell",
+    mod: damagePress,
+  },
+  {
+    file: `${A}/utils/ccTargetState.ts`,
+    symbol: "ccReachAt",
+    mod: ccTargetState,
   },
   {
     file: `${A}/utils/incomingPressure.ts`,

@@ -643,7 +643,7 @@ describe("triage missed-cleanse F-C13 / F-C16", () => {
 });
 
 describe("triage missed-cleanse F-C14 / F-C12 (owner's cleanse facts)", () => {
-  it("95127ab4 rows: Detox rejected ×2 while stunned → attempted; the not-ready press inside the owner's GCD is dropped; ownerDispelSpell names Detox", () => {
+  it("95127ab4 rows: Detox rejected ×2 while stunned → attempted; the not-ready press inside the owner's GCD of a READY Detox never cast after counts too (ruling C1, extended 2026-10-25); ownerDispelSpell names Detox", () => {
     const owner = makeUnit("mw", {
       spec: CombatUnitSpec.Monk_Mistweaver,
       spellCastEvents: [
@@ -690,8 +690,30 @@ describe("triage missed-cleanse F-C14 / F-C12 (owner's cleanse facts)", () => {
       matchStartMs: MATCH_START,
       rawStreams,
     });
-    expect(c!.facts.attempted).toBe("pressed but rejected (under crowd control×2)");
+    expect(c!.facts.attempted).toBe(
+      "pressed but rejected (under crowd control×2、not ready yet×1)",
+    );
     expect(c!.facts.ownerDispelSpell).toBe("Detox");
+    // codex 20-F18-01 #1: a Detox cast 1 s before the refusal was on its own
+    // cooldown — that refusal stays out
+    const recast = {
+      ...owner,
+      spellCastEvents: [
+        ...owner.spellCastEvents,
+        {
+          spellId: "115450",
+          spellName: "清创生血",
+          timestamp: S(48.1),
+          logLine: { event: LogEvent.SPELL_CAST_SUCCESS, timestamp: S(48.1) },
+        },
+      ],
+    } as never;
+    const [c2] = missedCleanseEvents([w], recast, [recast], false, {
+      enemyIds: new Set(),
+      matchStartMs: MATCH_START,
+      rawStreams,
+    });
+    expect(c2!.facts.attempted).toBe("pressed but rejected (under crowd control×2)");
   });
 
   it("the owner's dispel went out inside the window: ownerDispelUsed says where (work order 2026-10-14b fix 9, 9d899d10)", () => {

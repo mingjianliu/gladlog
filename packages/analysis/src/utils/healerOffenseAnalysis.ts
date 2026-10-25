@@ -20,6 +20,7 @@ import {
   enemySourceIds,
 } from "./cannotCastIntervals";
 import { isControlCast } from "./castMissRows";
+import { ccReachAt } from "./ccTargetState";
 import {
   cdAvailableAt,
   chargesAvailableAt,
@@ -68,6 +69,7 @@ import {
 } from "./renderGrid";
 import { roundEndMs } from "./roundEnd";
 import { type InterruptibleCast, interruptibleCastOf } from "./spellMechanics";
+import { ccThreatReachYards } from "./spellRange";
 import { firstDeathMs } from "./unitDeath";
 
 /**
@@ -654,7 +656,9 @@ export function computeContestedTradeFacts(
           drCategoryOfCast(s.spellId, ownerApplied),
           seg.fromSeconds,
           matchStartMs,
-        ) === "Full",
+        ) === "Full" &&
+        // …and able to reach them at some second of the span
+        ccReachesInSpan(owner, enemyHealer, s.spellId, combat, seg),
     );
     if (!readyAtFullDR) continue;
 
@@ -693,6 +697,31 @@ export function computeContestedTradeFacts(
   return facts
     .sort((a, b) => b.durationSeconds - a.durationSeconds)
     .slice(0, MAX_CONTESTED_FACTS);
+}
+
+/**
+ * Could the owner's CC reach the enemy healer at some whole second of the
+ * span — the shared geometry predicate (`ccReachAt`: reach, positions, LoS;
+ * unknown fails closed, as the PEEL / CC USE sampler reads it). The
+ * `[CONTESTED]` and `[OPPORTUNITY]` "X ready on enemy healer" lines state a
+ * CC that could land on that healer (fact5 D18 / D19).
+ */
+function ccReachesInSpan(
+  owner: ICombatUnit,
+  healer: ICombatUnit,
+  spellId: string,
+  combat: { startTime: number; startInfo?: { zoneId?: unknown } },
+  seg: { fromSeconds: number; toSeconds: number },
+): boolean {
+  const reach = ccThreatReachYards(owner, spellId);
+  if (reach === null) return false;
+  const zone = String(combat.startInfo?.zoneId ?? "");
+  for (let t = Math.floor(seg.fromSeconds); t < seg.toSeconds; t++)
+    if (
+      ccReachAt(owner, healer, reach, zone, combat.startTime + t * 1000).ok
+    )
+      return true;
+  return false;
 }
 
 // ── Task 2: Kill-window contribution analysis ──────────────────────────────
@@ -1123,7 +1152,9 @@ export function computeWindowCreationFacts(
           drCategoryOfCast(s.spellId, ownerApplied),
           seg.fromSeconds,
           matchStartMs,
-        ) === "Full",
+        ) === "Full" &&
+        // …and able to reach them at some second of the span
+        ccReachesInSpan(owner, enemyHealer, s.spellId, combat, seg),
     );
     if (!readyAtFullDR) continue;
 

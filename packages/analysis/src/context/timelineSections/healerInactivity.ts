@@ -5,6 +5,7 @@
  * its closure inputs now arrive through `ctx`. Output is pinned by the 605-file
  * acceptanceCapture context hash.
  */
+import { formatAttemptedFact } from "../../analysis/candidates/shared";
 import { fmtTime } from "../../utils/renderGrid";
 import type { TimelineCtx } from "./ctx";
 
@@ -18,9 +19,11 @@ export function emitHealerInactivityEntries(
 
   if (isHealer) {
     for (const gap of healingGaps) {
+      // a refused press inside the gap is a try, not idle time (fact5 D12)
+      const attempted = formatAttemptedFact(gap.refusedPresses ?? []);
       addEntry(
         gap.fromSeconds,
-        `${fmtTime(gap.fromSeconds)}  [INACTIVITY]   ${pid(owner.name)} inactive ${gap.durationSeconds.toFixed(1)}s (${gap.freeCastSeconds.toFixed(1)}s of it un-CC'd/free to cast) while ${pid(gap.mostDamagedName)} under pressure`,
+        `${fmtTime(gap.fromSeconds)}  [INACTIVITY]   ${pid(owner.name)} inactive ${gap.durationSeconds.toFixed(1)}s (${gap.freeCastSeconds.toFixed(1)}s of it un-CC'd/free to cast) while ${pid(gap.mostDamagedName)} under pressure${attempted ? ` — ${attempted}` : ""}`,
       );
     }
   }
