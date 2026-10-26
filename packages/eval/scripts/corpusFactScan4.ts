@@ -61,11 +61,13 @@ import {
   castKeyOfAura,
   effectAurasOfCast,
 } from "@gladlog/analysis/src/data/castEffectAuras";
+import healerSaveCdGenerated from "@gladlog/analysis/src/data/healerSaveCdGenerated.json";
 import {
   MITIGATION_TABLE,
   NO_MITIGATION_IDS,
 } from "@gladlog/analysis/src/data/mitigationData";
 import { mitigationVerdictOf } from "@gladlog/analysis/src/data/mitigationVerdicts";
+import { abilityProfile } from "@gladlog/analysis/src/data/abilityProfile";
 import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData";
 import spellEffectGenerated from "@gladlog/analysis/src/data/spellEffectGenerated.json";
 import { ENEMY_IMMUNITY_SAVE_AURAS } from "@gladlog/analysis/src/data/spellIdLists";
@@ -73,7 +75,11 @@ import { immunityCoversSpell } from "@gladlog/analysis/src/data/spellSchools";
 import { COPY_CAST_IDS } from "@gladlog/analysis/src/utils/castPress";
 import { charmedAt } from "@gladlog/analysis/src/utils/charmedPlayer";
 import { isEnemyCdWindowSpell } from "@gladlog/analysis/src/utils/cooldowns";
-import { isExternalSaveId } from "@gladlog/analysis/src/utils/enemyDefensives";
+import {
+  isExternalSaveId,
+  KW_OWN_ROTATIONAL_ABSORB_AURA_IDS,
+  KW_REDIRECT_PROTECTION_AURA_IDS,
+} from "@gladlog/analysis/src/utils/enemyDefensives";
 import {
   distanceBetween,
   getUnitPositionAtTime,
@@ -116,6 +122,8 @@ const CHECKS = [
   "defenselessExternalCaster",
   "spanCdBackInside",
   "rosterSides",
+  "enemyHealCdForward",
+  "defenselessRedirectUp",
 ] as const;
 type Check = (typeof CHECKS)[number];
 /** kinds counted but kept out of a check's violation total */
@@ -997,7 +1005,17 @@ for (const f of files) {
         const id = String(x.spellId ?? "");
         if (id === String(ext.spellId)) continue; // its own link copy
         const row = MITIGATION_TABLE[id];
-        if (!row || row.pct < 20) continue;
+        // a wall / immunity of ≥ 20 %, or a shield / redirect the span
+        // rulings count (own Power Word: Shield / Void Shield, Intervene,
+        // Roar of Sacrifice, an immunity-kind save) — 605 s0/7-2: a span
+        // that opened at its own Void Shield's end is no external's doing
+        if (
+          !(row && row.pct >= 20) &&
+          !KW_OWN_ROTATIONAL_ABSORB_AURA_IDS.has(id) &&
+          !KW_REDIRECT_PROTECTION_AURA_IDS.has(id) &&
+          !(id in ENEMY_IMMUNITY_SAVE_AURAS)
+        )
+          continue;
         const rem = ((u.auraEvents ?? []) as any[]).find(
           (y) => ev(y) === REMOVED && String(y.spellId) === id && tsOf(y) >= tsOf(x),
         );
@@ -1005,6 +1023,21 @@ for (const f of files) {
         if (to <= aMs + 500) lastProtEnd = Math.max(lastProtEnd, to);
       }
       if (!(aMs - Math.max(lastProtEnd, tsOf(ext)) >= 2000)) continue;
+      // …and no other own aura of the unit ended at the span's start (an
+      // Ultimate Penitence, a Fade's image: the span opened at that, not at
+      // the external — 605 s0/100-6, s2/41-6)
+      if (
+        ((u.auraEvents ?? []) as any[]).some(
+          (x) =>
+            ev(x) === REMOVED &&
+            x.srcUnitId === u.id &&
+            x.destUnitId === u.id &&
+            String(x.spellId) !== String(ext.spellId) &&
+            tsOf(x) >= aMs - 1500 &&
+            tsOf(x) <= aMs + 500,
+        )
+      )
+        continue;
       violate(
         "defenselessExternalCaster",
         nameOf(String(ext.spellId)),
@@ -1027,8 +1060,17 @@ for (const f of files) {
     }
     // the defensive kit as data: the mitigation table and its absorb /
     // heal / transfer whitelist (Dark Pact)
+    // a defensive as data: a wall / immunity row of ≥ 20 % in the mitigation
+    // table, or an absorb shield of the whitelist (Dark Pact) — not a
+    // self-heal (Desperate Prayer, Healthstone: filed Utility by ruling
+    // 2026-10-09) and not a sub-20 % row (Avatar)
     const wallNames = new Set(
-      [...Object.keys(MITIGATION_TABLE), ...NO_MITIGATION_IDS]
+      [
+        ...Object.entries(MITIGATION_TABLE)
+          .filter(([, r]) => r.pct >= 20)
+          .map(([id]) => id),
+        ...[...NO_MITIGATION_IDS].filter((id) => abilityProfile(id).absorbs),
+      ]
         .map((id) => nameOf(id))
         .filter(Boolean),
     );
@@ -1044,12 +1086,13 @@ for (const f of files) {
         const m2 = /rdy:(Δ )?(.*?)(?: {2}|$)/.exec(r.l);
         if (!m2) return false;
         // `rdy:Δ +A +2:B -C` (a change list) or `rdy:A,B,2:C` (the full one)
-        const added = m2[1]
-          ? m2[2]!
-              .split(/\s+(?=[+-])/)
-              .filter((t) => t.startsWith("+"))
-              .map((t) => t.slice(1))
-          : m2[2]!.split(",");
+        // a change list only: `+X` is X coming back at that second (the full
+        // list says what is ready, not what came back)
+        if (!m2[1]) return false;
+        const added = m2[2]!
+          .split(/\s+(?=[+-])/)
+          .filter((t) => t.startsWith("+"))
+          .map((t) => t.slice(1));
         return added.some((t) => !/^\d+:/.test(t) && wallNames.has(t.trim()));
       });
       if (back)
@@ -1089,6 +1132,97 @@ for (const f of files) {
           `${f.round}`,
           `roster ${mine} on the owner's side vs ${6 - mine}`,
         );
+    }
+  }
+
+  const roundEndAtFor = Math.min(
+    end,
+    playableEndMs(legacy as never, units) ?? Infinity,
+  );
+  // ── enemyHealCdForward ──
+  // An enemy healer's press of a healing major its spec's save-cooldown
+  // roster lists (the generated table, as data) is printed by some enemy
+  // line naming it at its second (± 1) — fact5 codex audit: Evangelism,
+  // Tip the Scales, Nature's Swiftness, Convoke had none
+  {
+    const roster = (
+      healerSaveCdGenerated as unknown as {
+        specs: Record<string, { spells: { spellId: string }[] }>;
+      }
+    ).specs;
+    for (const e of enemiesOfOwner) {
+      const pid = pidOf.get(e.name);
+      const specName = (/spec="([^"]+)"/.exec(
+        lines.find((l) => l.includes(`name="${e.name}"`)) ?? "",
+      ) ?? [])[1];
+      const ids = new Set(
+        (roster[specName ?? ""]?.spells ?? []).map((x) => x.spellId),
+      );
+      if (!pid || ids.size === 0) continue;
+      for (const c of successesOf(e)) {
+        if (!ids.has(String(c.spellId))) continue;
+        // Fade: no standalone enemy line, by convention (the 2026-10-25
+        // codex audit's refuted row)
+        if (String(c.spellId) === "586") continue;
+        if (tsOf(c) < start || tsOf(c) > roundEndAtFor) continue;
+        bump("enemyHealCdForward");
+        const sec = Math.floor((tsOf(c) - start) / 1000);
+        const name = nameOf(String(c.spellId), c.spellName ?? "");
+        const ok = linesNear(sec, 1).some(
+          (l) => /\[ENEMY [A-Z ]+\]/.test(l) && l.includes(` ${pid}(`) && l.includes(name),
+        );
+        if (!ok)
+          violate(
+            "enemyHealCdForward",
+            name,
+            tsOf(c),
+            `${e.id}:${c.spellId}:${sec}`,
+            `${pid} (${specName}) pressed ${name} at ${fmtS(sec)} — no enemy line names it`,
+          );
+      }
+    }
+  }
+
+  // ── defenselessRedirectUp ──
+  // A `defenseless a–b` span on a unit carrying an Intervene or a Roar of
+  // Sacrifice aura for ≥ 2 s of it (rulings 2026-10-21 / 2026-10-25: both
+  // end the span while up)
+  {
+    const REDIRECT = new Set(["147833", "53480"]);
+    const DL_RE2 =
+      /^\s+\[(?:KILL WINDOW|VULNERABLE)\] .*? on [^(]+\(([^)]+)\).*?\(defenseless (\d+:\d\d)–(\d+:\d\d)\)/;
+    const seen2 = new Set<string>();
+    for (const l of lines) {
+      const m = DL_RE2.exec(l);
+      if (!m) continue;
+      const u = byName.get(m[1]!);
+      if (!u) continue;
+      const a = start + secOf(m[2]!) * 1000;
+      const b = start + (secOf(m[3]!) + 1) * 1000;
+      const k = `${u.id}:${m[2]}:${m[3]}`;
+      if (seen2.has(k)) continue;
+      seen2.add(k);
+      bump("defenselessRedirectUp");
+      const rows = ((u.auraEvents ?? []) as any[])
+        .filter((x) => x.destUnitId === u.id && REDIRECT.has(String(x.spellId)))
+        .sort((x, y) => tsOf(x) - tsOf(y));
+      for (const x of rows) {
+        if (ev(x) !== APPLIED) continue;
+        const rem = rows.find((y) => ev(y) === REMOVED && String(y.spellId) === String(x.spellId) && tsOf(y) >= tsOf(x));
+        const to = rem ? tsOf(rem) : tsOf(x) + 3000;
+        const overlap = Math.min(b, to) - Math.max(a, tsOf(x));
+        if (overlap >= 2000) {
+          violate(
+            "defenselessRedirectUp",
+            nameOf(String(x.spellId)),
+            tsOf(x),
+            k,
+            `${u.name} defenseless ${m[2]}–${m[3]} with ${nameOf(String(x.spellId))} on it for ${(overlap / 1000).toFixed(1)}s`,
+            l.trim().slice(0, 180),
+          );
+          break;
+        }
+      }
     }
   }
 

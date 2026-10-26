@@ -1433,6 +1433,21 @@ export function burstWindowDecisionPoints(
       const w0 = tMs - BURST_RESPONSE_PRE_MS;
       const w1 = tMs + BURST_RESPONSE_WINDOW_MS;
       const casterIdSet = new Set(casterIds);
+      // whose control answers THIS burst: a caster of the lead or of an extra
+      // inside the 8 s the sentence judges — the CDs `burstExtrasLabel`
+      // prints (fact5 D11, ef3b61c9 r0 0:22: a Scatter Shot on a druid whose
+      // only CDs came 12 s and 33 s after the opener was credited as the
+      // answer). The window's other readers keep the whole segment's casters.
+      const answerCasterIdSet = new Set(
+        ordered
+          .filter(
+            (c) =>
+              c === leadRaw ||
+              Math.floor(c.castSeconds) <= tSec + BURST_RESPONSE_WINDOW_SEC,
+          )
+          .map((c) => enemyByName.get(c.playerName)?.id)
+          .filter((id): id is string => !!id),
+      );
       const responseCasts: BurstResponseCast[] = [];
       // the raw instant each response counts at (its `latencySec` origin) —
       // read once more below, against the pressured friendly's death
@@ -1461,7 +1476,7 @@ export function burstWindowDecisionPoints(
                 ? "healCd"
                 : CONTROL_IDS.has(c.spellId) &&
                     c.dest != null &&
-                    casterIdSet.has(c.dest)
+                    answerCasterIdSet.has(c.dest)
                   ? "control"
                   : BURST_EXTRA_ANSWER_IDS.has(c.spellId)
                     ? extraAnswerCategory(c)
@@ -1561,8 +1576,10 @@ export function burstWindowDecisionPoints(
         responseCasts.push(response);
       }
       for (const r of controlLandedResponses(
-        casterIds.map((id) => units.find((u) => u.id === id)).filter(Boolean),
-        casterIdSet,
+        [...answerCasterIdSet]
+          .map((id) => units.find((u) => u.id === id))
+          .filter(Boolean),
+        answerCasterIdSet,
         friendlyPlayerOf,
         friendlyCasts,
         w0,

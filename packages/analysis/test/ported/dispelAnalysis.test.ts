@@ -491,17 +491,19 @@ describe("dispelAnalysis — summary reconstruction", () => {
       },
     ];
 
-    // CC applied at 10s (within 60s window)
+    // A Curse CC (Hex 51514 — Cauterizing Flame's type; fact5 D1: a press
+    // of a cleanse that cannot remove the debuff's type is no burned
+    // cleanse for it) applied at 10s (within 60s window)
     const ccApply = makeAuraEvent(
       LogEvent.SPELL_AURA_APPLIED,
-      "118",
+      "51514",
       MATCH_START + 10_000,
       "e1",
       "t",
     );
     const ccRemove = makeAuraEvent(
       LogEvent.SPELL_AURA_REMOVED,
-      "118",
+      "51514",
       MATCH_START + 20_000,
       "e1",
       "t",
@@ -522,14 +524,14 @@ describe("dispelAnalysis — summary reconstruction", () => {
     // CC applied at 70s (outside 60s window)
     const ccApplyLate = makeAuraEvent(
       LogEvent.SPELL_AURA_APPLIED,
-      "118",
+      "51514",
       MATCH_START + 70_000,
       "e1",
       "t",
     );
     const ccRemoveLate = makeAuraEvent(
       LogEvent.SPELL_AURA_REMOVED,
-      "118",
+      "51514",
       MATCH_START + 80_000,
       "e1",
       "t",

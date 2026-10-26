@@ -4408,3 +4408,20 @@ STAYED IN `no defensive CD available` names a defensive back inside the span.
 kick-priority +3, burst-into-mitigation +1, position-mistake −3 (user-approved
 preview); gates unchanged; the new corpusFactScan4 checks read 0 except the
 residuals listed in the commit message.
+
+v458 (2026-10-26, fact5 round-5 fixes, batch 2): a player's side is its
+COMBATANT_INFO team rather than the flag vote (a Solo Shuffle round had read
+four against two, an enemy filed as a teammate); an enemy healer's healing
+majors on the save-cooldown roster print `[ENEMY HEAL CD]` for that healer spec
+(Evangelism, Tip the Scales, Nature's Swiftness, Divine Toll, Celestial
+Conduit, Frenzied Regeneration, Convoke — a forward check over the generated
+roster pins it); Roar of Sacrifice ends a `defenseless` span while its aura is
+up, like Intervene (user ruling 2026-10-25); a burst counts as answered by a
+control only on a caster of the cooldowns inside its 8 s; a cleanse is "on
+cooldown" only for a dispel that removes the debuff's type; a teammate's aimed
+control with no control aura and no control miss says so; a ground control's
+pulse row is its go-off for the dodge reading. 605 / second-corpus capture
+(main → batch): slow-defensive-response +15 / +34, missed-cleanse +3 / +13,
+kick-priority −3 / −3, cd-waste 0 / −1 (user-approved preview); gates and the
+older scans unchanged.
+

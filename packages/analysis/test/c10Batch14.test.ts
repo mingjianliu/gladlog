@@ -125,6 +125,19 @@ describe("warlock purge follows the logged pet (1120cb61: a Sayaad warlock liste
         makeSpellCastEvent("6358", T0 + 60_000, "Player-1-T", "Target", "Pet-0-1-1-1-1863-04", "Pet"),
       ],
     });
+    // fact5 D4: a Felhunter that dies before the next one comes out ends
+    // its span at its death (04a1bde9: died 3:00.7, re-summoned 3:04.5)
+    const dead = { ...late, deathRecords: [{ timestamp: T0 + 50_000 }] } as never;
+    const resummoned = makeUnit("Pet-0-1-1-1-417-05", {
+      ownerId: u.id,
+      spellCastEvents: [
+        makeSpellCastEvent("19647", T0 + 54_000, "Player-1-T", "Target", "Pet-0-1-1-1-417-05", "Pet"),
+      ],
+    });
+    expect(warlockPurgePetSpans(u, [u, sayaad, dead, resummoned], T0)).toEqual([
+      { fromSeconds: 40, toSeconds: 50 },
+      { fromSeconds: 54, toSeconds: Infinity },
+    ]);
     expect(warlockPurgePetSpans(u, [u, sayaad, late, sayaad2], T0)).toEqual([
       { fromSeconds: 40, toSeconds: 60 },
     ]);

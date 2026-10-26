@@ -77,6 +77,7 @@ import * as curatedAbilityFacts from "@gladlog/analysis/src/data/curatedAbilityF
 import * as dispelObservedGenerated from "@gladlog/analysis/src/data/dispelObservedGenerated";
 import * as dispelVerdicts from "@gladlog/analysis/src/data/dispelVerdicts";
 import * as druidForms from "@gladlog/analysis/src/data/druidForms";
+import * as enemyHealCds from "@gladlog/analysis/src/data/enemyHealCds";
 import * as healerSaveCd from "@gladlog/analysis/src/data/healerSaveCd";
 import * as healingVerdicts from "@gladlog/analysis/src/data/healingVerdicts";
 import * as kickPriorityHealSpells from "@gladlog/analysis/src/data/kickPriorityHealSpells";
@@ -808,6 +809,11 @@ const INDEX: PredicateRow[] = [
     file: `${A}/utils/damagePress.ts`,
     symbol: "isSameSpell",
     mod: damagePress,
+  },
+  {
+    file: `${A}/data/enemyHealCds.ts`,
+    symbol: "isEnemyHealCdFor",
+    mod: enemyHealCds,
   },
   {
     file: `${A}/utils/ccTargetState.ts`,

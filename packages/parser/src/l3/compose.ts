@@ -24,6 +24,26 @@ function calculateFnv1a32(lines: string[]): string {
   return (hash >>> 0).toString(16).padStart(8, "0");
 }
 
+/**
+ * A player's side is its COMBATANT_INFO team, read against the owner's: the
+ * round's own statement of who plays with whom. The flag vote (`buildRoster`
+ * — the reaction bits as the recorder saw them, by event count) stays only
+ * for a unit with no COMBATANT_INFO. In a Solo Shuffle round the vote can
+ * carry another round's view: fact5 F18 (605 s1/148 round 3) — a Frost Mage
+ * on the other team (COMBATANT_INFO team 1 against the recorder's 0) read
+ * Friendly by the flag vote, so the roster read 4 against 2 and his Ray of
+ * Frost on a player of the recorder's team counted as a teammate's damage.
+ */
+export function sidesFromTeams(
+  units: Map<string, { info?: { teamId: number }; reaction: string }>,
+  playerTeamId: number | null,
+): void {
+  if (playerTeamId === null) return;
+  for (const u of units.values())
+    if (u.info && typeof u.info.teamId === "number")
+      u.reaction = u.info.teamId === playerTeamId ? "Friendly" : "Hostile";
+}
+
 export function buildMatch(seg: Segment, end: ParsedLine): GladMatch {
   const roster = buildRoster(seg.records);
   const gladUnitsMap = collectEvents(seg.records, roster);
@@ -52,6 +72,7 @@ export function buildMatch(seg: Segment, end: ParsedLine): GladMatch {
   const playerId = roster.ownerId ?? "";
   const ownerUnit = roster.ownerId ? gladUnitsMap.get(roster.ownerId) : null;
   const playerTeamId = ownerUnit?.info?.teamId ?? null;
+  sidesFromTeams(gladUnitsMap, playerTeamId);
 
   const winningTeamId = end.arenaEnd ? end.arenaEnd.winningTeamId : null;
   const result = matchResult(winningTeamId, playerTeamId);
@@ -132,6 +153,7 @@ function buildShuffleRound(
   const playerId = resolvedOwnerId ?? roster.ownerId ?? "";
   const ownerUnit = playerId ? gladUnitsMap.get(playerId) : null;
   const playerTeamId = ownerUnit?.info?.teamId ?? null;
+  sidesFromTeams(gladUnitsMap, playerTeamId);
 
   // Find round deaths in chronological order
   const roundDeaths: { destId: string }[] = [];

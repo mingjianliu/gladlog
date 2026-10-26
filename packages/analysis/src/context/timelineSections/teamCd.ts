@@ -42,6 +42,7 @@ export function emitTeamCdEntries(
     | "friendlyPid"
     | "ccImmuneTagFor"
     | "ccMissTagFor"
+    | "noCcAuraTagFor"
     | "addEntry"
     | "requestSnapshotPlaceholder"
     | "matchStartMs"
@@ -57,6 +58,7 @@ export function emitTeamCdEntries(
     friendlyPid,
     ccImmuneTagFor,
     ccMissTagFor,
+    noCcAuraTagFor,
     addEntry,
     requestSnapshotPlaceholder,
     matchStartMs,
@@ -138,7 +140,7 @@ export function emitTeamCdEntries(
             effectiveTgt = formatAoeTargetPart(matchingAoe, tgt);
             for (const t of matchingAoe.targets) named.add(t.name);
           }
-          line = `${fmtTime(cast.timeSeconds)}  [TEAM] [CC]   ${pid(player.name)} (${spec}) cast ${cd.spellName}${effectiveTgt}${groundingNote}${ccImmuneTagFor(player, cd.spellId, cast.timeSeconds, named)}${ccMissTagFor(player, cd.spellId, cast.timeSeconds)}${unnecessaryNote}`;
+          line = `${fmtTime(cast.timeSeconds)}  [TEAM] [CC]   ${pid(player.name)} (${spec}) cast ${cd.spellName}${effectiveTgt}${groundingNote}${ccImmuneTagFor(player, cd.spellId, cast.timeSeconds, named)}${ccMissTagFor(player, cd.spellId, cast.timeSeconds) || (matchingAoe ? "" : noCcAuraTagFor(player, cd.spellId, cast.timeSeconds))}${unnecessaryNote}`;
         } else {
           // F-T1: another friendly player as the recipient — only for a spell
           // that officially reaches allies (`reachesAlly`: a self-only wall

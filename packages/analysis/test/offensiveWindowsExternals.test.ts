@@ -558,13 +558,13 @@ describe("computeOffensiveWindows — the target's own 20–99 % wall cuts the s
     });
   });
 
-  it("not a wall of the unit's own: a redirect that prints a percentage (Roar of Sacrifice, rulings A20 + U3), another unit's wall on itself, a wall aura somebody else applied", () => {
+  it("Roar of Sacrifice cuts the span while its aura is up (user ruling 2026-10-25, like Intervene); another unit's wall on itself, or a wall aura somebody else applied, does not", () => {
     const plain = spans(hunter());
-    expect(
-      spans(
-        hunter(up(ROAR_OF_SACRIFICE, 30, 40), [press(ROAR_OF_SACRIFICE, 30)]),
-      ),
-    ).toEqual(plain);
+    const roar = spans(
+      hunter(up(ROAR_OF_SACRIFICE, 30, 40), [press(ROAR_OF_SACRIFICE, 30)]),
+    ) as unknown as Array<[number, number]>;
+    expect(roar).not.toEqual(plain);
+    for (const [f, t] of roar) expect(f >= 40 || t <= 30).toBe(true);
     const other = makeUnit("e2", {
       name: "EnemyHealer",
       spec: CombatUnitSpec.Druid_Restoration,

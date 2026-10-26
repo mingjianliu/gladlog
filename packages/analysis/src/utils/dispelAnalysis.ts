@@ -3867,6 +3867,18 @@ export function reconstructDispelSummary(
               // `proc`, 484 events per 250 logs) used to count here as a burned
               // 8s cleanse cooldown and suppressed real missed-cleanse findings.
               if (c.dispelKind !== "deliberate") return false;
+              // …and only a press of a spell that removes this debuff's type:
+              // the cleanse that was "on CD" must be the one that could take
+              // it (fact5 D1, 04a1bde9 2:27: a Naturalize — Magic / Poison —
+              // read as the burned cleanse for a Curse of Tongues while the
+              // Curse removal Cauterizing Flame was ready). A spell the type
+              // table does not know keeps the old reading.
+              const removes = dispelTypesRemovedBy(
+                c.dispelSpellId,
+                specByName.get(c.sourceName) as CombatUnitSpec,
+              );
+              if (removes.size > 0 && !removes.has(windowDispelType))
+                return false;
               const { cooldownSeconds } = cleanseRecoveryOf(
                 c.dispelSpellId,
                 pvpTalentsByName.get(c.sourceName),

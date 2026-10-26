@@ -297,6 +297,13 @@ export interface TimelineCtx {
    * cc-dr F-NE1: ` [no CC aura logged]` for an aimed owner CC with no aura
    * and no miss on its target (shared by both owner-CC emitters) */
   ownerNoCcAuraTag: (spellId: string, castTimeSeconds: number) => string;
+  /** the same tag for any friendly caster (fact5 D15: the `[TEAM] [CC]`
+   * line) */
+  noCcAuraTagFor: (
+    caster: ICombatUnit,
+    spellId: string,
+    castTimeSeconds: number,
+  ) => string;
   ownerEmpowerTag: (spellId: string, castTimeSeconds: number) => string;
   getCDTargetAndVelocityPart: (
     spellId: string,

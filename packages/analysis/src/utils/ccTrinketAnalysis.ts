@@ -4805,6 +4805,19 @@ export function analyzePlayerCCAndTrinket(
         if (r.timestamp < castMs || r.timestamp > toMs) continue;
         if (first === undefined || r.timestamp < first) first = r.timestamp;
       }
+    // …or the summon's own pulse row: a Capacitor Totem's 118905 is written
+    // as the totem's SPELL_CAST_SUCCESS when it goes off, whether or not it
+    // caught anyone (fact5 D20, e38f41c9 r0 0:38.26: a feather pressed 1.4 s
+    // after the pulse was credited with dodging it)
+    for (const p of enemyPets)
+      if (p.ownerId === enemy.id)
+        for (const c of p.spellCastEvents ?? []) {
+          if (c.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
+          if (!c.spellId || !family.has(c.spellId)) continue;
+          const t = c.logLine.timestamp;
+          if (t < castMs || t > toMs) continue;
+          if (first === undefined || t < first) first = t;
+        }
     return first;
   };
   const pulseByCast = new Map<

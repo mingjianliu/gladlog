@@ -455,8 +455,10 @@ export function computeOffensiveWindows(
   // the event its line is rendered from — an aura of a `MITIGATION_TABLE`
   // 20–99 % row the unit applied to itself), so every table wall is covered
   // whatever the roster holds; a pressed self defensive that is no wall is
-  // not an event of this kind (Roar of Sacrifice — a redirect, rulings A20 +
-  // U3). A press the machine times keeps its reading (ruling D6).
+  // not an event of this kind (a redirect — rulings A20 + U3; Intervene and
+  // Roar of Sacrifice cut the span through their aura on the holder below,
+  // rulings 2026-10-21 / 2026-10-25). A press the machine times keeps its
+  // reading (ruling D6).
   // The roster was widened by user ruling (2026-10-20: Survival of the
   // Fittest, Retribution's Divine Protection, Dark Pact), together with the
   // owned-but-unpressed half (an `[UNUSED]` roster defensive in the kit keeps
@@ -519,7 +521,8 @@ export function computeOffensiveWindows(
   }
 
   // User rulings 2026-10-21: the target's own Power Word: Shield / Void
-  // Shield and an Intervene on it end the span while their aura is up
+  // Shield and an Intervene on it end the span while their aura is up — and
+  // a Roar of Sacrifice (user ruling 2026-10-25)
   // (`KW_OWN_ROTATIONAL_ABSORB_AURA_IDS`, `KW_REDIRECT_PROTECTION_AURA_IDS`)
   // …and every other own absorb shield it pressed that the log shows
   // absorbing for it, within a minute of a press of it

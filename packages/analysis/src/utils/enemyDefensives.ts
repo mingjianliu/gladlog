@@ -175,6 +175,11 @@ export const KW_OWN_ROTATIONAL_ABSORB_AURA_IDS: ReadonlySet<string> = new Set([
 ]);
 export const KW_REDIRECT_PROTECTION_AURA_IDS: ReadonlySet<string> = new Set([
   "147833",
+  // Roar of Sacrifice — user ruling 2026-10-25 「Roar of Sacrifice算防御」:
+  // it ends `defenseless` while its aura is on the unit, as Intervene does
+  // (closes fact4 A20 / U3 for this spell; retest ecfb3a7f: `defenseless
+  // 2:07–2:40` with Roar of Sacrifice on the target from 2:18.9)
+  "53480",
 ]);
 
 /**

@@ -291,7 +291,7 @@ describe("computeOffensiveWindows + [ENEMY DEF] ⇄ checkNoWindowAcrossOwnWall",
     [cast(SURVIVAL_OF_THE_FITTEST, 24.6), cast(ROAR_OF_SACRIFICE, 50)],
   );
 
-  it("the spans stop where each wall's aura begins and resume where it ends; the redirect cuts nothing; the gate passes", () => {
+  it("the spans stop where each wall's aura begins and resume where it ends; Roar of Sacrifice cuts too (user ruling 2026-10-25); the gate passes", () => {
     const { windows, def, lines } = render(pressed, pressed);
     expect(
       def.map((l) => l.slice(0, l.indexOf(")", l.indexOf("): ") + 3) + 1)),
@@ -303,7 +303,8 @@ describe("computeOffensiveWindows + [ENEMY DEF] ⇄ checkNoWindowAcrossOwnWall",
     ]);
     expect(windows.map((w) => [w.fromSeconds, w.toSeconds])).toEqual([
       [30.6, 40.4],
-      [44.2, 60],
+      [44.2, 50],
+      [55, 60],
     ]);
     expect(checkNoWindowAcrossOwnWall(lines)).toEqual([]);
   });

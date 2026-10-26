@@ -12,7 +12,7 @@ import { type ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
 import { castAndEffectIds } from "../../data/castEffectAuras";
 import { classMetadata } from "../../data/classSpells";
-import { ENEMY_HEAL_CD_IDS } from "../../data/enemyHealCds";
+import { isEnemyHealCdFor } from "../../data/enemyHealCds";
 import { getEnglishSpellName } from "../../data/spellEffectData";
 import { SpellTag } from "../../data/spellTypes";
 import { AURA_REBROADCAST_GAP_MS } from "../../utils/auraIntervals";
@@ -271,13 +271,13 @@ export function emitEnemyCdEntries(
     // (`pressRowsWithHidden` — 0284fcd9 r1 0:12, a Tranquility with no row)
     const casts = pressRowsWithHidden(
       enemy,
-      (id) => ENEMY_HEAL_CD_IDS.has(id),
+      (id) => isEnemyHealCdFor(id, enemy.spec),
       ctx.matchStartMs,
     ).filter(
       (c) =>
         c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
         !!c.spellId &&
-        ENEMY_HEAL_CD_IDS.has(c.spellId) &&
+        isEnemyHealCdFor(c.spellId, enemy.spec) &&
         // a shift back into Tree of Life form is no second press
         (c.unseenPress || !isFormReshiftCast(enemy, c as never)),
     );
@@ -312,7 +312,9 @@ export function emitEnemyCdEntries(
       ?.abilities.filter(
         (ab) =>
           ab.tags.includes(SpellTag.Utility) &&
-          !ENEMY_HEAL_CD_IDS.has(ab.spellId) &&
+          // a healing major of THIS unit's spec has its own line (a Feral's
+          // Convoke is no healer's)
+          !isEnemyHealCdFor(ab.spellId, enemy.spec) &&
           !OFFENSIVE_CD_SPELL_IDS.has(ab.spellId),
       );
     if (!rows || rows.length === 0) continue;

@@ -541,4 +541,19 @@
  *  deltas kick-eaten +6, kick-priority +3, burst-into-mitigation +1,
  *  position-mistake −3 (user-approved preview); gates unchanged.
  */
-export const PROMPT_VERSION = 457;
+/*
+ * v458 (2026-10-26, fact5 round-5 fixes F18 batch 2): a player's side is
+ *  its COMBATANT_INFO team (a Solo Shuffle round no longer reads 4 against
+ *  2); an enemy healer's Evangelism / Tip the Scales / Nature's Swiftness /
+ *  Divine Toll / Celestial Conduit / Frenzied Regeneration / Convoke print
+ *  [ENEMY HEAL CD] for their spec (the save-cooldown roster's forward
+ *  check); Roar of Sacrifice ends `defenseless` like Intervene (user ruling
+ *  2026-10-25); a burst is answered by a control only on a caster of the
+ *  CDs inside its 8 s; a cleanse "on cooldown" only for a dispel that
+ *  removes the debuff's type; a teammate's aimed CC with no control aura
+ *  says so; a ground control is dodged before its own pulse row. 605 / wide
+ *  (main 5032b4e4f → batch): slow-defensive-response +15 / +34,
+ *  missed-cleanse +3 / +13, kick-priority −3 / −3, cd-waste 0 / −1 (preview
+ *  approved by the user 2026-10-26); gates and scan1–3 unchanged.
+ */
+export const PROMPT_VERSION = 458;

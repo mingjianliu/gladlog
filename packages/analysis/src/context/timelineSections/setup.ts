@@ -813,13 +813,34 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
   // the cooldown ledger (ownerCd) and the cast gap-filler): the owner and
   // the owner's summons (a Hunter's pet applies
   // Intimidation's stun) — whose aura on the target counts as the cast's
-  const ownCcSources = new Set<string>([
-    owner.id,
-    ...(allUnits ?? []).filter((u) => u.ownerId === owner.id).map((u) => u.id),
-  ]);
+  const ccSourcesCache = new Map<string, Set<string>>();
+  const ccSourcesOf = (caster: ICombatUnit): Set<string> => {
+    let s = ccSourcesCache.get(caster.id);
+    if (!s) {
+      s = new Set<string>([
+        caster.id,
+        ...(allUnits ?? [])
+          .filter((u) => u.ownerId === caster.id)
+          .map((u) => u.id),
+      ]);
+      ccSourcesCache.set(caster.id, s);
+    }
+    return s;
+  };
   function ownerNoCcAuraTag(spellId: string, castTimeSeconds: number): string {
+    return noCcAuraTagFor(owner, spellId, castTimeSeconds);
+  }
+  // fact5 D15 (3fb8356f 1:59): a teammate's aimed CC that put no control on
+  // its target and logged no control miss printed bare — a Storm Bolt into
+  // Bladestorm read as landed. The owner's tag, for any friendly caster.
+  function noCcAuraTagFor(
+    caster: ICombatUnit,
+    spellId: string,
+    castTimeSeconds: number,
+  ): string {
+    const ownCcSources = ccSourcesOf(caster);
     const castMs = matchStartMs + castTimeSeconds * 1000;
-    const ev = owner.spellCastEvents.find(
+    const ev = caster.spellCastEvents.find(
       (e) =>
         e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
         e.spellId === spellId &&
@@ -845,11 +866,14 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
     // (fact3 D29, 46a55085 3:28: a Kidney Shot into Phase Shift, no aura
     // and no miss row of its own, printed bare)
     const missedOn = (u: ICombatUnit) =>
-      (owner.missesOut ?? []).some(
+      (caster.missesOut ?? []).some(
         (m) =>
           m.destUnitId === u.id &&
           m.spellId !== undefined &&
           own.has(m.spellId) &&
+          // a shield eating the hit's DAMAGE says nothing about the control
+          // (D15: Storm Bolt's damage absorbed by Void Shield, no stun)
+          m.missType !== "ABSORB" &&
           inWindow(m.timestamp),
       );
     if (!dest) {
@@ -873,7 +897,7 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
       if (![...own].some((id) => AOE_CC_SPELL_IDS.has(id))) return "";
       const landing = aoeCcLandingWindowFor(
         spellId,
-        playerTalentIdSets(owner).pvpTalentIds,
+        playerTalentIdSets(caster).pvpTalentIds,
       );
       if (landing === null) return "";
       const inLanding = landing
@@ -900,7 +924,7 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
                 x.logLine.event === LogEvent.SPELL_AURA_REFRESH) &&
               ownIn(x.spellId, x.timestamp),
           ) ||
-          (owner.missesOut ?? []).some(
+          (caster.missesOut ?? []).some(
             (m) => m.destUnitId === u.id && ownIn(m.spellId, m.timestamp),
           ),
       );
@@ -1427,6 +1451,7 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
     ccImmuneTagFor,
     ownerCcMissTag,
     ownerNoCcAuraTag,
+    noCcAuraTagFor,
     ccMissTagFor,
     ccNotLandedLines,
     ownerEmpowerTag,

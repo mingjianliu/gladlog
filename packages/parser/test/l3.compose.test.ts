@@ -1,7 +1,7 @@
 import { parseLine } from "../src/l1/parseLine";
 import { Segmenter } from "../src/l2/segmenter";
 import type { Segment, ShuffleClose } from "../src/l2/types";
-import { buildMatch, buildShuffle } from "../src/l3/compose";
+import { buildMatch, buildShuffle, sidesFromTeams } from "../src/l3/compose";
 import type { GladMatch, GladShuffle } from "../src/l3/model";
 
 const TZ = { timezone: "UTC" } as const;
@@ -163,5 +163,28 @@ describe("buildShuffle", () => {
     expect(s.rounds.map((r) => r.sequenceNumber)).toEqual([0, 1, 2]);
     expect(s.kind).toBe("shuffle");
     expect(s.startTime).toBeLessThan(s.endTime);
+  });
+});
+
+describe("sidesFromTeams — a player's side is its COMBATANT_INFO team (fact5 F18)", () => {
+  it("overrides the flag vote for a player with a team; leaves a unit with none", () => {
+    const units = new Map<string, { info?: { teamId: number }; reaction: string }>([
+      ["owner", { info: { teamId: 0 }, reaction: "Friendly" }],
+      // the flag vote read him Friendly; his team is the other one
+      ["mage", { info: { teamId: 1 }, reaction: "Friendly" }],
+      ["mate", { info: { teamId: 0 }, reaction: "Hostile" }],
+      ["pet", { reaction: "Hostile" }],
+    ]);
+    sidesFromTeams(units, 0);
+    expect([...units].map(([k, u]) => `${k}:${u.reaction}`)).toEqual([
+      "owner:Friendly",
+      "mage:Hostile",
+      "mate:Friendly",
+      "pet:Hostile",
+    ]);
+    // no owner team → nothing to read against
+    const other = new Map([["x", { info: { teamId: 1 }, reaction: "Friendly" }]]);
+    sidesFromTeams(other, null);
+    expect(other.get("x")!.reaction).toBe("Friendly");
   });
 });
