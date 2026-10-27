@@ -40,6 +40,7 @@ import {
   HEALING_AMPLIFIER_SPELL_IDS,
   MANA_COOLDOWN_SPELL_IDS,
 } from "../context/timelineHelpers";
+import { ENEMY_UTILITY_EXTRA_IDS } from "../context/timelineSections/enemyCd";
 import { CASTER_SIDE_LINK_AURA_IDS } from "../utils/brokenRowBreaker";
 import {
   NO_FIXED_DURATION_IDS,
@@ -170,6 +171,10 @@ import {
   SPELL_EFFECT_OVERRIDES as SPELL_DANGER_OVERRIDES,
 } from "../utils/spellDanger";
 import { HEALER_REACH_SPELLS } from "../utils/spellRange";
+import {
+  STEALTH_ONLY_CONTROL_IDS,
+  STEALTH_STATE_AURA_IDS,
+} from "../utils/stealthControl";
 import {
   OFFENSIVE_PURGE_TALENT_IDS,
   TALENT_BEHAVIORS,
@@ -848,6 +853,18 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   ),
   t("TARGET_BOUND_MOBILITY_IDS", "utils/ccTrinketAnalysis.ts", "cast", () =>
     set(TARGET_BOUND_MOBILITY_IDS),
+  ),
+  t("STEALTH_ONLY_CONTROL_IDS", "utils/stealthControl.ts", "cast", () =>
+    set(STEALTH_ONLY_CONTROL_IDS),
+  ),
+  t("STEALTH_STATE_AURA_IDS", "utils/stealthControl.ts", "aura", () =>
+    set(STEALTH_STATE_AURA_IDS),
+  ),
+  t(
+    "ENEMY_UTILITY_EXTRA_IDS",
+    "context/timelineSections/enemyCd.ts",
+    "cast",
+    () => set(ENEMY_UTILITY_EXTRA_IDS),
   ),
   t(
     "BURST_LEAD_CD_EXCLUDED_IDS",

@@ -311,7 +311,8 @@ export function emitEnemyCdEntries(
       .find((c) => c.unitClass === enemy.class)
       ?.abilities.filter(
         (ab) =>
-          ab.tags.includes(SpellTag.Utility) &&
+          (ab.tags.includes(SpellTag.Utility) ||
+            ENEMY_UTILITY_EXTRA_IDS.has(ab.spellId)) &&
           // a healing major of THIS unit's spec has its own line (a Feral's
           // Convoke is no healer's)
           !isEnemyHealCdFor(ab.spellId, enemy.spec) &&
@@ -373,3 +374,12 @@ export function emitEnemyCdEntries(
 
 /** The tag of an enemy's utility press line (fact1215 C7). */
 export const ENEMY_UTILITY_TAG = "[ENEMY UTILITY]";
+
+/** Catalog rows the friendly ledger tags otherwise whose ENEMY press is a
+ * utility fact line too: no [ENEMY DEF] roster names them, no reader takes
+ * them (fact5 cxa c224dd9e 0:51 / 0:53: a Windwalker's two Transcendence:
+ * Transfer escapes at 12 % / 8 % HP had only a loadout entry — user ruling
+ * 2026-10-26, a line only). Registered in curatedIdRegistry. */
+export const ENEMY_UTILITY_EXTRA_IDS: ReadonlySet<string> = new Set([
+  "119996", // Transcendence: Transfer
+]);

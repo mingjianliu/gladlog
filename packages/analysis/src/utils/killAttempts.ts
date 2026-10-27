@@ -82,6 +82,7 @@ import { ATTEMPT_INTO_TRINKET_OUTCOME_REF } from "../data/outcomeRefs";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import { ENEMY_AREA_SAVE_IDS } from "../data/spellIdLists";
 import { TIMELINE_LINE_FLAGS } from "../data/timelineLineFlags";
+import { buffFullDurationForCaster } from "./buffDuration";
 import { burstCastSpan, KILL_CREDIT_SLACK_S } from "./burstLedger";
 import {
   analyzePlayerCCAndTrinket,
@@ -106,6 +107,7 @@ import {
 } from "./drAnalysis";
 import { reconstructEnemyCDTimeline } from "./enemyCDs";
 import {
+  areaSaveSpansOnS,
   effectSaves,
   ENEMY_PROC_SAVE_NAMES,
   enemyDefensiveEvents,
@@ -1353,7 +1355,7 @@ export function formatKillAttemptsForContext(
   lines.push(
     "  `FAILED: X` names what the attempt ran into — the first that applies, in this fixed order: the target's trinket, a break ability, a full immunity, a wall, an external, another defensive of the target's own, `healed through` (over the attempt and the next 5 s the target received more healing than damage), `not enough damage` (none of the above). It is what was pressed or up, picked in that order — not a measurement of what stopped the kill. A wall / external / own defensive is named when it went up inside the attempt, or was already up when it began (`[up since m:ss]`) — one pressed after the attempt was over is not named; an immunity, the trinket or a break in the next 5 s still is. An external under the " +
       MITIGATION_AURA_MIN_PCT +
-      "% wall floor (an ally's 15% copy of Obsidian Scales) is not named. An immunity met along with the trinket or a break is named beside it, and so is an external beside the target's own defensive (`popped X; saved by external (Y)`): the attempt met both. `target trinketed out` / `broke out (X)` = the trinket / a racial or class ability removed a control of this attempt — the target's own, or an ally's Blessing of Sanctuary on it (`broke out (Blessing of Sanctuary)`).",
+      "% wall floor (an ally's 15% copy of Obsidian Scales) is not named. An immunity met along with the trinket or a break is named beside it, and so is an external beside the target's own defensive (`popped X; saved by external (Y)`): the attempt met both. A teammate's area save whose aura was on the target (Spirit Link Totem, Anti-Magic Zone, Darkness, Rallying Cry, Power Word: Barrier) is named as an external. `target trinketed out` / `broke out (X)` = the trinket / a racial or class ability removed a control of this attempt — the target's own, or an ally's Blessing of Sanctuary on it (`broke out (Blessing of Sanctuary)`).",
   );
   // User ruling 2026-10-11: the two words for the target's own defensive,
   // each explained only when a line of this block carries it.
@@ -1526,6 +1528,13 @@ interface ITargetReadings {
    * lines render them (`enemyDefensiveEvents` of its teammates) — a cast on
    * it, or an aura on it whose cast the log missed. */
   externalsReceived: () => IEnemyDefensiveEvent[];
+  /** a teammate's area saves (Spirit Link Totem, Anti-Magic Zone, Darkness,
+   * Rallying Cry, Power Word: Barrier) and their spans on this target — the
+   * kill windows' reading (`areaSaveSpansOnS`) */
+  areaSavesOn: () => Array<{
+    d: IEnemyDefensiveEvent;
+    spans: Array<{ from: number; to: number }>;
+  }>;
   /** the round's units by roster side (`buildRosterSides`) */
   sides: () => RosterSides;
   /** `documentRecordsAttackSpell` over the round's units */
@@ -1540,6 +1549,7 @@ function targetReadingsFactory(
   const intervals = new Map<string, ISaveAuraInterval[]>();
   const cc = new Map<string, IPlayerCCTrinketSummary>();
   let externals: IEnemyDefensiveEvent[] | undefined;
+  let areas: IEnemyDefensiveEvent[] | undefined;
   let rosterSides: RosterSides | undefined;
   let attackSpellRecorded: boolean | undefined;
   return (target) => ({
@@ -1566,6 +1576,33 @@ function targetReadingsFactory(
         ),
       );
       return externals.filter((d) => d.recipientId === target.id);
+    },
+    areaSavesOn: () => {
+      areas ??= enemies.flatMap((mate) =>
+        enemyDefensiveEvents(mate, enemies, combat).filter(
+          (d) => d.kind === "area",
+        ),
+      );
+      const units = Object.values(combat.units ?? {}) as ICombatUnit[];
+      const ivs = saveAuraIntervals(target, enemies, combat);
+      return areas
+        .filter((d) => d.casterId !== target.id)
+        .map((d) => {
+          const caster = enemies.find((e) => e.id === d.casterId);
+          const fromCaster = (src: string | undefined) =>
+            src === d.casterId ||
+            (!!src &&
+              units.some((u) => u.id === src && u.ownerId === d.casterId));
+          const lifetimeS =
+            (caster &&
+              buffFullDurationForCaster(d.spellId, caster, combat.startTime)) ??
+            SAVE_CAST_AURA_PAIR_S;
+          return {
+            d,
+            spans: areaSaveSpansOnS(d, ivs, fromCaster, lifetimeS),
+          };
+        })
+        .filter((x) => x.spans.length > 0);
     },
     sides: () =>
       (rosterSides ??= buildRosterSides(Object.values(combat.units ?? {}))),
@@ -1730,7 +1767,10 @@ function attributeFailure(
       atSeconds: (appliedMs - matchStartMs) / 1000,
       durationSeconds: (removedMs - appliedMs) / 1000,
     };
-    const name = getEnglishSpellName(BLESSING_OF_SANCTUARY_ID, "Blessing of Sanctuary");
+    const name = getEnglishSpellName(
+      BLESSING_OF_SANCTUARY_ID,
+      "Blessing of Sanctuary",
+    );
     if (ofThisAttempt(cc) && !brokeOut.includes(name)) brokeOut.push(name);
   }
 
@@ -1962,6 +2002,25 @@ function attributeFailure(
     if (externalReceived.includes(d.spellName)) continue;
     externalReceived.push(d.spellName);
     externalReceivedAtS.push(d.atSeconds);
+  }
+  // …and a teammate's area save whose aura was on the target inside the span,
+  // or up on it when the span began (user ruling 2026-10-26, fact5 retest r4
+  // 4accb068 2:08: a Spirit Link Totem took the druid from 3.9 % to 49 % and
+  // the attempt read `popped Frenzied Regeneration` alone)
+  for (const { d, spans } of readings.areaSavesOn()) {
+    // the span on the target that met the attempt — its own start is the
+    // save's time here, not the caster's press (codex 20-F18-09 #2: a
+    // target entering the totem's link after the attempt opened read
+    // "[up since]" the press)
+    const met = spans.find(
+      (sp) =>
+        inSave(matchStartMs + sp.from * 1000) ||
+        (matchStartMs + sp.from * 1000 < fromMs &&
+          matchStartMs + sp.to * 1000 > fromMs),
+    );
+    if (!met || externalReceived.includes(d.spellName)) continue;
+    externalReceived.push(d.spellName);
+    externalReceivedAtS.push(met.from);
   }
 
   // The target's own no-%-mitigation saves: pressed inside the span, or

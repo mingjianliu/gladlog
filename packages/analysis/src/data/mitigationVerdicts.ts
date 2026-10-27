@@ -40,6 +40,10 @@ interface IMitigationVerdict {
   source: string;
   /** 必须是 `YYYY-MM-DD user`,由 CI 校验。 */
   approved: string;
+  /** 只对非近战攻击(法术、远程)适用的裁定:招架型的墙对近战近乎免疫,对法术
+   * 只是它的百分比墙(用户 2026-10-26:剑在人在对法术只算 30% 墙)。缺省 =
+   * 与 `verdict` 相同。 */
+  nonMeleeVerdict?: MitigationVerdict;
 }
 
 /**
@@ -225,10 +229,11 @@ export const MITIGATION_VERDICTS: Record<string, IMitigationVerdict> = {
     zh: "剑在人在",
     officialPct: 30,
     verdict: "unconditional",
-    note: "招架型,对近战近乎免疫,远高于记录的 30%",
+    note: "招架型,对近战近乎免疫,远高于记录的 30%;对法术 / 远程只是 30% 墙(2026-10-26 user,fact5 retest 1120cb61)",
     source:
       "2026-08-17 减伤裁定问卷(32 条全表),artifact 63e64c88;打进去就是白打,与击杀是否成立无关",
     approved: "2026-08-17 user",
+    nonMeleeVerdict: "kill-live-gated",
   },
   "31850": {
     zh: "炽热防御者",
@@ -389,4 +394,13 @@ export const MITIGATION_VERDICTS: Record<string, IMitigationVerdict> = {
 /** 未裁定 / 从不出面的条目不参与任何「浪费」判断。 */
 export function mitigationVerdictOf(spellId: string): MitigationVerdict | null {
   return MITIGATION_VERDICTS[spellId]?.verdict ?? null;
+}
+
+/** The verdict for a non-melee attack into the wall (`nonMeleeVerdict`, else
+ * the wall's own). */
+export function nonMeleeMitigationVerdictOf(
+  spellId: string,
+): MitigationVerdict | null {
+  const v = MITIGATION_VERDICTS[spellId];
+  return v ? (v.nonMeleeVerdict ?? v.verdict) : null;
 }

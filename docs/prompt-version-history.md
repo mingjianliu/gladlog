@@ -4445,3 +4445,16 @@ line; a recast channel is its own span; a save pressed at or after the round's
 end is no kill attempt's cause. 605 / second-corpus capture (PV458 → batch):
 kick-eaten +1 / 0, burst-into-mitigation 0 / +1 (accepted by the user);
 checkEnemyDefRefConsistency 3 → 0 / 24 → 0, other gates unchanged.
+
+v460 (2026-10-27, fact5 round-5 fixes, batch 5 — user rulings of 2026-10-26):
+a stealth-only control (Rake's stun) is a `[HEALER EXPOSURE]` threat only with a
+stealth state up (Prowl / Shadowmeld until the holder's first action, Incarnation,
+Sudden Ambush) or a means to it in hand (Incarnation taken or pressed, Shadowmeld
+pressed this round, off cooldown) — tooltip "While stealthed", 441 of 460 corpus
+Rake stuns with a stealth state up; KILL ATTEMPTS names a teammate's area save
+whose aura was on the target (Spirit Link Totem, Rallying Cry, Anti-Magic Zone,
+Darkness, Power Word: Barrier) as an external; Die by the Sword keeps its
+unconditional verdict for melee and reads as its 30 % wall (kill-live-gated) for
+spells; Transcendence: Transfer prints an `[ENEMY UTILITY]` line. 605 /
+second-corpus capture: candidates and gates unchanged; `[HEALER EXPOSURE]` Rake
+mentions 1,836 → 822 on the second corpus.

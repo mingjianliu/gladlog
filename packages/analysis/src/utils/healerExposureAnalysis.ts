@@ -56,6 +56,7 @@ import {
 } from "./positionSampling";
 import { fmtTime } from "./renderGrid";
 import { ccThreatRadiusYards } from "./spellRange";
+import { stealthControlUsableAt } from "./stealthControl";
 import { summonOwnerById } from "./summonOwner";
 
 // An enemy standing outside cast range cannot land a CC, line of sight or not.
@@ -418,6 +419,9 @@ export function analyzeHealerExposureAtBurst(
           )
         )
           continue;
+        // a stealth-only control (Rake's stun) only with stealth up or a
+        // means to it in hand (user ruling 2026-10-26)
+        if (!stealthControlUsableAt(enemy, spellId, windowMs)) continue;
         listedCategories.add(category);
         if (distance > ccThreatRadiusYards(enemy, spellId)) continue;
         const healerDRLevel = getDRLevelAtTime(

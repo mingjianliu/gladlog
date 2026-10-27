@@ -574,4 +574,14 @@
  *  0 / +1 (accepted by the user 2026-10-26); checkEnemyDefRefConsistency
  *  3 → 0 / 24 → 0, other gates unchanged.
  */
-export const PROMPT_VERSION = 459;
+/*
+ * v460 (2026-10-27, fact5 round-5 fixes F18 batch 5, user rulings
+ *  2026-10-26): Rake's stun is a CC threat only with stealth up or a means
+ *  to it in hand (Incarnation, Shadowmeld); KILL ATTEMPTS names a
+ *  teammate's area save on the target as an external; Die by the Sword is a
+ *  parry against melee, only its 30 % wall against spells; Transcendence:
+ *  Transfer is an [ENEMY UTILITY] press. 605 / wide (PV459 → batch):
+ *  candidates unchanged, gates unchanged; [HEALER EXPOSURE] Rake mentions
+ *  1,836 → 822 on wide.
+ */
+export const PROMPT_VERSION = 460;

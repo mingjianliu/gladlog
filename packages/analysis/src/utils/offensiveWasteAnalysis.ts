@@ -9,8 +9,10 @@ import {
   KILL_LIVE_HP_PCT,
   type MitigationVerdict,
   mitigationVerdictOf,
+  nonMeleeMitigationVerdictOf,
 } from "../data/mitigationVerdicts";
 import { getEnglishSpellName } from "../data/spellEffectData";
+import { MELEE_RANGE_YD, spellRangeYards } from "../data/spellReach";
 import { immunityCoversSpell } from "../data/spellSchools";
 import { isAllyCopyWallId } from "./allyCopyWall";
 import { buildAuraIntervals } from "./auraIntervals";
@@ -34,6 +36,14 @@ import { roundEndMs } from "./roundEnd";
  * 虚空行走),砸进去一声不吭;而「大减伤」5 条里有 3 条只有 20%(树皮术/圣佑术/
  * 铁木树皮),80% 的伤害照样打进去了却被判「浪费」。
  */
+
+/** An attack a parry cannot stop: a spell with an official reach beyond
+ * melee (`spellRangeYards` > `MELEE_RANGE_YD`). Unknown reach reads as melee
+ * — the wall keeps its signed verdict. */
+function isNonMeleeAttack(spellId: string): boolean {
+  const r = spellRangeYards(spellId);
+  return r !== null && r > MELEE_RANGE_YD;
+}
 
 /** How many counted casts into a defensive make a line, by its verdict. */
 const WASTE_MIN_CASTS: Record<IDefenseWindow["verdict"], number> = {
@@ -73,6 +83,9 @@ interface IDefenseWindow {
   spellId: string;
   defenseName: string;
   verdict: Extract<MitigationVerdict, "unconditional" | "kill-live-gated">;
+  /** the verdict for a non-melee attack into it (Die by the Sword: a parry
+   * wall, only its 30 % against spells — user 2026-10-26) */
+  nonMeleeVerdict: MitigationVerdict;
   fromSeconds: number;
   toSeconds: number;
   unitId: string;
@@ -116,10 +129,10 @@ function buildDefenseWindows(
       // the verdict table is keyed by the cast; the wall runs under its own
       // aura id (fact2 C10: Fortifying Brew 120954, Greater Invisibility
       // 110960 never opened a window)
-      const verdict = mitigationVerdictOf(
+      const verdictKey =
         castKeyOfAura(iv.spellId, (id) => mitigationVerdictOf(id) !== null) ??
-          iv.spellId,
-      );
+        iv.spellId;
+      const verdict = mitigationVerdictOf(verdictKey);
       // "never"(不构成真实阻碍)与 "unresolved"(裁定人未遇到过)都不出面。
       if (verdict !== "unconditional" && verdict !== "kill-live-gated")
         continue;
@@ -132,6 +145,7 @@ function buildDefenseWindows(
         // 英文名 —— prompt 侧禁止中文技能名(spellNameZhLint)。
         defenseName: getEnglishSpellName(iv.spellId, iv.spellId),
         verdict,
+        nonMeleeVerdict: nonMeleeMitigationVerdictOf(verdictKey) ?? verdict,
         fromSeconds: iv.fromS,
         toSeconds: iv.toS,
         unitId: enemy.id,
@@ -286,79 +300,100 @@ export function buildOffensiveWasteSummary(
         ),
     );
 
-    for (const window of defenseWindows) {
-      const threshold = WASTE_MIN_CASTS[window.verdict];
+    for (const whole of defenseWindows) {
+      // a wall whose verdict for spells differs (Die by the Sword's parry):
+      // its melee casts and its other casts are two readings of it
+      const parts: Array<{
+        window: IDefenseWindow;
+        takes: (spellId: string) => boolean;
+      }> =
+        whole.nonMeleeVerdict === whole.verdict
+          ? [{ window: whole, takes: () => true }]
+          : [
+              { window: whole, takes: (id) => !isNonMeleeAttack(id) },
+              ...(whole.nonMeleeVerdict === "unconditional" ||
+              whole.nonMeleeVerdict === "kill-live-gated"
+                ? [
+                    {
+                      window: { ...whole, verdict: whole.nonMeleeVerdict },
+                      takes: isNonMeleeAttack,
+                    },
+                  ]
+                : []),
+            ];
+      for (const { window, takes } of parts) {
+        const threshold = WASTE_MIN_CASTS[window.verdict];
 
-      const wasteCasts: IOffensiveWasteCast[] = castEvents
-        .filter((e) => {
-          if (e.destUnitId !== window.unitId) return false;
-          const t = (castAtMs(e)! - matchStartMs) / 1000;
-          if (t < window.fromSeconds || t > window.toSeconds) return false;
-          if (e.spellId === null) return false;
-          // round-1 retest (fact1215 idx 107): a cast the target REFLECTED
-          // went back at its caster — it did not land inside the window
-          // (c3398b15 0:55: a Mortal Coil reflected by Spell Reflection was
-          // listed "into" Die by the Sword)
-          if (
-            reflectedBack(friend, e.spellId, window.unitId, castAtMs(e)!)
-          )
-            return false;
-          // round-1 retest idx 43 / 13: a school-limited immunity does not
-          // stop the schools it does not cover — a Chaos Bolt into Blessing
-          // of Protection, a Sinister Strike into Spellwarding LANDED (the
-          // prompt's own legend says so). The official school masks decide
-          // (`immunityCoversSpell`); a wall with no immunity mask (Die by the
-          // Sword, signed unconditional — ruling C3) keeps its verdict.
-          const covers = immunityCoversSpell(window.spellId, e.spellId);
-          if (covers === false) return false;
-          // B28: for immunity windows, also count high-value CC/utility spells that do no damage
-          // (e.g. Mindgames, HoJ, Silence) which would otherwise be filtered by the damage threshold.
-          // Round-1 retest idx 44: only into an immunity that covers it — a
-          // Mortal Coil into Die by the Sword (no control immunity) landed.
-          // codex 20-F16-09 #4: an immunity with no school mask (Aspect of
-          // the Turtle) stops the controls the avoidance table says it does
-          // (`applicableCCAvoidanceIds`) — unknown is no "does not cover"
-          const isHighValueCC =
-            window.verdict === "unconditional" &&
-            isControlCast(e.spellId) &&
-            (covers === true ||
-              (covers === undefined &&
-                applicableCCAvoidanceIds(
-                  e.spellId,
-                  getEnglishSpellName(e.spellId, e.spellName),
-                ).has(window.spellId)));
-          return (
-            isHighValueCC ||
-            highValueIds.size === 0 ||
-            highValueIds.has(spellNameKey(e.spellId, e.spellName))
-          );
-        })
-        .map((e) => ({
-          spellId: e.spellId ?? "",
-          spellName: e.spellName ?? "",
-          atSeconds: (castAtMs(e)! - matchStartMs) / 1000,
-        }));
+        const wasteCasts: IOffensiveWasteCast[] = castEvents
+          .filter((e) => {
+            if (e.destUnitId !== window.unitId) return false;
+            if (e.spellId && !takes(e.spellId)) return false;
+            const t = (castAtMs(e)! - matchStartMs) / 1000;
+            if (t < window.fromSeconds || t > window.toSeconds) return false;
+            if (e.spellId === null) return false;
+            // round-1 retest (fact1215 idx 107): a cast the target REFLECTED
+            // went back at its caster — it did not land inside the window
+            // (c3398b15 0:55: a Mortal Coil reflected by Spell Reflection was
+            // listed "into" Die by the Sword)
+            if (reflectedBack(friend, e.spellId, window.unitId, castAtMs(e)!))
+              return false;
+            // round-1 retest idx 43 / 13: a school-limited immunity does not
+            // stop the schools it does not cover — a Chaos Bolt into Blessing
+            // of Protection, a Sinister Strike into Spellwarding LANDED (the
+            // prompt's own legend says so). The official school masks decide
+            // (`immunityCoversSpell`); a wall with no immunity mask (Die by the
+            // Sword, signed unconditional — ruling C3) keeps its verdict.
+            const covers = immunityCoversSpell(window.spellId, e.spellId);
+            if (covers === false) return false;
+            // B28: for immunity windows, also count high-value CC/utility spells that do no damage
+            // (e.g. Mindgames, HoJ, Silence) which would otherwise be filtered by the damage threshold.
+            // Round-1 retest idx 44: only into an immunity that covers it — a
+            // Mortal Coil into Die by the Sword (no control immunity) landed.
+            // codex 20-F16-09 #4: an immunity with no school mask (Aspect of
+            // the Turtle) stops the controls the avoidance table says it does
+            // (`applicableCCAvoidanceIds`) — unknown is no "does not cover"
+            const isHighValueCC =
+              window.verdict === "unconditional" &&
+              isControlCast(e.spellId) &&
+              (covers === true ||
+                (covers === undefined &&
+                  applicableCCAvoidanceIds(
+                    e.spellId,
+                    getEnglishSpellName(e.spellId, e.spellName),
+                  ).has(window.spellId)));
+            return (
+              isHighValueCC ||
+              highValueIds.size === 0 ||
+              highValueIds.has(spellNameKey(e.spellId, e.spellName))
+            );
+          })
+          .map((e) => ({
+            spellId: e.spellId ?? "",
+            spellName: e.spellName ?? "",
+            atSeconds: (castAtMs(e)! - matchStartMs) / 1000,
+          }));
 
-      if (wasteCasts.length < threshold) continue;
-      // 击杀成立时顶着减伤打是正确操作 —— 只有不成立时才算该转火。
-      // 无条件类不看这个:打不进去就是打不进去。
-      if (
-        window.verdict === "kill-live-gated" &&
-        killWasLive(window, matchStartMs)
-      ) {
-        continue;
-      }
-      {
-        events.push({
-          casterName: friend.name,
-          casterSpec: specToString(friend.spec),
-          targetName: window.unitName,
-          targetSpec: window.unitSpec,
-          verdict: window.verdict,
-          defenseName: window.defenseName,
-          defenseWindowSeconds: [window.fromSeconds, window.toSeconds],
-          wasteCasts,
-        });
+        if (wasteCasts.length < threshold) continue;
+        // 击杀成立时顶着减伤打是正确操作 —— 只有不成立时才算该转火。
+        // 无条件类不看这个:打不进去就是打不进去。
+        if (
+          window.verdict === "kill-live-gated" &&
+          killWasLive(window, matchStartMs)
+        ) {
+          continue;
+        }
+        {
+          events.push({
+            casterName: friend.name,
+            casterSpec: specToString(friend.spec),
+            targetName: window.unitName,
+            targetSpec: window.unitSpec,
+            verdict: window.verdict,
+            defenseName: window.defenseName,
+            defenseWindowSeconds: [window.fromSeconds, window.toSeconds],
+            wasteCasts,
+          });
+        }
       }
     }
   }
