@@ -81,6 +81,12 @@ describe("syncRowNarrowedToOwnerPart / syncRowHasOwnerPart", () => {
         setupBy: "you (Fear)",
       }),
     ).toBe(true);
+    expect(
+      syncRowHasOwnerPart({
+        readyCds: "The Hunt (A-B's)",
+        alsoHeldSetupBy: "100: you (Polymorph)",
+      }),
+    ).toBe(true);
     // a bare name states no holder — not the owner's
     expect(syncRowHasOwnerPart({ readyCds: "Zenith" })).toBe(false);
   });
@@ -136,6 +142,29 @@ describe("missed-sync-window in Solo Shuffle (L04 (c))", () => {
     );
     expect(e!.facts.setupBy).toBe("you");
     expect(e!.facts.readyCds).toBe("The Hunt (Glaivemeomg-Stormscale-EU's)");
+  });
+
+  it("the owner cast a lock folded into the row: alsoHeldSetupBy names it and the row stays (codex R6C-01 #3)", () => {
+    const [e, ...rest] = missedSyncWindowEvents(
+      [lock(85, 88, "Chaos Nova", MATE.name), lock(100, 104, "Polymorph", ME.name)],
+      mateCd as any,
+      probes(SOLO_SHUFFLE_BRACKET),
+    );
+    expect(rest).toEqual([]);
+    expect(e!.facts.setupBy).toBeUndefined();
+    expect(e!.facts.alsoHeldAt).toBe("100");
+    expect(e!.facts.alsoHeldSetupBy).toBe("100: you");
+    // HAS TEETH: the same folded lock a teammate's — nothing of it the owner's
+    expect(
+      missedSyncWindowEvents(
+        [
+          lock(85, 88, "Chaos Nova", MATE.name),
+          lock(100, 104, "Polymorph", MATE2.name),
+        ],
+        mateCd as any,
+        probes(SOLO_SHUFFLE_BRACKET),
+      ),
+    ).toEqual([]);
   });
 
   it("the cut is made after the cap: a removed row lets no shorter lock in", () => {

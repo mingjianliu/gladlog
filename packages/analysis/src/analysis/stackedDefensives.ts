@@ -108,11 +108,35 @@ export function majorWallIntervals(
   playersById: ReadonlyMap<string, any>,
   friendNames: ReadonlySet<string>,
 ): IAuraInterval[] {
+  // a friendly's summon is the friendly (codex R6C-05 #3: Spirit Link
+  // Totem 325174 is sourced by the totem, not the shaman, and fell out): the
+  // interval's APPLIED row on the target names the source GUID, its owner
+  // decides — and is the caster every reader names (F19 605 diff: the line
+  // read "Spirit Link Totem (from Spirit Link Totem)")
+  const units = (combat?.units ?? {}) as Record<string, any>;
+  const friendlyCasterOf = (iv: IAuraInterval): string | null => {
+    if (friendNames.has(iv.srcUnitName)) return iv.srcUnitName;
+    const at = (combat?.startTime ?? 0) + iv.fromS * 1000;
+    const row = (target.auraEvents ?? []).find(
+      (a: any) =>
+        a.spellId === iv.spellId &&
+        a.logLine?.event === "SPELL_AURA_APPLIED" &&
+        Math.abs(a.timestamp - at) <= 5,
+    );
+    const owner = row?.srcUnitId ? units[row.srcUnitId]?.ownerId : undefined;
+    const ownerName: string | undefined = owner
+      ? units[owner]?.name
+      : undefined;
+    return ownerName && friendNames.has(ownerName) ? ownerName : null;
+  };
   return buildAuraIntervals(target, combat, playersById)
+    .flatMap((iv) => {
+      const caster = friendlyCasterOf(iv);
+      return caster === null ? [] : [{ ...iv, srcUnitName: caster }];
+    })
     .filter(
       (iv) =>
         stackedDefensiveKeyOf(iv.spellId) !== undefined &&
-        friendNames.has(iv.srcUnitName) &&
         // a Blessing of Sacrifice's link on its own caster moves damage ONTO
         // them — no protection (fact1215 C4, `isCasterSideLinkAura`)
         !isCasterSideLinkAura(iv.spellId, iv.srcUnitName === target.name),

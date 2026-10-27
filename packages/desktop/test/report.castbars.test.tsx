@@ -104,3 +104,91 @@ describe("排队窗口容差(2026-07-25 用户实测 10 例误掐修复)", () =>
     expect(bars[0]!.outcome).toBe("cut");
   });
 });
+
+describe("同技能连读:SUCCESS 只归一条读条(codex R6C-02 #4 / 20-F19-02)", () => {
+  it("被踢的读条不配到下一次同技能读条的 SUCCESS", () => {
+    const bars = deriveCastBars(
+      src({
+        castStarts: [
+          { timestamp: 1000, spellId: 77472, spellName: "Healing Wave" },
+          { timestamp: 9900, spellId: 77472, spellName: "Healing Wave" },
+        ],
+        casts: [{ timestamp: 11400, spellId: 77472 }],
+      }),
+      "u1",
+    );
+    expect(bars[0]!.outcome).toBe("cut");
+    expect(bars[1]!).toMatchObject({ toMs: 11400, outcome: "completed" });
+  });
+
+  it("同毫秒:SUCCESS 行在下一次 START 行之前 → 归前一条,后一条不成零长", () => {
+    const bars = deriveCastBars(
+      src({
+        castStarts: [
+          {
+            timestamp: 108036,
+            spellId: 188196,
+            spellName: "Lightning Bolt",
+            lineIndex: 7100,
+          },
+          {
+            timestamp: 109759,
+            spellId: 188196,
+            spellName: "Lightning Bolt",
+            lineIndex: 7210,
+          },
+        ],
+        casts: [
+          { timestamp: 109759, spellId: 188196, lineIndex: 7209 },
+          { timestamp: 111500, spellId: 188196, lineIndex: 7300 },
+        ],
+      }),
+      "u1",
+    );
+    expect(bars[0]!).toMatchObject({ toMs: 109759, outcome: "completed" });
+    expect(bars[1]!).toMatchObject({ toMs: 111500, outcome: "completed" });
+  });
+
+  it("同毫秒且无行号(旧存档):SUCCESS 归前一条", () => {
+    const bars = deriveCastBars(
+      src({
+        castStarts: [
+          { timestamp: 108036, spellId: 188196, spellName: "Lightning Bolt" },
+          { timestamp: 109759, spellId: 188196, spellName: "Lightning Bolt" },
+        ],
+        casts: [
+          { timestamp: 109759, spellId: 188196 },
+          { timestamp: 111500, spellId: 188196 },
+        ],
+      }),
+      "u1",
+    );
+    expect(bars[0]!).toMatchObject({ toMs: 109759, outcome: "completed" });
+    expect(bars[1]!).toMatchObject({ toMs: 111500, outcome: "completed" });
+  });
+
+  it("HAS TEETH:SUCCESS 行在下一次 START 行之后 → 归后一条", () => {
+    const bars = deriveCastBars(
+      src({
+        castStarts: [
+          {
+            timestamp: 108036,
+            spellId: 188196,
+            spellName: "Lightning Bolt",
+            lineIndex: 7100,
+          },
+          {
+            timestamp: 109759,
+            spellId: 188196,
+            spellName: "Lightning Bolt",
+            lineIndex: 7209,
+          },
+        ],
+        casts: [{ timestamp: 109759, spellId: 188196, lineIndex: 7210 }],
+      }),
+      "u1",
+    );
+    expect(bars[0]!.outcome).toBe("cut");
+    expect(bars[1]!).toMatchObject({ toMs: 109759, outcome: "completed" });
+  });
+});

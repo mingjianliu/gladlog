@@ -1007,6 +1007,39 @@ export function lockoutDebuffStopsPress(
   );
 }
 
+/** A dying unit's auras are removed in the milliseconds before its
+ * UNIT_DIED (codex R6C-04 #1: Forbearance REMOVED 14 ms, Hypothermia 12 ms
+ * before the death): a reading "at the death" is taken this much before it. */
+export const DEATH_AURA_CLEANUP_S = 0.25;
+
+/** `lockoutDebuffStopsPress` for a death's options — read just before the
+ * death (`DEATH_AURA_CLEANUP_S`), where the debuff still holds. The one
+ * test of the `[DEATH] (Unused: …)` list, `[DEFENSIVE AVAILABLE]`, the
+ * external-unused candidate, the missed-options roster and the
+ * counterfactual. */
+export function lockoutDebuffStopsPressAtDeath(
+  holder: ICombatUnit,
+  spellId: string,
+  recipient: ICombatUnit,
+  allUnits: ICombatUnit[],
+  deathSeconds: number,
+  matchStartMs: number,
+): boolean {
+  // two readings: before the cleanup window, and in the last ms before the
+  // death's own cleanup rows (codex 20-F19-01 #3: a Forbearance applied
+  // inside the 0.25 s and cleaned 10 ms before the death)
+  return [DEATH_AURA_CLEANUP_S, 0.02].some((back) =>
+    lockoutDebuffStopsPress(
+      holder,
+      spellId,
+      recipient,
+      allUnits,
+      Math.max(0, deathSeconds - back),
+      matchStartMs,
+    ),
+  );
+}
+
 export type PressLockoutDebuff = "Forbearance" | "Hypothermia";
 
 /**
@@ -2970,6 +3003,17 @@ export function cdRealisedSecondsUntilReady(
     ...(cd.sharedCasts ? { sharedCasts: cd.sharedCasts.map(realised) } : {}),
   };
   const latest = cdSecondsUntilReady(view, tSeconds);
+  // a multi-charge entry with event effects (resets, give-backs): the charge
+  // that actually came back — the simulation over every effect, the later
+  // ones too (codex R6C-11 #1: Soul Immolation read `(6–18s)` at 0:21, a
+  // Violent Transformation reset brought both charges back 3.4 s later)
+  if (latest > 0 && (cd.charges ?? 1) > 1 && chargeEffectsOf(cd)) {
+    const back = entryAvailabilityTransitions(
+      cd as IMajorCooldownInfo,
+      tSeconds + latest + 1,
+    ).find((f) => f.available && f.atSeconds > tSeconds);
+    if (back) return Math.max(0, Math.min(latest, back.atSeconds - tSeconds));
+  }
   if (!cd.rateWindows?.length || latest <= 0) return latest;
   // …and every rate window that happened, the later ones too: the warped
   // reading counts no buff after t, so its ready instant on the warped clock
@@ -4265,7 +4309,12 @@ function extractMajorCooldownsAll(
   combat: AtomicArenaCombat,
 ): IMajorCooldownInfo[] {
   const matchStartMs = combat.startTime;
-  const matchEndMs = combat.endTime;
+  // the round's end (`roundEndMs`: a Solo Shuffle round is over at its
+  // ending death — the log runs ~2 s past it), the timeline's own cut: a
+  // press after it is in no round (codex R6C-12 #1 / R6C-06 #2: an
+  // Anti-Magic Zone 0.6 s after the deciding death took the kit's
+  // `[UNUSED]` away)
+  const matchEndMs = roundEndMs(combat);
   const matchDurationSeconds = (matchEndMs - matchStartMs) / 1000;
 
   const classData = classMetadata.find((c) => c.unitClass === unit.class);
@@ -4780,7 +4829,7 @@ export function unitCooldownEntry(
       },
       {
         matchStartMs: combat.startTime,
-        matchDurationSeconds: (combat.endTime - combat.startTime) / 1000,
+        matchDurationSeconds: (roundEndMs(combat) - combat.startTime) / 1000,
         specIdNum,
         talentedSpellIds,
         pvpTalentIds,
@@ -6497,6 +6546,7 @@ export function hasOffensiveSpellActive(
 
   const applied = new Map<string, number[]>();
   const removed = new Map<string, number[]>();
+  const refreshed = new Map<string, number[]>();
 
   // a BROKEN line its aura's own REMOVED follows is not the end (FT-T08)
   const notTheEnd = supersededAuraBreaks(unit.auraEvents);
@@ -6532,6 +6582,9 @@ export function hasOffensiveSpellActive(
     if (aura.logLine.event === LogEvent.SPELL_AURA_APPLIED) {
       const b = applied.get(runKey) ?? [];
       applied.set(runKey, [...b, aura.timestamp]);
+    } else if (aura.logLine.event === LogEvent.SPELL_AURA_REFRESH) {
+      const b = refreshed.get(runKey) ?? [];
+      refreshed.set(runKey, [...b, aura.timestamp]);
     } else if (
       aura.logLine.event === LogEvent.SPELL_AURA_REMOVED ||
       aura.logLine.event === LogEvent.SPELL_AURA_BROKEN ||
@@ -6544,10 +6597,34 @@ export function hasOffensiveSpellActive(
 
   for (const [runKey, applications] of Array.from(applied)) {
     const removals = removed.get(runKey) ?? [];
+    const [spellId, srcId] = runKey.split("|") as [string, string];
+    const refreshes = refreshed.get(runKey) ?? [];
     for (const applyTs of applications) {
       if (applyTs > timestampMs) continue;
       const removeTs = removals.find((r) => r > applyTs);
-      if (removeTs === undefined || removeTs > timestampMs) return true;
+      if (removeTs !== undefined) {
+        if (removeTs > timestampMs) return true;
+        continue;
+      }
+      // a REMOVED the log never wrote: up for its official length (+1 s)
+      // from its last (re)application, not for the rest of the round (codex
+      // R6C-12 #2: a Colossus Smash applied at 2:26 with no REMOVED tagged a
+      // Barkskin at 2:52 `[friendly offensive CD active]`); the length the
+      // caster's talents give it when the caster is this unit (codex
+      // 20-F19-01 #1: a 30 s talented Avenging Wrath read as 20 s), from
+      // the latest REFRESH (#2: an Ignite refreshed at 173 s); unknown
+      // length → up, as before
+      const anchor = Math.max(
+        applyTs,
+        ...refreshes.filter((r) => r >= applyTs && r <= timestampMs),
+      );
+      const fullS = buffFullDurationForCaster(
+        spellId,
+        srcId === unit.id ? unit : undefined,
+        applyTs,
+      );
+      if (fullS === undefined || timestampMs <= anchor + (fullS + 1) * 1000)
+        return true;
     }
   }
   return false;

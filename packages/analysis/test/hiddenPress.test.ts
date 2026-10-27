@@ -13,6 +13,7 @@ import { selfSaveCasts } from "../src/utils/enemyDefensives";
 import {
   hiddenAuraLifeMs,
   hiddenPressMs,
+  isResyncBatchAt,
   RESYNC_BATCH_MIN_APPLIED,
   RESYNC_BATCH_SPAN_MS,
 } from "../src/utils/hiddenPress";
@@ -279,5 +280,36 @@ describe("hiddenAuraLifeMs", () => {
   it("reads the caster's own length when the caster is given (Recklessness 1719: DB2 18 s, played 12 s)", () => {
     expect(hiddenAuraLifeMs("1719", { spellCastEvents: [] })).toBe(13_000);
     expect(hiddenAuraLifeMs("1719")).toBe(19_000);
+  });
+});
+
+describe("isResyncBatchAt — a row in the batch that re-lists an unseen unit (hiddenPressMs' reading)", () => {
+  it("RESYNC_BATCH_MIN_APPLIED APPLIED rows on the unit within the span: yes; one fewer, or a row outside it: no", () => {
+    const unit = (rows: any[]) => ({ id: "rogue", auraEvents: rows });
+    expect(
+      isResyncBatchAt(unit(batch(RESYNC_BATCH_MIN_APPLIED)), BATCH_MS),
+    ).toBe(true);
+    expect(
+      isResyncBatchAt(
+        unit(batch(RESYNC_BATCH_MIN_APPLIED)),
+        BATCH_MS + RESYNC_BATCH_SPAN_MS,
+      ),
+    ).toBe(true);
+    // HAS TEETH
+    expect(
+      isResyncBatchAt(unit(batch(RESYNC_BATCH_MIN_APPLIED - 1)), BATCH_MS),
+    ).toBe(false);
+    expect(
+      isResyncBatchAt(
+        unit(batch(RESYNC_BATCH_MIN_APPLIED)),
+        BATCH_MS + RESYNC_BATCH_SPAN_MS + 1,
+      ),
+    ).toBe(false);
+    // rows on another unit are not this unit's re-listing
+    const elsewhere = batch(RESYNC_BATCH_MIN_APPLIED).map((a) => ({
+      ...a,
+      destUnitId: "mage",
+    }));
+    expect(isResyncBatchAt(unit(elsewhere), BATCH_MS)).toBe(false);
   });
 });

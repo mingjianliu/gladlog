@@ -69,6 +69,7 @@ export * from "./utils/offensiveWindows";
 export * from "./utils/positionSampling";
 export * from "./utils/rawStreams";
 export * from "./utils/renderGrid";
+export { roundEndMs } from "./utils/roundEnd";
 export * from "./utils/stats";
 export * from "./utils/talentOwnership";
 export {

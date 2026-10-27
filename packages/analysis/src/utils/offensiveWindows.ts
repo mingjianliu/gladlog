@@ -339,10 +339,20 @@ function ccSecondsInWindow(
  */
 /** Consume one emptying flip recorded at `t` (see computeOffensiveWindows). */
 function takeFlip(flips: Map<number, number>, t: number): boolean {
-  const n = flips.get(t) ?? 0;
+  const k = flipKey(t);
+  const n = flips.get(k) ?? 0;
   if (n <= 0) return false;
-  flips.set(t, n - 1);
+  flips.set(k, n - 1);
   return true;
+}
+
+/** A flip's key: whole milliseconds. A press time sent through a rate
+ * window's warped clock and back comes out a few ulps off (codex R6C-16 #2:
+ * Time Dilation pressed at 31.909 s emptied at 31.908999999999995 — the
+ * exact-key lookup missed it and left a phantom charge for the round);
+ * the log's own grid is the millisecond. */
+function flipKey(t: number): number {
+  return Math.round(t * 1000);
 }
 
 /** `spans` minus every interval of `cuts` (both in seconds; `cuts` may
@@ -698,7 +708,10 @@ export function computeOffensiveWindows(
       const emptiedAt = new Map<number, number>();
       for (const f of flips)
         if (!f.available)
-          emptiedAt.set(f.atSeconds, (emptiedAt.get(f.atSeconds) ?? 0) + 1);
+          emptiedAt.set(
+            flipKey(f.atSeconds),
+            (emptiedAt.get(flipKey(f.atSeconds)) ?? 0) + 1,
+          );
       const holdsNothing = !timesCastOf(spellId);
       for (const castTimeSeconds of casts) {
         // an external pressed on a teammate spends the button and protects

@@ -104,8 +104,12 @@ export function buildPlayerLoadout(
    */
   enemyCooldowns?: Array<{ player: ICombatUnit; cds: IMajorCooldownInfo[] }>,
   /** The round, in log ms — what "this round" means for a started cast
-   * (`[UNUSED — started N×…]`): the units keep lines from after it. */
-  roundMs?: { startTime: number; endTime: number },
+   * (`[UNUSED — started N×…]`): the units keep lines from after it. Its
+   * bracket and units let `castBarStartsInRound` end a Solo Shuffle round at
+   * its ending death, as CC USE's `cast bar started N×` does (F19 605 gate:
+   * a Ring of Frost begun after the death read `started 1×` here and
+   * `not cast` there). */
+  roundMs?: Parameters<typeof castBarStartsInRound>[1],
   /** The log owner's refused presses — `rawStreams.castFailed`, seconds since
    * the round's start — and the second the round was over for the owner (its
    * end or their death): what `[UNUSED — pressed N×, refused: …]` reads

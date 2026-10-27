@@ -34,6 +34,61 @@ const ROSTER = [
 ];
 
 describe("checkEnemyDefRefConsistency", () => {
+  it("an area save reaches its target inside its lifetime after the press — the caster's kit `lasts N` (user ruling 2026-10-27, A)", () => {
+    // fact5 wide 200-5: Rallying Cry pressed at 1:46, first on the cycloned
+    // feral at 1:51; the warrior's kit reads `lasts 13s`
+    const kit = (lasts: string) => [
+      ...ROSTER,
+      '  <unit id="5" name="Chrisyo-TwistingNether-EU" spec="Arms Warrior" role="enemy">',
+      `    <cooldowns>Die by the Sword [108s, lasts 8s], Rallying Cry [180s, lasts ${lasts}], Avatar [63–90s]`,
+      "  </unit>",
+    ];
+    const lines = (lasts: string, attempt: string) => [
+      LEGEND,
+      ...kit(lasts),
+      "1:46  [ENEMY DEF]   5(AWarrior) (Arms Warrior): Rallying Cry (area)",
+      ATTEMPT("1:57–2:00", attempt),
+    ];
+    expect(
+      checkEnemyDefRefConsistency(
+        lines("13s", "saved by external (Rallying Cry [up since 1:51])"),
+      ),
+    ).toEqual([]);
+    // a range prints its top: `lasts 10–13s`
+    expect(
+      checkEnemyDefRefConsistency(
+        lines("10–13s", "saved by external (Rallying Cry [up since 1:51])"),
+      ),
+    ).toEqual([]);
+    // HAS TEETH: past the lifetime (+ the pairing slack) it is not that save
+    expect(
+      checkEnemyDefRefConsistency(
+        lines("2s", "saved by external (Rallying Cry [up since 1:51])"),
+      ),
+    ).toHaveLength(1);
+    // … nor before its press
+    expect(
+      checkEnemyDefRefConsistency([
+        LEGEND,
+        ...kit("13s"),
+        "1:56  [ENEMY DEF]   5(AWarrior) (Arms Warrior): Rallying Cry (area)",
+        ATTEMPT(
+          "1:57–2:00",
+          "saved by external (Rallying Cry [up since 1:51])",
+        ),
+      ]),
+    ).toHaveLength(1);
+    // … and a unit's own wall gets no such reach
+    expect(
+      checkEnemyDefRefConsistency([
+        LEGEND,
+        ...kit("13s"),
+        "1:46  [ENEMY DEF]   4(ORogue) (Outlaw Rogue): Die by the Sword (30%, 8.0s)",
+        ATTEMPT("1:57–2:00", "popped Die by the Sword [up since 1:51]"),
+      ]),
+    ).toHaveLength(1);
+  });
+
   it("B4a (2026-09-25): the target's own non-wall press (`popped X` since 2026-10-11) needs an [ENEMY DEF] line for X in the span", () => {
     const ok = [
       LEGEND,

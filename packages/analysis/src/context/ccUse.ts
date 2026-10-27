@@ -45,6 +45,7 @@ import type { AtomicArenaCombat, ICombatUnit } from "@gladlog/parser-compat";
 
 import { getEnglishSpellName } from "../data/spellEffectData";
 import type { IBurstLedgerEntry } from "../utils/burstLedger";
+import { enemySourceIds } from "../utils/cannotCastIntervals";
 import {
   castBarsOfCooldown,
   type CastBarStart,
@@ -59,8 +60,11 @@ import {
   isHealerSpec,
   isMeleeSpec,
 } from "../utils/cooldowns";
+import { incomingPressureEvents } from "../utils/incomingPressure";
 import { petCommands } from "../utils/petCommands";
 import { fmtTime } from "../utils/renderGrid";
+import { buildRosterSides } from "../utils/rosterSide";
+import { roundEndMs } from "../utils/roundEnd";
 import { ccMechanicOf, isInstantCast } from "../utils/spellMechanics";
 import { DMG_SPIKE_THRESHOLD } from "./timelineHelpers";
 
@@ -277,13 +281,12 @@ export function ccUseSummary(params: {
   ofCooldown.forEach((bars, i) => {
     if (bars.length > 0) counts[i]!.castBarsStarted = bars.length;
   });
-  // To the LOG's end, like the [YOU] [CC] lines it is checked against
-  // (`checkCcUseStartedCounts`, `checkCcBookmarkConsistency`). Work order
-  // 2026-10-15 #5 cut it at `roundEndMs` and the 605 capture showed the two
-  // disagree (2 files: a Cyclone pressed after a Solo Shuffle round's ending
-  // death prints a [YOU] [CC] line) — the round end moves for both or for
-  // neither (predicate-index "Not yet unified").
-  const durationS = (combat.endTime - start) / 1000;
+  // To the round's end (`roundEndMs`), like the [YOU] [CC] lines it is
+  // checked against (`checkCcUseStartedCounts`, `checkCcBookmarkConsistency`):
+  // the timeline itself stops there since 2026-10-24
+  // (`checkNoEventAfterRoundEnd`), so the two move together now (codex
+  // R6C-06 #3; work order 2026-10-15 #5 had found them apart)
+  const durationS = (roundEndMs(combat) - start) / 1000;
   // fact2 R2: the owner's command rows did not go off as the control — the
   // summon's own successes of it did
   const cmd = petCommands(owner, combat);
@@ -335,6 +338,7 @@ export function ccUseSummary(params: {
   if (isHealerSpec(owner.spec)) return { counts, bookmarks: [] };
 
   const enemyIds = new Set(enemies.map((u) => u.id));
+  const sides = buildRosterSides(Object.values(combat.units));
   const petOwner = new Map<string, string>();
   for (const u of Object.values(combat.units))
     if (u.ownerId && enemyIds.has(u.ownerId)) petOwner.set(u.id, u.ownerId);
@@ -351,7 +355,9 @@ export function ccUseSummary(params: {
       combat,
       owner,
       cd,
-      enemyIds,
+      // enemy players AND their summons (`enemySourceIds`, codex R6C-01 #1:
+      // a Capacitor Totem's stun on the owner fell out of the sampler)
+      enemyIds: enemySourceIds(enemies, Object.values(combat.units)),
       renderedCcOf: (name) =>
         enemyCC.find((x) => x.playerName === name)?.ccInstances ?? [],
     });
@@ -405,10 +411,14 @@ export function ccUseSummary(params: {
       if (!mate || mate.id === owner.id) continue;
       const dmg = new Map<string, number>();
       let total = 0;
-      for (const e of mate.damageIn ?? []) {
+      // the [DMG SPIKE]'s own measure (`incomingPressureEvents`: landed and
+      // absorbed, redistribution out) — the line says "% of X's damage taken
+      // in the [DMG SPIKE]" (codex R6C-07 #1: 62 % on landed damage alone,
+      // 58 % of the spike's 1.44M, across the 60 % door)
+      for (const e of incomingPressureEvents(mate, sides)) {
         const t = (e.timestamp - start) / 1000;
         if (t < w.fromSeconds || t > w.toSeconds) continue;
-        const a = Math.abs(e.effectiveAmount ?? e.amount ?? 0);
+        const a = e.amount;
         total += a;
         const src = enemyIds.has(e.srcUnitId)
           ? e.srcUnitId

@@ -1,6 +1,7 @@
 import {
   buildAuraIntervals,
   type IAuraInterval,
+  roundEndMs,
   SPELL_CATEGORIES,
 } from "@gladlog/analysis";
 import { CombatUnitReaction } from "@gladlog/parser-compat";
@@ -96,7 +97,11 @@ export function deriveAuraUptime(
   range?: TimeRange | null,
 ): AuraUptime {
   try {
-    const legacy = toLegacySafe(source);
+    const full = toLegacySafe(source);
+    // the round's end (`roundEndMs`: a Solo Shuffle round's ending death, not
+    // the log's end ~2 s later) bounds every interval and the round's length
+    // (codex R6C-05 #4: protection counted past the deciding death)
+    const legacy = { ...full, endTime: roundEndMs(full) };
     const durationS = Math.max(
       1e-6,
       (legacy.endTime - legacy.startTime) / 1000,

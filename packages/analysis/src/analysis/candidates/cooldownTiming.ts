@@ -132,6 +132,9 @@ export interface IEnemyHealerCcWindow {
   /** what ended the lock, when the log says (`ccRemovalCause`; sync-burst
    * F-S3) — a CC that ran out or was capped at the round end has none */
   endedBy?: ICcRemovalCause;
+  /** still on when the round ended (`IOutgoingCCApplication.cutByRoundEnd`)
+   * — `toSeconds` is the round's end */
+  cutByRoundEnd?: true;
 }
 
 /**
@@ -180,19 +183,21 @@ export function enemyHealerCcWindows(
         friends.find((f) => f.name === app.casterName),
         healer ? oppressingRoarOnAtMs(healer, app.spellId, applyMs) : false,
       );
-      const endedBy = healer
-        ? ccRemovalCause(
-            healer,
-            app.spellId,
-            applyMs,
-            Math.round(
-              combat.startTime + (app.atSeconds + app.durationSeconds) * 1000,
-            ),
-            full === undefined
-              ? undefined
-              : applyMs + full * drDurationFactor(app.drInfo.level) * 1000,
-          )
-        : undefined;
+      // a lock the round ended on was ended by nothing logged
+      const endedBy =
+        healer && !app.cutByRoundEnd
+          ? ccRemovalCause(
+              healer,
+              app.spellId,
+              applyMs,
+              Math.round(
+                combat.startTime + (app.atSeconds + app.durationSeconds) * 1000,
+              ),
+              full === undefined
+                ? undefined
+                : applyMs + full * drDurationFactor(app.drInfo.level) * 1000,
+            )
+          : undefined;
       out.push({
         fromSeconds: app.atSeconds,
         toSeconds: app.atSeconds + app.durationSeconds,
@@ -202,6 +207,7 @@ export function enemyHealerCcWindows(
         casterName: app.casterName,
         drLevel: app.drInfo.level,
         ...(endedBy ? { endedBy } : {}),
+        ...(app.cutByRoundEnd ? { cutByRoundEnd: true as const } : {}),
       });
     }
   }
@@ -318,6 +324,7 @@ export function mergeHealerCcWindows<
     | "casterName"
     | "drLevel"
     | "endedBy"
+    | "cutByRoundEnd"
   >,
 >(windows: readonly W[]): Array<W & MergedLockParts> {
   const out: Array<W & MergedLockParts> = [];
@@ -342,6 +349,8 @@ export function mergeHealerCcWindows<
         if (extends_) {
           if (w.endedBy) cur.endedBy = w.endedBy;
           else delete cur.endedBy;
+          if (w.cutByRoundEnd) cur.cutByRoundEnd = true;
+          else delete cur.cutByRoundEnd;
         }
         names.push(w.spellName);
         starts.push(w.fromSeconds);
@@ -858,16 +867,18 @@ export function syncRowNarrowedToOwnerPart(
 /**
  * Is part of this missed-sync-window row the log owner's — one of its ready
  * cooldowns (`X (yours)`, `syncReadyCdEntry`) or the lock (`setupBy`: the
- * owner cast it, or a control of its chain)? A yes/no on two facts the row
- * carries, no threshold. A later lock folded into the row (`alsoHeldAt`) is
- * not asked about: `setupBy` is about the row's own lock.
+ * owner cast it, or a control of its chain) or a later lock folded into it
+ * (`alsoHeldSetupBy`, codex R6C-01 #3)? A yes/no on facts the row carries,
+ * no threshold.
  */
 export function syncRowHasOwnerPart(facts: {
   readyCds?: string;
   setupBy?: string;
+  alsoHeldSetupBy?: string;
 }): boolean {
   return (
     !!facts.setupBy ||
+    !!facts.alsoHeldSetupBy ||
     (facts.readyCds ?? "")
       .split("、")
       .some((entry) => parseSyncReadyCdEntry(entry).yours)
@@ -890,7 +901,7 @@ export function syncRowHasOwnerPart(facts: {
  * `(4s)` there), and 2–6 s over it in 16 of the 19 pairs the round's end cut.
  */
 export function syncLockLengthFacts(
-  w: { fromSeconds: number; toSeconds: number },
+  w: { fromSeconds: number; toSeconds: number; cutByRoundEnd?: true },
   roundEndS: number | undefined,
 ): {
   /** the lock's end, cut at the round's end */
@@ -899,9 +910,13 @@ export function syncLockLengthFacts(
   windowEndT: string;
   durationS: string;
 } {
-  const cutByRoundEnd = roundEndS !== undefined && w.toSeconds > roundEndS;
+  // a window already cut there says so (`cutByRoundEnd`: the outgoing
+  // chains stop at the round's end)
+  const cutByRoundEnd =
+    w.cutByRoundEnd === true ||
+    (roundEndS !== undefined && w.toSeconds > roundEndS);
   const endSeconds = cutByRoundEnd
-    ? Math.max(w.fromSeconds, roundEndS)
+    ? Math.max(w.fromSeconds, roundEndS ?? w.toSeconds)
     : w.toSeconds;
   return {
     endSeconds,
@@ -923,6 +938,7 @@ export function missedSyncWindowEvents(
     | "casterName"
     | "drLevel"
     | "endedBy"
+    | "cutByRoundEnd"
   >[],
   offensiveCds: SyncWindowCd[],
   probes: {
@@ -1109,11 +1125,6 @@ export function missedSyncWindowEvents(
                 ];
               })
             : [];
-        // B11b (user ruling 2026-10-06): whose control the lock was. Only the
-        // owner is named; a chain the owner cast part of names that part.
-        const ownParts = probes.ownerName
-          ? w.componentCasters.filter((c) => c.casterName === probes.ownerName)
-          : [];
         // Work order 2026-10-14b fix 13 (facts only): (a) the owner's own
         // ready cooldowns pressed and refused inside this lock or a later
         // held one — 24b6a229: Volley refused "not ready" (the GCD) 1.2 s
@@ -1170,12 +1181,32 @@ export function missedSyncWindowEvents(
                 ),
             )
           : undefined;
-        const setupBy =
-          ownParts.length === 0
+        // B11b (user ruling 2026-10-06): whose control the lock was. Only the
+        // owner is named; a chain the owner cast part of names that part.
+        const setupByOf = (lock: typeof w): string => {
+          const own = probes.ownerName
+            ? lock.componentCasters.filter(
+                (c) => c.casterName === probes.ownerName,
+              )
+            : [];
+          return own.length === 0
             ? ""
-            : ownParts.length === w.componentCasters.length
+            : own.length === lock.componentCasters.length
               ? "you"
-              : `you (${[...new Set(ownParts.map((c) => c.spellName))].join("、")})`;
+              : `you (${[...new Set(own.map((c) => c.spellName))].join("、")})`;
+        };
+        const setupBy = setupByOf(w);
+        // the same reading for each lock folded in (codex R6C-01 #3: the
+        // mage's own Polymorph, folded in at 71 s, and the Solo Shuffle row
+        // dropped for the mage) — the owner's part `syncRowHasOwnerPart`
+        // reads, gate and filter alike
+        const alsoHeldSetupBy = alsoHeldWins
+          .map((x) => {
+            const by = setupByOf(x);
+            return by ? `${toRenderSecond(x.fromSeconds)}: ${by}` : "";
+          })
+          .filter(Boolean)
+          .join("; ");
         return {
           // spellId disambiguates two CC windows on the same healer that floor
           // to the same rendered second (review fix round 2, 2026-08-15) — the
@@ -1228,6 +1259,7 @@ export function missedSyncWindowEvents(
               ? { enteredNextLock: enteredNext.join("; ") }
               : {}),
             ...(setupBy ? { setupBy } : {}),
+            ...(alsoHeldSetupBy ? { alsoHeldSetupBy } : {}),
             ...(refusedInLock ? { refusedInLock } : {}),
             ...(followUp
               ? {

@@ -46,6 +46,7 @@ import {
   limitedImmunitySchoolMask,
   MITIGATION_AURA_IDS,
   MITIGATION_AURA_MIN_PCT,
+  pressSecondsOfAura,
   REMOVED_EARLY_SLACK_S,
   RIDER_ABSORB_SAVE_AURAS,
   SAVE_AURA_END_UNSEEN_IDS,
@@ -1528,5 +1529,36 @@ describe("enemyDefensiveEvents — a press-less rider absorb shield", () => {
         (e) => e.noPressLogged && e.spellId !== SHIELD_OF_VENGEANCE,
       ),
     ).toEqual([]);
+  });
+});
+
+describe("pressSecondsOfAura — one press per cast/effect twin (F19 605 diff)", () => {
+  const row = (ms: number, spellId: string) => ({
+    spellId,
+    logLine: { event: LogEvent.SPELL_CAST_SUCCESS, timestamp: ms },
+  });
+  it("Greater Invisibility's 110959 + 110960 rows, 0–1 ms apart, are one press; a later press is its own", () => {
+    const casts = [
+      row(10_000, "110960"),
+      row(10_000, "110959"),
+      row(70_000, "110960"),
+      row(70_001, "110959"),
+    ] as never;
+    expect(pressSecondsOfAura(casts, "110960", 0)).toEqual([10, 70]);
+  });
+  it("HAS TEETH: two presses of one id stay two however close (Blur's second charge)", () => {
+    const casts = [row(10_000, "198589"), row(10_050, "198589")] as never;
+    expect(pressSecondsOfAura(casts, "212800", 0)).toEqual([10, 10.05]);
+  });
+  it("joinReappliedIntervals joins a re-announced aura behind one twin-row press", () => {
+    const casts = [row(12_000, "110960"), row(12_000, "110959")] as never;
+    const ivs = [
+      { spellId: "110960", srcUnitName: "Mage", fromS: 12, toS: 12.1, inferredStart: false, inferredEnd: true },
+      { spellId: "110960", srcUnitName: "Mage", fromS: 12.1, toS: 30, inferredStart: false, inferredEnd: true },
+    ] as never;
+    const joined = joinReappliedIntervals(ivs, (_n, id) =>
+      pressSecondsOfAura(casts, id, 0),
+    );
+    expect(joined).toHaveLength(1);
   });
 });

@@ -4608,8 +4608,10 @@ describe("谓词索引:无法共享 export 的配对,断言相等", () => {
     expect(fn).toMatch(/const zoneId = combat\.startInfo\.zoneId;/);
     expect(fn).toMatch(/const roundEnd = roundEndMs\(combat\);/);
     // … the prompt hands it the round …
+    // (its fifth argument, the recorder's refused presses, feeds only the
+    // kick-eaten cast-time median — codex R6C-02 #2)
     expect(readRepo(`${A}/context/buildMatchContext.ts`)).toMatch(
-      /analyzePlayerCCAndTrinket\(p, enemies, combat, enemyPets\)/,
+      /analyzePlayerCCAndTrinket\(p, enemies, combat, enemyPets(?:, \w+)?\)/,
     );
     // … and each reader the legacy match itself, in every call it makes
     const calls: Record<string, number> = {

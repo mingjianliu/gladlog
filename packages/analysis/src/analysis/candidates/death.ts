@@ -326,6 +326,11 @@ export function externalUnusedEvents(input: {
    * window (reliability round 3 W1f)? Built by the caller from positions and
    * the external's reach; absent or unknown ⇒ reachable (the pre-W1f test). */
   canReachVictim?: (spellId: string) => boolean;
+  /** codex R6C-04 #1 / #2: could the owner press this external for the
+   * victim at all — no lockout debuff on them just before the death
+   * (`lockoutDebuffStopsPressAtDeath`: Forbearance, Hypothermia) and it
+   * covers what was killing them (`saveCoversPressureOn`). Absent ⇒ yes. */
+  pressable?: (spellId: string) => boolean;
   /** fact3 D12: the seconds the owner could not PAY for this external (mana
    * under its cost, `unaffordableIntervals`) — not free to cast it either;
    * absent ⇒ none */
@@ -394,6 +399,7 @@ export function externalUnusedEvents(input: {
   const avail = input.ownerExternals.find((cd) => {
     if (!cdReadyInTimeAt(cd, deathT)) return false;
     if (!(input.canReachVictim?.(cd.spellId) ?? true)) return false;
+    if (!(input.pressable?.(cd.spellId) ?? true)) return false;
     if (input.attempted?.(cd.spellId, from, deathT)) return false;
     const gap = freeGapFor(cd.spellId, cd);
     if (gap < EXTERNAL_FREE_MIN_GAP_S) return false;

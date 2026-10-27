@@ -293,6 +293,8 @@ describe("CC USE counts — cast bars started vs casts that went off", () => {
     starts?: Array<[string, number, string]>;
     casts?: Array<[string, number, string]>;
     kicks?: Array<[string, number]>;
+    /** a Solo Shuffle round whose ending death (the rogue's) is at this s */
+    shuffleDeathS?: number;
   }) {
     const owner = makeUnit("p1", {
       name: "Owner",
@@ -310,11 +312,20 @@ describe("CC USE counts — cast bars started vs casts that went off", () => {
       name: "Rogue",
       spec: CombatUnitSpec.Rogue_Assassination,
       reaction: CombatUnitReaction.Hostile,
+      ...(opts.shuffleDeathS !== undefined
+        ? {
+            info: { talents: [], pvpTalents: [] },
+            deathRecords: [{ timestamp: at(opts.shuffleDeathS) }],
+          }
+        : {}),
     });
     const combat: any = {
       startTime: T0,
       endTime: at(120),
-      startInfo: { zoneId: "" },
+      startInfo:
+        opts.shuffleDeathS !== undefined
+          ? { zoneId: "", bracket: "Rated Solo Shuffle" }
+          : { zoneId: "" },
       units: { p1: owner, e1: rogue },
     };
     const summary = ccUseSummary({
@@ -341,7 +352,7 @@ describe("CC USE counts — cast bars started vs casts that went off", () => {
         { players: [], alignedBurstWindows: [] } as any,
         undefined,
         undefined,
-        { startTime: combat.startTime, endTime: combat.endTime },
+        combat,
       )
         .text.split("\n")
         .find((l) => l.includes("<cooldowns>")) ?? "";
@@ -349,6 +360,33 @@ describe("CC USE counts — cast bars started vs casts that went off", () => {
   }
   const of = (items: string[], spell: string) =>
     items.filter((i) => i.startsWith(`${spell} `));
+
+  it("a bar begun after a Solo Shuffle round's ending death is in neither count: the kit and CC USE cut at the same instant (F19 605 gate)", () => {
+    const mage = {
+      spec: CombatUnitSpec.Mage_Arcane,
+      unitClass: CombatUnitClass.Mage,
+      talents: [RING_OF_FROST_TALENT],
+    };
+    const after = countsLine({
+      ...mage,
+      starts: [[RING_OF_FROST, 100, "Ring of Frost"]],
+      shuffleDeathS: 90,
+    });
+    expect(of(after.items, "Ring of Frost")).toEqual(["Ring of Frost not cast"]);
+    expect(after.kit).toMatch(/Ring of Frost \[[^\]]*\] \[UNUSED\]/);
+    // HAS TEETH: the same bar inside the round is counted by both
+    const inRound = countsLine({
+      ...mage,
+      starts: [[RING_OF_FROST, 80, "Ring of Frost"]],
+      shuffleDeathS: 90,
+    });
+    expect(of(inRound.items, "Ring of Frost")).toEqual([
+      "Ring of Frost cast bar started 1×, went off 0×",
+    ]);
+    expect(inRound.kit).toMatch(
+      /Ring of Frost \[[^\]]*\] \[UNUSED — started 1×, never finished\]/,
+    );
+  });
 
   it("539b6ed0's shape: four Cyclone bars begun, none went off", () => {
     const { summary, items } = countsLine({

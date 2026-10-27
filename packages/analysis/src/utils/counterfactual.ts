@@ -10,6 +10,7 @@ import { buildAuraIntervals, IAuraInterval } from "./auraIntervals";
 import { binarySearchClosest } from "./binarySearch";
 import { isCasterSideLinkAura } from "./brokenRowBreaker";
 import { IPlayerCCTrinketSummary } from "./ccTrinketAnalysis";
+import { lockoutDebuffStopsPressAtDeath } from "./cooldowns";
 import {
   cdReadyInTimeAt,
   HP_SAMPLE_RADIUS_MS,
@@ -595,6 +596,20 @@ export function computeUnusedSelfCounterfactuals(
     if (cd.baselineOnly) continue;
     if (UNUSED_SELF_COVERAGE_UNMODELLED.has(cd.spellId)) continue;
     if (!cdReadyInTimeAt(cd, deathS)) continue;
+    // a button the game refused then (Ice Block under Hypothermia, Divine
+    // Shield under Forbearance — read just before the death, where the
+    // debuff still holds; codex R6C-04 #1) saved nobody
+    if (
+      lockoutDebuffStopsPressAtDeath(
+        victim,
+        cd.spellId,
+        victim,
+        Object.values(combat.units),
+        deathS,
+        combat.startTime,
+      )
+    )
+      continue;
     // GH #96 M3a: hypothetical ADDED protection: observed × p per component
     // (own cooldown → the victim carries it). Lower bound: "would have saved".
     const res = resolveMitigation(cd.spellId, {

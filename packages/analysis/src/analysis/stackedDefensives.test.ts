@@ -109,6 +109,44 @@ describe("stackedDefensivePairs", () => {
     );
   });
 
+  it("a friendly totem's wall is its owner's: Spirit Link Totem names the shaman, not the totem (codex R6C-05 #3; F19 605 diff)", () => {
+    const SLT = "325174";
+    const owner = unit("S", "Sham-R", {
+      spec: CombatUnitSpec.Shaman_Restoration,
+    });
+    const totem = {
+      id: "T",
+      name: "Spirit Link Totem",
+      ownerId: "S",
+      reaction: CombatUnitReaction.Friendly,
+      auraEvents: [],
+      spellCastEvents: [],
+    };
+    const mate = unit("M", "Mate-R", {
+      auraEvents: [
+        aura(10_000, LogEvent.SPELL_AURA_APPLIED, personal, "M", "Mate-R"),
+        aura(12_000, LogEvent.SPELL_AURA_APPLIED, SLT, "T", "Spirit Link Totem"),
+        aura(15_000, LogEvent.SPELL_AURA_REMOVED, personal, "M", "Mate-R"),
+        aura(18_000, LogEvent.SPELL_AURA_REMOVED, SLT, "T", "Spirit Link Totem"),
+      ],
+      damageIn: [{ timestamp: T0 + 13_000, amount: -30, effectiveAmount: -30 }],
+    });
+    const pairs = stackedDefensivePairs(owner, combat([owner, mate, totem]));
+    expect(pairs).toHaveLength(1);
+    expect(pairs[0]!.second.spellId).toBe(SLT);
+    expect(pairs[0]!.second.casterName).toBe("Sham-R");
+    expect(pairs[0]!.second.casterIsOwner).toBe(true);
+    // HAS TEETH: an enemy totem's aura is nobody's wall here
+    const enemyTotem = { ...totem, ownerId: "E" };
+    const enemy = unit("E", "Foe-R", {
+      reaction: CombatUnitReaction.Hostile,
+      info: { teamId: "1" },
+    });
+    expect(
+      stackedDefensivePairs(owner, combat([owner, mate, enemyTotem, enemy])),
+    ).toEqual([]);
+  });
+
   it("a later Time Dilation is priced by what the log says it held back, not D × b / (1 − b) over its own delayed ticks (fact1215 retest idx 10)", () => {
     const TD = "357170";
     const owner = unit("H", "Heals-R", {

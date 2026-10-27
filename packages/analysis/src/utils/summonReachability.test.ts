@@ -12,7 +12,9 @@ vi.mock("../data/spellEffectData", () => ({
 }));
 
 vi.mock("./cannotCastIntervals", () => ({
-  buildCannotCastIntervals: vi.fn(() => []),
+  // the per-spell reading (codex R6C-03 #1) over enemy players + summons
+  cannotCastIntervalsForSpells: vi.fn(() => []),
+  enemySourceIds: (e: Array<{ id: string }>) => new Set(e.map((u) => u.id)),
 }));
 
 // Partial mock: positionAnalysis → enemyDefensives reads ./cooldowns tables
@@ -32,13 +34,13 @@ vi.mock("./rootReachability", () => ({
 }));
 
 // Mock modules so we can change implementations
-import { buildCannotCastIntervals } from "./cannotCastIntervals";
+import { cannotCastIntervalsForSpells } from "./cannotCastIntervals";
 import { getUnitPositionAtTime } from "./losAnalysis";
 import { canReachTargetAt } from "./rootReachability";
 
 const mockGetUnitPositionAtTime = getUnitPositionAtTime as any;
 const mockCanReachTargetAt = canReachTargetAt as any;
-const mockBuildCannotCastIntervals = buildCannotCastIntervals as any;
+const mockBuildCannotCastIntervals = cannotCastIntervalsForSpells as any;
 
 describe("summonReach", () => {
   const createUnit = (id: string, spec: CombatUnitSpec = CombatUnitSpec.None, actionIn: any[] = []): ICombatUnit =>

@@ -67,7 +67,11 @@ export function deriveCcBreakDash(
     const stats = analyzeCcBreaks(
       friends,
       enemies,
-      { startTime: legacy.startTime, endTime: legacy.endTime },
+      {
+        startTime: legacy.startTime,
+        endTime: legacy.endTime,
+        startInfo: legacy.startInfo,
+      },
       petsOf(friends),
       petsOf(enemies),
     );

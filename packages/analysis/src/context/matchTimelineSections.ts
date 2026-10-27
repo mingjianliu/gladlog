@@ -26,7 +26,7 @@ import {
   isHealerSpec,
   isHpTroughWorthPrinting,
   isSpikeHealedThrough,
-  lockoutDebuffStopsPress,
+  lockoutDebuffStopsPressAtDeath,
   PRESSURE_WINDOWS_TOP_N,
   SELF_CAST_NOOP_EXTERNAL_IDS,
   specToBenchmarkKey,
@@ -1064,7 +1064,7 @@ export function emitFriendlyDeathEntries<S>(params: {
         // (FT F22).
         .filter(
           (cd) =>
-            !lockoutDebuffStopsPress(
+            !lockoutDebuffStopsPressAtDeath(
               dyingUnit,
               cd.spellId,
               dyingUnit,

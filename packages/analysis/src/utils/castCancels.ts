@@ -71,8 +71,8 @@ import {
   CANCEL_CC_NEAR_S,
   DISPLACEMENT_EVIDENCE_IDS,
 } from "./castStopEvidence";
-import { isPressOfCooldown, talentReplacementsOf } from "./cooldowns";
 import { TARGETED_CC_DODGE_SPELLS } from "./ccTrinketAnalysis";
+import { isPressOfCooldown, talentReplacementsOf } from "./cooldowns";
 import { analyzeKickAudit } from "./kickAudit";
 import type { RawStreams } from "./rawStreams";
 import { roundEndMs } from "./roundEnd";
@@ -125,9 +125,16 @@ export interface OwnerCastCancels {
  */
 export function castBarStartsInRound(
   unit: Pick<ICombatUnit, "castStartEvents">,
-  round: { startTime: number; endTime: number },
+  round: {
+    startTime: number;
+    endTime: number;
+    startInfo?: { bracket?: string };
+    units?: Record<string, unknown> | ReadonlyArray<unknown>;
+  },
 ): CastBarStart[] {
-  const durationS = (round.endTime - round.startTime) / 1000;
+  // the round's end (`roundEndMs`: a Solo Shuffle round ends at its ending
+  // death, ~2 s before the log; codex R6C-06 #3)
+  const durationS = (roundEndMs(round) - round.startTime) / 1000;
   return castBarStartsOf(unit, round.startTime).filter(
     (s) => s.t >= 0 && s.t <= durationS,
   );
@@ -331,5 +338,8 @@ export function ownerCastCancels(params: {
       });
     }
   baitedKicks.sort((a, b) => a.atSeconds - b.atSeconds);
-  return { hardcasts: starts.length, cancels, baitedKicks };
+  // the bars begun inside the round (codex R6C-02 #5: a Create Soulwell
+  // started after the Solo Shuffle round's ending death made 17 of 16)
+  const hardcasts = starts.filter((s) => s.t >= 0 && s.t <= roundEndS).length;
+  return { hardcasts, cancels, baitedKicks };
 }

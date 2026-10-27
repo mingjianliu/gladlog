@@ -7,6 +7,7 @@ import {
   LogEvent,
 } from "@gladlog/parser-compat";
 
+import { saveCoversPressureOn } from "../analysis/candidates/cooldownTiming";
 import { DEATH_CC_LOOKBACK_S } from "../analysis/candidates/death";
 import { ownEffectAurasOfCast } from "../data/castEffectAuras";
 import { DRUID_FORM_AURA_IDS, FORM_BOUND_BUFF_IDS } from "../data/druidForms";
@@ -42,7 +43,7 @@ import {
   IMajorCooldownInfo,
   isHealerSpec,
   isPassiveProcCast,
-  lockoutDebuffStopsPress,
+  lockoutDebuffStopsPressAtDeath,
   PASSIVE_SPELL_BLOCKLIST,
   pressSpentBy,
   rendersOnCaster,
@@ -58,6 +59,7 @@ import {
   AURA_BEFORE_CAST_MAX_S,
   SAVE_CAST_AURA_PAIR_S,
 } from "../utils/enemyDefensives";
+import { documentRecordsAttackSpell } from "../utils/incomingPressure";
 import {
   absorbedHitSchoolMask,
   DEFERRAL_SHIELD_DAMAGE_IDS,
@@ -2399,13 +2401,32 @@ export function buildKillSequenceBlock(params: {
             // Shield named 10 s after a self Lay on Hands), nor an Ice Block
             // under Hypothermia (FT F22)
             if (
-              lockoutDebuffStopsPress(
+              lockoutDebuffStopsPressAtDeath(
                 player as ICombatUnit,
                 cd.spellId,
                 dyingUnit as ICombatUnit,
                 [...friends, ...enemies],
                 deathTime,
                 matchStartMs,
+              )
+            )
+              return false;
+            // …and a school-limited save only when it covered what was
+            // killing them — the `[DEATH] (Unused: …)` list's rule
+            // (`saveCoversPressureOn`; codex R6C-04 #2: Blessing of
+            // Protection offered against an all-magic death)
+            if (
+              !saveCoversPressureOn(
+                cd.spellId,
+                dyingUnit as ICombatUnit,
+                matchStartMs + deathTime * 1000,
+                {
+                  sides: params.rosterSides,
+                  recordsAttackSpell: documentRecordsAttackSpell([
+                    ...friends,
+                    ...enemies,
+                  ] as ICombatUnit[]),
+                },
               )
             )
               return false;

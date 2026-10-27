@@ -276,6 +276,11 @@ export function intervalBlocksSpell(
     );
   // the pet's spell: the owner's cast bar is not its cast bar
   if (iv.petCastSpellIds?.has(spellId)) return false;
+  // a cast a silence does not prevent is not one a school lockout prevents
+  // (DB2's silence bit, `isUnsilenceableCast`; codex R6C-03 #2: Judgment
+  // SUCCEEDED inside a Holy lock, 121afd91 r3, and its five refusals there
+  // were its own cooldown, not the lock)
+  if (isUnsilenceableCast(spellId)) return false;
   const m = spellSchoolMask(spellId);
   if (m === undefined || iv.lockedSchoolMask === undefined) return true;
   return schoolLockedBy(m, iv.lockedSchoolMask);

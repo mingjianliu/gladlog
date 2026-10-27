@@ -38,6 +38,10 @@ describe("checkSyncWindowOwnerPart", () => {
         row(SOLO_SHUFFLE_BRACKET, `${MATES}、Touch of the Magi (yours)`),
         row(SOLO_SHUFFLE_BRACKET, MATES, "you"),
         row(SOLO_SHUFFLE_BRACKET, MATES, "you (Hex)"),
+        row(SOLO_SHUFFLE_BRACKET, MATES).replace(
+          ", refN=",
+          ", alsoHeldAt=100, alsoHeldSetupBy=100: you, refN=",
+        ),
       ]),
     ).toEqual([]);
   });

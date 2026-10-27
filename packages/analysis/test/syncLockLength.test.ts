@@ -106,6 +106,15 @@ describe("syncLockLengthFacts", () => {
       syncLockLengthFacts({ fromSeconds: 100, toSeconds: 104 }, 104)
         .cutByRoundEnd,
     ).toBe(false);
+    // … unless the window was already cut there (the outgoing chains stop at
+    // the round's end and flag it; F19 605 gate: a Binding Shot's row lost
+    // its endedBy=the round's end)
+    expect(
+      syncLockLengthFacts(
+        { fromSeconds: 100, toSeconds: 104, cutByRoundEnd: true },
+        104,
+      ),
+    ).toMatchObject({ cutByRoundEnd: true, windowEndT: "104", durationS: "4" });
   });
 });
 

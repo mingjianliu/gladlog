@@ -5,11 +5,13 @@ import {
   LogEvent,
 } from "@gladlog/parser-compat";
 
+import { saveCoversPressureOn } from "../analysis/candidates/cooldownTiming";
 import { MITIGATION_TABLE } from "../data/mitigationData";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import { cannotCastIntervalsForSpells } from "./cannotCastIntervals";
 import { isFormReshiftCast } from "./castPress";
 import { IPlayerCCTrinketSummary } from "./ccTrinketAnalysis";
+import { lockoutDebuffStopsPressAtDeath, playerTalentIdSets } from "./cooldowns";
 import {
   auraOnlyActivationSeconds,
   castRecovery,
@@ -35,6 +37,7 @@ import {
 } from "./cooldowns";
 import { isStunCcInstance } from "./drAnalysis";
 import { hiddenPressMs } from "./hiddenPress";
+import { documentRecordsAttackSpell } from "./incomingPressure";
 import {
   distanceBetween,
   getUnitPositionAtTime,
@@ -1200,7 +1203,16 @@ export function buildDeathOutcomeSummary(
               e.spellId === spellId &&
               e.logLine.event === LogEvent.SPELL_CAST_SUCCESS,
           );
-          if (!everCast && !spell.specs.includes(teammate.spec)) continue;
+          // the spec list, else ownership (codex R6C-04 #3: a Holy
+          // paladin's PvP-talent Blessing of Spellwarding was dropped by the
+          // Protection-only list before ownership was asked)
+          if (
+            !everCast &&
+            !spell.specs.includes(teammate.spec) &&
+            !playerTalentIdSets(teammate).pvpTalentIds.has(spellId) &&
+            !playerTalentIdSets(teammate).talentedSpellIds?.has(spellId)
+          )
+            continue;
           if (
             casterDistance !== null &&
             casterDistance > externalReachYards(spellId, teammate)
@@ -1247,6 +1259,24 @@ export function buildDeathOutcomeSummary(
             atSeconds,
             matchStartMs,
           );
+          // …pressable for this unit just before the death (Forbearance /
+          // Hypothermia — `lockoutDebuffStopsPressAtDeath`) and covering
+          // what was killing it (`saveCoversPressureOn`) — the [DEATH]
+          // Unused list's two tests (codex R6C-04 #1 / #2)
+          if (
+            lockoutDebuffStopsPressAtDeath(
+              teammate,
+              spellId,
+              unit,
+              friends,
+              atSeconds,
+              matchStartMs,
+            ) ||
+            !saveCoversPressureOn(spellId, unit, deathMs, {
+              recordsAttackSpell: documentRecordsAttackSpell(friends),
+            })
+          )
+            continue;
           missedExternals.push({
             casterName: teammate.name,
             casterSpec: specToString(teammate.spec),

@@ -647,18 +647,35 @@ export function computeContestedTradeFacts(
 
     // an unknown DR family (Chastise without caster evidence) is never "at
     // Full DR" (codex 35-CD-13b: getDRLevelAtTime reads no history as Full)
+    // ready, at Full DR and able to reach them in ONE second of the span
+    // (codex R6C-16 #1: Chastise was ready at 73–75 s and in reach only at
+    // 80 s, after it had gone out at 75.8 s — never both, yet the line read
+    // "ready on enemy healer")
     const readyAtFullDR = ccSpells.find(
       (s) =>
-        isCCReadyAt(s, seg.fromSeconds) &&
         drCategoryKnown(s.spellId, ownerApplied) &&
+        // the line states the DR at the segment's start
         getDRLevelAtTime(
           enemyHealerCCInstances,
           drCategoryOfCast(s.spellId, ownerApplied),
           seg.fromSeconds,
           matchStartMs,
         ) === "Full" &&
-        // …and able to reach them at some second of the span
-        ccReachesInSpan(owner, enemyHealer, s.spellId, combat, seg),
+        ccReachesInSpan(
+          owner,
+          enemyHealer,
+          s.spellId,
+          combat,
+          seg,
+          (t) =>
+            isCCReadyAt(s, t) &&
+            getDRLevelAtTime(
+              enemyHealerCCInstances,
+              drCategoryOfCast(s.spellId, ownerApplied),
+              t,
+              matchStartMs,
+            ) === "Full",
+        ),
     );
     if (!readyAtFullDR) continue;
 
@@ -712,12 +729,16 @@ function ccReachesInSpan(
   spellId: string,
   combat: { startTime: number; startInfo?: { zoneId?: unknown } },
   seg: { fromSeconds: number; toSeconds: number },
+  /** the CC usable at that second as far as readiness / DR go — reach and
+   * usability have to hold in the same second */
+  usableAt: (t: number) => boolean = () => true,
 ): boolean {
   const reach = ccThreatReachYards(owner, spellId);
   if (reach === null) return false;
   const zone = String(combat.startInfo?.zoneId ?? "");
   for (let t = Math.floor(seg.fromSeconds); t < seg.toSeconds; t++)
     if (
+      usableAt(Math.max(t, seg.fromSeconds)) &&
       ccReachAt(owner, healer, reach, zone, combat.startTime + t * 1000).ok
     )
       return true;
@@ -1143,18 +1164,35 @@ export function computeWindowCreationFacts(
 
     // an unknown DR family (Chastise without caster evidence) is never "at
     // Full DR" (codex 35-CD-13b: getDRLevelAtTime reads no history as Full)
+    // ready, at Full DR and able to reach them in ONE second of the span
+    // (codex R6C-16 #1: Chastise was ready at 73–75 s and in reach only at
+    // 80 s, after it had gone out at 75.8 s — never both, yet the line read
+    // "ready on enemy healer")
     const readyAtFullDR = ccSpells.find(
       (s) =>
-        isCCReadyAt(s, seg.fromSeconds) &&
         drCategoryKnown(s.spellId, ownerApplied) &&
+        // the line states the DR at the segment's start
         getDRLevelAtTime(
           enemyHealerCCInstances,
           drCategoryOfCast(s.spellId, ownerApplied),
           seg.fromSeconds,
           matchStartMs,
         ) === "Full" &&
-        // …and able to reach them at some second of the span
-        ccReachesInSpan(owner, enemyHealer, s.spellId, combat, seg),
+        ccReachesInSpan(
+          owner,
+          enemyHealer,
+          s.spellId,
+          combat,
+          seg,
+          (t) =>
+            isCCReadyAt(s, t) &&
+            getDRLevelAtTime(
+              enemyHealerCCInstances,
+              drCategoryOfCast(s.spellId, ownerApplied),
+              t,
+              matchStartMs,
+            ) === "Full",
+        ),
     );
     if (!readyAtFullDR) continue;
 

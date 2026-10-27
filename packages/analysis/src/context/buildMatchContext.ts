@@ -375,8 +375,11 @@ export function buildMatchContext(
     enemyPets,
     friendlyPets,
   );
+  const castFailedRows = options.rawStreams?.available
+    ? options.rawStreams.castFailed
+    : undefined;
   const ccTrinketSummaries = friends.map((p) =>
-    analyzePlayerCCAndTrinket(p, enemies, combat, enemyPets),
+    analyzePlayerCCAndTrinket(p, enemies, combat, enemyPets, castFailedRows),
   );
   // BACKLOG #36(e): CC-break attribution. `analyzeCcBreaks` has carried the
   // full who-broke-whose-CC attribution since 2026-08-02 (the log's own ground
@@ -506,6 +509,7 @@ export function buildMatchContext(
       friends as ICombatUnit[],
       combat,
       friendlyPets,
+      castFailedRows,
     ),
   );
   const enemyHealerUnit = enemies.find((e) => isHealerSpec(e.spec));
@@ -812,7 +816,7 @@ export function buildMatchContext(
     enemyCDTimeline,
     enemies as ICombatUnit[],
     enemyCooldowns,
-    { startTime: combat.startTime, endTime: combat.endTime },
+    combat,
     // FT F09: the owner's refused presses, for `[UNUSED — pressed N×, refused:
     // …]` — up to the round's end or the owner's own death (a key pressed
     // while dead or between rounds is not a press of a button they had)

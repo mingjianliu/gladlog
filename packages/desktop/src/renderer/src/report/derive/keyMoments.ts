@@ -392,8 +392,10 @@ export function deriveKeyMoments(
             ? `${e.startDistanceYards}→${e.endDistanceYards}yd 贴 ${shortUnitName(e.nearestEnemyName ?? "")}${
                 e.dangerLabel ? ` · ${e.dangerLabel}爆发` : ""
               }${
-                e.ownerHpStartPct != null && e.ownerHpMinPct != null
-                  ? ` · HP ${e.ownerHpStartPct}%→${e.ownerHpMinPct}%`
+                // the true trough, as the prompt prints it (codex R6C-01 #4)
+                e.ownerHpStartPct != null &&
+                (e.ownerHpLowPct ?? e.ownerHpMinPct) != null
+                  ? ` · HP ${e.ownerHpStartPct}%→${e.ownerHpLowPct ?? e.ownerHpMinPct}%`
                   : ""
               }`
             : e.type === "MISSED_PUSH"

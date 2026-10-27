@@ -1139,6 +1139,47 @@ export function joinReappliedIntervals(
   return out;
 }
 
+/** Two SUCCESS rows of one press under different ids of one aura — the
+ * cast and its effect, logged together (Greater Invisibility: 110959 and
+ * 110960 at the same ms or 1 ms apart). */
+export const ALIAS_PRESS_TWIN_MS = 100;
+
+/**
+ * The round seconds of a source's presses of an aura: SUCCESS rows of the
+ * aura's own id or of a cast whose effect it is (codex R6C-15 #2 / R6C-05
+ * #1: Blur is cast as 198589 and runs as 212800 — its second press, a
+ * same-ms REFRESH, was never split off the first), one per press: a row of
+ * another of those ids within `ALIAS_PRESS_TWIN_MS` of a kept one is the
+ * same press (F19 605 diff: Greater Invisibility's two rows read as two
+ * casts kept `joinReappliedIntervals` from joining a re-announced aura —
+ * two `[ENEMY DEF]` lines for one press).
+ */
+export function pressSecondsOfAura(
+  casts: ICombatUnit["spellCastEvents"] | undefined,
+  spellId: string,
+  startTime: number,
+): number[] {
+  const ids = new Set([spellId, ...castsOfEffectAura(spellId)]);
+  const rows = (casts ?? [])
+    .filter(
+      (c) =>
+        c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+        !!c.spellId &&
+        ids.has(c.spellId),
+    )
+    .sort((a, b) => a.logLine.timestamp - b.logLine.timestamp);
+  const out: number[] = [];
+  let last: { ms: number; id: string } | null = null;
+  for (const c of rows) {
+    const ms = c.logLine.timestamp;
+    if (last && c.spellId !== last.id && ms - last.ms <= ALIAS_PRESS_TWIN_MS)
+      continue;
+    out.push((ms - startTime) / 1000);
+    last = { ms, id: c.spellId! };
+  }
+  return out;
+}
+
 /** How long before its aura a logged cast can still be the press that put
  * it up (an `[ENEMY DEF]` aura kind's `pressSeconds`). */
 export const PRESS_TO_AURA_MAX_S = 1;
@@ -1424,18 +1465,14 @@ export function saveAuraIntervals(
   }
   const castSecondsOf = (srcUnitName: string, spellId: string): number[] => {
     const srcId = srcIdByName.get(srcUnitName);
-    return (
+    return pressSecondsOfAura(
       (srcId !== undefined
         ? castersById.get(srcId)
         : team.find((e) => e.name === srcUnitName)
-      )?.spellCastEvents ?? []
-    )
-      .filter(
-        (c) =>
-          c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
-          c.spellId === spellId,
-      )
-      .map((c) => (c.logLine.timestamp - combat.startTime) / 1000);
+      )?.spellCastEvents,
+      spellId,
+      combat.startTime,
+    );
   };
   return splitAtRepressRefresh(
     joinReappliedIntervals(

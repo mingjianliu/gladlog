@@ -57,6 +57,7 @@ import { join, resolve } from "node:path";
 import { gunzipSync } from "node:zlib";
 
 import { ensureAnalysisData } from "@gladlog/analysis";
+import { abilityProfile } from "@gladlog/analysis/src/data/abilityProfile";
 import {
   castKeyOfAura,
   effectAurasOfCast,
@@ -67,7 +68,6 @@ import {
   NO_MITIGATION_IDS,
 } from "@gladlog/analysis/src/data/mitigationData";
 import { mitigationVerdictOf } from "@gladlog/analysis/src/data/mitigationVerdicts";
-import { abilityProfile } from "@gladlog/analysis/src/data/abilityProfile";
 import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData";
 import spellEffectGenerated from "@gladlog/analysis/src/data/spellEffectGenerated.json";
 import { ENEMY_IMMUNITY_SAVE_AURAS } from "@gladlog/analysis/src/data/spellIdLists";
@@ -85,20 +85,20 @@ import {
   KW_REDIRECT_PROTECTION_AURA_IDS,
 } from "@gladlog/analysis/src/utils/enemyDefensives";
 import {
+  holderFirstOwnActionAfterMs,
+  SAVE_AURA_END_UNSEEN_IDS,
+} from "@gladlog/analysis/src/utils/enemyDefensives";
+import { isDeferralAbsorb } from "@gladlog/analysis/src/utils/incomingPressure";
+import { WALL_IN_HAND_MIT_IDS } from "@gladlog/analysis/src/utils/killWindowTargetSelection";
+import {
   distanceBetween,
   getUnitPositionAtTime,
 } from "@gladlog/analysis/src/utils/losAnalysis";
 import { INTERP_MAX_GAP_MS } from "@gladlog/analysis/src/utils/positionSampling";
-import { ccMechanicOf } from "@gladlog/analysis/src/utils/spellMechanics";
-import {
-  holderFirstOwnActionAfterMs,
-  SAVE_AURA_END_UNSEEN_IDS,
-} from "@gladlog/analysis/src/utils/enemyDefensives";
-import { WALL_IN_HAND_MIT_IDS } from "@gladlog/analysis/src/utils/killWindowTargetSelection";
-import { isDeferralAbsorb } from "@gladlog/analysis/src/utils/incomingPressure";
 import { parseRawStreams } from "@gladlog/analysis/src/utils/rawStreams";
-import { playableEndMs } from "@gladlog/analysis/src/utils/roundEnd";
+import { playableEndMs, roundEndMs } from "@gladlog/analysis/src/utils/roundEnd";
 import { OFFENSIVE_CD_SPELL_IDS } from "@gladlog/analysis/src/utils/spellDanger";
+import { ccMechanicOf } from "@gladlog/analysis/src/utils/spellMechanics";
 import { ccThreatReachYards } from "@gladlog/analysis/src/utils/spellRange";
 import { GladLogParser, type GladMatch } from "@gladlog/parser";
 import { LogEvent, toLegacyMatch } from "@gladlog/parser-compat";
@@ -141,6 +141,8 @@ const CHECKS = [
   "primeWallPressedAtStart",
   "petDispelCommanded",
   "externalAbsorbedPets",
+  "unusedAfterRoundEnd",
+  "deathOptionLocked",
 ] as const;
 type Check = (typeof CHECKS)[number];
 /** kinds counted but kept out of a check's violation total */
@@ -1595,6 +1597,116 @@ for (const f of files) {
             `${target.id}:${ally.id}:${m[1]}`,
             `${ally.name}'s summons had ${Math.round(petAbs / 1000)}k absorbed on ${target.name} in ${m[1]} ${m[2]} (${((b - a) / 1000).toFixed(1)}s); printed +${p[2] ?? "0"} absorbed`,
             l.trim().slice(0, 200),
+          );
+      }
+    }
+  }
+
+  // ── unusedAfterRoundEnd ──
+  // A Solo Shuffle round is over at its ending death (`roundEndMs`); a press
+  // after it is in no round. An owner kit entry whose every press of the
+  // round came after that death still reads `[UNUSED]` (codex R6C-12 #1 /
+  // R6C-06 #2: an Anti-Magic Zone 0.6 s after the death took it away)
+  {
+    const roundEnd = roundEndMs(legacy as never);
+    const kitLine = lines.find((l) => /^\s+<cooldowns>/.test(l)) ?? "";
+    if (roundEnd < end && kitLine) {
+      const late = successesOf(owner).filter(
+        (c) => tsOf(c) >= roundEnd && tsOf(c) <= end,
+      );
+      for (const c of late) {
+        const nm = nameOf(String(c.spellId), c.spellName ?? "");
+        const entry = new RegExp(
+          `(?:<cooldowns>|, )${nm.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} \\[[^\\]]*\\]( \\[UNUSED[^\\]]*\\])?`,
+        ).exec(kitLine);
+        if (!entry) continue;
+        const inRound = successesOf(owner).some(
+          (o) =>
+            nameOf(String(o.spellId), o.spellName ?? "") === nm &&
+            tsOf(o) >= start &&
+            tsOf(o) < roundEnd,
+        );
+        if (inRound) continue;
+        bump("unusedAfterRoundEnd");
+        if (!entry[1])
+          violate(
+            "unusedAfterRoundEnd",
+            nm,
+            tsOf(c),
+            `${owner.id}:${c.spellId}`,
+            `${nm} pressed only ${((tsOf(c) - roundEnd) / 1000).toFixed(2)}s after the round's ending death; kit has no [UNUSED]`,
+            entry[0],
+          );
+      }
+    }
+  }
+
+  // ── deathOptionLocked ──
+  // An external-unused row's external could be pressed for its victim: no
+  // Forbearance on the victim through the last second before the death (a
+  // Forbearance-gated save: Blessing of Protection / Spellwarding, Lay on
+  // Hands), and a Blessing of Protection only when physical damage hit the
+  // victim in the 2 s before it (codex R6C-04 #1 / #2)
+  {
+    const FORB_GATED = new Set([
+      "Blessing of Protection",
+      "Blessing of Spellwarding",
+      "Lay on Hands",
+    ]);
+    for (const l of menu.split("\n")) {
+      const m =
+        /type=external-unused t=([\d.]+)s .*?victim=([^,]+),.*?external=([^,}]+)/.exec(
+          l,
+        );
+      if (!m) continue;
+      const victim = byName.get(m[2]!.trim());
+      if (!victim) continue;
+      const ext = m[3]!.trim();
+      const deathAt = Math.min(
+        Infinity,
+        ...((victim.deathRecords ?? []) as any[]).map((d) => d.timestamp),
+      );
+      if (!Number.isFinite(deathAt)) continue;
+      bump("deathOptionLocked");
+      if (FORB_GATED.has(ext)) {
+        let on = false;
+        for (const a of ((victim.auraEvents ?? []) as any[]).sort(
+          (x, y) => tsOf(x) - tsOf(y),
+        )) {
+          if (String(a.spellId) !== "25771" || a.destUnitId !== victim.id)
+            continue;
+          if (tsOf(a) > deathAt - 1000) break;
+          on = ev(a) !== REMOVED;
+        }
+        if (on)
+          violate(
+            "deathOptionLocked",
+            "forbearance",
+            deathAt,
+            `${victim.id}:${ext}`,
+            `${ext} offered for ${victim.name}, under Forbearance 1 s before the death`,
+            l.trim().slice(0, 180),
+          );
+      }
+      if (ext === "Blessing of Protection") {
+        let phys = 0;
+        let all = 0;
+        for (const d of (victim.damageIn ?? []) as any[]) {
+          const t = tsOf(d);
+          if (t < deathAt - 2000 || t > deathAt) continue;
+          const amt = Math.abs(Number(d.effectiveAmount) || 0);
+          all += amt;
+          if ((parseInt(String(d.spellSchoolId ?? "0x0"), 16) & 1) === 1)
+            phys += amt;
+        }
+        if (all > 0 && phys === 0)
+          violate(
+            "deathOptionLocked",
+            "noPhysical",
+            deathAt,
+            `${victim.id}:${ext}`,
+            `Blessing of Protection offered for ${victim.name}; 0 of ${Math.round(all / 1000)}k in the last 2 s was physical`,
+            l.trim().slice(0, 180),
           );
       }
     }

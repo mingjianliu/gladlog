@@ -9,6 +9,7 @@ import { MITIGATION_TABLE } from "../data/mitigationData";
 import { SPELL_CATEGORIES as spellsData } from "../data/spellCategories";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import { isAllyCopyWallId } from "./allyCopyWall";
+import { buildAuraIntervals } from "./auraIntervals";
 import { isCasterSideLinkAura } from "./brokenRowBreaker";
 import {
   gridEndpointHpPct,
@@ -20,7 +21,9 @@ import { IEnemyCDCast, reconstructEnemyCDTimeline } from "./enemyCDs";
 import {
   FULL_IMMUNITY_IDS,
   holderFirstOwnActionAfterMs,
+  joinReappliedIntervals,
   MITIGATION_AURA_MIN_PCT,
+  pressSecondsOfAura,
   SAVE_AURA_END_UNSEEN_IDS,
 } from "./enemyDefensives";
 import { isDeferralAbsorb } from "./incomingPressure";
@@ -34,7 +37,6 @@ import { MIN_WINDOW_SECONDS } from "./killWindowTargetSelection";
 import { IOffensiveWindow } from "./offensiveWindows";
 import { fmtTime, toRenderSecond } from "./renderGrid";
 import { roundEndMs } from "./roundEnd";
-import { buildFilteredAuraIntervals } from "./utils";
 
 type SpellEntry = { type: string };
 const SPELLS = spellsData as Record<string, SpellEntry>;
@@ -424,11 +426,34 @@ export function analyzeBurstLedger(
       // Defensive/immunity auras actually ACTIVE on the target during the span
       // (real aura intervals, not cast+duration estimates).
       const defensivesHit: IBurstDefensiveHit[] = [];
-      for (const iv of buildFilteredAuraIntervals(
-        target,
-        DEF_OR_IMMUNE_IDS,
-        combat,
-      )) {
+      // a re-announced aura (APPLIED again within a second of its one press)
+      // is that press — `[ENEMY DEF]`'s join (`joinReappliedIntervals`;
+      // codex R6C-05 #2: one Guardian Spirit read as two pressed walls)
+      const castSecondsOf = (srcUnitName: string, spellId: string) => {
+        const src = Object.values(combat.units ?? {}).find(
+          (u) => (u as ICombatUnit).name === srcUnitName,
+        ) as ICombatUnit | undefined;
+        return pressSecondsOfAura(
+          src?.spellCastEvents,
+          spellId,
+          combat.startTime,
+        );
+      };
+      for (const iv of joinReappliedIntervals(
+        buildAuraIntervals(target, combat).filter((x) =>
+          DEF_OR_IMMUNE_IDS.has(x.spellId),
+        ),
+        castSecondsOf,
+      )
+        .map((x) => ({
+          spellId: x.spellId,
+          spellName: x.spellName,
+          srcUnitName: x.srcUnitName,
+          startMs: combat.startTime + x.fromS * 1000,
+          endMs: combat.startTime + x.toS * 1000,
+          inferredEnd: x.inferredEnd,
+        }))
+        .sort((x, y) => x.startMs - y.startMs)) {
         // An aura OUR side put on the target is not the target's defensive —
         // the owner's own Touch of Karma tether (122470, applied by the monk
         // ON the enemy) read as "Target had a major defensive up" (reliability

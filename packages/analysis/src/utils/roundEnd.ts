@@ -159,3 +159,22 @@ export function playableEndMs(
 ): number | undefined {
   return shuffleRoundEndMs(combat, units) ?? threesDecidedMs(combat, units);
 }
+
+/**
+ * Was a control still on when the round ended — so cut there, and its line
+ * says `still on them when the round ended`? Its removal is after the round's
+ * end, or the log never closed it (`noRemoved`: its end is an estimate the
+ * round's end capped) and that end is not before it. A logged removal on the
+ * round-ending ms itself ended it. One predicate for the incoming windows,
+ * roots and disarms (`ccTrinketAnalysis`) and the outgoing chains
+ * (`analyzeOutgoingCCChains` → missed-sync `endedBy=the round's end`; codex
+ * 20-F19-05: an unclosed Psychic Scream the log's end capped read cut on its
+ * line and not in the chain).
+ */
+export function stillOnAtRoundEnd(
+  removeMs: number,
+  noRemoved: boolean | undefined,
+  roundEnd: number,
+): boolean {
+  return removeMs > roundEnd || (noRemoved === true && removeMs >= roundEnd);
+}

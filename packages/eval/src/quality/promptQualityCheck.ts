@@ -4170,6 +4170,9 @@ interface EnemyDefLine {
   /** the line can be an immunity: it prints `(immune…`, or it is an external
    * (Blessing of Protection on an ally prints no strength) */
   canBeImmunity: boolean;
+  /** an area save (`X (area)`), with the rendered id of the unit that
+   * pressed it */
+  areaCasterId?: string;
 }
 function enemyDefLinesOf(lines: readonly string[]): EnemyDefLine[] {
   const defs: EnemyDefLine[] = [];
@@ -4187,10 +4190,46 @@ function enemyDefLinesOf(lines: readonly string[]): EnemyDefLine[] {
       endNotLogged: ENEMY_DEF_END_NOT_LOGGED_SLOT_RE.test(line),
       canBeImmunity:
         recipient !== null || line.includes(": " + m[3] + " (immune"),
+      ...(line.includes(" (area)")
+        ? { areaCasterId: ENEMY_DEF_CASTER_ID.exec(line)?.[1] }
+        : {}),
     });
   }
   return defs;
 }
+/**
+ * How long each unit's save can last, as its `<cooldowns>` kit prints it
+ * (`X [… lasts Ns]`, or `lasts a–Ns` → N: `buffDurationRangeForCaster`'s
+ * top), keyed by the unit's rendered id and the save's name. What an area
+ * save's line (`X (area)`, at the press) is read against: its aura reaches a
+ * unit any time inside its lifetime, which is when KILL ATTEMPTS dates it
+ * (`areaSaveSpansOnS`: the on-target start within the save's lifetime of
+ * the press; user ruling 2026-10-27, option A — fact5 wide 200-5: a
+ * Rallying Cry pressed at 1:46 first on a cycloned feral at 1:51).
+ */
+function kitLifetimesById(
+  lines: readonly string[],
+): Map<string, Map<string, number>> {
+  const out = new Map<string, Map<string, number>>();
+  let unitId: string | undefined;
+  for (const line of lines) {
+    const u = UNIT_LEGEND_LINE.exec(line);
+    if (u) {
+      unitId = u[1];
+      continue;
+    }
+    if (unitId === undefined || !line.includes("<cooldowns>")) continue;
+    const kit = new Map<string, number>();
+    for (const e of line.matchAll(
+      /(?:<cooldowns>|, )([^,[\]<]+?) \[[^\]]*?lasts (?:[\d.]+–)?([\d.]+)s\]/g,
+    ))
+      kit.set(e[1]!.trim(), Number(e[2]));
+    out.set(unitId, kit);
+    unitId = undefined;
+  }
+  return out;
+}
+
 /** The aura APPLIED that KILL ATTEMPTS attributes and the `[ENEMY DEF]` line
  * both render from the same log instant, but one is floored from the aura
  * event and the other from a paired cast ≤ 1.5 s away (externals), so the
@@ -4226,6 +4265,7 @@ export function checkEnemyDefRefConsistency(lines: string[]): string[] {
   if (!lines.some((l) => ENEMY_DEF_LEGEND.test(l))) return [];
   const idOf = unitIdsByName(lines);
   const defs = enemyDefLinesOf(lines);
+  const lifetimes = kitLifetimesById(lines);
   const failures: string[] = [];
   lines.forEach((line, i) => {
     const imm = KILL_ATTEMPT_IMMUNITY_UP_SINCE.exec(line);
@@ -4261,15 +4301,25 @@ export function checkEnemyDefRefConsistency(lines: string[]): string[] {
       if (!spell) continue;
       const lo = up ? Number(up[1]) * 60 + Number(up[2]) : spanFromS;
       const hi = up ? lo : spanToS;
-      const hit = defs.some(
-        (d) =>
-          d.spell === spell &&
-          (targetId === undefined ||
-            d.onId === undefined ||
-            d.onId === targetId) &&
-          d.atS >= lo - ENEMY_DEF_PAIR_SLACK_S &&
-          d.atS <= hi + ENEMY_DEF_PAIR_SLACK_S,
-      );
+      const hit = defs.some((d) => {
+        if (d.spell !== spell) return false;
+        if (
+          targetId !== undefined &&
+          d.onId !== undefined &&
+          d.onId !== targetId
+        )
+          return false;
+        // an area save reaches the unit inside its lifetime after the press
+        // (`kitLifetimesById`); else the line's own instant
+        const reachS =
+          d.areaCasterId !== undefined
+            ? (lifetimes.get(d.areaCasterId)?.get(spell) ?? 0)
+            : 0;
+        return (
+          d.atS >= lo - ENEMY_DEF_PAIR_SLACK_S - reachS &&
+          d.atS <= hi + ENEMY_DEF_PAIR_SLACK_S
+        );
+      });
       if (!hit)
         failures.push(
           `line ${i + 1}: KILL ATTEMPTS attributes "${spell}" in [${fmtTime(lo)}–${fmtTime(hi)}] but no [ENEMY DEF] line names it there on that unit: "${line.trim()}"`,

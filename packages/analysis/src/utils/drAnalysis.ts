@@ -37,8 +37,10 @@ import {
   officialDurationS,
   supersededAuraBreaks,
 } from "./auraIntervals";
+import { ccFullDurationForCaster } from "./ccDuration";
 import { specToString } from "./cooldowns";
 import { logIsFrom } from "./logEra";
+import { roundEndMs, stillOnAtRoundEnd } from "./roundEnd";
 import { ccMechanicOf, STUNNED_MECHANIC } from "./spellMechanics";
 import { summonOwnerById } from "./summonOwner";
 
@@ -940,6 +942,12 @@ export interface IOutgoingCCApplication {
   casterName: string;
   casterSpec: string;
   drInfo: IDRInfo;
+  /** still on at the round's end (`roundEndMs`), so cut there — what the
+   * `[CC ON ENEMY]` line's `still on them when the round ended` states; its
+   * `durationSeconds` stops at the round's end, so a reader cannot tell it
+   * from a control that ended on that ms (F19 605 gate: a Binding Shot the
+   * round ended on lost its missed-sync `endedBy=the round's end`) */
+  cutByRoundEnd?: true;
 }
 
 export interface IOutgoingCCChain {
@@ -975,6 +983,10 @@ export function analyzeOutgoingCCChains(
     friendlies.map((f) => [f.id, specToString(f.spec)]),
   );
   const matchStartMs = combat.startTime;
+  // the round's end (`roundEndMs`): an application after it is in no round,
+  // one still on then is cut there (codex R6C-06 #4: a Solo Shuffle chain ran
+  // to the log's end, past the ending death)
+  const roundEnd = roundEndMs(combat);
 
   // Target filter: Player type + belongs to the passed second-arg collection
   // (id-set membership), NOT a hardcoded `reaction === Hostile` check (#24).
@@ -1016,7 +1028,11 @@ export function analyzeOutgoingCCChains(
       const drOnly = new Set<IOutgoingCCApplication>();
 
       // Helper: close a pending CC entry and push it to applications + history
-      const closePending = (key: string, removeMs: number) => {
+      const closePending = (
+        key: string,
+        removeMs: number,
+        noRemoved?: boolean,
+      ) => {
         const p = pending.get(key);
         if (!p) return;
         pending.delete(key);
@@ -1024,7 +1040,10 @@ export function analyzeOutgoingCCChains(
 
         const spellId = key.split(":")[0];
         if (!spellId) return;
-        const durationSeconds = (removeMs - p.applyMs) / 1000;
+        if (p.applyMs >= roundEnd) return;
+        const cutByRoundEnd = stillOnAtRoundEnd(removeMs, noRemoved, roundEnd);
+        const durationSeconds =
+          (Math.min(removeMs, roundEnd) - p.applyMs) / 1000;
 
         // DR is assigned below, in APPLY order, once every interval is closed.
         const app: IOutgoingCCApplication = {
@@ -1039,6 +1058,7 @@ export function analyzeOutgoingCCChains(
             level: "Full",
             sequenceIndex: 0,
           },
+          ...(cutByRoundEnd ? { cutByRoundEnd: true as const } : {}),
         };
         applications.push(app);
         if (reflected) drOnly.add(app);
@@ -1168,16 +1188,24 @@ export function analyzeOutgoingCCChains(
         const caster =
           friendlies.find((f) => f.id === p.srcId) ??
           allUnits.find((u) => u.id === p.srcId);
-        const officialS = officialDurationS(
-          key.split(":")[0] ?? "",
-          caster,
-          p.applyMs,
-        );
+        const spellId = key.split(":")[0] ?? "";
+        // …and when that length is not known (a Kidney Shot with no combo
+        // points read), the [CC ON ENEMY] builder's own cap
+        // (`ccFullDurationForCaster`, its `pendingEnd`) — so the two say
+        // the same about the round's end (codex 20-F19-06: the log's end
+        // read as the cut there, a 15 s cap here)
+        const fullS =
+          officialDurationS(spellId, caster, p.applyMs) ??
+          ccFullDurationForCaster(spellId, caster) ??
+          null;
+        // closePending cuts it at the round's end, and says so — the log
+        // never closed it
         closePending(
           key,
-          officialS === null
+          fullS === null
             ? combat.endTime
-            : Math.min(combat.endTime, p.applyMs + officialS * 1000),
+            : Math.min(combat.endTime, p.applyMs + fullS * 1000),
+          true,
         );
       }
 

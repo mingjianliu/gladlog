@@ -4458,3 +4458,31 @@ unconditional verdict for melee and reads as its 30 % wall (kill-live-gated) for
 spells; Transcendence: Transfer prints an `[ENEMY UTILITY]` line. 605 /
 second-corpus capture: candidates and gates unchanged; `[HEALER EXPOSURE]` Rake
 mentions 1,836 → 822 on the second corpus.
+
+v461 (2026-10-27, F19 — fixes from the codex reader inventory, approved by the
+user on 2026-10-27): every reader of "this round" stops at a Solo Shuffle
+round's ending death (`roundEndMs`): the cooldown ledger, cast bars, CC breaks,
+outgoing CC chains, HEALER TRAINED, aura uptime, kick-eaten's post-kick window
+and CC USE; a death's options leave out a save the victim was locked out of just
+before the death (Forbearance, Hypothermia — `lockoutDebuffStopsPressAtDeath`)
+or that does not cover what was killing them (`saveCoversPressureOn`), and take
+an owned Blessing of Spellwarding; enemy pets and totems are enemy sources for
+CC USE, PEEL OPTIONS and summon reach; a friendly's Spirit Link Totem is a
+stacked wall, named for its shaman; Grounding is credited by the totem that was
+hit; cast/aura aliases read as one press (Blur's second charge splits, Lightning
+Lasso's channel phase, a re-announced Guardian Spirit, Greater Invisibility's
+two success rows); a kick lockout does not stop a cast DB2 says a silence does
+not prevent; a control that ran its official length was not ended by a trinket
+pressed in its last ms; deep-dive and desktop lows read the trough; an enemy
+offensive aura with no REMOVED lasts its official length; charge flips are keyed
+on whole ms; [CONTESTED] / [OPPORTUNITY] need the CC ready and in reach in the
+same second; a folded lock the owner set up is the missed-sync row's owner part
+(`alsoHeldSetupBy`, with a legend sentence); the kick-eaten cast-time median
+reads the recorder's failure rows; `checkEnemyDefRefConsistency` reads an
+`(area)` line as reaching its target until the press plus the caster kit's
+`lasts` (user ruling 2026-10-27, option A). 605 / second-corpus capture
+(PV460 → batch): cd-hoarded +7 / +5, cd-waste +9 / +45, external-unused −23 /
+−32, missed-cleanse +3 / +9, missed-sync-window +11 / +27, crisis-no-response
+0 / −1; gates unchanged on 605; on the second corpus
+`checkSelfOnlyDefensiveClaims` 28 → 25 and `checkEnemyDefRefConsistency`
+3 → 0.

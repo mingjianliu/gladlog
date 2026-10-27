@@ -123,9 +123,10 @@ import {
   pvpTrinketUses,
   trinketUseRemainingSeconds,
 } from "./pvpTrinketUses";
+import type { CastFailedEvent } from "./rawStreams";
 import { fmtTime, fmtWholeSeconds } from "./renderGrid";
 import { rootIntervalsOf } from "./rootReachability";
-import { roundEndMs } from "./roundEnd";
+import { roundEndMs, stillOnAtRoundEnd } from "./roundEnd";
 import {
   baseCastSeconds,
   ccMechanicOf,
@@ -1611,6 +1612,12 @@ export interface IInterruptInstance {
    * `firstDeathMs` is the one dead-at source. Absent when the player outlived
    * the window. */
   diedAfterKickS?: number;
+  /** The round ended (`roundEndMs`: a Solo Shuffle round's ending death)
+   * this many seconds after the kick, inside the window or the lock: the
+   * window ends there, as at the player's own death (codex R6C-14 #1:
+   * 5b724629 r5, a round over 0.41 s after the kick read "idle for 5s").
+   * Absent when the round outlived the window, or the player died first. */
+  roundEndedAfterKickS?: number;
   /** `switched` only: the cast that actually made the classification
    * "switched" — the first one in the window on a disjoint school. It is NOT
    * always `firstActionDelayS`'s cast: a same-school cast can come first
@@ -2135,9 +2142,15 @@ export function ccRemovalCause(
   );
   if (broken !== null) return broken;
   const window = { applyMs, removeMs };
-  const trinket = pvpTrinketUses(holder).find((u) =>
-    castEndedCcWindow(window, u.atMs),
-  );
+  // a control that ran its official length ended by itself, whatever was
+  // pressed in that millisecond — the break branch's test below (codex
+  // R6C-13 #1: a 6.004 s Howl of Terror of 6 s, a Medallion 8 ms after it,
+  // read `ended by their PvP trinket` beside the Psychic Scream that press
+  // did break)
+  const trinket =
+    officialEndMs !== undefined && removeMs >= officialEndMs
+      ? undefined
+      : pvpTrinketUses(holder).find((u) => castEndedCcWindow(window, u.atMs));
   if (trinket)
     return {
       kind: "trinket",
@@ -2909,6 +2922,12 @@ export function analyzePlayerCCAndTrinket(
   // trinket windows and DR chains all blind downstream. The caller passes enemy
   // pet units in to complete the src set.
   enemyPets: ICombatUnit[] = [],
+  /** the recorder's SPELL_CAST_FAILED rows (`RawStreams.castFailed`), when
+   * the caller has them: the cast-time median reads the player's own, as
+   * the cancel ledger does (codex R6C-02 #2: without them a bar stopped at
+   * 41.56 s paired with a SUCCESS at 44.32 s and the median read 1.032 s
+   * for 1.013 s) */
+  castFailed?: readonly CastFailedEvent[],
 ): IPlayerCCTrinketSummary {
   const enemyIds = new Set([...enemies, ...enemyPets].map((u) => u.id));
   const matchStartMs = combat.startTime;
@@ -3360,7 +3379,7 @@ export function analyzePlayerCCAndTrinket(
   > = ccWindows
     .filter((w) => w.applyMs < roundEnd)
     .map((w) =>
-      w.removeMs > roundEnd || (w.noRemoved && w.removeMs >= roundEnd)
+      stillOnAtRoundEnd(w.removeMs, w.noRemoved, roundEnd)
         ? { ...w, removeMs: roundEnd, stillOnAtRoundEnd: true as const }
         : w,
     );
@@ -3815,7 +3834,7 @@ export function analyzePlayerCCAndTrinket(
     .map((w) => ({
       atSeconds: (w.applyMs - matchStartMs) / 1000,
       durationSeconds: (Math.min(w.removeMs, roundEnd) - w.applyMs) / 1000,
-      ...(w.removeMs > roundEnd || (w.noRemoved && w.removeMs >= roundEnd)
+      ...(stillOnAtRoundEnd(w.removeMs, w.noRemoved, roundEnd)
         ? { stillOnAtRoundEnd: true as const }
         : {}),
       spellId: w.spellId,
@@ -3847,7 +3866,7 @@ export function analyzePlayerCCAndTrinket(
       // …or an unclosed one whose estimate the round's end capped (codex
       // 60-POSTHOC-10b #4: a Dismantle at 29 s, the round ending at 30, read
       // "1s" — the hard-CC builder's `noRemoved` reading)
-      ...(w.removeMs > roundEnd || (w.noRemoved && w.removeMs >= roundEnd)
+      ...(stillOnAtRoundEnd(w.removeMs, w.noRemoved, roundEnd)
         ? { stillOnAtRoundEnd: true as const }
         : {}),
       // its full length as it landed — the caster's talents and an
@@ -3874,7 +3893,7 @@ export function analyzePlayerCCAndTrinket(
     playerBars ??= castBarOutcomesOf({
       unit: player,
       startMs: matchStartMs,
-      failed: [],
+      failed: (castFailed ?? []).filter((e) => e.unitGuid === player.id),
     });
     return completedBarMedianS(playerBars, spellId);
   };
@@ -3978,13 +3997,21 @@ export function analyzePlayerCCAndTrinket(
     const successFloorMs = castStartEvent
       ? castStartEvent.logLine.timestamp
       : action.timestamp - CHANNEL_LOOKBACK_MS;
+    // the channel's press, under its own id or a cast whose effect it is
+    // (codex R6C-02 #1: Lightning Lasso is cast as 305483 and kicked as its
+    // channel 305485 — `channelStopAtRemoval` already reads the pair)
+    const channelPressIds = new Set([
+      interruptedSpellId,
+      ...castsOfEffectAura(interruptedSpellId),
+    ]);
     const channelStart = !CHANNELED_SPELL_IDS.has(interruptedSpellId)
       ? undefined
       : player.spellCastEvents
           .filter(
             (e) =>
               e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
-              e.spellId === interruptedSpellId &&
+              !!e.spellId &&
+              channelPressIds.has(e.spellId) &&
               e.logLine.timestamp >= successFloorMs &&
               e.logLine.timestamp <= action.timestamp,
           )
@@ -4394,6 +4421,7 @@ export function analyzePlayerCCAndTrinket(
       ? (combat.units as ICombatUnit[])
       : (Object.values(combat.units ?? {}) as ICombatUnit[]);
     const deathS = (firstDeathMs(player) - matchStartMs) / 1000;
+    const roundEndS = (roundEndMs(combat) - matchStartMs) / 1000;
     for (const inst of interruptInstances) {
       // a death in the kick's own millisecond closes the window too (codex
       // review: 0 s, every later press was by a dead player). Up to the
@@ -4408,6 +4436,14 @@ export function analyzePlayerCCAndTrinket(
             Math.max(POST_KICK_WINDOW_S, inst.lockoutDurationSeconds)
       )
         inst.diedAfterKickS = deathS - inst.atSeconds;
+      if (
+        inst.diedAfterKickS === undefined &&
+        roundEndS >= inst.atSeconds &&
+        roundEndS <=
+          inst.atSeconds +
+            Math.max(POST_KICK_WINDOW_S, inst.lockoutDurationSeconds)
+      )
+        inst.roundEndedAfterKickS = roundEndS - inst.atSeconds;
       try {
         // WO3 Part 2 (r1008-128): "could not act at all" — only an
         // interval that stops EVERY spell the player cast this round
@@ -4456,7 +4492,11 @@ export function analyzePlayerCCAndTrinket(
       // readings run over the whole lock — past the 5 s `after` window for a
       // longer lock, as `startedBy` (cast bars) and the printed list do
       const inLock = castTimes.filter(
-        (c) => c.t > inst.atSeconds && c.t < lockEndS && !isReplay(c),
+        (c) =>
+          c.t > inst.atSeconds &&
+          c.t < lockEndS &&
+          c.t < roundEndS &&
+          !isReplay(c),
       );
       const endedBy =
         lockedMask === undefined
@@ -4517,6 +4557,7 @@ export function analyzePlayerCCAndTrinket(
         (c) =>
           c.t > inst.atSeconds &&
           c.t <= inst.atSeconds + POST_KICK_WINDOW_S &&
+          c.t < roundEndS &&
           !isReplay(c),
       );
       if (after.length === 0) {
@@ -5321,7 +5362,16 @@ export function analyzePlayerCCAndTrinket(
         };
         if (!landedOnPlayer(cast)) {
           const castTimeMs = cast.logLine.timestamp;
-          if (
+          // the totem the spell went into, when the log names it: its owner
+          // is the shaman credited (codex R6C-14 #2, c67114fb r1: a Mind
+          // Control into one shaman's totem credited both shamans, each with
+          // a Grounding pressed inside 3.5 s); else the press timing
+          const totemOwner = g.totemId
+            ? unitsById.get(g.totemId)?.ownerId
+            : undefined;
+          if (totemOwner !== undefined) {
+            if (totemOwner !== player.id) continue;
+          } else if (
             !ownGroundingCastsMs.some(
               (ts) =>
                 ts <= castTimeMs &&

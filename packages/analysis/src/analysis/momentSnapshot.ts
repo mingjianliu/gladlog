@@ -419,7 +419,14 @@ export function buildMomentSnapshotItems(
   for (const u of players) {
     const hpStart = getHpPercentAtTime(u, t0, matchStartMs);
     const hpEnd = getHpPercentAtTime(u, t1, matchStartMs);
-    const hpMin = getLowestHpPercentInWindow(u, t0, t1, matchStartMs);
+    // the window's low includes its own ends' readings: a minimum above the
+    // start it pairs with is no minimum (codex R6C-07 #5: hpStart 85 from
+    // the 16.534 sample, hpMin 86 from in-window samples only)
+    const inWindowMin = getLowestHpPercentInWindow(u, t0, t1, matchStartMs);
+    const ends = [hpStart, hpEnd, inWindowMin].filter(
+      (x): x is number => x !== null,
+    );
+    const hpMin = ends.length > 0 ? Math.min(...ends) : null;
     if (hpStart === null && hpEnd === null && hpMin === null) continue;
     const facts: Record<string, string> = {
       t0: String(t0),

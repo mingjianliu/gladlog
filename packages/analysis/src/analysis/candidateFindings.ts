@@ -85,6 +85,7 @@ import {
   isTeamSaveCD,
   kitSpellReadyAt,
   lockoutDebuffStopsPress,
+  lockoutDebuffStopsPressAtDeath,
   lowestHpTroughInEventSpan,
   playerTalentIdSets,
   REACTION_WINDOW_S,
@@ -123,6 +124,7 @@ import {
 } from "../utils/externalDamage";
 import { forcedMovesText } from "../utils/forcedDisplacement";
 import { detectHealingGaps, type IHealingGap } from "../utils/healingGaps";
+import { documentRecordsAttackSpell } from "../utils/incomingPressure";
 import {
   attemptIntoTrinketEvents,
   extractKillAttempts,
@@ -151,12 +153,14 @@ import {
   type IRootInstance,
   rootReachProvenFact,
 } from "../utils/rootReachability";
+import { buildRosterSides } from "../utils/rosterSide";
 import {
   playableEndMs,
   roundEndMs as roundEndOf,
   shuffleRoundEndMs,
   threesDecidedMs,
 } from "../utils/roundEnd";
+import { isUnsilenceableCast } from "../utils/spellMechanics";
 import { RANGE_HITBOX_SLACK_YD, spellReachToAccuse } from "../utils/spellRange";
 import {
   isCasterCentredSpell,
@@ -176,6 +180,7 @@ import {
   backlashDispelWindowEvents,
 } from "./candidates/backlashDispel";
 import { burstWindowResponseEvents } from "./candidates/burstWindowResponse";
+import { saveCoversPressureOn } from "./candidates/cooldownTiming";
 import {
   CD_HOARD_RESPONSE_S,
   cdHoardedEvents,
@@ -1771,6 +1776,7 @@ export function kickEatenEvents(
         | "castStartS"
         | "castWindowS"
         | "diedAfterKickS"
+        | "roundEndedAfterKickS"
         | "sourceDistSampleGapS"
         | "nearestKickerSampleGapS"
         | "kickLandedFromYd"
@@ -2443,6 +2449,7 @@ function allRejectedPressesAfterKick(
   k: {
     atSeconds: number;
     diedAfterKickS?: number;
+    roundEndedAfterKickS?: number;
     lockoutDurationSeconds?: number;
   },
   ownerId: string,
@@ -2477,17 +2484,23 @@ function allRejectedPressesAfterKick(
 function pressesInPostKickWindow(
   rawStreams: RawStreams,
   ownerId: string,
-  k: { atSeconds: number; diedAfterKickS?: number },
+  k: {
+    atSeconds: number;
+    diedAfterKickS?: number;
+    roundEndedAfterKickS?: number;
+  },
   windowS: number = POST_KICK_WINDOW_S,
 ): CastFailedEvent[] {
   // in whole milliseconds, like the lockout boundary below: `kick + (death −
   // kick)` is one ulp past the death when the subtraction was inexact (kick
   // 0.177 s, death 0.838 s → 0.8380000000000001), and a "You are dead"
   // logged in the death's own millisecond passed the strict test
+  // …and at the round's end (`roundEndedAfterKickS`, codex R6C-14 #1)
+  const endAfterS = k.diedAfterKickS ?? k.roundEndedAfterKickS;
   const deathMs =
-    k.diedAfterKickS === undefined
+    endAfterS === undefined
       ? Infinity
-      : Math.round((k.atSeconds + k.diedAfterKickS) * 1000);
+      : Math.round((k.atSeconds + endAfterS) * 1000);
   return castFailedInWindow(
     rawStreams,
     ownerId,
@@ -2502,6 +2515,7 @@ function rejectedPressesAfterKick(
   k: {
     atSeconds: number;
     diedAfterKickS?: number;
+    roundEndedAfterKickS?: number;
     lockoutDurationSeconds?: number;
   },
   ownerId: string,
@@ -2604,6 +2618,7 @@ export function postKickFact(
         | "switchWasChanneled"
         | "firstActionSpellName"
         | "diedAfterKickS"
+        | "roundEndedAfterKickS"
       >
     >,
   everyRejected: CastFailedEvent[],
@@ -2640,6 +2655,9 @@ export function postKickFact(
     : undefined;
   const isOwnCd = (h: CastFailedEvent) => {
     if (lockedMask === undefined) return false;
+    // a cast no lockout prevents (DB2's silence bit, `intervalBlocksSpell`'s
+    // reading — codex R6C-03 #2: Judgment ×5 "rejected inside the lockout")
+    if (isUnsilenceableCast(String(h.spellId))) return true;
     const m = spellSchoolMask(String(h.spellId));
     // the classifier's predicate: a spell with one school still open is not
     // locked, so its "not ready" is its own cooldown or the GCD (F-K7b:
@@ -2770,9 +2788,12 @@ function postKickCore(
     // A death past the 5 s (inside a longer lock) bounds the press list only:
     // the idle reading itself covers 5 s (work order 2026-10-15 #4)
     const span =
-      k.diedAfterKickS === undefined || k.diedAfterKickS > POST_KICK_WINDOW_S
-        ? "for 5s after the kick"
-        : `before dying ${k.diedAfterKickS.toFixed(1)}s after the kick`;
+      k.diedAfterKickS !== undefined && k.diedAfterKickS <= POST_KICK_WINDOW_S
+        ? `before dying ${k.diedAfterKickS.toFixed(1)}s after the kick`
+        : k.roundEndedAfterKickS !== undefined &&
+            k.roundEndedAfterKickS <= POST_KICK_WINDOW_S
+          ? `before the round ended ${k.roundEndedAfterKickS.toFixed(1)}s after the kick`
+          : "for 5s after the kick";
     // The idle form covers the whole window, so a "not ready" press after
     // the school was free again is stated apart: the legend says the lock's
     // rejects were "refused while the school was locked" (work order
@@ -4194,7 +4215,13 @@ function teamPlayEvents(
   }
 
   try {
-    const cc = analyzePlayerCCAndTrinket(owner, enemies, combat, enemyPets);
+    const cc = analyzePlayerCCAndTrinket(
+      owner,
+      enemies,
+      combat,
+      enemyPets,
+      rawStreams?.available ? rawStreams.castFailed : undefined,
+    );
     // cc-locked 已退役(GH #14,用户裁定 2026-08-19,v28):机会归一化后转化率
     // 反向(能解时真解了:胜 23.2% vs 负 27.9%,−4.7pp;赢家更常全程不交徽章,
     // 有机会零解控回合 胜 23.4% vs 负 16.2%),出面事件 98.5% 落在两个无证据
@@ -4601,7 +4628,13 @@ function extractDeathSetups(
   const ccOf = (u: any) => {
     let v = ccMemo.get(u.id);
     if (!v) {
-      v = analyzePlayerCCAndTrinket(u, enemies, combat, enemyPets);
+      v = analyzePlayerCCAndTrinket(
+        u,
+        enemies,
+        combat,
+        enemyPets,
+        rawStreams?.available ? rawStreams.castFailed : undefined,
+      );
       ccMemo.set(u.id, v);
     }
     return v;
@@ -4731,6 +4764,19 @@ function extractDeathSetups(
                   toS,
                   Number(spellId),
                 ).length > 0,
+              pressable: (spellId: string) =>
+                !lockoutDebuffStopsPressAtDeath(
+                  ownerUnit,
+                  spellId,
+                  u,
+                  units,
+                  deathT,
+                  start,
+                ) &&
+                saveCoversPressureOn(spellId, u, start + deathT * 1000, {
+                  sides: buildRosterSides(units),
+                  recordsAttackSpell: documentRecordsAttackSpell(units),
+                }),
               // W1f: the external must reach the victim at some sampled
               // second of the free window — a zone external by its radius
               // around the owner, a targeted one by its cast reach; no

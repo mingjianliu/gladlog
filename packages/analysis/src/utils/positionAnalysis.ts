@@ -753,6 +753,7 @@ export function computeOwnerPositionEvents(params: {
    *  the enemy players alone are used. */
   combat: Pick<AtomicArenaCombat, "startTime" | "endTime"> & {
     units?: Readonly<Record<string, ICombatUnit>>;
+    startInfo?: { bracket?: string };
   };
   burstWindows: readonly IAlignedBurstWindow[];
   ownerCooldowns: IMajorCooldownInfo[];
@@ -814,7 +815,10 @@ export function computeOwnerPositionEvents(params: {
     spikeWindows,
   } = params;
   const matchStartMs = combat.startTime;
-  const durationSeconds = (combat.endTime - combat.startTime) / 1000;
+  // the round's end (`roundEndMs`): a Solo Shuffle round's ending death,
+  // not the log's end ~2 s later (codex R6C-06 #5: HEALER TRAINED swept the
+  // post-death tail and met its 8 s door on it)
+  const durationSeconds = (roundEndMs(combat) - combat.startTime) / 1000;
   const events: IPositionEvent[] = [];
 
   if ((owner.advancedActions ?? []).length === 0) return [];

@@ -584,4 +584,30 @@
  *  candidates unchanged, gates unchanged; [HEALER EXPOSURE] Rake mentions
  *  1,836 → 822 on wide.
  */
-export const PROMPT_VERSION = 460;
+/*
+ * v461 (2026-10-27, F19 — the codex reader inventory, user approval
+ *  2026-10-27): every reader of "this round" stops at the Solo Shuffle
+ *  round's ending death (cooldown ledger, cast bars, CC breaks, outgoing CC
+ *  chains, HEALER TRAINED, aura uptime, the post-kick window, CC USE);
+ *  death options drop a save the victim was locked out of (Forbearance,
+ *  Hypothermia) or that does not cover what killed them, and take an owned
+ *  Blessing of Spellwarding; pets and totems are enemy sources for CC USE,
+ *  PEEL OPTIONS and summon reach; a friendly's Spirit Link Totem is a
+ *  stacked wall named for its shaman; Grounding is credited by the totem
+ *  hit; cast/aura aliases (Blur's second press, Lasso's channel phase, a
+ *  re-announced Guardian Spirit, Greater Invisibility's two rows); a lockout
+ *  does not stop an unsilenceable cast; a control that ran its length was
+ *  not ended by a trinket pressed in its last ms; troughs on the deep dive
+ *  and the desktop; an unclosed enemy offensive aura lasts its official
+ *  length; charge flips keyed on whole ms; [CONTESTED] needs the CC ready
+ *  and in reach in one second; a folded lock the owner set up is the
+ *  missed-sync row's owner part (`alsoHeldSetupBy`); the kick-eaten
+ *  cast-time median reads the recorder's failure rows; checkEnemyDefRef
+ *  reads an area save until press + the caster kit's `lasts` (user ruling
+ *  A). 605 / wide (PV460 → batch): cd-hoarded +7 / +5, cd-waste +9 / +45,
+ *  external-unused −23 / −32, missed-cleanse +3 / +9, missed-sync-window
+ *  +11 / +27, crisis-no-response 0 / −1; gates unchanged on 605, wide
+ *  checkSelfOnlyDefensiveClaims 28 → 25 and checkEnemyDefRefConsistency
+ *  3 → 0.
+ */
+export const PROMPT_VERSION = 461;

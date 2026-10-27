@@ -37,10 +37,9 @@
 import type { AtomicArenaCombat, ICombatUnit } from "@gladlog/parser-compat";
 
 import { abilityProfile } from "../data/abilityProfile";
-import { getEnglishSpellName } from "../data/spellEffectData";
 import { effectAurasOfCast, effectAuraViaName } from "../data/castEffectAuras";
+import { getEnglishSpellName } from "../data/spellEffectData";
 import { ccSpellIds } from "../data/spellTags";
-import { KW_UNTARGETABLE_AURA_IDS, untargetableEndS } from "./enemyDefensives";
 import { buildAuraIntervals, type IAuraInterval } from "./auraIntervals";
 import { cannotCastIntervalsForSpells } from "./cannotCastIntervals";
 import { castingLockIntervalsOf } from "./castingLocks";
@@ -65,6 +64,7 @@ import {
   getDRCategory,
   getDRLevel,
 } from "./drAnalysis";
+import { KW_UNTARGETABLE_AURA_IDS, untargetableEndS } from "./enemyDefensives";
 import {
   distanceBetween,
   getUnitPositionAtTime,

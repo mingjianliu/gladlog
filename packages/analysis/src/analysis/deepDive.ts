@@ -496,8 +496,11 @@ export function buildDeepDivePack(
           // the model can use it to say "beaten from full HP down to X".
           if (e.ownerHpStartPct != null)
             f.hpStart = String(Math.round(e.ownerHpStartPct));
-          if (e.ownerHpMinPct != null)
-            f.hpMin = String(Math.round(e.ownerHpMinPct));
+          // the printed low is the window's true trough (`ownerHpLowPct`,
+          // signed exception (2) — the prompt's STAYED IN prints it; codex
+          // R6C-01 #4: 15 % grid vs 8 %); the cost test stays on the grid
+          const low = e.ownerHpLowPct ?? e.ownerHpMinPct;
+          if (low != null) f.hpMin = String(Math.round(low));
           if (e.ownerDefensiveAvailable !== undefined)
             f.defAvail = e.ownerDefensiveAvailable ? "yes" : "no";
         }

@@ -19,6 +19,7 @@ import {
   matchPendingCcKey,
   reAppliedIsSameApplication,
 } from "./drAnalysis";
+import { roundEndMs } from "./roundEnd";
 
 /**
  * CC-break statistics (user request, 2026-08-02). The determination uses no
@@ -220,7 +221,11 @@ export function oppressingRoarOnAtMs(
 export function analyzeCcBreaks(
   friends: ICombatUnit[],
   enemies: ICombatUnit[],
-  combat: { startTime: number; endTime: number },
+  combat: {
+    startTime: number;
+    endTime: number;
+    startInfo?: { bracket?: string };
+  },
   // Attribute pet breaks to the owner (same as B45): CC broken by Infernal /
   // pet DoTs accounts for ~8% of the squander quadrant; if these are not
   // passed in, those events fall into the "other quadrant" and never reach the
@@ -242,6 +247,10 @@ export function analyzeCcBreaks(
 
   const events: ICcBreakEvent[] = [];
   let rootBreakCount = 0;
+  // the round's end (`roundEndMs`: a Solo Shuffle round's ending death):
+  // nothing at or after it is in the round (codex R6C-06 #1: a damage tick
+  // 0.3 s past the deciding death "broke" a Psychic Scream on the desktop)
+  const roundEnd = roundEndMs(combat, [...friends, ...enemies]);
 
   for (const holder of [...friends, ...enemies]) {
     const holderIsFriendly = friendlyIds.has(holder.id);
@@ -273,6 +282,7 @@ export function analyzeCcBreaks(
     )) {
       const spellId = aura.spellId;
       if (!spellId) continue;
+      if (aura.timestamp >= roundEnd) continue;
       const ev = aura.logLine.event;
       if (roar.step(aura)) continue;
       const cc = isCcType(spellId);

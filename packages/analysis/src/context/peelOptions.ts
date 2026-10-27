@@ -38,11 +38,14 @@
  */
 import type { AtomicArenaCombat, ICombatUnit } from "@gladlog/parser-compat";
 
+import { enemySourceIds } from "../utils/cannotCastIntervals";
 import { isControlCast } from "../utils/castMissRows";
 import { ccSamplerFor, pvpTrinketReadyAtSecond } from "../utils/ccTargetState";
 import type { IPlayerCCTrinketSummary } from "../utils/ccTrinketAnalysis";
 import { extractMajorCooldowns } from "../utils/cooldowns";
+import { incomingPressureEvents } from "../utils/incomingPressure";
 import { fmtTime } from "../utils/renderGrid";
+import { buildRosterSides } from "../utils/rosterSide";
 import { isInstantCast } from "../utils/spellMechanics";
 
 /** How far back from a death the window reaches (seconds). */
@@ -84,6 +87,7 @@ export function peelOptionsForDeaths(params: {
   const allUnits = params.allUnits ?? Object.values(combat.units);
   const start = combat.startTime;
   const enemyIds = new Set(enemies.map((u) => u.id));
+  const sides = buildRosterSides(Object.values(combat.units));
   const enemyPetOwner = new Map<string, string>();
   for (const u of allUnits)
     if (u.ownerId && enemyIds.has(u.ownerId))
@@ -104,10 +108,13 @@ export function peelOptionsForDeaths(params: {
     // would otherwise read 60 %).
     const dmg = new Map<string, number>();
     let total = 0;
-    for (const e of victim.damageIn ?? []) {
+    // the shared incoming-damage reading (`incomingPressureEvents`: landed
+    // and absorbed, redistribution out — codex R6C-07 #3: a friendly
+    // Tempered in Battle sat in the denominator, 49 % for 50.1 %)
+    for (const e of incomingPressureEvents(victim as ICombatUnit, sides)) {
       const t = (e.timestamp - start) / 1000;
       if (t < tD - PEEL_LOOKBACK_S || t > tD) continue;
-      const a = Math.abs(e.effectiveAmount ?? e.amount ?? 0);
+      const a = e.amount;
       total += a;
       const src = enemyIds.has(e.srcUnitId)
         ? e.srcUnitId
@@ -146,7 +153,8 @@ export function peelOptionsForDeaths(params: {
           combat,
           owner: o,
           cd,
-          enemyIds,
+          // players AND summons (`enemySourceIds`, codex R6C-03 #1)
+          enemyIds: enemySourceIds(enemies, allUnits),
           renderedCcOf: (name) =>
             enemyCC.find((x) => x.playerName === name)?.ccInstances ?? [],
         });

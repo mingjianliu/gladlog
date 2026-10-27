@@ -152,6 +152,7 @@ export function deriveFocusFire(
     const units = Object.values(legacy.units);
     const players = units.filter((u) => u.info);
     const playerIds = new Set(players.map((p) => p.id));
+    const reactionOf = new Map(players.map((p) => [p.id, p.reaction]));
     // Pets/guardians → owner (focus fire counts heads by player)
     const ownerOf = new Map<string, string>();
     for (const u of units) {
@@ -164,6 +165,10 @@ export function deriveFocusFire(
       for (const d of victim.damageIn) {
         const src = ownerOf.get(d.srcUnitId) ?? d.srcUnitId;
         if (!playerIds.has(src) || src === victim.id) continue;
+        // a hostile player only — a teammate's redistribution (Tempered in
+        // Battle, Spirit Link) is no attacker (codex R6C-07 #4; the side is
+        // the roster's, COMBATANT_INFO-team based since PV458)
+        if (reactionOf.get(src) === victim.reaction) continue;
         if (Math.abs(d.effectiveAmount) <= 0) continue;
         const sec = Math.floor((d.logLine.timestamp - legacy.startTime) / 1000);
         let set = bySecond.get(sec);

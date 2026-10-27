@@ -23,7 +23,10 @@ import { LogEvent } from "@gladlog/parser-compat";
 
 import { spellEffectData } from "../data/spellEffectData";
 import { buffFullDurationForCaster } from "./buffDuration";
-import { buildCannotCastIntervals } from "./cannotCastIntervals";
+import {
+  cannotCastIntervalsForSpells,
+  enemySourceIds,
+} from "./cannotCastIntervals";
 import { isHealerSpec, isMeleeSpec } from "./cooldowns";
 import { KW_REACH_YARDS } from "./killWindowFacts";
 import { getUnitPositionAtTime } from "./losAnalysis";
@@ -79,13 +82,34 @@ export function summonReach(
   if (!windows.some((w) => getUnitPositionAtTime(summon, w.t, LOS_SWEEP_GAP_MS)))
     return null;
 
-  const enemyIds = new Set(enemies.map((e) => e.id));
+  // enemy players and their summons (`enemySourceIds`, codex R6C-03 #1: a
+  // pet's lockout fell out), read per spell — only time EVERY spell the
+  // player cast this round was stopped is time they could not reach the
+  // summon (`cannotCastIntervalsForSpells`; a mage under a pet's Arcane lock
+  // still cast Frost / Fire at the totem)
+  const roundUnits = Object.values(combat.units ?? {}) as ICombatUnit[];
+  const enemyIds = enemySourceIds(enemies, roundUnits);
   const zoneId = combat.startInfo?.zoneId;
   let best: ISummonReach["best"] = null;
   for (const f of friends) {
     if (isHealerSpec(f.spec)) continue;
     const melee = isMeleeSpec(f.spec);
-    const blocked = buildCannotCastIntervals(f, enemyIds, enemies);
+    const castIds = [
+      ...new Set(
+        (f.spellCastEvents ?? [])
+          .filter(
+            (c) =>
+              c.logLine.event === LogEvent.SPELL_CAST_SUCCESS && !!c.spellId,
+          )
+          .map((c) => c.spellId!),
+      ),
+    ];
+    const blocked = cannotCastIntervalsForSpells(
+      f,
+      enemyIds,
+      castIds.length > 0 ? castIds : undefined,
+      roundUnits,
+    );
     let ok = 0;
     for (const w of windows) {
       if (isDeadAt(f, w.t)) continue;
