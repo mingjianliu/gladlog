@@ -194,6 +194,9 @@ const within = (list: number[] | undefined, t: number): boolean =>
 
 interface IDispelToClassify {
   srcUnitId: string;
+  /** a pet's owner: its command press (Command Demon's Singe Magic 119905,
+   * the same name as the Imp's 89808) is the press that made the removal */
+  srcOwnerId?: string;
   spellId: string | null | undefined;
   spellName: string | null | undefined;
   timestamp: number;
@@ -220,7 +223,15 @@ export function dispelCameWithOwnCast(
   const nameHit = d.spellName
     ? within(index.byName.get(`${d.srcUnitId}|${d.spellName}`), d.timestamp)
     : false;
-  return idHit || nameHit;
+  // fact5 retest r3 2fd86b1f 2:18 / 3:35: the warlock's Singe Magic
+  // command 1 ms before the Imp's removal read `(passive)`
+  const owner =
+    d.srcOwnerId && !/^0+$/.test(d.srcOwnerId) ? d.srcOwnerId : undefined;
+  const ownerHit =
+    !!owner &&
+    !!d.spellName &&
+    within(index.byName.get(`${owner}|${d.spellName}`), d.timestamp);
+  return idHit || nameHit || ownerHit;
 }
 
 export function classifyDispel(

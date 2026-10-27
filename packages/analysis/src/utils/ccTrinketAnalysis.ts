@@ -1403,9 +1403,23 @@ export function findBrokenDisarm(
         ? { officialEndMs: applyMs + official * 1000 }
         : {}),
       ...(d.stillOnAtRoundEnd ? { noRemoved: true as const } : {}),
+      ...(d.endedByLoggedCause ? { endedByLoggedCause: true as const } : {}),
     };
   });
   return bindBreakToWindow(breakable, castTsMs)?.d;
+}
+
+/** fact5 retest r1 10299a17 / d64022ad: the root a PvP trinket press broke
+ * (a Medallion removes movement impairments too) — the disarm binder over
+ * the root windows, asked after the CC and the disarm ones. 10299a17 0:12:
+ * Mass Entanglement's REMOVED logged in the Medallion's own ms, the line
+ * read `used PvP trinket` with no control. */
+export function findBrokenRoot(
+  instances: IRootInstance[] | undefined,
+  matchStartMs: number,
+  castTsMs: number,
+): IRootInstance | undefined {
+  return findBrokenDisarm(instances ?? [], matchStartMs, castTsMs);
 }
 
 export interface IRootInstance {
@@ -1430,6 +1444,10 @@ export interface IRootInstance {
    * rule — F02b; a root too since A2, 2026-10-24): `durationSeconds` is
    * then landing → round end. */
   stillOnAtRoundEnd?: true;
+  /** a root the log shows another cause ending (a dispel of it, a break —
+   * `ccEndedByLoggedCause`, the CC instances' reading): no trinket press
+   * after it removed it (codex 20-F18-07 #1) */
+  endedByLoggedCause?: true;
 }
 
 /** BACKLOG #36(b): what the player did in the `POST_KICK_WINDOW_S` after
@@ -2739,7 +2757,12 @@ export function lastTrinketPressBefore(
     | "ccInstances"
     | "disarmInstances"
   > &
-    Partial<Pick<IPlayerCCTrinketSummary, "trinketType" | "trinketReadyAt">>,
+    Partial<
+      Pick<
+        IPlayerCCTrinketSummary,
+        "trinketType" | "trinketReadyAt" | "rootInstances"
+      >
+    >,
   atS: number,
   matchStartMs: number,
 ): { atSeconds: number; brokeSpellName?: string } | null {
@@ -2755,7 +2778,8 @@ export function lastTrinketPressBefore(
   const pressMs = matchStartMs + Math.round(last * 1000);
   const broke =
     findBrokenCC(summary.ccInstances, matchStartMs, pressMs) ??
-    findBrokenDisarm(summary.disarmInstances, matchStartMs, pressMs);
+    findBrokenDisarm(summary.disarmInstances, matchStartMs, pressMs) ??
+    findBrokenRoot(summary.rootInstances, matchStartMs, pressMs);
   return {
     atSeconds: last,
     ...(broke ? { brokeSpellName: broke.spellName } : {}),
@@ -3799,6 +3823,10 @@ export function analyzePlayerCCAndTrinket(
       sourceName: w.srcName,
       sourceId: w.srcId,
       sourceSpec: enemySpecMap.get(w.srcId) ?? "Unknown",
+      ...(w.removeMs < roundEnd &&
+      ccEndedByLoggedCause(player, w.spellId, w.applyMs, w.removeMs, w.srcId)
+        ? { endedByLoggedCause: true as const }
+        : {}),
     }))
     .sort((a, b) => a.atSeconds - b.atSeconds);
 

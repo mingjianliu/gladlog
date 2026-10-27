@@ -5,7 +5,10 @@ import {
   LogEvent,
 } from "@gladlog/parser-compat";
 
-import { castAndEffectIds } from "../data/castEffectAuras";
+import {
+  castAndEffectIds,
+  triggeredEffectAurasOfCast,
+} from "../data/castEffectAuras";
 import { SPELL_CATEGORIES as spellsData } from "../data/spellCategories";
 import {
   effectiveCooldownSeconds,
@@ -224,6 +227,7 @@ export function observedEffectEndSeconds(
   onlyDestId?: string,
 ): number | null {
   const ids = castAndEffectIds(castSpellId);
+  const triggered = new Set(triggeredEffectAurasOfCast(castSpellId));
   const mine = auraIndexOf(combat).filter(
     ({ iv, destId }) =>
       ids.has(iv.spellId) &&
@@ -264,11 +268,24 @@ export function observedEffectEndSeconds(
       .filter((m) => m.destId === dest)
       .map((m) => m.iv)
       .sort((a, b) => a.fromS - b.fromS);
-    let first = ivs.findIndex(
-      (iv) =>
-        iv.fromS >= castS - EFFECT_START_BEFORE_S &&
-        iv.fromS <= castS + EFFECT_START_AFTER_S,
-    );
+    const startsAtPress = (iv: (typeof ivs)[number]) =>
+      iv.fromS >= castS - EFFECT_START_BEFORE_S &&
+      iv.fromS <= castS + EFFECT_START_AFTER_S;
+    let first = ivs.findIndex(startsAtPress);
+    // the aura the cast's effect lives on (`triggeredEffectAurasOfCast`)
+    // over a side effect of it that went up first: The Hunt's 1.5 s root
+    // 370970 ended its span at 1:16 while its DoT 370969 ran to 1:21 (fact5
+    // cxa e38f41c9 1:15)
+    if (
+      first >= 0 &&
+      ivs[first]!.spellId !== castSpellId &&
+      !triggered.has(ivs[first]!.spellId)
+    ) {
+      const main = ivs.findIndex(
+        (iv) => startsAtPress(iv) && triggered.has(iv.spellId),
+      );
+      if (main >= 0) first = main;
+    }
     // F15 / fact1215 R8: a press that REFRESHed an aura already up (an
     // un-pressed application before it) starts no interval of its own — the
     // open one it refreshed is its effect (519781fd: Malevolence up from
@@ -514,6 +531,20 @@ export function reconstructEnemyCDTimeline(
     const mergedInto = new Set<IEnemyCDCast>();
     for (const o of aura.occurrences) {
       const castTimeSeconds = (o.startMs - matchStartMs) / 1000;
+      // the aura a press made while unseen was restated from
+      // (`pressRowsWithHidden`: the press sits at the aura's own instant) is
+      // that press — whatever the occurrence's provenance (fact5 b2b 92-5
+      // 2:19: Arcane Surge `(cast 3 of 3) [pressed while unseen]` beside
+      // `(no press)` for one APPLIED)
+      if (
+        loggedCasts.some(
+          (c) =>
+            c.unseenPress &&
+            c.spellId === o.spellId &&
+            Math.abs(c.castTimeSeconds - castTimeSeconds) <= 0.05,
+        )
+      )
+        continue;
       // a cast-less application beside a press the timeline has (a press
       // made unseen, `hiddenPressMs`, re-stated with the unit) is that press
       if (

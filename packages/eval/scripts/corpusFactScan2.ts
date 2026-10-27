@@ -1709,7 +1709,17 @@ async function main(): Promise<void> {
             tsOf(a) < to &&
             Math.abs(a.absorbedAmount) > 0 &&
             !ALTER_TIME.has(String(a.spellId)) &&
-            String(a.spellId) !== OBSIDIAN_SCALES,
+            String(a.spellId) !== OBSIDIAN_SCALES &&
+            // a shield whose aura the target carried — Mindgames 375902
+            // absorbs the damage its VICTIM deals the priest, its aura on
+            // that victim: no shield on the target (wide f18-3: all 21
+            // ownAbsorb facts)
+            ((T.auraEvents ?? []) as any[]).some(
+              (x) =>
+                x.destUnitId === T.id &&
+                nameOf(String(x.spellId), x.spellName) ===
+                  nameOf(String(a.spellId), a.spellName),
+            ),
         );
         // E6: a shield it APPLIED = one it pressed (an own cast of the shield,
         // by id / cast ↔ effect / name, in the 60 s before the absorb row) — a

@@ -549,7 +549,8 @@ describe("checkEnemyDefSaveEffect (FT-T07, ruling D8)", () => {
     ],
     [
       "4(EShaman) (Enhancement Shaman)",
-      "Spirit Walk (root / snare immunity) (at 97% HP)",
+      // a 100 ms cleanse is no standing immunity (fact5 cxa e38f41c9)
+      "Spirit Walk (+60% movement speed) (at 97% HP)",
     ],
     [
       "4(BMHunter) (Beast Mastery Hunter)",
@@ -618,7 +619,8 @@ describe("checkEnemyDefSaveEffect (FT-T07, ruling D8)", () => {
     ["a reflect called an immunity", "Nether Ward (immune, 3.0s)"],
     ["a rewind called a heal", "Alter Time (heal)"],
     ["the wrong control list", "Lichborne (root / snare immunity)"],
-    ["a freedom called a speed buff", "Spirit Walk (+60% movement speed)"],
+    ["a freedom called a speed buff", "Master's Call (+60% movement speed)"],
+    ["a speed buff called a freedom", "Spirit Walk (root / snare immunity)"],
     ["another percentage than the official one", "Roar of Sacrifice (30%)"],
     ["a heal absorb left out", "Death Pact (heal)"],
     ["a heal absorb on a plain heal", "Exhilaration (heal + heal absorb)"],

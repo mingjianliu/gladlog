@@ -4425,3 +4425,23 @@ pulse row is its go-off for the dodge reading. 605 / second-corpus capture
 kick-priority −3 / −3, cd-waste 0 / −1 (user-approved preview); gates and the
 older scans unchanged.
 
+v459 (2026-10-26, fact5 round-5 fixes, batches 3+4): an aimed control that put
+no control aura on its target and logged no miss names the avoidance aura up on
+that target at the cast (`[no CC aura logged — Phase Shift was up]`); a
+triggered aura of ≤ 100 ms is a cleanse on cast, not its parent's standing
+immunity (Spirit Walk, Vengeful Retreat, Wraith Walk and one more now read
+their movement — DB2 duration index 407, corpus roots landing inside); a DoT
+tick a shield ate (a SPELL_ABSORBED or SPELL_PERIODIC_MISSED of a spell the
+holder ticks) no longer ends a Mass / Greater Invisibility or a stealth wall;
+Spell Reflection is a Warrior Utility press (user 2026-10-26); a channel's
+cast row naming the caster's own teammate is said; a PvP trinket press names
+the root it removed unless a dispel ended it first (user 2026-10-26); a 20–99 %
+wall pressed after an attempt opened was in hand at its start; a pet's dispel
+its owner commanded is deliberate, not `(passive)`; the external window's
+absorbed part counts the ally's summons as its landed part does; an enemy
+cooldown's span runs on the aura its effect lives on (The Hunt's DoT, not its
+root); the aura an unseen press was restated from is no second `(no press)`
+line; a recast channel is its own span; a save pressed at or after the round's
+end is no kill attempt's cause. 605 / second-corpus capture (PV458 → batch):
+kick-eaten +1 / 0, burst-into-mitigation 0 / +1 (accepted by the user);
+checkEnemyDefRefConsistency 3 → 0 / 24 → 0, other gates unchanged.

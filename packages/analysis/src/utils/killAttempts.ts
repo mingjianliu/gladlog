@@ -1642,7 +1642,13 @@ function attributeFailure(
     toRenderSecond((ms - matchStartMs) / 1000);
   const fromR = renderedS(fromMs);
   const toR = renderedS(toMs);
+  // …and inside the round: a press at or after its end (`roundEndMs`: a
+  // Solo Shuffle round's ending death) is in no round and has no [ENEMY
+  // DEF] line (605 s2/149-6 3:19: a Dark Pact 0.3 s after the death,
+  // rendered in the death's second, read as the attempt's save)
+  const roundEndAt = roundEndMs(combat);
   const inSave = (ts: number): boolean => {
+    if (ts >= roundEndAt) return false;
     const r = renderedS(ts);
     return r >= fromR && r <= toR;
   };

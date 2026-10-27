@@ -262,8 +262,15 @@ export function externalDamageForApplication(
       immuneHits++;
       bins.add(Math.floor(tS));
     }
+    // the ally and its pets / guardians — the attackers its landed damage
+    // counts (parser-compat folds a summon's rows into the owner's
+    // `damageOut`); the absorbed part reads the same set (fact5 cxa
+    // 8d0ed9e9 0:25: a hunter's pets' 218k absorbed under Pain Suppression
+    // dropped beside their landed 134k)
+    const attackers = new Set<string>([ally.id]);
+    for (const d of ally.damageOut) if (d.srcUnitId) attackers.add(d.srcUnitId);
     for (const a of target.absorbsIn ?? []) {
-      if (a.attackerId !== ally.id) continue;
+      if (!a.attackerId || !attackers.has(a.attackerId)) continue;
       const tS = (a.logLine.timestamp - startMs) / 1000;
       if (tS < wFrom || tS >= wTo) continue;
       if (isDeferralAbsorb(a)) deferred += a.absorbedAmount;

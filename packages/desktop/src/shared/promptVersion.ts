@@ -556,4 +556,22 @@
  *  missed-cleanse +3 / +13, kick-priority −3 / −3, cd-waste 0 / −1 (preview
  *  approved by the user 2026-10-26); gates and scan1–3 unchanged.
  */
-export const PROMPT_VERSION = 458;
+/*
+ * v459 (2026-10-26, fact5 round-5 fixes F18 batches 3+4): an aimed control
+ *  with no control aura names the avoidance aura up on its target at the
+ *  cast; a triggered ≤ 100 ms aura is no standing immunity of its parent
+ *  (Spirit Walk, Vengeful Retreat, Wraith Walk read their movement); a DoT
+ *  tick a shield ate no longer ends an unseen save; Spell Reflection is a
+ *  Warrior Utility press (user 2026-10-26); a channel's cast row naming the
+ *  caster's teammate is said; a trinket press names the root it removed
+ *  (user 2026-10-26); a wall pressed after an attempt opened was in hand at
+ *  it; a pet dispel its owner commanded is deliberate; the external
+ *  window's absorbed part counts the ally's summons; an enemy CD's span runs
+ *  on the aura its effect lives on (The Hunt's DoT); an unseen press's own
+ *  aura is no second `(no press)` line; a recast channel is its own span; a
+ *  save pressed at or after the round's end is no kill attempt's cause.
+ *  605 / wide (PV458 → batch): kick-eaten +1 / 0, burst-into-mitigation
+ *  0 / +1 (accepted by the user 2026-10-26); checkEnemyDefRefConsistency
+ *  3 → 0 / 24 → 0, other gates unchanged.
+ */
+export const PROMPT_VERSION = 459;

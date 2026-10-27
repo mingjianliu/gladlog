@@ -932,7 +932,27 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
     }
     // an aimed cast at an enemy player
     if (landedOn(dest)) return "";
-    return missedOn(dest) ? "" : " [no CC aura logged]";
+    if (missedOn(dest)) return "";
+    // fact5 retest r3 D1 (46a55085 3:28): an avoidance aura up on the target
+    // at the cast (Phase Shift: no aura, no miss row) is its cause — the
+    // IMMUNE tag's reading (`ccAvoidanceBuffsUpAt`, applicability by the
+    // shared gate), at the cast row, never a move pressed after it (codex
+    // 20-F18-06 #1, cb6f3e66 r5: a Shadowmeld 0.3 s after a Cheap Shot)
+    const ccName = getEnglishSpellName(spellId, ev.spellName);
+    const applicable = applicableCCAvoidanceIds(spellId, ccName);
+    const up = ccAvoidanceBuffsUpAt(dest, t0, {
+      atLine: ev.logLine.lineIndex,
+      casterOf: (id) =>
+        allUnits?.find((u) => u.id === id) ??
+        allPlayers.find((u) => u.id === id),
+    }).find(
+      (b) =>
+        applicable.has(b.spellId) &&
+        avoidanceExplainsMissType(b.spellId, undefined),
+    );
+    return up
+      ? ` [no CC aura logged — ${up.name} was up]`
+      : " [no CC aura logged]";
   }
 
   // cc-dr F-TM1 (ruling A53, 2026-09-30): the same tag on a teammate's

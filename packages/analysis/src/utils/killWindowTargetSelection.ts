@@ -599,7 +599,15 @@ function wallsInHandAt(
     // the shared cooldown model (`unitCooldownAvailableAt`, cooldown mastery
     // round 2026-10-20) — the enemy's own presses with their per-press
     // talent effects
-    if (unitCooldownAvailableAt(enemy, combat, spellId, atSeconds)) {
+    // "in hand when the attempt began": only presses strictly before it
+    // spend it — the ledger's same-instant slack read a Darkness pressed
+    // 41 ms after the Bestial Wrath that opened the attempt as already
+    // spent and called the target PRIME (fact5 retest r2 e49b7c3b 2:40)
+    if (
+      unitCooldownAvailableAt(enemy, combat, spellId, atSeconds, {
+        before: true,
+      })
+    ) {
       ready.push(effectData?.name ?? spellId);
     }
   }

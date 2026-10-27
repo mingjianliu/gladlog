@@ -33,6 +33,31 @@ describe("untargetableEndS — the holder's own action ends an unseen end", () =
       ),
     ).toBe(17);
   });
+  it("a tick a shield ate does not end it; a swing a shield ate does", () => {
+    // codex 30-RV-01 #1 (0373256a r1): the SPELL_ABSORBED row of a Flame
+    // Shock tick — `spellId` the shield, `attackSpellId` the hit
+    const absorbed = (atS: number, attackSpellId?: string) =>
+      ({
+        srcUnitId: "e1",
+        spellId: "367364",
+        ...(attackSpellId ? { attackSpellId } : {}),
+        logLine: { event: LogEvent.SPELL_ABSORBED, timestamp: START + atS * 1000 },
+      }) as never;
+    const tick = {
+      srcUnitId: "e1",
+      spellId: "188389",
+      logLine: {
+        event: LogEvent.SPELL_PERIODIC_DAMAGE,
+        timestamp: START + 5_500,
+      },
+    } as never;
+    expect(
+      untargetableEndS(mage([tick, absorbed(6.3, "188389")]), iv, START),
+    ).toBe(17);
+    expect(
+      untargetableEndS(mage([tick, absorbed(6.3)]), iv, START),
+    ).toBeCloseTo(6.3);
+  });
   it("the holder's own direct hit ends it", () => {
     expect(untargetableEndS(mage([hit("e1", 7.5)]), iv, START)).toBe(7.5);
   });

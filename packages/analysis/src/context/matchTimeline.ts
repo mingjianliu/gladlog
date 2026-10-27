@@ -34,6 +34,7 @@ import type { ICcBreakEvent } from "../utils/ccBreakAnalysis";
 import {
   findBrokenCC,
   findBrokenDisarm,
+  findBrokenRoot,
   IPlayerCCTrinketSummary,
 } from "../utils/ccTrinketAnalysis";
 import {
@@ -787,7 +788,8 @@ export function buildMatchTimeline(params: BuildMatchTimelineParams): string {
     const rawCastMs = matchStartMs + Math.round(t * 1000);
     return findBrokenCC(summary.ccInstances, matchStartMs, rawCastMs)
       ? undefined
-      : findBrokenDisarm(summary.disarmInstances, matchStartMs, rawCastMs);
+      : (findBrokenDisarm(summary.disarmInstances, matchStartMs, rawCastMs) ??
+          findBrokenRoot(summary.rootInstances, matchStartMs, rawCastMs));
   };
   let disarmLineCount = 0;
   let trinketLastUsedCount = 0;

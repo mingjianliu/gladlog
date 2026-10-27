@@ -53,6 +53,12 @@ export const classMetadata: IClassSpellMetadata[] = [
       // burst. `SpellTag.Utility`: the press line, the loadout and [RES],
       // out of every role reader.
       a("376079", "Champion's Spear", U),
+      // fact5 retest r3 D2 (422ba114 r0: three presses of an enemy Arms
+      // Warrior's, no kit entry, no line, no [RES]) — user 2026-10-26:
+      // `SpellTag.Utility` as Champion's Spear above: the press line, the
+      // loadout and [RES], out of every role reader. What it sent back is
+      // the `[REFLECTED]` line's (`reflectedSpells`).
+      a("23920", "Spell Reflection", U),
       a("871", "Shield Wall", D),
       a("118038", "Die by the Sword", D),
       a("184364", "Enraged Regeneration", D),

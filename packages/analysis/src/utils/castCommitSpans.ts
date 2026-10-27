@@ -170,7 +170,20 @@ export function channelSpans(
   // consumer goes through.
   // … and a BROKEN line the aura's own REMOVED follows is not its end.
   const notTheEnd = supersededAuraBreaks(unit.auraEvents ?? []);
-  const auras = dropAuraRebroadcasts(unit.auraEvents ?? [])
+  // …unless a cast of the channel comes with the pair: that is a re-cast,
+  // the first channel's end (codex 30-RV-02 #1, b0a417b7 r6: Crackling Jade
+  // Lightning recast at 59.353 s merged into the 58.033 s cast, which then
+  // read `cut by CC after 1.5s`; the recast ran 0.229 s)
+  const recastAt = (a: { spellId?: string | null; timestamp: number }) =>
+    casts.some(
+      (c) =>
+        c.spellId === a.spellId &&
+        a.timestamp - c.timestamp >= -CHANNEL_AURA_LEAD_MS &&
+        a.timestamp - c.timestamp <= CHANNEL_AURA_LAG_MS,
+    );
+  const auras = dropAuraRebroadcasts(unit.auraEvents ?? [], (_r, a) =>
+    recastAt(a),
+  )
     .filter(
       (a) =>
         !notTheEnd.has(a) &&

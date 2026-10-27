@@ -327,7 +327,8 @@ export function untargetableEndS(
  * its own press — found by the log-shape matrix, castRowLag).
  */
 export function holderFirstOwnActionAfterMs(
-  holder: Pick<ICombatUnit, "id" | "spellCastEvents" | "damageOut">,
+  holder: Pick<ICombatUnit, "id" | "spellCastEvents" | "damageOut"> &
+    Partial<Pick<ICombatUnit, "missesOut">>,
   afterMs: number,
   auraId?: string,
 ): number {
@@ -345,9 +346,39 @@ export function holderFirstOwnActionAfterMs(
         continue;
       if (t > afterMs && t < first) first = t;
     }
+  // a tick a shield ate is logged as a SPELL_ABSORBED row with no periodic
+  // flag (its `spellId` is the shield, `attackSpellId` the hit's): the hit
+  // of a spell this holder ticks this round is a tick too (codex 30-RV-01
+  // #1, 0373256a r1: an absorbed Flame Shock tick ended Mass Invisibility
+  // at 44.3 s, the next own press came at 45.1 s). A DoT's first hit comes
+  // with its press, which ends it anyway.
+  const ticking = new Set<string>();
+  for (const d of holder.damageOut ?? [])
+    if (
+      d.srcUnitId === holder.id &&
+      d.logLine.event === LogEvent.SPELL_PERIODIC_DAMAGE &&
+      d.spellId
+    )
+      ticking.add(d.spellId);
+  // …or a periodic miss of it (a tick fully absorbed logs SPELL_PERIODIC_
+  // MISSED ABSORB beside its SPELL_ABSORBED row, and maybe never a
+  // PERIODIC_DAMAGE that round — codex 20-F18-06 #2, 2b380381 r5: a Fel
+  // Armor tick 12 ms into Mass Invisibility)
+  for (const m of holder.missesOut ?? [])
+    if (
+      m.srcUnitId === holder.id &&
+      m.logLine?.event === LogEvent.SPELL_PERIODIC_MISSED &&
+      m.spellId
+    )
+      ticking.add(m.spellId);
   for (const d of holder.damageOut ?? []) {
     if (d.srcUnitId !== holder.id) continue;
     if (d.logLine.event === LogEvent.SPELL_PERIODIC_DAMAGE) continue;
+    if (
+      d.logLine.event === LogEvent.SPELL_ABSORBED &&
+      ticking.has((d as { attackSpellId?: string }).attackSpellId ?? "")
+    )
+      continue;
     const t = d.logLine.timestamp;
     if (t > afterMs && t < first) first = t;
   }

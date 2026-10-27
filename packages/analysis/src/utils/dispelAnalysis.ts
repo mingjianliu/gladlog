@@ -3140,6 +3140,7 @@ export function reconstructDispelSummary(
       const destUnit = unitMap.get(action.destUnitId);
       const dispelToClassify = {
         srcUnitId: action.srcUnitId,
+        srcOwnerId: unitMap.get(action.srcUnitId)?.ownerId,
         spellId: action.spellId,
         spellName: action.spellName,
         timestamp: action.timestamp,

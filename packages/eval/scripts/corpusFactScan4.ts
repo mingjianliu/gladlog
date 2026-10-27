@@ -73,6 +73,10 @@ import spellEffectGenerated from "@gladlog/analysis/src/data/spellEffectGenerate
 import { ENEMY_IMMUNITY_SAVE_AURAS } from "@gladlog/analysis/src/data/spellIdLists";
 import { immunityCoversSpell } from "@gladlog/analysis/src/data/spellSchools";
 import { COPY_CAST_IDS } from "@gladlog/analysis/src/utils/castPress";
+import {
+  applicableCCAvoidanceIds,
+  CC_AVOIDANCE_BUFF_SPELLS,
+} from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
 import { charmedAt } from "@gladlog/analysis/src/utils/charmedPlayer";
 import { isEnemyCdWindowSpell } from "@gladlog/analysis/src/utils/cooldowns";
 import {
@@ -85,6 +89,13 @@ import {
   getUnitPositionAtTime,
 } from "@gladlog/analysis/src/utils/losAnalysis";
 import { INTERP_MAX_GAP_MS } from "@gladlog/analysis/src/utils/positionSampling";
+import { ccMechanicOf } from "@gladlog/analysis/src/utils/spellMechanics";
+import {
+  holderFirstOwnActionAfterMs,
+  SAVE_AURA_END_UNSEEN_IDS,
+} from "@gladlog/analysis/src/utils/enemyDefensives";
+import { WALL_IN_HAND_MIT_IDS } from "@gladlog/analysis/src/utils/killWindowTargetSelection";
+import { isDeferralAbsorb } from "@gladlog/analysis/src/utils/incomingPressure";
 import { parseRawStreams } from "@gladlog/analysis/src/utils/rawStreams";
 import { playableEndMs } from "@gladlog/analysis/src/utils/roundEnd";
 import { OFFENSIVE_CD_SPELL_IDS } from "@gladlog/analysis/src/utils/spellDanger";
@@ -124,6 +135,12 @@ const CHECKS = [
   "rosterSides",
   "enemyHealCdForward",
   "defenselessRedirectUp",
+  "ccNoAuraCause",
+  "mechanicImmunityLanded",
+  "unseenEndAbsorbedTick",
+  "primeWallPressedAtStart",
+  "petDispelCommanded",
+  "externalAbsorbedPets",
 ] as const;
 type Check = (typeof CHECKS)[number];
 /** kinds counted but kept out of a check's violation total */
@@ -133,6 +150,9 @@ const OUT_OF_TOTAL = new Set<string>();
  * outlived its official length (fact5 D17: talent-lengthened, refreshed) —
  * every kind stays out of the total until a mechanism reading lands */
 const MEASURED_ONLY = new Set<string>(["unclosedAtRoundEnd"]);
+/** kinds that size a class (what the old reading did), not a violation of
+ * the current one */
+OUT_OF_TOTAL.add("unseenEndAbsorbedTick|naive");
 interface IViolation {
   check: Check;
   kind: string;
@@ -1222,6 +1242,360 @@ for (const f of files) {
           );
           break;
         }
+      }
+    }
+  }
+
+  // ── ccNoAuraCause ──
+  // An aimed friendly control tagged `[no CC aura logged]` with no cause,
+  // while its target carried a listed CC-avoidance aura that applies to it
+  // (the avoidance table as data, applicability by the shared gate) at the
+  // cast — fact5 retest r3 D1: a Kidney Shot into Phase Shift
+  {
+    const NO_AURA_RE =
+      /^(\d+:\d\d)\s+\[(YOU|TEAM)\] \[CC\]\s+(.*?) → (\d+)\([^)]*\).*\[no CC aura logged\]/;
+    for (const l of lines) {
+      const m = NO_AURA_RE.exec(l);
+      if (!m) continue;
+      const sec = secOf(m[1]!);
+      let caster: any = owner;
+      let spell = m[3]!;
+      if (m[2] === "TEAM") {
+        const t = /^(\d+)\(.*?\bcast (.+)$/.exec(spell);
+        if (!t) continue;
+        caster = unitOfPid(t[1]);
+        spell = t[2]!;
+      }
+      const target = unitOfPid(m[4]);
+      if (!caster || !target) continue;
+      const cast = successesOf(caster).find(
+        (c) =>
+          c.destUnitId === target.id &&
+          nameOf(String(c.spellId), c.spellName ?? "") === spell &&
+          Math.floor((tsOf(c) - start) / 1000) === sec,
+      );
+      if (!cast) continue;
+      bump("ccNoAuraCause");
+      const at = tsOf(cast);
+      const applicable = applicableCCAvoidanceIds(String(cast.spellId), spell);
+      const rows = ((target.auraEvents ?? []) as any[])
+        .filter((x) => CC_AVOIDANCE_BUFF_SPELLS.has(String(x.spellId)))
+        .sort((x, y) => tsOf(x) - tsOf(y));
+      const up = rows.find((x) => {
+        if (ev(x) !== APPLIED || tsOf(x) > at) return false;
+        if (!applicable.has(String(x.spellId))) return false;
+        const rem = rows.find(
+          (y) =>
+            ev(y) === REMOVED &&
+            String(y.spellId) === String(x.spellId) &&
+            tsOf(y) >= tsOf(x),
+        );
+        return rem ? tsOf(rem) >= at : at - tsOf(x) <= 10_000;
+      });
+      if (up)
+        violate(
+          "ccNoAuraCause",
+          nameOf(String(up.spellId)),
+          at,
+          `${caster.id}:${cast.spellId}:${sec}`,
+          `${spell} → ${target.name} at ${m[1]}: ${nameOf(String(up.spellId))} up, tag names no cause`,
+          l.trim().slice(0, 180),
+        );
+    }
+  }
+
+  // ── mechanicImmunityLanded ──
+  // An `[ENEMY DEF]` save labelled `(… immunity)` (a DB2 aura 77 reading)
+  // while a control of a named mechanic went on its carrier inside the
+  // save's own aura, 0.3 s after it — fact5 cxa e38f41c9: Spirit Walk read
+  // "(root / snare immunity)" from a 100 ms cleanse aura, and The Hunt's
+  // root landed 3.4 s into it
+  {
+    const MECH: Record<string, number> = {
+      charm: 1,
+      fear: 5,
+      root: 7,
+      sleep: 10,
+      snare: 11,
+      stun: 12,
+    };
+    const IMM_RE =
+      /^(\d+:\d\d)\s+\[ENEMY DEF\]\s+(\d+)\([^)]*\) \([^)]*\): (.+?) \(([a-z /]+) immunity\)/;
+    for (const l of lines) {
+      const m = IMM_RE.exec(l);
+      if (!m) continue;
+      const u = unitOfPid(m[2]);
+      if (!u) continue;
+      const mechs = new Set(
+        m[4]!.split(" / ").flatMap((w) => (MECH[w] ? [MECH[w]] : [])),
+      );
+      const sec = secOf(m[1]!);
+      const rows = ((u.auraEvents ?? []) as any[]).sort(
+        (x, y) => tsOf(x) - tsOf(y),
+      );
+      const on = rows.find(
+        (x) =>
+          ev(x) === APPLIED &&
+          x.srcUnitId === u.id &&
+          nameOf(String(x.spellId), x.spellName ?? "") === m[3] &&
+          Math.abs(Math.floor((tsOf(x) - start) / 1000) - sec) <= 1,
+      );
+      if (!on) continue;
+      const off = rows.find(
+        (y) =>
+          ev(y) === REMOVED &&
+          String(y.spellId) === String(on.spellId) &&
+          tsOf(y) > tsOf(on),
+      );
+      const to = off ? tsOf(off) : tsOf(on) + 10_000;
+      bump("mechanicImmunityLanded");
+      const hit = rows.find(
+        (x) =>
+          ev(x) === APPLIED &&
+          tsOf(x) >= tsOf(on) + 300 &&
+          tsOf(x) < to &&
+          x.srcUnitId !== u.id &&
+          mechs.has(ccMechanicOf(String(x.spellId)) ?? -1),
+      );
+      if (hit)
+        violate(
+          "mechanicImmunityLanded",
+          m[3]!,
+          tsOf(hit),
+          `${u.id}:${on.spellId}:${sec}`,
+          `${m[3]} on ${u.name} labelled ${m[4]} immunity; ${nameOf(String(hit.spellId))} landed ${((tsOf(hit) - tsOf(on)) / 1000).toFixed(1)}s into it`,
+          l.trim().slice(0, 180),
+        );
+    }
+  }
+
+  // ── unseenEndAbsorbedTick ──
+  // An unseen-end save aura (Mass / Greater Invisibility, a stealth wall:
+  // `SAVE_AURA_END_UNSEEN_IDS`) is over at its holder's first own action;
+  // that action must not be a DoT tick a shield ate (a SPELL_ABSORBED row of
+  // a spell the holder ticks) — codex 30-RV-01 #1. `naive` counts the
+  // intervals a reading that took those rows would have cut (the class)
+  {
+    for (const u of players) {
+      const ticking = new Set<string>();
+      for (const d of (u.damageOut ?? []) as any[])
+        if (d.srcUnitId === u.id && ev(d) === "SPELL_PERIODIC_DAMAGE" && d.spellId)
+          ticking.add(String(d.spellId));
+      for (const m of (u.missesOut ?? []) as any[])
+        if (m.srcUnitId === u.id && ev(m) === "SPELL_PERIODIC_MISSED" && m.spellId)
+          ticking.add(String(m.spellId));
+      const tickRows = ((u.damageOut ?? []) as any[]).filter(
+        (d) =>
+          d.srcUnitId === u.id &&
+          ev(d) === ABSORBED &&
+          ticking.has(String(d.attackSpellId ?? "")),
+      );
+      if (tickRows.length === 0) continue;
+      for (const a of (u.auraEvents ?? []) as any[]) {
+        if (ev(a) !== APPLIED || a.destUnitId !== u.id) continue;
+        if (!SAVE_AURA_END_UNSEEN_IDS.has(String(a.spellId))) continue;
+        const at = tsOf(a);
+        if (at < start || at > end) continue;
+        bump("unseenEndAbsorbedTick");
+        const endMs = holderFirstOwnActionAfterMs(u, at, String(a.spellId));
+        const firstTick = Math.min(
+          Infinity,
+          ...tickRows.map(tsOf).filter((t: number) => t > at),
+        );
+        if (firstTick < endMs)
+          violate(
+            "unseenEndAbsorbedTick",
+            "naive",
+            firstTick,
+            `${u.id}:${a.spellId}:${at}`,
+            `${u.name} ${nameOf(String(a.spellId))} at ${fmtS((at - start) / 1000)}: an absorbed DoT tick ${((firstTick - at) / 1000).toFixed(2)}s in, before the first own action (${((endMs - at) / 1000).toFixed(2)}s)`,
+          );
+        // …and no other own action in that ms (a cast, a direct hit) that
+        // the end rightly stopped at
+        const otherAction =
+          successesOf(u).some((c) => tsOf(c) === endMs) ||
+          ((u.damageOut ?? []) as any[]).some(
+            (d) =>
+              d.srcUnitId === u.id &&
+              tsOf(d) === endMs &&
+              ev(d) !== "SPELL_PERIODIC_DAMAGE" &&
+              ev(d) !== ABSORBED,
+          ) ||
+          ((u.damageOut ?? []) as any[]).some(
+            (d) =>
+              d.srcUnitId === u.id &&
+              tsOf(d) === endMs &&
+              ev(d) === ABSORBED &&
+              !ticking.has(String(d.attackSpellId ?? "")),
+          );
+        if (!otherAction && tickRows.some((d) => tsOf(d) === endMs))
+          violate(
+            "unseenEndAbsorbedTick",
+            "endOnTick",
+            endMs,
+            `${u.id}:${a.spellId}:${at}`,
+            `${u.name} ${nameOf(String(a.spellId))} at ${fmtS((at - start) / 1000)} ends on an absorbed DoT tick`,
+          );
+      }
+    }
+  }
+
+  // ── primeWallPressedAtStart ──
+  // A KILL ATTEMPTS line read `opportunity: PRIME` (no 20–99 % wall in
+  // hand) while its target pressed such a wall inside the attempt's first
+  // second, its first press of it this round — it was in hand when the
+  // attempt began (fact5 retest r2 e49b7c3b 2:40: Darkness 41 ms after the
+  // Bestial Wrath that opened it). Second-grained: a press in the opening
+  // second may still precede the attempt's exact start
+  {
+    const KA_RE = /^\s+\[(\d+:\d\d)–(\d+:\d\d)\] on ([^ ]+) — .*\| opportunity: PRIME/;
+    for (const l of lines) {
+      const m = KA_RE.exec(l);
+      if (!m) continue;
+      const u = byName.get(m[3]!);
+      if (!u) continue;
+      bump("primeWallPressedAtStart");
+      const a = start + secOf(m[1]!) * 1000;
+      const press = successesOf(u).find(
+        (c) =>
+          WALL_IN_HAND_MIT_IDS.has(String(c.spellId)) &&
+          tsOf(c) >= a &&
+          tsOf(c) < a + 1000 &&
+          !successesOf(u).some(
+            (o) =>
+              String(o.spellId) === String(c.spellId) &&
+              tsOf(o) < tsOf(c) &&
+              tsOf(o) >= start,
+          ),
+      );
+      if (press)
+        violate(
+          "primeWallPressedAtStart",
+          nameOf(String(press.spellId)),
+          tsOf(press),
+          `${u.id}:${m[1]}`,
+          `${u.name} attempt ${m[1]}–${m[2]} PRIME; first ${nameOf(String(press.spellId))} pressed ${((tsOf(press) - a) / 1000).toFixed(2)}s into its opening second`,
+          l.trim().slice(0, 180),
+        );
+    }
+  }
+
+  // ── petDispelCommanded ──
+  // A pet's dispel its owner commanded — the owner's cast of the same
+  // English name within 300 ms of the removal (Command Demon's Singe Magic
+  // 119905 beside the Imp's 89808) — folded as `(passive)` in [MINOR
+  // DISPELS] (fact5 retest r3 2fd86b1f 2:18 / 3:35)
+  {
+    const passiveLines = lines.filter(
+      (l) => /\[MINOR DISPELS\]/.test(l) && /'s pet: .*\(passive\)/.test(l),
+    );
+    if (passiveLines.length > 0)
+      for (const pet of units) {
+        if (!pet.ownerId || pet.info) continue;
+        const ownerU = units.find((x) => x.id === pet.ownerId);
+        if (!ownerU) continue;
+        const pid = pidOf.get(ownerU.name);
+        if (!pid) continue;
+        for (const a of (pet.actionOut ?? []) as any[]) {
+          if (ev(a) !== "SPELL_DISPEL") continue;
+          const nm = nameOf(String(a.spellId), a.spellName ?? "");
+          const commanded = successesOf(ownerU).some(
+            (c) =>
+              nameOf(String(c.spellId), c.spellName ?? "") === nm &&
+              Math.abs(tsOf(c) - tsOf(a)) <= 300,
+          );
+          if (!commanded) continue;
+          bump("petDispelCommanded");
+          // (a fold line carries no per-removal times: an Imp's own
+          // autocast Singe Magic on the same line still trips this —
+          // the residual is read by hand)
+          const bad = passiveLines.find(
+            (l) =>
+              l.includes(`${pid}(`) && l.includes(`${nm} (passive)`),
+          );
+          if (bad)
+            violate(
+              "petDispelCommanded",
+              nm,
+              tsOf(a),
+              `${pet.id}:${tsOf(a)}`,
+              `${ownerU.name}'s pet ${nm} at ${fmtS((tsOf(a) - start) / 1000)} came with its owner's command, folded (passive)`,
+              bad.trim().slice(0, 180),
+            );
+        }
+      }
+  }
+
+  // ── externalAbsorbedPets ──
+  // An `[ENEMY DEF] … → target (Ns) | during it: P Nk on target (+Mk
+  // absorbed …)` entry: what shields on the target ate of P's pets' and
+  // guardians' hits inside [line second, + N s) is part of M — the landed
+  // figure counts those summons (fact5 cxa 8d0ed9e9 0:25: 218k of a hunter's
+  // pets' damage absorbed under Pain Suppression, `+108k` printed). Flags an
+  // entry whose pets alone had ≥ 20k absorbed in the span, more than the
+  // printed M
+  {
+    const EXT_RE =
+      /^(\d+:\d\d)\s+\[ENEMY DEF\][^:]*\): (.+?) → (\d+)\([^)]*\) \((\d+(?:\.\d)?)s\).*?\| during it: (.*)$/;
+    for (const l of lines) {
+      const m = EXT_RE.exec(l);
+      if (!m) continue;
+      const target = unitOfPid(m[3]);
+      if (!target) continue;
+      // the external's own aura on the target (codex 20-F18-07 #2: the
+      // rendered second + length is not its window)
+      const sec = secOf(m[1]!);
+      const rows = ((target.auraEvents ?? []) as any[]).sort(
+        (x, y) => tsOf(x) - tsOf(y),
+      );
+      const on = rows.find(
+        (x) =>
+          ev(x) === APPLIED &&
+          nameOf(String(x.spellId), x.spellName ?? "") === m[2] &&
+          // the line's second is the cast's; its aura can land in the next
+          // (codex 20-F18-08: Pain Suppression cast 121.406, aura 122.191)
+          tsOf(x) >= start + sec * 1000 &&
+          tsOf(x) < start + (sec + 2) * 1000,
+      );
+      if (!on) continue;
+      const off = rows.find(
+        (y) =>
+          ev(y) === REMOVED &&
+          String(y.spellId) === String(on.spellId) &&
+          tsOf(y) > tsOf(on),
+      );
+      const a = tsOf(on);
+      const b = off ? tsOf(off) : a + Number(m[4]) * 1000;
+      for (const part of m[5]!.split("; ")) {
+        const p = /^(\d+)\([^)]*\) [\d.]+[kM] on target(?: \(\+([\d.]+[kM]) absorbed)?/.exec(part);
+        if (!p) continue;
+        const ally = unitOfPid(p[1]);
+        if (!ally) continue;
+        bump("externalAbsorbedPets");
+        const printed = p[2] ? (amountOf(p[2])?.v ?? 0) : 0;
+        const pets = new Set(
+          units.filter((u) => u.ownerId === ally.id).map((u) => u.id),
+        );
+        let petAbs = 0;
+        for (const r of (target.absorbsIn ?? []) as any[])
+          if (
+            pets.has(r.attackerId) &&
+            r.timestamp >= a &&
+            r.timestamp < b &&
+            // a deferral shield's part is printed `+Nk deferred`, apart
+            !isDeferralAbsorb(r)
+          )
+            petAbs += Math.abs(Number(r.absorbedAmount) || 0);
+        const half = p[2] ? (amountOf(p[2])?.half ?? 0) : 0;
+        if (petAbs >= 20_000 && petAbs > printed + half)
+          violate(
+            "externalAbsorbedPets",
+            "petAbsorbed",
+            a,
+            `${target.id}:${ally.id}:${m[1]}`,
+            `${ally.name}'s summons had ${Math.round(petAbs / 1000)}k absorbed on ${target.name} in ${m[1]} ${m[2]} (${((b - a) / 1000).toFixed(1)}s); printed +${p[2] ?? "0"} absorbed`,
+            l.trim().slice(0, 200),
+          );
       }
     }
   }

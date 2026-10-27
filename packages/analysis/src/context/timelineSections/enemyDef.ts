@@ -296,6 +296,8 @@ export function emitEnemyDefEntries(
             matchStartMs,
             roundEndAtMs,
             pid,
+            enemies ?? [],
+            enemyPid,
           );
           // F16 retest: a rider shield no press of its own put up
           // (Shield of Vengeance with Divine Protection) says so, as a wall
@@ -365,6 +367,11 @@ export function channelTargetClause(
   matchStartMs: number,
   roundEndAtMs: number,
   pid: (name: string) => string,
+  /** the caster's own team: a cast row can name one of them (fact5 retest
+   * r4 7798a79a 0:50: Ultimate Penitence aimed at the priest's own Feral,
+   * its bolts on 2(HDHunter)) */
+  castersTeam: readonly ICombatUnit[] = [],
+  castersPid: (name: string) => string = pid,
 ): string {
   if (d.observedSeconds === undefined) return "";
   const pressMs =
@@ -425,11 +432,16 @@ export function channelTargetClause(
     .filter((x) => x.dealtK > 0)
     .sort((a, b) => b.dealtK - a.dealtK);
   if (hit.length === 0) return "";
-  const named = friends.find((f) => f.id === cast.destUnitId);
+  const namedFriend = friends.find((f) => f.id === cast.destUnitId);
+  const namedMate = namedFriend
+    ? undefined
+    : castersTeam.find((e) => e.id === cast.destUnitId && e.id !== enemy.id);
   const castRow =
-    named && named.id !== hit[0]!.f.id
-      ? ` (its cast row names ${pid(named.name)})`
-      : "";
+    namedFriend && namedFriend.id !== hit[0]!.f.id
+      ? ` (its cast row names ${pid(namedFriend.name)})`
+      : namedMate
+        ? ` (its cast row names ${castersPid(namedMate.name)})`
+        : "";
   return ` — its bolts hit ${hit
     .map(
       (x) =>

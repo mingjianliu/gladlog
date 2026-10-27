@@ -30,6 +30,7 @@ import {
   ccUnloggedEarlyEnd,
   findBrokenCC,
   findBrokenDisarm,
+  findBrokenRoot,
   formatCcLoggedEnd,
   formatCcRefreshed,
   formatCcUnloggedEnd,
@@ -259,6 +260,7 @@ export function emitCcOnEnemyEntries(
               matchStartMs,
               pressMs,
             ) ??
+            findBrokenRoot(summary.rootInstances, matchStartMs, pressMs) ??
             (silence
               ? {
                   spellName: getEnglishSpellName(

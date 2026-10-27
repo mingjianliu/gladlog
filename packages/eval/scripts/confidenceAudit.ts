@@ -104,6 +104,9 @@ for (const f of files) {
           if (!removed) continue;
           const kind = classifyDispel(castIndex, {
             srcUnitId: a.srcUnitId,
+            srcOwnerId: (legacy.units as Record<string, { ownerId?: string }>)[
+              a.srcUnitId
+            ]?.ownerId,
             spellId: a.spellId,
             spellName: a.spellName,
             timestamp: a.timestamp,

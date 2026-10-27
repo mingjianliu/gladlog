@@ -435,6 +435,9 @@ function convertUnit(
         amount: event.absorbedAmount,
         effectiveAmount: isPetDest ? 0 : event.absorbedAmount,
         absorbedAmount: event.absorbedAmount,
+        // the hit's own spell (`spellId` is the shield) — a DoT tick a
+        // shield ate is still a tick (`holderFirstOwnActionAfterMs`)
+        ...attackSpellFields(event),
         spellSchoolId: getSpellSchoolId(event.eventName, event.params),
         logLine: {
           event: event.eventName as LogEvent,

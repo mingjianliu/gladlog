@@ -54,6 +54,8 @@ import {
 const AURA_SCHOOL_IMMUNITY = "39";
 /** SpellEffect.EffectAura = 77 — SPELL_AURA_MECHANIC_IMMUNITY. */
 const AURA_MECHANIC_IMMUNITY = "77";
+/** a triggered aura this short is a cleanse on cast (see `isFlash`) */
+const FLASH_IMMUNITY_MAX_MS = 100;
 /** SpellEffect.Effect = 3 — DUMMY. Same treatment as genSpellTargeting: a dummy
  *  row only counts when the spell has nothing else. */
 const EFFECT_DUMMY = "3";
@@ -190,6 +192,29 @@ async function main(): Promise<void> {
     });
   }
 
+  // A triggered spell whose aura lasts ≤ `FLASH_IMMUNITY_MAX_MS` is a
+  // cleanse on cast, not a standing immunity (fact5 cxa e38f41c9: Spirit
+  // Walk 58875 triggers 58876 — aura 77 root / snare, duration index 407 =
+  // 100 ms — and The Hunt's root and a Master of the Glaive snare landed on
+  // the shaman 3.4 s and 5.0 s into its 8 s aura, no IMMUNE row). Its
+  // immunity is not the parent's. Cloak of Shadows' 35729 (1 s) is kept.
+  const durationParsed = parseCsv(
+    await fetchTable("SpellDuration", build, cacheDir),
+  );
+  assertColumns(durationParsed.header, ["ID", "Duration"], "SpellDuration");
+  const durationMs = new Map<string, number>(
+    durationParsed.rows.map((r) => [r.ID, Number(r.Duration)]),
+  );
+  assertColumns(miscParsed.header, ["DurationIndex"], "SpellMisc");
+  const auraMs = new Map<string, number>();
+  for (const r of miscParsed.rows) {
+    if (r.DifficultyID !== "0" || auraMs.has(r.SpellID)) continue;
+    const d = durationMs.get(r.DurationIndex);
+    if (d !== undefined && d > 0) auraMs.set(r.SpellID, d);
+  }
+  const isFlash = (id: string): boolean =>
+    (auraMs.get(id) ?? Infinity) <= FLASH_IMMUNITY_MAX_MS;
+
   const considered = (rows: Row[]): Row[] => {
     const real = rows.filter((r) => r.effect !== EFFECT_DUMMY);
     return real.length > 0 ? real : rows;
@@ -214,7 +239,7 @@ async function main(): Promise<void> {
         misc > 0
       )
         mechanics.add(misc);
-      if (hop && row.trigger && row.trigger !== "0") {
+      if (hop && row.trigger && row.trigger !== "0" && !isFlash(row.trigger)) {
         const deep = immunitiesOf(row.trigger, false);
         schools |= deep.schools;
         for (const m of deep.mechanics) mechanics.add(m);

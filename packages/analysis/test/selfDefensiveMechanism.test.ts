@@ -111,7 +111,9 @@ describe("selfDefensiveMechanism — what a self defensive does, official data f
         "47788": "+60% healing received", // Guardian Spirit
         // immunityMechanics — DB2 aura 77, on the cast or its effect aura
         "49039": "charm / fear / sleep immunity", // Lichborne
-        "58875": "root / snare immunity", // Spirit Walk
+        // the 100 ms cleanse aura 58876 is no standing immunity (fact5 cxa
+        // e38f41c9, `genSpellSchools` FLASH_IMMUNITY_MAX_MS)
+        "58875": "+60% movement speed", // Spirit Walk
         "272682": "root / snare immunity", // Master's Call → 54216 / 62305
         "1241871": "root / snare immunity", // Master's Call → 1224810
         // abilityProfile.moveSpeedPct — DB2 aura 31 (never cast on oneself)
@@ -157,9 +159,10 @@ describe("selfDefensiveMechanism — what a self defensive does, official data f
         [6, 301],
       ]),
     );
-    // a freedom: root (7) and snare (11) — Spirit Walk on the cast, Master's
-    // Call on the aura the log shows it applying
-    expect(immunityMechanics("58875")).toEqual(expect.arrayContaining([7, 11]));
+    // a freedom: root (7) and snare (11) — Master's Call on the aura the log
+    // shows it applying. Spirit Walk's 58876 lasts 100 ms: a cleanse on
+    // cast, not the cast's immunity (roots landed during it, fact5 cxa)
+    expect(immunityMechanics("58875")).toBeUndefined();
     for (const cast of ["272682", "1241871"]) {
       const auras = effectAurasOfCast(cast);
       expect(auras.length, cast).toBeGreaterThan(0);
@@ -526,7 +529,7 @@ describe("[ENEMY DEF] — a pressed self defensive prints what it does (2026-10-
       "Nether Ward (spell reflect)",
       "Alter Time (rewind)",
       "Lichborne (charm / fear / sleep immunity)",
-      "Spirit Walk (root / snare immunity)",
+      "Spirit Walk (+60% movement speed)",
       "Master's Call (root / snare immunity)",
       "Guardian Spirit (+60% healing received)",
       "Lay on Hands (heal)",
