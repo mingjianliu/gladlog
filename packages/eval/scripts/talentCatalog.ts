@@ -25,6 +25,8 @@
  *     npx tsx packages/eval/scripts/talentCatalog.ts
  * Output: $GLADLOG_EVAL_HOME/reports/talent-catalog-2026-09-13/catalog.json
  *   (or $TALENT_CATALOG_OUT/catalog.json)
+ * For an older build (version diff) also set TALENT_CATALOG_NO_HOTFIX=1: the
+ * SimC hotfix overlay is today's, not that build's.
  */
 import {
   mkdirSync,
@@ -272,7 +274,10 @@ async function main(): Promise<void> {
   for (const r of await load("SpellName")) enName.set(r.ID, r.Name_lang);
 
   const effRows = await load("SpellEffect");
-  applyHotfixOverlay(effRows, loadHotfixOverlay(DATA));
+  // The SimC overlay carries the CURRENT live hotfixes; laying it over an
+  // older build's rows (version diffs) would back-date today's numbers.
+  if (process.env.TALENT_CATALOG_NO_HOTFIX !== "1")
+    applyHotfixOverlay(effRows, loadHotfixOverlay(DATA));
   type Eff = {
     idx: number;
     effect: string;

@@ -159,7 +159,11 @@ export async function main(): Promise<void> {
       );
   }
 
-  const outPath = path.join(dataDirOf(import.meta.url), HOTFIX_OVERLAY_FILE);
+  // HOTFIX_OVERLAY_OUT: a research run that wants today's hotfixes without
+  // touching the product's checked-in overlay.
+  const outPath =
+    process.env.HOTFIX_OVERLAY_OUT ??
+    path.join(dataDirOf(import.meta.url), HOTFIX_OVERLAY_FILE);
   writeArtifact(outPath, `${JSON.stringify(overlay, null, 2)}\n`);
   const nEff = Object.keys(overlay.effects).length;
   const nSpells = new Set(Object.values(overlay.effects).map((e) => e.spellId))
