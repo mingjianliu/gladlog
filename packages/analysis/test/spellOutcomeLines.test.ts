@@ -9,6 +9,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import {
   groundedControls,
   ownerRejectRuns,
+  reflectCount,
   reflectedSpells,
   sanctuaryRemovals,
 } from "../src/context/spellOutcomeLines";
@@ -421,5 +422,60 @@ describe("ownerRejectRuns (f4eb)", () => {
       "Player-O",
     );
     expect(runs).toHaveLength(1);
+  });
+});
+
+describe("reflectCount (codex 20-G3 #2)", () => {
+  const ms = (s: number) => T0 + s * 1000;
+  it("rows belong to the caster's cast before them: two casts 0.9 s apart are two, one press's rows over 3.3 s are one", () => {
+    const priest = unit("Player-P", {
+      spellCastEvents: [
+        cast("8092", 32.734, "Player-W"),
+        cast("8092", 33.641, "Player-W"),
+      ],
+    });
+    expect(reflectCount(priest, "8092", [ms(32.734), ms(33.641)])).toBe(2);
+    const monk = unit("Player-K", {
+      spellCastEvents: [cast("8092", 14.568, "Player-W")],
+    });
+    expect(
+      reflectCount(monk, "8092", [ms(14.6), ms(15.9), ms(16.8), ms(17.889)]),
+    ).toBe(1);
+  });
+  it("a cast between two rows splits them, a projectile's flight included; a row logged 1 ms before its own cast does not", () => {
+    // Starsurge-like flight (0.43 s on 3da28605): casts 0 / 0.8, rows 0.5 / 1.3
+    const mage = unit("Player-M", {
+      spellCastEvents: [
+        cast("8092", 10, "Player-W"),
+        cast("8092", 10.8, "Player-W"),
+      ],
+    });
+    expect(reflectCount(mage, "8092", [ms(10.5), ms(11.3)])).toBe(2);
+    // 47867c33: Chastise's 200200 REFLECT 1 ms before 88625's SUCCESS, then 88625's own
+    const priest = unit("Player-P", {
+      spellCastEvents: [cast("8092", 20.835, "Player-W")],
+    });
+    expect(reflectCount(priest, "8092", [ms(20.834), ms(20.835)])).toBe(1);
+  });
+  it("a row no cast covers is a proc of its own (Astral Smolder, codex 20-G5); one logged twice within 100 ms is one", () => {
+    const caster = unit("Player-P");
+    expect(
+      reflectCount(caster, "8092", [
+        ms(91.639),
+        ms(91.894),
+        ms(92.463),
+        ms(93.28),
+        ms(93.711),
+      ]),
+    ).toBe(5);
+    expect(reflectCount(caster, "8092", [ms(10), ms(10.001)])).toBe(1);
+  });
+  it("a channel's bolts 5.8 s after its cast are still that cast's (Ultimate Penitence)", () => {
+    const priest = unit("Player-P", {
+      spellCastEvents: [cast("8092", 17.686, "Player-W")],
+    });
+    expect(
+      reflectCount(priest, "8092", [ms(21.017), ms(21.632), ms(22.06)]),
+    ).toBe(1);
   });
 });

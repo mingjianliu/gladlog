@@ -337,6 +337,33 @@ describe("promptQualityCheck.checkSelfOnlyDefensiveClaims (GH #28)", () => {
     expect(v[0]).toContain("19236");
   });
 
+  it("队友的死 + 带天赋、能给队友的自保(on an ally — Lifecinders)→ 不报;不写天赋、或写错天赋 → 硬失败(用户 2026-10-27 裁决)", () => {
+    const scales = (name: string) => [
+      `1:12  [DEFENSIVE AVAILABLE]  2(PEvoker): ${name} available but unused (free to press it for the last 7.0s before the death)`,
+      "1:13  [KILL]                 3(AWarrior) (Arms Warrior) dead",
+    ];
+    expect(
+      checkSelfOnlyDefensiveClaims(
+        scales("Obsidian Scales (on an ally — Lifecinders)"),
+      ),
+    ).toEqual([]);
+    // HAS TEETH: no note, another talent's name, or the note on a self-heal
+    expect(
+      checkSelfOnlyDefensiveClaims(scales("Obsidian Scales")),
+    ).toHaveLength(1);
+    expect(
+      checkSelfOnlyDefensiveClaims(
+        scales("Obsidian Scales (on an ally — Draconic Instincts)"),
+      ),
+    ).toHaveLength(1);
+    expect(
+      checkSelfOnlyDefensiveClaims([
+        "1:10  [DEFENSIVE AVAILABLE]  1(HPriest): Desperate Prayer (on an ally — Lifecinders) available but unused",
+        "1:11  [KILL]                 2(WMonk) (Windwalker Monk) dead",
+      ]),
+    ).toHaveLength(1);
+  });
+
   it("自己的死 + 自愈技能 → 不报(那正是该按的)", () => {
     expect(
       checkSelfOnlyDefensiveClaims([
@@ -1636,6 +1663,12 @@ describe("checkPeelOptionConsistency — a [PEEL OPTION] line must agree with th
   it("fails without the matching [DEATH] line", () => {
     expect(checkPeelOptionConsistency([peel])).toHaveLength(1);
   });
+  it("in the death's own second, a landing printed after the [DEATH] line came after it — no contradiction; before it, a contradiction (wide 240-16)", () => {
+    const at229 = "2:29  [CC ON ENEMY]   4(ARogue) ← Hammer of Justice (by 1(RPaladin)) (3s)";
+    expect(checkPeelOptionConsistency([death, at229, peel])).toEqual([]);
+    // HAS TEETH: the same landing printed before the death line
+    expect(checkPeelOptionConsistency([at229, death, peel])).toHaveLength(1);
+  });
   it("fails when the same CC landed on that target inside the window", () => {
     expect(
       checkPeelOptionConsistency([
@@ -1716,6 +1749,34 @@ describe("checkCcAvoidedLandedConsistency — a CC that landed cannot also have 
     ]);
     expect(out).toHaveLength(1);
     expect(out[0]).toContain("line 1");
+  });
+
+  it("a logged miss whose caster's recast landed says so (— recast landed +Ns): that one landing answers it; a second landing, or no tag, still fails (user ruling 2026-10-27)", () => {
+    const shroud =
+      "2:36  [CC AVOIDED?]   3(PEvoker): Cyclone (by 4(BDruid)) logged IMMUNE; Nullifying Shroud (own) active";
+    const landed =
+      "2:36  [CC ON TEAM]   3(PEvoker) ← Cyclone (by 4(BDruid)) | 3s [DR: Disorient 50%] | 21.7yd from caster";
+    expect(
+      checkCcAvoidedLandedConsistency([
+        `${shroud} — recast landed +0.9s`,
+        landed,
+      ]),
+    ).toEqual([]);
+    // a 0.96 s recast prints +1.0s and can land in the line's own second
+    expect(
+      checkCcAvoidedLandedConsistency([
+        `${shroud} — recast landed +1.0s`,
+        landed,
+      ]),
+    ).toEqual([]);
+    // HAS TEETH: no tag; or a tag whose recast cannot render in that second
+    expect(checkCcAvoidedLandedConsistency([shroud, landed])).toHaveLength(1);
+    expect(
+      checkCcAvoidedLandedConsistency([
+        `${shroud} — recast landed +3.0s`,
+        landed,
+      ]),
+    ).toHaveLength(1);
   });
 
   it("parses a spell name that itself contains a colon", () => {
@@ -1927,6 +1988,22 @@ describe("checkWarlockPurgeFollowsPet — the purge header follows the warlock's
 });
 
 describe("checkCcAvoidedMissType — `[CC AVOIDED?] … logged <TYPE>` names a miss type that means the control failed (FT-T16 D15 3c)", () => {
+  it("the 2026-10-27 tails pass: `pressed +N.Ns` for the avoidance, and the recast tag on either form", () => {
+    expect(
+      checkCcAvoidedMissType([
+        "1:40  [CC AVOIDED?]   1(HPriest): Freezing Trap (by 4(MHunter)) did not land; Angel's Feather (own) pressed +1.4s",
+        "2:36  [CC AVOIDED?]   3(PEvoker): Cyclone (by 4(BDruid)) logged IMMUNE; Nullifying Shroud (own) active — recast landed +0.9s",
+        "2:36  [CC AVOIDED?]   3(PEvoker): Cyclone (by 4(BDruid)) logged IMMUNE — recast landed +0.9s",
+        "2:36  [CC AVOIDED?]   3(PEvoker): Cyclone (by 4(BDruid)) logged IMMUNE (a Cyclone was on them) — recast landed +0.9s",
+      ]),
+    ).toEqual([]);
+    // HAS TEETH: anything else after an uncredited IMMUNE still fails
+    expect(
+      checkCcAvoidedMissType([
+        "2:36  [CC AVOIDED?]   3(PEvoker): Cyclone (by 4(BDruid)) logged IMMUNE — landed later",
+      ]),
+    ).toHaveLength(1);
+  });
   // the producer's own wording of the half the gate re-parses
   const line = (outcome: string) =>
     `0:40  [CC AVOIDED?]   1(BDruid): Hammer of Justice (by 5(RPaladin)) ${outcome}; Precognition (own) active`;

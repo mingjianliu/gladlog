@@ -623,4 +623,23 @@
  *  stay), 36 mitigation-audit, 12 [STACKED DEFENSIVES], 2
  *  burst-into-mitigation facts mitPct 30 → 40.
  */
-export const PROMPT_VERSION = 462;
+/*
+ * v463 (2026-10-28, the second-corpus gate residue and the round-5 items
+ *  F18 / F19 left, user rulings 2026-10-27): a talent-granted Obsidian
+ *  Scales says `(on an ally — Lifecinders)` on [DEFENSIVE AVAILABLE]; a
+ *  logged control failure whose caster's recast landed within 1.5 s says
+ *  `— recast landed +N.Ns`; one control's same-second twin miss is stated
+ *  once; [DMG SPIKE] cover cites no zero-length control; a Tree of Life
+ *  re-shift while its buff is up is no hidden press; the peel gate reads a
+ *  second's line order; Master's Call is labelled `(removes roots /
+ *  snares)`; a self-save aura with no press of its own (Guardian Spirit
+ *  with Divine Hymn, Ice Barrier with Blazing Barrier, Frenzied
+ *  Regeneration from Well-Honed Instincts) prints its [ENEMY DEF] line
+ *  `[no press logged]` and counts in KILL ATTEMPTS; Stasis lists one
+ *  Verdant Embrace once; `[REFLECTED] … ×N`, `[CC AVOIDED?] … pressed
+ *  +N.Ns`, a `[no CC aura logged]` legend. 605 / wide (PV461 → batch):
+ *  candidates unchanged / the two DR-window rows reverted with it; gates
+ *  unchanged on 605, wide 7 classes (49 lines) → 0; corpusFactScan4
+ *  mechanicImmunityLanded 13 → 0 / 61 → 0.
+ */
+export const PROMPT_VERSION = 463;

@@ -4500,3 +4500,32 @@ batch): candidate counts and the 100 gates unchanged; 906 Restoration `[ENEMY DE
 Barkskin lines 30 % → 40 % (Balance 1,254 / Feral 585 lines stay 30 %), 36
 mitigation-audit and 12 `[STACKED DEFENSIVES]` blocked amounts, 2
 burst-into-mitigation facts `mitPct` 30 → 40 — every changed line is Barkskin.
+
+v463 (2026-10-28, the second-corpus gate residue and the round-5 items F18 /
+F19 left, user rulings of 2026-10-27): a talent-granted Obsidian Scales says
+`(on an ally — Lifecinders)` on `[DEFENSIVE AVAILABLE]` and the self-only gate
+reads it; a logged control failure whose caster's recast landed within 1.5 s
+says `— recast landed +N.Ns` and the avoided/landed gate lets that landing
+answer it; a miss of one control in the same rendered second as one already
+stated is not stated again; `[DMG SPIKE]` cover cites no zero-length control
+(`rendersCcOnTeamLine`); a form cooldown's re-listed form aura is no hidden
+press while its buff is up; the peel gate reads a second's line order; Master's
+Call is labelled `(removes roots / snares)` — the corpus does not bear out its
+official immunity (`MECHANIC_IMMUNITY_REMOVAL_ONLY_IDS`); a self-save aura its
+holder put on itself with no press of it (Guardian Spirit while channeling
+Divine Hymn, Ice Barrier with Blazing Barrier, Frenzied Regeneration from
+Well-Honed Instincts; never a Blessing of Sacrifice caster link) prints its
+`[ENEMY DEF]` line `[no press logged]` and counts in KILL ATTEMPTS; Stasis
+skips a copy cast (one Verdant Embrace, two rows 746 ms apart); `[REFLECTED] …
+reflected ×N`, counted by cast (`reflectCount`: a row with a cast of the
+spell in the 10 s before it is that cast's, a new cast between two rows starts
+the next; a row no cast covers is a proc of its own); `[CC AVOIDED?] … pressed
++N.Ns` for a move made after the control hit, never for a ground control that
+went off after the move; a legend for `[no CC aura logged]`. A 20.2 s DR reset window was
+tried and reverted (second corpus: landed controls labelled Immune 42 → 150).
+605 / second-corpus capture (PV461 → batch): candidates unchanged; gates
+unchanged on 605, the second corpus's 7 failing classes (49 lines) → 0;
+corpusFactScan4 mechanicImmunityLanded 13 → 0 / 61 → 0. Review follow-ups on 605
+(candidates, gates, scans and body lines unchanged): 44 `[REFLECTED]` lines
+recounted (×N lines 75 → 81), 40 ground-control `[CC AVOIDED?]` lines `pressed
++N.Ns` → `active`.

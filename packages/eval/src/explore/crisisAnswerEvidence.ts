@@ -24,11 +24,13 @@
  */
 import { ENEMY_BURST_LOOKBACK_MS } from "@gladlog/analysis/src/analysis/crisisDecisionPoints";
 import { abilityProfile } from "@gladlog/analysis/src/data/abilityProfile";
+import { castsOfEffectAura } from "@gladlog/analysis/src/data/castEffectAuras";
 import {
   resolveMitigation,
   strongestComponentPct,
 } from "@gladlog/analysis/src/data/mitigationComponents";
 import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData";
+import { MECHANIC_IMMUNITY_REMOVAL_ONLY_IDS } from "@gladlog/analysis/src/data/spellIdLists";
 import { ccSpellIds } from "@gladlog/analysis/src/data/spellTags";
 import { buildAuraIntervals } from "@gladlog/analysis/src/utils/auraIntervals";
 import { isControlCast } from "@gladlog/analysis/src/utils/castMissRows";
@@ -310,7 +312,10 @@ export function buildCrisisAnswerEvidence(
       items.push({
         ...base,
         kind: "immunity",
-        text: `${nm} (${prof.immuneSchools !== undefined ? `school immunity, mask ${prof.immuneSchools}` : `mechanic immunity, ids ${prof.immuneMechanics!.join(", ")} — not damage protection`}) from ${who}, applied ${relS(atT.round, appliedMs)}`,
+        // a press the product labels by its removal alone (Master's Call —
+        // user ruling 2026-10-27, `MECHANIC_IMMUNITY_REMOVAL_ONLY_IDS`) is
+        // not quoted as an immunity here either (codex 20-G2)
+        text: `${nm} (${prof.immuneSchools !== undefined ? `school immunity, mask ${prof.immuneSchools}` : castsOfEffectAura(iv.spellId).some((c) => MECHANIC_IMMUNITY_REMOVAL_ONLY_IDS.has(c)) || MECHANIC_IMMUNITY_REMOVAL_ONLY_IDS.has(iv.spellId) ? "removes roots / snares — not damage protection" : `mechanic immunity, ids ${prof.immuneMechanics!.join(", ")} — not damage protection`}) from ${who}, applied ${relS(atT.round, appliedMs)}`,
         source: "abilityProfile.immuneSchools/immuneMechanics",
       });
       continue;

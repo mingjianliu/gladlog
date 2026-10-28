@@ -1801,7 +1801,38 @@ export interface ICCAvoidedInstance {
    * land`; nothing else about the instance changes.
    */
   loggedMissType?: string;
+  /** a logged failure the same caster's next cast of the control answered
+   * with a landing this many seconds later, inside the window (user ruling
+   * 2026-10-27; `ccAvoidedRecastTag`) */
+  recastLandedAfterS?: number;
+  /** a repositioning press made AFTER the control hit (the mobility path's
+   * ±1.5 s reading): how many seconds after — the line says `pressed +N.Ns`
+   * instead of `active` (user ruling 2026-10-27) */
+  avoidancePressedAfterS?: number;
 }
+
+/** `active`, or `pressed +1.4s` for a repositioning press made after the
+ * control hit (`avoidancePressedAfterS`; user ruling 2026-10-27: an Angel's
+ * Feather pressed 1.4 s after a trap read "active"). */
+export function ccAvoidedAvoidanceState(x: {
+  avoidancePressedAfterS?: number;
+}): string {
+  return x.avoidancePressedAfterS === undefined
+    ? "active"
+    : `pressed +${x.avoidancePressedAfterS.toFixed(1)}s`;
+}
+
+/** ` — recast landed +0.9s`: a `[CC AVOIDED?]` line whose cast logged its own
+ * failure and whose caster's next cast of the control landed within the
+ * landing window (`recastLandedAfterS`) — the landed `[CC ON TEAM]` line
+ * beside it is that recast's. `checkCcAvoidedLandedConsistency` reads it back
+ * (`CC_AVOIDED_RECAST_RE`). User ruling 2026-10-27. */
+export function ccAvoidedRecastTag(x: { recastLandedAfterS?: number }): string {
+  return x.recastLandedAfterS === undefined
+    ? ""
+    : ` — recast landed +${x.recastLandedAfterS.toFixed(1)}s`;
+}
+export const CC_AVOIDED_RECAST_RE = / — recast landed \+(\d+\.\d)s$/;
 
 /**
  * The first half of a `[CC AVOIDED?]` line: `logged <TYPE>` when the log
@@ -2638,6 +2669,8 @@ export interface IPlayerCCTrinketSummary {
     sourceId: string;
     /** the miss row's own ms (the cause readers' instant) */
     missMs: number;
+    /** see `ICCAvoidedInstance.recastLandedAfterS` */
+    recastLandedAfterS?: number;
   }>;
 }
 
@@ -4760,6 +4793,58 @@ export function analyzePlayerCCAndTrinket(
       );
     });
   };
+  // …and, for a cast that logged its own failure, the seconds after it at
+  // which the same caster's NEXT cast of the control landed inside the
+  // gate's same-instant window — the landing `ownTrigger` leaves to the
+  // later cast (user ruling 2026-10-27: the line says so,
+  // `ccAvoidedRecastTag`; wide 182-5 2:36, a Cyclone IMMUNE under Nullifying
+  // Shroud and the recast landing 0.87 s later printed in one second)
+  const recastLandedAfterS = (cast: {
+    spellId?: string | null;
+    spellName?: string | null;
+    srcUnitId?: string;
+    logLine: { timestamp: number };
+  }): number | undefined => {
+    const atMs = cast.logLine.timestamp - matchStartMs;
+    const castName = getEnglishSpellName(
+      cast.spellId ?? "",
+      cast.spellName ?? "",
+    );
+    // the same-instant window the gate reads a `logged` line with (a trap's
+    // 60 s landing window would name a recast half a minute on)
+    const afterMs = CC_LANDED_MATCH_WINDOW_MS;
+    const sameControl = (id: string | undefined, name: string | undefined) =>
+      !!id &&
+      (id === cast.spellId || getEnglishSpellName(id, name ?? "") === castName);
+    const castsAfter = (sourceId: string) => {
+      const src =
+        unitsById.get(sourceId) ??
+        [...enemies, ...enemyPets].find((u) => u.id === sourceId);
+      return (src?.spellCastEvents ?? []).filter(
+        (e) =>
+          e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+          e.logLine.timestamp > cast.logLine.timestamp &&
+          !COPY_CAST_IDS.has(e.spellId ?? "") &&
+          sameControl(e.spellId, e.spellName),
+      );
+    };
+    const hit = ccInstances
+      .filter((cc) => {
+        const afterCastMs = cc.atSeconds * 1000 - atMs;
+        const ccMs = matchStartMs + cc.atSeconds * 1000;
+        return (
+          afterCastMs > 0 &&
+          afterCastMs <= afterMs &&
+          sameControl(cc.spellId, cc.spellName) &&
+          (cast.srcUnitId === undefined || cc.sourceId === cast.srcUnitId) &&
+          castsAfter(cc.sourceId).some((e) => e.logLine.timestamp <= ccMs)
+        );
+      })
+      .sort((a, b) => a.atSeconds - b.atSeconds)[0];
+    return hit === undefined
+      ? undefined
+      : Math.round((hit.atSeconds * 1000 - atMs) / 100) / 10;
+  };
 
   // FT-T16 D15 "3c" (user approval 2026-10-10): the log's own SPELL_MISSED
   // row for an avoided cast, when it wrote one — 2c6e85ec r6 0:40, Hammer of
@@ -5169,6 +5254,9 @@ export function analyzePlayerCCAndTrinket(
               sourceId: cast.srcUnitId || enemy.id,
               sourceSpec: enemySpecMap.get(enemy.id) ?? "Unknown",
               ...(loggedMissType ? { loggedMissType } : {}),
+              ...(missRow && recastLandedAfterS(cast) !== undefined
+                ? { recastLandedAfterS: recastLandedAfterS(cast) }
+                : {}),
             });
             continue; // Avoid double counting
           }
@@ -5196,6 +5284,9 @@ export function analyzePlayerCCAndTrinket(
                 // resolves to "X's pet" through its GUID (`actorLabel`)
                 sourceId: cast.srcUnitId || enemy.id,
                 missMs: missRow.timestamp,
+                ...(recastLandedAfterS(cast) !== undefined
+                  ? { recastLandedAfterS: recastLandedAfterS(cast) }
+                  : {}),
               });
             continue;
           }
@@ -5239,6 +5330,19 @@ export function analyzePlayerCCAndTrinket(
                 REPOSITIONING_SPELL_IDS.get(mobilityCast.spellId) ?? "",
               avoidanceSpellId: mobilityCast.spellId,
               avoidanceSourceName: player.name,
+              // a ground control that went off was hit at its go-off, which
+              // the press preceded (above) — `hit.ms` is its placement
+              // (codex 20-G3 #3: a Chi Torpedo 1.3 s after a Ring of Frost
+              // was placed, 2.4 s before its first freeze)
+              ...(goOffMs === undefined &&
+              mobilityCast.logLine.timestamp - hit.ms >= 50
+                ? {
+                    avoidancePressedAfterS:
+                      Math.round(
+                        (mobilityCast.logLine.timestamp - hit.ms) / 100,
+                      ) / 10,
+                  }
+                : {}),
               sourceName: enemy.name,
               // the event's own caster (fact4 D2 / D34): a pet or guardian
               // cast — folded into its owner's sweep (F134) — resolves to

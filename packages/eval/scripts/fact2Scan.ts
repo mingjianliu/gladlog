@@ -1142,7 +1142,7 @@ for (const f of files) {
           (l) =>
             near.some((nt) => l.startsWith(`${nt}  [REFLECTED]`)) &&
             l.includes(`${cp}(`) &&
-            l.includes(`reflected by ${rp}(`),
+            new RegExp(`reflected(?: ×\\d+)? by ${rp}\\(`).test(l),
         )
       )
         miss(

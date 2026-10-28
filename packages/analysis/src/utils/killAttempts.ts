@@ -2028,7 +2028,11 @@ function attributeFailure(
   // Read from the CASTS, so "on itself" is the cast's own target — Blessing
   // of Sacrifice leaves an aura on the paladin who threw it at an ally, and
   // that is not the paladin saving himself.
-  for (const c of selfSaveCasts(target, matchStartMs)) {
+  for (const c of selfSaveCasts(
+    target,
+    matchStartMs,
+    Object.values(combat.units ?? {}) as ICombatUnit[],
+  )) {
     const castMs = matchStartMs + c.atSeconds * 1000;
     if (!inSave(castMs)) {
       if (castMs >= fromMs) continue; // after the span: not its cause

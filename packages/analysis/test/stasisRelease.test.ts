@@ -166,6 +166,18 @@ describe("FT-T06 — Stasis release", () => {
     expect(e!.releaseSeconds).toBe(102.9);
     expect(e!.spells).toEqual(["Verdant Embrace", "Dream Breath"]);
   });
+  it("Verdant Embrace's 361195 landing past the twin window is still no second stored spell (fact5 D3: 746 ms, the press predicate's COPY_CAST_IDS)", () => {
+    const u = unit(storing.slice(0, 4), [
+      cast("370537", "Stasis", 99_901),
+      cast("360995", "Verdant Embrace", 100_100),
+      cast("361195", "Verdant Embrace", 100_846),
+      cast("364343", "Echo", 101_800),
+    ]);
+    expect(extractStasisEvents(u, combat)[0]!.spells).toEqual([
+      "Verdant Embrace",
+      "Echo",
+    ]);
+  });
   it("储存光环中途被重播(REMOVED / APPLIED 同毫秒)仍是一次储存,不被读成开场前存好的", () => {
     const u = unit(
       [

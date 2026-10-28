@@ -261,6 +261,7 @@ import spellIdLists, {
   ENEMY_SELF_DEFENSIVE_HAND_MECHANISMS,
   ENEMY_SELF_SAVE_ONLY_IDS,
   ENEMY_STEALTH_WALL_AURAS,
+  MECHANIC_IMMUNITY_REMOVAL_ONLY_IDS,
 } from "./spellIdLists";
 import { trinketSpellIds } from "./spellTags";
 import {
@@ -363,6 +364,14 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
     "data/spellIdLists.ts",
     "cast",
     () => keys(ENEMY_SELF_DEFENSIVE_HAND_MECHANISMS),
+  ),
+  // 2026-10-27: presses labelled by the removal alone (Master's Call — the
+  // corpus does not bear out the official immunity) — cast ids
+  t(
+    "spellIdLists.MECHANIC_IMMUNITY_REMOVAL_ONLY_IDS",
+    "data/spellIdLists.ts",
+    "cast",
+    () => set(MECHANIC_IMMUNITY_REMOVAL_ONLY_IDS),
   ),
   t("spellIdLists.ENEMY_ALLY_SAVE_IDS", "data/spellIdLists.ts", "cast", () =>
     set(ENEMY_ALLY_SAVE_IDS),

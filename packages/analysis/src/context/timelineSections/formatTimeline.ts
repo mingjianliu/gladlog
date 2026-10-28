@@ -59,7 +59,12 @@ import {
 import { CAST_STOPPED_LEGEND, CAST_STOPPED_TAG } from "./castStopped";
 import { DR_CLASH_LEGEND } from "./contextFacts";
 import type { TimelineCtx } from "./ctx";
-import { CC_NOT_LANDED_LEGEND, CC_NOT_LANDED_TAG } from "./setup";
+import {
+  CC_NOT_LANDED_LEGEND,
+  CC_NOT_LANDED_TAG,
+  NO_CC_AURA_LOGGED_LEGEND,
+  NO_CC_AURA_LOGGED_TAG,
+} from "./setup";
 
 /** A [STATE] tick carrying a `unit:ghost` token (`state.ts`). */
 const STATE_GHOST_TOKEN_RE = /\[STATE\].*:ghost\b/;
@@ -312,6 +317,11 @@ export function formatTimeline(
   // the family rendered.
   const castStoppedRendered = entries.some((e) =>
     e.lines.some((l) => typeof l === "string" && l.includes(CAST_STOPPED_TAG)),
+  );
+  const noCcAuraRendered = entries.some((e) =>
+    e.lines.some(
+      (l) => typeof l === "string" && l.includes(NO_CC_AURA_LOGGED_TAG),
+    ),
   );
   const ccNotLandedRendered = entries.some((e) =>
     e.lines.some((l) => typeof l === "string" && l.includes(CC_NOT_LANDED_TAG)),
@@ -596,6 +606,7 @@ export function formatTimeline(
     ...(roundEndStatedRendered ? roundEndLegend(bracket) : []),
     ...(castStoppedRendered ? CAST_STOPPED_LEGEND : []),
     ...(ccNotLandedRendered ? CC_NOT_LANDED_LEGEND : []),
+    ...(noCcAuraRendered ? NO_CC_AURA_LOGGED_LEGEND : []),
     ...(guardianSaveRendered
       ? [
           "  `| save triggered Ns later (m:ss)` on a Guardian Spirit line = at m:ss the buff absorbed a hit that would have",

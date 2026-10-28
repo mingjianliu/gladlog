@@ -108,6 +108,68 @@ export interface IReflected {
   isControl: boolean;
   /** damage the spell then did to its own caster (incl. absorbed) */
   damageBack: number;
+  /** how many casts the chain reflected (`reflectCount`) — `×N` on the
+   * line when ≥ 2 (user ruling 2026-10-27) */
+  reflectCount: number;
+}
+
+/** A REFLECT row can be logged just before its own cast's SUCCESS row
+ * (47867c33: Holy Word: Chastise's 200200 REFLECT 1 ms ahead of 88625's
+ * SUCCESS) — far below two presses of one spell (Fire Blast 943 ms). Two
+ * rows no cast covers this close are one effect logged twice. */
+export const REFLECT_CAST_LEAD_MS = 100;
+
+/** How long after its cast a row is still that cast's: Touch of Karma's
+ * 10 s (its rows run 3.3 s past the press; an Ultimate Penitence's first
+ * reflected bolt 5.8 s after its cast). */
+export const REFLECT_CAST_COVER_MS = 10_000;
+
+/** How many casts or procs a reflect chain's rows came from. A row with a
+ * cast of the spell (id or English name) in the `REFLECT_CAST_COVER_MS`
+ * before it (`REFLECT_CAST_LEAD_MS` after) is that cast's: it starts a new
+ * one only when a cast lies between it and the previous row — one Penance
+ * channel's bolts and one Touch of Karma press's rows are one, two Fire
+ * Blasts 943 ms apart are two (codex 20-G3 #2, 20-G4; a projectile still in
+ * flight at the next press is not told apart). A row with none is a proc of
+ * its own — Astral Smolder's five reflected applications in 2 s are five
+ * (codex 20-G5) — unless within `REFLECT_CAST_LEAD_MS` of the previous. */
+export function reflectCount(
+  caster: ICombatUnit,
+  spellId: string,
+  rows: readonly number[],
+): number {
+  const sorted = [...rows].sort((a, b) => a - b);
+  if (sorted.length === 0) return 0;
+  const name = getEnglishSpellName(spellId, "");
+  const casts = (caster.spellCastEvents ?? [])
+    .filter(
+      (e) =>
+        e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+        !!e.spellId &&
+        (e.spellId === spellId ||
+          (name !== "" && getEnglishSpellName(e.spellId, "") === name)),
+    )
+    .map((e) => e.logLine.timestamp);
+  const covered = (ms: number) =>
+    casts.some(
+      (t) => t >= ms - REFLECT_CAST_COVER_MS && t <= ms + REFLECT_CAST_LEAD_MS,
+    );
+  let n = 1;
+  for (let i = 1; i < sorted.length; i++) {
+    const prev = sorted[i - 1]!;
+    const cur = sorted[i]!;
+    if (
+      covered(cur)
+        ? casts.some(
+            (t) =>
+              t > prev + REFLECT_CAST_LEAD_MS &&
+              t <= cur + REFLECT_CAST_LEAD_MS,
+          )
+        : cur - prev > REFLECT_CAST_LEAD_MS
+    )
+      n++;
+  }
+  return n;
 }
 
 function maxHpNear(unit: ICombatUnit, tMs: number): number | null {
@@ -413,6 +475,7 @@ export function reflectedSpells(
         spellName: getEnglishSpellName(m.spellId!, m.spellName),
         isControl,
         damageBack,
+        reflectCount: reflectCount(caster, m.spellId!, chain.rows),
       });
     }
   }

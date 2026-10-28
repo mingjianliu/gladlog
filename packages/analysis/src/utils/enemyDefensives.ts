@@ -42,13 +42,22 @@ import spellIdListsData, {
 import { immunitySchoolMask } from "../data/spellSchools";
 import { allyCopyRecipient } from "./allyCopyWall";
 import { auraEndFromLog, type IAuraEndFromLog } from "./auraEndCause";
-import { buildAuraIntervals, type IAuraInterval } from "./auraIntervals";
+import {
+  buildAuraIntervals,
+  dropAuraRebroadcasts,
+  type IAuraInterval,
+} from "./auraIntervals";
+import { isCasterSideLinkAura } from "./brokenRowBreaker";
 import { buffFullDurationForCaster } from "./buffDuration";
 import { missBelongsToCast } from "./castMissRows";
 import { AURA_BEFORE_CAST_ROW_MAX_MS, CAST_ROW_LAG_MAX_MS } from "./castRowLag";
 import { PRESSED_SPIRIT_OF_REDEMPTION_AURA_IDS } from "./combatStates";
 import { AURA_ONLY_ACTIVATION_IDS } from "./cooldowns";
-import { hiddenPressCandidates, hiddenPressMs } from "./hiddenPress";
+import {
+  hiddenPressCandidates,
+  hiddenPressMs,
+  isResyncBatchAt,
+} from "./hiddenPress";
 import { TOUCH_OF_KARMA_ID } from "./karmaFeed";
 import { toRenderSecond } from "./renderGrid";
 import {
@@ -1016,17 +1025,22 @@ export const SELF_SAVE_IDS: ReadonlySet<string> = new Set<string>([
 export function selfSaveCasts(
   enemy: ICombatUnit,
   matchStartMs: number,
+  /** the round's units, for a summon's press of its owner's save (Master's
+   * Call is pressed by the hunter's pet); absent = the unit's own casts */
+  units?: readonly ICombatUnit[],
 ): Array<{
   atSeconds: number;
   spellId: string;
   spellName: string;
   unseenPress?: true;
+  noPressLogged?: true;
 }> {
   const out: Array<{
     atSeconds: number;
     spellId: string;
     spellName: string;
     unseenPress?: true;
+    noPressLogged?: true;
   }> = [];
   for (const cast of enemy.spellCastEvents ?? []) {
     if (cast.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
@@ -1049,6 +1063,67 @@ export function selfSaveCasts(
         spellName: getEnglishSpellName(id, ""),
         unseenPress: true,
       });
+  // …and the save an aura of the unit's own put up with no press of it at
+  // all — a talent's or the spell's own rider (user ruling 2026-10-27,
+  // DB2 descriptions): Guardian Spirit while channeling Divine Hymn (64843,
+  // baseline), Ice Barrier with a Blazing Barrier (431066 / 333373), Frenzied
+  // Regeneration from Well-Honed Instincts (377847). 605 manifest, self-save
+  // auras the holder put on itself with no press of them within
+  // SAVE_CAST_AURA_PAIR_S: Ice Barrier 365, Frenzied Regeneration 283,
+  // Guardian Spirit 116, Blessing of Sacrifice 8.
+  const pressIdsOf = (castId: string) =>
+    new Set([castId, ...effectAurasOfCast(castId)]);
+  const pets = (units ?? []).filter((u) => u.ownerId === enemy.id);
+  const pressMsOf = (ids: ReadonlySet<string>) =>
+    [enemy, ...pets].flatMap((u) =>
+      (u.spellCastEvents ?? [])
+        .filter(
+          (c) =>
+            c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+            !!c.spellId &&
+            (ids.has(c.spellId) ||
+              castsOfEffectAura(c.spellId).some((x) => ids.has(x))),
+        )
+        .map((c) => c.logLine.timestamp),
+    );
+  const castOfAura = new Map<string, string>();
+  for (const id of SELF_SAVE_IDS)
+    for (const a of pressIdsOf(id))
+      if (!castOfAura.has(a)) castOfAura.set(a, id);
+  const pressMsByCast = new Map<string, number[]>();
+  for (const a of dropAuraRebroadcasts(enemy.auraEvents ?? [])) {
+    if (a.logLine.event !== LogEvent.SPELL_AURA_APPLIED) continue;
+    if (a.srcUnitId !== enemy.id || a.destUnitId !== enemy.id) continue;
+    // a transfer external's link on its own caster is no save of theirs
+    // (`isCasterSideLinkAura`; 605 preview: 17 Blessing of Sacrifice links
+    // read as the paladin's own absorb)
+    if (a.spellId && isCasterSideLinkAura(a.spellId, true)) continue;
+    // …and a harmful aura is none either (codex 20-G2 #1: Touch of Karma's
+    // reflected-damage debuff 124280 on the monk read as a second absorb)
+    if (a.auraType === "DEBUFF") continue;
+    const castId = a.spellId ? castOfAura.get(a.spellId) : undefined;
+    if (castId === undefined) continue;
+    const ms = a.logLine.timestamp;
+    if (isResyncBatchAt(enemy, ms)) continue; // the hidden-press reading's
+    const presses =
+      pressMsByCast.get(castId) ??
+      pressMsByCast
+        .set(
+          castId,
+          pressMsOf(
+            new Set([...pressIdsOf(castId), ...castsOfEffectAura(a.spellId!)]),
+          ),
+        )
+        .get(castId)!;
+    if (presses.some((p) => Math.abs(p - ms) <= SAVE_CAST_AURA_PAIR_S * 1000))
+      continue;
+    out.push({
+      atSeconds: (ms - matchStartMs) / 1000,
+      spellId: castId,
+      spellName: getEnglishSpellName(castId, a.spellName ?? ""),
+      noPressLogged: true,
+    });
+  }
   return out.sort((a, b) => a.atSeconds - b.atSeconds);
 }
 
@@ -2083,7 +2158,15 @@ export function enemyDefensiveEvents(
   // B4a (2026-09-25): the caster's own defensives outside the wall table,
   // each labelled by what it does (`selfDefensiveMechanism`, user ruling
   // 2026-10-11) — the label is the ability's, the figures are the log's.
-  for (const c of selfSaveCasts(enemy, combat.startTime)) {
+  for (const c of selfSaveCasts(
+    enemy,
+    combat.startTime,
+    // the round's units, when the caller handed the whole round: a pet's
+    // press of its owner's save (Master's Call)
+    Object.values(
+      (combat as { units?: Record<string, ICombatUnit> }).units ?? {},
+    ),
+  )) {
     const mechanism = selfDefensiveMechanism(c.spellId);
     // An absorb and a percentage reduction carry what the log shows of the
     // caster's own aura of the cast's id — how long it was up, with the
@@ -2113,6 +2196,7 @@ export function enemyDefensiveEvents(
       casterId: enemy.id,
       kind: "self-save",
       ...(c.unseenPress ? { unseenPress: true as const } : {}),
+      ...(c.noPressLogged ? { noPressLogged: true as const } : {}),
       ...(mechanism ? { mechanism } : {}),
       ...(mechanism?.kind === "absorb" ? { effect: "absorb" as const } : {}),
       ...(own

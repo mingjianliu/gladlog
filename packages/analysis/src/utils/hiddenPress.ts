@@ -32,6 +32,7 @@ import {
   effectAuraViaName,
   ownEffectAurasOfCast,
 } from "../data/castEffectAuras";
+import { FORM_COOLDOWN_BUFF_BY_CAST_ID } from "../data/druidForms";
 import {
   getEnglishSpellName,
   spellEffectData,
@@ -224,6 +225,30 @@ export function hiddenPressMs(
     }
     return ms + lifeMs(id!, ms);
   };
+  // a form cooldown's buff still up from an earlier press makes the form
+  // aura's re-listing a shift back, not a press (`isFormReshiftCast`'s
+  // reading, for a cast the log lost): wide 36-22 2:20, a Tree of Life buff
+  // 117679 pressed at 2:03 and re-listed with the form at 2:20 read as a
+  // third press 17 s into its own 30 s buff. Up to its REMOVED, or its
+  // official length when the log lost that.
+  const formBuffId = FORM_COOLDOWN_BUFF_BY_CAST_ID[spellId];
+  const formBuffUpBefore = (ms: number): boolean => {
+    if (formBuffId === undefined) return false;
+    let upUntil = -Infinity;
+    for (const b of unit.auraEvents ?? []) {
+      const at = b.logLine.timestamp;
+      if (at >= ms - RESYNC_BATCH_SPAN_MS) break;
+      if (b.spellId !== formBuffId || b.destUnitId !== unit.id) continue;
+      const ev = b.logLine.event;
+      if (ev === LogEvent.SPELL_AURA_REMOVED) upUntil = -Infinity;
+      else if (
+        ev === LogEvent.SPELL_AURA_APPLIED ||
+        ev === LogEvent.SPELL_AURA_REFRESH
+      )
+        upUntil = at + hiddenAuraLifeMs(formBuffId, unit, at);
+    }
+    return ms <= upUntil;
+  };
   for (const [i, a] of own.entries()) {
     if (!kept.has(a)) continue;
     const ms = a.logLine.timestamp;
@@ -235,7 +260,8 @@ export function hiddenPressMs(
         isResyncBatchAt({ id: unit.id, auraEvents: rows }, ms) &&
         !pressMs.some((p) => Math.abs(p - ms) <= PRESS_ROW_PAIR_MS) &&
         !restated(i) &&
-        !heraldProc(a.spellId!, ms)
+        !heraldProc(a.spellId!, ms) &&
+        !formBuffUpBefore(ms)
       )
         out.push(ms);
       upUntilMs = untilOf(i, ms);

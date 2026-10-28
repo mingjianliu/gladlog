@@ -80,6 +80,10 @@ export function emitEnemyDefEntries(
     const combatSpan = {
       startTime: matchStartMs,
       endTime: matchStartMs + matchEndSeconds * 1000,
+      // the round's units: a summon's press of its owner's save pairs with
+      // the owner's aura (codex 20-G2 #2: a pet's Master's Call 53271 left
+      // the hunter's 54216 / 62305 `[no press logged]`)
+      units: Object.fromEntries((_allUnits ?? []).map((u) => [u.id, u])),
     };
     // The round's end (`roundEndMs`: a Solo Shuffle round's ending death,
     // ~2 s before the log's end) — the instant `— still up when the round

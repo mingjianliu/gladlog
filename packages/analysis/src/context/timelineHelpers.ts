@@ -38,6 +38,7 @@ import {
 } from "../utils/ccTrinketAnalysis";
 import { isControlledPlayerFlags } from "../utils/charmedPlayer";
 import {
+  allyReachTalentNote,
   cdCanHelpAnotherUnit,
   cdReadyInTimeAt,
   IMajorCooldownInfo,
@@ -2468,10 +2469,17 @@ export function buildKillSequenceBlock(params: {
                     // cast — the same words on both read as one number
                     // (review 40-FT-54)
                     ` (free to press it for the last ${(Math.round(freeMs / 100) / 10).toFixed(1)}s before the death)`;
+              // a self-only wall a talent lets its holder put on an ally
+              // says so when the death is another unit's (user ruling
+              // 2026-10-27 — the gate reads it back)
+              const reachNote =
+                u.player.name !== dyingUnit.name
+                  ? allyReachTalentNote(u.cd)
+                  : undefined;
               killSeqEntries.push({
                 timeSeconds: Math.max(0, deathTime - 1),
                 label: "[DEFENSIVE AVAILABLE]",
-                text: `${pid(u.player.name)}: ${u.cd.spellName} available but unused${freeNote}`,
+                text: `${pid(u.player.name)}: ${u.cd.spellName}${reachNote ? ` (${reachNote})` : ""} available but unused${freeNote}`,
               });
             });
           }

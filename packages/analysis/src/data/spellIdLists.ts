@@ -252,6 +252,29 @@ export const ENEMY_SELF_DEFENSIVE_HAND_MECHANISMS: Readonly<
   "342245": "rewind",
 };
 
+/**
+ * Presses whose official mechanic immunity the log does not bear out, so the
+ * `[ENEMY DEF]` label says only that the controls were removed (user ruling
+ * 2026-10-27, "只写清除"). Master's Call — cast 272682 / 1241871, the pet's
+ * effect auras 54216 / 62305 / 1224810: DB2 aura 77 on root (7) and snare
+ * (11) for 4 s, and the description "cause them to be immune to all such
+ * effects for $d". On the 605 manifest, root / snare controls landing on a
+ * unit inside one of those auras: 571 logged IMMUNE and 545 put their aura
+ * on, almost every spell on one side only (Chains of Ice 45524, Earthgrab,
+ * Master of the Glaive, Ring of Frost always IMMUNE; Consecration 204242
+ * ×264, Earthbind ×64, Crippling Poison 3409 ×31 always on — and neither
+ * SpellCategories.Mechanic nor EffectMechanic tells the two sides apart).
+ * The removal at the press is in the log (an Ice Nova and a Judgment of
+ * Justice REMOVED in the press's ms, b14ac981 22:05:54.660). Whether an
+ * aura that went on still slowed the unit the log cannot show. FLAG: a
+ * movement-speed measurement could settle it. Registered in
+ * `curatedIdRegistry`.
+ */
+export const MECHANIC_IMMUNITY_REMOVAL_ONLY_IDS: ReadonlySet<string> = new Set([
+  "272682",
+  "1241871",
+]);
+
 /** F-E4, the ally-castable half of F-E7 and crisis-external F-A7: an instant
  * heal or an absorb thrown on an ally (rendered as an external, `X → unit`) or
  * on the caster itself (its own press, labelled by what it does —

@@ -354,6 +354,24 @@ export const ALLY_REACH_GRANTED_BY_TALENT: Readonly<Record<string, string>> = {
   "363916": "444322", // Obsidian Scales ← Lifecinders
 };
 
+/**
+ * What a line says beside a self-only cooldown this player can put on an
+ * ally through a talent (`ALLY_REACH_GRANTED_BY_TALENT`, `allyReach: true`):
+ * `on an ally — Lifecinders`. `[DEFENSIVE AVAILABLE]` prints it for another
+ * unit's death; `checkSelfOnlyDefensiveClaims` reads it back (user ruling
+ * 2026-10-27: name the talent). Undefined when the cooldown's reach is not a
+ * talent's.
+ */
+export function allyReachTalentNote(cd: {
+  spellId: string;
+  allyReach?: boolean;
+}): string | undefined {
+  if (cd.allyReach !== true) return undefined;
+  const talentId = ALLY_REACH_GRANTED_BY_TALENT[cd.spellId];
+  if (talentId === undefined) return undefined;
+  return `on an ally — ${getEnglishSpellName(talentId, "") || talentId}`;
+}
+
 /** `canHelpAnotherUnit` for THIS player's cooldown: the id-level answer, and
  * not when the player lacks the talent that grants the ally effect
  * (`allyReach: false`), and yes when a talent of theirs grants it

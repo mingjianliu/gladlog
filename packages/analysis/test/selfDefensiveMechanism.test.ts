@@ -114,8 +114,11 @@ describe("selfDefensiveMechanism — what a self defensive does, official data f
         // the 100 ms cleanse aura 58876 is no standing immunity (fact5 cxa
         // e38f41c9, `genSpellSchools` FLASH_IMMUNITY_MAX_MS)
         "58875": "+60% movement speed", // Spirit Walk
-        "272682": "root / snare immunity", // Master's Call → 54216 / 62305
-        "1241871": "root / snare immunity", // Master's Call → 1224810
+        // Master's Call: DB2 says root / snare immunity (asserted below); the
+        // label says the removal only (user ruling 2026-10-27,
+        // `MECHANIC_IMMUNITY_REMOVAL_ONLY_IDS`)
+        "272682": "removes roots / snares", // Master's Call → 54216 / 62305
+        "1241871": "removes roots / snares", // Master's Call → 1224810
         // abilityProfile.moveSpeedPct — DB2 aura 31 (never cast on oneself)
         "374227": "+30% movement speed", // Zephyr
         // talentMitigationGenerated, the reduction on the cast's own aura
@@ -530,7 +533,7 @@ describe("[ENEMY DEF] — a pressed self defensive prints what it does (2026-10-
       "Alter Time (rewind)",
       "Lichborne (charm / fear / sleep immunity)",
       "Spirit Walk (+60% movement speed)",
-      "Master's Call (root / snare immunity)",
+      "Master's Call (removes roots / snares)",
       "Guardian Spirit (+60% healing received)",
       "Lay on Hands (heal)",
     ]);

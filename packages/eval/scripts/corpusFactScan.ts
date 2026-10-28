@@ -993,7 +993,7 @@ for (const f of files) {
   }> = [];
   for (const l of lines) {
     const rm =
-      /^(\d+:\d\d) {2}\[REFLECTED\] {3}(\d+)\([^)]*\)'s (.+?) reflected by (\d+)\([^)]*\)(?: \(came back for (\d+)k\))?/.exec(
+      /^(\d+:\d\d) {2}\[REFLECTED\] {3}(\d+)\([^)]*\)'s (.+?) reflected(?: ×\d+)? by (\d+)\([^)]*\)(?: \(came back for (\d+)k\))?/.exec(
         l,
       );
     if (rm)

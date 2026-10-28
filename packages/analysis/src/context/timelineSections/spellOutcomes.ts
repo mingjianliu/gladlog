@@ -99,7 +99,7 @@ export function emitSpellOutcomeEntries(
       : ` (came back for ${Math.round(r.damageBack / 1000)}k)`;
     addEntry(
       r.atSeconds,
-      `${fmtTime(r.atSeconds)}  [REFLECTED]   ${unitLabel(caster)}'s ${r.spellName} reflected by ${unitLabel(reflector)}${back}`,
+      `${fmtTime(r.atSeconds)}  [REFLECTED]   ${unitLabel(caster)}'s ${r.spellName} reflected${r.reflectCount >= 2 ? ` ×${r.reflectCount}` : ""} by ${unitLabel(reflector)}${back}`,
     );
   }
   for (const x of sanctuaryRemovals(_allUnits, matchStartMs)) {

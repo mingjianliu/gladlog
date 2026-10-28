@@ -1200,7 +1200,7 @@ async function main(): Promise<void> {
       t === "IMMUNE" ? "IMMUNE" : t === "REFLECT" ? "REFLECT" : "MISS";
     for (const l of lines) {
       const av =
-        /^(\d+:\d\d) {2}\[CC AVOIDED\?\] {3}(\d+)\([^)]*\): (.+?) \(by (.+?)(?:; cast \d+:\d\d)?\) (?:logged (\w+)|did not land); (.+) \((own|from (.+))\) active$/.exec(
+        /^(\d+:\d\d) {2}\[CC AVOIDED\?\] {3}(\d+)\([^)]*\): (.+?) \(by (.+?)(?:; cast \d+:\d\d)?\) (?:logged (\w+)|did not land); (.+) \((own|from (.+))\) (?:active|pressed \+\d+\.\ds)(?: — recast landed \+\d+\.\ds)?$/.exec(
           l,
         );
       if (av) {

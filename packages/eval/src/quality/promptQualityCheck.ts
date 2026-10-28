@@ -163,6 +163,7 @@ import {
   CONTROL_FAILED_MISS_TYPES,
 } from "@gladlog/analysis/src/utils/castMissRows";
 import {
+  CC_AVOIDED_RECAST_RE,
   CC_END_CAUSE_NOT_LOGGED,
   CC_ENDED_BY_LEAD,
   CC_FROM_OWN_TEAM_TAG,
@@ -177,6 +178,7 @@ import {
 } from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
 import { spanHoldsGhostSecond } from "@gladlog/analysis/src/utils/combatStates";
 import {
+  allyReachTalentNote,
   canHelpAnotherUnit,
   isHpTroughWorthPrinting,
   isSpikeHealedThrough,
@@ -2210,6 +2212,21 @@ export function checkCcAvoidedLandedConsistency(lines: string[]): string[] {
           caster === undefined || l.caster === undefined || l.caster === caster,
       )
       .map((l) => l.at)
+      // a line that names its caster's recast landing (`ccAvoidedRecastTag`,
+      // user ruling 2026-10-27) is answered by one landing in the second(s)
+      // that recast can render in: [line second + N, line second + 1 + N)
+      .filter((t, k, all) => {
+        const r = logged ? CC_AVOIDED_RECAST_RE.exec(line.trimEnd()) : null;
+        if (!r) return true;
+        const lineS = Number(m[1]) * 60 + Number(m[2]);
+        // N is rounded to 0.1 s (codex 20-G1: a 0.96 s recast prints +1.0s
+        // and can land in the line's own second)
+        const d = Number(r[1]);
+        const lo = Math.floor(lineS + d - 0.05);
+        const hi = Math.floor(lineS + 1 + d + 0.05);
+        const isRecast = (x: number) => x >= lo && x <= hi;
+        return !(isRecast(t) && all.findIndex(isRecast) === k);
+      })
       .find((t) => {
         const d = t - at;
         return d >= 0 ? d + 1 <= afterMs / 1000 : -d + 1 <= beforeMs / 1000;
@@ -2300,7 +2317,7 @@ const CC_AVOIDED_DATA_LINE = /^\s*\d+:\d{2}\s+\[CC AVOIDED\?\]/;
 // — the line ends at the miss, with the log's own cause when it shows one
 // (`(DR: … Immune)` / `(a Cyclone was on them)`)
 const CC_AVOIDED_OUTCOME =
-  /\) (?:(?:did not land|logged (\S+)); |logged (IMMUNE)(?: \((?:DR: [^)]+ Immune|a Cyclone was on them)\))?$)/;
+  /\) (?:(?:did not land|logged (\S+)); |logged (IMMUNE)(?: \((?:DR: [^)]+ Immune|a Cyclone was on them)\))?(?: — recast landed \+\d+\.\ds)?$)/;
 
 /**
  * The first half of a `[CC AVOIDED?]` line (FT-T16 D15 "3c", user approval
@@ -2634,16 +2651,18 @@ const CC_ON_ENEMY_LINE =
  *    that target inside the window ("not used" would be false).
  */
 export function checkPeelOptionConsistency(lines: string[]): string[] {
-  const deaths = new Set<string>();
+  /** `second\0victim` → the `[DEATH]` line's index */
+  const deaths = new Map<string, number>();
   const landed: Array<{
     at: number;
     target: string;
     spell: string;
     by: string;
+    line: number;
   }> = [];
-  for (const line of lines) {
+  lines.forEach((line, i) => {
     const d = line.match(FRIENDLY_DEATH_LINE);
-    if (d) deaths.add(`${Number(d[1]) * 60 + Number(d[2])}\u0000${d[3]}`);
+    if (d) deaths.set(`${Number(d[1]) * 60 + Number(d[2])}\u0000${d[3]}`, i);
     const c = line.match(CC_ON_ENEMY_LINE);
     if (c)
       landed.push({
@@ -2651,8 +2670,9 @@ export function checkPeelOptionConsistency(lines: string[]): string[] {
         target: c[3]!,
         spell: c[4]!,
         by: c[5]!,
+        line: i,
       });
-  }
+  });
   const failures: string[] = [];
   lines.forEach((line, i) => {
     if (!PEEL_DATA_LINE.test(line)) return;
@@ -2673,13 +2693,14 @@ export function checkPeelOptionConsistency(lines: string[]): string[] {
     const atS = Number(m[13]) * 60 + Number(m[14]);
     const dr = m[15]!;
     const trinketUnit = m[16];
+    const deathLine = deaths.get(`${death}\u0000${victim}`);
     const why: string[] = [];
     if (attacker !== target)
       why.push(`伤害占比写的是 ${attacker},不是控制目标`);
     if (trinketUnit && trinketUnit !== target)
       why.push(`饰品事实写的是 ${trinketUnit},不是控制目标`);
     if (atS !== from) why.push(`at ${fmtTime(atS)} 不是时段起点`);
-    if (!deaths.has(`${death}\u0000${victim}`))
+    if (deathLine === undefined)
       why.push(`没有 ${victim} 在 ${fmtTime(death)} 的 [DEATH] 行`);
     if (from < death - PEEL_LOOKBACK_S || to > death || from > to)
       why.push(
@@ -2688,13 +2709,18 @@ export function checkPeelOptionConsistency(lines: string[]): string[] {
     if (n < PEEL_MIN_USABLE_S || n > to - from + 1)
       why.push(`可用 ${n} 秒与门槛 ${PEEL_MIN_USABLE_S} 秒 / 时段长度不符`);
     if (dr === "Immune") why.push("递减为 Immune");
+    // in the death's own second, only a landing printed before the [DEATH]
+    // line came before it: the timeline orders a second's lines by their
+    // instants (wide 240-16 1:42: a Paralysis 228 ms after the death)
     const used = landed.find(
       (c) =>
         c.by === owner &&
         c.target === target &&
         c.spell === spell &&
         c.at >= death - PEEL_LOOKBACK_S &&
-        c.at <= death,
+        (c.at < death ||
+          (c.at === death &&
+            (deathLine === undefined || c.line < deathLine))),
     );
     if (used)
       why.push(
@@ -7736,9 +7762,19 @@ export function checkSelfOnlyDefensiveClaims(lines: string[]): string[] {
       }
     }
     if (!dyingPid || dyingPid === whoPid) return; // 自己的死:自保 CD 合理
-    const spellId = DEFENSIVE_ID_BY_NAME.get(spellName.trim());
+    // `X (on an ally — Talent)`: the holder's talent puts this self-only
+    // wall on an ally (`allyReachTalentNote`, user ruling 2026-10-27) — the
+    // note must be the one that spell's talent prints
+    const note = / \((on an ally — [^)]+)\)$/.exec(spellName.trim());
+    const name = note ? spellName.trim().slice(0, note.index) : spellName.trim();
+    const spellId = DEFENSIVE_ID_BY_NAME.get(name);
     if (!spellId) return; // 认不出的技能不报
     if (canHelpAnotherUnit(spellId)) return;
+    if (
+      note &&
+      allyReachTalentNote({ spellId, allyReach: true }) === note[1]
+    )
+      return;
     violations.push(
       `self-only defensive offered for another unit's death: "${line.trim()}" ` +
         `(${spellName.trim()}/${spellId} 够不着 ${dyingPid})`,

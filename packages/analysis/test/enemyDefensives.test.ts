@@ -47,6 +47,7 @@ import {
   MITIGATION_AURA_IDS,
   MITIGATION_AURA_MIN_PCT,
   pressSecondsOfAura,
+  selfSaveCasts,
   REMOVED_EARLY_SLACK_S,
   RIDER_ABSORB_SAVE_AURAS,
   SAVE_AURA_END_UNSEEN_IDS,
@@ -1555,12 +1556,63 @@ describe("pressSecondsOfAura — one press per cast/effect twin (F19 605 diff)",
   it("joinReappliedIntervals joins a re-announced aura behind one twin-row press", () => {
     const casts = [row(12_000, "110960"), row(12_000, "110959")] as never;
     const ivs = [
-      { spellId: "110960", srcUnitName: "Mage", fromS: 12, toS: 12.1, inferredStart: false, inferredEnd: true },
-      { spellId: "110960", srcUnitName: "Mage", fromS: 12.1, toS: 30, inferredStart: false, inferredEnd: true },
+      {
+        spellId: "110960",
+        srcUnitName: "Mage",
+        fromS: 12,
+        toS: 12.1,
+        inferredStart: false,
+        inferredEnd: true,
+      },
+      {
+        spellId: "110960",
+        srcUnitName: "Mage",
+        fromS: 12.1,
+        toS: 30,
+        inferredStart: false,
+        inferredEnd: true,
+      },
     ] as never;
     const joined = joinReappliedIntervals(ivs, (_n, id) =>
       pressSecondsOfAura(casts, id, 0),
     );
     expect(joined).toHaveLength(1);
+  });
+});
+
+describe("selfSaveCasts — a self-save aura with no press of its own (user ruling 2026-10-27)", () => {
+  const row = (
+    event: LogEvent,
+    id: string,
+    ms: number,
+    auraType: "BUFF" | "DEBUFF",
+  ) => ({
+    spellId: id,
+    spellName: id,
+    srcUnitId: "u",
+    srcUnitName: "U",
+    destUnitId: "u",
+    timestamp: ms,
+    auraType,
+    logLine: { event, timestamp: ms, parameters: [] },
+  });
+  const unit = (auraEvents: unknown[]) =>
+    ({ id: "u", name: "U", auraEvents, spellCastEvents: [] }) as never;
+  it("Guardian Spirit put on its holder with no press of it is a [no press logged] save", () => {
+    const out = selfSaveCasts(
+      unit([row(LogEvent.SPELL_AURA_APPLIED, "47788", 10_000, "BUFF")]),
+      0,
+    );
+    expect(out).toEqual([
+      expect.objectContaining({ spellId: "47788", noPressLogged: true }),
+    ]);
+  });
+  it("HAS TEETH: a harmful aura of a save's family is none (codex 20-G2 #1: Touch of Karma's reflected-damage debuff 124280)", () => {
+    expect(
+      selfSaveCasts(
+        unit([row(LogEvent.SPELL_AURA_APPLIED, "124280", 10_000, "DEBUFF")]),
+        0,
+      ),
+    ).toEqual([]);
   });
 });

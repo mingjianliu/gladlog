@@ -609,7 +609,7 @@ describe("checkEnemyDefSaveEffect (FT-T07, ruling D8)", () => {
     ],
     [
       "4(BMHunter) (Beast Mastery Hunter)",
-      "Master's Call (root / snare immunity) [friendly offensive CD active] (at 89% HP)",
+      "Master's Call (removes roots / snares) [friendly offensive CD active] (at 89% HP)",
     ],
     [
       "4(BMHunter) (Beast Mastery Hunter)",
@@ -675,6 +675,10 @@ describe("checkEnemyDefSaveEffect (FT-T07, ruling D8)", () => {
     ["a rewind called a heal", "Alter Time (heal)"],
     ["the wrong control list", "Lichborne (root / snare immunity)"],
     ["a freedom called a speed buff", "Master's Call (+60% movement speed)"],
+    [
+      "an immunity the corpus does not bear out (user ruling 2026-10-27)",
+      "Master's Call (root / snare immunity)",
+    ],
     ["a speed buff called a freedom", "Spirit Walk (root / snare immunity)"],
     ["another percentage than the official one", "Roar of Sacrifice (30%)"],
     ["a heal absorb left out", "Death Pact (heal)"],

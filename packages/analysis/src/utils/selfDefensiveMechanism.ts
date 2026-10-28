@@ -20,6 +20,7 @@
  * | `heal` | `abilityProfile.healsSelf` / `healsOthers` (DB2 Effect 10 / 136, aura 8 / 20); `+ heal absorb` from `HEAL_ABSORB_SELF_SAVE_IDS` | `(heal)` |
  * | `healing received` | `abilityProfile.healingReceivedPct` (DB2 aura 118 / 259) | `(+N% healing received)` |
  * | `mechanic immunity` | `immunityMechanics` (DB2 aura 77) of the cast or of an aura the log shows it applying (`effectAurasOfCast`) | `(root / snare immunity)` |
+ * | `control removal` | the same, for a press in `MECHANIC_IMMUNITY_REMOVAL_ONLY_IDS` (Master's Call: the corpus does not bear out the immunity; user ruling 2026-10-27) | `(removes roots / snares)` |
  * | `movement speed` | `abilityProfile.moveSpeedPct` (DB2 aura 31) | `(+N% movement speed)` |
  * | `dodge` / `spell reflect` / `rewind` | `ENEMY_SELF_DEFENSIVE_HAND_MECHANISMS` — the three the profile has no dimension for, DB2 rows quoted there | the word |
  * | `redirect` / `area` | `ENEMY_REDIRECT_SAVE_IDS` / `ENEMY_AREA_SAVE_IDS` (signed sets) | the word |
@@ -39,6 +40,7 @@ import {
   ENEMY_REDIRECT_SAVE_IDS,
   ENEMY_SELF_DEFENSIVE_HAND_MECHANISMS,
   type EnemySelfDefensiveHandMechanism,
+  MECHANIC_IMMUNITY_REMOVAL_ONLY_IDS,
 } from "../data/spellIdLists";
 import { immunityMechanics } from "../data/spellSchools";
 import talentMitigationGenerated from "../data/talentMitigationGenerated.json";
@@ -56,6 +58,9 @@ export type SelfDefensiveMechanism =
   | { kind: "healing received"; pct: number }
   /** immunity to the named control mechanics while it is up */
   | { kind: "mechanic immunity"; mechanics: readonly string[] }
+  /** the named controls removed at the press, no immunity claimed
+   * (`MECHANIC_IMMUNITY_REMOVAL_ONLY_IDS`) */
+  | { kind: "control removal"; mechanics: readonly string[] }
   /** more movement speed, by an official percentage */
   | { kind: "movement speed"; pct: number }
   | { kind: EnemySelfDefensiveHandMechanism }
@@ -159,7 +164,10 @@ export function selfDefensiveMechanism(
   ]
     .sort((a, b) => a - b)
     .flatMap((m) => MECHANIC_NAMES[m] ?? []);
-  if (mechanics.length > 0) return { kind: "mechanic immunity", mechanics };
+  if (mechanics.length > 0)
+    return MECHANIC_IMMUNITY_REMOVAL_ONLY_IDS.has(spellId)
+      ? { kind: "control removal", mechanics }
+      : { kind: "mechanic immunity", mechanics };
   if (profile.moveSpeedPct !== undefined)
     return { kind: "movement speed", pct: profile.moveSpeedPct };
   const hand = ENEMY_SELF_DEFENSIVE_HAND_MECHANISMS[spellId];
@@ -184,6 +192,8 @@ export function selfDefensiveLabelWords(m: SelfDefensiveMechanism): string {
       return `+${m.pct}% healing received`;
     case "mechanic immunity":
       return `${m.mechanics.join(" / ")} immunity`;
+    case "control removal":
+      return `removes ${m.mechanics.map((x) => `${x}s`).join(" / ")}`;
     case "movement speed":
       return `+${m.pct}% movement speed`;
     default:
@@ -278,7 +288,12 @@ const LABEL_LEGENDS: ReadonlyArray<{ carried: RegExp; legend: string }> = [
   {
     carried: / \([a-z]+(?: \/ [a-z]+)* immunity\)/,
     legend:
-      "`(root / snare immunity)`, `(charm / fear / sleep immunity)` = the unit cannot be put under those controls while it is up, and one already on it is removed — no damage is reduced;",
+      "`(charm / fear / sleep immunity)` (or another list of controls) = the unit cannot be put under those controls while it is up, and one already on it is removed — no damage is reduced;",
+  },
+  {
+    carried: / \(removes [a-z]+s(?: \/ [a-z]+s)*\)/,
+    legend:
+      "`(removes roots / snares)` = those controls already on the unit are removed at the press; it does not say the unit stayed free of new ones afterwards — no damage is reduced;",
   },
   {
     carried: / \(\+\d+% movement speed\)/,

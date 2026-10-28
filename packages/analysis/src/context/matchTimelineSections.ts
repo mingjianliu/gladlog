@@ -10,6 +10,7 @@ import {
   IPlayerCCTrinketSummary,
   pvpTrinketRemainingSecondsAt,
   renderedCcDuration,
+  rendersCcOnTeamLine,
 } from "../utils/ccTrinketAnalysis";
 import {
   cdCanHelpAnotherUnit,
@@ -610,6 +611,10 @@ export function emitDmgSpikeEntries(params: {
           // fact3 D30: a dispel-backlash silence is a [SILENCE] line, not
           // enemy CC (the [CC ON TEAM] lines this list mirrors)
           if (BACKLASH_AURA_CC_TYPE.get(cc.spellId) === "silence") continue;
+          // …and one of no length prints no [CC ON TEAM] line
+          // (`rendersCcOnTeamLine`; wide 234-3 1:57: a Polymorph cleansed in
+          // the ms it landed was cited with no line to match)
+          if (!rendersCcOnTeamLine(cc)) continue;
           const isTarget = summary.playerName === pw.targetName;
           const isOwner =
             ownerName !== undefined && summary.playerName === ownerName;

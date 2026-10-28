@@ -8,6 +8,7 @@ import {
 import { getEnglishSpellName } from "../data/spellEffectData";
 import { dropAuraRebroadcasts, officialDurationS } from "./auraIntervals";
 import { empowerSpans } from "./castCommitSpans";
+import { COPY_CAST_IDS } from "./castPress";
 import { roundEndMs } from "./roundEnd";
 import { auraBlocksMechanic, INTERRUPT_MECHANIC } from "./spellMechanics";
 
@@ -575,6 +576,11 @@ export function extractStasisEvents(
       e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
       e.spellId &&
       STASIS_STORABLE_HEAL_IDS.has(e.spellId) &&
+      // a copy or a later stage of another press is no stored spell — the
+      // press predicate's own list (`COPY_CAST_IDS`; fact5 D3, 04a1bde9: a
+      // Verdant Embrace's 361195 landed 746 ms after its 360995, past the
+      // twin window, and read as a second stored Verdant Embrace)
+      !COPY_CAST_IDS.has(e.spellId) &&
       bufferedSpells.length < 3 &&
       !unreleasedEmpowerAt(e.spellId, e.logLine.timestamp)
     ) {

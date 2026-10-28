@@ -86,6 +86,15 @@ type OutgoingMiss = NonNullable<ICombatUnit["missesOut"]>[number];
  * that prefix (DR chains, `resLedgerPrune`, the gates) means "landed". */
 export const CC_NOT_LANDED_TAG = "[CC NOT LANDED]";
 
+/** The tag an aimed owner / teammate control's cast line carries when it
+ * went off and left no control aura and no miss row on its target (cc-dr
+ * F-NE1), and its legend — printed once, when a line carries the tag (user
+ * ruling 2026-10-27: the tag had no legend). */
+export const NO_CC_AURA_LOGGED_TAG = "[no CC aura logged";
+export const NO_CC_AURA_LOGGED_LEGEND = [
+  "  `[no CC aura logged]` = your team's aimed control went off, but the log shows no control aura and no miss row on that target; `— X was up` names an avoidance aura the target had at the cast.",
+];
+
 /** Printed once, when a `[CC NOT LANDED]` line rendered. */
 export const CC_NOT_LANDED_LEGEND = [
   `  ${CC_NOT_LANDED_TAG} = a control your team cast at that enemy did NOT take effect at that second: the log wrote a miss row for it.`,
@@ -951,8 +960,8 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
         avoidanceExplainsMissType(b.spellId, undefined),
     );
     return up
-      ? ` [no CC aura logged — ${up.name} was up]`
-      : " [no CC aura logged]";
+      ? ` ${NO_CC_AURA_LOGGED_TAG} — ${up.name} was up]`
+      : ` ${NO_CC_AURA_LOGGED_TAG}]`;
   }
 
   // cc-dr F-TM1 (ruling A53, 2026-09-30): the same tag on a teammate's
@@ -1040,13 +1049,25 @@ export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
   function missStatedOnAnotherLine(m: OutgoingMiss): boolean {
     if (consumedImmuneMisses.has(m) || consumedCcMisses.has(m)) return true;
     if (m.missType === "REFLECT" && !!m.spellId) return true;
+    // …or a failure of the same control in the same rendered second, which
+    // the line stating the first one already covers (the gate's reading:
+    // `checkCcNotLandedLines`; wide 197-3 2:33: Binding Shot's tether 117405
+    // and its stun 117526 each logged IMMUNE on one Divine Shield, 315 ms
+    // apart)
+    const nameOf = (x: OutgoingMiss) =>
+      getEnglishSpellName(x.spellId ?? "", x.spellName ?? "");
+    const secondOf = (x: OutgoingMiss) =>
+      toRenderSecond((x.timestamp - matchStartMs) / 1000);
     for (const c of [...consumedImmuneMisses, ...consumedCcMisses]) {
       const x = c as OutgoingMiss;
       if (
         x.srcUnitId === m.srcUnitId &&
         x.destUnitId === m.destUnitId &&
         x.missType === m.missType &&
-        Math.abs(x.timestamp - m.timestamp) <= CAST_MISS_LEAD_MS
+        (Math.abs(x.timestamp - m.timestamp) <= CAST_MISS_LEAD_MS ||
+          (nameOf(x) !== "" &&
+            nameOf(x) === nameOf(m) &&
+            secondOf(x) === secondOf(m)))
       )
         return true;
     }
