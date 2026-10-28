@@ -24,6 +24,14 @@ DB2 踢技是 Effect 68,无锁定时长。`kickLockoutSeconds` 读语料表 `kic
 
 `SpecializationSpells` 有专精被动(约 50 行,如治疗饰品 90 s)。「没有修正能解释」时要同时问 SpecializationSpells,不只天赋 + PvP 池。
 
+## 受疗修正与减疗(恢复德鲁伊研究 2026-10-28 实测)
+
+- 受疗光环:118 全部治疗,259 只作用于周期治疗,283 / 462 只作用于**光环施放者自己**的治疗并须对上 class mask。
+- **减疗(负的 118 / 259)不叠乘,只取最强的一个**:同时挂两种减疗的治疗跳,按乘积预测 ±5% 内只有 8.8%,只取最强 83.2%(10,247 跳)。毒蛇之血 1291471 是加深致伤药膏,照常相乘。
+- **减疗数值由施加者的天赋决定**:施加者 aura 107(加值)/ 108(百分比)行,SpellMod op 对应被改的效果(3 → #0,12 → #1),同 SpellClassSet、class mask 覆盖该减益,× 施加者本回合 COMBATANT_INFO 的 rank。毒药大师 378436 让致伤药膏 +20%(每层 −8 × PvP 0.5);感染伤口 58180 的减疗在 DB2 里是 0,全部来自野蛮爪击 203242(−8 / 层,+1 层上限)。致死打击 PvP −25%。
+- 「DB2 class mask 覆盖到」≠「实际生效」:德鲁伊长者之唤 319454 的 +30% 不作用于恢复的治疗;石皮 197061 只作用于铁木树皮自己 aura 283 掩码里的 HoT。都要拿残差验证。
+- SimC 热修叠加层漏了法强系数(field 9)和 ImplicitTarget_1(field 25),热修改系数时看不见——GH #162。
+
 ## 外部数据源
 
 - wago.tools CSV **不含 hotfix**(`hotfixes=` 参数被忽略)。SimC `midnight` 分支的 `sc_spell_data.inc` 带热修数组(field 27 = PvpMultiplier),已做成叠加层 `packages/analysis/scripts/datagen/fetchSimcHotfixes.ts`。

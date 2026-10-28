@@ -39,6 +39,13 @@
 
 同名召唤物归因走**事件自带的来源 GUID**(`sourceId` → `timelineHelpers.resolveSummonOwner`),不用「按边过滤」的小改(残留失败与原 bug 同形)。门规 `checkPetCreditSide`。NPC 被杀读 `nonPlayerUnitKill`(首个 overkill > 0 的 damageIn;宠物目标的 effectiveAmount 会被清零,所以 overkill 是独立字段)。
 
+## 单排回合与光环生命周期(恢复德鲁伊研究 2026-10-28 实测)
+
+- 每回合一条 ARENA_MATCH_START、全文件一条 END;每回合每人一份 COMBATANT_INFO,天赋可以换(7,171 个文件里每个文件所有玩家的份数都一致)。按回合相对时间建的索引**必须带回合号**,否则会配到别的回合的同一时刻。
+- **长时间增益跨回合保留**:日志既不写 REMOVED 也不重新 APPLIED。在 START 清空光环状态会丢掉它们(奶德逐跳模型的覆盖率 83.3% → 79.0%);只在 END 清。
+- 同一施法者对同一目标重复 APPLIED、中间没有 REMOVED = 刷新:层数保留,刷新历史(按剩余时长算的机制要用)也接着记;只有 tooltip 写明可重叠的光环才算多实例。按层叠的 buff 走 APPLIED_DOSE / REMOVED_DOSE,不是多实例。
+- 衰减 110310 的 APPLIED 行不带数值,3v3 / 单排开局是 10%。**召唤物 / 图腾 / 守护者**(GUID 非 `Player-` 非 `Pet-`)日志里没有衰减,但本回合第一次叠层前吃开局 10%,之后不吃;宠物照常。
+
 ## 「没读过的事件」清单要先核产品侧
 
 一次照研究侧提取器写的「8 条缺口」动工前逐条核对 parser / analysis:2 条落空(产品早有)、1 条部分已有、5 条坐实。**别照研究侧的缺口清单直接动工。** 玩家口头讲解 / 录像可以用来校准提取器,但给的是线索,判据仍要实测;录像是发现工具,不是数据源。
