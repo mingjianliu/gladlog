@@ -208,7 +208,9 @@ describe("enemyDefensiveEvents", () => {
       ["self", BARKSKIN, 10, 12],
       ["external", IRONBARK, 30, 12],
     ]);
-    expect(fromDruid[0].pct).toBe(20);
+    // 20 + the Restoration PvP aura's 10, owned by spec (GH #163); the
+    // fixture carries no talents, so Oakskin stays off the lower bound
+    expect(fromDruid[0].pct).toBe(30);
     expect(fromDruid[0].removedEarly).toBe(false);
     expect(fromDruid[1].casterName).toBe("e1");
     expect(fromDruid[1].recipientName).toBe("e2");

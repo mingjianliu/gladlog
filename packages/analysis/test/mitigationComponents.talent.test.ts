@@ -139,3 +139,38 @@ describe("mitigation resolver talent components (M3b)", () => {
     ]);
   });
 });
+
+describe("spec-passive modifier (GH #163: Restoration PvP aura on Barkskin)", () => {
+  afterEach(() => __resetFactConfigForTests());
+
+  it("owned by spec membership, not the loadout; an unnamed spec is unknown", async () => {
+    configureFacts({ talentMitigation: true });
+    const mod = await import("../src/data/talentMitigationModifiers");
+    (mod.TALENT_MITIGATION_MODIFIERS as unknown as object[]).push({
+      auraSpellId: "104773",
+      talentSpellId: "900005",
+      specIds: ["105"],
+      schoolMask: 127,
+      modPct: 10,
+      validation: "promoted",
+      evidence: "fixture",
+    });
+    const price = (spec: string) =>
+      strongestComponentPct(
+        resolveMitigation("104773", {
+          carrierIsCaster: true,
+          caster: { held: [], spec } as never,
+        })!,
+      )!;
+    const base = price("102").pctMin;
+    expect(price("102")).toEqual({ pctMin: base, pctMax: base });
+    expect(price("105")).toEqual({ pctMin: base + 10, pctMax: base + 10 });
+    expect(price("0")).toEqual({ pctMin: base, pctMax: base + 10 });
+    expect(
+      resolveMitigation("104773", {
+        carrierIsCaster: true,
+        caster: { held: [], spec: "0" } as never,
+      })!.unresolved,
+    ).toEqual(["talent 900005 on 104773: ownership unknown"]);
+  });
+});

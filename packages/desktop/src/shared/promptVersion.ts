@@ -610,4 +610,17 @@
  *  checkSelfOnlyDefensiveClaims 28 → 25 and checkEnemyDefRefConsistency
  *  3 → 0.
  */
-export const PROMPT_VERSION = 461;
+/*
+ * v462 (2026-10-27, GH #163 item 1): a Restoration druid's Barkskin is a
+ *  40 % wall, not 30 % — the Restoration PvP aura 1256995 adds 10 points
+ *  (aura 646) on top of Barkskin 20 + Oakskin 10 (corpus split by spec:
+ *  Restoration 0.600 taken, Balance / Feral 0.70). 605 (PV460 base →
+ *  batch): candidates and findings unchanged, gates unchanged; 268
+ *  [ENEMY DEF] Barkskin lines 30 % → 40 %, 8 mitigation-audit and 2
+ *  [STACKED DEFENSIVES] blocked amounts ×1.56. Wide (728 files, PV461
+ *  base): candidate counts and 100 gates unchanged; 906 Restoration
+ *  [ENEMY DEF] Barkskin lines 30 % → 40 % (Balance 1,254 / Feral 585
+ *  stay), 36 mitigation-audit, 12 [STACKED DEFENSIVES], 2
+ *  burst-into-mitigation facts mitPct 30 → 40.
+ */
+export const PROMPT_VERSION = 462;

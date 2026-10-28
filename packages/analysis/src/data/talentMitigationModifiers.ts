@@ -24,6 +24,11 @@ type TalentMitigationValidation = "promoted" | "unvalidated";
 interface ITalentMitigationModifier {
   auraSpellId: string;
   talentSpellId: string;
+  /** set when the source is a spec passive (DB2 SpecializationSpells — a
+   * spec's PvP aura), not a talent: every player of these specs owns it, and
+   * it sits in no talent tree, so `talentModifierOwnershipOf` would say "no"
+   * to everyone. Same contract as `ICDModifier.specIds` (GH #163). */
+  specIds?: string[];
   /** school mask the modified effect covers */
   schoolMask: number;
   modPct: number;
@@ -41,7 +46,20 @@ export const TALENT_MITIGATION_MODIFIERS: readonly ITalentMitigationModifier[] =
       modPct: 10,
       validation: "promoted",
       evidence:
-        "Barkskin + Oakskin: holders 0.688 (90% 0.682–0.697), 302 units, expected 0.70; S2 archive every 30, run 2 2026-09-13",
+        "Barkskin + Oakskin: holders 0.688 (90% 0.682–0.697), 302 units, expected 0.70; S2 archive every 30, run 2 2026-09-13. Pooled over every druid spec; split by spec (`--split-spec`, new-season archive every 30, 2026-10-27): Balance 0.704 (0.700–0.712, 103 units), Feral 0.700 (0.700–0.703, 76) — Restoration 0.600 is the next row. Re-run with Restoration excluded (`exceptSpecs`, GH #163 codex astra): 0.700 (0.700–0.705), 179 units / 98 players",
+    },
+    {
+      // GH #163: the Restoration PvP aura's effect #10 (aura 646, the flat PvP
+      // modifier) −10 on Barkskin's reduction; its class mask reaches 22812.
+      // A spec passive, not a talent — owned by every Restoration druid.
+      auraSpellId: "22812",
+      talentSpellId: "1256995",
+      specIds: ["105"],
+      schoolMask: 127,
+      modPct: 10,
+      validation: "promoted",
+      evidence:
+        "Barkskin + Oakskin + Restoration PvP aura: Restoration holders 0.600 (90% 0.600–0.603), 123 units / 95 players (player-clustered 0.600–0.603), every one a proven Oakskin holder (the scan counts only those: base 30 assumes it), expected 0.60 (20 + 10 + 10), non-holders (Balance / Feral) 0.70; new-season archive every 30, 2026-10-27. Independent: Restoration Druid study (eval-private runs/rdruid-pvp-2026-10-27, R7) 39.1 % on 2,207 non-crit magic hits, Aug–Oct",
     },
     {
       auraSpellId: "22812",

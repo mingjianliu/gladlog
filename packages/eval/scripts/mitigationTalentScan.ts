@@ -25,6 +25,7 @@
 import { ensureAnalysisData } from "@gladlog/analysis";
 import { MITIGATION_TABLE } from "@gladlog/analysis/src/data/mitigationData";
 import { buildAuraIntervals } from "@gladlog/analysis/src/utils/auraIntervals";
+import { specPassiveOwnership } from "@gladlog/analysis/src/utils/talentModifiers";
 import { talentModifierOwnershipOf } from "@gladlog/analysis/src/utils/talentOwnership";
 import { GladLogParser, type GladMatch, parseLine } from "@gladlog/parser";
 import { type ICombatUnit, toLegacyMatch } from "@gladlog/parser-compat";
@@ -44,6 +45,14 @@ const CANDIDATES: Array<{
   school: number;
   basePct: number;
   modPct: number;
+  /** a spec passive (the resolver's `specIds` contract): owned by spec */
+  specIds?: string[];
+  /** a talent `basePct` assumes: units that do not provably hold it are not
+   * counted (unknown cannot justify the base either) */
+  requires?: string;
+  /** specs whose aura carries a further modifier this row's expectation
+   * leaves out (they are the next row's population) */
+  exceptSpecs?: string[];
 }> = [
   {
     aura: "22812",
@@ -53,6 +62,26 @@ const CANDIDATES: Array<{
     school: 127,
     basePct: 20,
     modPct: 10,
+    // Restoration's Barkskin also carries its PvP aura's 10 (GH #163)
+    exceptSpecs: ["105"],
+  },
+  // GH #163 (2026-10-27): the Restoration PvP aura 1256995 effect #10, aura
+  // 646 (flat PvP modifier) −10 on Barkskin's reduction (class mask reaches
+  // 22812). Base 30 = Barkskin 20 + Oakskin 10, so only proven Oakskin
+  // holders count (`requires`; codex astra: a Resto caster without Oakskin
+  // passes 0.70 and would fail a band it agrees with the resolver on).
+  // `--split-spec` on that slice before the row existed: Restoration 0.600
+  // (0.600–0.603), 123 units / 95 players; Balance 0.704, Feral 0.700.
+  {
+    aura: "22812",
+    name: "Barkskin (Restoration PvP aura)",
+    talent: "1256995",
+    talentName: "Restoration Druid PvP aura",
+    school: 127,
+    basePct: 30,
+    modPct: 10,
+    specIds: ["105"],
+    requires: "449191",
   },
   {
     aura: "22812",
@@ -230,6 +259,12 @@ const shards = Number(arg("--shards", "1"));
 const dumpTo = arg("--dump", "");
 const fromDumps = arg("--from-dumps", "").split(",").filter(Boolean);
 const tag = arg("--tag", "");
+// `--split-spec` (GH #163, 2026-10-27): one row per (candidate, caster spec).
+// A spec's PvP aura can add to a defensive's effect value (Restoration's
+// 1256995 aura 646 on Barkskin), which a scan pooled over every druid spec
+// dilutes. `--only <aura,...>` restricts the report to those auras.
+const splitSpec = process.argv.includes("--split-spec");
+const only = new Set(arg("--only", "").split(",").filter(Boolean));
 
 const median = (xs: number[]) => {
   if (!xs.length) return NaN;
@@ -363,8 +398,16 @@ for (const f of files) {
           const caster = byName.get(iv.srcUnitName) ?? u;
           // the resolver's own predicate (shared-predicate rule); the plain
           // talentOwnershipOf reads other specs' talents as baseline (run 1)
-          const own = talentModifierOwnershipOf(caster, c.talent);
-          const key = `${c.aura}|${c.talent}`;
+          if (c.exceptSpecs?.includes(caster.spec ?? "")) continue;
+          if (
+            c.requires &&
+            talentModifierOwnershipOf(caster, c.requires) !== "yes"
+          )
+            continue;
+          const own = c.specIds
+            ? specPassiveOwnership(c.specIds, caster.spec)
+            : talentModifierOwnershipOf(caster, c.talent);
+          const key = `${c.aura}|${c.talent}${splitSpec ? `|${caster.spec}` : ""}`;
           const bk = buckets.get(key) ?? {
             yes: new Map(),
             no: new Map(),
@@ -488,8 +531,24 @@ const bootstrap = (xs: number[]) => {
   return { lo: ms[49]!, hi: ms[949]! };
 };
 const r3 = (x: number) => Math.round(x * 1000) / 1000;
-const out = CANDIDATES.map((c) => {
-  const bk = buckets.get(`${c.aura}|${c.talent}`) ?? {
+const rowsToReport = CANDIDATES.filter(
+  (c) => only.size === 0 || only.has(c.aura),
+).flatMap((c) =>
+  splitSpec
+    ? [...buckets.keys()]
+        .filter((k) => k.startsWith(`${c.aura}|${c.talent}|`))
+        .sort()
+        .map((k) => ({ ...c, spec: k.split("|")[2]!, key: k }))
+    : [
+        {
+          ...c,
+          spec: undefined as string | undefined,
+          key: `${c.aura}|${c.talent}`,
+        },
+      ],
+);
+const out = rowsToReport.map((c) => {
+  const bk = buckets.get(c.key) ?? {
     yes: new Map(),
     no: new Map(),
     unknown: new Map(),
@@ -541,5 +600,5 @@ writeFileSync(
 );
 for (const r of out)
   console.log(
-    `${r.name.padEnd(34)} +${r.talentName.padEnd(18)} expect ${r.expectedWith} (without ${r.expectedWithout}) | holders ${r.holders.median} ci90 ${r.holders.ci90 ? `${r.holders.ci90.lo}-${r.holders.ci90.hi}` : "-"} units ${r.holders.units} players ${r.holders.players} ci90-players ${r.holders.ci90Players ? `${r.holders.ci90Players.lo}-${r.holders.ci90Players.hi}` : "-"} ${r.holders.playerSensitivityInBand ? "(in band)" : "(OUT of band)"} | non ${r.nonHolders.median} units ${r.nonHolders.units} | unknown ${r.unknown.median} units ${r.unknown.units} | ${r.promoted ? "PROMOTE" : "stay unvalidated"}`,
+    `${r.name.padEnd(34)}${r.spec ? ` [spec ${r.spec}]` : ""} +${r.talentName.padEnd(18)} expect ${r.expectedWith} (without ${r.expectedWithout}) | holders ${r.holders.median} ci90 ${r.holders.ci90 ? `${r.holders.ci90.lo}-${r.holders.ci90.hi}` : "-"} units ${r.holders.units} players ${r.holders.players} ci90-players ${r.holders.ci90Players ? `${r.holders.ci90Players.lo}-${r.holders.ci90Players.hi}` : "-"} ${r.holders.playerSensitivityInBand ? "(in band)" : "(OUT of band)"} | non ${r.nonHolders.median} units ${r.nonHolders.units} | unknown ${r.unknown.median} units ${r.unknown.units} | ${r.promoted ? "PROMOTE" : "stay unvalidated"}`,
   );

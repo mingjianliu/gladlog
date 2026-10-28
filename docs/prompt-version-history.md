@@ -4486,3 +4486,17 @@ reads the recorder's failure rows; `checkEnemyDefRefConsistency` reads an
 0 / −1; gates unchanged on 605; on the second corpus
 `checkSelfOnlyDefensiveClaims` 28 → 25 and `checkEnemyDefRefConsistency`
 3 → 0.
+
+v462 (2026-10-27, GH #163 item 1): a Restoration druid's Barkskin is priced 40 %,
+not 30 % — the Restoration PvP aura 1256995 (effect #10, aura 646, the flat PvP
+modifier) adds 10 points to Barkskin 20 + Oakskin 10, owned by spec membership
+(`specIds`, like the cooldown and reach models). Corpus split by spec on the 605
+slice: Restoration holders take 0.600 (90 % 0.600–0.603, 123 units / 95 players),
+Balance 0.704, Feral 0.700. 605 capture (PV460 base → batch): candidates and
+findings unchanged, gates unchanged; 268 `[ENEMY DEF]` Barkskin lines 30 % → 40 %
+(Balance 303 / Feral 174 lines stay 30 %), 8 mitigation-audit and 2
+`[STACKED DEFENSIVES]` blocked amounts ×1.56. Wide corpus (728 files, PV461 base →
+batch): candidate counts and the 100 gates unchanged; 906 Restoration `[ENEMY DEF]`
+Barkskin lines 30 % → 40 % (Balance 1,254 / Feral 585 lines stay 30 %), 36
+mitigation-audit and 12 `[STACKED DEFENSIVES]` blocked amounts, 2
+burst-into-mitigation facts `mitPct` 30 → 40 — every changed line is Barkskin.

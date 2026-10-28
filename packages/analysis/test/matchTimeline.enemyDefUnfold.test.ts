@@ -195,7 +195,8 @@ describe("GH #97 timeline flags", () => {
     TIMELINE_LINE_FLAGS.enemyDef = "timeline";
     const on = render();
     expect(on).toContain(
-      "0:30  [ENEMY DEF]   4(RDruid) (Restoration Druid): Barkskin (20%, 12.0s)",
+      // 20 + the Restoration PvP aura's 10 (GH #163)
+      "0:30  [ENEMY DEF]   4(RDruid) (Restoration Druid): Barkskin (30%, 12.0s)",
     );
     expect(on).toContain("[ENEMY DEF] = ");
     // ruling D6: the legend that calls Ts OBSERVED says what stands there

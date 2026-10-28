@@ -53,6 +53,17 @@ export function specPassiveOwned(
   return specId !== undefined && specIds.includes(specId);
 }
 
+/** The three-state form for value modifiers: a unit whose spec the log never
+ * named ("" / "0") is unknown, not "no". Shared by `resolveMitigation` and
+ * `mitigationTalentScan` (GH #163, codex astra: the two had their own copies). */
+export function specPassiveOwnership(
+  specIds: readonly string[],
+  spec: string | undefined,
+): "yes" | "no" | "unknown" {
+  if (!spec || spec === "0") return "unknown";
+  return specPassiveOwned(specIds, spec) ? "yes" : "no";
+}
+
 /**
  * Multi-rank talents whose cooldown row is PER RANK: the arena reduction is
  * `value × rank` (rank read from COMBATANT_INFO), not `value` once.
@@ -228,8 +239,16 @@ export const DATED_COOLDOWN_VALUES: Readonly<
   "384820": {
     effect: "reduce_cd",
     bySpec: {
-      "70": { cutoverEpochMs: HOTFIX_2026_08_18_EPOCH_MS, before: 60, since: 30 },
-      "66": { cutoverEpochMs: HOTFIX_2026_08_25_EPOCH_MS, before: 60, since: 30 },
+      "70": {
+        cutoverEpochMs: HOTFIX_2026_08_18_EPOCH_MS,
+        before: 60,
+        since: 30,
+      },
+      "66": {
+        cutoverEpochMs: HOTFIX_2026_08_25_EPOCH_MS,
+        before: 60,
+        since: 30,
+      },
     },
     note: "Sacrifice of the Just — Retribution −30 s since the 2026-08-18 hotfix, Protection since 08-25 (were −60); not in DB2 (FLAG)",
   },
@@ -241,7 +260,11 @@ export const DATED_COOLDOWN_VALUES: Readonly<
   "114154": {
     effect: "reduce_cd_pct",
     bySpec: {
-      "70": { cutoverEpochMs: HOTFIX_2026_08_18_EPOCH_MS, before: 30, since: 20 },
+      "70": {
+        cutoverEpochMs: HOTFIX_2026_08_18_EPOCH_MS,
+        before: 30,
+        since: 20,
+      },
     },
     note: "Unbreakable Spirit — Retribution 20 % since the 2026-08-18 hotfix (was 30 %); not in DB2 (FLAG)",
   },
@@ -252,8 +275,16 @@ export const DATED_COOLDOWN_VALUES: Readonly<
   "424654": {
     effect: "reduce_cd",
     bySpec: {
-      "71": { cutoverEpochMs: HOTFIX_2026_09_01_EPOCH_MS, before: -10, since: -20 },
-      "72": { cutoverEpochMs: HOTFIX_2026_09_01_EPOCH_MS, before: -10, since: -20 },
+      "71": {
+        cutoverEpochMs: HOTFIX_2026_09_01_EPOCH_MS,
+        before: -10,
+        since: -20,
+      },
+      "72": {
+        cutoverEpochMs: HOTFIX_2026_09_01_EPOCH_MS,
+        before: -10,
+        since: -20,
+      },
     },
     note: "Safeguard — Arms / Fury Intervene +10 s before the 2026-09-01 hotfix, +20 s since",
   },
@@ -264,7 +295,11 @@ export const DATED_COOLDOWN_VALUES: Readonly<
   "382424": {
     effect: "reduce_cd",
     perRank: true,
-    value: { cutoverEpochMs: HOTFIX_2026_09_01_EPOCH_MS, before: 30, since: 15 },
+    value: {
+      cutoverEpochMs: HOTFIX_2026_09_01_EPOCH_MS,
+      before: 30,
+      since: 15,
+    },
     note: "Winter's Protection — Ice Block −30 s a rank before the 2026-09-01 hotfix, −15 since",
   },
   // Improved Conjuration 1244025 on Mirror Image: hotfix 2026-09-01
@@ -273,7 +308,11 @@ export const DATED_COOLDOWN_VALUES: Readonly<
   "1244025": {
     effect: "reduce_cd",
     perRank: true,
-    value: { cutoverEpochMs: HOTFIX_2026_09_01_EPOCH_MS, before: 30, since: 15 },
+    value: {
+      cutoverEpochMs: HOTFIX_2026_09_01_EPOCH_MS,
+      before: 30,
+      since: 15,
+    },
     note: "Improved Conjuration — Mirror Image −30 s a rank before the 2026-09-01 hotfix, −15 since",
   },
 };

@@ -398,6 +398,9 @@ export function manaEfficiencyEvents(
     healOut: Array<{
       spellId?: string;
       spellName?: string;
+      /** a pet's heal folded into its owner's `healOut` (parser-compat)
+       * carries the pet as source */
+      srcUnitId?: string;
       effectiveAmount: number;
     }>;
     absorbsOut: Array<{
@@ -465,14 +468,22 @@ export function manaEfficiencyEvents(
   }
   if (bySpell.size === 0) return [];
 
+  // The name fallback is for the healer's OWN events only. A pet's heals are
+  // folded into its owner's `healOut`, and a Grove Guardians treant heals
+  // under the name "Swiftmend" (142421, Creature source, in the same
+  // millisecond as the druid's own 18562 — GH #163 item 3; 1,606 treant vs
+  // 760 player Swiftmend heals in 200 new-season files): by name alone it
+  // would land on the druid's Swiftmend.
   const resolveAgg = (
     spellId: string | undefined,
     spellName: string | undefined,
+    srcUnitId?: string,
   ): IManaEfficiencySpellAgg | undefined => {
     if (spellId) {
       const byId = bySpell.get(spellId);
       if (byId) return byId;
     }
+    if (srcUnitId !== undefined && srcUnitId !== healer.id) return undefined;
     if (spellName) {
       const canonicalId = idByName.get(spellName);
       if (canonicalId) return bySpell.get(canonicalId);
@@ -482,7 +493,7 @@ export function manaEfficiencyEvents(
 
   const healingCapable = new Set<string>();
   for (const h of healerUnit.healOut) {
-    const agg = resolveAgg(h.spellId, h.spellName);
+    const agg = resolveAgg(h.spellId, h.spellName, h.srcUnitId);
     if (agg) {
       agg.effectiveHealing += Math.abs(h.effectiveAmount);
       healingCapable.add(agg.spellId);

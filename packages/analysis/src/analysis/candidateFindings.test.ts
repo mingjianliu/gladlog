@@ -488,7 +488,9 @@ describe("cdWasteEvents", () => {
         ownCastSuccessSeconds: [95.33],
       },
     );
-    expect(evts[0]!.facts["attempted"]).toBe("pressed but rejected (not ready yet×1)");
+    expect(evts[0]!.facts["attempted"]).toBe(
+      "pressed but rejected (not ready yet×1)",
+    );
   });
   it("skips a cooldown that was used", () => {
     const evts = cdWasteEvents(
@@ -2603,7 +2605,9 @@ describe("healingGapEvents(HEAL-001,2026-08-30 HP-crisis 门 change 1/5)", () =>
       owner,
     );
     expect(e!.facts["attempted"]).toMatch(/^pressed but rejected \(.+×2\)$/);
-    expect(healingGapEvents([gap(35, 50_000)], owner)[0]!.facts["attempted"]).toBeUndefined();
+    expect(
+      healingGapEvents([gap(35, 50_000)], owner)[0]!.facts["attempted"],
+    ).toBeUndefined();
   });
 
   it("lowestFriendlyHpPct === null(窗口内无采样)→ 不报", () => {
@@ -4996,6 +5000,37 @@ describe("manaEfficiencyEvents(BACKLOG #26 Task 4,2026-08-15,全场聚合纯函�
     // facts.table must contain spell A's own row (the brief's "facts 含 A 行").
     expect(evts[0]!.facts.table).toContain("Holy Shock");
     expect(evts[0]!.facts.table).toContain("Holy Light");
+  });
+
+  it("①b 宠物同名治疗不按名字归到主人的施法上(GH #163:树人的 Swiftmend 142421)", () => {
+    const druid = { id: "d", name: "Druid-R", spec: "105" };
+    const spellCastEvents = [
+      ...Array.from({ length: 12 }, (_, i) =>
+        castSuccess("18562", "Swiftmend", 1000 + i * 1000),
+      ),
+      ...Array.from({ length: 12 }, (_, i) =>
+        castSuccess("8936", "Regrowth", 20000 + i * 1000),
+      ),
+    ];
+    const regrowth = { spellId: "8936", srcUnitId: "d", effectiveAmount: 1000 };
+    const own = { spellId: "18562", srcUnitId: "d", effectiveAmount: 1000 };
+    const treant = {
+      spellId: "142421",
+      spellName: "Swiftmend",
+      srcUnitId: "Creature-treant",
+      effectiveAmount: 50000,
+    };
+    const run = (healOut: Array<typeof own | typeof treant>) =>
+      manaEfficiencyEvents(
+        druid,
+        { spellCastEvents, healOut: [regrowth, ...healOut], absorbsOut: [] },
+        0,
+        { floor: 2, minCasts: 1 },
+      )[0]!.facts.table;
+    expect(run([own, treant])).toBe(run([own]));
+    // the healer's own heal under another id still resolves by name
+    const ownOtherId = { ...treant, srcUnitId: "d" };
+    expect(run([own, ownOtherId])).not.toBe(run([own]));
   });
 
   it("② 效率高于地板(ratio >= MANA_EFF_FLOOR)→ 0 条", () => {

@@ -248,7 +248,8 @@ describe("FT-T08 step 3b — [ENEMY DEF] early end: the cause the log gives", ()
     const [d] = enemyDefensiveEvents(full, [full], combat);
     expect(d.removedEarly).toBe(false);
     expect(d.earlyEnd).toBeUndefined();
-    expect(render([full])[0]).toContain("(20%, 12.0s)");
+    // a Restoration fixture: 20 + its PvP aura's 10 (GH #163)
+    expect(render([full])[0]).toContain("(30%, 12.0s)");
   });
   it("驱散行分不清是哪一份:不说 removed early(图例说那是「日志没给原因」)", () => {
     const pal = unit("e1", {
