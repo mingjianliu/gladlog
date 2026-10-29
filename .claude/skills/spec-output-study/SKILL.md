@@ -1,6 +1,6 @@
 ---
 name: spec-output-study
-description: 分析某个职业 / 专精在 PvP 里的治疗或伤害「从哪来、各占多少」——技能与天赋占比、天赋价值、属性权重、PvP 与 PvE 指南的差异、补丁热修影响、逐跳模型与残差校准——时读这个。用户说「分析 XX 的占比」「做一份 XX 的 PvP 版指南」「XX 天赋值多少 / 属性怎么排」「换个职业照奶德那样做」时,在写任何提取或模型代码之前。
+description: 分析某个职业 / 专精在 PvP 里的治疗或伤害「从哪来、各占多少」——技能与天赋占比、天赋价值、属性权重、PvP 与 PvE 指南的差异、补丁热修影响、逐跳模型与残差校准——时读这个。用户说「分析 XX 的占比」「做一份 XX 的 PvP 版指南」「XX 天赋值多少 / 属性怎么排」「换个职业照奶德那样做」时,在写任何提取或模型代码之前。也用于手法问题——「XX 技能该不该攒 / 什么时候按 / 给谁」「理想打法值多少」「急速有没有阈值」。
 ---
 
 # 专精产出研究(2026-10-27/28 恢复德鲁伊一轮沉淀)
@@ -10,6 +10,9 @@ description: 分析某个职业 / 专精在 PvP 里的治疗或伤害「从哪�
 参考实现:`$GLADLOG_EVAL_HOME/runs/rdruid-pvp-2026-10-27/`(`FINDINGS.md` 第 1–9 版、`rerun_v*.sh`)。
 通用代码:`$GLADLOG_EVAL_HOME/specstudy/`(`db2.py` / `rules.py` / `logfmt.py` / `target_talents.py`,
 `python3 -I specstudy/test_rules.py` 用真实 DB2 自检)。专精自己的机制写在该专精的 run 目录,不进 specstudy。
+手法分析(织雾武僧 2026-10-29 一轮,RUNBOOK §11;参考 `runs/mwmonk-pvp-2026-10-28/play_*.py`):`timeline_scan.py` /
+`playtime.py`(急速、GCD、`usable_free`、`round_end`)/ `charges.py` / `hot_owners.py` 加三个探针,
+`python3 -I specstudy/test_play.py` 自检。
 
 ## 开工前定下来的三件事
 
@@ -29,6 +32,14 @@ description: 分析某个职业 / 专精在 PvP 里的治疗或伤害「从哪�
 - 「别人的天赋」作用到你的数值上:查**那个人本回合**点没点。
 - 反事实要把所有依赖状态的部分一起重算;检验脚本跟着模型同步(模型加进去的项,检验里别再减一次)。
 - 结论措辞对齐证据:「从未拟合」「已验证」要能说出是哪份数据、谁没碰过它。
+
+## 手法分析最容易再犯的(codex 六轮 26 条)
+
+- 「多按一下」只能放进 `usable_free`(下一个日志动作前放得下整个 GCD),虚拟施法也占自己的 GCD,要查法力、不能抢后面真实施法的资源。
+- 基线固定为日志里那串施法,不跟着策略变;三把尺子(当时缺血上界 / 到回合结束的 end-HP 下界 / 固定视野)一起报。
+- 积分和寿命、分子和分母读**同一套**归属 / 人群;同一毫秒的序列化顺序不是因果顺序。
+- GCD 和「就绪时按没按」都从施法开始算;按评分段分层,永远不按胜负分。
+- 新专精的 HoT 先跑 `probe_silent_recast.py`(复苏之雾重放不写光环行)和 `probe_partial_tick.py` 再写归属。
 
 ## 交给 gladlog
 
