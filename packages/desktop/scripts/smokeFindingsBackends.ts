@@ -70,16 +70,14 @@ import {
   auditFindings,
   buildFindingsPrompt,
   buildMatchContext,
+  type CandidateEvent,
+  ensureAnalysisData,
   extractCandidateFindings,
   parseModelJsonArray,
-  specToString,
-  type CandidateEvent,
   type RawFinding,
-  ensureAnalysisData,
+  specToString,
 } from "@gladlog/analysis";
 
-import { resolveOwner } from "../src/renderer/src/report/derive/analysisInput";
-import { toLegacySafe } from "../src/renderer/src/report/derive/legacySource";
 import type { AnthropicLike } from "../src/main/ai";
 import { buildCoachSystemPrompt } from "../src/main/ai";
 import { detectLocalCliCached, type LocalCliTool } from "../src/main/cliDetect";
@@ -89,6 +87,8 @@ import {
   claudeCliClientFactory,
   codexClientFactory,
 } from "../src/main/localAiBackends";
+import { resolveOwner } from "../src/renderer/src/report/derive/analysisInput";
+import { toLegacySafe } from "../src/renderer/src/report/derive/legacySource";
 import { AI_DEFAULT_MODEL } from "../src/shared/aiModels";
 
 const MATCH_DIR = join(

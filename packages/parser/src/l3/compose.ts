@@ -1,11 +1,11 @@
-import { slimMatchParams } from "../slim";
+import type { ParsedLine } from "../l1/types";
 import type { Segment, ShuffleClose } from "../l2/types";
-import type { GladMatch, GladShuffle, GladShuffleRound } from "./model";
-import { buildRoster } from "./roster";
+import { slimMatchParams } from "../slim";
 import { collectEvents } from "./collect";
 import { classIdOf } from "./data/specToClass";
+import type { GladMatch, GladShuffle, GladShuffleRound } from "./model";
 import { matchResult, roundWinner } from "./outcome";
-import type { ParsedLine } from "../l1/types";
+import { buildRoster } from "./roster";
 
 // FNV-1a 32-bit rolling hash
 function calculateFnv1a32(lines: string[]): string {
@@ -22,6 +22,26 @@ function calculateFnv1a32(lines: string[]): string {
     }
   }
   return (hash >>> 0).toString(16).padStart(8, "0");
+}
+
+/**
+ * A player's side is its COMBATANT_INFO team, read against the owner's: the
+ * round's own statement of who plays with whom. The flag vote (`buildRoster`
+ * — the reaction bits as the recorder saw them, by event count) stays only
+ * for a unit with no COMBATANT_INFO. In a Solo Shuffle round the vote can
+ * carry another round's view: fact5 F18 (605 s1/148 round 3) — a Frost Mage
+ * on the other team (COMBATANT_INFO team 1 against the recorder's 0) read
+ * Friendly by the flag vote, so the roster read 4 against 2 and his Ray of
+ * Frost on a player of the recorder's team counted as a teammate's damage.
+ */
+export function sidesFromTeams(
+  units: Map<string, { info?: { teamId: number }; reaction: string }>,
+  playerTeamId: number | null,
+): void {
+  if (playerTeamId === null) return;
+  for (const u of units.values())
+    if (u.info && typeof u.info.teamId === "number")
+      u.reaction = u.info.teamId === playerTeamId ? "Friendly" : "Hostile";
 }
 
 export function buildMatch(seg: Segment, end: ParsedLine): GladMatch {
@@ -52,9 +72,11 @@ export function buildMatch(seg: Segment, end: ParsedLine): GladMatch {
   const playerId = roster.ownerId ?? "";
   const ownerUnit = roster.ownerId ? gladUnitsMap.get(roster.ownerId) : null;
   const playerTeamId = ownerUnit?.info?.teamId ?? null;
+  sidesFromTeams(gladUnitsMap, playerTeamId);
 
   const winningTeamId = end.arenaEnd ? end.arenaEnd.winningTeamId : null;
   const result = matchResult(winningTeamId, playerTeamId);
+  const teamMmr = teamMmrOf(end);
 
   const rawLines = [...seg.rawLines, end.raw];
   const id = calculateFnv1a32(rawLines);
@@ -76,6 +98,7 @@ export function buildMatch(seg: Segment, end: ParsedLine): GladMatch {
     playerId,
     playerTeamId,
     winningTeamId,
+    teamMmr,
     result,
     linesTotal: rawLines.length,
     linesDropped: 0,
@@ -83,6 +106,19 @@ export function buildMatch(seg: Segment, end: ParsedLine): GladMatch {
     hasAdvancedLogging,
     timezone: "local",
   };
+}
+
+/** The lobby's matchmaking rating per team id off a closing ARENA_MATCH_END
+ * line; null without that line (an abnormal close, a shuffle cut at EOF) or
+ * when either value is not a positive number (unrated lobbies write 0). */
+function teamMmrOf(end: {
+  arenaEnd?: { team0Mmr: number; team1Mmr: number };
+}): { team0: number; team1: number } | null {
+  const a = end.arenaEnd;
+  if (!a) return null;
+  return a.team0Mmr > 0 && a.team1Mmr > 0
+    ? { team0: a.team0Mmr, team1: a.team1Mmr }
+    : null;
 }
 
 function buildShuffleRound(
@@ -117,6 +153,7 @@ function buildShuffleRound(
   const playerId = resolvedOwnerId ?? roster.ownerId ?? "";
   const ownerUnit = playerId ? gladUnitsMap.get(playerId) : null;
   const playerTeamId = ownerUnit?.info?.teamId ?? null;
+  sidesFromTeams(gladUnitsMap, playerTeamId);
 
   // Find round deaths in chronological order
   const roundDeaths: { destId: string }[] = [];
@@ -205,9 +242,13 @@ export function buildShuffle(close: ShuffleClose): GladShuffle {
     }
   }
 
-  const rounds = close.rounds.map((roundSeg, idx) =>
-    buildShuffleRound(roundSeg, idx, ownerId),
-  );
+  // every round carries the shuffle's closing line's lobby MMR (the rounds
+  // themselves have no ARENA_MATCH_END)
+  const teamMmr = teamMmrOf(close.end);
+  const rounds = close.rounds.map((roundSeg, idx) => ({
+    ...buildShuffleRound(roundSeg, idx, ownerId),
+    teamMmr,
+  }));
 
   const startTime = rounds[0] ? rounds[0].startTime : 0;
   const endTime = close.end.timestamp;

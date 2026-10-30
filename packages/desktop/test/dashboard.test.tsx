@@ -2,6 +2,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { vi } from "vitest";
 
+import type { StoredMatchMeta } from "../src/main/matchStore";
 import {
   deriveCurrentRating,
   deriveDashboard,
@@ -12,7 +13,6 @@ import {
   rateDisplay,
 } from "../src/renderer/src/components/dashboard";
 import { StatsDashboard } from "../src/renderer/src/components/StatsDashboard";
-import type { StoredMatchMeta } from "../src/main/matchStore";
 
 const NOW = new Date("2026-07-18T20:00:00Z").getTime();
 const H = 3600_000;

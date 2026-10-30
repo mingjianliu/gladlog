@@ -1,6 +1,7 @@
 import { existsSync, mkdtempSync, readFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
+
 import { buildCorpus } from "../src/corpus/buildCorpus";
 
 const FIX = process.env.GLADLOG_FIXTURES ?? "";

@@ -1,50 +1,30 @@
+import { randomBytes } from "node:crypto";
+
+import datagenManifest from "@gladlog/analysis/src/data/datagen-manifest.json";
 import { app, BrowserWindow, safeStorage, screen } from "electron";
 import log from "electron-log/main";
-import { randomBytes } from "node:crypto";
+import { readdirSync } from "fs";
 import { dirname, join } from "path";
-import type { WorkerConfig } from "../shared/protocol";
+
 import type { LogsStatusSnapshot } from "../preload/api";
+import { resolveRecordingDir } from "../shared/managedObsPrefs";
+import type { WorkerConfig } from "../shared/protocol";
+import { realClientFactory, stopAllAiActivity } from "./ai";
+import { createAnalysisService } from "./analysis";
+import type { CaptureBackend } from "./captureBackend";
+import { createCoachChatService } from "./coachChat";
+import { createCompareService } from "./compare";
+import { gameBuildFromManifest,loadBundledCorpus } from "./corpusLoader";
 import {
   detectWowDirCandidates,
   realFsProbe,
   resolveLogsDir,
 } from "./detectWowDir";
-import { exportReportImage } from "./exportImage";
-import { registerIpc } from "./ipc";
-import { MatchStore } from "./matchStore";
-import {
-  SettingsStore,
-  type GladlogSettings,
-  type SettingsStoreWarning,
-} from "./settingsStore";
-import { WorkerHost } from "./workerHost";
-import { createWorkerMessageHandler } from "./workerMessageHandler";
-import { realClientFactory, stopAllAiActivity } from "./ai";
-import { createIconCache } from "./iconCache";
-import { createCompareService } from "./compare";
-import { createAnalysisService } from "./analysis";
-import { createCoachChatService } from "./coachChat";
-import { createLearningService } from "./learning";
-import {
-  createRecorderService,
-  isManagedActive,
-  type RecorderService,
-  type RecorderStatus,
-} from "./recorder";
-import { realObsClient } from "./obsClient";
-import { RecordingsStore } from "./recordingsStore";
-import { createQuitLifecycleHandler } from "./quitLifecycle";
-import { handleVodProtocol, registerVodScheme } from "./vodProtocol";
-import { loadWindowState, MIN_WINDOW, saveWindowState } from "./windowState";
-import { loadBundledCorpus, gameBuildFromManifest } from "./corpusLoader";
-import datagenManifest from "@gladlog/analysis/src/data/datagen-manifest.json";
 import { e2eUserDataDir } from "./e2eEnv";
-import { readdirSync } from "fs";
-import { createObsAssets, type ObsInstallProgress } from "./obsAssets";
-import { clearSentinels, writeObsConfig } from "./obsConfigWriter";
-import { spawnManagedObs } from "./managedObsProcess";
-import { createManagedObsBackend } from "./managedObsBackend";
-import { createWowProcessWatch } from "./wowProcessWatch";
+import { exportReportImage } from "./exportImage";
+import { createIconCache } from "./iconCache";
+import { registerIpc } from "./ipc";
+import { createLearningService } from "./learning";
 import {
   assembleManagedRecording,
   createManagedAssemblyState,
@@ -52,8 +32,25 @@ import {
   reactToManagedToggle,
   teardownManagedRecording,
 } from "./managedAssembly";
-import { resolveRecordingDir } from "../shared/managedObsPrefs";
-import type { CaptureBackend } from "./captureBackend";
+import { createManagedObsBackend } from "./managedObsBackend";
+import { spawnManagedObs } from "./managedObsProcess";
+import { MatchStore } from "./matchStore";
+import { createObsAssets, type ObsInstallProgress } from "./obsAssets";
+import { realObsClient } from "./obsClient";
+import { clearSentinels, writeObsConfig } from "./obsConfigWriter";
+import { createQuitLifecycleHandler } from "./quitLifecycle";
+import {
+  createRecorderService,
+  isManagedActive,
+  type RecorderService,
+  type RecorderStatus,
+} from "./recorder";
+import { RecordingsStore } from "./recordingsStore";
+import {
+  type GladlogSettings,
+  SettingsStore,
+  type SettingsStoreWarning,
+} from "./settingsStore";
 import {
   createUpdaterService,
   evaluateGate,
@@ -61,6 +58,11 @@ import {
   type UpdaterService,
   type UpdateState,
 } from "./updater";
+import { handleVodProtocol, registerVodScheme } from "./vodProtocol";
+import { loadWindowState, MIN_WINDOW, saveWindowState } from "./windowState";
+import { WorkerHost } from "./workerHost";
+import { createWorkerMessageHandler } from "./workerMessageHandler";
+import { createWowProcessWatch } from "./wowProcessWatch";
 
 app.setName("gladlog");
 // The privileged vod:// scheme must be registered before app ready

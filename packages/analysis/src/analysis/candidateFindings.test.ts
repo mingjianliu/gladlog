@@ -17,13 +17,13 @@ import {
   cdWasteEvents,
   deathSetupEvents,
   enemyHealerCcWindows,
-  enemyMinHpPctInWindow,
   externalUnusedEvents,
   extractCandidateFindings,
   friendlyCrisisMomentInWindow,
   HARD_CC_CATEGORIES,
   healingGapEvents,
   kickEatenEvents,
+  kickEatenReach,
   LEGACY_TOPIC_TYPES,
   MANA_EFF_FLOOR,
   MANA_EFF_MIN_CASTS,
@@ -457,6 +457,41 @@ describe("cdWasteEvents", () => {
     expect(evts[0].spell).toBe("Pain Suppression");
     expect(evts[0].facts).toEqual({ spell: "Pain Suppression", unit: "Me-R" });
   });
+  it("fact5 D6: a GCD-refused press of the never-cast cooldown is an attempt (ruling C1's reading; the kit counts it too)", () => {
+    const evts = cdWasteEvents(
+      [
+        {
+          spellId: "1022",
+          spellName: "Blessing of Protection",
+          neverUsed: true,
+          isThroughput: false,
+        },
+      ],
+      healer,
+      null,
+      {
+        rawStreams: {
+          available: true,
+          manaSamples: [],
+          castFailed: [
+            {
+              tSeconds: 96.2,
+              unitGuid: "a",
+              spellId: 1022,
+              spellName: "Blessing of Protection",
+              reason: "Not yet recovered",
+            },
+          ],
+        },
+        untilS: 200,
+        // Divine Toll 0.87 s before the press: the GCD was running
+        ownCastSuccessSeconds: [95.33],
+      },
+    );
+    expect(evts[0]!.facts["attempted"]).toBe(
+      "pressed but rejected (not ready yet×1)",
+    );
+  });
   it("skips a cooldown that was used", () => {
     const evts = cdWasteEvents(
       [
@@ -741,6 +776,7 @@ describe("crisis-no-response wiring(菜单接线 + death-unused-defensive preced
           damageIn: [
             {
               timestamp: T0 + 1500,
+              logLine: { timestamp: T0 + 1500, parameters: [] },
               srcUnitId: "E1",
               amount: -30,
               effectiveAmount: -30,
@@ -783,6 +819,7 @@ describe("crisis-no-response wiring(菜单接线 + death-unused-defensive preced
           damageIn: [
             {
               timestamp: T0 + 1500,
+              logLine: { timestamp: T0 + 1500, parameters: [] },
               srcUnitId: "H",
               amount: -30,
               effectiveAmount: -30,
@@ -1021,7 +1058,8 @@ describe("团队协作候选映射(2026-07-24 覆盖面扩充)", () => {
     });
     expect(evts).toHaveLength(1);
     expect(evts[0]!.facts["ownerCastingS"]).toBe("3.0");
-    expect(evts[0]!.facts["ownerCastingSpells"]).toBe("精神控制×2");
+    // F-C17 (triage 2026-09-29): English names, not the log's localized ones
+    expect(evts[0]!.facts["ownerCastingSpells"]).toBe("Mind Control×2");
     expect(evts[0]!.facts["ownerCastingPreCommitted"]).toBe("no");
 
     // 读条从窗口前 1s 起手 → 只计窗口内重叠(1.5s),preCommitted=yes
@@ -1387,6 +1425,354 @@ describe("团队协作候选映射(2026-07-24 覆盖面扩充)", () => {
     expect(unknown[0]!.facts["kickRangeYd"]).toBeUndefined();
   });
 
+  // Triage 2026-09-29 F-K6a / F-K6b / F-K6c / F-K6d / F-K5a / F-K5b
+  // (ruling A12 = B with U2): one out-range verdict, with the first reason.
+  describe("kick-eaten: outRangeable", () => {
+    const facts = (
+      inst: Record<string, unknown>,
+      r: {
+        yourReachYd?: number;
+        yourCastRangeYd?: number;
+        kickRangeYd: number;
+      } | null = {
+        yourReachYd: 40,
+        kickRangeYd: 5,
+      },
+    ) =>
+      kickEatenEvents(
+        // a 0.2 s cast window by default: too short to walk in from anywhere
+        // these cases stand (condition 6 has its own cases below)
+        [switchedInst({ castWindowS: 0.2, ...inst })],
+        { id: "P1", name: "Me" },
+        undefined,
+        () => r,
+      )[0]!.facts;
+
+    it("X3 (condition 6): yes only when the kicker stood farther beyond its kick than it could walk during the cast, at 7 yd/s", () => {
+      // 5e8b11c1 @43.6: 18.4 yd from a 15 yd Mind Freeze, a 1.6 s Hex
+      const r = { yourReachYd: 30, kickRangeYd: 15 };
+      expect(
+        facts({ sourceDistYd: 18.4, castWindowS: 1.57 }, r)["outRangeable"],
+      ).toBe(
+        "no (kicker 3.4 yd beyond kick range could walk in during the 1.6s cast at 7 yd/s)",
+      );
+      // 1.5 s × 7 = 10.5 yd: 10.5 yd beyond is walkable, 10.6 is not
+      expect(
+        facts({ sourceDistYd: 25.5, castWindowS: 1.5 }, r)["outRangeable"],
+      ).toMatch(/^no \(kicker 10\.5 yd beyond/);
+      expect(
+        facts({ sourceDistYd: 25.6, castWindowS: 1.5 }, r)["outRangeable"],
+      ).toMatch(/^yes \(/);
+    });
+
+    it("X3: a cast window the log does not give closes it; a line another condition closes keeps that reason", () => {
+      expect(
+        facts({ sourceDistYd: 18.4, castWindowS: null })["outRangeable"],
+      ).toBe("no (cast length unknown)");
+      expect(facts({ sourceDistYd: 5.6, castWindowS: 3 })["outRangeable"]).toBe(
+        "no (kicker within 2 yd of kick range at cast start — inside it once hitboxes count)",
+      );
+      expect(
+        facts({
+          sourceDistYd: 18.4,
+          castWindowS: 3,
+          ownerImmobileBy: "Earthgrab",
+        })["outRangeable"],
+      ).toBe("no (you were held by Earthgrab)");
+      expect(
+        facts({ sourceDistYd: 18.4, castWindowS: 3 })["outRangeable"],
+      ).not.toContain(", ");
+    });
+
+    it("is absent when the ranges are unknown (the legend then forbids the advice)", () => {
+      expect(facts({ sourceDistYd: 20 }, null)["outRangeable"]).toBeUndefined();
+    });
+
+    // Re-eval 2026-10-08, F07.
+    it("F07: a placeholder table range is no range — Shield of Virtue's 50,000 yd row prints no reach fact (dfcccbf2 @166.5)", () => {
+      // 217824: an effect id with no castable twin; Polymorph 118 = 30 yd
+      expect(
+        kickEatenReach(null, null, {
+          interruptedSpellId: "118",
+          kickSpellId: "217824",
+        }),
+      ).toBeNull();
+      // control: Rebuke 96231 = 5 yd on the same cast
+      expect(
+        kickEatenReach(null, null, {
+          interruptedSpellId: "118",
+          kickSpellId: "96231",
+        }),
+      ).toEqual({ yourReachYd: 30, yourCastRangeYd: 30, kickRangeYd: 5 });
+      // a caster-centred spell still gets its kick range (F-K6c, Ebon Might)
+      expect(
+        kickEatenReach(null, null, {
+          interruptedSpellId: "395152",
+          kickSpellId: "96231",
+        }),
+      ).toEqual({ kickRangeYd: 5 });
+      // …and the row then has none of the three facts
+      const f = facts({ sourceDistYd: 11 }, null);
+      expect(f["kickRangeYd"]).toBeUndefined();
+      expect(f["yourReachYd"]).toBeUndefined();
+      expect(f["outRangeable"]).toBeUndefined();
+    });
+
+    it("F07: a kick that landed from beyond its table range says from where, and the verdict measures from there (0068182d @72.5)", () => {
+      // a 5 yd Rebuke that landed with the centres 10.6 yd apart
+      const at = facts({ sourceDistYd: 9.4, kickLandedFromYd: 10.6 });
+      expect(at["kickRangeYd"]).toBe("5");
+      expect(at["kickLandedFromYd"]).toBe("10.6");
+      expect(at["outRangeable"]).toBe(
+        "no (kicker already within the 10.6 yd this kick landed from at cast start)",
+      );
+      // farther out, the walk-in is counted from the landing distance too
+      expect(
+        facts({ sourceDistYd: 18.4, kickLandedFromYd: 10.6, castWindowS: 1.5 })[
+          "outRangeable"
+        ],
+      ).toBe(
+        "no (kicker 7.8 yd beyond where this kick landed from could walk in during the 1.5s cast at 7 yd/s)",
+      );
+      expect(
+        facts({ sourceDistYd: 18.4, kickLandedFromYd: 10.6 })["outRangeable"],
+      ).toMatch(/^yes /);
+      // a landing inside the table range is not printed and changes nothing
+      const inside = facts({ sourceDistYd: 18.4, kickLandedFromYd: 4.2 });
+      expect(inside["kickLandedFromYd"]).toBeUndefined();
+      expect(inside["outRangeable"]).toMatch(/^yes /);
+      expect(
+        facts({ sourceDistYd: 18.4, kickLandedFromYd: 5.0 })[
+          "kickLandedFromYd"
+        ],
+      ).toBeUndefined();
+    });
+
+    it("F07: a distance read across position samples far apart is printed as approximate, and no permission is built on it", () => {
+      const f = facts({
+        sourceDistYd: 17.2,
+        sourceDistSampleGapS: 2.3,
+        nearestKickerDistYd: 17.2,
+        nearestKickerSampleGapS: 2.3,
+      });
+      expect(f["sourceDistYd"]).toBe("~17 (position samples 2.3s apart)");
+      expect(f["nearestKickerDistYd"]).toBe(
+        "~17 (position samples 2.3s apart)",
+      );
+      expect(f["outRangeable"]).toBe(
+        "no (kicker distance approximate — position samples 2.3s apart)",
+      );
+      expect(JSON.stringify(f)).not.toContain(", ");
+      // tight samples: the number as before
+      const tight = facts({ sourceDistYd: 17.2, nearestKickerDistYd: 3.1 });
+      expect(tight["sourceDistYd"]).toBe("17.2");
+      expect(tight["nearestKickerDistYd"]).toBe("3.1");
+    });
+
+    it("yes: source outside its range, no gap-closer, nobody else in range, owner free", () => {
+      const f = facts({ sourceDistYd: 18.4, sourceGapCloser: null });
+      expect(f["outRangeable"]).toMatch(/^yes \(/);
+      expect(f["sourceDistYd"]).toBe("18.4");
+      expect(f["outRangeable"]).not.toContain(", ");
+    });
+
+    it("no: the spell does not reach farther than the kick", () => {
+      expect(
+        facts({ sourceDistYd: 45 }, { yourReachYd: 40, kickRangeYd: 40 })[
+          "outRangeable"
+        ],
+      ).toBe("no (the spell does not reach farther than the kick)");
+    });
+
+    it("no: a caster-centred spell prints no yourReachYd — and never NaN (F-K6c, Ebon Might)", () => {
+      const f = facts({ sourceDistYd: 13.4 }, { kickRangeYd: 40 });
+      expect(f["yourReachYd"]).toBeUndefined();
+      expect(f["kickRangeYd"]).toBe("40");
+      expect(f["outRangeable"]).toBe(
+        "no (the spell has no cast range of its own)",
+      );
+      expect(JSON.stringify(f)).not.toContain("NaN");
+    });
+
+    it("no: without the source's distance (a channel kick has no cast start) the branch is closed", () => {
+      expect(facts({})["outRangeable"]).toBe("no (kicker distance unknown)");
+    });
+
+    it("no: the source was already inside its kick range (condition 1, f4eb8c87 @173)", () => {
+      expect(facts({ sourceDistYd: 1.0 })["outRangeable"]).toBe(
+        "no (kicker already inside kick range at cast start)",
+      );
+      // exactly at the range is inside
+      expect(facts({ sourceDistYd: 5 })["outRangeable"]).toMatch(/^no /);
+      // model centres vs hitboxes: 5.6 yd from a 5 yd kick is not out of it
+      // (c2058ed4 @18.2), 7.1 yd is
+      expect(facts({ sourceDistYd: 5.6 })["outRangeable"]).toBe(
+        "no (kicker within 2 yd of kick range at cast start — inside it once hitboxes count)",
+      );
+      expect(facts({ sourceDistYd: 7.1 })["outRangeable"]).toMatch(/^yes /);
+    });
+
+    it("no: a gap-closer used in the second before (condition 2, dfcccbf2 @79.3)", () => {
+      expect(
+        facts({
+          sourceDistYd: 10.5,
+          sourceGapCloser: {
+            state: "used",
+            spellId: "100",
+            spellName: "Charge",
+            agoS: 0.328,
+          },
+        })["outRangeable"],
+      ).toBe("no (Charge used 0.3s before cast start)");
+    });
+
+    it("no: a gap-closer ready, even though it was not used (condition 3 alone)", () => {
+      expect(
+        facts({
+          sourceDistYd: 10.5,
+          sourceGapCloser: {
+            state: "ready",
+            spellId: "100",
+            spellName: "Charge",
+          },
+        })["outRangeable"],
+      ).toBe("no (Charge ready)");
+    });
+
+    it("no: a gap-closer whose cooldown is unknown closes the advice (c2058ed4 @194.9, Shadowstep)", () => {
+      expect(
+        facts({
+          sourceDistYd: 15.4,
+          sourceGapCloser: {
+            state: "unknown",
+            spellId: "36554",
+            spellName: "Shadowstep",
+          },
+        })["outRangeable"],
+      ).toBe("no (Shadowstep ready state unknown)");
+    });
+
+    it("no: another ready kicker in range whose kick reaches as far as the spell (F-K6a)", () => {
+      const f = facts(
+        { sourceDistYd: 20, maxKickRangeYd: 40 },
+        { yourReachYd: 30, kickRangeYd: 15 },
+      );
+      expect(f["maxKickRangeYd"]).toBe("40");
+      expect(f["outRangeable"]).toBe(
+        "no (another ready kicker in range with a 40 yd kick)",
+      );
+      // a longer spell than every in-range kick stays open
+      expect(
+        facts(
+          { sourceDistYd: 20, maxKickRangeYd: 30 },
+          { yourReachYd: 40, kickRangeYd: 15 },
+        )["outRangeable"],
+      ).toMatch(/^yes /);
+    });
+
+    it("no: the gate is the CAST range — an area's radius does not let the caster stand farther (pre-review: Summon Demonic Tyrant reach 45, cast 40, Counter Shot 40)", () => {
+      const f = facts(
+        { sourceDistYd: 42.5 },
+        { yourReachYd: 45, yourCastRangeYd: 40, kickRangeYd: 40 },
+      );
+      expect(f["yourReachYd"]).toBe("45");
+      expect(f["outRangeable"]).toBe(
+        "no (the spell's 40 yd cast range does not exceed the kick's)",
+      );
+      // and against another kicker's longer kick too
+      expect(
+        facts(
+          { sourceDistYd: 20, maxKickRangeYd: 40 },
+          { yourReachYd: 48, yourCastRangeYd: 40, kickRangeYd: 15 },
+        )["outRangeable"],
+      ).toBe("no (another ready kicker in range with a 40 yd kick)");
+    });
+
+    it("no: a kick during the channel — the cast-start facts are stale and the kicker had the channel to walk in (pre-review: five Mind Control lines read yes)", () => {
+      const f = facts(
+        { sourceDistYd: 17.3, channelS: 3.6 },
+        { yourReachYd: 30, kickRangeYd: 5 },
+      );
+      expect(f["outRangeable"]).toBe(
+        "no (kicked 3.6s into the channel — the kicker had the cast and the channel to close in)",
+      );
+      expect(f["outRangeable"]).not.toContain(", ");
+    });
+
+    it("no: a gap-closer cast during the cast, or back up before the kick landed (pre-review)", () => {
+      expect(
+        facts({
+          sourceDistYd: 12,
+          sourceGapCloser: {
+            state: "used-during",
+            spellId: "100",
+            spellName: "Charge",
+            afterS: 0.7,
+          },
+        })["outRangeable"],
+      ).toBe("no (Charge used 0.7s into the cast)");
+      expect(
+        facts({
+          sourceDistYd: 12,
+          sourceGapCloser: {
+            state: "ready-during",
+            spellId: "100",
+            spellName: "Charge",
+          },
+        })["outRangeable"],
+      ).toBe("no (Charge ready before the kick landed)");
+    });
+
+    it("no: another kicker within hitbox slack of its kick closes like one inside it (`maxKickRangeSlackYd`)", () => {
+      expect(
+        facts(
+          { sourceDistYd: 20, maxKickRangeYd: null, maxKickRangeSlackYd: 40 },
+          { yourReachYd: 40, kickRangeYd: 5 },
+        )["outRangeable"],
+      ).toBe("no (another ready kicker in range with a 40 yd kick)");
+    });
+
+    it("no: another kicker in range whose kick came back during the cast closes, with its own reason (`maxKickRangeLateYd`)", () => {
+      expect(
+        facts(
+          { sourceDistYd: 20, maxKickRangeYd: null, maxKickRangeLateYd: 40 },
+          { yourReachYd: 40, kickRangeYd: 5 },
+        )["outRangeable"],
+      ).toBe(
+        "no (another kicker in range got its 40 yd kick back during the cast)",
+      );
+      // a shorter kick than the spell leaves it open
+      expect(
+        facts(
+          { sourceDistYd: 20, maxKickRangeYd: null, maxKickRangeLateYd: 15 },
+          { yourReachYd: 40, kickRangeYd: 5 },
+        )["outRangeable"],
+      ).toMatch(/^yes/);
+    });
+
+    it("no: the owner was rooted at cast start (F-K6d, 9c9d8601 @63.9)", () => {
+      const f = facts(
+        { sourceDistYd: 35, ownerImmobileBy: "Entangling Roots" },
+        { yourReachYd: 46, kickRangeYd: 30 },
+      );
+      expect(f["youImmobileAtCastStart"]).toBe("Entangling Roots");
+      expect(f["outRangeable"]).toBe("no (you were held by Entangling Roots)");
+    });
+
+    it("prints who the nearest ready kicker was, and when the source's kick came back (F-K5a / F-K5b)", () => {
+      const f = facts({
+        sourceDistYd: 20.8,
+        nearestKickerDistYd: 17.6,
+        nearestKickerName: "Rogue-Realm",
+        kickersInRange: 0,
+        sourceKickReadyInS: 2.38,
+      });
+      expect(f["nearestKicker"]).toBe("Rogue-Realm");
+      expect(f["nearestKickerDistYd"]).toBe("17.6");
+      expect(f["sourceKickReadyAtCastStart"]).toBe("no (ready 2.4s later)");
+    });
+  });
+
   it("kick-eaten: carries nearestKickerDistYd and kickersInRange facts when present (GH #73, B6)", () => {
     const evts = kickEatenEvents(
       [
@@ -1458,11 +1844,73 @@ describe("团队协作候选映射(2026-07-24 覆盖面扩充)", () => {
       },
     );
     const f = evts[0]!.facts["postKick"]!;
-    expect(f).toContain("no successful cast for 5s");
-    expect(f).toContain("pressed 3x but rejected");
+    // I01: one press was refused as "not ready"; the other two carry a reason
+    // of their own in the log and are stated with it
+    expect(f).toBe(
+      "no successful cast for 5s after the kick; pressed 1x but rejected (Holy Fire +1.8s) inside the lockout; refused for another reason 1x — target not in line of sight (Mind Control +1.1s); refused for another reason 1x — under crowd control (Mind Control +3.5s)",
+    );
     expect(f).not.toContain("1262763");
     expect(f).not.toContain(", "); // checkFactsBlockIntegrity
     expect(f).not.toMatch(/[一-鿿]/); // checkCjkLeak: reasons stay out
+  });
+
+  it("kick-eaten: an off-GCD spell still not ready after the lock was its own cooldown (work order 2026-10-14c #4)", () => {
+    // Fade (586, off the GCD) refused at +0.5 s inside a 3 s lock and again
+    // at +3.6 s after it, never cast in between
+    const run = (ownerCasts: { spellId: string; tSeconds: number }[]) =>
+      kickEatenEvents(
+        [
+          kickInst({
+            lockoutDurationSeconds: 3,
+            postKick: "acted" as const,
+            firstActionDelayS: 4.4,
+          }),
+        ],
+        { id: "P1", name: "Me" },
+        {
+          rawStreams: streams([failed(91.63, 586), failed(94.73, 586)]),
+          ownerCasts,
+        },
+      )[0]!.facts["postKick"]!;
+    const f = run([]);
+    expect(f).toContain(
+      "its own cooldown 1x — still not ready after the lock (Fade +0.5s)",
+    );
+    expect(f).not.toContain("inside the lockout");
+    // a cast of it in between: no proof
+    expect(run([{ spellId: "586", tSeconds: 93.0 }])).not.toContain(
+      "its own cooldown",
+    );
+  });
+
+  it("kick-eaten: a lock longer than 5 s lists its presses to the lock's end (work order 2026-10-14c #5, fa5e6c66)", () => {
+    // 6 s lock: presses at +1.8 s and +5.5 s are both inside it
+    const evts = kickEatenEvents(
+      [kickInst({ lockoutDurationSeconds: 6 })],
+      { id: "P1", name: "Me" },
+      {
+        rawStreams: streams([failed(92.96, 14914), failed(96.63, 14914)]),
+        ownerCasts: [],
+      },
+    );
+    expect(evts[0]!.facts["postKick"]).toContain(
+      "pressed 2x but rejected (Holy Fire×2 +1.8/+5.5s) inside the lockout",
+    );
+  });
+
+  it("kick-eaten idle: a 'not ready' press after the lock ended is stated apart (work order 2026-10-14b fix 2, 138e632d)", () => {
+    // 3 s lock: Holy Fire +1.8 s inside it, Holy Fire +3.7 s after it
+    const evts = kickEatenEvents(
+      [kickInst({ lockoutDurationSeconds: 3 })],
+      { id: "P1", name: "Me" },
+      {
+        rawStreams: streams([failed(92.96, 14914), failed(94.83, 14914)]),
+        ownerCasts: [],
+      },
+    );
+    expect(evts[0]!.facts["postKick"]).toBe(
+      "no successful cast for 5s after the kick; pressed 1x but rejected (Holy Fire +1.8s) inside the lockout; after the lockout pressed 1x but rejected (Holy Fire +3.7s)",
+    );
   });
 
   it("kick-eaten: an idle kick with rejected presses no longer outranks a plain idle kick", () => {
@@ -1526,7 +1974,9 @@ describe("团队协作候选映射(2026-07-24 覆盖面扩充)", () => {
       },
     )[0]!.facts["postKick"]!;
     expect(f).toContain("acted on another school 2.4s later");
-    expect(f).toContain("outside the locked school 1x not ready yet — its own cooldown or the GCD");
+    expect(f).toContain(
+      "outside the locked school 1x not ready yet — its own cooldown or the GCD",
+    );
     expect(f).not.toContain(", ");
   });
 
@@ -1576,7 +2026,171 @@ describe("团队协作候选映射(2026-07-24 覆盖面扩充)", () => {
         ownerCasts: [{ spellId: "853", tSeconds: 94.13 }],
       },
     )[0]!.facts["postKick"]!;
-    expect(f).toContain("pressed 1x but rejected (Hammer of Justice) inside the lockout");
+    expect(f).toContain(
+      "pressed 1x but rejected (Hammer of Justice +2.3s) inside the lockout",
+    );
+  });
+
+  // Triage 2026-09-29 F-K12a, user rulings A34 (2026-09-30) and the exempt
+  // pool's own cap (2026-10-01).
+  describe("kick-eaten: the cap orders by pressure; the first two death / crisis-HP kicks do not count toward it", () => {
+    const calm = { burstAgainst: [] as string[] };
+    const burstOnly = {
+      ours: { burstAgainst: ["Bestial Wrath"] },
+      theirs: calm,
+      burstReady: [],
+    };
+    const lowHp = {
+      ours: {
+        low: { unit: "Mate", pct: 38, atSec: 87 },
+        burstAgainst: ["Bloodlust"],
+      },
+      theirs: calm,
+      burstReady: [],
+    };
+    const death = {
+      ours: { death: { unit: "Mate", atSec: 140.2 }, burstAgainst: [] },
+      theirs: calm,
+      burstReady: [],
+    };
+    const readyOnly = { ours: calm, theirs: calm, burstReady: ["Combustion"] };
+    const acted = (atSeconds: number) =>
+      kickInst({ atSeconds, postKick: "acted", firstActionDelayS: 4.1 });
+    const menu = (
+      kicks: Array<
+        [
+          number,
+          typeof burstOnly | typeof lowHp | typeof death | typeof readyOnly,
+        ]
+      >,
+    ) =>
+      kickEatenEvents(
+        kicks.map(([t]) => acted(t)),
+        { id: "P1", name: "Me" },
+        undefined,
+        undefined,
+        (k) => kicks.find(([t]) => t === k.atSeconds)![1] as never,
+      ).map((e) => e.t);
+
+    it("a crisis-HP kick is listed on top of the two capped ones (eb8041ce: 87.6 enters, nothing leaves)", () => {
+      expect(
+        menu([
+          [10, burstOnly],
+          [25.2, burstOnly],
+          [87.6, lowHp],
+        ]),
+      ).toEqual([87.6, 10, 25.2]);
+    });
+
+    it("exempt kicks do not count toward the regular two: three burst-only kicks still keep the earliest two", () => {
+      expect(
+        menu([
+          [10, burstOnly],
+          [25, burstOnly],
+          [40, burstOnly],
+          [60, death],
+          [87, lowHp],
+        ]),
+      ).toEqual([60, 87, 10, 25]);
+    });
+
+    it("only two kicks are exempt: a third death / crisis kick competes for the regular two, ahead of burst-only kicks (user ruling 2026-10-01: at most 2 + 2)", () => {
+      expect(
+        menu([
+          [10, lowHp],
+          [20, lowHp],
+          [30, burstOnly],
+          [40, lowHp],
+          [50, death],
+          [60, burstOnly],
+          [70, burstOnly],
+        ]),
+      ).toEqual([50, 10, 20, 40]);
+    });
+
+    it("a round never lists more than four, and a kick the old cap kept is not lost to the exemption cap (crisis kicks at 10 / 20 stay next to a later death)", () => {
+      expect(
+        menu([
+          [10, lowHp],
+          [20, lowHp],
+          [50, death],
+        ]),
+      ).toEqual([50, 10, 20]);
+      expect(
+        menu([
+          [10, lowHp],
+          [20, lowHp],
+          [40, lowHp],
+          [50, lowHp],
+          [55, lowHp],
+          [60, burstOnly],
+        ]),
+      ).toEqual([10, 20, 40, 50]);
+    });
+
+    it("inside the cap a burst-running kick outranks a ready-burst-only one, whatever the time (dfcccbf2: 79.3 loses to 137.6)", () => {
+      expect(
+        menu([
+          [79.3, readyOnly],
+          [137.6, burstOnly],
+          [150.8, burstOnly],
+        ]),
+      ).toEqual([137.6, 150.8]);
+    });
+
+    it("the coachability rank still sorts first: an idle burst-only kick precedes an acted crisis kick, and both are listed", () => {
+      const evts = kickEatenEvents(
+        [acted(10), kickInst({ atSeconds: 50 }), acted(30), acted(70)],
+        { id: "P1", name: "Me" },
+        undefined,
+        undefined,
+        (k) => (k.atSeconds === 70 ? lowHp : burstOnly) as never,
+      );
+      expect(evts.map((e) => e.t)).toEqual([50, 70, 10]);
+    });
+
+    it("without the pressure closure the old order and cap stand", () => {
+      expect(
+        kickEatenEvents([acted(30), acted(10), acted(20)], {
+          id: "P1",
+          name: "Me",
+        }).map((e) => e.t),
+      ).toEqual([10, 20]);
+    });
+  });
+
+  // Triage 2026-09-29 F-K10a, user ruling A35 (0.5 s window, fact only).
+  it("kick-eaten: a cast the owner stopped just before the kicked one is a fact (5e8b11c1 @157.3, 2c6e85ec @15.0)", () => {
+    const cancelsOf = (startS: number, cancelS: number) => ({
+      hardcasts: 5,
+      cancels: [
+        {
+          spellId: "51514",
+          spellName: "妖术",
+          startS,
+          cancelS,
+          progressPct: 31,
+        },
+      ],
+      baitedKicks: [],
+    });
+    const f = (castStartS: number | null, startS: number, cancelS: number) =>
+      kickEatenEvents(
+        [kickInst({ atSeconds: 157.287, castStartS })],
+        { id: "P1", name: "Me" },
+        undefined,
+        undefined,
+        undefined,
+        cancelsOf(startS, cancelS),
+      )[0]!.facts["stoppedJustBefore"];
+    // Hex started 156.662, stopped 157.156; the kicked cast started 157.283
+    expect(f(157.283, 156.662, 157.156)).toBe("Hex 0.1s before (~0.5s in)");
+    // stopped more than 0.5 s before: not "just before"
+    expect(f(157.283, 155.9, 156.5)).toBeUndefined();
+    // a stop AFTER the kicked cast's start is not it
+    expect(f(157.283, 157.29, 157.5)).toBeUndefined();
+    // a channel kick has no cast start: no fact
+    expect(f(null, 156.662, 157.156)).toBeUndefined();
   });
 
   it("kick-eaten: without raw streams the line is unchanged (old archives)", () => {
@@ -1585,6 +2199,374 @@ describe("团队协作候选映射(2026-07-24 覆盖面扩充)", () => {
         "postKick"
       ],
     ).toBe("no cast for 5s after the kick");
+  });
+
+  // Triage 2026-09-29, kick-eaten F-K7d / F-K7b / F-K7c / F-K7a.
+  // Cyclone 33786 = Nature. Verdant Embrace 360995 / Riptide 61295 / Surging
+  // Totem 444995 = Nature; Reversion 366155 = Arcane-side (64); Starsurge
+  // 78674 = Arcane + Nature (72).
+  const natureKick = (over: Record<string, unknown> = {}) =>
+    kickInst({
+      atSeconds: 100,
+      lockoutDurationSeconds: 3,
+      interruptedSpellId: "33786",
+      interruptedSpellName: "Cyclone",
+      ...over,
+    });
+  const postKickOf = (
+    inst: ReturnType<typeof kickInst>,
+    castFailed: ReturnType<typeof failed>[],
+    ownerCasts: { spellId: string; tSeconds: number }[] = [],
+  ) =>
+    kickEatenEvents(
+      [inst],
+      { id: "P1", name: "Me" },
+      { rawStreams: streams(castFailed), ownerCasts },
+    )[0]!.facts["postKick"]!;
+
+  it("kick-eaten: a switched line prints the presses rejected inside the lockout, and none after it (F-K7d, b12bfef4 @169)", () => {
+    const f = postKickOf(
+      natureKick({
+        postKick: "switched",
+        switchSpellName: "Echo",
+        switchDelayS: 1.4,
+        switchWasHardCast: false,
+      }),
+      [
+        failed(100.998, 360995), // Verdant Embrace, the locked school
+        failed(101.168, 360995),
+        failed(102.678, 366155, "超出范围"), // Reversion, out of range
+        failed(102.792, 366155, "超出范围"),
+        failed(103.886, 366155, "超出范围"), // after the 3.0 s lockout
+        failed(104.2, 366155), // not ready, a school the kick did not lock
+      ],
+    );
+    expect(f).toBe(
+      // I01: the two Reversion presses were refused "out of range" — the log's
+      // own reason, not the lock — and the one after the lock is not printed
+      "acted on another school 1.4s later (Echo; not a hard cast); pressed 2x but rejected (Verdant Embrace×2 +0.9/+1.1s) inside the lockout; refused for another reason 2x — out of range (Reversion×2 +2.6/+2.7s); outside the locked school 1x not ready yet — its own cooldown or the GCD (Reversion +4.2s)",
+    );
+    expect(f).not.toContain(", ");
+  });
+
+  // Re-eval 2026-10-08, F21 (dfcccbf2 @166.5, Shield of Virtue).
+  it("kick-eaten: a kick whose own spell also silenced the player says for how long, in the [SILENCE] line's own rendering", () => {
+    const factsOf = (kickSilenceS: number | null) =>
+      kickEatenEvents(
+        [
+          natureKick({
+            kickSpellName: "Shield of Virtue",
+            lockoutDurationSeconds: 4,
+            kickSilenceS,
+          }),
+        ],
+        { id: "P1", name: "Me" },
+      )[0]!.facts;
+    expect(factsOf(4.008)).toMatchObject({ lockout: "4.0", kickSilence: "4s" });
+    expect(factsOf(1.371)["kickSilence"]).toBe("1s"); // dispelled early
+    expect(factsOf(0.2)["kickSilence"]).toBe("<1s");
+    expect("kickSilence" in factsOf(null)).toBe(false);
+    // the fact sits with the lockout facts, before the reach and press facts
+    const keys = Object.keys(factsOf(4.008));
+    expect(keys.indexOf("kickSilence")).toBeLessThan(keys.indexOf("postKick"));
+  });
+
+  // Re-eval 2026-10-08, I01: what the log gives as the reason decides which
+  // list a refused press is in.
+  describe("kick-eaten: a press refused for a reason of its own is not a lockout reject (I01)", () => {
+    const acted = { postKick: "acted" as const, firstActionDelayS: 4.4 };
+
+    it("one clause per reason, in order of first press; an unworded reason is said to be one", () => {
+      const f = postKickOf(natureKick(acted), [
+        failed(100.4, 360995, "Can't do that while silenced"),
+        failed(100.6, 366155, "Can't do that while moving"),
+        failed(100.9, 360995, "Can't do that while silenced"),
+        failed(101.2, 366155, "Must be in Stealth"),
+        failed(101.5, 360995), // not ready: the lock's own answer
+      ]);
+      expect(f).toBe(
+        "pressed 1x but rejected (Verdant Embrace +1.5s) inside the lockout; first successful cast 4.4s later; refused for another reason 2x — silenced (Verdant Embrace×2 +0.4/+0.9s); refused for another reason 1x — can't cast while moving (Reversion +0.6s); refused for another reason 1x — client reason not translated (Reversion +1.2s)",
+      );
+      expect(f).not.toContain(", ");
+    });
+
+    it("with no not-ready press the line has no 'rejected inside the lockout' at all — and is not 'waited out'", () => {
+      const f = postKickOf(natureKick(acted), [
+        failed(100.6, 360995, "Out of range"),
+      ]);
+      expect(f).toBe(
+        "first successful cast 4.4s later; refused for another reason 1x — out of range (Verdant Embrace +0.6s)",
+      );
+    });
+
+    it("the acted / switched forms print it only inside the lock, the idle form for the whole window", () => {
+      const late = [failed(103.9, 360995, "Out of range")];
+      expect(postKickOf(natureKick(acted), late)).toBe(
+        "waited out the lockout (first cast 4.4s later)",
+      );
+      expect(postKickOf(natureKick({ postKick: "idle" }), late)).toBe(
+        "no successful cast for 5s after the kick; refused for another reason 1x — out of range (Verdant Embrace +3.9s)",
+      );
+    });
+
+    it("a cast bar that began and was stopped is said to be that, not a refusal the client left unworded", () => {
+      const f = postKickOf(natureKick({ postKick: "idle" }), [
+        failed(102.1, 360995, "Interrupted"),
+      ]);
+      expect(f).toBe(
+        "no successful cast for 5s after the kick; refused for another reason 1x — its cast bar began and was stopped (Verdant Embrace +2.1s)",
+      );
+    });
+
+    it("a not-ready press of a spell that had itself gone out inside the lock is not printed (f4eb8c87 @60.2: Demonic Circle: Teleport)", () => {
+      const shadow = (wentOutInLockS: Record<string, number>) =>
+        natureKick({
+          interruptedSpellId: "198590", // Drain Soul
+          interruptedSpellName: "Drain Soul",
+          postKick: "switched",
+          switchSpellName: "Dark Pact",
+          switchDelayS: 1.2,
+          switchWasHardCast: false,
+          wentOutInLockS,
+        });
+      // Teleport succeeded 2.634 s into the 3 s Shadow lock
+      const shadowKick = shadow({ "48020": 2.634 });
+      const presses = [
+        failed(100.065, 48181), // Haunt
+        failed(102.983, 48020), // Teleport, 0.35 s after its own success
+      ];
+      expect(postKickOf(shadowKick, presses)).toBe(
+        "acted on another school 1.2s later (Dark Pact; not a hard cast); pressed 1x but rejected (Haunt +0.0s) inside the lockout",
+      );
+      // without the success the press stays where it was
+      expect(postKickOf(shadow({}), presses)).toBe(
+        "acted on another school 1.2s later (Dark Pact; not a hard cast); pressed 2x but rejected (Haunt +0.0s、Demonic Circle: Teleport +2.9s) inside the lockout",
+      );
+      // …and a press BEFORE the success is still the lock's
+      expect(postKickOf(shadowKick, [failed(102.5, 48020)])).toContain(
+        "pressed 1x but rejected (Demonic Circle: Teleport +2.5s)",
+      );
+    });
+  });
+
+  it("kick-eaten: a switched line with no in-lockout reject is unchanged (F-K7d)", () => {
+    const f = postKickOf(
+      natureKick({
+        postKick: "switched",
+        switchSpellName: "Echo",
+        switchDelayS: 1.4,
+        switchWasHardCast: false,
+      }),
+      [failed(103.886, 366155, "超出范围")],
+    );
+    expect(f).toBe(
+      "acted on another school 1.4s later (Echo; not a hard cast)",
+    );
+  });
+
+  it("kick-eaten: a not-ready press of a spell with one school outside the lock is its own cooldown, not a lockout reject (F-K7b, 2c6e85ec @15)", () => {
+    const f = postKickOf(
+      natureKick({
+        postKick: "switched",
+        switchSpellName: "Starsurge",
+        switchDelayS: 0.8,
+        switchWasHardCast: false,
+      }),
+      [failed(101.5, 78674), failed(102.4, 78674)],
+      [{ spellId: "78674", tSeconds: 100.8 }],
+    );
+    expect(f).toBe(
+      "acted on another school 0.8s later (Starsurge; not a hard cast); outside the locked school 2x not ready yet — its own cooldown or the GCD (Starsurge×2 +1.5/+2.4s)",
+    );
+  });
+
+  it("kick-eaten: a not-ready reject within 0.3 s of the same spell's success is a key repeat and is not counted (F-K7c, ruling A32)", () => {
+    const f = postKickOf(
+      natureKick({
+        postKick: "switched",
+        switchSpellName: "Reversion",
+        switchDelayS: 1.3,
+        switchWasHardCast: false,
+      }),
+      [
+        failed(101.366, 366155), // 66 ms after the success → dropped
+        failed(101.65, 366155), // 350 ms after → a press
+        failed(101.4, 366155, "超出范围"), // not a not-ready reason → a press
+      ],
+      [{ spellId: "366155", tSeconds: 101.3 }],
+    );
+    expect(f).toBe(
+      "acted on another school 1.3s later (Reversion; not a hard cast); refused for another reason 1x — out of range (Reversion +1.4s); outside the locked school 1x not ready yet — its own cooldown or the GCD (Reversion +1.6s)",
+    );
+  });
+
+  it("kick-eaten: a line whose only reject was a key repeat loses its not-ready clause (F-K7c, 02c8e3ac @10)", () => {
+    const f = postKickOf(
+      natureKick({
+        postKick: "switched",
+        switchSpellName: "Reversion",
+        switchDelayS: 1.3,
+        switchWasHardCast: false,
+      }),
+      [failed(101.332, 366155)],
+      [{ spellId: "366155", tSeconds: 101.3 }],
+    );
+    expect(f).toBe(
+      "acted on another school 1.3s later (Reversion; not a hard cast)",
+    );
+  });
+
+  it("kick-eaten: the in-lockout rejects stop at the first successful cast of the locked school (F-K7a, ruling A23, 1b930c17 @237)", () => {
+    const f = postKickOf(
+      kickInst({
+        atSeconds: 237.691,
+        lockoutDurationSeconds: 2,
+        interruptedSpellId: "33786",
+        interruptedSpellName: "Cyclone",
+        postKick: "acted",
+        firstActionDelayS: 0.982,
+        lockEndedBySuccessS: 0.982,
+      }),
+      [
+        failed(238.158, 444995), // Surging Totem, before it went out
+        failed(239.231, 61295), // Riptide, after the Nature success
+        failed(239.396, 61295),
+      ],
+      [{ spellId: "444995", tSeconds: 238.673 }],
+    );
+    expect(f).toBe(
+      "pressed 1x but rejected (Surging Totem +0.4s) inside the lockout; first successful cast 1.0s later",
+    );
+  });
+
+  it("kick-eaten: a reject in the same millisecond as the cast that ended the lock is after it, whatever the float round trip says (F-K7a)", () => {
+    // 0.177 + (0.838 − 0.177) is 0.8380000000000001
+    expect(0.177 + (0.838 - 0.177)).toBeGreaterThan(0.838);
+    const f = postKickOf(
+      kickInst({
+        atSeconds: 0.177,
+        lockoutDurationSeconds: 2,
+        interruptedSpellId: "33786",
+        interruptedSpellName: "Cyclone",
+        postKick: "acted",
+        firstActionDelayS: 0.838 - 0.177,
+        lockEndedBySuccessS: 0.838 - 0.177,
+      }),
+      [failed(0.838, 61295)],
+      [{ spellId: "444995", tSeconds: 0.838 }],
+    );
+    expect(f).toBe("first cast 0.7s later");
+  });
+
+  it("kick-eaten: every press carries its offset after the kick; a repeated spell lists them in order (F-K7f, 141470d0 @198)", () => {
+    const f = postKickOf(
+      natureKick({
+        atSeconds: 198.268,
+        postKick: "switched",
+        switchSpellName: "Echo",
+        switchDelayS: 1.3,
+        switchWasHardCast: false,
+      }),
+      [
+        failed(200.818, 366155), // Reversion, +2.55 s → floored +2.5
+        failed(202.248, 355913), // Emerald Blossom-side id, +3.98 s → +3.9
+        failed(198.3, 360995),
+        failed(198.61, 360995),
+        failed(200.1, 360995),
+      ],
+    );
+    expect(f).toContain(
+      "pressed 3x but rejected (Verdant Embrace×3 +0.0/+0.3/+1.8s) inside the lockout",
+    );
+    expect(f).toContain("(Reversion +2.5s");
+    expect(f).not.toContain(", ");
+  });
+
+  it("kick-eaten: a channeled switching cast reads 'channel' (work order 2026-10-14b fix 4, 9c9d8601 Penance)", () => {
+    const base = {
+      postKick: "switched" as const,
+      switchSpellName: "Penance",
+      switchDelayS: 1.7,
+      switchWasHardCast: false,
+    };
+    expect(
+      postKickOf(natureKick({ ...base, switchWasChanneled: true }), []),
+    ).toBe("acted on another school 1.7s later (Penance; channel)");
+    expect(
+      postKickOf(natureKick({ ...base, switchWasChanneled: false }), []),
+    ).toBe("acted on another school 1.7s later (Penance; not a hard cast)");
+  });
+
+  it("kick-eaten switched: an earlier first cast is named too (work order 2026-10-14b fix 12, 1b930c17 @155)", () => {
+    const k = natureKick({
+      postKick: "switched" as const,
+      switchSpellName: "Spirit Walk",
+      switchDelayS: 3.02,
+      switchWasHardCast: false,
+      firstActionDelayS: 1.04,
+      firstActionSpellName: "Riptide",
+    });
+    expect(postKickOf(k, [])).toBe(
+      "acted on another school 3.0s later (Spirit Walk; not a hard cast); first cast 1.0s later (Riptide)",
+    );
+    // the switch IS the first cast: nothing added
+    expect(postKickOf(natureKick({ ...k, firstActionDelayS: 3.02 }), [])).toBe(
+      "acted on another school 3.0s later (Spirit Walk; not a hard cast)",
+    );
+  });
+
+  it("kick-eaten: an empowered switching cast is not 'not a hard cast' (F-K13, 02c8e3ac @33.9)", () => {
+    const base = {
+      postKick: "switched" as const,
+      switchSpellName: "Fire Breath",
+      switchDelayS: 2.4,
+      switchWasHardCast: false,
+    };
+    expect(
+      postKickOf(natureKick({ ...base, switchWasEmpowered: true }), []),
+    ).toBe("acted on another school 2.4s later (Fire Breath; empowered cast)");
+    // no empower data (old archive) or not an empower: today's qualifier
+    expect(
+      postKickOf(natureKick({ ...base, switchWasEmpowered: null }), []),
+    ).toBe("acted on another school 2.4s later (Fire Breath; not a hard cast)");
+    expect(
+      postKickOf(natureKick({ ...base, switchWasEmpowered: false }), []),
+    ).toBe("acted on another school 2.4s later (Fire Breath; not a hard cast)");
+  });
+
+  it("kick-eaten: a cast started under an interrupt immunity that ran out is a fact (F-K14b, 3306e8ee @40.3)", () => {
+    const f = kickEatenEvents(
+      [
+        natureKick({
+          kickImmunityEnded: { auraName: "Obsidian Scales", intoCastS: 0.158 },
+        }),
+      ],
+      { id: "P1", name: "Me" },
+    )[0]!.facts;
+    expect(f["kickImmunityEnded"]).toBe("Obsidian Scales 0.2s into the cast");
+    expect(
+      kickEatenEvents([natureKick()], { id: "P1", name: "Me" })[0]!.facts[
+        "kickImmunityEnded"
+      ],
+    ).toBeUndefined();
+  });
+
+  it("kick-eaten: without a locked-school success the modelled lockout bounds the rejects as before (F-K7a)", () => {
+    const f = postKickOf(
+      kickInst({
+        atSeconds: 237.691,
+        lockoutDurationSeconds: 2,
+        interruptedSpellId: "33786",
+        interruptedSpellName: "Cyclone",
+        postKick: "acted",
+        firstActionDelayS: 2.4,
+        lockEndedBySuccessS: null,
+      }),
+      [failed(238.158, 444995), failed(239.231, 61295), failed(239.8, 61295)],
+    );
+    expect(f).toBe(
+      "pressed 2x but rejected (Surging Totem +0.4s、Riptide +1.5s) inside the lockout; first successful cast 2.4s later",
+    );
   });
 });
 
@@ -1608,6 +2590,24 @@ describe("healingGapEvents(HEAL-001,2026-08-30 HP-crisis 门 change 1/5)", () =>
 
   it("5s 空窗但全队 HP 都 >70% → 不报(gap 长度本身不再是判据)", () => {
     expect(healingGapEvents([gap(75, 50_000, "Ally", 5)], owner)).toEqual([]);
+  });
+
+  it("fact5 D12:空档里有被拒的按键 → facts.attempted(与 [INACTIVITY] 行同源)", () => {
+    const refused = {
+      tSeconds: 31,
+      unitGuid: "h1",
+      spellId: 20473,
+      spellName: "Holy Shock",
+      reason: "Target not in line of sight",
+    };
+    const [e] = healingGapEvents(
+      [{ ...gap(35, 50_000), refusedPresses: [refused, refused] }],
+      owner,
+    );
+    expect(e!.facts["attempted"]).toMatch(/^pressed but rejected \(.+×2\)$/);
+    expect(
+      healingGapEvents([gap(35, 50_000)], owner)[0]!.facts["attempted"],
+    ).toBeUndefined();
   });
 
   it("lowestFriendlyHpPct === null(窗口内无采样)→ 不报", () => {
@@ -1706,6 +2706,52 @@ describe("positionMistakeEvents(POSITION-001,2026-08-06 信号扩容批 1)", () 
     expect(evts).toHaveLength(1);
     expect(evts[0]!.facts["kind"]).toBe("missed-push");
     expect(evts[0]!.facts["dist"]).toBe("45");
+    // the span facts are stayed-in's alone
+    expect(evts[0]!.facts["endDist"]).toBeUndefined();
+  });
+
+  it("stayed-in carries the span: end / min / max distance, the end enemy when it changed, CC and root seconds (triage position F-S1 / F-S2)", () => {
+    const base = {
+      type: "STAYED_IN" as const,
+      atSeconds: 130,
+      nearestEnemyName: "Pressbro-Illidan-US",
+      ownerHpStartPct: 80,
+      ownerHpMinPct: 20,
+      startDistanceYards: 10.3,
+      endDistanceYards: 3.2,
+      minDistanceYards: 2.6,
+      maxDistanceYards: 18.9,
+    };
+    const [changed] = positionMistakeEvents(
+      [
+        {
+          ...base,
+          endEnemyName: "Mastutinho-Azralon-US",
+          ownerCcSeconds: 2.4,
+          ownerRootSeconds: 0,
+        },
+      ],
+      owner,
+    );
+    expect(changed!.facts).toMatchObject({
+      dist: "10",
+      endDist: "3",
+      minDist: "3",
+      maxDist: "19",
+      endEnemy: "Mastutinho-Azralon-US",
+      ccS: "2",
+      rootS: "0",
+    });
+    // same enemy at both ends → no endEnemy; no CC summary → no ccS / rootS
+    const [same] = positionMistakeEvents(
+      [{ ...base, endEnemyName: "Pressbro-Illidan-US" }],
+      owner,
+    );
+    expect(same!.facts["endEnemy"]).toBeUndefined();
+    expect(same!.facts["ccS"]).toBeUndefined();
+    expect(same!.facts["rootS"]).toBeUndefined();
+    // id / order are untouched by the new facts
+    expect(same!.id).toBe(changed!.id);
   });
 
   it("CD_OUT_OF_RANGE 直接报,facts.spell/顶层 spell 都带技能名", () => {
@@ -2389,7 +3435,16 @@ describe("missedSyncWindowEvents(P1 起爆-1,2026-08-15,纯函数)", () => {
     const twoHealers = missedSyncWindowEvents(
       [polyWindow, { ...fearWindow, healerName: "Other-Healer" }],
       // the second CD is back at 440 (439.5 with the 0.5 s slack) — ready for the second lock only
-      [readyHammer, { ...readyHammer, spellId: "1719", spellName: "Recklessness", casts: [{ timeSeconds: 400 }], cooldownSeconds: 40 }],
+      [
+        readyHammer,
+        {
+          ...readyHammer,
+          spellId: "1719",
+          spellName: "Recklessness",
+          casts: [{ timeSeconds: 400 }],
+          cooldownSeconds: 40,
+        },
+      ],
       probes(50),
     );
     expect(new Set(twoHealers.map((e) => e.id)).size).toBe(2);
@@ -2431,9 +3486,27 @@ describe("missedSyncWindowEvents(P1 起爆-1,2026-08-15,纯函数)", () => {
   });
 
   it("one held CD across back-to-back locks is ONE accusation; a press between them makes two (round 3 W1a, 24b6)", () => {
-    const trap = { ...ccWindow, fromSeconds: 204, toSeconds: 208.1, healerName: "H1", spellId: "3355", spellName: "Freezing Trap" };
-    const cyclone = { ...ccWindow, fromSeconds: 210.6, toSeconds: 216.6, healerName: "H1", spellId: "33786", spellName: "Cyclone" };
-    const one = missedSyncWindowEvents([trap, cyclone], [readyHammer], probes(50));
+    const trap = {
+      ...ccWindow,
+      fromSeconds: 204,
+      toSeconds: 208.1,
+      healerName: "H1",
+      spellId: "3355",
+      spellName: "Freezing Trap",
+    };
+    const cyclone = {
+      ...ccWindow,
+      fromSeconds: 210.6,
+      toSeconds: 216.6,
+      healerName: "H1",
+      spellId: "33786",
+      spellName: "Cyclone",
+    };
+    const one = missedSyncWindowEvents(
+      [trap, cyclone],
+      [readyHammer],
+      probes(50),
+    );
     expect(one).toHaveLength(1);
     expect(one[0]!.facts["alsoHeldAt"]).toBe("210");
     const pressedBetween = {
@@ -2441,7 +3514,9 @@ describe("missedSyncWindowEvents(P1 起爆-1,2026-08-15,纯函数)", () => {
       cooldownSeconds: 1,
       casts: [{ timeSeconds: 0 }, { timeSeconds: 208.3 }],
     };
-    expect(missedSyncWindowEvents([trap, cyclone], [pressedBetween], probes(50))).toHaveLength(2);
+    expect(
+      missedSyncWindowEvents([trap, cyclone], [pressedBetween], probes(50)),
+    ).toHaveLength(2);
   });
 });
 
@@ -2545,37 +3620,6 @@ describe("unsyncedBurstEvents(P1 起爆-2,2026-08-15,纯函数)", () => {
     );
     expect(evts).toHaveLength(2);
     expect(evts.map((e) => e.facts["spell"])).toEqual(["Big", "Mid"]);
-  });
-});
-
-describe("enemyMinHpPctInWindow(missed-sync-window 的血量 accelerator 探针,渲染网格离散扫描)", () => {
-  it("窗口内多次采样取最小值,跨多个敌人也取全场最小", () => {
-    const enemies = [{ id: "e1" }, { id: "e2" }];
-    const seen: number[] = [];
-    const hp = enemyMinHpPctInWindow(
-      enemies,
-      { startTime: 0 },
-      10,
-      12,
-      (unit: any, timestampMs: number) => {
-        seen.push(timestampMs);
-        return unit.id === "e2" ? 30 : 80;
-      },
-    );
-    expect(hp).toBe(30);
-    // 3 rendered seconds (10,11,12) x 2 enemies = 6 probes
-    expect(seen).toHaveLength(6);
-  });
-
-  it("全程采不到样(全部返回 null)→ 整体 null,不是 0", () => {
-    const hp = enemyMinHpPctInWindow(
-      [{ id: "e1" }],
-      { startTime: 0 },
-      10,
-      12,
-      () => null,
-    );
-    expect(hp).toBeNull();
   });
 });
 
@@ -2744,7 +3788,7 @@ describe("cdHoardedEvents 意图守护(BACKLOG #26 Task 2,按了被拒不算屯�
     );
     expect(evts).toHaveLength(1);
     expect(evts[0]!.facts["attempted"]).toBe(
-      "曾尝试施放被拒(尚未恢复×2、法力值不足×1)",
+      "pressed but rejected (not ready yet×2、not enough mana×1)",
     );
   });
 
@@ -2859,7 +3903,11 @@ describe("cdHoardedEvents 意图守护(BACKLOG #26 Task 2,按了被拒不算屯�
     expect(evts[0]!.facts["attempted"]).toBeUndefined();
   });
 
-  it("⑤ #29:自己刚成功施放 ≤1.5s 内的「尚未恢复」是 GCD 不算证据;同时刻的昏迷理由保留(理由收窄)", () => {
+  // F-H12(用户裁决 2026-09-30 C1)推翻了 #29 在 cd-hoarded 里的这一半:就绪
+  // 技能在 GCD 内被拒、窗口内之后再没放出来,算尝试(指控照出)。「之后放了」
+  // 那一侧 cd-hoarded 本身判 spent 不出行,由 shared.test.ts 的
+  // keepGcdLockedUntilS 用例钉住。
+  it("⑤ 自己刚成功施放 ≤1.5s 内的「尚未恢复」:就绪且之后没放 → 算尝试(F-H12 / C1);同时刻的昏迷理由照旧保留", () => {
     const rawStreams: RawStreams = {
       available: true,
       manaSamples: [],
@@ -2892,7 +3940,48 @@ describe("cdHoardedEvents 意图守护(BACKLOG #26 Task 2,按了被拒不算屯�
     );
     expect(evts).toHaveLength(1);
     expect(evts[0]!.facts["attempted"]).toBe(
-      "曾尝试施放被拒(无法在昏迷时那样做×1)",
+      "pressed but rejected (not ready yet×1、under crowd control×1)",
+    );
+  });
+
+  it("⑤b F-H12:被拒那一刻冷却还没转好(0.5 s 后才好)→ 不算尝试;转好之后的被拒 → 算(真实 cdAvailableAt,codex 复审)", () => {
+    // used at 79 with a 120 s cooldown → back up at 199 (= t − 1, so it is
+    // in readyCds for the crisis at 200); own unrelated cast at 198.4
+    const cd = {
+      ...HOARDED_CD,
+      cooldownSeconds: 120,
+      casts: [{ timeSeconds: 79 }],
+      neverUsed: false,
+    };
+    const reject = (tSeconds: number) => ({
+      available: true,
+      manaSamples: [],
+      castFailed: [
+        {
+          tSeconds,
+          unitGuid: "h",
+          spellId: 642,
+          spellName: "Divine Shield",
+          reason: "尚未恢复",
+        },
+      ],
+    });
+    const run = (rejectAt: number, ownCast: number) =>
+      cdHoardedEvents(
+        [ownSource(200, 34)],
+        [cd],
+        OWNER,
+        undefined,
+        reject(rejectAt) as RawStreams,
+        [ownCast],
+      );
+    const early = run(198.5, 198.4);
+    expect(early).toHaveLength(1);
+    expect(early[0]!.facts["attempted"]).toBeUndefined();
+    const ready = run(199.3, 199.2);
+    expect(ready).toHaveLength(1);
+    expect(ready[0]!.facts["attempted"]).toBe(
+      "pressed but rejected (not ready yet×1)",
     );
   });
 
@@ -2926,7 +4015,7 @@ describe("cdHoardedEvents 意图守护(BACKLOG #26 Task 2,按了被拒不算屯�
     );
     expect(evts).toHaveLength(1);
     expect(evts[0]!.facts["attempted"]).toBe(
-      "曾尝试施放被拒(尚未恢复×1、法力值不足×1)",
+      "pressed but rejected (not ready yet×1、not enough mana×1)",
     );
   });
 });
@@ -3011,7 +4100,7 @@ describe("cdSpentIdleEvents(P2 起爆-2,2026-08-15,圣佑盲发形态)", () => {
     });
     expect(evts).toHaveLength(1);
     expect(evts[0].facts["costNorm"]).toBeDefined();
-    expect(evts[0].facts["costNorm"]).toContain("大技能");
+    expect(evts[0].facts["costNorm"]).toContain("major cooldown");
   });
 
   it("按时间升序排序并按上限截断", () => {
@@ -3529,7 +4618,7 @@ describe("manaPressureEvents(BACKLOG #26 Task 3,2026-08-15,60ab-shape 纯函数,
       durationS: "10",
       mana: "545/273000",
       rejectedCount: "3",
-      rejected: "法力值不足×3",
+      rejected: "not enough mana×3",
       threat: "yes",
     });
   });
@@ -3913,6 +5002,37 @@ describe("manaEfficiencyEvents(BACKLOG #26 Task 4,2026-08-15,全场聚合纯函�
     expect(evts[0]!.facts.table).toContain("Holy Light");
   });
 
+  it("①b 宠物同名治疗不按名字归到主人的施法上(GH #163:树人的 Swiftmend 142421)", () => {
+    const druid = { id: "d", name: "Druid-R", spec: "105" };
+    const spellCastEvents = [
+      ...Array.from({ length: 12 }, (_, i) =>
+        castSuccess("18562", "Swiftmend", 1000 + i * 1000),
+      ),
+      ...Array.from({ length: 12 }, (_, i) =>
+        castSuccess("8936", "Regrowth", 20000 + i * 1000),
+      ),
+    ];
+    const regrowth = { spellId: "8936", srcUnitId: "d", effectiveAmount: 1000 };
+    const own = { spellId: "18562", srcUnitId: "d", effectiveAmount: 1000 };
+    const treant = {
+      spellId: "142421",
+      spellName: "Swiftmend",
+      srcUnitId: "Creature-treant",
+      effectiveAmount: 50000,
+    };
+    const run = (healOut: Array<typeof own | typeof treant>) =>
+      manaEfficiencyEvents(
+        druid,
+        { spellCastEvents, healOut: [regrowth, ...healOut], absorbsOut: [] },
+        0,
+        { floor: 2, minCasts: 1 },
+      )[0]!.facts.table;
+    expect(run([own, treant])).toBe(run([own]));
+    // the healer's own heal under another id still resolves by name
+    const ownOtherId = { ...treant, srcUnitId: "d" };
+    expect(run([own, ownOtherId])).not.toBe(run([own]));
+  });
+
   it("② 效率高于地板(ratio >= MANA_EFF_FLOOR)→ 0 条", () => {
     // Single spell, healShare===manaShare (ratio exactly 1) — well above the
     // floor.
@@ -4237,5 +5357,30 @@ describe("mana-efficiency 接线(extractCandidateFindings,BACKLOG #26 Task 4,202
       0,
     );
     expect(evts).toHaveLength(1);
+  });
+});
+
+describe("position-mistake refusedPresses (work order 2026-10-14b fix 14)", () => {
+  it("a stayed-in row states the presses the game refused inside the span", () => {
+    const [e] = positionMistakeEvents(
+      [
+        {
+          type: "STAYED_IN" as const,
+          atSeconds: 87,
+          toSeconds: 93,
+          nearestEnemyName: "E",
+          ownerHpStartPct: 87,
+          ownerHpMinPct: 19,
+        },
+      ],
+      { id: "o", name: "Owner" },
+      (fromS, toS) =>
+        fromS === 87 && toS === 93
+          ? "Demonic Circle: Teleport×12 +0.0/+0.2/+0.3s (not ready yet)"
+          : "",
+    );
+    expect(e!.facts.refusedPresses).toBe(
+      "Demonic Circle: Teleport×12 +0.0/+0.2/+0.3s (not ready yet)",
+    );
   });
 });

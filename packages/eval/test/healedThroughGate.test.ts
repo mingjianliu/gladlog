@@ -80,7 +80,35 @@ describe("checkHealedThroughConsistency — trough half (2026-09-15)", () => {
 
   it("a printed low that is not a trough by the shared predicate → red", () => {
     const fails = checkHealedThroughConsistency([
-      TROUGH.replace("low 37% @0:14", "low 60% @0:14"),
+      TROUGH.replace("low 37% @0:14", "low 75% @0:14"),
+    ]);
+    expect(fails.some((f) => f.includes("不满足低谷判据"))).toBe(true);
+  });
+
+  // User ruling 2026-09-30 (triage A′14, hp-state F-N5): a trough is a low
+  // ≥ 10 points under BOTH endpoints, with no ≤ 40 % condition — the gate
+  // imports the renderer's predicate, so both move together.
+  it("A′14: a tick 10+ points under both endpoints with the word → red, above the crisis line too", () => {
+    const fails = checkHealedThroughConsistency([
+      "0:10–0:20  [DMG SPIKE]   2(AWarrior) (Arms Warrior): 0.50M in 10s (82% -> 82% HP, 0%/s — healed through)",
+      state("0:14", 43),
+    ]);
+    expect(fails).toHaveLength(1);
+    expect(fails[0]).toContain("0:14 [STATE] 报 43%");
+  });
+
+  it("A′14: a tick 9 points under the lower endpoint is not a trough → the word stands", () => {
+    expect(
+      checkHealedThroughConsistency([
+        "0:10–0:20  [DMG SPIKE]   2(AWarrior) (Arms Warrior): 0.50M in 10s (81% -> 87% HP, +1%/s — healed through)",
+        state("0:14", 72),
+      ]),
+    ).toEqual([]);
+  });
+
+  it("A′14: a printed low under 10 points below a falling window's end → red (the old crisis-line rule printed it)", () => {
+    const fails = checkHealedThroughConsistency([
+      "0:10–0:20  [DMG SPIKE]   2(AWarrior) (Arms Warrior): 0.80M in 10s (99% -> 24% HP, -8%/s, low 22% @0:19)",
     ]);
     expect(fails.some((f) => f.includes("不满足低谷判据"))).toBe(true);
   });
@@ -100,6 +128,118 @@ describe("checkHealedThroughConsistency — trough half (2026-09-15)", () => {
     ).toBe(true);
     expect(
       checkHealedThroughConsistency([TROUGH, state("0:19", "dead")]),
+    ).toEqual([]);
+  });
+});
+
+// FT-T03 (user ruling 2026-10-10, D7): the low is a TROUGH — the true minimum
+// inside the window (`hpTroughInWindow`), not the lowest whole-second tick.
+// The tick of the printed second need not equal it; no tick may be below it.
+describe("checkHealedThroughConsistency — the low is a trough, off the grid (FT-T03)", () => {
+  // 141470d0: `low 6% @4:15` beside a 4:15 tick of 33 and a 4:16 tick of 48
+  const DEEP =
+    "0:10–0:20  [DMG SPIKE]   2(AWarrior) (Arms Warrior): 0.50M in 10s (80% -> 57% HP, -2%/s, low 6% @0:15)";
+  it("a low BELOW the tick of its own second → passes (the tick is the start of that second)", () => {
+    expect(
+      checkHealedThroughConsistency([
+        state("0:10", 80),
+        DEEP,
+        state("0:15", 33),
+        state("0:16", 48),
+        state("0:20", 57),
+      ]),
+    ).toEqual([]);
+  });
+  it("a tick below the low is still red — at the low's own second too", () => {
+    const fails = checkHealedThroughConsistency([DEEP, state("0:15", 4)]);
+    expect(fails).toHaveLength(1);
+    expect(fails[0]).toContain("标注 low 6% 但 0:15 [STATE] 报 4%");
+  });
+  it("a low on a second that unit's tick reads `dead` → red", () => {
+    const fails = checkHealedThroughConsistency([DEEP, state("0:15", "dead")]);
+    expect(fails.some((f) => f.includes("该秒 [STATE] 报 dead"))).toBe(true);
+  });
+  it("no low printed over a tick that is a trough → still red (the trough is at or below every tick)", () => {
+    const fails = checkHealedThroughConsistency([
+      DEEP.replace(", low 6% @0:15", ""),
+      state("0:15", 33),
+    ]);
+    expect(fails.some((f) => f.includes("未标注低谷"))).toBe(true);
+  });
+});
+
+// T12 ① c (user ruling 2026-10-10): a bucket closes at its victim's death and
+// reads 0 % there; the gate asks the renderer's own `isSpikeHealedThrough`.
+describe("checkHealedThroughConsistency — a window that ends on a death (T12 ① c)", () => {
+  const DIED =
+    "0:39–0:45  [DMG SPIKE]   2(AWarlock) (Affliction Warlock): 0.60M in 6s (100k DPS) (33% -> 0% HP, -6%/s)";
+  /** a bucket opened in the death second: Δ = 0, and still a death */
+  const DIED_AT_OPEN =
+    "0:45–0:45  [DMG SPIKE]   2(AWarlock) (Affliction Warlock): 0.60M in 0s (600k DPS) (0% -> 0% HP, 0%/s)";
+
+  it("`N% -> 0% HP` without the word → passes, beside its `dead` tick", () => {
+    expect(
+      checkHealedThroughConsistency([
+        state("0:39", 33),
+        DIED,
+        state("0:45", "dead"),
+      ]),
+    ).toEqual([]);
+  });
+
+  it("`0% -> 0% HP` without the word → passes (Δ = 0 is not `healed through` at 0 %)", () => {
+    expect(checkHealedThroughConsistency([DIED_AT_OPEN])).toEqual([]);
+  });
+
+  it("the word on a window that ends at 0 % → red", () => {
+    const fails = checkHealedThroughConsistency([
+      DIED_AT_OPEN.replace("0%/s)", "0%/s — healed through)"),
+    ]);
+    expect(fails).toHaveLength(1);
+    expect(fails[0]).toContain("终点 HP 为 0%");
+  });
+
+  it("Δ = 0 above 0 % still needs the word (the two-sided rule is unchanged)", () => {
+    const fails = checkHealedThroughConsistency([
+      "0:10–0:20  [DMG SPIKE]   x (50% -> 50% HP, +0%/s)",
+    ]);
+    expect(fails).toHaveLength(1);
+    expect(fails[0]).toContain("Δ0 ≥ 0");
+  });
+
+  // 2026-10-11: both ends are the tick's reading — 0 % on a `dead` second
+  it("an endpoint on a second the unit's tick reads `dead` must be 0 %", () => {
+    // the bucket opened in the death second, as the renderer prints it now
+    expect(
+      checkHealedThroughConsistency([state("0:45", "dead"), DIED_AT_OPEN]),
+    ).toEqual([]);
+    // …and as it printed it before: the last pre-death sample as the start
+    const preDeathStart = DIED_AT_OPEN.replace(
+      "(0% -> 0% HP, 0%/s)",
+      "(60% -> 0% HP, -60%/s)",
+    );
+    const start = checkHealedThroughConsistency([
+      state("0:45", "dead"),
+      preDeathStart,
+    ]);
+    expect(start).toHaveLength(1);
+    expect(start[0]).toContain("起点写 60%,但 0:45 的 [STATE] 报 dead");
+    // the end likewise (the pre-T12 line: a sample from after the death)
+    const end = checkHealedThroughConsistency([
+      state("0:39", 33),
+      DIED.replace("(33% -> 0% HP, -6%/s)", "(33% -> 18% HP, -3%/s)"),
+      state("0:45", "dead"),
+    ]);
+    expect(end).toHaveLength(1);
+    expect(end[0]).toContain("终点写 18%,但 0:45 的 [STATE] 报 dead");
+    // another unit's `dead` tick, or a `dead` tick of another second, is not
+    // this line's
+    expect(
+      checkHealedThroughConsistency([
+        "0:45  [STATE]   friends 1(RShaman):dead 2(AWarlock):60 / enemies 6(RShaman):68",
+        preDeathStart,
+        state("0:46", "dead"),
+      ]),
     ).toEqual([]);
   });
 });

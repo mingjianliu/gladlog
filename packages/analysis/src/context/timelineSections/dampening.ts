@@ -3,9 +3,15 @@
  * milestone (30 / 50 / 70 / 90 %) already reached when the match starts, then at
  * the first crossing of each remaining one.
  *
- * Cut out of buildMatchTimeline verbatim (GH #116); the body is unchanged, only
- * its closure inputs now arrive through `ctx`. Output is pinned by the 605-file
- * acceptanceCapture context hash.
+ * "Already reached when the match starts" reads the value at 0:00. In a 2v2
+ * round that value is derived from the first logged stack
+ * (`getInitialDampening`, FT-T13 D11): 41 with a healer on both teams — its
+ * 30 % alert sits at `0:00` — and 21 otherwise, whose 30 % alert comes at the
+ * first logged stack at or above 30. A 2v2 round that logged no stack has no
+ * alert. The thresholds and the alert's meaning are unchanged.
+ *
+ * Cut out of buildMatchTimeline (GH #116); its closure inputs arrive through
+ * `ctx`.
  */
 import {
   buildDampeningEvents,
@@ -17,27 +23,30 @@ import type { TimelineCtx } from "./ctx";
 export function emitDampeningEntries(
   ctx: Pick<
     TimelineCtx,
-    "bracket" | "allPlayers" | "matchStartMs" | "addEntry"
+    "bracket" | "allPlayers" | "friends" | "matchStartMs" | "addEntry"
   >,
 ): void {
-  const { bracket, allPlayers, matchStartMs, addEntry } = ctx;
+  const { bracket, allPlayers, friends, matchStartMs, addEntry } = ctx;
 
+  // the owner team's doses (fact1215 R11: the teams tick apart), the
+  // roster's rules
   const initialDampening = getDampeningPercentage(
     bracket ?? "3v3",
-    allPlayers,
+    friends,
     matchStartMs,
+    allPlayers,
   );
   const emittedMilestones = new Set<number>();
   const milestones = [30, 50, 70, 90];
 
   for (const milestone of milestones) {
-    if (initialDampening >= milestone) {
+    if (initialDampening !== null && initialDampening >= milestone) {
       addEntry(0, `${fmtTime(0)}  [DAMPENING ALERT: ${milestone}%]`);
       emittedMilestones.add(milestone);
     }
   }
 
-  const events = buildDampeningEvents(allPlayers);
+  const events = buildDampeningEvents(friends);
   const dampeningEvents = events.map((e) => ({
     timeSeconds: (e.timestamp - matchStartMs) / 1000,
     stacks: e.stacks,

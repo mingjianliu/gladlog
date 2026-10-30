@@ -65,6 +65,52 @@ describe("healingGaps — main detection", () => {
     expect(res[0].mostDamagedAmount).toBe(100_000);
   });
 
+  it("fact5 D12:空档里被拒的按键随空档带出(refusedPresses)——不是发呆", () => {
+    const healer = makeUnit("h", {
+      spec: CombatUnitSpec.Paladin_Holy,
+      spellCastEvents: [
+        makeSpellCastEvent("19750", MATCH_START + 10_000, "f1"),
+        makeSpellCastEvent("20473", MATCH_START + 20_000, "f1"),
+      ],
+    });
+    const friend = makeUnit("f1", {
+      damageIn: [
+        {
+          logLine: { timestamp: MATCH_START + 15_000 },
+          effectiveAmount: -100_000,
+        },
+      ] as any,
+    });
+    const refused = (tSeconds: number) => ({
+      tSeconds,
+      unitGuid: "h",
+      spellId: 20473,
+      spellName: "Holy Shock",
+      reason: "Target not in line of sight",
+    });
+    const rawStreams = {
+      available: true,
+      manaSamples: [],
+      castFailed: [refused(11.6), refused(11.8), { ...refused(12), unitGuid: "f1" }, refused(25)],
+    };
+    const [gap] = detectHealingGaps(
+      healer as any,
+      [healer, friend] as any,
+      [makeUnit("e1")] as any,
+      makeCombat(),
+      { rawStreams },
+    );
+    expect(gap!.refusedPresses?.map((r) => r.tSeconds)).toEqual([11.6, 11.8]);
+    // no raw streams → no field (the callers that cannot read them)
+    const [plain] = detectHealingGaps(
+      healer as any,
+      [healer, friend] as any,
+      [makeUnit("e1")] as any,
+      makeCombat(),
+    );
+    expect(plain!.refusedPresses).toBeUndefined();
+  });
+
   it("skips gaps where the healer is fully CCed (B81)", () => {
     const healer = makeUnit("h", {
       spellCastEvents: [
@@ -342,6 +388,33 @@ describe("healingGaps — main detection", () => {
     expect(res[0].mostDamagedAmount).toBe(100_000); // the 200k post-death hit is excluded
   });
 
+  it("clips a gap at the playable end like at the healer's own death (3v3 deciding death, 2026-09-30)", () => {
+    // Healer alive all match; last cast at 10s, next at 50s. A teammate's
+    // deciding death at 20s ends the playable match: the 10–50s gap is
+    // charged only up to 20s.
+    const healer = makeUnit("h", {
+      spec: CombatUnitSpec.Priest_Holy,
+      spellCastEvents: [
+        makeSpellCastEvent("2061", MATCH_START + 10_000, "f1", "Friend", "h", "Priest"),
+        makeSpellCastEvent("2061", MATCH_START + 50_000, "f1", "Friend", "h", "Priest"),
+      ],
+    });
+    const friend = makeUnit("f1", {
+      spec: CombatUnitSpec.Warrior_Arms,
+      damageIn: [
+        { logLine: { timestamp: MATCH_START + 15_000 }, effectiveAmount: -100_000 },
+        { logLine: { timestamp: MATCH_START + 30_000 }, effectiveAmount: -200_000 },
+      ] as any,
+    });
+    const enemy = makeUnit("e1");
+    const args = [healer as any, [healer, friend] as any, [enemy] as any, makeCombat()] as const;
+    expect(detectHealingGaps(...args)[0].toSeconds).toBe(50);
+    const res = detectHealingGaps(...args, { playableEndMs: MATCH_START + 20_000 });
+    expect(res).toHaveLength(1);
+    expect(res[0].toSeconds).toBe(20);
+    expect(res[0].mostDamagedAmount).toBe(100_000);
+  });
+
   it("drops a phantom tail gap opened by a post-death HoT tick (B137)", () => {
     // Healer's last cast is 10s; it dies at 15s; a pre-death HoT ticks at 18s (post-mortem), which
     // would otherwise start a phantom gap 18s -> match end. That gap begins after death and must be
@@ -483,5 +556,62 @@ describe("healingGaps — formatting", () => {
       "[INACTIVITY] From 0:10 to 0:20 (10.0s total, 5.0s of it un-CC'd/free to cast)",
     );
     expect(res.join("\n")).toContain("Warrior (Player1) took 150k damage");
+  });
+});
+
+describe("healingGaps — round end (triage 2026-09-29 cc-dr F-HG1)", () => {
+  // A Solo Shuffle round ends at its first player death; the healer's
+  // activity logged after it (the next round's prep) must not close a gap.
+  function shuffleRound(deathAtMs: number) {
+    const dead = makeUnit("x", {
+      info: {},
+      deathRecords: [{ timestamp: deathAtMs }],
+    });
+    return {
+      startTime: MATCH_START,
+      endTime: MATCH_START + 60_000,
+      startInfo: { bracket: "Rated Solo Shuffle" },
+      units: { x: dead },
+    };
+  }
+
+  it("a gap closed by post-end activity is the tail gap — none here", () => {
+    const healer = makeUnit("h", {
+      spec: CombatUnitSpec.Priest_Holy,
+      spellCastEvents: [
+        makeSpellCastEvent("2061", MATCH_START + 10_000, "f1"),
+        makeSpellCastEvent("2061", MATCH_START + 19_000, "f1"),
+        // after the round-ending death at +20 s
+        makeSpellCastEvent("2061", MATCH_START + 28_000, "f1"),
+      ],
+    });
+    const friend = makeUnit("f1", {
+      spec: CombatUnitSpec.Warrior_Arms,
+      damageIn: [
+        {
+          logLine: { timestamp: MATCH_START + 22_000 },
+          effectiveAmount: -100_000,
+        },
+      ] as any,
+    });
+    const enemy = makeUnit("e1");
+    const args = [healer, [healer, friend], [enemy]] as any[];
+
+    // the match end alone (no bracket): the 19 → 28 s gap is charged
+    const plain = detectHealingGaps(args[0], args[1], args[2], {
+      startTime: MATCH_START,
+      endTime: MATCH_START + 60_000,
+    });
+    expect(plain.map((g) => g.durationSeconds)).toEqual([9]);
+
+    // Solo Shuffle, death at +20 s: the round ends there; 1 s of tail, no gap
+    expect(
+      detectHealingGaps(
+        args[0],
+        args[1],
+        args[2],
+        shuffleRound(MATCH_START + 20_000) as any,
+      ),
+    ).toEqual([]);
   });
 });

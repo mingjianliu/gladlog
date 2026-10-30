@@ -1,7 +1,7 @@
 import { fmtTime } from "@gladlog/analysis";
 
-import type { UncoveredHighlight } from "../derive/uncoveredHighlights";
 import type { TimeRange } from "../derive/timeRange";
+import type { UncoveredHighlight } from "../derive/uncoveredHighlights";
 
 /**
  * Uncovered-highlights card (BACKLOG #13): below the findings section of the AI

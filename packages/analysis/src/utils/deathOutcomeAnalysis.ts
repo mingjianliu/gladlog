@@ -5,34 +5,50 @@ import {
   LogEvent,
 } from "@gladlog/parser-compat";
 
+import { saveCoversPressureOn } from "../analysis/candidates/cooldownTiming";
+import { MITIGATION_TABLE } from "../data/mitigationData";
 import { getEnglishSpellName } from "../data/spellEffectData";
+import { cannotCastIntervalsForSpells } from "./cannotCastIntervals";
+import { isFormReshiftCast } from "./castPress";
 import { IPlayerCCTrinketSummary } from "./ccTrinketAnalysis";
+import { lockoutDebuffStopsPressAtDeath, playerTalentIdSets } from "./cooldowns";
 import {
   auraOnlyActivationSeconds,
   castRecovery,
   CD_INSTANT_SLACK_S,
-  chargesAvailableAt,
+  cdChargesAvailableAt,
+  ENEMY_TARGET_DEFENSIVE_IDS,
+  FORBEARANCE_AURA_ID,
   forbearanceBlocks,
+  HYPOTHERMIA_AURA_ID,
+  hypothermiaUntil,
   type IMajorCooldownInfo,
   isCooldownAvailableFromLastUse,
   isPressOfCooldown,
   isProcOnlyActivation,
   lockCastsOf,
+  pressSpentBy,
   REACTION_WINDOW_S,
+  selfForbearanceActiveAt,
   specToString,
   spendsSharedChargeOf,
   talentReplacementsOf,
   unitCooldownOf,
 } from "./cooldowns";
 import { isStunCcInstance } from "./drAnalysis";
+import { hiddenPressMs } from "./hiddenPress";
+import { documentRecordsAttackSpell } from "./incomingPressure";
 import {
   distanceBetween,
   getUnitPositionAtTime,
   hasLineOfSight,
 } from "./losAnalysis";
+import { LOS_SWEEP_GAP_MS } from "./positionSampling";
 import { fmtTime } from "./renderGrid";
+import { unaffordableIntervals } from "./resourceAt";
 import { spellReachForCaster } from "./spellRange";
 import { talentOwnershipOf } from "./talentOwnership";
+import { isDeadAt } from "./unitDeath";
 
 interface IImmunitySpell {
   name: string;
@@ -51,7 +67,7 @@ export const IMMUNITY_SPELLS: Record<string, IImmunitySpell> = {
   "642": {
     name: "Divine Shield",
     cooldownSeconds: 300,
-    lockoutSpellId: "25771",
+    lockoutSpellId: FORBEARANCE_AURA_ID,
     specs: [
       CombatUnitSpec.Paladin_Holy,
       CombatUnitSpec.Paladin_Retribution,
@@ -61,7 +77,7 @@ export const IMMUNITY_SPELLS: Record<string, IImmunitySpell> = {
   "45438": {
     name: "Ice Block",
     cooldownSeconds: 240,
-    lockoutSpellId: "41425",
+    lockoutSpellId: HYPOTHERMIA_AURA_ID,
     specs: [
       CombatUnitSpec.Mage_Arcane,
       CombatUnitSpec.Mage_Fire,
@@ -77,15 +93,8 @@ export const IMMUNITY_SPELLS: Record<string, IImmunitySpell> = {
   // MITIGATION_TABLE pct=100 ∧ schoolMask=0x7f 的全学派免疫(共识测试
   // immunityTables.test.ts 钉死);学派限定免疫(BoP/斗篷/护佑)刻意不进
   // 本表 —— 无击杀学派判定就断言「BoP 可救」会对魔法死亡撒谎。
-  "186265": {
-    name: "Aspect of the Turtle",
-    cooldownSeconds: 180,
-    specs: [
-      CombatUnitSpec.Hunter_BeastMastery,
-      CombatUnitSpec.Hunter_Marksmanship,
-      CombatUnitSpec.Hunter_Survival,
-    ],
-  },
+  // Aspect of the Turtle left 2026-10-21: a deflection, no immunity (user
+  // ruling — DoTs land under it; `deflectsDirectAttacks`)
 };
 
 // The key set must be identical to spellIdLists.externalDefensiveSpellIds
@@ -230,10 +239,37 @@ const EXTERNAL_DEFENSIVE_SPELLS: Record<
 
 export { EXTERNAL_DEFENSIVE_SPELLS };
 
+/** Triage death-kill F-M2: how free the unit was in the last
+ * `LETHAL_WINDOW_SECONDS` (from the cannot-cast intervals, F-M1). */
+export interface IDeathWindowFreedom {
+  /** the longest contiguous free gap — the gap `MIN_FREE_GAP_SECONDS` tests */
+  longestFreeS: number;
+  /** the same gap read on control and lockout alone, when the option's
+   * unpaid stretches (`unaffordableIntervals`) shortened it — "could not
+   * pay" is no control (codex 60-POSTHOC-07c #3: a priest with no mana read
+   * `holderCc=yes` and the death card 被控) */
+  controlFreeS?: number;
+  /** the cannot-cast interval covering the death instant, if any (the
+   * earliest-starting one). `onPet`: it sat on the unit's pet — the option
+   * asked about is a spell that pet casts (`cannotCastIntervalsForSpells`) */
+  heldAtDeath?: {
+    spellName: string;
+    fromSeconds: number;
+    lockout: boolean;
+    onPet?: true;
+  };
+}
+
 export interface IDeathImmuneAvailable {
   spellId: string;
   spellName: string;
   wasInCC: boolean;
+  /** death-kill F-M2; absent when the cannot-cast sources were not given */
+  freedom?: IDeathWindowFreedom;
+  /** WO3 #18 (r1014-176): seconds before the death it had been off
+   * cooldown, when that is shorter than `LETHAL_WINDOW_SECONDS` — the free
+   * stretch above reads CC alone. Facts only. */
+  offCooldownForLastS?: number;
 }
 
 export interface IMissedExternal {
@@ -242,6 +278,12 @@ export interface IMissedExternal {
   spellId: string;
   spellName: string;
   casterWasInCC: boolean;
+  /** no free stretch but for the mana the option cost (`controlFreeS`) */
+  casterCouldNotPay?: true;
+  /** death-kill F-M2; absent when the cannot-cast sources were not given */
+  casterFreedom?: IDeathWindowFreedom;
+  /** as `IDeathImmuneAvailable.offCooldownForLastS`, of the caster's spell */
+  offCooldownForLastS?: number;
 }
 
 export interface IDeathOutcomeEvent {
@@ -311,12 +353,19 @@ function pressSeconds(
   const castSeconds = unit.spellCastEvents
     .filter(
       (e) =>
-        isPressOfCooldown(e, spellId, name, replacements) ||
+        (isPressOfCooldown(e, spellId, name, replacements) &&
+          !isFormReshiftCast(unit, e)) ||
         spendsSharedChargeOf(e, spellId),
     )
     .map((e) => (e.logLine.timestamp - matchStartMs) / 1000);
   const auraSeconds = auraOnlyActivationSeconds(unit, spellId, matchStartMs);
-  return [...castSeconds, ...auraSeconds].sort((a, b) => a - b);
+  // the ledger's hidden presses too (`hiddenPressMs`, fact3 D35)
+  const hiddenSeconds = hiddenPressMs(unit, spellId, matchStartMs).map(
+    (ms) => (ms - matchStartMs) / 1000,
+  );
+  return [...castSeconds, ...auraSeconds, ...hiddenSeconds].sort(
+    (a, b) => a - b,
+  );
 }
 
 /** A plain number (a table constant), or the ledger's resolved entry — whose
@@ -377,6 +426,11 @@ export function isAvailableAt(
   // "pressed" (too late is not "never pressed"), exactly as the ledger shows
   // it on cd: for the same rendered second.
   const at = atSeconds + CD_INSTANT_SLACK_S;
+  // A45 (triage res-readiness F-C1): a press rendered at or before
+  // atSeconds is spent — the shared `pressSpentBy`; one spent only by that
+  // rule is read at `at` (the `gridConsumedView` clamp), so this predicate
+  // and cdAvailableAt agree on a latter-half-second press.
+  const spentBy = Math.floor(atSeconds) + 1;
   // Same gate as cdAvailableAt (GH #106 step 2): no button, never "available"
   // — the spell-level list and this unit's talent replacements alike.
   if (
@@ -384,7 +438,15 @@ export function isAvailableAt(
     talentReplacementsOf(unit).procOnly.has(spellId)
   )
     return false;
-  const lastCast = lastCastSeconds(unit, spellId, matchStartMs, at);
+  // every press ≤ this bound is spent by `pressSpentBy` (≤ at, or rendered
+  // in atSeconds' second)
+  const lastCastRaw = lastCastSeconds(
+    unit,
+    spellId,
+    matchStartMs,
+    Math.max(at, spentBy - 1e-6),
+  );
+  const lastCast = lastCastRaw === null ? null : Math.min(lastCastRaw, at);
   const charges = typeof cooldown === "number" ? 1 : (cooldown.charges ?? 1);
   if (typeof cooldown !== "number" && charges > 1) {
     // A second charge in hand is "available" (Pain Suppression + Protector of
@@ -395,8 +457,11 @@ export function isAvailableAt(
     // 2026-09-26); only the unitCooldownOf fallback (no casts) reads the raw log
     const presses = lockCastsOf(cooldown)
       .map((c) => c.timeSeconds)
-      .filter((t) => t <= at);
-    if (chargesAvailableAt(presses, cooldown.cooldownSeconds, charges, at) > 0)
+      .filter((t) => pressSpentBy(t, atSeconds))
+      .map((t) => Math.min(t, at));
+    // …with the entry's own per-press effects (codex 60-POSTHOC-07c #2:
+    // Pain Suppression back early by Protector of the Frail read spent)
+    if (cdChargesAvailableAt({ ...cooldown, charges }, presses, at) > 0)
       return true;
   } else {
     // The core predicate is shared with cdAvailableAt in cooldowns.ts
@@ -463,6 +528,35 @@ export function isReadyInTimeAt(
       resetSpellIds,
     )
   );
+}
+
+/**
+ * WO3 #18 (r1014-176): how long before `atSeconds` the spell had been off
+ * cooldown without a break, on a 0.1 s walk back over the last
+ * `LETHAL_WINDOW_SECONDS` through the same `isAvailableAt` — undefined when it
+ * was off cooldown for the whole window. The free stretch the death line
+ * prints reads CC alone; this is the other half of "could cast it".
+ */
+export function offCooldownForLastSeconds(
+  unit: ICombatUnit,
+  spellId: string,
+  cooldown: CooldownSource,
+  atSeconds: number,
+  matchStartMs: number,
+  resetSpellIds?: string[],
+): number | undefined {
+  // `isAvailableAt` reads `t + CD_INSTANT_SLACK_S` (the rendered second's
+  // slack): its first "available" instant is the real return minus that
+  // slack, so the slack comes back off the figure — the cooldown's own
+  // return, not the ledger's rounding (f4da82c5: logged removal − 1 s + 60 =
+  // 4.0 s before the death, the walk's 4.5 s minus 0.5)
+  const windowStart = Math.max(0, atSeconds - LETHAL_WINDOW_SECONDS);
+  for (let k = 1; atSeconds - k / 10 >= windowStart - 1e-9; k++) {
+    const t = atSeconds - k / 10;
+    if (!isAvailableAt(unit, spellId, cooldown, t, matchStartMs, resetSpellIds))
+      return Math.max(0, Math.round(k - 1 - CD_INSTANT_SLACK_S * 10) / 10);
+  }
+  return undefined;
 }
 
 /** Pre-computed lockout intervals: [fromSeconds, toSeconds] pairs sorted by fromSeconds. */
@@ -554,12 +648,33 @@ function computeLockoutWindow(
   const windowEnd = deathSeconds;
   if (windowEnd <= windowStart) return null;
 
-  const intervals = ccSummary.ccInstances
-    .filter((cc) => cc.trinketState !== "used")
-    .map((cc) => ({
-      start: Math.max(windowStart, cc.atSeconds),
-      end: Math.min(windowEnd, cc.atSeconds + cc.durationSeconds),
+  // Ruling A′8 (2026-09-30): a CC the unit trinketed out of counts until the
+  // press — its logged removal, the press's own millisecond (539b6ed0: the
+  // Scream REMOVED and the Medallion both at 66.879) — not dropped whole.
+  return freeGapCore(
+    ccSummary.ccInstances.map((cc) => ({
+      start: cc.atSeconds,
+      end: cc.atSeconds + cc.durationSeconds,
       isStun: isStunCcInstance(cc),
+    })),
+    windowStart,
+    windowEnd,
+  );
+}
+
+/** The contiguous-gap rule over any lock intervals (seconds): the longest
+ * free gap in [windowStart, windowEnd] and whether every interval inside it
+ * was a stun. */
+function freeGapCore(
+  locks: ReadonlyArray<{ start: number; end: number; isStun: boolean }>,
+  windowStart: number,
+  windowEnd: number,
+): LockoutWindowResult {
+  const intervals = locks
+    .map((iv) => ({
+      start: Math.max(windowStart, iv.start),
+      end: Math.min(windowEnd, iv.end),
+      isStun: iv.isStun,
     }))
     .filter((iv) => iv.end > iv.start)
     .sort((a, b) => a.start - b.start);
@@ -580,12 +695,123 @@ function computeLockoutWindow(
 /**
  * True only if the player had NO contiguous CC-free gap >= MIN_FREE_GAP_SECONDS in the
  * [death - windowSeconds, death] window — i.e. they were effectively locked out for the
- * whole lethal window. CC the player trinketed out of (`trinketState === 'used'`) does not
- * count as lockout. Uniform CC model: every CC type is treated the same for THIS boolean
+ * whole lethal window. CC the player trinketed out of counts until the press (ruling
+ * A′8, 2026-09-30; it used to be dropped whole). Uniform CC model: every CC type is treated the same for THIS boolean
  * (it only answers "were they locked out at all", used for informational "was in CC" tags
  * and combined by callers with `wasLockedOutByStunOnly` where the CC type matters — see
  * that function's doc comment).
  */
+/**
+ * Triage death-kill F-M1: the missed-options "caster in CC / was in CC" tags
+ * ask the one cannot-cast predicate (`buildCannotCastIntervals`: hard CC,
+ * silences, kick lockouts, backlash, reflected CC) under the same
+ * contiguous-gap rule (`LETHAL_WINDOW_SECONDS`, `MIN_FREE_GAP_SECONDS`). Only
+ * those two tags: `[DEATH] Unused` and the counterfactual keep the hard-CC
+ * input (a silence does not stop a physical wall) — registered in
+ * predicate-index "Not yet unified".
+ */
+export function wasLockedOutByCannotCast(
+  unit: ICombatUnit,
+  hostileIds: Set<string>,
+  matchStartMs: number,
+  deathSeconds: number,
+  windowSeconds = LETHAL_WINDOW_SECONDS,
+): boolean {
+  const f = deathWindowFreedom(
+    unit,
+    hostileIds,
+    matchStartMs,
+    deathSeconds,
+    windowSeconds,
+  );
+  return f !== null && f.longestFreeS < MIN_FREE_GAP_SECONDS;
+}
+
+/** death-kill F-M2: the longest free gap in the window and what held the
+ * unit at the death, from the same intervals as `wasLockedOutByCannotCast`.
+ * Null for an empty window. */
+export function deathWindowFreedom(
+  unit: ICombatUnit,
+  hostileIds: Set<string>,
+  matchStartMs: number,
+  deathSeconds: number,
+  windowSeconds = LETHAL_WINDOW_SECONDS,
+  // FT-T10: the option the tag is about — a kick lockout counts
+  // only when it locks that spell's school; absent → every lockout
+  optionSpellId?: string,
+  // the round's units: an option the unit's pet casts is asked of the pet
+  roundUnits?: readonly ICombatUnit[],
+  // the round's bounds, for the affordability reading's free-cast auras and
+  // the round's logged cast costs (codex 21-R12-a #2: without them a priest
+  // under Innervate read Guardian Spirit as unaffordable; the [RES] row and
+  // external-unused pass them)
+  combatBounds?: { startTime: number; endTime: number },
+): IDeathWindowFreedom | null {
+  const windowStart = Math.max(0, deathSeconds - windowSeconds);
+  if (deathSeconds <= windowStart) return null;
+  const named = cannotCastIntervalsForSpells(
+    unit,
+    hostileIds,
+    optionSpellId === undefined ? undefined : [optionSpellId],
+    roundUnits,
+  );
+  // fact3 D12 (20e0f243 5:57): a stretch the unit could not pay for the
+  // option is no stretch free to cast it (`unaffordableIntervals`, the
+  // [RES] row's `no mana` reading)
+  const unpaid =
+    optionSpellId === undefined
+      ? []
+      : unaffordableIntervals(
+          unit,
+          optionSpellId,
+          matchStartMs + windowStart * 1000,
+          matchStartMs + deathSeconds * 1000,
+          undefined,
+          combatBounds,
+        );
+  const result = freeGapCore(
+    [...named, ...unpaid].map((iv) => ({
+      start: (iv.from - matchStartMs) / 1000,
+      end: (iv.to - matchStartMs) / 1000,
+      isStun: false,
+    })),
+    windowStart,
+    deathSeconds,
+  );
+  const controlOnly =
+    unpaid.length > 0
+      ? freeGapCore(
+          named.map((iv) => ({
+            start: (iv.from - matchStartMs) / 1000,
+            end: (iv.to - matchStartMs) / 1000,
+            isStun: false,
+          })),
+          windowStart,
+          deathSeconds,
+        ).maxFreeGapSeconds
+      : undefined;
+  const deathMs = matchStartMs + Math.round(deathSeconds * 1000);
+  const cover = named
+    .filter((iv) => iv.from < deathMs && iv.to >= deathMs)
+    .sort((a, b) => a.from - b.from)[0];
+  return {
+    longestFreeS: result.maxFreeGapSeconds,
+    ...(controlOnly !== undefined && controlOnly !== result.maxFreeGapSeconds
+      ? { controlFreeS: controlOnly }
+      : {}),
+    ...(cover
+      ? {
+          heldAtDeath: {
+            spellName: getEnglishSpellName(cover.spellId),
+            fromSeconds: (cover.from - matchStartMs) / 1000,
+            lockout: cover.lockout,
+            ...(cover.onPetId !== undefined ? { onPet: true as const } : {}),
+          },
+        }
+      : {}),
+  };
+}
+
 export function wasLockedOutThroughWindow(
   ccSummary: Pick<IPlayerCCTrinketSummary, "playerName" | "ccInstances">,
   deathSeconds: number,
@@ -632,6 +858,28 @@ export function wasLockedOutByStunOnly(
   );
 }
 
+/**
+ * The CC auras of the lethal window (`[death - windowSeconds, death]`, the
+ * window `wasLockedOutByStunOnly` judges) — when that test is true, the
+ * stuns the unit was held by. What a school-limited purge is checked against
+ * (`usableWhileStunned`'s third argument; ruling U-T1: Blessing of
+ * Protection gets its caster out of a physical stun only).
+ */
+export function lockoutWindowCcSpellIds(
+  ccSummary: Pick<IPlayerCCTrinketSummary, "ccInstances">,
+  deathSeconds: number,
+  windowSeconds = LETHAL_WINDOW_SECONDS,
+): string[] {
+  const windowStart = Math.max(0, deathSeconds - windowSeconds);
+  return ccSummary.ccInstances
+    .filter(
+      (cc) =>
+        cc.atSeconds < deathSeconds &&
+        cc.atSeconds + cc.durationSeconds > windowStart,
+    )
+    .map((cc) => cc.spellId);
+}
+
 // Per-spell reach for "could this teammate have thrown it": official DB2 via
 // data/spellReachGenerated.json (GH #34 batch 4 ②, user ruling 2026-08-29) —
 // cast range for targeted spells, range + radius for placed areas, radius for
@@ -660,8 +908,83 @@ export function externalReachYards(
   return spellReachForCaster(caster, spellId) ?? EXTERNAL_REACH_FALLBACK_YARDS;
 }
 
+/**
+ * Could a POSITIONAL wall (`MITIGATION_TABLE` `positional`: Darkness' 8 yd
+ * zone) have covered ANOTHER unit — did its holder stand within the wall's
+ * reach of that unit at `atMs`? The 2026-07-30 ruling ("Darkness counts as
+ * 40 % but position MUST be evaluated") for every consumer that names such a
+ * wall on somebody else's behalf (triage menu-coverage F-MC1, ruling A58:
+ * cd-hoarded's accusation set; the kill sequence's [DEFENSIVE AVAILABLE]).
+ * Non-positional spells always pass. A missing position sample fails CLOSED:
+ * a sampling gap must not put a wall in somebody's hand.
+ */
+export function positionalWallReaches(
+  spellId: string,
+  holder: ICombatUnit,
+  target: ICombatUnit,
+  atMs: number,
+): boolean {
+  return positionalWallReach(spellId, holder, target, atMs) === "reaches";
+}
+
+/**
+ * The three answers behind `positionalWallReaches`, for a reader that must
+ * tell "stood too far" from "the log has no position": `reaches` (not a
+ * positional wall, or within its reach), `out-of-reach` (both positions
+ * sampled, farther than the reach), `unknown` (a sample is missing). An
+ * ACCUSATION reads `positionalWallReaches` — unknown fails closed there; a
+ * FACT that says "out of reach" (the [RES] row under a friendly death, B14a)
+ * reads `out-of-reach` only. One sampler, one reach, one instant.
+ */
+export function positionalWallReach(
+  spellId: string,
+  holder: ICombatUnit,
+  target: ICombatUnit,
+  atMs: number,
+): "reaches" | "out-of-reach" | "unknown" {
+  if (!MITIGATION_TABLE[spellId]?.positional) return "reaches";
+  const a = getUnitPositionAtTime(holder, atMs, LOS_SWEEP_GAP_MS);
+  const b = getUnitPositionAtTime(target, atMs, LOS_SWEEP_GAP_MS);
+  if (!a || !b) return "unknown";
+  return distanceBetween(a, b) <= externalReachYards(spellId, holder)
+    ? "reaches"
+    : "out-of-reach";
+}
+
+/**
+ * Could a defensive that is pressed ON AN ENEMY (`ENEMY_TARGET_DEFENSIVE_IDS`:
+ * Touch of Karma) have been pressed at `atMs` — did a living enemy stand
+ * within the holder's reach (`spellReachForCaster`) of them? Codex review of
+ * cd-hoarded F-W6, round 6: a rooted Windwalker was named for holding Karma
+ * while the only enemy stood 40 yd away. Every other spell passes. Like
+ * `positionalWallReaches` and for the same consumers (cd-hoarded's
+ * accusation set, the kill sequence's [DEFENSIVE AVAILABLE]) plus the
+ * `[DEATH] (Unused: …)` list (codex round 7); a missing
+ * position sample or an unknown reach fails CLOSED. Line of sight is not
+ * checked.
+ */
+export function enemyTargetReaches(
+  spellId: string,
+  holder: ICombatUnit,
+  enemies: readonly ICombatUnit[],
+  atMs: number,
+): boolean {
+  if (!ENEMY_TARGET_DEFENSIVE_IDS.has(spellId)) return true;
+  const reach = spellReachForCaster(holder, spellId);
+  const a = getUnitPositionAtTime(holder, atMs, LOS_SWEEP_GAP_MS);
+  if (reach === null || !a) return false;
+  return enemies.some((e) => {
+    if (isDeadAt(e, atMs)) return false;
+    const b = getUnitPositionAtTime(e, atMs, LOS_SWEEP_GAP_MS);
+    return !!b && distanceBetween(a, b) <= reach;
+  });
+}
+
 export function buildDeathOutcomeSummary(
-  combat: Pick<AtomicArenaCombat, "startTime"> & { zoneId?: string },
+  combat: Pick<AtomicArenaCombat, "startTime"> & {
+    zoneId?: string;
+    endTime?: number;
+  },
   friends: ICombatUnit[],
   ccSummaries: Pick<IPlayerCCTrinketSummary, "playerName" | "ccInstances">[],
   /**
@@ -690,8 +1013,55 @@ export function buildDeathOutcomeSummary(
         "casts" | "cooldownSeconds" | "charges" | "sharedCasts"
       >
     | undefined,
+  /**
+   * Triage death-kill F-M1: enemy players ∪ their pets, for the
+   * missed-options tags' cannot-cast test (`wasLockedOutByCannotCast`).
+   * Absent = the hard-CC test from `ccSummaries`, as before.
+   */
+  cannotCastSourceIds?: Set<string>,
+  /**
+   * The round's units, with `cannotCastSourceIds`: an option the holder's
+   * PET casts is asked of the pet's cannot-cast intervals, not the holder's
+   * (`cannotCastIntervalsForSpells`). Absent = every option is the holder's.
+   */
+  roundUnits?: readonly ICombatUnit[],
 ): IDeathOutcomeSummary {
   const matchStartMs = combat.startTime;
+  // death-kill F-M1 / F-M2: with the hostile sources, the cannot-cast
+  // predicate decides the tag and supplies the free stretch; without them the
+  // hard-CC test, as before
+  const lockAt = (
+    unit: ICombatUnit,
+    summary:
+      Pick<IPlayerCCTrinketSummary, "playerName" | "ccInstances"> | undefined,
+    atSeconds: number,
+    // FT-T10: the immunity / external the line names
+    optionSpellId: string,
+  ): { locked: boolean; freedom?: IDeathWindowFreedom } => {
+    if (cannotCastSourceIds) {
+      const freedom = deathWindowFreedom(
+        unit,
+        cannotCastSourceIds,
+        matchStartMs,
+        atSeconds,
+        LETHAL_WINDOW_SECONDS,
+        optionSpellId,
+        roundUnits,
+        typeof combat.endTime === "number"
+          ? { startTime: combat.startTime, endTime: combat.endTime }
+          : undefined,
+      );
+      return freedom
+        ? {
+            locked: freedom.longestFreeS < MIN_FREE_GAP_SECONDS,
+            freedom,
+          }
+        : { locked: false };
+    }
+    return {
+      locked: summary ? wasLockedOutThroughWindow(summary, atSeconds) : false,
+    };
+  };
   const events: IDeathOutcomeEvent[] = [];
 
   // B29: pre-build lockout intervals once per (unit, spell) pair to avoid O(N) filter+sort per death
@@ -743,21 +1113,59 @@ export function buildDeathOutcomeSummary(
           // Light's Revocation: a holder casts Divine Shield through
           // Forbearance (forbearanceBlocks, the death-line gate's predicate)
           !(
-            spell.lockoutSpellId === "25771" &&
+            spell.lockoutSpellId === FORBEARANCE_AURA_ID &&
             !forbearanceBlocks(unit, spellId)
           ) &&
-          isLockedOutAt(
-            getLockoutIntervals(unit, spell.lockoutSpellId),
-            atSeconds,
-          )
+          // FT F22: Hypothermia through the one reader (`hypothermiaUntil`).
+          // The interval walk below ends a lockout at the REMOVED the unit's
+          // own death writes, a few ms before the death it is asked about.
+          (spell.lockoutSpellId === HYPOTHERMIA_AURA_ID
+            ? hypothermiaUntil(unit, atSeconds, matchStartMs) !== undefined
+            : // FT F22's twin for Forbearance (predicate-index, 2026-10-24):
+              // `selfForbearanceActiveAt` ignores the REMOVED the death
+              // writes, so a paladin dying under a self Blessing of
+              // Protection's Forbearance no longer reads "died with Divine
+              // Shield available"
+              spell.lockoutSpellId === FORBEARANCE_AURA_ID
+              ? selfForbearanceActiveAt(
+                  unit,
+                  [...(roundUnits ?? [unit])],
+                  atSeconds,
+                  matchStartMs,
+                )
+              : isLockedOutAt(
+                  getLockoutIntervals(unit, spell.lockoutSpellId),
+                  atSeconds,
+                ))
         )
           continue;
+        const immReadyFor = offCooldownForLastSeconds(
+          unit,
+          spellId,
+          cooldownSourceOf(
+            unit,
+            spellId,
+            spell.cooldownSeconds,
+            resolvedCooldownSeconds?.(unit, spellId),
+            matchStartMs,
+          ),
+          atSeconds,
+          matchStartMs,
+          spell.resetSpellIds,
+        );
         availableImmunities.push({
           spellId,
           spellName: spell.name,
-          wasInCC: ccSummary
-            ? wasLockedOutThroughWindow(ccSummary, atSeconds)
-            : false,
+          ...(() => {
+            const l = lockAt(unit, ccSummary, atSeconds, spellId);
+            return {
+              wasInCC: l.locked,
+              ...(l.freedom ? { freedom: l.freedom } : {}),
+            };
+          })(),
+          ...(immReadyFor !== undefined
+            ? { offCooldownForLastS: immReadyFor }
+            : {}),
         });
       }
 
@@ -795,7 +1203,16 @@ export function buildDeathOutcomeSummary(
               e.spellId === spellId &&
               e.logLine.event === LogEvent.SPELL_CAST_SUCCESS,
           );
-          if (!everCast && !spell.specs.includes(teammate.spec)) continue;
+          // the spec list, else ownership (codex R6C-04 #3: a Holy
+          // paladin's PvP-talent Blessing of Spellwarding was dropped by the
+          // Protection-only list before ownership was asked)
+          if (
+            !everCast &&
+            !spell.specs.includes(teammate.spec) &&
+            !playerTalentIdSets(teammate).pvpTalentIds.has(spellId) &&
+            !playerTalentIdSets(teammate).talentedSpellIds?.has(spellId)
+          )
+            continue;
           if (
             casterDistance !== null &&
             casterDistance > externalReachYards(spellId, teammate)
@@ -829,14 +1246,61 @@ export function buildDeathOutcomeSummary(
             )
           )
             continue;
+          const extReadyFor = offCooldownForLastSeconds(
+            teammate,
+            spellId,
+            cooldownSourceOf(
+              teammate,
+              spellId,
+              spell.cooldownSeconds,
+              resolvedCooldownSeconds?.(teammate, spellId),
+              matchStartMs,
+            ),
+            atSeconds,
+            matchStartMs,
+          );
+          // …pressable for this unit just before the death (Forbearance /
+          // Hypothermia — `lockoutDebuffStopsPressAtDeath`) and covering
+          // what was killing it (`saveCoversPressureOn`) — the [DEATH]
+          // Unused list's two tests (codex R6C-04 #1 / #2)
+          if (
+            lockoutDebuffStopsPressAtDeath(
+              teammate,
+              spellId,
+              unit,
+              friends,
+              atSeconds,
+              matchStartMs,
+            ) ||
+            !saveCoversPressureOn(spellId, unit, deathMs, {
+              recordsAttackSpell: documentRecordsAttackSpell(friends),
+            })
+          )
+            continue;
           missedExternals.push({
             casterName: teammate.name,
             casterSpec: specToString(teammate.spec),
             spellId,
             spellName: spell.name,
-            casterWasInCC: teammateCCSummary
-              ? wasLockedOutThroughWindow(teammateCCSummary, atSeconds)
-              : false,
+            ...(() => {
+              const l = lockAt(teammate, teammateCCSummary, atSeconds, spellId);
+              // controlled = control and lockout alone; a stretch the
+              // caster could not pay for is its own fact (07c #3)
+              const controlled = l.freedom
+                ? (l.freedom.controlFreeS ?? l.freedom.longestFreeS) <
+                  MIN_FREE_GAP_SECONDS
+                : l.locked;
+              return {
+                casterWasInCC: controlled,
+                ...(l.locked && !controlled
+                  ? { casterCouldNotPay: true as const }
+                  : {}),
+                ...(l.freedom ? { casterFreedom: l.freedom } : {}),
+              };
+            })(),
+            ...(extReadyFor !== undefined
+              ? { offCooldownForLastS: extReadyFor }
+              : {}),
           });
         }
       }
@@ -856,6 +1320,30 @@ export function buildDeathOutcomeSummary(
   return { events };
 }
 
+/** death-kill F-M2 (cc-dr X-M2: the number is the LONGEST contiguous free
+ * gap, the one `MIN_FREE_GAP_SECONDS` tests — not the total free time), and
+ * what held the unit through the death when a cannot-cast interval covers
+ * it. When that interval sat on the unit's PET (the option is a spell the
+ * pet casts) the clause says so — it must not read as the unit's own CC. */
+function freedomNote(
+  who: string,
+  f: IDeathWindowFreedom,
+  offCooldownForLastS?: number,
+): string {
+  const pet = f.heldAtDeath?.onPet ? "its pet " : "";
+  const held = f.heldAtDeath
+    ? f.heldAtDeath.lockout
+      ? `, then ${pet}school-locked (${f.heldAtDeath.spellName}) from ${fmtTime(f.heldAtDeath.fromSeconds)} through the death`
+      : `, then ${pet}in ${f.heldAtDeath.spellName} from ${fmtTime(f.heldAtDeath.fromSeconds)} through the death`
+    : "";
+  // the free stretch reads CC alone; the cooldown is the other half
+  const ready =
+    offCooldownForLastS !== undefined
+      ? ` (off cooldown only for the last ${offCooldownForLastS.toFixed(1)}s)`
+      : "";
+  return `, ${who}longest stretch free to cast it ${f.longestFreeS.toFixed(1)}s of the last ${LETHAL_WINDOW_SECONDS}s${ready}${held}`;
+}
+
 export function formatDeathOutcomeForContext(
   summary: IDeathOutcomeSummary,
 ): string {
@@ -864,13 +1352,21 @@ export function formatDeathOutcomeForContext(
   for (const ev of summary.events) {
     const t = fmtTime(ev.atSeconds);
     for (const imm of ev.availableImmunities) {
-      const ccNote = imm.wasInCC ? ", was in CC" : ", was not CC'd";
+      const ccNote = imm.freedom
+        ? freedomNote("", imm.freedom, imm.offCooldownForLastS)
+        : imm.wasInCC
+          ? ", was in CC"
+          : ", was not CC'd";
       lines.push(
         `  [${t}] ${ev.deadPlayerSpec} (${ev.deadPlayer}) — had ${imm.spellName} available${ccNote}`,
       );
     }
     for (const ext of ev.missedExternals) {
-      const ccNote = ext.casterWasInCC ? ", caster in CC" : ", caster was free";
+      const ccNote = ext.casterFreedom
+        ? freedomNote("caster's ", ext.casterFreedom, ext.offCooldownForLastS)
+        : ext.casterWasInCC
+          ? ", caster in CC"
+          : ", caster was free";
       lines.push(
         `  [${t}] ${ev.deadPlayer} died — ${ext.casterName} had ${ext.spellName} available${ccNote}`,
       );

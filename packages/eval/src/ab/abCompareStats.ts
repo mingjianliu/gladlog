@@ -18,10 +18,10 @@
  * Run this ONLY after every blind item has been scored — it reads mapping.json.
  */
 
+import { toSortedFinite } from "@gladlog/analysis";
 import fs from "fs-extra";
 import path from "path";
 
-import { toSortedFinite } from "@gladlog/analysis";
 import { computeAccuracyFromFactAudit } from "../provenance/checkScoreProvenance.js";
 
 export const BOOTSTRAP_SEED = Number(process.env.BOOTSTRAP_SEED ?? 1337);

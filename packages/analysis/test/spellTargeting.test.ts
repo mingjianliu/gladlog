@@ -9,12 +9,12 @@
  */
 import { beforeAll, describe, expect, it } from "vitest";
 
-import { ensureAnalysisData } from "../src/data/ensure";
 import { classMetadata } from "../src/data/classSpells";
+import { ensureAnalysisData } from "../src/data/ensure";
 import spellIdLists from "../src/data/spellIdLists";
-import { SpellTag } from "../src/data/spellTypes";
 import { hasOfficialTargeting, reachesAlly } from "../src/data/spellTargeting";
 import { SPELL_REACHES_OTHERS_GENERATED } from "../src/data/spellTargetingGenerated";
+import { SpellTag } from "../src/data/spellTypes";
 
 // 数据改为动态载入(见 spellTargetingGenerated.ts 头部):测试必须先 await
 // 聚合入口,否则读到的是空表 —— 这正是生产 prompt 路径的同一条契约。
@@ -55,6 +55,9 @@ describe("reachesAlly(官方 ImplicitTarget)", () => {
     expect(reachesAlly("64843")).toBe(true); // 神圣赞美诗(64844)
     expect(reachesAlly("31821")).toBe(true); // 光环大师(目标 56 = 团队光环)
     expect(reachesAlly("97462")).toBe(true); // 集结呐喊 —— 全是 dummy 效果行的反向陷阱
+    // 圣洁鸣钟 —— 唯一的真实行是给自己回圣能(Effect 30,目标 1),真正的效果在
+    // 指向区域友方/敌方(31/16)的 dummy 行里;fact3 D7(0c796c56-r3 P:74)
+    expect(reachesAlly("375576")).toBe(true);
     // 宁静与神圣赞美诗至今不在手工外放表里 —— 官方 targeting 是它们被认出来的
     // 唯一途径。光环大师原本也在这一列,2026-08-22 用户裁定它 20% 全团减伤后
     // 补登记进了手工表(见 spellIdLists.ts 该条注释),所以它不再是这条断言的

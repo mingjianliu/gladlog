@@ -7,10 +7,10 @@
  */
 import {
   groupMistakesByMoment,
-  MISTAKE_MOMENT_GAP_S,
-  splitMistakesByOwner,
   type Mistake,
+  MISTAKE_MOMENT_GAP_S,
   type MistakeSeverity,
+  splitMistakesByOwner,
 } from "../src/renderer/src/report/derive/mistakes";
 
 function mk(tS: number, over: Partial<Mistake> = {}): Mistake {
@@ -116,8 +116,8 @@ describe("失误按时刻分组", () => {
 import {
   MISTAKE_DISCRIMINATION_PP,
   MISTAKE_RULES,
-  rankMistakeMoments,
   type MistakeMoment,
+  rankMistakeMoments,
 } from "../src/renderer/src/report/derive/mistakes";
 
 function moment(

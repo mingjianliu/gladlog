@@ -1,7 +1,7 @@
 import { parseLine } from "../src/l1/parseLine";
-import { buildRoster } from "../src/l3/roster";
-import { collectEvents } from "../src/l3/collect";
 import type { ParsedLine } from "../src/l1/types";
+import { collectEvents } from "../src/l3/collect";
+import { buildRoster } from "../src/l3/roster";
 
 const TZ = { timezone: "UTC" } as const;
 const L = (s: string, i = 0) =>
@@ -113,7 +113,7 @@ describe("collectEvents", () => {
     ).toHaveLength(1);
   });
 
-  it("SWING dedup: SWING_DAMAGE is collected in damage arrays, SWING_DAMAGE_LANDED is not, but both are in actions", () => {
+  it("SWING dedup: of a SWING_DAMAGE + SWING_DAMAGE_LANDED twin pair only the victim-side LANDED line is in the damage arrays, but both are in actions (lone lines, disagreeing amounts: l3.swingTwins.test.ts)", () => {
     const swingRecords = [
       L(
         'SWING_DAMAGE,Player-1-A,"Alice-X",0x511,0x80000000,Player-2-B,"Bob-Y",0x548,0x80000000,Player-2-B,0000000000000000,900,1000,0,0,0,0,0,0,0,100,100,0,1.0,-1.0,0,1.0,70,77,90,-1,1,0,0,0,nil,nil,nil',
@@ -130,10 +130,10 @@ describe("collectEvents", () => {
     const swingB = swingUnits.get("Player-2-B")!;
 
     expect(swingA.damageOut).toHaveLength(1);
-    expect(swingA.damageOut[0]!.eventName).toBe("SWING_DAMAGE");
+    expect(swingA.damageOut[0]!.eventName).toBe("SWING_DAMAGE_LANDED");
 
     expect(swingB.damageIn).toHaveLength(1);
-    expect(swingB.damageIn[0]!.eventName).toBe("SWING_DAMAGE");
+    expect(swingB.damageIn[0]!.eventName).toBe("SWING_DAMAGE_LANDED");
 
     expect(
       swingA.actionsOut.filter((x) => x.eventName === "SWING_DAMAGE"),
@@ -147,5 +147,40 @@ describe("collectEvents", () => {
     expect(
       swingB.actionsIn.filter((x) => x.eventName === "SWING_DAMAGE_LANDED"),
     ).toHaveLength(1);
+  });
+});
+
+describe("collectEvents: empowered casts (start / release / interrupt)", () => {
+  const EMP = (ev: string, i: number, tail = "") =>
+    L(
+      `${ev},Player-1-A,"Alice-X",0x511,0x80000000,0000000000000000,nil,0x80000000,0x80000000,355936,"Dream Breath",0x8${tail}`,
+      i,
+    );
+  const empRecords: ParsedLine[] = [
+    // A real line for the roster (an empower names no dest unit).
+    records[0]!,
+    EMP("SPELL_EMPOWER_START", 10),
+    EMP("SPELL_EMPOWER_INTERRUPT", 11, ",1"),
+    EMP("SPELL_EMPOWER_START", 20),
+    EMP("SPELL_EMPOWER_END", 23, ",3"),
+  ];
+  const a = collectEvents(empRecords, buildRoster(empRecords)).get(
+    "Player-1-A",
+  )!;
+
+  it("keeps every START on the caster", () => {
+    expect(a.empowerStarts!.map((e) => e.eventName)).toEqual([
+      "SPELL_EMPOWER_START",
+      "SPELL_EMPOWER_START",
+    ]);
+    expect(a.empowerStarts![0]!.spellId).toBe(355936);
+  });
+
+  it("an INTERRUPT goes to empowerInterrupts with the level reached, never to empowerEnds", () => {
+    expect(a.empowerInterrupts).toHaveLength(1);
+    expect(a.empowerInterrupts![0]!.level).toBe(1);
+    expect(a.empowerInterrupts![0]!.eventName).toBe("SPELL_EMPOWER_INTERRUPT");
+    expect(a.empowerEnds).toHaveLength(1);
+    expect(a.empowerEnds[0]!.level).toBe(3);
   });
 });

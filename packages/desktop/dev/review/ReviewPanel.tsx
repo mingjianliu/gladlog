@@ -8,14 +8,15 @@
  * once every card has an answer. Don't "helpfully" add a source label to the
  * queue view — that's the bias this whole tool exists to keep out.
  */
-import { useState, type JSX } from "react";
 import { fmtTime } from "@gladlog/analysis";
-import { summarize } from "./summary";
+import { type JSX,useState } from "react";
+
 import type {
   ReviewAnswer,
   ReviewCard,
   ReviewSession,
 } from "../../../eval/src/explore/reviewTypes";
+import { summarize } from "./summary";
 
 type AnswerDim = "truth" | "awareness" | "actionable" | "adopt" | "impact";
 

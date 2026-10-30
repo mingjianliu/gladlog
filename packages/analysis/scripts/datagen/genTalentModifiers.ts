@@ -22,6 +22,12 @@ import {
   talentClassMapOf,
 } from "./lib/talentInventory";
 import {
+  type ITalentDefinition,
+  rankPointsResolver,
+  specPointsAdjusts,
+} from "./lib/talentRankPoints";
+import { effectSpecGates, onlySpecIdsFor } from "./lib/tooltipSpecGates";
+import {
   assertColumns,
   fetchTable,
   parseCsv,
@@ -66,6 +72,13 @@ export function extractTalentModifiers(
   spellLabelRows: Record<string, string>[] = [],
   /** SpecializationSpells (spell → specs): spec passives as modifier sources */
   specSpells?: ReadonlyMap<string, readonly number[]>,
+  /** tooltip spec gates of a talent's effect rows (lib/tooltipSpecGates.ts) */
+  specGateOf?: (
+    talentSpellId: string,
+    effectIndex: number,
+  ) => string[] | "unreferenced" | undefined,
+  /** per-rank / per-spec points (lib/talentRankPoints.ts) */
+  pointsOf?: Parameters<typeof compileCooldownModifiers>[4],
 ): Record<string, ICDModifier[]> {
   const inventory = buildTalentInventory({
     specSpells,
@@ -78,7 +91,18 @@ export function extractTalentModifiers(
     temporarySpellIds: temporarySourceIds,
     trackedSpellIds,
   });
-  return compileCooldownModifiers(inventory, trackedSpellIds);
+  // G7-P9: a replace_spell must name a real spell (SpellName row) — only
+  // checked when the caller supplies the table (synthetic tests may not)
+  const knownSpellIds = _spellNameRows.length
+    ? new Set(_spellNameRows.map((r) => r.ID ?? "").filter(Boolean))
+    : undefined;
+  return compileCooldownModifiers(
+    inventory,
+    trackedSpellIds,
+    knownSpellIds,
+    specGateOf,
+    pointsOf,
+  );
 }
 
 export async function main(): Promise<void> {
@@ -94,6 +118,10 @@ export async function main(): Promise<void> {
     spellDurationRaw,
     spellLabelRaw,
     specSpellsRaw,
+    spellRaw,
+    chrSpecRaw,
+    tdepRaw,
+    curvePointRaw,
   ] = await Promise.all([
     fetchTable("SpellEffect", build, cacheDir),
     fetchTable("SpellClassOptions", build, cacheDir),
@@ -103,6 +131,10 @@ export async function main(): Promise<void> {
     fetchTable("SpellDuration", build, cacheDir),
     fetchTable("SpellLabel", build, cacheDir),
     fetchTable("SpecializationSpells", build, cacheDir),
+    fetchTable("Spell", build, cacheDir),
+    fetchTable("ChrSpecialization", build, cacheDir),
+    fetchTable("TraitDefinitionEffectPoints", build, cacheDir),
+    fetchTable("CurvePoint", build, cacheDir),
   ]);
   const spellLabelRows = parseCsv(spellLabelRaw).rows;
   // Spec passives as cooldown-modifier sources (GH #106, 2026-09-24): 50 DB2
@@ -245,6 +277,93 @@ export async function main(): Promise<void> {
       );
   }
 
+  // Tooltip spec branches (GH #124, 2026-10-20): a talent row the tooltip
+  // gives to some of the class's specs only (`$?c3[… $s3 …]`) applies to
+  // those specs only — lib/tooltipSpecGates.ts. cN is the class's N-th spec
+  // by ChrSpecialization.OrderIndex (Monk: Brewmaster, Windwalker,
+  // Mistweaver — not spec-id order), among the specs with a talent tree.
+  const chrSpec = parseCsv(chrSpecRaw);
+  assertColumns(
+    chrSpec.header,
+    ["ID", "ClassID", "OrderIndex"],
+    "ChrSpecialization",
+  );
+  const treeSpecIds = new Set(
+    (talentIdMap as Array<{ specId: number }>).map((t) => String(t.specId)),
+  );
+  const specsOfClass = new Map<number, string[]>();
+  for (const r of [...chrSpec.rows].sort(
+    (x, y) => toInt(x.OrderIndex) - toInt(y.OrderIndex),
+  )) {
+    if (!treeSpecIds.has(r.ID ?? "")) continue;
+    const l = specsOfClass.get(toInt(r.ClassID)) ?? [];
+    l.push(r.ID!);
+    specsOfClass.set(toInt(r.ClassID), l);
+  }
+  const spellCsv = parseCsv(spellRaw);
+  assertColumns(spellCsv.header, ["ID", "Description_lang"], "Spell");
+  const descriptionOf = new Map(
+    spellCsv.rows.map((r) => [r.ID ?? "", r.Description_lang ?? ""]),
+  );
+  const classOfTalent = talentClassMapOf(
+    talentIdMap as never,
+    PVP_TALENT_POOL_GENERATED,
+  );
+  const specOfSpell = (id: string) => specSpells.get(id)?.map(String);
+  const gatesOf = new Map<string, ReturnType<typeof effectSpecGates> | null>();
+  const specGateOf = (talentSpellId: string, effectIndex: number) => {
+    const classId = classOfTalent.get(talentSpellId)?.classId;
+    const ordered = classId === undefined ? undefined : specsOfClass.get(classId);
+    if (!ordered) return undefined;
+    if (!gatesOf.has(talentSpellId)) {
+      const d = descriptionOf.get(talentSpellId);
+      gatesOf.set(
+        talentSpellId,
+        d ? effectSpecGates(d, { ordered }, specOfSpell) : null,
+      );
+    }
+    const gates = gatesOf.get(talentSpellId);
+    return gates ? onlySpecIdsFor(gates, effectIndex, { ordered }) : undefined;
+  };
+
+  // The points a talent effect really has (cooldown mastery round,
+  // 2026-10-20 — lib/talentRankPoints.ts): per rank from
+  // TraitDefinitionEffectPoints + CurvePoint, per spec from a spec passive's
+  // label-keyed PointsIndex rewrite (aura 218 / 219).
+  const tdep = parseCsv(tdepRaw);
+  assertColumns(
+    tdep.header,
+    ["TraitDefinitionID", "EffectIndex", "OperationType", "CurveID"],
+    "TraitDefinitionEffectPoints",
+  );
+  const curvePoints = parseCsv(curvePointRaw);
+  assertColumns(
+    curvePoints.header,
+    ["CurveID", "Pos_0", "Pos_1", "OrderIndex"],
+    "CurvePoint",
+  );
+  const definitionOf = new Map<string, ITalentDefinition>();
+  for (const tree of talentIdMap as Array<Record<string, unknown>>)
+    for (const key of ["classNodes", "specNodes", "heroNodes", "subTreeNodes"])
+      for (const node of (tree[key] as Array<{ entries?: unknown[] }>) ?? [])
+        for (const e of (node.entries ?? []) as Array<{
+          spellId?: number;
+          definitionId?: number;
+          maxRanks?: number;
+        }>)
+          if (e.spellId && e.definitionId)
+            definitionOf.set(String(e.spellId), {
+              definitionId: String(e.definitionId),
+              maxRanks: e.maxRanks ?? 1,
+            });
+  const byRank = rankPointsResolver(tdep.rows, curvePoints.rows, definitionOf);
+  const adjusts = specPointsAdjusts(spellEffectRows, spellLabelRows, specSpells);
+  const pointsOf = {
+    byRank,
+    specAdjusts: (talentSpellId: string, effectIndex: number) =>
+      adjusts.get(`${talentSpellId}:${effectIndex}`) ?? [],
+  };
+
   const filteredResults = extractTalentModifiers(
     spellEffectRows,
     spellClassOptionsRows,
@@ -254,6 +373,8 @@ export async function main(): Promise<void> {
     temporarySourceIds,
     spellLabelRows,
     specSpells,
+    specGateOf,
+    pointsOf,
   );
 
   console.log(

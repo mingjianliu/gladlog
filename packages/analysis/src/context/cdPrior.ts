@@ -12,13 +12,15 @@
  *
  * Every number on the line is either a rendered integer from the reference
  * table (`medianHpPct`, `n`) or the engine's own `gridHpPct` reading at a
- * whole second (`hpAtCrossPct`, `minHpPct`) — the `[STATE]` tick's sampler.
+ * whole second (`hpAtCrossPct`) — the `[STATE]` tick's sampler — or, for
+ * "bottomed at", the dip's trough (`troughHpPct`, F15 R1 2026-10-16).
  * The `[ref=…]` suffix is machine-readable on purpose: the eval gate
  * `checkCdPriorRefConsistency` re-parses the line and redoes the lookup.
  */
 import type { CdPriorHoldEpisode } from "../analysis/cdTriggerPrior";
 import { CRISIS_HP_PCT_RENDERED } from "../analysis/crisisDecisionPoints";
 import { fmtTime } from "../utils/renderGrid";
+import type { ContextFactLabels } from "./burstAnswered";
 
 export const CD_PRIOR_TAG = "[CD PRIOR]";
 
@@ -29,7 +31,7 @@ export const CD_PRIOR_CAP = 2;
 
 export const CD_PRIOR_LEGEND = [
   `  ${CD_PRIOR_TAG} = a friendly dipped below the HP at which this healer's cohort (spec × hero tree, from the corpus) usually spends a save cooldown, while the owner had it ready and did not spend it — context, not a mistake.`,
-  `    The cohort number is a median of what most players do, not a rule; dips that reached the crisis line (${CRISIS_HP_PCT_RENDERED}%) are judged by the crisis lines instead and are not listed here. At most ${CD_PRIOR_CAP} per round.`,
+  `    The cohort number is a median of what most players do, not a rule; dips whose whole-second [STATE] readings reached the crisis line (${CRISIS_HP_PCT_RENDERED}%) are judged by the crisis lines instead and are not listed here; "bottomed at" is the true minimum the log shows between those readings, so it can sit below that line. At most ${CD_PRIOR_CAP} per round.`,
 ];
 
 export interface CdPriorEntry {
@@ -43,8 +45,10 @@ export function formatCdPriorLines(
   episodes: CdPriorHoldEpisode[],
   cohort: { spec: string; heroTree: string },
   overrides?: { cap?: number },
+  labels?: ContextFactLabels,
 ): CdPriorEntry[] {
   const cap = overrides?.cap ?? CD_PRIOR_CAP;
+  const friendly = labels?.friendly ?? ((n: string) => n);
   const ranked = [...episodes].sort(
     (a, b) => a.minHpPct - b.minHpPct || a.tSec - b.tSec,
   );
@@ -55,14 +59,16 @@ export function formatCdPriorLines(
         e.ref.fellBack || cohort.heroTree === "*"
           ? `${cohort.spec} (spec-wide)`
           : `${cohort.spec} · ${cohort.heroTree}`;
-      const who = e.minUnitIsOwner ? `${e.minUnitName} (you)` : e.minUnitName;
+      const who = e.minUnitIsOwner
+        ? `${friendly(e.minUnitName)} (you)`
+        : friendly(e.minUnitName);
       return {
         atSeconds: e.tSec,
         line:
           `${CD_PRIOR_TAG}   ${cohortLabel} cohort spends ${e.spellName} at a median lowest-friendly HP of ${e.ref.medianHpPct}% (n=${e.ref.n}); ` +
-          `${who} fell below that at ${fmtTime(e.tSec)} (${e.hpAtCrossPct}%) and bottomed at ${e.minHpPct}% by ${fmtTime(e.minSec)} with ${e.spellName} ${e.readyFromSec > e.tSec ? `ready from ${fmtTime(e.readyFromSec)}` : "ready"} and unspent` +
+          `${who} fell below that at ${fmtTime(e.crossSec ?? e.tSec)} (${e.hpAtCrossPct}%) and bottomed at ${e.troughHpPct}% by ${fmtTime(e.troughSec)} with ${e.spellName} ${e.readyFromSec > e.tSec ? `ready from ${fmtTime(e.readyFromSec)}` : "ready"} and unspent` +
           (e.ownerLockedSecs > 0
-            ? ` (you could not cast for ${e.ownerLockedSecs}s of that dip)`
+            ? ` (you could not cast it for ${e.ownerLockedSecs}s of that dip)`
             : "") +
           ` — context, not a mistake [ref=${e.ref.cellKey}]`,
       };

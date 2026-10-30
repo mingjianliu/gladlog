@@ -1,17 +1,23 @@
 import { ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
 import {
-  choiceSelectionResolved,
-  getPlayerTalentedSpellInfo,
-  getPlayerTalentRanks,
-  getSpecFreeOrEntrySpellIds,
-  getSpecTalentTreeSpellInfo,
-  isLoadoutFullyResolved,
-} from "./talents";
-
+  AURA_ACTIVATION_PROVES_BUTTON_IDS,
+  AURA_ONLY_ACTIVATION_IDS,
+} from "../data/auraActivation";
 import { PVP_TALENT_POOL_GENERATED } from "../data/pvpTalentPoolGenerated";
 import { PVP_TALENT_REPLACES_GENERATED } from "../data/pvpTalentReplacesGenerated";
 import { replacedSpellIds } from "../data/talentReplaces";
+import {
+  choiceSelectionResolved,
+  getPlayerTalentedSpellInfo,
+  getPlayerTalentGrantedButtonIds,
+  getPlayerTalentRanks,
+  getSpecFreeOrEntrySpellIds,
+  getSpecTalentButtonGrants,
+  getSpecTalentTreeSpellInfo,
+  isLoadoutFullyResolved,
+  talentsOf,
+} from "./talents";
 
 /**
  * Three-state verdict of "does THIS player actually have spell X in THIS
@@ -47,6 +53,10 @@ export type TalentOwnership = "yes" | "no" | "unknown";
  *        2026-08-11: every Blessing of Spellwarding "didn't talent it but
  *        cast it" contradiction was an old-build round).
  *     Talents missing/unparsed → unknown.
+ *  4b. spell the spec's tree grants through an entry of ANOTHER id
+ *     (`getSpecTalentButtonGrants`: Fortifying Brew 115203 is entry 388917)
+ *     → yes/no by that entry, with step 4's downgrades; a choice node whose
+ *     selection cannot be read → unknown. It used to fall to step 6.
  *  5. spell in this spec's official PvP-talent pool (DB2 PvpTalent) but not
  *     selected → no when the pvpTalents array is present; unknown otherwise
  *  6. in neither the trees nor the pool → baseline for this spec → yes
@@ -81,7 +91,7 @@ export function talentOwnershipFromTables(
 
   // 4. Talent-gated spell: judge by the player's actual selection
   // (choice/subtree nodes count only the chosen entry).
-  const talents = unit.info?.talents;
+  const talents = talentsOf(unit);
   const selected =
     talents && talents.length > 0
       ? getPlayerTalentedSpellInfo(specId, talents)
@@ -117,9 +127,36 @@ export function talentOwnershipFromTables(
     return "no";
   }
 
+  // 4b. Talent-gated all the same: the tree grants the spell through an
+  // entry that carries ANOTHER id (`getSpecTalentButtonGrants`, the official
+  // VisibleSpellID — Fortifying Brew 115203 is entry 388917), so step 4 never
+  // saw it and step 6 called it baseline: "yes" for a Monk who had not taken
+  // it. Judged like step 4, by the entry the loadout holds, with the same
+  // downgrades and one more: a choice node listed without a readable entry
+  // proves neither side. A slotted PvP-pool carrier (step 5) still wins.
+  const carrier = PVP_TALENT_POOL_GENERATED[unit.spec]?.[spellId];
+  const grantingTalentIds = getSpecTalentButtonGrants(specId).get(spellId);
+  if (
+    grantingTalentIds &&
+    !(carrier !== undefined && pvpTalentIds.has(carrier))
+  ) {
+    if (!talents || talents.length === 0 || selected === null) return "unknown";
+    if (getPlayerTalentGrantedButtonIds(specId, talents)?.has(spellId))
+      return "yes";
+    const freeOrEntry = getSpecFreeOrEntrySpellIds(specId);
+    if (grantingTalentIds.some((t) => freeOrEntry.has(t))) return "unknown";
+    if (
+      grantingTalentIds.some(
+        (t) => !choiceSelectionResolved(specId, talents, t),
+      )
+    )
+      return "unknown";
+    if (!isLoadoutFullyResolved(specId, talents)) return "unknown";
+    return "no";
+  }
+
   // 5. PvP-talent-gated spell (official per-spec pool, incl. the rare
   // distinct ActionBarSpellID carrier): owned iff its carrier is slotted.
-  const carrier = PVP_TALENT_POOL_GENERATED[unit.spec]?.[spellId];
   if (carrier !== undefined) {
     if (pvpTalentIds.has(carrier)) return "yes";
     // pvpTalents present (even with empty slots) = data present → not taken.
@@ -152,7 +189,10 @@ export function talentOwnershipFromTables(
  * pass the CURRENT round's unit, never a unit cached from another round.
  */
 export function talentOwnershipOf(
-  unit: Pick<ICombatUnit, "spec" | "info" | "spellCastEvents">,
+  unit: Pick<ICombatUnit, "spec" | "info" | "spellCastEvents"> & {
+    id?: string;
+    auraEvents?: ICombatUnit["auraEvents"];
+  },
   spellId: string,
 ): TalentOwnership {
   if (
@@ -160,6 +200,23 @@ export function talentOwnershipOf(
       (e) =>
         e.spellId === spellId &&
         e.logLine.event === LogEvent.SPELL_CAST_SUCCESS,
+    )
+  )
+    return "yes";
+  // B9 (user 2026-10-24): an activation only the press can make is cast
+  // evidence too — the ledger's reading (triage H15, ruling A9-3:
+  // `AURA_ACTIVATION_PROVES_BUTTON_IDS`; a Feign Death seen only through
+  // Survival Tactics' 202748 was owned in the ledger and `unknown` / `no`
+  // on the death path)
+  if (
+    AURA_ACTIVATION_PROVES_BUTTON_IDS.has(spellId) &&
+    (unit.auraEvents ?? []).some(
+      (a) =>
+        a.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
+        a.spellId !== undefined &&
+        (AURA_ONLY_ACTIVATION_IDS[spellId] ?? []).includes(a.spellId) &&
+        a.srcUnitId === unit.id &&
+        a.destUnitId === unit.id,
     )
   )
     return "yes";
@@ -202,8 +259,8 @@ export function talentModifierOwnershipOf(
   );
   if (
     !cast &&
-    unit.info?.talents?.length &&
-    !choiceSelectionResolved(specId, unit.info.talents, talentSpellId)
+    talentsOf(unit)?.length &&
+    !choiceSelectionResolved(specId, talentsOf(unit)!, talentSpellId)
   )
     return "unknown";
   return verdict;
@@ -243,7 +300,7 @@ export function talentRankOf(
 
   const specId = parseInt(unit.spec, 10);
   if (Number.isNaN(specId)) return 0;
-  const talents = unit.info?.talents;
+  const talents = talentsOf(unit);
   if (!talents || talents.length === 0) return 0;
   return getPlayerTalentRanks(specId, talents)?.get(talentSpellId) ?? 0;
 }

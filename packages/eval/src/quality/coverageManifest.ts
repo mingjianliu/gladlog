@@ -14,19 +14,19 @@
  */
 
 import {
+  ADAPTATION_TRIGGER_AURA_ID,
+  ccSpellIds,
+  getEnglishSpellName,
+  MOVEMENT_ROOT_BREAK_DISPEL_IDS,
+  specToString,
+  trinketSpellIds,
+} from "@gladlog/analysis";
+import type { IArenaMatch, IShuffleRound } from "@gladlog/parser-compat";
+import {
   CombatUnitReaction,
   CombatUnitType,
   ICombatUnit,
 } from "@gladlog/parser-compat";
-import type { IArenaMatch, IShuffleRound } from "@gladlog/parser-compat";
-
-import {
-  ccSpellIds,
-  trinketSpellIds,
-  specToString,
-  getEnglishSpellName,
-  MOVEMENT_ROOT_BREAK_DISPEL_IDS,
-} from "@gladlog/analysis";
 
 export type ParsedCombat = IArenaMatch | IShuffleRound;
 
@@ -60,7 +60,8 @@ export interface CoverageManifest {
   interrupts: ManifestEvent[];
   /** SPELL_DISPEL events between player units. */
   dispels: ManifestEvent[];
-  /** PvP-trinket spell casts (spellTags trinketSpellIds). */
+  /** PvP-trinket uses: Medallion casts (spellTags trinketSpellIds) and
+   * Adaptation triggers (its self-aura APPLIED — Adaptation logs no cast). */
   trinketCasts: ManifestEvent[];
   counts: {
     deaths: number;
@@ -171,6 +172,17 @@ export function buildCoverageManifest(
       if (cast.logLine.event !== "SPELL_CAST_SUCCESS") continue;
       if (!cast.spellId || !TRINKET_SPELL_ID_SET.has(cast.spellId)) continue;
       pushUnique(trinketCasts, cast);
+    }
+    // Adaptation logs no cast — its use is the self-aura 283167 APPLIED on
+    // the holder (codex 62-POSTHOC-13g #3: 0a84aa96 r dc067a1e, Medallion
+    // 15.8 s + Adaptation 57.8 s counted one use, so an omitted Adaptation
+    // annotation passed). A static id, not the analysis reader: the manifest
+    // stays outside the builder.
+    for (const aura of unit.auraEvents) {
+      if (aura.logLine.event !== "SPELL_AURA_APPLIED") continue;
+      if (aura.spellId !== ADAPTATION_TRIGGER_AURA_ID) continue;
+      if (aura.destUnitName !== unit.name) continue;
+      pushUnique(trinketCasts, aura);
     }
   }
 

@@ -63,6 +63,9 @@ interface Entry {
   type: string;
   name: string;
   spellId: number;
+  /** DB2 TraitDefinition.VisibleSpellID: the button the entry puts on the
+   * bar when it is another spell than `spellId` (`getSpecTalentButtonGrants`) */
+  visibleSpellId?: number;
   icon: string;
   index: number;
 }
@@ -99,6 +102,8 @@ interface Entry2 {
   type: string;
   name: string;
   spellId: number;
+  /** see `Entry.visibleSpellId` */
+  visibleSpellId?: number;
   icon: string;
   index: number;
 }
@@ -177,4 +182,3 @@ function fillNodeMaps(talentIdMap: RaidBotsTalentData): void {
 // 	for num = 0, 9 do
 // 		table.insert(base64ConversionTable, tostring(num));
 // 	end
-

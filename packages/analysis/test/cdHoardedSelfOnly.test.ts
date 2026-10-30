@@ -246,9 +246,10 @@ describe("cd-hoarded 决策点门(2026-08-30,GH #34)", () => {
       [cd("642", "Divine Shield")],
       OWNER,
     );
-    expect(evts[0]!.facts["refDeathSpent"]).toBe("4.5");
-    expect(evts[0]!.facts["refDeathHeld"]).toBe("11.4");
-    expect(evts[0]!.facts["refN"]).toBe("16960");
+    // GH #115 regen 2026-10-20 (refN 15656 → 15653; was 4.5 / 11.4 / 16960, 2026-08-30)
+    expect(evts[0]!.facts["refDeathSpent"]).toBe("5.8");
+    expect(evts[0]!.facts["refDeathHeld"]).toBe("13.0");
+    expect(evts[0]!.facts["refN"]).toBe("15653");
   });
 });
 
@@ -274,7 +275,7 @@ describe("cd-hoarded 意图守护(BACKLOG #26 Task 2,按了被拒不算屯 —�
       },
     );
     expect(evts).toHaveLength(1);
-    expect(evts[0]!.facts["attempted"]).toBe("曾尝试施放被拒(尚未恢复×1)");
+    expect(evts[0]!.facts["attempted"]).toBe("pressed but rejected (not ready yet×1)");
   });
 
   it("rawStreams 缺省 → facts 无 attempted 字段,行为与传空 castFailed 一致", () => {

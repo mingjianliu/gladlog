@@ -1,3 +1,4 @@
+import { _electron as electron, expect, test } from "@playwright/test";
 import {
   existsSync,
   mkdtempSync,
@@ -8,13 +9,10 @@ import {
 import { tmpdir } from "os";
 import { join } from "path";
 
-import { _electron as electron, expect, test } from "@playwright/test";
-
 // A relative path rather than the package name: @gladlog/parser's main points
 // at src/index.ts and there is no exports map, so Node cannot resolve deep
 // subpaths (Playwright runs under Node ESM, not through Vite).
 import { synthArenaLog } from "../../../parser/src/testing/synthLog";
-
 import { BOOT_TIMEOUT_MS, MAIN_ENTRY, matchRows } from "../support/launch";
 
 /**

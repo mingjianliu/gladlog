@@ -18,6 +18,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import readline from "node:readline";
+
 import { GladLogParser, parseLine } from "@gladlog/parser";
 import { toLegacyMatch } from "@gladlog/parser-compat";
 const dir = process.argv[2]; const maxM = Number(process.argv[3] ?? 100);

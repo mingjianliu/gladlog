@@ -1,3 +1,4 @@
+import { ownEffectAurasKeyedBy } from "./castEffectAuras";
 import generated from "./mitigationGenerated.json";
 
 export interface IMitigationEntry {
@@ -21,6 +22,15 @@ export interface IMitigationEntry {
    * so every consumer that prices an aura found ON a unit agrees.
    */
   pctOnOthers?: number;
+  /**
+   * The aura deflects every DIRECT attack and spell aimed at its carrier, and
+   * nothing else: periodic damage already on the unit keeps landing. No
+   * immunity — `IMMUNITY_IDS` / `FULL_IMMUNITY_IDS` leave it out, its
+   * `[ENEMY DEF]` line says what it does. User ruling 2026-10-21 (round-3
+   * q2, 「dot的确不免疫」) on Aspect of the Turtle: fact3 D38, 35 DoT
+   * ticks (~152k) landed during one.
+   */
+  deflectsDirectAttacks?: true;
 }
 
 /**
@@ -48,12 +58,12 @@ export const MITIGATION_OVERRIDES: Record<string, IMitigationEntry> = {
   "1022": { pct: 100, schoolMask: 0x1 }, // Blessing of Protection: physical immunity only; DB2 aura39 misc0=1 (its aura87 points=0 row is a leftover dead slot, Task 1 unresolved)
   "204018": { pct: 100, schoolMask: 0x7e }, // Blessing of Spellwarding: magic immunity only; DB2 aura39 misc0=126
   "31224": { pct: 100, schoolMask: 0x7e }, // Cloak of Shadows: magic immunity only; DB2 aura186 points=-200 (spell hit -200%); spec decision; the aura87 0 row is a dead slot
-  "186265": { pct: 100, schoolMask: 0x7f }, // Aspect of the Turtle: deflection = immunity (DB2 aura184/185/186 are all -200% hit); the spec decision overrides the generation layer's 30 with immunity semantics (that 30 is the residual mitigation on damage that isn't deflected)
+  "186265": { pct: 100, schoolMask: 0x7f, deflectsDirectAttacks: true }, // Aspect of the Turtle (user ruling 2026-10-21: no immunity — direct attacks deflected, DoTs land; `deflectsDirectAttacks`): deflection = immunity (DB2 aura184/185/186 are all -200% hit); the spec decision overrides the generation layer's 30 with immunity semantics (that 30 is the residual mitigation on damage that isn't deflected)
 
   // —— The mitigation aura hangs off a different id (the generation layer can't find it by cast id) ——
   "51052": { pct: 30, schoolMask: 0x7e }, // Anti-Magic Zone: DR aura 145629 (observed), aura87 −15/126 × PvpMultiplier 2 = 30 % in PvP (2026-09-04 user ruling "PvP 值为官方值", BACKLOG #41; was 15 = the PvE number); the same-named 332831 (-20) is not observed and judged not live
   "198589": { pct: 25, schoolMask: 0x7f }, // Blur 疾影术:DR aura 212800(S2 归档已观测),`aura87 pts=-25 misc=127`;cast id 198589 自己只有一条 `E64 trig=212800`,所以生成层按 cast id 找不到它。2026-08-22 用户确认「的确是减伤,而且是大技能」后补登记
-  "110959": { pct: 60, schoolMask: 0x7f }, // Greater Invisibility 强化隐形术:DR aura 113862(`aura87 pts=-60 misc=127`,PvpMultiplier 1,12.1.0.69587);cast id 110959 自己只有一条 `E64` 触发行,所以生成层按 cast id 找不到它 —— 与疾影术 198589 → 212800 同一形状。2026-09-26 用户签字 kill-live-gated 后登记(此前只在冷却账本里,ledgerGapScan 发现)
+  "110959": { pct: 60, schoolMask: 0x7f }, // Greater Invisibility 强化隐形术:DR aura 113862(`aura87 pts=-60 misc=127`,PvpMultiplier 1,12.1.0.69587);cast id 110959 自己只有一条 `E64` 触发行,所以生成层按 cast id 找不到它 —— 与疾影术 198589 → 212800 同一形状。2026-09-26 用户签字 kill-live-gated 后登记(此前只在冷却账本里,ledgerGapScan 发现)。FLAG(2026-09-30,分诊 tier-C C2):113862 在 605 场 S2 采集 / 713 次施放里从未出现,日志只有光环 110960;带 110960 期间与其后 3 秒的承伤是基线的 0.98×(−60% 应读约 0.33×)。用户 2026-09-30 裁定维持 60%、不重开;`SELF_WALL_AURA_TO_CAST_ID` 因此把 110960 接到这一行
   "62618": { pct: 40, schoolMask: 0x7f }, // Power Word: Barrier: DR aura 81782 (observed), aura87 −20/127 × PvpMultiplier 2 = 40 % in PvP (2026-09-04 user ruling, BACKLOG #41; was 20 = the PvE number)
   "98008": { pct: 10, schoolMask: 0x7f }, // Spirit Link Totem: DR aura 325174 (observed), currently -10/127 (98007 has the same value but is not observed)
   "61336": { pct: 50, schoolMask: 0x7f }, // Survival Instincts: the cast id is dummy only (points=50); same-named 50322/236157 are both currently -50/127; stable at 50% long-term
@@ -108,6 +118,46 @@ export const MITIGATION_TABLE: Record<string, IMitigationEntry> = {
   ...MITIGATION_OVERRIDES,
 };
 
+/** The floor of "a wall": a row of at least this percentage. */
+export const MITIGATION_WALL_MIN_PCT = 20;
+
+/**
+ * The walls — every `MITIGATION_TABLE` row of 20–99 %. An immunity (pct 100)
+ * is not one. The ONE slice behind the readers of "this unit has / had a
+ * wall": the kill-opportunity tier's `WALL_IN_HAND_MIT_IDS` (an alias), the
+ * `[ENEMY DEF]` line's and KILL ATTEMPTS' `MITIGATION_AURA_IDS` (a copy) and,
+ * through that line's events of kind "self", the own walls a kill-window
+ * span is cut on (`computeOffensiveWindows` step 2b). Until 2026-10-13 the
+ * first two each spelled the filter out.
+ *
+ * It is NOT the kill-window roster (`KW_MAJOR_DEFENSIVE_IDS`, the spells the
+ * span's state machine times): on 2026-10-13 that curated list holds 24 of
+ * these 26 — all but Survival of the Fittest 264735 and Retribution's Divine
+ * Protection 403876 — and whether it takes the other two is open, see
+ * docs/predicate-index.md "Not yet unified".
+ */
+export const MITIGATION_WALL_IDS: ReadonlySet<string> = new Set(
+  Object.entries(MITIGATION_TABLE)
+    .filter(([, e]) => e.pct >= MITIGATION_WALL_MIN_PCT && e.pct < 100)
+    .map(([id]) => id),
+);
+
+/**
+ * The deflections — `MITIGATION_TABLE` rows marked `deflectsDirectAttacks`
+ * (Aspect of the Turtle). Neither an immunity (`IMMUNITY_IDS` leaves them
+ * out, user ruling 2026-10-21) nor a 20–99 % wall, so until fact4 D6 / D62
+ * (2026-10-22) they fell out of both and the enemy's press had no
+ * `[ENEMY DEF]` line and no KILL ATTEMPTS `popped` (30 rounds, 0 Turtle
+ * lines). `MITIGATION_AURA_IDS` (the `[ENEMY DEF]` / KILL ATTEMPTS slice)
+ * takes them as an own defensive; `WALL_IN_HAND_MIT_IDS` does not — the
+ * kill-opportunity tier is "a 20–99 % wall in hand".
+ */
+export const DEFLECTION_IDS: ReadonlySet<string> = new Set(
+  Object.entries(MITIGATION_TABLE)
+    .filter(([, e]) => e.deflectsDirectAttacks === true)
+    .map(([id]) => id),
+);
+
 /**
  * The percentage an aura is worth on the unit that carries it — the single
  * predicate for pricing a mitigation aura found ON a unit (burst ledger
@@ -123,3 +173,32 @@ export function mitigationPctFor(
   if (appliedToCaster || entry.pctOnOthers === undefined) return entry.pct;
   return entry.pctOnOthers;
 }
+
+/**
+ * A personal wall whose table row is keyed by the CAST id while the log
+ * carries a different AURA id on the caster (logged aura → table key). The
+ * enemy-save predicate (`utils/enemyDefensives.ts`) matches aura intervals,
+ * so without this link an enemy Blur or Greater Invisibility never rendered
+ * and never counted in KILL ATTEMPTS (triage 2026-09-29, enemy-def F-E1a).
+ * Both aura ids are observed (605-file capture: 212800 428 applications for
+ * 448 casts of 198589; 110960 714 for 713 of 110959). Greater Invisibility's
+ * 60 % is the user's kept verdict, see the FLAG on its row above.
+ * FT-T05 (2026-10-09): Fortifying Brew was the third and was missing — its
+ * row is keyed by the cast 115203, the buff on the monk is 120954
+ * (`castEffectAuraGenerated.json`: 562 of 563 casts; the 60 re-eval logs: 29
+ * casts, 28 applications of 120954, none of 115203), so an enemy monk's brew
+ * never rendered: 605-file capture, 217 friendly cast lines against 0
+ * `[ENEMY DEF]` lines. `test/enemyDefensives.test.ts` now checks the whole
+ * table against the generated cast→aura table, so a fourth cannot hide.
+ * fact2 C10 (2026-10-20): no longer a hand list. It is DERIVED from the one
+ * cast→effect table — every aura that is a row's own same-named effect
+ * (`ownEffectAurasKeyedBy`, the rule the FT-T05 forward test already used),
+ * so a fourth cannot be missed: Blur, Greater Invisibility, Fortifying Brew
+ * and Spirit Link Totem's 325174 (an area save: no `[ENEMY DEF]` wall line —
+ * its row is under the 20 % wall floor — but priced by the readers that
+ * resolve an aura through `castKeyOfAura`). The friendly pricing readers
+ * (the death-window audit, the stacked-defensives record, the burst ledger)
+ * resolve the same way since fact2 C10.
+ */
+export const SELF_WALL_AURA_TO_CAST_ID: Readonly<Record<string, string>> =
+  ownEffectAurasKeyedBy((id) => id in MITIGATION_TABLE);

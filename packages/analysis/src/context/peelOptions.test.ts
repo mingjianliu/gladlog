@@ -7,7 +7,6 @@ import {
 } from "@gladlog/parser-compat";
 import { beforeAll, describe, expect, it } from "vitest";
 
-import { ensureAnalysisData } from "../index";
 import {
   makeAdvancedAction,
   makeAuraEvent,
@@ -15,6 +14,7 @@ import {
   makeSpellCastEvent,
   makeUnit,
 } from "../../test/ported/testHelpers";
+import { ensureAnalysisData } from "../index";
 import { fmtTime } from "../utils/renderGrid";
 import { formatPeelOptions, peelOptionsForDeaths } from "./peelOptions";
 

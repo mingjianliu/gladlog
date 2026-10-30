@@ -2,9 +2,9 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { vi } from "vitest";
 
-import { SettingsPanel } from "../src/renderer/src/components/SettingsPanel";
 import { API_KEY_REDACTED } from "../src/main/settingsStore";
 import type { UpdateState } from "../src/main/updater";
+import { SettingsPanel } from "../src/renderer/src/components/SettingsPanel";
 
 function mockBridge(
   over: Record<string, unknown> = {},
@@ -18,6 +18,7 @@ function mockBridge(
     aiBackendCommand: null,
     aiLanguage: "zh",
     autoAnalyzeNew: false,
+    aiSelfReview: false,
     autoCheckUpdates: true,
     ...over,
   };
@@ -102,6 +103,21 @@ describe("设置页(phase3 #2a)", () => {
     expect(btn.textContent).toBe("停用");
     fireEvent.click(btn);
     expect(save).toHaveBeenCalledWith({ autoAnalyzeNew: false });
+  });
+
+  it("AI 自查(2026-10-15):默认关,按钮显示开启;说明写清代价;开 / 关都持久化", async () => {
+    const { save } = mockBridge();
+    render(<SettingsPanel />);
+    const btn = await screen.findByRole("button", { name: "AI 自查" });
+    expect(btn.textContent).toBe("开启");
+    expect(screen.getByText(/多一次\s*AI 调用,用量约翻倍,多等 1–2 分钟/)).toBeTruthy();
+    fireEvent.click(btn);
+    expect(save).toHaveBeenCalledWith({ aiSelfReview: true });
+    expect(
+      (await screen.findByRole("button", { name: "AI 自查" })).textContent,
+    ).toBe("关闭");
+    fireEvent.click(screen.getByRole("button", { name: "AI 自查" }));
+    expect(save).toHaveBeenLastCalledWith({ aiSelfReview: false });
   });
 
   // Task 6(moment 深挖 UI 入口):自动深挖轮的密集快照开关,照抄自动分析新对局

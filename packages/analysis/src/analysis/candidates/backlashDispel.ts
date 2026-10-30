@@ -32,8 +32,10 @@
  * dispeller's 4 s damage window come from `reconstructDispelSummary`
  * (the same object the [DISPEL] context lines render from); cleanse
  * availability replays that summary's `cleanseWasOnCD` rule
- * (`canDefensiveCleanse` × `DISPEL_COOLDOWNS_BY_SPELL`); HP facts are
- * `gridHpPct` at a whole rendered second; incoming CC with DR level is
+ * (`canDefensiveCleanse` × `cleanseRecoveryOf`); the target's HP is
+ * `gridHpPct` at the decision instant itself (`t0`'s own ms — CLAUDE.md's
+ * fourth signed exception, user ruling 2026-10-22, fact3 D45), every other
+ * HP fact at a whole rendered second; incoming CC with DR level is
  * `analyzeOutgoingCCChains` mirrored; hard-CC membership is
  * `HARD_CC_CATEGORIES`. The archive probe imports `backlashDispelDecisionPoints`
  * — never a second implementation.
@@ -44,18 +46,25 @@ import {
   type BacklashWorthRef,
 } from "../../data/backlashDispelPrior";
 import { getEnglishSpellName } from "../../data/spellEffectData";
-import { gridHpPct, isHealerSpec } from "../../utils/cooldowns";
+import { dropAuraRebroadcasts } from "../../utils/auraIntervals";
+import {
+  chargeStateAt,
+  gridHpPct,
+  isHealerSpec,
+  playerTalentIdSets,
+} from "../../utils/cooldowns";
 import {
   canDefensiveCleanse,
-  DISPEL_COOLDOWNS_BY_SPELL,
+  cleanseRecoveryOf,
   DISPEL_PENALTY_SPELLS,
   type DispelPriority,
+  distinctDispelPressSeconds,
   getDispelType,
   type IDispelEvent,
   reconstructDispelSummary,
 } from "../../utils/dispelAnalysis";
 import { analyzeOutgoingCCChains, getDRCategory } from "../../utils/drAnalysis";
-import { toRenderSecond } from "../../utils/renderGrid";
+import { roundEndMs } from "../../utils/roundEnd";
 import { fmtFactNum as fmt, fmtFactTime } from "../factFormat";
 import type { CandidateEvent } from "../types";
 import { HARD_CC_CATEGORIES } from "./cooldownTiming";
@@ -107,6 +116,9 @@ export interface BacklashCcHit {
   atS: number;
   durationS: number;
   drLevel: string;
+  /** F-B1: seconds of the CC during which every capable cleanse was still
+   * on cooldown — min(CC end, first cleanse back) − landing. */
+  blockedS: number;
 }
 
 export interface IBacklashDispelPoint {
@@ -134,7 +146,8 @@ export interface IBacklashDispelPoint {
   stacks: number;
   coRemoved: Array<{ spellName: string; priority: DispelPriority }>;
   coRemovedCritical: boolean;
-  /** `gridHpPct` of the target at the rendered second of t0. */
+  /** `gridHpPct` of the target at t0's own ms — the decision instant, not
+   * its second's tick (fourth signed exception, fact3 D45). */
   targetHpPct: number | null;
   /** Dispelled: the backlash aura landed on the dispeller within 3 s. */
   backlashLanded: boolean | null;
@@ -250,14 +263,45 @@ export function backlashDispelDecisionPoints(
     friendPlayers.filter((f) =>
       canDefensiveCleanse(f as never, dtype as never),
     );
-  const offCd = (f: UnitLike, atRel: number): boolean => {
+  // F-B2 (triage missed-cleanse): the cleanse-cooldown fact is
+  // `cleanseRecoveryOf`'s — per dispeller, with the PvP-talent +4 s on
+  // Cleanse (199330) and Purify's second charge (196439) — not the bare
+  // table value; charge-aware through the ledger's `chargeStateAt`.
+  // Returns when the dispeller's cleanse is back (≤ atRel = ready now).
+  const readyAt = (f: UnitLike, atRel: number): number => {
+    const bySpell = new Map<string, number[]>();
     for (const c of cleanses) {
       if (c.sourceName !== f.name || c.timeSeconds >= atRel) continue;
-      const cd = DISPEL_COOLDOWNS_BY_SPELL.get(c.dispelSpellId) ?? 8;
-      if (cd > 0 && c.timeSeconds + cd > atRel) return false;
+      bySpell.set(c.dispelSpellId, [
+        ...(bySpell.get(c.dispelSpellId) ?? []),
+        c.timeSeconds,
+      ]);
     }
-    return true;
+    let back = -Infinity;
+    for (const [spellId, times] of bySpell) {
+      const { cooldownSeconds, charges } = cleanseRecoveryOf(
+        spellId,
+        new Set(
+          (
+            (f.info as { pvpTalents?: unknown[] } | undefined)?.pvpTalents ?? []
+          ).map(String),
+        ),
+        String(f.spec),
+        playerTalentIdSets(f as never),
+      );
+      if (!(cooldownSeconds > 0)) continue;
+      const st = chargeStateAt(
+        distinctDispelPressSeconds(times),
+        cooldownSeconds,
+        charges,
+        atRel,
+      );
+      if (st.charges === 0) back = Math.max(back, st.nextRecharge);
+    }
+    return back;
   };
+  const offCd = (f: UnitLike, atRel: number): boolean =>
+    readyAt(f, atRel) <= atRel;
   const activeBuffIds = (u: UnitLike, atMs: number): Set<string> => {
     const on = new Map<string, boolean>();
     for (const b of u.auraEvents ?? []) {
@@ -275,8 +319,19 @@ export function backlashDispelDecisionPoints(
     return new Set([...on].filter(([, v]) => v).map(([id]) => id));
   };
 
+  // WO3 Part 2 (readers.json fact 2 / 3): the round's end (a Solo Shuffle
+  // round ends at its first death) and one aura re-broadcast is one
+  // application — `roundEndMs` / `dropAuraRebroadcasts`, the shared readings
+  const roundEnd = roundEndMs(combat);
+  const usedDispels: Array<{ sourceName: string; timeSeconds: number }> = [];
+  const sameDispelCast = (c: { sourceName: string; timeSeconds: number }) =>
+    usedDispels.some(
+      (u) =>
+        u.sourceName === c.sourceName &&
+        Math.abs(u.timeSeconds - c.timeSeconds) <= CO_REMOVE_PAIR_S,
+    );
   for (const target of friendPlayers) {
-    const auras = target.auraEvents ?? [];
+    const auras = dropAuraRebroadcasts(target.auraEvents ?? []);
     for (let i = 0; i < auras.length; i++) {
       const a = auras[i];
       if (a.logLine.event !== "SPELL_AURA_APPLIED" || a.auraType !== "DEBUFF")
@@ -286,15 +341,23 @@ export function backlashDispelDecisionPoints(
       const casterId: string = a.srcUnitId;
       if (!enemyIds.has(casterId)) continue;
       const applyMs: number = a.timestamp;
+      if (applyMs >= roundEnd) continue;
+      // fact3 D46 (8888b780 r3 0:56): this caster's application — two
+      // warlocks' Unstable Afflictions on one target are two auras, and the
+      // second one's APPLIED is no end of the first
       const removed = auras
         .slice(i + 1)
         .find(
           (b: any) =>
             b.spellId === sid &&
+            b.srcUnitId === casterId &&
             (b.logLine.event === "SPELL_AURA_REMOVED" ||
               b.logLine.event === "SPELL_AURA_APPLIED"),
         );
-      const endMs: number = removed ? removed.timestamp : combat.endTime;
+      const endMs: number = Math.min(
+        removed ? removed.timestamp : combat.endTime,
+        roundEnd,
+      );
       const applyRel = rel(applyMs);
       const dtype = getDispelType(sid);
       if (!dtype) continue;
@@ -309,6 +372,11 @@ export function backlashDispelDecisionPoints(
           c.timeSeconds >= applyRel - 0.05 &&
           c.timeSeconds <= rel(endMs) + 0.15,
       );
+      // one dispel cast that took two applications (two casters' copies) is
+      // one decision: the earlier application's, the other copy among what
+      // it co-removed
+      if (dispel && sameDispelCast(dispel)) continue;
+      if (dispel) usedDispels.push(dispel);
       const dispeller = dispel ? byName.get(dispel.sourceName) : undefined;
       const t0S = dispel
         ? dispel.timeSeconds
@@ -323,7 +391,7 @@ export function backlashDispelDecisionPoints(
       let stacks = 1;
       for (const b of auras.slice(i + 1)) {
         if (b.timestamp > Math.min(endMs, t0Ms)) break;
-        if (b.spellId !== sid) continue;
+        if (b.spellId !== sid || b.srcUnitId !== casterId) continue;
         const ev = b.logLine.event;
         if (
           ev === "SPELL_AURA_APPLIED_DOSE" ||
@@ -343,7 +411,7 @@ export function backlashDispelDecisionPoints(
                 c.sourceName === dispel.sourceName &&
                 Math.abs(c.timeSeconds - dispel.timeSeconds) <=
                   CO_REMOVE_PAIR_S &&
-                !(c.removedSpellId === sid && c.targetName === target.name),
+                c !== dispel,
             )
             .map((c) => ({
               spellName: c.removedSpellName,
@@ -399,12 +467,18 @@ export function backlashDispelDecisionPoints(
         const cap = capableFor(ct);
         if (cap.length === 0) continue;
         if (cap.some((f) => offCd(f, app.atSeconds))) continue;
+        // F-B1: how long the CC ran with every cleanse still down — "on
+        // cooldown at landing" alone hid a cleanse back 0.33 s later
+        // (9d899d10: Purify Spirit back 123.467, Coil 123.139 for 3.0 s).
+        const back = Math.min(...cap.map((f) => readyAt(f, app.atSeconds)));
         cdCcHit = {
           targetName: app.targetName,
           spellName: getEnglishSpellName(app.spellId, app.spellName),
           atS: app.atSeconds,
           durationS: app.durationSeconds,
           drLevel: app.drLevel,
+          blockedS:
+            Math.min(app.atSeconds + app.durationSeconds, back) - app.atSeconds,
         };
         break;
       }
@@ -435,10 +509,12 @@ export function backlashDispelDecisionPoints(
         coRemovedCritical: coRemoved.some(
           (c) => c.priority === "Critical" || c.priority === "High",
         ),
-        targetHpPct: gridHpPct(
-          target as never,
-          startMs + toRenderSecond(t0S) * 1000,
-        ),
+        // the target's HP at the decision instant itself — the dispel's ms,
+        // or the left-on reading's — not its second's [STATE] tick: user
+        // ruling 2026-10-22 (fact3 D45, the fourth signed exception in
+        // CLAUDE.md's Shared-Predicate Rule; 8888b780-r3: the tick read 82 %
+        // for a dispel at 77 %)
+        targetHpPct: gridHpPct(target as never, t0Ms),
         backlashLanded,
         immuneBuffIds,
         refDispellerId: refHealer?.id ?? null,
@@ -558,7 +634,10 @@ export function backlashDispelEvents(
         // responses in the A/B carried 2.37 audited claims per finding vs
         // 1.83 in control, on the same old-line error rate.
         healTrend: trendK(p.healerHealBefore, p.healerHealAfter),
-        selfDmgTrend: trendK(p.dispellerDmgBefore ?? 0, p.dispellerDmgAfter ?? 0),
+        selfDmgTrend: trendK(
+          p.dispellerDmgBefore ?? 0,
+          p.dispellerDmgAfter ?? 0,
+        ),
         coRemoved: p.coRemoved.length
           ? joinNames(p.coRemoved.map((c) => c.spellName))
           : "none",
@@ -568,6 +647,7 @@ export function backlashDispelEvents(
               cdCcSpell: p.cdCcHit.spellName,
               cdCcT: fmtFactTime(p.cdCcHit.atS),
               cdCcDurationS: fmt(p.cdCcHit.durationS),
+              cdCcBlockedS: fmt(p.cdCcHit.blockedS),
               cdCcDr: p.cdCcHit.drLevel,
             }
           : {}),

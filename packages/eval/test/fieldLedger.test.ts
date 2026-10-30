@@ -13,10 +13,6 @@
  * Adding a decoder field or a unit array therefore means adding its row:
  * where it goes after L1, who reads it, and which class it is in.
  */
-import { readFileSync } from "fs";
-import { resolve } from "path";
-import { describe, expect, it } from "vitest";
-
 import {
   decodeCombatantInfo,
   GladLogParser,
@@ -38,6 +34,9 @@ import {
   decodeSpell,
 } from "@gladlog/parser/src/l1/decoders";
 import { synthArenaLog } from "@gladlog/parser/src/testing/synthLog";
+import { readFileSync } from "fs";
+import { resolve } from "path";
+import { describe, expect, it } from "vitest";
 
 const ROOT = resolve(__dirname, "../../..");
 
@@ -80,6 +79,8 @@ function decodedFieldTokens(): Set<string> {
   // ParsedLine's own scalar members that are not decoder objects.
   out.add("line.empowerLevel");
   out.add("line.unitDied");
+  // …and the one that is a list, not an object with keys (decodeCastCosts)
+  out.add("line.castCosts");
   // L3 unit arrays off a real parse of the synthetic log; COMBATANT_INFO's
   // decoded shape off its own line.
   const parser = new GladLogParser();

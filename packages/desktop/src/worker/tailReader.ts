@@ -1,5 +1,6 @@
 import { createHash } from "crypto";
 import { closeSync, openSync, readSync, statSync } from "fs";
+
 import type { FileCheckpoint } from "../shared/protocol";
 
 export interface TailState {

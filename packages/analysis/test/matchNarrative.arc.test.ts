@@ -1,13 +1,13 @@
-import { describe, it, expect } from "vitest";
 import { CombatUnitSpec } from "@gladlog/parser-compat";
+import { describe, expect,it } from "vitest";
 
 import {
   buildMatchArc,
   buildMatchArcStructured,
   IMatchArcPhase,
 } from "../src/context/matchNarrative";
-import { IEnemyCDTimeline } from "../src/utils/enemyCDs";
 import { IMajorCooldownInfo } from "../src/utils/cooldowns";
+import { IEnemyCDTimeline } from "../src/utils/enemyCDs";
 import { makeUnit } from "./ported/testHelpers";
 
 // #10 T1: buildMatchArcStructured single-source structured output + barrel +

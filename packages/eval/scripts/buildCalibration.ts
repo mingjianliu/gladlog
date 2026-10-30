@@ -1,4 +1,4 @@
-/* eslint-disable no-console */
+ 
 /**
  * CLI: Build judge calibration suite
  *
@@ -13,8 +13,8 @@
  *     [--seed <number>]
  */
 
-import { buildCalibrationSuite } from "../src/judge/buildCalibrationSuite";
 import { resolveEvalHome, runDir } from "../src/evalHome";
+import { buildCalibrationSuite } from "../src/judge/buildCalibrationSuite";
 
 // ── Argument parsing ──────────────────────────────────────────────────────────
 

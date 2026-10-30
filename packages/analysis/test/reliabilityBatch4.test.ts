@@ -58,11 +58,22 @@ describe("external-unused needs the external to reach the victim (round 3 W1f, 4
     expect(externalUnusedEvents({ ...base, canReachVictim: () => true })).toHaveLength(1);
     expect(externalUnusedEvents(base)).toHaveLength(1);
   });
+  // fact3 D12 (20e0f243 5:57): Guardian Spirit "free to cast 2.2 s" while
+  // the priest could not pay for it, then pressed it into a refusal
+  it("time the owner could not pay for the external is not free; a refused press is no held one", () => {
+    // unaffordable 87–90.5: the largest free gap left is 90.5–91 (0.5 s)
+    expect(externalUnusedEvents({ ...base, unaffordable: () => [{ atSeconds: 87, durationSeconds: 3.5 }] })).toEqual([]);
+    // pressed and refused inside the window
+    expect(externalUnusedEvents({ ...base, attempted: () => true })).toEqual([]);
+    // control: affordable all along, never pressed — as before
+    expect(externalUnusedEvents({ ...base, unaffordable: () => [], attempted: () => false })).toHaveLength(1);
+  });
 });
 
-import { getTopDamageSourcesInWindow, playerKillingBlow } from "../src/context/timelineHelpers";
-import { formatMitigationAuditLine } from "../src/context/matchTimelineSections";
 import { CombatUnitReaction, LogEvent as LE } from "@gladlog/parser-compat";
+
+import { formatMitigationAuditLine } from "../src/context/matchTimelineSections";
+import { getTopDamageSourcesInWindow, playerKillingBlow } from "../src/context/timelineHelpers";
 
 describe("death block (round 3 N13)", () => {
   const dmg = (ms: number, src: string, srcName: string, spellId: string, spellName: string, eff: number, overkill?: number) => ({
@@ -125,7 +136,15 @@ describe("[BURST ANSWERED] credits an answer that reached the pressured unit thr
   });
 });
 
-import { buildAuraIntervals, dropAuraRebroadcasts } from "../src/utils/auraIntervals";
+import {
+  AURA_BREAK_TO_REMOVED_MS,
+  AURA_REBROADCAST_GAP_MS,
+  auraBreaksBeforeRemoved,
+  buildAuraIntervals,
+  dropAuraRebroadcasts,
+  dropSupersededAuraBreaks,
+  supersededAuraBreaks,
+} from "../src/utils/auraIntervals";
 
 describe("aura re-broadcasts are one aura (rounds 2–3 W2e / N6)", () => {
   const ev = (event: string, spellId: string, ts: number, src = "s", dest = "d") =>
@@ -140,6 +159,54 @@ describe("aura re-broadcasts are one aura (rounds 2–3 W2e / N6)", () => {
     const out = dropAuraRebroadcasts(evs);
     expect(out).toHaveLength(2);
   });
+  it("FT-T08:REMOVED → APPLIED 隔 1 ms(跨毫秒边界的同一次重播)也是同一个光环;隔 2 ms 不是", () => {
+    // f4da82c5: one Sleep Walk cast, REMOVED 10.1853 / APPLIED 10.1863.
+    const oneMs = [
+      ev("SPELL_AURA_APPLIED", "360806", 9_964),
+      ev("SPELL_AURA_REMOVED", "360806", 10_185),
+      ev("SPELL_AURA_APPLIED", "360806", 10_186),
+      ev("SPELL_AURA_REMOVED", "360806", 10_571),
+    ];
+    expect(dropAuraRebroadcasts(oneMs).map((e: any) => e.timestamp)).toEqual([9_964, 10_571]);
+    const unit = { id: "d", auraEvents: oneMs } as never;
+    const iv = buildAuraIntervals(unit, { startTime: 0, endTime: 60_000 }).filter((i) => i.spellId === "360806");
+    expect(iv.map((i) => [i.fromS, i.toS])).toEqual([[9.964, 10.571]]);
+
+    const twoMs = [
+      ev("SPELL_AURA_APPLIED", "8680", 1_000),
+      ev("SPELL_AURA_REMOVED", "8680", 5_000),
+      ev("SPELL_AURA_APPLIED", "8680", 5_002),
+      ev("SPELL_AURA_REMOVED", "8680", 9_000),
+    ];
+    expect(dropAuraRebroadcasts(twoMs)).toHaveLength(4);
+    expect(AURA_REBROADCAST_GAP_MS).toBe(1);
+  });
+  it("FT-T08:更早的 REMOVED 不会和后来的 APPLIED 配成重播;APPLIED 在 REMOVED 之前 1 ms 也不是", () => {
+    const stale = [
+      ev("SPELL_AURA_APPLIED", "360806", 1_000),
+      ev("SPELL_AURA_REMOVED", "360806", 2_000),
+      ev("SPELL_AURA_APPLIED", "360806", 8_000),
+      ev("SPELL_AURA_REMOVED", "360806", 9_000),
+    ];
+    expect(dropAuraRebroadcasts(stale)).toHaveLength(4);
+    // log order REMOVED@5_001 then APPLIED@5_000 (a timestamp stepping back): not a re-broadcast
+    const backwards = [
+      ev("SPELL_AURA_APPLIED", "360806", 1_000),
+      ev("SPELL_AURA_REMOVED", "360806", 5_001),
+      ev("SPELL_AURA_APPLIED", "360806", 5_000),
+    ];
+    expect(dropAuraRebroadcasts(backwards)).toHaveLength(3);
+    // …and that REMOVED stays pending: the APPLIED after it, at its own ms, is its other half
+    // (codex post-hoc review of step 1 — the stepped-back APPLIED used to throw the pending REMOVED away)
+    const backwardsThenPair = [
+      ev("SPELL_AURA_APPLIED", "360806", 1_000),
+      ev("SPELL_AURA_REMOVED", "360806", 5_001),
+      ev("SPELL_AURA_APPLIED", "360806", 5_000),
+      ev("SPELL_AURA_APPLIED", "360806", 5_001),
+      ev("SPELL_AURA_REMOVED", "360806", 9_000),
+    ];
+    expect(dropAuraRebroadcasts(backwardsThenPair).map((e: any) => e.timestamp)).toEqual([1_000, 5_000, 9_000]);
+  });
   it("a second APPLIED inside the duration with no recast (leaving stealth) keeps one interval", () => {
     const unit = {
       id: "d",
@@ -150,5 +217,67 @@ describe("aura re-broadcasts are one aura (rounds 2–3 W2e / N6)", () => {
     expect(iv).toHaveLength(1);
     expect(iv[0]!.fromS).toBe(10);
     expect(iv[0]!.toS).toBe(22);
+  });
+});
+
+describe("FT-T08 step 2 — an aura ends at its REMOVED; a BROKEN line before it is not the end", () => {
+  const ev = (event: string, spellId: string, ts: number, src = "s", dest = "d") =>
+    ({ logLine: { event, timestamp: ts, parameters: [] }, timestamp: ts, spellId, spellName: spellId, srcUnitId: src, srcUnitName: src, destUnitId: dest, destUnitName: dest }) as never;
+
+  it("Frost Nova:每次受击一条 BROKEN_SPELL,定身到 REMOVED 才结束", () => {
+    // f4da82c5's shape: APPLIED, BROKEN_SPELL rows from the breakers, REMOVED ~0.5 s after the first.
+    const evs = [
+      ev("SPELL_AURA_APPLIED", "122", 10_000, "mage"),
+      ev("SPELL_AURA_BROKEN_SPELL", "122", 10_640, "breaker1"),
+      ev("SPELL_AURA_BROKEN_SPELL", "122", 10_960, "breaker2"),
+      ev("SPELL_AURA_REMOVED", "122", 11_210, "mage"),
+    ];
+    expect([...supersededAuraBreaks(evs)]).toEqual([evs[1], evs[2]]);
+    expect(dropSupersededAuraBreaks(evs)).toEqual([evs[0], evs[3]]);
+    const iv = buildAuraIntervals({ id: "d", auraEvents: evs } as never, { startTime: 0, endTime: 60_000 }).filter((i) => i.spellId === "122");
+    expect(iv.map((i) => [i.fromS, i.toS, i.inferredEnd])).toEqual([[10, 11.21, false]]);
+  });
+
+  it("每条 REMOVED 自己带着它取代的 BROKEN 行;下一次施加的 REMOVED 不继承上一次的", () => {
+    const evs = [
+      ev("SPELL_AURA_APPLIED", "8122", 10_000, "priest"),
+      ev("SPELL_AURA_BROKEN_SPELL", "8122", 12_000, "breaker"),
+      ev("SPELL_AURA_REMOVED", "8122", 12_003, "priest"),
+      // a second application that simply ran out
+      ev("SPELL_AURA_APPLIED", "8122", 40_000, "priest"),
+      ev("SPELL_AURA_REMOVED", "8122", 44_000, "priest"),
+    ];
+    expect(auraBreaksBeforeRemoved(evs, evs[2]!)).toEqual([evs[1]]);
+    expect(auraBreaksBeforeRemoved(evs, evs[4]!)).toEqual([]);
+  });
+
+  it("BROKEN 之后没有 REMOVED(日志丢了那一行):BROKEN 仍是结束", () => {
+    const evs = [
+      ev("SPELL_AURA_APPLIED", "118", 10_000),
+      ev("SPELL_AURA_BROKEN_SPELL", "118", 12_000, "breaker"),
+      ev("SPELL_AURA_APPLIED", "118", 30_000),
+      ev("SPELL_AURA_REMOVED", "118", 36_000),
+    ];
+    expect(supersededAuraBreaks(evs).size).toBe(0);
+    const iv = buildAuraIntervals({ id: "d", auraEvents: evs } as never, { startTime: 0, endTime: 60_000 }).filter((i) => i.spellId === "118");
+    expect(iv.map((i) => [i.fromS, i.toS])).toEqual([
+      [10, 12],
+      [30, 36],
+    ]);
+  });
+
+  it("REMOVED 来得太晚(超过窗口)就不是这次 BROKEN 的那一行;别的单位、别的法术互不相干", () => {
+    const late = [
+      ev("SPELL_AURA_APPLIED", "118", 10_000),
+      ev("SPELL_AURA_BROKEN_SPELL", "118", 12_000, "breaker"),
+      ev("SPELL_AURA_REMOVED", "118", 12_000 + AURA_BREAK_TO_REMOVED_MS + 1),
+    ];
+    expect(supersededAuraBreaks(late).size).toBe(0);
+    const other = [
+      ev("SPELL_AURA_BROKEN_SPELL", "118", 12_000, "breaker", "d1"),
+      ev("SPELL_AURA_REMOVED", "118", 12_001, "s", "d2"),
+      ev("SPELL_AURA_REMOVED", "122", 12_001, "s", "d1"),
+    ];
+    expect(supersededAuraBreaks(other).size).toBe(0);
   });
 });

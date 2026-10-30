@@ -2,6 +2,7 @@ import { claimChecker, interpolate } from "../compare/claimChecker";
 import { ATTEMPTED_GUARD_TYPES, LEGACY_TOPIC_TYPES } from "./candidateFindings";
 import { causalLint } from "./causalLint";
 import { normalizeFindingCategory } from "./findingCategories";
+import { citableEvents, eventIdSetKey } from "./findingsCount";
 import { hindsightViolations } from "./hindsightLint";
 import { rosterClassViolations } from "./rosterLint";
 import { repairSpellNameZh } from "./spellNameZhLint";
@@ -15,6 +16,10 @@ export const SEVERITY_RANK: Record<string, number> = {
   low: 2,
 };
 const RANK = SEVERITY_RANK;
+
+/** Bracket / format terms (1v1, 2v2, 3v3) — never a fabricated stat, so the
+ * raw-digit rule exempts them. Shared with selfReview.ts's numeric rule. */
+export const BRACKET_TERM = /\b\d+v\d+\b/gi;
 
 /**
  * Intent-guard severity downgrade (BACKLOG #26 Task 2, 意图守护): a finding
@@ -53,7 +58,9 @@ export function auditFindings(
   candidates: CandidateEvent[],
   options: AuditOptions = {},
 ): AuditResult {
-  const byId = new Map(candidates.map((c) => [c.id, c]));
+  // One entry per distinct menu id — the same map the prompt's requested
+  // count is taken from (findingsCount.ts).
+  const byId = citableEvents(candidates);
   // Diversity cap bookkeeping (2026-08-11): carried alongside each survivor
   // through the gate layers below so the post-loop cap (see after the loop)
   // can tell, without re-resolving eventIds, whether a finding belongs to the
@@ -63,8 +70,23 @@ export function auditFindings(
   const survived: { finding: Finding; raw: RawFinding; isLegacy: boolean }[] =
     [];
   const dropped: AuditResult["dropped"] = [];
+  // Repeat bookkeeping (L07 c): the cited-event set of every finding kept so
+  // far, in the model's own order, with that finding's title for the reason.
+  const keptEventSets = new Map<string, string>();
 
   for (const f of raw) {
+    // Layer 0: shape. Same untrusted-JSON rule as eventIds below: a finding
+    // whose title or explanation is missing / not a string is dropped, not
+    // dereferenced — 2026-09-30 headlessAnalyze run: one such finding threw
+    // "Cannot read properties of undefined (reading 'replace')" out of the
+    // prose check and failed the whole analysis (1 of 7 runs).
+    if (typeof f.title !== "string" || typeof f.explanation !== "string") {
+      dropped.push({
+        finding: f,
+        reason: "schema: missing / non-string title or explanation",
+      });
+      continue;
+    }
     // Layer 1: grounding — the finding must anchor to >=1 event, and every
     // eventId must resolve. (Empty eventIds is unanchored → drop.)
     // The model's JSON is untrusted input: a finding that omits `eventIds`
@@ -160,7 +182,7 @@ export function auditFindings(
     // digit rule (agy review F3).
     const prose = f.explanation
       .replace(/\{\{\s*[\w.]+\s*\}\}/g, " ")
-      .replace(/\b\d+v\d+\b/gi, " ");
+      .replace(BRACKET_TERM, " ");
     if (/\d/.test(prose)) {
       dropped.push({
         finding: f,
@@ -216,6 +238,28 @@ export function auditFindings(
         continue;
       }
     }
+    // Layer 7: repeats (L07 c, user ruling 2026-10-11). A finding that cites
+    // exactly the same set of events as an EARLIER kept finding of this reply
+    // is dropped: of the 195 findings in the 53 stored Opus 5.5 outputs, 17
+    // (in 15 outputs) were such repeats — a menu of two events answered with
+    // four findings, the extra ones mostly another topic from the match
+    // context hung on an event id already used. The first one stays; a
+    // subset or a superset is another finding (a chain that adds an event is
+    // not a repeat). Last of the per-finding layers on purpose: only a
+    // finding that would otherwise be shown can make a later one a repeat, so
+    // a repeat never takes the place of the only clean finding on its events
+    // and this layer cannot empty a reply. It runs before the severity sort
+    // and the diversity cap below, so a repeat does not spend a legacy slot.
+    const eventSet = eventIdSetKey(ids);
+    const earlier = keptEventSets.get(eventSet);
+    if (earlier !== undefined) {
+      dropped.push({
+        finding: f,
+        reason: `repeat: cites the same event ids as an earlier finding ("${earlier}")`,
+      });
+      continue;
+    }
+    keptEventSets.set(eventSet, f.title);
     // Diversity cap classification: ANY referenced candidate whose type is in
     // the legacy group is enough to count the whole finding as legacy — from
     // the strict/severe side (a chain finding pairing a legacy event with a

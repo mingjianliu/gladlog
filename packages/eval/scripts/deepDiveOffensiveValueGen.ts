@@ -8,22 +8,22 @@
 //     proving the judge's ruler is sane AND that offense is no worse than
 //     survival.
 // The judge scores blind; means are compared after unblinding.
-import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "fs";
-import { join } from "path";
-import { GladLogParser, type GladMatch } from "@gladlog/parser";
-import { toLegacyMatch, CombatUnitReaction } from "@gladlog/parser-compat";
 import {
-  extractCandidateFindings,
-  isHealerSpec,
   buildDeepDivePack,
-  buildOffensiveDeepDivePack,
   buildDeepDivePrompt,
+  buildOffensiveDeepDivePack,
+  ensureAnalysisData,
+  extractCandidateFindings,
+  type Finding,
   hasCoachableSignal,
   hasOffensiveCoachableSignal,
+  isHealerSpec,
   specToString,
-  type Finding,
-  ensureAnalysisData,
 } from "@gladlog/analysis";
+import { GladLogParser, type GladMatch } from "@gladlog/parser";
+import { CombatUnitReaction,toLegacyMatch } from "@gladlog/parser-compat";
+import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "fs";
+import { join } from "path";
 
 // Prompt builders read the background-loaded talent / spell-name tables
 // (data/ensure.ts contract) — without this the first combats are degraded.

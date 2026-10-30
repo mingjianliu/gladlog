@@ -1,42 +1,43 @@
-import { describe, it, expect } from "vitest";
-import {
-  emitRotPressureEntries,
-  emitDmgSpikeEntries,
-  emitManaMarkerEntries,
-  emitFriendlyDeathEntries,
-  emitEnemyDeathEntries,
-  formatMitigationAuditLine,
-  formatDecisiveCounterfactualLine,
-  MITIGATION_AUDIT_INDEPENDENT_NOTE,
-} from "../src/context/matchTimelineSections";
-import { buildMatchTimeline } from "../src/context/matchTimeline";
 import {
   CombatUnitClass,
+  CombatUnitPowerType,
   CombatUnitReaction,
   CombatUnitSpec,
-  CombatUnitPowerType,
-  LogEvent,
   ICombatUnit,
+  LogEvent,
 } from "@gladlog/parser-compat";
+import { describe, expect,it } from "vitest";
+
+import { buildMatchTimeline } from "../src/context/matchTimeline";
 import {
-  makeUnit,
-  makeAdvancedAction,
-  makeAuraEvent,
-} from "./ported/testHelpers";
+  emitDmgSpikeEntries,
+  emitEnemyDeathEntries,
+  emitFriendlyDeathEntries,
+  emitManaMarkerEntries,
+  emitRotPressureEntries,
+  formatDecisiveCounterfactualLine,
+  formatMitigationAuditLine,
+  MITIGATION_AUDIT_INDEPENDENT_NOTE,
+} from "../src/context/matchTimelineSections";
 import { DMG_SPIKE_THRESHOLD } from "../src/context/timelineHelpers";
+import { IPlayerCCTrinketSummary } from "../src/utils/ccTrinketAnalysis";
 import {
-  specToString,
   IMajorCooldownInfo,
+  specToString,
   USABLE_WHILE_CC_SPELL_IDS,
 } from "../src/utils/cooldowns";
-import { fmtTime } from "../src/utils/renderGrid";
-import { IPlayerCCTrinketSummary } from "../src/utils/ccTrinketAnalysis";
 import {
   COUNTERFACTUAL_WINDOW_S,
   DECISIVE_MARGIN_PCT,
   ICounterfactualHit,
   IMitigationAuditRow,
 } from "../src/utils/counterfactual";
+import { fmtTime } from "../src/utils/renderGrid";
+import {
+  makeAdvancedAction,
+  makeAuraEvent,
+  makeUnit,
+} from "./ported/testHelpers";
 
 describe("context.timelineSections.test.ts", () => {
   // ── 1. emitRotPressureEntries ──────────────────────────────────────────────
@@ -1031,11 +1032,11 @@ describe("context.timelineSections.test.ts", () => {
       const lines = entries[0][1];
       expect(lines).toHaveLength(4);
       expect(lines[0]).toBe(
-        "0:15  [DEATH]  p-Player1 (Restoration Druid — friendly) (PvP Trinket available) [Lethal]",
+        "0:15  [DEATH]  p-Player1 (Restoration Druid — friendly) (PvP Trinket available; no breakable CC in the last 10 s) [Lethal]",
       );
       expect(lines[1]).toEqual({ placeholder: "snap-15" });
       expect(lines[2]).toBe(
-        "               HP: 100% at T-15s → 90% at T-10s → 70% at T-5s → 50% at T-3s → 30% at T-2s → 10% at T-1s → dead",
+        "               HP (T = 0:15, the death line's second): 100% at T-15s → 90% at T-10s → 70% at T-5s → 50% at T-3s → 30% at T-2s → 10% at T-1s → dead",
       );
       expect(lines[3]).toBe(
         "               Top damage in final 10s: Enemy1 — Touch of Karma (300k)",
@@ -1323,7 +1324,7 @@ describe("context.timelineSections.test.ts", () => {
           seenArgs.push([victimName, atSeconds]);
           return {
             auditLines: [
-              "Mitigation audit: Barkskin blocked ~75k (≈8% max HP) over 6.0s active",
+              "Mitigation audit: Barkskin blocked ~75k (≈8% max HP) over 6.0s active in the final 10s",
             ],
             decisiveLines: [
               `Counterfactual (arithmetic, single-factor): Pain Suppression from Priest1 would have cut window damage below lethal (margin >${DECISIVE_MARGIN_PCT}% max HP)`,
@@ -1342,7 +1343,7 @@ describe("context.timelineSections.test.ts", () => {
       // [DEATH] + snapshot placeholder (no HP trajectory/top damage: empty advancedActions/damageIn) + 2 appended lines
       expect(lines).toHaveLength(4);
       expect(lines[2]).toBe(
-        "               Mitigation audit: Barkskin blocked ~75k (≈8% max HP) over 6.0s active",
+        "               Mitigation audit: Barkskin blocked ~75k (≈8% max HP) over 6.0s active in the final 10s",
       );
       expect(lines[3]).toBe(
         `               Counterfactual (arithmetic, single-factor): Pain Suppression from Priest1 would have cut window damage below lethal (margin >${DECISIVE_MARGIN_PCT}% max HP)`,
@@ -1430,6 +1431,21 @@ describe("context.timelineSections.test.ts", () => {
 
   // ── formatMitigationAuditLine / formatDecisiveCounterfactualLine (#17b Task4) ──
   describe("formatMitigationAuditLine / formatDecisiveCounterfactualLine", () => {
+    it("deferred(FT-T02b):写「deferred」而不是「blocked」,并说明是推迟不是挡掉", () => {
+      expect(
+        formatMitigationAuditLine({
+          spellId: "357170",
+          spellName: "Time Dilation",
+          kind: "deferred",
+          activeOverlapS: 6,
+          deferredAmount: 171_114,
+          deferredPctMaxHp: 18.8,
+        }),
+      ).toBe(
+        "Mitigation audit: Time Dilation held back ~171k (≈18.8% max HP) over 6.0s active in the final 10s — it lands later as the unit's own damage",
+      );
+    });
+
     it("arith 行:数字与措辞匹配 brief 示例(Barkskin ~75k / ≈8% / 6.0s)", () => {
       const row: IMitigationAuditRow = {
         spellId: "22812",
@@ -1440,7 +1456,7 @@ describe("context.timelineSections.test.ts", () => {
         blockedPctMaxHp: 8,
       };
       expect(formatMitigationAuditLine(row)).toBe(
-        "Mitigation audit: Barkskin blocked ~75k (≈8% max HP) over 6.0s active",
+        "Mitigation audit: Barkskin blocked ~75k (≈8% max HP) over 6.0s active in the final 10s",
       );
     });
 
@@ -1453,7 +1469,7 @@ describe("context.timelineSections.test.ts", () => {
         blockedAmount: 75000,
       };
       expect(formatMitigationAuditLine(row)).toBe(
-        "Mitigation audit: Barkskin blocked ~75k over 6.0s active",
+        "Mitigation audit: Barkskin blocked ~75k over 6.0s active in the final 10s",
       );
     });
 
@@ -1466,7 +1482,7 @@ describe("context.timelineSections.test.ts", () => {
         damageTakenDuringImmunity: 0,
       };
       expect(formatMitigationAuditLine(row)).toBe(
-        "Mitigation audit: Divine Shield immunity covered 8.0s (still took ~0k during it — dmg the immunity did not block)",
+        "Mitigation audit: Divine Shield immunity covered 8.0s in the final 10s (still took ~0k during it — dmg the immunity did not block)",
       );
     });
 
@@ -1478,7 +1494,7 @@ describe("context.timelineSections.test.ts", () => {
         activeOverlapS: 3.2,
       };
       expect(formatMitigationAuditLine(row)).toBe(
-        "Mitigation audit: Blessing of Sacrifice active 3.2s (mechanic — redirect/reflect, not modeled in the arithmetic)",
+        "Mitigation audit: Blessing of Sacrifice active 3.2s in the final 10s (not in the mitigation table — not modeled in the arithmetic)",
       );
     });
 
@@ -1618,7 +1634,7 @@ describe("context.timelineSections.test.ts", () => {
       expect(lines[1]).toBe("0:15  [ROSTER]  enemy e-Enemy1 removed (dead)");
       expect(lines[2]).toEqual({ placeholder: "snap-15" });
       expect(lines[3]).toBe(
-        "               HP: 100% at T-15s → 90% at T-10s → 70% at T-5s → 50% at T-3s → 30% at T-2s → 10% at T-1s → dead",
+        "               HP (T = 0:15, the death line's second): 100% at T-15s → 90% at T-10s → 70% at T-5s → 50% at T-3s → 30% at T-2s → 10% at T-1s → dead",
       );
       expect(lines[4]).toBe(
         "               Top damage in final 10s: Player1 — Touch of Karma (300k)",
@@ -1887,7 +1903,66 @@ describe("buildMatchTimeline — [UNNECESSARY] defensive-timing annotation (17c)
     expect(fearLine).toBeDefined();
     expect(fearLine).toContain("trinket: ON CD (45s left)");
     expect(fearLine).toContain(
-      "Tremor Totem from Shaman1 ended this CC after 0s (cut short — it had not expired)",
+      "Tremor Totem from Shaman1 ended this CC after <1s (cut short — it had not expired)",
     );
+  });
+
+  it("FT-T09 [CC ON TEAM]: a CC the round ended on says so; a sub-second one prints <1s", () => {
+    const owner = makeUnit("PlayerYou", {
+      name: "PlayerYou",
+      spec: CombatUnitSpec.Warrior_Fury,
+    });
+    const cc = (atSeconds: number, durationSeconds: number, over = {}) =>
+      ({
+        spellId: "46968",
+        spellName: "Shockwave",
+        atSeconds,
+        durationSeconds,
+        sourceName: "EnemyWarrior",
+        sourceSpec: "Arms Warrior",
+        trinketState: "passive_trinket",
+        distanceYards: null,
+        losBlocked: null,
+        ...over,
+      }) as any;
+    const timelineText = buildMatchTimeline({
+      ...baseParams,
+      owner,
+      ownerSpec: "Fury Warrior",
+      ownerCDs: [],
+      teammateCDs: [],
+      friends: [owner],
+      allUnits: [owner],
+      ccTrinketSummaries: [
+        {
+          playerName: "PlayerYou",
+          playerSpec: "Fury Warrior",
+          trinketType: "Relentless",
+          trinketCooldownSeconds: 120,
+          ccInstances: [
+            cc(10, 0.2),
+            cc(30, 3.4),
+            // 28c39eb1 round 3: landed 0.4 s before the round-ending death, removed 2.7 s in
+            cc(55, 0.4, { stillOnAtRoundEnd: true }),
+          ],
+          trinketUseTimes: [],
+          missedTrinketWindows: [],
+          rootInstances: [],
+          disarmInstances: [],
+          interruptInstances: [],
+          ccAvoidedInstances: [],
+        },
+      ] as IPlayerCCTrinketSummary[],
+    });
+    const shock = timelineText
+      .split("\n")
+      .filter((l) => l.includes("[CC ON TEAM]") && l.includes("Shockwave"));
+    expect(shock).toHaveLength(3);
+    expect(shock[0]).toMatch(/\(by EnemyWarrior\) \| <1s$/);
+    expect(shock[1]).toMatch(/\(by EnemyWarrior\) \| 3s$/);
+    expect(shock[2]).toMatch(
+      /\(by EnemyWarrior\) \| still on them when the round ended, <1s in$/,
+    );
+    expect(timelineText).not.toMatch(/\| 0s/);
   });
 });

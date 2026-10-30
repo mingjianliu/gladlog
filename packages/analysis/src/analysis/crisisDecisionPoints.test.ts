@@ -1,12 +1,15 @@
 import {
   CombatUnitClass,
   CombatUnitReaction,
+  CombatUnitType,
   LogEvent,
 } from "@gladlog/parser-compat";
 import { describe, expect, it } from "vitest";
 
 // the [STATE] renderer's own HP sampler — imported, not re-derived
 import { gridHpPct } from "../utils/cooldowns";
+import { incomingPressureBySchool } from "../utils/incomingPressure";
+import { coversCrisisSchool } from "./candidates/cooldownTiming";
 import {
   CRISIS_HP_PCT,
   CRISIS_MIN_DMG2S,
@@ -38,7 +41,29 @@ const hp = (
   advancedActorPositionX: x,
   advancedActorPositionY: y,
 });
+/** Production damage rows carry their log line; the school split
+ * (`incomingPressureBySchool`) keys on its timestamp. */
+const withLogLine = (rows: any[]) =>
+  rows.map((d) => ({
+    logLine: { timestamp: d.timestamp, parameters: [] },
+    ...d,
+  }));
 function unit(over: Record<string, unknown> = {}) {
+  const u: any = unitFields(over);
+  u.damageIn = withLogLine(u.damageIn ?? []);
+  // a heal row with no log line is a direct heal in these fixtures (the
+  // product reads an unknown row kind as no fresh heal — codex 20-F15-23)
+  u.healIn = (u.healIn ?? []).map((h: any) =>
+    h.logLine
+      ? h
+      : {
+          ...h,
+          logLine: { event: LogEvent.SPELL_HEAL, timestamp: h.timestamp },
+        },
+  );
+  return u;
+}
+function unitFields(over: Record<string, unknown> = {}) {
   return {
     id: "H",
     name: "Heals-R",
@@ -126,6 +151,283 @@ describe("crisisDecisionPoints", () => {
     expect(p.responses.carriedHeal).toBe(false);
     expect(p.selfHealPct).toBe(20);
     expect(p.responded).toBe(true);
+    // crisis-external F-C1: the value the test above compares, and its presses
+    expect(p.selfHealFreshPct).toBe(20);
+    expect(p.selfHealCasts).toBe(1);
+  });
+
+  // crisis-external F-C1 (ruling A48 = C): bd790c92 3:48 — two self-heals
+  // pressed in the window landed 4 % of max HP into 79 % dampening. Not a
+  // response (unchanged), but the point says what was pressed.
+  it("two small self-heals in the window: not a selfHeal response, selfHealFreshPct / selfHealCasts report them; a HoT already ticking is in neither", () => {
+    const o = unit({
+      spellCastEvents: [
+        { timestamp: T0 + 1800, spellId: "774" },
+        { timestamp: T0 + 3200, spellId: "18562" },
+      ],
+      healIn: [
+        {
+          timestamp: T0 + 2200,
+          srcUnitId: "H",
+          spellId: "774",
+          amount: 2,
+          effectiveAmount: 2,
+        },
+        {
+          timestamp: T0 + 3300,
+          srcUnitId: "H",
+          spellId: "18562",
+          amount: 2,
+          effectiveAmount: 2,
+        },
+        // a HoT pressed long before the window keeps ticking
+        {
+          timestamp: T0 + 2600,
+          srcUnitId: "H",
+          spellId: "33763",
+          amount: 3,
+          effectiveAmount: 3,
+        },
+      ],
+    });
+    const p = crisisDecisionPoints(o, combat(o))[0]!;
+    expect(p.responses.selfHeal).toBe(false);
+    expect(p.selfHealFreshPct).toBe(4);
+    expect(p.selfHealCasts).toBe(2);
+    expect(p.selfHealPct).toBe(7); // all own healing, the carried HoT included
+  });
+
+  // codex post-hoc 60-POSTHOC-03 U3: a HoT tick belongs to the HoT's latest
+  // (re)application on the owner, not to any cast of the spell id
+  it("a self-HoT from before the window, ticking while the owner casts the same HoT on an ally, is no fresh self-heal; recast on self it is", () => {
+    const tick = {
+      timestamp: T0 + 2200,
+      srcUnitId: "H",
+      spellId: "774",
+      amount: 5,
+      effectiveAmount: 5,
+      logLine: { event: LogEvent.SPELL_PERIODIC_HEAL, timestamp: T0 + 2200 },
+    };
+    const selfRejuv = (t: number, event: LogEvent) => ({
+      timestamp: T0 + t,
+      spellId: "774",
+      srcUnitId: "H",
+      destUnitId: "H",
+      logLine: { event, timestamp: T0 + t },
+    });
+    const onAlly = unit({
+      spellCastEvents: [
+        { timestamp: T0 + 1800, spellId: "774", destUnitId: "A" },
+      ],
+      auraEvents: [selfRejuv(-5000, LogEvent.SPELL_AURA_APPLIED)],
+      healIn: [tick],
+    });
+    const a = crisisDecisionPoints(onAlly, combat(onAlly))[0]!;
+    expect(a.selfHealFreshPct).toBe(0);
+    expect(a.selfHealCasts).toBe(0);
+    expect(a.selfHealPct).toBe(5);
+    const onSelf = unit({
+      spellCastEvents: [
+        { timestamp: T0 + 1800, spellId: "774", destUnitId: "H" },
+      ],
+      auraEvents: [
+        selfRejuv(-5000, LogEvent.SPELL_AURA_APPLIED),
+        selfRejuv(1800, LogEvent.SPELL_AURA_REFRESH),
+      ],
+      healIn: [tick],
+    });
+    const b = crisisDecisionPoints(onSelf, combat(onSelf))[0]!;
+    expect(b.selfHealFreshPct).toBe(5);
+    expect(b.selfHealCasts).toBe(1);
+  });
+
+  // codex 20-F15-20: one press association for the fresh amount and the count
+  describe("codex 20-F15-20 — a heal belongs to its own press", () => {
+    const heal = (
+      t: number,
+      id: string,
+      a: number,
+      periodic: boolean,
+      line?: number,
+    ) => ({
+      timestamp: T0 + t,
+      srcUnitId: "H",
+      spellId: id,
+      amount: a,
+      effectiveAmount: a,
+      logLine: {
+        event: periodic ? LogEvent.SPELL_PERIODIC_HEAL : LogEvent.SPELL_HEAL,
+        timestamp: T0 + t,
+        ...(line === undefined ? {} : { lineIndex: line }),
+      },
+    });
+    const cast = (t: number, id: string, dest: string, line?: number) => ({
+      timestamp: T0 + t,
+      spellId: id,
+      destUnitId: dest,
+      logLine: {
+        timestamp: T0 + t,
+        ...(line === undefined ? {} : { lineIndex: line }),
+      },
+    });
+    const selfAura = (t: number, event: LogEvent, line?: number) => ({
+      timestamp: T0 + t,
+      spellId: "774",
+      srcUnitId: "H",
+      destUnitId: "H",
+      logLine: {
+        event,
+        timestamp: T0 + t,
+        ...(line === undefined ? {} : { lineIndex: line }),
+      },
+    });
+    it("a HoT pressed before the window ticks inside it while a later press of it goes on an ally: not fresh", () => {
+      const o = unit({
+        // crisis at 2 s → window from 0.5 s: pressed 10 ms before it, landed
+        // 10 ms inside it (codex's repro)
+        spellCastEvents: [cast(490, "774", "H"), cast(3200, "774", "A")],
+        auraEvents: [selfAura(510, LogEvent.SPELL_AURA_APPLIED)],
+        healIn: [heal(2200, "774", 20, true)],
+      });
+      const p = crisisDecisionPoints(o, combat(o))[0]!;
+      expect(p.selfHealFreshPct).toBe(0);
+      expect(p.selfHealCasts).toBe(0);
+      expect(p.responses.selfHeal).toBe(false);
+    });
+    it("a refresh logged after a tick in its ms does not claim that tick", () => {
+      const o = unit({
+        spellCastEvents: [
+          cast(-5000, "774", "H", 10),
+          cast(2200, "774", "H", 101),
+        ],
+        auraEvents: [
+          selfAura(-4990, LogEvent.SPELL_AURA_APPLIED, 11),
+          selfAura(2200, LogEvent.SPELL_AURA_REFRESH, 102),
+        ],
+        healIn: [heal(2200, "774", 20, true, 100)],
+      });
+      const p = crisisDecisionPoints(o, combat(o))[0]!;
+      expect(p.selfHealFreshPct).toBe(0);
+      expect(p.selfHealCasts).toBe(0);
+    });
+    it("103-5 2:31: an instant self-heal's aura and heal rows logged before its CAST_SUCCESS in the same ms are that press's", () => {
+      const o = unit({
+        spellCastEvents: [cast(2100, "156322", "H", 403)],
+        auraEvents: [
+          {
+            ...selfAura(2100, LogEvent.SPELL_AURA_APPLIED, 401),
+            spellId: "156322",
+          },
+        ],
+        healIn: [heal(2100, "156322", 20, false, 402)],
+      });
+      const p = crisisDecisionPoints(o, combat(o))[0]!;
+      expect(p.selfHealFreshPct).toBe(20);
+      expect(p.selfHealCasts).toBe(1);
+    });
+    it("two presses of one spell in one ms keep their own heals (codex 20-F15-23)", () => {
+      const o = unit({
+        spellCastEvents: [
+          cast(2100, "2061", "H", 101),
+          cast(2100, "2061", "H", 103),
+        ],
+        healIn: [
+          heal(2100, "2061", 2, false, 100),
+          heal(2100, "2061", 2, false, 102),
+        ],
+      });
+      const p = crisisDecisionPoints(o, combat(o))[0]!;
+      expect(p.selfHealFreshPct).toBe(4);
+      expect(p.selfHealCasts).toBe(2);
+    });
+    it("… also with each press logged before its heal (codex 20-F15-27)", () => {
+      const o = unit({
+        spellCastEvents: [
+          cast(2100, "2061", "H", 100),
+          cast(2100, "2061", "H", 102),
+        ],
+        healIn: [
+          heal(2100, "2061", 2, false, 101),
+          heal(2100, "2061", 2, false, 103),
+        ],
+      });
+      const p = crisisDecisionPoints(o, combat(o))[0]!;
+      expect(p.selfHealFreshPct).toBe(4);
+      expect(p.selfHealCasts).toBe(2);
+    });
+    it("… also with a third press of the spell on an ally in that ms (codex 20-F15-34)", () => {
+      const o = unit({
+        spellCastEvents: [
+          cast(2100, "2061", "H", 101),
+          cast(2100, "2061", "H", 103),
+          cast(2100, "2061", "A", 104),
+        ],
+        healIn: [
+          heal(2100, "2061", 2, false, 100),
+          heal(2100, "2061", 2, false, 102),
+        ],
+      });
+      const p = crisisDecisionPoints(o, combat(o))[0]!;
+      expect(p.selfHealFreshPct).toBe(4);
+      expect(p.selfHealCasts).toBe(2);
+    });
+    it("an ally's cast of the HoT in the ms of the owner's own application is not its press (codex 20-F15-27, no line indexes)", () => {
+      const o = unit({
+        spellCastEvents: [cast(490, "774", "H"), cast(510, "774", "A")],
+        auraEvents: [selfAura(510, LogEvent.SPELL_AURA_APPLIED)],
+        healIn: [heal(2200, "774", 20, true)],
+      });
+      const p = crisisDecisionPoints(o, combat(o))[0]!;
+      expect(p.selfHealFreshPct).toBe(0);
+      expect(p.selfHealCasts).toBe(0);
+    });
+    it("a heal row whose kind is unknown is no fresh heal (codex 20-F15-23)", () => {
+      const o = unitFields({
+        spellCastEvents: [cast(1800, "774", "A")],
+        healIn: [
+          {
+            timestamp: T0 + 2200,
+            srcUnitId: "H",
+            spellId: "774",
+            amount: 20,
+            effectiveAmount: 20,
+          },
+        ],
+      }) as any;
+      o.damageIn = withLogLine(o.damageIn);
+      const p = crisisDecisionPoints(o, combat(o))[0]!;
+      expect(p.selfHealFreshPct).toBe(0);
+      expect(p.selfHealCasts).toBe(0);
+    });
+    it("a direct heal belongs to the press before it, not to a later press of the spell on an ally", () => {
+      const o = unit({
+        spellCastEvents: [cast(2100, "2061", "H"), cast(3600, "2061", "A")],
+        healIn: [heal(2100, "2061", 20, false)],
+      });
+      const p = crisisDecisionPoints(o, combat(o))[0]!;
+      expect(p.selfHealFreshPct).toBe(20);
+      expect(p.selfHealCasts).toBe(1);
+    });
+  });
+
+  // The rendered % sits on a line that names the 15 % bar, so it is floored:
+  // 14.6 % is not a response and must not read 15.
+  it("selfHealFreshPct is floored to the bar's grid: 14.6 % of max HP reads 14, and is not a selfHeal response", () => {
+    const o = unit({
+      spellCastEvents: [{ timestamp: T0 + 1800, spellId: "18562" }],
+      healIn: [
+        {
+          timestamp: T0 + 2200,
+          srcUnitId: "H",
+          spellId: "18562",
+          amount: 14.6,
+          effectiveAmount: 14.6,
+        },
+      ],
+    });
+    const p = crisisDecisionPoints(o, combat(o))[0]!;
+    expect(p.responses.selfHeal).toBe(false);
+    expect(p.selfHealFreshPct).toBe(14);
   });
 
   // BACKLOG #43 (user ruling 2026-09-14/17): a low-HP talent proc answers the
@@ -278,6 +580,64 @@ describe("crisisDecisionPoints", () => {
     ).toBe(true);
   });
 
+  it("B5 (user 2026-10-24): a control answers only when its target, or its pet, was hitting the owner", () => {
+    const scream = (dest: string) =>
+      unit({
+        spellCastEvents: [
+          { timestamp: T0 + 2800, spellId: "8122", destUnitId: dest },
+        ],
+      });
+    // E2 hit nobody: no answer
+    const o = scream("E2");
+    expect(
+      crisisDecisionPoints(o, combat(o, [enemy(), enemy("E2")]))[0]!.responses
+        .control,
+    ).toBe(false);
+    // E2's pet did the hitting: an answer
+    const p = scream("E2");
+    p.damageIn = p.damageIn.map((d: any) => ({ ...d, srcUnitId: "P2" }));
+    const pet = { ...enemy("P2"), info: undefined, ownerId: "E2" };
+    expect(
+      crisisDecisionPoints(p, combat(p, [enemy("E2"), pet]))[0]!.responses
+        .control,
+    ).toBe(true);
+  });
+
+  it("B6 (user 2026-10-24): a shift back into Tree of Life with Incarnation up answers nothing", () => {
+    const tree = (reshift: boolean) =>
+      unit({
+        spellCastEvents: [
+          {
+            timestamp: T0 + 2800,
+            spellId: "33891",
+            logLine: { event: LogEvent.SPELL_CAST_SUCCESS, timestamp: T0 + 2800 },
+          },
+        ],
+        auraEvents: [
+          {
+            timestamp: reshift ? T0 + 100 : T0 + 2800,
+            spellId: "117679",
+            srcUnitId: "H",
+            destUnitId: "H",
+            logLine: {
+              event: LogEvent.SPELL_AURA_APPLIED,
+              timestamp: reshift ? T0 + 100 : T0 + 2800,
+            },
+          },
+        ],
+      });
+    const fresh = tree(false);
+    expect(
+      crisisDecisionPoints(fresh, combat(fresh, [enemy()]))[0]!.responses
+        .protective,
+    ).toBe(true);
+    const back = tree(true);
+    expect(
+      crisisDecisionPoints(back, combat(back, [enemy()]))[0]!.responses
+        .protective,
+    ).toBe(false);
+  });
+
   it("peel: a teammate casts CC on the owner's attacker (does not count as responded)", () => {
     const mate = {
       ...enemy("M1"),
@@ -403,9 +763,43 @@ describe("crisisDecisionPoints", () => {
         },
       ],
     });
-    const p = crisisDecisionPoints(o, combat(o))[0]!;
+    const p = crisisDecisionPoints(o, combat(o, [enemy()]))[0]!;
     expect(p.inCC).toBe(true);
     expect(p.feasible).toBe(false);
+  });
+
+  it("fact4 D28: a CC landing just after the crossing that holds the owner for the response window → couldActInWindow=false, feasible=false (4184d534 1:54: Void Nova 79 ms after t, 4 s)", () => {
+    const at = (ms: number, event: string) => ({
+      timestamp: T0 + ms,
+      spellId: "408",
+      srcUnitId: "E1",
+      destUnitId: "H",
+      auraType: "DEBUFF",
+      logLine: { event },
+    });
+    // crossing second = 2 s; the stun lands 79 ms in and runs past t + 3 s
+    const o = unit({
+      auraEvents: [at(2079, "SPELL_AURA_APPLIED"), at(6096, "SPELL_AURA_REMOVED")],
+    });
+    const p = crisisDecisionPoints(o, combat(o, [enemy()]))[0]!;
+    expect(p.tSec).toBe(2);
+    expect(p.inCC).toBe(false); // free at the instant…
+    expect(p.couldActInWindow).toBe(false); // …0.08 s of the 3 s window
+    expect(p.freeInWindowS).toBe(0.1);
+    expect(p.feasible).toBe(false);
+    // the same stun from a FRIEND is no cannot-cast interval (the predicate
+    // cd-hoarded reads counts enemy sources only)
+    const f = unit({
+      auraEvents: [at(2079, "SPELL_AURA_APPLIED"), at(6096, "SPELL_AURA_REMOVED")],
+    });
+    expect(crisisDecisionPoints(f, combat(f))[0]!.feasible).toBe(true);
+    // a stun of 1.5 s inside the window leaves the 1 s REACTION_WINDOW_S free
+    const short = unit({
+      auraEvents: [at(2079, "SPELL_AURA_APPLIED"), at(3579, "SPELL_AURA_REMOVED")],
+    });
+    const ps = crisisDecisionPoints(short, combat(short, [enemy()]))[0]!;
+    expect(ps.couldActInWindow).toBe(true);
+    expect(ps.feasible).toBe(true);
   });
 
   it("C1: official DR silence category locks the school — Strangulate 47476 and Garrote-Silence 1330 (only 3/61 of the official category was covered by the hand `interrupts` set before this fix)", () => {
@@ -486,10 +880,15 @@ describe("crisisDecisionPoints", () => {
   it("gate 2: SPELL_INTERRUPT on the owner ≤1.5s before the crossing → lockedOut", () => {
     const o = unit({
       actionIn: [
-        { timestamp: T0 + 1000, logLine: { event: LogEvent.SPELL_INTERRUPT } },
+        {
+          timestamp: T0 + 1000,
+          srcUnitId: "E1",
+          spellId: "2139", // Counterspell
+          logLine: { event: LogEvent.SPELL_INTERRUPT },
+        },
       ],
     });
-    const p = crisisDecisionPoints(o, combat(o))[0]!;
+    const p = crisisDecisionPoints(o, combat(o, [enemy()]))[0]!;
     expect(p.lockedOut).toBe(true);
     expect(p.feasible).toBe(false);
   });
@@ -503,12 +902,43 @@ describe("crisisDecisionPoints", () => {
     expect(p.feasible).toBe(false);
   });
 
-  it("enemyBurst: an enemy offensive major CD cast within 8s before the crossing", () => {
-    const e = enemy("E1", {
-      spellCastEvents: [{ timestamp: T0 + 500, spellId: "31884" }],
-    }); // Avenging Wrath
+  it("enemyBurst: an enemy offensive major CD RUNNING at the crossing (fact4 D9: `burstCastSpan`, not a press in the last 8 s)", () => {
+    const cast = (ms: number) => ({
+      timestamp: T0 + ms,
+      spellId: "31884", // Avenging Wrath
+      spellName: "Avenging Wrath",
+      srcUnitId: "E1",
+      destUnitId: "E1",
+      logLine: { event: LogEvent.SPELL_CAST_SUCCESS, timestamp: T0 + ms },
+    });
+    const aura = (ms: number, event: string) => ({
+      timestamp: T0 + ms,
+      spellId: "31884",
+      spellName: "Avenging Wrath",
+      srcUnitId: "E1",
+      srcUnitName: "E1",
+      destUnitId: "E1",
+      destUnitName: "E1",
+      auraType: "BUFF",
+      logLine: { event, timestamp: T0 + ms },
+    });
     const o = unit();
+    // pressed 0.5 s, its aura up to 30 s: running at the 2 s crossing
+    const e = enemy("E1", {
+      spellCastEvents: [cast(500)],
+      auraEvents: [aura(500, "SPELL_AURA_APPLIED"), aura(30_000, "SPELL_AURA_REMOVED")],
+    });
     expect(crisisDecisionPoints(o, combat(o, [e]))[0]!.enemyBurst).toBe(true);
+    // pressed 0.5 s, its aura gone at 1.5 s: inside the old 8 s lookback,
+    // no longer running
+    const ended = enemy("E1", {
+      type: CombatUnitType.Player, // the effect-end index reads player units
+      spellCastEvents: [cast(500)],
+      auraEvents: [aura(500, "SPELL_AURA_APPLIED"), aura(1_500, "SPELL_AURA_REMOVED")],
+    });
+    expect(crisisDecisionPoints(o, combat(o, [ended]))[0]!.enemyBurst).toBe(
+      false,
+    );
   });
 
   it("no advanced HP samples → no points", () => {
@@ -828,8 +1258,10 @@ describe("crisisDecisionPoints — role='dps' gate 3 (spec §1d, GH #59)", () =>
  * change to either side can only move both together.
  */
 describe("crisisDecisionPoints — render-grid anchoring", () => {
-  // triage 2026-09-29 H3 (95127ab4 @23: sample 23.093, dmg2s 12 % → 33 %)
-  it("dmg2s is the damage in the 2 s before the HP reading, which can sit after the whole second", () => {
+  // triage 2026-09-29 H3 (95127ab4 @23: sample 23.093, dmg2s 12 % → 33 %).
+  // fact2 (2026-10-20): the tick reads the last sample at or before its
+  // second, so the 2.09 s reading is the 3 s tick's — the crossing is at 3
+  it("dmg2s is the damage in the 2 s before the HP reading the tick took", () => {
     const o = unit({
       advancedActions: [hp(0, 100), hp(1000, 70), hp(2090, 38), hp(4000, 35)],
       damageIn: [
@@ -849,7 +1281,7 @@ describe("crisisDecisionPoints — render-grid anchoring", () => {
       ],
     });
     const p = crisisDecisionPoints(o, combat(o, [enemy()]))[0]!;
-    expect(p.tSec).toBe(2);
+    expect(p.tSec).toBe(3);
     expect(p.hpPct).toBe(38);
     expect(p.dmg2s).toBe(0.32);
   });
@@ -875,8 +1307,12 @@ describe("crisisDecisionPoints — render-grid anchoring", () => {
       ],
     });
     const p = crisisDecisionPoints(o, combat(o, [enemy()]))[0]!;
-    expect(p.tSec).toBeLessThan(4);
-    expect(p.dmg2s).toBeLessThan(0.32);
+    // fact2: the 0.8 s dip is gone by the 0.9 s reading before any tick;
+    // the 4 s tick has no reading within the radius before it and takes the
+    // 4.7 s one; the 4.6 s hit sits inside that anchor second, so it is the
+    // reading's prior damage — and nothing after the second is
+    expect(p.tSec).toBe(4);
+    expect(p.dmg2s).toBe(0.32);
   });
 
   it("a crossing sampled between two whole seconds reports the grid second, not the raw instant", () => {
@@ -884,10 +1320,11 @@ describe("crisisDecisionPoints — render-grid anchoring", () => {
       advancedActions: [hp(0, 100), hp(1000, 70), hp(2400, 38), hp(3000, 35)],
     });
     const p = crisisDecisionPoints(o, combat(o, [enemy()]))[0]!;
-    // raw crossing is at 2.4s; the rendered second is 2
-    expect(p.tSec).toBe(2);
+    // raw crossing is at 2.4s; the first tick that reads it is 3 (fact2:
+    // a tick reads the last sample at or before its second)
+    expect(p.tSec).toBe(3);
     expect(Number.isInteger(p.tSec)).toBe(true);
-    expect(p.tMs).toBe(T0 + 2000);
+    expect(p.tMs).toBe(T0 + 3000);
   });
 
   it("hpPct IS the [STATE] tick's own reading at tSec (same sampler, same instant)", () => {
@@ -922,5 +1359,112 @@ describe("crisisDecisionPoints — render-grid anchoring", () => {
       ],
     });
     expect(crisisDecisionPoints(o, combat(o, [enemy()]))).toEqual([]);
+  });
+});
+
+describe("dmg2sBySchool — what was aimed at the unit, shields included (user ruling U-KA2)", () => {
+  const row = (
+    t: number,
+    amount: number,
+    school: string,
+    extra: Record<string, unknown> = {},
+  ) => ({
+    timestamp: T0 + t,
+    srcUnitId: "E1",
+    amount: -amount,
+    effectiveAmount: -amount,
+    spellSchoolId: school,
+    ...extra,
+  });
+  // a SPELL_ABSORBED in the spell form: parameters[10] is the attack's school
+  const absorbed = (t: number, amount: number, school: string) => {
+    const parameters: unknown[] = [];
+    parameters[10] = school;
+    return {
+      timestamp: T0 + t,
+      logLine: { timestamp: T0 + t, parameters },
+      absorbedAmount: amount,
+      spellId: "17", // Power Word: Shield
+      attackSpellId: "116",
+      attackerId: "E1",
+    };
+  };
+  const BOP = "1022"; // physical only
+
+  it("an absorbed hit is in the split and not in dmg2s; the split is the shared predicate's", () => {
+    const o = unit({
+      damageIn: [row(1500, 30, "0x1")],
+      absorbsIn: [absorbed(1800, 60, "0x10")],
+    });
+    const c = combat(o, [enemy()]);
+    const p = crisisDecisionPoints(o, c)[0]!;
+    expect(p.dmg2s).toBe(0.3); // landed damage only, as the reference tables read it
+    expect(p.dmg2sBySchool).toEqual({ "1": 30, "16": 60 });
+    // window of the point: (t − 2 s, t], t = the HP reading at 2.000
+    expect(p.dmg2sBySchool).toEqual(
+      incomingPressureBySchool(
+        o as never,
+        T0,
+        T0 + 2000,
+        undefined,
+        undefined,
+        true,
+      ),
+    );
+  });
+
+  it("a shield that ate the magic no longer makes the crisis look physical to a physical-only save", () => {
+    const landedOnly = unit({ damageIn: [row(1500, 30, "0x1")] });
+    expect(
+      coversCrisisSchool(
+        BOP,
+        crisisDecisionPoints(landedOnly, combat(landedOnly, [enemy()]))[0]!,
+      ),
+    ).toBe(true);
+    const shielded = unit({
+      damageIn: [row(1500, 30, "0x1")],
+      absorbsIn: [absorbed(1800, 60, "0x10")],
+    });
+    // 30 physical of 90 aimed at the unit: Blessing of Protection covers a third
+    expect(
+      coversCrisisSchool(
+        BOP,
+        crisisDecisionPoints(shielded, combat(shielded, [enemy()]))[0]!,
+      ),
+    ).toBe(false);
+  });
+
+  it("the look-back is half-open like dmg2s: a row exactly DMG_WINDOW_MS before the reading is in neither", () => {
+    const o = unit({
+      damageIn: [row(0, 40, "0x10"), row(1500, 30, "0x1")],
+      absorbsIn: [absorbed(0, 50, "0x10")],
+    });
+    const p = crisisDecisionPoints(o, combat(o, [enemy()]))[0]!;
+    expect(p.dmg2s).toBe(0.3);
+    expect(p.dmg2sBySchool).toEqual({ "1": 30 });
+  });
+
+  it("a teammate's Void Leech is not a school the enemy was throwing (dmg2s keeps it: landed HP loss)", () => {
+    const mate = {
+      id: "M",
+      name: "Mate-R",
+      reaction: CombatUnitReaction.Friendly,
+      info: { teamId: "0" },
+      spellCastEvents: [],
+      advancedActions: [],
+    };
+    const o = unit({
+      damageIn: [
+        row(1500, 30, "0x1"),
+        row(1600, 20, "0x20", {
+          spellId: "451963",
+          srcUnitId: "M",
+          srcUnitFlags: 0x511,
+        }),
+      ],
+    });
+    const p = crisisDecisionPoints(o, combat(o, [enemy(), mate]))[0]!;
+    expect(p.dmg2s).toBe(0.5);
+    expect(p.dmg2sBySchool).toEqual({ "1": 30 });
   });
 });

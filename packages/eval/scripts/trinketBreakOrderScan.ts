@@ -14,6 +14,9 @@
  *
  *   npx tsx packages/eval/scripts/trinketBreakOrderScan.ts --manifest <m> [--every 30]
  */
+import { readFileSync } from "node:fs";
+import { gunzipSync } from "node:zlib";
+
 import { ensureAnalysisData } from "@gladlog/analysis";
 import { ccSpellIds } from "@gladlog/analysis/src/data/spellTags";
 import { GladLogParser } from "@gladlog/parser";
@@ -22,8 +25,6 @@ import {
   toLegacyMatch,
   toLegacyShuffle,
 } from "@gladlog/parser-compat";
-import { readFileSync } from "node:fs";
-import { gunzipSync } from "node:zlib";
 
 import { arg, argOf } from "./lib/cli";
 

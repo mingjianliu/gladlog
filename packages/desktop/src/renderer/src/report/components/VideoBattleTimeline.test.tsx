@@ -3,8 +3,8 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { loadRealMatchFixture } from "../../../../../test/fixtures/loadFixture";
-import type { ReportSource } from "../derive/types";
 import { deriveTimeline } from "../derive/timeline";
+import type { ReportSource } from "../derive/types";
 import { deriveVulnBands } from "../derive/vulnWindows";
 import { VideoBattleTimeline } from "./VideoBattleTimeline";
 import { VideoTab } from "./VideoTab";

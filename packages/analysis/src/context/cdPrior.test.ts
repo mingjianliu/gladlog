@@ -17,6 +17,8 @@ const ep = (over: Partial<CdPriorHoldEpisode> = {}): CdPriorHoldEpisode => ({
   hpAtCrossPct: 52,
   minHpPct: 44,
   minSec: 55,
+  troughHpPct: 44,
+  troughSec: 55,
   minUnitName: "Mate-Realm-US",
   minUnitIsOwner: false,
   endSec: 55,
@@ -72,7 +74,7 @@ describe("formatCdPriorLines", () => {
   it("locked seconds inside the dip are said out loud", () => {
     const [e] = formatCdPriorLines([ep({ ownerLockedSecs: 3 })], cohort);
     expect(e!.line).toContain(
-      "ready and unspent (you could not cast for 3s of that dip) — context",
+      "ready and unspent (you could not cast it for 3s of that dip) — context",
     );
   });
 

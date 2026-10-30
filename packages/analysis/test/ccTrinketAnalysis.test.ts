@@ -1,19 +1,35 @@
 import {
+  CombatUnitClass,
   CombatUnitReaction,
   CombatUnitSpec,
   LogEvent,
 } from "@gladlog/parser-compat";
 import { beforeAll, describe, expect, it } from "vitest";
 
+import {
+  AURA_KEYED_BREAK_RACIALS,
+  breakRemovesCc,
+  CC_BREAK_CAST_IDS,
+  ccBreakAbilityName,
+  CLASS_CC_BREAK_ABILITIES,
+} from "../src/data/ccBreakAbilities";
 import { ensureAnalysisData } from "../src/data/ensure";
+import {
+  BREAK_RACIAL_SPELL_IDS,
+  RACIAL_ABILITIES,
+} from "../src/data/racialAbilities";
+import { ccFullDurationSeconds } from "../src/data/spellEffectData";
 import {
   analyzePlayerCCAndTrinket,
   bindBreakToWindow,
+  breakAbilityPresses,
+  castEndedCcWindow,
   findBrokenCC,
   ICCBreakableWindow,
   ICCInstance,
   TRINKET_BREAK_TOLERANCE_MS,
 } from "../src/utils/ccTrinketAnalysis";
+import { mechanicsBrokenBy } from "../src/utils/spellMechanics";
 import {
   makeAuraEvent,
   makeDamageEvent,
@@ -36,8 +52,13 @@ describe("bindBreakToWindow and findBrokenCC", () => {
 
     it("binds a break cast up to 250 ms before the apply and up to 50 ms after the removal (trinketBreakOrderScan 2026-09-26)", () => {
       const window: ICCBreakableWindow = { applyMs: 10_000, removeMs: 16_000 };
-      // 200ms before apply
-      expect(bindBreakToWindow([window], 9_800)).toBe(window);
+      // 200ms before apply — a control logged after the press that the press
+      // ended (its REMOVED beside the APPLIED)
+      const lagged: ICCBreakableWindow = { applyMs: 10_000, removeMs: 10_000 };
+      expect(bindBreakToWindow([lagged], 9_800)).toBe(lagged);
+      // fact2 605: one that stayed on long after landing was not ended by it
+      // (148-6 0:39: a Maim landing 105 ms after the Medallion ran 4.5 s)
+      expect(bindBreakToWindow([window], 9_800)).toBeUndefined();
       // 40ms after remove — the trinket's own removal lands within ±25 ms
       expect(bindBreakToWindow([window], 16_040)).toBe(window);
       // 200ms after remove — the CC had already ended some other way (dece)
@@ -66,6 +87,101 @@ describe("bindBreakToWindow and findBrokenCC", () => {
       expect(bound).toBe(longWindow);
     });
 
+    // Triage 2026-09-29, enemy-def F-E15: with official ends on the windows,
+    // the break belongs to the CC with the most official time left.
+    it("binds to the window with the most official time left, not the longest-active one (bd790c92 1:38)", () => {
+      // Leg Sweep 94.901 (4 s official, 0.09 s left at the 98.813 trinket);
+      // Cyclone 97.976 (5 s official, 4.16 s left). Both removed by the trinket.
+      const legSweep: ICCBreakableWindow = {
+        applyMs: 94_901,
+        removeMs: 98_812,
+        officialEndMs: 98_901,
+      };
+      const cyclone: ICCBreakableWindow = {
+        applyMs: 97_976,
+        removeMs: 98_812,
+        officialEndMs: 102_976,
+      };
+      expect(bindBreakToWindow([legSweep, cyclone], 98_813)).toBe(cyclone);
+      expect(bindBreakToWindow([cyclone, legSweep], 98_813)).toBe(cyclone);
+    });
+
+    it("the DR-shortened length decides: a 50 % DR Psychic Scream (3 s) loses to a full Dragon's Breath with more left", () => {
+      // Dragon's Breath 22.0 (4 s at Full DR → ends 26.0); Psychic Scream 22.5
+      // at 50 % DR (6 s × 0.5 → ends 25.5). Trinket at 24.4: 1.6 s vs 1.1 s left.
+      const breath: ICCBreakableWindow = {
+        applyMs: 22_000,
+        removeMs: 24_400,
+        officialEndMs: 26_000,
+      };
+      const scream: ICCBreakableWindow = {
+        applyMs: 22_500,
+        removeMs: 24_400,
+        officialEndMs: 25_500,
+      };
+      expect(bindBreakToWindow([breath, scream], 24_400)).toBe(breath);
+    });
+
+    it("a CC with no official duration counts as 0 s left: it wins only when no known-length CC had time left (24b6a229 0:43)", () => {
+      // Maim scales with combo points → no official end; Cyclone had 4.55 s left.
+      const maim: ICCBreakableWindow = { applyMs: 38_799, removeMs: 43_803 };
+      const cyclone: ICCBreakableWindow = {
+        applyMs: 43_358,
+        removeMs: 43_803,
+        officialEndMs: 48_358,
+      };
+      expect(bindBreakToWindow([maim, cyclone], 43_803)).toBe(cyclone);
+      // a known-length CC that had already run out ties at 0 → the longer
+      // observed window wins, the pre-F-E15 rule
+      const expired: ICCBreakableWindow = {
+        applyMs: 41_000,
+        removeMs: 43_803,
+        officialEndMs: 43_000,
+      };
+      expect(bindBreakToWindow([maim, expired], 43_803)).toBe(maim);
+    });
+
+    // 7a24f4b3 0:59: the trinket ends a Kidney Shot and a Cheap Shot lands
+    // 173 ms later. The Cheap Shot is "active at the cast" (the 250 ms
+    // tolerance) with all of its official time left — and is not what the
+    // trinket broke.
+    it("a CC that ended at the cast beats one that landed just after it, whatever its time left", () => {
+      const kidney: ICCBreakableWindow = {
+        applyMs: 56_000,
+        removeMs: 59_000,
+        officialEndMs: 62_000,
+      };
+      const cheapShot: ICCBreakableWindow = {
+        applyMs: 59_173,
+        removeMs: 61_335,
+        officialEndMs: 63_173,
+      };
+      expect(bindBreakToWindow([kidney, cheapShot], 59_000)).toBe(kidney);
+      expect(bindBreakToWindow([cheapShot, kidney], 59_000)).toBe(kidney);
+      expect(castEndedCcWindow(kidney, 59_000)).toBe(true);
+      expect(castEndedCcWindow(cheapShot, 59_000)).toBe(false);
+      // nothing ended at the cast, and the Cheap Shot landed after the press
+      // and stayed on 2.2 s: the press ended neither (fact2 605)
+      expect(bindBreakToWindow([cheapShot], 59_000)).toBeUndefined();
+    });
+
+    // Review finding: the 10–50 ms band. A Maim removed 30 ms before the press
+    // is inside the binder's own after-removal tolerance but outside the
+    // 10 ms "ended at the cast" lag, and has no official length (0 s left).
+    // It was on the unit; the Cheap Shot that lands 100 ms AFTER the press
+    // was not — and must not take the label on its 4 s of official time.
+    it("a CC that was on the unit at the cast beats one that landed after it, even with no time left", () => {
+      const maim: ICCBreakableWindow = { applyMs: 55_000, removeMs: 58_970 };
+      const lateCheapShot: ICCBreakableWindow = {
+        applyMs: 59_100,
+        removeMs: 61_300,
+        officialEndMs: 63_100,
+      };
+      expect(castEndedCcWindow(maim, 59_000)).toBe(false);
+      expect(bindBreakToWindow([maim, lateCheapShot], 59_000)).toBe(maim);
+      expect(bindBreakToWindow([lateCheapShot, maim], 59_000)).toBe(maim);
+    });
+
     it("returns undefined when cast is outside ±250ms tolerance", () => {
       const window: ICCBreakableWindow = { applyMs: 10_000, removeMs: 16_000 };
       // Well before apply
@@ -74,17 +190,22 @@ describe("bindBreakToWindow and findBrokenCC", () => {
       expect(bindBreakToWindow([window], 17_000)).toBeUndefined();
     });
 
-    it("matches exactly at the 250 ms before-apply boundary (not 251), and at 50 ms after the removal (not 51)", () => {
+    it("matches exactly at the 250 ms before-apply boundary (not 251), and at 100 ms after the removal (not 101)", () => {
       const window: ICCBreakableWindow = { applyMs: 10_000, removeMs: 16_000 };
+      // the before-apply side: a control logged after the press and removed
+      // in its own ms (one that stays on is no press's — fact2 605)
+      const lagged: ICCBreakableWindow = { applyMs: 10_000, removeMs: 10_000 };
 
       // Exactly at -250ms (9_750ms) -> matches
-      expect(bindBreakToWindow([window], 9_750)).toBe(window);
+      expect(bindBreakToWindow([lagged], 9_750)).toBe(lagged);
       // At -251ms (9_749ms) -> undefined
-      expect(bindBreakToWindow([window], 9_749)).toBeUndefined();
+      expect(bindBreakToWindow([lagged], 9_749)).toBeUndefined();
 
-      // After the removal the bound is 50 ms (TRINKET_BREAK_AFTER_REMOVAL_MS)
-      expect(bindBreakToWindow([window], 16_050)).toBe(window);
-      expect(bindBreakToWindow([window], 16_051)).toBeUndefined();
+      // After the removal the bound is 100 ms (TRINKET_BREAK_AFTER_REMOVAL_MS
+      // = CAST_ROW_LAG_MAX_MS; fact3 D23 / D39: 72 / 85 ms lags)
+      expect(bindBreakToWindow([window], 16_085)).toBe(window);
+      expect(bindBreakToWindow([window], 16_100)).toBe(window);
+      expect(bindBreakToWindow([window], 16_101)).toBeUndefined();
     });
   });
 
@@ -128,6 +249,23 @@ describe("bindBreakToWindow and findBrokenCC", () => {
         matchStartMs + 20_000,
       );
       expect(none).toBeUndefined();
+    });
+
+    it("with official durations on the instances, names the CC with the most time left (F-E15, 0777a8e0 0:51)", () => {
+      const matchStartMs = 1_000_000;
+      // Hammer of Justice 46.943 (5 s official → 0.13 s left at 51.814);
+      // Psychic Scream 49.679 (6 s official → 3.87 s left). The trinket ends both.
+      const hoj = {
+        ...makeCC(46.943, 4.868, "Hammer of Justice"),
+        expectedDurationSeconds: 5,
+      };
+      const scream = {
+        ...makeCC(49.679, 2.132, "Psychic Scream"),
+        expectedDurationSeconds: 6,
+      };
+      expect(
+        findBrokenCC([hoj, scream], matchStartMs, matchStartMs + 51_814),
+      ).toBe(scream);
     });
 
     it("picks the longest duration CC when multiple instances overlap at cast time", () => {
@@ -217,6 +355,9 @@ describe("analyzePlayerCCAndTrinket — structured data contract (N4)", () => {
     expect(result.ccInstances[0]).toEqual({
       atSeconds: 10,
       durationSeconds: 6,
+      // the official PvP length of Polymorph at Full DR (F-E15: what the
+      // break binder ranks "time left" by)
+      expectedDurationSeconds: ccFullDurationSeconds("118"),
       spellId: "118",
       spellName: "Polymorph",
       sourceName: "EnemyMage",
@@ -383,6 +524,8 @@ describe("analyzePlayerCCAndTrinket — structured data contract (N4)", () => {
     expect(result.ccAvoidedInstances).toHaveLength(1);
     expect(result.ccAvoidedInstances[0]).toEqual({
       atSeconds: 15.2,
+      // an instant control: read at its cast (R6 `controlHitInstant`)
+      castAtSeconds: 15.2,
       spellId: "118",
       spellName: "Polymorph",
       avoidanceSpellName: "Phase Shift",
@@ -428,6 +571,7 @@ describe("analyzePlayerCCAndTrinket — structured data contract (N4)", () => {
     expect(resNoSwitch.interruptInstances).toHaveLength(1);
     expect(resNoSwitch.interruptInstances[0]).toEqual({
       atSeconds: 10,
+      castStartS: null,
       kickSpellId: "1766",
       kickSpellName: "Kick",
       sourceName: "EnemyRogue",
@@ -438,12 +582,31 @@ describe("analyzePlayerCCAndTrinket — structured data contract (N4)", () => {
       lockoutDurationSeconds: 3,
       postKick: "idle",
       kickDepthPct: null,
+      castWindowS: null,
       channelS: null,
       kickersInRange: null,
+      kickImmunityEnded: null,
+      maxKickRangeYd: null,
+      maxKickRangeSlackYd: null,
+      maxKickRangeLateYd: null,
       nearestKickerDistYd: null,
+      nearestKickerName: null,
+      ownerImmobileBy: null,
+      ownerImmobileEndedIntoCastS: null,
+      sourceDistYd: null,
+      sourceDistSampleGapS: null,
+      nearestKickerSampleGapS: null,
+      kickLandedFromYd: null,
+      sourceGapCloser: null,
+      sourceKickReadyInS: null,
       firstActionDelayS: null,
+      lockEndedBySuccessS: null,
+      // agy 40-FT-94 #1: the lock readings run for an idle window too
+      wentOutInLockS: {},
+      kickSilenceS: null,
       switchDelayS: null,
       switchSpellName: null,
+      switchWasEmpowered: null,
       switchWasHardCast: null,
       ccInWindowS: 0,
     });
@@ -504,6 +667,920 @@ describe("analyzePlayerCCAndTrinket — structured data contract (N4)", () => {
       false,
     );
     expect(resInstantSwitch.interruptInstances[0].postKick).toBe("switched");
+  });
+
+  it("a hard cast that logs a companion SUCCESS first is the switch press (work order 2026-10-14b Part 2, user 10-14; 141470d0 Chrono Flames)", () => {
+    // Chrono Flames 431443: CAST_START +1.058 s, a Living Flame 361509
+    // SUCCESS 2 ms before its own SUCCESS at +1.881 s
+    const enemy = makeUnit("enemy-1", {
+      name: "EnemyRogue",
+      spec: CombatUnitSpec.Rogue_Subtlety,
+      reaction: CombatUnitReaction.Hostile,
+    });
+    const evoker = makeUnit("player-1", {
+      name: "PlayerEvoker",
+      spec: CombatUnitSpec.Evoker_Preservation,
+      reaction: CombatUnitReaction.Friendly,
+      actionIn: [
+        makeInterruptEvent(
+          "1766",
+          "Kick",
+          "2061",
+          "Flash Heal",
+          MATCH_START + 20_000,
+          "enemy-1",
+          "EnemyRogue",
+        ),
+      ],
+      castStartEvents: [
+        {
+          logLine: {
+            event: LogEvent.SPELL_CAST_START,
+            timestamp: MATCH_START + 21_058,
+            parameters: [],
+          },
+          spellId: "431443",
+        } as any,
+      ],
+      spellCastEvents: [
+        makeSpellCastEvent(
+          "361509",
+          MATCH_START + 21_879,
+          "player-1",
+          "PlayerEvoker",
+          "enemy-1",
+          "EnemyRogue",
+          0,
+          "Living Flame",
+        ),
+        makeSpellCastEvent(
+          "431443",
+          MATCH_START + 21_881,
+          "player-1",
+          "PlayerEvoker",
+          "enemy-1",
+          "EnemyRogue",
+          0,
+          "Chrono Flames",
+        ),
+      ],
+    });
+    const [k] = analyzePlayerCCAndTrinket(
+      evoker,
+      [enemy],
+      makeCombat(),
+    ).interruptInstances;
+    expect(k!.postKick).toBe("switched");
+    expect(k!.switchSpellName).toBe("Chrono Flames");
+    expect(k!.switchWasHardCast).toBe(true);
+    // the first cast after the kick is the same press, not the companion row
+    expect(k!.firstActionSpellName).toBe("Chrono Flames");
+    // dated when its bar began (work order 2026-10-14c #7), not at SUCCESS
+    expect(k!.switchDelayS).toBeCloseTo(1.058, 6);
+  });
+
+  it("agy 40-FT-86: an OFF-GCD instant 2 ms before a bar's SUCCESS is a press of its own, not its companion row", () => {
+    // Frost locked (Pain Suppression is Holy); Chrono Flames 431443: CAST_START +1.058 s, a Living Flame 361509
+    // SUCCESS 2 ms before its own SUCCESS at +1.881 s
+    const enemy = makeUnit("enemy-1", {
+      name: "EnemyRogue",
+      spec: CombatUnitSpec.Rogue_Subtlety,
+      reaction: CombatUnitReaction.Hostile,
+    });
+    const evoker = makeUnit("player-1", {
+      name: "PlayerEvoker",
+      spec: CombatUnitSpec.Evoker_Preservation,
+      reaction: CombatUnitReaction.Friendly,
+      actionIn: [
+        makeInterruptEvent(
+          "1766",
+          "Kick",
+          "116",
+          "Frostbolt",
+          MATCH_START + 20_000,
+          "enemy-1",
+          "EnemyRogue",
+        ),
+      ],
+      castStartEvents: [
+        {
+          logLine: {
+            event: LogEvent.SPELL_CAST_START,
+            timestamp: MATCH_START + 21_058,
+            parameters: [],
+          },
+          spellId: "431443",
+        } as any,
+      ],
+      spellCastEvents: [
+        makeSpellCastEvent(
+          "33206",
+          MATCH_START + 21_879,
+          "player-1",
+          "PlayerEvoker",
+          "enemy-1",
+          "EnemyRogue",
+          0,
+          "Pain Suppression",
+        ),
+        makeSpellCastEvent(
+          "431443",
+          MATCH_START + 21_881,
+          "player-1",
+          "PlayerEvoker",
+          "enemy-1",
+          "EnemyRogue",
+          0,
+          "Chrono Flames",
+        ),
+      ],
+    });
+    const [k] = analyzePlayerCCAndTrinket(
+      evoker,
+      [enemy],
+      makeCombat(),
+    ).interruptInstances;
+    expect(k!.postKick).toBe("switched");
+    expect(k!.switchSpellName).toBe("Pain Suppression");
+    expect(k!.firstActionSpellName).toBe("Pain Suppression");
+  });
+
+  // Triage 2026-09-29 kick-eaten F-K5a / F-K5b / F-K5d / F-K6d.
+  describe("kicker facts at the kicked cast's start", () => {
+    const CAST_START = MATCH_START + 18_500;
+    const KICK_AT = MATCH_START + 20_000;
+    const pos = (x: number, y: number) =>
+      [
+        {
+          timestamp: CAST_START,
+          advancedActorPositionX: x,
+          advancedActorPositionY: y,
+        },
+      ] as any;
+    const castStart = [
+      {
+        spellId: "116",
+        logLine: { event: LogEvent.SPELL_CAST_START, timestamp: CAST_START },
+      },
+    ] as any;
+    const aura = (
+      event: LogEvent,
+      spellId: string,
+      atMs: number,
+      src: string,
+      dest: string,
+    ) => ({
+      ...makeAuraEvent(event, spellId, atMs, src, dest),
+      spellName: spellId,
+    });
+    /** Owner hard-casting Frostbolt from 18.5 s, kicked at 20 s by the Rogue
+     * (5 yd away, Kick 5 yd); a Warrior with Pummel stands 2 yd away. */
+    const scene = (o: {
+      ownerAuras?: any[];
+      ownerActionIn?: any[];
+      rogueCasts?: any[];
+      warriorAuras?: any[];
+      warriorActionIn?: any[];
+      warriorCasts?: any[];
+      /** the second enemy as a Mage (Counterspell, a silenceable kick) */
+      secondIsMage?: boolean;
+      /** where the second enemy stands (default 2 yd away) */
+      secondPos?: [number, number];
+    }) => {
+      const owner = makeUnit("player-1", {
+        actionIn: [
+          makeInterruptEvent(
+            "1766",
+            "Kick",
+            "116",
+            "Frostbolt",
+            KICK_AT,
+            "enemy-1",
+            "Rogue",
+          ),
+          ...(o.ownerActionIn ?? []),
+        ],
+        castStartEvents: castStart,
+        advancedActions: pos(0, 0),
+        auraEvents: o.ownerAuras ?? [],
+      });
+      const rogue = makeUnit("enemy-1", {
+        name: "Rogue",
+        reaction: CombatUnitReaction.Hostile,
+        class: CombatUnitClass.Rogue,
+        spec: CombatUnitSpec.Rogue_Assassination,
+        advancedActions: pos(3, 4),
+        spellCastEvents: o.rogueCasts ?? [],
+      });
+      const warrior = makeUnit("enemy-2", {
+        name: "Warrior",
+        reaction: CombatUnitReaction.Hostile,
+        class: o.secondIsMage ? CombatUnitClass.Mage : CombatUnitClass.Warrior,
+        spec: o.secondIsMage
+          ? CombatUnitSpec.Mage_Frost
+          : CombatUnitSpec.Warrior_Arms,
+        advancedActions: pos(...(o.secondPos ?? [0, 2])),
+        auraEvents: o.warriorAuras ?? [],
+        actionIn: o.warriorActionIn ?? [],
+        spellCastEvents: o.warriorCasts ?? [],
+      });
+      return analyzePlayerCCAndTrinket(
+        owner,
+        [rogue, warrior],
+        makeCombat(),
+      ).interruptInstances.find((i) => i.atSeconds === 20)!;
+    };
+
+    it("the source's own distance is a fact of its own; the nearest ready kicker is named (F-K5a)", () => {
+      const k = scene({});
+      expect(k.sourceDistYd).toBe(5);
+      expect(k.nearestKickerDistYd).toBe(2);
+      expect(k.nearestKickerName).toBe("Warrior");
+      expect(k.kickersInRange).toBe(2);
+      expect(k.maxKickRangeYd).toBe(5);
+    });
+
+    it("a kicker stunned at cast start is neither counted nor the nearest (F-K5d, 3306e8ee @18.4)", () => {
+      const k = scene({
+        warriorAuras: [
+          aura(
+            LogEvent.SPELL_AURA_APPLIED,
+            "853",
+            MATCH_START + 18_000,
+            "friend-1",
+            "enemy-2",
+          ),
+          aura(
+            LogEvent.SPELL_AURA_REMOVED,
+            "853",
+            MATCH_START + 19_500,
+            "friend-1",
+            "enemy-2",
+          ),
+        ],
+      });
+      expect(k.kickersInRange).toBe(1);
+      expect(k.nearestKickerDistYd).toBe(5);
+      expect(k.nearestKickerName).toBe("Rogue");
+    });
+
+    it("a silence stops a silenceable kick only: a silenced Warrior still has Pummel, a silenced Mage has no Counterspell (6062daf2 @32.7)", () => {
+      const silence = [
+        aura(
+          LogEvent.SPELL_AURA_APPLIED,
+          "1330",
+          MATCH_START + 18_000,
+          "friend-1",
+          "enemy-2",
+        ),
+        aura(
+          LogEvent.SPELL_AURA_REMOVED,
+          "1330",
+          MATCH_START + 19_500,
+          "friend-1",
+          "enemy-2",
+        ),
+      ];
+      const melee = scene({ warriorAuras: silence });
+      expect(melee.kickersInRange).toBe(2);
+      expect(melee.nearestKickerName).toBe("Warrior");
+      const caster = scene({ warriorAuras: silence, secondIsMage: true });
+      expect(caster.kickersInRange).toBe(1);
+      expect(caster.nearestKickerName).toBe("Rogue");
+      // and unsilenced, the Mage counts
+      expect(scene({ secondIsMage: true }).kickersInRange).toBe(2);
+    });
+
+    it("a kicker under a school lockout is still a kicker — only auras count (codex fixture: fa5e6c66's Frost-locked Mage)", () => {
+      const k = scene({
+        warriorActionIn: [
+          {
+            ...makeInterruptEvent(
+              "2139",
+              "Counterspell",
+              "116",
+              "Frostbolt",
+              MATCH_START + 17_500,
+              "friend-1",
+              "Friend",
+            ),
+            destUnitId: "enemy-2",
+          },
+        ],
+      });
+      expect(k.kickersInRange).toBe(2);
+      expect(k.nearestKickerName).toBe("Warrior");
+    });
+
+    it("the source's kick still on cooldown at cast start: not a ready kicker, and `sourceKickReadyInS` says when it came back (F-K5b, 1bad0a5c @27.4)", () => {
+      // Kick (15 s) cast at 5 s → back at 20.0 s, the instant it landed
+      const k = scene({
+        rogueCasts: [
+          makeSpellCastEvent(
+            "1766",
+            MATCH_START + 5_000,
+            "player-1",
+            "Owner",
+            "enemy-1",
+            "Rogue",
+            0,
+            "Kick",
+          ),
+        ],
+      });
+      expect(k.sourceKickReadyInS).toBeCloseTo(1.5, 5);
+      expect(k.sourceDistYd).toBe(5); // the source's distance does not depend on readiness
+      expect(k.kickersInRange).toBe(1); // only the Warrior
+      expect(k.nearestKickerName).toBe("Warrior");
+    });
+
+    it("a modelled cooldown that would end after the kick landed is not claimed", () => {
+      // Kick cast at 10 s → the 15 s model says 25 s, but it landed at 20 s
+      const k = scene({
+        rogueCasts: [
+          makeSpellCastEvent(
+            "1766",
+            MATCH_START + 10_000,
+            "player-1",
+            "Owner",
+            "enemy-1",
+            "Rogue",
+            0,
+            "Kick",
+          ),
+        ],
+      });
+      expect(k.sourceKickReadyInS).toBeNull();
+    });
+
+    it("the owner rooted at cast start is immobile (F-K6d, 9c9d8601 @63.9)", () => {
+      const k = scene({
+        ownerAuras: [
+          aura(
+            LogEvent.SPELL_AURA_APPLIED,
+            "339",
+            MATCH_START + 17_000,
+            "enemy-1",
+            "player-1",
+          ),
+          aura(
+            LogEvent.SPELL_AURA_REMOVED,
+            "339",
+            MATCH_START + 19_000,
+            "enemy-1",
+            "player-1",
+          ),
+        ],
+      });
+      expect(k.ownerImmobileBy).toBe("Entangling Roots");
+    });
+
+    it("the owner's roots are the shared predicate (`rootIntervalsOf`): an Ice Nova or the 12.x Entangling Roots id holds like the old one (pre-review: this file's own root list lacks them)", () => {
+      for (const [id, name] of [
+        ["157997", "Ice Nova"],
+        ["1287975", "Entangling Roots"],
+      ]) {
+        const k = scene({
+          ownerAuras: [
+            aura(
+              LogEvent.SPELL_AURA_APPLIED,
+              id!,
+              MATCH_START + 17_000,
+              "enemy-1",
+              "player-1",
+            ),
+            aura(
+              LogEvent.SPELL_AURA_REMOVED,
+              id!,
+              MATCH_START + 19_500,
+              "enemy-1",
+              "player-1",
+            ),
+          ],
+        });
+        expect(k.ownerImmobileBy).toBe(name);
+      }
+    });
+
+    it("a kick-lockout aura on a kicker is not hard CC: a Warrior under Shambling Rush 91807 is still a kicker (pre-review)", () => {
+      const k = scene({
+        warriorAuras: [
+          aura(
+            LogEvent.SPELL_AURA_APPLIED,
+            "91807",
+            MATCH_START + 18_000,
+            "friend-1",
+            "enemy-2",
+          ),
+          aura(
+            LogEvent.SPELL_AURA_REMOVED,
+            "91807",
+            MATCH_START + 19_500,
+            "friend-1",
+            "enemy-2",
+          ),
+        ],
+      });
+      expect(k.kickersInRange).toBe(2);
+      expect(k.nearestKickerName).toBe("Warrior");
+    });
+
+    it("the source's gap-closer is read over the whole cast: a Shadowstep pressed between the cast's start and the Kick closes (pre-review)", () => {
+      const k = scene({
+        rogueCasts: [
+          makeSpellCastEvent(
+            "36554",
+            MATCH_START + 19_200,
+            "enemy-1",
+            "Rogue",
+            "player-1",
+            "Owner",
+            0,
+            "Shadowstep",
+          ),
+        ],
+      });
+      expect(k.sourceGapCloser).toMatchObject({
+        state: "used-during",
+        spellName: "Shadowstep",
+      });
+      expect(
+        k.sourceGapCloser?.state === "used-during"
+          ? k.sourceGapCloser.afterS
+          : NaN,
+      ).toBeCloseTo(0.7, 3);
+      // and nothing when the source cast no gap-closer this round
+      expect(scene({}).sourceGapCloser).toBeNull();
+    });
+
+    it("`maxKickRangeSlackYd` counts a second kicker just past its nominal range, `maxKickRangeYd` and `kickersInRange` do not (pre-review: condition 4 had no hitbox slack)", () => {
+      const past = scene({ secondIsMage: true, secondPos: [0, 41.5] });
+      expect(past.kickersInRange).toBe(1); // only the Rogue, at 5 yd
+      expect(past.maxKickRangeYd).toBe(5);
+      expect(past.maxKickRangeSlackYd).toBe(40);
+      const far = scene({ secondIsMage: true, secondPos: [0, 43] });
+      expect(far.maxKickRangeSlackYd).toBe(5);
+    });
+
+    it("`maxKickRangeLateYd`: another kicker whose kick came back between the cast's start and this kick is not 'ready at cast start', and the verdict still hears of it (Fable review)", () => {
+      const pummel = (atS: number) =>
+        makeSpellCastEvent(
+          "6552",
+          MATCH_START + atS * 1000,
+          "player-1",
+          "Owner",
+          "enemy-2",
+          "Warrior",
+          0,
+          "Pummel",
+        );
+      // Pummel (15 s) pressed at 4 s → back at 19 s; the cast ran 18.5 → 20
+      const back = scene({ warriorCasts: [pummel(4)] });
+      expect(back.kickersInRange).toBe(1); // the Rogue only
+      expect(back.nearestKickerName).toBe("Rogue");
+      expect(back.maxKickRangeLateYd).toBe(5);
+      // back only after the kick landed: not a kicker of this cast
+      expect(
+        scene({ warriorCasts: [pummel(6)] }).maxKickRangeLateYd,
+      ).toBeNull();
+      // back in time but beyond its range and the hitbox slack
+      expect(
+        scene({ warriorCasts: [pummel(4)], secondPos: [0, 9] })
+          .maxKickRangeLateYd,
+      ).toBeNull();
+      // ready at cast start: the cast-start facts carry it, not this one
+      expect(scene({}).maxKickRangeLateYd).toBeNull();
+      // stunned at cast start (18.5 s) but free when the Pummel came back
+      // (19 s): still a kicker of this cast
+      const stun = (fromS: number, toS: number) => [
+        aura(
+          LogEvent.SPELL_AURA_APPLIED,
+          "853",
+          MATCH_START + fromS * 1000,
+          "friend-1",
+          "enemy-2",
+        ),
+        aura(
+          LogEvent.SPELL_AURA_REMOVED,
+          "853",
+          MATCH_START + toS * 1000,
+          "friend-1",
+          "enemy-2",
+        ),
+      ];
+      expect(
+        scene({ warriorCasts: [pummel(4)], warriorAuras: stun(18, 18.8) })
+          .maxKickRangeLateYd,
+      ).toBe(5);
+      // held from before the Pummel came back until after the kick landed
+      expect(
+        scene({ warriorCasts: [pummel(4)], warriorAuras: stun(18, 20.5) })
+          .maxKickRangeLateYd,
+      ).toBeNull();
+    });
+
+    it("a silence or a school lockout on the owner does not stop movement (codex fixture)", () => {
+      const silenced = scene({
+        ownerAuras: [
+          aura(
+            LogEvent.SPELL_AURA_APPLIED,
+            "15487",
+            MATCH_START + 17_000,
+            "enemy-1",
+            "player-1",
+          ),
+          aura(
+            LogEvent.SPELL_AURA_REMOVED,
+            "15487",
+            MATCH_START + 19_000,
+            "enemy-1",
+            "player-1",
+          ),
+        ],
+      });
+      expect(silenced.ownerImmobileBy).toBeNull();
+      const locked = scene({
+        ownerActionIn: [
+          makeInterruptEvent(
+            "6552",
+            "Pummel",
+            "133",
+            "Fireball",
+            MATCH_START + 17_000,
+            "enemy-2",
+            "Warrior",
+          ),
+        ],
+      });
+      expect(locked.ownerImmobileBy).toBeNull();
+    });
+  });
+
+  // Triage 2026-09-29 kick-eaten F-K13 / F-K14b.
+  describe("empowered switch, immunity that ran out", () => {
+    const enemy = makeUnit("enemy-1", {
+      name: "Rogue",
+      reaction: CombatUnitReaction.Hostile,
+      class: CombatUnitClass.Rogue,
+      spec: CombatUnitSpec.Rogue_Assassination,
+    });
+    const start = (spellId: string, s: number) =>
+      ({
+        spellId,
+        logLine: {
+          event: LogEvent.SPELL_CAST_START,
+          timestamp: MATCH_START + s * 1000,
+        },
+      }) as any;
+    const success = (spellId: string, s: number) =>
+      makeSpellCastEvent(
+        spellId,
+        MATCH_START + s * 1000,
+        "enemy-1",
+        "Rogue",
+        "player-1",
+        "Owner",
+      );
+    const kickAt = (interrupted: string, s: number) =>
+      makeInterruptEvent(
+        "1766",
+        "Kick",
+        interrupted,
+        interrupted,
+        MATCH_START + s * 1000,
+        "enemy-1",
+        "Rogue",
+      );
+
+    it("a switching cast with a SPELL_EMPOWER_END after it is an empowered cast (F-K13, 02c8e3ac @33.9)", () => {
+      // Disintegrate 356995 (Spellfrost) kicked; Fire Breath 357208 (Fire)
+      // begins 2.4 s later — SUCCESS at the start of the hold, END at release
+      const mk = (empowerEnds: any[] | undefined) =>
+        analyzePlayerCCAndTrinket(
+          {
+            ...makeUnit("player-1", {
+              actionIn: [kickAt("356995", 33.93)],
+              castStartEvents: [start("356995", 33.0)],
+              spellCastEvents: [success("357208", 36.333)],
+            }),
+            empowerEnds,
+          } as any,
+          [enemy],
+          makeCombat(),
+        ).interruptInstances[0]!;
+      const empowered = mk([
+        { spellId: "357208", timestamp: MATCH_START + 37_015, level: 1 },
+      ]);
+      expect(empowered.postKick).toBe("switched");
+      expect(empowered.switchWasHardCast).toBe(false);
+      expect(empowered.switchWasEmpowered).toBe(true);
+      expect(mk([]).switchWasEmpowered).toBe(false);
+      // an old archive carries no empower data: nothing is claimed
+      expect(mk(undefined).switchWasEmpowered).toBeNull();
+    });
+
+    it("a cast begun under Obsidian Scales with Obsidian Mettle, the buff gone before the kick (F-K14b, 3306e8ee @40.3)", () => {
+      const mk = (pvpTalents: string[], removedAtS: number) =>
+        analyzePlayerCCAndTrinket(
+          makeUnit("player-1", {
+            info: { pvpTalents },
+            actionIn: [kickAt("395160", 40.322)],
+            castStartEvents: [start("395160", 39.286)],
+            auraEvents: [
+              makeAuraEvent(
+                LogEvent.SPELL_AURA_APPLIED,
+                "363916",
+                MATCH_START + 25_614,
+                "player-1",
+                "player-1",
+                "BUFF",
+              ),
+              makeAuraEvent(
+                LogEvent.SPELL_AURA_REMOVED,
+                "363916",
+                MATCH_START + removedAtS * 1000,
+                "player-1",
+                "player-1",
+                "BUFF",
+              ),
+            ],
+          }),
+          [enemy],
+          makeCombat(),
+        ).interruptInstances[0]!;
+      const k = mk(["378444"], 39.444);
+      expect(k.kickImmunityEnded?.auraName).toBe("Obsidian Scales");
+      expect(k.kickImmunityEnded?.intoCastS).toBeCloseTo(0.158, 3);
+      // without the PvP talent Obsidian Scales grants no interrupt immunity
+      expect(mk([], 39.444).kickImmunityEnded).toBeNull();
+      // the buff ended before the cast began: the cast never was immune
+      expect(mk(["378444"], 39.0).kickImmunityEnded).toBeNull();
+    });
+  });
+
+  // Triage 2026-09-29 kick-eaten F-K7b / F-K7a (rulings C5, A23).
+  describe("post-kick school rule and the first-success cut", () => {
+    const enemy = makeUnit("enemy-1", {
+      name: "EnemyRogue",
+      spec: CombatUnitSpec.Rogue_Subtlety,
+      reaction: CombatUnitReaction.Hostile,
+    });
+    // Kick at 10 s on `interrupted`, then the owner's casts (id, seconds after
+    // the kick); `auraRemovedAt` = a Stasis-ready aura removal (seconds after).
+    const kicked = (
+      interrupted: [string, string],
+      casts: Array<[string, number]>,
+      stasisRemovedAfterS?: number,
+    ) => {
+      const player = makeUnit("player-1", {
+        name: "Owner",
+        spec: CombatUnitSpec.Shaman_Restoration,
+        reaction: CombatUnitReaction.Friendly,
+        actionIn: [
+          makeInterruptEvent(
+            "1766",
+            "Kick",
+            interrupted[0],
+            interrupted[1],
+            MATCH_START + 10_000,
+            "enemy-1",
+            "EnemyRogue",
+          ),
+        ],
+        spellCastEvents: casts.map(([id, dt]) =>
+          makeSpellCastEvent(
+            id,
+            MATCH_START + 10_000 + dt * 1000,
+            "player-1",
+            "Owner",
+            "player-1",
+            "Owner",
+            0,
+            `spell-${id}`,
+          ),
+        ),
+        auraEvents:
+          stasisRemovedAfterS === undefined
+            ? []
+            : [
+                {
+                  logLine: {
+                    event: LogEvent.SPELL_AURA_REMOVED,
+                    timestamp:
+                      MATCH_START + 10_000 + stasisRemovedAfterS * 1000,
+                    parameters: [],
+                  },
+                  timestamp: MATCH_START + 10_000 + stasisRemovedAfterS * 1000,
+                  spellId: "370562",
+                  spellName: "Stasis",
+                  srcUnitId: "player-1",
+                  destUnitId: "player-1",
+                } as any,
+              ],
+      });
+      return analyzePlayerCCAndTrinket(player, [enemy], makeCombat())
+        .interruptInstances[0]!;
+    };
+
+    it("a spell with one school outside the lock is a switch (Starsurge, Arcane + Nature, under a Nature lock)", () => {
+      // Cyclone 33786 = Nature (8); Starsurge 78674 = Arcane + Nature (72)
+      const k = kicked(["33786", "Cyclone"], [["78674", 0.8]]);
+      expect(k.postKick).toBe("switched");
+      expect(k.switchDelayS).toBeCloseTo(0.8, 5);
+      // … and it does not end the lock: it was never locked
+      expect(k.lockEndedBySuccessS).toBeNull();
+    });
+
+    it("a fully locked spell is not a switch; its success inside the lockout ends the lock for the text", () => {
+      // Riptide 61295 = Nature, silenceable
+      const k = kicked(["33786", "Cyclone"], [["61295", 1.0]]);
+      expect(k.postKick).toBe("acted");
+      expect(k.lockEndedBySuccessS).toBeCloseTo(1.0, 5);
+      // the modelled lockout is untouched ([RES], CONSEQ, cannot-cast)
+      expect(k.lockoutDurationSeconds).toBe(3);
+    });
+
+    it("a locked-school success at or after the modelled lockout end is not a cut", () => {
+      const k = kicked(["33786", "Cyclone"], [["61295", 3.0]]);
+      expect(k.lockEndedBySuccessS).toBeNull();
+    });
+
+    it("Demonic Circle: Teleport inside a Shadow lock does not prove the lock ended (FLAG, LOCK_IGNORING_CAST_IDS)", () => {
+      // Fear 5782 = Shadow; Demonic Circle: Teleport 48020 = Shadow, silenceable
+      const k = kicked(["5782", "Fear"], [["48020", 2.6]]);
+      expect(k.postKick).toBe("acted");
+      expect(k.lockEndedBySuccessS).toBeNull();
+    });
+
+    it("Holy Fire inside a Holy lock does not prove the lock ended, nor do the rows a passive writes (LOCK_IGNORING_CAST_IDS, forward check 2026-10-01)", () => {
+      // Smite 585 = Holy; Holy Fire 14914 = Holy, silenceable — 50ebee26:
+      // it went out at +0.14 while Smite stayed rejected to +2.77
+      expect(
+        kicked(["585", "Smite"], [["14914", 0.14]]).lockEndedBySuccessS,
+      ).toBeNull();
+      // Frostbolt 116 = Frost; Snowdrift 390171 / 389823 = Frost passive rows
+      expect(
+        kicked(["116", "Frostbolt"], [["390171", 0.4]]).lockEndedBySuccessS,
+      ).toBeNull();
+      expect(
+        kicked(["116", "Frostbolt"], [["389823", 0.4]]).lockEndedBySuccessS,
+      ).toBeNull();
+      // Sanctified Ground 289655 = Holy passive row
+      expect(
+        kicked(["585", "Smite"], [["289655", 0.5]]).lockEndedBySuccessS,
+      ).toBeNull();
+      // control: another Holy press does cut (Flash Heal 2061)
+      expect(
+        kicked(["585", "Smite"], [["2061", 1.2]]).lockEndedBySuccessS,
+      ).toBeCloseTo(1.2, 5);
+    });
+
+    it("a cast DB2 does not mark silenceable is not evidence (Shadowy Apparition has no SpellCategories row)", () => {
+      const k = kicked(["5782", "Fear"], [["341263", 0.5]]);
+      expect(k.lockEndedBySuccessS).toBeNull();
+    });
+
+    it("a Stasis replay is not a press: locked-school casts right after the ready aura's removal do not cut (141470d0 @198)", () => {
+      // Verdant Embrace 360995 = Nature. Replays at +1.04 / +1.76 / +2.42 s,
+      // the ready aura removed at +1.02 s.
+      const replayed = kicked(
+        ["33786", "Cyclone"],
+        [
+          ["360995", 1.04],
+          ["360995", 1.76],
+          ["360995", 2.42],
+        ],
+        1.02,
+      );
+      expect(replayed.lockEndedBySuccessS).toBeNull();
+      // without the removal the same casts are presses
+      const pressed = kicked(["33786", "Cyclone"], [["360995", 1.04]]);
+      expect(pressed.lockEndedBySuccessS).toBeCloseTo(1.04, 5);
+    });
+
+    // Re-eval 2026-10-08, I01 (f4eb8c87 @60.2).
+    it("wentOutInLockS: the spells that went out inside the modelled lockout, each at its first success — whatever their school", () => {
+      // Demonic Circle: Teleport does not cut the lock (above), and is listed
+      const k = kicked(
+        ["5782", "Fear"],
+        [
+          ["48020", 2.6],
+          ["48020", 2.9],
+          ["5782", 3.4], // after the 3 s lock: not inside it
+        ],
+      );
+      expect(k.lockEndedBySuccessS).toBeNull();
+      expect(Object.keys(k.wentOutInLockS ?? {})).toEqual(["48020"]);
+      expect(k.wentOutInLockS!["48020"]).toBeCloseTo(2.6, 5);
+      // the cast that cuts the lock is in it too
+      const cut = kicked(["33786", "Cyclone"], [["61295", 1.0]]);
+      expect(cut.wentOutInLockS!["61295"]).toBeCloseTo(1.0, 5);
+      // a Stasis replay is not a press (work order 2026-10-14d #4: a kick
+      // followed only by replays reads idle, with nothing gone out)
+      const replayOnly = kicked(["33786", "Cyclone"], [["360995", 1.04]], 1.02);
+      expect(replayOnly.wentOutInLockS ?? {}).toEqual({});
+      expect(replayOnly.postKick).toBe("idle");
+      expect(replayOnly.firstActionDelayS).toBeNull();
+    });
+  });
+
+  // Re-eval 2026-10-08, F21 (dfcccbf2 @166.5): Shield of Virtue 217824 is an
+  // interrupt AND a silence — the log has its SPELL_INTERRUPT and, a few ms
+  // later, its aura on the same player.
+  describe("kickSilenceS: a kick whose own spell also leaves a silence on the player", () => {
+    const enemy = makeUnit("enemy-1", {
+      name: "EnemyPaladin",
+      spec: CombatUnitSpec.Paladin_Protection,
+      reaction: CombatUnitReaction.Hostile,
+    });
+    const KICK_MS = MATCH_START + 10_000;
+    const kickedBy = (
+      kickId: string,
+      aura?: { id: string; fromMs: number; toMs: number; src?: string },
+    ) => {
+      const mk = (event: LogEvent, t: number) => {
+        const e = makeAuraEvent(
+          event,
+          aura!.id,
+          t,
+          aura!.src ?? "enemy-1",
+          "player-1",
+        );
+        e.srcUnitName = "EnemyPaladin";
+        return e;
+      };
+      const player = makeUnit("player-1", {
+        name: "Owner",
+        spec: CombatUnitSpec.Mage_Fire,
+        reaction: CombatUnitReaction.Friendly,
+        actionIn: [
+          makeInterruptEvent(
+            kickId,
+            "Shield of Virtue",
+            "118",
+            "Polymorph",
+            KICK_MS,
+            "enemy-1",
+            "EnemyPaladin",
+          ),
+        ],
+        auraEvents: aura
+          ? [
+              mk(LogEvent.SPELL_AURA_APPLIED, aura.fromMs),
+              mk(LogEvent.SPELL_AURA_REMOVED, aura.toMs),
+            ]
+          : [],
+      });
+      return analyzePlayerCCAndTrinket(player, [enemy], makeCombat())
+        .interruptInstances[0]!;
+    };
+
+    it("the aura of the kick's own id from the kicker, as long as the log shows it", () => {
+      const full = kickedBy("217824", {
+        id: "217824",
+        fromMs: KICK_MS + 3,
+        toMs: KICK_MS + 4_011,
+      });
+      expect(full.kickSilenceS).toBeCloseTo(4.008, 3);
+      // the school lockout is the same kick's and is still there
+      expect(full.lockoutDurationSeconds).toBe(4);
+      // dispelled after 1.4 s
+      expect(
+        kickedBy("217824", {
+          id: "217824",
+          fromMs: KICK_MS + 6,
+          toMs: KICK_MS + 1_377,
+        }).kickSilenceS,
+      ).toBeCloseTo(1.371, 3);
+    });
+
+    it("null for a kick that leaves no aura, for another spell's silence, and for another unit's", () => {
+      expect(kickedBy("217824").kickSilenceS).toBeNull();
+      // Rebuke with a Strangulate landing in the same window: not the kick's
+      expect(
+        kickedBy("96231", {
+          id: "47476",
+          fromMs: KICK_MS + 3,
+          toMs: KICK_MS + 4_000,
+        }).kickSilenceS,
+      ).toBeNull();
+      expect(
+        kickedBy("217824", {
+          id: "217824",
+          fromMs: KICK_MS + 3,
+          toMs: KICK_MS + 4_000,
+          src: "enemy-2",
+        }).kickSilenceS,
+      ).toBeNull();
+      // an earlier one that ended before this kick
+      expect(
+        kickedBy("217824", {
+          id: "217824",
+          fromMs: KICK_MS - 9_000,
+          toMs: KICK_MS - 5_000,
+        }).kickSilenceS,
+      ).toBeNull();
+    });
   });
 
   it("A3 (2026-09-25): a PvP trinket pressed in the post-kick window is a CC break, not 'acting on another school'; ccInWindowS counts the CC", () => {
@@ -775,5 +1852,533 @@ describe("analyzePlayerCCAndTrinket — structured data contract (N4)", () => {
     expect(player.castStartEvents!.map((e) => e.logLine.timestamp)).toEqual(
       orderBefore,
     );
+  });
+
+  it("X3 castWindowS: the round's bar, else the official base cast, never less than the cast had run; neither known → null (review 37-BD-33)", () => {
+    const enemy = makeUnit("enemy-1", {
+      name: "EnemyRogue",
+      spec: CombatUnitSpec.Rogue_Subtlety,
+      reaction: CombatUnitReaction.Hostile,
+    });
+    const start = (spellId: string, atMs: number) =>
+      ({
+        logLine: {
+          event: LogEvent.SPELL_CAST_START,
+          timestamp: atMs,
+          parameters: [],
+        },
+        spellId,
+      }) as any;
+    const windowOf = (spellId: string, kickedAfterMs: number) => {
+      const player = makeUnit("player-1", {
+        name: "PlayerMage",
+        spec: CombatUnitSpec.Mage_Frost,
+        reaction: CombatUnitReaction.Friendly,
+        castStartEvents: [start(spellId, MATCH_START + 30_000)],
+        spellCastEvents: [],
+        actionIn: [
+          makeInterruptEvent(
+            "1766",
+            "Kick",
+            spellId,
+            "A Hardcast",
+            MATCH_START + 30_000 + kickedAfterMs,
+            "enemy-1",
+            "EnemyRogue",
+          ),
+        ],
+      });
+      return analyzePlayerCCAndTrinket(player, [enemy], makeCombat())
+        .interruptInstances[0].castWindowS;
+    };
+    // no completed bar in the round and no official cast time: kicked 0.2 s
+    // in is NOT a 0.2 s cast — unknown
+    expect(windowOf("999003", 200)).toBeNull();
+    // Polymorph (118): no completed bar, the official base cast stands in
+    const base = windowOf("118", 200);
+    expect(base).not.toBeNull();
+    expect(base!).toBeGreaterThan(1);
+    // … and a cast that had already run longer than that is at least that long
+    expect(windowOf("118", 4_000)).toBe(4);
+  });
+});
+
+/**
+ * Triage 2026-09-29, enemy-def F-E21 (ruling A′15): the "broke this CC" set is
+ * the break racials plus the class abilities that remove control, and a racial
+ * the game logs only as a buff is read from that buff.
+ */
+describe("CC-break abilities other than the trinket (F-E21 / A′15)", () => {
+  const MATCH_START = 1_000_000;
+  const combat = {
+    startTime: MATCH_START,
+    endTime: MATCH_START + 300_000,
+    startInfo: { zoneId: "1672" },
+  };
+  const KIDNEY = "408";
+  const BLINK = "1953";
+  const WILL_OF_THE_FORSAKEN = "7744";
+  const STONEFORM_BUFF = "65116";
+  const PSYCHIC_SCREAM = "8122";
+  const WILL_TO_SURVIVE = "59752";
+  const MEDALLION = "336126";
+
+  beforeAll(async () => {
+    await ensureAnalysisData();
+  });
+
+  const enemy = () =>
+    makeUnit("enemy-1", {
+      name: "EnemyRogue",
+      spec: CombatUnitSpec.Rogue_Subtlety,
+      reaction: CombatUnitReaction.Hostile,
+    });
+  /** a CC on player-1 from `fromS` to `toS` (round seconds) */
+  const cc = (spellId: string, fromS: number, toS: number) => [
+    makeAuraEvent(
+      LogEvent.SPELL_AURA_APPLIED,
+      spellId,
+      MATCH_START + fromS * 1000,
+      "enemy-1",
+      "player-1",
+    ),
+    makeAuraEvent(
+      LogEvent.SPELL_AURA_REMOVED,
+      spellId,
+      MATCH_START + toS * 1000,
+      "enemy-1",
+      "player-1",
+    ),
+  ];
+  const stun = (fromS: number, toS: number) => cc(KIDNEY, fromS, toS);
+  /** Psychic Scream — a fear (mechanic 5) */
+  const fear = (fromS: number, toS: number) => cc(PSYCHIC_SCREAM, fromS, toS);
+
+  it("the table: class ids are not racials, every aura-keyed racial maps to a registered break racial", () => {
+    for (const id of Object.keys(CLASS_CC_BREAK_ABILITIES)) {
+      expect(RACIAL_ABILITIES[id], id).toBeUndefined();
+      expect(CC_BREAK_CAST_IDS.has(id), id).toBe(true);
+    }
+    for (const id of BREAK_RACIAL_SPELL_IDS)
+      expect(CC_BREAK_CAST_IDS.has(id), id).toBe(true);
+    for (const castId of Object.values(AURA_KEYED_BREAK_RACIALS))
+      expect(BREAK_RACIAL_SPELL_IDS.has(castId), castId).toBe(true);
+    expect(ccBreakAbilityName(BLINK)).toBe("Blink");
+    expect(ccBreakAbilityName(WILL_OF_THE_FORSAKEN)).toBe(
+      "Will of the Forsaken",
+    );
+    expect(ccBreakAbilityName("642")).toBeNull(); // Divine Shield is F-E20's
+  });
+
+  it("Blink pressed inside a stun is the break: the CC reads broken by Blink, and the use carries the CC", () => {
+    const player = makeUnit("player-1", {
+      name: "Mage",
+      spec: CombatUnitSpec.Mage_Frost,
+      reaction: CombatUnitReaction.Friendly,
+      auraEvents: stun(10, 11.2),
+      spellCastEvents: [
+        makeSpellCastEvent(BLINK, MATCH_START + 11_200, "0000000000000000"),
+        // a Blink with no CC on is a press, not a break
+        makeSpellCastEvent(BLINK, MATCH_START + 60_000, "0000000000000000"),
+      ],
+    });
+    const r = analyzePlayerCCAndTrinket(player, [enemy()], combat);
+    expect(r.ccInstances[0]).toMatchObject({
+      trinketState: "racial_break",
+      breakRacialName: "Blink",
+    });
+    expect(
+      r.breakAbilityUses?.map((u) => [u.name, u.atSeconds, !!u.brokenCc]),
+    ).toEqual([
+      ["Blink", 11.2, true],
+      ["Blink", 60, false],
+    ]);
+    expect(r.breakAbilityUses?.[0]?.sharesTrinketLock).toBe(false);
+    // a class break does not lock the trinket
+    expect(r.racialTrinketLocks).toEqual([]);
+  });
+
+  it("Stoneform is read from its buff (the cast is never logged) and locks the trinket like the other racials", () => {
+    const stoneform = makeAuraEvent(
+      LogEvent.SPELL_AURA_APPLIED,
+      STONEFORM_BUFF,
+      MATCH_START + 20_000,
+      "player-1",
+      "player-1",
+      "BUFF",
+    );
+    const player = makeUnit("player-1", {
+      name: "Dwarf",
+      spec: CombatUnitSpec.Warrior_Arms,
+      reaction: CombatUnitReaction.Friendly,
+      auraEvents: [stoneform],
+    });
+    expect(breakAbilityPresses(player as never)).toEqual([
+      { ts: MATCH_START + 20_000, spellId: "20594" },
+    ]);
+    const r = analyzePlayerCCAndTrinket(player, [enemy()], combat);
+    expect(r.racialTrinketLocks).toEqual([{ atSeconds: 20, lockSeconds: 30 }]);
+    expect(r.breakAbilityUses?.[0]).toMatchObject({
+      name: "Stoneform",
+      sharesTrinketLock: true,
+    });
+  });
+
+  // 0cb55930 4:09 / f563bad8 0:57: a dwarf's Stoneform dispels Unstable
+  // Affliction / Vampiric Touch and the backlash CC lands on him 1–23 ms
+  // later, then runs its course. Inside the binder's 250 ms tolerance — and
+  // the opposite of a break.
+  it("a press just BEFORE a CC lands is not its break: the CC must end at the press (Stoneform → dispel backlash)", () => {
+    // the shared predicate (F-E20): at or after the landing, within 10 ms of
+    // the removal
+    const w = { applyMs: 1_000, removeMs: 5_000 };
+    expect(castEndedCcWindow(w, 5_003)).toBe(true);
+    expect(castEndedCcWindow(w, 4_995)).toBe(true);
+    expect(castEndedCcWindow(w, 4_900)).toBe(false); // mid-CC, the CC ran on
+    expect(castEndedCcWindow(w, 990)).toBe(false); // before it landed
+    const player = makeUnit("player-1", {
+      name: "Dwarf",
+      spec: CombatUnitSpec.Warrior_Arms,
+      reaction: CombatUnitReaction.Friendly,
+      auraEvents: [
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_APPLIED,
+          STONEFORM_BUFF,
+          MATCH_START + 19_980,
+          "player-1",
+          "player-1",
+          "BUFF",
+        ),
+        ...stun(20, 24),
+      ],
+      spellCastEvents: [
+        // Blink 0.1 s before a stun that then runs 4 s
+        makeSpellCastEvent(BLINK, MATCH_START + 19_900, "0000000000000000"),
+      ],
+    });
+    const r = analyzePlayerCCAndTrinket(player, [enemy()], combat);
+    expect(r.ccInstances[0]?.trinketState).not.toBe("racial_break");
+    expect(r.ccInstances[0]?.breakRacialName).toBeUndefined();
+    expect(r.breakAbilityUses?.map((u) => [u.name, !!u.brokenCc])).toEqual([
+      ["Blink", false],
+      ["Stoneform", false],
+    ]);
+  });
+
+  it("a later CC states the racial's own cooldown while it is still running (9c6ab747 1:37)", () => {
+    const player = makeUnit("player-1", {
+      name: "Priest",
+      spec: CombatUnitSpec.Priest_Holy,
+      reaction: CombatUnitReaction.Friendly,
+      // Will of the Forsaken removes charm / fear / sleep, not a stun
+      auraEvents: [...fear(17, 18.3), ...stun(97, 101), ...stun(150, 154)],
+      spellCastEvents: [
+        makeSpellCastEvent(
+          WILL_OF_THE_FORSAKEN,
+          MATCH_START + 18_293,
+          "0000000000000000",
+        ),
+      ],
+    });
+    const r = analyzePlayerCCAndTrinket(player, [enemy()], combat);
+    expect(r.ccInstances[0]?.breakRacialName).toBe("Will of the Forsaken");
+    // 120 s cooldown from 18.293 → 41.3 s left at 97 s, printed rounded up
+    expect(r.ccInstances[1]?.breakRacialOnCd).toEqual({
+      name: "Will of the Forsaken",
+      secondsLeft: 42,
+    });
+    // ready again by 150 s
+    expect(r.ccInstances[2]?.breakRacialOnCd).toBeUndefined();
+  });
+
+  it("which control a break removes is DB2's mechanic-immunity aura: the table has one per class id, the dispel-type racials have none", () => {
+    for (const id of Object.keys(CLASS_CC_BREAK_ABILITIES))
+      expect(mechanicsBrokenBy(id).length, id).toBeGreaterThan(0);
+    // stun = 12, fear = 5, incapacitate = 14, charm = 1, sleep = 10
+    expect(mechanicsBrokenBy(BLINK)).toContain(12);
+    expect(mechanicsBrokenBy(BLINK)).not.toContain(5);
+    expect([...mechanicsBrokenBy("384100")].sort((a, b) => a - b)).toEqual(
+      [...mechanicsBrokenBy("18499")].sort((a, b) => a - b),
+    ); // Berserker Shout = Berserker Rage
+    expect(mechanicsBrokenBy(WILL_TO_SURVIVE)).toEqual([12]);
+    expect(mechanicsBrokenBy(WILL_OF_THE_FORSAKEN)).not.toContain(12);
+    // Stoneform / Fireblood (dispel by type) and Escape Artist (roots /
+    // snares): no aura-77 row → `breakRemovesCc` never binds them
+    for (const id of ["20594", "265221", "20589"]) {
+      expect(mechanicsBrokenBy(id), id).toEqual([]);
+      expect(breakRemovesCc(id, KIDNEY), id).toBe(false);
+    }
+    expect(breakRemovesCc(BLINK, KIDNEY)).toBe(true);
+    expect(breakRemovesCc(BLINK, PSYCHIC_SCREAM)).toBe(false);
+    expect(breakRemovesCc(WILL_OF_THE_FORSAKEN, PSYCHIC_SCREAM)).toBe(true);
+    expect(breakRemovesCc(WILL_OF_THE_FORSAKEN, KIDNEY)).toBe(false);
+    // a CC whose mechanic DB2 cannot give is never "broken by" anything
+    expect(breakRemovesCc(BLINK, "999999999")).toBe(false);
+  });
+
+  it("a press at the instant a CC of ANOTHER mechanic ends is not its break (a fear that ran out, a queued Blink 4 ms later)", () => {
+    const player = makeUnit("player-1", {
+      name: "Mage",
+      spec: CombatUnitSpec.Mage_Frost,
+      reaction: CombatUnitReaction.Friendly,
+      auraEvents: fear(10, 18),
+      spellCastEvents: [
+        makeSpellCastEvent(BLINK, MATCH_START + 18_004, "0000000000000000"),
+      ],
+    });
+    const r = analyzePlayerCCAndTrinket(player, [enemy()], combat);
+    expect(r.ccInstances[0]?.trinketState).not.toBe("racial_break");
+    expect(r.ccInstances[0]?.breakRacialName).toBeUndefined();
+    expect(r.breakAbilityUses?.map((u) => [u.name, !!u.brokenCc])).toEqual([
+      ["Blink", false],
+    ]);
+  });
+
+  it("a CC that ran its full official length ended on its own: a Blink 4 ms later is not its break (codex round 3)", () => {
+    const full = ccFullDurationSeconds(KIDNEY)!;
+    expect(full).toBeGreaterThan(1);
+    const mage = (endS: number) =>
+      makeUnit("player-1", {
+        name: "Mage",
+        spec: CombatUnitSpec.Mage_Frost,
+        reaction: CombatUnitReaction.Friendly,
+        auraEvents: stun(10, endS),
+        spellCastEvents: [
+          makeSpellCastEvent(
+            BLINK,
+            MATCH_START + Math.round(endS * 1000) + 4,
+            "0000000000000000",
+          ),
+        ],
+      });
+    const ranOut = analyzePlayerCCAndTrinket(
+      mage(10 + full),
+      [enemy()],
+      combat,
+    );
+    expect(ranOut.ccInstances[0]?.breakRacialName).toBeUndefined();
+    expect(ranOut.breakAbilityUses?.[0]?.brokenCc).toBeUndefined();
+    // cut short by a second: the Blink is the break
+    const cut = analyzePlayerCCAndTrinket(mage(9 + full), [enemy()], combat);
+    expect(cut.ccInstances[0]?.breakRacialName).toBe("Blink");
+  });
+
+  it("the trinket locks the racial too: a CC inside the shared lock states the racial is not back (A′15: and vice versa)", () => {
+    const human = (casts: ReturnType<typeof makeSpellCastEvent>[]) =>
+      makeUnit("player-1", {
+        name: "Human",
+        spec: CombatUnitSpec.Warrior_Arms,
+        reaction: CombatUnitReaction.Friendly,
+        auraEvents: [...stun(9, 10), ...stun(195, 199), ...stun(215, 219)],
+        spellCastEvents: casts,
+      });
+    // Will to Survive at 10 s (180 s cooldown → back at 190 s); the trinket
+    // at 180 s holds it until 270 s — Will to Survive's lock is 90 s both
+    // ways for a DPS (codex 62-POSTHOC-13d #1; fact6 F20: 60 s is the
+    // healer's)
+    const r = analyzePlayerCCAndTrinket(
+      human([
+        makeSpellCastEvent(
+          WILL_TO_SURVIVE,
+          MATCH_START + 10_000,
+          "0000000000000000",
+        ),
+        makeSpellCastEvent(
+          MEDALLION,
+          MATCH_START + 180_000,
+          "0000000000000000",
+        ),
+      ]),
+      [enemy()],
+      combat,
+    );
+    expect(r.ccInstances[1]?.breakRacialOnCd).toEqual({
+      name: "Will to Survive",
+      secondsLeft: 75,
+    });
+    expect(r.ccInstances[2]?.breakRacialOnCd).toEqual({
+      name: "Will to Survive",
+      secondsLeft: 55,
+    });
+    // the racial is the player's whenever it is seen pressed this round —
+    // here only after the CC
+    const later = analyzePlayerCCAndTrinket(
+      human([
+        makeSpellCastEvent(
+          MEDALLION,
+          MATCH_START + 180_000,
+          "0000000000000000",
+        ),
+        makeSpellCastEvent(
+          WILL_TO_SURVIVE,
+          MATCH_START + 250_000,
+          "0000000000000000",
+        ),
+      ]),
+      [enemy()],
+      combat,
+    );
+    expect(later.ccInstances[1]?.breakRacialOnCd).toEqual({
+      name: "Will to Survive",
+      secondsLeft: 75,
+    });
+    // no racial ever pressed → nothing is claimed about one
+    const none = analyzePlayerCCAndTrinket(
+      human([
+        makeSpellCastEvent(
+          MEDALLION,
+          MATCH_START + 180_000,
+          "0000000000000000",
+        ),
+      ]),
+      [enemy()],
+      combat,
+    );
+    expect(none.ccInstances[1]?.breakRacialOnCd).toBeUndefined();
+  });
+});
+
+/**
+ * FT-T07 (user decision D9, 2026-10-10): the length an application was going
+ * to run counts an Oppressing Roar that was on the player as it landed
+ * (`ccFullDurationForApplication`). 605 S2 files: of the 20 Terror of the
+ * Skies that outlived 3.3 s, 14 landed under the Roar; of the 194 at
+ * 2.9–3.1 s, none did. The observed `durationSeconds` is the log's and never
+ * moves.
+ */
+describe("expectedDurationSeconds under Oppressing Roar (FT-T07)", () => {
+  const MATCH_START = 1_000_000;
+  const combat = {
+    startTime: MATCH_START,
+    endTime: MATCH_START + 300_000,
+    startInfo: { zoneId: "1672" },
+  };
+  const TERROR = "372245"; // Terror of the Skies — stun, DB2 3 s
+  const ROAR = "372048";
+  const CHAOS_NOVA = "179057";
+  const BLINK = "1953";
+
+  beforeAll(async () => {
+    await ensureAnalysisData();
+  });
+
+  const evoker = () =>
+    makeUnit("enemy-1", {
+      name: "EnemyEvoker",
+      spec: CombatUnitSpec.Evoker_Devastation,
+      reaction: CombatUnitReaction.Hostile,
+    });
+  const aura = (event: LogEvent, spellId: string, s: number) =>
+    makeAuraEvent(
+      event,
+      spellId,
+      MATCH_START + Math.round(s * 1000),
+      "enemy-1",
+      "player-1",
+    );
+  const on = (spellId: string, s: number) =>
+    aura(LogEvent.SPELL_AURA_APPLIED, spellId, s);
+  const off = (spellId: string, s: number) =>
+    aura(LogEvent.SPELL_AURA_REMOVED, spellId, s);
+  const run = (
+    auraEvents: ReturnType<typeof makeAuraEvent>[],
+    spellCastEvents: ReturnType<typeof makeSpellCastEvent>[] = [],
+  ) =>
+    analyzePlayerCCAndTrinket(
+      makeUnit("player-1", {
+        name: "Mage",
+        spec: CombatUnitSpec.Mage_Frost,
+        reaction: CombatUnitReaction.Friendly,
+        auraEvents,
+        spellCastEvents,
+      }),
+      [evoker()],
+      combat,
+    );
+
+  it("no Roar: Terror of the Skies was going to run its official 3 s", () => {
+    const r = run([on(TERROR, 10), off(TERROR, 13)]);
+    expect(r.ccInstances).toHaveLength(1);
+    expect(r.ccInstances[0]?.expectedDurationSeconds).toBe(3);
+    expect(r.ccInstances[0]?.durationSeconds).toBe(3);
+  });
+
+  it("the Roar on the player as it lands: 3 × 1.3 = 3.9 s (7b07c1dee3f0: 3.90 s under it, 3.00 s on the totem without)", () => {
+    const r = run([
+      on(ROAR, 8),
+      on(TERROR, 10),
+      off(TERROR, 13.897),
+      off(ROAR, 18),
+    ]);
+    // the Roar is not a CC: one instance
+    expect(r.ccInstances).toHaveLength(1);
+    expect(r.ccInstances[0]?.expectedDurationSeconds).toBeCloseTo(3.9, 6);
+    // the observed lifetime is the log's own
+    expect(r.ccInstances[0]?.durationSeconds).toBeCloseTo(3.897, 6);
+    expect(r.ccInstances[0]?.drInfo?.level).toBe("Full");
+  });
+
+  it("the Roar logged under its other id (406971 — 7951f46fcfb3: 3.91 s under it) lengthens the same way", () => {
+    const ROAR_OTHER_ID = "406971";
+    const r = run([
+      on(ROAR_OTHER_ID, 8.244),
+      on(TERROR, 10),
+      off(TERROR, 13.906),
+      off(ROAR_OTHER_ID, 18.244),
+    ]);
+    expect(r.ccInstances).toHaveLength(1);
+    expect(r.ccInstances[0]?.expectedDurationSeconds).toBeCloseTo(3.9, 6);
+    expect(r.ccInstances[0]?.durationSeconds).toBeCloseTo(3.906, 6);
+  });
+
+  it("a Roar that ran out before the landing, or landed after it, does not lengthen", () => {
+    const ranOut = run([
+      on(ROAR, 1),
+      off(ROAR, 9.5),
+      on(TERROR, 10),
+      off(TERROR, 13),
+    ]);
+    expect(ranOut.ccInstances[0]?.expectedDurationSeconds).toBe(3);
+    const after = run([
+      on(TERROR, 10),
+      on(ROAR, 10.5),
+      off(TERROR, 13),
+      off(ROAR, 20),
+    ]);
+    expect(after.ccInstances[0]?.expectedDurationSeconds).toBe(3);
+  });
+
+  it("the DR share applies on top: a second one at 50 % under the Roar is 3 × 1.3 × 0.5 = 1.95 s", () => {
+    const r = run([
+      on(ROAR, 8),
+      on(TERROR, 10),
+      off(TERROR, 13.9),
+      on(TERROR, 16),
+      off(TERROR, 17.95),
+      off(ROAR, 18),
+    ]);
+    expect(r.ccInstances.map((c) => c.drInfo?.level)).toEqual(["Full", "50%"]);
+    expect(r.ccInstances[1]?.expectedDurationSeconds).toBeCloseTo(1.95, 6);
+  });
+
+  it("a Blink 3.5 s into a stun the Roar stretched to 3.9 s cut it short; with no Roar that stun had already run its 3 s", () => {
+    const blink = [
+      makeSpellCastEvent(BLINK, MATCH_START + 13_504, "0000000000000000"),
+    ];
+    const stretched = run(
+      [on(ROAR, 8), on(TERROR, 10), off(TERROR, 13.5), off(ROAR, 18)],
+      blink,
+    );
+    expect(stretched.ccInstances[0]?.trinketState).toBe("racial_break");
+    expect(stretched.ccInstances[0]?.breakRacialName).toBe("Blink");
+    const plain = run([on(TERROR, 10), off(TERROR, 13.5)], blink);
+    expect(plain.ccInstances[0]?.breakRacialName).toBeUndefined();
+    expect(plain.ccInstances[0]?.trinketState).not.toBe("racial_break");
+  });
+
+  it("Chaos Nova is not touched: 3 s expected whatever it ran (its 4 s plateau has no known mechanism)", () => {
+    const r = run([on(CHAOS_NOVA, 10), off(CHAOS_NOVA, 14)]);
+    expect(r.ccInstances[0]?.expectedDurationSeconds).toBe(3);
+    expect(r.ccInstances[0]?.durationSeconds).toBe(4);
   });
 });

@@ -6,8 +6,8 @@
 import { CombatUnitSpec, LogEvent } from "@gladlog/parser-compat";
 import { beforeAll, describe, expect, it } from "vitest";
 
-import { ownerResUtilityCds } from "../src/context/resUtilityCds";
 import { buildResourceSnapshot } from "../src/context/resourceSnapshot";
+import { ownerResUtilityCds } from "../src/context/resUtilityCds";
 import { ensureAnalysisData } from "../src/data/ensure";
 
 beforeAll(async () => {
@@ -38,7 +38,9 @@ describe("ownerResUtilityCds", () => {
   it("a Frost Mage's Counterspell (class baseline) is listed, cast or not", () => {
     const cds = ownerResUtilityCds(unit(8, CombatUnitSpec.Mage_Frost), T0);
     expect(cds.map((c) => c.spellName)).toEqual(["Counterspell"]);
-    expect(cds[0]!.cooldownSeconds).toBe(24);
+    // DB2's 25 s (FT-T11: the hand 24 is gone); this fixture holds no
+    // Quick Witted
+    expect(cds[0]!.cooldownSeconds).toBe(25);
   });
   it("a warlock's Felhunter Spell Lock only once the pet was seen casting it", () => {
     expect(
@@ -77,7 +79,11 @@ describe("ownerResUtilityCds", () => {
       ownerSpec: "Frost Mage",
       teammateCDs: [],
       ccTrinketSummaries: [],
-      enemyCDTimeline: { alignedBurstWindows: [], enemyCDs: [], players: [] } as any,
+      enemyCDTimeline: {
+        alignedBurstWindows: [],
+        enemyCDs: [],
+        players: [],
+      } as any,
     };
     expect(
       buildResourceSnapshot({ ...base, timeSeconds: 15, ownerCDs: cds }),

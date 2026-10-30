@@ -38,8 +38,11 @@
  *   qualifying ally = landed a same-target DIRECT hit in the PRE_HIT_S before
  *                     the application (a sampling choice, not a reaction
  *                     standard)
- *   window W        = [ceil(apply), floor(remove)) on the render grid,
- *                     truncated at either combatant's death / round end
+ *   window W        = [apply, remove) — the aura's own logged span (2026-10-21,
+ *                     round-3 audit D31: the old render-grid window
+ *                     [ceil(apply), floor(remove)) dropped the press second),
+ *                     truncated at either combatant's death / round end;
+ *                     K / M count the rendered seconds it touches
  *   N = damage on the target inside W · D = damage on all enemy players
  *   inside W · X = 100·N/D (undefined when D = 0) · direct / periodic
  *   reported separately · K/M = 1 s bins with damage / |W| · G = longest
@@ -48,8 +51,8 @@
  *   mergePetEvents
  *   absorbed (2026-09-22 amendment, recorded on the issue): what the target's
  *   shields ate from this ally inside W — read from the TARGET's victim-keyed
- *   `absorbsIn` (attacker = the ally; the attacker's own damageOut only sees
- *   a fully absorbed hit as effective ≈ 0, or a positive residual, never the
+ *   `absorbsIn` (attacker = the ally; the attacker's own damage rows carry only
+ *   the health the hit removed — ≈ 0 for a fully absorbed hit — never the
  *   absorbed amount) — is reported SEPARATELY as `(+Ak absorbed)`, and a
  *   second with an absorbed hit counts in K. N / D / X are unchanged. Without
  *   it a Feral Druid hitting a shielded Havoc DH under Time Dilation rendered
@@ -60,18 +63,24 @@
  */
 import { type ICombatUnit,LogEvent } from "@gladlog/parser-compat";
 
+import { castKeyOfAura } from "../data/castEffectAuras";
 import { MITIGATION_TABLE, NO_MITIGATION_IDS } from "../data/mitigationData";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import { buildAuraIntervals, type IAuraInterval } from "./auraIntervals";
+import { hitSchoolId, isDeferralAbsorb,logSchoolMask } from "./incomingPressure";
 
-/** Seconds before the application in which a direct hit makes an ally "qualifying". */
+/** Seconds before the application in which a hit on the target makes an ally
+ *  "qualifying". Direct or periodic (user ruling 2026-09-30, A30 / triage
+ *  enemy-def F-E14): a DoT ticking on the target is the ally hitting it —
+ *  d4634bf1's owner had 5 periodic rows (20k) and 0 direct in the 3 s before
+ *  a Pain Suppression, then 117k absorbed inside it, and was left out. */
 export const EXTERNAL_DAMAGE_PRE_HIT_S = 3;
 /** K/M at or above this = the ally kept hitting through the external ("continues"). */
 export const EXTERNAL_DAMAGE_CONTINUES_SHARE = 0.5;
 /**
  * A hit counts as "a second with damage" (K) only at or above this effective
- * amount. A fully absorbed hit leaves an effective residual of 0–1 in the
- * attacker's damageOut; when the absorb cannot be matched back to the ally
+ * amount. A fully absorbed hit leaves a damage row of ≈ 0 (the health it
+ * removed) in the attacker's damageOut; when the absorb cannot be matched back to the ally
  * (a pet's hit is merged into the owner, but the victim's absorb names the
  * pet as attacker) that residual would otherwise render as `0k on target ·
  * damage in 1 of 8 s`. N still sums every hit.
@@ -81,6 +90,8 @@ export const EXTERNAL_DAMAGE_BIN_MIN_HIT = 100;
 const DIRECT_EVENTS = new Set<string>([
   LogEvent.SPELL_DAMAGE,
   LogEvent.SWING_DAMAGE,
+  // A swing the log wrote only its victim-side line for (parser swingTwins.ts).
+  LogEvent.SWING_DAMAGE_LANDED,
   LogEvent.RANGE_DAMAGE,
 ]);
 const PERIODIC_EVENT = LogEvent.SPELL_PERIODIC_DAMAGE as string;
@@ -151,10 +162,16 @@ export interface IExternalDamageObservation {
   dAll: number;
   /** SPELL_ABSORBED amounts the ally put on the target inside W (not in N or D). */
   absorbed: number;
+  /** The part a deferral shield (Time Dilation, Stretch Time) only DELAYED —
+   * it lands later as the target's own deferred damage, so it is not
+   * "absorbed" (`isDeferralAbsorb`, FT-T02b). Not in N, D or `absorbed`. */
+  deferred: number;
   /** 100·(nDirect+nPeriodic)/dAll, null when dAll = 0. */
   X: number | null;
   /** Direct damage on the target in the PRE_HIT_S before the application. */
   preDirect: number;
+  /** Periodic damage on the target in the same PRE_HIT_S (F-E14). */
+  prePeriodic: number;
   kind: ExternalDamageKind;
 }
 
@@ -162,10 +179,15 @@ export function classifyExternalDamage(
   o: Pick<
     IExternalDamageObservation,
     "nDirect" | "nPeriodic" | "K" | "M" | "absorbed" | "immuneHits"
-  >,
+  > & { deferred?: number },
 ): ExternalDamageKind {
-  // Round 2: an absorbed or immune hit is still the ally attacking the target.
-  const attacked = o.nDirect > 0 || o.absorbed > 0 || o.immuneHits > 0;
+  // Round 2: an absorbed, delayed or immune hit is still the ally attacking
+  // the target.
+  const attacked =
+    o.nDirect > 0 ||
+    o.absorbed > 0 ||
+    (o.deferred ?? 0) > 0 ||
+    o.immuneHits > 0;
   if (!attacked && o.nPeriodic === 0) return "empty";
   if (!attacked) return "periodic-only";
   return o.K / Math.max(o.M, 1) >= EXTERNAL_DAMAGE_CONTINUES_SHARE
@@ -196,7 +218,12 @@ export function externalDamageForApplication(
   enemies: readonly ICombatUnit[],
   combat: { startTime: number; endTime: number },
 ): IExternalDamageObservation[] {
-  const mit = eligibleExternalMitigation(iv.spellId);
+  // an external's own aura under another id prices as its cast (fact2 C10:
+  // Spirit Link Totem 98008 runs as 325174)
+  const mit = eligibleExternalMitigation(
+    castKeyOfAura(iv.spellId, (id) => eligibleExternalMitigation(id) !== null) ??
+      iv.spellId,
+  );
   if (!mit) return [];
   if (iv.inferredStart || iv.inferredEnd) return [];
   if (iv.srcUnitName === target.name) return []; // self-applied → not an external
@@ -204,21 +231,27 @@ export function externalDamageForApplication(
   const endS = (combat.endTime - startMs) / 1000;
   const enemyIds = new Set(enemies.map((e) => e.id));
   const tDeath = deathSecondOf(target, startMs);
-  const wToTarget = Math.floor(Math.min(iv.toS, endS, tDeath ?? Infinity));
-  const wFrom = Math.ceil(iv.fromS);
+  // the aura's own logged span (round-3 audit, 2026-10-21, a call the user
+  // left to us: fact3 D31 — the grid window [ceil(apply), floor(remove))
+  // dropped the press second, where half of a Pain Suppression's absorbs
+  // landed); the seconds it touches are the K / M bins
+  const wToTarget = Math.min(iv.toS, endS, tDeath ?? Infinity);
+  const wFrom = iv.fromS;
   if (wToTarget <= wFrom) return [];
   const out: IExternalDamageObservation[] = [];
   for (const ally of friends) {
     if (!ally.damageOut) continue;
     const aDeath = deathSecondOf(ally, startMs);
     // Per-ally truncation (the ally's own death); the target-side bound stays.
-    const wTo = Math.min(wToTarget, Math.floor(aDeath ?? Infinity));
+    const wTo = Math.min(wToTarget, aDeath ?? Infinity);
     if (wTo <= wFrom) continue;
     let preDirect = 0;
+    let prePeriodic = 0;
     let nDirect = 0;
     let nPeriodic = 0;
     let dAll = 0;
     let absorbed = 0;
+    let deferred = 0;
     let inSchool = 0;
     let immuneHits = 0;
     const bins = new Set<number>();
@@ -229,11 +262,19 @@ export function externalDamageForApplication(
       immuneHits++;
       bins.add(Math.floor(tS));
     }
+    // the ally and its pets / guardians — the attackers its landed damage
+    // counts (parser-compat folds a summon's rows into the owner's
+    // `damageOut`); the absorbed part reads the same set (fact5 cxa
+    // 8d0ed9e9 0:25: a hunter's pets' 218k absorbed under Pain Suppression
+    // dropped beside their landed 134k)
+    const attackers = new Set<string>([ally.id]);
+    for (const d of ally.damageOut) if (d.srcUnitId) attackers.add(d.srcUnitId);
     for (const a of target.absorbsIn ?? []) {
-      if (a.attackerId !== ally.id) continue;
+      if (!a.attackerId || !attackers.has(a.attackerId)) continue;
       const tS = (a.logLine.timestamp - startMs) / 1000;
       if (tS < wFrom || tS >= wTo) continue;
-      absorbed += a.absorbedAmount;
+      if (isDeferralAbsorb(a)) deferred += a.absorbedAmount;
+      else absorbed += a.absorbedAmount;
       bins.add(Math.floor(tS));
     }
     for (const d of ally.damageOut) {
@@ -245,26 +286,30 @@ export function externalDamageForApplication(
       const onTarget = d.destUnitId === target.id;
       if (
         onTarget &&
-        DIRECT_EVENTS.has(ev) &&
         tS >= iv.fromS - EXTERNAL_DAMAGE_PRE_HIT_S &&
         tS < iv.fromS
-      )
-        preDirect += amt;
+      ) {
+        if (DIRECT_EVENTS.has(ev)) preDirect += amt;
+        else if (ev === PERIODIC_EVENT) prePeriodic += amt;
+      }
       if (tS < wFrom || tS >= wTo) continue;
       dAll += amt;
       if (!onTarget) continue;
       if (DIRECT_EVENTS.has(ev)) nDirect += amt;
       else if (ev === PERIODIC_EVENT) nPeriodic += amt;
       else continue;
-      if ((Number(d.spellSchoolId ?? "0x0") & mit.schoolMask) !== 0)
+      if ((logSchoolMask(hitSchoolId(d)) & mit.schoolMask) !== 0)
         inSchool += amt;
       if (amt >= EXTERNAL_DAMAGE_BIN_MIN_HIT) bins.add(Math.floor(tS));
     }
-    if (preDirect <= 0) continue; // not a qualifying ally
-    const M = wTo - wFrom;
+    if (preDirect + prePeriodic <= 0) continue; // not a qualifying ally
+    // the rendered seconds the window touches
+    const firstSec = Math.floor(wFrom);
+    const lastSec = Math.ceil(wTo) - 1;
+    const M = lastSec - firstSec + 1;
     let G = 0;
     let run = 0;
-    for (let s = wFrom; s < wTo; s++) {
+    for (let s = firstSec; s <= lastSec; s++) {
       if (bins.has(s)) run = 0;
       else G = Math.max(G, ++run);
     }
@@ -292,8 +337,10 @@ export function externalDamageForApplication(
       nPeriodic,
       dAll,
       absorbed,
+      deferred,
       X: dAll > 0 ? (100 * (nDirect + nPeriodic)) / dAll : null,
       preDirect,
+      prePeriodic,
     };
     out.push({ ...base, kind: classifyExternalDamage(base) });
   }
@@ -314,9 +361,20 @@ export function externalDamageObservations(
 }
 
 const k = (x: number): string => `${Math.round(x / 1000)}k`;
-/** `(+Ak absorbed)` when the target's shields ate a material amount. */
-const absorbedTag = (o: IExternalDamageObservation): string =>
-  o.absorbed >= 500 ? ` (+${k(o.absorbed)} absorbed)` : "";
+/** `(+Ak absorbed)` when the target's shields ate a material amount;
+ * `+Dk deferred` for what a deferral shield only delayed. */
+const absorbedTag = (o: IExternalDamageObservation): string => {
+  const parts: string[] = [];
+  if (o.absorbed >= 500) parts.push(`+${k(o.absorbed)} absorbed`);
+  if (o.deferred >= 500) parts.push(`+${k(o.deferred)} deferred`);
+  return parts.length > 0 ? ` (${parts.join(", ")})` : "";
+};
+/** `absorbedTag` as the gate reads it back (`DURING_SEG` in
+ * promptQualityCheck.ts): the three forms above, or none. FT-T02b added the
+ * `deferred` part to the writer and left the gate's own pattern at
+ * `(+Ak absorbed)` — 580 unparsable `during it:` segments on the 605-file
+ * capture until the pattern moved here, next to what it reads. */
+export const DURING_ABSORBED_TAG_RE_SRC = String.raw`(?: \((?:\+\d+k absorbed(?:, \+\d+k deferred)?|\+\d+k deferred)\))?`;
 /** Round-2 fields: the in-school share for a school-limited wall, and immune hits. */
 const round2Tags = (o: IExternalDamageObservation): string => {
   let s = "";
@@ -330,7 +388,7 @@ const round2Tags = (o: IExternalDamageObservation): string => {
   return s;
 };
 const isEmpty = (o: IExternalDamageObservation): boolean =>
-  o.dAll <= 0 && o.absorbed <= 0 && o.immuneHits === 0;
+  o.dAll <= 0 && o.absorbed <= 0 && o.deferred <= 0 && o.immuneHits === 0;
 
 /**
  * The rendered fact for one observation, appended to the `[ENEMY DEF]`

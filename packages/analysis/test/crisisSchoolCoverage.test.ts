@@ -8,6 +8,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 
 import {
   coversCrisisSchool,
+  saveSchoolMask,
   SCHOOL_SAVE_MIN_SHARE,
 } from "../src/analysis/candidates/cooldownTiming";
 import { schoolShareCoveredBy } from "../src/analysis/crisisDecisionPoints";
@@ -51,5 +52,30 @@ describe("coversCrisisSchool", () => {
   });
   it("a point with no school breakdown keeps the old behaviour", () => {
     expect(coversCrisisSchool(BOP, {})).toBe(true);
+  });
+});
+
+// Triage F-H20 (user ruling 2026-09-30): Anti-Magic Shell has no percentage
+// row — its schools come from the DB2 absorb mask (aura 69 MiscValue 0x7e)
+describe("Anti-Magic Shell — DB2 absorb school mask", () => {
+  it("both ids read 0x7e (all magic, no physical); a signed row still wins", () => {
+    expect(saveSchoolMask("48707")).toBe(0x7e);
+    expect(saveSchoolMask("410358")).toBe(0x7e);
+    expect(saveSchoolMask(BOP)).toBe(0x1);
+    // Ice Barrier absorbs every school → no school claim narrows it
+    expect(saveSchoolMask("11426")).toBe(0x7f);
+  });
+  it("58a3d0f8 H:492 shape: 78 % physical → AMS is not a ready save", () => {
+    const p = { dmg2sBySchool: { "1": 78, "32": 22 } };
+    expect(coversCrisisSchool("48707", p)).toBe(false);
+    expect(coversCrisisSchool("410358", p)).toBe(false);
+  });
+  it("a crisis at least half magic keeps it (the A30 / W1e 50 % rule)", () => {
+    expect(
+      coversCrisisSchool("48707", { dmg2sBySchool: { "1": 50, "32": 50 } }),
+    ).toBe(true);
+    expect(
+      coversCrisisSchool("48707", { dmg2sBySchool: { "1": 51, "32": 49 } }),
+    ).toBe(false);
   });
 });

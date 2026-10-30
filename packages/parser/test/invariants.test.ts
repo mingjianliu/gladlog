@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { checkParserInvariants } from "../src/invariants";
 import { GladLogParser } from "../src/api";
-import { synthArenaLog } from "../src/testing/synthLog";
+import { checkParserInvariants } from "../src/invariants";
 import type { GladMatch, GladMatchBase } from "../src/l3/model";
+import { synthArenaLog } from "../src/testing/synthLog";
 
 function parseSynth(): GladMatch {
   const parser = new GladLogParser();

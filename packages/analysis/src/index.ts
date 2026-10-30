@@ -23,7 +23,7 @@ export {
 } from "./data/mitigationData";
 export { OBSERVED_SPELL_IDS } from "./data/observedSpellIds";
 export { SPEC_ICONS } from "./data/specIconsGenerated";
-export { SPELL_CATEGORIES } from "./data/spellCategories";
+export { isKickSpellId, SPELL_CATEGORIES } from "./data/spellCategories";
 export { getEnglishSpellName } from "./data/spellEffectData";
 export { SPELL_EFFECT_OVERRIDES } from "./data/spellEffectOverrides";
 export { SPELL_ICONS_GENERATED } from "./data/spellIconsGenerated";
@@ -38,6 +38,14 @@ export { nodeMaps } from "./data/talentStrings";
 export { zoneMetadata } from "./data/zoneMetadata";
 export * from "./utils/auraIntervals";
 export * from "./utils/burstLedger";
+export {
+  ADAPTATION_TRIGGER_AURA_ID,
+  pvpTrinketUses,
+} from "./utils/pvpTrinketUses";
+// the hostile-source set every cannot-cast reader passes (death-kill F-M1:
+// the desktop death recap asks the same predicate as the prompt)
+export { enemySourceIds } from "./utils/cannotCastIntervals";
+export * from "./utils/castCancels";
 export * from "./utils/ccBreakAnalysis";
 export * from "./utils/ccTrinketAnalysis";
 export * from "./utils/cooldowns";
@@ -54,7 +62,6 @@ export * from "./utils/healerExposureAnalysis";
 export * from "./utils/healerOffenseAnalysis";
 export * from "./utils/healingGaps";
 export * from "./utils/incomingPressure";
-export * from "./utils/castCancels";
 export * from "./utils/kickAudit";
 export * from "./utils/killAttempts";
 export * from "./utils/killWindowTargetSelection";
@@ -62,6 +69,7 @@ export * from "./utils/offensiveWindows";
 export * from "./utils/positionSampling";
 export * from "./utils/rawStreams";
 export * from "./utils/renderGrid";
+export { roundEndMs } from "./utils/roundEnd";
 export * from "./utils/stats";
 export * from "./utils/talentOwnership";
 export {
@@ -102,6 +110,7 @@ export * from "./analysis/buildFindingsPrompt";
 export * from "./analysis/causalLint";
 export * from "./analysis/deepDive";
 export * from "./analysis/findingCategories";
+export * from "./analysis/findingsCount";
 export * from "./analysis/hindsightLint";
 export * from "./analysis/parseModelJson";
 export * from "./analysis/rosterLint";
@@ -132,6 +141,9 @@ export { OFF_GCD_SPELL_IDS } from "./data/offGcdGenerated";
 // the prompt and the lanes (single-source, see context/timelineHelpers.ts).
 export * from "./context/peakSpikePlacement";
 export * from "./context/resLedgerPrune";
-export * from "./utils/externalDamage";
-export { DMG_SPIKE_THRESHOLD } from "./context/timelineHelpers";
+export {
+  DMG_SPIKE_THRESHOLD,
+  dmgSpikeWindowsOf,
+} from "./context/timelineHelpers";
 export * from "./data/kickedSpellCategories";
+export * from "./utils/externalDamage";

@@ -71,7 +71,11 @@ describe("buildMatchTimeline — [DR CLASH] context lines (GH #67 S3)", () => {
             spellName: "Gouge",
             casterName: "OwnerPlayer",
             casterSpec: "Subtlety Rogue",
-            drInfo: { category: "Incapacitate", level: "Full", sequenceIndex: 0 },
+            drInfo: {
+              category: "Incapacitate",
+              level: "Full",
+              sequenceIndex: 0,
+            },
           },
           {
             atSeconds: 20,
@@ -80,7 +84,11 @@ describe("buildMatchTimeline — [DR CLASH] context lines (GH #67 S3)", () => {
             spellName: "Freezing Trap",
             casterName: "HunterTeammate",
             casterSpec: "Survival Hunter",
-            drInfo: { category: "Incapacitate", level: "50%", sequenceIndex: 1 },
+            drInfo: {
+              category: "Incapacitate",
+              level: "50%",
+              sequenceIndex: 1,
+            },
           },
         ],
       },
@@ -115,12 +123,49 @@ describe("buildMatchTimeline — [DR CLASH] context lines (GH #67 S3)", () => {
     );
     // Legend included conditionally
     expect(timeline).toContain(DR_CLASH_LEGEND[0]);
+
+    // FT board item: with the rosters' id maps the ENEMY target reads its
+    // roster label too (it printed the bare character name)
+    const labelled = buildMatchTimeline({
+      owner,
+      ownerSpec: "Subtlety Rogue",
+      friends: [owner, teammate],
+      enemies: [enemy],
+      allUnits: [owner, teammate, enemy],
+      playerIdMap: new Map([
+        [owner.name, 1],
+        [teammate.name, 2],
+      ]),
+      enemyIdMap: new Map([[enemy.name, 4]]),
+      matchStartMs: T0,
+      matchEndMs: T0 + 60_000,
+      isHealer: false,
+      ownerCDs: [],
+      teammateCDs: [],
+      enemyCDTimeline: { players: [], alignedBurstWindows: [] },
+      ccTrinketSummaries: [],
+      dispelSummary: emptyDispel as any,
+      enemyDispelSummary: emptyDispel as any,
+      pressureWindows: [],
+      healingGaps: [],
+      friendlyDeaths: [],
+      enemyDeaths: [],
+      criticalWindowSeconds: new Set(),
+      outgoingCCChains,
+    });
+    const clash = labelled.split("\n").find((l) => l.includes("[DR CLASH]   "));
+    expect(clash).toMatch(/Freezing Trap on 4\S* landed at 50% DR/);
+    expect(clash).not.toContain("on EnemyHealer");
   });
 
   it("omits [DR CLASH] and legend when no teammate DR clash occurred", () => {
     const owner = makeUnit({ id: "P1", name: "OwnerPlayer" });
     const teammate = makeUnit({ id: "P2", name: "HunterTeammate" });
-    const enemy = makeUnit({ id: "E1", name: "EnemyHealer", reaction: CombatUnitReaction.Hostile });
+    const enemy = makeUnit({
+      id: "E1",
+      name: "EnemyHealer",
+      reaction: CombatUnitReaction.Hostile,
+    });
 
     const timeline = buildMatchTimeline({
       owner,
@@ -147,5 +192,136 @@ describe("buildMatchTimeline — [DR CLASH] context lines (GH #67 S3)", () => {
 
     expect(timeline).not.toContain("[DR CLASH]");
     expect(timeline).not.toContain(DR_CLASH_LEGEND[0]);
+  });
+});
+
+describe("[DR CLASH] cap keeps the owner's clashes first (triage cc-dr F-DC1)", () => {
+  it("an owner clash later than three teammate clashes still renders", () => {
+    const owner = makeUnit({ id: "P1", name: "OwnerPlayer" });
+    const mate = makeUnit({ id: "P2", name: "MateA" });
+    const mate2 = makeUnit({ id: "P3", name: "MateB" });
+    const app = (atSeconds: number, casterName: string, level: string) => ({
+      atSeconds,
+      durationSeconds: 3,
+      spellId: "1776",
+      spellName: "Gouge",
+      casterName,
+      casterSpec: "Subtlety Rogue",
+      drInfo: { category: "Incapacitate", level, sequenceIndex: 0 },
+    });
+    const chain = (target: string, t: number, second: string) => ({
+      targetName: target,
+      targetSpec: "Restoration Shaman",
+      applications: [app(t, "MateA", "Full"), app(t + 4, second, "50%")],
+    });
+    const enemies = ["E1", "E2", "E3", "E4"].map((n) =>
+      makeUnit({ id: n, name: n, reaction: CombatUnitReaction.Hostile }),
+    );
+    const timeline = buildMatchTimeline({
+      owner,
+      ownerSpec: "Subtlety Rogue",
+      friends: [owner, mate, mate2],
+      enemies,
+      allUnits: [owner, mate, mate2, ...enemies],
+      matchStartMs: T0,
+      matchEndMs: T0 + 60_000,
+      isHealer: false,
+      ownerCDs: [],
+      teammateCDs: [],
+      enemyCDTimeline: { players: [], alignedBurstWindows: [] },
+      ccTrinketSummaries: [],
+      dispelSummary: emptyDispel as any,
+      enemyDispelSummary: emptyDispel as any,
+      pressureWindows: [],
+      healingGaps: [],
+      friendlyDeaths: [],
+      enemyDeaths: [],
+      criticalWindowSeconds: new Set(),
+      outgoingCCChains: [
+        chain("E1", 10, "MateB"),
+        chain("E2", 20, "MateB"),
+        chain("E3", 30, "MateB"),
+        chain("E4", 40, "OwnerPlayer"),
+      ] as IOutgoingCCChain[],
+    });
+    const clashLines = timeline
+      .split("\n")
+      .filter((l) => l.includes("[DR CLASH]   "));
+    expect(clashLines).toHaveLength(3);
+    expect(clashLines.some((l) => l.includes("your Gouge on"))).toBe(true);
+    // rendered in time order
+    const times = clashLines.map((l) => l.trim().slice(0, 4));
+    expect([...times].sort()).toEqual(times);
+  });
+});
+
+describe("[DR CLASH] gap under the line's tenth-second grid", () => {
+  const clashLine = (priorAt: number, at: number): string => {
+    const owner = makeUnit({ id: "P1", name: "OwnerPlayer" });
+    const mate = makeUnit({ id: "P2", name: "MateA" });
+    const enemy = makeUnit({
+      id: "E1",
+      name: "E1",
+      reaction: CombatUnitReaction.Hostile,
+    });
+    const app = (atSeconds: number, casterName: string, level: string) => ({
+      atSeconds,
+      durationSeconds: 3,
+      spellId: "1776",
+      spellName: "Gouge",
+      casterName,
+      casterSpec: "Subtlety Rogue",
+      drInfo: { category: "Incapacitate", level, sequenceIndex: 0 },
+    });
+    const timeline = buildMatchTimeline({
+      owner,
+      ownerSpec: "Subtlety Rogue",
+      friends: [owner, mate],
+      enemies: [enemy],
+      allUnits: [owner, mate, enemy],
+      matchStartMs: T0,
+      matchEndMs: T0 + 60_000,
+      isHealer: false,
+      ownerCDs: [],
+      teammateCDs: [],
+      enemyCDTimeline: { players: [], alignedBurstWindows: [] },
+      ccTrinketSummaries: [],
+      dispelSummary: emptyDispel as any,
+      enemyDispelSummary: emptyDispel as any,
+      pressureWindows: [],
+      healingGaps: [],
+      friendlyDeaths: [],
+      enemyDeaths: [],
+      criticalWindowSeconds: new Set(),
+      outgoingCCChains: [
+        {
+          targetName: "E1",
+          targetSpec: "Restoration Shaman",
+          applications: [
+            app(priorAt, "MateA", "Full"),
+            app(at, "OwnerPlayer", "50%"),
+          ],
+        },
+      ] as IOutgoingCCChain[],
+    });
+    const line = timeline.split("\n").find((l) => l.includes("[DR CLASH]   "));
+    expect(line).toBeDefined();
+    return line!;
+  };
+
+  it("two landings within 50 ms read `<0.1s earlier`, not `0s earlier`", () => {
+    // 20 ms apart, and on the same millisecond
+    for (const prior of [19.98, 20]) {
+      const line = clashLine(prior, 20);
+      expect(line).toContain("MateA's Gouge <0.1s earlier put them on DR");
+      expect(line).not.toMatch(/ 0s earlier/);
+    }
+  });
+
+  it("from a tenth of a second up the gap prints as before", () => {
+    expect(clashLine(19.9, 20)).toContain("Gouge 0.1s earlier put them");
+    expect(clashLine(19.7, 20)).toContain("Gouge 0.3s earlier put them");
+    expect(clashLine(18.5, 20)).toContain("Gouge 1.5s earlier put them");
+    expect(clashLine(16, 20)).toContain("Gouge 4s earlier put them");
   });
 });

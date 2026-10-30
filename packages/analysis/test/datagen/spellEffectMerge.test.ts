@@ -1,6 +1,6 @@
 import { spellEffectData } from "../../src/data/spellEffectData";
-import { SPELL_EFFECT_OVERRIDES } from "../../src/data/spellEffectOverrides";
 import { SPELL_EFFECTS_GENERATED } from "../../src/data/spellEffectGenerated";
+import { SPELL_EFFECT_OVERRIDES } from "../../src/data/spellEffectOverrides";
 
 describe("spellEffectData 双层合并", () => {
   it("overrides 全部键保留于合并结果(校准字段覆盖层赢;dispelType 可由生成层补足 —— 2026-08-19 字段级契约,见 src/data/spellEffectData.test.ts)", () => {

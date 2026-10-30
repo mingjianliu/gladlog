@@ -1,12 +1,11 @@
 // @vitest-environment jsdom
-import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, waitFor } from "@testing-library/react";
-
 import { ensureAnalysisData } from "@gladlog/analysis";
+import { act, fireEvent, render, waitFor } from "@testing-library/react";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { MatchReport } from "../src/renderer/src/report/components/MatchReport";
-import { buildWindowAnalysisRequest } from "../src/renderer/src/report/derive/analysisInput";
 import { WindowAnalysisCard } from "../src/renderer/src/report/components/WindowAnalysisCard";
+import { buildWindowAnalysisRequest } from "../src/renderer/src/report/derive/analysisInput";
 import { loadRealMatchFixture } from "./fixtures/loadFixture";
 
 const m = loadRealMatchFixture();

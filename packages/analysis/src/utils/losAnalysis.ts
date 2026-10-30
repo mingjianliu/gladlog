@@ -71,6 +71,34 @@ export function getUnitPositionAtTime(
 }
 
 /**
+ * How far apart the two samples are that `getUnitPositionAtTime` reads
+ * `timestampMs` between: 0 on a sample, the time since the last sample past
+ * the end, null where it has no position. The position there is a straight
+ * line across that span — over a long one (an idle unit, a charge, a
+ * teleport) it is a guess, and a fact that prints a distance off it has to
+ * say so (kick-eaten `sourceDistYd`, re-eval 2026-10-08 F07: eb8041ce printed
+ * `sourceDistYd=1.3` across two samples 7.8 s and 36 yd apart).
+ */
+export function positionSampleSpanMs(
+  unit: ICombatUnit,
+  timestampMs: number,
+): number | null {
+  const actions = unit.advancedActions;
+  if (actions.length === 0 || timestampMs < actions[0].timestamp) return null;
+  const last = actions[actions.length - 1];
+  if (timestampMs >= last.timestamp) return timestampMs - last.timestamp;
+  for (let i = 0; i < actions.length - 1; i++) {
+    const curr = actions[i];
+    const next = actions[i + 1];
+    if (curr.timestamp <= timestampMs && next.timestamp > timestampMs)
+      return curr.timestamp === timestampMs
+        ? 0
+        : next.timestamp - curr.timestamp;
+  }
+  return null;
+}
+
+/**
  * Nearest RAW sampled position within `maxGapMs` of the instant — no interpolation.
  * Line-of-sight is a topological predicate: an interpolated point between two
  * real samples can sit on the wrong side of a pillar edge that neither real

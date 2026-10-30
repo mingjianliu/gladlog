@@ -1,7 +1,7 @@
 import type { PackItem } from "@gladlog/analysis";
+import { buildWindowPack } from "@gladlog/analysis";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { buildWindowPack } from "@gladlog/analysis";
 import { deriveUncoveredHighlights } from "../src/renderer/src/report/derive/uncoveredHighlights";
 
 // The exact geometry of hits / dedup boundaries / merging / ranking is verified

@@ -12,6 +12,8 @@
  * CC_AVOIDANCE_BUFF_SPELLS and CD_TALENT_MODIFIERS.
  */
 
+import { dropAuraRebroadcasts, officialDurationS } from "./auraIntervals";
+
 export type TalentEffectKind =
   /** while buffSpellId is active, immune to magic damage/effects → credit a magic CC/damage avoidance */
   | "magic_immunity"
@@ -404,6 +406,80 @@ export function getInterruptImmunityConditions(
     name: b.name,
     conditionName: b.conditionName ?? "",
   }));
+}
+
+/**
+ * When the owner was interrupt-immune through a PvP talent
+ * (`getInterruptImmunityConditions`): the condition aura's APPLIED / REFRESH
+ * to its REMOVED on the owner, epoch ms; an aura still up at the end closes
+ * at `endMs`. One builder for the timeline's "enemy interrupts UP" correction
+ * (B139) and kick-eaten's `kickImmunityEnded` fact (triage F-K14b).
+ */
+export function interruptImmuneWindows(
+  owner: {
+    info?: { pvpTalents?: string[] } | null;
+    auraEvents?: ReadonlyArray<{
+      spellId?: string | null;
+      timestamp: number;
+      logLine: { event: string };
+    }>;
+  },
+  endMs: number,
+): Array<{ from: number; to: number; reason: string; auraName: string }> {
+  const out: Array<{
+    from: number;
+    to: number;
+    reason: string;
+    auraName: string;
+  }> = [];
+  for (const cond of getInterruptImmunityConditions(owner.info?.pvpTalents)) {
+    const reason = cond.conditionName
+      ? `${cond.name} + ${cond.conditionName}`
+      : cond.name;
+    const auraName = cond.conditionName || cond.name;
+    let openFrom: number | null = null;
+    // the aura's lost REMOVED ends it at its official length after its last
+    // (re)application — the `buildAuraIntervals` cap (codex 60-POSTHOC-09f
+    // #2: an Obsidian Scales with no REMOVED kept Obsidian Mettle's
+    // interrupt immunity to 180 s, 22 s official)
+    let lastSeen = 0;
+    const capAt = (endAt: number) => {
+      const d = officialDurationS(
+        cond.conditionAuraId,
+        (owner as { spellCastEvents?: unknown }).spellCastEvents
+          ? (owner as never)
+          : undefined,
+        lastSeen,
+      );
+      return d === null ? endAt : Math.min(endAt, lastSeen + d * 1000);
+    };
+    // a re-broadcast's REMOVED is not the window's end (work order
+    // 2026-10-14d #9 — `dropAuraRebroadcasts`)
+    for (const a of dropAuraRebroadcasts(owner.auraEvents ?? [])) {
+      if (a.spellId !== cond.conditionAuraId) continue;
+      if (
+        a.logLine.event === "SPELL_AURA_APPLIED" ||
+        a.logLine.event === "SPELL_AURA_REFRESH"
+      ) {
+        if (openFrom !== null && a.timestamp > capAt(Infinity)) {
+          // the open run's REMOVED was lost: it ended at its length
+          out.push({ from: openFrom, to: capAt(a.timestamp), reason, auraName });
+          openFrom = null;
+        }
+        if (openFrom === null) openFrom = a.timestamp;
+        lastSeen = a.timestamp;
+      } else if (
+        a.logLine.event === "SPELL_AURA_REMOVED" &&
+        openFrom !== null
+      ) {
+        out.push({ from: openFrom, to: a.timestamp, reason, auraName });
+        openFrom = null;
+      }
+    }
+    if (openFrom !== null)
+      out.push({ from: openFrom, to: capAt(endMs), reason, auraName });
+  }
+  return out;
 }
 
 /** PvP talents that grant an OFFENSIVE purge (dispelling beneficial effects from ENEMIES). */

@@ -12,11 +12,11 @@ import {
 } from "@gladlog/parser-compat";
 import { describe, expect, it } from "vitest";
 
+import { isEnemyCdWindowSpell } from "../utils/enemyCDs";
 import {
   CRISIS_EXTERNAL_IDS,
   CRISIS_OFFENSIVE_CD_IDS,
 } from "./crisisDecisionPoints";
-import { isEnemyCdWindowSpell } from "../utils/enemyCDs";
 import {
   TEAMMATE_CRISIS_CUE_MIN_S,
   TEAMMATE_CRISIS_REACH_YARDS,
@@ -102,6 +102,8 @@ function mate(over: Record<string, unknown> = {}) {
     damageIn: [
       {
         timestamp: T0 + 1500,
+        // production rows carry their log line (the school split keys on it)
+        logLine: { timestamp: T0 + 1500, parameters: [] },
         srcUnitId: "E1",
         amount: -30,
         effectiveAmount: -30,

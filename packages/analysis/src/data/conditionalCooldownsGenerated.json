@@ -1,6 +1,6 @@
 {
  "_meta": {
-  "build": "12.1.5.69594",
+  "build": "12.1.5.70391",
   "generator": "scripts/datagen/genConditionalCooldowns.ts"
  },
  "byTarget": {
@@ -11,11 +11,32 @@
     "pct": 100
    }
   ],
+  "1953": [
+   {
+    "carrier": "381750",
+    "kind": "rate",
+    "mult": 1.1764705882352942
+   }
+  ],
+  "2983": [
+   {
+    "carrier": "1259614",
+    "kind": "rate",
+    "mult": 3
+   }
+  ],
   "6343": [
    {
     "carrier": "107574",
     "kind": "snapshot",
     "pct": 50
+   }
+  ],
+  "6544": [
+   {
+    "carrier": "381758",
+    "kind": "rate",
+    "mult": 1.1764705882352942
    }
   ],
   "6795": [
@@ -30,11 +51,37 @@
     "pct": 50
    }
   ],
+  "13750": [
+   {
+    "carrier": "1259614",
+    "kind": "rate",
+    "mult": 3
+   }
+  ],
+  "13877": [
+   {
+    "carrier": "1259614",
+    "kind": "rate",
+    "mult": 3
+   }
+  ],
   "17364": [
    {
     "carrier": "114051",
     "kind": "rate",
     "mult": 2.5
+   }
+  ],
+  "18562": [
+   {
+    "carrier": "1264618",
+    "kind": "rate",
+    "mult": 1.3333333333333333
+   },
+   {
+    "carrier": "1264911",
+    "kind": "rate",
+    "mult": 1.3333333333333333
    }
   ],
   "19434": [
@@ -73,11 +120,39 @@
     "mult": 2
    }
   ],
+  "48265": [
+   {
+    "carrier": "381732",
+    "kind": "rate",
+    "mult": 1.1764705882352942
+   }
+  ],
+  "51690": [
+   {
+    "carrier": "1259614",
+    "kind": "rate",
+    "mult": 3
+   }
+  ],
+  "61295": [
+   {
+    "carrier": "1270453",
+    "kind": "rate",
+    "mult": 1.1111111111111112
+   }
+  ],
   "61336": [
    {
     "carrier": "329042",
     "kind": "rate",
     "mult": 5
+   }
+  ],
+  "73325": [
+   {
+    "carrier": "381753",
+    "kind": "rate",
+    "mult": 1.1764705882352942
    }
   ],
   "77758": [
@@ -92,11 +167,162 @@
     "pct": 50
    }
   ],
+  "107428": [
+   {
+    "carrier": "443421",
+    "kind": "rate",
+    "mult": 1.75
+   },
+   {
+    "carrier": "443616",
+    "kind": "rate",
+    "mult": 2.5
+   },
+   {
+    "carrier": "1238904",
+    "kind": "rate",
+    "mult": 1.2475
+   }
+  ],
+  "108853": [
+   {
+    "carrier": "383637",
+    "kind": "rate",
+    "mult": 1.3
+   }
+  ],
+  "109132": [
+   {
+    "carrier": "381751",
+    "kind": "rate",
+    "mult": 1.1764705882352942
+   }
+  ],
+  "113656": [
+   {
+    "carrier": "443421",
+    "kind": "rate",
+    "mult": 1.75
+   },
+   {
+    "carrier": "443616",
+    "kind": "rate",
+    "mult": 2.5
+   },
+   {
+    "carrier": "1238904",
+    "kind": "rate",
+    "mult": 1.2475
+   }
+  ],
+  "115008": [
+   {
+    "carrier": "381751",
+    "kind": "rate",
+    "mult": 1.1764705882352942
+   }
+  ],
+  "115151": [
+   {
+    "carrier": "443421",
+    "kind": "rate",
+    "mult": 1.75
+   },
+   {
+    "carrier": "443616",
+    "kind": "rate",
+    "mult": 2.5
+   },
+   {
+    "carrier": "1238904",
+    "kind": "rate",
+    "mult": 1.2475
+   }
+  ],
   "115356": [
    {
     "carrier": "114051",
     "kind": "rate",
     "mult": 2.5
+   }
+  ],
+  "116680": [
+   {
+    "carrier": "443421",
+    "kind": "rate",
+    "mult": 1.75
+   },
+   {
+    "carrier": "443616",
+    "kind": "rate",
+    "mult": 2.5
+   },
+   {
+    "carrier": "1238904",
+    "kind": "rate",
+    "mult": 1.2475
+   }
+  ],
+  "116849": [
+   {
+    "carrier": "443421",
+    "kind": "rate",
+    "mult": 1.75
+   },
+   {
+    "carrier": "443616",
+    "kind": "rate",
+    "mult": 2.5
+   },
+   {
+    "carrier": "1238904",
+    "kind": "rate",
+    "mult": 1.2475
+   }
+  ],
+  "152175": [
+   {
+    "carrier": "443421",
+    "kind": "rate",
+    "mult": 1.75
+   },
+   {
+    "carrier": "443616",
+    "kind": "rate",
+    "mult": 2.5
+   },
+   {
+    "carrier": "1238904",
+    "kind": "rate",
+    "mult": 1.2475
+   }
+  ],
+  "190784": [
+   {
+    "carrier": "381752",
+    "kind": "rate",
+    "mult": 1.1764705882352942
+   }
+  ],
+  "195072": [
+   {
+    "carrier": "381741",
+    "kind": "rate",
+    "mult": 1.1764705882352942
+   }
+  ],
+  "195457": [
+   {
+    "carrier": "1259614",
+    "kind": "rate",
+    "mult": 3
+   }
+  ],
+  "205629": [
+   {
+    "carrier": "381741",
+    "kind": "rate",
+    "mult": 1.1764705882352942
    }
   ],
   "205644": [
@@ -111,6 +337,27 @@
     "pct": 50
    }
   ],
+  "206572": [
+   {
+    "carrier": "381758",
+    "kind": "rate",
+    "mult": 1.1764705882352942
+   }
+  ],
+  "212653": [
+   {
+    "carrier": "381750",
+    "kind": "rate",
+    "mult": 1.1764705882352942
+   }
+  ],
+  "257044": [
+   {
+    "carrier": "288613",
+    "kind": "rate",
+    "mult": 1.6
+   }
+  ],
   "259495": [
    {
     "carrier": "470488",
@@ -118,11 +365,151 @@
     "mult": 1.6
    }
   ],
+  "271877": [
+   {
+    "carrier": "1259614",
+    "kind": "rate",
+    "mult": 3
+   }
+  ],
+  "315341": [
+   {
+    "carrier": "1259614",
+    "kind": "rate",
+    "mult": 3
+   }
+  ],
+  "319836": [
+   {
+    "carrier": "383637",
+    "kind": "rate",
+    "mult": 1.3
+   }
+  ],
+  "344865": [
+   {
+    "carrier": "381741",
+    "kind": "rate",
+    "mult": 1.1764705882352942
+   }
+  ],
+  "351338": [
+   {
+    "carrier": "390148",
+    "kind": "rate",
+    "mult": 1.1
+   },
+   {
+    "carrier": "404977",
+    "kind": "rate",
+    "mult": 11
+   },
+   {
+    "carrier": "431698",
+    "kind": "rate",
+    "mult": 1.005
+   }
+  ],
+  "355913": [
+   {
+    "carrier": "390148",
+    "kind": "rate",
+    "mult": 1.1
+   },
+   {
+    "carrier": "404977",
+    "kind": "rate",
+    "mult": 11
+   },
+   {
+    "carrier": "431698",
+    "kind": "rate",
+    "mult": 1.005
+   }
+  ],
+  "355936": [
+   {
+    "carrier": "390148",
+    "kind": "rate",
+    "mult": 1.1
+   },
+   {
+    "carrier": "404977",
+    "kind": "rate",
+    "mult": 11
+   },
+   {
+    "carrier": "431698",
+    "kind": "rate",
+    "mult": 1.005
+   }
+  ],
+  "357170": [
+   {
+    "carrier": "390148",
+    "kind": "rate",
+    "mult": 1.1
+   },
+   {
+    "carrier": "404977",
+    "kind": "rate",
+    "mult": 11
+   },
+   {
+    "carrier": "431698",
+    "kind": "rate",
+    "mult": 1.005
+   }
+  ],
   "357208": [
    {
     "carrier": "404977",
     "kind": "rate",
     "mult": 11
+   },
+   {
+    "carrier": "390148",
+    "kind": "rate",
+    "mult": 1.1
+   },
+   {
+    "carrier": "431698",
+    "kind": "rate",
+    "mult": 1.005
+   }
+  ],
+  "357210": [
+   {
+    "carrier": "390148",
+    "kind": "rate",
+    "mult": 1.1
+   },
+   {
+    "carrier": "404977",
+    "kind": "rate",
+    "mult": 11
+   },
+   {
+    "carrier": "431698",
+    "kind": "rate",
+    "mult": 1.005
+   }
+  ],
+  "357214": [
+   {
+    "carrier": "390148",
+    "kind": "rate",
+    "mult": 1.1
+   },
+   {
+    "carrier": "404977",
+    "kind": "rate",
+    "mult": 11
+   },
+   {
+    "carrier": "431698",
+    "kind": "rate",
+    "mult": 1.005
    }
   ],
   "358267": [
@@ -130,6 +517,145 @@
     "carrier": "404977",
     "kind": "rate",
     "mult": 11
+   },
+   {
+    "carrier": "381748",
+    "kind": "rate",
+    "mult": 1.1764705882352942
+   },
+   {
+    "carrier": "390148",
+    "kind": "rate",
+    "mult": 1.1
+   },
+   {
+    "carrier": "431698",
+    "kind": "rate",
+    "mult": 1.005
+   }
+  ],
+  "358385": [
+   {
+    "carrier": "390148",
+    "kind": "rate",
+    "mult": 1.1
+   },
+   {
+    "carrier": "404977",
+    "kind": "rate",
+    "mult": 11
+   },
+   {
+    "carrier": "431698",
+    "kind": "rate",
+    "mult": 1.005
+   }
+  ],
+  "359073": [
+   {
+    "carrier": "390148",
+    "kind": "rate",
+    "mult": 1.1
+   },
+   {
+    "carrier": "404977",
+    "kind": "rate",
+    "mult": 11
+   },
+   {
+    "carrier": "431698",
+    "kind": "rate",
+    "mult": 1.005
+   }
+  ],
+  "359816": [
+   {
+    "carrier": "390148",
+    "kind": "rate",
+    "mult": 1.1
+   },
+   {
+    "carrier": "404977",
+    "kind": "rate",
+    "mult": 11
+   },
+   {
+    "carrier": "431698",
+    "kind": "rate",
+    "mult": 1.005
+   }
+  ],
+  "360823": [
+   {
+    "carrier": "390148",
+    "kind": "rate",
+    "mult": 1.1
+   },
+   {
+    "carrier": "404977",
+    "kind": "rate",
+    "mult": 11
+   },
+   {
+    "carrier": "431698",
+    "kind": "rate",
+    "mult": 1.005
+   }
+  ],
+  "360827": [
+   {
+    "carrier": "390148",
+    "kind": "rate",
+    "mult": 1.1
+   },
+   {
+    "carrier": "404977",
+    "kind": "rate",
+    "mult": 11
+   },
+   {
+    "carrier": "431698",
+    "kind": "rate",
+    "mult": 1.005
+   }
+  ],
+  "360995": [
+   {
+    "carrier": "381748",
+    "kind": "rate",
+    "mult": 1.1764705882352942
+   },
+   {
+    "carrier": "390148",
+    "kind": "rate",
+    "mult": 1.1
+   },
+   {
+    "carrier": "404977",
+    "kind": "rate",
+    "mult": 11
+   },
+   {
+    "carrier": "431698",
+    "kind": "rate",
+    "mult": 1.005
+   }
+  ],
+  "363534": [
+   {
+    "carrier": "390148",
+    "kind": "rate",
+    "mult": 1.1
+   },
+   {
+    "carrier": "404977",
+    "kind": "rate",
+    "mult": 11
+   },
+   {
+    "carrier": "431698",
+    "kind": "rate",
+    "mult": 1.005
    }
   ],
   "363916": [
@@ -137,6 +663,384 @@
     "carrier": "404977",
     "kind": "rate",
     "mult": 11
+   },
+   {
+    "carrier": "390148",
+    "kind": "rate",
+    "mult": 1.1
+   },
+   {
+    "carrier": "431698",
+    "kind": "rate",
+    "mult": 1.005
+   }
+  ],
+  "364342": [
+   {
+    "carrier": "390148",
+    "kind": "rate",
+    "mult": 1.1
+   },
+   {
+    "carrier": "404977",
+    "kind": "rate",
+    "mult": 11
+   },
+   {
+    "carrier": "431698",
+    "kind": "rate",
+    "mult": 1.005
+   }
+  ],
+  "365585": [
+   {
+    "carrier": "390148",
+    "kind": "rate",
+    "mult": 1.1
+   },
+   {
+    "carrier": "404977",
+    "kind": "rate",
+    "mult": 11
+   },
+   {
+    "carrier": "431698",
+    "kind": "rate",
+    "mult": 1.005
+   }
+  ],
+  "366155": [
+   {
+    "carrier": "390148",
+    "kind": "rate",
+    "mult": 1.1
+   },
+   {
+    "carrier": "404977",
+    "kind": "rate",
+    "mult": 11
+   },
+   {
+    "carrier": "431698",
+    "kind": "rate",
+    "mult": 1.005
+   }
+  ],
+  "367364": [
+   {
+    "carrier": "390148",
+    "kind": "rate",
+    "mult": 1.1
+   },
+   {
+    "carrier": "404977",
+    "kind": "rate",
+    "mult": 11
+   },
+   {
+    "carrier": "431698",
+    "kind": "rate",
+    "mult": 1.005
+   }
+  ],
+  "368412": [
+   {
+    "carrier": "390148",
+    "kind": "rate",
+    "mult": 1.1
+   },
+   {
+    "carrier": "404977",
+    "kind": "rate",
+    "mult": 11
+   },
+   {
+    "carrier": "431698",
+    "kind": "rate",
+    "mult": 1.005
+   }
+  ],
+  "368415": [
+   {
+    "carrier": "390148",
+    "kind": "rate",
+    "mult": 1.1
+   },
+   {
+    "carrier": "404977",
+    "kind": "rate",
+    "mult": 11
+   },
+   {
+    "carrier": "431698",
+    "kind": "rate",
+    "mult": 1.005
+   }
+  ],
+  "368970": [
+   {
+    "carrier": "390148",
+    "kind": "rate",
+    "mult": 1.1
+   },
+   {
+    "carrier": "404977",
+    "kind": "rate",
+    "mult": 11
+   },
+   {
+    "carrier": "431698",
+    "kind": "rate",
+    "mult": 1.005
+   }
+  ],
+  "369536": [
+   {
+    "carrier": "404977",
+    "kind": "rate",
+    "mult": 11
+   }
+  ],
+  "370537": [
+   {
+    "carrier": "390148",
+    "kind": "rate",
+    "mult": 1.1
+   },
+   {
+    "carrier": "404977",
+    "kind": "rate",
+    "mult": 11
+   },
+   {
+    "carrier": "431698",
+    "kind": "rate",
+    "mult": 1.005
+   }
+  ],
+  "370553": [
+   {
+    "carrier": "390148",
+    "kind": "rate",
+    "mult": 1.1
+   },
+   {
+    "carrier": "404977",
+    "kind": "rate",
+    "mult": 11
+   },
+   {
+    "carrier": "431698",
+    "kind": "rate",
+    "mult": 1.005
+   }
+  ],
+  "370665": [
+   {
+    "carrier": "390148",
+    "kind": "rate",
+    "mult": 1.1
+   },
+   {
+    "carrier": "404977",
+    "kind": "rate",
+    "mult": 11
+   },
+   {
+    "carrier": "431698",
+    "kind": "rate",
+    "mult": 1.005
+   }
+  ],
+  "370960": [
+   {
+    "carrier": "390148",
+    "kind": "rate",
+    "mult": 1.1
+   },
+   {
+    "carrier": "404977",
+    "kind": "rate",
+    "mult": 11
+   },
+   {
+    "carrier": "431698",
+    "kind": "rate",
+    "mult": 1.005
+   }
+  ],
+  "372048": [
+   {
+    "carrier": "390148",
+    "kind": "rate",
+    "mult": 1.1
+   },
+   {
+    "carrier": "404977",
+    "kind": "rate",
+    "mult": 11
+   },
+   {
+    "carrier": "431698",
+    "kind": "rate",
+    "mult": 1.005
+   }
+  ],
+  "372608": [
+   {
+    "carrier": "404184",
+    "kind": "rate",
+    "mult": 1.25
+   }
+  ],
+  "372610": [
+   {
+    "carrier": "404184",
+    "kind": "rate",
+    "mult": 1.25
+   }
+  ],
+  "373861": [
+   {
+    "carrier": "390148",
+    "kind": "rate",
+    "mult": 1.1
+   },
+   {
+    "carrier": "404977",
+    "kind": "rate",
+    "mult": 11
+   },
+   {
+    "carrier": "431698",
+    "kind": "rate",
+    "mult": 1.005
+   }
+  ],
+  "374227": [
+   {
+    "carrier": "390148",
+    "kind": "rate",
+    "mult": 1.1
+   },
+   {
+    "carrier": "404977",
+    "kind": "rate",
+    "mult": 11
+   },
+   {
+    "carrier": "431698",
+    "kind": "rate",
+    "mult": 1.005
+   }
+  ],
+  "374251": [
+   {
+    "carrier": "390148",
+    "kind": "rate",
+    "mult": 1.1
+   },
+   {
+    "carrier": "404977",
+    "kind": "rate",
+    "mult": 11
+   },
+   {
+    "carrier": "431698",
+    "kind": "rate",
+    "mult": 1.005
+   }
+  ],
+  "374968": [
+   {
+    "carrier": "390148",
+    "kind": "rate",
+    "mult": 1.1
+   },
+   {
+    "carrier": "404977",
+    "kind": "rate",
+    "mult": 11
+   },
+   {
+    "carrier": "431698",
+    "kind": "rate",
+    "mult": 1.005
+   }
+  ],
+  "375087": [
+   {
+    "carrier": "390148",
+    "kind": "rate",
+    "mult": 1.1
+   },
+   {
+    "carrier": "404977",
+    "kind": "rate",
+    "mult": 11
+   },
+   {
+    "carrier": "431698",
+    "kind": "rate",
+    "mult": 1.005
+   }
+  ],
+  "377509": [
+   {
+    "carrier": "390148",
+    "kind": "rate",
+    "mult": 1.1
+   },
+   {
+    "carrier": "404977",
+    "kind": "rate",
+    "mult": 11
+   },
+   {
+    "carrier": "431698",
+    "kind": "rate",
+    "mult": 1.005
+   }
+  ],
+  "378441": [
+   {
+    "carrier": "390148",
+    "kind": "rate",
+    "mult": 1.1
+   },
+   {
+    "carrier": "404977",
+    "kind": "rate",
+    "mult": 11
+   },
+   {
+    "carrier": "431698",
+    "kind": "rate",
+    "mult": 1.005
+   }
+  ],
+  "378464": [
+   {
+    "carrier": "390148",
+    "kind": "rate",
+    "mult": 1.1
+   },
+   {
+    "carrier": "404977",
+    "kind": "rate",
+    "mult": 11
+   },
+   {
+    "carrier": "431698",
+    "kind": "rate",
+    "mult": 1.005
+   }
+  ],
+  "381989": [
+   {
+    "carrier": "1259614",
+    "kind": "rate",
+    "mult": 3
    }
   ],
   "382266": [
@@ -144,6 +1048,293 @@
     "carrier": "404977",
     "kind": "rate",
     "mult": 11
+   },
+   {
+    "carrier": "390148",
+    "kind": "rate",
+    "mult": 1.1
+   },
+   {
+    "carrier": "431698",
+    "kind": "rate",
+    "mult": 1.005
+   }
+  ],
+  "382411": [
+   {
+    "carrier": "390148",
+    "kind": "rate",
+    "mult": 1.1
+   },
+   {
+    "carrier": "404977",
+    "kind": "rate",
+    "mult": 11
+   },
+   {
+    "carrier": "431698",
+    "kind": "rate",
+    "mult": 1.005
+   }
+  ],
+  "382614": [
+   {
+    "carrier": "390148",
+    "kind": "rate",
+    "mult": 1.1
+   },
+   {
+    "carrier": "404977",
+    "kind": "rate",
+    "mult": 11
+   },
+   {
+    "carrier": "431698",
+    "kind": "rate",
+    "mult": 1.005
+   }
+  ],
+  "383005": [
+   {
+    "carrier": "390148",
+    "kind": "rate",
+    "mult": 1.1
+   },
+   {
+    "carrier": "404977",
+    "kind": "rate",
+    "mult": 11
+   },
+   {
+    "carrier": "431698",
+    "kind": "rate",
+    "mult": 1.005
+   }
+  ],
+  "390386": [
+   {
+    "carrier": "390148",
+    "kind": "rate",
+    "mult": 1.1
+   },
+   {
+    "carrier": "404977",
+    "kind": "rate",
+    "mult": 11
+   },
+   {
+    "carrier": "431698",
+    "kind": "rate",
+    "mult": 1.005
+   }
+  ],
+  "392983": [
+   {
+    "carrier": "443421",
+    "kind": "rate",
+    "mult": 1.75
+   },
+   {
+    "carrier": "443616",
+    "kind": "rate",
+    "mult": 2.5
+   },
+   {
+    "carrier": "1238904",
+    "kind": "rate",
+    "mult": 1.2475
+   }
+  ],
+  "395152": [
+   {
+    "carrier": "390148",
+    "kind": "rate",
+    "mult": 1.1
+   },
+   {
+    "carrier": "404977",
+    "kind": "rate",
+    "mult": 11
+   },
+   {
+    "carrier": "431698",
+    "kind": "rate",
+    "mult": 1.005
+   }
+  ],
+  "396286": [
+   {
+    "carrier": "390148",
+    "kind": "rate",
+    "mult": 1.1
+   },
+   {
+    "carrier": "404977",
+    "kind": "rate",
+    "mult": 11
+   },
+   {
+    "carrier": "431698",
+    "kind": "rate",
+    "mult": 1.005
+   }
+  ],
+  "397744": [
+   {
+    "carrier": "390148",
+    "kind": "rate",
+    "mult": 1.1
+   },
+   {
+    "carrier": "404977",
+    "kind": "rate",
+    "mult": 11
+   },
+   {
+    "carrier": "431698",
+    "kind": "rate",
+    "mult": 1.005
+   }
+  ],
+  "403264": [
+   {
+    "carrier": "390148",
+    "kind": "rate",
+    "mult": 1.1
+   },
+   {
+    "carrier": "404977",
+    "kind": "rate",
+    "mult": 11
+   },
+   {
+    "carrier": "431698",
+    "kind": "rate",
+    "mult": 1.005
+   }
+  ],
+  "403265": [
+   {
+    "carrier": "390148",
+    "kind": "rate",
+    "mult": 1.1
+   },
+   {
+    "carrier": "404977",
+    "kind": "rate",
+    "mult": 11
+   },
+   {
+    "carrier": "431698",
+    "kind": "rate",
+    "mult": 1.005
+   }
+  ],
+  "403631": [
+   {
+    "carrier": "390148",
+    "kind": "rate",
+    "mult": 1.1
+   },
+   {
+    "carrier": "404977",
+    "kind": "rate",
+    "mult": 11
+   },
+   {
+    "carrier": "431698",
+    "kind": "rate",
+    "mult": 1.005
+   }
+  ],
+  "404977": [
+   {
+    "carrier": "390148",
+    "kind": "rate",
+    "mult": 1.1
+   },
+   {
+    "carrier": "404977",
+    "kind": "rate",
+    "mult": 11
+   },
+   {
+    "carrier": "431698",
+    "kind": "rate",
+    "mult": 1.005
+   }
+  ],
+  "406732": [
+   {
+    "carrier": "381748",
+    "kind": "rate",
+    "mult": 1.1764705882352942
+   },
+   {
+    "carrier": "390148",
+    "kind": "rate",
+    "mult": 1.1
+   },
+   {
+    "carrier": "404977",
+    "kind": "rate",
+    "mult": 11
+   },
+   {
+    "carrier": "431698",
+    "kind": "rate",
+    "mult": 1.005
+   }
+  ],
+  "406971": [
+   {
+    "carrier": "390148",
+    "kind": "rate",
+    "mult": 1.1
+   },
+   {
+    "carrier": "404977",
+    "kind": "rate",
+    "mult": 11
+   },
+   {
+    "carrier": "431698",
+    "kind": "rate",
+    "mult": 1.005
+   }
+  ],
+  "408233": [
+   {
+    "carrier": "390148",
+    "kind": "rate",
+    "mult": 1.1
+   },
+   {
+    "carrier": "404977",
+    "kind": "rate",
+    "mult": 11
+   },
+   {
+    "carrier": "431698",
+    "kind": "rate",
+    "mult": 1.005
+   }
+  ],
+  "408234": [
+   {
+    "carrier": "390148",
+    "kind": "rate",
+    "mult": 1.1
+   },
+   {
+    "carrier": "404977",
+    "kind": "rate",
+    "mult": 11
+   },
+   {
+    "carrier": "431698",
+    "kind": "rate",
+    "mult": 1.005
    }
   ],
   "409311": [
@@ -151,6 +1342,33 @@
     "carrier": "404977",
     "kind": "rate",
     "mult": 11
+   },
+   {
+    "carrier": "390148",
+    "kind": "rate",
+    "mult": 1.1
+   },
+   {
+    "carrier": "431698",
+    "kind": "rate",
+    "mult": 1.005
+   }
+  ],
+  "433874": [
+   {
+    "carrier": "390148",
+    "kind": "rate",
+    "mult": 1.1
+   },
+   {
+    "carrier": "404977",
+    "kind": "rate",
+    "mult": 11
+   },
+   {
+    "carrier": "431698",
+    "kind": "rate",
+    "mult": 1.005
    }
   ],
   "435222": [
@@ -158,6 +1376,78 @@
     "carrier": "107574",
     "kind": "snapshot",
     "pct": 50
+   }
+  ],
+  "442204": [
+   {
+    "carrier": "390148",
+    "kind": "rate",
+    "mult": 1.1
+   },
+   {
+    "carrier": "404977",
+    "kind": "rate",
+    "mult": 11
+   },
+   {
+    "carrier": "431698",
+    "kind": "rate",
+    "mult": 1.005
+   }
+  ],
+  "444347": [
+   {
+    "carrier": "381732",
+    "kind": "rate",
+    "mult": 1.1764705882352942
+   }
+  ],
+  "467307": [
+   {
+    "carrier": "443421",
+    "kind": "rate",
+    "mult": 1.75
+   },
+   {
+    "carrier": "443616",
+    "kind": "rate",
+    "mult": 2.5
+   },
+   {
+    "carrier": "1238904",
+    "kind": "rate",
+    "mult": 1.2475
+   }
+  ],
+  "1214909": [
+   {
+    "carrier": "1259614",
+    "kind": "rate",
+    "mult": 3
+   }
+  ],
+  "1234796": [
+   {
+    "carrier": "381741",
+    "kind": "rate",
+    "mult": 1.1764705882352942
+   }
+  ],
+  "1236943": [
+   {
+    "carrier": "390148",
+    "kind": "rate",
+    "mult": 1.1
+   },
+   {
+    "carrier": "404977",
+    "kind": "rate",
+    "mult": 11
+   },
+   {
+    "carrier": "431698",
+    "kind": "rate",
+    "mult": 1.005
    }
   ],
   "1253489": [
@@ -170,6 +1460,74 @@
     "carrier": "102558",
     "kind": "snapshot",
     "pct": 50
+   }
+  ],
+  "1259173": [
+   {
+    "carrier": "390148",
+    "kind": "rate",
+    "mult": 1.1
+   },
+   {
+    "carrier": "404977",
+    "kind": "rate",
+    "mult": 11
+   },
+   {
+    "carrier": "431698",
+    "kind": "rate",
+    "mult": 1.005
+   }
+  ],
+  "1259174": [
+   {
+    "carrier": "390148",
+    "kind": "rate",
+    "mult": 1.1
+   },
+   {
+    "carrier": "404977",
+    "kind": "rate",
+    "mult": 11
+   },
+   {
+    "carrier": "431698",
+    "kind": "rate",
+    "mult": 1.005
+   }
+  ],
+  "1259175": [
+   {
+    "carrier": "390148",
+    "kind": "rate",
+    "mult": 1.1
+   },
+   {
+    "carrier": "404977",
+    "kind": "rate",
+    "mult": 11
+   },
+   {
+    "carrier": "431698",
+    "kind": "rate",
+    "mult": 1.005
+   }
+  ],
+  "1291636": [
+   {
+    "carrier": "390148",
+    "kind": "rate",
+    "mult": 1.1
+   },
+   {
+    "carrier": "404977",
+    "kind": "rate",
+    "mult": 11
+   },
+   {
+    "carrier": "431698",
+    "kind": "rate",
+    "mult": 1.005
    }
   ]
  }

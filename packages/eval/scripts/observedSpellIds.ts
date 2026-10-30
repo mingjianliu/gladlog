@@ -14,10 +14,10 @@
  * fails to read/parse is counted and skipped, not fatal — one corrupt upload
  * must not abort a 10k-match pass.
  */
+import { GladLogParser, type GladMatch } from "@gladlog/parser";
 import { existsSync, readdirSync, readFileSync } from "fs";
 import { join } from "path";
 import { gunzipSync } from "zlib";
-import { GladLogParser, type GladMatch } from "@gladlog/parser";
 
 const argv = process.argv.slice(2);
 const mIdx = argv.indexOf("--manifest");

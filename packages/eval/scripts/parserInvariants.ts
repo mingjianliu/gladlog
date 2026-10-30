@@ -1,4 +1,4 @@
-/* eslint-disable no-console */
+ 
 /**
  * Full-corpus scanning gate for the A2 parser invariants (verifiability
  * roadmap).
@@ -13,14 +13,13 @@
  *   npx tsx packages/eval/scripts/parserInvariants.ts --manifest <file>
  */
 
-import fs from "fs-extra";
-import { gunzipSync } from "zlib";
-
 import {
   checkParserInvariants,
   GladLogParser,
   type GladMatchBase,
 } from "@gladlog/parser";
+import fs from "fs-extra";
+import { gunzipSync } from "zlib";
 
 function parseArgs(): { manifest: string } {
   const args = process.argv.slice(2);

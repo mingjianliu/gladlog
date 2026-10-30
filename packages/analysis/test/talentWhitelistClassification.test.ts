@@ -85,11 +85,8 @@ const EXPECTED: Record<string, Record<string, Source>> = {
     [CombatUnitSpec.Mage_Fire]: "class",
     [CombatUnitSpec.Mage_Frost]: "class",
   },
-  "186265": {
-    [CombatUnitSpec.Hunter_BeastMastery]: "baseline",
-    [CombatUnitSpec.Hunter_Marksmanship]: "baseline",
-    [CombatUnitSpec.Hunter_Survival]: "baseline",
-  },
+  // Aspect of the Turtle 186265 left IMMUNITY_SPELLS 2026-10-21 (a
+  // deflection — DoTs land under it; user ruling)
   // Netherwalk 196555: removed 12.1, 0/10682 matches 2026-08-21 — deleted from IMMUNITY_SPELLS
   // ---- EXTERNAL_DEFENSIVE_SPELLS ----
   "102342": { [CombatUnitSpec.Druid_Restoration]: "spec" },

@@ -1,20 +1,20 @@
 import { CombatUnitReaction, CombatUnitSpec } from "@gladlog/parser-compat";
 import { describe, expect, it } from "vitest";
 
+import type { IBurstLedgerEntry } from "../utils/burstLedger";
 import {
   auditDeepDives,
+  type AuditDropInfo,
   buildAuditRepairPrompt,
   buildDeepDivePack,
   buildDeepDivePrompt,
+  type DeepDivePack,
   hasCoachableSignal,
   hasOffensiveCoachableSignal,
   offensivePackItems,
   shouldAttemptAuditRepair,
-  type AuditDropInfo,
-  type DeepDivePack,
 } from "./deepDive";
 import type { CandidateEvent, Finding } from "./types";
-import type { IBurstLedgerEntry } from "../utils/burstLedger";
 
 const pack: DeepDivePack = {
   findingIndex: 0,
@@ -416,17 +416,24 @@ describe("offensivePackItems(进攻证据映射,纯函数)", () => {
   const entry: IBurstLedgerEntry = {
     fromSeconds: 40,
     toSeconds: 44,
-    spells: [{ spellId: "1", spellName: "Combustion", castTimeSeconds: 40 }],
+    spells: [{ spellId: "1", spellName: "Combustion", castTimeSeconds: 40, spanToSeconds: 50 }],
     totalDamage: 500000,
     damageByTarget: [
-      { unitId: "e1", unitName: "Rdruid-Area52", damage: 500000 },
+      {
+        unitId: "e1",
+        unitName: "Rdruid-Area52",
+        damage: 500000,
+        absorbed: 0,
+      },
     ],
     dominantTarget: {
       unitId: "e1",
       unitName: "Rdruid-Area52",
       hpStartPct: 70,
       hpEndPct: 18,
+      hpLow: null,
       damage: 500000,
+      absorbed: 0,
       defensivesHit: [
         {
           spellId: "9",
@@ -437,8 +444,14 @@ describe("offensivePackItems(进攻证据映射,纯函数)", () => {
       ],
       died: false,
     },
+    otherDeaths: [],
     allyCDsOverlapping: [
-      { playerName: "Mate-Area52", spellName: "Power Infusion" },
+      {
+        playerName: "Mate-Area52",
+        spellName: "Power Infusion",
+        overlapSeconds: 4,
+        topTarget: null,
+      },
     ],
   };
   const inWin = (t: number) => t >= 10 && t <= 50;
@@ -508,7 +521,12 @@ describe("offensivePackItems(进攻证据映射,纯函数)", () => {
     const crossRealmEntry: IBurstLedgerEntry = {
       ...entry,
       allyCDsOverlapping: [
-        { playerName: "Me-Ragnaros", spellName: "Power Infusion" },
+        {
+          playerName: "Me-Ragnaros",
+          spellName: "Power Infusion",
+          overlapSeconds: 4,
+          topTarget: null,
+        },
       ],
     };
     const items = offensivePackItems({

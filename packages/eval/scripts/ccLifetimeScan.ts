@@ -28,7 +28,7 @@ import { SPELL_CATEGORIES } from "@gladlog/analysis/src/data/spellCategories";
 import {
   CC_DURATION_TALENT_MODIFIERS,
   ccFullDurationSeconds,
-  OPPRESSING_ROAR_SPELL_ID,
+  OPPRESSING_ROAR_AURA_IDS,
   spellEffectData,
 } from "@gladlog/analysis/src/data/spellEffectData";
 import spellNames from "@gladlog/analysis/src/data/spellNames.json";
@@ -109,7 +109,7 @@ for (const f of files) {
     const src = p[1];
     const dst = p[5];
     const spell = p[9];
-    if (spell === OPPRESSING_ROAR_SPELL_ID) {
+    if (OPPRESSING_ROAR_AURA_IDS.has(spell)) {
       if (ev === "SPELL_AURA_REMOVED") roarOn.delete(dst);
       else roarOn.add(dst);
       continue;

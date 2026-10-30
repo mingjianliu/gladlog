@@ -1,6 +1,7 @@
 import { appendFileSync, mkdirSync, mkdtempSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
+
 import type { MainToWorker, WorkerToMain } from "../src/shared/protocol";
 import {
   createWorkerRuntime,

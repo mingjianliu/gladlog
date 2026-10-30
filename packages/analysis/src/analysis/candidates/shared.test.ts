@@ -2,10 +2,13 @@ import { describe, expect, it } from "vitest";
 
 import type { CastFailedEvent } from "../../utils/rawStreams";
 import {
+  dropKeyRepeatRejects,
   filterIntentGuardEvidence,
   INTENT_GUARD_GCD_S,
   INTENT_GUARD_PRE_CAST_EXCLUSION_S,
+  KEY_REPEAT_AFTER_SUCCESS_S,
   NOT_READY_REASON_ZH,
+  NOT_READY_REASONS,
 } from "./shared";
 
 const hit = (
@@ -103,5 +106,106 @@ describe("gcd-locked exclusion matches every client locale (reliability round 2,
       { ownCastSuccessSeconds: [16.784] },
     );
     expect(stunned).toHaveLength(1);
+  });
+});
+
+// Triage F-H12 (user ruling 2026-09-30 C1, cd-hoarded only): a ready
+// cooldown's GCD-rejected press that is never followed by the same spell's
+// cast in the window is an attempt (64a7a24d @200: Restoral 199.481 /
+// 199.639, 0.16 / 0.32 s after Sheilun's Gift 199.32, never cast)
+describe("keepGcdLockedUntilS (F-H12)", () => {
+  const restoral = [
+    hit(199.481, NOT_READY_REASON_ZH, 388615),
+    hit(199.639, NOT_READY_REASON_ZH, 388615),
+  ];
+  const opts = { ownCastSuccessSeconds: [199.32] };
+  it("kept when the spell is never cast in (hit, until]; dropped without the option", () => {
+    expect(filterIntentGuardEvidence(restoral, [], opts)).toEqual([]);
+    expect(
+      filterIntentGuardEvidence(restoral, [], {
+        ...opts,
+        keepGcdLockedUntilS: 205,
+      }),
+    ).toEqual(restoral);
+  });
+  it("a later cast inside the window still drops it; one after the window does not", () => {
+    // cast 2.4 s later: outside the 2 s pre-cast exclusion, inside the window
+    expect(
+      filterIntentGuardEvidence(restoral, [202.1], {
+        ...opts,
+        keepGcdLockedUntilS: 205,
+      }),
+    ).toEqual([]);
+    expect(
+      filterIntentGuardEvidence(restoral, [206], {
+        ...opts,
+        keepGcdLockedUntilS: 205,
+      }),
+    ).toEqual(restoral);
+  });
+  it("the pre-cast exclusion still comes first", () => {
+    expect(
+      filterIntentGuardEvidence(restoral, [200.5], {
+        ...opts,
+        keepGcdLockedUntilS: 205,
+      }),
+    ).toEqual([]);
+  });
+  it("a press whose own cooldown was still recovering stays dropped (readyAt)", () => {
+    const readyFrom = 199.6; // Restoral back at 199.6: only the second press was a ready one
+    expect(
+      filterIntentGuardEvidence(restoral, [], {
+        ...opts,
+        keepGcdLockedUntilS: 205,
+        readyAt: (s) => s >= readyFrom,
+      }).map((h) => h.tSeconds),
+    ).toEqual([199.639]);
+  });
+});
+
+/**
+ * Triage 2026-09-29 kick-eaten F-K7c and the pre-review of that batch
+ * (2026-10-01).
+ */
+describe("NOT_READY_REASONS / dropKeyRepeatRejects", () => {
+  it("carries SPELL_FAILED_NOT_READY in every client locale the 605-file sample shows (forward check 2026-10-01: fr, es, ru and zh-TW were missing)", () => {
+    for (const text of [
+      "尚未恢复",
+      "Not yet recovered",
+      "아직 사용 불가",
+      "Noch nicht erholt",
+      "Ainda não recuperado",
+      "Récupération incomplète",
+      "Aún no recuperado",
+      "Еще не готово.",
+      "尚未恢復",
+    ])
+      expect(NOT_READY_REASONS.has(text)).toBe(true);
+    expect(NOT_READY_REASONS.size).toBe(9);
+  });
+
+  it("a French or Russian not-ready press right after its own success is a key repeat like an English one", () => {
+    const casts = [{ spellId: "421453", tSeconds: 10 }];
+    for (const reason of ["Récupération incomplète", "Еще не готово."])
+      expect(dropKeyRepeatRejects([hit(10.2, reason)], casts)).toEqual([]);
+    // another reason is a press, whatever the timing
+    expect(
+      dropKeyRepeatRejects([hit(10.2, "Hors de portée")], casts),
+    ).toHaveLength(1);
+  });
+
+  it("the window is closed at exactly 300 ms, whatever float the two seconds make", () => {
+    expect(KEY_REPEAT_AFTER_SUCCESS_S).toBe(0.3);
+    // 5.437 - 5.137 = 0.3000000000000007 as floats
+    for (const t0 of [5.137, 10.0, 101.3, 0.001, 263.999]) {
+      const casts = [{ spellId: "421453", tSeconds: t0 }];
+      const at = (ms: number) => Math.round(t0 * 1000 + ms) / 1000;
+      expect(
+        dropKeyRepeatRejects([hit(at(300), "Not yet recovered")], casts),
+      ).toEqual([]);
+      expect(
+        dropKeyRepeatRejects([hit(at(301), "Not yet recovered")], casts),
+      ).toHaveLength(1);
+    }
   });
 });

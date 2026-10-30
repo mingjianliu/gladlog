@@ -19,10 +19,11 @@ import { ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
 import { effectiveCooldownSeconds } from "../data/spellEffectData";
 import {
-  eventReducedCooldownSeconds,
   eventReductionsFor,
+  eventTriggersFor,
 } from "../data/talentScriptedCooldowns";
 import {
+  applyEventReductions,
   type IMajorCooldownInfo,
   playerTalentIdSets,
   unitCooldownOf,
@@ -30,6 +31,7 @@ import {
 import {
   interruptCooldownSeconds,
   interruptForUnit,
+  interruptPressCooldownSeconds,
 } from "../utils/enemyInterrupts";
 
 export const DEATH_GRIP_ID = "49576";
@@ -51,7 +53,7 @@ function castsOf(
 }
 
 /** The ledger's per-press event reductions (Storm Conduit: each Lightning
- *  Bolt −1 s on Wind Shear), as extractMajorCooldowns applies them —
+ *  Bolt gives Wind Shear seconds back), as extractMajorCooldowns applies them —
  *  single-charge only (codex review of batch 14: [RES] printed Wind Shear on
  *  cooldown while interruptCooldownRemainingMs had it ready). */
 function withEventReductions(
@@ -67,25 +69,41 @@ function withEventReductions(
   const reductions = eventReductionsFor(
     spellId,
     (t) => !!sets.talentedSpellIds?.has(t) || sets.pvpTalentIds.has(t),
+    owner.spec === undefined ? undefined : String(owner.spec),
   );
-  if (!reductions.length) return casts;
-  const triggerSeconds = (r: { triggerCastIds: readonly string[] }) =>
-    owner.spellCastEvents
-      .filter(
-        (e) =>
-          e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
-          r.triggerCastIds.includes(String(e.spellId)),
-      )
-      .map((e) => (e.logLine.timestamp - matchStartMs) / 1000);
-  return casts.map((c) => {
-    const eff = eventReducedCooldownSeconds(
-      c.timeSeconds,
+  // FT-T11c: the press's own cooldown first — an on-interrupt talent
+  // (Coldthirst, Light of the Sun) shortens a press that interrupted a cast
+  // (`interruptPressCooldownSeconds`, the number interruptCooldownRemainingMs
+  // reads); the event reductions then act on that.
+  const pressCd = (c: { timeSeconds: number }) =>
+    interruptPressCooldownSeconds(
+      owner,
+      spellId,
+      matchStartMs + c.timeSeconds * 1000,
       cooldownSeconds,
-      reductions,
-      triggerSeconds,
     );
-    return eff < cooldownSeconds ? { ...c, cooldownSecondsOverride: eff } : c;
-  });
+  if (!reductions.length)
+    return casts.map((c) => {
+      const own = pressCd(c);
+      return own < cooldownSeconds ? { ...c, cooldownSecondsOverride: own } : c;
+    });
+  // the ledger's rule (`applyEventReductions`): the realised ready instant as
+  // the override AND the triggers behind it, so [RES] counts only the bolts
+  // cast by the row's second (acceptance 7e2a3c95 #1 — the override alone
+  // printed 1b930c17's 1:39 `Wind Shear(15s)` from bolts not yet cast). No
+  // event-reduced spell is also shortened on interrupt (test/
+  // talentScriptedCooldowns.test.ts), so the press's own cooldown is the
+  // entry's.
+  const out = casts.map((c) => ({ ...c }));
+  applyEventReductions(
+    out,
+    cooldownSeconds,
+    eventTriggersFor(owner, reductions).map((g) => ({
+      atSeconds: (g.atMs - matchStartMs) / 1000,
+      seconds: g.seconds,
+    })),
+  );
+  return out;
 }
 
 function entry(

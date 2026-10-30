@@ -6,6 +6,8 @@
  * is `undefined` / `null`, and callers treat that as "don't know → say
  * nothing", never as a yes or a no.
  */
+import { effectAurasOfCast } from "../data/castEffectAuras";
+import { CHANNELED_SPELL_IDS } from "../data/channeledGenerated";
 import raw from "../data/spellMechanicsGenerated.json";
 
 interface Entry {
@@ -15,6 +17,9 @@ interface Entry {
   immuneMechMask?: number;
   immuneAll?: boolean;
   locksCasting?: boolean;
+  silenceable?: boolean;
+  unsilenceable?: boolean;
+  weaponRequired?: boolean;
 }
 
 const SPELLS = (raw as unknown as { spells: Record<string, Entry | undefined> })
@@ -26,6 +31,12 @@ const STUN_MECHANICS = new Set([12]);
 const FEAR_MECHANICS = new Set([5, 24]); // fleeing, horrified
 const CONFUSE_MECHANICS = new Set([2]); // disoriented
 
+/** SpellMechanic SNARED: a movement slow — the carrier can still move. */
+export const SNARED_MECHANIC = 11;
+/** DB2 SpellMechanic 12, "stunned" (F15 C9: a stun with no DR family —
+ * Infernal Awakening 22703 — is a stun by its mechanic). */
+export const STUNNED_MECHANIC = 12;
+
 /** The CC's mechanic (SpellMechanic id), or undefined when DB2 cannot say
  * (Holy Word: Chastise 88625: its aura is an incapacitate or a stun
  * depending on a talent). */
@@ -36,6 +47,39 @@ export function ccMechanicOf(spellId: string): number | undefined {
 /** True only when DB2 says the base cast time is 0. Unknown is not instant. */
 export function isInstantCast(spellId: string): boolean {
   return SPELLS[spellId]?.castMs === 0;
+}
+
+/** The spell's official BASE cast time in seconds (unhasted — an upper bound
+ * on the bar a hasted caster shows); undefined for an instant or a spell the
+ * table does not know. */
+export function baseCastSeconds(spellId: string): number | undefined {
+  const ms = SPELLS[spellId]?.castMs;
+  return ms !== undefined && ms > 0 ? ms / 1000 : undefined;
+}
+
+/** What of a cast an interrupt can stop, by official data:
+ *  - `bar`: DB2 gives it a base cast time (`castMs` > 0);
+ *  - `channel`: no cast time, but the cast — or an effect aura the log shows
+ *    it applying (`effectAurasOfCast`) — is officially channelled
+ *    (`CHANNELED_SPELL_IDS`): Lightning Lasso 305483 begins instantly and
+ *    channels its stun 305485, and a kick ends the channel;
+ *  - `none`: DB2 says instant and nothing is channelled.
+ * `undefined` when DB2 has no row for the cast — never read as `none`.
+ * The BASE spell: a talent or proc that makes this unit's cast instant is not
+ * read here. */
+export type InterruptibleCast = "bar" | "channel" | "none";
+
+export function interruptibleCastOf(
+  castSpellId: string,
+): InterruptibleCast | undefined {
+  const ms = SPELLS[castSpellId]?.castMs;
+  if (ms !== undefined && ms > 0) return "bar";
+  if (
+    CHANNELED_SPELL_IDS.has(castSpellId) ||
+    effectAurasOfCast(castSpellId).some((a) => CHANNELED_SPELL_IDS.has(a))
+  )
+    return "channel";
+  return ms === 0 ? "none" : undefined;
 }
 
 /** Does carrying this aura make the carrier immune to a CC of `mech`?
@@ -51,6 +95,11 @@ export function auraBlocksMechanic(
   if (e.immuneMechMask !== undefined) return null;
   return false;
 }
+
+/** SpellMechanic 26: interrupt. An aura that is immune to it makes an enemy
+ * kick miss IMMUNE (Spiritwalker's Aegis 378078, Precognition 377362,
+ * Unending Resolve 104773 — DB2 aura 77 misc 26). */
+export const INTERRUPT_MECHANIC = 26;
 
 /** Is `mech` listed on this spell's own mechanic-immunity aura (aura 77)?
  * Those are the designed CC breakers, and the corpus confirms they are pressed
@@ -68,10 +117,40 @@ export function explicitlyBreaksMechanic(
   return SPELLS[spellId]?.immuneMech?.includes(mech) === true;
 }
 
+/** The mechanics on this spell's own mechanic-immunity aura (aura 77) — what
+ * `explicitlyBreaksMechanic` answers one at a time. Empty when DB2 lists
+ * none. */
+export function mechanicsBrokenBy(spellId: string): readonly number[] {
+  return SPELLS[spellId]?.immuneMech ?? [];
+}
+
 /** Does this aura stop its carrier casting its other abilities (Ice Block,
  * Dispersion, Bladestorm)? */
 export function auraLocksCasting(auraId: string): boolean {
   return SPELLS[auraId]?.locksCasting === true;
+}
+
+/** Does DB2 say a silence — and so an interrupt's school lockout — prevents
+ * this cast (`SpellCategories.PreventionType` silence bit)? False also means
+ * "no row": a caller may treat `true` as evidence, never `false` as "cannot
+ * be locked". */
+export function isSilenceableCast(spellId: string): boolean {
+  return SPELLS[spellId]?.silenceable === true;
+}
+
+/** DB2 says a silence does NOT prevent this cast: the spell has a
+ * SpellCategories row and none carries the silence bit (Stormstrike, Mortal
+ * Strike, Judgment). Not the negation of `isSilenceableCast` — a spell with
+ * no row is neither (no evidence either way). */
+export function isUnsilenceableCast(spellId: string): boolean {
+  return SPELLS[spellId]?.unsilenceable === true;
+}
+
+/** DB2 SpellEquippedItems: the cast needs a weapon (EquippedItemClass 2) —
+ * what a disarm stops (work order 2026-10-14d Part 2, preview: 0 of 163,906
+ * such casts went out inside a disarm aura on 605 files). */
+export function isWeaponRequiredCast(spellId: string): boolean {
+  return SPELLS[spellId]?.weaponRequired === true;
 }
 
 /** Which official usable-while-CC state a mechanic puts its victim in, or

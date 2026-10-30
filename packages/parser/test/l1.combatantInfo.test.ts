@@ -1,7 +1,8 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { splitLine } from "../src/l1/splitTopLevel";
+
 import { decodeCombatantInfo } from "../src/l1/combatantInfo";
+import { splitLine } from "../src/l1/splitTopLevel";
 
 const lines = readFileSync(
   join(__dirname, "fixtures", "combatant_info_sample.txt"),
@@ -78,5 +79,56 @@ describe("decodeCombatantInfo: leading empty element in talents array (Blizzard 
     // wrongly read 750; corrected against the raw log line)
     expect(c.personalRating).toBe(2439);
     expect(c.talents.length).toBeGreaterThan(5);
+  });
+});
+
+// Real-log regression (public wowarenalogs testlogs, 2024: 21 of 165 lines
+// across shuffle_reloads / shuffle_early_leaver): the interesting-auras list
+// is (caster, spellId) pairs OR (caster, spellId, stacks) triples, and the
+// old decoder chose by `length % 3`. Three pairs are six elements — read as
+// two triples, "1459" became a caster, the line decoded to null and the
+// player fell out of the round's roster. The lines here are the fixture's
+// own line 0 with only its aura segment swapped.
+describe("decodeCombatantInfo: interesting-auras shape is read off the structure", () => {
+  const AURAS =
+    "[Player-1329-0A8DFA0D,386208,1,Player-1329-0A8DFA0D,386628,1,Player-1596-0645EB62,462854,1,Player-1329-0A8DFA0D,6673,1]";
+  const withAuras = (seg: string) => {
+    const line = lines[0]!;
+    expect(line).toContain(AURAS);
+    return decodeCombatantInfo(splitLine(line.replace(AURAS, seg))!.params);
+  };
+
+  it("three pairs (six elements) are three pairs, not two triples", () => {
+    const c = withAuras(
+      "[Player-78-0F864CB8,373456,Player-163-0BD301A2,1459,Player-78-0F864CB8,21562]",
+    );
+    expect(c).not.toBeNull();
+    expect(c!.interestingAuras).toEqual([
+      { casterGuid: "Player-78-0F864CB8", spellId: 373456 },
+      { casterGuid: "Player-163-0BD301A2", spellId: 1459 },
+      { casterGuid: "Player-78-0F864CB8", spellId: 21562 },
+    ]);
+    expect(c!.personalRating).toBe(2273);
+  });
+
+  it("two triples (six elements) keep their (caster, spellId) and drop the stacks", () => {
+    const c = withAuras(
+      "[Player-60-0FBAAEF3,381748,1,Player-5-0E6A77BA,462854,1]",
+    );
+    expect(c!.interestingAuras).toEqual([
+      { casterGuid: "Player-60-0FBAAEF3", spellId: 381748 },
+      { casterGuid: "Player-5-0E6A77BA", spellId: 462854 },
+    ]);
+  });
+
+  it("the fixture's own four triples still decode", () => {
+    expect(withAuras(AURAS)!.interestingAuras).toHaveLength(4);
+  });
+
+  it("an aura list of neither shape drops the auras, not the player", () => {
+    const c = withAuras("[Player-1-0A,12,Player-2-0B]");
+    expect(c).not.toBeNull();
+    expect(c!.playerGuid).toMatch(/^Player-/);
+    expect(c!.interestingAuras).toEqual([]);
   });
 });

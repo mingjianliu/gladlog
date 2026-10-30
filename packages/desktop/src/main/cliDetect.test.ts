@@ -1,10 +1,11 @@
 import { afterEach, describe, expect, it } from "vitest";
+
 import {
   cliSpawnEnv,
   detectCliForBackend,
   detectLocalCli,
-  parseCliVersionOutput,
   isWindowsBatchFile,
+  parseCliVersionOutput,
   pickCliPathFromLookupOutput,
   probeCliVersion,
   probeCliVersionCached,

@@ -1,12 +1,13 @@
 import { mkdtempSync, readFileSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
+
 import {
-  SettingsStore,
   API_KEY_REDACTED,
   MANAGED_WS_PASSWORD_REDACTED,
   redactSettings,
   sanitizeSettingsPatch,
+  SettingsStore,
 } from "../src/main/settingsStore";
 
 const dir = () => mkdtempSync(join(tmpdir(), "gl-settings-"));
@@ -23,6 +24,7 @@ describe("SettingsStore", () => {
       aiBackendCommand: null,
       aiLanguage: "zh",
       autoAnalyzeNew: false,
+      aiSelfReview: false,
       recordingEnabled: false,
       obsWebsocketUrl: null,
       obsWebsocketPassword: null,
@@ -155,6 +157,7 @@ describe("settings 脱敏(key 永不出主进程)", () => {
       aiBackendCommand: null,
       aiLanguage: "zh" as const,
       autoAnalyzeNew: false,
+      aiSelfReview: false,
       recordingEnabled: false,
       obsWebsocketUrl: null,
       obsWebsocketPassword: null,
@@ -202,6 +205,7 @@ describe("settings 脱敏(key 永不出主进程)", () => {
       aiBackendCommand: null,
       aiLanguage: "zh" as const,
       autoAnalyzeNew: false,
+      aiSelfReview: false,
       recordingEnabled: false,
       obsWebsocketUrl: null,
       obsWebsocketPassword: null,

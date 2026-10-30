@@ -28,6 +28,7 @@
 import type { ICombatUnit } from "@gladlog/parser-compat";
 
 import { getFactConfig } from "../facts/factProviderConfig";
+import { specPassiveOwnership } from "../utils/talentModifiers";
 import { talentModifierOwnershipOf } from "../utils/talentOwnership";
 import { MITIGATION_TABLE, mitigationPctFor } from "./mitigationData";
 import { talentMitigationModifiersFor } from "./talentMitigationModifiers";
@@ -106,9 +107,11 @@ function applyTalentModifiers(
   unresolved: string[],
 ): void {
   for (const m of mods) {
-    const own = ctx.caster
-      ? talentModifierOwnershipOf(ctx.caster, m.talentSpellId)
-      : "unknown";
+    const own = !ctx.caster
+      ? "unknown"
+      : m.specIds
+        ? specPassiveOwnership(m.specIds, ctx.caster.spec)
+        : talentModifierOwnershipOf(ctx.caster, m.talentSpellId);
     if (own === "no") continue;
     const certain = m.validation === "promoted" && own === "yes" && !allyCopy;
     if (!certain)

@@ -5,21 +5,25 @@ import {
   extractPlaceholderKeys,
   interpolate,
 } from "../compare/claimChecker";
+import { dmgSpikeWindowsOf } from "../context/timelineHelpers";
 import {
   analyzeBurstLedger,
   type IBurstLedgerEntry,
 } from "../utils/burstLedger";
+import { enemySourceIds } from "../utils/cannotCastIntervals";
 import {
   analyzePlayerCCAndTrinket,
   trinketStateFact,
 } from "../utils/ccTrinketAnalysis";
 import {
   annotateDefensiveTimings,
+  computePressureWindows,
   DEFENSIVE_TAGS,
   extractMajorCooldowns,
   type IMajorCooldownInfo,
   isHealerSpec,
   isMeleeSpec,
+  unitCooldownEntry,
 } from "../utils/cooldowns";
 import { buildDeathOutcomeSummary } from "../utils/deathOutcomeAnalysis";
 import { reconstructDispelSummary } from "../utils/dispelAnalysis";
@@ -35,6 +39,7 @@ import {
   stayedInHadRealCost,
 } from "../utils/positionAnalysis";
 import { fmtTime } from "../utils/renderGrid";
+import { BRACKET_TERM } from "./auditFindings";
 import { causalLint } from "./causalLint";
 import { fmtFactTime, serializeFactsBlock } from "./factFormat";
 import { repairSpellNameZh } from "./spellNameZhLint";
@@ -391,10 +396,20 @@ export function buildDeepDivePack(
   // follow-up round.
   try {
     const outcome = buildDeathOutcomeSummary(
-      { startTime: combat.startTime ?? 0, zoneId: combat.startInfo?.zoneId },
+      {
+        startTime: combat.startTime ?? 0,
+        endTime: combat.endTime,
+        zoneId: combat.startInfo?.zoneId,
+      },
       friends,
       ccSummaries,
-      (unit, spellId) => resolvedCdByUnit.get(unit.id)?.get(spellId),
+      (unit, spellId) =>
+        resolvedCdByUnit.get(unit.id)?.get(spellId) ??
+        (combat?.units ? unitCooldownEntry(unit, combat, spellId) : undefined),
+      // death-kill F-M1: the missed-options tags ask the cannot-cast predicate
+      enemySourceIds(enemies, [...enemyPets]),
+      // an option the holder's pet casts is asked of the pet
+      units,
     );
     for (const ev of outcome.events) {
       if (!inWin(ev.atSeconds)) continue;
@@ -429,6 +444,10 @@ export function buildDeepDivePack(
             holder: sn(ext.casterName),
             holderRole: friendlyRole(ext.casterName),
             holderCc: ext.casterWasInCC ? "yes" : "no",
+            // the death fact's own split (codex 20-F17-07 #1, 20e0f243
+            // 359.9 s: 0.75 s affordable of 2.2 s free — "可用未给,
+            // holderCc:no" said nothing of the mana)
+            ...(ext.casterCouldNotPay ? { holderCouldNotPay: "yes" } : {}),
           },
         });
       }
@@ -452,6 +471,9 @@ export function buildDeepDivePack(
         isHealer: isHealerSpec(ownerUnit.spec),
         ownerIsMelee: isMeleeSpec(ownerUnit.spec),
         friends,
+        spikeWindows: dmgSpikeWindowsOf(
+          computePressureWindows(friends, combat),
+        ),
       });
       for (const e of posEvents) {
         if (!POSITION_MISTAKES.has(e.type)) continue;
@@ -474,8 +496,11 @@ export function buildDeepDivePack(
           // the model can use it to say "beaten from full HP down to X".
           if (e.ownerHpStartPct != null)
             f.hpStart = String(Math.round(e.ownerHpStartPct));
-          if (e.ownerHpMinPct != null)
-            f.hpMin = String(Math.round(e.ownerHpMinPct));
+          // the printed low is the window's true trough (`ownerHpLowPct`,
+          // signed exception (2) — the prompt's STAYED IN prints it; codex
+          // R6C-01 #4: 15 % grid vs 8 %); the cost test stays on the grid
+          const low = e.ownerHpLowPct ?? e.ownerHpMinPct;
+          if (low != null) f.hpMin = String(Math.round(low));
           if (e.ownerDefensiveAvailable !== undefined)
             f.defAvail = e.ownerDefensiveAvailable ? "yes" : "no";
         }
@@ -589,6 +614,7 @@ export function offensivePackItems(
       // prompt — item times must never fall outside it).
       if (inp.inWin(e.fromSeconds))
         for (const d of t.defensivesHit) {
+          if (d.viaLoggedAura) continue; // its cast-id predicate (F15 C10)
           raw.push({
             kind: d.isImmunity ? "immunity" : "enemy-defensive",
             spellId: d.spellId,
@@ -879,7 +905,7 @@ export function buildDeepDivePrompt(
     ``,
     `HARD RULES:`,
     `- Coach ${ownerShort} (facts with role=owner). role=teammate / role=enemy items are context only — cite a teammate's mistake ONLY when ${ownerShort} could have covered it (peel/CC the attacker, give an external, swap targets).`,
-    `- kind=position items are ${ownerShort}'s own movement: kind=stayed-in = an enemy stayed in close range through a burst while HP dropped — not proof the owner stood still (hpMin is where HP bottomed, defAvail says if a defensive was up); kind=missed-push = drifted out of range (dist yards) when pressure was needed; kind=cd-out-of-range = fired a cooldown (spell) while every enemy stayed beyond that spell's own reach for the next 5 s (summons and self-buffs are never listed). Coach the movement decision, not just cooldown usage.`,
+    `- kind=position items are ${ownerShort}'s own movement: kind=stayed-in = enemy (the enemy who dealt the most damage to the owner over the span; the one nearest at its start when no enemy damage landed, two tied, or that enemy had no position) started in close range and little distance was gained on it through a burst while HP dropped — not proof the owner stood still (hpMin is where HP bottomed, defAvail says if a defensive was up); kind=missed-push = drifted out of range (dist yards) when pressure was needed; kind=cd-out-of-range = fired a cooldown (spell) while every enemy stayed beyond that spell's own reach for the next 5 s (summons and self-buffs are never listed). Coach the movement decision, not just cooldown usage.`,
     ...(packs.some((p) =>
       p.items.some(
         (it) =>
@@ -1106,7 +1132,7 @@ export function auditDeepDives(
     // first round — any digit outside a placeholder = fabricated or defiant)
     const prose = entry.deepDive
       .replace(/\{\{[^}]*\}\}/g, " ")
-      .replace(/\b\d+v\d+\b/gi, " ");
+      .replace(BRACKET_TERM, " ");
     if (/\d/.test(prose)) {
       onDrop?.({
         reason: "bare-digit",

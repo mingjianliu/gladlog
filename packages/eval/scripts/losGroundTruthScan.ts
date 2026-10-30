@@ -1,4 +1,4 @@
-/* eslint-disable no-console */
+ 
 /**
  * losGroundTruthScan.ts — measures the arena line-of-sight model against the
  * game's own verdicts, BOTH directions, per map and per obstacle (GH #83,

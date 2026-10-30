@@ -23,8 +23,9 @@ import {
   CombatUnitSpec,
   LogEvent,
 } from "@gladlog/parser-compat";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 
+import { ensureAnalysisData } from "../src/data/ensure";
 import {
   cdAvailableAt,
   cdReadyInTimeAt,
@@ -41,6 +42,11 @@ import {
   makeSpellCastEvent,
   makeUnit,
 } from "./ported/testHelpers";
+
+// the Renewing Blaze fixture's talent row is decoded through the talent map
+beforeAll(async () => {
+  await ensureAnalysisData();
+});
 
 describe("isCooldownAvailableFromLastUse(共享算法核)", () => {
   it("从未使用(null)→ 全程可用", () => {
@@ -121,7 +127,7 @@ describe("cdAvailableAt 与 isAvailableAt 在重叠语义上必须同判(断言�
     },
   ];
 
-  it("GH #61:查询后 0.3s 内的施放算已按下(不可用),0.6s 后的不算(可用)—— 与 [RES] 台账同容差", () => {
+  it("GH #61 + A45(triage res-readiness F-C1):查询秒内的施放(0.3s / 0.6s 后)都算已按下(不可用),下一秒的不算(可用)—— 两谓词断言相等", () => {
     expect(cdAvailableAt(cdWith([40.3]), 40)).toBe(false);
     expect(
       isAvailableAt(
@@ -132,10 +138,21 @@ describe("cdAvailableAt 与 isAvailableAt 在重叠语义上必须同判(断言�
         MATCH_START,
       ),
     ).toBe(false);
-    expect(cdAvailableAt(cdWith([40.6]), 40)).toBe(true);
+    // the latter-half-second press (the F-C1 case): spent on both sides
+    expect(cdAvailableAt(cdWith([40.6]), 40)).toBe(false);
     expect(
       isAvailableAt(
         unitWith([40.6]),
+        SPELL_ID,
+        COOLDOWN_SECONDS,
+        40,
+        MATCH_START,
+      ),
+    ).toBe(false);
+    expect(cdAvailableAt(cdWith([41.1]), 40)).toBe(true);
+    expect(
+      isAvailableAt(
+        unitWith([41.1]),
         SPELL_ID,
         COOLDOWN_SECONDS,
         40,
@@ -207,6 +224,12 @@ describe("cdAvailableAt 与 isAvailableAt 对「仅有光环证据」的技能�
     return makeUnit("p1", {
       class: CombatUnitClass.Evoker,
       spec: CombatUnitSpec.Evoker_Devastation,
+      // Renewing Blaze talented (class node 93354) — the proc aura alone
+      // proves no button, so the ledger holds the row on the talent
+      info: {
+        talents: [{ id1: 93354, id2: 115669, count: 1 }],
+        pvpTalents: [],
+      },
       spellCastEvents: [], // zero cast evidence — proc-only ability, by design
       auraEvents: [
         makeAuraEvent(

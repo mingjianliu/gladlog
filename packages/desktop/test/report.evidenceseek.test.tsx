@@ -4,9 +4,11 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { FindingsList } from "../src/renderer/src/report/components/FindingsList";
 import { ReplayView } from "../src/renderer/src/report/components/ReplayView";
 import { deriveReplay } from "../src/renderer/src/report/derive/replay";
-import { loadRealMatchFixture } from "./fixtures/loadFixture";
+import { loadRealMatchFixtureWithKillWindow } from "./fixtures/loadFixture";
 
-const m = loadRealMatchFixture();
+// the real fixture minus the enemy priest's own shields: since the
+// 2026-10-21 ruling they end its only kill window (see the loader)
+const m = loadRealMatchFixtureWithKillWindow();
 
 const findings = [
   {
@@ -117,9 +119,8 @@ describe("#8 收尾:窗口色带", () => {
 
 describe("战报 HP 时间轴色带", () => {
   it("真实 fixture:时间轴渲染色带,点击切到回放并定位", async () => {
-    const { MatchReport } = await import(
-      "../src/renderer/src/report/components/MatchReport"
-    );
+    const { MatchReport } =
+      await import("../src/renderer/src/report/components/MatchReport");
     const { container } = render(<MatchReport source={m} matchId="t" />);
     const band = container.querySelector('[data-testid="tl-band"]');
     expect(band).toBeTruthy();

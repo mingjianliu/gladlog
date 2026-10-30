@@ -1,4 +1,6 @@
 import { classMetadata } from '../data/classSpells';
+import { OVERRIDE_VARIANTS_GENERATED } from '../data/overrideVariantsGenerated';
+import { OFFENSIVE_RACIAL_WINDOW_IDS } from '../data/racialAbilities';
 import { spells } from '../data/spellTags';
 import { SpellTag } from '../data/spellTypes';
 
@@ -90,13 +92,19 @@ export const OFFENSIVE_CD_DEAD_IDS: ReadonlySet<string> = new Set([
  *     nukes. Every consumer renders a table member as a WINDOW ("Meteor/Fire
  *     Mage (7 s left)" in [RES] — caught by the real-fixture test); a nuke
  *     that has already landed is not a window to defend through.
- *   - Predator's Wake 1259431 (Devourer, lift 2.26): official duration 2 s
- *     and no identified effect aura — added, then removed the same day; a
- *     window cannot be stated from official data, and a hand-guessed one is
- *     what the Game-Behaviour Rule forbids.
- *   - Gladiator's Badge 345228 / Blood Fury / Berserking: item and racials,
- *     coPressed 47–98 % (they ride a class cooldown); racials have their own
- *     table.
+ *   - Predator's Wake 1259431 (Devourer, lift 2.26) is no member of its
+ *     own: it is the The Hunt 1246167 button under Demonsurge 1245496 (DB2
+ *     SpellEffect aura 332, misc 1246167 → 1259431; both SpellCategories
+ *     Category 2427, 90 s), its press triggers The Hunt's own effect aura
+ *     1246168 (`castEffectAuraGenerated`), so it reaches every consumer
+ *     through `offensiveEffectCdId` as a The Hunt press (F20 D23,
+ *     2026-10-28). The removal recorded here before ("2 s, no identified
+ *     effect aura") read neither row.
+ *   - Gladiator's Badge 345228: an item, coPressed 47–98 % (it rides a class
+ *     cooldown). The racial windows Blood Fury / Berserking / Ancestral Call
+ *     ARE members since the user ruling of 2026-10-20 (`OFFENSIVE_RACIAL_WINDOW_IDS`:
+ *     "racials count as offensive cooldowns"), read from their own table in
+ *     racialAbilities.ts.
  *   - Reaper's Mark, Goremaw's Bite, Execution Sentence, Tip the Scales,
  *     Champion's Spear: coPressed 67–90 % or lift < 1.5 — the scan cannot
  *     separate them from the cooldown they are pressed with.
@@ -140,6 +148,14 @@ export const OFFENSIVE_CD_SPELL_IDS: ReadonlySet<string> = new Set(
         .filter((a) => a.tags.includes(SpellTag.Offensive))
         .map((a) => String(a.spellId)),
     ),
+    ...OFFENSIVE_RACIAL_WINDOW_IDS,
+    // Ultimate Penitence (Discipline, 240 s): its bolts are a kill cooldown as
+    // well as the caster's absorb — user ruling 2026-10-20 (fact1215 retest
+    // idx 69, 「我觉得都算」: an enemy Ultimate Penitence is an enemy offensive
+    // cooldown; 465k + 422k of its bolts on two players, the [ENEMY DEF] line
+    // its only record). The 6.5 s window is the channel's aura on the caster
+    // (`buffDuration.ts`); the save half stays where it is (`[ENEMY DEF]`).
+    '421453',
   ].filter((id) => !OFFENSIVE_CD_DEAD_IDS.has(id)),
 );
 
@@ -170,9 +186,17 @@ export const OFFENSIVE_EFFECT_ACTIVATION_IDS: ReadonlyMap<string, string> =
 
 /** The canonical offensive cooldown whose effect this cast / aura id is:
  * itself for a table member, its cooldown for a registered activation
- * (`OFFENSIVE_EFFECT_ACTIVATION_IDS`), undefined otherwise. */
+ * (`OFFENSIVE_EFFECT_ACTIVATION_IDS`) or for a DB2 override variant of a
+ * member (`OVERRIDE_VARIANTS_GENERATED` — the same button and cooldown under
+ * another id, F20 D23: Predator's Wake 1259431 → The Hunt 1246167, Orbital
+ * Strike's Celestial Alignment 383410 / Incarnation 390414), undefined
+ * otherwise. A variant is a PRESS of the cooldown (it is in
+ * `SPELL_CANONICAL_IDS` too); an activation is not. */
 export function offensiveEffectCdId(spellId: string): string | undefined {
   if (OFFENSIVE_CD_SPELL_IDS.has(spellId)) return spellId;
+  const overridden = OVERRIDE_VARIANTS_GENERATED[spellId];
+  if (overridden !== undefined && OFFENSIVE_CD_SPELL_IDS.has(overridden))
+    return overridden;
   return OFFENSIVE_EFFECT_ACTIVATION_IDS.get(spellId);
 }
 

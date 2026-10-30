@@ -1,38 +1,50 @@
-import { AtomicArenaCombat, ICombatUnit } from "@gladlog/parser-compat";
+import {
+  AtomicArenaCombat,
+  CombatUnitReaction,
+  ICombatUnit,
+} from "@gladlog/parser-compat";
 
 import {
   type BurstWindowDecisionPoint,
   burstWindowDecisionPoints,
 } from "../analysis/burstWindowDecisionPoints";
+import { CD_HOARD_RESPONSE_S } from "../analysis/candidates/cooldownTiming";
 import {
   type CdPriorHoldEpisode,
   cdPriorHoldEpisodes,
 } from "../analysis/cdTriggerPrior";
-import { CD_HOARD_RESPONSE_S } from "../analysis/candidates/cooldownTiming";
 import { crisisDecisionPoints } from "../analysis/crisisDecisionPoints";
 import {
   type StackedDefensivePair,
   stackedDefensivePairs,
 } from "../analysis/stackedDefensives";
 import { lookupCdTriggerPrior } from "../data/cdTriggerPrior";
+import { getEnglishSpellName } from "../data/spellEffectData";
 import { zoneMetadata } from "../data/zoneMetadata";
+import { allyCopyLegendPhrase } from "../utils/allyCopyWall";
 import { buildArchetypeInjectionHeader } from "../utils/archetypeInjection";
 import {
   analyzeBurstLedger,
   auditWindowTargeting,
   formatBurstLedgerForContext,
 } from "../utils/burstLedger";
+import { enemySourceIds } from "../utils/cannotCastIntervals";
+import { castBarsOfCooldown, castBarStartsInRound } from "../utils/castCancels";
 import { analyzeCcBreaks } from "../utils/ccBreakAnalysis";
 import { analyzePlayerCCAndTrinket } from "../utils/ccTrinketAnalysis";
-import { extractStasisEvents } from "../utils/combatStates";
+import {
+  extractSpiritOfRedemptionIntervals,
+  extractStasisEvents,
+} from "../utils/combatStates";
 import {
   annotateDefensiveTimings,
-  computePressureWindows,
   extractMajorCooldowns,
   IEnemyCDTimelineForTiming,
   type IMajorCooldownInfo,
   isHealerSpec,
+  selectPressureWindows,
   specToString,
+  unitCooldownEntry,
 } from "../utils/cooldowns";
 import { isMeleeSpec } from "../utils/cooldowns";
 import {
@@ -49,13 +61,16 @@ import {
   annotateMissedPurgesWithKillWindows,
   canOffensivePurge,
   reconstructDispelSummary,
+  scopedPurgeToolsOf,
 } from "../utils/dispelAnalysis";
 import { analyzeOutgoingCCChains } from "../utils/drAnalysis";
 import { reconstructEnemyCDTimeline } from "../utils/enemyCDs";
+import { MITIGATION_AURA_MIN_PCT } from "../utils/enemyDefensives";
 import {
   computeHealerExposureEvents,
   formatEnemyCCKitHeader,
   formatHealerExposureEntries,
+  landedControlsForKit,
 } from "../utils/healerExposureAnalysis";
 import {
   buildHealerOffenseSummary,
@@ -70,6 +85,10 @@ import {
 import {
   buildDpsKillWindowLines,
   createKillWindowFactsComputer,
+  hasPressOnlyTag,
+  hasTeamAbsorbedClause,
+  PRESS_ONLY_LEGEND,
+  TEAM_DAMAGE_ABSORBED_LEGEND,
 } from "../utils/killWindowFacts";
 import { matchMinHpPct } from "../utils/killWindowTargetSelection";
 import { computeMatchArchetype } from "../utils/matchArchetype";
@@ -81,40 +100,80 @@ import { computeOffensiveWindows } from "../utils/offensiveWindows";
 import {
   computeOwnerPositionEvents,
   formatPositionEventsForContext,
+  POSITIONING_BURST_ANSWERED_XREF,
 } from "../utils/positionAnalysis";
+import type { RawStreams } from "../utils/rawStreams";
 import { fmtTime, toRenderSecond } from "../utils/renderGrid";
 import {
   computeRootReachability,
   formatRootReachabilityEntries,
 } from "../utils/rootReachability";
+import { playableEndMs, roundEndMs } from "../utils/roundEnd";
 import {
   benchmarks,
   formatDTPSBaselines,
+  formatLobbyMmrFact,
   formatSpecBaselines,
 } from "../utils/specBaselines";
 import { heroBuildGroupOf } from "../utils/talents";
-import { warlockPetFunction } from "../utils/warlockPet";
+import { warlockPetFunctions, warlockPurgePetSpans } from "../utils/warlockPet";
+import { BURST_ANSWERED_POSITIONING_XREF } from "./burstAnswered";
+import { ccUseSummary, formatCcUse, ownerControlCastBars } from "./ccUse";
 import { buildCriticalWindowSet } from "./criticalWindows";
-import { formatObservedConsequences } from "./observedConsequences";
-import { ccUseSummary, formatCcUse } from "./ccUse";
 import {
   forcedTrinketFollowUps,
   formatForcedTrinketFollowUps,
 } from "./forcedTrinket";
-import { formatPeelOptions, peelOptionsForDeaths } from "./peelOptions";
+import { buildMatchTimeline, BuildMatchTimelineParams } from "./matchTimeline";
 import {
   formatDecisiveCounterfactualLine,
   formatMitigationAuditLine,
   lowPressureUnusedDefensiveNote,
   MITIGATION_AUDIT_INDEPENDENT_NOTE,
 } from "./matchTimelineSections";
-import { buildMatchTimeline, BuildMatchTimelineParams } from "./matchTimeline";
+import { formatObservedConsequences } from "./observedConsequences";
+import { formatPeelOptions, peelOptionsForDeaths } from "./peelOptions";
 import { buildPlayerLoadout } from "./resourceSnapshot";
-import { DMG_SPIKE_THRESHOLD, mergeTimestampedLines } from "./timelineHelpers";
-import { unitLabeler } from "./unitLabel";
-import type { RawStreams } from "../utils/rawStreams";
+import {
+  DMG_SPIKE_THRESHOLD,
+  dmgSpikeWindowsOf,
+  mergeTimestampedLines,
+  resolveSummonOwner,
+  summonKindOf,
+} from "./timelineHelpers";
+import { abbrevSpec, rosterLabelByName, unitLabeler } from "./unitLabel";
 
 // ──────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Work order 2026-10-15 #1: the [BURST ANSWERED] legend and the POSITIONING
+ * headers each name the other family's line — keep each cross-reference only
+ * when the prompt has a line of the other family (27 of 60 printed one with
+ * the other absent).
+ */
+export function applyLegendCrossRefs(
+  timelineText: string,
+  positionLines: readonly string[],
+): { timelineText: string; positionLines: string[] } {
+  const hasBurstAnsweredLine = /^\d+:\d{2}\s+\[BURST ANSWERED\]/m.test(
+    timelineText,
+  );
+  const hasPositioningBurstTarget = positionLines.some(
+    (l) =>
+      l.includes(" — you were the burst target") ||
+      l.includes(" — burst targeted "),
+  );
+  return {
+    timelineText: hasPositioningBurstTarget
+      ? timelineText
+      : timelineText.split(BURST_ANSWERED_POSITIONING_XREF).join(""),
+    positionLines: hasBurstAnsweredLine
+      ? [...positionLines]
+      : positionLines.map((l) =>
+          l.split(POSITIONING_BURST_ANSWERED_XREF).join(""),
+        ),
+  };
+}
 
 export function buildMatchContext(
   combat: AtomicArenaCombat,
@@ -147,8 +206,24 @@ export function buildMatchContext(
   // / purge is on the table. Predicate: utils/warlockPet.ts.
   const allUnitsForPets = Object.values(combat.units ?? {});
   const rosterEntry = (p: ICombatUnit): string => {
-    const pet = warlockPetFunction(p, allUnitsForPets);
-    return `${specToString(p.spec)} (${p.name})${pet ? ` [pet: ${pet.pet} — ${pet.does}]` : ""}`;
+    // F-PS1 (triage 2026-09-29): a warlock who swapped pets mid-round lists
+    // every permanent pet, in order, the later ones with the second they
+    // first show up (no end time — GH #86).
+    // Permanent pets only, for one pet as for several: the single-unit
+    // lookup (`warlockPetFunction`) takes the first owned unit it can name,
+    // and a Demonology warlock's temporary `Creature-` summon listed ahead of
+    // the real pet put "Imp — Singe Magic (friendly dispel)" on the roster
+    // of a warlock running a Felguard (agy review 2026-10-01, verified on
+    // archive ff310053: Wild Imps beside Pet-…-58965).
+    const pets = warlockPetFunctions(p, allUnitsForPets, combat.startTime);
+    return pets.length === 0
+      ? `${specToString(p.spec)} (${p.name})`
+      : `${specToString(p.spec)} (${p.name}) [pet: ${pets
+          .map(
+            (x, i) =>
+              `${x.fn.pet}${i > 0 && x.fromSeconds !== null ? ` from ${fmtTime(Math.max(0, x.fromSeconds))}` : ""} — ${x.fn.does}`,
+          )
+          .join("; ")}]`;
   };
   const myTeam = friends.map(rosterEntry).join(", ");
   const enemyTeam = enemies.map(rosterEntry).join(", ");
@@ -194,14 +269,19 @@ export function buildMatchContext(
     .sort((a, b) => a.atSeconds - b.atSeconds);
 
   // Compute all feature data upfront
-  const cooldowns = extractMajorCooldowns(owner, combat);
+  const cooldowns = extractMajorCooldowns(owner, combat, {
+    withBaselineOnly: true,
+  });
   // B126: Evoker Stasis load/release/expiry + stored-spell contents. The timeline already renders
   // [STASIS STORED] / [YOU] [STASIS RELEASE] → contents, but the events were never computed here, so
   // "incomplete Stasis" / "ended holding stored heals" findings were previously unverifiable.
   const stasisEvents = extractStasisEvents(owner, combat);
   const teammateCooldowns = friends
     .filter((p) => p.id !== owner.id)
-    .map((p) => ({ player: p, cds: extractMajorCooldowns(p, combat) }));
+    .map((p) => ({
+      player: p,
+      cds: extractMajorCooldowns(p, combat, { withBaselineOnly: true }),
+    }));
   // Enemy kits go through the **same extractor** (2026-07-21 evidence-gap
   // survey, P1).
   //
@@ -224,7 +304,9 @@ export function buildMatchContext(
   // and those **must stay cast-driven** — never-cast CDs must not leak in.
   const enemyCooldowns = (enemies ?? []).map((e) => ({
     player: e,
-    cds: extractMajorCooldowns(e as ICombatUnit, combat),
+    cds: extractMajorCooldowns(e as ICombatUnit, combat, {
+      withBaselineOnly: true,
+    }),
   }));
   const enemyCDTimeline = reconstructEnemyCDTimeline(
     enemies,
@@ -247,9 +329,22 @@ export function buildMatchContext(
       enemyCDTimeline as IEnemyCDTimelineForTiming,
     ),
   );
-  const pressureWindows = computePressureWindows(friends, combat);
+  // D4 (user ruling 2026-10-10): `pressureWindows` is the list every reader
+  // below gets — `computePressureWindows`'s own return, the first five of
+  // the walk — and `pressureWindowsNotListed` the windows of the listing
+  // threshold or more that the same walk kept past the cap. Only the
+  // timeline's legend reads the second (one line counting them).
+  const { listed: pressureWindows, notListed: pressureWindowsNotListed } =
+    selectPressureWindows(friends, combat, {
+      notListedMinDamage: DMG_SPIKE_THRESHOLD,
+    });
   const healingGaps = healer
-    ? detectHealingGaps(owner, friends, enemies, combat)
+    ? detectHealingGaps(owner, friends, enemies, combat, {
+        // the same bound as the healing-gap menu line (B137: no gap past the
+        // deciding death) — the timeline's [INACTIVITY] read the match end
+        playableEndMs: playableEndMs(combat, Object.values(combat.units ?? {})),
+        ...(options.rawStreams ? { rawStreams: options.rawStreams } : {}),
+      })
     : [];
   const offensiveWindows = computeOffensiveWindows(enemies, friends, combat);
   // Pets/guardians on both sides (ownerId ∈ the matching players): both the CC
@@ -280,8 +375,11 @@ export function buildMatchContext(
     enemyPets,
     friendlyPets,
   );
+  const castFailedRows = options.rawStreams?.available
+    ? options.rawStreams.castFailed
+    : undefined;
   const ccTrinketSummaries = friends.map((p) =>
-    analyzePlayerCCAndTrinket(p, enemies, combat, enemyPets),
+    analyzePlayerCCAndTrinket(p, enemies, combat, enemyPets, castFailedRows),
   );
   // BACKLOG #36(e): CC-break attribution. `analyzeCcBreaks` has carried the
   // full who-broke-whose-CC attribution since 2026-08-02 (the log's own ground
@@ -367,10 +465,22 @@ export function buildMatchContext(
   }
 
   const deathOutcome = buildDeathOutcomeSummary(
-    { startTime: combat.startTime, zoneId: combat.startInfo?.zoneId },
+    {
+      startTime: combat.startTime,
+      endTime: combat.endTime,
+      zoneId: combat.startInfo?.zoneId,
+    },
     friends as ICombatUnit[],
     ccTrinketSummaries,
-    (unit, spellId) => resolvedCdByUnit.get(unit.id)?.get(spellId),
+    // the ledger entry, or the same model for a spell outside it
+    // (`unitCooldownEntry`, cooldown mastery round 2026-10-20)
+    (unit, spellId) =>
+      resolvedCdByUnit.get(unit.id)?.get(spellId) ??
+      unitCooldownEntry(unit, combat, spellId),
+    // death-kill F-M1: the missed-options tags ask the cannot-cast predicate
+    enemySourceIds(enemies, allUnitsForPets),
+    // an option the holder's pet casts is asked of the pet
+    allUnitsForPets as ICombatUnit[],
   );
   const offensiveWaste = buildOffensiveWasteSummary(
     combat,
@@ -399,6 +509,7 @@ export function buildMatchContext(
       friends as ICombatUnit[],
       combat,
       friendlyPets,
+      castFailedRows,
     ),
   );
   const enemyHealerUnit = enemies.find((e) => isHealerSpec(e.spec));
@@ -419,6 +530,7 @@ export function buildMatchContext(
         ownerCCSummary?.ccInstances ?? [],
         enemyHealerCCSummary?.ccInstances ?? [],
         ownerPurgeTimes,
+        enemyHealerCCSummary?.drHistoryOnly ?? [],
       )
     : null;
 
@@ -482,22 +594,55 @@ export function buildMatchContext(
     enemyCCSummaries,
     healerExposures,
     // B4 fix: hand the positioning analysis the same damage-spike windows the timeline's
-    // [OFFENSIVE WINDOW]/[DMG SPIKE] headers render, so burst-target claims cannot diverge.
-    spikeWindows: pressureWindows
-      .filter((pw) => pw.totalDamage >= DMG_SPIKE_THRESHOLD)
-      .map((pw) => ({
-        fromSeconds: pw.fromSeconds,
-        toSeconds: pw.toSeconds,
-        targetName: pw.targetName,
-      })),
+    // [OFFENSIVE WINDOW]/[DMG SPIKE] headers render. Since ruling A′12 a spike names the
+    // POSITIONING burst target only when it covers at least half of the line's span.
+    spikeWindows: dmgSpikeWindowsOf(pressureWindows),
   });
   const positionLines = formatPositionEventsForContext(positionEvents);
 
   // Purge responsibility attribution
-  const ownerCanPurge = canOffensivePurge(owner as ICombatUnit);
+  // P-P5b = C: a scoped removal (Shattering Throw, an observed Arcane
+  // Torrent) is named with what it removes — it is not a general purge.
+  // Shiv's enrage scope is not stated (ruling P-P5b-land, 2026-10-02: it
+  // never carries a line, so the clause was noise in every Rogue header).
+  const scopedPurgeNote = (p: ICombatUnit): string =>
+    scopedPurgeToolsOf(p, allUnitsForPets)
+      .filter((t) => t.scope !== "enrage")
+      .map((t) => `${t.name}: ${t.note}`)
+      .join("; ");
+  // F16 retest (idx 50): a warlock's purge lasts while the Felhunter is the
+  // pet out — a swap mid-round says when (`warlockPurgePetSpans`, the
+  // missed-purge gate's own reading)
+  const purgePetNote = (p: ICombatUnit): string => {
+    const spans = warlockPurgePetSpans(p, allUnitsForPets, combat.startTime);
+    if (!spans || spans.length === 0) return "";
+    const whole = spans.some(
+      (sp) => sp.fromSeconds <= 0 && sp.toSeconds >= durationSeconds,
+    );
+    if (whole) return "";
+    const part = (sp: { fromSeconds: number; toSeconds: number }) =>
+      sp.fromSeconds <= 0
+        ? `until ${fmtTime(sp.toSeconds)}`
+        : sp.toSeconds >= durationSeconds
+          ? `from ${fmtTime(sp.fromSeconds)}`
+          : `${fmtTime(sp.fromSeconds)}–${fmtTime(sp.toSeconds)}`;
+    return ` (Felhunter out ${spans.map(part).join(", ")})`;
+  };
+  const ownerCanPurge = canOffensivePurge(
+    owner as ICombatUnit,
+    allUnitsForPets,
+  );
+  const ownerScopedNote = ownerCanPurge
+    ? ""
+    : scopedPurgeNote(owner as ICombatUnit);
   const teamPurgers = friends
-    .filter((p) => p.id !== owner.id && canOffensivePurge(p as ICombatUnit))
-    .map((p) => specToString(p.spec));
+    .filter((p) => p.id !== owner.id)
+    .flatMap((p) => {
+      if (canOffensivePurge(p as ICombatUnit, allUnitsForPets))
+        return [`${specToString(p.spec)}${purgePetNote(p as ICombatUnit)}`];
+      const note = scopedPurgeNote(p as ICombatUnit);
+      return note ? [`${specToString(p.spec)} (${note})`] : [];
+    });
 
   const allTeamCDsWithSpec = teammateCooldowns.map(({ player, cds }) => ({
     player: player as ICombatUnit,
@@ -518,11 +663,13 @@ export function buildMatchContext(
   );
   tLines.push(`  My team: ${myTeam}`);
   tLines.push(`  Enemy team: ${enemyTeam}`);
+  // B21a: the lobby's matchmaking rating, when the log carries it
+  tLines.push(...formatLobbyMmrFact(combat));
   tLines.push("");
 
   tLines.push("PURGE RESPONSIBILITY");
   tLines.push(
-    `  Log owner (${ownerSpec}): ${ownerCanPurge ? "CAN offensive purge" : "CANNOT offensive purge"}`,
+    `  Log owner (${ownerSpec}): ${ownerCanPurge ? `CAN offensive purge${purgePetNote(owner as ICombatUnit)}` : ownerScopedNote ? `CANNOT offensive purge, except ${ownerScopedNote}` : "CANNOT offensive purge"}`,
   );
   tLines.push(
     `  Team purgers: ${teamPurgers.length > 0 ? teamPurgers.join(", ") : "none"}`,
@@ -549,11 +696,13 @@ export function buildMatchContext(
   }
 
   tLines.push("");
+  // the owner team's doses, the roster's rules (fact1215 R11)
   formatDampeningForContext(
     combat.startInfo.bracket,
-    [...friends, ...enemies],
+    friends as ICombatUnit[],
     combat.startTime,
     combat.endTime,
+    [...friends, ...enemies] as ICombatUnit[],
   ).forEach((l) => tLines.push(l));
 
   // The timeline path returns early and never reaches the critical-moments render
@@ -594,6 +743,25 @@ export function buildMatchContext(
         combat,
       ),
       analyzeKickAudit(owner as ICombatUnit, enemies as ICombatUnit[], combat),
+      // a player by the name this block uses everywhere; a summon as
+      // `<owner>'s <kind>`, the timeline's own [KICK] wording, never by its
+      // unit name (localized on a non-English client)
+      (name, unitId) => {
+        if (unitId.startsWith("Player-")) return name;
+        const allUnits = Object.values(combat.units) as ICombatUnit[];
+        const summonOwner = resolveSummonOwner({
+          allUnits,
+          friends: friends as ICombatUnit[],
+          enemies: enemies as ICombatUnit[],
+          name,
+          sourceId: unitId,
+        });
+        const kind = summonKindOf(
+          unitId,
+          allUnits.find((u) => u.id === unitId),
+        );
+        return summonOwner ? `${summonOwner.name}'s ${kind}` : `a ${kind}`;
+      },
     );
     if (ledgerLines.length > 0) {
       tLines.push("");
@@ -620,6 +788,19 @@ export function buildMatchContext(
       tLines.push(
         "KILL WINDOWS (enemy vulnerability spans — team facts, not verdicts):",
       );
+      // fact1215 R7: what "defenseless" reads (2026-10-13: it says nothing
+      // was UP). User rulings 2026-10-20 (fact1215 retest idx 54 / 60): a
+      // ready Alter Time and an unpressed kit defensive are in hand. fact2 C1
+      // (user ruling 4, 2026-10-20): the floor the span applies to an ally's
+      // external (`isBelowWallFloorExternal`) is said.
+      // User ruling 1 (2026-10-28, fact6 F20): an own shield counts when a press
+      // put it up (`ownPressedShieldSpansMs`); a passive talent absorb does not.
+      tLines.push(
+        `  \`defenseless a–b\` = nothing of these was up on the target: its own wall, immunity or absorb shield (a Power Word: Shield / Void Shield it put on itself too, and a talent's shield that came with one of its presses — not a passive talent absorb such as Divine Aegis or Soul Leech), an ally's external on it, an Intervene, Roar of Sacrifice, Mass Invisibility or Phase Shift on it while its aura was up (not one under the ${MITIGATION_AURA_MIN_PCT}% wall floor — ${allyCopyLegendPhrase()} does not count), an area save it carried; and every major defensive it held was on cooldown — each one it pressed this round, a rewind (Alter Time) counting while it is back. A unit whose kit holds a major defensive it never pressed ([UNUSED]) — not a heal, not one it can only give an ally — has it in hand all round and is never defenseless. A heal is not counted.`,
+      );
+      if (kwLines.some(hasTeamAbsorbedClause))
+        tLines.push(TEAM_DAMAGE_ABSORBED_LEGEND);
+      if (kwLines.some(hasPressOnlyTag)) tLines.push(PRESS_ONLY_LEGEND);
       kwLines.forEach((l) => tLines.push(l));
       tLines.push("</kill_windows>");
     }
@@ -638,6 +819,22 @@ export function buildMatchContext(
     enemyCDTimeline,
     enemies as ICombatUnit[],
     enemyCooldowns,
+    combat,
+    // FT F09: the owner's refused presses, for `[UNUSED — pressed N×, refused:
+    // …]` — up to the round's end or the owner's own death (a key pressed
+    // while dead or between rounds is not a press of a button they had)
+    options.rawStreams?.available
+      ? {
+          castFailed: options.rawStreams.castFailed,
+          untilS:
+            (Math.min(
+              roundEndMs(combat),
+              ...(owner.deathRecords ?? []).map((d) => d.timestamp),
+            ) -
+              combat.startTime) /
+            1000,
+        }
+      : undefined,
   );
   tLines.push(loadoutText);
 
@@ -645,9 +842,24 @@ export function buildMatchContext(
   // the [UNUSED] defensive tags in the loadout are not a teaching point (same
   // predicate as the cd-waste candidate gate, see
   // lowPressureUnusedDefensiveNote).
+  const ownerBars = castBarStartsInRound(owner as ICombatUnit, combat);
+  // fact4 D45 (63d13f66 r3): a press the game refused (Nature's Swiftness ×10,
+  // all "can't do that while stunned") is no hold either — the owner's own
+  // refused rows of the cooldown, by id or English name
+  const refusedPressesOf = (cd: { spellId: string; spellName: string }) =>
+    (options.rawStreams?.available ? options.rawStreams.castFailed : []).filter(
+      (h) =>
+        h.unitGuid === owner.id &&
+        (String(h.spellId) === cd.spellId ||
+          getEnglishSpellName(String(h.spellId), h.spellName) ===
+            cd.spellName),
+    ).length;
   const unusedNoteTimeline = lowPressureUnusedDefensiveNote(
     cooldowns,
-    matchMinHpPct(owner as ICombatUnit),
+    matchMinHpPct(owner as ICombatUnit, combat),
+    (cd) =>
+      castBarsOfCooldown(ownerBars, owner as ICombatUnit, cd as never).length +
+      refusedPressesOf(cd),
   );
   if (unusedNoteTimeline) tLines.push(unusedNoteTimeline);
 
@@ -656,7 +868,28 @@ export function buildMatchContext(
   // per-window entries are merged inline into the timeline below so each exposure sits
   // chronologically next to the burst it belongs to (2026-07-09 week-eval:
   // inferenceScaffolding regression from the after-timeline block position).
-  const enemyCCKitLines = formatEnemyCCKitHeader(healerExposures);
+  // cc-dr F-KT1: name the healer when the log owner is not the healer
+  const kitHealerLabel =
+    healerUnit && healerUnit.id !== owner.id
+      ? `${playerIdMap.get(healerUnit.name) ?? healerUnit.name.split("-")[0]}(${abbrevSpec(specToString(healerUnit.spec))})`
+      : undefined;
+  // FT R03 (user ruling 2026-10-11): the kit is the burst-window threats ∪
+  // every control that landed on that healer this round — the healer's own
+  // instances of the summaries the [CC ON TEAM] lines are printed from
+  const kitHealerSummary = healerUnit
+    ? ccTrinketSummaries.find((s) => s.playerName === healerUnit.name)
+    : undefined;
+  const enemyCCKitLines = formatEnemyCCKitHeader(
+    healerExposures,
+    kitHealerLabel,
+    kitHealerSummary
+      ? landedControlsForKit(
+          kitHealerSummary,
+          enemies as ICombatUnit[],
+          Object.values(combat.units) as ICombatUnit[],
+        )
+      : undefined,
+  );
   if (enemyCCKitLines.length > 0) {
     tLines.push("");
     enemyCCKitLines.forEach((l) => tLines.push(l));
@@ -700,7 +933,7 @@ export function buildMatchContext(
           e.deadPlayer === victimName && Math.abs(e.atSeconds - atSeconds) < 1,
       )?.missedExternals ?? [];
 
-    const audit = computeMitigationAudit(victim, combat, deathS);
+    const audit = computeMitigationAudit(victim, combat, deathS, atSeconds);
     const decisiveHits = [
       ...(victimCcSummary
         ? computeUnusedSelfCounterfactuals(
@@ -802,8 +1035,10 @@ export function buildMatchContext(
     killAttempts,
   });
 
-  const timelineText = buildMatchTimeline({
+  const timelineTextRaw = buildMatchTimeline({
     rawStreams: options.rawStreams,
+    // FT-T16 D15 "2b": the bars CC USE's `cast bar started N×` counts
+    ownerControlCastBars: ownerControlCastBars(owner as ICombatUnit, combat),
     owner: owner as ICombatUnit,
     ownerSpec,
     ownerCDs: cooldowns,
@@ -818,6 +1053,7 @@ export function buildMatchContext(
     friendlyDeaths,
     enemyDeaths,
     pressureWindows,
+    pressureWindowsNotListed,
     healingGaps,
     friends: friends as ICombatUnit[],
     enemies: enemies as ICombatUnit[],
@@ -831,6 +1067,13 @@ export function buildMatchContext(
     outgoingCCChains,
     bracket: combat.startInfo.bracket,
     stasisEvents,
+    // FT-T10: the [STATE] tick's `unit:ghost` input, never passed before
+    spiritOfRedemptionIntervals: [...friends, ...enemies]
+      .map((player) => ({
+        player: player as ICombatUnit,
+        intervals: extractSpiritOfRedemptionIntervals(player, combat),
+      }))
+      .filter((x) => x.intervals.length > 0),
     criticalWindowSeconds,
     crisisAnchorSeconds,
     crisisUnfoldWindows,
@@ -840,16 +1083,39 @@ export function buildMatchContext(
     cdPriorCohort,
     stackedDefensives,
   } as BuildMatchTimelineParams);
+  const { timelineText, positionLines: positionLinesXref } =
+    applyLegendCrossRefs(timelineTextRaw, positionLines);
 
   // Merge each per-window exposure entry into the timeline at its timestamp so the
   // cause (burst + exposure state) sits next to its effects (CC landing, damage,
   // defensive responses) instead of in a block after the timeline.
-  const exposureInserts = formatHealerExposureEntries(healerExposures).map(
-    (entry) => ({
-      atSeconds: entry.atSeconds,
-      line: `${fmtTime(entry.atSeconds)}  ${entry.line}`,
-    }),
-  );
+  // FT board item (user ruling 2026-10-09): the roster label of a player
+  // NAME (`4(RShaman)`) — the [HEALER EXPOSURE] pillar hint and the [ROOT]
+  // line printed raw character names. An unknown name stays as it is.
+  // The timeline's own builder (`rosterLabelByName`, the tag keyed on the
+  // resolved id) — predicate-index 2026-10-09: this was a third builder
+  // that looked the full name up alone.
+  const rosterUnits = [
+    ...(friends as ICombatUnit[]),
+    ...(enemies as ICombatUnit[]),
+  ];
+  const friendlyLabel = rosterLabelByName(rosterUnits, playerIdMap);
+  const enemyLabel = rosterLabelByName(rosterUnits, enemyIdMap);
+  const rosterLabelOfUnit = (u: ICombatUnit): string =>
+    (u.reaction === CombatUnitReaction.Friendly ? friendlyLabel : enemyLabel)(
+      u.name,
+    ) ?? u.name.split("-")[0]!;
+  const rosterLabelOfName = (name: string): string => {
+    const u = rosterUnits.find((x) => x.name === name);
+    return u ? rosterLabelOfUnit(u) : name;
+  };
+  const exposureInserts = formatHealerExposureEntries(
+    healerExposures,
+    rosterLabelOfName,
+  ).map((entry) => ({
+    atSeconds: entry.atSeconds,
+    line: `${fmtTime(entry.atSeconds)}  ${entry.line}`,
+  }));
   // [ROOT] context facts (GH #24, 2026-08-30): roots whose target could not
   // reach anyone for >= ROOT_UNREACHABLE_MIN_S. Same merge path as exposure.
   let rootInserts: Array<{ atSeconds: number; line: string }> = [];
@@ -861,6 +1127,12 @@ export function buildMatchContext(
         Object.values(combat.units) as ICombatUnit[],
       ),
       owner.id,
+      // cc-dr F-RT1: the roster label of a cast target (`4(RShaman)`)
+      (id) => {
+        const u = rosterUnits.find((x) => x.id === id);
+        return u ? rosterLabelOfUnit(u) : id;
+      },
+      rosterLabelOfName,
     ).map((entry) => ({
       atSeconds: entry.atSeconds,
       line: `${fmtTime(entry.atSeconds)}  ${entry.line}`,
@@ -876,9 +1148,9 @@ export function buildMatchContext(
     ]).join("\n"),
   );
 
-  if (positionLines.length > 0) {
+  if (positionLinesXref.length > 0) {
     tLines.push("");
-    positionLines.forEach((l) => tLines.push(l));
+    positionLinesXref.forEach((l) => tLines.push(l));
   }
 
   // R1 (E2E regression fix): the death-outcome block — externals a teammate

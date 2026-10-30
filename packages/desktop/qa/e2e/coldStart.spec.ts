@@ -1,8 +1,7 @@
+import { _electron as electron, expect, test } from "@playwright/test";
 import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-
-import { _electron as electron, expect, test } from "@playwright/test";
 
 import { BUDGET_MS, reportBudget } from "../budgets";
 import { BOOT_TIMEOUT_MS, MAIN_ENTRY } from "../support/launch";

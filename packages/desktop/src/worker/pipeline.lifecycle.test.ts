@@ -2,8 +2,9 @@ import { appendFileSync, mkdtempSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { describe, expect, it } from "vitest";
-import { FilePipeline } from "./pipeline";
+
 import type { WorkerToMain } from "../shared/protocol";
+import { FilePipeline } from "./pipeline";
 
 function line(i: number, s: string): string {
   return `6/30/2026 12:00:${String(i).padStart(2, "0")}.000  ${s}\n`;

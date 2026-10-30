@@ -3,9 +3,10 @@ import {
   CombatUnitType,
   ICombatUnit,
 } from "@gladlog/parser-compat";
-import { isPassiveProcCast, specToString } from "./cooldowns";
-import { filterRealPresses } from "./castPress";
+
 import { getEnglishSpellName } from "../data/spellEffectData";
+import { filterRealPresses } from "./castPress";
+import { isPassiveProcCast, specToString } from "./cooldowns";
 
 export interface IExtractedRotations {
   opener: string[];

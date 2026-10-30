@@ -30,15 +30,15 @@
 import {
   ensureAnalysisData,
   extractMajorCooldowns,
+  lowestHpTroughInEventSpan,
   toRenderSecond,
 } from "@gladlog/analysis";
 import {
   countsAsTeamBurst,
-  syncWindowCdFor,
   enemyHealerCcWindows,
-  enemyMinHpPctInWindow,
   evaluateSyncWindow,
   mergeHealerCcWindows,
+  syncWindowCdFor,
   syncWindowEligible,
 } from "@gladlog/analysis/src/analysis/candidates/cooldownTiming";
 import { PATCH_121_GOLIVE_EPOCH_MS } from "@gladlog/analysis/src/utils/drAnalysis";
@@ -176,7 +176,15 @@ async function scan(): Promise<void> {
           for (const cd of extractMajorCooldowns(f, combat)) {
             if (!countsAsTeamBurst(f, String(cd.spellId))) continue;
             teamCds.push(
-              syncWindowCdFor(cd, f, enemies, enemyAndPetIds, startMs),
+              syncWindowCdFor(
+                cd,
+                f,
+                enemies,
+                enemyAndPetIds,
+                startMs,
+                units,
+                combat,
+              ),
             );
           }
         } catch {
@@ -194,12 +202,13 @@ async function scan(): Promise<void> {
         );
         let minHp: number | null = null;
         try {
-          minHp = enemyMinHpPctInWindow(
-            enemies,
-            combat,
-            w.fromSeconds,
-            w.toSeconds,
-          );
+          minHp =
+            lowestHpTroughInEventSpan(
+              enemies,
+              combat.startTime,
+              w.fromSeconds,
+              w.toSeconds,
+            )?.pct ?? null;
         } catch {
           /* torn/unparseable — skip */
         }

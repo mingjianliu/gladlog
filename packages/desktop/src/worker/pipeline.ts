@@ -1,4 +1,5 @@
 import { GladLogParser } from "@gladlog/parser";
+
 import type { FileCheckpoint, WorkerToMain } from "../shared/protocol";
 import { initialTailState, readTail, type TailState } from "./tailReader";
 

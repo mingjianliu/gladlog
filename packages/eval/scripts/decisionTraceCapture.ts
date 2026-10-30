@@ -30,7 +30,6 @@ import { resolve } from "path";
 import { gunzipSync } from "zlib";
 
 import { candidatesAsTheAppRuns } from "../src/corpus/appCandidates";
-
 import { splitTeams } from "../src/explore/storeAccess";
 import { arg } from "./lib/cli";
 

@@ -1,5 +1,7 @@
-import type { ReportSource } from "./types";
+import { correctedAdvancedSamples } from "@gladlog/parser-compat";
+
 import { sideOfUnit, type TeamSide } from "./teamSide";
+import type { ReportSource } from "./types";
 
 export interface ReplaySample {
   t: number;
@@ -87,7 +89,7 @@ export function deriveReplay(m: ReportSource): ReplayData {
   for (const u of Object.values(m.units)) {
     if (u.kind !== "Player") continue;
     const samples: ReplaySample[] = [];
-    for (const s of u.advancedSamples) {
+    for (const s of correctedAdvancedSamples(u, m.units)) {
       if (Number.isFinite(s.x) && Number.isFinite(s.y)) {
         samples.push({
           t: s.timestamp,

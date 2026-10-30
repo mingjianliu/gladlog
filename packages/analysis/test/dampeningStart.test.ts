@@ -1,0 +1,246 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import {
+  CombatUnitReaction,
+  CombatUnitSpec,
+  CombatUnitType,
+  LogEvent,
+} from "@gladlog/parser-compat";
+import { beforeAll, describe, expect, it } from "vitest";
+
+import { buildMatchTimeline } from "../src/context/matchTimeline";
+import { ensureAnalysisData } from "../src/data/ensure";
+import { formatDampeningForContext } from "../src/utils/dampening";
+import { makeAuraEvent, makeUnit } from "./ported/testHelpers";
+
+/**
+ * FT-T13 — what one 2v2 prompt says about dampening before and after the
+ * round's first logged stack.
+ *
+ * D10: the header, the alerts, `[MATCH END]`, the `[YOU] [CD]` notes and both
+ * `[DEATH]` families read ONE classification of the bracket. Three of them
+ * used to classify on a unit list that carried pets, so a healer 2v2 with a
+ * pet out printed `started at 30%` in the header and `dampening: 10%` on the
+ * press lines before the first stack (159 of 516 prompts / 220 lines of the
+ * 605-file capture). The round below carries a pet and a totem in `allUnits`
+ * for that reason.
+ */
+
+const START = 1_000_000;
+const ms = (s: number) => START + s * 1000;
+const END_S = 120;
+const FIRST_STACK_S = 11;
+
+/** Dampening stacks 42 at 0:11, +1 every 10 s — the shape the log prints in
+ * a 2v2 round with a healer on both teams. */
+function doses(): any[] {
+  const out: any[] = [];
+  for (let i = 0; FIRST_STACK_S + i * 10 <= END_S; i++) {
+    const e = makeAuraEvent(
+      LogEvent.SPELL_AURA_APPLIED_DOSE,
+      "110310",
+      ms(FIRST_STACK_S + i * 10),
+      "h",
+      "h",
+    );
+    (e.logLine as any).parameters[12] = 42 + i;
+    out.push(e);
+  }
+  return out;
+}
+
+function round() {
+  const owner = makeUnit("PlayerYou", {
+    spec: CombatUnitSpec.Shaman_Restoration,
+    info: { teamId: "0" },
+    auraEvents: doses(),
+  });
+  const alice = makeUnit("Alice", {
+    spec: CombatUnitSpec.Hunter_BeastMastery,
+    info: { teamId: "0" },
+    auraEvents: doses(),
+  });
+  const enemyHealer = makeUnit("Enemy1", {
+    spec: CombatUnitSpec.Druid_Restoration,
+    reaction: CombatUnitReaction.Hostile,
+    info: { teamId: "1" },
+    auraEvents: doses(),
+  });
+  const enemyDps = makeUnit("Enemy2", {
+    spec: CombatUnitSpec.Mage_Frost,
+    reaction: CombatUnitReaction.Hostile,
+    info: { teamId: "1" },
+    auraEvents: doses(),
+  });
+  // Alice's pet and a totem: units of the round, not players
+  const pet = {
+    ...makeUnit("AlicePet", { ownerId: "Alice" }),
+    type: CombatUnitType.Pet,
+  };
+  const totem = {
+    ...makeUnit("Totem", { ownerId: "PlayerYou" }),
+    type: CombatUnitType.Guardian,
+  };
+  return { owner, alice, enemyHealer, enemyDps, pet, totem };
+}
+
+const astralShift = {
+  spellId: "108271",
+  spellName: "Astral Shift",
+  tag: "Defensive",
+  cooldownSeconds: 90,
+  maxChargesDetected: 1,
+  // one press before the first logged stack, one after
+  casts: [{ timeSeconds: 4 }, { timeSeconds: 17 }],
+  availableWindows: [],
+  neverUsed: false,
+};
+
+function renderTimeline(
+  over: { bracket?: string; pressureWindows?: any[] } = {},
+): string[] {
+  const { owner, alice, enemyHealer, enemyDps, pet, totem } = round();
+  const empty = {
+    allyCleanse: [],
+    ourPurges: [],
+    hostilePurges: [],
+    missedCleanseWindows: [],
+    missedPurgeWindows: [],
+  } as any;
+  return buildMatchTimeline({
+    owner,
+    ownerSpec: "Restoration Shaman",
+    ownerCDs: [astralShift] as any,
+    teammateCDs: [],
+    enemyCDTimeline: { players: [], alignedBurstWindows: [] } as any,
+    ccTrinketSummaries: [],
+    dispelSummary: empty,
+    enemyDispelSummary: empty,
+    enemyCCSummaries: [],
+    friendlyDeaths: [
+      { spec: "Beast Mastery Hunter", name: "Alice", atSeconds: 30 },
+    ],
+    enemyDeaths: [{ spec: "Frost Mage", name: "Enemy2", atSeconds: 8 }],
+    pressureWindows: over.pressureWindows ?? [],
+    healingGaps: [],
+    friends: [owner, alice],
+    enemies: [enemyHealer, enemyDps],
+    // the round's whole unit list — pets included, as buildMatchContext passes it
+    allUnits: [owner, alice, enemyHealer, enemyDps, pet, totem] as any,
+    matchStartMs: START,
+    matchEndMs: ms(END_S),
+    isHealer: true,
+    playerIdMap: new Map([
+      ["PlayerYou", 1],
+      ["Alice", 2],
+    ]),
+    enemyIdMap: new Map([
+      ["Enemy1", 3],
+      ["Enemy2", 4],
+    ]),
+    outgoingCCChains: [],
+    bracket: over.bracket ?? "2v2",
+    criticalWindowSeconds: new Set<number>(),
+  }).split("\n");
+}
+
+function header(bracket = "2v2"): string[] {
+  const { owner, alice, enemyHealer, enemyDps } = round();
+  return formatDampeningForContext(
+    bracket,
+    [owner, alice, enemyHealer, enemyDps] as any,
+    START,
+    ms(END_S),
+  );
+}
+
+const lineOf = (lines: string[], re: RegExp) => lines.find((l) => re.test(l));
+/** the timeline lines stamped before `s` seconds */
+const stampedBefore = (lines: string[], s: number) =>
+  lines.filter((l) => {
+    const m = l.match(/^(\d+):(\d{2})\s/);
+    return m !== null && Number(m[1]) * 60 + Number(m[2]) < s;
+  });
+const DAMPENING_NUMBER = /dampening: \d+%|DAMPENING ALERT|damp: \d+%/;
+const SPIKE_LEGEND = "`next spike in Ns on X` on a [YOU] [CD] line";
+
+/**
+ * D11 (re-opens the signed O10 of 2026-09-30): the log never prints a value
+ * before the first stack, and the first stack reads 42 in 258 of 258 2v2
+ * rounds with two healers (22 in 32 of 32 of the other kind) — so the old
+ * `started at 30%` was wrong. The user's ruling: step back from the log's
+ * first stack (one dose → 41) and say the number is derived. Before the
+ * first logged stack every line of a 2v2 prompt reads that ONE derived
+ * value. (Under WP-H 1 alone every line below read 30%; PV368 printed no
+ * number there.)
+ */
+describe("FT-T13 D10 + D11: one 2v2 prompt, one derived dampening value before the first logged stack", () => {
+  beforeAll(async () => {
+    await ensureAnalysisData();
+  });
+
+  it("the header states the derived start, the stack it is derived from and that stack's second", () => {
+    expect(header()[0]).toBe(
+      "DAMPENING (2v2): started at 41% (derived: one 1% step below the first logged stack, 42% at 0:11 — the log prints no value before that), ended at 52% at match end",
+    );
+  });
+
+  it("every line stamped before the first stack reads the derived 41% — press line and [DEATH] line", () => {
+    const lines = renderTimeline();
+    const before = stampedBefore(lines, FIRST_STACK_S);
+    expect(lineOf(before, /^0:04 {2}\[YOU\] \[CD\] .*Astral Shift/)).toMatch(
+      / \| dampening: 41%/,
+    );
+    expect(lineOf(before, /^0:08 {2}\[DEATH\]/)).toMatch(/ \| dampening: 41%$/);
+    // one value, nowhere another
+    expect(
+      before
+        .filter((l) => /dampening: \d+%|damp: \d+%/.test(l))
+        .filter((l) => !/(?:dampening|damp): 41%/.test(l)),
+    ).toEqual([]);
+    expect(before.some((l) => DAMPENING_NUMBER.test(l))).toBe(true);
+  });
+
+  it("the 30% alert sits at 0:00: the round starts above it", () => {
+    const lines = renderTimeline();
+    expect(lines.filter((l) => l.includes("[DAMPENING ALERT: 30%]"))).toEqual([
+      "0:00  [DAMPENING ALERT: 30%]",
+    ]);
+    // 50% is crossed by the stack at 91 s (42 + 8), as before
+    expect(lines).toContain("1:31  [DAMPENING ALERT: 50%]");
+  });
+
+  it("after the first stack every line reads the logged value (unchanged)", () => {
+    const lines = renderTimeline();
+    expect(lineOf(lines, /^0:17 {2}\[YOU\] \[CD\] .*Astral Shift/)).toMatch(
+      / \| dampening: 42%/,
+    );
+    expect(lineOf(lines, /^0:30 {2}\[DEATH\]/)).toMatch(/ \| dampening: 43%$/);
+    expect(lineOf(lines, /\[MATCH END\]/)).toMatch(/damp: 52%/);
+  });
+
+  it("the hindsight spike note follows the derived dampening on the press line, and keeps its legend", () => {
+    const spike = {
+      fromSeconds: 9,
+      toSeconds: 14,
+      totalDamage: 500_000,
+      targetName: "Alice",
+      targetSpec: "Beast Mastery Hunter",
+    };
+    const lines = renderTimeline({ pressureWindows: [spike] });
+    const press = lineOf(lines, /^0:04 {2}\[YOU\] \[CD\] .*Astral Shift/)!;
+    expect(press).toMatch(/ \| dampening: 41%, next spike in 5s on 2/);
+    expect(lines.join("\n")).toContain(SPIKE_LEGEND);
+  });
+
+  it("3v3 is untouched: the same round under the 3v3 rules states 10% from 0:00", () => {
+    expect(header("3v3")[0]).toBe(
+      "DAMPENING (3v3): started at 10%, ended at 52% at match end",
+    );
+    const lines = renderTimeline({ bracket: "3v3" });
+    expect(lineOf(lines, /^0:04 {2}\[YOU\] \[CD\] .*Astral Shift/)).toMatch(
+      / \| dampening: 10%/,
+    );
+    expect(lineOf(lines, /^0:08 {2}\[DEATH\]/)).toMatch(/ \| dampening: 10%$/);
+    expect(lines).toContain("0:11  [DAMPENING ALERT: 30%]");
+  });
+});

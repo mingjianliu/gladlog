@@ -1,18 +1,15 @@
-import {
-  analyzePlayerCCAndTrinket,
-  reconstructDispelSummary,
-  SPELL_CATEGORIES,
-} from "@gladlog/analysis";
+import { analyzePlayerCCAndTrinket, isKickSpellId } from "@gladlog/analysis";
 import { CombatUnitReaction, LogEvent } from "@gladlog/parser-compat";
 
+import { dispelSummaryOf } from "./dispelSummary";
 import { toLegacySafe } from "./legacySource";
 import { displaySpellName } from "./spellDisplay";
 import {
   eventInRange,
   overlapSeconds,
   rangeDurationS,
-  tInRange,
   type TimeRange,
+  tInRange,
 } from "./timeRange";
 import type { ReportSource } from "./types";
 
@@ -77,16 +74,22 @@ export function deriveStatsTable(
     const enemies = players.filter(
       (u) => u.reaction === CombatUnitReaction.Hostile,
     );
-    const combatLike = {
-      startTime: legacy.startTime,
-      endTime: legacy.endTime,
-      startInfo: { zoneId: (legacy as { zoneId?: string }).zoneId ?? "" },
-    };
+    // Both analysis functions below are handed the round itself (`legacy`),
+    // as the prompt and `keyMoments.ts` hand it: they read the round's end
+    // off it (`roundEndMs` — a Solo Shuffle round is over at its first player
+    // death, though its log runs ~2 s on), so a control still on at that
+    // death counts to the death and not to its logged removal. This used to
+    // be `{startTime, endTime, startInfo: {zoneId: legacy.zoneId ?? ""}}`:
+    // no round, and a zone read off a field the legacy match does not have
+    // (it is `startInfo.zoneId`), so always "".
 
     // Dispels both ways: build once from our perspective and once from the
-    // enemy's (same predicate, symmetric on both sides)
-    const ourDispels = reconstructDispelSummary(friends, enemies, combatLike);
-    const theirDispels = reconstructDispelSummary(enemies, friends, combatLike);
+    // enemy's (same predicate, symmetric on both sides). B1 (user
+    // 2026-10-24): the dispel panel's reading (`dispelSummaryOf`: both
+    // sides' pets, a pet's dispel credited to its owner, B45) — the table's
+    // 解 / 驱散 had left a Warlock's pet purges out (3 of 184 rows).
+    const ourDispels = dispelSummaryOf(legacy, friends, enemies);
+    const theirDispels = dispelSummaryOf(legacy, enemies, friends);
 
     const rows: StatsRow[] = [];
     for (const p of players) {
@@ -96,7 +99,7 @@ export function deriveStatsTable(
       const oppPets = Object.values(legacy.units).filter(
         (u) => u.ownerId && oppIds.has(u.ownerId),
       );
-      const cc = analyzePlayerCCAndTrinket(p, opponents, combatLike, oppPets);
+      const cc = analyzePlayerCCAndTrinket(p, opponents, legacy, oppPets);
       // CC instances inside the window: overlap > 0 counts toward the instance
       // count, and duration counts only the overlapping part (a
       // boundary-crossing instance does not vanish wholesale)
@@ -113,7 +116,7 @@ export function deriveStatsTable(
       const kickCastEvents = p.spellCastEvents.filter(
         (e) =>
           e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
-          SPELL_CATEGORIES[e.spellId ?? ""]?.type === "interrupts" &&
+          isKickSpellId(e.spellId ?? "") &&
           inR(e.logLine),
       );
       const kicksCast = kickCastEvents.length;

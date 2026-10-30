@@ -1,9 +1,9 @@
 import {
-  deriveReplay,
   deathPosition,
+  deriveReplay,
   pathUpTo,
-  sampleAt,
   type ReplayTrack,
+  sampleAt,
 } from "../src/renderer/src/report/derive/replay";
 import { loadMatchFixture } from "./fixtures/loadFixture";
 

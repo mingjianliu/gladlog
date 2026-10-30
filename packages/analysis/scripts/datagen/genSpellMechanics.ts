@@ -39,6 +39,23 @@
  *                    (DISABLE_CASTING_EXCEPT_ABILITIES). Ice Block, Dispersion,
  *                    Bladestorm — the probe once offered a Shockwave to a
  *                    Warrior who was inside Bladestorm.
+ *   · silenceable  — `SpellCategories.PreventionType` has the silence bit (1):
+ *                    the cast is one a silence — and so an interrupt's school
+ *                    lockout — prevents. A successful cast of a silenceable
+ *                    spell of a locked school is evidence that the lock was
+ *                    over (kick-eaten's first-success cut, triage 2026-09-29
+ *                    F-K7a / ruling A23). A spell with no SpellCategories row
+ *                    (Shadowy Apparition 341263: 125 successes inside a Shadow
+ *                    lock on 605 files) gets no flag, and no flag means "no
+ *                    evidence", never "not lockable".
+ *   · unsilenceable — the spell HAS a SpellCategories row and none of its
+ *                    rows carries the silence bit: DB2 says a silence does
+ *                    not prevent it (Stormstrike, Mortal Strike, Judgment,
+ *                    Dream Breath). Separate from "no flag" on purpose: of
+ *                    the casts that went out inside a silence aura on 605
+ *                    files, 2,368 had such a row, 2 had the silence bit,
+ *                    123 had no row (pet commands, proc rows) — work order
+ *                    FT-R1011c follow-up, 2026-10-14.
  *
  * Universe = observedSpellIdsGenerated.json (every id the corpus has seen), so
  * the table cannot be incomplete relative to what a log can contain. An id
@@ -62,6 +79,8 @@ const AURA_SCHOOL_IMMUNITY = "39";
 const AURA_MOD_PACIFY_SILENCE = "60";
 const AURA_DISABLE_CASTING_EXCEPT_ABILITIES = "263";
 const ALL_SCHOOLS = 127;
+/** SpellCategories.PreventionType bit 1: the cast is prevented by silence. */
+const PREVENTION_TYPE_SILENCE = 1;
 /** SpellMechanic ids that take control away: charmed 1, disoriented 2,
  * fleeing 5, rooted 7, asleep 10, stunned 12, frozen 13, incapacitated 14,
  * polymorphed 17, banished 18, shackled 20, turned 23, horrified 24,
@@ -77,6 +96,9 @@ interface Entry {
   immuneMechMask?: number;
   immuneAll?: true;
   locksCasting?: true;
+  silenceable?: true;
+  unsilenceable?: true;
+  weaponRequired?: true;
 }
 
 async function main() {
@@ -101,6 +123,14 @@ async function main() {
   );
   const cats = parseCsv(await fetchTable("SpellCategories", build, cacheDir));
   const eff = parseCsv(await fetchTable("SpellEffect", build, cacheDir));
+  const equipped = parseCsv(
+    await fetchTable("SpellEquippedItems", build, cacheDir),
+  );
+  assertColumns(
+    equipped.header,
+    ["SpellID", "EquippedItemClass"],
+    "SpellEquippedItems",
+  );
   assertColumns(
     misc.header,
     ["SpellID", "CastingTimeIndex", "DifficultyID"],
@@ -109,7 +139,7 @@ async function main() {
   assertColumns(castTimes.header, ["ID", "Base"], "SpellCastTimes");
   assertColumns(
     cats.header,
-    ["SpellID", "Mechanic", "DifficultyID"],
+    ["SpellID", "Mechanic", "PreventionType", "DifficultyID"],
     "SpellCategories",
   );
   assertColumns(
@@ -135,16 +165,47 @@ async function main() {
     if (ms !== undefined && entry(r.SpellID).castMs === undefined)
       entry(r.SpellID).castMs = ms;
   }
+  const hasCategoriesRow = new Set<string>();
+  const categoryMech = new Set<string>();
   for (const r of cats.rows) {
     if (r.DifficultyID !== "0" || !observed.has(r.SpellID)) continue;
+    hasCategoriesRow.add(r.SpellID);
     const m = Number(r.Mechanic);
-    if (m > 0) entry(r.SpellID).mech = m;
+    if (m > 0) {
+      entry(r.SpellID).mech = m;
+      categoryMech.add(r.SpellID);
+    }
+    if ((Number(r.PreventionType) & PREVENTION_TYPE_SILENCE) !== 0)
+      entry(r.SpellID).silenceable = true;
   }
+  // a SpellCategories row with no silence bit is DB2 saying a silence does
+  // NOT prevent the cast — the positive "no" that a missing row is not
+  for (const id of hasCategoriesRow)
+    if (!out[id]?.silenceable) entry(id).unsilenceable = true;
+  // SpellEquippedItems.EquippedItemClass 2 (weapon): the cast needs a weapon,
+  // which a disarm takes away — work order 2026-10-14d Part 2 (preview):
+  // 605 files, casts inside a disarm aura: weapon-requiring 0 / 163,906,
+  // the rest 3,335 / 589,625
+  for (const r of equipped.rows)
+    if (observed.has(r.SpellID) && r.EquippedItemClass === "2")
+      entry(r.SpellID).weaponRequired = true;
   for (const r of eff.rows) {
     if (r.DifficultyID !== "0" || !observed.has(r.SpellID)) continue;
     const e = entry(r.SpellID);
     const mech = Number(r.EffectMechanic);
-    if (mech > 0 && e.mech === undefined) e.mech = mech;
+    // the control's own effect names the CC's mechanic: a loss-of-control
+    // one wins over another effect's (corpusFactScan trinketOutOf, 82-4
+    // 0:25: Axe Toss 89766 — effect 0 interrupt 26, effect 1 the stun aura,
+    // 12 — read as an interrupt, so no stun-breaker could end it). A
+    // SpellCategories mechanic stays authoritative.
+    if (
+      mech > 0 &&
+      (e.mech === undefined ||
+        (!categoryMech.has(r.SpellID) &&
+          !LOSS_OF_CONTROL_MECHANICS.has(e.mech) &&
+          LOSS_OF_CONTROL_MECHANICS.has(mech)))
+    )
+      e.mech = mech;
     const misc0 = Number(r.EffectMiscValue_0);
     switch (r.EffectAura) {
       case AURA_MECHANIC_IMMUNITY:
@@ -232,6 +293,10 @@ async function main() {
   );
   expect(out["46968"]?.mech === 12, "Shockwave cast 46968 resolves to stun");
   expect(
+    out["89766"]?.mech === 12,
+    "Axe Toss 89766 is a stun (12), not its interrupt effect's 26",
+  );
+  expect(
     !!out["18499"]?.immuneMech?.includes(5),
     "Berserker Rage 18499 grants fear (5) immunity",
   );
@@ -248,6 +313,16 @@ async function main() {
   expect(!!out["227847"]?.locksCasting, "Bladestorm 227847 locks casting");
   expect(!out["853"]?.immuneMech, "Hammer of Justice grants no immunity");
   expect(!out["18499"]?.locksCasting, "Berserker Rage does not lock casting");
+  expect(!!out["61295"]?.silenceable, "Riptide 61295 is prevented by silence");
+  expect(!!out["118"]?.silenceable, "Polymorph 118 is prevented by silence");
+  expect(
+    !out["6552"]?.silenceable,
+    "Pummel 6552 is a physical ability (pacify, not silence)",
+  );
+  expect(
+    !out["341263"]?.silenceable,
+    "Shadowy Apparition 341263 has no SpellCategories row",
+  );
 
   const outPath = new URL(
     "../../src/data/spellMechanicsGenerated.json",

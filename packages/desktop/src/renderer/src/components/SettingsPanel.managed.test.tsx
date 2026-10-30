@@ -7,8 +7,9 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { SettingsPanel } from "./SettingsPanel";
+
 import { bridge } from "../bridge";
+import { SettingsPanel } from "./SettingsPanel";
 
 vi.mock("../bridge");
 
@@ -29,6 +30,7 @@ const baseSettings: Settings = {
   aiBackendCommand: null,
   aiLanguage: "zh",
   autoAnalyzeNew: false,
+  aiSelfReview: false,
   recordingEnabled: false,
   obsWebsocketUrl: null,
   obsWebsocketPassword: null,

@@ -11,14 +11,14 @@
  * set, blocking both accounting paths (static table and dynamic talent
  * discovery).
  */
-import { spellEffectData } from "../../src/data/spellEffectData";
 import { classMetadata } from "../../src/data/classSpells";
+import { spellEffectData } from "../../src/data/spellEffectData";
 import { writeArtifact } from "./lib/emit";
 import {
   assertColumns,
-  resolveBuild,
   fetchTable,
   parseCsv,
+  resolveBuild,
 } from "./lib/wagoCsv";
 
 async function main() {

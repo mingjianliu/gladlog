@@ -1,0 +1,182 @@
+/**
+ * [UNCLEANSED DEBUFF] and [CLEANSE] — friendly debuffs that stayed on while a
+ * cleanse was available, the owner's missed purges that GH #99 did not fold into
+ * another line ([MISSED PURGE]), and our cleanses (Critical / High only, F163;
+ * same-second same-source merge, B14).
+ *
+ * Cut out of buildMatchTimeline verbatim (GH #116); the body is unchanged, only
+ * its closure inputs now arrive through `ctx`. Output is pinned by the 605-file
+ * acceptanceCapture context hash.
+ */
+import { getEnglishSpellName } from "../../data/spellEffectData";
+import {
+  canRemoveFrom,
+  formatMissedCleanseExemption,
+  formatMissedPurgeExemption,
+  type IDispelEvent,
+  ownerRemovedOtherCopy,
+  POST_CC_PRESSURE_WINDOW_S,
+  purgeableCountText,
+  unpurgedForText,
+} from "../../utils/dispelAnalysis";
+import { isRiderDispel } from "../../utils/dispelKind";
+import { fmtTime } from "../../utils/renderGrid";
+import { dispelActorLabel } from "../timelineHelpers";
+import type { TimelineCtx } from "./ctx";
+
+export function emitCleanseEntries(
+  ctx: Pick<
+    TimelineCtx,
+    | "dispelSummary"
+    | "owner"
+    | "addEntry"
+    | "pid"
+    | "qualifyingMissedPurges"
+    | "consumedMissedPurges"
+    | "enemyPid"
+    | "enemies"
+    | "matchStartMs"
+    | "allUnits"
+  >,
+): void {
+  const {
+    dispelSummary,
+    owner,
+    addEntry,
+    pid,
+    qualifyingMissedPurges,
+    consumedMissedPurges,
+    enemyPid,
+    enemies,
+    matchStartMs,
+  } = ctx;
+
+  for (const miss of dispelSummary.missedCleanseWindows) {
+    // B16: only emit if the log owner's spec can actually remove this debuff
+    // type — from a charmed teammate only by an offensive purge (W1d, a5a8d31b)
+    if (
+      !canRemoveFrom(
+        owner,
+        miss.dispelType,
+        miss.targetCharmed,
+        miss.targetName,
+        ctx.allUnits,
+      )
+    )
+      continue;
+    // postCcDamage is the first POST_CC_PRESSURE_WINDOW_S after the debuff
+    // landed, not its lifetime — "taken during" beside a 16 s duration was
+    // retold as "took 247k during the 16 s" (reliability round 2, 539f: the
+    // real 16 s figure was 568k).
+    const dmgK = Math.round(miss.postCcDamage / 1000);
+    const spellName = getEnglishSpellName(miss.spellId, miss.spellName);
+    addEntry(
+      miss.timeSeconds,
+      // Exemption context (Fix 5): a missed cleanse while the cleanse was on CD
+      // is still rendered (the fact layer hides nothing), but carries a context
+      // suffix so the model stops blaming an infeasible dispel as a mistake.
+      `${fmtTime(miss.timeSeconds)}  [UNCLEANSED DEBUFF]   ${spellName} on ${pid(miss.targetName)} | ${miss.durationSeconds.toFixed(0)}s | ${dmgK}k taken in the ${POST_CC_PRESSURE_WINDOW_S}s after it landed | dispel: ${miss.dispelType}${formatMissedCleanseExemption(miss)}`,
+    );
+  }
+
+  // B117: only the log owner's decisions are actionable, so a "missed purge" is noise unless the
+  // owner can actually offensive-purge. Mistweaver/Evoker/Holy Priest/Paladin etc. spammed this tag
+  // for enemy buffs (e.g. Power Infusion) they had no tool to remove — the weakest, lowest-confidence
+  // findings in the corpus. Gate the whole block to owners who can purge.
+  // (P-P5b = C: `qualifyingMissedPurges` is already the owner's — an owner
+  // with no removal for the buff has none.)
+  for (const miss of qualifyingMissedPurges) {
+    if (consumedMissedPurges.has(miss)) continue;
+    // B13d: the owner took the same caster's other copy meanwhile
+    const other = ownerRemovedOtherCopy(
+      miss,
+      owner.name,
+      dispelSummary.ourPurges,
+      enemies ?? [],
+      matchStartMs,
+    );
+    const otherNote = other
+      ? ` | you ${other.isSpellSteal ? "stole" : "purged"} the other copy at ${fmtTime(other.atSeconds)}`
+      : "";
+    // B13e: a purge takes one of the purgeable buffs on the target
+    const countNote =
+      miss.purgeableOnTarget !== undefined
+        ? ` | ${purgeableCountText(miss.purgeableOnTarget)} on it then`
+        : "";
+    // fact1215 R11 (519781fd 1:36): a purge of ours on that enemy inside
+    // the window took another buff — a purge was pressed there, the
+    // removal is the game's pick
+    // — a Magic purge that could have taken this buff (both Magic purge
+    // targets, `purgeableOnTarget`): a Shiv on an Enrage is no such pick
+    // (codex 20-F15-33)
+    const tookOther = dispelSummary.ourPurges.find(
+      (p) =>
+        miss.purgeableOnTarget !== undefined &&
+        p.purgeableOnTarget !== undefined &&
+        p.targetName === miss.enemyName &&
+        p.removedSpellId !== miss.spellId &&
+        p.timeSeconds >= miss.timeSeconds &&
+        p.timeSeconds <= miss.timeSeconds + miss.durationSeconds,
+    );
+    // round-1 retest (fact1215 idx 75): a summon's purge is named as the
+    // summon's, as [MINOR DISPELS] / [PURGE] name it (`dispelActorLabel`) —
+    // the Felhunter's Devour Magic read as the warlock's
+    const tookOtherNote = tookOther
+      ? ` | ${dispelActorLabel(tookOther, pid, ctx.allUnits ?? [])}'s ${tookOther.dispelSpellName} at ${fmtTime(tookOther.timeSeconds)} took ${tookOther.removedSpellName} instead`
+      : "";
+    addEntry(
+      miss.timeSeconds,
+      `${fmtTime(miss.timeSeconds)}  [MISSED PURGE OPPORTUNITY]   ${miss.spellName} active on ${enemyPid(miss.enemyName)} (${unpurgedForText(miss)})${formatMissedPurgeExemption(miss)}${countNote}${otherNote}${tookOtherNote}`,
+    );
+  }
+
+  // B14: Consolidate same-second same-source cleanses (e.g. Mass Dispel) into one line.
+  // F163: Filter out low/medium priority cleanses to de-noise the timeline.
+  {
+    const cleanseGroups = new Map<string, IDispelEvent[]>();
+    for (const cleanse of dispelSummary.allyCleanse) {
+      if (cleanse.priority !== "Critical" && cleanse.priority !== "High")
+        continue;
+      // D1 (2026-09-25): a rider (form shift, movement ability) is not a
+      // cleanse — it folds into the tagged minor line below instead.
+      if (isRiderDispel(cleanse)) continue;
+      const key = `${Math.round(cleanse.timeSeconds)}|${cleanse.sourceName}`;
+      const group = cleanseGroups.get(key) ?? [];
+      group.push(cleanse);
+      cleanseGroups.set(key, group);
+    }
+    for (const group of cleanseGroups.values()) {
+      const first = group[0];
+      const petTag = group.some((c) => c.isPetDispel) ? " (pet)" : "";
+      const fatalCleanse = group.find((c) => c.wasFatal);
+      const fatalTag = fatalCleanse
+        ? ` [FATAL DISPEL: ${pid(fatalCleanse.fatalUnitName ?? fatalCleanse.sourceName)}]`
+        : "";
+      const removedSpellName = getEnglishSpellName(
+        first.removedSpellId,
+        first.removedSpellName,
+      );
+      // T5 (dispel coverage): name the dispel spell — "what it was dispelled
+      // with" is where coaching advice (cooldown, priority) lands, and it is the
+      // match key for deterministic coverage.
+      const viaTag = first.dispelSpellName ? ` (${first.dispelSpellName})` : "";
+      if (group.length === 1) {
+        addEntry(
+          first.timeSeconds,
+          `${fmtTime(first.timeSeconds)}  [CLEANSE]   ${pid(first.sourceName)} dispelled ${removedSpellName} off ${pid(first.targetName)}${viaTag}${petTag}${fatalTag}`,
+        );
+      } else {
+        const effects = group
+          .map(
+            (c) =>
+              `${getEnglishSpellName(c.removedSpellId, c.removedSpellName)} off ${pid(c.targetName)}`,
+          )
+          .join(", ");
+        addEntry(
+          first.timeSeconds,
+          `${fmtTime(first.timeSeconds)}  [CLEANSE]   ${pid(first.sourceName)} dispelled ${group.length} effects: ${effects}${viaTag}${petTag}${fatalTag}`,
+        );
+      }
+    }
+  }
+}

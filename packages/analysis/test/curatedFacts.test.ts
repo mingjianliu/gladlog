@@ -179,6 +179,15 @@ describe("costNormPhrase(#25 cost_norm 守护注短语单源)", () => {
   it("不在册技能(如 Astral Shift 108271)→ 返回 null", () => {
     expect(costNormPhrase("108271")).toBeNull();
   });
+  // FT-T15 ⑥a: the phrase is a menu fact the model is told to echo — English
+  // like the rest of the prompt, and safe inside a ", "-joined facts block.
+  it("短语是英文(无中日韩字符、无全角标点),且不含会截断 facts 块的 \", \"", () => {
+    const phrase = costNormPhrase("642")!;
+    expect(phrase).not.toMatch(/[\u3000-\u9fff\uff00-\uffef]/);
+    expect(phrase).not.toContain(", ");
+    expect(phrase).toMatch(/^major cooldown: /);
+    expect(phrase).toMatch(/last resort under lethal threat only$/);
+  });
 });
 
 /**

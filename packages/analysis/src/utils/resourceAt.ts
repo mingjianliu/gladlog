@@ -1,8 +1,14 @@
-import { CombatUnitPowerType, ICombatUnit } from "@gladlog/parser-compat";
+import {
+  CombatUnitPowerType,
+  ICombatUnit,
+  LogEvent,
+} from "@gladlog/parser-compat";
 
+import { manaCostForCast, manaCostIsPercentage } from "../data/spellManaCost";
+import { getSortedAdvancedActions } from "./advancedActions";
+import { buildAuraIntervals } from "./auraIntervals";
 import { binarySearchClosest } from "./binarySearch";
 import { HP_SAMPLE_RADIUS_MS } from "./cooldowns";
-import { getSortedAdvancedActions } from "./advancedActions";
 import type { ManaSample, RawStreams } from "./rawStreams";
 
 /**
@@ -122,6 +128,42 @@ function rawManaSamplesOf(rs: RawStreams, unitId: string): ManaSample[] {
 }
 
 /**
+ * The unit's whole mana series, from the SAME source `manaReadingAt` answers
+ * from: its advanced samples that carry mana, and only when there are none
+ * the raw.txt pass (cast-success lines only). For tools that walk the
+ * trajectory instead of asking one instant (triage 2026-09-29, other F-OT:
+ * `matchExplore mana` read the cast-only raw pass, so a healer's trajectory
+ * stopped at their last cast — 7f67e778 ended at 6:22 while heal lines carried
+ * the monk's power to 6:30). Seconds from `matchStartMs`, time-ordered.
+ */
+export function manaSeriesOf(
+  unit: Pick<ICombatUnit, "id" | "advancedActions">,
+  fallback: ManaFallback,
+): ManaSample[] {
+  const advanced = samplesBearing(
+    unit.id,
+    getSortedAdvancedActions(unit),
+    MANA_POWER_TYPE,
+  );
+  if (advanced.length === 0)
+    return fallback.rawStreams?.available
+      ? rawManaSamplesOf(fallback.rawStreams, unit.id)
+      : [];
+  const out: ManaSample[] = [];
+  for (const a of advanced) {
+    const e = powerEntry(a, MANA_POWER_TYPE);
+    if (!e || !Number.isFinite(e.current) || !(e.max > 0)) continue;
+    out.push({
+      tSeconds: (a.logLine.timestamp - fallback.matchStartMs) / 1000,
+      unitGuid: unit.id,
+      mana: e.current,
+      manaMax: e.max,
+    });
+  }
+  return out;
+}
+
+/**
  * The unit's MANA reading at `timestampMs` — the one mana sampler the context
  * lines read (reliability audit D2, 2026-09-25).
  *
@@ -182,4 +224,304 @@ export function resourceDeltaPct(
   const b = manaReadingAt(unit, toMs, fallback);
   if (!a || !b) return null;
   return { fromPct: a.pct, toPct: b.pct, deltaPct: b.pct - a.pct };
+}
+
+/** The unit's mana samples inside [fromMs, toMs], by the same precedence as
+ * `manaReadingAt`: advanced samples when the unit's advanced stream carries
+ * mana at all, otherwise the raw.txt pass. */
+function manaSamplesWithin(
+  unit: Pick<ICombatUnit, "id" | "advancedActions">,
+  fromMs: number,
+  toMs: number,
+  fallback?: ManaFallback,
+): Array<{ current: number; max: number }> {
+  return timedManaSamplesWithin(unit, fromMs, toMs, fallback).map((s) => ({
+    current: s.current,
+    max: s.max,
+  }));
+}
+
+/** `manaSamplesWithin` with each sample's own instant (epoch ms). */
+function timedManaSamplesWithin(
+  unit: Pick<ICombatUnit, "id" | "advancedActions">,
+  fromMs: number,
+  toMs: number,
+  fallback?: ManaFallback,
+): Array<{ ms: number; current: number; max: number }> {
+  const advanced = samplesBearing(
+    unit.id,
+    getSortedAdvancedActions(unit),
+    MANA_POWER_TYPE,
+  );
+  if (advanced.length > 0 || !fallback?.rawStreams?.available)
+    return advanced
+      .filter(
+        (a) => a.logLine.timestamp >= fromMs && a.logLine.timestamp <= toMs,
+      )
+      .map((a) => ({
+        ms: a.logLine.timestamp,
+        e: powerEntry(a, MANA_POWER_TYPE)!,
+      }))
+      .filter(({ e }) => e && e.max > 0 && Number.isFinite(e.current))
+      .map(({ ms, e }) => ({ ms, current: e.current, max: e.max }));
+  const fromS = (fromMs - fallback.matchStartMs) / 1000;
+  const toS = (toMs - fallback.matchStartMs) / 1000;
+  return rawManaSamplesOf(fallback.rawStreams, unit.id)
+    .filter(
+      (m) =>
+        m.tSeconds >= fromS && m.tSeconds <= toS && Number.isFinite(m.mana),
+    )
+    .map((m) => ({
+      ms: fallback.matchStartMs + m.tSeconds * 1000,
+      current: m.mana,
+      max: m.manaMax,
+    }));
+}
+
+/**
+ * Auras under which the carrier's spells cost no mana — the static DB2 cost
+ * does not apply, so affordability is unknown (no gate). Innervate 29166
+ * ("mana costs reduced by 100 %", observed in the S2 archive): agy review of
+ * F-H6. Other partial reductions are not modelled; a missing one can only
+ * over-state the cost, i.e. excuse, never accuse. Registered in
+ * curatedIdRegistry.
+ */
+export const FREE_CAST_AURA_IDS: ReadonlySet<string> = new Set([
+  "29166", // Innervate
+]);
+
+function freeCastWithin(
+  unit: ICombatUnit,
+  fromMs: number,
+  toMs: number,
+  combat?: { startTime: number; endTime: number },
+): boolean {
+  if (!combat) return false;
+  const fromS = (fromMs - combat.startTime) / 1000;
+  const toS = (toMs - combat.startTime) / 1000;
+  return buildAuraIntervals(unit, combat).some(
+    (iv) =>
+      FREE_CAST_AURA_IDS.has(iv.spellId) && iv.fromS <= toS && iv.toS >= fromS,
+  );
+}
+
+// cast events → per spell id, the mana costs its rows state (cost > 0 only)
+const statedCostCache = new WeakMap<
+  readonly unknown[],
+  Map<string, Array<{ t: number; cost: number }>>
+>();
+
+/**
+ * The mana cost the unit's OWN cast rows of `spellId` state inside the round
+ * (`ISpellEvent.powerCosts`, the cost field of SPELL_CAST_SUCCESS), or null
+ * when none states one: the spell was not cast in the round, every cast of it
+ * was stated free, or the document was stored before the parser kept the
+ * field (2026-10-11).
+ *
+ * What the number is (measured, parser `decodeCastCosts`): the spell's cost
+ * before the caster's percentage reductions — for a spell DB2 prices as a
+ * percentage, that percentage of BASE mana (250,000 on all 251,568 such rows
+ * of the 605-file slice), not of the caster's current max. It is not always
+ * what was taken: a reduction on the caster is not in it.
+ *
+ * The highest one, should they differ. They do not for a percentage-priced
+ * spell (0 of 49,022 unit × spell × round groups on the slice); the one spell
+ * whose rows differ, Arcane Surge, states what it SPENT — all the mana there
+ * was — and is flat-priced, so `costFor` never asks for it.
+ *
+ * Only the round's own casts: a Solo Shuffle round's units keep the rows that
+ * follow it, and talents can change between rounds.
+ */
+export function statedManaCostInRound(
+  unit: Pick<ICombatUnit, "spellCastEvents">,
+  spellId: string,
+  round: { startTime: number; endTime: number },
+): number | null {
+  const events = unit.spellCastEvents ?? [];
+  let bySpell = statedCostCache.get(events);
+  if (!bySpell) {
+    bySpell = new Map();
+    for (const e of events) {
+      if (e.logLine.event !== LogEvent.SPELL_CAST_SUCCESS || !e.spellId)
+        continue;
+      const cost = e.powerCosts?.find(
+        (c) => (c.type as unknown as number) === MANA_POWER_TYPE,
+      )?.cost;
+      if (cost === undefined || !(cost > 0)) continue;
+      const list = bySpell.get(e.spellId) ?? [];
+      list.push({ t: e.logLine.timestamp, cost });
+      bySpell.set(e.spellId, list);
+    }
+    statedCostCache.set(events, bySpell);
+  }
+  let stated: number | null = null;
+  for (const c of bySpell.get(spellId) ?? [])
+    if (
+      c.t >= round.startTime &&
+      c.t <= round.endTime &&
+      (stated === null || c.cost > stated)
+    )
+      stated = c.cost;
+  return stated;
+}
+
+/**
+ * What the spell costs this unit, in mana: the official row
+ * (`manaCostForCast`), and — FT F09, 2026-10-11 — for a PERCENTAGE row the
+ * cost the unit's own cast rows of that spell state in the round, when one
+ * does (`statedManaCostInRound`).
+ *
+ * The percentage is a share of base mana, and the only mana figure a reading
+ * has is the unit's current MAX — equal to base on 57 % of the slice's mana
+ * cast rows, 4–9 % above it on most of the rest and up to half above — so
+ * `pct × max` overstated the cost (7f67e778: max 262,500; Invoke Chi-Ji
+ * printed `13.1k`, its cast rows say 12,500; Restoral `11.5k`, 10,935). A
+ * flat row is not converted with a
+ * mana figure and is left alone. No official row → null as before: the logged
+ * cost does not create a gate where there was none. No round, no stated cost
+ * in it, or a document without the field → `pct × max`, exactly as before.
+ */
+const costFor = (
+  unit: Pick<ICombatUnit, "spec" | "spellCastEvents">,
+  spellId: string,
+  manaMax: number,
+  round?: { startTime: number; endTime: number },
+) => {
+  const spec = String(unit.spec ?? "");
+  const official = manaCostForCast(spellId, spec, manaMax);
+  if (official === null || !round || !manaCostIsPercentage(spellId, spec))
+    return official;
+  return statedManaCostInRound(unit, spellId, round) ?? official;
+};
+
+/**
+ * "Could the unit pay for this spell's mana at `tMs`" — the ONE affordability
+ * predicate (triage 2026-09-29 F-H6 × res-readiness F-C3, user ruling
+ * 2026-09-30, res R2 = A). The reading is `manaReadingAt` (the [MANA]
+ * sampler); the cost is `costFor` — the official `manaCostForCast` against
+ * that reading's max, or what the unit's own cast rows of the spell state in
+ * the round. Null = unknown (no cost row, or no reading): callers must not
+ * gate on it. [RES] (res F-C3) keeps an unaffordable cooldown `rdy` and
+ * annotates it with `mana` / `cost`.
+ */
+export function affordableAt(
+  unit: ICombatUnit,
+  spellId: string,
+  tMs: number,
+  fallback?: ManaFallback,
+  /** the round, for the free-cast auras (`FREE_CAST_AURA_IDS`) and the cost
+   * the unit's cast rows state (`statedManaCostInRound`); absent = neither */
+  combat?: { startTime: number; endTime: number },
+): { affordable: boolean; mana: number; cost: number } | null {
+  if (freeCastWithin(unit, tMs, tMs, combat)) return null;
+  const r = manaReadingAt(unit, tMs, fallback);
+  if (!r) return null;
+  const cost = costFor(unit, spellId, r.max, combat);
+  if (cost === null || !(cost > 0)) return null;
+  return { affordable: r.current >= cost, mana: r.current, cost };
+}
+
+/**
+ * The stretches of [fromMs, toMs] the unit could NOT pay for `spellId`: from
+ * a mana sample under the cost to the next sample (the reading holds until
+ * it changes) — the same cost, samples and comparison as `affordableWithin`.
+ * Empty when unknown (no cost row, no sample, a free-cast aura): no gate.
+ * fact3 D12 (20e0f243 5:57): the priest's Guardian Spirit was "free to cast
+ * 2.2 s" while 169 mana sat under its 2.3k cost.
+ */
+export function unaffordableIntervals(
+  unit: ICombatUnit,
+  spellId: string,
+  fromMs: number,
+  toMs: number,
+  fallback?: ManaFallback,
+  combat?: { startTime: number; endTime: number },
+): Array<{ from: number; to: number }> {
+  // a free-cast aura (Innervate) pays only while it is up: its span comes
+  // out of the unpaid stretches, the rest stays unpaid (codex 60-POSTHOC-07c
+  // #1 / 09g #1: an Innervate overlapping any part of the window dropped all
+  // of it — Guardian Spirit "free 5.0s" where 0.5 s was affordable;
+  // `affordableAt` reads the aura at its own instant)
+  const free = freeCastSpansMs(unit, fromMs, toMs, combat);
+  // the reading in force at the window's start too
+  const samples = timedManaSamplesWithin(unit, fromMs - 5000, toMs, fallback);
+  const out: Array<{ from: number; to: number }> = [];
+  for (let i = 0; i < samples.length; i++) {
+    const smp = samples[i]!;
+    const next = samples[i + 1]?.ms ?? toMs;
+    if (next <= fromMs) continue;
+    const cost = costFor(unit, spellId, smp.max, combat);
+    if (cost === null || !(cost > 0)) return [];
+    if (smp.current < cost)
+      out.push({ from: Math.max(fromMs, smp.ms), to: Math.min(toMs, next) });
+  }
+  return subtractSpans(out, free);
+}
+
+/** The free-cast auras' spans (`FREE_CAST_AURA_IDS`) inside [fromMs, toMs],
+ * epoch ms — `freeCastWithin`'s reading as stretches. */
+function freeCastSpansMs(
+  unit: ICombatUnit,
+  fromMs: number,
+  toMs: number,
+  combat?: { startTime: number; endTime: number },
+): Array<{ from: number; to: number }> {
+  if (!combat) return [];
+  return buildAuraIntervals(unit, combat)
+    .filter((iv) => FREE_CAST_AURA_IDS.has(iv.spellId))
+    .map((iv) => ({
+      from: Math.max(fromMs, combat.startTime + iv.fromS * 1000),
+      to: Math.min(toMs, combat.startTime + iv.toS * 1000),
+    }))
+    .filter((x) => x.to > x.from);
+}
+
+/** `spans` minus `cut`, both epoch-ms stretches. */
+function subtractSpans(
+  spans: Array<{ from: number; to: number }>,
+  cut: Array<{ from: number; to: number }>,
+): Array<{ from: number; to: number }> {
+  let out = spans;
+  for (const c of cut) {
+    const next: Array<{ from: number; to: number }> = [];
+    for (const s of out) {
+      if (c.to <= s.from || c.from >= s.to) {
+        next.push(s);
+        continue;
+      }
+      if (c.from > s.from) next.push({ from: s.from, to: c.from });
+      if (c.to < s.to) next.push({ from: c.to, to: s.to });
+    }
+    out = next;
+  }
+  return out;
+}
+
+/**
+ * `affordableAt`'s window form for an accusation: affordable if ANY mana
+ * sample in [fromMs, toMs] covers the cost (F-H6: [t, t + CD_HOARD_RESPONSE_S]
+ * — the player could have waited a second for the mana). Same cost, same
+ * sample sources, same comparison. Null = unknown (no cost row or no sample
+ * in the window): no gate.
+ */
+export function affordableWithin(
+  unit: ICombatUnit,
+  spellId: string,
+  fromMs: number,
+  toMs: number,
+  fallback?: ManaFallback,
+  /** the round, for the free-cast auras (`FREE_CAST_AURA_IDS`) and the cost
+   * the unit's cast rows state (`statedManaCostInRound`); absent = neither */
+  combat?: { startTime: number; endTime: number },
+): boolean | null {
+  if (freeCastWithin(unit, fromMs, toMs, combat)) return null;
+  const samples = manaSamplesWithin(unit, fromMs, toMs, fallback);
+  let known = false;
+  for (const s of samples) {
+    const cost = costFor(unit, spellId, s.max, combat);
+    if (cost === null || !(cost > 0)) return null;
+    known = true;
+    if (s.current >= cost) return true;
+  }
+  return known ? false : null;
 }

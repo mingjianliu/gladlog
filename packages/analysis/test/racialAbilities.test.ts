@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+
+import { spellClassMap } from "../src/data/drCategories";
 import {
   BREAK_RACIAL_SPELL_IDS,
   OFFENSIVE_RACIAL_SPELL_IDS,
@@ -6,7 +8,6 @@ import {
   racialName,
 } from "../src/data/racialAbilities";
 import { spellEffectData } from "../src/data/spellEffectData";
-import { spellClassMap } from "../src/data/drCategories";
 
 describe("racialAbilities 表", () => {
   it("每个种族技能都能在官方生成表里查到冷却(datagen candidate 已收录)", () => {

@@ -8,6 +8,8 @@
  * `death-unused-defensive`, retired 2026-08-29; its emitter was deleted
  * 2026-09-24.)
  */
+import { getEnglishSpellName } from "../../data/spellEffectData";
+import { deathLockChain, freeMsBefore } from "../../utils/cannotCastIntervals";
 import {
   cdReadyInTimeAt,
   type IMajorCooldownInfo,
@@ -50,6 +52,27 @@ export interface DeathSetupParts {
       spellName: string;
       sourceName: string;
     }>;
+    /**
+     * Triage G5 (death-kill F-S1, crisis-external F-AS1 / F-D2): the
+     * healer's named cannot-cast intervals (`namedCannotCastIntervals`, epoch
+     * ms), its roots (seconds) and the round start. Absent (hand-built
+     * fixtures) = no `chain` / `chainFrom` / `lockedS` / `freeBeforeDeathS` /
+     * `landedWhileLocked` facts.
+     */
+    cannotCast?: ReadonlyArray<{
+      from: number;
+      to: number;
+      spellId: string;
+      lockout: boolean;
+      /** the unit's own flight (`OWN_FLIGHT_AURA_IDS`) */
+      self?: true;
+    }>;
+    roots?: ReadonlyArray<{
+      atSeconds: number;
+      durationSeconds: number;
+      spellName: string;
+    }>;
+    matchStartMs?: number;
   };
 }
 
@@ -81,6 +104,108 @@ export interface DeathSetupParts {
  */
 export const DEATH_CC_LOOKBACK_S = 12;
 
+/**
+ * Triage G5 facts on a healer-locked event, from the healer's cannot-cast
+ * intervals (`buildCannotCastIntervals`' named form), all on the raw death
+ * (codex c1 09-30: not the rendered `deathT`):
+ *  - crisis-external F-AS1 (amends death-kill F-S1): `chain` = the CCs of
+ *    every contiguous cannot-cast run that touches [death − 12 s, death], not
+ *    clipped at the window start, with `chainFrom` = the earliest run's
+ *    start; roots overlapping the window are listed `(root)` but count toward
+ *    no run; `landedWhileLocked` = the named CC landed inside an earlier
+ *    cannot-cast interval;
+ *  - death-kill F-S1: `lockedS` = cannot-cast seconds of the 12 s window;
+ *  - crisis-external F-D2 (ruling A′5): `freeBeforeDeathS` = free seconds just
+ *    before the death (`freeMsBefore`; 0 = still locked at the death).
+ */
+function lockChainFacts(
+  parts: DeathSetupParts,
+  lock: { atSeconds: number },
+): Record<string, string> {
+  const cc = parts.healerCC;
+  if (!cc?.cannotCast || cc.matchStartMs === undefined) return {};
+  const start = cc.matchStartMs;
+  const deathMs = start + parts.deathT * 1000;
+  const { runs, links, lockedMs } = deathLockChain(
+    cc.cannotCast,
+    deathMs,
+    DEATH_CC_LOOKBACK_S * 1000,
+  );
+  const facts: Record<string, string> = {};
+  // WO6 #4 (n25 82a2d681, n15 3df6ccf8): each entry prints its span — with
+  // start times alone two runs 4.5 s apart (Hex 162.6; Polymorph 168.1) read
+  // as one unbroken chain, and a root running on under the next CC read as
+  // a gap
+  const span = (fromS: number, toS: number) =>
+    `${fmtFactTime(fromS)}-${fmtFactTime(toS)}`;
+  const chain: Array<{ at: number; text: string }> = links.map((iv) => {
+    const at = (iv.from - start) / 1000;
+    return {
+      at,
+      text: `${getEnglishSpellName(iv.spellId)} ${span(at, (iv.to - start) / 1000)}`,
+    };
+  });
+  // agy 40-FT-86: the unit's own flight counts toward the runs (user ruling
+  // 2026-10-14) but is no enemy's CC — it is named as what it is, so a run
+  // that opens with it does not leave facts.chainFrom before every entry
+  for (const iv of cc.cannotCast) {
+    if (
+      !iv.self ||
+      !(iv.from < deathMs) ||
+      !runs.some((r) => iv.from < r.to && iv.to > r.from)
+    )
+      continue;
+    const at = (iv.from - start) / 1000;
+    chain.push({
+      at,
+      text: `${getEnglishSpellName(iv.spellId)} (own flight) ${span(at, (iv.to - start) / 1000)}`,
+    });
+  }
+  // agy 40-FT-98 #2 / #3: a kick's school lockout is time the runs count
+  // (lockedS) — listed, so a gap between two CCs is not read as free time
+  for (const iv of cc.cannotCast) {
+    if (
+      !iv.lockout ||
+      iv.self ||
+      !(iv.from < deathMs) ||
+      !runs.some((r) => iv.from < r.to && iv.to > r.from)
+    )
+      continue;
+    const at = (iv.from - start) / 1000;
+    chain.push({
+      at,
+      text: `${getEnglishSpellName(iv.spellId)} (school lockout) ${span(at, (iv.to - start) / 1000)}`,
+    });
+  }
+  for (const r of cc.roots ?? []) {
+    if (
+      r.atSeconds < parts.deathT &&
+      r.atSeconds + r.durationSeconds > parts.deathT - DEATH_CC_LOOKBACK_S
+    )
+      chain.push({
+        at: r.atSeconds,
+        text: `${r.spellName} (root) ${span(r.atSeconds, r.atSeconds + r.durationSeconds)}`,
+      });
+  }
+  chain.sort((a, b) => a.at - b.at);
+  const texts = [...new Set(chain.map((c) => c.text))];
+  if (texts.length) facts.chain = texts.join("; ");
+  if (runs.length)
+    facts.chainFrom = fmtFactTime((runs[0]!.from - start) / 1000);
+  facts.lockedS = fmt(Math.round(lockedMs / 100) / 10);
+  const freeMs = freeMsBefore(cc.cannotCast, deathMs);
+  if (freeMs !== undefined)
+    facts.freeBeforeDeathS = fmt(Math.round(freeMs / 100) / 10);
+  // whole ms: the named CC's own aura starts exactly here and is not earlier
+  const lockMs = start + Math.round(lock.atSeconds * 1000);
+  facts.landedWhileLocked = cc.cannotCast.some(
+    (iv) => iv.from < lockMs && iv.to > lockMs,
+  )
+    ? "true"
+    : "false";
+  return facts;
+}
+
 export function deathSetupEvents(parts: DeathSetupParts): CandidateEvent[] {
   const { deathT, victim } = parts;
   const out: CandidateEvent[] = [];
@@ -96,12 +221,31 @@ export function deathSetupEvents(parts: DeathSetupParts): CandidateEvent[] {
   // 0.4 s (b12bfef4), a backlash 0.95 s inside the healer's own GCD
   // (eb8041ce); a Kidney Shot with the victim 84 % → 80 % during it, the
   // lethal dive after the healer was free (be835950).
-  const lock = parts.healerCC?.ccInstances.find(
-    (cc) =>
-      cc.atSeconds < deathT &&
-      overlapS(cc) >= HEALER_LOCK_MIN_S &&
-      (parts.victimHitDuring?.(cc) ?? true),
-  );
+  //
+  // death-kill F-S1 (ruling A16, 2026-09-30): of the qualifying CCs, name the
+  // one that ends latest — the lock nearest the death, not the first in list
+  // order (9c6ab747: Storm Bolt → Song of Chi-Ji, which covers the death).
+  const endOf = (cc: { atSeconds: number; durationSeconds: number }) =>
+    cc.atSeconds + cc.durationSeconds;
+  const lock = parts.healerCC?.ccInstances
+    .filter(
+      (cc) =>
+        cc.atSeconds < deathT &&
+        overlapS(cc) >= HEALER_LOCK_MIN_S &&
+        (parts.victimHitDuring?.(cc) ?? true),
+    )
+    .reduce<
+      | NonNullable<DeathSetupParts["healerCC"]>["ccInstances"][number]
+      | undefined
+    >(
+      (best, cc) =>
+        !best ||
+        endOf(cc) > endOf(best) ||
+        (endOf(cc) === endOf(best) && cc.atSeconds > best.atSeconds)
+          ? cc
+          : best,
+      undefined,
+    );
   if (lock) {
     out.push({
       id: `death-setup:${victim.id}:${Math.round(deathT)}:healer-locked`,
@@ -123,6 +267,7 @@ export function deathSetupEvents(parts: DeathSetupParts): CandidateEvent[] {
         healer: parts.healerCC!.healerName,
         cc: lock.spellName,
         duration: lock.durationSeconds.toFixed(1),
+        ...lockChainFacts(parts, lock),
       },
     });
   }
@@ -181,31 +326,86 @@ export function externalUnusedEvents(input: {
    * window (reliability round 3 W1f)? Built by the caller from positions and
    * the external's reach; absent or unknown ⇒ reachable (the pre-W1f test). */
   canReachVictim?: (spellId: string) => boolean;
+  /** codex R6C-04 #1 / #2: could the owner press this external for the
+   * victim at all — no lockout debuff on them just before the death
+   * (`lockoutDebuffStopsPressAtDeath`: Forbearance, Hypothermia) and it
+   * covers what was killing them (`saveCoversPressureOn`). Absent ⇒ yes. */
+  pressable?: (spellId: string) => boolean;
+  /** fact3 D12: the seconds the owner could not PAY for this external (mana
+   * under its cost, `unaffordableIntervals`) — not free to cast it either;
+   * absent ⇒ none */
+  unaffordable?: (
+    spellId: string,
+  ) => Array<{ atSeconds: number; durationSeconds: number }>;
+  /** fact3 D12: the owner pressed this external inside the window and the
+   * game refused it (no mana, frozen …) — tried, not held; absent ⇒ never */
+  attempted?: (spellId: string, fromS: number, toS: number) => boolean;
 }): CandidateEvent[] {
   const { deathT, victim, owner } = input;
   if (!input.ownerAliveAt(deathT)) return [];
 
-  // Owner's free gap: the largest contiguous gap left in the window
-  // [deathT-5, deathT] after subtracting CC coverage
+  // Owner's free gap for one external: the largest contiguous gap left in
+  // the window [deathT-5, deathT] after subtracting CC coverage and the time
+  // the owner could not pay for it
   const from = Math.max(0, deathT - EXTERNAL_FREE_WINDOW_S);
-  const covers = input.ownerCC
-    .map((c) => [c.atSeconds, c.atSeconds + c.durationSeconds] as const)
-    .filter(([a, b]) => b > from && a < deathT)
-    .sort((a, b) => a[0] - b[0]);
-  let cursor = from;
-  let maxGap = 0;
-  for (const [a, b] of covers) {
-    maxGap = Math.max(maxGap, a - cursor);
-    cursor = Math.max(cursor, b);
-  }
-  maxGap = Math.max(maxGap, deathT - cursor);
-  if (maxGap < EXTERNAL_FREE_MIN_GAP_S) return [];
+  // …and before the external was back (codex 60-POSTHOC-04c #2: readiness
+  // read at the death and freedom over the whole window — Pain Suppression
+  // back at 180 s, the priest Cycloned 179–182 s, read free 177–179 s while
+  // it was still on cooldown). Ready ∧ free at the same time.
+  // every span it was not ready, not only the one before it first was
+  // (codex 20-F17-07 #2: a charge back at 117 s and spent on another ally
+  // at 118 s read "free 5 s" for a death at 122 s)
+  const notReadyFor = (
+    cd: (typeof input.ownerExternals)[number],
+  ): Array<{ atSeconds: number; durationSeconds: number }> => {
+    const out: Array<{ atSeconds: number; durationSeconds: number }> = [];
+    let openAt: number | null = null;
+    const steps = Math.round((deathT - from) / 0.1);
+    for (let i = 0; i <= steps; i++) {
+      const t = Math.min(deathT, from + i * 0.1);
+      const ready = cdReadyInTimeAt(cd, t);
+      if (!ready && openAt === null) openAt = t;
+      if (ready && openAt !== null) {
+        out.push({ atSeconds: openAt, durationSeconds: t - openAt });
+        openAt = null;
+      }
+    }
+    if (openAt !== null)
+      out.push({ atSeconds: openAt, durationSeconds: deathT - openAt });
+    return out;
+  };
+  const freeGapFor = (
+    spellId: string,
+    cd?: (typeof input.ownerExternals)[number],
+  ): number => {
+    const covers = [
+      ...input.ownerCC,
+      ...(input.unaffordable?.(spellId) ?? []),
+      ...(cd ? notReadyFor(cd) : []),
+    ]
+      .map((c) => [c.atSeconds, c.atSeconds + c.durationSeconds] as const)
+      .filter(([a, b]) => b > from && a < deathT)
+      .sort((a, b) => a[0] - b[0]);
+    let cursor = from;
+    let maxGap = 0;
+    for (const [a, b] of covers) {
+      maxGap = Math.max(maxGap, a - cursor);
+      cursor = Math.max(cursor, b);
+    }
+    return Math.max(maxGap, deathT - cursor);
+  };
 
-  const avail = input.ownerExternals.find(
-    (cd) =>
-      cdReadyInTimeAt(cd, deathT) &&
-      (input.canReachVictim?.(cd.spellId) ?? true),
-  );
+  let maxGap = 0;
+  const avail = input.ownerExternals.find((cd) => {
+    if (!cdReadyInTimeAt(cd, deathT)) return false;
+    if (!(input.canReachVictim?.(cd.spellId) ?? true)) return false;
+    if (!(input.pressable?.(cd.spellId) ?? true)) return false;
+    if (input.attempted?.(cd.spellId, from, deathT)) return false;
+    const gap = freeGapFor(cd.spellId, cd);
+    if (gap < EXTERNAL_FREE_MIN_GAP_S) return false;
+    maxGap = gap;
+    return true;
+  });
   if (!avail) return [];
   return [
     {

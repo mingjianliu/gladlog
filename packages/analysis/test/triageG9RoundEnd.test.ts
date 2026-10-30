@@ -1,0 +1,362 @@
+/**
+ * Triage 2026-09-29, group G9 — one round end (`utils/roundEnd.ts`
+ * `roundEndMs`: a Solo Shuffle round's first player death, else the combat
+ * end) for:
+ *  - cc-dr F-CI1: `[CC ON TEAM]` / `[CC ON ENEMY]` windows — a CC applied at
+ *    or after the end is dropped, a removal after it is clipped to it;
+ *  - missed-cleanse F-C3: uncleansed windows clip the same way (ba8c0510:
+ *    a Polymorph 0.6 s in the round was a 6 s missed cleanse).
+ * Also cc-dr F-RF1 (ruling A51 = A): a REFRESH its source cast for is a new
+ * CC on the holder; enemy-def F-E18 / cc-dr F-DA1: the disarm a trinket
+ * press broke; position F-D1: no caster distance from a pre-teleport spot.
+ * cc-dr F-HG1 (healing gaps) is in `ported/healingGaps.test.ts`.
+ */
+import {
+  CombatUnitClass,
+  CombatUnitReaction,
+  CombatUnitSpec,
+  LogEvent,
+} from "@gladlog/parser-compat";
+import { beforeAll, describe, expect, it } from "vitest";
+
+import { ensureAnalysisData } from "../src/data/ensure";
+import {
+  analyzePlayerCCAndTrinket,
+  findBrokenDisarm,
+} from "../src/utils/ccTrinketAnalysis";
+import { reconstructDispelSummary } from "../src/utils/dispelAnalysis";
+import { landedControlsForKit } from "../src/utils/healerExposureAnalysis";
+import { roundEndMs } from "../src/utils/roundEnd";
+import {
+  makeAdvancedAction,
+  makeAuraEvent,
+  makeSpellCastEvent,
+  makeUnit,
+} from "./ported/testHelpers";
+
+beforeAll(async () => {
+  await ensureAnalysisData();
+});
+
+const START = 1_000_000;
+const aura = (event: LogEvent, spellId: string, s: number, dest: string) => ({
+  ...makeAuraEvent(event, spellId, START + s * 1000, "e1", dest),
+  spellName: spellId,
+});
+const polyOn = (dest: string, fromS: number, toS: number) => [
+  aura(LogEvent.SPELL_AURA_APPLIED, "118", fromS, dest),
+  aura(LogEvent.SPELL_AURA_REMOVED, "118", toS, dest),
+];
+
+/** A Solo Shuffle round whose first player death is at `deathS`. */
+function shuffle(deathS: number) {
+  const dead = makeUnit("x", {
+    info: {},
+    deathRecords: [{ timestamp: START + deathS * 1000 }],
+  });
+  return {
+    startTime: START,
+    endTime: START + 60_000,
+    startInfo: { zoneId: "1672", bracket: "Rated Solo Shuffle" },
+    units: { x: dead },
+  };
+}
+
+describe("roundEndMs", () => {
+  it("is the first player death in Solo Shuffle, else the combat end", () => {
+    expect(roundEndMs(shuffle(48.327))).toBe(START + 48_327);
+    expect(
+      roundEndMs({ ...shuffle(48.327), startInfo: { bracket: "3v3" } }),
+    ).toBe(START + 60_000);
+    expect(roundEndMs({ endTime: START + 60_000 })).toBe(START + 60_000);
+  });
+});
+
+describe("cc-dr F-CI1 — CC windows end at the round end", () => {
+  const enemy = () => makeUnit("e1", { reaction: CombatUnitReaction.Hostile });
+
+  it("FT-T09: a CC the round end cut is marked — and one that ended inside the round is not", () => {
+    const victim = makeUnit("v", {
+      auraEvents: [
+        ...polyOn("v", 20, 23.5),
+        // 28c39eb1 round 3 shape: landed just before the round-ending death, removed after it
+        ...polyOn("v", 47.9, 50.6),
+      ],
+    });
+    const cc = analyzePlayerCCAndTrinket(
+      victim,
+      [enemy()],
+      shuffle(48.327),
+    ).ccInstances;
+    expect(cc.map((c) => c.stillOnAtRoundEnd)).toEqual([undefined, true]);
+    expect(cc[1]!.durationSeconds).toBeCloseTo(0.427, 3);
+    // no REMOVED at all, the round over before its 6 s: still on them too
+    const open = makeUnit("v", {
+      auraEvents: [aura(LogEvent.SPELL_AURA_APPLIED, "118", 45, "v")],
+    });
+    expect(
+      analyzePlayerCCAndTrinket(
+        open,
+        [enemy()],
+        shuffle(48.327),
+      ).ccInstances.map((c) => c.stillOnAtRoundEnd),
+    ).toEqual([true]);
+  });
+
+  it("a removal after the end is clipped; a CC applied at or after it is dropped", () => {
+    const victim = makeUnit("v", {
+      auraEvents: [
+        // ba8c0510 shape: applied 47.718, removed 53.726, round over at 48.327
+        ...polyOn("v", 47.718, 53.726),
+        // fd45b5d0 shape: applied after the round-ending death
+        ...polyOn("v", 48.964, 54.0),
+      ],
+    });
+    const cc = analyzePlayerCCAndTrinket(
+      victim,
+      [enemy()],
+      shuffle(48.327),
+    ).ccInstances;
+    expect(cc).toHaveLength(1);
+    expect(cc[0].durationSeconds).toBeCloseTo(0.609, 3);
+    // no negative window survives
+    expect(cc.every((c) => c.durationSeconds >= 0)).toBe(true);
+
+    // control: no Solo Shuffle death → the combat end, both CCs whole
+    const plain = analyzePlayerCCAndTrinket(victim, [enemy()], {
+      startTime: START,
+      endTime: START + 60_000,
+      startInfo: { zoneId: "1672" },
+    }).ccInstances;
+    expect(plain.map((c) => Math.round(c.durationSeconds))).toEqual([6, 5]);
+  });
+
+  it("A2 (user 2026-10-24): a root ends at the round's end like a CC — clipped and marked, one applied after it dropped", () => {
+    const ROOTS = "339"; // Entangling Roots
+    const victim = makeUnit("v", {
+      auraEvents: [
+        aura(LogEvent.SPELL_AURA_APPLIED, ROOTS, 46, "v"),
+        aura(LogEvent.SPELL_AURA_REMOVED, ROOTS, 51.5, "v"),
+        aura(LogEvent.SPELL_AURA_APPLIED, ROOTS, 49, "v"),
+      ],
+    });
+    const roots = analyzePlayerCCAndTrinket(
+      victim,
+      [enemy()],
+      shuffle(48.327),
+    ).rootInstances;
+    expect(roots).toHaveLength(1);
+    expect(roots[0]!.durationSeconds).toBeCloseTo(2.327, 3);
+    expect(roots[0]!.stillOnAtRoundEnd).toBe(true);
+  });
+
+  it("FT R03: the ENEMY CC KIT line's landed controls are the round's — one applied after the round-ending death is not counted", () => {
+    const victim = makeUnit("v", {
+      auraEvents: [
+        ...polyOn("v", 20, 23.5),
+        ...polyOn("v", 47.718, 53.726),
+        ...polyOn("v", 48.964, 54.0),
+      ],
+    });
+    const mage = makeUnit("e1", {
+      name: "Mage",
+      reaction: CombatUnitReaction.Hostile,
+    });
+    const count = (combat: Parameters<typeof analyzePlayerCCAndTrinket>[2]) =>
+      landedControlsForKit(
+        analyzePlayerCCAndTrinket(victim, [mage], combat),
+        [mage],
+        [mage],
+      ).map((l) => l.count);
+    expect(count(shuffle(48.327))).toEqual([2]);
+    // control: no Solo Shuffle death → all three are in the round
+    expect(
+      count({
+        startTime: START,
+        endTime: START + 60_000,
+        startInfo: { zoneId: "1672" },
+      }),
+    ).toEqual([3]);
+  });
+});
+
+describe("missed-cleanse F-C3 — uncleansed windows end at the round end", () => {
+  const healer = () =>
+    makeUnit("h", { name: "Healer", spec: CombatUnitSpec.Paladin_Holy });
+  const enemy = () => makeUnit("e1", { reaction: CombatUnitReaction.Hostile });
+
+  function windows(combat: object) {
+    const melee = makeUnit("m", {
+      name: "Melee",
+      spec: CombatUnitSpec.Warrior_Arms,
+      auraEvents: polyOn("m", 47.718, 53.726),
+    });
+    return reconstructDispelSummary(
+      [healer(), melee] as never,
+      [enemy()] as never,
+      combat as never,
+    ).missedCleanseWindows;
+  }
+
+  it("a 6 s Polymorph that ran 0.6 s in the round is no window", () => {
+    expect(windows(shuffle(48.327))).toEqual([]);
+  });
+
+  it("control: the same Polymorph in a round that ran on is a 6 s window", () => {
+    const w = windows({ startTime: START, endTime: START + 60_000 });
+    expect(w.map((x) => x.spellId)).toEqual(["118"]);
+    expect(w[0].durationSeconds).toBeCloseTo(6.008, 3);
+  });
+});
+
+describe("cc-dr F-RF1 — a cast-backed REFRESH is a new CC", () => {
+  const combat = {
+    startTime: START,
+    endTime: START + 300_000,
+    startInfo: { zoneId: "1672" },
+  };
+  // 5677ba13 shape: Polymorph at 107.7, re-cast and refreshed at 113.3
+  const victimAuras = [
+    aura(LogEvent.SPELL_AURA_APPLIED, "118", 107.7, "v"),
+    aura(LogEvent.SPELL_AURA_REFRESH, "118", 113.3, "v"),
+    aura(LogEvent.SPELL_AURA_REMOVED, "118", 116.3, "v"),
+  ];
+  const mage = (castAtS: number[]) =>
+    makeUnit("e1", {
+      reaction: CombatUnitReaction.Hostile,
+      spellCastEvents: castAtS.map((s) =>
+        makeSpellCastEvent("118", START + s * 1000, "v", "v", "e1"),
+      ),
+    });
+
+  it("splits at the refresh when the source cast it just before", () => {
+    const cc = analyzePlayerCCAndTrinket(
+      makeUnit("v", { auraEvents: victimAuras }),
+      [mage([107.6, 113.1])],
+      combat,
+    ).ccInstances;
+    expect(cc.map((c) => Math.round(c.durationSeconds * 10) / 10)).toEqual([
+      5.6, 3,
+    ]);
+    expect(cc.map((c) => c.drInfo?.level)).toEqual(["Full", "50%"]);
+  });
+
+  it("control: the cast that opened the window does not back a refresh", () => {
+    // 06bb9860 Bull Rush shape: one cast, APPLIED, REFRESH 0.4 s later
+    const cc = analyzePlayerCCAndTrinket(
+      makeUnit("v", {
+        auraEvents: [
+          aura(LogEvent.SPELL_AURA_APPLIED, "118", 170.0, "v"),
+          aura(LogEvent.SPELL_AURA_REFRESH, "118", 170.4, "v"),
+          aura(LogEvent.SPELL_AURA_REMOVED, "118", 171.5, "v"),
+        ],
+      }),
+      [mage([169.998])],
+      combat,
+    ).ccInstances;
+    expect(cc).toHaveLength(1);
+  });
+
+  it("codex 35-CD-14: the opening cast logged just after its APPLIED is not a recast", () => {
+    // Bull Rush shape: APPLIED 10.000, its only cast 10.001, REFRESH 10.400
+    const cc = analyzePlayerCCAndTrinket(
+      makeUnit("v", {
+        auraEvents: [
+          aura(LogEvent.SPELL_AURA_APPLIED, "118", 10.0, "v"),
+          aura(LogEvent.SPELL_AURA_REFRESH, "118", 10.4, "v"),
+          aura(LogEvent.SPELL_AURA_REMOVED, "118", 11.5, "v"),
+        ],
+      }),
+      [mage([10.001])],
+      combat,
+    ).ccInstances;
+    expect(cc).toHaveLength(1);
+  });
+
+  it("control: a re-cast at another unit does not back a refresh", () => {
+    const other = makeUnit("e1", {
+      reaction: CombatUnitReaction.Hostile,
+      spellCastEvents: [
+        makeSpellCastEvent("118", START + 107_600, "v", "v", "e1"),
+        makeSpellCastEvent("118", START + 113_100, "w", "w", "e1"),
+      ],
+    });
+    const cc = analyzePlayerCCAndTrinket(
+      makeUnit("v", { auraEvents: victimAuras }),
+      [other],
+      combat,
+    ).ccInstances;
+    expect(cc).toHaveLength(1);
+  });
+
+  it("control: a refresh with no cast behind it stays one window", () => {
+    const cc = analyzePlayerCCAndTrinket(
+      makeUnit("v", { auraEvents: victimAuras }),
+      [mage([107.6])],
+      combat,
+    ).ccInstances;
+    expect(cc.map((c) => Math.round(c.durationSeconds * 10) / 10)).toEqual([
+      8.6,
+    ]);
+  });
+});
+
+describe("enemy-def F-E18 / cc-dr F-DA1 — the disarm a trinket broke", () => {
+  // 8930cb36: Dismantle 15.191–16.133, Medallion cast 16.134 (1 ms after)
+  const dismantle = {
+    atSeconds: 15.191,
+    durationSeconds: 0.942,
+    spellId: "207777",
+    spellName: "Dismantle",
+    sourceName: "Babyrou",
+    sourceId: "e1",
+    sourceSpec: "Assassination Rogue",
+  };
+  it("binds a press 1 ms after the removal (the CC binder's tolerance)", () => {
+    expect(findBrokenDisarm([dismantle], START, START + 16_134)).toBe(
+      dismantle,
+    );
+  });
+  it("control: a press 1 s after the removal binds nothing", () => {
+    expect(findBrokenDisarm([dismantle], START, START + 17_133)).toBe(
+      undefined,
+    );
+  });
+});
+
+describe("position F-D1 — no distance from a pre-teleport position", () => {
+  const combat = {
+    startTime: START,
+    endTime: START + 300_000,
+    startInfo: { zoneId: "1672" },
+  };
+  // 539b6ed0 shape: Kidney Shot 408 lands while the log still has the rogue
+  // 15 yd away, 0.1 s after a Shadowstep
+  const kidney = (withStep: boolean) => {
+    const rogue = makeUnit("e1", {
+      reaction: CombatUnitReaction.Hostile,
+      class: CombatUnitClass.Rogue,
+      spec: CombatUnitSpec.Rogue_Assassination,
+      advancedActions: [makeAdvancedAction(START + 99_900, 15, 0)],
+      spellCastEvents: withStep
+        ? [makeSpellCastEvent("36554", START + 99_903, "v", "v", "e1")]
+        : [],
+    });
+    const victim = makeUnit("v", {
+      advancedActions: [makeAdvancedAction(START + 99_950, 0, 0)],
+      auraEvents: [
+        aura(LogEvent.SPELL_AURA_APPLIED, "408", 100, "v"),
+        aura(LogEvent.SPELL_AURA_REMOVED, "408", 104, "v"),
+      ],
+    });
+    return analyzePlayerCCAndTrinket(victim, [rogue], combat).ccInstances[0];
+  };
+
+  it("drops the distance beyond reach right after a Shadowstep", () => {
+    expect(kidney(true).distanceYards).toBe(null);
+    expect(kidney(true).losBlocked).toBe(null);
+  });
+  it("control: without the step the distance stands", () => {
+    expect(kidney(false).distanceYards).toBe(15);
+  });
+});

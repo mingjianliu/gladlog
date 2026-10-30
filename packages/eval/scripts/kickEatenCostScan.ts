@@ -119,7 +119,7 @@ export async function collect(
       // 1.3s later"), so bucketing on the raw text gives every event its
       // own row. Categories mirror `PostKickBehavior` (analysis).
       const raw = k.facts?.postKick ?? "";
-      const pk = raw.startsWith("no cast for")
+      const pk = raw.startsWith("no cast ")
         ? "idle"
         : raw.startsWith("acted on another school")
           ? "switched"
@@ -155,7 +155,7 @@ export async function collect(
     // menu slots on the least coachable half of the axis.
     const cats = kicks.map((k) => {
       const raw = k.facts?.postKick ?? "";
-      return raw.startsWith("no cast for")
+      return raw.startsWith("no cast ")
         ? "idle"
         : raw.startsWith("acted on another school")
           ? "switched"

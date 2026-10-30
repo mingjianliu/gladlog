@@ -31,7 +31,7 @@ desktop main process
   MatchStore          one directory per match on disk: meta.json + match.json + raw.txt,
   │                   plus an append-only NDJSON index (_index.ndjson)
   ├─ RecorderService  OBS websocket start/stop, driven by segmentOpen/segmentClose
-  ├─ AnalysisService  candidate findings → prompt → LLM → audit → per-model cache slots
+  ├─ AnalysisService  candidate findings → prompt → LLM → audit → (opt-in) self-review → per-model cache slots
   ├─ CompareService   your metrics vs a pre-built reference corpus of high-rated players
   ├─ LearningService  cross-match ledger → deterministic pattern scan → distilled rules
   └─ IPC              ~40 ipcMain.handle channels + push channels (src/main/ipc.ts)
@@ -339,6 +339,7 @@ This is where analysis output becomes the text a model sees. There is no single 
 | `buildFindingsPrompt.ts`                              | The findings prompt.                                                                                                                                                                                       |
 | `auditFindings.ts`                                    | Post-model audit: drop anything with bare numbers, invented events, or forbidden causal claims.                                                                                                            |
 | `causalLint.ts`                                       | Regex-only lint for strong causal _language_ (the policy forbids it), in Chinese and English. It checks language, not truth.                                                                               |
+| `selfReview.ts`                                       | Opt-in second call (setting, default off; 2026-10-15): the same backend/model re-reads the audited findings against the prompt that produced them and keeps / corrects / weakens / deletes each — never adds one. Checked by `applySelfReview`, not `auditFindings` (it sees rendered numbers); cache identity carries `SELF_REVIEW_PROMPT_VERSION`, independent of `PROMPT_VERSION`. |
 | `spellNameZhLint.ts`                                  | Guards against spell names being translated into Chinese in output.                                                                                                                                        |
 | `parseModelJson.ts`                                   | Tolerant JSON extraction (markdown fences and all) — the fix for the `bad-json` false-rejection class.                                                                                                     |
 | `findingCategories.ts` / `types.ts` / `factFormat.ts` | Category normalisation and shared types.                                                                                                                                                                   |
@@ -520,7 +521,7 @@ The before/after, from `docs/BACKLOG.md`:
 | visual suite total  | 3.0 min     | 22 s        |
 | E2E suite total     | 1.3 min     | 14.5 s      |
 
-This failure mode produces **no error at all** — only "the app is slow" — so it is guarded by a budget instead of by a human noticing: `packages/desktop/qa/budgets.ts` locks `parse` / `firstPaint` / `coldStart` at 4900 / 3300 / 2600 ms (CI p-max × 1.5). Those budgets were 5100 / 41000 / 36000 before this fix. Loosening any of them requires the reason in the commit message.
+This failure mode produces **no error at all** — only "the app is slow" — so it is guarded by a budget instead of by a human noticing: `packages/desktop/qa/budgets.ts` locked `parse` / `firstPaint` / `coldStart` at 4900 / 3300 / 2600 ms (CI p-max × 1.5); those budgets were 5100 / 41000 / 36000 before this fix. `firstPaint` has since been re-locked several times as the CI runner population changed (12800 ms as of 2026-10; the history is in that file's comments), and `firstPaintRatio` is measure-only until it has ≥ 10 CI samples. Loosening any of them requires the reason in the commit message.
 
 Generated data modules follow the same rule: `spellIconsGenerated.ts` and `spellEffectGenerated.ts` are thin `.ts` wrappers whose payload lives in a same-named `.json`. `spellIconsGenerated.json` additionally uses dictionary encoding — 41,707 entries share only 7,110 distinct icon names, so a flat `Record` was 48% duplicate strings (1.5 MB → 780 KB); the wrapper expands it back so consumers see an unchanged API.
 

@@ -13,7 +13,16 @@ import type {
   DeepDiveResult,
 } from "@gladlog/analysis/src/analysis/deepDive";
 import { normalizeFindingCategory } from "@gladlog/analysis/src/analysis/findingCategories";
-import { parseModelJsonArray } from "@gladlog/analysis/src/analysis/parseModelJson";
+import {
+  parseModelJsonArray,
+  parseModelJsonObject,
+} from "@gladlog/analysis/src/analysis/parseModelJson";
+import {
+  applySelfReview,
+  buildSelfReviewPrompt,
+  SELF_REVIEW_PROMPT_VERSION,
+  type SelfReviewChange,
+} from "@gladlog/analysis/src/analysis/selfReview";
 import type {
   CandidateEvent,
   Finding,
@@ -46,6 +55,7 @@ import {
   toSlottedDoc,
   upsertSlot,
 } from "../shared/analysisCache";
+import type { AnalysisFallbackReason } from "../shared/analysisFallback";
 import { findingKey } from "../shared/findingKey";
 import {
   type AiBackend,
@@ -76,17 +86,64 @@ export type AnalysisResult = {
   findings: Finding[];
   dropped: number;
   hadNarration: boolean;
-  /** Reason for the deterministic fallback (when hadNarration=false); older
-   * caches lack this field. */
-  fallbackReason?: "no-candidates" | "no-client" | "bad-json";
+  /** Why there is no narration (when hadNarration=false and the audit dropped
+   * nothing): one of the deterministic fallbacks, or `empty-reply` — the model
+   * ran and returned an empty array. Older caches lack this field. */
+  fallbackReason?: AnalysisFallbackReason;
   /** Deep-dive round already ran (regardless of how many it produced);
    * renderer uses it to guard against re-triggering. */
   deepened?: boolean;
   /** coach chat (2026-08-02 spec): session id captured by a CLI-backend
    * analysis call, used to resume the chat. Absent for API backends, for a
-   * failed capture, and for deterministic fallback results. */
+   * failed capture, and for deterministic fallback results. When the AI
+   * self-review succeeded it is the review call's session (its last reply is
+   * the version the player sees; user 2026-10-15), else the first round's. */
   sessionId?: string;
+  /** AI self-review (setting `aiSelfReview`, default off). Absent = the run
+   * had self-review off; present = it was on. Part of the cache identity, see
+   * selfReviewMatches. */
+  selfReview?: SelfReviewRecord;
 };
+
+export type SelfReviewRecord = {
+  /** SELF_REVIEW_PROMPT_VERSION the run used. */
+  version: number;
+  /** reviewed = the shown findings are the reviewed ones; failed = the review
+   * call errored / timed out / returned invalid JSON or broke the contract,
+   * the shown findings are the first round's ("not reviewed"); skipped =
+   * nothing to review (deterministic fallback or an empty reply). */
+  status: "reviewed" | "failed" | "skipped";
+  /** reviewed: the audited first-round findings as they were before review. */
+  original?: Finding[];
+  /** reviewed: the reviewer's own change log (unverified, for debugging). */
+  changes?: SelfReviewChange[];
+  /** reviewed: findings put back as they were after a per-finding check. */
+  reverted?: Array<{ index: number; reason: string }>;
+  /** failed: why. */
+  failure?: string;
+};
+
+/** Overall deadline of the self-review call. The local CLI backends already
+ * die at their own 300 s (localAiBackends TIMEOUT_MS); this gives the API
+ * backends the same bound. */
+const SELF_REVIEW_TIMEOUT_MS = 300_000;
+
+/**
+ * Single-source cache-identity predicate for the self-review setting: with it
+ * off only a result that never had a review counts (every cache written
+ * before the feature stays valid); with it on only a result written with it
+ * on, by the current SELF_REVIEW_PROMPT_VERSION. So toggling the setting never
+ * shows a result of the other kind.
+ */
+export function selfReviewMatches(
+  result: AnalysisResult | null | undefined,
+  selfReviewOn: boolean,
+): boolean {
+  const r = result?.selfReview;
+  return selfReviewOn
+    ? r?.version === SELF_REVIEW_PROMPT_VERSION
+    : r === undefined;
+}
 /**
  * Single-source predicate: "which slot should we be reading", derived from
  * settings. getCached/getState use it as the legacySlotKey when lazily
@@ -132,6 +189,7 @@ function readSlottedDoc(
     aiLanguage?: AiLanguage;
     aiBackend?: AiBackend | null;
     aiModels?: AiModelSelection | null;
+    aiSelfReview?: boolean;
   },
 ): AnalysisCacheDocV2<AnalysisResult> | null {
   const lang: AiLanguage = settings.aiLanguage ?? "zh";
@@ -170,14 +228,24 @@ function slottedDocCandidatePaths(
 /**
  * Single-source hit predicate: the slot resolveSlot picks (the active one
  * unless slotKey names another), and only if it was produced by the current
- * PROMPT_VERSION. Shared by getCached and the whole-library scan.
+ * PROMPT_VERSION. Shared by getCached and the whole-library scan. With
+ * `selfReviewOn` given, the slot must also match the self-review setting
+ * (selfReviewMatches) — getCached / listAnalyzed / getState pass it; the
+ * cross-match views (aggregate, notebook) don't, so toggling the setting does
+ * not empty them.
  */
 function currentSlot(
   doc: AnalysisCacheDocV2<AnalysisResult> | null,
   slotKey?: string,
+  selfReviewOn?: boolean,
 ): AnalysisSlot<AnalysisResult> | null {
   const slot = resolveSlot(doc, slotKey);
   if (!slot || slot.promptVersion !== PROMPT_VERSION) return null;
+  if (
+    selfReviewOn !== undefined &&
+    !selfReviewMatches(slot.result, selfReviewOn)
+  )
+    return null;
   return slot;
 }
 
@@ -245,6 +313,7 @@ async function readAnalyzedMatchDirs(
   matchesDir: string,
   candidates: (dir: string) => string[],
   legacySlotKey: string,
+  selfReviewOn?: boolean,
 ): Promise<AnalyzedMatchDir[]> {
   let dirs: string[] = [];
   try {
@@ -275,6 +344,8 @@ async function readAnalyzedMatchDirs(
         const raw = await readJson(file);
         const slot = currentSlot(
           toSlottedDoc<AnalysisResult>(raw, legacySlotKey),
+          undefined,
+          selfReviewOn,
         );
         if (!slot) return null;
         const base = join(matchesDir, dir);
@@ -456,6 +527,8 @@ export function createAnalysisService(deps: {
     aiBackend?: AiBackend;
     aiBackendCommand?: string | null;
     aiLanguage?: AiLanguage;
+    /** AI self-review (user 2026-10-15): default off; absent = off. */
+    aiSelfReview?: boolean;
   };
   clientFactory?: (key: string) => AnthropicLike;
   matchesDir: string;
@@ -506,7 +579,15 @@ export function createAnalysisService(deps: {
     string,
     // retrying(agy review #1):重试标注若只活在 renderer,本轮重挂载后计时
     // 还在涨、翻倍的解释却没了——所以随 meta 住在 main。
-    { since: number; backend: AiBackend; model: string; retrying: boolean }
+    {
+      since: number;
+      backend: AiBackend;
+      model: string;
+      retrying: boolean;
+      /** 首轮已出结果、正在跑 AI 自查那一次调用(与 retrying 同一套:
+       * 事件给挂着的面板,meta 给重挂载的面板)。 */
+      reviewing: boolean;
+    }
   >();
 
   /** matchIds currently deep-diving -- the idempotency guard, see deepen. */
@@ -560,11 +641,23 @@ export function createAnalysisService(deps: {
       input.backendOverride?.backend ?? settings.aiBackend ?? "anthropic";
     const model = input.backendOverride?.model ?? resolveAiModel(settings);
     const slotKey = slotKeyOf(backend, model);
+    // Read once with the rest of the snapshot: the record written below must
+    // describe the setting this run actually used.
+    const selfReviewOn = settings.aiSelfReview === true;
+    const skippedReview: Pick<AnalysisResult, "selfReview"> = selfReviewOn
+      ? {
+          selfReview: {
+            version: SELF_REVIEW_PROMPT_VERSION,
+            status: "skipped",
+          },
+        }
+      : {};
     runningMeta.set(input.matchId, {
       since: Date.now(),
       backend,
       model,
       retrying: false,
+      reviewing: false,
     });
 
     const finish = (result: AnalysisResult, record = false) => {
@@ -636,13 +729,14 @@ export function createAnalysisService(deps: {
 
     // deterministic fallback: no narration; `reason` lets the UI explain why
     // (so a 0-finding result is accountable)
-    const fallback = (reason: "no-candidates" | "no-client" | "bad-json") =>
+    const fallback = (reason: Exclude<AnalysisFallbackReason, "empty-reply">) =>
       finish(
         {
           findings: [],
           dropped: 0,
           hadNarration: false,
           fallbackReason: reason,
+          ...skippedReview,
         },
         reason === "no-candidates",
       );
@@ -735,6 +829,131 @@ export function createAnalysisService(deps: {
         };
       };
 
+      /**
+       * The AI self-review pass: one more call on the same client/model with
+       * the self-review instructions, this run's prompt and the audited
+       * findings. Never throws and never blocks the result — any failure
+       * (stream error, timeout, invalid JSON, contract breach) comes back as
+       * status "failed" and the caller shows the first round unchanged.
+       * null = this run was superseded/cancelled mid-review.
+       */
+      const selfReview = async (
+        firstPrompt: string,
+        original: Finding[],
+      ): Promise<{
+        record: SelfReviewRecord;
+        findings: Finding[];
+        sessionId?: string;
+      } | null> => {
+        if (running.get(input.matchId) === myGen) {
+          const m = runningMeta.get(input.matchId);
+          if (m) runningMeta.set(input.matchId, { ...m, reviewing: true });
+        }
+        deps.emit("gladlog:analysis:reviewing", { matchId: input.matchId });
+        const failed = (failure: string) => ({
+          record: {
+            version: SELF_REVIEW_PROMPT_VERSION,
+            status: "failed" as const,
+            failure,
+          },
+          findings: original,
+        });
+        const reviewPrompt = buildSelfReviewPrompt(firstPrompt, original);
+        const ac = new AbortController();
+        let timedOut = false;
+        let onDeadline: () => void = () => {};
+        const deadline = new Promise<never>((_, reject) => {
+          onDeadline = () => reject(new Error("timeout"));
+        });
+        // The race below settles on the deadline even when a backend ignores
+        // `signal` (the API factories); the abort kills a local CLI child.
+        deadline.catch(() => {});
+        const timer = setTimeout(() => {
+          timedOut = true;
+          ac.abort();
+          onDeadline();
+        }, SELF_REVIEW_TIMEOUT_MS);
+        let raw = "";
+        let reviewSession: string | undefined;
+        let it:
+          AsyncIterator<{ delta?: string; sessionId?: string }> | undefined;
+        try {
+          // Inside the try: a factory that throws on creation is a failed
+          // review, not an analysis error.
+          it = client
+            .stream({
+              model,
+              max_tokens: API_MAX_TOKENS.selfReview,
+              system: buildCoachSystemPrompt(lang),
+              messages: [{ role: "user", content: reviewPrompt }],
+              signal: ac.signal,
+              ...(isCliBackend && backend !== "claudeCli"
+                ? { captureSession: true }
+                : {}),
+              ...(backend === "claudeCli"
+                ? { sessionIdHint: randomUUID() }
+                : {}),
+            })
+            [Symbol.asyncIterator]();
+          for (;;) {
+            const step = await Promise.race([it.next(), deadline]);
+            if (step.done) break;
+            if (!isCurrent(input.matchId, myGen)) {
+              ac.abort();
+              void it.return?.();
+              return null;
+            }
+            if (step.value.sessionId) reviewSession = step.value.sessionId;
+            if (step.value.delta) raw += step.value.delta;
+          }
+        } catch (err) {
+          void it?.return?.();
+          if (!isCurrent(input.matchId, myGen)) return null;
+          recordAiDebug({
+            kind: "analysis",
+            matchId: `${input.matchId}#selfreview#error`,
+            at: Date.now(),
+            model,
+            prompt: reviewPrompt,
+            raw: raw + `\n\n[${timedOut ? "timeout" : String(err)}]`,
+          });
+          return failed(timedOut ? "timeout" : "error");
+        } finally {
+          clearTimeout(timer);
+        }
+        if (!isCurrent(input.matchId, myGen)) return null;
+        recordAiDebug({
+          kind: "analysis",
+          matchId: `${input.matchId}#selfreview`,
+          at: Date.now(),
+          model,
+          prompt: reviewPrompt,
+          raw,
+        });
+        const parsedReview = parseModelJsonObject(raw);
+        if (!parsedReview) return failed("bad-json");
+        const outcome = applySelfReview(
+          original,
+          parsedReview,
+          input.candidates,
+          input.rosterSpecs ? { rosterSpecs: input.rosterSpecs } : {},
+        );
+        if (!outcome.ok) return failed(outcome.reason);
+        return {
+          record: {
+            version: SELF_REVIEW_PROMPT_VERSION,
+            status: "reviewed",
+            original,
+            changes: outcome.changes,
+            ...(outcome.reverted.length > 0
+              ? { reverted: outcome.reverted }
+              : {}),
+          },
+          findings: outcome.findings,
+          ...(reviewSession ? { sessionId: reviewSession } : {}),
+        };
+      };
+
       let call = await callOnce(1);
       if (call === null) {
         clearRunning();
@@ -770,12 +989,41 @@ export function createAnalysisService(deps: {
         input.candidates,
         input.rosterSpecs ? { rosterSpecs: input.rosterSpecs } : {},
       );
+      let findings = audit.findings;
+      let sessionId = call.capturedSession;
+      let review: Pick<AnalysisResult, "selfReview"> = skippedReview;
+      if (selfReviewOn && findings.length > 0) {
+        const out = await selfReview(prompt, findings);
+        if (out === null) {
+          clearRunning();
+          return;
+        }
+        review = { selfReview: out.record };
+        if (out.record.status === "reviewed") {
+          findings = out.findings;
+          // The first round's session remembers the unreviewed wording; when
+          // the review call's own session was not captured (agy / codex may
+          // answer without one), store none so coach chat reseeds from the
+          // findings as shown (codex review 50-SR-01 #3).
+          sessionId = out.sessionId;
+        }
+      }
       finish(
         {
-          findings: audit.findings,
+          findings,
           dropped: audit.dropped.length,
-          hadNarration: audit.findings.length > 0,
-          ...(call.capturedSession ? { sessionId: call.capturedSession } : {}),
+          hadNarration: findings.length > 0,
+          // The reply parsed and was an empty array: the model read the menu
+          // and wrote no finding (the prompt asks for "up to N" on a small
+          // menu). Not a fallback of ours and not an audit drop — without a
+          // reason of its own the panel read it as a cache from before
+          // `fallbackReason` existed. Still an analysis that ran: cached and
+          // recorded like any other.
+          ...(parsed.length === 0
+            ? { fallbackReason: "empty-reply" as const }
+            : {}),
+          ...(sessionId ? { sessionId } : {}),
+          ...review,
         },
         true,
       );
@@ -1589,6 +1837,7 @@ export function createAnalysisService(deps: {
         deps.matchesDir,
         (dir) => slottedDocCandidatePaths(deps.matchesDir, dir, lang),
         currentSlotKey(settings),
+        settings.aiSelfReview === true,
       );
       // getCached returns `slot.result`, so a current slot whose stored
       // result is missing was never "analyzed" for the batch either.
@@ -1606,9 +1855,12 @@ export function createAnalysisService(deps: {
         backend: AiBackend;
         model: string;
         retrying: boolean;
+        reviewing: boolean;
       } | null;
       /** Multi-model comparison: a summary of every slot for this match
-       * (without the result body), ascending by createdAt. */
+       * (without the result body), ascending by createdAt. `stale` = getCached
+       * would miss it (old PROMPT_VERSION, or written with the other
+       * self-review setting). */
       slots: Array<{ key: string; createdAt: number; stale: boolean }>;
       /** doc.lastSlotKey; null when there is no document. */
       activeKey: string | null;
@@ -1636,7 +1888,9 @@ export function createAnalysisService(deps: {
         .map(([key, slot]) => ({
           key,
           createdAt: slot.createdAt,
-          stale: slot.promptVersion !== PROMPT_VERSION,
+          stale:
+            slot.promptVersion !== PROMPT_VERSION ||
+            !selfReviewMatches(slot.result, settings.aiSelfReview === true),
         }))
         .sort((a, b) => a.createdAt - b.createdAt);
       return {
@@ -1653,7 +1907,7 @@ export function createAnalysisService(deps: {
     ): Promise<AnalysisResult | null> {
       const settings = deps.getSettings();
       const doc = readSlottedDoc(deps.matchesDir, matchId, settings);
-      const slot = currentSlot(doc, slotKey);
+      const slot = currentSlot(doc, slotKey, settings.aiSelfReview === true);
       if (!slot) return null;
       return slot.result;
     },

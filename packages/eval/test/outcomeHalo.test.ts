@@ -1,14 +1,14 @@
-import { describe, expect, it } from "vitest";
 import fs from "fs-extra";
 import os from "os";
 import path from "path";
+import { describe, expect, it } from "vitest";
 
-import { redactOutcomeLabels } from "../src/halo/redactOutcome.js";
 import {
   buildHaloArms,
   copyResponsesAcrossArms,
 } from "../src/halo/buildHaloArms.js";
 import { computeHaloStats } from "../src/halo/haloStats.js";
+import { redactOutcomeLabels } from "../src/halo/redactOutcome.js";
 
 // 头行格式锚定 buildMatchContext.ts:802 的渲染模板(共享谓词:eval 重新解析
 // analysis 渲染文本;模板改了这里必须跟着红)。

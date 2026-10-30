@@ -10,12 +10,13 @@
  *
  *   npx tsx packages/eval/scripts/selfDamageScan.ts --manifest <m> [--every 60]
  */
+import { readFileSync } from "node:fs";
+import { gunzipSync } from "node:zlib";
+
 import { ensureAnalysisData } from "@gladlog/analysis";
 import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData";
 import { GladLogParser } from "@gladlog/parser";
 import { toLegacyMatch, toLegacyShuffle } from "@gladlog/parser-compat";
-import { readFileSync } from "node:fs";
-import { gunzipSync } from "node:zlib";
 
 import { arg, argOf } from "./lib/cli";
 

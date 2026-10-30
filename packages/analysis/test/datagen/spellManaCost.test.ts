@@ -4,14 +4,14 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildSpecNameIndex,
-  specKeyToDb2Name,
   SPEC_NAME_TO_ID,
+  specKeyToDb2Name,
   transformSpellManaCostRows,
 } from "../../scripts/datagen/genSpellManaCost";
 import { parseCsv } from "../../scripts/datagen/lib/wagoCsv";
 import {
-  SPELL_MANA_COST_TABLE,
   manaCostForCast,
+  SPELL_MANA_COST_TABLE,
 } from "../../src/data/spellManaCost";
 
 const HEADER = "SpellID,PowerType,PowerCostPct,ManaCost,RequiredAuraSpellID";

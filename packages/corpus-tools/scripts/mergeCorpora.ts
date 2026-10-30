@@ -19,10 +19,9 @@
  *     /tmp/rv_3v3.json /tmp/rv_2v2.json /tmp/rv_ss.json
  */
 import type { ReferenceCorpus } from "@gladlog/analysis";
+import { REFERENCE_CELL_N_FLOOR } from "@gladlog/analysis";
 import fs from "fs-extra";
 import path from "path";
-
-import { REFERENCE_CELL_N_FLOOR } from "@gladlog/analysis";
 
 import { validateCorpus } from "../src/validateCorpus";
 

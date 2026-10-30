@@ -20,7 +20,11 @@
  *
  * Not product code: lives in eval until the user reads the examples.
  */
-import { extractKillAttempts } from "@gladlog/analysis/src/utils/killAttempts";
+import {
+  resolveMitigation,
+  strongestComponentPct,
+} from "@gladlog/analysis/src/data/mitigationComponents";
+import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData";
 import { analyzePlayerCCAndTrinket } from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
 import {
   gridHpMinInWindow,
@@ -28,19 +32,14 @@ import {
   isHealerSpec,
 } from "@gladlog/analysis/src/utils/cooldowns";
 import {
-  getEnglishSpellName,
-  kickLockoutSeconds,
-} from "@gladlog/analysis/src/data/spellEffectData";
-import { fmtTime } from "@gladlog/analysis/src/utils/renderGrid";
-import {
   MITIGATION_AURA_IDS,
   MITIGATION_AURA_MIN_PCT,
+  wallTableIdOfAura,
 } from "@gladlog/analysis/src/utils/enemyDefensives";
+import { kickLockoutSecondsFor } from "@gladlog/analysis/src/utils/kickLockout";
+import { extractKillAttempts } from "@gladlog/analysis/src/utils/killAttempts";
 import { WALL_IN_HAND_MIT_IDS } from "@gladlog/analysis/src/utils/killWindowTargetSelection";
-import {
-  resolveMitigation,
-  strongestComponentPct,
-} from "@gladlog/analysis/src/data/mitigationComponents";
+import { fmtTime } from "@gladlog/analysis/src/utils/renderGrid";
 import { LogEvent } from "@gladlog/parser-compat";
 
 /** Experiment default; the report sweeps 30/40/50/60/70. */
@@ -132,7 +131,15 @@ export function buildConsequenceLines(
       seen.add(key);
       const t = sec(a.timestamp);
       if (t < 0) continue;
-      const lockS = kickLockoutSeconds(String(a.spellId ?? ""));
+      // the victim's own lockout (kick-eaten F-K8: Storm Conduit, by the
+      // interrupt's log date) — the production [CONSEQ] reader's number
+      const lockS = kickLockoutSecondsFor(
+        String(a.spellId ?? ""),
+        victim,
+        a.extraSpellId,
+        a.timestamp,
+        kicker,
+      );
       const next = ((victim.spellCastEvents ?? []) as any[]).find(
         (c) =>
           c.logLine?.event === LogEvent.SPELL_CAST_SUCCESS &&
@@ -351,7 +358,10 @@ export function buildConsequenceLines(
     for (const aura of (e.auraEvents ?? []) as any[]) {
       if (aura.destUnitId !== e.id || aura.srcUnitId !== e.id) continue;
       if (aura.logLine?.event !== LogEvent.SPELL_AURA_APPLIED) continue;
-      const id = aura.spellId;
+      // killAttempts resolves the aura to its table row first
+      // (`wallTableIdOfAura`; fact2 C10: Blur / Greater Invisibility /
+      // Fortifying Brew run under their own aura ids)
+      const id = aura.spellId ? wallTableIdOfAura(aura.spellId) : aura.spellId;
       if (!id || !(MITIGATION_AURA_IDS.has(id) || WALL_IN_HAND_MIT_IDS.has(id)))
         continue;
       const comp = resolveMitigation(id, { carrierIsCaster: true, caster: e });

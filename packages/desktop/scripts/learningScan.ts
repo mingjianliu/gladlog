@@ -9,10 +9,6 @@
  * Usage: npx tsx scripts/learningScan.ts [matchesDir] [learningDir]
  * Default matchesDir = ~/Library/Application Support/gladlog/matches (mac).
  */
-import { existsSync, readdirSync, readFileSync } from "fs";
-import { homedir } from "os";
-import { join } from "path";
-
 import { normalizeFindingCategory } from "@gladlog/analysis/src/analysis/findingCategories";
 import {
   measureGroup,
@@ -22,6 +18,10 @@ import type {
   LedgerMatch,
   RulesDoc,
 } from "@gladlog/analysis/src/learning/types";
+import { existsSync, readdirSync, readFileSync } from "fs";
+import { homedir } from "os";
+import { join } from "path";
+
 import { resolveActiveSlot, toSlottedDoc } from "../src/shared/analysisCache";
 
 const matchesDir =

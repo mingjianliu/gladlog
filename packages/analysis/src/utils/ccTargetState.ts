@@ -17,16 +17,18 @@
  * casting this CC, the owner CC'd or locked, the target CC'd or immune) must
  * be absent over the whole rendered second [s, s+1); positions, LoS and DR
  * are read at the instant s.
- *  - owner: alive, the CC reaction-ready (`cdReadyInTimeAt`), not CC'd
- *    (`buildCannotCastIntervals`), not inside an own casting-lockout aura
+ *  - owner: alive, the CC reaction-ready (`cdReadyInTimeAt`), not stopped
+ *    from casting THIS control (`cannotCastIntervalsForSpells`: CC, a
+ *    silence that stops it, a lockout of its school, a disarm when it needs
+ *    a weapon), not inside an own casting-lockout aura
  *    (DB2 aura 60 / 263 — Bladestorm, Ice Block);
  *  - target: alive, not already inside a CC aura, no active aura that blocks
  *    the CC's mechanic (`auraBlocksMechanic`; unknown → blocked);
  *  - geometry: both positions known, distance ≤ the owner's single-target
  *    reach (`ccThreatReachYards` — cast range, else a caster-centred radius),
  *    LoS not falsified;
- *  - DR for the CC's category not Immune (`getDRLevel` over the target's
- *    recorded CC history);
+ *  - DR for the CC's category not Immune (`drLevelNextAt` over the target's
+ *    DR history, `buildCcCategoryHistory`);
  *  - the target holds no ready breaker of its own for that mechanic
  *    (`kitSpellReadyAt`): a designed breaker (the mechanic is on its own DB2
  *    aura 77 — corpus-confirmed pressed from inside that CC) or a full-school
@@ -35,11 +37,19 @@
 import type { AtomicArenaCombat, ICombatUnit } from "@gladlog/parser-compat";
 
 import { abilityProfile } from "../data/abilityProfile";
+import { effectAurasOfCast, effectAuraViaName } from "../data/castEffectAuras";
+import { getEnglishSpellName } from "../data/spellEffectData";
+import { spellSchoolMask } from "../data/spellSchools";
 import { ccSpellIds } from "../data/spellTags";
 import { buildAuraIntervals, type IAuraInterval } from "./auraIntervals";
-import { buildCannotCastIntervals } from "./cannotCastIntervals";
+import { cannotCastIntervalsForSpells } from "./cannotCastIntervals";
 import { castingLockIntervalsOf } from "./castingLocks";
-import { pvpTrinketRemainingSecondsAt } from "./ccTrinketAnalysis";
+import {
+  applicableCCAvoidanceIds,
+  CC_AVOIDANCE_BUFF_SPELLS,
+  pvpTrinketRemainingSecondsAt,
+} from "./ccTrinketAnalysis";
+import { auraIsImmunityForm } from "./combatStates";
 import {
   cdReadyInTimeAt,
   type IMajorCooldownInfo,
@@ -50,11 +60,18 @@ import {
   USABLE_WHILE_FEARED_SPELL_IDS,
 } from "./cooldowns";
 import {
+  auraIdsAppliedBy,
+  buildCcCategoryHistory,
+  type CCEntry,
   drCategoryKnown,
   drCategoryOfCast,
-  getDRCategory,
-  getDRLevel,
+  drLevelNextAt,
 } from "./drAnalysis";
+import {
+  KW_UNTARGETABLE_AURA_IDS,
+  limitedImmunitySchoolMask,
+  untargetableEndS,
+} from "./enemyDefensives";
 import {
   distanceBetween,
   getUnitPositionAtTime,
@@ -131,8 +148,10 @@ function breakToolsFor(target: ICombatUnit, mech: number): string[] {
     if (e.spellId) ids.add(e.spellId);
   // A designed breaker (mechanic listed on its own aura 77) counts outright;
   // a full-school immunity (Ice Block, Divine Shield) only where the official
-  // usable-while attribute says it can be pressed in that state (user ruling
-  // 2026-09-04: neither is usable while stunned).
+  // usable-while table says it can be pressed in that state. Under a stun it
+  // can: both are on the immunity-purge route (user ruling U-T1, 2026-10-06,
+  // reversing 2026-09-04 — `USABLE_WHILE_STUNNED_BY_PURGE_IDS`); the feared
+  // and confused tables still leave them out.
   // An immunity only counts when it lands on its caster: Cyclone, Imprison
   // and Banish make their TARGET immune (official ImplicitTarget = enemy;
   // corpus: Cyclone's aura on the caster 5 times of 1,052, Imprison 0 / 38,
@@ -144,6 +163,123 @@ function breakToolsFor(target: ICombatUnit, mech: number): string[] {
       (auraBlocksMechanic(id, mech) === true &&
         !abilityProfile(id).hitsEnemy &&
         (usableIn === null || usableIn.has(id))),
+  );
+}
+
+/**
+ * The geometry half of "could this owner put this CC on that target at this
+ * instant": both positions known (`INTERP_MAX_GAP_MS`), the distance within
+ * the CC's reach (`ccThreatReachYards` — cast range, else a caster-centred
+ * radius), LoS not falsified. Unknown position fails closed. One predicate
+ * for `ccSamplerFor` and the healer-offense "X ready on enemy healer" lines
+ * (fact5 D18 / D19, 5fb1039a r0: an Incapacitating Roar — 10 yd around the
+ * druid — "ready on enemy healer" 38–65 yd away).
+ */
+export function ccReachAt(
+  owner: ICombatUnit,
+  target: ICombatUnit,
+  reachYards: number,
+  zone: string,
+  ms: number,
+):
+  | { ok: true; distanceYards: number }
+  | { ok: false; reason: "no-position" | "out-of-range" | "los" } {
+  const po = getUnitPositionAtTime(owner, ms, INTERP_MAX_GAP_MS);
+  const pt = getUnitPositionAtTime(target, ms, INTERP_MAX_GAP_MS);
+  if (!po || !pt) return { ok: false, reason: "no-position" };
+  const dist = distanceBetween(po, pt);
+  if (dist > reachYards) return { ok: false, reason: "out-of-range" };
+  if (hasLineOfSight(zone, po, pt) === false)
+    return { ok: false, reason: "los" };
+  return { ok: true, distanceYards: dist };
+}
+
+/**
+ * When `target` could not take this control because of an aura on it — the
+ * "not immune" half of every "this CC could land on that unit" claim. One
+ * predicate for `ccSamplerFor` (`[CC BOOKMARK]`, `[PEEL OPTION]`, CC USE)
+ * and the healer-offense "X ready on enemy healer" lines (`[CONTESTED]`,
+ * `[OPPORTUNITY]`). An aura blocks when:
+ *  - DB2 gives it an immunity to the control's mechanic (aura 77 / all);
+ *  - it is an immunity form DB2 does not encode (`auraIsImmunityForm`,
+ *    Spirit of Redemption — fact6 D8; F20 residual: 3 `[CONTESTED] … ready
+ *    on enemy healer` spans on a priest in the form, e.g. s0/72-1 3:01–3:05);
+ *  - it is a listed avoidance the press line's `[IMMUNE — X was up]` names
+ *    for this control (`applicableCCAvoidanceIds`, fact4 D3);
+ *  - it is a school-limited full immunity (`limitedImmunitySchoolMask`: a
+ *    `MITIGATION_TABLE` 100 % row) covering the school of what the control
+ *    puts on the target — its own control aura(s), else the cast (F20
+ *    residual: Cloak of Shadows, in no avoidance list, read "not immune" to
+ *    Binding Shot's arcane stun 117526 — s0/76-1 0:26–0:35 bookmark across a
+ *    Cloak 0:32.6–0:37.6);
+ *  - the unit is no target at all (`KW_UNTARGETABLE_AURA_IDS`: Mass
+ *    Invisibility, Phase Shift), to the end the kill windows read.
+ * Intervals in seconds from the round's start.
+ */
+export function ccTargetBlockerIntervals(
+  target: ICombatUnit,
+  combat: Parameters<typeof buildAuraIntervals>[1],
+  castSpellId: string,
+  castSpellName?: string,
+): IAuraInterval[] {
+  const mech = ccMechanicOf(castSpellId);
+  const controlIds = [
+    castSpellId,
+    ...effectAurasOfCast(castSpellId).filter(
+      (a) => ccSpellIds.has(a) && effectAuraViaName(castSpellId, a),
+    ),
+  ];
+  // keyed by the cast AND the control aura it applies: Freezing Trap's
+  // cast 187650 is physical in DB2, its aura 3355 frost — the IMMUNE row
+  // names the aura
+  const avoidance = new Set<string>();
+  for (const id of controlIds)
+    for (const b of applicableCCAvoidanceIds(
+      id,
+      getEnglishSpellName(castSpellId, castSpellName ?? ""),
+    ))
+      avoidance.add(b);
+  const landing =
+    controlIds.length > 1 ? controlIds.slice(1) : controlIds.slice(0, 1);
+  const landingSchools = landing.map((id) => spellSchoolMask(id));
+  const schoolBlocked = (auraId: string) => {
+    const mask = limitedImmunitySchoolMask(auraId);
+    return (
+      mask !== undefined &&
+      landingSchools.every(
+        (s) => s !== undefined && s !== 0 && (s & ~mask) === 0,
+      )
+    );
+  };
+  const auras = buildAuraIntervals(target, combat);
+  return (
+    auras
+      .filter(
+        (iv) =>
+          (mech !== undefined &&
+            auraBlocksMechanic(iv.spellId, mech) !== false) ||
+          // an immunity form DB2 does not encode (Spirit of
+          // Redemption, both forms): fact6 D8 (c992ce75 0:47–0:55)
+          auraIsImmunityForm(iv.spellId) ||
+          // …or one the press line's `[IMMUNE — X was up]` names for this
+          // control (`applicableCCAvoidanceIds`, by school): fact4 D3
+          // (190bbc57 0:26–0:31) — Anti-Magic Shell blocks no freeze by
+          // mechanic, yet a Freezing Trap into it logged IMMUNE, and the
+          // bookmark counted those seconds "not immune"
+          (CC_AVOIDANCE_BUFF_SPELLS.has(iv.spellId) &&
+            avoidance.has(iv.spellId)) ||
+          schoolBlocked(iv.spellId),
+      )
+      // not a target at all: Mass Invisibility / Phase Shift, to the
+      // end the kill windows read (`untargetableEndS`)
+      .concat(
+        auras
+          .filter((iv) => KW_UNTARGETABLE_AURA_IDS.has(iv.spellId))
+          .map((iv) => ({
+            ...iv,
+            toS: untargetableEndS(target, iv, combat.startTime),
+          })),
+      )
   );
 }
 
@@ -178,16 +314,31 @@ export function ccSamplerFor(params: {
   const zone = String(combat.startInfo?.zoneId ?? "");
   // The cooldown is a CAST id; the DR history below is keyed by the aura ids
   // the log applies (GH #111).
-  const cat = drCategoryOfCast(cd.spellId);
+  // a cast with variants in different DR families resolves from the
+  // owner's own applications (codex 35-CD-06: Chastise)
+  const ownerApplied = auraIdsAppliedBy(
+    owner.id,
+    Object.values(combat.units ?? {}).filter((u) => params.enemyIds.has(u.id)),
+  );
+  const cat = drCategoryOfCast(cd.spellId, ownerApplied);
   // An unmapped cast (spell:<id> fallback, not self-DR) has no DR history to
   // read: "n/a", never a fabricated "Full" (W1g).
-  const catKnown = drCategoryKnown(cd.spellId);
+  const catKnown = drCategoryKnown(cd.spellId, ownerApplied);
   const deathS = (u: ICombatUnit) => {
     const d = u.deathRecords[0];
     return d ? (d.timestamp - start) / 1000 : Infinity;
   };
   const ownerDeath = deathS(owner);
-  const cannot = buildCannotCastIntervals(owner, new Set(params.enemyIds));
+  // asked about THIS control (work order 2026-10-15 #7): a school lockout
+  // only when it locks the control's school, a silence only when DB2 lets it
+  // stop the control, a disarm only when the control needs a weapon (Kidney
+  // Shot, Gouge, Storm Bolt …) — the named-spell reading
+  const cannot = cannotCastIntervalsForSpells(
+    owner,
+    new Set(params.enemyIds),
+    [cd.spellId],
+    Object.values(combat.units ?? {}),
+  );
   // the one casting-lock predicate (Unrelenting Onslaught lets a holder
   // Storm Bolt inside Bladestorm)
   const locks: Interval[] = castingLockIntervalsOf(owner, combat, cd.spellId);
@@ -205,7 +356,7 @@ export function ccSamplerFor(params: {
       cc: IAuraInterval[];
       renderedCc: Array<{ fromS: number; toS: number }>;
       blockers: IAuraInterval[];
-      drHistory: Array<{ applyMs: number; removeMs: number; spellId: string }>;
+      drHistory: CCEntry[];
       tools: string[];
       talents: ReturnType<typeof playerTalentIdSets>;
     }
@@ -223,16 +374,18 @@ export function ccSamplerFor(params: {
         death: deathS(t),
         cc,
         renderedCc: rendered,
-        blockers: auras.filter(
-          (iv) => auraBlocksMechanic(iv.spellId, mech) !== false,
+        // the one "could not take this control" reading
+        // (`ccTargetBlockerIntervals`)
+        blockers: ccTargetBlockerIntervals(t, combat, cd.spellId, cd.spellName),
+        // the target's DR history — the one builder (fact6 F20,
+        // `buildCcCategoryHistory`: every source, a control reflected back
+        // onto it included)
+        drHistory: buildCcCategoryHistory(
+          t,
+          cat,
+          start,
+          new Map(Object.values(combat.units ?? {}).map((u) => [u.id, u])),
         ),
-        drHistory: cc
-          .filter((iv) => getDRCategory(iv.spellId) === cat)
-          .map((iv) => ({
-            applyMs: start + iv.fromS * 1000,
-            removeMs: start + iv.toS * 1000,
-            spellId: iv.spellId,
-          })),
         tools: breakToolsFor(t, mech),
         talents: playerTalentIdSets(t),
       };
@@ -267,22 +420,17 @@ export function ccSamplerFor(params: {
         return { ok: false, reason: "target-cc" };
       if (f.blockers.some((iv) => overlapsSecond(iv, s)))
         return { ok: false, reason: "target-immune" };
-      const po = getUnitPositionAtTime(owner, ms, INTERP_MAX_GAP_MS);
-      const pt = getUnitPositionAtTime(target, ms, INTERP_MAX_GAP_MS);
-      if (!po || !pt) return { ok: false, reason: "no-position" };
-      const dist = distanceBetween(po, pt);
-      if (dist > reach) return { ok: false, reason: "out-of-range" };
-      if (hasLineOfSight(zone, po, pt) === false)
-        return { ok: false, reason: "los" };
+      const geo = ccReachAt(owner, target, reach, zone, ms);
+      if (!geo.ok) return { ok: false, reason: geo.reason };
+      const dist = geo.distanceYards;
       const dr = catKnown
-        ? getDRLevel(
-            f.drHistory.filter((h) => h.applyMs < ms),
-            ms,
-          ).level
+        ? drLevelNextAt(f.drHistory, ms)
         : "n/a";
       if (dr === "Immune") return { ok: false, reason: "dr-immune" };
       if (
-        f.tools.some((id) => kitSpellReadyAt(target, id, s, start, f.talents))
+        f.tools.some((id) =>
+          kitSpellReadyAt(target, id, s, start, f.talents, combat),
+        )
       )
         return { ok: false, reason: "target-breaker" };
       return {

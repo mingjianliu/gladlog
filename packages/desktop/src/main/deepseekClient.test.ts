@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+
 import {
   abortAllDeepSeekStreams,
   deepseekClientFactory,
@@ -422,6 +423,36 @@ describe("abortAllDeepSeekStreams(#21 item9:quitLifecycle 完整性收尾)", () 
 
     abortAllDeepSeekStreams();
 
+    expect(capturedSignal?.aborted).toBe(true);
+    await expect(pending).rejects.toThrow(/aborted/);
+  });
+
+  it("调用方的 signal 一 abort,请求本身随之中止(codex 50-SR-01 #2:自查超时)", async () => {
+    let capturedSignal: AbortSignal | undefined;
+    const fetchImpl = (async (
+      _url: unknown,
+      init?: { signal?: AbortSignal },
+    ) => {
+      capturedSignal = init?.signal;
+      return new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () =>
+          reject(new Error("aborted")),
+        );
+      });
+    }) as unknown as typeof fetch;
+    const ac = new AbortController();
+    const pending = deepseekClientFactory("k", fetchImpl)
+      .stream({
+        model: "m",
+        max_tokens: 10,
+        messages: [{ role: "user", content: "hi" }],
+        signal: ac.signal,
+      })
+      [Symbol.asyncIterator]()
+      .next();
+    await vi.waitFor(() => expect(capturedSignal).toBeDefined());
+    expect(capturedSignal?.aborted).toBe(false);
+    ac.abort();
     expect(capturedSignal?.aborted).toBe(true);
     await expect(pending).rejects.toThrow(/aborted/);
   });

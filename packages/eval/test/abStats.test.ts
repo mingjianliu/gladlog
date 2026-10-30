@@ -1,30 +1,31 @@
 import {
-  mkdtempSync,
-  mkdirSync,
-  writeFileSync,
   existsSync,
-  readFileSync,
+  mkdirSync,
+  mkdtempSync,
   readdirSync,
+  readFileSync,
+  writeFileSync,
 } from "fs";
-import { tmpdir } from "os";
-import { join } from "path";
 import fs from "fs-extra";
+import { tmpdir } from "os";
 import os from "os";
+import { join } from "path";
 import path from "path";
+
 import {
-  signTestP,
-  bootstrapCI,
-  makeRng,
-  dimensionScore,
-  DIMENSIONS,
   aggregateReplicates,
+  bootstrapCI,
   collectReplicateFiles,
+  DIMENSIONS,
+  dimensionScore,
+  makeRng,
   medianOf,
+  signTestP,
 } from "../src/ab/abCompareStats";
 import { buildBlindPool } from "../src/ab/blindAbPool";
 import {
-  plantTimestampError,
   buildPlantedAb,
+  plantTimestampError,
 } from "../src/ab/plantTimestampError";
 
 describe("abCompareStats 数学 golden", () => {

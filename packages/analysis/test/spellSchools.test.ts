@@ -13,6 +13,7 @@ import {
   immunityMechanics,
   immunitySchoolMask,
   isPhysicalSpell,
+  schoolLockedBy,
   spellSchoolMask,
 } from "../src/data/spellSchools";
 import { applicableCCAvoidanceIds } from "../src/utils/ccTrinketAnalysis";
@@ -29,6 +30,15 @@ describe("官方学派事实", () => {
     expect(isPhysicalSpell("853")).toBe(false); // 制裁之锤(神圣)—— 手工表里没有
     expect(isPhysicalSpell("118")).toBe(false); // 变形术(奥术)
     expect(spellSchoolMask("360806")).toBe(8); // Sleep Walk(自然)
+  });
+
+  it("12.1.5:Merithra's Blessing 是奥术 —— 被锁自然系时仍能放", () => {
+    // 12.1.5.70391 SpellMisc 1256581 SchoolMask 8 → 64。补丁说明 PvP 段:「is now
+    // considered an Arcane spell, and can be cast when locked out of Nature」;
+    // 用户 2026-10-16 实测:被反(锁自然)后照样能用。
+    expect(spellSchoolMask("1256581")).toBe(64);
+    expect(schoolLockedBy(64, 8)).toBe(false);
+    expect(schoolLockedBy(8, 8)).toBe(true); // 对照:自然系法术被锁
   });
 
   it("免疫掩码分得清「挡全部」「只挡物理」「只挡魔法」", () => {

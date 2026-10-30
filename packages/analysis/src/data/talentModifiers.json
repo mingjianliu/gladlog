@@ -4,7 +4,10 @@
       "talentSpellId": "440681",
       "effect": "reduce_cd",
       "value": 1.5,
-      "sourceRowId": "1248561"
+      "sourceRowId": "1248561",
+      "onlySpecIds": [
+        "256"
+      ]
     }
   ],
   "66": [
@@ -40,7 +43,10 @@
       "talentSpellId": "431067",
       "effect": "reduce_cd_pct",
       "value": 30,
-      "sourceRowId": "1118575"
+      "sourceRowId": "1118575",
+      "onlySpecIds": [
+        "63"
+      ]
     }
   ],
   "122": [
@@ -54,7 +60,10 @@
       "talentSpellId": "431067",
       "effect": "reduce_cd_pct",
       "value": 30,
-      "sourceRowId": "1163206"
+      "sourceRowId": "1163206",
+      "onlySpecIds": [
+        "63"
+      ]
     },
     {
       "talentSpellId": "387807",
@@ -125,7 +134,11 @@
       "talentSpellId": "390670",
       "effect": "reduce_cd",
       "value": 5,
-      "sourceRowId": "1027663"
+      "sourceRowId": "1027663",
+      "valueByRank": [
+        5,
+        10
+      ]
     }
   ],
   "633": [
@@ -321,7 +334,10 @@
       "talentSpellId": "1272359",
       "effect": "reduce_cd",
       "value": 5,
-      "sourceRowId": "1285557"
+      "sourceRowId": "1285557",
+      "onlySpecIds": [
+        "257"
+      ]
     }
   ],
   "2094": [
@@ -371,14 +387,6 @@
       ]
     }
   ],
-  "2825": [
-    {
-      "talentSpellId": "193876",
-      "effect": "replace_spell",
-      "value": 8,
-      "sourceRowId": "301624"
-    }
-  ],
   "2983": [
     {
       "talentSpellId": "197000",
@@ -404,7 +412,15 @@
       "talentSpellId": "424654",
       "effect": "reduce_cd",
       "value": -10,
-      "sourceRowId": "1101811"
+      "sourceRowId": "1101811",
+      "valueBySpec": {
+        "71": [
+          -20
+        ],
+        "72": [
+          -20
+        ]
+      }
     },
     {
       "talentSpellId": "391271",
@@ -457,7 +473,11 @@
       "talentSpellId": "1258486",
       "effect": "reduce_cd",
       "value": 5,
-      "sourceRowId": "1267168"
+      "sourceRowId": "1267168",
+      "valueByRank": [
+        5,
+        10
+      ]
     }
   ],
   "5394": [
@@ -489,7 +509,11 @@
       "talentSpellId": "1260644",
       "effect": "reduce_cd",
       "value": 3,
-      "sourceRowId": "1282760"
+      "sourceRowId": "1282760",
+      "onlySpecIds": [
+        "262",
+        "264"
+      ]
     }
   ],
   "5484": [
@@ -561,7 +585,12 @@
       "talentSpellId": "384820",
       "effect": "reduce_cd",
       "value": 60,
-      "sourceRowId": "1017694"
+      "sourceRowId": "1017694",
+      "valueBySpec": {
+        "65": [
+          15
+        ]
+      }
     }
   ],
   "7384": [
@@ -677,7 +706,12 @@
       "talentSpellId": "428937",
       "effect": "reduce_cd",
       "value": 1,
-      "sourceRowId": "1112687"
+      "sourceRowId": "1112687",
+      "onlySpecIds": [
+        "103",
+        "104",
+        "105"
+      ]
     }
   ],
   "19236": [
@@ -701,7 +735,10 @@
       "talentSpellId": "231548",
       "effect": "reduce_cd",
       "value": 60,
-      "sourceRowId": "349261"
+      "sourceRowId": "349261",
+      "valueByRank": [
+        60
+      ]
     }
   ],
   "19577": [
@@ -773,7 +810,11 @@
       "talentSpellId": "203965",
       "effect": "reduce_cd_pct",
       "value": 12,
-      "sourceRowId": "300978"
+      "sourceRowId": "300978",
+      "valueByRank": [
+        12,
+        24
+      ]
     },
     {
       "talentSpellId": "137010",
@@ -885,7 +926,10 @@
       "talentSpellId": "385881",
       "effect": "reduce_cd",
       "value": 5,
-      "sourceRowId": "1021280"
+      "sourceRowId": "1021280",
+      "onlySpecIds": [
+        "266"
+      ]
     }
   ],
   "30283": [
@@ -901,7 +945,10 @@
       "talentSpellId": "1270827",
       "effect": "reduce_cd",
       "value": -4,
-      "sourceRowId": "1283189"
+      "sourceRowId": "1283189",
+      "valueByRank": [
+        -4
+      ]
     }
   ],
   "31661": [
@@ -915,7 +962,10 @@
       "talentSpellId": "431067",
       "effect": "reduce_cd_pct",
       "value": 30,
-      "sourceRowId": "1118816"
+      "sourceRowId": "1118816",
+      "onlySpecIds": [
+        "64"
+      ]
     }
   ],
   "31821": [
@@ -957,7 +1007,11 @@
       "talentSpellId": "1241511",
       "effect": "reduce_cd",
       "value": 30,
-      "sourceRowId": "1240525"
+      "sourceRowId": "1240525",
+      "valueByRank": [
+        15,
+        30
+      ]
     },
     {
       "talentSpellId": "1258011",
@@ -969,19 +1023,11 @@
       ]
     }
   ],
-  "32182": [
-    {
-      "talentSpellId": "193876",
-      "effect": "replace_spell",
-      "value": 8,
-      "sourceRowId": "301624"
-    }
-  ],
   "32375": [
     {
       "talentSpellId": "426438",
       "effect": "reduce_cd",
-      "value": 60,
+      "value": 75,
       "sourceRowId": "1104914"
     }
   ],
@@ -990,14 +1036,18 @@
       "talentSpellId": "1272326",
       "effect": "reduce_cd",
       "value": 3,
-      "sourceRowId": "1285514"
+      "sourceRowId": "1285514",
+      "onlySpecIds": [
+        "256",
+        "258"
+      ]
     }
   ],
   "32592": [
     {
       "talentSpellId": "426438",
       "effect": "reduce_cd",
-      "value": 60,
+      "value": 75,
       "sourceRowId": "1104914"
     }
   ],
@@ -1006,7 +1056,11 @@
       "talentSpellId": "440681",
       "effect": "reduce_cd",
       "value": 1.5,
-      "sourceRowId": "1134726"
+      "sourceRowId": "1134726",
+      "onlySpecIds": [
+        "257",
+        "258"
+      ]
     },
     {
       "talentSpellId": "1248423",
@@ -1151,14 +1205,19 @@
       "talentSpellId": "454433",
       "effect": "reduce_cd",
       "value": -10,
-      "sourceRowId": "1179470"
+      "sourceRowId": "1179470",
+      "valueBySpec": {
+        "260": [
+          0
+        ]
+      }
     }
   ],
   "39897": [
     {
       "talentSpellId": "426438",
       "effect": "reduce_cd",
-      "value": 60,
+      "value": 75,
       "sourceRowId": "1104914"
     }
   ],
@@ -1182,21 +1241,23 @@
       "talentSpellId": "444099",
       "effect": "reduce_cd",
       "value": 5,
-      "sourceRowId": "1140400"
+      "sourceRowId": "1140400",
+      "onlySpecIds": [
+        "250",
+        "252"
+      ]
     }
   ],
   "45438": [
     {
       "talentSpellId": "382424",
       "effect": "reduce_cd",
-      "value": 30,
-      "sourceRowId": "1013746"
-    },
-    {
-      "talentSpellId": "414659",
-      "effect": "replace_spell",
-      "value": 414658,
-      "sourceRowId": "1083954"
+      "value": 15,
+      "sourceRowId": "1013746",
+      "valueByRank": [
+        15,
+        30
+      ]
     },
     {
       "talentSpellId": "1244110",
@@ -1215,6 +1276,11 @@
       "effect": "reduce_cd",
       "value": 30,
       "sourceRowId": "1277318"
+    },
+    {
+      "talentSpellId": "414658",
+      "effect": "replace_spell",
+      "value": 414658
     }
   ],
   "45524": [
@@ -1486,7 +1552,11 @@
       "talentSpellId": "1244025",
       "effect": "reduce_cd",
       "value": 15,
-      "sourceRowId": "1244557"
+      "sourceRowId": "1244557",
+      "valueByRank": [
+        15,
+        30
+      ]
     }
   ],
   "57755": [
@@ -1554,7 +1624,10 @@
       "talentSpellId": "443418",
       "effect": "extra_charge",
       "value": 1,
-      "sourceRowId": "1144388"
+      "sourceRowId": "1144388",
+      "onlySpecIds": [
+        "264"
+      ]
     },
     {
       "talentSpellId": "1254251",
@@ -1577,7 +1650,11 @@
       "talentSpellId": "203965",
       "effect": "reduce_cd_pct",
       "value": 12,
-      "sourceRowId": "301037"
+      "sourceRowId": "301037",
+      "valueByRank": [
+        12,
+        24
+      ]
     }
   ],
   "61391": [
@@ -1633,7 +1710,12 @@
       "talentSpellId": "451211",
       "effect": "reduce_cd",
       "value": 4,
-      "sourceRowId": "1151653"
+      "sourceRowId": "1151653",
+      "onlySpecIds": [
+        "103",
+        "104",
+        "105"
+      ]
     }
   ],
   "79206": [
@@ -1683,7 +1765,10 @@
       "talentSpellId": "431067",
       "effect": "reduce_cd_pct",
       "value": 30,
-      "sourceRowId": "1118575"
+      "sourceRowId": "1118575",
+      "onlySpecIds": [
+        "63"
+      ]
     }
   ],
   "84714": [
@@ -1977,13 +2062,20 @@
       "talentSpellId": "431067",
       "effect": "reduce_cd_pct",
       "value": 30,
-      "sourceRowId": "1118816"
+      "sourceRowId": "1118816",
+      "onlySpecIds": [
+        "64"
+      ]
     },
     {
       "talentSpellId": "1260616",
       "effect": "reduce_cd",
       "value": 1,
-      "sourceRowId": "1270118"
+      "sourceRowId": "1270118",
+      "onlySpecIds": [
+        "63",
+        "64"
+      ]
     },
     {
       "talentSpellId": "205029",
@@ -2023,7 +2115,11 @@
       "talentSpellId": "270581",
       "effect": "reduce_cd",
       "value": 30,
-      "sourceRowId": "720204"
+      "sourceRowId": "720204",
+      "valueByRank": [
+        30,
+        60
+      ]
     }
   ],
   "110959": [
@@ -2045,7 +2141,10 @@
       "talentSpellId": "431067",
       "effect": "reduce_cd_pct",
       "value": 30,
-      "sourceRowId": "1118575"
+      "sourceRowId": "1118575",
+      "onlySpecIds": [
+        "63"
+      ]
     }
   ],
   "114018": [
@@ -2109,7 +2208,12 @@
       "talentSpellId": "379391",
       "effect": "reduce_cd",
       "value": 15,
-      "sourceRowId": "1008310"
+      "sourceRowId": "1008310",
+      "valueBySpec": {
+        "70": [
+          30
+        ]
+      }
     }
   ],
   "114852": [
@@ -2117,7 +2221,12 @@
       "talentSpellId": "379391",
       "effect": "reduce_cd",
       "value": 15,
-      "sourceRowId": "1008310"
+      "sourceRowId": "1008310",
+      "valueBySpec": {
+        "70": [
+          30
+        ]
+      }
     }
   ],
   "114871": [
@@ -2125,7 +2234,12 @@
       "talentSpellId": "379391",
       "effect": "reduce_cd",
       "value": 15,
-      "sourceRowId": "1008310"
+      "sourceRowId": "1008310",
+      "valueBySpec": {
+        "70": [
+          30
+        ]
+      }
     }
   ],
   "115008": [
@@ -2159,7 +2273,11 @@
       "talentSpellId": "344359",
       "effect": "reduce_cd",
       "value": 15,
-      "sourceRowId": "868594"
+      "sourceRowId": "868594",
+      "valueByRank": [
+        8,
+        15
+      ]
     }
   ],
   "115151": [
@@ -2189,7 +2307,12 @@
       "talentSpellId": "388813",
       "effect": "reduce_cd",
       "value": 30,
-      "sourceRowId": "1024732"
+      "sourceRowId": "1024732",
+      "valueBySpec": {
+        "268": [
+          120
+        ]
+      }
     },
     {
       "talentSpellId": "1258122",
@@ -2304,7 +2427,11 @@
       "talentSpellId": "344359",
       "effect": "reduce_cd",
       "value": 10,
-      "sourceRowId": "1149952"
+      "sourceRowId": "1149952",
+      "valueByRank": [
+        5,
+        10
+      ]
     }
   ],
   "119582": [
@@ -2364,7 +2491,10 @@
       "talentSpellId": "450989",
       "effect": "reduce_cd",
       "value": 25,
-      "sourceRowId": "1289290"
+      "sourceRowId": "1289290",
+      "onlySpecIds": [
+        "268"
+      ]
     }
   ],
   "132157": [
@@ -2385,7 +2515,7 @@
     {
       "talentSpellId": "1246126",
       "effect": "reduce_cd",
-      "value": -30,
+      "value": -60,
       "sourceRowId": "1247559"
     }
   ],
@@ -2438,7 +2568,10 @@
       "talentSpellId": "450989",
       "effect": "reduce_cd",
       "value": 25,
-      "sourceRowId": "1289290"
+      "sourceRowId": "1289290",
+      "onlySpecIds": [
+        "268"
+      ]
     }
   ],
   "145629": [
@@ -2516,7 +2649,10 @@
       "talentSpellId": "431067",
       "effect": "reduce_cd_pct",
       "value": 30,
-      "sourceRowId": "1118575"
+      "sourceRowId": "1118575",
+      "onlySpecIds": [
+        "63"
+      ]
     }
   ],
   "158221": [
@@ -2629,7 +2765,10 @@
       "talentSpellId": "231548",
       "effect": "reduce_cd",
       "value": 60,
-      "sourceRowId": "349261"
+      "sourceRowId": "349261",
+      "valueByRank": [
+        60
+      ]
     }
   ],
   "186257": [
@@ -2643,7 +2782,11 @@
       "talentSpellId": "266921",
       "effect": "reduce_cd",
       "value": 15,
-      "sourceRowId": "713188"
+      "sourceRowId": "713188",
+      "valueByRank": [
+        15,
+        30
+      ]
     },
     {
       "talentSpellId": "1253887",
@@ -2669,7 +2812,11 @@
       "talentSpellId": "266921",
       "effect": "reduce_cd",
       "value": 15,
-      "sourceRowId": "713188"
+      "sourceRowId": "713188",
+      "valueByRank": [
+        15,
+        30
+      ]
     },
     {
       "talentSpellId": "1253887",
@@ -2689,7 +2836,11 @@
       "talentSpellId": "266921",
       "effect": "reduce_cd",
       "value": 15,
-      "sourceRowId": "713188"
+      "sourceRowId": "713188",
+      "valueByRank": [
+        15,
+        30
+      ]
     },
     {
       "talentSpellId": "1258485",
@@ -2715,7 +2866,11 @@
       "talentSpellId": "266921",
       "effect": "reduce_cd",
       "value": 15,
-      "sourceRowId": "713188"
+      "sourceRowId": "713188",
+      "valueByRank": [
+        15,
+        30
+      ]
     }
   ],
   "187650": [
@@ -2774,7 +2929,10 @@
       "talentSpellId": "1254194",
       "effect": "reduce_cd",
       "value": 60,
-      "sourceRowId": "1260514"
+      "sourceRowId": "1260514",
+      "valueByRank": [
+        60
+      ]
     }
   ],
   "190784": [
@@ -2796,7 +2954,10 @@
       "talentSpellId": "454026",
       "effect": "reduce_cd",
       "value": 15,
-      "sourceRowId": "1156275"
+      "sourceRowId": "1156275",
+      "onlySpecIds": [
+        "262"
+      ]
     },
     {
       "talentSpellId": "468571",
@@ -2810,7 +2971,11 @@
       "talentSpellId": "265046",
       "effect": "reduce_cd",
       "value": 15,
-      "sourceRowId": "708963"
+      "sourceRowId": "708963",
+      "valueByRank": [
+        10,
+        20
+      ]
     },
     {
       "talentSpellId": "381867",
@@ -2878,7 +3043,11 @@
       "talentSpellId": "391397",
       "effect": "reduce_cd",
       "value": 1,
-      "sourceRowId": "1028885"
+      "sourceRowId": "1028885",
+      "valueByRank": [
+        1,
+        2
+      ]
     }
   ],
   "195457": [
@@ -2947,7 +3116,12 @@
       "talentSpellId": "451211",
       "effect": "reduce_cd",
       "value": 4,
-      "sourceRowId": "1151653"
+      "sourceRowId": "1151653",
+      "onlySpecIds": [
+        "103",
+        "104",
+        "105"
+      ]
     }
   ],
   "198149": [
@@ -2991,7 +3165,12 @@
       "talentSpellId": "384820",
       "effect": "reduce_cd",
       "value": 60,
-      "sourceRowId": "1017694"
+      "sourceRowId": "1017694",
+      "valueBySpec": {
+        "65": [
+          15
+        ]
+      }
     }
   ],
   "199507": [
@@ -3121,7 +3300,12 @@
       "talentSpellId": "429539",
       "effect": "reduce_cd",
       "value": 20,
-      "sourceRowId": "1134391"
+      "sourceRowId": "1134391",
+      "onlySpecIds": [
+        "103",
+        "104",
+        "105"
+      ]
     }
   ],
   "204157": [
@@ -3158,22 +3342,6 @@
       "effect": "reduce_cd",
       "value": 5,
       "sourceRowId": "1012979"
-    }
-  ],
-  "204361": [
-    {
-      "talentSpellId": "193876",
-      "effect": "replace_spell",
-      "value": 8,
-      "sourceRowId": "301624"
-    }
-  ],
-  "204362": [
-    {
-      "talentSpellId": "193876",
-      "effect": "replace_spell",
-      "value": 8,
-      "sourceRowId": "301624"
     }
   ],
   "204596": [
@@ -3229,7 +3397,10 @@
       "talentSpellId": "428937",
       "effect": "reduce_cd",
       "value": 15,
-      "sourceRowId": "1112686"
+      "sourceRowId": "1112686",
+      "onlySpecIds": [
+        "102"
+      ]
     }
   ],
   "206572": [
@@ -3251,7 +3422,11 @@
       "talentSpellId": "320418",
       "effect": "reduce_cd",
       "value": 30,
-      "sourceRowId": "807466"
+      "sourceRowId": "807466",
+      "onlySpecIds": [
+        "577",
+        "1480"
+      ]
     },
     {
       "talentSpellId": "1235091",
@@ -3360,7 +3535,11 @@
       "talentSpellId": "1241511",
       "effect": "reduce_cd",
       "value": 30,
-      "sourceRowId": "1240527"
+      "sourceRowId": "1240527",
+      "valueByRank": [
+        7.5,
+        15
+      ]
     }
   ],
   "217832": [
@@ -3471,7 +3650,10 @@
       "talentSpellId": "431067",
       "effect": "reduce_cd_pct",
       "value": 30,
-      "sourceRowId": "1118575"
+      "sourceRowId": "1118575",
+      "onlySpecIds": [
+        "63"
+      ]
     }
   ],
   "235313": [
@@ -3570,7 +3752,10 @@
       "talentSpellId": "431067",
       "effect": "reduce_cd_pct",
       "value": 30,
-      "sourceRowId": "1118816"
+      "sourceRowId": "1118816",
+      "onlySpecIds": [
+        "64"
+      ]
     }
   ],
   "269352": [
@@ -3905,13 +4090,20 @@
       "talentSpellId": "431067",
       "effect": "reduce_cd_pct",
       "value": 30,
-      "sourceRowId": "1118816"
+      "sourceRowId": "1118816",
+      "onlySpecIds": [
+        "64"
+      ]
     },
     {
       "talentSpellId": "1260616",
       "effect": "reduce_cd",
       "value": 1,
-      "sourceRowId": "1270118"
+      "sourceRowId": "1270118",
+      "onlySpecIds": [
+        "63",
+        "64"
+      ]
     },
     {
       "talentSpellId": "205029",
@@ -3925,7 +4117,10 @@
       "talentSpellId": "231548",
       "effect": "reduce_cd",
       "value": 60,
-      "sourceRowId": "349261"
+      "sourceRowId": "349261",
+      "valueByRank": [
+        60
+      ]
     }
   ],
   "322101": [
@@ -3979,7 +4174,10 @@
       "talentSpellId": "450989",
       "effect": "reduce_cd",
       "value": 25,
-      "sourceRowId": "1289290"
+      "sourceRowId": "1289290",
+      "onlySpecIds": [
+        "268"
+      ]
     }
   ],
   "322507": [
@@ -4013,7 +4211,10 @@
       "talentSpellId": "450989",
       "effect": "reduce_cd",
       "value": 25,
-      "sourceRowId": "1289290"
+      "sourceRowId": "1289290",
+      "onlySpecIds": [
+        "268"
+      ]
     }
   ],
   "330873": [
@@ -4124,7 +4325,11 @@
       "talentSpellId": "342249",
       "effect": "reduce_cd",
       "value": 5,
-      "sourceRowId": "843174"
+      "sourceRowId": "843174",
+      "valueByRank": [
+        5,
+        10
+      ]
     },
     {
       "talentSpellId": "1255166",
@@ -4152,7 +4357,10 @@
       "talentSpellId": "231548",
       "effect": "reduce_cd",
       "value": 60,
-      "sourceRowId": "349261"
+      "sourceRowId": "349261",
+      "valueByRank": [
+        60
+      ]
     }
   ],
   "344865": [
@@ -4166,7 +4374,11 @@
       "talentSpellId": "391397",
       "effect": "reduce_cd",
       "value": 1,
-      "sourceRowId": "1028885"
+      "sourceRowId": "1028885",
+      "valueByRank": [
+        1,
+        2
+      ]
     }
   ],
   "351140": [
@@ -4204,7 +4416,10 @@
       "talentSpellId": "431067",
       "effect": "reduce_cd_pct",
       "value": 30,
-      "sourceRowId": "1118816"
+      "sourceRowId": "1118816",
+      "onlySpecIds": [
+        "64"
+      ]
     }
   ],
   "353759": [
@@ -4299,7 +4514,11 @@
       "talentSpellId": "266921",
       "effect": "reduce_cd",
       "value": 15,
-      "sourceRowId": "713188"
+      "sourceRowId": "713188",
+      "valueByRank": [
+        15,
+        30
+      ]
     },
     {
       "talentSpellId": "1253887",
@@ -4437,7 +4656,11 @@
       "talentSpellId": "344359",
       "effect": "reduce_cd",
       "value": 15,
-      "sourceRowId": "868594"
+      "sourceRowId": "868594",
+      "valueByRank": [
+        8,
+        15
+      ]
     }
   ],
   "358267": [
@@ -4921,7 +5144,11 @@
       "talentSpellId": "1270900",
       "effect": "reduce_cd",
       "value": 15,
-      "sourceRowId": "1283315"
+      "sourceRowId": "1283315",
+      "valueByRank": [
+        15,
+        30
+      ]
     }
   ],
   "370984": [
@@ -5035,7 +5262,10 @@
       "talentSpellId": "431715",
       "effect": "reduce_cd",
       "value": 4,
-      "sourceRowId": "1119662"
+      "sourceRowId": "1119662",
+      "onlySpecIds": [
+        "1468"
+      ]
     }
   ],
   "373862": [
@@ -5049,7 +5279,10 @@
       "talentSpellId": "431715",
       "effect": "reduce_cd",
       "value": 4,
-      "sourceRowId": "1119662"
+      "sourceRowId": "1119662",
+      "onlySpecIds": [
+        "1468"
+      ]
     }
   ],
   "374227": [
@@ -5209,7 +5442,12 @@
       "talentSpellId": "379391",
       "effect": "reduce_cd",
       "value": 15,
-      "sourceRowId": "1008310"
+      "sourceRowId": "1008310",
+      "valueBySpec": {
+        "70": [
+          30
+        ]
+      }
     },
     {
       "talentSpellId": "1258016",
@@ -5289,7 +5527,7 @@
     {
       "talentSpellId": "1246131",
       "effect": "reduce_cd",
-      "value": -30,
+      "value": -20,
       "sourceRowId": "1247572"
     }
   ],
@@ -5614,7 +5852,12 @@
       "talentSpellId": "379391",
       "effect": "reduce_cd",
       "value": 15,
-      "sourceRowId": "1008310"
+      "sourceRowId": "1008310",
+      "valueBySpec": {
+        "70": [
+          30
+        ]
+      }
     },
     {
       "talentSpellId": "1258016",
@@ -5776,6 +6019,16 @@
       "effect": "reduce_cd_pct",
       "value": 50,
       "sourceRowId": "1033285"
+    },
+    {
+      "talentSpellId": "393371",
+      "effect": "reduce_cd",
+      "value": 60
+    },
+    {
+      "talentSpellId": "391548",
+      "effect": "reduce_cd_pct",
+      "value": 50
     }
   ],
   "392268": [
@@ -6169,7 +6422,11 @@
       "talentSpellId": "431715",
       "effect": "reduce_cd",
       "value": 2,
-      "sourceRowId": "1283897"
+      "sourceRowId": "1283897",
+      "onlySpecIds": [
+        "1467",
+        "1473"
+      ]
     }
   ],
   "409438": [
@@ -6356,8 +6613,12 @@
     {
       "talentSpellId": "382424",
       "effect": "reduce_cd",
-      "value": 30,
-      "sourceRowId": "1013746"
+      "value": 15,
+      "sourceRowId": "1013746",
+      "valueByRank": [
+        15,
+        30
+      ]
     },
     {
       "talentSpellId": "1244110",
@@ -6532,7 +6793,12 @@
       "talentSpellId": "379391",
       "effect": "reduce_cd",
       "value": 15,
-      "sourceRowId": "1240965"
+      "sourceRowId": "1240965",
+      "valueBySpec": {
+        "66": [
+          0
+        ]
+      }
     }
   ],
   "432472": [
@@ -6546,7 +6812,12 @@
       "talentSpellId": "379391",
       "effect": "reduce_cd",
       "value": 15,
-      "sourceRowId": "1240965"
+      "sourceRowId": "1240965",
+      "valueBySpec": {
+        "66": [
+          0
+        ]
+      }
     }
   ],
   "433874": [
@@ -6655,7 +6926,7 @@
     {
       "talentSpellId": "1246131",
       "effect": "reduce_cd",
-      "value": -30,
+      "value": -20,
       "sourceRowId": "1247572"
     }
   ],
@@ -6876,7 +7147,11 @@
       "talentSpellId": "1241511",
       "effect": "reduce_cd",
       "value": 30,
-      "sourceRowId": "1240525"
+      "sourceRowId": "1240525",
+      "valueByRank": [
+        15,
+        30
+      ]
     },
     {
       "talentSpellId": "1258011",
@@ -7067,7 +7342,11 @@
       "talentSpellId": "1269215",
       "effect": "reduce_cd",
       "value": 3,
-      "sourceRowId": "1280934"
+      "sourceRowId": "1280934",
+      "valueByRank": [
+        3,
+        6
+      ]
     }
   ],
   "470411": [
@@ -7132,7 +7411,7 @@
     {
       "talentSpellId": "1244220",
       "effect": "reduce_cd",
-      "value": 2,
+      "value": 2.5,
       "sourceRowId": "1244852"
     }
   ],
@@ -7155,6 +7434,14 @@
       "value": 473919,
       "sourceRowId": "1193213",
       "isConditional": true
+    }
+  ],
+  "474149": [
+    {
+      "talentSpellId": "428937",
+      "effect": "reduce_cd",
+      "value": 1,
+      "sourceRowId": "1256778"
     }
   ],
   "474421": [
@@ -7200,7 +7487,10 @@
       "talentSpellId": "1270827",
       "effect": "reduce_cd",
       "value": -4,
-      "sourceRowId": "1283189"
+      "sourceRowId": "1283189",
+      "valueByRank": [
+        -4
+      ]
     }
   ],
   "1233272": [
@@ -7248,7 +7538,11 @@
       "talentSpellId": "391397",
       "effect": "reduce_cd",
       "value": 1,
-      "sourceRowId": "1278703"
+      "sourceRowId": "1278703",
+      "valueByRank": [
+        1,
+        2
+      ]
     }
   ],
   "1235074": [
@@ -7416,7 +7710,15 @@
       "talentSpellId": "424654",
       "effect": "reduce_cd",
       "value": -10,
-      "sourceRowId": "1101811"
+      "sourceRowId": "1101811",
+      "valueBySpec": {
+        "71": [
+          -20
+        ],
+        "72": [
+          -20
+        ]
+      }
     },
     {
       "talentSpellId": "391271",
@@ -7446,7 +7748,10 @@
       "talentSpellId": "431067",
       "effect": "reduce_cd_pct",
       "value": 30,
-      "sourceRowId": "1118816"
+      "sourceRowId": "1118816",
+      "onlySpecIds": [
+        "64"
+      ]
     }
   ],
   "1246167": [
@@ -7454,7 +7759,11 @@
       "talentSpellId": "1270900",
       "effect": "reduce_cd",
       "value": 15,
-      "sourceRowId": "1283315"
+      "sourceRowId": "1283315",
+      "valueByRank": [
+        15,
+        30
+      ]
     }
   ],
   "1246768": [
@@ -7462,7 +7771,10 @@
       "talentSpellId": "440681",
       "effect": "reduce_cd",
       "value": 1.5,
-      "sourceRowId": "1248561"
+      "sourceRowId": "1248561",
+      "onlySpecIds": [
+        "256"
+      ]
     }
   ],
   "1247378": [
@@ -7484,7 +7796,11 @@
       "talentSpellId": "450989",
       "effect": "reduce_cd",
       "value": 10,
-      "sourceRowId": "1151638"
+      "sourceRowId": "1151638",
+      "onlySpecIds": [
+        "270",
+        "269"
+      ]
     },
     {
       "talentSpellId": "1249625",
@@ -7499,7 +7815,11 @@
       "talentSpellId": "1251790",
       "effect": "reduce_cd",
       "value": 15,
-      "sourceRowId": "1256590"
+      "sourceRowId": "1256590",
+      "valueByRank": [
+        15,
+        30
+      ]
     }
   ],
   "1251417": [
@@ -7529,7 +7849,10 @@
       "talentSpellId": "440681",
       "effect": "reduce_cd",
       "value": 1.5,
-      "sourceRowId": "1248561"
+      "sourceRowId": "1248561",
+      "onlySpecIds": [
+        "256"
+      ]
     }
   ],
   "1253799": [
@@ -7537,7 +7860,12 @@
       "talentSpellId": "441846",
       "effect": "reduce_cd",
       "value": 15,
-      "sourceRowId": "1136587"
+      "sourceRowId": "1136587",
+      "onlySpecIds": [
+        "102",
+        "104",
+        "105"
+      ]
     }
   ],
   "1253859": [
@@ -7545,7 +7873,11 @@
       "talentSpellId": "1251790",
       "effect": "reduce_cd",
       "value": 15,
-      "sourceRowId": "1256590"
+      "sourceRowId": "1256590",
+      "valueByRank": [
+        15,
+        30
+      ]
     }
   ],
   "1253862": [
@@ -7553,7 +7885,11 @@
       "talentSpellId": "1251790",
       "effect": "reduce_cd",
       "value": 15,
-      "sourceRowId": "1256590"
+      "sourceRowId": "1256590",
+      "valueByRank": [
+        15,
+        30
+      ]
     }
   ],
   "1256579": [
@@ -7600,7 +7936,11 @@
       "talentSpellId": "1269215",
       "effect": "reduce_cd",
       "value": 3,
-      "sourceRowId": "1280934"
+      "sourceRowId": "1280934",
+      "valueByRank": [
+        3,
+        6
+      ]
     }
   ],
   "1259171": [
@@ -7624,7 +7964,11 @@
       "talentSpellId": "1270900",
       "effect": "reduce_cd",
       "value": 15,
-      "sourceRowId": "1283315"
+      "sourceRowId": "1283315",
+      "valueByRank": [
+        15,
+        30
+      ]
     }
   ],
   "1261193": [
@@ -7777,7 +8121,11 @@
       "talentSpellId": "1260644",
       "effect": "reduce_cd",
       "value": 3,
-      "sourceRowId": "1282760"
+      "sourceRowId": "1282760",
+      "onlySpecIds": [
+        "262",
+        "264"
+      ]
     }
   ],
   "1271222": [
@@ -7785,7 +8133,12 @@
       "talentSpellId": "451211",
       "effect": "reduce_cd",
       "value": 4,
-      "sourceRowId": "1151653"
+      "sourceRowId": "1151653",
+      "onlySpecIds": [
+        "103",
+        "104",
+        "105"
+      ]
     }
   ],
   "1271783": [
@@ -7862,7 +8215,10 @@
       "talentSpellId": "431715",
       "effect": "reduce_cd",
       "value": 4,
-      "sourceRowId": "1119662"
+      "sourceRowId": "1119662",
+      "onlySpecIds": [
+        "1468"
+      ]
     }
   ],
   "1291678": [
@@ -7911,7 +8267,10 @@
       "talentSpellId": "440681",
       "effect": "reduce_cd",
       "value": 1.5,
-      "sourceRowId": "1248561"
+      "sourceRowId": "1248561",
+      "onlySpecIds": [
+        "256"
+      ]
     }
   ],
   "1300009": [
@@ -7919,7 +8278,10 @@
       "talentSpellId": "440681",
       "effect": "reduce_cd",
       "value": 1.5,
-      "sourceRowId": "1248561"
+      "sourceRowId": "1248561",
+      "onlySpecIds": [
+        "256"
+      ]
     }
   ]
 }

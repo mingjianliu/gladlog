@@ -1,6 +1,6 @@
 ---
 name: fetch-pvp-logs
-description: 按专精/分数过滤,在 wowarenalogs 的登录额度(每账号每天 15 个日志)内下载其他玩家的 WoW PvP 原始 combat log。Use when asked to 下载他人对局/拉外部 log/找某专精高分场次样本。不是语料采集工具 —— 归档器 2026-09-15 已退役。
+description: 按专精/分数过滤,在 wowarenalogs 的登录额度(每账号每天 30 个日志,2026-10-20 起)内下载其他玩家的 WoW PvP 原始 combat log。Use when asked to 下载他人对局/拉外部 log/找某专精高分场次样本。不是语料采集工具 —— 归档器 2026-09-15 已退役。
 ---
 
 # 下载他人 PvP combat log(按专精/分数过滤,额度内定向抽样)
@@ -24,8 +24,8 @@ gladlog parser 直接可解析。
 | -------------------- | ------------------------------------------------------------------------------------------------------------------------- |
 | 搜索 `latestMatches` | 必须带 Battle.net 登录态;匿名 → `UNAUTHENTICATED`;最近 1 小时的场次不可见;翻页不计量但按用户记日志                        |
 | 原始日志             | 桶已私有(裸 `logObjectUrl` 403);走 `logDownloadUrl(matchId)` 拿 **10 分钟**签名地址                                       |
-| 额度                 | **每账号每 UTC 日 15 个不同日志**,固定值无分档、无付费档;同日重开同一 id 不扣;`admin` 豁免、`blocked` 全拒                |
-| 拒绝                 | HTTP 200 + GraphQL error `LOG_QUOTA_EXCEEDED`,原话 "You've reached today's limit of 15 matches … resets at midnight UTC." |
+| 额度                 | **每账号每 UTC 日 30 个不同日志**(2026-10-20 从 15 翻倍),固定值无分档、无付费档;同日重开同一 id 不扣;`admin` 豁免、`blocked` 全拒                |
+| 拒绝                 | HTTP 200 + GraphQL error `LOG_QUOTA_EXCEEDED`,原话 "You've reached today's limit of 15 matches … resets at midnight UTC."(15 时代原话) |
 
 **这条额度是对方专门为了挡批量抓取设的,我们按它给的用:一个账号、服务端说停就停。**
 多账号 / 共享会话 / 换 UA / 任何找回旧量级的做法都不做(`docs/DATA-COMPLIANCE.md` §3)。
@@ -51,7 +51,7 @@ SPEC=Shaman_Restoration MIN_RATING=2100 npx tsx scripts/fetchPvpLogs.ts
 | `MIN_RATING`      | 0(不过滤)                                                 | **只有 1400/1800/2100/2400 四档生效**(服务端按场均 MMR 分档;传 2700 等效 2400)                                    |
 | `SPEC`            | 空(不过滤)                                                | 逗号分隔,数字 specId 或 `CombatUnitSpec` 枚举名(如 `Shaman_Restoration,105`)。多 spec = 同一队同时含这些专精      |
 | `SPEC_ROLE`       | `recorder`                                                | `recorder`=上传者本人是该专精(advanced logging 视角最优,做该专精分析用这个);`any`=场上任意玩家(敌我不限,样本量大) |
-| `LIMIT`           | 15                                                        | 本次运行**新下**的场数上限;真正的硬闸是服务端计数,到了就停;同日已满则零请求退出                                   |
+| `LIMIT`           | 30                                                        | 本次运行**新下**的场数上限;真正的硬闸是服务端计数,到了就停;同日已满则零请求退出                                   |
 | `OUT_DIR`         | `$GLADLOG_EVAL_HOME/downloads/<bracket>-<rating>-<spec>/` | 落盘目录                                                                                                          |
 | `MAX_PAGES`       | 40                                                        | 翻页兜底(spec 的 recorder 细筛在客户端,冷门条件别无限翻——翻页读费记在志愿者项目账上)                              |
 
@@ -65,9 +65,10 @@ SPEC=Shaman_Restoration MIN_RATING=2100 npx tsx scripts/fetchPvpLogs.ts
 
 ## 每日定额拉取(用户裁定 2026-09-15,launchd 已装)
 
-每天把 15 个额度用在**过滤能到的最高档 2100+、任意专精、任意上传者**上:先 **Solo Shuffle 10 盘**
-(一盘 = 6 轮 = 1 个额度,实测),再 **3v3 补满剩下的 5**(shuffle 没凑够 10 时 3v3 多拿;
-09-15 当天从 5/10 改成 10/5)。
+每天把 30 个额度用在**过滤能到的最高档 2100+、任意专精、任意上传者**上:先 **Solo Shuffle 20 盘**
+(一盘 = 6 轮 = 1 个额度,实测),再 **3v3 补满剩下的 10**(shuffle 没凑够 20 时 3v3 多拿;
+09-15 当天从 5/10 改成 10/5;10-20 上游额度 15→30,10-24 用户裁定配比同步翻倍成 20/10 ——
+10-20..24 五天因为 `DAILY_QUOTA` 还写 15、单排份额还是 10,多出的 15 全给了 3v3,实际是 10/20)。
 专精抓取时不筛,事后按 manifest 的 `players[].spec` 筛(用户不用 wowarenalogs,
 `SPEC_ROLE` 的 recorder 语义与用户本人无关)。
 
@@ -145,7 +146,7 @@ feed 语义(2026-07-29 实证,未变):
 
 ## 归档到 Google Drive(rclone,2026-07-30)
 
-feed 只留 ~7 天、每天只能拿 15 场,下载物要长期留存 → 同步进 Google Drive
+feed 只留 ~7 天、每天只能拿 30 场,下载物要长期留存 → 同步进 Google Drive
 (`<remote>:gladlog-pvp-logs/<slug>/`,与本地 downloads 目录镜像,两边互为备份)。
 
 一次性配置:`brew install rclone`(win:`winget install Rclone.Rclone`)→

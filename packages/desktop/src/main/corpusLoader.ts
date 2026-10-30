@@ -1,5 +1,5 @@
-import { existsSync, readFileSync } from "fs";
 import type { ReferenceCorpus } from "@gladlog/analysis";
+import { existsSync, readFileSync } from "fs";
 
 /** Coarse shape validation: only JSON with a `cells` array and a
  *  `wowPatchVersion` string is accepted as a usable corpus. */

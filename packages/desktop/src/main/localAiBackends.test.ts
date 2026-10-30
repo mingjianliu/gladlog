@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process";
 import { EventEmitter } from "node:events";
 import {
   existsSync,
@@ -9,28 +10,29 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { spawn } from "node:child_process";
+
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { type AnthropicLike,resolveAiClient } from "./ai";
+import type { CliVersionProbe } from "./cliDetect";
 import {
   AGY_PROMPT_SPILL_DIR,
   agyClientFactory,
   assertNoWindowsCmdMetacharacters,
   CLAUDE_CLI_ISOLATION_ARGS,
   claudeCliClientFactory,
-  codexClientFactory,
   CODEBUDDY_SAFETY_ARGS,
   codebuddyClientFactory,
+  codexClientFactory,
   continueCliChat,
   defaultRun,
   ensureSpillDirSwept,
   killAllCliChildren,
   parseCodebuddyJsonEnvelope,
+  type Runner,
   stripAgyHeader,
   withVersionHint,
-  type Runner,
 } from "./localAiBackends";
-import type { CliVersionProbe } from "./cliDetect";
-import { resolveAiClient, type AnthropicLike } from "./ai";
 
 // cliDetect.ts (imported transitively by localAiBackends.ts) also pulls
 // `execFile` from this module, so this must partially mock it — only

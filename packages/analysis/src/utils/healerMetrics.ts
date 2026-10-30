@@ -4,15 +4,20 @@ import {
   IShuffleRound,
   LogEvent,
 } from "@gladlog/parser-compat";
-import { ccSpellIds } from "../data/spellTags";
-import { analyzePlayerCCAndTrinket } from "./ccTrinketAnalysis";
+
+import { isControlCast } from "./castMissRows";
+import {
+  analyzePlayerCCAndTrinket,
+  CC_AVOIDANCE_FACT_ONLY_IDS,
+  type IPlayerCCTrinketSummary,
+} from "./ccTrinketAnalysis";
 import {
   annotateDefensiveTimings,
   detectOverlappedDefensives,
   extractMajorCooldowns,
   IMajorCooldownInfo,
-  MAJOR_DEFENSIVE_IDS,
   isPassiveProcCast,
+  MAJOR_DEFENSIVE_IDS,
 } from "./cooldowns";
 import { reconstructEnemyCDTimeline } from "./enemyCDs";
 import { detectHealingGaps } from "./healingGaps";
@@ -69,6 +74,23 @@ export interface IHealerMetrics {
   ccLandedCount: number;
 }
 
+/**
+ * The controls the player avoided, for `ccAvoidanceRate`: the `[CC
+ * AVOIDED?]` instances whose avoidance is the player's own doing. An aura in
+ * `CC_AVOIDANCE_FACT_ONLY_IDS` (the enemy's own Freezing Trap / Imprison /
+ * Time Stop on them, a talent's proc) names an IMMUNE row's cause on the
+ * line but is no avoidance of the player's — b9b3950 said "no avoided count
+ * moves" for these, while the rate still counted them (weekly review
+ * 2026-10-24).
+ */
+export function playerAvoidedCcCount(
+  summary: Pick<IPlayerCCTrinketSummary, "ccAvoidedInstances">,
+): number {
+  return summary.ccAvoidedInstances.filter(
+    (a) => !CC_AVOIDANCE_FACT_ONLY_IDS.has(a.avoidanceSpellId),
+  ).length;
+}
+
 export function computeHealerMetrics(
   combat: IArenaMatch | IShuffleRound,
   playerName: string,
@@ -106,7 +128,7 @@ export function computeHealerMetrics(
   const ccCasts = healerUnit.spellCastEvents.filter(
     (e: any) =>
       e.logLine.event === "SPELL_CAST_SUCCESS" &&
-      ccSpellIds.has(String(e.spellId)),
+      isControlCast(String(e.spellId)),
   );
   const durationSeconds = (combat.endTime - combat.startTime) / 1000;
   const ccDensity =
@@ -175,7 +197,7 @@ export function computeHealerMetrics(
   const interuptsOnMe = ccTrinketSummary.interruptInstances.length;
   const effectiveCastRatio = successCasts / (successCasts + interuptsOnMe + 1);
 
-  const avoidedCount = ccTrinketSummary.ccAvoidedInstances.length;
+  const avoidedCount = playerAvoidedCcCount(ccTrinketSummary);
   const successfulCCCount = ccTrinketSummary.ccInstances.length;
   const ccAvoidanceRate = avoidedCount / (avoidedCount + successfulCCCount + 1);
 

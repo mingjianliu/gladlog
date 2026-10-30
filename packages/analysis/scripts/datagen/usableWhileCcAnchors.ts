@@ -126,11 +126,11 @@ export const UWC_ANCHORS: UwcAnchor[] = [
   {
     spellId: "642",
     name: "圣盾术",
-    stunned: false,
+    stunned: true,
     feared: false,
     confused: false,
     rationale:
-      "**2026-09-04 用户改裁:三维度全部 false。**命名位(SimC/TrinityCore:163 Allow While Stunned、378 by Stun Mechanic、177 Fleeing、178 Confused)一个都没有;它带的「No Client Fail While Stunned, Fleeing, Confused」(244)按 TrinityCore 命名只是抑制客户端报错文案,不授予任何可用性;1028 场语料晕中施放 1 次。08-14 的 true 锚点正是把位搜索逼向 10#13(遭遇战结束重置冷却)的原因。以下为 08-14 原记录:已裁:手写表収录机制上正确。用户 2026-08-14 澄清此前「圣盾晕中开不出」是误记(语音记录里「生存树」实指圣盾术,当时记录有误);用户核实后确认圣盾术机制上任何被控状态下都能按下,三维度改判 true。wowhead flags 栏的「No Client Fail While Stunned, Fleeing, Confused」与此吻合,应视为真正的被控可用位而非仅抑制报错文案(见文件头「重要先验」)。教练规范补充:5 分钟大招不该拿来当常规挡控手段,代价太大,仅在别无选择时使用——该规范判断归 Task 6 签字册,不影响本条的机制判定。",
+      "**2026-10-06 用户改裁 U-T1:stunned=true。**09-04 的改裁只查了命名位,漏了第二条官方路线:Attributes_1 第 15 位「Immunity Purges Effect」(47)+ 自带的学派免疫(aura 39,0x7f)——施法者对眩晕免疫时可以顶着眩晕施放,施放即清掉眩晕。语料(605 个 S2 文件,fix-FU/stunCastProbe.py):417 次施放里 99 次的眩晕在施放前 ≤3 ms 被移除(09-04 数的是「严格在眩晕内」,所以读成 1 次)。feared / confused 未重裁,维持 false。以下为此前记录:**2026-09-04 用户改裁:三维度全部 false。**命名位(SimC/TrinityCore:163 Allow While Stunned、378 by Stun Mechanic、177 Fleeing、178 Confused)一个都没有;它带的「No Client Fail While Stunned, Fleeing, Confused」(244)按 TrinityCore 命名只是抑制客户端报错文案,不授予任何可用性;1028 场语料晕中施放 1 次。08-14 的 true 锚点正是把位搜索逼向 10#13(遭遇战结束重置冷却)的原因。以下为 08-14 原记录:已裁:手写表収录机制上正确。用户 2026-08-14 澄清此前「圣盾晕中开不出」是误记(语音记录里「生存树」实指圣盾术,当时记录有误);用户核实后确认圣盾术机制上任何被控状态下都能按下,三维度改判 true。wowhead flags 栏的「No Client Fail While Stunned, Fleeing, Confused」与此吻合,应视为真正的被控可用位而非仅抑制报错文案(见文件头「重要先验」)。教练规范补充:5 分钟大招不该拿来当常规挡控手段,代价太大,仅在别无选择时使用——该规范判断归 Task 6 签字册,不影响本条的机制判定。",
     source:
       "手写表(cooldowns.ts:131,已裁机制収录正确)+ 用户 2026-08-14 澄清(此前「晕中开不出」为误记,真实意见是代价规范)+ wowhead.com/spell=642 Flags 栏(2026-08-14 抓取)",
   },
@@ -148,11 +148,11 @@ export const UWC_ANCHORS: UwcAnchor[] = [
   {
     spellId: "48792",
     name: "冰封之韧",
-    stunned: false,
+    stunned: true,
     feared: null,
     confused: null,
     rationale:
-      "**2026-09-04 用户改裁:stunned=false**(命名位 163/378 全无;1028 场语料晕中施放 0 次)。以下为 08-14 原记录:用户 2026-08-14 裁决「昏迷的时候可以用,其他时候好像不行」—— stunned 按裁决改判 true;feared/confused 用户自己用「好像」表述,置信度不足,不作锚定(宁 null 勿猜)。",
+      "**2026-10-06 用户改裁 U-T1:stunned=true。**官方路线:Attributes_1 第 15 位「Immunity Purges Effect」(47)+ 自带的眩晕机制免疫(aura 77,机制 12)。语料(605 个 S2 文件):247 次施放里 108 次清掉了施法者身上的眩晕(09-04 数「严格在眩晕内」读成 0 次)。以下为此前记录:**2026-09-04 用户改裁:stunned=false**(命名位 163/378 全无;1028 场语料晕中施放 0 次)。以下为 08-14 原记录:用户 2026-08-14 裁决「昏迷的时候可以用,其他时候好像不行」—— stunned 按裁决改判 true;feared/confused 用户自己用「好像」表述,置信度不足,不作锚定(宁 null 勿猜)。",
     source: "用户 2026-08-14 裁决(昏迷可用,其余不确定)+ cooldowns.ts:133",
   },
 
@@ -221,11 +221,11 @@ export const UWC_ANCHORS: UwcAnchor[] = [
   {
     spellId: "45438",
     name: "寒冰屏障",
-    stunned: false,
+    stunned: true,
     feared: false,
     confused: false,
     rationale:
-      "**2026-09-04 用户改裁:三维度全部 false**(同 642:命名位全无,只有 244 报错抑制位;1028 场语料晕中施放 0 次)。以下为 08-14 原记录:用户 2026-08-14 裁决「都可以用」,从草案原判的反例翻转为正例(原判断依据的「晕中开不出」是一般 PvP 印象,被用户一手证词推翻)。寒冰屏障与圣盾术 flags 栏一模一样,都只有「No Client Fail While Stunned, Fleeing, Confused」;两条独立用户证词(642+45438)汇合到同一旗标上,说明它很可能就是真正的被控可用位,而不是仅抑制报错文案的无关位 —— 这是 Task 3 位搜索的重要先验(见文件头)。教练规范补充:代价太大,仅在别无选择时使用,不推荐作为常规挡控手段(用户 2026-08-14,归 Task 6 签字册)。",
+      "**2026-10-06 用户改裁 U-T1:stunned=true。**同 642:Attributes_1 第 15 位「Immunity Purges Effect」(47)+ 学派免疫 0x7f。语料(605 个 S2 文件):343 次施放里 42 次清掉了施法者身上的眩晕。feared / confused 未重裁,维持 false。以下为此前记录:**2026-09-04 用户改裁:三维度全部 false**(同 642:命名位全无,只有 244 报错抑制位;1028 场语料晕中施放 0 次)。以下为 08-14 原记录:用户 2026-08-14 裁决「都可以用」,从草案原判的反例翻转为正例(原判断依据的「晕中开不出」是一般 PvP 印象,被用户一手证词推翻)。寒冰屏障与圣盾术 flags 栏一模一样,都只有「No Client Fail While Stunned, Fleeing, Confused」;两条独立用户证词(642+45438)汇合到同一旗标上,说明它很可能就是真正的被控可用位,而不是仅抑制报错文案的无关位 —— 这是 Task 3 位搜索的重要先验(见文件头)。教练规范补充:代价太大,仅在别无选择时使用,不推荐作为常规挡控手段(用户 2026-08-14,归 Task 6 签字册)。",
     source:
       "用户 2026-08-14 裁决(都可以用;教练规范另记归 Task 6)+ wowhead.com/spell=45438 Flags 栏(与 642 同款「No Client Fail」旗标)",
   },
@@ -234,11 +234,11 @@ export const UWC_ANCHORS: UwcAnchor[] = [
   {
     spellId: "1022",
     name: "保护祝福",
-    stunned: null,
+    stunned: true,
     feared: false,
     confused: false,
     rationale:
-      "用户 2026-08-14「好像物理昏迷的时候可以给自己」—— 用户自己用「好像」表述,置信度不足,stunned 由草案的 false 改判 null(不再当作反例);feared/confused 用户未提出异议,维持 false(wowhead flags 栏也未见任何相关旗标)。" +
+      "**2026-10-06 用户裁 U-T1:stunned=true(仅限给自己、且眩晕是物理学派)。**官方路线:Attributes_1 第 15 位「Immunity Purges Effect」(47)+ 学派免疫 0x1(物理)。语料(605 个 S2 文件):给自己的 56 次里 13 次清掉了自己身上的眩晕,13 次全是物理学派的眩晕(偷袭、肾击、风暴之锤…);给别人的 179 次里 0 次。与用户 08-14 的原话「好像物理昏迷的时候可以给自己」一致。条件(自己、物理)由 STUN_PURGE_GENERATED 的 schoolMask 与调用方表达,本锚点只钉「在这条路线上」。以下为此前记录:用户 2026-08-14「好像物理昏迷的时候可以给自己」—— 用户自己用「好像」表述,置信度不足,stunned 由草案的 false 改判 null(不再当作反例);feared/confused 用户未提出异议,维持 false(wowhead flags 栏也未见任何相关旗标)。" +
       "**2026-08-15 语料矛盾在案(不改值)**:挂账清理 Task E 全库语料观测线(disorient 类,1028/1028 场)在 disorient 窗口内观测到 7 次保护祝福施放成功," +
       "其中 1 条(gapMs=0,cast 与 aura APPLIED 落在完全相同时间戳)是教科书级排队伪影已剔除、不计入证据,**6 条中窗清白样本**(毫秒差 1159-5219ms,分属多场/多玩家," +
       "100% Player 施放者,分布集中在窗口中段,不贴边)——用户 2026-08-15 复签「保护不能在恐惧里用」,**维持 feared=false**,语料矛盾记录在案不改判。" +

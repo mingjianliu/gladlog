@@ -29,46 +29,70 @@
  */
 import { type ICombatUnit } from "@gladlog/parser-compat";
 
+import { castAndEffectIds, isCastOrEffect } from "../data/castEffectAuras";
+import { CURATED_ABILITY_FACTS } from "../data/curatedAbilityFacts";
 import { HEALING_VERDICTS } from "../data/healingVerdicts";
 import { getEnglishSpellName } from "../data/spellEffectData";
-import { buffFullDurationForCaster } from "../utils/buffDuration";
-import spellIdLists from "../data/spellIdLists";
+import spellIdLists, { ENEMY_REDIRECT_SAVE_IDS } from "../data/spellIdLists";
 import {
   ccSpellIds,
   rootSpellIds,
   spells as spellMeta,
 } from "../data/spellTags";
+import { allyCopyRecipient } from "../utils/allyCopyWall";
+import { supersededAuraBreaks } from "../utils/auraIntervals";
+import { buffFullDurationForCaster } from "../utils/buffDuration";
+import {
+  controlTargetHitPressured,
+  damageTakenBetween,
+  hitByAttackers,
+} from "../utils/burstHit";
+import {
+  cannotCastIntervalsForSpells,
+  petCastersOf,
+} from "../utils/cannotCastIntervals";
+import { COPY_CAST_IDS } from "../utils/castPress";
 import {
   canHelpAnotherUnit,
+  cdHelpsRecipient,
+  cdIsProcOnly,
   cdReadyInTimeAt,
   extractMajorCooldowns,
   gridHpPct,
+  hpTroughInWindow,
   type IMajorCooldownInfo,
   isDeadAtRenderSecond,
-  cdIsProcOnly,
-  SELF_CAST_NOOP_EXTERNAL_IDS,
+  RESPONSE_ONLY_DEFENSIVE_IDS,
   specToString,
   TEAM_HEAL_CD_IDS,
 } from "../utils/cooldowns";
 import { externalReachYards } from "../utils/deathOutcomeAnalysis";
+import { drEffectAurasOfCast } from "../utils/drAnalysis";
 import {
   type IAlignedBurstWindow,
   type IEnemyCDTimeline,
+  observedEffectEndSeconds,
   reconstructEnemyCDTimeline,
   SOLO_WINDOW_MIN_WEIGHT,
 } from "../utils/enemyCDs";
+import { LANDED_PAIR_MS } from "../utils/kickAudit";
 import { getUnitPositionAtTime } from "../utils/losAnalysis";
 import { LOS_SWEEP_GAP_MS } from "../utils/positionSampling";
 import { canReachTargetAt } from "../utils/rootReachability";
-import { buildCannotCastIntervals } from "../utils/cannotCastIntervals";
 import { isOffensiveSpell } from "../utils/spellDanger";
+import { isDeadAt } from "../utils/unitDeath";
 import { buildFilteredAuraIntervals } from "../utils/utils";
 import {
   CRISIS_HP_PCT_RENDERED,
+  CRISIS_PROTECTIVE_ANSWER_IDS,
   KITE_GAIN_YARDS,
   kiteAttribution,
   kitedAway,
 } from "./crisisDecisionPoints";
+
+// moved to utils/burstHit.ts (B5, 2026-10-24); the burst engine's callers
+// keep importing it from here
+export { controlTargetHitPressured };
 
 /** How long after the window start any friendly may answer and still count
  * (GH #60's agreed shape: "response = within 8 s of window start, by ANY
@@ -137,10 +161,11 @@ export const BURST_LAPSE_DMG_PCT_PER_S = 0.03;
  * canonical table `spellDanger.ts`'s `OFFENSIVE_CD_SPELL_IDS` — the union of
  * the two former tables minus the 9 corpus-dead classMetadata ids (see
  * `OFFENSIVE_CD_DEAD_IDS` for the names and the deadness evidence), 60 ids,
- * registered in `curatedIdRegistry`. The forward gap is closed: the 6 live
- * ids that used to sit only in the classMetadata table (Empower Rune Weapon
- * 47568, Ascendance 114050, Invoke Xuen 123904, Metamorphosis 191427,
- * Bladestorm 227847, Summon Demonic Tyrant 265187) can now open a window,
+ * registered in `curatedIdRegistry`. The forward gap is closed: the live
+ * ids that used to sit only in the classMetadata table (Ascendance 114050,
+ * Invoke Xuen 123904, Metamorphosis 191427, Bladestorm 227847, Summon
+ * Demonic Tyrant 265187; Empower Rune Weapon 47568 left the table on
+ * 2026-10-01 — a rotation button, not a cooldown) can now open a window,
  * and `reconstructEnemyCDTimeline` + `threatActiveAt` +
  * `signalSkillGradientScan` all key on the same set. The
  * `docs/predicate-index.md` "Not yet unified" entry this used to point at is
@@ -226,7 +251,9 @@ export interface BurstWindowResponses {
   healCd: boolean;
   /** a friendly aimed hard CC / a root / an interrupt AT one of the burst's
    * own casters (dest = caster), or a friendly's hard CC / root LANDED on one
-   * of them from an untargeted or ground cast (`controlLandedResponses`) */
+   * of them from an untargeted or ground cast (`controlLandedResponses`) —
+   * and that caster, or its pets, was hitting the pressured friendly inside
+   * the window (`controlTargetHitPressured`, FT-T12 D3) */
   control: boolean;
   /** the most-pressured friendly opened `KITE_GAIN_YARDS` on the nearest
    * burst caster across the response window */
@@ -256,14 +283,205 @@ export interface BurstResponseCast {
    * reliability round 3 4446 / 7d1f: from the floored window second it read
    * "Chastise 0.6s before" for a 1.55 s gap); may be negative (a pre-wall) */
   latencySec: number;
-  /** the cast's target unit id (externals: who received it) */
+  /** the cast's target unit id (externals: who received it; an aimed
+   * control: who it was aimed at). On a LANDED control (a ground / untargeted
+   * cast, `controlLandedResponses`) it is the unit the aura landed on — the
+   * cast has no target of its own (FT-T12 D3). */
   destId?: string;
   /** the caster's unit id */
   casterId?: string;
-  /** whole second the effect ends (cast + the caster's full buff duration),
-   * when the spell has one — an answer that expired before the trough did
-   * not answer it (round 3 6954) */
+  /** whole second the effect ends — where the log shows it ended
+   * (`observedEffectEndSeconds`, `burstCastSpan`'s reading), else cast + the
+   * caster's full buff duration — when the spell has one: an answer that
+   * expired before the trough did not answer it (round 3 6954; work order
+   * 2026-10-15 #2: 141470d0's Greater Invisibility, removed 0.28 s after it
+   * went up, read as covering 4.5 s) */
   effectEndSec?: number;
+  /** An aimed control (cc / root, not an interrupt) cast BEFORE the lead
+   * cast: whether its own aura was still on the target at the lead cast's
+   * ms (triage sync-burst F-B4: 95127ab4's Paralysis was trinketed 0.5 s
+   * before the Zenith it was credited against). Credit-line only —
+   * `responded` never reads it. Absent on every other response. */
+  preOpenerStillUp?: boolean;
+  /** An aimed control (cc / root / interrupt cast AT a burst caster): did it
+   * land? A CC or root landed when its own aura — the cast's id or one of its
+   * effect auras (`castEffectAuras.ts`) — went on the target from the caster
+   * or the caster's pet; an interrupt when the caster interrupted the target
+   * (SPELL_INTERRUPT within `LANDED_PAIR_MS`) or its own silence aura went
+   * on. Triage sync-burst F-B1: Imprison with no aura, a Hammer of Justice
+   * into an immunity, a reflected Counterspell and a Wind Shear that hit no
+   * cast were credited as "answered with X". Credit-line only — `responded`
+   * never reads it (slow-defensive-response is unchanged). Absent on every
+   * other response. */
+  landed?: boolean;
+  /** The response was pressed at or after the pressured friendly's death
+   * (`isDeadAt` on its raw instant — the UNIT_DIED's own millisecond
+   * included). T12 ⑧ (i), user ruling 2026-10-10: 483f7433's Emerald
+   * Communion went out 0.251 s after the warrior it was credited for had
+   * died. Credit-line only — `responded` never reads it
+   * (slow-defensive-response is unchanged). Absent when it was not. */
+  afterPressuredDeath?: true;
+  /** A control: the enemy it was aimed at (an aimed cast) or landed on (a
+   * ground / untargeted one), and the aura applications it landed as — none
+   * for an interrupt, or a control that did not land. T12 ⑧ (i), second
+   * half: the credit line names the target and reads the control's length
+   * off the `[CC ON ENEMY]` instance of the same application. Credit-line
+   * only — `responded` never reads it. Absent on every other response. */
+  controlOn?: {
+    unitId: string;
+    unitName: string;
+    auras: ControlLandingAura[];
+  };
+}
+
+
+/** One aura application a control answer put on its target: the aura's own
+ * id and the instant it went on — the key the `[CC ON ENEMY]` instance of the
+ * same application carries (`ICCInstance.spellId` / `atSeconds`). */
+export interface ControlLandingAura {
+  spellId: string;
+  atMs: number;
+}
+
+/** How far before an aimed control's SPELL_CAST_SUCCESS its own aura / its
+ * SPELL_INTERRUPT may be logged and still be that cast's landing (the log
+ * can order the two either way). The value F-B1 shipped with, named so the
+ * gate that re-reads a landing's second derives its bound from it. */
+export const AIMED_CONTROL_LANDING_LEAD_MS = 100;
+
+/**
+ * The aura applications by which the aimed control `castSpellId`, cast by
+ * `casterId` at `castMs`, landed on `dest`: its own id or one of its effect
+ * auras (`castEffectAuras.ts`), from the caster or the caster's pet, inside
+ * the landing window. `aimedControlLanded`'s aura half — one scan, so "it
+ * landed" and "this is the aura it landed as" cannot disagree.
+ */
+export function aimedControlLandingAuras(
+  dest:
+    | {
+        auraEvents?: ReadonlyArray<{
+          timestamp: number;
+          spellId?: string;
+          srcUnitId: string;
+          logLine: { event: string };
+        }>;
+      }
+    | undefined,
+  casterId: string,
+  castSpellId: string,
+  castMs: number,
+  friendlyPlayerOf: (srcUnitId: string) => string | undefined,
+): ControlLandingAura[] {
+  const own = castAndEffectIds(castSpellId);
+  const out: ControlLandingAura[] = [];
+  for (const a of dest?.auraEvents ?? [])
+    if (
+      (a.logLine.event === "SPELL_AURA_APPLIED" ||
+        a.logLine.event === "SPELL_AURA_REFRESH") &&
+      a.spellId !== undefined &&
+      own.has(a.spellId) &&
+      (a.srcUnitId === casterId ||
+        friendlyPlayerOf(a.srcUnitId) === casterId) &&
+      a.timestamp >= castMs - AIMED_CONTROL_LANDING_LEAD_MS &&
+      a.timestamp <= castMs + GROUND_CONTROL_FUSE_MS
+    )
+      out.push({ spellId: a.spellId, atMs: a.timestamp });
+  return out;
+}
+
+/**
+ * F-B1: did the aimed control `castSpellId` cast by `casterId` at `castMs`
+ * land on `dest`? See `BurstResponseCast.landed`.
+ */
+export function aimedControlLanded(
+  dest:
+    | {
+        auraEvents?: ReadonlyArray<{
+          timestamp: number;
+          spellId?: string;
+          srcUnitId: string;
+          logLine: { event: string };
+        }>;
+        actionIn?: ReadonlyArray<{
+          timestamp: number;
+          srcUnitId: string;
+          logLine: { event: string };
+        }>;
+      }
+    | undefined,
+  casterId: string,
+  castSpellId: string,
+  castMs: number,
+  friendlyPlayerOf: (srcUnitId: string) => string | undefined,
+  isInterrupt: boolean,
+): boolean {
+  if (!dest) return true; // unknown target: never withhold credit
+  const fromCaster = (src: string) =>
+    src === casterId || friendlyPlayerOf(src) === casterId;
+  const auraLanded =
+    aimedControlLandingAuras(
+      dest,
+      casterId,
+      castSpellId,
+      castMs,
+      friendlyPlayerOf,
+    ).length > 0;
+  if (auraLanded) return true;
+  if (!isInterrupt) return false;
+  return (dest.actionIn ?? []).some(
+    (x) =>
+      x.logLine.event === "SPELL_INTERRUPT" &&
+      fromCaster(x.srcUnitId) &&
+      x.timestamp >= castMs - AIMED_CONTROL_LANDING_LEAD_MS &&
+      x.timestamp <= castMs + LANDED_PAIR_MS,
+  );
+}
+
+/**
+ * F-B4: is the control `casterId` aimed at `dest` (cast `castSpellId` at
+ * `castMs`) still applied at `atMs`? Keyed on the cast id and its effect aura
+ * (its DR-bearing effect auras in `castEffectAuras.ts`, the one cast→effect
+ * table), sourced from the caster.
+ */
+export function aimedControlUpAt(
+  dest:
+    | {
+        auraEvents?: ReadonlyArray<{
+          timestamp: number;
+          spellId?: string;
+          srcUnitId: string;
+          logLine: { event: string };
+        }>;
+      }
+    | undefined,
+  casterId: string,
+  castSpellId: string,
+  castMs: number,
+  atMs: number,
+): boolean {
+  const ids = new Set([castSpellId, ...drEffectAurasOfCast(castSpellId)]);
+  let up = false;
+  // a BROKEN line its aura's own REMOVED follows is not the end (FT-T08)
+  const notTheEnd = supersededAuraBreaks(dest?.auraEvents ?? []);
+  for (const a of dest?.auraEvents ?? []) {
+    if (a.timestamp < castMs || a.timestamp > atMs) continue;
+    if (notTheEnd.has(a)) continue;
+    if (a.srcUnitId !== casterId || !ids.has(a.spellId ?? "")) continue;
+    const ev = a.logLine.event;
+    if (
+      ev === "SPELL_AURA_APPLIED" ||
+      ev === "SPELL_AURA_REFRESH" ||
+      ev === "SPELL_AURA_APPLIED_DOSE"
+    )
+      up = true;
+    else if (
+      ev === "SPELL_AURA_REMOVED" ||
+      ev === "SPELL_AURA_BROKEN" ||
+      ev === "SPELL_AURA_BROKEN_SPELL"
+    )
+      up = false;
+  }
+  return up;
 }
 
 /**
@@ -304,6 +522,21 @@ export interface BurstFriendlyOutcome {
   /** the whole second `minHpPct` was read at */
   minHpSec: number | null;
   /**
+   * The TRUE minimum over the same seconds (`hpTroughInWindow`: every sample
+   * of `[tSec, outcomeEndSec]`'s displayed seconds, not only the whole-second
+   * ticks) and the second it happened at — FT-T03, user ruling 2026-10-10
+   * (D7). This pair is what a LINE prints (`[BURST ANSWERED] … bottomed at N%
+   * at m:ss`); it is never above `minHpPct`.
+   *
+   * `minHpPct` / `minHpSec` stay the grid readings and stay the ones every
+   * DECISION asks — who `pressured` is, `triaged`, the `[BURST ANSWERED]`
+   * door and ranking, "the answer was still up at the bottom", the corpus
+   * reference tables — so the ruling moves a printed number and no window.
+   * Absent on a hand-built point (tests): the grid pair stands in.
+   */
+  troughHpPct?: number | null;
+  troughHpSec?: number | null;
+  /**
    * `gridHpPct` at the window START — the first whole second in
    * `[tSec, outcomeEndSec]` that has a grid sample at all (normally `tSec`
    * itself; the fallback exists because `gridHpPct` returns null when no
@@ -330,6 +563,11 @@ export interface BurstWindowDecisionPoint {
   tSec: number;
   /** last whole second of the bounded window */
   endSec: number;
+  /** last whole second of the OUTCOME horizon — `endSec`, never shorter than
+   * the response window (`tSec + BURST_RESPONSE_WINDOW_SEC`): the span the
+   * pressured trough, `anyFriendlyDeath` and the reference table read.
+   * WO3 #18 (r1008-141): slow-defensive-response prints it, `windowEndT`. */
+  outcomeEndSec: number;
   /** `endSec - tSec` (rendered seconds, never raw) */
   durationSec: number;
   /** the CD that OPENED the window (earliest cast; a same-second tie goes to
@@ -468,6 +706,33 @@ export const BURST_HEAL_CD_IDS = new Set<string>([
     .map(([id]) => id),
 ]);
 
+/**
+ * F16 retest (2026-10-21, idx 51): presses that answer a crisis on the
+ * crisis side but sat in none of the three lists above, so
+ * slow-defensive-response said "no friendly answered within 8 s" over a
+ * Bear Form, a Frenzied Regeneration and a Roar of Sacrifice on the dying
+ * druid (e49b7c3b 3:24–3:32). The same signed sets the crisis readers take
+ * as answers — never as accusations (the accusation side, `feasible`, keeps
+ * the three lists):
+ *  - `CRISIS_PROTECTIVE_ANSWER_IDS` (user rulings 2026-09-14),
+ *  - the response-only saves: `RESPONSE_ONLY_DEFENSIVE_IDS` and the healer
+ *    roster's `responseOnly` facts (Barkskin, Frenzied Regeneration —
+ *    ruling 2026-09-25),
+ *  - the redirects `ENEMY_REDIRECT_SAVE_IDS` (rulings A20 + U3; fact1215
+ *    R11 counted them for cd-hoarded).
+ * A press on another friendly is an `external`, an untargeted / self press
+ * a `wall` — `answersPressured` then holds each to the caster or the
+ * destination it reached.
+ */
+export const BURST_EXTRA_ANSWER_IDS: ReadonlySet<string> = new Set([
+  ...CRISIS_PROTECTIVE_ANSWER_IDS,
+  ...RESPONSE_ONLY_DEFENSIVE_IDS,
+  ...CURATED_ABILITY_FACTS.filter(
+    (f) => f.kind === "save_role" && f.responseOnly,
+  ).map((f) => f.id),
+  ...ENEMY_REDIRECT_SAVE_IDS,
+]);
+
 const INTERRUPT_IDS = new Set<string>(
   Object.entries(spellMeta)
     .filter(([, m]) => m.type === "interrupts")
@@ -510,8 +775,39 @@ const isNoDest = (dest: string | undefined): boolean =>
  * totem). An aura that a control cast aimed at a caster could have produced
  * is skipped: the cast-side test already counts it.
  */
+/** One landed control from `controlLandedResponses`: who answered, the
+ * aura, when it counts, and — for the pre-opener lifetime check (codex
+ * 35-CD-13f) — the aura's holder, its own source unit and its time. */
+export interface LandedControlResponse {
+  unitId: string;
+  spellId: string;
+  tMs: number;
+  holderId?: string;
+  auraSrcId?: string;
+  auraAtMs?: number;
+}
+
+/**
+ * F-B4's pre-opener check for a landed control (codex 35-CD-13f / 13g): only
+ * an aura APPLIED before the lead cast can have expired before it — was it
+ * still on its holder at the lead cast? Undefined (no check) for an aura
+ * that landed at or after the lead cast, whatever its cast time: a ground
+ * control cast before the opener whose stun landed inside the burst (a
+ * Capacitor Totem's fuse) answers it.
+ */
+export function landedPreOpenerStillUp(
+  r: LandedControlResponse,
+  holder: Parameters<typeof aimedControlUpAt>[0],
+  leadMs: number,
+): boolean | undefined {
+  if (r.auraAtMs === undefined || r.auraAtMs >= leadMs || !r.auraSrcId)
+    return undefined;
+  return aimedControlUpAt(holder, r.auraSrcId, r.spellId, r.auraAtMs, leadMs);
+}
+
 export function controlLandedResponses(
   casters: ReadonlyArray<{
+    id?: string;
     auraEvents?: ReadonlyArray<{
       timestamp: number;
       spellId?: string;
@@ -529,8 +825,13 @@ export function controlLandedResponses(
   }>,
   w0: number,
   w1: number,
-): Array<{ unitId: string; spellId: string; tMs: number }> {
-  const out: Array<{ unitId: string; spellId: string; tMs: number }> = [];
+  /** a summon's own SPELL_CAST_SUCCESS rows (its id, its instant) — what
+   * times a control a `Pet-` unit landed when no press of its owner made it */
+  summonCastsOf: (
+    summonId: string,
+  ) => ReadonlyArray<{ spellId: string; tMs: number }> = () => [],
+): LandedControlResponse[] {
+  const out: LandedControlResponse[] = [];
   for (const caster of casters)
     for (const a of caster.auraEvents ?? []) {
       if (a.logLine.event !== "SPELL_AURA_APPLIED") continue;
@@ -540,31 +841,97 @@ export function controlLandedResponses(
         continue;
       const unitId = friendlyPlayerOf(a.srcUnitId);
       if (!unitId) continue;
-      let cast: (typeof friendlyCasts)[number] | undefined;
+      // F-B8 (triage sync-burst): the cast that produced this aura times it
+      // — its own spell, or its cast id through the cast→effect table (Ring of
+      // Frost 113724 → 82691, Lasso 305483 → 305485), or the same English
+      // name — before a control cast aimed at the aura's target, before any
+      // untargeted cast. 7d1f14af timed a Lasso root from an unrelated
+      // untargeted press 1.9 s earlier while the aimed cast came 40 ms
+      // before the aura. Codex review: a non-control cast aimed at the target
+      // (a Frostbolt between Ring of Frost and its aura) never times it.
+      const sidName = getEnglishSpellName(sid, "");
+      const producesAura = (castId: string): boolean =>
+        castId === sid ||
+        isCastOrEffect(castId, sid) ||
+        (sidName !== "" && getEnglishSpellName(castId, "") === sidName);
+      // fact2 (2026-10-20): an untargeted press that makes a control of its
+      // own (its cast→effect family holds a control aura — Freezing Trap
+      // 187650 → 3355) is that control's cause, never this one's
+      // (e49b7c3b 0:12: Binding Shot, armed 5.1 s before its stun, was
+      // timed from a Freezing Trap thrown 1.2 s after the opener — the aura
+      // time is the fallback the fuse comment above names)
+      const producesAControl = (castId: string): boolean =>
+        [...castAndEffectIds(castId)].some(
+          (id) => ccSpellIds.has(id) || rootSpellIds.has(id),
+        );
+      // fact6 D11 (e7608d97 1:10): a PET (`Pet-` GUID) acts on its own —
+      // its control is timed by a press of the owner that made it (a command,
+      // Intimidation), else by the pet's own cast row, else by the aura; never
+      // by another press of the owner (a Gladiator's Medallion 1.9 s before
+      // the Abomination's Monstrous Blow read "1.0s before it opened", the
+      // stun landed 0.9 s after). A totem or guardian keeps the owner's
+      // untargeted press (its summon or its relocation is that press).
+      const fromPet = a.srcUnitId !== unitId && a.srcUnitId.startsWith("Pet-");
+      let family: (typeof friendlyCasts)[number] | undefined;
+      let aimedControl: (typeof friendlyCasts)[number] | undefined;
+      let untargeted: (typeof friendlyCasts)[number] | undefined;
       for (const c of friendlyCasts) {
         if (c.tMs > a.timestamp) break;
-        if (
-          c.unitId === unitId &&
-          c.tMs >= a.timestamp - GROUND_CONTROL_FUSE_MS &&
-          (isNoDest(c.dest) || c.spellId === sid)
+        if (c.unitId !== unitId || c.tMs < a.timestamp - GROUND_CONTROL_FUSE_MS)
+          continue;
+        if (producesAura(c.spellId)) family = c;
+        else if (fromPet) continue;
+        else if (
+          caster.id !== undefined &&
+          c.dest === caster.id &&
+          (CONTROL_IDS.has(c.spellId) ||
+            ccSpellIds.has(c.spellId) ||
+            rootSpellIds.has(c.spellId))
         )
-          cast = c;
+          aimedControl = c;
+        else if (isNoDest(c.dest) && !producesAControl(c.spellId))
+          untargeted = c;
       }
+      let petOwn: { tMs: number } | undefined;
+      if (fromPet && !family)
+        for (const c of summonCastsOf(a.srcUnitId))
+          if (
+            c.tMs <= a.timestamp &&
+            c.tMs >= a.timestamp - GROUND_CONTROL_FUSE_MS &&
+            producesAura(c.spellId) &&
+            (!petOwn || c.tMs > petOwn.tMs)
+          )
+            petOwn = c;
+      const cast = family ?? petOwn ?? aimedControl ?? untargeted;
       // the cast-side test already counted an aimed control from this
-      // friendly that could be this aura's cause
+      // friendly that could be this aura's cause — one that produces THIS
+      // aura and was aimed at THIS aura's holder, the only case where the
+      // cast side credits it (since F-B1 it credits an aimed control only
+      // when it landed on its target). An unrelated aimed control (a Spear
+      // Hand Strike that missed before a Leg Sweep landed, codex 35-CD-08)
+      // or one aimed at another caster (Mass Entanglement at an immune E1
+      // whose root landed on E2, codex 35-CD-13d) must not swallow it.
       const aimed = friendlyCasts.some(
         (c) =>
           c.unitId === unitId &&
           c.tMs >= a.timestamp - GROUND_CONTROL_FUSE_MS &&
           c.tMs <= a.timestamp &&
           CONTROL_IDS.has(c.spellId) &&
-          c.dest != null &&
-          casterIds.has(c.dest),
+          producesAura(c.spellId) &&
+          caster.id !== undefined &&
+          c.dest === caster.id,
       );
       if (aimed) continue;
       const tMs = cast?.tMs ?? a.timestamp;
       if (tMs < w0 || tMs > w1) continue;
-      out.push({ unitId, spellId: sid, tMs });
+      out.push({
+        unitId,
+        spellId: sid,
+        tMs,
+        ...(caster.id !== undefined ? { holderId: caster.id } : {}),
+        auraSrcId: a.srcUnitId,
+        auraAtMs: a.timestamp,
+      });
     }
   return out;
 }
@@ -578,17 +945,31 @@ export function controlLandedResponses(
  * facts separator the gates split on. One helper for the candidate and the
  * [BURST ANSWERED] line.
  */
-export function burstExtrasLabel(p: {
-  tSec: number;
-  extraCds: ReadonlyArray<{ spellName: string; castSec: number }>;
-}): string {
+export function burstExtrasLabel(
+  p: {
+    tSec: number;
+    leadCd: Pick<BurstCdRef, "casterName">;
+    extraCds: ReadonlyArray<
+      Pick<BurstCdRef, "spellName" | "castSec" | "casterName" | "casterSpec">
+    >;
+  },
+  // WO6 #2 (n48, e10c6bea): an extra another enemy pressed names that enemy —
+  // without it the rogue's Kingsbane read as the warlock's, who opened. An
+  // extra of the opener's own stays bare. Without labels it reads like the
+  // menu's `facts.caster (facts.casterSpec)`.
+  casterLabel: (c: Pick<BurstCdRef, "casterName" | "casterSpec">) => string = (
+    c,
+  ) => `${c.casterName} (${c.casterSpec})`,
+): string {
   return p.extraCds
     .filter((c) => c.castSec <= p.tSec + BURST_RESPONSE_WINDOW_SEC)
-    .map((c) =>
-      c.castSec > p.tSec
-        ? `${c.spellName} ${c.castSec - p.tSec}s later`
-        : c.spellName,
-    )
+    .map((c) => {
+      const by =
+        c.casterName !== p.leadCd.casterName ? ` by ${casterLabel(c)}` : "";
+      return c.castSec > p.tSec
+        ? `${c.spellName}${by} ${c.castSec - p.tSec}s later`
+        : `${c.spellName}${by}`;
+    })
     .join("; ");
 }
 
@@ -840,19 +1221,49 @@ export function burstWindowDecisionPoints(
     spellId: string;
     dest: string | undefined;
     tMs: number;
+    /** a self wall the log shows on the teammate `dest` */
+    allyCopy?: true;
+    /** the one recipient whose copy this entry reads its end from (a
+     * talent-shared press split into its caster's and its ally's) */
+    copyOn?: string;
   }
   const friendlyCasts: FriendlyCast[] = [];
   for (const u of friendlies)
     for (const c of (u.spellCastEvents ?? []) as any[]) {
       const sid = String(c.spellId ?? "");
       if (!sid) continue;
+      // fact4 D32 (4accb068 r3): a row of the one not-a-press table
+      // (`COPY_CAST_IDS` — a channel tick, a proc copy) is no press: Divine
+      // Hymn's last 64844 tick, 1.2 s before Zenith, was read as the answer
+      // although the hymn was pressed 5.0 s before and had already ended
+      if (COPY_CAST_IDS.has(sid)) continue;
+      // fact4 D68 (ecfb3a7f 1:42): a self wall whose copy the log shows on a
+      // teammate (Flameshaper Obsidian Scales — `allyCopyRecipient`, the
+      // reading cd-hoarded's answered set and the press line take) went to
+      // that teammate: an external aimed at it
+      const allyCopy = allyCopyRecipient(u.id, c, units);
+      const tMs = c.timestamp ?? c.logLine?.timestamp;
       friendlyCasts.push({
         unitId: u.id,
         unitName: u.name,
         spellId: sid,
-        dest: c.destUnitId,
-        tMs: c.timestamp ?? c.logLine?.timestamp,
+        // …and the caster keeps its own copy: the press is its wall too
+        // (codex 20-F17-08 #3: an evoker under burst giving one to an ally
+        // lost the credit for its own)
+        dest: allyCopy ? u.id : c.destUnitId,
+        tMs,
+        ...(allyCopy ? { copyOn: u.id } : {}),
       });
+      if (allyCopy)
+        friendlyCasts.push({
+          unitId: u.id,
+          unitName: u.name,
+          spellId: sid,
+          dest: allyCopy.id,
+          tMs,
+          allyCopy: true,
+          copyOn: allyCopy.id,
+        });
     }
   friendlyCasts.sort((a, b) => a.tMs - b.tMs);
 
@@ -864,6 +1275,7 @@ export function burstWindowDecisionPoints(
   // externals that do nothing self-cast, `canHelpAnotherUnit` is GH #28's.
   const selfCdsByUnit = new Map<string, IMajorCooldownInfo[]>();
   const allyCdsByUnit = new Map<string, IMajorCooldownInfo[]>();
+  // hard CC on the unit itself, from any source (`inCcAt`'s first half)
   const ccByUnit = new Map<string, { startMs: number; endMs: number }[]>();
   /** PROBE-ONLY: spellId → base cooldown seconds, straight off the same
    * `extractMajorCooldowns` ledger `cdAvailableAt` reads above, so a spend's
@@ -876,6 +1288,11 @@ export function burstWindowDecisionPoints(
     } catch {
       cds = [];
     }
+    // The default ledger has no baseline-only row (owned by the spec, never
+    // pressed / talented / picked this round — cd-hoarded F-W6): user ruling
+    // 2026-10-01 (P-W6) gives those rows to cd-hoarded alone, and
+    // feasibility that counted them would widen slow-defensive-response and
+    // drift from the reference table's population (cast evidence).
     const answers = cds.filter(
       (cd) =>
         !cdIsProcOnly(cd) &&
@@ -886,11 +1303,11 @@ export function burstWindowDecisionPoints(
     );
     selfCdsByUnit.set(
       u.id,
-      answers.filter((cd) => !SELF_CAST_NOOP_EXTERNAL_IDS.has(cd.spellId)),
+      answers.filter((cd) => cdHelpsRecipient(cd, true)),
     );
     allyCdsByUnit.set(
       u.id,
-      answers.filter((cd) => canHelpAnotherUnit(cd.spellId, cd.tag)),
+      answers.filter((cd) => cdHelpsRecipient(cd, false)),
     );
     ccByUnit.set(u.id, buildFilteredAuraIntervals(u, ccSpellIds, combat));
     if (opts.collectSpend)
@@ -911,14 +1328,32 @@ export function burstWindowDecisionPoints(
       .filter((u) => u.ownerId && enemyPlayerIds.has(u.ownerId))
       .map((u) => u.id as string),
   ]);
-  for (const u of friendlies)
-    ccByUnit.set(u.id, [
-      ...(ccByUnit.get(u.id) ?? []),
-      ...buildCannotCastIntervals(u, enemySourceIds).map((iv) => ({
-        startMs: iv.from,
-        endMs: iv.to,
-      })),
-    ]);
+  // FT-T10: asked per tool, through the one reading for a named spell
+  // (`cannotCastIntervalsForSpells`): a kick lockout stops only a tool of the
+  // school it locked, and a tool the unit's PET casts is asked of the pet.
+  // `ofPet` = that second case: the hard-CC list above sits on the unit and
+  // says nothing about its pet, so it is not read for such a tool.
+  const cannotCastByTool = new Map<
+    string,
+    { ofPet: boolean; intervals: { from: number; to: number }[] }
+  >();
+  const cannotCastForTool = (u: any, toolSpellId: string) => {
+    const key = `${u.id}:${toolSpellId}`;
+    let entry = cannotCastByTool.get(key);
+    if (!entry) {
+      entry = {
+        ofPet: petCastersOf(u, units, toolSpellId).length > 0,
+        intervals: cannotCastIntervalsForSpells(
+          u,
+          enemySourceIds,
+          [toolSpellId],
+          units,
+        ),
+      };
+      cannotCastByTool.set(key, entry);
+    }
+    return entry;
+  };
   const friendlyPlayerIds = new Set<string>(friendlies.map((u) => u.id));
   const ownerOfUnit = new Map<string, string>(
     units
@@ -930,6 +1365,16 @@ export function burstWindowDecisionPoints(
   const friendlyNameById = new Map<string, string>(
     friendlies.map((u) => [u.id, u.name]),
   );
+  // A damage source → the enemy PLAYER behind it (itself, or its pet's /
+  // summon's owner), the mirror of `friendlyPlayerOf`. FT-T12 D3 asks it of
+  // every hit on the pressured friendly (`controlTargetHitPressured`).
+  const enemyOwnerOfUnit = new Map<string, string>(
+    units
+      .filter((u) => u.ownerId && enemyPlayerIds.has(u.ownerId))
+      .map((u) => [u.id as string, u.ownerId as string]),
+  );
+  const enemyPlayerOf = (srcUnitId: string): string | undefined =>
+    enemyPlayerIds.has(srcUnitId) ? srcUnitId : enemyOwnerOfUnit.get(srcUnitId);
 
   const out: BurstWindowDecisionPoint[] = [];
   {
@@ -968,6 +1413,13 @@ export function burstWindowDecisionPoints(
       // inside 0 seconds" is not an outcome, it is a rounding artefact.
       const outcomeEndSec = Math.max(endSec, tSec + BURST_RESPONSE_WINDOW_SEC);
       const outcomeEndMs = start + outcomeEndSec * 1000;
+      // F-B6: the window the line prints ends at the END of its last
+      // rendered second — the last ms of `outcomeEndSec`. One bound for every
+      // outcome reading (who died, who the burst hit, the damage taken, the
+      // control-answer filter): codex post-hoc 60-POSTHOC-03 U3 — a friendly
+      // hit at 18.5 s and dead at 18.6 s (outcomeEndSec 18) counted as died
+      // but not as hit, so the death-first pick passed it over
+      const outcomeLastMs = outcomeEndMs + 999;
 
       const ordered = orderedAll;
       const refOf = (
@@ -1004,12 +1456,42 @@ export function burstWindowDecisionPoints(
       const w0 = tMs - BURST_RESPONSE_PRE_MS;
       const w1 = tMs + BURST_RESPONSE_WINDOW_MS;
       const casterIdSet = new Set(casterIds);
+      // whose control answers THIS burst: a caster of the lead or of an extra
+      // inside the 8 s the sentence judges — the CDs `burstExtrasLabel`
+      // prints (fact5 D11, ef3b61c9 r0 0:22: a Scatter Shot on a druid whose
+      // only CDs came 12 s and 33 s after the opener was credited as the
+      // answer). The window's other readers keep the whole segment's casters.
+      const answerCasterIdSet = new Set(
+        ordered
+          .filter(
+            (c) =>
+              c === leadRaw ||
+              Math.floor(c.castSeconds) <= tSec + BURST_RESPONSE_WINDOW_SEC,
+          )
+          .map((c) => enemyByName.get(c.playerName)?.id)
+          .filter((id): id is string => !!id),
+      );
       const responseCasts: BurstResponseCast[] = [];
+      // the raw instant each response counts at (its `latencySec` origin) —
+      // read once more below, against the pressured friendly's death
+      const responseAtMs = new Map<BurstResponseCast, number>();
+      // a press on another friendly is an external; an untargeted press
+      // that can reach others (Tree of Life, Ancient of Lore) a group heal;
+      // one on its caster — or on an enemy (Ultimate Penitence) — a wall
+      const extraAnswerCategory = (
+        c: FriendlyCast,
+      ): BurstResponseCast["category"] =>
+        c.dest && c.dest !== c.unitId && friendlies.some((f) => f.id === c.dest)
+          ? "external"
+          : isNoDest(c.dest) && canHelpAnotherUnit(c.spellId)
+            ? "healCd"
+            : "wall";
       for (const c of friendlyCasts) {
         if (c.tMs < w0) continue;
         if (c.tMs > w1) break;
-        const category: BurstResponseCast["category"] | null =
-          PERSONAL_WALL_IDS.has(c.spellId)
+        const category: BurstResponseCast["category"] | null = c.allyCopy
+          ? "external"
+          : PERSONAL_WALL_IDS.has(c.spellId)
             ? "wall"
             : EXTERNAL_IDS.has(c.spellId)
               ? "external"
@@ -1017,51 +1499,174 @@ export function burstWindowDecisionPoints(
                 ? "healCd"
                 : CONTROL_IDS.has(c.spellId) &&
                     c.dest != null &&
-                    casterIdSet.has(c.dest)
+                    answerCasterIdSet.has(c.dest)
                   ? "control"
-                  : null;
+                  : BURST_EXTRA_ANSWER_IDS.has(c.spellId)
+                    ? extraAnswerCategory(c)
+                    : null;
         if (!category) continue;
         const casterUnit = units.find((u) => u.id === c.unitId);
         const dur = casterUnit
           ? buffFullDurationForCaster(c.spellId, casterUnit)
           : undefined;
-        responseCasts.push({
+        const castS = (c.tMs - start) / 1000;
+        // the observed end even for a cast with no official length of its
+        // own (Greater Invisibility 110959: its aura 110960 carries it —
+        // 141470d0 3:08 had no end at all and the coverage test was skipped)
+        const observedEndS =
+          casterUnit && category !== "control"
+            ? observedEffectEndSeconds(
+                casterUnit,
+                c.spellId,
+                castS,
+                Math.min(
+                  Infinity,
+                  ...((casterUnit.spellCastEvents ?? []) as any[])
+                    .filter(
+                      (e) =>
+                        e.logLine?.event === "SPELL_CAST_SUCCESS" &&
+                        e.spellId === c.spellId &&
+                        e.timestamp > c.tMs + 1,
+                    )
+                    .map((e) => (e.timestamp - start) / 1000),
+                ),
+                combat,
+                c.copyOn,
+              )
+            : null;
+        const preOpenerStillUp =
+          category === "control" &&
+          c.tMs < leadRawMs &&
+          !INTERRUPT_IDS.has(c.spellId)
+            ? aimedControlUpAt(
+                units.find((u) => u.id === c.dest),
+                c.unitId,
+                c.spellId,
+                c.tMs,
+                leadRawMs,
+              )
+            : undefined;
+        const landed =
+          category === "control"
+            ? aimedControlLanded(
+                units.find((u) => u.id === c.dest),
+                c.unitId,
+                c.spellId,
+                c.tMs,
+                friendlyPlayerOf,
+                INTERRUPT_IDS.has(c.spellId),
+              )
+            : undefined;
+        // T12 ⑧ (i): who the control was aimed at, and the aura applications
+        // it landed as — the scan `landed` itself rests on
+        const controlDest =
+          category === "control"
+            ? units.find((u) => u.id === c.dest)
+            : undefined;
+        const controlOn: BurstResponseCast["controlOn"] = controlDest
+          ? {
+              unitId: controlDest.id,
+              unitName: controlDest.name,
+              auras: aimedControlLandingAuras(
+                controlDest,
+                c.unitId,
+                c.spellId,
+                c.tMs,
+                friendlyPlayerOf,
+              ),
+            }
+          : undefined;
+        const response: BurstResponseCast = {
           category,
           spellId: c.spellId,
           spellName: getEnglishSpellName(c.spellId),
           casterName: c.unitName,
           tSec: Math.floor((c.tMs - start) / 1000),
           latencySec:
-            Math.round(((c.tMs - leadRawMs) / 1000 + Number.EPSILON) * 10) /
-            10,
+            Math.round(((c.tMs - leadRawMs) / 1000 + Number.EPSILON) * 10) / 10,
           ...(c.dest ? { destId: c.dest } : {}),
           casterId: c.unitId,
-          ...(dur
-            ? { effectEndSec: Math.floor((c.tMs - start) / 1000 + dur) }
-            : {}),
-        });
+          ...(observedEndS !== null
+            ? { effectEndSec: Math.floor(observedEndS) }
+            : dur
+              ? { effectEndSec: Math.floor(castS + dur) }
+              : {}),
+          ...(preOpenerStillUp !== undefined ? { preOpenerStillUp } : {}),
+          ...(landed !== undefined ? { landed } : {}),
+          ...(controlOn ? { controlOn } : {}),
+        };
+        responseAtMs.set(response, c.tMs);
+        responseCasts.push(response);
       }
       for (const r of controlLandedResponses(
-        casterIds.map((id) => units.find((u) => u.id === id)).filter(Boolean),
-        casterIdSet,
+        [...answerCasterIdSet]
+          .map((id) => units.find((u) => u.id === id))
+          .filter(Boolean),
+        answerCasterIdSet,
         friendlyPlayerOf,
         friendlyCasts,
         w0,
         w1,
-      ))
-        responseCasts.push({
+        (summonId) => {
+          const rows: ReadonlyArray<{
+            spellId?: string;
+            timestamp?: number;
+            logLine?: { event?: string; timestamp?: number };
+          }> = units.find((u) => u.id === summonId)?.spellCastEvents ?? [];
+          return rows
+            .filter(
+              (c) => c.logLine?.event === "SPELL_CAST_SUCCESS" && !!c.spellId,
+            )
+            .map((c) => ({
+              spellId: String(c.spellId),
+              tMs: c.timestamp ?? c.logLine?.timestamp ?? 0,
+            }));
+        },
+      )) {
+        const holder = units.find((u) => u.id === r.holderId);
+        const response: BurstResponseCast = {
           category: "control",
           spellId: r.spellId,
           spellName: getEnglishSpellName(r.spellId),
           casterName: friendlyNameById.get(r.unitId) ?? "",
+          // the unit the control landed on, in the field an aimed control
+          // carries its target in — D3's rule reads one field for both
+          ...(r.holderId !== undefined ? { destId: r.holderId } : {}),
           tSec: Math.floor((r.tMs - start) / 1000),
+          // the holder this aura landed on, and the application itself
+          ...(holder
+            ? {
+                controlOn: {
+                  unitId: holder.id,
+                  unitName: holder.name,
+                  auras:
+                    r.auraAtMs !== undefined
+                      ? [{ spellId: r.spellId, atMs: r.auraAtMs }]
+                      : [],
+                },
+              }
+            : {}),
+          // F-B4's pre-opener check, as for an aimed control: a landed control
+          // from before the lead cast answers only if its aura was still on
+          // its holder then (codex 35-CD-13f: a root that ended 0.5 s before
+          // the opener was credited)
+          ...(() => {
+            const up = landedPreOpenerStillUp(
+              r,
+              units.find((u) => u.id === r.holderId),
+              leadRawMs,
+            );
+            return up === undefined ? {} : { preOpenerStillUp: up };
+          })(),
           // the same origin as a direct cast (the raw lead press) — the
           // window's tMs mixed two clocks and sorted a later Barkskin ahead
           // of an earlier landed Capacitor Totem (codex review of batch 8)
           latencySec:
-            Math.round(((r.tMs - leadRawMs) / 1000 + Number.EPSILON) * 10) /
-            10,
-        });
+            Math.round(((r.tMs - leadRawMs) / 1000 + Number.EPSILON) * 10) / 10,
+        };
+        responseAtMs.set(response, r.tMs);
+        responseCasts.push(response);
+      }
       responseCasts.sort((a, b) => a.latencySec - b.latencySec);
       // ── outcomes per friendly, and the ONE pressured friendly ────────────
       // Computed before the kite/feasibility/triage work below, because all
@@ -1084,38 +1689,73 @@ export function burstWindowDecisionPoints(
             minHpSec = s;
           }
         }
+        // the printed bottom (FT-T03): the true minimum over the same
+        // seconds. Null exactly when the grid minimum is.
+        const trough =
+          minHpPct === null
+            ? null
+            : hpTroughInWindow(f, start, tSec, outcomeEndSec);
+        // F-B6 (triage sync-burst, codex 09-30): the window the line prints
+        // ends at the END of its last rendered second — a lethal burst's
+        // segment ends at the death, which falls in the fractional part of
+        // the floored `outcomeEndSec` (0777a8e0 1:19: death at 88.892, end
+        // second 88). Render-grid reading, no new threshold.
         const died = ((f.deathRecords ?? []) as any[]).some(
-          (d) => d.timestamp >= tMs && d.timestamp <= outcomeEndMs,
+          (d) => d.timestamp >= tMs && d.timestamp <= outcomeLastMs,
         );
         return {
           unitId: f.id,
           name: f.name,
           minHpPct,
           minHpSec,
+          troughHpPct: trough?.pct ?? minHpPct,
+          troughHpSec: trough?.atSec ?? minHpSec,
           startHpPct,
           startHpSec,
           died,
         };
       });
       const damageTakenIn = (f: any): number =>
-        ((f.damageIn ?? []) as any[])
-          .filter((d) => {
-            const ts = d.timestamp ?? d.logLine?.timestamp;
-            return ts != null && ts >= tMs && ts <= outcomeEndMs;
-          })
-          .reduce(
-            (n, d) => n + Math.abs(d.effectiveAmount ?? d.amount ?? 0),
-            0,
-          );
+        damageTakenBetween(f, tMs, outcomeLastMs);
       const dmgByUnitId = new Map<string, number>(
         friendlies.map((f) => [f.id, damageTakenIn(f)]),
       );
-      // lowest grid-sampled HP wins; equal HP goes to whoever took more damage
+      // WO3 Part 2 G6 (r1014-177): the pressured friendly is one the
+      // burst's casters (or their pets) hit inside the window — f4eb8c87:
+      // Frozen Orb / Ray of Frost did 0 to the owner named as pressured
+      const fromBurstCaster = (src: string) => {
+        const p = enemyPlayerOf(src);
+        return p !== undefined && casterIdSet.has(p);
+      };
+      // …or one their hits found IMMUNE: an immunity pressed at the opening
+      // is still the answer to it (user 2026-10-14, option B; s2/51-1-357:
+      // Ice Block 0.2 s before the Deathmark it answered) — `hitByAttackers`
+      const hitByBurst = new Set(
+        friendlies
+          .filter((f) =>
+            hitByAttackers(f, units, fromBurstCaster, tMs, outcomeLastMs),
+          )
+          .map((f) => f.id),
+      );
+      // WO6 Part 2 n37 (user 2026-10-15, 「按你的建议走」): a friendly the burst hit who DIED inside
+      // the window beats every survivor — its grid minimum stops before its
+      // death second, so 37 % on the grid (b711d4ac's mage, dead at 4:33)
+      // lost to a survivor's 29.5 %; two deaths: the earlier one. Then the
+      // lowest grid-sampled HP; equal HP goes to whoever took more damage
+      const deathMsOf = (unitId: string) => {
+        const f = friendlies.find((u) => u.id === unitId);
+        const ds = ((f?.deathRecords ?? []) as any[])
+          .map((d) => d.timestamp as number)
+          .filter((t) => t >= tMs && t <= outcomeLastMs);
+        return ds.length > 0 ? Math.min(...ds) : Infinity;
+      };
       const pressured =
         [...friendlyOutcomes]
-          .filter((f) => f.minHpPct !== null)
+          .filter((f) => f.minHpPct !== null && hitByBurst.has(f.unitId))
           .sort(
             (a, b) =>
+              Number(b.died) - Number(a.died) ||
+              deathMsOf(a.unitId) - deathMsOf(b.unitId) ||
               a.minHpPct! - b.minHpPct! ||
               (dmgByUnitId.get(b.unitId) ?? 0) -
                 (dmgByUnitId.get(a.unitId) ?? 0),
@@ -1123,13 +1763,49 @@ export function burstWindowDecisionPoints(
       const pressuredUnit = pressured
         ? (friendlies.find((f) => f.id === pressured.unitId) ?? null)
         : null;
+      // FT-T12 D3 (user ruling 2026-10-10): a control stays a response only
+      // when it went on a unit that was hitting the pressured friendly
+      // (`controlTargetHitPressured`). It leaves `responseCasts` itself — not
+      // a flag beside it — so `responses.control` / `responded` below
+      // (slow-defensive-response) and `creditedAnswer` ([BURST ANSWERED]) read
+      // ONE list and cannot disagree about what answered. Walls, externals
+      // and healing cooldowns are untouched.
+      for (let i = responseCasts.length - 1; i >= 0; i--) {
+        const r = responseCasts[i]!;
+        if (
+          r.category === "control" &&
+          !controlTargetHitPressured(
+            pressuredUnit,
+            r.destId,
+            enemyPlayerOf,
+            tMs,
+            outcomeLastMs,
+            units,
+          )
+        )
+          responseCasts.splice(i, 1);
+      }
+      // T12 ⑧ (i): mark the responses pressed at or after the pressured
+      // friendly's death — the one death predicate (`isDeadAt`), on the raw
+      // instants. Only the [BURST ANSWERED] credit line reads the mark;
+      // `responses` / `responded` below are computed from the same list (the
+      // one D3 narrowed just above) and never look at it.
+      if (pressuredUnit)
+        for (const r of responseCasts)
+          if (isDeadAt(pressuredUnit, responseAtMs.get(r)!))
+            r.afterPressuredDeath = true;
       const casterUnits = casterIds.map((id) => units.find((u) => u.id === id));
+      // agy 40-FT-101: a pressured friendly who died is not read kiting past
+      // its death — the distance is measured up to it, never off a corpse
+      const kiteEndMs = pressured
+        ? Math.min(w1, deathMsOf(pressured.unitId))
+        : w1;
       const kiteGain =
         pressuredUnit != null &&
         (dmgByUnitId.get(pressuredUnit.id) ?? 0) > 0 &&
-        kitedAway(pressuredUnit, casterUnits, tMs, w1);
+        kitedAway(pressuredUnit, casterUnits, tMs, kiteEndMs);
       const kiteWho = kiteGain
-        ? kiteAttribution(pressuredUnit, casterUnits, tMs, w1)
+        ? kiteAttribution(pressuredUnit, casterUnits, tMs, kiteEndMs)
         : null;
       const attackerMoved =
         !!kiteWho &&
@@ -1166,10 +1842,18 @@ export function burstWindowDecisionPoints(
       // external in range at t who then sat in CC until t+7 and ran out of
       // range still counted as able to answer. A cooldown that came back
       // three seconds into the window is now an opportunity it was not.
-      const inCcAt = (u: any, ms: number): boolean =>
-        (ccByUnit.get(u.id) ?? []).some(
-          (iv) => iv.startMs <= ms && ms < iv.endMs,
+      // FT-T10: asked per tool (`cannotCastForTool`); a unit is out at a
+      // second only when every ready tool is stopped
+      const inCcAt = (u: any, ms: number, toolSpellId: string): boolean => {
+        const tool = cannotCastForTool(u, toolSpellId);
+        return (
+          (!tool.ofPet &&
+            (ccByUnit.get(u.id) ?? []).some(
+              (iv) => iv.startMs <= ms && ms < iv.endMs,
+            )) ||
+          tool.intervals.some((iv) => iv.from <= ms && ms < iv.to)
         );
+      };
       const windowSecs: number[] = [];
       for (let sec = tSec; start + sec * 1000 < w1; sec++) windowSecs.push(sec);
       const feasibleUnits: string[] = [];
@@ -1178,8 +1862,14 @@ export function burstWindowDecisionPoints(
         // (a) the person under the burst could have saved themselves
         const selfCds = selfCdsByUnit.get(pressuredUnit.id) ?? [];
         for (const sec of windowSecs) {
-          if (inCcAt(pressuredUnit, start + sec * 1000)) continue;
-          const tool = selfCds.find((cd) => cdReadyInTimeAt(cd, sec));
+          // agy 40-FT-101: U8 for (a) too — a dead unit saves nobody, itself
+          // included (an Ice Block back 0.8 s after the death read feasible)
+          if (isDeadAtRenderSecond(pressuredUnit, start, sec)) break;
+          const tool = selfCds.find(
+            (cd) =>
+              cdReadyInTimeAt(cd, sec) &&
+              !inCcAt(pressuredUnit, start + sec * 1000, cd.spellId),
+          );
           if (!tool) continue;
           feasibleUnits.push(pressuredUnit.name);
           feasibleEvidence.push({
@@ -1199,10 +1889,11 @@ export function burstWindowDecisionPoints(
       // `externalReachYards` (official DB2 reach, 40 yd fallback — never
       // lower, so an unlisted spell cannot start acquitting or accusing
       // silently). Fail OPEN on missing data: no pressured friendly, no
-      // position sample for the helper, or an unknown reach (`null`: target
-      // dead / no target sample) all count as reachable — sampling gaps must
-      // not manufacture infeasibility, only a position pair the log actually
-      // recorded may remove a window.
+      // position sample for the helper, or an unknown reach (`null`: no
+      // target sample) all count as reachable — sampling gaps must not
+      // manufacture infeasibility, only a position pair the log actually
+      // recorded may remove a window. A DEAD target is not such a gap: the
+      // loop below skips those seconds (U8).
       const teammateCanDeliver = (
         u: any,
         readyCds: IMajorCooldownInfo[],
@@ -1229,10 +1920,19 @@ export function burstWindowDecisionPoints(
         const allyCds = allyCdsByUnit.get(u.id) ?? [];
         if (!allyCds.length) continue;
         for (const sec of windowSecs) {
+          // U8 (user ruling 2026-09-30): a second at which the pressured
+          // friendly is already dead is not a chance to answer for them —
+          // `teammateCanDeliver`'s fail-open on an unknown reach only covers
+          // a living target without a sample (4446729d 1:27: Xandarya died
+          // 91.388, every "reachable" second was after it)
+          if (pressuredUnit && isDeadAtRenderSecond(pressuredUnit, start, sec))
+            continue;
           const ms = start + sec * 1000;
-          if (inCcAt(u, ms)) continue;
           const deliverable = allyCds.find(
-            (cd) => cdReadyInTimeAt(cd, sec) && teammateCanDeliver(u, [cd], ms),
+            (cd) =>
+              cdReadyInTimeAt(cd, sec) &&
+              !inCcAt(u, ms, cd.spellId) &&
+              teammateCanDeliver(u, [cd], ms),
           );
           if (!deliverable) continue;
           feasibleUnits.push(u.name);
@@ -1265,7 +1965,7 @@ export function burstWindowDecisionPoints(
         spend = [];
         for (const c of friendlyCasts) {
           if (c.tMs < w0) continue;
-          if (c.tMs > outcomeEndMs) break;
+          if (c.tMs > outcomeLastMs) break;
           const category: BurstSpendCast["category"] | null =
             PERSONAL_WALL_IDS.has(c.spellId)
               ? "wall"
@@ -1291,6 +1991,7 @@ export function burstWindowDecisionPoints(
         tMs,
         tSec,
         endSec,
+        outcomeEndSec,
         durationSec: endSec - tSec,
         leadCd,
         extraCds,

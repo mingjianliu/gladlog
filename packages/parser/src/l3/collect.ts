@@ -1,13 +1,14 @@
 import type { ParsedLine } from "../l1/types";
-import type { RosterUnit } from "./roster";
 import type {
-  GladUnit,
-  GladHpEvent,
   GladAbsorbEvent,
-  GladSpellEvent,
   GladAuraEvent,
   GladDeathEvent,
+  GladHpEvent,
+  GladSpellEvent,
+  GladUnit,
 } from "./model";
+import type { RosterUnit } from "./roster";
+import { swingLandedTwins } from "./swingTwins";
 
 export function collectEvents(
   records: ParsedLine[],
@@ -41,10 +42,14 @@ export function collectEvents(
       advancedSamples: [],
       healAbsorbsIn: [],
       empowerEnds: [],
+      empowerStarts: [],
+      empowerInterrupts: [],
       missesOut: [],
       missesIn: [],
     });
   }
+
+  const twinnedSwings = new Set(swingLandedTwins(records).values());
 
   for (const record of records) {
     const srcGuid = record.base?.srcGuid;
@@ -65,8 +70,20 @@ export function collectEvents(
       lineIndex: record.lineIndex,
     };
 
-    // 1. Damage group
-    if (record.damage && record.eventName !== "SWING_DAMAGE_LANDED") {
+    // 1. Damage group. One swing is logged as SWING_DAMAGE (attacker side)
+    // and / or SWING_DAMAGE_LANDED (victim side) — see swingTwins.ts. The
+    // victim-side line is the swing's damage event: it carries what landed
+    // (where the two lines disagree the victim's health follows the LANDED
+    // amount, 1,494 of 1,494 measured). A SWING_DAMAGE line stands in only
+    // when it has no LANDED twin. A LANDED line with nothing landed (the
+    // swing was absorbed whole) is not a damage event — like a fully absorbed
+    // spell, it exists as its SPELL_ABSORBED record (and SWING_MISSED, when
+    // the log has one).
+    const skippedSwingLine =
+      record.eventName === "SWING_DAMAGE_LANDED"
+        ? !(record.damage && record.damage.amount > 0)
+        : record.eventName === "SWING_DAMAGE" && twinnedSwings.has(record);
+    if (record.damage && !skippedSwingLine) {
       const hpEvent: GladHpEvent = {
         ...baseEvent,
         spellId,
@@ -75,6 +92,7 @@ export function collectEvents(
         effectiveAmount: record.damage.effectiveAmount,
         absorbed: record.damage.absorbed,
         crit: record.damage.critical,
+        ...(record.damage.school > 0 ? { school: record.damage.school } : {}),
       };
 
       // DAMAGE_SPLIT's src is the unit whose damage is being redirected AWAY
@@ -148,21 +166,37 @@ export function collectEvents(
       }
     }
 
-    // 2c. Empowered casts (Evoker) and their release level.
+    // 2c. Empowered casts (Evoker): when the hold began, and how it ended —
+    // released at a level (END) or cut short (INTERRUPT).
     if (
-      record.eventName === "SPELL_EMPOWER_END" &&
+      (record.eventName === "SPELL_EMPOWER_END" ||
+        record.eventName === "SPELL_EMPOWER_INTERRUPT") &&
       typeof record.empowerLevel === "number"
     ) {
       if (srcGuid && srcGuid !== "0000000000000000") {
         const srcUnit = gladUnits.get(srcGuid);
         if (srcUnit) {
-          srcUnit.empowerEnds.push({
+          const empowerEvent = {
             ...baseEvent,
             spellId,
             spellName,
             level: record.empowerLevel,
-          });
+          };
+          if (record.eventName === "SPELL_EMPOWER_END") {
+            srcUnit.empowerEnds.push(empowerEvent);
+          } else {
+            srcUnit.empowerInterrupts?.push(empowerEvent);
+          }
         }
+      }
+    }
+    if (record.eventName === "SPELL_EMPOWER_START") {
+      if (srcGuid && srcGuid !== "0000000000000000") {
+        gladUnits.get(srcGuid)?.empowerStarts?.push({
+          ...baseEvent,
+          spellId,
+          spellName,
+        });
       }
     }
 
@@ -270,6 +304,8 @@ export function collectEvents(
         ...baseEvent,
         spellId,
         spellName,
+        // what the row says the cast cost; no key when it does not say
+        ...(record.castCosts ? { powerCosts: record.castCosts } : {}),
       };
 
       if (srcGuid && srcGuid !== "0000000000000000") {
@@ -344,6 +380,7 @@ export function collectEvents(
         if (actorUnit) {
           actorUnit.advancedSamples.push({
             timestamp: record.timestamp,
+            lineIndex: record.lineIndex,
             hp: record.advanced.hp,
             maxHp: record.advanced.maxHp,
             x: record.advanced.x,

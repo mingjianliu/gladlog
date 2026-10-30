@@ -6,12 +6,14 @@ import {
   computeOffensiveWindows,
   extractCandidateFindings,
   MENU_ONLY_TYPES,
-  reconstructDispelSummary,
+  missedPurgeNotActionable,
   RETIRED_TYPES,
 } from "@gladlog/analysis";
+import { parseSyncReadyCdEntry } from "@gladlog/analysis/src/analysis/candidates/cooldownTiming";
 import { CombatUnitReaction } from "@gladlog/parser-compat";
 
 import { resolveOwner } from "./analysisInput";
+import { dispelSummaryOf } from "./dispelSummary";
 import { toLegacySafe } from "./legacySource";
 import { type TimeRange, tInRange } from "./timeRange";
 import type { ReportSource } from "./types";
@@ -366,6 +368,33 @@ export interface Mistake {
 
 const RULE_BY_TYPE = new Map(MISTAKE_RULES.map((r) => [r.type, r]));
 
+/** kick-priority: "N 次施法合计" beside the kill target's heal amount — only
+ *  when that amount is not zero (a heal that went to another unit sums in
+ *  `healedWhom`, which this card does not print). */
+const healCastsNote = (f: Record<string, string | undefined>): string =>
+  f.healCasts && f.healK !== "0" ? `,${f.healCasts} 次施法合计` : "";
+
+/**
+ * missed-sync-window's `readyCds` for the card. The row states whose each
+ * cooldown is in the prompt's words — `The Hunt (Name-Realm's)`,
+ * `Touch of the Magi (yours)` (`syncReadyCdEntry`) — and the card is a Chinese
+ * sentence: each entry is read back with the producer's own
+ * `parseSyncReadyCdEntry` and the holder said in the card's language. The
+ * spell and the unit name stay as the row has them, like every other name on
+ * these cards; an entry that states no holder is the bare name.
+ */
+export function syncReadyCdsText(readyCds: string | undefined): string {
+  if (!readyCds) return "";
+  return readyCds
+    .split("、")
+    .map((entry) => {
+      const e = parseSyncReadyCdEntry(entry);
+      if (e.yours) return `${e.spell}(你的)`;
+      return e.holder ? `${e.spell}(${e.holder} 的)` : e.spell;
+    })
+    .join("、");
+}
+
 export function candidateDetail(c: CandidateEvent): string {
   const f = c.facts as Record<string, string | undefined>;
   switch (c.type) {
@@ -416,7 +445,7 @@ export function candidateDetail(c: CandidateEvent): string {
       // 反应慢」变成「整队 8 秒内没人应对承压的那个人」。
       return `${f.leadCd ?? ""}${f.extras ? `(+${f.extras})` : ""} 开启后 8 秒内全队无应对,${f.pressured ?? ""} 被打到 ${f.pressuredHpPct ?? "?"}%${f.diedInWindow === "yes" ? "、窗口内阵亡" : ""}`;
     case "missed-sync-window":
-      return `${f.healer ?? ""} 被 ${f.cc ?? ""} 控 ${f.durationS ?? "?"}s,${f.readyCds ?? ""} 均 ready 未按`;
+      return `${f.healer ?? ""} 被 ${f.cc ?? ""} 控 ${f.durationS ?? "?"}s,${syncReadyCdsText(f.readyCds)} 均 ready 未按`;
     case "unsynced-burst":
       return `${f.spell ?? ""} 起爆时 ${f.healer ?? ""} 没有硬控在身,自由治疗`;
     case "cd-hoarded":
@@ -429,9 +458,14 @@ export function candidateDetail(c: CandidateEvent): string {
     case "backlash-dispel":
       return `${f.t ?? "?"}s 给 ${f.targetHpPct ?? "?"}% 血的 ${f.target ?? ""} 解掉 ${f.debuff ?? ""}${f.stacks && f.stacks !== "1" ? `×${f.stacks}` : ""},自己吃 ${f.backlash ?? ""},4 秒内承伤 ${f.selfDmgTrend ?? "?"}、治疗 ${f.healTrend ?? "?"}${f.cdCcSpell ? `;驱散 CD 里 ${f.cdCcTarget ?? ""} 吃了 ${f.cdCcDurationS ?? "?"}s ${f.cdCcSpell} 无人能解` : ""}`;
     case "kick-priority-missed":
-      return `${f.t ?? "?"}s ${f.healer ?? ""} 读 ${f.castS ?? "?"}s ${f.heal ?? ""} 奶 ${f.targetHpPct ?? "?"}% 血的击杀目标 ${f.target ?? ""}(+${f.healK ?? "?"}k),你的 ${f.kick ?? ""} 空着、${f.distanceYd ?? "?"} 码内,没踢${f.othersFeasible && f.othersFeasible !== "none" ? `;${f.othersFeasible} 也能踢` : ""}`;
+      return `${f.t ?? "?"}s ${f.healer ?? ""} 读 ${f.castS ?? "?"}s ${f.heal ?? ""} 奶 ${f.targetHpPct ?? "?"}% 血的击杀目标 ${f.target ?? ""}(+${f.healK ?? "?"}k${healCastsNote(f)}),你的 ${f.kick ?? ""} 空着、${
+        // 近战踢是按「读条期间跑得到」放行的,不是站在射程里(分诊 kick-priority F-P3)
+        f.reachYd
+          ? `距离 ${f.distanceYd ?? "?"} 码(近战踢 ${f.kickRangeYd ?? "?"} 码,读条期间跑得到)`
+          : `${f.distanceYd ?? "?"} 码内`
+      },没踢${f.othersFeasible && f.othersFeasible !== "none" ? `;${f.othersFeasible} 也能踢` : ""}`;
     case "kick-priority-team":
-      return `${f.t ?? "?"}s ${f.healer ?? ""} 读 ${f.castS ?? "?"}s ${f.heal ?? ""} 奶 ${f.targetHpPct ?? "?"}% 血的击杀目标 ${f.target ?? ""}(+${f.healK ?? "?"}k),你踢不了(${f.ownerWhy ?? ""}),${f.teammates ?? ""} 能踢,没人踢`;
+      return `${f.t ?? "?"}s ${f.healer ?? ""} 读 ${f.castS ?? "?"}s ${f.heal ?? ""} 奶 ${f.targetHpPct ?? "?"}% 血的击杀目标 ${f.target ?? ""}(+${f.healK ?? "?"}k${healCastsNote(f)}),你踢不了(${f.ownerWhy ?? ""}),${f.teammates ?? ""} 能踢,没人踢`;
     case "backlash-dispel-window":
       return f.reason === "immune"
         ? `${f.t ?? "?"}s ${f.target ?? ""}(${f.targetHpPct ?? "?"}%)身上的 ${f.debuff ?? ""} 可解:你当时有 ${f.immuneBuff ?? ""},反噬控制无效`
@@ -523,17 +557,24 @@ export function deriveMistakes(
     }
 
     // dispel source: missed purges inside a kill window (same annotation
-    // predicate as the prompt side)
-    const dispels = reconstructDispelSummary(friends, enemies, {
-      startTime: legacy.startTime,
-      endTime: legacy.endTime,
-    });
+    // predicate as the prompt side), off the summary the prompt and the
+    // dispel panel read (`dispelSummaryOf`: the round itself, both sides'
+    // pets) — a window ends at the round's end, and a purge by our pet
+    // answers one
+    const dispels = dispelSummaryOf(legacy, friends, enemies);
     annotateMissedPurgesWithKillWindows(
       dispels.missedPurgeWindows,
       computeOffensiveWindows(enemies, friends, legacy),
     );
     for (const w of dispels.missedPurgeWindows) {
       if (!w.duringKillWindow) continue;
+      // C3 (user 2026-10-24): a window nobody could have answered is no
+      // mistake — every purger locked out, none in range / line of sight,
+      // or the purge on cooldown for the whole buff: the prompt's `not
+      // actionable` (`missedPurgeNotActionable`, the dispel panel's notes).
+      // Before: 73 of 206 cards on 31 rounds sat on such a window.
+      const why = missedPurgeNotActionable(w);
+      if (why.lockedOut || why.noReach || why.onCooldownThroughout) continue;
       const rule = RULE_BY_TYPE.get("missed-purge-kill-window")!;
       out.push({
         tS: w.timeSeconds,

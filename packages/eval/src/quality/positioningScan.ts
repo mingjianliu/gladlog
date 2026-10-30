@@ -31,6 +31,31 @@
  *                     F13, 06bb: "little distance gained" was retold as "stood
  *                     still" while the owner walked ~18.5 yd; codex review of
  *                     batch 10: the ±2 s slack let a mutated number pass).
+ *  G4c TOP_DAMAGER — STAYED "most damage to you in the span: <name> (Nk)"
+ *                     (B-tier B24b, 2026-10-07): <name> and N must be what the
+ *                     producer's own `topEnemyDamagerInSpan` returns over the
+ *                     span's rendered seconds — the nearest enemy is often
+ *                     the healer, so the line names who actually hit.
+ *  G4d MEASURED_ENEMY — STAYED "m:ss–m:ss [X burst] A→Byd from <name>"
+ *                     (FT-T12 D2, user ruling 2026-10-10): A and B are
+ *                     measured to ONE enemy, the one that hit the owner most
+ *                     over the span. When the producer's own
+ *                     `spanMeasuredEnemy` names an enemy for the rendered
+ *                     span, <name> must be that enemy and the line must not
+ *                     carry the two-enemy "X→Y" form; when it returns null the
+ *                     line is on the nearest-enemy fallback and G4 alone
+ *                     checks its distances. A KITED line prints no span end,
+ *                     so its measured enemy cannot be re-derived from the text
+ *                     — not checked.
+ *  G4e OWNER_DEAD  — no STAYED / KITED distance is printed for a second the
+ *                     log owner was already dead at (the producer's own
+ *                     `burstSpanSampledAfterDeath`, at the line's start, a
+ *                     STAYED line's end and a KITED line's peak). A corpse
+ *                     keeps its last position for the 1.5 s interpolation
+ *                     guard, so such a distance recomputes and passed G4. A
+ *                     KITED line prints no span end: a span the producer
+ *                     should have dropped whose peak precedes the death is
+ *                     not visible here.
  *  G5 LOS_BREAK     — "LoS break ~N.Nyd away (pillar-blocks <name>)": the map
  *                     must have obstacle data, and at that instant the owner
  *                     and that enemy must actually see each other (you can
@@ -46,9 +71,9 @@
  * recomputed (no coordinate samples) is not a violation; it is counted
  * separately as unverifiable and listed in the report.
  */
-import type { ICombatUnit } from "@gladlog/parser-compat";
 import {
   arenaObstacles,
+  burstSpanSampledAfterDeath,
   CC_MAX_PLAUSIBLE_RANGE_YARDS,
   ccDistanceClaimWindowS,
   distanceBetween,
@@ -60,7 +85,10 @@ import {
   LOS_SWEEP_SLACK_S,
   ownerDisplacementYards,
   positionSampleInstants,
+  spanMeasuredEnemy,
+  topEnemyDamagerInSpan,
 } from "@gladlog/analysis";
+import type { ICombatUnit } from "@gladlog/parser-compat";
 
 type GeoClaimKind =
   | "CC_DISTANCE"
@@ -68,6 +96,8 @@ type GeoClaimKind =
   | "CD_RANGE"
   | "STAYED_OR_KITED"
   | "OWNER_MOVED"
+  | "TOP_DAMAGER"
+  | "MEASURED_ENEMY"
   | "LOS_BREAK";
 
 interface GeoClaim {
@@ -88,6 +118,11 @@ interface GeoClaim {
   subjectName?: string;
   /** G4: which distance of "A→B" this claim is (start A, STAYED end B, KITED peak B) */
   endpoint?: "start" | "end" | "end-own" | "peak";
+  /** G4c: the damage (thousands, as rendered) the claim credits `unitName` */
+  amountK?: number;
+  /** G4d: the second name of a STAYED line's "from X→Y" (`unitName` is X) —
+   * present only when the line says its two ends were two enemies */
+  endUnitName?: string;
   raw: string;
 }
 
@@ -255,11 +290,24 @@ export function extractGeoClaims(promptText: string): GeoExtraction {
             endpoint: "end-own",
             raw: line,
           });
+        // G4d: the name after "from" is the ONE enemy the span is measured
+        // to (FT-T12 D2). `distanceYards` is unused: the claim is an identity.
+        claims.push({
+          kind: "MEASURED_ENEMY",
+          lineNo,
+          atSeconds: parseTime(m[1]),
+          toSeconds: parseTime(m[2]),
+          distanceYards: 0,
+          unitName: startName,
+          ...(m[7] ? { endUnitName: m[7] } : {}),
+          raw: line,
+        });
         // G4b: "— you moved N yd yourself (span start→end)" — the owner's
         // straight-line displacement between the span's two render seconds
-        // (reliability round 2 F13, 06bb).
+        // (reliability round 2 F13, 06bb). Without "yourself" when a forced
+        // move lies inside the span (`movedStr`); the number is the same.
         const mv = line.match(
-          / you moved ([\d.]+) yd yourself \(span start→end\)/,
+          / you moved ([\d.]+) yd(?: yourself)? \(span start→end\)/,
         );
         if (mv && m[2])
           claims.push({
@@ -270,13 +318,32 @@ export function extractGeoClaims(promptText: string): GeoExtraction {
             distanceYards: Number(mv[1]),
             raw: line,
           });
+        // G4c: "— most damage to you in the span: <name> (Nk)" (B24b) — the
+        // enemy player who dealt the most landed damage to the owner over the
+        // span's rendered seconds.
+        const td = line.match(
+          / most damage to you in the span: (\S+) \((\d+)k\)/,
+        );
+        if (td && m[2])
+          claims.push({
+            kind: "TOP_DAMAGER",
+            lineNo,
+            atSeconds: parseTime(m[1]),
+            toSeconds: parseTime(m[2]),
+            distanceYards: 0,
+            unitName: td[1]!,
+            amountK: Number(td[2]),
+            raw: line,
+          });
       }
       continue;
     }
 
-    // G5: 0:07  [HEALER EXPOSURE] … LoS break ~12.3yd away (pillar-blocks Oldchill-Proudmoore-US) …
+    // G5: 0:07  [HEALER EXPOSURE] … LoS break ~12.3yd away (pillar-blocks 4(RPaladin)) …
     m = line.match(
-      /^(\d+:\d{2}) {2}\[HEALER EXPOSURE\].*LoS break ~([\d.]+)yd away \(pillar-blocks ([^)]+)\)/,
+      // the unit is a roster label since FT (`4(RPaladin)`: one level of
+      // parentheses inside) or, in older prompts, a character name
+      /^(\d+:\d{2}) {2}\[HEALER EXPOSURE\].*LoS break ~([\d.]+)yd away \(pillar-blocks ((?:[^()]|\([^()]*\))+)\)/,
     );
     if (m) {
       claims.push({
@@ -302,6 +369,9 @@ interface CheckContext {
   matchStartMs: number;
   /** The prompt's authoritative pid→full-name map */
   unitIdMap?: Map<number, string>;
+  /** Every unit of the combat — pets and summons carry the `ownerId` G4c's
+   * predicate credits their damage through. Absent ⇒ players only. */
+  units?: ICombatUnit[];
 }
 
 /** Name resolution: prompt full name (Name-Realm-US) → unit. The pid label
@@ -558,6 +628,25 @@ export function checkGeoClaims(
       }
 
       case "STAYED_OR_KITED": {
+        // G4e: the producer's own predicate at the second this distance is
+        // printed for (a line's start, STAYED end, KITED peak). A sample on
+        // the owner's corpse is a violation whatever the distance reads —
+        // the held position would otherwise recompute it and pass.
+        if (
+          burstSpanSampledAfterDeath(
+            ctx.owner,
+            ctx.matchStartMs,
+            claim.atSeconds,
+          )
+        ) {
+          checked++;
+          violations.push({
+            claim,
+            code: "G4_OWNER_DEAD",
+            detail: `${claim.endpoint ?? "start"} distance printed for ${claim.atSeconds}s, a second the log owner was already dead at`,
+          });
+          break;
+        }
         const enemy = claim.unitName ? resolveUnit(claim.unitName, ctx) : null;
         if (!enemy) {
           unverifiable++;
@@ -607,6 +696,63 @@ export function checkGeoClaims(
             claim,
             code: "G4_OWNER_MOVED",
             detail: `claimed you moved ${claim.distanceYards}yd; recomputed ${moved}yd`,
+          });
+        break;
+      }
+
+      case "TOP_DAMAGER": {
+        // The producer's own predicate over the rendered span (shared, not
+        // re-derived): the name must be the top enemy damager and the
+        // rendered thousands must match.
+        const top = topEnemyDamagerInSpan(
+          ctx.owner,
+          ctx.enemies,
+          ctx.units ?? [...ctx.friends, ...ctx.enemies],
+          ctx.matchStartMs,
+          claim.atSeconds,
+          claim.toSeconds ?? claim.atSeconds,
+        );
+        checked++;
+        const claimed = claim.unitName
+          ? (resolveUnit(claim.unitName, ctx)?.name ?? claim.unitName)
+          : "";
+        if (
+          !top ||
+          top.name !== claimed ||
+          Math.round(top.damage / 1000) !== claim.amountK
+        )
+          violations.push({
+            claim,
+            code: "G4_TOP_DAMAGER",
+            detail: `claimed most damage from ${claim.unitName} (${claim.amountK}k); recomputed ${top ? `${top.name} (${Math.round(top.damage / 1000)}k)` : "no enemy damage in the span"}`,
+          });
+        break;
+      }
+
+      case "MEASURED_ENEMY": {
+        // The producer's own predicate over the rendered span (shared, not
+        // re-derived). null ⇒ the span is on the nearest-enemy fallback (no
+        // enemy damage, a tie, no distance at an endpoint): nothing to
+        // assert about WHO was measured, and the claim is not counted.
+        const measured = spanMeasuredEnemy(
+          ctx.owner,
+          ctx.enemies,
+          ctx.units ?? [...ctx.friends, ...ctx.enemies],
+          ctx.matchStartMs,
+          claim.atSeconds,
+          claim.toSeconds ?? claim.atSeconds,
+        );
+        if (!measured) break;
+        checked++;
+        const nameOf = (n: string | undefined) =>
+          n ? (resolveUnit(n, ctx)?.name ?? n) : undefined;
+        const start = nameOf(claim.unitName);
+        const end = nameOf(claim.endUnitName);
+        if (start !== measured.name || (end && end !== measured.name))
+          violations.push({
+            claim,
+            code: "G4_MEASURED_ENEMY",
+            detail: `distances read from ${claim.unitName}${claim.endUnitName ? `→${claim.endUnitName}` : ""}; the enemy that hit the owner most over the span is ${measured.name} and it has a distance at both ends`,
           });
         break;
       }
@@ -697,7 +843,24 @@ export function mutationDetectionRate(
     if (c.kind === "LOS_BREAK") continue; // distance mutation is meaningless for G5
     // Distance +15yd: tol = max(3, 0.25·claim) < 15 holds for every claim
     // < 45yd, so detection should be 100%
-    const m1: GeoClaim = { ...c, distanceYards: c.distanceYards + 15 };
+    // (G4c carries an amount, not a distance: the same +15 on its thousands)
+    // (G4d carries a name, not a distance: another enemy's name; a roster
+    // with one enemy has no such mutation)
+    const otherEnemy =
+      c.kind === "MEASURED_ENEMY"
+        ? ctx.enemies.find(
+            (e) =>
+              e.name !==
+              (c.unitName ? resolveUnit(c.unitName, ctx)?.name : undefined),
+          )
+        : undefined;
+    if (c.kind === "MEASURED_ENEMY" && !otherEnemy) continue;
+    const m1: GeoClaim =
+      c.kind === "TOP_DAMAGER"
+        ? { ...c, amountK: (c.amountK ?? 0) + 15 }
+        : otherEnemy
+          ? { ...c, unitName: otherEnemy.name }
+          : { ...c, distanceYards: c.distanceYards + 15 };
     const r1 = checkGeoClaims([m1], ctx);
     if (r1.checked > 0) {
       mutated++;

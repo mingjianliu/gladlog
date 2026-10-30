@@ -5,7 +5,7 @@ import os from "os";
 import path from "path";
 
 import type { RunRecord } from "../src/dailyPull";
-import { type QuotaState, nextUtcMidnight, quotaAlreadySpent } from "../src/pvpLogFetch";
+import { nextUtcMidnight, quotaAlreadySpent,type QuotaState } from "../src/pvpLogFetch";
 
 const EVAL_HOME =
   process.env.GLADLOG_EVAL_HOME ??

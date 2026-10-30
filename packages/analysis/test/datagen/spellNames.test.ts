@@ -1,4 +1,5 @@
 import { readFileSync } from "fs";
+
 import { transformSpellNames } from "../../scripts/datagen/genSpellNames";
 
 const csv = readFileSync(

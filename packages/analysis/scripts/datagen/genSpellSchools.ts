@@ -26,9 +26,10 @@
  * mechanic rather than to a school.
  *
  * NOT every avoidance tool has an official immunity row: Anti-Magic Shell
- * (absorb, aura 69), Spell Reflection (aura 28), Cloak of Shadows (its aura39
- * lives one EffectTriggerSpell hop away in 35729), Bladestorm and Aspect of the
- * Turtle work through other auras entirely. Consumers must therefore treat
+ * (absorb, aura 69), Spell Reflection (aura 28), Cloak of Shadows (its only
+ * aura 39 is the 1 s all-school 35729 it triggers — a moment on cast, not the
+ * 5 s aura's mask, see `isFlash`), Bladestorm and Aspect of the Turtle work
+ * through other auras entirely. Consumers must therefore treat
  * "absent" as UNKNOWN and fall back to the curated rule — never as "stops
  * nothing". `spellSchools.ts` is where that fallback lives.
  *
@@ -54,6 +55,9 @@ import {
 const AURA_SCHOOL_IMMUNITY = "39";
 /** SpellEffect.EffectAura = 77 — SPELL_AURA_MECHANIC_IMMUNITY. */
 const AURA_MECHANIC_IMMUNITY = "77";
+/** a triggered aura this short is a moment on cast, not the parent's
+ * standing immunity (see `isFlash`) */
+const FLASH_IMMUNITY_MAX_MS = 1000;
 /** SpellEffect.Effect = 3 — DUMMY. Same treatment as genSpellTargeting: a dummy
  *  row only counts when the spell has nothing else. */
 const EFFECT_DUMMY = "3";
@@ -172,8 +176,8 @@ async function main(): Promise<void> {
       misc: r.EffectMiscValue_0,
     });
   }
-  // One EffectTriggerSpell hop — Cloak of Shadows' school immunity lives in
-  // 35729, not on the cast id (same trap genSpellTargeting documents).
+  // One EffectTriggerSpell hop — an immunity can live on a triggered spell,
+  // not on the cast id (same trap genSpellTargeting documents).
   const triggered = new Set<string>();
   for (const rows of bySpell.values())
     for (const r of rows)
@@ -189,6 +193,36 @@ async function main(): Promise<void> {
       misc: r.EffectMiscValue_0,
     });
   }
+
+  // A triggered spell whose aura lasts ≤ `FLASH_IMMUNITY_MAX_MS` is a
+  // moment on cast, not a standing immunity (fact5 cxa e38f41c9: Spirit
+  // Walk 58875 triggers 58876 — aura 77 root / snare, duration index 407 =
+  // 100 ms — and The Hunt's root and a Master of the Glaive snare landed on
+  // the shaman 3.4 s and 5.0 s into its 8 s aura, no IMMUNE row). Its
+  // immunity is not the parent's.
+  // fact6 F20 (Q4, user "yes", 2026-10-28): the bar is 1 s. Cloak of
+  // Shadows' 35729 (1 s, all schools) gave the 5 s 31224 mask 127, while
+  // the fact6 15 rounds show 27 physical direct hits landing ≥ 1 s into a
+  // Cloak against 1 physical IMMUNE (002d2573-r0 0:16.8: 11 landed). The
+  // same bar takes the 127 off Metamorphosis 191427 and Void Metamorphosis
+  // 1217605 (a ≤ 1 s trigger each); no other id changes (build 12.1.5.70391:
+  // 21 → 18 school immunities, mechanic immunities unchanged).
+  const durationParsed = parseCsv(
+    await fetchTable("SpellDuration", build, cacheDir),
+  );
+  assertColumns(durationParsed.header, ["ID", "Duration"], "SpellDuration");
+  const durationMs = new Map<string, number>(
+    durationParsed.rows.map((r) => [r.ID, Number(r.Duration)]),
+  );
+  assertColumns(miscParsed.header, ["DurationIndex"], "SpellMisc");
+  const auraMs = new Map<string, number>();
+  for (const r of miscParsed.rows) {
+    if (r.DifficultyID !== "0" || auraMs.has(r.SpellID)) continue;
+    const d = durationMs.get(r.DurationIndex);
+    if (d !== undefined && d > 0) auraMs.set(r.SpellID, d);
+  }
+  const isFlash = (id: string): boolean =>
+    (auraMs.get(id) ?? Infinity) <= FLASH_IMMUNITY_MAX_MS;
 
   const considered = (rows: Row[]): Row[] => {
     const real = rows.filter((r) => r.effect !== EFFECT_DUMMY);
@@ -214,7 +248,7 @@ async function main(): Promise<void> {
         misc > 0
       )
         mechanics.add(misc);
-      if (hop && row.trigger && row.trigger !== "0") {
+      if (hop && row.trigger && row.trigger !== "0" && !isFlash(row.trigger)) {
         const deep = immunitiesOf(row.trigger, false);
         schools |= deep.schools;
         for (const m of deep.mechanics) mechanics.add(m);

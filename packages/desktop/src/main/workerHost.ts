@@ -1,10 +1,11 @@
-import { utilityProcess, type UtilityProcess } from "electron";
+import { type UtilityProcess,utilityProcess } from "electron";
+
 import type {
   MainToWorker,
   WorkerConfig,
   WorkerToMain,
 } from "../shared/protocol";
-import { nextCrashRecord, type CrashRecord } from "./crashPolicy";
+import { type CrashRecord,nextCrashRecord } from "./crashPolicy";
 
 export class WorkerHost {
   private child: UtilityProcess | null = null;

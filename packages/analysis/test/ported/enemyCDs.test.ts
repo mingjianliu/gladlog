@@ -153,6 +153,101 @@ describe("enemyCDs — timeline reconstruction", () => {
     );
   });
 
+  describe("FT-T13 D11: a 2v2 window that opens before the first logged dampening stack", () => {
+    const combat2v2 = () =>
+      ({
+        startTime: MATCH_START,
+        endTime: MATCH_START + 120_000,
+        startInfo: { bracket: "2v2" },
+      }) as any;
+    /** Avenging Wrath + Combustion from `atS`; the first stack (42) at 0:11 */
+    const enemies = (atS: number, withStack: boolean) => {
+      const dose = makeAuraEvent(
+        LogEvent.SPELL_AURA_APPLIED_DOSE,
+        "110310",
+        MATCH_START + 11_000,
+        "e1",
+        "e1",
+      );
+      (dose.logLine as any).parameters[12] = 42;
+      return [
+        makeUnit("e1", {
+          name: "Paladin",
+          spec: CombatUnitSpec.Paladin_Retribution,
+          auraEvents: withStack ? [dose] : [],
+          spellCastEvents: [
+            makeSpellCastEvent(
+              "31884",
+              MATCH_START + atS * 1000,
+              "e1",
+              "Self",
+              "e1",
+              "Paladin",
+              0,
+              "Avenging Wrath",
+            ),
+          ],
+        }),
+        makeUnit("e2", {
+          name: "Mage",
+          spec: CombatUnitSpec.Mage_Fire,
+          spellCastEvents: [
+            makeSpellCastEvent(
+              "190319",
+              MATCH_START + (atS + 1) * 1000,
+              "e2",
+              "Self",
+              "e2",
+              "Mage",
+              0,
+              "Combustion",
+            ),
+          ],
+        }),
+      ] as any;
+    };
+    const windowOf = (atS: number, withStack = true) =>
+      reconstructEnemyCDTimeline(enemies(atS, withStack), combat2v2())
+        .alignedBurstWindows[0];
+
+    it("states the derived start for the window (one dose below the first logged stack), and prints it", () => {
+      const early = windowOf(4);
+      expect(early.fromSeconds).toBe(4);
+      expect(early.dampeningPct).toBe(0.41);
+      expect(windowOf(12).dampeningPct).toBe(0.42);
+      const text = formatEnemyCDTimelineForContext(
+        { players: [], alignedBurstWindows: [early] } as any,
+        120,
+      ).join("\n");
+      expect(text).toContain("| Threat: ");
+      expect(text).toContain("| Dampening: 41%");
+      // a round whose log printed no stack states none and prints none
+      const none = windowOf(4, false);
+      expect(none.dampeningPct).toBeNull();
+      expect(
+        formatEnemyCDTimelineForContext(
+          { players: [], alignedBurstWindows: [none] } as any,
+          120,
+        ).join("\n"),
+      ).not.toContain("Dampening:");
+    });
+
+    it("weights the threat with the stated value — one dose apart from the same burst just after the first stack, not a step from ×1.0", () => {
+      const early = windowOf(4);
+      const late = windowOf(12);
+      expect(early.threatScore / late.threatScore).toBeCloseTo(
+        (1 + 0.41 * 1.5) / (1 + 0.42 * 1.5),
+        10,
+      );
+      // a round whose log printed no stack at all carries no dampening weight
+      const unweighted = windowOf(4, false);
+      expect(early.threatScore / unweighted.threatScore).toBeCloseTo(
+        1 + 0.41 * 1.5,
+        10,
+      );
+    });
+  });
+
   it("handles pseudo-CC fallback for healers (B62)", () => {
     const owner = makeUnit("h1", {
       name: "Healer",

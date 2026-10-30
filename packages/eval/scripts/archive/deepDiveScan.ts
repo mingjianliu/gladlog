@@ -3,20 +3,20 @@
 // hasCoachableSignal for every friendly death anchor, asserting invariants,
 // tallying distributions, and catching crashes / degenerate packs / digits left
 // in name fields / per-spec anomalies. No model calls.
-import { readdirSync, readFileSync } from "fs";
-import { join } from "path";
-import { GladLogParser, type GladMatch } from "@gladlog/parser";
-import { toLegacyMatch, CombatUnitReaction } from "@gladlog/parser-compat";
 import {
-  extractCandidateFindings,
-  isHealerSpec,
   buildDeepDivePack,
   buildDeepDivePrompt,
-  hasCoachableSignal,
-  specToString,
-  type Finding,
   ensureAnalysisData,
+  extractCandidateFindings,
+  type Finding,
+  hasCoachableSignal,
+  isHealerSpec,
+  specToString,
 } from "@gladlog/analysis";
+import { GladLogParser, type GladMatch } from "@gladlog/parser";
+import { CombatUnitReaction,toLegacyMatch } from "@gladlog/parser-compat";
+import { readdirSync, readFileSync } from "fs";
+import { join } from "path";
 
 // Prompt builders read the background-loaded talent / spell-name tables
 // (data/ensure.ts contract) — without this the first combats are degraded.

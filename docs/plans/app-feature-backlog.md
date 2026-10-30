@@ -1,5 +1,7 @@
 # App Feature Backlog
 
+> **2026-10-20: open items are tracked on GitHub.** §10's deferred row detail is in GH #151; §12–§16, §18 and §19 are in GH #152. §17 is implemented (`autoAnalyze` in settings). This file stays as the design record.
+
 > Desktop App feature requirements (distinct from prompt quality changes, which do not go through /eval-ab; UI/interaction changes are implemented directly with standard testing).
 
 ## 1. AI Analysis Language Switching (Chinese / English) ✅ (Implemented 2026-07-18: Chinese/EN segmented control next to analysis button, persisted in settings.aiLanguage (default zh); main side buildCoachSystemPrompt injects system prompt (before local CLI backend prepends prompt); cache key split by language analysis-v2.<lang>.json for bilingual coexistence, legacy keyless cache serves as English fallback; PROMPT_VERSION not bumped)
@@ -196,7 +198,7 @@ Timeline logs in Chinese clients mixed Chinese and English skill names (e.g. Hex
 
 **Implementation Highlights**: Pure meta derivation (startTime clustering), add `sessions.ts` adjacent to `dashboard.ts`; session headers = sticky mini-rows; add "session" option to dashboard period selector.
 
-## 17. Auto-Analyze Toggle + Completion Notifications ⬜ (P1)
+## 17. Auto-Analyze Toggle + Completion Notifications ✅ (P1; `autoAnalyze` in settings — found 2026-10-20)
 
 **Requirement**: Automatically trigger AI analysis upon match completion (opt-in, default off), dispatching desktop notifications when complete.
 

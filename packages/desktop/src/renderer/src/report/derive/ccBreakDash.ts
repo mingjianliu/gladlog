@@ -3,9 +3,9 @@ import { CombatUnitReaction } from "@gladlog/parser-compat";
 
 import { toLegacySafe } from "./legacySource";
 import { displaySpellName } from "./spellDisplay";
-import { tInRange, type TimeRange } from "./timeRange";
-import type { ReportSource } from "./types";
 import { shortUnitName } from "./teamSide";
+import { type TimeRange,tInRange } from "./timeRange";
+import type { ReportSource } from "./types";
 
 /** A single CC-break instance; tS = relative seconds. */
 export interface CcBreakRow {
@@ -67,7 +67,11 @@ export function deriveCcBreakDash(
     const stats = analyzeCcBreaks(
       friends,
       enemies,
-      { startTime: legacy.startTime, endTime: legacy.endTime },
+      {
+        startTime: legacy.startTime,
+        endTime: legacy.endTime,
+        startInfo: legacy.startInfo,
+      },
       petsOf(friends),
       petsOf(enemies),
     );

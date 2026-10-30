@@ -1,10 +1,11 @@
 import { createReadStream, existsSync } from "node:fs";
-import { createInterface } from "node:readline";
 import { join } from "node:path";
+import { createInterface } from "node:readline";
+
 import { parseLine } from "../src/l1/parseLine";
+import type { ParsedLine } from "../src/l1/types";
 import { Segmenter } from "../src/l2/segmenter";
 import type { Segment, ShuffleClose } from "../src/l2/types";
-import type { ParsedLine } from "../src/l1/types";
 
 const FIX = process.env.GLADLOG_FIXTURES ?? "";
 const hasFixtures = FIX !== "" && existsSync(FIX);

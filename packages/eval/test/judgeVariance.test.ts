@@ -3,8 +3,8 @@ import { tmpdir } from "os";
 import { join } from "path";
 
 import {
-  RESPONSE_PRESERVING,
   measureJudgeVariance,
+  RESPONSE_PRESERVING,
 } from "../src/judge/judgeVariance";
 
 type Item = { accuracy: number; errors: number };

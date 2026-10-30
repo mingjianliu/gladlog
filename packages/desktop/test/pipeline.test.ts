@@ -1,6 +1,7 @@
 import { appendFileSync, mkdtempSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
+
 import type { WorkerToMain } from "../src/shared/protocol";
 import { FilePipeline, type ParserLike } from "../src/worker/pipeline";
 

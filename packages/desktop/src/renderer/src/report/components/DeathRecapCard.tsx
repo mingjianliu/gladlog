@@ -35,6 +35,17 @@ function mitigationText(row: DeathRecap["mitigationAudit"][number]): string {
         : "";
     return `${row.spellName} 挡了 ~${blockedK}k${pctPart},覆盖 ${overlap}s`;
   }
+  if (row.kind === "deferred") {
+    // A deferral shield (Time Dilation, Stretch Time) holds damage back (Time
+    // Dilation counts as 50 % mitigation — user rulings 2026-07-30 /
+    // 2026-10-20); the amount is the log's own record of what it held back.
+    const deferredK = Math.round((row.deferredAmount ?? 0) / 1000);
+    const pctPart =
+      row.deferredPctMaxHp !== undefined
+        ? `(≈${row.deferredPctMaxHp}% maxHp)`
+        : "";
+    return `${row.spellName} 暂时挡下 ~${deferredK}k${pctPart},覆盖 ${overlap}s(之后以自身伤害落地)`;
+  }
   if (row.kind === "immunity") {
     const dmgK = Math.round((row.damageTakenDuringImmunity ?? 0) / 1000);
     return `${row.spellName} 免疫覆盖 ${overlap}s(期内观测承伤 ~${dmgK}k)`;
@@ -343,6 +354,7 @@ export function DeathRecapCard({
               <ChipIcon spellId={m.spellId} />
               {m.casterName}:{m.spellName}
               {m.casterWasInCC ? "(被控)" : ""}
+              {m.casterCouldNotPay ? "(蓝不够)" : ""}
             </span>
           ))}
         </p>

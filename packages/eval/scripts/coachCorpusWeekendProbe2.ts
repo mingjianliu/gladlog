@@ -20,7 +20,7 @@
  *       enemyHealerCcWindows: how many "windows" opened on a half/quarter
  *       duration CC.
  *
- * Shared predicates: interrupts via SPELL_CATEGORIES type "interrupts" and
+ * Shared predicates: interrupts via isKickSpellId (spellCategories.ts) and
  * kickerIds including pets (kickAudit.ts); enemy interrupt kit via
  * computeEnemyInterruptAvailability; offensive majors via OFFENSIVE_CD_SPELL_IDS
  * ∩ extractMajorCooldowns; dispel priority via purgePriorityForTest (the
@@ -34,7 +34,7 @@ import {
   extractMajorCooldowns,
 } from "@gladlog/analysis";
 import { enemyHealerCcWindows } from "@gladlog/analysis/src/analysis/candidates/cooldownTiming";
-import { SPELL_CATEGORIES } from "@gladlog/analysis/src/data/spellCategories";
+import { isKickSpellId } from "@gladlog/analysis/src/data/spellCategories";
 import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData";
 import { isHealerSpec } from "@gladlog/analysis/src/utils/cooldowns";
 import {
@@ -56,7 +56,6 @@ import {
 } from "../src/explore/storeAccess";
 import { argOf } from "./lib/cli";
 
-const SPELLS = SPELL_CATEGORIES as Record<string, { type: string }>;
 
 const pct = (a: number, b: number) =>
   b === 0 ? "n/a" : `${((a / b) * 100).toFixed(1)}%`;
@@ -214,7 +213,7 @@ async function main(): Promise<void> {
       const cast = e.spellCastEvents.some(
         (c) =>
           c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
-          SPELLS[c.spellId ?? ""]?.type === "interrupts",
+          isKickSpellId(c.spellId ?? ""),
       );
       if (!cast) {
         dNeverCast++;

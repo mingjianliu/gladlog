@@ -1,3 +1,5 @@
+import { CAST_QUEUE_TOLERANCE_MS } from "@gladlog/analysis";
+
 import type { ReportSource } from "./types";
 
 /** Fallback duration (ms) for a cast bar with no matching end event -- arena
@@ -12,8 +14,13 @@ const PAIR_WINDOW_MS = 12_000;
  * A/B over 10 user matches on 2026-07-25: 10 falsely-cut bars fixed, 0
  * regressions; the more aggressive variant ("constrain by the next start of the
  * same spell + fall back to same name") fixed 8 but broke 42 (SUCCESSes from
- * proc'd instant casts get mispaired) and was rejected. */
-const QUEUE_TOLERANCE_MS = 400;
+ * proc'd instant casts get mispaired) and was rejected.
+ *
+ * The number lives in analysis (`kickAudit.ts` → `CAST_QUEUE_TOLERANCE_MS`):
+ * the kick audit's juke test bounds a cast's completion by the same rule, so
+ * a bar drawn as "cut" here and a kick called "juked" there are one fact
+ * (triage 2026-09-29, kick-priority F-B1). */
+const QUEUE_TOLERANCE_MS = CAST_QUEUE_TOLERANCE_MS;
 
 interface CastBar {
   unitId: string;
@@ -40,31 +47,60 @@ export function deriveCastBars(
 ): CastBar[] {
   const u = source.units[unitId] as
     | {
-        casts?: Array<{ timestamp: number; spellId: number }>;
+        casts?: Array<{
+          timestamp: number;
+          spellId: number;
+          lineIndex?: number;
+        }>;
         castStarts?: Array<{
           timestamp: number;
           spellId: number;
           spellName: string;
+          lineIndex?: number;
         }>;
       }
     | undefined;
   const starts = u?.castStarts ?? [];
   if (starts.length === 0) return [];
   const successes = [...(u?.casts ?? [])].sort(
-    (a, b) => a.timestamp - b.timestamp,
+    (a, b) =>
+      a.timestamp - b.timestamp || (a.lineIndex ?? 0) - (b.lineIndex ?? 0),
   );
+  // row order inside one ms: the log line when both rows carry it, else a
+  // same-ms SUCCESS stays with the earlier bar (codex 20-F19-02: a Lightning
+  // Bolt SUCCESS logged just before the next Bolt's START closes the first)
+  const loggedAfter = (
+    c: (typeof successes)[number],
+    st: (typeof starts)[number],
+  ): boolean =>
+    c.timestamp !== st.timestamp
+      ? c.timestamp > st.timestamp
+      : c.lineIndex !== undefined && st.lineIndex !== undefined
+        ? c.lineIndex > st.lineIndex
+        : false;
 
   const bars: CastBar[] = [];
+  // a SUCCESS closes one bar only (codex R6C-02 #4: a Lightning Bolt
+  // SUCCESS logged just before the next START of the same ms also closed
+  // that new bar at zero length)
+  const used = new Set<(typeof successes)[number]>();
   for (let i = 0; i < starts.length; i++) {
     const st = starts[i]!;
-    const nextStartT = starts[i + 1]?.timestamp ?? Infinity;
+    const next = starts[i + 1];
+    const nextStartT = next?.timestamp ?? Infinity;
     const success = successes.find(
       (c) =>
+        !used.has(c) &&
         c.spellId === st.spellId &&
         c.timestamp >= st.timestamp &&
         c.timestamp <= st.timestamp + PAIR_WINDOW_MS &&
-        c.timestamp <= nextStartT + QUEUE_TOLERANCE_MS,
+        c.timestamp <= nextStartT + QUEUE_TOLERANCE_MS &&
+        // the next bar of the same spell owns a SUCCESS logged after its own
+        // start (codex R6C-02 #4: a kicked Healing Wave paired with the next
+        // Healing Wave's SUCCESS 10.4 s later)
+        !(next && next.spellId === st.spellId && loggedAfter(c, next)),
     );
+    if (success) used.add(success);
     // The end of the match ends every cast: the fallback duration for a bar
     // with no SUCCESS must not cross endTime, or the replay's final moment
     // shows a bar that "never finishes" (reported by the user from real use).

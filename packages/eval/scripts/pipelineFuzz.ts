@@ -23,9 +23,9 @@ import {
   buildMatchContext,
   computeDpsMetrics,
   computeHealerMetrics,
+  ensureAnalysisData,
   extractCandidateFindings,
   isHealerSpec,
-  ensureAnalysisData,
 } from "@gladlog/analysis";
 import { downloadLogText, fetchDetailedStubs } from "@gladlog/corpus-tools";
 import { GladLogParser } from "@gladlog/parser";

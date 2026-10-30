@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
-  downloadRaw,
   DOWNLOAD_RETRIES,
+  downloadRaw,
   fetchDetailedStubs,
   fetchMatchStubs,
   fetchWithRetry,

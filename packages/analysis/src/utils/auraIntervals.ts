@@ -1,12 +1,14 @@
 import { ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
+// runtime-only use (inside buildAuraIntervals); drAnalysis → cooldowns →
+// auraIntervals is a cycle, safe because no module-level code calls across it
+import { isCastOrEffect } from "../data/castEffectAuras";
+import { analysisDataReady } from "../data/ensure";
 import { CC_DURATION_TALENT_MODIFIERS } from "../data/spellEffectData";
 import { buffFullDurationForCaster } from "./buffDuration";
 import type { CastParamCaster } from "./castParam";
 import { ccFullDurationForCaster } from "./ccDuration";
-// runtime-only use (inside buildAuraIntervals); drAnalysis → cooldowns →
-// auraIntervals is a cycle, safe because no module-level code calls across it
-import { CC_CAST_EFFECT_AURA } from "./drAnalysis";
+import { TOUCH_OF_KARMA_ABSORB_ID, TOUCH_OF_KARMA_ID } from "./karmaFeed";
 
 
 /**
@@ -98,7 +100,7 @@ const OPEN_EVENTS = new Set<string>([
  * aura had it truncated (SW:P capped at 16 s instead of 20 s on 4,162
  * intervals). Passing no `castersById` keeps the previous no-caster answer.
  */
-function officialDurationS(
+export function officialDurationS(
   spellId: string,
   caster:
     | (Pick<ICombatUnit, "spec" | "info" | "spellCastEvents"> &
@@ -129,13 +131,30 @@ export const DUPLICATE_CLOSE_WINDOW_S = 1;
  * ascending fromS.
  */
 /**
- * An aura the game RE-BROADCASTS — `SPELL_AURA_REMOVED` and `SPELL_AURA_APPLIED`
- * of the same spell, source and target in the same millisecond (a Dracthyr
- * visage swap, leaving stealth) — is one continuous aura, not an end and a new
- * press. Reliability rounds 2–3 (W2e / N6: d78f a second CC, 3306 "Obsidian
- * Scales ended early", ba44 one Ironbark rendered as two). Returns the events
- * with every such REMOVED/APPLIED pair dropped, order preserved. The one
- * predicate every aura consumer filters through.
+ * How far apart the REMOVED and the APPLIED of one re-broadcast can sit, in
+ * the parsed (whole-millisecond) timestamps. The log writes four decimals, so
+ * the two lines of one re-broadcast straddle a millisecond boundary about one
+ * time in ten (f4da82c5: one Sleep Walk cast, REMOVED 10.1853 / APPLIED
+ * 10.1863 — two `(0s)` CC lines and an extra DR step). Measured on the 60 raw
+ * logs of the 2026-10-08 re-eval, REMOVED → APPLIED of one aura with no cast of
+ * it in between, on players: 7,032 at 0 ms, 666 at 1 ms, 72 at 2–5 ms, then
+ * 2,541 at 6–50 ms. Every CC among them is at 0 or 1 ms (Sleep Walk, Chaos
+ * Nova, Void Nova, Oppressing Roar, Mighty Bash); the 2–5 ms band is poisons
+ * and proc stacks re-applying, the band beyond it ground effects pulsing
+ * (Consecration) — real ends and re-applications.
+ */
+export const AURA_REBROADCAST_GAP_MS = 1;
+
+/**
+ * An aura the game RE-BROADCASTS — `SPELL_AURA_REMOVED` and then
+ * `SPELL_AURA_APPLIED` of the same spell, source and target within
+ * `AURA_REBROADCAST_GAP_MS` (a Dracthyr visage swap, leaving stealth, Sleep
+ * Walk's two phases) — is one continuous aura, not an end and a new press.
+ * Reliability rounds 2–3 (W2e / N6: d78f a second CC, 3306 "Obsidian Scales
+ * ended early", ba44 one Ironbark rendered as two); FT-T08 widened "the same
+ * millisecond" to the gap above. Returns the events with every such
+ * REMOVED/APPLIED pair dropped, order preserved. The one predicate every aura
+ * consumer filters through.
  */
 export function dropAuraRebroadcasts<
   T extends {
@@ -145,9 +164,14 @@ export function dropAuraRebroadcasts<
     timestamp: number;
     logLine: { event: string };
   },
->(events: readonly T[]): T[] {
+>(
+  events: readonly T[],
+  /** a REMOVED → APPLIED pair this says is a NEW application is kept (the
+   * control path: a recast its source logged — fact1215 112-1) */
+  isNewApplication?: (removed: T, applied: T) => boolean,
+): T[] {
   const key = (a: T) =>
-    `${a.spellId}|${a.srcUnitId ?? ""}|${a.destUnitId ?? ""}|${a.timestamp}`;
+    `${a.spellId}|${a.srcUnitId ?? ""}|${a.destUnitId ?? ""}`;
   // A rebroadcast is a REMOVED FOLLOWED BY an APPLIED (log order). An APPLIED
   // then a REMOVED at the same ms is a duplicate application and then the
   // real end — codex review of batch 9: Ironbark applied at 10 s, a duplicate
@@ -160,17 +184,151 @@ export function dropAuraRebroadcasts<
     if (a.logLine.event === LogEvent.SPELL_AURA_REMOVED) {
       pendingRemoved.set(k, [...(pendingRemoved.get(k) ?? []), a]);
     } else if (a.logLine.event === LogEvent.SPELL_AURA_APPLIED) {
-      const r = pendingRemoved.get(k)?.shift();
-      if (r) {
-        drop.add(r);
+      // only a REMOVED no older than the gap is this APPLIED's other half.
+      // One stamped AFTER this APPLIED (the log's timestamps step back now
+      // and then) is not its half, but stays pending for the APPLIED that
+      // follows it — codex post-hoc review of FT-T08 step 1.
+      const pending = (pendingRemoved.get(k) ?? []).filter(
+        (r) => a.timestamp - r.timestamp <= AURA_REBROADCAST_GAP_MS,
+      );
+      const at = pending.findIndex(
+        (r) =>
+          a.timestamp >= r.timestamp && !(isNewApplication?.(r, a) ?? false),
+      );
+      if (at >= 0) {
+        drop.add(pending[at]!);
         drop.add(a);
+        pending.splice(at, 1);
       }
+      pendingRemoved.set(k, pending);
     }
   }
   return drop.size === 0 ? [...events] : events.filter((a) => !drop.has(a));
 }
 
-export function buildAuraIntervals(
+/**
+ * How long after a `SPELL_AURA_BROKEN[_SPELL]` line the aura's own
+ * `SPELL_AURA_REMOVED` can follow and still be that application's end.
+ * Measured on the 60 raw logs of the 2026-10-08 re-eval, auras on players,
+ * first BROKEN → REMOVED of the same aura (2,233 applications with a BROKEN
+ * line): 1,597 within 1 ms and 313 more within 50 ms (a CC breaking — the
+ * BROKEN line is the end, to within a frame), 27 within 250 ms, 296 between
+ * 250 ms and 617 ms, none later. The late ones are three roots — Frost Nova
+ * 122, Ice Nova 157997, the Water Elemental's Freeze 33395 — which log a
+ * BROKEN_SPELL for each damaging hit (2.6 lines per application) and stay on
+ * the target about half a second longer. 23 applications had a BROKEN and no
+ * REMOVED before the aura's next APPLIED.
+ */
+export const AURA_BREAK_TO_REMOVED_MS = 1_000;
+
+interface AuraBreakPairing {
+  superseded: Set<unknown>;
+  /** each REMOVED event → the BROKEN lines it superseded, in log order */
+  before: Map<unknown, unknown[]>;
+}
+const auraBreakPairingCache = new WeakMap<object, AuraBreakPairing>();
+
+function auraBreakPairing<
+  T extends {
+    spellId?: string | null;
+    destUnitId?: string;
+    timestamp: number;
+    logLine: { event: string };
+  },
+>(events: readonly T[]): AuraBreakPairing {
+  const cached = auraBreakPairingCache.get(events);
+  if (cached) return cached;
+  const pending = new Map<string, T[]>();
+  const pairing: AuraBreakPairing = { superseded: new Set(), before: new Map() };
+  for (const a of events) {
+    if (!a.spellId) continue;
+    const ev = a.logLine.event;
+    const k = `${a.spellId}|${a.destUnitId ?? ""}`;
+    if (
+      ev === LogEvent.SPELL_AURA_BROKEN ||
+      ev === LogEvent.SPELL_AURA_BROKEN_SPELL
+    ) {
+      pending.set(k, [...(pending.get(k) ?? []), a]);
+    } else if (ev === LogEvent.SPELL_AURA_REMOVED) {
+      const mine = (pending.get(k) ?? []).filter((b) => {
+        const gap = a.timestamp - b.timestamp;
+        return gap >= 0 && gap <= AURA_BREAK_TO_REMOVED_MS;
+      });
+      for (const b of mine) pairing.superseded.add(b);
+      if (mine.length > 0) pairing.before.set(a, mine);
+      pending.delete(k);
+    } else if (ev === LogEvent.SPELL_AURA_APPLIED) {
+      pending.delete(k);
+    }
+  }
+  auraBreakPairingCache.set(events, pairing);
+  return pairing;
+}
+
+/**
+ * The BROKEN / BROKEN_SPELL events that are NOT their aura's end: the aura's
+ * own REMOVED follows on the same unit within `AURA_BREAK_TO_REMOVED_MS`, with
+ * no APPLIED of it in between. An aura ends at its REMOVED; a BROKEN line says
+ * what broke it (FT-T08 step 2). A BROKEN with no REMOVED after it stays the
+ * end — the log lost the REMOVED line.
+ *
+ * Keyed by spell and target only: a BROKEN line's source is the breaker, not
+ * the aura's caster. Memoised on the events array (callers pass a unit's own
+ * `auraEvents`, some once per window).
+ */
+export function supersededAuraBreaks<
+  T extends {
+    spellId?: string | null;
+    destUnitId?: string;
+    timestamp: number;
+    logLine: { event: string };
+  },
+>(events: readonly T[]): ReadonlySet<T> {
+  return auraBreakPairing(events).superseded as ReadonlySet<T>;
+}
+
+/**
+ * For a REMOVED event, the BROKEN / BROKEN_SPELL lines of the same aura on
+ * the same unit that it superseded (`supersededAuraBreaks`), in log order —
+ * what hit the aura before it ended. Empty when the aura simply ended. Tied
+ * to that one REMOVED event: a reader that carries "this removal was a
+ * break" over from the skipped BROKEN line reads it here, never from a flag
+ * of its own (a per-spell flag leaks into the next application when a filter
+ * drops the REMOVED it was meant for).
+ */
+export function auraBreaksBeforeRemoved<
+  T extends {
+    spellId?: string | null;
+    destUnitId?: string;
+    timestamp: number;
+    logLine: { event: string };
+  },
+>(events: readonly T[], removed: T): readonly T[] {
+  return (auraBreakPairing(events).before.get(removed) ?? []) as T[];
+}
+
+/** `events` without the BROKEN lines that are not their aura's end
+ * (`supersededAuraBreaks`) — for a reader that closes an aura on REMOVED /
+ * BROKEN / BROKEN_SPELL. A reader that wants to know WHAT broke an aura
+ * reads the unfiltered events. */
+export function dropSupersededAuraBreaks<
+  T extends {
+    spellId?: string | null;
+    destUnitId?: string;
+    timestamp: number;
+    logLine: { event: string };
+  },
+>(events: readonly T[]): T[] {
+  const superseded = supersededAuraBreaks(events);
+  return superseded.size === 0
+    ? [...events]
+    : events.filter((a) => !superseded.has(a));
+}
+
+/** @internal The reading itself; exported for test/auraIntervalsMemo.test.ts,
+ * which holds the memoised `buildAuraIntervals` to it. Product code calls
+ * `buildAuraIntervals`. */
+export function buildAuraIntervalsUncached(
   unit: ICombatUnit,
   combat: {
     startTime: number;
@@ -219,8 +377,10 @@ export function buildAuraIntervals(
   // whether from a real pairing or an earlier fallback — see module header.
   const lastCloseToSBySpellId = new Map<string, number>();
 
+  // a BROKEN line its aura's own REMOVED follows is not the end (FT-T08)
+  const notTheEnd = supersededAuraBreaks(unit.auraEvents);
   const events = dropAuraRebroadcasts(unit.auraEvents)
-    .filter((a) => a.destUnitId === unit.id && a.spellId)
+    .filter((a) => a.destUnitId === unit.id && a.spellId && !notTheEnd.has(a))
     .sort((a, b) => a.timestamp - b.timestamp);
 
   for (const a of events) {
@@ -254,9 +414,8 @@ export function buildAuraIntervals(
           (c) =>
             // Fear casts 5782 and applies 118699 (codex review of batch 9:
             // a real second Fear was swallowed as a rebroadcast)
-            (c.spellId === id ||
-              (c.spellId !== undefined &&
-                CC_CAST_EFFECT_AURA[c.spellId] === id)) &&
+            c.spellId !== undefined &&
+            isCastOrEffect(c.spellId, id) &&
             Math.abs(c.logLine.timestamp - a.timestamp) <= 1000,
         );
       if (rebroadcast) {
@@ -398,7 +557,142 @@ export function buildAuraIntervals(
     });
   }
 
+  endKarmaAtItsShield(out);
   return out.sort(
     (a, b) => a.fromS - b.fromS || a.spellId.localeCompare(b.spellId),
   );
+}
+
+/** How far from the Touch of Karma buff's APPLIED its shield aura may go up
+ * and still be that press's — the log writes both in the cast's own ms. */
+const KARMA_SHIELD_PAIR_S = 0.2;
+
+/**
+ * B2 (user 2026-10-24, 「全按建议」): Touch of Karma is up while its shield
+ * is. The press puts two buffs on the monk — the cast id's 10 s marker
+ * (`TOUCH_OF_KARMA_ID`), which stays its full length whatever happens to the
+ * shield, and the absorb itself (`TOUCH_OF_KARMA_ABSORB_ID`), which leaves
+ * when the shield does (2abc9185: eaten through 3.0 s in, the marker up to
+ * 10.0 s). `[BUFF FADED]` already ended there (N4 F02a); every reader of the
+ * intervals — `[STACKED DEFENSIVES]`, the burst ledger's "Target had a major
+ * defensive up", the death block's mitigation audit — read the marker. Each
+ * marker interval of the holder ends with the shield the same press put up,
+ * when that ended first; a log with no shield aura keeps the marker's.
+ */
+function endKarmaAtItsShield(out: IAuraInterval[]): void {
+  const shields = out.filter((iv) => iv.spellId === TOUCH_OF_KARMA_ABSORB_ID);
+  if (shields.length === 0) return;
+  for (const iv of out) {
+    if (iv.spellId !== TOUCH_OF_KARMA_ID) continue;
+    const shield = shields.find(
+      (sh) =>
+        sh.srcUnitName === iv.srcUnitName &&
+        Math.abs(sh.fromS - iv.fromS) <= KARMA_SHIELD_PAIR_S,
+    );
+    if (!shield || shield.toS >= iv.toS) continue;
+    iv.toS = shield.toS;
+    iv.inferredEnd = shield.inferredEnd;
+  }
+}
+
+/**
+ * One memo entry of `buildAuraIntervals`: the inputs the uncached reading
+ * depends on, besides the aura stream the entry is keyed by. `castsFp` is
+ * the casters' cast counts — a fixture that pushes a cast onto a caster
+ * between two calls gets a fresh reading, not the first one.
+ */
+interface AuraIntervalsEntry {
+  unitId: string;
+  len: number;
+  startTime: number;
+  endTime: number;
+  castsFp: number;
+  result: IAuraInterval[];
+}
+const AURA_INTERVALS_ENTRIES_MAX = 8;
+/** The casters key when a call has neither `castersById` nor `combat.units`. */
+const NO_CASTERS: object = {};
+/** aura stream → casters container → entries. A caller that builds a fresh
+ * `castersById` every call (five do) gets its own short-lived list and
+ * never pushes out another caller's entries (review of 698fc58). */
+const auraIntervalsCache = new WeakMap<
+  readonly unknown[],
+  WeakMap<object, AuraIntervalsEntry[]>
+>();
+
+/**
+ * `buildAuraIntervals`, memoised. Twenty call sites in nineteen files rebuild
+ * the same unit's intervals inside one analysis (the timeline's control
+ * lines, the kill windows, the crisis and burst engines, the kick audit …);
+ * measured on the real-match fixture, the uncached reading plus
+ * `dropAuraRebroadcasts` was about a third of the pipeline's CPU. The memo is
+ * keyed by the unit's `auraEvents` array (the same object
+ * `supersededAuraBreaks` keys its own cache by) and holds the other inputs the
+ * reading depends on: the unit id, the stream's length, the combat window, the
+ * casters container (`castersById`, else `combat.units`) and the casters'
+ * cast counts. A call made before the analysis data is ready is never cached
+ * (an official duration read then could differ from the one read after).
+ * Callers get a fresh array each time; the interval objects are shared, and
+ * no consumer writes to one (the call sites were read for that).
+ *
+ * The limit, as the 2026-10-17 review states it: a caster's `spec`, `info`
+ * (talents), `empowerEnds` / `advancedActions` or the CONTENT of its
+ * `spellCastEvents`, and an aura event's fields, are not in the key. No
+ * product code writes them after the parse (checked by grep); a test that
+ * changes one in place between two readings of the same stream gets the
+ * first reading — build a new unit or a new `auraEvents` array instead.
+ */
+export function buildAuraIntervals(
+  unit: ICombatUnit,
+  combat: {
+    startTime: number;
+    endTime: number;
+    units?: Readonly<Record<string, ICombatUnit>>;
+  },
+  castersById?: ReadonlyMap<
+    string,
+    Pick<ICombatUnit, "spec" | "info" | "spellCastEvents"> & CastParamCaster
+  >,
+): IAuraInterval[] {
+  const events = unit.auraEvents;
+  if (!events || !analysisDataReady())
+    return buildAuraIntervalsUncached(unit, combat, castersById);
+  const casters: object = castersById ?? combat.units ?? NO_CASTERS;
+  let castsFp = 0;
+  if (castersById)
+    for (const c of castersById.values())
+      castsFp += c.spellCastEvents?.length ?? 0;
+  else if (combat.units)
+    for (const c of Object.values(combat.units))
+      castsFp += c.spellCastEvents?.length ?? 0;
+  let byCasters = auraIntervalsCache.get(events);
+  if (!byCasters) {
+    byCasters = new WeakMap();
+    auraIntervalsCache.set(events, byCasters);
+  }
+  let entries = byCasters.get(casters);
+  if (!entries) {
+    entries = [];
+    byCasters.set(casters, entries);
+  }
+  const hit = entries.find(
+    (e) =>
+      e.unitId === unit.id &&
+      e.len === events.length &&
+      e.startTime === combat.startTime &&
+      e.endTime === combat.endTime &&
+      e.castsFp === castsFp,
+  );
+  if (hit) return hit.result.slice();
+  const result = buildAuraIntervalsUncached(unit, combat, castersById);
+  if (entries.length >= AURA_INTERVALS_ENTRIES_MAX) entries.shift();
+  entries.push({
+    unitId: unit.id,
+    len: events.length,
+    startTime: combat.startTime,
+    endTime: combat.endTime,
+    castsFp,
+    result,
+  });
+  return result.slice();
 }

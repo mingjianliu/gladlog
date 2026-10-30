@@ -1,3 +1,4 @@
+import { buildFindingsPrompt } from "../src/analysis/buildFindingsPrompt";
 import {
   CD_WASTE_PRESSURE_HP_PCT,
   cdWasteEvents,
@@ -62,6 +63,70 @@ describe("cd-waste / NOTE — shared charge pool (W2)", () => {
     expect(lowPressureUnusedDefensiveNote([bop, DP], 82)).not.toContain(
       "Blessing of Protection",
     );
+  });
+});
+
+// F-W1 (triage 2026-09-29, ruling 2026-09-30 R7 = A): e5b3534b's Lay on Hands
+// was rejected 11 times in Cyclone before the round-ending death — still a
+// cd-waste line, now with facts.attempted; rejects after the round end and
+// GCD-locked ones do not count
+describe("cd-waste — facts.attempted (F-W1)", () => {
+  const LOH = {
+    spellId: "471195",
+    spellName: "Lay on Hands",
+    neverUsed: true,
+    isThroughput: false,
+  };
+  const fail = (tSeconds: number, reason = "无法在放逐时那样做") => ({
+    tSeconds,
+    unitGuid: "p1",
+    spellId: 471195,
+    spellName: "Lay on Hands",
+    reason,
+  });
+  const rawStreams = {
+    available: true,
+    manaSamples: [],
+    castFailed: [fail(118.4), fail(119.2), fail(120.4), fail(120.6)],
+  };
+  it("counts the rejects up to the round end; the line still fires", () => {
+    const [e] = cdWasteEvents([LOH], me, 40, { rawStreams, untilS: 120.408 });
+    expect(e!.facts!.attempted).toBe(
+      "pressed but rejected (under crowd control×3)",
+    );
+  });
+  it("the caller's window ends at the owner's own death — \"You are dead\" is no attempt", () => {
+    const [e] = cdWasteEvents([LOH], me, 40, { rawStreams, untilS: 119.0 });
+    expect(e!.facts!.attempted).toBe(
+      "pressed but rejected (under crowd control×1)",
+    );
+  });
+  it("a not-ready reject within 1.5 s after an own success of the never-cast cooldown IS an attempt — ruling C1, extended to cd-waste 2026-10-25 (fact5 D6; it was the fe1a9355 GCD miss-press shape)", () => {
+    const [e] = cdWasteEvents([LOH], me, 40, {
+      rawStreams: {
+        ...rawStreams,
+        castFailed: [fail(168.57, "尚未恢复")],
+      },
+      untilS: 200,
+      ownCastSuccessSeconds: [167.783],
+    });
+    expect(e!.facts!.attempted).toBe("pressed but rejected (not ready yet×1)");
+  });
+  it("the legend says never successfully cast, with the intent-guard note", () => {
+    const [e] = cdWasteEvents([LOH], me, 40, { rawStreams, untilS: 120.408 });
+    const p = buildFindingsPrompt([e!], "", "Holy Paladin");
+    const legend = p.split("\n").find((l) => l.startsWith('- "cd-waste":'))!;
+    // FT-T15 ⑧: the predicate is per round (a Solo Shuffle prompt is one round)
+    expect(legend).toMatch(/never successfully cast in this round/);
+    expect(legend).not.toMatch(/entire match/);
+    expect(legend).toMatch(/DID try to press this ability/);
+  });
+  it("no rejects → no fact", () => {
+    const [e] = cdWasteEvents([LOH], me, 40, {
+      rawStreams: { ...rawStreams, castFailed: [] },
+      untilS: 200,
+    });
+    expect(e!.facts!.attempted).toBeUndefined();
   });
 });
 
@@ -148,5 +213,74 @@ describe("matchMinHpPct", () => {
     });
     expect(matchMinHpPct(u)).toBe(35);
     expect(matchMinHpPct(makeUnit("p2"))).toBeNull();
+  });
+
+  it("bounded to the round when the combat is passed (triage hp-state F-M1)", () => {
+    const sample = (timestamp: number, hp: number) => ({
+      logLine: { timestamp },
+      advancedActorCurrentHp: hp,
+      advancedActorMaxHp: 1000,
+    });
+    const u = makeUnit("p1", {
+      advancedActions: [
+        sample(900, 300), // before the round
+        sample(2000, 920),
+        sample(4000, 950),
+        sample(6000, 810), // after the round ended
+      ] as never[],
+    });
+    const round = { startTime: 1000, endTime: 5000 };
+    expect(matchMinHpPct(u, round)).toBe(92);
+    // without the bounds every sample counts, as before
+    expect(matchMinHpPct(u)).toBe(30);
+    // the boundary instants are inside the round
+    expect(matchMinHpPct(u, { startTime: 900, endTime: 6000 })).toBe(30);
+  });
+
+  it("a Solo Shuffle round ends at its first death — `roundEndMs` (acceptance 7e2a3c95 #6)", () => {
+    // 7d1f14af: the NOTE read 69 % 1.2 s after the round's first death
+    // (71.4 % inside the round); the log ran on to combat.endTime
+    const sample = (timestamp: number, hp: number) => ({
+      logLine: { timestamp },
+      advancedActorCurrentHp: hp,
+      advancedActorMaxHp: 1000,
+    });
+    const owner = makeUnit("p1", {
+      info: {},
+      advancedActions: [sample(2000, 714), sample(4200, 690)] as never[],
+    });
+    const dead = makeUnit("p2", {
+      info: {},
+      deathRecords: [{ timestamp: 3000 }],
+    } as never);
+    const round = {
+      startTime: 1000,
+      endTime: 5000,
+      startInfo: { bracket: "Rated Solo Shuffle" },
+      units: { p1: owner, p2: dead },
+    };
+    expect(matchMinHpPct(owner, round)).toBeCloseTo(71.4, 6);
+    // a 3v3 round keeps the combat's end
+    expect(
+      matchMinHpPct(owner, { ...round, startInfo: { bracket: "3v3" } }),
+    ).toBe(69);
+  });
+});
+
+// User ruling 2026-09-30: Mass Invisibility is accusable in cd-hoarded only
+// (A9 simulated cd-hoarded, not "never pressed it all match")
+describe("cd-waste never names Mass Invisibility", () => {
+  const mi = {
+    spellId: "414664",
+    spellName: "Mass Invisibility",
+    neverUsed: true,
+    isThroughput: false,
+    tag: "Defensive",
+  };
+  it("a never-pressed Mass Invisibility under pressure → no cd-waste", () => {
+    expect(cdWasteEvents([mi], me, 40)).toEqual([]);
+    expect(cdWasteEvents([mi, DP], me, 40).map((e) => e.spellId)).toEqual([
+      "19236",
+    ]);
   });
 });

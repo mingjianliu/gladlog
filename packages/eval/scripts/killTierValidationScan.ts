@@ -13,7 +13,19 @@
  *   - stun instances + DR level: analyzePlayerCCAndTrinket (ccTrinketAnalysis)
  *   - tier: killOpportunityAt — trinket state + WALL_IN_HAND_MIT_IDS in hand
  * Re-run whenever WALL_IN_HAND_MIT_IDS' inputs move (MITIGATION_TABLE or the
- * usable-while-stunned table — BACKLOG #41 (8) shrank the set 17 → 6).
+ * usable-while-stunned table — BACKLOG #41 (8) shrank the set 17 → 6), or
+ * what "in hand" reads does.
+ *
+ * 2026-10-11 (R08 b): "in hand" now also counts a wall the unit OWNS and has
+ * not pressed this round (the cooldown ledger, `unpressedWallsOwned`), not
+ * only one it cast. New-season archive every-30 (605 files, 1,270 rounds,
+ * 18,322 landings), base ebb689de → this input:
+ *   prime   4,712 → 3,734 landings   5.2 % → 5.7 %
+ *   gated   2,105 → 3,083            1.9 % → 2.4 %
+ *   locked 11,505 → 11,505           1.8 % → 1.8 %
+ * The 978 landings that moved prime → gated converted at 3.4 % (33) — under
+ * what stays prime, over what was gated. Prime still converts 2.4× gated
+ * (2.7× before); the gap in points is unchanged (3.3).
  *
  * Usage:
  *   npx tsx packages/eval/scripts/killTierValidationScan.ts \
@@ -123,7 +135,7 @@ for (const f of files) {
         for (const cc of summary.ccInstances) {
           if (cc.drInfo?.category !== "Stun") continue;
           if (cc.drInfo.level !== "Full" && cc.drInfo.level !== "50%") continue;
-          const opp = killOpportunityAt(victim, cc.atSeconds, legacy.startTime);
+          const opp = killOpportunityAt(victim, cc.atSeconds, legacy);
           const atMs = legacy.startTime + cc.atSeconds * 1000;
           const died = victim.deathRecords.some(
             (d) =>

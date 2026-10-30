@@ -83,6 +83,9 @@ export function burstWindowResponseEvents(
     tools: ReadonlyArray<{
       spellId: string;
       casts: ReadonlyArray<{ timeSeconds: number }>;
+      /** was the tool ready at that second — ruling C1 keeps a GCD-refused
+       * press of a READY tool; absent = the refusal is dropped as before */
+      readyAt?: (tSeconds: number) => boolean;
     }>;
     ownCastSuccessSeconds?: number[];
   },
@@ -209,8 +212,18 @@ export function burstWindowResponseEvents(
                 Number(tool.spellId),
               ),
               tool.casts.map((c) => c.timeSeconds),
+              // ruling C1's reading, extended by the user 2026-10-25 (fact5
+              // D6): a GCD-refused press of a ready tool, never cast later in
+              // the window, is an attempt
               {
                 ownCastSuccessSeconds: ownerAttempts.ownCastSuccessSeconds,
+                ...(tool.readyAt
+                  ? {
+                      keepGcdLockedUntilS:
+                        p.tSec + BURST_RESPONSE_WINDOW_MS / 1000,
+                      readyAt: tool.readyAt,
+                    }
+                  : {}),
               },
             ),
           ),
@@ -237,12 +250,26 @@ export function burstWindowResponseEvents(
         caster: p.leadCd.casterName,
         ...(extras ? { extras } : {}),
         pressured: p.pressured!.name,
-        pressuredHpPct: String(p.pressured!.minHpPct),
-        // The rendered second `pressuredHpPct` was sampled at — NOT decoration:
+        // FT-T03 (user ruling 2026-10-10, D7): "fell to N% inside the
+        // window" is a TROUGH — the engine's `troughHpPct` / `troughHpSec`
+        // (`hpTroughInWindow`, the true minimum, the pair `[BURST ANSWERED]`
+        // prints for an answered window), not the lowest whole-second tick.
+        // Whether this window is a candidate at all (`triaged`, the order
+        // and the cap above) still reads the grid pair `minHpPct`, so the
+        // fact can only be at or below the number that decided.
+        pressuredHpPct: String(
+          p.pressured!.troughHpPct ?? p.pressured!.minHpPct,
+        ),
+        // The rendered second `pressuredHpPct` happened at — NOT decoration:
         // it is what lets `checkCrisisHpStateConsistency` cross-check the HP
         // claim against that second's own `[STATE]` tick (the fact is a MIN
         // over the window, so the line's own `t` is the wrong second to check).
-        pressuredHpT: fmtFactTime(p.pressured!.minHpSec ?? p.tSec),
+        pressuredHpT: fmtFactTime(
+          p.pressured!.troughHpSec ?? p.pressured!.minHpSec ?? p.tSec,
+        ),
+        // WO3 #18 (r1008-141): where the window the trough and the death
+        // read ends — the burst's own span, not the 8 s answer window
+        windowEndT: fmtFactTime(p.outcomeEndSec),
         diedInWindow: p.anyFriendlyDeath ? "yes" : "no",
         refN: String(ref.nResp + ref.nNoResp),
         refDeathResp: String(ref.deathRespPct),

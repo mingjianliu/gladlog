@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+
 import { transformSpellNamesZh } from "../scripts/datagen/genSpellNamesZh";
 
 describe("transformSpellNamesZh", () => {

@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+ 
 /**
  * Feasibility gates for blaming a missed cleanse (decided by the user
  * 2026-08-02) — a "you didn't dispel" accusation must first pass:
@@ -22,11 +22,17 @@ import {
 } from "@gladlog/parser-compat";
 
 import {
+  dispellerPressedFact,
   missedCleanseEvents,
   missedPurgeEvents,
 } from "../src/analysis/candidateFindings";
 import { kickLockoutSeconds } from "../src/data/spellEffectData";
 import {
+  cleanseSpellNamesFor,
+  computeDrChainRisk,
+  consequenceGatedWorth,
+  coPresentBacklash,
+  dispelTypesRemovedBy,
   formatMissedCleanseExemption,
   formatMissedPurgeExemption,
   purgePriorityForTest,
@@ -92,6 +98,65 @@ function summarize(friends: any[], combat: any = COMBAT) {
  * gates (a/b+c/d), not the 2026-08-05 owner-capability gate (that gate has
  * its own coverage in candidateFindings.test.ts). */
 const DISPEL_OWNER = { spec: CombatUnitSpec.Priest_Discipline };
+
+describe("postCcDamage — a teammate's redistribution is not damage taken (triage missed-cleanse F-C1)", () => {
+  const row = (
+    tS: number,
+    amount: number,
+    spellId: string,
+    srcUnitId: string,
+    srcUnitFlags: number,
+  ) => ({
+    logLine: { event: LogEvent.SPELL_DAMAGE, timestamp: S(tS), parameters: [] },
+    timestamp: S(tS),
+    effectiveAmount: -amount,
+    amount: -amount,
+    spellId,
+    spellName: spellId,
+    srcUnitId,
+    srcUnitFlags,
+    destUnitId: "t1",
+  });
+  const FRIENDLY = 0x511;
+  const HOSTILE = 0x548;
+  const hostile = () =>
+    makeUnit("e1", {
+      spec: CombatUnitSpec.Hunter_Marksmanship,
+      reaction: CombatUnitReaction.Hostile,
+    });
+  const window = (damageIn: any[]) => {
+    const t1 = targetWithBinding(10, 16);
+    (t1 as any).damageIn = damageIn;
+    return reconstructDispelSummary(
+      [t1, discPriest("h1")] as any,
+      [hostile()] as any,
+      COMBAT,
+    ).missedCleanseWindows[0];
+  };
+
+  it("6062daf2's shape: the only rows in the 5 s are the owner's Void Leech → 0", () => {
+    const w = window([
+      row(11.4, 11_337, "451963", "h1", FRIENDLY),
+      row(14.4, 9_070, "451963", "h1", FRIENDLY),
+    ]);
+    expect(w.postCcDamage).toBe(0);
+  });
+
+  it("enemy hits stay, and so does every other same-side id (a self-sourced deferral is enemy damage paid late)", () => {
+    const w = window([
+      row(11, 37_300, "451963", "h1", FRIENDLY), // Void Leech from the priest: out
+      row(12, 27_000, "19434", "e1", HOSTILE), // Aimed Shot: in
+      row(13, 400, "361029", "t1", FRIENDLY), // Time Dilation tick on itself: in
+      row(16, 50_000, "19434", "e1", HOSTILE), // 6 s after the application: outside the 5 s
+    ]);
+    expect(w.postCcDamage).toBe(27_400);
+  });
+
+  it("a Void Leech from the other roster (a charmed victim's drain) is a hit", () => {
+    const w = window([row(11, 5_000, "451963", "e1", HOSTILE)]);
+    expect(w.postCcDamage).toBe(5_000);
+  });
+});
 
 describe("门 b+c 无法施法(硬控∪踢锁,自由时间 < 3s 反应阈值)", () => {
   it("基线:无任何门数据 → 窗口成立且不豁免,候选照常产出", () => {
@@ -496,5 +561,317 @@ describe("自由祝福:按我方阵容决定是否值得驱散(用户裁定)", (
   it("非上下文相关的目标不受阵容影响(真言术盾始终 High)", () => {
     const allMelee = [mkUnit(CombatUnitSpec.Warrior_Arms, "w")];
     expect(purgePriorityForTest("17", allMelee)).toBe("High");
+  });
+});
+
+describe("triage missed-cleanse F-C13 / F-C16", () => {
+  it("F-C13: a same-type backlash debuff on the target when the CC lands → coRemovesBacklash (UA; VT)", () => {
+    for (const [id, name] of [
+      ["1259790", "Unstable Affliction"],
+      ["34914", "Vampiric Touch"],
+    ]) {
+      const t1 = targetWithBinding(10, 16, [
+        makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, id!, S(5), "e1", "t1"),
+      ]);
+      (t1 as any).auraEvents.sort((a: any, b: any) => a.timestamp - b.timestamp);
+      const ds = summarize([t1, discPriest("h1")]);
+      const w = ds.missedCleanseWindows[0]!;
+      expect(w.coRemovesBacklash).toBe(name);
+      expect(
+        missedCleanseEvents(ds.missedCleanseWindows, DISPEL_OWNER, [], false)[0]!
+          .facts.coRemovesBacklash,
+      ).toBe(name);
+    }
+    // removed before the CC landed → nothing
+    const t2 = targetWithBinding(10, 16, [
+      makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, "1259790", S(2), "e1", "t1"),
+      makeAuraEvent(LogEvent.SPELL_AURA_REMOVED, "1259790", S(4), "e1", "t1"),
+    ]);
+    (t2 as any).auraEvents.sort((a: any, b: any) => a.timestamp - b.timestamp);
+    expect(summarize([t2, discPriest("h1")]).missedCleanseWindows[0]!.coRemovesBacklash).toBeUndefined();
+  });
+
+  it("WO3 #13: a backlash that lands inside the window counts; a cross-type one counts only when the dispel spell removes its type", () => {
+    // UA lands at 12 s, inside the 10–16 s Binding Shot → it was up when a
+    // cleanse could have been pressed
+    const t1 = targetWithBinding(10, 16, [
+      makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, "1259790", S(12), "e1", "t1"),
+    ]);
+    (t1 as any).auraEvents.sort((a: any, b: any) => a.timestamp - b.timestamp);
+    expect(summarize([t1, discPriest("h1")]).missedCleanseWindows[0]!.coRemovesBacklash).toBe("Unstable Affliction");
+    // applied after the window → nothing
+    const t2 = targetWithBinding(10, 16, [
+      makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, "1259790", S(17), "e1", "t1"),
+    ]);
+    (t2 as any).auraEvents.sort((a: any, b: any) => a.timestamp - b.timestamp);
+    expect(summarize([t2, discPriest("h1")]).missedCleanseWindows[0]!.coRemovesBacklash).toBeUndefined();
+    // Purify Spirit removes Magic and Curse; Remove Curse only Curse
+    expect([...dispelTypesRemovedBy("77130", CombatUnitSpec.Shaman_Restoration)].sort()).toEqual(["Curse", "Magic"]);
+    expect([...dispelTypesRemovedBy("475", CombatUnitSpec.Mage_Frost)]).toEqual(["Curse"]);
+    const target = makeUnit("t1", {
+      auraEvents: [makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, "1259790", S(5), "e1", "t1")],
+    });
+    const enemies = new Map([["e1", enemy()]]) as any;
+    expect(coPresentBacklash(target as any, new Set(["Curse", "Magic"]), S(10), S(16), enemies)).toEqual(["Unstable Affliction"]);
+    expect(coPresentBacklash(target as any, new Set(["Curse"]), S(10), S(16), enemies)).toEqual([]);
+  });
+
+  it("F-C16: an id with no DR family (a curse) never reads drChainRisk; a root keeps its self-DR", () => {
+    const curse = "1714"; // Curse of Tongues
+    const t1 = makeUnit("t1", {
+      auraEvents: [
+        makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, curse, S(10), "e1", "t1"),
+        makeAuraEvent(LogEvent.SPELL_AURA_REMOVED, curse, S(16), "e1", "t1"),
+        makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, curse, S(16.08), "e1", "t1"),
+      ],
+    });
+    expect(
+      computeDrChainRisk(t1 as any, curse, S(10), S(16), new Set(["e1"]), MATCH_START),
+    ).toBe(false);
+    const root = "122"; // Frost Nova
+    const t2 = makeUnit("t2", {
+      auraEvents: [
+        makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, root, S(10), "e1", "t2"),
+        makeAuraEvent(LogEvent.SPELL_AURA_REMOVED, root, S(16), "e1", "t2"),
+        makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, root, S(18), "e1", "t2"),
+      ],
+    });
+    expect(
+      computeDrChainRisk(t2 as any, root, S(10), S(16), new Set(["e1"]), MATCH_START),
+    ).toBe(true);
+  });
+});
+
+describe("triage missed-cleanse F-C14 / F-C12 (owner's cleanse facts)", () => {
+  it("95127ab4 rows: Detox rejected ×2 while stunned → attempted; the not-ready press inside the owner's GCD of a READY Detox never cast after counts too (ruling C1, extended 2026-10-25); ownerDispelSpell names Detox", () => {
+    const owner = makeUnit("mw", {
+      spec: CombatUnitSpec.Monk_Mistweaver,
+      spellCastEvents: [
+        {
+          spellId: "115078",
+          spellName: "Paralysis",
+          timestamp: S(48.285),
+          logLine: { event: LogEvent.SPELL_CAST_SUCCESS, timestamp: S(48.285) },
+        },
+      ],
+    });
+    const failed = (t: number, reason: string) => ({
+      tSeconds: t,
+      unitGuid: "mw",
+      spellId: 115450,
+      spellName: "清创生血",
+      reason,
+    });
+    const rawStreams = {
+      available: true,
+      manaSamples: [],
+      castFailed: [
+        failed(49.157, "尚未恢复"),
+        failed(49.458, "无法在昏迷时那样做"),
+        failed(49.967, "无法在昏迷时那样做"),
+      ],
+    } as any;
+    const w = {
+      timeSeconds: 45.793,
+      durationSeconds: 6,
+      targetName: "t1",
+      spellName: "Psychic Scream",
+      spellId: "8122",
+      priority: "Critical",
+      postCcDamage: 10_000,
+      cleanseWasOnCD: false,
+      dispellersLockedOut: false,
+      losReachable: null,
+      drChainRisk: false,
+      dispelType: "Magic",
+    } as any;
+    const [c] = missedCleanseEvents([w], owner, [owner], false, {
+      enemyIds: new Set(),
+      matchStartMs: MATCH_START,
+      rawStreams,
+    });
+    expect(c!.facts.attempted).toBe(
+      "pressed but rejected (under crowd control×2、not ready yet×1)",
+    );
+    expect(c!.facts.ownerDispelSpell).toBe("Detox");
+    // codex 20-F18-01 #1: a Detox cast 1 s before the refusal was on its own
+    // cooldown — that refusal stays out
+    const recast = {
+      ...owner,
+      spellCastEvents: [
+        ...owner.spellCastEvents,
+        {
+          spellId: "115450",
+          spellName: "清创生血",
+          timestamp: S(48.1),
+          logLine: { event: LogEvent.SPELL_CAST_SUCCESS, timestamp: S(48.1) },
+        },
+      ],
+    } as never;
+    const [c2] = missedCleanseEvents([w], recast, [recast], false, {
+      enemyIds: new Set(),
+      matchStartMs: MATCH_START,
+      rawStreams,
+    });
+    expect(c2!.facts.attempted).toBe("pressed but rejected (under crowd control×2)");
+  });
+
+  it("the owner's dispel went out inside the window: ownerDispelUsed says where (work order 2026-10-14b fix 9, 9d899d10)", () => {
+    const succ = (t: number, dest: string) => ({
+      spellId: "115450",
+      spellName: "清创生血",
+      destUnitName: dest,
+      timestamp: S(t),
+      logLine: { event: LogEvent.SPELL_CAST_SUCCESS, timestamp: S(t) },
+    });
+    const owner = makeUnit("mw", {
+      spec: CombatUnitSpec.Monk_Mistweaver,
+      // twice on the mage, once on another unit, once at the window's end
+      // (the dispel that ended it — not listed)
+      spellCastEvents: [
+        succ(17.43, "Mage"),
+        succ(26.3, "Mage"),
+        succ(30.5, "Rogue"),
+        succ(43.55, "t1"),
+      ],
+    });
+    const w = {
+      timeSeconds: 10,
+      durationSeconds: 33.6,
+      targetName: "t1",
+      spellName: "Curse of Weakness",
+      spellId: "702",
+      priority: "Critical",
+      postCcDamage: 10_000,
+      cleanseWasOnCD: false,
+      dispellersLockedOut: false,
+      losReachable: null,
+      drChainRisk: false,
+      dispelType: "Magic",
+    } as any;
+    const [c] = missedCleanseEvents([w], owner, [owner], false, {
+      enemyIds: new Set(),
+      matchStartMs: MATCH_START,
+      rawStreams: { available: true, manaSamples: [], castFailed: [] } as any,
+    });
+    expect(c!.facts.ownerDispelUsed).toBe(
+      "Detox×2 on Mage +7.4/+16.3s、Detox on Rogue +20.5s",
+    );
+    expect(c!.facts.ownerDispelUsed).not.toContain(", ");
+  });
+
+  it("dispellerPressed: the teammate dispeller's presses inside the window, in order (work order 2026-10-14b fix 14, ae9d6fbc)", () => {
+    const c = (spellId: string, spellName: string, t: number) => ({
+      spellId,
+      spellName,
+      timestamp: S(t),
+      logLine: { event: LogEvent.SPELL_CAST_SUCCESS, timestamp: S(t) },
+    });
+    const priest = makeUnit("dp", {
+      spec: CombatUnitSpec.Priest_Discipline,
+      spellCastEvents: [
+        c("58984", "Shadowmeld", 163.492),
+        c("1291791", "Drink", 164.169),
+        c("17", "Power Word: Shield", 170),
+        // a passive proc logged as a cast is not a press (codex 40-FT-83)
+        c("415388", "Reclamation", 163.6),
+      ],
+    });
+    expect(dispellerPressedFact(priest, MATCH_START, 163.036, 166.045)).toEqual({
+      dispellerPressed: "Shadowmeld +0.4s、Drink +1.1s",
+    });
+    expect(dispellerPressedFact(priest, MATCH_START, 150, 160)).toEqual({});
+  });
+
+  it("dispellersCcS states the gate's own blocked seconds, floored (work order 2026-10-14c #12, 29aabcc2)", () => {
+    const owner = makeUnit("mw", { spec: CombatUnitSpec.Monk_Mistweaver });
+    const w = {
+      timeSeconds: 10,
+      durationSeconds: 6,
+      targetName: "t1",
+      spellName: "Psychic Scream",
+      spellId: "8122",
+      priority: "Critical",
+      postCcDamage: 10_000,
+      cleanseWasOnCD: false,
+      dispellersLockedOut: false,
+      dispellersBlockedS: 1.94,
+      losReachable: null,
+      drChainRisk: false,
+      dispelType: "Magic",
+    } as any;
+    const [c] = missedCleanseEvents([w], owner, [owner], false, {
+      enemyIds: new Set(),
+      matchStartMs: MATCH_START,
+    });
+    expect(c!.facts.dispellersCcS).toBe("1.9");
+    const [d] = missedCleanseEvents(
+      [{ ...w, dispellersBlockedS: 0.04 }],
+      owner,
+      [owner],
+      false,
+      { enemyIds: new Set(), matchStartMs: MATCH_START },
+    );
+    expect(d!.facts.dispellersCcS).toBeUndefined();
+  });
+
+  it("codex review: a charmed teammate is reached by the offensive purge — Dispel Magic, not Purify", () => {
+    const disc = makeUnit("h1", { spec: CombatUnitSpec.Priest_Discipline });
+    expect(cleanseSpellNamesFor(disc as any, "Magic")).toEqual(["Purify"]);
+    expect(cleanseSpellNamesFor(disc as any, "Magic", true)).toEqual([
+      "Dispel Magic",
+    ]);
+  });
+
+  it("codex review: a free / entry node counts as held — Devastation with Cauterizing Flame talented still has Expunge", () => {
+    // talentIdMap 1467: Cauterizing Flame = node 93294 / entry 115602;
+    // Expunge (node 93306) is an entry node, never listed in a loadout
+    const dev = makeUnit("e1", { spec: CombatUnitSpec.Evoker_Devastation });
+    (dev as any).info = { talents: [{ id1: 93294, id2: 115602, count: 1 }] };
+    expect(cleanseSpellNamesFor(dev as any, "Poison")).toEqual([
+      "Expunge",
+      "Cauterizing Flame",
+    ]);
+  });
+});
+
+describe("triage missed-cleanse F-C4 (A39 = B, U4 = B-all, U6)", () => {
+  const base = {
+    timeSeconds: 10,
+    durationSeconds: 5,
+    targetName: "t1",
+    spellName: "X",
+    spellId: "1",
+    postCcDamage: 1_000,
+    cleanseWasOnCD: false,
+    dispellersLockedOut: false,
+    losReachable: null,
+    drChainRisk: false,
+    dispelType: "Magic",
+  } as any;
+  it("a signed cell renders worth=<cell> and admits situational; an unsigned id keeps its legacy tier and says so", () => {
+    const signed = missedCleanseEvents(
+      [{ ...base, priority: "Low", worth: "situational" }],
+      DISPEL_OWNER,
+      [],
+      false,
+    );
+    expect(signed).toHaveLength(1);
+    expect(signed[0]!.facts.worth).toBe("situational");
+    expect(signed[0]!.facts.priority).toBeUndefined();
+    const unsigned = missedCleanseEvents(
+      [{ ...base, priority: "High" }, { ...base, timeSeconds: 40, priority: "Medium" }],
+      DISPEL_OWNER,
+      [],
+      false,
+    );
+    expect(unsigned).toHaveLength(1);
+    expect(unsigned[0]!.facts).toMatchObject({ priority: "High", verdict: "unsigned" });
+  });
+  it("U6: a zero-damage, no-death must renders worth; worth / situational never demote", () => {
+    expect(consequenceGatedWorth("must", 0, false)).toEqual({ worth: "worth", demoted: true });
+    expect(consequenceGatedWorth("must", 0, true).worth).toBe("must");
+    expect(consequenceGatedWorth("must", 5, false).worth).toBe("must");
+    expect(consequenceGatedWorth("situational", 0, false).worth).toBe("situational");
   });
 });

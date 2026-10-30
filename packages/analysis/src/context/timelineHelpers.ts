@@ -1,5 +1,3 @@
-import { dropAuraRebroadcasts } from "../utils/auraIntervals";
-import { DRUID_FORM_AURA_IDS, FORM_BOUND_BUFF_IDS } from "../data/druidForms";
 import {
   CombatUnitReaction,
   CombatUnitType,
@@ -9,25 +7,88 @@ import {
   LogEvent,
 } from "@gladlog/parser-compat";
 
+import { saveCoversPressureOn } from "../analysis/candidates/cooldownTiming";
+import { DEATH_CC_LOOKBACK_S } from "../analysis/candidates/death";
+import { ownEffectAurasOfCast } from "../data/castEffectAuras";
+import { DRUID_FORM_AURA_IDS, FORM_BOUND_BUFF_IDS } from "../data/druidForms";
 import { getEnglishSpellName } from "../data/spellEffectData";
-import { buffFullDurationForCaster } from "../utils/buffDuration";
-import { IPlayerCCTrinketSummary } from "../utils/ccTrinketAnalysis";
 import {
-  canHelpAnotherUnit,
-  CD_INSTANT_SLACK_S,
+  auraEndFromLog,
+  DEATH_CASCADE_MS,
+  type IAuraEndFromLog,
+} from "../utils/auraEndCause";
+import {
+  AURA_REBROADCAST_GAP_MS,
+  dropAuraRebroadcasts,
+  officialDurationS,
+} from "../utils/auraIntervals";
+import { buffFullDurationForCaster } from "../utils/buffDuration";
+import {
+  cannotCastIntervalsForSpells,
+  deathLockChain,
+  deathLockChainText,
+  enemySourceIds,
+  freeMsBefore,
+  namedCannotCastIntervals,
+} from "../utils/cannotCastIntervals";
+import { pressImmuneMissRows } from "../utils/castMissRows";
+import {
+  auraBreakAtRemoval,
+  IPlayerCCTrinketSummary,
+} from "../utils/ccTrinketAnalysis";
+import { isControlledPlayerFlags } from "../utils/charmedPlayer";
+import {
+  allyReachTalentNote,
+  cdHelpsRecipient,
   cdReadyInTimeAt,
   IMajorCooldownInfo,
   isHealerSpec,
   isPassiveProcCast,
+  lockoutDebuffStopsPressAtDeath,
   PASSIVE_SPELL_BLOCKLIST,
+  pressSpentBy,
+  rendersOnCaster,
   specToString,
 } from "../utils/cooldowns";
-import { getDampeningPercentage } from "../utils/dampening";
+import { doseStackCount, getDampeningPercentage } from "../utils/dampening";
+import {
+  enemyTargetReaches,
+  positionalWallReaches,
+} from "../utils/deathOutcomeAnalysis";
 import { IEnemyCDTimeline } from "../utils/enemyCDs";
+import {
+  AURA_BEFORE_CAST_MAX_S,
+  SAVE_CAST_AURA_PAIR_S,
+} from "../utils/enemyDefensives";
+import { documentRecordsAttackSpell } from "../utils/incomingPressure";
+import {
+  absorbedHitSchoolMask,
+  DEFERRAL_SHIELD_DAMAGE_IDS,
+  hitSchoolId,
+  isDeferralAbsorb,
+} from "../utils/incomingPressure";
+import {
+  TOUCH_OF_KARMA_ABSORB_ID,
+  TOUCH_OF_KARMA_ID,
+} from "../utils/karmaFeed";
+import { CHANNEL_STOPPED_MAX_SHARE } from "../utils/kickAudit";
+import { playerKillingBlow } from "../utils/killingBlow";
 import { getHpPercentAtTime } from "../utils/killWindowTargetSelection";
 import { fmtTime } from "../utils/renderGrid";
+import { isSameSideSource, type RosterSides } from "../utils/rosterSide";
 import { getSpellSchoolName } from "../utils/spellSchools";
+import { type SummonKindWord, summonKindWord } from "../utils/summonKind";
+import {
+  type INonPlayerUnitKill,
+  nonPlayerUnitKill,
+  summonedAtMs,
+} from "../utils/summonLife";
 import { summonOwnerById } from "../utils/summonOwner";
+import {
+  ALTER_TIME_CAST_ID,
+  ALTER_TIME_RETURN_ID,
+} from "./timelineSections/alterTime";
+import { rosterLabelOfId } from "./unitLabel";
 
 export { isPassiveProcCast, PASSIVE_SPELL_BLOCKLIST };
 
@@ -35,13 +96,14 @@ export { isPassiveProcCast, PASSIVE_SPELL_BLOCKLIST };
 
 /** Returns the last cast at or before `timeSeconds`, or undefined if none. */
 /** Most recent cast at or before the rendered instant — reads casts through
- * CD_INSTANT_SLACK_S like every other "available at t" predicate (GH #61), so
+ * `pressSpentBy` like every other "available at t" predicate (GH #61, A45), so
  * the "on CD since / ready since" copy built from it agrees with cdAvailableAt
  * and the [RES] ledger. Consumers: matchNarrative,
  * candidates/death. */
 export function lastCastBefore(cd: IMajorCooldownInfo, timeSeconds: number) {
+  // A45 (triage res-readiness F-C1): the shared consumption rule
   return cd.casts
-    .filter((c) => c.timeSeconds <= timeSeconds + CD_INSTANT_SLACK_S)
+    .filter((c) => pressSpentBy(c.timeSeconds, timeSeconds))
     .slice(-1)[0];
 }
 
@@ -189,6 +251,9 @@ export interface IEnemyBuffInterval {
   startSeconds: number;
   endSeconds: number;
   purgeable: boolean;
+  /** no REMOVED in the log: `endSeconds` is the official length's cap or the
+   * log's end — not an end the log states */
+  inferredEnd?: true;
 }
 
 /**
@@ -201,16 +266,29 @@ export function extractEnemyMajorBuffIntervals(
   matchStartMs: number,
   matchEndMs: number,
 ): Map<string, IEnemyBuffInterval[]> {
+  // (an interval that reaches the round's end gets no `[ENEMY BUFF END]`
+  // line — decided where the line is printed, `emitEnemyBuffEntries`)
   const result = new Map<string, IEnemyBuffInterval[]>();
+  // a buff whose REMOVED the log lost ends at its official length (the
+  // `buildAuraIntervals` cap); a buff seeded before the round has no length
+  // to anchor and keeps the end it is given
+  const capOf = (spellId: string, startMs: number, endMs: number) => {
+    if (startMs <= matchStartMs) return endMs;
+    const d = officialDurationS(spellId, undefined, startMs);
+    return d === null ? endMs : Math.min(endMs, startMs + d * 1000);
+  };
 
   for (const enemy of enemies) {
     const intervals: IEnemyBuffInterval[] = [];
     // key: "${spellId}:${srcUnitId}" → startMs
     const openBuffs = new Map<string, number>();
+    // WO3 #20: a re-broadcast (REMOVED + APPLIED ≤ 1 ms apart) is one buff,
+    // not an end and a new one — the one predicate (`dropAuraRebroadcasts`)
+    const auraEvents = dropAuraRebroadcasts(enemy.auraEvents);
 
     // Pre-match scan: seed buffs applied before match start that were not removed before start
     const preNetActive = new Map<string, boolean>();
-    for (const event of enemy.auraEvents) {
+    for (const event of auraEvents) {
       const ts: number = event.logLine.timestamp;
       if (ts >= matchStartMs) break; // auraEvents are chronological; stop at match start
       const spellId = event.spellId ?? "";
@@ -227,7 +305,7 @@ export function extractEnemyMajorBuffIntervals(
     }
 
     // Main pass: process events during the match
-    for (const event of enemy.auraEvents) {
+    for (const event of auraEvents) {
       const spellId = event.spellId ?? "";
       const buffDef = ENEMY_MAJOR_BUFF_SPELL_IDS[spellId];
       if (!buffDef) continue;
@@ -237,6 +315,22 @@ export function extractEnemyMajorBuffIntervals(
       if (ts < matchStartMs) continue;
 
       if (event.logLine.event === LogEvent.SPELL_AURA_APPLIED) {
+        const open = openBuffs.get(stateKey);
+        // an APPLIED past the open buff's official length: that buff's
+        // REMOVED was lost — it ended at its length, this is a new one
+        // (codex 60-POSTHOC-06a #2: a Power Infusion at 10 s with no REMOVED
+        // and another at 140 s read as one 10–145 s buff)
+        if (open !== undefined && ts > capOf(spellId, open, Infinity)) {
+          intervals.push({
+            spellId,
+            spellName: buffDef.name,
+            startSeconds: (open - matchStartMs) / 1000,
+            endSeconds: (capOf(spellId, open, ts) - matchStartMs) / 1000,
+            purgeable: buffDef.purgeable,
+            inferredEnd: true,
+          });
+          openBuffs.delete(stateKey);
+        }
         if (!openBuffs.has(stateKey)) {
           openBuffs.set(stateKey, ts);
         }
@@ -264,8 +358,10 @@ export function extractEnemyMajorBuffIntervals(
           spellId,
           spellName: buffDef.name,
           startSeconds: (startMs - matchStartMs) / 1000,
-          endSeconds: (matchEndMs - matchStartMs) / 1000,
+          endSeconds:
+            (capOf(spellId, startMs, matchEndMs) - matchStartMs) / 1000,
           purgeable: buffDef.purgeable,
+          inferredEnd: true,
         });
       }
     }
@@ -292,11 +388,71 @@ export interface ICDExpiryEvent {
    * = removed before its natural duration (absorb consumed, dispelled, or cancelled). Distinguishing
    * these stops the model from inventing a dispel for a naturally-expired buff and lets it tell a
    * consumed absorb (e.g. Life Cocoon) from an expired one.
+   *
+   * FT-T08 step 3: the causes the log itself states are read off it —
+   * 'dispelled' / 'stolen' = a SPELL_DISPEL / SPELL_STOLEN of this aura on its
+   * holder at the removal (`endedBy`), whether or not the timing looked like
+   * an expiry, and whatever died right after (the line names this aura; a
+   * death cascade is read from timing); 'target_death' = the ally it was on
+   * died at the removal; 'absorbed' = an absorb whose REMOVED line carries 0
+   * left — or, for Touch of Karma, whose own aura left early in the ms of a
+   * hit it absorbed (below). 'ended_early' is what remains: removed before
+   * its time with none of those logged.
+   *
+   * F02a: Touch of Karma's end is its absorb aura's
+   * (`TOUCH_OF_KARMA_ABSORB_ID`), not the 10 s buff's: 'target_debuff_off' =
+   * that aura left early in the ms the Karma debuff came off the enemy it was
+   * cast on (`lostOn`), 'target_death' when that enemy died there.
+   *
+   * F02b: 'round_end' = the round ended with the buff still up — its REMOVED
+   * is logged at or after the round's end (`roundEndMs`; a Solo Shuffle log
+   * runs ~2 s past the ending death and strips every aura there), or the log
+   * has none and its official length reaches the round's end.
+   * `expiresAtSeconds` is then the round's end. A removal the round-ending
+   * death itself caused keeps 'death' / 'target_death'. Such a buff did not
+   * end in the round: it gets no `[BUFF FADED]` line (user ruling
+   * 2026-10-11, `emitBuffFadedEntries`); the cause is what the `[YOU] [CD]`
+   * channel suffix reads (`still channeling when the round ended`).
    */
-  cause: "expired" | "ended_early" | "form_shift";
+  cause:
+    | "expired"
+    | "ended_early"
+    | "form_shift"
+    | "death"
+    | "dispelled"
+    | "stolen"
+    | "target_death"
+    | "broken"
+    | "target_debuff_off"
+    | "absorbed"
+    | "charges_spent"
+    | "round_end";
+  /** cause dispelled / stolen: who did it, with what */
+  endedBy?: { unitId: string; unitName: string; spellName: string };
+  /** cause broken: the breaking spell and, when the BROKEN line names one,
+   * the breaker (`auraBreakAtRemoval`) */
+  brokenBy?: { spellName: string; unitId?: string; unitName?: string };
+  /** cause target_debuff_off: the enemy the debuff came off */
+  lostOn?: { unitId: string; unitName: string };
+  /** What this application absorbed (the SPELL_ABSORBED lines naming it) and
+   * what its REMOVED line had left — `auraEndFromLog`. Present only when it
+   * absorbed something. */
+  absorb?: IAuraEndFromLog["absorb"];
+  /** A dispel / steal of this spell is logged on the holder at the removal,
+   * but not which copy it took (`IAuraEndFromLog.takeUnclear`): the line
+   * must then not read "expired" or "no dispel logged". */
+  dispelUnclear?: true;
+  /** cause ended_early: the owner's own press that ended it in the
+   * REMOVED's ms (Alter Time's return, 342247 — fact4 D23) */
+  endedByOwnPress?: string;
+  /** cause ended_early on a channel: how long it ran before it stopped
+   * (fact4 D44: a Tranquility cut 1.9 s into its 8 s read "expired") */
+  channelStoppedAfterS?: number;
 }
 
 const FORM_SHIFT_PAIR_MS = 250;
+// the death cascade's window lives with the aura-end reader (auraEndCause.ts)
+export { DEATH_CASCADE_MS };
 
 // 2026-08-21 S2 corpus scan (10,682 matches): removed Zen Meditation 115176; 421116 was a "Push Loot [DNT]" placeholder, not Ultimate Penitence (421453 is the real id) — 0 occurrences, ability gone in 12.x (eval-private/reports/s2-health-2026-08-21)
 export const CHANNELED_CD_SPELL_IDS = new Set<string>([
@@ -329,6 +485,16 @@ export const CHANNELED_CD_SPELL_IDS = new Set<string>([
 // "NOT registered" list on BUFF_DURATION_TALENT_MODIFIERS.
 const BUFF_EXPIRY_PAIRING_TOLERANCE_S = 2;
 
+/**
+ * fact3 D42 / D48 (2026-10-21): a charge's aura — it ends when the charge
+ * lands, so its removal is never "ended early" on length. The Hunt 370965:
+ * APPLIED at the press, REMOVED 2 ms after the impact (8888b780 r0 0:14:
+ * 0.155 s; 1:18: 0.044 s), against a 6 s hand override that is the DoT's.
+ */
+export const ENDS_WITH_ITS_CHARGE_IDS: ReadonlySet<string> = new Set([
+  "370965", // The Hunt
+]);
+
 // B129: a removal within this slack of the natural end still counts as a normal expiry (server-tick
 // latency); earlier than this means the buff was ended early (consumed/dispelled/cancelled).
 const BUFF_FADE_EARLY_TOLERANCE_S = 1.5;
@@ -357,8 +523,21 @@ export function extractOwnerCDBuffExpiry(
    * dropping every talent-lengthened duration back to its base value.
    */
   owner?: Pick<ICombatUnit, "spec" | "info" | "spellCastEvents"> &
-    Partial<Pick<ICombatUnit, "auraEvents">>,
+    Partial<
+      Pick<ICombatUnit, "auraEvents" | "deathRecords" | "id" | "missesOut">
+    >,
+  /** the other side's units: Touch of Karma's debuff sits on one of them */
+  enemies: ReadonlyArray<
+    Pick<ICombatUnit, "id" | "name" | "auraEvents"> &
+      Partial<Pick<ICombatUnit, "deathRecords">>
+  > = [],
+  /** the round's end, epoch ms (`roundEndMs`); a press at or after it is not
+   * in the round and gets no expiry */
+  roundEnd: number = Number.POSITIVE_INFINITY,
 ): ICDExpiryEvent[] {
+  const ownerDeathsMs = (owner?.deathRecords ?? []).map(
+    (d) => d.timestamp as number,
+  );
   // Owner's own form removals (ms) — a buff removed at the same instant was
   // ended by the shapeshift, not dispelled or consumed.
   const formRemovalsMs = (owner?.auraEvents ?? [])
@@ -386,51 +565,134 @@ export function extractOwnerCDBuffExpiry(
     //    「日志里看不看得到」这个问题;
     //  · 现在直接问日志:这一局里,friends 身上出现过这个光环吗?没有就别估。
     //    Control CC 天然落在这一侧,原来的 tag 短路因此成了多余,一并删掉。
+    //  · fact2 C10 (2026-10-20): the cooldown's own aura may carry another id
+    //    (Alter Time 342245 → 342246, Fortifying Brew 115203 → 120954, Blur
+    //    198589 → 212800) — asked through the one cast→effect resolution, it
+    //    had no fade line at all.
+    const ownAuraIds = new Set([
+      cd.spellId,
+      ...ownEffectAurasOfCast(cd.spellId),
+    ]);
+    // fact2 (2026-10-20): a BUFF — the owner's control reflected back onto
+    // the owner lands as the owner's own DEBUFF (3f21c5db 0:24: Mortal Coil
+    // 6789, Dekayla > Dekayla) and is no cooldown buff of the owner's
+    const isOwnBuffRow = (event: { auraType?: string }) =>
+      event.auraType !== "DEBUFF";
+    const seenAuraId = (id: string) =>
+      friends.some((friend) =>
+        friend.auraEvents.some(
+          (event) =>
+            event.spellId === id &&
+            isOwnBuffRow(event) &&
+            event.srcUnitId === ownerId &&
+            ((event.logLine.event as LogEvent) ===
+              LogEvent.SPELL_AURA_APPLIED ||
+              (event.logLine.event as LogEvent) ===
+                LogEvent.SPELL_AURA_REMOVED),
+        ),
+      );
     const seenOnFriendly = friends.some((friend) =>
       friend.auraEvents.some(
         (event) =>
-          event.spellId === cd.spellId &&
+          ownAuraIds.has(event.spellId) &&
+          isOwnBuffRow(event) &&
           event.srcUnitId === ownerId &&
           ((event.logLine.event as LogEvent) === LogEvent.SPELL_AURA_APPLIED ||
             (event.logLine.event as LogEvent) === LogEvent.SPELL_AURA_REMOVED),
       ),
     );
     if (!seenOnFriendly) continue;
-    const duration = buffFullDurationForCaster(cd.spellId, owner);
-    if (!duration || duration <= 0) continue;
+    // the aura the log shows for it: the cast's own id first, else its own
+    // effect aura — timed by THAT aura's official length (Alter Time's cast
+    // row says 20 s, its 342246 aura 10 s), as the kill-window state machine
+    // times a cast-keyed wall
+    const runAuraId = seenAuraId(cd.spellId)
+      ? cd.spellId
+      : (ownEffectAurasOfCast(cd.spellId).find(seenAuraId) ?? cd.spellId);
+    const baseDuration =
+      buffFullDurationForCaster(runAuraId, owner) ??
+      buffFullDurationForCaster(cd.spellId, owner);
+    if (!baseDuration || baseDuration <= 0) continue;
+    // F02a: the aura whose REMOVED is this cooldown's end. Touch of Karma is
+    // an absorb with an aura of its own (`TOUCH_OF_KARMA_ABSORB_ID`); the
+    // cast id's buff is a 10 s marker that outlives it — 2abc9185 read
+    // `1:22 [BUFF FADED] Touch of Karma (expired; 582k absorbed)` for a
+    // shield that was eaten through at 1:15. A log that never shows the
+    // absorb aura keeps the cast id's.
+    const endAuraId =
+      cd.spellId === TOUCH_OF_KARMA_ID &&
+      friends.some((friend) =>
+        friend.auraEvents.some(
+          (event) =>
+            event.spellId === TOUCH_OF_KARMA_ABSORB_ID &&
+            event.srcUnitId === ownerId,
+        ),
+      )
+        ? TOUCH_OF_KARMA_ABSORB_ID
+        : runAuraId;
 
     // Collect all SPELL_AURA_REMOVED timestamps for this spell cast by the owner,
     // across all friendly units, sorted ascending.
-    const removalTimestampsMs: number[] = [];
+    // the recipient travels with each removal (codex c2 09-30): only a
+    // removal from the owner can be the owner's death cascade
+    const removals: Array<{ ms: number; unitId: string; amount?: number }> = [];
     for (const friend of friends) {
       // a same-ms REMOVED→APPLIED re-broadcast is not the buff ending (3306:
       // "Obsidian Scales ended early" on a Dracthyr visage swap)
       for (const event of dropAuraRebroadcasts(friend.auraEvents)) {
-        const isMatch = event.spellId === cd.spellId;
+        const isMatch = event.spellId === endAuraId && isOwnBuffRow(event);
         if (
           isMatch &&
           event.srcUnitId === ownerId &&
           (event.logLine.event as LogEvent) === LogEvent.SPELL_AURA_REMOVED
         ) {
-          removalTimestampsMs.push(event.logLine.timestamp as number);
+          removals.push({
+            ms: event.logLine.timestamp as number,
+            unitId: friend.id,
+            amount: event.amount,
+          });
         }
       }
     }
-    removalTimestampsMs.sort((a, b) => a - b);
+    removals.sort((a, b) => a.ms - b.ms);
+    const removalTimestampsMs = removals.map((r) => r.ms);
 
-    // Match each cast (ascending) to the chronologically-next removal after the cast.
-    let removalIndex = 0;
+    // Match each cast (ascending) to the chronologically-next removal after
+    // the cast that no earlier cast took. A removal before the cast started
+    // is an orphan / a prior application's. agy 40-FT-98 #1: a removal is
+    // used once, but one an earlier cast stepped over (it took its own
+    // target's later copy) stays there for the next cast.
+    const used = removals.map(() => false);
+    // the unit a press was on: its friendly target, else (no target) the
+    // owner; a target that is no friendly unit (a pet) prefers no copy —
+    // agy 40-FT-98
+    // fact2 R8 (2026-10-20): a cast row that names a HOSTILE unit is a
+    // self-buff pressed with an enemy targeted (Survival of the Fittest's
+    // SUCCESS names the hunter's target) — its copy is the owner's; read as
+    // "no holder", the refresh rule below never fired and a refreshed press
+    // printed `expired, estimated` (8a820ea3 0:32)
+    // …and a self-only wall's press stays on its caster whoever the row
+    // names, unless the log shows its copy on the ally (`allyCopyOn`): an
+    // Obsidian Scales cast row naming a teammate without Lifecinders put
+    // nothing there (4-3-31 0:07 → 0:19 `expired, estimated` while the
+    // evoker's own copy, refreshed by the next press, ran to 0:28)
+    const holderOf = (c: (typeof cd.casts)[number]): string | undefined =>
+      c.targetName === undefined ||
+      enemies.some((e) => e.name === c.targetName) ||
+      (rendersOnCaster(cd.spellId) && !c.allyCopyOn)
+        ? (owner?.id ?? ownerId)
+        : friends.find((f) => f.name === c.targetName)?.id;
     for (let i = 0; i < cd.casts.length; i++) {
       const cast = cd.casts[i]!;
       const castMs = matchStartMs + cast.timeSeconds * 1000;
-
-      // Skip removals that happened before this cast started (orphans / prior applications).
-      while (
-        removalIndex < removalTimestampsMs.length &&
-        removalTimestampsMs[removalIndex] < castMs
-      ) {
-        removalIndex++;
-      }
+      // this press's own length: a per-event extension (Spiritwalker's
+      // Momentum) grows with the casts after it (codex 20-F16-13 #1: the
+      // owner's expiry read 15 s, the aura builder 19 s)
+      const duration =
+        buffFullDurationForCaster(runAuraId, owner, castMs) ??
+        buffFullDurationForCaster(cd.spellId, owner, castMs) ??
+        baseDuration;
+      if (castMs >= roundEnd) break;
 
       let expiresAtSeconds: number;
       let isEstimated: boolean;
@@ -438,7 +700,7 @@ export function extractOwnerCDBuffExpiry(
       // M-b: only accept the chronologically-next removal as this cast's real expiry when it
       // falls within duration + tolerance of the cast. Otherwise it likely belongs to a later
       // cast (this cast's own removal is missing from the log) — fall back to estimated and
-      // leave removalIndex where it is so the removal remains available for that later cast.
+      // leave the removal unused so it remains available for that later cast.
       // GH #34 ① (2026-08-29): a removal is this cast's as long as it lands
       // before the NEXT cast of the same spell — a removal later than
       // duration + tolerance is not "someone else's", it is the buff lasting
@@ -453,20 +715,125 @@ export function extractOwnerCDBuffExpiry(
         i + 1 < cd.casts.length
           ? matchStartMs + cd.casts[i + 1]!.timeSeconds * 1000
           : Number.POSITIVE_INFINITY;
-      const withinWindow =
-        removalIndex < removalTimestampsMs.length &&
-        removalTimestampsMs[removalIndex] <
-          Math.max(
-            nextCastMs,
-            castMs + (duration + BUFF_EXPIRY_PAIRING_TOLERANCE_S) * 1000,
-          );
+      const windowEndMs = Math.max(
+        nextCastMs,
+        castMs + (duration + BUFF_EXPIRY_PAIRING_TOLERANCE_S) * 1000,
+      );
+      // WO6 #3 (n45, dfcccbf2): a buff one press put on several friendlies
+      // ends with the copy on the unit it was pressed on — the target the
+      // cast names (Power Infusion on a teammate: theirs, not the priest's
+      // talent copy), or the owner for a press with no friendly target
+      // (Mass Invisibility: the mage's own, not the first teammate's copy to
+      // go). That unit's first copy to end inside this press's window wins;
+      // with none, the first removal stays this press's end.
+      const holderId = holderOf(cast);
+      // agy 40-FT-99: a removal on a unit at or after a LATER press on that
+      // same unit is that press's (a refresh with no REMOVED between: the
+      // copy that ends is the refreshed one) — neither the target search
+      // nor the fallback below takes it (GH #34's own rule, "a removal is
+      // this cast's as long as it lands before the next cast", per unit)
+      const claimedByLater = (r: (typeof removals)[number]) => {
+        for (let k = i + 1; k < cd.casts.length; k++) {
+          const kMs = matchStartMs + cd.casts[k]!.timeSeconds * 1000;
+          if (kMs > r.ms) return false;
+          if (holderOf(cd.casts[k]!) === r.unitId) return true;
+        }
+        return false;
+      };
+      // A press pressed again on the same unit while its copy was still up
+      // (no removal of that copy in between, inside its length) was
+      // refreshed: its buff did not fade — the refreshing press's line
+      // says when it did (Ice Barrier at 0:43 and 0:49, gone at 1:07: no
+      // "expired, estimated" for the 0:43 press)
+      const nextOnHolder =
+        holderId === undefined
+          ? undefined
+          : cd.casts.slice(i + 1).find((c) => holderOf(c) === holderId);
+      const nextOnHolderMs =
+        nextOnHolder === undefined
+          ? undefined
+          : matchStartMs + nextOnHolder.timeSeconds * 1000;
+      // (agy 40-FT-100: only a press inside the round — one after the round's
+      // end refreshes nothing the round shows, and its own reading breaks
+      // off there)
+      // A removal the log lost reads the same as a refresh (a re-APPLIED
+      // with no REMOVED is the same application everywhere else): no line
+      // rather than an estimate at the press's own length.
+      if (
+        nextOnHolderMs !== undefined &&
+        nextOnHolderMs < roundEnd &&
+        nextOnHolderMs < castMs + duration * 1000 &&
+        !removals.some(
+          (r) =>
+            r.unitId === holderId && r.ms >= castMs && r.ms < nextOnHolderMs,
+        )
+      )
+        continue;
+      let pick = -1;
+      let firstOpen = -1;
+      for (let j = 0; j < removals.length; j++) {
+        const r = removals[j]!;
+        if (used[j] || r.ms < castMs) continue;
+        if (r.ms >= windowEndMs) break;
+        if (claimedByLater(r)) continue;
+        if (firstOpen < 0) firstOpen = j;
+        if (r.unitId === holderId) {
+          pick = j;
+          break;
+        }
+      }
+      if (pick < 0) pick = firstOpen;
+      const withinWindow = pick >= 0;
 
+      let removedFromId: string | undefined;
       if (withinWindow) {
-        expiresAtSeconds =
-          (removalTimestampsMs[removalIndex] - matchStartMs) / 1000;
+        expiresAtSeconds = (removalTimestampsMs[pick]! - matchStartMs) / 1000;
         isEstimated = false;
-        removalIndex++;
+        removedFromId = removals[pick]!.unitId;
+        used[pick] = true;
       } else {
+        // fact4 D1 (190bbc57 2:41): a press whose own row MISSED (IMMUNE —
+        // Time Stop) and whose aura never went up put no buff anywhere —
+        // no fade to estimate. Asked of the log: the press's own IMMUNE row
+        // (`pressImmuneMissRows`, the one "was this press refused" reading)
+        // and no application of its aura by the owner from the press to its
+        // length.
+        const sameSpellCastMs = cd.casts.map(
+          (c) => matchStartMs + c.timeSeconds * 1000,
+        );
+        // the press's own cast row: its target, for a follow-up impact
+        // row's IMMUNE (`pressFollowUpCastRows`)
+        const pressDest = (owner?.spellCastEvents ?? []).find(
+          (e) =>
+            e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+            e.spellId === cd.spellId &&
+            Math.abs(e.timestamp - castMs) <= 100,
+        )?.destUnitId;
+        const missed =
+          pressImmuneMissRows(
+            owner?.missesOut,
+            cd.spellId,
+            sameSpellCastMs,
+            castMs,
+            owner && pressDest
+              ? { casts: owner.spellCastEvents ?? [], destUnitId: pressDest }
+              : undefined,
+          ).length > 0;
+        const applied = friends.some((f) =>
+          f.auraEvents.some(
+            (a) =>
+              ownAuraIds.has(a.spellId) &&
+              isOwnBuffRow(a) &&
+              a.srcUnitId === ownerId &&
+              ((a.logLine.event as LogEvent) === LogEvent.SPELL_AURA_APPLIED ||
+                (a.logLine.event as LogEvent) ===
+                  LogEvent.SPELL_AURA_REFRESH) &&
+              (a.logLine.timestamp as number) >=
+                castMs - AURA_BEFORE_CAST_MAX_S * 1000 &&
+              (a.logLine.timestamp as number) <= castMs + duration * 1000,
+          ),
+        );
+        if (missed && !applied) continue;
         expiresAtSeconds = cast.timeSeconds + duration;
         isEstimated = true;
       }
@@ -481,17 +848,86 @@ export function extractOwnerCDBuffExpiry(
       // Channels are never dispelled; whether one was interrupted is stated on
       // the [YOU] line from kick/CC evidence (matchTimeline), so here they
       // always read "expired".
+      // F16 retest (2026-10-21): the slack is never more than half the
+      // buff's own length — Vanish 11327 lasts 1.5 s, so a 1.5 s slack put
+      // the "early" line at the press itself and a Vanish broken by its own
+      // Cheap Shot 0.39 s in read "(expired)" (19c03171 0:38 / 0:59)
+      const earlyToleranceS = Math.min(
+        BUFF_FADE_EARLY_TOLERANCE_S,
+        duration / 2,
+      );
       let cause: ICDExpiryEvent["cause"] =
         !CHANNELED_CD_SPELL_IDS.has(cd.spellId) &&
+        !ENDS_WITH_ITS_CHARGE_IDS.has(cd.spellId) &&
         !isEstimated &&
-        expiresAtSeconds < naturalEndSeconds - BUFF_FADE_EARLY_TOLERANCE_S
+        expiresAtSeconds < naturalEndSeconds - earlyToleranceS
           ? "ended_early"
           : "expired";
+      // fact4 D23 (3ec01728 r0 2:26): Alter Time's return press takes the
+      // aura in its own ms — 9 s of 10 is inside the early tolerance, and
+      // the line read "(expired)" for a buff the mage ended
+      let endedByOwnPress: string | undefined;
+      if (
+        !isEstimated &&
+        cd.spellId === ALTER_TIME_CAST_ID &&
+        (owner?.spellCastEvents ?? []).some(
+          (c) =>
+            c.spellId === ALTER_TIME_RETURN_ID &&
+            (c.logLine.event as LogEvent) === LogEvent.SPELL_CAST_SUCCESS &&
+            Math.abs(
+              (c.logLine.timestamp as number) -
+                (matchStartMs + expiresAtSeconds * 1000),
+            ) <= AURA_REBROADCAST_GAP_MS,
+        )
+      ) {
+        cause = "ended_early";
+        endedByOwnPress = "Alter Time return";
+      }
+      // fact4 D44 (63d13f66 r0 2:58): a channel that ran under
+      // `CHANNEL_STOPPED_MAX_SHARE` of its official length — kick audit's
+      // "the channel stopped" bound, far below any hasted natural end —
+      // ended early; above it the haste-dependent length keeps "expired"
+      // (GH #34 ①)
+      let channelStoppedAfterS: number | undefined;
+      if (
+        !isEstimated &&
+        CHANNELED_CD_SPELL_IDS.has(cd.spellId) &&
+        expiresAtSeconds - cast.timeSeconds <
+          duration * CHANNEL_STOPPED_MAX_SHARE
+      ) {
+        cause = "ended_early";
+        channelStoppedAfterS = expiresAtSeconds - cast.timeSeconds;
+      }
+      // F-B1 (triage death-kill): removed from the owner and the owner died
+      // within DEATH_CASCADE_MS after — the death stripped it. Checked before
+      // the shapeshift reading.
+      const removedMsForDeath = matchStartMs + expiresAtSeconds * 1000;
+      if (
+        !isEstimated &&
+        removedFromId !== undefined &&
+        removedFromId === (owner?.id ?? ownerId) &&
+        ownerDeathsMs.some(
+          (d) =>
+            d >= removedMsForDeath && d - removedMsForDeath <= DEATH_CASCADE_MS,
+        )
+      )
+        cause = "death";
       // Only a form-bound buff on the owner: the removal must be in the
       // owner's own aura events (dest = owner) and the spell one that cannot
       // outlive the form (FORM_BOUND_BUFF_IDS); then a form removal within
       // FORM_SHIFT_PAIR_MS explains it.
-      if (cause === "ended_early" && FORM_BOUND_BUFF_IDS.has(cd.spellId)) {
+      // F16 retest (2026-10-21): a form shift is read off the log, so it
+      // needs no early-end slack — only a removal before the buff's end
+      // (4b2e238d 1:43: Frenzied Regeneration removed 0.68 s early, 10 ms
+      // after Bear Form came off, read "(expired)")
+      if (
+        (cause === "ended_early" ||
+          (cause === "expired" &&
+            !isEstimated &&
+            expiresAtSeconds <
+              naturalEndSeconds - FORM_SHIFT_PAIR_MS / 1000)) &&
+        FORM_BOUND_BUFF_IDS.has(cd.spellId)
+      ) {
         const removedMs = matchStartMs + expiresAtSeconds * 1000;
         const onOwner = (owner?.auraEvents ?? []).some(
           (a) =>
@@ -508,7 +944,202 @@ export function extractOwnerCDBuffExpiry(
           cause = "form_shift";
       }
 
+      // FT-T08 step 3: what the log itself says ended it, read off the
+      // holder's own lines. A dispel is a dispel even when the removal fell
+      // inside the expiry tolerance (a Greater Purge at 3.2 s of a 4 s Ice
+      // Barrier read "(expired)").
+      const holder =
+        removedFromId === undefined
+          ? undefined
+          : friends.find((f) => f.id === removedFromId);
+      let endedBy: ICDExpiryEvent["endedBy"];
+      let lostOn: ICDExpiryEvent["lostOn"];
+      let absorb: ICDExpiryEvent["absorb"];
+      let brokenBy: ICDExpiryEvent["brokenBy"];
+      let dispelUnclear = false;
+      if (!isEstimated && holder) {
+        const span = {
+          // this press's application: from the press (its aura can be
+          // logged a few ms before the cast line) …
+          fromMs: Math.round(castMs - AURA_BEFORE_CAST_MAX_S * 1000),
+          // … back to the REMOVED line's own millisecond
+          removedMs: Math.round(matchStartMs + expiresAtSeconds * 1000),
+        };
+        // the absorb lines name the cast id as the shield; a dispel line
+        // would name the aura that came off
+        const ofCast = auraEndFromLog(holder, cd.spellId, span, ownerId);
+        const end =
+          endAuraId === cd.spellId
+            ? ofCast
+            : {
+                ...auraEndFromLog(holder, endAuraId, span, ownerId),
+                absorb: ofCast.absorb,
+              };
+        absorb = end.absorb;
+        dispelUnclear = end.takeUnclear === true;
+        // F02a: Touch of Karma's absorb aura that left before its time. Its
+        // lines carry no amount, so "used up" is read off the hit: an absorb
+        // line naming Karma on the monk in the REMOVED's own ms (one event's
+        // lines can straddle a ms boundary — `AURA_REBROADCAST_GAP_MS`).
+        // Otherwise the Karma debuff coming off the enemy it was cast on in
+        // that ms — the shield goes with it; whether that enemy died there
+        // is in the log too.
+        if (
+          endAuraId !== cd.spellId &&
+          cause === "ended_early" &&
+          !end.takenBy
+        ) {
+          const sameEvent = (ms: number) =>
+            Math.abs(ms - span.removedMs) <= AURA_REBROADCAST_GAP_MS;
+          const emptiedByHit = (holder.absorbsIn ?? []).some(
+            (x) =>
+              x.spellId === cd.spellId &&
+              x.srcUnitId === ownerId &&
+              sameEvent(x.logLine.timestamp),
+          );
+          const target = emptiedByHit
+            ? undefined
+            : enemies.find((e) =>
+                e.auraEvents.some(
+                  (a) =>
+                    a.spellId === cd.spellId &&
+                    a.srcUnitId === ownerId &&
+                    (a.logLine.event as LogEvent) ===
+                      LogEvent.SPELL_AURA_REMOVED &&
+                    sameEvent(a.logLine.timestamp as number),
+                ),
+              );
+          if (emptiedByHit && absorb) {
+            cause = "absorbed";
+          } else if (target) {
+            const died = (target.deathRecords ?? []).some((d) => {
+              const gap = (d.timestamp as number) - span.removedMs;
+              return gap >= 0 && gap <= DEATH_CASCADE_MS;
+            });
+            cause = died ? "target_death" : "target_debuff_off";
+            if (!died) lostOn = { unitId: target.id, unitName: target.name };
+          }
+        }
+        // The dispel line names this aura; a death right after it is a
+        // cascade read from timing. The line wins (codex review of step 3a).
+        if (end.takenBy) {
+          cause = end.takenBy.kind;
+          endedBy = {
+            unitId: end.takenBy.unitId,
+            unitName: end.takenBy.unitName,
+            spellName: end.takenBy.spellName,
+          };
+        } else if (cause !== "death") {
+          if (holder.id !== (owner?.id ?? ownerId) && end.holderDied) {
+            cause = "target_death";
+          } else if (
+            cause !== "form_shift" &&
+            cause !== "target_death" &&
+            cause !== "target_debuff_off" &&
+            absorb?.left === 0
+          ) {
+            cause = "absorbed";
+          }
+        }
+        // fact3 D55 (dff2c7a6 r0): a buff spent by its charges — a dose came
+        // off it during this application and the last one took it
+        // (Stormkeeper's two Lightning Bolts: REMOVED_DOSE at the first,
+        // REMOVED 2 ms after the second) — was used up, not ended early
+        // codex 21-R12-a #4: and the last one took it — the holder cast the
+        // spell that spent a dose (its cast ≤ 100 ms before the dose came
+        // off) again ≤ 100 ms before the removal; one dose spent, then the
+        // buff cancelled, is no charges spent
+        const CHARGE_CAST_MS = 100;
+        const castsBefore = (ms: number) =>
+          (holder.spellCastEvents ?? [])
+            .filter(
+              (c) =>
+                (c.logLine.event as LogEvent) === LogEvent.SPELL_CAST_SUCCESS &&
+                c.logLine.timestamp <= ms &&
+                ms - c.logLine.timestamp <= CHARGE_CAST_MS,
+            )
+            .map((c) => c.spellId);
+        const doseRows = holder.auraEvents.filter(
+          (a) =>
+            a.spellId === endAuraId &&
+            (a.logLine.event as LogEvent) ===
+              LogEvent.SPELL_AURA_REMOVED_DOSE &&
+            (a.logLine.timestamp as number) >= span.fromMs &&
+            (a.logLine.timestamp as number) <= span.removedMs,
+        );
+        const spenders = new Set(
+          doseRows.flatMap((a) => castsBefore(a.logLine.timestamp as number)),
+        );
+        // …or, by another spell that spends it, the LAST charge: the last
+        // dose row left one (codex 20-F17-04 #4: Stormkeeper's Lightning
+        // Bolt, then Chain Lightning took the last charge — read
+        // `ended_early`)
+        const lastDose = doseRows.at(-1);
+        const onLastCharge =
+          lastDose !== undefined &&
+          doseStackCount(lastDose.logLine.parameters?.[12]) === 1;
+        const finalCasts = castsBefore(span.removedMs).filter((id) => !!id);
+        if (
+          cause === "ended_early" &&
+          finalCasts.length > 0 &&
+          (finalCasts.some((id) => spenders.has(id)) ||
+            (onLastCharge && spenders.size > 0))
+        )
+          cause = "charges_spent";
+        // WO6 #3 (n45): a BROKEN line ended it — enemy damage broke the
+        // aura (Mass Invisibility broken by Refining Fire), which the log
+        // names: the shared break reader of the CC lines
+        if (cause === "ended_early" || cause === "expired") {
+          const brk = auraBreakAtRemoval(
+            holder,
+            endAuraId,
+            span.fromMs,
+            span.removedMs,
+            ownerId,
+          );
+          if (brk) {
+            cause = "broken";
+            brokenBy = {
+              spellName: brk.spellName,
+              ...(brk.byUnitId && brk.byName
+                ? { unitId: brk.byUnitId, unitName: brk.byName }
+                : {}),
+            };
+          }
+        }
+      }
+
+      // F02b: the round ended on it. Nothing logged at or after the round's
+      // end is the buff's own end — not the removal, not a dispel, not what
+      // it absorbed by then.
+      if (
+        Math.round(matchStartMs + expiresAtSeconds * 1000) >= roundEnd &&
+        cause !== "death" &&
+        cause !== "target_death"
+      ) {
+        result.push({
+          spellId: cd.spellId,
+          spellName: cd.spellName,
+          castAtSeconds: cast.timeSeconds,
+          expiresAtSeconds: (roundEnd - matchStartMs) / 1000,
+          isEstimated: false,
+          cause: "round_end",
+        });
+        continue;
+      }
+
       result.push({
+        ...(endedBy ? { endedBy } : {}),
+        ...(lostOn ? { lostOn } : {}),
+        ...(brokenBy ? { brokenBy } : {}),
+        ...(absorb ? { absorb } : {}),
+        ...(dispelUnclear ? { dispelUnclear: true as const } : {}),
+        ...(endedByOwnPress && cause === "ended_early"
+          ? { endedByOwnPress }
+          : {}),
+        ...(channelStoppedAfterS !== undefined && cause === "ended_early"
+          ? { channelStoppedAfterS }
+          : {}),
         spellId: cd.spellId,
         spellName: cd.spellName,
         castAtSeconds: cast.timeSeconds,
@@ -522,10 +1153,55 @@ export function extractOwnerCDBuffExpiry(
   return result;
 }
 
-/** H13: true if a real kick (interruptInstance) or control-CC (ccInstance) landed on the
- * caster within the channel window [startSeconds, endSeconds] (±0.5s tolerance so an
- * interrupt that lands right as the channel stops still counts). Used to confirm an early-
- * ended channel was actually interrupted, vs. a self-cancel/movement. */
+/**
+ * How long after a control lands the channel it cut is REMOVED. Measured on
+ * the 605-file S2 sample, the four channelled cooldowns (Divine Hymn,
+ * Tranquility, Emerald Communion, Ultimate Penitence; 1,219 channels;
+ * fix-FT/t08-channel-end-605.txt): of the debuffs that landed on a
+ * channelling caster, 43 landed at most 50 ms before the channel's end —
+ * hard controls almost to a line (Hammer of Justice, Freezing Trap, Fear,
+ * Polymorph …); between 51 and 250 ms before it there are still eight hard
+ * controls (Blind, Incapacitating Roar, Polymorph, Silence, a Binding Shot
+ * stun, Intimidating Shout, Psychic Scream, Sleep Walk); between 251 and
+ * 500 ms none. The cut lags its control by up to a quarter second. (The 60
+ * re-eval logs alone showed 1–19 ms for ten controls; the bound was not read
+ * off them.) A kick's SPELL_INTERRUPT is logged after the channel's
+ * REMOVED, in the same ms — 24 of 24.
+ */
+export const CHANNEL_CUT_BY_CC_MS = 250;
+
+/**
+ * Did something landing at `atMs` cut the channel that ran [startMs, endMs]?
+ * It landed after the channel began and the channel ended at its landing.
+ * One predicate for the `[YOU] [CD]` channel suffix (`channelWasInterrupted`)
+ * and the `[YOU] [CAST]` `[channel cut by CC …]` note (healer gap-filler),
+ * which decided the same fact with a 250 ms constant of its own.
+ */
+export function landingCutChannel(
+  atMs: number,
+  startMs: number,
+  endMs: number,
+): boolean {
+  return (
+    atMs > startMs &&
+    // a kick's line follows the REMOVED it caused; the two can sit on either
+    // side of a millisecond boundary
+    atMs <= endMs + AURA_REBROADCAST_GAP_MS &&
+    endMs - atMs <= CHANNEL_CUT_BY_CC_MS
+  );
+}
+
+/** H13: true if a kick (interruptInstance) or a control-CC (ccInstance)
+ * landed on the caster DURING the channel and the channel ended at its
+ * landing (`landingCutChannel`). Used to confirm an early-ended channel was
+ * actually interrupted, vs. a self-cancel/movement.
+ *
+ * FT-T08 step 5: a control already on the caster at the press, or one that
+ * landed and left the channel running, cut nothing — Emerald Communion is
+ * pressed while stunned, and 141470d0's two full 3.7 s channels read
+ * "interrupted" for the Binding Shot / Intimidation they were cast under.
+ * The same holds for a kick: one that hit the cast before the channel, or
+ * the cast after it, used to count through a ±0.5 s window (agy review). */
 export function channelWasInterrupted(
   ownerSummary:
     | Pick<IPlayerCCTrinketSummary, "ccInstances" | "interruptInstances">
@@ -534,19 +1210,11 @@ export function channelWasInterrupted(
   endSeconds: number,
 ): boolean {
   if (!ownerSummary) return false;
-  const kickInWindow = ownerSummary.interruptInstances.some(
-    (i) => i.atSeconds >= startSeconds - 0.5 && i.atSeconds <= endSeconds + 0.5,
+  const startMs = Math.round(startSeconds * 1000);
+  const endMs = Math.round(endSeconds * 1000);
+  return [...ownerSummary.interruptInstances, ...ownerSummary.ccInstances].some(
+    (x) => landingCutChannel(Math.round(x.atSeconds * 1000), startMs, endMs),
   );
-  if (kickInWindow) return true;
-
-  return ownerSummary.ccInstances.some((cc) => {
-    const landedInWindow =
-      cc.atSeconds >= startSeconds - 0.5 && cc.atSeconds <= endSeconds + 0.5;
-    const activeAtEnd =
-      endSeconds >= cc.atSeconds - 0.5 &&
-      endSeconds <= cc.atSeconds + cc.durationSeconds + 0.5;
-    return landedInWindow || activeAtEnd;
-  });
 }
 
 /** Rendered timeline lines start with an `M:SS ` timestamp column (e.g. `0:13  [DMG SPIKE]   …`). */
@@ -615,7 +1283,8 @@ export function mergeTimestampedLines(
  * 压力窗口达到多少总伤害才算一次 `[DMG SPIKE]`。
  *
  * **实测出处**(S2 归档 2026/08 快照(18,134 文件)均匀子样 585 个 / 1,155 回合,2026-08-23):`computePressureWindows` 产出的 5,697 个窗口
- * (注意 population 本身已是「每个目标 top-5 不重叠」)
+ * (注意 population 本身已是「全队合计 top-5、同一目标的窗口互不重叠」—— 不是每个目标各 5 个;
+ * 此前这行写的是「每个目标 top-5」,与代码不符,T12 ② / D4 2026-10-10 更正)
  * p10 341,518 · p25 590,816 · **中位 840,101** · p75 1,109,881 · p90 1,366,300 · max 2,382,051。
  * 现值 300,000 落在**第 8.3 分位**,即 91.7% 的窗口会被标记;每局约 4.8 行,
  * 只有 1% 的回合一行都没有。
@@ -636,6 +1305,29 @@ export function mergeTimestampedLines(
  * 未采纳:按掉幅裁会丢掉「被治疗顶住的高伤害窗口」,而那正是治疗做对了的证据。
  */
 export const DMG_SPIKE_THRESHOLD = 300_000;
+
+/** The damage-spike windows a burst-target claim reads: the pressure windows
+ * at or above `DMG_SPIKE_THRESHOLD` — the set the [DMG SPIKE] / [OFFENSIVE
+ * WINDOW] headers render. Every `computeOwnerPositionEvents` caller (prompt,
+ * menu, deep dive, report) passes this, so the melee STAYED_IN suppression
+ * reads one burst target and a menu event cannot lose its POSITIONING line
+ * (triage sync-burst F-L2, position X-L2). */
+export function dmgSpikeWindowsOf(
+  pressureWindows: ReadonlyArray<{
+    fromSeconds: number;
+    toSeconds: number;
+    targetName: string;
+    totalDamage: number;
+  }>,
+): Array<{ fromSeconds: number; toSeconds: number; targetName: string }> {
+  return pressureWindows
+    .filter((pw) => pw.totalDamage >= DMG_SPIKE_THRESHOLD)
+    .map((pw) => ({
+      fromSeconds: pw.fromSeconds,
+      toSeconds: pw.toSeconds,
+      targetName: pw.targetName,
+    }));
+}
 
 /**
  * Spell IDs for healing-amplifier CDs where we measure throughput during the buff window
@@ -678,6 +1370,107 @@ export const HEALING_WINDOW_EARLY_CD_SECONDS = 10;
  */
 export const HEALING_WINDOW_MIN_HPS = 1_000;
 
+/** Bucket width of the [HEALING] block, in seconds. */
+export const HEALING_BUCKET_S = 5;
+
+/** FT-T15 M5: the [HEALING] block had no definition anywhere in the prompt
+ * (893 lines on the 605 capture, 0 legends). Printed by formatTimeline only
+ * when a block rendered. It states what `computeHealingInWindow` measures
+ * (the owner's own `healOut`, effective amounts, over the buff's nominal
+ * duration) and which presses get a block (`ownerCdSetup.ts`: the first
+ * eligible one and the worst-scoring later one). */
+export const HEALING_BLOCK_LEGEND: readonly string[] = [
+  "  [HEALING] under one of your own throughput-cooldown presses = YOUR OWN healing over that buff's full duration from the",
+  `    press, in ${HEALING_BUCKET_S} s buckets: \`a–bs\` = seconds after the press, HPS = your effective healing per second (overheal left`,
+  "    out); `Overheal` = the share of your healing in the whole span that was overheal. At most two presses of a spell get",
+  "    the block: the first, and of the later ones the one with the most overheal and the lowest peak bucket — that",
+  `    spell's weakest later use, not a typical one. A press in the first ${HEALING_WINDOW_EARLY_CD_SECONDS} s with every bucket under ${HEALING_WINDOW_MIN_HPS / 1000}k HPS gets none. A`,
+  "    press without the block was not measured.",
+];
+
+/** The clause a throughput-buff press on a teammate carries when the log
+ * shows the same buff on the caster too — one string for the producer
+ * (`ownerCd.ts`) and for the legend's "did it render" test. */
+export const OWN_AURA_CLAUSE_PREFIX = " | also on you ";
+
+/** Printed by formatTimeline only when a line carries the clause. */
+export const OWN_AURA_CLAUSE_LEGEND: readonly string[] = [
+  "  `| also on you for Ns` on one of your own throughput-cooldown lines = that press went to a teammate and the log shows",
+  "    the same buff applied to you by it as well, on you for N s (`end not logged` = the log has no removal for it). A",
+  "    healing block under such a line is your own healing with the buff on you too; a press on a teammate without the",
+  "    clause = the log shows no such aura on you.",
+];
+
+/**
+ * FT-T15 ④ (user ruling 2026-10-10): the caster's OWN aura from a buff they
+ * pressed on someone else — Power Infusion with the twin talent logs one
+ * cast and two SPELL_AURA_APPLIED, the teammate's and, 8 ms later, the
+ * priest's (5677ba13 1:06). The [HEALING] block under such a press measures
+ * the priest's own healing, and nothing in the prompt said the priest had
+ * the buff (60 re-eval prompts: 8 of 8 `Power Infusion → teammate` blocks
+ * had the owner's aura in the log).
+ *
+ * Read from the log only, never from the talent: an aura of `spellId` on
+ * `caster`, cast by `caster`, applied within `SAVE_CAST_AURA_PAIR_S` of the
+ * press (the cast ↔ aura pairing radius the external-save reader uses).
+ * `seconds` = applied → that aura's first SPELL_AURA_REMOVED; null when the
+ * log has none. Returns null when the log shows no such aura.
+ */
+export function casterOwnAuraOfPress(
+  caster: Pick<ICombatUnit, "id" | "auraEvents">,
+  spellId: string,
+  pressMs: number,
+): { seconds: number | null } | null {
+  // one re-broadcast (REMOVED + APPLIED ≤ 1 ms apart) is one aura — work
+  // order 2026-10-14d #9: its REMOVED would end "also on you for Ns" early
+  const mine = dropAuraRebroadcasts(caster.auraEvents ?? []).filter(
+    (a) => a.spellId === spellId && a.srcUnitId === caster.id,
+  );
+  let appliedMs: number | null = null;
+  for (const a of mine) {
+    if (a.logLine.event !== LogEvent.SPELL_AURA_APPLIED) continue;
+    const gap = Math.abs(a.logLine.timestamp - pressMs);
+    if (gap > SAVE_CAST_AURA_PAIR_S * 1000) continue;
+    if (appliedMs === null || gap < Math.abs(appliedMs - pressMs))
+      appliedMs = a.logLine.timestamp;
+  }
+  if (appliedMs === null) return null;
+  const from = appliedMs;
+  // its own REMOVED: before the next application of it — a lost REMOVED is
+  // no end the next copy can lend (codex 60-POSTHOC-06a #2: "also on you for
+  // 135.0s" off a later Power Infusion's removal); none → no length stated
+  const nextApplied = mine.find(
+    (a) =>
+      a.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
+      a.logLine.timestamp > from,
+  )?.logLine.timestamp;
+  const removedMs = mine
+    .filter(
+      (a) =>
+        a.logLine.event === LogEvent.SPELL_AURA_REMOVED &&
+        a.logLine.timestamp >= from &&
+        a.logLine.timestamp < (nextApplied ?? Infinity),
+    )
+    .reduce<
+      number | null
+    >((lo, a) => (lo === null || a.logLine.timestamp < lo ? a.logLine.timestamp : lo), null);
+  return { seconds: removedMs === null ? null : (removedMs - from) / 1000 };
+}
+
+/** `casterOwnAuraOfPress` as the press line's clause; "" when the log shows
+ * no such aura. */
+export function casterOwnAuraClause(
+  caster: Pick<ICombatUnit, "id" | "auraEvents">,
+  spellId: string,
+  pressMs: number,
+): string {
+  const own = casterOwnAuraOfPress(caster, spellId, pressMs);
+  if (!own) return "";
+  return own.seconds === null
+    ? `${OWN_AURA_CLAUSE_PREFIX}(end not logged)`
+    : `${OWN_AURA_CLAUSE_PREFIX}for ${own.seconds.toFixed(1)}s`;
+}
+
 /**
  * Computes healing throughput during a CD's active window.
  * Returns per-5s HPS buckets and overall overheal % from healOut events.
@@ -707,7 +1500,7 @@ export function computeHealingInWindow(
   }
 
   const windowSeconds = (toMs - fromMs) / 1000;
-  const BUCKET_SIZE = 5;
+  const BUCKET_SIZE = HEALING_BUCKET_S;
   const buckets: Array<{
     fromSeconds: number;
     toSeconds: number;
@@ -762,11 +1555,50 @@ export function damageEventLabel(
   enemyIdMap?: Map<string, number>,
   summonOwners?: ReadonlyMap<string, string>,
 ): string {
+  const p = damageEventParts(d, playerIdMap, enemyIdMap, summonOwners);
+  return `${p.ability}${p.school ? ` [${p.school}]` : ""}`;
+}
+
+/**
+ * The parts of `damageEventLabel`: `ability` = "source — spell" (the source
+ * label and the English spell name — who hit with WHAT), `school` = the
+ * event's school name or null. `getTopDamageSourcesInWindow` sums by
+ * `ability`: one ability's damage is logged under several spell ids, and
+ * they do not all carry the same school (FT F22).
+ */
+export function damageEventParts(
+  d: ICombatUnit["damageIn"][number],
+  playerIdMap?: Map<string, number>,
+  enemyIdMap?: Map<string, number>,
+  summonOwners?: ReadonlyMap<string, string>,
+): { ability: string; school: string | null } {
   // B24: pet/guardian units may have localized (non-ASCII) names from non-en-US clients;
   // replace with "[pet]" to keep attribution readable without localization noise.
   const srcType = getUnitType(d.srcUnitFlags);
+  // A Mind-Controlled PLAYER logs with the PET type for as long as the charm
+  // lasts (`isControlledPlayerFlags`): it is that player, not somebody's pet
+  // (605-file slice: "[pet] — Rune of Unleashed Fire" for a charmed teammate).
+  const charmed = isControlledPlayerFlags(d.srcUnitId, d.srcUnitFlags);
+  // round-1 retest idx 39: a summon is one by its GUID's owner, whatever
+  // type flag a row carries — a Death Knight's Lesser Ghouls logged 0xa28
+  // (NPC) on 36 rows and 0x2148 (Guardian) on 12, and the NPC rows formed a
+  // bucket of their own beside `4's guardian — Death Order`
+  const ownedSummon =
+    !charmed &&
+    srcType !== CombatUnitType.Player &&
+    !!d.srcUnitId &&
+    !!summonOwners?.has(d.srcUnitId);
   const isPet =
-    srcType === CombatUnitType.Pet || srcType === CombatUnitType.Guardian;
+    !charmed &&
+    (srcType === CombatUnitType.Pet ||
+      srcType === CombatUnitType.Guardian ||
+      ownedSummon);
+  const summonType =
+    ownedSummon &&
+    srcType !== CombatUnitType.Pet &&
+    srcType !== CombatUnitType.Guardian
+      ? CombatUnitType.Guardian
+      : srcType;
 
   let srcName = "Unknown";
   if (!isPet && d.srcUnitName) {
@@ -779,17 +1611,20 @@ export function damageEventLabel(
     // (codex review of batch 12: enemy 4's Starsurge credited to friendly 1).
     const fullF = playerIdMap?.get(d.srcUnitName);
     const fullE = enemyIdMap?.get(d.srcUnitName);
+    // D3 (user 2026-10-24): the roster label, `N(Spec)` (`rosterLabelOfId`)
     if (fullF !== undefined && fullE === undefined) {
-      srcName = String(fullF);
+      srcName = rosterLabelOfId(playerIdMap, fullF);
     } else if (fullE !== undefined && fullF === undefined) {
-      srcName = String(fullE);
+      srcName = rosterLabelOfId(enemyIdMap, fullE);
     } else if (isSrcFriendly && playerIdMap) {
       const id =
         playerIdMap.get(d.srcUnitName) ?? playerIdMap.get(cleanSrcName);
-      srcName = id !== undefined ? String(id) : cleanSrcName;
+      srcName =
+        id !== undefined ? rosterLabelOfId(playerIdMap, id) : cleanSrcName;
     } else if (!isSrcFriendly && enemyIdMap) {
       const id = enemyIdMap.get(d.srcUnitName) ?? enemyIdMap.get(cleanSrcName);
-      srcName = id !== undefined ? String(id) : cleanSrcName;
+      srcName =
+        id !== undefined ? rosterLabelOfId(enemyIdMap, id) : cleanSrcName;
     } else {
       srcName = cleanSrcName;
     }
@@ -799,27 +1634,67 @@ export function damageEventLabel(
     // baseline (`次级食尸鬼 — Death Order`). Same last resort as
     // `actorLabel` / `rootSourceLabel`: not a player, not ASCII → [pet].
     if (
-      !/^\d+$/.test(srcName) &&
+      !/^\d+(?:\([A-Za-z]+\))?$/.test(srcName) &&
       [...srcName].some((c) => c.charCodeAt(0) > 127)
     )
       srcName = "[pet]";
   } else if (isPet) {
-    srcName = summonLabel(d, srcType, playerIdMap, enemyIdMap, summonOwners);
+    srcName = summonLabel(d, summonType, playerIdMap, enemyIdMap, summonOwners);
   }
-  if (srcName === "[pet]" && !isPet)
-    srcName = summonLabel(d, srcType, playerIdMap, enemyIdMap, summonOwners);
+  if (srcName === "[pet]" && !isPet && !charmed)
+    srcName = summonLabel(d, summonType, playerIdMap, enemyIdMap, summonOwners);
+  if (charmed) srcName = `${srcName} (mind-controlled)`;
 
   const baseSpellLabel = d.spellId
     ? getEnglishSpellName(d.spellId, d.spellName)
     : (d.spellName ?? "melee");
 
-  const schoolName = getSpellSchoolName(d.spellSchoolId);
-  const spellLabel = schoolName
-    ? `${baseSpellLabel} [${schoolName}]`
-    : baseSpellLabel;
-
-  return `${srcName} — ${spellLabel}`;
+  return {
+    ability: `${srcName} — ${baseSpellLabel}`,
+    school: getSpellSchoolName(hitSchoolId(d)),
+  };
 }
+
+/** Between the schools of one `Top sources` entry whose damage came in more
+ * than one (`Eviscerate [Physical + Shadow]`) — not the `/` of a single
+ * multi-school hit. The legend line is printed when an entry carries it. */
+export const TOP_SOURCE_SCHOOL_JOIN = " + ";
+/** A `Top sources` / `Top damage in final Ns` entry with such a tag. */
+export const TOP_SOURCE_MIXED_SCHOOL_RE =
+  / — [^\n[\]]+ \[[A-Za-z/]+(?: \+ [A-Za-z/]+)+\] \(\d+k/;
+/** A rendered `Top sources: …` / `Top damage in final Ns: …` line; group 1 is
+ * the list. */
+export const TOP_SOURCE_LIST_RE = /Top (?:sources|damage in final \d+s): (.+)$/;
+const TOP_SOURCE_ENTRY_RE =
+  /(.+?)(?: \[([^\]]+)\])? \((\d+)k(?:; \d+k of it absorbed)?\)(?:, |$)/y;
+/**
+ * The entries of such a list, read back as `getTopDamageSourcesInWindow`
+ * writes them: `ability` = "source — spell", the schools of its tag, the
+ * printed thousands. null when the text is not that format to its end. The
+ * gate's reader (`checkTopSourcesOneEntryPerAbility`): no two entries of one
+ * list may share an `ability`.
+ */
+export function parseTopSourceEntries(
+  list: string,
+): Array<{ ability: string; schools: string[]; k: number }> | null {
+  const out: Array<{ ability: string; schools: string[]; k: number }> = [];
+  const re = new RegExp(TOP_SOURCE_ENTRY_RE.source, "y");
+  let at = 0;
+  while (at < list.length) {
+    re.lastIndex = at;
+    const m = re.exec(list);
+    if (!m) return null;
+    out.push({
+      ability: m[1]!,
+      schools: m[2] ? m[2].split(TOP_SOURCE_SCHOOL_JOIN) : [],
+      k: Number(m[3]),
+    });
+    at = re.lastIndex;
+  }
+  return out.length ? out : null;
+}
+export const TOP_SOURCE_MIXED_SCHOOL_LEGEND =
+  "  `[A + B]` after an ability in a `Top sources` / `Top damage` list = its damage there came in both schools (largest first); the entry is their sum.";
 
 /** summon GUID → owner's full name, for every unit that carries an owner. */
 export function buildSummonOwnerNames(
@@ -868,15 +1743,56 @@ function summonLabel(
         ? es
         : undefined);
   if (id === undefined) return "[pet]";
-  return `${id}'s ${srcType === CombatUnitType.Guardian ? "guardian" : "pet"}`;
+  const map =
+    full !== undefined
+      ? playerIdMap?.get(ownerName) !== undefined
+        ? playerIdMap
+        : enemyIdMap
+      : fs !== undefined
+        ? playerIdMap
+        : enemyIdMap;
+  return `${rosterLabelOfId(map, id)}'s ${summonKindOf(d.srcUnitId || undefined, undefined, srcType)}`;
 }
 
-/** When the unit was summoned (its own SPELL_SUMMON), or null. */
-export function summonedAtMs(unit: ICombatUnit): number | null {
-  const e = unit.actionIn.find(
-    (a) => a.logLine.event === LogEvent.SPELL_SUMMON,
-  );
-  return e ? e.logLine.timestamp : null;
+/** `summonKindWord` with both kinds of evidence the timeline has: the unit's
+ * own SPELL_SUMMON line and its npc's listed name (a Static Field Totem is
+ * in the log with no summon line of its own). The one call every `X's
+ * <kind>` label on the timeline goes through. The damage rows (`summonLabel`)
+ * have the source's GUID but not its unit, so there a totem is recognised by
+ * its listed npc only — an unlisted totem that deals damage reads
+ * `guardian` (0 such rows in the 605-file capture, 2026-10-09). */
+export function summonKindOf(
+  sourceId: string | undefined,
+  unit?: Pick<ICombatUnit, "actionIn">,
+  srcType?: CombatUnitType,
+): SummonKindWord {
+  return summonKindWord(sourceId, {
+    unit,
+    srcType,
+    npcName:
+      CRITICAL_NON_PLAYER_NPC_NAMES[getNpcIdFromGuid(sourceId ?? "") ?? ""],
+  });
+}
+
+/**
+ * F15 / fact1215 R2 (2026-10-16): the actor a dispel line names — the
+ * player's roster label, or `<label>'s <kind>` when a summon cast it
+ * (`isPetDispel`; `summonKindOf`, the [KICK] lines' word: a Felhunter is
+ * `pet`, Poison Cleansing Totem `totem`, an Arcane Phoenix `guardian`). The
+ * [PURGE] / [ENEMY PURGE] / [ENEMY CLEANSE] / [MINOR DISPELS] lines named the
+ * warlock for his Felhunter's Devour Magic (06356dd9, 0f894aee, 364e3201,
+ * 519781fd, 62fdbf2e, 8cd58545). The line groups key on this label, so a
+ * summon's and its owner's removals in one second stay apart.
+ */
+export function dispelActorLabel(
+  e: { sourceName: string; isPetDispel: boolean; summonUnitId?: string },
+  labelOf: (name: string) => string,
+  allUnits: readonly ICombatUnit[],
+): string {
+  const label = labelOf(e.sourceName);
+  if (!e.isPetDispel) return label;
+  const src = allUnits.find((u) => u.id === e.summonUnitId);
+  return `${label}'s ${summonKindOf(e.summonUnitId, src)}`;
 }
 
 /**
@@ -888,17 +1804,32 @@ export function summonedAtMs(unit: ICombatUnit): number | null {
 export function opposingHitsOnUnit(
   unit: ICombatUnit,
   unitSide: CombatUnitReaction,
+  /** the round's roster sides — while the recorder is charmed the log flips
+   * every reaction flag, and the flag test counted the wrong team's hits
+   * (`killed by:` beside it has read `isSameSideSource` since triage
+   * death-kill F-T1) */
+  sides?: RosterSides,
 ): {
   hits: number;
   hitters: string[];
   firstHit?: ICombatUnit["damageIn"][number];
 } {
+  const victim = { id: unit.id, reaction: unitSide };
   const mine = unit.damageIn.filter((d) => {
-    const side = getUnitReaction(d.srcUnitFlags);
+    if (d.srcUnitId === unit.id) return false;
+    const side =
+      (d.srcUnitId ? sides?.get(d.srcUnitId) : undefined) ??
+      getUnitReaction(d.srcUnitFlags);
     return (
       (side === CombatUnitReaction.Friendly ||
         side === CombatUnitReaction.Hostile) &&
-      side !== unitSide
+      !isSameSideSource(
+        victim,
+        d.srcUnitId,
+        d.srcUnitFlags,
+        sides,
+        d.destUnitFlags,
+      )
     );
   });
   return {
@@ -908,54 +1839,15 @@ export function opposingHitsOnUnit(
   };
 }
 
-/** How a non-player unit's death is known. */
-export interface INonPlayerUnitKill {
-  timestamp: number;
-  /** The killing blow, when the evidence is a damage event (absent when the
-   * log only gave a bare `UNIT_DIED`). */
-  finalBlow?: ICombatUnit["damageIn"][number];
-}
+// `playerKillingBlow` lives in utils/killingBlow.ts (one predicate with the
+// death block's execute line); re-exported for this module's importers.
+export { playerKillingBlow };
 
-/**
- * When — and by what — a non-player unit was killed, or null when its end is
- * UNKNOWN (expired, replaced, owner died, despawned: the log does not say, and
- * "no kill evidence" must never be read as "survived").
- *
- * Evidence, earliest wins, at most one per unit (a GUID dies once):
- *  - a damage event with `overkill > 0` — the only evidence 12.x logs carry for
- *    totems and guardians (`UNIT_DIED` on 5 of 13,439 listed summoned units;
- *    `PARTY_KILL` is a strict subset of overkill, same millisecond, 134/134 —
- *    docs/log-observability-audit.md direction 4). This is a unit being
- *    ATTACKED; a spell a Grounding Totem eats is a separate SPELL_ABSORBED and
- *    is not a kill;
- *  - a `UNIT_DIED` death record, still honoured for the units that get one.
- */
-/** The blow that killed a player: the last damage event with overkill > 0 at
- * or before the death (+500 ms log slack), else undefined. */
-export function playerKillingBlow(
-  unit: ICombatUnit,
-  deathMs: number,
-): ICombatUnit["damageIn"][number] | undefined {
-  let best: ICombatUnit["damageIn"][number] | undefined;
-  for (const d of unit.damageIn) {
-    if ((d.overkill ?? 0) <= 0) continue;
-    if (d.logLine.timestamp > deathMs + 500) continue;
-    if (!best || d.logLine.timestamp >= best.logLine.timestamp) best = d;
-  }
-  return best;
-}
-
-export function nonPlayerUnitKill(
-  unit: ICombatUnit,
-): INonPlayerUnitKill | null {
-  const finalBlow = unit.damageIn.find((d) => (d.overkill ?? 0) > 0);
-  const died = unit.deathRecords?.[0]?.timestamp;
-  if (finalBlow && (died === undefined || finalBlow.timestamp <= died))
-    return { timestamp: finalBlow.timestamp, finalBlow };
-  if (died !== undefined)
-    return { timestamp: died, ...(finalBlow ? { finalBlow } : {}) };
-  return null;
-}
+// `summonedAtMs`, `INonPlayerUnitKill` and `nonPlayerUnitKill` live in
+// utils/summonLife.ts since fact2 R6 (ccTrinketAnalysis reads them and
+// cannot import this module); re-exported for this module's importers.
+export { nonPlayerUnitKill, summonedAtMs };
+export type { INonPlayerUnitKill };
 
 /**
  * How long a non-player unit stood before the blow that killed it: its own
@@ -976,18 +1868,31 @@ export function summonLifetimeAtKillS(
 /**
  * Extracts the top-N damage sources that hit `unit` within the `windowMs` window
  * ending at `deathMs`. Returns an array of formatted "source — spell (Xk)" strings.
+ *
+ * One entry per ABILITY of a source — the source label and the English spell
+ * name (FT F22). The entries were keyed on the whole label, school tag
+ * included, so an ability the log writes under several spell ids was split
+ * wherever those ids did not carry the same tag: Eviscerate 196819
+ * (Physical) and its Shadowed Finishers half 328082 (Shadow) — 1b930c17
+ * `4 — Eviscerate [Physical] (85k), …, 4 — Eviscerate [Shadow] (69k)` —
+ * and The Hunt's impact 370966, absorbed whole (an absorb row carries no
+ * school here), beside its DoT 370969 — f94a7604 `4 — The Hunt (116k; 116k
+ * of it absorbed), 4 — The Hunt [Chaos] (108k)`. 312 of 20,847 such lists on
+ * the 605-file capture named one source + ability twice. The tag of a summed
+ * entry lists the schools its damage rows carried, largest first
+ * (`TOP_SOURCE_SCHOOL_JOIN`); a part the log gives no school for adds none.
  */
-/** Self → self periodic damage that is damage DELAYED from earlier hits.
- * Time Dilation's deferral (361029) — b12b: 255k in the last 10 s of a death.
- * Registered in curatedIdRegistry. */
-export const DEFERRED_DAMAGE_SPELL_IDS: ReadonlySet<string> = new Set([
-  // selfDamageScan.ts (every 60th of the 12.1 archive, 303 files, 2026-09-26):
-  // the self → self periodic damage that is damage delayed from earlier hits.
-  // Refraction / Tempered in Battle / Blessing of Dawn / Fel Armor and
-  // reflected own spells are the unit's own damage too, but not deferred.
-  "361029", // Time Dilation — deferred damage (2,642 ticks, every spec)
-  "413924", // Stretch Time — deferred damage (1,005 ticks, Devastation)
-]);
+/** Self → self periodic damage that is damage DELAYED from earlier hits —
+ * the ids the deferral shields' delayed damage lands as
+ * (`DEFERRAL_SHIELD_DAMAGE_IDS`, the one table: Time Dilation 361029 — b12b:
+ * 255k in the last 10 s of a death — and Stretch Time 413924).
+ * selfDamageScan.ts (every 60th of the 12.1 archive, 303 files, 2026-09-26):
+ * 2,642 and 1,005 ticks; Refraction / Tempered in Battle / Blessing of Dawn /
+ * Fel Armor and reflected own spells are the unit's own damage too, but not
+ * deferred. Registered in curatedIdRegistry. */
+export const DEFERRED_DAMAGE_SPELL_IDS: ReadonlySet<string> = new Set(
+  Object.values(DEFERRAL_SHIELD_DAMAGE_IDS),
+);
 
 export function getTopDamageSourcesInWindow(
   unit: ICombatUnit,
@@ -998,6 +1903,8 @@ export function getTopDamageSourcesInWindow(
   enemyIdMap?: Map<string, number>,
   summonOwners?: ReadonlyMap<string, string>,
   unitNames?: ReadonlyMap<string, string>,
+  /** roster side by GUID (`buildRosterSides`); see the B20 note below */
+  sides?: RosterSides,
 ): string[] {
   const startMs = endMs - windowMs;
   // a melee swing is spellId "0" on a damage event and no attack spell on an
@@ -1007,9 +1914,19 @@ export function getTopDamageSourcesInWindow(
   const buckets = new Map<string, number>();
   /** bucket → the part of it a shield absorbed */
   const absorbedIn = new Map<string, number>();
-  /** `${attackerId}|${spellId}` → the bucket its damage events went to, so
-   *  an absorbed part joins the same line as the hit's landed part */
-  const keyOfHit = new Map<string, string>();
+  /** bucket → school name → the part of it that came in that school */
+  const schoolsIn = new Map<string, Map<string, number>>();
+  const add = (key: string, school: string | null, amount: number) => {
+    buckets.set(key, (buckets.get(key) ?? 0) + amount);
+    if (!school) return;
+    let m = schoolsIn.get(key);
+    if (!m) schoolsIn.set(key, (m = new Map()));
+    m.set(school, (m.get(school) ?? 0) + amount);
+  };
+  /** `${attackerId}|${spellId}` → the bucket its damage events went to and
+   *  their school, so an absorbed part joins the same line as the hit's
+   *  landed part */
+  const keyOfHit = new Map<string, ReturnType<typeof damageEventParts>>();
   for (const d of unit.damageIn) {
     if (d.logLine.timestamp < startMs || d.logLine.timestamp > endMs) continue;
     const dmg = Math.abs(d.effectiveAmount);
@@ -1018,20 +1935,37 @@ export function getTopDamageSourcesInWindow(
     // — except the unit's OWN deferred damage (Time Dilation's delayed
     // ticks 361029 land as self → self periodic damage: b12b, 255k in the
     // last 10 s, previously invisible here).
+    // The side is the ROSTER's (triage death-kill F-T1): while the log owner
+    // is charmed the log flips every reaction flag, and the flag test dropped
+    // the enemy's damage as "same team" (ba8c0510: 113k of a 199k Ray of
+    // Frost; 17 of the 60 triage rounds carry flipped rows).
     const self = !!d.srcUnitId && d.srcUnitId === unit.id;
-    if (!self && getUnitReaction(d.srcUnitFlags) === unit.reaction) continue;
+    if (
+      !self &&
+      isSameSideSource(
+        unit,
+        d.srcUnitId,
+        d.srcUnitFlags,
+        sides,
+        d.destUnitFlags,
+      )
+    )
+      continue;
     // "deferred" only for an identified delayed-damage effect — a direct
     // self-hit (Shadow Word: Death) is the unit's own, not deferred (codex
     // review of batch 7)
     const selfName = getEnglishSpellName(d.spellId ?? "", d.spellName ?? "");
-    const key = self
-      ? DEFERRED_DAMAGE_SPELL_IDS.has(d.spellId ?? "")
-        ? `deferred ${selfName} (own)`
-        : `${selfName} (own)`
-      : damageEventLabel(d, playerIdMap, enemyIdMap, summonOwners);
+    const hit = self
+      ? {
+          ability: DEFERRED_DAMAGE_SPELL_IDS.has(d.spellId ?? "")
+            ? `deferred ${selfName} (own)`
+            : `${selfName} (own)`,
+          school: null,
+        }
+      : damageEventParts(d, playerIdMap, enemyIdMap, summonOwners);
     if (d.srcUnitId)
-      keyOfHit.set(`${d.srcUnitId}|${hitSpellKey(d.spellId)}`, key);
-    buckets.set(key, (buckets.get(key) ?? 0) + dmg);
+      keyOfHit.set(`${d.srcUnitId}|${hitSpellKey(d.spellId)}`, hit);
+    add(hit.ability, hit.school, dmg);
   }
   // Absorbed parts of hits (reliability round 3 N13, b12b: "Starsurge 43k"
   // for 151k of Starsurge, most of it eaten by shields). The victim-keyed
@@ -1047,16 +1981,47 @@ export function getTopDamageSourcesInWindow(
   );
   for (const a of unit.absorbsIn ?? []) {
     if (a.timestamp < startMs || a.timestamp > endMs) continue;
-    if (!a.attackerId || a.attackerId === unit.id) continue;
-    if (getUnitReaction(a.srcUnitFlags) === unit.reaction) continue;
+    if (!a.attackerId) continue;
+    // round-1 retest idx 32: the unit's own damage a shield of its ate is
+    // part of its `(own)` entry, as the hits that landed are (15b4d4ec: a
+    // Refraction 100k landed + 41k eaten by its own Prismatic Barrier read
+    // `Refraction (own) (100k)`)
+    if (a.attackerId === unit.id) {
+      if (isDeferralAbsorb(a)) continue;
+      const amt = Math.abs(a.absorbedAmount);
+      const spellKey = hitSpellKey(a.attackSpellId);
+      if (amt <= 0 || spellKey === "") continue;
+      const selfName = getEnglishSpellName(
+        a.attackSpellId ?? "",
+        a.attackSpellName ?? "",
+      );
+      const ability = DEFERRED_DAMAGE_SPELL_IDS.has(a.attackSpellId ?? "")
+        ? `deferred ${selfName} (own)`
+        : `${selfName} (own)`;
+      add(ability, null, amt);
+      absorbedIn.set(ability, (absorbedIn.get(ability) ?? 0) + amt);
+      continue;
+    }
+    if (
+      isSameSideSource(
+        unit,
+        a.attackerId,
+        a.srcUnitFlags,
+        sides,
+        a.destUnitFlags,
+      )
+    )
+      continue;
     const amt = Math.abs(a.absorbedAmount);
     if (amt <= 0) continue;
+    // delayed, not absorbed — it is the "deferred …" row when it lands
+    if (isDeferralAbsorb(a)) continue;
     const noSpell = hitSpellKey(a.attackSpellId) === "";
     const swing = noSpell && recordsAttackSpell;
     const unknownAttack = noSpell && !recordsAttackSpell;
-    const key =
+    const hit =
       keyOfHit.get(`${a.attackerId}|${hitSpellKey(a.attackSpellId)}`) ??
-      damageEventLabel(
+      damageEventParts(
         {
           srcUnitId: a.attackerId,
           // the attacker by GUID — the raw name parameter is empty on stored
@@ -1070,21 +2035,33 @@ export function getTopDamageSourcesInWindow(
             : unknownAttack
               ? "unrecorded ability"
               : a.attackSpellName,
-          spellSchoolId: swing ? "0x1" : undefined,
+          // the absorbed hit's own school (`absorbedHitSchoolMask`, the
+          // school split's reading): the line's attack-school field, else
+          // the spell's official mask; a swing is physical
+          spellSchoolId: ((m) =>
+            m === undefined ? undefined : `0x${m.toString(16)}`)(
+            absorbedHitSchoolMask(a, recordsAttackSpell),
+          ),
         } as ICombatUnit["damageIn"][number],
         playerIdMap,
         enemyIdMap,
         summonOwners,
       );
-    buckets.set(key, (buckets.get(key) ?? 0) + amt);
-    absorbedIn.set(key, (absorbedIn.get(key) ?? 0) + amt);
+    add(hit.ability, hit.school, amt);
+    absorbedIn.set(hit.ability, (absorbedIn.get(hit.ability) ?? 0) + amt);
   }
   return [...buckets.entries()]
     .sort((a, b) => b[1] - a[1])
     .slice(0, topN)
     .map(([k, v]) => {
       const abs = Math.round((absorbedIn.get(k) ?? 0) / 1000);
-      return `${k} (${Math.round(v / 1000)}k${abs > 0 ? `; ${abs}k of it absorbed` : ""})`;
+      const schools = [...(schoolsIn.get(k)?.entries() ?? [])]
+        .sort((a, b) => b[1] - a[1])
+        .map(([name]) => name);
+      const tag = schools.length
+        ? ` [${schools.join(TOP_SOURCE_SCHOOL_JOIN)}]`
+        : "";
+      return `${k}${tag} (${Math.round(v / 1000)}k${abs > 0 ? `; ${abs}k of it absorbed` : ""})`;
     });
 }
 
@@ -1120,7 +2097,10 @@ export function buildMatchEndBlock(params: {
 
   // Final dampening — only when bracket is available
   const finalDampPct = bracket
-    ? getDampeningPercentage(bracket, [...friends, ...enemies], matchEndMs)
+    ? getDampeningPercentage(bracket, friends, matchEndMs, [
+        ...friends,
+        ...enemies,
+      ])
     : null;
   const dampStr =
     finalDampPct !== null ? `   damp: ${Math.round(finalDampPct)}%` : "";
@@ -1178,6 +2158,9 @@ export function buildMatchEndBlock(params: {
 
 // ── [KILL SEQUENCE] block (F113) ──────────────────────────────────────────────
 
+/** [KILL SEQUENCE] `[HEALER CC]`: the death-setup look-back (`DEATH_CC_LOOKBACK_S`). */
+const KILL_SEQ_LOCK_LOOKBACK_S = DEATH_CC_LOOKBACK_S;
+
 export function buildKillSequenceBlock(params: {
   matchStartMs: number;
   matchEndSeconds: number;
@@ -1215,8 +2198,13 @@ export function buildKillSequenceBlock(params: {
   enemyIdMap?: Map<string, number>;
   /** summon GUID → owner name (`buildSummonOwnerNames`) */
   summonOwners?: ReadonlyMap<string, string>;
+  /** unit GUID → roster side (`buildRosterSides`) */
+  rosterSides?: RosterSides;
   /** unit GUID → name (absorbed-hit attackers) */
   unitNames?: ReadonlyMap<string, string>;
+  /** every unit of the round — the cannot-cast sources include pets (cc-dr
+   * F-KS1); absent = players only */
+  allUnits?: ReadonlyArray<{ id: string; ownerId?: string }>;
 }): string[] {
   const {
     matchStartMs,
@@ -1265,7 +2253,38 @@ export function buildKillSequenceBlock(params: {
         const healerSummary = ccTrinketSummaries.find(
           (s) => s.playerName === dyingHealer.name,
         );
-        if (healerSummary) {
+        // cc-dr F-KS1: the lock chain of the death-setup facts (unclipped
+        // cannot-cast runs touching the 12 s, `deathLockChain`), not only the
+        // latest-starting CC (7d1f14af: Strangulate → Blinding Sleet →
+        // Polymorph, locked 10.2 of the last 12 s)
+        const deathMs = matchStartMs + Math.round(deathTime * 1000);
+        const lockSources = enemySourceIds(
+          isFriendlyDeath ? enemies : friends,
+          params.allUnits ?? [],
+        );
+        const lockChain = deathLockChain(
+          namedCannotCastIntervals(
+            dyingHealer as ICombatUnit,
+            lockSources,
+            (params.allUnits ?? []) as readonly ICombatUnit[],
+          ),
+          deathMs,
+          KILL_SEQ_LOCK_LOOKBACK_S * 1000,
+        );
+        // our healer only, as before (a summary exists for friends only):
+        // the enemy healer has no roster label here and would print a bare
+        // character name
+        if (healerSummary && lockChain.links.length > 0) {
+          // WO6 #4 (n25, 82a2d681): two runs are not one chain
+          const chainText = deathLockChainText(lockChain, (iv) =>
+            getEnglishSpellName(iv.spellId),
+          );
+          killSeqEntries.push({
+            timeSeconds: (lockChain.links[0]!.from - matchStartMs) / 1000,
+            label: "[HEALER CC]",
+            text: `${pid(dyingHealer.name)} (${specToString(dyingHealer.spec)}) ← ${chainText} (locked ${(Math.round(lockChain.lockedMs / 100) / 10).toFixed(1)} of the last ${KILL_SEQ_LOCK_LOOKBACK_S}s)`,
+          });
+        } else if (healerSummary) {
           const relevantCC = [...healerSummary.ccInstances]
             .filter(
               (cc) =>
@@ -1292,9 +2311,16 @@ export function buildKillSequenceBlock(params: {
           (w) => w.fromSeconds <= deathTime && w.toSeconds >= deathTime - 12,
         );
         if (activeBurst) {
+          // F-L7 (triage sync-burst): each CD at its own cast second — the
+          // line is stamped at the window's first second, and a bare list read
+          // as "everything popped then" (ba8c0510 0:21: Ray of Frost was 0:39).
           const cdNames = activeBurst.activeCDs
-            .map((c) => c.spellName)
-            .join(" + ");
+            .map((c) =>
+              Math.floor(c.castSeconds) === Math.floor(activeBurst.fromSeconds)
+                ? c.spellName
+                : `${c.spellName} @${fmtTime(c.castSeconds)}`,
+            )
+            .join(", ");
           killSeqEntries.push({
             timeSeconds: activeBurst.fromSeconds,
             label: "[ENEMY CD]",
@@ -1349,10 +2375,79 @@ export function buildKillSequenceBlock(params: {
             // intent of the dead `isExternal` branch: a DPS teammate's Rallying
             // Cry / Anti-Magic Zone now qualifies, which the healer-only rule
             // silently dropped).
+            // F20 D1: and never the dying player's own ally-only external
+            // (Blessing of Sacrifice cannot target its caster) — one
+            // predicate with cd-hoarded / [DEATH] Unused.
             const isDyingPlayer = player.name === dyingUnit.name;
-            if (!isDyingPlayer && !canHelpAnotherUnit(cd.spellId, cd.tag))
+            if (!cdHelpsRecipient(cd, isDyingPlayer)) return false;
+            // a row owned on the spec baseline alone (never pressed this
+            // round) is cd-hoarded's only (ruling P-W6) — not "available but
+            // unused" here, where no CC / usability gate stands behind it
+            if (cd.baselineOnly) return false;
+            // …and a positional wall (Darkness' zone) only when its holder
+            // stood within reach of the dying player — the 2026-07-30 ruling;
+            // one predicate with cd-hoarded (F-MC1). Without it the retag of
+            // Darkness as a Defensive printed "Darkness available but unused"
+            // at a teammate's death wherever the Demon Hunter stood (605-file
+            // capture: 9 of the 20 new lines).
+            if (
+              !isDyingPlayer &&
+              !positionalWallReaches(
+                cd.spellId,
+                player as ICombatUnit,
+                dyingUnit as ICombatUnit,
+                matchStartMs + deathTime * 1000,
+              )
+            )
               return false;
 
+            // …and a defensive cast ON AN ENEMY (Touch of Karma) only with a
+            // living enemy in its reach — cd-hoarded's predicate (codex
+            // round 6 on F-W6)
+            if (
+              !enemyTargetReaches(
+                cd.spellId,
+                player as ICombatUnit,
+                enemies as ICombatUnit[],
+                matchStartMs + deathTime * 1000,
+              )
+            )
+              return false;
+
+            // …and not a save Forbearance stops for the unit it would land
+            // on (review of cd-hoarded F-W6: an unpressed baseline Divine
+            // Shield named 10 s after a self Lay on Hands), nor an Ice Block
+            // under Hypothermia (FT F22)
+            if (
+              lockoutDebuffStopsPressAtDeath(
+                player as ICombatUnit,
+                cd.spellId,
+                dyingUnit as ICombatUnit,
+                [...friends, ...enemies],
+                deathTime,
+                matchStartMs,
+              )
+            )
+              return false;
+            // …and a school-limited save only when it covered what was
+            // killing them — the `[DEATH] (Unused: …)` list's rule
+            // (`saveCoversPressureOn`; codex R6C-04 #2: Blessing of
+            // Protection offered against an all-magic death)
+            if (
+              !saveCoversPressureOn(
+                cd.spellId,
+                dyingUnit as ICombatUnit,
+                matchStartMs + deathTime * 1000,
+                {
+                  sides: params.rosterSides,
+                  recordsAttackSpell: documentRecordsAttackSpell([
+                    ...friends,
+                    ...enemies,
+                  ] as ICombatUnit[]),
+                },
+              )
+            )
+              return false;
             // Single-source predicate (BACKLOG #18 Minor #3): shares the same
             // judgement as matchTimelineSections' [DEATH] Unused and
             // candidateFindings' death-unused-defensive / external-unused; we
@@ -1365,10 +2460,43 @@ export function buildKillSequenceBlock(params: {
               .sort((a, b) => b.cd.cooldownSeconds - a.cd.cooldownSeconds)
               .slice(0, 2);
             topUnused.forEach((u) => {
+              // cc-dr F-KS1: the holder's free time just before the death —
+              // crisis-external F-D2's `freeBeforeDeathS` (`freeMsBefore`, the
+              // same intervals); nothing when no lock started before it
+              // FT-T10: asked for the defensive the line names — a
+              // kick lockout counts only when it locks that spell's school,
+              // and a defensive the holder's pet casts is asked of the pet
+              // ("free to press it" is the spell's own free time either way)
+              const freeMs = freeMsBefore(
+                cannotCastIntervalsForSpells(
+                  u.player as ICombatUnit,
+                  enemySourceIds(enemies, params.allUnits ?? []),
+                  [u.cd.spellId],
+                  params.allUnits as ICombatUnit[] | undefined,
+                ),
+                matchStartMs + Math.round(deathTime * 1000),
+              );
+              const freeNote =
+                freeMs === undefined
+                  ? ""
+                  : // "to press it", not bare "free": this is the named
+                    // spell's own free time (a lockout on another school
+                    // does not count), where death-setup's
+                    // `freeBeforeDeathS` is the unit's free time for any
+                    // cast — the same words on both read as one number
+                    // (review 40-FT-54)
+                    ` (free to press it for the last ${(Math.round(freeMs / 100) / 10).toFixed(1)}s before the death)`;
+              // a self-only wall a talent lets its holder put on an ally
+              // says so when the death is another unit's (user ruling
+              // 2026-10-27 — the gate reads it back)
+              const reachNote =
+                u.player.name !== dyingUnit.name
+                  ? allyReachTalentNote(u.cd)
+                  : undefined;
               killSeqEntries.push({
                 timeSeconds: Math.max(0, deathTime - 1),
                 label: "[DEFENSIVE AVAILABLE]",
-                text: `${pid(u.player.name)}: ${u.cd.spellName} available but unused`,
+                text: `${pid(u.player.name)}: ${u.cd.spellName}${reachNote ? ` (${reachNote})` : ""} available but unused${freeNote}`,
               });
             });
           }
@@ -1389,14 +2517,18 @@ export function buildKillSequenceBlock(params: {
           params.enemyIdMap,
           params.summonOwners,
           params.unitNames,
+          params.rosterSides,
         );
         // Reliability round 3 N13 (7d1f): "Killer" was the largest 5 s source
         // (a 93k Scorch 2 s earlier) while the last half second was DK + pets.
         // The killing blow is the overkill hit — the same evidence
         // `nonPlayerUnitKill` reads — and the largest source is named as such.
+        // a split overkill row's attacker is the hit on its link holder,
+        // a player of either side (`attackerBlowFor`)
         const blow = playerKillingBlow(
           dyingUnit,
           matchStartMs + deathTime * 1000,
+          (id) => [...friends, ...enemies].find((u) => u.id === id),
         );
         if (topSources.length > 0) {
           const blowPart = blow

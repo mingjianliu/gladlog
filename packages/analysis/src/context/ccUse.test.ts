@@ -11,12 +11,15 @@ import {
   makeAdvancedAction,
   makeAuraEvent,
   makeDamageEvent,
+  makeInterruptEvent,
   makeSpellCastEvent,
   makeUnit,
 } from "../../test/ported/testHelpers";
 import { ensureAnalysisData } from "../index";
 import { pvpTrinketReadyAtSecond } from "../utils/ccTargetState";
+import { extractMajorCooldowns } from "../utils/cooldowns";
 import { CC_USE_CAP, ccUseSummary, formatCcUse } from "./ccUse";
+import { buildPlayerLoadout } from "./resourceSnapshot";
 
 const T0 = 1_000_000;
 const at = (s: number) => T0 + s * 1000;
@@ -246,5 +249,329 @@ describe("ccUseSummary (GH #77 part 2)", () => {
     });
     expect(out.bookmarks).toHaveLength(CC_USE_CAP);
     expect(out.bookmarks.map((b) => b.burstIndex)).toEqual([2, 3]);
+  });
+});
+
+// FT-T16 D15 "2c" (user approval 2026-10-10): a control with a cast time —
+// cast bars begun (SPELL_CAST_START) next to casts that went off
+// (SPELL_CAST_SUCCESS).
+describe("CC USE counts — cast bars started vs casts that went off", () => {
+  const CYCLONE = "33786";
+  const MIGHTY_BASH = "5211"; // instant
+  const WRATH = "190984"; // a cast time, not a control
+  const RING_OF_FROST = "113724"; // on the Mage cooldown ledger, 2 s cast
+  const barStart = (spellId: string, s: number, name: string) => ({
+    ...makeSpellCastEvent(
+      spellId,
+      at(s),
+      "e1",
+      "Rogue",
+      "p1",
+      "Owner",
+      0,
+      name,
+    ),
+    logLine: {
+      event: LogEvent.SPELL_CAST_START,
+      timestamp: at(s),
+      parameters: [],
+    },
+  });
+  const wentOff = (spellId: string, s: number, name: string) =>
+    makeSpellCastEvent(spellId, at(s), "e1", "Rogue", "p1", "Owner", 0, name);
+
+  // COMBATANT_INFO talent rows ({node, entry, rank}): a never-cast talent-tree
+  // control is on the kit only for a unit whose talents show it.
+  const MIGHTY_BASH_TALENT = { id1: 82237, id2: 103315, count: 1 }; // Druid
+  const RING_OF_FROST_TALENT = { id1: 62088, id2: 80144, count: 1 }; // Mage
+  const HEX_TALENT = { id1: 103623, id2: 127903, count: 1 }; // Shaman
+
+  function countsLine(opts: {
+    spec?: CombatUnitSpec;
+    unitClass?: CombatUnitClass;
+    talents?: Array<{ id1: number; id2: number; count: number }>;
+    starts?: Array<[string, number, string]>;
+    casts?: Array<[string, number, string]>;
+    kicks?: Array<[string, number]>;
+    /** a Solo Shuffle round whose ending death (the rogue's) is at this s */
+    shuffleDeathS?: number;
+  }) {
+    const owner = makeUnit("p1", {
+      name: "Owner",
+      spec: opts.spec ?? CombatUnitSpec.Druid_Balance,
+      class: opts.unitClass ?? CombatUnitClass.Druid,
+      info: { talents: opts.talents ?? [MIGHTY_BASH_TALENT], pvpTalents: [] },
+      reaction: CombatUnitReaction.Friendly,
+      castStartEvents: (opts.starts ?? []).map((x) => barStart(...x)),
+      spellCastEvents: (opts.casts ?? []).map((x) => wentOff(...x)),
+      actionIn: (opts.kicks ?? []).map(([spellId, s]) =>
+        makeInterruptEvent("1766", "Kick", spellId, "Cyclone", at(s), "e1"),
+      ),
+    });
+    const rogue = makeUnit("e1", {
+      name: "Rogue",
+      spec: CombatUnitSpec.Rogue_Assassination,
+      reaction: CombatUnitReaction.Hostile,
+      ...(opts.shuffleDeathS !== undefined
+        ? {
+            info: { talents: [], pvpTalents: [] },
+            deathRecords: [{ timestamp: at(opts.shuffleDeathS) }],
+          }
+        : {}),
+    });
+    const combat: any = {
+      startTime: T0,
+      endTime: at(120),
+      startInfo:
+        opts.shuffleDeathS !== undefined
+          ? { zoneId: "", bracket: "Rated Solo Shuffle" }
+          : { zoneId: "" },
+      units: { p1: owner, e1: rogue },
+    };
+    const summary = ccUseSummary({
+      combat,
+      owner,
+      friends: [owner],
+      enemies: [rogue],
+      enemyCC: [],
+      burstLedger: [],
+      pressureWindows: [],
+    });
+    const lines = formatCcUse(summary, {
+      friendly: (n) => n,
+      enemy: (n) => n,
+    });
+    const items = (lines[1] ?? "").replace(/^\s*Counts: /, "").split(" · ");
+    // the owner's kit line of the same round, from the same ledger
+    const kit =
+      buildPlayerLoadout(
+        owner,
+        "",
+        extractMajorCooldowns(owner, combat),
+        [],
+        { players: [], alignedBurstWindows: [] } as any,
+        undefined,
+        undefined,
+        combat,
+      )
+        .text.split("\n")
+        .find((l) => l.includes("<cooldowns>")) ?? "";
+    return { summary, items, header: lines[0] ?? "", kit };
+  }
+  const of = (items: string[], spell: string) =>
+    items.filter((i) => i.startsWith(`${spell} `));
+
+  it("a bar begun after a Solo Shuffle round's ending death is in neither count: the kit and CC USE cut at the same instant (F19 605 gate)", () => {
+    const mage = {
+      spec: CombatUnitSpec.Mage_Arcane,
+      unitClass: CombatUnitClass.Mage,
+      talents: [RING_OF_FROST_TALENT],
+    };
+    const after = countsLine({
+      ...mage,
+      starts: [[RING_OF_FROST, 100, "Ring of Frost"]],
+      shuffleDeathS: 90,
+    });
+    expect(of(after.items, "Ring of Frost")).toEqual(["Ring of Frost not cast"]);
+    expect(after.kit).toMatch(/Ring of Frost \[[^\]]*\] \[UNUSED\]/);
+    // HAS TEETH: the same bar inside the round is counted by both
+    const inRound = countsLine({
+      ...mage,
+      starts: [[RING_OF_FROST, 80, "Ring of Frost"]],
+      shuffleDeathS: 90,
+    });
+    expect(of(inRound.items, "Ring of Frost")).toEqual([
+      "Ring of Frost cast bar started 1×, went off 0×",
+    ]);
+    expect(inRound.kit).toMatch(
+      /Ring of Frost \[[^\]]*\] \[UNUSED — started 1×, never finished\]/,
+    );
+  });
+
+  it("539b6ed0's shape: four Cyclone bars begun, none went off", () => {
+    const { summary, items } = countsLine({
+      starts: [47.9, 49.0, 55.6, 56.5].map((s) => [CYCLONE, s, "Cyclone"]),
+    });
+    expect(summary.counts.find((c) => c.spellName === "Cyclone")).toEqual(
+      expect.objectContaining({
+        casts: 0,
+        firstCastS: null,
+        castBarsStarted: 4,
+      }),
+    );
+    expect(of(items, "Cyclone")).toEqual([
+      "Cyclone cast bar started 4×, went off 0×",
+    ]);
+  });
+
+  it("every started bar went off: the plain `cast N×` entry, no started form", () => {
+    const { items } = countsLine({
+      starts: [
+        [CYCLONE, 10, "Cyclone"],
+        [CYCLONE, 30, "Cyclone"],
+      ],
+      casts: [
+        [CYCLONE, 11.6, "Cyclone"],
+        [CYCLONE, 31.6, "Cyclone"],
+      ],
+    });
+    expect(of(items, "Cyclone")).toEqual(["Cyclone cast 2× (first 0:11)"]);
+  });
+
+  it("a kicked bar is a started one: 3 begun, 1 kicked, 1 stopped, 1 went off", () => {
+    const { items } = countsLine({
+      starts: [
+        [CYCLONE, 10, "Cyclone"],
+        [CYCLONE, 15, "Cyclone"],
+        [CYCLONE, 19, "Cyclone"],
+      ],
+      kicks: [[CYCLONE, 10.9]],
+      casts: [[CYCLONE, 20.6, "Cyclone"]],
+    });
+    expect(of(items, "Cyclone")).toEqual([
+      "Cyclone cast bar started 3×, went off 1× (first 0:20)",
+    ]);
+  });
+
+  it("an instant control has no cast bar: its entry keeps the plain forms", () => {
+    const { summary, items } = countsLine({
+      casts: [[MIGHTY_BASH, 13, "Mighty Bash"]],
+    });
+    expect(of(items, "Mighty Bash")).toEqual([
+      "Mighty Bash cast 1× (first 0:13)",
+    ]);
+    expect(
+      summary.counts.find((c) => c.spellId === MIGHTY_BASH)!.castBarsStarted,
+    ).toBeUndefined();
+    expect(items.join(" · ")).not.toContain("cast bar started");
+    // and a control never started and never cast gets no entry of its own
+    expect(of(items, "Cyclone")).toEqual([]);
+  });
+
+  it("a cast-time spell that is not a control gets no entry", () => {
+    const { items } = countsLine({ starts: [[WRATH, 5, "Wrath"]] });
+    expect(of(items, "Wrath")).toEqual([]);
+  });
+
+  it("a cooldown-ledger control with a cast time takes the form on its own entry — one entry per spell", () => {
+    const { items } = countsLine({
+      spec: CombatUnitSpec.Mage_Arcane,
+      unitClass: CombatUnitClass.Mage,
+      talents: [RING_OF_FROST_TALENT],
+      starts: [
+        [RING_OF_FROST, 40, "Ring of Frost"],
+        [RING_OF_FROST, 75, "Ring of Frost"],
+      ],
+      casts: [[RING_OF_FROST, 77, "Ring of Frost"]],
+    });
+    expect(of(items, "Ring of Frost")).toEqual([
+      "Ring of Frost cast bar started 2×, went off 1× (first 1:17)",
+    ]);
+  });
+
+  it("the variants of one spell are one entry: Polymorph 118 and its 61305 skin", () => {
+    const { items } = countsLine({
+      spec: CombatUnitSpec.Mage_Arcane,
+      unitClass: CombatUnitClass.Mage,
+      talents: [RING_OF_FROST_TALENT],
+      // the client's own (here localized) name is not what the entry prints
+      starts: [
+        ["118", 32, "变形术"],
+        ["61305", 50, "变形术"],
+        ["118", 60, "变形术"],
+      ],
+      casts: [["61305", 51.7, "变形术"]],
+    });
+    expect(of(items, "Polymorph")).toEqual([
+      "Polymorph cast bar started 3×, went off 1× (first 0:51)",
+    ]);
+  });
+
+  it("more casts than bars (an instant proc of the spell) reads `cast N×`, never went off > started", () => {
+    const { items } = countsLine({
+      starts: [[CYCLONE, 10, "Cyclone"]],
+      casts: [
+        [CYCLONE, 11.6, "Cyclone"],
+        [CYCLONE, 40, "Cyclone"],
+      ],
+    });
+    expect(of(items, "Cyclone")).toEqual(["Cyclone cast 2× (first 0:11)"]);
+  });
+
+  it("counts only the round: a bar begun after the round's end is not one of them", () => {
+    const { items } = countsLine({
+      starts: [
+        [CYCLONE, 10, "Cyclone"],
+        [CYCLONE, 130, "Cyclone"],
+      ],
+      casts: [[CYCLONE, 131.6, "Cyclone"]],
+    });
+    expect(of(items, "Cyclone")).toEqual([
+      "Cyclone cast bar started 1×, went off 0×",
+    ]);
+  });
+
+  // One number for one spell: the kit's `[UNUSED — started N×, never
+  // finished]` and this line read the same bars (`castBarsOfCooldown`).
+  it("a cooldown-ledger control never cast: the kit's `started N×` is this line's N", () => {
+    const { items, kit } = countsLine({
+      spec: CombatUnitSpec.Mage_Arcane,
+      unitClass: CombatUnitClass.Mage,
+      talents: [RING_OF_FROST_TALENT],
+      starts: [
+        [RING_OF_FROST, 40, "Ring of Frost"],
+        [RING_OF_FROST, 75, "Ring of Frost"],
+        [RING_OF_FROST, 130, "Ring of Frost"], // after the round
+      ],
+    });
+    expect(of(items, "Ring of Frost")).toEqual([
+      "Ring of Frost cast bar started 2×, went off 0×",
+    ]);
+    expect(kit).toMatch(
+      /Ring of Frost \[[^\]]*\] \[UNUSED — started 2×, never finished\]/,
+    );
+  });
+
+  it("a glyphed Hex (211015) is the Hex cooldown's bar on both lines — the id differs, the cooldown does not", () => {
+    const HEX_VARIANT = "211015";
+    const shaman = {
+      spec: CombatUnitSpec.Shaman_Restoration,
+      unitClass: CombatUnitClass.Shaman,
+      talents: [HEX_TALENT],
+    };
+    const unused = countsLine({
+      ...shaman,
+      starts: [
+        [HEX_VARIANT, 10, "Hex"],
+        [HEX_VARIANT, 24, "Hex"],
+      ],
+    });
+    expect(of(unused.items, "Hex")).toEqual([
+      "Hex cast bar started 2×, went off 0×",
+    ]);
+    expect(unused.kit).toMatch(
+      /Hex \[[^\]]*\] \[UNUSED — started 2×, never finished\]/,
+    );
+    const used = countsLine({
+      ...shaman,
+      starts: [
+        [HEX_VARIANT, 10, "Hex"],
+        [HEX_VARIANT, 24, "Hex"],
+        [HEX_VARIANT, 60, "Hex"],
+      ],
+      casts: [[HEX_VARIANT, 25.6, "Hex"]],
+    });
+    expect(of(used.items, "Hex")).toEqual([
+      "Hex cast bar started 3×, went off 1× (first 0:25)",
+    ]);
+    expect(used.kit).not.toMatch(/Hex \[[^\]]*\] \[UNUSED/);
+  });
+
+  it("the header says `went off` is the cast completing, not the control landing", () => {
+    const { header } = countsLine({});
+    expect(header).toContain("`cast bar started N×, went off M×`");
+    expect(header).toContain(
+      "`went off` means the cast bar completed and the spell was cast, NOT that the control landed",
+    );
   });
 });

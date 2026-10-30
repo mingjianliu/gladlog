@@ -14,10 +14,17 @@ import {
 } from "@gladlog/parser-compat";
 import { beforeAll, describe, expect, it } from "vitest";
 
-import { SHARED_CHARGE_CATEGORY } from "../src/data/sharedChargeGenerated";
 import { ensureAnalysisData } from "../src/data/ensure";
+import { SHARED_CHARGE_CATEGORY } from "../src/data/sharedChargeGenerated";
+import {
+  effectiveCooldownSeconds,
+  spellEffectData,
+} from "../src/data/spellEffectData";
+import { SPELL_EFFECTS_GENERATED } from "../src/data/spellEffectGenerated";
+import { SPELL_EFFECT_OVERRIDES } from "../src/data/spellEffectOverrides";
 import {
   cdAvailableAt,
+  cdSecondsUntilReady,
   extractMajorCooldowns,
   spendsSharedChargeOf,
 } from "../src/utils/cooldowns";
@@ -45,9 +52,16 @@ describe("shared DB2 charge pool", () => {
   });
 
   it("a Spellwarding press puts Blessing of Protection on cooldown — ledger and death path agree", () => {
+    // A paladin with both buttons: Blessing of Protection from the class tree
+    // (node 81616), Spellwarding as the PvP talent. (For Protection the
+    // Spellwarding talent REPLACES Blessing of Protection.)
     const unit = makeUnit("p1", {
       class: CombatUnitClass.Paladin,
-      spec: CombatUnitSpec.Paladin_Protection,
+      spec: CombatUnitSpec.Paladin_Holy,
+      info: {
+        talents: [{ id1: 81616, id2: 102604, count: 1 }],
+        pvpTalents: ["204018"],
+      },
       spellCastEvents: [makeSpellCastEvent("204018", T0 + 10_000, "p1")],
     });
     const combat = combatOf(unit);
@@ -74,6 +88,116 @@ describe("shared DB2 charge pool", () => {
     >[0];
     expect(spendsSharedChargeOf(e, "1022")).toBe(false);
     expect(spendsSharedChargeOf(e, "204018")).toBe(true);
+  });
+});
+
+/**
+ * 2026-10-13: Blessing of Spellwarding carried a hand cooldown of 180 s while
+ * the pool it shares with Blessing of Protection recovers in 300 s — after one
+ * press `[RES]` printed `Protection(300s), Spellwarding(180s)` (552 rows on the
+ * 605-file capture, all 120 s apart) and Spellwarding was called ready 120 s
+ * early. Evidence and corpus split: the note in `spellEffectOverrides.ts`.
+ */
+describe("one charge pool, one recovery", () => {
+  // Holy Paladin with both buttons: Blessing of Protection from the class
+  // tree (node 81616), Spellwarding as the PvP talent.
+  const BOP_TALENT = { id1: 81616, id2: 102604, count: 1 };
+  // Improved Blessing of Protection (node 81617): −60 s on charge category 1392
+  const IMPROVED_BOP_TALENT = { id1: 81617, id2: 102606, count: 1 };
+  const holy = (pressed: string, talents = [BOP_TALENT]) =>
+    makeUnit("p1", {
+      class: CombatUnitClass.Paladin,
+      spec: CombatUnitSpec.Paladin_Holy,
+      info: { talents, pvpTalents: ["204018"] },
+      spellCastEvents: [makeSpellCastEvent(pressed, T0 + 10_000, "p1")],
+    });
+
+  it.each([
+    ["Spellwarding", "204018"],
+    ["Blessing of Protection", "1022"],
+  ])(
+    "after a %s press both buttons come back at the same second",
+    (_name, pressed) => {
+      const unit = holy(pressed);
+      const cds = extractMajorCooldowns(unit, combatOf(unit));
+      const bop = cds.find((c) => c.spellId === "1022");
+      const sw = cds.find((c) => c.spellId === "204018");
+      expect(bop).toBeDefined();
+      expect(sw).toBeDefined();
+      expect(sw!.cooldownSeconds).toBe(300);
+      expect(bop!.cooldownSeconds).toBe(300);
+      for (const t of [5, 20, 189, 191, 309, 311, 400]) {
+        expect(cdAvailableAt(sw!, t), `t=${t}`).toBe(cdAvailableAt(bop!, t));
+        expect(cdSecondsUntilReady(sw!, t), `t=${t}`).toBe(
+          cdSecondsUntilReady(bop!, t),
+        );
+      }
+      // the hand 180 s called Spellwarding ready from 190 s
+      expect(cdAvailableAt(sw!, 191)).toBe(false);
+      expect(cdAvailableAt(sw!, 311)).toBe(true);
+    },
+  );
+
+  it("the pool's talents move both buttons together (Improved Blessing of Protection: 240 s)", () => {
+    const unit = holy("204018", [BOP_TALENT, IMPROVED_BOP_TALENT]);
+    const cds = extractMajorCooldowns(unit, combatOf(unit));
+    expect(cds.find((c) => c.spellId === "204018")!.cooldownSeconds).toBe(240);
+    expect(cds.find((c) => c.spellId === "1022")!.cooldownSeconds).toBe(240);
+  });
+
+  it("Spellwarding has no hand row: its recovery is the DB2 pool's (a back-fill is refused)", () => {
+    expect(SPELL_EFFECT_OVERRIDES["204018"]).toBeUndefined();
+    expect(spellEffectData["204018"]?.charges).toEqual({
+      charges: 1,
+      chargeCooldownSeconds: 300,
+    });
+    expect(spellEffectData["204018"]?.cooldownSeconds).toBeUndefined();
+    expect(spellEffectData["204018"]?.durationSeconds).toBe(6);
+    expect(effectiveCooldownSeconds("204018")).toBe(
+      effectiveCooldownSeconds("1022"),
+    );
+  });
+
+  // A hand row on a pool member replaces the whole DB2 row (the merge is a
+  // spread), so it can silently give one button of a pool its own recovery.
+  // An exception needs its evidence written here, next to the id.
+  const SIGNED_POOL_DEVIATIONS: Record<string, string> = {};
+
+  it("every member of a pool reads the pool's recovery — a hand override may not disagree with it unsigned", () => {
+    const gen = SPELL_EFFECTS_GENERATED as Record<
+      string,
+      { charges?: { chargeCooldownSeconds?: number } }
+    >;
+    const pools = new Map<string, string[]>();
+    for (const [id, pool] of Object.entries(SHARED_CHARGE_CATEGORY))
+      pools.set(pool, [...(pools.get(pool) ?? []), id]);
+    expect(pools.size).toBeGreaterThan(30);
+    const problems: string[] = [];
+    let handRows = 0;
+    for (const [pool, ids] of pools) {
+      const unsigned = ids.filter((id) => !(id in SIGNED_POOL_DEVIATIONS));
+      const merged = new Set(
+        unsigned.map((id) => effectiveCooldownSeconds(id)),
+      );
+      if (merged.size > 1)
+        problems.push(
+          `pool ${pool}: ${unsigned.map((id) => `${id}=${effectiveCooldownSeconds(id)}`).join(", ")}`,
+        );
+      for (const id of unsigned) {
+        if (!(id in SPELL_EFFECT_OVERRIDES)) continue;
+        handRows++;
+        const official = gen[id]?.charges?.chargeCooldownSeconds;
+        if (effectiveCooldownSeconds(id) !== official)
+          problems.push(
+            `pool ${pool}: hand row ${id} ${spellEffectData[id]?.name} = ${effectiveCooldownSeconds(id)}, DB2 pool recovery ${official}`,
+          );
+      }
+    }
+    expect(problems).toEqual([]);
+    // the check is not vacuous: hand rows do sit on pool members today
+    expect(handRows).toBeGreaterThan(3);
+    for (const id of Object.keys(SIGNED_POOL_DEVIATIONS))
+      expect(SHARED_CHARGE_CATEGORY[id], `${id} is in no pool`).toBeDefined();
   });
 });
 

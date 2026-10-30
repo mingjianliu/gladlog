@@ -3,14 +3,14 @@ import type { RawStreams } from "@gladlog/analysis/src/utils/rawStreams";
 
 import type { ChatSendResult, ChatState } from "../main/coachChat";
 import type { LearningState } from "../main/learning";
-import type { StoredMatchMeta } from "../main/matchStore";
-import type { RecorderStatus } from "../main/recorder";
 import type { ObsAudioDevice } from "../main/managedObsBackend";
-import type { ManagedObsPrefs } from "../shared/managedObsPrefs";
+import type { StoredMatchMeta } from "../main/matchStore";
 import type { ObsInstallProgress } from "../main/obsAssets";
+import type { RecorderStatus } from "../main/recorder";
 import type { GladlogSettings } from "../main/settingsStore";
 import type { UpdateState } from "../main/updater";
 import type { AiBackend } from "../shared/aiModels";
+import type { ManagedObsPrefs } from "../shared/managedObsPrefs";
 import type { FileStatus } from "../shared/protocol";
 
 export interface LogsStatusSnapshot {
@@ -206,6 +206,8 @@ export interface GladlogApi {
         backend: string;
         model: string;
         retrying: boolean;
+        /** 首轮已出结果、正在跑 AI 自查。 */
+        reviewing: boolean;
       } | null;
       /** Summaries of all of this match's slots (without the result body),
        * ascending by createdAt. */
@@ -319,6 +321,8 @@ export interface GladlogApi {
     /** 首轮输出解析失败、正在自动重试(bad-json retry):CLI 后端单发分钟级,
      * 重试让总时长翻倍,必须让面板能解释这段等待。 */
     onRetry(cb: (d: { matchId: string }) => void): () => void;
+    /** 首轮已出结果、正在跑 AI 自查(设置 aiSelfReview)那一次调用。 */
+    onReviewing(cb: (d: { matchId: string }) => void): () => void;
     /** slotKey: the slot this round wrote (run = the effective slot after
      * backendOverride is applied; deepen = lastSlotKey). Invariant on the main
      * side — the slot that just finished is necessarily the new activeKey; this

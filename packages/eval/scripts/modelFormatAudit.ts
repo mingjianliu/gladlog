@@ -31,11 +31,11 @@
 import {
   buildFindingsPrompt,
   buildMatchContext,
+  ensureAnalysisData,
   extractCandidateFindings,
   isHealerSpec,
   parseModelJsonArray,
   specToString,
-  ensureAnalysisData,
 } from "@gladlog/analysis";
 import { GladLogParser } from "@gladlog/parser";
 import { CombatUnitReaction, toLegacyMatch } from "@gladlog/parser-compat";

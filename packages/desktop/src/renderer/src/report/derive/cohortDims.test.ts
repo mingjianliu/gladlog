@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { cohortDims, type CohortDim } from "./cohortDims";
+
+import { type CohortDim,cohortDims } from "./cohortDims";
 
 const dim = (partial: Partial<CohortDim>): CohortDim => ({
   key: "offensiveIndex",

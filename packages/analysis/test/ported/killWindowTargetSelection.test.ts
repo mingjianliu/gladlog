@@ -8,7 +8,12 @@ vi.mock("../../src/data/spellIdLists", () => ({
   },
 }));
 
-vi.mock("../../src/data/spellEffectData", () => {
+vi.mock("../../src/data/spellEffectData", async (importActual) => {
+  // the rest of the module stays real: the shared cooldown model
+  // (`unitCooldownEntry`, cooldown mastery round 2026-10-20) reaches the
+  // ledger builder, which reads more of it than this file mocks
+  const actual =
+    await importActual<typeof import("../../src/data/spellEffectData")>();
   const spellEffectData: Record<
     string,
     {
@@ -38,6 +43,7 @@ vi.mock("../../src/data/spellEffectData", () => {
     },
   };
   return {
+    ...actual,
     spellEffectData,
     // the caster-aware duration predicate reads these (talent impact audit
     // 2026-09-26: buff length now comes from buffFullDurationForCaster)
@@ -84,8 +90,9 @@ describe("killWindowTargetSelection — HP helpers", () => {
         makeAdvancedAction(MATCH_START + 10000, 0, 0, 100, 80), // 80%
       ],
     });
-    // t=8s: nearest is the 10s sample (2s away) — two-sided nearest, same basis as [STATE]
-    expect(getHpPercentAtTime(unit, 8, MATCH_START)).toBe(80);
+    // t=8s: the last reading at or before it (5s, 3s away) — fact2: a later
+    // reading is not the state at 8s; same basis as [STATE]
+    expect(getHpPercentAtTime(unit, 8, MATCH_START)).toBe(50);
     expect(getHpPercentAtTime(unit, 12, MATCH_START)).toBe(80);
     // t=2s: the 5s sample is exactly 3s away — inside the radius
     expect(getHpPercentAtTime(unit, 2, MATCH_START)).toBe(50);
@@ -116,7 +123,9 @@ describe("killWindowTargetSelection — HP helpers", () => {
 
 describe("killWindowTargetSelection — main analysis", () => {
   function makeCombat() {
-    return { startTime: MATCH_START } as any;
+    // a real round has an end: the shared cooldown model keeps the presses
+    // made before it (`unitCooldownEntry`)
+    return { startTime: MATCH_START, endTime: MATCH_START + 600_000 } as any;
   }
 
   it("returns empty when less than 2 enemies", () => {

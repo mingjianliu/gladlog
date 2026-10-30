@@ -19,17 +19,17 @@ import {
   auditFindings,
   buildFindingsPrompt,
   buildMatchContext,
+  ensureAnalysisData,
   extractCandidateFindings,
   parseModelJsonArray,
-  specToString,
   type RawFinding,
-  ensureAnalysisData,
+  specToString,
 } from "@gladlog/analysis";
 
-import { resolveOwner } from "../src/renderer/src/report/derive/analysisInput";
-import { toLegacySafe } from "../src/renderer/src/report/derive/legacySource";
 import { buildCoachSystemPrompt } from "../src/main/ai";
 import { claudeCliClientFactory } from "../src/main/localAiBackends";
+import { resolveOwner } from "../src/renderer/src/report/derive/analysisInput";
+import { toLegacySafe } from "../src/renderer/src/report/derive/legacySource";
 import { AI_DEFAULT_MODEL } from "../src/shared/aiModels";
 
 const MATCH_DIR = join(

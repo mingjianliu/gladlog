@@ -13,6 +13,10 @@
  * them straight to `"verified"` (see `baselineFindings.ts`'s own header for
  * why that's not a gap).
  */
+import type { RawStreams } from "@gladlog/analysis";
+
+import { baselineToCards, readActiveAnalysisResult } from "./baselineFindings";
+import { runQuery } from "./matchExplore";
 import {
   type DeepFindingInput,
   type EvidenceRef,
@@ -20,9 +24,36 @@ import {
   type ReviewCard,
   type ReviewSession,
 } from "./reviewTypes";
-import { baselineToCards, readActiveAnalysisResult } from "./baselineFindings";
-import { runQuery } from "./matchExplore";
-import { type LegacyRound, readRawText, splitTeams } from "./storeAccess";
+import {
+  type LegacyRound,
+  RAW_STREAM_SUBCOMMANDS,
+  rawStreamsForRound,
+  readRawText,
+  splitTeams,
+} from "./storeAccess";
+
+/**
+ * The prescreen's query closure over one round: hands `mana`/`drink` the
+ * round's parsed raw streams (loaded once, on first use), exactly like the
+ * exploration CLI does. Without them those two subcommands answer "no data",
+ * and every deep-dive evidence line citing them prescreens as `mismatch`
+ * (2026-09-30: 75/307 deep evidence lines across six sessions).
+ */
+export function makeRoundQuery(
+  legacy: LegacyRound,
+  loadRawStreams: () => RawStreams,
+  run: typeof runQuery = runQuery,
+): (argv: string[]) => string[] {
+  let raw: RawStreams | undefined;
+  return (argv) =>
+    run(
+      legacy,
+      argv,
+      RAW_STREAM_SUBCOMMANDS.has(argv[0] ?? "")
+        ? (raw ??= loadRawStreams())
+        : undefined,
+    );
+}
 
 // ---------------------------------------------------------------------------
 // prescreen
@@ -134,7 +165,9 @@ export function buildSession(opts: {
   legacy: LegacyRound;
   matchesDir: string;
 }): ReviewSession {
-  const query = (argv: string[]): string[] => runQuery(opts.legacy, argv);
+  const query = makeRoundQuery(opts.legacy, () =>
+    rawStreamsForRound(opts.matchesDir, opts.matchId, opts.legacy),
+  );
 
   const deepCards: Array<Omit<ReviewCard, "cardId">> = opts.deep.map((d) => ({
     source: "deep" as const,

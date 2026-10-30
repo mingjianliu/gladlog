@@ -1,6 +1,6 @@
 /**
- * Generated at: 2026-09-26T05:34:49.150Z
- * Build: 12.1.0.69587
+ * Generated at: 2026-10-16T15:39:02.267Z
+ * Build: 12.1.5.70391
  * Source: SpellEffect.Effect 28 (SUMMON) on the spell or one EffectTriggerSpell hop;
  *   restricted to the observed universe
  * ids: 185

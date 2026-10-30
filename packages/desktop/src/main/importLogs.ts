@@ -1,10 +1,10 @@
-import { createReadStream } from "fs";
-import { basename } from "path";
 import {
   GladLogParser,
   type GladMatch,
   type GladShuffle,
 } from "@gladlog/parser";
+import { createReadStream } from "fs";
+import { basename } from "path";
 
 import type { MatchStore, StoredMatchMeta } from "./matchStore";
 

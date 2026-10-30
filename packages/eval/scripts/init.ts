@@ -1,7 +1,7 @@
+import { execSync } from "child_process";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
-import { execSync } from "child_process";
 
 function init() {
   const home = process.env.GLADLOG_EVAL_HOME || path.join(os.homedir(), "code", "gladlog-eval-private");

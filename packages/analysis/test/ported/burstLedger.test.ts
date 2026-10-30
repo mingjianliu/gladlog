@@ -4,7 +4,13 @@ import { CombatUnitSpec, LogEvent } from "@gladlog/parser-compat";
 import {
   analyzeBurstLedger,
   auditWindowTargeting,
+  BURST_ALLY_OVERLAP_ITEM_RE_SRC,
+  BURST_ALLY_OVERLAP_LABEL,
+  BURST_TARGET_DAMAGE_RE_SRC,
+  burstSecondTargetClause,
+  formatBurstLedgerForContext,
 } from "../../src/utils/burstLedger";
+import { gridHpPct, hpTroughInWindow } from "../../src/utils/cooldowns";
 import type { IOffensiveWindow } from "../../src/utils/offensiveWindows";
 import {
   makeAdvancedAction,
@@ -38,6 +44,41 @@ function dmgOut(timestamp: number, amount: number, destUnitId: string): any {
 const info = { teamId: "0", specId: "x" } as any;
 
 describe("burstLedger — burst grouping and audit", () => {
+  // codex post-hoc 60-POSTHOC-03 U3: a press after the round ended joined
+  // the burst it overlapped — `Avatar 0:10–0:20 + Recklessness 0:21–0:20`
+  it("a press after the round's end is not part of the burst it overlaps", () => {
+    const cast = (id: string, atS: number, name: string) =>
+      makeSpellCastEvent(
+        id,
+        MATCH_START + atS * 1000,
+        "p1",
+        "Self",
+        "p1",
+        "Ret",
+        0,
+        name,
+      );
+    const player = makeUnit("p1", {
+      name: "Ret",
+      spec: CombatUnitSpec.Paladin_Retribution,
+      info,
+      spellCastEvents: [
+        cast("31884", 10, "Avenging Wrath"),
+        cast("190319", 21, "Combustion"),
+      ],
+    } as any);
+    const enemy = makeUnit("e1", { name: "Enemy", info } as any);
+    const entries = analyzeBurstLedger(player, [], [enemy], {
+      startTime: MATCH_START,
+      endTime: MATCH_START + 20_000,
+    } as any);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]!.spells.map((x) => x.spellName)).toEqual([
+      "Avenging Wrath",
+    ]);
+    expect(entries[0]!.toSeconds).toBe(20);
+  });
+
   it("groups close casts into one burst, far casts into two (D1-B1)", () => {
     // 31884 Avenging Wrath (offensive, 20s buff): casts at 10s and 15s overlap
     // (buff reach), the 80s cast is separate.
@@ -122,6 +163,78 @@ describe("burstLedger — burst grouping and audit", () => {
     expect(entries[0].damageByTarget).toHaveLength(2);
   });
 
+  it("round-1 retest 62fdbf2e: an unseen-end invisibility is over once its holder deals damage", () => {
+    const player = makeUnit("p1", {
+      name: "Ret",
+      spec: CombatUnitSpec.Paladin_Retribution,
+      info,
+      spellCastEvents: [
+        makeSpellCastEvent("31884", MATCH_START + 10_000, "p1", "Self", "p1", "Ret", 0, "Avenging Wrath"),
+      ],
+      damageOut: [dmgOut(MATCH_START + 12_000, -50_000, "e1")],
+    } as any);
+    // Greater Invisibility 110960 at 5 s, no REMOVED (closed at 20 s by the
+    // builder); the mage hits someone at 9 s — before the 10 s burst
+    const e1 = makeUnit("e1", {
+      name: "Mage",
+      info,
+      auraEvents: [makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, "110960", MATCH_START + 5_000, "e1", "e1", "BUFF")],
+      // the mage's own hit (the helper stamps `p1` as the source)
+      damageOut: [{ ...dmgOut(MATCH_START + 9_000, -20_000, "p1"), srcUnitId: "e1" }],
+    } as any);
+    const entries = analyzeBurstLedger(player, [], [e1], makeCombat());
+    expect(entries[0].dominantTarget?.defensivesHit ?? []).toEqual([]);
+  });
+
+  // weekly review 2026-10-24: the holder's pet hit and DoT tick ended the
+  // unseen-end invisibility too (parser-compat folds pet damage into the
+  // owner's damageOut), and a logged REMOVED was cut as well
+  describe("an unseen-end invisibility ends at the holder's own action only", () => {
+    const burster = () =>
+      makeUnit("p1", {
+        name: "Ret",
+        spec: CombatUnitSpec.Paladin_Retribution,
+        info,
+        spellCastEvents: [
+          makeSpellCastEvent("31884", MATCH_START + 10_000, "p1", "Self", "p1", "Ret", 0, "Avenging Wrath"),
+        ],
+        damageOut: [dmgOut(MATCH_START + 12_000, -50_000, "e1")],
+      } as any);
+    const mage = (damageOut: any[], extraAuras: any[] = []) =>
+      makeUnit("e1", {
+        name: "Mage",
+        info,
+        auraEvents: [
+          makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, "110960", MATCH_START + 5_000, "e1", "e1", "BUFF"),
+          ...extraAuras,
+        ],
+        damageOut,
+      } as any);
+    const from = (src: string, at: number, event = LogEvent.SPELL_DAMAGE) => {
+      const d = dmgOut(MATCH_START + at, -20_000, "p1");
+      return { ...d, srcUnitId: src, logLine: { ...d.logLine, event } };
+    };
+    const walls = (e1: any) =>
+      (analyzeBurstLedger(burster(), [], [e1], makeCombat())[0].dominantTarget
+        ?.defensivesHit ?? []).map((d) => d.spellId);
+
+    it("its Water Elemental's hit before the burst does not end it", () => {
+      expect(walls(mage([from("pet-1", 9_000)]))).toEqual(["110960"]);
+    });
+    it("its DoT tick before the burst does not end it", () => {
+      expect(
+        walls(mage([from("e1", 9_000, LogEvent.SPELL_PERIODIC_DAMAGE)])),
+      ).toEqual(["110960"]);
+    });
+    it("its own direct hit before the burst still ends it", () => {
+      expect(walls(mage([from("e1", 9_000)]))).toEqual([]);
+    });
+    it("a logged REMOVED stands — the holder's hit inside does not cut it", () => {
+      const removed = makeAuraEvent(LogEvent.SPELL_AURA_REMOVED, "110960", MATCH_START + 15_000, "e1", "e1", "BUFF");
+      expect(walls(mage([from("e1", 9_000)], [removed]))).toEqual(["110960"]);
+    });
+  });
+
   it("flags immunity/defensive auras active on the dominant target (D1-B3)", () => {
     const player = makeUnit("p1", {
       name: "Ret",
@@ -170,6 +283,26 @@ describe("burstLedger — burst grouping and audit", () => {
     expect(hits).toHaveLength(1);
     expect(hits[0].isImmunity).toBe(true);
     expect(hits[0].overlapSeconds).toBeCloseTo(6, 0);
+  });
+
+  it("fact3 D59: Divine Hymn's heal-taken buff 64844 on the target is no major defensive", () => {
+    const player = makeUnit("p1", {
+      name: "Ret",
+      spec: CombatUnitSpec.Paladin_Retribution,
+      info,
+      spellCastEvents: [makeSpellCastEvent("31884", MATCH_START + 10_000, "p1", "Ret", "p1", "Ret", 0, "Avenging Wrath")],
+      damageOut: [dmgOut(MATCH_START + 12_000, -50_000, "e1")],
+    } as any);
+    const e1 = makeUnit("e1", {
+      name: "Pally",
+      info,
+      auraEvents: [
+        makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, "64844", MATCH_START + 11_000, "e2", "e1", "BUFF"),
+        makeAuraEvent(LogEvent.SPELL_AURA_REMOVED, "64844", MATCH_START + 15_000, "e2", "e1", "BUFF"),
+      ],
+    } as any);
+    const entries = analyzeBurstLedger(player, [], [e1], makeCombat());
+    expect(entries[0].dominantTarget?.defensivesHit ?? []).toEqual([]);
   });
 
   it("appliedByOther:别人给目标上的墙(塑焰者黑曜鳞片给队友)和目标自己开的墙分开标记", () => {
@@ -364,8 +497,15 @@ describe("burstLedger — burst grouping and audit", () => {
     } as any);
 
     const entries = analyzeBurstLedger(player, [ally], [e1], makeCombat());
+    // T12 ⑦: the overlap carries its length and where that ally's damage
+    // went in it — AW 10–30 s, Combustion from 13 s; the mage hit nobody
     expect(entries[0].allyCDsOverlapping).toEqual([
-      { playerName: "Mage", spellName: "Combustion" },
+      {
+        playerName: "Mage",
+        spellName: "Combustion",
+        overlapSeconds: 10, // Combustion 13–23 s inside 10–30 s
+        topTarget: null,
+      },
     ]);
     // AW buff 20s → span ends at 30s; death at 32s is inside the 5s credit slack
     expect(entries[0].dominantTarget?.died).toBe(true);
@@ -405,6 +545,546 @@ describe("burstLedger — burst grouping and audit", () => {
   });
 });
 
+// Triage 2026-09-29, group G15: hp-state F-B1 (Target HP on the render grid),
+// sync-burst F-L5 + F-L5b / hp-state F-N5 (the low, by the one trough rule,
+// ruling A′14) and sync-burst F-L1 (the burst's other victim).
+describe("analyzeBurstLedger — Target HP on the render grid, the low, other deaths", () => {
+  const ret = (castAtMs: number, damageOut: unknown[]) =>
+    makeUnit("p1", {
+      name: "Ret",
+      spec: CombatUnitSpec.Paladin_Retribution,
+      info,
+      spellCastEvents: [
+        makeSpellCastEvent(
+          "31884",
+          castAtMs,
+          "p1",
+          "Self",
+          "p1",
+          "Ret",
+          0,
+          "Avenging Wrath",
+        ),
+      ],
+      damageOut,
+    } as any);
+  const hpAt = (s: number, pct: number) =>
+    makeAdvancedAction(MATCH_START + s * 1000, 0, 0, 100, pct);
+
+  it("a cast at a fractional second reads the [STATE] grid of the rendered seconds, not the raw instants", () => {
+    // cast 10.8 s → span 10.8–30.8, rendered 0:10–0:30. Raw-instant samples
+    // (the old read) would pick 62 % at 10.8 and 50 % at 30.8.
+    const player = ret(MATCH_START + 10_800, [
+      dmgOut(MATCH_START + 12_000, -50_000, "e1"),
+    ]);
+    const e1 = makeUnit("e1", {
+      name: "Victim",
+      info,
+      advancedActions: [
+        hpAt(10.0, 95),
+        hpAt(10.8, 62),
+        hpAt(30.0, 69),
+        hpAt(30.8, 50),
+      ],
+    } as any);
+    const t = analyzeBurstLedger(player, [], [e1], makeCombat())[0]
+      .dominantTarget!;
+    expect(t.hpStartPct).toBe(gridHpPct(e1, MATCH_START + 10_000));
+    expect(t.hpStartPct).toBe(95);
+    expect(t.hpEndPct).toBe(gridHpPct(e1, MATCH_START + 30_000));
+    expect(t.hpEndPct).toBe(69);
+  });
+
+  it("the low prints only as a trough: ≥ 10 points under both grid endpoints", () => {
+    const player = ret(MATCH_START + 10_000, [
+      dmgOut(MATCH_START + 12_000, -50_000, "e1"),
+    ]);
+    const run = (points: Array<[number, number]>) => {
+      const e1 = makeUnit("e1", {
+        name: "Victim",
+        info,
+        advancedActions: points.map(([s, pct]) => hpAt(s, pct)),
+      } as any);
+      const bursts = analyzeBurstLedger(player, [], [e1], makeCombat());
+      return {
+        low: bursts[0].dominantTarget!.hpLow,
+        line: formatBurstLedgerForContext(bursts, [], []).find((l) =>
+          l.includes("Target:"),
+        )!,
+      };
+    };
+    // 100 → 98 with a 37 % dip at 0:18
+    const deep = run([
+      [10, 100],
+      [17, 100],
+      [18, 37],
+      [19, 60],
+      [21, 90],
+      [30, 98],
+    ]);
+    expect(deep.low).toEqual({ pct: 37, atSeconds: 18 });
+    expect(deep.line).toContain(
+      "Target: Victim 100% → 98% (low 37% at 0:18) |",
+    );
+    // a 9-point dip under the lower endpoint is not a trough
+    const shallow = run([
+      [10, 100],
+      [17, 100],
+      [18, 61],
+      [19, 80],
+      [21, 90],
+      [30, 70],
+    ]);
+    expect(shallow.low).toBeNull();
+    expect(shallow.line).toContain("Target: Victim 100% → 70% |");
+    // the low IS the start value: nothing hidden (f4da82c5's 35 → 70)
+    const atStart = run([
+      [10, 35],
+      [30, 70],
+    ]);
+    expect(atStart.low).toBeNull();
+  });
+
+  // FT-T03 (user ruling 2026-10-10, D7): the low is a TROUGH — the true
+  // minimum of every sample inside the displayed seconds, at the second it
+  // happened; the endpoints stay `[STATE]` grid readings.
+  it("FT-T03: a dip between two ticks is the low; the endpoints and the ticks keep their grid readings", () => {
+    const player = ret(MATCH_START + 10_000, [
+      dmgOut(MATCH_START + 12_000, -50_000, "e1"),
+    ]);
+    const e1 = makeUnit("e1", {
+      name: "Victim",
+      info,
+      advancedActions: [
+        hpAt(10, 100),
+        hpAt(17, 100),
+        hpAt(18, 37),
+        hpAt(18.4, 6), // the dip the grid cannot see
+        hpAt(19, 60),
+        hpAt(21, 90),
+        hpAt(30, 98),
+      ],
+    } as any);
+    const bursts = analyzeBurstLedger(player, [], [e1], makeCombat());
+    const t = bursts[0].dominantTarget!;
+    expect(t.hpStartPct).toBe(100);
+    expect(t.hpEndPct).toBe(98);
+    expect(t.hpLow).toEqual({ pct: 6, atSeconds: 18 });
+    // shared-predicate pin: the `[DMG SPIKE]` line's own function and window
+    const trough = hpTroughInWindow(e1, MATCH_START, 10, 30)!;
+    expect(t.hpLow).toEqual({ pct: trough.pct, atSeconds: trough.atSec });
+    // the [STATE] sampler still reads 37 on that second
+    expect(gridHpPct(e1, MATCH_START + 18_000)).toBe(37);
+    const lines = formatBurstLedgerForContext(bursts, [], []);
+    expect(
+      lines.find((l) => l.includes("Target:") && l.includes("|")),
+    ).toContain("Target: Victim 100% → 98% (low 6% at 0:18) |");
+    // …and the off-grid low is legended when one prints
+    expect(lines.some((l) => l.includes("`A% → B% (low L% at m:ss)` ="))).toBe(
+      true,
+    );
+  });
+
+  it("FT-T03: a dip no tick shows at all turns `100% → 98%` into a printed low; no low → no legend line", () => {
+    const player = ret(MATCH_START + 10_000, [
+      dmgOut(MATCH_START + 12_000, -50_000, "e1"),
+    ]);
+    const mk = (extra: unknown[]) =>
+      makeUnit("e1", {
+        name: "Victim",
+        info,
+        advancedActions: [
+          hpAt(10, 100),
+          hpAt(18, 100),
+          ...extra,
+          hpAt(19, 100),
+          hpAt(30, 98),
+        ],
+      } as any);
+    const flat = formatBurstLedgerForContext(
+      analyzeBurstLedger(player, [], [mk([])], makeCombat()),
+      [],
+      [],
+    );
+    expect(flat.find((l) => l.includes("Target: Victim"))).toContain(
+      "Target: Victim 100% → 98% |",
+    );
+    expect(flat.some((l) => l.includes("(low L% at m:ss)"))).toBe(false);
+    const dipped = formatBurstLedgerForContext(
+      analyzeBurstLedger(player, [], [mk([hpAt(18.5, 40)])], makeCombat()),
+      [],
+      [],
+    );
+    expect(dipped.find((l) => l.includes("Target: Victim"))).toContain(
+      "Target: Victim 100% → 98% (low 40% at 0:18) |",
+    );
+  });
+
+  it("a target dead inside the burst's first rendered second reads 0 at the start too", () => {
+    const player = ret(MATCH_START + 10_100, [
+      dmgOut(MATCH_START + 10_600, -50_000, "e1"),
+    ]);
+    const e1 = makeUnit("e1", {
+      name: "Victim",
+      info,
+      advancedActions: [hpAt(10, 95)],
+      deathRecords: [{ timestamp: MATCH_START + 10_800 } as any],
+    } as any);
+    const bursts = analyzeBurstLedger(player, [], [e1], {
+      ...makeCombat(),
+      endTime: MATCH_START + 10_900,
+    });
+    const t = bursts[0].dominantTarget!;
+    expect(t.hpStartPct).toBe(0);
+    expect(t.hpEndPct).toBe(0);
+  });
+
+  it("a target dead at the end second reads 0 and prints no low", () => {
+    const player = ret(MATCH_START + 10_000, [
+      dmgOut(MATCH_START + 12_000, -50_000, "e1"),
+    ]);
+    const e1 = makeUnit("e1", {
+      name: "Victim",
+      info,
+      advancedActions: [hpAt(10, 80), hpAt(20, 12)],
+      deathRecords: [{ timestamp: MATCH_START + 21_300 } as any],
+    } as any);
+    const bursts = analyzeBurstLedger(player, [], [e1], makeCombat());
+    const t = bursts[0].dominantTarget!;
+    expect(t.hpEndPct).toBe(0);
+    expect(t.hpLow).toBeNull();
+    expect(t.died).toBe(true);
+    expect(formatBurstLedgerForContext(bursts, [], [])[3]).toContain(
+      "Target: Victim 80% → 0% | your damage 0.05M | target DIED",
+    );
+  });
+
+  it("another enemy the burst hit and that died inside it is named; the target is unchanged", () => {
+    const player = ret(MATCH_START + 10_600, [
+      dmgOut(MATCH_START + 11_000, -300_000, "e2"),
+      dmgOut(MATCH_START + 15_000, -700_000, "e1"),
+    ]);
+    const e1 = makeUnit("e1", { name: "Kegrunner", info } as any);
+    const e2 = makeUnit("e2", {
+      name: "Shatters",
+      info,
+      deathRecords: [{ timestamp: MATCH_START + 11_945 } as any],
+    } as any);
+    const e3 = makeUnit("e3", {
+      // died in the span, but this burst never touched it
+      name: "Bystander",
+      info,
+      deathRecords: [{ timestamp: MATCH_START + 14_000 } as any],
+    } as any);
+    const e4 = makeUnit("e4", {
+      // a fully absorbed tick (effective damage 0), then killed by the rest
+      // of the team: not this burst's victim
+      name: "Shielded",
+      info,
+      deathRecords: [{ timestamp: MATCH_START + 13_000 } as any],
+    } as any);
+    player.damageOut.push(dmgOut(MATCH_START + 12_000, 0, "e4") as never);
+    const bursts = analyzeBurstLedger(
+      player,
+      [],
+      [e1, e2, e3, e4],
+      makeCombat(),
+    );
+    expect(bursts[0].dominantTarget?.unitName).toBe("Kegrunner");
+    expect(bursts[0].dominantTarget?.died).toBe(false);
+    expect(bursts[0].otherDeaths).toEqual([
+      { unitName: "Shatters", atSeconds: 11.945 },
+    ]);
+    expect(formatBurstLedgerForContext(bursts, [], [])[3]).toMatch(
+      // T12 ⑤: a second enemy under half the target's figure is not a
+      // "second target" (0.30M of 0.70M) — the death note still names it
+      /Target: Kegrunner \| your damage 0\.70M \| also hit: Shatters DIED 0:11 \(\+1\.3s\)$/,
+    );
+  });
+});
+
+// T12 ⑤ (user ruling 2026-10-10): the `Target:` line prints the second enemy
+// the burst damaged, and the absorbed part of each figure.
+describe("burstLedger — the second target and the absorbed part (T12 ⑤)", () => {
+  const absorbedOut = (timestamp: number, amount: number, dest: string) => ({
+    ...dmgOut(timestamp, amount, dest),
+    logLine: { event: LogEvent.SPELL_ABSORBED, timestamp, parameters: [] },
+  });
+  const mage = (damageOut: unknown[]) =>
+    makeUnit("p1", {
+      name: "Mage",
+      spec: CombatUnitSpec.Paladin_Retribution,
+      info,
+      spellCastEvents: [
+        makeSpellCastEvent(
+          "31884",
+          MATCH_START + 12_000,
+          "p1",
+          "Self",
+          "p1",
+          "Mage",
+          0,
+          "Avenging Wrath",
+        ),
+      ],
+      damageOut,
+    } as any);
+  const paladin = () => makeUnit("e1", { name: "Rohbell", info } as any);
+  const warrior = () => makeUnit("e2", { name: "Shalamayne", info } as any);
+  const targetLine = (bursts: ReturnType<typeof analyzeBurstLedger>) =>
+    formatBurstLedgerForContext(bursts, [], []).find((l) =>
+      l.trimStart().startsWith("Target: "),
+    );
+
+  // dfcccbf2 Burst #1: paladin 301k landed + 403k absorbed, warrior 641k
+  // landed + 27k absorbed — `Target: Rohbell … | your damage 0.70M`, nothing
+  // about the 0.67M on the warrior or the 0.40M that was a shield.
+  const dfcccbf2 = () =>
+    analyzeBurstLedger(
+      mage([
+        dmgOut(MATCH_START + 13_000, -301_000, "e1"),
+        absorbedOut(MATCH_START + 14_000, 403_000, "e1"),
+        dmgOut(MATCH_START + 15_000, -641_000, "e2"),
+        absorbedOut(MATCH_START + 16_000, 27_000, "e2"),
+      ]),
+      [],
+      [paladin(), warrior()],
+      makeCombat(),
+    );
+
+  it("the target is still the enemy with the most landed + absorbed; both parts are kept", () => {
+    const [b] = dfcccbf2();
+    expect(b.dominantTarget?.unitName).toBe("Rohbell");
+    expect(b.dominantTarget?.damage).toBe(704_000);
+    expect(b.dominantTarget?.absorbed).toBe(403_000);
+    expect(b.damageByTarget).toEqual([
+      { unitId: "e1", unitName: "Rohbell", damage: 704_000, absorbed: 403_000 },
+      {
+        unitId: "e2",
+        unitName: "Shalamayne",
+        damage: 668_000,
+        absorbed: 27_000,
+      },
+    ]);
+    expect(b.totalDamage).toBe(1_372_000);
+  });
+
+  it("the line prints the absorbed part and the second target", () => {
+    expect(targetLine(dfcccbf2())).toBe(
+      "    Target: Rohbell | your damage 0.70M (0.40M of it absorbed) | second target: Shalamayne 0.67M (0.03M of it absorbed)",
+    );
+  });
+
+  it("the line reads in the pattern the gate uses", () => {
+    const m = targetLine(dfcccbf2())!.match(
+      new RegExp(BURST_TARGET_DAMAGE_RE_SRC),
+    );
+    expect(m?.slice(1)).toEqual(["0.70", "0.40", "Shalamayne", "0.67", "0.03"]);
+  });
+
+  // F16 retest idx 2 (0457a45e Burst #1): Time Dilation's rows are no
+  // absorb — the delayed hit lands later as the shield caster's tick
+  it("a deferral shield's absorb row is not part of the figure (FT-T02b)", () => {
+    const td = {
+      ...absorbedOut(MATCH_START + 14_500, 250_000, "e1"),
+      spellId: "357170",
+    };
+    const [b] = analyzeBurstLedger(
+      mage([
+        dmgOut(MATCH_START + 13_000, -301_000, "e1"),
+        absorbedOut(MATCH_START + 14_000, 103_000, "e1"),
+        td,
+      ]),
+      [],
+      [paladin(), warrior()],
+      makeCombat(),
+    );
+    expect(b.dominantTarget).toMatchObject({ damage: 404_000, absorbed: 103_000 });
+  });
+
+  it("one enemy damaged, nothing absorbed: the line is as it was", () => {
+    const bursts = analyzeBurstLedger(
+      mage([dmgOut(MATCH_START + 13_000, -520_000, "e1")]),
+      [],
+      [paladin(), warrior()],
+      makeCombat(),
+    );
+    expect(targetLine(bursts)).toBe("    Target: Rohbell | your damage 0.52M");
+    expect(burstSecondTargetClause(bursts[0].damageByTarget)).toBe("");
+  });
+
+  it("a second enemy is printed when it took at least half the target's figure (review 40-FT-53 P2: not for incidental cleave)", () => {
+    const run = (onWarrior: number) =>
+      targetLine(
+        analyzeBurstLedger(
+          mage([
+            dmgOut(MATCH_START + 13_000, -900_000, "e1"),
+            dmgOut(MATCH_START + 15_000, -onWarrior, "e2"),
+          ]),
+          [],
+          [paladin(), warrior()],
+          makeCombat(),
+        ),
+      );
+    expect(run(450_000)).toBe(
+      "    Target: Rohbell | your damage 0.90M | second target: Shalamayne 0.45M",
+    );
+    expect(run(449_000)).toBe("    Target: Rohbell | your damage 0.90M");
+    expect(run(12_000)).toBe("    Target: Rohbell | your damage 0.90M");
+  });
+
+  it("the legend says what Target, your damage and the second target are", () => {
+    const legend = formatBurstLedgerForContext(dfcccbf2(), [], [])[1];
+    expect(legend).toContain(
+      "`Target` = the enemy player your own damage in the burst was highest on, counting what its shields absorbed",
+    );
+    expect(legend).toContain("`(A of it absorbed)` = the absorbed part");
+    expect(legend).toContain(
+      "`second target: X N` = the enemy player your damage was next highest on",
+    );
+  });
+});
+
+// T12 ⑦ (user ruling 2026-10-10): "Aligned with" meant only that a
+// teammate's offensive cooldown overlapped in time. The line says what was
+// measured — how long, and where that teammate's damage went in it.
+describe("burstLedger — ally CDs overlapping: seconds and their top target (T12 ⑦)", () => {
+  const cast = (id: string, atS: number, src: string, name: string) =>
+    makeSpellCastEvent(
+      id,
+      MATCH_START + atS * 1000,
+      src,
+      "Self",
+      src,
+      src,
+      0,
+      name,
+    );
+  // 0e0663e6 Burst #1: the DK's burst is on the paladin; the priest's
+  // Voidform overlaps it while 0.73M of his damage goes to the hunter and
+  // 0.34M to the paladin.
+  const dk = () =>
+    makeUnit("p1", {
+      name: "Dk",
+      spec: CombatUnitSpec.Paladin_Retribution,
+      info,
+      // Avenging Wrath: a 20 s effect → the burst is 13–33 s
+      spellCastEvents: [cast("31884", 13, "p1", "Avenging Wrath")],
+      damageOut: [dmgOut(MATCH_START + 15_000, -1_400_000, "e1")],
+    } as any);
+  const priest = (castAtS: number, damageOut: unknown[]) =>
+    makeUnit("f2", {
+      name: "Priest",
+      spec: CombatUnitSpec.Mage_Fire,
+      info,
+      spellCastEvents: [cast("190319", castAtS, "f2", "Combustion")],
+      damageOut,
+    } as any);
+  const paladin = () => makeUnit("e1", { name: "Paladin", info } as any);
+  const hunter = () => makeUnit("e2", { name: "Hunter", info } as any);
+  const ledger = (ally: ReturnType<typeof priest>) =>
+    analyzeBurstLedger(dk(), [ally], [paladin(), hunter()], makeCombat());
+  const overlapLine = (bursts: ReturnType<typeof analyzeBurstLedger>) =>
+    formatBurstLedgerForContext(bursts, [], []).find((l) =>
+      l.includes(`${BURST_ALLY_OVERLAP_LABEL}: `),
+    );
+
+  it("the teammate's top target in the overlap is his own, not the burst's", () => {
+    const bursts = ledger(
+      priest(13, [
+        dmgOut(MATCH_START + 16_000, -730_000, "e2"),
+        dmgOut(MATCH_START + 17_000, -340_000, "e1"),
+        dmgOut(MATCH_START + 5_000, -900_000, "e1"), // before the overlap
+      ]),
+    );
+    const [a] = bursts[0].allyCDsOverlapping;
+    expect(bursts[0].dominantTarget?.unitName).toBe("Paladin");
+    expect(a!.topTarget).toEqual({
+      unitId: "e2",
+      unitName: "Hunter",
+      damage: 730_000,
+    });
+    expect(a!.overlapSeconds).toBeGreaterThan(0);
+    expect(overlapLine(bursts)).toBe(
+      `    Ally CDs overlapping: Priest Combustion ${a!.overlapSeconds.toFixed(1)}s (their top target in it: Hunter 0.73M)`,
+    );
+  });
+
+  it("the overlap is the seconds both ran, not the ally cooldown's length", () => {
+    // Combustion pressed 5 s before the burst: only what is inside 13–33 s
+    const early = ledger(priest(8, []))[0].allyCDsOverlapping[0]!;
+    const inside = ledger(priest(13, []))[0].allyCDsOverlapping[0]!;
+    expect(inside.overlapSeconds - early.overlapSeconds).toBeCloseTo(5, 6);
+    // pressed 2 s before the burst ends: 2 s, whatever its own length
+    expect(
+      ledger(priest(31, []))[0].allyCDsOverlapping[0]!.overlapSeconds,
+    ).toBeCloseTo(2, 6);
+  });
+
+  it("an ally who damaged no enemy player in the overlap: said, not left blank", () => {
+    const bursts = ledger(
+      // all of it after the burst ended
+      priest(31, [dmgOut(MATCH_START + 40_000, -500_000, "e1")]),
+    );
+    expect(bursts[0].allyCDsOverlapping[0]!.topTarget).toBeNull();
+    expect(overlapLine(bursts)).toBe(
+      "    Ally CDs overlapping: Priest Combustion 2.0s (no damage by them on enemy players in it)",
+    );
+  });
+
+  it("which ally CDs are listed is the old predicate: spans that only touch still count, at 0.0s", () => {
+    // Combustion 3–13 s ends in the instant the burst begins (13 s). The
+    // list's length is what `alignedBurstRatio` counts — it must not move.
+    const bursts = ledger(priest(3, []));
+    expect(bursts[0].allyCDsOverlapping).toHaveLength(1);
+    expect(bursts[0].allyCDsOverlapping[0]!.overlapSeconds).toBe(0);
+    expect(overlapLine(bursts)).toBe(
+      "    Ally CDs overlapping: Priest Combustion 0.0s (no damage by them on enemy players in it)",
+    );
+    // one that ended before the burst began is not listed, as before
+    expect(ledger(priest(2, []))[0].allyCDsOverlapping).toEqual([]);
+  });
+
+  it("the bare word is gone; a burst nobody overlapped still reads Solo burst", () => {
+    const withAlly = formatBurstLedgerForContext(
+      ledger(priest(13, [])),
+      [],
+      [],
+    );
+    expect(withAlly.join("\n")).not.toContain("Aligned");
+    const solo = formatBurstLedgerForContext(
+      analyzeBurstLedger(dk(), [], [paladin(), hunter()], makeCombat()),
+      [],
+      [],
+    );
+    expect(solo).toContain("    Solo burst — no ally offensive CD overlapped.");
+    expect(solo.join("\n")).not.toContain("Aligned");
+  });
+
+  it("each item reads in the pattern the gate uses", () => {
+    const line = overlapLine(
+      ledger(priest(13, [dmgOut(MATCH_START + 16_000, -730_000, "e2")])),
+    )!;
+    const items = [
+      ...line.matchAll(new RegExp(BURST_ALLY_OVERLAP_ITEM_RE_SRC, "g")),
+    ];
+    expect(items).toHaveLength(1);
+    expect(items[0]!.slice(2)).toEqual(["Hunter", "0.73"]);
+  });
+
+  it("the legend says the overlap is in time only", () => {
+    const legend = formatBurstLedgerForContext(
+      ledger(priest(13, [])),
+      [],
+      [],
+    )[1];
+    expect(legend).toContain(
+      "`Ally CDs overlapping` = a teammate's offensive cooldown was running during part of this burst — an overlap in time and nothing more",
+    );
+    expect(legend).toContain("which need not be this burst's Target");
+  });
+});
+
 describe("burstLedger — window targeting audit", () => {
   const window: IOffensiveWindow = {
     targetUnitId: "e1",
@@ -414,6 +1094,7 @@ describe("burstLedger — window targeting audit", () => {
     toSeconds: 30,
     durationSeconds: 10,
     friendlyDamageInWindow: 0,
+    friendlyAbsorbedInWindow: 0,
     friendlyOffensives: [],
     bursts: [],
   };
@@ -473,6 +1154,7 @@ describe("auditWindowTargeting — 目标死亡截断(2026-07-16 baseline 修复
       toSeconds: 60,
       durationSeconds: 40,
       friendlyDamageInWindow: 0,
+      friendlyAbsorbedInWindow: 0,
       friendlyOffensives: [],
       bursts: [],
     };
@@ -511,6 +1193,7 @@ describe("auditWindowTargeting — 目标死亡截断(2026-07-16 baseline 修复
       toSeconds: 60,
       durationSeconds: 40,
       friendlyDamageInWindow: 0,
+      friendlyAbsorbedInWindow: 0,
       friendlyOffensives: [],
       bursts: [],
     };
@@ -549,6 +1232,7 @@ describe("auditWindowTargeting — 目标死亡截断(2026-07-16 baseline 修复
       toSeconds: 60,
       durationSeconds: 40,
       friendlyDamageInWindow: 0,
+      friendlyAbsorbedInWindow: 0,
       friendlyOffensives: [],
       bursts: [],
     };

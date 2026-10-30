@@ -26,13 +26,13 @@ vi.mock("../src/renderer/src/batch/batchAnalysis", () => {
   };
 });
 
+import { startAutoAnalyzeListener } from "../src/renderer/src/batch/autoAnalyze";
 import {
+  type BatchItem,
   getBatchStatus,
   startBatch,
-  type BatchItem,
 } from "../src/renderer/src/batch/batchAnalysis";
 import * as batchAnalysisMock from "../src/renderer/src/batch/batchAnalysis";
-import { startAutoAnalyzeListener } from "../src/renderer/src/batch/autoAnalyze";
 
 const setRunning = (v: boolean) =>
   (

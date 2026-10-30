@@ -1,5 +1,5 @@
-import { nodeMaps } from "../src/data/talentStrings";
 import { getTalentNames } from "../src/data/talentNames";
+import { nodeMaps } from "../src/data/talentStrings";
 
 describe("getTalentNames", () => {
   it("真实 talentIdMap 自洽:任一 spec 的首个 classNode entry 可命名", () => {

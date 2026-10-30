@@ -1,18 +1,19 @@
-import {
-  decodeBaseUnits,
-  decodeSpell,
-  decodeDamage,
-  decodeHeal,
-  decodeAdvanced,
-  decodeAura,
-  decodeExtraSpell,
-  decodeAbsorbed,
-  decodeArenaStart,
-  decodeArenaEnd,
-  decodeMissed,
-  decodeHealAbsorbed,
-} from "./decoders";
 import { decodeCombatantInfo } from "./combatantInfo";
+import {
+  decodeAbsorbed,
+  decodeAdvanced,
+  decodeArenaEnd,
+  decodeArenaStart,
+  decodeAura,
+  decodeBaseUnits,
+  decodeCastCosts,
+  decodeDamage,
+  decodeExtraSpell,
+  decodeHeal,
+  decodeHealAbsorbed,
+  decodeMissed,
+  decodeSpell,
+} from "./decoders";
 
 export interface ParsedLine {
   timestamp: number;
@@ -29,6 +30,9 @@ export interface ParsedLine {
   damage?: ReturnType<typeof decodeDamage>;
   heal?: ReturnType<typeof decodeHeal>;
   advanced?: ReturnType<typeof decodeAdvanced>;
+  /** `SPELL_CAST_SUCCESS` only: what the row says the cast cost, per power.
+   * Absent when the row does not state it — see decodeCastCosts. */
+  castCosts?: NonNullable<ReturnType<typeof decodeCastCosts>>;
   aura?: ReturnType<typeof decodeAura>;
   extraSpell?: ReturnType<typeof decodeExtraSpell>;
   absorbed?: ReturnType<typeof decodeAbsorbed>;
@@ -41,7 +45,8 @@ export interface ParsedLine {
   missed?: ReturnType<typeof decodeMissed>;
   /** `SPELL_HEAL_ABSORBED` — healing eaten by a heal-absorb debuff. */
   healAbsorbed?: ReturnType<typeof decodeHealAbsorbed>;
-  /** `SPELL_EMPOWER_END`'s trailing field: how far the empowered cast was
-   * charged (Evoker). Absent on `SPELL_EMPOWER_START`. */
+  /** The trailing field of `SPELL_EMPOWER_END` and `SPELL_EMPOWER_INTERRUPT`:
+   * how far the empowered cast was charged (Evoker) when it was released /
+   * interrupted. Absent on `SPELL_EMPOWER_START`. */
   empowerLevel?: number;
 }

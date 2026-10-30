@@ -1,3 +1,4 @@
+/* eslint-disable simple-import-sort/imports -- styles.css loads after the components it overrides (the sorter would hoist this side-effect import and change the CSS cascade) */
 import React from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App";

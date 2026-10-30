@@ -1,9 +1,9 @@
-import { specToClass, classIdOf } from "../src/l3/data/specToClass";
+import { classIdOf,specToClass } from "../src/l3/data/specToClass";
 import type {
-  GladUnit,
   GladMatch,
-  GladShuffleRound,
   GladShuffle,
+  GladShuffleRound,
+  GladUnit,
 } from "../src/l3/model";
 
 describe("specToClass (Blizzard spec IDs → class IDs)", () => {

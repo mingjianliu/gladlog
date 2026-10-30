@@ -37,7 +37,7 @@ import {
   specToString,
 } from "@gladlog/analysis";
 import { enemyHealerCcWindows } from "@gladlog/analysis/src/analysis/candidates/cooldownTiming";
-import { SPELL_CATEGORIES } from "@gladlog/analysis/src/data/spellCategories";
+import { isKickSpellId } from "@gladlog/analysis/src/data/spellCategories";
 import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData";
 import { ccSpellIds } from "@gladlog/analysis/src/data/spellTags";
 import { bracketKey } from "@gladlog/analysis/src/utils/bracketKey";
@@ -67,7 +67,6 @@ import { gunzipSync } from "zlib";
 
 import { bucketOf, RATING_BUCKETS } from "../src/explore/signalSkillGradient";
 
-const SPELLS = SPELL_CATEGORIES as Record<string, { type: string }>;
 const argv = process.argv.slice(2);
 const cmd = argv[0];
 const flag = (f: string): string | undefined => {
@@ -230,14 +229,14 @@ function perspective(
       .filter(
         (c) =>
           c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
-          SPELLS[c.spellId ?? ""]?.type === "interrupts",
+          isKickSpellId(c.spellId ?? ""),
       )
       .map((c) => c.logLine.timestamp);
     // cooldown seconds from the interrupt table via the availability helper
     // at each candidate instant would re-walk casts; a kick's cooldown is
     // constant, so derive "ready at t" as: no owner kick cast within cd before t.
     const cdS =
-      ownerCds.find((cd) => SPELLS[cd.spellId]?.type === "interrupts")
+      ownerCds.find((cd) => isKickSpellId(cd.spellId))
         ?.cooldownSeconds ?? 24;
     for (const victim of enemyPlayers) {
       const starts = (victim.castStartEvents ?? []).filter(
@@ -405,7 +404,7 @@ function perspective(
     const cast = e.spellCastEvents.some(
       (c) =>
         c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
-        SPELLS[c.spellId ?? ""]?.type === "interrupts",
+        isKickSpellId(c.spellId ?? ""),
     );
     if (!cast) r.enemyNeverKick++;
   }

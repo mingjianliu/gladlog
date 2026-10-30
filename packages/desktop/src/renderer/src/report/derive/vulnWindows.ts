@@ -17,8 +17,12 @@ export interface VulnBand {
   fromS: number;
   toS: number;
   targetName: string;
-  /** burst: team damage; vulnerable: team damage over the whole stretch. */
+  /** burst: team damage; vulnerable: team damage over the whole stretch —
+   * the health the target lost. */
   damage: number;
+  /** What the target's shields absorbed of the same hits (fact2 R7: the
+   * analysis line prints it beside the total; so does the list). */
+  absorbed: number;
   /** The target died inside the window (plus 3s of slack) → kill chip
    * (P3-2). */
   targetDied: boolean;
@@ -61,6 +65,7 @@ export function deriveVulnBands(source: ReportSource): VulnBand[] {
             toS: b.toSeconds,
             targetName: w.targetName,
             damage: b.damage,
+            absorbed: b.absorbed,
             targetDied: diedIn(w.targetName, b.fromSeconds, b.toSeconds),
           });
         }
@@ -71,6 +76,7 @@ export function deriveVulnBands(source: ReportSource): VulnBand[] {
           toS: w.toSeconds,
           targetName: w.targetName,
           damage: w.friendlyDamageInWindow,
+          absorbed: w.friendlyAbsorbedInWindow,
           targetDied: diedIn(w.targetName, w.fromSeconds, w.toSeconds),
         });
       }

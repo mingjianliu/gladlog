@@ -35,10 +35,15 @@
  */
 import { ensureAnalysisData, specToString } from "@gladlog/analysis";
 import { buildFindingsPrompt, extractCandidateFindings } from "@gladlog/analysis";
-import { spellSchoolMask } from "@gladlog/analysis/src/data/spellSchools";
+import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData";
+import {
+  schoolLockedBy,
+  spellSchoolMask,
+} from "@gladlog/analysis/src/data/spellSchools";
 import {
   analyzePlayerCCAndTrinket,
   CAST_START_LOOKBACK_S,
+  COMPANION_SUCCESS_MS,
   type IInterruptInstance,
   postKickSeverityRank,
 } from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
@@ -192,15 +197,7 @@ export async function collect(limit: number): Promise<{
       // Which cast made production say "switched"? Production's own rule,
       // production's own mask function — re-asked here only to NAME the cast,
       // never to re-decide the label.
-      const lockedMask = spellSchoolMask(inst.interruptedSpellId);
-      const trigger = casts.find(
-        (c) =>
-          c.t > inst.atSeconds &&
-          c.t <= inst.atSeconds + WINDOW_S &&
-          lockedMask !== undefined &&
-          spellSchoolMask(c.spellId) !== undefined &&
-          (spellSchoolMask(c.spellId)! & lockedMask) === 0,
-      );
+      const trigger = switchTrigger(casts, inst);
       if (!trigger) { row.unknown++; continue; }
       if (!haveStarts) { row.unknown++; continue; }
       const isHard = starts.some(
@@ -235,6 +232,49 @@ export async function collect(limit: number): Promise<{
     bySpec,
     topSwitchSpells,
   };
+}
+
+/**
+ * The switching cast to NAME for a "switched" instance: the one production
+ * named (`switchSpellName`) first — it already folds a companion SUCCESS row
+ * into the hard cast it belongs to (an Evoker's Living Flame row 2 ms before
+ * its Chrono Flames SUCCESS; codex 61-POSTHOC-12b #2: the first off-school
+ * row alone read hard=0 / instant=1). The mask search only when production
+ * named none. Production's name is English (`getEnglishSpellName` by id), so
+ * each cast is compared by its English name, never the logged one — a zhCN
+ * log's localized Chrono Flames used to miss and fall back to the Living
+ * Flame row (codex 30-RV-04 #3). The named cast may sit up to production's
+ * `COMPANION_SUCCESS_MS` past the window's end — a Living Flame row at
+ * 4.999 s, its Chrono Flames at 5.001 s (codex 30-RV-04 #4).
+ */
+export function switchTrigger<T extends { t: number; spellId: string; spellName: string }>(
+  casts: readonly T[],
+  inst: { atSeconds: number; interruptedSpellId: string; switchSpellName: string | null },
+): T | undefined {
+  const lockedMask = spellSchoolMask(inst.interruptedSpellId);
+  const inWin = (c: T) => c.t > inst.atSeconds && c.t <= inst.atSeconds + WINDOW_S;
+  // production's companion row may follow a switch cast at the window's end
+  // by up to COMPANION_SUCCESS_MS — and is then the cast it names
+  const inNamedWin = (c: T) =>
+    c.t > inst.atSeconds &&
+    c.t <= inst.atSeconds + WINDOW_S + COMPANION_SUCCESS_MS / 1000;
+  return (
+    (inst.switchSpellName !== null
+      ? casts.find(
+          (c) =>
+            inNamedWin(c) &&
+            getEnglishSpellName(c.spellId, c.spellName) ===
+              inst.switchSpellName,
+        )
+      : undefined) ??
+    casts.find(
+      (c) =>
+        inWin(c) &&
+        lockedMask !== undefined &&
+        spellSchoolMask(c.spellId) !== undefined &&
+        !schoolLockedBy(spellSchoolMask(c.spellId)!, lockedMask),
+    )
+  );
 }
 
 /** 真实 prompt 前后对照:菜单行原文由 production 的 buildFindingsPrompt 产出,
@@ -296,15 +336,7 @@ async function examples(limit: number, want: number): Promise<void> {
         (i) => Math.abs(i.atSeconds - k.t) < 1.5 && i.postKick === "switched",
       );
       if (!inst) continue;
-      const lockedMask = spellSchoolMask(inst.interruptedSpellId);
-      const trigger = casts.find(
-        (c) =>
-          c.t > inst.atSeconds &&
-          c.t <= inst.atSeconds + WINDOW_S &&
-          lockedMask !== undefined &&
-          spellSchoolMask(c.spellId) !== undefined &&
-          (spellSchoolMask(c.spellId)! & lockedMask) === 0,
-      );
+      const trigger = switchTrigger(casts, inst);
       if (!trigger) continue;
       const isHard = starts.some(
         (st) =>

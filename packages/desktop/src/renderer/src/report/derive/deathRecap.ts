@@ -6,6 +6,7 @@ import {
   computeUnusedSelfCounterfactuals,
   COUNTERFACTUAL_WINDOW_S,
   detectPanicDefensives,
+  enemySourceIds,
   extractMajorCooldowns,
   findCheaperDefensiveAlternatives,
   ICounterfactualHit,
@@ -14,6 +15,8 @@ import {
   IMitigationAuditRow,
   reconstructDispelSummary,
   SPELL_CATEGORIES,
+  toRenderSecond,
+  unitCooldownEntry,
 } from "@gladlog/analysis";
 import { CombatUnitReaction, LogEvent } from "@gladlog/parser-compat";
 
@@ -129,6 +132,9 @@ export interface DeathRecap {
     spellId: string;
     spellName: string;
     casterWasInCC: boolean;
+    /** the caster could not pay for it for long enough (the death fact's
+     * `casterCouldNotPay`, apart from control) */
+    casterCouldNotPay?: true;
   }>;
   /**
    * Mitigation audit (form A, #17b Task4): a row-by-row accounting of the
@@ -183,7 +189,11 @@ export function deriveDeathRecaps(source: ReportSource): DeathRecap[] {
       const oppPets = allUnits.filter(
         (u) => u.ownerId && oppIds.has(u.ownerId),
       );
-      return analyzePlayerCCAndTrinket(p, opponents, combatLike, oppPets);
+      // The round itself, as the prompt and keyMoments.ts hand it: the
+      // function reads the round's end off it (`roundEndMs`), so a control
+      // still on at a Solo Shuffle round's ending death stops there instead
+      // of at its removal logged up to 2 s later.
+      return analyzePlayerCCAndTrinket(p, opponents, legacy, oppPets);
     });
     // I-1 (reviewer finding): the teammate/missedExternals loop inside
     // buildDeathOutcomeSummary does no faction filtering (it trusts the caller
@@ -204,8 +214,12 @@ export function deriveDeathRecaps(source: ReportSource): DeathRecap[] {
     const hostilePlayers = players.filter(
       (p) => p.reaction === CombatUnitReaction.Hostile,
     );
+    // the round's end too: the death window's freedom reads the free-cast
+    // auras over the round (codex 60-POSTHOC-09e #2: without it the card
+    // said 被控 where the prompt said 5 s free)
     const outcomeCombat = {
       startTime: legacy.startTime,
+      endTime: legacy.endTime,
       zoneId: legacy.startInfo.zoneId,
     };
     // Mitigation audit / counterfactuals (#17b Task4): victimCds/ccSummary are
@@ -220,20 +234,32 @@ export function deriveDeathRecaps(source: ReportSource): DeathRecap[] {
     // (buildMatchContext): without it the card priced externals from the hand
     // table (Ironbark 45 s against the ledger's 90) — the 2026-07-20 class of
     // bug, fixed on the prompt path only (talent impact audit 2026-09-26).
+    // the ledger entry, or the same cooldown model for a spell outside it
+    // (`unitCooldownEntry`, cooldown mastery round 2026-10-20)
     const resolved = (unit: { id: string }, spellId: string) =>
-      cdsByUnit.get(unit.id)?.find((c) => c.spellId === spellId);
+      cdsByUnit.get(unit.id)?.find((c) => c.spellId === spellId) ??
+      (legacy.units[unit.id]
+        ? unitCooldownEntry(legacy.units[unit.id]!, legacy, spellId)
+        : undefined);
     const outcomeEvents = [
       ...buildDeathOutcomeSummary(
         outcomeCombat,
         friendlyPlayers,
         ccSummaries,
         resolved,
+        // death-kill F-M1: the same cannot-cast predicate as the prompt
+        enemySourceIds(hostilePlayers, Object.values(legacy.units)),
+        // and the round's units: an option the holder's pet casts is asked
+        // of the pet, as the prompt does
+        Object.values(legacy.units),
       ).events,
       ...buildDeathOutcomeSummary(
         outcomeCombat,
         hostilePlayers,
         ccSummaries,
         resolved,
+        enemySourceIds(friendlyPlayers, Object.values(legacy.units)),
+        Object.values(legacy.units),
       ).events,
     ];
     const ccSummaryByUnit = new Map(
@@ -575,9 +601,15 @@ export function deriveDeathRecaps(source: ReportSource): DeathRecap[] {
         // it only consumes Task1's return values.
         const victimCds = cdsByUnit.get(unit.id) ?? [];
         const victimCcSummary = ccSummaryByUnit.get(unit.id);
+        // the prompt's own reading (`buildMatchContext` `counterfactualOf`):
+        // the death on the render grid, the audit also handed the exact
+        // instant (codex 60-POSTHOC-09e #1: the fractional second gave the
+        // card a decisive Pain Suppression the prompt did not print)
+        const renderDeathS = toRenderSecond(deathS);
         const mitigationAudit = computeMitigationAudit(
           unit,
           legacy,
+          renderDeathS,
           deathS,
         ).rows;
         const counterfactuals: ICounterfactualHit[] = [
@@ -587,14 +619,14 @@ export function deriveDeathRecaps(source: ReportSource): DeathRecap[] {
                 victimCds,
                 victimCcSummary,
                 legacy,
-                deathS,
+                renderDeathS,
               )
             : []),
           ...computeMissedExternalCounterfactuals(
             oc?.missedExternals ?? [],
             unit,
             legacy,
-            deathS,
+            renderDeathS,
           ),
         ];
 
@@ -627,6 +659,7 @@ export function deriveDeathRecaps(source: ReportSource): DeathRecap[] {
             spellId: m.spellId,
             spellName: m.spellName,
             casterWasInCC: m.casterWasInCC,
+            ...(m.casterCouldNotPay ? { casterCouldNotPay: true as const } : {}),
           })),
           mitigationAudit,
           counterfactuals,

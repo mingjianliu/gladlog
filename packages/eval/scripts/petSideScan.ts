@@ -23,6 +23,7 @@ import {
   ensureAnalysisData,
   isHealerSpec,
 } from "@gladlog/analysis";
+import { SUMMON_KIND_RE_SRC } from "@gladlog/analysis/src/utils/summonKind";
 
 import {
   DEFAULT_MATCH_DIR,
@@ -35,7 +36,9 @@ import { checkPetCreditSide } from "../src/quality/promptQualityCheck";
 const N_MATCHES = process.argv[2] !== undefined ? Number(process.argv[2]) : 200;
 
 const UNIT_RE = /<unit id="(\d+)"[^>]*role="([^"]+)"/g;
-const PET_RE = /\[(CC ON TEAM|CC ON ENEMY)\][^\n]*?\(by (\d+)\S*?'s pet\)/;
+const PET_RE = new RegExp(
+  String.raw`\[(CC ON TEAM|CC ON ENEMY)\][^\n]*?\(by (\d+)\S*?'s ${SUMMON_KIND_RE_SRC}\)`,
+);
 /** Every `(by …)` credit on a CC line, whatever shape it resolved to. */
 const BY_RE =
   /\[(CC ON TEAM|CC ON ENEMY)\][^\n]*?\(by ([^()]*(?:\([^()]*\)[^()]*)*)\)/;

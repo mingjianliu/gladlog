@@ -118,10 +118,12 @@ const ccOnEnemy = (t: string) =>
   t.split("\n").filter((l) => l.includes("[CC ON ENEMY]"));
 
 describe("keepOwnerCcOnEnemy (GH #69)", () => {
-  it("without a follow-up, the owner's tracked CC has no [CC ON ENEMY] line", () => {
+  it("the owner's tracked CC keeps its [CC ON ENEMY] line with its length, follow-up or not (work order 2026-10-14c #8)", () => {
     const t = render(undefined);
     expect(t).toContain("0:16  [YOU] [CC]   Psychic Scream");
-    expect(ccOnEnemy(t)).toEqual([]);
+    const lines = ccOnEnemy(t);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toMatch(/← Psychic Scream \(by \S+\) \(6s\)$/);
   });
 
   it("the selected instance keeps its aura line at the landing second, with its duration", () => {
@@ -135,20 +137,11 @@ describe("keepOwnerCcOnEnemy (GH #69)", () => {
     );
   });
 
-  it("matches the exact instance only (another time or target keeps nothing)", () => {
-    expect(
-      ccOnEnemy(
-        render([
-          { targetName: "Enemy-Realm", spellId: PSYCHIC_SCREAM, ccAtS: 17 },
-        ]),
-      ),
-    ).toEqual([]);
-    expect(
-      ccOnEnemy(
-        render([
-          { targetName: "Other", spellId: PSYCHIC_SCREAM, ccAtS: 17.05 },
-        ]),
-      ),
-    ).toEqual([]);
+  it("the line is there whichever instance a follow-up names", () => {
+    for (const k of [
+      { targetName: "Enemy-Realm", spellId: PSYCHIC_SCREAM, ccAtS: 17 },
+      { targetName: "Other", spellId: PSYCHIC_SCREAM, ccAtS: 17.05 },
+    ])
+      expect(ccOnEnemy(render([k]))).toHaveLength(1);
   });
 });

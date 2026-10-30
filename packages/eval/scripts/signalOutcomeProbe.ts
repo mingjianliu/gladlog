@@ -40,8 +40,9 @@
  */
 import {
   analyzePlayerCCAndTrinket,
-  canHelpAnotherUnit,
   cdAvailableAt,
+  cdCanHelpAnotherUnit,
+  cdIsProcOnly,
   classMetadata,
   DEFENSIVE_TAGS,
   detectHealingGaps,
@@ -50,7 +51,6 @@ import {
   extractMajorCooldowns,
   type IMajorCooldownInfo,
   isHealerSpec,
-  cdIsProcOnly,
   matchThreatLevel,
   specToString,
   SpellTag,
@@ -259,7 +259,11 @@ type Emit = (
 function probeCdHoarded(ctx: RoundCtx, emit: Emit): void {
   let cds: IMajorCooldownInfo[];
   try {
-    cds = extractMajorCooldowns(ctx.owner, ctx.combat);
+    // cd-hoarded's ledger, with the spec-baseline rows (ruling P-W6) — the
+    // population CD_HOARDED_OUTCOME_REF describes
+    cds = extractMajorCooldowns(ctx.owner, ctx.combat, {
+      withBaselineOnly: true,
+    });
   } catch {
     return;
   }
@@ -267,9 +271,7 @@ function probeCdHoarded(ctx: RoundCtx, emit: Emit): void {
     (cd) => DEFENSIVE_TAGS.has(cd.tag) && !cdIsProcOnly(cd),
   );
   if (!defensive.length) return;
-  const allyCapable = defensive.filter((cd) =>
-    canHelpAnotherUnit(cd.spellId, cd.tag),
-  );
+  const allyCapable = defensive.filter((cd) => cdCanHelpAnotherUnit(cd));
 
   for (const unit of ctx.friends) {
     const isSelf = unit.id === ctx.owner.id;

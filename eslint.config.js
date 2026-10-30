@@ -100,7 +100,7 @@ export default tseslint.config(
           patterns: [
             {
               regex:
-                "^@gladlog/(?!analysis/src/(?:data/specNames|data/datagen-manifest\\.json|compare/claimChecker|learning/(?:distillRules|matchRules|patternScan|types)|context/matchNarrative|utils/rawStreams)$)[^/]+/src/",
+                "^@gladlog/(?!analysis/src/(?:analysis/candidates/cooldownTiming|data/specNames|data/datagen-manifest\\.json|compare/claimChecker|learning/(?:distillRules|matchRules|patternScan|types)|context/matchNarrative|utils/rawStreams)$)[^/]+/src/",
               message:
                 "Renderer/preload may deep-import only pure workspace modules listed in eslint.config.js (GH #117). Check the module has no Node import, then add it to the list.",
             },

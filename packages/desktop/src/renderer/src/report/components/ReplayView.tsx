@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import arenaFloorsJson from "../data/arenaFloors.json";
 import { arenaMap, arenaPx, arenaToPx } from "../data/arenaMaps";
 import { classColor, classGlyph, specIconName } from "../data/gameConstants";
-import { useIconDataUrls } from "./useIconDataUrl";
 import { castBarAt, deriveCastBars } from "../derive/castBars";
 import { deriveCasts } from "../derive/casts";
 import { dampeningAt, deriveDampeningSeries } from "../derive/dampeningSeries";
@@ -27,7 +26,8 @@ import { GcdSwimlane } from "./GcdSwimlane";
 import { ReplayMapResizer } from "./ReplayMapResizer";
 import { ReplaySplitter } from "./ReplaySplitter";
 import { ReplayZoomControls } from "./ReplayZoomControls";
-import { useReplayLayout, type ReplayLayoutMode } from "./useReplayLayout";
+import { useIconDataUrls } from "./useIconDataUrl";
+import { type ReplayLayoutMode,useReplayLayout } from "./useReplayLayout";
 import { useReplayZoom } from "./useReplayZoom";
 
 const FALLBACK_VW = 520;

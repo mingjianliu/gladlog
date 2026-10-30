@@ -195,7 +195,7 @@ export const SPELL_CATEGORIES: Record<string, ISpellCategoryEntry> = {
   "91797": cc(), // Monstrous Blow (Unholy DK transformed ghoul stun)
   "91800": cc(), // Gnaw (Unholy DK ghoul stun)
   "118345": cc(), // Pulverize (Guardian Druid stun)
-  "200166": cc(), // Metamorphosis (Havoc DH landing stun)
+  "200166": cc(), // Metamorphosis (Havoc DH landing) — stuns NPCs only; players are Dazed (247121) instead: no press / miss of it is a control on a player (castMissRows NO_PLAYER_CONTROL_IDS)
   "200200": cc(), // Holy Word: Chastise (Priest Censure stun talent aura)
   "202244": cc(), // Overrun (Brewmaster Monk PvP talent stun)
   "202346": cc(), // Double Barrel (Outlaw Rogue PvP talent stun)
@@ -228,6 +228,7 @@ export const SPELL_CATEGORIES: Record<string, ISpellCategoryEntry> = {
   "233395": root(), // Deathchill (Frost Mage root variant)
   "370970": root(), // The Hunt (Demon Hunter root component)
   "386770": root(), // Freezing Cold (Frost Mage Ice Nova root)
+  "157997": root(), // Ice Nova (Mage talent; DB2: root aura, DispelType Magic). The one official Magic root (rootAuraGenerated × SpellCategories.DispelType 1) with no entry → priority Low → folded as a minor dispel while Frost Nova got [ENEMY CLEANSE] lines (fact1215 C10, 34204ef9 1:41; ×1193 in the dispel corpus).
   "454787": root(), // Ice Prison (Frost Mage root talent)
   "460614": root(), // Entangling Roots (Druid variant)
   "1258862": root(), // Encasing Cold (Frost Mage root)
@@ -254,10 +255,15 @@ export const SPELL_CATEGORIES: Record<string, ISpellCategoryEntry> = {
   "236077": { type: "disarms" }, // Disarm (Warrior)
   "207777": { type: "disarms" }, // Dismantle
   "233759": { type: "disarms" }, // Grapple Weapon
+  // WO3 #10 / Part 2 (r1008-131): the rest of DB2 SpellMechanic 3
+  // (disarm) on observed auras — 7 of 60 re-eval matches carry one
+  "209749": { type: "disarms" }, // Faerie Swarm
+  "407031": { type: "disarms" }, // Sticky Tar Bomb
+  "407032": { type: "disarms" }, // Sticky Tar Bomb
   // -- Immunities --
   "642": { type: "immunities" }, // Divine Shield
   "45438": { type: "immunities" }, // Ice Block
-  "186265": { type: "immunities" }, // Aspect of the Turtle
+  "186265": { type: "buffs_defensive" }, // Aspect of the Turtle — a deflection, no immunity (user ruling 2026-10-21: DoTs land under it)
   "31224": { type: "immunities" }, // Cloak of Shadows
   "1022": { type: "immunities" }, // Blessing of Protection
   // 2026-08-21(GH #17/D1 尾巴,免疫三表一致性测试上线时补):官方减伤表
@@ -302,6 +308,10 @@ export const SPELL_CATEGORIES: Record<string, ISpellCategoryEntry> = {
   "41635": { type: "buffs_defensive" }, // Prayer of Mending(牧师,180 段)——弹射治疗
   "81700": { type: "buffs_offensive" }, // Archangel(戒律,140 段)——治疗量爆发
   "204361": { type: "buffs_offensive" }, // Bloodlust(69 段)——急速爆发
+  // Heroism:204361 的联盟侧 PvP 天赋孪生(同一法术另一阵营)。曾漏登 → 敌方英勇
+  // 从不出 [ENEMY CD]、被驱散时折叠成 Low(triage 2026-09-29 enemy-def F-E10b ×
+  // missed-cleanse F-P4,14055cb2 / 2abc9185 实测;语料 observed)。
+  "204362": { type: "buffs_offensive" }, // Heroism(PvP 天赋)——急速爆发
   // Decided 2026-07-22: missed cleanse only takes "discrete active
   // cooldowns", not permanent HoTs/shields (opening it up to permanent auras
   // measured 103 -> 892 rows, 59% of which was Rejuvenation-class noise --
@@ -412,8 +422,11 @@ export const SPELL_CATEGORIES: Record<string, ISpellCategoryEntry> = {
   // Silences (drGapScan S2 DR gap fill-ins, official DiminishType = silence):
   "1330": { type: "interrupts" }, // Garrote - Silence (Rogue)
   "47476": { type: "interrupts" }, // Strangulate (DK silence aura)
-  "356727": { type: "interrupts" }, // Spider Venom (Rogue PvP talent silence)
+  "356727": { type: "interrupts" }, // Spider Venom (the silence of the Hunter PvP talent Chimaeral Sting 356719)
   "374776": { type: "interrupts" }, // Tightening Grasp (DK silence talent)
+  //   … but none of the four is a kick: each is only a silence aura (DB2 aura
+  //   27, no INTERRUPT_CAST effect 68), so it never opens a school lockout. See
+  //   SILENCE_AURAS_NOT_KICKS below.
   // -- Speed boosts --
   "2983": { type: "buffs_speed_boost" }, // Sprint
   "1850": { type: "buffs_speed_boost" }, // Dash
@@ -423,3 +436,34 @@ export const SPELL_CATEGORIES: Record<string, ISpellCategoryEntry> = {
   "1714": { type: "debuffs_offensive" }, // Curse of Tongues
   "12654": { type: "debuffs_offensive" }, // Ignite
 };
+
+/**
+ * Silences filed under "interrupts" (the 2026-09-23 drGapScan fill-ins, DB2
+ * DiminishType = silence) that are NOT kicks and stay out of the interrupt kit
+ * (genInterruptKit → INTERRUPT_SPELL_IDS → the [KICK] lines and the "enemy
+ * interrupts UP" ledger). Each is only a silence aura (DB2 aura 27, no
+ * INTERRUPT_CAST effect 68): it blocks casting as control does and never opens
+ * a school lockout, so there is no cooldown trade-off to read (user ruling
+ * 2026-10-16: 「沉默本身其实是一种控制。打断的话，实际上主要是一个 cooldown
+ * trade-off 的问题」). Kept out because the 12.1.5 refresh would otherwise have
+ * printed their misses as `[KICK] … missed — IMMUNE` (605 files: 403 lines).
+ * Priest Silence 15487 is the same shape but has been Shadow's kick since
+ * GH #78 — deliberately not listed here (open question for the user).
+ */
+export const SILENCE_AURAS_NOT_KICKS: ReadonlySet<string> = new Set([
+  "1330", // Garrote - Silence (rides on Garrote)
+  "47476", // Strangulate
+  "356727", // Spider Venom (rides on Chimaeral Sting 356719)
+  "374776", // Tightening Grasp (rides on Gorefiend's Grasp)
+]);
+
+/** "Is this a kick" — the interrupts category minus the silence auras above.
+ *  One predicate for every reader that counts or audits kicks (the interrupt
+ *  kit, the kick audit, healer offense kick casts, the stats table); readers
+ *  that want control responses keep reading the whole category. */
+export function isKickSpellId(spellId: string): boolean {
+  return (
+    SPELL_CATEGORIES[spellId]?.type === "interrupts" &&
+    !SILENCE_AURAS_NOT_KICKS.has(spellId)
+  );
+}

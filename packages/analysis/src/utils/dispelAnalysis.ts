@@ -1,33 +1,90 @@
 import { CombatUnitSpec, ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
-import { dispelVerdictOf } from "../data/dispelVerdicts";
+import {
+  dispelVerdictOf,
+  type DispelWorth,
+  type HealerCell,
+} from "../data/dispelVerdicts";
+import { CHANNEL_PROXY_IDS, DRINK_AURA_IDS } from "../data/occupancyAuras";
+import { OFF_GCD_SPELL_IDS } from "../data/offGcdGenerated";
+import {
+  PURGE_REMOVALS_PER_TARGET,
+  PURGE_TOOL_NAMES,
+} from "../data/purgeRemovalsGenerated";
+import { racialName } from "../data/racialAbilities";
+import { ROOT_SPELL_IDS } from "../data/rootSpells";
+import {
+  ARCANE_TORRENT_NAME,
+  SHATTERING_THROW_CAST_ID,
+  SHATTERING_THROW_CAST_S,
+  SHATTERING_THROW_REMOVES,
+  SHIV_REMOVES,
+  SHIV_SPELL_ID,
+} from "../data/scopedPurges";
+import { SELF_REMOVAL_BY_TYPE } from "../data/selfRemovals";
 import { SPELL_CATEGORIES as spellsData } from "../data/spellCategories";
-import { getEnglishSpellName, spellEffectData } from "../data/spellEffectData";
+import {
+  effectiveCooldownSeconds,
+  getEnglishSpellName,
+  spellEffectData,
+} from "../data/spellEffectData";
 import spellIdListsData from "../data/spellIdLists";
-import { buildCannotCastIntervals } from "./cannotCastIntervals";
+import {
+  auraBreaksBeforeRemoved,
+  buildAuraIntervals,
+  dropAuraRebroadcasts,
+  type IAuraInterval,
+  officialDurationS,
+  supersededAuraBreaks,
+} from "./auraIntervals";
+import {
+  buildCannotCastIntervals,
+  cannotCastIntervalsForSpells,
+} from "./cannotCastIntervals";
+import {
+  CHANNEL_AURA_LAG_MS,
+  channelSpans,
+  EMPOWER_PRESS_MATCH_MS,
+  empowerSpans,
+  tickEndedChannelSpans,
+} from "./castCommitSpans";
+import { oppressingRoarOnAtMs } from "./ccBreakAnalysis";
+import { ccFullDurationForApplication } from "./ccDuration";
 import { charmedThrough } from "./charmedPlayer";
 import {
   applyCdTalentModifiers,
+  chargeStateAt,
   getPressureThreshold,
   isHealerSpec,
   isMeleeSpec,
+  isPassiveProcCast,
   playerTalentIdSets,
   specToString,
 } from "./cooldowns";
 import {
   buildCcCategoryHistory,
+  ccRecastBetween,
+  ccRecastSplitsResend,
+  DR_CATEGORY_MAP,
+  drLevelAtLanding,
   getDRCategory,
-  getDRLevelAtTime,
+  matchPendingCcKey,
   PATCH_121_GOLIVE_EPOCH_MS,
+  reAppliedIsSameApplication,
 } from "./drAnalysis";
+import { sumLandedPressure } from "./incomingPressure";
+import { logIsFrom } from "./logEra";
 import {
   distanceBetween,
   getUnitPositionAtTime,
+  getUnitRawPositionAtTime,
   hasLineOfSight,
 } from "./losAnalysis";
 import { DISPEL_MAX_RANGE_YARDS, LOS_SWEEP_GAP_MS } from "./positionSampling";
 import { fmtTime } from "./renderGrid";
-import { spellRangeForCaster } from "./spellRange";
+import { buildRosterSides } from "./rosterSide";
+import { roundEndMs } from "./roundEnd";
+import { spellRangeForCaster, spellReachForCaster } from "./spellRange";
 import { hasOffensivePurgeTalent } from "./talentBehaviors";
 import {
   choiceSelectionResolved,
@@ -35,14 +92,19 @@ import {
   getSpecFreeOrEntrySpellIds,
   getSpecTalentTreeSpellIds,
   isLoadoutFullyResolved,
+  talentsOf,
 } from "./talents";
 import { threatActiveAt } from "./threatAssessment";
+import { warlockPurgePetSpans, warlockRanPurgePet } from "./warlockPet";
 
 export type DispelPriority = "Critical" | "High" | "Medium" | "Low";
 import {
   buildCastMatchIndex,
   classifyDispel,
+  dispelCameWithOwnCast,
   type DispelKind,
+  dispelRodeOwnPress,
+  isRiderDispel,
 } from "./dispelKind";
 
 type SpellEntry = { type: string; priority?: boolean };
@@ -144,9 +206,81 @@ function getDispelPenalty(
 ): string | undefined {
   const base = DISPEL_PENALTY_SPELLS.get(removedSpellId);
   if (base !== undefined) return base;
-  if (!casterMayBeBalanceDruid || epochMs < PATCH_121_GOLIVE_EPOCH_MS)
+  if (
+    !casterMayBeBalanceDruid ||
+    !logIsFrom(epochMs, PATCH_121_GOLIVE_EPOCH_MS)
+  )
     return undefined;
   return STELLAR_PROTECTION_PENALIZED_SPELLS.get(removedSpellId);
+}
+
+/**
+ * The dispel types a spell removes for `spec` — every `CLEANSE_SPELLS_BY_TYPE`
+ * row that lists it (Purify Spirit: Magic and Curse; Cleanse: Magic, Poison
+ * and Disease). One cast removes all of them.
+ */
+export function dispelTypesRemovedBy(
+  spellId: string,
+  spec: CombatUnitSpec,
+): Set<DispelType> {
+  const out = new Set<DispelType>();
+  for (const [t, bySpec] of Object.entries(CLEANSE_SPELLS_BY_TYPE))
+    if (bySpec[spec]?.includes(spellId)) out.add(t as DispelType);
+  return out;
+}
+
+/**
+ * F-C13: the backlash debuffs (the one penalty predicate, `getDispelPenalty`)
+ * enemies had on `target` at any instant of [fromMs, toMs] whose dispel type
+ * is in `dispelTypes` — a defensive dispel removes every debuff of every type
+ * its spell removes, so these go with the CC when it is pressed while they
+ * are up. WO3 #13 (2026-10-14): was the apply instant only, and the CC's own
+ * type only (a Purify Spirit on a Magic CC also takes a Curse backlash).
+ * @internal exported for tests
+ */
+export function coPresentBacklash(
+  target: ICombatUnit,
+  dispelTypes: ReadonlySet<string>,
+  fromMs: number,
+  toMs: number,
+  enemyPlayerById: ReadonlyMap<string, ICombatUnit>,
+): string[] {
+  const up = new Map<string, { name: string; src: string }>();
+  const seen = new Map<string, { name: string; src: string }>();
+  for (const a of target.auraEvents ?? []) {
+    if (a.logLine.timestamp > toMs) continue;
+    if (!a.spellId) continue;
+    const key = `${a.spellId}|${a.srcUnitId}`;
+    const ev = a.logLine.event;
+    if (
+      ev === LogEvent.SPELL_AURA_APPLIED ||
+      ev === LogEvent.SPELL_AURA_REFRESH ||
+      ev === LogEvent.SPELL_AURA_APPLIED_DOSE
+    ) {
+      up.set(key, { name: a.spellName, src: a.srcUnitId });
+      if (a.logLine.timestamp >= fromMs)
+        seen.set(key, { name: a.spellName, src: a.srcUnitId });
+    } else if (ev === LogEvent.SPELL_AURA_REMOVED) {
+      // up into the window and removed inside it → it was up
+      if (a.logLine.timestamp > fromMs && up.has(key))
+        seen.set(key, up.get(key)!);
+      up.delete(key);
+    }
+  }
+  for (const [key, a] of up) seen.set(key, a);
+  const names: string[] = [];
+  for (const [key, a] of seen) {
+    const id = key.split("|")[0]!;
+    const caster = enemyPlayerById.get(a.src);
+    if (!caster) continue;
+    const t = getDispelType(id);
+    if (!t || !dispelTypes.has(t)) continue;
+    const isBalance = caster.spec === CombatUnitSpec.Druid_Balance;
+    if (!getDispelPenalty(id, isBalance, fromMs)) continue;
+    const name = getEnglishSpellName(id, a.name);
+    if (!names.includes(name)) names.push(name);
+  }
+  return names;
 }
 
 const teamHasBalanceDruid = (team: readonly ICombatUnit[]): boolean =>
@@ -305,6 +439,14 @@ const OFFENSIVE_PURGERS = new Set<CombatUnitSpec>([
   CombatUnitSpec.Mage_Frost, // Spellsteal
   CombatUnitSpec.DemonHunter_Havoc, // Consume Magic
   CombatUnitSpec.DemonHunter_Vengeance, // Consume Magic
+  // Triage 2026-09-29 missed-cleanse F-P5: the Devourer DH (Consume Magic
+  // 278326) and every Hunter spec (Tranquilizing Shot 19801) purge in the log
+  // (8c5b6ec5, f94a7604, 1b930c17) and read "CANNOT offensive purge". Both
+  // are talent-gated like DH (`PURGE_TALENT_GATE`).
+  CombatUnitSpec.DemonHunter_Devourer, // Consume Magic
+  CombatUnitSpec.Hunter_BeastMastery, // Tranquilizing Shot
+  CombatUnitSpec.Hunter_Marksmanship, // Tranquilizing Shot
+  CombatUnitSpec.Hunter_Survival, // Tranquilizing Shot
   CombatUnitSpec.Warlock_Affliction, // Devour Magic (Felhunter)
   CombatUnitSpec.Warlock_Demonology, // Devour Magic (Felhunter)
   CombatUnitSpec.Warlock_Destruction, // Devour Magic (Felhunter)
@@ -402,6 +544,10 @@ export const PURGE_SPELLS_BY_SPEC: Readonly<
   [CombatUnitSpec.Mage_Frost]: ["30449"],
   [CombatUnitSpec.DemonHunter_Havoc]: ["278326"], // Consume Magic
   [CombatUnitSpec.DemonHunter_Vengeance]: ["278326"],
+  [CombatUnitSpec.DemonHunter_Devourer]: ["278326"], // F-P5
+  [CombatUnitSpec.Hunter_BeastMastery]: ["19801"], // Tranquilizing Shot (F-P5)
+  [CombatUnitSpec.Hunter_Marksmanship]: ["19801"],
+  [CombatUnitSpec.Hunter_Survival]: ["19801"],
 };
 
 /** A dispeller's reach with the spells it would use: the longest of their
@@ -419,25 +565,310 @@ export function dispelReachYards(
   return best ?? DISPEL_MAX_RANGE_YARDS;
 }
 
-// Purge specs whose purge ability has a meaningful cooldown (>= 8s).
-// For these, only flag Critical priority missed purges — they can't freely spam purge
-// every GCD so holding the ability for a better target is often correct.
-const CD_GATED_PURGERS = new Set<CombatUnitSpec>([
-  CombatUnitSpec.Evoker_Preservation, // Naturalize: 10s CD
-  CombatUnitSpec.Evoker_Devastation, // Naturalize: 10s CD
-  CombatUnitSpec.Evoker_Augmentation, // Naturalize: 10s CD
-  CombatUnitSpec.Warlock_Affliction, // Devour Magic: ~8s CD
-  CombatUnitSpec.Warlock_Demonology,
-  CombatUnitSpec.Warlock_Destruction,
-  CombatUnitSpec.DemonHunter_Havoc, // Consume Magic: 8s CD
-  CombatUnitSpec.DemonHunter_Vengeance,
+/**
+ * The offensive-purge spell a purger presses (user ruling A19 = C,
+ * 2026-09-30; triage missed-cleanse F-P5 / F-P7). Its DB2 cooldown decides
+ * the "Critical only" gate (`isCdGatedPurger`) — this replaced the hand spec
+ * list CD_GATED_PURGERS, which missed the 12 s Greater Purge and the Hunters.
+ * Priest 528 / Mage 30449 / Shaman 370 have no cooldown; Shaman 378773 (when
+ * talented or cast) 12 s, DH 278326 10 s, Warlock 19505 15 s, Evoker
+ * (Scouring Flame → Fire Breath) 357208 30 s, Hunter 19801 10 s.
+ */
+export const PURGE_GATE_SPELL_BY_SPEC: Readonly<
+  Partial<Record<string, string>>
+> = {
+  [CombatUnitSpec.Priest_Discipline]: "528", // Dispel Magic
+  [CombatUnitSpec.Priest_Holy]: "528",
+  [CombatUnitSpec.Priest_Shadow]: "528",
+  [CombatUnitSpec.Mage_Arcane]: "30449", // Spellsteal
+  [CombatUnitSpec.Mage_Fire]: "30449",
+  [CombatUnitSpec.Mage_Frost]: "30449",
+  [CombatUnitSpec.Shaman_Restoration]: "370", // Purge (378773 when talented / cast)
+  [CombatUnitSpec.Shaman_Elemental]: "370",
+  [CombatUnitSpec.Shaman_Enhancement]: "370",
+  [CombatUnitSpec.DemonHunter_Havoc]: "278326", // Consume Magic
+  [CombatUnitSpec.DemonHunter_Vengeance]: "278326",
+  [CombatUnitSpec.DemonHunter_Devourer]: "278326",
+  [CombatUnitSpec.Warlock_Affliction]: "19505", // Devour Magic (Felhunter)
+  [CombatUnitSpec.Warlock_Demonology]: "19505",
+  [CombatUnitSpec.Warlock_Destruction]: "19505",
+  [CombatUnitSpec.Evoker_Preservation]: "357208", // Scouring Flame → Fire Breath
+  [CombatUnitSpec.Evoker_Devastation]: "357208",
+  [CombatUnitSpec.Evoker_Augmentation]: "357208",
+  [CombatUnitSpec.Hunter_BeastMastery]: "19801", // Tranquilizing Shot
+  [CombatUnitSpec.Hunter_Marksmanship]: "19801",
+  [CombatUnitSpec.Hunter_Survival]: "19801",
+};
+export function purgeSpellOf(unit: ICombatUnit): string | null {
+  const base = PURGE_GATE_SPELL_BY_SPEC[unit.spec] ?? null;
+  if (
+    base === "370" &&
+    (playerTalentIdSets(unit).talentedSpellIds?.has(GREATER_PURGE_SPELL_ID) ||
+      unitCastSpellIds(unit).has(GREATER_PURGE_SPELL_ID))
+  )
+    return GREATER_PURGE_SPELL_ID;
+  return base;
+}
+export const GREATER_PURGE_SPELL_ID = "378773";
+
+/** The purger's purge cooldown and charges as it plays it: the DB2 value
+ *  through the ledger's talent layer (`applyCdTalentModifiers`, the
+ *  `cleanseRecoveryOf` shape). */
+function purgeRecoveryOf(
+  unit: ICombatUnit,
+  spellId: string,
+): { cooldownSeconds: number; charges: number } {
+  const base = effectiveCooldownSeconds(spellId) ?? 0;
+  if (!(base > 0)) return { cooldownSeconds: 0, charges: 1 };
+  const t = playerTalentIdSets(unit);
+  return applyCdTalentModifiers(
+    spellId,
+    base,
+    1,
+    t.talentedSpellIds,
+    new Set((unit.info?.pvpTalents ?? []).map(String)),
+    { specId: unit.spec, talentRanks: t.talentRanks },
+  );
+}
+
+/** A19 = C: a purger whose purge spell has a cooldown only answers Critical
+ *  buffs ("they can't spam purge every GCD"). */
+export function isCdGatedPurger(unit: ICombatUnit): boolean {
+  const sp = purgeSpellOf(unit);
+  return sp !== null && purgeRecoveryOf(unit, sp).cooldownSeconds > 0;
+}
+
+/**
+ * F-P7 (codex r2 09-30): when this purger's purge is next usable, from its
+ * cooldown-consuming CASTS (a purge that removes nothing still spends it —
+ * f94a7604 243.483), in match seconds; −∞ = ready at `atMs`. The ability set
+ * is the purger's purge spell(s) plus any dispel spell it removed something
+ * with; a Felhunter's casts count for its warlock. Charge-aware.
+ */
+export function purgeReadyAtSeconds(
+  unit: ICombatUnit,
+  extraSpellIds: ReadonlySet<string>,
+  atMs: number,
+  matchStartMs: number,
+): number {
+  return abilitiesReadyAtSeconds(
+    unit,
+    purgeSpellIdsOf(unit),
+    extraSpellIds,
+    atMs,
+    matchStartMs,
+  );
+}
+
+/** The purge abilities this unit HAS: its purge spell (Greater Purge
+ *  replaces Purge), else the spec's list. One of them that was never cast,
+ *  or has no cooldown, is ready — an unused Dispel Magic keeps a priest
+ *  ready whatever its Mass Dispel is doing (codex review of F-P7).
+ *  FT-T10: also the spells "purger locked" asks a kick lockout about. */
+function purgeSpellIdsOf(unit: ICombatUnit): Set<string> {
+  const own = purgeSpellOf(unit);
+  const listed = PURGE_SPELLS_BY_SPEC[unit.spec] ?? [];
+  const available = new Set<string>(
+    own !== null && !listed.includes(own) ? [own] : listed,
+  );
+  if (own !== null) available.add(own);
+  return available;
+}
+
+/** `purgeReadyAtSeconds`'s ledger over an explicit ability set: `available`
+ *  are abilities the unit holds (never pressed ⇒ ready), `extraSpellIds` ones
+ *  it was only seen using. */
+function abilitiesReadyAtSeconds(
+  unit: ICombatUnit,
+  available: ReadonlySet<string>,
+  extraSpellIds: ReadonlySet<string>,
+  atMs: number,
+  matchStartMs: number,
+): number {
+  const ids = new Set<string>([...available, ...extraSpellIds]);
+  const casts = [
+    ...(unit.spellCastEvents ?? []),
+    ...(unit.petSpellCastEvents ?? []),
+  ].filter(
+    (c) =>
+      c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+      !!c.spellId &&
+      ids.has(c.spellId) &&
+      c.logLine.timestamp < atMs,
+  );
+  const atS = (atMs - matchStartMs) / 1000;
+  let back = -Infinity;
+  for (const id of ids) {
+    const times = casts
+      .filter((c) => c.spellId === id)
+      .map((c) => (c.logLine.timestamp - matchStartMs) / 1000);
+    if (!times.length) {
+      if (available.has(id)) return -Infinity; // held and never pressed
+      continue; // a dispel spell it used elsewhere, no press on record
+    }
+    const { cooldownSeconds, charges } = purgeRecoveryOf(unit, id);
+    if (!(cooldownSeconds > 0)) return -Infinity; // a free purge is always there
+    const st = chargeStateAt(times, cooldownSeconds, charges, atS);
+    if (st.charges > 0) return -Infinity;
+    back =
+      back === -Infinity ? st.nextRecharge : Math.min(back, st.nextRecharge);
+  }
+  return back;
+}
+
+/**
+ * A removal that is not a spec's Magic purge (user ruling P-P5b = C,
+ * 2026-10-01; evidence in `data/scopedPurges.ts`). It counts only inside its
+ * own scope and never makes its holder a general purger (`canOffensivePurge`
+ * stays the Magic-purge roster).
+ */
+export type ScopedPurgeScope = "immunity" | "enrage" | "magic";
+export interface IScopedPurgeTool {
+  /** the press — its cooldown and reach are the tool's */
+  castSpellId: string;
+  name: string;
+  scope: ScopedPurgeScope;
+  /** what it removes, as the prompt states it */
+  note: string;
+  /** its cast time — a buff must outlast the reaction bar PLUS this to be a
+   *  miss (0 for an instant) */
+  castSeconds: number;
+}
+const WARRIOR_SPECS = new Set<CombatUnitSpec>([
+  CombatUnitSpec.Warrior_Arms,
+  CombatUnitSpec.Warrior_Fury,
+  CombatUnitSpec.Warrior_Protection,
 ]);
+const ROGUE_SPECS = new Set<CombatUnitSpec>([
+  CombatUnitSpec.Rogue_Assassination,
+  CombatUnitSpec.Rogue_Outlaw,
+  CombatUnitSpec.Rogue_Subtlety,
+]);
+
+/** How far the tool reaches from its holder: Shattering Throw's cast range,
+ *  Arcane Torrent's radius around the caster (`spellReachForCaster`). */
+export function scopedToolReachYards(
+  unit: ICombatUnit,
+  tool: Pick<IScopedPurgeTool, "castSpellId">,
+): number {
+  return spellReachForCaster(unit, tool.castSpellId) ?? DISPEL_MAX_RANGE_YARDS;
+}
+
+/**
+ * The scoped removals `unit` holds this match:
+ *  - a Warrior with Shattering Throw (a choice node: talented, or — whatever
+ *    the loadout says — observed casting it) → immunity shields;
+ *  - a Rogue (Shiv is every Rogue's) → enrage effects;
+ *  - anyone OBSERVED casting Arcane Torrent this match who has no Magic purge
+ *    of their own → one Magic buff, enemies within its radius (the log has no
+ *    race field, so an unpressed racial is not asserted).
+ */
+export function scopedPurgeToolsOf(
+  unit: ICombatUnit,
+  /** the round's units, for a warlock's pet (`canOffensivePurge`) */
+  units?: Iterable<ICombatUnit>,
+): IScopedPurgeTool[] {
+  const tools: IScopedPurgeTool[] = [];
+  const cast = unitCastSpellIds(unit);
+  if (
+    WARRIOR_SPECS.has(unit.spec) &&
+    (cast.has(SHATTERING_THROW_CAST_ID) ||
+      hasTalentedAbility(unit, SHATTERING_THROW_CAST_ID))
+  )
+    tools.push({
+      castSpellId: SHATTERING_THROW_CAST_ID,
+      name: getEnglishSpellName(SHATTERING_THROW_CAST_ID),
+      scope: "immunity",
+      note: `immunity shields only, ${SHATTERING_THROW_CAST_S}s cast`,
+      castSeconds: SHATTERING_THROW_CAST_S,
+    });
+  if (ROGUE_SPECS.has(unit.spec))
+    tools.push({
+      castSpellId: SHIV_SPELL_ID,
+      name: getEnglishSpellName(SHIV_SPELL_ID),
+      scope: "enrage",
+      note: "enrage effects only",
+      castSeconds: 0,
+    });
+  if (!canOffensivePurge(unit, units)) {
+    const torrent = [...cast].find(
+      (id) => racialName(id) === ARCANE_TORRENT_NAME,
+    );
+    if (torrent !== undefined)
+      tools.push({
+        castSpellId: torrent,
+        name: ARCANE_TORRENT_NAME,
+        scope: "magic",
+        note: `one Magic buff from enemies within ${scopedToolReachYards(unit, { castSpellId: torrent })} yd of the caster`,
+        castSeconds: 0,
+      });
+  }
+  return tools;
+}
+
+/** A Magic buff an offensive purge can take: officially Magic and not on the
+ *  blocklist. One predicate for the missed-purge universe and the "magic"
+ *  scope. */
+export function isMagicPurgeTarget(spellId: string): boolean {
+  return getDispelType(spellId) === "Magic" && !PURGE_BLOCKLIST.has(spellId);
+}
+
+/**
+ * Is that aura inside this scoped tool's scope — what `purgerRosterScan`
+ * accepts as the explanation of an OBSERVED removal. "magic" is the dispel
+ * type alone (Arcane Torrent did strip Power Word: Fortitude); whether a
+ * tool can carry a missed-purge window is `scopedToolAnswers`.
+ */
+export function scopedToolRemoves(
+  tool: Pick<IScopedPurgeTool, "scope">,
+  auraSpellId: string,
+): boolean {
+  switch (tool.scope) {
+    case "immunity":
+      return SHATTERING_THROW_REMOVES.has(auraSpellId);
+    case "enrage":
+      return SHIV_REMOVES.has(auraSpellId);
+    case "magic":
+      return getDispelType(auraSpellId) === "Magic";
+  }
+}
+
+/**
+ * Could a missed-purge window on that buff be this tool's. Only Shattering
+ * Throw accuses (user ruling P-P5b-land, 2026-10-02): Arcane Torrent is
+ * stated in the PURGE RESPONSIBILITY header and never produces a
+ * [MISSED PURGE OPPORTUNITY] line — its caster cannot choose which buff it
+ * strips; Shiv's enrage effects carry no purge priority.
+ */
+export function scopedToolAnswers(
+  tool: Pick<IScopedPurgeTool, "scope">,
+  auraSpellId: string,
+): boolean {
+  return tool.scope === "immunity" && scopedToolRemoves(tool, auraSpellId);
+}
 
 // Spell IDs that have Magic dispelType in the game DB but cannot actually be targeted
 // by player offensive purge abilities in practice. Covers three categories:
 //   1. Immunity shells — target is spell-immune while active, so purge cannot land
 //   2. Passive/visual auras — registered as Magic but not dispel-targetable
 //   3. Cross-team targeting issues — buff is on your ally, not an enemy
+/**
+ * The blocklist entries that cannot be REMOVED at all by a purge — immunity
+ * shells, passive / visual auras, the two the user ruled unpurgeable
+ * (2026-08-21). The rest of `PURGE_BLOCKLIST` (raid buffs, Nature's
+ * Swiftness, Innervate) can be purged and is only not worth a missed-purge
+ * line. `purgeableBuffIntervals` counts what a purge could take, so it reads
+ * this subset; a test pins it inside the blocklist.
+ */
+export const UNPURGEABLE_MAGIC_AURAS: ReadonlySet<string> = new Set([
+  "642", // Divine Shield
+  "45438", // Ice Block
+  "186265", // Aspect of the Turtle
+  "188501", // Spectral Sight
+  "6940", // Blessing of Sacrifice
+  "378441", // Time Stop
+]);
+
 /** @internal exported for data/curatedIdRegistry (corpus rot scan) */
 export const PURGE_BLOCKLIST = new Set<string>([
   // ── Immunity shells (target is spell-immune; purge cannot land) ──────────────────
@@ -494,7 +925,14 @@ const WARLOCK_SPECS = new Set<CombatUnitSpec>([
 const DH_SPECS = new Set<CombatUnitSpec>([
   CombatUnitSpec.DemonHunter_Havoc,
   CombatUnitSpec.DemonHunter_Vengeance,
+  CombatUnitSpec.DemonHunter_Devourer,
 ]);
+const HUNTER_SPECS = new Set<CombatUnitSpec>([
+  CombatUnitSpec.Hunter_BeastMastery,
+  CombatUnitSpec.Hunter_Marksmanship,
+  CombatUnitSpec.Hunter_Survival,
+]);
+const TRANQUILIZING_SHOT_SPELL_ID = "19801";
 
 /** Returns the set of spell IDs the unit successfully cast during the match. */
 function unitCastSpellIds(unit: ICombatUnit): Set<string> {
@@ -504,6 +942,104 @@ function unitCastSpellIds(unit: ICombatUnit): Set<string> {
       .map((e) => e.spellId)
       .filter((id): id is string => id !== null),
   );
+}
+
+/** Two instants this close are one moment for "was the buff on the unit
+ * then": the removed buff's interval ends at the purge, the missed buff's
+ * begins at its application. */
+const PURGEABLE_AT_SLACK_S = 0.05;
+
+/**
+ * B-tier B13e (user ruling 2026-10-07): the Magic buffs on `unit` an
+ * offensive purge could take — official dispel type Magic (`getDispelType`,
+ * DB2 — not a corpus stand-in), a BUFF on the unit, and not one of
+ * `UNPURGEABLE_MAGIC_AURAS`. Raid buffs count: they are purgeable
+ * and they are what a purge most often takes (21562 / 1459 / 1126 lead the
+ * corpus's dispelled ids). Intervals come from `buildAuraIntervals`, so a
+ * buff that was up before the log began is on the list.
+ */
+export function purgeableBuffIntervals(
+  unit: ICombatUnit,
+  sameSideIds: ReadonlySet<string>,
+  combat: { startTime: number; endTime: number },
+): IAuraInterval[] {
+  const auraEvents = unit.auraEvents.filter((a) => {
+    if (!a.spellId) return false;
+    // A BUFF is one whoever cast it: a buff the unit STOLE keeps its first
+    // caster as the source (69546267 round 3: Body and Soul stolen from our
+    // priest, then purged back off the mage). Only a row with no marker
+    // falls back to "its own side put it there".
+    const type = getAuraType(a);
+    if (type === "DEBUFF") return false;
+    if (type === null && !sameSideIds.has(a.srcUnitId)) return false;
+    return isPurgeableMagicBuff(a.spellId);
+  });
+  return buildAuraIntervals({ ...unit, auraEvents }, combat);
+}
+
+/** B13e: an aura that counts as one of the `N purgeable buffs` — official
+ * dispel type Magic and not `UNPURGEABLE_MAGIC_AURAS`. One predicate for N
+ * (`purgeableBuffIntervals`, which removals carry `purgeableOnTarget`) and
+ * for k (`purgePressRemovalCount`: an Enrage a Tranquilizing Shot took with
+ * the Magic buff is not one of them — F20 wide residual, "2 of 1"). */
+export function isPurgeableMagicBuff(spellId: string): boolean {
+  return (
+    getDispelType(spellId) === "Magic" && !UNPURGEABLE_MAGIC_AURAS.has(spellId)
+  );
+}
+
+/** How many Magic buffs one press removes from one target, in words, from
+ * DB2 Effect 38 base points (`PURGE_REMOVALS_PER_TARGET`), for the purge
+ * legend and the missed-purge menu definition (one wording, two readers).
+ * F20 D31 (2026-10-28): Greater Purge 378773 and Fire Breath 357209
+ * (Scouring Flame) remove 2; the B13e model "a purge removes ONE" was
+ * wrong for both. Reads `1 for most purges, 2 for Greater Purge and Fire
+ * Breath`. A count of 99+
+ * is a "remove all" (Mass Dispel, the friendly cleanses) — not a purge a
+ * player aims at one buff with — and is left out. */
+export const PURGE_PRESS_REMOVALS_TEXT: string = (() => {
+  const byCount = new Map<number, string[]>();
+  for (const [id, n] of Object.entries(PURGE_REMOVALS_PER_TARGET)) {
+    if (n < 2 || n >= 99) continue;
+    // the generated official name: the spell-name table loads in the
+    // background, so at module load a name lookup falls back to the id
+    const name = PURGE_TOOL_NAMES[id];
+    if (!name) continue;
+    const names = byCount.get(n) ?? [];
+    if (!names.includes(name)) names.push(name);
+    byCount.set(n, names);
+  }
+  const join = (xs: string[]) =>
+    xs.length <= 1
+      ? (xs[0] ?? "")
+      : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`;
+  return [
+    "1 for most purges",
+    ...[...byCount.entries()]
+      .sort((a, b) => a[0] - b[0])
+      .map(([n, names]) => `${n} for ${join(names)}`),
+  ].join(", ");
+})();
+
+/** `4 purgeable buffs` — the count's one wording (the timeline lines and
+ * their legend); "" for an absent count. */
+export const purgeableCountText = (n: number | undefined): string =>
+  n === undefined ? "" : `${n} purgeable buff${n === 1 ? "" : "s"}`;
+
+/** How many distinct purgeable buffs (`purgeableBuffIntervals`) were on the
+ * unit at `atSeconds` (round seconds). */
+export function purgeableBuffCountAt(
+  intervals: readonly IAuraInterval[],
+  atSeconds: number,
+): number {
+  const ids = new Set<string>();
+  for (const iv of intervals)
+    if (
+      iv.fromS <= atSeconds + PURGEABLE_AT_SLACK_S &&
+      iv.toS >= atSeconds - PURGEABLE_AT_SLACK_S
+    )
+      ids.add(iv.spellId);
+  return ids.size;
 }
 
 /**
@@ -532,8 +1068,8 @@ function hasTalentedAbility(unit: ICombatUnit, spellId: string): boolean {
   const talentTreeIds = getSpecTalentTreeSpellIds(specIdNum);
   if (!talentTreeIds.has(spellId)) return false; // not a talent for this spec
 
-  const talentedIds = unit.info?.talents
-    ? getPlayerTalentedSpellIds(specIdNum, unit.info.talents)
+  const talentedIds = talentsOf(unit)
+    ? getPlayerTalentedSpellIds(specIdNum, talentsOf(unit)!)
     : null;
   if (talentedIds !== null) return talentedIds.has(spellId);
 
@@ -636,7 +1172,7 @@ function passesDispelTalentGate(
   // the talentOwnership "unknown" guards (codex review 2026-09-26): an empty
   // loadout, a loadout with node ids this build cannot resolve, or an
   // unreadable choice selection proves nothing about the gate talent
-  const talents = unit.info?.talents;
+  const talents = talentsOf(unit);
   if (!talents || talents.length === 0) return true;
   if (!isLoadoutFullyResolved(specIdNum, talents)) return true;
   if (gate.some((t) => !choiceSelectionResolved(specIdNum, talents, t)))
@@ -682,18 +1218,58 @@ export function canDefensiveCleanse(
  * charmed (reliability round 2 W1d, `charmedPlayer.ts`). One predicate for
  * the dispel windows, the missed-cleanse menu and the timeline lines.
  */
+/**
+ * The dispel spell(s) `unit` would press for a `dispelType` debuff (triage
+ * missed-cleanse F-C12): the spec's `CLEANSE_SPELLS_BY_TYPE` list, and where
+ * it lists several, only those that are baseline for the spec or talented
+ * (the `hasTalentedAbility` reading `passesDispelTalentGate` uses). English
+ * names.
+ */
+export function removalSpellIdsFor(
+  unit: ICombatUnit,
+  dispelType: DispelType,
+  targetCharmed = false,
+): readonly string[] {
+  // a charmed teammate is hostile: only the offensive purge reaches them
+  // (`canRemoveFrom`'s W1d distinction; codex review of F-C12 — a Discipline
+  // priest's spell there is Dispel Magic, not Purify)
+  if (targetCharmed) return PURGE_SPELLS_BY_SPEC[unit.spec] ?? [];
+  const ids = CLEANSE_SPELLS_BY_TYPE[dispelType]?.[unit.spec] ?? [];
+  if (ids.length <= 1) return ids;
+  const specIdNum = parseInt(unit.spec, 10);
+  const tree = getSpecTalentTreeSpellIds(specIdNum);
+  // a free / entry node is never listed in the loadout (Expunge for
+  // Devastation / Augmentation) — held, as `passesDispelTalentGate` reads it
+  const free = getSpecFreeOrEntrySpellIds(specIdNum);
+  const f = ids.filter(
+    (id) => !tree.has(id) || free.has(id) || hasTalentedAbility(unit, id),
+  );
+  return f.length ? f : ids;
+}
+export function cleanseSpellNamesFor(
+  unit: ICombatUnit,
+  dispelType: DispelType,
+  targetCharmed = false,
+): string[] {
+  return removalSpellIdsFor(unit, dispelType, targetCharmed).map((id) =>
+    getEnglishSpellName(id),
+  );
+}
+
 export function canRemoveFrom(
   unit: ICombatUnit,
   dispelType: DispelType,
   targetCharmed: boolean | undefined,
   targetName?: string,
+  /** the round's units, for a warlock's pet (`canOffensivePurge`) */
+  units?: Iterable<ICombatUnit>,
 ): boolean {
   // the charmed player is under enemy control: never their own dispeller
   // (509-1-3009: a Scouring-Flame Devastation Evoker "able to purge" the
   // Mind Control he was under)
   if (targetCharmed && unit.name === targetName) return false;
   return targetCharmed
-    ? dispelType === "Magic" && canOffensivePurge(unit)
+    ? dispelType === "Magic" && canOffensivePurge(unit, units)
     : canDefensiveCleanse(unit, dispelType);
 }
 
@@ -701,7 +1277,17 @@ export function canRemoveFrom(
  * Returns true if the unit can actually perform an offensive purge, accounting for
  * talent gating (DH Consume Magic) and pet requirements (Warlock Felhunter).
  */
-export function canOffensivePurge(unit: ICombatUnit): boolean {
+/** Grimoire of Sacrifice: the warlock's buff, and the shadow damage it
+ * adds to their spells */
+const GRIMOIRE_OF_SACRIFICE_AURA_ID = "196099";
+const GRIMOIRE_OF_SACRIFICE_DAMAGE_ID = "196100";
+
+export function canOffensivePurge(
+  unit: ICombatUnit,
+  /** the round's units, for the warlock's pet (`warlockRanPurgePet`); absent
+   *  = the pets the warlock's own pet casts name */
+  units?: Iterable<ICombatUnit>,
+): boolean {
   // B139: some specs gain an offensive purge only from a PvP talent — Preservation Evoker has no baseline
   // offensive purge (Naturalize is a defensive ally-dispel), but Scouring Flame gives Fire Breath one.
   if (hasOffensivePurgeTalent(unit.info?.pvpTalents)) return true;
@@ -709,8 +1295,8 @@ export function canOffensivePurge(unit: ICombatUnit): boolean {
 
   const specIdNum = parseInt(unit.spec, 10);
   const talentTreeIds = getSpecTalentTreeSpellIds(specIdNum);
-  const talentedIds = unit.info?.talents
-    ? getPlayerTalentedSpellIds(specIdNum, unit.info.talents)
+  const talentedIds = talentsOf(unit)
+    ? getPlayerTalentedSpellIds(specIdNum, talentsOf(unit)!)
     : null;
   const hasCombatantInfo = unit.info !== undefined;
   // castSpellIds is computed lazily (only when talentedIds is null) to avoid iterating
@@ -721,14 +1307,19 @@ export function canOffensivePurge(unit: ICombatUnit): boolean {
     return castSpellIds;
   };
 
-  // DH: Consume Magic is talent-gated.
-  if (DH_SPECS.has(unit.spec) && talentTreeIds.has(CONSUME_MAGIC_SPELL_ID)) {
-    if (talentedIds !== null && !talentedIds.has(CONSUME_MAGIC_SPELL_ID))
-      return false;
+  // DH: Consume Magic is talent-gated; Hunters: Tranquilizing Shot (F-P5),
+  // the same reading.
+  const gateId = DH_SPECS.has(unit.spec)
+    ? CONSUME_MAGIC_SPELL_ID
+    : HUNTER_SPECS.has(unit.spec)
+      ? TRANQUILIZING_SHOT_SPELL_ID
+      : null;
+  if (gateId !== null && talentTreeIds.has(gateId)) {
+    if (talentedIds !== null && !talentedIds.has(gateId)) return false;
     if (
       talentedIds === null &&
       hasCombatantInfo &&
-      !getCastSpellIds().has(CONSUME_MAGIC_SPELL_ID)
+      !getCastSpellIds().has(gateId)
     )
       return false;
   }
@@ -737,6 +1328,24 @@ export function canOffensivePurge(unit: ICombatUnit): boolean {
   // Summon Felhunter (30146) is in the talent tree; if the player has talent data and didn't
   // take it, they likely have a different pet. Fall back to cast evidence for the summon.
   if (WARLOCK_SPECS.has(unit.spec)) {
+    // the pet the log shows decides (the roster's predicate): a Sayaad /
+    // Felguard / Imp warlock has no Devour Magic, whatever the talent says
+    const purgePet = warlockRanPurgePet(unit, units);
+    if (purgePet !== undefined) return purgePet;
+    // no pet logged and Grimoire of Sacrifice in use (its aura 196099, or
+    // its damage 196100): the demon was sacrificed, and a sacrificed demon
+    // lends no Devour Magic (fact4 D37, 4dee936a: the warlock's only Command
+    // Demon press was the sacrificed Imp's Singe Magic, and the prompt read
+    // "CAN offensive purge")
+    if (
+      (unit.auraEvents ?? []).some(
+        (a) => a.spellId === GRIMOIRE_OF_SACRIFICE_AURA_ID,
+      ) ||
+      (unit.damageOut ?? []).some(
+        (d) => d.spellId === GRIMOIRE_OF_SACRIFICE_DAMAGE_ID,
+      )
+    )
+      return false;
     if (talentTreeIds.has(SUMMON_FELHUNTER_SPELL_ID)) {
       if (talentedIds !== null && !talentedIds.has(SUMMON_FELHUNTER_SPELL_ID)) {
         // Didn't take Summon Felhunter talent — check cast evidence as final fallback
@@ -848,10 +1457,24 @@ export interface IDispelEvent {
   isSpellSteal: boolean;
   /** True when the dispel was performed by a pet/NPC merged into the player's actionOut (e.g. Warlock Felhunter Devour Magic, Imp Singe Magic). */
   isPetDispel: boolean;
+  /** The summon's own unit id when `isPetDispel` (F15 R2) — what the line
+   * names it as (`summonKindOf`: pet / guardian / totem). */
+  summonUnitId?: string;
   /** deliberate = a cast produced it; proc = passive trigger (Cleanse the
    * Weak …); rider = side effect of a movement/form action. One predicate,
    * utils/dispelKind.ts — the desktop counts and the prompt fold read this. */
   dispelKind: DispelKind;
+  /** A `rider` whose own source logged the cast of the dispelling spell at
+   * the removal (`dispelCameWithOwnCast`), or (fact2 C5) any non-deliberate
+   * removal its source made with a press of another button at that instant
+   * (`dispelRodeOwnPress`: Phantasm on Fade): a side effect of a press, which
+   * the [MINOR DISPELS] fold must not call passive. Absent otherwise. */
+  riderOfOwnCast?: true;
+  /** B13e, our purges of a Magic buff only: how many purgeable buffs
+   * (`purgeableBuffIntervals`) were on the target at the removal, the
+   * removed one included. Absent when the removed aura is not one (an
+   * enrage, an immunity a scoped tool took) or the count came out 0. */
+  purgeableOnTarget?: number;
   wasFatal?: boolean;
   fatalUnitName?: string;
   fatalUnitSpec?: string;
@@ -867,7 +1490,8 @@ export interface IMissedCleanseWindow {
   spellId: string;
   priority: DispelPriority;
   dispelType: DispelType; // always set; null case is filtered before pushing
-  /** Damage the target took in the first POST_CC_PRESSURE_WINDOW_S seconds after CC was applied */
+  /** Damage the target took in the first POST_CC_PRESSURE_WINDOW_S seconds after CC was applied
+   * (`sumLandedPressure`: landed hits, same-side redistribution left out) */
   postCcDamage: number;
   /** BACKLOG #39 (user ruling A, 2026-08-25): true when this window's a-priori
    * tier said Critical but the measured consequence was zero (no damage in the
@@ -886,10 +1510,29 @@ export interface IMissedCleanseWindow {
    * time < the reaction threshold (MISSED_CLEANSE_THRESHOLD_S) inside the
    * window — you can't cleanse while CC'd/locked out, so it isn't a miss. */
   dispellersLockedOut: boolean;
+  /** Seconds of the window during which every capable dispeller was unable to
+   * cast — the intersection the gate above reads (`dispellersBlockedMsInWindow`);
+   * absent when there is no dispeller. Facts only (work order 2026-10-14c #12). */
+  dispellersBlockedS?: number;
+  /** WO3 #11: how long the TARGET itself could not press its own
+   * self-removal (`SELF_REMOVAL_BY_TYPE`) inside the window — facts only;
+   * absent when the type has no self-removal. */
+  targetSelfBlockedS?: number;
+  /** the same per self-removal button (`SELF_REMOVAL_BY_TYPE`), seconds */
+  targetSelfBlockedSById?: Record<string, number>;
   /** The target was charmed (Mind Control, `charmedThrough`) for the
    * window: only a friendly offensive purge could remove anything on them
    * (`canRemoveFrom`). Absent on hand-built fixtures = false. */
   targetCharmed?: boolean;
+  /** Triage missed-cleanse F-C13 (ruling A44 = A): English names of the
+   * backlash debuffs (`getDispelPenalty`) of the same dispel type on the
+   * target when the CC landed — a cleanse would have removed them too and
+   * the dispeller would eat the penalty. A fact, never an exemption. */
+  coRemovesBacklash?: string;
+  /** F-C4 (A39 = B): the signed 08-19 cell, after DR and U6's zero-damage
+   * demotion — replaces `priority` for both rendering and menu admission.
+   * Absent for ids with no signed row (they keep the legacy tier). */
+  worth?: DispelWorth | HealerCell;
   /** Feasibility gate a (tri-state): true = at least one dispeller was in
    * reach during the reaction window (≤40 yd and LoS not false); false =
    * position data exists and nobody was in reach; null = no position data, so
@@ -928,15 +1571,24 @@ export interface ICCEfficiencyStat {
 
 export interface IMissedPurgeWindow {
   timeSeconds: number;
-  /** How long the buff sat uncontested; capped at match duration if never removed */
+  /** How long the buff sat uncontested inside the round: to its removal, or
+   * to the round's end (`roundEndMs`) when it was still up then — never past
+   * it. */
   durationSeconds: number;
   enemyName: string;
   enemySpec: string;
   spellName: string;
   spellId: string;
   priority: DispelPriority;
+  /** B13e: how many purgeable buffs (`purgeableBuffIntervals`) were on the
+   * enemy when this one went up, this one included. Absent for a buff only a
+   * scoped tool answers (not a Magic purge target) or when the count is 0. */
+  purgeableOnTarget?: number;
   /** True if all eligible purgers had their purge ability on CD at the start of the miss window */
   purgeWasOnCD: boolean;
+  /** F-P7: when the team's purge came back (match seconds), only when it
+   * was on cooldown at application. */
+  purgeReadyAtSeconds?: number;
   /** What the purger last used their ability on before the miss (only set when purgeWasOnCD) */
   cdBurnedOn?: {
     spellName: string;
@@ -955,9 +1607,112 @@ export interface IMissedPurgeWindow {
    * purger was hard-CC'd/kick-locked down to free time < the reaction
    * threshold. */
   purgersLockedOut: boolean;
+  /** fact2: seconds of the window during which every purger the gate above
+   * asks was unable to cast (`dispellersBlockedMsInWindow`, the gate's own
+   * intersection) — the exemption prints it, so "CC'd/locked out" is a
+   * measured share, not a bare claim. Absent when there is no purger. */
+  purgersBlockedS?: number;
   /** Feasibility gate a (tri-state, same semantics as the cleanse side). */
   losReachable: boolean | null;
+  /**
+   * P-P5b = C: friends whose SCOPED removal answers this buff (Shattering
+   * Throw on an immunity shield) and who were
+   * not locked out for the whole window — each with ITS OWN feasibility, read
+   * off its tool's cooldown and reach. The window-level facts above stay the
+   * general Magic purgers' whenever one carried the window; a window no
+   * general purger carried lives in `scopedMissedPurgeWindows`, its
+   * window-level facts the scoped holders'.
+   */
+  scopedPurgers?: IScopedPurgerFacts[];
+  /** Set by `missedPurgesFor`: the removal the asked-about player holds for
+   *  this buff when it is a scoped one. */
+  viaScopedTool?: Pick<
+    IScopedPurgeTool,
+    "name" | "scope" | "note" | "castSeconds"
+  >;
 }
+
+export interface IScopedPurgerFacts {
+  purgerName: string;
+  tool: Pick<IScopedPurgeTool, "name" | "scope" | "note" | "castSeconds">;
+  /** when the tool came back, only when it was on cooldown at application */
+  purgeReadyAtSeconds?: number;
+  lockedOut: boolean;
+  /** fact2: the seconds `lockedOut` measured (`purgersBlockedS`, this purger
+   * and its tool alone) */
+  blockedS?: number;
+  losReachable: boolean | null;
+}
+
+/**
+ * The missed-purge windows `unit` itself could have answered, with the
+ * feasibility facts that apply to IT (Value-Gate feasibility: "could the
+ * player have done it"). A general purger keeps the team's windows exactly as
+ * they are; a player who holds only a scoped removal gets the windows that
+ * tool covers, judged on that tool's cooldown and reach.
+ */
+export function missedPurgesFor(
+  unit: ICombatUnit,
+  summary: Pick<
+    IDispelSummary,
+    "missedPurgeWindows" | "scopedMissedPurgeWindows"
+  >,
+  /** the round's units, for a warlock's pet (`canOffensivePurge`; codex
+   * 20-F15-29: the header and this list read different pets) */
+  units?: Iterable<ICombatUnit>,
+): IMissedPurgeWindow[] {
+  if (canOffensivePurge(unit, units)) return summary.missedPurgeWindows;
+  return [
+    ...summary.missedPurgeWindows,
+    ...(summary.scopedMissedPurgeWindows ?? []),
+  ]
+    .sort((a, b) => a.timeSeconds - b.timeSeconds)
+    .flatMap((w) => {
+      const mine = w.scopedPurgers?.find((p) => p.purgerName === unit.name);
+      if (!mine) return [];
+      const {
+        purgeReadyAtSeconds: _teamReadyAt,
+        cdBurnedOn: _teamBurn,
+        purgersBlockedS: _teamBlocked,
+        ...rest
+      } = w;
+      return [
+        {
+          ...rest,
+          purgeWasOnCD: mine.purgeReadyAtSeconds !== undefined,
+          ...(mine.purgeReadyAtSeconds !== undefined
+            ? { purgeReadyAtSeconds: mine.purgeReadyAtSeconds }
+            : {}),
+          purgersLockedOut: mine.lockedOut,
+          ...(mine.blockedS !== undefined
+            ? { purgersBlockedS: mine.blockedS }
+            : {}),
+          losReachable: mine.losReachable,
+          viaScopedTool: mine.tool,
+        },
+      ];
+    });
+}
+
+/**
+ * The length a missed-purge line states for its window — `unpurged for Ns`,
+ * the window's seconds rounded. One formatter for the two lines that print
+ * it: `[MISSED PURGE OPPORTUNITY]` (`emitCleanseEntries`) and the note the
+ * owner's qualifying miss leaves on an `[ENEMY BUFF]` / `[ENEMY CD]` line
+ * (`foldMissedPurges`).
+ *
+ * The window ends at or before the round's end (`roundEndMs`), and the line
+ * it prints on starts in the application's second (`fmtTime` floors), so on
+ * the render grid start + N is at most ONE second past the round-end second
+ * — what `checkUnpurgedWithinRound` holds every such line to.
+ */
+export function unpurgedForText(
+  w: Pick<IMissedPurgeWindow, "durationSeconds">,
+): string {
+  return `unpurged for ${Math.round(w.durationSeconds)}s`;
+}
+/** `unpurgedForText`, read back: 1 = the whole seconds it printed. */
+export const UNPURGED_FOR_RE_SRC = String.raw`unpurged for (\d+)s`;
 
 /** Marks missed purges that fell inside a friendly kill window. Mutates in place;
  *  kept separate from reconstructDispelSummary so its signature (and all call sites) stay unchanged. */
@@ -995,6 +1750,16 @@ export interface IDispelSummary {
   ccEfficiency: ICCEfficiencyStat[];
   /** Critical/High magic buffs on enemies that sat >3s while we had an offensive purger */
   missedPurgeWindows: IMissedPurgeWindow[];
+  /**
+   * P-P5b = C: windows NO general purger carried — only a scoped removal
+   * (Shattering Throw on an immunity shield) could have answered. A separate
+   * array on purpose, the `lateCleanseWindows` reasoning: every reader of
+   * `missedPurgeWindows` (the desktop dispel dashboard and mistakes card, the
+   * retired missed-purge candidate) keeps exactly the universe it had; only
+   * the timeline's owner view (`missedPurgesFor`) reads this one. Optional so
+   * hand-built summaries need not carry it.
+   */
+  scopedMissedPurgeWindows?: IMissedPurgeWindow[];
 }
 
 /**
@@ -1027,6 +1792,12 @@ function ownTeamNeedsSnares(ownTeam: readonly ICombatUnit[]): boolean {
   return ownTeam.some((u) => SNARE_DEPENDENT_SPECS.has(u.spec));
 }
 
+/** The tier of a dispel that HAPPENED (the [ENEMY CLEANSE] / [PURGE] line's
+ * pick): `getPriority`, with a disarm raised to High. */
+export function removedDispelPriority(spellId: string): DispelPriority {
+  return SPELLS[spellId]?.type === "disarms" ? "High" : getPriority(spellId);
+}
+
 /** Exported for tests only: the comp-dependent gate is a ruling that must be
  * pinned directly, not inferred from a whole-summary assertion. */
 export function purgePriorityForTest(
@@ -1051,17 +1822,47 @@ export function purgePriorityForTest(
  * field the corpus measurement used). Note it deliberately excludes absorbed
  * pressure for now — same basis as the 22/125 baseline; folding
  * incomingPressure in would change the ruling's evidence base and is a
- * separate call.
+ * separate call. Since triage missed-cleanse F-C1 (2026-10-06) the sum is
+ * `sumLandedPressure`: the same landed rows minus same-side redistribution
+ * (`REDISTRIBUTION_DAMAGE_IDS`, user ruling A22 = B) — a teammate's Void
+ * Leech is not a consequence of the missed dispel. The 22/125 baseline was
+ * measured on the unfiltered sum.
  */
 export function consequenceGatedPriority(
   priority: DispelPriority,
   postCcDamage: number,
   targetDied: boolean,
 ): { priority: DispelPriority; consequenceDemoted: boolean } {
-  if (priority === "Critical" && postCcDamage <= 0 && !targetDied) {
+  if (priority === "Critical" && consequenceDemotes(postCcDamage, targetDied)) {
     return { priority: "High", consequenceDemoted: true };
   }
   return { priority, consequenceDemoted: false };
+}
+
+/** #39's consequence test, one predicate for the legacy tier and the signed
+ *  cell: no damage after the CC landed and the target did not die. */
+export function consequenceDemotes(
+  postCcDamage: number,
+  targetDied: boolean,
+): boolean {
+  return !(postCcDamage > 0) && !targetDied;
+}
+
+/**
+ * The signed 08-19 cell a window renders and is admitted by (triage
+ * missed-cleanse F-C4; user rulings 2026-09-30: A39 = B, U4 = B-all, U6).
+ * A `must` cell renders one tier down (`worth`) when #39's consequence test
+ * says nothing came of it — the legacy Critical → High rule carried onto the
+ * signed tier. worth / situational never demote.
+ */
+export function consequenceGatedWorth(
+  cell: DispelWorth | HealerCell,
+  postCcDamage: number,
+  targetDied: boolean,
+): { worth: DispelWorth | HealerCell; demoted: boolean } {
+  return cell === "must" && consequenceDemotes(postCcDamage, targetDied)
+    ? { worth: "worth", demoted: true }
+    : { worth: cell, demoted: false };
 }
 
 /** #39: did the CC'd target die during the CC or its pressure window (+ the
@@ -1180,6 +1981,46 @@ export function hardCastOccupancyWithin(
   enemyIds: Set<string>,
   windowStartMs: number,
   windowEndMs: number,
+  failedCasts?: ReadonlyArray<{ spellId: string; ms: number }>,
+): IHardCastOccupancy | null {
+  const bars = hardCastBarsWithin(
+    unit,
+    enemyIds,
+    windowStartMs,
+    windowEndMs,
+    failedCasts,
+  );
+  if (bars === null) return null;
+  const out: IHardCastOccupancy = {
+    occupiedMs: 0,
+    startedBeforeWindow: false,
+    spellNames: [],
+  };
+  for (const b of bars) {
+    out.occupiedMs +=
+      Math.min(b.to, windowEndMs) - Math.max(b.from, windowStartMs);
+    if (b.from < windowStartMs) out.startedBeforeWindow = true;
+    out.spellNames.push(b.spellName);
+  }
+  return out;
+}
+
+/** One counted bar of `hardCastBarsWithin` (overlapping the window). */
+export interface IOccupancyInterval {
+  from: number;
+  to: number;
+  spellId: string;
+  /** English (F-C17: the log's localized name leaked into the facts) */
+  spellName: string;
+}
+
+/** `hardCastOccupancyWithin`'s bars, each as an interval; null when the unit
+ *  carries no cast-start stream. */
+function hardCastBarsWithin(
+  unit: ICombatUnit,
+  enemyIds: Set<string>,
+  windowStartMs: number,
+  windowEndMs: number,
   /** Reliability audit A5 (2026-09-25): the unit's own SPELL_CAST_FAILED
    * (absolute ms, from the raw stream). A same-spell failure after a bar
    * started, with no same-spell success before the next bar, is that bar
@@ -1188,21 +2029,16 @@ export function hardCastOccupancyWithin(
    * as running through the 9.18–14.78 Mind Control window ("you were mid
    * hard cast", preCommitted=yes). Absent = the pre-A5 cuts only. */
   failedCasts?: ReadonlyArray<{ spellId: string; ms: number }>,
-): IHardCastOccupancy | null {
+): IOccupancyInterval[] | null {
   const starts = unit.castStartEvents;
   if (!Array.isArray(starts)) return null;
-  const none: IHardCastOccupancy = {
-    occupiedMs: 0,
-    startedBeforeWindow: false,
-    spellNames: [],
-  };
-  if (windowEndMs <= windowStartMs || starts.length === 0) return none;
+  if (windowEndMs <= windowStartMs || starts.length === 0) return [];
   const cutters = buildCannotCastIntervals(unit, enemyIds)
     .map((iv) => iv.from)
     .sort((a, b) => a - b);
   const sorted = [...starts].sort((a, b) => a.timestamp - b.timestamp);
   const successes = unit.spellCastEvents ?? [];
-  const out: IHardCastOccupancy = { ...none, spellNames: [] };
+  const out: IOccupancyInterval[] = [];
   // A success already paired with an earlier bar is not this bar's success
   // (codex review 2026-09-26: 585 starts 1/3/5 s, successes 3/5/7 s — bar 2
   // must pair with 5 s, not re-read bar 1's 3 s).
@@ -1248,9 +2084,26 @@ export function hardCastOccupancyWithin(
             f.ms > from &&
             (nextStart === undefined || f.ms <= nextStart),
         )?.ms;
-    const ends = [succ?.timestamp, nextStart, cut, cancel].filter(
-      (x): x is number => typeof x === "number" && x > from,
-    );
+    // Work order 2026-10-14b fix 5: a success of ANOTHER spell on the global
+    // cooldown means the bar was gone — nothing on the GCD goes out while a
+    // bar runs (24b6a229: a Hex started 68.412 with no end line, then five
+    // instants 70.459–75.769, ran to the next start at 80.275 and read
+    // "busy casting Hex" through a 77.1–80.1 Binding Shot). Off-GCD buttons
+    // (DB2 `OFF_GCD_SPELL_IDS`) and passive procs logged as casts do not cut.
+    const otherGcdPress = successes.find(
+      (e) =>
+        e.timestamp > from &&
+        e.spellId !== sorted[i].spellId &&
+        !OFF_GCD_SPELL_IDS.has(String(e.spellId ?? "")) &&
+        !isPassiveProcCast(e),
+    )?.timestamp;
+    const ends = [
+      succ?.timestamp,
+      nextStart,
+      cut,
+      cancel,
+      otherGcdPress,
+    ].filter((x): x is number => typeof x === "number" && x > from);
     if (ends.length === 0) continue;
     const end = Math.min(...ends);
     // The success completed this bar only if nothing ended the bar first.
@@ -1261,11 +2114,277 @@ export function hardCastOccupancyWithin(
     if (end - from > HARD_CAST_MAX_MS) continue;
     const overlap = Math.min(end, windowEndMs) - Math.max(from, windowStartMs);
     if (overlap <= 0) continue;
-    out.occupiedMs += overlap;
-    if (from < windowStartMs) out.startedBeforeWindow = true;
-    out.spellNames.push(sorted[i].spellName);
+    out.push({
+      from,
+      to: end,
+      spellId: String(sorted[i].spellId),
+      spellName: getEnglishSpellName(
+        String(sorted[i].spellId),
+        sorted[i].spellName,
+      ),
+    });
   }
   return out;
+}
+
+/** What occupied a unit, for the acceptance split (F-C11). */
+export type OccupancyKind =
+  "hardcast" | "empower" | "channel" | "proxy" | "drink";
+
+export interface IOccupancy extends IHardCastOccupancy {
+  kinds: OccupancyKind[];
+}
+
+/** The unit's own self-aura intervals for `ids` (APPLIED → REMOVED, open
+ *  ones closed at `openEndMs`). */
+function selfAuraIntervals(
+  unit: ICombatUnit,
+  ids: ReadonlySet<string>,
+  openEndMs: number,
+): IOccupancyInterval[] {
+  const out: IOccupancyInterval[] = [];
+  const open = new Map<string, { from: number; name: string }>();
+  for (const a of unit.auraEvents ?? []) {
+    if (!a.spellId || !ids.has(a.spellId) || a.srcUnitId !== unit.id) continue;
+    const ev = a.logLine.event;
+    if (ev === LogEvent.SPELL_AURA_APPLIED && !open.has(a.spellId))
+      open.set(a.spellId, { from: a.logLine.timestamp, name: a.spellName });
+    else if (ev === LogEvent.SPELL_AURA_REMOVED) {
+      const o = open.get(a.spellId);
+      if (!o) continue;
+      open.delete(a.spellId);
+      out.push({
+        from: o.from,
+        to: a.logLine.timestamp,
+        spellId: a.spellId,
+        spellName: getEnglishSpellName(a.spellId, o.name),
+      });
+    }
+  }
+  for (const [id, o] of open)
+    out.push({
+      from: o.from,
+      to: openEndMs,
+      spellId: id,
+      spellName: getEnglishSpellName(id, o.name),
+    });
+  return out;
+}
+
+/**
+ * The one "was this player busy" predicate (triage missed-cleanse F-C11,
+ * user ruling A43 = B, 2026-09-30) — the owner's `ownerCasting*` and a
+ * teammate dispeller's `dispellerCasting*` both read it. The union of:
+ *  - `hardCastOccupancyWithin`'s bars;
+ *  - an empowered cast being held and a channel whose length the log
+ *    records — the two commitments with no SPELL_CAST_START bar, read from
+ *    `castCommitSpans.ts` (triage F-C10, 2026-10-01). Before this an
+ *    Evoker's breaths and Disintegrate counted as free hands. Cut at the
+ *    first cannot-cast interval like a bar (rule (c)), and one press is one
+ *    entry: an empower that is also in the channelled table is its hold, and
+ *    a channel that begins at its own bar's success extends that bar;
+ *  - a channel the log shows only as the caster's self-aura
+ *    (`CHANNEL_PROXY_IDS`, Ultimate Penitence 421453);
+ *  - drinking (`DRINK_AURA_IDS`).
+ * occupiedMs is the union's overlap with the window; startedBeforeWindow is
+ * true when any counted interval began before it. null = no cast-start
+ * stream and no aura (unknown, not idle).
+ */
+export function occupancyWithin(
+  unit: ICombatUnit,
+  enemyIds: Set<string>,
+  windowStartMs: number,
+  windowEndMs: number,
+  failedCasts?: ReadonlyArray<{ spellId: string; ms: number }>,
+): IOccupancy | null {
+  const bars = hardCastBarsWithin(
+    unit,
+    enemyIds,
+    windowStartMs,
+    windowEndMs,
+    failedCasts,
+  );
+  if (bars === null && !Array.isArray(unit.auraEvents)) return null;
+  const barItems = (bars ?? []).map((b) => ({
+    ...b,
+    kind: "hardcast" as OccupancyKind,
+  }));
+  const cutters = buildCannotCastIntervals(unit, enemyIds)
+    .map((iv) => iv.from)
+    .sort((a, b) => a - b);
+  const holds = empowerSpans(unit) ?? [];
+  // the aura-ended channels and the ones whose end only a kick or their
+  // own last tick logs (`tickEndedChannelSpans`, fact1215 R9)
+  const channels = [
+    ...channelSpans(unit),
+    ...tickEndedChannelSpans(unit),
+  ].filter(
+    (c) =>
+      !holds.some(
+        (h) =>
+          h.spellId === c.spellId &&
+          Math.abs(h.startMs - c.startMs) <= EMPOWER_PRESS_MATCH_MS,
+      ),
+  );
+  const noBar: Array<IOccupancyInterval & { kind: OccupancyKind }> = [];
+  // A bar takes at most ONE channel: once extended, its `to` is the channel's
+  // end, and a second channel of the same spell starting right there is a
+  // second press, not the first one's tail.
+  const extended = new Set<IOccupancyInterval>();
+  for (const [kind, spans] of [
+    ["empower", holds],
+    ["channel", channels],
+  ] as const) {
+    for (const span of spans) {
+      const cut = cutters.find((c) => c > span.startMs);
+      const to = Math.min(span.endMs, cut ?? Infinity);
+      const ownBar =
+        kind === "channel"
+          ? barItems.find(
+              (b) =>
+                !extended.has(b) &&
+                b.spellId === span.spellId &&
+                Math.abs(b.to - span.startMs) <= CHANNEL_AURA_LAG_MS,
+            )
+          : undefined;
+      if (ownBar) {
+        extended.add(ownBar);
+        ownBar.to = Math.max(ownBar.to, to);
+        continue;
+      }
+      noBar.push({
+        from: span.startMs,
+        to,
+        spellId: span.spellId,
+        spellName: getEnglishSpellName(span.spellId, span.spellName),
+        kind,
+      });
+    }
+  }
+  const tagged: Array<IOccupancyInterval & { kind: OccupancyKind }> = [
+    ...barItems,
+    ...noBar,
+    ...selfAuraIntervals(unit, CHANNEL_PROXY_IDS, windowEndMs).map((b) => ({
+      ...b,
+      kind: "proxy" as const,
+    })),
+    ...selfAuraIntervals(unit, DRINK_AURA_IDS, windowEndMs).map((b) => ({
+      ...b,
+      kind: "drink" as const,
+    })),
+  ]
+    .filter(
+      (b) => b.to > windowStartMs && b.from < windowEndMs && b.to > b.from,
+    )
+    .sort((a, b) => a.from - b.from);
+  const out: IOccupancy = {
+    occupiedMs: 0,
+    startedBeforeWindow: false,
+    spellNames: [],
+    kinds: [],
+  };
+  let curFrom = -Infinity;
+  let curTo = -Infinity;
+  for (const b of tagged) {
+    const from = Math.max(b.from, windowStartMs);
+    const to = Math.min(b.to, windowEndMs);
+    if (from > curTo) {
+      if (curTo > curFrom) out.occupiedMs += curTo - curFrom;
+      curFrom = from;
+      curTo = to;
+    } else curTo = Math.max(curTo, to);
+    if (b.from < windowStartMs) out.startedBeforeWindow = true;
+    out.spellNames.push(b.spellName);
+    if (!out.kinds.includes(b.kind)) out.kinds.push(b.kind);
+  }
+  if (curTo > curFrom) out.occupiedMs += curTo - curFrom;
+  return out;
+}
+
+/** What "the dispeller / purger was locked out" is asked with: the hostile
+ * sources (enemy players and their summons) and the round's units — the
+ * second so that a removal the unit's pet casts is asked of the pet. */
+interface CannotCastSrc {
+  enemyIds: Set<string>;
+  units: ICombatUnit[];
+  /** a unit's cannot-cast intervals per spell set, built once per summary —
+   * they are whole-round facts, asked again for every window (the ×12
+   * first-paint fixture spent seconds rebuilding them per render) */
+  memo?: Map<ICombatUnit, Map<string, CannotCastIntervals>>;
+  /** a warlock's spans with no purge pet out (the Felhunter's Devour Magic
+   * cannot be cast then) — locked time for that purge, the way a stun is
+   * (codex 21-R12-b #2) */
+  purgePetAbsentOf?: (unit: ICombatUnit) => Array<{ from: number; to: number }>;
+}
+
+/** The complement of a warlock's purge-pet spans (`warlockPurgePetSpans`,
+ * seconds from `startMs`), epoch ms — when its purge cannot be cast. */
+export function purgePetAbsentSpansMs(
+  spans: ReadonlyArray<{ fromSeconds: number; toSeconds: number }>,
+  startMs: number,
+): Array<{ from: number; to: number }> {
+  const ms = (sec: number) =>
+    Number.isFinite(sec) ? startMs + sec * 1000 : sec;
+  const out: Array<{ from: number; to: number }> = [];
+  let cursor = -Infinity;
+  for (const sp of [...spans].sort((a, b) => a.fromSeconds - b.fromSeconds)) {
+    const from = ms(sp.fromSeconds);
+    if (from > cursor) out.push({ from: cursor, to: from });
+    cursor = Math.max(cursor, ms(sp.toSeconds));
+  }
+  if (cursor < Infinity) out.push({ from: cursor, to: Infinity });
+  return out.filter((a) => a.to > a.from);
+}
+
+/** The Felhunter's Devour Magic — the purge a warlock's pet must be out for. */
+const DEVOUR_MAGIC_ID = "19505";
+
+type CannotCastIntervals = ReturnType<typeof cannotCastIntervalsForSpells>;
+
+/** `cannotCastIntervalsForSpells` through the summary's memo. Readers never
+ * mutate the returned intervals. */
+function cannotCastOf(
+  src: CannotCastSrc,
+  unit: ICombatUnit,
+  spellIds: readonly string[] | undefined,
+): CannotCastIntervals {
+  const build = () => {
+    const ivs = cannotCastIntervalsForSpells(
+      unit,
+      src.enemyIds,
+      spellIds,
+      src.units,
+    );
+    // a purge only the pet casts, asked of a warlock whose Felhunter was
+    // not the pet out: that time is locked too (codex 21-R12-b #2: the
+    // presence filter and the feasibility read different spans — a
+    // Felhunter stunned 25–30 s and replaced at 30 s left 30–35 s "free")
+    const absent =
+      spellIds?.length && spellIds.every((id) => id === DEVOUR_MAGIC_ID)
+        ? (src.purgePetAbsentOf?.(unit) ?? [])
+        : [];
+    return absent.length === 0
+      ? ivs
+      : [
+          ...ivs,
+          ...absent.map((a) => ({
+            ...a,
+            spellId: DEVOUR_MAGIC_ID,
+            lockout: false,
+            self: true as const,
+          })),
+        ];
+  };
+  if (!src.memo) return build();
+  let byUnit = src.memo.get(unit);
+  if (!byUnit) src.memo.set(unit, (byUnit = new Map()));
+  const key = spellIds === undefined ? "*" : spellIds.join(",");
+  let ivs = byUnit.get(key);
+  if (!ivs) {
+    ivs = build();
+    byUnit.set(key, ivs);
+  }
+  return ivs;
 }
 
 /**
@@ -1277,10 +2396,15 @@ function isPurgerFullyBlockedDuringWindow(
   purger: ICombatUnit,
   windowStartMs: number,
   windowEndMs: number,
-  enemyIds: Set<string>,
+  src: CannotCastSrc,
+  // FT-T10: the removal(s) the unit would press — a kick lockout
+  // counts only when it stops every one of them; absent → every lockout.
+  // A removal the unit's pet casts (Devour Magic) is asked of the pet: a
+  // stunned Warlock is not "locked" for it, a stunned Felhunter is.
+  spellIds?: readonly string[],
 ): boolean {
   return isWindowFullyCovered(
-    buildCannotCastIntervals(purger, enemyIds),
+    cannotCastOf(src, purger, spellIds),
     windowStartMs,
     windowEndMs,
   );
@@ -1317,26 +2441,95 @@ function dispellersLockedOutForWindow(
   dispellers: ICombatUnit[],
   startMs: number,
   endMs: number,
-  enemyIds: Set<string>,
+  src: CannotCastSrc,
   freeThresholdMs: number,
+  // FT-T10: each dispeller's removal(s) — a kick lockout counts only
+  // when it stops every one of them; absent → every lockout. A removal the
+  // dispeller's pet casts is asked of the pet.
+  spellIdsOf?: (d: ICombatUnit) => readonly string[] | undefined,
 ): boolean {
-  if (dispellers.length === 0 || endMs <= startMs) return false;
+  const blockedMs = dispellersBlockedMsInWindow(
+    dispellers,
+    startMs,
+    endMs,
+    src,
+    spellIdsOf,
+  );
+  if (blockedMs === null) return false;
+  return endMs - startMs - blockedMs < freeThresholdMs;
+}
+
+/**
+ * The milliseconds of [startMs, endMs] during which EVERY dispeller was
+ * unable to cast — the intersection `dispellersLockedOutForWindow` gates on,
+ * exported for the fact that states it (work order 2026-10-14c #12:
+ * 29aabcc2's druid stunned 1.94 of the 6.0 s and the row said nothing).
+ * Null when there is no dispeller or no window.
+ */
+export function dispellersBlockedMsInWindow(
+  dispellers: ICombatUnit[],
+  startMs: number,
+  endMs: number,
+  src: CannotCastSrc,
+  spellIdsOf?: (d: ICombatUnit) => readonly string[] | undefined,
+): number | null {
+  if (dispellers.length === 0 || endMs <= startMs) return null;
   // The intersection is "everyone locked" millisecond by millisecond, which is
   // the window minus the time "at least one is free". Numerically: free time =
   // window length - intersection coverage. Build it as a per-unit union, then
   // intersect the unions.
   let intersection: Array<{ from: number; to: number }> | null = null;
   for (const d of dispellers) {
-    const merged = mergeIntervals(buildCannotCastIntervals(d, enemyIds));
+    const merged = mergeIntervals(cannotCastOf(src, d, spellIdsOf?.(d)));
     intersection =
       intersection === null
         ? merged
         : intersectIntervalSets(intersection, merged);
-    if (intersection.length === 0) return false; // someone was free throughout
+    if (intersection.length === 0) return 0; // someone was free throughout
   }
-  const blockedMs = coveredMsWithin(intersection ?? [], startMs, endMs);
-  const freeMs = endMs - startMs - blockedMs;
-  return freeMs < freeThresholdMs;
+  return coveredMsWithin(intersection ?? [], startMs, endMs);
+}
+
+/** WO3 #11: `targetSelfBlockedS` — the target's own cannot-cast time for its
+ *  self-removals of `dispelType`, on the same interval reading as
+ *  `dispellersBlockedMsInWindow`. */
+function targetSelfBlocked(
+  target: ICombatUnit,
+  dispelType: string,
+  startMs: number,
+  endMs: number,
+  src: CannotCastSrc,
+): {
+  targetSelfBlockedS?: number;
+  targetSelfBlockedSById?: Record<string, number>;
+} {
+  const ids = SELF_REMOVAL_BY_TYPE[dispelType];
+  if (!ids?.length) return {};
+  const b = dispellersBlockedMsInWindow(
+    [target],
+    startMs,
+    endMs,
+    src,
+    () => ids,
+  );
+  // per button too: a kick lockout of one school stops one of them, and the
+  // reader names only the button the target holds (codex 60-POSTHOC-10c #1:
+  // a Holy-locked Retribution Paladin read free 6.0 s through Cloak of
+  // Shadows / Ice Block, 1.0 s through its own Divine Shield)
+  const byId: Record<string, number> = {};
+  for (const id of ids) {
+    const one = dispellersBlockedMsInWindow(
+      [target],
+      startMs,
+      endMs,
+      src,
+      () => [id],
+    );
+    if (one !== null) byId[id] = one / 1000;
+  }
+  return b === null
+    ? {}
+    : { targetSelfBlockedS: b / 1000, targetSelfBlockedSById: byId };
 }
 
 /** The units still alive at `ms` (no death record at or before it). */
@@ -1386,7 +2579,7 @@ function intersectIntervalSets(
  * pair exists at all → null (do not change the verdict; the tri-state rule —
  * see the losAnalysis / ccTrinketAnalysis precedents).
  */
-function anyDispellerReachable(
+export function anyDispellerReachable(
   dispellers: ICombatUnit[],
   target: ICombatUnit,
   applyTs: number,
@@ -1394,12 +2587,11 @@ function anyDispellerReachable(
   zoneId: string | undefined,
   /** this dispeller's reach for the removal in question (GH #83) */
   reachOf: (dispeller: ICombatUnit) => number,
+  /** the round's start (absolute ms) — the render grid is round-relative */
+  matchStartMs: number,
 ): boolean | null {
   if (dispellers.length === 0) return null;
-  // Anchored to the render grid: sweep on whole seconds (fmtTime floors to the
-  // second and gates recompute on the rendered grid — same family as
-  // healerExposureAnalysis's G5 semantics).
-  const t0 = Math.floor(applyTs / 1000) * 1000;
+  const t0 = dispelReachSweepStartMs(applyTs, matchStartMs);
   let sawSamplePair = false;
   for (let t = t0; t <= applyTs + reactMs; t += 1000) {
     const targetPos = getUnitPositionAtTime(target, t, LOS_SWEEP_GAP_MS);
@@ -1409,11 +2601,39 @@ function anyDispellerReachable(
       if (!dPos) continue;
       sawSamplePair = true;
       if (distanceBetween(dPos, targetPos) > reachOf(d)) continue;
-      const los = zoneId ? hasLineOfSight(zoneId, dPos, targetPos) : null;
+      // LoS is topological — it reads the nearest RAW samples, never the
+      // interpolated point (`losAnalysis` contract; codex review of F-C9: an
+      // interpolated position between two in-LoS samples can sit inside a
+      // pillar and wrongly exempt the window). Distance keeps interpolating.
+      // No raw sample in reach of this second = LoS not disproven.
+      const dRaw = zoneId
+        ? getUnitRawPositionAtTime(d, t, LOS_SWEEP_GAP_MS)
+        : null;
+      const targetRaw = zoneId
+        ? getUnitRawPositionAtTime(target, t, LOS_SWEEP_GAP_MS)
+        : null;
+      const los =
+        zoneId && dRaw && targetRaw
+          ? hasLineOfSight(zoneId, dRaw, targetRaw)
+          : null;
       if (los !== false) return true; // in range and LoS not disproven
     }
   }
   return sawSamplePair ? false : null;
+}
+
+/**
+ * First instant of the reach sweep (user ruling A42 = A, 2026-09-30; triage
+ * missed-cleanse F-C8): the round-relative whole second `start + k·1000`,
+ * from ceil(applyRel) — never a sample before the CC landed. Flooring the
+ * ABSOLUTE epoch ms put the grid at "second + the match's ms remainder" and
+ * could sample before the debuff (95127ab4: 45.317 for a fear at 45.793).
+ */
+export function dispelReachSweepStartMs(
+  applyTs: number,
+  matchStartMs: number,
+): number {
+  return matchStartMs + Math.ceil((applyTs - matchStartMs) / 1000) * 1000;
 }
 
 /** Look-ahead window (seconds) for value gate d's re-CC check: only if the
@@ -1425,7 +2645,7 @@ export const DR_CHAIN_LOOKAHEAD_S = 10;
 
 /**
  * Value gate d: at applyTs the target's DR category for this CC was **fully
- * fresh** (getDRLevelAtTime is the single source; do not write a second copy
+ * fresh** (`drLevelAtLanding`, the one DR walk; do not write a second copy
  * of the chain-level math), AND within DR_CHAIN_LOOKAHEAD_S after the window
  * ended the enemy applied another CC of the same category. When both hold,
  * dispelling this window could have traded into a full-duration chain, so the
@@ -1434,8 +2654,9 @@ export const DR_CHAIN_LOOKAHEAD_S = 10;
 /**
  * DR level of THIS CC application (Full / 50% / Immune) — the 裁定册's
  * `afterDR` axis. Same single-source machinery as `computeDrChainRisk` right
- * below: buildCcCategoryHistory + getDRLevelAtTime, never a second copy of
- * the chain math. Root-category ids fall back to self-DR (`spell:<id>`)
+ * below: buildCcCategoryHistory (every DR source — fact6 F20: a control
+ * reflected back onto the target and a pet's count) + `drLevelAtLanding`,
+ * never a second copy of the chain math. Root-category ids fall back to self-DR (`spell:<id>`)
  * because of #24's ruling, but every signed root row has `afterDR: null`, so
  * the gate never consults this for them.
  */
@@ -1443,50 +2664,51 @@ function drLevelAtApply(
   target: ICombatUnit,
   ccSpellId: string,
   applyTs: number,
-  enemyIds: Set<string>,
   matchStartMs: number,
+  unitById?: ReadonlyMap<string, ICombatUnit>,
 ): "Full" | "50%" | "25%" | "Immune" {
   const category = getDRCategory(ccSpellId);
-  const instances = buildCcCategoryHistory(
+  const history = buildCcCategoryHistory(
     target,
     category,
-    enemyIds,
     matchStartMs,
+    unitById,
   );
-  return getDRLevelAtTime(
-    instances,
-    category,
-    (applyTs - matchStartMs) / 1000,
-    matchStartMs,
-  );
+  return drLevelAtLanding(history, { applyMs: applyTs, spellId: ccSpellId });
 }
 
-function computeDrChainRisk(
+export function computeDrChainRisk(
   target: ICombatUnit,
   ccSpellId: string,
   applyTs: number,
   windowEndTs: number,
   enemyIds: Set<string>,
   matchStartMs: number,
+  unitById?: ReadonlyMap<string, ICombatUnit>,
 ): boolean {
+  // Triage missed-cleanse F-C16: an id no DR family claims (a curse) falls
+  // back to `spell:<id>` self-DR, and a curse re-applied 0.08 s after its
+  // dispel then read "DR was fresh and the enemy re-CC'd right after"
+  // (9d899d10 Curse of Tongues). Only roots keep that self-DR (#24 ruling).
+  // (`getDRCategory` never returns empty, so the old `!category` test was
+  // dead.)
+  if (!(ccSpellId in DR_CATEGORY_MAP) && !ROOT_SPELL_IDS.has(ccSpellId))
+    return false;
   const category = getDRCategory(ccSpellId);
-  if (!category) return false;
 
   // Single source for instance history: buildCcCategoryHistory (drAnalysis) —
   // it shares the same pairing logic ccBreakAnalysis uses for remaining-
   // duration math. Two separate copies would be a breeding ground for drift.
-  const instances = buildCcCategoryHistory(
+  const history = buildCcCategoryHistory(
     target,
     category,
-    enemyIds,
     matchStartMs,
+    unitById,
   );
-  const level = getDRLevelAtTime(
-    instances,
-    category,
-    (applyTs - matchStartMs) / 1000,
-    matchStartMs,
-  );
+  const level = drLevelAtLanding(history, {
+    applyMs: applyTs,
+    spellId: ccSpellId,
+  });
   if (level !== "Full") return false;
 
   // Re-CC evidence: within the lookahead after the window ends, an enemy
@@ -1543,7 +2765,7 @@ export function wasRemovedByAllyDispel(
   // dispel. Same predicate the desktop dispel dash already uses.
   return allyCleanse.some(
     (d) =>
-      d.dispelKind !== "rider" &&
+      !isRiderDispel(d) &&
       d.removedSpellId === spellId &&
       d.targetName === targetName &&
       Math.abs(d.timeSeconds - removalSeconds) <= ALLY_DISPEL_MATCH_TOLERANCE_S,
@@ -1552,7 +2774,23 @@ export function wasRemovedByAllyDispel(
 
 /** The 50 ms SPELL_DISPEL ↔ SPELL_AURA_REMOVED pairing tolerance (see B11
  * above), shared by both removal matchers. */
-const ALLY_DISPEL_MATCH_TOLERANCE_S = 0.05;
+export const ALLY_DISPEL_MATCH_TOLERANCE_S = 0.05;
+
+/**
+ * One cleanse press removing several debuffs logs one SPELL_DISPEL per
+ * removal at the same instant — `allyCleanse` then holds that press several
+ * times. A cooldown / charge replay must count PRESSES (triage
+ * missed-cleanse F-B2, codex review: a two-charge Purify taking two debuffs
+ * at t = 10 read as both charges spent). Removal times within the dispel
+ * pairing tolerance of the previous kept one are the same press.
+ */
+export function distinctDispelPressSeconds(times: readonly number[]): number[] {
+  const out: number[] = [];
+  for (const t of [...times].sort((a, b) => a - b))
+    if (!out.length || t - out[out.length - 1]! > ALLY_DISPEL_MATCH_TOLERANCE_S)
+      out.push(t);
+  return out;
+}
 
 /** Did the debuffed unit free ITSELF with a rider (its own form shift /
  * movement ability, or a form expiring) at this removal? User ruling
@@ -1588,6 +2826,7 @@ export function formatMissedCleanseExemption(
     | "cleanseWasOnCD"
     | "cdBurnedOn"
     | "dispellersLockedOut"
+    | "dispellersBlockedS"
     | "losReachable"
     | "drChainRisk"
   >,
@@ -1603,8 +2842,7 @@ export function formatMissedCleanseExemption(
   // fact layer hides nothing), but carry explicit exemption context so the
   // model stops calling an impossible dispel a mistake.
   if (w.dispellersLockedOut)
-    out +=
-      " | dispellers were CC'd/locked out for most of this — not actionable";
+    out += ` | dispellers were CC'd/locked out${blockedForText(w.dispellersBlockedS)} — not actionable`;
   if (w.losReachable === false)
     out += " | no dispeller had range/line of sight — not actionable";
   if (w.drChainRisk)
@@ -1613,16 +2851,153 @@ export function formatMissedCleanseExemption(
   return out;
 }
 
+/**
+ * B-tier B13d (user ruling 2026-10-06, "照出但加注"): while this buff sat
+ * unpurged, did `ownerName` take the SAME caster's other copy of it off
+ * another enemy? 0068182d 0:17: Blessing of Freedom "unpurged for 8s" on the
+ * Paladin while the owner Spellstole the Paladin's Freedom off the Warrior
+ * at 0:20. The line still prints; this is the note it gains.
+ *
+ * "The same caster's" is read off the auras: the unit that applied this
+ * buff to the window's enemy (latest SPELL_AURA_APPLIED of the id at or
+ * before the window's start) must be the one that applied the removed copy
+ * to its target (latest at or before the removal). A copy whose source the
+ * log does not show is not claimed. The removal must fall inside the
+ * window, be the owner's, and be on a different enemy. The first such
+ * removal is returned.
+ */
+export function ownerRemovedOtherCopy(
+  miss: Pick<
+    IMissedPurgeWindow,
+    "timeSeconds" | "durationSeconds" | "enemyName" | "spellId"
+  >,
+  ownerName: string,
+  ourPurges: readonly IDispelEvent[],
+  enemies: ReadonlyArray<Pick<ICombatUnit, "name" | "auraEvents">>,
+  matchStartMs: number,
+): { atSeconds: number; isSpellSteal: boolean } | null {
+  /** who applied `spellId` to `unitName`, as of round second `atS` */
+  const sourceOf = (unitName: string, atS: number): string | undefined => {
+    const unit = enemies.find((e) => e.name === unitName);
+    const atMs = matchStartMs + atS * 1000 + AURA_SOURCE_SLACK_MS;
+    let src: string | undefined;
+    let best = -Infinity;
+    for (const a of unit?.auraEvents ?? []) {
+      if (a.logLine.event !== LogEvent.SPELL_AURA_APPLIED) continue;
+      if (a.spellId !== miss.spellId || a.timestamp > atMs) continue;
+      if (a.timestamp >= best) {
+        best = a.timestamp;
+        src = a.srcUnitId || undefined;
+      }
+    }
+    return src;
+  };
+  const caster = sourceOf(miss.enemyName, miss.timeSeconds);
+  if (!caster) return null;
+  const end = miss.timeSeconds + miss.durationSeconds;
+  const hit = ourPurges
+    .filter(
+      (p) =>
+        p.sourceName === ownerName &&
+        p.removedSpellId === miss.spellId &&
+        p.targetName !== miss.enemyName &&
+        p.timeSeconds >= miss.timeSeconds &&
+        p.timeSeconds <= end &&
+        sourceOf(p.targetName, p.timeSeconds) === caster,
+    )
+    .sort((a, b) => a.timeSeconds - b.timeSeconds)[0];
+  return hit
+    ? { atSeconds: hit.timeSeconds, isSpellSteal: hit.isSpellSteal }
+    : null;
+}
+/** A buff's SPELL_AURA_APPLIED may be written a tick after the instant a
+ * window or a removal is stamped at. */
+const AURA_SOURCE_SLACK_MS = 100;
+
+/**
+ * Why a missed-purge window was not actionable for the purgers its facts
+ * describe — the three conditions `formatMissedPurgeExemption` words as "not
+ * actionable". ONE predicate, two readers: that formatter (the prompt's
+ * `[MISSED PURGE OPPORTUNITY]` line) and the desktop dispel panel's scoped
+ * rows (B-tier X1), so the panel cannot label a window differently from the
+ * prompt.
+ *  - lockedOut: every purger was CC'd / locked out for the window;
+ *  - noReach: no purger had range / line of sight (`false` only — unknown is
+ *    not a reason);
+ *  - onCooldownThroughout: the removal came back with less of the buff left
+ *    than the reaction threshold plus its own cast time.
+ */
+export function missedPurgeNotActionable(
+  w: Pick<
+    IMissedPurgeWindow,
+    | "purgersLockedOut"
+    | "losReachable"
+    | "purgeReadyAtSeconds"
+    | "timeSeconds"
+    | "durationSeconds"
+    | "viaScopedTool"
+  >,
+): { lockedOut: boolean; noReach: boolean; onCooldownThroughout: boolean } {
+  return {
+    lockedOut: w.purgersLockedOut,
+    noReach: w.losReachable === false,
+    onCooldownThroughout:
+      w.purgeReadyAtSeconds !== undefined &&
+      w.timeSeconds + w.durationSeconds - w.purgeReadyAtSeconds <
+        MISSED_PURGE_THRESHOLD_S + (w.viaScopedTool?.castSeconds ?? 0),
+  };
+}
+
+/** fact2 (2026-10-20): the measured share behind a "CC'd/locked out"
+ *  exemption — ` for N.Ns of it` (the desktop dispel list prints the same
+ *  number through `blockedSecondsText`), floored to 0.1 s like the menu's
+ *  `dispellersCcS`. The gate is free time < the reaction bar, so the blocked
+ *  part can be well under half the window (a 2.2 s Sleep Walk in a 5 s
+ *  Blessing of Sanctuary); the old wording ("for most of this", or nothing)
+ *  claimed more than the log shows. Empty when unmeasured. */
+export function blockedSecondsText(
+  blockedS: number | undefined,
+): string | undefined {
+  if (blockedS === undefined) return undefined;
+  return (Math.floor(blockedS * 10 + 1e-9) / 10).toFixed(1);
+}
+function blockedForText(blockedS: number | undefined): string {
+  const s = blockedSecondsText(blockedS);
+  return s === undefined ? "" : ` for ${s}s of it`;
+}
+
 /** Feasibility-exemption suffix for the [MISSED PURGE OPPORTUNITY] line (same
  *  treatment as the cleanse side). */
 export function formatMissedPurgeExemption(
-  w: Pick<IMissedPurgeWindow, "purgersLockedOut" | "losReachable">,
+  w: Pick<
+    IMissedPurgeWindow,
+    | "purgersLockedOut"
+    | "purgersBlockedS"
+    | "losReachable"
+    | "purgeReadyAtSeconds"
+    | "timeSeconds"
+    | "durationSeconds"
+    | "viaScopedTool"
+  >,
 ): string {
   let out = "";
-  if (w.purgersLockedOut)
-    out += " | purgers were CC'd/locked out — not actionable";
-  if (w.losReachable === false)
+  // P-P5b = C: the owner's removal for this buff is a scoped one — name it,
+  // the facts after it are that tool's cooldown and reach
+  if (w.viaScopedTool)
+    out += ` | your removal for it: ${w.viaScopedTool.name} (${w.viaScopedTool.note})`;
+  const why = missedPurgeNotActionable(w);
+  if (why.lockedOut)
+    out += ` | purgers were CC'd/locked out${blockedForText(w.purgersBlockedS)} — not actionable`;
+  if (why.noReach)
     out += " | no purger had range/line of sight — not actionable";
+  // F-P7 (codex r2 09-30): say WHEN the purge came back — "on cooldown at
+  // application" alone hides 9 s of a buff that was purgeable after.
+  if (w.purgeReadyAtSeconds !== undefined) {
+    const left = w.timeSeconds + w.durationSeconds - w.purgeReadyAtSeconds;
+    out += why.onCooldownThroughout
+      ? ` | purge on cooldown for the whole buff (ready ${fmtTime(w.purgeReadyAtSeconds)}) — not actionable`
+      : ` | purge on cooldown at application — ready at ${fmtTime(w.purgeReadyAtSeconds)} (${Math.round(left)}s of the buff left)`;
+  }
   return out;
 }
 
@@ -1630,8 +3005,18 @@ export function reconstructDispelSummary(
   friends: ICombatUnit[],
   enemies: ICombatUnit[],
   // zoneId lets feasibility gate a look up arena geometry (LoS); omit it and
-  // the gate judges on range alone (still tri-state).
-  combat: { startTime: number; endTime: number; zoneId?: string },
+  // the gate judges on range alone (still tri-state). The legacy match carries
+  // it under startInfo (triage missed-cleanse F-C9: every caller passed the
+  // legacy match, so LoS was never evaluated).
+  combat: {
+    startTime: number;
+    endTime: number;
+    zoneId?: string;
+    startInfo?: { zoneId?: string; bracket?: string };
+    // the round's units, for `roundEndMs` (missed-cleanse F-C3); absent =
+    // the round ends at `endTime`
+    units?: Record<string, unknown> | ReadonlyArray<unknown>;
+  },
   // B45: friendly pet/guardian units whose dispels should be attributed to their owner player
   friendlyPets: ICombatUnit[] = [],
   // Coverage tail fix: dispels by enemy pets (Felhunter Devour Magic etc.)
@@ -1639,6 +3024,21 @@ export function reconstructDispelSummary(
   // purges — completed symmetrically with friendlyPets.
   enemyPets: ICombatUnit[] = [],
 ): IDispelSummary {
+  const zoneId = combat.zoneId ?? combat.startInfo?.zoneId;
+  const roundEnd = roundEndMs(combat);
+  // Whose side a damage row's source is on, for `postCcDamage`'s
+  // redistribution rule — the round's roster as every pressure reader builds
+  // it; the units this call was handed when the caller passed no roster.
+  const roundUnits = (
+    Array.isArray(combat.units)
+      ? combat.units
+      : Object.values(combat.units ?? {})
+  ) as ICombatUnit[];
+  const rosterUnits =
+    roundUnits.length > 0
+      ? roundUnits
+      : [...friends, ...enemies, ...friendlyPets, ...enemyPets];
+  const rosterSides = buildRosterSides(rosterUnits);
   const friendlyIds = new Set(friends.map((u) => u.id));
   const enemyIds = new Set(enemies.map((u) => u.id));
   // B45: pets are also considered friendly sources; owner lookup is via ownerId
@@ -1648,9 +3048,18 @@ export function reconstructDispelSummary(
   // with pets and totems as sources (a Felhunter's Spell Lock locks as hard
   // as a Kick; triage 2026-09-29 H23) — `enemyIds` stays players-only for its
   // other readers here (DR history, aura attribution).
-  const cannotCastSrcIds = new Set([...enemyIds, ...enemyPetIds]);
+  // `units`: the round's roster, so a removal the dispeller's PET casts
+  // (Devour Magic, Singe Magic) is asked of the pet and not of its owner
+  // (`cannotCastIntervalsForSpells`).
+  const cannotCastSrc: CannotCastSrc = {
+    enemyIds: new Set([...enemyIds, ...enemyPetIds]),
+    units: rosterUnits,
+    memo: new Map(),
+  };
   const friendlyPlayerById = new Map(friends.map((u) => [u.id, u]));
   const enemyPlayerById = new Map(enemies.map((u) => [u.id, u]));
+  // the CC's possible casters for the DR history's recast test
+  const rosterUnitById = new Map(rosterUnits.map((u) => [u.id, u]));
   const teamDispelTypes = buildTeamDispelTypes(friends);
   const teamDispelCapability = buildTeamDispelCapability(friends);
   // Reliability round 2 W1d (2026-09-25): a charmed teammate (Mind Control)
@@ -1658,7 +3067,51 @@ export function reconstructDispelSummary(
   // on them; only an offensive purge can, and only Magic (a5a8d31b: "your
   // Cleanse was available" on a Mind-Controlled rogue, a team with no
   // purge). Everything else keeps the defensive-cleanse capability.
-  const friendlyPurgers = friends.filter((f) => canOffensivePurge(f));
+  const friendlyPurgers = friends.filter((f) =>
+    canOffensivePurge(f, roundUnits.length > 0 ? roundUnits : undefined),
+  );
+  // a warlock purges only while the Felhunter is the pet out (F16 retest
+  // idx 50: a mid-round swap to a Sayaad) — the window must leave it the
+  // reaction bar of Felhunter time
+  const purgePetSpanCache = new Map<
+    string,
+    ReturnType<typeof warlockPurgePetSpans>
+  >();
+  const purgePetOutDuring = (
+    u: ICombatUnit,
+    fromMs: number,
+    toMs: number,
+  ): boolean => {
+    if (roundUnits.length === 0) return true;
+    if (!purgePetSpanCache.has(u.id))
+      purgePetSpanCache.set(
+        u.id,
+        warlockPurgePetSpans(u, roundUnits, combat.startTime),
+      );
+    const spans = purgePetSpanCache.get(u.id);
+    if (spans === undefined) return true;
+    const fromS = (fromMs - combat.startTime) / 1000;
+    const toS = (toMs - combat.startTime) / 1000;
+    return spans.some(
+      (sp) =>
+        Math.min(toS, sp.toSeconds) - Math.max(fromS, sp.fromSeconds) >=
+        MISSED_PURGE_THRESHOLD_S,
+    );
+  };
+  // …and the feasibility reads the same spans: outside them the warlock's
+  // purge is locked (`cannotCastOf`)
+  cannotCastSrc.purgePetAbsentOf = (u) => {
+    if (roundUnits.length === 0) return [];
+    if (!purgePetSpanCache.has(u.id))
+      purgePetSpanCache.set(
+        u.id,
+        warlockPurgePetSpans(u, roundUnits, combat.startTime),
+      );
+    const spans = purgePetSpanCache.get(u.id);
+    return spans === undefined
+      ? []
+      : purgePetAbsentSpansMs(spans, combat.startTime);
+  };
   const capableFor = (
     type: DispelType,
     target: ICombatUnit,
@@ -1671,7 +3124,10 @@ export function reconstructDispelSummary(
       ? {
           units:
             type === "Magic"
-              ? friendlyPurgers.filter((u) => u.id !== target.id)
+              ? friendlyPurgers.filter(
+                  (u) =>
+                    u.id !== target.id && purgePetOutDuring(u, fromMs, toMs),
+                )
               : [],
           charmed: true,
         }
@@ -1711,8 +3167,21 @@ export function reconstructDispelSummary(
       const removedSpellId = action.extraSpellId;
       if (!removedSpellId) continue;
 
-      const priority = getPriority(removedSpellId);
+      // F16 retest (2026-10-21, idx 13): a removed disarm is a control on a
+      // melee — filed Low it fell into the [MINOR DISPELS] fold below a DoT
+      // (0c8b1932 1:11: one Purify took Faerie Swarm and Ignite; the line
+      // named Ignite). The removal's tier only: an uncleansed disarm is no
+      // missed-cleanse (the signed verdict matrix has no disarm row).
+      const priority = removedDispelPriority(removedSpellId);
       const destUnit = unitMap.get(action.destUnitId);
+      const dispelToClassify = {
+        srcUnitId: action.srcUnitId,
+        srcOwnerId: unitMap.get(action.srcUnitId)?.ownerId,
+        spellId: action.spellId,
+        spellName: action.spellName,
+        timestamp: action.timestamp,
+      };
+      const dispelKind = classifyDispel(castIndex, dispelToClassify);
 
       // Treat a pet owned by a friendly player as a friendly source
       // Pets passed via friendlyPets are always friendly — we already filtered them by reaction
@@ -1760,12 +3229,19 @@ export function reconstructDispelSummary(
         isSpellSteal: isSteal,
         // B45: pet unit actions are always pet dispels; player actions only when srcUnit ≠ player
         isPetDispel: isPetUnit || action.srcUnitId !== unit.id,
-        dispelKind: classifyDispel(castIndex, {
-          srcUnitId: action.srcUnitId,
-          spellId: action.spellId,
-          spellName: action.spellName,
-          timestamp: action.timestamp,
-        }),
+        ...(isPetUnit || action.srcUnitId !== unit.id
+          ? { summonUnitId: isPetUnit ? unit.id : action.srcUnitId }
+          : {}),
+        dispelKind,
+        // a removal a press of its source made: the dispelling spell's own
+        // cast, or (fact2 C5) any press at that instant — a talent's rider
+        // on a differently named button
+        ...((dispelKind === "rider" &&
+          dispelCameWithOwnCast(castIndex, dispelToClassify)) ||
+        (dispelKind !== "deliberate" &&
+          dispelRodeOwnPress(castIndex, dispelToClassify))
+          ? { riderOfOwnCast: true as const }
+          : {}),
         wasFatal: false,
       };
 
@@ -1860,18 +3336,70 @@ export function reconstructDispelSummary(
       : isMeleeSpec(unit.spec)
         ? "melee"
         : "ranged";
-    const appliedTimes = new Map<string, { ts: number; spellName: string }[]>();
-    const removedTimes = new Map<
+    // agy 40-FT-94 #2 / #3, 40-FT-95: the CC pairings' walk
+    // (`buildCcCategoryHistory`, `disarmIntervals`) — keyed by spell AND
+    // source; a removal closes its source's open application, else the
+    // earliest open one of the spell (`matchPendingCcKey`: a BROKEN names the
+    // breaker), and is consumed. It used to pair every APPLIED with the
+    // first later removal of the spell, whoever's.
+    const windows = new Map<
       string,
-      { ts: number; brokenByDamage: boolean }[]
+      {
+        ts: number;
+        spellName: string;
+        removal: { ts: number; brokenByDamage: boolean };
+      }[]
     >();
+    const pending = new Map<
+      string,
+      { applyMs: number; spellId: string; spellName: string; src: string }
+    >();
+    const closeWindow = (
+      open: { applyMs: number; spellId: string; spellName: string },
+      removal: { ts: number; brokenByDamage: boolean },
+    ) =>
+      windows.set(open.spellId, [
+        ...(windows.get(open.spellId) ?? []),
+        { ts: open.applyMs, spellName: open.spellName, removal },
+      ]);
+    const lengthOf = (spellId: string, srcUnitId: string, applyMs: number) =>
+      ccFullDurationForApplication(
+        spellId,
+        enemyPlayerById.get(srcUnitId),
+        oppressingRoarOnAtMs(unit, spellId, applyMs),
+      ) ?? null;
 
-    for (const aura of unit.auraEvents) {
+    // A BROKEN line its aura's own REMOVED follows is not the end (FT-T08):
+    // the window closes at the REMOVED, which still carries "broken by
+    // damage" when a BROKEN_SPELL line from an enemy came before it — the
+    // lines this loop read as a removal before (it only reads enemy-sourced
+    // events).
+    const notTheEnd = supersededAuraBreaks(unit.auraEvents);
+    // WO3 Part 2 (readers.json fact 3): one re-broadcast is one
+    // application (`dropAuraRebroadcasts`) — it used to end the window at
+    // its own ms and pair the re-APPLIED with the same-ms REMOVED
+    // … unless its source recast it (`ccRecastSplitsResend`, fact1215
+    // 112-1 — codex 20-F15-35: a Polymorph recast 1 ms after its expiry
+    // read as one 7 s control here and a late cleanse)
+    for (const aura of dropAuraRebroadcasts(
+      unit.auraEvents,
+      ccRecastSplitsResend(unit.id, unit.auraEvents, (id) => unitMap.get(id)),
+    )) {
       const spellId = aura.spellId;
       if (!spellId) continue;
 
-      // Only CC applied by enemies
-      if (!enemyIds.has(aura.srcUnitId)) continue;
+      // Only CC applied by enemies. A BROKEN row names the BREAKER, whoever
+      // that is (raw.txt: Dragon's Breath broken by a warrior's Champion's
+      // Spear logs the warrior; an enemy pet's Kill Command logs the pet; a
+      // teammate's Blessing of Sacrifice or the holder's own Time Dilation
+      // logs that friendly — 65 of 1,360 BROKEN_SPELL rows in 60 matches) —
+      // agy 40-FT-96 / 40-FT-97: those rows were dropped here, so the window
+      // never read "broken by damage". A break only closes an open
+      // application, and only an enemy's opens one
+      const isBreak =
+        aura.logLine.event === LogEvent.SPELL_AURA_BROKEN ||
+        aura.logLine.event === LogEvent.SPELL_AURA_BROKEN_SPELL;
+      if (!enemyIds.has(aura.srcUnitId) && !isBreak) continue;
 
       // B11 fix: skip BUFF auras. When a friendly Mage spellsteals an enemy buff (e.g.
       // Blessing of Freedom 1044), the resulting SPELL_AURA_APPLIED on the Mage carries
@@ -1913,10 +3441,16 @@ export function reconstructDispelSummary(
       // spellEffectData — one data refresh and this would have blown up.
       // Stellar Protection tier (12.1): here the aura's caster is known
       // precisely, so gate on that unit's spec rather than team composition.
+      // (on the APPLIED only: a removal row's source can be the breaker — an
+      // application this skipped is never open, so its removal pairs nothing)
       const casterIsBalance =
         enemyPlayerById.get(aura.srcUnitId)?.spec ===
         CombatUnitSpec.Druid_Balance;
-      if (getDispelPenalty(spellId, casterIsBalance, aura.timestamp)) continue;
+      if (
+        aura.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
+        getDispelPenalty(spellId, casterIsBalance, aura.timestamp)
+      )
+        continue;
 
       // Skip spells that cannot be dispelled (DispelType=None in game data)
       const dispelType = getDispelType(spellId);
@@ -1925,29 +3459,67 @@ export function reconstructDispelSummary(
       // Only flag if the team has someone capable of removing this debuff type
       if (!teamDispelTypes.has(dispelType)) continue;
 
+      const key = `${spellId}:${aura.srcUnitId}`;
       if (aura.logLine.event === LogEvent.SPELL_AURA_APPLIED) {
-        const bucket = appliedTimes.get(spellId) ?? [];
-        appliedTimes.set(spellId, [
-          ...bucket,
-          {
-            ts: aura.timestamp,
-            spellName: getEnglishSpellName(spellId, aura.spellName),
-          },
-        ]);
+        // work order 2026-10-15 Part 2 (user 「好」): a re-APPLIED while this
+        // source's application of the spell is still open and inside its
+        // length is that application (`reAppliedIsSameApplication`; a recast
+        // by the source — `ccRecastBetween` — is a new one); past it, or
+        // recast, the open one's REMOVED was lost and it ends at this
+        // application or its length, whichever is first
+        const open = pending.get(key);
+        if (open !== undefined) {
+          const lengthS = lengthOf(spellId, aura.srcUnitId, open.applyMs);
+          const src = enemyPlayerById.get(aura.srcUnitId);
+          if (
+            reAppliedIsSameApplication(
+              open.applyMs,
+              aura.timestamp,
+              lengthS,
+              src !== undefined &&
+                ccRecastBetween(
+                  [src],
+                  spellId,
+                  unit.id,
+                  open.applyMs,
+                  aura.timestamp,
+                ),
+            )
+          )
+            continue;
+          closeWindow(open, {
+            ts: Math.min(
+              aura.timestamp,
+              lengthS === null ? Infinity : open.applyMs + lengthS * 1000,
+            ),
+            brokenByDamage: false,
+          });
+        }
+        pending.set(key, {
+          applyMs: aura.timestamp,
+          spellId,
+          spellName: getEnglishSpellName(spellId, aura.spellName),
+          src: aura.srcUnitId,
+        });
       } else if (
         aura.logLine.event === LogEvent.SPELL_AURA_REMOVED ||
         aura.logLine.event === LogEvent.SPELL_AURA_BROKEN ||
         aura.logLine.event === LogEvent.SPELL_AURA_BROKEN_SPELL
       ) {
+        if (notTheEnd.has(aura)) continue;
+        const k = matchPendingCcKey(pending, spellId, key);
+        const open = k ? pending.get(k) : undefined;
+        if (!k || !open) continue;
+        pending.delete(k);
         const brokenByDamage =
-          aura.logLine.event === LogEvent.SPELL_AURA_BROKEN_SPELL;
-        const bucket = removedTimes.get(spellId) ?? [];
-        removedTimes.set(spellId, [
-          ...bucket,
-          { ts: aura.timestamp, brokenByDamage },
-        ]);
+          aura.logLine.event === LogEvent.SPELL_AURA_BROKEN_SPELL ||
+          auraBreaksBeforeRemoved(unit.auraEvents, aura).some(
+            (b) => b.logLine.event === LogEvent.SPELL_AURA_BROKEN_SPELL,
+          );
+        closeWindow(open, { ts: aura.timestamp, brokenByDamage });
       }
     }
+    // an application never removed stays out (no removal to pair, as before)
 
     // Ensure efficiency entry exists for this unit
     const effKey = unit.id;
@@ -1964,19 +3536,29 @@ export function reconstructDispelSummary(
     const eff = efficiencyMap.get(effKey);
     if (!eff) continue;
 
-    for (const [spellId, applications] of appliedTimes) {
+    for (const [spellId, applications] of windows) {
       const priority = getPriority(spellId);
-      const removals = removedTimes.get(spellId) ?? [];
 
-      for (const { ts: applyTs, spellName } of applications) {
-        const removal = removals.find((r) => r.ts >= applyTs);
-        if (!removal) continue;
+      for (const { ts: applyTs, spellName, removal: paired } of applications) {
+        // Triage 2026-09-29 missed-cleanse F-C3 (with cc-dr F-CI1, one round
+        // end): a window ends at `roundEndMs`. A CC still up when the round
+        // ended paired with a removal logged after it and read as a full-
+        // length uncleansed window (ba8c0510 Polymorph: 0.6 s in the round,
+        // "6s", missed-cleanse High). A CC applied at or after the end is
+        // not in the round. A removal after the end is the round ending, not
+        // a dispel, a rider or a break.
+        if (applyTs >= roundEnd) continue;
+        const clippedAtRoundEnd = paired.ts > roundEnd;
+        const removal = clippedAtRoundEnd
+          ? { ts: roundEnd, brokenByDamage: false }
+          : paired;
 
         const durationSeconds = (removal.ts - applyTs) / 1000;
 
         // D1: freed by its own rider (form shift / form expiry) → not a
         // cleanse window at all (user ruling 2026-09-24).
         if (
+          !clippedAtRoundEnd &&
           wasRemovedBySelfRider(
             allyCleanse,
             spellId,
@@ -1986,12 +3568,14 @@ export function reconstructDispelSummary(
         )
           continue;
         // Was removed by a friendly dispel near that removal time?
-        const removedByDispel = wasRemovedByAllyDispel(
-          allyCleanse,
-          spellId,
-          unit.name,
-          (removal.ts - combat.startTime) / 1000,
-        );
+        const removedByDispel =
+          !clippedAtRoundEnd &&
+          wasRemovedByAllyDispel(
+            allyCleanse,
+            spellId,
+            unit.name,
+            (removal.ts - combat.startTime) / 1000,
+          );
 
         // CC broke from incoming damage — not a missed cleanse, but not a healer cleanse either
         if (removal.brokenByDamage) {
@@ -2022,8 +3606,9 @@ export function reconstructDispelSummary(
             // cleanseCount++ 之后:驱散确实发生了,效率统计照记,只有
             // 「批评窗口」被拦。
             const lateVerdict = dispelVerdictOf(spellId);
+            let lateCell: DispelWorth | HealerCell | undefined;
             if (lateVerdict !== null) {
-              let lateWorth: string =
+              let lateWorth: DispelWorth | HealerCell =
                 role === "healer"
                   ? lateVerdict.healer
                   : role === "melee"
@@ -2035,13 +3620,14 @@ export function reconstructDispelSummary(
                   unit,
                   spellId,
                   applyTs,
-                  enemyIds,
                   combat.startTime,
+                  rosterUnitById,
                 ) !== "Full"
               ) {
                 lateWorth = lateVerdict.afterDR;
               }
               if (lateWorth === "skip") continue;
+              lateCell = lateWorth;
               {
                 const fromS = Math.floor((applyTs - combat.startTime) / 1000);
                 const toS = Math.floor((removal.ts - combat.startTime) / 1000);
@@ -2057,19 +3643,24 @@ export function reconstructDispelSummary(
             }
             const windowDispelType = getDispelType(spellId) as DispelType;
             const windowEndMs = applyTs + POST_CC_PRESSURE_WINDOW_S * 1000;
-            const postCcDamage = unit.damageIn
-              .filter(
-                (d) =>
-                  d.logLine.timestamp >= applyTs &&
-                  d.logLine.timestamp <= windowEndMs,
-              )
-              .reduce((sum, d) => sum + Math.abs(d.effectiveAmount), 0);
+            const postCcDamage = sumLandedPressure(
+              unit,
+              applyTs,
+              windowEndMs,
+              rosterSides,
+            );
+            const lateDied = targetDiedAround(unit, applyTs, removal.ts);
             const lateGate = consequenceGatedPriority(
               priority,
               postCcDamage,
-              targetDiedAround(unit, applyTs, removal.ts),
+              lateDied,
             );
+            const lateW =
+              lateCell !== undefined
+                ? consequenceGatedWorth(lateCell, postCcDamage, lateDied)
+                : undefined;
             lateCleanseWindows.push({
+              ...(lateW ? { worth: lateW.worth } : {}),
               timeSeconds: (applyTs - combat.startTime) / 1000,
               durationSeconds,
               targetName: unit.name,
@@ -2077,7 +3668,8 @@ export function reconstructDispelSummary(
               spellName,
               spellId,
               priority: lateGate.priority,
-              consequenceDemoted: lateGate.consequenceDemoted,
+              consequenceDemoted:
+                lateGate.consequenceDemoted || (lateW?.demoted ?? false),
               dispelType: windowDispelType,
               postCcDamage,
               cleanseWasOnCD: false,
@@ -2099,8 +3691,39 @@ export function reconstructDispelSummary(
                 ),
                 applyTs,
                 removal.ts,
-                cannotCastSrcIds,
+                cannotCastSrc,
                 MISSED_CLEANSE_THRESHOLD_S * 1000,
+                // FT-T10: asked for the dispel(s) each would press
+                (d) =>
+                  removalSpellIdsFor(
+                    d,
+                    windowDispelType,
+                    capableFor(windowDispelType, unit, applyTs, removal.ts)
+                      .charmed,
+                  ),
+              ),
+              ...(() => {
+                const cap = capableFor(
+                  windowDispelType,
+                  unit,
+                  applyTs,
+                  removal.ts,
+                );
+                const b = dispellersBlockedMsInWindow(
+                  aliveAt(cap.units, applyTs),
+                  applyTs,
+                  removal.ts,
+                  cannotCastSrc,
+                  (d) => removalSpellIdsFor(d, windowDispelType, cap.charmed),
+                );
+                return b === null ? {} : { dispellersBlockedS: b / 1000 };
+              })(),
+              ...targetSelfBlocked(
+                unit,
+                windowDispelType,
+                applyTs,
+                removal.ts,
+                cannotCastSrc,
               ),
               losReachable: true,
               drChainRisk: computeDrChainRisk(
@@ -2110,6 +3733,7 @@ export function reconstructDispelSummary(
                 removal.ts,
                 enemyIds,
                 combat.startTime,
+                rosterUnitById,
               ),
               lateDispelSeconds: durationSeconds,
             });
@@ -2143,8 +3767,9 @@ export function reconstructDispelSummary(
           // 晚了」适用于所有签字档位。未签字 id 不受此门(走旧优先级,无
           // 裁定依据不豁免)。
           const windowVerdict = dispelVerdictOf(spellId);
+          let windowCell: DispelWorth | HealerCell | undefined;
           if (windowVerdict !== null) {
-            let effectiveWorth: string =
+            let effectiveWorth: DispelWorth | HealerCell =
               role === "healer"
                 ? windowVerdict.healer
                 : role === "melee"
@@ -2156,13 +3781,14 @@ export function reconstructDispelSummary(
                 unit,
                 spellId,
                 applyTs,
-                enemyIds,
                 combat.startTime,
+                rosterUnitById,
               ) !== "Full"
             ) {
               effectiveWorth = windowVerdict.afterDR;
             }
             if (effectiveWorth === "skip") continue;
+            windowCell = effectiveWorth;
             {
               const fromS = Math.floor((applyTs - combat.startTime) / 1000);
               const toS = Math.floor((removal.ts - combat.startTime) / 1000);
@@ -2205,7 +3831,10 @@ export function reconstructDispelSummary(
                 dispeller,
                 applyTs,
                 removal.ts,
-                cannotCastSrcIds,
+                cannotCastSrc,
+                // FT-T10: a lockout on another school leaves the
+                // dispel (the spells `removalSpellIdsFor` names)
+                removalSpellIdsFor(dispeller, windowDispelType, charmed),
               ),
             );
           if (allDispellersBlocked) {
@@ -2217,13 +3846,12 @@ export function reconstructDispelSummary(
 
           // Measure post-CC pressure: damage taken in first POST_CC_PRESSURE_WINDOW_S seconds
           const windowEndMs = applyTs + POST_CC_PRESSURE_WINDOW_S * 1000;
-          const postCcDamage = unit.damageIn
-            .filter(
-              (d) =>
-                d.logLine.timestamp >= applyTs &&
-                d.logLine.timestamp <= windowEndMs,
-            )
-            .reduce((sum, d) => sum + Math.abs(d.effectiveAmount), 0);
+          const postCcDamage = sumLandedPressure(
+            unit,
+            applyTs,
+            windowEndMs,
+            rosterSides,
+          );
 
           let cleanseWasOnCD = false;
           let cdBurnedOn:
@@ -2241,7 +3869,9 @@ export function reconstructDispelSummary(
                   d,
                   applyTs,
                   removal.ts,
-                  cannotCastSrcIds,
+                  cannotCastSrc,
+                  // FT-T10: the gate's spells above
+                  removalSpellIdsFor(d, windowDispelType, charmed),
                 ),
             );
 
@@ -2272,6 +3902,18 @@ export function reconstructDispelSummary(
               // `proc`, 484 events per 250 logs) used to count here as a burned
               // 8s cleanse cooldown and suppressed real missed-cleanse findings.
               if (c.dispelKind !== "deliberate") return false;
+              // …and only a press of a spell that removes this debuff's type:
+              // the cleanse that was "on CD" must be the one that could take
+              // it (fact5 D1, 04a1bde9 2:27: a Naturalize — Magic / Poison —
+              // read as the burned cleanse for a Curse of Tongues while the
+              // Curse removal Cauterizing Flame was ready). A spell the type
+              // table does not know keeps the old reading.
+              const removes = dispelTypesRemovedBy(
+                c.dispelSpellId,
+                specByName.get(c.sourceName) as CombatUnitSpec,
+              );
+              if (removes.size > 0 && !removes.has(windowDispelType))
+                return false;
               const { cooldownSeconds } = cleanseRecoveryOf(
                 c.dispelSpellId,
                 pvpTalentsByName.get(c.sourceName),
@@ -2325,12 +3967,18 @@ export function reconstructDispelSummary(
             }
           }
 
+          const missDied = targetDiedAround(unit, applyTs, removal.ts);
           const missGate = consequenceGatedPriority(
             priority,
             postCcDamage,
-            targetDiedAround(unit, applyTs, removal.ts),
+            missDied,
           );
+          const missW =
+            windowCell !== undefined
+              ? consequenceGatedWorth(windowCell, postCcDamage, missDied)
+              : undefined;
           missedCleanseWindows.push({
+            ...(missW ? { worth: missW.worth } : {}),
             timeSeconds: (applyTs - combat.startTime) / 1000,
             durationSeconds,
             targetName: unit.name,
@@ -2338,11 +3986,38 @@ export function reconstructDispelSummary(
             spellName,
             spellId,
             priority: missGate.priority,
-            consequenceDemoted: missGate.consequenceDemoted,
+            consequenceDemoted:
+              missGate.consequenceDemoted || (missW?.demoted ?? false),
             dispelType: windowDispelType,
             postCcDamage,
             cleanseWasOnCD,
             cdBurnedOn,
+            ...(() => {
+              // the types every capable dispeller's own button removes
+              // (a backlash only some of them would take is not claimed)
+              let types: Set<string> | undefined;
+              for (const d of capableDispellers) {
+                const own = new Set<string>();
+                for (const sid of removalSpellIdsFor(
+                  d,
+                  windowDispelType,
+                  charmed,
+                ))
+                  for (const t of dispelTypesRemovedBy(sid, d.spec)) own.add(t);
+                own.add(windowDispelType);
+                types = types
+                  ? new Set([...types].filter((t) => own.has(t)))
+                  : own;
+              }
+              const co = coPresentBacklash(
+                unit,
+                types ?? new Set([windowDispelType]),
+                applyTs,
+                removal.ts,
+                enemyPlayerById,
+              );
+              return co.length ? { coRemovesBacklash: co.join("、") } : {};
+            })(),
             // Feasibility / value gates (user-decided 2026-08-02; measured on
             // a 150-match corpus, together they hold back ~24% of the blame
             // candidates):
@@ -2351,20 +4026,40 @@ export function reconstructDispelSummary(
               capableDispellers,
               applyTs,
               removal.ts,
-              cannotCastSrcIds,
+              cannotCastSrc,
               MISSED_CLEANSE_THRESHOLD_S * 1000,
+              // FT-T10: asked for the dispel(s) each would press
+              (d) => removalSpellIdsFor(d, windowDispelType, charmed),
+            ),
+            ...(() => {
+              const b = dispellersBlockedMsInWindow(
+                capableDispellers,
+                applyTs,
+                removal.ts,
+                cannotCastSrc,
+                (d) => removalSpellIdsFor(d, windowDispelType, charmed),
+              );
+              return b === null ? {} : { dispellersBlockedS: b / 1000 };
+            })(),
+            ...targetSelfBlocked(
+              unit,
+              windowDispelType,
+              applyTs,
+              removal.ts,
+              cannotCastSrc,
             ),
             losReachable: anyDispellerReachable(
               capableDispellers,
               unit,
               applyTs,
               MISSED_CLEANSE_THRESHOLD_S * 1000,
-              combat.zoneId,
+              zoneId,
               (d) =>
                 dispelReachYards(
                   d,
                   CLEANSE_SPELLS_BY_TYPE[windowDispelType][d.spec],
                 ),
+              combat.startTime,
             ),
             drChainRisk: computeDrChainRisk(
               unit,
@@ -2373,6 +4068,7 @@ export function reconstructDispelSummary(
               removal.ts,
               enemyIds,
               combat.startTime,
+              rosterUnitById,
             ),
           });
         }
@@ -2386,17 +4082,48 @@ export function reconstructDispelSummary(
   // Missed offensive purge detection: Critical/High magic buffs on enemies that sat >threshold
   // without being purged, when our team had the capability to purge.
   const missedPurgeWindows: IMissedPurgeWindow[] = [];
+  const scopedMissedPurgeWindows: IMissedPurgeWindow[] = [];
   // (friendlyPurgers: declared once at the top of this function, W1d)
+  // P-P5b = C: friends holding a scoped removal — each answers only what its
+  // scope covers, and only Shattering Throw answers at all
+  // (`scopedToolAnswers`).
+  const scopedHolders = friends
+    .map((unit) => ({
+      unit,
+      tools: scopedPurgeToolsOf(
+        unit,
+        roundUnits.length > 0 ? roundUnits : undefined,
+      ),
+    }))
+    .filter((h) => h.tools.length > 0);
+  /** the scoped tool this holder would answer `spellId` with; like any purge
+   *  with a cooldown it answers Critical buffs only (A19 = C) */
+  const scopedToolFor = (
+    h: (typeof scopedHolders)[number],
+    spellId: string,
+    priority: DispelPriority,
+  ): IScopedPurgeTool | undefined =>
+    h.tools.find(
+      (t) =>
+        scopedToolAnswers(t, spellId) &&
+        (priority === "Critical" ||
+          !(purgeRecoveryOf(h.unit, t.castSpellId).cooldownSeconds > 0)),
+    );
 
-  if (friendlyPurgers.length > 0) {
+  if (friendlyPurgers.length > 0 || scopedHolders.length > 0) {
     for (const enemy of enemies) {
       const appliedTimes = new Map<
         string,
-        { ts: number; spellName: string }[]
+        { ts: number; spellName: string; srcUnitId: string }[]
       >();
-      const removedTimes = new Map<string, number[]>();
+      const removedTimes = new Map<
+        string,
+        Array<{ ts: number; src: string | undefined; broken: boolean }>
+      >();
 
-      for (const aura of enemy.auraEvents) {
+      // one re-broadcast is one application (02c8e3ac: an Obsidian Scales
+      // run cut to 3.3 s of its 12 s)
+      for (const aura of dropAuraRebroadcasts(enemy.auraEvents)) {
         const spellId = aura.spellId;
         if (!spellId) continue;
         // Only consider buffs applied by the enemy's own side — skip debuffs our team placed on them
@@ -2406,10 +4133,13 @@ export function reconstructDispelSummary(
         // weirdness) is not something our offensive purge should handle.
         const auraType = getAuraType(aura);
         if (auraType !== null && auraType !== "BUFF") continue;
-        if (getDispelType(spellId) !== "Magic") continue;
-        if (PURGE_BLOCKLIST.has(spellId)) continue;
         const priority = getPriority(spellId, friends);
         if (priority !== "Critical" && priority !== "High") continue;
+        if (
+          !(friendlyPurgers.length > 0 && isMagicPurgeTarget(spellId)) &&
+          !scopedHolders.some((h) => scopedToolFor(h, spellId, priority))
+        )
+          continue;
 
         if (aura.logLine.event === LogEvent.SPELL_AURA_APPLIED) {
           const bucket = appliedTimes.get(spellId) ?? [];
@@ -2418,6 +4148,7 @@ export function reconstructDispelSummary(
             {
               ts: aura.timestamp,
               spellName: getEnglishSpellName(spellId, aura.spellName),
+              srcUnitId: aura.srcUnitId,
             },
           ]);
         } else if (
@@ -2426,58 +4157,193 @@ export function reconstructDispelSummary(
           aura.logLine.event === LogEvent.SPELL_AURA_BROKEN_SPELL
         ) {
           const bucket = removedTimes.get(spellId) ?? [];
-          removedTimes.set(spellId, [...bucket, aura.timestamp]);
+          removedTimes.set(spellId, [
+            ...bucket,
+            {
+              ts: aura.timestamp,
+              src: aura.srcUnitId || undefined,
+              // a BROKEN row names the breaker, not the aura's caster
+              broken: aura.logLine.event !== LogEvent.SPELL_AURA_REMOVED,
+            },
+          ]);
         }
       }
 
       for (const [spellId, applications] of appliedTimes) {
         const priority = getPriority(spellId, friends);
         const removals = removedTimes.get(spellId) ?? [];
+        /** per source: the end of the last window emitted for this spell on
+         * this enemy (codex 20-F15-09: two casters' re-logs interleave) */
+        const emittedEndBySrc = new Map<string, number>();
 
-        for (const { ts: applyTs, spellName } of applications) {
-          const removalTs = removals.find((r) => r >= applyTs);
-          const durationSeconds =
-            ((removalTs ?? combat.endTime) - applyTs) / 1000;
+        for (const { ts: applyTs, spellName, srcUnitId } of applications) {
+          // The window ends at the round's end (`roundEndMs` — the one the
+          // uncleansed windows above stop at, F-C3). A round's units keep
+          // the rows logged after its ending death, so a buff still up then
+          // paired with a removal written in the strip between two rounds,
+          // or with none and ran to `combat.endTime`: Power Infusion up
+          // 7.7 s when a Solo Shuffle round ended at 2:29 read "unpurged for
+          // 14s" (287ee68f round 2: its REMOVED is 6.0 s after the death,
+          // 4.0 s after `combat.endTime`). A buff applied at or after the
+          // end is not in the round, and neither is a removal — or a purge
+          // of ours — logged after it. Everything below (the length, the
+          // reaction floor, "purged by us", the purgers' lockouts, the
+          // pressure reading) is asked of [applyTs, windowEndMs].
+          if (applyTs >= roundEnd) continue;
+          // its own removal: the caster's REMOVED (or a BROKEN / a row with
+          // no source) — two priests' shields on one target are two
+          // applications (codex 60-POSTHOC-10c #3: B's Power Word: Shield
+          // read 8 s off A's removal, 15 s in the log); and an application
+          // of it by the same caster past this one's official length means
+          // this one's REMOVED was lost — it ended at its length (10c #2: a
+          // Power Infusion at 10 s with no REMOVED took the 150 s one's
+          // removal, "unpurged for 145s")
+          const ownRemoval = removals.find(
+            (r) =>
+              r.ts >= applyTs &&
+              (r.broken || r.src === undefined || r.src === srcUnitId),
+          )?.ts;
+          const officialS = officialDurationS(spellId, undefined, applyTs);
+          const lostAt =
+            officialS === null
+              ? undefined
+              : applications.find(
+                    (a) =>
+                      a.srcUnitId === srcUnitId &&
+                      a.ts > applyTs + officialS * 1000 &&
+                      (ownRemoval === undefined || a.ts < ownRemoval),
+                  )
+                ? applyTs + officialS * 1000
+                : undefined;
+          const removalTs = lostAt ?? ownRemoval;
+          const windowEndMs = Math.min(removalTs ?? combat.endTime, roundEnd);
+          const durationSeconds = (windowEndMs - applyTs) / 1000;
+          // F15 / fact1215 R8: an APPLIED inside a window already emitted for
+          // this spell by the same source, ending at the same removal, is
+          // that aura re-logged
+          // (62fdbf2e 0:14: one Alter Time cast 0:13.35, re-APPLIED 0:14.88
+          // during Mass Invisibility with no REMOVED — a second "unpurged
+          // for 3s"; 105-1: Power Infusion 0:18 with its 0:21 re-log printed
+          // as two windows of one buff). Only a window emitted inside the
+          // round absorbs it (see below).
+          // the SAME source's aura: another caster's press ending at the
+          // same removal is a new application (codex 20-F15-08: two priests'
+          // Power Infusions, the second feasible, read as one)
+          if (emittedEndBySrc.get(srcUnitId) === windowEndMs) continue;
 
           if (durationSeconds < MISSED_PURGE_THRESHOLD_S) continue;
 
           // Was it actually purged by our team within this window?
           const applyRelative = (applyTs - combat.startTime) / 1000;
+          // The window's end on the purge events' own clock: a purge shares
+          // its timestamp with the removal it causes, and `applyRelative +
+          // durationSeconds` is not that number in floating point (75.922 +
+          // 6.933 = 82.85499999999999 < the purge's 82.855 — a Shattering
+          // Throw that took Blessing of Protection off read "unpurged for
+          // 7s", 17664ae3 round 1).
+          const endRelative = (windowEndMs - combat.startTime) / 1000;
           const purgedByUs = ourPurges.some(
             (p) =>
               p.removedSpellId === spellId &&
               p.targetName === enemy.name &&
               p.timeSeconds >= applyRelative &&
-              p.timeSeconds <= applyRelative + durationSeconds,
+              p.timeSeconds <= endRelative,
           );
 
           if (!purgedByUs) {
             // Only flag if at least one purger was free during the window AND
             // the priority meets the bar for that purger's spec (CD-gated purgers
             // only get flagged for Critical misses — they can't spam purge every GCD).
-            const windowEndMs = removalTs ?? combat.endTime;
-            const eligiblePurgers = friendlyPurgers.filter(
-              (p) => priority === "Critical" || !CD_GATED_PURGERS.has(p.spec),
-            );
-            const allPurgersBlocked =
-              eligiblePurgers.length === 0 ||
-              eligiblePurgers.every((purger) =>
+            const generalPurgers = isMagicPurgeTarget(spellId)
+              ? friendlyPurgers.filter(
+                  (p) =>
+                    (priority === "Critical" || !isCdGatedPurger(p)) &&
+                    purgePetOutDuring(p, applyTs, windowEndMs),
+                )
+              : [];
+            const generalOpen =
+              generalPurgers.length > 0 &&
+              !generalPurgers.every((purger) =>
                 isPurgerFullyBlockedDuringWindow(
                   purger,
                   applyTs,
                   windowEndMs,
-                  cannotCastSrcIds,
+                  cannotCastSrc,
+                  // FT-T10: a lockout on another school leaves the purge
+                  [...purgeSpellIdsOf(purger)],
                 ),
               );
-            if (!allPurgersBlocked) {
-              // Expected buff duration from spell data
-              // Purge CD state: look back at ourPurges for each eligible purger.
-              // Only meaningful for CD-gated purgers (Evoker 10s, DH/Warlock/Priest 8s).
-              // Free-purge specs (Shaman, Mage) never have their CD "burned" — skip them.
-              const cdGatedEligible = eligiblePurgers.filter((p) =>
-                CD_GATED_PURGERS.has(p.spec),
-              );
-              let purgeWasOnCD = false;
+            // P-P5b = C: scoped holders whose tool covers this buff and who
+            // were not locked out for the whole window
+            const scoped = scopedHolders.flatMap((h) => {
+              const tool = scopedToolFor(h, spellId, priority);
+              return tool !== undefined &&
+                // a cast-time removal needs the reaction bar plus its cast
+                // (Shattering Throw: 1.5 s; fastest observed removal 2.3 s
+                // after the shield, median 3.1 s)
+                durationSeconds >=
+                  MISSED_PURGE_THRESHOLD_S + tool.castSeconds &&
+                !isPurgerFullyBlockedDuringWindow(
+                  h.unit,
+                  applyTs,
+                  windowEndMs,
+                  cannotCastSrc,
+                  // FT-T10: asked for the scoped tool's own press
+                  [tool.castSpellId],
+                )
+                ? [{ unit: h.unit, tool }]
+                : [];
+            });
+            const scopedToolOf = new Map(
+              scoped.map((x) => [x.unit.id, x.tool]),
+            );
+            // the purgers the window-level facts speak for: the general Magic
+            // purgers when one carried the window (unchanged by P-P5b), else
+            // the scoped holders — and then the window goes to
+            // `scopedMissedPurgeWindows`, not to the team's list
+            const eligiblePurgers = generalOpen
+              ? generalPurgers
+              : scoped.map((x) => x.unit);
+            const readyAtOf = (p: ICombatUnit): number => {
+              const tool = generalOpen ? undefined : scopedToolOf.get(p.id);
+              return tool !== undefined
+                ? abilitiesReadyAtSeconds(
+                    p,
+                    new Set([tool.castSpellId]),
+                    new Set(),
+                    applyTs,
+                    combat.startTime,
+                  )
+                : purgeReadyAtSeconds(
+                    p,
+                    new Set(
+                      ourPurges
+                        .filter((x) => x.sourceName === p.name)
+                        .map((x) => x.dispelSpellId),
+                    ),
+                    applyTs,
+                    combat.startTime,
+                  );
+            };
+            const reachOf = (d: ICombatUnit): number => {
+              const tool = generalOpen ? undefined : scopedToolOf.get(d.id);
+              return tool !== undefined
+                ? scopedToolReachYards(d, tool)
+                : dispelReachYards(d, PURGE_SPELLS_BY_SPEC[d.spec]);
+            };
+            // "free for less than the reaction bar" — for a cast-time tool
+            // the bar is the reaction time PLUS the cast (codex review of
+            // P-P5b: a warrior stunned until 3.5 s before an Ice Block ended
+            // could not have thrown it off)
+            const freeBarMs = (tool?: IScopedPurgeTool): number =>
+              (MISSED_PURGE_THRESHOLD_S + (tool?.castSeconds ?? 0)) * 1000;
+            if (eligiblePurgers.length > 0) {
+              // F-P7 (codex r1 / r2 09-30, ruling A19 = C): the team's purge
+              // is back at the earliest eligible purger's readiness, read from
+              // its cooldown-consuming casts — not a constant 8 s, not only
+              // when every purger is CD-gated, not from removals only.
+              const teamReadyAt = Math.min(...eligiblePurgers.map(readyAtOf));
+              const purgeWasOnCD = teamReadyAt > applyRelative;
               let cdBurnedOn:
                 | {
                     spellName: string;
@@ -2485,32 +4351,20 @@ export function reconstructDispelSummary(
                     secondsBefore: number;
                   }
                 | undefined;
-              if (
-                cdGatedEligible.length > 0 &&
-                eligiblePurgers.every((p) => CD_GATED_PURGERS.has(p.spec))
-              ) {
-                // Only meaningful when ALL eligible purgers are CD-gated
-                const purgeCD = 8; // seconds — conservative; Evoker is 10s
-                const recentPurges = ourPurges.filter(
-                  (p) =>
-                    cdGatedEligible.some((pu) => pu.name === p.sourceName) &&
-                    p.timeSeconds < applyRelative &&
-                    p.timeSeconds >= applyRelative - purgeCD,
-                );
-                const purgersWhoUsedCD = new Set(
-                  recentPurges.map((p) => p.sourceName),
-                );
-                if (
-                  cdGatedEligible.every((p) => purgersWhoUsedCD.has(p.name))
-                ) {
-                  purgeWasOnCD = true;
-                  const lastPurge = recentPurges[recentPurges.length - 1];
+              if (purgeWasOnCD) {
+                const lastPurge = ourPurges
+                  .filter(
+                    (p) =>
+                      eligiblePurgers.some((pu) => pu.name === p.sourceName) &&
+                      p.timeSeconds < applyRelative,
+                  )
+                  .at(-1);
+                if (lastPurge)
                   cdBurnedOn = {
                     spellName: lastPurge.removedSpellName,
                     priority: lastPurge.priority,
                     secondsBefore: applyRelative - lastPurge.timeSeconds,
                   };
-                }
               }
 
               // Healing pressure: was the friendly team taking significant damage at the moment of application?
@@ -2518,7 +4372,7 @@ export function reconstructDispelSummary(
               // excuse missed purges during long, unpressured periods.
               const pressureWindowEndMs = Math.min(
                 applyTs + POST_CC_PRESSURE_WINDOW_S * 1000,
-                removalTs ?? combat.endTime,
+                windowEndMs,
               );
               const teamUnderPressure = friends.some((f) => {
                 const threshold = getPressureThreshold(f);
@@ -2532,7 +4386,14 @@ export function reconstructDispelSummary(
                 return dmg >= threshold;
               });
 
-              missedPurgeWindows.push({
+              // only a window that started in the round absorbs a re-log (one
+              // opened before `combat.startTime` is not a line of the round)
+              if (applyTs >= combat.startTime)
+                emittedEndBySrc.set(srcUnitId, windowEndMs);
+              (generalOpen
+                ? missedPurgeWindows
+                : scopedMissedPurgeWindows
+              ).push({
                 timeSeconds: applyRelative,
                 durationSeconds,
                 enemyName: enemy.name,
@@ -2541,23 +4402,113 @@ export function reconstructDispelSummary(
                 spellId,
                 priority,
                 purgeWasOnCD,
+                ...(purgeWasOnCD ? { purgeReadyAtSeconds: teamReadyAt } : {}),
                 cdBurnedOn,
                 teamUnderPressure,
-                purgersLockedOut: dispellersLockedOutForWindow(
-                  eligiblePurgers,
-                  applyTs,
-                  windowEndMs,
-                  cannotCastSrcIds,
-                  MISSED_PURGE_THRESHOLD_S * 1000,
-                ),
+                // FT-T10: each purger's lockouts are asked for its own
+                // purge / scoped tool (the spells the gate above asks about)
+                ...(() => {
+                  const b = generalOpen
+                    ? dispellersBlockedMsInWindow(
+                        eligiblePurgers,
+                        applyTs,
+                        windowEndMs,
+                        cannotCastSrc,
+                        (p) => [...purgeSpellIdsOf(p)],
+                      )
+                    : dispellersBlockedMsInWindow(
+                        scoped.map(({ unit }) => unit),
+                        applyTs,
+                        windowEndMs,
+                        cannotCastSrc,
+                        (u) =>
+                          scoped
+                            .filter((x) => x.unit === u)
+                            .map((x) => x.tool.castSpellId),
+                      );
+                  return b === null ? {} : { purgersBlockedS: b / 1000 };
+                })(),
+                purgersLockedOut: generalOpen
+                  ? dispellersLockedOutForWindow(
+                      eligiblePurgers,
+                      applyTs,
+                      windowEndMs,
+                      cannotCastSrc,
+                      MISSED_PURGE_THRESHOLD_S * 1000,
+                      (p) => [...purgeSpellIdsOf(p)],
+                    )
+                  : // scoped holders: each against its own tool's bar
+                    scoped.every(({ unit, tool }) =>
+                      dispellersLockedOutForWindow(
+                        [unit],
+                        applyTs,
+                        windowEndMs,
+                        cannotCastSrc,
+                        freeBarMs(tool),
+                        () => [tool.castSpellId],
+                      ),
+                    ),
                 losReachable: anyDispellerReachable(
                   eligiblePurgers,
                   enemy,
                   applyTs,
                   MISSED_PURGE_THRESHOLD_S * 1000,
-                  combat.zoneId,
-                  (d) => dispelReachYards(d, PURGE_SPELLS_BY_SPEC[d.spec]),
+                  zoneId,
+                  reachOf,
+                  combat.startTime,
                 ),
+                ...(scoped.length > 0
+                  ? {
+                      scopedPurgers: scoped.map(({ unit, tool }) => {
+                        const readyAt = abilitiesReadyAtSeconds(
+                          unit,
+                          new Set([tool.castSpellId]),
+                          new Set(),
+                          applyTs,
+                          combat.startTime,
+                        );
+                        return {
+                          purgerName: unit.name,
+                          tool: {
+                            name: tool.name,
+                            scope: tool.scope,
+                            note: tool.note,
+                            castSeconds: tool.castSeconds,
+                          },
+                          ...(readyAt > applyRelative
+                            ? { purgeReadyAtSeconds: readyAt }
+                            : {}),
+                          lockedOut: dispellersLockedOutForWindow(
+                            [unit],
+                            applyTs,
+                            windowEndMs,
+                            cannotCastSrc,
+                            freeBarMs(tool),
+                            () => [tool.castSpellId],
+                          ),
+                          ...(() => {
+                            const b = dispellersBlockedMsInWindow(
+                              [unit],
+                              applyTs,
+                              windowEndMs,
+                              cannotCastSrc,
+                              () => [tool.castSpellId],
+                            );
+                            return b === null ? {} : { blockedS: b / 1000 };
+                          })(),
+                          losReachable: anyDispellerReachable(
+                            [unit],
+                            enemy,
+                            applyTs,
+                            MISSED_PURGE_THRESHOLD_S * 1000,
+                            zoneId,
+                            () => scopedToolReachYards(unit, tool),
+                            combat.startTime,
+                          ),
+                        };
+                      }),
+                    }
+                  : {}),
               });
             }
           }
@@ -2566,6 +4517,42 @@ export function reconstructDispelSummary(
     }
 
     missedPurgeWindows.sort((a, b) => a.timeSeconds - b.timeSeconds);
+    scopedMissedPurgeWindows.sort((a, b) => a.timeSeconds - b.timeSeconds);
+  }
+
+  // B13e: a purge takes some of the purgeable buffs on its target — one, or
+  // `purgeRemovalsPerPress` (Greater Purge / Fire Breath: 2, F20 D31) — and
+  // not the ones the player picks, so every purge of ours and every
+  // missed-purge window says how many were there.
+  {
+    const span = { startTime: combat.startTime, endTime: combat.endTime };
+    // a pet's buff on its owner's team is theirs too (Master's Call)
+    const enemySideIds = new Set([...enemyIds, ...enemyPetIds]);
+    const cache = new Map<string, IAuraInterval[]>();
+    const countOn = (enemyName: string, atSeconds: number): number => {
+      // 138e632d: the unit is "Antagonist", its event rows name
+      // "Antagonist-Balnazzar-US" — the bare name is tried second
+      const enemy =
+        enemies.find((e) => e.name === enemyName) ??
+        enemies.find((e) => e.name === enemyName.split("-")[0]);
+      if (!enemy) return 0;
+      let ivs = cache.get(enemy.id);
+      if (!ivs) {
+        ivs = purgeableBuffIntervals(enemy, enemySideIds, span);
+        cache.set(enemy.id, ivs);
+      }
+      return purgeableBuffCountAt(ivs, atSeconds);
+    };
+    for (const p of ourPurges) {
+      if (!isPurgeableMagicBuff(p.removedSpellId)) continue;
+      const n = countOn(p.targetName, p.timeSeconds);
+      if (n > 0) p.purgeableOnTarget = n;
+    }
+    for (const w of [...missedPurgeWindows, ...scopedMissedPurgeWindows]) {
+      if (!isPurgeableMagicBuff(w.spellId)) continue;
+      const n = countOn(w.enemyName, w.timeSeconds);
+      if (n > 0) w.purgeableOnTarget = n;
+    }
   }
 
   const ccEfficiency: ICCEfficiencyStat[] = [...efficiencyMap.values()]
@@ -2589,6 +4576,7 @@ export function reconstructDispelSummary(
     lateCleanseWindows,
     ccEfficiency,
     missedPurgeWindows,
+    scopedMissedPurgeWindows,
   };
 }
 

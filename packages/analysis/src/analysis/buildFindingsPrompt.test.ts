@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import { CANDIDATE_TYPE_FLAGS } from "../data/candidateTypeFlags";
+import {
+  LATE_WINDOW_SECONDS,
+  PRE_WALL_SECONDS,
+  TIMING_DAMAGE_WINDOW_S,
+  TIMING_SPIKE_THRESHOLD,
+  UNNECESSARY_TARGET_HP_PCT,
+} from "../utils/cooldowns";
+import { DR_CHAIN_LOOKAHEAD_S } from "../utils/dispelAnalysis";
 import { buildFindingsPrompt } from "./buildFindingsPrompt";
 import { LEGACY_TOPIC_TYPES } from "./candidateFindings";
 import { FINDING_CATEGORIES } from "./findingCategories";
@@ -34,6 +42,21 @@ describe("buildFindingsPrompt", () => {
     expect(p).toMatch(/NEVER infer a state the context does not show/);
     expect(p).toMatch(/Discipline Priest/);
     expect(p).toMatch(/no digits|words|discarded/i); // strict no-raw-digit guidance
+  });
+
+  it("death-kill F-D1: the death legend prints only with a death on the menu, and names friendly deaths only", () => {
+    const withDeath = buildFindingsPrompt(candidates, "", "Discipline Priest");
+    expect(withDeath).toContain(
+      // FT-T15 M4: facts.unit, which every death row carries, is named
+      `- "death": one of YOUR team's players died (facts.unit names them; facts.side=friendly); enemy deaths are timeline context only.`,
+    );
+    expect(withDeath).not.toContain("facts.side=enemy");
+    const noDeath = buildFindingsPrompt(
+      [{ ...candidates[0]!, id: "cd-waste:x", type: "cd-waste" }],
+      "",
+      "Discipline Priest",
+    );
+    expect(noDeath).not.toContain(`- "death":`);
   });
 
   it("category 收敛为枚举(与 FINDING_CATEGORIES 单源渲染)", () => {
@@ -74,13 +97,25 @@ describe("buildFindingsPrompt", () => {
     // owner's own class cannot remove.
     expect(p).toMatch(/ownerCanDispel/);
     expect(p).toMatch(/eligibleDispellers/);
-    expect(p).toMatch(/CANNOT remove this debuff type/);
+    // F-C7 (triage 2026-09-29): the owner has no dispel SPELL for the type —
+    // not "the class CANNOT remove it" (a rogue's Cloak of Shadows can).
+    expect(p).toMatch(/has no dispel spell for this debuff type/);
+    expect(p).not.toMatch(/CANNOT remove this debuff type/);
+    // F-C15: a curse is not a CC
+    expect(p).toMatch(/high-value enemy debuff \(a CC, root or curse/);
+    expect(p).not.toMatch(/high-value enemy CC/);
     expect(p).toMatch(/call-out|call for a dispel/);
   });
 
   describe("挑选层多样性指令(2026-08-11 定为旧四族合计上限 2,2026-08-15 约束审计 C1 放宽为 3;2026-08-19 GH #14 cc-locked 与 wasted-trinket 先后退役后缩为二族)", () => {
     it("prompt 含合计最多 3 条的指令行,并逐一列出 LEGACY_TOPIC_TYPES 的两个类型名", () => {
-      const p = buildFindingsPrompt(candidates, "", "Discipline Priest");
+      // A menu that can carry more than three findings: the cap of 3 is
+      // printed only where it can bind (findingsCount.test.ts).
+      const four = [0, 1, 2, 3].map((i) => ({
+        ...candidates[0]!,
+        id: `death:a:${30 + i}`,
+      }));
+      const p = buildFindingsPrompt(four, "", "Discipline Priest");
       // The instruction sentence itself (wording, not just the type names).
       expect(p).toMatch(/at most 3 findings TOTAL/);
       expect(p).toMatch(/Prioritize covering DIFFERENT event types/);
@@ -104,10 +139,34 @@ describe("buildFindingsPrompt", () => {
   });
 
   describe("cost_norm 守护注(#25,2026-08-14):facts.costNorm 字段说明", () => {
-    it("cd-waste 图例(始终渲染)已解释 costNorm 语义", () => {
-      const p = buildFindingsPrompt(candidates, "", "Holy Paladin");
+    // FT-T15 M5 (2026-10-10): the cd-waste legend follows the convention of
+    // every other per-type legend — printed only with a cd-waste row on the
+    // menu (it used to print on every prompt).
+    it("cd-waste 图例(菜单有 cd-waste 行时渲染)已解释 costNorm 语义", () => {
+      const p = buildFindingsPrompt(
+        [
+          ...candidates,
+          {
+            id: "cd-waste:p1:642",
+            type: "cd-waste",
+            t: 0,
+            unitNames: ["Me-R"],
+            spell: "Divine Shield",
+            facts: { spell: "Divine Shield", unit: "Me-R" },
+          },
+        ],
+        "",
+        "Holy Paladin",
+      );
       expect(p).toMatch(/facts\.costNorm/);
       expect(p).toMatch(/last-resort|emergency/);
+      expect(p).toContain(`- "cd-waste": `);
+    });
+
+    it("菜单里没有 cd-waste 行 → cd-waste 图例与 costNorm 说明都不渲染", () => {
+      const p = buildFindingsPrompt(candidates, "", "Holy Paladin");
+      expect(p).not.toContain(`- "cd-waste":`);
+      expect(p).not.toMatch(/facts\.costNorm/);
     });
   });
 
@@ -123,7 +182,7 @@ describe("buildFindingsPrompt", () => {
           facts: {
             t: "100",
             readyCds: "Astral Shift",
-            attempted: "曾尝试施放被拒(尚未恢复×3)",
+            attempted: "pressed but rejected (尚未恢复×3)",
           },
         },
       ];
@@ -147,15 +206,20 @@ describe("buildFindingsPrompt", () => {
             facts: {
               t: "2:36",
               leadCd: "Summon Darkglare",
-              attempted: "曾尝试施放被拒(无法在昏迷时那样做×2)",
+              attempted: "pressed but rejected (无法在昏迷时那样做×2)",
             },
           },
         ],
         "",
         "Holy Paladin",
       );
-      expect(p).toMatch(/one of their own ally-reaching defensive cooldowns/);
-      expect(p).not.toMatch(/DID try to press this ability/);
+      const legend = p
+        .split("\n")
+        .find((l) => l.startsWith('- "slow-defensive-response":'))!;
+      expect(legend).toMatch(
+        /one of their own ally-reaching defensive cooldowns/,
+      );
+      expect(legend).not.toMatch(/DID try to press this ability/);
     });
   });
 
@@ -263,6 +327,24 @@ describe("buildFindingsPrompt", () => {
       expect(p).toMatch(/stayed-in/);
       expect(p).toMatch(/missed-push/);
       expect(p).toMatch(/cd-out-of-range/);
+      // triage position F-S1 / F-S2 / F-S3: every stayed-in fact the mapper
+      // emits is defined, and `moved` is a displacement, not a path
+      for (const key of [
+        "enemy",
+        "dist",
+        "endDist",
+        "endEnemy",
+        "minDist",
+        "maxDist",
+        "moved",
+        "ccS",
+        "rootS",
+      ])
+        expect(p).toMatch(new RegExp(`facts\\.${key}\\b`));
+      expect(p).toContain(
+        "facts.moved = the owner's straight-line displacement from span start to end",
+      );
+      expect(p).not.toContain("yards the owner itself moved");
     });
 
     it("cc-held 图例把「长期可用未使用」表述为事实层,明确禁止因果断言", () => {
@@ -373,7 +455,11 @@ describe("P1/P2 起爆候选图例(Task 4,2026-08-15,特性开关接线;Task 9 �
     }
   });
 
-  it("单开 cdHoarded(其余三个显式关闭,隔离验证)→ 只有 cd-hoarded 的图例出现,且带 costNorm 联动措辞", () => {
+  // FT-T15 M5: the costNorm note this test used to find came from the
+  // cd-waste legend, which printed on every prompt; cd-hoarded rows carry no
+  // facts.costNorm (cost_norm abilities are kept out of readyCds), so with
+  // no cd-waste row on the menu the note is absent.
+  it("单开 cdHoarded(其余三个显式关闭,隔离验证)→ 只有 cd-hoarded 的图例出现;菜单无 cd-waste 行,costNorm 说明不出现", () => {
     const savedFlags = { ...CANDIDATE_TYPE_FLAGS };
     CANDIDATE_TYPE_FLAGS.missedSyncWindow = false;
     CANDIDATE_TYPE_FLAGS.unsyncedBurst = false;
@@ -385,7 +471,7 @@ describe("P1/P2 起爆候选图例(Task 4,2026-08-15,特性开关接线;Task 9 �
         "Discipline Priest",
       );
       expect(p).toMatch(/"cd-hoarded"/);
-      expect(p).toMatch(/facts\.costNorm is present/);
+      expect(p).not.toMatch(/facts\.costNorm is present/);
       expect(p).not.toMatch(/"missed-sync-window"/);
       expect(p).not.toMatch(/"unsynced-burst"/);
       expect(p).not.toMatch(/"cd-spent-idle"/);
@@ -483,6 +569,18 @@ describe("crisis-no-response 图例(spec 2026-08-29 §1b,GH #58):条件渲染 + 
       /For DPS the counted outcome is always "this player died within 10 s" \(DPS are the kill target\); for healers in Solo Shuffle it is a teammate's death within 15 s\./,
     );
     expect(p).toMatch(/not causal proof/);
+    // crisis-external F-C1 (ruling A48 = C): "did NOTHING" is gone — the line
+    // says what the measure is and what the player did press.
+    expect(p).not.toMatch(/did NOTHING/);
+    // WP-H 3 (FT-T13 D11): the dampening fact is conditional — it is left out
+    // in a 2v2 round that logged no stack — so the legend says
+    // "when … is present" instead of citing it unconditionally.
+    expect(p).toContain(
+      "did not answer it by this measure — no self-heal that reached 15% of max HP (facts.selfHealPct% landed from facts.selfHealCasts self-heal casts — at facts.dampeningPct% dampening, when facts.dampeningPct is present)",
+    );
+    expect(p).not.toContain(
+      "self-heal casts at facts.dampeningPct% dampening)",
+    );
   });
 
   it("图例说明两种结果口径(spec §1c):ownDeath10s = 本人 10 秒内阵亡,teamDeath15s = 含本人在内任意队友 15 秒内阵亡(单排常见击杀目标是队友)", () => {
@@ -521,5 +619,138 @@ describe("crisis-no-response 图例(spec 2026-08-29 §1b,GH #58):条件渲染 + 
     expect(p).toMatch(/"this player died within 10 s"/);
     expect(p).toMatch(/kill target is often a teammate/);
     expect(p).toMatch(/never as a code token/);
+  });
+});
+
+describe("FT-T15 M1–M4 (2026-10-10): a legend names every fact key its rows carry, and claims no more than they do", () => {
+  const ev = (
+    type: string,
+    facts: Record<string, string>,
+    t = 30,
+  ): CandidateEvent => ({
+    id: `${type}:x:${t}`,
+    type,
+    t,
+    unitNames: ["Me-R"],
+    facts,
+  });
+  const legendOf = (type: string, facts: Record<string, string>): string => {
+    const p = buildFindingsPrompt([ev(type, facts)], "", "Holy Paladin");
+    const line = p.split("\n").find((l) => l.startsWith(`- "${type}":`));
+    expect(line, `${type} has a legend`).toBeDefined();
+    return line!;
+  };
+
+  it("M1: questionable-external has a legend — printed only with the type, built from the Unnecessary tier's own constants", () => {
+    expect(buildFindingsPrompt(candidates, "", "Holy Paladin")).not.toContain(
+      `- "questionable-external":`,
+    );
+    const legend = legendOf("questionable-external", {
+      t: "67.2",
+      spell: "Blessing of Sacrifice",
+      caster: "Me-R",
+      target: "Ally-R",
+      targetHp: "100",
+      nearestBurstGapS: "22.3",
+    });
+    for (const key of [
+      "spell",
+      "caster",
+      "target",
+      "targetHp",
+      "nearestBurstGapS",
+    ])
+      expect(legend).toMatch(new RegExp(`facts\\.${key}\\b`));
+    expect(legend).toContain(`${UNNECESSARY_TARGET_HP_PCT}% or higher`);
+    expect(legend).toContain(
+      `less than ${TIMING_SPIKE_THRESHOLD / 1000}k damage in the ${TIMING_DAMAGE_WINDOW_S} s before the press`,
+    );
+    expect(legend).toContain(
+      `within ${PRE_WALL_SECONDS} s before or ${LATE_WINDOW_SECONDS} s after one`,
+    );
+    expect(legend).toContain(`"n/a" = the round had no such window`);
+    expect(legend).toMatch(/readings at the press, not a verdict/);
+  });
+
+  it("M2: missed-cleanse — a row with facts.latencyS WAS dispelled, late; the legend no longer says there was no friendly dispel", () => {
+    const legend = legendOf("missed-cleanse", {
+      t: "152",
+      target: "Ally-R",
+      cc: "Psychic Scream",
+      duration: "3.3",
+      worth: "must",
+      latencyS: "3",
+    });
+    expect(legend).not.toMatch(/seconds without a friendly dispel/);
+    expect(legend).toMatch(/facts\.latencyS/);
+    expect(legend).toMatch(/the debuff WAS dispelled/);
+    expect(legend).toMatch(/never write that nobody dispelled it/);
+    for (const key of [
+      "drChainRisk",
+      "dispelType",
+      "ownerCastingS",
+      "ownerCastingSpells",
+      "ownerCastingPreCommitted",
+    ])
+      expect(legend).toMatch(new RegExp(`facts\\.${key}\\b`));
+    expect(legend).toContain(`within ${DR_CHAIN_LOOKAHEAD_S} s after`);
+  });
+
+  it("M3: kick-priority-team — ownerWhy=unknown is 'not known', never 'could not'", () => {
+    const legend = legendOf("kick-priority-team", {
+      t: "1:10",
+      ownerWhy: "unknown",
+    });
+    expect(legend).not.toMatch(/The player could NOT kick it/);
+    expect(legend).toMatch(/"unknown" = none of those held/);
+    expect(legend).toMatch(
+      /say it is not known whether the player could kick, never that they could not/,
+    );
+    for (const key of [
+      "ownerWhy",
+      "refNCompleted",
+      "refNInterrupted",
+      "refDeathCompleted",
+      "refDeathInterrupted",
+    ])
+      expect(legend).toMatch(new RegExp(`facts\\.${key}\\b`));
+  });
+
+  it("M4: the keys the 605-capture table found on rows and in no legend are now named", () => {
+    const cases: Array<[string, string[]]> = [
+      ["death", ["unit"]],
+      ["cd-waste", ["unit"]],
+      ["death-setup", ["victim", "healer"]],
+      [
+        "slow-defensive-response",
+        [
+          "caster",
+          "casterSpec",
+          "pressuredHpT",
+          "diedInWindow",
+          "cellKey",
+          "fellBack",
+          "refTop",
+          "leadCdId",
+        ],
+      ],
+      [
+        "kick-priority-missed",
+        ["kickNeverUsed", "refDeathCompleted", "refDeathInterrupted"],
+      ],
+      ["crisis-no-response", ["unit", "refOutcomeKey"]],
+      ["backlash-dispel", ["refKey"]],
+    ];
+    for (const [type, keys] of cases) {
+      const legend = legendOf(type, { t: "30" });
+      for (const key of keys)
+        expect(legend, `${type} names facts.${key}`).toMatch(
+          new RegExp(`facts\\.${key}\\b`),
+        );
+    }
+    // a fallback cell is not this opener's: the legend says so
+    expect(legendOf("slow-defensive-response", { t: "30" })).toMatch(
+      /the numbers are not about facts\.leadCd alone/,
+    );
   });
 });

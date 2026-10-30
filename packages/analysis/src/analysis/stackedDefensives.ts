@@ -15,6 +15,13 @@
  * talent- and carrier-aware; multiplicative stacking, measured 2026-09-13):
  *  - percentage aura: D × b / (1 − b) with D = damage the target actually
  *    took while both were up, b = pctMin of B; the same over B's full run;
+ *  - deferral shield (`DEFERRAL_SHIELD_DAMAGE_IDS`: Time Dilation, Stretch
+ *    Time): what the log records it held back (its own SPELL_ABSORBED rows,
+ *    `isDeferralAbsorb`) — the 50 % the mitigation table prices Time
+ *    Dilation at (user rulings 2026-07-30, kept 2026-10-20), measured
+ *    instead of back-computed from damage that includes its own delayed
+ *    ticks (fact1215 retest idx 10: `~20%` read the 361029 ticks as damage
+ *    Time Dilation then "blocked");
  *  - absorb aura: the absorbs the log credits to B's spell AND B's caster
  *    (codex R2: dropping the caster credited another player's same-spell
  *    shield to B);
@@ -22,6 +29,7 @@
  * Only pairs the OWNER took part in (cast A or B, or is the target) are
  * returned — the card is owner-anchored like every other context line.
  */
+import { castKeyOfAura } from "../data/castEffectAuras";
 import {
   resolveMitigation,
   strongestComponentPct,
@@ -29,6 +37,9 @@ import {
 import { getEnglishSpellName } from "../data/spellEffectData";
 import spellIdLists from "../data/spellIdLists";
 import { buildAuraIntervals, type IAuraInterval } from "../utils/auraIntervals";
+import { isCasterSideLinkAura } from "../utils/brokenRowBreaker";
+import { isDeferralAbsorb } from "../utils/incomingPressure";
+import { roundEndMs } from "../utils/roundEnd";
 
 /** external ∪ big-personal defensives — the two lists the product already
  * treats as "major"; small cooldowns (Fade, PW:S) are on neither */
@@ -38,6 +49,14 @@ export const STACKED_DEFENSIVE_MAJOR_IDS: ReadonlySet<string> = new Set<string>(
     ...spellIdLists.bigDefensiveSpellIds.map(String),
   ],
 );
+/** The `STACKED_DEFENSIVE_MAJOR_IDS` key an aura stands for: its own id, or
+ * the cast whose own effect it is (fact2 C10, `castKeyOfAura`: Rallying Cry
+ * 97462 runs as 97463, Fortifying Brew 115203 as 120954, Spirit Link Totem
+ * 98008 as 325174, Greater Invisibility 110959 as 110960 — none was ever
+ * "already protected"). Pricing reads the key; the line names the aura. */
+export function stackedDefensiveKeyOf(auraSpellId: string): string | undefined {
+  return castKeyOfAura(auraSpellId, (id) => STACKED_DEFENSIVE_MAJOR_IDS.has(id));
+}
 /** overlaps shorter than this are aura-refresh noise, not a stack */
 export const STACKED_DEFENSIVE_MIN_OVERLAP_S = 0.5;
 
@@ -63,12 +82,12 @@ export interface StackedDefensivePair {
   /** rounded to 1 dp */
   overlapSeconds: number;
   /** how B was priced; `unpriced` carries the reason in `unpricedReason` */
-  pricing: "pct" | "absorb" | "unpriced";
+  pricing: "pct" | "absorb" | "deferred" | "unpriced";
   unpricedReason: "immunity" | "positional" | "off-table" | null;
   /** B's extra blocked damage during the overlap, integer % of target max HP */
   blockedOverlapPct: number | null;
   /** B's blocked damage over its full run (from the overlap start to B's
-   * end), integer % — only for percentage auras */
+   * end), integer % — only for percentage auras and deferral shields */
   blockedFullPct: number | null;
   /** B's full run length in whole seconds */
   secondRunSeconds: number;
@@ -89,11 +108,38 @@ export function majorWallIntervals(
   playersById: ReadonlyMap<string, any>,
   friendNames: ReadonlySet<string>,
 ): IAuraInterval[] {
+  // a friendly's summon is the friendly (codex R6C-05 #3: Spirit Link
+  // Totem 325174 is sourced by the totem, not the shaman, and fell out): the
+  // interval's APPLIED row on the target names the source GUID, its owner
+  // decides — and is the caster every reader names (F19 605 diff: the line
+  // read "Spirit Link Totem (from Spirit Link Totem)")
+  const units = (combat?.units ?? {}) as Record<string, any>;
+  const friendlyCasterOf = (iv: IAuraInterval): string | null => {
+    if (friendNames.has(iv.srcUnitName)) return iv.srcUnitName;
+    const at = (combat?.startTime ?? 0) + iv.fromS * 1000;
+    const row = (target.auraEvents ?? []).find(
+      (a: any) =>
+        a.spellId === iv.spellId &&
+        a.logLine?.event === "SPELL_AURA_APPLIED" &&
+        Math.abs(a.timestamp - at) <= 5,
+    );
+    const owner = row?.srcUnitId ? units[row.srcUnitId]?.ownerId : undefined;
+    const ownerName: string | undefined = owner
+      ? units[owner]?.name
+      : undefined;
+    return ownerName && friendNames.has(ownerName) ? ownerName : null;
+  };
   return buildAuraIntervals(target, combat, playersById)
+    .flatMap((iv) => {
+      const caster = friendlyCasterOf(iv);
+      return caster === null ? [] : [{ ...iv, srcUnitName: caster }];
+    })
     .filter(
       (iv) =>
-        STACKED_DEFENSIVE_MAJOR_IDS.has(iv.spellId) &&
-        friendNames.has(iv.srcUnitName),
+        stackedDefensiveKeyOf(iv.spellId) !== undefined &&
+        // a Blessing of Sacrifice's link on its own caster moves damage ONTO
+        // them — no protection (fact1215 C4, `isCasterSideLinkAura`)
+        !isCasterSideLinkAura(iv.spellId, iv.srcUnitName === target.name),
     )
     .sort((x, y) => x.fromS - y.fromS);
 }
@@ -110,6 +156,16 @@ export function stackedDefensivePairs(
   const byId = new Map<string, any>(players.map((u) => [u.id, u]));
   const nameOf = (id: string) => getEnglishSpellName(id, "") || id;
   const out: StackedDefensivePair[] = [];
+  // the round's end (`roundEndMs`): an aura still up at a Solo Shuffle
+  // round's deciding death is cut there, and the hits after it are not the
+  // round's (codex 62-POSTHOC-13a #1, 402b1816 r3: Scales + Pain
+  // Suppression "0:16–0:20 (4s)" and 36 % blocked counted post-death hits;
+  // the round ended at 18.3 s)
+  const roundEndS = (roundEndMs(combat) - combat.startTime) / 1000;
+  const inRound = (iv: IAuraInterval): IAuraInterval => ({
+    ...iv,
+    toS: Math.min(iv.toS, roundEndS),
+  });
   for (const target of players.filter((u) => u.reaction === owner.reaction)) {
     const friendNames = new Set(
       players.filter((u) => u.reaction === target.reaction).map((u) => u.name),
@@ -122,7 +178,9 @@ export function stackedDefensivePairs(
     );
     let ivs;
     try {
-      ivs = majorWallIntervals(target, combat, byId, friendNames);
+      ivs = majorWallIntervals(target, combat, byId, friendNames)
+        .filter((iv) => iv.fromS < roundEndS)
+        .map(inRound);
     } catch {
       continue;
     }
@@ -141,7 +199,7 @@ export function stackedDefensivePairs(
           second.srcUnitName === owner.name;
         if (!involvesOwner) continue;
         const caster2 = byName.get(second.srcUnitName);
-        const res = resolveMitigation(second.spellId, {
+        const res = resolveMitigation(stackedDefensiveKeyOf(second.spellId)!, {
           carrierIsCaster: second.srcUnitName === target.name,
           caster: caster2,
         });
@@ -158,21 +216,29 @@ export function stackedDefensivePairs(
               (n, d) => n + Math.abs(d.effectiveAmount ?? d.amount ?? 0),
               0,
             );
-        const absorbed = ((target.absorbsIn ?? []) as any[])
-          .filter(
-            (e) =>
-              e.timestamp >= fromMs &&
-              e.timestamp <= toMs &&
-              String(e.spellId) === second.spellId &&
-              (e.srcUnitName === second.srcUnitName ||
-                e.srcUnitId === caster2?.id),
-          )
-          .reduce((n, e) => n + (e.absorbedAmount ?? 0), 0);
+        const absorbedBetween = (a: number, b: number) =>
+          ((target.absorbsIn ?? []) as any[])
+            .filter(
+              (e) =>
+                e.timestamp >= a &&
+                e.timestamp <= b &&
+                String(e.spellId) === second.spellId &&
+                (e.srcUnitName === second.srcUnitName ||
+                  e.srcUnitId === caster2?.id),
+            )
+            .reduce((n, e) => n + (e.absorbedAmount ?? 0), 0);
+        const absorbed = absorbedBetween(fromMs, toMs);
         let pricing: StackedDefensivePair["pricing"] = "unpriced";
         let unpricedReason: StackedDefensivePair["unpricedReason"] = null;
         let blockedOverlapPct: number | null = null;
         let blockedFullPct: number | null = null;
-        if (res && res.positional) unpricedReason = "positional";
+        if (isDeferralAbsorb({ spellId: second.spellId })) {
+          pricing = "deferred";
+          blockedOverlapPct = Math.round((absorbed / maxHp) * 100);
+          blockedFullPct = Math.round(
+            (absorbedBetween(fromMs, bEndMs) / maxHp) * 100,
+          );
+        } else if (res && res.positional) unpricedReason = "positional";
         else if (pct && pct.pctMin >= 100) unpricedReason = "immunity";
         else if (res && pct && pct.pctMin > 0) {
           const b = pct.pctMin / 100;

@@ -8,10 +8,10 @@
 import {
   ensureAnalysisData,
   extractMajorCooldowns,
+  lowestHpTroughInEventSpan,
 } from "@gladlog/analysis";
 import {
   enemyHealerCcWindows,
-  enemyMinHpPctInWindow,
   missedSyncWindowEvents,
 } from "@gladlog/analysis/src/analysis/candidates/cooldownTiming";
 import { lookupSyncWindowPrior } from "@gladlog/analysis/src/data/syncWindowPrior";
@@ -154,7 +154,8 @@ async function main(): Promise<void> {
         // Post-resurrection signature (2026-09-02): mirror production wiring.
         evs = missedSyncWindowEvents(ccWindows, teamOffensiveCds, {
           enemyMinHpPctAt: (from: number, to: number) =>
-            enemyMinHpPctInWindow(enemies, combat, from, to),
+            lowestHpTroughInEventSpan(enemies, combat.startTime, from, to)
+              ?.pct ?? null,
           enemyDeathS: enemies
             .flatMap((e: any) => (e.deathRecords ?? []) as any[])
             .map((d: any) => (d.timestamp - startMs) / 1000),

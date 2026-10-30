@@ -5,6 +5,11 @@
  * theme). Nothing here decides whether a candidate fires — these only format
  * facts once a producer has already decided to emit one.
  */
+import { refusalWhy } from "../../context/spellOutcomeLines";
+import {
+  STASIS_RELEASE_SPELL_ID,
+  stasisReplayWindows,
+} from "../../utils/combatStates";
 import type { CastFailedEvent } from "../../utils/rawStreams";
 
 /**
@@ -33,9 +38,15 @@ export function aggregateReasonCounts(
   events: CastFailedEvent[],
 ): string | undefined {
   if (events.length === 0) return undefined;
+  // In the prompt's language (user ruling 2026-10-14, Q6-2: "只要和整体的语言
+  // 一样就可以了"): the client's own text, in whatever locale it was, read the
+  // way kick-eaten's postKick reads it — "not ready yet" for the not-ready
+  // family, else `refusalWhy`'s words ("client reason not translated" when it
+  // has none). `checkCjkLeak` 7 of the 60 re-eval prompts until then.
   const counts = new Map<string, number>();
   for (const e of events) {
-    counts.set(e.reason, (counts.get(e.reason) ?? 0) + 1);
+    const why = refusalReasonWords(e.reason);
+    counts.set(why, (counts.get(why) ?? 0) + 1);
   }
   return [...counts.entries()]
     .sort((a, b) => b[1] - a[1])
@@ -47,7 +58,12 @@ export function formatAttemptedFact(
   events: CastFailedEvent[],
 ): string | undefined {
   const agg = aggregateReasonCounts(events);
-  return agg === undefined ? undefined : `曾尝试施放被拒(${agg})`;
+  // FT-T15 ⑥a (user ruling 2026-10-10): the wrapper is English, the wording
+  // kick-eaten's `postKick` already uses for the same fact (`pressed Nx but
+  // rejected (…)`). It was `曾尝试施放被拒(…)` inside an English prompt
+  // (53 of 53 `attempted` values on the 605 capture). The reasons inside
+  // the brackets are `aggregateReasonCounts`' words, "、"-joined.
+  return agg === undefined ? undefined : `pressed but rejected (${agg})`;
 }
 
 /**
@@ -100,14 +116,63 @@ export const NOT_READY_REASON_ZH = "尚未恢复";
  * lockout". Measured on 60 archive files (every 300th of the 2026-08-28
  * manifest): share of each reason within 1.5 s after the same unit's own
  * SPELL_CAST_SUCCESS — en 16,942 / 94.7 %, zh 2,487 / 96.5 %, ko 1,265 /
- * 96.4 %, de 450 / 91.8 %, pt 225 / 89.8 % (vs 28.9 % for "stunned"). */
+ * 96.4 %, de 450 / 91.8 %, pt 225 / 89.8 % (vs 28.9 % for "stunned").
+ *
+ * Forward check on the wider sample (Curated-List Completeness Rule,
+ * 2026-10-01; `SPELL_CAST_FAILED` reasons on 605 S2 files, 291,377 rows, 313
+ * distinct texts): four client locales were missing — fr 2,048 rows in 6
+ * files, es 1,902 / 2, ru 1,582 / 5, zh-TW 739 / 3 — so on those 16 logs a
+ * GCD or own-cooldown press was no "not ready" press anywhere: the
+ * gcd-locked exclusion and the key-repeat filter did nothing, and the
+ * kick-eaten line printed such presses as "rejected inside the lockout"
+ * (30846f8e @68: Shadowmeld "rejected" 0.2–0.75 s after Shadowmeld itself
+ * succeeded). `context/spellOutcomeLines.ts` `REJECT_REASONS` already
+ * carried all nine locales for its own kinds. */
 export const NOT_READY_REASONS: ReadonlySet<string> = new Set([
   NOT_READY_REASON_ZH,
   "Not yet recovered",
   "아직 사용 불가",
   "Noch nicht erholt",
   "Ainda não recuperado",
+  "Récupération incomplète",
+  "Aún no recuperado",
+  "Еще не готово.",
+  "尚未恢復",
 ]);
+
+/** A not-ready reject this soon after a success of the SAME spell is the key
+ * repeating, not a second attempt (triage 2026-09-29 kick-eaten F-K7c, user
+ * ruling A32 = B, 2026-09-30, the 0.3 s signed): 02c8e3ac — Living Flame
+ * succeeded at 10.800 and "not ready" at 10.866, Dragonrage 13.703 / 13.735,
+ * and the kick-eaten line counted both as "2x not ready yet". The kick-eaten
+ * TEXT drops these; the ranking evidence (`filterIntentGuardEvidence`) is a
+ * different, wider filter and is unchanged. */
+export const KEY_REPEAT_AFTER_SUCCESS_S = 0.3;
+
+/** `hits` without the key-repeat rejects: a `NOT_READY_REASONS` hit at most
+ * `KEY_REPEAT_AFTER_SUCCESS_S` after a success of the same spell id. */
+export function dropKeyRepeatRejects(
+  hits: CastFailedEvent[],
+  ownerCasts: { spellId: string; tSeconds: number }[],
+): CastFailedEvent[] {
+  return hits.filter(
+    (h) =>
+      !(
+        NOT_READY_REASONS.has(h.reason) &&
+        ownerCasts.some(
+          (c) =>
+            c.spellId === String(h.spellId) &&
+            c.tSeconds <= h.tSeconds &&
+            // in whole milliseconds, the log's own grid: as float seconds a
+            // reject exactly 300 ms after the success was inside the window
+            // or outside it depending on the pair (5.137 -> 5.437 gives
+            // 0.3000000000000007)
+            Math.round((h.tSeconds - c.tSeconds) * 1000) <=
+              KEY_REPEAT_AFTER_SUCCESS_S * 1000,
+        )
+      ),
+  );
+}
 
 /**
  * Filters `castFailedInWindow` hits down to genuine "pressed but rejected"
@@ -124,6 +189,16 @@ export const NOT_READY_REASONS: ReadonlySet<string> = new Set([
  *    (`opts.ownCastSuccessSeconds`). Optional — absent means this exclusion
  *    is skipped entirely (graceful degradation, same convention as the
  *    guard's own `rawStreams?` param).
+ *    `opts.keepGcdLockedUntilS` (triage F-H12, user ruling 2026-09-30 C1 —
+ *    cd-hoarded only): a gcd-locked hit is KEPT when the same spell has no
+ *    success in `(hit, keepGcdLockedUntilS]` — the press of a ready
+ *    cooldown that the GCD rejected and that was then never cast in the
+ *    window is an attempt (64a7a24d @200: Restoral rejected 0.16 / 0.32 s
+ *    after Sheilun's Gift, never cast, owner dead at 201.4). The ruling
+ *    covers a READY cooldown only, so the caller also passes
+ *    `opts.readyAt` (the ledger's `cdAvailableAt` at the press): a hit
+ *    whose cooldown was itself still recovering stays dropped. Absent = the
+ *    #29 behaviour for every other caller.
  *
  * Known tail (agy flash review, 2026-08-17, accepted): `cd.casts` is the
  * ledger's 2s-DEDUP'D cast list, so a double-charge spell cast twice within
@@ -137,9 +212,14 @@ export const NOT_READY_REASONS: ReadonlySet<string> = new Set([
 export function filterIntentGuardEvidence(
   hits: CastFailedEvent[],
   sameSpellCastSeconds: number[],
-  opts?: { ownCastSuccessSeconds?: number[] },
+  opts?: {
+    ownCastSuccessSeconds?: number[];
+    keepGcdLockedUntilS?: number;
+    readyAt?: (tSeconds: number) => boolean;
+  },
 ): CastFailedEvent[] {
   const ownCasts = opts?.ownCastSuccessSeconds;
+  const keepUntil = opts?.keepGcdLockedUntilS;
   return hits.filter((h) => {
     const preCast = sameSpellCastSeconds.some(
       (ct) =>
@@ -148,11 +228,72 @@ export function filterIntentGuardEvidence(
     );
     if (preCast) return false;
     if (NOT_READY_REASONS.has(h.reason) && ownCasts) {
-      const gcdLocked = ownCasts.some(
-        (ct) => ct <= h.tSeconds && ct >= h.tSeconds - INTENT_GUARD_GCD_S,
-      );
-      if (gcdLocked) return false;
+      const gcdLocked = gcdLockedUntilS(ownCasts, h.tSeconds) !== undefined;
+      if (gcdLocked) {
+        if (keepUntil === undefined) return false;
+        const castLater = sameSpellCastSeconds.some(
+          (ct) => ct > h.tSeconds && ct <= keepUntil,
+        );
+        if (castLater) return false;
+        if (opts?.readyAt && !opts.readyAt(h.tSeconds)) return false;
+      }
     }
     return true;
   });
+}
+
+/**
+ * When the owner's own global cooldown that covers `atS` ends: the latest own
+ * successful cast at or before `atS` and within `INTENT_GUARD_GCD_S` of it,
+ * plus that ceiling; undefined when none covers it. The intent guard's
+ * "GCD-locked" test (`filterIntentGuardEvidence`) and cd-hoarded's
+ * `freeAfterAttemptS` start (WO3 #14, r1008-79: two Restoral rejects 0.16 /
+ * 0.32 s after a Sheilun's Gift counted their free time from the rejects)
+ * read this one function. The ceiling over-states a hasted GCD — fewer
+ * free seconds, the side that never adds an accusation.
+ */
+export function gcdLockedUntilS(
+  ownCastSuccessSeconds: readonly number[],
+  atS: number,
+): number | undefined {
+  let last: number | undefined;
+  for (const ct of ownCastSuccessSeconds)
+    if (
+      ct <= atS &&
+      ct >= atS - INTENT_GUARD_GCD_S &&
+      (last === undefined || ct > last)
+    )
+      last = ct;
+  return last === undefined ? undefined : last + INTENT_GUARD_GCD_S;
+}
+
+/** One SPELL_CAST_FAILED reason in the prompt's words: "not ready yet" for
+ * the not-ready family (`NOT_READY_REASONS` — a locked school, the spell's
+ * own cooldown and the GCD all answer with it), else `refusalWhy`'s. The
+ * `attempted` / mana `rejected` counts, msw `refusedInLock` and stayed-in
+ * `refusedPresses` all read it (user ruling 2026-10-14). */
+export function refusalReasonWords(reason: string): string {
+  return NOT_READY_REASONS.has(reason) ? "not ready yet" : refusalWhy(reason);
+}
+
+/**
+ * The owner's cast rows that are PRESSES: every `spellCastEvents` row but the
+ * spells a Stasis release replays (`stasisReplayWindows`). The one "did the
+ * player cast it" list for the intent guard's success evidence
+ * (`filterIntentGuardEvidence`, `dropKeyRepeatRejects`, `ownCdProven`) —
+ * work order 2026-10-15 #3: kick-eaten's post-kick reading dropped the
+ * replays in work order 2026-10-14d #4, these readers still saw them.
+ */
+export function ownerPressEvents<
+  T extends { logLine: { timestamp: number } },
+>(owner: { spellCastEvents?: T[]; auraEvents?: any[] }): T[] {
+  const replays = stasisReplayWindows(owner as any);
+  return (owner.spellCastEvents ?? []).filter(
+    (e) =>
+      // WO6 #5: the release press itself is a press, not a replay
+      (e as { spellId?: string }).spellId === STASIS_RELEASE_SPELL_ID ||
+      !replays.some(
+        (w) => e.logLine.timestamp >= w.from && e.logLine.timestamp <= w.to,
+      ),
+  );
 }

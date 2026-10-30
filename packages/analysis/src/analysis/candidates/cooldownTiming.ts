@@ -8,62 +8,89 @@
  * angles — was this button pressed at the moment the team's window wanted it —
  * which is why the shared window predicates live here with them.
  */
-import { buffFullDurationForCaster } from "../../utils/buffDuration";
-import {
-  distanceBetween,
-  getUnitPositionAtTime,
-} from "../../utils/losAnalysis";
-import { cdOutOfRangeReachYards, isDeadAt } from "../../utils/positionAnalysis";
-import { INTERP_MAX_GAP_MS } from "../../utils/positionSampling";
+import { ABILITY_EFFECTS_GENERATED } from "../../data/abilityEffectsGenerated";
 import { costNormPhrase } from "../../data/curatedAbilityFacts";
+import { MITIGATION_TABLE } from "../../data/mitigationData";
+import { OFF_GCD_SPELL_IDS } from "../../data/offGcdGenerated";
+import { getEnglishSpellName } from "../../data/spellEffectData";
 import { reachesAlly } from "../../data/spellTargeting";
 import {
   syncRefClearsMinContrast,
   type SyncWindowPriorRef,
 } from "../../data/syncWindowPrior";
+import {
+  type DecisionRecord,
+  isDecisionTraceActive,
+  traceDecision,
+} from "../../facts/decisionTrace";
+import { isAllyCopyWallId } from "../../utils/allyCopyWall";
+import { buffFullDurationForCaster } from "../../utils/buffDuration";
 import { burstCastSpan } from "../../utils/burstLedger";
 import {
-  canHelpAnotherUnit,
+  type ActWindowState,
+  cannotCastIntervalsForSpells,
+  couldActForMostOf,
+  lockedSchoolsText,
+} from "../../utils/cannotCastIntervals";
+import { oppressingRoarOnAtMs } from "../../utils/ccBreakAnalysis";
+import { ccFullDurationForApplication } from "../../utils/ccDuration";
+import {
+  ccRemovalCause,
+  formatCcRemovalCause,
+  type ICcRemovalCause,
+  renderedCcDuration,
+} from "../../utils/ccTrinketAnalysis";
+import {
+  CD_INSTANT_SLACK_S,
   cdAvailableAt,
+  cdCanHelpAnotherUnit,
+  cdChargeStateAt,
+  cdHelpsRecipient,
+  cdIsProcOnly,
   cdReadyInTimeAt,
   DEFENSIVE_TAGS,
   getUnitHpAtTimestamp,
   HP_SAMPLE_RADIUS_MS,
   type IMajorCooldownInfo,
   isHealerSpec,
-  cdIsProcOnly,
-  SELF_CAST_NOOP_EXTERNAL_IDS,
+  lockCastsOf,
   THROUGHPUT_EMPOWER_DEFENSIVE_IDS,
 } from "../../utils/cooldowns";
 import {
   analyzeOutgoingCCChains,
   DR_CATEGORY_MAP,
+  drDurationFactor,
   type DRLevel,
 } from "../../utils/drAnalysis";
+import { reconstructEnemyCDTimeline } from "../../utils/enemyCDs";
+import { incomingPressureBySchool } from "../../utils/incomingPressure";
 import {
-  type ActWindowState,
-  buildCannotCastIntervals,
-  couldActForMostOf,
-} from "../../utils/cannotCastIntervals";
-import { getEnglishSpellName } from "../../data/spellEffectData";
+  distanceBetween,
+  getUnitPositionAtTime,
+} from "../../utils/losAnalysis";
+import { cdOutOfRangeReachYards, isDeadAt } from "../../utils/positionAnalysis";
+import { INTERP_MAX_GAP_MS } from "../../utils/positionSampling";
 import { castFailedInWindow, type RawStreams } from "../../utils/rawStreams";
-import {
-  type DecisionRecord,
-  isDecisionTraceActive,
-  traceDecision,
-} from "../../facts/decisionTrace";
 import { renderedWindowSeconds, toRenderSecond } from "../../utils/renderGrid";
+import type { RosterSides } from "../../utils/rosterSide";
+import { SOLO_SHUFFLE_BRACKET } from "../../utils/roundEnd";
 import { OFFENSIVE_CD_SPELL_IDS } from "../../utils/spellDanger";
 import { type MatchThreatLevel } from "../../utils/threatAssessment";
-import { MITIGATION_TABLE } from "../../data/mitigationData";
 import {
   type DecisionPoint,
+  DMG_WINDOW_MS,
   RESPONSE_PRE_MS,
   schoolShareCoveredBy,
 } from "../crisisDecisionPoints";
 import { fmtFactNum as fmt } from "../factFormat";
 import { CandidateEvent } from "../types";
-import { filterIntentGuardEvidence, formatAttemptedFact } from "./shared";
+import {
+  filterIntentGuardEvidence,
+  formatAttemptedFact,
+  gcdLockedUntilS,
+  INTENT_GUARD_GCD_S,
+  NOT_READY_REASONS,
+} from "./shared";
 
 /**
  * HARD_CC_CATEGORIES (P1 sync-lens, 2026-08-15, `missedSyncWindowEvents` /
@@ -98,7 +125,16 @@ export interface IEnemyHealerCcWindow {
   spellName: string;
   spellId: string;
   healerName: string;
+  /** who applied it (`IOutgoingCCApplication.casterName`, the log's source
+   * name) — read only by the `setupBy` fact (B11b) */
+  casterName?: string;
   drLevel?: DRLevel;
+  /** what ended the lock, when the log says (`ccRemovalCause`; sync-burst
+   * F-S3) — a CC that ran out or was capped at the round end has none */
+  endedBy?: ICcRemovalCause;
+  /** still on when the round ended (`IOutgoingCCApplication.cutByRoundEnd`)
+   * — `toSeconds` is the round's end */
+  cutByRoundEnd?: true;
 }
 
 /**
@@ -133,53 +169,49 @@ export function enemyHealerCcWindows(
   const out: IEnemyHealerCcWindow[] = [];
   for (const chain of analyzeOutgoingCCChains(friends, enemies, combat)) {
     if (!healerNames.has(chain.targetName)) continue;
+    const healer = enemies.find((e) => e.name === chain.targetName);
     for (const app of chain.applications) {
       if (!HARD_CC_CATEGORIES.has(app.drInfo.category)) continue;
       if (app.drInfo.level === "Immune") continue;
+      const applyMs = Math.round(combat.startTime + app.atSeconds * 1000);
+      // the official length at its DR step, as `[CC ON ENEMY] broke out`
+      // reads it: a CC that ran its course was not ended by a press. Under an
+      // Oppressing Roar that course is 30 % longer (FT-T07) — the one
+      // per-application length, `ccFullDurationForApplication`.
+      const full = ccFullDurationForApplication(
+        app.spellId,
+        friends.find((f) => f.name === app.casterName),
+        healer ? oppressingRoarOnAtMs(healer, app.spellId, applyMs) : false,
+      );
+      // a lock the round ended on was ended by nothing logged
+      const endedBy =
+        healer && !app.cutByRoundEnd
+          ? ccRemovalCause(
+              healer,
+              app.spellId,
+              applyMs,
+              Math.round(
+                combat.startTime + (app.atSeconds + app.durationSeconds) * 1000,
+              ),
+              full === undefined
+                ? undefined
+                : applyMs + full * drDurationFactor(app.drInfo.level) * 1000,
+            )
+          : undefined;
       out.push({
         fromSeconds: app.atSeconds,
         toSeconds: app.atSeconds + app.durationSeconds,
         spellName: app.spellName,
         spellId: app.spellId,
         healerName: chain.targetName,
+        casterName: app.casterName,
         drLevel: app.drInfo.level,
+        ...(endedBy ? { endedBy } : {}),
+        ...(app.cutByRoundEnd ? { cutByRoundEnd: true as const } : {}),
       });
     }
   }
   return out.sort((a, b) => a.fromSeconds - b.fromSeconds);
-}
-
-/** Lowest HP% across all enemy players sampled at every rendered second inside
- * [fromSeconds, toSeconds] (inclusive) — the ACCELERATOR-only fact
- * `missed-sync-window` attaches (B8: never a gate). Render-grid discipline
- * (CLAUDE.md): the query instants are `toRenderSecond`-floored before
- * sampling (at `HP_SAMPLE_RADIUS_MS`, the gate's radius), so this cannot
- * contradict the whole-second [STATE] HP the prompt timeline separately renders. Returns
- * null only when NO sample succeeded anywhere in the window (no advanced
- * logging) — the caller must treat null as "omit the fact", never as "0%".
- */
-export function enemyMinHpPctInWindow(
-  enemies: any[],
-  combat: { startTime: number },
-  fromSeconds: number,
-  toSeconds: number,
-  hpLookup: (
-    unit: any,
-    timestampMs: number,
-    maxDtMs: number,
-  ) => number | null = getUnitHpAtTimestamp,
-): number | null {
-  const fromR = toRenderSecond(fromSeconds);
-  const toR = toRenderSecond(toSeconds);
-  let min: number | null = null;
-  for (let t = fromR; t <= toR; t++) {
-    for (const e of enemies) {
-      const hp = hpLookup(e, combat.startTime + t * 1000, HP_SAMPLE_RADIUS_MS);
-      if (hp === null) continue;
-      if (min === null || hp < min) min = hp;
-    }
-  }
-  return min;
 }
 
 /** Per-match cap for missed-sync-window. <标定定稿 2026-08-15,报告
@@ -256,6 +288,31 @@ const MISSED_SYNC_WINDOW_CAP = 2; // <标定定稿 2026-08-15,报告 p1p2-calibr
  * overlap or touch merge; the merged window keeps the opener's id / DR and
  * names the chain "Fear→Cheap Shot".
  */
+/** What `mergeHealerCcWindows` adds to the opener: every component's start
+ * (a merged lock is judged at each) and who cast each component. */
+export interface MergedLockParts {
+  componentStartsSeconds: number[];
+  componentCasters: Array<{ spellName: string; casterName?: string }>;
+}
+
+/**
+ * A merged lock's name: its components in order, joined by "→", a run of the
+ * same control written once with its count — `Fear→Cheap Shot`,
+ * `Hammer of Justice ×2`. FT-T09: a run used to be written once with no
+ * count, so two Hammers of Justice (2 s + 3 s on the timeline) read
+ * `cc=Hammer of Justice, durationS=5` — one control, of a length no
+ * `[CC ON ENEMY]` line shows.
+ */
+export function lockChainName(names: readonly string[]): string {
+  const runs: Array<{ name: string; n: number }> = [];
+  for (const name of names) {
+    const last = runs[runs.length - 1];
+    if (last && last.name === name) last.n++;
+    else runs.push({ name, n: 1 });
+  }
+  return runs.map((r) => (r.n > 1 ? `${r.name} ×${r.n}` : r.name)).join("→");
+}
+
 export function mergeHealerCcWindows<
   W extends Pick<
     IEnemyHealerCcWindow,
@@ -264,10 +321,13 @@ export function mergeHealerCcWindows<
     | "spellName"
     | "spellId"
     | "healerName"
+    | "casterName"
     | "drLevel"
+    | "endedBy"
+    | "cutByRoundEnd"
   >,
->(windows: readonly W[]): Array<W & { componentStartsSeconds: number[] }> {
-  const out: Array<W & { componentStartsSeconds: number[] }> = [];
+>(windows: readonly W[]): Array<W & MergedLockParts> {
+  const out: Array<W & MergedLockParts> = [];
   const byHealer = new Map<string, W[]>();
   for (const w of windows) {
     const list = byHealer.get(w.healerName) ?? [];
@@ -279,28 +339,42 @@ export function mergeHealerCcWindows<
     let cur = null as W | null;
     let names: string[] = [];
     let starts: number[] = [];
+    let casters: MergedLockParts["componentCasters"] = [];
     for (const w of sorted) {
       if (cur && w.fromSeconds <= cur.toSeconds) {
+        // the chain ends where its last-ending component ends, and so does
+        // what ended it (sync-burst F-S3: "the last component's removal")
+        const extends_ = w.toSeconds >= cur.toSeconds;
         cur = { ...cur, toSeconds: Math.max(cur.toSeconds, w.toSeconds) };
-        if (names[names.length - 1] !== w.spellName) names.push(w.spellName);
+        if (extends_) {
+          if (w.endedBy) cur.endedBy = w.endedBy;
+          else delete cur.endedBy;
+          if (w.cutByRoundEnd) cur.cutByRoundEnd = true;
+          else delete cur.cutByRoundEnd;
+        }
+        names.push(w.spellName);
         starts.push(w.fromSeconds);
+        casters.push({ spellName: w.spellName, casterName: w.casterName });
         continue;
       }
       if (cur)
         out.push({
           ...cur,
-          spellName: names.join("→"),
+          spellName: lockChainName(names),
           componentStartsSeconds: starts,
+          componentCasters: casters,
         });
       cur = { ...w };
       names = [w.spellName];
       starts = [w.fromSeconds];
+      casters = [{ spellName: w.spellName, casterName: w.casterName }];
     }
     if (cur)
       out.push({
         ...cur,
-        spellName: names.join("→"),
+        spellName: lockChainName(names),
         componentStartsSeconds: starts,
+        componentCasters: casters,
       });
   }
   return out.sort((a, b) => a.fromSeconds - b.fromSeconds);
@@ -330,20 +404,28 @@ export type SyncWindowCd = Pick<
   | "cooldownSeconds"
   | "neverUsed"
   | "charges"
-> & {
-  /** the unit that owns the CD */
-  owner?: any;
-  /** the owner's enemies' ids (for `buildCannotCastIntervals`) */
-  ownerEnemyIds?: Set<string>;
-  /** absolute ms of match start (the owner's intervals are absolute) */
-  matchStartMs?: number;
-  /** The enemies a burst in this lock would land on — every enemy but the
-   *  healers (the lock is on a healer). With them, a CD that hits an enemy
-   *  is ready only if its owner was within the spell's own reach
-   *  (`cdOutOfRangeReachYards`, the CD_OUT_OF_RANGE predicate) of one of
-   *  them at some half-second of the free part of the lock. */
-  reachTargets?: readonly any[];
-};
+> &
+  Partial<Pick<IMajorCooldownInfo, "responseOnly">> & {
+    /** the unit that owns the CD */
+    owner?: any;
+    /** the owner's enemies' ids (for `buildCannotCastIntervals`) */
+    ownerEnemyIds?: Set<string>;
+    /** the round's units — a cooldown the owner's PET casts is asked of the
+     *  pet (`cannotCastIntervalsForSpells`); absent = the owner's reading */
+    roundUnits?: readonly any[];
+    /** absolute ms of match start (the owner's intervals are absolute) */
+    matchStartMs?: number;
+    /** The enemies a burst in this lock would land on — every enemy but the
+     *  healers (the lock is on a healer). With them, a CD that hits an enemy
+     *  is ready only if its owner was within the spell's own reach
+     *  (`cdOutOfRangeReachYards`, the CD_OUT_OF_RANGE predicate) of one of
+     *  them at some half-second of the free part of the lock. */
+    reachTargets?: readonly any[];
+    /** work order 2026-10-14d Part 2 (preview): each press's OBSERVED effect
+     *  end (`burstCastSpan`'s `buffEndSeconds`), keyed by the press second in
+     *  whole ms; absent → the official length */
+    castEndS?: ReadonlyMap<number, number>;
+  };
 
 /** Hard-cast bars a START → SUCCESS pair can span (the [ENEMY HARD CAST] /
  *  hardCastOccupancyWithin bound). */
@@ -357,18 +439,42 @@ export function syncWindowCdFor<T extends object>(
   enemies: readonly any[],
   ownerEnemyIds: Set<string>,
   matchStartMs: number,
+  /** the round's units (`combat.units`) — required, so the candidate and the
+   *  scan cannot differ on whose intervals a pet-cast cooldown is asked of */
+  roundUnits: readonly any[],
+  /** the round — with it each press carries its observed effect end
+   *  (`castEndS`); the candidate and the scan both pass it */
+  combat?: any,
 ): T & {
   owner: any;
   ownerEnemyIds: Set<string>;
   matchStartMs: number;
   reachTargets: readonly any[];
+  roundUnits: readonly any[];
 } {
+  let castEndS: Map<number, number> | undefined;
+  if (combat) {
+    try {
+      castEndS = new Map(
+        (
+          reconstructEnemyCDTimeline([owner], combat).players[0]
+            ?.offensiveCDs ?? []
+        )
+          .filter((c) => c.spellId === String((cd as any).spellId))
+          .map((c) => [Math.round(c.castTimeSeconds * 1000), c.buffEndSeconds]),
+      );
+    } catch {
+      castEndS = undefined;
+    }
+  }
   return {
     ...cd,
     owner,
     ownerEnemyIds,
     matchStartMs,
     reachTargets: enemies.filter((e) => !isHealerSpec(e.spec)),
+    roundUnits,
+    ...(castEndS ? { castEndS } : {}),
   };
 }
 
@@ -491,13 +597,33 @@ export function evaluateSyncWindow(
     ? w.componentStartsSeconds
     : [w.fromSeconds];
   const ready = cds.filter((cd) => {
+    // a response-only row (`IMajorCooldownInfo.responseOnly`) enters a lock
+    // when pressed — `entered` below — and is never named ready and unpressed
+    if (cd.responseOnly) return false;
     const readyAtS = starts.find((s) => cdAvailableAt(cd, s));
     if (readyAtS === undefined) return false;
+    // F-S1 (triage sync-burst): a holder dead at the instant its cooldown
+    // counts as ready holds nothing — 539b6ed0, Incarnation "ready" for a
+    // lock starting 1.3 s after its Druid died. `isDeadAt` is the one dead-at
+    // predicate (the kill-window facts, [RES] and the cd-hoarded gate read it).
+    if (
+      cd.owner &&
+      cd.matchStartMs !== undefined &&
+      isDeadAt(cd.owner, cd.matchStartMs + readyAtS * 1000)
+    )
+      return false;
     if (!cd.owner || !cd.ownerEnemyIds || cd.matchStartMs === undefined)
       return true;
     let blocked: Array<{ from: number; to: number }>;
     try {
-      blocked = buildCannotCastIntervals(cd.owner, cd.ownerEnemyIds);
+      // FT-T10: a lockout counts only when it locks this cooldown's school;
+      // a cooldown the owner's pet casts is asked of the pet
+      blocked = cannotCastIntervalsForSpells(
+        cd.owner,
+        cd.ownerEnemyIds,
+        [cd.spellId],
+        cd.roundUnits,
+      );
     } catch {
       return true;
     }
@@ -508,26 +634,39 @@ export function evaluateSyncWindow(
     return syncCdReachable(cd, readyAtS, w.toSeconds, blocked);
   });
   const entered = cds.some((cd) =>
-    cd.casts.some((c) => {
-      const spanEnd =
-        c.timeSeconds +
-        (cd.owner ? (buffFullDurationForCaster(cd.spellId, cd.owner) ?? 0) : 0);
-      // a press leading the lock by ≤ SYNC_ENTER_LEAD_S (the old test), or a
-      // burst still ACTIVE when the lock starts — a burst that ended before
-      // the lock is not in it, however close
-      // a hard-cast CD enters when its bar STARTS inside the lock (round 3
-      // W1a, f4eb: Summon Demonic Tyrant started 166.724 inside a lock
-      // ending 167.143, landed 167.861 — "none entered")
-      const startS = syncPressStartS(cd, c.timeSeconds);
-      const pressedIn =
-        (c.timeSeconds >= w.fromSeconds - SYNC_ENTER_LEAD_S &&
-          c.timeSeconds <= w.toSeconds) ||
-        (startS >= w.fromSeconds - SYNC_ENTER_LEAD_S && startS <= w.toSeconds);
-      const activeIn = c.timeSeconds <= w.toSeconds && spanEnd > w.fromSeconds;
-      return pressedIn || activeIn;
-    }),
+    cd.casts.some((c) => castEntersWindow(cd, c, w)),
   );
   return { ready, entered };
+}
+
+/** Did this press of `cd` enter the lock `w` — the ONE "entered" test
+ *  (`evaluateSyncWindow`'s verdict and the `enteredNextLock` fact). */
+function castEntersWindow(
+  cd: SyncWindowCd,
+  c: { timeSeconds: number },
+  w: { fromSeconds: number; toSeconds: number },
+): boolean {
+  // work order 2026-10-14d Part 2 (preview): the press's OBSERVED end when
+  // the CD timeline has it (`burstCastSpan` reads the same field), else the
+  // official length
+  const observed = cd.castEndS?.get(Math.round(c.timeSeconds * 1000));
+  const spanEnd =
+    observed ??
+    c.timeSeconds +
+      (cd.owner ? (buffFullDurationForCaster(cd.spellId, cd.owner) ?? 0) : 0);
+  // a press leading the lock by ≤ SYNC_ENTER_LEAD_S (the old test), or a
+  // burst still ACTIVE when the lock starts — a burst that ended before
+  // the lock is not in it, however close
+  // a hard-cast CD enters when its bar STARTS inside the lock (round 3
+  // W1a, f4eb: Summon Demonic Tyrant started 166.724 inside a lock
+  // ending 167.143, landed 167.861 — "none entered")
+  const startS = syncPressStartS(cd, c.timeSeconds);
+  const pressedIn =
+    (c.timeSeconds >= w.fromSeconds - SYNC_ENTER_LEAD_S &&
+      c.timeSeconds <= w.toSeconds) ||
+    (startS >= w.fromSeconds - SYNC_ENTER_LEAD_S && startS <= w.toSeconds);
+  const activeIn = c.timeSeconds <= w.toSeconds && spanEnd > w.fromSeconds;
+  return pressedIn || activeIn;
 }
 
 /**
@@ -556,9 +695,238 @@ export function countsAsTeamBurst(
   );
 }
 
+/** Signed one-decimal offset, the `attemptedAt` convention. */
+const signedS = (d: number): string => `${d >= 0 ? "+" : ""}${d.toFixed(1)}`;
+
+/**
+ * The per-CD timing a `missed-sync-window` line cannot show with names
+ * alone (triage sync-burst F-S2 / F-S6; facts only — the verdict, the gates
+ * and the 09-02 window are unchanged). Offsets are intervals between raw
+ * instants (one decimal), relative to the lock's raw start or end:
+ *
+ *  - `pressedAfter` (A36 = A, 2026-09-30): a ready CD whose first press after
+ *    the lock falls in (end, end + SYNC_ENTER_LEAD_S] — b711d4ac's Kingsbane
+ *    0.28 s after the Cyclone ended.
+ *  - `readyFrom`: a ready CD that came back from cooldown within the
+ *    SYNC_ENTER_LEAD_S before the lock or during it, at its RAW return (last
+ *    press + cooldown, charge-aware) — not `cdAvailableAt`'s first true
+ *    instant, which includes the 0.5 s slack (e10c6bea Kingsbane: +0.4, the
+ *    slack would print −0.1). Omitted for a rate-warped cooldown.
+ *  - `holderCc`: the ready CD's holder's own cannot-cast intervals for THIS
+ *    cooldown (the gate's `cannotCastIntervalsForSpells`, no second
+ *    predicate) that overlap the lock, unclipped — a disarm among them when
+ *    the cooldown needs a weapon (since work order 2026-10-14d Part 2b). For
+ *    a cooldown the holder's pet casts the gate reads the PET's intervals,
+ *    and none of those is printed.
+ */
+export function syncReadyTimingFacts(
+  w: { fromSeconds: number; toSeconds: number },
+  ready: readonly SyncWindowCd[],
+): { pressedAfter?: string; readyFrom?: string; holderCc?: string } {
+  const pressedAfter: string[] = [];
+  const readyFrom: string[] = [];
+  const holderCc: string[] = [];
+  for (const cd of ready) {
+    const after = cd.casts.find(
+      (c) =>
+        c.timeSeconds > w.toSeconds &&
+        c.timeSeconds <= w.toSeconds + SYNC_ENTER_LEAD_S,
+    );
+    if (after)
+      pressedAfter.push(
+        `${cd.spellName} ${signedS(after.timeSeconds - w.toSeconds)}s`,
+      );
+    const ret = rawReturnAfter(cd, w.fromSeconds - SYNC_ENTER_LEAD_S);
+    if (ret !== null && ret <= w.toSeconds)
+      readyFrom.push(`${cd.spellName} ${signedS(ret - w.fromSeconds)}s`);
+    if (cd.owner && cd.ownerEnemyIds && cd.matchStartMs !== undefined) {
+      let blocked: Array<{ from: number; to: number }> = [];
+      try {
+        // the gate's own intervals (FT-T10): what stopped THIS cooldown —
+        // on the holder. The fact says "the holder was hard-CC'd / silenced
+        // / locked out / disarmed", so what the gate read on the holder's PET
+        // (a cooldown the pet casts) is not printed here.
+        blocked = cannotCastIntervalsForSpells(
+          cd.owner,
+          cd.ownerEnemyIds,
+          [cd.spellId],
+          cd.roundUnits,
+        ).filter((iv) => iv.onPetId === undefined);
+      } catch {
+        blocked = [];
+      }
+      const fromMs = cd.matchStartMs + w.fromSeconds * 1000;
+      const toMs = cd.matchStartMs + w.toSeconds * 1000;
+      const spans = blocked
+        .filter((b) => b.from < toMs && b.to > fromMs)
+        .sort((a, b) => a.from - b.from)
+        .map(
+          (b) =>
+            `${signedS((b.from - fromMs) / 1000)}…${signedS((b.to - fromMs) / 1000)}s`,
+        );
+      if (spans.length) holderCc.push(`${cd.spellName} ${spans.join(" ")}`);
+    }
+  }
+  return {
+    ...(pressedAfter.length ? { pressedAfter: pressedAfter.join("; ") } : {}),
+    ...(readyFrom.length ? { readyFrom: readyFrom.join("; ") } : {}),
+    ...(holderCc.length ? { holderCc: holderCc.join("; ") } : {}),
+  };
+}
+
+/** When `cd` came back if it was NOT available at `probeS` (raw, no slack):
+ *  the last press ≤ probeS + its cooldown, or the next charge; null when it
+ *  was available at probeS (or its clock is rate-warped). */
+function rawReturnAfter(cd: SyncWindowCd, probeS: number): number | null {
+  if ((cd as { rateWindows?: unknown[] }).rateWindows?.length) return null;
+  const lock = lockCastsOf(cd as IMajorCooldownInfo).filter(
+    (c) => c.timeSeconds <= probeS,
+  );
+  if ((cd.charges ?? 1) > 1) {
+    // the entry's own per-press effects (codex 60-POSTHOC-04b #2: an
+    // Incarnation under Control of the Dream read back at 130 s, not 115)
+    const st = cdChargeStateAt(
+      cd as IMajorCooldownInfo,
+      lock.map((c) => c.timeSeconds),
+      probeS,
+    );
+    return st.charges > 0 ? null : st.nextRecharge;
+  }
+  const last = lock.at(-1);
+  if (!last) return null;
+  const ret =
+    last.timeSeconds + (last.cooldownSecondsOverride ?? cd.cooldownSeconds);
+  return ret > probeS ? ret : null;
+}
+
 export const SYNC_WINDOW_MIN_T_S = 30;
 export const SYNC_WINDOW_MIN_DUR_S = 3;
 export const SYNC_ENTER_LEAD_S = 2;
+/** `endedBy` of a lock the round ended on (F06a) — what its `[CC ON ENEMY]`
+ * line says with `CC_STILL_ON_AT_ROUND_END`. */
+export const SYNC_LOCK_ENDED_BY_ROUND_END = "the round's end";
+/** What a `readyCds` entry of a missed-sync-window row says of a cooldown
+ * the log owner holds — `The Hunt (yours)`. */
+export const SYNC_READY_CD_YOURS = "yours";
+const SYNC_READY_CD_ENTRY = new RegExp(
+  String.raw`^(.+) \((?:(${SYNC_READY_CD_YOURS})|(.+)'s)\)$`,
+);
+
+/**
+ * One `readyCds` entry of a missed-sync-window row: the cooldown and whose it
+ * is (L04, user ruling 2026-10-11) — `The Hunt (yours)` for the log owner's,
+ * `The Hunt (Name-Realm's)` for a teammate's, the unit name every candidate
+ * row and the loadout's `<unit name=…>` use. The holder is the unit whose
+ * ledger `evaluateSyncWindow` read the cooldown from (`SyncWindowCd.owner`);
+ * a cooldown with no holder unit (a hand-built fixture) stays a bare name.
+ *
+ * Before, the row listed names alone and its legend said they "may still be
+ * teammates'": on the 605-file capture 441 of 726 rows name no cooldown the
+ * owner's own kit lists (272 of them a lock the owner did not cast either).
+ * The gate (`checkSyncWindowReadyCdHolders`) parses the entry back with
+ * `parseSyncReadyCdEntry`.
+ */
+export function syncReadyCdEntry(
+  spellName: string,
+  holderName: string | undefined,
+  isOwner: boolean,
+): string {
+  if (isOwner) return `${spellName} (${SYNC_READY_CD_YOURS})`;
+  return holderName ? `${spellName} (${holderName}'s)` : spellName;
+}
+
+/** `syncReadyCdEntry` read back: the cooldown, and its holder — `yours`, a
+ * unit name, or neither (`holder` null) for an entry that states none. */
+export function parseSyncReadyCdEntry(entry: string): {
+  spell: string;
+  yours: boolean;
+  holder: string | null;
+} {
+  const m = entry.match(SYNC_READY_CD_ENTRY);
+  if (!m) return { spell: entry, yours: false, holder: null };
+  return m[2] !== undefined
+    ? { spell: m[1]!, yours: true, holder: null }
+    : { spell: m[1]!, yours: false, holder: m[3]! };
+}
+
+/**
+ * L04 (c) (user ruling 2026-10-11): in Solo Shuffle a missed-sync-window row
+ * reaches the log owner's menu only when part of it is the owner's
+ * (`syncRowHasOwnerPart`) — "telling a player that a random teammate did not
+ * press has nothing actionable"; a fixed 2v2 / 3v3 team keeps every row. The
+ * bracket is the row's own `cellKey` (`lookupSyncWindowPrior` keys the
+ * reference on `startInfo.bracket` and returns it as `cellKey`), so the gate
+ * (`checkSyncWindowOwnerPart`) asks the same question of the rendered row.
+ */
+export function syncRowNarrowedToOwnerPart(
+  cellKey: string | undefined,
+): boolean {
+  return cellKey === SOLO_SHUFFLE_BRACKET;
+}
+
+/**
+ * Is part of this missed-sync-window row the log owner's — one of its ready
+ * cooldowns (`X (yours)`, `syncReadyCdEntry`) or the lock (`setupBy`: the
+ * owner cast it, or a control of its chain) or a later lock folded into it
+ * (`alsoHeldSetupBy`, codex R6C-01 #3)? A yes/no on facts the row carries,
+ * no threshold.
+ */
+export function syncRowHasOwnerPart(facts: {
+  readyCds?: string;
+  setupBy?: string;
+  alsoHeldSetupBy?: string;
+}): boolean {
+  return (
+    !!facts.setupBy ||
+    !!facts.alsoHeldSetupBy ||
+    (facts.readyCds ?? "")
+      .split("、")
+      .some((entry) => parseSyncReadyCdEntry(entry).yours)
+  );
+}
+
+/**
+ * The numbers a missed-sync-window row states about its lock's length
+ * (F06a). `durationS` is the lock's length through the control lines' own
+ * formatter (`renderedCcDuration`: rounded to the whole second, `<1` under
+ * half a second) — for a one-control lock the very number its
+ * `[CC ON ENEMY]` line prints; `windowEndT` is the timeline second it ended
+ * in. Both stop at the round's end: the `[CC ON ENEMY]` line of a lock the
+ * round ended on is cut there (`stillOnAtRoundEnd`), and the row read
+ * `windowEndT=188, durationS=5` for a Kidney Shot the round ended 1 s into.
+ *
+ * `durationS` was `windowEndT − t`, the floored endpoints' difference: one
+ * off the control line's number in 32 of 452 one-control pairs of the
+ * 605-file capture (a 4.4 s Hammer of Justice from x.9 to y.3 read 5 here and
+ * `(4s)` there), and 2–6 s over it in 16 of the 19 pairs the round's end cut.
+ */
+export function syncLockLengthFacts(
+  w: { fromSeconds: number; toSeconds: number; cutByRoundEnd?: true },
+  roundEndS: number | undefined,
+): {
+  /** the lock's end, cut at the round's end */
+  endSeconds: number;
+  cutByRoundEnd: boolean;
+  windowEndT: string;
+  durationS: string;
+} {
+  // a window already cut there says so (`cutByRoundEnd`: the outgoing
+  // chains stop at the round's end)
+  const cutByRoundEnd =
+    w.cutByRoundEnd === true ||
+    (roundEndS !== undefined && w.toSeconds > roundEndS);
+  const endSeconds = cutByRoundEnd
+    ? Math.max(w.fromSeconds, roundEndS ?? w.toSeconds)
+    : w.toSeconds;
+  return {
+    endSeconds,
+    cutByRoundEnd,
+    windowEndT: String(toRenderSecond(endSeconds)),
+    durationS: renderedCcDuration({
+      durationSeconds: endSeconds - w.fromSeconds,
+    }).replace(/s$/, ""),
+  };
+}
 export function missedSyncWindowEvents(
   ccWindows: Pick<
     IEnemyHealerCcWindow,
@@ -567,15 +935,56 @@ export function missedSyncWindowEvents(
     | "spellName"
     | "spellId"
     | "healerName"
+    | "casterName"
     | "drLevel"
+    | "endedBy"
+    | "cutByRoundEnd"
   >[],
   offensiveCds: SyncWindowCd[],
   probes: {
-    /** Wired to enemyMinHpPctInWindow in production. Accelerator-only, see
-     * the B8 doc comment above — must NEVER gate the candidate. */
+    /** Wired to `lowestHpTroughInEventSpan` (utils/cooldowns.ts) over the
+     * enemy team in production — the lowest HP inside the lock's own span,
+     * the reading its [CONSEQ] line prints. Accelerator-only, see the B8
+     * doc comment above — must NEVER gate the candidate. */
     enemyMinHpPctAt: (fromSeconds: number, toSeconds: number) => number | null;
+    /** Whose reading `enemyMinHpPctAt` returned;
+     * optional — absent, the unit fact is omitted. Facts only (F-S7). */
+    enemyMinHpUnitAt?: (
+      fromSeconds: number,
+      toSeconds: number,
+    ) => string | null;
     /** seconds (match-relative) of every enemy deathRecord. */
     enemyDeathS: number[];
+    /** the log owner's unit id — an `endedBy` breaker that is the owner
+     * reads "you", and a ready cooldown the owner holds reads `(yours)`
+     * (`syncReadyCdEntry`); optional (absent, both are named). With it, a
+     * Solo Shuffle round's rows are narrowed to the owner's part (L04 (c),
+     * `syncRowNarrowedToOwnerPart`) — pass `ownerName` too, or a lock the
+     * owner cast is not known as theirs. */
+    ownerId?: string;
+    /** the log owner's name as the CC applications carry it (`casterName`)
+     * — with it, a lock the owner cast (part of) carries `setupBy` (B11b).
+     * Facts only. */
+    ownerName?: string;
+    /** the last playable second (`playableEndMs`): a later lock, or a press
+     * after it, never reaches `enteredNextLock`. Absent ⇒ no cut. */
+    playableEndS?: number;
+    /** the round's end in match seconds (`roundEndMs` — what the
+     * `[CC ON ENEMY]` lines are cut at): the row's `windowEndT`,
+     * `durationS` and HP reading stop there (F06a), and so does the lock
+     * the eligibility test and the ranking read — a lock that began at or
+     * after it is not in the round, one the round ended on counts for its
+     * in-round part. Whether a cooldown ENTERED the lock is still read on
+     * the lock as logged. Absent ⇒ no cut. */
+    roundEndS?: number;
+    /** The owner's refused presses (SPELL_CAST_FAILED, the recorder's own
+     *  rows) of these spells in [fromS, toS] — work order 2026-10-14b
+     *  fix 13. Facts only; absent ⇒ the fact is omitted. */
+    ownerRefusedAt?: (
+      spellIds: readonly string[],
+      fromS: number,
+      toS: number,
+    ) => Array<{ spellName: string; tS: number; why: string }>;
     /** The bracket's reference cell, or null when the bracket has no cell,
      * misses the n floor, or fails the min-contrast door — null silences
      * the type for the whole round (the resurrection's bracket gate). */
@@ -588,12 +997,21 @@ export function missedSyncWindowEvents(
   const cap = overrides?.cap ?? MISSED_SYNC_WINDOW_CAP;
   const ref = probes.ref;
   if (ref === null || !syncRefClearsMinContrast(ref)) return [];
+  // L04 (c): a Solo Shuffle owner gets the rows part of which is theirs.
+  // With no owner in the question (the calibration counts) nothing is cut.
+  const ownerPartOnly =
+    probes.ownerId !== undefined && syncRowNarrowedToOwnerPart(ref.cellKey);
+  const merged = mergeHealerCcWindows(ccWindows);
   const candidates: Array<{
-    w: (typeof ccWindows)[number];
+    w: (typeof merged)[number];
     ready: string[];
+    readyCds: SyncWindowCd[];
     minHp: number | null;
+    minHpUnit: string | null;
     /** later locks the same ready CDs were still held through */
     alsoHeld: number[];
+    /** …and those locks themselves */
+    alsoHeldWins: Array<(typeof merged)[number]>;
   }> = [];
   // One accusation per held CD (round 3 W1a, 24b6: Freezing Trap broken
   // 108.149, Cyclone 110.635 — two accusations against one held Volley).
@@ -606,9 +1024,31 @@ export function missedSyncWindowEvents(
     SyncWindowCd,
     { end: number; cand: (typeof candidates)[number] }
   >();
-  for (const w of mergeHealerCcWindows(ccWindows)) {
-    if (!syncWindowEligible(w, probes.enemyDeathS)) continue;
-    const ev = evaluateSyncWindow(w, offensiveCds);
+  // F06a: the lock up to the round's end. A Solo Shuffle round ends at its
+  // first player death — a FRIENDLY one leaves `enemyDeathS` empty, and a
+  // Kidney Shot that landed 1 s before it was a 5 s "missed sync window"
+  // (`syncLockLengthFacts`' rows: `durationS=<1, endedBy=the round's end`).
+  const inRound = (w: (typeof merged)[number]) =>
+    probes.roundEndS === undefined
+      ? w
+      : { ...w, toSeconds: Math.min(w.toSeconds, probes.roundEndS) };
+  for (const w of merged) {
+    if (probes.roundEndS !== undefined && w.fromSeconds >= probes.roundEndS)
+      continue;
+    if (!syncWindowEligible(inRound(w), probes.enemyDeathS)) continue;
+    // readiness is read on the lock up to the round's end (codex
+    // 60-POSTHOC-04b #1: a Cyclone running 0.6 s past a Shuffle round's
+    // ending death read `readyCds=The Hunt`, the log's tail counted) — the
+    // cd-hoarded owner gate's clip; whether the burst was entered is read on
+    // the whole lock, as before
+    const evAll = evaluateSyncWindow(w, offensiveCds);
+    const ev = {
+      ...evAll,
+      ready:
+        probes.roundEndS !== undefined && w.toSeconds > probes.roundEndS
+          ? evaluateSyncWindow(inRound(w), offensiveCds).ready
+          : evAll.ready,
+    };
     const ready = ev.ready.map((cd) => cd.spellName);
     if (ready.length === 0) continue;
     if (ev.entered) continue;
@@ -631,66 +1071,215 @@ export function missedSyncWindowEvents(
       });
     if (sameHold) {
       firstCand!.alsoHeld.push(toRenderSecond(w.fromSeconds));
+      firstCand!.alsoHeldWins.push(w);
       for (const cd of ev.ready)
         accused.set(cd, { end: w.toSeconds, cand: accused.get(cd)!.cand });
       continue;
     }
+    // F06a: the readings stop where the row's own `windowEndT` does
+    const factsEndS = syncLockLengthFacts(w, probes.roundEndS).endSeconds;
     const cand = {
       w,
       ready,
+      readyCds: ev.ready,
       // B8: this value only ever feeds `facts` below — it is read AFTER the
       // ready/castDuring gates above have already decided emission.
-      minHp: probes.enemyMinHpPctAt(w.fromSeconds, w.toSeconds),
+      minHp: probes.enemyMinHpPctAt(w.fromSeconds, factsEndS),
+      minHpUnit: probes.enemyMinHpUnitAt?.(w.fromSeconds, factsEndS) ?? null,
       alsoHeld: [] as number[],
+      alsoHeldWins: [],
     };
     candidates.push(cand);
     for (const cd of ev.ready) accused.set(cd, { end: w.toSeconds, cand });
   }
-  return candidates
-    .sort(
-      (a, b) =>
-        renderedWindowSeconds(b.w.fromSeconds, b.w.toSeconds) -
-        renderedWindowSeconds(a.w.fromSeconds, a.w.toSeconds),
-    )
-    .slice(0, cap)
-    .map(({ w, ready, minHp, alsoHeld }) => {
-      const t = toRenderSecond(w.fromSeconds);
-      const windowEndT = toRenderSecond(w.toSeconds);
-      return {
-        // spellId disambiguates two CC windows on the same healer that floor
-        // to the same rendered second (review fix round 2, 2026-08-15) — the
-        // menu id is the eventIds reference key, so a collision here corrupts
-        // adoption attribution, not just cosmetics.
-        id: `missed-sync-window:${w.healerName}:${w.spellId}:${t}`,
-        type: "missed-sync-window",
-        t,
-        unitNames: [w.healerName],
-        spell: w.spellName,
-        spellId: w.spellId,
-        facts: {
-          t: String(t),
-          windowEndT: String(windowEndT),
-          healer: w.healerName,
-          cc: w.spellName,
-          dr: w.drLevel ?? "Full",
-          // Render-grid anchoring (CLAUDE.md 门规谓词即规范): derived from the
-          // ALREADY-floored t/windowEndT, not the raw fractional seconds.
-          durationS: String(windowEndT - t),
-          readyCds: ready.join("、"),
-          ...(minHp !== null ? { enemyMinHpPct: fmt(minHp) } : {}),
-          // the same held CDs through later healer locks (rendered seconds,
-          // "、"-joined — a ", " would cut the facts value)
-          ...(alsoHeld.length ? { alsoHeldAt: alsoHeld.join("、") } : {}),
-          // Corpus reference (syncWindowPrior.ts) — the gate
-          // (checkSyncWindowRefConsistency) redoes the lookup from cellKey
-          // and re-checks every one of these numbers plus the door.
-          refN: String(ref.nEntered + ref.nUnentered),
-          refKillEntered: String(ref.killEnteredPct),
-          refKillUnentered: String(ref.killUnenteredPct),
-          cellKey: ref.cellKey,
-        },
-      };
-    });
+  return (
+    candidates
+      .sort(
+        (a, b) =>
+          renderedWindowSeconds(b.w.fromSeconds, inRound(b.w).toSeconds) -
+          renderedWindowSeconds(a.w.fromSeconds, inRound(a.w).toSeconds),
+      )
+      .slice(0, cap)
+      .map(({ w, readyCds, minHp, minHpUnit, alsoHeld, alsoHeldWins }) => {
+        const t = toRenderSecond(w.fromSeconds);
+        const length = syncLockLengthFacts(w, probes.roundEndS);
+        const timing = syncReadyTimingFacts(w, readyCds);
+        // B2-① (user ruling 2026-10-06; facts only — the verdict and the
+        // reference numbers are unchanged): a ready CD whose FIRST press after
+        // this lock entered the NEXT lock on an enemy healer, by the verdict's
+        // own `castEntersWindow`. fe1a9355 @94: Kingsbane, unpressed through
+        // the Seduction, went into the Kidney Shot→Fear lock that followed.
+        const afterEnd = (s: number) =>
+          probes.playableEndS !== undefined && s > probes.playableEndS;
+        const next = merged.find((n) => n.fromSeconds > w.toSeconds);
+        const enteredNext =
+          next && !afterEnd(next.fromSeconds)
+            ? readyCds.flatMap((cd) => {
+                const first = cd.casts
+                  .filter((c) => c.timeSeconds > w.toSeconds)
+                  .sort((a, b) => a.timeSeconds - b.timeSeconds)[0];
+                if (!first || afterEnd(first.timeSeconds)) return [];
+                if (!castEntersWindow(cd, first, next)) return [];
+                return [
+                  `${cd.spellName} at ${toRenderSecond(first.timeSeconds)} in the ${toRenderSecond(next.fromSeconds)}–${toRenderSecond(next.toSeconds)} lock (${next.spellName})`,
+                ];
+              })
+            : [];
+        // Work order 2026-10-14b fix 13 (facts only): (a) the owner's own
+        // ready cooldowns pressed and refused inside this lock or a later
+        // held one — 24b6a229: Volley refused "not ready" (the GCD) 1.2 s
+        // into the 1:50 Cyclone, listed in alsoHeldAt as a plain hold; the
+        // lock stays in alsoHeldAt. (b) the owner's own control on the same
+        // healer right after the lock, not chained into it (chaining would
+        // move the window) — 82a2d681: Blinding Sleet 0.54 s after the
+        // Storm Bolt ended.
+        const ownReadyIds = readyCds
+          .filter(
+            (cd) =>
+              probes.ownerId !== undefined && cd.owner?.id === probes.ownerId,
+          )
+          .map((cd) => cd.spellId);
+        const refusedInLock =
+          probes.ownerRefusedAt && ownReadyIds.length
+            ? [w, ...alsoHeldWins]
+                .flatMap((l) => {
+                  const groups = new Map<string, number[]>();
+                  for (const r of probes.ownerRefusedAt!(
+                    ownReadyIds,
+                    l.fromSeconds,
+                    Math.min(l.toSeconds, probes.roundEndS ?? Infinity),
+                  )) {
+                    const k = `${r.spellName}\u0000${r.why}`;
+                    groups.set(k, [
+                      ...(groups.get(k) ?? []),
+                      r.tS - l.fromSeconds,
+                    ]);
+                  }
+                  return [...groups].map(([k, offs]) => {
+                    const [spell, why] = k.split("\u0000");
+                    const n = offs.length > 1 ? `×${offs.length}` : "";
+                    const at = offs
+                      .map(
+                        (o) =>
+                          `+${(Math.floor(o * 10 + 1e-9) / 10).toFixed(1)}`,
+                      )
+                      .join("/");
+                    return `${toRenderSecond(l.fromSeconds)}: ${spell}${n} ${at}s (${why})`;
+                  });
+                })
+                .join("; ")
+            : "";
+        const followUp = probes.ownerName
+          ? merged.find(
+              (n) =>
+                n.healerName === w.healerName &&
+                n.fromSeconds > w.toSeconds &&
+                n.fromSeconds - w.toSeconds <= SYNC_ENTER_LEAD_S &&
+                n.componentCasters.length > 0 &&
+                n.componentCasters.every(
+                  (c) => c.casterName === probes.ownerName,
+                ),
+            )
+          : undefined;
+        // B11b (user ruling 2026-10-06): whose control the lock was. Only the
+        // owner is named; a chain the owner cast part of names that part.
+        const setupByOf = (lock: typeof w): string => {
+          const own = probes.ownerName
+            ? lock.componentCasters.filter(
+                (c) => c.casterName === probes.ownerName,
+              )
+            : [];
+          return own.length === 0
+            ? ""
+            : own.length === lock.componentCasters.length
+              ? "you"
+              : `you (${[...new Set(own.map((c) => c.spellName))].join("、")})`;
+        };
+        const setupBy = setupByOf(w);
+        // the same reading for each lock folded in (codex R6C-01 #3: the
+        // mage's own Polymorph, folded in at 71 s, and the Solo Shuffle row
+        // dropped for the mage) — the owner's part `syncRowHasOwnerPart`
+        // reads, gate and filter alike
+        const alsoHeldSetupBy = alsoHeldWins
+          .map((x) => {
+            const by = setupByOf(x);
+            return by ? `${toRenderSecond(x.fromSeconds)}: ${by}` : "";
+          })
+          .filter(Boolean)
+          .join("; ");
+        return {
+          // spellId disambiguates two CC windows on the same healer that floor
+          // to the same rendered second (review fix round 2, 2026-08-15) — the
+          // menu id is the eventIds reference key, so a collision here corrupts
+          // adoption attribution, not just cosmetics.
+          id: `missed-sync-window:${w.healerName}:${w.spellId}:${t}`,
+          type: "missed-sync-window",
+          t,
+          unitNames: [w.healerName],
+          spell: w.spellName,
+          spellId: w.spellId,
+          facts: {
+            t: String(t),
+            windowEndT: length.windowEndT,
+            healer: w.healerName,
+            cc: w.spellName,
+            dr: w.drLevel ?? "Full",
+            // F06a: the control lines' formatter, not the floored endpoints'
+            // difference (`syncLockLengthFacts`) — the gate pairs it with the
+            // `[CC ON ENEMY]` line (`checkSyncWindowLockLength`).
+            durationS: length.durationS,
+            // L04: each entry says whose cooldown it is (`syncReadyCdEntry`)
+            readyCds: readyCds
+              .map((cd) =>
+                syncReadyCdEntry(
+                  cd.spellName,
+                  cd.owner?.name,
+                  probes.ownerId !== undefined &&
+                    cd.owner?.id === probes.ownerId,
+                ),
+              )
+              .join("、"),
+            ...(minHp !== null ? { enemyMinHpPct: fmt(minHp) } : {}),
+            ...(minHp !== null && minHpUnit
+              ? { enemyMinHpUnit: minHpUnit }
+              : {}),
+            ...timing,
+            // the same held CDs through later healer locks (rendered seconds,
+            // "、"-joined — a ", " would cut the facts value)
+            ...(alsoHeld.length ? { alsoHeldAt: alsoHeld.join("、") } : {}),
+            // sync-burst F-S3: what ended the lock, only when the log says —
+            // a lock your own team's damage cut short is its own lesson. A
+            // lock the round ended on was ended by nothing logged after it.
+            ...(length.cutByRoundEnd
+              ? { endedBy: SYNC_LOCK_ENDED_BY_ROUND_END }
+              : w.endedBy
+                ? { endedBy: formatCcRemovalCause(w.endedBy, probes.ownerId) }
+                : {}),
+            ...(enteredNext.length
+              ? { enteredNextLock: enteredNext.join("; ") }
+              : {}),
+            ...(setupBy ? { setupBy } : {}),
+            ...(alsoHeldSetupBy ? { alsoHeldSetupBy } : {}),
+            ...(refusedInLock ? { refusedInLock } : {}),
+            ...(followUp
+              ? {
+                  ownerFollowUpCc: `${followUp.spellName} +${(Math.floor((followUp.fromSeconds - w.toSeconds) * 10 + 1e-9) / 10).toFixed(1)}s (${syncLockLengthFacts(followUp, probes.roundEndS).durationS}s)`,
+                }
+              : {}),
+            // Corpus reference (syncWindowPrior.ts) — the gate
+            // (checkSyncWindowRefConsistency) redoes the lookup from cellKey
+            // and re-checks every one of these numbers plus the door.
+            refN: String(ref.nEntered + ref.nUnentered),
+            refKillEntered: String(ref.killEnteredPct),
+            refKillUnentered: String(ref.killUnenteredPct),
+            cellKey: ref.cellKey,
+          },
+        };
+      })
+      // L04 (c): AFTER the cap — a row that goes frees no slot, so no shorter
+      // lock of the round moves up into the menu in its place.
+      .filter((e) => !ownerPartOnly || syncRowHasOwnerPart(e.facts))
+  );
 }
 
 /** Per-match cap for unsynced-burst. <标定定稿 2026-08-15,报告
@@ -718,10 +1307,9 @@ const UNSYNCED_BURST_CAP = 2; // <标定定稿 2026-08-15,报告 p1p2-calibratio
  *
  * Effect window: `burstCastSpan` — the exact predicate the burst ledger
  * already uses for "how long is this CD's effect active", built from
- * `spellEffectData[spellId].durationSeconds` with a documented fallback
- * (`MIN_BURST_SPAN_S` = `BURST_CLUSTER_SECONDS`, enemyCDs.ts/burstLedger.ts's
- * own established default for a CD whose buff duration is unknown/instant) —
- * reused here rather than inventing a second duration-with-fallback rule.
+ * `spellEffectData[spellId].durationSeconds`. Since 2026-10-01 (ruling A14)
+ * there is no 10 s fallback: a CD whose buff duration is unknown / instant
+ * has a zero-length window.
  *
  * Severity/cap: sorted by the cooldown's own length (`cooldownSeconds`
  * descending) — the biggest-cooldown CDs are the highest-value presses to
@@ -879,10 +1467,28 @@ const CD_HOARD_CAP = 2;
  * different question: "did the crisis unit do ANYTHING" vs. "did the OWNER
  * spend THIS specific ready cooldown"). */
 export const CD_HOARD_RESPONSE_S = 5;
+/** How far before the crisis reading an offensive press of the player's own
+ *  still counts as "just pressed" for `facts.ownBurstPressed` (B2-②, user
+ *  ruling 2026-10-06: "within 2 s before the crisis"). */
+export const OWN_BURST_LEAD_S = 2;
 
 /**
- * A school-limited save (its `MITIGATION_TABLE` school mask is not all
- * schools) is a relevant "ready" save for a crisis only when it covers at
+ * The schools a save covers: its signed `MITIGATION_TABLE` row's mask, else —
+ * for an absorb with no percentage row — the DB2 absorb school mask (aura 69
+ * MiscValue_0, `abilityEffectsGenerated.absorbSchoolMask`). Anti-Magic Shell
+ * 48707 / 410358 = 0x7e, magic only (triage F-H20, user ruling 2026-09-30:
+ * read the DB2 mask, no hand-signed percentage). Undefined = no school claim.
+ */
+export function saveSchoolMask(spellId: string): number | undefined {
+  return (
+    MITIGATION_TABLE[spellId]?.schoolMask ??
+    ABILITY_EFFECTS_GENERATED[spellId]?.absorbSchoolMask
+  );
+}
+
+/**
+ * A school-limited save (`saveSchoolMask` is not all schools) is a relevant
+ * "ready" save for a crisis only when it covers at
  * least this share of the crisis's 2 s of damage — a majority, so the save
  * named would have stopped most of what put the unit there. Editorial, not
  * measured; the audited misses sat far from it (Blessing of Protection vs
@@ -895,27 +1501,65 @@ export function coversCrisisSchool(
   spellId: string,
   point: Pick<DecisionPoint, "dmg2sBySchool">,
 ): boolean {
-  const mask = MITIGATION_TABLE[spellId]?.schoolMask;
+  const mask = saveSchoolMask(spellId);
   if (mask === undefined || (mask & ALL_SCHOOLS) === ALL_SCHOOLS) return true;
   const share = schoolShareCoveredBy(point, mask);
   return share === null || share >= SCHOOL_SAVE_MIN_SHARE;
 }
 
 /**
- * Corpus-derived outcome reference for cd-hoarded (2026-08-30, GH #34):
- * 3,000-match outcome probe "cd-hoarded"
- * (eval-private/reports/signal-outcomes-2026-08-30/report.md). Decision
+ * `coversCrisisSchool` at an arbitrary instant (B-tier B3a, user ruling
+ * 2026-10-06: `cheaper available:` and `[DEATH] … Unused:` read cd-hoarded's
+ * school rule): does this save cover at least `SCHOOL_SAVE_MIN_SHARE` of what
+ * `unit` was being hit with in the `DMG_WINDOW_MS` up to `atMs` — the window
+ * and the split a crisis point's `dmg2sBySchool` is built from
+ * (`incomingPressureBySchool`, landed and absorbed, exclusive start). A save
+ * with no school claim, an all-school one, and a window with no damage all
+ * cover — the fail-open direction `coversCrisisSchool` has.
+ */
+export function saveCoversPressureOn(
+  spellId: string,
+  unit: Parameters<typeof incomingPressureBySchool>[0],
+  atMs: number,
+  round: { sides?: RosterSides; recordsAttackSpell?: boolean } = {},
+): boolean {
+  const mask = saveSchoolMask(spellId);
+  if (mask === undefined || (mask & ALL_SCHOOLS) === ALL_SCHOOLS) return true;
+  return coversCrisisSchool(spellId, {
+    dmg2sBySchool: incomingPressureBySchool(
+      unit,
+      atMs - DMG_WINDOW_MS,
+      atMs,
+      round.sides,
+      round.recordsAttackSpell,
+      true,
+    ),
+  });
+}
+
+/**
+ * Corpus-derived outcome reference for cd-hoarded (2026-08-30, GH #34;
+ * re-run 2026-10-08 and 2026-10-13 in the GH #115 batched regens):
+ * 3,000-match outcome probe "cd-hoarded" (`signalOutcomeProbe.ts --only
+ * cd-hoarded`, the first 3,000 files of manifest-archive-2026-08-28-newseason;
+ * report eval-private/runs/regen-115-2026-10-13/cd-hoarded-ref/report.md;
+ * first run: eval-private/reports/signal-outcomes-2026-08-30/report.md). Decision
  * point = every friendly crisis (`crisisDecisionPoints` on the owner for
  * their own crises, and on each teammate as owner for theirs; HP crossed
  * <=40%, 5s merge — `CRISIS_HP_PCT`/`CRISIS_WINDOW_GAP_MS`,
  * crisisDecisionPoints.ts) at which the owner had >=1 usable major
  * Defensive cooldown ready (a personal wall or a self-castable external for
  * the owner's own crisis; any cooldown `canHelpAnotherUnit` says can reach
- * the crisis unit for a teammate's). Across 16,960 such decision points,
- * the crisis unit died within 10s **4.5%** of the time when a ready
- * cooldown was spent within `CD_HOARD_RESPONSE_S` vs **11.4%** when every
- * ready cooldown was held (share acted 29%; 3v3 5.2% vs 22.2%; own-crisis
- * 4.0% vs 16.8%; teammate-crisis 4.7% vs 10.5%).
+ * the crisis unit for a teammate's). Across 15,653 such decision points,
+ * the crisis unit died within 10s **5.8%** of the time when a ready
+ * cooldown was spent within `CD_HOARD_RESPONSE_S` vs **13.0%** when every
+ * ready cooldown was held (share acted 27%; 2v2 7.0% vs 16.7%; Solo Shuffle
+ * 5.3% vs 11.6%; own-crisis 6.9% vs 19.7%; teammate-crisis 5.5% vs 11.8%).
+ * The 2026-08-30 run (16,960 points: 4.5% vs 11.4%) recorded only "3,000
+ * matches"; its 2v2 / Solo Shuffle point counts (4,485 / 11,943) are close
+ * to this slice's (4,359 / 11,274) but not equal, and its 3v3 count (532) is
+ * far off (23 here — the slice holds 6 3v3 files), so the slice is a best
+ * reconstruction, not proven to be the same input.
  *
  * Descriptive, never causal — the legend (buildFindingsPrompt.ts) says so
  * explicitly and the reference does not identify WHICH cooldown mattered.
@@ -924,18 +1568,21 @@ export function coversCrisisSchool(
  * yet built — until then this is a fixed constant block, not a per-cell
  * lookup keyed on bracket/role/damage the way that table is.
  *
- * ⚠ Measured on the PRE-2026-09-24 spent/held partition. Reliability audit
- * A2 moved points out of "held": a save cooldown pressed just before the
- * crossing now counts as spent, and a major wall already up on the crisis
- * unit makes the point abstain (605-file slice: emitted cd-hoarded 2,241 →
- * 1,858). Both removals are answered-or-protected crises, so the "held" arm
- * was, if anything, diluted with safer points; the numbers are kept as the
- * last measured reference until the probe is re-run on the new partition.
+ * The re-run is on the current partition: reliability audit A2's spent /
+ * abstain changes (2026-09-24), triage F-W6's spec-baseline defensives in
+ * the ledger (2026-10-06), and every crisis-point change since (dmg2s window
+ * e0012b99, damage = amount − overkill b999ce1c) — pinned code 859883a6.
+ * The 2026-10-13 re-run (pinned code d511b212, after the ledger gained the
+ * buttons a talent grants under another id and the owner-feasibility
+ * changes of 2026-10-11) moved the point count 15,645 → 15,656 and no
+ * printed rate, overall or per slice. The 2026-10-20 re-run (code cc8b22e8c,
+ * after the fact1215 fixes) moved it 15,656 → 15,653 and no printed rate;
+ * four per-slice rates moved by 0.1 pp (2v2 and own-crisis, both sides).
  */
 export const CD_HOARDED_OUTCOME_REF = {
-  refDeathSpent: "4.5",
-  refDeathHeld: "11.4",
-  refN: "16960",
+  refDeathSpent: "5.8",
+  refDeathHeld: "13.0",
+  refN: "15653",
 } as const;
 
 /** One crisis-decision-point SOURCE cd-hoarded scans: the unit in crisis
@@ -1027,6 +1674,20 @@ function readyDefensiveCds(
 }
 
 /**
+ * The span cd-hoarded reads the OWNER's free time over, in seconds since the
+ * round start: from the crisis's rendered second (`facts.t`, what
+ * `facts.ownerCc` / `facts.ownerFreeS` are offsets from) to the end of the
+ * response window. One definition for the owner gate and for the fact it
+ * prints (I05, user ruling 2026-10-11): the gate needs REACTION_WINDOW_S of
+ * free time inside it, `facts.ownerFreeS` is the free time inside it.
+ * "Spent" keeps its own, wider window — a press up to `RESPONSE_PRE_MS`
+ * before the crossing still answers it.
+ */
+export function ownerFreeSpan(tSec: number): { fromS: number; toS: number } {
+  return { fromS: toRenderSecond(tSec), toS: tSec + CD_HOARD_RESPONSE_S };
+}
+
+/**
  * cd-hoarded (2026-08-30 rewrite, GH #34, decision-point shaped): "a
  * teammate (or you) hit a crisis while you had a usable major defensive CD
  * ready and you did not spend it within `CD_HOARD_RESPONSE_S`". Replaces
@@ -1098,11 +1759,22 @@ export function cdHoardedEvents(
    * same convention as every other guard-carrying builder in this file. */
   ownCastSuccessSeconds?: number[],
   /** Reliability round 2 W1a (2026-09-25): could the OWNER act at all during
-   * the response window `[fromS, toS]` (seconds since round start)? Built by
-   * the caller from `buildCannotCastIntervals` + the owner's death — the same
-   * predicate `evaluateSyncWindow` and cdTriggerPrior's opportunity set use.
-   * Absent ⇒ no owner gate (tests, callers without a combat clock). */
-  ownerCouldRespond?: (fromS: number, toS: number) => boolean,
+   * `[fromS, toS]` (seconds since round start)? Built by the caller from
+   * `buildCannotCastIntervals` + the owner's death — the same predicate
+   * `evaluateSyncWindow` and cdTriggerPrior's opportunity set use. Asked over
+   * `ownerFreeSpan` — from the crisis second on, the span `facts.ownerFreeS`
+   * prints (I05, 2026-10-11). Absent ⇒ no owner gate (tests, callers without
+   * a combat clock). */
+  ownerCouldRespond?: (
+    fromS: number,
+    toS: number,
+    /** asked for one cooldown: a lockout counts only on its school (FT-T10) */
+    spellId?: string,
+    /** the press would land on the owner (their own crisis) — with
+     * `ownerActState`'s, what lets a school-limited purge count under a stun
+     * (I05 c, `stunLetsPress`) */
+    onSelf?: boolean,
+  ) => boolean,
   /** User ruling 2026-09-26 (reliability leftovers item 3, fa5e): the crisis
    * counts as answered when the OWNER cast a control (a peel) or ANY friendly
    * pressed a team save (TEAM_HEAL_CD_IDS: Spirit Link, Barrier, Aura Mastery,
@@ -1111,17 +1783,93 @@ export function cdHoardedEvents(
   teamAnswers?: {
     ownerPeelCastSeconds: readonly number[];
     teamSaveCastSeconds: readonly number[];
+    /** fact1215 R11: the owner's redirect-save presses for a unit
+     * (`ownerRedirectSaveFor`) */
+    ownerRedirectSaves?: (unitId: string) => readonly number[];
   },
   /** Triage 2026-09-29 H1: what the owner gate saw — `actWindowFor(...)
    * .stateIn` over the SAME inputs as `ownerCouldRespond`. The gate passes an
-   * owner free for 1 s of the window (ruling 2026-09-23/26) even when CC'd for
-   * the rest; the facts then say so (`ownerCc`, `ownerFreeS`) instead of the
-   * line reading "held". Absent ⇒ neither fact. */
+   * owner free for 1 s after the crisis second (ruling 2026-09-23/26; the
+   * span since I05) even when CC'd for the rest; the facts then say so
+   * (`ownerCc`, `ownerFreeS`) instead of the line reading "held". Absent ⇒
+   * neither fact. */
   ownerActState?: (
     fromS: number,
     toS: number,
     anchorS: number,
+    spellIds?: readonly string[],
+    /** the press would land on the owner (their own crisis): what lets a
+     * school-limited purge count under a stun (I05 c, `stunLetsPress`) */
+    onSelf?: boolean,
   ) => ActWindowState | null,
+  /** Triage 2026-09-29 F-H7 / F-H9 (user ruling 2026-09-30, R4 = B, R5 = B):
+   * every friendly's own major-cooldown ledger. A save the crisis unit
+   * pressed on itself (`crisisUnitSaved`) or another teammate pressed for it
+   * (`teamAnswered`) inside the window is STATED, never counted as the
+   * player's answer — the verdict is unchanged. Absent ⇒ neither fact. */
+  teamLedgers?: ReadonlyArray<{
+    unit: { id: string; name: string };
+    cds: CdHoardCandidateCd[];
+    /** Presses of this unit's saves the ledger does not carry — Alter
+     *  Time's return, 342247 (work order 2026-10-14b fix 7: 138e632d's mage
+     *  snapped back from 33 % to 68 % at +0.1 s and the row did not say so). */
+    returns?: ReadonlyArray<{ atS: number; name: string }>;
+    /** This unit's presses of the redirect saves (Roar of Sacrifice,
+     *  Intervene …), on no ledger: when, what, and whom they went to
+     *  (fact1215 R11, codex 20-F15-33). Stated, never credited, like the
+     *  ledger saves. */
+    redirects?: ReadonlyArray<{ atS: number; name: string; onUnitId: string }>;
+    /** When the aura a press of `spellId` at `castS` put on this unit was
+     *  broken (SPELL_AURA_BROKEN[_SPELL], seconds since round start), null
+     *  when it was not (b12bfef4: a Greater Invisibility broken by a Moonfire
+     *  0.54 s after the press read as a save that held). */
+    brokenAtS?: (spellId: string, castS: number) => number | null;
+  }>,
+  /** Triage 2026-09-29 F-H6 (user ruling 2026-09-30, with res-readiness
+   * R2 = A): could the owner pay this cooldown's mana at any sample in
+   * [fromS, toS] (`affordableWithin`, the shared affordability predicate)?
+   * `false` keeps it out of the ACCUSATION set; `null` (unknown) and an
+   * absent callback do not gate. The response set is untouched. */
+  ownerAffordable?: (
+    spellId: string,
+    fromS: number,
+    toS: number,
+  ) => boolean | null,
+  /** Triage 2026-09-29 menu-coverage F-MC1 (user ruling 2026-09-30, A58;
+   * executes the 2026-07-30 ruling "Darkness counts as 40 % but position
+   * MUST be evaluated"): for a TEAMMATE's crisis, was the owner within the
+   * positional wall's reach of the crisis unit at `tSec`? `false` — including
+   * a missing position sample, which fails CLOSED here: a gap must not create
+   * an accusation — keeps a `MITIGATION_TABLE` `positional` cooldown out of
+   * the ACCUSATION set. An absent callback does not gate. The response set
+   * is untouched. */
+  reachesCrisisUnit?: (
+    spellId: string,
+    crisisUnitId: string,
+    tSec: number,
+  ) => boolean,
+  /** Could Forbearance stop the owner pressing this cooldown at `tSec`
+   * (`forbearanceBlocks` ∧ `selfForbearanceActiveAt` — the predicates the
+   * `[DEATH]` "Unused:" gate reads)? `true` keeps it out of the ACCUSATION
+   * set: a Divine Shield under Forbearance was not "ready" (review of
+   * cd-hoarded F-W6, 2026-10-03: a Holy Paladin's unpressed Divine Shield,
+   * owned on the spec baseline, named 10 s after a self Lay on Hands). The
+   * caller checks the RECIPIENT (`forbearanceStopsPress`: the crisis unit
+   * for an external such as Lay on Hands). Since FT F22 the caller asks
+   * `lockoutDebuffStopsPress`, which also stops an Ice Block under
+   * Hypothermia. An absent callback does not gate; the response set is
+   * untouched. */
+  ownerForbearanceBlocks?: (
+    spellId: string,
+    tSec: number,
+    crisisUnitId: string,
+  ) => boolean,
+  /** Codex review of F-W6, round 6: could the owner press a defensive that
+   * is cast ON AN ENEMY (`enemyTargetReaches`: Touch of Karma) at `tSec` —
+   * a living enemy within its reach? `false` (a missing sample fails closed)
+   * keeps it out of the ACCUSATION set, the own crisis included. An absent
+   * callback does not gate; the response set is untouched. */
+  ownerReachesEnemyTarget?: (spellId: string, tSec: number) => boolean,
 ): CandidateEvent[] {
   const cap = overrides?.cap ?? CD_HOARD_CAP;
   const candidates: Array<{
@@ -1180,14 +1928,21 @@ export function cdHoardedEvents(
       // accusation fired on a silenced / stunned / kicked owner (6fcb Garrote
       // 58.5–61.5 at a 1:00 teammate crisis; 138e Skull Bash lockout then
       // Incapacitating Roar). The owner must be able to act for at least
-      // REACTION_WINDOW_S inside the same window "spent" counts presses in.
-      if (
-        ownerCouldRespond &&
-        !ownerCouldRespond(
-          p.tSec - RESPONSE_PRE_MS / 1000,
-          p.tSec + CD_HOARD_RESPONSE_S,
-        )
-      ) {
+      // REACTION_WINDOW_S of `ownerFreeSpan` — from the crisis second on.
+      // I05 (user ruling 2026-10-11, option b): until then the gate read the
+      // whole window "spent" counts presses in, 1.5 s before the crossing
+      // included, while `facts.ownerFreeS` counts from `t` — so an owner free
+      // only BEFORE the crisis passed and the row printed `ownerFreeS=0.0`
+      // (30846f8e @82: a Frost Mage's Ice Block, Frost locked by Counterspell
+      // from −0.4 s; 3b56ac97 r4 @79: Hammer of Justice from +0.8 s to +5.8 s,
+      // `ownerFreeS=0.8`). Nobody is asked to answer a crisis before it
+      // exists; a press before it still ANSWERS it (`spent` below keeps its
+      // own window).
+      // FT-T10 (user ruling 2026-10-10): asked per cooldown below — a kick
+      // lockout stops only the spells of the school it locked. Unasked for a
+      // spell, the gate is the old one (every lockout locks everything).
+      const free = ownerFreeSpan(p.tSec);
+      const traceOwnerCouldNotAct = () => {
         if (tracing)
           trace.push({
             type: "cd-hoarded",
@@ -1198,8 +1953,7 @@ export function cdHoardedEvents(
             facts: pointFacts(src.own, p),
             candidateIds: [],
           });
-        continue;
-      }
+      };
       // Two sets on purpose (reaction window, user ruling 2026-09-23): the
       // ACCUSATION names only cooldowns ready by t − REACTION_WINDOW_S
       // (`cdReadyInTimeAt`), but "did they respond" (`spent` below) counts a
@@ -1210,25 +1964,61 @@ export function cdHoardedEvents(
       // against a player who had answered — 8 new accusations on the S2
       // archive every-30 before the split, 0 after (the 1 remaining addition is a
       // CD_HOARD_CAP substitution).
-      const helps = (cd: CdHoardCandidateCd) =>
-        src.own
-          ? !SELF_CAST_NOOP_EXTERNAL_IDS.has(cd.spellId)
-          : canHelpAnotherUnit(cd.spellId, cd.tag);
+      const helps = (cd: CdHoardCandidateCd) => cdHelpsRecipient(cd, src.own);
       const offCooldown = readyDefensiveCds(ownerCds, p.tSec, helps);
       // The ACCUSATION set: a response-only save (Barkskin / Frenzied
       // Regeneration, user ruling 2026-09-25 「不指控」) is never named as
       // "ready" — it still answers the crisis through `spent` below.
       // W1e (reliability round 2): a save that only blocks some schools
       // (Blessing of Protection physical, Spellwarding / Cloak of Shadows
-      // magic — `MITIGATION_TABLE`'s official school mask) is named only when
+      // magic — `MITIGATION_TABLE`'s official school mask; Anti-Magic Shell
+      // magic via its DB2 absorb mask, F-H20 — `saveSchoolMask`) is named only when
       // it covers at least SCHOOL_SAVE_MIN_SHARE of the 2 s of damage that
       // made this a crisis. The response set below is untouched.
-      const ready = offCooldown.filter(
+      // F-H6: a cooldown the owner could not pay for at any mana sample in
+      // [t, t + CD_HOARD_RESPONSE_S] is not "ready" to accuse (7f67e778 @378:
+      // Restoral costs 11,482 while the owner held 1,398).
+      const readyButForOwner = offCooldown.filter(
         (cd) =>
           !cd.responseOnly &&
           cdReadyInTimeAt(cd, p.tSec) &&
-          coversCrisisSchool(cd.spellId, p),
+          coversCrisisSchool(cd.spellId, p) &&
+          ownerAffordable?.(
+            cd.spellId,
+            p.tSec,
+            p.tSec + CD_HOARD_RESPONSE_S,
+          ) !== false &&
+          // F-MC1: a positional wall (Darkness' 8 yd zone) is "ready" for a
+          // teammate only when the owner stood within its reach of them
+          (src.own ||
+            !MITIGATION_TABLE[cd.spellId]?.positional ||
+            reachesCrisisUnit?.(cd.spellId, src.crisisUnit.id, p.tSec) !==
+              false) &&
+          ownerForbearanceBlocks?.(cd.spellId, p.tSec, src.crisisUnit.id) !==
+            true &&
+          ownerReachesEnemyTarget?.(cd.spellId, p.tSec) !== false,
       );
+      // the owner could press THIS cooldown: free of CC, and of a lockout on
+      // its school, for REACTION_WINDOW_S of `ownerFreeSpan`. I05 (c): a stun
+      // is no CC for a cooldown the game lets a stunned player press — the
+      // reading `facts.ownerFreeS` has, so the gate and the fact agree per
+      // cooldown (an owner stunned through the span with Icebound Fortitude
+      // in hand is named for it; with Anti-Magic Shell alone, not)
+      const ready = readyButForOwner.filter(
+        (cd) =>
+          ownerCouldRespond?.(free.fromS, free.toS, cd.spellId, src.own) !==
+          false,
+      );
+      // the trace keeps its two reasons: the owner could not act (for any
+      // ready cooldown, or — with none ready — at all), else nothing ready
+      if (
+        ready.length === 0 &&
+        (readyButForOwner.length > 0 ||
+          (!!ownerCouldRespond && !ownerCouldRespond(free.fromS, free.toS)))
+      ) {
+        traceOwnerCouldNotAct();
+        continue;
+      }
       if (ready.length === 0) {
         if (tracing)
           trace.push({
@@ -1308,9 +2098,15 @@ export function cdHoardedEvents(
         cd: CdHoardCandidateCd,
         c: { targetName?: string },
       ) =>
-        !canHelpAnotherUnit(cd.spellId, cd.tag) ||
+        !cdCanHelpAnotherUnit(cd) ||
         c.targetName === undefined ||
-        c.targetName === src.crisisUnit.name;
+        c.targetName === src.crisisUnit.name ||
+        // a talent-shared wall put on an ally lands on its caster too (the
+        // log: an APPLIED on each, one instant — `MITIGATION_TABLE`'s
+        // `pctOnOthers` note), so it answers the caster's own crisis
+        // (fact4 D57 preview, 149-4-936 @129: Obsidian Scales on a teammate
+        // 2.2 s after the evoker's own crossing read "held")
+        (src.own && isAllyCopyWallId(cd.spellId));
       const inWindow = (t: number) =>
         t >= p.tSec - RESPONSE_PRE_MS / 1000 &&
         t <= p.tSec + CD_HOARD_RESPONSE_S;
@@ -1322,8 +2118,32 @@ export function cdHoardedEvents(
               (c) => inWindow(c.timeSeconds) && reachedThisUnit(cd, c),
             ),
           ) ||
+        // fact2 C1 (user ruling 4, 2026-10-20): the owner's own self wall
+        // whose copy the log shows on THIS teammate answered it (Flameshaper
+        // Obsidian Scales — `allyCopyOn`, the same reading the teammates'
+        // answered set takes; 94e93f63 @110: the copy landed on the crisis
+        // unit 2.2 s after t and the event read "no save spent")
+        (!src.own &&
+          ownerCds
+            .filter((cd) => isSpendableDefensiveCd(cd))
+            .some((cd) =>
+              cd.casts.some(
+                (c) =>
+                  inWindow(c.timeSeconds) &&
+                  c.allyCopyOn === src.crisisUnit.name,
+              ),
+            )) ||
         (teamAnswers?.ownerPeelCastSeconds ?? []).some(inWindow) ||
-        (teamAnswers?.teamSaveCastSeconds ?? []).some(inWindow);
+        (teamAnswers?.teamSaveCastSeconds ?? []).some(inWindow) ||
+        // fact1215 R11 (5dd3d2d6 @86): a redirect save the owner pressed for
+        // this unit — Roar of Sacrifice, Master's Call, Intervene, Leap of
+        // Faith (`ownerRedirectSaves`). It is never accused (rulings A20 +
+        // U3) and is outside the ledger, so the response set did not see it
+        // either; keeping a save out of the accusation set must not take it
+        // out of the answers.
+        (teamAnswers?.ownerRedirectSaves?.(src.crisisUnit.id) ?? []).some(
+          inWindow,
+        );
       if (spent) {
         if (tracing)
           trace.push({
@@ -1390,21 +2210,48 @@ export function cdHoardedEvents(
                 windowToS,
                 Number(cd.spellId),
               ),
+              // Feign Death's casts are its Survival Tactics 202748
+              // activations (AURA_ONLY_ACTIVATION_IDS), so "cast later" sees
+              // a feign that is never logged as a press
               cd.casts.map((c) => c.timeSeconds),
-              { ownCastSuccessSeconds },
+              // F-H12 (ruling 2026-09-30 C1): a GCD reject of a cooldown
+              // ready at that press, never followed by its cast in the
+              // window, counts as an attempt; the accusation is not waived
+              {
+                ownCastSuccessSeconds,
+                keepGcdLockedUntilS: windowToS,
+                // at the press itself: cdAvailableAt adds the rendered-
+                // second slack, which here would admit a cooldown that
+                // only came back up to 0.5 s after the reject (codex
+                // review of F-H12)
+                readyAt: (s) => cdAvailableAt(cd, s - CD_INSTANT_SLACK_S),
+              },
             ),
           )
         : [];
       const attempted = formatAttemptedFact(failedHits);
+      // F-H2 (ruling 2026-09-30, R1 = B): the rejected presses stay counted,
+      // but the line says WHEN (offsets from t) and how long the owner could
+      // still act after the last one — pressing once while stunned does not
+      // excuse the rest of the window (95127ab4: six rejects in Leg Sweep
+      // before t, then 5.2 s free with the cooldown in hand).
+      const rejectAt = failedHits.map((h) => h.tSeconds).sort((a, b) => a - b);
       // A2 step 2 (user ruling 2026-09-25 「给别人也算回应不行」): a save the
       // owner pressed in this window on ANOTHER unit did not answer this
       // crisis — but it WAS pressed, so the line says where it went, or the
       // model reads "ready" as "held the whole time".
+      // fact2 C1: a self wall's ally copy went where the log shows it
+      // (`allyCopyOn`), not to the cast's named target
+      const recipientOf = (
+        cd: CdHoardCandidateCd,
+        c: { targetName?: string; allyCopyOn?: string },
+      ): string | undefined =>
+        cdCanHelpAnotherUnit(cd) ? c.targetName : c.allyCopyOn;
       const spentElsewhere = ownerCds
         .filter(
           (cd) =>
             isSpendableDefensiveCd(cd) &&
-            canHelpAnotherUnit(cd.spellId, cd.tag),
+            (cdCanHelpAnotherUnit(cd) || cd.casts.some((c) => c.allyCopyOn)),
         )
         .flatMap((cd) =>
           cd.casts
@@ -1412,14 +2259,14 @@ export function cdHoardedEvents(
               (c) =>
                 c.timeSeconds >= windowFromS &&
                 c.timeSeconds <= windowToS &&
-                c.targetName !== undefined &&
-                c.targetName !== crisisUnit.name,
+                recipientOf(cd, c) !== undefined &&
+                recipientOf(cd, c) !== crisisUnit.name,
             )
             .map((c) => {
               const dt = c.timeSeconds - point.tSec;
               return {
                 at: c.timeSeconds,
-                text: `${cd.spellName} → ${c.targetName} ${dt >= 0 ? "+" : ""}${dt.toFixed(1)}s`,
+                text: `${cd.spellName} → ${recipientOf(cd, c)} ${dt >= 0 ? "+" : ""}${dt.toFixed(1)}s`,
               };
             }),
         )
@@ -1430,17 +2277,234 @@ export function cdHoardedEvents(
       // window, offsets from the anchor second, and the free seconds after
       // it. Only when something blocked them — a free owner gets neither.
       // anchored on the rendered second `t` (facts.t), which the legend
-      // measures the offsets and ownerFreeS from
-      const act = ownerActState?.(windowFromS, windowToS, t) ?? null;
+      // measures the offsets and ownerFreeS from — `ownerFreeSpan`, the span
+      // the owner gate passed on (I05), so ownerFreeS ≥ REACTION_WINDOW_S
+      // FT-T10: free time is counted against the cooldowns the row names;
+      // `ownerCc` still lists every interval on the owner, a lockout with
+      // its school — the legend tells the reader a named cooldown was
+      // outside it (deliberate; post-hoc review 45-FT-99)
+      // I05 (c): and a stun is not counted against a cooldown the game lets
+      // a stunned player press (`actWindowFor`'s `stunPressable`) — the
+      // stun stays in `ownerCc`, the legend says why the time still counts
+      const readySpellIds = ready.map((cd) => cd.spellId);
+      const freeSpan = ownerFreeSpan(point.tSec);
+      const act =
+        ownerActState?.(
+          windowFromS,
+          freeSpan.toS,
+          freeSpan.fromS,
+          readySpellIds,
+          own,
+        ) ?? null;
       const off = (s: number) => {
         const d = s - t;
         return `${d >= 0 ? "+" : ""}${d.toFixed(1)}`;
       };
+      const attemptedAt = rejectAt.length
+        ? rejectAt.length === 1 || off(rejectAt[0]!) === off(rejectAt.at(-1)!)
+          ? `${off(rejectAt[0]!)}s`
+          : `${off(rejectAt[0]!)}…${off(rejectAt.at(-1)!)}s`
+        : "";
+      // WO3 #14 (r1008-79): a "not ready" reject of an on-GCD cooldown
+      // inside the owner's own GCD is free only once that GCD ends
+      // (`gcdLockedUntilS`, the guard's own test)
+      const freeFromS = failedHits.reduce((m, h) => {
+        const gcdEnd =
+          ownCastSuccessSeconds &&
+          NOT_READY_REASONS.has(h.reason) &&
+          !OFF_GCD_SPELL_IDS.has(String(h.spellId))
+            ? gcdLockedUntilS(ownCastSuccessSeconds, h.tSeconds)
+            : undefined;
+        return Math.max(m, gcdEnd ?? h.tSeconds);
+      }, -Infinity);
+      const afterReject =
+        rejectAt.length && ownerActState
+          ? ownerActState(
+              windowFromS,
+              windowToS,
+              Math.min(freeFromS, windowToS),
+              readySpellIds,
+              own,
+            )
+          : null;
+      // F-H5 (ruling 2026-09-30, R3 = A): the window really available after
+      // t — cut at the owner's death or the round end, the gate's own cut —
+      // stated only when shorter than CD_HOARD_RESPONSE_S.
+      // (compared as rendered: 4.96 s would print "5.0", which says nothing)
+      const windowRendered = act ? Math.max(0, act.endS - t).toFixed(1) : "";
+      const windowS =
+        act && Number(windowRendered) < CD_HOARD_RESPONSE_S
+          ? windowRendered
+          : "";
+      // F-H7 / F-H9 (ruling 2026-09-30, R4 = B, R5 = B): saves pressed for
+      // the crisis unit by someone other than the player — the unit itself,
+      // or another teammate's ally-reaching save — stated, not credited.
+      const pressedFor = (
+        cds: CdHoardCandidateCd[],
+        ally: boolean,
+      ): Array<{ at: number; name: string; spellId: string }> =>
+        cds
+          .filter((cd) => isSpendableDefensiveCd(cd))
+          .flatMap((cd) =>
+            cd.casts
+              .filter(
+                (c) =>
+                  c.timeSeconds >= windowFromS &&
+                  c.timeSeconds <= windowToS &&
+                  (cdCanHelpAnotherUnit(cd)
+                    ? c.targetName === undefined ||
+                      c.targetName === crisisUnit.name ||
+                      c.allyCopyOn === crisisUnit.name ||
+                      // the unit's own talent-shared wall given to an ally
+                      // lands on it too (codex 20-F17-09 #1)
+                      (!ally && isAllyCopyWallId(cd.spellId))
+                    : // F15 C1: a self wall answers for a teammate only
+                      // through the copy the log shows on that teammate
+                      // (Flameshaper Obsidian Scales — `allyCopyOn`)
+                      !ally || c.allyCopyOn === crisisUnit.name),
+              )
+              .map((c) => ({
+                at: c.timeSeconds,
+                name: cd.spellName,
+                spellId: cd.spellId,
+              })),
+          );
+      const crisisUnitSaved = own
+        ? ""
+        : (teamLedgers ?? [])
+            .filter((l) => l.unit.id === crisisUnit.id)
+            .flatMap((l) => [
+              ...pressedFor(l.cds, false).map((x) => ({
+                ...x,
+                broken: l.brokenAtS?.(x.spellId, x.at) ?? null,
+              })),
+              ...(l.returns ?? [])
+                .filter((r) => r.atS >= windowFromS && r.atS <= windowToS)
+                .map((r) => ({ at: r.atS, name: r.name, broken: null })),
+              ...(l.redirects ?? [])
+                .filter(
+                  (r) =>
+                    r.onUnitId === crisisUnit.id &&
+                    r.atS >= windowFromS &&
+                    r.atS <= windowToS,
+                )
+                .map((r) => ({ at: r.atS, name: r.name, broken: null })),
+            ])
+            .sort((a, b) => a.at - b.at)
+            .map(
+              (x) =>
+                `${x.name} ${off(x.at)}s${x.broken !== null ? ` (broken ${off(x.broken)}s)` : ""}`,
+            )
+            .join("; ");
+      // Work order 2026-10-14b fix 11 (facts only): a listed ready cooldown
+      // the player DID press in the next response window after this one —
+      // late, not never (0068182d @152: Mass Invisibility reached the
+      // crisis unit at +5.8 s, the row said nothing; 3 of 22 rows of the 51
+      // had such a press). The first press in (window end, window end +
+      // CD_HOARD_RESPONSE_S], with whom it was aimed at.
+      const pressedLate = ready
+        .slice(0, 3)
+        .flatMap((cd) => {
+          const c = cd.casts.find(
+            (x) =>
+              x.timeSeconds > windowToS &&
+              x.timeSeconds <= windowToS + CD_HOARD_RESPONSE_S,
+          );
+          return c
+            ? [
+                `${cd.spellName}${c.targetName ? ` → ${c.targetName}` : ""} ${off(c.timeSeconds)}s`,
+              ]
+            : [];
+        })
+        .join("; ");
+      const teamAnswered = (teamLedgers ?? [])
+        .filter((l) => l.unit.id !== crisisUnit.id && l.unit.id !== owner.id)
+        .flatMap((l) => [
+          ...pressedFor(l.cds, true).map((x) => ({ ...x, who: l.unit.name })),
+          ...(l.redirects ?? [])
+            .filter(
+              (r) =>
+                r.onUnitId === crisisUnit.id &&
+                r.atS >= windowFromS &&
+                r.atS <= windowToS,
+            )
+            .map((r) => ({ at: r.atS, name: r.name, who: l.unit.name })),
+        ])
+        .sort((a, b) => a.at - b.at)
+        .map((x) => `${x.name} (${x.who}) ${off(x.at)}s`)
+        .join("; ");
+      // B2-② (user ruling 2026-10-06; facts only — verdict and reference
+      // unchanged): offensive cooldowns the player pressed in the
+      // OWN_BURST_LEAD_S before the crisis reading — raw instants, and each
+      // says how long BEFORE THE READING it was. Not an offset from `t` like
+      // the line's other offsets: `t` is the reading's floored second, so a
+      // press 0.5 s before a 29.8 s reading would print "+0.3s" — after `t`,
+      // on a fact that says "before" (agy review of the batch). 537209d8 @29:
+      // Power Infusion and Voidform 1–2 s before the 37 % reading with
+      // Dispersion ready.
+      const ownBurstPressed = ownerCds
+        .filter((cd) => OFFENSIVE_CD_SPELL_IDS.has(String(cd.spellId)))
+        .flatMap((cd) =>
+          cd.casts
+            .filter(
+              (c) =>
+                c.timeSeconds >= point.tSec - OWN_BURST_LEAD_S &&
+                c.timeSeconds <= point.tSec,
+            )
+            .map((c) => ({ at: c.timeSeconds, name: cd.spellName })),
+        )
+        .sort((a, b) => a.at - b.at)
+        .map((x) => `${x.name} ${(point.tSec - x.at).toFixed(1)}s before`)
+        .join("; ");
+      // B1 (user ruling 2026-10-07, variant B of the 605 scan; a fact — the
+      // accusation is not waived): a defensive that would have helped here
+      // and is NOT among the ready ones, pressed inside the response window
+      // and rejected as not ready while the ledger says it was on its own
+      // cooldown at that press. Only key repeats right after that same
+      // spell's cast are left out; another cast's global cooldown is not
+      // (14055cb2 @63: two Ice Barrier presses 0.5 and 0.7 s after an Ice
+      // Storm cast, Ice Barrier itself on cooldown).
+      const readyIds = new Set(ready.map((cd) => cd.spellId));
+      const otherAttempts = rawStreams
+        ? ownerCds
+            .filter(
+              (cd) =>
+                isSpendableDefensiveCd(cd) &&
+                // F20 D1: not the owner's own ally-only external
+                cdHelpsRecipient(cd, own) &&
+                !readyIds.has(cd.spellId),
+            )
+            .map((cd) => {
+              const n = castFailedInWindow(
+                rawStreams,
+                owner.id,
+                windowFromS,
+                windowToS,
+                Number(cd.spellId),
+              ).filter(
+                (h) =>
+                  NOT_READY_REASONS.has(h.reason) &&
+                  // at the press itself, without the rendered-second slack
+                  // `cdAvailableAt` adds (the `attempted` guard above does
+                  // the same): a reject 0.3 s before the cooldown came back
+                  // was still a press into its own cooldown
+                  !cdAvailableAt(cd, h.tSeconds - CD_INSTANT_SLACK_S) &&
+                  !cd.casts.some(
+                    (c) =>
+                      h.tSeconds >= c.timeSeconds &&
+                      h.tSeconds - c.timeSeconds <= INTENT_GUARD_GCD_S,
+                  ),
+              ).length;
+              return n > 0 ? `${cd.spellName}${n > 1 ? ` ×${n}` : ""}` : "";
+            })
+            .filter(Boolean)
+            .join("、")
+        : "";
       const ownerCc = act?.blocks.length
         ? act.blocks
             .map(
               (b) =>
-                `${getEnglishSpellName(b.spellId)}${b.lockout ? " lockout" : ""} ${off(b.fromS)}…${Number.isFinite(b.toS) ? `${off(b.toS)}s` : "(no end logged)"}`,
+                `${getEnglishSpellName(b.spellId)}${b.lockout ? ` lockout${lockedSchoolsText(b.lockedSchoolMask)}` : ""} ${off(b.fromS)}…${Number.isFinite(b.toS) ? `${off(b.toS)}s` : "(no end logged)"}`,
             )
             .join("; ")
         : "";
@@ -1465,10 +2529,27 @@ export function cdHoardedEvents(
           own: own ? "yes" : "no",
           ...CD_HOARDED_OUTCOME_REF,
           ...(attempted ? { attempted } : {}),
+          ...(attempted && attemptedAt ? { attemptedAt } : {}),
+          // floored, not rounded: the legend compares the RENDERED value
+          // with REACTION_WINDOW_S, so 0.96 s must read 0.9, never 1.0
+          // (codex check of F-H2; CLAUDE.md render-grid rule)
+          ...(attempted && afterReject
+            ? {
+                freeAfterAttemptS: (
+                  Math.floor(afterReject.freeAfterS * 10 + 1e-9) / 10
+                ).toFixed(1),
+              }
+            : {}),
+          ...(windowS ? { windowS } : {}),
+          ...(crisisUnitSaved ? { crisisUnitSaved } : {}),
+          ...(teamAnswered ? { teamAnswered } : {}),
+          ...(pressedLate ? { pressedLate } : {}),
           ...(spentElsewhere ? { spentElsewhere } : {}),
           ...(ownerCc && act
             ? { ownerCc, ownerFreeS: act.freeAfterS.toFixed(1) }
             : {}),
+          ...(ownBurstPressed ? { ownBurstPressed } : {}),
+          ...(otherAttempts ? { otherAttempts } : {}),
         },
       };
     })
@@ -1487,8 +2568,8 @@ export interface ICrisisMoment {
 
 /**
  * Worst HP% any friendly reached inside [fromSeconds, toSeconds], render-grid
- * sampled at every rendered second — same scan shape as `enemyMinHpPctInWindow`
- * (Task 2), mirrored onto the owner's own team and extended to carry back
+ * sampled at every rendered second — the scan missed-sync-window's enemy
+ * reading ran until 2026-10-14 (Task 2), on the owner's own team, carrying back
  * WHICH unit and WHICH render second produced the worst reading (cd-hoarded's
  * crisis fact needs a citable moment, not just a number). Render-grid
  * discipline (CLAUDE.md): the caller must pass already-`toRenderSecond`-floored

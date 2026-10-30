@@ -35,19 +35,24 @@
  * saying the same thing twice. `[CD PRIOR]` lives in the band between the
  * cohort's median and the crisis line.
  */
-import { CombatUnitReaction } from "@gladlog/parser-compat";
+import { CombatUnitReaction, type ICombatUnit } from "@gladlog/parser-compat";
 
 import type { CdTriggerPriorRef } from "../data/cdTriggerPrior";
-import { buildCannotCastIntervals } from "../utils/cannotCastIntervals";
 import {
-  canHelpAnotherUnit,
+  cannotCastIntervalsForSpells,
+  type NamedCannotCastInterval,
+} from "../utils/cannotCastIntervals";
+import {
+  cdHelpsRecipient,
   cdReadyInTimeAt,
   extractMajorCooldowns,
   gridHpPct,
+  gridHpSample,
+  hpTroughInWindow,
   type IMajorCooldownInfo,
   isDeadAtRenderSecond,
-  SELF_CAST_NOOP_EXTERNAL_IDS,
 } from "../utils/cooldowns";
+import { roundEndMs } from "../utils/roundEnd";
 import {
   isSpendableDefensiveCd,
   type SpendableDefensiveCd,
@@ -100,12 +105,25 @@ export interface CdPriorHoldEpisode {
   spellName: string;
   /** rendered second the lowest friendly crossed below the cohort median */
   tSec: number;
-  /** that friendly's `gridHpPct` at `tSec` */
+  /** the reading the line pairs with its name (`minUnitName`): THAT
+   * friendly's `gridHpPct` at the second it fell below the median
+   * (`crossSec`) — the lowest friendly at `tSec` can be another unit
+   * (codex 60-POSTHOC-06c #1 / 07a #2: "Bob fell below that at 0:02 (48%)",
+   * the 48 % and the second Alice's) */
   hpAtCrossPct: number;
+  /** the second `minUnitName` itself fell below the median (≥ `tSec`;
+   * absent = `tSec`) */
+  crossSec?: number;
   /** the deepest lowest-friendly reading before HP came back above the
    * median (or the round ended) */
   minHpPct: number;
   minSec: number;
+  /** What the line PRINTS as "bottomed at": that friendly's true minimum
+   * over the dip's seconds (`hpTroughInWindow` — user ruling 2026-10-16, F15
+   * R1). `minHpPct` stays the grid reading every decision and the ranking
+   * read (09dda3c6: grid 43 % at 1:14, the log 41.3 %). */
+  troughHpPct: number;
+  troughSec: number;
   /** last rendered second still at or below the median — `endSec - tSec`
    * is how long the dip persisted */
   endSec: number;
@@ -237,7 +255,9 @@ export function cdPriorHoldEpisodes(
   overrides?: CdTriggerPriorOverrides,
 ): CdPriorHoldEpisode[] {
   const startMs: number = combat.startTime;
-  const endMs: number = combat.endTime;
+  // the round's end (`roundEndMs`): a dip is not walked into the strip after
+  // a Solo Shuffle round's ending death (work order 2026-10-14c #1)
+  const endMs: number = roundEndMs(combat);
   const lastSec = Math.floor((endMs - startMs) / 1000);
   const friends = friendliesOf(combat, owner);
   const cds = rosterOf(owner, combat, overrides)
@@ -248,31 +268,72 @@ export function cdPriorHoldEpisodes(
     );
   if (cds.length === 0 || lastSec <= 0) return [];
 
+  const roundUnits = Object.values(combat.units ?? {}) as UnitLike[];
   const enemyIds = new Set(
-    (Object.values(combat.units ?? {}) as UnitLike[])
+    roundUnits
       .filter(
         (u) => u.reaction !== (owner.reaction ?? CombatUnitReaction.Friendly),
       )
       .map((u) => u.id),
   );
-  let cannotCast: Array<{ from: number; to: number }> = [];
-  try {
-    cannotCast = buildCannotCastIntervals(owner, enemyIds);
-  } catch {
-    cannotCast = [];
-  }
-  const ownerCannotCastAt = (sec: number): boolean => {
-    const tMs = startMs + sec * 1000;
-    return cannotCast.some((iv) => iv.from <= tMs && tMs < iv.to);
+  // FT-T10: asked for the held cooldown — a kick lockout counts only when
+  // it locks that cooldown's school, and a cooldown the owner's pet casts is
+  // asked of the pet (`cannotCastIntervalsForSpells`)
+  const cannotCastBySpell = new Map<string, NamedCannotCastInterval[]>();
+  const cannotCastFor = (spellId: string): NamedCannotCastInterval[] => {
+    let ivs = cannotCastBySpell.get(spellId);
+    if (!ivs) {
+      try {
+        ivs = cannotCastIntervalsForSpells(
+          owner,
+          enemyIds,
+          [spellId],
+          roundUnits as never,
+        );
+      } catch {
+        ivs = [];
+      }
+      cannotCastBySpell.set(spellId, ivs);
+    }
+    return ivs;
   };
-  const ownerCanActAt = (sec: number): boolean =>
-    !isDeadAtRenderSecond(owner, startMs, sec) && !ownerCannotCastAt(sec);
+  const ownerCannotCastAt = (sec: number, spellId: string): boolean => {
+    const tMs = startMs + sec * 1000;
+    return cannotCastFor(spellId).some((iv) => iv.from <= tMs && tMs < iv.to);
+  };
+  const ownerCanActAt = (sec: number, spellId: string): boolean =>
+    !isDeadAtRenderSecond(owner, startMs, sec) &&
+    !ownerCannotCastAt(sec, spellId);
 
   // One series, walked once per cooldown.
   const series: Array<{ hpPct: number; unit: UnitLike } | null> = [];
   for (let s = 0; s <= lastSec; s++)
     series.push(lowestFriendlyGridHp(friends, startMs, s));
 
+  const troughOf = (
+    unit: UnitLike,
+    fromSec: number,
+    toSec: number,
+    gridPct: number,
+    gridSec: number,
+  ): { troughHpPct: number; troughSec: number } => {
+    // fact2 R1 (2026-10-20): the dip starts after the last tick that read
+    // above the line, not at the crossing tick — the readings between the
+    // two ticks are this episode's (e49b7c3b: 37.3 % at 1:58.902, the 1:59
+    // tick 41 %, printed `bottomed at 41%`). The crossing second itself stays
+    // the grid's (the ruling: decisions read the grid).
+    const u = unit as unknown as ICombatUnit;
+    const prevTick = gridHpSample(u, startMs + (fromSec - 1) * 1000);
+    const t = hpTroughInWindow(u, startMs, fromSec, toSec, undefined, {
+      fromMs: prevTick ? prevTick.sampleMs + 1 : startMs + fromSec * 1000,
+      // …never past the round's end (codex 60-POSTHOC-07a #1: "bottomed
+      // at 10%" read after the deciding death; 50 % in the round)
+      toMs: Math.min(startMs + (toSec + 1) * 1000 - 1, endMs),
+    });
+    return t && t.pct < gridPct
+      ? { troughHpPct: t.pct, troughSec: t.atSec }
+      : { troughHpPct: gridPct, troughSec: gridSec };
+  };
   const out: CdPriorHoldEpisode[] = [];
   for (const { cd, ref } of cds) {
     const line = ref.medianHpPct;
@@ -328,12 +389,12 @@ export function cdPriorHoldEpisodes(
       let actionableSecs = 0;
       // The cooldown's own readiness, kept apart from the owner's: the line
       // says "ready from M:SS" about the COOLDOWN, while the owner's lockout
-      // has its own clause ("you could not cast for Ns of that dip").
+      // has its own clause ("you could not cast it for Ns of that dip").
       let firstReadySec: number | null = null;
       for (let t = s; t <= episodeEndSec; t++) {
         const ready = cdReadyInTimeAt(cd, t);
         if (ready) firstReadySec ??= t;
-        if (!ownerCanActAt(t)) continue;
+        if (!ownerCanActAt(t, cd.spellId)) continue;
         castableSecs++;
         if (ready) actionableSecs++;
       }
@@ -345,9 +406,7 @@ export function cdPriorHoldEpisodes(
         continue;
       }
       const minIsOwner = min.unit.id === owner.id;
-      const helps = minIsOwner
-        ? !SELF_CAST_NOOP_EXTERNAL_IDS.has(cd.spellId)
-        : canHelpAnotherUnit(cd.spellId, cd.tag);
+      const helps = cdHelpsRecipient(cd, minIsOwner);
       if (!helps) {
         skipTo();
         continue;
@@ -365,9 +424,19 @@ export function cdPriorHoldEpisodes(
         spellId: cd.spellId,
         spellName: cd.spellName,
         tSec: s,
-        hpAtCrossPct: cur.hpPct,
+        ...(() => {
+          if (min.unit === cur.unit)
+            return { hpAtCrossPct: cur.hpPct, crossSec: s };
+          for (let r = s; r <= minSec; r++) {
+            const hp = gridHpPct(min.unit as never, startMs + r * 1000);
+            if (hp !== null && hp > 0 && hp <= line)
+              return { hpAtCrossPct: hp, crossSec: r };
+          }
+          return { hpAtCrossPct: min.hpPct, crossSec: minSec };
+        })(),
         minHpPct: min.hpPct,
         minSec,
+        ...troughOf(min.unit, s, episodeEndSec, min.hpPct, minSec),
         endSec: episodeEndSec,
         ownerLockedSecs: episodeEndSec - s + 1 - castableSecs,
         readyFromSec: firstReadySec ?? s,

@@ -1,9 +1,8 @@
-import { describe, expect, it } from "vitest";
-
 import { gzipSync } from "node:zlib";
 
+import { describe, expect, it } from "vitest";
+
 import { dateKeyOf, type LedgerEntry } from "./archiveLedger";
-import type { DetailedMatchStub } from "./feedClient";
 import {
   checkArchivePayload,
   driveDestFor,
@@ -25,6 +24,7 @@ import {
   stagingPathFor,
   STOP_AFTER_KNOWN,
 } from "./archivePlan";
+import type { DetailedMatchStub } from "./feedClient";
 
 function ledgerEntry(over: Partial<LedgerEntry> = {}): LedgerEntry {
   return {

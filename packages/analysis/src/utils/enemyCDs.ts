@@ -1,23 +1,38 @@
 import {
   AtomicArenaCombat,
+  CombatUnitType,
   ICombatUnit,
   LogEvent,
 } from "@gladlog/parser-compat";
 
+import {
+  castAndEffectIds,
+  triggeredEffectAurasOfCast,
+} from "../data/castEffectAuras";
 import { SPELL_CATEGORIES as spellsData } from "../data/spellCategories";
 import {
   effectiveCooldownSeconds,
   spellEffectData,
 } from "../data/spellEffectData";
+import {
+  buildAuraIntervals,
+  dropAuraRebroadcasts,
+  type IAuraInterval,
+  supersededAuraBreaks,
+} from "./auraIntervals";
 import { buffFullDurationForCaster } from "./buffDuration";
 import {
+  canonicalSpellId,
   getUnitHpAtTimestamp,
   HP_SAMPLE_RADIUS_MS,
+  isEnemyCdWindowSpell,
   isHealerSpec,
-  MIN_CD_SECONDS,
+  pressReadyAgainAtSeconds,
   specToString,
+  unitCooldownEntry,
   unitCooldownOf,
 } from "./cooldowns";
+import { pressRowsWithHidden } from "./hiddenPress";
 import { fmtTime } from "./renderGrid";
 
 type SpellEntry = { type: string };
@@ -25,14 +40,18 @@ const SPELLS = spellsData as Record<string, SpellEntry>;
 import {
   computeDampening,
   dampeningDangerMultiplier,
+  dampeningForThreatWeight,
   fmtDampening,
 } from "./dampening";
 import {
   AURA_EVIDENCE_WINDOW_S,
   auraOffensiveOccurrences,
+  GENERIC_PRESS_AFTER_MS,
+  TWIN_CAST_BEFORE_S,
 } from "./offensiveAuraOccurrences";
 import {
   dangerLabel,
+  OFFENSIVE_EFFECT_ACTIVATION_IDS,
   offensiveDangerWeight,
   offensiveEffectCdId,
 } from "./spellDanger";
@@ -52,6 +71,9 @@ export interface IEnemyCDCast {
   spellId: string;
   spellName: string;
   castTimeSeconds: number;
+  /** pressed while the enemy was unseen (`hiddenPressMs`): the instant the
+   * log showed its aura again, the latest the press can have been */
+  unseenPress?: true;
   /** this id's own cooldown; 0 for an activation of another cooldown's
    * effect (Radiant Glory's 454351 has none — GH #115) */
   cooldownSeconds: number;
@@ -63,8 +85,10 @@ export interface IEnemyCDCast {
    * scoring read. */
   dangerWeight: number;
   /**
-   * When the buff granted by this CD expires. Computed from spellEffectData.durationSeconds
-   * when available; falls back to castTimeSeconds when duration data is missing.
+   * When the effect of this cast ended: the end of its OBSERVED aura chain
+   * when the log shows one (`observedEffectEndSeconds`), else the official
+   * duration for the caster (spellEffectData / `buffFullDurationForCaster`),
+   * else the cast time. `burstCastSpan` reads it.
    */
   buffEndSeconds: number;
   /** GH #119: "fact" = shown, never part of a burst window (a Demonic
@@ -105,7 +129,9 @@ export interface IAlignedBurstWindow {
   /** Combined score including outcome factors (damage dealt, healer CC) — kept for existing consumers */
   readonly dangerScore: number;
   readonly dangerLabel: "Low" | "Moderate" | "High" | "Critical";
-  readonly dampeningPct: number; // 0–1
+  /** 0–1; `null` where no value is stated — a 2v2 round that logged no
+   * stack (`getInitialDampening`). */
+  readonly dampeningPct: number | null;
   readonly damageInWindow: number;
   readonly damageRatio: number;
   readonly healerCCed: boolean;
@@ -124,38 +150,266 @@ export interface IEnemyCDTimeline {
   readonly alignedBurstWindows: readonly IAlignedBurstWindow[];
 }
 
-/** Max CD to consider a "real" cooldown (filters out 999.999s passive procs) */
-export const ENEMY_CD_MAX_SECONDS = 360;
-
-/**
- * "The enemy opened a cooldown" — ONE predicate for every consumer that
- * turns an enemy cast into a burst / threat fact: this builder's enemy-CD
- * windows, `crisisDecisionPoints`' `enemyBurst` and the teammate-crisis
- * cards' burst fact (2026-09-17, GH #95 hand-read). Membership in the
- * canonical `OFFENSIVE_CD_SPELL_IDS` is necessary but not sufficient — that
- * table also admits `debuffs_offensive` rows with no cooldown at all (Curse
- * of Weakness 702, Curse of Tongues 1714, Ignite 12654), which are not
- * something a cooldown tracker shows. Official cooldown (or charge recharge)
- * inside [MIN_CD_SECONDS, ENEMY_CD_MAX_SECONDS] — of the EFFECT's cooldown:
- * a registered activation (`OFFENSIVE_EFFECT_ACTIVATION_IDS`, Radiant Glory's
- * Avenging Wrath 454351) is admitted on its canonical cooldown (GH #115).
- */
-export function isEnemyCdWindowSpell(spellId: string): boolean {
-  const cdId = offensiveEffectCdId(spellId);
-  if (cdId === undefined) return false;
-  const effectData = spellEffectData[spellId];
-  if (!effectData) return false;
-  const cooldownSeconds = effectiveCooldownSeconds(cdId) ?? 0;
-  return (
-    cooldownSeconds >= MIN_CD_SECONDS && cooldownSeconds <= ENEMY_CD_MAX_SECONDS
-  );
-}
+// `ENEMY_CD_MAX_SECONDS` and `isEnemyCdWindowSpell` live in `cooldowns.ts`
+// since fact2 C10 (2026-10-20): the aura-evidence reader there
+// (`offensiveCdOfAura`) admits an effect aura on the same window test, and
+// `cooldowns.ts` cannot import this module (it imports `cooldowns.ts`).
+export { ENEMY_CD_MAX_SECONDS, isEnemyCdWindowSpell } from "./cooldowns";
 
 /**
  * For each enemy player, reconstruct when their offensive cooldowns (>= 30s) were cast
  * and when each CD will be available again. Also identifies aligned burst windows where
  * multiple enemies stacked offensive CDs together.
  */
+/** A re-application this close after the previous interval's end continues
+ * the same effect (triage kick-eaten F-K1, Sim R1-A: 02c8e3ac's Dragonrage
+ * re-applied through 29.9 and removed at 45.4). */
+export const EFFECT_CHAIN_GAP_S = 0.5;
+
+/** A chain starts at an application in [cast − this, cast + `EFFECT_START_AFTER_S`]
+ * — the entry's Sim R1-A window (an aura's APPLIED can be logged a little
+ * before the cast's SUCCESS). */
+export const EFFECT_START_BEFORE_S = 0.5;
+export const EFFECT_START_AFTER_S = 2;
+
+/** Every PLAYER unit's aura intervals, once per combat. A summon's auras are
+ * left out (FT F13): `observedEffectEndSeconds` answers "until when was this
+ * player's cooldown running", and an effect that lives on only on a pet, a
+ * totem or a guardian is not that — 9c6ab747: The Hunt's DoT left its player
+ * target at 83.9 and sat on a Jade Serpent Statue until 85.1, and a kick at
+ * 84.7 read `ourBurst=The Hunt`. */
+const AURA_INDEX = new WeakMap<
+  object,
+  Array<{ destId: string; iv: IAuraInterval }>
+>();
+function auraIndexOf(combat: AtomicArenaCombat) {
+  let idx = AURA_INDEX.get(combat);
+  if (!idx) {
+    idx = [];
+    for (const u of Object.values(combat.units ?? {})) {
+      if (u.type !== CombatUnitType.Player) continue;
+      for (const iv of buildAuraIntervals(u, combat))
+        idx.push({ destId: u.id, iv });
+    }
+    AURA_INDEX.set(combat, idx);
+  }
+  return idx;
+}
+
+/**
+ * Where one cast's effect was seen to end, in seconds from the match start —
+ * or null when the log does not show it.
+ *
+ * Triage kick-eaten F-K1, the observed-chain half of ruling A14 = B (the
+ * floor half landed 2026-10-02): `burstCastSpan` ends at the observed aura
+ * chain of the cast. The cast's effect auras are its own id plus the
+ * cast→effect table's (`castAndEffectIds`, CROSS-THEME G3, ruling A10), on
+ * any PLAYER unit (The Hunt's DoT is on its target, Strike of the Windlord's
+ * debuff too; a copy on a pet, a totem or a guardian is not read — FT F13,
+ * `auraIndexOf`), applied by the caster: an interval that starts in [cast −
+ * `EFFECT_START_BEFORE_S`, cast + `EFFECT_START_AFTER_S`] (before the
+ * caster's next press of the same spell), extended by re-applications on the
+ * same unit no more than `EFFECT_CHAIN_GAP_S` after it ended. Several chains
+ * (a caster buff and a target DoT) → the one that ends last, and only when
+ * THAT end was logged: a chain closed only by the official-length cap
+ * (`inferredEnd`) says nothing about when the effect ended, so a longer
+ * unclosed DoT is not cut short by a shorter buff's removal (codex review:
+ * The Hunt's 0.4 s buff against its unclosed DoT) — null, the official
+ * duration stands. Sim R1-A of the entry, rule for rule.
+ */
+export function observedEffectEndSeconds(
+  caster: ICombatUnit,
+  castSpellId: string,
+  castS: number,
+  nextSameCastS: number,
+  combat: AtomicArenaCombat,
+  /** read only this recipient's copy (a press that put one on its caster
+   * and one on an ally answers for each with its own end — codex
+   * 20-F17-11 #1) */
+  onlyDestId?: string,
+): number | null {
+  const ids = castAndEffectIds(castSpellId);
+  const triggered = new Set(triggeredEffectAurasOfCast(castSpellId));
+  const mine = auraIndexOf(combat).filter(
+    ({ iv, destId }) =>
+      ids.has(iv.spellId) &&
+      iv.srcUnitName === caster.name &&
+      !iv.inferredStart &&
+      iv.fromS < nextSameCastS &&
+      (onlyDestId === undefined || destId === onlyDestId),
+  );
+  const castMs = combat.startTime + castS * 1000;
+  const auraRowsOf = (destId: string, orNoSource = false) =>
+    (combat.units?.[destId]?.auraEvents ?? []).filter(
+      (a) =>
+        !!a.spellId &&
+        ids.has(a.spellId) &&
+        (a.srcUnitId === caster.id ||
+          // a REMOVED written with no source closes the caster's interval in
+          // the builder too (its source fallback)
+          (orNoSource &&
+            (!a.srcUnitId || a.srcUnitId === "0000000000000000"))) &&
+        a.destUnitId === destId,
+    );
+  const refreshedAtCast = (destId: string): boolean =>
+    auraRowsOf(destId).some(
+      (a) =>
+        (a.logLine.event === LogEvent.SPELL_AURA_REFRESH ||
+          a.logLine.event === LogEvent.SPELL_AURA_APPLIED) &&
+        a.logLine.timestamp >= castMs - EFFECT_START_BEFORE_S * 1000 &&
+        a.logLine.timestamp <= castMs + EFFECT_START_AFTER_S * 1000,
+    );
+  let best: {
+    end: number;
+    observed: boolean;
+    destId: string;
+    lastFromS: number;
+  } | null = null;
+  for (const dest of new Set(mine.map((m) => m.destId))) {
+    const ivs = mine
+      .filter((m) => m.destId === dest)
+      .map((m) => m.iv)
+      .sort((a, b) => a.fromS - b.fromS);
+    const startsAtPress = (iv: (typeof ivs)[number]) =>
+      iv.fromS >= castS - EFFECT_START_BEFORE_S &&
+      iv.fromS <= castS + EFFECT_START_AFTER_S;
+    let first = ivs.findIndex(startsAtPress);
+    // the aura the cast's effect lives on (`triggeredEffectAurasOfCast`)
+    // over a side effect of it that went up first: The Hunt's 1.5 s root
+    // 370970 ended its span at 1:16 while its DoT 370969 ran to 1:21 (fact5
+    // cxa e38f41c9 1:15)
+    if (
+      first >= 0 &&
+      ivs[first]!.spellId !== castSpellId &&
+      !triggered.has(ivs[first]!.spellId)
+    ) {
+      const main = ivs.findIndex(
+        (iv) => startsAtPress(iv) && triggered.has(iv.spellId),
+      );
+      if (main >= 0) first = main;
+    }
+    // F15 / fact1215 R8: a press that REFRESHed an aura already up (an
+    // un-pressed application before it) starts no interval of its own — the
+    // open one it refreshed is its effect (519781fd: Malevolence up from
+    // 1:11.95, the 1:21.50 press refreshed it, it ran to 1:47.96; the span
+    // read the official 20 s, 1:21–1:41)
+    // Only with the log's word for it: this caster's REFRESH (or re-APPLIED)
+    // of one of the ids on this unit at the press (codex 20-F15-08: another
+    // target's older copy merely overlapping the press is not this press's)
+    if (first < 0 && refreshedAtCast(dest))
+      // …the interval the logged refresh lands in: open at the press, however
+      // soon it closed after (codex 60-POSTHOC-10d: a Malevolence refreshed
+      // at 20 s and removed at 21 read the official 20 s, 20–40 s, and made a
+      // false burst kill attempt)
+      first = ivs.findIndex((iv) => iv.fromS < castS && iv.toS >= castS);
+    if (first < 0) continue;
+    let chainEnd = ivs[first]!.toS;
+    let observed = !ivs[first]!.inferredEnd;
+    let lastFromS = ivs[first]!.fromS;
+    for (const iv of ivs.slice(first + 1)) {
+      if (iv.fromS > chainEnd + EFFECT_CHAIN_GAP_S) break;
+      // a re-application of the SAME aura continues the chain; another of
+      // the cast's effect ids on this unit does not (round-1 retest idx 46:
+      // Kingsbane 385627 ended at 2:25.13, and its same-named stacking buff
+      // 394095 — nominated by name only — stretched the span to 2:29.7)
+      if (iv.spellId !== ivs[first]!.spellId) continue;
+      if (iv.toS > chainEnd) {
+        chainEnd = iv.toS;
+        observed = !iv.inferredEnd;
+        lastFromS = iv.fromS;
+      }
+    }
+    if (best === null || chainEnd > best.end)
+      best = { end: chainEnd, observed, destId: dest, lastFromS };
+  }
+  // F15 / fact1215 R8: the interval builder clamps a REMOVED logged after
+  // the combat's end onto that end (`buildAuraIntervals` `rel`) and still
+  // calls the end observed — a clamp is no observation (26bfd4f3: Kingsbane
+  // removed 1:50.78, after the round; `4s left` at 1:42 was the round's end
+  // minus now). The official duration stands.
+  // Read on the raw rows (codex 20-F15-08: an aura really removed at the
+  // combat's end is an observation): the chain ends on the clamp only when
+  // the log's own REMOVED of it came after the combat ended.
+  const combatEndS = (combat.endTime - combat.startTime) / 1000;
+  // The REMOVED that closed the chain's last interval: the first one at or
+  // after that interval's start, from the caster or written with no source
+  // (codex 20-F15-09: a duplicate REMOVED after a real one at the end, and a
+  // source-less REMOVED the builder pairs, both read wrong by "any later
+  // REMOVED").
+  if (best !== null && best.end >= combatEndS - 0.001) {
+    const fromMs = combat.startTime + best.lastFromS * 1000;
+    // re-broadcast pairs dropped first, as the interval builder does
+    // (codex 20-F15-10: a REMOVED + APPLIED at 26 s is not the close)
+    const closing = dropAuraRebroadcasts(auraRowsOf(best.destId, true))
+      .filter(
+        (a) =>
+          a.logLine.event === LogEvent.SPELL_AURA_REMOVED &&
+          a.logLine.timestamp >= fromMs,
+      )
+      .sort((x, y) => x.logLine.timestamp - y.logLine.timestamp)[0];
+    if (closing && closing.logLine.timestamp > combat.endTime) {
+      // …unless the log shows it outliving its official length: still up
+      // when the combat ended, past `cast + official`, it ran at least to the
+      // combat's end (round-1 retest idx 64, a2e71187: a talent-lengthened
+      // Dragonrage up 29.5 s against 18 s read as ending at cast + 18 s). A
+      // clamp before the official end leaves the official end standing (the
+      // Kingsbane case).
+      const full = buffFullDurationForCaster(castSpellId, caster);
+      return full !== undefined && castS + full < combatEndS
+        ? combatEndS
+        : null;
+    }
+  }
+  return best?.observed ? best.end : null;
+}
+
+const OWN_CAST_COMBAT = new WeakMap<object, AtomicArenaCombat>();
+
+/**
+ * `observedEffectEndSeconds` for a caller that has the round's players but
+ * no combat object (the timeline sections), in epoch ms: where this press of
+ * `spellId` by `caster` was seen to end, or null (the official length
+ * stands). The next press of the same spell bounds the search. Work order
+ * 2026-10-15 #8: the [HEALING] / [MANA] windows read cast + official length.
+ */
+export function observedCastEndMs(
+  caster: ICombatUnit,
+  spellId: string,
+  castMs: number,
+  players: readonly ICombatUnit[],
+  matchStartMs: number,
+  matchEndMs: number,
+): number | null {
+  let combat = OWN_CAST_COMBAT.get(players);
+  if (!combat) {
+    combat = {
+      startTime: matchStartMs,
+      endTime: matchEndMs,
+      units: Object.fromEntries(players.map((u) => [u.id, u])),
+    } as unknown as AtomicArenaCombat;
+    OWN_CAST_COMBAT.set(players, combat);
+  }
+  const nextMs = Math.min(
+    Infinity,
+    ...(caster.spellCastEvents ?? [])
+      .filter(
+        (e) =>
+          e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+          e.spellId === spellId &&
+          e.timestamp > castMs + 1,
+      )
+      .map((e) => e.timestamp),
+  );
+  const end = observedEffectEndSeconds(
+    caster,
+    spellId,
+    (castMs - matchStartMs) / 1000,
+    (nextMs - matchStartMs) / 1000,
+    combat,
+  );
+  return end === null ? null : matchStartMs + end * 1000;
+}
+
 export function reconstructEnemyCDTimeline(
   enemies: ICombatUnit[],
   combat: AtomicArenaCombat,
@@ -170,21 +424,33 @@ export function reconstructEnemyCDTimeline(
   for (const enemy of enemies) {
     const offensiveCDs: IEnemyCDCast[] = [];
 
-    for (const cast of enemy.spellCastEvents) {
+    // corpusFactScan hiddenPressUnused (2026-10-21): a press made while the
+    // enemy was unseen (`hiddenPressMs`) is a press too (0284fcd9 r1 0:12:
+    // Tranquility; 4-3 r3 0:06: Takedown — no line, kit [UNUSED])
+    const presses = pressRowsWithHidden(
+      enemy,
+      isEnemyCdWindowSpell,
+      matchStartMs,
+    );
+    for (const cast of presses) {
       if (cast.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
       const { spellId } = cast;
       if (!spellId) continue;
       if (!isEnemyCdWindowSpell(spellId)) continue;
       const effectData = spellEffectData[spellId]!;
       // an activation of another cooldown's effect (GH #115) has no button:
-      // no cooldown of its own, nothing to come "available again"
-      const isActivation = offensiveEffectCdId(spellId) !== spellId;
+      // no cooldown of its own, nothing to come "available again". An
+      // override variant (F20 D23: Predator's Wake 1259431 on The Hunt's
+      // button) IS that button: priced on the cooldown it presses, under the
+      // log's own id and name.
+      const isActivation = OFFENSIVE_EFFECT_ACTIVATION_IDS.has(spellId);
+      const cdId = offensiveEffectCdId(spellId) ?? spellId;
       // the enemy's own talent-resolved cooldown (`unitCooldownOf`: Summon
       // Infernal 90 with Inferno, not 120) — talent impact audit 2026-09-26
       const cooldownSeconds = isActivation
         ? 0
-        : (unitCooldownOf(enemy, spellId)?.cooldownSeconds ??
-          effectiveCooldownSeconds(spellId) ??
+        : (unitCooldownOf(enemy, cdId)?.cooldownSeconds ??
+          effectiveCooldownSeconds(cdId) ??
           0);
 
       const castTimeSeconds = (cast.logLine.timestamp - matchStartMs) / 1000;
@@ -205,6 +471,12 @@ export function reconstructEnemyCDTimeline(
       );
       if (isDuplicate) continue;
 
+      // back in hand: the shared cooldown model's realised instant for this
+      // press (`unitCooldownEntry` — per-press talent effects, charges);
+      // the static sum only for a cast the model does not count as a press
+      const entry = isActivation
+        ? undefined
+        : unitCooldownEntry(enemy, combat, cdId);
       offensiveCDs.push({
         spellId,
         spellName: effectData.name,
@@ -212,13 +484,34 @@ export function reconstructEnemyCDTimeline(
         cooldownSeconds,
         availableAgainAtSeconds: isActivation
           ? null
-          : castTimeSeconds + cooldownSeconds,
+          : ((entry && pressReadyAgainAtSeconds(entry, castTimeSeconds)) ??
+            castTimeSeconds + cooldownSeconds),
         buffEndSeconds: castTimeSeconds + buffDuration,
+        ...(cast.unseenPress ? { unseenPress: true as const } : {}),
         dangerWeight: offensiveDangerWeight(
           spellId,
           (id) => effectiveCooldownSeconds(id) ?? 0,
         ),
       });
+    }
+
+    // The span of each LOGGED cast ends where its effect was seen to end
+    // (`observedEffectEndSeconds`) — before the aura-evidence merge below,
+    // which keeps its own say for the effects it owns.
+    for (const cd of offensiveCDs) {
+      const next = offensiveCDs.find(
+        (c) =>
+          canonicalSpellId(c.spellId) === canonicalSpellId(cd.spellId) &&
+          c.castTimeSeconds > cd.castTimeSeconds,
+      );
+      const end = observedEffectEndSeconds(
+        enemy,
+        cd.spellId,
+        cd.castTimeSeconds,
+        next?.castTimeSeconds ?? Infinity,
+        combat,
+      );
+      if (end !== null) cd.buffEndSeconds = end;
     }
 
     // GH #119: effects whose only evidence is an aura (Havoc Metamorphosis —
@@ -238,18 +531,55 @@ export function reconstructEnemyCDTimeline(
     // (codex re-review: two source-unknown forms [10,11] and [12,17] merged
     // into one [10,17] when the second matched the first)
     const loggedCasts = [...offensiveCDs];
+    // one logged cast takes one aura occurrence, and an occurrence the
+    // helper found no press for (`unresolved` — a cast-less Avenging Wrath
+    // 2 s after a pressed one) is never folded into a press (codex
+    // 20-F15-34: its 12.5–20.5 s interval stretched the 10 s cast)
+    const mergedInto = new Set<IEnemyCDCast>();
     for (const o of aura.occurrences) {
       const castTimeSeconds = (o.startMs - matchStartMs) / 1000;
+      // the aura a press made while unseen was restated from
+      // (`pressRowsWithHidden`: the press sits at the aura's own instant) is
+      // that press — whatever the occurrence's provenance (fact5 b2b 92-5
+      // 2:19: Arcane Surge `(cast 3 of 3) [pressed while unseen]` beside
+      // `(no press)` for one APPLIED)
+      if (
+        loggedCasts.some(
+          (c) =>
+            c.unseenPress &&
+            c.spellId === o.spellId &&
+            Math.abs(c.castTimeSeconds - castTimeSeconds) <= 0.05,
+        )
+      )
+        continue;
+      // a cast-less application beside a press the timeline has (a press
+      // made unseen, `hiddenPressMs`, re-stated with the unit) is that press
+      if (
+        o.generic &&
+        loggedCasts.some(
+          (c) =>
+            c.spellId === o.spellId &&
+            c.castTimeSeconds <=
+              castTimeSeconds + GENERIC_PRESS_AFTER_MS / 1000 &&
+            c.castTimeSeconds >= castTimeSeconds - TWIN_CAST_BEFORE_S,
+        )
+      )
+        continue;
       // a LOGGED press of the same cooldown already stands for this effect
       // (a 191427 button cast, should one ever log): merge the aura's end
       // into it instead of adding a second occurrence (codex review)
-      const logged = loggedCasts.find(
-        (c) =>
-          c.spellId === o.spellId &&
-          Math.abs(c.castTimeSeconds - castTimeSeconds) <=
-            AURA_EVIDENCE_WINDOW_S,
-      );
+      const logged =
+        o.provenance === "unresolved"
+          ? undefined
+          : loggedCasts.find(
+              (c) =>
+                !mergedInto.has(c) &&
+                c.spellId === o.spellId &&
+                Math.abs(c.castTimeSeconds - castTimeSeconds) <=
+                  AURA_EVIDENCE_WINDOW_S,
+            );
       if (logged) {
+        mergedInto.add(logged);
         // an observed aura end replaces the estimate; an INFERRED one (the
         // aura's own official length — Summon Infernal's cast row is 0.25 s)
         // may only lengthen it: a re-application closes the interval early
@@ -369,15 +699,33 @@ export function reconstructEnemyCDTimeline(
             )
           : 0.5;
 
-      // Dampening at window start
+      // Dampening at window start. The stack events are read on the units
+      // this call was handed (unchanged); the bracket is classified on the
+      // round's whole roster (FT-T13, D10) — half of this function's callers
+      // pass no `friendlies`, and for a bracket string that names no bracket
+      // one side alone never counts as a 3v3 roster.
       const bracket = combat.startInfo?.bracket ?? "3v3";
       const allPlayers = [...enemies, ...(friendlies ?? [])];
+      const roundUnits = Object.values(combat.units ?? {});
+      const roster = roundUnits.length > 0 ? roundUnits : allPlayers;
+      const windowStartAtMs = windowStart * 1000 + matchStartMs;
+      // `dampening` is the STATED value — null in a 2v2 round that logged no
+      // stack (FT-T13 D11); it is what `dampeningPct` carries to anything
+      // that prints it. The threat score needs a weight even there and takes
+      // it from `dampeningForThreatWeight` (0 for such a round).
+      // the doses of the team the burst lands on — ours, when the caller
+      // passed it (fact1215 R11, codex 20-F15-32: the teams tick apart)
+      const dosesOf =
+        friendlies && friendlies.length > 0 ? friendlies : allPlayers;
       const dampening = computeDampening(
-        windowStart * 1000 + matchStartMs,
+        windowStartAtMs,
         bracket,
-        allPlayers,
+        dosesOf,
+        roster,
       );
-      const dampeningMult = dampeningDangerMultiplier(dampening);
+      const dampeningMult = dampeningDangerMultiplier(
+        dampeningForThreatWeight(windowStartAtMs, bracket, dosesOf, roster),
+      );
 
       // Hoist window timestamps here so both the healer CC block and HP sampling share the same values
       const windowStartMs = matchStartMs + windowStart * 1000;
@@ -391,8 +739,10 @@ export function reconstructEnemyCDTimeline(
       if (owner && isHealerSpec(owner.spec)) {
         const ccStartBySpell = new Map<string, number>();
         const ccIntervals: { start: number; end: number }[] = [];
+        // a BROKEN line its aura's own REMOVED follows is not the end (FT-T08)
+        const notTheEnd = supersededAuraBreaks(owner.auraEvents);
         for (const a of owner.auraEvents) {
-          if (!a.spellId) continue;
+          if (!a.spellId || notTheEnd.has(a)) continue;
           const entry = SPELLS[a.spellId];
           if (entry?.type === "cc") {
             if (
@@ -571,7 +921,11 @@ export function formatEnemyCDTimelineForContext(
     "  (Threat = strength of the stacked CDs before outcome; Outcome = what actually happened. High threat with below-average damage usually means the burst was well defended — worth crediting.)",
   );
   timeline.alignedBurstWindows.forEach((w, idx) => {
-    const dampStr = fmtDampening(w.dampeningPct);
+    // No `| Dampening:` where none is stated (a 2v2 round with no logged stack)
+    const dampStr =
+      w.dampeningPct === null
+        ? ""
+        : ` | Dampening: ${fmtDampening(w.dampeningPct)}`;
     // Each CD carries its own cast time: the window is the union of "earliest
     // cast -> latest buff end", and a list without times was once read as
     // everything popping at the window start (059).
@@ -585,7 +939,7 @@ export function formatEnemyCDTimelineForContext(
     const ratioStr = `${w.damageRatio.toFixed(1)}× match avg rate`;
     const healerStr = w.healerCCed ? "healer CCed" : "healer free";
     lines.push(
-      `  #${idx + 1} — ${fmtTime(w.fromSeconds)}–${fmtTime(w.toSeconds)} | Threat: ${w.threatLabel} (${w.threatScore.toFixed(1)}) | Dampening: ${dampStr}`,
+      `  #${idx + 1} — ${fmtTime(w.fromSeconds)}–${fmtTime(w.toSeconds)} | Threat: ${w.threatLabel} (${w.threatScore.toFixed(1)})${dampStr}`,
     );
     lines.push(`    CDs: ${cdNames}`);
     lines.push(`    Outcome: ${dmgM}M damage (${ratioStr}) | ${healerStr}`);

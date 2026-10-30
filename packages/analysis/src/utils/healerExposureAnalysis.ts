@@ -21,14 +21,19 @@ import {
   LogEvent,
 } from "@gladlog/parser-compat";
 
-import { ccSpellIds } from "../data/spellTags";
+import { BACKLASH_AURA_CC_TYPE } from "../data/backlashCc";
+import { effectAuraViaName } from "../data/castEffectAuras";
+import { getEnglishSpellName } from "../data/spellEffectData";
+import { hardCcAuraAt } from "./cannotCastIntervals";
 import {
   analyzePlayerCCAndTrinket,
   IPlayerCCTrinketSummary,
   pvpTrinketRemainingSecondsAt,
+  rendersCcOnTeamLine,
 } from "./ccTrinketAnalysis";
 import {
   chargeAvailabilityTransitions,
+  earliestCooldownSecondsFor,
   isHealerSpec,
   specToString,
   unitCooldownOf,
@@ -51,6 +56,8 @@ import {
 } from "./positionSampling";
 import { fmtTime } from "./renderGrid";
 import { ccThreatRadiusYards } from "./spellRange";
+import { stealthControlUsableAt } from "./stealthControl";
+import { summonOwnerById } from "./summonOwner";
 
 // An enemy standing outside cast range cannot land a CC, line of sight or not.
 // The range is the single-source export from positionSampling — note that it and
@@ -68,17 +75,17 @@ import { ccThreatRadiusYards } from "./spellRange";
 const POSITION_MAX_GAP_MS = INTERP_MAX_GAP_MS;
 
 /** Returns true if the enemy has an active CC aura at the given timestamp (ms). */
-function isEnemyInCC(enemy: ICombatUnit, atMs: number): boolean {
-  const active = new Map<string, boolean>();
-  for (const e of enemy.auraEvents) {
-    if (!e.spellId || !ccSpellIds.has(e.spellId)) continue;
-    if (e.logLine.timestamp > atMs) break;
-    if (e.logLine.event === LogEvent.SPELL_AURA_APPLIED)
-      active.set(e.spellId, true);
-    else if (e.logLine.event === LogEvent.SPELL_AURA_REMOVED)
-      active.set(e.spellId, false);
-  }
-  return [...active.values()].some(Boolean);
+/** Is `enemy` in hard CC at `atMs`? The shared pairing (`hardCcAuraAt`:
+ * by caster, a lost REMOVED capped at the control's official length) — the
+ * raw APPLIED / REMOVED replay this was kept a CC never removed "in CC" to
+ * the round's end (F-K5b, 69546267's Chastise). `ourSideIds` are the
+ * sources whose controls count: the healer's side and its summons. */
+function isEnemyInCC(
+  enemy: ICombatUnit,
+  atMs: number,
+  ourSideIds: Set<string>,
+): boolean {
+  return hardCcAuraAt(enemy, ourSideIds, atMs) !== undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -149,6 +156,14 @@ export interface IHealerCCThreat {
   healerDRLevel: Exclude<DRLevel, "Immune">;
   /** true = this enemy is behind a pillar relative to the healer */
   losBlocked: boolean;
+  /** cc-dr F-KT1: the CC is the spec's default (`getPrimaryCC`), not one this
+   * enemy was seen landing */
+  fromTemplate?: boolean;
+  /** With `fromTemplate`: how many times the enemy pressed that control this
+   * round without it landing on the team (cast starts, else successes) —
+   * work order 2026-10-14c #9: a Hex started 4× read "(spec default, not
+   * seen)". */
+  pressedCount?: number;
 }
 
 export interface IHealerBurstExposure {
@@ -163,6 +178,9 @@ export interface IHealerBurstExposure {
   /** F194: nearest verified LoS-breaking reposition against an exposed threat.
    *  null when the zone is unmapped or no obstacle blocks any exposed threat. */
   losBreak?: { repositionYards: number; blocksEnemyName: string } | null;
+  /** cc-dr F-EX1: the healer's CC active at the window start (the
+   * `[CC ON TEAM]` instances, `at <= t < at + duration`) */
+  alreadyIn?: { spellName: string; untilSeconds: number };
 }
 
 // ---------------------------------------------------------------------------
@@ -213,8 +231,21 @@ function computeExposureLabel(
  * Build a map of enemyName → observed CC categories from all friendly CC summaries.
  * Prefer observed data over spec inference — only falls back to spec if no CC observed.
  */
-function buildEnemyCCHistory(
+/**
+ * The CC each enemy PLAYER landed on our team, keyed by that player's name.
+ * Triage pets-summons F-PS3 (ruling A17 = A): a summon's CC (a Capacitor
+ * Totem's stun, a pet's Intimidation) is its owner's — the source player
+ * itself, else `summonOwnerById` (the GH #99 resolver `[CC ON TEAM]` uses),
+ * else it is skipped; `cc.sourceName` is no longer the key (a totem's name
+ * matched no enemy, so its owner fell back to a spec template).
+ * FLAG (accepted under A17): the threat's reach / LoS is then measured from
+ * the OWNER's position, while a totem's area sits at the totem — registered
+ * in predicate-index "Not yet unified"; the DB2-radius check is in Needs.
+ */
+export function buildEnemyCCHistory(
   allFriendlyCCSummaries: IPlayerCCTrinketSummary[],
+  enemies: readonly ICombatUnit[],
+  allUnits?: Iterable<ICombatUnit>,
 ): Map<
   string,
   Array<{ spellName: string; spellId: string; category: string }>
@@ -227,15 +258,23 @@ function buildEnemyCCHistory(
     for (const cc of summary.ccInstances) {
       const category = DR_CATEGORY_MAP[cc.spellId];
       if (!category) continue;
-      const existing = result.get(cc.sourceName) ?? [];
-      if (!existing.some((e) => e.category === category)) {
+      const owner =
+        enemies.find((e) => e.id === cc.sourceId) ??
+        summonOwnerById(allUnits, cc.sourceId, enemies);
+      if (!owner) continue;
+      const existing = result.get(owner.name) ?? [];
+      // every distinct control, in landing order: the threat list keeps the
+      // first of each DR category that is off cooldown at the window
+      // (`enemyCcOnCooldownAt`, fact2), so a second stun of the same enemy
+      // stands in when the first is spent
+      if (!existing.some((e) => e.spellId === cc.spellId)) {
         existing.push({
           spellName: cc.spellName,
           spellId: cc.spellId,
           category,
         });
       }
-      result.set(cc.sourceName, existing);
+      result.set(owner.name, existing);
     }
   }
   return result;
@@ -253,10 +292,33 @@ export function analyzeHealerExposureAtBurst(
   allFriendlyCCSummaries: IPlayerCCTrinketSummary[],
   zoneId: string,
   matchStartMs: number,
+  /** every unit of the round, so a summon's CC is credited to its owner
+   * (pets-summons F-PS3); absent = player-sourced CC only */
+  allUnits?: Iterable<ICombatUnit>,
 ): IHealerBurstExposure[] {
-  const enemyCCHistory = buildEnemyCCHistory(allFriendlyCCSummaries);
+  const enemyCCHistory = buildEnemyCCHistory(
+    allFriendlyCCSummaries,
+    enemies,
+    allUnits,
+  );
   const results: IHealerBurstExposure[] = [];
+  const enemyIds = new Set(enemies.map((e) => e.id));
+  const ourSideIds = new Set<string>([healer.id]);
+  for (const u of allUnits ?? [])
+    if (!enemyIds.has(u.id) && !(u.ownerId && enemyIds.has(u.ownerId)))
+      ourSideIds.add(u.id);
+  // without the round's units: every source of a control on an enemy that is
+  // not an enemy (what the raw replay counted)
+  if (allUnits === undefined)
+    for (const e of enemies)
+      for (const a of e.auraEvents)
+        if (a.srcUnitId && !enemyIds.has(a.srcUnitId))
+          ourSideIds.add(a.srcUnitId);
 
+  const healerDrHistory = [
+    ...healerCCSummary.ccInstances,
+    ...(healerCCSummary.drHistoryOnly ?? []),
+  ];
   for (const window of burstWindows) {
     const windowMs = matchStartMs + window.fromSeconds * 1000;
 
@@ -317,7 +379,7 @@ export function analyzeHealerExposureAtBurst(
       // such casters close in); the flat bound stays as the outer limit.
       const distance = distanceBetween(healerPos, enemyPos);
       if (distance > CC_MAX_CAST_RANGE_YARDS) continue;
-      if (isEnemyInCC(enemy, windowMs)) continue;
+      if (isEnemyInCC(enemy, windowMs, ourSideIds)) continue;
 
       // Store the RAW position when one exists — the losBreak suggestion below
       // does pillar geometry and real samples beat interpolated points there.
@@ -332,13 +394,46 @@ export function analyzeHealerExposureAtBurst(
       // Use observed CC history; fall back to spec-based primary CC
       const observedCCs = enemyCCHistory.get(enemy.name) ?? [];
       const primaryCC = getPrimaryCC(enemySpec);
+      const fromTemplate = observedCCs.length === 0 && !!primaryCC;
+      const pressedCount =
+        fromTemplate && primaryCC
+          ? (() => {
+              const of = (
+                list: ReadonlyArray<{ spellId?: string }> | undefined,
+              ) =>
+                (list ?? []).filter((e) => e.spellId === primaryCC.spellId)
+                  .length;
+              return of(enemy.castStartEvents) || of(enemy.spellCastEvents);
+            })()
+          : 0;
       const ccSources =
         observedCCs.length > 0 ? observedCCs : primaryCC ? [primaryCC] : [];
 
+      const renderedSecond = Math.floor(window.fromSeconds);
+      const listedCategories = new Set<string>();
       for (const { spellName, spellId, category } of ccSources) {
+        if (listedCategories.has(category)) continue;
+        if (
+          enemyCcOnCooldownAt(
+            enemy,
+            spellId,
+            matchStartMs,
+            renderedSecond,
+            allUnits ?? [healer],
+          )
+        )
+          continue;
+        // a stealth-only control (Rake's stun) only with stealth up or a
+        // means to it in hand (user ruling 2026-10-26)
+        if (!stealthControlUsableAt(enemy, spellId, windowMs)) continue;
+        listedCategories.add(category);
         if (distance > ccThreatRadiusYards(enemy, spellId)) continue;
+        // Q2 at the window's instant — a control landing on that very ms is
+        // on (fact6 D10: the window opened on the Cyclone's own ms; the line
+        // said "already in Cyclone … the DR levels count it" and printed
+        // Full DR) — over the healer's whole DR history
         const healerDRLevel = getDRLevelAtTime(
-          healerCCSummary.ccInstances,
+          healerDrHistory,
           category,
           window.fromSeconds,
           matchStartMs,
@@ -352,6 +447,8 @@ export function analyzeHealerExposureAtBurst(
           ccSpellName: spellName,
           healerDRLevel: healerDRLevel as Exclude<DRLevel, "Immune">,
           losBlocked,
+          ...(fromTemplate ? { fromTemplate: true } : {}),
+          ...(pressedCount > 0 ? { pressedCount } : {}),
         });
       }
     }
@@ -392,6 +489,22 @@ export function analyzeHealerExposureAtBurst(
             blocksEnemyName: losBreak.blocksEnemyName,
           }
         : null,
+      ...(() => {
+        // cc-dr F-EX1: the healer's CC active at the window start
+        const cc = healerCCSummary.ccInstances.find(
+          (c) =>
+            c.atSeconds <= window.fromSeconds &&
+            window.fromSeconds < c.atSeconds + c.durationSeconds,
+        );
+        return cc
+          ? {
+              alreadyIn: {
+                spellName: cc.spellName,
+                untilSeconds: cc.atSeconds + cc.durationSeconds,
+              },
+            }
+          : {};
+      })(),
     });
   }
 
@@ -425,6 +538,7 @@ export interface IHealerExposureEntry {
  */
 function buildEnemyRefMap(
   exposures: IHealerBurstExposure[],
+  labelOfName?: (name: string) => string,
 ): Map<string, string> {
   const specByEnemyName = new Map<string, string>();
   for (const e of exposures) {
@@ -443,24 +557,131 @@ function buildEnemyRefMap(
   for (const [name, spec] of specByEnemyName) {
     refMap.set(
       name,
-      (specCounts.get(spec) ?? 0) > 1 ? `${spec} (${name})` : spec,
+      (specCounts.get(spec) ?? 0) > 1
+        ? `${spec} (${labelOfName ? labelOfName(name) : name})`
+        : spec,
     );
   }
   return refMap;
 }
 
+/** One control of the `ENEMY CC KIT` line that LANDED on the kit's unit this
+ * round (`landedControlsForKit`). */
+export interface IKitLandedControl {
+  /** the enemy PLAYER credited — the caster, or its summon's owner */
+  enemyName: string;
+  enemySpec: string;
+  spellName: string;
+  /** `DR_CATEGORY_MAP`'s family of the landed aura — the kit's one category
+   * source; undefined for a control no DR family claims */
+  category?: string;
+  /** how many `[CC ON TEAM]` lines */
+  count: number;
+}
+
+/**
+ * Every control that landed on the kit's unit this round, per enemy player
+ * and control, in order of first landing (FT R03, user ruling 2026-10-11,
+ * option b — it reopens A17's "labels only"). ONE source with the timeline:
+ * the unit's own `ccInstances` of the summaries the `[CC ON TEAM]` lines are
+ * printed from, under the emitter's own test (`rendersCcOnTeamLine`), so a
+ * count is a number of lines; the round is the summary's (a CC applied at or
+ * after `roundEndMs` is not in it).
+ *
+ * The enemy credited is `buildEnemyCCHistory`'s: the source player, else its
+ * summon's owner (`summonOwnerById`, ruling pets R1 = A). A control whose
+ * source is neither — the unit's own CC reflected back, a source the round
+ * cannot place — is on no enemy's list.
+ */
+export function landedControlsForKit(
+  unitCCSummary: Pick<IPlayerCCTrinketSummary, "ccInstances">,
+  enemies: readonly ICombatUnit[],
+  allUnits?: Iterable<ICombatUnit>,
+): IKitLandedControl[] {
+  const out: IKitLandedControl[] = [];
+  const units = allUnits ? [...allUnits] : undefined;
+  for (const cc of [...unitCCSummary.ccInstances].sort(
+    (a, b) => a.atSeconds - b.atSeconds,
+  )) {
+    if (!rendersCcOnTeamLine(cc)) continue;
+    // fact3 D37: a dispel-backlash silence is a [SILENCE] line, not a
+    // control that landed (Unstable Affliction "landed 3×" in the kit)
+    if (BACKLASH_AURA_CC_TYPE.get(cc.spellId) === "silence") continue;
+    const enemy =
+      enemies.find((e) => e.id === cc.sourceId) ??
+      summonOwnerById(units, cc.sourceId, enemies);
+    if (!enemy) continue;
+    const category = DR_CATEGORY_MAP[cc.spellId];
+    const seen = out.find(
+      (l) =>
+        l.enemyName === enemy.name &&
+        l.spellName === cc.spellName &&
+        l.category === category,
+    );
+    if (seen) seen.count++;
+    else
+      out.push({
+        enemyName: enemy.name,
+        enemySpec: specToString(enemy.spec),
+        spellName: cc.spellName,
+        ...(category ? { category } : {}),
+        count: 1,
+      });
+  }
+  return out;
+}
+
+/** A kit entry's two marks. `(spec default, not seen)` (cc-dr F-KT1): the
+ * spec's default, listed for an enemy seen landing no control on the team.
+ * `(landed N×)` (FT R03): it landed on the kit's unit N times this round. */
+const KIT_SPEC_DEFAULT_MARK = "(spec default, not seen)";
+/** …and the same default the enemy did press, never landing it (#9) */
+const kitPressedMark = (count: number) =>
+  `(spec default, pressed ${count}×, never landed)`;
+const kitLandedMark = (count: number) => `(landed ${count}×)`;
+/** What the header says once the landed controls are on the line. */
+const kitLandedClause = (who: "you" | "them") =>
+  `, plus every control that landed on ${who} this round, marked \`landed N×\``;
+
 /**
  * Once-per-match enemy CC kit header: the per-enemy union of (spell, DR category)
  * across ALL burst windows, both in-LoS and pillar-blocked. Stable order: enemies
  * by first appearance, spells by first appearance within each enemy.
+ *
+ * With `landed` (FT R03) the line is that list ∪ every control that landed
+ * on the unit this round: an entry that landed carries `(landed N×)` — also
+ * when it was a burst-window threat — and a control or an enemy the windows
+ * never listed is appended, in order of first landing. The burst-window
+ * entries themselves, the `(spec default, not seen)` mark and WHETHER the
+ * line prints (an exposure with a threat) are untouched, and so is every
+ * other reader of the threat table — `[HEALER EXPOSURE]`'s `IN LoS:` list
+ * states what could reach the healer at that window, not what an enemy has
+ * landed.
  */
 export function formatEnemyCCKitHeader(
   exposures: IHealerBurstExposure[],
+  /** cc-dr F-KT1 (ruling A17, cc-dr R3 = A): the healer's roster label when
+   * the log owner is not the healer — the kit is threats to THAT healer at
+   * enemy burst windows, not to the reader (33 DPS-owner rounds read "threats
+   * to you") */
+  healerLabel?: string,
+  /** `landedControlsForKit` of that unit; absent = the burst-window list
+   * alone, under the header that promises no more */
+  landed?: readonly IKitLandedControl[],
 ): string[] {
   const enemyOrder: string[] = [];
   const kits = new Map<
     string,
-    { spec: string; spells: Array<{ spellName: string; category: string }> }
+    {
+      spec: string;
+      spells: Array<{
+        spellName: string;
+        category?: string;
+        fromTemplate?: boolean;
+        pressedCount?: number;
+        landed?: number;
+      }>;
+    }
   >();
 
   for (const e of exposures) {
@@ -476,36 +697,134 @@ export function formatEnemyCCKitHeader(
           (s) => s.spellName === t.ccSpellName && s.category === t.ccCategory,
         )
       ) {
-        kit.spells.push({ spellName: t.ccSpellName, category: t.ccCategory });
+        kit.spells.push({
+          spellName: t.ccSpellName,
+          category: t.ccCategory,
+          ...(t.fromTemplate ? { fromTemplate: true } : {}),
+          ...(t.pressedCount ? { pressedCount: t.pressedCount } : {}),
+        });
       }
     }
   }
 
   if (enemyOrder.length === 0) return [];
 
+  for (const l of landed ?? []) {
+    let kit = kits.get(l.enemyName);
+    if (!kit) {
+      kit = { spec: l.enemySpec, spells: [] };
+      kits.set(l.enemyName, kit);
+      enemyOrder.push(l.enemyName);
+    }
+    const entry = kit.spells.find(
+      (s) => s.spellName === l.spellName && s.category === l.category,
+    );
+    if (entry) entry.landed = (entry.landed ?? 0) + l.count;
+    else
+      kit.spells.push({
+        spellName: l.spellName,
+        ...(l.category ? { category: l.category } : {}),
+        landed: l.count,
+      });
+  }
+
   const parts = enemyOrder.map((name) => {
-    const kit = kits.get(name) as {
-      spec: string;
-      spells: Array<{ spellName: string; category: string }>;
-    };
+    const kit = kits.get(name)!;
+    // cc-dr F-KT1: a spec default the enemy was never seen landing says so;
+    // FT R03: a control that landed on the unit says how many times
     const spellsStr = kit.spells
-      .map((s) => `${s.spellName} [${s.category}]`)
+      .map(
+        (s) =>
+          `${s.spellName}${s.category ? ` [${s.category}]` : ""}${s.landed ? ` ${kitLandedMark(s.landed)}` : s.fromTemplate ? ` ${s.pressedCount ? kitPressedMark(s.pressedCount) : KIT_SPEC_DEFAULT_MARK}` : ""}`,
+      )
       .join(", ");
     return `${kit.spec} (${name}): ${spellsStr}`;
   });
 
-  return [`ENEMY CC KIT (threats to you): ${parts.join("; ")}`];
+  const who = healerLabel
+    ? `threats to your healer ${healerLabel} at enemy burst windows${landed ? kitLandedClause("them") : ""}`
+    : `threats to you${landed ? kitLandedClause("you") : ""}`;
+  return [`ENEMY CC KIT (${who}): ${parts.join("; ")}`];
+}
+
+/** An `ENEMY CC KIT` line read back (`parseEnemyCcKitLine`). */
+export interface IParsedEnemyCcKit {
+  /** the healer's roster label (`3(RDruid)`); null = the line is about the
+   * log owner */
+  healerLabel: string | null;
+  /** the header promises the landed controls (`formatEnemyCCKitHeader` was
+   * given them) */
+  statesLanded: boolean;
+  enemies: Array<{
+    spec: string;
+    name: string;
+    entries: Array<{
+      spellName: string;
+      category?: string;
+      /** 0 = no `(landed N×)` mark */
+      landed: number;
+      specDefault: boolean;
+    }>;
+  }>;
+}
+
+const KIT_LINE_RE =
+  /^ENEMY CC KIT \(threats to (?:you|your healer (\S+) at enemy burst windows)(, plus every control that landed on (?:you|them) this round, marked `landed N×`)?\): (.+)$/;
+const KIT_ENEMY_RE = /^(.+?) \((\S+)\): (.+)$/;
+/** One entry and the separator after it: the name, its `[family]`, one mark.
+ * Read entry by entry — the spec-default mark has a `, ` of its own, so the
+ * list cannot be split on it. */
+const KIT_ENTRY_RE =
+  /(.+?)(?: \[([^\]]+)\])?(?: \((?:landed (\d+)×|(spec default, (?:not seen|pressed \d+×, never landed)))\))?(?:, |$)/y;
+
+/** `formatEnemyCCKitHeader`'s line read back to its end — the gate's reader
+ * (`checkEnemyCcKitLanded`). Null when the line is not in the generated
+ * format. */
+export function parseEnemyCcKitLine(line: string): IParsedEnemyCcKit | null {
+  const m = KIT_LINE_RE.exec(line);
+  if (!m) return null;
+  const who = m[2] ? (m[1] ? "them" : "you") : undefined;
+  if (who && m[2] !== kitLandedClause(who)) return null;
+  const enemies: IParsedEnemyCcKit["enemies"] = [];
+  for (const part of m[3]!.split("; ")) {
+    const e = KIT_ENEMY_RE.exec(part);
+    if (!e) return null;
+    const entries: IParsedEnemyCcKit["enemies"][number]["entries"] = [];
+    const list = e[3]!;
+    KIT_ENTRY_RE.lastIndex = 0;
+    while (KIT_ENTRY_RE.lastIndex < list.length) {
+      const s = KIT_ENTRY_RE.exec(list);
+      if (!s) return null;
+      entries.push({
+        spellName: s[1]!,
+        ...(s[2] ? { category: s[2] } : {}),
+        landed: s[3] ? Number(s[3]) : 0,
+        specDefault: s[4] !== undefined,
+      });
+    }
+    enemies.push({ spec: e[1]!, name: e[2]!, entries });
+  }
+  return {
+    healerLabel: m[1] ?? null,
+    statesLanded: who !== undefined,
+    enemies,
+  };
 }
 
 /** Compact single-line-per-window exposure entries (see module comment above). */
 export function formatHealerExposureEntries(
   exposures: IHealerBurstExposure[],
+  /** roster label for a player NAME (FT board item, user ruling
+   * 2026-10-09: `pillar-blocks Hamisha-Misha-US` → `pillar-blocks
+   * 4(RPaladin)`); absent = the name as it is */
+  labelOfName?: (name: string) => string,
 ): IHealerExposureEntry[] {
   if (exposures.length === 0) return [];
 
-  const refMap = buildEnemyRefMap(exposures);
+  const refMap = buildEnemyRefMap(exposures, labelOfName);
   const refOf = (t: IHealerCCThreat) =>
-    refMap.get(t.enemyName) ?? `${t.enemySpec} (${t.enemyName})`;
+    refMap.get(t.enemyName) ??
+    `${t.enemySpec} (${labelOfName ? labelOfName(t.enemyName) : t.enemyName})`;
 
   return exposures.map((e) => {
     // Make the subject explicit (2026-07-16 DPS baseline: in matches 021 and
@@ -548,7 +867,7 @@ export function formatHealerExposureEntries(
           // the Hunter was advised against the Rogue's melee Kidney Shot.
           // Kept outside the parenthesis — the G5 gate captures the name
           // inside it.
-          ` — LoS break ~${e.losBreak.repositionYards}yd away (pillar-blocks ${e.losBreak.blocksEnemyName}) — that enemy only`
+          ` — LoS break ~${e.losBreak.repositionYards}yd away (pillar-blocks ${labelOfName ? labelOfName(e.losBreak.blocksEnemyName) : e.losBreak.blocksEnemyName}) — that enemy only`
         : "";
 
     const exposed = e.threats.filter((t) => !t.losBlocked);
@@ -591,7 +910,13 @@ export function formatHealerExposureEntries(
       verdict = "Full-DR CC in LoS; healer trinket up (sole CC counter)";
     }
 
-    let body = `${e.burstDangerLabel} burst — ${trinketStr} — ${labelStr}${pillarStr}`;
+    // cc-dr F-EX1: the window opens while the healer is already in a CC —
+    // say so (its DR counts in the levels below), and (ruling A′19) drop
+    // the LoS-break advice to a healer who cannot move
+    const alreadyStr = e.alreadyIn
+      ? ` — healer already in ${e.alreadyIn.spellName} until ${fmtTime(e.alreadyIn.untilSeconds)} (the DR levels count it)`
+      : "";
+    let body = `${e.burstDangerLabel} burst — ${trinketStr}${alreadyStr} — ${labelStr}${e.alreadyIn ? "" : pillarStr}`;
     if (losStr) body += ` | IN LoS: ${losStr}`;
     if (blockedRefs) body += ` | Pillar-blocked: ${blockedRefs}`;
     if (verdict) body += ` | → ${verdict}`;
@@ -719,6 +1044,136 @@ function avoidanceCastSeconds(
     .map((e) => (e.logLine.timestamp - matchStartMs) / 1000)
     .filter((t) => t <= atSeconds)
     .sort((a, b) => a - b);
+}
+
+/**
+ * fact3 D44 (2026-10-21): controls a talent triggers off another button —
+ * the control is ready only when that button is. Terror of the Skies 372245:
+ * DB2 puts it on the talent 371032 (aura 4, trigger 372245), whose tooltip
+ * ties it to Deep Breath. 605 capture (every 30th new-season file): of 1,014
+ * 372245 landings, 534 followed a 433874 Deep Breath press and 290 a 357210
+ * one, 8 a 403631 Breath of Eons, all within 3.6 s (median 1.1 s); 178 had no
+ * press row of either at all. [HEALER EXPOSURE] listed it as an in-LoS
+ * threat 45 s into Deep Breath's 120 s (8888b780 r3 1:03).
+ */
+export const TALENT_TRIGGERED_CONTROL_BUTTONS: Readonly<
+  Record<string, readonly string[]>
+> = {
+  "372245": ["433874", "357210", "403631"], // Terror of the Skies ← Deep Breath / Breath of Eons
+};
+/** A landing within this of a press (or of an earlier landing) is that
+ * press's: 3.6 s measured max, one flight stunning several units. */
+const TRIGGERED_CONTROL_LANDING_S = 5;
+
+/** Match seconds of `auraId` APPLIED rows from `enemy` on `units`. */
+function auraLandingsFrom(
+  enemy: ICombatUnit,
+  auraId: string,
+  units: Iterable<ICombatUnit>,
+  matchStartMs: number,
+): number[] {
+  return [...units]
+    .flatMap((u) => u.auraEvents ?? [])
+    .filter(
+      (a) =>
+        a.spellId === auraId &&
+        a.srcUnitId === enemy.id &&
+        a.logLine.event === LogEvent.SPELL_AURA_APPLIED,
+    )
+    .map((a) => (a.logLine.timestamp - matchStartMs) / 1000)
+    .sort((a, b) => a - b);
+}
+
+/**
+ * fact2 (2026-10-20): whether the enemy's control `ccSpellId` (the landed
+ * aura id, or the spec template's) is certainly on cooldown at the window's
+ * rendered second — the threat list named Mighty Bash 4 s after a press with
+ * a 60 s cooldown, and Sigil of Misery 33 s into its 120 s. The press is the
+ * enemy's own SPELL_CAST_SUCCESS of that id or of a cast whose effect the
+ * aura is by the cast's own DB2 name (`effectAuraViaName`: Sigil of Misery
+ * 207684 → 207685, Ring of Frost 113724 → 82691);
+ * the cooldown and charges are the enemy's talent-resolved ones
+ * (`unitCooldownOf`) and the charge timeline is the shared one
+ * (`inHandSince`). A press inside the rendered second itself still counts as
+ * a threat (it is the control being thrown); without talents the base
+ * cooldown could overstate the wait, so nothing is dropped then. A summon's
+ * control pressed by the summon is never on the owner's cast list → kept.
+ */
+function enemyCcOnCooldownAt(
+  enemy: ICombatUnit,
+  ccSpellId: string,
+  matchStartMs: number,
+  renderedSecond: number,
+  /** the units a triggered control can have landed on */
+  landingUnits: Iterable<ICombatUnit>,
+): boolean {
+  // the casts this enemy pressed that ARE this control's button: its own
+  // id, a cast whose effect it is by DB2 name (Ring of Frost 113724 →
+  // 82691, which lands on under 90 % of its casts, so the own-effect share
+  // test cannot be asked here), or a same-named variant (Hex 51514 and
+  // 269352 are one button — 26-4 1:47 listed a Hex pressed 2 s earlier)
+  const ccName = getEnglishSpellName(ccSpellId, "");
+  const castIds = new Set(
+    (enemy.spellCastEvents ?? [])
+      .filter((e) => e.logLine.event === LogEvent.SPELL_CAST_SUCCESS)
+      .map((e) => e.spellId)
+      .filter(
+        (id): id is string =>
+          !!id &&
+          (id === ccSpellId ||
+            effectAuraViaName(id, ccSpellId) ||
+            (ccName !== "" && getEnglishSpellName(id, "") === ccName)),
+      ),
+  );
+  // fact3 D44: a control a talent triggers off another button (Terror of
+  // the Skies off Deep Breath) — that button's presses, and the control's
+  // own landings from this enemy where no press row is logged
+  const buttons = TALENT_TRIGGERED_CONTROL_BUTTONS[ccSpellId] ?? [];
+  for (const e of enemy.spellCastEvents ?? [])
+    if (
+      e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+      e.spellId &&
+      buttons.includes(e.spellId)
+    )
+      castIds.add(e.spellId);
+  const castPresses = [...castIds].flatMap((id) =>
+    avoidanceCastSeconds(enemy, id, matchStartMs, renderedSecond),
+  );
+  const landingPresses: number[] = [];
+  if (buttons.length > 0) {
+    const landings = auraLandingsFrom(
+      enemy,
+      ccSpellId,
+      landingUnits,
+      matchStartMs,
+    );
+    for (const t of landings)
+      if (
+        ![...castPresses, ...landingPresses].some(
+          (p) => t >= p && t - p <= TRIGGERED_CONTROL_LANDING_S,
+        )
+      )
+        landingPresses.push(t);
+  }
+  const presses = [...castPresses, ...landingPresses]
+    .filter((t) => t < renderedSecond)
+    .sort((a, b) => a - b);
+  if (presses.length === 0) return false;
+  // the button's cooldown: a pressed id's first, else the control's own —
+  // the first that has one (Maim's stun aura 203123 has a row with no
+  // cooldown; its button 22570 carries the 30 s)
+  const cdId = [...castIds, ...buttons, ccSpellId].find(
+    (id) => (unitCooldownOf(enemy, id)?.cooldownSeconds ?? 0) > 0,
+  );
+  const cd = cdId === undefined ? undefined : unitCooldownOf(enemy, cdId);
+  if (!cd || !cd.talentsKnown || !(cd.cooldownSeconds > 0)) return false;
+  // a cooldown the game shortens on the fly (Holy Words by Smite) is
+  // certainly down only until its measured recast floor — the reading the
+  // [RES] rows' `a–b s` range gives (`earliestCooldownSecondsFor`)
+  const certainS =
+    earliestCooldownSecondsFor(cdId!, enemy.spec, cd.cooldownSeconds) ??
+    cd.cooldownSeconds;
+  return inHandSince(presses, certainS, cd.charges, renderedSecond) === null;
 }
 
 /** Since when a tool has had a charge in hand at `atSeconds` (0 = since the
@@ -958,5 +1413,6 @@ export function computeHealerExposureEvents(
     ccTrinketSummaries,
     combat.startInfo?.zoneId ?? "",
     combat.startTime,
+    units,
   );
 }

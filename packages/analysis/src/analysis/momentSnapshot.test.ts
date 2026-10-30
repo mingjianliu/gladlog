@@ -7,6 +7,7 @@ import {
 } from "@gladlog/parser-compat";
 import { describe, expect, it } from "vitest";
 
+import type { PackItem } from "./deepDive";
 import {
   ACTIVITY_GAP_MIN_S,
   aurasActiveAt,
@@ -15,7 +16,6 @@ import {
   largestCastGap,
   MOMENT_PACK_MAX,
 } from "./momentSnapshot";
-import type { PackItem } from "./deepDive";
 
 // Copies the mkUnit style used by deepDive.window.test.ts (~24-49): a plain
 // object literal shaped like ICombatUnit, cast through `as any` at call sites
@@ -272,6 +272,46 @@ describe("aurasActiveAt", () => {
     expect(auras).toHaveLength(10);
     expect(auras).toContain("Freezing Trap");
     expect(auras).toContain("Divine Shield");
+  });
+
+  it("an enemy's offensive cooldown on the victim outranks cosmetic buffs (c57aeb42 0:46, Deathmark + Kingsbane, 2026-09-30)", () => {
+    const events: Record<string, unknown>[] = [];
+    for (let i = 0; i < 10; i++) {
+      events.push(
+        auraEvent(
+          LogEvent.SPELL_AURA_APPLIED,
+          0,
+          `${9_000_000 + i}`,
+          "o",
+          "o",
+          `Buff${i}`,
+        ),
+        auraEvent(
+          LogEvent.SPELL_AURA_REMOVED,
+          100_000,
+          `${9_000_000 + i}`,
+          "o",
+          "o",
+          `Buff${i}`,
+        ),
+      );
+    }
+    for (const [id, name] of [
+      ["360194", "Deathmark"],
+      ["385627", "Kingsbane"],
+    ]) {
+      events.push(
+        auraEvent(LogEvent.SPELL_AURA_APPLIED, 40_000, id, "o", "e", name),
+        auraEvent(LogEvent.SPELL_AURA_REMOVED, 60_000, id, "o", "e", name),
+      );
+    }
+    const u = mkUnit("o", "Owner-Area52", true, CombatUnitSpec.Mage_Frost, {
+      auraEvents: events,
+    });
+    const auras = aurasActiveAt(u, combat, 50);
+    expect(auras).toHaveLength(10);
+    expect(auras).toContain("Deathmark");
+    expect(auras).toContain("Kingsbane");
   });
 });
 

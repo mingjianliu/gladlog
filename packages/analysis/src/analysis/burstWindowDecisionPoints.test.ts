@@ -19,8 +19,10 @@ import {
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { ensureAnalysisData } from "../data/ensure";
+import { analyzePlayerCCAndTrinket } from "../utils/ccTrinketAnalysis";
 import { extractMajorCooldowns } from "../utils/cooldowns";
 import {
+  aimedControlUpAt,
   BURST_HEAL_CD_IDS,
   BURST_LEAD_CD_EXCLUDED_IDS,
   BURST_OUTCOME_FIELDS,
@@ -28,6 +30,8 @@ import {
   BURST_TRIAGE_MIN_HP_DROP_PP,
   burstExtrasLabel,
   burstWindowDecisionPoints,
+  controlLandedResponses,
+  landedPreOpenerStillUp,
 } from "./burstWindowDecisionPoints";
 import { CRISIS_HP_PCT_RENDERED } from "./crisisDecisionPoints";
 
@@ -105,6 +109,21 @@ function friendly(over: Record<string, unknown> = {}) {
     ...over,
   };
 }
+/** A friendly that owns NO cooldown: an Arms Warrior with no talents and no
+ * casts. The default Balance Druid owns Barkskin as a spec baseline (triage
+ * cd-hoarded F-W6, 2026-10-01); the default ledger this engine reads leaves
+ * that row out, but "nobody had a tool" cases should not lean on it. */
+const NO_KIT = {
+  class: CombatUnitClass.Warrior,
+  spec: CombatUnitSpec.Warrior_Arms,
+  info: { teamId: "0", specId: "71" },
+};
+const DRUID = {
+  class: CombatUnitClass.Druid,
+  spec: CombatUnitSpec.Druid_Balance,
+  info: { teamId: "0", specId: "102" },
+};
+
 function hostile(over: Record<string, unknown> = {}) {
   return friendly({
     id: "E1",
@@ -283,6 +302,46 @@ describe("burstWindowDecisionPoints — response classification", () => {
     expect(onSomeoneElse[0]!.responded).toBe(false);
   });
 
+  // F16 retest idx 51 (e49b7c3b 3:24): Bear Form, a pressed Frenzied
+  // Regeneration and a hunter's Roar of Sacrifice on the dying druid — the
+  // crisis side's answers, absent from the burst window's
+  it("the crisis readers' answers count: Bear Form / Frenzied Regeneration (own), Roar of Sacrifice (a mate's, on the pressured friend)", () => {
+    for (const id of ["5487", "22842"]) {
+      const pts = burstWindowDecisionPoints(
+        combat([pressuredFriend({ spellCastEvents: [cast(id, 13)] }), enemyWithBurst()]),
+      );
+      // Bear Form a wall; Frenzied Regeneration a heal (DB2 can reach
+      // others' reading), held to its caster by `answersPressured`
+      expect(pts[0]!.responseCasts.map((r) => r.category), id).toEqual([
+        id === "5487" ? "wall" : "healCd",
+      ]);
+      expect(pts[0]!.responded, id).toBe(true);
+    }
+    const hunter = friendly({
+      id: "F2",
+      name: "Hunter-R",
+      advancedActions: hpTrack("F2", 0, 40, 100),
+      spellCastEvents: [cast("53480", 14, "F1")],
+    });
+    const pts = burstWindowDecisionPoints(
+      combat([pressuredFriend(), hunter, enemyWithBurst()]),
+    );
+    expect(pts[0]!.responses.external).toBe(true);
+    expect(pts[0]!.responded).toBe(true);
+    // control: a Roar the hunter kept for itself is the hunter's own wall,
+    // which `answersPressured` holds to its caster — still a press, so
+    // `responded` (any friendly) is true, as for a teammate's Barkskin
+    const selfRoar = burstWindowDecisionPoints(
+      combat([
+        pressuredFriend(),
+        friendly({ ...hunter, spellCastEvents: [cast("53480", 14, "F2")] }),
+        enemyWithBurst(),
+      ]),
+    );
+    expect(selfRoar[0]!.responses.external).toBe(false);
+    expect(selfRoar[0]!.responses.wall).toBe(true);
+  });
+
   it("a wall pressed just BEFORE the opener still counts (pre-wall allowance)", () => {
     const pts = burstWindowDecisionPoints(
       combat([
@@ -375,6 +434,22 @@ describe("burstWindowDecisionPoints — feasibility gate", () => {
 
   it("a team with no relevant cooldown at all is NOT feasible — nobody is accused of not being psychic", () => {
     const f = friendly({
+      ...NO_KIT,
+      damageIn: steadyDamage(10, 20),
+      advancedActions: hpTrack("F1", 0, 40, 60),
+    });
+    const pts = burstWindowDecisionPoints(
+      combat([f, hostile({ spellCastEvents: [cast(AR, 10)] })]),
+    );
+    expect(pts[0]!.feasible).toBe(false);
+    expect(pts[0]!.feasibleUnits).toEqual([]);
+  });
+
+  it("a wall owned on the spec baseline alone (never pressed this round) is not an answer either", () => {
+    // the default Balance Druid owns Barkskin without a talent; with no cast
+    // this round the row is `baselineOnly` — cd-hoarded's alone (ruling
+    // P-W6), so the default ledger this engine reads does not carry it
+    const f = friendly({
       damageIn: steadyDamage(10, 20),
       advancedActions: hpTrack("F1", 0, 40, 60),
     });
@@ -466,6 +541,26 @@ describe("burstWindowDecisionPoints — outcomes are table-only", () => {
     expect(dead.feasibleUnits).toEqual(alive.feasibleUnits);
   });
 
+  it("F-B6: a death in the window's last rendered second counts; one after it does not", () => {
+    const base = {
+      damageIn: steadyDamage(10, 20),
+      advancedActions: hpTrack("F1", 0, 40, 60),
+    };
+    const at = (deathSec: number) =>
+      burstWindowDecisionPoints(
+        combat([
+          friendly({
+            ...base,
+            deathRecords: [{ timestamp: T0 + deathSec * 1000 }],
+          }),
+          hostile({ spellCastEvents: [cast(AR, 10)] }),
+        ]),
+      )[0]!;
+    const end = at(40).endSec; // the death is outside; read the window's end second
+    expect(at(end + 0.5).anyFriendlyDeath).toBe(true);
+    expect(at(end + 1.2).anyFriendlyDeath).toBe(false);
+  });
+
   it("the outcome-field list is exactly the three fields the producer must not read", () => {
     // `anyFriendlyDeath` left this list on 2026-09-01 (approved correction 2):
     // it is the triage door AND `facts.diedInWindow`, and it is deliberately
@@ -478,11 +573,84 @@ describe("burstWindowDecisionPoints — outcomes are table-only", () => {
   });
 });
 
+describe("burstWindowDecisionPoints — a response pressed after the pressured friendly's death (T12 ⑧ i)", () => {
+  // 483f7433's shape: the pressured friendly dies 5.385 s into the window and
+  // a teammate's healing cooldown goes out around that instant.
+  const DEATH_MS = T0 + 15_385;
+  const at = (castSec: number, over: Record<string, unknown> = {}) =>
+    burstWindowDecisionPoints(
+      combat([
+        friendly({
+          damageIn: steadyDamage(10, 16),
+          advancedActions: [...hpTrack("F1", 0, 13, 60), hp(14, 20, "F1")],
+          deathRecords: [{ timestamp: DEATH_MS }],
+          ...over,
+        }),
+        friendly({
+          id: "F2",
+          name: "Mate-R",
+          advancedActions: hpTrack("F2", 0, 40, 100),
+          spellCastEvents: [cast(HEALING_TIDE, castSec)],
+        }),
+        hostile({ spellCastEvents: [cast(AR, 10)] }),
+      ]),
+    )[0]!;
+
+  it("marks a press 0.251 s after the death, and one on the UNIT_DIED's own millisecond", () => {
+    const late = at(15.636);
+    expect(late.pressured!.unitId).toBe("F1");
+    expect(late.pressured!.died).toBe(true);
+    expect(late.responseCasts).toHaveLength(1);
+    expect(late.responseCasts[0]!.afterPressuredDeath).toBe(true);
+    expect(at(15.385).responseCasts[0]!.afterPressuredDeath).toBe(true);
+  });
+
+  it("a press one millisecond before the death carries no mark", () => {
+    const r = at(15.384).responseCasts[0]!;
+    expect(r.afterPressuredDeath).toBeUndefined();
+    expect("afterPressuredDeath" in r).toBe(false);
+  });
+
+  it("a press after ANOTHER friendly's death carries no mark — the predicate is about the pressured unit", () => {
+    // F1 stays the pressured unit (lowest HP) and lives; F2's own death at
+    // 12.0 does not mark F2's … nor anybody's … response.
+    const pts = burstWindowDecisionPoints(
+      combat([
+        friendly({
+          damageIn: steadyDamage(10, 16),
+          advancedActions: [...hpTrack("F1", 0, 13, 60), hp(14, 20, "F1")],
+          spellCastEvents: [cast(BARKSKIN, 13)],
+        }),
+        friendly({
+          id: "F2",
+          name: "Mate-R",
+          advancedActions: hpTrack("F2", 0, 11, 100),
+          deathRecords: [{ timestamp: T0 + 12_000 }],
+        }),
+        hostile({ spellCastEvents: [cast(AR, 10)] }),
+      ]),
+    )[0]!;
+    expect(pts.pressured!.unitId).toBe("F1");
+    expect(pts.responseCasts[0]!.afterPressuredDeath).toBeUndefined();
+  });
+
+  it("`responded` and the response classes do not read the mark — the candidate's half is unchanged", () => {
+    const late = at(15.636);
+    const early = at(15.384);
+    expect(late.responded).toBe(true);
+    expect(late.responses).toEqual(early.responses);
+    expect(late.feasible).toBe(early.feasible);
+    expect(late.triaged).toBe(early.triaged);
+    expect(late.firstResponseSec).toBe(5.6);
+  });
+});
+
 describe("burstWindowDecisionPoints — the pressured friendly (correction 1)", () => {
   /** two friendlies: F1 takes the damage, F2 is the healer standing next to
    * it. `over1`/`over2` add whatever the case under test needs. */
   const twoFriendlies = (over1: any = {}, over2: any = {}) => [
     friendly({
+      ...NO_KIT,
       damageIn: steadyDamage(10, 20),
       advancedActions: hpTrack("F1", 0, 40, 25),
       ...over1,
@@ -506,6 +674,48 @@ describe("burstWindowDecisionPoints — the pressured friendly (correction 1)", 
     expect(pts[0]!.pressured?.minHpPct).toBe(25);
   });
 
+  it("WO6 Part 2 n37 (b711d4ac): a friendly the burst hit who DIED in the window is pressured, over a lower-HP survivor", () => {
+    // F2 is hit, sits at 60 % on the grid until it dies at 15.4 s (its death
+    // second reads nothing); F1 survives at 25 %
+    const pts = burstWindowDecisionPoints(
+      combat(
+        twoFriendlies(
+          {},
+          {
+            damageIn: steadyDamage(10, 15),
+            advancedActions: hpTrack("F2", 0, 14, 60),
+            deathRecords: [{ timestamp: T0 + 15_400 }],
+          },
+        ),
+      ),
+    );
+    expect(pts[0]!.pressured?.name).toBe("Mate-R");
+    expect(pts[0]!.pressured?.died).toBe(true);
+  });
+
+  it("codex post-hoc 60-POSTHOC-03 U3: hit and dead inside the window's LAST rendered second — still the hit friendly who died", () => {
+    // the outcome window's last second, read off the same burst with F2 idle
+    const end = burstWindowDecisionPoints(combat(twoFriendlies()))[0]!
+      .outcomeEndSec;
+    const pts = burstWindowDecisionPoints(
+      combat(
+        twoFriendlies(
+          {},
+          {
+            // one hit at end + 0.5 s, dead at end + 0.6 s: inside the
+            // printed window, past the whole-second `outcomeEndMs`
+            damageIn: [dmg(end + 0.5, 5)],
+            advancedActions: hpTrack("F2", 0, end, 60),
+            deathRecords: [{ timestamp: T0 + (end + 0.6) * 1000 }],
+          },
+        ),
+      ),
+    );
+    expect(pts[0]!.outcomeEndSec).toBe(end);
+    expect(pts[0]!.pressured?.name).toBe("Mate-R");
+    expect(pts[0]!.pressured?.died).toBe(true);
+  });
+
   it("a teammate's ready wall does NOT make the window feasible — it cannot reach the pressured friendly", () => {
     // Ironbark on the healer is a personal wall: ready, but useless to F1.
     const pts = burstWindowDecisionPoints(
@@ -525,10 +735,28 @@ describe("burstWindowDecisionPoints — the pressured friendly (correction 1)", 
 
   it("the pressured friendly's OWN wall makes it feasible even with a useless team", () => {
     const pts = burstWindowDecisionPoints(
-      combat(twoFriendlies({ spellCastEvents: [cast(BARKSKIN, 120)] })),
+      combat(
+        twoFriendlies({ ...DRUID, spellCastEvents: [cast(BARKSKIN, 120)] }),
+      ),
     );
     expect(pts[0]!.feasible).toBe(true);
     expect(pts[0]!.feasibleUnits).toEqual(["Friend-R"]);
+  });
+
+  it("agy 40-FT-101: the pressured friendly's own wall back only after its death is no chance (U8 for the self-save)", () => {
+    // Barkskin pressed 47 s before the opener comes back ~13 s in; the druid
+    // dies at 11.6 s
+    const pts = burstWindowDecisionPoints(
+      combat(
+        twoFriendlies({
+          ...DRUID,
+          spellCastEvents: [cast(BARKSKIN, -47)],
+          deathRecords: [{ timestamp: T0 + 11_600 }],
+        }),
+      ),
+    );
+    expect(pts[0]!.pressured?.name).toBe("Friend-R");
+    expect(pts[0]!.feasibleUnits).not.toContain("Friend-R");
   });
 });
 
@@ -679,6 +907,7 @@ describe("burstWindowDecisionPoints — teammate reachability gate (GH #60 tail,
    * position each case varies. */
   const withMateAt = (mateOver: Record<string, unknown>) => [
     friendly({
+      ...NO_KIT,
       damageIn: steadyDamage(10, 20),
       advancedActions: trackAt("F1", 0, 40, 25, 0, 0),
     }),
@@ -742,6 +971,48 @@ describe("burstWindowDecisionPoints — teammate reachability gate (GH #60 tail,
     expect(pts[0]!.feasible).toBe(true);
     // the unreachable teammate is still not credited
     expect(pts[0]!.feasibleUnits).toEqual(["Friend-R"]);
+  });
+
+  describe("U8 (user ruling 2026-09-30): seconds after the pressured friendly died are not chances to answer for them", () => {
+    // F1 dies 2.4 s into the window; F2 is 500 yd away while F1 lives. After
+    // the death F1 has no reach (`canReachTargetAt` → null), which used to
+    // fail open and credit F2 on post-death seconds only (4446729d 1:27).
+    const f1Dying = (over: Record<string, unknown> = {}) =>
+      friendly({
+        ...NO_KIT,
+        damageIn: steadyDamage(10, 20),
+        advancedActions: trackAt("F1", 0, 12, 25, 0, 0),
+        deathRecords: [{ timestamp: T0 + 12_400 }],
+        ...over,
+      });
+    const mate = (y: number) =>
+      friendly({
+        id: "F2",
+        name: "Mate-R",
+        spec: CombatUnitSpec.Druid_Restoration,
+        info: { teamId: "0", specId: "105" },
+        spellCastEvents: [cast(TRANQUILITY, 120)],
+        advancedActions: trackAt("F2", 0, 40, 95, 0, y),
+      });
+    const enemy = () => hostile({ spellCastEvents: [cast(AR, 10)] });
+
+    it("out of reach while the target lived → not feasible, however long the window runs after the death", () => {
+      const pts = burstWindowDecisionPoints(
+        combat([f1Dying(), mate(500), enemy()]),
+      );
+      expect(pts[0]!.pressured?.name).toBe("Friend-R");
+      expect(pts[0]!.anyFriendlyDeath).toBe(true);
+      expect(pts[0]!.feasible).toBe(false);
+      expect(pts[0]!.feasibleUnits).toEqual([]);
+    });
+
+    it("in reach while the target lived → still feasible (the death itself removes nothing)", () => {
+      const pts = burstWindowDecisionPoints(
+        combat([f1Dying(), mate(10), enemy()]),
+      );
+      expect(pts[0]!.feasible).toBe(true);
+      expect(pts[0]!.feasibleUnits).toEqual(["Mate-R"]);
+    });
   });
 });
 
@@ -849,9 +1120,11 @@ describe("burstWindowDecisionPoints — reliability round 2 W1a", () => {
     expect(pts[0]!.responses.control).toBe(false);
   });
 
-  it("a friendly silenced across the whole response window does not make it feasible", () => {
-    // Garrote - Silence (1330) is a silence, not hard CC: `inCcAt` alone
-    // never saw it; the shared cannot-cast predicate does.
+  it("a silence across the whole response window does not stop a wall DB2 says a silence does not prevent (Barkskin)", () => {
+    // Garrote - Silence (1330) is a silence, not hard CC. Barkskin's
+    // SpellCategories row has no silence bit (PreventionType 4) and went out
+    // inside a silence aura 15 times on 605 files — FT-R1011c follow-up
+    // (2026-10-14); until then a silence was read as stopping every spell.
     const f = pressuredFriend({
       spellCastEvents: [cast(BARKSKIN, 120)],
       auraEvents: [
@@ -860,21 +1133,431 @@ describe("burstWindowDecisionPoints — reliability round 2 W1a", () => {
       ],
     });
     const pts = burstWindowDecisionPoints(combat([f, enemyWithBurst()]));
-    expect(pts[0]!.feasible).toBe(false);
+    expect(pts[0]!.feasible).toBe(true);
+  });
+});
+
+describe("burstWindowDecisionPoints — where a control answer landed (T12 ⑧ i)", () => {
+  const aura = (
+    event: string,
+    spellId: string,
+    tSec: number,
+    srcUnitId: string,
+    destUnitId: string,
+  ) => ({
+    spellId,
+    spellName: spellId,
+    srcUnitId,
+    srcUnitName: srcUnitId,
+    destUnitId,
+    timestamp: T0 + tSec * 1000,
+    logLine: { event, timestamp: T0 + tSec * 1000 },
+  });
+  const pressuredFriend = (over: Record<string, unknown> = {}) =>
+    friendly({
+      damageIn: steadyDamage(10, 20),
+      advancedActions: hpTrack("F1", 0, 40, 60),
+      ...over,
+    });
+  /** Storm Bolt's stun aura (107570 → 132169, `castEffectAuras.ts`). */
+  const STORM_BOLT_STUN = "132169";
+
+  it("an aimed control carries its target and the aura application it landed as", () => {
+    const e = hostile({
+      spellCastEvents: [cast(AR, 10)],
+      auraEvents: [
+        aura(LogEvent.SPELL_AURA_APPLIED, STORM_BOLT_STUN, 12.3, "F1", "E1"),
+        aura(LogEvent.SPELL_AURA_REMOVED, STORM_BOLT_STUN, 15.4, "F1", "E1"),
+      ],
+    });
+    const f = pressuredFriend({
+      spellCastEvents: [cast(STORM_BOLT, 12, "E1")],
+    });
+    const c = combat([f, e]);
+    const r = burstWindowDecisionPoints(c)[0]!.responseCasts[0]!;
+    expect(r.landed).toBe(true);
+    expect(r.controlOn).toEqual({
+      unitId: "E1",
+      unitName: "Enemy-R",
+      auras: [{ spellId: STORM_BOLT_STUN, atMs: T0 + 12_300 }],
+    });
+    // the join the credit line makes: the application IS the instance the
+    // `[CC ON ENEMY]` line renders (`analyzePlayerCCAndTrinket` on the enemy)
+    const summary = analyzePlayerCCAndTrinket(e as never, [f] as never, {
+      ...c,
+      startInfo: { zoneId: "0", bracket: "3v3" },
+    });
+    expect(summary.ccInstances).toHaveLength(1);
+    const cc = summary.ccInstances[0]!;
+    expect(cc.spellId).toBe(r.controlOn!.auras[0]!.spellId);
+    expect(T0 + cc.atSeconds * 1000).toBeCloseTo(
+      r.controlOn!.auras[0]!.atMs,
+      6,
+    );
+    expect(cc.durationSeconds).toBeCloseTo(3.1, 6);
+  });
+
+  it("an aimed control that did not land carries its target and no application", () => {
+    const r = burstWindowDecisionPoints(
+      combat([
+        pressuredFriend({ spellCastEvents: [cast(STORM_BOLT, 12, "E1")] }),
+        hostile({ spellCastEvents: [cast(AR, 10)] }),
+      ]),
+    )[0]!.responseCasts[0]!;
+    expect(r.landed).toBe(false);
+    expect(r.controlOn).toEqual({
+      unitId: "E1",
+      unitName: "Enemy-R",
+      auras: [],
+    });
+  });
+
+  it("a ground-cast control carries the holder it landed on and that application", () => {
+    const STATIC_CHARGE = "118905";
+    const pts = burstWindowDecisionPoints(
+      combat([
+        pressuredFriend({
+          spellCastEvents: [cast("192058", 17.8, "0000000000000000")],
+        }),
+        {
+          id: "T1",
+          name: "Capacitor Totem",
+          ownerId: "F1",
+          reaction: CombatUnitReaction.Friendly,
+          spellCastEvents: [],
+          auraEvents: [],
+        },
+        hostile({
+          spellCastEvents: [cast(AR, 10)],
+          auraEvents: [
+            aura(LogEvent.SPELL_AURA_APPLIED, STATIC_CHARGE, 19.8, "T1", "E1"),
+          ],
+        }),
+      ]),
+    );
+    expect(pts[0]!.responseCasts[0]!.controlOn).toEqual({
+      unitId: "E1",
+      unitName: "Enemy-R",
+      auras: [{ spellId: STATIC_CHARGE, atMs: T0 + 19_800 }],
+    });
+  });
+
+  it("a wall / heal / external answer carries none", () => {
+    const r = burstWindowDecisionPoints(
+      combat([
+        pressuredFriend({ spellCastEvents: [cast(BARKSKIN, 13)] }),
+        hostile({ spellCastEvents: [cast(AR, 10)] }),
+      ]),
+    )[0]!.responseCasts[0]!;
+    expect(r.category).toBe("wall");
+    expect("controlOn" in r).toBe(false);
   });
 });
 
 describe("burstExtrasLabel", () => {
+  const hunter = { casterName: "Hunter", casterSpec: "MHunter" };
+  const druid = { casterName: "Druid", casterSpec: "BDruid" };
+  const rogue = { casterName: "Gematria", casterSpec: "ARogue" };
   it("marks each extra pressed after the opener and drops those past the horizon", () => {
     expect(
       burstExtrasLabel({
         tSec: 63,
+        leadCd: { casterName: "Hunter" },
         extraCds: [
-          { spellName: "Trueshot", castSec: 63 },
-          { spellName: "Incarnation: Chosen of Elune", castSec: 69 },
-          { spellName: "Avatar", castSec: 84 },
+          { spellName: "Trueshot", castSec: 63, ...hunter },
+          { spellName: "Incarnation: Chosen of Elune", castSec: 69, ...druid },
+          { spellName: "Avatar", castSec: 84, ...hunter },
         ],
       }),
-    ).toBe("Trueshot; Incarnation: Chosen of Elune 6s later");
+    ).toBe("Trueshot; Incarnation: Chosen of Elune by Druid (BDruid) 6s later");
+  });
+
+  it("WO6 #2 (n48): an extra another enemy pressed names that enemy, through the caller's label", () => {
+    expect(
+      burstExtrasLabel(
+        {
+          tSec: 156,
+          leadCd: { casterName: "Akuro" },
+          extraCds: [
+            { spellName: "Kingsbane", castSec: 156, ...rogue },
+            { spellName: "Deathmark", castSec: 164, ...rogue },
+          ],
+        },
+        (c) => `3(${c.casterSpec})`,
+      ),
+    ).toBe("Kingsbane by 3(ARogue); Deathmark by 3(ARogue) 8s later");
+  });
+});
+
+describe("controlLandedResponses — a pet's control (fact6 D11)", () => {
+  // e7608d97 1:10: the Abomination's Monstrous Blow stun landed 0.9 s after
+  // the opener; the owner's untargeted Gladiator's Medallion 1.9 s before the
+  // aura timed it ("1.0s before it opened").
+  const MONSTROUS_BLOW = "91797";
+  const MEDALLION = "336126";
+  const auraFrom = (src: string, spellId: string, tMs: number) => ({
+    id: "E1",
+    auraEvents: [
+      {
+        timestamp: tMs,
+        spellId,
+        srcUnitId: src,
+        logLine: { event: "SPELL_AURA_APPLIED" },
+      },
+    ],
+  });
+  const ownerOf = (id: string) =>
+    id === "F1" || id.includes("-F1") ? "F1" : undefined;
+  const PET = "Pet-0-F1";
+  const press = [
+    { unitId: "F1", spellId: MEDALLION, dest: undefined, tMs: 10_000 },
+  ];
+  const run = (
+    src: string,
+    petCasts: Array<{ spellId: string; tMs: number }>,
+  ) =>
+    controlLandedResponses(
+      [auraFrom(src, MONSTROUS_BLOW, 11_900)],
+      new Set(["E1"]),
+      ownerOf,
+      press,
+      0,
+      40_000,
+      () => petCasts,
+    );
+
+  it("a pet's aura is timed by the pet's own cast, never by another press of the owner", () => {
+    expect(run(PET, [{ spellId: MONSTROUS_BLOW, tMs: 11_850 }])).toMatchObject([
+      { unitId: "F1", spellId: MONSTROUS_BLOW, tMs: 11_850 },
+    ]);
+  });
+
+  it("with no cast of its own in the log, the aura's own instant", () => {
+    expect(run(PET, [])).toMatchObject([{ tMs: 11_900 }]);
+  });
+
+  it("an owner press that made the control (a command of the same spell) times it first", () => {
+    const out = controlLandedResponses(
+      [auraFrom(PET, MONSTROUS_BLOW, 11_900)],
+      new Set(["E1"]),
+      ownerOf,
+      [
+        ...press,
+        { unitId: "F1", spellId: MONSTROUS_BLOW, dest: undefined, tMs: 11_400 },
+      ],
+      0,
+      40_000,
+      () => [{ spellId: MONSTROUS_BLOW, tMs: 11_850 }],
+    );
+    expect(out).toMatchObject([{ tMs: 11_400 }]);
+    // (a press aimed at the holder is the cast-side response, counted there)
+  });
+
+  it("a totem or guardian keeps the owner's untargeted press", () => {
+    expect(
+      run("Creature-0-F1", [{ spellId: MONSTROUS_BLOW, tMs: 11_850 }]),
+    ).toMatchObject([{ tMs: 10_000 }]);
+  });
+});
+
+describe("controlLandedResponses — which cast times a landed control (F-B8)", () => {
+  const LASSO_CAST = "305483";
+  const LASSO_AURA = "305485";
+  const auraOn = (spellId: string, tMs: number) => ({
+    id: "E1",
+    auraEvents: [
+      {
+        timestamp: tMs,
+        spellId,
+        srcUnitId: "F1",
+        logLine: { event: "SPELL_AURA_APPLIED" },
+      },
+    ],
+  });
+  it("fact2 e49b7c3b: an untargeted press that makes its own control (Freezing Trap) never times another (Binding Shot armed 5 s before its stun)", () => {
+    const casts = [
+      { unitId: "F1", spellId: "109248", dest: undefined, tMs: 7_080 },
+      { unitId: "F1", spellId: "187650", dest: undefined, tMs: 9_905 },
+    ];
+    const out = controlLandedResponses(
+      [auraOn("117526", 12_150)],
+      new Set(["E1"]),
+      (id) => id,
+      casts,
+      0,
+      40_000,
+    );
+    // past the fuse: the aura's own time, not the trap's press
+    expect(out).toMatchObject([{ unitId: "F1", spellId: "117526", tMs: 12_150 }]);
+  });
+
+  it("7d1f14af: the cast that produced the aura beats an earlier untargeted press", () => {
+    const casts = [
+      { unitId: "F1", spellId: "1223412", dest: undefined, tMs: 28_014 },
+      { unitId: "F1", spellId: LASSO_CAST, dest: "E1", tMs: 29_896 },
+    ];
+    const out = controlLandedResponses(
+      [auraOn(LASSO_AURA, 29_936)],
+      new Set(["E1"]),
+      (id) => id,
+      casts,
+      20_000,
+      40_000,
+    );
+    expect(out).toMatchObject([
+      { unitId: "F1", spellId: LASSO_AURA, tMs: 29_896 },
+    ]);
+    // with no producing cast the untargeted one still times it (Capacitor Totem)
+    expect(
+      controlLandedResponses(
+        [auraOn(LASSO_AURA, 29_936)],
+        new Set(["E1"]),
+        (id) => id,
+        [casts[0]!],
+        20_000,
+        40_000,
+      ),
+    ).toMatchObject([{ unitId: "F1", spellId: LASSO_AURA, tMs: 28_014 }]);
+  });
+  it("codex review: a non-control cast aimed at the target between Ring of Frost and its aura does not time it", () => {
+    // opener 10 s, response deadline 18 s: Ring of Frost (untargeted) 17.5 s,
+    // Frostbolt at E1 18.5 s, the Ring's aura 82691 on E1 at 19 s
+    const casts = [
+      { unitId: "F1", spellId: "113724", dest: undefined, tMs: 17_500 },
+      { unitId: "F1", spellId: "116", dest: "E1", tMs: 18_500 },
+    ];
+    expect(
+      controlLandedResponses(
+        [auraOn("82691", 19_000)],
+        new Set(["E1"]),
+        (id) => id,
+        casts,
+        10_000,
+        18_000,
+      ),
+    ).toMatchObject([{ unitId: "F1", spellId: "82691", tMs: 17_500 }]);
+  });
+  it("codex 35-CD-08: a failed aimed control does not swallow a landed AoE one", () => {
+    // burst 10 s; the monk's Spear Hand Strike at E1 11 s (no interrupt),
+    // then an untargeted Leg Sweep at 12 s whose stun 119381 lands on E1
+    const casts = [
+      { unitId: "F1", spellId: "116705", dest: "E1", tMs: 11_000 },
+      { unitId: "F1", spellId: "119381", dest: undefined, tMs: 12_000 },
+    ];
+    expect(
+      controlLandedResponses(
+        [auraOn("119381", 12_000)],
+        new Set(["E1"]),
+        (id) => id,
+        casts,
+        10_000,
+        18_000,
+      ),
+    ).toMatchObject([{ unitId: "F1", spellId: "119381", tMs: 12_000 }]);
+  });
+  it("codex 35-CD-13f: a landed response carries its holder, source and time for the pre-opener check", () => {
+    // Mass Entanglement at E1 9.0 s; its root on E2 9.001–9.5 s; burst at 10 s
+    const holder = {
+      id: "E2",
+      auraEvents: [
+        {
+          timestamp: 9_001,
+          spellId: "102359",
+          srcUnitId: "F1",
+          logLine: { event: "SPELL_AURA_APPLIED" },
+        },
+        {
+          timestamp: 9_500,
+          spellId: "102359",
+          srcUnitId: "F1",
+          logLine: { event: "SPELL_AURA_REMOVED" },
+        },
+      ],
+    };
+    const [r] = controlLandedResponses(
+      [holder],
+      new Set(["E1", "E2"]),
+      (id) => id,
+      [{ unitId: "F1", spellId: "102359", dest: "E1", tMs: 9_000 }],
+      8_000,
+      18_000,
+    );
+    expect(r).toMatchObject({
+      holderId: "E2",
+      auraSrcId: "F1",
+      auraAtMs: 9_001,
+      tMs: 9_000,
+    });
+    // the decision point's check: expired before the opener → not up
+    expect(
+      aimedControlUpAt(holder, r!.auraSrcId!, r!.spellId, r!.auraAtMs!, 10_000),
+    ).toBe(false);
+    // control: still up at the opener
+    expect(aimedControlUpAt(holder, "F1", "102359", 9_001, 9_400)).toBe(true);
+  });
+  it("codex 35-CD-13g: the pre-opener check is for auras applied before the opener only", () => {
+    const r = {
+      unitId: "F1",
+      spellId: "118905",
+      tMs: 9_000,
+      holderId: "E1",
+      auraSrcId: "totem",
+      auraAtMs: 11_000,
+    };
+    // Capacitor Totem cast 9 s, burst 10 s, stun lands 11 s → no check
+    expect(landedPreOpenerStillUp(r, { auraEvents: [] }, 10_000)).toBe(
+      undefined,
+    );
+    // an aura applied at 9.001 s and removed at 9.5 s → expired
+    expect(
+      landedPreOpenerStillUp(
+        { ...r, auraAtMs: 9_001 },
+        {
+          auraEvents: [
+            {
+              timestamp: 9_001,
+              spellId: "118905",
+              srcUnitId: "totem",
+              logLine: { event: "SPELL_AURA_APPLIED" },
+            },
+            {
+              timestamp: 9_500,
+              spellId: "118905",
+              srcUnitId: "totem",
+              logLine: { event: "SPELL_AURA_REMOVED" },
+            },
+          ],
+        },
+        10_000,
+      ),
+    ).toBe(false);
+  });
+  it("codex 35-CD-13d: an aimed control at another caster does not swallow the aura that landed on this one", () => {
+    // Mass Entanglement 102359 aimed at E1 (immune, no aura), its root on E2
+    const casts = [
+      { unitId: "F1", spellId: "102359", dest: "E1", tMs: 12_000 },
+    ];
+    const onE2 = { ...auraOn("102359", 12_001), id: "E2" };
+    expect(
+      controlLandedResponses(
+        [onE2],
+        new Set(["E1", "E2"]),
+        (id) => id,
+        casts,
+        10_000,
+        18_000,
+      ),
+    ).toMatchObject([{ unitId: "F1", spellId: "102359", tMs: 12_000 }]);
+    // control: aimed at E2 itself → the cast side credits it, no duplicate
+    expect(
+      controlLandedResponses(
+        [onE2],
+        new Set(["E1", "E2"]),
+        (id) => id,
+        [{ ...casts[0]!, dest: "E2" }],
+        10_000,
+        18_000,
+      ),
+    ).toEqual([]);
   });
 });

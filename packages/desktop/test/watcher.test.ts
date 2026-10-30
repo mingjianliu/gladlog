@@ -1,4 +1,4 @@
-import { startLogWatcher, type LogWatcher } from "../src/worker/watcher";
+import { type LogWatcher,startLogWatcher } from "../src/worker/watcher";
 
 const noopWatch = (() => ({
   close() {},

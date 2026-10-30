@@ -1,14 +1,14 @@
+import { classMetadata } from "../../src/data/classSpells";
+import { spellClassMap } from "../../src/data/drCategories";
+import { SPELL_CATEGORIES } from "../../src/data/spellCategories";
+import { SPELL_EFFECT_OVERRIDES } from "../../src/data/spellEffectOverrides";
+import spellIdLists from "../../src/data/spellIdLists";
 import {
+  assertColumns,
+  fetchTable,
   parseCsv,
   resolveBuild,
-  fetchTable,
-  assertColumns,
 } from "./lib/wagoCsv";
-import { SPELL_CATEGORIES } from "../../src/data/spellCategories";
-import { classMetadata } from "../../src/data/classSpells";
-import spellIdLists from "../../src/data/spellIdLists";
-import { spellClassMap } from "../../src/data/drCategories";
-import { SPELL_EFFECT_OVERRIDES } from "../../src/data/spellEffectOverrides";
 
 /** Spells removed from the current build that still show up in historical logs
  * — kept in the catalogs and waved through by validation.

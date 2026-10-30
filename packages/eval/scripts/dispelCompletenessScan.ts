@@ -12,9 +12,9 @@
  *
  * Usage: tsx packages/eval/scripts/dispelCompletenessScan.ts <dispel-counts.txt>
  */
-import { readFileSync } from "fs";
 import { getDispelType } from "@gladlog/analysis";
 import { MD_SPELL_ID } from "@gladlog/analysis/src/analysis/candidates/massDispel";
+import { readFileSync } from "fs";
 // Mass Dispel ignores the DispelType flag: the cast is 32375 (MD_SPELL_ID), the
 // dispel effect sometimes logs as 32592 (see dispelKind.ts). Cyclone 33786 is the
 // canonical case — official DispelType=0 (verified 12.1.0.69382, GH #33) yet

@@ -1,11 +1,12 @@
-import { describe, expect, it } from "vitest";
-import { existsSync, mkdtempSync, mkdirSync, writeFileSync } from "fs";
-import { join } from "path";
-import { tmpdir } from "os";
-import { createCompareService } from "./compare";
-import { COMPARE_PROMPT_VERSION } from "@gladlog/analysis/src/compare/buildExemplarLedPrompt";
-import { PROMPT_VERSION } from "./ai";
 import type { ReferenceCorpus } from "@gladlog/analysis";
+import { COMPARE_PROMPT_VERSION } from "@gladlog/analysis/src/compare/buildExemplarLedPrompt";
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "fs";
+import { tmpdir } from "os";
+import { join } from "path";
+import { describe, expect, it } from "vitest";
+
+import { PROMPT_VERSION } from "./ai";
+import { createCompareService } from "./compare";
 
 const corpus: ReferenceCorpus = {
   wowPatchVersion: "12.1.0.68629",

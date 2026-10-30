@@ -10,6 +10,7 @@
  * and will be replaced by the subproject-5 pipeline's output.
  */
 import { CombatUnitClass } from "@gladlog/parser-compat";
+
 import { SpellTag } from "./spellTypes";
 
 interface IClassAbility {
@@ -25,6 +26,7 @@ interface IClassSpellMetadata {
 const D = SpellTag.Defensive;
 const O = SpellTag.Offensive;
 const C = SpellTag.Control;
+const U = SpellTag.Utility;
 const a = (
   spellId: string,
   name: string,
@@ -41,6 +43,22 @@ export const classMetadata: IClassSpellMetadata[] = [
       // p25 1.76 · p50 2.05; corrected run) — user delegated the ruling ("你自己决定吧").
       a("446035", "Bladestorm", O), // live id: 93 % of Arms rounds, lift 2.45 (227847 above: 5 %)
       a("167105", "Colossus Smash", O), // 45 s, lift 2.05, n 1,935
+      // F19 (2026-10-11): a 90 s class talent of all three specs with no
+      // roster row — the owner's and a teammate's press had no line, no
+      // loadout row and no [RES] entry (121c7e15 round 1: the Fury owner's
+      // two presses; 605-file capture: 0 press lines in 3,520 contexts).
+      // NOT an offensive registration: `offensiveCdGapScan` left it out of
+      // `OFFENSIVE_CD_SPELL_IDS` (coPressed 67–90 %, it rides the cooldown
+      // it is pressed with), so it opens no burst window and anchors no
+      // burst. `SpellTag.Utility`: the press line, the loadout and [RES],
+      // out of every role reader.
+      a("376079", "Champion's Spear", U),
+      // fact5 retest r3 D2 (422ba114 r0: three presses of an enemy Arms
+      // Warrior's, no kit entry, no line, no [RES]) — user 2026-10-26:
+      // `SpellTag.Utility` as Champion's Spear above: the press line, the
+      // loadout and [RES], out of every role reader. What it sent back is
+      // the `[REFLECTED]` line's (`reflectedSpells`).
+      a("23920", "Spell Reflection", U),
       a("871", "Shield Wall", D),
       a("118038", "Die by the Sword", D),
       a("184364", "Enraged Regeneration", D),
@@ -83,6 +101,12 @@ export const classMetadata: IClassSpellMetadata[] = [
       a("260243", "Volley", O), // 45 s, lift 2.23, coPressed 9 %
       a("186265", "Aspect of the Turtle", D),
       a("109304", "Exhilaration", D),
+      // Feign Death — triage H15, user ruling 2026-09-30 (R13 / A9-3): a
+      // self response only (RESPONSE_ONLY_DEFENSIVE_IDS), never an ally save.
+      // Its press is never logged; Survival Tactics 202748 is the activation
+      // evidence (AURA_ONLY_ACTIVATION_IDS) and, since the same day, ownership
+      // evidence too. DB2: aura 66 FEIGN_DEATH on the caster, 30 s cooldown.
+      a("5384", "Feign Death", D),
       a("264735", "Survival of the Fittest", D), // W1g 2026-09-26: a defensive players press that the ledger never admitted (ledgerGapScan, 605 archive files: 457 rounds)
       a("19574", "Bestial Wrath", O),
       a("288613", "Trueshot", O),
@@ -114,6 +138,26 @@ export const classMetadata: IClassSpellMetadata[] = [
       a("408", "Kidney Shot", C),
       a("1833", "Cheap Shot", C),
       a("1776", "Gouge", C),
+      // B-tier B16c (user ruling 2026-10-06; res-readiness R5, the defensive /
+      // movement half, this one item): Smoke Bomb had no press line, no
+      // loadout row and no [RES] entry (483f7433 round 0: the Outlaw owner
+      // dropped it, "Smoke Bomb" 0 times in the prompt). The PvP talent's
+      // cast id, all three specs; 605 S2 files: 468 casts by 198 units
+      // (359053: 0). Not in a talent tree — owned on PvP-talent or cast
+      // evidence.
+      // NOT a defensive (user ruling 2026-10-07 on the 605 report, option
+      // B): half of its presses are offensive (232 owner presses, 116 at
+      // ≥ 90 % HP — it cuts the enemy healer's line of sight).
+      // `SpellTag.Utility`: on the ledger, the press line, the loadout and
+      // [RES]; never a "ready defensive" (as a Defensive it had produced 62
+      // cd-hoarded rows, 35 cd-waste rows and `Unused: Smoke Bomb` on 22
+      // deaths on the 605 files).
+      a("212182", "Smoke Bomb", U),
+      // WO3 #19 (r1014-169, 483f7433: two owner presses, no line): Vanish had
+      // no roster row (only its 11327 aura, as an enemy's). Utility, by the
+      // Smoke Bomb rule: a press line, the loadout and [RES]; never a ready
+      // defensive (it drops targeting as often as it saves).
+      a("1856", "Vanish", U),
       a("207777", "Dismantle", C), // W1g 2026-09-25: control kit a player cast in the corpus (DB2 control mechanic, ≥ 30 s cooldown) that no roster listed
     ],
   },
@@ -134,6 +178,11 @@ export const classMetadata: IClassSpellMetadata[] = [
       a("10060", "Power Infusion", O),
       a("391109", "Dark Ascension", O),
       a("8122", "Psychic Scream", C),
+      // fact2 C6 (2026-10-20): Holy Word: Chastise (DB2 60 s; incapacitate /
+      // stun 200196 / 200200, 3 s). Its control has no DB2 mechanic on the
+      // cast, so the W1g scan (keyed on one) never nominated it; 01502819's
+      // owner pressed it 16 times and CC USE counted only Psychic Scream.
+      a("88625", "Holy Word: Chastise", C),
       a("605", "Mind Control", C),
       a("9484", "Shackle Undead", C),
       a("1234195", "Void Nova", C), // W1g 2026-09-25: control kit a player cast in the corpus (DB2 control mechanic, ≥ 30 s cooldown) that no roster listed
@@ -152,8 +201,31 @@ export const classMetadata: IClassSpellMetadata[] = [
       a("410358", "Anti-Magic Shell", D), // W1g 2026-09-26: a defensive players press that the ledger never admitted (ledgerGapScan, 605 archive files: Spellwarden's ally-cast id, 224 rounds)
       a("51052", "Anti-Magic Zone", D),
       a("51271", "Pillar of Frost", O),
-      a("47568", "Empower Rune Weapon", O),
+      // Empower Rune Weapon 47568 was tagged Offensive until 2026-10-01: in
+      // 12.x it is a rotational damage button (2 charges / 30 s, no aura —
+      // triage kick-eaten F-K2, ruling C7), so it opened a 120 s "burst"
+      // window ten times a round (5e8b11c1: `[ENEMY CD] … [1/10]`).
       a("275699", "Apocalypse", O),
+      // Triage 2026-09-29 res-readiness F-C20 × sync-burst F-S4 (user ruling
+      // A′1 = A, 2026-09-30; G7-P9): in OFFENSIVE_CD_SPELL_IDS already, but no
+      // roster listed them, so msw's `entered` / `ready` never saw an Army
+      // covering a lock (82a2d681 @33). DB2 cooldowns: Army 90 s, DT 45 s.
+      // Unholy talents (in 252's tree only): other specs need cast evidence.
+      // B-tier B15a (user ruling 2026-10-06, "按键缺行当缺陷修"): the owner's
+      // own Death Pact / Lichborne had no press line and no loadout row
+      // (82a2d681 round 5: both pressed at 2:45, zero lines) while the ENEMY
+      // side has listed them since A11 (`ENEMY_SELF_SAVE_ONLY_IDS`). Class
+      // talents of all three specs; 605 S2 files: 196 / 231 casts.
+      a("48743", "Death Pact", D),
+      // Lichborne is NOT a defensive (user ruling 2026-10-07 on the 605
+      // report): it frees the Death Knight from charm / fear / sleep, it
+      // saves nobody. `SpellTag.Utility`: on the ledger, the press line, the
+      // loadout and [RES], and out of every role reader (cd-hoarded,
+      // cd-waste, `cheaper available`, `[DEATH] Unused`, CC USE). As a
+      // Defensive it had produced 5 cd-hoarded rows on the 605 files.
+      a("49039", "Lichborne", U),
+      a("42650", "Army of the Dead", O),
+      a("1233448", "Dark Transformation", O),
       a("207289", "Unholy Assault", O),
       a("221562", "Asphyxiate", C),
       a("207167", "Blinding Sleet", C),
@@ -171,8 +243,18 @@ export const classMetadata: IClassSpellMetadata[] = [
       a("98008", "Spirit Link Totem", D),
       a("114050", "Ascendance", O),
       a("114051", "Ascendance", O),
+      // G7-P9 (A′1 = A): the Shamanism PvP-talent lusts players actually press
+      // (DB2 RecoveryTime 60 s; every-6 archive: 6,947 presses, gap median
+      // 67.1 s). The base 2825 / 32182 are never cast in arena. Not in any
+      // talent tree: a Shaman needs cast evidence to own them.
+      a("204361", "Bloodlust", O),
+      a("204362", "Heroism", O),
       a("51514", "Hex", C),
       a("305483", "Lightning Lasso", C), // W1g 2026-09-25: control kit a player cast in the corpus (DB2 control mechanic, ≥ 30 s cooldown) that no roster listed
+      // WO3 #19 (r1008-152, f4647408: pressed in rounds 0 and 3, never
+      // printed): a fear / charm / sleep breaker for the team, no defensive.
+      // Utility (listed, never accused).
+      a("8143", "Tremor Totem", U),
       a("192058", "Capacitor Totem", C), // W1g 2026-09-25: cast id (was the aura id, which is never cast — the ledger's cast-evidence gate never admitted it)
     ],
   },
@@ -187,6 +269,18 @@ export const classMetadata: IClassSpellMetadata[] = [
       a("11426", "Ice Barrier", D),
       a("110959", "Greater Invisibility", D), // W1g 2026-09-26: a defensive players press that the ledger never admitted (ledgerGapScan, 605 archive files: 407 rounds)
       a("342245", "Alter Time", D), // W1g 2026-09-26: a defensive players press that the ledger never admitted (ledgerGapScan, 605 archive files: 397 rounds)
+      // Mass Invisibility — user ruling 2026-09-30 (triage R13 / A9-2): a
+      // Defensive the ledger admits and cd-hoarded may name ("可指控"; the
+      // recommended fact-only option was not taken). Game-Behaviour note
+      // (runs/triage-2026-09-29/probes/a9/A9-EVIDENCE.md §2): DB2 has NO
+      // mitigation / absorb / heal effect — aura 18 (invisibility), 335, 260,
+      // Effect 176, caster-centred friendly area 40 yd, 12 s, cd 300 s; allies
+      // in combat are covered only with PvP talent 415945 (the `$?a415945`
+      // description branch), gated per player by ALLY_REACH_REQUIRES_PVP_TALENT
+      // (cooldowns.ts). Friendly invisibility lasts a median 0.59 s (every-6
+      // archive, 6,501 in-combat casts). Missed by W1g's ledgerGapScan pass
+      // because its official profile is no survival wall.
+      a("414664", "Mass Invisibility", D),
       a("190319", "Combustion", O),
       a("365350", "Arcane Surge", O),
       a("118", "Polymorph", C),
@@ -246,6 +340,16 @@ export const classMetadata: IClassSpellMetadata[] = [
       a("61336", "Survival Instincts", D),
       a("102342", "Ironbark", D),
       a("740", "Tranquility", D),
+      // F15 / fact1215 C6 (2026-10-16): Resto Druid's 180 s Incarnation had
+      // no friendly row — no kit row, no [TEAM] / [YOU] [CD] line, no [RES],
+      // while the enemy side prints it as [ENEMY HEAL CD] (enemyHealCds.ts)
+      // and the crisis readers count its press ("树肯定算,是大技能",
+      // CRISIS_PROTECTIVE_ANSWER_IDS). Utility, not Defensive: the healer save
+      // table strips Defensive from it for Restoration Druid
+      // (healerSaveCdGenerated `stripDefensive`), so the row is a press line,
+      // the loadout and [RES] — no role reader. Form re-shifts are no presses
+      // (`isFormReshiftCast`); Reforestation's 8 s copies log no cast.
+      a("33891", "Incarnation: Tree of Life", U),
       a("106951", "Berserk", O),
       a("102560", "Incarnation: Chosen of Elune", O),
       a("194223", "Celestial Alignment", O),
@@ -282,6 +386,12 @@ export const classMetadata: IClassSpellMetadata[] = [
       a("363916", "Obsidian Scales", D),
       a("374348", "Renewing Blaze", D),
       a("357170", "Time Dilation", D),
+      // F15 / fact1215 C6 (2026-10-16, the one high item): Time Stop, the 5 s
+      // immunity PvP talent (DB2 45 s, self or an ally — targeting reaches
+      // allies; 605 files: 31 self, 4 on an ally). It sat only in the
+      // enemy-side and purge lists, so an owner who pressed it at 21 % HP
+      // six seconds before dying (a2e71187) had no line for it anywhere.
+      a("378441", "Time Stop", D),
       a("374227", "Zephyr", D),
       a("375087", "Dragonrage", O),
       a("360806", "Sleep Walk", C),

@@ -1,6 +1,7 @@
-import { mkdtempSync, existsSync, readFileSync } from "fs";
+import { existsSync, mkdtempSync, readFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
+
 import {
   validateTalentData,
   writeTalentIdMap,

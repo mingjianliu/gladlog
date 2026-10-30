@@ -6,6 +6,7 @@
 import { CombatUnitSpec } from "@gladlog/parser-compat";
 import { describe, expect, it } from "vitest";
 
+import { positionMistakeEvents } from "../src/analysis/candidateFindings";
 import {
   computeOwnerPositionEvents,
   formatPositionEventsForContext,
@@ -129,6 +130,136 @@ describe("STAYED IN states the owner's own displacement (F13 06bb)", () => {
     const text = formatPositionEventsForContext(events).join("\n");
     expect(text).toContain("you moved 18 yd yourself (span start→end)");
     expect(text).toContain("says nothing about whether you moved");
+  });
+});
+
+// FT leftovers 2026-10-11 (the I13 fact half): the yards between the span's
+// two ends were printed as the owner's own with a Death Grip, or a landed
+// knockback, between them (10 such lines with a [GRIP] on the owner inside
+// the span on the 605-file capture of main 8c3275fa).
+describe("STAYED IN does not call a forced move the owner's own (I13)", () => {
+  const walker = () =>
+    unit("1", "Owner-R-US", CombatUnitSpec.Paladin_Holy, (t) =>
+      t < 10 ? 0 : Math.min(18, (t - 10) * 2),
+    );
+  const dk = (extra: Record<string, unknown> = {}) => ({
+    ...unit(
+      "2",
+      "Dk-R-US",
+      CombatUnitSpec.DeathKnight_Unholy,
+      (t) => (t < 10 ? 0 : Math.min(18, (t - 10) * 2)) - 2,
+    ),
+    ...extra,
+  });
+  const gripAt = (s: number) => ({
+    spellId: "49576",
+    destUnitId: "1",
+    logLine: { event: "SPELL_CAST_SUCCESS", timestamp: T0 + s * 1000 },
+  });
+  const stayedLine = (owner: any, enemy: any) => {
+    const events = run(owner, [enemy]);
+    const text = formatPositionEventsForContext(events).join("\n");
+    return {
+      event: events.find((e) => e.type === "STAYED_IN")!,
+      line: text.split("\n").find((l) => l.includes(" burst] "))!,
+    };
+  };
+
+  it("a landed Death Grip inside the span is named, and the number is unchanged", () => {
+    const { event, line } = stayedLine(
+      walker(),
+      dk({ spellCastEvents: [gripAt(12.4)] }),
+    );
+    expect(event.ownerMovedYards).toBe(18);
+    expect(event.ownerForcedMoves).toEqual([{ atSeconds: 12.4, kind: "grip" }]);
+    expect(line).toContain(
+      "you moved 18 yd (span start→end), not all of it yourself: Death Grip pulled you at 0:12",
+    );
+    expect(line).not.toContain("yd yourself");
+  });
+
+  it("a grip that did not land, or outside the two sampled seconds, changes nothing", () => {
+    const missed = walker();
+    missed.missesIn = [
+      {
+        spellId: "49576",
+        srcUnitId: "2",
+        missType: "IMMUNE",
+        timestamp: T0 + 12_450,
+      },
+    ];
+    for (const [owner, enemy] of [
+      [missed, dk({ spellCastEvents: [gripAt(12.4)] })],
+      // the end sample is taken at 0:20: a grip inside that second is after it
+      [walker(), dk({ spellCastEvents: [gripAt(20.3)] })],
+      [walker(), dk({ spellCastEvents: [gripAt(9.9)] })],
+    ] as const) {
+      const { event, line } = stayedLine(owner, enemy);
+      expect(event.ownerForcedMoves).toBeUndefined();
+      expect(line).toContain("you moved 18 yd yourself (span start→end)");
+    }
+  });
+
+  it("a landed knockback is named once (its aura and its damage are one event)", () => {
+    const owner = walker();
+    owner.auraEvents = [
+      {
+        spellId: "132469",
+        timestamp: T0 + 15_100,
+        logLine: { event: "SPELL_AURA_APPLIED", timestamp: T0 + 15_100 },
+      },
+    ];
+    owner.damageIn = [
+      {
+        spellId: "132469",
+        srcUnitId: "2",
+        effectiveAmount: 0,
+        timestamp: T0 + 15_104,
+        logLine: { timestamp: T0 + 15_104 },
+      },
+    ];
+    const { event, line } = stayedLine(owner, dk());
+    expect(event.ownerForcedMoves).toEqual([
+      { atSeconds: 15.1, kind: "displacement" },
+    ]);
+    expect(line).toContain(
+      "you moved 18 yd (span start→end), not all of it yourself: an enemy knockback or pull landed on you at 0:15",
+    );
+  });
+});
+
+describe("position-mistake row: facts.moved says when it includes a forced move (I13)", () => {
+  const stay = (over: Record<string, unknown> = {}) =>
+    ({
+      type: "STAYED_IN",
+      atSeconds: 10,
+      toSeconds: 20,
+      nearestEnemyName: "Dk-R-US",
+      ownerHpStartPct: 80,
+      ownerHpMinPct: 9,
+      ownerMovedYards: 18,
+      ...over,
+    }) as any;
+  const rowOf = (e: any) =>
+    positionMistakeEvents([e], { id: "1", name: "Owner-R-US" })[0]!;
+
+  it("carries the line's own words next to the same number", () => {
+    const facts = rowOf(
+      stay({ ownerForcedMoves: [{ atSeconds: 12.4, kind: "grip" }] }),
+    ).facts;
+    expect(facts.moved).toBe("18");
+    expect(facts.movedIncludes).toBe("Death Grip pulled you at 0:12");
+  });
+
+  it("is absent without one — the row is otherwise the same", () => {
+    const plain = rowOf(stay());
+    const forced = rowOf(
+      stay({ ownerForcedMoves: [{ atSeconds: 12.4, kind: "grip" }] }),
+    );
+    expect("movedIncludes" in plain.facts).toBe(false);
+    const { movedIncludes: _dropped, ...rest } = forced.facts;
+    expect(rest).toEqual(plain.facts);
+    expect(forced.id).toBe(plain.id);
   });
 });
 

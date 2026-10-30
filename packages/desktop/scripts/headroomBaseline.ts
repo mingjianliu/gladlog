@@ -17,14 +17,13 @@
  *   npm run recorder:headroom --workspace=packages/desktop
  *   npx tsx packages/desktop/scripts/headroomBaseline.ts [--user-data <dir>]
  */
-import { existsSync } from "fs";
-import { homedir } from "os";
-import { join } from "path";
-
 import {
   medianFinite,
   toSortedFinite,
 } from "@gladlog/analysis/src/utils/stats";
+import { existsSync } from "fs";
+import { homedir } from "os";
+import { join } from "path";
 
 import { MatchStore, type StoredMatchMeta } from "../src/main/matchStore";
 import { RecordingsStore } from "../src/main/recordingsStore";

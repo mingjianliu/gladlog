@@ -12,18 +12,27 @@
  * of Frost, Arcane Missiles, Soothing Mist, Tranquility, Divine Hymn …) has
  * the bit, no hardcast does; empowered spells (Fire / Dream Breath) carry only
  * bit 6 and are deliberately not channels here.
+ *
+ * fact3 D36 (2026-10-21): bit 6 ("Is Self Channelled", 0x40) without bit 2 is
+ * a channel too, unless the spell is empowered (its own `SpellEmpower` row).
+ * Dark Harvest 1257052 carries only 0x40: a Spell Lock 0.6 s into its channel
+ * read as no channel kick (6f49c8f0 0:26). Observed 0x40-only ids on
+ * 12.1.5.70391: 14 — Fire Breath ×3, Dream Breath ×2 and Azerite Surge have
+ * an empower row; Dark Harvest, Emerald Communion, Celestial Conduit, Time
+ * Skip, Cannibalize, Dream Projection … do not.
  */
 import fs from "fs-extra";
 
 import { writeArtifact } from "./lib/emit";
 import {
   assertColumns,
-  resolveBuild,
   fetchTable,
   parseCsv,
+  resolveBuild,
 } from "./lib/wagoCsv";
 
 export const IS_CHANNELLED_BIT = 2; // Attributes_1
+export const IS_SELF_CHANNELLED_BIT = 6; // Attributes_1
 
 async function main() {
   const build = await resolveBuild(process.argv[2]);
@@ -47,6 +56,11 @@ async function main() {
     ["SpellID", "DifficultyID", "Attributes_1"],
     "SpellMisc",
   );
+  const empowered = new Set(
+    parseCsv(await fetchTable("SpellEmpower", build, cacheDir)).rows.map(
+      (r) => r.SpellID,
+    ),
+  );
   const ids: number[] = [];
   const seen = new Set<string>();
   for (const row of parsed.rows) {
@@ -55,7 +69,12 @@ async function main() {
     seen.add(row.SpellID);
     if (!observed.has(row.SpellID)) continue;
     const a1 = Number(row.Attributes_1 ?? "0");
-    if (Number.isFinite(a1) && ((a1 >>> IS_CHANNELLED_BIT) & 1) === 1)
+    if (!Number.isFinite(a1)) continue;
+    if (
+      ((a1 >>> IS_CHANNELLED_BIT) & 1) === 1 ||
+      (((a1 >>> IS_SELF_CHANNELLED_BIT) & 1) === 1 &&
+        !empowered.has(row.SpellID))
+    )
       ids.push(Number(row.SpellID));
   }
   ids.sort((a, b) => a - b);
@@ -63,7 +82,7 @@ async function main() {
     "../../src/data/channeledGenerated.ts",
     import.meta.url,
   ).pathname;
-  const header = `/**\n * Generated at: ${new Date().toISOString()}\n * Build: ${build}\n * Source: SpellMisc Attributes_1 bit ${IS_CHANNELLED_BIT} (Is Channelled), restricted to the\n *   observed universe\n * ids: ${ids.length}\n */\n\n`;
+  const header = `/**\n * Generated at: ${new Date().toISOString()}\n * Build: ${build}\n * Source: SpellMisc Attributes_1 bit ${IS_CHANNELLED_BIT} (Is Channelled), or bit\n *   ${IS_SELF_CHANNELLED_BIT} (Is Self Channelled) without a SpellEmpower row, restricted to\n *   the observed universe\n * ids: ${ids.length}\n */\n\n`;
   writeArtifact(
     outPath,
     header +

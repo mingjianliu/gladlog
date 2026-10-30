@@ -11,6 +11,12 @@ import { beforeAll, describe, expect, it } from "vitest";
 
 import { ensureAnalysisData } from "../data/ensure";
 import { buildMatchTimeline, BuildMatchTimelineParams } from "./matchTimeline";
+import {
+  ROT_PRESSURE_HP_PCT,
+  ROT_PRESSURE_MIN_DOTS,
+  ROT_PRESSURE_MIN_PERIODIC_SHARE,
+  ROT_PRESSURE_MIN_SECONDS,
+} from "./matchTimelineSections";
 
 /**
  * Innervate (29166) is a MANA cooldown, and until 2026-08-23 it sat in
@@ -193,5 +199,261 @@ describe("Innervate is reported as resource, not throughput", () => {
     expect(timeline).toContain("[YOU] [CD]");
     expect(timeline).toContain("Innervate");
     expect(timeline).toContain("22% -> 41% mana (+19pp over 8s)");
+  });
+});
+
+// FT-T15 M5 (2026-10-10): [HEALING] and [ROT PRESSURE] had no definition
+// anywhere in the prompt (893 and 1,155 lines on the 605 capture, 0 legends).
+// Each legend prints only when a line of its family rendered.
+describe("[HEALING] / [ROT PRESSURE] legends print only with their line family", () => {
+  beforeAll(async () => {
+    await ensureAnalysisData();
+  });
+
+  const POWER_INFUSION = "10060";
+  const heal = (atMs: number, amount: number, effectiveAmount: number) =>
+    ({
+      timestamp: atMs,
+      amount,
+      effectiveAmount,
+      spellId: "2061",
+      spellName: "Flash Heal",
+      srcUnitId: "o",
+      destUnitId: "o",
+      logLine: { event: "SPELL_HEAL", timestamp: atMs, parameters: [] },
+    }) as unknown as ICombatUnit["healOut"][number];
+
+  function piParams(owner: ICombatUnit): BuildMatchTimelineParams {
+    const params = paramsWith(owner);
+    params.ownerCDs = [
+      {
+        spellId: POWER_INFUSION,
+        spellName: "Power Infusion",
+        tag: "Offensive",
+        cooldownSeconds: 120,
+        maxChargesDetected: 1,
+        casts: [{ timeSeconds: 30 }],
+        availableWindows: [],
+        neverUsed: false,
+      },
+    ] as BuildMatchTimelineParams["ownerCDs"];
+    return params;
+  }
+
+  it("neither family rendered → neither legend (and no stray tag for a scan to count)", () => {
+    const timeline = buildMatchTimeline(paramsWith(mkOwner()));
+    expect(timeline).not.toContain("[HEALING]");
+    expect(timeline).not.toContain("[ROT PRESSURE]");
+  });
+
+  it("a Power Infusion press with healing logged → the block and its legend, once", () => {
+    const owner = mkOwner({
+      healOut: [
+        heal(MATCH_START_MS + 31_000, 60_000, 45_000),
+        heal(MATCH_START_MS + 37_000, 40_000, 30_000),
+      ],
+    });
+    const lines = buildMatchTimeline(piParams(owner)).split("\n");
+    const block = lines.filter((l) => l.startsWith("      [HEALING]"));
+    expect(block).toEqual([
+      "      [HEALING]    0–5s: 9.0k HPS | 5–10s: 6.0k HPS | 10–15s: 0.0k HPS | Overheal: 25%",
+    ]);
+    const legend = lines.filter((l) => l.startsWith("  [HEALING] "));
+    expect(legend).toHaveLength(1);
+    expect(legend[0]).toContain("YOUR OWN healing");
+    const text = lines.join("\n");
+    expect(text).toContain("in 5 s buckets");
+    expect(text).toContain(
+      "`Overheal` = the share of your healing in the whole span that was overheal",
+    );
+    expect(text).toContain("At most two presses of a spell get");
+    expect(text).not.toContain("[ROT PRESSURE]");
+  });
+
+  // FT-T15 ④ (user ruling 2026-10-10): Power Infusion pressed on a teammate
+  // lands on the priest too with the twin talent — one cast, two
+  // SPELL_AURA_APPLIED (5677ba13 1:06: the priest's own 8 ms after the
+  // teammate's, removed 15.0 s later). The [HEALING] block under that press
+  // measures the priest's own healing; the press line now says the priest
+  // had the buff — only when the priest's own aura is in the log.
+  describe("Power Infusion on a teammate: `| also on you` only when the owner's own aura is logged", () => {
+    const PRESS_MS = MATCH_START_MS + 30_000;
+    const aura = (
+      event: LogEvent,
+      atMs: number,
+      srcUnitId = "o",
+    ): ICombatUnit["auraEvents"][number] =>
+      ({
+        timestamp: atMs,
+        spellId: POWER_INFUSION,
+        spellName: "Power Infusion",
+        srcUnitId,
+        srcUnitName: "Source",
+        destUnitId: "o",
+        destUnitName: "Druid-Ravencrest",
+        auraType: "BUFF",
+        logLine: {
+          event,
+          timestamp: atMs,
+          parameters: Object.assign([], { 11: "BUFF" }),
+        },
+      }) as unknown as ICombatUnit["auraEvents"][number];
+    const mate = mkOwner({ id: "m", name: "Lock-Illidan" });
+
+    function timelineOf(
+      ownerAuras: ICombatUnit["auraEvents"],
+      pressedOn: "teammate" | "self" = "teammate",
+    ): string[] {
+      const targetName = pressedOn === "self" ? undefined : mate.name;
+      const owner = mkOwner({
+        auraEvents: ownerAuras,
+        healOut: [heal(PRESS_MS + 1_000, 60_000, 45_000)],
+      });
+      const params = piParams(owner);
+      params.ownerCDs[0]!.casts = [{ timeSeconds: 30, targetName }];
+      params.friends = [owner, mate];
+      params.playerIdMap = new Map([
+        [owner.name, 1],
+        [mate.name, 2],
+      ]);
+      return buildMatchTimeline(params).split("\n");
+    }
+    const pressOf = (lines: string[]) =>
+      lines.find((l) => /^0:30\s+\[YOU\] \[CD\]\s+Power Infusion/.test(l))!;
+    const legendOf = (lines: string[]) =>
+      lines.filter((l) => l.startsWith("  `| also on you for Ns`"));
+
+    it("the owner's own aura, applied 8 ms after the press and removed 15 s later → the clause, the legend, and the block unchanged", () => {
+      const lines = timelineOf([
+        aura(LogEvent.SPELL_AURA_APPLIED, PRESS_MS + 8),
+        aura(LogEvent.SPELL_AURA_REMOVED, PRESS_MS + 15_008),
+      ]);
+      const press = pressOf(lines);
+      expect(press).toContain("Power Infusion → 2(");
+      expect(press).toContain(" | also on you for 15.0s");
+      expect(legendOf(lines)).toHaveLength(1);
+      expect(lines.filter((l) => l.startsWith("      [HEALING]"))).toEqual([
+        "      [HEALING]    0–5s: 9.0k HPS | 5–10s: 0.0k HPS | 10–15s: 0.0k HPS | Overheal: 25%",
+      ]);
+    });
+
+    it("no aura of it on the owner in the log → no clause and no legend (never assumed from the talent)", () => {
+      const lines = timelineOf([]);
+      expect(pressOf(lines)).toContain("Power Infusion → 2(");
+      expect(pressOf(lines)).not.toContain("also on you");
+      expect(legendOf(lines)).toHaveLength(0);
+    });
+
+    it("an aura on the owner from ANOTHER caster is not this press's", () => {
+      const lines = timelineOf([
+        aura(LogEvent.SPELL_AURA_APPLIED, PRESS_MS + 8, "other-priest"),
+        aura(LogEvent.SPELL_AURA_REMOVED, PRESS_MS + 15_008, "other-priest"),
+      ]);
+      expect(pressOf(lines)).not.toContain("also on you");
+    });
+
+    it("applied but never removed in the log → `(end not logged)`, no invented duration", () => {
+      const lines = timelineOf([
+        aura(LogEvent.SPELL_AURA_APPLIED, PRESS_MS + 8),
+      ]);
+      expect(pressOf(lines)).toContain(" | also on you (end not logged)");
+    });
+
+    it("an aura that ended early says how long it was on the owner", () => {
+      const lines = timelineOf([
+        aura(LogEvent.SPELL_AURA_APPLIED, PRESS_MS + 8),
+        aura(LogEvent.SPELL_AURA_REMOVED, PRESS_MS + 3_208),
+      ]);
+      expect(pressOf(lines)).toContain(" | also on you for 3.2s");
+    });
+
+    it("pressed on the owner themselves → no clause (the line names no teammate)", () => {
+      const lines = timelineOf(
+        [
+          aura(LogEvent.SPELL_AURA_APPLIED, PRESS_MS),
+          aura(LogEvent.SPELL_AURA_REMOVED, PRESS_MS + 15_000),
+        ],
+        "self",
+      );
+      expect(pressOf(lines)).not.toContain("→");
+      expect(pressOf(lines)).not.toContain("also on you");
+      expect(legendOf(lines)).toHaveLength(0);
+    });
+  });
+
+  const debuff = (spellId: string) =>
+    ({
+      timestamp: MATCH_START_MS,
+      spellId,
+      spellName: spellId,
+      srcUnitId: "src",
+      srcUnitName: "Source",
+      destUnitId: "dest",
+      destUnitName: "Dest",
+      logLine: {
+        event: LogEvent.SPELL_AURA_APPLIED,
+        timestamp: MATCH_START_MS,
+        parameters: Object.assign([], { 11: "DEBUFF" }),
+      },
+    }) as unknown as ICombatUnit["auraEvents"][number];
+  const hpAt = (id: string, sec: number, hp: number) => ({
+    ...advSample(id, MATCH_START_MS + sec * 1000, 50_000, 100_000),
+    advancedActorCurrentHp: hp,
+  });
+  /** Three DoTs on from the first second, under 40 % HP from 0:10 to 0:14. */
+  const rotting = (id: string): Partial<ICombatUnit> => ({
+    // Agony / Corruption / Unstable Affliction
+    auraEvents: [debuff("980"), debuff("146739"), debuff("30108")],
+    advancedActions: [
+      hpAt(id, 8, 80),
+      hpAt(id, 10, 30),
+      hpAt(id, 11, 30),
+      hpAt(id, 12, 30),
+      hpAt(id, 13, 30),
+      hpAt(id, 14, 30),
+      hpAt(id, 20, 80),
+    ],
+  });
+
+  // FT-T15 ⑤a: `pid` knows the friendly roster only, so an enemy's line
+  // printed its bare character name (`Jamosqueeze (Windwalker Monk)`, realm
+  // cut off) — 660 of 1,155 lines on the 605 capture.
+  it("an ENEMY's rot-pressure line carries its roster label, not the bare character name", () => {
+    const owner = mkOwner();
+    const enemy = mkOwner({
+      id: "e5",
+      name: "Jamosqueeze-Tichondrius-US",
+      class: CombatUnitClass.Monk,
+      spec: CombatUnitSpec.Monk_Windwalker,
+      reaction: CombatUnitReaction.Hostile,
+      ...rotting("e5"),
+    });
+    const params = paramsWith(owner);
+    params.enemies = [enemy];
+    params.playerIdMap = new Map([[owner.name, 1]]);
+    params.enemyIdMap = new Map([[enemy.name, 5]]);
+    const rot = buildMatchTimeline(params)
+      .split("\n")
+      .filter((l) => /^\d+:\d\d\s+\[ROT PRESSURE\]/.test(l));
+    expect(rot).toEqual([
+      "0:13  [ROT PRESSURE]   5(WMonk) (Windwalker Monk) at 30% HP with 3 active DoTs",
+    ]);
+  });
+
+  it("a rot-pressure stretch → the line and its legend, with the predicate's own numbers", () => {
+    const owner = mkOwner(rotting("o"));
+    const lines = buildMatchTimeline(paramsWith(owner)).split("\n");
+    expect(
+      lines.filter((l) => /^\d+:\d\d\s+\[ROT PRESSURE\]/.test(l)),
+    ).toHaveLength(1);
+    const legend = lines.filter((l) => l.startsWith("  [ROT PRESSURE] = "));
+    expect(legend).toHaveLength(1);
+    const text = lines.join("\n");
+    expect(text).toContain(
+      `spent ${ROT_PRESSURE_MIN_SECONDS} whole seconds in a row under ${ROT_PRESSURE_HP_PCT}% HP with ${ROT_PRESSURE_MIN_DOTS} or more tracked`,
+    );
+    expect(text).toContain(
+      `at least ${ROT_PRESSURE_MIN_PERIODIC_SHARE * 100}% of the damage they took`,
+    );
   });
 });

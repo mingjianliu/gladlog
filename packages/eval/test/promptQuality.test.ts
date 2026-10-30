@@ -1,26 +1,66 @@
 import { ensureAnalysisData } from "@gladlog/analysis";
+import type { BurstWindowDecisionPoint } from "@gladlog/analysis/src/analysis/burstWindowDecisionPoints";
 import { buildMomentSnapshotItems } from "@gladlog/analysis/src/analysis/momentSnapshot";
+import {
+  ccSpanLookup,
+  formatBurstAnsweredLines,
+} from "@gladlog/analysis/src/context/burstAnswered";
+import { formatCcUseCount } from "@gladlog/analysis/src/context/ccUse";
+import { formatPressedDuringNote } from "@gladlog/analysis/src/context/controlRejectedPresses";
+import { formatKitUnusedNote } from "@gladlog/analysis/src/context/kitUnusedNote";
+import {
+  dmgSpikeListLegend,
+  emitDmgSpikeEntries,
+  formatDmgSpikesNotListed,
+} from "@gladlog/analysis/src/context/matchTimelineSections";
+import {
+  castStoppedLine,
+  castStoppedText,
+} from "@gladlog/analysis/src/context/timelineSections/castStopped";
 import {
   lookupBehaviorPrior,
   outcomePhrase,
 } from "@gladlog/analysis/src/data/behaviorPrior";
+import type { CastBarEnd } from "@gladlog/analysis/src/utils/castCancels";
+import { CONTROL_FAILED_MISS_TYPES } from "@gladlog/analysis/src/utils/castMissRows";
+import {
+  ccAvoidedCastTag,
+  ccAvoidedOutcomeText,
+  ccLandedMatchWindowMs,
+} from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
 import { CombatUnitReaction } from "@gladlog/parser-compat";
 
 import type { CoverageManifest } from "../src/quality/coverageManifest";
 import {
   checkBehaviorPriorConsistency,
+  checkBurstAnsweredBeforeDeath,
+  checkBurstAnsweredBottomConsistency,
+  checkBurstAnsweredControlSpan,
+  checkCastStoppedLines,
   checkCcAvoidedLandedConsistency,
+  checkCcAvoidedMissType,
   checkCcBookmarkConsistency,
+  checkCcNotLandedLines,
+  checkCcSuggestionInsideImmunity,
+  checkCcUseStartedCounts,
+  checkDeathTrinketCcConsistency,
+  checkDmgSpikeListCap,
   checkDuringExternalConsistency,
   checkForcedTrinketConsistency,
+  checkFreeOfWindowConsistency,
   checkHeaderHpPromise,
+  checkHitNoPlayerContradiction,
+  checkKickEatenCancelsCoverCastStopped,
+  checkKitUnusedNote,
   checkMatch,
   checkPeelOptionConsistency,
   checkPetCreditSide,
+  checkPressedDuringControlNote,
   checkResNoChangeRowsPruned,
   checkSameSecondHpConsistency,
   checkSelfOnlyDefensiveClaims,
   checkSnapshotFactsConsistency,
+  checkWarlockPurgeFollowsPet,
 } from "../src/quality/promptQualityCheck";
 import { loadLegacyMatchFixture } from "./helpers/legacyFixture";
 
@@ -299,6 +339,33 @@ describe("promptQualityCheck.checkSelfOnlyDefensiveClaims (GH #28)", () => {
     expect(v[0]).toContain("19236");
   });
 
+  it("队友的死 + 带天赋、能给队友的自保(on an ally — Lifecinders)→ 不报;不写天赋、或写错天赋 → 硬失败(用户 2026-10-27 裁决)", () => {
+    const scales = (name: string) => [
+      `1:12  [DEFENSIVE AVAILABLE]  2(PEvoker): ${name} available but unused (free to press it for the last 7.0s before the death)`,
+      "1:13  [KILL]                 3(AWarrior) (Arms Warrior) dead",
+    ];
+    expect(
+      checkSelfOnlyDefensiveClaims(
+        scales("Obsidian Scales (on an ally — Lifecinders)"),
+      ),
+    ).toEqual([]);
+    // HAS TEETH: no note, another talent's name, or the note on a self-heal
+    expect(
+      checkSelfOnlyDefensiveClaims(scales("Obsidian Scales")),
+    ).toHaveLength(1);
+    expect(
+      checkSelfOnlyDefensiveClaims(
+        scales("Obsidian Scales (on an ally — Draconic Instincts)"),
+      ),
+    ).toHaveLength(1);
+    expect(
+      checkSelfOnlyDefensiveClaims([
+        "1:10  [DEFENSIVE AVAILABLE]  1(HPriest): Desperate Prayer (on an ally — Lifecinders) available but unused",
+        "1:11  [KILL]                 2(WMonk) (Windwalker Monk) dead",
+      ]),
+    ).toHaveLength(1);
+  });
+
   it("自己的死 + 自愈技能 → 不报(那正是该按的)", () => {
     expect(
       checkSelfOnlyDefensiveClaims([
@@ -435,6 +502,15 @@ describe("checkPetCreditSide — a summon-cast CC credited to the wrong side (GH
     expect(out[0]).toContain("CC ON TEAM");
   });
 
+  it("F16 retest idx 21: a charmed holder's own team's control says so and passes", () => {
+    expect(
+      checkPetCreditSide([
+        ...roster,
+        "4:25  [CC ON TEAM]   1(RShaman) ← Capacitor Totem (by 3(EShaman)'s totem) [from its own team, while charmed] | 3s [DR: Stun Full]",
+      ]),
+    ).toEqual([]);
+  });
+
   it("flags a [CC ON ENEMY] line credited to an enemy's summon", () => {
     const out = checkPetCreditSide([
       ...roster,
@@ -451,6 +527,23 @@ describe("checkPetCreditSide — a summon-cast CC credited to the wrong side (GH
         "1:40  [CC ON ENEMY]   6(RShaman) ← Capacitor Totem (by 3(EShaman)'s pet) (1s)",
       ]),
     ).toEqual([]);
+  });
+
+  it("FT-T14: 换了称呼(totem / guardian)的召唤物,记错边照样报", () => {
+    for (const kind of ["totem", "guardian", "pet"]) {
+      expect(
+        checkPetCreditSide([
+          ...roster,
+          `0:32  [CC ON TEAM]   1(RShaman) ← Capacitor Totem (by 3(EShaman)'s ${kind}) | 3s [DR: Stun Full]`,
+        ]),
+      ).toHaveLength(1);
+      expect(
+        checkPetCreditSide([
+          ...roster,
+          `0:32  [CC ON TEAM]   1(RShaman) ← Capacitor Totem (by 6(RShaman)'s ${kind}) | 3s`,
+        ]),
+      ).toEqual([]);
+    }
   });
 
   it("says nothing about a credit that never resolved to an id", () => {
@@ -485,7 +578,7 @@ describe("checkPetCreditSide — a summon-cast CC credited to the wrong side (GH
 
 describe("checkHeaderHpPromise — an HP floor promised in a header binds the lines under it (GH #99)", () => {
   const killWindow =
-    "  [KILL WINDOW] 1:29–1:47 on Fury Warrior (Todory-MoonGuard-US): you cast no CC; your damage 480k; free 15s of 18s, team min HP 32%.";
+    "  [KILL WINDOW] 1:29–1:47 on Fury Warrior (Todory-MoonGuard-US): you cast no CC; your damage on it 480k; free 15s of 18s, team min HP 32%.";
 
   it("flags the pre-fix header over a window that reports 32%", () => {
     const out = checkHeaderHpPromise([
@@ -519,55 +612,46 @@ describe("checkHeaderHpPromise — an HP floor promised in a header binds the li
 });
 
 describe("checkSameSecondHpConsistency", () => {
-  it("flags external-recipient HP contradiction on [ENEMY DEF]", () => {
-    const lines = [
+  // User ruling 2026-09-30 (triage A21, enemy-def F-E11): `[ENEMY DEF]` and
+  // `[ENEMY TRINKET]` print the target's HP at the press, the signed
+  // exception to the render grid — these three shapes used to be flagged
+  // against the same-second [STATE] tick and are now exempt
+  // (`PRESS_HP_LINE_TAGS`).
+  it("does not compare an [ENEMY DEF] external's (target at N% HP) with [STATE]", () => {
+    expect(
+      checkSameSecondHpConsistency([
+        "0:15  [STATE]   friends 1(HPriest):99 / enemies 2(ERogue):80",
+        "0:15  [ENEMY DEF]   3(HPriest) (Holy Priest): Pain Suppression → 2(ERogue) (target at 24% HP)",
+      ]),
+    ).toEqual([]);
+  });
+
+  it("does not compare an [ENEMY DEF] self wall's (at N% HP) with [STATE]", () => {
+    expect(
+      checkSameSecondHpConsistency([
+        "0:20  [STATE]   friends 1(HPriest):99 / enemies 2(ERogue):70",
+        "0:20  [ENEMY DEF]   2(ERogue) (Subtlety Rogue): Cloak of Shadows (immune) (at 28% HP)",
+      ]),
+    ).toEqual([]);
+  });
+
+  it("does not compare an [ENEMY TRINKET]'s (target at N% HP) with [STATE]", () => {
+    expect(
+      checkSameSecondHpConsistency([
+        "0:25  [STATE]   friends 1(HPriest):99 / enemies 2(ERogue):90",
+        "0:25  [ENEMY TRINKET]   2(ERogue) used PvP trinket (target at 31% HP)",
+      ]),
+    ).toEqual([]);
+  });
+
+  it("still flags a [DMG SPIKE] endpoint on the same second as an exempt press line", () => {
+    const out = checkSameSecondHpConsistency([
       "0:15  [STATE]   friends 1(HPriest):99 / enemies 2(ERogue):80",
       "0:15  [ENEMY DEF]   3(HPriest) (Holy Priest): Pain Suppression → 2(ERogue) (target at 24% HP)",
-    ];
-    const out = checkSameSecondHpConsistency(lines);
+      "0:15–0:25  [DMG SPIKE]   2(ERogue) (Subtlety Rogue): 0.9M in 10s (90k DPS) (24% -> 60% HP)",
+    ]);
     expect(out).toHaveLength(1);
-    expect(out[0]).toContain("[ENEMY DEF]");
-    expect(out[0]).toContain("2(ERogue)");
-    expect(out[0]).toContain("24%");
-    expect(out[0]).toContain("80%");
-  });
-
-  it("flags self-defensive HP contradiction on [ENEMY DEF]", () => {
-    const lines = [
-      "0:20  [STATE]   friends 1(HPriest):99 / enemies 2(ERogue):70",
-      "0:20  [ENEMY DEF]   2(ERogue) (Subtlety Rogue): Cloak of Shadows (immune) (at 28% HP)",
-    ];
-    const out = checkSameSecondHpConsistency(lines);
-    expect(out).toHaveLength(1);
-    expect(out[0]).toContain("[ENEMY DEF]");
-    expect(out[0]).toContain("2(ERogue)");
-    expect(out[0]).toContain("28%");
-    expect(out[0]).toContain("70%");
-  });
-
-  it("flags enemy trinket HP contradiction on [ENEMY TRINKET]", () => {
-    const lines = [
-      "0:25  [STATE]   friends 1(HPriest):99 / enemies 2(ERogue):90",
-      "0:25  [ENEMY TRINKET]   2(ERogue) used PvP trinket (target at 31% HP)",
-    ];
-    const out = checkSameSecondHpConsistency(lines);
-    expect(out).toHaveLength(1);
-    expect(out[0]).toContain("[ENEMY TRINKET]");
-    expect(out[0]).toContain("2(ERogue)");
-    expect(out[0]).toContain("31%");
-    expect(out[0]).toContain("90%");
-  });
-
-  it("passes when HP values agree within 3pp", () => {
-    const lines = [
-      "0:15  [STATE]   friends 1(HPriest):99 / enemies 2(ERogue):25",
-      "0:15  [ENEMY DEF]   3(HPriest) (Holy Priest): Pain Suppression → 2(ERogue) (target at 24% HP)",
-      "0:20  [STATE]   friends 1(HPriest):99 / enemies 2(ERogue):30",
-      "0:20  [ENEMY DEF]   2(ERogue) (Subtlety Rogue): Cloak of Shadows (immune) (at 28% HP)",
-      "0:25  [STATE]   friends 1(HPriest):99 / enemies 2(ERogue):33",
-      "0:25  [ENEMY TRINKET]   2(ERogue) used PvP trinket (target at 31% HP)",
-    ];
-    expect(checkSameSecondHpConsistency(lines)).toEqual([]);
+    expect(out[0]).toContain("[DMG SPIKE]");
   });
 });
 
@@ -637,7 +721,7 @@ describe("checkForcedTrinketConsistency — [FORCED TRINKET] agrees with the tri
   const ccOn =
     "0:17  [CC ON ENEMY]   5(DPriest) ← Intimidating Shout (by 1(AWarrior)) (6s)";
   const attempt =
-    "  [0:13–0:26] on Zenkitty-Illidan-US — Leg Sweep opener (Full DR), 2 stuns | opportunity: trinket up (no softer target) | team focus 31% (0.46M on target) | FAILED: target trinketed out";
+    "  [0:13–0:26] on Zenkitty-Illidan-US — Leg Sweep opener (Full DR), 2 stuns | opportunity: trinket up (no softer target) | team focus 31% (0.31M on target inside it, 0.46M incl. the 5 s after) | FAILED: target trinketed out";
   const line =
     "0:16  [FORCED TRINKET]  5(DPriest) used PvP trinket inside your team's kill attempt [0:13–0:26] on them → 0:17 your Intimidating Shout landed on 5(DPriest) 1 s later (6s)";
   const ok = [...legend, trinket, you, ccOn, attempt, line];
@@ -679,6 +763,49 @@ describe("checkForcedTrinketConsistency — [FORCED TRINKET] agrees with the tri
       ),
     ).toHaveLength(1);
   });
+  it("cc-dr F-CE1: accepts the aura line with its outgoing-chain DR tag, both forms", () => {
+    const tagged = ccOn.replace("(6s)", "(6s) [DR: Disorient Full]");
+    expect(
+      checkForcedTrinketConsistency(ok.map((l) => (l === ccOn ? tagged : l))),
+    ).toEqual([]);
+    const tremorTagged =
+      "0:17  [CC ON ENEMY]   5(DPriest) ← Intimidating Shout (by 1(AWarrior)) [DR: Disorient Full] | enemy Tremor Totem from 6(RShaman) ended this CC after 6s (cut short — it had not expired)";
+    expect(
+      checkForcedTrinketConsistency(
+        ok.map((l) => (l === ccOn ? tremorTagged : l)),
+      ),
+    ).toEqual([]);
+    // the duration is still checked behind the tag
+    expect(
+      checkForcedTrinketConsistency(
+        ok.map((l) => (l === ccOn ? tagged.replace("(6s)", "(1s)") : l)),
+      ),
+    ).toHaveLength(1);
+  });
+  it("FT-T08 step 3c: accepts the aura line with its logged-end clause; the duration is still checked behind it", () => {
+    for (const note of [
+      " | broken by 2(MMonk)'s Rising Sun Kick",
+      " | broken by 3(BMHunter)'s pet's melee hit",
+      " | dispelled by 6(RShaman)'s Purify Spirit",
+      " | ended at their death",
+    ]) {
+      const noted = `${ccOn} [DR: Disorient Full]${note}`;
+      expect(
+        checkForcedTrinketConsistency(ok.map((l) => (l === ccOn ? noted : l))),
+      ).toEqual([]);
+      expect(
+        checkForcedTrinketConsistency(
+          ok.map((l) => (l === ccOn ? noted.replace("(6s)", "(1s)") : l)),
+        ),
+      ).toHaveLength(1);
+    }
+    // a clause the producer does not write is not waved through
+    expect(
+      checkForcedTrinketConsistency(
+        ok.map((l) => (l === ccOn ? `${ccOn} | whatever` : l)),
+      ),
+    ).toHaveLength(1);
+  });
   it("fails a missing trinket or attempt line", () => {
     expect(
       checkForcedTrinketConsistency(ok.filter((l) => l !== trinket)),
@@ -712,6 +839,44 @@ describe("checkForcedTrinketConsistency — [FORCED TRINKET] agrees with the tri
     expect(
       checkForcedTrinketConsistency([...ok, line]).length,
     ).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe("checkCcSuggestionInsideImmunity — no control suggestion inside a printed full immunity (fact6 D8, F20)", () => {
+  // c992ce75 P:416: the old rendered shape
+  const sor =
+    "0:45  [ENEMY DEF]   4(HPriest) (Holy Priest): Spirit of Redemption (immune, 9.0s) [friendly offensive CD active] (at 83% HP)";
+  const bookmark =
+    "0:47–0:55  [CC BOOKMARK]  Incapacitating Roar → 4(HPriest): during your Burst #2 (0:42–1:01) on 5(AWarrior), their healer was not CC'd | at 0:47: 2.7yd, DR Full, 4(HPriest) PvP trinket on cooldown";
+  const peel =
+    "0:50–0:56  [PEEL OPTION]  1(RPaladin) Hammer of Justice → 4(HPriest): usable 7 s, not used | 4(HPriest) did 71% of 3(FDKnight)'s damage taken in the 10 s before dying at 0:56 | at 0:50: 4.0yd, DR Full, 4(HPriest) PvP trinket on cooldown";
+  it("fails the old shape: a bookmark / peel second inside the form", () => {
+    expect(checkCcSuggestionInsideImmunity([sor, bookmark])).toHaveLength(1);
+    expect(checkCcSuggestionInsideImmunity([sor, peel])).toHaveLength(1);
+  });
+  it("passes the new shape (no bookmark), and spans outside the covered seconds", () => {
+    expect(checkCcSuggestionInsideImmunity([sor])).toEqual([]);
+    // covered wholly: 0:46 … 0:52 (began inside 0:45, at least 8.95 s);
+    // a span from 0:53 on, or one ending at 0:45, is no contradiction
+    for (const span of ["0:53–0:59", "0:40–0:45"])
+      expect(
+        checkCcSuggestionInsideImmunity([
+          sor,
+          bookmark
+            .replace("0:47–0:55", span)
+            .replace("at 0:47", `at ${span.slice(0, 4)}`),
+        ]),
+        span,
+      ).toEqual([]);
+  });
+  it("another unit's immunity, a school-limited one, a stealth kind and an end not logged say nothing", () => {
+    for (const def of [
+      sor.replace("4(HPriest)", "5(AWarrior)"),
+      sor.replace("(immune, 9.0s)", "(immune to magic, 9.0s)"),
+      sor.replace("Spirit of Redemption", "Vanish"),
+      sor.replace("(immune, 9.0s)", "(immune, end not logged)"),
+    ])
+      expect(checkCcSuggestionInsideImmunity([def, bookmark]), def).toEqual([]);
   });
 });
 
@@ -808,6 +973,53 @@ describe("checkCcBookmarkConsistency — [CC BOOKMARK] lines agree with the burs
         "0:30  [CC ON ENEMY]   6(DPriest) ← Fear (by 2(DPriest)) (3s)",
       ]),
     ).toEqual([]);
+    // FT-T08 step 3c (agy review): a tail the producer does not write is a failure of its own —
+    // it used to swallow the span and pass
+    expect(
+      checkCcBookmarkConsistency([
+        ...ok,
+        "0:30  [CC ON ENEMY]   6(DPriest) ← Fear (by 2(DPriest)) (3s) | whatever",
+      ]),
+    ).toHaveLength(1);
+    expect(
+      checkCcBookmarkConsistency([
+        ...ok,
+        "0:30  [CC ON ENEMY]   6(DPriest) ← Fear (by 3(RShaman)'s pet) [DR: Disorient Full] | enemy Tremor Totem from 6(RShaman) ended this CC after 2s (cut short — it had not expired)",
+      ]),
+    ).toEqual([]);
+    // FT-T08 step 3c: the span is still read behind a logged-end clause
+    expect(
+      checkCcBookmarkConsistency([
+        ...ok,
+        "0:40  [CC ON ENEMY]   6(DPriest) ← Fear (by 2(DPriest)) (3s) [DR: Disorient Full] | broken by 1(ARogue)'s Eviscerate",
+      ]),
+    ).toHaveLength(1);
+    expect(
+      checkCcBookmarkConsistency([
+        ...ok,
+        "0:30  [CC ON ENEMY]   6(DPriest) ← Fear (by 2(DPriest)) (3s) | broken by 1(ARogue)'s Eviscerate",
+      ]),
+    ).toEqual([]);
+    // FT-T09: `<1s`, a CC the round ended on, and an own-press end are producer forms; the span
+    // behind "still on them when the round ended" is still read
+    for (const tail of [
+      "(<1s) [DR: Disorient Full] | broken by Shadow Word: Death",
+      "(3s) | ended by their PvP trinket",
+      "(still on them when the round ended, <1s in) [DR: Disorient Full]",
+      "(still on them when the round ended, 3s in)",
+    ])
+      expect(
+        checkCcBookmarkConsistency([
+          ...ok,
+          `0:30  [CC ON ENEMY]   6(DPriest) ← Fear (by 2(DPriest)) ${tail}`,
+        ]),
+      ).toEqual([]);
+    expect(
+      checkCcBookmarkConsistency([
+        ...ok,
+        "0:40  [CC ON ENEMY]   6(DPriest) ← Fear (by 2(DPriest)) (still on them when the round ended, 3s in)",
+      ]),
+    ).toHaveLength(1);
     expect(
       checkCcBookmarkConsistency([
         ...ok,
@@ -840,6 +1052,696 @@ describe("checkCcBookmarkConsistency — [CC BOOKMARK] lines agree with the burs
   });
 });
 
+describe("checkCcUseStartedCounts — CC USE `cast bar started N×, went off M×` (FT-T16 D15 2c)", () => {
+  const line = (...items: string[]) => [`  Counts: ${items.join(" · ")}`];
+  const roar = "Incapacitating Roar cast 2× (first 0:26)";
+  it("passes what the producer writes, and the plain-form gate does not call it malformed", () => {
+    const items = [
+      { spellId: "99", spellName: "Incapacitating Roar", casts: 2, first: 26 },
+      { spellId: "106898", spellName: "Stampeding Roar", casts: 0 },
+      { spellId: "33786", spellName: "Cyclone", casts: 0, started: 4 },
+      {
+        spellId: "118",
+        spellName: "Polymorph",
+        casts: 11,
+        first: 32,
+        started: 14,
+      },
+      // every bar went off / more casts than bars: the plain form
+      {
+        spellId: "113724",
+        spellName: "Ring of Frost",
+        casts: 1,
+        first: 77,
+        started: 1,
+      },
+      { spellId: "5782", spellName: "Fear", casts: 3, first: 9, started: 2 },
+    ].map((c) =>
+      formatCcUseCount({
+        spellId: c.spellId,
+        spellName: c.spellName,
+        casts: c.casts,
+        firstCastS: c.first ?? null,
+        castBarsStarted: c.started,
+      }),
+    );
+    expect(items).toEqual([
+      roar,
+      "Stampeding Roar not cast",
+      "Cyclone cast bar started 4×, went off 0×",
+      "Polymorph cast bar started 14×, went off 11× (first 0:32)",
+      "Ring of Frost cast 1× (first 1:17)",
+      "Fear cast 3× (first 0:09)",
+    ]);
+    expect(checkCcUseStartedCounts(line(...items))).toEqual([]);
+    expect(checkCcBookmarkConsistency(line(...items))).toEqual([]);
+  });
+  it("fails went off ≥ started — that entry must read `cast N×`", () => {
+    expect(
+      checkCcUseStartedCounts(
+        line(roar, "Cyclone cast bar started 4×, went off 4× (first 0:19)"),
+      ),
+    ).toHaveLength(1);
+    expect(
+      checkCcUseStartedCounts(
+        line(roar, "Cyclone cast bar started 4×, went off 5× (first 0:19)"),
+      ),
+    ).toHaveLength(1);
+    expect(
+      checkCcUseStartedCounts(line("Cyclone cast bar started 0×, went off 0×")),
+    ).toHaveLength(1);
+  });
+  it("fails a `(first m:ss)` that disagrees with the went-off count", () => {
+    expect(
+      checkCcUseStartedCounts(
+        line("Cyclone cast bar started 4×, went off 0× (first 0:19)"),
+      ),
+    ).toHaveLength(1);
+    expect(
+      checkCcUseStartedCounts(line("Cyclone cast bar started 4×, went off 2×")),
+    ).toHaveLength(1);
+  });
+  it("fails two entries for one spell", () => {
+    expect(
+      checkCcUseStartedCounts(
+        line("Cyclone not cast", "Cyclone cast bar started 4×, went off 0×"),
+      ),
+    ).toHaveLength(1);
+    expect(
+      checkCcUseStartedCounts(
+        line(
+          "Cyclone cast 2× (first 0:19)",
+          "Cyclone cast bar started 4×, went off 2× (first 0:19)",
+        ),
+      ),
+    ).toHaveLength(1);
+  });
+  it("fails a went-off count the rendered [YOU] [CC] lines contradict", () => {
+    const walk = "Sleep Walk cast bar started 5×, went off 1× (first 0:36)";
+    const cast = (t: string) => `${t}  [YOU] [CC]   Sleep Walk → 4(BDruid)`;
+    expect(checkCcUseStartedCounts([...line(walk), cast("0:36")])).toEqual([]);
+    // two rendered casts against "went off 1×"
+    expect(
+      checkCcUseStartedCounts([...line(walk), cast("0:36"), cast("1:10")]),
+    ).toHaveLength(1);
+    // a rendered cast before the stated first
+    expect(checkCcUseStartedCounts([...line(walk), cast("0:20")])).toHaveLength(
+      1,
+    );
+    // a rendered cast of a spell that "went off 0×"
+    expect(
+      checkCcUseStartedCounts([
+        ...line("Sleep Walk cast bar started 5×, went off 0×"),
+        cast("0:36"),
+      ]),
+    ).toHaveLength(1);
+  });
+  // The kit's `[UNUSED — started K×, never finished]` (FT-T06) and this line
+  // state the same bars of one cooldown.
+  const kit = (hex: string) => [
+    '  <unit id="1" name="Totem-Illidan-US" spec="Restoration Shaman" role="log owner">',
+    `    <cooldowns>Astral Shift [120s, lasts 12s], Hex [30s]${hex && ` ${hex}`}, Capacitor Totem [60s] [UNUSED]</cooldowns>`,
+  ];
+  it("agrees with the owner's kit: `[UNUSED — started K×, never finished]` ⟺ `cast bar started K×, went off 0×`", () => {
+    const started2 = "[UNUSED — started 2×, never finished]";
+    expect(
+      checkCcUseStartedCounts([
+        ...kit(started2),
+        ...line(
+          "Hex cast bar started 2×, went off 0×",
+          "Capacitor Totem not cast",
+        ),
+      ]),
+    ).toEqual([]);
+    // the kit's note may also carry refused presses (FT F09): the K is read
+    // the same
+    expect(
+      checkCcUseStartedCounts([
+        ...kit(
+          "[UNUSED — started 2×, never finished; pressed 1×, refused: silenced]",
+        ),
+        ...line("Hex cast bar started 2×, went off 0×"),
+      ]),
+    ).toEqual([]);
+    expect(
+      checkCcUseStartedCounts([
+        ...kit("[UNUSED — pressed 1×, refused: silenced]"),
+        ...line("Hex cast bar started 2×, went off 0×"),
+      ]),
+    ).toHaveLength(1);
+    // another number of bars for the same cooldown
+    expect(
+      checkCcUseStartedCounts([
+        ...kit(started2),
+        ...line("Hex cast bar started 3×, went off 0×"),
+      ]),
+    ).toHaveLength(1);
+    // the kit says never spent, the counts say one went off
+    expect(
+      checkCcUseStartedCounts([
+        ...kit(started2),
+        ...line("Hex cast bar started 2×, went off 1× (first 0:11)"),
+      ]),
+    ).toHaveLength(1);
+    // the kit says bars were begun, the counts do not
+    expect(
+      checkCcUseStartedCounts([...kit(started2), ...line("Hex not cast")]),
+    ).toHaveLength(1);
+    // the kit's bare [UNUSED] says no bar was begun, the counts say two
+    expect(
+      checkCcUseStartedCounts([
+        ...kit("[UNUSED]"),
+        ...line("Hex cast bar started 2×, went off 0×"),
+      ]),
+    ).toHaveLength(1);
+    // the last kit entry (its `]` survives the split) is read too
+    expect(
+      checkCcUseStartedCounts([
+        ...kit("[UNUSED]"),
+        ...line("Capacitor Totem cast bar started 1×, went off 0×"),
+      ]),
+    ).toHaveLength(1);
+  });
+  it("a kit entry that is not UNUSED, a spell the kit does not list, or no kit at all says nothing", () => {
+    for (const lines of [
+      [
+        ...kit(""),
+        ...line("Hex cast bar started 4×, went off 3× (first 0:11)"),
+      ],
+      [...kit("[UNUSED]"), ...line("Cyclone cast bar started 4×, went off 0×")],
+      line("Hex cast bar started 2×, went off 0×"),
+    ])
+      expect(checkCcUseStartedCounts(lines)).toEqual([]);
+  });
+  it("the prototype's wording (`started N×, completed M×`) is a malformed entry", () => {
+    const old = line(roar, "Cyclone started 4×, completed 0×");
+    expect(checkCcUseStartedCounts(old)).toEqual([]);
+    expect(checkCcBookmarkConsistency(old)).toHaveLength(1);
+  });
+});
+
+describe("checkCastStoppedLines — a [CAST STOPPED] line is one of the producer's wordings and one of CC USE's bars (FT-T16 D15 2b)", () => {
+  const unit = [
+    '  <unit id="1" name="Herbivore-TwistingNether-EU" spec="Balance Druid" role="log owner">',
+    "    <cooldowns>Barkskin [60s], Mighty Bash [60s]</cooldowns>",
+  ];
+  const counts = (...items: string[]) => `  Counts: ${items.join(" · ")}`;
+  const kick =
+    "0:15  [KICK]   5(RPaladin) interrupted 1(BDruid)'s Cyclone (Rebuke; back 0:30)";
+  // every wording, written by the producer from one bar's ending
+  const produced = (
+    startS: number,
+    end: CastBarEnd,
+    opts: { roundEndS?: number; nextBarS?: number } = {},
+  ) =>
+    castStoppedLine(
+      startS,
+      "Cyclone",
+      castStoppedText(
+        { id: "33786", name: "Cyclone", t: startS, end, earlierFailure: false },
+        opts.roundEndS ?? 600,
+        opts.nextBarS,
+        new Set(),
+      )!,
+    );
+  const refusal = (atS: number, reason: string): CastBarEnd => ({
+    kind: "refused",
+    atS,
+    row: {
+      tSeconds: atS,
+      unitGuid: "p1",
+      spellId: 33786,
+      spellName: "Cyclone",
+      reason,
+    },
+  });
+  const six = [
+    produced(13.2, { kind: "stopped", atS: 13.7, near: null }),
+    produced(30.1, { kind: "stopped", atS: 30.6, near: "cc" }),
+    produced(51.4, { kind: "stopped", atS: 51.7, near: "displaced" }),
+    produced(49.04, refusal(49.94, "Your vision of the target is obscured")),
+    produced(81.0, refusal(82.2, "Invalid target")),
+    produced(118, { kind: "none" }, { roundEndS: 119.4 }),
+  ];
+  const started = (n: number, m = 2) =>
+    counts(
+      "Mighty Bash cast 2× (first 0:13)",
+      `Cyclone cast bar started ${n}×, went off ${m}× (first 0:19)`,
+    );
+
+  it("passes every wording the producer writes", () => {
+    expect(six).toEqual([
+      "0:13  [CAST STOPPED]   Cyclone — cast bar stopped after 0.5s; not kicked; no control, silence or knockback landed on you then",
+      "0:30  [CAST STOPPED]   Cyclone — cast bar stopped after 0.5s as a control or silence landed on you",
+      "0:51  [CAST STOPPED]   Cyclone — cast bar stopped after 0.3s as an enemy knockback or pull landed on you",
+      "0:49  [CAST STOPPED]   Cyclone — refused 0.9s in: vision obscured (Smoke Bomb)",
+      "1:21  [CAST STOPPED]   Cyclone — refused 1.2s in: invalid target",
+      "1:58  [CAST STOPPED]   Cyclone — no end logged; the round ended 1.4s after it began",
+    ]);
+    expect(checkCastStoppedLines([...unit, kick, ...six, started(9)])).toEqual(
+      [],
+    );
+    // a reason refusalWhy has no words for keeps the bracketed marker
+    // (work order 2026-10-14d #8)
+    expect(
+      checkCastStoppedLines([
+        ...unit,
+        kick,
+        ...six.slice(0, 4),
+        "1:21  [CAST STOPPED]   Cyclone — refused 1.2s in (client reason not translated)",
+        six[5]!,
+        started(9),
+      ]),
+    ).toEqual([]);
+    // a prompt with no such line has nothing to check
+    expect(checkCastStoppedLines([...unit, kick, started(9)])).toEqual([]);
+  });
+
+  it("fails a line that is not the producer's wording to the last character", () => {
+    const base = six[0]!;
+    for (const wrong of [
+      // an HP token: this is not a press line
+      `${base} (self: 62% HP)`,
+      base.replace("Cyclone —", "Cyclone (62% HP) —"),
+      // what the log cannot tell
+      base.replace("cast bar stopped", "cancelled by hand"),
+      base.replace("cast bar stopped", "you moved and the cast bar stopped"),
+      // the prototype's wording, on the press tag's text
+      "0:13  [CAST STOPPED]   Cyclone started — not completed (cast bar stopped after 0.5s; not kicked, no control landed on you then)",
+      // a quoted client string
+      '1:21  [CAST STOPPED]   Cyclone — refused 1.2s in; client: "Invalid target"',
+      // a reason the product does not word (refusalWhy words "invalid
+      // target" since FT-R1014b — work order 2026-10-14d #8)
+      "1:21  [CAST STOPPED]   Cyclone — refused 1.2s in: the target was busy",
+      // wordings refusalWhy has that the producer never prints after a colon
+      // (agy 40-FT-90): the unworded marker goes in brackets, an
+      // interruption row ends the bar as "cast bar stopped"
+      "1:21  [CAST STOPPED]   Cyclone — refused 1.2s in: client reason not translated",
+      "1:21  [CAST STOPPED]   Cyclone — refused 1.2s in: its cast bar began and was stopped",
+    ])
+      expect(
+        checkCastStoppedLines([...unit, ...six.slice(1), wrong, started(9)]),
+        wrong,
+      ).toHaveLength(1);
+    // a target on the line: no CC USE entry reads `Cyclone → 4(DPriest)`
+    expect(
+      checkCastStoppedLines([
+        ...unit,
+        base.replace("Cyclone —", "Cyclone → 4(DPriest) —"),
+        started(9),
+      ]),
+    ).toHaveLength(1);
+  });
+
+  it("fails an elapsed time past the cast-bar window", () => {
+    const late = six[0]!.replace("after 0.5s", "after 4.1s");
+    expect(checkCastStoppedLines([...unit, late, started(9)])).toHaveLength(1);
+    expect(
+      checkCastStoppedLines([
+        ...unit,
+        six[0]!.replace("after 0.5s", "after 4.0s"),
+        started(9),
+      ]),
+    ).toEqual([]);
+  });
+
+  it("fails a spell CC USE has no entry for", () => {
+    expect(
+      checkCastStoppedLines([
+        ...unit,
+        ...six,
+        counts("Mighty Bash cast 2× (first 0:13)"),
+      ]),
+    ).toHaveLength(1);
+    // … and a prompt whose lines have no Counts line at all
+    expect(checkCastStoppedLines([...unit, six[0]!])).toHaveLength(1);
+  });
+
+  it("fails more lines, with the owner's kicked casts, than the entry has bars", () => {
+    // six lines + one kicked Cyclone = seven bars
+    expect(checkCastStoppedLines([...unit, kick, ...six, started(7)])).toEqual(
+      [],
+    );
+    expect(
+      checkCastStoppedLines([...unit, kick, ...six, started(6)]),
+    ).toHaveLength(1);
+    // a teammate's kicked Cyclone is not the owner's bar
+    expect(
+      checkCastStoppedLines([
+        ...unit,
+        kick.replace("1(BDruid)", "2(RDruid)"),
+        ...six,
+        started(6),
+      ]),
+    ).toEqual([]);
+    // the plain form is printed when no more bars than casts were begun
+    const plain = counts("Cyclone cast 3× (first 0:19)");
+    expect(checkCastStoppedLines([...unit, ...six.slice(0, 3), plain])).toEqual(
+      [],
+    );
+    expect(
+      checkCastStoppedLines([...unit, kick, ...six.slice(0, 3), plain]),
+    ).toHaveLength(1);
+    expect(
+      checkCastStoppedLines([...unit, six[0]!, counts("Cyclone not cast")]),
+    ).toHaveLength(1);
+  });
+
+  it("fails a refusal a [REJECTED] line of that spell and reason already states", () => {
+    const refused =
+      "1:55  [CAST STOPPED]   Cyclone — refused 1.2s in: out of range";
+    const run = (why: string, span = " (1:55–1:58)") =>
+      `1:55  [REJECTED]   your Cyclone ×4 — ${why}${span}`;
+    expect(
+      checkCastStoppedLines([
+        ...unit,
+        refused,
+        run("out of range"),
+        started(9),
+      ]),
+    ).toHaveLength(1);
+    // another reason, another spell, or a span the refusal need not be in
+    expect(
+      checkCastStoppedLines([
+        ...unit,
+        refused,
+        run("target not in line of sight"),
+        started(9),
+      ]),
+    ).toEqual([]);
+    expect(
+      checkCastStoppedLines([
+        ...unit,
+        refused,
+        run("out of range").replace("your Cyclone", "your Moonfire"),
+        started(9),
+      ]),
+    ).toEqual([]);
+    expect(
+      checkCastStoppedLines([
+        ...unit,
+        refused,
+        run("out of range", ""),
+        started(9),
+      ]),
+    ).toEqual([]);
+  });
+});
+
+describe("checkKickEatenCancelsCoverCastStopped — kick-eaten's yourCancels counts every [CAST STOPPED] line that states a cancel", () => {
+  const stopped = (startS: number, near: "cc" | "displaced" | null = null) =>
+    castStoppedLine(
+      startS,
+      "Cyclone",
+      castStoppedText(
+        {
+          id: "33786",
+          name: "Cyclone",
+          t: startS,
+          end: { kind: "stopped", atS: startS + 0.5, near },
+          earlierFailure: false,
+        },
+        600,
+        undefined,
+        new Set(),
+      )!,
+    );
+  const kickEaten = (facts: string) =>
+    `  - id=kick-eaten:Player-1:44 type=kick-eaten t=43.5s units=A/B facts={t=43.5, interrupted=Regrowth, kick=Kick, ${facts}}`;
+
+  it("passes a count at or above the lines — the ledger counts every cast-time spell, the lines controls only", () => {
+    const lines = [stopped(13.2), stopped(47.0)];
+    for (const n of [2, 3, 11])
+      expect(
+        checkKickEatenCancelsCoverCastStopped([
+          ...lines,
+          kickEaten(`yourCancels=${n}, baitedKicks=0`),
+        ]),
+      ).toEqual([]);
+  });
+
+  it("fails a count below the lines, once per kick-eaten row (the bar the ledger left out until 2026-10-11)", () => {
+    const lines = [stopped(13.2), stopped(47.0), stopped(70.0)];
+    const row = kickEaten("yourCancels=2, baitedKicks=0");
+    expect(checkKickEatenCancelsCoverCastStopped([...lines, row])).toHaveLength(
+      1,
+    );
+    expect(
+      checkKickEatenCancelsCoverCastStopped([...lines, row, row]),
+    ).toHaveLength(2);
+    expect(
+      checkKickEatenCancelsCoverCastStopped([
+        ...lines,
+        kickEaten("yourCancels=0, baitedKicks=0"),
+      ]),
+    ).toHaveLength(1);
+  });
+
+  it("counts only the lines that say nothing landed on the owner, and only rows that carry the fact", () => {
+    // a stop as a control or a knockback landed is not a cancel; nor is a
+    // refusal or a bar the round ended on
+    const others = [
+      stopped(20.0, "cc"),
+      stopped(30.0, "displaced"),
+      "0:49  [CAST STOPPED]   Cyclone — refused 0.9s in: vision obscured (Smoke Bomb)",
+      "1:58  [CAST STOPPED]   Cyclone — no end logged; the round ended 1.4s after it began",
+    ];
+    expect(
+      checkKickEatenCancelsCoverCastStopped([
+        ...others,
+        stopped(13.2),
+        kickEaten("yourCancels=1, baitedKicks=0"),
+      ]),
+    ).toEqual([]);
+    // a kick-eaten row of another log's owner has no cast-control facts
+    expect(
+      checkKickEatenCancelsCoverCastStopped([
+        stopped(13.2),
+        kickEaten("lockout=3.0"),
+      ]),
+    ).toEqual([]);
+    // no such line, nothing to compare
+    expect(
+      checkKickEatenCancelsCoverCastStopped([
+        kickEaten("yourCancels=0, baitedKicks=0"),
+      ]),
+    ).toEqual([]);
+  });
+});
+
+describe("checkHitNoPlayerContradiction — [hit no enemy player] against the press's own [CC NOT LANDED] / [CC ON ENEMY] lines (fact6 F20)", () => {
+  const unit = [
+    '  <unit id="1" name="Henblinked-WyrmrestAccord-US" spec="Arcane Mage" role="log owner">',
+  ];
+  // 4caab013 2:10 / 2:12, as rendered before the fix: the totem's IMMUNE
+  // pulse on the warlock under the cast line that says it hit nobody
+  const totemOld =
+    "2:10  [TEAM] [CC]   3(RShaman) (Restoration Shaman) cast Capacitor Totem [hit no enemy player]";
+  const totemNew =
+    "2:10  [TEAM] [CC]   3(RShaman) (Restoration Shaman) cast Capacitor Totem [no CC aura logged — hit 5(AWarlock)]";
+  const pulse =
+    "2:12  [CC NOT LANDED]   5(AWarlock) ← Capacitor Totem (by 3(RShaman)'s totem) — logged IMMUNE (Precognition was up)";
+
+  it("fails the old shape: the tag beside a miss line of that press", () => {
+    const out = checkHitNoPlayerContradiction([...unit, totemOld, pulse]);
+    expect(out).toHaveLength(1);
+    expect(out[0]).toContain("Capacitor Totem");
+  });
+
+  it("passes the new shape, and a tag with no line of that press", () => {
+    expect(checkHitNoPlayerContradiction([...unit, totemNew, pulse])).toEqual(
+      [],
+    );
+    expect(checkHitNoPlayerContradiction([...unit, totemOld])).toEqual([]);
+  });
+
+  it("an owner's tag against an owner's landing; another caster's or a later second's line is no contradiction", () => {
+    const breath = "0:38  [YOU] [CC]   Dragon's Breath [hit no enemy player]";
+    const landed =
+      "0:38  [CC ON ENEMY]   5(HDHunter) ← Dragon's Breath (by 1(AMage)) (3s) [DR: Disorient Full]";
+    expect(checkHitNoPlayerContradiction([...unit, breath, landed])).toHaveLength(
+      1,
+    );
+    expect(
+      checkHitNoPlayerContradiction([
+        ...unit,
+        breath,
+        landed.replace("(by 1(AMage))", "(by 2(FMage))"),
+      ]),
+    ).toEqual([]);
+    expect(
+      checkHitNoPlayerContradiction([
+        ...unit,
+        breath,
+        landed.replace("0:38", "0:45"),
+      ]),
+    ).toEqual([]);
+  });
+});
+
+describe("checkCcNotLandedLines — a [CC NOT LANDED] line states a failed control no other line states (FT-T16 D15 3b)", () => {
+  const unit = [
+    '  <unit id="1" name="Mangosbaby-Illidan-US" spec="Arcane Mage" role="log owner">',
+    "    <cooldowns>Ice Block [240s]</cooldowns>",
+  ];
+  const poly =
+    "1:40  [CC NOT LANDED]   4(AWarrior) ← Polymorph (by 1(AMage)) — logged IMMUNE (Bladestorm was up)";
+  const cyclone =
+    "0:19  [CC NOT LANDED]   6(UDKnight) ← Cyclone (by 1(AMage)) — logged MISS";
+  const gouge =
+    "0:25  [CC NOT LANDED]   4(DPriest) ← Gouge (by 2(ARogue)) — logged IMMUNE (Precognition was up)";
+  const landedLater =
+    "1:46  [CC ON ENEMY]   4(AWarrior) ← Polymorph (by 1(AMage)) (3s) [DR: Incapacitate Full]";
+
+  it("passes the producer's lines, with every type that establishes a failed control", () => {
+    expect(
+      checkCcNotLandedLines([...unit, cyclone, gouge, poly, landedLater]),
+    ).toEqual([]);
+    // REFLECT establishes a failed control too, but never on this line
+    for (const type of CONTROL_FAILED_MISS_TYPES)
+      if (type !== "REFLECT")
+        expect(
+          checkCcNotLandedLines([
+            ...unit,
+            cyclone.replace("logged MISS", `logged ${type}`),
+          ]),
+          type,
+        ).toEqual([]);
+  });
+
+  it("fails `logged REFLECT`: every reflect has its [REFLECTED] line", () => {
+    const out = checkCcNotLandedLines([
+      ...unit,
+      "0:42  [REFLECTED]   2(RShaman)'s Lightning Lasso reflected by 4(AWarlock) (a control — sent back at the caster)",
+      "0:42  [CC NOT LANDED]   4(AWarlock) ← Lightning Lasso (by 2(RShaman)) — logged REFLECT",
+    ]);
+    expect(out).toHaveLength(1);
+    expect(out[0]).toContain("REFLECT");
+  });
+
+  it("fails a type that does not establish a failed control", () => {
+    for (const type of ["ABSORB", "RESIST", "BLOCK"])
+      expect(
+        checkCcNotLandedLines([
+          ...unit,
+          cyclone.replace("logged MISS", `logged ${type}`),
+        ]),
+        type,
+      ).toHaveLength(1);
+  });
+
+  it("fails a line that is not the producer's format", () => {
+    for (const wrong of [
+      // the prototype's wording, on the landed tag's shape
+      "1:40  [CC NOT LANDED]   4(AWarrior) ← Polymorph (by 1(AMage)) [IMMUNE — Bladestorm was up]",
+      // a landed line's clauses
+      `${cyclone} [DR: Disorient Full]`,
+      cyclone.replace("(by 1(AMage))", "(by 1(AMage)) (5s)"),
+      cyclone.replace("logged MISS", "did not land"),
+      cyclone.replace("logged MISS", "logged undefined"),
+    ])
+      expect(checkCcNotLandedLines([...unit, wrong]), wrong).toHaveLength(1);
+  });
+
+  it("fails when the same control is on a [CC ON ENEMY] line of that second", () => {
+    const landed = (by: string, at = "1:40", target = "4(AWarrior)") =>
+      `${at}  [CC ON ENEMY]   ${target} ← Polymorph (by ${by}) (6s) [DR: Incapacitate Full]`;
+    expect(
+      checkCcNotLandedLines([...unit, poly, landed("1(AMage)")]),
+    ).toHaveLength(1);
+    // the player's summon is the player's control
+    expect(
+      checkCcNotLandedLines([...unit, poly, landed("1(AMage)'s pet")]),
+    ).toHaveLength(1);
+    // another caster, another enemy, another second
+    expect(checkCcNotLandedLines([...unit, poly, landed("3(FMage)")])).toEqual(
+      [],
+    );
+    expect(
+      checkCcNotLandedLines([
+        ...unit,
+        poly,
+        landed("1(AMage)", "1:40", "6(RShaman)"),
+      ]),
+    ).toEqual([]);
+    expect(
+      checkCcNotLandedLines([...unit, poly, landed("1(AMage)", "1:41")]),
+    ).toEqual([]);
+  });
+
+  it("fails a miss the caster's cast line of that second already states", () => {
+    // the owner's line, IMMUNE on its named target
+    expect(
+      checkCcNotLandedLines([
+        ...unit,
+        "1:40  [YOU] [CC]   Polymorph → 4(AWarrior) [IMMUNE — Bladestorm was up]",
+        poly,
+      ]),
+    ).toHaveLength(1);
+    // … IMMUNE on a player the line does not name
+    expect(
+      checkCcNotLandedLines([
+        ...unit,
+        "1:40  [YOU] [CC]   Polymorph → 6(RShaman) [DR: Incapacitate Full] [IMMUNE: 4(AWarrior)]",
+        poly,
+      ]),
+    ).toHaveLength(1);
+    // … and the MISS tag
+    expect(
+      checkCcNotLandedLines([
+        ...unit,
+        "0:19  [YOU] [CC]   Cyclone → 6(UDKnight) [MISSED on 6(UDKnight)]",
+        cyclone,
+      ]),
+    ).toHaveLength(1);
+    // a teammate's line
+    const teamLine =
+      "0:25  [TEAM] [CC]   2(ARogue) (Assassination Rogue) cast Gouge → 4(DPriest) [IMMUNE — Precognition was up]";
+    expect(checkCcNotLandedLines([...unit, teamLine, gouge])).toHaveLength(1);
+
+    // not the same miss: another enemy, another caster, another spell,
+    // another second, another type
+    expect(
+      checkCcNotLandedLines([
+        ...unit,
+        "1:40  [YOU] [CC]   Polymorph → 6(RShaman) [IMMUNE — Grounding Totem was up]",
+        poly,
+      ]),
+    ).toEqual([]);
+    expect(
+      checkCcNotLandedLines([
+        ...unit,
+        teamLine.replace(
+          "2(ARogue) (Assassination Rogue)",
+          "3(SRogue) (Subtlety Rogue)",
+        ),
+        gouge,
+      ]),
+    ).toEqual([]);
+    expect(
+      checkCcNotLandedLines([
+        ...unit,
+        "1:40  [YOU] [CC]   Ring of Frost → 4(AWarrior) [IMMUNE — Bladestorm was up]",
+        poly,
+      ]),
+    ).toEqual([]);
+    expect(
+      checkCcNotLandedLines([
+        ...unit,
+        "1:39  [YOU] [CC]   Polymorph → 4(AWarrior) [IMMUNE — Bladestorm was up]",
+        poly,
+      ]),
+    ).toEqual([]);
+    expect(
+      checkCcNotLandedLines([
+        ...unit,
+        "0:19  [YOU] [CC]   Cyclone → 6(UDKnight) [IMMUNE — Anti-Magic Shell was up]",
+        cyclone,
+      ]),
+    ).toEqual([]);
+  });
+});
+
 describe("checkPeelOptionConsistency — a [PEEL OPTION] line must agree with the death and CC lines (GH #77)", () => {
   const death =
     "2:29  [DEATH]  3(FDKnight) (Frost Death Knight — friendly) (Unused: Anti-Magic Zone) | dampening: 46%";
@@ -850,6 +1752,12 @@ describe("checkPeelOptionConsistency — a [PEEL OPTION] line must agree with th
   });
   it("fails without the matching [DEATH] line", () => {
     expect(checkPeelOptionConsistency([peel])).toHaveLength(1);
+  });
+  it("in the death's own second, a landing printed after the [DEATH] line came after it — no contradiction; before it, a contradiction (wide 240-16)", () => {
+    const at229 = "2:29  [CC ON ENEMY]   4(ARogue) ← Hammer of Justice (by 1(RPaladin)) (3s)";
+    expect(checkPeelOptionConsistency([death, at229, peel])).toEqual([]);
+    // HAS TEETH: the same landing printed before the death line
+    expect(checkPeelOptionConsistency([at229, death, peel])).toHaveLength(1);
   });
   it("fails when the same CC landed on that target inside the window", () => {
     expect(
@@ -933,6 +1841,34 @@ describe("checkCcAvoidedLandedConsistency — a CC that landed cannot also have 
     expect(out[0]).toContain("line 1");
   });
 
+  it("a logged miss whose caster's recast landed says so (— recast landed +Ns): that one landing answers it; a second landing, or no tag, still fails (user ruling 2026-10-27)", () => {
+    const shroud =
+      "2:36  [CC AVOIDED?]   3(PEvoker): Cyclone (by 4(BDruid)) logged IMMUNE; Nullifying Shroud (own) active";
+    const landed =
+      "2:36  [CC ON TEAM]   3(PEvoker) ← Cyclone (by 4(BDruid)) | 3s [DR: Disorient 50%] | 21.7yd from caster";
+    expect(
+      checkCcAvoidedLandedConsistency([
+        `${shroud} — recast landed +0.9s`,
+        landed,
+      ]),
+    ).toEqual([]);
+    // a 0.96 s recast prints +1.0s and can land in the line's own second
+    expect(
+      checkCcAvoidedLandedConsistency([
+        `${shroud} — recast landed +1.0s`,
+        landed,
+      ]),
+    ).toEqual([]);
+    // HAS TEETH: no tag; or a tag whose recast cannot render in that second
+    expect(checkCcAvoidedLandedConsistency([shroud, landed])).toHaveLength(1);
+    expect(
+      checkCcAvoidedLandedConsistency([
+        `${shroud} — recast landed +3.0s`,
+        landed,
+      ]),
+    ).toHaveLength(1);
+  });
+
   it("parses a spell name that itself contains a colon", () => {
     expect(
       checkCcAvoidedLandedConsistency([
@@ -951,6 +1887,498 @@ describe("checkCcAvoidedLandedConsistency — a CC that landed cannot also have 
         "0:45  [CC ON TEAM]   2(EShaman) ← Fear (by 5(DWarlock)) | 3s",
       ]),
     ).toEqual([]);
+  });
+
+  // FT-T16 (user decision D14, 2026-10-10): a control with a landing delay
+  // is paired as far after its cast as it can land — the gate reads the
+  // producer's own window for the name the line prints.
+  const fmt = (s: number) =>
+    `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+  const delayed = (spell: string, gapS: number) => [
+    `6:56  [CC AVOIDED?]   1(PEvoker): ${spell} (by 6(RShaman)) did not land; Nullifying Shroud (own) active`,
+    `${fmt(416 + gapS)}  [CC ON TEAM]   1(PEvoker) ← ${spell} (by 6(RShaman)'s totem) | 1s [DR: Stun 50%]`,
+  ];
+
+  it("141470d0: `6:56 Capacitor Totem did not land` with the same totem's stun at 6:58 is a contradiction", () => {
+    const out = checkCcAvoidedLandedConsistency(delayed("Capacitor Totem", 2));
+    expect(out).toHaveLength(1);
+    expect(out[0]).toContain("line 1");
+    expect(out[0]).toContain("6:58");
+  });
+
+  it("flags exactly the rendered gaps the producer's window makes certain: d + 1 <= after, per spell", () => {
+    const certain = (spell: string) =>
+      [-2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].filter(
+        (d) => checkCcAvoidedLandedConsistency(delayed(spell, d)).length > 0,
+      );
+    // no delay: the 1.5 s default, the same second only
+    expect(certain("Mortal Coil")).toEqual([0]);
+    // Capacitor Totem lands up to 4.5 s after the cast, Sigil of Misery 3 s,
+    // Ring of Frost 10.5 s (the ring's life)
+    expect(certain("Capacitor Totem")).toEqual([0, 1, 2, 3]);
+    expect(certain("Sigil of Misery")).toEqual([0, 1, 2]);
+    expect(certain("Ring of Frost")).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+    // … and those bounds are the producer's function, not a copy of it
+    for (const spell of [
+      "Mortal Coil",
+      "Capacitor Totem",
+      "Sigil of Misery",
+      "Ring of Frost",
+    ])
+      expect(Math.max(...certain(spell)), spell).toBe(
+        Math.floor(ccLandedMatchWindowMs(spell).afterMs / 1000 - 1),
+      );
+  });
+
+  it("a delayed landing on another unit, or of another spell, is not this line's twin", () => {
+    const [avoidedLine] = delayed("Capacitor Totem", 2);
+    expect(
+      checkCcAvoidedLandedConsistency([
+        avoidedLine!,
+        "6:58  [CC ON TEAM]   2(RDruid) ← Capacitor Totem (by 6(RShaman)'s totem) | 3s",
+        "6:58  [CC ON TEAM]   1(PEvoker) ← Hex (by 6(RShaman)) | 3s",
+      ]),
+    ).toEqual([]);
+  });
+
+  it("anchors on the cast stamp a delayed line carries, not its hit second (codex 20-F15-21)", () => {
+    // Ring of Frost cast at 0:10 misses at 0:18 while Shroud is up; another
+    // ring lands at 0:21 — past the first cast's 10.5 s window
+    const line = `0:18  [CC AVOIDED?]   1(PEvoker): Ring of Frost (by 6(FMage)${ccAvoidedCastTag({ atSeconds: 18.4, castAtSeconds: 10.2 })}) did not land; Nullifying Shroud (own) active`;
+    expect(line).toContain("(by 6(FMage); cast 0:10)");
+    const landed21 =
+      "0:21  [CC ON TEAM]   1(PEvoker) ← Ring of Frost (by 6(FMage)) | 3s";
+    expect(checkCcAvoidedLandedConsistency([line, landed21])).toEqual([]);
+    // the same landing inside the cast's window is still a contradiction
+    expect(
+      checkCcAvoidedLandedConsistency([
+        line,
+        "0:15  [CC ON TEAM]   1(PEvoker) ← Ring of Frost (by 6(FMage)) | 3s",
+      ]),
+    ).toHaveLength(1);
+    // a pet caster's label keeps the stamp readable
+    const pet = line.replace("(by 6(FMage);", "(by 6(FMage)'s pet;");
+    expect(checkCcAvoidedLandedConsistency([pet, landed21])).toEqual([]);
+    // no stamp when the cast and the hit share a rendered second
+    expect(ccAvoidedCastTag({ atSeconds: 18.9, castAtSeconds: 18.1 })).toBe("");
+    expect(ccAvoidedCastTag({ atSeconds: 18.9 })).toBe("");
+  });
+
+  it("reads the `logged <TYPE>` form the same way (FT-T16 D15 3c)", () => {
+    const logged = avoided.replace("did not land", "logged IMMUNE");
+    expect(
+      checkCcAvoidedLandedConsistency([
+        logged,
+        "0:45  [CC ON TEAM]   2(EShaman) ← Mortal Coil (by 5(DWarlock)) | 3s",
+      ]),
+    ).toHaveLength(1);
+    expect(checkCcAvoidedLandedConsistency([logged])).toEqual([]);
+  });
+
+  it("a `logged <TYPE>` line with a cast stamp is read at its own hit second (codex 20-F17-02 #3)", () => {
+    const line =
+      "0:12  [CC AVOIDED?]   1(PEvoker): Capacitor Totem (by 6(RShaman); cast 0:10) logged IMMUNE; Nullifying Shroud (own) active";
+    expect(
+      checkCcAvoidedLandedConsistency([
+        line,
+        "0:12  [CC ON TEAM]   1(PEvoker) ← Capacitor Totem (by 6(RShaman)'s totem) | 3s",
+      ]),
+    ).toHaveLength(1);
+    // another caster's landing in that second is not this trigger's
+    expect(
+      checkCcAvoidedLandedConsistency([
+        line,
+        "0:12  [CC ON TEAM]   1(PEvoker) ← Capacitor Totem (by 5(EShaman)'s totem) | 3s",
+      ]),
+    ).toEqual([]);
+    // a landing at the cast's second is not this trigger's
+    expect(
+      checkCcAvoidedLandedConsistency([
+        line,
+        "0:10  [CC ON TEAM]   1(PEvoker) ← Capacitor Totem (by 6(RShaman)'s totem) | 3s",
+      ]),
+    ).toEqual([]);
+  });
+});
+
+describe("checkWarlockPurgeFollowsPet — the purge header follows the warlock's pet (fact1215 C10)", () => {
+  const prompt = (owner: string, purgers: string, pet: string) => [
+    `  <unit id="1" name="Me-R" spec="Affliction Warlock" role="log owner">`,
+    `  <unit id="2" name="Mate-R" spec="Destruction Warlock" role="teammate">`,
+    `  My team: Affliction Warlock (Me-R)${pet}, Destruction Warlock (Mate-R) [pet: Sayaad — Seduction (disorient)], Holy Paladin (Pal-R)`,
+    `  Log owner (Affliction Warlock): ${owner}`,
+    `  Team purgers: ${purgers}`,
+  ];
+  const sayaad = " [pet: Sayaad — Seduction (disorient)]";
+  const felhunter =
+    " [pet: Felhunter — Spell Lock (kick), Devour Magic (purge)]";
+  it("1120cb61: a Sayaad warlock as owner purger and a Sayaad teammate as team purger", () => {
+    const out = checkWarlockPurgeFollowsPet(
+      prompt("CAN offensive purge", "Destruction Warlock", sayaad),
+    );
+    expect(out).toHaveLength(2);
+  });
+  it("passes the producer's words for each pet, and a warlock with no pet tag", () => {
+    expect(
+      checkWarlockPurgeFollowsPet(
+        prompt("CAN offensive purge", "none", felhunter),
+      ),
+    ).toEqual([]);
+    expect(
+      checkWarlockPurgeFollowsPet(
+        prompt("CANNOT offensive purge", "none", sayaad),
+      ),
+    ).toEqual([]);
+    expect(
+      checkWarlockPurgeFollowsPet(prompt("CAN offensive purge", "none", "")),
+    ).toEqual([]);
+  });
+  it("a name with parentheses, and one capable warlock listed twice (codex 20-F15-29)", () => {
+    expect(
+      checkWarlockPurgeFollowsPet([
+        `  <unit id="1" name="Me (EU)-R" spec="Affliction Warlock" role="log owner">`,
+        `  My team: Affliction Warlock (Me (EU)-R) [pet: Sayaad — Seduction (disorient)], Holy Paladin (Pal-R)`,
+        `  Log owner (Affliction Warlock): CAN offensive purge`,
+      ]),
+    ).toHaveLength(1);
+    const two = [
+      `  <unit id="1" name="Pri-R" spec="Holy Priest" role="log owner">`,
+      `  <unit id="2" name="A-R" spec="Affliction Warlock" role="teammate">`,
+      `  <unit id="3" name="B-R" spec="Affliction Warlock" role="teammate">`,
+      `  My team: Holy Priest (Pri-R), Affliction Warlock (A-R) [pet: Felhunter — Spell Lock (kick), Devour Magic (purge)], Affliction Warlock (B-R) [pet: Sayaad — Seduction (disorient)]`,
+    ];
+    expect(
+      checkWarlockPurgeFollowsPet([
+        ...two,
+        `  Team purgers: Affliction Warlock, Affliction Warlock`,
+      ]),
+    ).toHaveLength(1);
+    expect(
+      checkWarlockPurgeFollowsPet([...two, `  Team purgers: Affliction Warlock`]),
+    ).toEqual([]);
+  });
+  it("F16 retest idx 50: a swap's `(Felhunter out until m:ss)` suffix keeps the entry checked", () => {
+    const two = [
+      `  <unit id="1" name="Pri-R" spec="Holy Priest" role="log owner">`,
+      `  <unit id="2" name="B-R" spec="Affliction Warlock" role="teammate">`,
+      `  My team: Holy Priest (Pri-R), Affliction Warlock (B-R) [pet: Sayaad — Seduction (disorient)]`,
+    ];
+    expect(
+      checkWarlockPurgeFollowsPet([
+        ...two,
+        `  Team purgers: Affliction Warlock (Felhunter out until 0:17), Holy Priest`,
+      ]),
+    ).toHaveLength(1);
+    expect(
+      checkWarlockPurgeFollowsPet(
+        prompt("CAN offensive purge (Felhunter out until 0:17)", "none", felhunter),
+      ),
+    ).toEqual([]);
+  });
+});
+
+describe("checkCcAvoidedMissType — `[CC AVOIDED?] … logged <TYPE>` names a miss type that means the control failed (FT-T16 D15 3c)", () => {
+  it("the 2026-10-27 tails pass: `pressed +N.Ns` for the avoidance, and the recast tag on either form", () => {
+    expect(
+      checkCcAvoidedMissType([
+        "1:40  [CC AVOIDED?]   1(HPriest): Freezing Trap (by 4(MHunter)) did not land; Angel's Feather (own) pressed +1.4s",
+        "2:36  [CC AVOIDED?]   3(PEvoker): Cyclone (by 4(BDruid)) logged IMMUNE; Nullifying Shroud (own) active — recast landed +0.9s",
+        "2:36  [CC AVOIDED?]   3(PEvoker): Cyclone (by 4(BDruid)) logged IMMUNE — recast landed +0.9s",
+        "2:36  [CC AVOIDED?]   3(PEvoker): Cyclone (by 4(BDruid)) logged IMMUNE (a Cyclone was on them) — recast landed +0.9s",
+      ]),
+    ).toEqual([]);
+    // HAS TEETH: anything else after an uncredited IMMUNE still fails
+    expect(
+      checkCcAvoidedMissType([
+        "2:36  [CC AVOIDED?]   3(PEvoker): Cyclone (by 4(BDruid)) logged IMMUNE — landed later",
+      ]),
+    ).toHaveLength(1);
+  });
+  // the producer's own wording of the half the gate re-parses
+  const line = (outcome: string) =>
+    `0:40  [CC AVOIDED?]   1(BDruid): Hammer of Justice (by 5(RPaladin)) ${outcome}; Precognition (own) active`;
+  it("passes both forms the producer writes, for every type it admits", () => {
+    expect(checkCcAvoidedMissType([line(ccAvoidedOutcomeText({}))])).toEqual(
+      [],
+    );
+    expect(CONTROL_FAILED_MISS_TYPES.size).toBeGreaterThan(1);
+    for (const loggedMissType of CONTROL_FAILED_MISS_TYPES)
+      expect(
+        checkCcAvoidedMissType([
+          line(ccAvoidedOutcomeText({ loggedMissType })),
+        ]),
+        loggedMissType,
+      ).toEqual([]);
+    // a spell name with a colon, a totem's source label
+    expect(
+      checkCcAvoidedMissType([
+        "1:10  [CC AVOIDED?]   1(HPaladin): Holy Word: Chastise (by 4(HPriest)) logged IMMUNE; Divine Shield (own) active",
+        "6:56  [CC AVOIDED?]   1(PEvoker): Capacitor Totem (by 6(RShaman)) did not land; Nullifying Shroud (own) active",
+      ]),
+    ).toEqual([]);
+  });
+  it("fails ABSORB, an unknown type and a missing type", () => {
+    for (const bad of ["logged ABSORB", "logged undefined", "logged immune"]) {
+      const out = checkCcAvoidedMissType([line(bad)]);
+      expect(out, bad).toHaveLength(1);
+      expect(out[0]).toContain("line 1");
+    }
+  });
+  it("fails a first half that is neither form", () => {
+    for (const bad of ["was avoided", "logged", "landed"])
+      expect(checkCcAvoidedMissType([line(bad)]), bad).toHaveLength(1);
+  });
+  it("an uncredited IMMUNE row ends at the miss, with the log's cause or none (corpusFactScan2 immunityTableForward)", () => {
+    const bare = (tail: string) =>
+      `0:48  [CC AVOIDED?]   2(RShaman): Polymorph (by 4(AMage)) ${tail}`;
+    expect(
+      checkCcAvoidedMissType([
+        bare("logged IMMUNE"),
+        bare("logged IMMUNE (DR: Incapacitate Immune)"),
+        bare("logged IMMUNE (a Cyclone was on them)"),
+      ]),
+    ).toEqual([]);
+    // only IMMUNE ends a line there; "did not land" and another cause do not
+    for (const bad of [
+      "did not land",
+      "logged MISS",
+      "logged IMMUNE (Ice Block was up)",
+    ])
+      expect(checkCcAvoidedMissType([bare(bad)]), bad).toHaveLength(1);
+  });
+  it("says nothing about other lines", () => {
+    expect(
+      checkCcAvoidedMissType([
+        "0:40  [CC ON TEAM]   1(BDruid) ← Hammer of Justice (by 5(RPaladin)) | 5s",
+        "0:41  [TEAM] [CD]   3(DKnight): Death Grip → 5(RPaladin) — did not land (IMMUNE)",
+      ]),
+    ).toEqual([]);
+  });
+});
+
+describe("checkPressedDuringControlNote — `| pressed during it:` names the log owner's own kit cooldowns (FT-T16, D13)", () => {
+  const roster = [
+    '  <unit id="1" name="Ingbumb-Illidan-US" spec="Discipline Priest" role="log owner">',
+    "    <cooldowns>Desperate Prayer [90s, lasts 10s], Fade [20s], Invoke Xuen, the White Tiger [120s] [UNUSED], Avenging Wrath [PASSIVE], Psychic Scream [30s] [UNUSED — started 2×, never finished]</cooldowns>",
+    '  <unit id="2" name="Mate-Illidan-US" spec="Frost Mage" role="teammate">',
+    "    <cooldowns>Ice Block [240s, lasts 10s]</cooldowns>",
+  ];
+  // the producer's own writer: the gate reads what it prints
+  const note = (...items: Array<[string, number]>) =>
+    formatPressedDuringNote(
+      items.map(([spellName, count], i) => ({
+        spellId: String(i),
+        spellName,
+        count,
+        firstSeconds: i,
+      })),
+    );
+  const cc = (unit: string, tail: string) =>
+    `0:20  [CC ON TEAM]   ${unit} ← Rake (by 3(FDruid)) | 6s [DR: Stun Full] | 5yd from caster${tail}`;
+
+  it("passes the owner's line, on [CC ON TEAM] and on [SILENCE], a comma inside a spell name included", () => {
+    expect(
+      checkPressedDuringControlNote([
+        ...roster,
+        cc("1(DPriest)", note(["Desperate Prayer", 12], ["Fade", 3])),
+        cc("1(DPriest)", note(["Invoke Xuen, the White Tiger", 1])),
+        `0:40  [SILENCE]   1(DPriest) ← Silence (by 4(SPriest)) | 3s${note(["Psychic Scream", 2])}`,
+        // a line without the clause is not this gate's
+        cc("2(FMage)", ""),
+      ]),
+    ).toEqual([]);
+  });
+
+  it("flags the clause on a teammate's line — only the recorder has refused presses", () => {
+    const out = checkPressedDuringControlNote([
+      ...roster,
+      cc("2(FMage)", note(["Ice Block", 2])),
+    ]);
+    expect(out.length).toBeGreaterThan(0);
+    expect(out[0]).toContain("line 5");
+  });
+
+  it("flags a spell that is not in the owner's <cooldowns>, one that has no button there, one named twice, a zero count", () => {
+    for (const tail of [
+      note(["Power Word: Shield", 16]),
+      note(["Avenging Wrath", 2]),
+      note(["Fade", 2], ["Fade", 1]),
+      note(["Fade", 0]),
+    ])
+      expect(
+        checkPressedDuringControlNote([...roster, cc("1(DPriest)", tail)]),
+        tail,
+      ).toHaveLength(1);
+  });
+
+  it("flags the clause anywhere but the end of a [CC ON TEAM] / [SILENCE] line, and a malformed list", () => {
+    for (const line of [
+      cc("1(DPriest)", `${note(["Fade", 3])} [CLEANSED]`),
+      cc("1(DPriest)", " | pressed during it: Fade"),
+      cc("1(DPriest)", " | pressed during it: Fade ×3,Desperate Prayer ×1"),
+      `0:20  [YOU] [CD]   Fade${note(["Fade", 3])}`,
+    ])
+      expect(
+        checkPressedDuringControlNote([...roster, line]),
+        line,
+      ).toHaveLength(1);
+  });
+
+  it("without a log-owner unit the ownership checks say nothing; the format is still checked", () => {
+    expect(
+      checkPressedDuringControlNote([cc("1(DPriest)", note(["Fade", 3]))]),
+    ).toEqual([]);
+    expect(
+      checkPressedDuringControlNote([
+        cc("1(DPriest)", " | pressed during it: Fade"),
+      ]),
+    ).toHaveLength(1);
+  });
+});
+
+describe("checkKitUnusedNote — a kit entry's `[UNUSED — …]` note (FT F09: `pressed N×, refused: …`)", () => {
+  // the producer's own writer: the gate reads what it prints
+  const tag = (
+    started: number,
+    refused: Array<[string, number]> | null = null,
+  ) =>
+    `[UNUSED${formatKitUnusedNote(
+      started,
+      refused && {
+        count: refused.reduce((n, [, c]) => n + c, 0),
+        reasons: refused.map(([why, count]) => ({ why, count })),
+      },
+    )}]`;
+  const roster = (fade: string, mate = "[UNUSED]") => [
+    '  <unit id="1" name="Ingbumb-Illidan-US" spec="Discipline Priest" role="log owner">',
+    `    <cooldowns>Desperate Prayer [90s, lasts 10s], Fade [20s, lasts 10s] ${fade}, Invoke Xuen, the White Tiger [120s] ${tag(0)}, Psychic Scream [30s] ${tag(2)}</cooldowns>`,
+    '  <unit id="2" name="Mate-Illidan-US" spec="Frost Mage" role="teammate">',
+    `    <cooldowns>Ice Block [240s, lasts 10s] ${mate}, Ring of Frost [45s] ${tag(1)}</cooldowns>`,
+  ];
+  const during = (...items: Array<[string, number]>) =>
+    formatPressedDuringNote(
+      items.map(([spellName, count], i) => ({
+        spellId: String(i),
+        spellName,
+        count,
+        firstSeconds: i,
+      })),
+    );
+  const cc = (tail: string) =>
+    `0:20  [CC ON TEAM]   1(DPriest) ← Rake (by 3(FDruid)) | 6s [DR: Stun Full] | 5yd from caster${tail}`;
+  const silence = (tail: string) =>
+    `0:40  [SILENCE]   1(DPriest) ← Silence (by 4(SPriest)) | 3s${tail}`;
+
+  it("passes every form the producer writes, alone and beside the control lines that state the same presses", () => {
+    for (const fade of [
+      tag(0),
+      tag(2),
+      tag(0, [["under crowd control", 3]]),
+      tag(0, [
+        ["target not in line of sight", 5],
+        ["under crowd control", 1],
+      ]),
+      tag(1, [
+        ["not ready yet", 4],
+        ["vision obscured (Smoke Bomb)", 2],
+        ["client reason not translated", 1],
+      ]),
+    ])
+      expect(checkKitUnusedNote(roster(fade)), fade).toEqual([]);
+    expect(
+      checkKitUnusedNote([
+        ...roster(
+          tag(0, [
+            ["under crowd control", 3],
+            ["silenced", 2],
+            ["out of range", 1],
+          ]),
+        ),
+        cc(during(["Fade", 2])),
+        cc(during(["Fade", 1], ["Desperate Prayer", 4])),
+        silence(during(["Fade", 2])),
+      ]),
+    ).toEqual([]);
+    // a cooldown the kit does not call UNUSED is not this gate's
+    expect(
+      checkKitUnusedNote([
+        ...roster(tag(0)),
+        cc(during(["Desperate Prayer", 4])),
+      ]),
+    ).toEqual([]);
+  });
+
+  it("fails a kit that calls a cooldown UNUSED with fewer control-refused presses than its control lines state", () => {
+    // bare [UNUSED] against a stated press — the line the item was about
+    expect(
+      checkKitUnusedNote([...roster(tag(0)), cc(during(["Fade", 3]))]),
+    ).toHaveLength(1);
+    // two lines, three presses; the kit says two
+    expect(
+      checkKitUnusedNote([
+        ...roster(tag(0, [["under crowd control", 2]])),
+        cc(during(["Fade", 2])),
+        cc(during(["Fade", 1])),
+      ]),
+    ).toHaveLength(1);
+    // a [SILENCE] line's presses are `silenced`, not `under crowd control`
+    expect(
+      checkKitUnusedNote([
+        ...roster(tag(0, [["under crowd control", 2]])),
+        silence(during(["Fade", 2])),
+      ]),
+    ).toHaveLength(1);
+  });
+
+  it("fails the note on anyone but the log owner — only the recorder has refused presses", () => {
+    const out = checkKitUnusedNote(
+      roster(tag(0), tag(0, [["out of range", 2]])),
+    );
+    expect(out).toHaveLength(1);
+    expect(out[0]).toContain("line 4");
+  });
+
+  it("fails a count that does not add up, a reason outside the producer's words, one listed twice, a zero", () => {
+    for (const fade of [
+      "[UNUSED — pressed 5×, refused: out of range ×2, silenced ×1]",
+      "[UNUSED — pressed 2×, refused: Out of range]", // the client's text
+      "[UNUSED — pressed 2×, refused: its cast bar began and was stopped]",
+      "[UNUSED — pressed 3×, refused: out of range ×3]", // one reason carries no count
+      "[UNUSED — pressed 4×, refused: silenced ×2, silenced ×2]",
+      "[UNUSED — pressed 0×, refused: silenced]",
+      "[UNUSED — pressed 2×, refused: silenced ×2, out of range ×0]",
+    ])
+      expect(
+        checkKitUnusedNote(roster(fade)).length,
+        fade,
+      ).toBeGreaterThanOrEqual(1);
+  });
+
+  it("fails a tag that is not the producer's pattern to the end of the entry, on any unit", () => {
+    for (const fade of [
+      "[UNUSED — tried]",
+      "[UNUSED — started 2×, never finished — pressed 1×, refused: silenced]",
+      "[UNUSED; pressed 1×, refused: silenced]",
+      "[UNUSED — pressed 1×, refused: silenced] [x]",
+      "[UNUSED — pressed 1×]",
+    ])
+      expect(checkKitUnusedNote(roster(fade)), fade).toHaveLength(1);
+    expect(checkKitUnusedNote(roster(tag(0), "[UNUSED — tried]"))).toHaveLength(
+      1,
+    );
+  });
+
+  it("without a log-owner unit the format is still checked; the ownership and cross checks say nothing", () => {
+    const kit = (fade: string) => [
+      `    <cooldowns>Fade [20s, lasts 10s] ${fade}</cooldowns>`,
+    ];
+    expect(
+      checkKitUnusedNote([
+        ...kit(tag(0, [["silenced", 2]])),
+        cc(during(["Fade", 9])),
+      ]),
+    ).toEqual([]);
+    expect(checkKitUnusedNote(kit("[UNUSED — tried]"))).toHaveLength(1);
   });
 });
 
@@ -973,8 +2401,15 @@ describe("checkDuringExternalConsistency — the [ENEMY DEF] during-it annotatio
       ]),
     ).toHaveLength(2);
     expect(
-      checkDuringExternalConsistency([ok.replace("(11.0s)", "(9.0s)")]),
+      checkDuringExternalConsistency([ok.replace("(11.0s)", "(8.0s)")]),
     ).toHaveLength(2); // both segments' M=11 > 10
+  });
+  it("round-3 D31: M counts the rendered seconds the aura's span touches — 8.0 s printed (≤ 8.05 s) can touch ten", () => {
+    const eight = ok
+      .replace("(11.0s)", "(8.0s)")
+      .replaceAll("of 11 s", "of 10 s")
+      .replace("longest gap 6 s", "longest gap 5 s");
+    expect(checkDuringExternalConsistency([eight])).toEqual([]);
   });
   it("accepts the absorbed tag (Touch of Karma shape) as part of the total field", () => {
     expect(
@@ -984,6 +2419,23 @@ describe("checkDuringExternalConsistency — the [ENEMY DEF] during-it annotatio
           .replace("direct 0k / periodic 13k", "direct 0k / periodic 0k"),
       ]),
     ).toEqual([]);
+  });
+  it("FT-T02b follow-up: accepts the deferred tag, alone and after the absorbed one (the writer's three forms)", () => {
+    for (const tag of ["(+6k deferred)", "(+2k absorbed, +6k deferred)"])
+      expect(
+        checkDuringExternalConsistency([
+          ok.replace("13k on target ·", `13k on target ${tag} ·`),
+        ]),
+      ).toEqual([]);
+    // a form the writer does not produce is still unparsable
+    expect(
+      checkDuringExternalConsistency([
+        ok.replace(
+          "13k on target ·",
+          "13k on target (+6k deferred, +2k absorbed) ·",
+        ),
+      ]).length,
+    ).toBeGreaterThan(0);
   });
   it("round 2: accepts the in-school and immune fields, and flags in-school above the total", () => {
     const r2 = ok.replace(
@@ -1002,5 +2454,583 @@ describe("checkDuringExternalConsistency — the [ENEMY DEF] during-it annotatio
         "0:55  [STATE]   x",
       ]),
     ).toEqual([]);
+  });
+});
+
+describe("checkDeathTrinketCcConsistency — the death line's trinket tag vs [CC ON TEAM] (F-E28, A28)", () => {
+  const death = (tag: string) =>
+    `2:53  [DEATH]  1(UDKnight) (Unholy Death Knight — friendly)${tag}`;
+  const bare = " (PvP Trinket available)";
+  const none = " (PvP Trinket available; no breakable CC in the last 10 s)";
+  it("a 1 s Lasso 5 s before (82a2d681) is not breakable: the 'none' form passes, the bare tag fails", () => {
+    const lasso =
+      "2:48  [CC ON TEAM]   1(UDKnight) ← Lightning Lasso (by 5(EShaman)) | 1s [DR: Stun Full]";
+    expect(checkDeathTrinketCcConsistency([lasso, death(none)])).toEqual([]);
+    expect(checkDeathTrinketCcConsistency([lasso, death(bare)])).toHaveLength(
+      1,
+    );
+  });
+  it("a 5 s Kidney Shot 7 s before (539b6ed0) is breakable, also when a trinket cut it short", () => {
+    const ks =
+      "2:46  [CC ON TEAM]   1(UDKnight) ← Kidney Shot (by 4(ARogue)) | 5s [DR: Stun Full] | 3.1yd from caster";
+    expect(checkDeathTrinketCcConsistency([ks, death(bare)])).toEqual([]);
+    expect(checkDeathTrinketCcConsistency([ks, death(none)])).toHaveLength(1);
+    const broken =
+      "2:40  [CC ON TEAM]   1(UDKnight) ← Kidney Shot (by 4(ARogue)) [DR: Stun Full] | trinket broke this CC after 3s (cut short — it had not expired)";
+    expect(checkDeathTrinketCcConsistency([broken, death(bare)])).toEqual([]);
+  });
+  it("FT-T09: a CC the round ended on is read by its printed seconds; `<1s` is never breakable", () => {
+    const cut =
+      "2:50  [CC ON TEAM]   1(UDKnight) ← Kidney Shot (by 4(ARogue)) | still on them when the round ended, 3s in [DR: Stun Full]";
+    expect(checkDeathTrinketCcConsistency([cut, death(bare)])).toEqual([]);
+    expect(checkDeathTrinketCcConsistency([cut, death(none)])).toHaveLength(1);
+    const blip =
+      "2:50  [CC ON TEAM]   1(UDKnight) ← Kidney Shot (by 4(ARogue)) | <1s [DR: Stun Full] | ended by their PvP trinket";
+    expect(checkDeathTrinketCcConsistency([blip, death(none)])).toEqual([]);
+    expect(checkDeathTrinketCcConsistency([blip, death(bare)])).toHaveLength(1);
+  });
+  it("a CC ending more than 10 s before, or on another player, does not count", () => {
+    const old = "2:22  [CC ON TEAM]   1(UDKnight) ← Fear (by 6(AWarlock)) | 8s";
+    const other = "2:50  [CC ON TEAM]   2(RDruid) ← Fear (by 6(AWarlock)) | 8s";
+    expect(checkDeathTrinketCcConsistency([old, other, death(none)])).toEqual(
+      [],
+    );
+  });
+});
+
+describe("checkBurstAnsweredBottomConsistency — the credit line's bottom second (F-B3)", () => {
+  const roster =
+    '  <unit id="1" name="Sgarbossa-Tortheldrin-US" spec="Windwalker Monk" role="log owner">';
+  const line = (at: string) =>
+    `0:04  [BURST ANSWERED]   enemy opened The Hunt (Havoc Demon Hunter Irridanz-Sargeras-US): Botobumps-Illidan-US answered with Earthgrab 0.6s before it opened; Sgarbossa-Tortheldrin-US bottomed at 42% at ${at}`;
+  // FT-T03 (user ruling 2026-10-10, D7): the bottom is a trough — the true
+  // minimum inside the window — so the tick of its second may read ABOVE it
+  // (it was red: the bottom had to be that tick). A tick below it stays red.
+  it("passes when the same-second [STATE] is at or above the bottom, fails when it is below", () => {
+    expect(
+      checkBurstAnsweredBottomConsistency([
+        roster,
+        "0:55  [STATE]   friends 1(WMonk):42 / enemies 4(HDHunter):90",
+        line("0:55"),
+      ]),
+    ).toEqual([]);
+    expect(
+      checkBurstAnsweredBottomConsistency([
+        roster,
+        "0:55  [STATE]   friends 1(WMonk):47 / enemies 4(HDHunter):90",
+        line("0:55"),
+      ]),
+    ).toEqual([]);
+    expect(
+      checkBurstAnsweredBottomConsistency([
+        roster,
+        "0:55  [STATE]   friends 1(WMonk):40 / enemies 4(HDHunter):90",
+        line("0:55"),
+      ]),
+    ).toHaveLength(1);
+  });
+  it("FT-T03: no tick from the line's second to the bottom's second reads below it; a bottom after the death second fails, on it passes (ruling 2026-10-20); later ticks are not judged", () => {
+    const tick = (at: string, v: number | "dead") =>
+      `${at}  [STATE]   friends 1(WMonk):${v} / enemies 4(HDHunter):90`;
+    const f = checkBurstAnsweredBottomConsistency([
+      roster,
+      tick("0:30", 35),
+      line("0:55"),
+    ]);
+    expect(f).toHaveLength(1);
+    expect(f[0]).toContain("0:30 的 [STATE] 为 35");
+    // 0:55 is the monk's death second: its live samples are the trough's
+    expect(
+      checkBurstAnsweredBottomConsistency([
+        roster,
+        tick("0:55", "dead"),
+        line("0:55"),
+      ]),
+    ).toEqual([]);
+    // dead already at 0:54: a bottom at 0:55 is after the death
+    expect(
+      checkBurstAnsweredBottomConsistency([
+        roster,
+        tick("0:54", "dead"),
+        tick("0:55", "dead"),
+        line("0:55"),
+      ]),
+    ).toHaveLength(1);
+    // before the window opened (0:03) and after the bottom (0:58): not judged
+    expect(
+      checkBurstAnsweredBottomConsistency([
+        roster,
+        tick("0:03", 10),
+        tick("0:58", 10),
+        line("0:55"),
+      ]),
+    ).toEqual([]);
+  });
+  it("a bottom before the line's own second fails", () => {
+    expect(
+      checkBurstAnsweredBottomConsistency([roster, line("0:03")]),
+    ).toHaveLength(1);
+  });
+  it("FT board item: 行里是花名册标签(1(WMonk))时照样核对同秒 [STATE]", () => {
+    const labelled = (pct: number) =>
+      `0:04  [BURST ANSWERED]   enemy opened The Hunt (4(HDHunter)): 2(RShaman) answered with Earthgrab 0.6s before it opened; 1(WMonk) bottomed at ${pct}% at 0:55`;
+    const state =
+      "0:55  [STATE]   friends 1(WMonk):42 / enemies 4(HDHunter):90";
+    expect(
+      checkBurstAnsweredBottomConsistency([roster, state, labelled(42)]),
+    ).toEqual([]);
+    expect(
+      checkBurstAnsweredBottomConsistency([roster, state, labelled(47)]),
+    ).toHaveLength(1);
+  });
+});
+
+describe("checkBurstAnsweredBeforeDeath — the credited answer precedes the pressured unit's death (T12 ⑧ i)", () => {
+  // The lines are rendered by the producer, so the gate reads the wording the
+  // prompt carries — not a copy of it.
+  const labels = {
+    friendly: (n: string) => (n === "Warrior-R" ? "2(AWarrior)" : "3(PEvoker)"),
+    enemy: () => "4(HDHunter)",
+  };
+  const rendered = (latencySec: number, died = true) => {
+    const point = {
+      tSec: 105,
+      leadCd: {
+        spellId: "370965",
+        spellName: "The Hunt",
+        casterName: "Hunter-R",
+        casterSpec: "Havoc Demon Hunter",
+        castSec: 105,
+      },
+      extraCds: [],
+      pressured: {
+        unitId: "f2",
+        name: "Warrior-R",
+        minHpPct: 20,
+        minHpSec: 109,
+        startHpPct: 90,
+        startHpSec: 105,
+        died,
+      },
+      responded: true,
+      feasible: true,
+      anyFriendlyDeath: died,
+      friendlyOutcomes: [],
+      responseCasts: [
+        {
+          category: "healCd",
+          spellId: "370960",
+          spellName: "Emerald Communion",
+          casterName: "Evoker-R",
+          casterId: "f3",
+          tSec: 110,
+          latencySec,
+        },
+      ],
+    } as unknown as BurstWindowDecisionPoint;
+    const [e] = formatBurstAnsweredLines([point], undefined, labels);
+    return `1:45  ${e!.line}`;
+  };
+  const death = (at: string) =>
+    `${at}  [DEATH]  2(AWarrior) (Arms Warrior — friendly)`;
+
+  it("the producer's line is the one the gate reads", () => {
+    expect(rendered(5.1)).toBe(
+      "1:45  [BURST ANSWERED]   enemy opened The Hunt (4(HDHunter)): 3(PEvoker) answered with Emerald Communion in 5.1s; 2(AWarrior) bottomed at 20% at 1:49 — 2(AWarrior) still died",
+    );
+  });
+  it("an answer the grid proves came after the death fails", () => {
+    // opened 1:45 or later, +6.1 s ≥ 1:51.05; the death is before 1:51
+    expect(
+      checkBurstAnsweredBeforeDeath([death("1:50"), rendered(6.1)]),
+    ).toHaveLength(1);
+    expect(
+      checkBurstAnsweredBeforeDeath([rendered(7.9), death("1:50")]),
+    ).toHaveLength(1);
+  });
+  it("an answer that can precede the death passes — the death's own second is beyond the grid", () => {
+    // 483f7433's own numbers (5.1 s, death at 1:50.385) are inside one second:
+    // the raw-instant tests in analysis pin that case
+    expect(
+      checkBurstAnsweredBeforeDeath([death("1:50"), rendered(5.1)]),
+    ).toEqual([]);
+    expect(
+      checkBurstAnsweredBeforeDeath([death("1:50"), rendered(6.0)]),
+    ).toEqual([]);
+    expect(
+      checkBurstAnsweredBeforeDeath([death("1:52"), rendered(6.1)]),
+    ).toEqual([]);
+  });
+  it("reads the unit's EARLIEST [DEATH] line, and only that unit's", () => {
+    expect(
+      checkBurstAnsweredBeforeDeath([
+        death("1:50"),
+        death("3:10"),
+        rendered(6.1),
+      ]),
+    ).toHaveLength(1);
+    expect(
+      checkBurstAnsweredBeforeDeath([
+        "1:46  [DEATH]  3(PEvoker) (Preservation Evoker — friendly)",
+        rendered(6.1),
+      ]),
+    ).toEqual([]);
+  });
+  it("a line whose pressured unit did not die is not read", () => {
+    expect(
+      checkBurstAnsweredBeforeDeath([death("1:46"), rendered(6.1, false)]),
+    ).toEqual([]);
+  });
+});
+
+describe("checkBurstAnsweredControlSpan — a credited control's length is its [CC ON ENEMY] line's (T12 ⑧ i)", () => {
+  const HEX_AT_MS = 46_300;
+  const labels = {
+    friendly: (n: string) =>
+      n === "Shaman-R"
+        ? "3(RShaman)"
+        : n === "Me-R"
+          ? "1(HPriest)"
+          : "2(AWarrior)",
+    enemy: (n: string) => (n === "Paladin-R" ? "5(RPaladin)" : "4(AWarrior)"),
+  };
+  /** the producer's line for a Hex 1.2 s into a window opened at 0:45, with
+   * the span it reads off a CC instance of `durationSeconds` */
+  const rendered = (
+    durationSeconds: number,
+    over: { casterName?: string; latencySec?: number } = {},
+  ) => {
+    const point = {
+      tSec: 45,
+      leadCd: {
+        spellId: "107574",
+        spellName: "Avatar",
+        casterName: "Warrior-E",
+        casterSpec: "Arms Warrior",
+        castSec: 45,
+      },
+      extraCds: [],
+      pressured: {
+        unitId: "f2",
+        name: "Warrior-R",
+        minHpPct: 35,
+        minHpSec: 50,
+        startHpPct: 90,
+        startHpSec: 45,
+        died: false,
+      },
+      responded: true,
+      feasible: true,
+      anyFriendlyDeath: false,
+      friendlyOutcomes: [],
+      responseCasts: [
+        {
+          category: "control",
+          spellId: "51514",
+          spellName: "Hex",
+          casterName: over.casterName ?? "Shaman-R",
+          casterId: "f3",
+          destId: "e2",
+          tSec: 46,
+          latencySec: over.latencySec ?? 1.2,
+          landed: true,
+          controlOn: {
+            unitId: "e2",
+            unitName: "Paladin-R",
+            auras: [{ spellId: "51514", atMs: HEX_AT_MS }],
+          },
+        },
+      ],
+    } as unknown as BurstWindowDecisionPoint;
+    const [e] = formatBurstAnsweredLines(
+      [point],
+      undefined,
+      labels,
+      ccSpanLookup(
+        [
+          {
+            playerName: "Paladin-R",
+            ccInstances: [
+              {
+                spellId: "51514",
+                atSeconds: HEX_AT_MS / 1000,
+                durationSeconds,
+              },
+            ],
+          },
+        ] as never,
+        0,
+      ),
+    );
+    return `0:45  ${e!.line}`;
+  };
+  const roster =
+    '  <unit id="1" name="Me-R" spec="Holy Priest" role="log owner">';
+  const landing = (at: string, tail: string, by = "3(RShaman)") =>
+    `${at}  [CC ON ENEMY]   5(RPaladin) ← Hex (by ${by})${tail}`;
+
+  it("the producer's line is the one the gate reads", () => {
+    expect(rendered(2.1)).toBe(
+      "0:45  [BURST ANSWERED]   enemy opened Avatar (4(AWarrior)): 3(RShaman) answered with Hex on 5(RPaladin) (2s) in 1.2s; 2(AWarrior) bottomed at 35% at 0:50",
+    );
+  });
+  it("the same span on the [CC ON ENEMY] line passes; a different one fails", () => {
+    expect(
+      checkBurstAnsweredControlSpan([
+        roster,
+        rendered(2.1),
+        landing("0:46", " (2s) | broken by damage from 2(AWarrior)"),
+      ]),
+    ).toEqual([]);
+    const bad = checkBurstAnsweredControlSpan([
+      roster,
+      rendered(2.1),
+      landing("0:46", " (5s)"),
+    ]);
+    expect(bad).toHaveLength(1);
+    expect(bad[0]).toContain("(2s)");
+    expect(bad[0]).toContain("(5s)");
+  });
+  it("reads the other forms the span takes: <1s, the round ending on it, a Tremor break", () => {
+    expect(
+      checkBurstAnsweredControlSpan([
+        roster,
+        rendered(0.2),
+        landing("0:46", " (<1s)"),
+      ]),
+    ).toEqual([]);
+    expect(
+      checkBurstAnsweredControlSpan([
+        roster,
+        rendered(0.2),
+        landing("0:46", " (1s)"),
+      ]),
+    ).toHaveLength(1);
+    expect(
+      checkBurstAnsweredControlSpan([
+        roster,
+        rendered(2.1),
+        landing(
+          "0:46",
+          " | enemy Tremor Totem from 4(AWarrior) ended this CC after 2s (cut short — it had not expired)",
+        ),
+      ]),
+    ).toEqual([]);
+    expect(
+      checkBurstAnsweredControlSpan([
+        roster,
+        rendered(2.1),
+        landing(
+          "0:46",
+          " | enemy Tremor Totem from 4(AWarrior) ended this CC after 4s (cut short — it had not expired)",
+        ),
+      ]),
+    ).toHaveLength(1);
+  });
+  it("only a landing whose second can be this application's is compared", () => {
+    // opened 0:45, +1.2 s, the aura from 0.1 s before the press to 3 s after
+    // it: seconds 0:46 … 0:50. A re-Hex at 0:51 is another application.
+    expect(
+      checkBurstAnsweredControlSpan([
+        roster,
+        rendered(2.1),
+        landing("0:51", " (5s)"),
+        landing("0:45", " (5s)"),
+      ]),
+    ).toEqual([]);
+    expect(
+      checkBurstAnsweredControlSpan([
+        roster,
+        rendered(2.1),
+        landing("0:50", " (5s)"),
+      ]),
+    ).toHaveLength(1);
+    // two applications in reach: one of them carrying the span is enough
+    expect(
+      checkBurstAnsweredControlSpan([
+        roster,
+        rendered(2.1),
+        landing("0:46", " (2s)"),
+        landing("0:49", " (5s)"),
+      ]),
+    ).toEqual([]);
+  });
+  it("another caster's Hex, another target's, or no [CC ON ENEMY] line at all proves nothing", () => {
+    expect(
+      checkBurstAnsweredControlSpan([
+        roster,
+        rendered(2.1),
+        landing("0:46", " (5s)", "2(AWarrior)"),
+        "0:46  [CC ON ENEMY]   4(AWarrior) ← Hex (by 3(RShaman)) (5s)",
+        "0:46  [CC ON ENEMY]   5(RPaladin) ← Polymorph (by 3(RShaman)) (5s)",
+      ]),
+    ).toEqual([]);
+    expect(checkBurstAnsweredControlSpan([roster, rendered(2.1)])).toEqual([]);
+  });
+  it("the log owner's own control is not read — its [CC ON ENEMY] lines are not all of its applications", () => {
+    expect(
+      checkBurstAnsweredControlSpan([
+        roster,
+        rendered(2.1, { casterName: "Me-R" }),
+        landing("0:46", " (5s)", "1(HPriest)"),
+      ]),
+    ).toEqual([]);
+  });
+});
+
+describe("checkDmgSpikeListCap — the [DMG SPIKE] cap and the line counting what it dropped (D4)", () => {
+  // Every line is the producer's: the entry lines from `emitDmgSpikeEntries`,
+  // the legend sentence and the count line from their own formatters.
+  type W = [fromS: number, totalDamage: number, name?: string];
+  const bucket = ([fromSeconds, totalDamage, name = "Warrior-R"]: W) => ({
+    fromSeconds,
+    toSeconds: fromSeconds + 10,
+    totalDamage,
+    targetName: name,
+    targetSpec: name === "Warrior-R" ? "Arms Warrior" : "Havoc Demon Hunter",
+  });
+  const pid = (n: string) =>
+    n === "Warrior-R" ? "3(AWarrior)" : "2(HDHunter)";
+  const entries = (ws: W[]) => {
+    const out: string[] = [];
+    emitDmgSpikeEntries({
+      pressureWindows: ws.map(bucket),
+      friends: [],
+      matchStartMs: 0,
+      pid,
+      addEntry: (_t, ...ls) => out.push(...ls),
+    });
+    return out;
+  };
+  const count = (ws: W[]) =>
+    formatDmgSpikesNotListed({
+      notListed: ws.map(bucket),
+      matchEndSeconds: 600,
+      pid,
+    })!;
+  const FIVE: W[] = [
+    [10, 900_000],
+    [20, 850_000, "Hunter-R"],
+    [30, 800_000],
+    [40, 750_000, "Hunter-R"],
+    [50, 700_000],
+  ];
+  const DROPPED: W[] = [
+    [60, 600_000, "Hunter-R"],
+    [70, 350_000],
+  ];
+  const prompt = (listed: W[], dropped: W[] | null = DROPPED) => [
+    "MATCH TIMELINE",
+    dmgSpikeListLegend(),
+    ...(dropped ? [count(dropped)] : []),
+    "",
+    ...entries(listed),
+  ];
+
+  it("the producer's lines are the ones the gate reads, and a consistent prompt passes", () => {
+    const p = prompt(FIVE);
+    expect(p[2]).toBe(
+      "    Not listed this round: 2 more [DMG SPIKE] windows of 0.30M or more (largest: 0.60M on 2(HDHunter) at 1:00–1:10).",
+    );
+    expect(p[4]).toBe(
+      "0:10–0:20  [DMG SPIKE]   3(AWarrior) (Arms Warrior): 0.90M in 10s (90k DPS)",
+    );
+    expect(checkDmgSpikeListCap(p)).toEqual([]);
+    // no window past the cap: no count line, nothing to check
+    expect(checkDmgSpikeListCap(prompt(FIVE, null))).toEqual([]);
+    expect(checkDmgSpikeListCap(prompt(FIVE.slice(0, 3), null))).toEqual([]);
+  });
+
+  it("more lines than the cap fail; a line quoted a second time is not a second window", () => {
+    const six = checkDmgSpikeListCap(
+      prompt([...FIVE, [60, 600_000, "Hunter-R"]], null),
+    );
+    expect(six).toHaveLength(1);
+    expect(six[0]).toContain("6");
+    const p = prompt(FIVE, null);
+    expect(checkDmgSpikeListCap([...p, `  ${p[3]}`, p[3]!])).toEqual([]);
+  });
+
+  it("a count line beside a list that is not full fails", () => {
+    expect(checkDmgSpikeListCap(prompt(FIVE.slice(0, 4)))).toHaveLength(1);
+  });
+
+  it("the largest unlisted window cannot outrank a listed one", () => {
+    const f = checkDmgSpikeListCap(prompt(FIVE, [[60, 720_000, "Hunter-R"]]));
+    expect(f).toHaveLength(1);
+    expect(f[0]).toContain("0.72M");
+    expect(f[0]).toContain("0.70M");
+    // equal to the smallest listed total is in rank order
+    expect(
+      checkDmgSpikeListCap(prompt(FIVE, [[60, 700_000, "Hunter-R"]])),
+    ).toEqual([]);
+  });
+
+  it("the largest unlisted window cannot overlap a listed line of the same unit", () => {
+    // 0:15–0:25 on the warrior overlaps the listed 0:10–0:20
+    expect(checkDmgSpikeListCap(prompt(FIVE, [[15, 600_000]]))).toHaveLength(1);
+    // the same seconds on the other unit, or touching bounds, are fine
+    expect(
+      checkDmgSpikeListCap(prompt(FIVE, [[5, 600_000, "Hunter-R"]])),
+    ).toEqual([]);
+    expect(checkDmgSpikeListCap(prompt(FIVE, [[60, 600_000]]))).toEqual([]);
+  });
+
+  it("the count line sits under the legend sentence, once", () => {
+    const p = prompt(FIVE);
+    const moved = [p[0]!, p[1]!, "", p[2]!, ...p.slice(4)];
+    expect(checkDmgSpikeListCap(moved)).toHaveLength(1);
+    const twice = [...p.slice(0, 3), p[1]!, p[2]!, ...p.slice(3)];
+    expect(checkDmgSpikeListCap(twice)).toHaveLength(1);
+  });
+
+  it("a hand-edited threshold or a largest under it fails", () => {
+    const p = prompt(FIVE);
+    const at = (text: string) => [...p.slice(0, 2), text, ...p.slice(3)];
+    expect(
+      checkDmgSpikeListCap(
+        at(p[2]!.replace("of 0.30M or more", "of 0.50M or more")),
+      ),
+    ).toHaveLength(1);
+    expect(
+      checkDmgSpikeListCap(
+        at(p[2]!.replace("largest: 0.60M", "largest: 0.20M")),
+      ),
+    ).toHaveLength(1);
+  });
+});
+
+describe("checkFreeOfWindowConsistency (F-C11)", () => {
+  it("free X s of Y s with X > Y fails; X ≤ Y passes", () => {
+    expect(
+      checkFreeOfWindowConsistency(["  0:40–0:56 … free 17s of 16s"]),
+    ).toHaveLength(1);
+    expect(
+      checkFreeOfWindowConsistency(["  0:40–0:56 … free 16s of 16s"]),
+    ).toEqual([]);
+  });
+
+  it("reads the producer's `<1s` (= 0) and `0s`; a slot it cannot read fails", () => {
+    // what `fmtWholeSecondsOrZero` prints for the free slot
+    for (const free of ["<1s", "0s", "2s"])
+      expect(
+        checkFreeOfWindowConsistency([
+          `  [KILL WINDOW] 0:40–0:42 on X: … your damage on it 0k; free ${free} of 2s, team min HP 34%.`,
+        ]),
+      ).toEqual([]);
+    // still fails a wrong line on the same family
+    expect(
+      checkFreeOfWindowConsistency([
+        "  [KILL WINDOW] 0:40–0:42 on X: … free 3s of 2s, team min HP 34%.",
+      ]),
+    ).toHaveLength(1);
+    // a form the shared parser does not know is not silently skipped
+    for (const free of ["0.3s", "<2s", "~1s"]) {
+      const failures = checkFreeOfWindowConsistency([
+        `  [KILL WINDOW] 0:40–0:42 on X: … free ${free} of 2s, team min HP 34%.`,
+      ]);
+      expect(failures).toHaveLength(1);
+      expect(failures[0]).toContain(`free ${free} of 2s`);
+    }
   });
 });

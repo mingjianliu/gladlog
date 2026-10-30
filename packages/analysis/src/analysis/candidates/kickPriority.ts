@@ -29,14 +29,16 @@ import { getEnglishSpellName } from "../../data/spellEffectData";
 import { MELEE_RANGE_YD, spellRangeYards } from "../../data/spellReach";
 import { buildAuraIntervals } from "../../utils/auraIntervals";
 import {
-  buildCannotCastIntervals,
+  cannotCastIntervalsForSpells,
   enemySourceIds,
 } from "../../utils/cannotCastIntervals";
 import { castingLockIntervalsOf } from "../../utils/castingLocks";
+import { auraBlocksInterrupt } from "../../utils/combatStates";
 import { gridHpPct, isHealerSpec } from "../../utils/cooldowns";
 import {
   interruptCooldownRemainingMs,
   interruptForUnit,
+  interruptReadySinceMs,
 } from "../../utils/enemyInterrupts";
 import {
   distanceBetween,
@@ -44,16 +46,17 @@ import {
 } from "../../utils/losAnalysis";
 import { computeOffensiveWindows } from "../../utils/offensiveWindows";
 import { LOS_SWEEP_GAP_MS } from "../../utils/positionSampling";
-import { toRenderSecond } from "../../utils/renderGrid";
+import { fmtTime, toRenderSecond } from "../../utils/renderGrid";
 import {
   canReachTargetAt,
   rootIntervalsOf,
 } from "../../utils/rootReachability";
-import { auraBlocksMechanic } from "../../utils/spellMechanics";
+import { roundEndMs } from "../../utils/roundEnd";
 import {
   RANGE_HITBOX_SLACK_YD,
   spellRangeForCaster,
 } from "../../utils/spellRange";
+import { firstDeathMs } from "../../utils/unitDeath";
 import { fmtFactNum as fmt, fmtFactTime } from "../factFormat";
 import type { CandidateEvent } from "../types";
 
@@ -118,6 +121,60 @@ export const KICK_MIN_FREE_S = 0.5;
 const CAST_PAIR_MAX_MS = 10_000;
 /** SPELL_HEAL from the healer on the target within this after SPELL_CAST_SUCCESS. */
 const HEAL_LAND_PAIR_MS = 500;
+/**
+ * Of the kill windows a heal cast started in (`startS` inside), the one whose
+ * target was lowest at the cast, at or under `hpGate`; undefined when none.
+ * Two targets' windows can overlap, and the first in list order alone made
+ * the answer depend on how the windows sort (fact3, 605: 49643222 2:30 — a
+ * Flash Heal on the 46 % hunter, inside both the hunter's span and the
+ * priest's, was judged on the priest's 2:04 span until a Phase Shift cut
+ * moved that span after the hunter's).
+ */
+export function lowestTargetWindowAt<
+  W extends { targetUnitId: string; fromSeconds: number; toSeconds: number },
+>(
+  windows: readonly W[],
+  startS: number,
+  hpGate: number,
+  hpOf: (targetUnitId: string) => number | null | undefined,
+): { w: W; hp: number } | undefined {
+  let pick: { w: W; hp: number } | undefined;
+  for (const w of windows) {
+    if (startS < w.fromSeconds || startS > w.toSeconds) continue;
+    const hp = hpOf(w.targetUnitId);
+    if (hp == null || hp > hpGate) continue;
+    if (!pick || hp < pick.hp) pick = { w, hp };
+  }
+  return pick;
+}
+
+/**
+ * How many casts of `sid` the heal pairing of a hardcast that finished at
+ * `endMs` sums: the hardcast itself plus every later SPELL_CAST_SUCCESS of
+ * the same spell inside the window the SPELL_HEAL rows are paired in
+ * (`(endMs, endMs + HEAL_LAND_PAIR_MS]`). SPELL_HEAL names no cast, so an
+ * instant cast of the same heal right behind the hardcast is summed into
+ * `healAmount` and can only be counted, not separated (triage kick-priority
+ * F-P4).
+ */
+export function healCastsPaired(
+  successes: ReadonlyArray<{
+    spellId?: string | null;
+    logLine: { timestamp: number };
+  }>,
+  sid: string,
+  endMs: number,
+): number {
+  let n = 1;
+  for (const c of successes)
+    if (
+      c.spellId === sid &&
+      c.logLine.timestamp > endMs &&
+      c.logLine.timestamp <= endMs + HEAL_LAND_PAIR_MS
+    )
+      n++;
+  return n;
+}
 export const KICK_PRIORITY_CAP = 2;
 
 export interface KickPriorityFriend {
@@ -141,6 +198,24 @@ export interface KickPriorityFriend {
   /** Completed casts: still castable and in reach inside the ACTUAL cast
    * (start → landing), not only the nominal one. Accusations need both. */
   reachableBeforeLanding: boolean;
+  /** A melee kicker who was castable but rooted for the whole cast: the run
+   * budget is zero, so the reach collapsed to kick range + slack (triage
+   * kick-priority F-P2). */
+  rootedThroughCast: boolean;
+  /** This kicker's interrupt range (official + their range talents); null
+   * when unknown. */
+  rangeYd: number | null;
+  /** Melee kicks only, and only when the feasibility tests leaned on it: the
+   * run envelope from the cast start (the smaller of the nominal-cast and
+   * the before-landing one when both ran) for a kicker who stood outside the
+   * kick's standing reach. null for a ranged kick, without a position
+   * sample, for a kicker already inside range + hitbox slack, and for one
+   * rooted through the cast (triage kick-priority F-P3). */
+  reachYd: number | null;
+  /** Seconds the kick had been off cooldown at the cast start; null when it
+   * was never observed before the cast, or not ready (triage kick-priority
+   * F-P5, ruling A′3). */
+  kickReadyForS: number | null;
 }
 
 export interface IKickPriorityPoint {
@@ -168,6 +243,12 @@ export interface IKickPriorityPoint {
    * nothing landed. */
   healOtherName: string | null;
   healOtherAmount: number;
+  /** How many casts of this spell the amounts above sum: 1, plus every
+   * SPELL_CAST_SUCCESS of it by the healer inside the heal pairing window
+   * after the hardcast finished — an instant cast of the same heal half a
+   * second behind it lands in the same window and cannot be told apart
+   * (triage kick-priority F-P4: b711d4ac, 292k read as one cast was two). */
+  healCasts: number;
   windowFromS: number;
   windowToS: number;
   friends: KickPriorityFriend[];
@@ -185,9 +266,6 @@ interface UnitLike {
   healOut: any[];
   advancedActions: any[];
 }
-
-/** SpellMechanic 26 — interrupted (DB2 SpellMechanic table). */
-const MECH_INTERRUPT = 26;
 
 export function kickPriorityDecisionPoints(
   friends: any[],
@@ -214,6 +292,9 @@ export function kickPriorityDecisionPoints(
   const enemyPlayers = (enemies as UnitLike[]).filter((e) => e.info);
   if (friendPlayers.length === 0 || enemyPlayers.length === 0) return out;
   const startMs = combat.startTime;
+  // the round's end (`roundEndMs`: a Solo Shuffle round's ending death,
+  // else the log's end)
+  const roundEndAt = roundEndMs(combat as never);
   const rel = (ms: number) => (ms - startMs) / 1000;
   const zoneId = combat.startInfo?.zoneId;
   const friendIds = new Set(friendPlayers.map((f) => f.id));
@@ -250,15 +331,16 @@ export function kickPriorityDecisionPoints(
   // aura (official DB2 aura 77 mechanic 26, or a full school immunity —
   // Spiritwalker's Aegis 378078, Zen Focus Tea, Precognition, Obsidian
   // Mettle's Obsidian Scales, Unending Resolve …) cannot be kicked, so no
-  // one "could have kicked" that cast. `auraBlocksMechanic` is the same
-  // official table the CC-immunity predicates read.
+  // one "could have kicked" that cast. `auraBlocksInterrupt` reads the same
+  // official table the CC-immunity predicates read, plus the Spirit of
+  // Redemption form (F16 retest idx 42).
   const immuneCache = new Map<string, Array<{ from: number; to: number }>>();
   const interruptImmuneAt = (u: UnitLike, ms: number): boolean => {
     let iv = immuneCache.get(u.id);
     if (!iv) {
       try {
         iv = buildAuraIntervals(u as never, combat)
-          .filter((a) => auraBlocksMechanic(a.spellId, MECH_INTERRUPT) === true)
+          .filter((a) => auraBlocksInterrupt(a.spellId))
           .map((a) => ({
             from: startMs + a.fromS * 1000,
             to: startMs + a.toS * 1000,
@@ -280,7 +362,19 @@ export function kickPriorityDecisionPoints(
         // impact audit 2026-09-26.
         const kit = interruptForUnit(f as never);
         iv = [
-          ...buildCannotCastIntervals(f as never, cannotCastSrcIds),
+          // FT-T10: a kick lockout counts only when it locks the
+          // school of this friend's interrupt (no kit → every lockout).
+          // A pet's interrupt (`interruptForUnit` returns one only when the
+          // pet was seen casting it) is asked of the PET: the Warlock's stun
+          // does not lock Spell Lock, the Felhunter's does. The friend's own
+          // casting locks below and the roots of the run budget stay the
+          // friend's.
+          ...cannotCastIntervalsForSpells(
+            f as never,
+            cannotCastSrcIds,
+            kit ? [kit.spellId] : undefined,
+            units as never,
+          ),
           ...castingLockIntervalsOf(f as never, combat, kit?.spellId),
         ];
       } catch {
@@ -434,17 +528,15 @@ export function kickPriorityDecisionPoints(
       if (outcome === "completed" && durationS > KICK_PRIORITY_MAX_CAST_S)
         continue;
       const startS = rel(sMs);
-      const w = windows.find(
-        (x) => startS >= x.fromSeconds && startS <= x.toSeconds,
-      );
-      if (!w) continue;
-      const target = enemyById.get(w.targetUnitId);
-      if (!target) continue;
-      const hp = gridHpPct(
-        target as never,
-        startMs + toRenderSecond(startS) * 1000,
-      );
-      if (hp == null || hp > hpGate) continue;
+      const pick = lowestTargetWindowAt(windows, startS, hpGate, (id) => {
+        const t = enemyById.get(id);
+        return t
+          ? gridHpPct(t as never, startMs + toRenderSecond(startS) * 1000)
+          : null;
+      });
+      if (!pick) continue;
+      const target = enemyById.get(pick.w.targetUnitId)!;
+      const { w, hp } = pick;
       if (interruptImmuneAt(healer, sMs)) continue;
 
       // Both arms: eligibility comes from the corpus table (or the bootstrap
@@ -457,7 +549,9 @@ export function kickPriorityDecisionPoints(
       let healAmount = 0;
       let healOtherName: string | null = null;
       let healOtherAmount = 0;
+      let healCasts = 1;
       if (outcome === "completed") {
+        healCasts = healCastsPaired(successes, sid, endMs);
         const byDest = new Map<string, number>();
         for (const h of healer.healOut ?? []) {
           const t = h.logLine.timestamp;
@@ -497,6 +591,13 @@ export function kickPriorityDecisionPoints(
             e.logLine.event === "SPELL_CAST_SUCCESS" &&
             e.logLine.timestamp < sMs,
         );
+        // how long the kick had been back (F-P5): the cooldown predicate's
+        // own ready instant, so it cannot disagree with `cdRemainingS`
+        const readySinceMs = neverObserved
+          ? null
+          : interruptReadySinceMs(f as never, kit.spellId, sMs);
+        const kickReadyForS =
+          readySinceMs === null ? null : (sMs - readySinceMs) / 1000;
         // an unconfirmed kit (tree-availability fallback, pet) is
         // observed-or-nothing; a confirmed one (baseline / talent in the log)
         // needs no prior cast — codex round-1: the prior-cast rule was
@@ -505,10 +606,17 @@ export function kickPriorityDecisionPoints(
         // Feasibility is judged on the NOMINAL cast (same for a kicked and a
         // completed cast of the same spell), on the longest continuous
         // castable stretch inside it.
-        const freeS = longestOutside(cannotCastOf(f), sMs, nominalEndMs);
+        // …up to the kicker's death and the round's end (codex
+        // 60-POSTHOC-04c #1: a rogue dying 0.1 s into a Flash Heal, the
+        // Shuffle round ending there, read as a kicker with the cast free)
+        const castEndMs = Math.max(
+          sMs,
+          Math.min(nominalEndMs, firstDeathMs(f as never), roundEndAt),
+        );
+        const freeS = longestOutside(cannotCastOf(f), sMs, castEndMs);
         const locked = freeS < Math.min(KICK_MIN_FREE_S, nominalS);
         const runBlocked = [...cannotCastOf(f), ...rootedOf(f)];
-        const runS = longestOutside(runBlocked, sMs, nominalEndMs);
+        const runS = longestOutside(runBlocked, sMs, castEndMs);
         const pos = getUnitPositionAtTime(f as never, sMs, LOS_SWEEP_GAP_MS);
         const hpos = getUnitPositionAtTime(
           healer as never,
@@ -522,6 +630,8 @@ export function kickPriorityDecisionPoints(
         const range = spellRangeForCaster(f as never, kit.spellId);
         let inRange: boolean | null = null;
         let reachableBeforeLanding = true;
+        let rootedThroughCast = false;
+        let reachYd: number | null = null;
         if (
           pos &&
           baseRange != null &&
@@ -531,6 +641,10 @@ export function kickPriorityDecisionPoints(
           // melee is a property of the spell, not of the talented number: a
           // talented melee kick still needs no line of sight
           const melee = baseRange <= MELEE_RANGE_YD;
+          // castable (not locked) with no runnable stretch = rooted through
+          // the cast: `runBlocked` is cannot-cast ∪ rooted
+          rootedThroughCast = melee && !locked && runS <= 0;
+          if (melee) reachYd = meleeKickReachYd(runS, range, baseRange);
           // run budget = the runnable stretch (castable and not rooted), not
           // the cast length: a friendly stunned for 1.5 s of a 2 s cast can
           // run for 0.5 s, a rooted one not at all
@@ -549,6 +663,12 @@ export function kickPriorityDecisionPoints(
           if (outcome === "completed" && endMs < nominalEndMs) {
             const freeB = longestOutside(cannotCastOf(f), sMs, endMs);
             const runB = longestOutside(runBlocked, sMs, endMs);
+            // the number both accusation tests passed is the smaller reach
+            if (melee)
+              reachYd = Math.min(
+                reachYd ?? Infinity,
+                meleeKickReachYd(runB, range, baseRange),
+              );
             reachableBeforeLanding =
               freeB >= Math.min(KICK_MIN_FREE_S, durationS) &&
               true ===
@@ -562,6 +682,19 @@ export function kickPriorityDecisionPoints(
                 );
           }
         }
+        // reachYd is a fact only when the accusation leaned on the run
+        // envelope: the kicker stood outside the kick's standing reach (range
+        // + hitbox slack) and the envelope is wider than it. Standing inside
+        // that reach, or rooted through the cast (envelope = standing reach),
+        // "could have closed in" is not what happened (review 2026-10-02).
+        const standingReachYd =
+          range == null ? null : range + RANGE_HITBOX_SLACK_YD;
+        const leanedOnRun =
+          reachYd !== null &&
+          standingReachYd !== null &&
+          distanceYd !== null &&
+          distanceYd > standingReachYd &&
+          reachYd > standingReachYd;
         friendsOut.push({
           id: f.id,
           name: f.name,
@@ -577,6 +710,10 @@ export function kickPriorityDecisionPoints(
           // round is not evidence of a kick at all. Observed-or-nothing.
           feasible: kitOk && cdRemainingS <= 0 && !locked && inRange === true,
           reachableBeforeLanding,
+          rootedThroughCast,
+          rangeYd: range ?? null,
+          reachYd: leanedOnRun ? reachYd : null,
+          kickReadyForS,
         });
       }
 
@@ -605,6 +742,7 @@ export function kickPriorityDecisionPoints(
         healAmount,
         healOtherName,
         healOtherAmount,
+        healCasts,
         windowFromS: w.fromSeconds,
         windowToS: w.toSeconds,
         friends: friendsOut,
@@ -648,10 +786,22 @@ const healedWhom = (p: IKickPriorityPoint): string =>
       ? `${p.healOtherName} (${k(p.healOtherAmount)}k)`
       : "none";
 
+/** `healCasts`, present only when the amounts sum more than one cast. */
+const healCastsFact = (p: IKickPriorityPoint): { healCasts?: string } =>
+  p.healCasts > 1 ? { healCasts: String(p.healCasts) } : {};
+
 export function kickPriorityMissedEvents(
   points: IKickPriorityPoint[],
   owner: { id: string; name: string },
-  probes: { lookup: () => KickPriorityRef | null },
+  probes: {
+    lookup: () => KickPriorityRef | null;
+    /** B7b (user ruling 2026-10-06; a fact, the verdict is unchanged): what
+     * the player was hard-casting or channelling while the heal was being
+     * cast — the names `occupancyWithin` (the one "was this player busy"
+     * predicate, missed-cleanse's `ownerCastingSpells`) returns for
+     * [castStartS, castEndS], "、"-joined; "" or absent ⇒ no fact. */
+    ownerBusyWith?: (castStartS: number, castEndS: number) => string;
+  },
   overrides?: { cap?: number },
 ): CandidateEvent[] {
   const cap = overrides?.cap ?? KICK_PRIORITY_CAP;
@@ -665,6 +815,8 @@ export function kickPriorityMissedEvents(
         (f) => f.id !== owner.id && f.feasible && f.reachableBeforeLanding,
       )
       .map((f) => f.name);
+    const youChannelling =
+      probes.ownerBusyWith?.(p.castStartS, p.castEndS) ?? "";
     return {
       id: `kick-priority-missed:${owner.id}:${Math.round(p.castStartS)}`,
       type: "kick-priority-missed",
@@ -680,12 +832,25 @@ export function kickPriorityMissedEvents(
         target: p.targetName,
         targetHpPct: String(p.targetHpPct),
         healK: k(p.healAmount),
+        ...healCastsFact(p),
         healedWhom: healedWhom(p),
+        // the detector's span (F-P1): the whole defenseless span of the
+        // target, which the rendered KILL WINDOW lines (the bursts) sit inside
+        windowFrom: fmtTime(p.windowFromS),
+        windowTo: fmtTime(p.windowToS),
         kick: me.kickSpellName,
+        ...(me.rangeYd === null ? {} : { kickRangeYd: String(me.rangeYd) }),
         kickNeverUsed: me.neverObserved ? "yes" : "no",
+        ...(me.kickReadyForS === null
+          ? {}
+          : { kickReadyForS: fmt(me.kickReadyForS) }),
         distanceYd:
           me.distanceYd == null ? "?" : String(Math.round(me.distanceYd)),
+        ...(me.reachYd === null
+          ? {}
+          : { reachYd: String(Math.round(me.reachYd)) }),
         othersFeasible: others.length ? others.join("; ") : "none",
+        ...(youChannelling ? { youChannelling } : {}),
         refNCompleted: String(ref.nCompleted),
         refNInterrupted: String(ref.nInterrupted),
         refDeathCompleted: String(ref.deathCompletedPct),
@@ -729,7 +894,12 @@ export function kickPriorityTeamEvents(
         : me.locked
           ? "locked"
           : me.inRange === false
-            ? `out of range (${me.distanceYd == null ? "?" : Math.round(me.distanceYd)} yd)`
+            ? // F-P2: a castable melee kicker rooted for the whole cast is not
+              // "out of range" by the same rule as the teammates listed at a
+              // larger distance — say what held them
+              me.rootedThroughCast
+              ? `rooted through the cast (${me.distanceYd == null ? "?" : Math.round(me.distanceYd)} yd)`
+              : `out of range (${me.distanceYd == null ? "?" : Math.round(me.distanceYd)} yd)`
             : "unknown";
     out.push({
       id: `kick-priority-team:${owner.id}:${Math.round(p.castStartS)}`,
@@ -746,7 +916,10 @@ export function kickPriorityTeamEvents(
         target: p.targetName,
         targetHpPct: String(p.targetHpPct),
         healK: k(p.healAmount),
+        ...healCastsFact(p),
         healedWhom: healedWhom(p),
+        windowFrom: fmtTime(p.windowFromS),
+        windowTo: fmtTime(p.windowToS),
         ownerWhy,
         teammates: mates
           // name + distance only (user ruling 2026-09-15): the interrupt's

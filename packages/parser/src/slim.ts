@@ -45,6 +45,8 @@ const EVENT_ARRAYS = [
   // 2026-08-23: the misses and empower ends carry params too. healAbsorbsIn is
   // deliberately absent — it stores decoded fields only, never a params array.
   "empowerEnds",
+  "empowerStarts",
+  "empowerInterrupts",
   "missesOut",
   "missesIn",
 ] as const;

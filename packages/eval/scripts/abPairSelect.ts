@@ -28,7 +28,6 @@ import { basename, resolve } from "path";
 import { gunzipSync } from "zlib";
 
 import { candidatesAsTheAppRuns } from "../src/corpus/appCandidates";
-
 import { selectCorpusOwner } from "../src/corpus/buildCorpus";
 
 function parseArgs() {

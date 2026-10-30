@@ -1,8 +1,7 @@
 // @vitest-environment jsdom
-import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, waitFor } from "@testing-library/react";
-
 import { ensureAnalysisData } from "@gladlog/analysis";
+import { fireEvent, render, waitFor } from "@testing-library/react";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { MatchReport } from "../src/renderer/src/report/components/MatchReport";
 import { UncoveredHighlightsCard } from "../src/renderer/src/report/components/UncoveredHighlightsCard";
@@ -60,7 +59,7 @@ beforeEach(() => {
 });
 
 describe("UncoveredHighlightsCard 点击链路(BACKLOG #13)", () => {
-  it("AI 视图挂载即出现未覆盖亮点卡(真实 fixture:0–30s 与 80–90s 未被 mistakesAll 覆盖)", async () => {
+  it("AI 视图挂载即出现未覆盖亮点卡(真实 fixture:0–90s 未被 mistakesAll 覆盖)", async () => {
     const { findByTestId } = render(
       <MatchReport source={m} matchId="uh-1" initialView="ai" />,
     );
@@ -84,10 +83,11 @@ describe("UncoveredHighlightsCard 点击链路(BACKLOG #13)", () => {
 
     await waitFor(() => expect(analyzeWindow).toHaveBeenCalledTimes(1));
     const call = analyzeWindow.mock.calls[0]![0];
-    // btn-0 is the first highlight, 0–30 s since GH #96's 60 % coverage door
-    // (see uncoveredHighlights.test.ts).
+    // btn-0 is the first highlight — the whole 0–90 s since the user ruling
+    // of 2026-10-20 took the fixture's last timed anchor (the Frost Mage holds
+    // an unpressed Ice Block, so no kill window; see uncoveredHighlights.test.ts)
     expect(call.fromS).toBe(0);
-    expect(call.toS).toBe(30);
+    expect(call.toS).toBe(90);
     expect(call.matchId).toBe("uh-2");
 
     // The result card appears in place in the AI view (no need to switch to

@@ -6,11 +6,11 @@
  * accepts pairs that were MINED; it is never extended from memory.
  * Usage: tsx pvpReplaceScan.ts --manifest <file> [--store <matches dir>]
  */
-import { readdirSync, readFileSync, existsSync } from "fs";
-import { join } from "path";
+import { extractMajorCooldowns, specToString } from "@gladlog/analysis";
 import { GladLogParser, type GladMatch } from "@gladlog/parser";
 import { toLegacyMatch } from "@gladlog/parser-compat";
-import { extractMajorCooldowns, specToString } from "@gladlog/analysis";
+import { existsSync,readdirSync, readFileSync } from "fs";
+import { join } from "path";
 
 type Key = string; // spec|talent|cd
 const agg = new Map<Key, { pickedN: number; pickedNever: number; unpickedN: number; unpickedNever: number; cdName: string; spec: string }>();

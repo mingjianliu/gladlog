@@ -30,6 +30,13 @@
  *   · absorb          — `EffectAura = 69` (SCHOOL_ABSORB). DB2 stores 0 points
  *                       (the amount is a spell-power coefficient), so this is
  *                       a boolean, never a number.
+ *   · absorbSchoolMask — OR of those aura-69 rows' `EffectMiscValue_0` (the
+ *                       school bits the shield absorbs; 127 = all), through
+ *                       the same one trigger hop; a 0 mask is a dead slot and
+ *                       is skipped. Anti-Magic Shell 48707 / 410358 = 126 (all
+ *                       magic, no physical) — triage F-H20, user ruling
+ *                       2026-09-30: the crisis school gate reads this instead
+ *                       of a hand-signed MITIGATION_TABLE percentage.
  *   · healsSelf       — a heal effect (`Effect` 10 HEAL / 136 HEAL_PCT, or
  *                       aura 8 PERIODIC_HEAL / 20 OBS_MOD_HEALTH) whose target
  *                       is the caster.
@@ -101,6 +108,8 @@ const ENEMY_AREA_TARGETS = new Set(["15", "16", "28", "104"]);
 
 export type AbilityEffectFacts = {
   absorbs?: true;
+  /** School bits the absorb covers (aura 69 MiscValue_0; 127 = all). */
+  absorbSchoolMask?: number;
   /** 效果指向敌人(而不是自己/队友)。 */
   hitsEnemy?: true;
   /** 指向敌人且是范围/锥形(不是指定单体)。 */
@@ -146,8 +155,16 @@ const CONTROLS: Array<[string, keyof AbilityEffectFacts, boolean, string]> = [
   ["118", "dealsDamage", false, "变形术 —— 纯控制,不造成伤害"],
 ];
 const NUMERIC_CONTROLS: Array<
-  [string, "healingReceivedPct" | "moveSpeedPct", number, string]
+  [
+    string,
+    "healingReceivedPct" | "moveSpeedPct" | "absorbSchoolMask",
+    number,
+    string,
+  ]
 > = [
+  ["48707", "absorbSchoolMask", 126, "反魔法护罩 —— 只吸收魔法(0x7e,无物理)"],
+  ["11426", "absorbSchoolMask", 127, "寒冰护体 —— 全学派吸收"],
+  ["17", "absorbSchoolMask", 127, "真言术:盾 —— 全学派吸收"],
   ["47788", "healingReceivedPct", 60, "守护之魂 —— 受治疗 +60%"],
   ["55233", "healingReceivedPct", 30, "鲜血之力 —— 受治疗 +30%"],
   ["47585", "moveSpeedPct", 50, "消散 —— 移动速度 +50%(aura 31 = A_MOD_INCREASE_SPEED,不是加速)"],
@@ -203,6 +220,7 @@ async function main(): Promise<void> {
       "EffectAura",
       "EffectTriggerSpell",
       "EffectBasePointsF",
+      "EffectMiscValue_0",
       "ImplicitTarget_0",
       "ImplicitTarget_1",
       PVP_MULTIPLIER_COLUMN,
@@ -216,6 +234,7 @@ async function main(): Promise<void> {
     aura: string;
     trigger: string;
     points: number;
+    misc: number;
     targets: string[];
   };
   const bySpell = new Map<string, Row[]>();
@@ -226,6 +245,7 @@ async function main(): Promise<void> {
     // PvP-scaled (lib/pvpMultiplier.ts): healingReceivedPct / moveSpeedPct are
     // arena numbers; the boolean facts only look at the sign / non-zero.
     points: pvpBasePoints(r),
+    misc: Number(r.EffectMiscValue_0) || 0,
     targets: [r.ImplicitTarget_0, r.ImplicitTarget_1].filter(
       (t) => t && t !== "0",
     ),
@@ -268,7 +288,11 @@ async function main(): Promise<void> {
   const factsFor = (id: string, hop = true): AbilityEffectFacts => {
     const facts: AbilityEffectFacts = {};
     for (const row of considered(bySpell.get(id) ?? [])) {
-      if (row.aura === AURA_ABSORB) facts.absorbs = true;
+      if (row.aura === AURA_ABSORB) {
+        facts.absorbs = true;
+        if (row.misc !== 0)
+          facts.absorbSchoolMask = (facts.absorbSchoolMask ?? 0) | row.misc;
+      }
       if (isHealRow(row)) {
         if (hitsAlly(row)) facts.healsOthers = true;
         else if (hitsSelf(row)) facts.healsSelf = true;
@@ -294,6 +318,9 @@ async function main(): Promise<void> {
         // 一跳只补「够得着别人」这一面:触发法术自身的目标才是真受众
         if (deep.healsOthers) facts.healsOthers = true;
         if (deep.absorbs) facts.absorbs = true;
+        if (deep.absorbSchoolMask !== undefined)
+          facts.absorbSchoolMask =
+            (facts.absorbSchoolMask ?? 0) | deep.absorbSchoolMask;
         // 一跳同样补进攻面:旋风斩这类本体只有 E64 触发,伤害与目标都在被触发的法术上
         if (deep.hitsEnemy) facts.hitsEnemy = true;
         if (deep.enemyAoE) facts.enemyAoE = true;
@@ -351,7 +378,7 @@ async function main(): Promise<void> {
     `/**\n` +
       ` * Generated at: ${new Date().toISOString()}\n` +
       ` * Build: ${build}\n` +
-      ` * Source: DB2 SpellEffect — aura 69 (absorb), Effect 10/136 + aura 8/20\n` +
+      ` * Source: DB2 SpellEffect — aura 69 (absorb, school mask = MiscValue_0), Effect 10/136 + aura 8/20\n` +
       ` *   (healing, split self vs ally by ImplicitTarget), aura 118/259\n` +
       ` *   (healing received %), aura 31 (movement speed %). One EffectTriggerSpell hop,\n` +
       ` *   dummy rows ignored unless they are all the spell has.\n` +
@@ -371,6 +398,8 @@ async function main(): Promise<void> {
       `import raw from "./abilityEffectsGenerated.json";\n\n` +
       `export type AbilityEffectFacts = {\n` +
       `  absorbs?: true;\n` +
+      `  /** School bits the absorb covers (aura 69 MiscValue_0; 127 = all). */\n` +
+      `  absorbSchoolMask?: number;\n` +
       `  healsSelf?: true;\n` +
       `  healsOthers?: true;\n` +
       `  healingReceivedPct?: number;\n` +

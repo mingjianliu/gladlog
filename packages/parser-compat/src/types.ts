@@ -37,6 +37,10 @@ export interface IHpEvent extends ICombatEvent {
   amount: number;
   effectiveAmount: number;
   spellSchoolId?: string;
+  /** The school the damage was dealt in (the hp tail's field, hex like
+   * `spellSchoolId`) when the parser kept it — see `GladHpEvent.school`.
+   * Read through analysis `hitSchoolId`. */
+  damageSchoolId?: string;
   /**
    * Damage past the target's remaining health (positive), present ONLY when
    * > 0 — i.e. this event is a killing blow. Needed as its own field because
@@ -102,12 +106,22 @@ export interface ISpellEvent extends ICombatEvent {
    * (params[11..12]); undefined for all other events */
   extraSpellId?: string;
   extraSpellName?: string;
+  /** What the cast cost, as its `SPELL_CAST_SUCCESS` row states it: one entry
+   * per power the row lists (two when the spell is charged in two), `cost` in
+   * the log's own unit for that power — the unit of `advancedActorPowers` —
+   * and 0 when the row says 0. It is the spell's cost before the caster's
+   * percentage reductions, not always what was taken (parser
+   * `decodeCastCosts`). Only on `spellCastEvents` / `petSpellCastEvents`.
+   * Undefined on a row that does not state it and on documents stored before
+   * 2026-10-11: unknown, not free. */
+  powerCosts?: { type: CombatUnitPowerType; cost: number }[];
 }
 
 /** `SPELL_EMPOWER_END` — an Evoker empowered cast and the charge level it was
  * released at. Deliberately NOT folded into spellCastEvents: the same cast
  * already appears there as its own SPELL_CAST_SUCCESS, so folding would
- * double-count every empowered cast. */
+ * double-count every empowered cast. `SPELL_EMPOWER_INTERRUPT` has the same
+ * shape: `level` is then the level reached when the hold was cut short. */
 export interface IEmpowerEvent extends ICombatEvent {
   /** Release level (1-based; Font of Magic raises the cap, the log only
    * carries the level actually reached). */
@@ -201,6 +215,14 @@ export interface ICombatUnit {
   /** Empowered casts BY this unit with their release level. Same
    * absent-on-old-archives caveat as healAbsorbsIn. */
   empowerEnds?: IEmpowerEvent[];
+  /** `SPELL_EMPOWER_START` — when this unit began holding an empowered cast
+   * (the cast's SPELL_CAST_SUCCESS is logged at this instant, not at the
+   * release). Undefined on documents stored before 2026-10-01: unknown, not
+   * "held none". Read through analysis `empowerSpans`, not directly. */
+  empowerStarts?: ISpellEvent[];
+  /** `SPELL_EMPOWER_INTERRUPT` — empowered casts BY this unit that were cut
+   * short instead of released; `level` is the level reached. Same caveat. */
+  empowerInterrupts?: IEmpowerEvent[];
 }
 
 export interface IAdvancedAction {
@@ -223,6 +245,9 @@ export interface IAdvancedAction {
   logLine: {
     event: "ADVANCED_SAMPLE";
     timestamp: number;
+    /** the source line (`GladAdvancedSample.lineIndex`), when the document
+     * carries it */
+    lineIndex?: number;
   };
 }
 
@@ -241,6 +266,10 @@ export interface IArenaCombatBase {
   playerTeamId: string | null;
   result: CombatResult;
   winningTeamId: string | null;
+  /** The lobby's matchmaking rating per team id (ARENA_MATCH_END) — the
+   * parser's `teamMmr`, passed through. Not a personal rating. null = the
+   * log did not say; absent = a document stored before the parser kept it. */
+  teamMmr?: { team0: number; team1: number } | null;
   rawLines: string[];
   durationInSeconds: number;
   hasAdvancedLogging: boolean;

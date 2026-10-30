@@ -1,3 +1,4 @@
+import { CJK_LEAK } from "../utils/localizedText";
 import { KICK_LOCKOUT_OBSERVED } from "./kickLockoutObservedGenerated";
 import { SPELL_CATEGORIES } from "./spellCategories";
 import { SPELL_EFFECTS_GENERATED } from "./spellEffectGenerated";
@@ -36,7 +37,7 @@ export interface IMinedSpell {
 // reached the main table. Field-restore dispelType only: the calibration
 // fields (cd/duration/charges) stay override-authoritative as written, since
 // their silence is itself a hand-modeling choice (e.g. generated
-// charges 2×30s for Empower Rune Weapon contradicts the calibrated 120s —
+// charges 1×180s for Shield Wall contradicts the calibrated 210s —
 // restoring charges wholesale would mix the two models).
 export const spellEffectData = (() => {
   const merged = {
@@ -85,7 +86,40 @@ export function effectiveCooldownSeconds(spellId: string): number | undefined {
  * "羊本身永远是6秒 除非有龙给的加持续时间的debuff".
  */
 export const OPPRESSING_ROAR_SPELL_ID = "372048";
+/**
+ * The ids the Roar's debuff is logged under. 406971 is the same spell in DB2
+ * (name, 10 s, 120 s cooldown — `spellEffectGenerated.json`) cast by an
+ * Evoker whose log shows no 372048 at all; read as one id, its lengthening
+ * was invisible: of the 22 Terror of the Skies stuns that still outlived
+ * their labelled length on the 605-file capture, 12 sat under a 406971
+ * debuff applied by the caster 1.8–2.2 s earlier, 11 of them at 1.25–1.35 ×
+ * (fix-FT/scripts/t09_terrorOutlived.ts). FLAG (Game-Behaviour Rule): the
+ * aura-232 rows of 406971 are not in `talentEffectInventoryGenerated.json`
+ * (0 rows; 372048 has 17), so the DB2 leg for this id is its identity with
+ * 372048, not its own effect rows — the corpus leg carries it, and the
+ * direction is the safe one (a control cannot outlive its duration: lengthen
+ * on corpus evidence). Re-check with `buffDurationScan` at a data refresh.
+ */
+export const OPPRESSING_ROAR_AURA_IDS: ReadonlySet<string> = new Set([
+  OPPRESSING_ROAR_SPELL_ID,
+  "406971",
+]);
 export const OPPRESSING_ROAR_PVP_CC_DURATION_MULT = 1.3;
+/**
+ * What the Roar covers: aura 232 is keyed by SpellMechanic, one row per
+ * mechanic (`EffectMiscValue_0`) — the 17 rows of 372048 in
+ * `talentEffectInventoryGenerated.json` (build 12.1.5.69594), each 50 × 0.6:
+ * charm 1, disorient 2, disarm 3, fear 5, root 7, silence 9, sleep 10,
+ * snare 11, stun 12, freeze 13, knockout 14, polymorph 17, banish 18, turn 23,
+ * interrupt 26, daze 27, sap 30. NOT on it: horror 24 (Mortal Coil) and
+ * shackle 20 — every other id typed `cc` / `roots` in SPELL_CATEGORIES has a
+ * listed mechanic (114 of 117; Holy Word: Chastise has no DB2 mechanic and no
+ * fixed duration). A set of mechanic ids, not spell ids, so the spell-id
+ * registry does not apply; `test/ccDuration.test.ts` pins it to the inventory
+ * rows instead, so a data refresh that changes them turns CI red.
+ */
+export const OPPRESSING_ROAR_LENGTHENED_MECHANICS: ReadonlySet<number> =
+  new Set([1, 2, 3, 5, 7, 9, 10, 11, 12, 13, 14, 17, 18, 23, 26, 27, 30]);
 
 /**
  * Full, undiminished PvP duration of a CC / root aura in seconds — the fact the
@@ -230,6 +264,13 @@ export const CC_DURATION_TALENT_MODIFIERS: Record<
       talentSpellId: "429639",
       addSeconds: 1,
       note: "Boneshaker — DB2 aura 107 +1000 ms on Shockwave (46968 / stun aura 132168), Warrior hero tree for Arms and Protection (choice node, maxRanks 1); durationTalentScan (GH #96 M5, rule predeclared a76aabda), S2 archive every 5: 3,627 files / 7,387 rounds: 76 of 97 holder cells at 3.0 s against 891 of 1,065 non-holder cells at 2.0 s; 2 + 1 = 3.",
+    },
+  ],
+  "122": [
+    {
+      talentSpellId: "343183",
+      addSeconds: 2,
+      note: "Improved Frost Nova — tooltip 「冰霜新星的持续时间延长${$s1/1000}秒」 = +2 s (talentDurationTooltipsGenerated, GH #155); talentDurationVerify on 605 files: holders' full-run Frost Novas 60 at 8 s / 5 at 6 s, non-holders 1,155 at 6 s / 0 at 8 s. User ruling 2026-10-21: a control lengthened by the caster's talent is priced at that length (the official-duration rule stays for everything else)",
     },
   ],
   "5246": [
@@ -493,7 +534,7 @@ export const BUFF_DURATION_TALENT_MODIFIERS: Record<
       specs: ["65"], // Paladin_Holy
       untalentedBaseSeconds: 15,
       pct: 50,
-      note: "Sanctified Wrath — corpus is unambiguous and matches Avenging Wrath's ×1.5 exactly: 102 of 102 caster-cells at 22.5 s hold it, the 15 s group 2 of 5 (15 × 1.5 = 22.5). DB2 only accounts for HALF of it here — 216331's class mask is 0/0/0/64 and the second +25 % row (171648) carries 0/256/0/0, so only the talent's own +25 % legally reaches it. Registered on corpus evidence with DB2 partially disagreeing, the same standing as CORPUS_DURATION_PATCHES' Binding Shot 2 → 3 s; if a future build's mask data lines up, fold it back to two +25 % rows.",
+      note: "Sanctified Wrath — corpus is unambiguous and matches Avenging Wrath's ×1.5 exactly: 102 of 102 caster-cells at 22.5 s hold it, the 15 s group 2 of 5 (15 × 1.5 = 22.5). DB2 only accounts for HALF of it here — 216331's class mask is 0/0/0/64 and the second +25 % row (171648) carries 0/256/0/0, so only the talent's own +25 % legally reaches it. Mechanism (user-supplied research, 2026-10-21): Patch 12.0.0 notes — 'Sanctified Wrath … now increases the duration of Avenging Wrath by 50% (was 25%)', and its Holy text names Avenging Crusader too ($?c1 branch of 53376); the client's effect row still carries 25 (Wowhead's spell details show the same), so the +50 % is the live server value, not a second talent. Do not look for another +25 % row.",
     },
   ],
   "358267": [
@@ -959,6 +1000,14 @@ export const BUFF_DURATION_TALENT_MODIFIERS: Record<
       note: "Anti-Magic Barrier — DB2 aura 108 +40 % with PvpMultiplier bringing it to +20 % in PvP (the PvP value is the official one, user ruling 2026-09-04), Death Knight class tree all three specs (maxRanks 1), mask covers both Anti-Magic Shell ids; GAP row 2026-09-22: 6.0 s in 247 caster-cells, modal lifetime 6.0 s = 69 % of 1,991. Split: 129 of 137 holder cells at 6.0 s across Unholy/Frost × Aug/Sep; NO non-holder cell exists — the talent is universally taken, and Rule 3 says a control group is not required; 5 × 1.2 = 6.",
     },
   ],
+  "444741": [
+    {
+      talentSpellId: "205727",
+      untalentedBaseSeconds: 5,
+      pct: 20,
+      note: "Anti-Magic Barrier on the DOMINANT Anti-Magic Shell aura (cast 444740 → aura 444741) — same DB2 row (205727 eff1 aura 108 +40, PvpMultiplier 0.5) and mask (131072); corpusFactScan 2026-10-21: 2,284 of 2,366 runs at 6.0 s on the 605-file capture. It had no entry, so every reader of it (the kit's `lasts`, the expiry) priced the DB2 5 s; 5 × 1.2 = 6.",
+    },
+  ],
   "48707": [
     {
       talentSpellId: "205727",
@@ -1224,6 +1273,10 @@ export function getSpellNamesSnapshot(): Record<string, string> {
   return spellNamesMap;
 }
 
+/** Any character outside ASCII — a localized client's letter. */
+// eslint-disable-next-line no-control-regex
+const NON_ASCII = /[^\x00-\x7F]/;
+
 export function getEnglishSpellName(
   spellId: string,
   fallback?: string | null,
@@ -1231,7 +1284,19 @@ export function getEnglishSpellName(
   return (
     spellNamesMap[spellId] ??
     spellEffectData[spellId]?.name ??
-    fallback ??
+    // the log's own name is the recording client's: a zhCN / zhTW / koKR
+    // client writes it in its script, and an id the name table lacks (a
+    // renumbered or retired one — Unstable Affliction 316099 in 2024 zhTW
+    // logs) printed `痛苦動盪` on [KICK] lines. Such a name falls back to the
+    // id, as a missing one does (`CJK_LEAK`, the gate's own regex). D4
+    // (user 2026-10-24): so does any name with a non-ASCII letter — a
+    // French / German / Spanish / Portuguese client's accented name passed
+    // `CJK_LEAK` unseen (the forward check found 6 of 5,362 observed ids
+    // with no English name). An unaccented localized name still cannot be
+    // told from English: the log does not say which locale wrote it.
+    (fallback && !CJK_LEAK.test(fallback) && !NON_ASCII.test(fallback)
+      ? fallback
+      : undefined) ??
     spellId
   );
 }

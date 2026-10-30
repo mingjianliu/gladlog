@@ -1,8 +1,14 @@
 import { ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
-import { effectiveCooldownSeconds } from "../data/spellEffectData";
+import { effectAurasOfCast } from "../data/castEffectAuras";
+import {
+  effectiveCooldownSeconds,
+  getEnglishSpellName,
+} from "../data/spellEffectData";
 import { buildAuraIntervals } from "./auraIntervals";
 import { buffFullDurationForCaster } from "./buffDuration";
+// call-time only (cooldowns reads this module's table the same way)
+import { isEnemyCdWindowSpell, offensiveCdOfAura } from "./cooldowns";
 import { offensiveDangerWeight } from "./spellDanger";
 
 /**
@@ -57,13 +63,53 @@ export const OFFENSIVE_AURA_EVIDENCE: ReadonlyMap<
   ["111685", { cooldownId: "1122", name: "Summon Infernal", twin: true }],
   ["365362", { cooldownId: "365350", name: "Arcane Surge", twin: true }],
   ["1219480", { cooldownId: "114050", name: "Ascendance", twin: true }],
+  // F15 / fact1215 C5 (2026-10-18): Radiant Glory's Avenging Wrath. The log
+  // writes most activations as a 454351 SPELL_CAST_SUCCESS in the ms of a
+  // Wake of Ashes (the enemy timeline's `proc k of N`); the Holy-Power-spend
+  // proc puts the 454351 aura up with no cast at all (519781fd 5:56.596 →
+  // 6:05.600, no [ENEMY CD] line, no `enemy:` column at 6:01). A cast-backed
+  // aura folds into its cast as for the other twins; one with none is the
+  // `(no press)` occurrence — weight 0, never a window on its own.
+  ["454351", { cooldownId: "454351", name: "Avenging Wrath", twin: true }],
 ]);
 /** A twin's cast is logged at most this long before its aura (Infernal:
  * ≈ 1.0 s, the summon landing — p90 1.02 s on 207 pairs) or 0.5 s after
  * (log order). Not widened for lag: the only cast-less applications in 605
  * files lasted 0.4–10.3 s, i.e. short procs, not late-landing presses. */
-const TWIN_CAST_BEFORE_S = 3;
-const TWIN_CAST_AFTER_S = 0.5;
+export const TWIN_CAST_BEFORE_S = 3;
+export const TWIN_CAST_AFTER_S = 0.5;
+
+/**
+ * fact5 D16 class (F18; user ruling 2026-10-25, 「通用规则」): every other
+ * enemy offensive cooldown's own aura that goes up with no press of it —
+ * a talent proc, read off the log the way the twins' cast-less branch reads
+ * Radiant Glory's Avenging Wrath (C5). 605 capture: 292 such applications,
+ * none on the timeline. The triggers, from the official tooltips:
+ * Recklessness ← Enduring Rage 411764 (PvP: 「受到失控效果影响有一定几率
+ * 使你获得鲁莽」), Malevolence ← 1266805 (「枯萎的周期性伤害有几率使你获得
+ * 怨毒」), Avatar ← Odyn's Fury (Titan's Torment). The cooldown an aura is the
+ * effect of is `offensiveCdOfAura` (the enemy-CD window test included); an
+ * application within `TWIN_CAST_BEFORE_S` / `TWIN_CAST_AFTER_S` of a press of
+ * the same-named spell, or of a cast whose own effect it is (Ascendance →
+ * Doom Winds: one burst, Ascendance's — ruling 2026-09-26), is that press's;
+ * an interval whose start the log did not see is no new application.
+ * Undefined for the ids `OFFENSIVE_AURA_EVIDENCE` answers for.
+ */
+/** A press of the same cooldown up to this long after a cast-less
+ * application is that press: the two print in one rendered second, and the
+ * log can write the aura half a second before its press row (605 s2/38-3
+ * 0:14: Recklessness 14.224 s, pressed with Avatar at 14.725 s — the
+ * `(no press)` line and the press line stood side by side, corpusFactScan2
+ * duplicateLine). */
+export const GENERIC_PRESS_AFTER_MS = 1000;
+
+function genericCdOfAura(auraSpellId: string): string | undefined {
+  if (OFFENSIVE_AURA_EVIDENCE.has(auraSpellId)) return undefined;
+  const cd = offensiveCdOfAura(auraSpellId);
+  // the enemy-CD window test on the resolved id too: a table id with no
+  // cooldown is no cooldown tracker's (codex 20-F18-02 #2: Archangel 81700)
+  return cd !== undefined && isEnemyCdWindowSpell(cd) ? cd : undefined;
+}
 
 /** Cast ids read as evidence (registered with the table above). */
 export const METAMORPHOSIS_PRESS_CAST_IDS: ReadonlySet<string> = new Set([
@@ -122,6 +168,10 @@ export interface IAuraOffensiveOccurrence {
   dangerWeight: number;
   burstRole: "burst" | "fact";
   provenance: AuraOccurrenceProvenance;
+  /** a cast-less application of a cooldown outside `OFFENSIVE_AURA_EVIDENCE`
+   * (`genericCdOfAura`) — the timeline drops it beside a press it already
+   * has (an unseen press re-stated by the log) */
+  generic?: true;
 }
 
 export interface IAuraOccurrenceResult {
@@ -173,7 +223,10 @@ export function auraOffensiveOccurrences(
   const events = (unit.auraEvents ?? []).filter(
     (a) =>
       a.spellId !== undefined &&
-      OFFENSIVE_AURA_EVIDENCE.has(a.spellId) &&
+      (OFFENSIVE_AURA_EVIDENCE.has(a.spellId) ||
+        // a generic one: the unit's own buff on itself
+        (a.destUnitId === unit.id &&
+          genericCdOfAura(a.spellId) !== undefined)) &&
       a.srcUnitId === unit.id &&
       a.logLine.timestamp >= bounds.startTime &&
       a.logLine.timestamp <= bounds.endTime,
@@ -224,10 +277,55 @@ export function auraOffensiveOccurrences(
     (id) => effectiveCooldownSeconds(id) ?? 0,
   );
 
+  const usedTwinCasts = new Set<string>();
+  const successes = (unit.spellCastEvents ?? []).filter(
+    (c) => c.logLine?.event === LogEvent.SPELL_CAST_SUCCESS && !!c.spellId,
+  );
   for (const iv of intervals) {
     const startMs = bounds.startTime + iv.fromS * 1000;
     const endMs = bounds.startTime + iv.toS * 1000;
     const endObserved = !iv.inferredEnd;
+
+    const genericCd = genericCdOfAura(iv.spellId);
+    if (genericCd !== undefined) {
+      if (iv.inferredStart) continue;
+      const name = getEnglishSpellName(genericCd, iv.spellName);
+      const pressed = successes.some(
+        (c) =>
+          c.logLine.timestamp >= startMs - TWIN_CAST_BEFORE_S * 1000 &&
+          c.logLine.timestamp <= startMs + GENERIC_PRESS_AFTER_MS &&
+          (getEnglishSpellName(c.spellId!, c.spellName ?? "") === name ||
+            effectAurasOfCast(c.spellId!).includes(iv.spellId)),
+      );
+      if (pressed) continue;
+      // a press of it later inside the interval (a REFRESH) takes over from
+      // there: the proc ends at the press (codex 20-F18-02 #3, 4501dd64
+      // 2:19.9 → the 2:32.0 press), as a Metamorphosis press splits a form
+      const laterPress = successes
+        .filter(
+          (c) =>
+            c.logLine.timestamp > startMs + GENERIC_PRESS_AFTER_MS &&
+            c.logLine.timestamp < endMs &&
+            getEnglishSpellName(c.spellId!, c.spellName ?? "") === name,
+        )
+        .map((c) => c.logLine.timestamp)
+        .sort((a, b) => a - b)[0];
+      result.occurrences.push({
+        spellId: genericCd,
+        spellName: `${name} (no press)`,
+        startMs,
+        endMs: laterPress ?? endMs,
+        endObserved: laterPress !== undefined ? true : endObserved,
+        cooldownSeconds: 0,
+        availableAgainAtMs: null,
+        availabilityUnknown: true,
+        dangerWeight: 0,
+        burstRole: "burst",
+        provenance: "unresolved",
+        generic: true,
+      });
+      continue;
+    }
 
     if (iv.spellId === "162264") {
       const press = near(pressCasts, startMs, -W, endMs - startMs);
@@ -320,12 +418,20 @@ export function auraOffensiveOccurrences(
     const twin = OFFENSIVE_AURA_EVIDENCE.get(iv.spellId);
     if (twin?.twin) {
       const cdId = twin.cooldownId;
+      // one cast pairs with one application: a later cast-less application
+      // inside the pairing reach is its own `(no press)` occurrence, not a
+      // second interval of the cast before it (codex 20-F15-25: a 454351
+      // cast at 10 s, removed 10.5 s, and a cast-less one at 12.5 s were
+      // merged into one 10–20.5 s Avenging Wrath)
       const cast = near(
-        castTimes(unit, new Set([cdId])),
+        castTimes(unit, new Set([cdId])).filter(
+          (x) => !usedTwinCasts.has(`${cdId}:${x}`),
+        ),
         startMs,
         -TWIN_CAST_BEFORE_S * 1000,
         TWIN_CAST_AFTER_S * 1000,
       );
+      if (cast !== undefined) usedTwinCasts.add(`${cdId}:${cast}`);
       const cd = effectiveCooldownSeconds(cdId) ?? 0;
       if (cast !== undefined) {
         // the press: anchored AT THE CAST (agy review: the Infernal aura lands

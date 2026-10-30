@@ -43,6 +43,16 @@ function evoker(id: string, name: string, procAtMs: number) {
     name,
     class: CombatUnitClass.Evoker,
     spec: CombatUnitSpec.Evoker_Preservation,
+    // The talents this fixture stands on: Renewing Blaze (class node 93354 —
+    // its proc aura proves no button, so the ledger holds the row on the
+    // talent) and Obsidian Scales (node 93304), the real button beside it.
+    info: {
+      talents: [
+        { id1: 93354, id2: 115669, count: 1 },
+        { id1: 93304, id2: 115613, count: 1 },
+      ],
+      pvpTalents: [],
+    },
     spellCastEvents: [],
     auraEvents: [
       makeAuraEvent(
@@ -70,7 +80,7 @@ const baseTimelineParams = {
   enemyCDTimeline: { players: [], alignedBurstWindows: [] } as any,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   ccTrinketSummaries: [] as any[],
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   dispelSummary: {
     allyCleanse: [],
     ourPurges: [],
@@ -78,7 +88,7 @@ const baseTimelineParams = {
     missedCleanseWindows: [],
     missedPurgeWindows: [],
   } as any,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   enemyDispelSummary: {
     allyCleanse: [],
     ourPurges: [],

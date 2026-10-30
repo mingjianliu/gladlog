@@ -1,4 +1,4 @@
-/* eslint-disable no-console */
+ 
 /**
  * healReachGroundTruth.ts — checks the reach / line-of-sight model behind the
  * GH #83 [HEAL REACH] probe against the game's own verdict (user go-ahead

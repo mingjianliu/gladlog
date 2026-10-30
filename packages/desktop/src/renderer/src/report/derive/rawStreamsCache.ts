@@ -1,4 +1,4 @@
-import { roundDurationSOf, type RawStreams } from "@gladlog/analysis";
+import { type RawStreams,roundDurationSOf } from "@gladlog/analysis";
 
 import { bridge } from "../../bridge";
 import { toLegacySafe } from "./legacySource";

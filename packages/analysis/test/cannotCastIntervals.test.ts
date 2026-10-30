@@ -3,7 +3,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildCannotCastIntervals,
+  castBlockingAuraIntervals,
   coveredMsWithin,
+  deathLockChain,
   enemySourceIds,
   silenceIntervals,
 } from "../src/utils/cannotCastIntervals";
@@ -81,7 +83,7 @@ describe("cannotCastIntervals — buildCannotCastIntervals", () => {
     expect(intervals).toEqual([{ from: 10_000, to: 16_000 }]);
   });
 
-  it("treats unremoved CC auras as open-ended (to: Infinity)", () => {
+  it("closes an unremoved CC aura at its official length (work order 2026-10-14d #13; it used to run open-ended)", () => {
     const unit = {
       id: "Player-1",
       auraEvents: [
@@ -96,7 +98,42 @@ describe("cannotCastIntervals — buildCannotCastIntervals", () => {
     } as unknown as ICombatUnit;
 
     const intervals = buildCannotCastIntervals(unit, enemyIds);
-    expect(intervals).toEqual([{ from: 10_000, to: Infinity }]);
+    // Polymorph's official 6 s (`ccFullDurationSeconds`)
+    expect(intervals).toEqual([{ from: 10_000, to: 16_000 }]);
+  });
+
+  it("a second APPLIED with no REMOVED between: the same application inside the official length, a new one past it (work order 2026-10-14d #13)", () => {
+    const ev = (event: LogEvent, ms: number) => ({
+      spellId: "118",
+      srcUnitId: "Enemy-1",
+      timestamp: ms,
+      logLine: { event },
+    });
+    const of = (auraEvents: object[]) =>
+      buildCannotCastIntervals(
+        { id: "Player-1", auraEvents, actionIn: [] } as unknown as ICombatUnit,
+        enemyIds,
+      );
+    // a re-send 2 s in: one interval to the REMOVED
+    expect(
+      of([
+        ev(LogEvent.SPELL_AURA_APPLIED, 10_000),
+        ev(LogEvent.SPELL_AURA_APPLIED, 12_000),
+        ev(LogEvent.SPELL_AURA_REMOVED, 15_000),
+      ]),
+    ).toEqual([{ from: 10_000, to: 15_000 }]);
+    // a lost REMOVED, the next application 50 s later: the first closes at
+    // its official end, never at the later REMOVED
+    expect(
+      of([
+        ev(LogEvent.SPELL_AURA_APPLIED, 10_000),
+        ev(LogEvent.SPELL_AURA_APPLIED, 60_000),
+        ev(LogEvent.SPELL_AURA_REMOVED, 63_000),
+      ]),
+    ).toEqual([
+      { from: 10_000, to: 16_000 },
+      { from: 60_000, to: 63_000 },
+    ]);
   });
 
   it("adds kick lockout intervals from enemy SPELL_INTERRUPT events", () => {
@@ -270,7 +307,7 @@ describe("cannotCastIntervals — log-order pairing and pet sources (H23)", () =
     logLine: { event },
   });
 
-  it("a same-millisecond re-application pairs with the NEXT removal, not the one logged before it", () => {
+  it("a same-millisecond REMOVED → APPLIED is one Cyclone re-broadcast: one interval from the landing (H23; work order 2026-10-14b fix 8)", () => {
     const unit = {
       id: "Player-1",
       auraEvents: [
@@ -282,8 +319,194 @@ describe("cannotCastIntervals — log-order pairing and pet sources (H23)", () =
       actionIn: [],
     } as unknown as ICombatUnit;
     expect(buildCannotCastIntervals(unit, new Set(["Enemy-1"]))).toEqual([
-      { from: 23_103, to: 23_317 },
-      { from: 23_317, to: 28_109 },
+      { from: 23_103, to: 28_109 },
+    ]);
+  });
+
+  it("the unit's own Deep Breath flight is a cannot-cast interval (user ruling 2026-10-14)", () => {
+    // b12bfef4's shape: Deep Breath 108.771 → 110.321 on the Evoker itself
+    const unit = {
+      id: "Player-1",
+      auraEvents: [
+        ev("357210", "Player-1", 108_771, LogEvent.SPELL_AURA_APPLIED),
+        ev("357210", "Player-1", 110_321, LogEvent.SPELL_AURA_REMOVED),
+        // another unit's flight on this unit's records is not this unit's
+        ev("357210", "Player-9", 120_000, LogEvent.SPELL_AURA_APPLIED),
+        ev("357210", "Player-9", 122_000, LogEvent.SPELL_AURA_REMOVED),
+      ],
+      actionIn: [],
+    } as unknown as ICombatUnit;
+    expect(buildCannotCastIntervals(unit, new Set(["Enemy-1"]))).toEqual([
+      { from: 108_771, to: 110_321 },
+    ]);
+  });
+
+  it("flights pair per id and are never left open (agy 40-FT-85)", () => {
+    const unit = {
+      id: "Player-1",
+      auraEvents: [
+        // no REMOVED before the next APPLIED: closed at its 6 s length
+        ev("357210", "Player-1", 30_000, LogEvent.SPELL_AURA_APPLIED),
+        ev("357210", "Player-1", 90_000, LogEvent.SPELL_AURA_APPLIED),
+        ev("357210", "Player-1", 92_000, LogEvent.SPELL_AURA_REMOVED),
+        // two ids overlapping: each its own piece
+        ev("357210", "Player-1", 100_000, LogEvent.SPELL_AURA_APPLIED),
+        ev("433874", "Player-1", 100_500, LogEvent.SPELL_AURA_APPLIED),
+        ev("357210", "Player-1", 102_000, LogEvent.SPELL_AURA_REMOVED),
+        ev("433874", "Player-1", 103_000, LogEvent.SPELL_AURA_REMOVED),
+        // never removed: closed at its 3.75 s length
+        ev("433874", "Player-1", 150_000, LogEvent.SPELL_AURA_APPLIED),
+      ],
+      actionIn: [],
+    } as unknown as ICombatUnit;
+    expect(
+      buildCannotCastIntervals(unit, new Set(["Enemy-1"])).sort(
+        (a, b) => a.from - b.from,
+      ),
+    ).toEqual([
+      { from: 30_000, to: 36_000 },
+      { from: 90_000, to: 92_000 },
+      { from: 100_000, to: 102_000 },
+      { from: 100_500, to: 103_000 },
+      { from: 150_000, to: 153_750 },
+    ]);
+  });
+
+  it("a death's lock chain counts the flight's time but does not name it as a CC (agy 40-FT-85)", () => {
+    const named = [
+      {
+        from: 10_000,
+        to: 12_000,
+        spellId: "357210",
+        lockout: false,
+        self: true as const,
+      },
+      { from: 12_000, to: 15_000, spellId: "853", lockout: false },
+    ];
+    const chain = deathLockChain(named, 15_000, 12_000);
+    expect(chain.links.map((l) => l.spellId)).toEqual(["853"]);
+    expect(chain.lockedMs).toBe(5_000);
+  });
+
+  it("a 1 ms gap is not filled: the covered time stays what the log shows (codex 40-FT-83)", () => {
+    const unit = {
+      id: "Player-1",
+      auraEvents: [
+        ev("33786", "Enemy-1", 0, LogEvent.SPELL_AURA_APPLIED),
+        ev("33786", "Enemy-1", 2_000, LogEvent.SPELL_AURA_REMOVED),
+        ev("33786", "Enemy-1", 2_001, LogEvent.SPELL_AURA_APPLIED),
+        ev("33786", "Enemy-1", 4_001, LogEvent.SPELL_AURA_REMOVED),
+      ],
+      actionIn: [],
+    } as unknown as ICombatUnit;
+    expect(buildCannotCastIntervals(unit, new Set(["Enemy-1"]))).toEqual([
+      { from: 0, to: 2_000 },
+      { from: 2_001, to: 4_001 },
+    ]);
+  });
+
+  it("a removal closes ITS caster's application: a second caster's same-id stun runs to its own removal (ruling P-FU-H23)", () => {
+    // 110-5-617's shape: Hammer of Justice from one paladin at 90.0 (5 s),
+    // from the other at 95.1 — landing before the first one's REMOVED at
+    // 95.5 — and removed at 98.1. Paired by spell alone, the second stun
+    // ended at 95.5 and the unit read as free for 2.6 s of it.
+    const unit = {
+      id: "Player-1",
+      auraEvents: [
+        ev("853", "Enemy-1", 90_000, LogEvent.SPELL_AURA_APPLIED),
+        ev("853", "Enemy-2", 95_100, LogEvent.SPELL_AURA_APPLIED),
+        ev("853", "Enemy-1", 95_500, LogEvent.SPELL_AURA_REMOVED),
+        ev("853", "Enemy-2", 98_100, LogEvent.SPELL_AURA_REMOVED),
+      ],
+      actionIn: [],
+    } as unknown as ICombatUnit;
+    const both = new Set(["Enemy-1", "Enemy-2"]);
+    expect(buildCannotCastIntervals(unit, both)).toEqual([
+      { from: 90_000, to: 95_500 },
+      { from: 95_100, to: 98_100 },
+    ]);
+    expect(
+      coveredMsWithin(buildCannotCastIntervals(unit, both), 90_000, 99_000),
+    ).toBe(8_100);
+    // each interval names its own caster
+    expect(
+      castBlockingAuraIntervals(unit, both).map((a) => [
+        a.srcUnitId,
+        a.from,
+        a.to,
+      ]),
+    ).toEqual([
+      ["Enemy-1", 90_000, 95_500],
+      ["Enemy-2", 95_100, 98_100],
+    ]);
+  });
+
+  it("a BROKEN line's source is the breaker: it closes the earliest pending application of the spell", () => {
+    // Fear from the enemy warlock, broken by the enemy mage's damage — the
+    // BROKEN_SPELL line carries the mage, and still ends the warlock's Fear.
+    // No REMOVED line here on purpose: the break alone has to close it (with
+    // the caster's REMOVED in the fixture the exact-key match would close the
+    // interval at the same time and the fallback would go untested).
+    const both = new Set(["Enemy-1", "Enemy-2"]);
+    for (const breakEvent of [
+      LogEvent.SPELL_AURA_BROKEN_SPELL,
+      LogEvent.SPELL_AURA_BROKEN,
+    ]) {
+      const unit = {
+        id: "Player-1",
+        auraEvents: [
+          ev("5782", "Enemy-1", 10_000, LogEvent.SPELL_AURA_APPLIED),
+          ev("5782", "Enemy-2", 12_400, breakEvent),
+        ],
+        actionIn: [],
+      } as unknown as ICombatUnit;
+      expect(castBlockingAuraIntervals(unit, both)).toEqual([
+        expect.objectContaining({
+          srcUnitId: "Enemy-1",
+          from: 10_000,
+          to: 12_400,
+        }),
+      ]);
+    }
+  });
+
+  it("the log's shape — BROKEN, then the caster's REMOVED: one interval ending at the REMOVED, which closes nothing else", () => {
+    // the REMOVED arrives 300 ms after the break here so the two cannot be
+    // told apart by luck; a later Fear from the same caster is its own
+    // interval, not swallowed by the leftover REMOVED. FT-T08 (2026-10-09):
+    // the aura is on the unit until its REMOVED — the interval ends there,
+    // not at the BROKEN line (was 12_400).
+    const unit = {
+      id: "Player-1",
+      auraEvents: [
+        ev("5782", "Enemy-1", 10_000, LogEvent.SPELL_AURA_APPLIED),
+        ev("5782", "Enemy-2", 12_400, LogEvent.SPELL_AURA_BROKEN_SPELL),
+        ev("5782", "Enemy-1", 12_700, LogEvent.SPELL_AURA_REMOVED),
+        ev("5782", "Enemy-1", 20_000, LogEvent.SPELL_AURA_APPLIED),
+        ev("5782", "Enemy-1", 23_000, LogEvent.SPELL_AURA_REMOVED),
+      ],
+      actionIn: [],
+    } as unknown as ICombatUnit;
+    expect(
+      buildCannotCastIntervals(unit, new Set(["Enemy-1", "Enemy-2"])),
+    ).toEqual([
+      { from: 10_000, to: 12_700 },
+      { from: 20_000, to: 23_000 },
+    ]);
+  });
+
+  it("one caster re-applying with no removal between keeps one interval from the first application", () => {
+    const unit = {
+      id: "Player-1",
+      auraEvents: [
+        ev("853", "Enemy-1", 10_000, LogEvent.SPELL_AURA_APPLIED),
+        ev("853", "Enemy-1", 11_000, LogEvent.SPELL_AURA_APPLIED),
+        ev("853", "Enemy-1", 14_000, LogEvent.SPELL_AURA_REMOVED),
+      ],
+      actionIn: [],
+    } as unknown as ICombatUnit;
+    expect(buildCannotCastIntervals(unit, new Set(["Enemy-1"]))).toEqual([
+      { from: 10_000, to: 14_000 },
     ]);
   });
 

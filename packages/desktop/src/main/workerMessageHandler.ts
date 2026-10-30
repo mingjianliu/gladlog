@@ -1,5 +1,5 @@
-import type { WorkerToMain } from "../shared/protocol";
 import type { LogsStatusSnapshot } from "../preload/api";
+import type { WorkerToMain } from "../shared/protocol";
 import type { MatchStore, StoredMatchMeta } from "./matchStore";
 import type { RecorderService } from "./recorder";
 

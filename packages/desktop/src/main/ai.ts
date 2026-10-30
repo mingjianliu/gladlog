@@ -72,7 +72,7 @@ export function buildCoachSystemPrompt(
 ): string {
   const language =
     lang === "zh"
-      ? "Respond entirely in Simplified Chinese (简体中文). Keep spell/ability names in English exactly as written in the data — never translate them into Chinese, even inline; you may explain them in Chinese, but the name token itself must stay English. Every other fact string quoted from the data (facts.postKick such as \"pressed 3x but rejected (Not yet recovered)\", lockout / reach / DR labels, [BURST ANSWERED] extras) must be rendered in Chinese in your own words — never paste an English phrase other than a spell name into the reply (reliability round 3 N12: English postKick text appeared verbatim in Chinese replies)."
+      ? 'Respond entirely in Simplified Chinese (简体中文). Keep spell/ability names in English exactly as written in the data — never translate them into Chinese, even inline; you may explain them in Chinese, but the name token itself must stay English. Every other fact string quoted from the data (facts.postKick such as "pressed 3x but rejected (Not yet recovered)", lockout / reach / DR labels, [BURST ANSWERED] extras) must be rendered in Chinese in your own words — never paste an English phrase other than a spell name into the reply (reliability round 3 N12: English postKick text appeared verbatim in Chinese replies).'
       : "Respond in English.";
   const parts = [
     `You are a World of Warcraft arena coach reviewing a player's match. Be direct, specific, and grounded strictly in the provided events. ${language}`,
@@ -136,15 +136,22 @@ export function realClientFactory(key: string): AnthropicLike {
       max_tokens: number;
       system?: string;
       messages: { role: "user"; content: string }[];
+      signal?: AbortSignal;
     }): AsyncIterable<{ delta?: string }> {
       const { Anthropic } = await import("@anthropic-ai/sdk");
       const client = new Anthropic({ apiKey: key });
-      const stream = await client.messages.stream({
-        model: params.model,
-        max_tokens: params.max_tokens,
-        ...(params.system ? { system: params.system } : {}),
-        messages: params.messages,
-      });
+      // `signal` aborts the HTTP request itself: a consumer that gives up on a
+      // stalled read (the self-review deadline) cannot reach the `finally`
+      // below while next() is still pending (codex review 50-SR-01 #2).
+      const stream = await client.messages.stream(
+        {
+          model: params.model,
+          max_tokens: params.max_tokens,
+          ...(params.system ? { system: params.system } : {}),
+          messages: params.messages,
+        },
+        params.signal ? { signal: params.signal } : undefined,
+      );
 
       try {
         for await (const event of stream) {

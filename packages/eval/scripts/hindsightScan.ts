@@ -15,9 +15,10 @@
  * MANIFEST) to get both a built corpus's ordinals and freshly-parsed
  * candidates in the same pass.
  */
+import { ensureAnalysisData } from "@gladlog/analysis";
+
 import { resolveEvalHome, runDir } from "../src/evalHome";
 import { runCheck, runSynthesize } from "../src/quality/hindsightScan";
-import { ensureAnalysisData } from "@gladlog/analysis";
 
 function arg(flag: string): string | undefined {
   const i = process.argv.indexOf(flag);

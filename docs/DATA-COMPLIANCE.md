@@ -38,8 +38,8 @@ https://wowarenalogs.com/api/graphql` with a Battle.net session cookie,
 `latestMatches(...)` with server-side `bracket` / `minRating` /
 `compQueryString` filters, page size capped at 50, matches from the last hour
 embargoed. A raw log is then obtained through `logDownloadUrl(matchId)`, which
-returns a 10-minute V4 signed URL and **charges one of 15 distinct logs per
-user per UTC day** (their `accessLimits.ts`: flat, no tiers; an `admin`
+returns a 10-minute V4 signed URL and **charges one of 30 distinct logs per
+user per UTC day** (15 until they raised it on 2026-10-20; their `accessLimits.ts`: flat, no tiers; an `admin`
 profile tag is exempt, a `blocked` tag refuses everything). This is the
 interface their own web client uses, and the quota is theirs to set — we
 consume it as offered, one account, and stop when the server says stop.
@@ -261,10 +261,10 @@ Two consequences, both settled on 2026-09-15:
   requests a grant immediately before each download, prints the server's
   `downloadsUsedToday / downloadsQuota` after every match, and stops the
   moment the server refuses (`LOG_QUOTA_EXCEEDED`) — it never guesses the
-  count locally, the server's counter is the predicate. Fifteen a day is what
+  count locally, the server's counter is the predicate. Thirty a day is what
   a spec/rating sample needs and nothing like a corpus, which is the right
   size. The daily routine (`npm run logs:daily`, launchd, once a day at 21:00
-  local) takes 10 Solo Shuffle objects and 3v3 for the rest, all at 2100+, and
+  local) takes 20 Solo Shuffle objects and 3v3 for the rest (10), all at 2100+, and
   a rerun on a day whose quota is spent makes no request at all. The session cookie is a credential and lives outside every repo
   (`~/.gladlog/wal-session-cookie` by default).
 

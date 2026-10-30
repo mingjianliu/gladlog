@@ -120,7 +120,7 @@ describe('combatStates', () => {
         } as any,
         {
           logLine: { event: LogEvent.SPELL_AURA_APPLIED, timestamp: 7000 },
-          spellId: '215982',
+          spellId: '215769',
           spellName: 'Spirit of Redemption',
         } as any,
       ],

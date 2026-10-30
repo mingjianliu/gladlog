@@ -22,18 +22,21 @@
  *     end to end, each with a negative control so it cannot silently no-op.
  */
 import { ensureAnalysisData } from "@gladlog/analysis";
+import * as auditFindings from "@gladlog/analysis/src/analysis/auditFindings";
 import * as burstWindowDecisionPoints from "@gladlog/analysis/src/analysis/burstWindowDecisionPoints";
 import * as candidateFindings from "@gladlog/analysis/src/analysis/candidateFindings";
 import * as backlashDispel from "@gladlog/analysis/src/analysis/candidates/backlashDispel";
 import * as burstWindowResponse from "@gladlog/analysis/src/analysis/candidates/burstWindowResponse";
 import * as cooldownTiming from "@gladlog/analysis/src/analysis/candidates/cooldownTiming";
 import * as kickPriority from "@gladlog/analysis/src/analysis/candidates/kickPriority";
+import * as massDispel from "@gladlog/analysis/src/analysis/candidates/massDispel";
 import * as candidatesShared from "@gladlog/analysis/src/analysis/candidates/shared";
 import * as teammateCrisisIdle from "@gladlog/analysis/src/analysis/candidates/teammateCrisisIdle";
 import * as cdTriggerPrior from "@gladlog/analysis/src/analysis/cdTriggerPrior";
 import * as crisisDecisionPoints from "@gladlog/analysis/src/analysis/crisisDecisionPoints";
 import * as factFormat from "@gladlog/analysis/src/analysis/factFormat";
 import * as findingCategories from "@gladlog/analysis/src/analysis/findingCategories";
+import * as findingsCount from "@gladlog/analysis/src/analysis/findingsCount";
 import * as hindsightLint from "@gladlog/analysis/src/analysis/hindsightLint";
 import * as momentSnapshot from "@gladlog/analysis/src/analysis/momentSnapshot";
 import * as stackedDefensives from "@gladlog/analysis/src/analysis/stackedDefensives";
@@ -44,13 +47,21 @@ import * as claimChecker from "@gladlog/analysis/src/compare/claimChecker";
 import * as burstAnswered from "@gladlog/analysis/src/context/burstAnswered";
 import * as ccUse from "@gladlog/analysis/src/context/ccUse";
 import * as cdPrior from "@gladlog/analysis/src/context/cdPrior";
+import * as controlRejectedPresses from "@gladlog/analysis/src/context/controlRejectedPresses";
 import * as forcedTrinket from "@gladlog/analysis/src/context/forcedTrinket";
+import * as kitUnusedNote from "@gladlog/analysis/src/context/kitUnusedNote";
 import * as matchTimelineSections from "@gladlog/analysis/src/context/matchTimelineSections";
 import * as observedConsequences from "@gladlog/analysis/src/context/observedConsequences";
+import * as peakSpikePlacement from "@gladlog/analysis/src/context/peakSpikePlacement";
 import * as peelOptions from "@gladlog/analysis/src/context/peelOptions";
 import * as resLedgerPrune from "@gladlog/analysis/src/context/resLedgerPrune";
+import * as spellOutcomeLines from "@gladlog/analysis/src/context/spellOutcomeLines";
 import * as stackedDefensivesContext from "@gladlog/analysis/src/context/stackedDefensives";
 import * as timelineHelpers from "@gladlog/analysis/src/context/timelineHelpers";
+import * as timelineCastStopped from "@gladlog/analysis/src/context/timelineSections/castStopped";
+import * as enemyCd from "@gladlog/analysis/src/context/timelineSections/enemyCd";
+import * as healerCastGapFiller from "@gladlog/analysis/src/context/timelineSections/healerCastGapFiller";
+import * as timelineSetup from "@gladlog/analysis/src/context/timelineSections/setup";
 import * as unitLabel from "@gladlog/analysis/src/context/unitLabel";
 import * as abilityProfileMod from "@gladlog/analysis/src/data/abilityProfile";
 import * as arenaGeometry from "@gladlog/analysis/src/data/arenaGeometry";
@@ -60,41 +71,69 @@ import * as behaviorPrior from "@gladlog/analysis/src/data/behaviorPrior";
 import * as burstWindowPrior from "@gladlog/analysis/src/data/burstWindowPrior";
 import { CANDIDATE_TYPE_FLAGS } from "@gladlog/analysis/src/data/candidateTypeFlags";
 import * as candidateTypeRegistry from "@gladlog/analysis/src/data/candidateTypeRegistry";
+import * as castEffectAuras from "@gladlog/analysis/src/data/castEffectAuras";
+import * as ccBreakAbilities from "@gladlog/analysis/src/data/ccBreakAbilities";
 import * as cdTriggerPriorData from "@gladlog/analysis/src/data/cdTriggerPrior";
+import * as curatedAbilityFacts from "@gladlog/analysis/src/data/curatedAbilityFacts";
 import * as dispelObservedGenerated from "@gladlog/analysis/src/data/dispelObservedGenerated";
 import * as dispelVerdicts from "@gladlog/analysis/src/data/dispelVerdicts";
+import * as druidForms from "@gladlog/analysis/src/data/druidForms";
+import * as enemyHealCds from "@gladlog/analysis/src/data/enemyHealCds";
 import * as healerSaveCd from "@gladlog/analysis/src/data/healerSaveCd";
 import * as healingVerdicts from "@gladlog/analysis/src/data/healingVerdicts";
 import * as kickPriorityHealSpells from "@gladlog/analysis/src/data/kickPriorityHealSpells";
 import * as kickPriorityPrior from "@gladlog/analysis/src/data/kickPriorityPrior";
 import * as mitigationComponents from "@gladlog/analysis/src/data/mitigationComponents";
+import * as mitigationData from "@gladlog/analysis/src/data/mitigationData";
 import * as outcomeRefs from "@gladlog/analysis/src/data/outcomeRefs";
+import * as overrideVariantsGenerated from "@gladlog/analysis/src/data/overrideVariantsGenerated";
+import * as ownShieldLinks from "@gladlog/analysis/src/data/ownShieldLinks";
+import * as purgeRemovalsGenerated from "@gladlog/analysis/src/data/purgeRemovalsGenerated";
 import * as racialAbilities from "@gladlog/analysis/src/data/racialAbilities";
 import * as rootAuraGenerated from "@gladlog/analysis/src/data/rootAuraGenerated";
+import * as scopedPurges from "@gladlog/analysis/src/data/scopedPurges";
+import * as selfRemovals from "@gladlog/analysis/src/data/selfRemovals";
 import * as sharedChargeGenerated from "@gladlog/analysis/src/data/sharedChargeGenerated";
 import * as spellCategories from "@gladlog/analysis/src/data/spellCategories";
-import * as summonGenerated from "@gladlog/analysis/src/data/summonGenerated";
 import * as spellEffectData from "@gladlog/analysis/src/data/spellEffectData";
+import * as spellIdLists from "@gladlog/analysis/src/data/spellIdLists";
 import * as spellReach from "@gladlog/analysis/src/data/spellReach";
 import * as spellSchools from "@gladlog/analysis/src/data/spellSchools";
 import * as spellTags from "@gladlog/analysis/src/data/spellTags";
 import * as spellTargeting from "@gladlog/analysis/src/data/spellTargeting";
+import * as summonGenerated from "@gladlog/analysis/src/data/summonGenerated";
 import * as syncWindowPrior from "@gladlog/analysis/src/data/syncWindowPrior";
+import * as talentScriptedCooldowns from "@gladlog/analysis/src/data/talentScriptedCooldowns";
 import * as teammateCrisisPriorData from "@gladlog/analysis/src/data/teammateCrisisPrior";
 import { TIMELINE_LINE_FLAGS } from "@gladlog/analysis/src/data/timelineLineFlags";
 import { PRODUCTION_FACT_CONFIG } from "@gladlog/analysis/src/facts/factProviderConfig";
+import * as allyCopyWall from "@gladlog/analysis/src/utils/allyCopyWall";
+import * as auraEndCause from "@gladlog/analysis/src/utils/auraEndCause";
 import * as auraIntervals from "@gladlog/analysis/src/utils/auraIntervals";
 import * as bracketKey from "@gladlog/analysis/src/utils/bracketKey";
+import * as brokenRowBreaker from "@gladlog/analysis/src/utils/brokenRowBreaker";
 import * as buffDuration from "@gladlog/analysis/src/utils/buffDuration";
+import * as burstHit from "@gladlog/analysis/src/utils/burstHit";
+import * as burstLedger from "@gladlog/analysis/src/utils/burstLedger";
 import * as cannotCastIntervals from "@gladlog/analysis/src/utils/cannotCastIntervals";
+import * as castBarOutcomes from "@gladlog/analysis/src/utils/castBarOutcomes";
 import * as castCancels from "@gladlog/analysis/src/utils/castCancels";
+import * as castCommitSpans from "@gladlog/analysis/src/utils/castCommitSpans";
+import * as castingLocks from "@gladlog/analysis/src/utils/castingLocks";
+import * as castMissRows from "@gladlog/analysis/src/utils/castMissRows";
 import * as castParam from "@gladlog/analysis/src/utils/castParam";
+import * as castPress from "@gladlog/analysis/src/utils/castPress";
+import * as castRowLag from "@gladlog/analysis/src/utils/castRowLag";
+import * as ccBreakAnalysis from "@gladlog/analysis/src/utils/ccBreakAnalysis";
+import * as ccDuration from "@gladlog/analysis/src/utils/ccDuration";
 import * as ccTargetState from "@gladlog/analysis/src/utils/ccTargetState";
 import * as ccTrinketAnalysis from "@gladlog/analysis/src/utils/ccTrinketAnalysis";
-import * as castingLocks from "@gladlog/analysis/src/utils/castingLocks";
 import * as charmedPlayer from "@gladlog/analysis/src/utils/charmedPlayer";
+import * as combatStates from "@gladlog/analysis/src/utils/combatStates";
 import * as cooldowns from "@gladlog/analysis/src/utils/cooldowns";
 import * as counterfactual from "@gladlog/analysis/src/utils/counterfactual";
+import * as damagePress from "@gladlog/analysis/src/utils/damagePress";
+import * as dampening from "@gladlog/analysis/src/utils/dampening";
 import * as deathOutcomeAnalysis from "@gladlog/analysis/src/utils/deathOutcomeAnalysis";
 import * as dispelAnalysis from "@gladlog/analysis/src/utils/dispelAnalysis";
 import * as dispelKind from "@gladlog/analysis/src/utils/dispelKind";
@@ -103,24 +142,45 @@ import * as drAnalysis from "@gladlog/analysis/src/utils/drAnalysis";
 import * as enemyCDs from "@gladlog/analysis/src/utils/enemyCDs";
 import * as enemyDefensives from "@gladlog/analysis/src/utils/enemyDefensives";
 import * as enemyInterrupts from "@gladlog/analysis/src/utils/enemyInterrupts";
-import * as offensiveAuraOccurrences from "@gladlog/analysis/src/utils/offensiveAuraOccurrences";
 import * as externalDamage from "@gladlog/analysis/src/utils/externalDamage";
+import * as forcedDisplacement from "@gladlog/analysis/src/utils/forcedDisplacement";
+import * as gapClosers from "@gladlog/analysis/src/utils/gapClosers";
+import * as groundingRedirects from "@gladlog/analysis/src/utils/groundingRedirects";
+import * as healerExposureAnalysis from "@gladlog/analysis/src/utils/healerExposureAnalysis";
 import * as healerOffenseAnalysis from "@gladlog/analysis/src/utils/healerOffenseAnalysis";
+import * as hiddenPress from "@gladlog/analysis/src/utils/hiddenPress";
 import * as incomingPressure from "@gladlog/analysis/src/utils/incomingPressure";
+import * as karmaFeed from "@gladlog/analysis/src/utils/karmaFeed";
+import * as kickAudit from "@gladlog/analysis/src/utils/kickAudit";
+import * as kickLockout from "@gladlog/analysis/src/utils/kickLockout";
 import * as killAttempts from "@gladlog/analysis/src/utils/killAttempts";
+import * as killingBlowMod from "@gladlog/analysis/src/utils/killingBlow";
 import * as killWindowFactsMod from "@gladlog/analysis/src/utils/killWindowFacts";
 import * as killWindowTargetSelection from "@gladlog/analysis/src/utils/killWindowTargetSelection";
+import * as localizedText from "@gladlog/analysis/src/utils/localizedText";
+import * as logEra from "@gladlog/analysis/src/utils/logEra";
 import * as losAnalysis from "@gladlog/analysis/src/utils/losAnalysis";
+import * as offensiveAuraOccurrences from "@gladlog/analysis/src/utils/offensiveAuraOccurrences";
+import * as offensiveWindows from "@gladlog/analysis/src/utils/offensiveWindows";
+import * as petCommandsMod from "@gladlog/analysis/src/utils/petCommands";
 import * as positionAnalysis from "@gladlog/analysis/src/utils/positionAnalysis";
 import * as positionSampling from "@gladlog/analysis/src/utils/positionSampling";
+import * as pvpTrinketUsesMod from "@gladlog/analysis/src/utils/pvpTrinketUses";
 import * as rawStreams from "@gladlog/analysis/src/utils/rawStreams";
 import * as renderGrid from "@gladlog/analysis/src/utils/renderGrid";
 import * as resourceAt from "@gladlog/analysis/src/utils/resourceAt";
 import * as rootReachability from "@gladlog/analysis/src/utils/rootReachability";
+import * as rosterSide from "@gladlog/analysis/src/utils/rosterSide";
+import * as roundEnd from "@gladlog/analysis/src/utils/roundEnd";
+import * as sanctuaryRemovalsMod from "@gladlog/analysis/src/utils/sanctuaryRemovals";
+import * as selfDefensiveMechanismMod from "@gladlog/analysis/src/utils/selfDefensiveMechanism";
+import * as specBaselines from "@gladlog/analysis/src/utils/specBaselines";
 import * as spellDanger from "@gladlog/analysis/src/utils/spellDanger";
 import * as spellMechanics from "@gladlog/analysis/src/utils/spellMechanics";
 import * as spellRange from "@gladlog/analysis/src/utils/spellRange";
 import * as stats from "@gladlog/analysis/src/utils/stats";
+import * as summonKind from "@gladlog/analysis/src/utils/summonKind";
+import * as summonLife from "@gladlog/analysis/src/utils/summonLife";
 import * as summonOwner from "@gladlog/analysis/src/utils/summonOwner";
 import * as summonReachability from "@gladlog/analysis/src/utils/summonReachability";
 import * as talentBehaviors from "@gladlog/analysis/src/utils/talentBehaviors";
@@ -128,13 +188,17 @@ import * as talentOwnership from "@gladlog/analysis/src/utils/talentOwnership";
 import * as talents from "@gladlog/analysis/src/utils/talents";
 import * as threatAssessment from "@gladlog/analysis/src/utils/threatAssessment";
 import * as trinketCooldown from "@gladlog/analysis/src/utils/trinketCooldown";
+import * as unitDeath from "@gladlog/analysis/src/utils/unitDeath";
 import * as warlockPet from "@gladlog/analysis/src/utils/warlockPet";
 import {
   decodeAdvanced as parserDecodeAdvanced,
+  logLineInstantMs as parserLogLineInstantMs,
   parseTimestamp as parserParseTimestamp,
   splitLine as parserSplitLine,
 } from "@gladlog/parser";
 import { CombatUnitSpec } from "@gladlog/parser-compat";
+import * as convertMod from "@gladlog/parser-compat/src/convert";
+import * as maxHpLagMod from "@gladlog/parser-compat/src/maxHpLag";
 import { readdirSync, readFileSync } from "fs";
 import { join } from "path";
 
@@ -151,6 +215,7 @@ import * as pvpLogFetch from "../../corpus-tools/src/pvpLogFetch";
 import * as obsConfigWriter from "../../desktop/src/main/obsConfigWriter";
 import * as dashboard from "../../desktop/src/renderer/src/components/dashboard";
 import * as analysisInput from "../../desktop/src/renderer/src/report/derive/analysisInput";
+import * as dispelSummary from "../../desktop/src/renderer/src/report/derive/dispelSummary";
 import * as flowSeries from "../../desktop/src/renderer/src/report/derive/flowSeries";
 import * as meterRows from "../../desktop/src/renderer/src/report/derive/meterRows";
 import * as reportMistakes from "../../desktop/src/renderer/src/report/derive/mistakes";
@@ -164,6 +229,7 @@ import * as videoTime from "../../desktop/src/shared/videoTime";
 // standalone on the gaming machine), so corpus-tools cannot import it. The
 // naming relation between the two is asserted below instead.
 import * as collectLogs from "../../log-pipeline/src/collectLogs";
+import * as swingTwins from "../../parser/src/l3/swingTwins";
 // Desktop renderer predicates (the "Report UI" section). Relative for a
 // different reason than corpus-tools: eval has no dependency on the desktop app
 // and should not grow one. Both modules are leaf-safe to import — flowSeries
@@ -220,6 +286,26 @@ const INDEX: PredicateRow[] = [
     mod: renderGrid,
   },
   {
+    file: `${A}/utils/renderGrid.ts`,
+    symbol: "fmtWholeSeconds",
+    mod: renderGrid,
+  },
+  {
+    file: `${A}/utils/renderGrid.ts`,
+    symbol: "fmtWholeSecondsOrZero",
+    mod: renderGrid,
+  },
+  {
+    file: `${A}/utils/renderGrid.ts`,
+    symbol: "parseWholeSeconds",
+    mod: renderGrid,
+  },
+  {
+    file: `${A}/utils/renderGrid.ts`,
+    symbol: "WHOLE_SECONDS_RE_SRC",
+    mod: renderGrid,
+  },
+  {
     file: `${A}/analysis/factFormat.ts`,
     symbol: "fmtFactTime",
     mod: factFormat,
@@ -240,6 +326,13 @@ const INDEX: PredicateRow[] = [
     symbol: "parseRawTimestamp",
     mod: rawStreams,
   },
+  // … and the OTHER reading of the same date prefix: the instant the line
+  // states for itself (its own UTC offset, signed or not)
+  {
+    file: `${A}/utils/rawStreams.ts`,
+    symbol: "rawLineInstantMs",
+    mod: rawStreams,
+  },
   {
     file: `${A}/utils/rawStreams.ts`,
     symbol: "mirrorDecodeAdvanced",
@@ -250,6 +343,13 @@ const INDEX: PredicateRow[] = [
     file: `${A}/utils/rawStreams.ts`,
     symbol: "roundDurationSOf",
     mod: rawStreams,
+  },
+  // FT-T01: one swing, one damage event (parser side; the raw-level scan
+  // swingLandedScan.ts imports the same function).
+  {
+    file: "packages/parser/src/l3/swingTwins.ts",
+    symbol: "swingLandedTwins",
+    mod: swingTwins,
   },
   {
     file: `${A}/analysis/candidates/shared.ts`,
@@ -265,6 +365,76 @@ const INDEX: PredicateRow[] = [
     file: `${A}/utils/castCancels.ts`,
     symbol: "CAST_INTERRUPTED_REASONS",
     mod: castCancels,
+  },
+  // cast bars begun (FT-T16 D15 "2c")
+  {
+    file: `${A}/utils/castCancels.ts`,
+    symbol: "castBarStartsOf",
+    mod: castCancels,
+  },
+  {
+    file: `${A}/utils/castCancels.ts`,
+    symbol: "castBarStartsInRound",
+    mod: castCancels,
+  },
+  {
+    file: `${A}/utils/castCancels.ts`,
+    symbol: "castBarsOfCooldown",
+    mod: castCancels,
+  },
+  // how a cast bar ended, the owner's control cast bars, what a [REJECTED]
+  // line states (FT-T16 D15 "2b")
+  {
+    file: `${A}/utils/castCancels.ts`,
+    symbol: "ownerCastBarOutcomes",
+    mod: castCancels,
+  },
+  {
+    file: `${A}/context/ccUse.ts`,
+    symbol: "ownerControlCastBars",
+    mod: ccUse,
+  },
+  {
+    file: `${A}/context/spellOutcomeLines.ts`,
+    symbol: "rejectRunStatesRow",
+    mod: spellOutcomeLines,
+  },
+  {
+    file: `${A}/context/spellOutcomeLines.ts`,
+    symbol: "rejectKindOf",
+    mod: spellOutcomeLines,
+  },
+  {
+    file: `${A}/context/spellOutcomeLines.ts`,
+    symbol: "REJECT_WHY",
+    mod: spellOutcomeLines,
+  },
+  // which SPELL_MISSED row is a control cast's own (FT-T16 D15 "3c")
+  {
+    file: `${A}/utils/castMissRows.ts`,
+    symbol: "missBelongsToCast",
+    mod: castMissRows,
+  },
+  {
+    file: `${A}/utils/castMissRows.ts`,
+    symbol: "CC_MISS_TAG_WORD",
+    mod: castMissRows,
+  },
+  // fact6 D14 (F20): was this press refused as IMMUNE
+  {
+    file: `${A}/utils/castMissRows.ts`,
+    symbol: "pressImmuneMissRows",
+    mod: castMissRows,
+  },
+  {
+    file: `${A}/utils/castMissRows.ts`,
+    symbol: "pressRefusedImmuneOn",
+    mod: castMissRows,
+  },
+  {
+    file: `${A}/utils/castMissRows.ts`,
+    symbol: "pressFollowUpCastRows",
+    mod: castMissRows,
   },
   // HP sampling
   {
@@ -284,6 +454,11 @@ const INDEX: PredicateRow[] = [
   },
   {
     file: `${A}/utils/cooldowns.ts`,
+    symbol: "hpAtPress",
+    mod: cooldowns,
+  },
+  {
+    file: `${A}/utils/cooldowns.ts`,
     symbol: "gridHpSample",
     mod: cooldowns,
   },
@@ -293,9 +468,9 @@ const INDEX: PredicateRow[] = [
     mod: cooldowns,
   },
   {
-    file: `${A}/analysis/crisisDecisionPoints.ts`,
-    symbol: "isDmgSpikeTrough",
-    mod: crisisDecisionPoints,
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "isHpTroughWorthPrinting",
+    mod: cooldowns,
   },
   {
     file: `${A}/context/observedConsequences.ts`,
@@ -308,6 +483,11 @@ const INDEX: PredicateRow[] = [
     mod: unitLabel,
   },
   {
+    file: `${A}/context/unitLabel.ts`,
+    symbol: "rosterLabelByName",
+    mod: unitLabel,
+  },
+  {
     file: `${A}/utils/enemyDefensives.ts`,
     symbol: "enemyDefensiveEvents",
     mod: enemyDefensives,
@@ -315,6 +495,13 @@ const INDEX: PredicateRow[] = [
   {
     file: `${A}/utils/cooldowns.ts`,
     symbol: "isDeadAtRenderSecond",
+    mod: cooldowns,
+  },
+  // 2026-10-11: a rendered window's endpoint = the tick as a number (0 on a
+  // `dead` second) — [DMG SPIKE] and the burst ledger's `Target:` line
+  {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "gridEndpointHpPct",
     mod: cooldowns,
   },
   // Cooldown availability
@@ -350,6 +537,16 @@ const INDEX: PredicateRow[] = [
     mod: dispelAnalysis,
   },
   {
+    file: `${A}/utils/dispelAnalysis.ts`,
+    symbol: "missedPurgeNotActionable",
+    mod: dispelAnalysis,
+  },
+  {
+    file: `${A}/utils/pvpTrinketUses.ts`,
+    symbol: "pvpTrinketUses",
+    mod: pvpTrinketUsesMod,
+  },
+  {
     file: `${A}/utils/cooldowns.ts`,
     symbol: "chargesAvailableAt",
     mod: cooldowns,
@@ -374,6 +571,12 @@ const INDEX: PredicateRow[] = [
     symbol: "selfCastNoopAnnotatedName",
     mod: cooldowns,
   },
+  // user ruling P-FU-b7-DS: the cost-norm book has a third reader (the cheaper note)
+  {
+    file: `${A}/data/curatedAbilityFacts.ts`,
+    symbol: "costNormPhrase",
+    mod: curatedAbilityFacts,
+  },
   {
     file: `${A}/data/dispelVerdicts.ts`,
     symbol: "DISPEL_VERDICTS",
@@ -382,6 +585,26 @@ const INDEX: PredicateRow[] = [
   {
     file: `${A}/utils/cooldowns.ts`,
     symbol: "cdSecondsUntilReady",
+    mod: cooldowns,
+  },
+  {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "applyEventReductions",
+    mod: cooldowns,
+  },
+  {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "cdRealisedSecondsUntilReady",
+    mod: cooldowns,
+  },
+  {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "hpTroughInEventSpan",
+    mod: cooldowns,
+  },
+  {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "lowestHpTroughInEventSpan",
     mod: cooldowns,
   },
   {
@@ -454,6 +677,12 @@ const INDEX: PredicateRow[] = [
     symbol: "USABLE_WHILE_CC_SPELL_IDS",
     mod: cooldowns,
   },
+  // user ruling U-T1: the immunity route to usable-while-stunned
+  {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "USABLE_WHILE_STUNNED_BY_PURGE_IDS",
+    mod: cooldowns,
+  },
   {
     file: `${A}/utils/cooldowns.ts`,
     symbol: "usableWhileStunned",
@@ -475,8 +704,59 @@ const INDEX: PredicateRow[] = [
     mod: cooldowns,
   },
   {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "forbearanceStopsPress",
+    mod: cooldowns,
+  },
+  {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "selfForbearanceUntil",
+    mod: cooldowns,
+  },
+  // FT F22: Hypothermia, read off the log; one predicate with Forbearance
+  {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "lockoutDebuffStopsPress",
+    mod: cooldowns,
+  },
+  {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "hypothermiaStopsPress",
+    mod: cooldowns,
+  },
+  {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "hypothermiaUntil",
+    mod: cooldowns,
+  },
+  {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "ownPressLockout",
+    mod: cooldowns,
+  },
+  {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "cdRemainingWholeSeconds",
+    mod: cooldowns,
+  },
+  {
+    file: `${A}/context/resLedgerPrune.ts`,
+    symbol: "resCcRemainingText",
+    mod: resLedgerPrune,
+  },
+  {
     file: `${A}/utils/deathOutcomeAnalysis.ts`,
     symbol: "externalReachYards",
+    mod: deathOutcomeAnalysis,
+  },
+  {
+    file: `${A}/utils/deathOutcomeAnalysis.ts`,
+    symbol: "positionalWallReaches",
+    mod: deathOutcomeAnalysis,
+  },
+  {
+    file: `${A}/utils/deathOutcomeAnalysis.ts`,
+    symbol: "enemyTargetReaches",
     mod: deathOutcomeAnalysis,
   },
   {
@@ -487,6 +767,42 @@ const INDEX: PredicateRow[] = [
   {
     file: `${A}/utils/drAnalysis.ts`,
     symbol: "drCategoryOfCast",
+    mod: drAnalysis,
+  },
+  // fact6 F20 (D10 D29): one DR walk, two queries, one history-source predicate
+  {
+    file: `${A}/utils/drAnalysis.ts`,
+    symbol: "getDRLevel",
+    mod: drAnalysis,
+  },
+  {
+    file: `${A}/utils/drAnalysis.ts`,
+    symbol: "drResetMsAt",
+    mod: drAnalysis,
+  },
+  {
+    file: `${A}/utils/drAnalysis.ts`,
+    symbol: "drLevelAtLanding",
+    mod: drAnalysis,
+  },
+  {
+    file: `${A}/utils/drAnalysis.ts`,
+    symbol: "drLevelNextAt",
+    mod: drAnalysis,
+  },
+  {
+    file: `${A}/utils/drAnalysis.ts`,
+    symbol: "isDrHistorySource",
+    mod: drAnalysis,
+  },
+  {
+    file: `${A}/utils/drAnalysis.ts`,
+    symbol: "buildCcCategoryHistory",
+    mod: drAnalysis,
+  },
+  {
+    file: `${A}/utils/drAnalysis.ts`,
+    symbol: "ccRefreshIsNewApplication",
     mod: drAnalysis,
   },
   {
@@ -510,6 +826,12 @@ const INDEX: PredicateRow[] = [
     symbol: "threatActiveAt",
     mod: threatAssessment,
   },
+  // user ruling U-T2: the per-unit half of threatActiveAt
+  {
+    file: `${A}/utils/threatAssessment.ts`,
+    symbol: "unitUnderFireAt",
+    mod: threatAssessment,
+  },
   {
     file: `${A}/utils/threatAssessment.ts`,
     symbol: "matchThreatLevel",
@@ -525,6 +847,47 @@ const INDEX: PredicateRow[] = [
     symbol: "incomingPressureEvents",
     mod: incomingPressure,
   },
+  {
+    file: `${A}/utils/rosterSide.ts`,
+    symbol: "isSameSideSource",
+    mod: rosterSide,
+  },
+  // triage missed-cleanse F-C1: postCcDamage = landed hits minus redistribution
+  {
+    file: `${A}/utils/incomingPressure.ts`,
+    symbol: "sumLandedPressure",
+    mod: incomingPressure,
+  },
+  {
+    file: `${A}/utils/incomingPressure.ts`,
+    symbol: "isDeferralAbsorb",
+    mod: incomingPressure,
+  },
+  {
+    file: `${A}/utils/damagePress.ts`,
+    symbol: "isSameSpell",
+    mod: damagePress,
+  },
+  {
+    file: `${A}/data/enemyHealCds.ts`,
+    symbol: "isEnemyHealCdFor",
+    mod: enemyHealCds,
+  },
+  {
+    file: `${A}/utils/ccTargetState.ts`,
+    symbol: "ccReachAt",
+    mod: ccTargetState,
+  },
+  {
+    file: `${A}/utils/incomingPressure.ts`,
+    symbol: "incomingPressureBySchool",
+    mod: incomingPressure,
+  },
+  {
+    file: `${A}/utils/incomingPressure.ts`,
+    symbol: "logSchoolMask",
+    mod: incomingPressure,
+  },
   // Talent ownership
   {
     file: `${A}/utils/talentOwnership.ts`,
@@ -536,6 +899,19 @@ const INDEX: PredicateRow[] = [
     symbol: "talentModifierOwnershipOf",
     mod: talentOwnership,
   },
+  // 2026-10-13: the button a talent grants when its entry carries another
+  // spell id than the cast (Fortifying Brew 388917 → 115203) — the cooldown
+  // ledger's ownership rule and talentOwnershipFromTables read one map
+  {
+    file: `${A}/utils/talents.ts`,
+    symbol: "getSpecTalentButtonGrants",
+    mod: talents,
+  },
+  {
+    file: `${A}/utils/talents.ts`,
+    symbol: "getPlayerTalentGrantedButtonIds",
+    mod: talents,
+  },
   {
     file: `${A}/data/racialAbilities.ts`,
     symbol: "RACIAL_ABILITIES",
@@ -545,6 +921,21 @@ const INDEX: PredicateRow[] = [
     file: `${A}/data/racialAbilities.ts`,
     symbol: "BREAK_RACIAL_SPELL_IDS",
     mod: racialAbilities,
+  },
+  {
+    file: `${A}/data/ccBreakAbilities.ts`,
+    symbol: "CC_BREAK_CAST_IDS",
+    mod: ccBreakAbilities,
+  },
+  {
+    file: `${A}/data/ccBreakAbilities.ts`,
+    symbol: "breakRemovesCc",
+    mod: ccBreakAbilities,
+  },
+  {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "breakAbilityPresses",
+    mod: ccTrinketAnalysis,
   },
   {
     file: `${A}/data/racialAbilities.ts`,
@@ -571,6 +962,37 @@ const INDEX: PredicateRow[] = [
     file: `${A}/utils/killAttempts.ts`,
     symbol: "softerTargetAt",
     mod: killAttempts,
+  },
+  // R08 (b): which walls a unit has in hand — the kit's [UNUSED] and the tier
+  {
+    file: `${A}/utils/killWindowTargetSelection.ts`,
+    symbol: "killOpportunityAt",
+    mod: killWindowTargetSelection,
+  },
+  {
+    file: `${A}/utils/killWindowTargetSelection.ts`,
+    symbol: "WALL_IN_HAND_MIT_IDS",
+    mod: killWindowTargetSelection,
+  },
+  {
+    file: `${A}/utils/killWindowTargetSelection.ts`,
+    symbol: "unpressedWallsOwned",
+    mod: killWindowTargetSelection,
+  },
+  {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "kitRowUnused",
+    mod: cooldowns,
+  },
+  {
+    file: `${A}/utils/killWindowTargetSelection.ts`,
+    symbol: "wallInHandKitNames",
+    mod: killWindowTargetSelection,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkKillTierWallOwnership",
+    mod: promptQualityCheck,
   },
   // Position and geometry
   {
@@ -601,9 +1023,9 @@ const INDEX: PredicateRow[] = [
     mod: positionAnalysis,
   },
   {
-    file: `${A}/utils/positionAnalysis.ts`,
+    file: `${A}/utils/unitDeath.ts`,
     symbol: "isDeadAt",
-    mod: positionAnalysis,
+    mod: unitDeath,
   },
   {
     file: `${A}/utils/rootReachability.ts`,
@@ -691,6 +1113,86 @@ const INDEX: PredicateRow[] = [
     mod: candidateFindings,
   },
   {
+    file: `${A}/data/spellSchools.ts`,
+    symbol: "schoolLockedBy",
+    mod: spellSchools,
+  },
+  {
+    file: `${A}/utils/combatStates.ts`,
+    symbol: "stasisReplayWindows",
+    mod: combatStates,
+  },
+  {
+    file: `${A}/analysis/candidates/shared.ts`,
+    symbol: "ownerPressEvents",
+    mod: candidatesShared,
+  },
+  {
+    file: `${A}/utils/gapClosers.ts`,
+    symbol: "gapCloserStateAt",
+    mod: gapClosers,
+  },
+  {
+    file: `${A}/utils/burstLedger.ts`,
+    symbol: "burstCastSpan",
+    mod: burstLedger,
+  },
+  {
+    file: `${A}/utils/enemyCDs.ts`,
+    symbol: "observedCastEndMs",
+    mod: enemyCDs,
+  },
+  {
+    file: `${A}/utils/enemyCDs.ts`,
+    symbol: "observedEffectEndSeconds",
+    mod: enemyCDs,
+  },
+  {
+    file: `${A}/utils/kickAudit.ts`,
+    symbol: "analyzeKickAudit",
+    mod: kickAudit,
+  },
+  {
+    file: `${A}/utils/kickAudit.ts`,
+    symbol: "kickMissTag",
+    mod: kickAudit,
+  },
+  {
+    file: `${A}/utils/enemyDefensives.ts`,
+    symbol: "FULL_IMMUNITY_IDS",
+    mod: enemyDefensives,
+  },
+  {
+    file: `${A}/utils/enemyDefensives.ts`,
+    symbol: "SCHOOL_LIMITED_IMMUNITY_IDS",
+    mod: enemyDefensives,
+  },
+  {
+    file: `${A}/utils/enemyDefensives.ts`,
+    symbol: "fullImmunityIntervals",
+    mod: enemyDefensives,
+  },
+  {
+    file: `${A}/utils/kickAudit.ts`,
+    symbol: "CAST_QUEUE_TOLERANCE_MS",
+    mod: kickAudit,
+  },
+  {
+    file: `${A}/utils/cannotCastIntervals.ts`,
+    symbol: "castBlockingAuraAt",
+    mod: cannotCastIntervals,
+  },
+  {
+    file: `${A}/utils/cannotCastIntervals.ts`,
+    symbol: "ownFlightIntervals",
+    mod: cannotCastIntervals,
+  },
+  {
+    file: `${A}/utils/talentBehaviors.ts`,
+    symbol: "interruptImmuneWindows",
+    mod: talentBehaviors,
+  },
+  {
     file: `${E}/quality/promptQualityCheck.ts`,
     symbol: "checkKickWaitedOutConsistency",
     mod: promptQualityCheck,
@@ -771,6 +1273,71 @@ const INDEX: PredicateRow[] = [
     symbol: "stayedInHadRealCost",
     mod: positionAnalysis,
   },
+  {
+    file: `${A}/utils/positionAnalysis.ts`,
+    symbol: "mostPressuredInSpan",
+    mod: positionAnalysis,
+  },
+  {
+    file: `${A}/utils/burstHit.ts`,
+    symbol: "hitByAttackers",
+    mod: burstHit,
+  },
+  {
+    file: `${A}/utils/burstHit.ts`,
+    symbol: "immuneHitTargets",
+    mod: burstHit,
+  },
+  {
+    file: `${A}/utils/burstHit.ts`,
+    symbol: "damageTakenBetween",
+    mod: burstHit,
+  },
+  {
+    file: `${A}/utils/positionAnalysis.ts`,
+    symbol: "POSITIONING_BURST_ANSWERED_XREF",
+    mod: positionAnalysis,
+  },
+  {
+    file: `${A}/context/burstAnswered.ts`,
+    symbol: "BURST_ANSWERED_POSITIONING_XREF",
+    mod: burstAnswered,
+  },
+  {
+    file: `${A}/utils/positionAnalysis.ts`,
+    symbol: "topEnemyDamagerInSpan",
+    mod: positionAnalysis,
+  },
+  {
+    file: `${A}/utils/positionAnalysis.ts`,
+    symbol: "topDamagerClause",
+    mod: positionAnalysis,
+  },
+  // FT-T12 D2: the one enemy a STAYED IN / KITED span is measured to — the
+  // producer and the positioning gate's G4d call it
+  {
+    file: `${A}/utils/positionAnalysis.ts`,
+    symbol: "spanMeasuredEnemy",
+    mod: positionAnalysis,
+  },
+  // No burst-span sample on the log owner's corpse — the producer (a span's
+  // last rendered second) and the positioning gate's G4e (every second a
+  // line prints a distance at) call it
+  {
+    file: `${A}/utils/positionAnalysis.ts`,
+    symbol: "burstSpanSampledAfterDeath",
+    mod: positionAnalysis,
+  },
+  {
+    file: `${A}/context/timelineHelpers.ts`,
+    symbol: "dmgSpikeWindowsOf",
+    mod: timelineHelpers,
+  },
+  {
+    file: `${A}/utils/enemyDefensives.ts`,
+    symbol: "isOwnImmunityInterval",
+    mod: enemyDefensives,
+  },
   // Order statistics
   { file: `${A}/utils/stats.ts`, symbol: "toSortedFinite", mod: stats },
   { file: `${A}/utils/stats.ts`, symbol: "medianFinite", mod: stats },
@@ -780,11 +1347,28 @@ const INDEX: PredicateRow[] = [
     symbol: "DMG_SPIKE_THRESHOLD",
     mod: timelineHelpers,
   },
+  // triage other F-O2: the benchmark bracket is a PERSONAL rating floor
+  {
+    file: `${A}/utils/specBaselines.ts`,
+    symbol: "BASELINE_RATING_FLOOR",
+    mod: specBaselines,
+  },
   // GH #100: kill evidence for totems / guardians (12.x logs carry no UNIT_DIED)
   {
-    file: `${A}/context/timelineHelpers.ts`,
+    file: `${A}/utils/summonLife.ts`,
     symbol: "nonPlayerUnitKill",
-    mod: timelineHelpers,
+    mod: summonLife,
+  },
+  // fact6 D22: a final blow is an attacker's (a DAMAGE_SPLIT row never is)
+  {
+    file: `${A}/utils/killingBlow.ts`,
+    symbol: "attackerBlowFor",
+    mod: killingBlowMod,
+  },
+  {
+    file: `${A}/utils/killingBlow.ts`,
+    symbol: "isAttackerDamageRow",
+    mod: killingBlowMod,
   },
   {
     file: `${A}/context/timelineHelpers.ts`,
@@ -866,9 +1450,40 @@ const INDEX: PredicateRow[] = [
     mod: cooldowns,
   },
   {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "cdCanHelpAnotherUnit",
+    mod: cooldowns,
+  },
+  // F20 D1: a save for its holder or for another unit
+  {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "cdHelpsRecipient",
+    mod: cooldowns,
+  },
+  {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "ALLY_REACH_REQUIRES_PVP_TALENT",
+    mod: cooldowns,
+  },
+  {
     file: `${A}/data/spellTargeting.ts`,
     symbol: "reachesAlly",
     mod: spellTargeting,
+  },
+  {
+    file: `${A}/utils/allyCopyWall.ts`,
+    symbol: "allyCopyRecipient",
+    mod: allyCopyWall,
+  },
+  {
+    file: `${A}/utils/enemyDefensives.ts`,
+    symbol: "limitedImmunitySchoolMask",
+    mod: enemyDefensives,
+  },
+  {
+    file: `${A}/utils/enemyDefensives.ts`,
+    symbol: "ENEMY_DEF_IMMUNE_LABEL_RE_SRC",
+    mod: enemyDefensives,
   },
   {
     file: `${A}/data/spellSchools.ts`,
@@ -891,8 +1506,38 @@ const INDEX: PredicateRow[] = [
     mod: summonOwner,
   },
   {
+    file: `${A}/utils/summonKind.ts`,
+    symbol: "summonKindWord",
+    mod: summonKind,
+  },
+  {
+    file: `${A}/utils/summonKind.ts`,
+    symbol: "SUMMON_KIND_RE_SRC",
+    mod: summonKind,
+  },
+  {
+    file: `${A}/context/timelineHelpers.ts`,
+    symbol: "summonKindOf",
+    mod: timelineHelpers,
+  },
+  {
     file: `${A}/utils/resourceAt.ts`,
     symbol: "manaReadingAt",
+    mod: resourceAt,
+  },
+  {
+    file: `${A}/utils/resourceAt.ts`,
+    symbol: "affordableAt",
+    mod: resourceAt,
+  },
+  {
+    file: `${A}/utils/resourceAt.ts`,
+    symbol: "affordableWithin",
+    mod: resourceAt,
+  },
+  {
+    file: `${A}/utils/resourceAt.ts`,
+    symbol: "statedManaCostInRound",
     mod: resourceAt,
   },
   {
@@ -908,6 +1553,17 @@ const INDEX: PredicateRow[] = [
   {
     file: "packages/eval/src/quality/promptQualityCheck.ts",
     symbol: "checkPetCreditSide",
+    mod: promptQualityCheck,
+  },
+  // fact6 D22: a single final blow is never credited to the dead unit's side
+  {
+    file: "packages/eval/src/quality/promptQualityCheck.ts",
+    symbol: "checkKillCreditNotOwnSide",
+    mod: promptQualityCheck,
+  },
+  {
+    file: "packages/eval/src/quality/promptQualityCheck.ts",
+    symbol: "checkBurstAnsweredBottomConsistency",
     mod: promptQualityCheck,
   },
   {
@@ -952,6 +1608,59 @@ const INDEX: PredicateRow[] = [
     symbol: "classifyDispel",
     mod: dispelKind,
   },
+  // F20 D31: buffs one purge press removed / removes per tool
+  {
+    file: `${A}/context/timelineSections/healerCastGapFiller.ts`,
+    symbol: "purgePressRemovals",
+    mod: healerCastGapFiller,
+  },
+  {
+    file: `${A}/context/timelineSections/healerCastGapFiller.ts`,
+    symbol: "purgePressRemovalCount",
+    mod: healerCastGapFiller,
+  },
+  {
+    file: `${A}/utils/dispelAnalysis.ts`,
+    symbol: "isPurgeableMagicBuff",
+    mod: dispelAnalysis,
+  },
+  {
+    file: `${A}/utils/dispelAnalysis.ts`,
+    symbol: "PURGE_PRESS_REMOVALS_TEXT",
+    mod: dispelAnalysis,
+  },
+  {
+    file: `${A}/data/purgeRemovalsGenerated.ts`,
+    symbol: "PURGE_REMOVALS_PER_TARGET",
+    mod: purgeRemovalsGenerated,
+  },
+  // F20 D26: what a Grounding Totem ate
+  {
+    file: `${A}/utils/groundingRedirects.ts`,
+    symbol: "groundingEatenRedirects",
+    mod: groundingRedirects,
+  },
+  // N3 (F11): a rider that came with its own cast; a form cooldown's press
+  {
+    file: `${A}/utils/dispelKind.ts`,
+    symbol: "dispelCameWithOwnCast",
+    mod: dispelKind,
+  },
+  {
+    file: `${A}/utils/castPress.ts`,
+    symbol: "isFormReshiftCast",
+    mod: castPress,
+  },
+  {
+    file: `${A}/data/druidForms.ts`,
+    symbol: "FORM_COOLDOWN_BUFF_BY_CAST_ID",
+    mod: druidForms,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkFormCooldownPressSpacing",
+    mod: promptQualityCheck,
+  },
   {
     file: `${A}/utils/dispelKind.ts`,
     symbol: "MOVEMENT_ROOT_BREAK_DISPEL_IDS",
@@ -961,6 +1670,33 @@ const INDEX: PredicateRow[] = [
     file: `${A}/data/backlashCc.ts`,
     symbol: "BACKLASH_AURA_CC_TYPE",
     mod: backlashCc,
+  },
+  // FT F22: an enemy's backlash silence is a [SILENCE] line; a Top sources
+  // list names one source + ability once
+  {
+    file: `${A}/data/backlashCc.ts`,
+    symbol: "backlashCcTag",
+    mod: backlashCc,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkBacklashSilenceFamily",
+    mod: promptQualityCheck,
+  },
+  {
+    file: `${A}/context/timelineHelpers.ts`,
+    symbol: "damageEventParts",
+    mod: timelineHelpers,
+  },
+  {
+    file: `${A}/context/timelineHelpers.ts`,
+    symbol: "parseTopSourceEntries",
+    mod: timelineHelpers,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkTopSourcesOneEntryPerAbility",
+    mod: promptQualityCheck,
   },
   {
     file: `${A}/data/dispelObservedGenerated.ts`,
@@ -995,9 +1731,979 @@ const INDEX: PredicateRow[] = [
     mod: spellCategories,
   },
   {
+    file: `${A}/data/spellCategories.ts`,
+    symbol: "isKickSpellId",
+    mod: spellCategories,
+  },
+  {
     file: `${A}/utils/cannotCastIntervals.ts`,
     symbol: "buildCannotCastIntervals",
     mod: cannotCastIntervals,
+  },
+  {
+    file: `${A}/utils/cannotCastIntervals.ts`,
+    symbol: "intervalBlocksSpell",
+    mod: cannotCastIntervals,
+  },
+  {
+    file: `${A}/utils/cannotCastIntervals.ts`,
+    symbol: "disarmIntervals",
+    mod: cannotCastIntervals,
+  },
+  {
+    file: `${A}/utils/spellMechanics.ts`,
+    symbol: "isWeaponRequiredCast",
+    mod: spellMechanics,
+  },
+  {
+    file: `${A}/utils/cannotCastIntervals.ts`,
+    symbol: "isSilenceOnlyAura",
+    mod: cannotCastIntervals,
+  },
+  {
+    file: `${A}/utils/spellMechanics.ts`,
+    symbol: "isUnsilenceableCast",
+    mod: spellMechanics,
+  },
+  {
+    file: `${A}/utils/cannotCastIntervals.ts`,
+    symbol: "lockedSchoolsText",
+    mod: cannotCastIntervals,
+  },
+  // WP-G (FT-T07, D9): the per-application CC length under Oppressing Roar
+  {
+    file: `${A}/utils/ccDuration.ts`,
+    symbol: "ccFullDurationForApplication",
+    mod: ccDuration,
+  },
+  {
+    file: `${A}/data/spellEffectData.ts`,
+    symbol: "OPPRESSING_ROAR_LENGTHENED_MECHANICS",
+    mod: spellEffectData,
+  },
+  {
+    file: `${A}/utils/ccBreakAnalysis.ts`,
+    symbol: "oppressingRoarOnAt",
+    mod: ccBreakAnalysis,
+  },
+  {
+    file: `${A}/utils/ccBreakAnalysis.ts`,
+    symbol: "oppressingRoarOnAtMs",
+    mod: ccBreakAnalysis,
+  },
+  // WP-E (FT-T03, ruling D7): troughs — the signed exception to the grid rule
+  {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "HP_TROUGH_MIN_DROP_PTS",
+    mod: cooldowns,
+  },
+  {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "hpTroughInWindow",
+    mod: cooldowns,
+  },
+  {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "isTickBelowTrough",
+    mod: cooldowns,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "crisisHpProbeMismatch",
+    mod: promptQualityCheck,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkStayedInHpConsistency",
+    mod: promptQualityCheck,
+  },
+  {
+    file: `${A}/utils/positionAnalysis.ts`,
+    symbol: "STAYED_IN_NEAR_DEATH_PCT",
+    mod: positionAnalysis,
+  },
+  // WP-A1 (T12 ① c): `healed through` needs a unit that ended the window alive
+  {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "isSpikeHealedThrough",
+    mod: cooldowns,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkHealedThroughConsistency",
+    mod: promptQualityCheck,
+  },
+  // WP-F (FT-T07, ruling D8): effect saves are not immunities
+  {
+    file: `${A}/utils/enemyDefensives.ts`,
+    symbol: "effectSaves",
+    mod: enemyDefensives,
+  },
+  {
+    file: `${A}/data/spellIdLists.ts`,
+    symbol: "ENEMY_PROC_SAVES",
+    mod: spellIdLists,
+  },
+  // WO3 #11 / #13 (2026-10-14): self-removals and a cleanse's dispel types
+  {
+    file: `${A}/data/selfRemovals.ts`,
+    symbol: "SELF_REMOVAL_BY_TYPE",
+    mod: selfRemovals,
+  },
+  {
+    file: `${A}/utils/dispelAnalysis.ts`,
+    symbol: "dispelTypesRemovedBy",
+    mod: dispelAnalysis,
+  },
+  {
+    file: `${A}/utils/enemyDefensives.ts`,
+    symbol: "enemySaveEffectNote",
+    mod: enemyDefensives,
+  },
+  {
+    file: `${A}/utils/enemyDefensives.ts`,
+    symbol: "enemySaveEffectOfNote",
+    mod: enemyDefensives,
+  },
+  {
+    file: `${A}/utils/enemyDefensives.ts`,
+    symbol: "ENEMY_SAVE_EFFECT_BY_NAME",
+    mod: enemyDefensives,
+  },
+  // 2026-10-11 (user ruling): a pressed self defensive is labelled by what it
+  // does, never `(self-save)`
+  {
+    file: `${A}/utils/selfDefensiveMechanism.ts`,
+    symbol: "selfDefensiveMechanism",
+    mod: selfDefensiveMechanismMod,
+  },
+  {
+    file: `${A}/data/spellIdLists.ts`,
+    symbol: "ENEMY_SELF_DEFENSIVE_HAND_MECHANISMS",
+    mod: spellIdLists,
+  },
+  {
+    file: `${A}/utils/selfDefensiveMechanism.ts`,
+    symbol: "selfDefensiveLabelWords",
+    mod: selfDefensiveMechanismMod,
+  },
+  {
+    file: `${A}/utils/selfDefensiveMechanism.ts`,
+    symbol: "statesSelfDefensiveLabel",
+    mod: selfDefensiveMechanismMod,
+  },
+  {
+    file: `${A}/utils/enemyDefensives.ts`,
+    symbol: "selfSaveMechanismOfName",
+    mod: enemyDefensives,
+  },
+  // 2026-10-11: Roar of Sacrifice's percentage — a wall's form, no wall
+  {
+    file: `${A}/utils/selfDefensiveMechanism.ts`,
+    symbol: "selfReductionLegend",
+    mod: selfDefensiveMechanismMod,
+  },
+  {
+    file: `${A}/utils/enemyDefensives.ts`,
+    symbol: "selfSaveReductionNames",
+    mod: enemyDefensives,
+  },
+  {
+    file: `${A}/utils/enemyDefensives.ts`,
+    symbol: "ENEMY_PROC_SAVE_NAMES",
+    mod: enemyDefensives,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkEnemyDefSaveEffect",
+    mod: promptQualityCheck,
+  },
+  // WP-D (FT-T07 / T15, ruling D6): an aura the log never shows end
+  {
+    file: `${A}/utils/enemyDefensives.ts`,
+    symbol: "ENEMY_DEF_END_NOT_LOGGED",
+    mod: enemyDefensives,
+  },
+  {
+    file: `${A}/utils/enemyDefensives.ts`,
+    symbol: "ENEMY_DEF_END_NOT_LOGGED_SLOT_RE",
+    mod: enemyDefensives,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkEnemyDefEndNotLogged",
+    mod: promptQualityCheck,
+  },
+  {
+    file: `${A}/utils/enemyDefensives.ts`,
+    symbol: "SAVE_AURA_END_UNSEEN_IDS",
+    mod: enemyDefensives,
+  },
+  {
+    file: `${A}/data/spellIdLists.ts`,
+    symbol: "ENEMY_STEALTH_WALL_AURAS",
+    mod: spellIdLists,
+  },
+  {
+    file: `${A}/utils/enemyDefensives.ts`,
+    symbol: "SAVE_AURA_END_UNSEEN_NAMES",
+    mod: enemyDefensives,
+  },
+  {
+    file: `${A}/utils/enemyDefensives.ts`,
+    symbol: "saveAuraCountsWhenAlreadyUp",
+    mod: enemyDefensives,
+  },
+  {
+    file: `${A}/utils/enemyDefensives.ts`,
+    symbol: "holderFirstOwnActionAfterMs",
+    mod: enemyDefensives,
+  },
+  {
+    file: `${A}/utils/localizedText.ts`,
+    symbol: "CJK_LEAK",
+    mod: localizedText,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkCjkLeak",
+    mod: promptQualityCheck,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkKillAttemptUpSinceEndLogged",
+    mod: promptQualityCheck,
+  },
+  // WP-C (FT-T15): a legend interpolates its predicate's constants
+  {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "LATE_WINDOW_SECONDS",
+    mod: cooldowns,
+  },
+  {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "TIMING_DAMAGE_WINDOW_S",
+    mod: cooldowns,
+  },
+  {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "TIMING_SPIKE_THRESHOLD",
+    mod: cooldowns,
+  },
+  {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "UNNECESSARY_TARGET_HP_PCT",
+    mod: cooldowns,
+  },
+  {
+    file: `${A}/context/matchTimelineSections.ts`,
+    symbol: "ROT_PRESSURE_HP_PCT",
+    mod: matchTimelineSections,
+  },
+  {
+    file: `${A}/context/matchTimelineSections.ts`,
+    symbol: "ROT_PRESSURE_MIN_DOTS",
+    mod: matchTimelineSections,
+  },
+  {
+    file: `${A}/context/matchTimelineSections.ts`,
+    symbol: "ROT_PRESSURE_MIN_SECONDS",
+    mod: matchTimelineSections,
+  },
+  {
+    file: `${A}/context/matchTimelineSections.ts`,
+    symbol: "ROT_PRESSURE_MIN_PERIODIC_SHARE",
+    mod: matchTimelineSections,
+  },
+  {
+    file: `${A}/context/timelineHelpers.ts`,
+    symbol: "HEALING_BUCKET_S",
+    mod: timelineHelpers,
+  },
+  {
+    file: `${A}/context/timelineHelpers.ts`,
+    symbol: "OWN_AURA_CLAUSE_PREFIX",
+    mod: timelineHelpers,
+  },
+  // WP-I (FT-T16, D13 / D14): presses refused under control; the per-spell
+  // landing window
+  {
+    file: `${A}/context/controlRejectedPresses.ts`,
+    symbol: "CONTROL_REJECT_REASONS",
+    mod: controlRejectedPresses,
+  },
+  {
+    file: `${A}/context/controlRejectedPresses.ts`,
+    symbol: "ownerControlPressKit",
+    mod: controlRejectedPresses,
+  },
+  {
+    file: `${A}/context/controlRejectedPresses.ts`,
+    symbol: "ownerPressesRejectedDuring",
+    mod: controlRejectedPresses,
+  },
+  {
+    file: `${A}/context/controlRejectedPresses.ts`,
+    symbol: "formatPressedDuringNote",
+    mod: controlRejectedPresses,
+  },
+  {
+    file: `${A}/context/controlRejectedPresses.ts`,
+    symbol: "stripPressedDuringNote",
+    mod: controlRejectedPresses,
+  },
+  {
+    file: `${A}/context/controlRejectedPresses.ts`,
+    symbol: "PRESSED_DURING_NOTE_HEAD",
+    mod: controlRejectedPresses,
+  },
+  {
+    file: `${A}/context/controlRejectedPresses.ts`,
+    symbol: "PRESSED_DURING_NOTE_RE_SRC",
+    mod: controlRejectedPresses,
+  },
+  {
+    file: `${A}/context/controlRejectedPresses.ts`,
+    symbol: "PRESSED_DURING_ITEM_RE_SRC",
+    mod: controlRejectedPresses,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkPressedDuringControlNote",
+    mod: promptQualityCheck,
+  },
+  {
+    file: `${A}/context/kitUnusedNote.ts`,
+    symbol: "kitRefusedPressesOf",
+    mod: kitUnusedNote,
+  },
+  {
+    file: `${A}/context/kitUnusedNote.ts`,
+    symbol: "formatKitUnusedNote",
+    mod: kitUnusedNote,
+  },
+  {
+    file: `${A}/context/kitUnusedNote.ts`,
+    symbol: "KIT_UNUSED_NOTE_RE_SRC",
+    mod: kitUnusedNote,
+  },
+  {
+    file: `${A}/context/kitUnusedNote.ts`,
+    symbol: "KIT_REFUSED_WHY_WORDS",
+    mod: kitUnusedNote,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkKitUnusedNote",
+    mod: promptQualityCheck,
+  },
+  {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "ccLandedMatchWindowMs",
+    mod: ccTrinketAnalysis,
+  },
+  {
+    file: `${A}/utils/drAnalysis.ts`,
+    symbol: "AOE_CC_LANDING_WINDOW_S",
+    mod: drAnalysis,
+  },
+  // WP-H (FT-T13, D10 / D11): one dampening classification; no 2v2 value before
+  // the first logged stack
+  {
+    file: `${A}/utils/dampening.ts`,
+    symbol: "dampeningRulesOf",
+    mod: dampening,
+  },
+  {
+    file: `${A}/utils/dampening.ts`,
+    symbol: "getInitialDampening",
+    mod: dampening,
+  },
+  {
+    file: `${A}/utils/dampening.ts`,
+    symbol: "buildDampeningEvents",
+    mod: dampening,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkDampeningStartConsistency",
+    mod: promptQualityCheck,
+  },
+  {
+    file: `${A}/utils/dampening.ts`,
+    symbol: "dampeningForThreatWeight",
+    mod: dampening,
+  },
+  {
+    file: `${A}/utils/dampening.ts`,
+    symbol: "firstLoggedDampening",
+    mod: dampening,
+  },
+  {
+    file: `${A}/utils/dampening.ts`,
+    symbol: "DAMPENING_DOSE_PCT",
+    mod: dampening,
+  },
+  // WP-A2 (T12 ③ ⑤ ⑦): spike credit, the burst ledger's Target / ally lines,
+  // the healer view's own damage
+  {
+    file: `${A}/context/peakSpikePlacement.ts`,
+    symbol: "creditSpikesToWindows",
+    mod: peakSpikePlacement,
+  },
+  {
+    file: `${A}/context/peakSpikePlacement.ts`,
+    symbol: "spikeWindowOverlapSeconds",
+    mod: peakSpikePlacement,
+  },
+  {
+    file: `${A}/context/peakSpikePlacement.ts`,
+    symbol: "NO_CREDITED_SPIKE_CLAUSE",
+    mod: peakSpikePlacement,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkOffensiveWindowSpikeCredit",
+    mod: promptQualityCheck,
+  },
+  // Post-hoc review 45-FT-98 (2026-10-11): the round's end on the kill
+  // windows, the death on every credited attempt row, the header of a window
+  // opened after the round, the one-second [DMG SPIKE] bucket
+  {
+    file: `${A}/context/peakSpikePlacement.ts`,
+    symbol: "isPointBucket",
+    mod: peakSpikePlacement,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkOffensiveWindowHeaderSpan",
+    mod: promptQualityCheck,
+  },
+  {
+    file: `${A}/utils/offensiveWindows.ts`,
+    symbol: "computeOffensiveWindows",
+    mod: offensiveWindows,
+  },
+  {
+    file: `${A}/utils/roundEnd.ts`,
+    symbol: "roundEndMs",
+    mod: roundEnd,
+  },
+  {
+    file: `${A}/utils/roundEnd.ts`,
+    symbol: "SOLO_SHUFFLE_BRACKET",
+    mod: roundEnd,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkKillWindowWithinRound",
+    mod: promptQualityCheck,
+  },
+  {
+    file: `${A}/utils/killAttempts.ts`,
+    symbol: "extractKillAttempts",
+    mod: killAttempts,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkKillAttemptBracketEnd",
+    mod: promptQualityCheck,
+  },
+  // R08 (c): what was already up when a kill attempt began
+  {
+    file: `${A}/utils/killAttempts.ts`,
+    symbol: "killAttemptAlreadyUpFact",
+    mod: killAttempts,
+  },
+  {
+    file: `${A}/utils/killAttempts.ts`,
+    symbol: "KILL_ATTEMPT_IMMUNITY_ALREADY_UP_NAME",
+    mod: killAttempts,
+  },
+  {
+    file: `${A}/utils/killAttempts.ts`,
+    symbol: "KILL_ATTEMPTS_ALREADY_UP_LEGEND",
+    mod: killAttempts,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkKillAttemptAlreadyUpStated",
+    mod: promptQualityCheck,
+  },
+  // I10: our own Cyclone on the kill target
+  {
+    file: `${A}/analysis/candidates/massDispel.ts`,
+    symbol: "isDamageImmuneControl",
+    mod: massDispel,
+  },
+  {
+    file: `${A}/analysis/candidates/massDispel.ts`,
+    symbol: "damageImmuneControlUpAt",
+    mod: massDispel,
+  },
+  {
+    file: `${A}/utils/killAttempts.ts`,
+    symbol: "ownImmuneControlsOverBracket",
+    mod: killAttempts,
+  },
+  {
+    file: `${A}/utils/killAttempts.ts`,
+    symbol: "killAttemptBracketMeetsControl",
+    mod: killAttempts,
+  },
+  {
+    file: `${A}/utils/killAttempts.ts`,
+    symbol: "killAttemptOwnControlClause",
+    mod: killAttempts,
+  },
+  {
+    file: `${A}/utils/killAttempts.ts`,
+    symbol: "KILL_ATTEMPT_OWN_CONTROL_LEAD",
+    mod: killAttempts,
+  },
+  {
+    file: `${A}/utils/killAttempts.ts`,
+    symbol: "KILL_ATTEMPTS_OWN_CONTROL_LEGEND",
+    mod: killAttempts,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkKillAttemptOwnControlClause",
+    mod: promptQualityCheck,
+  },
+  // F17: no kill window / bracket across Spirit of Redemption form
+  {
+    file: `${A}/utils/combatStates.ts`,
+    symbol: "isGhostAtRenderSecond",
+    mod: combatStates,
+  },
+  {
+    file: `${A}/utils/combatStates.ts`,
+    symbol: "spanHoldsGhostSecond",
+    mod: combatStates,
+  },
+  {
+    file: `${A}/utils/killAttempts.ts`,
+    symbol: "attemptSpanOutsideForm",
+    mod: killAttempts,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkNoWindowAcrossSpiritOfRedemption",
+    mod: promptQualityCheck,
+  },
+  // R08 (d) gap 1: no kill window across the target's own 20–99 % wall
+  {
+    file: `${A}/utils/enemyDefensives.ts`,
+    symbol: "ownWallSpanS",
+    mod: enemyDefensives,
+  },
+  {
+    file: `${A}/utils/enemyDefensives.ts`,
+    symbol: "spanHoldsOwnWallSecond",
+    mod: enemyDefensives,
+  },
+  {
+    file: `${A}/utils/enemyDefensives.ts`,
+    symbol: "ownWallLineNames",
+    mod: enemyDefensives,
+  },
+  {
+    file: `${A}/data/mitigationData.ts`,
+    symbol: "MITIGATION_WALL_IDS",
+    mod: mitigationData,
+  },
+  {
+    file: `${A}/data/mitigationData.ts`,
+    symbol: "DEFLECTION_IDS",
+    mod: mitigationData,
+  },
+  {
+    file: `${A}/utils/sanctuaryRemovals.ts`,
+    symbol: "sanctuaryRemovalPairs",
+    mod: sanctuaryRemovalsMod,
+  },
+  {
+    file: `${A}/utils/petCommands.ts`,
+    symbol: "petCommands",
+    mod: petCommandsMod,
+  },
+  {
+    file: `${A}/utils/castPress.ts`,
+    symbol: "isNoPressRow",
+    mod: castPress,
+  },
+  {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "CHARGE_WINDOW_STEP_S",
+    mod: cooldowns,
+  },
+  {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "saveRoleReachesAlly",
+    mod: cooldowns,
+  },
+  {
+    file: `${A}/utils/dampening.ts`,
+    symbol: "dampeningReadersAt",
+    mod: dampening,
+  },
+  {
+    file: `${A}/utils/charmedPlayer.ts`,
+    symbol: "charmedAt",
+    mod: charmedPlayer,
+  },
+  {
+    file: `${A}/utils/warlockPet.ts`,
+    symbol: "warlockPetChronology",
+    mod: warlockPet,
+  },
+  {
+    file: `${A}/utils/dispelAnalysis.ts`,
+    symbol: "purgePetAbsentSpansMs",
+    mod: dispelAnalysis,
+  },
+  {
+    file: `${A}/utils/hiddenPress.ts`,
+    symbol: "hiddenAuraLifeMs",
+    mod: hiddenPress,
+  },
+  {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "cdChargesAvailableAt",
+    mod: cooldowns,
+  },
+  {
+    file: "packages/parser-compat/src/maxHpLag.ts",
+    symbol: "laggingMaxHpCorrected",
+    mod: maxHpLagMod,
+  },
+  {
+    file: "packages/parser-compat/src/convert.ts",
+    symbol: "correctedAdvancedSamples",
+    mod: convertMod,
+  },
+  {
+    file: `${A}/utils/dampening.ts`,
+    symbol: "getDampeningPercentage",
+    mod: dampening,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkNoWindowAcrossOwnWall",
+    mod: promptQualityCheck,
+  },
+  {
+    file: `${A}/utils/burstLedger.ts`,
+    symbol: "BURST_TARGET_DAMAGE_RE_SRC",
+    mod: burstLedger,
+  },
+  {
+    file: `${A}/utils/burstLedger.ts`,
+    symbol: "BURST_ALLY_OVERLAP_LABEL",
+    mod: burstLedger,
+  },
+  {
+    file: `${A}/utils/burstLedger.ts`,
+    symbol: "BURST_ALLY_OVERLAP_ITEM_RE_SRC",
+    mod: burstLedger,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkBurstTargetDamageParts",
+    mod: promptQualityCheck,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkBurstAllyOverlap",
+    mod: promptQualityCheck,
+  },
+  {
+    file: `${A}/utils/healerOffenseAnalysis.ts`,
+    symbol: "VULNERABLE_OWNER_DAMAGE_RE_SRC",
+    mod: healerOffenseAnalysis,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkVulnerableOwnerDamage",
+    mod: promptQualityCheck,
+  },
+  // FT I12: a [CONTESTED] line states cast risk only for a control that has
+  // a cast to interrupt
+  {
+    file: `${A}/utils/spellMechanics.ts`,
+    symbol: "interruptibleCastOf",
+    mod: spellMechanics,
+  },
+  {
+    file: `${A}/utils/healerOffenseAnalysis.ts`,
+    symbol: "contestedTradeTail",
+    mod: healerOffenseAnalysis,
+  },
+  {
+    file: `${A}/utils/healerOffenseAnalysis.ts`,
+    symbol: "contestedTailFormsOfName",
+    mod: healerOffenseAnalysis,
+  },
+  {
+    file: `${A}/utils/healerOffenseAnalysis.ts`,
+    symbol: "CONTESTED_LINE_RE_SRC",
+    mod: healerOffenseAnalysis,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkContestedCastRisk",
+    mod: promptQualityCheck,
+  },
+  // FT R03 (reopens A17, user 2026-10-11): the ENEMY CC KIT line's
+  // `(landed N×)` entries are the [CC ON TEAM] lines on its unit
+  {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "rendersCcOnTeamLine",
+    mod: ccTrinketAnalysis,
+  },
+  {
+    file: `${A}/utils/healerExposureAnalysis.ts`,
+    symbol: "landedControlsForKit",
+    mod: healerExposureAnalysis,
+  },
+  {
+    file: `${A}/utils/healerExposureAnalysis.ts`,
+    symbol: "parseEnemyCcKitLine",
+    mod: healerExposureAnalysis,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkEnemyCcKitLanded",
+    mod: promptQualityCheck,
+  },
+  // FT-T10 readers: a lockout asked for a set of spells
+  {
+    file: `${A}/utils/cannotCastIntervals.ts`,
+    symbol: "cannotCastIntervalsForSpells",
+    mod: cannotCastIntervals,
+  },
+  {
+    file: `${A}/utils/cannotCastIntervals.ts`,
+    symbol: "blockedForEverySpell",
+    mod: cannotCastIntervals,
+  },
+  // the backlash horror is hard CC for the castability questions (60-POSTHOC-02)
+  {
+    file: `${A}/utils/cannotCastIntervals.ts`,
+    symbol: "isHardCcAura",
+    mod: cannotCastIntervals,
+  },
+  // a spell the unit's pet casts is asked of the pet (2026-10-11)
+  {
+    file: `${A}/utils/cannotCastIntervals.ts`,
+    symbol: "petCastSpellIdsOf",
+    mod: cannotCastIntervals,
+  },
+  {
+    file: `${A}/utils/cannotCastIntervals.ts`,
+    symbol: "petCastersOf",
+    mod: cannotCastIntervals,
+  },
+  {
+    file: `${A}/utils/cannotCastIntervals.ts`,
+    symbol: "isControlledPetGuid",
+    mod: cannotCastIntervals,
+  },
+  // WP-A2 fix (review 40-FT-53 P2): the second target's share
+  {
+    file: `${A}/utils/burstLedger.ts`,
+    symbol: "ON_TARGET_GOOD_PCT",
+    mod: burstLedger,
+  },
+  // WP-A3 1 / 2 (T12 ⑧ i): the [BURST ANSWERED] credit rules — not after the
+  // pressured unit's death; a control's target and span
+  {
+    file: `${A}/context/burstAnswered.ts`,
+    symbol: "parseBurstAnsweredLine",
+    mod: burstAnswered,
+  },
+  {
+    file: `${A}/context/burstAnswered.ts`,
+    symbol: "ccSpanLookup",
+    mod: burstAnswered,
+  },
+  {
+    file: `${A}/analysis/burstWindowDecisionPoints.ts`,
+    symbol: "aimedControlLandingAuras",
+    mod: burstWindowDecisionPoints,
+  },
+  {
+    file: `${A}/analysis/burstWindowDecisionPoints.ts`,
+    symbol: "AIMED_CONTROL_LANDING_LEAD_MS",
+    mod: burstWindowDecisionPoints,
+  },
+  // FT-T12 D3: which control answers a burst — one rule for `responded` and
+  // the [BURST ANSWERED] credit
+  {
+    file: `${A}/utils/burstHit.ts`,
+    symbol: "controlTargetHitPressured",
+    mod: burstHit,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkBurstAnsweredBeforeDeath",
+    mod: promptQualityCheck,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkBurstAnsweredControlSpan",
+    mod: promptQualityCheck,
+  },
+  // WP-A3 3 (T12 ②, D4): the [DMG SPIKE] list cap and the windows it dropped
+  {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "selectPressureWindows",
+    mod: cooldowns,
+  },
+  {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "PRESSURE_WINDOWS_TOP_N",
+    mod: cooldowns,
+  },
+  {
+    file: `${A}/context/matchTimelineSections.ts`,
+    symbol: "dmgSpikeListLegend",
+    mod: matchTimelineSections,
+  },
+  {
+    file: `${A}/context/matchTimelineSections.ts`,
+    symbol: "formatDmgSpikesNotListed",
+    mod: matchTimelineSections,
+  },
+  {
+    file: `${A}/context/matchTimelineSections.ts`,
+    symbol: "parseDmgSpikesNotListed",
+    mod: matchTimelineSections,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkDmgSpikeListCap",
+    mod: promptQualityCheck,
+  },
+  // fact1215 C5: what a proc-only activation went out with
+  {
+    file: `${A}/context/timelineSections/enemyCd.ts`,
+    symbol: "procTriggerOf",
+    mod: enemyCd,
+  },
+  {
+    file: `${A}/context/timelineSections/enemyCd.ts`,
+    symbol: "PROC_TRIGGER_LEAD_MS",
+    mod: enemyCd,
+  },
+  // fact1215 R9 / R10: channels without an aura, a kick on a channelled
+  // control's caster, a refused press's mechanic
+  {
+    file: `${A}/utils/castCommitSpans.ts`,
+    symbol: "tickEndedChannelSpans",
+    mod: castCommitSpans,
+  },
+  {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "ccEndedByCasterInterrupt",
+    mod: ccTrinketAnalysis,
+  },
+  {
+    file: `${A}/context/controlRejectedPresses.ts`,
+    symbol: "CONTROL_REJECT_MECHANIC",
+    mod: controlRejectedPresses,
+  },
+  // fact1215 R5 / R6: which avoidance aura was up when a control hit
+  {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "ccAvoidanceBuffsUpAt",
+    mod: ccTrinketAnalysis,
+  },
+  // fact1215 C10: a miss row that stands for a control; a warlock's purge pet
+  {
+    file: `${A}/utils/castMissRows.ts`,
+    symbol: "missReportsControl",
+    mod: castMissRows,
+  },
+  {
+    file: `${A}/utils/warlockPet.ts`,
+    symbol: "warlockRanPurgePet",
+    mod: warlockPet,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkWarlockPurgeFollowsPet",
+    mod: promptQualityCheck,
+  },
+  // fact1215 C7: which enemy presses [ENEMY DEF] already speaks for
+  {
+    file: `${A}/utils/enemyDefensives.ts`,
+    symbol: "enemyDefSpeaksForPress",
+    mod: enemyDefensives,
+  },
+  // fact1215 112-1: a recast inside the re-send gap is a new control
+  {
+    file: `${A}/utils/drAnalysis.ts`,
+    symbol: "ccRecastSplitsResend",
+    mod: drAnalysis,
+  },
+  // fact1215 R11: the silence reading of the no-aura [SILENCE] line
+  {
+    file: `${A}/utils/cannotCastIntervals.ts`,
+    symbol: "isSilenceEffectAura",
+    mod: cannotCastIntervals,
+  },
+  // fact1215 R7: the non-wall saves that cut a kill-window span
+  {
+    file: `${A}/utils/enemyDefensives.ts`,
+    symbol: "ownSaveSpanS",
+    mod: enemyDefensives,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkNoWindowAcrossOwnSave",
+    mod: promptQualityCheck,
+  },
+  // fact1215 R4 / C4: who broke an aura; the caster-side link aura
+  {
+    file: `${A}/utils/brokenRowBreaker.ts`,
+    symbol: "breakerOfBrokenRow",
+    mod: brokenRowBreaker,
+  },
+  {
+    file: `${A}/utils/brokenRowBreaker.ts`,
+    symbol: "isCasterSideLinkAura",
+    mod: brokenRowBreaker,
+  },
+  // user ruling P-FU-H23: the removal pairing has a fourth reader (cannot-cast)
+  {
+    file: `${A}/utils/drAnalysis.ts`,
+    symbol: "matchPendingCcKey",
+    mod: drAnalysis,
+  },
+  {
+    file: `${A}/utils/drAnalysis.ts`,
+    symbol: "reAppliedIsSameApplication",
+    mod: drAnalysis,
+  },
+  {
+    file: `${A}/utils/drAnalysis.ts`,
+    symbol: "ccRecastBetween",
+    mod: drAnalysis,
+  },
+  // Triage 2026-09-29 (missed-cleanse F-C10 / other F-O6): commitments with
+  // no SPELL_CAST_START bar — the occupancy facts and the interrupted-empower
+  // tag read the same spans.
+  {
+    file: `${A}/utils/castCommitSpans.ts`,
+    symbol: "empowerSpans",
+    mod: castCommitSpans,
+  },
+  {
+    file: `${A}/utils/castCommitSpans.ts`,
+    symbol: "channelSpans",
+    mod: castCommitSpans,
   },
   {
     file: `${A}/utils/cannotCastIntervals.ts`,
@@ -1028,6 +2734,31 @@ const INDEX: PredicateRow[] = [
     file: `${A}/utils/cannotCastIntervals.ts`,
     symbol: "actWindowFor",
     mod: cannotCastIntervals,
+  },
+  {
+    file: `${A}/utils/cannotCastIntervals.ts`,
+    symbol: "freeMsWithin",
+    mod: cannotCastIntervals,
+  },
+  {
+    file: `${A}/utils/cannotCastIntervals.ts`,
+    symbol: "stunLetsPress",
+    mod: cannotCastIntervals,
+  },
+  {
+    file: `${A}/utils/drAnalysis.ts`,
+    symbol: "isStunDrAura",
+    mod: drAnalysis,
+  },
+  {
+    file: `${A}/analysis/candidates/cooldownTiming.ts`,
+    symbol: "ownerFreeSpan",
+    mod: cooldownTiming,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkCdHoardedOwnerFree",
+    mod: promptQualityCheck,
   },
   {
     file: `${A}/utils/cannotCastIntervals.ts`,
@@ -1075,6 +2806,41 @@ const INDEX: PredicateRow[] = [
     mod: dispelAnalysis,
   },
   {
+    file: `${A}/utils/dispelAnalysis.ts`,
+    symbol: "canOffensivePurge",
+    mod: dispelAnalysis,
+  },
+  {
+    file: `${A}/utils/dispelAnalysis.ts`,
+    symbol: "scopedPurgeToolsOf",
+    mod: dispelAnalysis,
+  },
+  {
+    file: `${A}/utils/dispelAnalysis.ts`,
+    symbol: "scopedToolRemoves",
+    mod: dispelAnalysis,
+  },
+  {
+    file: `${A}/utils/dispelAnalysis.ts`,
+    symbol: "isMagicPurgeTarget",
+    mod: dispelAnalysis,
+  },
+  {
+    file: `${A}/utils/dispelAnalysis.ts`,
+    symbol: "missedPurgesFor",
+    mod: dispelAnalysis,
+  },
+  {
+    file: `${A}/data/scopedPurges.ts`,
+    symbol: "SHATTERING_THROW_REMOVES",
+    mod: scopedPurges,
+  },
+  {
+    file: `${A}/data/scopedPurges.ts`,
+    symbol: "SHIV_REMOVES",
+    mod: scopedPurges,
+  },
+  {
     file: `${A}/analysis/crisisDecisionPoints.ts`,
     symbol: "schoolShareCoveredBy",
     mod: crisisDecisionPoints,
@@ -1082,6 +2848,16 @@ const INDEX: PredicateRow[] = [
   {
     file: `${A}/analysis/candidates/cooldownTiming.ts`,
     symbol: "coversCrisisSchool",
+    mod: cooldownTiming,
+  },
+  {
+    file: `${A}/analysis/candidates/cooldownTiming.ts`,
+    symbol: "saveCoversPressureOn",
+    mod: cooldownTiming,
+  },
+  {
+    file: `${A}/analysis/candidates/cooldownTiming.ts`,
+    symbol: "saveSchoolMask",
     mod: cooldownTiming,
   },
   {
@@ -1130,9 +2906,95 @@ const INDEX: PredicateRow[] = [
     mod: drAnalysis,
   },
   {
-    file: `${A}/utils/drAnalysis.ts`,
-    symbol: "CC_CAST_EFFECT_AURA",
-    mod: drAnalysis,
+    file: `${A}/data/castEffectAuras.ts`,
+    symbol: "effectAurasOfCast",
+    mod: castEffectAuras,
+  },
+  {
+    file: `${A}/data/castEffectAuras.ts`,
+    symbol: "triggeredEffectAurasOfCast",
+    mod: castEffectAuras,
+  },
+  {
+    file: `${A}/data/castEffectAuras.ts`,
+    symbol: "castKeyOfAura",
+    mod: castEffectAuras,
+  },
+  {
+    file: `${A}/data/castEffectAuras.ts`,
+    symbol: "castsOwningEffectAura",
+    mod: castEffectAuras,
+  },
+  {
+    file: `${A}/data/castEffectAuras.ts`,
+    symbol: "ownEffectAurasOfCast",
+    mod: castEffectAuras,
+  },
+  {
+    file: `${A}/data/castEffectAuras.ts`,
+    symbol: "ownEffectAurasKeyedBy",
+    mod: castEffectAuras,
+  },
+  {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "offensiveCdOfAura",
+    mod: cooldowns,
+  },
+  {
+    file: `${A}/utils/enemyDefensives.ts`,
+    symbol: "ownPressedShieldSpansMs",
+    mod: enemyDefensives,
+  },
+  {
+    file: `${A}/data/ownShieldLinks.ts`,
+    symbol: "ownShieldPressCastIds",
+    mod: ownShieldLinks,
+  },
+  {
+    file: `${A}/data/ownShieldLinks.ts`,
+    symbol: "OWN_SHIELD_RULING_FAMILY_IDS",
+    mod: ownShieldLinks,
+  },
+  {
+    file: `${A}/utils/castMissRows.ts`,
+    symbol: "isControlCast",
+    mod: castMissRows,
+  },
+  {
+    file: `${A}/utils/castMissRows.ts`,
+    symbol: "castControlsIn",
+    mod: castMissRows,
+  },
+  // fact6 F20 D19 / D20: a control the game never puts on a player
+  {
+    file: `${A}/utils/castMissRows.ts`,
+    symbol: "controlReachesPlayers",
+    mod: castMissRows,
+  },
+  {
+    file: `${A}/utils/castMissRows.ts`,
+    symbol: "NO_PLAYER_CONTROL_IDS",
+    mod: castMissRows,
+  },
+  {
+    file: `${A}/utils/killWindowFacts.ts`,
+    symbol: "teamDamageTotalClause",
+    mod: killWindowFactsMod,
+  },
+  {
+    file: `${A}/utils/killWindowFacts.ts`,
+    symbol: "teamBurstClause",
+    mod: killWindowFactsMod,
+  },
+  {
+    file: `${A}/utils/offensiveWindows.ts`,
+    symbol: "computeBurstSubWindows",
+    mod: offensiveWindows,
+  },
+  {
+    file: `${A}/utils/dispelAnalysis.ts`,
+    symbol: "blockedSecondsText",
+    mod: dispelAnalysis,
   },
   {
     file: `${A}/utils/cooldowns.ts`,
@@ -1153,6 +3015,28 @@ const INDEX: PredicateRow[] = [
     file: `${A}/data/sharedChargeGenerated.ts`,
     symbol: "SHARED_CHARGE_CATEGORY",
     mod: sharedChargeGenerated,
+  },
+  // X1: one cd-waste row per cooldown — the never-spent buttons of one
+  // charge pool in one row; the gate asks the rows the producer's relation.
+  {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "sharesChargePool",
+    mod: cooldowns,
+  },
+  {
+    file: `${A}/analysis/candidateFindings.ts`,
+    symbol: "cdWasteSpellFact",
+    mod: candidateFindings,
+  },
+  {
+    file: `${A}/analysis/candidateFindings.ts`,
+    symbol: "cdWasteSpellNames",
+    mod: candidateFindings,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkCdWasteSharedCooldown",
+    mod: promptQualityCheck,
   },
   {
     file: `${A}/utils/spellRange.ts`,
@@ -1286,6 +3170,50 @@ const INDEX: PredicateRow[] = [
   },
   {
     file: `${A}/utils/enemyInterrupts.ts`,
+    symbol: "interruptPressCooldownSeconds",
+    mod: enemyInterrupts,
+  },
+  {
+    file: `${A}/data/talentScriptedCooldowns.ts`,
+    symbol: "ON_INTERRUPT_COOLDOWN_REDUCTIONS",
+    mod: talentScriptedCooldowns,
+  },
+  {
+    file: `${A}/data/talentScriptedCooldowns.ts`,
+    symbol: "eventTriggerTimesMs",
+    mod: talentScriptedCooldowns,
+  },
+  // Storm Conduit by log date (user ruling 2026-10-11): how much one trigger
+  // gives back, and the one comparison of a log timestamp with a dated change
+  {
+    file: `${A}/data/talentScriptedCooldowns.ts`,
+    symbol: "eventReductionSecondsAt",
+    mod: talentScriptedCooldowns,
+  },
+  {
+    file: `${A}/utils/logEra.ts`,
+    symbol: "logIsFrom",
+    mod: logEra,
+  },
+  // … and what a dated number is at a timestamp — the reading both halves of
+  // that hotfix share (the cooldown give-back, the lockout multiplier)
+  {
+    file: `${A}/utils/logEra.ts`,
+    symbol: "logDatedNumberAt",
+    mod: logEra,
+  },
+  {
+    file: `${A}/utils/kickLockout.ts`,
+    symbol: "kickLockoutSecondsFor",
+    mod: kickLockout,
+  },
+  {
+    file: `${A}/utils/kickLockout.ts`,
+    symbol: "kickLockoutVictimMultiplierAt",
+    mod: kickLockout,
+  },
+  {
+    file: `${A}/utils/enemyInterrupts.ts`,
     symbol: "kickCastSpellId",
     mod: enemyInterrupts,
   },
@@ -1388,6 +3316,11 @@ const INDEX: PredicateRow[] = [
     file: `${A}/utils/spellDanger.ts`,
     symbol: "offensiveEffectCdId",
     mod: spellDanger,
+  },
+  {
+    file: `${A}/data/overrideVariantsGenerated.ts`,
+    symbol: "OVERRIDE_VARIANTS_GENERATED",
+    mod: overrideVariantsGenerated,
   },
   {
     file: `${A}/analysis/burstWindowDecisionPoints.ts`,
@@ -1560,6 +3493,11 @@ const INDEX: PredicateRow[] = [
     mod: claimChecker,
   },
   {
+    file: `${A}/analysis/auditFindings.ts`,
+    symbol: "BRACKET_TERM",
+    mod: auditFindings,
+  },
+  {
     file: `${A}/compare/buildExemplarLedPrompt.ts`,
     symbol: "COMPARE_PROMPT_VERSION",
     mod: buildExemplarLedPrompt,
@@ -1579,6 +3517,237 @@ const INDEX: PredicateRow[] = [
     file: `${A}/utils/auraIntervals.ts`,
     symbol: "buildAuraIntervals",
     mod: auraIntervals,
+  },
+  {
+    file: `${A}/utils/auraIntervals.ts`,
+    symbol: "dropAuraRebroadcasts",
+    mod: auraIntervals,
+  },
+  {
+    file: `${A}/utils/auraIntervals.ts`,
+    symbol: "supersededAuraBreaks",
+    mod: auraIntervals,
+  },
+  {
+    file: `${A}/utils/auraEndCause.ts`,
+    symbol: "auraEndFromLog",
+    mod: auraEndCause,
+  },
+  {
+    file: `${A}/utils/combatStates.ts`,
+    symbol: "extractSpiritOfRedemptionIntervals",
+    mod: combatStates,
+  },
+  {
+    file: `${A}/utils/combatStates.ts`,
+    symbol: "SPIRIT_OF_REDEMPTION_AURA_IDS",
+    mod: combatStates,
+  },
+  {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "ccLoggedEnd",
+    mod: ccTrinketAnalysis,
+  },
+  {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "auraBreakAtRemoval",
+    mod: ccTrinketAnalysis,
+  },
+  {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "formatCcLoggedEnd",
+    mod: ccTrinketAnalysis,
+  },
+  {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "CC_LOGGED_END_NOTE_RE_SRC",
+    mod: ccTrinketAnalysis,
+  },
+  {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "ccEndedByOwnPress",
+    mod: ccTrinketAnalysis,
+  },
+  {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "renderedCcDuration",
+    mod: ccTrinketAnalysis,
+  },
+  {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "renderedCcSpan",
+    mod: ccTrinketAnalysis,
+  },
+  {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "renderedCcSpanSeconds",
+    mod: ccTrinketAnalysis,
+  },
+  {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "CC_STILL_ON_AT_ROUND_END",
+    mod: ccTrinketAnalysis,
+  },
+  // N4 (2026-10-11) — how the prompt states the END or LENGTH of an aura /
+  // control. F02a: Touch of Karma's `[BUFF FADED]` reads the absorb's own
+  // aura, not the 10 s marker.
+  {
+    file: `${A}/utils/karmaFeed.ts`,
+    symbol: "TOUCH_OF_KARMA_ABSORB_ID",
+    mod: karmaFeed,
+  },
+  // F02b: the label of an aura the round's end cut, and the gate that holds
+  // aura ends and control lengths to the round. Ruling 2026-10-11: the label
+  // is `[ENEMY DEF]`'s alone — a buff the round ended on has no
+  // `[BUFF FADED]` / `[ENEMY BUFF END]` line, and the gate fails one that
+  // carries it.
+  {
+    file: `${A}/utils/roundEnd.ts`,
+    symbol: "AURA_STILL_UP_AT_ROUND_END",
+    mod: roundEnd,
+  },
+  // 2026-10-11: one round end for every line that says "the round ended"
+  {
+    file: `${A}/utils/roundEnd.ts`,
+    symbol: "ROUND_ENDED_WORDS",
+    mod: roundEnd,
+  },
+  {
+    file: `${A}/utils/roundEnd.ts`,
+    symbol: "roundEndLegend",
+    mod: roundEnd,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkAuraEndWithinRound",
+    mod: promptQualityCheck,
+  },
+  // a missed-purge window ends at the round's end: the one text for its
+  // length, that text read back, and the gate that holds it to the round
+  {
+    file: `${A}/utils/dispelAnalysis.ts`,
+    symbol: "unpurgedForText",
+    mod: dispelAnalysis,
+  },
+  {
+    file: `${A}/utils/dispelAnalysis.ts`,
+    symbol: "UNPURGED_FOR_RE_SRC",
+    mod: dispelAnalysis,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkUnpurgedWithinRound",
+    mod: promptQualityCheck,
+  },
+  // F06a: a missed-sync-window row's lock length through the control lines'
+  // formatter, cut at the round's end; the gate pairs it with its line.
+  {
+    file: `${A}/analysis/candidates/cooldownTiming.ts`,
+    symbol: "syncLockLengthFacts",
+    mod: cooldownTiming,
+  },
+  {
+    file: `${A}/analysis/candidates/cooldownTiming.ts`,
+    symbol: "SYNC_LOCK_ENDED_BY_ROUND_END",
+    mod: cooldownTiming,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkSyncWindowLockLength",
+    mod: promptQualityCheck,
+  },
+  // L04 (b): each `readyCds` entry of a missed-sync-window row says whose
+  // cooldown it is; the gate reads the entry back and asks the loadout.
+  {
+    file: `${A}/analysis/candidates/cooldownTiming.ts`,
+    symbol: "syncReadyCdEntry",
+    mod: cooldownTiming,
+  },
+  {
+    file: `${A}/analysis/candidates/cooldownTiming.ts`,
+    symbol: "parseSyncReadyCdEntry",
+    mod: cooldownTiming,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkSyncWindowReadyCdHolders",
+    mod: promptQualityCheck,
+  },
+  // L04 (c): in Solo Shuffle a row reaches the owner's menu only when part
+  // of it is the owner's; the gate asks the row the producer's two questions.
+  {
+    file: `${A}/analysis/candidates/cooldownTiming.ts`,
+    symbol: "syncRowNarrowedToOwnerPart",
+    mod: cooldownTiming,
+  },
+  {
+    file: `${A}/analysis/candidates/cooldownTiming.ts`,
+    symbol: "syncRowHasOwnerPart",
+    mod: cooldownTiming,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkSyncWindowOwnerPart",
+    mod: promptQualityCheck,
+  },
+  // F06b / F08: a control gone in under half a second with no cause in the
+  // log; a damage break's `endedBy` names the breaking hit as that.
+  {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "ccUnloggedEarlyEnd",
+    mod: ccTrinketAnalysis,
+  },
+  {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "CC_END_CAUSE_NOT_LOGGED",
+    mod: ccTrinketAnalysis,
+  },
+  // 2026-10-11: a control immunity that went up in the REMOVED's millisecond
+  {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "ccEndedByImmunityAura",
+    mod: ccTrinketAnalysis,
+  },
+  {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "channelStoppedAtRemoval",
+    mod: ccTrinketAnalysis,
+  },
+  {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "CHANNEL_STOP_LEAD_MS",
+    mod: ccTrinketAnalysis,
+  },
+  {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "CC_ENDED_BY_LEAD",
+    mod: ccTrinketAnalysis,
+  },
+  {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "CC_BREAKING_HIT_LEAD",
+    mod: ccTrinketAnalysis,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkCcEndCauseNotLogged",
+    mod: promptQualityCheck,
+  },
+  // F06c: a REFRESH a control line runs across.
+  {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "formatCcRefreshed",
+    mod: ccTrinketAnalysis,
+  },
+  {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "CC_REFRESHED_NOTE_RE_SRC",
+    mod: ccTrinketAnalysis,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkCcRefreshedNote",
+    mod: promptQualityCheck,
   },
   {
     file: `${A}/analysis/momentSnapshot.ts`,
@@ -1604,6 +3773,16 @@ const INDEX: PredicateRow[] = [
   {
     file: `${E}/quality/promptQualityCheck.ts`,
     symbol: "checkSameSecondHpConsistency",
+    mod: promptQualityCheck,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkUnnecessaryNoteHpAgreement",
+    mod: promptQualityCheck,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkBurstTargetHpConsistency",
     mod: promptQualityCheck,
   },
   {
@@ -1647,6 +3826,11 @@ const INDEX: PredicateRow[] = [
     mod: externalDamage,
   },
   {
+    file: `${A}/utils/externalDamage.ts`,
+    symbol: "DURING_ABSORBED_TAG_RE_SRC",
+    mod: externalDamage,
+  },
+  {
     file: "packages/eval/src/quality/promptQualityCheck.ts",
     symbol: "checkDuringExternalConsistency",
     mod: promptQualityCheck,
@@ -1661,10 +3845,127 @@ const INDEX: PredicateRow[] = [
     symbol: "checkCcAvoidedLandedConsistency",
     mod: promptQualityCheck,
   },
+  // FT-T16 D15 "3c": the `logged <TYPE>` half of [CC AVOIDED?]
+  {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "ccAvoidedOutcomeText",
+    mod: ccTrinketAnalysis,
+  },
+  {
+    file: `${A}/utils/castMissRows.ts`,
+    symbol: "CONTROL_FAILED_MISS_TYPES",
+    mod: castMissRows,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkCcAvoidedMissType",
+    mod: promptQualityCheck,
+  },
+  // FT-T16 D15 "3b": [CC NOT LANDED]
+  {
+    file: `${A}/context/timelineSections/setup.ts`,
+    symbol: "CC_NOT_LANDED_TAG",
+    mod: timelineSetup,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkCcNotLandedLines",
+    mod: promptQualityCheck,
+  },
+  // fact6 F20 D4 / D5: [hit no enemy player] vs the press's reach
+  {
+    file: `${A}/utils/drAnalysis.ts`,
+    symbol: "OWNER_AOE_CC_NO_PLAYER_TAG",
+    mod: drAnalysis,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkHitNoPlayerContradiction",
+    mod: promptQualityCheck,
+  },
+  // fact6 D30: a pet-command miss prints once, as the pet's
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkPetCommandMissPrintedOnce",
+    mod: promptQualityCheck,
+  },
   {
     file: `${A}/utils/cooldowns.ts`,
     symbol: "kitSpellReadyAt",
     mod: cooldowns,
+  },
+  {
+    file: `${A}/utils/hiddenPress.ts`,
+    symbol: "hiddenPressMs",
+    mod: hiddenPress,
+  },
+  {
+    file: `${A}/utils/hiddenPress.ts`,
+    symbol: "HERALD_PROC_BUNDLE_IDS",
+    mod: hiddenPress,
+  },
+  {
+    file: `${A}/utils/cooldowns.ts`,
+    symbol: "PRESS_EFFECT_LEAD_MS",
+    mod: cooldowns,
+  },
+  {
+    file: `${A}/utils/castRowLag.ts`,
+    symbol: "AURA_BEFORE_CAST_ROW_MAX_MS",
+    mod: castRowLag,
+  },
+  {
+    file: `${A}/context/spellOutcomeLines.ts`,
+    symbol: "REFLECT_OWN_ID_LEAD_MS",
+    mod: spellOutcomeLines,
+  },
+  {
+    file: `${A}/context/spellOutcomeLines.ts`,
+    symbol: "REFLECT_DIRECT_RETURN_MS",
+    mod: spellOutcomeLines,
+  },
+  {
+    file: `${A}/context/spellOutcomeLines.ts`,
+    symbol: "REFLECT_CHAIN_GAP_MS",
+    mod: spellOutcomeLines,
+  },
+  // F20 D6: the fallback window, only without a reflected copy's aura
+  {
+    file: `${A}/context/spellOutcomeLines.ts`,
+    symbol: "REFLECT_DAMAGE_WINDOW_S",
+    mod: spellOutcomeLines,
+  },
+  // F20 wide residual: the 5 % floor's max-HP reading
+  {
+    file: `${A}/context/spellOutcomeLines.ts`,
+    symbol: "maxHpNear",
+    mod: spellOutcomeLines,
+  },
+  // F20 D9 / D13: what one trinket press removed; the [DEATH] trinket tag
+  {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "disarmsRemovedByPress",
+    mod: ccTrinketAnalysis,
+  },
+  {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "breakableCcBeforeDeath",
+    mod: ccTrinketAnalysis,
+  },
+  {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "deathCutCcBeforeDeath",
+    mod: ccTrinketAnalysis,
+  },
+  {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "DEATH_CUT_CC_TAG_RE_SRC",
+    mod: ccTrinketAnalysis,
+  },
+  {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "avoidanceExplainsMissType",
+    mod: ccTrinketAnalysis,
   },
   {
     file: `${A}/utils/spellMechanics.ts`,
@@ -1721,6 +4022,25 @@ const INDEX: PredicateRow[] = [
     symbol: "pvpTrinketReadyAtSecond",
     mod: ccTargetState,
   },
+  // F20 immunity residual: one target-blocker reading for the sampler and
+  // the healer-offense lines
+  {
+    file: `${A}/utils/ccTargetState.ts`,
+    symbol: "ccTargetBlockerIntervals",
+    mod: ccTargetState,
+  },
+  // fact6 D8 (F20): the immunity form; a control suggestion inside a
+  // printed full immunity
+  {
+    file: `${A}/utils/combatStates.ts`,
+    symbol: "auraIsImmunityForm",
+    mod: combatStates,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkCcSuggestionInsideImmunity",
+    mod: promptQualityCheck,
+  },
   {
     file: `${A}/context/ccUse.ts`,
     symbol: "ccUseSummary",
@@ -1744,6 +4064,188 @@ const INDEX: PredicateRow[] = [
   {
     file: `${E}/quality/promptQualityCheck.ts`,
     symbol: "checkCcBookmarkConsistency",
+    mod: promptQualityCheck,
+  },
+  // FT-T16 D15 "2c": CC USE `cast bar started N×, went off M×`
+  {
+    file: `${A}/context/ccUse.ts`,
+    symbol: "formatCcUseCount",
+    mod: ccUse,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkCcUseStartedCounts",
+    mod: promptQualityCheck,
+  },
+  // FT-T16 D15 "2b": [CAST STOPPED]
+  {
+    file: `${A}/context/timelineSections/castStopped.ts`,
+    symbol: "castStoppedText",
+    mod: timelineCastStopped,
+  },
+  {
+    file: `${A}/context/timelineSections/castStopped.ts`,
+    symbol: "CAST_STOPPED_NEAR_TEXT",
+    mod: timelineCastStopped,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkCastStoppedLines",
+    mod: promptQualityCheck,
+  },
+  // 2026-10-11: kick-eaten's `yourCancels` ≥ the [CAST STOPPED] lines that
+  // state a cancel (one reading, `ownerCastBarOutcomes`)
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkKickEatenCancelsCoverCastStopped",
+    mod: promptQualityCheck,
+  },
+  // 2026-10-11 (FT F12): how a cast bar of any unit ended (the kick audit
+  // reads it too), and a JUKED line never follows an interrupt of that spell
+  {
+    file: `${A}/utils/castBarOutcomes.ts`,
+    symbol: "castBarOutcomesOf",
+    mod: castBarOutcomes,
+  },
+  {
+    file: `${A}/utils/kickAudit.ts`,
+    symbol: "JUKED_BY_FAKE_HEAD",
+    mod: kickAudit,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkJukedKickNotAfterInterrupt",
+    mod: promptQualityCheck,
+  },
+  // fact6 D3: the owner's "hit nothing" kick beside its own interrupt line
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkOwnKickNotContradictedByInterrupt",
+    mod: promptQualityCheck,
+  },
+  // 2026-10-11 (FT I11): a cancel is a stop inside the round with nothing
+  // ending the cast for the player, and the [CAST STOPPED] lines end there
+  {
+    file: `${A}/utils/castCancels.ts`,
+    symbol: "isCancelInRound",
+    mod: castCancels,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkCastStoppedWithinRound",
+    mod: promptQualityCheck,
+  },
+  // 2026-10-11 (re-eval I01 / F21 / F07 / I06): the kick-eaten row's refused
+  // presses, its kick's own silence, its range and distance facts, and the
+  // legends' cross-references
+  {
+    file: `${A}/context/spellOutcomeLines.ts`,
+    symbol: "refusalWhy",
+    mod: spellOutcomeLines,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkKickEatenRefusedForAnotherReason",
+    mod: promptQualityCheck,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkKickEatenKickSilence",
+    mod: promptQualityCheck,
+  },
+  {
+    file: `${A}/analysis/candidateFindings.ts`,
+    symbol: "kickEatenReach",
+    mod: candidateFindings,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkKickEatenRangeFacts",
+    mod: promptQualityCheck,
+  },
+  {
+    file: `${A}/utils/losAnalysis.ts`,
+    symbol: "positionSampleSpanMs",
+    mod: losAnalysis,
+  },
+  {
+    file: `${A}/analysis/candidateFindings.ts`,
+    symbol: "distanceFact",
+    mod: candidateFindings,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkLegendCrossReferences",
+    mod: promptQualityCheck,
+  },
+  {
+    file: `${A}/analysis/findingsCount.ts`,
+    symbol: "findingsCountInstruction",
+    mod: findingsCount,
+  },
+  {
+    file: `${A}/analysis/findingsCount.ts`,
+    symbol: "findingsPromptHead",
+    mod: findingsCount,
+  },
+  {
+    file: `${A}/analysis/findingsCount.ts`,
+    symbol: "citableEventCount",
+    mod: findingsCount,
+  },
+  {
+    file: `${A}/analysis/findingsCount.ts`,
+    symbol: "citableEvents",
+    mod: findingsCount,
+  },
+  {
+    file: `${A}/analysis/findingsCount.ts`,
+    symbol: "menuEventIdsOfPrompt",
+    mod: findingsCount,
+  },
+  {
+    file: `${A}/analysis/findingsCount.ts`,
+    symbol: "menuRowHead",
+    mod: findingsCount,
+  },
+  {
+    file: `${A}/analysis/findingsCount.ts`,
+    symbol: "EVENT_MENU_HEADER",
+    mod: findingsCount,
+  },
+  {
+    file: `${A}/analysis/findingsCount.ts`,
+    symbol: "eventIdSetKey",
+    mod: findingsCount,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkFindingsCountFollowsMenu",
+    mod: promptQualityCheck,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkBareRosterPossessive",
+    mod: promptQualityCheck,
+  },
+  {
+    file: `${A}/utils/forcedDisplacement.ts`,
+    symbol: "deathGripsOn",
+    mod: forcedDisplacement,
+  },
+  {
+    file: `${A}/utils/forcedDisplacement.ts`,
+    symbol: "forcedMovesInRenderedSpan",
+    mod: forcedDisplacement,
+  },
+  {
+    file: `${A}/utils/forcedDisplacement.ts`,
+    symbol: "FORCED_MOVE_TEXT",
+    mod: forcedDisplacement,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkStayedInForcedMove",
     mod: promptQualityCheck,
   },
   {
@@ -1793,6 +4295,11 @@ const INDEX: PredicateRow[] = [
   },
   {
     file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkCdPriorCrossingHp",
+    mod: promptQualityCheck,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
     symbol: "checkTeammateCrisisRefConsistency",
     mod: promptQualityCheck,
   },
@@ -1814,6 +4321,11 @@ const INDEX: PredicateRow[] = [
   {
     file: `${E}/quality/promptQualityCheck.ts`,
     symbol: "checkEnemyDefRefConsistency",
+    mod: promptQualityCheck,
+  },
+  {
+    file: `${E}/quality/promptQualityCheck.ts`,
+    symbol: "checkBrokeOutRefConsistency",
     mod: promptQualityCheck,
   },
   {
@@ -2007,6 +4519,21 @@ const INDEX: PredicateRow[] = [
     file: `${D}/derive/mistakes.ts`,
     symbol: "rankMistakeMoments",
     mod: reportMistakes,
+  },
+  // the report's call of reconstructDispelSummary — the prompt's call (the
+  // round itself, both sides' pets); the equality is asserted below
+  {
+    file: `${D}/derive/dispelSummary.ts`,
+    symbol: "dispelSummaryOf",
+    mod: dispelSummary,
+  },
+  // where a control ends for the report's control readers: the function reads
+  // the round's end off the round it is handed — each reader hands the round
+  // itself, as the prompt does; asserted below
+  {
+    file: `${A}/utils/ccTrinketAnalysis.ts`,
+    symbol: "analyzePlayerCCAndTrinket",
+    mod: ccTrinketAnalysis,
   },
   // Dashboard lives outside report/ — spelled out so it matches the doc column
   {
@@ -2222,11 +4749,142 @@ const RAW_STREAMS_REAL_LINES = [
   '7/19/2026 04:19:12.536-4  SPELL_CAST_FAILED,Player-57-0E0CB0B6,"Minilay-Illidan-US",0x10511,0x80000000,0000000000000000,nil,0x80000000,0x80000000,156322,"永恒之火",0x6,"尚未恢复"',
 ];
 
+describe("谓词索引:刻意不统一的配对,两边的符号都还在", () => {
+  it("kick-eaten 的突进门(gapCloserStateAt)与 kick-priority 的跑动模型(meleeKickReachYd)—— 方向相反的保守,见「Not yet unified」(triage F-K6b × F-P3)", () => {
+    expect(typeof gapClosers.gapCloserStateAt).toBe("function");
+    expect(typeof kickPriority.meleeKickReachYd).toBe("function");
+  });
+  it("「施加控制时压迫怒吼在不在」的两份实现:analyzeCcBreaks 内联的 roarActive 与 oppressingRoarOnAt —— 未收口,见「Not yet unified」(triage CD CR1 遗留)", () => {
+    expect(typeof ccBreakAnalysis.analyzeCcBreaks).toBe("function");
+    expect(typeof ccBreakAnalysis.oppressingRoarOnAt).toBe("function");
+  });
+});
+
 describe("谓词索引:无法共享 export 的配对,断言相等", () => {
+  it("FT-T01:平砍孪生行谓词只有一处声明 —— collect.ts 与 swingLandedScan.ts 都 import 它,窗口 = 1000 ms", () => {
+    expect(swingTwins.SWING_TWIN_WINDOW_MS).toBe(1_000);
+    expect(readRepo("packages/parser/src/l3/collect.ts")).toMatch(
+      /import \{ swingLandedTwins \} from "\.\/swingTwins"/,
+    );
+    expect(readRepo("packages/eval/scripts/swingLandedScan.ts")).toMatch(
+      /import \{[^}]*\bswingLandedTwins\b[^}]*\} from "@gladlog\/parser"/s,
+    );
+  });
+
+  it("战报驱散读者的那次调用就是 prompt 的那次:回合本身 + 两边的宠物;dispelDash / mistakes 只经 dispelSummaryOf 调 reconstructDispelSummary", () => {
+    // the function reads the zone, the round's end and the units off the
+    // combat it is handed …
+    const fn = readRepo(`${A}/utils/dispelAnalysis.ts`);
+    expect(fn).toMatch(
+      /const zoneId = combat\.zoneId \?\? combat\.startInfo\?\.zoneId;\s*const roundEnd = roundEndMs\(combat\);/,
+    );
+    expect(fn).toMatch(/Object\.values\(combat\.units \?\? \{\}\)/);
+    // … the prompt hands it the round itself and both sides' pets, built off
+    // the round's units by owner …
+    const prompt = readRepo(`${A}/context/buildMatchContext.ts`);
+    expect(prompt).toMatch(
+      /const dispelSummary = reconstructDispelSummary\(\s*friends,\s*enemies,\s*combat,\s*friendlyPets,\s*enemyPets,\s*\);/,
+    );
+    expect(prompt).toMatch(
+      /const enemyPets = Object\.values\(combat\.units \?\? \{\}\)\.filter\(\s*\(u\) => u\.ownerId && enemyPlayerIds\.has\(u\.ownerId\),\s*\);/,
+    );
+    // … and so does the report's one call: the legacy match whole (no object
+    // built of some of its fields), the pets by the same rule
+    const seam = readRepo(`${D}/derive/dispelSummary.ts`);
+    expect(seam).toMatch(
+      /return reconstructDispelSummary\(us, them, legacy, petsOf\(us\), petsOf\(them\)\);/,
+    );
+    expect(seam).toMatch(
+      /const units = Object\.values\(legacy\.units\);\s*const petsOf = \(owners: Side\) => \{\s*const ids = new Set\(owners\.map\(\(o\) => o\.id\)\);\s*return units\.filter\(\(u\) => u\.ownerId && ids\.has\(u\.ownerId\)\);/,
+    );
+    expect(seam.match(/\breturn reconstructDispelSummary\(/g)).toHaveLength(1);
+    // both readers go through it, and neither calls the function itself
+    const dash = readRepo(`${D}/derive/dispelDash.ts`);
+    expect(dash).toMatch(
+      /import \{ dispelSummaryOf \} from "\.\/dispelSummary"/,
+    );
+    expect(dash).toMatch(
+      /const ours = dispelSummaryOf\(legacy, friends, enemies\);\s*const theirs = dispelSummaryOf\(legacy, enemies, friends\);/,
+    );
+    const mistakes = readRepo(`${D}/derive/mistakes.ts`);
+    expect(mistakes).toMatch(
+      /import \{ dispelSummaryOf \} from "\.\/dispelSummary"/,
+    );
+    expect(mistakes).toMatch(
+      /const dispels = dispelSummaryOf\(legacy, friends, enemies\);/,
+    );
+    for (const reader of [dash, mistakes]) {
+      expect(reader).not.toMatch(/reconstructDispelSummary\(/);
+      expect(reader).toMatch(/const legacy = toLegacySafe\(source\);/);
+    }
+    expect(typeof dispelSummary.dispelSummaryOf).toBe("function");
+  });
+
+  it("战报的控制读者交给 analyzePlayerCCAndTrinket 的就是 prompt 交的那个回合:statsTable / deathRecap / replayHighlights / keyMoments 都把 legacy 本身交过去", () => {
+    // the function reads the zone and the round's end off the combat it is
+    // handed …
+    const fn = readRepo(`${A}/utils/ccTrinketAnalysis.ts`);
+    expect(fn).toMatch(/const zoneId = combat\.startInfo\.zoneId;/);
+    expect(fn).toMatch(/const roundEnd = roundEndMs\(combat\);/);
+    // … the prompt hands it the round …
+    // (its fifth argument, the recorder's refused presses, feeds only the
+    // kick-eaten cast-time median — codex R6C-02 #2)
+    expect(readRepo(`${A}/context/buildMatchContext.ts`)).toMatch(
+      /analyzePlayerCCAndTrinket\(p, enemies, combat, enemyPets(?:, \w+)?\)/,
+    );
+    // … and each reader the legacy match itself, in every call it makes
+    const calls: Record<string, number> = {
+      statsTable: 1,
+      deathRecap: 1,
+      replayHighlights: 1,
+      keyMoments: 3,
+    };
+    for (const [name, n] of Object.entries(calls)) {
+      const src = readRepo(`${D}/derive/${name}.ts`);
+      const third = [
+        ...src.matchAll(
+          /analyzePlayerCCAndTrinket\(\s*\w+,\s*\w+,\s*([^,)]+?)\s*,/g,
+        ),
+      ].map((m) => m[1]);
+      expect(third, name).toEqual(Array(n).fill("legacy"));
+      expect(src.match(/analyzePlayerCCAndTrinket\(/g), name).toHaveLength(n);
+      expect(src, name).toMatch(/\blegacy = toLegacySafe\(source\);/);
+    }
+    // the stats table's zone was read off a field the legacy match does not
+    // have; it builds no round of its own any more
+    const stats = readRepo(`${D}/derive/statsTable.ts`);
+    expect(stats).not.toMatch(/const combatLike\b/);
+    expect(stats).not.toMatch(/legacy as \{ zoneId/);
+    expect(typeof ccTrinketAnalysis.analyzePlayerCCAndTrinket).toBe("function");
+  });
+
   it("rawStreams 的 splitRawLine / parseRawTimestamp / mirrorDecodeAdvanced 自 2026-09-26 起就是 parser 的 splitLine / parseTimestamp / decodeAdvanced 本身(经 parser-compat 重导出,同一引用),不再是镜像", () => {
     expect(rawStreams.splitRawLine).toBe(parserSplitLine);
     expect(rawStreams.parseRawTimestamp).toBe(parserParseTimestamp);
     expect(rawStreams.mirrorDecodeAdvanced).toBe(parserDecodeAdvanced);
+  });
+
+  it("rawStreams.rawLineInstantMs 就是 parser 的 logLineInstantMs(同一引用);带符号的行与 parseRawTimestamp 同值,不带符号的行(UTC 以东)与机器时区无关;kickLockoutScan 的日期读它", () => {
+    expect(rawStreams.rawLineInstantMs).toBe(parserLogLineInstantMs);
+    for (const line of RAW_STREAMS_REAL_LINES) {
+      const datePart = rawStreams.splitRawLine(line)!.datePart;
+      // every fixture line carries a signed offset: one instant, two readers
+      expect(rawStreams.rawLineInstantMs(datePart)).toBe(
+        rawStreams.parseRawTimestamp(datePart),
+      );
+    }
+    // file 097c4ae3: .167 and +10 — 08:56:32 UTC whatever zone parses it
+    const oceanic = "8/18/2026 18:56:32.16710";
+    expect(rawStreams.rawLineInstantMs(oceanic)).toBe(
+      Date.UTC(2026, 7, 18, 8, 56, 32, 167),
+    );
+    expect(
+      rawStreams.parseRawTimestamp(oceanic, { timezone: "America/New_York" }),
+    ).toBe(Date.UTC(2026, 7, 18, 22, 56, 32, 167));
+    expect(rawStreams.rawLineInstantMs("8/18/2026 18:56:32.167")).toBeNull();
+    expect(readRepo("packages/eval/scripts/kickLockoutScan.ts")).toMatch(
+      /statedMs: rawLineInstantMs\(split\.dateText\) \?\? split\.at/,
+    );
   });
 
   it("rawStreams.splitRawLine/parseRawTimestamp 与 parser 的 splitLine/parseTimestamp 在真实 raw.txt 行上逐字节相同(2026-08-15 到 09-26 是镜像 + parity,现为同一引用的回归对照,BACKLOG #26 Task 1)", () => {
@@ -2507,6 +5165,39 @@ describe("谓词索引:分析产出 X ⇄ 门规验证 X", () => {
     // printed the raw 1-dp overlap and the integer-only regex never saw it).
     expect(
       promptQualityCheck.checkWindowSpanConsistency(["0:34–0:38 (4.3s)"]),
+    ).toHaveLength(1);
+  });
+
+  it("`free X of Ys`:fmtWholeSecondsOrZero 印出的每一种写法,门规都读得回来", () => {
+    // the producer's line (healerOffenseAnalysis): free time capped at the
+    // rendered window, printed through fmtWholeSecondsOrZero
+    const line = (free: number, from: number, to: number) => {
+      const windowS = renderGrid.renderedWindowSeconds(from, to);
+      return `  [KILL WINDOW] ${renderGrid.fmtTime(from)}–${renderGrid.fmtTime(to)} on X: free ${renderGrid.fmtWholeSecondsOrZero(Math.min(free, windowS))} of ${windowS}s, team min HP 50%.`;
+    };
+    const lines = [0, 0.3, 0.49, 0.5, 1.3, 2.3, 7.6, 20.6].map((free) =>
+      line(free, 40.1, 60.7),
+    );
+    expect(lines.some((l) => l.includes("free <1s of 20s"))).toBe(true);
+    expect(lines.some((l) => l.includes("free 0s of 20s"))).toBe(true);
+    expect(promptQualityCheck.checkFreeOfWindowConsistency(lines)).toEqual([]);
+    // every printed slot round-trips to the number it rounded to
+    for (const free of [0, 0.3, 0.5, 7.6])
+      expect(
+        renderGrid.parseWholeSeconds(renderGrid.fmtWholeSecondsOrZero(free)),
+      ).toBe(Math.round(free));
+
+    // Negative controls: the uncapped rounding the gate was written for, and
+    // a slot written outside the shared formatter.
+    expect(
+      promptQualityCheck.checkFreeOfWindowConsistency([
+        "  [KILL WINDOW] 0:40–1:00 on X: free 21s of 20s, team min HP 50%.",
+      ]),
+    ).toHaveLength(1);
+    expect(
+      promptQualityCheck.checkFreeOfWindowConsistency([
+        "  [KILL WINDOW] 0:40–1:00 on X: free 0.3s of 20s, team min HP 50%.",
+      ]),
     ).toHaveLength(1);
   });
 

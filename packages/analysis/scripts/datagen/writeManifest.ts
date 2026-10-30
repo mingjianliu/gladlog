@@ -153,6 +153,14 @@ export async function main(): Promise<void> {
           .length,
         bytes: statSync(dataDir + "talentMitigationGenerated.json").size,
       },
+      // GH #155: talent duration extensions read off the tooltips; the
+      // unparsed sentences tracked like talentMitigation's pendingRuling
+      "talentDurationTooltipsGenerated.json": {
+        entries: readJson("talentDurationTooltipsGenerated.json").entries.length,
+        unparsed: readJson("talentDurationTooltipsGenerated.json").unparsed
+          .length,
+        bytes: statSync(dataDir + "talentDurationTooltipsGenerated.json").size,
+      },
       "offGcdGenerated.ts": {
         entries: countQuotedIds("offGcdGenerated.ts"),
       },
@@ -165,12 +173,35 @@ export async function main(): Promise<void> {
       "rootAuraGenerated.ts": {
         entries: countQuotedIds("rootAuraGenerated.ts"),
       },
+      // Triage G3 (2026-10-02, ruling A10): the DB2 half of the cast → effect
+      // table — nominations only; the corpus half follows below.
+      "castEffectNominationsGenerated.json": {
+        casts: readJson("castEffectNominationsGenerated.json").casts,
+        pairs: readJson("castEffectNominationsGenerated.json").pairs,
+      },
       // spell → charge pool pairs: count the keys, not every quoted number
       // (each row also quotes its category id).
       "sharedChargeGenerated.ts": {
         entries: (
           readFileSync(dataDir + "sharedChargeGenerated.ts", "utf-8").match(
             /"\d+": "\d+"/g,
+          ) ?? []
+        ).length,
+      },
+      // F20 D23 / D31 (2026-10-28): override variants on one cooldown, and
+      // Magic buffs one purge press removes — count the rows, not every
+      // quoted id (each variant row quotes its overridden id too).
+      "overrideVariantsGenerated.ts": {
+        pairs: (
+          readFileSync(dataDir + "overrideVariantsGenerated.ts", "utf-8").match(
+            /"\d+": "\d+"/g,
+          ) ?? []
+        ).length,
+      },
+      "purgeRemovalsGenerated.ts": {
+        entries: (
+          readFileSync(dataDir + "purgeRemovalsGenerated.ts", "utf-8").match(
+            /"\d+": \d+/g,
           ) ?? []
         ).length,
       },
@@ -261,6 +292,19 @@ export async function main(): Promise<void> {
       // GH #60 phase 1 (2026-08-31): the enemy-burst-window outcome reference.
       // Same corpus-driven shape as behaviorPriorGenerated.json above — the
       // producer lives in packages/eval, not under datagen.
+      // Triage G3 (2026-10-02, ruling A10): the corpus half of the cast →
+      // effect table, verified over the DB2 nominations above.
+      "castEffectAuraGenerated.json": {
+        casts: Object.keys(readJson("castEffectAuraGenerated.json").casts)
+          .length,
+        pairs: Object.values(
+          readJson("castEffectAuraGenerated.json").casts as Record<
+            string,
+            unknown[]
+          >,
+        ).reduce((n, rows) => n + rows.length, 0),
+        producer: "packages/eval/scripts/castEffectAuraScan.ts --emit",
+      },
       "burstWindowPriorGenerated.json": {
         entries: Object.keys(readJson("burstWindowPriorGenerated.json").cells)
           .length,

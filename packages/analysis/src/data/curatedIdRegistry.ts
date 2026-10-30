@@ -1,4 +1,3 @@
-import { DEFERRED_DAMAGE_SPELL_IDS } from "../context/timelineHelpers";
 /**
  * Registry of every HAND-MAINTAINED table keyed by (or containing) WoW spell
  * ids. Exists for one purpose: the Curated-List Completeness Rule's **reverse
@@ -20,6 +19,7 @@ import { DEFERRED_DAMAGE_SPELL_IDS } from "../context/timelineHelpers";
  * index, and the rule has never been the missing piece (CLAUDE.md).
  */
 import { BURST_LEAD_CD_EXCLUDED_IDS } from "../analysis/burstWindowDecisionPoints";
+import { CD_WASTE_EXCLUDED_IDS } from "../analysis/candidateFindings";
 import { HEALER_TEAM_BURST_IDS } from "../analysis/candidates/cooldownTiming";
 import { ZONE_EXTERNAL_RADIUS_YD } from "../analysis/candidates/death";
 import {
@@ -27,11 +27,12 @@ import {
   CRISIS_PROC_ANSWERS,
   CRISIS_PROTECTIVE_ANSWER_IDS,
 } from "../analysis/crisisDecisionPoints";
-import {
-  HIGH_VALUE_PURGEABLE_BUFFS,
-  PURGE_WHITELIST_DATA_BLOCKED,
-} from "../context/matchTimeline";
 import { DOT_SPELL_IDS } from "../context/matchTimelineSections";
+import { REFLECT_OWN_DAMAGE_IDS } from "../context/spellOutcomeLines";
+import {
+  DEFERRED_DAMAGE_SPELL_IDS,
+  ENDS_WITH_ITS_CHARGE_IDS,
+} from "../context/timelineHelpers";
 import {
   CHANNELED_CD_SPELL_IDS,
   ENEMY_MAJOR_BUFF_SPELL_IDS,
@@ -39,45 +40,76 @@ import {
   HEALING_AMPLIFIER_SPELL_IDS,
   MANA_COOLDOWN_SPELL_IDS,
 } from "../context/timelineHelpers";
-import { SPELL_DURATION_OVERRIDES } from "../utils/buffDuration";
+import { ENEMY_UTILITY_EXTRA_IDS } from "../context/timelineSections/enemyCd";
+import { CASTER_SIDE_LINK_AURA_IDS } from "../utils/brokenRowBreaker";
 import {
+  NO_FIXED_DURATION_IDS,
+  SPELL_DURATION_OVERRIDES,
+} from "../utils/buffDuration";
+import {
+  ATTACK_LOCK_AURA_IDS,
   BLADESTORM_AURA_IDS,
   UNRELENTING_ONSLAUGHT_TALENT_ID,
   USABLE_IN_BLADESTORM_WITH_TALENT,
 } from "../utils/castingLocks";
-import { COPY_CAST_IDS } from "../utils/castPress";
+import {
+  NO_PLAYER_CONTROL_IDS,
+  PRESS_TRIGGERED_CAST_IDS,
+} from "../utils/castMissRows";
+import { COMPANION_CAST_ROWS, COPY_CAST_IDS } from "../utils/castPress";
+import { DISPLACEMENT_EVIDENCE_IDS } from "../utils/castStopEvidence";
 import {
   BREAKABLE_CC_SPELL_IDS,
   CC_AVOIDANCE_BUFF_SPELLS,
+  CC_AVOIDANCE_FACT_ONLY_IDS,
   DRUID_FORM_BUFFS,
   GROUND_CC_SPELL_IDS,
+  LOCK_IGNORING_CAST_IDS,
   MAGIC_ONLY_IMMUNITY_IDS,
   PHYSICAL_CC_IDS,
+  PRE_TELEPORT_POSITION_SPELL_IDS,
+  REFLECT_ONLY_AVOIDANCE_IDS,
   REPOSITIONING_SPELL_IDS,
+  SINGLE_VICTIM_GROUND_CC_IDS,
+  TARGET_BOUND_MOBILITY_IDS,
   TARGETED_CC_DODGE_SPELLS,
   TREMOR_BREAKABLE_CC_IDS,
 } from "../utils/ccTrinketAnalysis";
-import { STASIS_STORABLE_HEAL_IDS } from "../utils/combatStates";
 import {
-  TEAM_SAVE_CD_IDS,
+  SPIRIT_OF_REDEMPTION_AURA_IDS,
+  STASIS_STORABLE_HEAL_IDS,
+} from "../utils/combatStates";
+import {
   ADDITIONAL_OVERLAP_DEFENSIVE_IDS,
+  ALLY_REACH_GRANTED_BY_TALENT,
+  ALLY_REACH_REQUIRES_PVP_TALENT,
+  AURA_ACTIVATION_PROVES_BUTTON_IDS,
   AURA_IS_THE_PRESS_IDS,
   AURA_ONLY_ACTIVATION_IDS,
+  BASELINE_DEFENSIVE_BY_SPEC,
   CD_ROLE_TAGS,
+  ENEMY_TARGET_DEFENSIVE_IDS,
   FORBEARANCE_GATED_IDS,
+  HAND_CANONICAL_IDS,
+  HYPOTHERMIA_AURA_ID,
+  HYPOTHERMIA_GATED_IDS,
   NON_SUBSTITUTE_DEFENSIVE_IDS,
+  NOT_DEFENSIVE_BY_NAME_IDS,
   PASSIVE_PROC_CAST_IDS,
   PROC_ONLY_ACTIVATION_IDS,
+  RESPONSE_ONLY_DEFENSIVE_IDS,
   SELF_CAST_NOOP_EXTERNAL_IDS,
   SPEC_EXCLUSIVE_SPELLS,
-  SPELL_CANONICAL_IDS,
+  STUN_PURGE_WITHHELD_IDS,
   TEAM_HEAL_CD_IDS,
+  TEAM_SAVE_CD_IDS,
   THROUGHPUT_EMPOWER_DEFENSIVE_IDS,
   USABLE_WHILE_CC_CONDITIONAL,
   USABLE_WHILE_CC_GAP_IDS,
   USABLE_WHILE_FEARED_GAP_IDS,
 } from "../utils/cooldowns";
 import { UNUSED_SELF_COVERAGE_UNMODELLED } from "../utils/counterfactual";
+import { AUTO_ATTACK_REPLACEMENT_IDS } from "../utils/damagePress";
 import {
   EXTERNAL_DEFENSIVE_SPELLS,
   IMMUNITY_SPELLS,
@@ -89,27 +121,46 @@ import {
   DISPEL_COOLDOWNS_BY_SPELL,
   DISPEL_PENALTY_SPELLS,
   DISPEL_TYPE_TALENT_GATES,
+  GREATER_PURGE_SPELL_ID,
   PURGE_BLOCKLIST,
+  PURGE_GATE_SPELL_BY_SPEC,
   PURGE_SPELLS_BY_SPEC,
   STELLAR_PROTECTION_PENALIZED_SPELLS,
+  UNPURGEABLE_MAGIC_AURAS,
 } from "../utils/dispelAnalysis";
 import { MOVEMENT_ROOT_BREAK_DISPEL_IDS } from "../utils/dispelKind";
-import { AOE_CC_SPELL_IDS, CC_CAST_EFFECT_AURA } from "../utils/drAnalysis";
+import { AOE_CC_LANDING_WINDOW_S, AOE_CC_SPELL_IDS } from "../utils/drAnalysis";
+import {
+  KW_OWN_ROTATIONAL_ABSORB_AURA_IDS,
+  KW_REDIRECT_PROTECTION_AURA_IDS,
+  KW_UNTARGETABLE_AURA_IDS,
+  RIDER_ABSORB_SAVE_AURAS,
+} from "../utils/enemyDefensives";
 import { NON_PLAYER_INTERRUPT_IDS } from "../utils/enemyInterrupts";
 import { EXTERNAL_DAMAGE_SHIELD_IDS } from "../utils/externalDamage";
-import { SPEC_PRIMARY_CC } from "../utils/healerExposureAnalysis";
+import { GAP_CLOSER_SPELL_IDS } from "../utils/gapClosers";
+import { HEAL_ABSORB_SELF_SAVE_IDS } from "../utils/healAbsorbSave";
+import {
+  SPEC_PRIMARY_CC,
+  TALENT_TRIGGERED_CONTROL_BUTTONS,
+} from "../utils/healerExposureAnalysis";
 import { HEALER_AVOIDANCE_SPELLS } from "../utils/healerExposureAnalysis";
+import { HERALD_PROC_BUNDLE_IDS } from "../utils/hiddenPress";
+import {
+  DEFERRAL_SHIELD_DAMAGE_IDS,
+  REDISTRIBUTION_DAMAGE_IDS,
+} from "../utils/incomingPressure";
+import { TOUCH_OF_KARMA_FEED_IDS } from "../utils/karmaFeed";
+import {
+  KICK_LOCKOUT_KICKER_TALENTS,
+  KICK_LOCKOUT_VICTIM_MODIFIERS,
+} from "../utils/kickLockout";
+import { KILL_ATTEMPT_NON_ANCHOR_CDS } from "../utils/killAttempts";
+import {
+  DAMAGE_TRANSFER_ROW_IDS,
+  EXECUTE_KILLING_BLOW_IDS,
+} from "../utils/killingBlow";
 import { PVP_TRINKET_SPELL_IDS } from "../utils/killWindowTargetSelection";
-import {
-  OFFENSIVE_CD_SPELL_IDS,
-  OFFENSIVE_EFFECT_ACTIVATION_IDS,
-  SPELL_EFFECT_OVERRIDES as SPELL_DANGER_OVERRIDES,
-} from "../utils/spellDanger";
-import { HEALER_REACH_SPELLS } from "../utils/spellRange";
-import {
-  OFFENSIVE_PURGE_TALENT_IDS,
-  TALENT_BEHAVIORS,
-} from "../utils/talentBehaviors";
 import {
   ASCENDANCE_ENH_ID,
   DOOM_WINDS_PRESS_ID,
@@ -118,16 +169,50 @@ import {
   OFFENSIVE_AURA_EVIDENCE,
 } from "../utils/offensiveAuraOccurrences";
 import {
+  ADAPTATION_LOCKOUT_AURA_ID,
+  ADAPTATION_TRIGGER_AURA_ID,
+} from "../utils/pvpTrinketUses";
+import { FREE_CAST_AURA_IDS } from "../utils/resourceAt";
+import {
+  OFFENSIVE_CD_SPELL_IDS,
+  OFFENSIVE_EFFECT_ACTIVATION_IDS,
+  SPELL_EFFECT_OVERRIDES as SPELL_DANGER_OVERRIDES,
+} from "../utils/spellDanger";
+import { HEALER_REACH_SPELLS } from "../utils/spellRange";
+import {
+  STEALTH_ONLY_CONTROL_IDS,
+  STEALTH_STATE_AURA_IDS,
+} from "../utils/stealthControl";
+import {
+  OFFENSIVE_PURGE_TALENT_IDS,
+  TALENT_BEHAVIORS,
+} from "../utils/talentBehaviors";
+import {
+  DATED_COOLDOWN_VALUES,
   PER_RANK_COOLDOWN_TALENTS,
   RULED_COOLDOWN_VALUES,
 } from "../utils/talentModifiers";
-import { KW_MAJOR_DEFENSIVE_IDS } from "./abilityProfile";
+import {
+  KW_IN_HAND_ONLY_DEFENSIVE_IDS,
+  KW_MAJOR_DEFENSIVE_IDS,
+  KW_UNPRESSED_NOT_IN_HAND_IDS,
+} from "./abilityProfile";
+import { castEffectPairs } from "./castEffectAuras";
 import { CAST_PARAM_DURATIONS } from "./castParamDurations";
+import {
+  AURA_KEYED_BREAK_RACIALS,
+  CLASS_CC_BREAK_ABILITIES,
+} from "./ccBreakAbilities";
 import { classMetadata } from "./classSpells";
 import { CURATED_ABILITY_FACTS } from "./curatedAbilityFacts";
 import { DISPEL_VERDICTS } from "./dispelVerdicts";
 import { spellClassMap } from "./drCategories";
-import { DRUID_FORM_AURA_IDS, FORM_BOUND_BUFF_IDS } from "./druidForms";
+import {
+  DRUID_FORM_AURA_IDS,
+  FORM_BOUND_BUFF_IDS,
+  FORM_COOLDOWN_BUFF_BY_CAST_ID,
+} from "./druidForms";
+import { ENEMY_HEAL_CD_IDS } from "./enemyHealCds";
 import { HEALING_VERDICTS, PROPOSED_HEALING_VERDICTS } from "./healingVerdicts";
 import {
   KICKED_CONTROL_OVERRIDE_IDS,
@@ -138,28 +223,69 @@ import {
 import { MITIGATION_OVERRIDES, NO_MITIGATION_IDS } from "./mitigationData";
 import { MITIGATION_VERDICTS } from "./mitigationVerdicts";
 import {
+  CHANNEL_PROXY_IDS,
+  DRINK_AURA_IDS,
+  OWN_FLIGHT_AURA_IDS,
+} from "./occupancyAuras";
+import { riderShieldPairs } from "./ownShieldLinks";
+import {
+  HIGH_VALUE_PURGEABLE_BUFFS,
+  PURGE_WHITELIST_DATA_BLOCKED,
+} from "./purgeWhitelist";
+import {
+  OFFENSIVE_RACIAL_WINDOW_IDS,
   RACIAL_ABILITIES,
+  RACIAL_TRINKET_LOCK_MS,
   SHARED_CD_RACIAL_SPELL_IDS,
 } from "./racialAbilities";
-import { SPELL_CATEGORIES } from "./spellCategories";
+import {
+  DISENTANGLEMENT_EFFECT_ID,
+  SHATTERING_THROW_CAST_ID,
+  SHATTERING_THROW_DISPEL_ID,
+  SHATTERING_THROW_REMOVES,
+  SHIV_REMOVES,
+  SHIV_SPELL_ID,
+} from "./scopedPurges";
+import { SELF_REMOVAL_SPELL_IDS } from "./selfRemovals";
+import { SILENCE_AURAS_NOT_KICKS, SPELL_CATEGORIES } from "./spellCategories";
 import {
   BUFF_DURATION_TALENT_MODIFIERS,
   CC_DURATION_TALENT_MODIFIERS,
-  OPPRESSING_ROAR_SPELL_ID,
+  OPPRESSING_ROAR_AURA_IDS,
 } from "./spellEffectData";
 import {
+  ARENA_DURATION_RULINGS,
   CORPUS_COOLDOWN_PATCHES,
   CORPUS_DURATION_PATCHES,
   DISPEL_TYPES,
   SPELL_EFFECT_OVERRIDES,
 } from "./spellEffectOverrides";
-import spellIdLists from "./spellIdLists";
+import spellIdLists, {
+  ENEMY_ALLY_SAVE_IDS,
+  ENEMY_AREA_SAVE_IDS,
+  ENEMY_IMMUNITY_EXTERNAL_CASTS,
+  ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS,
+  ENEMY_IMMUNITY_SAVE_AURAS,
+  ENEMY_IMMUNITY_TEAM_PROC_AURAS,
+  ENEMY_PROC_SAVES,
+  ENEMY_REDIRECT_SAVE_IDS,
+  ENEMY_SELF_DEFENSIVE_HAND_MECHANISMS,
+  ENEMY_SELF_SAVE_ONLY_IDS,
+  ENEMY_STEALTH_WALL_AURAS,
+  MECHANIC_IMMUNITY_REMOVAL_ONLY_IDS,
+} from "./spellIdLists";
 import { trinketSpellIds } from "./spellTags";
+import {
+  TOOLTIP_DURATION_ROWS,
+  TOOLTIP_PER_EVENT_DURATIONS,
+} from "./talentDurationTooltips";
 import { TALENT_MITIGATION_MODIFIERS } from "./talentMitigationModifiers";
 import { TALENT_REPLACES } from "./talentReplaces";
 import {
   EVENT_COOLDOWN_REDUCTIONS,
   FREE_RECAST_WINDOWS,
+  IDLE_COOLDOWN_CREDITS,
+  ON_INTERRUPT_COOLDOWN_REDUCTIONS,
 } from "./talentScriptedCooldowns";
 import { WARLOCK_PET_CAST_FUNCTION } from "./warlockPets";
 
@@ -234,6 +360,97 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
     "cast",
     () => spellIdLists.externalDefensiveSpellIds,
   ),
+  // Triage 2026-09-29 (enemy-def F-E7 / F-E4 / F-E9): the enemy-only save
+  // sets — read by enemyDefensives.ts alone ([ENEMY DEF] + KILL ATTEMPTS).
+  t(
+    "spellIdLists.ENEMY_SELF_SAVE_ONLY_IDS",
+    "data/spellIdLists.ts",
+    "cast",
+    () => set(ENEMY_SELF_SAVE_ONLY_IDS),
+  ),
+  // 2026-10-11: the self defensives whose `[ENEMY DEF]` label the official
+  // profile cannot give (Evasion, Nether Ward, Alter Time) — cast ids
+  t(
+    "spellIdLists.ENEMY_SELF_DEFENSIVE_HAND_MECHANISMS",
+    "data/spellIdLists.ts",
+    "cast",
+    () => keys(ENEMY_SELF_DEFENSIVE_HAND_MECHANISMS),
+  ),
+  // 2026-10-27: presses labelled by the removal alone (Master's Call — the
+  // corpus does not bear out the official immunity) — cast ids
+  t(
+    "spellIdLists.MECHANIC_IMMUNITY_REMOVAL_ONLY_IDS",
+    "data/spellIdLists.ts",
+    "cast",
+    () => set(MECHANIC_IMMUNITY_REMOVAL_ONLY_IDS),
+  ),
+  t("spellIdLists.ENEMY_ALLY_SAVE_IDS", "data/spellIdLists.ts", "cast", () =>
+    set(ENEMY_ALLY_SAVE_IDS),
+  ),
+  t(
+    "spellIdLists.ENEMY_REDIRECT_SAVE_IDS",
+    "data/spellIdLists.ts",
+    "cast",
+    () => set(ENEMY_REDIRECT_SAVE_IDS),
+  ),
+  // enemy-def F-E5 / F-E6 (ruling A25, split by effect in D8): the
+  // immunity-kind saves, aura-keyed; the proc saves (Cheat Death and Cauterize
+  // log only their proc aura, Nature's Guardian only its heal); and the
+  // cast → aura pairs of immunities put on an ally.
+  t(
+    "spellIdLists.ENEMY_IMMUNITY_SAVE_AURAS",
+    "data/spellIdLists.ts",
+    "aura",
+    () => keys(ENEMY_IMMUNITY_SAVE_AURAS),
+  ),
+  // fact6 D17: the immunity-kind saves a teammate's proc puts on each carrier
+  t(
+    "spellIdLists.ENEMY_IMMUNITY_TEAM_PROC_AURAS",
+    "data/spellIdLists.ts",
+    "aura",
+    () => set(ENEMY_IMMUNITY_TEAM_PROC_AURAS),
+  ),
+  // user ruling U-KA3: the immunity-kind auras that hold while they are up
+  t(
+    "spellIdLists.ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS",
+    "data/spellIdLists.ts",
+    "aura",
+    () => set(ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS),
+  ),
+  // user ruling D6: the wall aura whose carrier goes unseen (Greater
+  // Invisibility) — with the three above, "the log never shows it end"
+  t(
+    "spellIdLists.ENEMY_STEALTH_WALL_AURAS",
+    "data/spellIdLists.ts",
+    "aura",
+    () => keys(ENEMY_STEALTH_WALL_AURAS),
+  ),
+  t("spellIdLists.ENEMY_PROC_SAVES", "data/spellIdLists.ts", "aura", () =>
+    keys(ENEMY_PROC_SAVES),
+  ),
+  t(
+    "spellIdLists.ENEMY_IMMUNITY_EXTERNAL_CASTS",
+    "data/spellIdLists.ts",
+    "mixed",
+    () => [
+      ...keys(ENEMY_IMMUNITY_EXTERNAL_CASTS),
+      ...Object.values(ENEMY_IMMUNITY_EXTERNAL_CASTS),
+    ],
+  ),
+  // enemy-def F-E21 (ruling A′15): class abilities that remove control, and
+  // the break racials logged only as a buff (buff id → racial cast id).
+  t("CLASS_CC_BREAK_ABILITIES", "data/ccBreakAbilities.ts", "cast", () =>
+    keys(CLASS_CC_BREAK_ABILITIES),
+  ),
+  t("AURA_KEYED_BREAK_RACIALS", "data/ccBreakAbilities.ts", "aura", () =>
+    keys(AURA_KEYED_BREAK_RACIALS),
+  ),
+  // enemy-def F-E1a's SELF_WALL_AURA_TO_CAST_ID left the registry with fact2
+  // C10 (2026-10-20): it is derived from the generated cast→effect table now.
+  // enemy-def F-E1b / crisis-external F-A1b (ruling A15): cast-anchored area saves.
+  t("spellIdLists.ENEMY_AREA_SAVE_IDS", "data/spellIdLists.ts", "cast", () =>
+    set(ENEMY_AREA_SAVE_IDS),
+  ),
   // GH #91 round 2 (2026-09-22): the ally-applied absorb shields the
   // during-external contract admits (one member, Life Cocoon).
   t(
@@ -262,11 +479,85 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
     "cast",
     () => [...KW_MAJOR_DEFENSIVE_IDS],
   ),
+  // 10-20 用户裁定(fact1215 复测 idx 54):就绪的 Alter Time 算手里的大减伤,
+  // 按下后不算「身上有」(R7)。
+  t(
+    "abilityProfile.KW_IN_HAND_ONLY_DEFENSIVE_IDS",
+    "data/abilityProfile.ts",
+    "cast",
+    () => [...KW_IN_HAND_ONLY_DEFENSIVE_IDS],
+  ),
+  // 10-20 用户裁定:没按过的治疗(Desperate Prayer、Divine Hymn、Tranquility)
+  // 和只能给队友的(Blessing of Sacrifice)不算「手里有」。
+  t(
+    "abilityProfile.KW_UNPRESSED_NOT_IN_HAND_IDS",
+    "data/abilityProfile.ts",
+    "cast",
+    () => [...KW_UNPRESSED_NOT_IN_HAND_IDS],
+  ),
+  // 10-20 用户裁定(fact1215 复测 idx 50):种族的进攻 buff 算进攻大招,并入
+  // OFFENSIVE_CD_SPELL_IDS(Ancestral Call 的四个光环一起登记)。
+  t("OFFENSIVE_RACIAL_WINDOW_IDS", "data/racialAbilities.ts", "mixed", () => [
+    ...OFFENSIVE_RACIAL_WINDOW_IDS,
+  ]),
+  // 10-20 用户裁定(fact1215 复测 idx 11):Counterspell 6 秒是 Improved
+  // Counterspell 持有者的值;天赋明确没有的踢人者锁 5 秒。
+  t("KICK_LOCKOUT_KICKER_TALENTS", "utils/kickLockout.ts", "mixed", () => [
+    ...Object.keys(KICK_LOCKOUT_KICKER_TALENTS),
+    ...Object.values(KICK_LOCKOUT_KICKER_TALENTS).map((t) => t.talentSpellId),
+  ]),
+  // 10-20 用户裁定(fact1215 复测 idx 22):随别的按键出现的吸收盾单独写
+  // [ENEMY DEF](Shield of Vengeance 跟着 Ret 的 Divine Protection)。
+  t(
+    "KW_OWN_ROTATIONAL_ABSORB_AURA_IDS",
+    "utils/enemyDefensives.ts",
+    "aura",
+    () => set(KW_OWN_ROTATIONAL_ABSORB_AURA_IDS),
+  ),
+  // F20 用户裁决 1(10-28):随别的按键出现的自身吸收盾也算「自己按出来的」
+  // (Chi Cocoon 跟 Invoke Chi-Ji / Enveloping Mist)。语料选出的表,10-28 在
+  // 605 上重量(阈值沿用 90 %),wide 未跑。
+  t("OWN_SHIELD_RIDERS", "data/ownShieldLinks.ts", "mixed", () =>
+    riderShieldPairs().flatMap(([aura, cast]) => [aura, cast]),
+  ),
+  t("KW_UNTARGETABLE_AURA_IDS", "utils/enemyDefensives.ts", "aura", () =>
+    set(KW_UNTARGETABLE_AURA_IDS),
+  ),
+  t("KW_REDIRECT_PROTECTION_AURA_IDS", "utils/enemyDefensives.ts", "aura", () =>
+    set(KW_REDIRECT_PROTECTION_AURA_IDS),
+  ),
+  t("RIDER_ABSORB_SAVE_AURAS", "utils/enemyDefensives.ts", "aura", () => [
+    ...RIDER_ABSORB_SAVE_AURAS.keys(),
+  ]),
+  // GH #155(10-21):天赋 tooltip 写明、语料验证过的持续时间延长。
+  t("TOOLTIP_DURATION_ROWS", "data/talentDurationTooltips.ts", "mixed", () => [
+    ...Object.keys(TOOLTIP_DURATION_ROWS),
+    ...Object.values(TOOLTIP_DURATION_ROWS).flatMap((rs) =>
+      rs.map((r) => r.talentSpellId),
+    ),
+  ]),
+  t(
+    "TOOLTIP_PER_EVENT_DURATIONS",
+    "data/talentDurationTooltips.ts",
+    "mixed",
+    () => [
+      ...Object.keys(TOOLTIP_PER_EVENT_DURATIONS),
+      ...Object.values(TOOLTIP_PER_EVENT_DURATIONS).map((p) => p.talentSpellId),
+      // the casts that extend it (`SHAMAN_CAST_TIME_SPELLS`, weekly review
+      // 2026-10-24: hand-kept, decides Spiritwalker's Momentum's length)
+      ...Object.values(TOOLTIP_PER_EVENT_DURATIONS).flatMap((p) => [
+        ...p.qualifyingSpellIds,
+      ]),
+    ],
+  ),
   t("RACIAL_ABILITIES", "data/racialAbilities.ts", "cast", () =>
     keys(RACIAL_ABILITIES),
   ),
   t("SHARED_CD_RACIAL_SPELL_IDS", "data/racialAbilities.ts", "cast", () =>
     set(SHARED_CD_RACIAL_SPELL_IDS),
+  ),
+  t("RACIAL_TRINKET_LOCK_MS", "data/racialAbilities.ts", "cast", () =>
+    keys(RACIAL_TRINKET_LOCK_MS),
   ),
   t("MITIGATION_OVERRIDES", "data/mitigationData.ts", "cast", () =>
     keys(MITIGATION_OVERRIDES),
@@ -312,6 +603,44 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   t("TEAM_HEAL_CD_IDS", "utils/cooldowns.ts", "cast", () =>
     set(TEAM_HEAL_CD_IDS),
   ),
+  t("FREE_CAST_AURA_IDS", "utils/resourceAt.ts", "aura", () =>
+    set(FREE_CAST_AURA_IDS),
+  ),
+  t("AURA_ACTIVATION_PROVES_BUTTON_IDS", "data/auraActivation.ts", "cast", () =>
+    set(AURA_ACTIVATION_PROVES_BUTTON_IDS),
+  ),
+  t("CD_WASTE_EXCLUDED_IDS", "analysis/candidateFindings.ts", "cast", () =>
+    set(CD_WASTE_EXCLUDED_IDS),
+  ),
+  t("RESPONSE_ONLY_DEFENSIVE_IDS", "utils/cooldowns.ts", "cast", () =>
+    set(RESPONSE_ONLY_DEFENSIVE_IDS),
+  ),
+  // generated (data/baselineDefensivesGenerated.json), registered all the
+  // same: a renumbered baseline button would sit in every such spec's ledger
+  // as "never used" (triage cd-hoarded F-W6)
+  t("BASELINE_DEFENSIVE_BY_SPEC", "utils/cooldowns.ts", "cast", () => [
+    ...new Set(Object.values(BASELINE_DEFENSIVE_BY_SPEC).flat()),
+  ]),
+  // generated too: a renumbered Touch of Karma would drop out of the
+  // enemy-in-reach gate and come back as a held save (codex round 6, F-W6)
+  t("ENEMY_TARGET_DEFENSIVE_IDS", "utils/cooldowns.ts", "cast", () =>
+    set(ENEMY_TARGET_DEFENSIVE_IDS),
+  ),
+  t("ALLY_REACH_REQUIRES_PVP_TALENT", "utils/cooldowns.ts", "cast", () =>
+    keys(ALLY_REACH_REQUIRES_PVP_TALENT),
+  ),
+  t(
+    "ALLY_REACH_REQUIRES_PVP_TALENT.talent",
+    "utils/cooldowns.ts",
+    "talent",
+    () => set(Object.values(ALLY_REACH_REQUIRES_PVP_TALENT)),
+  ),
+  t("ALLY_REACH_GRANTED_BY_TALENT", "utils/cooldowns.ts", "cast", () =>
+    keys(ALLY_REACH_GRANTED_BY_TALENT),
+  ),
+  t("ALLY_REACH_GRANTED_BY_TALENT.talent", "utils/cooldowns.ts", "talent", () =>
+    set(Object.values(ALLY_REACH_GRANTED_BY_TALENT)),
+  ),
   t("ADDITIONAL_OVERLAP_DEFENSIVE_IDS", "utils/cooldowns.ts", "cast", () =>
     set(ADDITIONAL_OVERLAP_DEFENSIVE_IDS),
   ),
@@ -320,28 +649,40 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   t("USABLE_WHILE_CC_GAP_IDS", "utils/cooldowns.ts", "cast", () =>
     set(USABLE_WHILE_CC_GAP_IDS),
   ),
+  // user ruling U-T1b: nominated by DB2's immunity route, not taken
+  t("STUN_PURGE_WITHHELD_IDS", "utils/cooldowns.ts", "cast", () =>
+    set(STUN_PURGE_WITHHELD_IDS),
+  ),
   t("USABLE_WHILE_FEARED_GAP_IDS", "utils/cooldowns.ts", "cast", () =>
     set(USABLE_WHILE_FEARED_GAP_IDS),
   ),
   t("USABLE_WHILE_CC_CONDITIONAL", "utils/cooldowns.ts", "cast", () =>
     keys(USABLE_WHILE_CC_CONDITIONAL),
   ),
+  // the hand layer only: F20 D23 merged the generated override variants
+  // (overrideVariantsGenerated.ts, DB2 aura 332) into the table itself
   t("SPELL_CANONICAL_IDS", "utils/cooldowns.ts", "mixed", () => [
-    ...keys(SPELL_CANONICAL_IDS),
-    ...Object.values(SPELL_CANONICAL_IDS),
+    ...keys(HAND_CANONICAL_IDS),
+    ...Object.values(HAND_CANONICAL_IDS),
   ]),
   t("FORBEARANCE_GATED_IDS", "utils/cooldowns.ts", "cast", () =>
     set(FORBEARANCE_GATED_IDS),
   ),
+  // FT F22: the casts Hypothermia refuses (DB2 SpellAuraRestrictions), and
+  // the aura itself
+  t("HYPOTHERMIA_GATED_IDS", "utils/cooldowns.ts", "mixed", () => [
+    ...set(HYPOTHERMIA_GATED_IDS),
+    HYPOTHERMIA_AURA_ID,
+  ]),
   t("SPEC_EXCLUSIVE_SPELLS", "utils/cooldowns.ts", "cast", () =>
     keys(SPEC_EXCLUSIVE_SPELLS),
   ),
   // GH #106 step 2 (2026-09-24): aura-only entries whose buff is the press
   // itself (read even when a real cast was logged).
-  t("AURA_IS_THE_PRESS_IDS", "utils/cooldowns.ts", "cast", () => [
+  t("AURA_IS_THE_PRESS_IDS", "data/auraActivation.ts", "cast", () => [
     ...AURA_IS_THE_PRESS_IDS,
   ]),
-  t("AURA_ONLY_ACTIVATION_IDS", "utils/cooldowns.ts", "mixed", () => [
+  t("AURA_ONLY_ACTIVATION_IDS", "data/auraActivation.ts", "mixed", () => [
     ...keys(AURA_ONLY_ACTIVATION_IDS),
     ...Object.values(AURA_ONLY_ACTIVATION_IDS).flat(),
   ]),
@@ -352,6 +693,9 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   ),
   t("NON_SUBSTITUTE_DEFENSIVE_IDS", "utils/cooldowns.ts", "cast", () =>
     set(NON_SUBSTITUTE_DEFENSIVE_IDS),
+  ),
+  t("NOT_DEFENSIVE_BY_NAME_IDS", "utils/cooldowns.ts", "cast", () =>
+    set(NOT_DEFENSIVE_BY_NAME_IDS),
   ),
   t("SELF_CAST_NOOP_EXTERNAL_IDS", "utils/cooldowns.ts", "cast", () =>
     set(SELF_CAST_NOOP_EXTERNAL_IDS),
@@ -377,6 +721,9 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
     set(DISPEL_COOLDOWNS_BY_SPELL.keys()),
   ),
   // talent impact audit 2026-09-26: dispel types that need a talent
+  t("ATTACK_LOCK_AURA_IDS", "utils/castingLocks.ts", "aura", () =>
+    set(ATTACK_LOCK_AURA_IDS),
+  ),
   t("BLADESTORM_AURA_IDS", "utils/castingLocks.ts", "aura", () =>
     set(BLADESTORM_AURA_IDS),
   ),
@@ -384,6 +731,23 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
     ...USABLE_IN_BLADESTORM_WITH_TALENT,
     UNRELENTING_ONSLAUGHT_TALENT_ID,
   ]),
+  // kick-eaten F-K8 (ruling A23, 2026-09-30): a victim talent that shortens a
+  // kick's lockout for some interrupted spells (Storm Conduit 1217092 on
+  // Lightning Bolt / Chain Lightning)
+  t("KICK_LOCKOUT_VICTIM_MODIFIERS", "utils/kickLockout.ts", "mixed", () =>
+    KICK_LOCKOUT_VICTIM_MODIFIERS.flatMap((m) => [
+      m.talentId,
+      ...m.interruptedSpellIds,
+    ]),
+  ),
+  // position F-D1: teleports whose caster keeps its pre-teleport position
+  // in the log for a moment (Shadowstep)
+  t(
+    "PRE_TELEPORT_POSITION_SPELL_IDS",
+    "utils/ccTrinketAnalysis.ts",
+    "cast",
+    () => set(PRE_TELEPORT_POSITION_SPELL_IDS),
+  ),
   t("NON_PLAYER_INTERRUPT_IDS", "utils/enemyInterrupts.ts", "cast", () =>
     set(NON_PLAYER_INTERRUPT_IDS),
   ),
@@ -394,6 +758,11 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   ),
   t("PURGE_BLOCKLIST", "utils/dispelAnalysis.ts", "aura", () =>
     set(PURGE_BLOCKLIST),
+  ),
+  // B-tier B13e (user ruling 2026-10-07): the blocklist's subset no purge
+  // can remove — what the purgeable-buff count leaves out.
+  t("UNPURGEABLE_MAGIC_AURAS", "utils/dispelAnalysis.ts", "aura", () =>
+    set(UNPURGEABLE_MAGIC_AURAS),
   ),
   // GH #83: the spell each spec dispels with — its range is the reach gate
   t("CLEANSE_SPELLS_BY_TYPE", "utils/dispelAnalysis.ts", "cast", () =>
@@ -407,12 +776,45 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   t("SPEC_PRIMARY_CC", "utils/healerExposureAnalysis.ts", "aura", () =>
     SPEC_PRIMARY_CC.map((e) => e.spellId),
   ),
+  t(
+    "TALENT_TRIGGERED_CONTROL_BUTTONS",
+    "utils/healerExposureAnalysis.ts",
+    "cast",
+    () => Object.values(TALENT_TRIGGERED_CONTROL_BUTTONS).flat(),
+  ),
+  // Triage 2026-09-29 F-K10b (ruling A′17): enemy displacements that break a
+  // cast bar — the knockback family plus Typhoon's daze aura.
+  t("DISPLACEMENT_EVIDENCE_IDS", "utils/castStopEvidence.ts", "mixed", () =>
+    set(DISPLACEMENT_EVIDENCE_IDS),
+  ),
+  // Triage 2026-09-29 F-K6b (ruling A12 + U2): caster-displacing abilities
+  // an enemy kicker can close a gap with — kick-eaten's out-range gate.
+  t("GAP_CLOSER_SPELL_IDS", "utils/gapClosers.ts", "cast", () =>
+    set(GAP_CLOSER_SPELL_IDS),
+  ),
   t("HEALER_REACH_SPELLS", "utils/spellRange.ts", "cast", () =>
     set(Object.values(HEALER_REACH_SPELLS).flat()),
   ),
+  t("PURGE_GATE_SPELL_BY_SPEC", "utils/dispelAnalysis.ts", "cast", () => [
+    ...Object.values(PURGE_GATE_SPELL_BY_SPEC),
+    GREATER_PURGE_SPELL_ID,
+  ]),
   t("PURGE_SPELLS_BY_SPEC", "utils/dispelAnalysis.ts", "cast", () =>
     set(Object.values(PURGE_SPELLS_BY_SPEC).flatMap((ids) => [...(ids ?? [])])),
   ),
+  // P-P5b = C (2026-10-01): scoped removals — what Shattering Throw and Shiv
+  // take off (auras), and the spells themselves (64380 / 233674 appear only
+  // as a SPELL_DISPEL source, hence "mixed")
+  t("SCOPED_PURGE_REMOVES", "data/scopedPurges.ts", "aura", () => [
+    ...SHATTERING_THROW_REMOVES,
+    ...SHIV_REMOVES,
+  ]),
+  t("SCOPED_PURGE_SPELLS", "data/scopedPurges.ts", "mixed", () => [
+    SHATTERING_THROW_CAST_ID,
+    SHATTERING_THROW_DISPEL_ID,
+    SHIV_SPELL_ID,
+    DISENTANGLEMENT_EFFECT_ID,
+  ]),
   // Dispelling-spell ids of movement/form riders (UI review 2026-08-21 #3;
   // moved here from eval's coverageManifest). "mixed": some (Cat Form) are
   // casts, others (Phantasm) only ever appear as the SPELL_DISPEL source spell.
@@ -422,6 +824,11 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   t("DRUID_FORM_AURA_IDS", "data/druidForms.ts", "aura", () =>
     set(DRUID_FORM_AURA_IDS),
   ),
+  // F11: a cooldown's form (cast id) → the cooldown's own buff (aura id).
+  t("FORM_COOLDOWN_BUFF_BY_CAST_ID", "data/druidForms.ts", "mixed", () => [
+    ...keys(FORM_COOLDOWN_BUFF_BY_CAST_ID),
+    ...Object.values(FORM_COOLDOWN_BUFF_BY_CAST_ID),
+  ]),
   t("FORM_BOUND_BUFF_IDS", "data/druidForms.ts", "aura", () =>
     set(FORM_BOUND_BUFF_IDS),
   ),
@@ -434,6 +841,15 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   t("DEFERRED_DAMAGE_SPELL_IDS", "context/timelineHelpers.ts", "cast", () =>
     set(DEFERRED_DAMAGE_SPELL_IDS),
   ),
+  t("ENDS_WITH_ITS_CHARGE_IDS", "context/timelineHelpers.ts", "cast", () =>
+    set(ENDS_WITH_ITS_CHARGE_IDS),
+  ),
+  t("REDISTRIBUTION_DAMAGE_IDS", "utils/incomingPressure.ts", "cast", () =>
+    set(REDISTRIBUTION_DAMAGE_IDS),
+  ),
+  t("DEFERRAL_SHIELD_DAMAGE_IDS", "utils/incomingPressure.ts", "aura", () =>
+    keys(DEFERRAL_SHIELD_DAMAGE_IDS),
+  ),
   t("COMP_DEPENDENT_PURGE_TARGETS", "utils/dispelAnalysis.ts", "aura", () =>
     set(COMP_DEPENDENT_PURGE_TARGETS),
   ),
@@ -441,8 +857,28 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   t("CC_AVOIDANCE_BUFF_SPELLS", "utils/ccTrinketAnalysis.ts", "aura", () =>
     set(CC_AVOIDANCE_BUFF_SPELLS.keys()),
   ),
+  t("HERALD_PROC_BUNDLE_IDS", "utils/hiddenPress.ts", "aura", () =>
+    set(HERALD_PROC_BUNDLE_IDS),
+  ),
+  t("CC_AVOIDANCE_FACT_ONLY_IDS", "utils/ccTrinketAnalysis.ts", "aura", () =>
+    set(CC_AVOIDANCE_FACT_ONLY_IDS),
+  ),
+  // weekly review 2026-10-24: three hand tables that had not registered
+  t("REFLECT_ONLY_AVOIDANCE_IDS", "utils/ccTrinketAnalysis.ts", "aura", () =>
+    set(REFLECT_ONLY_AVOIDANCE_IDS),
+  ),
+  t("REFLECT_OWN_DAMAGE_IDS", "context/spellOutcomeLines.ts", "cast", () =>
+    set(REFLECT_OWN_DAMAGE_IDS),
+  ),
+  t("COMPANION_CAST_ROWS", "utils/castPress.ts", "cast", () => [
+    ...COMPANION_CAST_ROWS.keys(),
+    ...COMPANION_CAST_ROWS.values(),
+  ]),
   t("DRUID_FORM_BUFFS", "utils/ccTrinketAnalysis.ts", "aura", () =>
     set(DRUID_FORM_BUFFS.keys()),
+  ),
+  t("CASTER_SIDE_LINK_AURA_IDS", "utils/brokenRowBreaker.ts", "aura", () =>
+    set(CASTER_SIDE_LINK_AURA_IDS),
   ),
   t("BREAKABLE_CC_SPELL_IDS", "utils/ccTrinketAnalysis.ts", "aura", () =>
     set(BREAKABLE_CC_SPELL_IDS),
@@ -450,8 +886,26 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   t("GROUND_CC_SPELL_IDS", "utils/ccTrinketAnalysis.ts", "cast", () =>
     set(GROUND_CC_SPELL_IDS),
   ),
+  t("SINGLE_VICTIM_GROUND_CC_IDS", "utils/ccTrinketAnalysis.ts", "aura", () =>
+    set(SINGLE_VICTIM_GROUND_CC_IDS),
+  ),
   t("MAGIC_ONLY_IMMUNITY_IDS", "utils/ccTrinketAnalysis.ts", "aura", () =>
     set(MAGIC_ONLY_IMMUNITY_IDS),
+  ),
+  t("TARGET_BOUND_MOBILITY_IDS", "utils/ccTrinketAnalysis.ts", "cast", () =>
+    set(TARGET_BOUND_MOBILITY_IDS),
+  ),
+  t("STEALTH_ONLY_CONTROL_IDS", "utils/stealthControl.ts", "cast", () =>
+    set(STEALTH_ONLY_CONTROL_IDS),
+  ),
+  t("STEALTH_STATE_AURA_IDS", "utils/stealthControl.ts", "aura", () =>
+    set(STEALTH_STATE_AURA_IDS),
+  ),
+  t(
+    "ENEMY_UTILITY_EXTRA_IDS",
+    "context/timelineSections/enemyCd.ts",
+    "cast",
+    () => set(ENEMY_UTILITY_EXTRA_IDS),
   ),
   t(
     "BURST_LEAD_CD_EXCLUDED_IDS",
@@ -465,6 +919,37 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
     "cast",
     () => set(HEALER_TEAM_BURST_IDS),
   ),
+  // B-tier B15c-U10 (user ruling 2026-10-06): a Holy Paladin's Avenging Wrath
+  // does not anchor a kill attempt of its own team.
+  t("KILL_ATTEMPT_NON_ANCHOR_CDS", "utils/killAttempts.ts", "cast", () =>
+    set([...KILL_ATTEMPT_NON_ANCHOR_CDS.values()].flatMap((s) => [...s])),
+  ),
+  // B-tier B15a step 2 (user ruling 2026-10-06): self-saves whose aura is a
+  // heal absorb on the caster — the press line says what it ate.
+  t("HEAL_ABSORB_SELF_SAVE_IDS", "utils/healAbsorbSave.ts", "cast", () =>
+    set(HEAL_ABSORB_SELF_SAVE_IDS),
+  ),
+  // B-tier B20a (user ruling 2026-10-06/07): Touch of Karma's cast / shield
+  // id and the id of the damage it sends back — the `| fed by` clause; and
+  // the absorb's own aura, whose end is the `[BUFF FADED]` line's (F02a).
+  t("TOUCH_OF_KARMA_FEED_IDS", "utils/karmaFeed.ts", "mixed", () =>
+    set(TOUCH_OF_KARMA_FEED_IDS),
+  ),
+  // User ruling 2026-10-07 (B11a's 605 report): spells swung in place of the
+  // auto-attack are not a press (`pressBehindDamageOf`).
+  t("AUTO_ATTACK_REPLACEMENT_IDS", "utils/damagePress.ts", "cast", () =>
+    set(AUTO_ATTACK_REPLACEMENT_IDS),
+  ),
+  // B-tier B15c-U11 (user ruling 2026-10-06): killing blows the friendly
+  // [DEATH] block names as an execute.
+  t("EXECUTE_KILLING_BLOW_IDS", "utils/killingBlow.ts", "cast", () =>
+    set(EXECUTE_KILLING_BLOW_IDS),
+  ),
+  // F20 (fact6 D22 residual): damage transfers logged as SPELL_DAMAGE whose
+  // source is the protected unit, never the killer.
+  t("DAMAGE_TRANSFER_ROW_IDS", "utils/killingBlow.ts", "cast", () =>
+    set(DAMAGE_TRANSFER_ROW_IDS),
+  ),
   t("PHYSICAL_CC_IDS", "utils/ccTrinketAnalysis.ts", "aura", () =>
     set(PHYSICAL_CC_IDS),
   ),
@@ -477,11 +962,16 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   t("TREMOR_BREAKABLE_CC_IDS", "utils/ccTrinketAnalysis.ts", "aura", () =>
     set(TREMOR_BREAKABLE_CC_IDS),
   ),
+  // Triage 2026-09-29 F-K7a: casts that succeed inside a lock on their own
+  // school (Demonic Circle: Teleport — FLAG, no DB2 mechanism).
+  t("LOCK_IGNORING_CAST_IDS", "utils/ccTrinketAnalysis.ts", "cast", () =>
+    set(LOCK_IGNORING_CAST_IDS),
+  ),
   // context/
-  t("HIGH_VALUE_PURGEABLE_BUFFS", "context/matchTimeline.ts", "aura", () =>
+  t("HIGH_VALUE_PURGEABLE_BUFFS", "data/purgeWhitelist.ts", "aura", () =>
     set(HIGH_VALUE_PURGEABLE_BUFFS),
   ),
-  t("PURGE_WHITELIST_DATA_BLOCKED", "context/matchTimeline.ts", "aura", () =>
+  t("PURGE_WHITELIST_DATA_BLOCKED", "data/purgeWhitelist.ts", "aura", () =>
     set(PURGE_WHITELIST_DATA_BLOCKED),
   ),
   t("HEALER_CAST_SPELL_ID_TO_NAME", "context/timelineHelpers.ts", "cast", () =>
@@ -492,6 +982,9 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   ),
   t("CHANNELED_CD_SPELL_IDS", "context/timelineHelpers.ts", "cast", () =>
     set(CHANNELED_CD_SPELL_IDS),
+  ),
+  t("NO_FIXED_DURATION_IDS", "utils/buffDuration.ts", "cast", () =>
+    set(NO_FIXED_DURATION_IDS),
   ),
   t("SPELL_DURATION_OVERRIDES", "utils/buffDuration.ts", "mixed", () =>
     keys(SPELL_DURATION_OVERRIDES),
@@ -527,12 +1020,34 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   t("AOE_CC_SPELL_IDS", "utils/drAnalysis.ts", "cast", () =>
     set(AOE_CC_SPELL_IDS),
   ),
-  // GH #111 (2026-09-25): CC cast id → the debuff aura the log applies, so a
-  // cast-keyed DR lookup reaches the aura-keyed DR table.
-  t("CC_CAST_EFFECT_AURA", "utils/drAnalysis.ts", "mixed", () => [
-    ...Object.keys(CC_CAST_EFFECT_AURA),
-    ...Object.values(CC_CAST_EFFECT_AURA),
+  // FT-T16 (D14, 2026-10-10): cast id → when its control lands. A hand table
+  // since 2026-10-09 and unregistered until the enemy-cast pairing
+  // (`ccLandedMatchWindowMs`) started reading it: a renumbered cast id would
+  // silently give that spell the 1.5 s default again.
+  t("AOE_CC_LANDING_WINDOW_S", "utils/drAnalysis.ts", "cast", () =>
+    keys(AOE_CC_LANDING_WINDOW_S),
+  ),
+  // fact6 D19 / D20 (2026-10-28): control ids whose control never reaches a
+  // player (DB2 tooltip: players get another effect) — a press / miss row of
+  // one is no control on a player. Aura ids that are also logged as the press.
+  t("NO_PLAYER_CONTROL_IDS", "utils/castMissRows.ts", "mixed", () =>
+    set(NO_PLAYER_CONTROL_IDS),
+  ),
+  // codex 20-F20-28 (2026-10-29): press → the id its effect triggers as a
+  // second SPELL_CAST_SUCCESS at the target (DB2 SpellEffect EffectTriggerSpell)
+  // — the evidence a follow-up row's IMMUNE is the press's refusal.
+  t("PRESS_TRIGGERED_CAST_IDS", "utils/castMissRows.ts", "cast", () => [
+    ...PRESS_TRIGGERED_CAST_IDS.keys(),
+    ...[...PRESS_TRIGGERED_CAST_IDS.values()].flat(),
   ]),
+  // Triage G3 (2026-10-02, ruling A10 = both): the one cast id → effect aura
+  // table, which absorbed GH #111's hand list `CC_CAST_EFFECT_AURA`. Generated
+  // — but from a CORPUS measurement over DB2 nominations, so its pairs are a
+  // season's snapshot like a hand list's: registered (ruling A10) so the
+  // reverse pass sees a renumbered cast or aura.
+  t("castEffectAuraGenerated", "data/castEffectAuras.ts", "mixed", () =>
+    castEffectPairs().flatMap(([cast, aura]) => [cast, aura]),
+  ),
   t("IMMUNITY_SPELLS", "utils/deathOutcomeAnalysis.ts", "mixed", () =>
     Object.entries(IMMUNITY_SPELLS).flatMap(([k, v]) => [
       k,
@@ -547,11 +1062,21 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   // generated data/interruptKitGenerated.json (DB2 SkillLineAbility +
   // SpecializationSpells + talent trees) — its id universe is SPELL_CATEGORIES
   // type "interrupts", already registered above.
+  t("SILENCE_AURAS_NOT_KICKS", "data/spellCategories.ts", "aura", () =>
+    set(SILENCE_AURAS_NOT_KICKS),
+  ),
+  t("ADAPTATION_TRINKET_AURAS", "utils/pvpTrinketUses.ts", "aura", () => [
+    ADAPTATION_TRIGGER_AURA_ID,
+    ADAPTATION_LOCKOUT_AURA_ID,
+  ]),
   t("PVP_TRINKET_SPELL_IDS", "utils/killWindowTargetSelection.ts", "cast", () =>
     set(PVP_TRINKET_SPELL_IDS),
   ),
   t("STASIS_STORABLE_HEAL_IDS", "utils/combatStates.ts", "cast", () =>
     set(STASIS_STORABLE_HEAL_IDS),
+  ),
+  t("SPIRIT_OF_REDEMPTION_AURA_IDS", "utils/combatStates.ts", "aura", () =>
+    set(SPIRIT_OF_REDEMPTION_AURA_IDS),
   ),
   t("HEALER_AVOIDANCE_SPELLS", "utils/healerExposureAnalysis.ts", "cast", () =>
     Object.values(HEALER_AVOIDANCE_SPELLS).flatMap((arr) =>
@@ -581,17 +1106,25 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   // the aura ids, the cooldowns they map to, and every cast id read as
   // evidence (Metamorphosis landing / button, Eye Beam, Doom Winds press,
   // Ascendance). All hand-keyed ids a patch can renumber.
-  t("OFFENSIVE_AURA_EVIDENCE", "utils/offensiveAuraOccurrences.ts", "mixed", () => [
-    ...OFFENSIVE_AURA_EVIDENCE.keys(),
-    ...[...OFFENSIVE_AURA_EVIDENCE.values()].map((v) => v.cooldownId),
-    ...METAMORPHOSIS_PRESS_CAST_IDS,
-    EYE_BEAM_ID,
-    DOOM_WINDS_PRESS_ID,
-    ASCENDANCE_ENH_ID,
-  ]),
+  t(
+    "OFFENSIVE_AURA_EVIDENCE",
+    "utils/offensiveAuraOccurrences.ts",
+    "mixed",
+    () => [
+      ...OFFENSIVE_AURA_EVIDENCE.keys(),
+      ...[...OFFENSIVE_AURA_EVIDENCE.values()].map((v) => v.cooldownId),
+      ...METAMORPHOSIS_PRESS_CAST_IDS,
+      EYE_BEAM_ID,
+      DOOM_WINDS_PRESS_ID,
+      ASCENDANCE_ENH_ID,
+    ],
+  ),
   // CC full-duration predicate (GH #44 tail, 2026-09-02): the corpus-vs-DB2
   // duration corrections and the one aura that lengthens CC in arena. Both are
   // hand-keyed ids a patch can renumber, so both sit under the rot scans.
+  t("ARENA_DURATION_RULINGS", "data/spellEffectOverrides.ts", "aura", () =>
+    keys(ARENA_DURATION_RULINGS),
+  ),
   t("CORPUS_DURATION_PATCHES", "data/spellEffectOverrides.ts", "aura", () =>
     keys(CORPUS_DURATION_PATCHES),
   ),
@@ -616,6 +1149,9 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
   t("RULED_COOLDOWN_VALUES", "utils/talentModifiers.ts", "talent", () =>
     Object.keys(RULED_COOLDOWN_VALUES),
   ),
+  t("DATED_COOLDOWN_VALUES", "utils/talentModifiers.ts", "talent", () =>
+    Object.keys(DATED_COOLDOWN_VALUES),
+  ),
   // Talent impact audit (2026-09-26): scripted cooldown effects — the talents
   // (vouched by COMBATANT_INFO) and the spells they act on (vouched by casts).
   t("FREE_RECAST_WINDOWS", "data/talentScriptedCooldowns.ts", "mixed", () => [
@@ -631,11 +1167,50 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
       ...Object.values(EVENT_COOLDOWN_REDUCTIONS).flatMap((r) => [
         ...r.targets,
         ...r.triggerCastIds,
+        ...(r.triggerHitIds ?? []),
+        ...(r.triggerSummonIds ?? []),
+        ...(r.triggerInterruptIds ?? []),
+        ...(r.triggerOwnAuraEndIds ?? []),
+        ...(r.triggerSelfAuraAppliedIds ?? []),
+        // weekly review 2026-10-24: the id fields 5dcd31c added — a
+        // renumbered Sudden Death aura silently dropped Unrelenting
+        // Onslaught's reductions with no scan seeing it
+        ...(r.triggerAuraConsumed?.auraIds ?? []),
+        ...(r.triggerAuraConsumed?.byCastIds ?? []),
+        ...(r.triggerAuraConsumed?.perStackOfAuraId
+          ? [r.triggerAuraConsumed.perStackOfAuraId]
+          : []),
+        ...(r.triggerPowerSpend?.exclude?.castIds ?? []),
+        ...(r.triggerPowerSpend?.costReductions ?? []).flatMap((c) => [
+          ...c.castIds,
+          ...(c.whileAuraId ? [c.whileAuraId] : []),
+          ...(c.talentId ? [c.talentId] : []),
+        ]),
+        ...(r.triggerHostileTaken?.notWhileSelfAuraId
+          ? [r.triggerHostileTaken.notWhileSelfAuraId]
+          : []),
+        ...(r.creditBonus?.whileSelfAura
+          ? [r.creditBonus.whileSelfAura.auraId]
+          : []),
+        ...(r.creditBonus?.perRank ? [r.creditBonus.perRank.talentId] : []),
       ]),
     ],
   ),
-  t("OPPRESSING_ROAR_SPELL_ID", "data/spellEffectData.ts", "aura", () => [
-    OPPRESSING_ROAR_SPELL_ID,
+  t("IDLE_COOLDOWN_CREDITS", "data/talentScriptedCooldowns.ts", "mixed", () => [
+    ...Object.keys(IDLE_COOLDOWN_CREDITS),
+    ...Object.values(IDLE_COOLDOWN_CREDITS).flatMap((r) => r.targets),
+  ]),
+  t(
+    "ON_INTERRUPT_COOLDOWN_REDUCTIONS",
+    "data/talentScriptedCooldowns.ts",
+    "mixed",
+    () => [
+      ...Object.keys(ON_INTERRUPT_COOLDOWN_REDUCTIONS),
+      ...Object.values(ON_INTERRUPT_COOLDOWN_REDUCTIONS).map((r) => r.spellId),
+    ],
+  ),
+  t("OPPRESSING_ROAR_AURA_IDS", "data/spellEffectData.ts", "aura", () => [
+    ...OPPRESSING_ROAR_AURA_IDS,
   ]),
   // Talent-conditional CC duration modifiers (GH #44 tail, 2026-09-02): the CC
   // aura ids it keys on plus the talent spell ids it gates on — a renumbered
@@ -693,6 +1268,22 @@ export const CURATED_ID_TABLES: readonly CuratedIdTable[] = [
       ...TALENT_MITIGATION_MODIFIERS.map((m) => m.auraSpellId),
       ...TALENT_MITIGATION_MODIFIERS.map((m) => m.talentSpellId),
     ],
+  ),
+  t("ENEMY_HEAL_CD_IDS", "data/enemyHealCds.ts", "cast", () =>
+    set(ENEMY_HEAL_CD_IDS),
+  ),
+  t("CHANNEL_PROXY_IDS", "data/occupancyAuras.ts", "aura", () =>
+    set(CHANNEL_PROXY_IDS),
+  ),
+  t("DRINK_AURA_IDS", "data/occupancyAuras.ts", "aura", () =>
+    set(DRINK_AURA_IDS),
+  ),
+  t("OWN_FLIGHT_AURA_IDS", "data/occupancyAuras.ts", "aura", () =>
+    set(OWN_FLIGHT_AURA_IDS),
+  ),
+  // WO3 #11: own buttons that clear the caster's debuffs of a dispel type
+  t("SELF_REMOVAL_BY_TYPE", "data/selfRemovals.ts", "cast", () =>
+    set(SELF_REMOVAL_SPELL_IDS),
   ),
   // GH #79 / B4: classification overrides for interrupted spells.
   t("KICKED_SPELL_OVERRIDES", "data/kickedSpellCategories.ts", "cast", () => [

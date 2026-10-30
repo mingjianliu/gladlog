@@ -4,11 +4,11 @@
 // was nothing to report); then write the surviving deep dives, interleaved and
 // anonymized, as the judge input (the judge scores blind and does not know
 // which entry is before/after).
-import { existsSync, readFileSync, readdirSync, writeFileSync } from "fs";
-import { join } from "path";
 import { auditDeepDives, type DeepDivePack,
   parseModelJsonArray,
 } from "@gladlog/analysis";
+import { existsSync, readdirSync, readFileSync, writeFileSync } from "fs";
+import { join } from "path";
 
 const AB = process.argv[2]!;
 

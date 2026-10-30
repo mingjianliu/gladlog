@@ -37,6 +37,12 @@ export interface GladHpEvent extends GladEventBase {
   /** Critical hit (materialized by the L1 hp-tail decode; after params
    * slimming the tail is no longer persisted with the doc). */
   crit?: boolean;
+  /** The school the DAMAGE was dealt in — the hp tail's own school field,
+   * which can differ from the spell's (a reflect logged under Spell
+   * Reflection 23920 carries 0x1 in the spell field and the reflected
+   * spell's school in the tail; fact2, 2026-10-20). Damage events only;
+   * absent on documents stored before it. */
+  school?: number;
 }
 
 export interface GladAbsorbEvent extends GladEventBase {
@@ -55,7 +61,16 @@ export interface GladAbsorbEvent extends GladEventBase {
   attackSpellName?: string;
 }
 
-export interface GladSpellEvent extends GladEventBase {}
+export interface GladSpellEvent extends GladEventBase {
+  /** What the cast cost, as its `SPELL_CAST_SUCCESS` row states it — one
+   * entry per power the row lists (two when the spell is charged in two: 35
+   * energy and 5 combo points), `cost` in the log's own unit for that power
+   * and 0 when the row says 0. The row states the spell's cost before the
+   * caster's percentage reductions (see `decodeCastCosts`). Only on `casts`
+   * (and their `petCasts` copies). Absent on a row that does not state it and
+   * on documents stored before 2026-10-11 — absent means unknown, not free. */
+  powerCosts?: Array<{ powerType: number; cost: number }>;
+}
 
 export interface GladAuraEvent extends GladEventBase {
   auraType: "BUFF" | "DEBUFF";
@@ -68,6 +83,11 @@ export interface GladDeathEvent extends GladEventBase {
 
 export interface GladAdvancedSample {
   timestamp: number;
+  /** the log line the reading came from — the order of a millisecond's
+   * rows (fact4 D31: a reading logged before a press's own cast row is the
+   * HP at the press; the row itself carries its cost). Absent on documents
+   * stored before 2026-10-24. */
+  lineIndex?: number;
   hp: number;
   maxHp: number;
   x: number;
@@ -99,7 +119,9 @@ export interface GladHealAbsorbEvent {
 
 /** `SPELL_EMPOWER_END` — an Evoker empowered cast and the charge level it was
  * released at. Kept out of `casts` on purpose: folding it in would double-count
- * every empowered cast, which already appears as its own SPELL_CAST_SUCCESS. */
+ * every empowered cast, which already appears as its own SPELL_CAST_SUCCESS.
+ * `SPELL_EMPOWER_INTERRUPT` has the same shape; there `level` is the level
+ * reached when the empower was cut short (nothing was released). */
 export interface GladEmpowerEvent extends GladEventBase {
   level: number;
 }
@@ -141,6 +163,15 @@ export interface GladUnit {
   healAbsorbsIn: GladHealAbsorbEvent[];
   /** Empowered casts BY this unit, with their release level. */
   empowerEnds: GladEmpowerEvent[];
+  /** `SPELL_EMPOWER_START` — the instant this unit began holding an empowered
+   * cast. The cast's own SPELL_CAST_SUCCESS is logged at this instant too (not
+   * at the release), so START → END / INTERRUPT is the only record of how long
+   * the unit was committed to it. Absent on documents stored before
+   * 2026-10-01 — absent means unknown. */
+  empowerStarts?: GladSpellEvent[];
+  /** Empowered casts BY this unit that were cut short (CC, kick, movement)
+   * instead of released. Same absent-on-older-documents caveat. */
+  empowerInterrupts?: GladEmpowerEvent[];
   /** Attacks BY this unit that missed, with the reason (IMMUNE, REFLECT, …). */
   missesOut: GladMissEvent[];
   /** Attacks ON this unit that missed — "I was immune to that". */
@@ -157,6 +188,14 @@ export interface GladMatchBase {
   playerId: string; // GUID of the log's owner
   playerTeamId: number | null;
   winningTeamId: number | null;
+  /** The lobby's matchmaking rating per team id, as the closing
+   * ARENA_MATCH_END line carries it (params 2 and 3) — NOT a player's
+   * personal rating (COMBATANT_INFO `personalRating`). null when the segment
+   * closed without that line or either value is not a positive number. A
+   * Solo Shuffle round carries its SHUFFLE's closing line: teams re-form
+   * every round, so the two numbers are not "this round's two teams".
+   * Absent on documents stored before 2026-10-07 — absent means unknown. */
+  teamMmr?: { team0: number; team1: number } | null;
   result: MatchResult;
   linesTotal: number;
   linesDropped: number;

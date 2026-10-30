@@ -5,8 +5,8 @@
 import {
   auditFindings,
   buildFindingsPrompt,
-  parseModelJsonArray,
   ensureAnalysisData,
+  parseModelJsonArray,
 } from "@gladlog/analysis";
 import { readFileSync, writeFileSync } from "fs";
 

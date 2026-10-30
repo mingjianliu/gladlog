@@ -13,11 +13,22 @@
 // Brackets swept: ARCHIVED_BRACKETS (src/pvpLogFetch.ts) — 2v2 excluded since 2026-09-04.
 // Env vars: ARCHIVE_ROOT / RCLONE_REMOTE / DOWNLOAD_SLEEP_MS / MAX_PAGES / DRY_RUN
 import { spawnSync } from "child_process";
+import { statfsSync } from "fs";
 import fs from "fs-extra";
 import os from "os";
 import path from "path";
-import { statfsSync } from "fs";
 
+import {
+  knownKeysFrom,
+  latestById,
+  LEDGER_WINDOW_DAYS,
+  type LedgerEntry,
+  ledgerShardPath,
+  mergeIndexLines,
+  parseShard,
+  recentDateKeys,
+  serializeEntry,
+} from "../src/archiveLedger";
 import {
   checkArchivePayload,
   driveDestFor,
@@ -36,17 +47,6 @@ import {
   stagedIdsFrom,
   stagingPathFor,
 } from "../src/archivePlan";
-import {
-  knownKeysFrom,
-  latestById,
-  LEDGER_WINDOW_DAYS,
-  ledgerShardPath,
-  type LedgerEntry,
-  mergeIndexLines,
-  parseShard,
-  recentDateKeys,
-  serializeEntry,
-} from "../src/archiveLedger";
 import {
   buildArchiveUploadArgs,
   buildIndexCatArgs,

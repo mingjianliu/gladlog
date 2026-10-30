@@ -2,7 +2,12 @@ import { CombatUnitReaction, LogEvent } from "@gladlog/parser-compat";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { ensureAnalysisData } from "../src";
-import { ownerCastCancels } from "../src/utils/castCancels";
+import {
+  castBarsOfCooldown,
+  castBarStartsInRound,
+  castBarStartsOf,
+  ownerCastCancels,
+} from "../src/utils/castCancels";
 import type { RawStreams } from "../src/utils/rawStreams";
 import {
   makeAuraEvent,
@@ -87,6 +92,25 @@ describe("ownerCastCancels", () => {
       rawStreams: streams,
     })!;
     expect(r.hardcasts).toBe(7);
+    // the shared cast-bar reading (CC USE's `cast bar started N×` and the
+    // kit's `[UNUSED — started N×, never finished]` count the same rows)
+    const bars = castBarStartsOf(owner, T0);
+    expect(bars.map((s) => [s.id, s.t])).toEqual(
+      [0, 4, 10, 20, 30, 40, 50].map((s) => ["2061", s]),
+    );
+    // inside a round only, both ends included, in seconds since its start
+    expect(
+      castBarStartsInRound(owner, { startTime: at(4), endTime: at(30) }).map(
+        (s) => s.t,
+      ),
+    ).toEqual([0, 6, 16, 26]);
+    // a bar is a cooldown's when its completed cast would be a press of it
+    expect(
+      castBarsOfCooldown(bars, owner, { spellId: "2061", spellName: "Flash Heal" }),
+    ).toHaveLength(7);
+    expect(
+      castBarsOfCooldown(bars, owner, { spellId: "51514", spellName: "Hex" }),
+    ).toHaveLength(0);
     expect(r.cancels.map((c) => [c.startS, c.progressPct])).toEqual([
       [10, 40],
       [20, 60],
@@ -127,6 +151,64 @@ describe("ownerCastCancels", () => {
       },
       rawStreams: { ...streams, castFailed: failed },
     })!;
+
+  // Triage 2026-09-29 kick-eaten F-K10b, user ruling A′17.
+  it("a cast broken by a landed enemy displacement is not the owner's own stop (138e632d @116.9, Typhoon)", () => {
+    // one completed bar (1.5 s), then a bar stopped at 10.6 s
+    const base = {
+      ...owner,
+      castStartEvents: [0, 10].map((s) => start("2061", s)),
+      spellCastEvents: [
+        makeSpellCastEvent("2061", at(1.5), "p1", "Me", "p1", "Me"),
+      ],
+      auraEvents: [],
+    };
+    const failed = [fail("2061", 10.6, "Interrupted")];
+    // control: nothing around it → a cancel
+    expect(run(base, [enemy], failed).cancels).toHaveLength(1);
+    // the Typhoon daze aura lands on the owner at the same instant
+    const dazed = {
+      ...base,
+      auraEvents: [
+        makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, "61391", at(10.6), "e1", "p1"),
+      ],
+    };
+    expect(run(dazed, [enemy], failed).cancels).toHaveLength(0);
+    // damage of a knockback (Thunderstorm 51490) taken by the owner
+    const knocked = {
+      ...base,
+      damageIn: [
+        { timestamp: at(10.5), spellId: "51490", srcUnitId: "e1", destUnitId: "p1" },
+      ],
+    };
+    expect(run(knocked as never, [enemy], failed).cancels).toHaveLength(0);
+    // a displacement outside CANCEL_CC_NEAR_S does not explain the stop
+    const late = {
+      ...base,
+      auraEvents: [
+        makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, "61391", at(11.2), "e1", "p1"),
+      ],
+    };
+    expect(run(late, [enemy], failed).cancels).toHaveLength(1);
+  });
+
+  it("a displacement that MISSED the owner does not excuse the stop — the owner was not moved (codex fixture)", () => {
+    const immune = {
+      ...owner,
+      castStartEvents: [0, 10].map((s) => start("2061", s)),
+      spellCastEvents: [
+        makeSpellCastEvent("2061", at(1.5), "p1", "Me", "p1", "Me"),
+      ],
+      auraEvents: [],
+      // Typhoon 132469 logged as SPELL_MISSED IMMUNE on the owner
+      missesIn: [
+        { timestamp: at(10.6), spellId: "132469", srcUnitId: "e1", destUnitId: "p1", missType: "IMMUNE", amount: 0 },
+      ],
+    };
+    expect(
+      run(immune as never, [enemy], [fail("2061", 10.6, "Interrupted")]).cancels,
+    ).toHaveLength(1);
+  });
 
   it("pairs a success only inside its own start window", () => {
     // Starts at 0 and 1 s, one success at 2 s: only the 1 s start completed
@@ -206,6 +288,69 @@ describe("ownerCastCancels", () => {
       rawStreams: streams,
     })!;
     expect(r.baitedKicks).toEqual([]);
+  });
+
+  // FT I11 (b): stops the player did not choose.
+  it("a cast bar the owner's own death ended is not a cancel (0fe0e2e2 0:43: the \"Interrupted\" row 24 ms before UNIT_DIED)", () => {
+    const base = {
+      ...owner,
+      castStartEvents: [0, 43.158].map((s) => start("2061", s)),
+      spellCastEvents: [
+        makeSpellCastEvent("2061", at(1.5), "p1", "Me", "p1", "Me"),
+      ],
+      auraEvents: [],
+    };
+    const failed = [fail("2061", 43.715, "Interrupted")];
+    // control: the owner lives → a cancel
+    expect(run(base, [enemy], failed).cancels).toHaveLength(1);
+    const died = { ...base, deathRecords: [{ timestamp: at(43.739) }] };
+    expect(run(died as never, [enemy], failed).cancels).toHaveLength(0);
+    // a death outside CANCEL_CC_NEAR_S of the stop row does not explain it
+    const later = { ...base, deathRecords: [{ timestamp: at(44.1) }] };
+    expect(run(later as never, [enemy], failed).cancels).toHaveLength(1);
+    // and an enemy kick that went out at the dead player's bar baited nothing
+    const kicker = {
+      ...enemy,
+      spellCastEvents: [
+        makeSpellCastEvent("1766", at(43.8), "p1", "Me", "e1", "Enemy"),
+      ],
+    };
+    expect(run(died as never, [kicker], failed).baitedKicks).toEqual([]);
+    expect(run(base, [kicker], failed).baitedKicks).toHaveLength(1);
+  });
+
+  it("a cast bar stopped at or after the round's end is not a cancel — a Solo Shuffle round is over at its first death (f0a10402 round 3)", () => {
+    // the round-ending death (an enemy's) at 103.983; a bar stopped before
+    // it, one stopped across it, one begun after it
+    const o2 = {
+      ...owner,
+      castStartEvents: [0, 100, 103.5, 104.062].map((s) => start("2061", s)),
+      spellCastEvents: [
+        makeSpellCastEvent("2061", at(1.5), "p1", "Me", "p1", "Me"),
+      ],
+      auraEvents: [],
+    };
+    const dead = { ...enemy, deathRecords: [{ timestamp: at(103.983) }] };
+    const failed = [
+      fail("2061", 100.6, "Interrupted"),
+      fail("2061", 104.0, "Interrupted"),
+      fail("2061", 104.602, "Interrupted"),
+    ];
+    const of = (bracket: string) =>
+      ownerCastCancels({
+        owner: o2 as never,
+        friends: [o2 as never],
+        enemies: [dead as never],
+        combat: {
+          ...combat,
+          startInfo: { bracket },
+          units: { p1: o2, e1: dead },
+        },
+        rawStreams: { ...streams, castFailed: failed },
+      })!.cancels.map((c) => c.startS);
+    expect(of("Rated Solo Shuffle")).toEqual([100]);
+    // in a 3v3 an enemy's death ends nothing: the round runs to the log's end
+    expect(of("3v3")).toEqual([100, 103.5, 104.062]);
   });
 
   it("is null for a player who did not record the log (no SPELL_CAST_FAILED)", () => {

@@ -1,12 +1,13 @@
-import { GladLogParser } from "@gladlog/parser";
 import type { GladMatch, GladShuffle } from "@gladlog/parser";
+import { GladLogParser } from "@gladlog/parser";
+
 import { toLegacyMatch, toLegacyShuffle } from "../src/convert";
 import {
+  CombatResult,
   CombatUnitClass,
   CombatUnitReaction,
-  CombatUnitType,
   CombatUnitSpec,
-  CombatResult,
+  CombatUnitType,
   LogEvent,
 } from "../src/enums";
 
@@ -47,6 +48,8 @@ describe("toLegacyMatch", () => {
     expect(legacy.playerId).toBe("Player-1-A");
     expect(legacy.playerTeamId).toBe("0");
     expect(legacy.winningTeamId).toBe("0");
+    // the lobby's matchmaking ratings pass through untouched (B21a)
+    expect(legacy.teamMmr).toEqual({ team0: 1500, team1: 1501 });
     expect(legacy.result).toBe(CombatResult.Win);
     expect(legacy.durationInSeconds).toBeGreaterThan(0);
     expect(legacy.rawLines.length).toBeGreaterThanOrEqual(5);
@@ -181,15 +184,16 @@ describe("event-name fidelity + SWING dedup (adjudication #10/#12)", () => {
   it("logLine.event preserves the real event name (PERIODIC stays PERIODIC)", () => {
     const evs = a.damageOut.map((e) => e.logLine.event).sort();
     expect(evs).toContain(LogEvent.SPELL_PERIODIC_DAMAGE);
-    expect(evs).toContain(LogEvent.SWING_DAMAGE);
+    // a paired swing's damage event is its victim-side line (FT-T02c)
+    expect(evs).toContain(LogEvent.SWING_DAMAGE_LANDED);
   });
 
-  it("SWING_DAMAGE_LANDED is NOT double-counted in damage arrays (old-parser dedup rule)", () => {
+  it("a SWING_DAMAGE + SWING_DAMAGE_LANDED pair is ONE damage event — the victim-side line — not two", () => {
     const swings = a.damageOut.filter((e) =>
       String(e.logLine.event).startsWith("SWING"),
     );
     expect(swings).toHaveLength(1);
-    expect(swings[0]!.logLine.event).toBe(LogEvent.SWING_DAMAGE);
+    expect(swings[0]!.logLine.event).toBe(LogEvent.SWING_DAMAGE_LANDED);
     // The damage total contains only one swing: periodic 55 + swing 77 (using
     // the negative-sign convention)
     const total = a.damageOut.reduce(
@@ -200,7 +204,7 @@ describe("event-name fidelity + SWING dedup (adjudication #10/#12)", () => {
   });
 });
 
-describe("absorb attribution + damage effective semantics (adjudication #13, real lines)", () => {
+describe("absorb attribution + damage effective semantics (adjudication #13 as amended by ruling A38, real lines)", () => {
   // Real log line: Pakoartisti attacks Envenum and Vierforfear's shield absorbs
   // 21986 (spell form, 22 fields)
   const ABS_SPELL =
@@ -209,13 +213,15 @@ describe("absorb attribution + damage effective semantics (adjudication #13, rea
   const ABS_SWING =
     'SPELL_ABSORBED,Player-1-ATK,"Atk-X",0x548,0x80000000,Player-2-VIC,"Vic-Y",0x10512,0x80000000,Player-3-OWN,"Own-Z",0x511,0x80000000,17,"Power Word: Shield",0x2,814,4755,nil';
   // Damage line carrying an absorbed field: amount=100, overkill=-1,
-  // absorbed=30 → legacy eff = -(100-0-30) = -70
+  // absorbed=30. `amount` is already net of the absorb, so the health lost is
+  // 100 — the old rule subtracted the 30 again (-70).
   const DMG_ABS =
     'SPELL_DAMAGE,Player-1-ATK,"Atk-X",0x548,0x80000000,Player-2-VIC,"Vic-Y",0x10512,0x80000000,50622,"Bladestorm",0x1,Player-2-VIC,0000000000000000,900,1000,0,0,0,0,0,0,0,100,100,0,1.0,-1.0,0,1.0,70,100,120,-1,1,0,0,30,nil,nil,nil';
 
   const { matches } = parseLines([
     "ARENA_MATCH_START,1825,41,3v3,1",
     CI("Player-1-ATK", 0, 71, 2000),
+    CI("Player-2-VIC", 1, 257, 2380),
     DMG_ABS,
     ABS_SPELL,
     ABS_SWING,
@@ -239,12 +245,94 @@ describe("absorb attribution + damage effective semantics (adjudication #13, rea
     expect(abs).toEqual([814, 21986]);
   });
 
-  it("legacy damage effectiveAmount subtracts the absorbed param: -(100-0-30) = -70", () => {
+  it("absorb rows name the unit that was HIT as dest, not the shield owner", () => {
+    // Own-Z's shield ate the hit on Vic-Y. With the shield owner as dest, a
+    // healer's shield on a teammate made the healer the "target" of the hit.
+    const abs = atk.damageOut.filter(
+      (e) => e.logLine.event === LogEvent.SPELL_ABSORBED,
+    );
+    expect(abs.map((e) => e.destUnitId)).toEqual([
+      "Player-2-VIC",
+      "Player-2-VIC",
+    ]);
+    expect(abs.map((e) => e.destUnitName)).toEqual(["Vic-Y", "Vic-Y"]);
+    expect(abs.map((e) => e.srcUnitId)).toEqual([
+      "Player-1-ATK",
+      "Player-1-ATK",
+    ]);
+  });
+
+  it("damage effectiveAmount is the health lost (amount − overkill); the absorbed param is NOT subtracted again (ruling A38)", () => {
     const dmg = atk.damageOut.filter(
       (e) => e.logLine.event === LogEvent.SPELL_DAMAGE,
     );
-    expect(dmg[0]!.effectiveAmount).toBe(-70);
+    expect(dmg[0]!.effectiveAmount).toBe(-100);
     expect(dmg[0]!.amount).toBe(-100);
+    // The victim's intake reads the same event the same way.
+    const vicIn = legacy.units["Player-2-VIC"]!.damageIn.filter(
+      (e) => e.logLine.event === LogEvent.SPELL_DAMAGE,
+    );
+    expect(vicIn[0]!.effectiveAmount).toBe(-100);
+  });
+
+  it("overkill is still removed: a 100 hit with 40 overkill and 30 absorbed lost 60 health", () => {
+    const OVERKILL = DMG_ABS.replace(
+      ",100,120,-1,1,0,0,30,",
+      ",100,120,40,1,0,0,30,",
+    );
+    expect(OVERKILL).not.toBe(DMG_ABS);
+    const { matches: m2 } = parseLines([
+      "ARENA_MATCH_START,1825,41,3v3,1",
+      CI("Player-1-ATK", 0, 71, 2000),
+      OVERKILL,
+      "ARENA_MATCH_END,0,30,1500,1501",
+    ]);
+    const row = toLegacyMatch(m2[0]!).units["Player-1-ATK"]!.damageOut[0]!;
+    expect(row.effectiveAmount).toBe(-60);
+    expect(row.overkill).toBe(40);
+  });
+});
+
+describe("damageOut absorb rows: pet zeroing follows the victim, not the shield owner", () => {
+  const PET = "Pet-0-1-1-1-165189-01P";
+  const TOTEM = "Creature-0-1-1-1-100943-01T";
+  // A player's shield eats a hit on a PET: a row onto a pet is zeroed
+  // (adjudication #17), whoever owns the shield.
+  const ABS_ON_PET = `SPELL_ABSORBED,Player-1-ATK,"Atk-X",0x548,0x80000000,${PET},"Kitty",0x1112,0x80000000,50622,"Bladestorm",0x1,Player-3-OWN,"Own-Z",0x511,0x80000000,17,"Power Word: Shield",0x2,500,900,nil`;
+  // A GUARDIAN's shield (Earthen Wall Totem) eats a hit on a PLAYER: the hit
+  // was on a player, so it counts.
+  const ABS_BY_TOTEM = `SPELL_ABSORBED,Player-1-ATK,"Atk-X",0x548,0x80000000,Player-2-VIC,"Vic-Y",0x10512,0x80000000,50622,"Bladestorm",0x1,${TOTEM},"Earthen Wall Totem",0x2112,0x80000000,201633,"Earthen Wall",0x8,700,900,nil`;
+  // Give the roster the pet and the totem (a SPELL_ABSORBED alone names no
+  // base units), each with the flags that decide its kind.
+  const PET_SEEN = `SPELL_AURA_APPLIED,${PET},"Kitty",0x1112,0x80000000,${PET},"Kitty",0x1112,0x80000000,136,"Mend Pet",0x8,BUFF`;
+  const TOTEM_SEEN = `SPELL_AURA_APPLIED,${TOTEM},"Earthen Wall Totem",0x2112,0x80000000,Player-2-VIC,"Vic-Y",0x10512,0x80000000,201633,"Earthen Wall",0x8,BUFF`;
+  const { matches } = parseLines([
+    "ARENA_MATCH_START,1825,41,3v3,1",
+    CI("Player-1-ATK", 0, 71, 2000),
+    CI("Player-2-VIC", 1, 257, 2380),
+    CI("Player-3-OWN", 1, 256, 2380),
+    PET_SEEN,
+    TOTEM_SEEN,
+    ABS_ON_PET,
+    ABS_BY_TOTEM,
+    "ARENA_MATCH_END,0,30,1500,1501",
+  ]);
+  const legacy = toLegacyMatch(matches[0]!);
+  const rows = legacy.units["Player-1-ATK"]!.damageOut.filter(
+    (e) => e.logLine.event === LogEvent.SPELL_ABSORBED,
+  );
+
+  it("a hit absorbed on a pet is zeroed even though a player owns the shield", () => {
+    const onPet = rows.find((e) => e.destUnitId === PET)!;
+    expect(onPet.destUnitName).toBe("Kitty");
+    expect(onPet.effectiveAmount).toBe(0);
+    expect(onPet.amount).toBe(500);
+  });
+
+  it("a hit absorbed on a player counts even though a guardian owns the shield", () => {
+    const onPlayer = rows.find((e) => e.destUnitId === "Player-2-VIC")!;
+    expect(onPlayer.destUnitName).toBe("Vic-Y");
+    expect(onPlayer.effectiveAmount).toBe(700);
   });
 });
 
@@ -627,5 +715,87 @@ describe("absorbs carry the ATTACKER's spell (GH #100: what did the shield eat)"
   it("the shield owner's absorbsOut carries it too", () => {
     const out = legacy.units["Player-2-B"]!.absorbsOut;
     expect(out[0]!.attackSpellId).toBe("50622");
+  });
+});
+
+describe("empowered casts: starts and interrupts cross into the legacy unit (triage other F-O6 / missed-cleanse F-C10)", () => {
+  const EMP = (ev: string, tail = "") =>
+    `${ev},Player-1-A,"Alice-X",0x511,0x80000000,0000000000000000,nil,0x80000000,0x80000000,355936,"Dream Breath",0x8${tail}`;
+  const { matches } = parseLines([
+    "ARENA_MATCH_START,1825,41,3v3,1",
+    CI("Player-1-A", 0, 1468, 2400),
+    EMP("SPELL_EMPOWER_START"),
+    EMP("SPELL_EMPOWER_INTERRUPT", ",1"),
+    EMP("SPELL_EMPOWER_START"),
+    EMP("SPELL_EMPOWER_END", ",3"),
+    "ARENA_MATCH_END,0,30,1500,1501",
+  ]);
+  const a = toLegacyMatch(matches[0]!).units["Player-1-A"]!;
+
+  it("empowerStarts / empowerInterrupts are exposed, and an interrupt is not a release", () => {
+    expect(a.empowerStarts).toHaveLength(2);
+    expect(a.empowerStarts![0]!.spellId).toBe("355936");
+    expect(a.empowerStarts![0]!.logLine.event).toBe("SPELL_EMPOWER_START");
+    expect(a.empowerInterrupts).toHaveLength(1);
+    expect(a.empowerInterrupts![0]!.level).toBe(1);
+    expect(a.empowerEnds).toHaveLength(1);
+    expect(a.empowerEnds![0]!.level).toBe(3);
+  });
+
+  it("a document stored before the parser kept them leaves the fields undefined (unknown, not none)", () => {
+    const old = structuredClone(matches[0]!);
+    for (const u of Object.values(old.units)) {
+      delete (u as { empowerStarts?: unknown }).empowerStarts;
+      delete (u as { empowerInterrupts?: unknown }).empowerInterrupts;
+    }
+    const legacy = toLegacyMatch(old).units["Player-1-A"]!;
+    expect(legacy.empowerStarts).toBeUndefined();
+    expect(legacy.empowerInterrupts).toBeUndefined();
+    expect(legacy.empowerEnds).toHaveLength(1);
+  });
+});
+
+describe("the cost a cast row states (2026-10-11)", () => {
+  const CAST = (cost: string, tail = true) =>
+    `SPELL_CAST_SUCCESS,Player-1-A,"Alice-X",0x511,0x80000000,Player-2-B,"Bob-Y",0x548,0x80000000,85673,"Word of Glory",0x2${
+      tail
+        ? `,Player-1-A,0000000000000000,1000,1000,0,0,0,0,0,0,9|0,5|267798,5|273000,${cost},1.0,-1.0,0,1.0,70`
+        : ""
+    }`;
+  const { matches } = parseLines([
+    "ARENA_MATCH_START,1825,41,3v3,1",
+    CI("Player-1-A", 0, 65, 2400),
+    CI("Player-2-B", 1, 71, 2380),
+    CAST("3|1500"),
+    CAST("0|0"),
+    CAST("", false),
+    "ARENA_MATCH_END,0,30,1500,1501",
+  ]);
+  const casts = toLegacyMatch(matches[0]!).units["Player-1-A"]!.spellCastEvents;
+
+  it("spellCastEvents carry it per power, in the log's own unit", () => {
+    expect(casts).toHaveLength(3);
+    expect(casts[0]!.powerCosts).toEqual([
+      { type: 9, cost: 3 },
+      { type: 0, cost: 1500 },
+    ]);
+    // a stated zero stays a statement
+    expect(casts[1]!.powerCosts).toEqual([
+      { type: 9, cost: 0 },
+      { type: 0, cost: 0 },
+    ]);
+  });
+
+  it("a row without the field, and a document stored before the parser kept it, leave it undefined", () => {
+    expect(casts[2]!.powerCosts).toBeUndefined();
+    expect("powerCosts" in casts[2]!).toBe(false);
+    const old = structuredClone(matches[0]!);
+    for (const u of Object.values(old.units))
+      for (const e of u.casts)
+        delete (e as { powerCosts?: unknown }).powerCosts;
+    const legacy = toLegacyMatch(old).units["Player-1-A"]!;
+    expect(legacy.spellCastEvents).toHaveLength(3);
+    for (const e of legacy.spellCastEvents)
+      expect("powerCosts" in e).toBe(false);
   });
 });

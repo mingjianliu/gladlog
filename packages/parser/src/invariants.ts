@@ -65,6 +65,8 @@ const EVENT_ARRAYS = [
   "advancedSamples",
   "healAbsorbsIn",
   "empowerEnds",
+  "empowerStarts",
+  "empowerInterrupts",
   "missesOut",
   "missesIn",
 ] as const;

@@ -2,6 +2,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 
 import { Timeline } from "../src/renderer/src/report/components/Timeline";
+import { deriveDampeningSeries } from "../src/renderer/src/report/derive/dampeningSeries";
 import {
   deriveFlowSeries,
   type FlowMetric,
@@ -108,6 +109,50 @@ describe("Timeline", () => {
     expect(rects[0]!.getAttribute("opacity")).toBe("0");
     expect(rects[0]!.textContent).toContain("Dampening 0%");
     expect(rects[1]!.textContent).toContain("10%");
+  });
+
+  it("dampening 泳道:序列不从 0 秒开始时(2v2 第一条记录是掉层,此前没有陈述值)—— 之前没有 rect,第一段从该秒画起", () => {
+    const data = deriveTimeline(m);
+    // a series whose first point is not at 0: deriveDampeningSeries returns
+    // one for a 2v2 round with no stated start (FT-T13 D11: the first logged
+    // line is a stack drop, which is not stepped back from)
+    const dampening = [
+      { tS: 11, pct: 42 },
+      { tS: 12, pct: 42 },
+      { tS: 13, pct: 43 },
+    ];
+    const { container } = render(
+      <Timeline data={data} dampening={dampening} />,
+    );
+    const rects = container.querySelectorAll("[data-testid='rpt-damp-lane']");
+    expect(rects).toHaveLength(2);
+    expect(rects[0]!.textContent).toContain("Dampening 42%");
+    // the first run starts at second 11, not at the left edge: a series that
+    // started at 0 puts its first rect further left
+    const fromZero = render(
+      <Timeline data={data} dampening={[{ tS: 0, pct: 42 }, ...dampening]} />,
+    ).container.querySelectorAll("[data-testid='rpt-damp-lane']");
+    expect(Number(rects[0]!.getAttribute("x"))).toBeGreaterThan(
+      Number(fromZero[0]!.getAttribute("x")),
+    );
+  });
+
+  it('dampening 泳道:report-match.json(真实 2v2,旧解析存档的层数是 "42\\r")仍然有泳道,从 0 秒的倒推值画起(WP-H 3,FT-T13 D11)', () => {
+    // the lane this fixture renders in the report: the derived 41% from 0:00
+    // and 42% from the first logged stack on — not the empty lane an unread
+    // "42\r" left it with
+    const dampening = deriveDampeningSeries(m);
+    expect(dampening[0]).toEqual({ tS: 0, pct: 41 });
+    expect(dampening.find((p) => p.pct === 42)).toEqual({ tS: 13, pct: 42 });
+    const { container } = render(
+      <Timeline data={deriveTimeline(m)} dampening={dampening} />,
+    );
+    const rects = container.querySelectorAll("[data-testid='rpt-damp-lane']");
+    expect(rects).toHaveLength(2);
+    expect(rects[0]!.textContent).toContain("Dampening 41%");
+    expect(rects[0]!.getAttribute("opacity")).toBe("0.41");
+    expect(rects[1]!.textContent).toContain("Dampening 42%");
+    expect(rects[1]!.getAttribute("opacity")).toBe("0.42");
   });
 });
 

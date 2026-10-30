@@ -13,16 +13,18 @@
  * (real movement widens the checked span); the 100 % detection gate lives in
  * the stationary synthetic fixture, packages/eval/test/positioningScan.test.ts.
  */
-import fs from "fs-extra";
-import path from "path";
 import { gunzipSync } from "node:zlib";
+
+import { isHealerSpec } from "@gladlog/analysis";
 import { GladLogParser } from "@gladlog/parser";
 import {
+  CombatUnitReaction,
   toLegacyMatch,
   toLegacyShuffle,
-  CombatUnitReaction,
 } from "@gladlog/parser-compat";
-import { isHealerSpec } from "@gladlog/analysis";
+import fs from "fs-extra";
+import path from "path";
+
 // The row shape of index.json (including ownerName) is defined single-source by
 // buildCorpus — this file used to declare an inline type and hand-add
 // ownerName, which meant nothing went red here when whoever writes the index
@@ -140,6 +142,7 @@ async function main() {
       zoneId: String(combat.startInfo?.zoneId ?? ""),
       matchStartMs: combat.startTime,
       unitIdMap,
+      units,
     };
 
     const result = checkGeoClaims(claims, ctx);

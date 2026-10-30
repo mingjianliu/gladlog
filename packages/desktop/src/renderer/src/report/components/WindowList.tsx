@@ -52,6 +52,8 @@ export function WindowList({
           <span className="rpt-window-detail">
             团队伤害{b.kind === "burst" ? "" : "仅"}{" "}
             {(b.damage / 1000).toFixed(0)}k
+            {(b.absorbed / 1000).toFixed(0) !== "0" &&
+              ` (+${(b.absorbed / 1000).toFixed(0)}k 被吸收)`}
           </span>
           {/* Trailing duration + kill-result chip (P3-2) */}
           <span className="rpt-ledger-chip rpt-ledger-chip-dim">

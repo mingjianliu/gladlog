@@ -72,10 +72,12 @@ describe("outgoing chains credit summon-sourced CC to the owner (C6)", () => {
     expect(apps[0]!.durationSeconds).toBeCloseTo(3, 5);
   });
 
-  it("an ENEMY-owned totem's stun on its own teammate is not ours", () => {
+  it("an ENEMY-owned totem's stun on its own teammate is not ours — but it is DR history (fact6 F20)", () => {
     const apps = build("esham");
+    // no application of ours; the game DRs the next stun all the same
+    // (`isDrHistorySource`: every source but a holder-self non-control)
     expect(apps.map((a) => [a.spellId, a.drInfo.level])).toEqual([
-      ["853", "Full"],
+      ["853", "50%"],
     ]);
   });
 });

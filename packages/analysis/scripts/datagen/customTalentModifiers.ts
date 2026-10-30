@@ -41,30 +41,56 @@ export const CUSTOM_TALENT_MODIFIERS: Record<string, ICDModifier[]> = {
   ],
 
   // --- Druid ---
-  // Nature's Swiftness + Call of Ohn'ahra (PvP talent): "Nature's Swiftness now
-  // also affects Cyclone, but its cooldown is increased by 30 sec" (A-tier
-  // tooltip). A cooldown INCREASE is a negative reduction — `applyCdModifiers`
-  // computes `base - flatReduce`, so -30 adds 30s.
+  // Nature's Swiftness 132158 + Call of Ohn'ahra 1246126 had a hand −30 here
+  // (2026-09-11, corpus split on 700 S2 logs: with the talent p05 63.1 s, without
+  // p05 47.4 s). It is gone: DB2 carries the penalty itself on row 1247559
+  // (already −30 at 12.1.0.69587, where the identical hand row hid it), and the
+  // 2026-09-22 hotfix ("increases the cooldown of Nature's Swiftness by 60 sec
+  // (was 30 sec)") reached 12.1.5.70391 as −60. Keeping the hand row would have
+  // stacked −30 on top of DB2's −60. A log from before the hotfix gets −30
+  // (`DATED_COOLDOWN_VALUES`, src/utils/talentModifiers.ts).
   //
-  // Hand entry because DB2 does not carry it: the 2026-09-11 PvP-pool pass mines
-  // the Shaman's identical talent (Ancestral Swiftness/Nature's Swiftness 378081
-  // <- Call of Al'Akir 1246131, reduce_cd -30) but nothing for the Druid's, so
-  // this one is server-side script. Corpus split instead (700 S2 logs,
-  // round-segmented, grouped by whether COMBATANT_INFO's pvpTalents holds
-  // 1246126):
-  //   · with Call of Ohn'ahra    — 75 casters, 186 repeat intervals, p05 63.1s,
-  //     p25 73.5s, and only 1.1% under 60s;
-  //   · without it               — 26 casters, 42 intervals, p05 47.4s,
-  //     p25 56.3s, 36% under 60s.
-  // The arithmetic closes: base 60 − Passing Seasons 15 = 45 (floor observed
-  // 32–47, Control of the Dream shaves up to 15 more), +30 → 75, floor 60 with
-  // the same Control of the Dream (observed 63.1 at p05). Direction is the safe
-  // one — a longer modelled cooldown can only cost a finding, never invent one.
-  "132158": [
+  // Convoke the Spirits 391528 ← Cenarius' Guidance 393371 (Restoration),
+  // GH #154. The tooltip's "cooldown is reduced by 50%" is $393374s4 / 120 s:
+  // effect 3 of 393374 is a dummy aura (4), −60 000 ms, no class mask — a
+  // server script the mask reader cannot see, while Feral's and Balance's
+  // −50 % (393414 / 393991) are masked rows and already generated. Corpus,
+  // ledgerImpossibleCastScan, 2,000 new-season files + 240 downloaded:
+  // Restoration holders' Convoke recasts on the modelled 120 s come back
+  // from 45.0 s on (36 presses under it), 60 − 15 with Control of the Dream.
+  //
+  // Feral's Ashamane's Guidance 391548 has the same split (cooldown mastery
+  // round, 2026-10-20): the talent itself is a dummy (effect 3) and its −50 %
+  // sits on 391538 (aura 108, misc 11, mask 0x10000 — Convoke), which no
+  // talent node names, so the generator never reached it. Corpus (2,240
+  // files): Feral holders' Convoke recasts on the modelled 120 s are 60.6,
+  // 66.2, 70.3, 74.1, 76.8, 80 and 94.1 s — all ≥ 60.
+  "391528": [
     {
-      talentSpellId: "1246126", // Call of Ohn'ahra (PvP talent SpellID)
+      talentSpellId: "393371", // Cenarius' Guidance
       effect: "reduce_cd",
-      value: -30,
+      value: 60,
+    },
+    {
+      talentSpellId: "391548", // Ashamane's Guidance (row on 391538)
+      effect: "reduce_cd_pct",
+      value: 50,
+    },
+  ],
+
+  // --- Mage ---
+  // Ice Block 45438 ← Ice Cold 414658 (`pressedAs`: Ice Cold's presses are Ice
+  // Block's). Up to 12.1.0 the node carried the passive 414659, whose aura-332
+  // override row (1083954, 414659 → 414658) the generator read as this
+  // replace_spell. 12.1.5.70391 puts the button 414658 on the node itself and
+  // states the relation only as TraitDefinition.OverridesSpellID (414658
+  // overrides 45438), which the aura-332 reader does not see — so the official
+  // relation is carried here, keyed on the talent id the node now holds.
+  "45438": [
+    {
+      talentSpellId: "414658", // Ice Cold (talent node spell since 12.1.5)
+      effect: "replace_spell",
+      value: 414658,
     },
   ],
 

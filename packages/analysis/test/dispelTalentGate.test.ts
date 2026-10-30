@@ -6,6 +6,10 @@ import { canDefensiveCleanse } from "../src/utils/dispelAnalysis";
 // Talent reads stubbed: "IMPROVED" holds Improved Purify, "PLAIN" does not,
 // null = no parsed loadout.
 vi.mock("../src/utils/talents", () => ({
+  // the era-aware talent list (cooldown mastery round 2026-10-20) — this
+  // file's synthetic units read as they are
+  talentsOf: (u: { info?: { talents?: unknown } }) => u.info?.talents,
+  unitLogEpochMs: () => Number.NaN,
   getPlayerTalentedSpellIds: (_spec: unknown, talents: unknown) =>
     talents === "IMPROVED"
       ? new Set(["390632"])

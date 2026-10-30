@@ -84,6 +84,27 @@ export function charmedSpans(
   return spans;
 }
 
+const charmedSpansMemo = new WeakMap<
+  ICombatUnit,
+  Array<{ from: number; to: number }>
+>();
+/**
+ * Was `unit` charmed (under enemy control, `charmedSpans`) at `ms`? A control
+ * its OWN team put on it then is a control on it (F16 retest idx 21: the
+ * mage under our Mind Control took its warlock's Mortal Coil) — the one
+ * admission `ccInstances` and the cannot-cast intervals read (codex
+ * 21-R12-b #1: the latter still dropped it, and the horrified mage read a
+ * ready kicker).
+ */
+export function charmedAt(unit: ICombatUnit, ms: number): boolean {
+  let spans = charmedSpansMemo.get(unit);
+  if (!spans) {
+    spans = charmedSpans(unit);
+    charmedSpansMemo.set(unit, spans);
+  }
+  return spans.some((sp) => sp.from <= ms && ms <= sp.to);
+}
+
 /**
  * Was `unit` charmed for all but less than `freeMs` of [fromMs, toMs]? A
  * 34 s Curse of Tongues with a 3 s Mind Control in the middle is not a

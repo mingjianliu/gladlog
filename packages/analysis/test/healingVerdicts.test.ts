@@ -11,10 +11,10 @@ import { describe, expect, it } from "vitest";
 
 import {
   HEALING_VERDICTS,
-  PROPOSED_HEALING_VERDICTS,
+  type HealingVerdict,
   healingVerdictDomain,
   healingVerdictOf,
-  type HealingVerdict,
+  PROPOSED_HEALING_VERDICTS,
 } from "../src/data/healingVerdicts";
 
 const SIGNED = /^\d{4}-\d{2}-\d{2} user$/;

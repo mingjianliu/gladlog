@@ -2,6 +2,7 @@ import { mkdtempSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { describe, expect, it } from "vitest";
+
 import { OBS_PASSWORD_REDACTED } from "../shared/protocol";
 import {
   redactSettings,

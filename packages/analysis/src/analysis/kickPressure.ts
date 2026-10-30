@@ -20,22 +20,59 @@
  * ours only 25 %, theirs only 20 %, calm with a burst ready 5 %, calm with
  * nothing ready 9 % — the last group is the one kick-eaten stops listing.
  *
- * Window: the lockout on the render grid, whole seconds
- * [floor(kick), ceil(kick + lockout)]; deaths up to KICK_OUTCOME_S after the
- * lockout ends. HP is `gridHpMinInWindow` — the [STATE] tick sampler — with
- * CRISIS_HP_PCT_RENDERED as the low line, so a rendered "13%" is the same
- * reading a [STATE] tick at that second prints.
+ * Window: the lock the text prints, on the render grid — whole seconds
+ * [floor(kick), floor(kick + min(lockout, lockEndedBySuccessS))] (the end
+ * floored since work order 2026-10-14b Part 2; cut at a locked-school SUCCESS
+ * or cast-bar start since 2026-10-14c Part 2 G3); deaths up to
+ * KICK_OUTCOME_S after the lock ends.
+ *
+ * HP, two readings since FT-T03 (user ruling 2026-10-10, D7 — "the 'trough'
+ * numbers may leave the whole-second grid and read the true minimum inside
+ * their window; the [STATE] point readings, the crisis crossing instants …
+ * do NOT move"):
+ *  - WHETHER a side has a unit at the crisis line (`low` exists — which
+ *    decides `kickIsHarmless`, i.e. whether the kick is listed at all, and
+ *    its cap tier) is asked of `gridHpMinInWindow`, the [STATE] tick
+ *    sampler, against CRISIS_HP_PCT_RENDERED, exactly as before. No
+ *    kick-eaten candidate appears or disappears with the ruling.
+ *  - WHAT the fact prints — the side's lowest unit, how low, and when — is
+ *    the trough: `hpTroughInWindow` over the same seconds, its samples
+ *    bounded to the lockout itself [kick, kick + lockout]. It is never above
+ *    the grid minimum, so a low that exists on the grid always has one to
+ *    print; `ourLowPct` can sit below the [STATE] tick of `ourLowT`, and the
+ *    unit named can be another one than the grid's lowest (rarely: when a
+ *    different unit dipped lower between two ticks).
+ *
+ * Triage 2026-09-29 (kick-eaten F-K3 / F-K9b), user rulings 2026-09-30:
+ *  - A31 = A: an offensive cooldown counts only when it was ALREADY RUNNING
+ *    when the kick landed. One pressed inside the lockout after the kick is
+ *    not what the kick served (141470d0 @60.4: Force of Nature pressed 2.8 s
+ *    later, 0.16 s before the lock ended, read `enemyBurst=Force of Nature`).
+ *  - A33 = A: a unit's ticks while it carries an immunity are not its low HP
+ *    (0068182d @72.5: `ourLowPct=40` was a mage inside Ice Block from 69.6 to
+ *    75.9). Since ruling F-K9b-B (2026-10-02) a FULL immunity only
+ *    (`FULL_IMMUNITY_IDS`): under Blessing of Protection, Blessing of
+ *    Spellwarding or Cloak of Shadows the unit can still be hurt by the other
+ *    kind of damage and is read as low (605 files: 12 of the 28 low facts the
+ *    whole set removed were under one of those three).
  */
-import type { AtomicArenaCombat, ICombatUnit } from "@gladlog/parser-compat";
+import {
+  type AtomicArenaCombat,
+  type ICombatUnit,
+  LogEvent,
+} from "@gladlog/parser-compat";
 
 import { getEnglishSpellName } from "../data/spellEffectData";
 import { burstCastSpan } from "../utils/burstLedger";
 import {
   gridHpMinInWindow,
+  hpTroughInWindow,
   kitSpellReadyAt,
   playerTalentIdSets,
 } from "../utils/cooldowns";
 import { reconstructEnemyCDTimeline } from "../utils/enemyCDs";
+import { fullImmunityIntervals } from "../utils/enemyDefensives";
+import { roundEndMs } from "../utils/roundEnd";
 import { OFFENSIVE_CD_SPELL_IDS } from "../utils/spellDanger";
 import { CRISIS_HP_PCT_RENDERED } from "./crisisDecisionPoints";
 
@@ -43,12 +80,21 @@ import { CRISIS_HP_PCT_RENDERED } from "./crisisDecisionPoints";
 export const KICK_OUTCOME_S = 5;
 
 export interface KickSidePressure {
-  /** The side's lowest unit at or below CRISIS_HP_PCT_RENDERED in the window. */
+  /** Present when a unit of the side sat at or below CRISIS_HP_PCT_RENDERED
+   * on a [STATE] tick of the window (the decision, on the grid). The values
+   * are the side's lowest TROUGH inside the lockout and the second it
+   * happened at (`hpTroughInWindow`, FT-T03) — at or below that tick. */
   low?: { unit: string; pct: number; atSec: number };
   /** The side's first death from the kick to KICK_OUTCOME_S after the lockout. */
   death?: { unit: string; atSec: number };
-  /** The OTHER side's offensive cooldowns running during the lockout. */
+  /** The OTHER side's offensive cooldowns already running when the kick
+   * landed (ruling A31). */
   burstAgainst: string[];
+  /** When each `burstAgainst` cooldown went out, match seconds (its cast
+   *  span's start; the earliest when one name has several) — work order
+   *  2026-10-14b fix 12: whether it came before or after the kicked cast
+   *  began. Facts only. */
+  burstFromS?: Record<string, number>;
 }
 
 export interface KickPressure {
@@ -73,14 +119,43 @@ export function kickIsHarmless(p: KickPressure): boolean {
   );
 }
 
+/**
+ * How much was at stake while the kick had the school locked — lower sorts
+ * first. One predicate over the fields the facts print (`kickPressureFacts`),
+ * for kick-eaten's cap (triage 2026-09-29 F-K12a, user ruling A34,
+ * 2026-09-30):
+ *   0  a death on either side (`*DeathUnit`)
+ *   1  a unit at the crisis line on either side (`*LowUnit`)
+ *   2  an offensive cooldown running against either side, nothing else
+ *   3  only a burst of ours ready (`burstReady`)
+ * A kick with none of these is harmless and never reaches the cap.
+ */
+export function kickPressureTier(p: KickPressure): 0 | 1 | 2 | 3 {
+  if (p.ours.death !== undefined || p.theirs.death !== undefined) return 0;
+  if (p.ours.low !== undefined || p.theirs.low !== undefined) return 1;
+  if (p.ours.burstAgainst.length > 0 || p.theirs.burstAgainst.length > 0)
+    return 2;
+  return 3;
+}
+
+/** Tiers the regular per-round cap may leave uncounted: a kick with a death
+ * or a crisis-HP fact (ruling A34's exemption; since 2026-10-01 only the
+ * first `KICK_EATEN_EXEMPT_CAP` of them per round). */
+export const KICK_CAP_EXEMPT_MAX_TIER = 1;
+
 export function kickPressureFor(params: {
   combat: AtomicArenaCombat;
   owner: ICombatUnit;
   friends: ICombatUnit[];
   enemies: ICombatUnit[];
-}): (k: { atSeconds: number; lockoutDurationSeconds: number }) => KickPressure {
+}): (k: {
+  atSeconds: number;
+  lockoutDurationSeconds: number;
+  lockEndedBySuccessS?: number | null;
+}) => KickPressure {
   const { combat, owner, friends, enemies } = params;
   const start = combat.startTime;
+  const roundEndS = (roundEndMs(combat as never) - start) / 1000;
   const spans = (side: ICombatUnit[]) =>
     reconstructEnemyCDTimeline(side, combat).players.flatMap((pl) =>
       pl.offensiveCDs.map((cd) => ({ ...burstCastSpan(cd), spell: cd.spellName })),
@@ -90,6 +165,17 @@ export function kickPressureFor(params: {
   const deathS = (u: ICombatUnit) =>
     u.deathRecords?.[0] ? (u.deathRecords[0].timestamp - start) / 1000 : null;
   const talents = new Map(friends.map((u) => [u.id, playerTalentIdSets(u)]));
+  const immune = new Map<string, ReturnType<typeof fullImmunityIntervals>>();
+  /** Does the unit carry a full immunity at that rendered second? */
+  const immuneAt = (u: ICombatUnit) => {
+    let spans = immune.get(u.id);
+    if (!spans) {
+      spans = fullImmunityIntervals(u, combat);
+      immune.set(u.id, spans);
+    }
+    const s = spans;
+    return (sec: number) => s.some((iv) => iv.fromS <= sec && sec < iv.toS);
+  };
 
   const side = (
     units: ICombatUnit[],
@@ -98,28 +184,62 @@ export function kickPressureFor(params: {
     t1: number,
   ): KickSidePressure => {
     const s0 = Math.floor(t0);
-    const s1 = Math.ceil(t1);
+    // the seconds the lockout is PRINTED on (fmtTime floors): a tick up to
+    // 1 s after the lock ended used to enter both the low and the ≤ 40 test
+    // (work order 2026-10-14b Part 2: 1bad0a5c 37 vs 43 in the lock,
+    // 2c6e85ec 35 vs 41.7, 3306e8ee 21 vs 49.5 — each the row's only ≤ 40)
+    const s1 = Math.floor(t1);
+    // the lockout itself, in whole ms: the trough's samples are bounded to it
+    const span = {
+      fromMs: start + Math.round(t0 * 1000),
+      toMs: start + Math.round(t1 * 1000),
+    };
+    let gridLow = false;
     let low: KickSidePressure["low"];
     for (const u of units) {
-      const m = gridHpMinInWindow(u, start, s0, s1);
+      const skip = immuneAt(u);
+      // the DECISION stays on the [STATE] grid (ruling D7: crossings do not
+      // move) — is any unit of this side at the crisis line on a tick?
+      const g = gridHpMinInWindow(u, start, s0, s1, skip);
+      if (g && g.pct <= CRISIS_HP_PCT_RENDERED) gridLow = true;
+      // the FACT is the trough: the true minimum inside the lockout
+      const m = hpTroughInWindow(u, start, s0, s1, skip, span);
       if (m && m.pct <= CRISIS_HP_PCT_RENDERED && (!low || m.pct < low.pct))
         low = { unit: u.name, pct: Math.round(m.pct), atSec: m.atSec };
     }
+    // a trough under the line with every tick above it is not a low: the
+    // grid did not see a unit at the crisis line, so the fact is not added
+    if (!gridLow) low = undefined;
     let death: KickSidePressure["death"];
     for (const u of units) {
       const d = deathS(u);
       if (d !== null && d >= t0 && d <= t1 + KICK_OUTCOME_S && (!death || d < death.atSec))
         death = { unit: u.name, atSec: d };
     }
-    const burstAgainst = [
-      ...new Set(against.filter((b) => b.from < t1 && b.to > t0).map((b) => b.spell)),
-    ];
-    return { ...(low ? { low } : {}), ...(death ? { death } : {}), burstAgainst };
+    const running = against.filter((b) => b.from <= t0 && b.to > t0);
+    const burstAgainst = [...new Set(running.map((b) => b.spell))];
+    const burstFromS: Record<string, number> = {};
+    for (const b of running)
+      burstFromS[b.spell] = Math.min(burstFromS[b.spell] ?? Infinity, b.from);
+    return {
+      ...(low ? { low } : {}),
+      ...(death ? { death } : {}),
+      burstAgainst,
+      ...(burstAgainst.length ? { burstFromS } : {}),
+    };
   };
 
   return (k) => {
     const t0 = k.atSeconds;
-    const t1 = k.atSeconds + k.lockoutDurationSeconds;
+    // WO3 Part 2: the lock as the text reads it — ended early once
+    // a spell of the locked school went out or began its bar
+    // …and never past the round's end (codex 60-POSTHOC-09h #2: ourLowPct
+    // read after a Solo Shuffle round's ending death; `roundEndMs`)
+    const t1 = Math.min(
+      k.atSeconds +
+        Math.min(k.lockoutDurationSeconds, k.lockEndedBySuccessS ?? Infinity),
+      roundEndS,
+    );
     const ours = side(friends, enemySpans, t0, t1);
     const theirs = side(enemies, ourSpans, t0, t1);
     const burstReady: string[] = [];
@@ -131,7 +251,28 @@ export function kickPressureFor(params: {
         );
         for (const id of kit) {
           if (!OFFENSIVE_CD_SPELL_IDS.has(id)) continue;
-          if (!kitSpellReadyAt(u, id, s, start, talents.get(u.id)!)) continue;
+          if (!kitSpellReadyAt(u, id, s, start, talents.get(u.id)!, combat))
+            continue;
+          // readiness is read on the rendered second (`s` = floor of the
+          // kick); a cooldown pressed between that second and the kick is
+          // spent, not ready. Unreachable while every span ran at least
+          // 10 s (the cast was then "running"); with the floor gone, a
+          // zero-length cooldown cast 0.7 s before the kick was named ready
+          // (pre-review: a teammate's Soul Fire at 60.2, kick at 60.9).
+          // A press is a SPELL_CAST_SUCCESS, the event `kitSpellReadyAt`
+          // prices; the stream holds nothing else today.
+          if (
+            (u.spellCastEvents ?? []).some((e) => {
+              const tS = (e.logLine.timestamp - start) / 1000;
+              return (
+                e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+                String(e.spellId ?? "") === id &&
+                tS > s &&
+                tS <= t0
+              );
+            })
+          )
+            continue;
           const name = getEnglishSpellName(
             id,
             u.spellCastEvents?.find((e) => e.spellId === id)?.spellName,

@@ -1,5 +1,5 @@
 import { createHash } from "crypto";
-import { existsSync, readFileSync, readdirSync } from "fs";
+import { existsSync, readdirSync,readFileSync } from "fs";
 import { join } from "path";
 
 export const SCORE_DIMENSIONS = [

@@ -33,6 +33,11 @@ export const BACKLASH_CC_SPELL_IDS = new Map<
   ["1259790", { backlashSpellId: "196364", ccType: "silence" }],
 ]);
 
+/** The tag a line carries for a backlash aura: `[DISPEL BACKLASH CC: silence]`. */
+export function backlashCcTag(type: BacklashCcType): string {
+  return ` [DISPEL BACKLASH CC: ${type}]`;
+}
+
 /** Backlash aura id (the one on the dispeller) → the CC it applies. */
 export const BACKLASH_AURA_CC_TYPE: ReadonlyMap<string, BacklashCcType> =
   new Map(

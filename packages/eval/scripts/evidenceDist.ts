@@ -6,9 +6,9 @@
 // from avg 5.7 to 6.3 per match (38 chain candidates over 60 matches:
 // healer-locked 25 / trinket-early 8 / defensive-early 5).
 import {
+  ensureAnalysisData,
   extractCandidateFindings,
   isHealerSpec,
-  ensureAnalysisData,
 } from "@gladlog/analysis";
 import { GladLogParser, type GladMatch } from "@gladlog/parser";
 import { CombatUnitReaction, toLegacyMatch } from "@gladlog/parser-compat";

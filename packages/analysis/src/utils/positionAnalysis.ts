@@ -13,23 +13,47 @@ import { AtomicArenaCombat, ICombatUnit } from "@gladlog/parser-compat";
 
 import { abilityProfile } from "../data/abilityProfile";
 import { SUMMON_SPELL_IDS } from "../data/summonGenerated";
+import { buildAuraIntervals } from "./auraIntervals";
+import { hitByAttackers } from "./burstHit";
+import {
+  buildCannotCastIntervals,
+  coveredMsWithin,
+  enemySourceIds,
+} from "./cannotCastIntervals";
 import { ICCInstance } from "./ccTrinketAnalysis";
 import {
-  getUnitHpAtTimestamp,
-  HP_SAMPLE_RADIUS_MS,
+  gridHpMinInWindow,
+  gridHpPct,
+  hpTroughInWindow,
   IMajorCooldownInfo,
+  isDeadAtRenderSecond,
   isHealerSpec,
   isMeleeSpec,
 } from "./cooldowns";
-import { fmtTime, toRenderSecond } from "./renderGrid";
 import { IAlignedBurstWindow } from "./enemyCDs";
+import { isOwnImmunityInterval } from "./enemyDefensives";
+import {
+  type ForcedMove,
+  forcedMovesInRenderedSpan,
+  forcedMovesText,
+} from "./forcedDisplacement";
 import {
   HealerExposureLabel,
   IHealerBurstExposure,
 } from "./healerExposureAnalysis";
+import { sumIncomingPressure } from "./incomingPressure";
 import { distanceBetween, getUnitPositionAtTime } from "./losAnalysis";
-import { HEALER_TRAINED_YARDS, INTERP_MAX_GAP_MS } from "./positionSampling";
+import {
+  HEALER_TRAINED_YARDS,
+  INTERP_MAX_GAP_MS,
+  positionSampleInstants,
+} from "./positionSampling";
+import { fmtTime, toRenderSecond } from "./renderGrid";
+import { buildRosterSides, type RosterSides } from "./rosterSide";
+import { roundEndMs } from "./roundEnd";
+import { ccMechanicOf, SNARED_MECHANIC } from "./spellMechanics";
 import { spellReachToAccuse } from "./spellRange";
+import { isDeadAt } from "./unitDeath";
 
 // Thresholds (yards / seconds) — starting values from the Feature 15 spec.
 //
@@ -44,6 +68,12 @@ import { spellReachToAccuse } from "./spellRange";
 //  · RANGED=45 仅 0.6% 采样超过(40yd 也才 1.2%)—— 保守到几乎只剩真离场,
 //    与行尾「35–40 是正常满射程走位」的设计意图一致。
 // 改任何一条前先重跑 scratchpad pos.mts 形态的分布脚本拿前后数字。
+//
+// FT-T12 D2 (2026-10-10): KITE / STAY / CLOSE_RANGE now read the distance to
+// the span's MEASURED enemy (`spanMeasuredEnemy`: the enemy that hit the owner
+// most, else the nearest), not to the nearest of any enemy at each instant.
+// The values are unchanged and the p66 / p39 placement above was measured on
+// the old quantity — it has NOT been re-measured on the new one.
 export const CLOSE_RANGE_YARDS = 12; // "in range" of an enemy — shared with rootReachability.ts (melee reach)
 const KITE_DELTA_YARDS = 10; // distance gained that counts as a successful kite(p66,见上)
 const STAY_DELTA_YARDS = 5; // distance gained below this = stayed in(p39,见上)
@@ -147,47 +177,122 @@ export interface IPositionEvent {
   /** STAYED_IN only (GH #103 A7): nearest-enemy distance range over the
    * window's whole-second samples plus both endpoints — the endpoints alone
    * ("8→3.3yd") read as "stayed within 3.3–8yd" when the owner had been at
-   * 15yd mid-window. Nearest ENEMY, not the named one: the sweep asks who is
-   * closest at each second, and that can change. */
+   * 15yd mid-window. Nearest of ANY enemy, not the named one: the sweep asks
+   * who is closest at each second, and that can change. It keeps that meaning
+   * after FT-T12 D2 — the endpoints follow the measured enemy
+   * (`spanMeasuredEnemy`), this range does not, so it can sit below both
+   * endpoints when another enemy stood closer than the measured one. */
   minDistanceYards?: number;
   maxDistanceYards?: number;
+  /** STAYED_IN / KITED: the enemy `startDistanceYards` is measured to. Since
+   *  FT-T12 D2 (user ruling 2026-10-10) that is the span's measured enemy —
+   *  the enemy player who dealt the most landed damage to the owner over the
+   *  span (`spanMeasuredEnemy`) — and `endEnemyName` / `peakEnemyName` are
+   *  then the same player. Only on the fallback (no enemy damage, a tie, no
+   *  distance at an endpoint) is it what the name says: the enemy nearest at
+   *  the span start. (CD_OUT_OF_RANGE / SPLIT_PUSH / HEALER_TRAINED reuse the
+   *  field for their own subject.) */
   nearestEnemyName?: string;
   /** Burst window threat label for STAYED_IN / KITED */
   dangerLabel?: string;
-  /** Dampening during the window (0–1), for the "staying in may be correct" nuance */
-  dampeningPct?: number;
+  /** Dampening during the window (0–1), for the "staying in may be correct"
+   * nuance. `null` = none stated (a 2v2 round that logged no stack) — the
+   * nuance is then not printed. */
+  dampeningPct?: number | null;
   /** STAYED_IN only: whether a defensive CD was off cooldown at window start.
    *  undefined when no defensive CDs are tracked for this spec. */
   ownerDefensiveAvailable?: boolean;
+  /** STAYED_IN only, with `ownerDefensiveAvailable` false: the first of the
+   *  owner's defensives back inside the span, and when (fact5 D23, 0c56ee06
+   *  2:42–2:52: Dark Pact back at 2:50.55 under `no defensive CD
+   *  available`). */
+  ownerDefensiveBack?: { spellName: string; atSeconds: number };
   /** STAYED_IN / KITED: whether the burst's most-pressured target was the owner.
    *  undefined when the window has no pressure-target attribution. */
   burstTargetsOwner?: boolean;
   /** STAYED_IN / KITED: name of the burst's most-pressured target when it isn't the owner */
   burstTargetName?: string;
   /** STAYED_IN only: owner HP% at window start / minimum across the window — the
-   *  OUTCOME that turns "stayed in" from a hedge into a fact (near-death vs no cost). */
+   *  OUTCOME that turns "stayed in" from a hedge into a fact (near-death vs no cost).
+   *
+   *  Both are `[STATE]`-grid readings of the window the line prints
+   *  (`fmtTime(atSeconds)–fmtTime(toSeconds)`): the start is `gridHpPct` at
+   *  the rendered start second — the number that second's `[STATE]` tick
+   *  prints — and the minimum is `gridHpMinInWindow` over the rendered
+   *  seconds from the start second to the end second, both included. */
   ownerHpStartPct?: number | null;
   ownerHpMinPct?: number | null;
+  /** STAYED_IN only: the TRUE minimum of the owner's HP inside the window
+   *  (`hpTroughInWindow`: every sample, not only the whole-second readings)
+   *  — FT-T03, user ruling 2026-10-10 (D7). Never above `ownerHpMinPct`.
+   *
+   *  This is the number the prompt PRINTS (the POSITIONING line's `A%→B%
+   *  (min over window)`, position-mistake's `hpMin` fact). `ownerHpMinPct`
+   *  stays the whole-second minimum and stays what every DECISION reads:
+   *  `stayedInHadRealCost` for the menu gate and its ordering / cap, the
+   *  "(near-death — the stay was costly)" tag, the desktop key moment, the
+   *  deep-dive item and its teachable gate — so no position-mistake
+   *  candidate appears or disappears with the ruling. */
+  ownerHpLowPct?: number | null;
   /** HEALER_TRAINED only: healer was hard-CC'd for most of the camp → could not
    *  self-reposition (team must peel), so don't advise "reposition". */
   ownerCcLocked?: boolean;
-  /** HEALER_TRAINED only: merged hard-CC seconds inside the camp window
-   *  (`ccOverlapSeconds`). GH #103: the line used to say "CC-locked through
-   *  this" whenever this was ≥ half the window, and the responder quoted it as
-   *  "CC-locked the whole time" beside the owner's own 1:08 Apotheosis. */
+  /** HEALER_TRAINED / STAYED_IN: merged hard-CC seconds inside the window
+   *  (`ccOverlapSeconds`). GH #103: the HEALER TRAINED line used to say
+   *  "CC-locked through this" whenever this was ≥ half the window, and the
+   *  responder quoted it as "CC-locked the whole time" beside the owner's own
+   *  1:08 Apotheosis. STAYED_IN (triage position F-S2): movement coaching was
+   *  generated for spans the owner spent stunned. `undefined` = no CC summary
+   *  was passed (unknown), never 0. */
   ownerCcSeconds?: number;
-  /** STAYED_IN: the enemy nearest at the evaluated end (`endDistanceYards`
-   *  is its distance), and — when it is not `nearestEnemyName` — that start
-   *  enemy's own distance at the end */
+  /** STAYED_IN (F-S2): merged seconds of the span the owner was rooted
+   *  (`analyzePlayerCCAndTrinket`'s `rootInstances`, same merge). `undefined`
+   *  = no root summary was passed. */
+  ownerRootSeconds?: number;
+  /** STAYED_IN: merged seconds of the span the owner was hard-CC'd OR rooted
+   *  — the union the two figures above overlap into (a root inside a stun
+   *  counts in both). Set only when both summaries were passed. */
+  ownerCcOrRootSeconds?: number;
+  /** STAYED_IN (WO3 #15, r1008-48): merged seconds of the span the owner
+   *  carried an enemy's snare — an aura DB2 gives spell-level mechanic
+   *  SNARED (`ccMechanicOf` = 11): free to move, slower. A lower bound (a
+   *  slow whose mechanic sits on an effect, Thunder Clap, is not read).
+   *  `undefined` = no aura stream. Facts only. */
+  ownerSnaredSeconds?: number;
+  /** STAYED_IN (F-S5): merged seconds of the span the owner could not cast
+   *  (`buildCannotCastIntervals` — CC, silence, kick lockout: the one
+   *  feasibility predicate), read beside "a defensive CD was available". */
+  ownerCannotCastSeconds?: number;
+  /** STAYED_IN: the enemy `endDistanceYards` is measured to, and — when it
+   *  is not `nearestEnemyName` — that start enemy's own distance at the end.
+   *  The two names can differ only on the nearest-enemy fallback; a span
+   *  measured to one enemy (`spanMeasuredEnemy`) names it at both ends. */
   endEnemyName?: string;
   startEnemyEndYards?: number;
+  /** STAYED_IN (B-tier B24b): the enemy player who dealt the most landed
+   *  damage to the owner over the span's rendered seconds, and that damage
+   *  (`topEnemyDamagerInSpan`). The nearest enemy is often the enemy healer
+   *  (2abc9185 @81: nearest = a Holy Priest with 8k of the 1.9M taken).
+   *  Since FT-T12 D2 this is also the enemy the span's distances are
+   *  measured to, unless the span fell back (`spanMeasuredEnemy`): a tie
+   *  still prints its name-order pick here, and so does a top damager with
+   *  no distance at an endpoint. */
+  topDamagerName?: string;
+  topDamagerDamage?: number;
   /** STAYED_IN: the owner's own straight-line displacement between the span's
    *  first and last render seconds. Reliability round 2 F13 (06bb): the owner
    *  walked ~18.5 yd while a Death Knight kept up, and "STAYED IN … little
    *  distance gained" was retold as "stood still" (原地硬抗). */
   ownerMovedYards?: number;
-  /** KITED: when and from whom the peak nearest-enemy distance
-   *  (`endDistanceYards`) was measured */
+  /** STAYED_IN: what moved the owner between those two seconds without the
+   *  owner doing it — a landed Death Grip, a landed enemy knockback or pull
+   *  (`forcedMovesInRenderedSpan`). With one inside, `ownerMovedYards` is not
+   *  all the owner's own walking and the line says so. */
+  ownerForcedMoves?: ForcedMove[];
+  /** KITED: when and from whom the peak distance (`endDistanceYards`) was
+   *  measured — the measured enemy's peak (`spanMeasuredEnemy`), so
+   *  `peakEnemyName` is `nearestEnemyName`; on the fallback, the peak of the
+   *  nearest enemy at each second, who may be another one */
   peakSeconds?: number;
   peakEnemyName?: string;
   /** CD_OUT_OF_RANGE only */
@@ -208,13 +313,10 @@ interface INearestEnemy {
   enemyName: string;
 }
 
-/** True when the unit has died at or before the given timestamp. A corpse's
- *  last-known position is returned by getUnitPositionAtTime indefinitely, so
- *  dead enemies must be excluded from distance checks. */
-/** Shared with rootReachability.ts (2026-08-30). */
-export function isDeadAt(unit: ICombatUnit, tMs: number): boolean {
-  return (unit.deathRecords ?? []).some((d) => d.timestamp <= tMs);
-}
+/** Shared with rootReachability.ts (2026-08-30); the definition moved to the
+ * leaf module `unitDeath.ts` (triage G4) so the modules below this one in the
+ * import graph read the same predicate. */
+export { isDeadAt };
 
 function nearestEnemyAt(
   enemies: ICombatUnit[],
@@ -248,6 +350,160 @@ function allLivingEnemiesKnown(enemies: ICombatUnit[], tMs: number): boolean {
       isDeadAt(e, tMs) ||
       getUnitPositionAtTime(e, tMs, POSITION_MAX_GAP_MS) !== null,
   );
+}
+
+/**
+ * B-tier B24b (user ruling 2026-10-06): the enemy PLAYER who dealt the most
+ * landed damage to `owner` over the rendered seconds [fromRenderS, toRenderS]
+ * (both whole seconds in full — the span a STAYED IN line prints), with that
+ * damage. A pet's or summon's damage counts for its owner (`ownerId`); a
+ * source that is neither an enemy player nor owned by one is ignored (a
+ * charmed teammate, the owner's own deferred damage). Landed damage only —
+ * what a shield absorbed is not in it. null when no enemy damage landed.
+ * Ties go to the name that sorts first, so the two readers cannot differ.
+ *
+ * ONE predicate, two readers: the STAYED IN producer below (the rendered
+ * line and the menu's `topDamager`) and the positioning gate's G4c, which
+ * re-reads the rendered span and name and calls this again.
+ */
+export function topEnemyDamagerInSpan(
+  owner: Pick<ICombatUnit, "damageIn">,
+  enemies: ReadonlyArray<Pick<ICombatUnit, "id" | "name">>,
+  allUnits: ReadonlyArray<Pick<ICombatUnit, "id" | "ownerId">>,
+  matchStartMs: number,
+  fromRenderS: number,
+  toRenderS: number,
+): { name: string; damage: number } | null {
+  const enemyNameById = new Map(enemies.map((e) => [e.id, e.name]));
+  const ownerOf = new Map(
+    allUnits
+      .filter((u) => u.ownerId && enemyNameById.has(u.ownerId))
+      .map((u) => [u.id, u.ownerId as string]),
+  );
+  const fromMs = matchStartMs + fromRenderS * 1000;
+  const toMs = matchStartMs + (toRenderS + 1) * 1000;
+  const byEnemy = new Map<string, number>();
+  for (const d of owner.damageIn ?? []) {
+    const ts = d.logLine.timestamp;
+    if (ts < fromMs || ts >= toMs) continue;
+    const dmg = Math.abs(d.effectiveAmount);
+    if (!(dmg > 0) || !d.srcUnitId) continue;
+    const enemyId = enemyNameById.has(d.srcUnitId)
+      ? d.srcUnitId
+      : ownerOf.get(d.srcUnitId);
+    if (!enemyId) continue;
+    byEnemy.set(enemyId, (byEnemy.get(enemyId) ?? 0) + dmg);
+  }
+  let top: { name: string; damage: number } | null = null;
+  for (const [id, damage] of byEnemy) {
+    const name = enemyNameById.get(id)!;
+    if (
+      !top ||
+      damage > top.damage ||
+      (damage === top.damage && name < top.name)
+    )
+      top = { name, damage };
+  }
+  return top;
+}
+
+/** The rendered clause of a STAYED IN line for `topEnemyDamagerInSpan` — the
+ *  producer writes it and the positioning gate's G4c parses it back. */
+export const topDamagerClause = (name: string, damage: number): string =>
+  ` — most damage to you in the span: ${name} (${Math.round(damage / 1000)}k)`;
+
+/**
+ * FT-T12 D2 (user ruling 2026-10-10, "option C"): the ONE enemy a STAYED IN /
+ * KITED span measures its distances to — the enemy player who dealt the most
+ * landed damage to the owner over the span's rendered seconds
+ * (`topEnemyDamagerInSpan`, the B24b reading the STAYED IN line prints).
+ *
+ * null — the caller falls back, for the WHOLE span, to the nearest enemy at
+ * each instant (the rule before the ruling) — when:
+ *  - no enemy damage landed on the owner in the span;
+ *  - two enemies tie for the most (a tie has no "the one who hit you most";
+ *    `topEnemyDamagerInSpan`'s name-order tie-break is a rendering
+ *    convention, not a reason to measure one of the two);
+ *  - that enemy has no distance at the span's first or last rendered second
+ *    (dead, or no position sample within POSITION_MAX_GAP_MS — the owner's
+ *    own missing position counts too, and then the fallback has none either).
+ *
+ * Why: start, end and every mid-span sample used to read whoever stood
+ * nearest at that instant, so "A→B yd" paired two enemies' distances (605
+ * capture: 974 of 2,156 STAYED IN lines, 582 of 1,121 KITED lines; s0/1-6-16:
+ * a druid went 3 → 21.9 yd while a paladin closed to 1.2 yd, read "stayed in
+ * 3→1.2"). The 12 yd entry gate reads the measured enemy as well: a span
+ * whose top damager starts beyond `CLOSE_RANGE_YARDS` yields no event — and
+ * no position-mistake candidate — however close another enemy stood. The
+ * user was shown that consequence on the 605 capture and accepted it:
+ * position-mistake 341 rows → +8 / −150, every one `stayed-in`.
+ *
+ * ONE predicate, two readers: the producer below and the positioning gate's
+ * G4d, which re-reads a STAYED IN line's rendered span and the name after
+ * "from" and calls this again.
+ */
+export function spanMeasuredEnemy<E extends ICombatUnit>(
+  owner: ICombatUnit,
+  enemies: readonly E[],
+  allUnits: ReadonlyArray<Pick<ICombatUnit, "id" | "ownerId">>,
+  matchStartMs: number,
+  fromRenderS: number,
+  toRenderS: number,
+): E | null {
+  const read = (among: readonly E[]) =>
+    topEnemyDamagerInSpan(
+      owner,
+      among,
+      allUnits,
+      matchStartMs,
+      fromRenderS,
+      toRenderS,
+    );
+  const top = read(enemies);
+  const unit = top ? enemies.find((e) => e.name === top.name) : undefined;
+  if (!top || !unit) return null;
+  const runnerUp = read(enemies.filter((e) => e !== unit));
+  if (runnerUp && runnerUp.damage === top.damage) return null;
+  const hasDistanceAt = (renderS: number) =>
+    nearestEnemyAt([unit], null, matchStartMs + renderS * 1000, owner) !== null;
+  return hasDistanceAt(fromRenderS) && hasDistanceAt(toRenderS) ? unit : null;
+}
+
+/**
+ * Whether a STAYED IN / KITED sample at rendered second `renderS` would be
+ * taken on the unit's corpse: the unit is dead (`isDeadAt`, the file's one
+ * dead-at predicate — the same test `nearestEnemyAt` puts to every enemy) at
+ * the instant the span samples that second, its first (`renderS.000`).
+ *
+ * Why it is asked of the OWNER: `getUnitPositionAtTime` holds a unit's last
+ * position for `POSITION_MAX_GAP_MS` (1.5 s) past its last sample, and a dead
+ * player's last sample is the death. A burst span whose last rendered second
+ * fell inside that 1.5 s was measured to the spot the owner died on — the
+ * "end distance" was an enemy's distance to a corpse — and a span that began
+ * inside it was built from nothing else (605-file capture of f8ce87ae: 16
+ * STAYED IN lines ending after the owner's death second, 1 starting after it,
+ * 2 KITED peaks after it). A death further than 1.5 s from the span's end
+ * already gave no event, because the end sample had no position: a span the
+ * owner did not live through is dropped, not shortened — so this drops the
+ * rest, and no span appears that was not there before.
+ *
+ * The instant, not the `[STATE]` tick's `isDeadAtRenderSecond`: the tick
+ * prints `dead` from the death's own second, but the sample of that second is
+ * taken at its first instant, before the death, and is a live position. A
+ * span whose LAST rendered second is the death second therefore stays (8
+ * STAYED IN lines on the same capture).
+ *
+ * ONE predicate, two readers: the producer below asks it of a span's last
+ * rendered second (death is monotone, so that covers the start, the peak and
+ * every second between), and the positioning gate's G4e asks it of every
+ * second a STAYED IN / KITED line prints a distance at.
+ */
+export function burstSpanSampledAfterDeath(
+  unit: Pick<ICombatUnit, "deathRecords">,
+  matchStartMs: number,
+  renderS: number,
+): boolean {
+  return isDeadAt(unit, matchStartMs + renderS * 1000);
 }
 
 /** The owner's straight-line displacement between two rendered seconds,
@@ -385,10 +641,12 @@ export function beyondReachThroughout(
 }
 
 /**
- * "X" when the nearest enemy at the end is still the start's, else "X→Y"
+ * "X" when the enemy measured at the end is still the start's, else "X→Y"
  * plus the start enemy's own end distance — the two distances of
  * "A→B yd from …" name whoever they were measured to (audit eb80: "10→2.1yd
  * from Pressbro" while Pressbro was 22.7 yd away and 2.1 yd was Mastutinho).
+ * Since FT-T12 D2 a span measured to one enemy (`spanMeasuredEnemy`) always
+ * prints the bare "X"; "X→Y" is left to the nearest-enemy fallback.
  * positioningScan G4 parses this form.
  */
 export function stayedEndpointNames(
@@ -406,7 +664,9 @@ export function stayedEndpointNames(
   return `${e.nearestEnemyName}→${e.endEnemyName}${own}`;
 }
 
-/** KITED's B is the PEAK nearest-enemy distance: say when, and from whom
+/** KITED's B is the PEAK distance — to the span's measured enemy
+ *  (`spanMeasuredEnemy`), or on the fallback to the nearest enemy at each
+ *  second: say when, and from whom
  *  when it is not the start enemy. positioningScan G4 parses this form. */
 export function kitedPeakStr(
   e: Pick<IPositionEvent, "nearestEnemyName" | "peakSeconds" | "peakEnemyName">,
@@ -451,6 +711,34 @@ function ccOverlapSeconds(
   return total;
 }
 
+/** A header spike names the burst target of a POSITIONING line only when it
+ *  covers at least this share of the line's own span (user ruling 2026-09-30,
+ *  A′12; 4446729d: 1.26 s of 10 s is not "the burst of this span"). */
+export const SPIKE_SPAN_MIN_SHARE = 0.5;
+
+/** The friendly under the most incoming pressure in [fromMs, toMs] —
+ *  `sumIncomingPressure` (damage taken + absorbed, same-side redistribution
+ *  out), the one "how hard was this unit hit" predicate. `undefined` when no
+ *  friendlies were passed or nobody was hit. Ties keep the roster order. */
+export function mostPressuredInSpan(
+  friends: readonly ICombatUnit[] | undefined,
+  fromMs: number,
+  toMs: number,
+  sides?: RosterSides,
+  /** only friendlies this admits (work order 2026-10-14d Part 2, preview:
+   * the ones the burst's casters hit — `hitByAttackers`) */
+  admit?: (f: ICombatUnit) => boolean,
+): string | undefined {
+  let best: { name: string; pressure: number } | undefined;
+  for (const f of friends ?? []) {
+    if (admit && !admit(f)) continue;
+    const pressure = sumIncomingPressure(f, fromMs, toMs, sides);
+    if (pressure > 0 && (!best || pressure > best.pressure))
+      best = { name: f.name, pressure };
+  }
+  return best?.name;
+}
+
 function isAvailableAt(cd: IMajorCooldownInfo, atSeconds: number): boolean {
   return cd.availableWindows.some(
     (w) => atSeconds >= w.fromSeconds && atSeconds <= w.toSeconds,
@@ -460,11 +748,20 @@ function isAvailableAt(cd: IMajorCooldownInfo, atSeconds: number): boolean {
 export function computeOwnerPositionEvents(params: {
   owner: ICombatUnit;
   enemies: ICombatUnit[];
-  combat: Pick<AtomicArenaCombat, "startTime" | "endTime">;
+  /** `units` (every AtomicArenaCombat has them) feeds the roster side and the
+   *  enemy summons' ids; absent in bare fixtures, where the flag fallback and
+   *  the enemy players alone are used. */
+  combat: Pick<AtomicArenaCombat, "startTime" | "endTime"> & {
+    units?: Readonly<Record<string, ICombatUnit>>;
+    startInfo?: { bracket?: string };
+  };
   burstWindows: readonly IAlignedBurstWindow[];
   ownerCooldowns: IMajorCooldownInfo[];
+  /** The owner's `analyzePlayerCCAndTrinket` summary. `rootInstances` (same
+   *  summary) feed the STAYED_IN / KITED skip rule and the root seconds. */
   ownerCCSummary?: {
     ccInstances: Array<Pick<ICCInstance, "atSeconds" | "durationSeconds">>;
+    rootInstances?: Array<{ atSeconds: number; durationSeconds: number }>;
   };
   isHealer: boolean;
   ownerIsMelee: boolean;
@@ -491,9 +788,10 @@ export function computeOwnerPositionEvents(params: {
   }>;
   healerExposures?: IHealerBurstExposure[];
   /** B4 fix (optional): damage-spike windows (pre-filtered to >= DMG_SPIKE_THRESHOLD by the
-   * caller). When a spike overlaps a burst window, its targetName is the burst-target claim —
-   * the SAME source the [OFFENSIVE WINDOW] timeline header renders — so the POSITIONING line
-   * can never contradict the timeline about who the burst hit. */
+   * caller) — the SAME source the [OFFENSIVE WINDOW] timeline header renders. A spike that
+   * covers at least `SPIKE_SPAN_MIN_SHARE` of the line's own span names the burst target;
+   * below that the target is the friendly under the most pressure in the span (ruling A′12),
+   * so the POSITIONING line and the header CAN name different units for a short overlap. */
   spikeWindows?: Array<{
     fromSeconds: number;
     toSeconds: number;
@@ -517,13 +815,54 @@ export function computeOwnerPositionEvents(params: {
     spikeWindows,
   } = params;
   const matchStartMs = combat.startTime;
-  const durationSeconds = (combat.endTime - combat.startTime) / 1000;
+  // the round's end (`roundEndMs`): a Solo Shuffle round's ending death,
+  // not the log's end ~2 s later (codex R6C-06 #5: HEALER TRAINED swept the
+  // post-death tail and met its 8 s door on it)
+  const durationSeconds = (roundEndMs(combat) - combat.startTime) / 1000;
   const events: IPositionEvent[] = [];
 
   if ((owner.advancedActions ?? []).length === 0) return [];
 
   const ccInstances = ownerCCSummary?.ccInstances ?? [];
-  const defensiveCDs = ownerCooldowns.filter((cd) => cd.tag === "Defensive");
+  const rootInstances = ownerCCSummary?.rootInstances;
+  // The owner's OWN all-school immunities (Ice Block, Divine Shield, Aspect
+  // of the Turtle): `isOwnImmunityInterval`.
+  // (bare fixtures carry no aura stream)
+  const ownerAuraIntervals = owner.auraEvents
+    ? buildAuraIntervals(owner, combat)
+    : undefined;
+  const ownImmunities = (ownerAuraIntervals ?? [])
+    .filter((iv) => isOwnImmunityInterval(owner, iv))
+    .map((iv) => ({ atSeconds: iv.fromS, durationSeconds: iv.toS - iv.fromS }));
+  const enemyNames = new Set(enemies.map((u) => u.name));
+  const snareInstances = ownerAuraIntervals
+    ?.filter(
+      (iv) =>
+        ccMechanicOf(iv.spellId) === SNARED_MECHANIC &&
+        enemyNames.has(iv.srcUnitName),
+    )
+    .map((iv) => ({ atSeconds: iv.fromS, durationSeconds: iv.toS - iv.fromS }));
+  // No free choice of where to stand (user ruling 2026-09-30, A′13 = C):
+  // hard CC, roots, and the owner's own immunity all enter the skip rule.
+  const noChoiceIntervals = [
+    ...ccInstances,
+    ...(rootInstances ?? []),
+    ...ownImmunities,
+  ];
+  const combatUnits = Object.values(combat.units ?? {});
+  const rosterSides: RosterSides | undefined = combatUnits.length
+    ? buildRosterSides(combatUnits)
+    : undefined;
+  const ownerCannotCast = buildCannotCastIntervals(
+    owner,
+    enemySourceIds(enemies, combatUnits),
+    combatUnits,
+  );
+  // baseline-only rows are cd-hoarded's alone (ruling P-W6): "a defensive CD
+  // was available" reads only buttons the owner showed this round
+  const defensiveCDs = ownerCooldowns.filter(
+    (cd) => cd.tag === "Defensive" && !cd.baselineOnly,
+  );
   const offensiveCDs = ownerCooldowns.filter((cd) => cd.tag === "Offensive");
 
   // ── 1. Burst-window engagement: STAYED_IN / KITED ─────────────────────────
@@ -540,8 +879,17 @@ export function computeOwnerPositionEvents(params: {
         : undefined;
     const healerExposureLabel = exposure?.exposureLabel;
 
-    // CC'd for most of the window → could not choose to kite; not a decision
-    if (ccOverlapSeconds(ccInstances, w.fromSeconds, evalEnd) >= evalSpan / 2)
+    // CC'd, rooted or inside their own immunity for most of the window →
+    // could not choose to kite (or had nothing to kite from); not a decision.
+    // Dropped before the branch, so STAYED_IN and KITED both skip (A′13 = C:
+    // dfcccbf2 2:54 Storm Bolt 3.0 s + own Ice Block 2.3 s of 10 s; fe1a9355
+    // 1:03 rooted 6.0 of 10 s). A school-limited immunity does not count
+    // (`isOwnImmunityInterval`): 06bb9860 3:17 own Spellwarding 6.0 of 10 s
+    // keeps its line until the A30 / E24 damage-share predicate lands.
+    if (
+      ccOverlapSeconds(noChoiceIntervals, w.fromSeconds, evalEnd) >=
+      evalSpan / 2
+    )
       continue;
 
     // Every distance this line renders is sampled ON the render grid (whole
@@ -552,25 +900,62 @@ export function computeOwnerPositionEvents(params: {
     const tStart = toRenderSecond(w.fromSeconds);
     const tEnd = toRenderSecond(evalEnd);
     if (tEnd <= tStart) continue;
-    const start = nearestEnemyAt(
-      enemies,
-      null,
-      matchStartMs + tStart * 1000,
+    // The owner did not live to the span's last rendered second: no event.
+    // Without this the corpse's held position (1.5 s, POSITION_MAX_GAP_MS)
+    // stood in for the owner at the span's end, or at both ends — see
+    // `burstSpanSampledAfterDeath`. Dropped, not cut at the death: that is
+    // what already happens to every span the owner died further inside (the
+    // end sample has no position), and cutting would make the owner's last
+    // seconds assessable and ADD stays (the T12 ① b finding recorded in
+    // `timelineSections/offensiveWindow.ts`: +53 `stayed-in` candidates).
+    // The HP readings below (`hpStart`, the whole-second minimum, the
+    // trough) sit on the same rendered seconds, so none of them is taken
+    // after the death either. A Solo Shuffle round ends at its first player
+    // death (`roundEndMs`), which is never later than the owner's own: every
+    // span dropped here also runs past the round's end.
+    if (burstSpanSampledAfterDeath(owner, matchStartMs, tEnd)) continue;
+    // FT-T12 D2 (user ruling 2026-10-10): the start, the end and every
+    // mid-span sample of this span read ONE enemy — the one that hit the
+    // owner most over it (`spanMeasuredEnemy`, which also states the three
+    // fallback cases) — so the STAYED_IN / KITED verdict, both rendered lines
+    // and the position-mistake candidate built from the event cannot pair two
+    // enemies' distances. On the fallback the WHOLE span reads the nearest
+    // enemy at each instant, as it did before; the two rules are never mixed
+    // inside one span.
+    const nearestAt = (t: number) =>
+      nearestEnemyAt(enemies, null, matchStartMs + t * 1000, owner);
+    const measured = spanMeasuredEnemy(
       owner,
-    );
-    const end = nearestEnemyAt(
       enemies,
-      null,
-      matchStartMs + tEnd * 1000,
-      owner,
+      combatUnits,
+      matchStartMs,
+      tStart,
+      tEnd,
     );
+    const sampleAt = measured
+      ? (t: number) =>
+          nearestEnemyAt([measured], null, matchStartMs + t * 1000, owner)
+      : nearestAt;
+    const start = sampleAt(tStart);
+    const end = sampleAt(tEnd);
     if (!start || !end) continue;
-    if (start.distanceYards > CLOSE_RANGE_YARDS) continue; // was not in range to begin with
+    // The entry gate reads the measured enemy too (D2): the enemy hitting the
+    // owner most was not in close range to begin with ⇒ no event, even with
+    // another enemy on top of the owner.
+    if (start.distanceYards > CLOSE_RANGE_YARDS) continue;
 
     // Sample every second across the window: hit-and-run kiting (out and back)
     // shows up as a mid-window peak that endpoint-only checks would miss.
     let maxDistance = Math.max(start.distanceYards, end.distanceYards);
-    let minDistance = Math.min(start.distanceYards, end.distanceYards);
+    // `maxDistance` (the KITED peak) follows the sampled enemy; the STAYED IN
+    // line's "(nearest enemy A–B yd over the window)" (`minDistance` /
+    // `nearestMax`) keeps its own meaning — the nearest of ANY enemy at each
+    // second — whichever rule measured the span.
+    const nearestEnds = [nearestAt(tStart), nearestAt(tEnd)].flatMap((n) =>
+      n ? [n.distanceYards] : [],
+    );
+    let nearestMax = Math.max(...nearestEnds);
+    let minDistance = Math.min(...nearestEnds);
     // the peak's own identity and time (KITED renders it; audit 483f / eb80:
     // "A→B yd from X" used to pair X with another enemy's distance)
     let peak =
@@ -578,20 +963,20 @@ export function computeOwnerPositionEvents(params: {
         ? { d: end.distanceYards, enemy: end.enemyName, t: tEnd }
         : { d: start.distanceYards, enemy: start.enemyName, t: tStart };
     for (let t = tStart + 1; t < tEnd; t += 1) {
-      const sample = nearestEnemyAt(
-        enemies,
-        null,
-        matchStartMs + t * 1000,
-        owner,
-      );
+      const sample = sampleAt(t);
+      const near = nearestAt(t);
+      if (near) {
+        nearestMax = Math.max(nearestMax, near.distanceYards);
+        minDistance = Math.min(minDistance, near.distanceYards);
+      }
       if (sample) {
         maxDistance = Math.max(maxDistance, sample.distanceYards);
-        minDistance = Math.min(minDistance, sample.distanceYards);
         if (sample.distanceYards > peak.d)
           peak = { d: sample.distanceYards, enemy: sample.enemyName, t };
       }
     }
     // the start enemy's own distance at the end, when someone else is nearest
+    // (fallback rule only: a measured span has one enemy at both ends)
     const startEnemy = enemies.find((e) => e.name === start.enemyName);
     const startEnemyEndPos =
       startEnemy && end.enemyName !== start.enemyName
@@ -612,16 +997,73 @@ export function computeOwnerPositionEvents(params: {
         : undefined;
 
     const delta = end.distanceYards - start.distanceYards;
-    // B4 fix: prefer the overlapping damage-spike's target (identical ±5s overlap rule to the
-    // [OFFENSIVE WINDOW] header in matchTimeline) so this line and the timeline can never
-    // disagree about who the burst hit; fall back to the whole-window most-pressured unit.
+    // B4 fix: prefer the overlapping damage-spike's target (the ±5 s rule the
+    // [OFFENSIVE WINDOW] header used until T12 ③ — the header now names a
+    // spike through `creditSpikesToWindows`; this line keeps its own rule and
+    // the A′12 half-span limit below, both feeding position-mistake);
+    // fall back to the whole-window most-pressured unit.
     const overlappingSpike = spikeWindows?.find(
       (pw) =>
         pw.fromSeconds >= w.fromSeconds - 5 &&
         pw.fromSeconds <= w.toSeconds + 5,
     );
+    // …but only while that spike is about THIS line's span (triage sync-burst
+    // F-L2 + F-L2b, user ruling 2026-09-30 A′12): the spike array is not
+    // time-ordered and the ±5 s rule admits a spike that starts after the
+    // span ended (f4eb8c87 1:27–1:37 named a teammate hit at 1:42 while the
+    // owner took 1.04M in the span). A spike covering less than half of the
+    // span yields to the friendly under the most incoming pressure inside it.
+    const spikeOverlapS = overlappingSpike
+      ? Math.min(overlappingSpike.toSeconds, evalEnd) -
+        Math.max(overlappingSpike.fromSeconds, w.fromSeconds)
+      : -1;
+    const spikeCoversSpan =
+      !!overlappingSpike && spikeOverlapS >= evalSpan * SPIKE_SPAN_MIN_SHARE;
+    const spanTarget =
+      overlappingSpike && spikeOverlapS >= evalSpan * SPIKE_SPAN_MIN_SHARE
+        ? undefined
+        : (() => {
+            // work order 2026-10-14d Part 2 (preview): the burst target is a
+            // friendly the window's cooldown casters (or their pets) hit —
+            // the burst engine's `pressured` reading (G6), not the most
+            // incoming damage from any source (f4647408 1:43: [BURST
+            // ANSWERED] named the warlock, POSITIONING the owner)
+            const casterNames = new Set(
+              (w.activeCDs ?? []).map((c) => c.playerName),
+            );
+            const casterIds = new Set(
+              enemies.filter((e) => casterNames.has(e.name)).map((e) => e.id),
+            );
+            const ownerOf = new Map(
+              combatUnits
+                .filter((u) => u.ownerId)
+                .map((u) => [u.id, u.ownerId as string]),
+            );
+            const fromCaster = (src: string) =>
+              casterIds.has(src) || casterIds.has(ownerOf.get(src) ?? "");
+            const fromMs = matchStartMs + w.fromSeconds * 1000;
+            const toMs = matchStartMs + evalEnd * 1000;
+            return mostPressuredInSpan(
+              friends,
+              fromMs,
+              toMs,
+              rosterSides,
+              casterIds.size > 0
+                ? (f) =>
+                    hitByAttackers(f, combatUnits, fromCaster, fromMs, toMs)
+                : undefined,
+            );
+          })();
+    // work order 2026-10-15 Part 2 (user 「好」): when the window's cooldown
+    // casters are known and hit nobody in the span, no burst target is named
+    // — the any-source fallbacks (a shorter spike's friendly, the window's
+    // most-pressured) had no hit test
+    const castersKnown = (w.activeCDs ?? []).length > 0;
     const targetName =
-      overlappingSpike?.targetName ?? w.mostPressuredTarget?.unitName;
+      spanTarget ??
+      (castersKnown && !spikeCoversSpan
+        ? undefined
+        : (overlappingSpike?.targetName ?? w.mostPressuredTarget?.unitName));
     const burstTargetsOwner =
       targetName !== undefined ? targetName === owner.name : undefined;
     // The owner's own displacement, on the same render-grid seconds.
@@ -642,8 +1084,9 @@ export function computeOwnerPositionEvents(params: {
     // where the owner stood at the peak, minus the starting gap — the gap had
     // the enemy stood still. Displacement magnitude alone credited a chase
     // (codex review of batch 10: owner 0→10 yd after an enemy running 5→35
-    // read "KITED 5→25yd"); the peak is measured to the nearest enemy, which
-    // may be another one, so this is the owner's own share of the opening.
+    // read "KITED 5→25yd"); on the fallback rule the peak is measured to the
+    // nearest enemy, which may be another one, so this is the owner's own
+    // share of the opening.
     const startEnemyStartPos = startEnemy
       ? getUnitPositionAtTime(
           startEnemy,
@@ -678,6 +1121,12 @@ export function computeOwnerPositionEvents(params: {
       tStart,
       tEnd,
     );
+    // FT leftovers 2026-10-11 (the I13 fact half): displacement the log
+    // shows the owner did not make, between the same two rendered seconds
+    const ownerForcedMoves =
+      ownerMovedToEnd === undefined
+        ? []
+        : forcedMovesInRenderedSpan(owner, enemies, matchStartMs, tStart, tEnd);
     const opened = maxDistance - start.distanceYards;
     if (opened >= KITE_DELTA_YARDS) {
       // Who moved (F13 c540): the enemy walking away from a stunned owner is
@@ -709,27 +1158,63 @@ export function computeOwnerPositionEvents(params: {
       // The OUTCOME: did staying in actually cost HP? This is what turns STAYED_IN
       // from a hedge-pileup into a checkable finding — a coach should only fault a
       // stay that dropped the owner low, not one that cost nothing.
-      // HP freshness is NOT the position-interpolation grounding guard: this
-      // renders "HP fell from X% to Y%" into the prompt, so it must use the
-      // one shared radius every other rendered HP claim uses. Passing
-      // POSITION_MAX_GAP_MS here (1.5s, a guard against fabricating a
-      // coordinate across a sampling gap) was a 2026-07-14 copy-paste that the
-      // same day's shared-sampler commit did not sweep.
-      const hpStart = getUnitHpAtTimestamp(
-        owner,
-        matchStartMs + w.fromSeconds * 1000,
-        HP_SAMPLE_RADIUS_MS,
-      );
-      let hpMin = hpStart;
-      for (let t = Math.ceil(w.fromSeconds); t <= evalEnd; t += 1) {
-        const hp = getUnitHpAtTimestamp(
-          owner,
-          matchStartMs + t * 1000,
-          HP_SAMPLE_RADIUS_MS,
-        );
-        if (hp !== null && (hpMin === null || hp < hpMin)) hpMin = hp;
-      }
+      //
+      // All three HP numbers are read on the window the line PRINTS —
+      // `fmtTime(from)–fmtTime(to)`, the rendered seconds [tStart, tEnd] the
+      // distances above are sampled on — through the `[STATE]` tick's own
+      // sampler (CLAUDE.md Shared-Predicate Rule):
+      //  - the start is the tick of the rendered start second (`gridHpPct`);
+      //  - the DECISION's minimum is the lowest tick of the window
+      //    (`gridHpMinInWindow`: clamped at 100, nothing read from the
+      //    owner's death second on);
+      //  - the PRINTED minimum is the trough (below).
+      // Until 2026-10-11 the start was the raw reading at the window's
+      // fractional start (`w.fromSeconds` — another instant than the tick of
+      // the second the line prints), and the minimum a loop of raw readings
+      // from `ceil(w.fromSeconds)` seeded with that start: no clamp, no stop
+      // at the death, and it never read the rendered start second — whose
+      // `[STATE]` tick could then sit below the printed "(min over window)".
+      const hpStart = gridHpPct(owner, matchStartMs + tStart * 1000);
+      // A span whose last rendered second is the owner's death second (kept:
+      // its samples are of the living owner — `burstSpanSampledAfterDeath`)
+      // ends on a `[STATE]` tick that prints `dead`. The minimum reads 0
+      // there, the convention every endpoint has (`gridEndpointHpPct`): the
+      // grid minimum and the trough read nothing from the death second on,
+      // so without this a stay that ended in the owner's death could print
+      // "(HP stayed at or above 35%)" (2 of the 8 such spans of the 605-file
+      // capture had no tick under 35 % before the death).
+      const diedAtEnd = isDeadAtRenderSecond(owner, matchStartMs, tEnd);
+      const hpMin = diedAtEnd
+        ? 0
+        : (gridHpMinInWindow(owner, matchStartMs, tStart, tEnd)?.pct ?? null);
+      // FT-T03 (user ruling 2026-10-10, D7): the minimum a line or the menu
+      // PRINTS is a trough — the true minimum inside the window, not the
+      // lowest whole-second reading (`hpMin`, which stays the decision's: see
+      // `ownerHpLowPct`). Its ticks are the same rendered seconds
+      // [tStart, tEnd], so it is never above a `[STATE]` tick of the owner
+      // inside the printed window (the gate `checkStayedInHpConsistency`
+      // re-reads every one of them); its samples are the ones of the burst
+      // span itself (`span`: from the window's own start to its end, in ms).
+      const trough =
+        hpMin === null || diedAtEnd
+          ? null
+          : hpTroughInWindow(owner, matchStartMs, tStart, tEnd, undefined, {
+              fromMs: matchStartMs + Math.round(w.fromSeconds * 1000),
+              toMs: matchStartMs + Math.round(evalEnd * 1000),
+              // the line pairs this minimum with the start second's tick
+              ticksRegardless: true,
+            });
+      const hpLow = trough?.pct ?? hpMin;
 
+      // B24b: who actually hit the owner over the rendered span
+      const topDamager = topEnemyDamagerInSpan(
+        owner,
+        enemies,
+        combatUnits,
+        matchStartMs,
+        tStart,
+        tEnd,
+      );
       events.push({
         type: "STAYED_IN",
         atSeconds: w.fromSeconds,
@@ -737,23 +1222,84 @@ export function computeOwnerPositionEvents(params: {
         startDistanceYards: Math.round(start.distanceYards * 10) / 10,
         endDistanceYards: Math.round(end.distanceYards * 10) / 10,
         minDistanceYards: Math.round(minDistance * 10) / 10,
-        maxDistanceYards: Math.round(maxDistance * 10) / 10,
+        maxDistanceYards: Math.round(nearestMax * 10) / 10,
         nearestEnemyName: start.enemyName,
         endEnemyName: end.enemyName,
         ...(startEnemyEndYards !== undefined ? { startEnemyEndYards } : {}),
+        ...(topDamager
+          ? {
+              topDamagerName: topDamager.name,
+              topDamagerDamage: topDamager.damage,
+            }
+          : {}),
         dangerLabel: w.dangerLabel,
         dampeningPct: w.dampeningPct,
         ownerDefensiveAvailable:
           defensiveCDs.length > 0
             ? defensiveCDs.some((cd) => isAvailableAt(cd, w.fromSeconds))
             : undefined,
+        ...(() => {
+          if (defensiveCDs.some((cd) => isAvailableAt(cd, w.fromSeconds)))
+            return {};
+          let back: { spellName: string; atSeconds: number } | undefined;
+          for (const cd of defensiveCDs)
+            for (const aw of cd.availableWindows)
+              if (
+                aw.fromSeconds > w.fromSeconds &&
+                aw.fromSeconds <= evalEnd &&
+                (!back || aw.fromSeconds < back.atSeconds)
+              )
+                back = { spellName: cd.spellName, atSeconds: aw.fromSeconds };
+          return back ? { ownerDefensiveBack: back } : {};
+        })(),
         burstTargetsOwner,
         burstTargetName: burstTargetsOwner === false ? targetName : undefined,
         ownerHpStartPct: hpStart === null ? null : Math.round(hpStart),
         ownerHpMinPct: hpMin === null ? null : Math.round(hpMin),
+        ownerHpLowPct: hpLow === null ? null : Math.round(hpLow),
         ...(ownerMovedToEnd !== undefined
           ? { ownerMovedYards: ownerMovedToEnd }
           : {}),
+        ...(ownerForcedMoves.length > 0 ? { ownerForcedMoves } : {}),
+        // three-state: no summary passed ⇒ unknown, not 0
+        ...(ownerCCSummary
+          ? {
+              ownerCcSeconds: ccOverlapSeconds(
+                ccInstances,
+                w.fromSeconds,
+                evalEnd,
+              ),
+            }
+          : {}),
+        ...(rootInstances
+          ? {
+              ownerRootSeconds: ccOverlapSeconds(
+                rootInstances,
+                w.fromSeconds,
+                evalEnd,
+              ),
+              ownerCcOrRootSeconds: ccOverlapSeconds(
+                [...ccInstances, ...rootInstances],
+                w.fromSeconds,
+                evalEnd,
+              ),
+            }
+          : {}),
+        ...(snareInstances
+          ? {
+              ownerSnaredSeconds: ccOverlapSeconds(
+                snareInstances,
+                w.fromSeconds,
+                evalEnd,
+              ),
+            }
+          : {}),
+        ownerCannotCastSeconds:
+          coveredMsWithin(
+            ownerCannotCast,
+            matchStartMs + w.fromSeconds * 1000,
+            matchStartMs + evalEnd * 1000,
+          ) / 1000,
         healerExposureLabel,
       });
     }
@@ -796,7 +1342,13 @@ export function computeOwnerPositionEvents(params: {
     const allLivingEnemiesKnownAt = (tMs: number) =>
       allLivingEnemiesKnown(enemies, tMs);
 
-    for (let t = 0; t <= durationSeconds; t += 1) {
+    // work order 2026-10-15 Part 2 (user 「好」): the sweep stops at the round's
+    // end (`roundEndMs`: a Solo Shuffle round ends at its first death)
+    const sweepEndS = Math.min(
+      durationSeconds,
+      (roundEndMs(combat as never) - matchStartMs) / 1000,
+    );
+    for (let t = 0; t <= sweepEndS; t += 1) {
       const tMs = matchStartMs + t * 1000;
       const allOffensivesReady = offensiveCDs.every((cd) =>
         isAvailableAt(cd, t),
@@ -822,7 +1374,7 @@ export function computeOwnerPositionEvents(params: {
         closeRun(t);
       }
     }
-    closeRun(durationSeconds);
+    closeRun(sweepEndS);
   }
 
   // ── 3. CD_OUT_OF_RANGE: offensive CD cast beyond its own reach ───────────
@@ -863,6 +1415,32 @@ export function computeOwnerPositionEvents(params: {
   }
 
   // ── 4. Iter 3: SPLIT_PUSH — a melee DPS away from the target during a committed push ──
+  /** "Stayed >PUSH_AWOL_YARDS away" over [fromS, toS] (match seconds) at
+   *  every instant the positioning gate samples (`positionSampleInstants`:
+   *  both units' real samples + the sub-second grid). An instant where
+   *  either unit is dead or has no position cannot show it, so the claim is
+   *  not made (codex 40-FT-82: a melee dead at 26 s of a 20–30 s span, or
+   *  without samples after 25 s, still read "stayed >20yd away"). */
+  const stayedBeyondThroughout = (
+    a: ICombatUnit,
+    b: ICombatUnit,
+    fromS: number,
+    toS: number,
+  ): boolean => {
+    const fromMs = matchStartMs + fromS * 1000;
+    const toMs = matchStartMs + toS * 1000;
+    for (const ts of positionSampleInstants([a, b], fromMs, toMs, [
+      fromMs,
+      toMs,
+    ])) {
+      if (isDeadAt(a, ts) || isDeadAt(b, ts)) return false;
+      const pa = getUnitPositionAtTime(a, ts, POSITION_MAX_GAP_MS);
+      const pb = getUnitPositionAtTime(b, ts, POSITION_MAX_GAP_MS);
+      if (!pa || !pb || distanceBetween(pa, pb) <= PUSH_AWOL_YARDS)
+        return false;
+    }
+    return true;
+  };
   if (friends && offensiveWindows) {
     const ccByName = new Map(
       (friendCCSummaries ?? []).map((c) => [c.playerName, c.ccInstances]),
@@ -885,6 +1463,9 @@ export function computeOwnerPositionEvents(params: {
 
       const evalEnd = Math.min(w.toSeconds, w.fromSeconds + BURST_EVAL_SECONDS);
       const sampleTimes = [w.fromSeconds + 2, (w.fromSeconds + evalEnd) / 2];
+      // the rendered span `from–to` the line prints (floored like fmtTime)
+      const splitFromS = toRenderSecond(w.fromSeconds);
+      const splitToS = evalEnd;
       const onTarget: string[] = [];
       const awol: string[] = [];
       for (const dps of meleeDps) {
@@ -913,7 +1494,10 @@ export function computeOwnerPositionEvents(params: {
         if (dists.some((d) => d === null)) continue; // unreliable positions — no claim
         if (dists.every((d) => (d as number) <= PUSH_ON_TARGET_YARDS))
           onTarget.push(dps.name);
-        else if (dists.every((d) => (d as number) > PUSH_AWOL_YARDS))
+        else if (
+          dists.every((d) => (d as number) > PUSH_AWOL_YARDS) &&
+          stayedBeyondThroughout(dps, target, splitFromS, splitToS)
+        )
           awol.push(dps.name);
       }
 
@@ -921,7 +1505,11 @@ export function computeOwnerPositionEvents(params: {
         events.push({
           type: "SPLIT_PUSH",
           atSeconds: w.fromSeconds,
-          toSeconds: w.toSeconds,
+          // the span the line prints is the span checked (acceptance
+          // 7e2a3c95 #5): the window's whole length printed as "stayed >20yd
+          // away" from two samples in its first 10 s — c2058ed4 2:33–3:33,
+          // Lava Lash on the target from ~1 yd at 3:06.9
+          toSeconds: evalEnd,
           nearestEnemyName: w.targetName,
           playersInvolved: awol,
         });
@@ -1109,13 +1697,45 @@ export function computeOwnerPositionEvents(params: {
 /** STAYED_IN: the owner's own displacement (render-grid span ends). The
  *  positioning gate re-derives it (G4 "you moved"). */
 function movedStr(e: IPositionEvent): string {
-  return e.ownerMovedYards === undefined
-    ? ""
+  if (e.ownerMovedYards === undefined) return "";
+  // the yards are the owner's own only when nothing the log shows moved them
+  return e.ownerForcedMoves?.length
+    ? ` — you moved ${e.ownerMovedYards} yd (span start→end), not all of it yourself: ${forcedMovesText(e.ownerForcedMoves)}`
     : ` — you moved ${e.ownerMovedYards} yd yourself (span start→end)`;
 }
 
 /** STAYED_IN's nearest-enemy range, only when the window left the endpoint
  * span (GH #103 A7); `from <name>` stays adjacent to "yd" for the G4 gate. */
+/** Seconds as the HEALER TRAINED line prints them: `<1` below half a second. */
+function lockSeconds(s: number): string {
+  return s > 0 && s < 0.5 ? "<1" : String(Math.round(s));
+}
+
+/** STAYED_IN: how much of the span the owner could not choose where to stand
+ *  (triage position F-S2). After `movedStr`, so the positioning gate's
+ *  "A→Byd from X" and "you moved … (span start→end)" anchors are untouched. */
+function lockStr(e: IPositionEvent): string {
+  const span = Math.round((e.toSeconds ?? e.atSeconds) - e.atSeconds);
+  const cc = e.ownerCcSeconds ?? 0;
+  const root = e.ownerRootSeconds ?? 0;
+  // the two can overlap (a root inside a stun): with both printed, say how
+  // long it was in all, so they are not read as a sum
+  const both =
+    cc > 0 && root > 0 && e.ownerCcOrRootSeconds !== undefined
+      ? ` (${lockSeconds(e.ownerCcOrRootSeconds)}s in all)`
+      : "";
+  return (
+    (cc > 0 ? ` — CC'd ${lockSeconds(cc)}s of ${span}s` : "") +
+    (root > 0 ? ` — rooted ${lockSeconds(root)}s` : "") +
+    both
+  );
+}
+
+/** STAYED IN's "(nearest enemy A–Byd over the window)". The range is the
+ *  nearest of ANY enemy at each second (`STAYED_IN_SECTION_HEADER` says so),
+ *  the endpoints are the measured enemy's (FT-T12 D2): it prints when the
+ *  range leaves the endpoint span, which now includes every span on which
+ *  another enemy stood closer than the measured one. */
 function rangeStr(e: IPositionEvent): string {
   if (
     e.minDistanceYards === undefined ||
@@ -1129,6 +1749,32 @@ function rangeStr(e: IPositionEvent): string {
   if (e.minDistanceYards >= lo && e.maxDistanceYards <= hi) return "";
   return ` (nearest enemy ${e.minDistanceYards}–${e.maxDistanceYards}yd over the window)`;
 }
+
+/**
+ * The two section headers of the burst-span lines. They are the only place
+ * the prompt says WHO "A→B yd from X" is measured to, so they state the rule
+ * `spanMeasuredEnemy` implements (FT-T12 D2, user ruling 2026-10-10) and its
+ * fallback, and that the STAYED IN range clause is a different reading.
+ * Before the ruling the STAYED IN header read "an enemy stayed in close
+ * range" — true of the nearest enemy at each end, which could be two players.
+ * Neither header may contain the literal "most damage to you": that is the
+ * anchor of a line's own `topDamagerClause`, which the positioning gate (G4c)
+ * and the tests look for.
+ */
+/** The cross-reference to the [BURST ANSWERED] line, printed only when that
+ * line is in the prompt (work order 2026-10-15 #1 — `buildMatchContext`
+ * strips it otherwise). */
+export const POSITIONING_BURST_ANSWERED_XREF =
+  " — which can differ from the [BURST ANSWERED] line's player, the lowest-HP one over the burst and what followed";
+
+export const STAYED_IN_SECTION_HEADER =
+  "  STAYED IN during enemy burst (A→Byd = your distance, at the span's start and end, to the ONE enemy named after 'from' — the enemy who dealt you the most damage over the span; it started in close range and little distance was gained on it. When no enemy damage landed in the span, two enemies tied for the most, or that enemy had no position at either end, each end reads the nearest enemy at that second instead, and 'from X→Y' names both when they differ. '(nearest enemy A–Byd over the window)' is always the nearest of ANY enemy at each second, not the named one. The line says nothing about whether you moved; see 'you moved'. 'you were the burst target' / 'burst targeted X' = the friendly of the [DMG SPIKE] that covers at least half the span; with no such spike, of the friendlies the burst's cooldown casters hit in the span (a hit stopped by an immunity counts) the one under the most incoming damage; with none hit, no burst target is named (only when the window's cooldown casters are unknown does it fall back to a shorter overlapping spike's friendly, else the window's most-damaged friendly from any source)" +
+  POSITIONING_BURST_ANSWERED_XREF +
+  ".):";
+export const KITED_SECTION_HEADER =
+  "  KITED during enemy burst (opened distance: A = your distance at the start to the ONE enemy named after 'from' — the enemy who dealt you the most damage over the span — and B = your largest distance to that same enemy, at the second in '(peak at m:ss)'. When no enemy damage landed in the span, two enemies tied for the most, or that enemy had no position at either end, A is the nearest enemy at the start and B the largest nearest-enemy distance, with ', from Z' naming the enemy at the peak when it is another one. 'you were the burst target' / 'burst targeted X' = the friendly of the [DMG SPIKE] that covers at least half the span; with no such spike, of the friendlies the burst's cooldown casters hit in the span (a hit stopped by an immunity counts) the one under the most incoming damage; with none hit, no burst target is named (only when the window's cooldown casters are unknown does it fall back to a shorter overlapping spike's friendly, else the window's most-damaged friendly from any source)" +
+  POSITIONING_BURST_ANSWERED_XREF +
+  ".):";
 
 export function formatPositionEventsForContext(
   events: IPositionEvent[],
@@ -1146,16 +1792,19 @@ export function formatPositionEventsForContext(
   const outOfRange = events.filter((e) => e.type === "CD_OUT_OF_RANGE");
 
   if (stayedIn.length > 0) {
-    lines.push(
-      "  STAYED IN during enemy burst (an enemy stayed in close range, little distance gained — says nothing about whether you moved; see 'you moved'):",
-    );
+    lines.push(STAYED_IN_SECTION_HEADER);
     for (const e of stayedIn) {
+      // F-S5: availability is sampled at the span start; say how long of the
+      // span the owner could not have pressed it
+      const blockedS = e.ownerCannotCastSeconds ?? 0;
       const defStr =
         e.ownerDefensiveAvailable === undefined
           ? ""
           : e.ownerDefensiveAvailable
-            ? " — a defensive CD was available"
-            : " — no defensive CD available";
+            ? ` — a defensive CD was available${blockedS >= 1 ? ` (you could not cast for ${Math.round(blockedS)}s of it)` : ""}`
+            : e.ownerDefensiveBack
+              ? ` — no defensive CD available at the start (${e.ownerDefensiveBack.spellName} back at ${fmtTime(e.ownerDefensiveBack.atSeconds)})`
+              : " — no defensive CD available";
       const targetStr =
         e.burstTargetsOwner === true
           ? " — you were the burst target"
@@ -1166,13 +1815,25 @@ export function formatPositionEventsForContext(
       // whether the stay was a mistake, replacing the old hedge-pileup.
       let hpStr = "";
       if (e.ownerHpMinPct !== null && e.ownerHpMinPct !== undefined) {
-        const tag =
-          e.ownerHpMinPct <= STAYED_IN_NEAR_DEATH_PCT
-            ? " (near-death — the stay was costly)"
-            : !stayedInHadRealCost(e.ownerHpMinPct, e.ownerHpStartPct)
-              ? " (no real cost)"
-              : "";
-        hpStr = ` — your HP ${e.ownerHpStartPct}%→${e.ownerHpMinPct}% (min over window)${tag}`;
+        // One predicate for the tag and the menu gate (`stayedInHadRealCost`,
+        // GH #16): at hpMin = 35 the old `<=` tagged "near-death" a stay the
+        // gate did not count. The other side states the fact instead of the
+        // verdict "(no real cost)" (user ruling 2026-09-30, A60 = B).
+        //
+        // FT-T03 (ruling D7): the PRINTED minimum is the trough
+        // (`ownerHpLowPct`). The verdict tag is a decision and stays where
+        // the menu gate is — on the grid minimum — so "the stay was costly"
+        // is printed exactly on the stays the menu can list. The other tag
+        // is a statement about the printed number and must be true of it: a
+        // stay whose ticks stayed at or above the line while the trough went
+        // under it prints neither (`90%→20% (min over window)`).
+        const low = e.ownerHpLowPct ?? e.ownerHpMinPct;
+        const tag = stayedInHadRealCost(e.ownerHpMinPct, e.ownerHpStartPct)
+          ? " (near-death — the stay was costly)"
+          : stayedInHadRealCost(low, e.ownerHpStartPct)
+            ? ""
+            : ` (HP stayed at or above ${STAYED_IN_NEAR_DEATH_PCT}%)`;
+        hpStr = ` — your HP ${e.ownerHpStartPct}%→${low}% (min over window)${tag}`;
       } else {
         // No HP data — fall back to the dampening context hedge.
         hpStr =
@@ -1191,14 +1852,21 @@ export function formatPositionEventsForContext(
         e.toSeconds !== undefined && e.toSeconds > e.atSeconds
           ? `${fmtTime(e.atSeconds)}–${fmtTime(e.toSeconds)}`
           : fmtTime(e.atSeconds);
+      // B24b: only on a span line (the gate re-reads both seconds)
+      const topStr =
+        e.topDamagerName !== undefined &&
+        e.topDamagerDamage !== undefined &&
+        spanStr.includes("–")
+          ? topDamagerClause(e.topDamagerName, e.topDamagerDamage)
+          : "";
       lines.push(
-        `    ${spanStr} [${e.dangerLabel} burst] ${e.startDistanceYards}→${e.endDistanceYards}yd from ${stayedEndpointNames(e)}${rangeStr(e)}${movedStr(e)}${targetStr}${exposureStr}${hpStr}${defStr}`,
+        `    ${spanStr} [${e.dangerLabel} burst] ${e.startDistanceYards}→${e.endDistanceYards}yd from ${stayedEndpointNames(e)}${rangeStr(e)}${movedStr(e)}${lockStr(e)}${targetStr}${exposureStr}${hpStr}${topStr}${defStr}`,
       );
     }
   }
 
   if (kited.length > 0) {
-    lines.push("  KITED during enemy burst (opened distance):");
+    lines.push(KITED_SECTION_HEADER);
     for (const e of kited) {
       const targetStr =
         e.burstTargetsOwner === true

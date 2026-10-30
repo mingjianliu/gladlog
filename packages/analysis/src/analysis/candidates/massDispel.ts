@@ -36,21 +36,78 @@
  * minor tier, never "should have" — and the type is excluded from the
  * mistakes card (desktop `IGNORED_CANDIDATE_TYPES`), menu-only.
  */
-import { CombatUnitClass } from "@gladlog/parser-compat";
+import {
+  CombatUnitClass,
+  type ICombatUnit,
+  LogEvent,
+} from "@gladlog/parser-compat";
 
 import {
   ccFullDurationSeconds,
   effectiveCooldownSeconds,
   spellEffectData,
 } from "../../data/spellEffectData";
-import { chargesAvailableAt } from "../../utils/cooldowns";
+import { chargesAvailableAt, ICE_BLOCK_SPELL_ID } from "../../utils/cooldowns";
 import { toRenderSecond } from "../../utils/renderGrid";
 import { CandidateEvent } from "../types";
 import { CD_HOARD_CRISIS_HP_PCT, type ICrisisMoment } from "./cooldownTiming";
 
 export const MD_SPELL_ID = "32375";
 export const CYCLONE_SPELL_ID = "33786";
-export const ICE_BLOCK_SPELL_ID = "45438";
+/**
+ * A control whose target cannot be damaged while it lasts — Cyclone: the
+ * unit is banished, immune to everything, the caster's own team included.
+ * One reader for "our own control made the target unhittable": the cause a
+ * `[CC NOT LANDED]` / `[IMMUNE — …]` note names (`X's Cyclone was on the
+ * target`, timelineSections/setup.ts, B17a) and the KILL ATTEMPTS clause
+ * `target in your team's Cyclone a–b` (killAttempts.ts, I10). No list of its
+ * own: it is `CYCLONE_SPELL_ID`.
+ */
+export function isDamageImmuneControl(
+  spellId: string | null | undefined,
+): boolean {
+  return spellId === CYCLONE_SPELL_ID;
+}
+
+/**
+ * Was a Cyclone (`isDamageImmuneControl`) on `unit` at `atMs`? Returns the
+ * application that put it there (its source and log ms), or undefined. Read
+ * in log order up to `atMs`; a REMOVED closes it, and one whose REMOVED the
+ * log lost is over at its full length (`ccFullDurationForCaster` with the
+ * applier the caller resolves — codex 60-POSTHOC-05a #1: a 0:10 Cyclone
+ * blamed for a 0:44 IMMUNE). The one reading for "a Cyclone was on them" —
+ * the `[CC NOT LANDED]` / `[IMMUNE — …]` note (timelineSections/setup.ts)
+ * and the uncredited `[CC AVOIDED?] … logged IMMUNE` line
+ * (timelineSections/trinketCcOnTeam.ts; weekly review 2026-10-24: that copy
+ * had no cap).
+ */
+export function damageImmuneControlUpAt(
+  unit: Pick<ICombatUnit, "auraEvents">,
+  atMs: number,
+  fullSecondsFor: (spellId: string, srcUnitId: string) => number | undefined,
+): { srcUnitId: string; sinceMs: number } | undefined {
+  let on: { srcUnitId: string; sinceMs: number; spellId: string } | undefined;
+  for (const a of unit.auraEvents ?? []) {
+    if (a.timestamp > atMs) break;
+    if (!isDamageImmuneControl(a.spellId)) continue;
+    const ev = a.logLine.event;
+    if (
+      ev === LogEvent.SPELL_AURA_APPLIED ||
+      ev === LogEvent.SPELL_AURA_REFRESH
+    )
+      on = {
+        srcUnitId: a.srcUnitId,
+        sinceMs: a.timestamp,
+        spellId: a.spellId!,
+      };
+    else if (ev === LogEvent.SPELL_AURA_REMOVED) on = undefined;
+  }
+  if (!on) return undefined;
+  const full = fullSecondsFor(on.spellId, on.srcUnitId);
+  if (full !== undefined && atMs > on.sinceMs + full * 1000) return undefined;
+  return { srcUnitId: on.srcUnitId, sinceMs: on.sinceMs };
+}
+export { ICE_BLOCK_SPELL_ID };
 export const DIVINE_SHIELD_SPELL_ID = "642";
 
 /** User-ruled on GH #25 (2026-08-21) as part of the four-gate sign-off: an MD
@@ -191,7 +248,7 @@ export function mdCycloneWindowEvents(opts: {
     const tS = toRenderSecond(chain[1].atS);
 
     // Gate 4: MD ready at window start (the owner's own cooldown —
-    // Improved Mass Dispel makes it 60 s)…
+    // Improved Mass Dispel takes 75 s off it since 12.1.5, read from DB2)…
     const mdCooldownS = opts.ownerMdCooldownS ?? MD_COOLDOWN_S;
     const mdReady = !ownerMdCastSeconds.some(
       (c) => c > fromS - mdCooldownS && c <= fromS,

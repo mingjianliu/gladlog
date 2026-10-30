@@ -5,6 +5,7 @@ import {
   extractCandidateFindings,
   MENU_ONLY_TYPES,
 } from "@gladlog/analysis";
+import { syncReadyCdEntry } from "@gladlog/analysis/src/analysis/candidates/cooldownTiming";
 import { render, screen } from "@testing-library/react";
 
 import { MatchReport } from "../src/renderer/src/report/components/MatchReport";
@@ -15,6 +16,7 @@ import {
   deriveMistakes,
   IGNORED_CANDIDATE_TYPES,
   MISTAKE_RULES,
+  syncReadyCdsText,
   timedAnchorsFromMistakes,
 } from "../src/renderer/src/report/derive/mistakes";
 import { loadRealMatchFixture } from "./fixtures/loadFixture";
@@ -198,6 +200,49 @@ describe("失误引擎(第四阶段③ / backlog #8)— 规则表防腐", () => 
     ).toBe(
       "血量 38% 后 3 秒无应对(此状态下无应对者 25% 十五秒内我方有人阵亡,有应对者 15%,出手者常见应对:selfHeal 75%; wall 23%)",
     );
+  });
+
+  it("missed-sync-window:readyCds 每一项的持有者用卡片的语言说(你的 / X 的),条目用产出方自己的 syncReadyCdEntry 写、parseSyncReadyCdEntry 读回;句子里不留英文的 (yours) / 's", () => {
+    const readyCds = [
+      syncReadyCdEntry("The Hunt", "Glaivemeomg-Stormscale-EU", false),
+      syncReadyCdEntry("Touch of the Magi", "Owner-Realm", true),
+    ].join("、");
+    expect(readyCds).toBe(
+      "The Hunt (Glaivemeomg-Stormscale-EU's)、Touch of the Magi (yours)",
+    );
+    expect(syncReadyCdsText(readyCds)).toBe(
+      "The Hunt(Glaivemeomg-Stormscale-EU 的)、Touch of the Magi(你的)",
+    );
+    const detail = candidateDetail({
+      type: "missed-sync-window",
+      facts: {
+        healer: "Holypriest-Realm",
+        cc: "Chaos Nova",
+        durationS: "3",
+        readyCds,
+      },
+    } as any);
+    expect(detail).toBe(
+      "Holypriest-Realm 被 Chaos Nova 控 3s,The Hunt(Glaivemeomg-Stormscale-EU 的)、Touch of the Magi(你的) 均 ready 未按",
+    );
+    expect(detail).not.toMatch(/\(yours\)|'s\)/);
+    // an entry that states no holder (no holder unit on the row) is the bare
+    // name, and a name with its own apostrophe / parentheses survives
+    expect(
+      syncReadyCdsText(
+        [
+          syncReadyCdEntry("Avatar", undefined, false),
+          syncReadyCdEntry("Fists of Fury (PvP)", "D'ark-Kel'Thuzad", false),
+        ].join("、"),
+      ),
+    ).toBe("Avatar、Fists of Fury (PvP)(D'ark-Kel'Thuzad 的)");
+    expect(syncReadyCdsText(undefined)).toBe("");
+    expect(
+      candidateDetail({
+        type: "missed-sync-window",
+        facts: { healer: "H", cc: "Fear", durationS: "4" },
+      } as any),
+    ).toBe("H 被 Fear 控 4s, 均 ready 未按");
   });
 });
 

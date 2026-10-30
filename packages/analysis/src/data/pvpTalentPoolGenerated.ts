@@ -1,6 +1,6 @@
 /**
- * Generated at: 2026-09-05T00:11:50.396Z
- * Build: 12.1.0.69587
+ * Generated at: 2026-10-16T15:38:38.832Z
+ * Build: 12.1.5.70391
  * Source: DB2 PvpTalent (SpecID / SpellID / ActionBarSpellID)
  * Rows: 407 across 40 specs
  * Shape: specId -> { grantedSpellId -> carrier talent SpellID }

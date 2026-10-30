@@ -1,5 +1,6 @@
 /** @vitest-environment jsdom */
 import { render, screen, waitFor } from "@testing-library/react";
+
 import { SpellIcon } from "../src/renderer/src/report/components/SpellIcon";
 
 function mockBridge(iconResult: string | null) {

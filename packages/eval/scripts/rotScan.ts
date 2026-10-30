@@ -1,4 +1,4 @@
-/* eslint-disable no-console */
+ 
 /**
  * CLI: corpus-driven scan for whitelist rot (the mining tool behind
  * update-wow-data step 7).
@@ -24,11 +24,10 @@
  *   (the PvP log archive keeps raw gzip bytes).
  */
 
+import { getEnglishSpellName,SPELL_CATEGORIES } from "@gladlog/analysis";
 import fs from "fs-extra";
 import path from "path";
 import { gunzipSync } from "zlib";
-
-import { SPELL_CATEGORIES, getEnglishSpellName } from "@gladlog/analysis";
 
 function parseArgs() {
   const a = process.argv.slice(2);

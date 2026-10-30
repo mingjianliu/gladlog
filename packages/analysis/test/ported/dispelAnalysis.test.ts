@@ -20,6 +20,10 @@ import { makeAuraEvent, makeDispelAction, makeUnit } from "./testHelpers";
 
 // Mock talents module to bypass complex lookups
 vi.mock("../../src/utils/talents", () => ({
+  // the era-aware talent list (cooldown mastery round 2026-10-20) — this
+  // file's synthetic units read as they are
+  talentsOf: (u: { info?: { talents?: unknown } }) => u.info?.talents,
+  unitLogEpochMs: () => Number.NaN,
   getPlayerTalentedSpellIds: (_spec: any, talents: any) => {
     if (talents === "HAS_DISEASE") return new Set(["213634"]);
     if (talents === "HAS_FELHUNTER") return new Set(["30146"]);
@@ -487,17 +491,19 @@ describe("dispelAnalysis — summary reconstruction", () => {
       },
     ];
 
-    // CC applied at 10s (within 60s window)
+    // A Curse CC (Hex 51514 — Cauterizing Flame's type; fact5 D1: a press
+    // of a cleanse that cannot remove the debuff's type is no burned
+    // cleanse for it) applied at 10s (within 60s window)
     const ccApply = makeAuraEvent(
       LogEvent.SPELL_AURA_APPLIED,
-      "118",
+      "51514",
       MATCH_START + 10_000,
       "e1",
       "t",
     );
     const ccRemove = makeAuraEvent(
       LogEvent.SPELL_AURA_REMOVED,
-      "118",
+      "51514",
       MATCH_START + 20_000,
       "e1",
       "t",
@@ -518,14 +524,14 @@ describe("dispelAnalysis — summary reconstruction", () => {
     // CC applied at 70s (outside 60s window)
     const ccApplyLate = makeAuraEvent(
       LogEvent.SPELL_AURA_APPLIED,
-      "118",
+      "51514",
       MATCH_START + 70_000,
       "e1",
       "t",
     );
     const ccRemoveLate = makeAuraEvent(
       LogEvent.SPELL_AURA_REMOVED,
-      "118",
+      "51514",
       MATCH_START + 80_000,
       "e1",
       "t",
@@ -766,8 +772,20 @@ describe("dispelAnalysis — summary reconstruction", () => {
       },
     );
     (purger as any).actionOut = [firstPurge];
+    // F-P7 (triage 2026-09-29): readiness reads the cooldown-consuming CAST,
+    // which a real log always carries next to the removal.
+    (purger as any).spellCastEvents = [
+      {
+        spellId: "278326",
+        spellName: "Consume Magic",
+        timestamp: MATCH_START + 5_000,
+        srcUnitId: "dh1",
+        destUnitId: "e1",
+        logLine: { event: LogEvent.SPELL_CAST_SUCCESS, timestamp: MATCH_START + 5_000 },
+      },
+    ];
 
-    // BOP applied at 10s (DH purge on CD for 8s until 13s)
+    // BOP applied at 10s (Consume Magic's DB2 10 s cooldown: back at 15s)
     const buffApply = makeAuraEvent(
       LogEvent.SPELL_AURA_APPLIED,
       "1022",
@@ -793,6 +811,7 @@ describe("dispelAnalysis — summary reconstruction", () => {
     );
     expect(res.missedPurgeWindows).toHaveLength(1);
     expect(res.missedPurgeWindows[0].purgeWasOnCD).toBe(true);
+    expect(res.missedPurgeWindows[0].purgeReadyAtSeconds).toBe(15);
     expect(res.missedPurgeWindows[0].cdBurnedOn?.spellName).toBe(
       "Blessing of Protection",
     );

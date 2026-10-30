@@ -103,17 +103,29 @@ export function threatActiveAt(
   )
     return true;
 
+  return friendlies.some((f) => unitUnderFireAt(f, tMs, windowMs));
+}
+
+/**
+ * The damage half of `threatActiveAt`, for ONE unit: it took at least its
+ * own `getPressureThreshold` inside `[tMs - windowMs, tMs + windowMs]`
+ * (epoch ms). `threatActiveAt` is this over the friendlies, so "the team was
+ * under fire" and "THIS unit was under fire" cannot drift apart. Read alone
+ * by the `cheaper available:` note of a group save (`ownerCd.ts`): a tool
+ * that only helps another unit is no alternative while the caster is the
+ * only one being hit (user ruling U-T2, 2026-10-06).
+ */
+export function unitUnderFireAt(
+  unit: ICombatUnit,
+  tMs: number,
+  windowMs: number = THREAT_DAMAGE_WINDOW_MS,
+): boolean {
   const fromMs = tMs - windowMs;
   const toMs = tMs + windowMs;
-  for (const f of friendlies) {
-    const dmg = f.damageIn
-      .filter(
-        (d) => d.logLine.timestamp >= fromMs && d.logLine.timestamp <= toMs,
-      )
-      .reduce((sum, d) => sum + Math.abs(d.effectiveAmount), 0);
-    if (dmg >= getPressureThreshold(f)) return true;
-  }
-  return false;
+  const dmg = unit.damageIn
+    .filter((d) => d.logLine.timestamp >= fromMs && d.logLine.timestamp <= toMs)
+    .reduce((sum, d) => sum + Math.abs(d.effectiveAmount), 0);
+  return dmg >= getPressureThreshold(unit);
 }
 
 export type MatchThreatLevel = "low" | "med" | "high";

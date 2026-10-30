@@ -2,12 +2,18 @@ import { ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
 import {
   buildCannotCastIntervals,
-  enemySourceIds,
   coveredMsWithin,
+  enemySourceIds,
 } from "./cannotCastIntervals";
 import { isHealerSpec, isPassiveProcCast, specToString } from "./cooldowns";
 import { getLowestHpPercentInWindow } from "./killWindowTargetSelection";
+import {
+  type CastFailedEvent,
+  castFailedInWindow,
+  type RawStreams,
+} from "./rawStreams";
 import { fmtTime } from "./renderGrid";
+import { roundEndMs } from "./roundEnd";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -63,6 +69,11 @@ export interface IHealingGap {
    * >70% 0.8%) — gap length is not the criterion, this is.
    */
   lowestFriendlyHpPct: number | null;
+  /** The healer's presses the game refused inside the gap (SPELL_CAST_FAILED,
+   * `castFailedInWindow`) — a gap with a refused press is not idle (fact5
+   * D12, ef3b61c9 r0 2:03: two Holy Shocks refused for line of sight).
+   * Present only when the caller passes the raw streams. */
+  refusedPresses?: CastFailedEvent[];
 }
 
 // ---------------------------------------------------------------------------
@@ -118,8 +129,14 @@ export function detectHealingGaps(
   combat: {
     startTime: number;
     endTime: number;
+    // `startInfo.bracket` + the units' deaths give `roundEndMs` (F-HG1)
+    startInfo?: { bracket?: string };
     units?: Record<string, { id: string; ownerId?: string }>;
   },
+  /** The last playable instant, epoch ms (`playableEndMs`: a Solo Shuffle
+   * round's ending death, a 3v3's deciding death) — gaps are bounded by it
+   * exactly as by the healer's own death (B137). Absent = the match end. */
+  opts: { playableEndMs?: number; rawStreams?: RawStreams } = {},
 ): IHealingGap[] {
   // One predicate for "could not cast" (auras ∪ kick lockouts), built once
   // per healer and clipped per gap below; pets and totems count as sources
@@ -127,10 +144,16 @@ export function detectHealingGaps(
   const cannotCast = buildCannotCastIntervals(
     healer,
     enemySourceIds(enemies, Object.values(combat.units ?? {})),
+    Object.values(combat.units ?? {}) as ICombatUnit[],
   );
   const teammates = friends.filter((u) => u.id !== healer.id);
   const matchStartMs = combat.startTime;
-  const matchEndMs = combat.endTime;
+  // Triage 2026-09-29 cc-dr F-HG1: gaps end at the round end (`roundEndMs`,
+  // shared with the CC windows F-CI1 and missed-cleanse F-C3). Activity
+  // logged after it — the next Solo Shuffle round's prep — closed a gap that
+  // ran past the end and was scored as idle time (e5b3534b); it is dropped
+  // below, so a gap reaching the end is the tail gap and takes the tail rule.
+  const matchEndMs = roundEndMs(combat);
 
   // All timestamps where the healer produced a heal event or successfully cast a spell, sorted ascending
   const healTimestamps = healer.healOut.map((h) => h.logLine.timestamp);
@@ -145,7 +168,9 @@ export function detectHealingGaps(
 
   const activeTimestamps = Array.from(
     new Set([...healTimestamps, ...castTimestamps]),
-  ).sort((a, b) => a - b);
+  )
+    .filter((ts) => ts <= matchEndMs)
+    .sort((a, b) => a - b);
 
   // Build raw gap intervals [fromMs, toMs] where no heal/cast was produced
   const rawGaps: Array<{ fromMs: number; toMs: number }> = [];
@@ -181,9 +206,12 @@ export function detectHealingGaps(
   const deathTimestamps = healer.deathRecords
     .map((r) => r.timestamp)
     .filter((ts) => ts >= matchStartMs && ts <= matchEndMs);
-  const firstDeathMs = deathTimestamps.length
-    ? Math.min(...deathTimestamps)
-    : Infinity;
+  // Same bound for the end of play (2026-09-30, agy review): a 3v3 gap from
+  // 0:38 ran on to 0:50 past the deciding 0:40 death and was charged whole.
+  const firstDeathMs = Math.min(
+    deathTimestamps.length ? Math.min(...deathTimestamps) : Infinity,
+    opts.playableEndMs ?? Infinity,
+  );
 
   for (const { fromMs, toMs } of rawGaps) {
     // B19: skip gaps at match start — pre-combat initialization artifact
@@ -249,6 +277,16 @@ export function detectHealingGaps(
       mostDamagedSpec,
       mostDamagedAmount,
       lowestFriendlyHpPct,
+      ...(opts.rawStreams
+        ? {
+            refusedPresses: castFailedInWindow(
+              opts.rawStreams,
+              healer.id,
+              (fromMs - matchStartMs) / 1000,
+              (effectiveToMs - matchStartMs) / 1000,
+            ),
+          }
+        : {}),
     });
   }
 

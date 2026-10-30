@@ -16,9 +16,9 @@ import fs from "fs-extra";
 import { writeArtifact } from "./lib/emit";
 import {
   assertColumns,
-  resolveBuild,
   fetchTable,
   parseCsv,
+  resolveBuild,
 } from "./lib/wagoCsv";
 
 // 440 is MOD_MULTISTRIKE_DAMAGE, not a root (codex astra review, TrinityCore

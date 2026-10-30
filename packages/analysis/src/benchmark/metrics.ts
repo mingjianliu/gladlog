@@ -2,19 +2,20 @@
  * Core benchmark metrics computation
  */
 
+import type { AtomicArenaCombat, IArenaMatch } from "@gladlog/parser-compat";
 import {
   CombatUnitReaction,
   CombatUnitType,
   LogEvent,
 } from "@gladlog/parser-compat";
-import type { AtomicArenaCombat, IArenaMatch } from "@gladlog/parser-compat";
+
 import { specToString } from "../utils/cooldowns";
 import {
   annotateDefensiveTimings,
   extractMajorCooldowns,
   IEnemyCDTimelineForTiming,
 } from "../utils/cooldowns";
-import { getDampeningPercentage } from "../utils/dampening";
+import { dampeningReadersAt, getDampeningPercentage } from "../utils/dampening";
 import { canOffensivePurge } from "../utils/dispelAnalysis";
 import { reconstructEnemyCDTimeline } from "../utils/enemyCDs";
 import { toSortedFinite } from "../utils/stats";
@@ -251,23 +252,43 @@ function extractCombatStats(
     }
 
     // ── 5. Purge rate ─────────────────────────────────────────────────────
-    if (canOffensivePurge(unit)) {
+    if (canOffensivePurge(unit, allUnits)) {
       const enemyIds = new Set(enemies.map((e) => e.id));
-      const purgeCount = unit.actionOut.filter(
-        (a) =>
-          (a.logLine.event === LogEvent.SPELL_DISPEL ||
-            a.logLine.event === LogEvent.SPELL_STOLEN) &&
-          enemyIds.has(a.destUnitId),
-      ).length;
+      // the unit's own rows and its pets' (a Felhunter's Devour Magic is
+      // logged under the pet — codex 62-POSTHOC-13b #2: 5 purges read 0;
+      // `reconstructDispelSummary` credits the owner the same way)
+      const purgeCount = [
+        unit,
+        ...(allUnits ?? []).filter((u) => u.ownerId === unit.id),
+      ]
+        .flatMap((u) => u.actionOut ?? [])
+        .filter(
+          (a) =>
+            (a.logLine.event === LogEvent.SPELL_DISPEL ||
+              a.logLine.event === LogEvent.SPELL_STOLEN) &&
+            enemyIds.has(a.destUnitId),
+        ).length;
       stats.purgesPerMinuteSamples.push(purgeCount / (durationSeconds / 60));
     }
 
     // ── 6. Dampening at friendly deaths ───────────────────────────────────
+    // Read on the players, like every prompt line (FT-T13, D10): `allUnits`
+    // carries pets, and a unit list is what `dampeningRulesOf` classifies.
     const bracket = (combat as IArenaMatch).startInfo?.bracket ?? "3v3";
+    const players = [...friendlies, ...enemies];
     for (const death of unit.deathRecords) {
-      const dampPct =
-        getDampeningPercentage(bracket, allUnits, death.timestamp) / 100;
-      stats.dampeningAtDeathSamples.push(dampPct);
+      // the dead unit's own doses, its team's before its first
+      // (`dampeningReadersAt`; fact1215 R11 the team, codex 62-POSTHOC-13b
+      // #3: 72 % for a 71 %)
+      const dampPct = getDampeningPercentage(
+        bracket,
+        dampeningReadersAt(unit, friendlies, death.timestamp),
+        death.timestamp,
+        players,
+      );
+      // null = none stated (a 2v2 round that logged no stack,
+      // `getInitialDampening`): no sample, rather than a hand value.
+      if (dampPct !== null) stats.dampeningAtDeathSamples.push(dampPct / 100);
     }
   }
 }

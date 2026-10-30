@@ -15,15 +15,24 @@
  */
 import type { ICombatUnit } from "@gladlog/parser-compat";
 
-import type { IPlayerCCTrinketSummary } from "../../utils/ccTrinketAnalysis";
+import type {
+  findBrokenDisarm,
+  IPlayerCCTrinketSummary,
+} from "../../utils/ccTrinketAnalysis";
+import type { IMissedPurgeWindow } from "../../utils/dispelAnalysis";
 import type { IAoeCCEvent } from "../../utils/drAnalysis";
 import type { IEnemyCDCast } from "../../utils/enemyCDs";
+import type { buildRosterSides } from "../../utils/rosterSide";
 import type { BuildMatchTimelineParams } from "../matchTimeline";
+import type { buildResourceSnapshot } from "../resourceSnapshot";
 import type {
+  buildSummonOwnerNames,
   extractEnemyMajorBuffIntervals,
   extractOwnerCDBuffExpiry,
   IEnemyBuffInterval,
 } from "../timelineHelpers";
+import type { emitContextFactEntries } from "./contextFacts";
+import type { emitEnemyCdEntries } from "./enemyCd";
 
 /** A [STATE]/[RES] snapshot requested at a time; resolved after all sections
  * have run (it can be debounced away or forced full). */
@@ -32,10 +41,30 @@ export interface DeferredSnapshot {
   timeSeconds: number;
   forceFull: boolean;
   bypassDebounce?: boolean;
+  /** the friendly player whose [DEATH] this snapshot sits under (unit id) —
+   * a positional cooldown out of its reach of them leaves `rdy:` (B14a) */
+  deathOfUnitId?: string;
+  /** B14b: the full row under an [OFFENSIVE WINDOW] header. It does not
+   * start the 2 s debounce for the requests after it — the owner's press a
+   * second into the burst keeps its own (delta) row. */
+  keepFollowing?: boolean;
   id: number;
 }
 
+/** Is this timeline entry line a deferred snapshot placeholder (as opposed
+ * to a rendered string)? Moved here from matchTimeline.ts with the type it
+ * guards (GH #116). */
+export function isDeferredSnapshot(line: unknown): line is DeferredSnapshot {
+  return !!(
+    line &&
+    typeof line === "object" &&
+    "type" in line &&
+    line.type === "resource_snapshot"
+  );
+}
+
 type P = BuildMatchTimelineParams;
+type ContextFacts = ReturnType<typeof emitContextFactEntries>;
 
 export interface TimelineCtx {
   // ── params (as destructured by buildMatchTimeline) ──
@@ -58,15 +87,95 @@ export interface TimelineCtx {
   params: P;
   teammateCDs: P["teammateCDs"];
   pressureWindows: P["pressureWindows"];
+  pressureWindowsNotListed: P["pressureWindowsNotListed"];
   enemies: P["enemies"];
   enemyCDTimeline: P["enemyCDTimeline"];
   bracket: P["bracket"];
+  friends: P["friends"];
+  /** params.allUnits as passed (may be undefined — see `_allUnits`) */
+  allUnits: P["allUnits"];
+  enemyCCSummaries: P["enemyCCSummaries"];
+  matchEndMs: P["matchEndMs"];
+  playerIdMap: P["playerIdMap"];
+  enemyIdMap: P["enemyIdMap"];
+  rawStreams: P["rawStreams"];
+  ownerSpec: P["ownerSpec"];
+  burstWindows: P["burstWindows"];
+  cdPriorEpisodes: P["cdPriorEpisodes"];
+  cdPriorCohort: P["cdPriorCohort"];
+  stackedDefensives: P["stackedDefensives"];
+  outgoingCCChains: P["outgoingCCChains"];
+  enemyDeaths: P["enemyDeaths"];
+  healingGaps: P["healingGaps"];
+  /** defaulted to [] by the destructuring */
+  shapeshiftIntervals: NonNullable<P["shapeshiftIntervals"]>;
+
+  // ── what earlier emitters report back (read by the legends) ──
+  enemyCdRender: ReturnType<typeof emitEnemyCdEntries>;
+  burstAnsweredEntries: ContextFacts["burstAnsweredEntries"];
+  cdPriorEntries: ContextFacts["cdPriorEntries"];
+  stackedDefensiveEntries: ContextFacts["stackedDefensiveEntries"];
+  drClashEntries: ContextFacts["drClashEntries"];
+  /** [SILENCE] lines rendered; the legend needs > 0 */
+  silenceLineCount: number;
+  crisisAnchorSeconds: P["crisisAnchorSeconds"];
+  /** defaulted to [] by the destructuring */
+  spiritOfRedemptionIntervals: NonNullable<P["spiritOfRedemptionIntervals"]>;
+
+  // ── the entries every emitter feeds; the snapshot pass rewrites them in place ──
+  entries: Array<{
+    timeSeconds: number;
+    lines: (string | DeferredSnapshot)[];
+  }>;
 
   // ── derived values ──
+  /** (matchEndMs − matchStartMs) / 1000 */
+  matchDurationS: number;
+  /** power-sample fallback for stored matches without power samples */
+  manaFallback: { rawStreams: P["rawStreams"]; matchStartMs: number };
+  /** the [RES] snapshot builder (buildResourceSnapshot) */
+  snapshotFn: typeof buildResourceSnapshot;
+  /** ownerCDs plus the owner's kick / Death Grip, for the [RES] line only */
+  resOwnerCDs: P["ownerCDs"];
+  /** whole seconds where a major event happens — [STATE] always renders there */
+  keyMomentSeconds: Set<number>;
+  /** the HP tokens of [STATE], in player-id order */
+  friendlyHpUnits: Array<{
+    unit: ICombatUnit;
+    label: (name: string) => string;
+  }>;
+  enemyHpUnits: Array<{ unit: ICombatUnit; label: (name: string) => string }>;
+  /** death time by name (mana markers take names, not units) */
+  friendlyDeathAtByName: Map<string, number>;
+  enemyDeathAtByName: Map<string, number>;
+  /** summon GUID -> owner name (a pet / guardian is named through its owner) */
+  summonOwners: ReturnType<typeof buildSummonOwnerNames>;
+  /** unit GUID -> name, over `_allUnits` */
+  unitNames: Map<string, string>;
+  /** unit GUID -> roster side (a roster fact, not the event's reaction flags) */
+  rosterSides: ReturnType<typeof buildRosterSides>;
+  /** (matchEndMs − matchStartMs) / 1000 */
+  matchEndSeconds: number;
+  /** the round's end, epoch ms (`roundEndMs`): a Solo Shuffle round's ending
+   * death, else `matchEndMs`. What an aura-end line is cut at (F02b). */
+  roundEndAtMs: number;
+  /** the round, as reconstructEnemyCDTimeline reads it (GH #119) */
+  roundBounds: { startTime: number; endTime: number };
+  /** the owner's CC spell ids that already have a [YOU] [CC] cast line */
+  ownerRenderedCcIds: Set<string>;
   /** params.allUnits, or friends + enemies when absent */
   _allUnits: ICombatUnit[];
   /** friends + enemies (dampening, rot pressure) */
   allPlayers: ICombatUnit[];
+  /** the dampening (0–100) at a match second — the ONE reading every timeline
+   * line prints (the `| dampening: N%` note of `[YOU] [CD]` / `[PROC]` lines
+   * and of both `[DEATH]` families). Read on `allPlayers`, the list the
+   * DAMPENING header, the alerts and `[MATCH END]` read (FT-T13, D10).
+   * `null` = none stated (a 2v2 round that logged no stack, D11): the line
+   * prints no note. */
+  /** the side's Dampening at an instant; with `unit`, that unit's own doses
+   * (fact4 D53) */
+  dampeningAt: (atSeconds: number, unit?: ICombatUnit) => number | null;
   /** AoE CC casts from outgoingCCChains; [] when there are none */
   aoeCCEvents: IAoeCCEvent[];
   /** AoE CC events already folded into a cast line (shared: owner casts,
@@ -86,29 +195,88 @@ export interface TimelineCtx {
   buffPurgeAnnotations: Map<IEnemyBuffInterval, string>;
   /** GH #99 Rules B & C: missed-purge notes attached to an enemy CD cast line */
   cdPurgeAnnotations: Map<IEnemyCDCast, string>;
+  /** the owner's missed purges worth naming (high-value buff or a scoped
+   * immunity tool) — GH #99 folds some into lines, the rest render alone */
+  qualifyingMissedPurges: IMissedPurgeWindow[];
+  /** GH #99 Rules B & C: missed purges already folded into a line */
+  consumedMissedPurges: Set<IMissedPurgeWindow>;
 
   // ── threaded (in / out) ──
   /** set when any owner / teammate proc-only activation rendered as [PROC];
    * the legend line for the tag is emitted only then. Emitters that set it
    * take the current value and return the new one. */
   procLinesEmitted: boolean;
+  /** enemy trinket lines rendered; the [ENEMY TRINKET] legend needs > 0 */
+  enemyTrinketCount: number;
+  /** [DISARM] tail lines rendered; the [DISARM] legend needs > 0 */
+  disarmLineCount: number;
+  /** `trinket: ON CD (…; last used m:ss …)` notes rendered (B4a); their
+   * legend line needs > 0 */
+  trinketLastUsedCount: number;
+  /** [GRIP] lines rendered (B17b-U8); the [GRIP] legend needs > 0 */
+  gripLineCount: number;
+  /** [RES] rows under a friendly death whose `rdy:` lost a positional
+   * cooldown out of reach of the dying player (B14a); legend needs > 0 */
+  resOutOfReachRows: number;
 
   // ── closure helpers ──
+  /** GH #103 A6: who provided the avoidance aura on a `[CC AVOIDED?]` line */
+  avoidanceSourceTag: (
+    sourceName: string | undefined,
+    targetName: string,
+  ) => string;
+  /** enemy-def F-E18: the disarm a trinket press at `t` broke, when no CC took it */
+  trinketBrokenDisarm: (
+    summary: IPlayerCCTrinketSummary,
+    t: number,
+  ) => ReturnType<typeof findBrokenDisarm> | undefined;
+  /** caster label for "(by X)": player -> pid / enemyPid, pet / totem -> its owner */
+  actorLabel: (
+    name: string,
+    side: "friendly" | "enemy",
+    sourceId?: string,
+  ) => string;
+  /** the DR tag on our CC landing on an enemy */
+  enemyCcDrTag: (
+    targetName: string,
+    spellId: string,
+    atSeconds: number,
+    sourceId: string | undefined,
+    sourceName: string,
+  ) => string;
   /** friendly player name -> short id (+ spec tag) */
   pid: (name: string) => string;
+  /** friendly player name -> short id (+ spec tag); undefined for a name that
+   * is no friendly player (crisis-external F-T1) */
+  friendlyPid: (name: string) => string | undefined;
   /** enemy player name -> short id (+ spec tag) */
   enemyPid: (name: string) => string;
-  outgoingDrTag: (spellId: string, cast: { timeSeconds: number }) => string;
+  outgoingDrTag: (
+    spellId: string,
+    cast: { timeSeconds: number },
+    named?: ReadonlySet<string>,
+  ) => string;
+  /** `named`: the unit names the line names (enemy-def F-E26) */
   ccImmuneTagFor: (
+    unit: ICombatUnit,
+    spellId: string,
+    castTimeSeconds: number,
+    named?: ReadonlySet<string>,
+    onlyNamed?: boolean,
+  ) => string;
+  /** cc-dr F-TM1: MISS / REFLECT / … on that caster's CC cast */
+  ccMissTagFor: (
     unit: ICombatUnit,
     spellId: string,
     castTimeSeconds: number,
   ) => string;
   ownerInterruptImmuneReasonAt: (timeSeconds: number) => string | undefined;
+  /** false when the entry was dropped (past match end, B103) — a legend that
+   * counts lines counts only the ones that print */
   addEntry: (
     timeSeconds: number,
     ...lines: (string | DeferredSnapshot)[]
-  ) => void;
+  ) => boolean;
   manaCooldownNote: (
     spellId: string,
     timeSeconds: number,
@@ -121,27 +289,53 @@ export interface TimelineCtx {
     castSeconds: number,
   ) => string;
   resolveTarget: (destUnitName: string | null | undefined) => string;
-  ownerCcImmuneTag: (spellId: string, castTimeSeconds: number) => string;
+  ownerCcImmuneTag: (
+    spellId: string,
+    castTimeSeconds: number,
+    named?: ReadonlySet<string>,
+    onlyNamed?: boolean,
+  ) => string;
   ownerCcMissTag: (spellId: string, castTimeSeconds: number) => string;
+  /** FT-T14: ` [hit no enemy player]` for an un-aimed area control
+   * (`AOE_CC_SPELL_IDS`) with no aura, damage or miss row on any enemy
+   * player, ` [no CC aura logged — hit …]` when it reached one and
+   * controlled nobody (fact6 ruling 2);
+   * cc-dr F-NE1: ` [no CC aura logged]` for an aimed owner CC with no aura
+   * and no miss on its target (shared by both owner-CC emitters) */
+  ownerNoCcAuraTag: (spellId: string, castTimeSeconds: number) => string;
+  /** the same tag for any friendly caster (fact5 D15: the `[TEAM] [CC]`
+   * line) */
+  noCcAuraTagFor: (
+    caster: ICombatUnit,
+    spellId: string,
+    castTimeSeconds: number,
+  ) => string;
   ownerEmpowerTag: (spellId: string, castTimeSeconds: number) => string;
   getCDTargetAndVelocityPart: (
     spellId: string,
     rawTimeSeconds: number,
     targetName: string | undefined,
-    overrideHpPct?: number,
     forceSelf?: boolean,
   ) => string;
   requestSnapshotPlaceholder: (
     timeSeconds: number,
     forceFull?: boolean,
     bypassDebounce?: boolean,
+    deathOfUnitId?: string,
+    keepFollowing?: boolean,
   ) => DeferredSnapshot;
   findAndConsumeAoeCC: (
     castTimeSeconds: number,
     casterName: string,
     spellName: string,
     isOwnerCast: boolean,
+    landing?: { fromS: number; toS: number },
   ) => IAoeCCEvent | undefined;
   formatAoeTargetPart: (aoe: IAoeCCEvent, existingTargetPart: string) => string;
   ownerHardCcTagAt: (timeSeconds: number) => string;
+  /** The owner was stunned at this cast: strictly inside a stun, or the cast
+   * is the one that ended it (triage enemy-def F-E20). */
+  ownerStunnedAtCast: (timeSeconds: number) => boolean;
+  /** The stun auras behind `ownerStunnedAtCast` (empty when it is false). */
+  ownerStunIdsAtCast: (timeSeconds: number) => string[];
 }

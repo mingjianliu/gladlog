@@ -4,7 +4,9 @@
  *
  * Talent ownership in these fixtures goes through `pvpTalents`: the ownership
  * check reads talent and PvP-talent ids alike, and a synthetic unit has no
- * talent-tree blob to resolve node ids from.
+ * talent-tree blob to resolve node ids from. The one exception is the
+ * Renewing Blaze fixture: the ledger holds a never-cast talent-tree row only
+ * for a unit whose decoded talents show it, so that unit carries the node row.
  */
 import {
   AtomicArenaCombat,
@@ -12,8 +14,9 @@ import {
   CombatUnitSpec,
   LogEvent,
 } from "@gladlog/parser-compat";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 
+import { ensureAnalysisData } from "../src/data/ensure";
 import {
   auraOnlyActivationSeconds,
   extractMajorCooldowns,
@@ -29,6 +32,11 @@ import {
 
 const START = 1_700_000_000_000;
 const at = (s: number) => START + s * 1000;
+
+// the Renewing Blaze fixture's talent row is decoded through the talent map
+beforeAll(async () => {
+  await ensureAnalysisData();
+});
 
 describe("talent replacements (DB2 replace_spell)", () => {
   it("Radiant Glory makes Avenging Wrath proc-only for that player and keeps its procs as activations", () => {
@@ -123,10 +131,30 @@ describe("aura evidence", () => {
     ]);
   });
 
+  it("Doom Winds: a re-application while the buff is up extends it — no press (cooldown mastery 2026-10-20)", () => {
+    const shaman = makeUnit("p1", {
+      class: CombatUnitClass.Shaman,
+      spec: CombatUnitSpec.Shaman_Enhancement,
+      auraEvents: [
+        makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, "466772", at(10), "p1", "p1", "BUFF"),
+        makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, "466772", at(15), "p1", "p1", "BUFF"),
+        makeAuraEvent(LogEvent.SPELL_AURA_REMOVED, "466772", at(25), "p1", "p1", "BUFF"),
+        makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, "466772", at(70), "p1", "p1", "BUFF"),
+      ],
+    });
+    expect(auraOnlyActivationSeconds(shaman, "384352", START)).toEqual([10, 70]);
+  });
+
   it("a proc-only entry has no availability windows (Renewing Blaze)", () => {
     const evoker = makeUnit("p1", {
       class: CombatUnitClass.Evoker,
       spec: CombatUnitSpec.Evoker_Devastation,
+      // Renewing Blaze talented (class node 93354): its aura is a proc and
+      // proves no button, so the ledger needs the talent to hold the row
+      info: {
+        talents: [{ id1: 93354, id2: 115669, count: 1 }],
+        pvpTalents: [],
+      },
       auraEvents: [
         makeAuraEvent(
           LogEvent.SPELL_AURA_APPLIED,
@@ -150,6 +178,62 @@ describe("aura evidence", () => {
     expect(rb!.isProcOnly).toBe(true);
     expect(rb!.casts.map((c) => c.timeSeconds)).toEqual([10]);
     expect(rb!.availableWindows).toEqual([]);
+  });
+});
+
+describe("a later stage of one press (COPY_CAST_IDS)", () => {
+  it("Champion's Spear: the re-press 1271980 is not a second press of the 90 s cooldown, however long after the throw", () => {
+    // 82a2d681 round 5 (Robou): thrown 0:47.841 (376079), re-pressed 0:50.421
+    // (1271980) — 2.58 s, past the ledger's 2 s merge. 1271980 carries a 6 s
+    // cooldown of its own in DB2, so by name it read as a variant press.
+    const warrior = makeUnit("p1", {
+      class: CombatUnitClass.Warrior,
+      spec: CombatUnitSpec.Warrior_Arms,
+      spellCastEvents: [
+        makeSpellCastEvent("376079", at(47.841), "p1"),
+        makeSpellCastEvent("1271980", at(50.421), "p1"),
+      ],
+    });
+    const repl = talentReplacementsOf(warrior);
+    const [thrown, again] = warrior.spellCastEvents as unknown as Array<{
+      spellId: string;
+      logLine: { event: string };
+    }>;
+    expect(isPressOfCooldown(thrown!, "376079", "Champion's Spear", repl)).toBe(
+      true,
+    );
+    expect(isPressOfCooldown(again!, "376079", "Champion's Spear", repl)).toBe(
+      false,
+    );
+    const combat = {
+      startTime: START,
+      endTime: at(200),
+      units: { p1: warrior },
+    } as unknown as AtomicArenaCombat;
+    const spear = extractMajorCooldowns(warrior, combat).find(
+      (cd) => cd.spellId === "376079",
+    );
+    expect(spear).toBeDefined();
+    expect(spear!.casts.map((c) => c.timeSeconds)).toEqual([47.841]);
+    // the death analysis reads the same press: 90 s from the throw, not from
+    // the re-press
+    expect(isAvailableAt(warrior, "376079", 90, 138.5, START)).toBe(true);
+    expect(isAvailableAt(warrior, "376079", 90, 137, START)).toBe(false);
+  });
+
+  it("a real same-named variant press still counts (a glyphed Hex, by name)", () => {
+    const shaman = makeUnit("p1", {
+      class: CombatUnitClass.Shaman,
+      spec: CombatUnitSpec.Shaman_Restoration,
+    });
+    // Hex's glyphed variant 211004 (30 s of its own) against the roster's 51514
+    const press = makeSpellCastEvent("211004", at(10), "p1") as unknown as {
+      spellId: string;
+      logLine: { event: string };
+    };
+    expect(
+      isPressOfCooldown(press, "51514", "Hex", talentReplacementsOf(shaman)),
+    ).toBe(true);
   });
 });
 

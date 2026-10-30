@@ -7,8 +7,8 @@
 
 import { defineConfig, devices } from "@playwright/test";
 
-import { isE2EOnlyRun } from "./argv";
 import { VISUAL_PORT as PORT } from "../dev/ports";
+import { isE2EOnlyRun } from "./argv";
 
 export default defineConfig({
   testDir: ".",

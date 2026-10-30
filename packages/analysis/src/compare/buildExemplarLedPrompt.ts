@@ -1,7 +1,7 @@
 // packages/analysis/src/compare/buildExemplarLedPrompt.ts
-import type { VerifiedComparison } from "./verifiedComparison";
-import type { ReferenceCell } from "./corpusTypes";
 import { scrubExemplar } from "./claimChecker";
+import type { ReferenceCell } from "./corpusTypes";
+import type { VerifiedComparison } from "./verifiedComparison";
 
 /**
  * Cache key for the cohort-comparison cache (desktop's `compare.json`) — the

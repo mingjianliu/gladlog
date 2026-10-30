@@ -42,15 +42,15 @@ import {
   strongestComponentPct,
 } from "@gladlog/analysis/src/data/mitigationComponents";
 import { getEnglishSpellName } from "@gladlog/analysis/src/data/spellEffectData";
-import { hasLineOfSight } from "@gladlog/analysis/src/utils/losAnalysis";
-import { buildAuraIntervals } from "@gladlog/analysis/src/utils/auraIntervals";
 import spellIdLists from "@gladlog/analysis/src/data/spellIdLists";
 import { ccSpellIds, rootSpellIds } from "@gladlog/analysis/src/data/spellTags";
+import { buildAuraIntervals } from "@gladlog/analysis/src/utils/auraIntervals";
 import {
   cdAvailableAt,
   extractMajorCooldowns,
   isHealerSpec,
 } from "@gladlog/analysis/src/utils/cooldowns";
+import { hasLineOfSight } from "@gladlog/analysis/src/utils/losAnalysis";
 import { GladLogParser, type GladMatch } from "@gladlog/parser";
 import { LogEvent, toLegacyMatch } from "@gladlog/parser-compat";
 import { readFileSync } from "fs";

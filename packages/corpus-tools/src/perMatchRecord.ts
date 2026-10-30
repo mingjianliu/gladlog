@@ -1,10 +1,10 @@
 import {
-  heroBuildGroupOf,
   computeDpsMetrics,
   computeHealerMetrics,
   enemyCompArchetype,
   enemyCompSignature,
   extractRotations,
+  heroBuildGroupOf,
   isHealerSpec,
   specToString,
 } from "@gladlog/analysis";

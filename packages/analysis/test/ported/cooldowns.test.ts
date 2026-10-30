@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-non-null-assertion */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import {
   CombatUnitClass,
   CombatUnitReaction,
@@ -6,9 +6,11 @@ import {
   LogEvent,
 } from "@gladlog/parser-compat";
 
+import { ensureAnalysisData } from "../../src/data/ensure";
 import {
   annotateDefensiveTimings,
   canHelpAnotherUnit,
+  castRecovery,
   CD_ROLE_TAGS,
   cdAvailableAt,
   cdRoleTag,
@@ -18,11 +20,10 @@ import {
   extractMajorCooldowns,
   findCheaperDefensiveAlternatives,
   getPressureThreshold,
-  castRecovery,
+  getUnitHpAtTimestamp,
   GUARDIAN_SPIRIT_SAVE_HEAL_ID,
   guardianSpiritCastCooldownSeconds,
   guardianSpiritSaved,
-  getUnitHpAtTimestamp,
   IEnemyCDTimelineForTiming,
   IMajorCooldownInfo,
   isHealerSpec,
@@ -31,6 +32,7 @@ import {
   isSelfOnlyDefensive,
   isTeamHealCD,
   MAJOR_DEFENSIVE_IDS,
+  rendersOnCaster,
   specToString,
   THROUGHPUT_EMPOWER_DEFENSIVE_IDS,
 } from "../../src/utils/cooldowns";
@@ -42,7 +44,6 @@ import {
   makeSpellCastEvent,
   makeUnit,
 } from "./testHelpers";
-import { ensureAnalysisData } from "../../src/data/ensure";
 
 // ─── fmtTime ──────────────────────────────────────────────────────────────────
 
@@ -1619,10 +1620,15 @@ describe("extractMajorCooldowns", () => {
     expect(cds.find((c) => c.spellId === "740")).toBeUndefined();
   });
 
-  it("B102: deduplicates consecutive casts of the same major cooldown within 2 seconds", () => {
+  it("Empower Rune Weapon is not on a Frost Death Knight's ledger, talented and cast or not (triage kick-eaten F-K2: neither the catalog nor talent discovery admits it)", () => {
+    // talent node 76096 / entry 96225 = Empower Rune Weapon 47568 (active);
+    // 101929 / 125874 = Pillar of Frost 51271, the control that stays
+    const ERW_TALENT = { id1: 76096, id2: 96225, count: 1 };
+    const PILLAR_TALENT = { id1: 101929, id2: 125874, count: 1 };
     const owner = makeUnit("player-1", {
       class: CombatUnitClass.DeathKnight,
       spec: CombatUnitSpec.DeathKnight_Frost,
+      info: { talents: [ERW_TALENT, PILLAR_TALENT], pvpTalents: [] } as never,
       spellCastEvents: [
         makeSpellCastEvent(
           "47568",
@@ -1631,41 +1637,70 @@ describe("extractMajorCooldowns", () => {
           "Target",
           "player-1",
           "Empower Rune Weapon",
+        ),
+        makeSpellCastEvent(
+          "51271",
+          T0 + 12_000,
+          "player-1",
+          "Target",
+          "player-1",
+          "Pillar of Frost",
+        ),
+      ],
+    });
+    const combat = makeCombatFull({ "player-1": owner });
+    const ids = extractMajorCooldowns(owner, combat).map((c) => c.spellId);
+    expect(ids).toContain("51271");
+    expect(ids).not.toContain("47568");
+  });
+
+  it("B102: deduplicates consecutive casts of the same major cooldown within 2 seconds", () => {
+    const owner = makeUnit("player-1", {
+      class: CombatUnitClass.DeathKnight,
+      spec: CombatUnitSpec.DeathKnight_Frost,
+      spellCastEvents: [
+        makeSpellCastEvent(
+          "51271",
+          T0 + 10_000,
+          "player-1",
+          "Target",
+          "player-1",
+          "Pillar of Frost",
         ), // Manual cast
         makeSpellCastEvent(
-          "47568",
+          "51271",
           T0 + 10_500,
           "player-1",
           "Target",
           "player-1",
-          "Empower Rune Weapon",
+          "Pillar of Frost",
         ), // Duplicate at +0.5s
         makeSpellCastEvent(
-          "47568",
+          "51271",
           T0 + 11_500,
           "player-1",
           "Target",
           "player-1",
-          "Empower Rune Weapon",
+          "Pillar of Frost",
         ), // Duplicate at +1.5s
         makeSpellCastEvent(
-          "47568",
+          "51271",
           T0 + 30_000,
           "player-1",
           "Target",
           "player-1",
-          "Empower Rune Weapon",
+          "Pillar of Frost",
         ), // Separate cast > 2s
       ] as any,
     });
     const combat = makeCombatFull({ "player-1": owner });
 
     const cds = extractMajorCooldowns(owner, combat);
-    const erw = cds.find((c) => c.spellId === "47568");
-    expect(erw).toBeDefined();
-    expect(erw?.casts).toHaveLength(2); // Should only keep 10s and 30s
-    expect(erw?.casts[0].timeSeconds).toBe(10);
-    expect(erw?.casts[1].timeSeconds).toBe(30);
+    const pillar = cds.find((c) => c.spellId === "51271");
+    expect(pillar).toBeDefined();
+    expect(pillar?.casts).toHaveLength(2); // Should only keep 10s and 30s
+    expect(pillar?.casts[0].timeSeconds).toBe(10);
+    expect(pillar?.casts[1].timeSeconds).toBe(30);
   });
 
   it("B102: filters out casts that match the PASSIVE_SPELL_BLOCKLIST", () => {
@@ -1674,7 +1709,7 @@ describe("extractMajorCooldowns", () => {
       spec: CombatUnitSpec.DeathKnight_Frost,
       spellCastEvents: [
         makeSpellCastEvent(
-          "47568",
+          "51271",
           T0 + 10_000,
           "player-1",
           "Target",
@@ -1688,9 +1723,9 @@ describe("extractMajorCooldowns", () => {
     const combat = makeCombatFull({ "player-1": owner });
 
     const cds = extractMajorCooldowns(owner, combat);
-    const erw = cds.find((c) => c.spellId === "47568");
-    expect(erw).toBeDefined();
-    expect(erw?.casts).toHaveLength(0); // Filtered out by name
+    const pillar = cds.find((c) => c.spellId === "51271");
+    expect(pillar).toBeDefined();
+    expect(pillar?.casts).toHaveLength(0); // Filtered out by name
   });
 
   describe("isPassiveProcCast (2026-09-11: id-keyed passive procs)", () => {
@@ -1870,9 +1905,9 @@ describe("extractMajorCooldowns", () => {
       expect(getUnitHpAtTimestamp(unit, 2100)).toBe(50);
     });
 
-    it("should find the closest HP after the timestamp", () => {
-      // Target 2900, closest is 3000
-      expect(getUnitHpAtTimestamp(unit, 2900)).toBe(20);
+    it("fact2: the last reading at or before the timestamp, not a nearer one after it", () => {
+      // Target 2900: 3000 is nearer, but the state at 2900 is the 2000 reading
+      expect(getUnitHpAtTimestamp(unit, 2900)).toBe(50);
     });
 
     it("should handle timestamp before the first action", () => {
@@ -2147,7 +2182,9 @@ describe("findCheaperDefensiveAlternatives (review C2)", () => {
     });
 
     it("does NOT classify self-oriented or defensive CDs as team heals", () => {
-      expect(isTeamHealCD("370960")).toBe(false); // Emerald Communion — self mana/heal channel
+      // Emerald Communion 370960 moved IN on 2026-09-30 (user ruling A9-1:
+      // its overheal lands on an ally as 370984 — A9-EVIDENCE §1)
+      expect(isTeamHealCD("370960")).toBe(true);
       expect(isTeamHealCD("642")).toBe(false); // Divine Shield — self defensive
       expect(isTeamHealCD("")).toBe(false);
     });
@@ -2234,14 +2271,40 @@ describe("isSelfOnlyDefensive", () => {
   });
 });
 
+// ─── rendersOnCaster (triage 2026-09-29, hp-state F-S1) ───────────────────────
+
+describe("rendersOnCaster", () => {
+  it("covers every self-only big defensive", () => {
+    for (const id of ["22812", "642", "45438"]) {
+      expect(isSelfOnlyDefensive(id)).toBe(true);
+      expect(rendersOnCaster(id)).toBe(true);
+    }
+  });
+
+  it("adds an officially self-only Defensive outside the big-defensive roster", () => {
+    // Survival of the Fittest: the cast line names the hunter's current target
+    expect(isSelfOnlyDefensive("264735")).toBe(false);
+    expect(rendersOnCaster("264735")).toBe(true);
+  });
+
+  it("stays false for an external and for a cooldown outside the static catalog", () => {
+    expect(rendersOnCaster("33206")).toBe(false); // Pain Suppression
+    expect(rendersOnCaster("6940")).toBe(false); // Blessing of Sacrifice
+    expect(rendersOnCaster("421453")).toBe(false); // Ultimate Penitence — injected at runtime
+    expect(rendersOnCaster("190319")).toBe(false); // Combustion — not a defensive
+  });
+});
+
 // ─── cdRoleTag / CD_ROLE_TAGS (B113/B130) ─────────────────────────────────────
 
 describe("cdRoleTag", () => {
   it("returns the tagged role descriptor for a known throughput/modifier CD", () => {
-    expect(cdRoleTag("388615")).toBe("mana+heal CD"); // Restoral
+    expect(cdRoleTag("388615")).toBe("heal+cleanse CD"); // Restoral (round-1 retest idx 0)
     expect(cdRoleTag("325197")).toBe("healing CD"); // Invoke Chi-Ji
     expect(cdRoleTag("116680")).toBe("heal amplifier"); // Thunder Focus Tea
-    expect(cdRoleTag("357170")).toBe("ally heal-over-time"); // Time Dilation
+    // Time Dilation — FT F01: not "ally heal-over-time", it heals nothing
+    // (test/deferralRoleTag.test.ts)
+    expect(cdRoleTag("357170")).toBe("delays damage on its target");
     expect(cdRoleTag("370553")).toBe("cast-time modifier"); // Tip the Scales
     expect(cdRoleTag("358267")).toBe("mobility"); // Hover
   });

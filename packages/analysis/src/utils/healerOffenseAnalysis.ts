@@ -1,35 +1,88 @@
-import { ICombatUnit, LogEvent } from "@gladlog/parser-compat";
-
-import { SPELL_CATEGORIES as spellsData } from "../data/spellCategories";
-import { getEnglishSpellName } from "../data/spellEffectData";
-import { ccSpellIds } from "../data/spellTags";
 import {
+  type AtomicArenaCombat,
+  ICombatUnit,
+  LogEvent,
+} from "@gladlog/parser-compat";
+
+import {
+  castEffectPairs,
+  castsOfEffectAura,
+  effectAurasOfCast,
+} from "../data/castEffectAuras";
+import {
+  isKickSpellId,
+  SPELL_CATEGORIES as spellsData,
+} from "../data/spellCategories";
+import { getEnglishSpellName, spellNamesReady } from "../data/spellEffectData";
+import { ccSpellIds, rootSpellIds } from "../data/spellTags";
+import {
+  buildCannotCastIntervals,
+  enemySourceIds,
+} from "./cannotCastIntervals";
+import { isControlCast } from "./castMissRows";
+import { ccReachAt, ccTargetBlockerIntervals } from "./ccTargetState";
+import {
+  cdAvailableAt,
   chargesAvailableAt,
+  extractMajorCooldowns,
+  hpTroughInEventSpan,
+  hpTroughInWindow,
+  type IMajorCooldownInfo,
   isHealerSpec,
   specToString,
+  unitCooldownEntry,
   unitCooldownOf,
 } from "./cooldowns";
 import {
+  auraIdsAppliedBy,
+  drCategoryKnown,
   drCategoryOfCast,
   DRLevel,
   getDRLevelAtTime,
   IDRInfo,
 } from "./drAnalysis";
 import { IEnemyCDTimeline } from "./enemyCDs";
-import { computeEnemyInterruptAvailability } from "./enemyInterrupts";
+import {
+  computeEnemyInterruptAvailability,
+  isInterruptUsable,
+} from "./enemyInterrupts";
+import { isDeferralAbsorb } from "./incomingPressure";
 import {
   createKillWindowFactsComputer,
+  hasPressOnlyTag,
   type IKillWindowFactsComputer,
   type IKillWindowGateFacts,
   killWindowAcquittal,
   killWindowFactsSuffix,
+  PRESS_ONLY_LEGEND,
+  teamDamageTotalClause,
 } from "./killWindowFacts";
 import {
   getHpPercentAtTime,
   getTrinketStateAtTime,
 } from "./killWindowTargetSelection";
 import { IOffensiveWindow } from "./offensiveWindows";
-import { fmtTime, renderedWindowSeconds } from "./renderGrid";
+import {
+  fmtTime,
+  fmtWholeSecondsOrZero,
+  renderedWindowSeconds,
+} from "./renderGrid";
+import { roundEndMs } from "./roundEnd";
+import { type InterruptibleCast, interruptibleCastOf } from "./spellMechanics";
+import { ccThreatReachYards } from "./spellRange";
+import { firstDeathMs } from "./unitDeath";
+
+/**
+ * Is this owner CAST a CC — by its own id, or through the one cast → effect
+ * table when the CC is listed by the aura it leaves (triage res-readiness
+ * F-C23: Song of Chi-Ji 198898 → 198909, Lightning Lasso 305483 → 305485 —
+ * `ccSpellIds` lists them by aura, so a Mistweaver who pressed Song read "you
+ * cast no CC"). The one test for the roster, the window's "you cast CC" and
+ * the per-segment CC counts.
+ */
+function isOwnerCcCast(spellId: string): boolean {
+  return isControlCast(spellId);
+}
 
 type SpellEntry = { type: string };
 const SPELLS = spellsData as Record<string, SpellEntry>;
@@ -83,32 +136,45 @@ export interface IContestedSegment extends ISlackSegment {
   ownerHealing: number;
 }
 
-/** Lowest friendly HP% over the whole seconds of [fromSeconds, toSeconds),
- * sampled with `getHpPercentAtTime` — the same grid the slack / contested band
- * predicates sweep, so the number can never fall below the band the section
- * header promises. The segment is [from, to): toSeconds is the first second
- * that FAILED the band predicate — sampling it would report a min below the
- * floor. 100 when no friend has a reading. Shared by `[SLACK]` and
- * `[CONTESTED]`. */
+/** Lowest friendly HP% inside the segment [fromSeconds, toSeconds) — the
+ * true minimum the log shows (`hpTroughInWindow` over the segment's
+ * displayed seconds; user ruling 2026-10-17, F15: 「改成真最低」). The
+ * segment itself is still the grid band's (`isSlackSecond` / the contested
+ * band read the whole-second ticks), so this number can sit below the band —
+ * the legend says so (`SLACK_TEAM_MIN_LEGEND`). toSeconds is the first second
+ * that FAILED the band predicate and is not read. 100 when no friend has a
+ * reading. Shared by `[SLACK]` and `[CONTESTED]`. */
 export function teamMinHpPctOver(
   friends: ICombatUnit[],
   fromSeconds: number,
   toSeconds: number,
   matchStartMs: number,
 ): number {
-  let min = 100;
-  let found = false;
-  for (const f of friends) {
-    for (let t = fromSeconds; t < toSeconds; t++) {
-      const hp = getHpPercentAtTime(f, t, matchStartMs);
-      if (hp !== null && (!found || hp < min)) {
-        min = hp;
-        found = true;
-      }
+  let min: number | null = null;
+  if (toSeconds > fromSeconds)
+    for (const f of friends) {
+      // the half-open segment [from, to): a tick counts only when its
+      // sample lies inside it (codex 20-F15-07: the last tick borrowed the
+      // first failed second's sample)
+      const t = hpTroughInWindow(
+        f,
+        matchStartMs,
+        fromSeconds,
+        toSeconds - 1,
+        undefined,
+        {
+          fromMs: matchStartMs + fromSeconds * 1000,
+          toMs: matchStartMs + toSeconds * 1000 - 1,
+        },
+      );
+      if (t && (min === null || t.pct < min)) min = t.pct;
     }
-  }
-  return Math.round(found ? min : 100);
+  return Math.round(min ?? 100);
 }
+
+/** The `[SLACK]` / `[CONTESTED]` legend for their `team min HP` (F15). */
+export const SLACK_TEAM_MIN_LEGEND =
+  "  `team min HP N%` on a slack or contested line below = the lowest HP any of your team had inside that span, the true minimum the log shows; the span itself is judged on the whole-second [STATE] readings (team at or above the band at every one of them), so N can sit below the band.";
 
 type CCInterval = ReadonlyArray<{ atSeconds: number; durationSeconds: number }>;
 
@@ -141,7 +207,11 @@ function ownerMobilityCastTimes(
 }
 
 export function computeSlackSegments(
-  combat: { startTime: number; endTime: number },
+  combat: {
+    startTime: number;
+    endTime: number;
+    startInfo?: { bracket?: string };
+  },
   owner: ICombatUnit,
   friends: ICombatUnit[],
   enemies: ICombatUnit[],
@@ -150,8 +220,10 @@ export function computeSlackSegments(
   ownerPurgeTimesSeconds: ReadonlyArray<number>,
 ): { advancedLoggingAvailable: boolean; segments: ISlackSegment[] } {
   const matchStartMs = combat.startTime;
+  // A3 (user 2026-10-24): the sweep walks the round, not the log — a Solo
+  // Shuffle round is over at its deciding death (`roundEndMs`)
   const durationSeconds = Math.floor(
-    (combat.endTime - combat.startTime) / 1000,
+    (roundEndMs(combat, [...friends, ...enemies]) - combat.startTime) / 1000,
   );
 
   const advancedLoggingAvailable = friends.every(
@@ -189,6 +261,12 @@ export function computeSlackSegments(
     raw.push({ fromSeconds: segStart, toSeconds: durationSeconds });
 
   const enemyIds = new Set(enemies.map((e) => e.id));
+  // the owner's pets (a Water Elemental's Freeze, a Treant's root)
+  const ownerPetIds = new Set(
+    (owner.petSpellCastEvents ?? [])
+      .map((c) => c.srcUnitId)
+      .filter((id): id is string => !!id),
+  );
 
   const segments: ISlackSegment[] = raw
     .filter((s) => s.toSeconds - s.fromSeconds >= MIN_SLACK_SECONDS)
@@ -210,20 +288,35 @@ export function computeSlackSegments(
           e.spellId,
       );
       const ownerCCCasts = casts.filter((e) =>
-        ccSpellIds.has(e.spellId as string),
+        isOwnerCcCast(e.spellId as string),
       ).length;
-      const ownerKickCasts = casts.filter(
-        (e) => SPELLS[e.spellId as string]?.type === "interrupts",
+      const ownerKickCasts = casts.filter((e) =>
+        isKickSpellId(e.spellId as string),
       ).length;
       const ownerPurgeCasts = ownerPurgeTimesSeconds.filter(
         (t) => t >= s.fromSeconds && t < s.toSeconds,
+      ).length;
+      // user ruling 2026-10-23 (fact4 D26, 3f433db1 0:14–0:22): a root the
+      // owner landed on an enemy is offensive output — Landslide held the
+      // enemy healer 0:20.9–0:22.4 inside a span read "zero output"
+      const ownerRootLandings = enemies.filter((e) =>
+        (e.auraEvents ?? []).some(
+          (a) =>
+            a.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
+            !!a.spellId &&
+            rootSpellIds.has(a.spellId) &&
+            (a.srcUnitId === owner.id ||
+              ownerPetIds.has(a.srcUnitId ?? "")) &&
+            inSeg(a.logLine.timestamp),
+        ),
       ).length;
 
       const idle =
         ownerDamage === 0 &&
         ownerCCCasts === 0 &&
         ownerKickCasts === 0 &&
-        ownerPurgeCasts === 0;
+        ownerPurgeCasts === 0 &&
+        ownerRootLandings === 0;
       return {
         fromSeconds: s.fromSeconds,
         toSeconds: s.toSeconds,
@@ -246,7 +339,11 @@ export function computeSlackSegments(
 }
 
 export function computeContestedSegments(
-  combat: { startTime: number; endTime: number },
+  combat: {
+    startTime: number;
+    endTime: number;
+    startInfo?: { bracket?: string };
+  },
   owner: ICombatUnit,
   friends: ICombatUnit[],
   enemies: ICombatUnit[],
@@ -255,8 +352,10 @@ export function computeContestedSegments(
   ownerPurgeTimesSeconds: ReadonlyArray<number>,
 ): { advancedLoggingAvailable: boolean; segments: IContestedSegment[] } {
   const matchStartMs = combat.startTime;
+  // A3 (user 2026-10-24): the sweep walks the round, not the log — a Solo
+  // Shuffle round is over at its deciding death (`roundEndMs`)
   const durationSeconds = Math.floor(
-    (combat.endTime - combat.startTime) / 1000,
+    (roundEndMs(combat, [...friends, ...enemies]) - combat.startTime) / 1000,
   );
 
   const advancedLoggingAvailable = friends.every(
@@ -298,6 +397,12 @@ export function computeContestedSegments(
     raw.push({ fromSeconds: segStart, toSeconds: durationSeconds });
 
   const enemyIds = new Set(enemies.map((e) => e.id));
+  // the owner's pets (a Water Elemental's Freeze, a Treant's root)
+  const ownerPetIds = new Set(
+    (owner.petSpellCastEvents ?? [])
+      .map((c) => c.srcUnitId)
+      .filter((id): id is string => !!id),
+  );
 
   const segments: IContestedSegment[] = raw
     .filter((s) => s.toSeconds - s.fromSeconds >= MIN_SLACK_SECONDS)
@@ -319,20 +424,35 @@ export function computeContestedSegments(
           e.spellId,
       );
       const ownerCCCasts = casts.filter((e) =>
-        ccSpellIds.has(e.spellId as string),
+        isOwnerCcCast(e.spellId as string),
       ).length;
-      const ownerKickCasts = casts.filter(
-        (e) => SPELLS[e.spellId as string]?.type === "interrupts",
+      const ownerKickCasts = casts.filter((e) =>
+        isKickSpellId(e.spellId as string),
       ).length;
       const ownerPurgeCasts = ownerPurgeTimesSeconds.filter(
         (t) => t >= s.fromSeconds && t < s.toSeconds,
+      ).length;
+      // user ruling 2026-10-23 (fact4 D26, 3f433db1 0:14–0:22): a root the
+      // owner landed on an enemy is offensive output — Landslide held the
+      // enemy healer 0:20.9–0:22.4 inside a span read "zero output"
+      const ownerRootLandings = enemies.filter((e) =>
+        (e.auraEvents ?? []).some(
+          (a) =>
+            a.logLine.event === LogEvent.SPELL_AURA_APPLIED &&
+            !!a.spellId &&
+            rootSpellIds.has(a.spellId) &&
+            (a.srcUnitId === owner.id ||
+              ownerPetIds.has(a.srcUnitId ?? "")) &&
+            inSeg(a.logLine.timestamp),
+        ),
       ).length;
 
       const idle =
         ownerDamage === 0 &&
         ownerCCCasts === 0 &&
         ownerKickCasts === 0 &&
-        ownerPurgeCasts === 0;
+        ownerPurgeCasts === 0 &&
+        ownerRootLandings === 0;
 
       const ownerHealing = (owner.healOut ?? [])
         .filter((h) => inSeg(h.logLine.timestamp))
@@ -366,28 +486,147 @@ export interface IContestedTradeFact {
   durationSeconds: number;
   teamMinHpPct: number;
   ccSpellName: string;
+  /** the owner's cast id of that CC */
+  ccSpellId: string;
+  /** What of that cast an enemy interrupt can stop, by official data
+   * (`interruptibleCastOf`); undefined = DB2 has no row. The line states cast
+   * risk — and the interrupt count — only for `bar` / `channel`. */
+  ccInterruptible: InterruptibleCast | undefined;
   enemyHealerName: string;
   enemyHealerSpec: string;
   /** 'on CD' | 'available' | 'unknown' at segment start */
   enemyHealerTrinket: string;
   ownerHealing: number;
   ownerCCCasts: number;
-  /** Enemy interrupts ready (cdRemainingSeconds === 0) at segment start — cast-risk context. */
+  /** Enemy interrupts usable at segment start (`isInterruptUsable`: off
+   * cooldown, kicker alive and not in a cast-blocking CC) — cast-risk context,
+   * printed only when the named CC has a cast to interrupt. */
   enemyInterruptsReady: number;
 }
 
+const CONTESTED_TRADE_TEXT =
+  "contested trade: a CC here competed with continued healing";
+const CONTESTED_CAST_RISK_TEXT = "AND carried cast risk";
+const CONTESTED_INSTANT_TEXT = "(instant: no cast to interrupt)";
+const CONTESTED_EV_TEXT = "(EV question, not a verdict).";
+
+/** The three ends a `[CONTESTED]` line can have (`contestedTradeTail`). */
+export type ContestedTailForm = "risk" | "instant" | "silent";
+
+/**
+ * The end of a `[CONTESTED]` line, after `cast N CC` (FT I12, user ruling
+ * 2026-10-11, option b). The line names ONE control — the first of the
+ * owner's that was ready at Full DR — and the cast-risk clause is about that
+ * one:
+ *  - `risk`, a cast bar or a channel: the enemy interrupts ready and `AND
+ *    carried cast risk` (the text every line carried until then);
+ *  - `instant`: neither — `(instant: no cast to interrupt)`. The interrupt
+ *    count is on the line as cast-risk context only, so it goes with the
+ *    clause: beside an instant it reads as a threat to a cast that does not
+ *    exist;
+ *  - `silent`, DB2 has no row for the cast: neither claim.
+ */
+export function contestedTradeTail(
+  interruptible: InterruptibleCast | undefined,
+  enemyInterruptsReady: number,
+): string {
+  if (interruptible === "bar" || interruptible === "channel")
+    return `; enemy interrupts ready: ${enemyInterruptsReady} — ${CONTESTED_TRADE_TEXT} ${CONTESTED_CAST_RISK_TEXT} ${CONTESTED_EV_TEXT}`;
+  if (interruptible === "none")
+    return ` — ${CONTESTED_TRADE_TEXT} ${CONTESTED_INSTANT_TEXT} ${CONTESTED_EV_TEXT}`;
+  return ` — ${CONTESTED_TRADE_TEXT} ${CONTESTED_EV_TEXT}`;
+}
+
+/** One `[CONTESTED]` line. */
+export function formatContestedTradeLine(f: IContestedTradeFact): string {
+  return `  [CONTESTED] ${fmtTime(f.fromSeconds)}–${fmtTime(f.toSeconds)} (${f.durationSeconds}s, team min HP ${f.teamMinHpPct}%): ${f.ccSpellName} ready on enemy healer ${f.enemyHealerName} (DR Full, trinket ${f.enemyHealerTrinket}); you healed ${(f.ownerHealing / 1000).toFixed(0)}k, cast ${f.ownerCCCasts} CC${contestedTradeTail(f.ccInterruptible, f.enemyInterruptsReady)}`;
+}
+
+/** A whole `[CONTESTED]` line, as the gates (`checkContestedCastRisk`,
+ * `scripts/contestedContract.ts`) read it back: 1–2 = the span, 3 = its
+ * seconds, 4 = team min HP, 5 = the control's name, 6 = the enemy healer,
+ * 7 = their trinket, 8 = healed (k), 9 = CC casts, 10 = the tail
+ * (`contestedTradeTail`; `contestedTailForm` reads it). */
+export const CONTESTED_LINE_RE_SRC = String.raw`^ {2}\[CONTESTED\] (\d+:\d{2})–(\d+:\d{2}) \((\d+)s, team min HP (\d+)%\): (.+?) ready on enemy healer (\S+) \(DR Full, trinket ([\w ]+?)\); you healed (\d+)k, cast (\d+) CC((?:; enemy interrupts ready: \d+)? — .*)$`;
+
+/** Which `contestedTradeTail` form a rendered tail is — null when it is none
+ * of the three to its last character. */
+export function contestedTailForm(tail: string): ContestedTailForm | null {
+  const risk = /^; enemy interrupts ready: (\d+) — /.exec(tail);
+  if (risk)
+    return tail === contestedTradeTail("bar", Number(risk[1])) ? "risk" : null;
+  if (tail === contestedTradeTail("none", 0)) return "instant";
+  if (tail === contestedTradeTail(undefined, 0)) return "silent";
+  return null;
+}
+
+let contestedFormsByName: Map<string, Set<ContestedTailForm>> | undefined;
+
+/**
+ * The tail forms `contestedTradeTail` can give a control of this English
+ * name — what a rendered `[CONTESTED]` line, which names its control by name,
+ * can be held to. Read from the same ids and the same official predicate as
+ * the producer: every CC cast (`isOwnerCcCast`), `interruptibleCastOf` of
+ * each. An id that is only another cast's effect aura is not what is pressed
+ * (Capacitor Totem's stun 118905 carries the totem's own 2 s; Song of
+ * Chi-Ji's disorient 198909 carries none) and is left out. One form for
+ * every name but `Fear` on the 12.1 tables (`test/contestedCastRisk.test.ts`
+ * pins that); an empty set = no cast of that name has a DB2 row, so the line
+ * may claim neither (`silent`, which is never in a set).
+ */
+export function contestedTailFormsOfName(
+  spellName: string,
+): ReadonlySet<ContestedTailForm> {
+  let byName = contestedFormsByName;
+  if (!byName) {
+    byName = new Map();
+    const ids = new Set<string>(ccSpellIds);
+    for (const [cast] of castEffectPairs())
+      if (isOwnerCcCast(cast)) ids.add(cast);
+    for (const id of ids) {
+      const effectOnly =
+        castsOfEffectAura(id).length > 0 && effectAurasOfCast(id).length === 0;
+      const kind = effectOnly ? undefined : interruptibleCastOf(id);
+      if (!kind) continue;
+      const name = getEnglishSpellName(id);
+      if (!byName.has(name)) byName.set(name, new Set());
+      byName.get(name)!.add(kind === "none" ? "instant" : "risk");
+    }
+    // the names load in the background: an index built before they are in
+    // would be keyed on ids
+    if (spellNamesReady()) contestedFormsByName = byName;
+  }
+  return byName.get(spellName) ?? new Set();
+}
+
 export function computeContestedTradeFacts(
-  combat: { startTime: number; endTime: number },
+  combat: {
+    startTime: number;
+    endTime: number;
+    /** the round's units, for "is the kicker CC'd" (F-C5b); absent = unknown */
+    units?: Record<string, ICombatUnit>;
+  },
   owner: ICombatUnit,
   enemies: ICombatUnit[],
   contestedSegments: IContestedSegment[],
   offensiveWindows: IOffensiveWindow[],
   enemyHealerCCInstances: CCWithDR,
+  /** the enemy healer's DR history beyond `enemyHealerCCInstances` — its
+   * `drHistoryOnly` (fact6 F20: a control reflected back onto it) */
+  enemyHealerDrHistoryOnly: CCWithDR = [],
 ): IContestedTradeFact[] {
   const matchStartMs = combat.startTime;
+  // the DR point queries read the whole history (fact6 F20)
+  const enemyHealerDrHistory = [
+    ...enemyHealerCCInstances,
+    ...enemyHealerDrHistoryOnly,
+  ];
   const enemyHealer = enemies.find((e) => isHealerSpec(e.spec));
   if (!enemyHealer) return [];
-  const ccSpells = collectOwnerCCSpells(owner, matchStartMs);
+  const ccSpells = collectOwnerCCSpells(owner, matchStartMs, [], combat);
+  // the caster evidence for a CC cast with variants in different DR
+  // families (Chastise: stun / incapacitate)
+  const ownerApplied = auraIdsAppliedBy(owner.id, enemies);
   if (ccSpells.length === 0) return [];
 
   const overlapsKillWindow = (seg: IContestedSegment) =>
@@ -396,18 +635,55 @@ export function computeContestedTradeFacts(
     );
 
   const facts: IContestedTradeFact[] = [];
+  // a dead owner holds no control (`isDeadAt`, the one dead-at predicate)
+  const ownerDeathMs = firstDeathMs(owner);
+  // fact4 D35 / D36 (4dc94d91 3:03–3:14): a span the enemy healer spent in
+  // our control offers no control on them — Freezing Trap 3:04.4–3:10.4,
+  // then Psychic Scream to 3:16.1, and the line offered Mighty Bash on him.
+  // The span needs MIN_SLACK_SECONDS of [STATE] seconds with the healer free.
+  const healerCcAt = (t: number) =>
+    enemyHealerCCInstances.some(
+      (c) => t >= c.atSeconds && t < c.atSeconds + c.durationSeconds,
+    );
   for (const seg of contestedSegments) {
     if (overlapsKillWindow(seg)) continue;
+    if (matchStartMs + seg.fromSeconds * 1000 >= ownerDeathMs) continue;
+    let healerFreeSeconds = 0;
+    for (let t = seg.fromSeconds; t < seg.toSeconds; t++)
+      if (!healerCcAt(t)) healerFreeSeconds++;
+    if (healerFreeSeconds < MIN_SLACK_SECONDS) continue;
 
+    // an unknown DR family (Chastise without caster evidence) is never "at
+    // Full DR" (codex 35-CD-13b: getDRLevelAtTime reads no history as Full)
+    // ready, at Full DR and able to reach them in ONE second of the span
+    // (codex R6C-16 #1: Chastise was ready at 73–75 s and in reach only at
+    // 80 s, after it had gone out at 75.8 s — never both, yet the line read
+    // "ready on enemy healer")
     const readyAtFullDR = ccSpells.find(
       (s) =>
-        isCCReadyAt(s, seg.fromSeconds) &&
+        drCategoryKnown(s.spellId, ownerApplied) &&
+        // the line states the DR at the segment's start
         getDRLevelAtTime(
-          enemyHealerCCInstances,
-          drCategoryOfCast(s.spellId),
+          enemyHealerDrHistory,
+          drCategoryOfCast(s.spellId, ownerApplied),
           seg.fromSeconds,
           matchStartMs,
-        ) === "Full",
+        ) === "Full" &&
+        ccReachesInSpan(
+          owner,
+          enemyHealer,
+          s.spellId,
+          combat,
+          seg,
+          (t) =>
+            isCCReadyAt(s, t) &&
+            getDRLevelAtTime(
+              enemyHealerDrHistory,
+              drCategoryOfCast(s.spellId, ownerApplied),
+              t,
+              matchStartMs,
+            ) === "Full",
+        ),
     );
     if (!readyAtFullDR) continue;
 
@@ -422,10 +698,9 @@ export function computeContestedTradeFacts(
     const interrupts = computeEnemyInterruptAvailability(
       enemies,
       matchStartMs + seg.fromSeconds * 1000,
+      combat.units ? Object.values(combat.units) : undefined,
     );
-    const enemyInterruptsReady = interrupts.filter(
-      (i) => i.cdRemainingSeconds === 0,
-    ).length;
+    const enemyInterruptsReady = interrupts.filter(isInterruptUsable).length;
 
     facts.push({
       fromSeconds: seg.fromSeconds,
@@ -433,6 +708,8 @@ export function computeContestedTradeFacts(
       durationSeconds: seg.durationSeconds,
       teamMinHpPct: seg.teamMinHpPct,
       ccSpellName: readyAtFullDR.spellName,
+      ccSpellId: readyAtFullDR.spellId,
+      ccInterruptible: interruptibleCastOf(readyAtFullDR.spellId),
       enemyHealerName: enemyHealer.name,
       enemyHealerSpec: specToString(enemyHealer.spec),
       enemyHealerTrinket,
@@ -445,6 +722,48 @@ export function computeContestedTradeFacts(
   return facts
     .sort((a, b) => b.durationSeconds - a.durationSeconds)
     .slice(0, MAX_CONTESTED_FACTS);
+}
+
+/**
+ * Could the owner's CC reach the enemy healer at some whole second of the
+ * span — the shared geometry predicate (`ccReachAt`: reach, positions, LoS;
+ * unknown fails closed, as the PEEL / CC USE sampler reads it). The
+ * `[CONTESTED]` and `[OPPORTUNITY]` "X ready on enemy healer" lines state a
+ * CC that could land on that healer (fact5 D18 / D19).
+ */
+function ccReachesInSpan(
+  owner: ICombatUnit,
+  healer: ICombatUnit,
+  spellId: string,
+  combat: {
+    startTime: number;
+    endTime: number;
+    units?: Readonly<Record<string, ICombatUnit>>;
+    startInfo?: { zoneId?: unknown };
+  },
+  seg: { fromSeconds: number; toSeconds: number },
+  /** the CC usable at that second as far as readiness / DR go — reach and
+   * usability have to hold in the same second */
+  usableAt: (t: number) => boolean = () => true,
+): boolean {
+  const reach = ccThreatReachYards(owner, spellId);
+  if (reach === null) return false;
+  const zone = String(combat.startInfo?.zoneId ?? "");
+  // …and the healer could take it then: no aura that stops this control on
+  // the whole rendered second (`ccTargetBlockerIntervals`, the CC sampler's
+  // reading — F20 immunity residual: 3 `[CONTESTED] … ready on enemy healer`
+  // spans on a priest in Spirit of Redemption, s0/72-1 3:01–3:05)
+  const blockers = ccTargetBlockerIntervals(healer, combat, spellId);
+  const immuneAt = (t: number) =>
+    blockers.some((iv) => iv.fromS < t + 1 && t < iv.toS);
+  for (let t = Math.floor(seg.fromSeconds); t < seg.toSeconds; t++)
+    if (
+      usableAt(Math.max(t, seg.fromSeconds)) &&
+      !immuneAt(t) &&
+      ccReachAt(owner, healer, reach, zone, combat.startTime + t * 1000).ok
+    )
+      return true;
+  return false;
 }
 
 // ── Task 2: Kill-window contribution analysis ──────────────────────────────
@@ -464,6 +783,9 @@ export interface IWindowContribution {
   unpunished: boolean;
   /** Total team damage to the target over the full vulnerability span. */
   teamDamageInVulnSpan: number;
+  /** What the target's shields absorbed of the team's hits over the span
+   * (fact2 R7), printed beside the total. */
+  teamAbsorbedInVulnSpan: number;
   targetName: string;
   targetSpec: string;
   enemyHealerName: string | null;
@@ -471,8 +793,18 @@ export interface IWindowContribution {
   /** Owner CC spells off cooldown at window start (cast-history replay). Empty when the owner cast no CC all match. */
   ownerCCReady: Array<{ spellName: string; enemyHealerDR: DRLevel | null }>;
   ownerCastCCInWindow: boolean;
-  ownerDamageInWindow: number;
-  /** Seconds of the window the owner was NOT in CC. */
+  /** The health the WINDOW'S TARGET lost to the owner's hits inside the
+   * rendered span — the measure of the line's own `team damage … total`
+   * (hits on `targetName`, absorbed part not counted). Until T12 ⑤ this was
+   * `ownerDamageInWindow`: the owner's damage on every enemy, absorbs
+   * included, printed beside a window on one target (78 lines of the 605
+   * capture read `team damage 0k total` with `your damage` above 0). */
+  ownerDamageOnTarget: number;
+  /** What the target's shields absorbed of the owner's hits in the span —
+   * printed apart, as `(+Ak absorbed)`. */
+  ownerAbsorbedOnTarget: number;
+  /** Seconds of the window the owner could cast: not inside any
+   * `buildCannotCastIntervals` interval (hard CC, silence, kick lockout). */
   ownerFreeSeconds: number;
   /** Lowest friendly HP% during the window; null without advanced logging. */
   teamMinHpPct: number | null;
@@ -487,23 +819,55 @@ interface IOwnerCCSpell {
   /** talent-resolved charge cap (1 for most CC) */
   charges: number;
   castTimesSeconds: number[];
+  /** the shared cooldown model's entry (`unitCooldownEntry`, cooldown
+   * mastery round 2026-10-20) when the round's units are known */
+  model?: IMajorCooldownInfo;
 }
 
 /** Owner CC spells observed at least once in cast history (honest availability: never-cast spells are unknowable). */
 function collectOwnerCCSpells(
   owner: ICombatUnit,
   matchStartMs: number,
+  /** the owner's kit controls (the ledger the [RES] rows and the loadout
+   * read), pressed or not: round-1 retest idx 28 — "your CC on cooldown"
+   * while the kit's Maim, never pressed, was ready on the [RES] row */
+  kitControls: ReadonlyArray<{ spellId: string; spellName: string }> = [],
+  /** the round, for the shared cooldown model; absent or without units =
+   * the cast list and the static cooldown below */
+  combat?: { units?: Record<string, ICombatUnit> },
 ): IOwnerCCSpell[] {
   const bySpell = new Map<string, IOwnerCCSpell>();
+  for (const k of kitControls) {
+    const own = unitCooldownOf(owner, k.spellId);
+    bySpell.set(k.spellId, {
+      spellId: k.spellId,
+      spellName: getEnglishSpellName(k.spellId, k.spellName),
+      cooldownSeconds: own?.cooldownSeconds ?? 0,
+      charges: own?.charges ?? 1,
+      castTimesSeconds: [],
+    });
+  }
   for (const e of owner.spellCastEvents) {
     if (e.logLine.event !== LogEvent.SPELL_CAST_SUCCESS || !e.spellId) continue;
-    if (!ccSpellIds.has(e.spellId)) continue;
+    if (!isOwnerCcCast(e.spellId)) continue;
     // The owner's talent-resolved cooldown and charges (`unitCooldownOf`):
     // Psychic Voice, Fist of Justice, Ancient Arts, Voodoo Mastery … were
     // ignored, and a charge-only CC row (no plain cooldown) read 0 = "always
     // ready" (talent impact audit 2026-09-26).
     const own = unitCooldownOf(owner, e.spellId);
-    const entry = bySpell.get(e.spellId) ?? {
+    // a cast logged under another id of a kit control (Hex 210873, the
+    // Compy variant, against the kit's 51514) is a press of that control
+    // (fact3 D14 / D16: the kit entry had no casts and read "ready" in
+    // every window, and Hex printed twice)
+    const name = getEnglishSpellName(e.spellId, e.spellName);
+    const kitKey = bySpell.has(e.spellId)
+      ? e.spellId
+      : [...bySpell.values()].find(
+          (k) =>
+            kitControls.some((c) => c.spellId === k.spellId) &&
+            k.spellName === name,
+        )?.spellId;
+    const entry = (kitKey !== undefined ? bySpell.get(kitKey) : undefined) ?? {
       spellId: e.spellId,
       spellName: getEnglishSpellName(e.spellId, e.spellName),
       cooldownSeconds: own?.cooldownSeconds ?? 0,
@@ -511,16 +875,39 @@ function collectOwnerCCSpells(
       castTimesSeconds: [],
     };
     entry.castTimesSeconds.push((e.logLine.timestamp - matchStartMs) / 1000);
-    bySpell.set(e.spellId, entry);
+    bySpell.set(kitKey ?? e.spellId, entry);
   }
-  return [...bySpell.values()].map((s) => ({
-    ...s,
-    castTimesSeconds: s.castTimesSeconds.sort((a, b) => a - b),
-  }));
+  const model = (id: string) =>
+    combat?.units
+      ? unitCooldownEntry(owner, combat as AtomicArenaCombat, id)
+      : undefined;
+  return [...bySpell.values()].map((s) => {
+    const m = model(s.spellId);
+    return {
+      ...s,
+      castTimesSeconds: s.castTimesSeconds.sort((a, b) => a - b),
+      ...(m ? { model: m } : {}),
+    };
+  });
 }
 
 function isCCReadyAt(spell: IOwnerCCSpell, atSeconds: number): boolean {
   if (spell.cooldownSeconds <= 0) return true; // spammable CC (no CD data) is always ready
+  if (spell.model)
+    return cdAvailableAt(
+      {
+        ...spell.model,
+        casts: spell.model.casts.filter((c) => c.timeSeconds < atSeconds),
+        ...(spell.model.sharedCasts
+          ? {
+              sharedCasts: spell.model.sharedCasts.filter(
+                (c) => c.timeSeconds < atSeconds,
+              ),
+            }
+          : {}),
+      },
+      atSeconds,
+    );
   if (spell.charges > 1)
     return (
       chargesAvailableAt(
@@ -552,14 +939,50 @@ export function computeWindowContributions(
   friends: ICombatUnit[],
   enemies: ICombatUnit[],
   offensiveWindows: IOffensiveWindow[],
-  ownerCCInstances: CCInterval,
+  /** When the owner could not cast, epoch ms — `buildCannotCastIntervals`
+   * over the enemy players and everything they summoned (hard CC, silences,
+   * kick lockouts). NOT the `[CC ON TEAM]` instance list: "free" here means
+   * free to act, and a Strangulate or a Pummel lockout is not that (triage
+   * other F-O12: 7d1f14af printed "free 6s of 15s" with ~2 s castable). */
+  ownerCannotCast: ReadonlyArray<{ from: number; to: number }>,
   enemyHealerCCInstances: CCWithDR,
   factsComputer: IKillWindowFactsComputer,
+  /** the enemy healer's DR history beyond `enemyHealerCCInstances` — its
+   * `drHistoryOnly` (fact6 F20: a control reflected back onto it) */
+  enemyHealerDrHistoryOnly: CCWithDR = [],
 ): IWindowContribution[] {
   const matchStartMs = combat.startTime;
+  // the DR point queries read the whole history (fact6 F20)
+  const enemyHealerDrHistory = [
+    ...enemyHealerCCInstances,
+    ...enemyHealerDrHistoryOnly,
+  ];
   const enemyHealer = enemies.find((e) => isHealerSpec(e.spec)) ?? null;
-  const ccSpells = collectOwnerCCSpells(owner, matchStartMs);
-  const enemyIds = new Set(enemies.map((e) => e.id));
+  // the kit's controls, when the caller handed a combat with its units (the
+  // ledger needs one); a bare clock keeps the cast-history reading
+  const kitControls =
+    "units" in combat && combat.units
+      ? extractMajorCooldowns(owner, combat as never, {
+          withBaselineOnly: true,
+        }).filter((cd) => isOwnerCcCast(cd.spellId))
+      : [];
+  // the round for the shared cooldown model (codex 59-POSTHOC-11d #2: only
+  // the contested facts passed it — a Capacitor Totem Storm Conduit brought
+  // back read "on cooldown" here)
+  const ccSpells = collectOwnerCCSpells(
+    owner,
+    matchStartMs,
+    kitControls,
+    combat as { units?: Record<string, ICombatUnit> },
+  );
+  // the caster evidence for a CC cast with variants in different DR
+  // families (Chastise: stun / incapacitate)
+  const ownerApplied = auraIdsAppliedBy(owner.id, enemies);
+  // F16 retest (2026-10-21): a dead owner is not free and holds no control
+  // (e49b7c3b 3:39–3:46: "your CC ready: Mighty Bash, Maim, Cyclone … free
+  // 7s of 7s" for a druid dead at 3:30) — the death joins the cannot-cast
+  // intervals, as `cooldownTiming`'s owner gate reads them
+  const ownerDeathMs = firstDeathMs(owner);
 
   // One contribution per damage burst (kill attempt) inside each vulnerability
   // span; spans with no qualifying burst yield a single unpunished contribution
@@ -571,61 +994,107 @@ export function computeWindowContributions(
     toSeconds: number,
     unpunished: boolean,
   ): IWindowContribution => {
+    const ownerDeadAtStart = matchStartMs + fromSeconds * 1000 >= ownerDeathMs;
     const ownerCCReady = ccSpells
-      .filter((s) => isCCReadyAt(s, fromSeconds))
+      .filter((s) => !ownerDeadAtStart && isCCReadyAt(s, fromSeconds))
       .map((s) => ({
         spellName: s.spellName,
-        enemyHealerDR: enemyHealer
-          ? getDRLevelAtTime(
-              enemyHealerCCInstances,
-              drCategoryOfCast(s.spellId),
-              fromSeconds,
-              matchStartMs,
-            )
-          : null,
+        // unknown DR family → no DR said (codex 35-CD-13b), never "Full"
+        enemyHealerDR:
+          enemyHealer && drCategoryKnown(s.spellId, ownerApplied)
+            ? getDRLevelAtTime(
+                enemyHealerDrHistory,
+                drCategoryOfCast(s.spellId, ownerApplied),
+                fromSeconds,
+                matchStartMs,
+              )
+            : null,
       }));
 
-    const ownerCastCCInWindow = owner.spellCastEvents.some((e) => {
-      if (
-        e.logLine.event !== LogEvent.SPELL_CAST_SUCCESS ||
-        !e.spellId ||
-        !ccSpellIds.has(e.spellId)
-      )
-        return false;
-      const t = (e.logLine.timestamp - matchStartMs) / 1000;
-      // Rendered-grid rule (invariant sweep I2, 2026-07-16): the window header
-      // and the timeline [YOU] [CC] lines both render floored seconds, so the
-      // membership test must use the same grid — fractional boundaries made
-      // "you cast no CC" coexist with a [YOU] [CC] line at the rendered
-      // window edge in 12/1245 prompts.
-      return (
-        Math.floor(t) >= Math.floor(fromSeconds) &&
-        Math.floor(t) <= Math.floor(toSeconds)
-      );
-    });
+    // F16 retest (2026-10-21, idx 26): a control the owner's press applied
+    // under an id the cast→effect table does not tie to it — Deep Breath's
+    // talent stun Terror of the Skies 372245 on the kill target and the
+    // enemy healer read "you cast no CC" (179b83ac 2:53). The control aura
+    // itself, sourced from the owner, inside the window's rendered seconds.
+    const ownerControlLandedInWindow = enemies.some((en) =>
+      (en.auraEvents ?? []).some((a) => {
+        if (
+          a.logLine.event !== LogEvent.SPELL_AURA_APPLIED ||
+          a.srcUnitId !== owner.id ||
+          !a.spellId ||
+          !ccSpellIds.has(a.spellId)
+        )
+          return false;
+        const t = Math.floor((a.logLine.timestamp - matchStartMs) / 1000);
+        return t >= Math.floor(fromSeconds) && t <= Math.floor(toSeconds);
+      }),
+    );
+    const ownerCastCCInWindow =
+      ownerControlLandedInWindow ||
+      owner.spellCastEvents.some((e) => {
+        if (
+          e.logLine.event !== LogEvent.SPELL_CAST_SUCCESS ||
+          !e.spellId ||
+          !isOwnerCcCast(e.spellId)
+        )
+          return false;
+        const t = (e.logLine.timestamp - matchStartMs) / 1000;
+        // Rendered-grid rule (invariant sweep I2, 2026-07-16): the window header
+        // and the timeline [YOU] [CC] lines both render floored seconds, so the
+        // membership test must use the same grid — fractional boundaries made
+        // "you cast no CC" coexist with a [YOU] [CC] line at the rendered
+        // window edge in 12/1245 prompts.
+        return (
+          Math.floor(t) >= Math.floor(fromSeconds) &&
+          Math.floor(t) <= Math.floor(toSeconds)
+        );
+      });
 
-    const ownerDamageInWindow = owner.damageOut
-      .filter((d) => {
-        const t = (d.logLine.timestamp - matchStartMs) / 1000;
-        return t >= fromSeconds && t < toSeconds && enemyIds.has(d.destUnitId);
-      })
-      // Same sign fix as the slack segments above: damage is negative in the
-      // log convention; max(0,·) yielded absorb-only "your damage" figures.
-      .reduce((sum, d) => sum + Math.abs(d.effectiveAmount), 0);
-
-    let ccdSeconds = 0;
-    for (let t = Math.floor(fromSeconds); t < toSeconds; t++) {
-      if (isOwnerCCdAt(ownerCCInstances, t)) ccdSeconds++;
+    // T12 ⑤ (user ruling 2026-10-10): the owner's damage on THIS window's
+    // target. The line is a window on one enemy and prints the team's damage
+    // on that enemy; the owner's figure beside it was his damage on every
+    // enemy, so `[VULNERABLE] … (team damage 0k total) … your damage 208k`
+    // (the target already dead; the 208k went elsewhere). Split the way the
+    // team figure is measured: a damage row is health lost (negative in the
+    // log convention — hence abs), a SPELL_ABSORBED row is what a shield ate.
+    let ownerDamageOnTarget = 0;
+    let ownerAbsorbedOnTarget = 0;
+    for (const d of owner.damageOut) {
+      if (d.destUnitId !== w.targetUnitId) continue;
+      const t = (d.logLine.timestamp - matchStartMs) / 1000;
+      if (t < fromSeconds || t >= toSeconds) continue;
+      if ((d.logLine.event as string) === LogEvent.SPELL_ABSORBED) {
+        // a deferral shield's row is no absorb (FT-T02b, `isDeferralAbsorb`)
+        if (!isDeferralAbsorb(d))
+          ownerAbsorbedOnTarget += Math.abs(d.effectiveAmount);
+      } else ownerDamageOnTarget += Math.abs(d.effectiveAmount);
     }
-    const ownerFreeSeconds = Math.max(0, toSeconds - fromSeconds - ccdSeconds);
 
+    // Sampled per whole second, as the CC instances were before F-O12: a
+    // second is not free when its start lies inside a cannot-cast interval.
+    let blockedSeconds = 0;
+    for (let t = Math.floor(fromSeconds); t < toSeconds; t++) {
+      const ms = matchStartMs + t * 1000;
+      if (
+        ms >= ownerDeathMs ||
+        ownerCannotCast.some((iv) => iv.from <= ms && ms < iv.to)
+      )
+        blockedSeconds++;
+    }
+    const ownerFreeSeconds = Math.max(
+      0,
+      toSeconds - fromSeconds - blockedSeconds,
+    );
+
+    // A trough (user ruling 2026-10-16, F15 R1: every printed "lowest /
+    // team min" reads the true minimum): the window's own samples, not its
+    // whole-second ticks only — 8cd58545 printed `team min HP 33%` over a
+    // paladin at 3.8 % between two ticks. Printed only; nothing decides on it.
     let teamMinHpPct: number | null = null;
     for (const f of friends) {
-      for (let t = Math.ceil(fromSeconds); t <= Math.floor(toSeconds); t++) {
-        const hp = getHpPercentAtTime(f, t, matchStartMs);
-        if (hp !== null && (teamMinHpPct === null || hp < teamMinHpPct))
-          teamMinHpPct = hp;
-      }
+      const low = hpTroughInEventSpan(f, matchStartMs, fromSeconds, toSeconds);
+      if (low && (teamMinHpPct === null || low.pct < teamMinHpPct))
+        teamMinHpPct = low.pct;
     }
 
     const targetUnit = enemies.find((e) => e.id === w.targetUnitId) ?? null;
@@ -646,13 +1115,15 @@ export function computeWindowContributions(
       vulnToSeconds: w.toSeconds,
       unpunished,
       teamDamageInVulnSpan: w.friendlyDamageInWindow,
+      teamAbsorbedInVulnSpan: w.friendlyAbsorbedInWindow,
       targetName: w.targetName,
       targetSpec: w.targetSpec,
       enemyHealerName: enemyHealer?.name ?? null,
       enemyHealerSpec: enemyHealer ? specToString(enemyHealer.spec) : null,
       ownerCCReady,
       ownerCastCCInWindow,
-      ownerDamageInWindow,
+      ownerDamageOnTarget,
+      ownerAbsorbedOnTarget,
       ownerFreeSeconds,
       teamMinHpPct,
       gateFacts,
@@ -696,11 +1167,27 @@ export function computeWindowCreationFacts(
   slackSegments: ISlackSegment[],
   offensiveWindows: IOffensiveWindow[],
   enemyHealerCCInstances: CCWithDR,
+  /** the enemy healer's DR history beyond `enemyHealerCCInstances` — its
+   * `drHistoryOnly` (fact6 F20: a control reflected back onto it) */
+  enemyHealerDrHistoryOnly: CCWithDR = [],
 ): IWindowCreationFact[] {
   const matchStartMs = combat.startTime;
+  // the DR point queries read the whole history (fact6 F20)
+  const enemyHealerDrHistory = [
+    ...enemyHealerCCInstances,
+    ...enemyHealerDrHistoryOnly,
+  ];
   const enemyHealer = enemies.find((e) => isHealerSpec(e.spec));
   if (!enemyHealer) return [];
-  const ccSpells = collectOwnerCCSpells(owner, matchStartMs);
+  const ccSpells = collectOwnerCCSpells(
+    owner,
+    matchStartMs,
+    [],
+    combat as { units?: Record<string, ICombatUnit> },
+  );
+  // the caster evidence for a CC cast with variants in different DR
+  // families (Chastise: stun / incapacitate)
+  const ownerApplied = auraIdsAppliedBy(owner.id, enemies);
   if (ccSpells.length === 0) return [];
 
   const overlapsKillWindow = (seg: ISlackSegment) =>
@@ -712,15 +1199,37 @@ export function computeWindowCreationFacts(
   for (const seg of slackSegments) {
     if (overlapsKillWindow(seg)) continue;
 
+    // an unknown DR family (Chastise without caster evidence) is never "at
+    // Full DR" (codex 35-CD-13b: getDRLevelAtTime reads no history as Full)
+    // ready, at Full DR and able to reach them in ONE second of the span
+    // (codex R6C-16 #1: Chastise was ready at 73–75 s and in reach only at
+    // 80 s, after it had gone out at 75.8 s — never both, yet the line read
+    // "ready on enemy healer")
     const readyAtFullDR = ccSpells.find(
       (s) =>
-        isCCReadyAt(s, seg.fromSeconds) &&
+        drCategoryKnown(s.spellId, ownerApplied) &&
+        // the line states the DR at the segment's start
         getDRLevelAtTime(
-          enemyHealerCCInstances,
-          drCategoryOfCast(s.spellId),
+          enemyHealerDrHistory,
+          drCategoryOfCast(s.spellId, ownerApplied),
           seg.fromSeconds,
           matchStartMs,
-        ) === "Full",
+        ) === "Full" &&
+        ccReachesInSpan(
+          owner,
+          enemyHealer,
+          s.spellId,
+          combat,
+          seg,
+          (t) =>
+            isCCReadyAt(s, t) &&
+            getDRLevelAtTime(
+              enemyHealerDrHistory,
+              drCategoryOfCast(s.spellId, ownerApplied),
+              t,
+              matchStartMs,
+            ) === "Full",
+        ),
     );
     if (!readyAtFullDR) continue;
 
@@ -780,7 +1289,8 @@ export function buildHealerOffenseSummary(
   combat: {
     startTime: number;
     endTime: number;
-    startInfo?: { zoneId?: string };
+    startInfo?: { zoneId?: string; bracket?: string };
+    units?: Record<string, ICombatUnit>;
   },
   owner: ICombatUnit,
   friends: ICombatUnit[],
@@ -790,6 +1300,8 @@ export function buildHealerOffenseSummary(
   ownerCCInstances: CCInterval,
   enemyHealerCCInstances: CCWithDR,
   ownerPurgeTimesSeconds: ReadonlyArray<number>,
+  /** the enemy healer summary's `drHistoryOnly` (fact6 F20) */
+  enemyHealerDrHistoryOnly: CCWithDR = [],
 ): IHealerOffenseSummary {
   const { advancedLoggingAvailable, segments } = computeSlackSegments(
     combat,
@@ -826,6 +1338,7 @@ export function buildHealerOffenseSummary(
     ).segments,
     offensiveWindows,
     enemyHealerCCInstances,
+    enemyHealerDrHistoryOnly,
   );
 
   return {
@@ -837,9 +1350,17 @@ export function buildHealerOffenseSummary(
       friends,
       enemies,
       offensiveWindows,
-      ownerCCInstances,
+      // One predicate for "could not cast", built as `healingGaps` and
+      // `positionAnalysis` build it; only the free-seconds count reads it —
+      // the slack segments above keep the CC instance list (F-O12's scope).
+      buildCannotCastIntervals(
+        owner,
+        enemySourceIds(enemies, Object.values(combat.units ?? {})),
+        Object.values(combat.units ?? {}),
+      ),
       enemyHealerCCInstances,
       createKillWindowFactsComputer(combat, friends, enemies),
+      enemyHealerDrHistoryOnly,
     ),
     windowCreationFacts: computeWindowCreationFacts(
       combat,
@@ -848,13 +1369,33 @@ export function buildHealerOffenseSummary(
       segments,
       offensiveWindows,
       enemyHealerCCInstances,
+      enemyHealerDrHistoryOnly,
     ),
     contestedTradeFacts,
-    ownerCCSpellsObserved: collectOwnerCCSpells(owner, combat.startTime).map(
-      (s) => s.spellName,
-    ),
+    ownerCCSpellsObserved: collectOwnerCCSpells(
+      owner,
+      combat.startTime,
+      [],
+      combat as { units?: Record<string, ICombatUnit> },
+    ).map((s) => s.spellName),
   };
 }
+
+/** `your damage on it Nk[ (+Ak absorbed)]` — the owner clause of a healer
+ * `[KILL WINDOW]` / `[VULNERABLE]` line. The absorbed tag is printed when it
+ * has a figure at the line's precision (not `0k`). */
+function healerWindowOwnerDamage(
+  w: Pick<IWindowContribution, "ownerDamageOnTarget" | "ownerAbsorbedOnTarget">,
+): string {
+  const k = (n: number) => (n / 1000).toFixed(0);
+  const absorbed = k(w.ownerAbsorbedOnTarget);
+  return `your damage on it ${k(w.ownerDamageOnTarget)}k${absorbed === "0" ? "" : ` (+${absorbed}k absorbed)`}`;
+}
+
+/** A healer-view `[VULNERABLE]` line's two damage figures, as the gate
+ * (`checkVulnerableOwnerDamage`) reads them back: 1 = the team's on the
+ * window's target, 2 = the owner's on it. */
+export const VULNERABLE_OWNER_DAMAGE_RE_SRC = String.raw`\[VULNERABLE\] .*\(team damage (\d+)k total(?:, \+\d+k absorbed)?\).*; your damage on it (\d+)k`;
 
 export function formatHealerOffenseForContext(
   summary: IHealerOffenseSummary,
@@ -912,18 +1453,30 @@ export function formatHealerOffenseForContext(
   const idleSlack = slackSegments
     .filter((s) => s.idle)
     .reduce((s, seg) => s + seg.durationSeconds, 0);
+  let teamMinLegendShown = false;
   if (slackSegments.length > 0) {
     lines.push(
       // The gate is rendered FROM the constant the sweep uses, so the claim
       // cannot drift from `isSlackSecond` (shared-predicate rule).
       `  Slack time (team ≥${SLACK_TEAM_HP_THRESHOLD}% HP, no enemy offensive CDs active, you un-CC-d): ${totalSlack}s across ${slackSegments.length} segment(s); ${idleSlack}s with zero offensive output.`,
     );
+    if (idleSegs.length > 0) {
+      lines.push(SLACK_TEAM_MIN_LEGEND);
+      teamMinLegendShown = true;
+    }
     for (const seg of idleSegs) {
       lines.push(
         `  [SLACK] ${fmtTime(seg.fromSeconds)}–${fmtTime(seg.toSeconds)} (${seg.durationSeconds}s, team min HP ${seg.teamMinHpPct}%): no damage, no CC, no purge, no kick.`,
       );
     }
   }
+
+  // T12 ⑤: what the per-window damage figure is measured on.
+  if (windowContributions.length > 0)
+    lines.push(
+      // (no bracket tags in this line: readers count the window lines by tag)
+      "  `your damage on it Nk` on a window line below = the health that window's target lost to your hits in the printed span — the measure of `team damage … total`; `(+Ak absorbed)` = what its shields absorbed of your hits on top (`, +Ak absorbed` after `team damage … total`: of the team's). Your damage on other enemies is not in it.",
+    );
 
   // Cap the per-window lines; keep the highest-free-time windows (printed chronologically) and
   // roll the remainder up so aggregate sufficiency is preserved.
@@ -961,8 +1514,20 @@ export function formatHealerOffenseForContext(
     const cast = w.ownerCastCCInWindow
       ? "you cast CC in this window"
       : "you cast no CC";
-    const dmg = `your damage ${(w.ownerDamageInWindow / 1000).toFixed(0)}k`;
-    const free = `free ${Math.round(w.ownerFreeSeconds)}s of ${renderedWindowSeconds(w.fromSeconds, w.toSeconds)}s`;
+    const dmg = healerWindowOwnerDamage(w);
+    // The denominator is the rendered (floored) window; the free time is
+    // continuous, so it can round past it ("free 21s of 20s", 193 of 3,956
+    // KILL WINDOW lines on the 2026-09-30 605-file capture). Free time cannot
+    // exceed the window it sits in — cap it at the number the line prints.
+    // `ownerFreeSeconds` is the window's length minus its blocked whole
+    // seconds, clamped at zero: exactly 0 when every sampled second was
+    // blocked — `free 0s` is then the fact — and a positive remainder under
+    // half a second when a sampled second was free in a window that ends
+    // inside it, which printed `free 0s` as well. That one is `free <1s`
+    // (`fmtWholeSecondsOrZero`; `checkFreeOfWindowConsistency` reads both
+    // through `parseWholeSeconds`).
+    const windowS = renderedWindowSeconds(w.fromSeconds, w.toSeconds);
+    const free = `free ${fmtWholeSecondsOrZero(Math.min(w.ownerFreeSeconds, windowS))} of ${windowS}s`;
     const teamHp =
       w.teamMinHpPct !== null
         ? `, team min HP ${Math.round(w.teamMinHpPct)}%`
@@ -978,7 +1543,7 @@ export function formatHealerOffenseForContext(
         ? "never punished"
         : `not punished — not accountable (${killWindowAcquittal(w.gateFacts)})`;
       lines.push(
-        `  [VULNERABLE] ${fmtTime(w.fromSeconds)}–${fmtTime(w.toSeconds)} (${renderedWindowSeconds(w.fromSeconds, w.toSeconds)}s) on ${w.targetSpec} (${w.targetName}): no major defensives, ${verdict} (team damage ${(w.teamDamageInVulnSpan / 1000).toFixed(0)}k total); ${killWindowFactsSuffix(w.gateFacts)}; ${ready}; ${cast}; ${dmg}; ${free}${teamHp}.`,
+        `  [VULNERABLE] ${fmtTime(w.fromSeconds)}–${fmtTime(w.toSeconds)} (${renderedWindowSeconds(w.fromSeconds, w.toSeconds)}s) on ${w.targetSpec} (${w.targetName}): no major defensives, ${verdict} (${teamDamageTotalClause(w.teamDamageInVulnSpan, w.teamAbsorbedInVulnSpan)}); ${killWindowFactsSuffix(w.gateFacts)}; ${ready}; ${cast}; ${dmg}; ${free}${teamHp}.`,
       );
     } else {
       // Kill windows are team-damage bursts inside the vulnerability span; the
@@ -994,10 +1559,10 @@ export function formatHealerOffenseForContext(
   }
 
   if (omittedWindows.length > 0) {
-    const omDmg = omittedWindows.reduce((s, w) => s + w.ownerDamageInWindow, 0);
+    const omDmg = omittedWindows.reduce((s, w) => s + w.ownerDamageOnTarget, 0);
     const omCC = omittedWindows.filter((w) => w.ownerCastCCInWindow).length;
     lines.push(
-      `  [+${omittedWindows.length} more windows omitted (least free time): your damage ${(omDmg / 1000).toFixed(0)}k total, CC cast in ${omCC} of ${omittedWindows.length}]`,
+      `  [+${omittedWindows.length} more windows omitted (least free time): your damage on their targets ${(omDmg / 1000).toFixed(0)}k total, CC cast in ${omCC} of ${omittedWindows.length}]`,
     );
   }
 
@@ -1007,15 +1572,20 @@ export function formatHealerOffenseForContext(
     );
   }
 
-  for (const f of summary.contestedTradeFacts) {
-    lines.push(
-      `  [CONTESTED] ${fmtTime(f.fromSeconds)}–${fmtTime(f.toSeconds)} (${f.durationSeconds}s, team min HP ${f.teamMinHpPct}%): ${f.ccSpellName} ready on enemy healer ${f.enemyHealerName} (DR Full, trinket ${f.enemyHealerTrinket}); you healed ${(f.ownerHealing / 1000).toFixed(0)}k, cast ${f.ownerCCCasts} CC; enemy interrupts ready: ${f.enemyInterruptsReady} — contested trade: a CC here competed with continued healing AND carried cast risk (EV question, not a verdict).`,
-    );
-  }
+  if (summary.contestedTradeFacts.length > 0 && !teamMinLegendShown)
+    lines.push(SLACK_TEAM_MIN_LEGEND);
+  for (const f of summary.contestedTradeFacts)
+    lines.push(formatContestedTradeLine(f));
 
   // The "facts, not conclusions / cross-check the timeline / valid uses of slack" guidance is
   // already in the system prompt's healer-offense rules — repeating it here cost ~35 tok/match
   // (2026-07-09 week-eval tokens.md #4). "Outranks" is NOT in the system prompt, so it stays.
   lines.push("  Note: healing under pressure always outranks offense.");
+  // fact2 C8: a press-only cooldown named on a window line says what it is
+  const firstWindow = lines.findIndex(
+    (l) => l.startsWith("  [KILL WINDOW]") || l.startsWith("  [VULNERABLE]"),
+  );
+  if (firstWindow >= 0 && lines.some(hasPressOnlyTag))
+    lines.splice(firstWindow, 0, PRESS_ONLY_LEGEND);
   return lines;
 }

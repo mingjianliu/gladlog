@@ -18,8 +18,8 @@ import {
   manaPct,
   oomWindows,
   parseRawStreams,
-  roundDurationSOf,
   type RawStreams,
+  roundDurationSOf,
 } from "../src/utils/rawStreams";
 
 const GUID = "Player-57-0E0CB0B6";

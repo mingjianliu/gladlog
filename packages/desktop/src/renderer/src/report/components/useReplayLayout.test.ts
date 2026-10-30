@@ -1,9 +1,9 @@
 import {
   clampMapHeight,
+  clampSplitRatio,
   MAP_HEIGHT_DEFAULT,
   MAP_HEIGHT_MAX,
   MAP_HEIGHT_MIN,
-  clampSplitRatio,
   SPLIT_DEFAULT,
   SPLIT_MAX,
   SPLIT_MIN,

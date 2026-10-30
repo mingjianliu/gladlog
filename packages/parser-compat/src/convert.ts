@@ -15,6 +15,7 @@ import {
   CombatUnitType,
   LogEvent,
 } from "./enums";
+import { laggingMaxHpCorrected } from "./maxHpLag";
 import type {
   CombatantInfo,
   IAbsorbEvent,
@@ -25,8 +26,8 @@ import type {
   IEmpowerEvent,
   IHealAbsorbEvent,
   IHpEvent,
-  IMissEvent,
   ILogLine,
+  IMissEvent,
   IShuffleMatch,
   ISpellEvent,
   IStartInfo,
@@ -145,6 +146,21 @@ function attackSpellFields(event: {
     : {};
 }
 
+/** What a cast cost, when the document carries it (cast rows parsed on or
+ * after 2026-10-11 that state it). No key otherwise: unknown, not free. */
+function powerCostFields(event: {
+  powerCosts?: Array<{ powerType: number; cost: number }>;
+}): Pick<ISpellEvent, "powerCosts"> {
+  return event.powerCosts
+    ? {
+        powerCosts: event.powerCosts.map((c) => ({
+          type: c.powerType as unknown as CombatUnitPowerType,
+          cost: c.cost,
+        })),
+      }
+    : {};
+}
+
 /** L3 stores `effectiveAmount = amount − overkill` (l1/decoders decodeDamage),
  * so the difference IS the overkill; carried only on a killing blow. */
 function overkillField(event: { amount: number; effectiveAmount: number }): {
@@ -152,6 +168,24 @@ function overkillField(event: { amount: number; effectiveAmount: number }): {
 } {
   const overkill = event.amount - event.effectiveAmount;
   return overkill > 0 ? { overkill } : {};
+}
+
+/**
+ * The health a damage event actually removed: `amount − overkill`.
+ *
+ * The log's `amount` is ALREADY net of what a shield absorbed — the absorbed
+ * part travels separately, as the line's `absorbed` field and as its own
+ * SPELL_ABSORBED event. Until 2026-10-01 this subtracted `absorbed` a second
+ * time (adjudication #13, inherited from the old parser), so every partly
+ * absorbed hit read as less damage than the health bar lost: on 4 logs the
+ * victim's HP drop equalled `amount` in 455 of 455 hits and `amount −
+ * absorbed` in 0. Reversed by user ruling A38 (triage missed-cleanse F-C2).
+ *
+ * Consequence for sums: damage rows + absorb rows now add up to the whole
+ * hit (health lost + shield eaten); before, they added up to `amount` alone.
+ */
+function hpLost(event: { effectiveAmount: number }): number {
+  return event.effectiveAmount;
 }
 
 function isPetOrGuardian(
@@ -167,6 +201,15 @@ function isPetOrGuardian(
     }
   }
   return destId.startsWith("Pet-");
+}
+
+/** `IHpEvent.damageSchoolId` from the L3 damage event's tail school. */
+function damageSchoolField(event: { school?: number }): {
+  damageSchoolId?: string;
+} {
+  return event.school !== undefined && event.school > 0
+    ? { damageSchoolId: `0x${event.school.toString(16)}` }
+    : {};
 }
 
 function getSpellSchoolId(
@@ -253,6 +296,52 @@ function buildAbsorbsByVictim(
   return byVictim;
 }
 
+/**
+ * A unit's advanced samples sorted by time, each read with the max HP
+ * `laggingMaxHpCorrected` gives it (fact4 D13 / D14 / D50) — every HP reader:
+ * the analysis (through `advancedActions`) and the report's HP timeline and
+ * replay (codex 20-F17-03 #3: those two read the raw `maxHp`, 90.9 % where
+ * the prompt read 100 %). A heal or hit that moves current HP by the max's
+ * ratio is no lag (codex 20-F17-03 #1), so the unit's own heals and hits go
+ * along.
+ */
+export function correctedAdvancedSamples<
+  S extends { timestamp: number; hp: number; maxHp: number },
+>(
+  unit: Pick<GladUnit, "id" | "healIn" | "damageIn"> & {
+    advancedSamples: readonly S[];
+  },
+  allUnits?: Record<string, GladUnit>,
+): S[] {
+  const sorted = [...unit.advancedSamples].sort(
+    (a, b) => a.timestamp - b.timestamp,
+  );
+  const maxHpOf = laggingMaxHpCorrected(sorted, hpEventsOf(unit, allUnits));
+  return sorted.map((sample, i) =>
+    maxHpOf[i] === sample.maxHp ? sample : { ...sample, maxHp: maxHpOf[i]! },
+  );
+}
+
+/** A unit's heals (+) and hits (−) by effective amount, sorted by time —
+ * what `laggingMaxHpCorrected` reconciles a current-HP jump against. */
+function hpEventsOf(
+  unit: Pick<GladUnit, "id" | "healIn" | "damageIn">,
+  allUnits?: Record<string, GladUnit>,
+): Array<{ timestamp: number; amount: number }> {
+  if (isPetOrGuardian(unit.id, allUnits)) return [];
+  return [
+    // (a hand-built report fixture can carry samples without the streams)
+    ...(unit.healIn ?? []).map((e) => ({
+      timestamp: e.timestamp,
+      amount: Math.abs(e.effectiveAmount),
+    })),
+    ...(unit.damageIn ?? []).map((e) => ({
+      timestamp: e.timestamp,
+      amount: -Math.abs(hpLost(e)),
+    })),
+  ].sort((a, b) => a.timestamp - b.timestamp);
+}
+
 function convertUnit(
   unit: GladUnit,
   allUnits?: Record<string, GladUnit>,
@@ -265,9 +354,12 @@ function convertUnit(
     lineIndex: death.lineIndex,
   }));
 
-  const advancedActions: IAdvancedAction[] = [...unit.advancedSamples]
-    .sort((a, b) => a.timestamp - b.timestamp)
-    .map((sample) => ({
+  // a max HP the log writes late after a max-HP change (fact4 D13 / D14 /
+  // D50: a bear form exit read 75 % for a druid at 98 %) — the one reading
+  // the report's timeline and replay take too
+  const sortedSamples = correctedAdvancedSamples(unit, allUnits);
+  const advancedActions: IAdvancedAction[] = sortedSamples.map(
+    (sample) => ({
       advancedActorCurrentHp: sample.hp,
       advancedActorMaxHp: sample.maxHp,
       advancedActorPositionX: sample.x,
@@ -283,6 +375,9 @@ function convertUnit(
       logLine: {
         event: "ADVANCED_SAMPLE" as const,
         timestamp: sample.timestamp,
+        ...(sample.lineIndex !== undefined
+          ? { lineIndex: sample.lineIndex }
+          : {}),
         parameters: [],
       },
     }),
@@ -301,11 +396,10 @@ function convertUnit(
         destUnitId: event.destId,
         destUnitName: event.destName,
         amount: -event.amount,
-        effectiveAmount: isPetDest
-          ? -0
-          : -(event.effectiveAmount - (event.absorbed ?? 0)),
+        effectiveAmount: isPetDest ? -0 : -hpLost(event),
         ...overkillField(event),
         spellSchoolId: getSpellSchoolId(event.eventName, event.params),
+        ...damageSchoolField(event),
         logLine: {
           event: event.eventName as LogEvent,
           timestamp: event.timestamp,
@@ -315,18 +409,35 @@ function convertUnit(
       };
     }),
     ...unit.absorbsIn.map((event) => {
-      const isPetDest = isPetOrGuardian(event.srcId, allUnits);
+      // The row's dest is the unit that was HIT, not the unit whose shield ate
+      // the hit: with the shield owner there, a healer's Power Word: Shield on
+      // a teammate turned the healer into the target of every hit it absorbed
+      // (kill-attempt focus, burst-ledger target, off-target damage). An event
+      // stored before `victimId` existed has only the shield owner to offer.
+      const victimId =
+        event.victimId && event.victimId !== "0000000000000000"
+          ? event.victimId
+          : event.srcId;
+      const isPetDest = isPetOrGuardian(victimId, allUnits);
       return {
         spellId: String(event.spellId),
         spellName: event.spellName,
         timestamp: event.timestamp,
         srcUnitId: event.attackerId,
         srcUnitName: event.destName,
-        destUnitId: event.srcId,
-        destUnitName: event.srcName,
+        destUnitId: victimId,
+        // GladAbsorbEvent carries no victim name (srcName is the shield
+        // owner, destName the attacker), so it comes from the roster.
+        destUnitName:
+          victimId === event.srcId
+            ? event.srcName
+            : (allUnits?.[victimId]?.name ?? ""),
         amount: event.absorbedAmount,
         effectiveAmount: isPetDest ? 0 : event.absorbedAmount,
         absorbedAmount: event.absorbedAmount,
+        // the hit's own spell (`spellId` is the shield) — a DoT tick a
+        // shield ate is still a tick (`holderFirstOwnActionAfterMs`)
+        ...attackSpellFields(event),
         spellSchoolId: getSpellSchoolId(event.eventName, event.params),
         logLine: {
           event: event.eventName as LogEvent,
@@ -351,11 +462,10 @@ function convertUnit(
         destUnitId: event.destId,
         destUnitName: event.destName,
         amount: -event.amount,
-        effectiveAmount: isPetDest
-          ? -0
-          : -(event.effectiveAmount - (event.absorbed ?? 0)),
+        effectiveAmount: isPetDest ? -0 : -hpLost(event),
         ...overkillField(event),
         spellSchoolId: getSpellSchoolId(event.eventName, event.params),
+        ...damageSchoolField(event),
         logLine: {
           event: event.eventName as LogEvent,
           timestamp: event.timestamp,
@@ -463,7 +573,33 @@ function convertUnit(
   const missesOut: IMissEvent[] = (unit.missesOut ?? []).map(convertMiss);
   const missesIn: IMissEvent[] = (unit.missesIn ?? []).map(convertMiss);
 
+  const convertEmpower = (
+    event: NonNullable<GladUnit["empowerEnds"]>[number],
+  ): IEmpowerEvent => ({
+    spellId: String(event.spellId),
+    spellName: event.spellName,
+    timestamp: event.timestamp,
+    ...unitFlagFields(event.params),
+    srcUnitId: event.srcId,
+    srcUnitName: event.srcName,
+    destUnitId: event.destId,
+    destUnitName: event.destName,
+    level: event.level,
+    logLine: {
+      event: event.eventName as LogEvent,
+      timestamp: event.timestamp,
+      parameters: convertParams(event.params),
+      lineIndex: event.lineIndex,
+    },
+  });
   const empowerEnds: IEmpowerEvent[] = (unit.empowerEnds ?? []).map(
+    convertEmpower,
+  );
+  // Absent on documents stored before the parser kept them: stay undefined
+  // ("unknown"), never [] ("this unit held no empower").
+  const empowerInterrupts: IEmpowerEvent[] | undefined =
+    unit.empowerInterrupts?.map(convertEmpower);
+  const empowerStarts: ISpellEvent[] | undefined = unit.empowerStarts?.map(
     (event) => ({
       spellId: String(event.spellId),
       spellName: event.spellName,
@@ -473,7 +609,6 @@ function convertUnit(
       srcUnitName: event.srcName,
       destUnitId: event.destId,
       destUnitName: event.destName,
-      level: event.level,
       logLine: {
         event: event.eventName as LogEvent,
         timestamp: event.timestamp,
@@ -562,6 +697,7 @@ function convertUnit(
     srcUnitName: event.srcName,
     destUnitId: event.destId,
     destUnitName: event.destName,
+    ...powerCostFields(event),
     logLine: {
       event: event.eventName as LogEvent,
       timestamp: event.timestamp,
@@ -600,6 +736,7 @@ function convertUnit(
     srcUnitName: event.srcName,
     destUnitId: event.destId,
     destUnitName: event.destName,
+    ...powerCostFields(event),
     logLine: {
       event: event.eventName as LogEvent,
       timestamp: event.timestamp,
@@ -672,6 +809,8 @@ function convertUnit(
     missesOut,
     missesIn,
     empowerEnds,
+    ...(empowerStarts ? { empowerStarts } : {}),
+    ...(empowerInterrupts ? { empowerInterrupts } : {}),
   };
 }
 
@@ -762,6 +901,7 @@ export function toLegacyMatch(m: GladMatch): IArenaMatch {
     playerTeamId: m.playerTeamId != null ? String(m.playerTeamId) : null,
     result: resultToLegacy(m.result),
     winningTeamId: m.winningTeamId != null ? String(m.winningTeamId) : null,
+    ...(m.teamMmr !== undefined ? { teamMmr: m.teamMmr } : {}),
     rawLines: m.rawLines,
     durationInSeconds: (m.endTime - m.startTime) / 1000,
     hasAdvancedLogging: m.hasAdvancedLogging,
@@ -802,6 +942,7 @@ export function toLegacyShuffle(s: GladShuffle): IShuffleMatch {
       result: resultToLegacy(round.result),
       winningTeamId:
         round.winningTeamId != null ? String(round.winningTeamId) : null,
+      ...(round.teamMmr !== undefined ? { teamMmr: round.teamMmr } : {}),
       rawLines: round.rawLines,
       durationInSeconds: (round.endTime - round.startTime) / 1000,
       hasAdvancedLogging: round.hasAdvancedLogging,

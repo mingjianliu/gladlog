@@ -134,6 +134,7 @@ describe("externalDamage — damage kept on a target under an ally-applied exter
       nPeriodic: 10_000,
       dAll: 120_000,
       preDirect: 50_000,
+      prePeriodic: 0,
       kind: "continues",
     });
     expect(o!.X).toBeCloseTo(83.33, 1);
@@ -145,17 +146,23 @@ describe("externalDamage — damage kept on a target under an ally-applied exter
     );
   });
 
-  it("an ally without a direct hit in the PRE_HIT_S before the application does not qualify", () => {
+  it("an ally without a hit on the target in the PRE_HIT_S before the application does not qualify", () => {
     const e1 = enemy("E1", psOn("E1"));
     const late = ally("A2", [
       dmg(LogEvent.SPELL_DAMAGE, 20 - EXTERNAL_DAMAGE_PRE_HIT_S - 0.5, "E1", 50_000),
       dmg(LogEvent.SPELL_DAMAGE, 22, "E1", 30_000),
     ]);
+    expect(externalDamageObservations(e1, [late], [e1], combat)).toEqual([]);
+  });
+
+  it("F-E14 (A30, 2026-09-30): a periodic hit in the PRE_HIT_S qualifies — a DoT ticking is the ally hitting the target", () => {
+    const e1 = enemy("E1", psOn("E1"));
     const dotOnly = ally("A3", [
-      dmg(LogEvent.SPELL_PERIODIC_DAMAGE, 19, "E1", 50_000), // periodic pre-hit does not qualify
+      dmg(LogEvent.SPELL_PERIODIC_DAMAGE, 19, "E1", 50_000),
       dmg(LogEvent.SPELL_DAMAGE, 22, "E1", 30_000),
     ]);
-    expect(externalDamageObservations(e1, [late, dotOnly], [e1], combat)).toEqual([]);
+    const [o] = externalDamageObservations(e1, [dotOnly], [e1], combat);
+    expect(o).toMatchObject({ allyId: "A3", preDirect: 0, prePeriodic: 50_000, nDirect: 30_000 });
   });
 
   it("a qualifying ally with no damage on anyone in the window is the 'empty' shape", () => {
@@ -188,7 +195,7 @@ describe("externalDamage — damage kept on a target under an ally-applied exter
     });
     const a1 = ally("A1", [
       dmg(LogEvent.SPELL_DAMAGE, 19, "E1", 40_000),
-      dmg(LogEvent.SPELL_DAMAGE, 21, "E1", 1), // a fully absorbed hit leaves an effective −1
+      dmg(LogEvent.SPELL_DAMAGE, 21, "E1", 1), // a fully absorbed hit: its damage row is the ≈ 0 health it removed
       dmg(LogEvent.SPELL_DAMAGE, 25, "E3", 20_000),
     ]);
     const [o] = externalDamageObservations(e1, [a1], [e1, enemy("E3")], combat);
@@ -197,6 +204,33 @@ describe("externalDamage — damage kept on a target under an ally-applied exter
     expect(o).toMatchObject({ nDirect: 1, nPeriodic: 0, dAll: 20_001, absorbed: 55_000, K: 2, M: 8, kind: "stops" });
     expect(formatDuringExternal(o!, (n) => n)).toBe(
       "A1 0k on target (+55k absorbed) · 0% of their enemy-player damage · direct 0k / periodic 0k · damage in 2 of 8 s · longest gap 4 s",
+    );
+  });
+
+  it("FT-T02b:Time Dilation 推迟的部分不算 absorbed,单独写 deferred,仍算有伤害的秒", () => {
+    const row = (atS: number, amt: number, shieldId: string): any => ({
+      spellId: shieldId,
+      spellName: shieldId === "357170" ? "Time Dilation" : "Power Word: Shield",
+      srcUnitId: "E2",
+      srcUnitName: "E2",
+      destUnitId: "E1",
+      destUnitName: "E1",
+      attackerId: "A1",
+      absorbedAmount: amt,
+      timestamp: ms(atS),
+      logLine: { event: LogEvent.SPELL_ABSORBED, timestamp: ms(atS), parameters: [] },
+    });
+    const e1 = makeUnit("E1", {
+      spec: CombatUnitSpec.Hunter_Marksmanship,
+      reaction: CombatUnitReaction.Hostile,
+      auraEvents: psOn("E1"),
+      absorbsIn: [row(21.0, 30_000, "357170"), row(23.5, 25_000, "17")],
+    });
+    const a1 = ally("A1", [dmg(LogEvent.SPELL_DAMAGE, 19, "E1", 40_000)]);
+    const [o] = externalDamageObservations(e1, [a1], [e1], combat);
+    expect(o).toMatchObject({ absorbed: 25_000, deferred: 30_000, K: 2 });
+    expect(formatDuringExternal(o!, (n) => n)).toContain(
+      "A1 0k on target (+25k absorbed, +30k deferred)",
     );
   });
 
@@ -222,9 +256,18 @@ describe("externalDamage — damage kept on a target under an ally-applied exter
       deathRecords: [{ timestamp: ms(24.6) }],
     });
     const [o] = externalDamageObservations(e1, [a1], [e1], combat);
-    expect(o).toMatchObject({ wFrom: 20, wTo: 24, M: 4 });
+    // the aura's own span, cut at the death (24.6 s): seconds 20–24 touched
+    expect(o).toMatchObject({ wFrom: 20, wTo: 24.6, M: 5 });
     const dead = makeUnit("A1", { spec: CombatUnitSpec.Warrior_Arms, damageOut: a1.damageOut, deathRecords: [{ timestamp: ms(23.2) }] });
     const [o2] = externalDamageObservations(enemy("E1", psOn("E1")), [dead], [enemy("E1")], combat);
-    expect(o2).toMatchObject({ wFrom: 20, wTo: 23, M: 3 });
+    expect(o2).toMatchObject({ wFrom: 20, wTo: 23.2, M: 4 });
+  });
+
+  // round-3 audit D31 (46a55085 0:15): the press second is inside the window
+  it("a hit in the aura's first (press) second counts", () => {
+    const a1 = ally("A1", [dmg(LogEvent.SPELL_DAMAGE, 19, "E1", 40_000), dmg(LogEvent.SPELL_DAMAGE, 20.5, "E1", 30_000)]);
+    const [o] = externalDamageObservations(enemy("E1", psOn("E1", "E2", 20.03, 28.04)), [a1], [enemy("E1")], combat);
+    expect(o!.nDirect).toBe(30_000);
+    expect(o!.M).toBe(9);
   });
 });

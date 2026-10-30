@@ -5,11 +5,11 @@
 import {
   buildDeepDivePack,
   buildDeepDivePrompt,
+  ensureAnalysisData,
   extractCandidateFindings,
   type Finding,
   isHealerSpec,
   specToString,
-  ensureAnalysisData,
 } from "@gladlog/analysis";
 import { GladLogParser, type GladMatch } from "@gladlog/parser";
 import { CombatUnitReaction, toLegacyMatch } from "@gladlog/parser-compat";

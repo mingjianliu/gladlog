@@ -1,32 +1,96 @@
 /**
  * [BUFF FADED] (F70, B31) — the owner's cooldown buffs ending, tagged with the
- * cause (own shapeshift / ended early / expired / estimated) so the model does
- * not invent a dispel for a buff that simply ran out (B129).
+ * cause (own shapeshift / dispelled / stolen / its target died / absorb used
+ * up / its debuff off its target / ended early / expired / estimated) so the model does not invent a
+ * dispel for a buff that simply ran out (B129) nor miss one the log shows
+ * (FT-T08 step 3).
  *
  * Cut out of buildMatchTimeline verbatim (GH #116); the body is unchanged, only
  * its closure inputs now arrive through `ctx`. Output is pinned by the 605-file
  * acceptanceCapture context hash.
  */
+import { HEAL_ABSORB_SELF_SAVE_IDS } from "../../utils/healAbsorbSave";
 import { fmtTime } from "../../utils/renderGrid";
 import type { TimelineCtx } from "./ctx";
 
 export function emitBuffFadedEntries(
-  ctx: Pick<TimelineCtx, "cdExpiryEvents" | "addEntry">,
+  ctx: Pick<TimelineCtx, "cdExpiryEvents" | "addEntry" | "actorLabel">,
 ): void {
-  const { cdExpiryEvents, addEntry } = ctx;
+  const { cdExpiryEvents, addEntry, actorLabel } = ctx;
+  const k = (n: number) => `${Math.round(n / 1000)}k`;
 
   for (const expiry of cdExpiryEvents) {
+    // B15a step 2: Death Pact's aura is the heal absorb it leaves on its
+    // caster, not a buff — "ended early" there means the absorb was eaten,
+    // and the press line already says how it ended.
+    if (HEAL_ABSORB_SELF_SAVE_IDS.has(expiry.spellId)) continue;
+    // User ruling 2026-10-11: a buff the round ended on did not fade in the
+    // round — it gets no line, neither `expired` / `ended early` for the
+    // strip that follows a round (1–2 s after its ending death; F02b) nor a
+    // `still up` label. A line here is a buff that ended inside the round.
+    if (expiry.cause === "round_end") continue;
     // B129: tag the fade cause so the model does not invent a dispel for a buff that simply expired,
     // and can tell a consumed absorb (ended early) from an expired one. "(estimated)" is retained for
     // expiries inferred from duration (no removal event logged).
+    // FT-T08 step 3: a dispel, a steal, the holder's death and an absorb
+    // running out are in the log — they are stated, not offered as one of
+    // three guesses. "ended early" is what is left when none of them is.
+    const a = expiry.absorb;
+    // what it absorbed is the log's absorb lines; what was left is the
+    // amount on its REMOVED line
+    const took = a
+      ? `${k(a.absorbed)} absorbed${a.left ? `, ${k(a.left)} left` : ""}`
+      : "";
+    const by = expiry.endedBy
+      ? `${actorLabel(expiry.endedBy.unitName, "enemy", expiry.endedBy.unitId)}'s ${expiry.endedBy.spellName}`
+      : "";
+    // A dispel line the log cannot tie to this copy is stated next to
+    // whatever else the line reads from the removal — the death, the empty
+    // shield — never dropped behind it (codex post-hoc review of step 3a).
+    const unclear = expiry.dispelUnclear
+      ? "; a dispel of this spell is logged at that moment — not which copy it took"
+      : "";
     const causeNote =
-      expiry.cause === "form_shift"
-        ? " (ended by your own shapeshift)"
-        : expiry.cause === "ended_early"
-          ? " (ended early — absorbed, dispelled, or cancelled)"
-          : expiry.isEstimated
-            ? " (expired, estimated)"
-            : " (expired)";
+      expiry.cause === "death"
+        ? ` (removed at your death${unclear})`
+        : expiry.cause === "target_death"
+          ? ` (its target died${unclear})`
+          : expiry.cause === "target_debuff_off"
+            ? // F02a: Touch of Karma's shield goes when its debuff leaves the
+              // enemy it was cast on (their immunity, a dispel of it …) — the
+              // log shows the two removals in one ms, not what took it off
+              ` (ended early — its debuff came off ${actorLabel(expiry.lostOn!.unitName, "enemy", expiry.lostOn!.unitId)} at that moment${took ? `; ${took}` : ""}${unclear})`
+            : expiry.cause === "dispelled"
+              ? ` (dispelled by ${by}${took ? `; ${took}` : ""})`
+              : expiry.cause === "stolen"
+                ? ` (stolen by ${by}${took ? `; ${took}` : ""})`
+                : expiry.cause === "form_shift"
+                  ? ` (ended by your own shapeshift${unclear})`
+                  : expiry.cause === "broken"
+                    ? // WO6 #3: the BROKEN line names the breaking spell
+                      // and, mostly, who cast it
+                      ` (broken by ${expiry.brokenBy!.unitName ? `${actorLabel(expiry.brokenBy!.unitName, "enemy", expiry.brokenBy!.unitId)}'s ` : ""}${expiry.brokenBy!.spellName}${took ? `; ${took}` : ""}${unclear})`
+                    : expiry.cause === "absorbed"
+                      ? ` (used up — absorbed ${k(a!.absorbed)}${unclear})`
+                      : expiry.cause === "charges_spent"
+                        ? ` (used up — its charges spent${unclear})`
+                        : expiry.dispelUnclear
+                          ? ` (a dispel of this spell is logged at that moment — not which copy it took${took ? `; ${took}` : ""})`
+                          : expiry.cause === "ended_early" &&
+                              expiry.endedByOwnPress
+                            ? ` (ended by your own ${expiry.endedByOwnPress}${took ? `; ${took}` : ""})`
+                            : expiry.cause === "ended_early" &&
+                                expiry.channelStoppedAfterS !== undefined
+                              ? ` (ended early — the channel stopped after ${expiry.channelStoppedAfterS.toFixed(1)}s${took ? `; ${took}` : ""})`
+                              : expiry.cause === "ended_early"
+                                ? took
+                                  ? ` (ended early — ${took}; no dispel logged)`
+                                  : " (ended early — no dispel logged)"
+                                : expiry.isEstimated
+                                  ? " (expired, estimated)"
+                                  : took
+                                    ? ` (expired; ${took})`
+                                    : " (expired)";
     addEntry(
       expiry.expiresAtSeconds,
       `${fmtTime(expiry.expiresAtSeconds)}  [BUFF FADED]   ${expiry.spellName}${causeNote}`,

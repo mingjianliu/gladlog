@@ -69,7 +69,8 @@ interface CcSpan {
  * (ring + drain bar). CC detection = analyzePlayerCCAndTrinket, the same
  * predicate the prompt's [CC ON TEAM] lines and the death recap consume —
  * interval ends are log ground truth (aura apply→remove), so a trinket break
- * shortens the bar exactly where it shortened the CC.
+ * shortens the bar exactly where it shortened the CC; one still on when the
+ * round ended stops at the round's end, as its prompt line does.
  */
 export function deriveCcSpans(source: ReportSource): Record<string, CcSpan[]> {
   try {
@@ -77,11 +78,6 @@ export function deriveCcSpans(source: ReportSource): Record<string, CcSpan[]> {
     const players = Object.values(legacy.units).filter((u) => u.info);
     if (players.length === 0) return {};
     const allUnits = Object.values(legacy.units);
-    const combatLike = {
-      startTime: legacy.startTime,
-      endTime: legacy.endTime,
-      startInfo: { zoneId: legacy.startInfo.zoneId },
-    };
 
     const out: Record<string, CcSpan[]> = {};
     for (const p of players) {
@@ -90,12 +86,11 @@ export function deriveCcSpans(source: ReportSource): Record<string, CcSpan[]> {
       const oppPets = allUnits.filter(
         (u) => u.ownerId && oppIds.has(u.ownerId),
       );
-      const summary = analyzePlayerCCAndTrinket(
-        p,
-        opponents,
-        combatLike,
-        oppPets,
-      );
+      // The round itself, as the prompt and keyMoments.ts hand it: the
+      // function reads the round's end off it (`roundEndMs`), so the span of
+      // a control still on at a Solo Shuffle round's ending death stops at
+      // the death, not at its removal logged up to 2 s later.
+      const summary = analyzePlayerCCAndTrinket(p, opponents, legacy, oppPets);
       const span = (
         i: { atSeconds: number; durationSeconds: number } & {
           spellId: string;
@@ -157,6 +152,7 @@ export function deriveFocusFire(
     const units = Object.values(legacy.units);
     const players = units.filter((u) => u.info);
     const playerIds = new Set(players.map((p) => p.id));
+    const reactionOf = new Map(players.map((p) => [p.id, p.reaction]));
     // Pets/guardians → owner (focus fire counts heads by player)
     const ownerOf = new Map<string, string>();
     for (const u of units) {
@@ -169,6 +165,10 @@ export function deriveFocusFire(
       for (const d of victim.damageIn) {
         const src = ownerOf.get(d.srcUnitId) ?? d.srcUnitId;
         if (!playerIds.has(src) || src === victim.id) continue;
+        // a hostile player only — a teammate's redistribution (Tempered in
+        // Battle, Spirit Link) is no attacker (codex R6C-07 #4; the side is
+        // the roster's, COMBATANT_INFO-team based since PV458)
+        if (reactionOf.get(src) === victim.reaction) continue;
         if (Math.abs(d.effectiveAmount) <= 0) continue;
         const sec = Math.floor((d.logLine.timestamp - legacy.startTime) / 1000);
         let set = bySecond.get(sec);

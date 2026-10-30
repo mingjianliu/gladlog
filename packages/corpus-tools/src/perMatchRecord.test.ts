@@ -1,7 +1,6 @@
+import { ensureHeroTalents } from "@gladlog/analysis";
 import { CombatUnitReaction, CombatUnitSpec } from "@gladlog/parser-compat";
 import { describe, expect, it } from "vitest";
-
-import { ensureHeroTalents } from "@gladlog/analysis";
 
 import type { KeystoneGate } from "./keystoneGates";
 import { combatToRecords } from "./perMatchRecord";

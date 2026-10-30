@@ -1,4 +1,4 @@
-/* eslint-disable no-console */
+ 
 /**
  * A3 fixture-coverage corpus (verifiability roadmap): curate a **minimum
  * covering set** out of the full log collection and freeze it as the golden
@@ -19,12 +19,11 @@
  *   npx tsx packages/eval/scripts/coverageCorpus.ts --manifest <...> --check
  */
 
+import { isHealerSpec, specToString } from "@gladlog/analysis";
+import { GladLogParser, type GladMatchBase } from "@gladlog/parser";
+import type { CombatUnitSpec } from "@gladlog/parser-compat";
 import fs from "fs-extra";
 import path from "path";
-
-import { isHealerSpec, specToString } from "@gladlog/analysis";
-import type { CombatUnitSpec } from "@gladlog/parser-compat";
-import { GladLogParser, type GladMatchBase } from "@gladlog/parser";
 
 import { resolveEvalHome } from "../src/evalHome";
 

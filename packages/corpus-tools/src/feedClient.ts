@@ -227,8 +227,8 @@ export async function downloadLogText(
 // The upstream no longer serves the feed anonymously: `latestMatches` needs a
 // Battle.net session ("Sign in with Battle.net to view matches."), the log
 // bucket is private, and raw logs are handed out through `logDownloadUrl`
-// as a 10-minute V4 signed URL charged against a flat quota of 15 distinct
-// logs per user per UTC day (their `accessLimits.ts`; admins exempt, a
+// as a 10-minute V4 signed URL charged against a flat quota of distinct
+// logs per user per UTC day (15, raised to 30 on 2026-10-20; their `accessLimits.ts`; admins exempt, a
 // `blocked` profile tag refuses everything). This is the interface their own
 // web client uses — we consume it as offered and never around it:
 // docs/DATA-COMPLIANCE.md §2.
@@ -328,7 +328,7 @@ export interface LogDownloadGrant {
   expiresAt: number;
   /** Distinct logs charged to this user today, after this grant. */
   downloadsUsedToday: number;
-  /** The flat daily quota (15 as of 2026-09-13). */
+  /** The flat daily quota (15 as of 2026-09-13, 30 since 2026-10-20). */
   downloadsQuota: number;
 }
 
@@ -339,7 +339,7 @@ const LOG_GRANT_QUERY = `query GetLogDownloadUrl($matchId: String!) {
 /**
  * Ask for a signed download URL. **The quota is charged here, not at
  * download time**: a grant whose download then fails has still cost one of
- * the day's 15 (re-requesting the same id the same day is free, so the
+ * the day's quota (re-requesting the same id the same day is free, so the
  * retry is cheap — but do request the grant immediately before downloading,
  * never in a batch ahead of time; the URL dies in 10 minutes).
  *

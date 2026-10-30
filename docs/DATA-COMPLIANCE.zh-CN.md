@@ -34,7 +34,7 @@ Kirkland WA;联络 `privacy@wowarenalogs.com`;维护者渠道为其
 带 Battle.net 登录态 cookie(2026-09-13 起),`latestMatches(...)` 带服务端
 `bracket` / `minRating` / `compQueryString` 过滤,分页 cap 50,最近 1 小时的场次
 不可见;随后通过 `logDownloadUrl(matchId)` 取原始日志 —— 它返回一个 10 分钟有效的
-V4 签名地址,并**从每账号每 UTC 日 15 个不同日志的额度里扣一个**(他们的
+V4 签名地址,并**从每账号每 UTC 日 30 个不同日志的额度里扣一个**(2026-10-20 前是 15 个,对方上调;他们的
 `accessLimits.ts`:固定值,无分档;`admin` 标签豁免,`blocked` 标签全拒)。这就是
 他们自己的前端在用的接口,额度也是他们定的 —— 我们按对方给的用,单账号,服务端说停
 就停。2026-09-08 之前同一个 feed 是匿名的、`logObjectUrl` 可以直接公开 GET;那个
@@ -212,9 +212,9 @@ scraping reason in the daily log limit message」;2026-09-15 对线上 API 实�
 - **定向抽样在额度内、单个登录账号上继续。** `packages/corpus-tools/scripts/fetchPvpLogs.ts` 现在用操作者
   自己的会话 cookie,每次下载前一刻才申请 grant,每场之后打印服务端返回的
   `downloadsUsedToday / downloadsQuota`,服务端一拒(`LOG_QUOTA_EXCEEDED`)就停 ——
-  从不在本地自己猜计数,服务端的计数器就是谓词。一天十五场够做专精/分数抽样,离语料
+  从不在本地自己猜计数,服务端的计数器就是谓词。一天三十场够做专精/分数抽样,离语料
   差得远,这个尺寸是对的。每日例行(`npm run logs:daily`,launchd 每天本地 21:00 一次)
-  先拿 10 盘 Solo Shuffle,3v3 补满剩下的,全部 2100+;当天额度已满再起一次不发任何请求。会话 cookie 是凭据,放在所有仓库之外(默认
+  先拿 20 盘 Solo Shuffle,3v3 补满剩下的(10 盘),全部 2100+;当天额度已满再起一次不发任何请求。会话 cookie 是凭据,放在所有仓库之外(默认
   `~/.gladlog/wal-session-cookie`)。
 
 2026-09-08 的裁定(「不重试、不找别的入口、不挂调度」)对十五场以上的一切仍然有效。

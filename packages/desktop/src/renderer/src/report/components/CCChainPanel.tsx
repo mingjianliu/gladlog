@@ -1,6 +1,5 @@
-import { useState } from "react";
-
 import { DR_LEVEL_LABEL, fmtTime } from "@gladlog/analysis";
+import { useState } from "react";
 
 import { classColor } from "../data/gameConstants";
 import type { CCChainRow } from "../derive/ccChainDash";

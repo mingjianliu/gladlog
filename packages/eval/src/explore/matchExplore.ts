@@ -32,12 +32,12 @@ import {
   cdAvailableAt,
   cdIsProcOnly,
   cdMaybeAvailableAt,
+  cdRealisedSecondsUntilReady,
   cdSecondsUntilReady,
   detectHealingGaps,
   distanceBetween,
   drinkingSegments,
   extractMajorCooldowns,
-  selfCastNoopAnnotatedName,
   fmtTime,
   formatHealingGapsForContext,
   getHpPercentAtTime,
@@ -48,9 +48,8 @@ import {
   isHealerSpec,
   LOS_SWEEP_GAP_MS,
   MANA_PRESSURE_LOW_PCT,
-  manaAt,
-  oomWindows,
   type RawStreams,
+  selfCastNoopAnnotatedName,
   specToString,
   toRenderSecond,
 } from "@gladlog/analysis";
@@ -62,6 +61,8 @@ import {
   getUnitRawPositionAtTime,
   hasLineOfSight,
 } from "@gladlog/analysis/src/utils/losAnalysis";
+import { oomWindowsOf } from "@gladlog/analysis/src/utils/rawStreams";
+import { manaSeriesOf } from "@gladlog/analysis/src/utils/resourceAt";
 import type { ICombatUnit } from "@gladlog/parser-compat";
 
 import { type LegacyRound, overviewLines, splitTeams } from "./storeAccess";
@@ -86,13 +87,22 @@ function allPlayers(legacy: LegacyRound): ICombatUnit[] {
 function remainingNote(cd: IMajorCooldownInfo, tt: number): string {
   const latest = Math.max(0, Math.round(cdSecondsUntilReady(cd, tt)));
   if (cdMaybeAvailableAt(cd, tt)) return `可能已好,最多还剩 ${latest}s`;
-  if (cd.earliestCooldownSeconds !== undefined) {
-    const soonest = Math.max(
-      0,
-      Math.round(cdSecondsUntilReady(cd, tt, cd.earliestCooldownSeconds)),
-    );
-    if (soonest < latest) return `还剩 ${soonest}–${latest}s`;
-  }
+  // an event-reduced press (Storm Conduit) is combat-shortened too: its real
+  // return is the low end, as the [RES] row prints it (codex 40-FT-82: the
+  // explorer said 还剩 175s beside the row's (165–175s))
+  const realised = Math.max(
+    0,
+    Math.round(cdRealisedSecondsUntilReady(cd, tt)),
+  );
+  const floored =
+    cd.earliestCooldownSeconds === undefined
+      ? realised
+      : Math.max(
+          0,
+          Math.round(cdSecondsUntilReady(cd, tt, cd.earliestCooldownSeconds)),
+        );
+  const soonest = Math.min(realised, floored);
+  if (soonest < latest) return `还剩 ${soonest}–${latest}s`;
   return `还剩 ${latest}s`;
 }
 
@@ -383,9 +393,11 @@ function resolveUnitByName(players: ICombatUnit[], query: string): ICombatUnit {
  * never counts as a reversal on its own — it just continues whatever trend
  * was already running.
  */
-function manaKeyPoints(samples: RawStreams["manaSamples"]): typeof samples {
+function manaKeyPoints(
+  samples: readonly RawStreams["manaSamples"][number][],
+): RawStreams["manaSamples"] {
   if (samples.length === 0) return [];
-  const points: typeof samples = [samples[0]!];
+  const points: RawStreams["manaSamples"] = [samples[0]!];
   let trend = 0; // sign of the most recent nonzero step
   for (let i = 1; i < samples.length; i++) {
     const diff = samples[i]!.mana - samples[i - 1]!.mana;
@@ -432,26 +444,38 @@ export function manaLines(
     return lines;
   }
 
-  // `manaAt`'s contract is strictly at-or-before `toTT` (the literal render
-  // instant, not "anything that floors into the same second") — a raw
-  // sample timestamped e.g. 20.3s is EXCLUDED from `manaAt(..., 20)` even
-  // though `toRenderSecond(20.3) === 20`, because at the instant "0:20"
-  // itself that sample hadn't happened yet. This can make the terminal
-  // headline read slightly earlier than the LAST key point printed below
-  // (which uses the floor-inclusive `inWindow` filter) when a sample lands
-  // in the same render second but after `toTT`'s literal boundary — this is
-  // correct render-grid behavior (CLAUDE.md), not a bug: "@toTT" means "as
-  // of that instant", and a same-second-but-later sample is future info
-  // relative to it.
-  const terminal = manaAt(rawStreams, unit.id, toTT);
+  // One mana series, from the source the product's own sampler reads
+  // (`manaSeriesOf`: the unit's advanced samples; the cast-only raw pass only
+  // when those carry no mana) — triage other F-OT. All three outputs below
+  // walk it; reading `rawStreams.manaSamples` cut the terminal reading, the
+  // key points and the OOM windows off at the unit's last cast.
+  const series = manaSeriesOf(unit, {
+    rawStreams,
+    matchStartMs: legacy.startTime,
+  });
+
+  // The terminal reading is strictly at-or-before `toTT` (the literal render
+  // instant, not "anything that floors into the same second") — a sample
+  // timestamped e.g. 20.3s is EXCLUDED from "@0:20" even though
+  // `toRenderSecond(20.3) === 20`, because at the instant "0:20" itself that
+  // sample hadn't happened yet. This can make the terminal headline read
+  // slightly earlier than the LAST key point printed below (which uses the
+  // floor-inclusive `inWindow` filter) when a sample lands in the same render
+  // second but after `toTT`'s literal boundary — this is correct render-grid
+  // behavior (CLAUDE.md), not a bug: "@toTT" means "as of that instant", and
+  // a same-second-but-later sample is future info relative to it.
+  let terminal: (typeof series)[number] | undefined;
+  for (const sample of series) {
+    if (sample.tSeconds > toTT) break;
+    terminal = sample;
+  }
   lines.push(
     terminal
       ? `终局蓝量(@${fmtTime(toTT)}): ${terminal.mana}/${terminal.manaMax}`
       : `终局蓝量(@${fmtTime(toTT)}): 无样本`,
   );
 
-  const inWindow = rawStreams.manaSamples.filter((s) => {
-    if (s.unitGuid !== unit.id) return false;
+  const inWindow = series.filter((s) => {
     const tt = toRenderSecond(s.tSeconds);
     return tt >= fromTT && tt <= toTT;
   });
@@ -469,7 +493,7 @@ export function manaLines(
     }
   }
 
-  const windows = oomWindows(rawStreams, unit.id, MANA_PRESSURE_LOW_PCT)
+  const windows = oomWindowsOf(series, MANA_PRESSURE_LOW_PCT)
     .map((w) => ({
       fromTT: toRenderSecond(w.fromS),
       toTT: toRenderSecond(w.toS),
@@ -620,10 +644,9 @@ function flagStr(argv: string[], name: string): string | undefined {
  * individual `*Lines` functions directly — so the two never drift on how a
  * subcommand's flags are parsed or validated. Pure: no I/O of its own, never
  * exits the process; illegal input always throws `Error("usage: …")`.
- * `rawStreams` is optional and only consulted by `mana`/`drink` — every
- * caller that never touches those two subcommands (all of `buildSession.ts`'s
- * existing evidence lines, today) can go on passing two arguments exactly as
- * before.
+ * `rawStreams` is optional and only consulted by `mana`/`drink`; both callers
+ * (the CLI and `buildSession.ts`'s prescreen) load it through
+ * `storeAccess.ts`'s `rawStreamsForRound` for exactly those two subcommands.
  */
 export function runQuery(
   legacy: LegacyRound,

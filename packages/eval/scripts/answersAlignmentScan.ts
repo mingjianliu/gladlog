@@ -16,6 +16,9 @@ import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
 
+import { ensureAnalysisData } from "@gladlog/analysis";
+
+import { resolveEvalHome } from "../src/evalHome.js";
 import {
   type AlignedRow,
   joinAnswers,
@@ -26,8 +29,6 @@ import type {
   ReviewAnswers,
   ReviewSession,
 } from "../src/explore/reviewTypes.js";
-import { resolveEvalHome } from "../src/evalHome.js";
-import { ensureAnalysisData } from "@gladlog/analysis";
 
 // Prompt builders read the background-loaded talent / spell-name tables
 // (data/ensure.ts contract) — without this the first combats are degraded.

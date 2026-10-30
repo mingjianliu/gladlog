@@ -1,12 +1,20 @@
 import { ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 import { describe, expect, it } from "vitest";
 
-import { afterShuffleRoundEnd } from "../src/analysis/candidateFindings";
-import { cdHoardedEvents } from "../src/analysis/candidates/cooldownTiming";
+import {
+  afterShuffleRoundEnd,
+  dropCdHoardedBesideExternalUnused,
+} from "../src/analysis/candidateFindings";
+import {
+  cdHoardedEvents,
+  ownerFreeSpan,
+} from "../src/analysis/candidates/cooldownTiming";
 import {
   actWindowFor,
   couldRespondFor,
+  stunLetsPress,
 } from "../src/utils/cannotCastIntervals";
+import { REACTION_WINDOW_S } from "../src/utils/cooldowns";
 
 describe("afterShuffleRoundEnd — Solo Shuffle ends at the first player death (W1a)", () => {
   const units = [
@@ -65,7 +73,9 @@ const cd = () => ({
 });
 
 describe("cdHoardedEvents — owner feasibility (W1a)", () => {
-  const run = (couldRespond?: (fromS: number, toS: number) => boolean) =>
+  const run = (
+    couldRespond?: (fromS: number, toS: number, spellId?: string) => boolean,
+  ) =>
     cdHoardedEvents(
       [{ crisisUnit: MATE, own: false, points: [point(60)] }],
       [cd()],
@@ -81,13 +91,34 @@ describe("cdHoardedEvents — owner feasibility (W1a)", () => {
     expect(run(() => false)).toHaveLength(0);
   });
 
-  it("asks about the same window 'spent' uses: [t − 1.5 s, t + 5 s]", () => {
-    const seen: Array<[number, number]> = [];
-    run((a, b) => {
-      seen.push([a, b]);
+  it("asks about the span ownerFreeS prints: [t, t + 5 s] — once per ready cooldown (FT-T10, I05)", () => {
+    const seen: Array<[number, number, string | undefined]> = [];
+    run((a, b, spellId) => {
+      seen.push([a, b, spellId]);
       return true;
     });
-    expect(seen).toEqual([[58.5, 65]]);
+    expect(seen).toEqual([[60, 65, "33206"]]);
+    expect(ownerFreeSpan(60)).toEqual({ fromS: 60, toS: 65 });
+  });
+
+  it("FT-T10: a cooldown the owner could not press is not named; with none left the row is gone", () => {
+    const two = (
+      couldRespond: (a: number, b: number, id?: string) => boolean,
+    ) =>
+      cdHoardedEvents(
+        [{ crisisUnit: OWNER, own: true, points: [point(60)] }],
+        [cd(), { ...cd(), spellId: "47788", spellName: "Guardian Spirit" }],
+        OWNER,
+        undefined,
+        undefined,
+        undefined,
+        couldRespond,
+      );
+    // locked out of one cooldown's school only: the other is still named
+    const one = two((_a, _b, id) => id !== "33206");
+    expect(one).toHaveLength(1);
+    expect(one[0]!.facts!.readyCds).toBe("Guardian Spirit");
+    expect(two(() => false)).toHaveLength(0);
   });
 
   it("without the callback (no combat clock) the old behaviour stands", () => {
@@ -284,5 +315,682 @@ describe("cdHoardedEvents — ownerCc / ownerFreeS facts (H1)", () => {
   it("the free seconds stop at the round end, like the gate", () => {
     const act = actWindowFor(owner, new Set(["e"]), T0, at(62));
     expect(act.stateIn(58.5, 65, 60)!.freeAfterS).toBeCloseTo(1.375, 3);
+  });
+});
+
+// I05 (user ruling 2026-10-11, option b): the owner gate counts the span
+// `facts.ownerFreeS` prints — from the crisis second on — so a row can no
+// longer state less free time than the gate asked for.
+describe("cdHoardedEvents — the owner gate and ownerFreeS read one span (I05)", () => {
+  const T0 = 1_000_000;
+  const at = (s: number) => T0 + s * 1000;
+  // Hammer of Justice (853) on the owner
+  const stunned = (fromS: number, toS: number, deathS?: number) =>
+    ({
+      id: "h",
+      auraEvents: [
+        {
+          spellId: "853",
+          spellName: "Hammer of Justice",
+          srcUnitId: "e",
+          timestamp: at(fromS),
+          logLine: { event: LogEvent.SPELL_AURA_APPLIED },
+        },
+        {
+          spellId: "853",
+          spellName: "Hammer of Justice",
+          srcUnitId: "e",
+          timestamp: at(toS),
+          logLine: { event: LogEvent.SPELL_AURA_REMOVED },
+        },
+      ],
+      actionIn: [],
+      deathRecords: deathS === undefined ? [] : [{ timestamp: at(deathS) }],
+    }) as unknown as ICombatUnit;
+  const run = (u: ICombatUnit, casts: { timeSeconds: number }[] = []) => {
+    const act = actWindowFor(u, new Set(["e"]), T0);
+    return cdHoardedEvents(
+      [{ crisisUnit: MATE, own: false, points: [point(60)] }],
+      [{ ...cd(), casts, neverUsed: casts.length === 0 }],
+      OWNER,
+      undefined,
+      undefined,
+      undefined,
+      act.couldRespond,
+      undefined,
+      act.stateIn,
+    );
+  };
+
+  it("free only BEFORE the crisis second → no row (3b56ac97 r4 @79: stunned +0.75…+5.76 s)", () => {
+    // 1.5 s free before t and 0.75 s after it: the old window passed this
+    // and printed ownerFreeS=0.8
+    expect(run(stunned(60.75, 65.761))).toHaveLength(0);
+    // stunned from before t to the end of the window (ownerFreeS=0.0)
+    expect(run(stunned(59.6, 65.6))).toHaveLength(0);
+  });
+
+  it("REACTION_WINDOW_S free after the crisis second → the row, and it says so", () => {
+    const [e] = run(stunned(61, 65.5));
+    expect(e!.facts!.ownerCc).toBe("Hammer of Justice +1.0…+5.5s");
+    expect(e!.facts!.ownerFreeS).toBe("1.0");
+    // 1 ms short of it
+    expect(run(stunned(60.999, 65.5))).toHaveLength(0);
+  });
+
+  it("the window after t cut by the owner's death counts the same on both sides", () => {
+    // dies 1.4 s after t, free until then
+    const [e] = run(stunned(50, 51, 61.4));
+    expect(e!.facts!.windowS).toBe("1.4");
+    // dies 0.9 s after t: under REACTION_WINDOW_S of playable time
+    expect(run(stunned(50, 51, 60.9))).toHaveLength(0);
+  });
+
+  it("every row the gate lets through prints ownerFreeS ≥ REACTION_WINDOW_S (sweep)", () => {
+    let rows = 0;
+    for (let from = 58; from <= 66; from += 0.137)
+      for (const len of [0.4, 1.2, 3, 4.6, 6.5]) {
+        const u = stunned(from, from + len);
+        const act = actWindowFor(u, new Set(["e"]), T0);
+        const span = ownerFreeSpan(60);
+        const state = act.stateIn(58.5, span.toS, span.fromS, ["33206"])!;
+        // one count behind the gate and the fact
+        expect(act.couldRespond(span.fromS, span.toS, "33206")).toBe(
+          state.freeAfterS >= REACTION_WINDOW_S,
+        );
+        const out = run(u);
+        expect(out.length).toBe(state.freeAfterS >= REACTION_WINDOW_S ? 1 : 0);
+        for (const e of out) {
+          rows++;
+          if (e.facts!.ownerFreeS !== undefined)
+            expect(Number(e.facts!.ownerFreeS)).toBeGreaterThanOrEqual(
+              REACTION_WINDOW_S,
+            );
+        }
+      }
+    expect(rows).toBeGreaterThan(50);
+  });
+
+  it("the response set is not the gate's span: a press 1 s before t still answers the crisis", () => {
+    // free owner, Pain Suppression pressed at t − 1.0
+    const free = { ...stunned(10, 11) } as ICombatUnit;
+    expect(run(free)).toHaveLength(1);
+    expect(run(free, [{ timeSeconds: 59 }])).toHaveLength(0);
+  });
+});
+
+// I05 (user ruling 2026-10-11, option c): `ownerFreeS` asks of each stun on
+// the owner whether the game lets a stunned player press THAT cooldown
+// (`usableWhileStunned`, the product's one predicate — rulings U-T1 / U-T1b).
+describe("stunLetsPress — which interval a named cooldown is pressable through (I05 c)", () => {
+  const stun = (spellId: string) => ({ spellId, lockout: false });
+  const HOJ = "853"; // Hammer of Justice — Holy
+  const KIDNEY = "408"; // Kidney Shot — Physical
+  const NO_TALENTS = new Set<string>();
+
+  it("the immunity-purge route of U-T1 and DB2's allow-while-stunned bit, through a stun only", () => {
+    for (const id of ["642", "45438", "48792", "33206"])
+      expect(stunLetsPress(stun(HOJ), id, {})).toBe(true);
+    // not through a fear, a silence, or a kick lockout
+    expect(stunLetsPress(stun("8122"), "48792", {})).toBe(false);
+    expect(stunLetsPress(stun("1330"), "48792", {})).toBe(false);
+    // nor through an incapacitate: Quaking Palm was filed as a stun until
+    // 2026-10-13 and let Pain Suppression / Guardian Spirit through (codex
+    // review 45-FT-102); War Stomp, the racial that IS a stun, still does
+    for (const id of ["33206", "47788", "48792"])
+      expect(stunLetsPress(stun("107079"), id, {})).toBe(false);
+    expect(stunLetsPress(stun("20549"), "33206", {})).toBe(true);
+    expect(stunLetsPress({ spellId: "2139", lockout: true }, "48792", {})).toBe(
+      false,
+    );
+    // nor through a stun that sits on a pet
+    expect(stunLetsPress({ ...stun(HOJ), onPetId: "Pet-1" }, "48792", {})).toBe(
+      false,
+    );
+  });
+
+  it("a cooldown the table does not admit stays blocked — Blink is withheld by U-T1b", () => {
+    expect(stunLetsPress(stun(HOJ), "98008", {})).toBe(false); // Spirit Link Totem
+    expect(stunLetsPress(stun(HOJ), "1953", {})).toBe(false); // Blink
+  });
+
+  it("Blessing of Protection: on oneself, and only out of a stun its school covers", () => {
+    expect(stunLetsPress(stun(KIDNEY), "1022", { onSelf: true })).toBe(true);
+    expect(stunLetsPress(stun(HOJ), "1022", { onSelf: true })).toBe(false);
+    expect(stunLetsPress(stun(KIDNEY), "1022", { onSelf: false })).toBe(false);
+    expect(stunLetsPress(stun(KIDNEY), "1022", {})).toBe(false);
+  });
+
+  it("the conditional layer reads the unit's PvP talents (Transcendence: Transfer needs Eminence)", () => {
+    expect(
+      stunLetsPress(stun(HOJ), "119996", { pvpTalentIds: NO_TALENTS }),
+    ).toBe(false);
+    expect(
+      stunLetsPress(stun(HOJ), "119996", {
+        pvpTalentIds: new Set(["353584"]),
+      }),
+    ).toBe(true);
+  });
+});
+
+describe("cdHoardedEvents — ownerFreeS reads a stun per named cooldown (I05 c)", () => {
+  const T0 = 1_000_000;
+  const at = (s: number) => T0 + s * 1000;
+  const aura = (
+    spellId: string,
+    spellName: string,
+    s: number,
+    on: boolean,
+  ) => ({
+    spellId,
+    spellName,
+    srcUnitId: "e",
+    timestamp: at(s),
+    logLine: {
+      event: on ? LogEvent.SPELL_AURA_APPLIED : LogEvent.SPELL_AURA_REMOVED,
+    },
+  });
+  const unit = (auras: ReturnType<typeof aura>[]) =>
+    ({
+      id: "h",
+      auraEvents: auras,
+      actionIn: [],
+      deathRecords: [],
+    }) as unknown as ICombatUnit;
+  // 11346ea9 r1 @51: Shockwave on an Unholy Death Knight +0.83…+2.84 s
+  const shockwave = unit([
+    aura("132168", "Shockwave", 60.829, true),
+    aura("132168", "Shockwave", 62.844, false),
+  ]);
+  const save = (spellId: string, spellName: string) => ({
+    spellId,
+    spellName,
+    tag: "Defensive",
+    cooldownSeconds: 180,
+    casts: [] as { timeSeconds: number }[],
+    neverUsed: true,
+  });
+  const IBF = save("48792", "Icebound Fortitude");
+  const AMS = save("48707", "Anti-Magic Shell");
+  const BOP = save("1022", "Blessing of Protection");
+  const run = (
+    u: ICombatUnit,
+    cds: ReturnType<typeof save>[],
+    opts: { own?: boolean; stunPressable?: boolean } = {},
+  ) => {
+    const own = opts.own ?? true;
+    const act = actWindowFor(
+      u,
+      new Set(["e"]),
+      T0,
+      undefined,
+      undefined,
+      opts.stunPressable === false ? undefined : { pvpTalentIds: new Set() },
+    );
+    return cdHoardedEvents(
+      [{ crisisUnit: own ? OWNER : MATE, own, points: [point(60)] }],
+      cds,
+      OWNER,
+      undefined,
+      undefined,
+      undefined,
+      act.couldRespond,
+      undefined,
+      act.stateIn,
+    );
+  };
+
+  it("Icebound Fortitude under a Shockwave: the stun stays named, the 2 s count (ownerFreeS 3.0 → 5.0)", () => {
+    const [e] = run(shockwave, [IBF]);
+    expect(e!.facts!.ownerCc).toBe("Shockwave +0.8…+2.8s");
+    expect(e!.facts!.ownerFreeS).toBe("5.0");
+    // the reading every other caller of actWindowFor still gets
+    const [old] = run(shockwave, [IBF], { stunPressable: false });
+    expect(old!.facts!.ownerFreeS).toBe("3.0");
+  });
+
+  it("a cooldown a stunned player cannot press keeps the stun counted", () => {
+    const [e] = run(shockwave, [AMS]);
+    expect(e!.facts!.ownerFreeS).toBe("3.0");
+  });
+
+  it("several ready cooldowns: one number, the time AT LEAST ONE of them could be pressed (the FT-T10 quantifier)", () => {
+    const [e] = run(shockwave, [AMS, IBF]);
+    expect(e!.facts!.readyCds).toBe("Anti-Magic Shell; Icebound Fortitude");
+    expect(e!.facts!.ownerFreeS).toBe("5.0");
+  });
+
+  it("only a stun: a fear over the same seconds still counts against Icebound Fortitude", () => {
+    const feared = unit([
+      aura("8122", "Psychic Scream", 60.829, true),
+      aura("8122", "Psychic Scream", 62.844, false),
+    ]);
+    const [e] = run(feared, [IBF]);
+    expect(e!.facts!.ownerFreeS).toBe("3.0");
+    // and a fear on top of the stun keeps its own seconds
+    const both = unit([
+      aura("132168", "Shockwave", 60.829, true),
+      aura("8122", "Psychic Scream", 61.5, true),
+      aura("8122", "Psychic Scream", 62.5, false),
+      aura("132168", "Shockwave", 62.844, false),
+    ]);
+    const [b] = run(both, [IBF]);
+    expect(b!.facts!.ownerFreeS).toBe("4.0");
+  });
+
+  it("Blessing of Protection: out of a Kidney Shot on one's own crisis only", () => {
+    const kidney = unit([
+      aura("408", "Kidney Shot", 60.829, true),
+      aura("408", "Kidney Shot", 62.844, false),
+    ]);
+    const [own] = run(kidney, [BOP]);
+    expect(own!.facts!.ownerFreeS).toBe("5.0");
+    // pressed on a teammate it does not get the paladin out of the stun
+    const [mate] = run(kidney, [BOP], { own: false });
+    expect(mate!.facts!.ownerFreeS).toBe("3.0");
+    // Hammer of Justice is Holy: not covered
+    const hoj = unit([
+      aura("853", "Hammer of Justice", 60.829, true),
+      aura("853", "Hammer of Justice", 62.844, false),
+    ]);
+    const [holy] = run(hoj, [BOP]);
+    expect(holy!.facts!.ownerFreeS).toBe("3.0");
+  });
+
+  it("the gate reads it too: stunned through the whole span, a stun-pressable cooldown is named, another is not", () => {
+    const whole = unit([
+      aura("853", "Hammer of Justice", 59.9, true),
+      aura("853", "Hammer of Justice", 65.5, false),
+    ]);
+    // Icebound Fortitude could be pressed for all 5 s
+    const [e] = run(whole, [IBF]);
+    expect(e!.facts!.readyCds).toBe("Icebound Fortitude");
+    expect(e!.facts!.ownerCc).toBe("Hammer of Justice -0.1…+5.5s");
+    expect(e!.facts!.ownerFreeS).toBe("5.0");
+    // Anti-Magic Shell could not: no row for it alone, and it is not named
+    // next to the one that could
+    expect(run(whole, [AMS])).toHaveLength(0);
+    const [both] = run(whole, [AMS, IBF]);
+    expect(both!.facts!.readyCds).toBe("Icebound Fortitude");
+    // without the reading (every other caller of actWindowFor): no row
+    expect(run(whole, [AMS, IBF], { stunPressable: false })).toHaveLength(0);
+    // a teammate's crisis, Blessing of Protection: the stun on the paladin
+    // is not purged by a press on someone else
+    const kidney = unit([
+      aura("408", "Kidney Shot", 59.9, true),
+      aura("408", "Kidney Shot", 65.5, false),
+    ]);
+    expect(run(kidney, [BOP], { own: false })).toHaveLength(0);
+    expect(run(kidney, [BOP])).toHaveLength(1);
+  });
+
+  it("direction: the reading only ADDS — every row without it is a row with it, each cooldown still named", () => {
+    let added = 0;
+    for (let from = 58; from <= 66; from += 0.31)
+      for (const len of [0.6, 2, 4.2, 6.5]) {
+        const u = unit([
+          aura("853", "Hammer of Justice", from, true),
+          aura("853", "Hammer of Justice", from + len, false),
+        ]);
+        const withIt = run(u, [IBF, AMS]);
+        const without = run(u, [IBF, AMS], { stunPressable: false });
+        for (const o of without) {
+          const w = withIt.find((e) => e.id === o.id);
+          expect(w).toBeDefined();
+          for (const name of o.facts!.readyCds!.split("; "))
+            expect(w!.facts!.readyCds).toContain(name);
+        }
+        added += withIt.length - without.length;
+      }
+    expect(added).toBeGreaterThan(0);
+  });
+
+  it("gate and fact are one count per cooldown (sweep, stun-pressable and not)", () => {
+    for (let from = 58; from <= 66; from += 0.137)
+      for (const len of [0.4, 1.2, 3, 4.6, 6.5])
+        for (const cd of [IBF, AMS]) {
+          const u = unit([
+            aura("853", "Hammer of Justice", from, true),
+            aura("853", "Hammer of Justice", from + len, false),
+          ]);
+          const act = actWindowFor(
+            u,
+            new Set(["e"]),
+            T0,
+            undefined,
+            undefined,
+            { pvpTalentIds: new Set() },
+          );
+          const span = ownerFreeSpan(60);
+          const free = act.stateIn(
+            58.5,
+            span.toS,
+            span.fromS,
+            [cd.spellId],
+            true,
+          )!.freeAfterS;
+          expect(act.couldRespond(span.fromS, span.toS, cd.spellId, true)).toBe(
+            free >= REACTION_WINDOW_S,
+          );
+          const out = run(u, [cd]);
+          expect(out).toHaveLength(free >= REACTION_WINDOW_S ? 1 : 0);
+          for (const e of out)
+            if (e.facts!.ownerFreeS !== undefined)
+              expect(Number(e.facts!.ownerFreeS)).toBeGreaterThanOrEqual(
+                REACTION_WINDOW_S,
+              );
+        }
+  });
+});
+
+// Triage 2026-09-29 F-H2 / F-H5 / F-H7 / F-H9, user rulings 2026-09-30
+// (R1 = B, R3 = A, R4 = B, R5 = B): facts only, the verdict is unchanged.
+describe("cdHoardedEvents — signed 09-30 facts", () => {
+  const T0 = 1_000_000;
+  const at = (s: number) => T0 + s * 1000;
+  const stunned = (fromS: number, toS: number, deathS?: number) =>
+    ({
+      id: "h",
+      auraEvents: [
+        {
+          spellId: "119381",
+          spellName: "Leg Sweep",
+          srcUnitId: "e",
+          timestamp: at(fromS),
+          logLine: { event: LogEvent.SPELL_AURA_APPLIED },
+        },
+        {
+          spellId: "119381",
+          spellName: "Leg Sweep",
+          srcUnitId: "e",
+          timestamp: at(toS),
+          logLine: { event: LogEvent.SPELL_AURA_REMOVED },
+        },
+      ],
+      actionIn: [],
+      deathRecords: deathS === undefined ? [] : [{ timestamp: at(deathS) }],
+    }) as unknown as ICombatUnit;
+  const run = (
+    u: ICombatUnit,
+    extra: {
+      rawStreams?: unknown;
+      teamLedgers?: Parameters<typeof cdHoardedEvents>[9];
+    } = {},
+  ) => {
+    const act = actWindowFor(u, new Set(["e"]), T0);
+    return cdHoardedEvents(
+      [{ crisisUnit: MATE, own: false, points: [point(60)] }],
+      [cd()],
+      OWNER,
+      undefined,
+      extra.rawStreams as never,
+      [],
+      act.couldRespond,
+      undefined,
+      act.stateIn,
+      extra.teamLedgers,
+    );
+  };
+
+  it("F-H2: rejected presses carry their offsets and the free seconds after the last one", () => {
+    const rawStreams = {
+      available: true,
+      manaSamples: [],
+      castFailed: [58.6, 59.4].map((tSeconds) => ({
+        tSeconds,
+        unitGuid: "h",
+        spellId: 33206,
+        spellName: "Pain Suppression",
+        reason: "Can't do that while stunned",
+      })),
+    };
+    const [e] = run(stunned(58, 59.8), { rawStreams });
+    expect(e!.facts!.attempted).toContain("under crowd control×2");
+    expect(e!.facts!.attemptedAt).toBe("-1.4…-0.6s");
+    // free from the 59.8 stun end to 65: 5.2 s
+    expect(e!.facts!.freeAfterAttemptS).toBe("5.2");
+  });
+
+  it("F-H2: freeAfterAttemptS is floored so 0.96 s never renders as 1.0 (the legend threshold)", () => {
+    const rawStreams = {
+      available: true,
+      manaSamples: [],
+      castFailed: [
+        {
+          tSeconds: 64.04,
+          unitGuid: "h",
+          spellId: 33206,
+          spellName: "Pain Suppression",
+          reason: "Can't do that while stunned",
+        },
+      ],
+    };
+    const [e] = run(stunned(50, 51), { rawStreams });
+    expect(e!.facts!.freeAfterAttemptS).toBe("0.9");
+  });
+
+  it("F-H5: windowS only when the owner's death (or the round end) cuts the 5 s", () => {
+    const [short] = run(stunned(50, 51, 61.4));
+    expect(short!.facts!.windowS).toBe("1.4");
+    const [full] = run(stunned(50, 51));
+    expect(full!.facts!.windowS).toBeUndefined();
+  });
+
+  it("F-H7 / F-H9: the crisis unit's own save and another teammate's ally save are stated, not credited", () => {
+    const save = (spellId: string, spellName: string, s: number) => ({
+      spellId,
+      spellName,
+      tag: "Defensive",
+      cooldownSeconds: 180,
+      casts: [{ timeSeconds: s }],
+      neverUsed: false,
+    });
+    const out = run(stunned(50, 51), {
+      teamLedgers: [
+        { unit: OWNER, cds: [cd()] },
+        { unit: MATE, cds: [save("45438", "Ice Block", 61.1)] },
+        {
+          unit: { id: "p", name: "Priest-R" },
+          cds: [save("47788", "Guardian Spirit", 60.2)],
+        },
+      ],
+    });
+    expect(out).toHaveLength(1);
+    expect(out[0]!.facts!.crisisUnitSaved).toBe("Ice Block +1.1s");
+    expect(out[0]!.facts!.teamAnswered).toBe(
+      "Guardian Spirit (Priest-R) +0.2s",
+    );
+  });
+
+  it("fix 11 (work order 2026-10-14b): a ready cooldown pressed in the next 5 s after the window is pressedLate", () => {
+    const u = stunned(50, 51);
+    const act = actWindowFor(u, new Set(["e"]), T0);
+    const late = (s: number) => ({
+      ...cd(),
+      casts: [{ timeSeconds: s, targetName: "Mate-R" }],
+      neverUsed: false,
+    });
+    const emit = (s: number) =>
+      cdHoardedEvents(
+        [{ crisisUnit: MATE, own: false, points: [point(60)] }],
+        [late(s)],
+        OWNER,
+        undefined,
+        undefined,
+        [],
+        act.couldRespond,
+        undefined,
+        act.stateIn,
+      );
+    // 0068182d's shape: +5.8 s, just outside the 5 s window
+    expect(emit(65.8)[0]!.facts!.pressedLate).toBe(
+      "Pain Suppression → Mate-R +5.8s",
+    );
+    // beyond the next 5 s: not stated
+    expect(emit(70.5)[0]!.facts!.pressedLate).toBeUndefined();
+  });
+
+  it("fix 7 (work order 2026-10-14b): Alter Time's return is listed, and a save broken right after is marked", () => {
+    const save = (spellId: string, spellName: string, s: number) => ({
+      spellId,
+      spellName,
+      tag: "Defensive",
+      cooldownSeconds: 120,
+      casts: [{ timeSeconds: s }],
+      neverUsed: false,
+    });
+    const [e] = run(stunned(50, 51), {
+      teamLedgers: [
+        {
+          unit: MATE,
+          cds: [save("110959", "Greater Invisibility", 60.4)],
+          // 138e632d: the snap-back at +0.1 s
+          returns: [{ atS: 60.1, name: "Alter Time (return)" }],
+          // b12bfef4: a Moonfire broke the invisibility 0.54 s later
+          brokenAtS: (spellId: string, castS: number) =>
+            spellId === "110959" && castS === 60.4 ? 60.94 : null,
+        },
+      ],
+    });
+    expect(e!.facts!.crisisUnitSaved).toBe(
+      "Alter Time (return) +0.1s; Greater Invisibility +0.4s (broken +0.9s)",
+    );
+  });
+
+  it("F-H7 / F-H9: an ally save aimed at someone else is not listed; a self wall aimed at an enemy is (it lands on its caster)", () => {
+    const save = (
+      spellId: string,
+      spellName: string,
+      s: number,
+      targetName?: string,
+    ) => ({
+      spellId,
+      spellName,
+      tag: "Defensive",
+      cooldownSeconds: 180,
+      casts: [{ timeSeconds: s, targetName }],
+      neverUsed: false,
+    });
+    const [e] = run(stunned(50, 51), {
+      teamLedgers: [
+        {
+          unit: MATE,
+          cds: [save("363916", "Obsidian Scales", 61.1, "Enemy-R")],
+        },
+        {
+          unit: { id: "p", name: "Priest-R" },
+          cds: [save("47788", "Guardian Spirit", 60.2, "Other-R")],
+        },
+      ],
+    });
+    expect(e!.facts!.crisisUnitSaved).toBe("Obsidian Scales +1.1s");
+    expect(e!.facts!.teamAnswered).toBeUndefined();
+  });
+
+  it("F-H7: an own=yes line never carries crisisUnitSaved", () => {
+    const act = actWindowFor(stunned(50, 51), new Set(["e"]), T0);
+    const [e] = cdHoardedEvents(
+      [{ crisisUnit: OWNER, own: true, points: [point(60)] }],
+      [{ ...cd(), spellId: "45438", spellName: "Ice Block" }],
+      OWNER,
+      undefined,
+      undefined,
+      [],
+      act.couldRespond,
+      undefined,
+      act.stateIn,
+      [
+        {
+          unit: OWNER,
+          cds: [
+            {
+              spellId: "22812",
+              spellName: "Barkskin",
+              tag: "Defensive",
+              cooldownSeconds: 60,
+              casts: [{ timeSeconds: 70 }],
+              neverUsed: false,
+            },
+          ],
+        },
+      ],
+    );
+    expect(e?.facts?.crisisUnitSaved).toBeUndefined();
+  });
+});
+
+// F-H21 (triage 2026-09-29, ruling 2026-09-30 R11 = B): one decision, one
+// card — external-unused stays, the cd-hoarded card for the same victim
+// within 5 s of the death goes (ba8c0510 :47 / :48)
+describe("dropCdHoardedBesideExternalUnused", () => {
+  const ev = (type: string, t: number, facts: Record<string, string>) =>
+    ({ id: `${type}:${t}`, type, t, unitNames: [], facts }) as never;
+  it("drops the same victim's cd-hoarded within 5 s, keeps the rest", () => {
+    const out = dropCdHoardedBesideExternalUnused([
+      ev("external-unused", 48, { victim: "Zug-R" }),
+      ev("cd-hoarded", 47, { crisisUnit: "Zug-R" }),
+      ev("cd-hoarded", 30, { crisisUnit: "Zug-R" }),
+      ev("cd-hoarded", 46, { crisisUnit: "Other-R" }),
+    ]) as Array<{ id: string }>;
+    expect(out.map((e) => e.id)).toEqual([
+      "external-unused:48",
+      "cd-hoarded:30",
+      "cd-hoarded:46",
+    ]);
+  });
+  it("the death's fractional instant is compared on the render grid (48.9 vs 43 → 5 s)", () => {
+    const out = dropCdHoardedBesideExternalUnused([
+      ev("external-unused", 48.9, { victim: "Zug-R" }),
+      ev("cd-hoarded", 43, { crisisUnit: "Zug-R" }),
+      ev("cd-hoarded", 42, { crisisUnit: "Zug-R" }),
+    ]) as Array<{ id: string }>;
+    expect(out.map((e) => e.id)).toEqual([
+      "external-unused:48.9",
+      "cd-hoarded:42",
+    ]);
+  });
+  it("no external-unused on the menu (e.g. 2v2) → nothing removed", () => {
+    const menu = [ev("cd-hoarded", 47, { crisisUnit: "Zug-R" })];
+    expect(dropCdHoardedBesideExternalUnused(menu)).toBe(menu);
+  });
+});
+
+// F-H6 (ruling 2026-09-30 A8): an unaffordable cooldown is not named ready;
+// unknown (null) does not gate; the response set is untouched
+describe("cdHoardedEvents — ownerAffordable (F-H6)", () => {
+  const run = (afford: (id: string) => boolean | null) =>
+    cdHoardedEvents(
+      [{ crisisUnit: MATE, own: false, points: [point(60)] }],
+      [cd()],
+      OWNER,
+      undefined,
+      undefined,
+      [],
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      (spellId, fromS, toS) => {
+        expect([fromS, toS]).toEqual([60, 65]);
+        return afford(spellId);
+      },
+    );
+  it("false → not ready → no line", () => {
+    expect(run(() => false)).toHaveLength(0);
+  });
+  it("null (unknown) or true → the line stands", () => {
+    expect(run(() => null)).toHaveLength(1);
+    expect(run(() => true)).toHaveLength(1);
+  });
+});
+
+// F-H10 (ruling 2026-09-30 A9-1): Emerald Communion is a save — its press
+// answers a teammate crisis and it can be named ready for one
+describe("Emerald Communion 370960 (F-H10)", () => {
+  it("reaches another unit and counts as a team save", async () => {
+    const { canHelpAnotherUnit, isTeamSaveCD } =
+      await import("../src/utils/cooldowns");
+    expect(canHelpAnotherUnit("370960", "Defensive")).toBe(true);
+    expect(isTeamSaveCD("370960")).toBe(true);
   });
 });

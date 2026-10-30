@@ -1,4 +1,4 @@
-/* eslint-disable no-console */
+ 
 /**
  * CLI: Check judge calibration
  *
@@ -24,8 +24,8 @@
  *   tsx packages/eval/scripts/checkCalibration.ts --run <runId>
  */
 
-import { checkCalibration } from "../src/judge/checkCalibration";
 import { resolveEvalHome, runDir } from "../src/evalHome";
+import { checkCalibration } from "../src/judge/checkCalibration";
 
 // ── Argument parsing ──────────────────────────────────────────────────────────
 

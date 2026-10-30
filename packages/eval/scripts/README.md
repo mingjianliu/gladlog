@@ -2,7 +2,7 @@
 
 _English-only developer index, regenerated 2026-09-26 from the file set; `lib/` holds the shared CLI helpers, `archive/` the retired one-off probes (see `archive/README.md`). Grouped by name suffix; a script is listed once. Run any of them with `npx tsx packages/eval/scripts/<name>.ts` from the repo root (artifacts go to `$GLADLOG_EVAL_HOME`)._
 
-## Scans (re-runnable corpus scans; the season runbook ones live in `docs/commands/update-wow-data.md` §7b) — 65
+## Scans (re-runnable corpus scans; the season runbook ones live in `docs/commands/update-wow-data.md` §7b) — 66
 
 | Script | Note |
 |---|---|
@@ -40,6 +40,7 @@ _English-only developer index, regenerated 2026-09-26 from the file set; `lib/` 
 | `hpTieScan.ts` | hpTieScan.ts — how often the `[STATE]` HP sampler has to choose between |
 | `immuneCcScan.ts` | Completeness check for the CC-immunity table, using the log's own verdict. |
 | `kickEatenCostScan.ts` | kick-eaten 代价门体检:**这条在产指控里,有多少发生在「锁了也不疼」的时刻? |
+| `kickEatenScan.ts` | kickEatenScan.ts — every enemy kick that landed on a friendly owner, one |
 | `kickLockoutScan.ts` | kickLockoutScan.ts — observed school-lockout length per kick id (GH #62). |
 | `killTierValidationScan.ts` | killTierValidationScan.ts — re-validates the kill-opportunity tier model |
 | `kwDefAdmitScan.ts` | GH #31 ② forward scan: which corpus-observed ids does the official face |

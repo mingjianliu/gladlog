@@ -8,16 +8,32 @@
  * written for that player alone (verified on the new-season archive — one GUID
  * per file). For anybody else `ownerCastCancels` returns null, never zero.
  *
+ * How a cast bar ended is ONE reading, `castBarOutcomesOf`
+ * (`castBarOutcomes.ts`; `ownerCastBarOutcomes` below is it for the recorder)
+ * — the cancels of this file, the timeline's `[CAST STOPPED]` lines (FT-T16
+ * D15 "2b") and the kick audit's juke test (FT F12) all take it. What the
+ * cancel ledger counts of it:
+ *
  * A hardcast start (castStartEvents) ends with the first of:
  *  - a same-spell SPELL_CAST_SUCCESS within JUKE_LOOKBACK_MS → completed;
  *  - a SPELL_INTERRUPT of that spell on the owner → kicked;
  *  - a SPELL_CAST_FAILED of that spell (raw streams) → cancelled when the
  *    reason is an interruption (CAST_INTERRUPTED_REASONS, every client locale
  *    the corpus shows) and no control or silence aura (ccSpellIds,
- *    officialSilenceIds) landed on the owner within CANCEL_CC_NEAR_S of it; any other reason (line of sight, range,
- *    "another action is in progress") is not a cancel.
+ *    officialSilenceIds) landed on the owner within CANCEL_CC_NEAR_S of it,
+ *    nor an enemy displacement (`DISPLACEMENT_EVIDENCE_IDS`: a knockback
+ *    moves the caster and breaks the bar — user ruling A′17, 2026-09-30:
+ *    "被敌方位移(台风等)打断的读条不算骗踢"), nor did the owner die within
+ *    it (dying writes the same row — FT I11), and the row is before the
+ *    round's end (`isCancelInRound`); any other reason (line of sight,
+ *    range, "another action is in progress") is not a cancel.
  * The window for all three is the next start or JUKE_LOOKBACK_MS, whichever is
- * first — the cast-bar pairing rule `kickAudit` uses.
+ * first (`kickAudit`'s cast-bar cap). A bar with none of the three there and
+ * a SUCCESS up to `CAST_QUEUE_TOLERANCE_MS` past the next bar's start is
+ * completed too (`queued`), and a key pressed again while the bar ran is not
+ * its end (`earlierFailure`) — the ledger counts every bar for what
+ * `ownerCastBarOutcomes` says of it, with no restriction of its own (see
+ * `ownerCastCancels`).
  *
  * `progressPct` = elapsed ÷ the owner's median completed duration of the same
  * spell in the round (haste included, since it is the owner's own cast time)
@@ -36,30 +52,41 @@
  * cancelled 17 % (median progress 44 %), kicked 6 %, CC'd 4 %; enemy kicks
  * baited 199 vs landed 953.
  */
-import type { AtomicArenaCombat, ICombatUnit } from "@gladlog/parser-compat";
+import {
+  type AtomicArenaCombat,
+  type ICombatUnit,
+  LogEvent,
+} from "@gladlog/parser-compat";
 
-import { ccSpellIds, officialSilenceIds } from "../data/spellTags";
-import { analyzeKickAudit, JUKE_LOOKBACK_MS } from "./kickAudit";
+import {
+  CAST_INTERRUPTED_REASONS,
+  type CastBarEnd,
+  type CastBarOutcome,
+  castBarOutcomesOf,
+  type CastBarStart,
+  castBarStartsOf,
+  completedBarMedianS,
+} from "./castBarOutcomes";
+import {
+  CANCEL_CC_NEAR_S,
+  DISPLACEMENT_EVIDENCE_IDS,
+} from "./castStopEvidence";
+import { TARGETED_CC_DODGE_SPELLS } from "./ccTrinketAnalysis";
+import { isPressOfCooldown, talentReplacementsOf } from "./cooldowns";
+import { analyzeKickAudit } from "./kickAudit";
 import type { RawStreams } from "./rawStreams";
+import { roundEndMs } from "./roundEnd";
 
-/** SPELL_CAST_FAILED reasons that mean "the cast bar was interrupted" — the
- * client writes them localized. Every entry was observed in the new-season
- * archive (605 files, 2026-09-25): Interrupted 2,781 · 被打断 322 ·
- * Interrumpido 65 · Interrompu 64 · 방해를 받아 취소되었습니다. 34 ·
- * Unterbrochen 30 · 被打斷 9 · Interrompido 9. */
-export const CAST_INTERRUPTED_REASONS: ReadonlySet<string> = new Set([
-  "Interrupted",
-  "被打断",
-  "被打斷",
-  "Interrumpido",
-  "Interrompu",
-  "방해를 받아 취소되었습니다.",
-  "Unterbrochen",
-  "Interrompido",
-]);
+// The reading of how a cast bar ended, the rows it starts from and the
+// interruption reasons live in castBarOutcomes.ts (kickAudit reads them too);
+// re-exported for this file's importers.
+export { CAST_INTERRUPTED_REASONS, castBarStartsOf };
+export type { CastBarEnd, CastBarOutcome, CastBarStart };
 
-/** A control aura this close to the failure means CC broke the cast. */
-export const CANCEL_CC_NEAR_S = 0.3;
+// CANCEL_CC_NEAR_S, DISPLACEMENT_EVIDENCE_IDS and the instants they are tested
+// against live in castStopEvidence.ts (kickAudit's stopped-channel test reads
+// them too); re-exported for this file's importers.
+export { CANCEL_CC_NEAR_S, DISPLACEMENT_EVIDENCE_IDS };
 
 /** A juked kick counts as baited by a cancel when it went out from this long
  * before the cancel (the same tick) to this long after it. */
@@ -90,6 +117,150 @@ export interface OwnerCastCancels {
   baitedKicks: BaitedKick[];
 }
 
+/**
+ * `castBarStartsOf` inside the round, both ends included. A Solo Shuffle
+ * round's units keep the lines that follow it (the gap, the next round's
+ * preparation), so "this round" has to be asked — the same bound the
+ * cooldown ledger puts on its casts. `t` is seconds since the round's start.
+ */
+export function castBarStartsInRound(
+  unit: Pick<ICombatUnit, "castStartEvents">,
+  round: {
+    startTime: number;
+    endTime: number;
+    startInfo?: { bracket?: string };
+    units?: Record<string, unknown> | ReadonlyArray<unknown>;
+  },
+): CastBarStart[] {
+  // the round's end (`roundEndMs`: a Solo Shuffle round ends at its ending
+  // death, ~2 s before the log; codex R6C-06 #3)
+  const durationS = (roundEndMs(round) - round.startTime) / 1000;
+  return castBarStartsOf(unit, round.startTime).filter(
+    (s) => s.t >= 0 && s.t <= durationS,
+  );
+}
+
+/**
+ * The bars among `starts` that are cooldown `cd`'s for this unit: a bar is
+ * the cooldown's when its completed cast would have been a press of it
+ * (`isPressOfCooldown` — the same id, the canonical id, a talent's pressable
+ * replacement, a same-named variant press such as a glyphed Hex). One answer
+ * for the kit's `[UNUSED — started N×, never finished]`
+ * (context/resourceSnapshot.ts) and CC USE's `cast bar started N×`
+ * (context/ccUse.ts), which state the same number for one spell.
+ */
+export function castBarsOfCooldown(
+  starts: readonly CastBarStart[],
+  unit: ICombatUnit,
+  cd: { spellId: string; spellName: string },
+): CastBarStart[] {
+  const replacements = talentReplacementsOf(unit);
+  return starts.filter((s) =>
+    isPressOfCooldown(
+      { spellId: s.id, logLine: { event: LogEvent.SPELL_CAST_SUCCESS } },
+      cd.spellId,
+      cd.spellName,
+      replacements,
+    ),
+  );
+}
+
+/**
+ * How each of the log owner's cast bars ended: `castBarOutcomesOf` read with
+ * the owner's own SPELL_CAST_FAILED rows — the reading behind
+ * `ownerCastCancels` (kick-eaten's cancels, the desktop kick dashboard) and
+ * the timeline's `[CAST STOPPED]` lines (FT-T16 D15 "2b",
+ * `timelineSections/castStopped.ts`). The windows, the order of the end rows
+ * and the known limit are stated there.
+ *
+ * null when the unit did not record the log (SPELL_CAST_FAILED is written for
+ * the recorder alone). Times are seconds since `startMs`, the clock of
+ * `rawStreams.castFailed`.
+ */
+export function ownerCastBarOutcomes(params: {
+  owner: ICombatUnit;
+  startMs: number;
+  rawStreams?: RawStreams;
+  /** the other side: their target-dropping presses (`dodgeMs`) */
+  enemies?: readonly ICombatUnit[];
+}): CastBarOutcome[] | null {
+  const { owner, startMs, rawStreams } = params;
+  if (!rawStreams?.available) return null;
+  const failed = rawStreams.castFailed.filter((e) => e.unitGuid === owner.id);
+  if (failed.length === 0) return null; // not the recorder
+  const dodgeMs = (params.enemies ?? []).flatMap((e) =>
+    (e.spellCastEvents ?? [])
+      .filter(
+        (c) =>
+          c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+          TARGETED_CC_DODGE_SPELLS.has(c.spellId ?? ""),
+      )
+      .map((c) => c.logLine.timestamp),
+  );
+  return castBarOutcomesOf({ unit: owner, startMs, failed, dodgeMs });
+}
+
+/**
+ * Is this bar a cancel of the round: the owner's cast bar the log shows
+ * stopped (`stopped`), with nothing that ends a cast happening to them then
+ * (`near === null`), before the round's end (`roundEndS`, seconds on the
+ * outcome's clock — `roundEndMs`). The ONE test behind the ledger's count
+ * and the `[CAST STOPPED]` line that reads "not kicked; no control, silence
+ * or knockback landed on you then" (`castStoppedText`): a stop row at or
+ * after the round's end is not the player stopping a cast in the round.
+ */
+export function isCancelInRound(
+  o: CastBarOutcome,
+  roundEndS: number,
+): o is CastBarOutcome & {
+  end: { kind: "stopped"; atS: number; near: null };
+} {
+  return (
+    o.end.kind === "stopped" && o.end.near === null && o.end.atS < roundEndS
+  );
+}
+
+/**
+ * The cancel ledger: `ownerCastBarOutcomes` counted, every bar for what that
+ * reading says of it.
+ *  - a cancel = a `stopped` bar with nothing that ends a cast happening to
+ *    the owner then (`near === null`: no control, silence or knockback
+ *    landed, and the owner did not die), stopped before the round's end
+ *    (`isCancelInRound`). For a control this is the bar whose
+ *    `[CAST STOPPED]` line reads "not kicked; no control, silence or
+ *    knockback landed on you then" (`CAST_STOPPED_NEAR_TEXT.none`): one
+ *    reading, two places. The ledger counts every cast-time spell and its
+ *    bars are not clamped to the round's START; the lines exist for controls
+ *    begun inside the round — so kick-eaten's `yourCancels` is never below
+ *    the number of those lines, and may be above it (gate:
+ *    `promptQualityCheck.checkKickEatenCancelsCoverCastStopped`);
+ *  - the median completed bar behind `progressPct` = every `completed` bar
+ *    of the spell longer than 0.2 s, a `queued` completion included;
+ *  - a baited kick = a kickAudit "juked" kick on the owner that went out into
+ *    one of those cancels.
+ *
+ * Until 2026-10-11 the ledger left two kinds of bar out of the shared reading
+ * (its 2026-09-26 code, kept when `[CAST STOPPED]` arrived so that no
+ * kick-eaten fact moved): a bar with a SPELL_CAST_FAILED of the spell before
+ * its end row (`earlierFailure`) was neither a cancel nor a completed
+ * duration, and a `queued` completion was no completed duration. A bar stopped
+ * after a repeated key press then had a `[CAST STOPPED]` line and was missing
+ * from `yourCancels`. Both are counted now (user decision 2026-10-11).
+ * Measured on the 605-match capture: 126 of 1,869 kick-eaten rows change a
+ * cast-control fact (`yourCancels`, `yourCancelMedianPct`, `baitedKicks`,
+ * `baitedThisKickerT`, `stoppedJustBefore`); no row added or removed, no
+ * context line changed.
+ *
+ * FT I11 (2026-10-11): two stops the player did not choose were cancels.
+ * A bar the owner's own death ended (0fe0e2e2: Sleep Walk begun 43.158,
+ * "Interrupted" row 43.715, the owner's UNIT_DIED 43.739) — `near` is now
+ * `death`. And a bar stopped at or after the round's end (`roundEndMs`: a
+ * Solo Shuffle round is over at its first player death, and the log runs on
+ * for ~2 s) — f0a10402 round 3: the round-ending death 103.983, the owner's
+ * Mind Control begun 104.062 and "Interrupted" 104.602, after the round.
+ *
+ * null when the unit did not record the log — never zero.
+ */
 export function ownerCastCancels(params: {
   owner: ICombatUnit;
   friends: ICombatUnit[];
@@ -98,76 +269,24 @@ export function ownerCastCancels(params: {
   rawStreams?: RawStreams;
 }): OwnerCastCancels | null {
   const { owner, friends, enemies, combat, rawStreams } = params;
-  if (!rawStreams?.available) return null;
-  const failed = rawStreams.castFailed.filter((e) => e.unitGuid === owner.id);
-  if (failed.length === 0) return null; // not the recorder
-  const start = combat.startTime;
-  const sec = (ms: number) => (ms - start) / 1000;
-  const capS = JUKE_LOOKBACK_MS / 1000;
-  const successes = (owner.spellCastEvents ?? []).filter(
-    (e) => e.logLine.event === "SPELL_CAST_SUCCESS",
-  );
-  const kicks = (owner.actionIn ?? []).filter(
-    (a) => a.logLine.event === "SPELL_INTERRUPT",
-  );
-  const ccAt = (owner.auraEvents ?? [])
-    .filter(
-      (a) =>
-        a.logLine.event === "SPELL_AURA_APPLIED" &&
-        // a silence breaks a cast bar too (codex review 2026-09-26)
-        (ccSpellIds.has(a.spellId) || officialSilenceIds.has(a.spellId)),
-    )
-    .map((a) => sec(a.timestamp));
-  const starts = (owner.castStartEvents ?? [])
-    .map((e) => ({
-      id: e.spellId ?? "",
-      name: e.spellName ?? "",
-      t: sec(e.logLine.timestamp),
-    }))
-    .sort((a, b) => a.t - b.t);
+  const starts = ownerCastBarOutcomes({
+    owner,
+    startMs: combat.startTime,
+    rawStreams,
+    enemies,
+  });
+  if (!starts) return null;
+  const roundEndS = (roundEndMs(combat) - combat.startTime) / 1000;
 
-  const completedDurations = new Map<string, number[]>();
   const pending: Array<{ id: string; name: string; t: number; failS: number }> =
     [];
-  starts.forEach((s, i) => {
-    const endS = Math.min(s.t + capS, starts[i + 1]?.t ?? Infinity);
-    // Same window for all three endings (codex review 2026-09-26: a success
-    // looked up past the next start was paired with two starts at once).
-    const done = successes.find(
-      (e) =>
-        e.spellId === s.id &&
-        sec(e.logLine.timestamp) >= s.t &&
-        sec(e.logLine.timestamp) <= endS,
-    );
-    const fail = failed.find(
-      (e) =>
-        String(e.spellId) === s.id && e.tSeconds > s.t && e.tSeconds <= endS,
-    );
-    if (done && (!fail || sec(done.logLine.timestamp) <= fail.tSeconds)) {
-      const d = sec(done.logLine.timestamp) - s.t;
-      if (d > 0.2) {
-        const list = completedDurations.get(s.id) ?? [];
-        list.push(d);
-        completedDurations.set(s.id, list);
-      }
-      return;
-    }
-    const kicked = kicks.some(
-      (a) =>
-        (a as { extraSpellId?: string }).extraSpellId === s.id &&
-        sec(a.timestamp) >= s.t &&
-        sec(a.timestamp) <= endS,
-    );
-    if (kicked || !fail) return;
-    if (!CAST_INTERRUPTED_REASONS.has(fail.reason.trim())) return;
-    if (ccAt.some((t) => Math.abs(t - fail.tSeconds) <= CANCEL_CC_NEAR_S))
-      return;
-    pending.push({ ...s, failS: fail.tSeconds });
-  });
-  const median = (id: string) => {
-    const d = [...(completedDurations.get(id) ?? [])].sort((a, b) => a - b);
-    return d.length ? d[Math.floor(d.length / 2)]! : null;
-  };
+  for (const s of starts) {
+    if (s.end.kind !== "completed" && isCancelInRound(s, roundEndS))
+      pending.push({ id: s.id, name: s.name, t: s.t, failS: s.end.atS });
+  }
+  // the round's cast time of the spell — the one reading kick depth uses
+  // (`completedBarMedianS`, D6 2026-10-24)
+  const median = (id: string) => completedBarMedianS(starts, id);
   const cancels: CastCancel[] = pending.map((p) => {
     const m = median(p.id);
     const pct = m ? Math.round(((p.failS - p.t) / m) * 100) : null;
@@ -184,12 +303,16 @@ export function ownerCastCancels(params: {
   });
 
   // A baited kick is a kickAudit "juked" kick on THIS unit (by GUID) that went
-  // out right after one of the cancels above — not any juked kick: kickAudit's
-  // own juke test only needs an uncompleted cast start, which a CC'd or
-  // line-of-sight-failed cast also satisfies (codex review 2026-09-26).
+  // out right after one of the cancels above — not any juked kick: for a unit
+  // whose SPELL_CAST_FAILED rows it is not handed, kickAudit's juke test only
+  // needs a cast start with no end row, which a CC'd or line-of-sight-failed
+  // cast also satisfies (codex review 2026-09-26). Handed the rows, it reads
+  // the owner's bars exactly as `starts` above does (one reading — a bar this
+  // ledger calls stopped is not "completed" there because the same spell
+  // went off as an instant right after).
   const baitedKicks: BaitedKick[] = [];
   for (const enemy of enemies)
-    for (const k of analyzeKickAudit(enemy, friends, combat)) {
+    for (const k of analyzeKickAudit(enemy, friends, combat, rawStreams)) {
       if (k.result !== "juked" || k.targetId !== owner.id) continue;
       // The same cast instance: it started before the kick, was stopped
       // around it, and no other cast of the owner started in between (else
@@ -215,5 +338,8 @@ export function ownerCastCancels(params: {
       });
     }
   baitedKicks.sort((a, b) => a.atSeconds - b.atSeconds);
-  return { hardcasts: starts.length, cancels, baitedKicks };
+  // the bars begun inside the round (codex R6C-02 #5: a Create Soulwell
+  // started after the Solo Shuffle round's ending death made 17 of 16)
+  const hardcasts = starts.filter((s) => s.t >= 0 && s.t <= roundEndS).length;
+  return { hardcasts, cancels, baitedKicks };
 }

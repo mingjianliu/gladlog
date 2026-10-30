@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen } from "@testing-library/react";
 import { arenaObstacles } from "@gladlog/analysis";
+import { fireEvent, render, screen } from "@testing-library/react";
 
 import { ReplayView } from "../src/renderer/src/report/components/ReplayView";
 import {

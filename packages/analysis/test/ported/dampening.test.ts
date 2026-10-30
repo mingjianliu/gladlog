@@ -1,12 +1,22 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { CombatUnitSpec, LogEvent } from "@gladlog/parser-compat";
+import {
+  CombatUnitSpec,
+  CombatUnitType,
+  LogEvent,
+} from "@gladlog/parser-compat";
 
 import {
+  buildDampeningEvents,
   computeDampening,
   computeDampeningTimeline,
+  DAMPENING_DOSE_PCT,
   dampeningDangerMultiplier,
+  dampeningForThreatWeight,
+  dampeningRulesOf,
+  firstLoggedDampening,
   formatDampeningForContext,
   getDampeningPercentage,
+  getInitialDampening,
 } from "../../src/utils/dampening";
 import { makeAuraEvent, makeUnit } from "./testHelpers";
 
@@ -35,7 +45,13 @@ describe("dampening — rule detection", () => {
       info: { teamId: "1" },
     });
 
-    expect(getDampeningPercentage("2v2", [p1, p2, p3, p4] as any, 0)).toBe(30);
+    // FT-T13 D11 (re-opens O10): this pinned 30 — the Dragonflight start the
+    // log contradicts (first stack 42 in 258 of 258 rounds). Before its first
+    // logged stack a 2v2 round states no value.
+    expect(dampeningRulesOf("2v2", [p1, p2, p3, p4] as any)).toBe("2v2");
+    expect(
+      getDampeningPercentage("2v2", [p1, p2, p3, p4] as any, 0),
+    ).toBeNull();
   });
 
   it("identifies 2v2 double DPS (B71)", () => {
@@ -47,7 +63,11 @@ describe("dampening — rule detection", () => {
       spec: CombatUnitSpec.Mage_Frost,
       info: { teamId: "1" },
     });
-    expect(getDampeningPercentage("2v2", [p1, p2] as any, 0)).toBe(10);
+    // FT-T13 D11: this pinned 10 (first stack 22 in 32 of 32 rounds of this
+    // kind). Same rule as with two healers: the start is derived from the
+    // first logged stack — and these units logged none, so none is stated.
+    expect(dampeningRulesOf("2v2", [p1, p2] as any)).toBe("2v2");
+    expect(getDampeningPercentage("2v2", [p1, p2] as any, 0)).toBeNull();
   });
 
   it("identifies 3v3 based on string or player count (B72)", () => {
@@ -60,6 +80,313 @@ describe("dampening — rule detection", () => {
       makeUnit("5"),
     ];
     expect(getDampeningPercentage("Unknown", players as any, 0)).toBe(10);
+  });
+
+  describe("FT-T13 D10: one classification, on players only", () => {
+    const healer2v2 = () => [
+      makeUnit("p1", {
+        spec: CombatUnitSpec.Priest_Discipline,
+        info: { teamId: "0" },
+      }),
+      makeUnit("p2", {
+        spec: CombatUnitSpec.Warrior_Arms,
+        info: { teamId: "0" },
+      }),
+      makeUnit("p3", {
+        spec: CombatUnitSpec.Paladin_Holy,
+        info: { teamId: "1" },
+      }),
+      makeUnit("p4", {
+        spec: CombatUnitSpec.Hunter_BeastMastery,
+        info: { teamId: "1" },
+      }),
+    ];
+    const pet = (id: string) => ({
+      ...makeUnit(id, { ownerId: "p4" }),
+      type: CombatUnitType.Pet,
+    });
+
+    it("pets, totems and guardians in the unit list do not tip a 2v2 round into the 3v3 rules", () => {
+      const players = healer2v2();
+      const withPets = [...players, pet("pet1"), pet("totem1"), pet("g1")];
+      expect(dampeningRulesOf("2v2", players as any)).toBe("2v2");
+      expect(dampeningRulesOf("2v2", withPets as any)).toBe("2v2");
+      // the same reading from both lists — the header read the first, the
+      // press lines the second. (Under the 3v3 rules it would be 10.)
+      expect(getDampeningPercentage("2v2", players as any, 0)).toBeNull();
+      expect(getDampeningPercentage("2v2", withPets as any, 0)).toBeNull();
+    });
+
+    it("a bracket string that names no bracket falls back to the PLAYER count", () => {
+      const players = healer2v2();
+      const withPets = [...players, pet("pet1"), pet("totem1")];
+      expect(dampeningRulesOf("", withPets as any)).toBe("2v2");
+      expect(dampeningRulesOf(undefined, withPets as any)).toBe("2v2");
+      expect(getDampeningPercentage("", withPets as any, 0)).toBeNull();
+      const five = [...players, makeUnit("p5")];
+      expect(dampeningRulesOf("", five as any)).toBe("3v3");
+      expect(getDampeningPercentage("", five as any, 0)).toBe(10);
+    });
+
+    it("the literal 2v2 string is not overridden by a roster count", () => {
+      const six = [...healer2v2(), makeUnit("p5"), makeUnit("p6")];
+      expect(dampeningRulesOf("2v2", six as any)).toBe("2v2");
+    });
+
+    it("one side's events, the round's roster: the bracket is classified on the roster", () => {
+      // a 3v3 round whose bracket string names no bracket (a skirmish)
+      const roster = [...healer2v2(), makeUnit("p5"), makeUnit("p6")];
+      const enemies = roster.slice(3);
+      // one side alone never counts more than four — which is why the roster
+      // is passed
+      expect(dampeningRulesOf("", enemies as any)).toBe("2v2");
+      expect(dampeningRulesOf("", roster as any)).toBe("3v3");
+      expect(getDampeningPercentage("", enemies as any, 0)).toBeNull();
+      expect(getDampeningPercentage("", enemies as any, 0, roster as any)).toBe(
+        10,
+      );
+      expect(computeDampening(0, "", enemies as any, roster as any)).toBe(0.1);
+    });
+  });
+});
+
+describe("FT-T13 D11: a 2v2 round's start is derived from its first logged stack — one dose below it", () => {
+  /** stacks 42 at 0:11, +1 every 10 s — what the log prints with two healers */
+  const doses2v2 = (untilS: number) => {
+    const out: any[] = [];
+    for (let i = 0; 11 + i * 10 <= untilS; i++) {
+      const e = makeAuraEvent(
+        LogEvent.SPELL_AURA_APPLIED_DOSE as any,
+        "110310",
+        MATCH_START + (11 + i * 10) * 1000,
+        "h",
+        "h",
+      );
+      (e.logLine as any).parameters[12] = 42 + i;
+      out.push(e);
+    }
+    return out;
+  };
+  const withStacks = () => [makeUnit("p", { auraEvents: doses2v2(120) })];
+  const noStack = () => [makeUnit("p")];
+  const at = (s: number) => MATCH_START + s * 1000;
+
+  it("the value before the first stack is that stack minus one dose (42 → 41), then the logged stack — never the 30 / 10 table", () => {
+    const p = withStacks();
+    expect(DAMPENING_DOSE_PCT).toBe(1);
+    expect(getInitialDampening("2v2", p as any)).toBe(41);
+    expect(getDampeningPercentage("2v2", p as any, at(0))).toBe(41);
+    expect(getDampeningPercentage("2v2", p as any, at(10.9))).toBe(41);
+    expect(getDampeningPercentage("2v2", p as any, at(11))).toBe(42);
+    expect(getDampeningPercentage("2v2", p as any, at(25))).toBe(43);
+    expect(computeDampening(at(5), "2v2", p as any)).toBe(0.41);
+    expect(computeDampening(at(11), "2v2", p as any)).toBe(0.42);
+    // a round that logged no stack has nothing to step back from
+    expect(getInitialDampening("2v2", noStack() as any)).toBeNull();
+    expect(getDampeningPercentage("2v2", noStack() as any, at(5))).toBeNull();
+    expect(firstLoggedDampening(p as any)).toEqual({
+      timestamp: at(11),
+      stacks: 42,
+    });
+    expect(firstLoggedDampening(noStack() as any)).toBeNull();
+  });
+
+  it("the other kind of 2v2 (first stack 22) starts at 21; a first line that is a REMOVED_DOSE is not stepped back from", () => {
+    const dose = (event: LogEvent, atS: number, stacks: number) => {
+      const e = makeAuraEvent(event as any, "110310", at(atS), "h", "h");
+      (e.logLine as any).parameters[12] = stacks;
+      return e;
+    };
+    const single = [
+      makeUnit("p", {
+        auraEvents: [dose(LogEvent.SPELL_AURA_APPLIED_DOSE, 10, 22)],
+      }),
+    ];
+    expect(getInitialDampening("2v2", single as any)).toBe(21);
+    const droppedFirst = [
+      makeUnit("p", {
+        auraEvents: [
+          dose(LogEvent.SPELL_AURA_REMOVED_DOSE, 9, 28),
+          dose(LogEvent.SPELL_AURA_APPLIED_DOSE, 19, 29),
+        ],
+      }),
+    ];
+    expect(buildDampeningEvents(droppedFirst as any)[0]).toEqual({
+      timestamp: at(9),
+      stacks: 28,
+      removed: true,
+    });
+    expect(getInitialDampening("2v2", droppedFirst as any)).toBeNull();
+    expect(
+      getDampeningPercentage("2v2", droppedFirst as any, at(5)),
+    ).toBeNull();
+    expect(getDampeningPercentage("2v2", droppedFirst as any, at(9))).toBe(28);
+    // review 40-FT-56: no start is stated, so the header does not claim one
+    // (it read `started at 29% (derived: … 28% at 0:09 …)`)
+    expect(
+      formatDampeningForContext(
+        "2v2",
+        droppedFirst as any,
+        MATCH_START,
+        at(120),
+      )[0],
+    ).toBe(
+      "DAMPENING (2v2): first logged 28% at 0:09 (a stack drop; the log prints no value before that), ended at 29% at match end",
+    );
+    // review 40-FT-57: keyed on the line being a drop, not on where the
+    // timeline's first sample sits — a drop logged at the round's first
+    // instant is still not a derived start
+    const dropAtStart = [
+      makeUnit("p", {
+        auraEvents: [
+          dose(LogEvent.SPELL_AURA_REMOVED_DOSE, 0, 28),
+          dose(LogEvent.SPELL_AURA_APPLIED_DOSE, 10, 29),
+        ],
+      }),
+    ];
+    expect(getInitialDampening("2v2", dropAtStart as any)).toBeNull();
+    expect(
+      formatDampeningForContext(
+        "2v2",
+        dropAtStart as any,
+        MATCH_START,
+        at(120),
+      )[0],
+    ).toBe(
+      "DAMPENING (2v2): first logged 28% at 0:00 (a stack drop; the log prints no value before that), ended at 29% at match end",
+    );
+  });
+
+  it("3v3 and Solo Shuffle keep their stated 10 before the first stack", () => {
+    const p = withStacks();
+    expect(getInitialDampening("3v3", p as any)).toBe(10);
+    expect(getInitialDampening("Rated Solo Shuffle", p as any)).toBe(10);
+    expect(getDampeningPercentage("3v3", p as any, at(5))).toBe(10);
+    expect(getDampeningPercentage("Rated Solo Shuffle", p as any, at(5))).toBe(
+      10,
+    );
+  });
+
+  it("the threat weight is the stated value — the derived start before the first stack — and 0 with no stack", () => {
+    const p = withStacks();
+    expect(dampeningForThreatWeight(at(5), "2v2", p as any)).toBe(0.41);
+    expect(dampeningForThreatWeight(at(25), "2v2", p as any)).toBe(0.43);
+    expect(dampeningForThreatWeight(at(5), "2v2", noStack() as any)).toBe(0);
+    // where a value is stated the weight is that value
+    expect(dampeningForThreatWeight(at(5), "3v3", p as any)).toBe(0.1);
+    expect(dampeningForThreatWeight(at(5), "3v3", noStack() as any)).toBe(0.1);
+  });
+
+  it("the 30 s timeline starts at 0 s with the derived value; empty when no stack was logged", () => {
+    const tl = computeDampeningTimeline(
+      "2v2",
+      withStacks() as any,
+      MATCH_START,
+      at(120),
+    );
+    expect(tl[0]).toEqual({ atSeconds: 0, dampening: 0.41 });
+    expect(tl[1]).toEqual({ atSeconds: 30, dampening: 0.43 });
+    expect(tl[tl.length - 1]).toEqual({ atSeconds: 120, dampening: 0.52 });
+    expect(
+      computeDampeningTimeline("2v2", noStack() as any, MATCH_START, at(8)),
+    ).toEqual([]);
+  });
+
+  it("the header states the derived start and says what it is derived from", () => {
+    const lines = formatDampeningForContext(
+      "2v2",
+      withStacks() as any,
+      MATCH_START,
+      at(120),
+    );
+    expect(lines[0]).toBe(
+      "DAMPENING (2v2): started at 41% (derived: one 1% step below the first logged stack, 42% at 0:11 — the log prints no value before that), ended at 52% at match end",
+    );
+    // 3v3's start is not derived from a stack and does not say so
+    expect(
+      formatDampeningForContext(
+        "3v3",
+        withStacks() as any,
+        MATCH_START,
+        at(120),
+      )[0],
+    ).toBe("DAMPENING (3v3): started at 10%, ended at 52% at match end");
+    expect(lines[1]).toContain("Dampening 52% at match end");
+  });
+
+  it("a 2v2 round without a logged stack says so — what the data has, no hand value and no reason", () => {
+    const lines = formatDampeningForContext(
+      "2v2",
+      noStack() as any,
+      MATCH_START,
+      at(8.7),
+    );
+    expect(lines).toEqual([
+      "DAMPENING (2v2): n/a — no dampening stack was logged in this round (8s)",
+    ]);
+  });
+
+  describe('WP-H 3: the stack count of a stored document ("42\\r", a pre-CRLF-fix parse) is read', () => {
+    // packages/desktop/test/fixtures/report-match.json is such a document: a
+    // real 15 s healer 2v2 whose four `42\r` doses sit at 12.1–15.2 s. The
+    // amount is the last field of the line, so it kept the trailing "\r" and
+    // parser-compat left it a string; read as "not a number" the round had
+    // no logged stack at all.
+    const doseWith = (raw: unknown, atS = 12) => {
+      const e = makeAuraEvent(
+        LogEvent.SPELL_AURA_APPLIED_DOSE as any,
+        "110310",
+        at(atS),
+        "h",
+        "h",
+      );
+      (e.logLine as any).parameters[12] = raw;
+      return e as any;
+    };
+    const unitWith = (...raws: unknown[]) => [
+      makeUnit("p", { auraEvents: raws.map((r, i) => doseWith(r, 12 + i)) }),
+    ];
+
+    it('trailing "\\r" / whitespace is trimmed; the value is the number', () => {
+      for (const raw of ["42\r", "42\r\n", " 42 ", "42", 42]) {
+        expect(buildDampeningEvents(unitWith(raw) as any)).toEqual([
+          { timestamp: at(12), stacks: 42 },
+        ]);
+      }
+      const p = unitWith("42\r");
+      expect(firstLoggedDampening(p as any)).toEqual({
+        timestamp: at(12),
+        stacks: 42,
+      });
+      expect(getDampeningPercentage("2v2", p as any, at(11))).toBe(41);
+      expect(getDampeningPercentage("2v2", p as any, at(13))).toBe(42);
+      expect(
+        formatDampeningForContext("2v2", p as any, MATCH_START, at(15.5)),
+      ).toEqual([
+        "DAMPENING (2v2): started at 41% (derived: one 1% step below the first logged stack, 42% at 0:12 — the log prints no value before that), ended at 42% at match end",
+        "  Dampening 42% at match end (≥40% bracket: healing received reduced by 42%).",
+      ]);
+    });
+
+    it("what is not a count is still not read", () => {
+      for (const raw of [
+        "",
+        "\r",
+        "DEBUFF",
+        "4x",
+        "-3",
+        "4.5",
+        "nil",
+        null,
+        undefined,
+      ]) {
+        expect(buildDampeningEvents(unitWith(raw) as any)).toEqual([]);
+      }
+      // a readable dose next to an unreadable one: only the readable one
+      expect(buildDampeningEvents(unitWith("DEBUFF\r", "43\r") as any)).toEqual(
+        [{ timestamp: at(13), stacks: 43 }],
+      );
+    });
   });
 });
 
@@ -78,6 +405,32 @@ describe("dampening — timeline logic", () => {
     expect(
       getDampeningPercentage("3v3", [p] as any, MATCH_START + 20_000),
     ).toBe(15);
+  });
+
+  it("FT-T08 step 4: the stack also goes down — a REMOVED_DOSE line carries the new count (95127ab4: 51 → 32 after a death)", () => {
+    const dose = (event: LogEvent, atMs: number, stacks: number) => {
+      const e = makeAuraEvent(
+        event as any,
+        "110310",
+        MATCH_START + atMs,
+        "h",
+        "h",
+      );
+      (e.logLine as any).parameters[12] = stacks;
+      return e as any;
+    };
+    const p = makeUnit("p", {
+      auraEvents: [
+        dose(LogEvent.SPELL_AURA_APPLIED_DOSE, 100_000, 51),
+        dose(LogEvent.SPELL_AURA_REMOVED_DOSE, 110_000, 32),
+        dose(LogEvent.SPELL_AURA_APPLIED_DOSE, 120_000, 33),
+      ],
+    });
+    const at = (ms: number) =>
+      getDampeningPercentage("2v2", [p] as any, MATCH_START + ms);
+    expect(at(105_000)).toBe(51);
+    expect(at(115_000)).toBe(32);
+    expect(at(125_000)).toBe(33);
   });
 
   it("builds sparse timeline with de-duplication (B74)", () => {

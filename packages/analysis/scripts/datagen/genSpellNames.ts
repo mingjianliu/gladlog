@@ -1,10 +1,10 @@
+import { writeArtifact } from "./lib/emit";
 import {
+  assertMinRows,
+  fetchTable,
   parseCsv,
   resolveBuild,
-  fetchTable,
-  assertMinRows,
 } from "./lib/wagoCsv";
-import { writeArtifact } from "./lib/emit";
 
 export function transformSpellNames(csvText: string): Record<string, string> {
   const { rows } = parseCsv(csvText);

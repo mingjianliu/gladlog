@@ -15,26 +15,27 @@
 
 import { CombatUnitReaction, LogEvent } from "@gladlog/parser-compat";
 
+import { castKeyOfAura } from "../data/castEffectAuras";
+import { buildAuraIntervals } from "../utils/auraIntervals";
 import {
   cdAvailableAt,
   cdIsProcOnly,
   cdMaybeAvailableAt,
   extractMajorCooldowns,
+  type IMajorCooldownInfo,
   isHealerSpec,
+  isPassiveProcCast,
   MAJOR_DEFENSIVE_IDS,
+  offensiveCdOfAura,
   selfCastNoopAnnotatedName,
   specToString,
-  type IMajorCooldownInfo,
-  isPassiveProcCast,
 } from "../utils/cooldowns";
-import { fmtTime } from "../utils/renderGrid";
 import { analyzeOutgoingCCChains, DR_CATEGORY_MAP } from "../utils/drAnalysis";
 import { detectHealingGaps, type IHealingGap } from "../utils/healingGaps";
 import {
   getHpPercentAtTime,
   getLowestHpPercentInWindow,
 } from "../utils/killWindowTargetSelection";
-import { buildAuraIntervals } from "../utils/auraIntervals";
 import {
   distanceBetween,
   getUnitPositionAtTime,
@@ -42,6 +43,7 @@ import {
   hasLineOfSight,
 } from "../utils/losAnalysis";
 import { INTERP_MAX_GAP_MS, LOS_SWEEP_GAP_MS } from "../utils/positionSampling";
+import { fmtTime } from "../utils/renderGrid";
 import type { PackItem } from "./deepDive";
 
 /** Short name (realm stripped): same style as deepDive's `sn()`, copied here
@@ -82,17 +84,28 @@ function roleOf(u: any, ownerName?: string): Role {
  *     Shield 642, Ice Block 45438, Dispersion 47585, Aspect of the Turtle
  *     186265, …) is already inside `externalOrBigDefensiveSpellIds`, so
  *     `MAJOR_DEFENSIVE_IDS` alone covers both without a second set.
- *  2. Everything else, original `buildAuraIntervals` order.
+ *  2. Offensive cooldowns — `offensiveCdOfAura` (`OFFENSIVE_CD_SPELL_IDS`, an
+ *     effect aura resolved to its cast)
+ *     (spellDanger.ts, the enemy-CD timeline's own set): an enemy's
+ *     Deathmark / Kingsbane on the victim, a burst buff on its caster.
+ *  3. Everything else, original `buildAuraIntervals` order.
  *
  * Historical damage (BACKLOG #27): match 76ea5f90, owner frozen in Freezing
  * Trap (spellId 3355, a DR_CATEGORY_MAP stun entry) 2:48-2:53 — the trap aura
  * was pushed out of the raw top-10 by cosmetic buffs, and two deep-dive
  * rounds concluded "he could act" from the truncated aura list.
+ * Tier 2 (2026-09-30): c57aeb42 0:46 — the frost mage's top-10 was Fortitude,
+ * Arcane Intellect, renews… and dropped the Deathmark + Kingsbane that killed
+ * him nine seconds later.
  */
-function auraPriority(spellId: string): 0 | 1 | 2 {
+function auraPriority(spellId: string): 0 | 1 | 2 | 3 {
   if (spellId in DR_CATEGORY_MAP) return 0;
-  if (MAJOR_DEFENSIVE_IDS.has(spellId)) return 1;
-  return 2;
+  // a cooldown's own aura under another id resolves to its cast (fact2 C10:
+  // Kingsbane runs as 394095, Fortifying Brew as 120954)
+  if (castKeyOfAura(spellId, (id) => MAJOR_DEFENSIVE_IDS.has(id)) !== undefined)
+    return 1;
+  if (offensiveCdOfAura(spellId) !== undefined) return 2;
+  return 3;
 }
 
 /**
@@ -100,8 +113,8 @@ function auraPriority(spellId: string): 0 | 1 | 2 {
  * point-in-time filter over the single-source interval builder, capped at 10
  * names so a long buff list can't blow out a facts field. Sorted by
  * `auraPriority` (stable — ties keep `buildAuraIntervals`' original order)
- * before the cap so a hard-CC or major/immunity aura is never displaced by
- * cosmetic buffs.
+ * before the cap so a hard-CC, major/immunity or offensive-cooldown aura is never
+ * displaced by cosmetic buffs.
  */
 export function aurasActiveAt(
   unit: any,
@@ -299,7 +312,12 @@ export function buildMomentSnapshotItems(
         if (ownerRaw) {
           const otherRaw = getUnitRawPositionAtTime(u, midMs, LOS_SWEEP_GAP_MS);
           if (otherRaw) {
-            const los = hasLineOfSight(combat?.zoneId, ownerRaw, otherRaw);
+            // the legacy match keeps the zone under startInfo (triage F-C9)
+            const los = hasLineOfSight(
+              combat?.zoneId ?? combat?.startInfo?.zoneId,
+              ownerRaw,
+              otherRaw,
+            );
             if (los !== null) facts.los = los ? "有" : "被挡";
           }
         }
@@ -401,7 +419,14 @@ export function buildMomentSnapshotItems(
   for (const u of players) {
     const hpStart = getHpPercentAtTime(u, t0, matchStartMs);
     const hpEnd = getHpPercentAtTime(u, t1, matchStartMs);
-    const hpMin = getLowestHpPercentInWindow(u, t0, t1, matchStartMs);
+    // the window's low includes its own ends' readings: a minimum above the
+    // start it pairs with is no minimum (codex R6C-07 #5: hpStart 85 from
+    // the 16.534 sample, hpMin 86 from in-window samples only)
+    const inWindowMin = getLowestHpPercentInWindow(u, t0, t1, matchStartMs);
+    const ends = [hpStart, hpEnd, inWindowMin].filter(
+      (x): x is number => x !== null,
+    );
+    const hpMin = ends.length > 0 ? Math.min(...ends) : null;
     if (hpStart === null && hpEnd === null && hpMin === null) continue;
     const facts: Record<string, string> = {
       t0: String(t0),

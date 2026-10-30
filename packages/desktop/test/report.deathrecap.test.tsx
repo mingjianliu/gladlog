@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen } from "@testing-library/react";
-
 import { COUNTERFACTUAL_WINDOW_S } from "@gladlog/analysis";
+import { fireEvent, render, screen } from "@testing-library/react";
 
 import { DeathRecapCard } from "../src/renderer/src/report/components/DeathRecapCard";
 import { MatchReport } from "../src/renderer/src/report/components/MatchReport";
@@ -1120,12 +1119,12 @@ describe("#10 T5: 恐慌性使用 + 更省替代", () => {
   });
 
   describe("availableImmunities 行追加更省替代(findCheaperDefensiveAlternatives)", () => {
-    // Marksmanship Hunter: both casts happen at t=10s (long before the death,
-    // so both cooldowns are back up), and the death is at t=10000s — Aspect of
-    // the Turtle (186265, 180s CD) was available at death and never pressed,
-    // and Exhilaration (109304, 120s CD, strictly shorter) was available too,
-    // so it must be attached as a cheaper alternative on the Aspect of the
-    // Turtle pill.
+    // Holy Paladin: both casts happen at t=10s (long before the death, so
+    // both cooldowns are back up), and the death is at t=10000s — Divine
+    // Shield (642, 300s CD) was available at death and never pressed, and
+    // Divine Protection (498, strictly shorter CD) was available too, so it
+    // must be attached as a cheaper alternative on the Divine Shield pill. (Was Aspect of
+    // the Turtle, which is no immunity since the user ruling of 2026-10-21.)
     const DEATH_T = 10_000_000; // ms (10000s)
 
     function buildSource(): ReportSource {
@@ -1150,9 +1149,9 @@ describe("#10 T5: 恐慌性使用 + 更省替代", () => {
             name: "Hunter1",
             kind: "Player",
             reaction: "Friendly",
-            classId: 3, // Hunter
-            specId: 254, // Marksmanship
-            info: combatantInfo(254),
+            classId: 2, // Paladin
+            specId: 65, // Holy
+            info: combatantInfo(65),
             deaths: [
               {
                 timestamp: DEATH_T,
@@ -1169,8 +1168,8 @@ describe("#10 T5: 恐慌性使用 + 更省替代", () => {
             casts: [
               {
                 eventName: "SPELL_CAST_SUCCESS",
-                spellId: 186265,
-                spellName: "Aspect of the Turtle",
+                spellId: 642,
+                spellName: "Divine Shield",
                 timestamp: 10_000,
                 srcId: "hunter1",
                 srcName: "Hunter1",
@@ -1179,8 +1178,8 @@ describe("#10 T5: 恐慌性使用 + 更省替代", () => {
               },
               {
                 eventName: "SPELL_CAST_SUCCESS",
-                spellId: 109304,
-                spellName: "Exhilaration",
+                spellId: 498,
+                spellName: "Divine Protection",
                 timestamp: 10_000,
                 srcId: "hunter1",
                 srcName: "Hunter1",
@@ -1202,14 +1201,14 @@ describe("#10 T5: 恐慌性使用 + 更省替代", () => {
       } as unknown as ReportSource;
     }
 
-    it("Aspect of the Turtle 死亡时可用未按 → cheaperAlternatives 含 Exhilaration(严格更短 CD)", () => {
+    it("Divine Shield 死亡时可用未按 → cheaperAlternatives 含 Divine Protection(严格更短 CD)", () => {
       const recaps = deriveDeathRecaps(buildSource());
       expect(recaps).toHaveLength(1);
-      const turtle = recaps[0]!.availableImmunities.find(
-        (i) => i.spellId === "186265",
+      const block = recaps[0]!.availableImmunities.find(
+        (i) => i.spellId === "642",
       );
-      expect(turtle).toBeTruthy();
-      expect(turtle!.cheaperAlternatives).toContain("Exhilaration");
+      expect(block).toBeTruthy();
+      expect(block!.cheaperAlternatives).toContain("Divine Protection");
     });
 
     it("DeathRecapCard: absorb 行渲染实测吸收量,不再套用「转移/反弹」机制文案", () => {
@@ -1244,12 +1243,44 @@ describe("#10 T5: 恐慌性使用 + 更省替代", () => {
       expect(text).not.toContain("转移/反弹");
     });
 
+    it("DeathRecapCard: deferred 行(Time Dilation / Stretch Time)写「暂时挡下」和日志里的量,不写「挡了」或「吸收」(FT-T02b;10-20 裁定算减伤)", () => {
+      const recap: DeathRecap = {
+        unitId: "victim-1",
+        unitName: "Victim",
+        deathS: 100,
+        events: [],
+        rows: [],
+        availableImmunities: [],
+        missedExternals: [],
+        mitigationAudit: [
+          {
+            spellId: "357170",
+            spellName: "Time Dilation",
+            kind: "deferred",
+            activeOverlapS: 5.4,
+            deferredAmount: 171_114,
+            deferredPctMaxHp: 18.8,
+          },
+        ],
+        counterfactuals: [],
+      };
+      const { container } = render(
+        <DeathRecapCard recap={recap} onClose={() => {}} />,
+      );
+      const text = container.textContent ?? "";
+      expect(text).toContain("Time Dilation 暂时挡下 ~171k");
+      expect(text).toContain("18.8% maxHp");
+      expect(text).toContain("覆盖 5.4s");
+      expect(text).not.toContain("挡了");
+      expect(text).not.toContain("吸收");
+    });
+
     it("DeathRecapCard: cheaperAlternatives 非空 → pill 内追加「更省替代」文案", () => {
       const recaps = deriveDeathRecaps(buildSource());
       render(<DeathRecapCard recap={recaps[0]!} onClose={() => {}} />);
       expect(screen.getByText(/更省替代/)).toBeTruthy();
       expect(screen.getByText(/更省替代/).textContent).toContain(
-        "Exhilaration",
+        "Divine Protection",
       );
     });
   });

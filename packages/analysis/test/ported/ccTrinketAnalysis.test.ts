@@ -6,6 +6,8 @@ import {
   LogEvent,
 } from "@gladlog/parser-compat";
 
+import { ensureAnalysisData } from "../../src/data/ensure";
+import { hardcastHealSpell } from "../../src/data/kickPriorityHealSpells";
 import {
   analyzePlayerCCAndTrinket,
   applicableCCAvoidanceIds,
@@ -19,7 +21,6 @@ import {
   makeSpellCastEvent,
   makeUnit,
 } from "./testHelpers";
-import { ensureAnalysisData } from "../../src/data/ensure";
 
 // Mock the generated JSON so tests never depend on real item IDs.
 vi.mock("../../src/data/trinketItemIds.json", () => ({
@@ -422,8 +423,9 @@ describe("analyzePlayerCCAndTrinket — root/disarm/interrupt tracking", () => {
     expect(res2.interruptInstances[0].kickersInRange).toBeNull();
   });
 
-  it("computes kickDepthPct from hardcastHealSpell table or completed cast median (GH #87, B7)", () => {
-    // Case 1: Interrupted heal spell from hardcastHealSpell table (e.g. Flash Heal 2061)
+  it("computes kickDepthPct from the player's own completed cast median, never from the corpus heal table (GH #87, B7; FT I11)", () => {
+    // Case 1: a heal of the hardcastHealSpell table (Flash Heal 2061) with no
+    // completed cast in the round
     const healKick = makeInterruptEvent(
       "1766",
       "Kick",
@@ -451,8 +453,54 @@ describe("analyzePlayerCCAndTrinket — root/disarm/interrupt tracking", () => {
       [enemy],
       makeCombat(),
     );
-    // Flash Heal nominal = 1.17s -> Math.round((0.5 / 1.17) * 100) = 43%
-    expect(resHeal.interruptInstances[0].kickDepthPct).toBe(43);
+    // FT I11: nothing in this round to measure the bar against — it read 43,
+    // 0.5 s over the corpus-wide median of every player's Flash Heal
+    expect(resHeal.interruptInstances[0].kickDepthPct).toBeNull();
+    // the out-range verdict's window keeps its reading (the table first)
+    expect(resHeal.interruptInstances[0].castWindowS).toBe(
+      hardcastHealSpell("2061")!.medianCastS,
+    );
+
+    // Case 1b (856fd105 round 6): four Flash Heals of 1.29–1.32 s, the fifth
+    // kicked 1.157 s in — 89 % of this player's bar, not "100" against the
+    // table's 1.16 s
+    const bars = [
+      [28_609, 29_902],
+      [29_902, 31_207],
+      [31_208, 32_525],
+      [32_526, 33_817],
+    ];
+    const ownHeals = makeUnit("player-1", {
+      actionIn: [
+        makeInterruptEvent(
+          "2139",
+          "Counterspell",
+          "2061",
+          "Flash Heal",
+          MATCH_START + 34_975,
+          "enemy-1",
+          "EnemyA",
+        ),
+      ],
+      castStartEvents: [...bars.map((b) => b[0]!), 33_818].map((ms) => ({
+        spellId: "2061",
+        logLine: {
+          event: LogEvent.SPELL_CAST_START,
+          timestamp: MATCH_START + ms,
+        },
+      })) as any,
+      spellCastEvents: bars.map((b) => ({
+        spellId: "2061",
+        logLine: {
+          event: LogEvent.SPELL_CAST_SUCCESS,
+          timestamp: MATCH_START + b[1]!,
+        },
+      })) as any,
+    });
+    expect(
+      analyzePlayerCCAndTrinket(ownHeals, [enemy], makeCombat())
+        .interruptInstances[0].kickDepthPct,
+    ).toBe(89);
 
     // Case 2: Non-heal spell with completed cast in match
     const frostKick = makeInterruptEvent(
@@ -495,6 +543,34 @@ describe("analyzePlayerCCAndTrinket — root/disarm/interrupt tracking", () => {
     const resDps = analyzePlayerCCAndTrinket(playerDps, [enemy], makeCombat());
     // Completed cast = 2.0s -> Math.round((0.5 / 2.0) * 100) = 25%
     expect(resDps.interruptInstances[0].kickDepthPct).toBe(25);
+
+    // Case 2b (3306e8ee: Sleep Walk kicked 1.727 s in, the completed ones
+    // 1.647 and 1.595 s): a bar that had already run longer than the round's
+    // median completed bar is not "100" — the depth is not derivable
+    const longBar = makeUnit("player-1", {
+      actionIn: [
+        makeInterruptEvent(
+          "1766",
+          "Kick",
+          "116",
+          "Frostbolt",
+          MATCH_START + 32_100,
+          "enemy-1",
+          "EnemyA",
+        ),
+      ],
+      castStartEvents: [10_000, 30_000].map((ms) => ({
+        spellId: "116",
+        logLine: {
+          event: LogEvent.SPELL_CAST_START,
+          timestamp: MATCH_START + ms,
+        },
+      })) as any,
+      spellCastEvents: playerDps.spellCastEvents,
+    });
+    const resLong = analyzePlayerCCAndTrinket(longBar, [enemy], makeCombat());
+    expect(resLong.interruptInstances[0].kickDepthPct).toBeNull();
+    expect(resLong.interruptInstances[0].castWindowS).toBeCloseTo(2.1, 5);
 
     // Case 3: Unknown spell with no completed casts and no start event -> null
     const resNoData = analyzePlayerCCAndTrinket(
@@ -902,8 +978,16 @@ describe("analyzePlayerCCAndTrinket — edge cases and corner branches", () => {
       spellName: "Will to Survive",
       srcUnitId: "player-1",
     };
+    // 解控在按下的那一刻把控制移除(F-E21:非饰品的解控只认「按下即结束」的控制)
+    const ccRemove = makeAuraEvent(
+      LogEvent.SPELL_AURA_REMOVED,
+      "853",
+      MATCH_START + 11_000,
+      "enemy-1",
+      "player-1",
+    );
     const player = makeUnit("player-1", {
-      auraEvents: [ccApply],
+      auraEvents: [ccApply, ccRemove],
       spellCastEvents: [racialCast] as any,
     });
     const result = analyzePlayerCCAndTrinket(
@@ -1261,23 +1345,21 @@ describe("analyzePlayerCCAndTrinket — further branches", () => {
     const player = makeUnit("p1", {
       spec: CombatUnitSpec.Warrior_Arms,
       info: { equipment } as any,
-      spellCastEvents: [
-        {
-          logLine: {
-            event: LogEvent.SPELL_CAST_SUCCESS,
-            timestamp: MATCH_START + 6100,
-          },
-          spellId: "195756", // Adaptation
-          spellName: "Adaptation",
-          srcUnitId: "p1",
-        },
-      ] as any,
+      // G7-P2 (triage F-E19): Adaptation logs no cast — its trigger is the
+      // self-aura 283167 (the old 195756 cast id has 0 corpus rows)
       auraEvents: [
         makeAuraEvent(
           LogEvent.SPELL_AURA_APPLIED,
           "853",
           MATCH_START + 6000,
           "e1",
+          "p1",
+        ),
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_APPLIED,
+          "283167",
+          MATCH_START + 6100,
+          "p1",
           "p1",
         ),
       ],
@@ -2278,6 +2360,66 @@ describe("CC 规避门控真单源交叉校验(2026-08-07,矩阵:CC × 规避技
       (a) => a.spellId === row.ccSpellId && a.avoidanceSpellId === row.avoidId,
     );
     expect(realResult, "analyzePlayerCCAndTrinket 真实产出").toBe(row.expected);
+  });
+});
+
+describe("a target-bound mobility counts only on the avoiding player (triage other F-O13)", () => {
+  const MATCH_START = 1_000_000;
+  const CAST_AT = MATCH_START + 10_000;
+  const combat = {
+    startTime: MATCH_START,
+    endTime: MATCH_START + 300_000,
+    startInfo: { zoneId: "1672" },
+  };
+  // enemy Freezing Trap (a ground CC) that never landed on the player
+  const avoided = (avoidId: string, destUnitId: string) => {
+    const player = makeUnit("player-1", {
+      class: CombatUnitClass.Paladin,
+      spec: CombatUnitSpec.Paladin_Holy,
+      spellCastEvents: [
+        makeSpellCastEvent(
+          avoidId,
+          CAST_AT - 500,
+          destUnitId,
+          "X",
+          "player-1",
+          "Player",
+        ),
+      ] as any,
+    });
+    const enemy = makeUnit("enemy-1", {
+      name: "EnemyA",
+      reaction: CombatUnitReaction.Hostile,
+      spec: CombatUnitSpec.Hunter_Survival,
+    });
+    enemy.spellCastEvents = [
+      makeSpellCastEvent(
+        "3355",
+        CAST_AT,
+        "player-1",
+        "Player",
+        "enemy-1",
+        "EnemyA",
+      ) as any,
+    ];
+    return analyzePlayerCCAndTrinket(player, [enemy], combat as any)
+      .ccAvoidedInstances.length;
+  };
+
+  it("Blessing of Freedom / Tiger's Lust on a teammate is not the caster's avoidance", () => {
+    expect(avoided("1044", "mate-1")).toBe(0);
+    expect(avoided("116841", "mate-1")).toBe(0);
+  });
+
+  it("on the player, or with no destination, it still is", () => {
+    expect(avoided("1044", "player-1")).toBe(1);
+    expect(avoided("1044", "0000000000000000")).toBe(1);
+    expect(avoided("116841", "player-1")).toBe(1);
+  });
+
+  it("a mobility that carries the caster to another unit keeps counting (Wild Charge, Rescue)", () => {
+    expect(avoided("102401", "mate-1")).toBe(1);
+    expect(avoided("370665", "mate-1")).toBe(1);
   });
 });
 

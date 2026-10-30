@@ -4,20 +4,20 @@
 // distinguishes "the defensive wasn't tracked / has no timing" (a data gap)
 // from "the defensive was rated Optimal so it isn't a signal" (they genuinely
 // played well). No model calls.
+import {
+  buildDeepDivePack,
+  ensureAnalysisData,
+  extractCandidateFindings,
+  type Finding,
+  hasCoachableSignal,
+  isHealerSpec,
+  type PackItem,
+  specToString,
+} from "@gladlog/analysis";
+import { GladLogParser, type GladMatch } from "@gladlog/parser";
+import { CombatUnitReaction,toLegacyMatch } from "@gladlog/parser-compat";
 import { readdirSync, readFileSync } from "fs";
 import { join } from "path";
-import { GladLogParser, type GladMatch } from "@gladlog/parser";
-import { toLegacyMatch, CombatUnitReaction } from "@gladlog/parser-compat";
-import {
-  extractCandidateFindings,
-  isHealerSpec,
-  buildDeepDivePack,
-  hasCoachableSignal,
-  specToString,
-  type Finding,
-  type PackItem,
-  ensureAnalysisData,
-} from "@gladlog/analysis";
 
 // Prompt builders read the background-loaded talent / spell-name tables
 // (data/ensure.ts contract) — without this the first combats are degraded.

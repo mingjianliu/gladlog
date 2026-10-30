@@ -1,0 +1,1687 @@
+/**
+ * The setup of buildMatchTimeline — the params destructure (with its defaults),
+ * the derived maps (summon owners, unit names, roster sides, Grounding absorbs,
+ * …) and the closure helpers every section uses: player / enemy ids and labels,
+ * target resolution, the CC / DR / immune / empower tags, the deferred-snapshot
+ * placeholder counter, mana and Grounding notes. Everything later code reads is
+ * returned; the helpers keep closing over the same state (e.g. the placeholder
+ * counter, the consumed-miss sets) inside this function.
+ *
+ * Cut out of buildMatchTimeline verbatim (GH #116); the body is unchanged, only
+ * `params` now arrives through `ctx`, and the declarations come back to the
+ * caller. Output is pinned by the 605-file acceptanceCapture context hash.
+ */
+import {
+  CombatUnitReaction,
+  CombatUnitType,
+  type ICombatUnit,
+  LogEvent,
+} from "@gladlog/parser-compat";
+
+import { damageImmuneControlUpAt } from "../../analysis/candidates/massDispel";
+import {
+  castAndEffectIds,
+  nominatedEffectAurasOfCast,
+} from "../../data/castEffectAuras";
+import { getEnglishSpellName } from "../../data/spellEffectData";
+import { ccSpellIds } from "../../data/spellTags";
+import { buffFullDurationForCaster } from "../../utils/buffDuration";
+import {
+  EMPOWER_PRESS_MATCH_MS,
+  empowerSpans,
+} from "../../utils/castCommitSpans";
+import {
+  CAST_MISS_LEAD_MS,
+  CC_MISS_TAG_WORD,
+  CONTROL_FAILED_MISS_TYPES,
+  isControlCast,
+  missBelongsToCast as missRowBelongsToCast,
+  missReportsControl,
+  pressImmuneMissRows,
+} from "../../utils/castMissRows";
+import { ccFullDurationForCaster } from "../../utils/ccDuration";
+import {
+  applicableCCAvoidanceIds,
+  avoidanceExplainsMissType,
+  ccAvoidanceBuffsUpAt,
+  GROUNDING_TOTEM_SPELL_ID,
+  GROUNDING_TOTEM_WINDOW_S,
+} from "../../utils/ccTrinketAnalysis";
+import {
+  getUnitHpAtTimestamp,
+  HP_SAMPLE_RADIUS_MS,
+  hpAtPress,
+  isTeamHealCD,
+  playerTalentIdSets,
+} from "../../utils/cooldowns";
+import {
+  AOE_CC_SPELL_IDS,
+  aoeCcLandingWindowFor,
+  buildCcCategoryHistory,
+  drLevelNextAt,
+  getDRCategory,
+  OWNER_AOE_CC_NO_PLAYER_TAG,
+} from "../../utils/drAnalysis";
+import { observedCastEndMs } from "../../utils/enemyCDs";
+import { groundingEatenRedirects } from "../../utils/groundingRedirects";
+import { sumIncomingPressure } from "../../utils/incomingPressure";
+import { PET_COMMAND_MS, petCommands } from "../../utils/petCommands";
+import { fmtTime, toRenderSecond } from "../../utils/renderGrid";
+import { resourceDeltaPct } from "../../utils/resourceAt";
+import { buildRosterSides } from "../../utils/rosterSide";
+import { roundEndMs } from "../../utils/roundEnd";
+import { buildResourceSnapshot } from "../resourceSnapshot";
+import { ownerResUtilityCds } from "../resUtilityCds";
+import { isCountedReflectRow } from "../spellOutcomeLines";
+import {
+  buildSummonOwnerNames,
+  CRITICAL_NON_PLAYER_NPC_NAMES,
+  extractEnemyMajorBuffIntervals,
+  getNpcIdFromGuid,
+  GROUNDING_TOTEM_NPC_ID,
+  MANA_COOLDOWN_SPELL_IDS,
+  resolveSummonOwner,
+  summonKindOf,
+} from "../timelineHelpers";
+import { rosterLabelByName } from "../unitLabel";
+import type { DeferredSnapshot } from "./ctx";
+import type { TimelineCtx } from "./ctx";
+
+type OutgoingMiss = NonNullable<ICombatUnit["missesOut"]>[number];
+
+/** The tag of a friendly control the log says did not land and no other line
+ * states (FT-T16 D15 "3b"). Deliberately not `[CC ON …]`: every reader of
+ * that prefix (DR chains, `resLedgerPrune`, the gates) means "landed". */
+export const CC_NOT_LANDED_TAG = "[CC NOT LANDED]";
+
+/** The tag an aimed owner / teammate control's cast line carries when it
+ * went off and left no control aura and no miss row on its target (cc-dr
+ * F-NE1), and its legend — printed once, when a line carries the tag (user
+ * ruling 2026-10-27: the tag had no legend). */
+export const NO_CC_AURA_LOGGED_TAG = "[no CC aura logged";
+export const NO_CC_AURA_LOGGED_LEGEND = [
+  "  `[no CC aura logged]` = your team's aimed control went off, but the log shows no control aura and no miss row on that target; `— X was up` names an avoidance aura the target had at the cast. `— hit X` = an area control that reached those enemy players (its damage, or a miss row of it) and put no control on anyone; `DR: <family> Immune` = they were at immune diminishing returns for it.",
+];
+
+/** Printed once, when a `[CC NOT LANDED]` line rendered. */
+export const CC_NOT_LANDED_LEGEND = [
+  `  ${CC_NOT_LANDED_TAG} = a control your team cast at that enemy did NOT take effect at that second: the log wrote a miss row for it.`,
+  "    `logged X` is the log's own word (IMMUNE, MISS, PARRY, DODGE …); the parenthesis is the cause when the log shows",
+  "    one (an immunity that was up, your own team's Cyclone on the target, diminishing returns at Immune) — no parenthesis =",
+  "    the log gives none. It is not a [CC ON ENEMY] line: nothing landed, and it is in no `[DR: …]` state of this timeline. A",
+  "    failed control already tagged on its cast line (`[IMMUNE …]`, `[MISSED on …]`) or on a [REFLECTED] line is not repeated here.",
+];
+
+export function prepareTimelineSetup(ctx: Pick<TimelineCtx, "params">) {
+  const { params } = ctx;
+
+  const {
+    owner,
+    ownerSpec,
+    ownerCDs,
+    teammateCDs,
+    enemyCDTimeline,
+    ccTrinketSummaries,
+    dispelSummary,
+    enemyDispelSummary,
+    enemyCCSummaries,
+    friendlyDeaths,
+    enemyDeaths,
+    pressureWindows,
+    healingGaps,
+    friends,
+    enemies,
+    allUnits,
+    matchStartMs,
+    matchEndMs,
+    isHealer,
+    playerIdMap,
+    enemyIdMap,
+    outgoingCCChains,
+    bracket,
+    stasisEvents = [],
+    shapeshiftIntervals = [],
+    spiritOfRedemptionIntervals = [],
+    criticalWindowSeconds: criticalWindowSet,
+    crisisAnchorSeconds,
+    counterfactualOf,
+    burstWindows,
+    cdPriorEpisodes,
+    cdPriorCohort,
+    stackedDefensives,
+    rawStreams,
+  } = params;
+  // friends + enemies (dampening, rot pressure, and setup closures below)
+  const allPlayers = friends.concat(enemies ?? []);
+  const manaFallback = { rawStreams, matchStartMs };
+
+  const matchDurationS = (matchEndMs - matchStartMs) / 1000;
+  const enemyBuffIntervals = extractEnemyMajorBuffIntervals(
+    enemies ?? [],
+    matchStartMs,
+    matchEndMs,
+  );
+
+  const _allUnits = allUnits ?? [...friends, ...(enemies ?? [])];
+  // summon GUID → owner name: damage-source labels name a pet / guardian
+  // through its owner (reliability round 3, f4da).
+  const summonOwners = buildSummonOwnerNames(_allUnits);
+  // unit GUID → roster side: "same team" is a roster fact, not the event's
+  // reaction flags, which flip while someone is charmed (death-kill F-T1)
+  const rosterSides = buildRosterSides(_allUnits);
+  const unitNames = new Map(_allUnits.map((u) => [u.id, u.name]));
+
+  // criticalWindowSet is built by the caller (buildMatchContext) via
+  // buildCriticalWindowSet and passed in — deliberately not built here, or the
+  // [CD] / death blocks would not share the same set.
+
+  // F143: Pre-calculate Grounding Totem absorbs.
+  // A SPELL_ABSORBED event's own spellId is the SHIELD (Grounding Totem
+  // itself); the note used to print that, so once it rendered at all it read
+  // `[ABSORBED: Grounding Totem]` on 277 of 298 lines (GH #100). The eaten
+  // spell is the ATTACKER's, which the parser materialises as
+  // `attackSpellId/Name` since 2026-09-20 (user: "even if we don't use it, we
+  // should know what the totem ate"). Documents stored before that do not
+  // carry it — the archive slimmer had cleared those params — so the note
+  // falls back to naming the caster only. A totem killed by direct damage is a
+  // different fact with its own `[UNIT DESTROYED]` line: a final blow is NOT
+  // an eaten spell.
+  const groundingAbsorbs: Array<{
+    timeSeconds: number;
+    attackerId: string;
+    /** English name of the eaten spell; undefined on pre-2026-09-20 documents */
+    spellName?: string;
+    totemOwnerId: string;
+  }> = [];
+  if (allUnits) {
+    for (const unit of allUnits) {
+      const npcId = getNpcIdFromGuid(unit.id);
+      if (
+        (npcId === GROUNDING_TOTEM_NPC_ID ||
+          unit.name.toLowerCase().includes("grounding totem")) &&
+        unit.ownerId
+      ) {
+        for (const absorb of unit.absorbsIn) {
+          if (!absorb.attackerId) continue;
+          let spellName: string | undefined;
+          if (absorb.attackSpellId) {
+            const raw = getEnglishSpellName(
+              absorb.attackSpellId,
+              absorb.attackSpellName?.trim() || null,
+            );
+            spellName =
+              raw.trim() ||
+              absorb.attackSpellName?.trim() ||
+              absorb.attackSpellId;
+          } else if (absorb.attackSpellName?.trim()) {
+            spellName = absorb.attackSpellName.trim();
+          }
+          groundingAbsorbs.push({
+            timeSeconds: (absorb.timestamp - matchStartMs) / 1000,
+            attackerId: absorb.attackerId,
+            ...(spellName ? { spellName } : {}),
+            totemOwnerId: unit.ownerId,
+          });
+        }
+        // F20 D26: what went into the totem with no damage to absorb — a
+        // root, a grip, a trap (`groundingEatenRedirects`, the one redirect
+        // predicate) — is eaten too, in the same list (default ruling,
+        // 2026-10-28). A spell that then DAMAGED the totem was an attack on
+        // it (the `[UNIT DESTROYED]` fact), not a redirect.
+        const totemSide = rosterSides.get(unit.id);
+        for (const caster of allUnits) {
+          const side = rosterSides.get(caster.id);
+          if (
+            caster.id === unit.id ||
+            side === undefined ||
+            totemSide === undefined ||
+            side === totemSide
+          )
+            continue;
+          for (const g of groundingEatenRedirects(caster)) {
+            if (g.totemId !== unit.id) continue;
+            const spellName = getEnglishSpellName(g.spellId, g.spellName);
+            const attacked = unit.damageIn.some(
+              (d) =>
+                d.srcUnitId === caster.id &&
+                !!d.spellId &&
+                getEnglishSpellName(d.spellId, d.spellName ?? "") === spellName,
+            );
+            if (attacked) continue;
+            groundingAbsorbs.push({
+              timeSeconds: (g.timestampMs - matchStartMs) / 1000,
+              attackerId: caster.id,
+              ...(spellName ? { spellName } : {}),
+              totemOwnerId: unit.ownerId,
+            });
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * A mana cooldown is answered with resource, not throughput. Innervate sat in
+   * HEALING_AMPLIFIER_SPELL_IDS until 2026-08-23 and got the HPS/overheal
+   * block, whose cast ranking (`overhealPct*1000 - maxBucketHps`) surfaced the
+   * WORST-scoring cast — teaching the model that low HPS during Innervate is
+   * the mistake, when low HPS is exactly when a healer drinks. Measured on 200
+   * archive files: it ticks mana back (SPELL_PERIODIC_ENERGIZE, 258 hits) and
+   * the target's mana rises in 55 of 58 windows (0 fell, median +9.5pp).
+   *
+   * Shared by BOTH emitters of `[YOU] [CD]`: the ownerCDs ledger loop and the
+   * B38 promotion path further down. Innervate is normally ABSENT from
+   * `extractMajorCooldowns`, so production renders it through the promotion
+   * path — wiring only the ledger loop produced a line that passed its unit
+   * test and never once appeared on a real match.
+   */
+  function manaCooldownNote(
+    spellId: string,
+    timeSeconds: number,
+    targetName: string | undefined,
+  ): string | null {
+    if (!MANA_COOLDOWN_SPELL_IDS.has(spellId)) return null;
+    // Caster-aware: the owner cast it, so their talents price its length.
+    const duration = buffFullDurationForCaster(spellId, owner);
+    if (!duration) return null;
+    const target =
+      (targetName
+        ? allPlayers.find((u) => u.name === targetName)
+        : undefined) ?? owner;
+    const fromMs = matchStartMs + timeSeconds * 1000;
+    // where the buff was seen to end, else the official length (work order
+    // 2026-10-15 #8)
+    // …never past the round's end (codex 60-POSTHOC-05a #3: a Shuffle
+    // Innervate read `30% -> 100%`, the mana after the deciding death
+    // counted; `roundEndMs`, the one round end)
+    const toMs = Math.min(
+      observedCastEndMs(
+        owner,
+        spellId,
+        fromMs,
+        allPlayers,
+        matchStartMs,
+        matchEndMs,
+      ) ?? fromMs + duration * 1000,
+      roundEndMs({ endTime: matchEndMs, startInfo: { bracket } }, allPlayers),
+    );
+    const spanS = Math.round((toMs - fromMs) / 100) / 10;
+    const delta = resourceDeltaPct(target, fromMs, toMs, manaFallback);
+    const who = target.id === owner.id ? "self" : pid(target.name);
+    return delta
+      ? `      [MANA]       ${who}: ${delta.fromPct}% -> ${delta.toPct}% mana (${delta.deltaPct >= 0 ? "+" : ""}${delta.deltaPct}pp over ${spanS}s)`
+      : `      [MANA]       ${who}: no resource reading in this window`;
+  }
+
+  const groundingAbsorbNote = (
+    spellId: string,
+    spellName: string,
+    totemOwnerId: string,
+    castSeconds: number,
+  ): string => {
+    if (spellId !== GROUNDING_TOTEM_SPELL_ID && spellName !== "Grounding Totem")
+      return "";
+    const eaten = groundingAbsorbs.filter(
+      (a) =>
+        a.totemOwnerId === totemOwnerId &&
+        a.timeSeconds >= castSeconds &&
+        a.timeSeconds <= castSeconds + GROUNDING_TOTEM_WINDOW_S,
+    );
+    if (eaten.length === 0) return "";
+    const ownerIsFriendly = friends.some((f) => f.id === totemOwnerId);
+    const casterOf = (attackerId: string): string => {
+      const attacker = allUnits?.find((u) => u.id === attackerId);
+      return attacker
+        ? actorLabel(
+            attacker.name,
+            ownerIsFriendly ? "enemy" : "friendly",
+            attacker.id,
+          )
+        : "unknown";
+    };
+    // Every eaten spell is known → name them; otherwise (an older stored
+    // document) say only who cast them. Never a mix that reads as complete.
+    if (eaten.every((a) => Boolean(a.spellName?.trim())))
+      return ` [ABSORBED: ${Array.from(
+        new Set(eaten.map((a) => `${a.spellName} (${casterOf(a.attackerId)})`)),
+      ).join(", ")}]`;
+    return ` [ABSORBED spells from: ${Array.from(
+      new Set(eaten.map((a) => casterOf(a.attackerId))),
+    ).join(", ")}]`;
+  };
+
+  // A/B cycle-1 accuracy regression fix: bare numeric ids forced the responder
+  // to map unit identity itself across thousands of tokens; blind review showed
+  // fine-grained misattribution (pets / unit HP / dispel direction crossed).
+  // Inline a compact spec tag at every reference; same-spec twins are still
+  // disambiguated by id.
+  // One builder for both sides (`unitLabel.ts`): the tag is keyed on the id
+  // the map resolves, so a name the map answers to never prints a bare id.
+  const rosterUnits = [...friends, ...(enemies ?? [])];
+  const friendLabel = rosterLabelByName(rosterUnits, playerIdMap);
+  const enemyLabel = rosterLabelByName(rosterUnits, enemyIdMap);
+
+  /**
+   * Returns the short numeric ID for a friendly player name, or the raw name
+   * if no mapping exists.  Enemy names must be resolved via enemyPid() to avoid
+   * ID collision when a friendly and enemy share a display name.
+   */
+  function pid(name: string): string {
+    return friendLabel(name) ?? name.split("-")[0];
+  }
+
+  /** GH #103 A6: who provided the avoidance aura on a `[CC AVOIDED?]` line —
+   * `(own)` for the CC'd player's own, `(from <pid>)` for a teammate's (the
+   * responder wrote "your Grounding" for a totem the other shaman dropped).
+   * Empty when unknown (mobility avoidance, aura up at log start). */
+  function avoidanceSourceTag(
+    sourceName: string | undefined,
+    targetName: string,
+  ): string {
+    if (!sourceName) return "";
+    // a summon's buff (a Death Knight's Rider of the Apocalypse casting
+    // Anti-Magic Shell) is named as its owner's summon, never by its
+    // client-locale name (605 at fact2: `(from 索拉斯·托尔贝恩国王)`, 6 lines)
+    return sourceName === targetName
+      ? " (own)"
+      : ` (from ${actorLabel(sourceName, "friendly")})`;
+  }
+
+  /** Returns the short numeric ID for an *enemy* player name, falling back to name. */
+  /** crisis-external F-T1: the friendly player's pid, or undefined for a name
+   * that is no friendly player (a pet, an NPC, an enemy) — `pid` falls back
+   * to the raw name and cannot tell. `playerIdMap` holds the friendly
+   * players, owner included. */
+  function friendlyPid(name: string): string | undefined {
+    return friendLabel(name);
+  }
+
+  function enemyPid(name: string): string {
+    return enemyLabel(name) ?? name.split("-")[0];
+  }
+
+  /**
+   * Caster label (used by the "(by X)" part of CC lines): player → pid/enemyPid;
+   * pet → owner's label + "'s pet"; a localized name with no resolvable owner
+   * (CJK pet names etc.) → "[pet]".
+   * Same rule as resolveKicker on [KICK] lines — 2026-07-17 thousand-match fuzz:
+   * hunter pet Intimidation leaked a CJK pet name in "(by …)" ×72.
+   */
+  function actorLabel(
+    name: string,
+    side: "friendly" | "enemy",
+    sourceId?: string,
+  ): string {
+    // The event's own source GUID first. A roster player's id is that player
+    // whatever the row calls it; a non-player unit is never read as a player
+    // by its NAME — a hunter pet named like its owner (`Pet-…,"Laughing"` of
+    // `Laughing-Realm`) hit the player map through the short name and printed
+    // as the hunter himself, without the `'s pet` (FT leftovers 2026-10-11).
+    const mate = sourceId ? friends.find((f) => f.id === sourceId) : undefined;
+    if (mate) return pid(mate.name);
+    const foe = sourceId
+      ? (enemies ?? []).find((e) => e.id === sourceId)
+      : undefined;
+    if (foe) return enemyPid(foe.name);
+    const src = sourceId ? allUnits?.find((u) => u.id === sourceId) : undefined;
+    if (src === undefined || src.type === CombatUnitType.Player) {
+      const primary = side === "friendly" ? pid(name) : enemyPid(name);
+      if (/^\d/.test(primary)) return primary; // hit the player map (player names never start with a digit)
+    }
+    // GH #99: resolve the summon by the event's OWN source GUID. Matching on
+    // the NAME collided whenever both teams fielded a same-named summon (two
+    // shamans → two units called "Capacitor Totem"): `find` returned whichever
+    // one the unit table held first, so 48 lines of the 2026-09-15 baseline
+    // credited the wrong side — including `3(EShaman) ← Capacitor Totem (by
+    // 3(EShaman)'s pet)`, a teammate rendered as stunning his own team. The id
+    // is ground truth, so the owner it resolves to wins over the caller's
+    // `side`; `side` now only narrows the name fallback used by documents that
+    // carry no source id.
+    const ownerUnit = resolveSummonOwner({
+      allUnits,
+      friends,
+      enemies,
+      name,
+      sourceId,
+      side,
+    });
+    if (ownerUnit) {
+      const label = friends.some((f) => f.id === ownerUnit.id)
+        ? pid(ownerUnit.name)
+        : enemyPid(ownerUnit.name);
+      // FT-T14: the summon's kind is read off the log — a Capacitor Totem
+      // is the shaman's totem, not a pet the round never had
+      const summon =
+        src ??
+        allUnits?.find((u) => u.name === name && u.ownerId === ownerUnit.id);
+      return `${label}'s ${summonKindOf(summon?.id ?? sourceId, summon)}`;
+    }
+    const short = name.split("-")[0];
+    return [...short].some((c) => c.charCodeAt(0) > 127) ? "[pet]" : short;
+  }
+
+  /**
+   * Resolves a cast's destUnitName to a display label for [YOU] [CAST] entries.
+   * Returns "self" for self-casts, a numeric ID for known players, or the raw name.
+   * Returns "" when destUnitName is empty (AoE spells with no specific log target).
+   */
+  function resolveTarget(destUnitName: string | null | undefined): string {
+    if (!destUnitName || destUnitName === "nil") return "";
+    const cleanDest = destUnitName.split("-")[0];
+    const cleanOwner = owner.name.split("-")[0];
+    if (destUnitName === owner.name || cleanDest === cleanOwner) return "self";
+    // D3 (user 2026-10-24): the roster label (`3(AWarrior)`), the one every
+    // other line prints — a bare `→ 6` sent the reader to the roster
+    if (playerIdMap) {
+      const id = playerIdMap.get(destUnitName) ?? playerIdMap.get(cleanDest);
+      if (id !== undefined)
+        return (
+          friendLabel(destUnitName) ?? friendLabel(cleanDest) ?? String(id)
+        );
+    }
+    if (enemyIdMap) {
+      const id = enemyIdMap.get(destUnitName) ?? enemyIdMap.get(cleanDest);
+      if (id !== undefined)
+        return enemyLabel(destUnitName) ?? enemyLabel(cleanDest) ?? String(id);
+    }
+    // Unmapped target = totem/pet/NPC (not one of the arena players, who are all
+    // pid-mapped above). Its name comes from the log in the client's locale — do
+    // not leak a localized (e.g. Chinese) unit name into an English prompt. Cast
+    // lines tag [totem/pet] separately, so suppress the name here; ASCII names
+    // (rare English-locale NPCs) still pass through unchanged.
+    const isLocalized = [...cleanDest].some((ch) => ch.charCodeAt(0) > 127);
+    if (isLocalized) return "";
+    return cleanDest;
+  }
+
+  /**
+   * DR state of a CC the player cast, **at the moment it lands**, rendered as
+   * `[DR: category level]` — exactly the same format as [CC ON TEAM] (class F:
+   * previously only received CC carried DR, outgoing CC did not).
+   *
+   * DR itself is not recomputed: read the drInfo already annotated by
+   * analyzeOutgoingCCChains, so no second DR judgement exists (single-source
+   * predicate). Matching is by spellId + landing second, compared on the render
+   * grid (atSeconds in the chain is fractional, and so is cast.timeSeconds, so
+   * floor both before comparing).
+   */
+  function enemyCcDrTag(
+    targetName: string,
+    spellId: string,
+    atSeconds: number,
+    sourceId: string | undefined,
+    sourceName: string,
+  ): string {
+    const src = friends.find((f) => f.id === sourceId);
+    const unit = src ?? allUnits?.find((u) => u.id === sourceId);
+    const ownerOf = unit?.ownerId
+      ? friends.find((f) => f.id === unit.ownerId)
+      : undefined;
+    const caster = src?.name ?? ownerOf?.name ?? sourceName;
+    const t = toRenderSecond(atSeconds);
+    for (const chain of outgoingCCChains ?? []) {
+      if (chain.targetName !== targetName) continue;
+      for (const app of chain.applications)
+        if (
+          app.spellId === spellId &&
+          app.casterName === caster &&
+          app.drInfo &&
+          isDrFamilyCategory(app.drInfo.category) &&
+          toRenderSecond(app.atSeconds) === t
+        )
+          return ` [DR: ${app.drInfo.category} ${app.drInfo.level}]`;
+    }
+    return "";
+  }
+
+  /** A DR family the tag can name — not the chain builder's placeholders
+   * (`Unknown`, `spell:<id>` for a control that shares no family, e.g.
+   * Infernal Awakening): round-1 retest idx 30 printed `[DR: Unknown Full]`;
+   * the [CC ON TEAM] line has always had this guard */
+  function isDrFamilyCategory(category: string): boolean {
+    return category !== "Unknown" && !category.startsWith("spell:");
+  }
+
+  function outgoingDrTag(
+    spellId: string,
+    cast: { timeSeconds: number },
+    named?: ReadonlySet<string>,
+  ): string {
+    // cc-dr F-AO1: every application of this spell by the OWNER at the
+    // line's render second (an AoE lands on several enemies at different DR
+    // levels; any caster's same spell used to match). One level → as before;
+    // several → per target, labelled with `enemyPid` (the chain's targets are
+    // enemies — codex c2 10-02).
+    // F20 residual: when the line names units, the landings ON them that
+    // belong to this press (`missBelongsToCast`'s window — a missile lands
+    // after the press second) — 9fa2e09d r2 2:07 `Mortal Coil →
+    // 6(HPaladin) [DR: Incapacitate 50%]` carried the 50 % of the coil's
+    // second target (5, landed 127.573, the press second); the paladin's own
+    // landing (128.092) is Full.
+    const t = toRenderSecond(cast.timeSeconds);
+    const castMs = matchStartMs + cast.timeSeconds * 1000;
+    const byName = named !== undefined && named.size > 0;
+    const hits: Array<{ target: string; category: string; level: string }> = [];
+    for (const chain of outgoingCCChains ?? []) {
+      if (byName && !named.has(chain.targetName)) continue;
+      for (const app of chain.applications) {
+        if (app.spellId !== spellId) continue;
+        if (
+          byName
+            ? !missBelongsToCast(
+                owner,
+                spellId,
+                castMs,
+                matchStartMs + app.atSeconds * 1000,
+              )
+            : toRenderSecond(app.atSeconds) !== t
+        )
+          continue;
+        if (!app.drInfo || app.casterName !== owner.name) continue;
+        if (!isDrFamilyCategory(app.drInfo.category)) continue;
+        hits.push({
+          target: chain.targetName,
+          category: app.drInfo.category,
+          level: app.drInfo.level,
+        });
+      }
+    }
+    if (hits.length === 0) return "";
+    if (new Set(hits.map((h) => h.level)).size === 1)
+      return ` [DR: ${hits[0]!.category} ${hits[0]!.level}]`;
+    return ` [DR: ${hits[0]!.category} — ${hits.map((h) => `${enemyPid(h.target)} ${h.level}`).join(", ")}]`;
+  }
+
+  /**
+   * `[IMMUNE]` tag for the owner's CC casts that the game rejected outright —
+   * `SPELL_MISSED` with `missType === "IMMUNE"` (readable since 2026-08-23; the
+   * field was parsed away before). Without it a whiffed CC renders exactly like
+   * a landed one: the cast line appears, no DR tag follows, and the model has
+   * no way to tell "you opened with Fear" from "you threw Fear into Divine
+   * Shield". S2 corpus: 4,602 immune CC casts / 1,200 rounds, 82% of rounds
+   * carry at least one.
+   *
+   * The immunity's NAME is attached only when a listed CC-immunity aura
+   * (CC_AVOIDANCE_BUFF_SPELLS — completeness-checked against these very IMMUNE
+   * events, see immuneCcScan.ts) covered the target at impact. No known aura →
+   * bare `[IMMUNE]`, never a guess.
+   *
+   * Matching: same spellId, miss at [cast, cast+2.5s] (instant CC misses on the
+   * same instant; a Polymorph projectile lands up to ~1.5s later). Each miss
+   * event is consumed once so chain-cast spam cannot re-attach one miss to
+   * several cast lines.
+   */
+  // The owner's own SPELL_CAST_SUCCESS times per spell, for attributing a miss
+  // to the cast that produced it (codex astra 2026-09-25: with only a window,
+  // a Polymorph reflected at 31.55 s tagged the landed 30.0 s cast and left
+  // the reflected 31.5 s cast bare).
+  // Per CASTER (codex review of batch 3, 2026-09-26: a teammate's tag must
+  // read the teammate's casts, not the owner's — otherwise the owner's
+  // Polymorph at 31.52 s suppressed the teammate's 31.5 s tag and vice versa).
+  const castMsBySpellByUnit = new Map<string, Map<string, number[]>>();
+  function castMsBySpellOf(unit: ICombatUnit): Map<string, number[]> {
+    let m = castMsBySpellByUnit.get(unit.id);
+    if (m) return m;
+    m = new Map<string, number[]>();
+    for (const e of unit.spellCastEvents ?? []) {
+      if (e.logLine?.event !== LogEvent.SPELL_CAST_SUCCESS || !e.spellId)
+        continue;
+      const list = m.get(e.spellId) ?? [];
+      list.push(e.timestamp);
+      m.set(e.spellId, list);
+    }
+    castMsBySpellByUnit.set(unit.id, m);
+    return m;
+  }
+  /** The miss falls in the cast's window AND no later cast of the same spell
+   * by the same caster happened at or before it — it belongs to the latest
+   * cast before it (`utils/castMissRows.ts`, shared with the `logged <TYPE>`
+   * half of `[CC AVOIDED?]`). */
+  function missBelongsToCast(
+    unit: ICombatUnit,
+    spellId: string,
+    castMs: number,
+    missMs: number,
+  ): boolean {
+    return missRowBelongsToCast(
+      castMsBySpellOf(unit).get(spellId) ?? [],
+      castMs,
+      missMs,
+    );
+  }
+
+  const consumedImmuneMisses = new Set<unknown>();
+  function ownerCcImmuneTag(
+    spellId: string,
+    castTimeSeconds: number,
+    named?: ReadonlySet<string>,
+    onlyNamed = false,
+  ): string {
+    return ccImmuneTagFor(owner, spellId, castTimeSeconds, named, onlyNamed);
+  }
+  // Reliability round 3 N10 (483f): a teammate's Storm Bolt the game rejected
+  // as IMMUNE rendered as a plain [TEAM] [CC] cast — same predicate as the
+  // owner's tag, read from that unit's own SPELL_MISSED stream.
+  //
+  // Triage 2026-09-29 G3:
+  //  - enemy-def F-E25b: a miss is the cast's when its id is the cast's own or
+  //    one of the cast's effect auras (`castAndEffectIds`, the one cast→effect
+  //    table): Storm Bolt's IMMUNE is logged under its stun 132169, Freezing
+  //    Trap's under 3355 / 203337, Maim's under 203123.
+  //  - enemy-def F-E26: `named` = the unit names the line names (its target,
+  //    plus an AoE fold's landed targets). On such a line a miss on a named
+  //    target is the line's own `[IMMUNE]`; a miss on a PLAYER the line does
+  //    not name is said with that player's label (`[IMMUNE: 6(UDKnight)]` —
+  //    d692582c's Leg Sweep landed on the named priest and was immune only on
+  //    the Death Knight); a miss on anything else says nothing (its
+  //    Intimidating Shout was immune only on summons and a pet). Without
+  //    `named` (a line that names no one) the rule is as before.
+  //  - fact2 (2026-10-20): `onlyNamed` = a press that reaches an ALLY
+  //    (Intervene, an external): only an IMMUNE on the unit the line names
+  //    is the press's — the game refused it on that ally (a2e71187 2:27:
+  //    Intervene IMMUNE on an Evoker in Time Stop, the line said nothing)
+  //  - fact6 D14 (F20): `onlyNamed` on a line that names NOBODY = a hostile
+  //    press the ledger keeps no target for (an offensive cooldown): the
+  //    unit its own cast row was aimed at is the one named, when that unit
+  //    is on the other side — 2b3fba97-r0 2:27 Deathmark into Time Stop
+  //    rendered bare. A press with no aimed dest says nothing (round-1
+  //    retest idx 34, 26bfd4f3 0:39 Summon Darkglare).
+  function ccImmuneTagFor(
+    unit: ICombatUnit,
+    spellId: string,
+    castTimeSeconds: number,
+    lineNamed?: ReadonlySet<string>,
+    onlyNamed = false,
+  ): string {
+    const misses = unit.missesOut;
+    if (!misses || misses.length === 0) return "";
+    const castMs = matchStartMs + castTimeSeconds * 1000;
+    // Whose immunity counts: a player's, or the unit the cast itself was
+    // aimed at. An AoE CC (Psychic Scream, Leg Sweep) logs an IMMUNE miss for
+    // every immune pet / totem it sweeps — ghouls, Army of the Dead, totems —
+    // while the line names only the player targets; 2026-09-30 corpus
+    // (605 files): 818 Psychic Scream lines carried a bare [IMMUNE] that way,
+    // e.g. 5dc8b136 0:53 "[DR: Disorient Full] [IMMUNE]" with all three
+    // player targets feared.
+    // the press's own cast row: its id, else a skin variant of the same
+    // English name (F20 immunity residual: the ledger keys Hex 51514 /
+    // Imprison 217832 while the press logs 210873 / 221527, and its IMMUNE
+    // row under the variant left the line bare — s0/1-1 0:25 Hex into Cloak
+    // of Shadows, `[CC NOT LANDED]` said it instead)
+    const nearPress = (e: {
+      logLine?: { event?: unknown };
+      timestamp: number;
+    }) =>
+      e.logLine?.event === LogEvent.SPELL_CAST_SUCCESS &&
+      Math.abs(e.timestamp - castMs) <= 100;
+    const pressName = getEnglishSpellName(spellId, "");
+    const pressRow =
+      (unit.spellCastEvents ?? []).find(
+        (e) => nearPress(e) && e.spellId === spellId,
+      ) ??
+      (pressName
+        ? (unit.spellCastEvents ?? []).find(
+            (e) =>
+              nearPress(e) &&
+              !!e.spellId &&
+              getEnglishSpellName(e.spellId, e.spellName) === pressName,
+          )
+        : undefined);
+    const rowSpellId = pressRow?.spellId ?? spellId;
+    const aimedAt = pressRow?.destUnitId;
+    let aimedNamed: ReadonlySet<string> | undefined;
+    if (onlyNamed && (!lineNamed || lineNamed.size === 0)) {
+      const decided = (r: CombatUnitReaction | undefined) =>
+        r === CombatUnitReaction.Friendly || r === CombatUnitReaction.Hostile;
+      const side = rosterSides.get(unit.id);
+      const aimedSide = aimedAt ? rosterSides.get(aimedAt) : undefined;
+      if (
+        !aimedAt ||
+        !decided(side) ||
+        !decided(aimedSide) ||
+        aimedSide === side
+      )
+        return "";
+      aimedNamed = new Set([aimedAt]);
+    }
+    const named = aimedNamed ?? lineNamed;
+    const counts = (destId: string | undefined) =>
+      !!destId &&
+      (destId === aimedAt || allPlayers.some((p) => p.id === destId));
+    // the press's own IMMUNE rows (`pressImmuneMissRows`, the one "was this
+    // press refused" reading — shared with the KILL ATTEMPTS burst anchor)
+    const candidates = pressImmuneMissRows(
+      misses,
+      rowSpellId,
+      castMsBySpellOf(unit).get(rowSpellId) ?? [],
+      castMs,
+      aimedAt
+        ? { casts: unit.spellCastEvents ?? [], destUnitId: aimedAt }
+        : undefined,
+    ).filter((m) => counts(m.destUnitId) && !consumedImmuneMisses.has(m));
+    let miss: (typeof candidates)[number] | undefined = candidates[0];
+    let unnamedLabel = "";
+    if (miss && named && named.size > 0) {
+      // `named` holds the line's unit names and/or ids: a miss's dest name
+      // need not spell the roster's (realm suffix), its id does
+      const onNamed = candidates.find(
+        (m) =>
+          (!!m.destUnitName && named.has(m.destUnitName)) ||
+          (!!m.destUnitId && named.has(m.destUnitId)),
+      );
+      const onPlayer = candidates.find((m) =>
+        allPlayers.some((p) => p.id === m.destUnitId),
+      );
+      miss = onlyNamed ? onNamed : (onNamed ?? onPlayer);
+      if (!onNamed && onPlayer && !onlyNamed) {
+        // the roster label, resolved by id on the player's own side (a bare
+        // character name never prints — 605: `[IMMUNE: Mashiyyds]`)
+        const pl = allPlayers.find((p) => p.id === onPlayer.destUnitId)!;
+        unnamedLabel =
+          pl.reaction === CombatUnitReaction.Friendly
+            ? pid(pl.name)
+            : enemyPid(pl.name);
+      }
+    }
+    if (!miss) return "";
+    // fact3 D58 (dff2c7a6 r3 0:53): a line that names nobody (a ground
+    // control — Binding Shot stunned two and met one immune mage) says whose
+    // immunity it was, or the cast reads as wholly immune
+    if (!unnamedLabel && (!named || named.size === 0)) {
+      const pl = allPlayers.find((p) => p.id === miss!.destUnitId);
+      if (pl && miss.destUnitId !== aimedAt)
+        unnamedLabel =
+          pl.reaction === CombatUnitReaction.Friendly
+            ? pid(pl.name)
+            : enemyPid(pl.name);
+    }
+    consumedImmuneMisses.add(miss);
+    const word = unnamedLabel ? `IMMUNE: ${unnamedLabel}` : "IMMUNE";
+    const cause = ccImmuneCauseOf(miss);
+    return cause ? ` [${word} — ${cause}]` : ` [${word}]`;
+  }
+
+  /**
+   * Why ONE logged IMMUNE miss of a control was immune, as far as the log
+   * shows — the text inside a cast line's `[IMMUNE — …]` and inside a
+   * `[CC NOT LANDED]` line's parenthesis (one reading for both): a listed
+   * immunity aura up on the target at impact, else our own team's Cyclone on
+   * it, else its diminishing returns at Immune. "" when the log shows none
+   * of the three — never a guess.
+   */
+  function ccImmuneCauseOf(miss: OutgoingMiss): string {
+    // Which listed immunity was up on the target at impact.
+    let immunityName = "";
+    const target =
+      allUnits?.find((u) => u.id === miss.destUnitId) ??
+      allPlayers.find((u) => u.id === miss.destUnitId);
+    if (target) {
+      // the one "was it up when the control hit" reading, in log order up to
+      // the miss row (a Shroud the miss consumed is REMOVED after it in the
+      // same ms) and capped at the aura's own length (fact1215 R5)
+      // only an avoidance that can stop THIS control is named — the
+      // avoidance sweep's own applicability (`applicableCCAvoidanceIds`):
+      // a mechanic-limited one (The Beast Within, Berserker Rage …) by
+      // mechanic (codex 20-F16-09 #1: The Beast Within read as the cause of
+      // an IMMUNE Hammer of Justice at stun DR Immune), a magic-only one by
+      // school (fact3 D2, 02b930cd 1:42: Spell Reflection named for a
+      // physical Shockwave at stun DR Immune)
+      const ccName = getEnglishSpellName(miss.spellId ?? "", miss.spellName);
+      const applicable = applicableCCAvoidanceIds(miss.spellId ?? "", ccName);
+      immunityName =
+        ccAvoidanceBuffsUpAt(target, miss.timestamp, {
+          atLine: miss.logLine.lineIndex,
+          casterOf: (id) =>
+            allUnits?.find((u) => u.id === id) ??
+            allPlayers.find((u) => u.id === id),
+        }).find(
+          (b) =>
+            applicable.has(b.spellId) &&
+            avoidanceExplainsMissType(b.spellId, miss.missType),
+        )?.name ?? "";
+    }
+    if (immunityName) return `${immunityName} was up`;
+    // B-tier B17a (user ruling 2026-10-06, "三种都写；找不到原因不加注"): the
+    // two other reasons the log can show, after the immunity aura above —
+    // our own team's Cyclone on the target, then diminishing returns.
+    const why = target
+      ? (ccImmuneByOwnCyclone(target, miss.timestamp) ??
+        ccImmuneByDr(target, miss.spellId!, miss.timestamp))
+      : undefined;
+    return why ?? "";
+  }
+
+  /** B17a: a friendly Druid's Cyclone was on the target at the miss — a
+   * cycloned unit is immune to everything, our own control included. */
+  function ccImmuneByOwnCyclone(
+    target: ICombatUnit,
+    missMs: number,
+  ): string | undefined {
+    // the shared reading, capped at the Cyclone's full length when its
+    // REMOVED was lost (`damageImmuneControlUpAt`)
+    const up = damageImmuneControlUpAt(target, missMs, (id, src) =>
+      ccFullDurationForCaster(
+        id,
+        friends.find((f) => f.id === src),
+      ),
+    );
+    const druid = up && friends.find((f) => f.id === up.srcUnitId);
+    if (!druid) return undefined;
+    return `${pid(druid.name)}'s Cyclone was on the target`;
+  }
+
+  /** B17a: the target's diminishing returns for this control's family were
+   * already at immune — the DR engine's own walk (`drLevelNextAt`) over the
+   * target's history in that family (`buildCcCategoryHistory`)
+   * (ba8c0510 0:22: Freezing Trap after two Saps). Nothing is said for a
+   * family the DR table does not know. */
+  function ccImmuneByDr(
+    target: ICombatUnit,
+    missSpellId: string,
+    missMs: number,
+  ): string | undefined {
+    const category = getDRCategory(missSpellId);
+    if (category.startsWith("spell:") || category === "Unknown")
+      return undefined;
+    // the target's whole DR history (fact6 F20: every source but a
+    // holder-self non-control — a control reflected back onto them, an enemy
+    // pet's — not only the applications we are credited with)
+    const history = buildCcCategoryHistory(
+      target,
+      category,
+      matchStartMs,
+      new Map(_allUnits.map((u) => [u.id, u])),
+    );
+    return drLevelNextAt(history, missMs) === "Immune"
+      ? `DR: ${category} Immune`
+      : undefined;
+  }
+
+  /**
+   * The other ways an owner CC fails to land on a unit (2026-09-25): the game
+   * reports MISS, REFLECT, PARRY, DODGE, EVADE or DEFLECT in the same
+   * `SPELL_MISSED` stream as IMMUNE, and without a tag the cast line reads
+   * exactly like a landed CC — "Intimidating Shout → 5(HPaladin)" when the
+   * Shout missed the paladin (MISS, AOE), next to a [CC BOOKMARK] saying the
+   * healer was not CC'd. Season sample (1 file in 60): MISS 397, REFLECT 60,
+   * PARRY/DODGE 17 against IMMUNE 1,866. ABSORB alone does not establish a
+   * failed control (it reports the CC's damage part) and is ignored.
+   * Each miss names its unit — an AoE CC can miss one target and land on
+   * another — and is consumed once. Attributed like the IMMUNE tag
+   * (`missBelongsToCast`). Ground truth, same sample: after a MISS / REFLECT /
+   * PARRY / DODGE the caster's CC aura appeared on that target within 0.5 s
+   * 0 / 474 times; after an ABSORB, 957 / 1,072 (89 %). The type → word
+   * table is `CC_MISS_TAG_WORD` (`utils/castMissRows.ts`).
+   */
+  const consumedCcMisses = new Set<unknown>();
+  function ownerCcMissTag(spellId: string, castTimeSeconds: number): string {
+    return ccMissTagFor(owner, spellId, castTimeSeconds);
+  }
+  // cc-dr F-NE1 (codex 35-CD-07: one helper for both owner-CC emitters —
+  // the cooldown ledger (ownerCd) and the cast gap-filler): the owner and
+  // the owner's summons (a Hunter's pet applies
+  // Intimidation's stun) — whose aura on the target counts as the cast's
+  const ccSourcesCache = new Map<string, Set<string>>();
+  const ccSourcesOf = (caster: ICombatUnit): Set<string> => {
+    let s = ccSourcesCache.get(caster.id);
+    if (!s) {
+      s = new Set<string>([
+        caster.id,
+        ...(allUnits ?? [])
+          .filter((u) => u.ownerId === caster.id)
+          .map((u) => u.id),
+      ]);
+      ccSourcesCache.set(caster.id, s);
+    }
+    return s;
+  };
+  function ownerNoCcAuraTag(spellId: string, castTimeSeconds: number): string {
+    return noCcAuraTagFor(owner, spellId, castTimeSeconds);
+  }
+  // fact5 D15 (3fb8356f 1:59): a teammate's aimed CC that put no control on
+  // its target and logged no control miss printed bare — a Storm Bolt into
+  // Bladestorm read as landed. The owner's tag, for any friendly caster.
+  function noCcAuraTagFor(
+    caster: ICombatUnit,
+    spellId: string,
+    castTimeSeconds: number,
+  ): string {
+    const ownCcSources = ccSourcesOf(caster);
+    const castMs = matchStartMs + castTimeSeconds * 1000;
+    const ev = caster.spellCastEvents.find(
+      (e) =>
+        e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+        e.spellId === spellId &&
+        Math.abs(e.logLine.timestamp - castMs) <= 1,
+    );
+    if (!ev) return "";
+    const dest = (enemies ?? []).find((u) => u.id === ev.destUnitId);
+    const t0 = ev.logLine.timestamp;
+    const inWindow = (ms: number) => ms >= t0 - 100 && ms <= t0 + 2500;
+    const own = castAndEffectIds(spellId);
+    const landedOn = (u: ICombatUnit) =>
+      (u.auraEvents ?? []).some(
+        (x) =>
+          ownCcSources.has(x.srcUnitId) &&
+          x.spellId !== undefined &&
+          (ccSpellIds.has(x.spellId) || own.has(x.spellId)) &&
+          (x.logLine.event === LogEvent.SPELL_AURA_APPLIED ||
+            x.logLine.event === LogEvent.SPELL_AURA_REFRESH) &&
+          inWindow(x.timestamp),
+      );
+    // a miss of THIS cast (its own id or an effect aura's): any miss on the
+    // target — a DoT tick a shield ate — said nothing about the control
+    // (fact3 D29, 46a55085 3:28: a Kidney Shot into Phase Shift, no aura
+    // and no miss row of its own, printed bare)
+    const missedOn = (u: ICombatUnit) =>
+      (caster.missesOut ?? []).some(
+        (m) =>
+          m.destUnitId === u.id &&
+          m.spellId !== undefined &&
+          own.has(m.spellId) &&
+          // a shield eating the hit's DAMAGE says nothing about the control
+          // (D15: Storm Bolt's damage absorbed by Void Shield, no stun)
+          m.missType !== "ABSORB" &&
+          inWindow(m.timestamp),
+      );
+    if (!dest) {
+      // FT-T14: an un-aimed area control (the `AOE_CC_SPELL_IDS` the cast
+      // line lists landings for) that put its aura on NO enemy player and
+      // logged no miss on one says so. The line used to be bare, the same
+      // text as a landing nobody listed — 5677ba13 1:09 Psychic Scream:
+      // the log has two IMMUNE misses, a Death Knight's ghoul and his Lord
+      // of the Dead, and no player. Same window and aura test as the aimed
+      // case below; a pet's IMMUNE stays unsaid (the 2026-09-30 rule in
+      // `ccImmuneTagFor`). Any other un-aimed cast has no unit to read.
+      // A listed area control (its own id or one of its effect auras —
+      // Shockwave 46968 stuns with 132168). One that lands seconds after
+      // the cast is read in its own landing window (Capacitor Totem: the
+      // stun comes ~2 s later, `AOE_CC_LANDING_WINDOW_S`); one the table
+      // lists with a `null` window keeps a bare line — an absence can not
+      // be called (no entry is `null` since FT-T16). Since fact2 C10 the
+      // cast lines of Sigil of Misery and Ring of Frost ask here too
+      // (`isControlCast`); a Lay In Wait sigil keeps a bare line
+      // (`aoeCcLandingWindowFor`).
+      if (![...own].some((id) => AOE_CC_SPELL_IDS.has(id))) return "";
+      const landing = aoeCcLandingWindowFor(
+        spellId,
+        playerTalentIdSets(caster).pvpTalentIds,
+      );
+      if (landing === null) return "";
+      const inLanding = landing
+        ? (ms: number) =>
+            ms >= t0 + landing.fromS * 1000 - 100 &&
+            ms <= t0 + landing.toS * 1000
+        : inWindow;
+      const players = enemies ?? [];
+      if (players.length === 0) return "";
+      // Only THIS cast's own aura / miss ids count here (the aimed case
+      // below accepts any control aura and any miss on its one target): a
+      // Fear landing a second later, or a DoT tick a shield absorbed (a
+      // SPELL_MISSED too), on one of three enemies is not this cast's
+      // landing — 36 of the 101 such lines of the 605-file capture stayed
+      // bare that way.
+      const ownIn = (id: string | undefined, ms: number) =>
+        id !== undefined && own.has(id) && inLanding(ms);
+      // the press's own control aura on an enemy player: a landing (the
+      // cast line's landing list states it)
+      const landedOnPlayer = players.some((u) =>
+        (u.auraEvents ?? []).some(
+          (x) =>
+            ownCcSources.has(x.srcUnitId) &&
+            (x.logLine.event === LogEvent.SPELL_AURA_APPLIED ||
+              x.logLine.event === LogEvent.SPELL_AURA_REFRESH) &&
+            ownIn(x.spellId, x.timestamp),
+        ),
+      );
+      if (landedOnPlayer) return "";
+      // a failed-control miss of the caster's own: the cast line's fail
+      // tag (`[IMMUNE …]` / `[MISSED on …]`) states it
+      if (
+        players.some((u) =>
+          (caster.missesOut ?? []).some(
+            (m) =>
+              m.destUnitId === u.id &&
+              m.missType !== "ABSORB" &&
+              ownIn(m.spellId, m.timestamp),
+          ),
+        )
+      )
+        return "";
+      // fact6 D4 / D5 (a400c9d8 0:38 / 1:26, ruling 2 of 2026-10-28): the
+      // press REACHED an enemy player and put no control on anyone — its
+      // own damage (Dragon's Breath on a disorient-DR-immune DH: the game
+      // writes the damage and no aura, no miss), a shield eating that
+      // damage, or a miss row of the caster's summon (a Capacitor Totem's
+      // IMMUNE pulse is logged under the totem — 7eba4054 1:28, 4caab013
+      // 2:10 / 3:21: read from the caster only, the line said "hit no enemy
+      // player" beside a `[CC NOT LANDED]` of that pulse). The units it
+      // reached are named; the DR engine's Immune reading (`ccImmuneByDr`)
+      // is added only when it holds for every one of them.
+      const reached: Array<{ u: ICombatUnit; ms: number }> = [];
+      for (const u of players) {
+        const rows = [
+          ...(u.damageIn ?? []).filter((d) => ownCcSources.has(d.srcUnitId)),
+          ...(u.missesIn ?? []).filter(
+            (m) =>
+              ownCcSources.has(m.srcUnitId) &&
+              (m.srcUnitId !== caster.id || m.missType === "ABSORB"),
+          ),
+        ]
+          .filter((r) => ownIn(r.spellId, r.timestamp))
+          .sort((a, b) => a.timestamp - b.timestamp);
+        if (rows.length > 0) reached.push({ u, ms: rows[0]!.timestamp });
+      }
+      if (reached.length === 0) return ` ${OWNER_AOE_CC_NO_PLAYER_TAG}`;
+      const drId = [...own].find(
+        (id) => !getDRCategory(id).startsWith("spell:"),
+      );
+      const drs = reached.map(({ u, ms }) =>
+        drId ? ccImmuneByDr(u, drId, ms) : undefined,
+      );
+      const dr =
+        drs[0] !== undefined && drs.every((d) => d === drs[0]) ? drs[0] : "";
+      return ` ${NO_CC_AURA_LOGGED_TAG} — hit ${reached
+        .map(({ u }) => enemyPid(u.name))
+        .join(", ")}${dr ? `; ${dr}` : ""}]`;
+    }
+    // an aimed cast at an enemy player
+    if (landedOn(dest)) return "";
+    if (missedOn(dest)) return "";
+    // fact5 retest r3 D1 (46a55085 3:28): an avoidance aura up on the target
+    // at the cast (Phase Shift: no aura, no miss row) is its cause — the
+    // IMMUNE tag's reading (`ccAvoidanceBuffsUpAt`, applicability by the
+    // shared gate), at the cast row, never a move pressed after it (codex
+    // 20-F18-06 #1, cb6f3e66 r5: a Shadowmeld 0.3 s after a Cheap Shot)
+    const ccName = getEnglishSpellName(spellId, ev.spellName);
+    const applicable = applicableCCAvoidanceIds(spellId, ccName);
+    const up = ccAvoidanceBuffsUpAt(dest, t0, {
+      atLine: ev.logLine.lineIndex,
+      casterOf: (id) =>
+        allUnits?.find((u) => u.id === id) ??
+        allPlayers.find((u) => u.id === id),
+    }).find(
+      (b) =>
+        applicable.has(b.spellId) &&
+        avoidanceExplainsMissType(b.spellId, undefined),
+    );
+    return up
+      ? ` ${NO_CC_AURA_LOGGED_TAG} — ${up.name} was up]`
+      : ` ${NO_CC_AURA_LOGGED_TAG}]`;
+  }
+
+  // cc-dr F-TM1 (ruling A53, 2026-09-30): the same tag on a teammate's
+  // `[TEAM] [CC]` line, from that unit's own SPELL_MISSED stream, with the
+  // cause looked up for that caster. A miss's id is the cast's own or one of
+  // its effect auras (F-E25b: Maim's MISS logged under its stun 203123).
+  // IMMUNE never comes here — `ccImmuneTagFor` owns it.
+  /**
+   * The cause of a MISS / PARRY / … of a control cast, when the shared
+   * avoidance sweep found one for THIS cast (the enemy summary's
+   * ccAvoidedInstances — the predicate behind [CC AVOIDED?]): same caster,
+   * same spell, same cast time. 105 of 204 tags on the 605-file slice were
+   * Holy Priests (Phase Shift). One reading for the cast line's tag and a
+   * `[CC NOT LANDED]` line's parenthesis; "" for none.
+   */
+  function ccMissCauseOf(
+    unit: ICombatUnit,
+    spellId: string,
+    castTimeSeconds: number,
+    destUnitName: string,
+  ): string {
+    const avoided = enemyCCSummaries
+      ?.find((x) => x.playerName === destUnitName)
+      ?.ccAvoidedInstances?.find(
+        (a) =>
+          a.sourceName === unit.name &&
+          a.spellId === spellId &&
+          Math.abs((a.castAtSeconds ?? a.atSeconds) - castTimeSeconds) < 0.01,
+      );
+    return avoided ? `${avoided.avoidanceSpellName} was up` : "";
+  }
+
+  function ccMissTagFor(
+    unit: ICombatUnit,
+    spellId: string,
+    castTimeSeconds: number,
+  ): string {
+    const misses = unit.missesOut;
+    if (!misses || misses.length === 0) return "";
+    const castMs = matchStartMs + castTimeSeconds * 1000;
+    const family = castAndEffectIds(spellId);
+    const parts: string[] = [];
+    for (const m of misses) {
+      const word = m.missType ? CC_MISS_TAG_WORD[m.missType] : undefined;
+      if (
+        !word ||
+        m.spellId === undefined ||
+        !family.has(m.spellId) ||
+        // a REFLECT row aimed at its own caster is no reflect
+        // (`isCountedReflectRow`; codex F20-23: "[REFLECTED by Me]")
+        (m.missType === "REFLECT" && !isCountedReflectRow(m)) ||
+        consumedCcMisses.has(m) ||
+        !missBelongsToCast(unit, spellId, castMs, m.timestamp)
+      )
+        continue;
+      consumedCcMisses.add(m);
+      // By GUID: a pet target renders as "X's pet" / "[pet]", never its raw
+      // (possibly localized) name (codex astra: `[MISSED on 恶魔卫士]`).
+      const who = actorLabel(m.destUnitName, "enemy", m.destUnitId);
+      const why = ccMissCauseOf(unit, spellId, castTimeSeconds, m.destUnitName);
+      const cause = why ? ` — ${why}` : "";
+      parts.push(
+        word === "MISSED"
+          ? ` [MISSED on ${who}${cause}]`
+          : ` [${word} ${who}${cause}]`,
+      );
+    }
+    // one cast can log the same failure twice — under its cast id and its
+    // effect id (95127ab4: Maim 22570 and its stun 203123, 4 ms apart): say
+    // it once
+    return [...new Set(parts)].join("");
+  }
+
+  /**
+   * A miss row some other line already states — the ONE test of "this miss
+   * has its line" for `[CC NOT LANDED]`:
+   *  - a cast line's fail tag took it (`[IMMUNE …]`, `[MISSED on …]`,
+   *    `[REFLECTED by …]` on `[YOU] [CC]` / `[TEAM] [CC]` / a cooldown line —
+   *    the consumed sets above), or its twin did: one failure logged under
+   *    the cast id and the effect id within `CAST_MISS_LEAD_MS`;
+   *  - it is a REFLECT: `reflectedSpells` gives every reflected spell its
+   *    `[REFLECTED]` line, whatever id the row is logged under. (Asked of
+   *    `isControlSpell(m.spellId)` at first — Lightning Lasso's reflect is
+   *    logged under its stun 305485, not the cast 305483, and got both lines:
+   *    3 contexts of the 605-file capture.)
+   * Read AFTER every cast-line emitter has run — they consume as they print.
+   */
+  function missStatedOnAnotherLine(m: OutgoingMiss): boolean {
+    if (consumedImmuneMisses.has(m) || consumedCcMisses.has(m)) return true;
+    if (m.missType === "REFLECT" && !!m.spellId) return true;
+    // …or a failure of the same control in the same rendered second, which
+    // the line stating the first one already covers (the gate's reading:
+    // `checkCcNotLandedLines`; wide 197-3 2:33: Binding Shot's tether 117405
+    // and its stun 117526 each logged IMMUNE on one Divine Shield, 315 ms
+    // apart)
+    const nameOf = (x: OutgoingMiss) =>
+      getEnglishSpellName(x.spellId ?? "", x.spellName ?? "");
+    const secondOf = (x: OutgoingMiss) =>
+      toRenderSecond((x.timestamp - matchStartMs) / 1000);
+    for (const c of [...consumedImmuneMisses, ...consumedCcMisses]) {
+      const x = c as OutgoingMiss;
+      if (
+        x.srcUnitId === m.srcUnitId &&
+        x.destUnitId === m.destUnitId &&
+        x.missType === m.missType &&
+        (Math.abs(x.timestamp - m.timestamp) <= CAST_MISS_LEAD_MS ||
+          (nameOf(x) !== "" &&
+            nameOf(x) === nameOf(m) &&
+            secondOf(x) === secondOf(m)))
+      )
+        return true;
+    }
+    return false;
+  }
+
+  /**
+   * `[CC NOT LANDED]` (FT-T16 D15 "3b", user approval 2026-10-10 on
+   * real-match samples): a control by our team that the log says did not
+   * land on an enemy PLAYER — a SPELL_MISSED row of a failed-control type
+   * (`CONTROL_FAILED_MISS_TYPES`: IMMUNE, MISS, REFLECT, PARRY …) — and that
+   * no other line states (`missStatedOnAnotherLine`). A control with no
+   * cooldown (Polymorph, Cyclone, Fear, Hex …) has no cast line, and
+   * `[CC ON ENEMY]` prints landed auras only: 0068182d round 5 — the owner's
+   * Polymorph into Bladestorm at 1:40 was on no line.
+   *
+   *   1:40  [CC NOT LANDED]   4(AWarrior) ← Polymorph (by 1(AMage)) — logged IMMUNE (Bladestorm was up)
+   *
+   * The type is the log's own word; the parenthesis is the cast lines' cause
+   * (`ccImmuneCauseOf` / `ccMissCauseOf`), absent when the log shows none.
+   * A miss whose control is on the target anyway — an aura of that spell
+   * from that caster starting on the miss's displayed second or instant (the
+   * row was for another part of the spell) — gets no line: the landing has
+   * its own. Nothing here feeds DR, a landed count or a candidate.
+   */
+  function ccNotLandedLines(): Array<{ atSeconds: number; line: string }> {
+    const out: Array<{ atSeconds: number; line: string }> = [];
+    const seen = new Set<string>();
+    const friendIds = new Set(friends.map((f) => f.id));
+    // a friendly player, or a summon of one (a pet's control is logged under
+    // the pet) — the owning player's id either way
+    const sideOf = (unitId: string | undefined): string | undefined => {
+      if (!unitId) return undefined;
+      if (friendIds.has(unitId)) return unitId;
+      const ownerId = allUnits?.find((u) => u.id === unitId)?.ownerId;
+      return ownerId && friendIds.has(ownerId) ? ownerId : undefined;
+    };
+    const casters = [
+      ...friends,
+      ...(allUnits ?? []).filter(
+        (u) => !friendIds.has(u.id) && sideOf(u.id) !== undefined,
+      ),
+    ];
+    for (const caster of casters) {
+      // fact6 D30 (bbd5e632 0:37): an owner's command to its pet (Command
+      // Demon: Seduction 119909 → the Sayaad's 6358) is no control of its
+      // own — the pet's row is (`petCommands`, the [CC AVOIDED?] / CC USE
+      // reading). A command the pet carried out is stated by the pet's own
+      // row; one no summon row carried out prints once, as the pet's.
+      const cmd = friendIds.has(caster.id)
+        ? petCommands(caster, { units: allUnits ?? [] })
+        : undefined;
+      for (const m of caster.missesOut ?? []) {
+        if (m.logLine?.event !== LogEvent.SPELL_MISSED) continue;
+        if (!m.spellId || !CONTROL_FAILED_MISS_TYPES.has(m.missType)) continue;
+        // a miss that stands for a control (`missReportsControl`: not a
+        // damage miss of a cast whose control takes only some targets)
+        if (!missReportsControl(m.spellId)) continue;
+        const target = (enemies ?? []).find((e) => e.id === m.destUnitId);
+        if (!target) continue;
+        const atSeconds = (m.timestamp - matchStartMs) / 1000;
+        if (atSeconds < 0 || atSeconds > matchEndSeconds) continue;
+        if (missStatedOnAnotherLine(m)) continue;
+        // the cast this row belongs to, when the caster has one logged
+        // (`missBelongsToCast`, the cast lines' own attribution)
+        const cast = (caster.spellCastEvents ?? []).find(
+          (e) =>
+            e.logLine?.event === LogEvent.SPELL_CAST_SUCCESS &&
+            !!e.spellId &&
+            castAndEffectIds(e.spellId).has(m.spellId!) &&
+            missBelongsToCast(caster, e.spellId, e.timestamp, m.timestamp),
+        );
+        const family = castAndEffectIds(cast?.spellId ?? m.spellId);
+        // the line names the press — unless DB2 links the control to it only
+        // through a talent of its class (`nominatedEffectAurasOfCast` leaves
+        // those out): Terror of the Skies keeps its own name, not the Deep
+        // Breath it rode in on (F20 dr residual)
+        const named =
+          cast &&
+          (cast.spellId === m.spellId ||
+            nominatedEffectAurasOfCast(cast.spellId!).includes(m.spellId))
+            ? cast
+            : undefined;
+        const name = getEnglishSpellName(
+          named?.spellId ?? m.spellId,
+          named?.spellName ?? m.spellName ?? "",
+        );
+        let shown = caster;
+        if (cmd) {
+          if (
+            cmd.carriedOutBy(m.timestamp, name) ||
+            (cast && cmd.carriedOutBy(cast.timestamp, name))
+          )
+            continue;
+          const at = cast ?? m;
+          if (
+            cmd.isCommandRow(at.spellId!, at.timestamp, cast ? 0 : PET_COMMAND_MS)
+          )
+            shown = cmd.commandPet(name) ?? caster;
+        }
+        const landed = enemyCCSummaries
+          ?.find((x) => x.playerName === target.name)
+          ?.ccInstances.some(
+            (cc) =>
+              sideOf(cc.sourceId) === sideOf(caster.id) &&
+              (family.has(cc.spellId) ||
+                cc.spellId === m.spellId ||
+                cc.spellName === name) &&
+              (toRenderSecond(cc.atSeconds) === toRenderSecond(atSeconds) ||
+                Math.abs(cc.atSeconds - atSeconds) * 1000 <= CAST_MISS_LEAD_MS),
+          );
+        if (landed) continue;
+        // the same failure logged under the cast id and the effect id
+        const key = `${shown.id}|${target.id}|${name}|${toRenderSecond(atSeconds)}|${m.missType}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const cause =
+          m.missType === "IMMUNE"
+            ? ccImmuneCauseOf(m)
+            : cast
+              ? ccMissCauseOf(
+                  caster,
+                  cast.spellId!,
+                  (cast.timestamp - matchStartMs) / 1000,
+                  target.name,
+                )
+              : "";
+        out.push({
+          atSeconds,
+          line: `${fmtTime(atSeconds)}  ${CC_NOT_LANDED_TAG}   ${enemyPid(target.name)} ← ${name} (by ${actorLabel(shown.name, "friendly", shown.id)}) — logged ${m.missType}${cause ? ` (${cause})` : ""}`,
+        });
+      }
+    }
+    return out.sort((a, b) => a.atSeconds - b.atSeconds);
+  }
+
+  /**
+   * `[EMPOWER L?]` on the owner's empowered casts (Evoker). The release level
+   * is the whole difference between a tap and a full charge — Dream Breath in
+   * the S2 archive releases at L1 87% of the time (774 L1 / 20 L2 / 104 L3) —
+   * and without this tag every release renders identically, so the model
+   * cannot connect "the big AoE heal did nothing" to "it was tapped at L1".
+   * The tag states the fact only; whether L1 was right (Flameshaper tap-spam
+   * is a real style) is the model's call, not an accusation baked in here.
+   *
+   * The level is the released hold's (`empowerSpans`: START → END in log
+   * order), matched to the press on its START instant like the cut hold
+   * below, each hold consumed once (D2, 2026-10-24 — it used to look for an
+   * END within ±1.5 s of the press, which a full charge held longer misses:
+   * the SUCCESS is logged at the START, the END at the release).
+   *
+   * `[EMPOWER not released — cut short after Ns]` (triage other F-O6): a hold
+   * that ended in SPELL_EMPOWER_INTERRUPT released nothing, yet its
+   * SPELL_CAST_SUCCESS — the press, logged at SPELL_EMPOWER_START — rendered
+   * exactly like a release. The tag does NOT say "interrupted": the log writes
+   * that event for every hold that did not release, and on the 60-file library
+   * only 20 of 35 coincide with an enemy CC or kick (the rest: moved, or let
+   * go before the first rank). The cause, when there is one, is on the
+   * timeline's own [CC ON TEAM] / kick line at that second.
+   * Read from `empowerSpans` (the predicate occupancyWithin counts
+   * the hold with), matched on the START instant and checked BEFORE the END
+   * lookup: an interrupted press followed by a quick re-press must not take
+   * the second press's END.
+   */
+  const ownerInterruptedEmpowers = (empowerSpans(owner) ?? []).filter(
+    (s) => s.interrupted,
+  );
+  const consumedEmpowerInterrupts = new Set<unknown>();
+  // D2 (user 2026-10-24): the released holds, START → END paired by
+  // `empowerSpans` with the level each one went out at. The tag used to
+  // look for an END within ±1.5 s of the press — but the press's SUCCESS
+  // is logged at the START and the END at the release, so a full charge
+  // (holds of 1.7–3.0 s on the 60 triage picks) was out of reach: all 4
+  // level-3 releases rendered no tag.
+  const ownerSpans = empowerSpans(owner);
+  const ownerReleasedEmpowers = (ownerSpans ?? []).filter(
+    (s) => !s.interrupted,
+  );
+  const consumedEmpowerReleases = new Set<unknown>();
+  // a document stored before the parser kept SPELL_EMPOWER_START has no
+  // spans: its ENDs are matched to the press as they used to be
+  const consumedEmpowerEnds = new Set<unknown>();
+  function ownerEmpowerTag(spellId: string, castTimeSeconds: number): string {
+    const castMs = matchStartMs + castTimeSeconds * 1000;
+    // fact3 D18 (2cc2373a 0:12): a hold is the press its own SUCCESS row
+    // sits beside — after Tip the Scales an instant Fire Breath and a second
+    // press 0.44 s later (EMPOWER_START 13.236, SUCCESS 13.237, cut 13.290)
+    // are two presses inside EMPOWER_PRESS_MATCH_MS, and the ledger keeps one
+    // line: the cut hold is not the instant one's
+    const pressMs = owner.spellCastEvents
+      .filter(
+        (e) =>
+          e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+          e.spellId === spellId,
+      )
+      .map((e) => e.logLine.timestamp);
+    const nearestPressIsThis = (startMs: number) => {
+      let best = castMs;
+      for (const t of pressMs)
+        if (Math.abs(t - startMs) < Math.abs(best - startMs)) best = t;
+      return Math.abs(best - castMs) <= 1;
+    };
+    const cut = ownerInterruptedEmpowers.find(
+      (s) =>
+        s.spellId === spellId &&
+        !consumedEmpowerInterrupts.has(s) &&
+        Math.abs(s.startMs - castMs) <= EMPOWER_PRESS_MATCH_MS &&
+        nearestPressIsThis(s.startMs),
+    );
+    if (cut) {
+      consumedEmpowerInterrupts.add(cut);
+      return ` [EMPOWER not released — cut short after ${((cut.endMs - cut.startMs) / 1000).toFixed(1)}s]`;
+    }
+    if (ownerSpans === null) {
+      const end = (owner.empowerEnds ?? []).find(
+        (e) =>
+          e.spellId === spellId &&
+          !consumedEmpowerEnds.has(e) &&
+          Math.abs(e.timestamp - castMs) <= 1500,
+      );
+      if (!end) return "";
+      consumedEmpowerEnds.add(end);
+      return ` [EMPOWER L${end.level}]`;
+    }
+    const released = ownerReleasedEmpowers.find(
+      (s) =>
+        s.spellId === spellId &&
+        !consumedEmpowerReleases.has(s) &&
+        Math.abs(s.startMs - castMs) <= EMPOWER_PRESS_MATCH_MS &&
+        nearestPressIsThis(s.startMs),
+    );
+    if (!released) return "";
+    consumedEmpowerReleases.add(released);
+    return ` [EMPOWER L${released.level}]`;
+  }
+
+  function getCDTargetAndVelocityPart(
+    spellId: string,
+    rawTimeSeconds: number,
+    targetName: string | undefined,
+    forceSelf = false,
+  ): string {
+    // HP on a press line is the HP AT THE PRESS (`hpAtPress`), just before the
+    // press's own heal — user ruling 2026-09-30 (triage A21, hp-state F-R8),
+    // the signed exception to the whole-second grid: the `[STATE]` tick of the
+    // displayed second can read differently, the legend says so and the gate
+    // exempts `PRESS_HP_LINE_TAGS`. Every number this helper prints (HP,
+    // velocity, the 2 s DPS window) is anchored on that one instant, so a line
+    // never mixes two.
+    const castMs = matchStartMs + Math.round(rawTimeSeconds * 1000);
+    const press = { spellId, srcUnitId: owner.id };
+    // B112/B127: self-only defensives (Obsidian Scales, Divine Shield, Ice Block, …) log whatever
+    // unit the caster was targeting — often an enemy — as their "target". forceSelf overrides that so
+    // the line renders (self) with the caster's own HP, never "→ <enemy>" with that enemy's HP.
+    const isSelf =
+      forceSelf ||
+      !targetName ||
+      targetName === "nil" ||
+      targetName === owner.name ||
+      targetName.split("-")[0] === owner.name.split("-")[0];
+    // F139: no owner fallback — it printed the CASTER's own HP as if it were the target's
+    // whenever the dest unit wasn't found by exact name.
+    const targetUnit = isSelf
+      ? owner
+      : _allUnits.find((u) => u.name === targetName);
+
+    // H9: the HP-velocity / incoming-DPS trajectory is defensive context (was this ally
+    // dying?). It is meaningless — and misleading — for an offensive CD cast on an enemy
+    // (e.g. Maim, which is not in ccSpellIds), so skip it when the target is hostile.
+    const targetIsEnemy =
+      !isSelf && targetUnit?.reaction === CombatUnitReaction.Hostile;
+
+    let velocityStr = "";
+    if (targetUnit && !targetIsEnemy && !isControlCast(spellId)) {
+      const hpNow = hpAtPress(targetUnit, castMs, press);
+      const hpBefore = getUnitHpAtTimestamp(
+        targetUnit,
+        castMs - 2000,
+        HP_SAMPLE_RADIUS_MS,
+      );
+
+      // Preceding 2-second lookback window for incoming DPS
+      const fromMs = castMs - 2000;
+      const toMs = castMs;
+      const incomingDpsK = Math.round(
+        sumIncomingPressure(targetUnit, fromMs, toMs, rosterSides) / 2 / 1000,
+      );
+
+      if (hpNow !== null && hpBefore !== null) {
+        const perSec = (hpNow - hpBefore) / 2;
+        const sign = perSec > 0 ? "+" : "";
+        velocityStr = `, ${sign}${perSec.toFixed(0)}%/s, ${incomingDpsK}k DPS`;
+      } else {
+        velocityStr = `, ${incomingDpsK}k DPS`;
+      }
+    }
+
+    let targetPart = "";
+    if (isTeamHealCD(spellId) && (isSelf || targetIsEnemy)) {
+      // B136: team-wide healing CDs (Divine Hymn, Restoral, Rewind, Tranquility, …) have no single
+      // target, so this line would otherwise render the CASTER's own HP — usually ~100%, which the
+      // model reads as a "premature" cast. Show the lowest-HP ally at cast time instead: that is the
+      // context these CDs are judged on.
+      let lowUnit: ICombatUnit | undefined;
+      let lowHp = Infinity;
+      for (const u of _allUnits) {
+        if (
+          u.type !== CombatUnitType.Player ||
+          u.reaction !== CombatUnitReaction.Friendly
+        )
+          continue;
+        const hp = hpAtPress(u, castMs, press);
+        if (hp !== null && hp < lowHp) {
+          lowHp = hp;
+          lowUnit = u;
+        }
+      }
+      if (lowUnit) {
+        targetPart = ` (team; lowest ally ${lowHp.toFixed(0)}% HP on ${pid(lowUnit.name)})`;
+      } else {
+        const hpNow = hpAtPress(owner, castMs, press);
+        if (hpNow !== null)
+          targetPart = ` (self: ${hpNow.toFixed(0)}% HP${velocityStr})`;
+      }
+    } else if (!isSelf && targetName !== undefined) {
+      // F139: resolve by the target's actual reaction — pid() only knows friendlies, so an
+      // offensive CD/CC target (an enemy) rendered as a raw name, or as the WRONG friendly id
+      // when both teams had a player with the same display name.
+      const shortTarget = targetName.split("-")[0];
+      const resolved = targetUnit
+        ? targetUnit.reaction === CombatUnitReaction.Hostile
+          ? enemyPid(targetName)
+          : pid(targetName)
+        : shortTarget;
+      // Totem/pet/NPC targets resolve through the pid fallback to their log
+      // name, which is client-localized (localized Grounding Totem leak, locale audit). Known
+      // critical NPCs get their English name via npcId; anything else
+      // non-ASCII is suppressed. ASCII English names still pass through.
+      const npcEnglish = targetUnit
+        ? CRITICAL_NON_PLAYER_NPC_NAMES[getNpcIdFromGuid(targetUnit.id) ?? ""]
+        : undefined;
+      const targetLabel = [...resolved].some((c) => c.charCodeAt(0) > 127)
+        ? (npcEnglish ?? "[pet/NPC]")
+        : resolved;
+      targetPart = ` → ${targetLabel}`;
+      const hpPct = targetUnit
+        ? hpAtPress(targetUnit, castMs, press)?.toFixed(0)
+        : undefined;
+      if (hpPct !== undefined || velocityStr !== "") {
+        targetPart += ` (${hpPct ?? "?"}% HP${velocityStr})`;
+      }
+    } else if (velocityStr !== "") {
+      const hpNow = hpAtPress(owner, castMs, press);
+      if (hpNow !== null) {
+        targetPart = ` (self: ${hpNow.toFixed(0)}% HP${velocityStr})`;
+      }
+    }
+    return targetPart;
+  }
+
+  const snapshotFn = buildResourceSnapshot;
+  // [RES] only (user ruling 2026-09-26, round 3 N14): the owner's kick (own
+  // or pet) and Death Grip sit under MIN_CD_SECONDS and never entered the
+  // ledger; they join the [RES] line and nothing else (resUtilityCds.ts).
+  const resOwnerCDs = [...ownerCDs, ...ownerResUtilityCds(owner, matchStartMs)];
+
+  const matchEndSeconds = (matchEndMs - matchStartMs) / 1000;
+  // F02b: the round's end (`roundEndMs`, the one round end — a Solo Shuffle
+  // round is over at its first player death, ~2 s before the log's end) for
+  // the lines that state when an aura ended.
+  const roundEndAtMs = roundEndMs(
+    { endTime: matchEndMs, startInfo: { bracket } },
+    allPlayers,
+  );
+  // GH #119: the round the aura-evidenced bursts are read over (the same
+  // bounds reconstructEnemyCDTimeline uses)
+  const roundBounds = { startTime: matchStartMs, endTime: matchEndMs };
+
+  let nextPlaceholderId = 0;
+  function requestSnapshotPlaceholder(
+    timeSeconds: number,
+    forceFull = false,
+    bypassDebounce = false,
+    deathOfUnitId?: string,
+    keepFollowing = false,
+  ): DeferredSnapshot {
+    return {
+      type: "resource_snapshot",
+      timeSeconds,
+      forceFull,
+      bypassDebounce,
+      ...(deathOfUnitId ? { deathOfUnitId } : {}),
+      ...(keepFollowing ? { keepFollowing } : {}),
+      id: nextPlaceholderId++,
+    };
+  }
+
+  // exported: returned to the caller (GH #116)
+  return {
+    owner,
+    ownerSpec,
+    ownerCDs,
+    teammateCDs,
+    enemyCDTimeline,
+    ccTrinketSummaries,
+    dispelSummary,
+    enemyDispelSummary,
+    enemyCCSummaries,
+    friendlyDeaths,
+    enemyDeaths,
+    pressureWindows,
+    healingGaps,
+    friends,
+    enemies,
+    allUnits,
+    matchStartMs,
+    matchEndMs,
+    isHealer,
+    playerIdMap,
+    enemyIdMap,
+    outgoingCCChains,
+    bracket,
+    stasisEvents,
+    shapeshiftIntervals,
+    spiritOfRedemptionIntervals,
+    criticalWindowSet,
+    crisisAnchorSeconds,
+    counterfactualOf,
+    burstWindows,
+    cdPriorEpisodes,
+    cdPriorCohort,
+    stackedDefensives,
+    rawStreams,
+    allPlayers,
+    manaFallback,
+    matchDurationS,
+    enemyBuffIntervals,
+    _allUnits,
+    summonOwners,
+    rosterSides,
+    unitNames,
+    manaCooldownNote,
+    groundingAbsorbNote,
+    pid,
+    avoidanceSourceTag,
+    friendlyPid,
+    enemyPid,
+    actorLabel,
+    resolveTarget,
+    enemyCcDrTag,
+    outgoingDrTag,
+    ownerCcImmuneTag,
+    ccImmuneTagFor,
+    ownerCcMissTag,
+    ownerNoCcAuraTag,
+    noCcAuraTagFor,
+    ccMissTagFor,
+    ccNotLandedLines,
+    ownerEmpowerTag,
+    getCDTargetAndVelocityPart,
+    snapshotFn,
+    resOwnerCDs,
+    matchEndSeconds,
+    roundEndAtMs,
+    roundBounds,
+    requestSnapshotPlaceholder,
+  };
+}

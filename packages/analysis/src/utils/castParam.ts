@@ -17,6 +17,9 @@ export type CastParamCaster = Partial<
   Pick<ICombatUnit, "spellCastEvents" | "empowerEnds" | "advancedActions">
 >;
 
+/** How far after its aura a finisher's own cast row may be logged. */
+export const CAST_PARAM_TRAIL_MS = 5;
+
 /**
  * The parameter of the cast that produced `auraId` at `atMs` — the empower
  * level (1-based, from `SPELL_EMPOWER_END`) or the combo points the finisher
@@ -51,7 +54,11 @@ export function castParamAt(
     if (c.logLine?.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
     if (!cfg.castIds.includes(String(c.spellId))) continue;
     const dt = atMs - c.logLine.timestamp;
-    if (dt >= 0 && dt <= CAST_PARAM_WINDOW_MS) castTs = c.logLine.timestamp;
+    // the cast row can trail its aura by a ms or two (codex 62-POSTHOC-13e
+    // #2: an Envenom cast 1 ms after its aura was rejected — 49 of 322
+    // finisher applications in 20 files read a 0 s duration)
+    if (dt >= -CAST_PARAM_TRAIL_MS && dt <= CAST_PARAM_WINDOW_MS)
+      castTs = c.logLine.timestamp;
   }
   if (castTs === null) return null;
   for (const s of caster.advancedActions ?? []) {

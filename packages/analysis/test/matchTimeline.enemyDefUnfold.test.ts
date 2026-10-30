@@ -89,20 +89,40 @@ function aura(
   };
 }
 
-function render(): string {
+function render(
+  over: {
+    isHealer?: boolean;
+    ownerCDs?: any[];
+    pressureWindows?: any[];
+    /** advanced samples of the owner (mana readings for the F-C3 legend) */
+    ownerAdvancedActions?: any[];
+    ccTrinketSummaries?: any[];
+    /** indices of the casts that go to an unnamed pet (non-ASCII name) */
+    petCasts?: number[];
+  } = {},
+): string {
   // 14 Riptides ≥ SPAM_FOLD_THRESHOLD (12) so the fold engages; the last
   // three sit inside the death window (DEATH_AT − 10 … DEATH_AT).
   const castTimes = [2, 5, 8, 11, 14, 17, 20, 23, 26, 29, 32, 52, 55, 58];
   const owner = makeUnit("PlayerYou", {
     spec: CombatUnitSpec.Shaman_Restoration,
-    spellCastEvents: castTimes.map((t) => cast(t, "Alice")),
+    spellCastEvents: castTimes.map((t, i) =>
+      over.petCasts?.includes(i)
+        ? { ...cast(t, "Pet-0-1-1-1-416-0104D28E67"), destUnitName: "塔洛特" }
+        : cast(t, "Alice"),
+    ),
+    ...(over.ownerAdvancedActions
+      ? { advancedActions: over.ownerAdvancedActions }
+      : {}),
   });
   const alice = makeUnit("Alice", {
     spec: CombatUnitSpec.Hunter_BeastMastery,
     advancedActions: [
-      hpTick("Alice", 52, 70),
-      hpTick("Alice", 55, 40),
-      hpTick("Alice", 58, 15),
+      // the reading just before each press (HP on a press line is the HP at
+      // the press, ruling A21)
+      hpTick("Alice", 51.9, 70),
+      hpTick("Alice", 54.9, 40),
+      hpTick("Alice", 57.9, 15),
     ],
   });
   const enemy = makeUnit("Enemy1", {
@@ -137,10 +157,10 @@ function render(): string {
   return buildMatchTimeline({
     owner,
     ownerSpec: "Restoration Shaman",
-    ownerCDs: [],
+    ownerCDs: over.ownerCDs ?? [],
     teammateCDs: [],
     enemyCDTimeline: { players: [], alignedBurstWindows: [] } as any,
-    ccTrinketSummaries: [],
+    ccTrinketSummaries: over.ccTrinketSummaries ?? [],
     dispelSummary: empty,
     enemyDispelSummary: empty,
     enemyCCSummaries: [],
@@ -148,14 +168,14 @@ function render(): string {
       { spec: "Beast Mastery Hunter", name: "Alice", atSeconds: DEATH_AT },
     ],
     enemyDeaths: [],
-    pressureWindows: [],
+    pressureWindows: over.pressureWindows ?? [],
     healingGaps: [],
     friends: [owner, alice],
     enemies: [enemy],
     allUnits: [owner, alice, enemy],
     matchStartMs: START,
     matchEndMs: ms(120),
-    isHealer: true,
+    isHealer: over.isHealer ?? true,
     playerIdMap: new Map([
       ["PlayerYou", 1],
       ["Alice", 2],
@@ -175,9 +195,16 @@ describe("GH #97 timeline flags", () => {
     TIMELINE_LINE_FLAGS.enemyDef = "timeline";
     const on = render();
     expect(on).toContain(
-      "0:30  [ENEMY DEF]   4(RDruid) (Restoration Druid): Barkskin (20%, 12.0s)",
+      // 20 + the Restoration PvP aura's 10 (GH #163)
+      "0:30  [ENEMY DEF]   4(RDruid) (Restoration Druid): Barkskin (30%, 12.0s)",
     );
     expect(on).toContain("[ENEMY DEF] = ");
+    // ruling D6: the legend that calls Ts OBSERVED says what stands there
+    // when the log has no end for the aura
+    expect(on).toContain("OBSERVED duration in this round;");
+    expect(on).toContain(
+      "`end not logged` in place of Ts = the log never shows that aura end",
+    );
     for (const mode of ["off", "stamp"] as const) {
       TIMELINE_LINE_FLAGS.enemyDef = mode;
       const text = render();
@@ -185,14 +212,15 @@ describe("GH #97 timeline flags", () => {
     }
   });
 
-  it("death-window unfold: perCast lines carry the target's grid HP and stop at the cap; off keeps the fold", () => {
+  it("death-window unfold: perCast lines carry the target's HP at the press and stop at the cap; off keeps the fold", () => {
     TIMELINE_LINE_FLAGS.deathWindowUnfold = "perCast";
     const on = render();
-    expect(on).toContain("0:52  [YOU] [CAST]   Riptide → 2 (70% HP)");
-    expect(on).toContain("0:55  [YOU] [CAST]   Riptide → 2 (40% HP)");
-    expect(on).toContain("0:58  [YOU] [CAST]   Riptide → 2 (15% HP)");
-    // the fold still covers the pre-window spam
-    expect(on).toContain("0:02  [YOU] [CAST]   Riptide (x11 over 30s) → 2");
+    expect(on).toContain("0:52  [YOU] [CAST]   Riptide → 2(BMHunter) (70% HP)");
+    expect(on).toContain("0:55  [YOU] [CAST]   Riptide → 2(BMHunter) (40% HP)");
+    expect(on).toContain("0:58  [YOU] [CAST]   Riptide → 2(BMHunter) (15% HP)");
+    // the fold still covers the pre-window spam — and counts the three
+    // printed per cast, as the legend says (fact1215 R11: it said x11)
+    expect(on).toContain("0:02  [YOU] [CAST]   Riptide (x14 over 56s) → 2");
     expect(on).not.toContain("0:29  [YOU] [CAST]   Riptide");
     expect(DEATH_WINDOW_UNFOLD_CAP).toBeGreaterThanOrEqual(3);
     expect(DEATH_WINDOW_S).toBe(10);
@@ -202,6 +230,58 @@ describe("GH #97 timeline flags", () => {
     expect(off).not.toContain("0:55  [YOU] [CAST]   Riptide");
     expect(off).not.toMatch(/\[CAST\].*\(\d+% HP\)/);
     expect(off).not.toContain("[YOU] [HEALS]");
+  });
+
+  it("F16 retest idx 22: an annotated cast of the folded spell prints alone and the fold still counts it", () => {
+    TIMELINE_LINE_FLAGS.deathWindowUnfold = "perCast";
+    const text = render({
+      ccTrinketSummaries: [
+        {
+          playerName: "PlayerYou",
+          ccInstances: [
+            {
+              atSeconds: 20.4,
+              durationSeconds: 3,
+              spellId: "853",
+              spellName: "Hammer of Justice",
+              sourceName: "Enemy1",
+              sourceId: "Enemy1",
+              sourceSpec: "Restoration Druid",
+              damageTakenDuring: 0,
+              trinketState: "available_unused",
+              drInfo: null,
+              distanceYards: null,
+              losBlocked: null,
+              applyMs: ms(20.4),
+              removeMs: ms(23.4),
+            },
+          ],
+          trinketUseTimes: [],
+          missedTrinketWindows: [],
+          rootInstances: [],
+          disarmInstances: [],
+          interruptInstances: [],
+          ccAvoidedInstances: [],
+        },
+      ],
+    });
+    expect(text).toMatch(
+      /0:20 {2}\[YOU\] \[CAST\] {3}Riptide → 2\(BMHunter\) \[cast succeeded before CC landed\]/,
+    );
+    // all 14 presses in the count, the annotated one among them
+    expect(text).toContain("0:02  [YOU] [CAST]   Riptide (x14 over 56s) → 2");
+  });
+
+  it("fact3 D21: casts on a unit the label cannot name make the fold say `various`, not claim the named target", () => {
+    TIMELINE_LINE_FLAGS.deathWindowUnfold = "perCast";
+    const text = render({ petCasts: [1, 2, 3] });
+    expect(text).toContain(
+      "0:02  [YOU] [CAST]   Riptide (x14 over 56s) → various",
+    );
+    // control: all on Alice → the one named target
+    expect(render()).toContain(
+      "0:02  [YOU] [CAST]   Riptide (x14 over 56s) → 2",
+    );
   });
 
   it("death-window unfold: summary prints one counted [YOU] [HEALS] line per window", () => {
@@ -289,5 +369,136 @@ describe("GH #97 timeline flags", () => {
       expect(text).toContain("popped Barkskin");
       expect(text).not.toContain("Barkskin@");
     }
+  });
+});
+
+// Triage 2026-09-29 res-readiness F-C16 / F-C17 (agy review: pin the legend
+// conditions).
+describe("legends follow the lines they explain (F-C16 / F-C17)", () => {
+  beforeAll(async () => {
+    await ensureAnalysisData();
+  });
+  const PER_CAST_LEGEND = "[YOU] [CAST] lines inside the";
+  const SPIKE_LEGEND = "`next spike in Ns on X` on a [YOU] [CD] line";
+  const astralShift = {
+    spellId: "108271",
+    spellName: "Astral Shift",
+    tag: "Defensive",
+    cooldownSeconds: 90,
+    maxChargesDetected: 1,
+    casts: [{ timeSeconds: 20 }],
+    availableWindows: [],
+    neverUsed: false,
+  };
+
+  it("F-C17: the per-cast / summary legend is printed for a healer owner only", () => {
+    for (const mode of ["perCast", "summary"] as const) {
+      TIMELINE_LINE_FLAGS.deathWindowUnfold = mode;
+      const legend = mode === "perCast" ? PER_CAST_LEGEND : "[YOU] [HEALS]";
+      expect(render({ isHealer: true })).toContain(legend);
+      expect(render({ isHealer: false })).not.toContain(legend);
+    }
+  });
+
+  it("F-C16: the hindsight legend appears exactly when a [YOU] [CD] line carries `next spike in`", () => {
+    const withSpike = render({
+      ownerCDs: [astralShift],
+      pressureWindows: [
+        {
+          fromSeconds: 27,
+          toSeconds: 37,
+          totalDamage: 500_000,
+          targetName: "Alice",
+          targetSpec: "Beast Mastery Hunter",
+        },
+      ],
+    });
+    expect(withSpike).toMatch(
+      /0:20 {2}\[YOU\] \[CD\] .*Astral Shift.*, next spike in 7s on 2/,
+    );
+    expect(withSpike).toContain(SPIKE_LEGEND);
+    const noSpike = render({ ownerCDs: [astralShift] });
+    expect(noSpike).toMatch(/0:20 {2}\[YOU\] \[CD\] .*Astral Shift/);
+    expect(noSpike).not.toContain("next spike in");
+    expect(noSpike).not.toContain(SPIKE_LEGEND);
+  });
+
+  it("a spike whose first hit lands under half a second after the press reads `in <1s`, not `in 0s`", () => {
+    const SUB_SECOND_LEGEND =
+      "`in <1s` = its first hit landed within half a second of the press.";
+    const spikeAt = (fromSeconds: number) =>
+      render({
+        ownerCDs: [astralShift],
+        pressureWindows: [
+          {
+            fromSeconds,
+            toSeconds: fromSeconds + 10,
+            totalDamage: 500_000,
+            targetName: "Alice",
+            targetSpec: "Beast Mastery Hunter",
+          },
+        ],
+      });
+    // 0.3 s after the press, and on the press's own millisecond
+    for (const from of [20.3, 20]) {
+      const text = spikeAt(from);
+      expect(text).toMatch(
+        /0:20 {2}\[YOU\] \[CD\] .*Astral Shift.*, next spike in <1s on 2/,
+      );
+      expect(text).not.toMatch(/next spike in 0s/);
+      expect(text).toContain(SPIKE_LEGEND);
+      expect(text).toContain(SUB_SECOND_LEGEND);
+    }
+    // half a second and more: the rounded whole second, as before — and the
+    // `<1s` clause of the legend is printed only where a line carries it
+    for (const [from, shown] of [
+      [20.5, "1s"],
+      [21.4, "1s"],
+      [27, "7s"],
+    ] as const) {
+      const text = spikeAt(from);
+      expect(text).toMatch(
+        new RegExp(String.raw`Astral Shift.*, next spike in ${shown} on 2`),
+      );
+      expect(text).toContain(SPIKE_LEGEND);
+      expect(text).not.toContain(SUB_SECOND_LEGEND);
+    }
+  });
+
+  it("F-C3: the `(no mana a/b)` legend appears exactly when a [RES] row carries the tag", () => {
+    const NO_MANA_LEGEND = "`X(no mana a/b)` = X is off cooldown";
+    // Restoral 388615 costs 4.374 % of max mana (11,482 of 262,500)
+    const restoral = {
+      spellId: "388615",
+      spellName: "Restoral",
+      tag: "Defensive",
+      cooldownSeconds: 180,
+      maxChargesDetected: 1,
+      casts: [],
+      availableWindows: [],
+      neverUsed: true,
+    };
+    const mana = (current: number) =>
+      Array.from({ length: 60 }, (_, s) => ({
+        advancedActorId: "PlayerYou",
+        timestamp: ms(s),
+        logLine: { timestamp: ms(s) },
+        advancedActorCurrentHp: 100,
+        advancedActorMaxHp: 100,
+        advancedActorPowers: [{ type: 0, current, max: 262_500 }],
+      }));
+    const low = render({
+      ownerCDs: [astralShift, restoral],
+      ownerAdvancedActions: mana(6_055),
+    });
+    expect(low).toContain("Restoral(no mana 6.1k/11.5k)");
+    expect(low).toContain(NO_MANA_LEGEND);
+    const full = render({
+      ownerCDs: [astralShift, restoral],
+      ownerAdvancedActions: mana(200_000),
+    });
+    expect(full).toContain("Restoral");
+    expect(full).not.toContain("(no mana");
+    expect(full).not.toContain(NO_MANA_LEGEND);
   });
 });

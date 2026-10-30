@@ -32,6 +32,29 @@ export function spellSchoolMask(spellId: string): number | undefined {
   return SPELL_SCHOOLS_GENERATED[spellId]?.school;
 }
 
+/**
+ * Is a spell of school mask `spellMask` shut out by an interrupt that locked
+ * `lockedMask` (the interrupted spell's schools)? Only when **every** school
+ * the spell belongs to is locked — a multi-school spell with one school still
+ * open goes out.
+ *
+ * Game-behaviour check (triage 2026-09-29, kick-eaten R6 / tier-C C5; 605 S2
+ * files, 6,133 kicks, plain victims): spells with one school inside the lock
+ * and one outside it succeeded inside the lockout 891× and started a cast
+ * 287× (Dark Harvest 0x24, Chaos Bolt 0x7c, Starsurge 0x48, Voltaic Blaze
+ * 0xc), spread through the window (dt / L p50 0.43) — against 14 not-ready
+ * failures that neither the GCD nor the spell's own cooldown explains. The
+ * control, fully locked spells: 2,025 such failures. The any-overlap test
+ * this replaces called Starsurge locked by a Nature lock and printed its GCD
+ * presses as lockout rejects (2c6e85ec).
+ *
+ * One predicate for the post-kick classifier (`ccTrinketAnalysis.ts`), the
+ * kick-eaten text (`postKickFact`) and the first-success cut.
+ */
+export function schoolLockedBy(spellMask: number, lockedMask: number): boolean {
+  return spellMask !== 0 && (spellMask & ~lockedMask) === 0;
+}
+
 /** 这个法术是不是纯物理(官方口径)。未知返回 undefined —— 调用方自己决定
  *  未知时怎么办,不要在这里替它假设。 */
 export function isPhysicalSpell(spellId: string): boolean | undefined {

@@ -1,16 +1,27 @@
 import {
   annotateMissedPurgesWithKillWindows,
+  blockedSecondsText,
   computeOffensiveWindows,
-  reconstructDispelSummary,
   type ICCEfficiencyStat,
   type IDispelEvent,
+  type IMissedPurgeWindow,
+  missedPurgeNotActionable,
+  missedPurgesFor,
 } from "@gladlog/analysis";
 import { CombatUnitReaction } from "@gladlog/parser-compat";
 
+import { dispelSummaryOf } from "./dispelSummary";
 import { toLegacySafe } from "./legacySource";
 import { displaySpellName } from "./spellDisplay";
-import { tInRange, type TimeRange } from "./timeRange";
+import { type TimeRange,tInRange } from "./timeRange";
 import type { ReportSource } from "./types";
+
+/** fact2: the measured blocked seconds behind a "被控/被锁" tag — the same
+ * number the prompt's exemption prints (`blockedSecondsText`). */
+function lockedSecondsSuffix(blockedS: number | undefined): string {
+  const s = blockedSecondsText(blockedS);
+  return s === undefined ? "" : ` ${s} 秒`;
+}
 
 /** One dispel / missed-dispel instance (used by row expansion and lists);
  * tS = relative seconds. */
@@ -22,6 +33,11 @@ export interface DispelInstance {
   /** proc or rider — not a cleanse decision (analysis `dispelKind`,
    * UI review 2026-08-21 #3). */
   passive: boolean;
+  /** A missed scoped removal (Shattering Throw on an immunity shield) whose
+   * holder could not have pressed it — locked out, out of reach, or on
+   * cooldown for the whole buff (analysis `missedPurgeNotActionable`, the
+   * prompt's "not actionable"). Listed all the same (user ruling X1). */
+  notActionable?: boolean;
 }
 
 export interface DispelDashRow {
@@ -47,7 +63,10 @@ export interface DispelDash {
    * engagement tab label (they used to each reduce `rows`). */
   totals: { friendlyDeliberate: number; friendlyPassive: number };
   /** Offensive dispel opportunities our side missed (a Critical/High enemy
-   * buff sat for >3s). */
+   * buff sat for >3s) — and, since B-tier X1, the windows only a SCOPED
+   * removal could have answered (analysis `scopedMissedPurgeWindows`), one
+   * row per teammate who holds that removal, the ones that were not
+   * actionable included and flagged. The mistake cards do not read this. */
   missedPurges: DispelInstance[];
   /** Windows where our side missed a cleanse of CC / a debuff. */
   missedCleanses: DispelInstance[];
@@ -66,6 +85,55 @@ const EMPTY: DispelDash = {
 
 const fmtName = (id: string, fallback: string): string =>
   displaySpellName(id, fallback);
+
+/**
+ * B-tier X1 (user ruling 2026-10-06): the windows only a SCOPED removal could
+ * have answered (Shattering Throw on an immunity shield), one row per
+ * teammate holding that removal — analysis' own per-player view
+ * (`missedPurgesFor`, the one the prompt's owner line is built from) over the
+ * scoped array only, so a window a general purger carried is not listed
+ * twice. Every such window is shown; one its holder could not have answered
+ * says so (`missedPurgeNotActionable`, the prompt's "not actionable").
+ */
+export function scopedMissedPurgeInstances(
+  friends: ReadonlyArray<Parameters<typeof missedPurgesFor>[0]>,
+  scopedWindows: IMissedPurgeWindow[],
+  range?: TimeRange | null,
+  /** the round's units, for a warlock's pet (the prompt's reading) */
+  units?: Parameters<typeof missedPurgesFor>[2],
+): DispelInstance[] {
+  const out: DispelInstance[] = [];
+  for (const f of friends) {
+    const mine = missedPurgesFor(
+      f,
+      {
+        missedPurgeWindows: [],
+        scopedMissedPurgeWindows: scopedWindows,
+      },
+      units,
+    );
+    for (const w of mine) {
+      if (!w.viaScopedTool || !tInRange(w.timeSeconds, range)) continue;
+      const why = missedPurgeNotActionable(w);
+      const notActionable =
+        why.lockedOut || why.noReach || why.onCooldownThroughout;
+      out.push({
+        tS: w.timeSeconds,
+        label: `${fmtName(w.spellId, w.spellName)} 挂在 ${w.enemyName} 身上 ${Math.round(
+          w.durationSeconds,
+        )}s 未被打掉 · 可用 ${w.viaScopedTool.name}(${f.name})${
+          why.lockedOut ? `(持有者被控/被锁${lockedSecondsSuffix(w.purgersBlockedS)})` : ""
+        }${why.noReach ? "(无视线/超射程)" : ""}${
+          why.onCooldownThroughout ? "(技能全程在 CD)" : ""
+        }${notActionable ? " · 当时做不到" : ""}`,
+        unitName: w.enemyName,
+        passive: false,
+        ...(notActionable ? { notActionable: true } : {}),
+      });
+    }
+  }
+  return out;
+}
 
 /**
  * Dispel dashboard (backlog #3): the completed ledger (purge / cleanse /
@@ -93,30 +161,12 @@ export function deriveDispelDash(
       (u) => u.reaction === CombatUnitReaction.Hostile,
     );
     if (friends.length === 0 || enemies.length === 0) return EMPTY;
-    const combatLike = { startTime: legacy.startTime, endTime: legacy.endTime };
-
-    // Build once per side (same approach as statsTable); pet dispels are
-    // attributed to the owner (B45) via the pets parameters
-    const petsOf = (owners: typeof players) => {
-      const ids = new Set(owners.map((o) => o.id));
-      return Object.values(legacy.units).filter(
-        (u) => u.ownerId && ids.has(u.ownerId),
-      );
-    };
-    const ours = reconstructDispelSummary(
-      friends,
-      enemies,
-      combatLike,
-      petsOf(friends),
-      petsOf(enemies),
-    );
-    const theirs = reconstructDispelSummary(
-      enemies,
-      friends,
-      combatLike,
-      petsOf(enemies),
-      petsOf(friends),
-    );
+    // Built once per side, each asked for as the prompt asks
+    // (`dispelSummaryOf`): the round itself — so a window ends at a Solo
+    // Shuffle round's ending death and its reach reading has the zone's line
+    // of sight — and both sides' pets, whose dispels go to their owner (B45)
+    const ours = dispelSummaryOf(legacy, friends, enemies);
+    const theirs = dispelSummaryOf(legacy, enemies, friends);
     // Annotate whether each missed purge falls inside one of our kill windows
     // (the same annotation predicate the prompt side uses)
     const windows = computeOffensiveWindows(enemies, friends, legacy);
@@ -188,13 +238,21 @@ export function deriveDispelDash(
           w.durationSeconds,
         )}s 未被驱散${w.duringKillWindow ? "(我方击杀窗口内)" : ""}${
           w.purgeWasOnCD ? "(驱散在 CD)" : ""
-        }${w.purgersLockedOut ? "(驱散者被控/被锁)" : ""}${
+        }${w.purgersLockedOut ? `(驱散者被控/被锁${lockedSecondsSuffix(w.purgersBlockedS)})` : ""}${
           w.losReachable === false ? "(无视线/超射程)" : ""
         }`,
         unitName: w.enemyName,
         passive: false,
-      }))
-      .sort((a, b) => a.tS - b.tS);
+      }));
+    missedPurges.push(
+      ...scopedMissedPurgeInstances(
+        friends,
+        ours.scopedMissedPurgeWindows ?? [],
+        range,
+        Object.values(legacy.units),
+      ),
+    );
+    missedPurges.sort((a, b) => a.tS - b.tS);
 
     const missedCleanses: DispelInstance[] = ours.missedCleanseWindows
       .filter((w) => tInRange(w.timeSeconds, range))
@@ -203,7 +261,9 @@ export function deriveDispelDash(
         label: `${w.targetName} 挂 ${fmtName(w.spellId, w.spellName)} ${Math.round(
           w.durationSeconds,
         )}s 未被解${w.cleanseWasOnCD ? "(解法在 CD)" : ""}${
-          w.dispellersLockedOut ? "(驱散者被控/被锁)" : ""
+          w.dispellersLockedOut
+            ? `(驱散者被控/被锁${lockedSecondsSuffix(w.dispellersBlockedS)})`
+            : ""
         }${w.losReachable === false ? "(无视线/超射程)" : ""}${
           w.drChainRisk ? "(对方 DR 未递减,解了易被续控)" : ""
         }`,

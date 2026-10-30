@@ -23,6 +23,16 @@ import type { CandidateEvent } from "../types";
 
 export const CRISIS_NO_RESPONSE_CAP = 2;
 
+/** The `dampeningPct` fact — rendered only where a dampening value is stated
+ * at the crossing (no probe, or `null` from it = no fact; FT-T13 D11). */
+function dampeningFact(
+  dampening: number | null | undefined,
+): { dampeningPct: string } | Record<string, never> {
+  return dampening === null || dampening === undefined
+    ? {}
+    : { dampeningPct: String(Math.round(dampening * 100)) };
+}
+
 export function crisisNoResponseEvents(
   points: DecisionPoint[],
   owner: { id: string; name: string },
@@ -32,6 +42,11 @@ export function crisisNoResponseEvents(
     /** Major walls friendlies had up on the owner (`majorWallIntervals`,
      * seconds). A crossing inside one abstains (A2b below); absent = none. */
     majorWalls?: ReadonlyArray<{ fromS: number; toS: number }>;
+    /** Dampening (0–1) at a crossing's instant (`computeDampening`), for the
+     * `dampeningPct` fact; absent = the fact is not rendered. `null` at an
+     * instant (a 2v2 round that logged no stack — no value is stated,
+     * `getInitialDampening`) = not rendered either. */
+    dampeningAt?: (tMs: number) => number | null;
   },
   overrides?: { cap?: number },
 ): CandidateEvent[] {
@@ -66,6 +81,8 @@ export function crisisNoResponseEvents(
     dmg2s: p.dmg2s,
     inCC: p.inCC,
     lockedOut: p.lockedOut,
+    couldActInWindow: p.couldActInWindow,
+    freeInWindowS: p.freeInWindowS,
     diedInWindow: p.diedInWindow,
     hasTool: p.hasTool,
     responses: p.responses,
@@ -80,13 +97,16 @@ export function crisisNoResponseEvents(
           verdict: "ineligible",
           reason: !p.dangerous
             ? "not-dangerous"
-            : p.inCC
-              ? "owner-in-cc"
-              : p.lockedOut
-                ? "owner-locked-out"
-                : p.diedInWindow
-                  ? "died-in-window"
-                  : "no-tool",
+            : p.couldActInWindow === false
+              ? // fact4 D28: CC / lockout over the response window
+                p.inCC
+                ? "owner-in-cc"
+                : p.lockedOut
+                  ? "owner-locked-out"
+                  : "owner-could-not-act"
+              : p.diedInWindow
+                ? "died-in-window"
+                : "no-tool",
           facts: facts(p),
           candidateIds: [],
         });
@@ -168,6 +188,17 @@ export function crisisNoResponseEvents(
         refTop: ref.top.map(([k, v]) => `${k} ${v}%`).join("; "), // "; " — ", " is the facts separator the gate splits on
         cellKey: ref.cellKey,
         fellBack: ref.fellBack ? "yes" : "no",
+        // crisis-external F-C1 (user ruling A48 = C, 2026-09-30): what the
+        // owner DID press — the predicate and the reference table are
+        // unchanged, the line just stops hiding two self-heals that landed
+        // 4 % into 79 % dampening (bd790c92 3:48) behind "did NOTHING".
+        ...(p.selfHealFreshPct !== undefined && p.selfHealCasts !== undefined
+          ? {
+              selfHealPct: String(p.selfHealFreshPct),
+              selfHealCasts: String(p.selfHealCasts),
+            }
+          : {}),
+        ...dampeningFact(probes.dampeningAt?.(p.tMs)),
       },
     });
   }

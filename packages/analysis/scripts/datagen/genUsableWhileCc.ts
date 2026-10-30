@@ -58,12 +58,60 @@
  *     authoritative. A named bit is evidence, not a verdict, when a signed
  *     ruling and the game disagree with it.
  *
+ * 2026-10-06 (user ruling U-T1) — the SECOND official route, for "stunned"
+ * only. The 09-04 rewrite above was right about the named bits and wrong to
+ * conclude that a spell without one cannot be pressed under a stun. A spell
+ * whose own effect makes its CASTER immune to the stun may be cast through
+ * it, and the cast purges the stun (TrinityCore `Spell::CheckCasterAuras` →
+ * `SpellInfo::SpellCancelsAuraEffect`):
+ *
+ *    47 = Attributes_1 bit 15  "Immunity Purges Effect"   (SPELL_ATTR1_IMMUNITY_PURGES_EFFECT)
+ *    + an own effect that is SCHOOL_IMMUNITY (aura 39, MiscValue_0 = the
+ *      school mask it covers) or MECHANIC_IMMUNITY (aura 77) of mechanic 12
+ *      (stunned).
+ *
+ * Over the observed corpus at 12.1.0.69587 that is exactly: Divine Shield
+ * 642 (0x7f), Ice Block 45438 (0x7f), Icebound Fortitude 48792 (mechanic
+ * 12), Blessing of Protection 1022 (0x1 — physical stuns only, and only on
+ * the caster), Blink 1953 / 119415 and the imp's Flee 89792 (mechanic 12),
+ * plus Will to Survive 59752, which also carries bit 378. Blessing of
+ * Spellwarding (aura 39 0x7e, no bit 47), Cloak of Shadows and Aspect of the
+ * Turtle (no bit 47) are not on it.
+ *
+ * User ruling U-T1b (2026-10-06): only the four named spells are taken.
+ * Blink and Flee are nominated by the route and WITHHELD by the ruling
+ * (`STUN_PURGE_WITHHELD_IDS`, cooldowns.ts) — the emitted map leaves them
+ * out and the generated header names them.
+ *
+ * Corpus leg (605 S2 files, `fix-FU/stunCastProbe.py`: the caster's stun
+ * REMOVED ≤ 3 ms before the SPELL_CAST_SUCCESS line — the purge is logged
+ * just before the cast, which is why the 09-04 "casts strictly inside a
+ * stun" count read 1 / 0 / 0): Divine Shield 99 of 417 casts, Ice Block 42
+ * of 343, Icebound Fortitude 108 of 247, Blessing of Protection on self 13
+ * of 56 — all 13 physical-school stuns — and on another unit 0 of 179;
+ * Spellwarding on self 0 of 46, Cloak of Shadows 0 of 499, Aspect of the
+ * Turtle 0 of 224, Astral Shift 0 of 304, Die by the Sword 0 of 343. The
+ * named-bit spells show the other shape, pressed inside a stun that runs
+ * on: Barkskin 222 of 630, Divine Protection 107 of 486, Pain Suppression
+ * 123 of 592.
+ *
+ * Emitted as `STUN_PURGE_GENERATED` (id → the school mask its immunity
+ * covers, and whether it is immune to the stun mechanic itself). The three
+ * anchors the 09-04 ruling turned false (642 / 45438 / 48792) are true again
+ * and agree through this route; 1022 is anchored true for the first time.
+ * The feared / confused dimensions are NOT extended: the ruling is about
+ * stuns, though the same purge ends a fear (a Psychic Scream REMOVED at 0 ms
+ * of Divine Shield in the same scan).
+ *
  * Usage: `DATAGEN_BUILD=<build> DATAGEN_CACHE=<dir> npx tsx
  *   packages/analysis/scripts/datagen/genUsableWhileCc.ts`
  */
 import fs from "fs-extra";
 
-import { USABLE_WHILE_CC_CONDITIONAL } from "../../src/utils/cooldowns";
+import {
+  STUN_PURGE_WITHHELD_IDS,
+  USABLE_WHILE_CC_CONDITIONAL,
+} from "../../src/utils/cooldowns";
 import { writeArtifact } from "./lib/emit";
 import {
   assertColumns,
@@ -87,6 +135,47 @@ export const NAMED_BITS: Readonly<
   feared: [{ index: 177, name: "Allow While Fleeing" }],
   confused: [{ index: 178, name: "Allow While Confused" }],
 };
+
+/** Attributes_1 bit 15, "Immunity Purges Effect". */
+export const IMMUNITY_PURGES_EFFECT_BIT = 47;
+/** SpellEffect.EffectAura: SCHOOL_IMMUNITY / MECHANIC_IMMUNITY. */
+const AURA_SCHOOL_IMMUNITY = "39";
+const AURA_MECHANIC_IMMUNITY = "77";
+/** SpellMechanic 12 — stunned. */
+const MECHANIC_STUNNED = "12";
+const EVERY_SCHOOL = 0x7f;
+
+/** What a spell's own immunity covers, for the purge route. */
+export interface StunPurge {
+  /** union of its SCHOOL_IMMUNITY masks (0 = none) */
+  schoolMask: number;
+  /** immune to the stun mechanic itself */
+  stunMechanic: boolean;
+}
+
+/**
+ * The immunity route to "usable while stunned": bit 47 on the spell, and an
+ * own effect (default difficulty) that is a school immunity or a
+ * stun-mechanic immunity. Null when the spell is not on it.
+ */
+export function stunPurgeRoute(
+  miscRow: Record<string, string>,
+  effectRows: ReadonlyArray<Record<string, string>>,
+): StunPurge | null {
+  if (!attrBit(miscRow, IMMUNITY_PURGES_EFFECT_BIT)) return null;
+  let schoolMask = 0;
+  let stunMechanic = false;
+  for (const e of effectRows) {
+    if (e.EffectAura === AURA_SCHOOL_IMMUNITY)
+      schoolMask |= Number(e.EffectMiscValue_0 ?? 0) & EVERY_SCHOOL;
+    else if (
+      e.EffectAura === AURA_MECHANIC_IMMUNITY &&
+      e.EffectMiscValue_0 === MECHANIC_STUNNED
+    )
+      stunMechanic = true;
+  }
+  return schoolMask !== 0 || stunMechanic ? { schoolMask, stunMechanic } : null;
+}
 
 /**
  * Anchors the attribute system cannot express; each one MUST have a hand
@@ -132,6 +221,19 @@ const CONTROLS: Array<[Dimension, string, boolean, string]> = [
   ],
 ];
 
+/** Purge-route controls: [id, expected mask (null = not on the route),
+ * expected stun-mechanic immunity, why]. */
+const PURGE_CONTROLS: Array<[string, number | null, boolean, string]> = [
+  ["642", 0x7f, false, "Divine Shield — every school (ruling U-T1)"],
+  ["45438", 0x7f, false, "Ice Block — every school (ruling U-T1)"],
+  ["48792", 0, true, "Icebound Fortitude — the stun mechanic (ruling U-T1)"],
+  ["1022", 0x1, false, "Blessing of Protection — physical only (ruling U-T1)"],
+  ["204018", null, false, "Blessing of Spellwarding — aura 39 without bit 47"],
+  ["31224", null, false, "Cloak of Shadows — no bit 47; 0 of 499 casts"],
+  ["186265", null, false, "Aspect of the Turtle — no bit 47; 0 of 224 casts"],
+  ["108271", null, false, "Astral Shift — a wall, no immunity"],
+];
+
 const ATTR_COLUMNS = Array.from({ length: 17 }, (_, i) => `Attributes_${i}`);
 
 export function attrBit(
@@ -167,6 +269,8 @@ export function verifyAnchors(
   exemptions: Readonly<
     Record<Dimension, ReadonlySet<string>>
   > = ANCHOR_HAND_EXEMPTIONS,
+  /** the purge route's ids — "stunned" agrees through it as well */
+  stunPurgeIds: ReadonlySet<string> = new Set(),
 ): AnchorVerdict {
   const out: AnchorVerdict = { checked: 0, disagreements: [], exempted: [] };
   for (const a of anchors) {
@@ -181,7 +285,9 @@ export function verifyAnchors(
         continue;
       }
       out.checked++;
-      const actual = row ? usableWhile(row, dim) : false;
+      const actual =
+        (row ? usableWhile(row, dim) : false) ||
+        (dim === "stunned" && stunPurgeIds.has(a.spellId));
       if (actual !== expected)
         out.disagreements.push(
           `${a.spellId} ${a.name}: ${dim} anchor=${expected} bits=${actual}${row ? "" : " (no SpellMisc row)"}`,
@@ -212,8 +318,35 @@ export async function main(): Promise<void> {
     byId.set(row.SpellID, row);
   }
 
+  // The immunity route needs each spell's own effects.
+  const effects = parseCsv(await fetchTable("SpellEffect", build, cacheDir));
+  assertColumns(
+    effects.header,
+    ["SpellID", "DifficultyID", "EffectAura", "EffectMiscValue_0"],
+    "SpellEffect",
+  );
+  const effectsById = new Map<string, Record<string, string>[]>();
+  for (const row of effects.rows) {
+    if (row.DifficultyID !== "0" || !row.SpellID) continue;
+    const list = effectsById.get(row.SpellID);
+    if (list) list.push(row);
+    else effectsById.set(row.SpellID, [row]);
+  }
+  const purgeOf = (id: string): StunPurge | null => {
+    const row = byId.get(id);
+    return row ? stunPurgeRoute(row, effectsById.get(id) ?? []) : null;
+  };
+
   // 1. Verification gate over the FULL table.
-  const verdict = verifyAnchors(byId, UWC_ANCHORS);
+  const anchorPurgeIds = new Set(
+    UWC_ANCHORS.map((a) => a.spellId).filter((id) => purgeOf(id) !== null),
+  );
+  const verdict = verifyAnchors(
+    byId,
+    UWC_ANCHORS,
+    ANCHOR_HAND_EXEMPTIONS,
+    anchorPurgeIds,
+  );
   for (const line of verdict.exempted)
     console.log(`[genUsableWhileCc] exempted: ${line}`);
   if (verdict.disagreements.length > 0) {
@@ -236,8 +369,24 @@ export async function main(): Promise<void> {
       return;
     }
   }
+  for (const [id, mask, stun, why] of PURGE_CONTROLS) {
+    const actual = purgeOf(id);
+    const ok =
+      mask === null
+        ? actual === null
+        : actual !== null &&
+          actual.schoolMask === mask &&
+          actual.stunMechanic === stun;
+    if (!ok) {
+      console.error(
+        `[genUsableWhileCc] PURGE CONTROL FAILED: ${id} expected ${mask === null ? "off the route" : `mask 0x${mask.toString(16)} stunMechanic ${stun}`} got ${JSON.stringify(actual)} — ${why}`,
+      );
+      process.exit(1);
+      return;
+    }
+  }
   console.log(
-    `[genUsableWhileCc] anchors: ${verdict.checked} cells agree with the named bits, ${verdict.exempted.length} hand-exempted; ${CONTROLS.length} controls pass`,
+    `[genUsableWhileCc] anchors: ${verdict.checked} cells agree with the named bits or the purge route, ${verdict.exempted.length} hand-exempted; ${CONTROLS.length} + ${PURGE_CONTROLS.length} controls pass`,
   );
 
   // 2. Emit over the observed corpus, minus the signed conditional layer.
@@ -281,6 +430,30 @@ export async function main(): Promise<void> {
     }
   }
   for (const dim of DIMENSIONS) sets[dim] = sortedIds(sets[dim]);
+  // The purge route, same corpus restriction. An id the named bits already
+  // admit is left out (Will to Survive: nothing to add), and so is the signed
+  // conditional layer.
+  const stunnedByBits = new Set(sets.stunned);
+  const purge: Record<string, StunPurge> = {};
+  const purgeWithheld: string[] = [];
+  for (const id of sortedIds(observed)) {
+    if (stunnedByBits.has(id) || conditional.has(id)) continue;
+    const route = purgeOf(id);
+    if (!route) continue;
+    // nominated by the data, left out by a signed ruling (U-T1b)
+    if (STUN_PURGE_WITHHELD_IDS.has(id)) purgeWithheld.push(id);
+    else purge[id] = route;
+  }
+  // a withheld id the route no longer nominates is a stale ruling row
+  for (const id of STUN_PURGE_WITHHELD_IDS) {
+    if (observed.has(id) && !purgeWithheld.includes(id)) {
+      console.error(
+        `[genUsableWhileCc] STUN_PURGE_WITHHELD_IDS names ${id}, which the immunity route does not nominate — drop the row`,
+      );
+      process.exit(1);
+      return;
+    }
+  }
 
   const countsLine = DIMENSIONS.map((d) => `${d}:${sets[d].length}`).join(" ");
   const sample = (d: Dimension) =>
@@ -309,7 +482,20 @@ export async function main(): Promise<void> {
     ` *   agree with the bits; hand-exempted: ${verdict.exempted.length ? verdict.exempted.join("; ") : "none"}.\n` +
     ` * Withheld from stunned (signed conditional layer, cooldowns.ts\n` +
     ` *   USABLE_WHILE_CC_CONDITIONAL): ${withheld.length ? withheld.map((id) => `${id} ${spellNames[id] ?? ""}`).join(", ") : "none"}.\n` +
-    ` * ${countsLine}\n` +
+    ` * Purge route (stunned only): Attributes_1 bit 15 "Immunity Purges Effect"\n` +
+    ` *   + an own SCHOOL_IMMUNITY (aura 39) or MECHANIC_IMMUNITY (aura 77) of\n` +
+    ` *   mechanic 12; ids the named bits already admit are left out:\n` +
+    ` *   ${
+      Object.entries(purge)
+        .map(
+          ([id, r]) =>
+            `${id} ${spellNames[id] ?? ""} (${r.stunMechanic ? "stun mechanic" : `schools 0x${r.schoolMask.toString(16)}`})`,
+        )
+        .join(", ") || "none"
+    }.\n` +
+    ` *   Nominated by the route and withheld by user ruling (cooldowns.ts\n` +
+    ` *   STUN_PURGE_WITHHELD_IDS): ${purgeWithheld.map((id) => `${id} ${spellNames[id] ?? ""}`).join(", ") || "none"}.\n` +
+    ` * ${countsLine} stunnedByPurge:${Object.keys(purge).length}\n` +
     DIMENSIONS.map((d) => ` * ${d} sample: ${sample(d) || "(none)"}`).join(
       "\n",
     ) +
@@ -323,7 +509,14 @@ export async function main(): Promise<void> {
     DIMENSIONS.map(
       (d) => `  ${d}: new Set(\n    ${JSON.stringify(sets[d])},\n  ),`,
     ).join("\n") +
-    `\n};\n`;
+    `\n};\n\n` +
+    `/** The immunity route to "usable while stunned" (see the header): spell →\n` +
+    ` * the school mask its own immunity covers (0 = none) and whether it is\n` +
+    ` * immune to the stun mechanic itself. The immunity lands on the CASTER —\n` +
+    ` * a targeted one (Blessing of Protection) only counts cast on oneself. */\n` +
+    `export const STUN_PURGE_GENERATED: Readonly<\n` +
+    `  Record<string, { schoolMask: number; stunMechanic: boolean }>\n` +
+    `> = ${JSON.stringify(purge, null, 2)};\n`;
 
   const dataDir = new URL("../../src/data/", import.meta.url).pathname;
   writeArtifact(dataDir + "usableWhileCcGenerated.ts", header + body);

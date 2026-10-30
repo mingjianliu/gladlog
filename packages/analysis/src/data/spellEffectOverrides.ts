@@ -24,12 +24,21 @@ const e = (
 export const SPELL_EFFECT_OVERRIDES: Record<string, IMinedSpell> =
   Object.fromEntries(
     [
+      // fact1215 R11 (2026-10-19): Solar Beam's silence aura. The log never
+      // writes it (0 rows in 1,215 logs), so no generator saw the id; DB2
+      // (build 12.1.0.69587): SpellMisc.DurationIndex 31 → SpellDuration
+      // 8000 ms, SpellCategories.Mechanic 9 (silence). Read by the
+      // `[SILENCE] … no aura logged` attribution window (silence.ts).
+      e("81261", "Solar Beam", undefined, 8),
       // ── Major defensive CDs ──
       e("642", "Divine Shield", 300, 8),
       e("498", "Divine Protection", 60, 8),
       e("216331", "Avenging Crusader", 60, 15),
       e("31821", "Aura Mastery", 180, 8),
-      e("64843", "Divine Hymn", 180, 8),
+      // Divine Hymn 64843 / Tranquility 740: no row — DB2's 5 s / 6 s
+      // (fact4 D30, 2026-10-23: the hand 8 s shadowed them; 605 files, the
+      // channels ran ≤ 4.7 s / ≤ 5.1 s complete, haste shortening the DB2
+      // length — `Divine Hymn [120s, lasts 8s]` beside `channeled 3.8s`)
       e("200183", "Apotheosis", 120, 20),
       e("45438", "Ice Block", 240, 10),
       e("31224", "Cloak of Shadows", 120, 5),
@@ -43,7 +52,6 @@ export const SPELL_EFFECT_OVERRIDES: Record<string, IMinedSpell> =
       e("62618", "Power Word: Barrier", 180, 10),
       e("98008", "Spirit Link Totem", 180, 6),
       e("102342", "Ironbark", 90, 12),
-      e("740", "Tranquility", 180, 8),
       e("22812", "Barkskin", 60, 12), // 12 = 8 (DB2) + Improved Barkskin, held by ~100 % of casters — see BUFF_DURATION_TALENT_MODIFIERS
       e("61336", "Survival Instincts", 180, 6),
       e("871", "Shield Wall", 210, 8),
@@ -51,11 +59,44 @@ export const SPELL_EFFECT_OVERRIDES: Record<string, IMinedSpell> =
       e("184364", "Enraged Regeneration", 120, 8),
       e("48792", "Icebound Fortitude", 120, 8),
       e("55233", "Vampiric Blood", 90, 10),
-      e("31850", "Ardent Defender", 120, 12), // 2026-09-06: hand 8 shadowed the official DB2 12; corpus 12.0 s in 94 % of 81 lifetimes
+      // Duration, 2026-09-06: hand 8 shadowed the official DB2 12; corpus 12.0 s
+      // in 94 % of 81 lifetimes. Cooldown, FT F20 2026-10-11: the hand 120
+      // shadowed the official 90 (SpellCooldowns 7108, RecoveryTime 90 000 ms
+      // at 12.1.5.69594). Every Protection Paladin of the 1,814-file ledger
+      // scan (4) holds Unbreakable Spirit (−30 %, its class mask covers this
+      // spell), so the hand value modelled 84 s and the official one 63 s;
+      // the one that recast it did so after 79.8, 84.0 and 157.2 s (76f70196,
+      // a 2v2). FLAG: one player, three gaps — it refutes 84 s once and never
+      // the official 63 s, and puts no floor under it.
+      e("31850", "Ardent Defender", 90, 12),
       e("86659", "Guardian of Ancient Kings", 300, 8),
       e("6940", "Blessing of Sacrifice", 120, 12),
       e("1022", "Blessing of Protection", 300, 10),
-      e("204018", "Blessing of Spellwarding", 180, 6), // 2026-09-06: hand 10 was the PvE number and shadowed the official PvP one — SpellMisc.PvPDurationIndex 32 → 6 s; corpus 6.0 s in 91 % of 659 lifetimes
+      // Blessing of Spellwarding 204018 had `180, 6` here until 2026-10-13. The
+      // 180 s came with the first port of this file (f47badd2) and nothing
+      // signed it; the game recovers the button through the charge pool it
+      // shares with Blessing of Protection (Game-Behaviour Rule, four legs):
+      // (a) DB2 12.1.0.69587 — SpellCategories 52322 (204018) and 227 (1022)
+      //     both ChargeCategory 1392, 1 charge, 300 000 ms; SpellCooldowns
+      //     holds the global cooldown only for either spell;
+      // (b) the three talents that shorten it are charge-CATEGORY mods on
+      //     misc 1392 (auras 453 / 454: Improved Blessing of Protection −60 s,
+      //     Uther's Counsel −15 % × 0.67, Sacred Duty −33 %), each covering
+      //     both spells `via: chargeCategory` in the talent-effect inventory;
+      // (c) corpus, 18,134 new-season files (fix-FT/scripts/
+      //     sw_blessing_scan.py + sw_blessing_gaps.ts, ranks from
+      //     COMBATANT_INFO): 4,007 Spellwarding presses, 239 with room in the
+      //     round for a recast at the hand number and 59 at the pool's; 31
+      //     recasts, none before the pool's number;
+      // (d) the shortest gaps are the arithmetic's: 300.3 / 300.9 / 301.0 s
+      //     with no reduction, 249.8 s with Improved Blessing of Protection
+      //     (240); after a Blessing of Protection press 300.0 s and 243.9 s.
+      // The hand number called the button ready 120 s early (72–120 s under
+      // the talents). The DB2 row now stands on its own — 1 charge / 300 s,
+      // and the official PvP duration 6 s the hand row had been corrected to
+      // on 2026-09-06 (SpellMisc.PvPDurationIndex 32; corpus 6.0 s in 91 % of
+      // 659 lifetimes). Uther's Counsel and Sacred Duty holders never recast
+      // in the corpus (9 and 11 unit-rounds): their rows are DB2's, unsplit.
       e("116849", "Life Cocoon", 120, 12),
       e("115203", "Fortifying Brew", 360, 15),
       e("122470", "Touch of Karma", 90, 10),
@@ -97,12 +138,21 @@ export const SPELL_EFFECT_OVERRIDES: Record<string, IMinedSpell> =
       e("391109", "Dark Ascension", 60, 20),
       e("375087", "Dragonrage", 120, 18),
       e("51271", "Pillar of Frost", 60, 12),
-      e("47568", "Empower Rune Weapon", 120, 20),
+      // Empower Rune Weapon 47568 had `120, 20` here until 2026-10-01. In
+      // 12.x it is a damage button, not a cooldown window: DB2 gives 2 charges
+      // on a 30 s recharge and no duration, and on 605 S2 files its 392 casts
+      // (44 Frost Death Knight rounds, 3–19 casts a round, gaps p50 12.2 s)
+      // applied the aura 0 times (triage kick-eaten F-K2, Game-Behaviour
+      // legs a + c; ruling C7). The DB2 row now stands on its own.
       e("275699", "Apocalypse", 90, 15),
       e("207289", "Unholy Assault", 90, 20),
-      e("106951", "Berserk", 180, 20),
+      // corpusFactScan fullRunEndedEarly (2026-10-21): Berserk and Celestial
+      // Alignment run DB2's 15 s (605 every 30th: 5 / 5 and 3 / 3 removals at
+      // exactly 15.0 s); the hand 20 was their Incarnations' and read every
+      // full run "ended early"
+      e("106951", "Berserk", 180, 15),
       e("102560", "Incarnation: Chosen of Elune", 180, 20), // 2026-09-06: hand 30 shadowed the official DB2 20; corpus 20.0 s in 88 % of 1,147 lifetimes
-      e("194223", "Celestial Alignment", 180, 20),
+      e("194223", "Celestial Alignment", 180, 15),
       e("391528", "Convoke the Spirits", 120, 4),
       e("288613", "Trueshot", 120, 15),
       e("19574", "Bestial Wrath", 90, 15),
@@ -143,7 +193,11 @@ export const SPELL_EFFECT_OVERRIDES: Record<string, IMinedSpell> =
       // so 6 is the holder's value; the lockout path takes no caster, so a
       // non-holder still reads 6 (one second long, the "locked" side) — see
       // test/kickLockout.test.ts RULED_LOCKOUTS.
-      e("2139", "Counterspell", 24, 6),
+      // FT-T11 (2026-10-09): the cooldown is DB2's 25 s again (row built from
+      // the generated one, see Astral Shift) — the hand 24 put a Quick Witted
+      // holder's Counterspell back at 19 s; the corpus edge is 20.0 s = 25 − 5
+      // (605 files, 702 recast gaps: none below 19.9 s).
+      { ...SPELL_EFFECTS_GENERATED["2139"]!, durationSeconds: 6 },
       e("6552", "Pummel", 15),
       e("47528", "Mind Freeze", 15),
       e("57994", "Wind Shear", 12),
@@ -155,8 +209,12 @@ export const SPELL_EFFECT_OVERRIDES: Record<string, IMinedSpell> =
       e("183752", "Disrupt", 15),
       e("119910", "Spell Lock", 24),
       e("132409", "Spell Lock", 24),
-      e("351338", "Quell", 40),
-      e("15487", "Silence", 45),
+      // FT-T11 (2026-10-09): Quell and Silence have no row here any more —
+      // the hand 40 s / 45 s were an older patch's. DB2 12.1.5: Quell 20 s,
+      // Silence 30 s; the corpus agrees (605 files, shortest recast gap by the
+      // same player in a round: Quell 20.0 s, 76 of 97 gaps under 40 s;
+      // Silence 30.0 s, 266 of 349 under 45 s). `[KICK] … (Quell; back m:ss)`
+      // was contradicted by the same evoker's next Quell on 34 of 59 pairs.
       { ...SPELL_EFFECTS_GENERATED["8122"]!, durationSeconds: 6 }, // cooldown stays DB2's 40 s (row built from the generated one, see Astral Shift): the hand 30: the hand 30 already held Psychic Voice's −10 and CD_TALENT_MODIFIERS subtracted it again → 20 s. Corpus 2026-09-26 (605 files, --split-talent 196704): holders floor 29–30 s (1,909 gaps, 3 specs), non-holders 40 s (187 gaps). Reliability round 2 W2b (7b3c "≥ 30 s observed").
       e("78675", "Solar Beam", 60),
     ].map((s) => [s.spellId, s]),
@@ -342,7 +400,32 @@ export const CORPUS_DURATION_PATCHES: Record<string, number> = {
   // allowed because it carries that mechanism (Rule 7), 2026-09-22 GH #65 item 5.
   "257622": 6,
 };
-for (const [id, durationSeconds] of Object.entries(CORPUS_DURATION_PATCHES)) {
+/**
+ * Arena durations SHORTER than DB2 that a user ruling sets — a downward
+ * change needs a mechanism (Game-Behaviour Rule 7); here the ruling and the
+ * corpus are it, the client tables carry none. Registered in curatedIdRegistry.
+ *
+ * Intervene 147833 — FLAG, user ruling 2026-10-21: 「我觉得我们可以先这样
+ * 告诉他们：统一写成 3 秒。虽然防战这个专精是 6秒，但因为玩的人很少，高分段也
+ * 没有，所以不是很重要」 (and 「竞技场一律 3 秒」). Protection is 6 s per the
+ * user, deliberately not modelled. DB2
+ * (12.1.5.70391): SpellMisc DurationIndex 32 = 6 s, PvPDurationIndex 0 (the
+ * field is live — 126 observed spells use it, Vanish 3 → 1.5 s); the only
+ * class-mask duration modifier on it is 106080 Last Defender of Azeroth
+ * (+100 %), referenced by nothing; no SpellLabel modifier. Corpus, every 6th
+ * new-season file, split by COMBATANT_INFO spec: Arms 2,141 / 2,210 runs at
+ * 3.0 s, Fury 480 / 503, Protection 3 / 3 — none near 6. The audit libraries:
+ * at the end, 213 of 375 runs still had the warrior within 10 yd of the ally
+ * (no range break). Every 3.0 s run read "(ended early — no dispel logged)".
+ */
+export const ARENA_DURATION_RULINGS: Record<string, number> = {
+  "147833": 3, // Intervene
+};
+
+for (const [id, durationSeconds] of [
+  ...Object.entries(CORPUS_DURATION_PATCHES),
+  ...Object.entries(ARENA_DURATION_RULINGS),
+]) {
   const cur = SPELL_EFFECT_OVERRIDES[id];
   if (cur)
     (cur as { durationSeconds?: number }).durationSeconds = durationSeconds;

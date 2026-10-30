@@ -1,5 +1,6 @@
-import { ICombatUnit } from "@gladlog/parser-compat";
+import { CombatUnitType, ICombatUnit } from "@gladlog/parser-compat";
 
+import { castKeyOfAura } from "../data/castEffectAuras";
 import { resolveMitigation } from "../data/mitigationComponents";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import spellIdLists from "../data/spellIdLists";
@@ -7,7 +8,9 @@ import { absorbContributionsInWindow } from "./absorbShields";
 import { getSortedAdvancedActions } from "./advancedActions";
 import { buildAuraIntervals, IAuraInterval } from "./auraIntervals";
 import { binarySearchClosest } from "./binarySearch";
+import { isCasterSideLinkAura } from "./brokenRowBreaker";
 import { IPlayerCCTrinketSummary } from "./ccTrinketAnalysis";
+import { lockoutDebuffStopsPressAtDeath } from "./cooldowns";
 import {
   cdReadyInTimeAt,
   HP_SAMPLE_RADIUS_MS,
@@ -17,6 +20,7 @@ import {
   IMissedExternal,
   wasLockedOutThroughWindow,
 } from "./deathOutcomeAnalysis";
+import { DEFERRAL_SHIELD_DAMAGE_IDS,hitSchoolId, logSchoolMask } from "./incomingPressure";
 
 /**
  * counterfactual.ts — mitigation counterfactual accounting (#17b): the
@@ -28,8 +32,8 @@ import {
  *    mitigation **already active** inside the death window — arith entries
  *    back out the blocked amount from the observed damage; immunity (pct=100)
  *    is never back-computed, it only reports coverage duration and the damage
- *    observed during it; mechanic/off-table entries (transfer, reflect, …) get
- *    no invented numbers; positional (Darkness) is not modelled this round and
+ *    observed during it; off-table entries (not in the mitigation table: shields,
+ *    dodges, heals, transfers, reflects …) get no invented numbers; positional (Darkness) is not modelled this round and
  *    is skipped without emitting a row.
  *  - B (computeMissedExternalCounterfactuals): a teammate external that was
  *    **available but not given**, on the discount measure (saved = damage of
@@ -84,6 +88,12 @@ const WHITELIST_IDS: ReadonlySet<string> = new Set<string>([
   // list's own comment for why it is separate from the other two.
   ...spellIdLists.attributedMitigationSpellIds,
 ]);
+/** The whitelist key an aura on the victim stands for — its own id or the
+ * cast whose own effect it is (fact2 C10, `castKeyOfAura`): Rallying Cry
+ * 97462 runs as 97463, Fortifying Brew 115203 as 120954, Blur 198589 as
+ * 212800 — rows the audit never wrote. Priced by the key. */
+const whitelistKeyOf = (auraSpellId: string): string | undefined =>
+  castKeyOfAura(auraSpellId, (id) => WHITELIST_IDS.has(id));
 
 /**
  * Direct absolute-HP sampling: `getUnitHpAtTimestamp` returns a percentage and
@@ -159,7 +169,7 @@ export function windowDamage(
   for (const d of unit.damageIn) {
     const ts = d.logLine.timestamp;
     if (ts < fromMs || ts > toMs) continue;
-    const school = Number.parseInt(d.spellSchoolId ?? "0x0", 16);
+    const school = logSchoolMask(hitSchoolId(d));
     if ((school & schoolMask) === 0) continue;
     sum += Math.abs(d.effectiveAmount);
   }
@@ -185,12 +195,18 @@ function windowStartSecondsOf(deathS: number): number {
 export interface IMitigationAuditRow {
   spellId: string;
   spellName: string;
-  kind: "arith" | "immunity" | "mechanic" | "absorb";
+  kind: "arith" | "immunity" | "mechanic" | "absorb" | "deferred";
   /** Seconds of (active interval ∩ death window), one decimal. */
   activeOverlapS: number;
   /** kind=arith: blocked amount (absolute) and its share of maxHp. */
   blockedAmount?: number;
   blockedPctMaxHp?: number;
+  /** kind=deferred: what a deferral shield (`DEFERRAL_SHIELD_DAMAGE_IDS`:
+   * Time Dilation, Stretch Time) DELAYED inside the overlap — the log's own
+   * SPELL_ABSORBED rows of that shield, a measured amount — and its share of
+   * maxHp. It lands later as the unit's own damage. */
+  deferredAmount?: number;
+  deferredPctMaxHp?: number;
   /** kind=immunity: ALL damage taken during the immunity coverage (reported as-is). */
   damageTakenDuringImmunity?: number;
   /** kind=immunity: the part of it outside the immunity's schools (a physical
@@ -220,20 +236,67 @@ export interface IWindowedAuraInterval extends IAuraInterval {
  */
 export function whitelistedIntervalsInDeathWindow(
   victim: ICombatUnit,
-  combat: { startTime: number; endTime: number },
+  combat: {
+    startTime: number;
+    endTime: number;
+    units?: Record<string, ICombatUnit>;
+  },
   deathS: number,
+  /** The death's real instant, when the caller has it: the active overlap is
+   *  a duration and runs to the death itself, like the [DEATH] block's "Top
+   *  damage in final 10s" (work order 2026-10-14c #2: 9c9d8601's Pain
+   *  Suppression up 3.24 s before the death printed 2.4 s — the window
+   *  stopped at the floored second). The HP / net-damage readings stay on
+   *  the render grid (`deathS`). */
+  deathInstantS: number = deathS,
 ): IWindowedAuraInterval[] {
-  const windowStartS = windowStartSecondsOf(deathS);
+  const windowStartS = windowStartSecondsOf(deathInstantS);
   const out: IWindowedAuraInterval[] = [];
   // 白名单里的减伤绝大多数是**自施**(树皮术、洞察之眼…),所以受害者自己就是
   // 施法者 —— 不用改签名就能让天赋加长的时长参与封顶(auraIntervals:11% 的上身
   // 等不到 REMOVED)。外置减伤(守护之魂等)的施法者不在这里,按无施法者取值,
   // 即接线前的行为。
   const selfCaster = new Map([[victim.id, victim]]);
+  // Work order 2026-10-14d #3: an aura the OTHER side put on the victim is
+  // not the victim's mitigation — an enemy Windwalker's Touch of Karma
+  // tether (122470, a DEBUFF on our mage) read as "Touch of Karma active
+  // 9.0s in the final 10s" (b711d4ac 4:33). Same reading as the burst
+  // ledger's target defensives (`burstLedger.ts`: by the aura's source name).
+  // Players on both sides, and never a name the victim's side also has
+  // (agy 40-FT-90: a pet's bare name could equal a player's; 40-FT-91: so
+  // the own side is its PLAYERS too, or a same-named own pet would let the
+  // enemy player's aura back in): a player's name is realm-qualified
+  const units = Object.values(combat.units ?? {});
+  const ownSide = new Set(
+    units
+      .filter(
+        (u) =>
+          u.reaction === victim.reaction && u.type === CombatUnitType.Player,
+      )
+      .map((u) => u.name),
+  );
+  ownSide.add(victim.name);
+  const opposing = new Set(
+    units
+      .filter(
+        (u) =>
+          u.reaction !== victim.reaction &&
+          u.type === CombatUnitType.Player &&
+          !ownSide.has(u.name),
+      )
+      .map((u) => u.name),
+  );
   for (const iv of buildAuraIntervals(victim, combat, selfCaster)) {
-    if (!WHITELIST_IDS.has(iv.spellId)) continue;
+    if (whitelistKeyOf(iv.spellId) === undefined) continue;
+    if (opposing.has(iv.srcUnitName)) continue;
+    // fact2 C4 (2026-10-20): a damage-transfer external's link on its own
+    // caster moves damage ONTO the victim — no mitigation of theirs
+    // (a5df6bff 2:45: the paladin's own Blessing of Sacrifice link listed in
+    // his death's audit; `isCasterSideLinkAura`, the stacked-defensives rule)
+    if (isCasterSideLinkAura(iv.spellId, iv.srcUnitName === victim.name))
+      continue;
     const overlapFrom = Math.max(iv.fromS, windowStartS);
-    const overlapTo = Math.min(iv.toS, deathS);
+    const overlapTo = Math.min(iv.toS, deathInstantS);
     if (overlapTo <= overlapFrom) continue; // no overlap, emit no row
     out.push({ ...iv, overlapFrom, overlapTo });
   }
@@ -262,6 +325,8 @@ export function computeMitigationAudit(
     units: Record<string, ICombatUnit>;
   },
   deathS: number,
+  /** see `whitelistedIntervalsInDeathWindow` */
+  deathInstantS: number = deathS,
 ): {
   rows: IMitigationAuditRow[];
   netDamage: number | null;
@@ -275,13 +340,18 @@ export function computeMitigationAudit(
 
   const rows: IMitigationAuditRow[] = [];
 
-  for (const iv of whitelistedIntervalsInDeathWindow(victim, combat, deathS)) {
+  for (const iv of whitelistedIntervalsInDeathWindow(
+    victim,
+    combat,
+    deathS,
+    deathInstantS,
+  )) {
     const { overlapFrom, overlapTo } = iv;
     const activeOverlapS = round1(overlapTo - overlapFrom);
     const spellName = getEnglishSpellName(iv.spellId, iv.spellName);
     // GH #96 M3a: every pricing goes through the component resolver; carrier =
     // an ally-applied Flameshaper Obsidian Scales is 15 %, the Evoker's own 30 %.
-    const res = resolveMitigation(iv.spellId, {
+    const res = resolveMitigation(whitelistKeyOf(iv.spellId) ?? iv.spellId, {
       carrierIsCaster: iv.srcUnitName === victim.name,
       // the caster by name from the round's roster (talent impact audit
       // 2026-09-26: an ally-cast external was priced without its caster's
@@ -292,6 +362,34 @@ export function computeMitigationAudit(
           : unitByName(combat.units, iv.srcUnitName),
     });
 
+    // A deferral shield is priced by what it held back — whether the
+    // mitigation table prices it (Time Dilation, 50 %: user rulings
+    // 2026-07-30, kept 2026-10-20 「我觉得都算」 — the row no longer says
+    // "not prevented") or not (Stretch Time, which would otherwise be read as
+    // an off-table ABSORB shield below; agy review of FT-T02b).
+    // The back-computation would price it from damage that includes its own
+    // delayed ticks; the log records what it delayed (FT-T02b, user ruling 2026-10-09; the table's
+    // 50 % for Time Dilation still prices kill windows — ruling 2026-07-30).
+    if (iv.spellId in DEFERRAL_SHIELD_DAMAGE_IDS) {
+      const deferredAmount =
+        absorbContributionsInWindow(
+          victim,
+          combat.startTime + overlapFrom * 1000,
+          combat.startTime + overlapTo * 1000,
+        ).find((c) => c.spellId === iv.spellId)?.absorbedAmount ?? 0;
+      rows.push({
+        spellId: iv.spellId,
+        spellName,
+        kind: "deferred",
+        activeOverlapS,
+        deferredAmount,
+        deferredPctMaxHp:
+          maxHp !== null && maxHp > 0
+            ? round1((deferredAmount / maxHp) * 100)
+            : undefined,
+      });
+      continue;
+    }
     if (!res) {
       // Off-table (including NO_MITIGATION_IDS; the two are mutually
       // exclusive). Absorb shields are the one off-table class that CAN be
@@ -492,8 +590,26 @@ export function computeUnusedSelfCounterfactuals(
 
   const hits: ICounterfactualHit[] = [];
   for (const cd of victimCds) {
+    // a row owned on the spec baseline alone is cd-hoarded's only (ruling
+    // P-W6); this line has no Forbearance gate for a button never shown
+    // (Fable review of F-W6, round 8)
+    if (cd.baselineOnly) continue;
     if (UNUSED_SELF_COVERAGE_UNMODELLED.has(cd.spellId)) continue;
     if (!cdReadyInTimeAt(cd, deathS)) continue;
+    // a button the game refused then (Ice Block under Hypothermia, Divine
+    // Shield under Forbearance — read just before the death, where the
+    // debuff still holds; codex R6C-04 #1) saved nobody
+    if (
+      lockoutDebuffStopsPressAtDeath(
+        victim,
+        cd.spellId,
+        victim,
+        Object.values(combat.units),
+        deathS,
+        combat.startTime,
+      )
+    )
+      continue;
     // GH #96 M3a: hypothetical ADDED protection: observed × p per component
     // (own cooldown → the victim carries it). Lower bound: "would have saved".
     const res = resolveMitigation(cd.spellId, {

@@ -1,14 +1,15 @@
 // @vitest-environment jsdom
-import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
-
 import { ensureAnalysisData } from "@gladlog/analysis";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ShuffleReport } from "../src/renderer/src/report/components/ShuffleReport";
 import type { StoredShuffle } from "../src/renderer/src/report/derive/types";
-import { loadRealMatchFixture } from "./fixtures/loadFixture";
+import { loadRealMatchFixtureWithKillWindow } from "./fixtures/loadFixture";
 
-const m = loadRealMatchFixture();
+// the real fixture minus the enemy priest's own shields: since the
+// 2026-10-21 ruling they end its only kill window (see the loader)
+const m = loadRealMatchFixtureWithKillWindow();
 
 beforeAll(async () => {
   // Build-time contract: spell names in the prompt must never degrade (same as

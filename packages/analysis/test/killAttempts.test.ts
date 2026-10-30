@@ -1,14 +1,35 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { LogEvent } from "@gladlog/parser-compat";
+import { CombatUnitSpec, LogEvent } from "@gladlog/parser-compat";
 import { describe, expect, it } from "vitest";
 
 import { extractCandidateFindings } from "../src/analysis/candidateFindings";
+import { isDamageImmuneControl } from "../src/analysis/candidates/massDispel";
 import { CANDIDATE_TYPE_FLAGS } from "../src/data/candidateTypeFlags";
 import { ensureAnalysisData } from "../src/data/ensure";
 import {
+  extractSpiritOfRedemptionIntervals,
+  PRESSED_SPIRIT_OF_REDEMPTION_AURA_IDS,
+} from "../src/utils/combatStates";
+import {
+  ENEMY_PROC_SAVE_NAMES,
+  SAVE_AURA_END_UNSEEN_NAMES,
+} from "../src/utils/enemyDefensives";
+import {
+  anchorsKillAttempt,
   attemptIntoTrinketEvents,
+  attemptSpanOutsideForm,
   extractKillAttempts,
   formatKillAttemptsForContext,
+  KILL_ATTEMPT_IMMUNITY_ALREADY_UP_NAME,
+  KILL_ATTEMPTS_ALREADY_UP_LEGEND,
+  KILL_ATTEMPTS_END_UNSEEN_LEGEND,
+  KILL_ATTEMPTS_OWN_CONTROL_LEGEND,
+  KILL_ATTEMPTS_POPPED_LEGEND,
+  KILL_ATTEMPTS_PROC_LEGEND,
+  killAttemptBracketMeetsControl,
+  killAttemptOwnControlClause,
+  ownImmuneControlsOverBracket,
+  softerTargetAt,
 } from "../src/utils/killAttempts";
 
 /**
@@ -39,6 +60,9 @@ function unit(id: string, over: Record<string, unknown> = {}): any {
     healIn: [],
     deathRecords: [],
     advancedActions: [],
+    // read by analyzePlayerCCAndTrinket (the trinket binder's CC instances)
+    actionIn: [],
+    actionOut: [],
     ...over,
   };
 }
@@ -108,6 +132,8 @@ function makeCombat(f1: any, e1: any, extraEnemies: any[] = []): any {
   return {
     startTime: MATCH_START,
     endTime: MATCH_START + 300_000,
+    // the trinket binder reads the target's CC instances (zone → LoS lookup)
+    startInfo: { zoneId: "1505" },
     units: {
       f1,
       e1,
@@ -135,6 +161,68 @@ describe("extractKillAttempts", () => {
     expect(attempts[0].fromSeconds).toBe(10);
     expect(attempts[0].toSeconds).toBe(23);
     expect(attempts[1].stuns).toHaveLength(1);
+  });
+
+  it("F16 retest idx 5: a shorter stun applied inside a longer one does not cut the bracket — it ends at the latest end", () => {
+    const e1 = unit("e1", {
+      auraEvents: [
+        ...stunAuras("e1", "119381", 28.178, 3.978), // Leg Sweep to 32.156
+        ...stunAuras("e1", "372245", 28.767, 1.504), // Terror of the Skies to 30.271
+      ],
+    });
+    const f1 = unit("f1", {
+      reaction: 1,
+      damageOut: [dmg("f1", "e1", 29, 40_000)],
+    });
+    const [a] = extractKillAttempts([f1], [e1], makeCombat(f1, e1));
+    expect(a!.stuns).toHaveLength(2);
+    expect(a!.toSeconds).toBeCloseTo(32.156, 3);
+  });
+
+  it("F16 retest idx 37: a trinket that broke a Fear layered inside a stun bracket is this attempt's trinket", () => {
+    const FEAR = "5782";
+    const e1 = unit("e1", {
+      auraEvents: [
+        ...stunAuras("e1", KIDNEY, 10, 3), // 10–13
+        ...stunAuras("e1", FEAR, 11.5, 2.5), // to 14.0, taken by the Medallion
+        ...stunAuras("e1", KIDNEY, 18, 2), // 18–20, same chain
+      ],
+      spellCastEvents: [
+        {
+          spellId: "336126",
+          logLine: {
+            event: LogEvent.SPELL_CAST_SUCCESS,
+            timestamp: ms(14),
+            parameters: [],
+          },
+        },
+      ],
+    });
+    const f1 = unit("f1", {
+      reaction: 1,
+      damageOut: [dmg("f1", "e1", 12, 50_000)],
+    });
+    const a = extractKillAttempts([f1], [e1], makeCombat(f1, e1))[0];
+    expect(a!.attribution?.trinketed).toBe(true);
+  });
+
+  it("codex 20-F16-08 #1: a deferral shield's absorb row is not in the bracket figure", () => {
+    const e1 = unit("e1", { auraEvents: stunAuras("e1", KIDNEY, 10, 4) });
+    const deferred = {
+      ...dmg("f1", "e1", 12, 40_000),
+      spellId: "410355",
+      logLine: {
+        event: LogEvent.SPELL_ABSORBED,
+        timestamp: ms(12),
+        parameters: [],
+      },
+    };
+    const f1 = unit("f1", {
+      reaction: 1,
+      damageOut: [dmg("f1", "e1", 11, 35_000), deferred],
+    });
+    const [a] = extractKillAttempts([f1], [e1], makeCombat(f1, e1));
+    expect(a!.teamDamageToTargetInBracket).toBe(35_000);
   });
 
   it("伤害地板:控住了但团队伤害 < 30k → 不算尝试(那是 peel/铺垫)", () => {
@@ -175,8 +263,10 @@ describe("extractKillAttempts", () => {
   });
 
   it("归因优先级:span 内交徽章 → trinketed 压过其余全部", () => {
+    // the Medallion at 12 s ends the stun in that ms (fact2 R3: a stun that
+    // ran its full length was not broken by a press inside it)
     const e1 = unit("e1", {
-      auraEvents: stunAuras("e1", KIDNEY, 10, 5),
+      auraEvents: stunAuras("e1", KIDNEY, 10, 2),
       spellCastEvents: [
         {
           spellId: "336126",
@@ -344,6 +434,28 @@ describe("attemptIntoTrinketEvents(候选 mapper)", () => {
     return { f1, e1, e2, combat: makeCombat(f1, e1, [e2]) };
   }
 
+  it("G2 F-K6: a softer candidate sitting in our own breakable CC is skipped", () => {
+    const { e1, e2, combat } = lockedScenario();
+    expect(softerTargetAt(e1, [e1, e2], 10, combat)?.name).toBe("e2");
+    expect(
+      softerTargetAt(e1, [e1, e2], 10, combat, (e) => e.id === "e2"),
+    ).toBeNull();
+  });
+
+  it("G2 F-K6 through extractKillAttempts: our Polymorph on the softer enemy skips it; our Kidney Shot does not", () => {
+    const softerWith = (spellId: string) => {
+      const { f1, e1, e2 } = lockedScenario();
+      // our CC on e2 from 9 to 15 — the attempt on e1 opens at 10
+      e2.auraEvents = stunAuras("e2", spellId, 9, 6);
+      return extractKillAttempts([f1], [e1, e2], makeCombat(f1, e1, [e2]))[0]!
+        .softerTarget;
+    };
+    // Polymorph (DR Incapacitate): damage would break it — no softer target
+    expect(softerWith("118")).toBeUndefined();
+    // Kidney Shot (DR Stun): a stunned enemy is still the softer target
+    expect(softerWith(KIDNEY)?.name).toBe("e2");
+  });
+
   it("locked 上的失败尝试 + 场上有 prime → 出候选,facts 可验证", () => {
     const { f1, e1, e2, combat } = lockedScenario();
     const attempts = extractKillAttempts([f1], [e1, e2], combat);
@@ -367,9 +479,7 @@ describe("attemptIntoTrinketEvents(候选 mapper)", () => {
       [e1, e2],
       makeCombat(f1, e1, [e2]),
     );
-    expect(
-      attemptIntoTrinketEvents(attempts),
-    ).toHaveLength(0);
+    expect(attemptIntoTrinketEvents(attempts)).toHaveLength(0);
   });
 
   it("尝试成功(击杀)→ 不指控", () => {
@@ -377,9 +487,7 @@ describe("attemptIntoTrinketEvents(候选 mapper)", () => {
     e1.deathRecords = [{ timestamp: ms(16) }];
     const combat = makeCombat(f1, e1, [e2]);
     const attempts = extractKillAttempts([f1], [e1, e2], combat);
-    expect(
-      attemptIntoTrinketEvents(attempts),
-    ).toHaveLength(0);
+    expect(attemptIntoTrinketEvents(attempts)).toHaveLength(0);
   });
 
   it("开关:默认退役(flag=false,用户裁决 2026-09-22)零产出;flag=true 时发射器仍接线", () => {
@@ -521,6 +629,51 @@ describe("extractKillAttempts — 大招锚定(v2)", () => {
     expect(attempts[0]!.openingDrLevel).toBeUndefined();
   });
 
+  it("fact6 D14 (F20): a press the game refused IMMUNE on the target does not name the burst", () => {
+    // 2b3fba97-r0 2:27: Deathmark into Time Stop was named `Deathmark burst`
+    const aimed = (spellId: string, spellName: string, atS: number): any => ({
+      ...offensiveCast(atS),
+      spellId,
+      spellName,
+      destUnitId: "e1",
+      destUnitName: "e1",
+    });
+    const run = (missesOut: any[]) => {
+      const e1 = unit("e1");
+      const f1 = unit("f1", {
+        reaction: 1,
+        spec: "71", // Arms Warrior
+        spellCastEvents: [
+          aimed("1719", "Recklessness", 40),
+          aimed("107574", "Avatar", 40.5),
+        ],
+        damageOut: [dmg("f1", "e1", 42, 60_000)],
+        missesOut,
+      });
+      return extractKillAttempts([f1], [e1], makeCombat(f1, e1));
+    };
+    const refused = {
+      spellId: "1719",
+      missType: "IMMUNE",
+      destUnitId: "e1",
+      timestamp: ms(40.01),
+      logLine: { event: LogEvent.SPELL_MISSED, timestamp: ms(40.01) },
+    };
+    // control: nothing refused — the first press into the target names it
+    expect(run([])[0]!.anchorSpellName).toBe("Recklessness");
+    expect(run([refused])[0]!.anchorSpellName).toBe("Avatar");
+    // a later DoT tick meeting an immunity is not the press refused
+    expect(
+      run([
+        {
+          ...refused,
+          timestamp: ms(41),
+          logLine: { event: LogEvent.SPELL_PERIODIC_MISSED, timestamp: ms(41) },
+        },
+      ])[0]!.anchorSpellName,
+    ).toBe("Recklessness");
+  });
+
   it("同目标已有重叠晕锚尝试 → 不再另立 burst 尝试(晕锚优先,去重)", () => {
     const e1 = unit("e1", { auraEvents: stunAuras("e1", KIDNEY, 40, 5) });
     const f1 = unit("f1", {
@@ -531,6 +684,84 @@ describe("extractKillAttempts — 大招锚定(v2)", () => {
     const attempts = extractKillAttempts([f1], [e1], makeCombat(f1, e1));
     expect(attempts).toHaveLength(1);
     expect(attempts[0]!.anchor).toBe("stun");
+  });
+
+  it("G2 F-K2: a covered burst cluster that alone reaches the kill is kept; the stun attempt did not get it", () => {
+    // Kidney 40–45 (credit to 50); Recklessness from 40 (span to ~52);
+    // the target dies at 55 — only the burst's credit window holds it
+    const e1 = unit("e1", {
+      auraEvents: stunAuras("e1", KIDNEY, 40, 5),
+      deathRecords: [{ timestamp: ms(55) }],
+    });
+    const f1 = unit("f1", {
+      reaction: 1,
+      spellCastEvents: [offensiveCast(40)],
+      damageOut: [dmg("f1", "e1", 42, 60_000)],
+    });
+    const attempts = extractKillAttempts([f1], [e1], makeCombat(f1, e1));
+    expect(attempts.map((a) => [a.anchor, a.killed])).toEqual([
+      ["stun", false],
+      ["burst", true],
+    ]);
+  });
+
+  it("G2 F-K2: a covered cluster whose death goes to another row stays skipped (no extra FAILED row)", () => {
+    // Kidney 40–45 (credit to 50) covers Recklessness 40–52 (credit to 57);
+    // a second go at 53 runs past the death at 56, so it gets the kill
+    const e1 = unit("e1", {
+      auraEvents: stunAuras("e1", KIDNEY, 40, 5),
+      deathRecords: [{ timestamp: ms(56) }],
+    });
+    const f1 = unit("f1", {
+      reaction: 1,
+      spellCastEvents: [offensiveCast(40), offensiveCast(53)],
+      damageOut: [dmg("f1", "e1", 42, 60_000), dmg("f1", "e1", 54, 60_000)],
+    });
+    const attempts = extractKillAttempts([f1], [e1], makeCombat(f1, e1));
+    expect(attempts.map((a) => [a.anchor, a.fromSeconds, a.killed])).toEqual([
+      ["stun", 40, false],
+      ["burst", 53, true],
+    ]);
+  });
+
+  it("G2: one death, one KILL — the attempt the death fell inside gets it; the other is a failed attempt", () => {
+    // Kidney 40–45 credits a death up to 50; a burst opened at 46 (not
+    // overlapping the stun) runs past the death at 48
+    const e1 = unit("e1", {
+      auraEvents: stunAuras("e1", KIDNEY, 40, 5),
+      deathRecords: [{ timestamp: ms(48) }],
+    });
+    const f1 = unit("f1", {
+      reaction: 1,
+      spellCastEvents: [offensiveCast(46)],
+      damageOut: [dmg("f1", "e1", 42, 60_000), dmg("f1", "e1", 47, 60_000)],
+    });
+    const attempts = extractKillAttempts([f1], [e1], makeCombat(f1, e1));
+    expect(attempts.filter((a) => a.killed)).toHaveLength(1);
+    const kill = attempts.find((a) => a.killed)!;
+    expect(kill.anchor).toBe("burst");
+    expect(kill.killedAtSeconds).toBeCloseTo(48, 6);
+    const other = attempts.find((a) => !a.killed)!;
+    expect(other.anchor).toBe("stun");
+    expect(other.attribution).toBeDefined();
+  });
+
+  it("G2 F-K1: a death credited to a KILL in its slack is not 'outside every attempt window'", () => {
+    const e1 = unit("e1", {
+      auraEvents: stunAuras("e1", KIDNEY, 10, 5),
+      deathRecords: [{ timestamp: ms(18) }],
+    });
+    const f1 = unit("f1", {
+      reaction: 1,
+      damageOut: [dmg("f1", "e1", 12, 50_000)],
+    });
+    const attempts = extractKillAttempts([f1], [e1], makeCombat(f1, e1));
+    expect(attempts[0]!.killed).toBe(true);
+    const text = formatKillAttemptsForContext(attempts, [18, 70]).join("\n");
+    // 18 s is the KILL's death (in the slack after 15 s); 70 s is outside
+    expect(text).toContain(
+      "Enemy deaths this round: 2 (1 outside every attempt window)",
+    );
   });
 
   it("大招 span 内伤害 <30k → 不算尝试(同一伤害地板)", () => {
@@ -554,14 +785,13 @@ describe("extractKillAttempts — 大招锚定(v2)", () => {
       stuns: [],
       opportunity: { tier: "locked", wallsInHand: [] },
       teamDamageToTarget: 100_000,
+      teamDamageToTargetInBracket: 100_000,
       teamDamageTotal: 100_000,
       teamOnTargetPct: 100,
       killed: false,
       attribution: { primary: "trinketed" },
     };
-    expect(
-      attemptIntoTrinketEvents([burstAttempt]),
-    ).toHaveLength(0);
+    expect(attemptIntoTrinketEvents([burstAttempt])).toHaveLength(0);
   });
 
   it("formatter:burst 行带「burst (no stun)」,Summary 报锚定拆分", () => {
@@ -621,12 +851,2145 @@ describe("formatKillAttemptsForContext — enemy deaths outside attempt windows 
   it("a death inside an attempt's window on ANOTHER target is not 'outside every attempt window'", () => {
     const e1 = unit("e1", { auraEvents: stunAuras("e1", KIDNEY, 5, 5) });
     const e2 = unit("e2");
-    const f1 = unit("f1", { reaction: 1, damageOut: [dmg("f1", "e1", 7, 50_000)] });
+    const f1 = unit("f1", {
+      reaction: 1,
+      damageOut: [dmg("f1", "e1", 7, 50_000)],
+    });
     const [a] = extractKillAttempts([f1], [e1, e2], makeCombat(f1, e1, [e2]));
-    const inside = formatKillAttemptsForContext([a!], [a!.fromSeconds + 1]).join("\n");
+    const inside = formatKillAttemptsForContext(
+      [a!],
+      [a!.fromSeconds + 1],
+    ).join("\n");
     expect(inside).toContain("Enemy deaths this round: 1.");
     expect(inside).not.toContain("outside every attempt window");
-    const after = formatKillAttemptsForContext([a!], [a!.toSeconds + 20]).join("\n");
+    const after = formatKillAttemptsForContext([a!], [a!.toSeconds + 20]).join(
+      "\n",
+    );
     expect(after).toContain("(1 outside every attempt window)");
+  });
+});
+
+/**
+ * Triage 2026-09-29, enemy-def F-E7 / F-E4 / F-E9 (rulings A11, A20, U3): the
+ * enemy-only save sets are failure causes, through the same predicate the
+ * [ENEMY DEF] line renders from.
+ */
+describe("extractKillAttempts — enemy-only saves are failure causes", () => {
+  const press = (spellId: string, dest: string, atS: number): any => ({
+    spellId,
+    spellName: `S${spellId}`,
+    destUnitId: dest,
+    destUnitName: dest,
+    logLine: {
+      event: LogEvent.SPELL_CAST_SUCCESS,
+      timestamp: ms(atS),
+      parameters: [],
+    },
+  });
+  const attacker = () =>
+    unit("f1", { reaction: 1, damageOut: [dmg("f1", "e1", 12, 50_000)] });
+
+  it("the target's own Dark Pact inside the span → the self-save cause, worded `popped Dark Pact`", async () => {
+    await ensureAnalysisData();
+    const e1 = unit("e1", {
+      auraEvents: stunAuras("e1", KIDNEY, 10, 5),
+      spellCastEvents: [press("108416", "0000000000000000", 11)],
+    });
+    const f1 = attacker();
+    const [a] = extractKillAttempts([f1], [e1], makeCombat(f1, e1));
+    expect(a.attribution?.primary).toBe("self-saved");
+    // user ruling 2026-10-11: the word states the press, not a purpose
+    const block = formatKillAttemptsForContext([a]).join("\n");
+    expect(block).toMatch(/FAILED: popped Dark Pact$/m);
+    expect(block).not.toContain("self-saved (");
+    // … and each word is legended only where a line carries it
+    expect(block).toContain(KILL_ATTEMPTS_POPPED_LEGEND);
+    expect(block).not.toContain(KILL_ATTEMPTS_PROC_LEGEND);
+  });
+
+  it("a teammate's Lay on Hands or Leap of Faith on the target → saved by external, one name per spell", async () => {
+    await ensureAnalysisData();
+    const e1 = unit("e1", { auraEvents: stunAuras("e1", KIDNEY, 10, 5) });
+    const e2 = unit("e2", {
+      spellCastEvents: [
+        press("73325", "e1", 11),
+        press("73325", "e1", 13),
+        press("471195", "e1", 14),
+      ],
+    });
+    const f1 = attacker();
+    const [a] = extractKillAttempts([f1], [e1, e2], makeCombat(f1, e1, [e2]));
+    expect(a.attribution?.primary).toBe("external");
+    expect(a.attribution?.externalReceived).toEqual([
+      "Leap of Faith",
+      "Lay on Hands",
+    ]);
+  });
+
+  it("Roar of Sacrifice the target cast on ITSELF is its self-save; cast on a teammate it is not this target's save", async () => {
+    await ensureAnalysisData();
+    const onSelf = unit("e1", {
+      auraEvents: stunAuras("e1", KIDNEY, 10, 5),
+      spellCastEvents: [press("53480", "e1", 11)],
+    });
+    const f1 = attacker();
+    expect(
+      extractKillAttempts([f1], [onSelf], makeCombat(f1, onSelf))[0].attribution
+        ?.primary,
+    ).toBe("self-saved");
+    const onMate = unit("e1", {
+      auraEvents: stunAuras("e1", KIDNEY, 10, 5),
+      spellCastEvents: [press("53480", "e2", 11)],
+    });
+    const e2 = unit("e2");
+    const f2 = attacker();
+    expect(
+      extractKillAttempts([f2], [onMate, e2], makeCombat(f2, onMate, [e2]))[0]
+        .attribution?.primary,
+    ).toBe("pressure");
+  });
+});
+
+/** enemy-def F-E5 / F-E6 (ruling A25): an immunity-kind save inside the span
+ * reads "forced a full immunity", whoever applied the aura. Ruling D8
+ * (2026-10-10) took Feign Death, Nature's Guardian, Cheat Death and Cauterize
+ * out of that kind: they take the self-save's place — worded `popped Feign
+ * Death` (a press, user ruling 2026-10-11) and `self-saved (X)` for the three
+ * procs, which nobody pressed. */
+describe("extractKillAttempts — immunity-kind saves are immunity-baited; the effect saves are self-saved (ruling D8)", () => {
+  const auraOn = (spellId: string, src: string, atS: number): any => ({
+    spellId,
+    spellName: `S${spellId}`,
+    srcUnitId: src,
+    srcUnitName: src,
+    destUnitId: "e1",
+    destUnitName: "e1",
+    timestamp: ms(atS),
+    logLine: {
+      event: LogEvent.SPELL_AURA_APPLIED,
+      timestamp: ms(atS),
+      parameters: [],
+    },
+    auraType: "BUFF",
+  });
+  const attempt = (e1: any) => {
+    const f1 = unit("f1", {
+      reaction: 1,
+      damageOut: [dmg("f1", "e1", 12, 50_000)],
+    });
+    return extractKillAttempts([f1], [e1], makeCombat(f1, e1))[0];
+  };
+
+  it.each([
+    ["378441", "e1", "Time Stop on itself"],
+    ["11327", "e1", "Vanish"],
+    [
+      "228050",
+      "guardian",
+      "Guardian of the Forgotten Queen, applied by the summon",
+    ],
+  ])("aura %s from %s (%s) → immunity-baited", async (id, src) => {
+    await ensureAnalysisData();
+    const a = attempt(
+      unit("e1", {
+        auraEvents: [...stunAuras("e1", KIDNEY, 10, 5), auraOn(id, src, 12)],
+      }),
+    );
+    expect(a.attribution?.primary).toBe("immunity-baited");
+  });
+
+  const heal = (atS: number): any => ({
+    spellId: "31616",
+    srcUnitId: "e1",
+    destUnitId: "e1",
+    effectiveAmount: 10,
+    logLine: {
+      event: LogEvent.SPELL_HEAL,
+      timestamp: ms(atS),
+      parameters: [],
+    },
+  });
+  const auraOff = (spellId: string, src: string, atS: number): any => ({
+    ...auraOn(spellId, src, atS),
+    logLine: {
+      event: LogEvent.SPELL_AURA_REMOVED,
+      timestamp: ms(atS),
+      parameters: [],
+    },
+  });
+  const text = (a: any): string => formatKillAttemptsForContext([a]).join("\n");
+
+  // The attempt is Kidney Shot 10–15 s; its kill-credit slack runs to 20 s.
+  it.each([
+    ["202748", "Feign Death"],
+    ["45182", "Cheat Death"],
+    ["87023", "Cauterize"],
+  ])(
+    "ruling D8: aura %s (%s) inside the span → self-saved, not a forced immunity (it was immunity-baited)",
+    async (id, name) => {
+      await ensureAnalysisData();
+      const a = attempt(
+        unit("e1", {
+          auraEvents: [...stunAuras("e1", KIDNEY, 10, 5), auraOn(id, "e1", 12)],
+        }),
+      );
+      expect(a.attribution?.immunityBaited).toBe(false);
+      expect(a.attribution?.primary).toBe("self-saved");
+      expect(a.attribution?.selfSaved).toEqual([name]);
+      // Feign Death is a press; Cheat Death and Cauterize fired on their own
+      expect(text(a)).toMatch(
+        new RegExp(
+          name === "Feign Death"
+            ? "FAILED: popped Feign Death$"
+            : `FAILED: self-saved \\(${name}\\)$`,
+          "m",
+        ),
+      );
+      expect(text(a).includes(KILL_ATTEMPTS_PROC_LEGEND)).toBe(
+        name !== "Feign Death",
+      );
+      expect(text(a)).not.toContain("forced a full immunity");
+    },
+  );
+
+  it("ruling D8: a Nature's Guardian heal on itself inside the span → self-saved (it was immunity-baited); outside it → not a cause", async () => {
+    await ensureAnalysisData();
+    const inside = attempt(
+      unit("e1", {
+        auraEvents: stunAuras("e1", KIDNEY, 10, 5),
+        healIn: [heal(13)],
+      }),
+    );
+    expect(inside.attribution?.immunityBaited).toBe(false);
+    expect(inside.attribution?.primary).toBe("self-saved");
+    expect(text(inside)).toContain("FAILED: self-saved (Nature's Guardian)");
+    const later = attempt(
+      unit("e1", {
+        auraEvents: stunAuras("e1", KIDNEY, 10, 5),
+        healIn: [heal(60)],
+      }),
+    );
+    expect(later.attribution?.immunityBaited).toBe(false);
+    expect(later.attribution?.selfSaved).toEqual([]);
+  });
+
+  it("ruling D8: the four take the self-save's window — one in the 5 s after the span is not the cause (as an immunity it was)", async () => {
+    await ensureAnalysisData();
+    // each falls through to the next cause in the order. The fixture's target
+    // record holds no damage, so the heal row alone reads "healed through".
+    for (const [e1, next] of [
+      [
+        unit("e1", {
+          auraEvents: [
+            ...stunAuras("e1", KIDNEY, 10, 5),
+            auraOn("202748", "e1", 17),
+          ],
+        }),
+        "pressure",
+      ],
+      [
+        unit("e1", {
+          auraEvents: [
+            ...stunAuras("e1", KIDNEY, 10, 5),
+            auraOn("87023", "e1", 17),
+          ],
+        }),
+        "pressure",
+      ],
+      [
+        unit("e1", {
+          auraEvents: stunAuras("e1", KIDNEY, 10, 5),
+          healIn: [heal(17)],
+        }),
+        "outhealed",
+      ],
+    ] as const) {
+      const a = attempt(e1);
+      expect(a.attribution?.immunityBaited).toBe(false);
+      expect(a.attribution?.selfSaved).toEqual([]);
+      expect(a.attribution?.primary).toBe(next);
+    }
+    // a real immunity in that slack still ends the go (ruling A29)
+    const shield = attempt(
+      unit("e1", {
+        auraEvents: [
+          ...stunAuras("e1", KIDNEY, 10, 5),
+          auraOn("642", "e1", 17),
+        ],
+      }),
+    );
+    expect(shield.attribution?.primary).toBe("immunity-baited");
+  });
+
+  it("ruling D8, rule 2: Feign Death's shield still up when the attempt began is the save, with its second; a proc that fired before it is not", async () => {
+    await ensureAnalysisData();
+    const feign = attempt(
+      unit("e1", {
+        auraEvents: [
+          ...stunAuras("e1", KIDNEY, 10, 5),
+          auraOn("202748", "e1", 9.2),
+          auraOff("202748", "e1", 11.2),
+        ],
+      }),
+    );
+    expect(feign.attribution?.primary).toBe("self-saved");
+    expect(text(feign)).toContain("FAILED: popped Feign Death [up since 0:09]");
+    // the shield had already dropped: nothing
+    const dropped = attempt(
+      unit("e1", {
+        auraEvents: [
+          ...stunAuras("e1", KIDNEY, 10, 5),
+          auraOn("202748", "e1", 7),
+          auraOff("202748", "e1", 9),
+        ],
+      }),
+    );
+    expect(dropped.attribution?.selfSaved).toEqual([]);
+    // Cauterize fired at 8 s; its burn runs to 14 s, across the attempt's
+    // start — the proc is a moment, and that moment was before the attempt
+    for (const id of ["87023", "45182"]) {
+      const proc = attempt(
+        unit("e1", {
+          auraEvents: [
+            ...stunAuras("e1", KIDNEY, 10, 5),
+            auraOn(id, "e1", 8),
+            auraOff(id, "e1", 14),
+          ],
+        }),
+      );
+      expect(proc.attribution?.selfSaved, id).toEqual([]);
+      expect(proc.attribution?.immunityBaited, id).toBe(false);
+    }
+  });
+
+  it("ruling D8: the existing order holds — a real immunity or a wall in the same attempt still comes first; self-saves list in log order", async () => {
+    await ensureAnalysisData();
+    const withShield = attempt(
+      unit("e1", {
+        auraEvents: [
+          ...stunAuras("e1", KIDNEY, 10, 5),
+          auraOn("202748", "e1", 11),
+          auraOn("642", "e1", 13),
+        ],
+      }),
+    );
+    expect(withShield.attribution?.primary).toBe("immunity-baited");
+    const withWall = attempt(
+      unit("e1", {
+        auraEvents: [
+          ...stunAuras("e1", KIDNEY, 10, 5),
+          auraOn("202748", "e1", 11),
+          auraOn("22812", "e1", 13),
+        ],
+      }),
+    );
+    expect(withWall.attribution?.primary).toBe("defensive");
+    expect(text(withWall)).toContain("FAILED: popped Barkskin");
+    // Dark Pact pressed at 13 s, the feign at 11 s
+    const two = attempt(
+      unit("e1", {
+        auraEvents: [
+          ...stunAuras("e1", KIDNEY, 10, 5),
+          auraOn("202748", "e1", 11),
+        ],
+        spellCastEvents: [
+          {
+            spellId: "108416",
+            spellName: "S108416",
+            destUnitId: "0000000000000000",
+            destUnitName: "",
+            logLine: {
+              event: LogEvent.SPELL_CAST_SUCCESS,
+              timestamp: ms(13),
+              parameters: [],
+            },
+          },
+        ],
+      }),
+    );
+    expect(two.attribution?.selfSaved).toEqual(["Feign Death", "Dark Pact"]);
+    expect(text(two)).toMatch(/FAILED: popped Feign Death\/Dark Pact$/m);
+  });
+});
+
+/** enemy-def F-E1a: Blur's wall is logged as aura 212800 while its table row
+ * is the cast 198589 — the attribution resolves the aura to that row. */
+describe("extractKillAttempts — a cast-keyed wall found under its aura id", () => {
+  it("Blur (aura 212800) inside the span → popped Blur", async () => {
+    await ensureAnalysisData();
+    const e1 = unit("e1", {
+      spec: "577",
+      auraEvents: [
+        ...stunAuras("e1", KIDNEY, 10, 5),
+        {
+          spellId: "212800",
+          spellName: "疾影",
+          srcUnitId: "e1",
+          srcUnitName: "e1",
+          destUnitId: "e1",
+          destUnitName: "e1",
+          timestamp: ms(12),
+          logLine: {
+            event: LogEvent.SPELL_AURA_APPLIED,
+            timestamp: ms(12),
+            parameters: [],
+          },
+          auraType: "BUFF",
+        },
+      ],
+    });
+    const f1 = unit("f1", {
+      reaction: 1,
+      damageOut: [dmg("f1", "e1", 12, 50_000)],
+    });
+    const [a] = extractKillAttempts([f1], [e1], makeCombat(f1, e1));
+    expect(a.attribution?.primary).toBe("defensive");
+    expect(formatKillAttemptsForContext([a]).join("\n")).toContain(
+      "FAILED: popped Blur",
+    );
+  });
+});
+
+/**
+ * Triage 2026-09-29, enemy-def F-E22 + crisis-external F-E22b + F-E24 + the
+ * Anti-Magic Shell gate (rulings A29, A30, A′4, A7-补): what window each
+ * failure cause is read over, and when a school-limited save counts.
+ */
+describe("attributeFailure — windows, bound trinket, school gates", () => {
+  const POLYMORPH = "118";
+  const BARKSKIN = "22812";
+  const DIVINE_SHIELD = "642";
+  const BOP = "1022";
+  const AMS = "48707";
+  const GUARDIAN_SPIRIT = "47788";
+  const BOSAC = "6940";
+  const TRINKET = "336126";
+  const MASS_INVISIBILITY = "414664";
+  const BURROW = "409293";
+  const TIME_STOP = "378441";
+
+  const auraEv = (
+    spellId: string,
+    src: string,
+    dest: string,
+    atS: number,
+    event: LogEvent,
+  ): any => ({
+    spellId,
+    spellName: `S${spellId}`,
+    srcUnitId: src,
+    srcUnitName: src,
+    destUnitId: dest,
+    destUnitName: dest,
+    timestamp: ms(atS),
+    logLine: { event, timestamp: ms(atS), parameters: [] },
+    auraType: "BUFF",
+  });
+  const up = (
+    id: string,
+    src: string,
+    dest: string,
+    fromS: number,
+    toS: number,
+  ) => [
+    auraEv(id, src, dest, fromS, LogEvent.SPELL_AURA_APPLIED),
+    auraEv(id, src, dest, toS, LogEvent.SPELL_AURA_REMOVED),
+  ];
+  const press = (spellId: string, dest: string, atS: number): any => ({
+    spellId,
+    spellName: `S${spellId}`,
+    destUnitId: dest,
+    destUnitName: dest,
+    logLine: {
+      event: LogEvent.SPELL_CAST_SUCCESS,
+      timestamp: ms(atS),
+      parameters: [],
+    },
+  });
+  /** team damage on e1 at 12 s in one school (0x1 physical, 0x20 shadow) */
+  const hit = (school: string, amount = 50_000): any => ({
+    ...dmg("f1", "e1", 12, amount),
+    spellSchoolId: school,
+  });
+  const attacker = (hits: any[] = [hit("0x1")]) =>
+    unit("f1", { reaction: 1, damageOut: hits });
+  // the stun runs 10–15 s; the kill-credit slack ends at 20 s
+  const stunned = (over: Record<string, unknown> = {}) =>
+    unit("e1", { auraEvents: stunAuras("e1", KIDNEY, 10, 5), ...over });
+  // One hit is one record on both sides of a parsed log: the attacker's
+  // `damageOut` and the victim's `damageIn` (the school share reads the
+  // victim's, so a pet's hits and absorbed hits are in it).
+  const run = (e1: any, f1 = attacker(), mates: any[] = []) => {
+    const target = {
+      ...e1,
+      damageIn: [
+        ...(e1.damageIn ?? []),
+        ...f1.damageOut.filter((d: any) => d.destUnitId === e1.id),
+      ],
+    };
+    return extractKillAttempts(
+      [f1],
+      [target, ...mates],
+      makeCombat(f1, target, mates),
+    )[0];
+  };
+  /** a hit on e1 at 12 s that a shield ate whole (SPELL_ABSORBED, spell form) */
+  const eaten = (school: string, amount: number): any => ({
+    spellId: "48707",
+    spellName: "Anti-Magic Shell",
+    srcUnitId: "e1",
+    destUnitId: "e1",
+    attackerId: "f1",
+    attackSpellId: "999999999",
+    absorbedAmount: amount,
+    timestamp: ms(12),
+    logLine: {
+      event: "SPELL_ABSORBED",
+      timestamp: ms(12),
+      parameters: [0, 0, 0, 0, 0, 0, 0, 0, 999999999, "x", school],
+    },
+  });
+
+  it("rule 3′: a wall popped in the slack after the span is not the cause; one popped inside it is", async () => {
+    await ensureAnalysisData();
+    const after = run(
+      stunned({
+        auraEvents: [
+          ...stunAuras("e1", KIDNEY, 10, 5),
+          ...up(BARKSKIN, "e1", "e1", 17, 29),
+        ],
+      }),
+    );
+    expect(after.attribution?.defensivePopped).toEqual([]);
+    expect(after.attribution?.primary).toBe("pressure");
+    const inside = run(
+      stunned({
+        auraEvents: [
+          ...stunAuras("e1", KIDNEY, 10, 5),
+          ...up(BARKSKIN, "e1", "e1", 13, 25),
+        ],
+      }),
+    );
+    expect(inside.attribution?.primary).toBe("defensive");
+  });
+
+  it("rule 2: a wall already up when the attempt began is the cause, rendered with the second it went up", async () => {
+    await ensureAnalysisData();
+    const a = run(
+      stunned({
+        auraEvents: [
+          ...stunAuras("e1", KIDNEY, 10, 5),
+          ...up(BARKSKIN, "e1", "e1", 4.3, 16.3),
+        ],
+      }),
+    );
+    expect(a.attribution?.primary).toBe("defensive");
+    expect(formatKillAttemptsForContext([a]).join("\n")).toContain(
+      "FAILED: popped Barkskin [up since 0:04]",
+    );
+    // one that had already ended before the attempt is nothing
+    const ended = run(
+      stunned({
+        auraEvents: [
+          ...stunAuras("e1", KIDNEY, 10, 5),
+          ...up(BARKSKIN, "e1", "e1", 1, 9),
+        ],
+      }),
+    );
+    expect(ended.attribution?.primary).toBe("pressure");
+  });
+
+  it("rule 2 and Greater Invisibility (ruling D6, P-FU-b8 extended): pressed before the attempt it is the cause only when the log saw it end — s2/112-1-757 read `popped Greater Invisibility [up since 5:49]` on an attempt at 6:04", async () => {
+    await ensureAnalysisData();
+    const GREATER_INVIS_AURA = "110960"; // cast 110959, the 60 % table row
+    const applied = (atS: number) =>
+      auraEv(GREATER_INVIS_AURA, "e1", "e1", atS, LogEvent.SPELL_AURA_APPLIED);
+    // no REMOVED in the log: the interval builder closes the aura at its
+    // official 20 s, so by the cap alone it is "up" when the stun lands 6 s on
+    const unseen = run(
+      stunned({
+        auraEvents: [...stunAuras("e1", KIDNEY, 10, 5), applied(4)],
+      }),
+    );
+    expect(unseen.attribution?.defensivePopped).toEqual([]);
+    // …and the attempt reads its next cause in the existing order
+    expect(unseen.attribution?.primary).toBe("pressure");
+    expect(formatKillAttemptsForContext([unseen]).join("\n")).not.toContain(
+      "popped Greater Invisibility",
+    );
+    // next cause, with one present: the healing that outran the damage
+    const unseenHealed = run(
+      stunned({
+        auraEvents: [...stunAuras("e1", KIDNEY, 10, 5), applied(4)],
+        healIn: [
+          {
+            effectiveAmount: 400_000,
+            logLine: {
+              event: LogEvent.SPELL_HEAL,
+              timestamp: ms(12),
+              parameters: [],
+            },
+          },
+        ],
+      }),
+    );
+    expect(unseenHealed.attribution?.primary).toBe("outhealed");
+    // the log SAW it end after the attempt began: up at its start, the cause
+    const seen = run(
+      stunned({
+        auraEvents: [
+          ...stunAuras("e1", KIDNEY, 10, 5),
+          ...up(GREATER_INVIS_AURA, "e1", "e1", 4, 13),
+        ],
+      }),
+    );
+    expect(seen.attribution?.primary).toBe("defensive");
+    expect(formatKillAttemptsForContext([seen]).join("\n")).toContain(
+      "FAILED: popped Greater Invisibility [up since 0:04]",
+    );
+    // seen to end BEFORE the attempt: nothing, as for any wall
+    const over = run(
+      stunned({
+        auraEvents: [
+          ...stunAuras("e1", KIDNEY, 10, 5),
+          ...up(GREATER_INVIS_AURA, "e1", "e1", 4, 4.7),
+        ],
+      }),
+    );
+    expect(over.attribution?.defensivePopped).toEqual([]);
+    // pressed INSIDE the attempt its start is logged: still `popped`, with or
+    // without a logged end
+    const inside = run(
+      stunned({
+        auraEvents: [...stunAuras("e1", KIDNEY, 10, 5), applied(12)],
+      }),
+    );
+    expect(inside.attribution?.primary).toBe("defensive");
+    expect(formatKillAttemptsForContext([inside]).join("\n")).toContain(
+      "FAILED: popped Greater Invisibility",
+    );
+    // every other wall keeps the cap (P-FU-b8 names the unseen carriers only):
+    // a Barkskin with no logged REMOVED is still up when the attempt begins
+    const barkskinUnseen = run(
+      stunned({
+        auraEvents: [
+          ...stunAuras("e1", KIDNEY, 10, 5),
+          auraEv(BARKSKIN, "e1", "e1", 4.3, LogEvent.SPELL_AURA_APPLIED),
+        ],
+      }),
+    );
+    expect(barkskinUnseen.attribution?.defensivePopped).toEqual(["Barkskin"]);
+  });
+
+  it("the legend names the auras that are never a cause `already up` on the cap alone — the predicate's own set", () => {
+    expect([...SAVE_AURA_END_UNSEEN_NAMES]).toEqual([
+      "Burrow",
+      "Vanish",
+      "Mass Invisibility",
+      "Greater Invisibility",
+    ]);
+    expect(KILL_ATTEMPTS_END_UNSEEN_LEGEND).toContain(
+      "  Burrow / Vanish / Mass Invisibility / Greater Invisibility: ",
+    );
+  });
+
+  it("the save window is the attempt as it renders: a wall in the span's last rendered second counts, one in the next does not", async () => {
+    await ensureAnalysisData();
+    // Kidney 10–15.5 s renders [0:10–0:15]
+    const at = (fromS: number) =>
+      run(
+        unit("e1", {
+          auraEvents: [
+            ...stunAuras("e1", KIDNEY, 10, 5.5),
+            ...up(BARKSKIN, "e1", "e1", fromS, fromS + 8),
+          ],
+        }),
+      );
+    expect(at(15.4).attribution?.primary).toBe("defensive");
+    expect(at(15.6).attribution?.primary).toBe("defensive"); // also 0:15
+    expect(at(16.1).attribution?.primary).toBe("pressure"); // 0:16
+  });
+
+  it("an immunity keeps the slack: popped after the span, inside the credit window, it still ends the go", async () => {
+    await ensureAnalysisData();
+    const a = run(
+      stunned({
+        auraEvents: [
+          ...stunAuras("e1", KIDNEY, 10, 5),
+          ...up(DIVINE_SHIELD, "e1", "e1", 17, 25),
+        ],
+      }),
+    );
+    expect(a.attribution?.primary).toBe("immunity-baited");
+  });
+
+  it("rule 2 for an immunity: one already up when the attempt began says since when; a 'moment' immunity whose aura lingers is not a cause", async () => {
+    await ensureAnalysisData();
+    // Blessing of Protection up 4.3–14.3 s, a physical go at 10–15 s
+    const bop = run(
+      stunned({
+        auraEvents: [
+          ...stunAuras("e1", KIDNEY, 10, 5),
+          ...up(BOP, "e2", "e1", 4.3, 14.3),
+        ],
+      }),
+    );
+    expect(bop.attribution?.primary).toBe("immunity-baited");
+    expect(bop.attribution?.immunityUpSinceS).toBeCloseTo(4.3, 6);
+    expect(formatKillAttemptsForContext([bop]).join("\n")).toContain(
+      "FAILED: forced a full immunity [up since 0:04] (a win — re-open after it drops)",
+    );
+    // Mass Invisibility (aura 414664) counts exactly like Vanish (user ruling
+    // U-KA3b, 2026-10-06): up on the target as the attempt began, it is why
+    // the attempt failed. Until then it was a 'moment' immunity and this
+    // attempt read "pressure".
+    const massInvis = run(
+      stunned({
+        auraEvents: [
+          ...stunAuras("e1", KIDNEY, 10, 5),
+          ...up(MASS_INVISIBILITY, "e2", "e1", 9.5, 10.4),
+        ],
+      }),
+    );
+    expect(massInvis.attribution?.primary).toBe("immunity-baited");
+    expect(massInvis.attribution?.immunityUpSinceS).toBeCloseTo(9.5, 6);
+    // …and gone before the attempt began, it is nothing
+    const massInvisOver = run(
+      stunned({
+        auraEvents: [
+          ...stunAuras("e1", KIDNEY, 10, 5),
+          ...up(MASS_INVISIBILITY, "e2", "e1", 4, 4.6),
+        ],
+      }),
+    );
+    expect(massInvisOver.attribution?.immunityBaited).toBe(false);
+    // User ruling P-FU-b8 (option C): only an aura the log SAW end. A Mass
+    // Invisibility whose REMOVED was never logged is closed at its official
+    // 12 s by the interval builder (`inferredEnd`) — "up" at the attempt's
+    // start by that cap alone, with a stun landing on the target.
+    const massInvisUnseen = run(
+      stunned({
+        auraEvents: [
+          ...stunAuras("e1", KIDNEY, 10, 5),
+          auraEv(MASS_INVISIBILITY, "e2", "e1", 4, LogEvent.SPELL_AURA_APPLIED),
+        ],
+      }),
+    );
+    expect(massInvisUnseen.attribution?.immunityBaited).toBe(false);
+    // the same for Vanish and Burrow: one rule for the ruled-in auras
+    for (const id of ["11327", BURROW]) {
+      const unseen = run(
+        stunned({
+          auraEvents: [
+            ...stunAuras("e1", KIDNEY, 10, 5),
+            auraEv(id, "e1", "e1", 9, LogEvent.SPELL_AURA_APPLIED),
+          ],
+        }),
+      );
+      expect(unseen.attribution?.immunityBaited, id).toBe(false);
+    }
+    // a pct-100 table row keeps the cap: a Divine Shield with no logged
+    // REMOVED is still why the attempt failed
+    const shieldUnseen = run(
+      stunned({
+        auraEvents: [
+          ...stunAuras("e1", KIDNEY, 10, 5),
+          auraEv(DIVINE_SHIELD, "e1", "e1", 8, LogEvent.SPELL_AURA_APPLIED),
+        ],
+      }),
+    );
+    expect(shieldUnseen.attribution?.primary).toBe("immunity-baited");
+    // Burrow (user ruling U-KA3, 2026-10-06): the unit cannot be attacked
+    // while it is burrowed — up at the start, it is why the attempt failed.
+    // What lands through it is a DoT already ticking and area damage (605
+    // files: 78 of 89 auras take a periodic tick, 16 any other damage row).
+    const burrow = run(
+      stunned({
+        auraEvents: [
+          ...stunAuras("e1", KIDNEY, 10, 5),
+          ...up(BURROW, "e1", "e1", 9, 14),
+        ],
+      }),
+    );
+    expect(burrow.attribution?.primary).toBe("immunity-baited");
+    expect(burrow.attribution?.immunityUpSinceS).toBeCloseTo(9, 6);
+    // Vanish, the same ruling: the aura 11327 up as the attempt began
+    const vanish = run(
+      stunned({
+        auraEvents: [
+          ...stunAuras("e1", KIDNEY, 10, 5),
+          ...up("11327", "e1", "e1", 9.4, 10.9),
+        ],
+      }),
+    );
+    expect(vanish.attribution?.primary).toBe("immunity-baited");
+    expect(vanish.attribution?.immunityUpSinceS).toBeCloseTo(9.4, 6);
+    // Cauterize's aura lingers 6 s after the hit it refused — still a moment,
+    // and since ruling D8 no immunity either way: not this attempt's cause
+    const cauterize = run(
+      stunned({
+        auraEvents: [
+          ...stunAuras("e1", KIDNEY, 10, 5),
+          ...up("87023", "e1", "e1", 8, 14),
+        ],
+      }),
+    );
+    expect(cauterize.attribution?.immunityBaited).toBe(false);
+    expect(cauterize.attribution?.selfSaved).toEqual([]);
+    // Time Stop's aura IS the immunity (DB2 aura 39, every school): thrown
+    // on the target before the attempt, it is why the attempt failed
+    const timeStop = run(
+      stunned({
+        auraEvents: [
+          ...stunAuras("e1", KIDNEY, 10, 5),
+          ...up(TIME_STOP, "e2", "e1", 9.2, 14.2),
+        ],
+      }),
+    );
+    expect(timeStop.attribution?.primary).toBe("immunity-baited");
+    expect(timeStop.attribution?.immunityUpSinceS).toBeCloseTo(9.2, 6);
+    // …but going up INSIDE the attempt it is the immunity ruling A25 signed,
+    // and carries no [up since]
+    const inside = run(
+      stunned({
+        auraEvents: [
+          ...stunAuras("e1", KIDNEY, 10, 5),
+          ...up(MASS_INVISIBILITY, "e2", "e1", 13, 25),
+        ],
+      }),
+    );
+    expect(inside.attribution?.primary).toBe("immunity-baited");
+    expect(inside.attribution?.immunityUpSinceS).toBeUndefined();
+    expect(formatKillAttemptsForContext([inside]).join("\n")).toContain(
+      "FAILED: forced a full immunity (a win — re-open after it drops)",
+    );
+  });
+
+  it("rule 1: a trinket in the slack that broke ANOTHER control is not this attempt's trinket", async () => {
+    await ensureAnalysisData();
+    // Kidney 10–15; a Polymorph lands at 17 and the trinket at 18 breaks it
+    const other = run(
+      stunned({
+        auraEvents: [
+          ...stunAuras("e1", KIDNEY, 10, 5),
+          ...stunAuras("e1", POLYMORPH, 17, 1),
+        ],
+        spellCastEvents: [press(TRINKET, "0000000000000000", 18)],
+      }),
+    );
+    expect(other.attribution?.trinketed).toBe(false);
+    expect(other.attribution?.primary).toBe("pressure");
+    // the trinket that ends the Kidney itself counts
+    const own = run(
+      stunned({
+        auraEvents: stunAuras("e1", KIDNEY, 10, 2),
+        spellCastEvents: [press(TRINKET, "0000000000000000", 12)],
+      }),
+    );
+    expect(own.attribution?.primary).toBe("trinketed");
+  });
+
+  it("A29: a bound trinket and an immunity are both named", async () => {
+    await ensureAnalysisData();
+    const a = run(
+      stunned({
+        auraEvents: [
+          ...stunAuras("e1", KIDNEY, 10, 2),
+          ...up(DIVINE_SHIELD, "e1", "e1", 13, 21),
+        ],
+        spellCastEvents: [press(TRINKET, "0000000000000000", 12)],
+      }),
+    );
+    expect(a.attribution?.primary).toBe("trinketed");
+    expect(formatKillAttemptsForContext([a]).join("\n")).toContain(
+      "FAILED: target trinketed out; forced a full immunity (a win — re-open after it drops)",
+    );
+  });
+
+  it("A30: Blessing of Protection is a full immunity against a physical go, an external against a magic one", async () => {
+    await ensureAnalysisData();
+    const withBop = () =>
+      stunned({
+        auraEvents: [
+          ...stunAuras("e1", KIDNEY, 10, 5),
+          ...up(BOP, "e2", "e1", 12, 22),
+        ],
+      });
+    const pal = () => unit("e2", { spellCastEvents: [press(BOP, "e1", 12)] });
+    const physical = run(withBop(), attacker([hit("0x1")]), [pal()]);
+    expect(physical.attribution?.primary).toBe("immunity-baited");
+    const magic = run(
+      withBop(),
+      attacker([hit("0x20", 76_000), hit("0x1", 24_000)]),
+      [pal()],
+    );
+    expect(magic.attribution?.immunityBaited).toBe(false);
+    expect(magic.attribution?.primary).toBe("external");
+    expect(magic.attribution?.externalReceived).toEqual([
+      "Blessing of Protection",
+    ]);
+  });
+
+  it("A7-补: Anti-Magic Shell is the save only when at least half of the team's damage was magic", async () => {
+    await ensureAnalysisData();
+    const dk = () =>
+      stunned({
+        auraEvents: [
+          ...stunAuras("e1", KIDNEY, 10, 5),
+          ...up(AMS, "e1", "e1", 11, 16),
+        ],
+        spellCastEvents: [press(AMS, "0000000000000000", 11)],
+      });
+    const magic = run(
+      dk(),
+      attacker([hit("0x20", 60_000), hit("0x1", 40_000)]),
+    );
+    expect(magic.attribution?.primary).toBe("self-saved");
+    expect(magic.attribution?.selfSaved).toEqual(["Anti-Magic Shell"]);
+    const physical = run(
+      dk(),
+      attacker([hit("0x20", 44_000), hit("0x1", 56_000)]),
+    );
+    expect(physical.attribution?.selfSaved).toEqual([]);
+    expect(physical.attribution?.primary).toBe("pressure");
+  });
+
+  it("the school share reads the target's record: a pet's hits and the hits the shield ate count", async () => {
+    await ensureAnalysisData();
+    // A hunter's pet: its physical hits are in the target's damageIn and in
+    // no friendly PLAYER's damageOut. 30k shadow from the player, 70k
+    // physical from the pet → Blessing of Protection is the immunity.
+    const bopped = stunned({
+      auraEvents: [
+        ...stunAuras("e1", KIDNEY, 10, 5),
+        ...up(BOP, "e2", "e1", 12, 22),
+      ],
+      damageIn: [{ ...hit("0x1", 70_000), srcUnitId: "pet-of-f1" }],
+    });
+    const pal = unit("e2", { spellCastEvents: [press(BOP, "e1", 12)] });
+    const pet = run(bopped, attacker([hit("0x20", 30_000)]), [pal]);
+    expect(pet.attribution?.primary).toBe("immunity-baited");
+    // Anti-Magic Shell: 44k shadow landed against 56k physical — but the
+    // shell ate another 20k of shadow. 64 of 120 is its school.
+    const dk = (absorbsIn: any[]) =>
+      stunned({
+        auraEvents: [
+          ...stunAuras("e1", KIDNEY, 10, 5),
+          ...up(AMS, "e1", "e1", 11, 16),
+        ],
+        spellCastEvents: [press(AMS, "0000000000000000", 11)],
+        absorbsIn,
+      });
+    const hits = () => attacker([hit("0x20", 44_000), hit("0x1", 56_000)]);
+    expect(run(dk([]), hits()).attribution?.primary).toBe("pressure");
+    const ate = run(dk([eaten("0x20", 20_000)]), hits());
+    expect(ate.attribution?.primary).toBe("self-saved");
+    expect(ate.attribution?.selfSaved).toEqual(["Anti-Magic Shell"]);
+  });
+
+  it("a target whose own record holds no damage: an immunity still counts, an absorb does not", async () => {
+    await ensureAnalysisData();
+    // An attempt needs 30k on the target in the attackers' `damageOut`, so
+    // this needs a target record with nothing in it — built here without
+    // the mirroring `run` does. (Every hit into Blessing of Protection is an
+    // IMMUNE miss with no amount; a shell nothing hit saved nobody.)
+    const bare = (e1: any, mates: any[] = []) => {
+      const f1 = attacker();
+      return extractKillAttempts(
+        [f1],
+        [e1, ...mates],
+        makeCombat(f1, e1, mates),
+      )[0];
+    };
+    const bop = bare(
+      stunned({
+        auraEvents: [
+          ...stunAuras("e1", KIDNEY, 10, 5),
+          ...up(BOP, "e2", "e1", 12, 22),
+        ],
+      }),
+    );
+    expect(bop.attribution?.primary).toBe("immunity-baited");
+    const ams = bare(
+      stunned({
+        auraEvents: [
+          ...stunAuras("e1", KIDNEY, 10, 5),
+          ...up(AMS, "e1", "e1", 11, 16),
+        ],
+        spellCastEvents: [press(AMS, "0000000000000000", 11)],
+      }),
+    );
+    expect(ams.attribution?.selfSaved).toEqual([]);
+    expect(ams.attribution?.primary).toBe("pressure");
+  });
+
+  it("rule 2 for an external: thrown before the attempt and still on the target when it began", async () => {
+    await ensureAnalysisData();
+    const AMS_ALLY = "410358";
+    const LEAP_OF_FAITH = "73325";
+    const SPELLWARDING = "204018";
+    const withAura = (id: string, fromS: number, toS: number) =>
+      stunned({
+        auraEvents: [
+          ...stunAuras("e1", KIDNEY, 10, 5),
+          ...up(id, "e2", "e1", fromS, toS),
+        ],
+      });
+    const mate = (id: string, atS: number) =>
+      unit("e2", { spellCastEvents: [press(id, "e1", atS)] });
+    // the ally's Anti-Magic Shell 0.5 s before the first stun, a magic go
+    const shell = run(
+      withAura(AMS_ALLY, 9.5, 15.5),
+      attacker([hit("0x20", 70_000), hit("0x1", 30_000)]),
+      [mate(AMS_ALLY, 9.5)],
+    );
+    expect(shell.attribution?.primary).toBe("external");
+    expect(formatKillAttemptsForContext([shell]).join("\n")).toContain(
+      "FAILED: saved by external (Anti-Magic Shell [up since 0:09])",
+    );
+    // cast 0.1 s before the attempt, its aura going up 0.1 s into it
+    const justBefore = run(
+      withAura(AMS_ALLY, 10.1, 16.1),
+      attacker([hit("0x20", 70_000), hit("0x1", 30_000)]),
+      [mate(AMS_ALLY, 9.9)],
+    );
+    expect(justBefore.attribution?.externalReceived).toEqual([
+      "Anti-Magic Shell",
+    ]);
+    // …one that had dropped before the attempt began is nothing
+    const dropped = run(
+      withAura(AMS_ALLY, 3, 9),
+      attacker([hit("0x20", 70_000), hit("0x1", 30_000)]),
+      [mate(AMS_ALLY, 3)],
+    );
+    expect(dropped.attribution?.externalReceived).toEqual([]);
+    // a grip is a moment: before the attempt it is not its cause
+    const grip = run(withAura(LEAP_OF_FAITH, 9.5, 10.5), attacker(), [
+      mate(LEAP_OF_FAITH, 9.5),
+    ]);
+    expect(grip.attribution?.externalReceived).toEqual([]);
+    expect(grip.attribution?.primary).toBe("pressure");
+    // the cast missing from the log: the aura alone renders an [ENEMY DEF]
+    // external line, and KILL ATTEMPTS reads that same event
+    const auraOnly = run(
+      withAura(AMS_ALLY, 9.5, 15.5),
+      attacker([hit("0x20", 70_000), hit("0x1", 30_000)]),
+      [unit("e2")],
+    );
+    expect(auraOnly.attribution?.primary).toBe("external");
+    expect(auraOnly.attribution?.externalReceived).toEqual([
+      "Anti-Magic Shell",
+    ]);
+    // c2058ed4 R:623 to the millisecond: Spellwarding at 10.04 s, the first
+    // stun at 10.14 s — the same rendered second — and a physical go
+    const sameSecond = run(
+      unit("e1", {
+        auraEvents: [
+          ...stunAuras("e1", KIDNEY, 10.14, 2.73),
+          ...up(SPELLWARDING, "e2", "e1", 10.04, 20.04),
+        ],
+      }),
+      attacker(),
+      [mate(SPELLWARDING, 10.04)],
+    );
+    expect(sameSecond.attribution?.externalReceived).toEqual([]);
+    expect(sameSecond.attribution?.immunityBaited).toBe(false);
+    // c2058ed4 R:623: Blessing of Spellwarding still up, the go is physical
+    const warded = run(withAura(SPELLWARDING, 9.86, 19.86), attacker(), [
+      mate(SPELLWARDING, 9.86),
+    ]);
+    expect(warded.attribution?.immunityBaited).toBe(false);
+    expect(warded.attribution?.externalReceived).toEqual([]);
+    expect(warded.attribution?.primary).toBe("pressure");
+  });
+
+  it("rule 2 for a self-save: Guardian Spirit pressed on oneself just before the first stun counts; Blessing of Sacrifice thrown at an ally does not", async () => {
+    await ensureAnalysisData();
+    // 537209d8: self Guardian Spirit 0.14 s before the first stun
+    const priest = run(
+      stunned({
+        auraEvents: [
+          ...stunAuras("e1", KIDNEY, 10, 5),
+          ...up(GUARDIAN_SPIRIT, "e1", "e1", 9.86, 21.86),
+        ],
+        spellCastEvents: [press(GUARDIAN_SPIRIT, "e1", 9.86)],
+      }),
+    );
+    expect(priest.attribution?.primary).toBe("self-saved");
+    expect(formatKillAttemptsForContext([priest]).join("\n")).toContain(
+      "FAILED: popped Guardian Spirit [up since 0:09]",
+    );
+    // pressed before the attempt, aura only up after it: no save of it
+    const late = run(
+      unit("e1", {
+        auraEvents: [
+          ...stunAuras("e1", KIDNEY, 10, 0.2),
+          ...up(GUARDIAN_SPIRIT, "e1", "e1", 11.1, 21.1),
+        ],
+        spellCastEvents: [press(GUARDIAN_SPIRIT, "e1", 9.8)],
+      }),
+    );
+    expect(late.attribution?.selfSaved).toEqual([]);
+    // the paladin's own 6940 aura after casting it on a teammate
+    const pal = run(
+      stunned({
+        auraEvents: [
+          ...stunAuras("e1", KIDNEY, 10, 5),
+          ...up(BOSAC, "e1", "e1", 7, 19),
+        ],
+        spellCastEvents: [press(BOSAC, "e2", 7)],
+      }),
+      attacker(),
+      [unit("e2")],
+    );
+    expect(pal.attribution?.selfSaved).toEqual([]);
+  });
+
+  it("A′4: an external cast in the slack after the span is not the save", async () => {
+    await ensureAnalysisData();
+    const mate = unit("e2", {
+      spellCastEvents: [press(GUARDIAN_SPIRIT, "e1", 18.3)],
+    });
+    const a = run(stunned(), attacker(), [mate]);
+    expect(a.attribution?.externalReceived).toEqual([]);
+    expect(a.attribution?.primary).toBe("pressure");
+  });
+});
+
+/** enemy-def F-E21 (ruling A′15): a racial or class ability that removed a
+ * stun of the attempt is its cause, like the trinket; and a trinket-equivalent
+ * racial locks the trinket for the kill-opportunity tier. */
+describe("extractKillAttempts — broke out with a racial / class ability", () => {
+  const press = (spellId: string, atS: number): any => ({
+    spellId,
+    spellName: `S${spellId}`,
+    destUnitId: "0000000000000000",
+    destUnitName: "nil",
+    timestamp: ms(atS),
+    logLine: {
+      event: LogEvent.SPELL_CAST_SUCCESS,
+      timestamp: ms(atS),
+      parameters: [],
+    },
+  });
+  const attacker = () =>
+    unit("f1", { reaction: 1, damageOut: [dmg("f1", "e1", 11, 50_000)] });
+
+  it("Will to Survive ending the stun → broke out (Will to Survive); the racial's trinket lock does NOT change the next attempt's tier (ruling P-b7)", async () => {
+    await ensureAnalysisData();
+    const e1 = unit("e1", {
+      // first stun broken at 12 s by Will to Survive; a second one at 40 s
+      auraEvents: [
+        ...stunAuras("e1", KIDNEY, 10, 2),
+        ...stunAuras("e1", KIDNEY, 40, 5),
+      ],
+      spellCastEvents: [press("59752", 12)],
+    });
+    const f1 = unit("f1", {
+      reaction: 1,
+      damageOut: [dmg("f1", "e1", 11, 50_000), dmg("f1", "e1", 42, 50_000)],
+    });
+    const [first, second] = extractKillAttempts([f1], [e1], makeCombat(f1, e1));
+    expect(first.attribution?.primary).toBe("broke-out");
+    expect(formatKillAttemptsForContext([first]).join("\n")).toContain(
+      "FAILED: broke out (Will to Survive)",
+    );
+    expect(first.opportunity.tier).toBe("locked"); // trinket up at 10 s
+    // 40 s is inside the racial's shared lock (12 + 60). User ruling P-b7
+    // (2026-10-01): that lock must not make the target "trinket-less".
+    expect(second.opportunity.trinketAvailable).toBe(true);
+    expect(second.opportunity.tier).toBe("locked");
+  });
+
+  it("Blink out of the stun → broke out (Blink); Icebound Fortitude stays a popped wall", async () => {
+    await ensureAnalysisData();
+    const mage = unit("e1", {
+      auraEvents: stunAuras("e1", KIDNEY, 10, 2),
+      spellCastEvents: [press("1953", 12)],
+    });
+    const f1 = attacker();
+    expect(
+      extractKillAttempts([f1], [mage], makeCombat(f1, mage))[0].attribution
+        ?.primary,
+    ).toBe("broke-out");
+    const dk = unit("e1", {
+      spec: "252",
+      auraEvents: [
+        ...stunAuras("e1", KIDNEY, 10, 2),
+        {
+          spellId: "48792",
+          spellName: "Icebound Fortitude",
+          srcUnitId: "e1",
+          srcUnitName: "e1",
+          destUnitId: "e1",
+          destUnitName: "e1",
+          timestamp: ms(12),
+          logLine: {
+            event: LogEvent.SPELL_AURA_APPLIED,
+            timestamp: ms(12),
+            parameters: [],
+          },
+          auraType: "BUFF",
+        },
+      ],
+      spellCastEvents: [press("48792", 12)],
+    });
+    const f2 = attacker();
+    const a = extractKillAttempts([f2], [dk], makeCombat(f2, dk))[0];
+    expect(a.attribution?.brokeOut).toEqual([]);
+    expect(a.attribution?.primary).toBe("defensive");
+  });
+});
+
+// B-tier B16b (user ruling 2026-10-06, "照 A29 两个都写"): the target's own
+// save and an external in one attempt are both named.
+describe("FAILED cause: own save + external in one attempt (B16b)", () => {
+  const attempt = (attribution: Record<string, unknown>): any => ({
+    targetUnitId: "e1",
+    targetName: "Warrior-R",
+    anchor: "burst",
+    anchorSpellName: "Adrenaline Rush",
+    fromSeconds: 307.2,
+    toSeconds: 322.4,
+    stuns: [],
+    opportunity: { tier: "locked", wallsInHand: [] },
+    teamDamageToTarget: 980_000,
+    teamDamageToTargetInBracket: 980_000,
+    teamDamageTotal: 980_000,
+    teamOnTargetPct: 100,
+    killed: false,
+    attribution: {
+      trinketed: false,
+      brokeOut: [],
+      immunityBaited: false,
+      defensivePopped: [],
+      defensivePoppedAtS: [],
+      externalReceived: [],
+      externalReceivedAtS: [],
+      selfSaved: [],
+      selfSavedAtS: [],
+      outhealed: false,
+      ...attribution,
+    },
+  });
+  const failed = (attribution: Record<string, unknown>) =>
+    formatKillAttemptsForContext([attempt(attribution)])
+      .find((l) => l.includes("| FAILED: "))!
+      .split("| FAILED: ")[1];
+
+  it("a wall and an external: both, the wall first (7f67e778 [5:07–5:22])", () => {
+    expect(
+      failed({
+        primary: "defensive",
+        defensivePopped: ["Enraged Regeneration"],
+        defensivePoppedAtS: [317.1],
+        externalReceived: ["Lay on Hands"],
+        externalReceivedAtS: [319.4],
+      }),
+    ).toBe("popped Enraged Regeneration; saved by external (Lay on Hands)");
+  });
+
+  it("an external and the target's own non-wall defensive: both; all three when all three were there", () => {
+    expect(
+      failed({
+        primary: "external",
+        externalReceived: ["Life Cocoon"],
+        externalReceivedAtS: [310],
+        selfSaved: ["Desperate Prayer"],
+        selfSavedAtS: [312],
+      }),
+    ).toBe("saved by external (Life Cocoon); popped Desperate Prayer");
+    expect(
+      failed({
+        primary: "defensive",
+        defensivePopped: ["Barkskin"],
+        defensivePoppedAtS: [300], // already up when the attempt began
+        externalReceived: ["Ironbark"],
+        externalReceivedAtS: [311],
+        selfSaved: ["Renewal"],
+        selfSavedAtS: [313],
+      }),
+    ).toBe(
+      "popped Barkskin [up since 5:00]; saved by external (Ironbark); popped Renewal",
+    );
+  });
+
+  it("an external that is itself the wall on the list (Pain Suppression, Ironbark) is named once", () => {
+    // 605 S2 files: the first cut printed `popped Pain Suppression; saved by
+    // external (Pain Suppression)` on 113 lines — the wall list names every
+    // wall aura on the target, whoever put it there
+    expect(
+      failed({
+        primary: "defensive",
+        defensivePopped: ["Pain Suppression"],
+        defensivePoppedAtS: [311],
+        externalReceived: ["Pain Suppression"],
+        externalReceivedAtS: [311],
+        selfSaved: ["Desperate Prayer"],
+        selfSavedAtS: [313],
+      }),
+    ).toBe("popped Pain Suppression");
+    expect(
+      failed({
+        primary: "defensive",
+        defensivePopped: ["Pain Suppression"],
+        defensivePoppedAtS: [311],
+        externalReceived: ["Pain Suppression", "Leap of Faith"],
+        externalReceivedAtS: [311, 300],
+      }),
+    ).toBe(
+      "popped Pain Suppression; saved by external (Leap of Faith [up since 5:00])",
+    );
+  });
+
+  it("without an external nothing changes: one cause, as `primary` orders them", () => {
+    expect(
+      failed({
+        primary: "defensive",
+        defensivePopped: ["Barkskin"],
+        defensivePoppedAtS: [310],
+        selfSaved: ["Renewal"],
+        selfSavedAtS: [313],
+      }),
+    ).toBe("popped Barkskin");
+    expect(
+      failed({
+        primary: "external",
+        externalReceived: ["Ironbark"],
+        externalReceivedAtS: [311],
+      }),
+    ).toBe("saved by external (Ironbark)");
+    expect(
+      failed({
+        primary: "self-saved",
+        selfSaved: ["Renewal"],
+        selfSavedAtS: [313],
+      }),
+    ).toBe("popped Renewal");
+  });
+
+  it("user ruling 2026-10-11: the target's own press is worded `popped X`, a proc `self-saved (X)` — same selection, same place in the order", () => {
+    // alone: the attempt still names it, by the press
+    expect(
+      failed({
+        primary: "self-saved",
+        selfSaved: ["Ultimate Penitence"],
+        selfSavedAtS: [313],
+      }),
+    ).toBe("popped Ultimate Penitence");
+    // already up when the attempt began: the stamp is the self-save's
+    expect(
+      failed({
+        primary: "self-saved",
+        selfSaved: ["Alter Time"],
+        selfSavedAtS: [300],
+      }),
+    ).toBe("popped Alter Time [up since 5:00]");
+    // several presses: one clause, in log order
+    expect(
+      failed({
+        primary: "self-saved",
+        selfSaved: ["Desperate Prayer", "Ultimate Penitence"],
+        selfSavedAtS: [310, 313],
+      }),
+    ).toBe("popped Desperate Prayer/Ultimate Penitence");
+    // a proc nobody pressed keeps its own word, after the presses
+    for (const proc of ENEMY_PROC_SAVE_NAMES)
+      expect(
+        failed({
+          primary: "self-saved",
+          selfSaved: [proc, "Dark Pact"],
+          selfSavedAtS: [310, 313],
+        }),
+        proc,
+      ).toBe(`popped Dark Pact; self-saved (${proc})`);
+    expect([...ENEMY_PROC_SAVE_NAMES].sort()).toEqual([
+      "Cauterize",
+      "Cheat Death",
+      "Nature's Guardian",
+    ]);
+    // beside an external it is named after it, as before
+    expect(
+      failed({
+        primary: "external",
+        externalReceived: ["Life Cocoon"],
+        externalReceivedAtS: [310],
+        selfSaved: ["Evasion"],
+        selfSavedAtS: [312],
+      }),
+    ).toBe("saved by external (Life Cocoon); popped Evasion");
+    // behind a wall it stays unnamed, as before
+    expect(
+      failed({
+        primary: "defensive",
+        defensivePopped: ["Pain Suppression"],
+        defensivePoppedAtS: [311],
+        selfSaved: ["Ultimate Penitence"],
+        selfSavedAtS: [313],
+      }),
+    ).toBe("popped Pain Suppression");
+  });
+});
+
+// B-tier B15c-U10 (user ruling 2026-10-06): our Holy Paladin's Avenging Wrath
+// does not anchor a kill attempt — it neither opens a burst cluster nor
+// extends one. Any other spec's wings, and any other cooldown, still do.
+describe("opportunity clause: what was already up when the attempt began (R08 c)", () => {
+  const attempt = (
+    tier: "prime" | "gated" | "locked",
+    attribution: Record<string, unknown>,
+    over: Record<string, unknown> = {},
+  ): any => ({
+    targetUnitId: "e1",
+    targetName: "Druid-R",
+    anchor: "burst",
+    anchorSpellName: "Adrenaline Rush",
+    fromSeconds: 307.2,
+    toSeconds: 322.4,
+    stuns: [],
+    opportunity: {
+      tier,
+      wallsInHand: tier === "gated" ? ["Ironbark"] : [],
+    },
+    teamDamageToTarget: 980_000,
+    teamDamageToTargetInBracket: 980_000,
+    teamDamageTotal: 980_000,
+    teamOnTargetPct: 100,
+    killed: false,
+    attribution: {
+      trinketed: false,
+      brokeOut: [],
+      immunityBaited: false,
+      defensivePopped: [],
+      defensivePoppedAtS: [],
+      externalReceived: [],
+      externalReceivedAtS: [],
+      selfSaved: [],
+      selfSavedAtS: [],
+      outhealed: false,
+      ...attribution,
+    },
+    ...over,
+  });
+  const oppOf = (a: any, block = formatKillAttemptsForContext([a])) =>
+    block
+      .find((l) => l.includes("| opportunity: "))!
+      .split("| opportunity: ")[1]!
+      .split(" | ")[0];
+  const barkskinUp = {
+    primary: "defensive",
+    defensivePopped: ["Barkskin"],
+    defensivePoppedAtS: [300], // 5:00, the attempt opens at 5:07
+  };
+
+  it("121c7e15's shape: PRIME, and the wall the FAILED clause marks `[up since]` is said beside the tier — the tier is not changed by it", () => {
+    const a = attempt("prime", barkskinUp);
+    const block = formatKillAttemptsForContext([a]);
+    expect(oppOf(a, block)).toBe(
+      "PRIME (no trinket, no 20-99% wall in hand; Barkskin already up since 5:00)",
+    );
+    expect(block.join("\n")).toContain(
+      "FAILED: popped Barkskin [up since 5:00]",
+    );
+    expect(block.join("\n")).toContain("1 on PRIME targets");
+    expect(block).toContain(KILL_ATTEMPTS_ALREADY_UP_LEGEND);
+  });
+
+  it("gated and trinket-up lines carry it too, between the tier's own facts and the softer target", () => {
+    expect(oppOf(attempt("gated", barkskinUp))).toBe(
+      "gated (Ironbark in hand; Barkskin already up since 5:00; no softer target)",
+    );
+    expect(
+      oppOf(
+        attempt("locked", barkskinUp, {
+          softerTarget: { name: "Mage-R", tier: "prime", wallsInHand: [] },
+        }),
+      ),
+    ).toBe(
+      "trinket up (Barkskin already up since 5:00; softer target then: Mage-R — PRIME)",
+    );
+  });
+
+  it("an immunity that was already up names no spell: `a full immunity`; an external and the target's own defensive are restated like a wall", () => {
+    expect(
+      oppOf(
+        attempt("prime", {
+          primary: "immunity-baited",
+          immunityBaited: true,
+          immunityUpSinceS: 304.3,
+        }),
+      ),
+    ).toBe(
+      `PRIME (no trinket, no 20-99% wall in hand; ${KILL_ATTEMPT_IMMUNITY_ALREADY_UP_NAME} already up since 5:04)`,
+    );
+    expect(
+      oppOf(
+        attempt("prime", {
+          primary: "defensive",
+          defensivePopped: ["Barkskin"],
+          defensivePoppedAtS: [300],
+          externalReceived: ["Leap of Faith"],
+          externalReceivedAtS: [301],
+          selfSaved: ["Renewal"],
+          selfSavedAtS: [302],
+        }),
+      ),
+    ).toBe(
+      "PRIME (no trinket, no 20-99% wall in hand; Barkskin already up since 5:00; Leap of Faith already up since 5:01; Renewal already up since 5:02)",
+    );
+  });
+
+  it("only what the FAILED clause prints: a wall that went up inside the attempt, or a clause the fixed order hides, adds nothing — and then no legend line", () => {
+    // went up inside the attempt
+    const inside = attempt("prime", {
+      primary: "defensive",
+      defensivePopped: ["Barkskin"],
+      defensivePoppedAtS: [310],
+    });
+    expect(oppOf(inside)).toBe("PRIME (no trinket, no 20-99% wall in hand)");
+    // the wall prints; the own defensive that was up is not printed (no
+    // external beside them), so it is not restated either
+    const hidden = attempt("prime", {
+      primary: "defensive",
+      defensivePopped: ["Barkskin"],
+      defensivePoppedAtS: [310],
+      selfSaved: ["Renewal"],
+      selfSavedAtS: [300],
+    });
+    const block = formatKillAttemptsForContext([hidden]);
+    expect(block.join("\n")).toContain("FAILED: popped Barkskin");
+    expect(oppOf(hidden, block)).toBe(
+      "PRIME (no trinket, no 20-99% wall in hand)",
+    );
+    expect(block).not.toContain(KILL_ATTEMPTS_ALREADY_UP_LEGEND);
+    // a trinket hides a wall that was up: the FAILED clause does not mark
+    // it, the opportunity clause does not state it
+    expect(
+      oppOf(attempt("prime", { ...barkskinUp, primary: "trinketed" })),
+    ).toBe("PRIME (no trinket, no 20-99% wall in hand)");
+    // a KILL has no FAILED clause
+    expect(
+      oppOf(
+        attempt("prime", barkskinUp, { killed: true, attribution: undefined }),
+      ),
+    ).toBe("PRIME (no trinket, no 20-99% wall in hand)");
+  });
+});
+
+describe("our own Cyclone on the kill target: a fact clause after the outcome (I10)", () => {
+  const CYCLONE = "33786";
+  const cc = (spellId: string, atSeconds: number, durationSeconds: number) => ({
+    spellId,
+    spellName: spellId === CYCLONE ? "Cyclone" : "Polymorph",
+    atSeconds,
+    durationSeconds,
+  });
+
+  it("the predicate is the product's Cyclone reading, on the printed seconds — both ends included", () => {
+    expect(isDamageImmuneControl(CYCLONE)).toBe(true);
+    expect(isDamageImmuneControl("118")).toBe(false); // Polymorph: breakable, hittable
+    expect(isDamageImmuneControl(null)).toBe(false);
+    // bracket [0:40–0:45]
+    expect(killAttemptBracketMeetsControl(40, 45, 42, 47)).toBe(true);
+    expect(killAttemptBracketMeetsControl(40, 45, 45, 50)).toBe(true); // shares 0:45
+    expect(killAttemptBracketMeetsControl(40, 45, 35, 40)).toBe(true); // shares 0:40
+    // B4 (user 2026-10-24): the 5 s after the bracket, where the outcome is
+    // read, count — a Cyclone that began at 0:46 … 0:50 meets it
+    expect(killAttemptBracketMeetsControl(40, 45, 46, 51)).toBe(true);
+    expect(killAttemptBracketMeetsControl(40, 45, 50, 55)).toBe(true);
+    expect(killAttemptBracketMeetsControl(40, 45, 51, 56)).toBe(false);
+    expect(killAttemptBracketMeetsControl(40, 45, 34, 39)).toBe(false);
+  });
+
+  it("only Cyclone, only an instance that prints a second or more, on the `[CC ON ENEMY]` line's own interval", () => {
+    expect(
+      ownImmuneControlsOverBracket(
+        [
+          cc("118", 41, 6), // Polymorph over the whole bracket: not this fact
+          cc(CYCLONE, 42.7, 4.6), // prints 0:42 … (5s)
+          cc(CYCLONE, 44.2, 0.3), // prints `<1s`
+          cc(CYCLONE, 60, 5), // after the bracket
+        ],
+        40.3,
+        45.9,
+      ),
+    ).toEqual([{ spellName: "Cyclone", fromSecond: 42, toSecond: 47 }]);
+    expect(
+      killAttemptOwnControlClause([
+        { spellName: "Cyclone", fromSecond: 42, toSecond: 47 },
+        { spellName: "Cyclone", fromSecond: 50, toSecond: 55 },
+      ]),
+    ).toBe("target in your team's Cyclone 0:42–0:47, 0:50–0:55");
+  });
+
+  // a Kidney Shot 10–15 s on e1 with team damage behind it; f1's Cyclone on
+  // e1 12.4–17.4 s (2c6e85ec's shape: the stunned target blown up by its own
+  // attackers' Druid)
+  const cyclone = (targetId: string, fromS: number, durS: number) =>
+    stunAuras(targetId, CYCLONE, fromS, durS);
+  const build = (auraEvents: any[], extra: any[] = []) => {
+    const f1 = unit("f1", {
+      reaction: 1,
+      damageOut: [dmg("f1", "e1", 11, 60_000)],
+    });
+    const e1 = unit("e1", { auraEvents });
+    return extractKillAttempts([f1], [e1, ...extra], makeCombat(f1, e1, extra));
+  };
+
+  it("the clause sits after the outcome; the outcome and the tier are what they were without the Cyclone", async () => {
+    await ensureAnalysisData();
+    const plain = build(stunAuras("e1", KIDNEY, 10, 5));
+    const withCyclone = build([
+      ...stunAuras("e1", KIDNEY, 10, 5),
+      ...cyclone("e1", 12.4, 5),
+    ]);
+    expect(withCyclone).toHaveLength(1);
+    expect(withCyclone[0].ownImmuneControl).toEqual([
+      { spellName: "Cyclone", fromSecond: 12, toSecond: 17 },
+    ]);
+    expect(plain[0].ownImmuneControl).toBeUndefined();
+    expect(withCyclone[0].attribution).toEqual(plain[0].attribution);
+    expect(withCyclone[0].opportunity).toEqual(plain[0].opportunity);
+    const lineOf = (as: any[]) =>
+      formatKillAttemptsForContext(as).find((l) => l.includes("] on e1 — "))!;
+    expect(lineOf(withCyclone)).toBe(
+      `${lineOf(plain)} | target in your team's Cyclone 0:12–0:17`,
+    );
+    expect(lineOf(plain)).toMatch(/\| FAILED: not enough damage$/);
+    // the legend sentence only when a line carries the clause
+    expect(formatKillAttemptsForContext(withCyclone)).toContain(
+      KILL_ATTEMPTS_OWN_CONTROL_LEGEND,
+    );
+    expect(formatKillAttemptsForContext(plain)).not.toContain(
+      KILL_ATTEMPTS_OWN_CONTROL_LEGEND,
+    );
+  });
+
+  it("a Cyclone on ANOTHER enemy, or one that ended before the bracket's first second, adds nothing", async () => {
+    await ensureAnalysisData();
+    const other = unit("e2", { auraEvents: cyclone("e2", 12.4, 5) });
+    expect(
+      build(stunAuras("e1", KIDNEY, 10, 5), [other])[0].ownImmuneControl,
+    ).toBeUndefined();
+    expect(
+      build([...stunAuras("e1", KIDNEY, 10, 5), ...cyclone("e1", 3.2, 5)])[0]
+        .ownImmuneControl,
+    ).toBeUndefined();
+  });
+});
+
+describe("a bracket does not run across the target's Spirit of Redemption form (F17)", () => {
+  const FORM = "215769";
+  // the form on e1 itself, 16.4–25.4 s
+  const form = (fromS = 16.4, toS = 25.4): any[] =>
+    stunAuras("e1", FORM, fromS, toS - fromS).map((a) => ({
+      ...a,
+      srcUnitId: "e1",
+      srcUnitName: "e1",
+      auraType: "BUFF",
+    }));
+
+  it("attemptSpanOutsideForm: ends where the form begins, starts where a form it opened in ends, null when the form holds it all", () => {
+    const forms = [{ startSeconds: 16.4, endSeconds: 25.4 }];
+    // no form meets the span: the span itself
+    expect(attemptSpanOutsideForm(forms, 2, 9)).toEqual({
+      fromSeconds: 2,
+      toSeconds: 9,
+    });
+    expect(attemptSpanOutsideForm([], 10, 30)).toEqual({
+      fromSeconds: 10,
+      toSeconds: 30,
+    });
+    expect(attemptSpanOutsideForm(forms, 10, 30)).toEqual({
+      fromSeconds: 10,
+      toSeconds: 16.4,
+    });
+    expect(attemptSpanOutsideForm(forms, 20, 40)).toEqual({
+      fromSeconds: 25.4,
+      toSeconds: 40,
+    });
+    expect(attemptSpanOutsideForm(forms, 18, 22)).toBeNull();
+    // codex 40-FT-74: a span the form covers to its LAST second leaves
+    // nothing — not a zero-length `[25.4–25.4]` attempt
+    expect(attemptSpanOutsideForm(forms, 17, 25.4)).toBeNull();
+    // a span that was one instant to begin with, outside any form, stays
+    expect(attemptSpanOutsideForm(forms, 30, 30)).toEqual({
+      fromSeconds: 30,
+      toSeconds: 30,
+    });
+  });
+
+  it("only the PRESSED form is cut around — the on-death form is the kill (codex 40-FT-74)", () => {
+    expect([...PRESSED_SPIRIT_OF_REDEMPTION_AURA_IDS]).toEqual(["215769"]);
+    const aura = (id: string, at: number, event: string) => ({
+      spellId: id,
+      destUnitId: "e1",
+      logLine: { event, timestamp: at * 1000 },
+    });
+    const priest = {
+      id: "e1",
+      auraEvents: [
+        aura("27827", 12, "SPELL_AURA_APPLIED"),
+        aura("27827", 27, "SPELL_AURA_REMOVED"),
+        aura("215769", 40, "SPELL_AURA_APPLIED"),
+        aura("215769", 49, "SPELL_AURA_REMOVED"),
+      ],
+    } as never;
+    const combat = { startTime: 0, endTime: 100_000 };
+    // the [STATE] reader sees both forms …
+    expect(extractSpiritOfRedemptionIntervals(priest, combat)).toEqual([
+      { startSeconds: 12, endSeconds: 27 },
+      { startSeconds: 40, endSeconds: 49 },
+    ]);
+    // … the attempt cut only the pressed one
+    expect(
+      extractSpiritOfRedemptionIntervals(
+        priest,
+        combat,
+        PRESSED_SPIRIT_OF_REDEMPTION_AURA_IDS,
+      ),
+    ).toEqual([{ startSeconds: 40, endSeconds: 49 }]);
+  });
+
+  it("183-3-1104's shape: a stun before the form and a stun after it, inside one DR window, are two attempts — neither bracket holds the form", () => {
+    const f1 = unit("f1", {
+      reaction: 1,
+      damageOut: [dmg("f1", "e1", 11, 60_000), dmg("f1", "e1", 28, 60_000)],
+    });
+    const stuns = [
+      ...stunAuras("e1", KIDNEY, 10, 5),
+      ...stunAuras("e1", KIDNEY, 27, 3),
+    ];
+    const without = unit("e1", { auraEvents: stuns });
+    const one = extractKillAttempts([f1], [without], makeCombat(f1, without));
+    // one DR chain (27 s is 12 s after the first stun's end): one bracket
+    expect(one.map((a) => [a.fromSeconds, a.toSeconds])).toEqual([[10, 30]]);
+    expect(one[0].stuns).toHaveLength(2);
+
+    const e1 = unit("e1", { auraEvents: [...stuns, ...form()] });
+    const two = extractKillAttempts([f1], [e1], makeCombat(f1, e1));
+    expect(two.map((a) => [a.fromSeconds, a.toSeconds])).toEqual([
+      [10, 15],
+      [27, 30],
+    ]);
+    expect(two.map((a) => a.stuns.length)).toEqual([1, 1]);
+    // the DR level of the second go's opener is the chain's, untouched
+    expect(two[1].openingDrLevel).toBe(one[0].stuns[1].drLevel);
+  });
+
+  it("a burst cluster on the priest ends where the form begins; left under the damage floor it is no attempt", async () => {
+    await ensureAnalysisData();
+    const build = (auraEvents: any[], damageAt: number[]) => {
+      const f1 = unit("f1", {
+        reaction: 1,
+        spec: "71",
+        spellCastEvents: [offensiveCast(10)],
+        damageOut: damageAt.map((s) => dmg("f1", "e1", s, 60_000)),
+      });
+      const e1 = unit("e1", { auraEvents });
+      return extractKillAttempts([f1], [e1], makeCombat(f1, e1));
+    };
+    const plain = build([], [12, 26]);
+    expect(plain).toHaveLength(1);
+    expect(plain[0].anchor).toBe("burst");
+    expect(plain[0].fromSeconds).toBe(10);
+    expect(plain[0].toSeconds).toBeGreaterThan(16.4);
+    // the form begins at 16.4 s: the bracket ends there, and the sums are
+    // the cut span's — the hit at 26 s (after the form) is not in them
+    const cut = build(form(), [12, 26]);
+    expect(cut.map((a) => [a.fromSeconds, a.toSeconds])).toEqual([[10, 16.4]]);
+    expect(cut[0].teamDamageToTarget).toBe(60_000);
+    expect(cut[0].teamDamageToTargetInBracket).toBe(60_000);
+    // every hit came after the form: nothing landed in the cut span
+    expect(build(form(), [26, 27])).toEqual([]);
+  });
+});
+
+describe("burst anchor: a Holy Paladin's Avenging Wrath is not one (B15c-U10)", () => {
+  const cast = (spellId: string, spellName: string, atS: number): any => ({
+    spellId,
+    spellName,
+    logLine: {
+      event: LogEvent.SPELL_CAST_SUCCESS,
+      timestamp: ms(atS),
+      parameters: [],
+    },
+  });
+  const wings = (atS: number) => cast("31884", "Avenging Wrath", atS);
+
+  it("the predicate: Holy Paladin + Avenging Wrath (or its activation) only", () => {
+    const holy = { spec: CombatUnitSpec.Paladin_Holy };
+    const ret = { spec: CombatUnitSpec.Paladin_Retribution };
+    expect(anchorsKillAttempt(holy, "31884")).toBe(false);
+    expect(anchorsKillAttempt(holy, "454351")).toBe(false); // Radiant Glory's proc of it
+    expect(anchorsKillAttempt(ret, "31884")).toBe(true);
+    expect(anchorsKillAttempt(holy, "1719")).toBe(true);
+  });
+
+  it("wings alone with real team damage behind them: no attempt for Holy, one for Retribution", async () => {
+    await ensureAnalysisData();
+    const attemptsFor = (spec: CombatUnitSpec) => {
+      const e1 = unit("e1");
+      const f1 = unit("f1", {
+        reaction: 1,
+        spec,
+        spellCastEvents: [wings(40)],
+        damageOut: [dmg("f1", "e1", 42, 60_000)],
+      });
+      return extractKillAttempts([f1], [e1], makeCombat(f1, e1));
+    };
+    expect(attemptsFor(CombatUnitSpec.Paladin_Holy)).toHaveLength(0);
+    const ret = attemptsFor(CombatUnitSpec.Paladin_Retribution);
+    expect(ret).toHaveLength(1);
+    expect(ret[0]!.anchorSpellName).toBe("Avenging Wrath");
+  });
+
+  it("it does not open a teammate's cluster either: the attempt starts at the teammate's cooldown and carries its name", async () => {
+    await ensureAnalysisData();
+    const e1 = unit("e1");
+    const pal = unit("f1", {
+      reaction: 1,
+      spec: CombatUnitSpec.Paladin_Holy,
+      spellCastEvents: [wings(40)],
+    });
+    const war = unit("f2", {
+      reaction: 1,
+      spellCastEvents: [offensiveCast(46)],
+      damageOut: [dmg("f2", "e1", 48, 60_000)],
+    });
+    const combat = makeCombat(pal, e1);
+    combat.units.f2 = war;
+    const attempts = extractKillAttempts([pal, war], [e1], combat);
+    expect(attempts).toHaveLength(1);
+    expect(attempts[0]!.anchorSpellName).toBe("Recklessness");
+    expect(attempts[0]!.fromSeconds).toBe(46);
+  });
+});
+
+// T12 ① d (user ruling 2026-10-10): a kill-attempt line does not run past the
+// target's death or the round's end.
+describe("extractKillAttempts — brackets end at the round's end and at the kill (T12 ① d)", () => {
+  // 101-3-555 (Duration 2:20): `[2:18–2:21] on … Storm Bolt opener` — the
+  // stun's nominal end, 1 s after ARENA_MATCH_END.
+  it("a stun anchor's end is the round's end, not the stun's nominal end", () => {
+    const e1 = unit("e1", { auraEvents: stunAuras("e1", KIDNEY, 138, 3.5) });
+    const f1 = unit("f1", {
+      reaction: 1,
+      damageOut: [dmg("f1", "e1", 139, 60_000)],
+    });
+    const combat = makeCombat(f1, e1);
+    const open = extractKillAttempts([f1], [e1], combat);
+    expect(open[0]!.toSeconds).toBeCloseTo(141.5, 6);
+
+    combat.endTime = MATCH_START + 140_000;
+    const cut = extractKillAttempts([f1], [e1], combat);
+    expect(cut).toHaveLength(1);
+    expect(cut[0]!.fromSeconds).toBe(138);
+    expect(cut[0]!.toSeconds).toBe(140);
+    expect(formatKillAttemptsForContext(cut).join("\n")).toContain(
+      "[2:18–2:20] on e1",
+    );
+  });
+
+  // 100-2-534: `[2:02–2:16] on … Zenith burst (no stun) | … | KILL`, the
+  // target dead at 2:14 — the cooldown's own reach.
+  it("a KILL's bracket ends at the death it is credited with", () => {
+    const mk = (deathS?: number) => {
+      const e1 = unit("e1", {
+        deathRecords: deathS === undefined ? [] : [{ timestamp: ms(deathS) }],
+      });
+      const f1 = unit("f1", {
+        reaction: 1,
+        spellCastEvents: [offensiveCast(122)],
+        damageOut: [dmg("f1", "e1", 124, 60_000)],
+      });
+      return extractKillAttempts([f1], [e1], makeCombat(f1, e1));
+    };
+    const reach = mk()[0]!.toSeconds;
+    expect(reach).toBeGreaterThan(130);
+
+    const [kill] = mk(128.4);
+    expect(kill!.killed).toBe(true);
+    expect(kill!.killedAtSeconds).toBeCloseTo(128.4, 6);
+    expect(kill!.toSeconds).toBeCloseTo(128.4, 6);
+    // the damage figure is the anchor's, unchanged
+    expect(kill!.teamDamageToTarget).toBe(60_000);
+    const text = formatKillAttemptsForContext([kill!], [128.4]).join("\n");
+    expect(text).toContain("[2:02–2:08] on e1 — Recklessness burst (no stun)");
+    expect(text).toContain("| KILL");
+    expect(text).not.toContain("outside every attempt window");
+  });
+
+  it("a death in the kill-credit slack after the bracket leaves the bracket alone", () => {
+    const e1 = unit("e1", {
+      auraEvents: stunAuras("e1", KIDNEY, 10, 5),
+      deathRecords: [{ timestamp: ms(18) }],
+    });
+    const f1 = unit("f1", {
+      reaction: 1,
+      damageOut: [dmg("f1", "e1", 12, 50_000)],
+    });
+    const [a] = extractKillAttempts([f1], [e1], makeCombat(f1, e1));
+    expect(a!.killed).toBe(true);
+    expect(a!.toSeconds).toBe(15);
+    expect(a!.killedAtSeconds).toBeCloseTo(18, 6);
+  });
+
+  it("a FAILED attempt keeps its anchor's end", () => {
+    const e1 = unit("e1");
+    const f1 = unit("f1", {
+      reaction: 1,
+      spellCastEvents: [offensiveCast(122)],
+      damageOut: [dmg("f1", "e1", 124, 60_000)],
+    });
+    const [a] = extractKillAttempts([f1], [e1], makeCombat(f1, e1));
+    expect(a!.killed).toBe(false);
+    expect(a!.toSeconds).toBeGreaterThan(130);
+  });
+
+  it("a Solo Shuffle round ends at its first player death: the anchor ends there, and one opened after it is not an attempt", () => {
+    const shuffle = (f1: any, e1: any, e2: any) => {
+      const combat = makeCombat(f1, e1, [e2]);
+      combat.startInfo = { ...combat.startInfo, bracket: "Rated Solo Shuffle" };
+      return combat;
+    };
+    // e2 dies at 126 s: the round is over; the log runs on to 300 s
+    const e2 = unit("e2", { deathRecords: [{ timestamp: ms(126) }] });
+    const e1 = unit("e1");
+    const f1 = unit("f1", {
+      reaction: 1,
+      spellCastEvents: [offensiveCast(122)],
+      damageOut: [dmg("f1", "e1", 124, 60_000)],
+    });
+    const [a] = extractKillAttempts([f1], [e1, e2], shuffle(f1, e1, e2));
+    expect(a!.targetUnitId).toBe("e1");
+    expect(a!.toSeconds).toBe(126);
+
+    const late = unit("f1", {
+      reaction: 1,
+      spellCastEvents: [offensiveCast(127)],
+      damageOut: [dmg("f1", "e1", 128, 60_000)],
+    });
+    expect(
+      extractKillAttempts([late], [e1, e2], shuffle(late, e1, e2)),
+    ).toHaveLength(0);
+    const lateStun = unit("e1", {
+      auraEvents: stunAuras("e1", KIDNEY, 127, 3),
+    });
+    const hitter = unit("f1", {
+      reaction: 1,
+      damageOut: [dmg("f1", "e1", 128, 60_000)],
+    });
+    expect(
+      extractKillAttempts(
+        [hitter],
+        [lateStun, e2],
+        shuffle(hitter, lateStun, e2),
+      ),
+    ).toHaveLength(0);
+  });
+
+  // Post-hoc review 45-FT-98, finding 2: "two attempts on one target both
+  // cover its death; the one not kept is un-killed and then not cut, so it
+  // prints `[0:10–0:30] … FAILED` for a target dead at 0:24".
+  it("the reviewed pair — a burst cluster 10–22 over a stun 14–19, the target dead at 18 — is one row, the KILL, cut at the death", () => {
+    const e1 = unit("e1", {
+      auraEvents: stunAuras("e1", KIDNEY, 14, 5),
+      deathRecords: [{ timestamp: ms(18) }],
+    });
+    const f1 = unit("f1", {
+      reaction: 1,
+      spellCastEvents: [offensiveCast(10)],
+      damageOut: [dmg("f1", "e1", 12, 60_000), dmg("f1", "e1", 16, 60_000)],
+    });
+    const attempts = extractKillAttempts([f1], [e1], makeCombat(f1, e1));
+    // the cluster is under a stun attempt that got the kill: not a row (F-K2)
+    expect(
+      attempts.map((a) => [a.anchor, a.fromSeconds, a.toSeconds, a.killed]),
+    ).toEqual([["stun", 14, 18, true]]);
+  });
+
+  it("the row a shared death was not given to ended before it: it stays a FAILED row of its own, with its anchor's end", () => {
+    // Kidney 40–45 (credit to 50), a burst opened at 46, the target dead at 48
+    const e1 = unit("e1", {
+      auraEvents: stunAuras("e1", KIDNEY, 40, 5),
+      deathRecords: [{ timestamp: ms(48) }],
+    });
+    const f1 = unit("f1", {
+      reaction: 1,
+      spellCastEvents: [offensiveCast(46)],
+      damageOut: [dmg("f1", "e1", 42, 60_000), dmg("f1", "e1", 47, 60_000)],
+    });
+    const attempts = extractKillAttempts([f1], [e1], makeCombat(f1, e1));
+    expect(
+      attempts.map((a) => [a.anchor, a.fromSeconds, a.toSeconds, a.killed]),
+    ).toEqual([
+      ["stun", 40, 45, false],
+      ["burst", 46, 48, true],
+    ]);
+    const text = formatKillAttemptsForContext(attempts, [48]).join("\n");
+    expect(text).toMatch(/\[0:40–0:45\] on e1 .* \| FAILED: /);
+    expect(text).toMatch(/\[0:46–0:48\] on e1 .* \| KILL/);
+  });
+
+  // The property, over every way the two anchors can sit around one death:
+  // no bracket holds its target's death and runs on, and one death is one
+  // KILL. A grid, not a sample — 0 violations is the claim "the builders
+  // cannot produce the reviewed line", and the cut on every credited row
+  // (`extractKillAttempts`) is what keeps it true if a builder changes.
+  it("no attempt's bracket runs past its target's death, whatever the anchors — stun × burst × second burst × death, 1,440 rounds", () => {
+    const STUNS: Array<[number, number] | null> = [
+      null,
+      [20, 4],
+      [33, 5],
+      [41, 3],
+      [47, 6],
+    ];
+    const BURSTS: Array<number | null> = [null, 12, 30, 39, 46, 52];
+    const SECOND_BURSTS: Array<number | null> = [null, 14, 16, 30];
+    const DEATHS = [21, 24.5, 36, 43, 44, 45.5, 48, 50, 53.2, 56, 58.9, 66];
+    let rounds = 0;
+    let sharedDeaths = 0;
+    let rows = 0;
+    for (const stun of STUNS)
+      for (const burst of BURSTS)
+        for (const gap of SECOND_BURSTS)
+          for (const deathS of DEATHS) {
+            rounds++;
+            const casts =
+              burst === null
+                ? []
+                : gap === null
+                  ? [offensiveCast(burst)]
+                  : [offensiveCast(burst), offensiveCast(burst + gap)];
+            const e1 = unit("e1", {
+              auraEvents: stun ? stunAuras("e1", KIDNEY, stun[0], stun[1]) : [],
+              deathRecords: [{ timestamp: ms(deathS) }],
+            });
+            const f1 = unit("f1", {
+              reaction: 1,
+              spellCastEvents: casts,
+              // a hit a second up to the death: every anchor clears the floor
+              damageOut: Array.from({ length: 70 }, (_, i) => i + 5)
+                .filter((s) => s <= deathS)
+                .map((s) => dmg("f1", "e1", s, 60_000)),
+            });
+            const attempts = extractKillAttempts(
+              [f1],
+              [e1],
+              makeCombat(f1, e1),
+            );
+            rows += attempts.length;
+            const at = `stun ${stun} burst ${burst}+${gap} death ${deathS}`;
+            for (const a of attempts) {
+              // a bracket that holds the death ends at it
+              if (a.fromSeconds <= deathS)
+                expect(a.toSeconds, at).toBeLessThanOrEqual(deathS);
+              expect(a.toSeconds, at).toBeGreaterThanOrEqual(a.fromSeconds);
+              expect(a.attribution !== undefined, at).toBe(!a.killed);
+            }
+            const kills = attempts.filter((a) => a.killed);
+            expect(kills.length, at).toBeLessThanOrEqual(1);
+            // a second row whose kill-credit window held the same death
+            if (
+              kills.length === 1 &&
+              attempts.some(
+                (a) =>
+                  !a.killed &&
+                  a.fromSeconds <= deathS &&
+                  deathS <= a.toSeconds + 5,
+              )
+            )
+              sharedDeaths++;
+          }
+    expect(rounds).toBe(1440);
+    // the grid reaches the tie-break — the property is not vacuous
+    expect(sharedDeaths).toBeGreaterThan(20);
+    expect(rows).toBeGreaterThan(rounds);
+  });
+});
+
+// T12 ④ (user ruling 2026-10-10: print both numbers): the line printed the
+// bracket beside a sum taken over the bracket + the 5 s kill-credit slack.
+describe("KILL ATTEMPTS — the damage inside the bracket and with the 5 s after it (T12 ④)", () => {
+  // ae9d6fbc: `[5:41–5:46] … Maim opener … (0.87M on target) | FAILED: not
+  // enough damage` — 0.39M inside the Maim, 0.87M through the 5 s after it.
+  const maim = () => {
+    const e1 = unit("e1", { auraEvents: stunAuras("e1", KIDNEY, 341, 5) });
+    const e2 = unit("e2");
+    const f1 = unit("f1", {
+      reaction: 1,
+      damageOut: [
+        dmg("f1", "e1", 343, 390_000),
+        dmg("f1", "e1", 349, 480_000),
+        dmg("f1", "e2", 344, 65_000),
+        dmg("f1", "e1", 352, 500_000), // past the slack: in neither
+        dmg("f1", "e1", 340, 500_000), // before the bracket: in neither
+      ],
+    });
+    const combat = makeCombat(f1, e1, [e2]);
+    combat.endTime = MATCH_START + 400_000;
+    return extractKillAttempts([f1], [e1, e2], combat);
+  };
+
+  it("both sums are on the attempt; the one the outcome reads is unchanged", () => {
+    const [a] = maim();
+    expect(a!.fromSeconds).toBe(341);
+    expect(a!.toSeconds).toBe(346);
+    expect(a!.teamDamageToTargetInBracket).toBe(390_000);
+    expect(a!.teamDamageToTarget).toBe(870_000);
+    // team focus stays on the [from, to + 5 s] span: 870 / (870 + 65)
+    expect(a!.teamOnTargetPct).toBe(93);
+    expect(a!.attribution?.primary).toBe("pressure");
+  });
+
+  it("the line prints both, and the legend says which is which", () => {
+    const text = formatKillAttemptsForContext(maim());
+    // (the opener's name and the tier depend on loaded spell data — not pinned)
+    const line = text.find((l) => l.startsWith("  [5:41–5:46] on e1 — "));
+    expect(line).toMatch(
+      / \| team focus 93% \(0\.39M on target inside it, 0\.87M incl\. the 5 s after\) \| FAILED: not enough damage$/,
+    );
+    const legend = text.find((l) => l.includes("on target inside it, B M"));
+    expect(legend).toContain(
+      "A inside the printed bracket, B over the bracket and the 5 s after it",
+    );
+    expect(legend).toContain("are read over that longer span (B)");
+    expect(text.join("\n")).not.toContain("M on target)");
+  });
+
+  it("damage only in the 5 s after the bracket: still an attempt (the 30k floor reads the longer span), 0.00M inside", () => {
+    const e1 = unit("e1", { auraEvents: stunAuras("e1", KIDNEY, 10, 5) });
+    const f1 = unit("f1", {
+      reaction: 1,
+      damageOut: [dmg("f1", "e1", 18, 60_000)],
+    });
+    const attempts = extractKillAttempts([f1], [e1], makeCombat(f1, e1));
+    expect(attempts).toHaveLength(1);
+    expect(attempts[0]!.teamDamageToTargetInBracket).toBe(0);
+    expect(attempts[0]!.teamDamageToTarget).toBe(60_000);
+    expect(formatKillAttemptsForContext(attempts).join("\n")).toContain(
+      "(0.00M on target inside it, 0.06M incl. the 5 s after)",
+    );
+  });
+
+  it("a KILL's inside figure stops at the bracket it prints — the death", () => {
+    const e1 = unit("e1", {
+      deathRecords: [{ timestamp: ms(128.4) }],
+    });
+    const f1 = unit("f1", {
+      reaction: 1,
+      spellCastEvents: [offensiveCast(122)],
+      damageOut: [
+        dmg("f1", "e1", 124, 60_000),
+        dmg("f1", "e1", 128.4, 25_000), // the killing blow, at the death
+        dmg("f1", "e1", 129, 7_000), // logged after the death
+      ],
+    });
+    const [kill] = extractKillAttempts([f1], [e1], makeCombat(f1, e1));
+    expect(kill!.killed).toBe(true);
+    expect(kill!.toSeconds).toBeCloseTo(128.4, 6);
+    expect(kill!.teamDamageToTargetInBracket).toBe(85_000);
+    expect(kill!.teamDamageToTarget).toBe(92_000);
   });
 });

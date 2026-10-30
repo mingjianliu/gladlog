@@ -1,4 +1,5 @@
 import { buildDampeningEvents, getInitialDampening } from "@gladlog/analysis";
+import { CombatUnitReaction } from "@gladlog/parser-compat";
 
 import { toLegacySafe } from "./legacySource";
 import type { ReportSource } from "./types";
@@ -31,6 +32,12 @@ import type { ReportSource } from "./types";
  * would be missed on a whole-second boundary. Using the exact endTime
  * guarantees this last cell reflects the true value at the moment the match
  * ended.
+ *
+ * The series starts at 0:00 with getInitialDampening's value: 10 in 3v3 / Solo
+ * Shuffle; in 2v2 the value derived from the round's first logged stack (one
+ * dose below it — the number the prompt prints for those seconds, FT-T13
+ * D11). A 2v2 round whose log printed no stack has none (null) and its series
+ * is empty. Seconds stay contiguous from the first point on.
  */
 export function deriveDampeningSeries(
   source: ReportSource,
@@ -44,8 +51,14 @@ export function deriveDampeningSeries(
       1,
       Math.floor((legacy.endTime - legacy.startTime) / 1000),
     );
-    const events = buildDampeningEvents(players); // sorted event table, built once
-    const fallback = getInitialDampening(bracket, players);
+    // the log owner's team's doses, the rules from the whole roster (the
+    // prompt's reading — fact1215 R11: the teams tick apart)
+    const ownSide = players.filter(
+      (u) => u.reaction === CombatUnitReaction.Friendly,
+    );
+    const team = ownSide.length > 0 ? ownSide : players;
+    const events = buildDampeningEvents(team); // sorted event table, built once
+    const fallback = getInitialDampening(bracket, team, players);
     const out: Array<{ tS: number; pct: number }> = [];
     let idx = 0;
     let cur = fallback;
@@ -56,7 +69,7 @@ export function deriveDampeningSeries(
         cur = events[idx]!.stacks;
         idx++;
       }
-      out.push({ tS: s, pct: cur });
+      if (cur !== null) out.push({ tS: s, pct: cur });
     }
     return out;
   } catch {
@@ -65,12 +78,14 @@ export function deriveDampeningSeries(
 }
 
 /** The current dampening at the playback clock (the latest sample at or before
- *  t). */
+ *  t) — null when the series is empty (a 2v2 round that logged no stack),
+ *  where no value is known. */
 export function dampeningAt(
   series: Array<{ tS: number; pct: number }>,
   tS: number,
 ): number | null {
   if (series.length === 0) return null;
+  if (series[0]!.tS > 0 && tS < series[0]!.tS) return null;
   let cur = series[0]!.pct;
   for (const p of series) {
     if (p.tS > tS) break;

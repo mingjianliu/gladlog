@@ -8,10 +8,22 @@
  * its closure inputs now arrive through `ctx`. Output is pinned by the 605-file
  * acceptanceCapture context hash.
  */
+import { LogEvent } from "@gladlog/parser-compat";
+
 import { getEnglishSpellName } from "../../data/spellEffectData";
-import type { IDispelEvent } from "../../utils/dispelAnalysis";
+import {
+  type IDispelEvent,
+  purgeableCountText,
+} from "../../utils/dispelAnalysis";
+import { isRiderDispel } from "../../utils/dispelKind";
 import { fmtTime } from "../../utils/renderGrid";
+import { dispelActorLabel } from "../timelineHelpers";
 import type { TimelineCtx } from "./ctx";
+import {
+  purgeMatchesCast,
+  purgePressRemovalCount,
+  purgePressRemovals,
+} from "./healerCastGapFiller";
 
 export function emitPurgeEntries(
   ctx: Pick<
@@ -22,18 +34,62 @@ export function emitPurgeEntries(
     | "addEntry"
     | "pid"
     | "enemyDispelSummary"
+    | "isHealer"
+    | "matchStartMs"
+    | "_allUnits"
   >,
 ): void {
-  const { dispelSummary, owner, enemyPid, addEntry, pid, enemyDispelSummary } =
-    ctx;
+  const {
+    _allUnits,
+    dispelSummary,
+    owner,
+    enemyPid,
+    addEntry,
+    pid,
+    enemyDispelSummary,
+    isHealer,
+    matchStartMs,
+  } = ctx;
+
+  // F-P1 (triage missed-cleanse): the owner's purge is skipped only when it is
+  // already on a cast line — cast lines with `[removed: …]` exist only for a
+  // healer owner (the gap filler), and only for a targeted cast that matches
+  // (the gap filler's own predicate). fa5e6c66's Shadow Priest's Mass Dispel
+  // of Divine Shield + Ice Block rendered nowhere.
+  const ownerCastTimes = (owner.spellCastEvents ?? [])
+    .filter((c) => c.logLine.event === LogEvent.SPELL_CAST_SUCCESS)
+    .map((c) => ({
+      destUnitName: c.destUnitName,
+      timeSeconds: (c.logLine.timestamp - matchStartMs) / 1000,
+      spellId: c.spellId,
+    }));
+  const onOwnerCastLine = (purge: IDispelEvent): boolean =>
+    isHealer && ownerCastTimes.some((c) => purgeMatchesCast(purge, c));
+
+  const pressRemovalCount = (c: IDispelEvent): number =>
+    purgePressRemovalCount(
+      purgePressRemovals(dispelSummary.ourPurges, {
+        sourceName: c.sourceName,
+        isPetDispel: c.isPetDispel,
+        destUnitName: c.targetName,
+        timeSeconds: c.timeSeconds,
+        spellId: c.dispelSpellId,
+      }),
+    );
 
   const purgeGroups = new Map<string, IDispelEvent[]>();
   for (const purge of dispelSummary.ourPurges) {
     // Pet-cast dispels (Devour Magic, …) have no owner cast line to annotate,
     // so they must not be skipped
-    if (purge.sourceName === owner.name && !purge.isPetDispel) continue;
+    if (
+      purge.sourceName === owner.name &&
+      !purge.isPetDispel &&
+      onOwnerCastLine(purge)
+    )
+      continue;
     if (purge.priority !== "Critical" && purge.priority !== "High") continue;
-    const key = `${Math.round(purge.timeSeconds)}|${purge.sourceName}`;
+    if (isRiderDispel(purge)) continue;
+    const key = `${Math.round(purge.timeSeconds)}|${purge.sourceName}|${purge.isPetDispel}`;
     const group = purgeGroups.get(key) ?? [];
     group.push(purge);
     purgeGroups.set(key, group);
@@ -44,19 +100,23 @@ export function emitPurgeEntries(
     const effects = group
       .map(
         (c) =>
-          `${getEnglishSpellName(c.removedSpellId, c.removedSpellName)} off ${enemyPid(c.targetName)}`,
+          // B13e: a press takes k of the purgeable buffs on the target —
+          // k counted from the press's own removal rows (F20 D31: Greater
+          // Purge / Fire Breath take 2), the folded low-priority ones included
+          `${getEnglishSpellName(c.removedSpellId, c.removedSpellName)} off ${enemyPid(c.targetName)}${c.purgeableOnTarget !== undefined ? ` (${pressRemovalCount(c)} of ${purgeableCountText(c.purgeableOnTarget)} on it)` : ""}`,
       )
       .join(", ");
     addEntry(
       first.timeSeconds,
-      `${fmtTime(first.timeSeconds)}  [PURGE]   ${pid(first.sourceName)} purged ${effects}${viaTag}`,
+      `${fmtTime(first.timeSeconds)}  [PURGE]   ${dispelActorLabel(first, pid, _allUnits)} purged ${effects}${viaTag}`,
     );
   }
 
   const hostileGroups = new Map<string, IDispelEvent[]>();
   for (const purge of dispelSummary.hostilePurges) {
     if (purge.priority !== "Critical" && purge.priority !== "High") continue;
-    const key = `${Math.round(purge.timeSeconds)}|${purge.sourceName}`;
+    if (isRiderDispel(purge)) continue;
+    const key = `${Math.round(purge.timeSeconds)}|${purge.sourceName}|${purge.isPetDispel}`;
     const group = hostileGroups.get(key) ?? [];
     group.push(purge);
     hostileGroups.set(key, group);
@@ -72,7 +132,7 @@ export function emitPurgeEntries(
       .join(", ");
     addEntry(
       first.timeSeconds,
-      `${fmtTime(first.timeSeconds)}  [ENEMY PURGE]   ${enemyPid(first.sourceName)} stripped ${effects}${viaTag}`,
+      `${fmtTime(first.timeSeconds)}  [ENEMY PURGE]   ${dispelActorLabel(first, enemyPid, _allUnits)} stripped ${effects}${viaTag}`,
     );
   }
 
@@ -85,7 +145,10 @@ export function emitPurgeEntries(
     const enemyCleanseGroups = new Map<string, IDispelEvent[]>();
     for (const c of enemyDispelSummary.allyCleanse) {
       if (c.priority !== "Critical" && c.priority !== "High") continue;
-      const key = `${Math.round(c.timeSeconds)}|${c.sourceName}`;
+      // a form shift's / movement ability's root break is no cleanse
+      // (`isRiderDispel`, the friendly [CLEANSE]'s own test)
+      if (isRiderDispel(c)) continue;
+      const key = `${Math.round(c.timeSeconds)}|${c.sourceName}|${c.isPetDispel}`;
       const group = enemyCleanseGroups.get(key) ?? [];
       group.push(c);
       enemyCleanseGroups.set(key, group);
@@ -101,7 +164,7 @@ export function emitPurgeEntries(
         .join(", ");
       addEntry(
         first.timeSeconds,
-        `${fmtTime(first.timeSeconds)}  [ENEMY CLEANSE]   ${enemyPid(first.sourceName)} cleansed ${effects}${viaTag}`,
+        `${fmtTime(first.timeSeconds)}  [ENEMY CLEANSE]   ${dispelActorLabel(first, enemyPid, _allUnits)} cleansed ${effects}${viaTag}`,
       );
     }
   }

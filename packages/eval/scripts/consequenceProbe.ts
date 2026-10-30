@@ -1,4 +1,4 @@
-/* eslint-disable no-console */
+ 
 /**
  * consequenceProbe.ts — GH #70 two-arm experiment: may the findings prompt
  * state OBSERVABLE consequences (user rulings 2026-09-19 / 2026-09-24)?
@@ -45,13 +45,6 @@
  * (96 % of those trinkets broke one of our CCs: an HP gate is the wrong
  * evidence for a trinket).
  */
-import { ensureAnalysisData, parseModelJsonArray } from "@gladlog/analysis";
-import { buildFindingsPrompt } from "@gladlog/analysis/src/analysis/buildFindingsPrompt";
-import { extractCandidateFindings } from "@gladlog/analysis/src/analysis/candidateFindings";
-import { buildMatchContext } from "@gladlog/analysis/src/context/buildMatchContext";
-import { specToString } from "@gladlog/analysis/src/utils/cooldowns";
-import { GladLogParser } from "@gladlog/parser";
-import { toLegacyMatch, toLegacyShuffle } from "@gladlog/parser-compat";
 import {
   existsSync,
   mkdirSync,
@@ -62,16 +55,15 @@ import {
 import { join } from "node:path";
 import { gunzipSync } from "node:zlib";
 
+import { ensureAnalysisData, parseModelJsonArray } from "@gladlog/analysis";
+import { buildFindingsPrompt } from "@gladlog/analysis/src/analysis/buildFindingsPrompt";
+import { extractCandidateFindings } from "@gladlog/analysis/src/analysis/candidateFindings";
+import { buildMatchContext } from "@gladlog/analysis/src/context/buildMatchContext";
+import { specToString } from "@gladlog/analysis/src/utils/cooldowns";
+import { GladLogParser } from "@gladlog/parser";
+import { toLegacyMatch, toLegacyShuffle } from "@gladlog/parser-compat";
+
 import { selectCorpusOwner } from "../src/corpus/buildCorpus";
-import {
-  callClaude,
-  coachSystemPrompt,
-  FINDINGS_EVIDENCE_DESC,
-  type JudgeItem,
-  judgeInstructions,
-  sentencesOf,
-  shuffled,
-} from "../src/explore/sentenceJudge";
 import {
   buildConsequenceLines,
   CAUSATION_RULE_A,
@@ -80,6 +72,15 @@ import {
   type ForcedSample,
   renderConsequenceSection,
 } from "../src/explore/consequenceFacts";
+import {
+  callClaude,
+  coachSystemPrompt,
+  FINDINGS_EVIDENCE_DESC,
+  judgeInstructions,
+  type JudgeItem,
+  sentencesOf,
+  shuffled,
+} from "../src/explore/sentenceJudge";
 
 const argv = process.argv.slice(2);
 const cmd = argv[0];
@@ -122,7 +123,10 @@ function manifestSlice(): string[] {
     .slice(0, Number(flag("--limit", "100000")));
 }
 
-const MENU_ANCHOR = "\n\nEvent menu (the ONLY things that provably happened";
+// The prefix both header wordings share: "…the ONLY things that provably
+// happened" (stored runs before FT-T15) and "…the ONLY events and facts a
+// finding may cite" (buildFindingsPrompt.ts today).
+const MENU_ANCHOR = "\n\nEvent menu (the ONLY ";
 
 export function armBPrompt(promptA: string, section: string): string {
   if (!promptA.includes(CAUSATION_RULE_A))

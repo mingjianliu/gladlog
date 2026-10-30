@@ -24,9 +24,9 @@
  * onward is passed to `runQuery` byte-for-byte.
  *
  * `mana`/`drink` (BACKLOG #26 Task 5) are the only two subcommands that
- * touch raw.txt: this shell reads it (`storeAccess.ts`'s `readRawText`,
- * matchesDir-relative like `loadLegacyRound`) and parses it
- * (`parseRawStreams`, baseMs = the loaded round's OWN `startTime`, clamped to
+ * touch raw.txt: this shell loads it through `storeAccess.ts`'s
+ * `rawStreamsForRound` (the same loader `buildSession`'s prescreen uses —
+ * `readRawText` + `parseRawStreams`, baseMs = the loaded round's OWN `startTime`, clamped to
  * that round's OWN `(endTime-startTime)/1000` duration — BACKLOG #32,
  * see `matchExplore.ts`'s module header for why that base and no other) ONLY
  * when the trailing subcommand is one of those two, so the other eight
@@ -36,12 +36,7 @@
  */
 import { parseArgs } from "node:util";
 
-import {
-  ensureAnalysisData,
-  fmtTime,
-  parseRawStreams,
-  roundDurationSOf,
-} from "@gladlog/analysis";
+import { ensureAnalysisData, fmtTime } from "@gladlog/analysis";
 
 import { runQuery } from "../src/explore/matchExplore.js";
 import {
@@ -49,7 +44,8 @@ import {
   loadIndex,
   loadLegacyRound,
   pickRows,
-  readRawText,
+  RAW_STREAM_SUBCOMMANDS,
+  rawStreamsForRound,
 } from "../src/explore/storeAccess.js";
 
 const USAGE = `usage:
@@ -108,14 +104,9 @@ try {
     if (!subToken) throw new Error(USAGE);
 
     const { legacy } = loadLegacyRound(matchesDir, matchId, roundSeq);
-    const rawStreams =
-      subToken.value === "mana" || subToken.value === "drink"
-        ? parseRawStreams(
-            readRawText(matchesDir, matchId),
-            legacy.startTime,
-            roundDurationSOf(legacy.startTime, legacy.endTime),
-          )
-        : undefined;
+    const rawStreams = RAW_STREAM_SUBCOMMANDS.has(subToken.value)
+      ? rawStreamsForRound(matchesDir, matchId, legacy)
+      : undefined;
     const queryArgv = args.slice(subToken.index);
     console.log(runQuery(legacy, queryArgv, rawStreams).join("\n"));
   }

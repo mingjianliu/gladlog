@@ -1,5 +1,6 @@
 export * from "./convert";
 export * from "./enums";
+export * from "./maxHpLag";
 export * from "./shim";
 export * from "./types";
 
@@ -8,6 +9,7 @@ export * from "./types";
 // implementation instead of the byte-for-byte mirrors it kept until 2026-09-26.
 export {
   decodeAdvanced,
+  logLineInstantMs,
   parseTimestamp,
   splitLine,
   splitTopLevel,

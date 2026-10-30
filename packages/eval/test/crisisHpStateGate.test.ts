@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   checkCrisisHpStateConsistency,
   checkCrisisStateTickPresent,
+  crisisHpProbeMismatch,
   crisisHpStateProbes,
 } from "../src/quality/promptQualityCheck";
 
@@ -118,6 +119,138 @@ describe("checkCrisisHpStateConsistency (11th hardFailure class)", () => {
         cdHoarded("27", "Tank-T", "99"),
       ]),
     ).toEqual([]);
+  });
+});
+
+// FT-T03 (user ruling 2026-10-10, D7): "the 'trough' numbers may leave the
+// whole-second grid and read the true minimum inside their window; the
+// [STATE] point readings, the crisis crossing instants and cd-hoarded's
+// `crisisHpPct` do NOT move".
+describe("checkCrisisHpStateConsistency — a trough fact is not a point reading (FT-T03)", () => {
+  const kickEaten = (ourLowPct: string, ourLowT: string) =>
+    `  - id=kick-eaten:P1:26.4 type=kick-eaten t=26.4s units=Heals-R ` +
+    `facts={t=26.4, interrupted=Healing Wave, lockout=3, ourLowUnit=Tank-T, ourLowPct=${ourLowPct}, ourLowT=${ourLowT}, enemyBurst=Trueshot}`;
+
+  it("kick-eaten: a low BELOW the tick of its own second → passes (the tick is the start of that second)", () => {
+    // 0:27 tick: Tank-T 38; the lowest reading inside that second was 12
+    expect(
+      checkCrisisHpStateConsistency([
+        ...ROSTER,
+        STATE_27,
+        kickEaten("12", "27"),
+      ]),
+    ).toEqual([]);
+    expect(
+      checkCrisisHpStateConsistency([
+        ...ROSTER,
+        STATE_27,
+        kickEaten("38", "27"),
+      ]),
+    ).toEqual([]);
+  });
+
+  it("kick-eaten: on the lockout's edge seconds the tick may predate the kick (user ruling 2026-10-17) — not adjudicated; inside the lockout it still is", () => {
+    // kick at 26.8 s, lockout 3 s: the 0:27 tick can read a sample from
+    // before the kick (38-1 shape), so a low above it is no contradiction —
+    // and so at 26.4 s (codex 20-F15-07: no sample until 27.8 s)
+    const late = (pct: string, at: string) =>
+      kickEaten(pct, at).replace(/26\.4/g, "26.8");
+    expect(
+      checkCrisisHpStateConsistency([...ROSTER, STATE_27, late("40", "27")]),
+    ).toEqual([]);
+    expect(
+      checkCrisisHpStateConsistency([
+        ...ROSTER,
+        STATE_27,
+        kickEaten("40", "27"),
+      ]),
+    ).toEqual([]);
+    // the same low on a second strictly inside the lockout stays red
+    expect(
+      checkCrisisHpStateConsistency([
+        ...ROSTER,
+        STATE_27.replace("0:27", "0:28"),
+        late("40", "28"),
+      ]),
+    ).toHaveLength(1);
+  });
+
+  it("kick-eaten: a tick below the low → red; a `dead` tick after the death second → red, on it → passes (ruling 2026-10-20)", () => {
+    // 0:28 — strictly inside the 26.4 s + 3 s lockout, not an edge second
+    const fails = checkCrisisHpStateConsistency([
+      ...ROSTER,
+      STATE_27.replace("0:27", "0:28"),
+      kickEaten("40", "28"),
+    ]);
+    expect(fails).toHaveLength(1);
+    expect(fails[0]).toContain("kick-eaten");
+    expect(fails[0]).toContain("40%");
+    expect(fails[0]).toContain("38%");
+    // 0:28 is the unit's first `dead` tick — its death second, whose live
+    // samples belong to the trough
+    expect(
+      checkCrisisHpStateConsistency([
+        ...ROSTER,
+        "0:28  [STATE]   friends 1(RShaman):71 2(FWarrior):dead",
+        kickEaten("12", "28"),
+      ]),
+    ).toEqual([]);
+    // dead already at 0:27: a trough at 0:28 is after the death
+    expect(
+      checkCrisisHpStateConsistency([
+        ...ROSTER,
+        "0:27  [STATE]   friends 1(RShaman):71 2(FWarrior):dead",
+        "0:28  [STATE]   friends 1(RShaman):71 2(FWarrior):dead",
+        kickEaten("12", "28"),
+      ]),
+    ).toHaveLength(1);
+  });
+
+  it("slow-defensive-response: `pressuredHpPct` is a trough too — below its `pressuredHpT` tick passes, above it is red", () => {
+    const slow = (hp: string) =>
+      `  - id=slow-defensive-response:P1:20 type=slow-defensive-response t=20s units=Heals-R ` +
+      `facts={t=20, leadCd=Deathmark, pressured=Tank-T, pressuredHpPct=${hp}, pressuredHpT=27, diedInWindow=no}`;
+    // 0:27 tick: Tank-T 38
+    expect(
+      checkCrisisHpStateConsistency([...ROSTER, STATE_27, slow("9")]),
+    ).toEqual([]);
+    expect(
+      checkCrisisHpStateConsistency([...ROSTER, STATE_27, slow("38")]),
+    ).toEqual([]);
+    const fails = checkCrisisHpStateConsistency([
+      ...ROSTER,
+      STATE_27,
+      slow("41"),
+    ]);
+    expect(fails).toHaveLength(1);
+    expect(fails[0]).toContain("slow-defensive-response");
+    expect(
+      crisisHpStateProbes([...ROSTER, STATE_27, slow("9")])[0]!.trough,
+    ).toBe(true);
+  });
+
+  it("the point readings did not move: cd-hoarded one point under its tick is still red", () => {
+    expect(
+      checkCrisisHpStateConsistency([
+        ...ROSTER,
+        STATE_27,
+        cdHoarded("27", "Tank-T", "37"),
+      ]),
+    ).toHaveLength(1);
+  });
+
+  it("the probe says which kind it is, and one predicate judges both (the scan script's count)", () => {
+    const probes = crisisHpStateProbes([
+      ...ROSTER,
+      STATE_27,
+      cdHoarded("27", "Tank-T", "37"),
+      kickEaten("12", "27"),
+    ]);
+    expect(probes.map((p) => [p.type, p.trough])).toEqual([
+      ["cd-hoarded", false],
+      ["kick-eaten", true],
+    ]);
+    expect(probes.map(crisisHpProbeMismatch)).toEqual([true, false]);
   });
 });
 

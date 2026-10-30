@@ -1,4 +1,5 @@
 import {
+  CombatUnitPowerType,
   CombatUnitReaction,
   CombatUnitSpec,
   LogEvent,
@@ -335,6 +336,109 @@ describe("context.resourceSnapshot unit tests", () => {
       expect(res.friendlyIdMap.get("Player1")).toBe(1);
     });
 
+    it("FT-T04 follow-up: Guardian Angel 下的 Guardian Spirit 写明 60 秒从光环到期起算、救到人是官方的 180 秒", () => {
+      const owner = makeUnit("player-1", {
+        name: "Player1",
+        spellCastEvents: [],
+      });
+      const cd = (
+        spellId: string,
+        spellName: string,
+        cooldownSeconds: number,
+      ) =>
+        ({
+          spellId,
+          spellName,
+          tag: "Defensive",
+          cooldownSeconds,
+          maxChargesDetected: 1,
+          neverUsed: false,
+          casts: [{ timeSeconds: 10 }],
+        }) as unknown as IMajorCooldownInfo;
+      const text = (cds: IMajorCooldownInfo[]) =>
+        buildPlayerLoadout(owner, "Holy Priest", cds, [], {
+          players: [],
+          alignedBurstWindows: [],
+        } as unknown as IEnemyCDTimeline).text;
+      expect(text([cd("47788", "Guardian Spirit", 60)])).toContain(
+        "Guardian Spirit [60s from when it expires unused, 180s after a save, lasts",
+      );
+      // 没有 Guardian Angel(条目就是官方冷却)和别的技能:照旧一个数字
+      expect(text([cd("47788", "Guardian Spirit", 180)])).toContain(
+        "Guardian Spirit [180s, lasts",
+      );
+      expect(text([cd("33206", "Pain Suppression", 180)])).toContain(
+        "Pain Suppression [180s",
+      );
+    });
+
+    it("FT-T06: 起手过但没读完的技能,[UNUSED] 写明试过", () => {
+      const ev = (event: string, spellId: string) =>
+        ({
+          spellId,
+          logLine: { event, timestamp: 1, parameters: [] },
+        }) as never;
+      const owner = makeUnit("player-1", {
+        name: "Player1",
+        spellCastEvents: [],
+        castStartEvents: [
+          ev("SPELL_CAST_START", "51514"),
+          ev("SPELL_CAST_START", "51514"),
+        ],
+      });
+      const cd = (spellId: string, spellName: string) =>
+        ({
+          spellId,
+          spellName,
+          cooldownSeconds: 30,
+          maxChargesDetected: 1,
+          neverUsed: true,
+          casts: [],
+        }) as unknown as IMajorCooldownInfo;
+      const res = buildPlayerLoadout(
+        owner,
+        "Restoration Shaman",
+        [
+          cd("51514", "Hex"),
+          cd("109304", "Exhilaration"),
+          cd("108271", "Astral Shift"),
+        ],
+        [],
+        { players: [], alignedBurstWindows: [] } as unknown as IEnemyCDTimeline,
+      );
+      expect(res.text).toContain(
+        "Hex [30s] [UNUSED — started 2×, never finished]",
+      );
+      // a cast bar started after the round is not this round's attempt (codex review)
+      const late = makeUnit("player-1", {
+        name: "Player1",
+        spellCastEvents: [],
+        castStartEvents: [
+          {
+            spellId: "51514",
+            logLine: {
+              event: "SPELL_CAST_START",
+              timestamp: 105_000,
+              parameters: [],
+            },
+          } as never,
+        ],
+      });
+      const lateRes = buildPlayerLoadout(
+        late,
+        "Restoration Shaman",
+        [cd("51514", "Hex")],
+        [],
+        { players: [], alignedBurstWindows: [] } as unknown as IEnemyCDTimeline,
+        undefined,
+        undefined,
+        { startTime: 0, endTime: 100_000 },
+      );
+      expect(lateRes.text).toMatch(/Hex \[30s[^\]]*\] \[UNUSED\]/);
+      expect(res.text).toMatch(/Exhilaration \[30s[^\]]*\] \[UNUSED\]/);
+      expect(res.text).toMatch(/Astral Shift \[30s[^\]]*\] \[UNUSED\]/);
+    });
+
     it("典型态: 携带天赋/PVP技能、未使用CD标签、队友CD、敌方CD时间轴与技能组", () => {
       // 1246126 Call of Ohn'ahra (Restoration Druid PvP Talent), maps to abilitySpellId: 33786
       const owner = makeUnit("player-1", {
@@ -589,5 +693,200 @@ describe("context.resourceSnapshot unit tests", () => {
       // Verify the two are byte-identical at render precision
       expect(snapshot10_2).toBe(snapshot10_0);
     });
+  });
+});
+
+// Triage 2026-09-29, res-readiness F-C3 (user ruling 2026-09-30, res R2 = A):
+// an owner cooldown that is off cooldown but costs more mana than the owner
+// has at that rendered second stays `rdy` and carries `(no mana a/b)`.
+describe("[RES] rdy: (no mana a/b) on an unaffordable owner cooldown (res-readiness F-C3)", () => {
+  const T0 = 1_000_000;
+  const mana = (s: number, current: number) => ({
+    advancedActorId: "Player-MW",
+    logLine: { timestamp: T0 + s * 1000 },
+    advancedActorPowers: [
+      { type: CombatUnitPowerType.Mana, current, max: 262_500 },
+    ],
+  });
+  const owner = (samples: unknown[]) =>
+    ({
+      id: "Player-MW",
+      name: "Monk-Realm",
+      spec: "270",
+      advancedActions: samples,
+      damageIn: [],
+      absorbsIn: [],
+    }) as never;
+  const cd = (spellId: string, spellName: string): IMajorCooldownInfo => ({
+    spellId,
+    spellName,
+    tag: "Defensive",
+    cooldownSeconds: 180,
+    maxChargesDetected: 1,
+    casts: [],
+    availableWindows: [],
+    neverUsed: true,
+  });
+  const snapshot = (
+    ownerUnit: unknown,
+    extra: Partial<Parameters<typeof buildResourceSnapshot>[0]> = {},
+  ) =>
+    buildResourceSnapshot({
+      timeSeconds: 374.6,
+      ownerCDs: [cd("388615", "Restoral"), cd("115203", "Fortifying Brew")],
+      ownerName: "Monk-Realm",
+      ownerSpec: "Mistweaver Monk",
+      teammateCDs: [],
+      ccTrinketSummaries: [],
+      enemyCDTimeline: { players: [], alignedBurstWindows: [] },
+      matchStartMs: T0,
+      ownerUnit: ownerUnit as never,
+      ...extra,
+    });
+
+  it("full form: the unaffordable cooldown stays ready and is tagged with mana / cost at the rendered second", () => {
+    // the reading of the rendered second 374 (not of 374.6)
+    const line = snapshot(owner([mana(374, 6_055), mana(374.6, 200_000)]));
+    expect(line).toContain("rdy:Restoral(no mana 6.1k/11.5k),Fortifying Brew");
+  });
+
+  it("delta form: the tag rides on the +added entry; the delta keys are the bare names", () => {
+    const line = snapshot(owner([mana(374, 6_055)]), {
+      prevReadyNames: ["Fortifying Brew"],
+    });
+    expect(line).toContain("rdy:Δ +Restoral(no mana 6.1k/11.5k)");
+    // already-ready and unchanged → nothing re-printed
+    expect(
+      snapshot(owner([mana(374, 6_055)]), {
+        prevReadyNames: ["Restoral", "Fortifying Brew"],
+      }),
+    ).not.toContain("no mana");
+    expect(
+      computeReadyNames(
+        374,
+        [cd("388615", "Restoral"), cd("115203", "Fortifying Brew")],
+        [],
+      ),
+    ).toEqual(["Restoral", "Fortifying Brew"]);
+  });
+
+  it("enough mana, no reading, or a spell without a mana cost → no tag (fail open)", () => {
+    expect(snapshot(owner([mana(374, 200_000)]))).toContain(
+      "rdy:Restoral,Fortifying Brew",
+    );
+    expect(snapshot(owner([]))).toContain("rdy:Restoral,Fortifying Brew");
+  });
+});
+
+describe("F20 D24 / D25 — the [RES] enemy: column", () => {
+  const press = (
+    spellId: string,
+    spellName: string,
+    castTimeSeconds: number,
+    buffEndSeconds: number,
+  ) => ({
+    spellId,
+    spellName,
+    castTimeSeconds,
+    cooldownSeconds: 120,
+    availableAgainAtSeconds: castTimeSeconds + 120,
+    dangerWeight: 1,
+    buffEndSeconds,
+  });
+  const row = (
+    timeSeconds: number,
+    offensiveCDs: ReturnType<typeof press>[],
+  ): string =>
+    buildResourceSnapshot({
+      timeSeconds,
+      ownerCDs: [],
+      ownerName: "Owner-Realm",
+      ownerSpec: "Holy Priest",
+      teammateCDs: [],
+      ccTrinketSummaries: [],
+      enemyCDTimeline: {
+        players: [
+          {
+            playerName: "Dh-Realm",
+            specName: "Devourer Demon Hunter",
+            offensiveCDs,
+          },
+        ],
+        alignedBurstWindows: [],
+      } as unknown as IEnemyCDTimeline,
+    });
+
+  it("D24: a re-press that refreshes the running aura is one window with the latest end (1263fff6 1:41 + 1:45 Soul Immolation)", () => {
+    const line = row(106.6, [
+      press("1241937", "Soul Immolation", 101.75, 110.77),
+      press("1241937", "Soul Immolation", 105.26, 110.77),
+    ]);
+    expect(line).toContain(
+      "enemy:Soul Immolation/Devourer Demon Hunter(5s left)",
+    );
+    expect(line.match(/Soul Immolation/g)).toHaveLength(1);
+  });
+
+  it("D25: a press inside the row's own second is spent by it (pressSpentBy), not dropped by the floored row time (1263fff6 0:11 Avenging Wrath)", () => {
+    // row at 11.85 floors to 11; the press at 11.10 is in that second
+    const line = row(11.85, [press("454351", "Avenging Wrath", 11.1, 35.1)]);
+    expect(line).toContain("enemy:Avenging Wrath/Devourer Demon Hunter(24s left)");
+    // a press in the next second is not
+    expect(row(10.9, [press("454351", "Avenging Wrath", 11.1, 35.1)])).not.toContain(
+      "enemy:",
+    );
+  });
+});
+
+describe("F20 D23 — an override variant is its kit row's button in the enemy loadout", () => {
+  it("Predator's Wake pressed under its own name adds no second entry beside The Hunt", () => {
+    const owner = makeUnit("player-1", { name: "Player1" });
+    const dh = makeUnit("enemy-1", {
+      name: "Dh",
+      spec: CombatUnitSpec.DemonHunter_Devourer,
+    });
+    const res = buildPlayerLoadout(
+      owner,
+      "Holy Priest",
+      [],
+      [],
+      {
+        players: [
+          {
+            playerName: "Dh",
+            specName: "Devourer Demon Hunter",
+            offensiveCDs: [
+              {
+                spellId: "1259431",
+                spellName: "Predator's Wake",
+                cooldownSeconds: 90,
+                castTimeSeconds: 146,
+                buffEndSeconds: 148,
+                availableAgainAtSeconds: 236,
+              },
+            ],
+          },
+        ],
+        alignedBurstWindows: [],
+      } as unknown as IEnemyCDTimeline,
+      [dh],
+      [
+        {
+          player: dh,
+          cds: [
+            {
+              spellId: "1246167",
+              spellName: "The Hunt",
+              cooldownSeconds: 90,
+              maxChargesDetected: 1,
+              casts: [],
+              neverUsed: false,
+            } as unknown as IMajorCooldownInfo,
+          ],
+        },
+      ],
+    );
+    expect(res.text).toContain("The Hunt");
+    expect(res.text).not.toContain("Predator's Wake");
   });
 });

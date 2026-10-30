@@ -2,13 +2,13 @@
 // the serialized packs, run auditDeepDives, and quantify the pass rate,
 // classifying violations by cause. Answers: does the model stay disciplined once
 // it is given depth.
-import { existsSync, readFileSync, readdirSync } from "fs";
-import { join } from "path";
 import {
   auditDeepDives,
   type DeepDivePack,
   parseModelJsonArray,
 } from "@gladlog/analysis";
+import { existsSync, readdirSync,readFileSync } from "fs";
+import { join } from "path";
 
 const outDir = process.argv[2] ?? "/tmp/deepdive-smoke";
 const respDir = join(outDir, "responses");

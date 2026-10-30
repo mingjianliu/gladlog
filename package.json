@@ -8,7 +8,7 @@
     "test": "npm run test --workspaces --if-present",
     "coverage": "npm run coverage --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "lint": "eslint .",
+    "lint": "eslint . --max-warnings 1572",
     "lint:fix": "eslint . --fix",
     "presubmit": "npm run lint && npm run verify:doc-commands && npm run typecheck && npm test && npm -w @gladlog/desktop run verify:vision && npm -w @gladlog/desktop run build",
     "verify:doc-commands": "node --test scripts/check-doc-commands.test.mjs && node scripts/check-doc-commands.mjs --root .",

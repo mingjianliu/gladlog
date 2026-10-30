@@ -30,17 +30,16 @@
  * only `countsAtThresholds` (pure, cheap) runs per cell.
  */
 import {
-  ccSpellIds,
   cdAvailableAt,
   cdHoardedEvents,
   cdSpentIdleEvents,
   enemyHealerCcWindows,
-  enemyMinHpPctInWindow,
   extractMajorCooldowns,
   type IEnemyHealerCcWindow,
   type IMajorCooldownInfo,
   isHealerSpec,
   type IThreatLevelOverrides,
+  lowestHpTroughInEventSpan,
   type MatchThreatLevel,
   matchThreatLevel,
   missedSyncWindowEvents,
@@ -54,6 +53,7 @@ import {
 // crisis-no-response uses.
 import { crisisDecisionPoints } from "@gladlog/analysis/src/analysis/crisisDecisionPoints";
 import { lookupSyncWindowPrior } from "@gladlog/analysis/src/data/syncWindowPrior";
+import { isControlCast } from "@gladlog/analysis/src/utils/castMissRows";
 import type { ICombatUnit } from "@gladlog/parser-compat";
 
 import { type LegacyRound, splitTeams } from "./storeAccess.js";
@@ -73,6 +73,9 @@ export interface RoundContext {
   enemies: ICombatUnit[];
   owner: ICombatUnit;
   ownerCds: IMajorCooldownInfo[];
+  /** the ledger with the spec-baseline rows — cd-hoarded's alone (ruling
+   * P-W6), as production's candidateFindings wires it */
+  ownerCdsWithBaseline: IMajorCooldownInfo[];
   ccWindows: IEnemyHealerCcWindow[];
   teamOffensiveCds: Array<IMajorCooldownInfo & { ownerName: string }>;
   /** unsynced-burst 可行性门:此刻队伍有没有硬控转好(与生产同一判据)。 */
@@ -171,12 +174,15 @@ export function buildRoundContext(
   if (friends.length === 0 || enemies.length === 0) return null;
   const owner = friends.find((u) => isHealerSpec(u.spec)) ?? friends[0];
 
-  let ownerCds: IMajorCooldownInfo[] = [];
+  let ownerCdsWithBaseline: IMajorCooldownInfo[] = [];
   try {
-    ownerCds = extractMajorCooldowns(owner, legacy);
+    ownerCdsWithBaseline = extractMajorCooldowns(owner, legacy, {
+      withBaselineOnly: true,
+    });
   } catch {
-    ownerCds = [];
+    ownerCdsWithBaseline = [];
   }
+  const ownerCds = ownerCdsWithBaseline.filter((cd) => !cd.baselineOnly);
 
   const ccWindows = enemyHealerCcWindows(friends, enemies, legacy);
   const teamOffensiveCds: Array<IMajorCooldownInfo & { ownerName: string }> =
@@ -189,7 +195,7 @@ export function buildRoundContext(
   for (const f of friends) {
     try {
       for (const cd of extractMajorCooldowns(f, legacy)) {
-        if (ccSpellIds.has(cd.spellId)) teamCcCds.push(cd);
+        if (isControlCast(cd.spellId)) teamCcCds.push(cd);
         if (!cd.isThroughput) continue;
         teamOffensiveCds.push({ ...cd, ownerName: f.name });
       }
@@ -208,6 +214,7 @@ export function buildRoundContext(
     enemies,
     owner,
     ownerCds,
+    ownerCdsWithBaseline,
     ccWindows,
     teamOffensiveCds,
     teamCcReadyAt: (tSeconds: number) =>
@@ -260,7 +267,8 @@ export function countsAtThresholds(
     threatOverrides?: IThreatLevelOverrides;
   } = {},
 ): RoundCandidateCounts {
-  const { friends, enemies, owner, ownerCds, legacy } = ctx;
+  const { friends, enemies, owner, ownerCds, ownerCdsWithBaseline, legacy } =
+    ctx;
 
   let threatLevel: MatchThreatLevel = "low";
   try {
@@ -296,8 +304,12 @@ export function countsAtThresholds(
           points: crisisDecisionPoints(f, legacy),
         })),
     ];
-    cdHoardedCapped = cdHoardedEvents(sources, ownerCds, owner).length;
-    cdHoardedRaw = cdHoardedEvents(sources, ownerCds, owner, {
+    cdHoardedCapped = cdHoardedEvents(
+      sources,
+      ownerCdsWithBaseline,
+      owner,
+    ).length;
+    cdHoardedRaw = cdHoardedEvents(sources, ownerCdsWithBaseline, owner, {
       cap: UNCAPPED,
     }).length;
   } catch {
@@ -334,7 +346,8 @@ export function countsAtThresholds(
     try {
       const syncProbes = {
         enemyMinHpPctAt: (from: number, to: number) =>
-          enemyMinHpPctInWindow(enemies, legacy, from, to),
+          lowestHpTroughInEventSpan(enemies, legacy.startTime, from, to)
+            ?.pct ?? null,
         // Mirror teamPlayEvents' production wiring exactly (2026-09-02
         // resurrection): same death list, same bracket-keyed reference —
         // calibration densities are only comparable if the door is the same.

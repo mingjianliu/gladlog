@@ -5,7 +5,8 @@
  *  C1 anchoring complete: every [CONTESTED] line must match the full template
  *     (time span, duration, team min HP, CC spell name, named enemy healer,
  *     the literal "DR Full", trinket status, amount healed, CC cast count,
- *     enemy interrupts ready count) -- 0 unanchored.
+ *     and one of the three tails: enemy interrupts ready count + cast risk /
+ *     instant / neither) -- 0 unanchored.
  *  C2 HP band: 70 ≤ team min HP < 85 (CONTESTED_TEAM_HP_MIN /
  *     SLACK_TEAM_HP_THRESHOLD) -- 0 sub-70%.
  *  C3 EV wording: the line must end with the complete disclaimer
@@ -17,6 +18,10 @@
  * Usage: BASE_DIR=<run dir> npx tsx packages/eval/scripts/contestedContract.ts
  * Exits 1 on any violation.
  */
+import {
+  CONTESTED_LINE_RE_SRC,
+  contestedTailForm,
+} from "@gladlog/analysis/src/utils/healerOffenseAnalysis";
 import fs from "fs-extra";
 import path from "path";
 
@@ -24,8 +29,11 @@ const MAX_CONTESTED_FACTS = 2;
 const HP_MIN = 70;
 const HP_MAX_EXCLUSIVE = 85;
 
-const LINE_RE =
-  /^ {2}\[CONTESTED\] (\d+:\d{2})–(\d+:\d{2}) \((\d+)s, team min HP (\d+)%\): (.+?) ready on enemy healer (\S+) \(DR Full, trinket ([\w ]+?)\); you healed (\d+)k, cast (\d+) CC; enemy interrupts ready: (\d+) — contested trade: a CC here competed with continued healing AND carried cast risk \(EV question, not a verdict\)\.$/;
+// The producer's own line pattern and tail reader (FT I12: the tail has three
+// forms — cast risk with the interrupt count, instant, neither — and every
+// one ends with the EV disclaimer; whether a line's form fits its control is
+// `checkContestedCastRisk`'s class in promptQualityCheck.ts).
+const LINE_RE = new RegExp(CONTESTED_LINE_RE_SRC);
 
 async function main() {
   const baseDir = process.env.BASE_DIR;
@@ -60,7 +68,7 @@ async function main() {
         );
       }
       const m = line.match(LINE_RE);
-      if (!m) {
+      if (!m || !contestedTailForm(m[10]!)) {
         violations.push(
           `${f}:${i + 1} C1/C3 unanchored or missing EV framing: ${line.trim().slice(0, 120)}`,
         );

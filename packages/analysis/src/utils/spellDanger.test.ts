@@ -37,9 +37,13 @@ describe("OFFENSIVE_CD_SPELL_IDS — canonical membership", () => {
     }
   });
 
-  it("the six former forward-gap ids (classMetadata-only, live) are members now", () => {
+  it("Empower Rune Weapon is not an offensive cooldown: a 12.x rotation button with no aura (triage kick-eaten F-K2, ruling C7)", () => {
+    expect(OFFENSIVE_CD_SPELL_IDS.has("47568")).toBe(false);
+    expect(isOffensiveSpell("47568")).toBe(false);
+  });
+
+  it("the five former forward-gap ids (classMetadata-only, live) are members now", () => {
     for (const id of [
-      "47568", // Empower Rune Weapon
       "114050", // Ascendance (Elemental)
       "123904", // Invoke Xuen, the White Tiger
       "191427", // Metamorphosis
@@ -62,8 +66,14 @@ describe("OFFENSIVE_CD_SPELL_IDS — canonical membership", () => {
     }
   });
 
-  it("union-minus-dead arithmetic: 42 ∪ 46 (overlap 19) − 9 dead = 60 (2026-09-18: + Zenith, + 10 casts and the Voidform aura id from offensiveCdGapScan)", () => {
-    expect(OFFENSIVE_CD_SPELL_IDS.size).toBe(60);
+  it("union-minus-dead arithmetic: 43 ∪ 45 (overlap 19) − 9 dead = 60 (2026-09-18: + Zenith, + 10 casts and the Voidform aura id from offensiveCdGapScan; 2026-09-30: + Heroism 204362, triage G7-P1; 2026-10-01: − Empower Rune Weapon 47568, triage kick-eaten F-K2; 2026-10-20: + 9 racial window ids and Ultimate Penitence 421453, user ruling)", () => {
+    expect(OFFENSIVE_CD_SPELL_IDS.size).toBe(70);
+    // user ruling 2026-10-20: racial damage buffs and Ultimate Penitence are
+    // offensive cooldowns; the racial nukes are not windows
+    for (const id of ["20572", "33697", "33702", "26297", "274738", "274742", "421453"])
+      expect(OFFENSIVE_CD_SPELL_IDS.has(id)).toBe(true);
+    expect(OFFENSIVE_CD_SPELL_IDS.has("255647")).toBe(false); // Light's Judgment
+    expect(OFFENSIVE_CD_SPELL_IDS.has("204362")).toBe(true);
     // live renumber of a registered spell, and the Shadow successor
     expect(OFFENSIVE_CD_SPELL_IDS.has("446035")).toBe(true);
     expect(OFFENSIVE_CD_SPELL_IDS.has("228260")).toBe(true);
@@ -121,6 +131,27 @@ describe("both consumers read the canonical table", () => {
       ],
     } as any;
     expect(hasOffensiveSpellActive(unit, 2_000, null)).toBe(true);
+  });
+
+  it("fact2: asked of any source, an opponent's offensive DEBUFF on the unit is not the unit's own cooldown", () => {
+    // Feral Frenzy's bleed 274838 (its cast 274837) put on an enemy rogue by
+    // the friendly druid — ab7fbe2e 0:17
+    const unit = (auraType: string) =>
+      ({
+        id: "E1",
+        auraEvents: [
+          {
+            spellId: "274838",
+            srcUnitId: "F1",
+            auraType,
+            timestamp: 1_000,
+            logLine: { event: LogEvent.SPELL_AURA_APPLIED, timestamp: 1_000 },
+          },
+        ],
+      }) as never;
+    expect(hasOffensiveSpellActive(unit("DEBUFF"), 2_000, null)).toBe(false);
+    // asked for those sources by name, the debuff is still read
+    expect(hasOffensiveSpellActive(unit("DEBUFF"), 2_000, new Set(["F1"]))).toBe(true);
   });
 
   it("…and no longer reacts to a dead id's aura", () => {

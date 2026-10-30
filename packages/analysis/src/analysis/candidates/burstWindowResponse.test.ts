@@ -36,6 +36,7 @@ const point = (
     tMs: 0,
     tSec: 40,
     endSec: 55,
+    outcomeEndSec: 55,
     durationSec: 15,
     leadCd: {
       spellId: "360194",
@@ -240,10 +241,11 @@ describe("burstWindowResponseEvents — the rendered facts", () => {
       leadCdId: "360194",
       casterSpec: "Assassination Rogue",
       caster: "Rogue-R",
-      extras: "Recklessness 2s later",
+      extras: "Recklessness by Warr-R (Arms Warrior) 2s later",
       pressured: "Mate-R",
       pressuredHpPct: "31",
       pressuredHpT: "45",
+      windowEndT: "55",
       diedInWindow: "no",
       refN: "2534",
       refDeathResp: "9",
@@ -254,6 +256,51 @@ describe("burstWindowResponseEvents — the rendered facts", () => {
     });
     expect(evts[0]!.id).toBe("slow-defensive-response:h1:40");
     expect(evts[0]!.spellId).toBe("360194");
+  });
+
+  // FT-T03 (user ruling 2026-10-10, D7): "fell to N% inside the window" is
+  // a trough — the engine's true-minimum pair — while which windows are
+  // listed, and in what order, still reads the grid pair.
+  it("FT-T03: `pressuredHpPct` / `pressuredHpT` are the engine's trough pair; the order under the cap is still the grid minimum's", () => {
+    const withTrough = (
+      tSec: number,
+      minHpPct: number,
+      troughHpPct: number,
+      troughHpSec: number,
+    ) =>
+      point({
+        tSec,
+        endSec: tSec + 15,
+        pressured: {
+          ...point().pressured!,
+          minHpPct,
+          minHpSec: tSec + 5,
+          troughHpPct,
+          troughHpSec,
+        },
+      });
+    const one = burstWindowResponseEvents(
+      [withTrough(40, 31, 8, 43)],
+      owner,
+      probes(),
+    );
+    expect(one[0]!.facts.pressuredHpPct).toBe("8");
+    expect(one[0]!.facts.pressuredHpT).toBe("43");
+    // cap 1: the window with the lower GRID minimum is the one kept, although
+    // the other one's trough is lower
+    const kept = burstWindowResponseEvents(
+      [withTrough(40, 31, 5, 43), withTrough(80, 20, 18, 84)],
+      owner,
+      probes(),
+      { cap: 1 },
+    );
+    expect(kept).toHaveLength(1);
+    expect(kept[0]!.t).toBe(80);
+    expect(kept[0]!.facts.pressuredHpPct).toBe("18");
+    // a hand-built point without the trough pair: the grid pair stands in
+    const plain = burstWindowResponseEvents([point()], owner, probes());
+    expect(plain[0]!.facts.pressuredHpPct).toBe("31");
+    expect(plain[0]!.facts.pressuredHpT).toBe("45");
   });
 
   it("`t` and `pressuredHpT` are whole rendered seconds (render-grid rule)", () => {
@@ -302,7 +349,40 @@ describe("burstWindowResponseEvents — facts.attempted (S1)", () => {
       undefined,
       attempts,
     );
-    expect(e!.facts!.attempted).toBe("曾尝试施放被拒(无法在昏迷时那样做×2)");
+    expect(e!.facts!.attempted).toBe(
+      "pressed but rejected (under crowd control×2)",
+    );
+  });
+  it("fact5 D6 (ruling C1, extended 2026-10-25): a GCD-refused press of a READY tool, never cast after, counts; of a tool not ready, it does not", () => {
+    const notReady = (tSeconds: number) => ({
+      ...fail(tSeconds),
+      reason: "Not yet recovered",
+    });
+    const gcd = {
+      rawStreams: {
+        available: true,
+        manaSamples: [],
+        castFailed: [notReady(158)],
+      },
+      ownerId: "h1",
+      // the owner's own cast 0.6 s before: the GCD was running
+      ownCastSuccessSeconds: [157.4],
+    };
+    const run = (readyAt?: (s: number) => boolean) =>
+      burstWindowResponseEvents(
+        [point({ tSec: 156 })],
+        owner,
+        probes(),
+        undefined,
+        {
+          ...gcd,
+          tools: [{ spellId: "6940", casts: [], ...(readyAt ? { readyAt } : {}) }],
+        },
+      )[0]!.facts!.attempted;
+    expect(run(() => true)).toBe("pressed but rejected (not ready yet×1)");
+    expect(run(() => false)).toBeUndefined();
+    // no readiness reading → dropped as before
+    expect(run()).toBeUndefined();
   });
   it("no rejects, or no raw streams → no fact", () => {
     expect(

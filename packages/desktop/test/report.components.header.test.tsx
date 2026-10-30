@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { render, screen } from "@testing-library/react";
-import { ReportHeader } from "../src/renderer/src/report/components/ReportHeader";
+
 import { Meters } from "../src/renderer/src/report/components/Meters";
+import { ReportHeader } from "../src/renderer/src/report/components/ReportHeader";
 import { abbrevAmount } from "../src/renderer/src/report/derive/meterRows";
 import { deriveSummary } from "../src/renderer/src/report/derive/summary";
 import { loadMatchFixture } from "./fixtures/loadFixture";

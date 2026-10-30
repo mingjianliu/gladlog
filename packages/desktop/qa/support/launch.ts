@@ -1,7 +1,3 @@
-import { readdirSync } from "fs";
-import { dirname, join, resolve } from "path";
-import { fileURLToPath } from "url";
-
 import {
   _electron as electron,
   type ElectronApplication,
@@ -9,6 +5,9 @@ import {
   type Locator,
   type Page,
 } from "@playwright/test";
+import { readdirSync } from "fs";
+import { dirname, join, resolve } from "path";
+import { fileURLToPath } from "url";
 
 /** Entry point of the packaged output. Resolved relative to this file so cwd
  * cannot affect it. */

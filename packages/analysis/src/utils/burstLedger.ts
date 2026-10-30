@@ -1,19 +1,42 @@
-import { AtomicArenaCombat, ICombatUnit } from "@gladlog/parser-compat";
+import {
+  AtomicArenaCombat,
+  ICombatUnit,
+  LogEvent,
+} from "@gladlog/parser-compat";
 
+import { ownEffectAurasKeyedBy } from "../data/castEffectAuras";
+import { MITIGATION_TABLE } from "../data/mitigationData";
 import { SPELL_CATEGORIES as spellsData } from "../data/spellCategories";
 import { getEnglishSpellName } from "../data/spellEffectData";
-import { getUnitHpAtTimestamp, HP_SAMPLE_RADIUS_MS } from "./cooldowns";
-import { SELF_CAST_NOOP_EXTERNAL_IDS } from "./cooldowns";
+import { isAllyCopyWallId } from "./allyCopyWall";
+import { buildAuraIntervals } from "./auraIntervals";
+import { isCasterSideLinkAura } from "./brokenRowBreaker";
 import {
-  BURST_CLUSTER_SECONDS,
-  IEnemyCDCast,
-  reconstructEnemyCDTimeline,
-} from "./enemyCDs";
-import type { IKickAuditEntry } from "./kickAudit";
+  gridEndpointHpPct,
+  hpTroughInWindow,
+  isDeadAtRenderSecond,
+  isHpTroughWorthPrinting,
+} from "./cooldowns";
+import { IEnemyCDCast, reconstructEnemyCDTimeline } from "./enemyCDs";
+import {
+  FULL_IMMUNITY_IDS,
+  holderFirstOwnActionAfterMs,
+  joinReappliedIntervals,
+  MITIGATION_AURA_MIN_PCT,
+  pressSecondsOfAura,
+  SAVE_AURA_END_UNSEEN_IDS,
+} from "./enemyDefensives";
+import { isDeferralAbsorb } from "./incomingPressure";
+import {
+  type IKickAuditEntry,
+  jukedByFakeText,
+  jukedByStoppedChannelText,
+  kickMissTag,
+} from "./kickAudit";
 import { MIN_WINDOW_SECONDS } from "./killWindowTargetSelection";
 import { IOffensiveWindow } from "./offensiveWindows";
-import { fmtTime } from "./renderGrid";
-import { buildFilteredAuraIntervals } from "./utils";
+import { fmtTime, toRenderSecond } from "./renderGrid";
+import { roundEndMs } from "./roundEnd";
 
 type SpellEntry = { type: string };
 const SPELLS = spellsData as Record<string, SpellEntry>;
@@ -23,17 +46,56 @@ const SPELLS = spellsData as Record<string, SpellEntry>;
 // GH #31 ② (2026-09-02): shared official-face predicate replaces the hand set
 // (immunities stay — immuneSchools covers most, the category term keeps parity
 // for entries the face lacks).
-import { isKillWindowMajorDefensive } from "../data/abilityProfile";
+import {
+  abilityProfile,
+  isKillWindowMajorDefensive,
+} from "../data/abilityProfile";
 import { spellEffectData } from "../data/spellEffectData";
-const DEF_OR_IMMUNE_IDS = new Set<string>([
+const DEF_OR_IMMUNE_CAST_IDS = new Set<string>([
   // Enumerate the official universe through the shared predicate — the same
   // ids the span state machine reasons with, so the two can never disagree.
   ...Object.keys(spellEffectData).filter(isKillWindowMajorDefensive),
   ...Object.keys(SPELLS).filter((id) => SPELLS[id]?.type === "immunities"),
 ]);
+/** …and the AURA a wall logs under when it is not its cast id — the ledger
+ * matches aura intervals (F15 / fact1215 C10: 62fdbf2e Burst #2 missed
+ * Vizine's Greater Invisibility 110959 → 110960 that KILL ATTEMPTS named).
+ * fact2 C10 (2026-10-20): every cast's own same-named effect aura from the
+ * one cast→effect table (`ownEffectAurasKeyedBy`), not the three of the
+ * mitigation table's hand map — Rallying Cry 97462 → 97463 and Spirit Link
+ * Totem 98008 → 325174 are kill-window major defensives the ledger never
+ * named. */
+const DEF_OR_IMMUNE_IDS = new Set<string>([
+  ...DEF_OR_IMMUNE_CAST_IDS,
+  ...Object.keys(
+    ownEffectAurasKeyedBy((id) => DEF_OR_IMMUNE_CAST_IDS.has(id)),
+  ).filter((aura) => !isHealOnlyAura(aura)),
+]);
 
-/** A burst with no buff-duration data still gets this measurement span (= the grouping reach). */
-const MIN_BURST_SPAN_S = BURST_CLUSTER_SECONDS;
+/** fact3 D59 (fe64d179): an effect aura whose official profile only heals
+ * (Divine Hymn 64844, +4 % healing received on every ally of the channel)
+ * is no defensive on its holder — no mitigation, no absorb, no immunity. */
+function isHealOnlyAura(aura: string): boolean {
+  const p = abilityProfile(aura);
+  return (
+    (p.healsSelf || p.healsOthers || p.healingReceivedPct !== undefined) &&
+    p.mitigationPct === undefined &&
+    !p.absorbs &&
+    p.immuneSchools === undefined
+  );
+}
+
+/** The percentage of an ally's copy of a talent-shared wall on the target
+ * (`isAllyCopyWallId` + `pctOnOthers`), undefined for anything else — the
+ * caster's own copy is its own wall. */
+export function allyCopyPctOf(
+  d: Pick<IBurstDefensiveHit, "spellId" | "appliedByOther">,
+): number | undefined {
+  if (!d.appliedByOther || !isAllyCopyWallId(d.spellId)) return undefined;
+  const pct = MITIGATION_TABLE[d.spellId]?.pctOnOthers;
+  return pct !== undefined && pct < MITIGATION_AURA_MIN_PCT ? pct : undefined;
+}
+
 /** A target death up to this long after the burst ends still credits the burst. */
 /** Death within this many seconds after a span still credits the span as the
  * kill. Exported 2026-08-18: killAttempts.ts judges "did this attempt convert"
@@ -55,6 +117,12 @@ export interface IBurstDefensiveHit {
   overlapSeconds: number;
   /** true = full immunity (Divine Shield / Turtle class); false = major damage reduction. */
   isImmunity: boolean;
+  /** Matched through the wall's logged aura id, not its cast id
+   * (`ownEffectAurasKeyedBy`, F15 C10 / fact2 C10). The ledger line states it; the
+   * readers whose predicate and reference data were built on the cast-id set
+   * (deepDive's coaching pack, dpsMetrics' `burstIntoDefensiveRatio`) leave
+   * it out (codex 20-F15-13). */
+  viaLoggedAura?: true;
   /** true = the aura was applied by a unit OTHER than the target (a talent-shared
    * wall such as Flameshaper Obsidian Scales on an ally). Consumers price it
    * through `resolveMitigation(id, { carrierIsCaster: !appliedByOther })`. Optional so hand-built
@@ -107,6 +175,13 @@ export interface IBurstTargetDamage {
   damage: number;
 }
 
+/** One enemy's share of a burst: `damage` is what landed plus what its
+ * shields absorbed (the figure the target is chosen on); `absorbed` is the
+ * absorbed part of it — the attacker's `SPELL_ABSORBED` rows (T12 ⑤). */
+export interface IBurstLedgerTargetDamage extends IBurstTargetDamage {
+  absorbed: number;
+}
+
 export interface IBurstLedgerEntry {
   fromSeconds: number;
   toSeconds: number;
@@ -115,32 +190,112 @@ export interface IBurstLedgerEntry {
     spellId: string;
     spellName: string;
     castTimeSeconds: number;
+    /** end of this CD's own active span (`burstCastSpan`) — the header's
+     *  span is the union (triage sync-burst F-L4) */
+    spanToSeconds: number;
   }>;
   /** Player damage to enemy players inside the span (pets excluded from targeting). */
   totalDamage: number;
-  damageByTarget: IBurstTargetDamage[];
+  /** Every enemy player the burst damaged, largest `damage` first — the list
+   * `dominantTarget` is the head of. The `Target:` line prints the second
+   * entry too (T12 ⑤): the head is chosen on landed + absorbed, so it can
+   * lead by a little, and on landed damage alone not at all. */
+  damageByTarget: IBurstLedgerTargetDamage[];
   /** Enemy player that received the most damage; null when the burst hit nothing. */
   dominantTarget: {
     unitId: string;
     unitName: string;
+    /** The `[STATE]`-grid reading (`gridHpPct`) at the burst's rendered
+     * start / end second — the numbers the same-second `[STATE]` ticks print
+     * (triage hp-state F-B1; the raw-millisecond samples disagreed with the
+     * tick on 115 of 142 ledger targets). `hpEndPct` is 0 when the target is
+     * dead at the end second. */
     hpStartPct: number | null;
     hpEndPct: number | null;
+    /** The lowest HP inside the rendered span and the second it happened
+     * at, when it is a trough worth printing (`isHpTroughWorthPrinting`, the
+     * `[DMG SPIKE]` rule); null otherwise, and whenever an endpoint is
+     * unknown or dead. A TROUGH since FT-T03 (user ruling 2026-10-10, D7):
+     * `hpTroughInWindow`, the true minimum of every sample in the displayed
+     * seconds — not the lowest whole-second tick, so it can sit below every
+     * `[STATE]` number of the span. The two endpoints above stay grid
+     * readings, and nothing decides on this field (`isBurstConverted` reads
+     * `died`, the cards read the endpoints). */
+    hpLow: { pct: number; atSeconds: number } | null;
     damage: number;
+    /** The part of `damage` the target's shields absorbed. */
+    absorbed: number;
     defensivesHit: IBurstDefensiveHit[];
     /** Target died inside [from, to + KILL_CREDIT_SLACK_S]. */
     died: boolean;
   } | null;
-  /** Ally offensive CDs whose active span overlaps this burst (alignment evidence). */
-  allyCDsOverlapping: Array<{ playerName: string; spellName: string }>;
+  /** Enemy players OTHER than the dominant target that this burst damaged and
+   * that died inside [from, to + KILL_CREDIT_SLACK_S] — the window `died`
+   * uses (triage sync-burst F-L1: a burst whose first victim died early was
+   * named after the survivor who took the rest, and printed no death). Keyed
+   * on the burst's own damage, not a cast target. `dominantTarget.died` and
+   * every conversion count are unchanged. */
+  otherDeaths: Array<{ unitName: string; atSeconds: number }>;
+  /** Ally offensive CDs whose active span overlaps this burst IN TIME — the
+   * whole of what is measured (endpoints touching count; no minimum; no
+   * target test). `dpsMetrics`' `alignedBurstRatio` counts bursts with a
+   * non-empty list and is not changed by the two readings below. */
+  allyCDsOverlapping: Array<{
+    playerName: string;
+    spellName: string;
+    /** Seconds the ally CD's span and this burst's span share (0 for an
+     * instant cooldown, whose span has no length, and for spans that only
+     * touch). */
+    overlapSeconds: number;
+    /** The enemy player that ally damaged most inside the shared seconds —
+     * landed + absorbed, the measure `dominantTarget` is chosen on — or null
+     * when they damaged no enemy player in them (T12 ⑦: 0e0663e6's Voidform
+     * was "aligned" with a burst on the paladin while 0.73M of the priest's
+     * damage went to the hunter and 0.34M to the paladin). */
+    topTarget: IBurstTargetDamage | null;
+  }>;
 }
 
-/** Active span of one offensive CD cast: buff duration when known, grouping reach otherwise.
- * Exported for the replay burst visual — the pulse must cover exactly the span the ledger audits. */
+/**
+ * Active span of one offensive CD cast: from the cast to the end of its
+ * effect (`buffEndSeconds` — where the log shows the effect ended,
+ * `observedEffectEndSeconds`, else the official duration for the caster),
+ * nothing more. One predicate for every reader of "is this cooldown
+ * running": the burst ledger's grouping / span / ally overlap, the
+ * kill-attempt burst clusters (`killAttempts.ts`), kick-eaten's
+ * `enemyBurst` / `ourBurst` (`kickPressure.ts`), `unsyncedBurstEvents`'
+ * effect window, missed-sync-window's `castEntersWindow` (`castEndS`, since
+ * work order 2026-10-14d Part 2c), and the replay burst pulse (desktop
+ * `replayHighlights.ts` — the pulse covers exactly the span the ledger
+ * audits).
+ *
+ * Until 2026-10-01 the span was `max(buffEnd, cast + 10 s)` — a 10 s floor
+ * borrowed from the clustering reach (`BURST_CLUSTER_SECONDS`). User ruling
+ * A14 = B (2026-09-30, triage kick-eaten F-K1 × sync-burst F-L3): the floor
+ * goes, globally. It named cooldowns whose effect had ended seconds earlier
+ * as "running": c2058ed4 @18.2 `enemyBurst=Boomstick` (a 3 s effect cast at
+ * 10.9), and 2abc9185's `Aligned with: … (Doom Winds)` credited from the
+ * tail of a Strike of the Windlord that had ended 3 s before. An instant
+ * cooldown is now a zero-length span: it is "running" for nobody and groups
+ * only with casts in its own instant.
+ *
+ * The span ends at the OBSERVED aura chain when the log shows one (the
+ * second half of A14, after the cast→effect table of CROSS-THEME G3, ruling
+ * A10): `buffEndSeconds` is `enemyCDs.ts` → `observedEffectEndSeconds` when
+ * it is known — an effect that ended early ends the span early, one that
+ * re-application kept alive (02c8e3ac Dragonrage) lengthens it — else the
+ * official duration.
+ * `enemyCDs.ts`' aligned-window clustering keeps its own reach
+ * (`BURST_CLUSTER_SECONDS`): "which casts form one go" is a different
+ * question from "how long does one cast's effect run".
+ */
 export function burstCastSpan(
   cd: Pick<IEnemyCDCast, "castTimeSeconds" | "buffEndSeconds">,
 ): { from: number; to: number } {
-  const to = Math.max(cd.buffEndSeconds, cd.castTimeSeconds + MIN_BURST_SPAN_S);
-  return { from: cd.castTimeSeconds, to };
+  return {
+    from: cd.castTimeSeconds,
+    to: Math.max(cd.buffEndSeconds, cd.castTimeSeconds),
+  };
 }
 
 /**
@@ -148,8 +303,8 @@ export function burstCastSpan(
  * where the damage went, whether the dominant target had an immunity/major
  * defensive running, whether any ally CD overlapped, and whether the target died.
  *
- * CD detection and clustering share the enemy-side predicates
- * (reconstructEnemyCDTimeline / BURST_CLUSTER_SECONDS) — same facts, one spec.
+ * CD detection shares the enemy-side predicate (reconstructEnemyCDTimeline);
+ * casts group while their effect spans overlap (`burstCastSpan`).
  */
 export function analyzeBurstLedger(
   player: ICombatUnit,
@@ -158,33 +313,46 @@ export function analyzeBurstLedger(
   combat: AtomicArenaCombat,
 ): IBurstLedgerEntry[] {
   const matchStartMs = combat.startTime;
-  const matchEndS = (combat.endTime - matchStartMs) / 1000;
+  // Work order 2026-10-14d #7: a burst ends at the ROUND's end (a Solo
+  // Shuffle round ends at its first death, `roundEndMs`), not the log's —
+  // 0068182d `Burst #4 — 2:55–2:59` ran past the 2:57 round-ending death and
+  // counted hits after it
+  const matchEndS = (roundEndMs(combat) - matchStartMs) / 1000;
   const attackingSide = new Set<string>([
     player.name,
     ...allies.map((a) => a.name),
   ]);
 
-  const ownCDs =
-    reconstructEnemyCDTimeline([player], combat).players[0]?.offensiveCDs ?? [];
+  // a press after the round ended is no part of it — dropped BEFORE the
+  // grouping: grouped by span, a post-round press joined the burst it
+  // overlapped and printed `Avatar 0:10–0:20 + Recklessness 0:21–0:20` in a
+  // Solo Shuffle round that ended at 0:20 (codex post-hoc 60-POSTHOC-03 U3)
+  const pressedInRound = (cd: { castTimeSeconds: number }) =>
+    cd.castTimeSeconds < matchEndS;
+  const ownCDs = (
+    reconstructEnemyCDTimeline([player], combat).players[0]?.offensiveCDs ?? []
+  ).filter(pressedInRound);
   if (ownCDs.length === 0) return [];
 
   // Ally offensive CD spans, computed once (player excluded).
   const allyCDSpans = allies
     .filter((a) => a.id !== player.id)
     .flatMap((a) =>
-      (
-        reconstructEnemyCDTimeline([a], combat).players[0]?.offensiveCDs ?? []
-      ).map((cd) => ({
-        playerName: a.name,
-        spellName: cd.spellName,
-        ...burstCastSpan(cd),
-      })),
+      (reconstructEnemyCDTimeline([a], combat).players[0]?.offensiveCDs ?? [])
+        .filter(pressedInRound)
+        .map((cd) => ({
+          ally: a,
+          playerName: a.name,
+          spellName: cd.spellName,
+          ...burstCastSpan(cd),
+        })),
     );
 
   const enemyPlayers = enemies.filter((e) => e.info);
   const enemyById = new Map(enemyPlayers.map((e) => [e.id, e]));
 
-  // Group own casts by active-span overlap — same reach rule as enemyCDs' aligned windows.
+  // Group own casts by active-span overlap (`burstCastSpan`: the effect's own
+  // length, no floor — ruling A14).
   const groups: IEnemyCDCast[][] = [];
   {
     let current: IEnemyCDCast[] = [];
@@ -204,6 +372,7 @@ export function analyzeBurstLedger(
   const entries: IBurstLedgerEntry[] = [];
   for (const group of groups) {
     const fromSeconds = group[0].castTimeSeconds;
+    if (fromSeconds >= matchEndS) continue; // pressed after the round ended
     const toSeconds = Math.min(
       Math.max(...group.map((cd) => burstCastSpan(cd).to)),
       matchEndS,
@@ -213,19 +382,38 @@ export function analyzeBurstLedger(
 
     // Player damage (pet damage is merged into damageOut upstream) to enemy players.
     const damageMap = new Map<string, number>();
+    // The absorbed part of each sum, kept beside it (T12 ⑤): an attacker's
+    // `damageOut` carries what a shield ate as rows of their own
+    // (`SPELL_ABSORBED`, parser-compat convert.ts). The target is still
+    // chosen on the whole — dfcccbf2: 301k landed + 403k absorbed on the
+    // paladin made him `Target: … your damage 0.70M` over a warrior who took
+    // 641k landed + 27k absorbed, and the line said neither.
+    const absorbedMap = new Map<string, number>();
     for (const d of player.damageOut) {
       if (d.logLine.timestamp < fromMs || d.logLine.timestamp > toMs) continue;
       if (!enemyById.has(d.destUnitId)) continue;
-      damageMap.set(
-        d.destUnitId,
-        (damageMap.get(d.destUnitId) ?? 0) + Math.abs(d.effectiveAmount),
-      );
+      // a deferral shield's row is no absorb (FT-T02b, `isDeferralAbsorb`;
+      // F16 retest idx 2: 0457a45e's `0.40M of it absorbed` was two-thirds
+      // Time Dilation — the other burst readers already skip it)
+      if (
+        (d.logLine.event as string) === LogEvent.SPELL_ABSORBED &&
+        isDeferralAbsorb(d)
+      )
+        continue;
+      const amount = Math.abs(d.effectiveAmount);
+      damageMap.set(d.destUnitId, (damageMap.get(d.destUnitId) ?? 0) + amount);
+      if ((d.logLine.event as string) === LogEvent.SPELL_ABSORBED)
+        absorbedMap.set(
+          d.destUnitId,
+          (absorbedMap.get(d.destUnitId) ?? 0) + amount,
+        );
     }
-    const damageByTarget: IBurstTargetDamage[] = [...damageMap.entries()]
+    const damageByTarget: IBurstLedgerTargetDamage[] = [...damageMap.entries()]
       .map(([unitId, damage]) => ({
         unitId,
         unitName: enemyById.get(unitId)?.name ?? unitId,
         damage,
+        absorbed: absorbedMap.get(unitId) ?? 0,
       }))
       .sort((a, b) => b.damage - a.damage);
     const totalDamage = damageByTarget.reduce((s, t) => s + t.damage, 0);
@@ -238,11 +426,34 @@ export function analyzeBurstLedger(
       // Defensive/immunity auras actually ACTIVE on the target during the span
       // (real aura intervals, not cast+duration estimates).
       const defensivesHit: IBurstDefensiveHit[] = [];
-      for (const iv of buildFilteredAuraIntervals(
-        target,
-        DEF_OR_IMMUNE_IDS,
-        combat,
-      )) {
+      // a re-announced aura (APPLIED again within a second of its one press)
+      // is that press — `[ENEMY DEF]`'s join (`joinReappliedIntervals`;
+      // codex R6C-05 #2: one Guardian Spirit read as two pressed walls)
+      const castSecondsOf = (srcUnitName: string, spellId: string) => {
+        const src = Object.values(combat.units ?? {}).find(
+          (u) => (u as ICombatUnit).name === srcUnitName,
+        ) as ICombatUnit | undefined;
+        return pressSecondsOfAura(
+          src?.spellCastEvents,
+          spellId,
+          combat.startTime,
+        );
+      };
+      for (const iv of joinReappliedIntervals(
+        buildAuraIntervals(target, combat).filter((x) =>
+          DEF_OR_IMMUNE_IDS.has(x.spellId),
+        ),
+        castSecondsOf,
+      )
+        .map((x) => ({
+          spellId: x.spellId,
+          spellName: x.spellName,
+          srcUnitName: x.srcUnitName,
+          startMs: combat.startTime + x.fromS * 1000,
+          endMs: combat.startTime + x.toS * 1000,
+          inferredEnd: x.inferredEnd,
+        }))
+        .sort((x, y) => x.startMs - y.startMs)) {
         // An aura OUR side put on the target is not the target's defensive —
         // the owner's own Touch of Karma tether (122470, applied by the monk
         // ON the enemy) read as "Target had a major defensive up" (reliability
@@ -252,21 +463,41 @@ export function analyzeBurstLedger(
         // CASTER — that copy means the caster is taking extra damage, not
         // mitigating (reliability round 3 N4, 483f: the Ret who gave BoSac to
         // the hunter read as "a major defensive up ON THE TARGET").
-        if (
-          SELF_CAST_NOOP_EXTERNAL_IDS.has(iv.spellId) &&
-          iv.srcUnitName === target.name
-        )
+        // (fact2 C4: the one caster-side-link predicate, `isCasterSideLinkAura`)
+        if (isCasterSideLinkAura(iv.spellId, iv.srcUnitName === target.name))
           continue;
-        const overlapMs =
-          Math.min(iv.endMs, toMs) - Math.max(iv.startMs, fromMs);
+        // round-1 retest (62fdbf2e-r0, D6's unseen-end auras): an
+        // invisibility / stealth whose end the log does not show is over by
+        // the time its holder deals damage — Greater Invisibility 110960
+        // logs no REMOVED, the builder closed it at 20 s, and the mage hit
+        // at 0:25.3 before a burst at 0:28.4 read "active ON THE TARGET
+        // 15.1s". A logged end stands; the holder's own action is the one
+        // `untargetableEndS` reads (its pet's hits and its DoT ticks are
+        // not — a Water Elemental's swing cut a Greater Invisibility short)
+        const endMs =
+          iv.inferredEnd && SAVE_AURA_END_UNSEEN_IDS.has(iv.spellId)
+            ? Math.min(
+                iv.endMs,
+                holderFirstOwnActionAfterMs(target, iv.startMs, iv.spellId),
+              )
+            : iv.endMs;
+        const overlapMs = Math.min(endMs, toMs) - Math.max(iv.startMs, fromMs);
         if (overlapMs / 1000 < MIN_DEFENSIVE_OVERLAP_S) continue;
         defensivesHit.push({
+          ...(DEF_OR_IMMUNE_CAST_IDS.has(iv.spellId)
+            ? {}
+            : { viaLoggedAura: true as const }),
           spellId: iv.spellId,
           // Aura names in a Chinese-client log are localized text — prompt/facts
           // must be English (lesson from the CJK leak audit)
           spellName: getEnglishSpellName(iv.spellId, iv.spellName),
           overlapSeconds: Math.round(overlapMs / 100) / 10,
-          isImmunity: SPELLS[iv.spellId]?.type === "immunities",
+          // User ruling F-BI-full (2026-10-02, same rule as F-K9b-B): only a
+          // FULL immunity (Ice Block, Divine Shield, Aspect of the Turtle) is
+          // "IMMUNE". Cloak of Shadows / Blessing of Protection / Spellwarding
+          // stop one kind of damage — a burst through Cloak still lands its
+          // physical part — so they show as the target's defensive.
+          isImmunity: FULL_IMMUNITY_IDS.has(iv.spellId),
           appliedByOther: iv.srcUnitName !== target.name,
           casterName: iv.srcUnitName,
           startOffsetSeconds: Math.round((iv.startMs - fromMs) / 100) / 10,
@@ -281,20 +512,98 @@ export function analyzeBurstLedger(
           dr.timestamp <= toMs + KILL_CREDIT_SLACK_S * 1000,
       );
 
+      // Endpoints on the render grid: the line prints `fmtTime(from)–
+      // fmtTime(to)` (floored), so its HP pair is the `[STATE]` reading of
+      // those two seconds.
+      const fromSec = toRenderSecond(fromSeconds);
+      const toSec = toRenderSecond(toSeconds);
+      const deadAtEnd = isDeadAtRenderSecond(target, matchStartMs, toSec);
+      // `gridEndpointHpPct`, shared with `[DMG SPIKE]`: the tick's reading,
+      // and 0 on a second the tick reads `dead` — at the end, and at the
+      // start too (a death inside the burst's first rendered second: that
+      // second's [STATE] tick already reads `dead`)
+      const hpStartPct = gridEndpointHpPct(target, matchStartMs, fromSec);
+      const hpEndPct = gridEndpointHpPct(target, matchStartMs, toSec);
+      // the low is a trough (FT-T03): the true minimum inside the displayed
+      // seconds, the `[DMG SPIKE]` line's own function and window
+      const low =
+        hpStartPct !== null && hpEndPct !== null && !deadAtEnd
+          ? hpTroughInWindow(target, matchStartMs, fromSec, toSec)
+          : null;
+
       dominantTarget = {
         unitId: top.unitId,
         unitName: top.unitName,
-        hpStartPct: getUnitHpAtTimestamp(target, fromMs, HP_SAMPLE_RADIUS_MS),
-        hpEndPct: getUnitHpAtTimestamp(target, toMs, HP_SAMPLE_RADIUS_MS),
+        hpStartPct,
+        hpEndPct,
+        hpLow:
+          low !== null &&
+          isHpTroughWorthPrinting(hpStartPct!, hpEndPct!, low.pct)
+            ? { pct: low.pct, atSeconds: low.atSec }
+            : null,
         damage: top.damage,
+        absorbed: top.absorbed,
         defensivesHit,
         died,
       };
     }
 
+    const otherDeaths: IBurstLedgerEntry["otherDeaths"] = [];
+    for (const t of damageByTarget) {
+      if (t.unitId === top?.unitId) continue;
+      // "also hit" means hit: a fully absorbed tick (effective damage 0) on
+      // a unit the rest of the team then killed is not this burst's victim
+      if (t.damage <= 0) continue;
+      const death = enemyById
+        .get(t.unitId)
+        ?.deathRecords.map((dr) => dr.timestamp)
+        .filter((ms) => ms >= fromMs && ms <= toMs + KILL_CREDIT_SLACK_S * 1000)
+        .sort((a, b) => a - b)[0];
+      if (death !== undefined)
+        otherDeaths.push({
+          unitName: t.unitName,
+          atSeconds: (death - matchStartMs) / 1000,
+        });
+    }
+    otherDeaths.sort((a, b) => a.atSeconds - b.atSeconds);
+
     const allyCDsOverlapping = allyCDSpans
       .filter((s) => s.from <= toSeconds && s.to >= fromSeconds)
-      .map((s) => ({ playerName: s.playerName, spellName: s.spellName }));
+      .map((s) => {
+        // T12 ⑦ (user ruling 2026-10-10): the overlap is a fact about time
+        // and nothing else — print how long it was and where that ally's
+        // damage went in it, instead of a word that reads as "same target".
+        const overlapFrom = Math.max(s.from, fromSeconds);
+        const overlapTo = Math.min(s.to, toSeconds);
+        const oFromMs = matchStartMs + overlapFrom * 1000;
+        const oToMs = matchStartMs + overlapTo * 1000;
+        const byEnemy = new Map<string, number>();
+        for (const d of s.ally.damageOut ?? []) {
+          const ts = d.logLine.timestamp;
+          if (ts < oFromMs || ts > oToMs) continue;
+          if (!enemyById.has(d.destUnitId)) continue;
+          byEnemy.set(
+            d.destUnitId,
+            (byEnemy.get(d.destUnitId) ?? 0) + Math.abs(d.effectiveAmount),
+          );
+        }
+        let topTarget: IBurstTargetDamage | null = null;
+        for (const [unitId, damage] of byEnemy) {
+          if (damage <= 0) continue;
+          if (!topTarget || damage > topTarget.damage)
+            topTarget = {
+              unitId,
+              unitName: enemyById.get(unitId)?.name ?? unitId,
+              damage,
+            };
+        }
+        return {
+          playerName: s.playerName,
+          spellName: s.spellName,
+          overlapSeconds: Math.max(0, overlapTo - overlapFrom),
+          topTarget,
+        };
+      });
 
     entries.push({
       fromSeconds,
@@ -303,10 +612,13 @@ export function analyzeBurstLedger(
         spellId: cd.spellId,
         spellName: cd.spellName,
         castTimeSeconds: cd.castTimeSeconds,
+        // clipped like the header's own end (the round can end mid-burst)
+        spanToSeconds: Math.min(burstCastSpan(cd).to, toSeconds),
       })),
       totalDamage,
       damageByTarget,
       dominantTarget,
+      otherDeaths,
       allyCDsOverlapping,
     });
   }
@@ -462,6 +774,84 @@ export const ON_TARGET_GOOD_PCT = 50;
 
 const fmtM = (n: number): string => `${(n / 1_000_000).toFixed(2)}M`;
 
+/** `X.XXM`, plus ` (A.AAM of it absorbed)` when the absorbed part has a figure
+ * to print at the line's precision (it is not `0.00M`). */
+function fmtDamageWithAbsorbed(damage: number, absorbed: number): string {
+  const a = fmtM(absorbed);
+  return a === fmtM(0) ? fmtM(damage) : `${fmtM(damage)} (${a} of it absorbed)`;
+}
+
+/** The label of the `Target:` line's clause for the second enemy the burst
+ * damaged. The gate (`checkBurstTargetDamageParts`) reads it back. */
+export const BURST_SECOND_TARGET_LABEL = "second target";
+
+/**
+ * The second entry of `damageByTarget` as the `Target:` line prints it
+ * (T12 ⑤, user ruling 2026-10-10) — ` | second target: <name> X.XXM[ (A of it
+ * absorbed)]` — or "" when the burst damaged one enemy player only.
+ *
+ * Printed when the second enemy took at least half of what the named target
+ * took (`ON_TARGET_GOOD_PCT`, the off-target line's own half) — the case the
+ * evidence measured: on 60 raw rounds 34 of 131 ledger targets had a second
+ * enemy at half the target's figure or more, and for 2 the order flips on
+ * landed damage alone. Below that it is incidental cleave: printed down to
+ * the line's precision it named an enemy for 5k of a 3.5M burst (review
+ * 40-FT-53 P2). From the same list and sums the target was chosen on.
+ */
+export function burstSecondTargetClause(
+  damageByTarget: IBurstLedgerEntry["damageByTarget"],
+): string {
+  const top = damageByTarget[0];
+  const second = damageByTarget[1];
+  if (!top || !second || fmtM(second.damage) === fmtM(0)) return "";
+  if (second.damage * 100 < top.damage * ON_TARGET_GOOD_PCT) return "";
+  return ` | ${BURST_SECOND_TARGET_LABEL}: ${second.unitName} ${fmtDamageWithAbsorbed(second.damage, second.absorbed)}`;
+}
+
+/** The label of the line that lists the ally offensive CDs overlapping a
+ * burst. It replaced `Aligned with:` (T12 ⑦) — a word the measurement, an
+ * overlap in time, does not carry. */
+export const BURST_ALLY_OVERLAP_LABEL = "Ally CDs overlapping";
+
+/** What an overlap item says when that ally damaged no enemy player in it. */
+const ALLY_NO_DAMAGE_IN_OVERLAP = "no damage by them on enemy players in it";
+
+/** One item's tail on the `Ally CDs overlapping:` line, as the gate reads it
+ * back (global): 1 = the overlap in seconds, 2 = that ally's top target in
+ * it, 3 = their damage on it (2 and 3 absent = no damage in it). */
+export const BURST_ALLY_OVERLAP_ITEM_RE_SRC = String.raw` (\d+\.\d)s \((?:${ALLY_NO_DAMAGE_IN_OVERLAP}|their top target in it: (\S+) (\d+\.\d{2})M)\)(?=; |$)`;
+
+function formatAllyOverlaps(b: IBurstLedgerEntry): string {
+  return `    ${BURST_ALLY_OVERLAP_LABEL}: ${b.allyCDsOverlapping
+    .map(
+      (a) =>
+        `${a.playerName} ${a.spellName} ${a.overlapSeconds.toFixed(1)}s (${
+          a.topTarget
+            ? `their top target in it: ${a.topTarget.unitName} ${fmtM(a.topTarget.damage)}`
+            : ALLY_NO_DAMAGE_IN_OVERLAP
+        })`,
+    )
+    .join("; ")}`;
+}
+
+/** The `Target:` line from `| your damage` on, as the gate reads it back:
+ * 1 = the target's figure, 2 = its absorbed part, 3 = the second target's
+ * name, 4 = its figure, 5 = its absorbed part. */
+export const BURST_TARGET_DAMAGE_RE_SRC = String.raw` \| your damage (\d+\.\d{2})M(?: \((\d+\.\d{2})M of it absorbed\))?(?: \| target DIED)?(?: \| ${BURST_SECOND_TARGET_LABEL}: (.+?) (\d+\.\d{2})M(?: \((\d+\.\d{2})M of it absorbed\))?)?(?: \| also hit: .*)?$`;
+
+/** The header's CD list: with two or more CDs each carries its own span
+ *  (triage sync-burst F-L4: `Dark Transformation + Army of the Dead` under
+ *  one 0:11–0:41 span, while DT's own span ended at 0:26). */
+function formatBurstSpells(spells: IBurstLedgerEntry["spells"]): string {
+  if (spells.length < 2) return spells.map((s) => s.spellName).join(" + ");
+  return spells
+    .map(
+      (s) =>
+        `${s.spellName} ${fmtTime(s.castTimeSeconds)}–${fmtTime(s.spanToSeconds)}`,
+    )
+    .join(" + ");
+}
+
 /**
  * Renders the burst ledger as plain text for the AI context (DPS owners).
  * Times via fmtTime (floored render grid), percentages as ints — any future
@@ -471,38 +861,91 @@ export function formatBurstLedgerForContext(
   bursts: IBurstLedgerEntry[],
   targeting: IWindowTargetingAudit[],
   kicks: IKickAuditEntry[],
+  /** How a kick's miss target is named when it is not a player — a totem's
+   * unit name is whatever language the log was written in (FT-T11 follow-up:
+   * `[IMMUNE: 根基图腾]` on a zhCN log, `checkCjkLeak`). Absent = the name. */
+  missTargetLabel: (name: string, unitId: string) => string = (name) => name,
 ): string[] {
   if (bursts.length + targeting.length + kicks.length === 0) return [];
   const lines: string[] = ["## BURST LEDGER (your offensive audit)"];
+  // FT-T02d: what the damage figure is. T12 ⑤: what "Target" is, and the
+  // two readings the one figure used to hide.
+  if (bursts.length > 0)
+    lines.push(
+      // one line: readers index the block's lines from the top
+      `  \`Target\` = the enemy player your own damage in the burst was highest on, counting what its shields absorbed. \`your damage\` = that figure: what landed plus what the shields absorbed; \`(A of it absorbed)\` = the absorbed part, printed when it is not 0.00M. \`${BURST_SECOND_TARGET_LABEL}: X N\` = the enemy player your damage was next highest on, same measure — printed when that enemy took at least half of the Target's figure; it can be close to the Target's figure, and ahead of it on landed damage alone. \`${BURST_ALLY_OVERLAP_LABEL}\` = a teammate's offensive cooldown was running during part of this burst — an overlap in time and nothing more: \`Ns\` = how long the two ran together (0.0s = an instant cooldown pressed inside the burst, or the two only touched), \`their top target in it\` = the enemy player that teammate damaged most in those seconds (landed + absorbed), which need not be this burst's Target.`,
+    );
+  // FT-T03 (ruling D7): the low is off the grid — legended when one prints
+  // (worded without the literal line tag: tests and gates find the target
+  // line by it)
+  if (bursts.some((b) => b.dominantTarget?.hpLow))
+    lines.push(
+      "  On a burst's target line, `A% → B% (low L% at m:ss)` = that unit's [STATE] readings at the burst's first and last second; `low` = the lowest HP the log shows for it in between, at the second it happened (the true minimum between the ticks: it can sit below every [STATE] number of the span).",
+    );
 
   bursts.forEach((b, i) => {
     lines.push(
-      `  Burst #${i + 1} — ${fmtTime(b.fromSeconds)}–${fmtTime(b.toSeconds)} | ${b.spells.map((s) => s.spellName).join(" + ")}`,
+      `  Burst #${i + 1} — ${fmtTime(b.fromSeconds)}–${fmtTime(b.toSeconds)} | ${formatBurstSpells(b.spells)}`,
     );
     const t = b.dominantTarget;
     if (t) {
+      const lowStr = t.hpLow
+        ? ` (low ${t.hpLow.pct}% at ${fmtTime(t.hpLow.atSeconds)})`
+        : "";
       const hpStr =
         t.hpStartPct !== null && t.hpEndPct !== null
-          ? ` ${Math.round(t.hpStartPct)}% → ${Math.round(t.hpEndPct)}%`
+          ? ` ${Math.round(t.hpStartPct)}% → ${Math.round(t.hpEndPct)}%${lowStr}`
+          : "";
+      // F-L1: the burst's other victim(s) — a fact about who else it hit
+      // and killed; the target above is unchanged
+      const alsoStr =
+        b.otherDeaths.length > 0
+          ? ` | also hit: ${b.otherDeaths
+              .map(
+                (d) =>
+                  // `+N.Ns` is from the burst's raw start, like the
+                  // dominant target's own DIED offset and `defensivesHit`:
+                  // an interval, not a grid reading (the header and DIED
+                  // stamps are floored, so 27.95 → 28.05 reads 0:28 (+0.1s))
+                  `${d.unitName} DIED ${fmtTime(d.atSeconds)} (+${(d.atSeconds - b.fromSeconds).toFixed(1)}s)`,
+              )
+              .join("; ")}`
           : "";
       lines.push(
-        `    Target: ${t.unitName}${hpStr} | your damage ${fmtM(t.damage)}${t.died ? " | target DIED" : ""}`,
+        `    Target: ${t.unitName}${hpStr} | your damage ${fmtDamageWithAbsorbed(t.damage, t.absorbed)}${t.died ? " | target DIED" : ""}${burstSecondTargetClause(b.damageByTarget)}${alsoStr}`,
       );
       for (const d of t.defensivesHit) {
         // 2026-07-16 smoke test: without spelling out "on the target", the
         // responder misreads this as one of our own externals (Pain Suppression
         // can only be cast on a teammate → it reasons "so it is not target
         // mitigation"). The subject must be explicit.
+        // fact2 C1 (2026-10-20, user ruling 4): an ally's copy of a
+        // talent-shared wall (Flameshaper Obsidian Scales, 15 %) is under
+        // the 20 % wall floor — KILL WINDOWS' `defenseless` and KILL
+        // ATTEMPTS do not count it (`isBelowWallFloorExternal`), so the
+        // ledger does not call it a major defensive either
+        const copyPct = allyCopyPctOf(d);
+        const what = d.isImmunity
+          ? "⚠ Target was IMMUNE"
+          : copyPct !== undefined
+            ? `Target had an ally's ${copyPct}% copy up (below the ${MITIGATION_AURA_MIN_PCT}% wall floor, not a major defensive)`
+            : "Target had a major defensive up";
         lines.push(
-          `    ${d.isImmunity ? "⚠ Target was IMMUNE" : "Target had a major defensive up"}: ${d.spellName} active ON THE TARGET ${d.overlapSeconds.toFixed(1)}s of this burst${wallUpAtOpen(d) !== undefined ? ` (${wallTimingPhrase(d)})` : ""}`,
+          `    ${what}: ${d.spellName} active ON THE TARGET ${d.overlapSeconds.toFixed(1)}s of this burst${wallUpAtOpen(d) !== undefined ? ` (${wallTimingPhrase(d)})` : ""}`,
         );
       }
-    } else {
+    } else if (b.toSeconds > b.fromSeconds) {
       lines.push(`    No damage dealt to enemy players during this burst.`);
     }
+    // A zero-length burst (an offensive cooldown with no tracked buff — Soul
+    // Fire, whose hit lands after the cast) has no window damage could fall
+    // into: saying "No damage dealt" there contradicted the KILL ATTEMPTS
+    // row of the same cast (pre-review of the burst-span batch: 50 owner
+    // files on 605). Until the observed-chain half (CROSS-THEME G3) gives
+    // such a cast its effect, the line says nothing about its damage.
     lines.push(
       b.allyCDsOverlapping.length > 0
-        ? `    Aligned with: ${b.allyCDsOverlapping.map((a) => `${a.playerName} (${a.spellName})`).join(", ")}`
+        ? formatAllyOverlaps(b)
         : `    Solo burst — no ally offensive CD overlapped.`,
     );
   });
@@ -520,17 +963,29 @@ export function formatBurstLedgerForContext(
   }
 
   if (kicks.length > 0) {
+    // the target as this line names units elsewhere (`silenced <name>`)
+    const missTag = (k: IKickAuditEntry) => kickMissTag(k, missTargetLabel);
     const parts = kicks.map((k) => {
       const at = fmtTime(k.atSeconds);
       switch (k.result) {
         case "landed":
           return `${at} ${k.kickSpellName} → interrupted ${k.interruptedSpellName}`;
+        case "silenced":
+          // "no cast interrupted" only when the target had no open cast:
+          // a silence stops a bar without a SPELL_INTERRUPT row
+          return `${at} ${k.kickSpellName} → silenced ${k.silencedTargetName} (${
+            k.openCastSpellName
+              ? `their ${k.openCastSpellName} cast did not finish`
+              : "no cast interrupted"
+          })${missTag(k)}`;
         case "juked":
-          return `${at} ${k.kickSpellName} → JUKED by fake ${k.jukedBySpellName}`;
+          return k.jukedChannelStoppedAgoS !== undefined
+            ? `${at} ${k.kickSpellName} → ${jukedByStoppedChannelText(k)}${missTag(k)}`
+            : `${at} ${k.kickSpellName} → ${jukedByFakeText(k)}${missTag(k)}`;
         case "missed":
-          return `${at} ${k.kickSpellName} → hit nothing`;
+          return `${at} ${k.kickSpellName} → hit nothing${missTag(k)}`;
         default:
-          return `${at} ${k.kickSpellName} → outcome unknown (no cast-start data)`;
+          return `${at} ${k.kickSpellName} → outcome unknown (no cast-start data)${missTag(k)}`;
       }
     });
     lines.push(`  Kicks: ${parts.join(" | ")}`);

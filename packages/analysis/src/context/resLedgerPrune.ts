@@ -36,6 +36,9 @@
  * A `[RES]` row carries no timestamp of its own; it belongs to the nearest
  * timestamped line above it.
  */
+import { renderedCcSpanSeconds } from "../utils/ccTrinketAnalysis";
+import { fmtWholeSeconds, WHOLE_SECONDS_RE_SRC } from "../utils/renderGrid";
+import { stripPressedDuringNote } from "./controlRejectedPresses";
 
 /** Any `[RES]` ledger row. */
 export const RES_ROW_RE = /\[RES\]\s+rdy:/;
@@ -71,12 +74,18 @@ const fieldOf = (line: string, name: string): string | undefined => {
   }
   return undefined;
 };
-/** `3/Wind Shear-1s[kick]` → spell name. */
-const CC_ENTRY = /^\d+\/(.+?)-\d/;
+/** The remaining time of a `cc:` entry as the ledger prints it (FT-T04): a
+ * control with under half a second left used to read `-0s` — 10,644 entries
+ * of the 605-file capture said a control still on the unit had 0 s to run.
+ * Written by `resourceSnapshot.ts`, parsed by `CC_ENTRY` below. Text and
+ * pattern are the render grid's (`fmtWholeSeconds`, `WHOLE_SECONDS_RE_SRC`). */
+export function resCcRemainingText(remainingSeconds: number): string {
+  return fmtWholeSeconds(remainingSeconds);
+}
+/** `3/Wind Shear-1s[kick]`, `1/Psychic Scream-<1s` → spell name. */
+const CC_ENTRY = new RegExp(String.raw`^\d+\/(.+?)-${WHOLE_SECONDS_RE_SRC}`);
 /** `Trueshot/Marksmanship Hunter(6s left)` → spell name. */
 const CD_ENTRY = /^(.+?)\//;
-/** `… ← Polymorph (by 6(RShaman)) | 6s [DR: …]` → duration seconds. */
-const CC_LINE_DUR = /\|\s*(\d+(?:\.\d+)?)s\b/;
 const CC_LANDING = /\[CC ON /;
 const ENEMY_CD = /\[ENEMY CD\]/;
 
@@ -116,7 +125,10 @@ export function classifyNoChangeResRows(
   lines.forEach((l, i) => {
     const t = at[i];
     if (t === null || t === undefined) return;
-    if (CC_LANDING.test(l)) ccLines.push({ t, text: l });
+    // FT-T16: without the owner's `pressed during it:` clause — it names the
+    // owner's own cooldowns, not a control on anyone
+    if (CC_LANDING.test(l))
+      ccLines.push({ t, text: stripPressedDuringNote(l) });
     if (ENEMY_CD.test(l)) cdLines.push({ t, text: l });
   });
 
@@ -153,9 +165,9 @@ export function classifyNoChangeResRows(
         if (!spell) continue;
         const covered = ccLines.some((c) => {
           if (!c.text.includes(spell)) return false;
-          const dur = Number(
-            c.text.match(CC_LINE_DUR)?.[1] ?? RES_PRUNE_CC_FALLBACK_S,
-          );
+          // `… ← Polymorph (by 6(RShaman)) | 6s [DR: …]` → its seconds,
+          // through the line's own reader (FT-T09)
+          const dur = renderedCcSpanSeconds(c.text) ?? RES_PRUNE_CC_FALLBACK_S;
           return (
             t >= c.t - RES_PRUNE_CC_SLACK_S &&
             t <= c.t + dur + RES_PRUNE_CC_SLACK_S
@@ -184,7 +196,9 @@ export function classifyNoChangeResRows(
 }
 
 /** Indices of the no-change rows that may be dropped with zero information loss. */
-export function droppableNoChangeResRows(lines: readonly string[]): Set<number> {
+export function droppableNoChangeResRows(
+  lines: readonly string[],
+): Set<number> {
   const out = new Set<number>();
   for (const v of classifyNoChangeResRows(lines))
     if (v.uniqueFacts.length === 0) out.add(v.index);

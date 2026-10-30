@@ -22,9 +22,9 @@ vi.mock("../src/renderer/src/batch/batchAnalysis", () => ({
   subscribeBatch: () => () => {},
 }));
 
+import type { StoredMatchMeta } from "../src/main/matchStore";
 import { startBatch } from "../src/renderer/src/batch/batchAnalysis";
 import { BatchAnalyzeBar } from "../src/renderer/src/components/BatchAnalyzeBar";
-import type { StoredMatchMeta } from "../src/main/matchStore";
 
 const meta = (id: string, kind = "match"): StoredMatchMeta =>
   ({

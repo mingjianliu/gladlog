@@ -1,17 +1,17 @@
-import { splitLine } from "../src/l1/splitTopLevel";
 import {
-  decodeBaseUnits,
-  decodeSpell,
-  decodeDamage,
-  decodeHeal,
-  decodeAdvanced,
-  decodeAura,
-  decodeExtraSpell,
   decodeAbsorbed,
-  decodeHealAbsorbed,
-  decodeArenaStart,
+  decodeAdvanced,
   decodeArenaEnd,
+  decodeArenaStart,
+  decodeAura,
+  decodeBaseUnits,
+  decodeDamage,
+  decodeExtraSpell,
+  decodeHeal,
+  decodeHealAbsorbed,
+  decodeSpell,
 } from "../src/l1/decoders";
+import { splitLine } from "../src/l1/splitTopLevel";
 
 const CAST =
   '6/30/2026 19:10:32.0442  SPELL_CAST_SUCCESS,Player-3391-0D728907,"Envenum-Silvermoon-EU",0x512,0x80000000,0000000000000000,nil,0x80000000,0x80000000,2983,"Sprint",0x1,Player-3391-0D728907,0000000000000000,561620,561620,2830,486,924,2161,0,0,3,250,250,0,1046.62,-358.72,0,1.9542,298';

@@ -1,6 +1,6 @@
 /**
- * Generated at: 2026-09-05T00:12:16.291Z
- * Build: 12.1.0.69587
+ * Generated at: 2026-10-28T17:52:25.730Z
+ * Build: 12.1.5.70391
  * Source: DB2 SpellMisc.SchoolMask (what school the spell IS) +
  *   SpellEffect aura 39 / 77 (which schools / mechanics it makes you
  *   immune to), one EffectTriggerSpell hop, dummy rows ignored unless
@@ -10,7 +10,7 @@
  * Absent field = no official row. Consumers MUST treat that as unknown
  *   and fall back, never as "stops nothing" (Anti-Magic Shell, Spell
  *   Reflection, Bladestorm and Aspect of the Turtle all have no aura 39).
- * ids: 6447 (6447 with a school, 21 with school immunity, 62 with mechanic immunity)
+ * ids: 6447 (6447 with a school, 18 with school immunity, 58 with mechanic immunity)
  * The data lives in the .json of the same name (vite json.stringify ->
  * JSON.parse loading — the big-JSON lesson).
  */

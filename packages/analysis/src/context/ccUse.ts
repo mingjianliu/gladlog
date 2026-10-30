@@ -17,6 +17,22 @@
  *        CC-able;
  *  - healer owners: counts only (their slack predicate and the defense branch
  *    exclude each other, and "not CC'd" is not spare capacity).
+ *  - FT-T16 D15 "2c" (user approval 2026-10-10, on real-match samples): a
+ *    control with a cast time says how many cast bars were begun next to how
+ *    many casts went off — `Cyclone cast bar started 4×, went off 0×`
+ *    (539b6ed0: four Cyclone bars, none finished, and the prompt never said
+ *    "Cyclone"). Started = the owner's SPELL_CAST_START rows in the round
+ *    (`castBarStartsInRound` — the rows `ownerCastCancels` counts hardcasts
+ *    with and the kit's `[UNUSED — started N×, never finished]` counts; a
+ *    kicked bar is one of them); went off = SPELL_CAST_SUCCESS, the same
+ *    number `cast N×` prints. The approval's condition: the second number
+ *    must not read as "the control landed" (2c6e85ec round 6: 12 Cyclones
+ *    went off, 3 MISSED and 2 were IMMUNE) — hence "went off", and the header
+ *    says so. A control with no cooldown (Cyclone, Polymorph, Fear …) is on
+ *    no cooldown ledger, so it gets its entry here, from its first started
+ *    bar. The form is printed only when fewer went off than were started;
+ *    otherwise the entry is the plain `cast N×` (one entry per spell, never
+ *    both).
  * "CC-able" = `ccSamplerFor(...).stateAt` (shared with PEEL OPTIONS) at Full DR
  * only — an unresolved DR category is not admitted. The two doors
  * (>= CC_USE_MIN_S passing seconds, >= CC_USE_MIN_SHARE) are editorial,
@@ -27,8 +43,15 @@
  */
 import type { AtomicArenaCombat, ICombatUnit } from "@gladlog/parser-compat";
 
-import { ccSpellIds } from "../data/spellTags";
+import { getEnglishSpellName } from "../data/spellEffectData";
 import type { IBurstLedgerEntry } from "../utils/burstLedger";
+import { enemySourceIds } from "../utils/cannotCastIntervals";
+import {
+  castBarsOfCooldown,
+  type CastBarStart,
+  castBarStartsInRound,
+} from "../utils/castCancels";
+import { isControlCast } from "../utils/castMissRows";
 import { ccSamplerFor, pvpTrinketReadyAtSecond } from "../utils/ccTargetState";
 import type { IPlayerCCTrinketSummary } from "../utils/ccTrinketAnalysis";
 import {
@@ -37,7 +60,11 @@ import {
   isHealerSpec,
   isMeleeSpec,
 } from "../utils/cooldowns";
+import { incomingPressureEvents } from "../utils/incomingPressure";
+import { petCommands } from "../utils/petCommands";
 import { fmtTime } from "../utils/renderGrid";
+import { buildRosterSides } from "../utils/rosterSide";
+import { roundEndMs } from "../utils/roundEnd";
 import { ccMechanicOf, isInstantCast } from "../utils/spellMechanics";
 import { DMG_SPIKE_THRESHOLD } from "./timelineHelpers";
 
@@ -52,13 +79,17 @@ export const CC_USE_CAP = 2;
 export const DISARM_MECHANIC = 3;
 
 export const CC_USE_SECTION_HEADER =
-  "CC USE — your control cooldowns this round. `cast N×` counts completed casts. A [CC BOOKMARK] marks a moment worth a look, not a missed cast: on every second of its span the CC was ready and not cast, you were not CC'd or in a casting lockout, and the named enemy was in range, with no detected LoS obstruction, not CC'd, not immune, at Full DR, and with no known ready self-breaker of their own. The distance, DR and trinket state after `at m:ss` are as of the span's first second. Enemy dispels are not considered, and nothing here says whether casting was the better play — or whether you had a free global then: say \"you weren't CC'd\", never \"you were free\". Use a bookmark only to point the player at that moment, in your own words; never say they should have cast it, never count it as a mistake, and never judge the player as passive or aggressive from the counts.";
+  "CC USE — your control cooldowns this round. `cast N×` counts completed casts. `cast bar started N×, went off M×` is printed for a control with a cast time when fewer casts went off than cast bars were started (otherwise its entry is the plain `cast N×`): N counts every cast bar you began, a kicked one included, and M the casts that finished (`first m:ss` = the first of them) — `went off` means the cast bar completed and the spell was cast, NOT that the control landed (a cast that went off can still miss or hit an immune target), and the counts do not say why a started bar did not go off. A [CC BOOKMARK] marks a moment worth a look, not a missed cast: on every second of its span the CC was ready and not cast, you were not CC'd or in a casting lockout, and the named enemy was in range, with no detected LoS obstruction, not CC'd, not immune, at Full DR, and with no known ready self-breaker of their own. The distance, DR and trinket state after `at m:ss` are as of the span's first second. Enemy dispels are not considered, and nothing here says whether casting was the better play — or whether you had a free global then: say \"you weren't CC'd\", never \"you were free\". Use a bookmark only to point the player at that moment, in your own words; never say they should have cast it, never count it as a mistake, and never judge the player as passive or aggressive from the counts.";
 
 export interface ICcUseCount {
   spellId: string;
   spellName: string;
   casts: number;
   firstCastS: number | null;
+  /** Cast bars begun in the round (SPELL_CAST_START rows of this spell,
+   * `castBarStartsInRound`) — absent for a control the owner started no cast
+   * bar of this round (an instant control never has one). */
+  castBarsStarted?: number;
 }
 
 export interface ICcUseBookmark {
@@ -96,6 +127,132 @@ function runsOf(seconds: number[]): number[][] {
   return out.filter((r) => r.length >= CC_USE_MIN_S);
 }
 
+type ControlCooldown = ReturnType<typeof extractMajorCooldowns>[number];
+
+/** The owner's control cooldowns CC USE counts — W1g (reliability round 2,
+ * user ruling 2026-09-25): every control cooldown in the owner's kit, the
+ * roster's Control tag (disarms, grips, traps, totems included) as well as
+ * the hard-CC set. null when the cooldown ledger cannot be built. */
+function ccUseCooldowns(
+  owner: ICombatUnit,
+  combat: AtomicArenaCombat,
+): ControlCooldown[] | null {
+  try {
+    return extractMajorCooldowns(owner, combat).filter(
+      (cd) => cd.tag === "Control" || isControlCast(cd.spellId),
+    );
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The owner's cast bars of a control begun inside the round, sorted into the
+ * CC USE entries that count them (FT-T16 D15 "2c"). A Solo Shuffle round's
+ * units keep the gap after its end, so "inside the round" is asked
+ * (`castBarStartsInRound` — the bound the cooldown ledger puts on its casts),
+ * and both numbers of an entry count one stretch of time.
+ *  - `ofCooldown[i]`: the bars that are cooldown `cds[i]`'s, by the ledger's
+ *    own relation (`castBarsOfCooldown` — the number the kit's `[UNUSED —
+ *    started N×, never finished]` prints for the same spell);
+ *  - `offLedger`: a control on no cooldown ledger (Cyclone, Polymorph, Fear
+ *    …), one entry per English name — the variants of one spell (Polymorph's
+ *    skins) are one entry, under the name the line prints — in order of the
+ *    first bar.
+ */
+function sortControlCastBars(
+  owner: ICombatUnit,
+  combat: AtomicArenaCombat,
+  cds: readonly ControlCooldown[],
+): {
+  ofCooldown: CastBarStart[][];
+  offLedger: Array<{
+    spellId: string;
+    spellName: string;
+    bars: CastBarStart[];
+  }>;
+} {
+  // fact2 R2: an owner's command is no bar of the owner's; the summon's bar
+  // it began is
+  const cmd = petCommands(owner, combat);
+  const start = combat.startTime;
+  const begun = castBarStartsInRound(owner, combat).filter(
+    (b) => !cmd.commandRows.has(`${Math.round(start + b.t * 1000)}|${b.id}`),
+  );
+  const ofCooldown = cds.map((cd) => castBarsOfCooldown(begun, owner, cd));
+  const summonBars = cmd.summons.flatMap((u) =>
+    castBarStartsInRound(u, combat).filter((b) =>
+      cmd.petRow(u, Math.round(start + b.t * 1000), getEnglishSpellName(b.id, b.name)),
+    ),
+  );
+  const onLedger = new Set<CastBarStart>(ofCooldown.flat());
+  const ledgerNames = new Set(cds.map((cd) => cd.spellName));
+  const offLedger = new Map<
+    string,
+    { spellId: string; spellName: string; bars: CastBarStart[] }
+  >();
+  for (const s of [...begun, ...summonBars].sort((a, b) => a.t - b.t)) {
+    if (!s.id || onLedger.has(s)) continue;
+    const name = getEnglishSpellName(s.id, s.name);
+    // a same-named id the ledger does not take for a press of its entry is
+    // not given a second entry: one entry per spell
+    if (ledgerNames.has(name)) continue;
+    let entry = offLedger.get(name);
+    if (!entry) {
+      // a control by the hard-CC set, asked of the cast's own id and of its
+      // effect auras (a cast id is often not the id of the aura it leaves —
+      // data/castEffectAuras.ts)
+      // (fact2 C10: the one cast→control reading, `isControlCast`)
+      if (!isControlCast(s.id)) continue;
+      entry = { spellId: s.id, spellName: name, bars: [] };
+      offLedger.set(name, entry);
+    }
+    entry.bars.push(s);
+  }
+  return { ofCooldown, offLedger: [...offLedger.values()] };
+}
+
+/** One cast bar of a control, with the name of the CC USE entry that counts
+ * it. */
+export interface IControlCastBar extends CastBarStart {
+  /** The spell name of its `Counts:` entry — what a line about this bar must
+   * call it for the two to read as one spell. */
+  entryName: string;
+}
+
+/**
+ * Every cast bar CC USE's `cast bar started N×` counts for the owner this
+ * round, each under its entry's name, in time order — the ONE set of "the
+ * owner's control cast bars" for the `Counts:` line and the timeline's
+ * `[CAST STOPPED]` lines (FT-T16 D15 "2b"), so a stopped bar can never be of
+ * a spell the counts do not hold. A bar two cooldown entries both take is
+ * listed once, under the first.
+ */
+export function ownerControlCastBars(
+  owner: ICombatUnit,
+  combat: AtomicArenaCombat,
+): IControlCastBar[] {
+  const cds = ccUseCooldowns(owner, combat);
+  if (!cds) return [];
+  const { ofCooldown, offLedger } = sortControlCastBars(owner, combat, cds);
+  const entryOf = new Map<CastBarStart, string>();
+  ofCooldown.forEach((bars, i) => {
+    for (const b of bars)
+      if (!entryOf.has(b)) entryOf.set(b, cds[i]!.spellName);
+  });
+  for (const e of offLedger)
+    for (const b of e.bars) entryOf.set(b, e.spellName);
+  // the owner's own bars only: a summon's bar a command began (fact2 R2)
+  // has no outcome among the owner's rows
+  const own = new Set(
+    castBarStartsInRound(owner, combat).map((b) => `${b.t}|${b.id}`),
+  );
+  return [...entryOf.entries()]
+    .filter(([bar]) => own.has(`${bar.t}|${bar.id}`))
+    .map(([bar, entryName]) => ({ ...bar, entryName }))
+    .sort((a, b) => a.t - b.t);
+}
+
 export function ccUseSummary(params: {
   combat: AtomicArenaCombat;
   owner: ICombatUnit;
@@ -109,17 +266,8 @@ export function ccUseSummary(params: {
 }): ICcUseSummary {
   const { combat, owner, friends, enemies, enemyCC } = params;
   const start = combat.startTime;
-  let cds: ReturnType<typeof extractMajorCooldowns> = [];
-  try {
-    // W1g (reliability round 2, user ruling 2026-09-25): every control
-    // cooldown in the owner's kit — the roster's Control tag (disarms, grips,
-    // traps, totems included) as well as the hard-CC set.
-    cds = extractMajorCooldowns(owner, combat).filter(
-      (cd) => cd.tag === "Control" || ccSpellIds.has(cd.spellId),
-    );
-  } catch {
-    return { counts: [], bookmarks: [] };
-  }
+  const cds = ccUseCooldowns(owner, combat);
+  if (!cds) return { counts: [], bookmarks: [] };
   const counts: ICcUseCount[] = cds.map((cd) => ({
     spellId: cd.spellId,
     spellName: cd.spellName,
@@ -128,9 +276,69 @@ export function ccUseSummary(params: {
       ? Math.min(...cd.casts.map((c) => c.timeSeconds))
       : null,
   }));
+  // FT-T16 D15 "2c": cast bars begun, per control, inside the round.
+  const { ofCooldown, offLedger } = sortControlCastBars(owner, combat, cds);
+  ofCooldown.forEach((bars, i) => {
+    if (bars.length > 0) counts[i]!.castBarsStarted = bars.length;
+  });
+  // To the round's end (`roundEndMs`), like the [YOU] [CC] lines it is
+  // checked against (`checkCcUseStartedCounts`, `checkCcBookmarkConsistency`):
+  // the timeline itself stops there since 2026-10-24
+  // (`checkNoEventAfterRoundEnd`), so the two move together now (codex
+  // R6C-06 #3; work order 2026-10-15 #5 had found them apart)
+  const durationS = (roundEndMs(combat) - start) / 1000;
+  // fact2 R2: the owner's command rows did not go off as the control — the
+  // summon's own successes of it did
+  const cmd = petCommands(owner, combat);
+  const wentOffS = (englishName: string) =>
+    [
+      ...(owner.spellCastEvents ?? []).filter(
+        (e) =>
+          !cmd.commandRows.has(`${e.logLine.timestamp}|${e.spellId}`),
+      ),
+      ...cmd.summons.flatMap((u) =>
+        (u.spellCastEvents ?? []).filter((e) => {
+          if (e.logLine.event !== "SPELL_CAST_SUCCESS" || !e.spellId)
+            return false;
+          const name = getEnglishSpellName(e.spellId, e.spellName);
+          // the success of a bar a command began: the last bar of the spell
+          // before it was commanded
+          const bar = (u.castStartEvents ?? [])
+            .filter(
+              (b) =>
+                b.spellId === e.spellId &&
+                b.logLine.timestamp <= e.logLine.timestamp,
+            )
+            .sort((a, b) => b.logLine.timestamp - a.logLine.timestamp)[0];
+          return (
+            !!bar && cmd.petRow(u, bar.logLine.timestamp, name)
+          );
+        }),
+      ),
+    ]
+      .filter(
+        (e) =>
+          e.logLine.event === "SPELL_CAST_SUCCESS" &&
+          !!e.spellId &&
+          getEnglishSpellName(e.spellId, e.spellName) === englishName,
+      )
+      .map((e) => (e.logLine.timestamp - start) / 1000)
+      .filter((t) => t >= 0 && t <= durationS)
+      .sort((a, b) => a - b);
+  for (const e of offLedger) {
+    const went = wentOffS(e.spellName);
+    counts.push({
+      spellId: e.spellId,
+      spellName: e.spellName,
+      casts: went.length,
+      firstCastS: went.length ? Math.min(...went) : null,
+      castBarsStarted: e.bars.length,
+    });
+  }
   if (isHealerSpec(owner.spec)) return { counts, bookmarks: [] };
 
   const enemyIds = new Set(enemies.map((u) => u.id));
+  const sides = buildRosterSides(Object.values(combat.units));
   const petOwner = new Map<string, string>();
   for (const u of Object.values(combat.units))
     if (u.ownerId && enemyIds.has(u.ownerId)) petOwner.set(u.id, u.ownerId);
@@ -147,7 +355,9 @@ export function ccUseSummary(params: {
       combat,
       owner,
       cd,
-      enemyIds,
+      // enemy players AND their summons (`enemySourceIds`, codex R6C-01 #1:
+      // a Capacitor Totem's stun on the owner fell out of the sampler)
+      enemyIds: enemySourceIds(enemies, Object.values(combat.units)),
       renderedCcOf: (name) =>
         enemyCC.find((x) => x.playerName === name)?.ccInstances ?? [],
     });
@@ -201,10 +411,14 @@ export function ccUseSummary(params: {
       if (!mate || mate.id === owner.id) continue;
       const dmg = new Map<string, number>();
       let total = 0;
-      for (const e of mate.damageIn ?? []) {
+      // the [DMG SPIKE]'s own measure (`incomingPressureEvents`: landed and
+      // absorbed, redistribution out) — the line says "% of X's damage taken
+      // in the [DMG SPIKE]" (codex R6C-07 #1: 62 % on landed damage alone,
+      // 58 % of the spike's 1.44M, across the 60 % door)
+      for (const e of incomingPressureEvents(mate, sides)) {
         const t = (e.timestamp - start) / 1000;
         if (t < w.fromSeconds || t > w.toSeconds) continue;
-        const a = Math.abs(e.effectiveAmount ?? e.amount ?? 0);
+        const a = e.amount;
         total += a;
         const src = enemyIds.has(e.srcUnitId)
           ? e.srcUnitId
@@ -239,18 +453,28 @@ export function ccUseSummary(params: {
   return { counts, bookmarks };
 }
 
+/**
+ * One entry of the `Counts:` line. The started form only when fewer casts
+ * went off than cast bars were begun: with every bar finished (or more casts
+ * than bars — an instant proc of a cast-time spell) the plain form says all
+ * there is, so a spell never reads two ways. The gate
+ * (`promptQualityCheck.checkCcUseStartedCounts`) re-parses this text.
+ */
+export function formatCcUseCount(c: ICcUseCount): string {
+  const first = c.casts > 0 ? ` (first ${fmtTime(c.firstCastS!)})` : "";
+  if ((c.castBarsStarted ?? 0) > c.casts)
+    return `${c.spellName} cast bar started ${c.castBarsStarted}×, went off ${c.casts}×${first}`;
+  return c.casts === 0
+    ? `${c.spellName} not cast`
+    : `${c.spellName} cast ${c.casts}×${first}`;
+}
+
 export function formatCcUse(
   summary: ICcUseSummary,
   labels: { friendly: (n: string) => string; enemy: (n: string) => string },
 ): string[] {
   if (summary.counts.length === 0) return [];
-  const countStr = summary.counts
-    .map((c) =>
-      c.casts === 0
-        ? `${c.spellName} not cast`
-        : `${c.spellName} cast ${c.casts}× (first ${fmtTime(c.firstCastS!)})`,
-    )
-    .join(" · ");
+  const countStr = summary.counts.map(formatCcUseCount).join(" · ");
   const lines = [CC_USE_SECTION_HEADER, `  Counts: ${countStr}`];
   for (const b of summary.bookmarks) {
     const from = b.seconds[0]!;

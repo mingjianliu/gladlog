@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, writeFileSync } from "fs";
-import { join } from "path";
 import { ensureDirSync } from "fs-extra";
+import { join } from "path";
 
 /**
  * Creates the icon cache service.

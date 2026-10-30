@@ -1,4 +1,4 @@
-/* eslint-disable no-console */
+ 
 /**
  * Corpus-empirical scan of the three new candidate types (arenacoach batch 1
  * Task 6): quantify the occurrence rate of death-unused-defensive /
@@ -23,20 +23,19 @@
  *
  * Usage: npx tsx packages/eval/scripts/newCandidateScan.ts --manifest <file>
  */
-import { readFileSync } from "fs";
-import path from "path";
-
-import { GladLogParser, type GladMatch } from "@gladlog/parser";
-import { toLegacyMatch, CombatUnitReaction } from "@gladlog/parser-compat";
 import {
   analyzePlayerCCAndTrinket,
+  type CandidateEvent,
   ensureAnalysisData,
   extractCandidateFindings,
   extractMajorCooldowns,
   isAllyCastableDefensive,
   isHealerSpec,
-  type CandidateEvent,
 } from "@gladlog/analysis";
+import { GladLogParser, type GladMatch } from "@gladlog/parser";
+import { CombatUnitReaction,toLegacyMatch } from "@gladlog/parser-compat";
+import { readFileSync } from "fs";
+import path from "path";
 
 function parseArgs(): { manifest: string } {
   const a = process.argv.slice(2);

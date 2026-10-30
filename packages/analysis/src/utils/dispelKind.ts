@@ -81,10 +81,12 @@ export interface CastMatchIndex {
   byId: Map<string, number[]>;
   /** `${srcUnitId}|${spellName}` → timestamps (insertion order) */
   byName: Map<string, number[]>;
+  /** `srcUnitId` → every press's timestamp, any spell (fact2 C5) */
+  bySource: Map<string, number[]>;
 }
 
 export function createCastMatchIndex(): CastMatchIndex {
-  return { byId: new Map(), byName: new Map() };
+  return { byId: new Map(), byName: new Map(), bySource: new Map() };
 }
 
 export function addCastToIndex(
@@ -106,6 +108,31 @@ export function addCastToIndex(
     list.push(timestamp);
     index.byName.set(k, list);
   }
+  const bySrc = index.bySource.get(srcUnitId) ?? [];
+  bySrc.push(timestamp);
+  index.bySource.set(srcUnitId, bySrc);
+}
+
+/** A press and a removal it caused share their instant; the log can split
+ * them by a few ms (the [MINOR DISPELS] fold's one-cast merge,
+ * `MINOR_DISPEL_CAST_MERGE_S`, is the same 50 ms). */
+export const DISPEL_RIDES_PRESS_MS = 50;
+
+/**
+ * fact2 C5 (2026-10-20): did the dispel's source press ANY spell at the
+ * removal — a talent's dispel riding a differently named button (Phantasm
+ * 114239 on Fade 586, Spreading the Word: Freedom 199508 on Blessing of
+ * Freedom 1044; 0deb726b 0:06 / 0:39). The [MINOR DISPELS] fold calls such a
+ * removal a side effect of the cast, not `(passive)`: a press made it.
+ * Says nothing about the dispel kind (`classifyDispel` is unchanged).
+ */
+export function dispelRodeOwnPress(
+  index: CastMatchIndex,
+  d: Pick<IDispelToClassify, "srcUnitId" | "timestamp">,
+): boolean {
+  return (index.bySource.get(d.srcUnitId) ?? []).some(
+    (t) => Math.abs(t - d.timestamp) <= DISPEL_RIDES_PRESS_MS,
+  );
 }
 
 /**
@@ -126,6 +153,12 @@ export function buildCastMatchIndex(
       spellName?: string | null;
       timestamp: number;
     }>;
+    empowerEnds?: ReadonlyArray<{
+      srcUnitId?: string;
+      spellId?: string | null;
+      spellName?: string | null;
+      timestamp: number;
+    }>;
   }>,
 ): CastMatchIndex {
   const index = createCastMatchIndex();
@@ -140,6 +173,18 @@ export function buildCastMatchIndex(
         c.timestamp,
       );
     }
+    // an empowered cast logs its SUCCESS when the hold starts and acts at
+    // the release (SPELL_EMPOWER_END): its dispel comes with the release
+    // (fact1215 R11, 34204ef9: Fire Breath held 1.1 s and 1.3 s, six of
+    // its dispels read as `(passive)`)
+    for (const r of u.empowerEnds ?? [])
+      addCastToIndex(
+        index,
+        r.srcUnitId || u.id,
+        r.spellId,
+        r.spellName,
+        r.timestamp,
+      );
   }
   return index;
 }
@@ -147,27 +192,68 @@ export function buildCastMatchIndex(
 const within = (list: number[] | undefined, t: number): boolean =>
   !!list && list.some((c) => Math.abs(c - t) <= DISPEL_CAST_MATCH_WINDOW_MS);
 
-export function classifyDispel(
+interface IDispelToClassify {
+  srcUnitId: string;
+  /** a pet's owner: its command press (Command Demon's Singe Magic 119905,
+   * the same name as the Imp's 89808) is the press that made the removal */
+  srcOwnerId?: string;
+  spellId: string | null | undefined;
+  spellName: string | null | undefined;
+  timestamp: number;
+}
+
+/**
+ * Did the dispel's own source log a cast of the dispelling spell (same id or
+ * same name) inside `DISPEL_CAST_MATCH_WINDOW_MS` — the cast-match half of
+ * `classifyDispel`, on its own for a RIDER (F11): the list makes a Demonic
+ * Circle: Teleport's snare removal a rider whether or not the teleport was
+ * cast, and the [MINOR DISPELS] fold printed every rider as `(passive)` — on
+ * the 60 re-eval prompts the only mention of seven warlocks' teleports. A
+ * rider with its cast on the log is a side effect of a press; one without
+ * (Incarnation: Tree of Life's removal when the druid LEAVES the form, or
+ * enters it on a Reforestation proc) is not.
+ */
+export function dispelCameWithOwnCast(
   index: CastMatchIndex,
-  d: {
-    srcUnitId: string;
-    spellId: string | null | undefined;
-    spellName: string | null | undefined;
-    timestamp: number;
-  },
-): DispelKind {
-  // The list wins over the cast match: a form shift IS a cast, but its dispel
-  // is a root-break rider, not a cleanse decision.
-  if (d.spellId && MOVEMENT_ROOT_BREAK_DISPEL_IDS.has(d.spellId))
-    return "rider";
+  d: IDispelToClassify,
+): boolean {
   const idHit = d.spellId
     ? within(index.byId.get(`${d.srcUnitId}|${d.spellId}`), d.timestamp)
     : false;
   const nameHit = d.spellName
     ? within(index.byName.get(`${d.srcUnitId}|${d.spellName}`), d.timestamp)
     : false;
-  return idHit || nameHit ? "deliberate" : "proc";
+  // fact5 retest r3 2fd86b1f 2:18 / 3:35: the warlock's Singe Magic
+  // command 1 ms before the Imp's removal read `(passive)`
+  const owner =
+    d.srcOwnerId && !/^0+$/.test(d.srcOwnerId) ? d.srcOwnerId : undefined;
+  const ownerHit =
+    !!owner &&
+    !!d.spellName &&
+    within(index.byName.get(`${owner}|${d.spellName}`), d.timestamp);
+  return idHit || nameHit || ownerHit;
 }
+
+export function classifyDispel(
+  index: CastMatchIndex,
+  d: IDispelToClassify,
+): DispelKind {
+  // The list wins over the cast match: a form shift IS a cast, but its dispel
+  // is a root-break rider, not a cleanse decision.
+  if (d.spellId && MOVEMENT_ROOT_BREAK_DISPEL_IDS.has(d.spellId))
+    return "rider";
+  return dispelCameWithOwnCast(index, d) ? "deliberate" : "proc";
+}
+
+/** A removal that is a side effect of a form / movement / defensive action
+ * (`MOVEMENT_ROOT_BREAK_DISPEL_IDS`) — no cleanse, purge or steal decision.
+ * The one test of every reader that lists dispels as such: the friendly
+ * [CLEANSE] (D1, 2026-09-25), `wasRemovedByAllyDispel`, and since fact2
+ * (2026-10-20) the [ENEMY CLEANSE] / [PURGE] / [ENEMY PURGE] lines
+ * (08acb188 1:24: `cleansed The Hunt off 5(FWarrior) (Escape Artist)`;
+ * 179b83ac: a Travel Form root break as an enemy cleanse). */
+export const isRiderDispel = (d: { dispelKind?: DispelKind }): boolean =>
+  d.dispelKind === "rider";
 
 export const isDeliberateDispel = (k: DispelKind): boolean =>
   k === "deliberate";

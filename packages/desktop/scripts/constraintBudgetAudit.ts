@@ -64,10 +64,10 @@ import { join } from "node:path";
 import {
   auditFindings,
   buildFindingsPrompt,
+  ensureAnalysisData,
   LEGACY_TOPIC_TYPES,
   parseModelJsonArray,
   type RawFinding,
-  ensureAnalysisData,
 } from "@gladlog/analysis";
 
 import { seededShuffle } from "../../eval/src/explore/buildSession";

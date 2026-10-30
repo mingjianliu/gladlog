@@ -2786,6 +2786,12 @@ pre {
   background: var(--surface-2);
   color: var(--mute);
 }
+/* AI 自查标注:结果区顶部一行淡色小字,不抢结论的视线 */
+.rpt-self-review-note {
+  margin: 0 0 8px;
+  font-size: 11px;
+  color: var(--mute);
+}
 
 /* ── 统计表行展开(#10 v2)── */
 .rpt-stats-expandable {

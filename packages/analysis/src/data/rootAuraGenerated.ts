@@ -1,6 +1,6 @@
 /**
- * Generated at: 2026-09-26T09:45:14.770Z
- * Build: 12.1.0.69587
+ * Generated at: 2026-10-16T15:39:05.179Z
+ * Build: 12.1.5.70391
  * Source: SpellEffect aura 26 / 455 (MOD_ROOT / MOD_ROOT_2) on the spell itself; restricted to the
  *   observed universe
  * ids: 28

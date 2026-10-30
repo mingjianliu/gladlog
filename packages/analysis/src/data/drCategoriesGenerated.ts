@@ -1,8 +1,8 @@
 /**
- * Generated at: 2026-09-05T00:11:50.985Z
- * Build: 12.1.0.69587
+ * Generated at: 2026-10-16T15:38:39.754Z
+ * Build: 12.1.5.70391
  * Source: DB2 SpellCategories.DiminishType(1=root 4=stun 16=incap 32=disorient 64=silence)
- * stun:649 incapacitate:325 root:139 disorient:225 silence:61
+ * stun:651 incapacitate:325 root:139 disorient:226 silence:61
  */
 
 export const DR_CATEGORIES_GENERATED: Record<string, string[]> = {
@@ -230,6 +230,7 @@ export const DR_CATEGORIES_GENERATED: Record<string, string[]> = {
     "1243765",
     "1243948",
     "1287366",
+    "1293457",
     "1294062",
     "1305650"
   ],
@@ -1413,6 +1414,8 @@ export const DR_CATEGORIES_GENERATED: Record<string, string[]> = {
     "1291770",
     "1294651",
     "1296733",
-    "1299191"
+    "1299191",
+    "1315479",
+    "1315587"
   ]
 };

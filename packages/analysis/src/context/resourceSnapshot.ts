@@ -1,23 +1,52 @@
 import { ICombatUnit } from "@gladlog/parser-compat";
 
-import { buffFullDurationForCaster } from "../utils/buffDuration";
+import {
+  effectAuraViaName,
+  ownEffectAurasOfCast,
+} from "../data/castEffectAuras";
+import { spellEffectData } from "../data/spellEffectData";
+import {
+  buffDurationRangeForCaster,
+  buffFullDurationForCaster,
+} from "../utils/buffDuration";
+import { castBarsOfCooldown, castBarStartsInRound } from "../utils/castCancels";
 import { IPlayerCCTrinketSummary } from "../utils/ccTrinketAnalysis";
 import {
-  CD_INSTANT_SLACK_S,
+  canonicalSpellId,
   cdAvailableAt,
   cdChargesReadyAt,
   cdIsProcOnly,
-  cdNeverSpent,
+  cdLatestRemainingSeconds,
   cdMaybeAvailableAt,
+  cdRealisedSecondsUntilReady,
+  cdRemainingWholeSeconds,
   cdSecondsUntilReady,
+  GUARDIAN_SPIRIT_SPELL_ID,
   IMajorCooldownInfo,
+  kitRowUnused,
   lockCastsOf,
+  ownPressLockout,
+  type PressLockoutDebuff,
+  pressSpentBy,
   specToString,
+  warpClock,
 } from "../utils/cooldowns";
+import { positionalWallReach } from "../utils/deathOutcomeAnalysis";
+import { isStunCcInstance } from "../utils/drAnalysis";
 import { IEnemyCDTimeline } from "../utils/enemyCDs";
 import { sumIncomingPressure } from "../utils/incomingPressure";
+import type { CastFailedEvent } from "../utils/rawStreams";
 import { toRenderSecond } from "../utils/renderGrid";
+import { affordableAt, type ManaFallback } from "../utils/resourceAt";
+import type { RosterSides } from "../utils/rosterSide";
 import { getPvpToolkit } from "../utils/talentBehaviors";
+import { isDeadAt } from "../utils/unitDeath";
+import {
+  formatKitUnusedNote,
+  KIT_REFUSED_PRESS_LEGEND,
+  kitRefusedPressesOf,
+} from "./kitUnusedNote";
+import { resCcRemainingText } from "./resLedgerPrune";
 
 // F169: number of friendly units with an active Atonement (194384) at a given time. Disc Priest
 // healing scales with Atonement count, so this is a core throughput signal for the spec.
@@ -75,6 +104,18 @@ export function buildPlayerLoadout(
    * listing only what was actually cast this match.
    */
   enemyCooldowns?: Array<{ player: ICombatUnit; cds: IMajorCooldownInfo[] }>,
+  /** The round, in log ms — what "this round" means for a started cast
+   * (`[UNUSED — started N×…]`): the units keep lines from after it. Its
+   * bracket and units let `castBarStartsInRound` end a Solo Shuffle round at
+   * its ending death, as CC USE's `cast bar started N×` does (F19 605 gate:
+   * a Ring of Frost begun after the death read `started 1×` here and
+   * `not cast` there). */
+  roundMs?: Parameters<typeof castBarStartsInRound>[1],
+  /** The log owner's refused presses — `rawStreams.castFailed`, seconds since
+   * the round's start — and the second the round was over for the owner (its
+   * end or their death): what `[UNUSED — pressed N×, refused: …]` reads
+   * (`kitUnusedNote.ts`). Absent (no raw stream) = no such note. */
+  ownerRefused?: { castFailed: readonly CastFailedEvent[]; untilS: number },
 ): {
   text: string;
   playerIdMap: Map<string, number>;
@@ -91,7 +132,7 @@ export function buildPlayerLoadout(
   // in the model's own head (bare-fact bypass lesson, 8fba412 precedent), so
   // the semantics are stated in-band where the kit is rendered.
   lines.push(
-    "  NOTE: each unit's kit below lists only abilities there is evidence this player actually has THIS round (talent selection, PvP talents, or casts). Do not base coaching on class/spec abilities absent from these lists — talents differ per player and, in Solo Shuffle, per round.",
+    "  NOTE: each unit's kit below lists only abilities there is evidence this player actually has THIS round (talent selection, PvP talents, casts, or a defensive every player of that spec owns without a talent). Do not base coaching on class/spec abilities absent from these lists — talents differ per player and, in Solo Shuffle, per round.",
   );
 
   // Use separate maps to prevent a friendly and enemy sharing a display name from
@@ -119,18 +160,149 @@ export function buildPlayerLoadout(
   // the prompt. No duration known → nothing rendered.
   const lastsPart = (cd: IMajorCooldownInfo, caster?: ICombatUnit): string => {
     if (cd.tag !== "Defensive") return "";
-    const d = buffFullDurationForCaster(cd.spellId, caster);
-    return d !== undefined && d > 0
-      ? `, lasts ${Math.round(d * 10) / 10}s`
-      : "";
+    // GH #155: a per-event talent makes it a range (Spiritwalker's Grace
+    // `lasts 15–19s` for a Spiritwalker's Momentum holder)
+    // fact3 D53 (b3aa876f r3): a press that runs as its own same-named
+    // effect aura of the same base length is timed by that aura, whose
+    // talents are registered there — Rallying Cry 97462 runs as 97463,
+    // (10 + 3) × 1.2 = 15.6 s with Battlefield Commander and Resonant Voice,
+    // as its [BUFF FADED] reads; the cast id knew none and the kit said 10 s.
+    // A different base length is a different effect (Divine Hymn's 15 s
+    // healing buff beside its 8 s channel) and keeps the cast's.
+    const base = buffFullDurationForCaster(cd.spellId, undefined);
+    const runAuraId =
+      ownEffectAurasOfCast(cd.spellId).find(
+        (a) =>
+          effectAuraViaName(cd.spellId, a) &&
+          base !== undefined &&
+          buffFullDurationForCaster(a, undefined) === base,
+      ) ?? cd.spellId;
+    const r =
+      buffDurationRangeForCaster(runAuraId, caster) ??
+      buffDurationRangeForCaster(cd.spellId, caster);
+    if (r === undefined || !(r.min > 0)) return "";
+    const fmt = (x: number) => Math.round(x * 10) / 10;
+    return r.max > r.min
+      ? `, lasts ${fmt(r.min)}–${fmt(r.max)}s`
+      : `, lasts ${fmt(r.min)}s`;
+  };
+  // FT-T06: "never spent" is not "never tried". A cast bar that was started
+  // and never finished (kicked, cancelled, CC'd) is in the log —
+  // SPELL_CAST_START with no SPELL_CAST_SUCCESS — and the bare [UNUSED] read
+  // as "did not think of it" (24b6a229, 3306e8ee, 7d1f14af: Hex started once
+  // or twice, kicked). FT F09 (2026-10-11): nor is it "never pressed" when
+  // the game refused every press (SPELL_CAST_FAILED — written for the log's
+  // recorder alone, read from the raw stream like `[REJECTED]`): the owner's
+  // entry says `pressed N×, refused: …` (`kitUnusedNote.ts`). The cooldown
+  // stays never spent for every reader of the ledger; only this tag's text
+  // changes.
+  let refusedNotePrinted = false;
+  const triedNote = (cd: IMajorCooldownInfo, caster?: ICombatUnit): string => {
+    if (!caster) return "";
+    // inside the round only, as the cooldown ledger's casts are — a Shuffle
+    // round's units keep the lines that follow it (codex review: a Hex
+    // started and finished after the round read "never finished").
+    // Which bars are this cooldown's is the ledger's own relation
+    // (`castBarsOfCooldown`), shared with CC USE's `cast bar started N×`
+    // (FT-T16 D15): by the id alone, a glyphed Hex — another id, the same
+    // cooldown, whose casts the ledger does count — never got the note.
+    const starts = castBarsOfCooldown(
+      castBarStartsInRound(
+        caster,
+        roundMs ?? { startTime: 0, endTime: Infinity },
+      ),
+      caster,
+      cd,
+    ).length;
+    const refused =
+      ownerRefused && caster.id === owner.id
+        ? kitRefusedPressesOf(
+            ownerRefused.castFailed,
+            caster,
+            cd,
+            ownerRefused.untilS,
+          )
+        : null;
+    if (refused) refusedNotePrinted = true;
+    return formatKitUnusedNote(starts, refused);
+  };
+  // FT-T04 follow-up (user ruling 2026-10-09): a cooldown whose length
+  // depends on what its press did says so. Guardian Spirit under Guardian
+  // Angel recovers 60 s after the buff EXPIRES unused and the official 180 s
+  // after a save (`guardianSpiritCastCooldownSeconds`); the kit printed
+  // `[60s, lasts 12s]` while the [RES] row of a press read `(71s)` — 2,121
+  // `cd:` entries of the 605-file capture sat above the kit's own number.
+  let shortenedPrinted = false;
+  const cdSecondsLabel = (cd: IMajorCooldownInfo): string => {
+    const official = spellEffectData[cd.spellId]?.cooldownSeconds;
+    if (
+      cd.spellId === GUARDIAN_SPIRIT_SPELL_ID &&
+      official !== undefined &&
+      cd.cooldownSeconds < official
+    )
+      return `${cd.cooldownSeconds}s from when it expires unused, ${official}s after a save`;
+    // fact2 (2026-10-20): a cooldown combat shortens (Anger Management,
+    // `earliestCooldownSeconds`, the corpus floor) prints its range, as the
+    // [RES] rows do — `[90s]` stood beside Bladestorm presses 68.5 s apart
+    // (0b72c44e)
+    // … and so does one whose presses this round came back early by events
+    // (`reductions`, Storm Conduit's bolts — the [RES] rows' realised
+    // reading): the most any press was shortened
+    const eventShortest = Math.max(
+      0,
+      ...(cd.casts ?? []).map((c) =>
+        (c.reductions ?? []).reduce((sum, r) => sum + r.seconds, 0),
+      ),
+    );
+    // … and one whose recovery a buff of the unit's own sped up this round
+    // (`rateWindows`, the warped clock every [RES] row reads): the real time
+    // its quickest press took to come back (fact2-retest idx 25: Emerald
+    // Communion `[180s]` above `+Emerald Communion` rows and two presses
+    // 175.0 s apart)
+    const warp = cd.rateWindows?.length ? warpClock(cd.rateWindows) : null;
+    const rateShortest = warp
+      ? Math.min(
+          cd.cooldownSeconds,
+          ...(cd.casts ?? []).map(
+            (c) =>
+              warp.inverse(warp.tau(c.timeSeconds) + cd.cooldownSeconds) -
+              c.timeSeconds,
+          ),
+        )
+      : cd.cooldownSeconds;
+    const soonest = Math.floor(
+      Math.min(
+        cd.earliestCooldownSeconds ?? cd.cooldownSeconds,
+        cd.cooldownSeconds - eventShortest,
+        rateShortest,
+      ),
+    );
+    if (soonest < cd.cooldownSeconds) {
+      shortenedPrinted = true;
+      return `${Math.max(0, soonest)}–${cd.cooldownSeconds}s`;
+    }
+    return `${cd.cooldownSeconds}s`;
   };
   const fmtCDLabel = (cd: IMajorCooldownInfo, caster?: ICombatUnit) =>
     // a proc-only entry's "charges" are inferred from how often it procced
     // (Radiant Glory's Avenging Wrath every Wake of Ashes → "2 Charges"), not
     // something the player holds — not printed (GH #106 step 2)
-    `${cd.spellName} [${cd.cooldownSeconds}s${(cd.charges ?? 1) > 1 && !cdIsProcOnly(cd) ? `, ${cd.charges} Charges` : ""}${lastsPart(cd, caster)}]${
-      cdIsProcOnly(cd) ? " [PASSIVE]" : cdNeverSpent(cd) ? " [UNUSED]" : ""
-    }`;
+    // FT-T06: an entry with no button (`isProcOnly`: a talent replaced it by
+    // a passive, or a registered proc) has no cooldown the player waits for
+    // either — `[60s] [PASSIVE]` on an Avenging Wrath that comes with every
+    // Wake of Ashes read as a 60 s cooldown. 605-file capture: 1,468 kit
+    // entries printed seconds in front of [PASSIVE]; none does now.
+    cd.isProcOnly
+      ? `${cd.spellName} [PASSIVE]`
+      : `${cd.spellName} [${cdSecondsLabel(cd)}${(cd.charges ?? 1) > 1 && !cdIsProcOnly(cd) ? `, ${cd.charges} Charges` : ""}${lastsPart(cd, caster)}]${
+          cdIsProcOnly(cd)
+            ? " [PASSIVE]"
+            : // `kitRowUnused`: the reading the kill-opportunity tier's "wall
+              // in hand" shares (R08 b) — the two cannot disagree
+              kitRowUnused(cd)
+              ? ` [UNUSED${triedNote(cd, caster)}]`
+              : ""
+        }`;
 
   const ownerId = nextId++;
   friendlyIdMap.set(owner.name, ownerId);
@@ -139,6 +311,7 @@ export function buildPlayerLoadout(
     ownerCDs.length > 0
       ? ownerCDs.map((cd) => fmtCDLabel(cd, owner)).join(", ")
       : "none tracked";
+  if (refusedNotePrinted) lines.push(KIT_REFUSED_PRESS_LEGEND);
 
   lines.push(
     `  <unit id="${ownerId}" name="${owner.name}" spec="${ownerSpec}" role="log owner">`,
@@ -209,10 +382,19 @@ export function buildPlayerLoadout(
     // value wins (the talent-adjusted cooldown), so the same spell never shows
     // two different cooldown numbers (the lesson of class D, 2026-07-20).
     const kitNames = new Set((kit ?? []).map((c) => c.spellName));
+    // F20 D23: an override variant pressed under its own name (Predator's
+    // Wake) is the kit row's button (The Hunt) — one cooldown, one entry
+    const kitIds = new Set((kit ?? []).map((c) => canonicalSpellId(c.spellId)));
     const observedOnly: string[] = [];
     const seen = new Set<string>();
     for (const cd of player.offensiveCDs) {
-      if (kitNames.has(cd.spellName) || seen.has(cd.spellName)) continue;
+      if (
+        kitNames.has(cd.spellName) ||
+        (canonicalSpellId(cd.spellId) !== cd.spellId &&
+          kitIds.has(canonicalSpellId(cd.spellId))) ||
+        seen.has(cd.spellName)
+      )
+        continue;
       seen.add(cd.spellName);
       // an activation of another cooldown's effect has no cooldown of its
       // own to print (Radiant Glory's Avenging Wrath, GH #115)
@@ -257,6 +439,7 @@ export function buildPlayerLoadout(
     lines.push("  </unit>");
   }
 
+  if (shortenedPrinted) lines.push(KIT_SHORTENED_CD_LEGEND);
   lines.push("</player_loadout>");
 
   // playerIdMap carries only friendly (owner + teammate) name→ID entries; pid() in
@@ -307,15 +490,25 @@ export function chargesReadyCount(
  * Everything else keeps the exact `(Ns)`.
  */
 function remainingText(cd: IMajorCooldownInfo, timeSeconds: number): string {
-  const latest = Math.max(1, Math.round(cdSecondsUntilReady(cd, timeSeconds)));
-  if (cd.earliestCooldownSeconds === undefined) return `${latest}s`;
+  const latest = cdLatestRemainingSeconds(cd, timeSeconds);
   if (cdMaybeAvailableAt(cd, timeSeconds)) return `≤${latest}s`;
-  const soonest = Math.max(
-    1,
-    Math.round(
-      cdSecondsUntilReady(cd, timeSeconds, cd.earliestCooldownSeconds),
-    ),
+  // An event-reduced press (Storm Conduit) is a cooldown combat shortens too:
+  // `latest` counts the bolts cast so far, the realised return every bolt
+  // before it came back — `(a–Ns)` with that as a, by the legend's own
+  // definition (acceptance 7e2a3c95 #1: 1b930c17 0:24 `Healing Tide
+  // Totem(119s)`, pressed again at 1:57).
+  const realised = cdRemainingWholeSeconds(
+    cdRealisedSecondsUntilReady(cd, timeSeconds),
   );
+  const soonest =
+    cd.earliestCooldownSeconds === undefined
+      ? realised
+      : Math.min(
+          realised,
+          cdRemainingWholeSeconds(
+            cdSecondsUntilReady(cd, timeSeconds, cd.earliestCooldownSeconds),
+          ),
+        );
   return soonest < latest ? `${soonest}–${latest}s` : `${latest}s`;
 }
 
@@ -332,10 +525,24 @@ function onCdKey(
   timeSeconds: number,
 ): string {
   const last = lockCastsOf(cd)
-    .filter((c) => c.timeSeconds <= timeSeconds + CD_INSTANT_SLACK_S)
+    .filter((c) => pressSpentBy(c.timeSeconds, timeSeconds))
     .reduce((m, c) => Math.max(m, c.timeSeconds), Number.NEGATIVE_INFINITY);
   return `${displayName}@${Math.round(last * 10) / 10}`;
 }
+
+/** B35 delta key of a debuff-locked entry (Forbearance, Hypothermia): the
+ * name and the lockout it is waiting out, so a second one prints again. */
+function lockoutKey(displayName: string, lock: ResPressLockout): string {
+  return `${displayName}@${lock.debuff.toLowerCase()}${Math.round(lock.untilS * 10) / 10}`;
+}
+
+/** A never-pressed cooldown makes no [RES] row on its own in the round's
+ * first seconds up to this one (`resStateOf`'s `skip`). */
+export const RES_OPENER_SKIP_S = 5;
+
+/** The kit's `[a–Ns]` (fact2, 2026-10-20): written when a kit carries one. */
+export const KIT_SHORTENED_CD_LEGEND =
+  "  NOTE: `[a–Ns]` on a kit = a cooldown that combat shortens (a talent like Anger Management, or presses this round brought back early by events): it is back N s after a press at the latest, and has been seen back after a s at the soonest — the same range the [RES] rows print.";
 
 /**
  * One cooldown's state on a [RES] line, through the shared predicate
@@ -349,39 +556,215 @@ function resStateOf(
 ): "ready" | "onCd" | "skip" {
   // A shared-pool press (Spellwarding for Blessing of Protection) counts:
   // the cooldown is running even though X itself was never pressed.
-  const pressed = lockCastsOf(cd).some(
-    (c) => c.timeSeconds <= timeSeconds + CD_INSTANT_SLACK_S,
+  const pressed = lockCastsOf(cd).some((c) =>
+    pressSpentBy(c.timeSeconds, timeSeconds),
   );
-  if (!pressed) return timeSeconds > 5 ? "ready" : "skip";
+  if (!pressed) return timeSeconds > RES_OPENER_SKIP_S ? "ready" : "skip";
   return cdAvailableAt(cd, timeSeconds) ? "ready" : "onCd";
+}
+
+/**
+ * Whose deaths the ledger reads (triage res-readiness F-C4): with it, a
+ * holder dead before the row's rendered second holds nothing — 539b6ed0's
+ * `rdy:` kept a Druid's Incarnation and Stampeding Roar 16 s after he died.
+ * Absent (hand-built fixtures) = nobody is dead.
+ */
+export interface ResHolderDeaths {
+  matchStartMs: number;
+  ownerUnit?: ICombatUnit;
+}
+
+type ResTeammateCds = {
+  cds: IMajorCooldownInfo[];
+  playerLabel?: string;
+  /** the holder, for `ResHolderDeaths` */
+  player?: ICombatUnit;
+};
+
+/**
+ * Every friendly cooldown the [RES] ledger tracks, attributed, with whether
+ * its holder is dead at the row — the ONE list `rdy:`, `cd:` and both delta
+ * trackers are built from.
+ *
+ * No button → not on the ledger line at all (GH #106 step 2): "rdy:X" would
+ * tell the model the player could press X.
+ *
+ * `holderDead` is `isDeadAt` (the one dead-at predicate) at the row's rendered
+ * second: a death at 67.03 leaves the 1:07 row untouched — that row is how
+ * the death block shows what the dying unit held — and empties the holder's
+ * entries from 1:08 on.
+ */
+function friendlyResCds(
+  timeSeconds: number,
+  ownerCDs: IMajorCooldownInfo[],
+  teammateCDs: ResTeammateCds[],
+  deaths: ResHolderDeaths | undefined,
+): Array<{
+  displayName: string;
+  cd: IMajorCooldownInfo;
+  holderDead: boolean;
+  /** off cooldown, but its holder is under a debuff that refuses the press
+   * (`ownPressLockout`: Forbearance, Hypothermia) until this second */
+  lockout?: ResPressLockout;
+}> {
+  // "dead before the row's second": `isDeadAt` 1 ms before it, so a death at
+  // exactly 67.000 keeps the 1:07 row like one at 67.030 (codex review — the
+  // shared predicate's own `<=` is unchanged)
+  const rowMs =
+    deaths === undefined
+      ? undefined
+      : deaths.matchStartMs + toRenderSecond(timeSeconds) * 1000 - 1;
+  const dead = (unit: ICombatUnit | undefined) =>
+    rowMs !== undefined && unit !== undefined && isDeadAt(unit, rowMs);
+  const ownerDead = dead(deaths?.ownerUnit);
+  // FT-T04 / FT F22: the debuff that takes a cooldown from its own holder
+  // while it is off cooldown (`ownPressLockout`: Divine Shield under
+  // Forbearance, Ice Block under Hypothermia).
+  const team = [deaths?.ownerUnit, ...teammateCDs.map((t) => t.player)].filter(
+    (u): u is ICombatUnit => u !== undefined,
+  );
+  const lockoutOf = (
+    cd: IMajorCooldownInfo,
+    holder: ICombatUnit | undefined,
+  ): ResPressLockout | undefined =>
+    deaths !== undefined && holder !== undefined
+      ? ownPressLockout(
+          holder,
+          cd.spellId,
+          team,
+          timeSeconds,
+          deaths.matchStartMs,
+        )
+      : undefined;
+  return [
+    ...ownerCDs
+      .filter((cd) => !cdIsProcOnly(cd))
+      .map((cd) => ({
+        displayName: cd.spellName,
+        cd,
+        holderDead: ownerDead,
+        lockout: lockoutOf(cd, deaths?.ownerUnit),
+      })),
+    ...teammateCDs.flatMap(({ cds, playerLabel, player }) => {
+      const holderDead = dead(player);
+      return cds
+        .filter((cd) => !cdIsProcOnly(cd))
+        .map((cd) => ({
+          displayName: playerLabel
+            ? `${playerLabel}:${cd.spellName}`
+            : cd.spellName,
+          cd,
+          holderDead,
+          lockout: lockoutOf(cd, player),
+        }));
+    }),
+  ];
+}
+
+type ResPressLockout = { debuff: PressLockoutDebuff; untilS: number };
+
+/** What a `cd:` entry reads for a cooldown that is off cooldown while its
+ * holder is under the debuff that refuses the press — `Divine
+ * Shield(Forbearance 12s)` (FT-T04), `Ice Block(Hypothermia 12s)` (FT F22). */
+export const RES_FORBEARANCE_RE_SRC = String.raw`\(Forbearance \d+s\)`;
+export const RES_HYPOTHERMIA_RE_SRC = String.raw`\(Hypothermia \d+s\)`;
+/** fact4 D18: a cooldown that MAY be back (`≤Ns`) while its holder is under
+ * the lockout debuff — `Ice Block(≤83s; Hypothermia 30s)` */
+export const RES_MAYBE_LOCKED_RE_SRC = String.raw`\(≤\d+s; (?:Forbearance|Hypothermia) \d+s\)`;
+function lockoutText(lock: ResPressLockout, timeSeconds: number): string {
+  return `${lock.debuff} ${Math.max(1, Math.floor(lock.untilS - timeSeconds))}s`;
+}
+
+/** `resStateOf` with the holder's lockout debuff: a ready Divine Shield under
+ * Forbearance, a ready Ice Block under Hypothermia, is "locked" — out of
+ * `rdy:`, in `cd:` with the lockout's own remaining. */
+function resEntryState(
+  e: { cd: IMajorCooldownInfo; lockout?: ResPressLockout },
+  timeSeconds: number,
+): "ready" | "onCd" | "skip" | "locked" | "maybeLocked" {
+  const state = resStateOf(e.cd, timeSeconds);
+  // a lockout (Forbearance, Hypothermia) locks an unpressed opener entry too:
+  // the opener rows promote "skip" to ready (codex 20-F16-03 #1: Lay on Hands
+  // at 1 s, `rdy:Divine Shield` at 2 s)
+  if ((state === "ready" || state === "skip") && e.lockout !== undefined)
+    return "locked";
+  // fact4 D18 (353ad51a r3 2:50 / 3:16): a cooldown that may already be back
+  // (`≤Ns`) is still refused while the lockout runs — `≤Ns` alone read "may
+  // be pressable" under 30 s of Hypothermia
+  if (
+    state === "onCd" &&
+    e.lockout !== undefined &&
+    cdMaybeAvailableAt(e.cd, timeSeconds)
+  )
+    return "maybeLocked";
+  return state;
+}
+
+/**
+ * B14a: the [RES] display names of positional cooldowns whose holder stood
+ * out of their reach of `outOfReachOf.victim` at that instant
+ * (`positionalWallReach` === "out-of-reach": the reach predicate of
+ * `positionalWallReaches`, with "no position sample" kept apart; a
+ * non-positional cooldown always reaches, the victim's own cooldowns are
+ * never listed). `buildResourceSnapshot` drops
+ * these from a death row's `rdy:`; the snapshot resolver counts the rows
+ * that lost one, for the legend.
+ */
+export function positionalOutOfReachNames(
+  ownerUnit: ICombatUnit | undefined,
+  ownerCDs: IMajorCooldownInfo[],
+  teammateCDs: ResTeammateCds[],
+  outOfReachOf: { victim: ICombatUnit; atMs: number },
+): Set<string> {
+  const out = new Set<string>();
+  const holders: Array<{
+    unit: ICombatUnit | undefined;
+    cds: IMajorCooldownInfo[];
+    label?: string;
+  }> = [
+    { unit: ownerUnit, cds: ownerCDs },
+    ...teammateCDs.map(({ player, cds, playerLabel }) => ({
+      unit: player,
+      cds,
+      label: playerLabel,
+    })),
+  ];
+  for (const { unit, cds, label } of holders) {
+    if (!unit || unit.id === outOfReachOf.victim.id) continue;
+    for (const cd of cds)
+      // only a KNOWN out-of-reach leaves the row: a missing position sample
+      // drops nothing (the row is a fact, and its legend says "stood out of
+      // reach" — agy review of the batch: the first cut used the
+      // accusation-side predicate, which fails closed)
+      if (
+        positionalWallReach(
+          cd.spellId,
+          unit,
+          outOfReachOf.victim,
+          outOfReachOf.atMs,
+        ) === "out-of-reach"
+      )
+        out.add(label ? `${label}:${cd.spellName}` : cd.spellName);
+  }
+  return out;
 }
 
 export function computeReadyNames(
   timeSeconds: number,
   ownerCDs: IMajorCooldownInfo[],
-  teammateCDs: Array<{ cds: IMajorCooldownInfo[]; playerLabel?: string }>,
+  teammateCDs: ResTeammateCds[],
+  deaths?: ResHolderDeaths,
+  /** the row prints although it is in the first 5 s: a never-pressed
+   * cooldown is ready on it (fact2, `ResourceSnapshotParams.openerPrints`) */
+  openerPrints = false,
 ): string[] {
   const readyNames: string[] = [];
-  // No button → not on the ledger line at all (GH #106 step 2): "rdy:X" would
-  // tell the model the player could press X.
-  const allFriendlyCDs: Array<{ displayName: string; cd: IMajorCooldownInfo }> =
-    [
-      ...ownerCDs
-        .filter((cd) => !cdIsProcOnly(cd))
-        .map((cd) => ({ displayName: cd.spellName, cd })),
-      ...teammateCDs.flatMap(({ cds, playerLabel }) =>
-        cds
-          .filter((cd) => !cdIsProcOnly(cd))
-          .map((cd) => ({
-            displayName: playerLabel
-              ? `${playerLabel}:${cd.spellName}`
-              : cd.spellName,
-            cd,
-          })),
-      ),
-    ];
-  for (const { displayName, cd } of allFriendlyCDs)
-    if (resStateOf(cd, timeSeconds) === "ready") readyNames.push(displayName);
+  for (const e of friendlyResCds(timeSeconds, ownerCDs, teammateCDs, deaths)) {
+    if (e.holderDead) continue;
+    const state = resEntryState(e, timeSeconds);
+    if (state === "ready" || (openerPrints && state === "skip"))
+      readyNames.push(e.displayName);
+  }
   return readyNames;
 }
 
@@ -395,30 +778,22 @@ export function computeReadyNames(
 export function computeOnCDDisplayNames(
   timeSeconds: number,
   ownerCDs: IMajorCooldownInfo[],
-  teammateCDs: Array<{ cds: IMajorCooldownInfo[]; playerLabel?: string }>,
+  teammateCDs: ResTeammateCds[],
+  deaths?: ResHolderDeaths,
 ): string[] {
   const onCDNames: string[] = [];
-  // No button → not on the ledger line at all (GH #106 step 2): "rdy:X" would
-  // tell the model the player could press X.
-  const allFriendlyCDs: Array<{ displayName: string; cd: IMajorCooldownInfo }> =
-    [
-      ...ownerCDs
-        .filter((cd) => !cdIsProcOnly(cd))
-        .map((cd) => ({ displayName: cd.spellName, cd })),
-      ...teammateCDs.flatMap(({ cds, playerLabel }) =>
-        cds
-          .filter((cd) => !cdIsProcOnly(cd))
-          .map((cd) => ({
-            displayName: playerLabel
-              ? `${playerLabel}:${cd.spellName}`
-              : cd.spellName,
-            cd,
-          })),
-      ),
-    ];
-  for (const { displayName, cd } of allFriendlyCDs)
-    if (resStateOf(cd, timeSeconds) === "onCd")
-      onCDNames.push(onCdKey(displayName, cd, timeSeconds));
+  for (const e of friendlyResCds(timeSeconds, ownerCDs, teammateCDs, deaths)) {
+    if (e.holderDead) continue;
+    const state = resEntryState(e, timeSeconds);
+    if (state === "onCd")
+      onCDNames.push(onCdKey(e.displayName, e.cd, timeSeconds));
+    else if (state === "locked")
+      onCDNames.push(lockoutKey(e.displayName, e.lockout!));
+    else if (state === "maybeLocked")
+      onCDNames.push(
+        `${onCdKey(e.displayName, e.cd, timeSeconds)}${lockoutKey("", e.lockout!)}`,
+      );
+  }
   return onCDNames;
 }
 interface ResourceSnapshotParams {
@@ -446,9 +821,49 @@ interface ResourceSnapshotParams {
   prevOnCDNames?: string[];
   matchStartMs?: number;
   ownerUnit?: ICombatUnit;
+  /** unit GUID → roster side (`buildRosterSides`), for the focus pick's
+   * incoming-pressure read */
+  rosterSides?: RosterSides;
+  /** the timeline's mana fallback (raw.txt pass) and the round's bounds, for
+   * the `(no mana …)` tag on the owner's ready cooldowns (`affordableAt`) */
+  manaFallback?: ManaFallback;
+  roundBounds?: { startTime: number; endTime: number };
+  /**
+   * B-tier B14a (user ruling 2026-10-06, "够不着就不列"): the snapshot under
+   * a friendly [DEATH]. A POSITIONAL cooldown (`MITIGATION_TABLE`
+   * `positional`: Darkness' zone) whose holder stood out of its reach of the
+   * dying player at `atMs` is left out of `rdy:` — `positionalWallReach`,
+   * the reach predicate cd-hoarded and [DEFENSIVE AVAILABLE] read (A58 /
+   * F-MC1) with its third answer kept apart: a missing position sample is
+   * "unknown" and drops nothing here (it fails closed on the accusation side).
+   * The dying player's own cooldowns are untouched. Only on a full line
+   * (no `prevReadyNames`): a delta would print the drop as a spent `-X`.
+   */
+  outOfReachOf?: { victim: ICombatUnit; atMs: number };
+  /** fact2 (2026-10-20): a row in the first 5 s that prints at all lists
+   * the never-pressed cooldowns as ready (`resStateOf`'s `skip` is for
+   * whether such a row prints, not for what it says). Set by the builder on
+   * its own second pass; the resolver reads the same through
+   * `computeReadyNames(…, openerPrints)`. */
+  openerPrints?: boolean;
 }
 
-export function buildResourceSnapshot({
+export function buildResourceSnapshot(params: ResourceSnapshotParams): string {
+  const line = buildResourceSnapshotOnce(params);
+  // fact2 (2026-10-20): a first-5-s row that prints says what was ready on
+  // it — every untouched cooldown — instead of `rdy:—` (0c8b1932 0:02:
+  // `rdy:—  cd:3:Stampeding Roar(60s)`, then `+Pain Suppression +…` at 0:13
+  // as if they had just come back)
+  if (
+    line !== "" &&
+    !params.openerPrints &&
+    toRenderSecond(params.timeSeconds) <= RES_OPENER_SKIP_S
+  )
+    return buildResourceSnapshotOnce({ ...params, openerPrints: true });
+  return line;
+}
+
+function buildResourceSnapshotOnce({
   timeSeconds: rawTimeSeconds,
   ownerCDs,
   ownerName,
@@ -461,6 +876,11 @@ export function buildResourceSnapshot({
   prevOnCDNames,
   matchStartMs,
   ownerUnit,
+  rosterSides,
+  manaFallback,
+  roundBounds,
+  outOfReachOf,
+  openerPrints,
 }: ResourceSnapshotParams): string {
   // Render-grid anchor (CLAUDE.md shared-predicate rule; GH #63, 2026-09-04):
   // callers hand in the cast's fractional instant, but the line is printed
@@ -479,36 +899,48 @@ export function buildResourceSnapshot({
 
   // ── rdy / cd — B34: attribute teammate CDs with player pid prefix ──────────
   // Owner CDs: plain "SpellName"; teammate CDs: "pid:SpellName"
+  const labelledTeammates = teammateCDs.map(({ player, cds }) => ({
+    cds,
+    player,
+    playerLabel: pid(player.name),
+  }));
+  const deaths: ResHolderDeaths | undefined =
+    matchStartMs !== undefined ? { matchStartMs, ownerUnit } : undefined;
+  // B14a: positional cooldowns out of reach of the dying friendly
+  const outOfReach =
+    outOfReachOf && prevReadyNames === undefined
+      ? positionalOutOfReachNames(
+          ownerUnit,
+          ownerCDs,
+          labelledTeammates,
+          outOfReachOf,
+        )
+      : new Set<string>();
   const readyNames = computeReadyNames(
     timeSeconds,
     ownerCDs,
-    teammateCDs.map(({ player, cds }) => ({
-      cds,
-      playerLabel: pid(player.name),
-    })),
-  );
+    labelledTeammates,
+    deaths,
+    openerPrints,
+  ).filter((n) => !outOfReach.has(n));
 
   // Build on-CD display list with player attribution (B34) and delta filtering (B35).
   const onCDParts: string[] = [];
   const prevOnCDSet =
     prevOnCDNames !== undefined ? new Set(prevOnCDNames) : null;
 
-  // No button → not on the ledger line at all (GH #106 step 2): "rdy:X" would
-  // tell the model the player could press X.
-  const allFriendlyCDs: Array<{ displayName: string; cd: IMajorCooldownInfo }> =
-    [
-      ...ownerCDs
-        .filter((cd) => !cdIsProcOnly(cd))
-        .map((cd) => ({ displayName: cd.spellName, cd })),
-      ...teammateCDs.flatMap(({ player, cds }) =>
-        cds
-          .filter((cd) => !cdIsProcOnly(cd))
-          .map((cd) => ({
-            displayName: `${pid(player.name)}:${cd.spellName}`,
-            cd,
-          })),
-      ),
-    ];
+  const everyFriendlyCd = friendlyResCds(
+    timeSeconds,
+    ownerCDs,
+    labelledTeammates,
+    deaths,
+  );
+  // F-C4: a dead holder's entries leave the line without a `-X` — the delta
+  // reports cooldowns that were SPENT, and a death is on its own line.
+  const deadHolderNames = new Set(
+    everyFriendlyCd.filter((x) => x.holderDead).map((x) => x.displayName),
+  );
+  const allFriendlyCDs = everyFriendlyCd.filter((x) => !x.holderDead);
 
   // B114: per-charge readiness suffix "[k/N]" for multi-charge CDs, so the model can tell a partly
   // available CD (1/2) from a fully spent one (0/2) or a fully available one (2/2). Only applied to
@@ -533,8 +965,28 @@ export function buildResourceSnapshot({
   }
 
   const currentOnCDNames: string[] = [];
-  for (const { displayName, cd } of allFriendlyCDs) {
-    if (resStateOf(cd, timeSeconds) !== "onCd") continue;
+  for (const e of allFriendlyCDs) {
+    const { displayName, cd } = e;
+    const state = resEntryState(e, timeSeconds);
+    if (state === "locked") {
+      const key = lockoutKey(displayName, e.lockout!);
+      currentOnCDNames.push(key);
+      if (prevOnCDSet === null || !prevOnCDSet.has(key))
+        onCDParts.push(
+          `${displayName}(${lockoutText(e.lockout!, timeSeconds)})`,
+        );
+      continue;
+    }
+    if (state === "maybeLocked") {
+      const key = `${onCdKey(displayName, cd, timeSeconds)}${lockoutKey("", e.lockout!)}`;
+      currentOnCDNames.push(key);
+      if (prevOnCDSet === null || !prevOnCDSet.has(key))
+        onCDParts.push(
+          `${displayName}(${remainingText(cd, timeSeconds)}; ${lockoutText(e.lockout!, timeSeconds)})${chargeSuffix.get(displayName) ?? ""}`,
+        );
+      continue;
+    }
+    if (state !== "onCd") continue;
     const key = onCdKey(displayName, cd, timeSeconds);
     currentOnCDNames.push(key);
     // B35: in delta mode only show CDs that newly went on cooldown (not in previous snapshot).
@@ -546,25 +998,51 @@ export function buildResourceSnapshot({
     }
   }
 
+  // Triage res-readiness F-C3 (user ruling 2026-09-30, res R2 = A): an owner
+  // cooldown that is off cooldown but costs more mana than the owner has at
+  // this rendered second stays `rdy` and says so — `X(no mana 6.1k/11.5k)`.
+  // Display only: the ready set, the delta keys and `computeReadyNames` are
+  // unchanged. `affordableAt` is the one affordability predicate (cd-hoarded
+  // F-H6 reads its window form); unknown cost or no reading → no tag.
+  const noManaTag = new Map<string, string>();
+  if (ownerUnit && matchStartMs !== undefined) {
+    const k = (n: number) => `${(n / 1000).toFixed(1)}k`;
+    for (const cd of ownerCDs) {
+      if (cdIsProcOnly(cd)) continue;
+      const a = affordableAt(
+        ownerUnit,
+        cd.spellId,
+        matchStartMs + timeSeconds * 1000,
+        manaFallback,
+        roundBounds,
+      );
+      if (a && !a.affordable)
+        noManaTag.set(cd.spellName, `(no mana ${k(a.mana)}/${k(a.cost)})`);
+    }
+  }
+  const rdyDisplay = (n: string) => `${n}${noManaTag.get(n) ?? ""}`;
+
   // ── rdy: — full form first time, delta form on subsequent calls ─────────────
   let rdyPart: string;
   if (prevReadyNames !== undefined) {
     const prevSet = new Set(prevReadyNames);
     const currentSet = new Set(readyNames);
     const added = readyNames.filter((n) => !prevSet.has(n));
-    const removed = prevReadyNames.filter((n) => !currentSet.has(n));
+    const removed = prevReadyNames.filter(
+      (n) => !currentSet.has(n) && !deadHolderNames.has(n),
+    );
     // H1: prefix each item with its own +/- sign and space-separate them. The previous
     // `+a,b-c,d` form used a bare '-' as the added/removed boundary, which collided with
     // the hyphens inside spell names (e.g. "Anti-Magic Zone"), making the delta unparseable.
     const parts = [
-      ...added.map((n) => `+${n}`),
+      ...added.map((n) => `+${rdyDisplay(n)}`),
       ...removed.map((n) => `-${n}`),
     ];
     rdyPart = parts.length > 0 ? `rdy:Δ ${parts.join(" ")}` : "rdy:Δ";
   } else {
     // B114: annotate multi-charge CDs with their ready-charge count in the full ready list.
     const readyDisplay = readyNames.map(
-      (n) => `${n}${chargeSuffix.get(n) ?? ""}`,
+      (n) => `${rdyDisplay(n)}${chargeSuffix.get(n) ?? ""}`,
     );
     rdyPart = `rdy:${readyDisplay.length > 0 ? readyDisplay.join(",") : "—"}`;
   }
@@ -589,23 +1067,36 @@ export function buildResourceSnapshot({
   // friendly cd: field, where (Ns) means "N seconds until the CD is READY again".
   const enemyActiveParts: string[] = [];
   for (const player of enemyCDTimeline.players) {
+    // F20 D24: one window per (enemy, cooldown). A re-press that REFRESHes
+    // the running aura (1263fff6 1:41 + 1:45 Soul Immolation, one aura
+    // instance APPLIED…REMOVED) is not a second window — the entry keeps the
+    // latest end of the presses that are running (on a tie the first one's
+    // name: a press before a cast-less `(no press)` occurrence of the same
+    // chain — 4caab013 0:55 Volley), in first-press order.
+    const windows = new Map<string, { spellName: string; end: number }>();
     for (const cd of player.offensiveCDs) {
-      // If the buff duration is known, show it until it expires (capped at 30s to prevent bugs).
-      // If duration is 0 (instant cast), show it for 8 seconds to ensure AI has context.
+      // Shown until its effect ends — `buffEndSeconds`, the burst span's own
+      // end (the observed aura chain, else the official duration; triage
+      // G16). The old 30 s cap made a chain the log shows running 52 s read
+      // "5s left" at 35 s (codex review): no cap. If duration is 0 (instant
+      // cast), show it for 8 seconds to ensure AI has context.
       const buffDuration = cd.buffEndSeconds - cd.castTimeSeconds;
-      const displayWindowSeconds =
-        buffDuration > 0 ? Math.min(buffDuration, 30) : 8;
-
-      const agoSeconds = timeSeconds - cd.castTimeSeconds;
-      if (agoSeconds >= 0 && agoSeconds <= displayWindowSeconds) {
-        const remainingSeconds = Math.max(
-          1,
-          Math.round(displayWindowSeconds - agoSeconds),
-        );
-        enemyActiveParts.push(
-          `${cd.spellName}/${player.specName}(${remainingSeconds}s left)`,
-        );
-      }
+      const end = cd.castTimeSeconds + (buffDuration > 0 ? buffDuration : 8);
+      // F20 D25: spent by the row's second on the friendly half's predicate
+      // (`pressSpentBy` — the rendered second, A45), not `ago >= 0` against
+      // the floored row time, which dropped every press at s + 0.xxx.
+      if (!pressSpentBy(cd.castTimeSeconds, timeSeconds)) continue;
+      if (timeSeconds > end) continue;
+      const key = canonicalSpellId(cd.spellId);
+      const prev = windows.get(key);
+      if (prev === undefined || end > prev.end)
+        windows.set(key, { spellName: cd.spellName, end });
+    }
+    for (const w of windows.values()) {
+      const remainingSeconds = Math.max(1, Math.round(w.end - timeSeconds));
+      enemyActiveParts.push(
+        `${w.spellName}/${player.specName}(${remainingSeconds}s left)`,
+      );
     }
   }
 
@@ -627,7 +1118,12 @@ export function buildResourceSnapshot({
     );
     const atMs = matchStartMs + timeSeconds * 1000;
     for (const f of allFriends) {
-      const dmg = sumIncomingPressure(f, atMs - focusLookbackMs, atMs);
+      const dmg = sumIncomingPressure(
+        f,
+        atMs - focusLookbackMs,
+        atMs,
+        rosterSides,
+      );
       if (dmg > maxDmg) {
         maxDmg = dmg;
         focusFriendName = f.name;
@@ -655,23 +1151,36 @@ export function buildResourceSnapshot({
     const summary = summaryByName.get(name);
 
     // Hard CC (existing)
-    const activeCC = summary?.ccInstances.find(
-      (cc) =>
-        cc.atSeconds <= timeSeconds &&
-        timeSeconds < cc.atSeconds + cc.durationSeconds,
-    );
+    // of the controls on the unit then, the one that holds it longest
+    // (fact1215 R11, 1120cb61 0:18: Blinding Sleet −<1s was printed over a
+    // Capacitor Totem stun that ran 2.3 s longer)
+    const activeCC = summary?.ccInstances
+      .filter(
+        (cc) =>
+          cc.atSeconds <= timeSeconds &&
+          timeSeconds < cc.atSeconds + cc.durationSeconds,
+      )
+      .reduce<(typeof summary.ccInstances)[number] | undefined>(
+        (best, cc) =>
+          !best ||
+          cc.atSeconds + cc.durationSeconds >
+            best.atSeconds + best.durationSeconds
+            ? cc
+            : best,
+        undefined,
+      );
     if (activeCC) {
-      const remaining = Math.round(
+      const remaining = resCcRemainingText(
         activeCC.atSeconds + activeCC.durationSeconds - timeSeconds,
       );
-      const isStun = activeCC.drInfo?.category === "Stun";
+      const isStun = isStunCcInstance(activeCC);
       const stunTag = isStun ? "[stun]" : "";
       const trinketUsedNow =
         summary?.trinketUseTimes.some((t) => Math.abs(t - timeSeconds) <= 1) ??
         false;
       const trinketTag = isStun && trinketUsedNow ? "[trinketed]" : "";
       ccParts.push(
-        `${pid(name)}/${activeCC.spellName}-${remaining}s${stunTag}${trinketTag}`,
+        `${pid(name)}/${activeCC.spellName}-${remaining}${stunTag}${trinketTag}`,
       );
     }
 
@@ -682,10 +1191,10 @@ export function buildResourceSnapshot({
         timeSeconds < r.atSeconds + r.durationSeconds,
     );
     if (activeRoot) {
-      const remaining = Math.round(
+      const remaining = resCcRemainingText(
         activeRoot.atSeconds + activeRoot.durationSeconds - timeSeconds,
       );
-      ccParts.push(`${pid(name)}/${activeRoot.spellName}-${remaining}s[root]`);
+      ccParts.push(`${pid(name)}/${activeRoot.spellName}-${remaining}[root]`);
     }
 
     // Disarm
@@ -695,11 +1204,11 @@ export function buildResourceSnapshot({
         timeSeconds < d.atSeconds + d.durationSeconds,
     );
     if (activeDisarm) {
-      const remaining = Math.round(
+      const remaining = resCcRemainingText(
         activeDisarm.atSeconds + activeDisarm.durationSeconds - timeSeconds,
       );
       ccParts.push(
-        `${pid(name)}/${activeDisarm.spellName}-${remaining}s[disarm]`,
+        `${pid(name)}/${activeDisarm.spellName}-${remaining}[disarm]`,
       );
     }
 
@@ -710,11 +1219,11 @@ export function buildResourceSnapshot({
         timeSeconds < k.atSeconds + k.lockoutDurationSeconds,
     );
     if (activeKick) {
-      const remaining = Math.round(
+      const remaining = resCcRemainingText(
         activeKick.atSeconds + activeKick.lockoutDurationSeconds - timeSeconds,
       );
       ccParts.push(
-        `${pid(name)}/${activeKick.kickSpellName}-${remaining}s[kick]`,
+        `${pid(name)}/${activeKick.kickSpellName}-${remaining}[kick]`,
       );
     }
   }

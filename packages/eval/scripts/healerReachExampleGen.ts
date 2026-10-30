@@ -1,4 +1,4 @@
-/* eslint-disable no-console */
+ 
 /**
  * healerReachExampleGen.ts — value-gate example generator for GH #83 (owner ↔
  * ally geometry, first slice: "a teammate was in crisis while out of the

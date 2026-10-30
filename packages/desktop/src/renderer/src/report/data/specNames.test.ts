@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
-import { SPEC_ID_BY_EN, SPEC_NAMES_ZH } from "./specNames";
+
 import { specIconName } from "./gameConstants";
+import { SPEC_ID_BY_EN, SPEC_NAMES_ZH } from "./specNames";
 
 describe("specNames 一致性", () => {
   test("两表键集一致,specId 全部有图标", () => {

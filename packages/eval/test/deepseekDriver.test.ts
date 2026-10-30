@@ -1,7 +1,8 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect,it } from "vitest";
+
 import {
-  buildResponderMessages,
   buildJudgeMessages,
+  buildResponderMessages,
   parseScoreObject,
   RESPONDER_SYSTEM_PROMPT,
 } from "../src/family/deepseekDriver";

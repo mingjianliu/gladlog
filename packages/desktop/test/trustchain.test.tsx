@@ -11,21 +11,20 @@
  * parserInvariants sweep covers the parse hop; here a synthetic log locks the
  * **whole chain** down inside the public repo.
  */
+import type { GladMatch } from "@gladlog/parser";
+import {
+  checkParserInvariants,
+  GladLogParser,
+  parseLine,
+} from "@gladlog/parser";
 import { render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import {
-  GladLogParser,
-  checkParserInvariants,
-  parseLine,
-} from "@gladlog/parser";
-import type { GladMatch } from "@gladlog/parser";
 import { synthArenaLog } from "../../parser/src/testing/synthLog";
-
 import { Meters } from "../src/renderer/src/report/components/Meters";
-import { checkFaithful } from "../src/renderer/src/report/derive/faithfulness";
 import { deriveEventRows } from "../src/renderer/src/report/derive/eventsView";
 import { buildReportMarkdown } from "../src/renderer/src/report/derive/exportReport";
+import { checkFaithful } from "../src/renderer/src/report/derive/faithfulness";
 import {
   meterRows,
   meterValue,

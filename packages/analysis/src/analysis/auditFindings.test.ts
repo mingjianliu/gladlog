@@ -30,14 +30,20 @@ describe("auditFindings", () => {
   it("roster lint(2026-09-22):点名阵容外职业的 finding 被丢弃,未传阵容时不检查", () => {
     const wrong: RawFinding = {
       ...base,
-      explanation: "对方圣骑士这一手几乎每次冷却好就往你脸上砸;你在 {{t}}s 倒下。",
+      explanation:
+        "对方圣骑士这一手几乎每次冷却好就往你脸上砸;你在 {{t}}s 倒下。",
     };
-    const r = auditFindings([wrong], candidates, { rosterSpecs: ["257", "103"] });
+    const r = auditFindings([wrong], candidates, {
+      rosterSpecs: ["257", "103"],
+    });
     expect(r.findings).toHaveLength(0);
-    expect(r.dropped[0].reason).toBe('roster: names Paladin ("圣骑") — not on the roster');
+    expect(r.dropped[0].reason).toBe(
+      'roster: names Paladin ("圣骑") — not on the roster',
+    );
     // 阵容里真有圣骑 → 保留
     expect(
-      auditFindings([wrong], candidates, { rosterSpecs: ["65", "103"] }).findings,
+      auditFindings([wrong], candidates, { rosterSpecs: ["65", "103"] })
+        .findings,
     ).toHaveLength(1);
     // 没传阵容 → 老行为,不检查
     expect(auditFindings([wrong], candidates).findings).toHaveLength(1);
@@ -174,9 +180,142 @@ describe("auditFindings", () => {
     expect(r.dropped[0].reason).toMatch(/causal/i);
   });
   it("sorts survivors by severity (high → low)", () => {
-    const low: RawFinding = { ...base, severity: "low", title: "Low" };
-    const r = auditFindings([low, base], candidates);
+    // two events: a second finding on the same event would be a repeat
+    const other: CandidateEvent = {
+      ...candidates[0]!,
+      id: "death:b:40",
+      facts: { t: "40", unit: "Ally-R" },
+    };
+    const low: RawFinding = {
+      ...base,
+      eventIds: [other.id],
+      severity: "low",
+      title: "Low",
+    };
+    const r = auditFindings([low, base], [...candidates, other]);
     expect(r.findings.map((f) => f.severity)).toEqual(["high", "low"]);
+  });
+});
+
+describe("repeats: a finding citing the same event ids as an earlier kept one is dropped (L07 c, 2026-10-11)", () => {
+  const ev = (id: string, t: string): CandidateEvent => ({
+    id,
+    type: "kick-eaten",
+    t: Number(t),
+    unitNames: ["Me-R"],
+    facts: { t, unit: "Me-R" },
+  });
+  const menu = [ev("kick:a:10", "10"), ev("kick:b:20", "20")];
+  const on = (
+    title: string,
+    eventIds: string[],
+    more: Partial<RawFinding> = {},
+  ): RawFinding => ({
+    eventIds,
+    severity: "med",
+    category: "interrupts",
+    title,
+    explanation: "A cast was stopped.",
+    ...more,
+  });
+
+  it("identical sets: the first is kept, the later one is dropped with a reason that names it", () => {
+    const r = auditFindings(
+      [on("First", ["kick:a:10"]), on("Second", ["kick:a:10"])],
+      menu,
+    );
+    expect(r.findings.map((f) => f.title)).toEqual(["First"]);
+    expect(r.dropped).toHaveLength(1);
+    expect(r.dropped[0]!.finding.title).toBe("Second");
+    expect(r.dropped[0]!.reason).toBe(
+      'repeat: cites the same event ids as an earlier finding ("First")',
+    );
+  });
+
+  it("a set is a set: order and a doubled id do not make it another one", () => {
+    const r = auditFindings(
+      [
+        on("Chain", ["kick:a:10", "kick:b:20"]),
+        on("Chain again", ["kick:b:20", "kick:a:10", "kick:b:20"]),
+      ],
+      menu,
+    );
+    expect(r.findings.map((f) => f.title)).toEqual(["Chain"]);
+    expect(r.dropped[0]!.reason).toMatch(/^repeat: /);
+  });
+
+  it("a subset and a superset are other findings — both kept", () => {
+    const r = auditFindings(
+      [
+        on("One", ["kick:a:10"]),
+        on("Both", ["kick:a:10", "kick:b:20"]),
+        on("Other", ["kick:b:20"]),
+      ],
+      menu,
+    );
+    expect(r.findings.map((f) => f.title)).toEqual(["One", "Both", "Other"]);
+    expect(r.dropped).toEqual([]);
+  });
+
+  it("no event ids at all: still the grounding drop it always was, never a repeat", () => {
+    const r = auditFindings([on("A", []), on("B", [])], menu);
+    expect(r.findings).toEqual([]);
+    expect(r.dropped.map((d) => d.reason)).toEqual([
+      "grounding: unanchored / unknown eventId",
+      "grounding: unanchored / unknown eventId",
+    ]);
+  });
+
+  it("order kept: the model's first finding on a set wins even when a later repeat is graded higher", () => {
+    const r = auditFindings(
+      [
+        on("B low", ["kick:b:20"], { severity: "low" }),
+        on("A med", ["kick:a:10"]),
+        on("B high", ["kick:b:20"], { severity: "high" }),
+      ],
+      menu,
+    );
+    // severity sort of the survivors, ties in the model's order
+    expect(r.findings.map((f) => f.title)).toEqual(["A med", "B low"]);
+    expect(r.dropped.map((d) => d.finding.title)).toEqual(["B high"]);
+  });
+
+  it("a finding another layer dropped does not make the next one a repeat — a reply never loses its only clean finding on an event", () => {
+    const r = auditFindings(
+      [
+        on("Bare digit", ["kick:a:10"], { explanation: "Stopped at 10s." }),
+        on("Clean", ["kick:a:10"]),
+        on("Clean again", ["kick:a:10"]),
+      ],
+      menu,
+    );
+    expect(r.findings.map((f) => f.title)).toEqual(["Clean"]);
+    expect(r.dropped.map((d) => d.reason.split(":")[0])).toEqual([
+      "numeric",
+      "repeat",
+    ]);
+  });
+
+  it("a repeat does not spend a legacy slot: three missed cleanses and a repeat of the first leave all three", () => {
+    const cleanse = (n: number): CandidateEvent => ({
+      id: `missed-cleanse:x:${n}`,
+      type: "missed-cleanse",
+      t: n,
+      unitNames: ["Ally-R"],
+      facts: { t: String(n) },
+    });
+    const cleanses = [cleanse(1), cleanse(2), cleanse(3)];
+    const r = auditFindings(
+      [
+        on("C1", [cleanses[0]!.id], { severity: "high" }),
+        on("C1 again", [cleanses[0]!.id], { severity: "high" }),
+        on("C2", [cleanses[1]!.id]),
+        on("C3", [cleanses[2]!.id], { severity: "low" }),
+      ],
+      cleanses,
+    );
+    expect(r.findings.map((f) => f.title)).toEqual(["C1", "C2", "C3"]);
+    expect(r.dropped.map((d) => d.reason.split(":")[0])).toEqual(["repeat"]);
   });
 });
 
@@ -200,7 +339,7 @@ describe("意图守护 severity 降一档(BACKLOG #26 Task 2,candidateFindings.t
       refDeathSpent: "4.5",
       refDeathHeld: "11.4",
       refN: "16960",
-      attempted: "曾尝试施放被拒(尚未恢复×3)",
+      attempted: "pressed but rejected (尚未恢复×3)",
     },
   };
   const { attempted: _attempted, ...factsWithoutAttempted } =
@@ -800,5 +939,27 @@ describe("agy 复核采纳(2026-07-25)", () => {
     expect(res.findings).toHaveLength(0);
     expect(res.dropped).toHaveLength(1);
     expect(res.dropped[0]!.reason).toBe("grounding: missing eventIds");
+  });
+
+  it("a finding without a string title / explanation is dropped, not a crash (headlessAnalyze, 2026-09-30)", () => {
+    const id = candidates[0]!.id;
+    const shapes = [
+      { title: "t" },
+      { explanation: "e" },
+      { title: 3, explanation: { a: 1 } },
+    ];
+    for (const s of shapes) {
+      const bad = {
+        severity: "high",
+        category: "x",
+        eventIds: [id],
+        ...s,
+      } as unknown as RawFinding;
+      const res = auditFindings([bad], candidates);
+      expect(res.findings).toHaveLength(0);
+      expect(res.dropped[0]!.reason).toBe(
+        "schema: missing / non-string title or explanation",
+      );
+    }
   });
 });

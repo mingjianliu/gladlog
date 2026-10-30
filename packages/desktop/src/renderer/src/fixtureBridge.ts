@@ -41,6 +41,7 @@ export function installFixtureBridge(): void {
     aiBackendCommand: null,
     aiLanguage: "zh",
     autoAnalyzeNew: false,
+    aiSelfReview: false,
     recordingEnabled: false,
     obsWebsocketUrl: null,
     obsWebsocketPassword: null,

@@ -33,7 +33,10 @@
  */
 import type { ICombatUnit } from "@gladlog/parser-compat";
 
-import type { IPlayerCCTrinketSummary } from "../utils/ccTrinketAnalysis";
+import {
+  type IPlayerCCTrinketSummary,
+  renderedCcSeconds,
+} from "../utils/ccTrinketAnalysis";
 import type { IKillAttempt } from "../utils/killAttempts";
 import { fmtTime } from "../utils/renderGrid";
 
@@ -112,7 +115,7 @@ export function forcedTrinketFollowUps(params: {
           if (cc.sourceName !== owner.name || !(cc.atSeconds > t)) return false;
           return (
             forcedFollowUpGapOk(Math.floor(t), Math.floor(cc.atSeconds)) &&
-            forcedFollowUpDurOk(Number(cc.durationSeconds.toFixed(0)))
+            forcedFollowUpDurOk(renderedCcSeconds(cc))
           );
         })
         .sort((a, b) => a.atSeconds - b.atSeconds);
@@ -126,7 +129,7 @@ export function forcedTrinketFollowUps(params: {
         spellId: cc.spellId,
         spellName: cc.spellName,
         ccAtS: cc.atSeconds,
-        durationS: Number(cc.durationSeconds.toFixed(0)),
+        durationS: renderedCcSeconds(cc),
       });
     }
   }

@@ -9,10 +9,12 @@ import { beforeAll, describe, expect, it } from "vitest";
 import {
   groundedControls,
   ownerRejectRuns,
+  reflectCount,
   reflectedSpells,
   sanctuaryRemovals,
 } from "../src/context/spellOutcomeLines";
 import { ensureAnalysisData } from "../src/data/ensure";
+import { sanctuaryRemovesControl } from "../src/utils/sanctuaryRemovals";
 
 beforeAll(async () => {
   await ensureAnalysisData();
@@ -58,6 +60,113 @@ describe("groundedControls (7d1f)", () => {
     const out = groundedControls([mage, owner], T0, new Set(["Player-O"]));
     expect(out).toHaveLength(1);
     expect(out[0]).toMatchObject({ casterId: "Player-M", spellId: "118" });
+  });
+
+  it("F-E27: a trap eaten by the totem (IMMUNE miss, no cast aimed at it) is stated — the owner's too", () => {
+    // c2058ed4 L5985: Freezing Trap cast 187650 has no destination; the only
+    // trace is `SPELL_MISSED … Grounding Totem … 3355 IMMUNE`.
+    const trapMiss = (s: number) => ({
+      spellId: "3355",
+      spellName: "冰冻陷阱",
+      destUnitId: TOTEM,
+      missType: "IMMUNE",
+      logLine: { timestamp: T0 + s * 1000 },
+    });
+    const hunter = unit("Player-H", {
+      spellCastEvents: [cast("187650", 53.9, "")],
+      missesOut: [trapMiss(54.407), trapMiss(115.204)],
+    });
+    const out = groundedControls([hunter], T0, new Set(["Player-H"]));
+    expect(out.map((g) => [g.spellId, g.spellName, g.atSeconds])).toEqual([
+      ["3355", "Freezing Trap", 54.407],
+      ["3355", "Freezing Trap", 115.204],
+    ]);
+  });
+
+  it("F-E27: a miss following the caster's own cast into that totem is the same redirect", () => {
+    const mage = unit("Player-M", {
+      spellCastEvents: [cast("118", 6.4, TOTEM)],
+      missesOut: [
+        {
+          spellId: "118",
+          destUnitId: TOTEM,
+          missType: "IMMUNE",
+          logLine: { timestamp: T0 + 7_000 },
+        },
+      ],
+    });
+    expect(groundedControls([mage], T0, new Set())).toHaveLength(1);
+  });
+
+  it("F-E27 (codex review): a cast and its miss logged under another id of the same spell are one redirect", () => {
+    // Fear: cast 5782 into the totem, the IMMUNE miss on the aura id 118699
+    const lock = unit("Player-W", {
+      spellCastEvents: [cast("5782", 10, TOTEM)],
+      missesOut: [
+        {
+          spellId: "118699",
+          destUnitId: TOTEM,
+          missType: "IMMUNE",
+          logLine: { timestamp: T0 + 10_100 },
+        },
+      ],
+    });
+    const out = groundedControls([lock], T0, new Set());
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({ spellId: "5782" });
+  });
+});
+
+describe("reflectedSpells — a pet command is the pet's (fact6 D30)", () => {
+  // the warlock's Command Demon Seduction (119909) and the Sayaad's own
+  // Seduction (6358) reflected by one Spell Reflection: one reflect, the pet's
+  const PET = "Pet-0-1-1-1-1-0000000001";
+  const reflect = (spellId: string, tS: number) => ({
+    spellId,
+    spellName: "Seduction",
+    missType: "REFLECT",
+    destUnitId: "Player-W",
+    logLine: { timestamp: T0 + tS * 1000 },
+  });
+  const warlock = (over: Record<string, unknown>) =>
+    unit("Player-P", { info: {}, ...over });
+  const sayaad = (over: Record<string, unknown>) =>
+    unit(PET, { name: "Sayaad", ownerId: "Player-P", ...over });
+
+  it("the owner's command row beside the pet's own reflect is not a second reflect", () => {
+    const out = reflectedSpells(
+      [
+        warlock({
+          spellCastEvents: [cast("119909", 5, "Player-W")],
+          missesOut: [reflect("119909", 5)],
+        }),
+        sayaad({
+          spellCastEvents: [cast("6358", 5.001, "Player-W")],
+          missesOut: [reflect("6358", 5.2)],
+        }),
+        unit("Player-W"),
+      ],
+      T0,
+    );
+    expect(out.map((r) => r.casterId)).toEqual([PET]);
+  });
+
+  it("a command no summon row carried out is reflected once, as the pet's", () => {
+    const out = reflectedSpells(
+      [
+        warlock({
+          spellCastEvents: [
+            cast("119909", 2, "Player-X"),
+            cast("119909", 5, "Player-W"),
+          ],
+          missesOut: [reflect("119909", 5)],
+        }),
+        sayaad({ spellCastEvents: [cast("6358", 2.001, "Player-X")] }),
+        unit("Player-W"),
+      ],
+      T0,
+    );
+    expect(out.map((r) => r.casterId)).toEqual([PET]);
   });
 });
 
@@ -107,6 +216,177 @@ describe("reflectedSpells (0051f0c9)", () => {
     expect(out).toHaveLength(1);
     expect(out[0]!.damageBack).toBe(300_000);
   });
+  it("corpusFactScan reflectReturn: the return under the spell's damage id (Frostfire Bolt 431044 → 468655), logged just before the REFLECT row", () => {
+    const caster = unit("Player-P", {
+      missesOut: [miss("431044")],
+      damageIn: [
+        {
+          spellId: "468655",
+          srcUnitId: "Player-W",
+          effectiveAmount: -112_000,
+          logLine: { timestamp: T0 + 4_990 },
+        },
+      ],
+      advancedActions: advanced(500_000),
+    });
+    const [r] = reflectedSpells([caster, unit("Player-W")], T0);
+    expect(r!.damageBack).toBe(112_000);
+  });
+  it("a scripted damage spell the profile misses (Fel Lance) owns the reflector's own-id return when its caster's hits of it are in the round", () => {
+    const FEL_LANCE = "206966";
+    const caster = unit("Player-P", {
+      missesOut: [miss(FEL_LANCE)],
+      damageIn: [
+        {
+          spellId: "23920",
+          srcUnitId: "Player-W",
+          effectiveAmount: -133_000,
+          logLine: { timestamp: T0 + 6_200 },
+        },
+      ],
+      advancedActions: advanced(500_000),
+    });
+    const mate = unit("Player-M", {
+      damageIn: [
+        {
+          spellId: FEL_LANCE,
+          srcUnitId: "Player-P",
+          effectiveAmount: -40_000,
+          logLine: { timestamp: T0 + 2_000 },
+        },
+      ],
+    });
+    const [r] = reflectedSpells([caster, unit("Player-W"), mate], T0);
+    expect(r!.damageBack).toBe(133_000);
+  });
+  it("a dispel backlash of the reflected spell's name (Unstable Affliction 196364) is not the return", () => {
+    const UA = "1259790";
+    const caster = unit("Player-P", {
+      missesOut: [miss(UA)],
+      damageIn: [
+        {
+          spellId: UA,
+          srcUnitId: "Player-P",
+          effectiveAmount: -61_500,
+          logLine: { timestamp: T0 + 6_000 },
+        },
+        {
+          spellId: "196364",
+          srcUnitId: "Player-P",
+          effectiveAmount: -127_700,
+          logLine: { timestamp: T0 + 9_000 },
+        },
+      ],
+      advancedActions: advanced(500_000),
+    });
+    const [r] = reflectedSpells([caster, unit("Player-W")], T0);
+    expect(r!.damageBack).toBe(61_500);
+  });
+  it("fact3 D15 / D40: the reflector's own copy of the DoT on the caster is not the return; the copy ticking caster → caster is", () => {
+    const AGONY = "980";
+    const tick = (src: string, amt: number, ms: number) => ({
+      spellId: AGONY,
+      srcUnitId: src,
+      effectiveAmount: -amt,
+      logLine: { event: LogEvent.SPELL_PERIODIC_DAMAGE, timestamp: T0 + ms },
+    });
+    const ownAgony = {
+      spellId: AGONY,
+      srcUnitId: "Player-W",
+      destUnitId: "Player-P",
+      logLine: { event: LogEvent.SPELL_AURA_APPLIED, timestamp: T0 + 1_000 },
+    };
+    const caster = unit("Player-P", {
+      missesOut: [miss(AGONY)],
+      auraEvents: [ownAgony],
+      damageIn: [
+        tick("Player-P", 40_000, 7_000), // the reflected copy
+        tick("Player-W", 60_000, 8_000), // the reflector's own Agony
+      ],
+      advancedActions: advanced(500_000),
+    });
+    const [r] = reflectedSpells([caster, unit("Player-W")], T0);
+    expect(r!.damageBack).toBe(40_000);
+  });
+  it("a copy the reflect itself applied, logged reflector → caster (Wither 445474 147 ms after the row), is the return, not the reflector's own", () => {
+    const WITHER = "445474";
+    const tick = (amt: number, ms: number) => ({
+      spellId: WITHER,
+      srcUnitId: "Player-W",
+      effectiveAmount: -amt,
+      logLine: { event: LogEvent.SPELL_PERIODIC_DAMAGE, timestamp: T0 + ms },
+    });
+    const aura = (event: LogEvent, ms: number) => ({
+      spellId: WITHER,
+      srcUnitId: "Player-W",
+      destUnitId: "Player-P",
+      logLine: { event, timestamp: T0 + ms },
+    });
+    const caster = unit("Player-P", {
+      missesOut: [miss(WITHER)],
+      auraEvents: [
+        // the reflector's own Wither, gone 2 s before the reflect
+        aura(LogEvent.SPELL_AURA_APPLIED, 0),
+        aura(LogEvent.SPELL_AURA_REMOVED, 3_000),
+        // the reflected copy
+        aura(LogEvent.SPELL_AURA_APPLIED, 5_147),
+      ],
+      damageIn: [tick(30_000, 2_000), tick(6_000, 7_500), tick(6_000, 8_700)],
+      advancedActions: advanced(200_000),
+    });
+    const [r] = reflectedSpells([caster, unit("Player-W")], T0);
+    expect(r!.damageBack).toBe(12_000);
+  });
+  it("a hit of the spell the reflector sends after the projectile's flight, outside a copy the reflect put up, is its own (Shadow of Nathreza mirror)", () => {
+    const SON = "1262710";
+    const hit = (amt: number, ms: number) => ({
+      spellId: SON,
+      srcUnitId: "Player-W",
+      effectiveAmount: -amt,
+      logLine: { event: LogEvent.SPELL_DAMAGE, timestamp: T0 + ms },
+    });
+    const caster = unit("Player-P", {
+      missesOut: [miss(SON)],
+      damageIn: [
+        hit(5_553, 5_000), // the return, in the REFLECT row's ms
+        hit(5_925, 9_000), // the reflector's own pulses
+        hit(5_925, 10_000),
+      ],
+      advancedActions: advanced(100_000),
+    });
+    const [r] = reflectedSpells([caster, unit("Player-W")], T0);
+    expect(r!.damageBack).toBe(5_553);
+  });
+  it("an own-id return goes to the chain whose nearest REFLECT row is closest, not the chain's first row (two Wicked Reapings, a Demonbolt between)", () => {
+    const WR = "449826";
+    const DB = "264178";
+    const reflect = (spellId: string, ms: number) => ({
+      ...miss(spellId),
+      logLine: { timestamp: T0 + ms },
+    });
+    const nw = (amt: number, ms: number) => ({
+      spellId: "212295",
+      srcUnitId: "Player-W",
+      effectiveAmount: -amt,
+      logLine: { event: LogEvent.SPELL_DAMAGE, timestamp: T0 + ms },
+    });
+    const caster = unit("Player-P", {
+      // 50-1 2:17's timings: WR 44.788 / 45.874, Demonbolt 45.539 / 46.643;
+      // Nether Ward rows 44.789, 45.874, 46.289
+      missesOut: [
+        reflect(WR, 5_000),
+        reflect(DB, 5_751),
+        reflect(WR, 6_086),
+        reflect(DB, 6_855),
+      ],
+      damageIn: [nw(59_508, 5_001), nw(59_508, 6_086), nw(60_696, 6_501)],
+      advancedActions: advanced(300_000),
+    });
+    const out = reflectedSpells([caster, unit("Player-W")], T0);
+    const back = (id: string) => out.find((x) => x.spellId === id)!.damageBack;
+    expect(back(WR)).toBe(119_016);
+    expect(back(DB)).toBe(60_696);
+  });
 });
 
 describe("sanctuaryRemovals (0035285c)", () => {
@@ -132,6 +412,30 @@ describe("sanctuaryRemovals (0035285c)", () => {
       ccSpellId: "408",
       ccSourceName: "Rogue-R-US",
     });
+  });
+});
+
+describe("sanctuaryRemovals — the mechanics Blessing of Sanctuary removes (fact4 D40)", () => {
+  it("a silence (Strangulate) is removed; an incapacitate (Polymorph) or a root (Earthbind) at the same ms is not", () => {
+    const pal = unit("Player-Pal", {
+      spellCastEvents: [cast("210256", 10, "Player-H")],
+    });
+    const aura = (spellId: string) => ({
+      spellId,
+      spellName: "x",
+      srcUnitName: "Enemy-R-US",
+      logLine: { event: LogEvent.SPELL_AURA_REMOVED, timestamp: T0 + 10_000 },
+    });
+    const holder = unit("Player-H", {
+      auraEvents: [aura("47476"), aura("118"), aura("116947")],
+    });
+    expect(sanctuaryRemovals([pal, holder], T0).map((r) => r.ccSpellId)).toEqual([
+      "47476",
+    ]);
+    expect(sanctuaryRemovesControl("853")).toBe(true); // Hammer of Justice, stun
+    expect(sanctuaryRemovesControl("8122")).toBe(true); // Psychic Scream, fear
+    expect(sanctuaryRemovesControl("6789")).toBe(true); // Mortal Coil, horror
+    expect(sanctuaryRemovesControl("2094")).toBe(false); // Blind, disorient
   });
 });
 
@@ -171,5 +475,60 @@ describe("ownerRejectRuns (f4eb)", () => {
       "Player-O",
     );
     expect(runs).toHaveLength(1);
+  });
+});
+
+describe("reflectCount (codex 20-G3 #2)", () => {
+  const ms = (s: number) => T0 + s * 1000;
+  it("rows belong to the caster's cast before them: two casts 0.9 s apart are two, one press's rows over 3.3 s are one", () => {
+    const priest = unit("Player-P", {
+      spellCastEvents: [
+        cast("8092", 32.734, "Player-W"),
+        cast("8092", 33.641, "Player-W"),
+      ],
+    });
+    expect(reflectCount(priest, "8092", [ms(32.734), ms(33.641)])).toBe(2);
+    const monk = unit("Player-K", {
+      spellCastEvents: [cast("8092", 14.568, "Player-W")],
+    });
+    expect(
+      reflectCount(monk, "8092", [ms(14.6), ms(15.9), ms(16.8), ms(17.889)]),
+    ).toBe(1);
+  });
+  it("a cast between two rows splits them, a projectile's flight included; a row logged 1 ms before its own cast does not", () => {
+    // Starsurge-like flight (0.43 s on 3da28605): casts 0 / 0.8, rows 0.5 / 1.3
+    const mage = unit("Player-M", {
+      spellCastEvents: [
+        cast("8092", 10, "Player-W"),
+        cast("8092", 10.8, "Player-W"),
+      ],
+    });
+    expect(reflectCount(mage, "8092", [ms(10.5), ms(11.3)])).toBe(2);
+    // 47867c33: Chastise's 200200 REFLECT 1 ms before 88625's SUCCESS, then 88625's own
+    const priest = unit("Player-P", {
+      spellCastEvents: [cast("8092", 20.835, "Player-W")],
+    });
+    expect(reflectCount(priest, "8092", [ms(20.834), ms(20.835)])).toBe(1);
+  });
+  it("a row no cast covers is a proc of its own (Astral Smolder, codex 20-G5); one logged twice within 100 ms is one", () => {
+    const caster = unit("Player-P");
+    expect(
+      reflectCount(caster, "8092", [
+        ms(91.639),
+        ms(91.894),
+        ms(92.463),
+        ms(93.28),
+        ms(93.711),
+      ]),
+    ).toBe(5);
+    expect(reflectCount(caster, "8092", [ms(10), ms(10.001)])).toBe(1);
+  });
+  it("a channel's bolts 5.8 s after its cast are still that cast's (Ultimate Penitence)", () => {
+    const priest = unit("Player-P", {
+      spellCastEvents: [cast("8092", 17.686, "Player-W")],
+    });
+    expect(
+      reflectCount(priest, "8092", [ms(21.017), ms(21.632), ms(22.06)]),
+    ).toBe(1);
   });
 });

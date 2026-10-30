@@ -23,13 +23,17 @@ import { LogEvent } from "@gladlog/parser-compat";
 
 import { spellEffectData } from "../data/spellEffectData";
 import { buffFullDurationForCaster } from "./buffDuration";
-import { buildCannotCastIntervals } from "./cannotCastIntervals";
+import {
+  cannotCastIntervalsForSpells,
+  enemySourceIds,
+} from "./cannotCastIntervals";
 import { isHealerSpec, isMeleeSpec } from "./cooldowns";
 import { KW_REACH_YARDS } from "./killWindowFacts";
 import { getUnitPositionAtTime } from "./losAnalysis";
 import { CLOSE_RANGE_YARDS, isDeadAt } from "./positionAnalysis";
 import { LOS_SWEEP_GAP_MS } from "./positionSampling";
 import { canReachTargetAt } from "./rootReachability";
+import { roundEndMs } from "./roundEnd";
 
 /** Below this many seconds in reach and free, nobody is named: a second or two
  * of overlap is not an opportunity. Same 3 s floor as ROOT_UNREACHABLE_MIN_S. */
@@ -50,7 +54,9 @@ export interface ISummonReach {
  */
 export function summonReach(
   summon: ICombatUnit,
-  combat: { endTime: number; startInfo?: { zoneId?: string } },
+  combat: Parameters<typeof roundEndMs>[0] & {
+    startInfo?: { zoneId?: string; bracket?: string };
+  },
   friends: ICombatUnit[],
   enemies: ICombatUnit[],
 ): ISummonReach | null {
@@ -66,7 +72,8 @@ export function summonReach(
     buffFullDurationForCaster(String(summonEvent.spellId), summoner, fromMs) ??
     spellEffectData[String(summonEvent.spellId)]?.durationSeconds;
   if (!durationS) return null;
-  const toMs = Math.min(fromMs + durationS * 1000, combat.endTime);
+  // ends at the round's end (`roundEndMs`; work order 2026-10-14c #1)
+  const toMs = Math.min(fromMs + durationS * 1000, roundEndMs(combat));
   const windows: Array<{ secStart: number; secEnd: number; t: number }> = [];
   for (let t = fromMs; t + 1000 <= toMs; t += 1000) {
     windows.push({ secStart: t, secEnd: t + 1000, t: t + 500 });
@@ -75,13 +82,34 @@ export function summonReach(
   if (!windows.some((w) => getUnitPositionAtTime(summon, w.t, LOS_SWEEP_GAP_MS)))
     return null;
 
-  const enemyIds = new Set(enemies.map((e) => e.id));
+  // enemy players and their summons (`enemySourceIds`, codex R6C-03 #1: a
+  // pet's lockout fell out), read per spell — only time EVERY spell the
+  // player cast this round was stopped is time they could not reach the
+  // summon (`cannotCastIntervalsForSpells`; a mage under a pet's Arcane lock
+  // still cast Frost / Fire at the totem)
+  const roundUnits = Object.values(combat.units ?? {}) as ICombatUnit[];
+  const enemyIds = enemySourceIds(enemies, roundUnits);
   const zoneId = combat.startInfo?.zoneId;
   let best: ISummonReach["best"] = null;
   for (const f of friends) {
     if (isHealerSpec(f.spec)) continue;
     const melee = isMeleeSpec(f.spec);
-    const blocked = buildCannotCastIntervals(f, enemyIds);
+    const castIds = [
+      ...new Set(
+        (f.spellCastEvents ?? [])
+          .filter(
+            (c) =>
+              c.logLine.event === LogEvent.SPELL_CAST_SUCCESS && !!c.spellId,
+          )
+          .map((c) => c.spellId!),
+      ),
+    ];
+    const blocked = cannotCastIntervalsForSpells(
+      f,
+      enemyIds,
+      castIds.length > 0 ? castIds : undefined,
+      roundUnits,
+    );
     let ok = 0;
     for (const w of windows) {
       if (isDeadAt(f, w.t)) continue;

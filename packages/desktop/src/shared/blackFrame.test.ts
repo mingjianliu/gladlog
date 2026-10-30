@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
+
 import {
   BRIGHT_PIXEL_LUMINANCE_THRESHOLD,
   BRIGHT_RATIO_THRESHOLD,
-  MEAN_LUMINANCE_THRESHOLD,
   judgeBlackFrame,
+  MEAN_LUMINANCE_THRESHOLD,
 } from "./blackFrame";
 
 /** Builds a flat luminance array of `n` pixels, each at `value` (0-255),

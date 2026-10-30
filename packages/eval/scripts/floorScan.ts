@@ -1,4 +1,4 @@
-/* eslint-disable no-console */
+ 
 /**
  * CLI: measure arena walkable-floor outlines from the corpus (floor occupancy
  * scan).

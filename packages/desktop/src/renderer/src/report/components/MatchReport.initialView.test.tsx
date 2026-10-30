@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { describe, expect, it, beforeEach, vi } from "vitest";
 import { render } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import fixture from "../../../../../test/fixtures/report-match.json";
 import type { ReportSource } from "../derive/types";

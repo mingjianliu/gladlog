@@ -1,10 +1,10 @@
+import { parseDocBytes } from "../src/shared/parseDocBytes";
+import { composeLazyDoc, parseRoundBytes } from "../src/shared/parseLazyDoc";
 import {
-  scanRoundOffsets,
   buildShellText,
   nullFiller,
+  scanRoundOffsets,
 } from "../src/shared/roundOffsets";
-import { composeLazyDoc, parseRoundBytes } from "../src/shared/parseLazyDoc";
-import { parseDocBytes } from "../src/shared/parseDocBytes";
 import { loadMatchFixture } from "./fixtures/loadFixture";
 
 const enc = (s: string) => Buffer.from(s, "utf-8");

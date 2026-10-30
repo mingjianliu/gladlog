@@ -24,6 +24,13 @@
  * | 产出强化(官方给不出) | **用户签字** | `curatedAbilityFacts.ts` kind `throughput_role` |
  * | 团队治疗 CD / 可外放 | 手工登记 | `cooldowns` 的 `TEAM_HEAL_CD_IDS` / `spellIdLists` |
  *
+ * **形态光环(aura 36)的画像是空的,不等于形态没有效果**(GH #163 第 2 项,
+ * 2026-10-27):效果挂在 SpellShapeshift 掩码指向这个形态的被动上,由形态开关。
+ * 生命之树 33891 自身只有 aura 36/77/226,+10 % 治疗、回春 +40 % 等在被动 5420;
+ * 熊形态的 aura 87 行一部分在被动 1178。官方读法不跟这一跳,所以任何「看画像判断
+ * 形态干什么」的新判据都要先补这一跳。现有读者没有一个按形态光环的画像下结论
+ * (33891 挂 Utility,不进治疗裁定域;形态只当状态读,见 `druidForms.ts`)。
+ *
  * 迁移纪律:消费方一次换一个判据,每次带前后数字。**不要**把这里的字段当成
  * 「tag 的替代品」整体切换 —— 阶段 1 的审计数出 19 处判据直接产 prompt 文本,
  * 那是必须逐处量化的改动面,不是一次性替换。
@@ -161,6 +168,43 @@ export const KW_MAJOR_DEFENSIVE_IDS: ReadonlySet<string> = new Set(
     ...((spellIdListsData as { externalOrBigDefensiveSpellIds?: string[] })
       .externalOrBigDefensiveSpellIds ?? []),
     "473909", // Ancient of Lore (GH #44: official 30%)
+    // Triage 2026-09-29, enemy-def F-E3 — the span stayed "defenseless"
+    // through these presses (2abc9185: `defenseless 0:17–1:40` across three
+    // Blurs). User rulings 2026-09-30: A24 "Blur 期间不算 defenseless,切开
+    // 窗口"; A25 (Burrow and Time Stop are immunities); the 2026-09-26
+    // kill-live-gated verdict for Greater Invisibility, kept by C2. All four
+    // are the logged CAST ids, cooldown ≥ 30 s in DB2.
+    // NOT Mass Invisibility 414664 (user ruling P-b8, 2026-10-01): its aura
+    // runs the full 12.0 s on 524 of 575 lines of the 605-file capture, on
+    // the mage's allies too, whatever they do — in the roster it wrote
+    // "Target had a major defensive up: Mass Invisibility" on 227 burst
+    // lines whose target was being hit.
+    "198589", // Blur — 60 s
+    "110959", // Greater Invisibility — 120 s
+    "409293", // Burrow — 120 s
+    "378441", // Time Stop — 45 s
+    // User ruling 2026-10-20 (fact1215 retest idx 45 / 47 / 48 「都要」):
+    // the two 20–99 % walls signed in W1g (2026-09-26) went into
+    // `bigDefensiveSpellIds` and the mitigation table but never into this
+    // list, so the burst ledger never said "a major defensive up" for them
+    // and the span never timed their cooldown; Dark Pact's cooldown was
+    // never timed either (`defenseless 1:59–2:07` with it back since 1:58).
+    "403876", // Divine Protection (Retribution) — 60 s
+    "264735", // Survival of the Fittest — 90 s
+    "108416", // Dark Pact — 60 s
+    // User ruling 2026-10-21 (fact3 D49, 605 preview approved): Vanish, an
+    // immunity-kind save (ENEMY_IMMUNITY_SAVE_AURAS) — a charge in hand keeps
+    // the rogue out of `defenseless` (b3aa876f r0: `defenseless 1:10–1:31`
+    // with the second charge pressed at 1:31.9). Preview: rogue [KILL
+    // WINDOW] lines 1,203 → 752; kick-priority −6; 56 burst lines name it.
+    "1856", // Vanish — 120 s
+    // fact5 D22 (F18, 2026-10-24): the PRESSED Spirit of Redemption (Spirit
+    // of the Redeemer, PvP), the immunity-kind save of fact2 ruling 5
+    // (`ENEMY_IMMUNITY_SAVE_AURAS`) — the one such save this roster lacked
+    // (Burrow, Time Stop and Vanish are here; Mass Invisibility is out by
+    // P-b8; Guardian of the Forgotten Queen goes on an ally). 0c56ee06:
+    // `defenseless 0:49–1:04` on a Holy Priest who pressed it at 1:04.8.
+    "215769", // Spirit of Redemption (pressed) — 120 s
   ].filter((id) => id !== "200183"),
 ); // Apotheosis dropped
 
@@ -187,5 +231,62 @@ export function isKillWindowMajorDefensive(spellId: string): boolean {
   return (
     KW_MAJOR_DEFENSIVE_IDS.has(spellId) &&
     kwCooldownSeconds(spellId) >= KW_MAJOR_DEF_MIN_CD_S
+  );
+}
+
+/**
+ * Major defensives that count while IN HAND but are no defense that is UP
+ * (user ruling 2026-10-20, fact1215 retest idx 54 「我觉得都算」: a ready
+ * Alter Time is a major defensive in hand — `defenseless 2:28–2:34` on a
+ * mage whose Alter Time had been back since ~1:03). The pressed half keeps
+ * fact1215 R7 (2026-10-18): a rewind is no defense that was up and cuts
+ * nothing, so these never enter `KW_MAJOR_DEFENSIVE_IDS` (whose members also
+ * read "Target had a major defensive up" in the burst ledger). Logged CAST
+ * ids, cooldown ≥ `KW_MAJOR_DEF_MIN_CD_S` in DB2.
+ */
+export const KW_IN_HAND_ONLY_DEFENSIVE_IDS: ReadonlySet<string> = new Set([
+  "342245", // Alter Time — 60 s (runs as 342246)
+]);
+
+/**
+ * Roster members that do NOT keep their owner out of a span while unpressed
+ * in its kit (user ruling 2026-10-20, 「去掉治疗和只能给队友的」 — the 605
+ * preview read 2,002 lines off an unpressed Desperate Prayer): a heal, which
+ * the `defenseless` legend already says is not counted, and a cooldown that
+ * only reaches an ally. Pressed, they keep the machine's reading. Evidence:
+ *  - heals: Desperate Prayer 19236 (`NO_MITIGATION_IDS`: pure healing + max
+ *    health), Divine Hymn 64843 and Tranquility 740 (DB2 `healsOthers`, no
+ *    mitigation-table row);
+ *  - ally-only: Blessing of Sacrifice 6940 — 0 of 948 casts in the 605
+ *    new-season files named the caster (Pain Suppression 75 of 592, Guardian
+ *    Spirit 70 of 1,239, Ironbark 37 of 460, Time Dilation 29 of 383, Life
+ *    Cocoon 16 of 187, Blessing of Protection 56 of 235 — those reach the
+ *    caster and stay).
+ * Registered in curatedIdRegistry.
+ */
+export const KW_UNPRESSED_NOT_IN_HAND_IDS: ReadonlySet<string> = new Set([
+  "19236", // Desperate Prayer — a heal
+  "64843", // Divine Hymn — a heal
+  "740", // Tranquility — a heal
+  "6940", // Blessing of Sacrifice — an ally only
+]);
+
+/** Does a roster defensive the unit OWNS and never pressed keep it out of
+ * every span (`unusedKitRows`; user rulings 2026-10-20)? */
+export function unpressedKitDefensiveInHand(spellId: string): boolean {
+  return (
+    countsAsKillWindowDefensiveInHand(spellId) &&
+    !KW_UNPRESSED_NOT_IN_HAND_IDS.has(spellId)
+  );
+}
+
+/** Does a READY charge of this spell mean the unit still holds a major
+ * defensive (kill-window family: the span state machine, target selection's
+ * defensive state)? The roster plus the in-hand-only rewinds. */
+export function countsAsKillWindowDefensiveInHand(spellId: string): boolean {
+  return (
+    isKillWindowMajorDefensive(spellId) ||
+    (KW_IN_HAND_ONLY_DEFENSIVE_IDS.has(spellId) &&
+      kwCooldownSeconds(spellId) >= KW_MAJOR_DEF_MIN_CD_S)
   );
 }

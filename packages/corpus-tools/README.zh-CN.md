@@ -51,7 +51,7 @@ GraphQL `SEARCH_DISABLED` 错误,当天的裁定是停止再问(`docs/DATA-COMPL
 所以上面那条 feed 路径已经重建不了任何东西,而且**是静默失败** —— 零 stub、不报错。
 
 2026-09-13 上游把搜索在 Battle.net 登录后重开,原始日志改走 `logDownloadUrl` ——
-10 分钟签名地址,从**每账号每 UTC 日 15 个不同日志**的额度里扣。那是抽样预算,不是
+10 分钟签名地址,从**每账号每 UTC 日 15 个不同日志**(2026-10-20 起 30 个)的额度里扣。那是抽样预算,不是
 语料预算,所以下面的归档模式仍然是参考语料的构建方式;`buildCorpus.ts` 的 feed 模式
 不会去学登录路径。
 
@@ -120,9 +120,9 @@ WAL_COOKIE=<Battle.net 会话 token> SPEC=Shaman_Restoration MIN_RATING=2100 npx
 从登录态 feed 按 bracket/评分档(服务端)+ 专精(compQueryString 服务端预筛 +
 recorder/any 客户端细筛)下载原始 log 到 `$GLADLOG_EVAL_HOME/downloads/`,
 带 manifest(评分/MMR/全员 spec/GCS 时区 meta)与断点续传。2026-09-13 起每个日志
-经 `logDownloadUrl` grant 取得,上游允许**每账号每 UTC 日 15 个不同日志**;脚本每场
+经 `logDownloadUrl` grant 取得,上游允许**每账号每 UTC 日 30 个不同日志**(2026-10-20 之前是 15 个);脚本每场
 之后打印服务端计数,被拒即停,并记住当日用量 —— 同一 UTC 日再跑零请求退出。每日例行是
-`npm run logs:daily`(2100+、不筛专精:先 10 盘 Solo Shuffle 再 3v3 补满 15,每步最多翻 3 页;
+`npm run logs:daily`(2100+、不筛专精:先 20 盘 Solo Shuffle 再 3v3 补满 30,每步最多翻 3 页;
 launchd 每天本地 21:00 起;`npm run logs:daily:status` 看最近运行、今日额度和会话是否过期)。会话 cookie、参数、评分档位语义、7 天窗口等坑见
 `.claude/skills/fetch-pvp-logs`。
 

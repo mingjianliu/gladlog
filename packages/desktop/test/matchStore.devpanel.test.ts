@@ -1,8 +1,9 @@
+import type { GladMatch } from "@gladlog/parser";
 import { mkdtempSync, readFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { describe, expect, it } from "vitest";
-import type { GladMatch } from "@gladlog/parser";
+
 import { MatchStore } from "../src/main/matchStore";
 
 const dir = () => mkdtempSync(join(tmpdir(), "gl-devpanel-"));

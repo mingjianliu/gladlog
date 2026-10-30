@@ -1,6 +1,5 @@
 import type { StoredMatchMeta } from "../../src/main/matchStore";
 import { installFixtureBridge } from "../../src/renderer/src/fixtureBridge";
-
 import { FIXED_NOW } from "./fixedNow";
 
 // Single-sourced in ./fixedNow (a leaf module with zero imports, so

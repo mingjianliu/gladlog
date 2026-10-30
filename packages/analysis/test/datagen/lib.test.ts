@@ -1,7 +1,7 @@
 import {
-  parseCsv,
   assertColumns,
   assertMinRows,
+  parseCsv,
 } from "../../scripts/datagen/lib/wagoCsv";
 
 describe("parseCsv (RFC4180)", () => {

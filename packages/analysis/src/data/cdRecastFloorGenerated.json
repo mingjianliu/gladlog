@@ -1,6 +1,6 @@
 {
   "meta": {
-    "generatedAt": "2026-09-25",
+    "generatedAt": "2026-10-20",
     "manifest": "manifest-archive-2026-08-28-newseason.txt",
     "every": 3,
     "offset": 1,
@@ -8,26 +8,6 @@
     "rule": "floor = the highest of p2 / p1 / p0.5 / p0.25 / p0 (p0 = minimum) of recast/modelled-cooldown ratios on even-indexed files that is < 0.99 and that ≤ 3 % of odd-file ratios fall below; kept when on each half ≥ 1 % and ≥ 3 ratios are < 0.99, the odd-file minimum is ≤ floor + 0.1, and ≥ 50 ratios per half"
   },
   "floors": {
-    "47568|251": {
-      "name": "Empower Rune Weapon",
-      "quantile": 0.02,
-      "floorRatio": 0.019,
-      "staticBreak": 0.999,
-      "holdoutStaticBreak": 1,
-      "nTrain": 992,
-      "nHoldout": 1109,
-      "holdoutBelow": 0.026
-    },
-    "374251|1468": {
-      "name": "Cauterizing Flame",
-      "quantile": 0.02,
-      "floorRatio": 0.068,
-      "staticBreak": 0.2,
-      "holdoutStaticBreak": 0.261,
-      "nTrain": 90,
-      "nHoldout": 119,
-      "holdoutBelow": 0
-    },
     "22842|105": {
       "name": "Frenzied Regeneration",
       "quantile": 0.02,
@@ -52,21 +32,11 @@
       "name": "Ice Block",
       "quantile": 0.02,
       "floorRatio": 0.151,
-      "staticBreak": 0.089,
-      "holdoutStaticBreak": 0.046,
+      "staticBreak": 0.554,
+      "holdoutStaticBreak": 0.538,
       "nTrain": 56,
       "nHoldout": 65,
       "holdoutBelow": 0
-    },
-    "384352|263": {
-      "name": "Doom Winds",
-      "quantile": 0.02,
-      "floorRatio": 0.216,
-      "staticBreak": 0.385,
-      "holdoutStaticBreak": 0.35,
-      "nTrain": 698,
-      "nHoldout": 723,
-      "holdoutBelow": 0.011
     },
     "446035|71": {
       "name": "Bladestorm",
@@ -138,6 +108,16 @@
       "nHoldout": 221,
       "holdoutBelow": 0.023
     },
+    "33891|105": {
+      "name": "Incarnation: Tree of Life",
+      "quantile": 0.02,
+      "floorRatio": 0.463,
+      "staticBreak": 0.993,
+      "holdoutStaticBreak": 0.988,
+      "nTrain": 592,
+      "nHoldout": 578,
+      "holdoutBelow": 0.014
+    },
     "471195|65": {
       "name": "Lay on Hands",
       "quantile": 0.02,
@@ -148,6 +128,16 @@
       "nHoldout": 78,
       "holdoutBelow": 0.026
     },
+    "84714|64": {
+      "name": "Frozen Orb",
+      "quantile": 0.02,
+      "floorRatio": 0.485,
+      "staticBreak": 0.906,
+      "holdoutStaticBreak": 0.897,
+      "nTrain": 1901,
+      "nHoldout": 2153,
+      "holdoutBelow": 0.015
+    },
     "202770|102": {
       "name": "Fury of Elune",
       "quantile": 0.02,
@@ -157,6 +147,26 @@
       "nTrain": 271,
       "nHoldout": 219,
       "holdoutBelow": 0.014
+    },
+    "132158|105": {
+      "name": "Nature's Swiftness",
+      "quantile": 0.02,
+      "floorRatio": 0.59,
+      "staticBreak": 0.656,
+      "holdoutStaticBreak": 0.702,
+      "nTrain": 1080,
+      "nHoldout": 1088,
+      "holdoutBelow": 0.019
+    },
+    "1241937|1480": {
+      "name": "Soul Immolation",
+      "quantile": 0.02,
+      "floorRatio": 0.596,
+      "staticBreak": 0.111,
+      "holdoutStaticBreak": 0.075,
+      "nTrain": 1180,
+      "nHoldout": 1070,
+      "holdoutBelow": 0.012
     },
     "473909|105": {
       "name": "Ancient of Lore",
@@ -176,6 +186,16 @@
       "holdoutStaticBreak": 0.111,
       "nTrain": 2603,
       "nHoldout": 2118,
+      "holdoutBelow": 0.018
+    },
+    "22842|102": {
+      "name": "Frenzied Regeneration",
+      "quantile": 0.02,
+      "floorRatio": 0.67,
+      "staticBreak": 0.312,
+      "holdoutStaticBreak": 0.308,
+      "nTrain": 458,
+      "nHoldout": 490,
       "holdoutBelow": 0.018
     },
     "205636|102": {
@@ -198,14 +218,24 @@
       "nHoldout": 445,
       "holdoutBelow": 0.02
     },
+    "191634|262": {
+      "name": "Stormkeeper",
+      "quantile": 0.02,
+      "floorRatio": 0.683,
+      "staticBreak": 0.651,
+      "holdoutStaticBreak": 0.645,
+      "nTrain": 1096,
+      "nHoldout": 930,
+      "holdoutBelow": 0.027
+    },
     "33206|256": {
       "name": "Pain Suppression",
       "quantile": 0.02,
       "floorRatio": 0.686,
-      "staticBreak": 0.865,
-      "holdoutStaticBreak": 0.893,
-      "nTrain": 266,
-      "nHoldout": 225,
+      "staticBreak": 0.867,
+      "holdoutStaticBreak": 0.895,
+      "nTrain": 270,
+      "nHoldout": 228,
       "holdoutBelow": 0.013
     },
     "116849|270": {
@@ -238,44 +268,74 @@
       "nHoldout": 2169,
       "holdoutBelow": 0.025
     },
-    "132158|105": {
-      "name": "Nature's Swiftness",
+    "22842|103": {
+      "name": "Frenzied Regeneration",
       "quantile": 0.02,
-      "floorRatio": 0.803,
-      "staticBreak": 0.285,
-      "holdoutStaticBreak": 0.323,
-      "nTrain": 1080,
-      "nHoldout": 1088,
-      "holdoutBelow": 0.015
+      "floorRatio": 0.8,
+      "staticBreak": 0.17,
+      "holdoutStaticBreak": 0.175,
+      "nTrain": 188,
+      "nHoldout": 285,
+      "holdoutBelow": 0.011
+    },
+    "5384|255": {
+      "name": "Feign Death",
+      "quantile": 0.02,
+      "floorRatio": 0.815,
+      "staticBreak": 0.233,
+      "holdoutStaticBreak": 0.243,
+      "nTrain": 688,
+      "nHoldout": 765,
+      "holdoutBelow": 0.008
+    },
+    "5384|254": {
+      "name": "Feign Death",
+      "quantile": 0.02,
+      "floorRatio": 0.819,
+      "staticBreak": 0.259,
+      "holdoutStaticBreak": 0.253,
+      "nTrain": 1350,
+      "nHoldout": 1211,
+      "holdoutBelow": 0.017
+    },
+    "5384|253": {
+      "name": "Feign Death",
+      "quantile": 0.02,
+      "floorRatio": 0.823,
+      "staticBreak": 0.228,
+      "holdoutStaticBreak": 0.251,
+      "nTrain": 2555,
+      "nHoldout": 2501,
+      "holdoutBelow": 0.026
+    },
+    "205021|64": {
+      "name": "Ray of Frost",
+      "quantile": 0.02,
+      "floorRatio": 0.828,
+      "staticBreak": 0.172,
+      "holdoutStaticBreak": 0.187,
+      "nTrain": 1374,
+      "nHoldout": 1471,
+      "holdoutBelow": 0.019
     },
     "11426|64": {
       "name": "Ice Barrier",
       "quantile": 0.02,
-      "floorRatio": 0.848,
-      "staticBreak": 0.083,
-      "holdoutStaticBreak": 0.092,
-      "nTrain": 2432,
-      "nHoldout": 2655,
-      "holdoutBelow": 0.017
-    },
-    "108280|264": {
-      "name": "Healing Tide Totem",
-      "quantile": 0.02,
-      "floorRatio": 0.874,
-      "staticBreak": 0.048,
-      "holdoutStaticBreak": 0.053,
-      "nTrain": 541,
-      "nHoldout": 562,
-      "holdoutBelow": 0.014
+      "floorRatio": 0.845,
+      "staticBreak": 0.092,
+      "holdoutStaticBreak": 0.095,
+      "nTrain": 2495,
+      "nHoldout": 2726,
+      "holdoutBelow": 0.016
     },
     "102560|102": {
       "name": "Incarnation: Chosen of Elune",
       "quantile": 0.02,
-      "floorRatio": 0.886,
+      "floorRatio": 0.885,
       "staticBreak": 0.152,
-      "holdoutStaticBreak": 0.176,
-      "nTrain": 429,
-      "nHoldout": 467,
+      "holdoutStaticBreak": 0.175,
+      "nTrain": 435,
+      "nHoldout": 468,
       "holdoutBelow": 0.028
     },
     "370553|1468": {
@@ -313,18 +373,18 @@
       "quantile": 0.02,
       "floorRatio": 0.932,
       "staticBreak": 0.099,
-      "holdoutStaticBreak": 0.099,
-      "nTrain": 706,
-      "nHoldout": 832,
-      "holdoutBelow": 0.022
+      "holdoutStaticBreak": 0.101,
+      "nTrain": 715,
+      "nHoldout": 839,
+      "holdoutBelow": 0.023
     },
     "363916|1468": {
       "name": "Obsidian Scales",
       "quantile": 0.02,
       "floorRatio": 0.938,
-      "staticBreak": 0.176,
+      "staticBreak": 0.181,
       "holdoutStaticBreak": 0.179,
-      "nTrain": 165,
+      "nTrain": 166,
       "nHoldout": 207,
       "holdoutBelow": 0.024
     },

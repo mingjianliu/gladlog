@@ -31,7 +31,7 @@ desktop 主进程
   MatchStore          一场一目录:meta.json + match.json + raw.txt,
   │                   外加一个只追加的 NDJSON 索引(_index.ndjson)
   ├─ RecorderService  按 segmentOpen/segmentClose 走 OBS websocket 起停录像
-  ├─ AnalysisService  候选事件 → prompt → LLM → 审计 → 按模型分槽的缓存
+  ├─ AnalysisService  候选事件 → prompt → LLM → 审计 →(可选)AI 自查 → 按模型分槽的缓存
   ├─ CompareService   你的指标 vs 预先构建的高分玩家参照语料
   ├─ LearningService  跨场台账 → 确定性模式扫描 → 提炼成规则
   └─ IPC              约 40 个 ipcMain.handle 频道 + 推送频道(src/main/ipc.ts)
@@ -339,6 +339,7 @@ analysis 的函数要的是旧的 `ICombatUnit` 形状。`parser-compat` 导出�
 | `buildFindingsPrompt.ts`                              | findings prompt。                                                                                                                      |
 | `auditFindings.ts`                                    | 出模型后的审计:凡带裸数字、编造事件、或违禁因果断言的一律丢弃。                                                                        |
 | `causalLint.ts`                                       | 纯正则的强因果**措辞**检查(策略禁止),中英双语。它查的是措辞,不是真伪。                                                                 |
+| `selfReview.ts`                                       | 可选的第二次调用(设置项,默认关;2026-10-15):同一后端 / 模型拿着生成它们的那份 prompt 重读审计后的 findings,逐条保留 / 更正 / 弱化 / 删除——绝不新增。由 `applySelfReview` 而非 `auditFindings` 校验(它看到的是渲染后的数字);缓存身份带 `SELF_REVIEW_PROMPT_VERSION`,与 `PROMPT_VERSION` 独立。 |
 | `spellNameZhLint.ts`                                  | 防止输出里把技能名译成中文。                                                                                                           |
 | `parseModelJson.ts`                                   | 容错的 JSON 抽取(带 markdown 围栏也认)—— `bad-json` 误杀那一类的修法。                                                                 |
 | `findingCategories.ts` / `types.ts` / `factFormat.ts` | 类别归一化与共享类型。                                                                                                                 |
@@ -520,7 +521,7 @@ interface AnalysisSlot<T> {
 | 视觉套件总耗时 | 3.0 分钟   | 22 秒      |
 | E2E 套件总耗时 | 1.3 分钟   | 14.5 秒    |
 
-这个失效模式**完全不报错** —— 只表现为「应用很慢」—— 所以它靠预算把门,而不是靠人肉察觉:`packages/desktop/qa/budgets.ts` 把 `parse` / `firstPaint` / `coldStart` 锁在 4900 / 3300 / 2600 ms(CI 采样最大值 × 1.5)。修复前这三个预算是 5100 / 41000 / 36000。放宽任何一个都要把理由写进 commit message。
+这个失效模式**完全不报错** —— 只表现为「应用很慢」—— 所以它靠预算把门,而不是靠人肉察觉:`packages/desktop/qa/budgets.ts` 当时把 `parse` / `firstPaint` / `coldStart` 锁在 4900 / 3300 / 2600 ms(CI 采样最大值 × 1.5);修复前这三个预算是 5100 / 41000 / 36000。此后 `firstPaint` 随 CI runner 构成变化重锁过几次(2026-10 为 12800 ms,历史见该文件注释),`firstPaintRatio` 在攒够 ≥ 10 个 CI 样本前只测不卡。放宽任何一个都要把理由写进 commit message。
 
 生成的数据模块遵循同一规则:`spellIconsGenerated.ts` 与 `spellEffectGenerated.ts` 是薄薄的 `.ts` 包装,负载放在同名 `.json` 里。`spellIconsGenerated.json` 还额外做了字典编码 —— 41,707 条只用到 7,110 个不同图标名,平铺 `Record` 有 48% 是重复字符串(1.5 MB → 780 KB);包装层再展开回去,消费方 API 不变。
 

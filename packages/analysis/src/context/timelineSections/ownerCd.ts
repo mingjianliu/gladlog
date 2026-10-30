@@ -11,21 +11,41 @@
  * the caller passes its current value and assigns back the returned one. Output
  * is pinned by the 605-file acceptanceCapture context hash.
  */
-import { ccSpellIds } from "../../data/spellTags";
+
+import { saveCoversPressureOn } from "../../analysis/candidates/cooldownTiming";
+import { reachesAlly } from "../../data/spellTargeting";
 import { buffFullDurationForCaster } from "../../utils/buffDuration";
+import { isControlCast } from "../../utils/castMissRows";
 import {
+  castSpellName,
   cdIsProcOnly,
   cdRoleTag,
   findCheaperDefensiveAlternatives,
+  guardianSpiritSaveClause,
   type IDamageBucket,
-  isSelfOnlyDefensive,
-  isTeamHealCD,
+  isTeamSaveCD,
+  rendersOnCaster,
   THROUGHPUT_EMPOWER_DEFENSIVE_IDS,
+  timingContextWithLabel,
 } from "../../utils/cooldowns";
-import { getDampeningPercentage } from "../../utils/dampening";
-import { computeEnemyInterruptAvailability } from "../../utils/enemyInterrupts";
-import { fmtTime } from "../../utils/renderGrid";
+import { AOE_CC_LANDING_WINDOW_S } from "../../utils/drAnalysis";
+import { observedCastEndMs } from "../../utils/enemyCDs";
 import {
+  computeEnemyInterruptAvailability,
+  isInterruptUsable,
+} from "../../utils/enemyInterrupts";
+import {
+  healAbsorbPressClause,
+  healAbsorbUseOf,
+  healerCreditOf,
+} from "../../utils/healAbsorbSave";
+import { documentRecordsAttackSpell } from "../../utils/incomingPressure";
+import { fmtTime, fmtWholeSeconds } from "../../utils/renderGrid";
+import { buildRosterSides } from "../../utils/rosterSide";
+import { unitUnderFireAt } from "../../utils/threatAssessment";
+import { isDeadAt } from "../../utils/unitDeath";
+import {
+  casterOwnAuraClause,
   CHANNELED_CD_SPELL_IDS,
   channelWasInterrupted,
   computeHealingInWindow,
@@ -35,6 +55,11 @@ import {
 import { ALTER_TIME_CAST_ID, alterTimeReturnSeconds } from "./alterTime";
 import type { DeferredSnapshot } from "./ctx";
 import type { TimelineCtx } from "./ctx";
+import { procTriggerAt, procTriggerOf } from "./enemyCd";
+
+const DIVINE_HYMN_ID = "64843";
+/** Spirit of Redemption, the pressed PvP-talent version (not the death proc). */
+const SPIRIT_OF_REDEMPTION_PRESSED_ID = "215769";
 
 export function emitOwnerCdEntries(
   ctx: Pick<
@@ -52,18 +77,24 @@ export function emitOwnerCdEntries(
     | "outgoingDrTag"
     | "ownerCcImmuneTag"
     | "ownerCcMissTag"
+    | "ownerNoCcAuraTag"
     | "ownerEmpowerTag"
     | "groundingAbsorbNote"
     | "params"
     | "_allUnits"
+    | "dampeningAt"
     | "pressureWindows"
     | "pid"
     | "cdExpiryEvents"
     | "ownerCCSummary"
     | "enemies"
+    | "friends"
+    | "summonOwners"
     | "ownerInterruptImmuneReasonAt"
     | "addEntry"
     | "ownerHardCcTagAt"
+    | "ownerStunnedAtCast"
+    | "ownerStunIdsAtCast"
   >,
 ): Pick<TimelineCtx, "procLinesEmitted"> {
   const {
@@ -79,27 +110,66 @@ export function emitOwnerCdEntries(
     outgoingDrTag,
     ownerCcImmuneTag,
     ownerCcMissTag,
+    ownerNoCcAuraTag,
     ownerEmpowerTag,
     groundingAbsorbNote,
     params,
     _allUnits,
+    dampeningAt,
     pressureWindows,
     pid,
     cdExpiryEvents,
     ownerCCSummary,
     enemies,
+    friends,
+    summonOwners,
     ownerInterruptImmuneReasonAt,
     addEntry,
     ownerHardCcTagAt,
+    ownerStunnedAtCast,
+    ownerStunIdsAtCast,
   } = ctx;
+  const roundPlayers = [...friends, ...(enemies ?? [])];
+  // B3a: the round-level inputs of the school split (`saveCoversPressureOn`)
+  const roundFacts = {
+    sides: buildRosterSides(_allUnits),
+    recordsAttackSpell: documentRecordsAttackSpell(_allUnits),
+  };
   // threaded: read from ctx, returned to the caller (GH #116)
   let { procLinesEmitted } = ctx;
+
+  // User ruling 2026-09-30: the pressed Spirit of Redemption (PvP talent,
+  // 215769) that carries a Divine Hymn is part of the Hymn throughput combo,
+  // not a survival cooldown — no "cheaper available: Guardian Spirit,
+  // Desperate Prayer" on it. "Carries" = the owner started Divine Hymn while
+  // still in spirit form (cast … logged expiry). Pressed alone it stays a
+  // defensive. 2026-09-30 capture (605 files): 483 owner SoR lines, the next
+  // Hymn 0–1 s later on 279 of them.
+  const hymnCastSeconds =
+    ownerCDs
+      .find((c) => c.spellId === DIVINE_HYMN_ID)
+      ?.casts.map((c) => c.timeSeconds) ?? [];
+  function spiritCarriesHymn(spellId: string, castAtSeconds: number): boolean {
+    if (spellId !== SPIRIT_OF_REDEMPTION_PRESSED_ID) return false;
+    const form = cdExpiryEvents.find(
+      (e) =>
+        e.spellId === spellId &&
+        Math.abs(e.castAtSeconds - castAtSeconds) < 0.01,
+    );
+    if (!form) return false;
+    return hymnCastSeconds.some(
+      (h) => h >= castAtSeconds && h <= form.expiresAtSeconds,
+    );
+  }
+
+  const ownerPvpTalentIds = new Set<string>(owner.info?.pvpTalents ?? []);
 
   for (const cd of ownerCDs) {
     // B112/B127: a big personal defensive that cannot be cast on an ally is self-only — force (self)
     // rendering so a self-buff (e.g. Obsidian Scales) logged against the caster's current enemy/ally
-    // target is not shown as "→ <unit>" with that unit's HP.
-    const forceSelf = isSelfOnlyDefensive(cd.spellId);
+    // target is not shown as "→ <unit>" with that unit's HP. `rendersOnCaster` (hp-state F-S1)
+    // adds the officially self-only Defensives outside the big-defensive roster.
+    const selfOnlyId = rendersOnCaster(cd.spellId);
     // Reliability round 3 N5 (02c8 / ba8c / 3306): a proc-only entry (Renewing
     // Blaze — structurally cast-less; a talent-replaced button) keeps its aura
     // activations in `casts`, and this loop read them as presses: "[YOU] [CD]
@@ -108,22 +178,65 @@ export function emitOwnerCdEntries(
     // judgement (cheaper alternative, [UNNECESSARY], CC tag, [HEALING]) is off.
     const isProc = cdIsProcOnly(cd);
     if (isProc) procLinesEmitted = true;
+    // F15 C5: what a proc-only activation goes out with (`procTriggerOf`)
+    const procWith = isProc
+      ? procTriggerOf(
+          owner,
+          cd.spellId,
+          cd.casts.map((c) => Math.round(matchStartMs + c.timeSeconds * 1000)),
+        )
+      : undefined;
     for (const cast of cd.casts) {
+      // the round's trigger, only where this activation went out with it
+      // (codex 20-F15-25)
+      const castProcWith = procTriggerAt(
+        owner,
+        cd.spellId,
+        Math.round(matchStartMs + cast.timeSeconds * 1000),
+        procWith,
+      );
+      // F15 C1: a talent-shared wall's press that put its copy on an ally
+      // (Flameshaper Obsidian Scales) keeps that ally as its target.
+      const forceSelf = selfOnlyId && !cast.allyCopyOn;
+      // No `cast.targetHpPct` override (hp-state F-R8): the helper reads
+      // `hpAtPress` itself. The ledger field is the same press reading since
+      // the A21 extension (2026-10-01) — one sampler for the line, the
+      // [UNNECESSARY] threshold and the questionable-external facts.
       const targetPart = getCDTargetAndVelocityPart(
         cd.spellId,
         cast.timeSeconds,
         cast.targetName,
-        cast.targetHpPct,
         forceSelf,
       );
 
-      const isCC = ccSpellIds.has(cd.spellId);
+      const isCC = isControlCast(cd.spellId);
       const extraLines: (string | DeferredSnapshot)[] = [
         // T3: delta form (non-CC used to force a full snapshot, the main source of
         // [RES] tokens; full snapshots are reserved for death snapshots and the
         // periodic 60s refresh)
         requestSnapshotPlaceholder(cast.timeSeconds),
       ];
+
+      // FT-T15 ④: a throughput buff pressed on a TEAMMATE that the log shows
+      // on the owner too (Power Infusion with the twin talent). Stated on
+      // every such press, whether or not it gets a [HEALING] block; read
+      // from the owner's own aura events, so no aura in the log ⇒ no clause.
+      const pressedOnAnother =
+        !forceSelf &&
+        !!cast.targetName &&
+        cast.targetName !== "nil" &&
+        cast.targetName !== owner.name &&
+        cast.targetName.split("-")[0] !== owner.name.split("-")[0];
+      const ownAuraNote =
+        !isProc &&
+        pressedOnAnother &&
+        HEALING_AMPLIFIER_SPELL_IDS.has(cd.spellId)
+          ? casterOwnAuraClause(
+              owner,
+              cd.spellId,
+              matchStartMs + cast.timeSeconds * 1000,
+            )
+          : "";
 
       if (
         HEALING_AMPLIFIER_SPELL_IDS.has(cd.spellId) &&
@@ -132,7 +245,18 @@ export function emitOwnerCdEntries(
         const duration = buffFullDurationForCaster(cd.spellId, owner);
         if (duration) {
           const fromMs = matchStartMs + cast.timeSeconds * 1000;
-          const toMs = fromMs + duration * 1000;
+          // the window the emission choice read (`prepareOwnerCdContext`):
+          // the observed end, else the official length (work order
+          // 2026-10-15 #8)
+          const toMs =
+            observedCastEndMs(
+              owner,
+              cd.spellId,
+              fromMs,
+              roundPlayers,
+              matchStartMs,
+              params.matchEndMs,
+            ) ?? fromMs + duration * 1000;
           const healStats = computeHealingInWindow(owner.healOut, fromMs, toMs);
           if (healStats) {
             const bucketParts = healStats.buckets.map(
@@ -159,19 +283,25 @@ export function emitOwnerCdEntries(
 
       const prefix = isProc
         ? "[YOU] [PROC]"
-        : ccSpellIds.has(cd.spellId)
+        : isControlCast(cd.spellId)
           ? "[YOU] [CC]"
           : "[YOU] [CD]";
       let effectiveTargetPart = targetPart;
+      // enemy-def F-E26: the units this line names, for the IMMUNE tag
+      const named = new Set<string>(
+        cast.targetName && cast.targetName !== "nil" ? [cast.targetName] : [],
+      );
       if (isCC) {
         const matchingAoe = findAndConsumeAoeCC(
           cast.timeSeconds,
           owner.name,
           cd.spellName,
           true,
+          AOE_CC_LANDING_WINDOW_S[cd.spellId] ?? undefined,
         );
         if (matchingAoe) {
           effectiveTargetPart = formatAoeTargetPart(matchingAoe, targetPart);
+          for (const t of matchingAoe.targets) named.add(t.name);
         }
       }
       // Class F (2026-07-20 eval): [CC ON TEAM] carries [DR: category level]
@@ -179,11 +309,46 @@ export function emitOwnerCdEntries(
       // led the model to transfer the semantics of enemy lines onto its own.
       // Outgoing DR is already computed (drInfo on outgoingCCChains); align the
       // rendering here.
-      const outgoingDrNote = isCC ? outgoingDrTag(cd.spellId, cast) : "";
-      const immuneNote = isCC
-        ? ownerCcImmuneTag(cd.spellId, cast.timeSeconds) +
-          ownerCcMissTag(cd.spellId, cast.timeSeconds)
-        : "";
+      const outgoingDrNote = isCC ? outgoingDrTag(cd.spellId, cast, named) : "";
+      // enemy-def F-E25a: a non-CC press into an immunity (Grapple Weapon
+      // into Bladestorm, a Freezing Trap the roster does not class as CC) is
+      // tagged too; the MISS / REFLECT tag stays a CC tag. A proc-only
+      // activation is not a press and gets neither.
+      // (a spell that reaches allies is not aimed at an enemy — Mass
+      // Invisibility logs IMMUNE on the enemies standing in it)
+      const failTags = isProc
+        ? ""
+        : isCC
+          ? ownerCcImmuneTag(cd.spellId, cast.timeSeconds, named) +
+            ownerCcMissTag(cd.spellId, cast.timeSeconds)
+          : reachesAlly(cd.spellId)
+            ? // fact2: refused on the ally the line names (an IMMUNE row)
+              cast.targetName && cast.targetName !== "nil"
+              ? ownerCcImmuneTag(
+                  cd.spellId,
+                  cast.timeSeconds,
+                  new Set([cast.targetName]),
+                  true,
+                )
+              : ""
+            : // round-1 retest idx 34: a non-control press with no target is
+              // not aimed at anyone — a stray IMMUNE on a player standing in
+              // our own Imprison is no immunity it was pressed into
+              // (26bfd4f3 0:39 Summon Darkglare `[IMMUNE]`); fact6 D14: a
+              // line that names nobody asks the press's own cast-row target,
+              // when it is an enemy
+              named.size > 0
+              ? ownerCcImmuneTag(cd.spellId, cast.timeSeconds, named)
+              : ownerCcImmuneTag(cd.spellId, cast.timeSeconds, undefined, true);
+      // cc-dr F-NE1 (wording ruling A55): an aimed CC cast that left no CC
+      // aura on its target and no miss either is said to have no logged
+      // effect — an absence of evidence, never "it missed". Probe p12's rule:
+      // no CC aura (any id, or the cast's own effect auras) from the owner or
+      // the owner's summons on the target within [cast − 0.1 s, cast + 2.5 s],
+      // and no owner miss on it in that window.
+      const immuneNote =
+        failTags ||
+        (isCC && !isProc ? ownerNoCcAuraTag(cd.spellId, cast.timeSeconds) : "");
       const empowerNote = ownerEmpowerTag(cd.spellId, cast.timeSeconds);
       const groundingNote = groundingAbsorbNote(
         cd.spellId,
@@ -202,12 +367,17 @@ export function emitOwnerCdEntries(
       // fmtTime, so pass it through verbatim.
       const unnecessaryNote =
         !isProc && cast.timingLabel === "Unnecessary" && cast.timingContext
-          ? ` [UNNECESSARY — ${cast.timingContext}]`
+          ? ` [UNNECESSARY — ${timingContextWithLabel(cast, pid)}]`
           : "";
 
+      // ` | dampening: N%, next spike in Ns on X`. The dampening half is left
+      // out where no value is stated — a 2v2 round that logged no stack
+      // (`getInitialDampening`, FT-T13 D11) — and the spike half then stands
+      // alone: ` | next spike in Ns on X`.
       let dampeningNote = "";
       if (!isCC) {
-        dampeningNote = ` | dampening: ${getDampeningPercentage(params.bracket ?? "3v3", _allUnits, matchStartMs + cast.timeSeconds * 1000)}%`;
+        const dampPct = dampeningAt(cast.timeSeconds, owner);
+        const noteParts = dampPct === null ? [] : [`dampening: ${dampPct}%`];
         // pressureWindows is sorted by totalDamage descending (see computePressureWindows),
         // so Array.find() would return the biggest future spike rather than the nearest one.
         // Select by minimum fromSeconds among qualifying spikes instead of relying on order.
@@ -224,35 +394,128 @@ export function emitOwnerCdEntries(
           undefined,
         );
         if (nextSpike) {
-          dampeningNote += `, next spike in ${Math.round(nextSpike.fromSeconds - cast.timeSeconds)}s on ${pid(nextSpike.targetName)}`;
+          // `fromSeconds` is the spike's first hit, at or after the press
+          // (the filter above), so the gap is never negative. Under half a
+          // second it printed `in 0s` — 545 press lines of the 605-file
+          // capture — which reads as no gap at all; the spike is real and
+          // its first hit lands inside that second: `in <1s`
+          // (`fmtWholeSeconds`; also for a first hit on the press's own
+          // millisecond, which still follows the press).
+          noteParts.push(
+            `next spike in ${fmtWholeSeconds(nextSpike.fromSeconds - cast.timeSeconds)} on ${pid(nextSpike.targetName)}`,
+          );
         }
+        if (noteParts.length > 0) dampeningNote = ` | ${noteParts.join(", ")}`;
       }
 
       // F166: "cheaper-tool-available" tag — if a shorter-CD defensive was available, flag it.
       // Throughput CDs (e.g. Power Infusion) are excluded by findCheaperDefensiveAlternatives.
       // H11: when this cast was an external thrown on a teammate, only suggest alternatives
       // that can themselves target a teammate — a self-only tool (e.g. Barkskin) can't help.
+      // B15a step 2 (wording approved 2026-10-07): a self-save that puts a
+      // heal absorb on the owner (Death Pact) says what the absorb ate
+      const healAbsorbUse =
+        isProc || isCC
+          ? null
+          : healAbsorbUseOf(
+              owner,
+              cd.spellId,
+              matchStartMs + cast.timeSeconds * 1000,
+              params.matchEndMs,
+              healerCreditOf([...friends, ...(enemies ?? [])], summonOwners),
+            );
+      const healAbsorbNote = healAbsorbUse
+        ? healAbsorbPressClause(
+            healAbsorbUse,
+            owner.id,
+            (unitId) => {
+              const u = _allUnits.find((x) => x.id === unitId);
+              return u ? pid(u.name) : unitId;
+            },
+            (ms) => fmtTime((ms - matchStartMs) / 1000),
+          )
+        : "";
+      // B18: the owner's own Guardian Spirit whose save triggered says so
+      const guardianSaveNote = isProc
+        ? ""
+        : guardianSpiritSaveClause(
+            cd.spellId,
+            owner,
+            cast.timeSeconds,
+            matchStartMs,
+            cast.targetName && cast.targetName !== "nil"
+              ? cast.targetName
+              : owner.name,
+          );
       let cheaperNote = "";
       if (
         !isCC &&
         !isProc &&
         cd.tag === "Defensive" &&
-        !THROUGHPUT_EMPOWER_DEFENSIVE_IDS.has(cd.spellId)
+        !THROUGHPUT_EMPOWER_DEFENSIVE_IDS.has(cd.spellId) &&
+        !spiritCarriesHymn(cd.spellId, cast.timeSeconds)
       ) {
         // B142: a team/raid heal (Divine Hymn, Tranquility, …) covers an injured ALLY, so a
         // self-only tool (Desperate Prayer, Frenzied Regeneration) can't substitute for it — treat it
         // like an external cast so only team-capable alternatives are offered (extends the H11 guard).
-        const castTargetIsTeammate =
-          isTeamHealCD(cd.spellId) ||
-          (!!cast.targetName &&
-            cast.targetName !== "nil" &&
-            cast.targetName.split("-")[0] !== owner.name.split("-")[0]);
+        // Triage hp-state F-T1: the test is the team-SAVE set (the heals plus the group walls of
+        // the 2026-09-26 ruling) — a nil-dest Spirit Link Totem / Aura Mastery read as a self-cast
+        // and was offered Astral Shift / Divine Protection.
+        const castOnTeammate =
+          !!cast.targetName &&
+          cast.targetName !== "nil" &&
+          cast.targetName.split("-")[0] !== owner.name.split("-")[0];
+        const castTargetIsTeammate = isTeamSaveCD(cd.spellId) || castOnTeammate;
+        // U-T2 (user ruling 2026-10-06): a group save names no recipient. When
+        // the owner was the only friendly under fire at the press, the danger
+        // it answered was the owner's own, and a tool that only works on
+        // another unit (Blessing of Sacrifice) was not an alternative.
+        const pressMs = matchStartMs + cast.timeSeconds * 1000;
+        const onlyCasterUnderFire =
+          castTargetIsTeammate &&
+          !castOnTeammate &&
+          unitUnderFireAt(owner, pressMs) &&
+          // a teammate who died just before the press still has his fatal
+          // hits inside the ± window — nothing can be put on a corpse
+          !params.friends.some(
+            (f) =>
+              f.id !== owner.id &&
+              !isDeadAt(f, pressMs) &&
+              unitUnderFireAt(f, pressMs),
+          );
+        // B3a: the unit the save went on — the named teammate, the owner for
+        // a self-cast, the owner for a group save that answered only the
+        // owner's danger; a group save with no single recipient has none,
+        // and no school gate
+        const recipient = castOnTeammate
+          ? params.friends.find(
+              (f) => f.name.split("-")[0] === cast.targetName!.split("-")[0],
+            )
+          : !castTargetIsTeammate || onlyCasterUnderFire
+            ? owner
+            : undefined;
         const cheaperAvailable = findCheaperDefensiveAlternatives(
           cd,
           ownerCDs,
           cast.timeSeconds,
           {
             castTargetIsTeammate,
+            onlyCasterUnderFire,
+            coversSchool: recipient
+              ? (spellId) =>
+                  saveCoversPressureOn(spellId, recipient, pressMs, roundFacts)
+              : undefined,
+            // F-E20: a stunned owner can only be offered what a stunned player can press.
+            // U-T1: a school-limited purge (Blessing of Protection) is an
+            // alternative only where it would go on the stunned owner himself.
+            stunnedCaster: ownerStunnedAtCast(cast.timeSeconds)
+              ? {
+                  pvpTalentIds: ownerPvpTalentIds,
+                  selfCastUnderStuns: castTargetIsTeammate
+                    ? undefined
+                    : ownerStunIdsAtCast(cast.timeSeconds),
+                }
+              : undefined,
           },
         );
         if (cheaperAvailable.length > 0) {
@@ -277,11 +540,15 @@ export function emitOwnerCdEntries(
           // length and its end; "interrupted" only on kick/CC evidence.
           if (expiry.isEstimated) {
             channelSuffix = ` (channel end not logged)`;
+          } else if (expiry.cause === "round_end") {
+            // F02b: the round's end is not the channel's (the wording of a
+            // control the round ended on, `CC_STILL_ON_AT_ROUND_END`)
+            channelSuffix = ` (still channeling when the round ended, ${actualDuration.toFixed(1)}s in)`;
           } else {
             const interrupted = channelWasInterrupted(
               ownerCCSummary,
               cast.timeSeconds,
-              cast.timeSeconds + actualDuration,
+              expiry.expiresAtSeconds,
             );
             const channelEnd = fmtTime(cast.timeSeconds + actualDuration);
             channelSuffix = interrupted
@@ -294,7 +561,7 @@ export function emitOwnerCdEntries(
       // a mechanic (e.g. "Restoral breaks stuns") for a CD it otherwise sees only as a [YOU] [CD] cast.
       const ownerRole = cdRoleTag(cd.spellId);
       const roleSuffix = ownerRole ? ` [${ownerRole}]` : "";
-      const displayNameWithChannel = `${cd.spellName}${roleSuffix}${channelSuffix}`;
+      const displayNameWithChannel = `${castSpellName(cd, cast)}${roleSuffix}${channelSuffix}`;
 
       // B128: for the owner's CHANNELED CDs, state whether any enemy had an interrupt available at the
       // cast — so the model can decide "was this a lockout reaction" and "would this have been kicked"
@@ -311,13 +578,26 @@ export function emitOwnerCdEntries(
           // B139: kicks can't land — a PvP talent grants interrupt/silence immunity here.
           interruptNote = ` | interrupt-immune (${immuneReason})`;
         } else {
+          // F-C5 / F-C5b (ruling A′16): UP = usable at this instant — the
+          // kicker alive and not in a cast-blocking CC, not merely off
+          // cooldown. The CC test is at the exact instant, like kick-priority.
           const states = computeEnemyInterruptAvailability(
             enemies,
             matchStartMs + cast.timeSeconds * 1000,
+            _allUnits,
           );
-          const upKicks = states.filter((s) => s.cdRemainingSeconds === 0);
+          const kickLabel = (s: (typeof states)[number]) =>
+            s.assumedReady
+              ? `${s.spellName}/${s.spec} (assumed)`
+              : `${s.spellName}/${s.spec}`;
+          const upKicks = states.filter(isInterruptUsable);
+          const ccdKicks = states.filter(
+            (s) => s.cdRemainingSeconds === 0 && s.ccd,
+          );
           if (upKicks.length > 0) {
-            interruptNote = ` | enemy interrupts UP: ${upKicks.map((s) => (s.assumedReady ? `${s.spellName}/${s.spec} (assumed)` : `${s.spellName}/${s.spec}`)).join(", ")}`;
+            interruptNote = ` | enemy interrupts UP: ${upKicks.map(kickLabel).join(", ")}`;
+          } else if (ccdKicks.length > 0) {
+            interruptNote = ` | no enemy interrupt usable (CC'd: ${ccdKicks.map(kickLabel).join(", ")})`;
           } else if (states.length > 0) {
             interruptNote = " | no enemy interrupt available (all on CD)";
           }
@@ -338,7 +618,7 @@ export function emitOwnerCdEntries(
 
       addEntry(
         cast.timeSeconds,
-        `${fmtTime(cast.timeSeconds)}  ${prefix}   ${displayNameWithChannel}${effectiveTargetPart}${outgoingDrNote}${immuneNote}${empowerNote}${dampeningNote}${cheaperNote}${groundingNote}${interruptNote}${returnNote}${isProc ? "" : ownerHardCcTagAt(cast.timeSeconds)}${unnecessaryNote}`,
+        `${fmtTime(cast.timeSeconds)}  ${prefix}   ${displayNameWithChannel}${castProcWith ? ` (with ${castProcWith})` : ""}${effectiveTargetPart}${ownAuraNote}${outgoingDrNote}${immuneNote}${empowerNote}${healAbsorbNote}${guardianSaveNote}${dampeningNote}${cheaperNote}${groundingNote}${interruptNote}${returnNote}${isProc ? "" : ownerHardCcTagAt(cast.timeSeconds)}${unnecessaryNote}`,
         ...extraLines,
       );
     }

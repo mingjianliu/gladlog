@@ -49,6 +49,12 @@ description: 改 packages/analysis 的任何东西之前读这个 —— 谓词�
   一批改动 bump 一次。
 - 读生成物先确认形状:`observedSpellIdsGenerated.json` 是数组,`Object.keys` 拿到的是下标,曾造出「只有 1 个 observed」的假象。
 - 门规:渲染出来的数字(参照率、时刻、时长)加 `promptQualityCheck.ts` 的 hardFailure 一类,而不是靠 A/B 发现矛盾。
+- **新读者过日志形态矩阵**(2026-10-24 根因复盘:三周 299 个修复没有一个是单测抓到的,同几种日志怪癖被一个谓词接一个谓词地重新踩):
+  在 `test/logShapeMatrix.test.ts` 里给它写不变式 —— `NEUTRAL_SHAPES`(重播、小数毫秒、宠物伤害并主、DoT、cast 行延迟、同毫秒倒序)下结果不变,
+  `lostRemoved` 下有上界。新踩到的怪癖加进 `test/support/logShapes.ts` 一次,所有矩阵测试自动遇上它。
+- **测试的牙齿**:写完测试跑一遍 `npx tsx packages/eval/scripts/mutationProbe.ts <源文件>`,存活的变异 = 没被钉住的行为。
+  合成事件用 `test/ported/testHelpers.ts`(生产符号、带 `lineIndex`),别在测试里另造一份更"干净"的。
+- **真实日志**:`GLADLOG_FIXTURES=<目录> npx vitest run --root packages/eval realLogGates` 本地就能跑全链路;CI 的 `real-logs` job 每次推送都跑。
 
 ## 改完:验收与归因
 

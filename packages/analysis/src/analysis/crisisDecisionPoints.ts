@@ -11,9 +11,10 @@
  * Design: docs/superpowers/specs/2026-08-29-crisis-no-response-design.md.
  * Evidence: eval-private/reports/behavior-prior-2026-08-28/ (18,134 matches).
  */
-import { LogEvent } from "@gladlog/parser-compat";
+import { type IAuraEvent, LogEvent } from "@gladlog/parser-compat";
 
 import { type CrisisRole } from "../data/behaviorPrior";
+import { castEffectPairs } from "../data/castEffectAuras";
 import { BREAK_RACIAL_SPELL_IDS } from "../data/racialAbilities";
 import spellIdLists from "../data/spellIdLists";
 import {
@@ -22,6 +23,18 @@ import {
   rootSpellIds,
   spells as spellMeta,
 } from "../data/spellTags";
+import { controlTargetHitPressured } from "../utils/burstHit";
+import { burstCastSpan } from "../utils/burstLedger";
+import {
+  buildCannotCastIntervals,
+  couldReactWithin,
+  enemySourceIds,
+  freeMsWithin,
+  isSilenceOnlyAura,
+  namedCannotCastIntervals,
+} from "../utils/cannotCastIntervals";
+import { castControlsIn } from "../utils/castMissRows";
+import { isFormReshiftCast } from "../utils/castPress";
 import {
   cdIsProcOnly,
   cdReadyInTimeAt,
@@ -37,11 +50,15 @@ import {
   // ...and its companion, the [STATE] tick's `unit:dead` predicate.
   isDeadAtRenderSecond,
 } from "../utils/cooldowns";
-import { CC_CAST_EFFECT_AURA } from "../utils/drAnalysis";
-import { isEnemyCdWindowSpell } from "../utils/enemyCDs";
+import { reconstructEnemyCDTimeline } from "../utils/enemyCDs";
+import {
+  documentRecordsAttackSpell,
+  incomingPressureBySchool,
+} from "../utils/incomingPressure";
 import { PVP_TRINKET_SPELL_IDS } from "../utils/killWindowTargetSelection";
-import { auraOffensiveOccurrences } from "../utils/offensiveAuraOccurrences";
 import { rootIntervalsOf } from "../utils/rootReachability";
+import { buildRosterSides } from "../utils/rosterSide";
+import { playableEndMs } from "../utils/roundEnd";
 import { OFFENSIVE_CD_SPELL_IDS } from "../utils/spellDanger";
 import { buildFilteredAuraIntervals } from "../utils/utils";
 
@@ -83,6 +100,9 @@ export function schoolShareCoveredBy(
   }
   return total > 0 ? covered / total : null;
 }
+/** teammate-crisis's "an enemy burst was PRESSED this close before the
+ * crossing" (its legend says pressed). The crisis point's own `enemyBurst`
+ * reads a running span since fact4 D9 (`burstCastSpan`). */
 export const ENEMY_BURST_LOOKBACK_MS = 8000;
 /** Gate 2: an interrupt landing on the owner this close before the crossing
  * means the school is locked — handed to `kick-eaten`, never double-charged. */
@@ -162,16 +182,36 @@ export interface DecisionPoint {
   hpPct: number;
   dmg2s: number;
   /**
-   * The same `DMG_WINDOW_MS` damage as `dmg2s` (same events, same amounts),
-   * summed per log school mask (`spellSchoolId`, 0x1 = physical; a swing is
-   * 0x1). Read by `schoolShareCoveredBy`; the reference tables never read
-   * it. Optional so hand-built fixtures need not carry it.
+   * What was aimed at the unit in `dmg2s`'s window, per school mask
+   * (`incomingPressureBySchool`; 0x1 = physical, a swing is 0x1): the hits
+   * that landed AND the hits a shield ate, a teammate's redistribution left
+   * out. Not a split of `dmg2s` — that stays landed damage, the number the
+   * reference tables were built on. A school-limited save is judged by what
+   * the enemy was throwing, and a Power Word: Shield on the unit ate exactly
+   * the school the save would have covered (user ruling U-KA2, 2026-10-06:
+   * the same reading KILL ATTEMPTS has had since F-E22 / F-E24). Read by
+   * `schoolShareCoveredBy`; the reference tables never read it. Optional so
+   * hand-built fixtures need not carry it.
    */
   dmg2sBySchool?: Record<string, number>;
   attackers2s: number;
+  /** an enemy burst cooldown RUNNING at the crossing (`burstCastSpan`, fact4
+   * D9) — not "pressed in the last 8 s" */
   enemyBurst: boolean;
+  /** the owner was in hard CC / a silence at the crossing instant `t` (what
+   * cd-hoarded's crisis-unit gate and the context read) */
   inCC: boolean;
+  /** the owner was kicked within `LOCKOUT_LOOKBACK_MS` before `t`, or
+   * silenced at `t` */
   lockedOut: boolean;
+  /** fact4 D28: the owner could act inside the response window — at least
+   * REACTION_WINDOW_S of [t, t + RESPONSE_WINDOW_MS] outside every
+   * cannot-cast interval (`couldReactWithin` over `buildCannotCastIntervals`,
+   * the predicate cd-hoarded's owner gate reads). Gate 1 + 2 of `feasible`.
+   * Optional (as `dmg2sBySchool`) so hand-built fixtures need not carry it. */
+  couldActInWindow?: boolean;
+  /** seconds of that window the owner was free (`freeMsWithin`) */
+  freeInWindowS?: number;
   diedInWindow: boolean;
   responses: DecisionPointResponses;
   /** owner's own active answer: selfHeal ∨ wall ∨ external ∨ control ∨ kite
@@ -181,12 +221,24 @@ export interface DecisionPoint {
    * name — for the "you auto-triggered X" phrasing; empty when none */
   procNames: string[];
   selfHealPct: number;
+  /** `selfHealFresh` as a whole percent of max HP — the value the `selfHeal`
+   * response test compares with SELF_HEAL_BIG: heals from spells the owner
+   * pressed inside the window, a proc's healing and HoTs already ticking
+   * excluded (GH #93). Not `selfHealPct`, which counts all of those. Floored,
+   * not rounded: 14.6 % is not a response and must not print as 15 on a line
+   * that says the bar is 15.
+   * Optional (as `dmg2sBySchool`) so hand-built fixtures need not carry it. */
+  selfHealFreshPct?: number;
+  /** How many of the owner's presses in the window healed the owner in it —
+   * the presses behind `selfHealFreshPct` (crisis-external F-C1). */
+  selfHealCasts?: number;
   /** gate 3, "has a tool" (spec §1d, GH #59): trivially true for a healer
    * (self-heal always exists). For a DPS owner: `!rooted || wallReady ||
    * controlReady` — not rooted (still free to move/act), or a personal wall
    * is off cooldown, or a Control-tagged major CD is off cooldown. */
   hasTool: boolean;
-  /** gates 1, 2, 3 and 4 all pass */
+  /** gates 1, 2, 3 and 4 all pass: `couldActInWindow`, alive through the
+   * window, a tool */
   feasible: boolean;
   /** gate 5: dmg2s >= CRISIS_MIN_DMG2S (spec §1b). Independent of `feasible`
    * — a point can be dangerous but infeasible (e.g. CC'd), or feasible but
@@ -287,14 +339,18 @@ const CONTROL_AURA_IDS = new Set<string>([
 // The owner's PRESS is a cast id, and some CC casts apply a differently
 // numbered aura (Blinding Light 115750 → 105421, Shockwave → 132168, Capacitor
 // Totem → 118905 …): add the cast ids whose effect aura is a control aura, from
-// the one cast→aura table (CC_CAST_EFFECT_AURA). Talent impact audit
+// the one cast→effect table (castEffectAuras.ts). Talent impact audit
 // 2026-09-26: a Holy Paladin who pressed Blinding Light was told "no CC on an
 // enemy".
+// fact2 C10 (2026-10-20): through the one cast→control reading
+// (`castControlsIn`): the effect must be the cast's own same-named control and
+// its usual result — not Summon Infernal's triggered Infernal Awakening, not
+// Wake of Ashes' demon-and-undead stun.
 const CONTROL_IDS = new Set<string>([
   ...CONTROL_AURA_IDS,
-  ...Object.entries(CC_CAST_EFFECT_AURA)
-    .filter(([, aura]) => CONTROL_AURA_IDS.has(aura))
-    .map(([cast]) => cast),
+  ...castEffectPairs()
+    .map(([cast]) => cast)
+    .filter((cast) => castControlsIn(cast, CONTROL_AURA_IDS)),
 ]);
 // C1 (2026-08-29): the hand-typed `interrupts` set alone covered 3/61 of the
 // official DR `silence` category (measured) — Strangulate 47476,
@@ -366,29 +422,6 @@ function samplesOf(u: any): Sample[] {
  * with this number, not a second `Math.round(CRISIS_HP_PCT * 100)`. */
 export const CRISIS_HP_PCT_RENDERED = Math.round(CRISIS_HP_PCT * 100);
 
-/**
- * Whether a `[DMG SPIKE]` window whose endpoints read `hpFrom% -> hpTo%`
- * hid a trough at `minPct` worth printing: the unit touched the crisis line
- * inside the window AND that reading is below both endpoints (a window that
- * starts or ends at its own minimum has nothing hidden).
- *
- * One predicate, two sides (CLAUDE.md Shared-Predicate Rule): the renderer
- * decides `, low N% @m:ss` vs `— healed through` with it, and the eval gate
- * `checkHealedThroughConsistency` asks the same question of every rendered
- * `[STATE]` tick inside the window. The crisis line is `CRISIS_HP_PCT_RENDERED`
- * — the same number every other "was this unit in danger" fact renders with —
- * rather than a second, spike-specific threshold (2026-09-15; measured on the
- * 309-prompt Opus baseline: 64 of 276 `healed through` lines had a visible
- * tick at or under it, 82 would have tripped a ≥25pp relative rule, the two
- * disagreeing only on troughs that never reached crisis).
- */
-export function isDmgSpikeTrough(
-  hpFrom: number,
-  hpTo: number,
-  minPct: number,
-): boolean {
-  return minPct <= CRISIS_HP_PCT_RENDERED && minPct < Math.min(hpFrom, hpTo);
-}
 /** How many whole seconds forward the grid re-anchor may search from the
  * crossing's own second. Derived from `CRISIS_WINDOW_GAP_MS` — anything
  * further away would already be a separate crisis by the merge rule. */
@@ -644,6 +677,18 @@ export const CRISIS_PROC_ANSWERS: ReadonlyMap<string, CrisisProcAnswer> =
         triggers: new Set(["87023", "108843"]),
       },
     ],
+    // …and its own heal 1286444: the burn aura is not always written (fact4
+    // D61 — 211 of 1,011 procs on 605 files every 3rd had the heal and no
+    // 87023); one proc's two markers name it once (`procNames`)
+    [
+      "1286444",
+      {
+        name: "Cauterize",
+        kind: "cheatDeath",
+        via: "heal",
+        triggers: new Set(["1286444"]),
+      },
+    ],
     // Cheat Death (Rogue, 5 %): a killing blow leaves the rogue at 7 % with
     // 85 % damage reduction for 3 s; 45182 = that reduction.
     [
@@ -672,18 +717,26 @@ export function actionBlockedAt(
   combat: any,
   tMs: number,
 ): { inCC: boolean; lockedOut: boolean; dead: boolean; blocked: boolean } {
-  const cc = buildFilteredAuraIntervals(unit, ccSpellIds, combat);
-  const silence = buildFilteredAuraIntervals(unit, SILENCE_IDS, combat);
-  const inCC = cc.some((i) => i.startMs <= tMs && i.endMs >= tMs);
-  const interrupted = ((unit?.actionIn ?? []) as any[])
-    .filter((a) => a.logLine?.event === LogEvent.SPELL_INTERRUPT)
-    .some(
-      (a) =>
-        (a.timestamp as number) >= tMs - LOCKOUT_LOOKBACK_MS &&
-        (a.timestamp as number) <= tMs,
-    );
-  const lockedOut =
-    interrupted || silence.some((i) => i.startMs <= tMs && i.endMs >= tMs);
+  // work order 2026-10-14d Part 2 (preview): the unit's own cannot-cast
+  // reading is the shared one (`namedCannotCastIntervals`: hard CC and
+  // silences from the other side, capped at their official length; each kick
+  // at its modelled lockout; the unit's own flight) — it used to be any
+  // silence aura, 1.5 s after any interrupt, and no flight
+  const units: any[] = Object.values(combat?.units ?? {});
+  const hostile = new Set<string>(
+    units
+      .filter((u) => u.id !== unit.id && u.reaction !== unit.reaction)
+      .map((u) => u.id as string),
+  );
+  const at = namedCannotCastIntervals(unit, hostile, units).filter(
+    (iv) => iv.from <= tMs && tMs < iv.to,
+  );
+  const inCC = at.some(
+    (iv) => !iv.lockout && !iv.self && !isSilenceOnlyAura(iv.spellId),
+  );
+  const lockedOut = at.some(
+    (iv) => iv.lockout || iv.self || isSilenceOnlyAura(iv.spellId),
+  );
   const dead = ((unit?.deathRecords ?? []) as any[]).some(
     (d) => (d.timestamp as number) <= tMs,
   );
@@ -728,24 +781,174 @@ export function crisisDecisionPoints(
     }
   }
   const unitById = new Map(units.map((u) => [u.id, u]));
+  // A damage source → the enemy PLAYER behind it (itself, or its pet's /
+  // summon's owner) — the burst engine's reading, for the control answer
+  // below (`controlTargetHitPressured`)
+  const enemyPlayerIds = new Set(
+    players.filter((u) => !friendIds.has(u.id)).map((u) => u.id as string),
+  );
+  const enemyPlayerOf = (srcUnitId: string): string | undefined =>
+    enemyPlayerIds.has(srcUnitId)
+      ? srcUnitId
+      : unitById.get(srcUnitId)?.ownerId &&
+          enemyPlayerIds.has(unitById.get(srcUnitId).ownerId)
+        ? (unitById.get(srcUnitId).ownerId as string)
+        : undefined;
 
   const dmgIn = ((owner.damageIn ?? []) as any[]).map((d) => ({
     t: d.timestamp,
     src: d.srcUnitId,
     a: Math.abs(d.effectiveAmount ?? d.amount ?? 0),
-    school: Number.parseInt(String(d.spellSchoolId ?? "0x0"), 16) || 0,
   }));
+  // the school split's inputs (`incomingPressureBySchool`): whose side a
+  // redistribution row's source is on, and whether this document records an
+  // absorbed attack's spell — both read off the round, not the crisis unit
+  const rosterSides = units.length > 0 ? buildRosterSides(units) : undefined;
+  const recordsAttackSpell =
+    units.length > 0 ? documentRecordsAttackSpell(units) : undefined;
   const healIn = ((owner.healIn ?? []) as any[]).map((h) => ({
     t: h.timestamp,
     src: h.srcUnitId,
     id: String(h.spellId ?? ""),
     a: Math.abs(h.effectiveAmount ?? h.amount ?? 0),
+    periodic: h.logLine?.event === LogEvent.SPELL_PERIODIC_HEAL,
+    /** the row's event is known (codex 20-F15-23: a row with no log line
+     * is neither a known tick nor a known direct heal — never fresh) */
+    kindKnown: !!h.logLine?.event,
+    line: h.logLine?.lineIndex as number | undefined,
   }));
+  /** `x` was logged before `y`: an earlier ms, or the same ms with both line
+   * indexes saying so (codex 20-F15-20: a refresh logged after a tick in its
+   * ms must not claim that tick) */
+  const loggedBefore = (
+    x: { t: number; line?: number },
+    y: { t: number; line?: number },
+  ): boolean =>
+    x.t < y.t ||
+    (x.t === y.t &&
+      x.line !== undefined &&
+      y.line !== undefined &&
+      x.line < y.line);
+  // codex post-hoc 60-POSTHOC-03 U3: a HoT tick on the owner belongs to the
+  // owner's latest (re)application of that HoT ON THE OWNER — not to any
+  // cast of the spell id. A self-Rejuvenation from before the window ticked
+  // on while the owner cast Rejuvenation on an ally inside it, and read as
+  // a fresh self-heal press (`selfHealCasts` 1, `selfHealFreshPct` 5).
+  const ownHotApplies = (
+    (owner.auraEvents ?? []) as Array<
+      Pick<IAuraEvent, "srcUnitId" | "spellId" | "timestamp" | "logLine">
+    >
+  )
+    .filter(
+      (a) =>
+        a.srcUnitId === owner.id &&
+        (a.logLine?.event === LogEvent.SPELL_AURA_APPLIED ||
+          a.logLine?.event === LogEvent.SPELL_AURA_REFRESH),
+    )
+    .map((a) => ({
+      t: a.timestamp,
+      id: String(a.spellId ?? ""),
+      line: a.logLine?.lineIndex,
+    }));
+  /** the (re)application of HoT `h.id` on the owner that the tick `h`
+   * belongs to: the latest one logged before it */
+  const hotAppliedFor = (h: (typeof healIn)[number]) => {
+    let at: (typeof ownHotApplies)[number] | undefined;
+    for (const a of ownHotApplies)
+      if (a.id === h.id && loggedBefore(a, h) && (!at || loggedBefore(at, a)))
+        at = a;
+    return at;
+  };
   const ownerCasts = ((owner.spellCastEvents ?? []) as any[]).map((c) => ({
     t: c.timestamp,
     id: String(c.spellId ?? ""),
     dest: c.destUnitId,
+    line: c.logLine?.lineIndex as number | undefined,
+    // B6 (user 2026-10-24): a shift back into a form whose cooldown buff is
+    // still up (Incarnation: Tree of Life, `isFormReshiftCast`) presses
+    // nothing — it answers no crisis
+    reshift: isFormReshiftCast(owner, c),
   }));
+  /**
+   * The press a heal on the owner belongs to (codex 20-F15-20): the owner's
+   * latest press of that spell before the heal's own evidence — a HoT tick's
+   * (re)application on the owner (`hotAppliedFor`; a press of the spell on
+   * an ally after it does not take it), a direct heal's own row (a Chain
+   * Heal or smart heal cast on an ally that lands on the owner is its
+   * press; a later press of the spell is not). One association for the
+   * fresh amount and the press count.
+   */
+  const pressOf = (h: (typeof healIn)[number]) => {
+    if (!h.kindKnown) return undefined;
+    const evidence = h.periodic ? hotAppliedFor(h) : h;
+    if (!evidence) return undefined;
+    // a HoT's application on the owner comes from a press aimed at the
+    // owner (or at no one): an ally's cast of the spell in the same ms is
+    // not it (codex 20-F15-27, no line indexes: self-Rejuvenation at 490 ms,
+    // its application and an ally's Rejuvenation cast both at 510 ms)
+    const same = ownerCasts.filter(
+      (c) =>
+        c.id === h.id &&
+        (!h.periodic ||
+          !c.dest ||
+          /^0+$/.test(c.dest) ||
+          c.dest === owner.id),
+    );
+    const inMs = same
+      .filter(
+        (c) =>
+          c.t === evidence.t &&
+          c.line !== undefined &&
+          evidence.line !== undefined,
+      )
+      .sort((a, b) => a.line! - b.line!);
+    if (inMs.length > 0) {
+      // in its own ms, with the log's order, presses and their evidence pair
+      // one to one in order — the log writes an instant spell's aura and heal
+      // rows before its CAST_SUCCESS (103-5 2:31, Eternal Flame on lines
+      // 18401–18403) or after it, and two presses of one ms keep their own
+      // heals either way (codex 20-F15-23: heal 100, cast 101, heal 102,
+      // cast 103; 20-F15-27: cast 100, heal 101, cast 102, heal 103)
+      const peers = (
+        h.periodic
+          ? ownHotApplies.filter((a) => a.id === h.id)
+          : healIn.filter(
+              (x) =>
+                x.id === h.id &&
+                x.src === owner.id &&
+                !x.periodic &&
+                x.kindKnown,
+            )
+      )
+        .filter((x) => x.t === evidence.t && x.line !== undefined)
+        .sort((a, b) => a.line! - b.line!);
+      const rank = peers.findIndex((x) => x.line === evidence.line);
+      if (peers.length === inMs.length && rank >= 0) return inMs[rank];
+      // … the presses aimed at the owner (or at no one) when another went to
+      // an ally in that ms (codex 20-F15-34: a third Flash Heal on an ally
+      // took both self-heals' pairing away)
+      const aimed = inMs.filter(
+        (c) => !c.dest || /^0+$/.test(c.dest) || c.dest === owner.id,
+      );
+      if (peers.length === aimed.length && rank >= 0) return aimed[rank];
+      // counts differ: the nearest press logged before it, else after it
+      const before = inMs.filter((c) => c.line! < evidence.line!).pop();
+      if (before) return before;
+      const after = inMs.find((c) => c.line! > evidence.line!);
+      if (after) return after;
+    }
+    // else the latest press before it (in its ms when the order is unknown)
+    let press: (typeof ownerCasts)[number] | undefined;
+    for (const c of same)
+      if (
+        (c.t < evidence.t ||
+          (c.t === evidence.t &&
+            (c.line === undefined || evidence.line === undefined))) &&
+        (!press || loggedBefore(press, c))
+      )
+        press = c;
+    return press;
+  };
   const deaths = ((owner.deathRecords ?? []) as any[]).map(
     (d) => d.timestamp as number,
   );
@@ -763,6 +966,55 @@ export function crisisDecisionPoints(
   // over it, already used by candidateFindings.ts's burst-ledger path.
   const cc = buildFilteredAuraIntervals(owner, ccSpellIds, combat);
   const silence = buildFilteredAuraIntervals(owner, SILENCE_IDS, combat);
+  // fact4 D28 (2026-10-22): could the owner act inside the response window?
+  // The one cannot-cast predicate cd-hoarded's owner gate reads
+  // (`buildCannotCastIntervals`: enemy hard CC and silences — pets' and
+  // totems' included — a kick's school lockout for its kicker's length, the
+  // owner's own flight), with the one reaction standard (`couldReactWithin`:
+  // REACTION_WINDOW_S free inside [t, t + RESPONSE_WINDOW_MS]). Until then
+  // CC and lockout were read at the crossing instant only: 4184d534 1:54, a
+  // Void Nova landing 79 ms after t held the healer 4 s, five Rewind presses
+  // refused "can't do that while stunned", and the menu said the player was
+  // free. Null when the intervals cannot be built: the instant reading then.
+  const enemyPlayers = players.filter((u) => !friendIds.has(u.id));
+  let cannotCast: Array<{ from: number; to: number }> | null = null;
+  try {
+    cannotCast = buildCannotCastIntervals(
+      owner,
+      enemySourceIds(enemyPlayers, units),
+      units,
+    );
+  } catch {
+    cannotCast = null;
+  }
+  // the last playable instant (codex 20-F17-01 #1): a Solo Shuffle round's
+  // ending death or a 3v3's deciding friendly death, else the log's end — a
+  // crossing 0.5 s before the round ended read 2 s free off the log's tail
+  const roundEndAt: number = Math.min(
+    typeof combat?.endTime === "number" && combat.endTime > 0
+      ? combat.endTime
+      : Infinity,
+    playableEndMs(combat, units) ?? Infinity,
+  );
+  // fact4 D9: an enemy burst RUNNING at the crossing — the span the burst
+  // ledger, kick-eaten's `enemyBurst` and KILL ATTEMPTS read
+  // (`burstCastSpan`: cast → observed effect end). The 8 s press lookback it
+  // replaces printed `burst=no` under a 24 s Avenging Wrath pressed 19 s
+  // earlier (2d25d01a 4:34), against a legend that says "active".
+  let enemyBurstSpansMs: Array<{ from: number; to: number }> = [];
+  try {
+    enemyBurstSpansMs = reconstructEnemyCDTimeline(
+      enemyPlayers,
+      combat,
+    ).players.flatMap((pl) =>
+      pl.offensiveCDs.map((cd) => {
+        const sp = burstCastSpan(cd);
+        return { from: start + sp.from * 1000, to: start + sp.to * 1000 };
+      }),
+    );
+  } catch {
+    enemyBurstSpansMs = [];
+  }
 
   // Gate 3 for a DPS owner (spec §1d, GH #59): rooted intervals + the
   // owner's Defensive-wall / Control-CD ledger, both computed once for the
@@ -796,21 +1048,13 @@ export function crisisDecisionPoints(
     controlCds = cds.filter((cd) => cd.tag === "Control");
   }
 
-  const enemyBurstCasts: number[] = [];
   const friendControlCasts: { t: number; dest: string }[] = [];
   for (const u of players) {
     for (const c of (u.spellCastEvents ?? []) as any[]) {
       const sid = String(c.spellId ?? "");
-      if (!friendIds.has(u.id) && isEnemyCdWindowSpell(sid))
-        enemyBurstCasts.push(c.timestamp);
       if (friendIds.has(u.id) && u.id !== owner.id && CONTROL_IDS.has(sid))
         friendControlCasts.push({ t: c.timestamp, dest: c.destUnitId });
     }
-    // GH #119: aura-evidenced bursts (Havoc Metamorphosis, an unlogged Doom
-    // Winds press) — the same occurrences the enemy-CD timeline shows
-    if (!friendIds.has(u.id))
-      for (const o of auraOffensiveOccurrences(u, combat).occurrences)
-        if (o.burstRole === "burst") enemyBurstCasts.push(o.startMs);
   }
 
   // BACKLOG #43: proc marker auras applied to the owner (self-sourced)
@@ -902,11 +1146,17 @@ export function crisisDecisionPoints(
         .reduce((n, h) => n + h.a, 0) / x.max;
     // GH #93: only heals from spells the owner cast inside the window are a
     // press; the rest was already ticking
-    const castIdsInWin = new Set(castsIn.map((c) => c.id));
-    const selfHealFresh =
-      ownHealInWin
-        .filter((h) => castIdsInWin.has(h.id) && !procHealIds.has(h.id))
-        .reduce((n, h) => n + h.a, 0) / x.max;
+    // a heal is fresh when the press it belongs to (`pressOf`) is one of
+    // the owner's presses inside the window (U3 + codex 20-F15-20)
+    const freshPressOf = (h: (typeof healIn)[number]) => {
+      if (procHealIds.has(h.id)) return undefined;
+      const p = pressOf(h);
+      return p && castsIn.includes(p) ? p : undefined;
+    };
+    const freshHeals = ownHealInWin
+      .map((h) => ({ h, press: freshPressOf(h) }))
+      .filter((f) => f.press !== undefined);
+    const selfHealFresh = freshHeals.reduce((n, f) => n + f.h.a, 0) / x.max;
 
     // one kite predicate, shared with burstWindowDecisionPoints (see kitedAway)
     const attackerUnits = [...attackers].map((id) => unitById.get(id));
@@ -924,11 +1174,29 @@ export function crisisDecisionPoints(
 
     // User ruling 2026-09-14: a break or mobility press inside the window gets
     // its own RESPONSE_WINDOW_MS to pay off (see CRISIS_MOBILITY_PRESS_IDS).
-    const credited = (c: { id: string; dest?: string }) => ({
+    // B5 (user 2026-10-24, 「全按建议」): a control answers the crisis only
+    // when its target, or the target's pets, was hitting the owner — the
+    // burst engine's rule (FT-T12 D3, `controlTargetHitPressured`), over
+    // this crisis's span: the 2 s of damage before the reading to the
+    // response window's end. Before, any control on a non-friendly unit
+    // counted, whoever it was hitting.
+    const controlAnswers = (c: { id: string; dest?: string }) =>
+      CONTROL_IDS.has(c.id) &&
+      !!c.dest &&
+      !friendIds.has(c.dest) &&
+      controlTargetHitPressured(
+        owner,
+        c.dest,
+        enemyPlayerOf,
+        dmgEnd - DMG_WINDOW_MS,
+        w1,
+        units,
+      );
+    const credited = (c: { id: string; dest?: string; reshift?: boolean }) => ({
       wall: PERSONAL_WALL_IDS.has(c.id),
-      protective: CRISIS_PROTECTIVE_ANSWER_IDS.has(c.id),
+      protective: CRISIS_PROTECTIVE_ANSWER_IDS.has(c.id) && !c.reshift,
       external: EXTERNAL_IDS.has(c.id),
-      control: CONTROL_IDS.has(c.id) && !!c.dest && !friendIds.has(c.dest),
+      control: controlAnswers(c),
     });
     const followUp = {
       selfHeal: false,
@@ -976,14 +1244,12 @@ export function crisisDecisionPoints(
       attackerMoved: attackerMoved && !followUp.kite,
       wall: castsIn.some((c) => PERSONAL_WALL_IDS.has(c.id)) || followUp.wall,
       protective:
-        castsIn.some((c) => CRISIS_PROTECTIVE_ANSWER_IDS.has(c.id)) ||
-        followUp.protective,
+        castsIn.some(
+          (c) => CRISIS_PROTECTIVE_ANSWER_IDS.has(c.id) && !c.reshift,
+        ) || followUp.protective,
       external:
         castsIn.some((c) => EXTERNAL_IDS.has(c.id)) || followUp.external,
-      control:
-        castsIn.some(
-          (c) => CONTROL_IDS.has(c.id) && c.dest && !friendIds.has(c.dest),
-        ) || followUp.control,
+      control: castsIn.some(controlAnswers) || followUp.control,
       peel: friendControlCasts.some((c) => inWin(c.t) && attackers.has(c.dest)),
       kite: kite || followUp.kite,
     };
@@ -993,6 +1259,15 @@ export function crisisDecisionPoints(
         (it) => it >= t - LOCKOUT_LOOKBACK_MS && it <= t,
       ) || silence.some((i) => i.startMs <= t && i.endMs >= t);
     const diedInWindow = deaths.some((d) => d >= t && d < w1);
+    const actTo = Math.min(w1, roundEndAt);
+    const freeInWindowMs = cannotCast
+      ? freeMsWithin(cannotCast, t, actTo)
+      : inCC || lockedOut
+        ? 0
+        : actTo - t;
+    const couldActInWindow = cannotCast
+      ? couldReactWithin(cannotCast, t, actTo)
+      : !inCC && !lockedOut;
     // Table-only outcome (spec §1b): a death strictly after t, within
     // DEATH_LOOKAHEAD_MS. `(t, t+10000]` — t itself is excluded (that's
     // diedInWindow's job at a shorter horizon), the far edge is inclusive.
@@ -1036,16 +1311,21 @@ export function crisisDecisionPoints(
       tSec,
       hpPct: anchor.hpPct,
       dmg2s: dmg2sRounded,
-      dmg2sBySchool: recent.reduce<Record<string, number>>((m, d) => {
-        m[String(d.school)] = (m[String(d.school)] ?? 0) + d.a;
-        return m;
-      }, {}),
-      attackers2s: attackers.size,
-      enemyBurst: enemyBurstCasts.some(
-        (b) => b > t - ENEMY_BURST_LOOKBACK_MS && b <= t,
+      // the window of `recent`: (dmgEnd − DMG_WINDOW_MS, dmgEnd]
+      dmg2sBySchool: incomingPressureBySchool(
+        owner,
+        dmgEnd - DMG_WINDOW_MS,
+        dmgEnd,
+        rosterSides,
+        recordsAttackSpell,
+        true,
       ),
+      attackers2s: attackers.size,
+      enemyBurst: enemyBurstSpansMs.some((sp) => sp.from <= t && t < sp.to),
       inCC,
       lockedOut,
+      couldActInWindow,
+      freeInWindowS: Math.round(freeInWindowMs / 100) / 10,
       diedInWindow,
       dangerous,
       diedWithin10s,
@@ -1054,8 +1334,12 @@ export function crisisDecisionPoints(
       responded,
       procNames: [...new Set(procsIn.map((m) => m.name))],
       selfHealPct: Math.round(selfHeal * 100),
+      selfHealFreshPct: Math.floor(selfHealFresh * 100),
+      // distinct presses — the cast rows themselves, so two presses of one
+      // spell in one ms count twice (codex 20-F15-23)
+      selfHealCasts: new Set(freshHeals.map((f) => f.press)).size,
       hasTool,
-      feasible: !inCC && !lockedOut && !diedInWindow && hasTool,
+      feasible: couldActInWindow && !diedInWindow && hasTool,
     });
   }
   return out;

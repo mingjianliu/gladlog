@@ -1,5 +1,5 @@
-import { toLegacyMatch } from "@gladlog/parser-compat";
 import type { GladMatch } from "@gladlog/parser";
+import { toLegacyMatch } from "@gladlog/parser-compat";
 
 import type { ReportSource } from "./types";
 

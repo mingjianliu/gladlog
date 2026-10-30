@@ -4,8 +4,9 @@ import {
   CombatUnitSpec,
   LogEvent,
 } from "@gladlog/parser-compat";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 
+import { ensureAnalysisData } from "../src/data/ensure";
 import {
   auraOnlyActivationSeconds,
   extractMajorCooldowns,
@@ -15,6 +16,19 @@ import {
   makeSpellCastEvent,
   makeUnit,
 } from "./ported/testHelpers";
+
+// A talent-tree cooldown is in the ledger only for a unit whose talents show
+// it (or that pressed it): these auras are proc-capable and prove no button
+// (`AURA_ACTIVATION_PROVES_BUTTON_IDS`), so each fixture carries the
+// COMBATANT_INFO talent row its scenario needs — {node, entry, rank}.
+const RENEWING_BLAZE_TALENT = { id1: 93354, id2: 115669, count: 1 };
+const AVENGING_WRATH_TALENT = { id1: 81544, id2: 102519, count: 1 };
+const evokerInfo = { talents: [RENEWING_BLAZE_TALENT], pvpTalents: [] };
+const retributionInfo = { talents: [AVENGING_WRATH_TALENT], pvpTalents: [] };
+
+beforeAll(async () => {
+  await ensureAnalysisData();
+});
 
 /**
  * Task 7 (cd-ledger-rot): Renewing Blaze (Evoker, spellId 374348) never emits
@@ -31,6 +45,7 @@ describe("extractMajorCooldowns: aura-only activation (Renewing Blaze 374348/374
     const owner = makeUnit("player-1", {
       class: CombatUnitClass.Evoker,
       spec: CombatUnitSpec.Evoker_Devastation,
+      info: evokerInfo,
       spellCastEvents: [], // never logged as a cast — proc-only ability
       auraEvents: [
         makeAuraEvent(
@@ -63,6 +78,7 @@ describe("extractMajorCooldowns: aura-only activation (Renewing Blaze 374348/374
     const owner = makeUnit("player-1", {
       class: CombatUnitClass.Evoker,
       spec: CombatUnitSpec.Evoker_Devastation,
+      info: evokerInfo,
       spellCastEvents: [],
       auraEvents: [],
     });
@@ -98,6 +114,7 @@ describe("extractMajorCooldowns: aura-only activation (Avenging Wrath 31884/4543
     const owner = makeUnit("player-1", {
       class: CombatUnitClass.Paladin,
       spec: CombatUnitSpec.Paladin_Retribution,
+      info: retributionInfo,
       spellCastEvents: [],
       auraEvents: [
         makeAuraEvent(
@@ -130,6 +147,7 @@ describe("extractMajorCooldowns: aura-only activation (Avenging Wrath 31884/4543
     const owner = makeUnit("player-1", {
       class: CombatUnitClass.Paladin,
       spec: CombatUnitSpec.Paladin_Retribution,
+      info: retributionInfo,
       spellCastEvents: [],
       auraEvents: [
         makeAuraEvent(
@@ -175,6 +193,7 @@ describe("extractMajorCooldowns: aura-only activation (Avenging Wrath 31884/4543
     const owner = makeUnit("player-1", {
       class: CombatUnitClass.Paladin,
       spec: CombatUnitSpec.Paladin_Retribution,
+      info: retributionInfo,
       spellCastEvents: [
         makeSpellCastEvent("31884", 5_000, "player-1", "player-1"),
       ],
@@ -205,6 +224,134 @@ describe("extractMajorCooldowns: aura-only activation (Avenging Wrath 31884/4543
     // Only the ONE real cast — the stray aura must not fabricate a second entry.
     expect(avengingWrath!.casts).toHaveLength(1);
     expect(avengingWrath!.casts[0].timeSeconds).toBeCloseTo(5, 3);
+  });
+});
+
+/**
+ * 2026-10-13 (codex review 40-FT-74): the ledger asserts a talent-tree
+ * cooldown only on evidence. With the talents unknown — no COMBATANT_INFO row,
+ * or a talent blob that does not decode — the evidence is an activation: a
+ * cast, or an aura only the press can apply. A never-activated talent-tree
+ * wall used to be admitted for a unit with no row at all (and printed
+ * `[UNUSED]`).
+ */
+describe("extractMajorCooldowns: a talent-tree cooldown of a unit whose talents are unknown", () => {
+  const combatOf = (unit: ReturnType<typeof makeUnit>) =>
+    ({
+      startTime: 0,
+      endTime: 300_000,
+      units: { [unit.id]: unit },
+    }) as unknown as AtomicArenaCombat;
+  const ASTRAL_SHIFT = "108271";
+  const ASTRAL_SHIFT_TALENT = { id1: 103616, id2: 127893, count: 1 };
+  const shaman = (
+    info: object | undefined,
+    spellCastEvents: ReturnType<typeof makeSpellCastEvent>[] = [],
+  ) =>
+    makeUnit("player-1", {
+      class: CombatUnitClass.Shaman,
+      spec: CombatUnitSpec.Shaman_Restoration,
+      info,
+      spellCastEvents,
+    });
+  const has = (unit: ReturnType<typeof makeUnit>, spellId: string) =>
+    extractMajorCooldowns(unit, combatOf(unit), {
+      withBaselineOnly: true,
+    }).some((cd) => cd.spellId === spellId);
+
+  it.each([
+    ["no COMBATANT_INFO row", undefined],
+    // a spec id the talent map does not know: the blob cannot be decoded
+    ["a talent blob that does not decode", { talents: undefined }],
+  ])("%s, never pressed: Astral Shift is not asserted", (_name, info) => {
+    expect(has(shaman(info), ASTRAL_SHIFT)).toBe(false);
+  });
+
+  it.each([
+    ["no COMBATANT_INFO row", undefined],
+    ["a talent blob that does not decode", { talents: undefined }],
+  ])("%s, pressed once: the cast is the evidence", (_name, info) => {
+    const unit = shaman(info, [
+      makeSpellCastEvent(ASTRAL_SHIFT, 20_000, "player-1", "player-1"),
+    ]);
+    const row = extractMajorCooldowns(unit, combatOf(unit)).find(
+      (cd) => cd.spellId === ASTRAL_SHIFT,
+    );
+    expect(row?.casts).toHaveLength(1);
+    expect(row?.neverUsed).toBe(false);
+  });
+
+  it("talents decoded: taken and never pressed is `neverUsed`; not taken is absent", () => {
+    const taken = shaman({ talents: [ASTRAL_SHIFT_TALENT], pvpTalents: [] });
+    expect(
+      extractMajorCooldowns(taken, combatOf(taken)).find(
+        (cd) => cd.spellId === ASTRAL_SHIFT,
+      )?.neverUsed,
+    ).toBe(true);
+    expect(has(shaman({ talents: [], pvpTalents: [] }), ASTRAL_SHIFT)).toBe(
+      false,
+    );
+  });
+
+  it("a proc-capable aura proves no button when the talents are unknown; an aura only the press applies does", () => {
+    const procAura = makeUnit("player-1", {
+      class: CombatUnitClass.Paladin,
+      spec: CombatUnitSpec.Paladin_Retribution,
+      auraEvents: [
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_APPLIED,
+          "31884",
+          11_000,
+          "player-1",
+          "player-1",
+          "BUFF",
+        ),
+      ],
+    });
+    expect(has(procAura, "31884")).toBe(false);
+    // Doom Winds: the buff 466772 IS the press (AURA_IS_THE_PRESS_IDS)
+    const pressAura = makeUnit("player-1", {
+      class: CombatUnitClass.Shaman,
+      spec: CombatUnitSpec.Shaman_Enhancement,
+      auraEvents: [
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_APPLIED,
+          "466772",
+          11_000,
+          "player-1",
+          "player-1",
+          "BUFF",
+        ),
+      ],
+    });
+    expect(has(pressAura, "384352")).toBe(true);
+  });
+
+  it("outside the talent tree, no row: a PvP talent nobody can read is not asserted, a spec-baseline defensive is a baseline-only row, a cast is evidence", () => {
+    // Holy Paladin: Blessing of Spellwarding is a PvP talent, Divine Shield
+    // the spec's DB2 baseline defensive.
+    const holy = (spellCastEvents: ReturnType<typeof makeSpellCastEvent>[]) =>
+      makeUnit("player-1", {
+        class: CombatUnitClass.Paladin,
+        spec: CombatUnitSpec.Paladin_Holy,
+        spellCastEvents,
+      });
+    const idle = holy([]);
+    expect(has(idle, "204018")).toBe(false);
+    const all = extractMajorCooldowns(idle, combatOf(idle), {
+      withBaselineOnly: true,
+    });
+    expect(all.find((cd) => cd.spellId === "642")?.baselineOnly).toBe(true);
+    // the evidence-owned ledger every other reader gets does not hold it
+    expect(
+      extractMajorCooldowns(idle, combatOf(idle)).some(
+        (cd) => cd.spellId === "642",
+      ),
+    ).toBe(false);
+    const pressed = holy([
+      makeSpellCastEvent("204018", 20_000, "player-1", "player-1"),
+    ]);
+    expect(has(pressed, "204018")).toBe(true);
   });
 });
 

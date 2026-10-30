@@ -8,10 +8,11 @@
  * 用法:DOWNLOADS_DIR=<dir> npx tsx packages/eval/scripts/drWindowVerify.mts
  * 首跑 2026-08-12(30 场开服首日):Stun A 桶 med 1.5(n=5)≈ C 桶 1.5(n=25)
  * ≠ B 桶 3.0(n=155)→ 20s 规则实锤;parse 0 错;1673 id 名表 0 缺。 */
+import { DR_CATEGORY_MAP } from "@gladlog/analysis";
+import { GladLogParser, type GladMatch } from "@gladlog/parser";
 import { readFileSync } from "fs";
 import { join } from "path";
-import { GladLogParser, type GladMatch } from "@gladlog/parser";
-import { DR_CATEGORY_MAP } from "@gladlog/analysis";
+
 import spellNames from "../../analysis/src/data/spellNames.json";
 
 const DIR =

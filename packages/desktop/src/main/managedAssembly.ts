@@ -1,20 +1,20 @@
-import { MANAGED_WS_PORT } from "../shared/obsAsset";
 import {
-  managedObsPrefsChanged,
   type ManagedObsPrefs,
+  managedObsPrefsChanged,
   resolveRecordingDir,
 } from "../shared/managedObsPrefs";
-import type { ObsAssets } from "./obsAssets";
-import type { ObsConfigSpec } from "./obsConfigWriter";
-import type {
-  ManagedObsHandle,
-  SpawnManagedObsSpec,
-} from "./managedObsProcess";
+import { MANAGED_WS_PORT } from "../shared/obsAsset";
+import type { CaptureBackend } from "./captureBackend";
 import type {
   ManagedObsBackend,
   ManagedObsBackendDeps,
 } from "./managedObsBackend";
-import type { CaptureBackend } from "./captureBackend";
+import type {
+  ManagedObsHandle,
+  SpawnManagedObsSpec,
+} from "./managedObsProcess";
+import type { ObsAssets } from "./obsAssets";
+import type { ObsConfigSpec } from "./obsConfigWriter";
 import { isManagedActive, type RecorderStatus } from "./recorder";
 
 /**

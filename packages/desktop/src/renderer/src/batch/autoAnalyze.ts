@@ -1,11 +1,11 @@
+import type { StoredMatchMeta } from "../../../main/matchStore";
 import { bridge } from "../bridge";
 import {
+  type BatchItem,
   getBatchStatus,
   startBatch,
   subscribeBatch,
-  type BatchItem,
 } from "./batchAnalysis";
-import type { StoredMatchMeta } from "../../../main/matchStore";
 
 type LiveStoredMatchMeta = StoredMatchMeta & { live?: boolean };
 

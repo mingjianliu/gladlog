@@ -10,30 +10,31 @@
  * Optional: ANTHROPIC_MODEL (default: the product default, AI_DEFAULT_MODEL.anthropic), LOG_PATH (use a local raw
  * combat log instead of the feed).
  */
-import { readFileSync, writeFileSync, mkdirSync } from "fs";
-import { join } from "path";
-import { fileURLToPath } from "url";
-import { GladLogParser } from "@gladlog/parser";
 import {
-  toLegacyShuffle,
-  toLegacyMatch,
-  CombatUnitReaction,
-} from "@gladlog/parser-compat";
-import {
-  extractCandidateFindings,
   buildMatchContext,
   computeHealerMetrics,
-  specToString,
-  isHealerSpec,
   enemyCompArchetype,
   ensureAnalysisData,
+  extractCandidateFindings,
+  isHealerSpec,
+  specToString,
 } from "@gladlog/analysis";
+import { GladLogParser } from "@gladlog/parser";
+import {
+  CombatUnitReaction,
+  toLegacyMatch,
+  toLegacyShuffle,
+} from "@gladlog/parser-compat";
+import { mkdirSync,readFileSync, writeFileSync } from "fs";
+import { join } from "path";
+import { fileURLToPath } from "url";
+
+import { realClientFactory } from "../src/main/ai";
 import { createAnalysisService } from "../src/main/analysis";
 import { createCompareService } from "../src/main/compare";
-import { realClientFactory } from "../src/main/ai";
 import {
-  loadBundledCorpus,
   gameBuildFromManifest,
+  loadBundledCorpus,
 } from "../src/main/corpusLoader";
 import { AI_DEFAULT_MODEL, type AiBackend } from "../src/shared/aiModels";
 

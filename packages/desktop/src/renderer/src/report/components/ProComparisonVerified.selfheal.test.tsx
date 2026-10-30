@@ -11,7 +11,7 @@
 // on the microtask timing of the real 12MB load and can reproduce the
 // "not loaded → healed" two-phase state deterministically).
 import { act, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { beforeEach,describe, expect, it, vi } from "vitest";
 
 const mockState = vi.hoisted(() => ({
   ready: false,

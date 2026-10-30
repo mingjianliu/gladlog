@@ -7,6 +7,8 @@ import {
   LogEvent,
 } from "@gladlog/parser-compat";
 
+import { ensureAnalysisData } from "../../src/data/ensure";
+import { buildCannotCastIntervals } from "../../src/utils/cannotCastIntervals";
 import { specToString } from "../../src/utils/cooldowns";
 import { IEnemyCDTimeline } from "../../src/utils/enemyCDs";
 import {
@@ -16,6 +18,8 @@ import {
 } from "../../src/utils/healerOffenseAnalysis";
 import {
   makeAdvancedAction,
+  makeAuraEvent,
+  makeInterruptEvent,
   makeSpellCastEvent,
   makeUnit,
 } from "./testHelpers";
@@ -36,7 +40,7 @@ function makeFriend(
 ): ICombatUnit {
   return makeUnit(id, {
     reaction: CombatUnitReaction.Friendly,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     advancedActions: fullHpActions() as any[],
     ...overrides,
   });
@@ -67,6 +71,24 @@ describe("computeSlackSegments", () => {
     expect(segments[0].idle).toBe(true);
   });
 
+  it("A3 (user 2026-10-24): the sweep ends at a Solo Shuffle round's deciding death, not the log's end", () => {
+    const owner = makeFriend("owner", {
+      info: {} as any,
+      deathRecords: [{ timestamp: T0 + 100_000 } as any],
+    });
+    const { segments } = computeSlackSegments(
+      { ...combat, startInfo: { bracket: "Rated Solo Shuffle" } },
+      owner,
+      [owner],
+      [makeUnit("enemy-1", { reaction: CombatUnitReaction.Hostile })],
+      emptyEnemyTimeline(),
+      [],
+      [],
+    );
+    const last = segments[segments.length - 1]!;
+    expect(last.fromSeconds + last.durationSeconds).toBeLessThanOrEqual(100);
+  });
+
   it("disables entirely when a friendly unit has no advancedActions", () => {
     const owner = makeFriend("owner");
     const mate = makeUnit("mate", { reaction: CombatUnitReaction.Friendly }); // no advancedActions
@@ -92,7 +114,7 @@ describe("computeSlackSegments", () => {
       const hp = s >= 20 && s < 40 ? 300_000 : 500_000;
       mateActions.push(makeAdvancedAction(T0 + s * 1000, 0, 0, 500_000, hp));
     }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const mate = makeUnit("mate", {
       reaction: CombatUnitReaction.Friendly,
       advancedActions: mateActions as any[],
@@ -186,7 +208,7 @@ describe("computeSlackSegments", () => {
       mateActions.push(makeAdvancedAction(T0 + s * 1000, 0, 0, 500_000, hp));
     }
     const owner = makeFriend("owner");
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const mate = makeUnit("mate", {
       reaction: CombatUnitReaction.Friendly,
       advancedActions: mateActions as any[],
@@ -259,7 +281,10 @@ describe("computeSlackSegments", () => {
 });
 
 // Task 2: Kill-window contribution analysis
-import { computeWindowContributions } from "../../src/utils/healerOffenseAnalysis";
+import {
+  computeWindowContributions,
+  VULNERABLE_OWNER_DAMAGE_RE_SRC,
+} from "../../src/utils/healerOffenseAnalysis";
 import {
   computeBurstSubWindows,
   IOffensiveWindow,
@@ -278,15 +303,18 @@ function makeWindow(
     toSeconds,
     durationSeconds: toSeconds - fromSeconds,
     friendlyDamageInWindow: 0,
+    friendlyAbsorbedInWindow: 0,
     friendlyOffensives: [],
     // Default: one burst spanning the whole window, so existing expectations
     // (contribution span == window span, [KILL WINDOW] label) keep holding.
-    bursts: bursts ?? [{ fromSeconds, toSeconds, damage: 50_000 }],
+    bursts: bursts ?? [{ fromSeconds, toSeconds, damage: 50_000, absorbed: 0 }],
   };
 }
 
 describe("computeWindowContributions", () => {
   const enemyHealer = makeUnit("enemy-h", {
+    // a position beside the owner's (0, 0): the CC can reach (fact5 D18)
+    advancedActions: fullHpActions() as any[],
     reaction: CombatUnitReaction.Hostile,
     spec: CombatUnitSpec.Shaman_Restoration,
     name: "Rsham",
@@ -334,6 +362,93 @@ describe("computeWindowContributions", () => {
     expect(result[0].ownerCastCCInWindow).toBe(false);
     expect(result[0].ownerFreeSeconds).toBe(10);
     expect(result[0].teamMinHpPct).toBe(100);
+  });
+
+  it("F16 retest idx 26 (179b83ac 2:53): a control aura the owner's press applied is CC cast in the window", () => {
+    const owner = makeFriend("owner", {
+      spellCastEvents: [
+        makeSpellCastEvent("357210", T0 + 42_000, "", "", "owner", "Owner"),
+      ],
+    });
+    const stunned = makeUnit("enemy-1", {
+      reaction: CombatUnitReaction.Hostile,
+      name: "Edk",
+      auraEvents: [
+        makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, "372245", T0 + 42_790, "owner", "enemy-1"),
+        makeAuraEvent(LogEvent.SPELL_AURA_REMOVED, "372245", T0 + 45_790, "owner", "enemy-1"),
+      ],
+    });
+    const run = (from: number, to: number) =>
+      computeWindowContributions(
+        combat,
+        owner,
+        [owner],
+        [stunned, enemyHealer],
+        [makeWindow(from, to)],
+        [],
+        [],
+        stubFactsComputer,
+      )[0]!.ownerCastCCInWindow;
+    expect(run(40, 50)).toBe(true);
+    // control: the stun before the window is not in it
+    expect(run(44, 50)).toBe(false);
+  });
+
+  it("fact3 D14/D16 (270ef58d): a kit control cast under another id (Hex 210873 vs kit 51514) is one entry, on cooldown after the press", () => {
+    const shaman = makeFriend("owner", {
+      spec: CombatUnitSpec.Shaman_Restoration,
+      class: CombatUnitClass.Shaman,
+      // Hex 51514 taken (class node 103623) — the kit's control
+      info: { talents: [{ id1: 103623, id2: 127903, count: 1 }], pvpTalents: [] },
+      spellCastEvents: [
+        makeSpellCastEvent("210873", T0 + 77_360, "enemy-h", "Rsham", "owner", "Owner", 0, "Hex"),
+      ],
+    } as never);
+    const w = computeWindowContributions(
+      { ...combat, units: { owner: shaman, "enemy-1": enemyDk, "enemy-h": enemyHealer } } as never,
+      shaman,
+      [shaman],
+      [enemyDk, enemyHealer],
+      [makeWindow(85, 105), makeWindow(115, 125)],
+      [],
+      [],
+      stubFactsComputer,
+    );
+    const hexIn = (i: number) =>
+      w[i]!.ownerCCReady.filter((c) => c.spellName === "Hex").length;
+    // back at 107.4 (30 s): not ready at 85, ready once at 115
+    expect(hexIn(0)).toBe(0);
+    expect(hexIn(1)).toBe(1);
+  });
+
+  it("F16 retest (e49b7c3b 3:39): a dead owner is not free and holds no ready CC", () => {
+    const owner = makeFriend("owner", {
+      spellCastEvents: [
+        makeSpellCastEvent("8122", T0 + 100_000, "enemy-h", "Rsham", "owner", "Owner"),
+      ],
+      deathRecords: [{ timestamp: T0 + 44_000 } as never],
+    });
+    const run = (from: number, to: number) =>
+      computeWindowContributions(
+        combat,
+        owner,
+        [owner],
+        [enemyDk, enemyHealer],
+        [makeWindow(from, to)],
+        [],
+        [],
+        stubFactsComputer,
+      )[0];
+    // dead from 44 s: the window 40–50 is free 40–43 only
+    const across = run(40, 50);
+    expect(across.ownerFreeSeconds).toBe(4);
+    expect(across.ownerCCReady).toEqual([
+      { spellName: "Psychic Scream", enemyHealerDR: "Full" },
+    ]);
+    // a window opening after the death: nothing ready, nothing free
+    const after = run(46, 53);
+    expect(after.ownerFreeSeconds).toBe(0);
+    expect(after.ownerCCReady).toEqual([]);
   });
 
   it("flags CC as NOT ready when inside its cooldown, and detects an in-window cast", () => {
@@ -394,7 +509,7 @@ describe("computeWindowContributions", () => {
       [owner],
       [enemyDk, enemyHealer],
       [makeWindow(40, 50)],
-      [{ atSeconds: 42, durationSeconds: 4 }], // owner feared 42–46
+      [{ from: T0 + 42_000, to: T0 + 46_000 }], // owner could not cast 42–46
       // enemy healer feared at t=38 for 6s → same 'Disorient'-category DR window is still hot at 40
       [
         {
@@ -418,14 +533,30 @@ describe("computeWindowContributions", () => {
       [enemyDk, enemyHealer],
       [makeWindow(40, 50)],
       [
-        { atSeconds: 42, durationSeconds: 4 }, // 42–46
-        { atSeconds: 43, durationSeconds: 3 }, // 43–46, overlaps the above
+        { from: T0 + 42_000, to: T0 + 46_000 }, // 42–46
+        { from: T0 + 43_000, to: T0 + 46_000 }, // 43–46, overlaps the above
       ],
       [],
       stubFactsComputer,
     );
-    // Union of CC'd seconds is still {42,43,44,45} = 4s, so ownerFreeSeconds is 6, not 10-(4+3)=3.
+    // Union of blocked seconds is still {42,43,44,45} = 4s, so ownerFreeSeconds is 6, not 10-(4+3)=3.
     expect(result[0].ownerFreeSeconds).toBe(6);
+  });
+
+  it("a never-removed lock (to = Infinity) blocks every second after it starts", () => {
+    const owner = makeFriend("owner");
+    const result = computeWindowContributions(
+      combat,
+      owner,
+      [owner],
+      [enemyDk, enemyHealer],
+      [makeWindow(40, 50)],
+      [{ from: T0 + 47_500, to: Infinity }],
+      [],
+      stubFactsComputer,
+    );
+    // seconds 48 and 49 start inside the lock; 47 starts before it
+    expect(result[0].ownerFreeSeconds).toBe(8);
   });
 });
 
@@ -449,8 +580,138 @@ function slackSeg(fromSeconds: number, toSeconds: number): ISlackSegment {
   };
 }
 
+// T12 ⑤ (user ruling 2026-10-10): a window is on one enemy; the owner's
+// damage beside it was his damage on every enemy, absorbs included.
+describe("healer view: `your damage on it` is measured on the window's target (T12 ⑤)", () => {
+  const enemyHealer = makeUnit("enemy-h", {
+    // a position beside the owner's (0, 0): the CC can reach (fact5 D18)
+    advancedActions: fullHpActions() as any[],
+    reaction: CombatUnitReaction.Hostile,
+    spec: CombatUnitSpec.Shaman_Restoration,
+    name: "Rsham",
+  });
+  const enemyDk = makeUnit("enemy-1", {
+    reaction: CombatUnitReaction.Hostile,
+    name: "Edk",
+  });
+  const hit = (
+    atS: number,
+    amount: number,
+    dest: string,
+    absorbed = false,
+  ) => ({
+    logLine: {
+      event: absorbed ? LogEvent.SPELL_ABSORBED : LogEvent.SPELL_DAMAGE,
+      timestamp: T0 + atS * 1000,
+      parameters: [],
+    },
+    timestamp: T0 + atS * 1000,
+    // log convention: a damage row is negative, an absorbed row positive
+    effectiveAmount: absorbed ? amount : -amount,
+    amount,
+    srcUnitId: "owner",
+    destUnitId: dest,
+  });
+  const contributions = (damageOut: unknown[], unpunished = false) => {
+    const owner = makeFriend("owner");
+     
+    (owner as any).damageOut = damageOut;
+    return computeWindowContributions(
+      combat,
+      owner,
+      [owner],
+      [enemyDk, enemyHealer],
+      [makeWindow(40, 50, unpunished ? [] : undefined)],
+      [],
+      [],
+      stubFactsComputer,
+    );
+  };
+
+  it("damage on another enemy is not in it; the shield's part is kept apart", () => {
+    const [w] = contributions([
+      hit(42, 12_000, "enemy-1"),
+      hit(43, 3_000, "enemy-1", true),
+      hit(44, 208_000, "enemy-h"), // the old figure counted this
+      hit(45, 9_000, "enemy-h", true),
+      hit(39, 50_000, "enemy-1"), // before the window
+      hit(50, 50_000, "enemy-1"), // the window's end second is not in it
+    ]);
+    expect(w!.ownerDamageOnTarget).toBe(12_000);
+    expect(w!.ownerAbsorbedOnTarget).toBe(3_000);
+  });
+
+  it("the [VULNERABLE] line: the owner's figure sits beside the team's on the same target", () => {
+    // the old line: `(team damage 0k total); …; your damage 208k`
+    const windows = contributions([hit(44, 208_000, "enemy-h")], true);
+    expect(windows[0]!.unpunished).toBe(true);
+    const text = formatHealerOffenseForContext({
+      advancedLoggingAvailable: true,
+      slackSegments: [],
+      windowContributions: windows,
+      windowCreationFacts: [],
+      contestedTradeFacts: [],
+    });
+    const line = text.find((l) => l.includes("[VULNERABLE]"))!;
+    expect(line).toContain("(team damage 0k total)");
+    expect(line).toContain("; your damage on it 0k; ");
+    expect(line).not.toContain("208k");
+    expect(
+      line.match(new RegExp(VULNERABLE_OWNER_DAMAGE_RE_SRC))?.slice(1),
+    ).toEqual(["0", "0"]);
+  });
+
+  it("the clause and its legend", () => {
+    const text = formatHealerOffenseForContext({
+      advancedLoggingAvailable: true,
+      slackSegments: [],
+      windowContributions: contributions([
+        hit(42, 12_000, "enemy-1"),
+        hit(43, 3_000, "enemy-1", true),
+      ]),
+      windowCreationFacts: [],
+      contestedTradeFacts: [],
+    });
+    expect(text.find((l) => l.includes("[KILL WINDOW]"))).toContain(
+      "; your damage on it 12k (+3k absorbed); ",
+    );
+    const legend = text.find((l) => l.includes("`your damage on it Nk`"))!;
+    expect(legend).toContain(
+      "the health that window's target lost to your hits in the printed span",
+    );
+    expect(legend).toContain("Your damage on other enemies is not in it.");
+    // the legend names no line tag: readers count the window lines by tag
+    expect(legend).not.toMatch(/\[[A-Z ]+\]/);
+  });
+
+  it("no window lines, no legend line", () => {
+    const text = formatHealerOffenseForContext({
+      advancedLoggingAvailable: true,
+      slackSegments: [
+        {
+          fromSeconds: 10,
+          toSeconds: 30,
+          durationSeconds: 20,
+          ownerDamage: 0,
+          ownerCCCasts: 0,
+          ownerPurgeCasts: 0,
+          ownerKickCasts: 0,
+          idle: true,
+          teamMinHpPct: 95,
+        },
+      ],
+      windowContributions: [],
+      windowCreationFacts: [],
+      contestedTradeFacts: [],
+    });
+    expect(text.join("\n")).not.toContain("your damage on it");
+  });
+});
+
 describe("computeWindowCreationFacts", () => {
   const enemyHealerWithTrinketDown = makeUnit("enemy-h", {
+    // a position beside the owner's (0, 0): the CC can reach (fact5 D18)
+    advancedActions: fullHpActions() as any[],
     reaction: CombatUnitReaction.Hostile,
     spec: CombatUnitSpec.Shaman_Restoration,
     name: "Rsham",
@@ -493,6 +754,55 @@ describe("computeWindowCreationFacts", () => {
     expect(facts[0].ccSpellName).toBe("Psychic Scream");
     expect(facts[0].enemyHealerDRLevel).toBe("Full");
     expect(facts[0].enemyHealerTrinketOnCD).toBe(true);
+  });
+
+  it("codex 35-CD-13b: a CC whose DR family is unknown (Chastise, no caster evidence) is never 'ready at Full DR'", () => {
+    const chastise = (extra: object = {}) =>
+      makeFriend("owner", {
+        spellCastEvents: [
+          makeSpellCastEvent(
+            "88625",
+            T0 + 100_000,
+            "enemy-h",
+            "Rsham",
+            "owner",
+            "Owner",
+          ),
+        ],
+        ...extra,
+      });
+    const run = (healer: ReturnType<typeof makeUnit>) =>
+      computeWindowCreationFacts(
+        combat,
+        chastise(),
+        [healer],
+        [slackSeg(40, 50)],
+        [],
+        [],
+      );
+    expect(run(enemyHealerWithTrinketDown)).toEqual([]);
+    // control: the priest's stun variant 200200 on record (after the
+    // segment, so no DR history at 40 s) → the family is known → Full
+    const withEvidence = makeUnit("enemy-h", {
+    // a position beside the owner's (0, 0): the CC can reach (fact5 D18)
+    advancedActions: fullHpActions() as any[],
+      reaction: CombatUnitReaction.Hostile,
+      spec: CombatUnitSpec.Shaman_Restoration,
+      name: "Rsham",
+      spellCastEvents: enemyHealerWithTrinketDown.spellCastEvents,
+      auraEvents: [
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_APPLIED,
+          "200200",
+          T0 + 100_010,
+          "owner",
+          "enemy-h",
+        ),
+      ],
+    });
+    const facts = run(withEvidence);
+    expect(facts.length).toBe(1);
+    expect(facts[0].enemyHealerDRLevel).toBe("Full");
   });
 
   it("suppresses facts during an active kill window, at decayed DR, and caps at 2 by slack length", () => {
@@ -586,6 +896,8 @@ describe("computeWindowCreationFacts", () => {
     // cooldowns reset at match start ⇒ never used means available ⇒ the enemy
     // healer can trinket out of the opener, so it is not a clean opportunity.
     const enemyHealerNoTrinket = makeUnit("enemy-h", {
+    // a position beside the owner's (0, 0): the CC can reach (fact5 D18)
+    advancedActions: fullHpActions() as any[],
       reaction: CombatUnitReaction.Hostile,
       spec: CombatUnitSpec.Shaman_Restoration,
       name: "Rsham",
@@ -637,6 +949,8 @@ describe("buildHealerOffenseSummary + formatHealerOffenseForContext", () => {
 
   it("renders header, aggregate slack line, idle segments, window and opportunity lines", () => {
     const enemyHealer = makeUnit("enemy-h", {
+    // a position beside the owner's (0, 0): the CC can reach (fact5 D18)
+    advancedActions: fullHpActions() as any[],
       reaction: CombatUnitReaction.Hostile,
       spec: CombatUnitSpec.Shaman_Restoration,
       name: "Rsham",
@@ -707,15 +1021,230 @@ describe("buildHealerOffenseSummary + formatHealerOffenseForContext", () => {
     // Note trimmed 2026-07-09 (week-eval tokens.md #4): redundant guidance lives in the system
     // prompt; only the load-bearing "outranks" rule remains in the block.
     expect(text).toContain("healing under pressure always outranks offense");
-    // GH #103 A4: every [SLACK] line states its own team min HP, which the
-    // slack band (team ≥ SLACK_TEAM_HP_THRESHOLD) can never undercut
-    const slackLines = lines.filter((l) => l.includes("[SLACK]"));
+    // GH #103 A4: every [SLACK] line states its own team min HP — since the
+    // 2026-10-17 ruling (F15, 「改成真最低」) the true minimum, which can sit
+    // below the band the span is judged on (the legend line says so)
+    const slackLines = lines.filter((l) => l.startsWith("  [SLACK]"));
     expect(slackLines.length).toBeGreaterThan(0);
     for (const l of slackLines) {
       const m = l.match(/team min HP (\d+)%/);
       expect(m).not.toBeNull();
-      expect(Number(m![1])).toBeGreaterThanOrEqual(85);
     }
+    expect(text).toContain("so N can sit below the band");
+  });
+});
+
+describe("[KILL WINDOW] free seconds vs the rendered window (2026-09-30)", () => {
+  it("never prints more free seconds than the window it sits in", () => {
+    // 40.1–60.7: the rendered window floors to 60 − 40 = 20 s while the
+    // continuous span is 20.6 s — the old line read "free 21s of 20s".
+    const enemyHealer = makeUnit("enemy-h", {
+    // a position beside the owner's (0, 0): the CC can reach (fact5 D18)
+    advancedActions: fullHpActions() as any[],
+      reaction: CombatUnitReaction.Hostile,
+      spec: CombatUnitSpec.Shaman_Restoration,
+      name: "Rsham",
+    });
+    const owner = makeFriend("owner", {});
+    const summary = buildHealerOffenseSummary(
+      combat,
+      owner,
+      [owner],
+      [enemyHealer],
+      [makeWindow(40.1, 60.7)],
+      emptyEnemyTimeline(),
+      [],
+      [],
+      [],
+    );
+    const line = formatHealerOffenseForContext(summary).find((l) =>
+      l.includes("[KILL WINDOW]"),
+    );
+    const m = line?.match(/free (\d+)s of (\d+)s/);
+    expect(m).not.toBeNull();
+    expect(Number(m![2])).toBe(20);
+    expect(Number(m![1])).toBeLessThanOrEqual(Number(m![2]));
+  });
+});
+
+describe("[KILL WINDOW] free seconds are castable seconds (triage other F-O12)", () => {
+  beforeAll(async () => {
+    await ensureAnalysisData();
+  });
+  const enemyHealer = makeUnit("enemy-h", {
+    // a position beside the owner's (0, 0): the CC can reach (fact5 D18)
+    advancedActions: fullHpActions() as any[],
+    reaction: CombatUnitReaction.Hostile,
+    spec: CombatUnitSpec.Shaman_Restoration,
+    name: "Rsham",
+  });
+  const enemyDk = makeUnit("enemy-1", {
+    reaction: CombatUnitReaction.Hostile,
+    name: "Edk",
+  });
+  const freeOf = (
+    owner: ICombatUnit,
+    units?: Record<string, ICombatUnit>,
+  ): number => {
+    const summary = buildHealerOffenseSummary(
+      { ...combat, units },
+      owner,
+      [owner],
+      [enemyDk, enemyHealer],
+      [makeWindow(40, 55)],
+      emptyEnemyTimeline(),
+      [], // the [CC ON TEAM] instance list sees neither lock below
+      [],
+      [],
+    );
+    return summary.windowContributions[0]!.ownerFreeSeconds;
+  };
+
+  it("a silence and a kick lockout are not free time, though neither is a CC instance", () => {
+    expect(freeOf(makeFriend("owner"))).toBe(15);
+    // Strangulate 42.0–46.0 (4 s), then Pummel at 50.0 (its lockout)
+    const owner = makeFriend("owner", {
+      auraEvents: [
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_APPLIED,
+          "47476",
+          T0 + 42_000,
+          "enemy-1",
+          "owner",
+        ),
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_REMOVED,
+          "47476",
+          T0 + 46_000,
+          "enemy-1",
+          "owner",
+        ),
+      ] as never,
+      actionIn: [
+        makeInterruptEvent(
+          "6552",
+          "Pummel",
+          "2061",
+          "Flash Heal",
+          T0 + 50_000,
+          "enemy-1",
+        ),
+      ] as never,
+    });
+    const blocked = buildCannotCastIntervals(
+      owner,
+      new Set(["enemy-1", "enemy-h"]),
+    );
+    expect(blocked).toHaveLength(2);
+    const lockoutS = (blocked[1]!.to - blocked[1]!.from) / 1000;
+    expect(lockoutS).toBeGreaterThanOrEqual(3);
+    // 4 silenced seconds + the lockout's whole seconds inside 50–55
+    expect(freeOf(owner)).toBe(15 - 4 - Math.min(5, Math.ceil(lockoutS)));
+  });
+
+  it("an enemy pet's stun counts when the round's units name its owner", () => {
+    const pet = makeUnit("pet-1", {
+      reaction: CombatUnitReaction.Hostile,
+      name: "Pet",
+      ownerId: "enemy-1",
+    } as never);
+    const owner = makeFriend("owner", {
+      auraEvents: [
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_APPLIED,
+          "853",
+          T0 + 44_000,
+          "pet-1",
+          "owner",
+        ),
+        makeAuraEvent(
+          LogEvent.SPELL_AURA_REMOVED,
+          "853",
+          T0 + 47_000,
+          "pet-1",
+          "owner",
+        ),
+      ] as never,
+    });
+    expect(freeOf(owner)).toBe(15); // no units: the pet is nobody's
+    expect(
+      freeOf(owner, {
+        "enemy-1": enemyDk,
+        "enemy-h": enemyHealer,
+        "pet-1": pet,
+      }),
+    ).toBe(12);
+  });
+});
+
+describe("[KILL WINDOW] `free` under half a second is `<1s`; no free second at all stays `0s`", () => {
+  beforeAll(async () => {
+    await ensureAnalysisData();
+  });
+  const enemyHealer = makeUnit("enemy-h", {
+    // a position beside the owner's (0, 0): the CC can reach (fact5 D18)
+    advancedActions: fullHpActions() as any[],
+    reaction: CombatUnitReaction.Hostile,
+    spec: CombatUnitSpec.Shaman_Restoration,
+    name: "Rsham",
+  });
+  const enemyDk = makeUnit("enemy-1", {
+    reaction: CombatUnitReaction.Hostile,
+    name: "Edk",
+  });
+  /** The window 40.0–42.3 (rendered 0:40–0:42, 2 s; sampled seconds 40, 41,
+   *  42) with the owner Strangulated from `fromMs` to `toMs`. */
+  const freeText = (silence?: [number, number]): string => {
+    const owner = makeFriend("owner", {
+      auraEvents: (silence
+        ? [
+            makeAuraEvent(
+              LogEvent.SPELL_AURA_APPLIED,
+              "47476",
+              T0 + silence[0],
+              "enemy-1",
+              "owner",
+            ),
+            makeAuraEvent(
+              LogEvent.SPELL_AURA_REMOVED,
+              "47476",
+              T0 + silence[1],
+              "enemy-1",
+              "owner",
+            ),
+          ]
+        : []) as never,
+    });
+    const summary = buildHealerOffenseSummary(
+      combat,
+      owner,
+      [owner],
+      [enemyDk, enemyHealer],
+      [makeWindow(40, 42.3)],
+      emptyEnemyTimeline(),
+      [],
+      [],
+      [],
+    );
+    const line = formatHealerOffenseForContext(summary).find((l) =>
+      l.includes("[KILL WINDOW]"),
+    );
+    const m = line?.match(/\bfree (\S+) of 2s/);
+    expect(m).not.toBeNull();
+    return m![1]!;
+  };
+
+  it("one free sampled second in a window that ends 0.3 s into it: `free <1s`", () => {
+    // seconds 40 and 41 blocked, 42 free: 2.3 − 2 = 0.3 s
+    expect(freeText([40_000, 42_000])).toBe("<1s");
+  });
+  it("every sampled second blocked: `free 0s` is the fact", () => {
+    expect(freeText([39_500, 43_000])).toBe("0s");
+  });
+  it("a whole second and more prints as before", () => {
+    expect(freeText()).toBe("2s");
+    // second 40 blocked: 2.3 − 1 = 1.3 s
+    expect(freeText([40_000, 41_000])).toBe("1s");
   });
 });
 
@@ -732,7 +1261,6 @@ const stubFactsComputer = {
     accountable: true,
   }),
 };
-
 
 describe("burst sub-windows (2026-07-17 kill-window redesign)", () => {
   it("computeBurstSubWindows: splits on gaps, drops sub-threshold clusters, caps count, clamps to span", () => {
@@ -772,8 +1300,8 @@ describe("burst sub-windows (2026-07-17 kill-window redesign)", () => {
       name: "Edk",
     });
     const withBursts = makeWindow(40, 140, [
-      { fromSeconds: 50, toSeconds: 55, damage: 90_000 },
-      { fromSeconds: 100, toSeconds: 108, damage: 60_000 },
+      { fromSeconds: 50, toSeconds: 55, damage: 90_000, absorbed: 0 },
+      { fromSeconds: 100, toSeconds: 108, damage: 60_000, absorbed: 0 },
     ]);
     const punished = computeWindowContributions(
       combat,
@@ -821,7 +1349,8 @@ describe("burst sub-windows (2026-07-17 kill-window redesign)", () => {
       enemyHealerSpec: "Restoration Shaman",
       ownerCCReady: [],
       ownerCastCCInWindow: false,
-      ownerDamageInWindow: 12_000,
+      ownerDamageOnTarget: 12_000,
+      ownerAbsorbedOnTarget: 0,
       ownerFreeSeconds: 5,
       teamMinHpPct: 80,
     };
@@ -837,6 +1366,7 @@ describe("burst sub-windows (2026-07-17 kill-window redesign)", () => {
           vulnToSeconds: 140,
           unpunished: false,
           teamDamageInVulnSpan: 90_000,
+          teamAbsorbedInVulnSpan: 0,
           gateFacts: stubFactsComputer.facts(),
         },
         {
@@ -847,6 +1377,7 @@ describe("burst sub-windows (2026-07-17 kill-window redesign)", () => {
           vulnToSeconds: 260,
           unpunished: true,
           teamDamageInVulnSpan: 8_000,
+          teamAbsorbedInVulnSpan: 0,
           gateFacts: stubFactsComputer.facts(),
         },
       ],
@@ -873,13 +1404,15 @@ describe("formatHealerOffenseForContext KILL WINDOW cap", () => {
       vulnToSeconds: i * 20 + 10,
       unpunished: false,
       teamDamageInVulnSpan: 50_000,
+      teamAbsorbedInVulnSpan: 0,
       targetName: `Enemy${i}`,
       targetSpec: "Frost Death Knight",
       enemyHealerName: "Rsham",
       enemyHealerSpec: "Restoration Shaman",
       ownerCCReady: [],
       ownerCastCCInWindow: i % 2 === 0,
-      ownerDamageInWindow: 1000 * i,
+      ownerDamageOnTarget: 1000 * i,
+      ownerAbsorbedOnTarget: 0,
       ownerFreeSeconds: freeSeconds,
       teamMinHpPct: 95,
       gateFacts: stubFactsComputer.facts(),
@@ -911,7 +1444,9 @@ describe("formatHealerOffenseForContext KILL WINDOW cap", () => {
     expect(idxA).toBeGreaterThan(-1);
     expect(idxB).toBeGreaterThan(idxA);
     // Rollup aggregates: damage of omitted 0+1+2 = 3k, CC cast in windows 0 and 2 => 2 of 3
-    expect(text).toContain("your damage 3k total, CC cast in 2 of 3");
+    expect(text).toContain(
+      "your damage on their targets 3k total, CC cast in 2 of 3",
+    );
   });
 
   it("leaves blocks at or under the cap untouched", () => {
@@ -935,6 +1470,8 @@ describe("formatHealerOffenseForContext KILL WINDOW cap", () => {
 
 describe("F193 V2 — contested trade facts", () => {
   const enemyHealer = makeUnit("enemy-h", {
+    // a position beside the owner's (0, 0): the CC can reach (fact5 D18)
+    advancedActions: fullHpActions() as any[],
     reaction: CombatUnitReaction.Hostile,
     spec: CombatUnitSpec.Shaman_Restoration,
     name: "Rsham",
@@ -947,7 +1484,7 @@ describe("F193 V2 — contested trade facts", () => {
         makeAdvancedAction(T0 + s * 1000, 0, 0, 500_000, 375_000),
       );
     }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const mate = makeFriend("mate", {
       advancedActions: partialHpActions as any[],
     });
@@ -995,11 +1532,99 @@ describe("F193 V2 — contested trade facts", () => {
     // Shaman archive rounds cast it). The old hand table keyed on class only
     // and this fixture's healer has no class set, so it used to count 0.
     expect(fact.enemyInterruptsReady).toBe(2);
+    // FT I12: Psychic Scream 8122 is instant by DB2 — no cast-risk clause and
+    // no interrupt count on its line
+    expect(fact.ccSpellId).toBe("8122");
+    expect(fact.ccInterruptible).toBe("none");
 
     const lines = formatHealerOffenseForContext(summary);
     const text = lines.join("\n");
     expect(text).toContain("[CONTESTED]");
     expect(text).toContain("EV question, not a verdict");
+    expect(text).toContain(
+      "cast 1 CC — contested trade: a CC here competed with continued healing (instant: no cast to interrupt) (EV question, not a verdict).",
+    );
+    expect(text).not.toContain("cast risk");
+    expect(text).not.toContain("enemy interrupts ready");
+  });
+
+  it("fact5 D18: a CC that cannot reach the enemy healer in the span (Psychic Scream 8 yd, healer 60 yd off) offers no contested trade", () => {
+    const partialHpActions = [];
+    for (let s = 0; s <= 120; s += 5)
+      partialHpActions.push(
+        makeAdvancedAction(T0 + s * 1000, 0, 0, 500_000, 375_000),
+      );
+    const mate = makeFriend("mate", {
+      advancedActions: partialHpActions as any[],
+    });
+    const owner = makeFriend("owner", {
+      spellCastEvents: [
+        makeSpellCastEvent("8122", T0 + 100_000, "enemy-h", "Rsham", "owner", "Owner"),
+      ],
+    });
+    const far = { ...enemyHealer, advancedActions: [] as unknown[] } as ICombatUnit;
+    for (let s = 0; s <= 120; s += 5)
+      far.advancedActions.push(makeAdvancedAction(T0 + s * 1000, 60, 0) as never);
+    const run = (healer: ICombatUnit) =>
+      buildHealerOffenseSummary(
+        combat,
+        owner,
+        [owner, mate],
+        [healer],
+        [],
+        emptyEnemyTimeline(),
+        [],
+        [],
+        [],
+      ).contestedTradeFacts.length;
+    expect(run(enemyHealer)).toBe(1);
+    expect(run(far)).toBe(0);
+  });
+
+  it("1b. a control with a cast time keeps the interrupt count and the cast-risk clause (FT I12)", () => {
+    const partialHpActions = [];
+    for (let s = 0; s <= 120; s += 5) {
+      partialHpActions.push(
+        makeAdvancedAction(T0 + s * 1000, 0, 0, 500_000, 375_000),
+      );
+    }
+    const mate = makeFriend("mate", {
+      advancedActions: partialHpActions as never[],
+    });
+    const owner = makeFriend("owner", {
+      spellCastEvents: [
+        // Cyclone: 1.7 s base cast
+        makeSpellCastEvent(
+          "33786",
+          T0 + 100_000,
+          "enemy-h",
+          "Rsham",
+          "owner",
+          "Owner",
+        ),
+      ],
+    });
+    const enemyWarrior = makeUnit("enemy-w", {
+      reaction: CombatUnitReaction.Hostile,
+      class: CombatUnitClass.Warrior,
+      name: "Ewar",
+    });
+    const summary = buildHealerOffenseSummary(
+      combat,
+      owner,
+      [owner, mate],
+      [enemyHealer, enemyWarrior],
+      [],
+      emptyEnemyTimeline(),
+      [],
+      [],
+      [],
+    );
+    expect(summary.contestedTradeFacts.length).toBe(1);
+    expect(summary.contestedTradeFacts[0].ccInterruptible).toBe("bar");
+    expect(formatHealerOffenseForContext(summary).join("\n")).toContain(
+      "cast 1 CC; enemy interrupts ready: 2 — contested trade: a CC here competed with continued healing AND carried cast risk (EV question, not a verdict).",
+    );
   });
 
   it("2. emits no facts when team is at 60% HP (below the band)", () => {
@@ -1009,7 +1634,7 @@ describe("F193 V2 — contested trade facts", () => {
         makeAdvancedAction(T0 + s * 1000, 0, 0, 500_000, 300_000),
       );
     }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const mate = makeFriend("mate", {
       advancedActions: partialHpActions as any[],
     });
@@ -1048,7 +1673,7 @@ describe("F193 V2 — contested trade facts", () => {
         makeAdvancedAction(T0 + s * 1000, 0, 0, 500_000, 375_000),
       );
     }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const mate = makeFriend("mate", {
       advancedActions: partialHpActions as any[],
     });
@@ -1082,7 +1707,7 @@ describe("F193 V2 — contested trade facts", () => {
       [],
       emptyEnemyTimeline(),
       [],
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       enemyHealerCCInstances as any[],
       [],
     );
@@ -1133,7 +1758,7 @@ describe("F193 V2 — contested trade facts", () => {
       mateActions.push(makeAdvancedAction(T0 + s * 1000, 0, 0, 200_000, hp));
     }
     const mate = makeFriend("mate", {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       advancedActions: mateActions as any[],
     });
 
@@ -1143,6 +1768,8 @@ describe("F193 V2 — contested trade facts", () => {
     });
 
     const enemyHealer = makeUnit("enemy-h", {
+    // a position beside the owner's (0, 0): the CC can reach (fact5 D18)
+    advancedActions: fullHpActions() as any[],
       reaction: CombatUnitReaction.Hostile,
       spec: CombatUnitSpec.Shaman_Restoration,
       name: "Rsham",
@@ -1235,7 +1862,7 @@ describe("F193 V2 — contested trade facts", () => {
 
     expect(summary.contestedTradeFacts.length).toBe(1);
     expect(summary.contestedTradeFacts[0].ownerHealing).toBe(20_000);
-    expect(summary.windowContributions[0].ownerDamageInWindow).toBe(30_000);
+    expect(summary.windowContributions[0].ownerDamageOnTarget).toBe(30_000);
 
     const lines = formatHealerOffenseForContext(summary);
     const text = lines.join("\n");

@@ -1,6 +1,7 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { CombatUnitSpec, type ICombatUnit,LogEvent } from "@gladlog/parser-compat";
+import { beforeEach,describe, expect, it, vi } from "vitest";
+
 import { summonReach } from "./summonReachability";
-import { LogEvent, CombatUnitSpec, type ICombatUnit } from "@gladlog/parser-compat";
 
 vi.mock("../data/spellEffectData", () => ({
   spellEffectData: {
@@ -11,10 +12,15 @@ vi.mock("../data/spellEffectData", () => ({
 }));
 
 vi.mock("./cannotCastIntervals", () => ({
-  buildCannotCastIntervals: vi.fn(() => []),
+  // the per-spell reading (codex R6C-03 #1) over enemy players + summons
+  cannotCastIntervalsForSpells: vi.fn(() => []),
+  enemySourceIds: (e: Array<{ id: string }>) => new Set(e.map((u) => u.id)),
 }));
 
-vi.mock("./cooldowns", () => ({
+// Partial mock: positionAnalysis → enemyDefensives reads ./cooldowns tables
+// (AURA_ONLY_ACTIVATION_IDS) at module load, so every other export stays real.
+vi.mock("./cooldowns", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./cooldowns")>()),
   isHealerSpec: vi.fn((spec) => spec === CombatUnitSpec.Priest_Discipline),
   isMeleeSpec: vi.fn((spec) => spec === CombatUnitSpec.Rogue_Assassination),
 }));
@@ -28,13 +34,13 @@ vi.mock("./rootReachability", () => ({
 }));
 
 // Mock modules so we can change implementations
+import { cannotCastIntervalsForSpells } from "./cannotCastIntervals";
 import { getUnitPositionAtTime } from "./losAnalysis";
 import { canReachTargetAt } from "./rootReachability";
-import { buildCannotCastIntervals } from "./cannotCastIntervals";
 
 const mockGetUnitPositionAtTime = getUnitPositionAtTime as any;
 const mockCanReachTargetAt = canReachTargetAt as any;
-const mockBuildCannotCastIntervals = buildCannotCastIntervals as any;
+const mockBuildCannotCastIntervals = cannotCastIntervalsForSpells as any;
 
 describe("summonReach", () => {
   const createUnit = (id: string, spec: CombatUnitSpec = CombatUnitSpec.None, actionIn: any[] = []): ICombatUnit =>

@@ -9,15 +9,15 @@
  * named artifact a human built for one experiment run, not a fixed baseline
  * screenshot state, so it must never enter the visual-regression suite.
  */
-import { useEffect, useState, type JSX } from "react";
+import { type JSX,useEffect, useState } from "react";
 
-import { MatchReport } from "../../src/renderer/src/report/components/MatchReport";
-import type { StoredMatch } from "../../src/renderer/src/report/derive/types";
 import type {
   ReviewAnswer,
   ReviewCard,
   ReviewSession,
 } from "../../../eval/src/explore/reviewTypes";
+import { MatchReport } from "../../src/renderer/src/report/components/MatchReport";
+import type { StoredMatch } from "../../src/renderer/src/report/derive/types";
 import { ReviewPanel } from "./ReviewPanel";
 
 /** `/__review/match/<id>` payload — matchStore.ts's on-disk envelope

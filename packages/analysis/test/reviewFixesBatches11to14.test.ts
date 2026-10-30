@@ -233,7 +233,11 @@ describe("batch 12 — absorbed parts: melee joins melee, attacker by GUID", () 
         ["Player-B", "Boomy-R-US"],
       ]),
     );
-    expect(out).toContain("5 — Starsurge (150k; 150k of it absorbed)");
+    // a fully absorbed hit carries its school too (absorbedHitSchoolMask,
+    // 2026-10-24; this line pinned the missing tag)
+    expect(out).toContain(
+      "5 — Starsurge [Nature/Arcane] (150k; 150k of it absorbed)",
+    );
     expect(
       out.some((l) => /^4 — Melee.*\(120k; 40k of it absorbed\)$/.test(l)),
     ).toBe(true);

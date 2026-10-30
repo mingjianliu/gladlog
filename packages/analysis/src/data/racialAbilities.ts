@@ -160,6 +160,33 @@ export const OFFENSIVE_RACIAL_SPELL_IDS: ReadonlySet<string> =
   idsOfKind("offensive");
 
 /**
+ * The offensive racials whose press puts a damage buff on the caster — a
+ * WINDOW (DB2 duration 12–15 s), the shape every `OFFENSIVE_CD_SPELL_IDS`
+ * consumer renders. User ruling 2026-10-20 (fact1215 retest idx 50,
+ * 「我觉得都算」): they are offensive cooldowns like any class cooldown — the
+ * ledger printed an owner's Blood Fury as a `[YOU] [CD]` while the kill
+ * window's "team offensive CDs ready / back inside / pressed inside" and the
+ * `[friendly offensive CD active]` tag left it out. Ancestral Call 274738
+ * runs as one of four auras (raw 8/20 03:27:14.6249: 274742 Might of the
+ * Blackrock APPLIED with the cast, REMOVED 15.0 s later), listed beside it so
+ * the aura-side readers see it. NOT the nukes (Light's Judgment, Arcane
+ * Pulse, Rocket Barrage, Bag of Tricks, Thorn Bloom: no duration; Azerite
+ * Surge: 2.5 s) — the same reason Meteor is not in the table (spellDanger.ts):
+ * a nuke that has landed is no window. Registered in curatedIdRegistry.
+ */
+export const OFFENSIVE_RACIAL_WINDOW_IDS: ReadonlySet<string> = new Set([
+  "20572", // Blood Fury — 15 s
+  "33697", // Blood Fury — 15 s
+  "33702", // Blood Fury — 15 s
+  "26297", // Berserking — 12 s
+  "274738", // Ancestral Call — 15 s, runs as one of:
+  "274739", // Rictus of the Laughing Skull
+  "274740", // Zeal of the Burning Blade
+  "274741", // Ferocity of the Frostwolf
+  "274742", // Might of the Blackrock
+]);
+
+/**
  * Racials that share a cooldown lockout with the PvP trinket — official DB2
  * `SpellCategories.Category` 1166 ("PvP Trinket/WOTF", build 12.1.0.69273).
  * Escape Artist is deliberately absent: its Category is 0, i.e. the official
@@ -174,45 +201,70 @@ export const SHARED_CD_RACIAL_SPELL_IDS: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * How long pressing one of the above locks the PvP trinket.
- *
- * This number is NOT in DB2: the racials sit in category 1166 and the trinket
- * in 1182, so neither `CategoryRecoveryTime` column encodes the cross-category
- * lock (1166's own recovery is 30s for most and 90s for Will to Survive —
- * that is how long the RACIAL is locked, not the trinket). It is therefore
- * measured from the corpus, which is decisive: across 200 local matches, 190
- * racial→trinket and 117 trinket→racial consecutive presses show a minimum gap
- * of 30.7s and 30.1s, with 0.0% under 30s in either direction.
- *
- * Will to Survive's own observed floor is higher (61.2s, n=47) but with that
- * sample it cannot be distinguished from "nobody pressed sooner", so the flat
- * evidence-backed floor is used rather than a hand-picked per-spell number. If
- * a later sweep shows a genuinely longer lock, tighten it here — one constant,
- * one place.
+ * How long pressing Will of the Forsaken / Stoneform / Fireblood locks the
+ * PvP trinket, and how long a trinket press locks them: DB2
+ * `SpellCooldowns.CategoryRecoveryTime` 30000 on all three (category 1166),
+ * the tooltip's "shares a 30 sec cooldown with other similar effects". Corpus
+ * (fact6 F20, 2026-10-28; 15 + 605 + wide = 1,348 files): Will of the
+ * Forsaken → Medallion successes min 30.1 s (healer, n = 736) / 32.0 s (DPS,
+ * n = 54); Medallion → Will of the Forsaken min 30.0 s (n = 377). Stoneform
+ * and Fireblood are logged only as buffs and were not paired; they keep the
+ * DB2 value.
  */
 export const TRINKET_RACIAL_SHARED_LOCKOUT_MS = 30_000;
 
 /**
- * Will to Survive locks the trinket longer than the others. Measured
- * 2026-09-25 (reliability round 3 W1j) on a 1-in-5 sample of the 08-28
- * new-season manifest: Will to Survive → Medallion successes n = 482, 478 of
- * them at ≥ 60.1 s (p1 60.1 s); the rejected presses ("Item is not ready
- * yet", the trinket's own cooldown excluded) n = 17, 14 of them ≤ 57.5 s —
- * e10c6bea's rejection 50.7 s after Will to Survive, while the ledger said
- * "trinket: ON CD (18s left)" and then "ready". The same scan confirms the
- * flat 30 s for Will of the Forsaken (successes min 30.1 s n = 1,404,
- * rejections max 29.9 s). Open, not suppressed: 4 Will to Survive successes
- * below 60 s (52.1 / 56.0 / 58.1 / 59.4) and 3 rejections above it (62.1 /
- * 70.4 / 71.0) are unexplained. Re-measure with
+ * The racial ↔ PvP-trinket lock per racial, before the healer cap below —
+ * DB2 `SpellCooldowns.CategoryRecoveryTime` of each category-1166 racial
+ * (build 12.1.5.70575): Will to Survive 90000, the others 30000. The tooltip
+ * says the same ("shares a 90 sec cooldown" / "30 sec"). Registered in
+ * curatedIdRegistry; its keys are `SHARED_CD_RACIAL_SPELL_IDS`.
+ */
+export const RACIAL_TRINKET_LOCK_MS: Readonly<Record<string, number>> = {
+  "7744": TRINKET_RACIAL_SHARED_LOCKOUT_MS, // Will of the Forsaken
+  "20594": TRINKET_RACIAL_SHARED_LOCKOUT_MS, // Stoneform
+  "59752": 90_000, // Will to Survive
+  "265221": TRINKET_RACIAL_SHARED_LOCKOUT_MS, // Fireblood
+};
+
+/**
+ * A healer's lock is capped at 60 s — DB2 1228476 "PvP - Racial + PvP
+ * Trinket Shared Trigger (Healers)", category 1182, CategoryRecoveryTime
+ * 60000 (the DPS + tank twin 72757 is 30000). Only Will to Survive is longer
+ * than the cap.
+ *
+ * Game-Behaviour Rule evidence (fact6 F20 D2 / D27 / B9, 2026-10-28; 1,348
+ * files, pairs with no trinket use between racial and press, refusals =
+ * "item not ready yet" in any locale, role from COMBATANT_INFO):
+ *  - Will to Survive → Medallion, DPS/tank: successes n = 122, min 90.2 s;
+ *    refusals max 89.8 s (4caab013: refused 66.5 s after it, "El objeto aún
+ *    no está listo", while the flat 60 s said "6s left" and then "ready");
+ *  - Will to Survive → Medallion, healer: successes n = 59, min 60.3 s;
+ *    refusals max 33.9 s;
+ *  - Medallion → Will to Survive: DPS min 90.0 s (n = 116, a refusal at
+ *    87.4 s), healer min 60.0 s (n = 79).
+ * The old flat 60 s (2026-09-25, successes p1 60.1 s n = 482) pooled both
+ * roles: the healers set the floor, and its "3 unexplained rejections at
+ * 62.1 / 70.4 / 71.0 s" were DPS humans inside the 90 s. The lock is a floor
+ * from the press, not added to the trinket's own cooldown:
+ * `max(own cooldown end, press + lock)` has 0 contradictions on 188 Will to
+ * Survive pairs (25 with the trinket's own cooldown still running), the
+ * additive reading 10. Re-measure with
  * packages/eval/scripts/racialTrinketLockScan.ts (update-wow-data.md §7b).
  */
-export const WILL_TO_SURVIVE_TRINKET_LOCKOUT_MS = 60_000;
+export const HEALER_RACIAL_TRINKET_LOCK_CAP_MS = 60_000;
 
-/** How long pressing this racial locks the PvP trinket. */
-export function racialTrinketLockoutMs(spellId: string): number {
-  return spellId === "59752"
-    ? WILL_TO_SURVIVE_TRINKET_LOCKOUT_MS
-    : TRINKET_RACIAL_SHARED_LOCKOUT_MS;
+/** How long pressing this racial locks the PvP trinket — and how long a
+ * PvP trinket press locks this racial: the lock is one number both ways
+ * (ruling A′15 "and vice versa"; codex 62-POSTHOC-13d #1, 2026-10-23), by
+ * role (`isHealer` = `isHealerSpec` of the presser, the same role the
+ * trinket's own cooldown reads). */
+export function racialTrinketLockoutMs(
+  spellId: string,
+  isHealer: boolean,
+): number {
+  const lock = RACIAL_TRINKET_LOCK_MS[spellId] ?? TRINKET_RACIAL_SHARED_LOCKOUT_MS;
+  return isHealer ? Math.min(lock, HEALER_RACIAL_TRINKET_LOCK_CAP_MS) : lock;
 }
 
 /** English name of a racial spell id, or null when the id is not a racial. */

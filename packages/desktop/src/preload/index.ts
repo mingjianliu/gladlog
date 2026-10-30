@@ -133,6 +133,7 @@ const api: GladlogApi = {
       ipcRenderer.invoke("gladlog:analysis:setFlag", matchId, key, flag),
     onDelta: sub<{ matchId: string; text: string }>("gladlog:analysis:delta"),
     onRetry: sub<{ matchId: string }>("gladlog:analysis:retry"),
+    onReviewing: sub<{ matchId: string }>("gladlog:analysis:reviewing"),
     onDone: sub<{ matchId: string; result: unknown; slotKey?: string }>(
       "gladlog:analysis:done",
     ),

@@ -11,6 +11,7 @@ import {
   drCategoryOfCast,
   getDRCategory,
   getDRLevel,
+  isStunDrAura,
   SELF_DR_SPELL_IDS,
 } from "../src/utils/drAnalysis";
 import { ccMechanicOf } from "../src/utils/spellMechanics";
@@ -41,6 +42,27 @@ describe("drCategoryIds (GH #33 — inverse of DR_CATEGORY_MAP)", () => {
     expect(DR_CATEGORIES_GENERATED.incapacitate).toContain("99");
     expect(drCategoryIds("Incapacitate").has("99")).toBe(true);
     expect(drCategoryIds("Disorient").has("99")).toBe(false);
+  });
+
+  // codex review 45-FT-102 (2026-10-13): the supplement block filed 107079
+  // Quaking Palm under "Stun" over DB2's Incapacitate, and the stun-only
+  // readers pressed cooldowns through it. The override layer may fill an id
+  // DB2 leaves blank; it may not contradict a category DB2 states.
+  it("no entry contradicts the category DB2 states for the same id", () => {
+    const official = new Map<string, string>();
+    for (const [cat, ids] of Object.entries(DR_CATEGORIES_GENERATED))
+      for (const id of ids) official.set(id, cat);
+    const contradicting = Object.entries(DR_CATEGORY_MAP)
+      .filter(([id, label]) => {
+        const cat = official.get(id);
+        return cat !== undefined && cat !== label.toLowerCase();
+      })
+      .map(([id, label]) => `${id}: ${label} vs DB2 ${official.get(id)}`);
+    expect(contradicting).toEqual([]);
+    expect(official.get("107079")).toBe("incapacitate");
+    expect(getDRCategory("107079")).toBe("Incapacitate");
+    expect(isStunDrAura("107079")).toBe(false);
+    expect(isStunDrAura("20549")).toBe(true); // War Stomp stays a stun
   });
 
   it("is exactly the inverse of DR_CATEGORY_MAP", () => {

@@ -335,3 +335,40 @@ describe("analyzeCcBreaks — ground truth 打破事件", () => {
     expect(stats.events[0].breakSpellName).toBe("Melee");
   });
 });
+
+describe("fact2 R5 — a Roar whose REMOVED the log never shows ends at its official length", () => {
+  beforeAll(async () => {
+    const { ensureAnalysisData } = await import("../src/data/ensure");
+    await ensureAnalysisData();
+  });
+  it("179b83ac: a Roar 16 s before the poly, no REMOVED (the holder Vanished), no longer lengthens it", () => {
+    const breakAt = (t: number) =>
+      aura(LogEvent.SPELL_AURA_BROKEN_SPELL, POLY, S(t), "d1", "OurPriest", {
+        breakSpellId: "589",
+        breakSpellName: "Shadow Word: Pain",
+      });
+    const late = makeUnit("e1", {
+      auraEvents: [
+        aura(LogEvent.SPELL_AURA_APPLIED, ROAR, S(9), "v1", "OurEvoker"),
+        aura(LogEvent.SPELL_AURA_APPLIED, POLY, S(25), "h1", "OurMage"),
+        breakAt(26.5),
+      ],
+    });
+    // inside the 10 s the unclosed Roar still counts
+    const inside = makeUnit("e2", {
+      auraEvents: [
+        aura(LogEvent.SPELL_AURA_APPLIED, ROAR, S(9), "v1", "OurEvoker"),
+        aura(LogEvent.SPELL_AURA_APPLIED, POLY, S(15), "h1", "OurMage"),
+        breakAt(16.5),
+      ],
+    });
+    const stats = analyzeCcBreaks(
+      [makeUnit("h1"), makeUnit("d1"), makeUnit("v1")],
+      [late, inside],
+      COMBAT,
+    );
+    const byHolder = new Map(stats.events.map((e) => [e.holderName, e]));
+    expect(byHolder.get("e1")?.remainingSeconds).toBeCloseTo(4.5);
+    expect(byHolder.get("e2")?.remainingSeconds).toBeCloseTo(6.3);
+  });
+});

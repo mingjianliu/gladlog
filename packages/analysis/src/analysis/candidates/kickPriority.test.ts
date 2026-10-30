@@ -1,14 +1,16 @@
 import { describe, expect, it } from "vitest";
 
+import { buildFindingsPrompt } from "../buildFindingsPrompt";
 import {
+  healCastsPaired,
   type IKickPriorityPoint,
   isOwnerMissedKick,
   KICK_MELEE_BASE_YD,
   KICK_MELEE_REACH_YD,
-  meleeKickReachYd,
   type KickPriorityFriend,
   kickPriorityMissedEvents,
   kickPriorityTeamEvents,
+  meleeKickReachYd,
 } from "./kickPriority";
 
 const owner = { id: "P1", name: "Rogue" };
@@ -24,6 +26,10 @@ const friend = (over: Partial<KickPriorityFriend> = {}): KickPriorityFriend => (
   inRange: true,
   feasible: true,
   reachableBeforeLanding: true,
+  rootedThroughCast: false,
+  rangeYd: 5,
+  reachYd: 12,
+  kickReadyForS: 20.4,
   ...over,
 });
 const point = (over: Partial<IKickPriorityPoint> = {}): IKickPriorityPoint => ({
@@ -43,6 +49,7 @@ const point = (over: Partial<IKickPriorityPoint> = {}): IKickPriorityPoint => ({
   healAmount: 900_000,
   healOtherName: null,
   healOtherAmount: 0,
+  healCasts: 1,
   windowFromS: 95,
   windowToS: 110,
   friends: [friend()],
@@ -150,5 +157,91 @@ describe("owner card: othersFeasible needs the landing predicate too (codex revi
     const ev = kickPriorityMissedEvents([point({ friends: [friend(), late] })], owner, probes);
     expect(ev).toHaveLength(1);
     expect(ev[0]!.facts.othersFeasible).toBe("none");
+  });
+});
+
+describe("the detector's span, the kick's range and reach, how long it had been back (triage kick-priority F-P1 / F-P3 / F-P5)", () => {
+  it("owner form: windowFrom / windowTo on the render grid, kickRangeYd, reachYd for a melee kick, kickReadyForS", () => {
+    const f = kickPriorityMissedEvents([point({ windowFromS: 187.95, windowToS: 360.4 })], owner, probes)[0]!.facts;
+    expect(f).toMatchObject({ windowFrom: "3:07", windowTo: "6:00", kickRangeYd: "5", reachYd: "12", kickReadyForS: "20.4" });
+  });
+  it("a ranged kick has no reachYd; a never-used kick has no kickReadyForS", () => {
+    const f = kickPriorityMissedEvents(
+      [point({ friends: [friend({ kickSpellName: "Counter Shot", rangeYd: 40, reachYd: null, kickReadyForS: null, neverObserved: true })] })],
+      owner,
+      probes,
+    )[0]!.facts;
+    expect(f.kickRangeYd).toBe("40");
+    expect(f.kickNeverUsed).toBe("yes");
+    expect("reachYd" in f).toBe(false);
+    expect("kickReadyForS" in f).toBe(false);
+  });
+  it("no fact value carries the facts separator", () => {
+    const f = kickPriorityMissedEvents([point()], owner, probes)[0]!.facts;
+    for (const v of Object.values(f)) expect(v).not.toContain(", ");
+  });
+  it("team form carries the same span", () => {
+    const mate = friend({ id: "P2", name: "Mage2", distanceYd: 31 });
+    const f = kickPriorityTeamEvents([point({ windowFromS: 107.46, windowToS: 171.25, friends: [friend({ cdRemainingS: 6, feasible: false }), mate] })], owner, probes)[0]!.facts;
+    expect(f).toMatchObject({ windowFrom: "1:47", windowTo: "2:51" });
+  });
+});
+
+describe("team form: a rooted melee kicker (triage kick-priority F-P2)", () => {
+  const mate = friend({ id: "P2", name: "Mage2", distanceYd: 31 });
+  const why = (over: Partial<KickPriorityFriend>) =>
+    kickPriorityTeamEvents([point({ friends: [friend({ feasible: false, ...over }), mate] })], owner, probes)[0]!.facts.ownerWhy;
+  it("ready, castable, rooted for the whole cast → named as rooted, with the distance", () => {
+    expect(why({ inRange: false, rootedThroughCast: true, distanceYd: 8.41 })).toBe("rooted through the cast (8 yd)");
+  });
+  it("out of range without the root stays out of range; cooldown and lock outrank the root", () => {
+    expect(why({ inRange: false, distanceYd: 20 })).toBe("out of range (20 yd)");
+    expect(why({ inRange: false, rootedThroughCast: true, cdRemainingS: 6 })).toBe("on cooldown (6s)");
+    expect(why({ inRange: false, rootedThroughCast: true, locked: true })).toBe("locked");
+  });
+  it("a rooted owner whose range is unknown is not relabelled", () => {
+    expect(why({ inRange: null, rootedThroughCast: true })).toBe("unknown");
+  });
+});
+
+
+describe("healCasts: a healK that sums several casts says so (triage kick-priority F-P4)", () => {
+  const ok = (spellId: string, timestamp: number) => ({ spellId, logLine: { timestamp } });
+  it("healCastsPaired counts the hardcast plus same-spell successes inside the heal pairing window after it", () => {
+    // b711d4ac's shape: the hardcast finishes at 245.700, an instant cast of the same heal at 246.025
+    expect(healCastsPaired([ok("2061", 245_700), ok("2061", 246_025)], "2061", 245_700)).toBe(2);
+    // the edge is inclusive at +500 ms, exclusive at the hardcast's own success
+    expect(healCastsPaired([ok("2061", 245_700), ok("2061", 246_200)], "2061", 245_700)).toBe(2);
+    expect(healCastsPaired([ok("2061", 245_700), ok("2061", 246_201)], "2061", 245_700)).toBe(1);
+    // another spell, or an earlier cast of this one, is not part of the sum
+    expect(healCastsPaired([ok("2061", 245_000), ok("2060", 245_900)], "2061", 245_700)).toBe(1);
+  });
+  it("absent at one cast, present from two — owner form and team form", () => {
+    const one = kickPriorityMissedEvents([point()], owner, probes)[0]!.facts;
+    expect("healCasts" in one).toBe(false);
+    const two = kickPriorityMissedEvents([point({ healCasts: 2, healAmount: 292_000 })], owner, probes)[0]!.facts;
+    expect(two).toMatchObject({ healK: "292", healCasts: "2" });
+    const mate = friend({ id: "P2", name: "Mage2", distanceYd: 31 });
+    const friends = [friend({ cdRemainingS: 6, feasible: false }), mate];
+    expect("healCasts" in kickPriorityTeamEvents([point({ friends })], owner, probes)[0]!.facts).toBe(false);
+    expect(kickPriorityTeamEvents([point({ friends, healCasts: 3 })], owner, probes)[0]!.facts.healCasts).toBe("3");
+  });
+  it("both legends say what the count means", () => {
+    const mate = friend({ id: "P2", name: "Mage2", distanceYd: 31 });
+    const missed = kickPriorityMissedEvents([point({ healCasts: 2 })], owner, probes);
+    const team = kickPriorityTeamEvents([point({ friends: [friend({ cdRemainingS: 6, feasible: false }), mate], healCasts: 2 })], owner, probes);
+    const legend = (evts: typeof missed, type: string) =>
+      buildFindingsPrompt(evts, "", "Outlaw Rogue").split("\n").find((l) => l.startsWith(`- "${type}"`)) ?? "";
+    expect(legend(missed, "kick-priority-missed")).toContain("when facts.healCasts is present, that many casts of facts.heal finished together");
+    // the heal can have gone to another unit (healK 0): the sum is then the amount inside healedWhom
+    expect(legend(missed, "kick-priority-missed")).toContain("facts.healK or the one inside facts.healedWhom when the heal went to another unit, is their sum");
+    const elsewhere = kickPriorityMissedEvents([point({ healCasts: 2, healAmount: 0, healOtherName: "Warrior", healOtherAmount: 610_000 })], owner, probes)[0]!.facts;
+    expect(elsewhere).toMatchObject({ healK: "0", healCasts: "2", healedWhom: "Warrior (610k)" });
+    // I06: the team legend states it itself — a prompt with no
+    // kick-priority-missed row has no such legend to be sent to
+    expect(legend(team, "kick-priority-team")).toContain(
+      "when facts.healCasts is present, that many casts of facts.heal finished together",
+    );
+    expect(legend(team, "kick-priority-team")).not.toContain("kick-priority-missed");
   });
 });

@@ -1,0 +1,163 @@
+{
+  "meta": {
+    "producer": "packages/eval/scripts/ownShieldLinkScan.ts",
+    "build": "12.1.5.70391",
+    "manifest": "m605.txt",
+    "filesRead": 605,
+    "note": "605 S2 every-30 acceptance files (manifest-archive-2026-08-28-newseason.txt NR%30==1), fact6 F20 residual 2026-10-28 + wide residual 2026-10-29; 90 %, rate over holders with a carrying cast logged",
+    "rule": "rulingFamily = SpellClassOptions set + mask bit shared with 17/1253593, DB2 absorbs; riders = DB2 absorbs with a class set, ≥ 10 self-applications, ≥ 0.9 of them (over the holders that logged a carrying cast that round) within ±150 ms of an own SUCCESS of another spell of the same class set (or of it or itself, another spell's on ≥ 0.5), deferral share ≤ 0.5, absorbing on ≥ 0.1 of them, carried by another spell's press (casts ≥ 0.05 of applications)",
+    "generatedAt": "2026-10-29T11:35:27.699Z"
+  },
+  "rulingFamily": [
+    "17",
+    "1246768",
+    "1253593",
+    "1300008",
+    "1300009"
+  ],
+  "riders": {
+    "11426": {
+      "name": "Ice Barrier",
+      "casts": [
+        "235313"
+      ],
+      "apps": 365,
+      "withPress": 363,
+      "noCarrierLogged": 739,
+      "castAsItself": true
+    },
+    "184662": {
+      "name": "Shield of Vengeance",
+      "casts": [
+        "403876",
+        "408385"
+      ],
+      "apps": 654,
+      "withPress": 653
+    },
+    "196440": {
+      "name": "Purification",
+      "casts": [
+        "527"
+      ],
+      "apps": 50,
+      "withPress": 50
+    },
+    "367364": {
+      "name": "Reversion",
+      "casts": [
+        "1256581"
+      ],
+      "apps": 109,
+      "withPress": 94,
+      "withPressOrItself": 109,
+      "noCarrierLogged": 2,
+      "castAsItself": true
+    },
+    "385787": {
+      "name": "Matted Fur",
+      "casts": [
+        "22812",
+        "61336"
+      ],
+      "apps": 620,
+      "withPress": 611
+    },
+    "406139": {
+      "name": "Chi Cocoon",
+      "casts": [
+        "322118"
+      ],
+      "apps": 23,
+      "withPress": 23
+    },
+    "406220": {
+      "name": "Chi Cocoon",
+      "casts": [
+        "325197"
+      ],
+      "apps": 183,
+      "withPress": 182
+    },
+    "427901": {
+      "name": "Deflecting Dance",
+      "casts": [
+        "185123",
+        "210152",
+        "337819",
+        "188499",
+        "444686",
+        "228537"
+      ],
+      "apps": 31,
+      "withPress": 31
+    },
+    "442749": {
+      "name": "Niuzao's Protection",
+      "casts": [
+        "115203"
+      ],
+      "apps": 25,
+      "withPress": 25
+    },
+    "461867": {
+      "name": "Sacrosanct Crusade",
+      "casts": [
+        "255937",
+        "454351",
+        "427453",
+        "431398",
+        "408385"
+      ],
+      "apps": 324,
+      "withPress": 324,
+      "noCarrierLogged": 1,
+      "castAsItself": true
+    },
+    "1239002": {
+      "name": "Lesser Bulwark",
+      "casts": [
+        "415388",
+        "20473",
+        "1279187"
+      ],
+      "apps": 354,
+      "withPress": 354,
+      "noCarrierLogged": 6
+    },
+    "1241717": {
+      "name": "Seraphic Barrier",
+      "casts": [
+        "156322",
+        "85673"
+      ],
+      "apps": 71,
+      "withPress": 70
+    },
+    "1246768": {
+      "name": "Power Word: Shield",
+      "casts": [
+        "33076"
+      ],
+      "apps": 1344,
+      "withPress": 1341
+    },
+    "1260681": {
+      "name": "Chi Cocoon",
+      "casts": [
+        "124682"
+      ],
+      "apps": 286,
+      "withPress": 284
+    },
+    "1266619": {
+      "name": "First In, Last Out",
+      "casts": [
+        "195072"
+      ],
+      "apps": 1332,
+      "withPress": 1331,
+      "noCarrierLogged": 204
+    }
+  }
+}

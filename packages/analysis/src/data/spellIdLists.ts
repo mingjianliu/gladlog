@@ -82,7 +82,8 @@ const spellIdLists = {
     // 一进白名单就能挖到,不用手工 override。补丁说明写的是 20%,官方表与 wowhead tooltip
     // 都是 30%(BACKLOG #24-9 的裁决就是「别照补丁说明填数」);S2 归档已观测(对局
     // 7d74b373,2026-08-13)。talentMitigationGenerated.json 同样挖到 30%(via "self s3
-    // (aura 87) = -30"),但那张表目前零消费者,产品用的减伤算术只读 MITIGATION_TABLE。
+    // (aura 87) = -30"),但那张表不进减伤算术 —— 产品的减伤算术只读 MITIGATION_TABLE
+    // (它唯一的运行时读者是 2026-10-11 起 `selfDefensiveMechanism` 的标签,只读一行)。
     "473909",
     "108416", // Dark Pact (Warlock)
   ],
@@ -155,3 +156,402 @@ const spellIdLists = {
   ],
 };
 export default spellIdLists;
+
+// —— Enemy-side saves (triage 2026-09-29, enemy-def F-E7 / F-E4 / F-E9) ————————
+// The three sets below are read ONLY by `utils/enemyDefensives.ts`: the
+// `[ENEMY DEF]` line and the KILL ATTEMPTS failure attribution. They are kept
+// out of the lists above on purpose. `bigDefensiveSpellIds` members are "a wall
+// this player could have pressed" (cd-hoarded, and dispelAnalysis.getPriority
+// treats each as a Critical purge target); `externalDefensiveSpellIds` members
+// become "an ally could have thrown you this" missed-option lines and are
+// pinned to deathOutcomeAnalysis's roster. An id here states one thing: when an
+// ENEMY presses it, that is a save the timeline shows and KILL ATTEMPTS may
+// name. It can never produce a "you did not press X" accusation.
+//
+// Every id is the SPELL_CAST_SUCCESS id the game logs. Counts are from the
+// 605-file S2 every-30 capture (eval-private runs/triage-2026-09-29/fix-KA/
+// idscan.out + idscan2.out, 2026-10-01); same-named ids with zero casts there
+// are not listed.
+
+/** F-E7 (user ruling A11, 2026-09-30: "全部出行,并作为 KA 失败原因"): an
+ * enemy's own absorb / heal / avoidance saves that carry no percentage
+ * mitigation and sit in neither major list. All are cast with a nil dest.
+ * What each one's `[ENEMY DEF]` line says it does is
+ * `utils/selfDefensiveMechanism.ts` (user ruling 2026-10-11). */
+export const ENEMY_SELF_SAVE_ONLY_IDS: ReadonlySet<string> = new Set([
+  // Anti-Magic Shell, the self-only id (ruling A7-补, 2026-09-30: no
+  // MITIGATION_TABLE row — its KILL ATTEMPTS credit is gated on the DB2
+  // absorb school mask, `gatedSaveSchoolMask`; the line always renders).
+  "48707", // 141 casts, all nil-dest, aura on the caster
+  "48743", // Death Pact — 196 casts
+  "49039", // Lichborne — 231
+  "108416", // Dark Pact — 1,063
+  "5277", // Evasion — 484
+  "6262", // Healthstone — 178
+  "452930", // Demonic Healthstone — 425
+  "212295", // Nether Ward — 534
+  "11426", // Ice Barrier — 722
+  "342245", // Alter Time (the press; 342247 is the return) — 804
+  "185311", // Crimson Vial — 1,060
+  "109304", // Exhilaration — 597
+  "22842", // Frenzied Regeneration — 346
+  "58875", // Spirit Walk — 202
+  // Ultimate Penitence (F10, 2026-10-11): the Discipline Priest's own absorb
+  // shield for the channel — the caster's 421453 aura, `NO_MITIGATION_IDS`'
+  // "pure absorb (aura69)" row — in neither major list, so an enemy's press
+  // had no line: 3df6ccf8 round 4, SUCCESS at 1:10.065 with the APPLIED
+  // carrying a 596,132 shield, after two kicked attempts the timeline did
+  // show. 605-file capture (3,520 contexts): 324 friendly press lines, 0
+  // `[ENEMY DEF]`. The cast's dest is the channel's target (an enemy of the
+  // priest); the shield is always the caster's, so `selfSaveCasts` takes it
+  // whatever the dest. A friendly priest's ledger row is the Priest roster's
+  // (`extractMajorCooldowns` adds it there), not the press-only path's.
+  "421453",
+]);
+
+/** What a hand-labelled self defensive does
+ * (`ENEMY_SELF_DEFENSIVE_HAND_MECHANISMS`). */
+export type EnemySelfDefensiveHandMechanism =
+  "dodge" | "spell reflect" | "rewind";
+
+/**
+ * The self defensives whose `[ENEMY DEF]` label the official ability profile
+ * cannot give (user ruling 2026-10-11: a label states what the spell DOES —
+ * `utils/selfDefensiveMechanism.ts` derives it from `abilityProfile`, the
+ * mitigation tables and the mechanic immunities; these three have no such
+ * dimension there). Cast id → the mechanism. DB2 `SpellEffect`, build
+ * 12.1.5.69594 (the same rows on 12.1.0.69587); every id is in
+ * `observedSpellIdsGenerated.json`.
+ *
+ *  - Evasion 5277 — row 1892: Effect 6 (APPLY_AURA), aura 49
+ *    (MOD_DODGE_PERCENT), 200 points on the caster (the tooltip prints
+ *    `$s1/2` = 100 %); its two aura-87 rows carry 0 points (`NO_MITIGATION_IDS`).
+ *    Raw logs 2c6e85ec + 141470d0, 5 Evasion auras: 25 SWING_MISSED DODGE,
+ *    12 SPELL_MISSED DODGE and 1 RANGE_MISSED DODGE on the rogue while up.
+ *  - Nether Ward 212295 — row 314734: Effect 6, aura 28 (REFLECT_SPELLS),
+ *    100 points on the caster; its only effect row. Raw log 06bb9860, 27
+ *    Nether Ward auras: 88 SPELL_MISSED REFLECT on the warlock while up.
+ *  - Alter Time 342245 (the press) — rows 843168 / 843169 / 843170: Effect 28
+ *    (the image, creature 58542), Effect 64 triggering 342246, a dummy;
+ *    342246 row 843171 is aura 332 (the button becomes 342247, the return);
+ *    the health comes back as a heal on the caster at the return — 1219545
+ *    row 1205358, Effect 10 (HEAL), named "Alter Time" in the log. Official
+ *    description: position and health go back to what they were at the
+ *    press when it is pressed again or runs out. Raw log 141470d0: pressed
+ *    00:56:55.080 at 364,001 HP; 342247 at 00:57:03.226, a 211,459 heal of
+ *    1219545 on the row before it (00:57:03.225, HP 262,188 after it).
+ *
+ * Registered in `curatedIdRegistry`; `test/selfDefensiveMechanism.test.ts`
+ * holds that none of them is an id the official path already classifies.
+ */
+export const ENEMY_SELF_DEFENSIVE_HAND_MECHANISMS: Readonly<
+  Record<string, EnemySelfDefensiveHandMechanism>
+> = {
+  "5277": "dodge",
+  "212295": "spell reflect",
+  "342245": "rewind",
+};
+
+/**
+ * Presses whose official mechanic immunity the log does not bear out, so the
+ * `[ENEMY DEF]` label says only that the controls were removed (user ruling
+ * 2026-10-27, "只写清除"). Master's Call — cast 272682 / 1241871, the pet's
+ * effect auras 54216 / 62305 / 1224810: DB2 aura 77 on root (7) and snare
+ * (11) for 4 s, and the description "cause them to be immune to all such
+ * effects for $d". On the 605 manifest, root / snare controls landing on a
+ * unit inside one of those auras: 571 logged IMMUNE and 545 put their aura
+ * on, almost every spell on one side only (Chains of Ice 45524, Earthgrab,
+ * Master of the Glaive, Ring of Frost always IMMUNE; Consecration 204242
+ * ×264, Earthbind ×64, Crippling Poison 3409 ×31 always on — and neither
+ * SpellCategories.Mechanic nor EffectMechanic tells the two sides apart).
+ * The removal at the press is in the log (an Ice Nova and a Judgment of
+ * Justice REMOVED in the press's ms, b14ac981 22:05:54.660). Whether an
+ * aura that went on still slowed the unit the log cannot show. FLAG: a
+ * movement-speed measurement could settle it. Registered in
+ * `curatedIdRegistry`.
+ */
+export const MECHANIC_IMMUNITY_REMOVAL_ONLY_IDS: ReadonlySet<string> = new Set([
+  "272682",
+  "1241871",
+]);
+
+/** F-E4, the ally-castable half of F-E7 and crisis-external F-A7: an instant
+ * heal or an absorb thrown on an ally (rendered as an external, `X → unit`) or
+ * on the caster itself (its own press, labelled by what it does —
+ * `selfDefensiveMechanism`). Lay on Hands' signed tier lives in
+ * `healingVerdicts.ts` (471195, burst-answer, 2026-09-26); the friendly side
+ * already reads it from classSpells — nothing here feeds that. */
+export const ENEMY_ALLY_SAVE_IDS: ReadonlySet<string> = new Set([
+  // Anti-Magic Shell, the 12.x id that goes on self or an ally (rulings A7 +
+  // A7-补). A7 words it "410358 仍留 EXTERNAL_DEF_IDS"; the id was never in
+  // that roster (`externalDefensiveSpellIds` is the FRIENDLY one — a member
+  // there is a cooldown the ledger tracks and cd-hoarded / external-unused
+  // can charge), so it is an external HERE: `isExternalSaveId` reads this set
+  // for the `[ENEMY DEF]` external line, the aura-only fallback and KILL
+  // ATTEMPTS, and no friendly accusation is added. The ally's 410358 aura
+  // times the external; KILL ATTEMPTS credit is school-gated like 48707's.
+  "410358", // 742 casts (541 self, 201 ally)
+  // Blessing of Sacrifice as cast under the Holy PvP talent Ultimate Sacrifice
+  // (crisis-external F-A9): 56 casts in 20 files, all by Holy Paladins, all on
+  // an ally; aura 199448 on the recipient, 6 s. Enemy side only. It is NOT in
+  // `externalDefensiveSpellIds` next to 6940: a second roster row for the same
+  // button printed the friendly "had Blessing of Sacrifice available" line
+  // twice (e5b3534b 2:00, a Holy Paladin who casts 6940) — how the friendly
+  // side should know the two ids are one button is an open ruling.
+  "199448",
+  "471195", // Lay on Hands, live 12.x id — 528 casts (135 self, 393 ally)
+  "633", // Lay on Hands, pre-12.x id still logged — 17 (3 self, 14 ally)
+  // Gift of the Naaru: one racial, one cast id per class. These five are the
+  // ids cast in the capture; 59543 / 59548 / 121093 / 370626 / 416250 have 0.
+  "59542", // 11 (7 self, 4 ally)
+  "59544", // 5 (3 self, 2 ally)
+  "59547", // 5 (3 self, 2 ally)
+  "28880", // 2 (1 self, 1 ally)
+  "59545", // 2 (1 self, 1 ally)
+]);
+
+/** F-E9 (user rulings A20 + U3, 2026-09-30): grips and redirects render and
+ * count in KILL ATTEMPTS, and go ONLY here — "拉人/替伤只进击杀判定专用表,
+ * 不进 externalDefensiveSpellIds,不产生「没交」指控". On an ally they render
+ * `X → unit` with no duration and no "removed early" (a 1 s Leap of Faith
+ * aura is the pull, not a buff that was cut short); Roar of Sacrifice and
+ * Master's Call cast on oneself render as the caster's own press, labelled
+ * by what they do (`selfDefensiveMechanism`). The set is
+ * side-agnostic: enemy kill attempts on our team credit our grips too. */
+export const ENEMY_REDIRECT_SAVE_IDS: ReadonlySet<string> = new Set([
+  "73325", // Leap of Faith — 648 casts, all on an ally
+  "53480", // Roar of Sacrifice — 350 (235 self, 115 ally)
+  "272682", // Master's Call — 435 (395 self, 40 ally)
+  "1241871", // Master's Call, the second player-cast id — 169 (153 self, 16 ally); 53271 / 54216 / 62305 are the pet's effect ids, not presses
+  "3411", // Intervene — 596, all on an ally (147833 / 316531 are the same press logged again as its buff and charge)
+]);
+
+/** The three sets above as one: the saves that had a line only when an ENEMY
+ * pressed them. FT board item 1 (user ruling 2026-10-09): the owner's and a
+ * teammate's own press of the same spell is the same fact, so the cooldown
+ * ledger admits a member a player CAST and no roster path listed
+ * (`extractMajorCooldowns`, `SpellTag.Utility` — a press line, a kit row and
+ * a [RES] entry; under the contract above it still "can never produce a 'you
+ * did not press X' accusation"). 605 new-season files before that: 1,743 of
+ * the owners' 2,283 presses of these spells had no line (Crimson Vial 543,
+ * Master's Call 315, Intervene 277, Nether Ward 208, Demonic Healthstone
+ * 200, Frenzied Regeneration 114, Healthstone 55, Leap of Faith 29). */
+export const ENEMY_ONLY_SAVE_IDS: ReadonlySet<string> = new Set([
+  ...ENEMY_SELF_SAVE_ONLY_IDS,
+  ...ENEMY_ALLY_SAVE_IDS,
+  ...ENEMY_REDIRECT_SAVE_IDS,
+]);
+
+// —— Enemy immunity-kind saves (enemy-def F-E5 / F-E6; user ruling A25,
+// 2026-09-30, re-opened by ruling D8, 2026-10-10: "split by effect") ————————
+// Same reader as the sets above (`utils/enemyDefensives.ts` only). These are
+// NOT `MITIGATION_TABLE` rows: that table prices friendly mitigation
+// arithmetic and feeds `IMMUNITY_IDS`, which other predicates read as "a
+// pct-100 aura" (kick-eaten's low-HP facts). Here an id only says: the
+// `[ENEMY DEF]` line prints it as `immune`, and a kill attempt that ran into
+// it reads "forced a full immunity".
+//
+// A25 put eight abilities here ("遁地、时间停止、群体隐形、假死、消失、装死、
+// 灼烧、自然守护都当免疫"). D8 takes four of them out again — the ones whose
+// carrier goes on being hit: Feign Death is an absorb shield, Nature's
+// Guardian a heal, Cheat Death and Cauterize a refused killing blow
+// (`ENEMY_PROC_SAVES` below; Feign Death's aura is read from the ledger's own
+// table, `enemyDefensives.FEIGN_DEATH_ABSORB_AURA_IDS`). What stays is a unit
+// that cannot be hit: DB2's all-school immunity (Time Stop, Guardian of the
+// Forgotten Queen) and the three auras rulings U-KA3 / U-KA3b signed (Burrow,
+// Vanish, Mass Invisibility).
+
+/** Keyed by the LOGGED AURA id (Vanish casts 1856 and logs the aura 11327) →
+ * the ability name the line prints. Applications in the 605-file capture. */
+export const ENEMY_IMMUNITY_SAVE_AURAS: Readonly<Record<string, string>> = {
+  "409293": "Burrow", // 90, all self
+  "378441": "Time Stop", // 35 (31 self, 4 on an ally)
+  "414664": "Mass Invisibility", // 465 casts; the aura lands on the mage and on allies
+  "11327": "Vanish", // 1,084, one per 1856 cast
+  "228050": "Guardian of the Forgotten Queen", // 2 — applied by the summoned guardian, see the cast map below
+  // fact2 (user ruling 5, 2026-10-20: 「算免疫形态」): the PRESSED Spirit of
+  // Redemption (Spirit of the Redeemer, PvP) — the unit cannot be hit while
+  // the form lasts (the F17 span cut's own reading: 81 logs, 300 pressed
+  // forms, no damage row later than 1.47 s after the aura went up;
+  // 17b44099 0:33: 26 hits IMMUNE in the form). The on-death form 27827 is
+  // no press and stays out.
+  "215769": "Spirit of Redemption",
+  // fact6 D17 (F20 ruling 3, 2026-10-28): Peaceweaver, the Mistweaver
+  // talent's 2 s proc of Revival / Restoral on every healed ally. DB2: aura
+  // 39 mask 126 (every school but physical — `immunitySchoolMask`), so it is
+  // school-limited: `limitedImmunitySchoolMask` reads the DB2 mask for it and
+  // the line prints `immune to magic`. Corpus, the fact6 15 rounds: 90
+  // non-periodic IMMUNE misses under it, all magic; 17 physical / 1 magic
+  // direct hit landed ≥ 1 s in. Its source is the monk, never the carrier
+  // (`ENEMY_IMMUNITY_TEAM_PROC_AURAS`).
+  "353319": "Peaceweaver",
+};
+
+/** fact6 D17 (F20): the `ENEMY_IMMUNITY_SAVE_AURAS` a teammate's PROC puts on
+ * each carrier — no press of the carrier's own, no cast aimed at it (the
+ * external path pairs a cast with its recipient's aura and sees none). The
+ * `[ENEMY DEF]` aura loop takes such an aura on every carrier whose source is
+ * on the carrier's team, and its press is the source's trigger cast
+ * (`TALENT_BEHAVIORS`' `triggerSpellIds`: Revival 115310 / Restoral 388615).
+ * 4caab013 1:38 and 114a4df7-r0 1:12: Peaceweaver on three enemies, no
+ * `[ENEMY DEF]` line. */
+export const ENEMY_IMMUNITY_TEAM_PROC_AURAS: ReadonlySet<string> = new Set([
+  "353319", // Peaceweaver
+]);
+
+/** What a proc save does, as its `[ENEMY DEF]` line says it. */
+export type EnemyProcSaveEffect = "heal proc" | "cheat-death proc";
+
+/**
+ * An enemy's save that is a PROC — nothing was pressed, and the unit can be
+ * hit before, during and after it (user ruling D8, 2026-10-10: "自然守护 /
+ * 灼烧 / 装死印它们的触发类型;KILL ATTEMPTS 不再对这四个写 forced a full
+ * immunity"). Keyed by the LOGGED id — the talents' own ids (30884 Nature's
+ * Guardian, 31230 Cheat Death, 86949 Cauterize) are never logged; `via` says
+ * whether that id is the proc's aura on the unit or its heal of itself.
+ *
+ * Three-way evidence (Game-Behaviour rule), build 12.1.5.69594:
+ *  - DB2 (`talentEffectInventoryGenerated.json`): 31616 = effect 136, a heal
+ *    of 40 % of max health, no aura; the talents 31230 and 86949 = aura 316
+ *    on every school (mask 127) — a hit that would kill is absorbed instead
+ *    (`guardianSpiritSaveOf` documents the same aura type) — and no school
+ *    immunity (aura 39) on any of the five ids.
+ *    `test/enemyDefensives.test.ts` re-reads these rows.
+ *  - corpus, the 605 new-season files (fix-FT/t07-enemydef-vs-raw-605.txt):
+ *    enemy players' direct (non-periodic) damage on the carrier inside the
+ *    span the line used to print as `immune` — Nature's Guardian 164 of 174
+ *    (within 2 s of the heal), Cauterize 31 of 34, Cheat Death 7 of 10; an
+ *    IMMUNE miss in 3, 4 and 1 of them. The controls: Divine Shield 0 of 209
+ *    hit, 193 with an IMMUNE miss; Ice Block 0 of 113, 102.
+ * The same classification as the owner-side `CRISIS_PROC_ANSWERS`
+ * (crisisDecisionPoints.ts: `proc` via heal, `cheatDeath` via aura); a unit
+ * test holds the two together.
+ */
+export const ENEMY_PROC_SAVES: Readonly<
+  Record<
+    string,
+    { name: string; effect: EnemyProcSaveEffect; via: "aura" | "heal" }
+  >
+> = {
+  "31616": { name: "Nature's Guardian", effect: "heal proc", via: "heal" }, // 306 heals in 107 files, no cast, no aura
+  "45182": { name: "Cheat Death", effect: "cheat-death proc", via: "aura" }, // 10 ("Cheating Death")
+  "87023": { name: "Cauterize", effect: "cheat-death proc", via: "aura" }, // 77
+  // fact4 D61 (2026-10-22): Cauterize's own heal — the burn aura 87023 is
+  // not always written (bb7e1d9f r0 0:58.745: heal 1286444 + Cauterized
+  // 87024 + an absorb under 86949, no 87023). 605 files every 3rd, per unit
+  // and 2 s: 1,011 procs with the heal, 211 of them without 87023; 87023
+  // never without the heal but 31 times. One proc is one event
+  // (the heal folds into an 87023 aura of the same instant).
+  "1286444": { name: "Cauterize", effect: "cheat-death proc", via: "heal" },
+};
+
+/**
+ * The `ENEMY_IMMUNITY_SAVE_AURAS` whose immunity holds for as long as the
+ * aura is up, by user ruling U-KA3 (2026-10-06): "遁地 / 消失算免疫;但期间
+ * 残留的 DoT 仍可命中 —— 免疫只挡直接伤害,判定「有伤害打进来」时排除持续
+ * 伤害跳", and U-KA3b the same day: "群体隐形和消失一样算免疫:允许残留持续
+ * 伤害与开启头 1 s 的伤害". KILL ATTEMPTS may count one of these when it was
+ * already up as the attempt began (`immunityLastsItsAura`), as it does a
+ * pct-100 table row.
+ *
+ * The 2026-10-02 count that kept them out ("Burrow 80 of 89 auras with damage
+ * landing, Vanish 264 of 533") did not tell a DoT tick from a hit, and paired
+ * 71 Vanish applications whose REMOVED the log lost with a later removal.
+ * Re-measured on the same 605 S2 files (`fix-FU/immSplitRaw.py`; hostile
+ * damage on the carrier from 0.3 s after the aura went up to 0.1 s before it
+ * dropped):
+ *
+ *   Burrow   89 auras: 78 with a periodic tick, 16 with any other damage row
+ *            (60 rows — Caustic Spatter, Nimble Flurry, Frost Splinter,
+ *            Starfall: splash, procs and area damage), 8 past the first second
+ *   Vanish  462 auras of ≤ 3.5 s: 205 with a periodic tick, 123 with any other
+ *            damage row (273 rows, every one in the first 1.5 s — Consecration,
+ *            Frost / Arcane Splinter, Sun's Avatar, Bladestorm, Frozen Orb,
+ *            Death and Decay: area damage and embedded splinters), 42 past the
+ *            first second
+ *   Mass Invisibility  593 auras of ≤ 6.5 s (median 0.6 s; on the mage and on
+ *            allies): 99 with a periodic tick, 47 with any other damage row
+ *            (60 rows — Ruptured Viscera, Consecration, Fists of Fury), none
+ *            past the first second
+ *
+ * What lands is what is already on the unit or covers the ground it stands
+ * on; nothing aimed at it does. The evidence standard of the two rulings: a
+ * periodic tick, and damage inside the first second after the aura went up
+ * (already in flight), do not deny the immunity.
+ *
+ * Mass Invisibility was first kept out on other evidence — applied to it,
+ * the 2026-10-01 first cut called 250 opening Mass Invisibilities "forced a
+ * full immunity" on a target a stun had just landed on (`fix-KA/immcheck.py`)
+ * — and U-KA3b rules it in with that known. The rest of ruling A25's list
+ * was hit through — Cauterize (62 of 72 auras take other-than-periodic
+ * damage, melee swings first, 47 past the first second), Cheat Death (7 of
+ * 10) and Feign Death's Survival Tactics (1,135 of 1,474) — and is no
+ * immunity at all since ruling D8 (`ENEMY_PROC_SAVES`). Time Stop and
+ * Guardian of the Forgotten Queen need no row: DB2 gives their auras an
+ * all-school immunity.
+ */
+export const ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS: ReadonlySet<string> = new Set([
+  "409293", // Burrow
+  "11327", // Vanish
+  "414664", // Mass Invisibility (U-KA3b)
+]);
+
+/**
+ * The enemy WALL auras whose carrier goes unseen — the wall-side half of
+ * "the log never shows this aura end" (`enemyDefensives.SAVE_AURA_END_UNSEEN_IDS`;
+ * the immunity-kind half is `ENEMY_IMMUNITY_HOLDS_ITS_AURA_IDS`). One entry:
+ * Greater Invisibility's logged aura 110960 (cast 110959, the 60 % row of
+ * `MITIGATION_TABLE`). User ruling D6 (2026-10-10): "the existing ruling
+ * P-FU-b8 ('only an aura the log saw end counts') is extended to Greater
+ * Invisibility".
+ *
+ * Corpus, the 605 new-season raw files, split by whether the carrier is the
+ * recorder's ally or opponent (fix-FT/t07-stealth-lifetimes-605.txt):
+ *
+ *                              on an ally                  on an opponent
+ *   Greater Invisibility   375, 373 with a REMOVED;    339, 329 with NO REMOVED
+ *     110960 (20 s)        median 0.74 s, p90 9.0 s,
+ *                          3 ran the full 20 s
+ *   Mass Invisibility      244, all with a REMOVED;    200, 197 with none
+ *     414664 (12 s)        median 0.72 s
+ *   Vanish 11327 (1.5 s)   518, 514 with a REMOVED     566, 547 with none
+ *
+ * An opponent who goes invisible takes the aura's REMOVED line out of the
+ * recorder's log with them; the interval builder then closes it at the
+ * official 20 s, an order of magnitude past what the allied side shows.
+ * DB2 has no row to read this from (110960 carries invisibility auras only,
+ * and the generated effect tables hold no stealth flag), so it is a signed
+ * list — registered in `curatedIdRegistry`. Keyed by the LOGGED AURA id → the
+ * name its `[ENEMY DEF]` line prints (a test holds it to the spell data).
+ */
+export const ENEMY_STEALTH_WALL_AURAS: Readonly<Record<string, string>> = {
+  "110960": "Greater Invisibility",
+};
+
+/** A cast that puts an immunity aura on ANOTHER unit (cast id → aura id).
+ * Guardian of the Forgotten Queen: the paladin casts 228049 on an ally and
+ * the summoned guardian applies 228050, so the aura's source is never the
+ * paladin. Time Stop is cast on an ally in 4 of 35 casts. */
+export const ENEMY_IMMUNITY_EXTERNAL_CASTS: Readonly<Record<string, string>> = {
+  "228049": "228050",
+  "378441": "378441",
+};
+
+/** Enemy-def F-E1b + crisis-external F-A1b (user ruling A15, 2026-09-30:
+ * "只写「X 在 m:ss 放了」"): an area save whose press has no dest and whose
+ * aura cannot be tied to a recipient — Anti-Magic Zone's 145629 has a nil
+ * source, Darkness's 209426 is never APPLIED (only SPELL_ABSORBED), Rallying
+ * Cry's 97463 lands on the whole team. The `[ENEMY DEF]` line is anchored on
+ * the cast and says `(area)`: who pressed it and when — no %, no recipients,
+ * no duration. All are members of `externalDefensiveSpellIds`; every cast in
+ * the 605-file capture has a nil dest (168 / 145 / 356 / 158 / 1).
+ * User ruling P-E1b2 (2026-10-01, "照 A15"): Spirit Link Totem and Power
+ * Word: Barrier have the same shape — a nil-dest cast, and an aura (325174 /
+ * 81782) applied by the totem / the barrier, never by the caster. */
+export const ENEMY_AREA_SAVE_IDS: ReadonlySet<string> = new Set([
+  "51052", // Anti-Magic Zone
+  "196718", // Darkness
+  "97462", // Rallying Cry
+  "98008", // Spirit Link Totem — 158 casts / 76 files
+  "62618", // Power Word: Barrier — 1 cast / 1 file
+]);

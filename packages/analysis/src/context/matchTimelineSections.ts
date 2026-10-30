@@ -1,27 +1,36 @@
 import { ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
 import { CD_WASTE_PRESSURE_HP_PCT } from "../analysis/candidateFindings";
-import { isDmgSpikeTrough } from "../analysis/crisisDecisionPoints";
+import { saveCoversPressureOn } from "../analysis/candidates/cooldownTiming";
+import { BACKLASH_AURA_CC_TYPE } from "../data/backlashCc";
 import { getEnglishSpellName } from "../data/spellEffectData";
 import {
+  breakableCcBeforeDeath,
+  DEATH_BREAKABLE_CC_LOOKBACK_S,
+  deathCutCcBeforeDeath,
   IPlayerCCTrinketSummary,
   pvpTrinketRemainingSecondsAt,
+  renderedCcDuration,
+  rendersCcOnTeamLine,
 } from "../utils/ccTrinketAnalysis";
 import {
-  canHelpAnotherUnit,
+  cdCanHelpAnotherUnit,
+  cdHelpsRecipient,
   cdIsProcOnly,
   cdNeverSpent,
   cdReadyInTimeAt,
   DEFENSIVE_TAGS,
-  forbearanceBlocks,
   getUnitHpAtTimestamp,
-  gridHpMinInWindow,
+  gridEndpointHpPct,
   HP_SAMPLE_RADIUS_MS,
+  hpTroughInWindow,
   IDamageBucket,
   IMajorCooldownInfo,
   isHealerSpec,
-  SELF_CAST_NOOP_EXTERNAL_IDS,
-  selfForbearanceActiveAt,
+  isHpTroughWorthPrinting,
+  isSpikeHealedThrough,
+  lockoutDebuffStopsPressAtDeath,
+  PRESSURE_WINDOWS_TOP_N,
   specToBenchmarkKey,
   specToString,
   usableWhileStunned,
@@ -33,15 +42,33 @@ import {
   IMitigationAuditRow,
 } from "../utils/counterfactual";
 import {
+  enemyTargetReaches,
+  lockoutWindowCcSpellIds,
   wasLockedOutByStunOnly,
   wasLockedOutThroughWindow,
 } from "../utils/deathOutcomeAnalysis";
-import { sumAbsorbedPressure } from "../utils/incomingPressure";
+import {
+  HEAL_ABSORB_SELF_SAVE_IDS,
+  healAbsorbDeathLine,
+  healAbsorbUseOf,
+  healerCreditOf,
+} from "../utils/healAbsorbSave";
+import {
+  documentRecordsAttackSpell,
+  sumAbsorbedPressure,
+} from "../utils/incomingPressure";
+import { executeKillingBlowOf } from "../utils/killingBlow";
 import { getHpPercentAtTime } from "../utils/killWindowTargetSelection";
-import { fmtTime, toRenderSecond } from "../utils/renderGrid";
+import {
+  fmtTime,
+  renderedWindowSeconds,
+  toRenderSecond,
+} from "../utils/renderGrid";
 import { type ManaFallback, manaReadingAt } from "../utils/resourceAt";
+import type { RosterSides } from "../utils/rosterSide";
 import { benchmarks } from "../utils/specBaselines";
 import {
+  damageEventLabel,
   DMG_SPIKE_THRESHOLD,
   getTopDamageSourcesInWindow,
 } from "./timelineHelpers";
@@ -185,10 +212,28 @@ function extractPlayerDotIntervals(
   return intervals;
 }
 
+/** [ROT PRESSURE]'s four numbers — the predicate below and the legend that
+ * defines the line read the same constants (FT-T15 M5). */
+export const ROT_PRESSURE_HP_PCT = 40;
+export const ROT_PRESSURE_MIN_DOTS = 3;
+export const ROT_PRESSURE_MIN_SECONDS = 4;
+export const ROT_PRESSURE_MIN_PERIODIC_SHARE = 0.5;
+
+/** FT-T15 M5: the family had no definition anywhere in the prompt (1,155
+ * lines on the 605 capture, 0 legends). Printed by formatTimeline only when
+ * a line of the family rendered. States what `emitRotPressureEntries`
+ * computes, nothing more. */
+export const ROT_PRESSURE_LEGEND: readonly string[] = [
+  `  [ROT PRESSURE] = a player of either team spent ${ROT_PRESSURE_MIN_SECONDS} whole seconds in a row under ${ROT_PRESSURE_HP_PCT}% HP with ${ROT_PRESSURE_MIN_DOTS} or more tracked`,
+  `    damage-over-time debuffs on them, and at least ${Math.round(ROT_PRESSURE_MIN_PERIODIC_SHARE * 100)}% of the damage they took in those ${ROT_PRESSURE_MIN_SECONDS} s was periodic. Printed once per`,
+  "    such stretch, at the second it is reached, with the HP and the DoT count of that second.",
+];
+
 /**
  * Rot Pressure Detection (F147). Emits a [ROT PRESSURE] entry for each player that
- * sustains ≥4 consecutive seconds below 40% HP with ≥3 active DoTs, where the recent
- * damage was majority periodic. Pushes entries via the `addEntry` callback.
+ * sustains ≥ROT_PRESSURE_MIN_SECONDS consecutive seconds below ROT_PRESSURE_HP_PCT% HP
+ * with ≥ROT_PRESSURE_MIN_DOTS active DoTs, where the recent damage was majority
+ * periodic. Pushes entries via the `addEntry` callback.
  */
 export function emitRotPressureEntries(params: {
   allPlayers: ICombatUnit[];
@@ -196,6 +241,12 @@ export function emitRotPressureEntries(params: {
   matchEndMs: number;
   matchDurationS: number;
   pid: (name: string) => string;
+  /** FT-T15 ⑤a: the timeline's roster label for a player of EITHER side
+   * (`allPlayers` holds both teams, and `pid` knows the friendly roster
+   * only — an enemy printed as its bare character name, realm cut off:
+   * 660 of 1,155 lines on the 605 capture). Resolved by the unit, not its
+   * name. Absent ⇒ `pid(name)` as before, for callers without a roster. */
+  labelOf?: (player: ICombatUnit) => string;
   addEntry: (timeSeconds: number, ...lines: string[]) => void;
 }): void {
   const {
@@ -204,6 +255,7 @@ export function emitRotPressureEntries(params: {
     matchEndMs,
     matchDurationS,
     pid,
+    labelOf,
     addEntry,
   } = params;
 
@@ -238,10 +290,17 @@ export function emitRotPressureEntries(params: {
 
       const hp = getUnitHpAtTimestamp(player, tsMs, HP_SAMPLE_RADIUS_MS);
 
-      if (hp !== null && hp < 40 && dotCount >= 3) {
+      if (
+        hp !== null &&
+        hp < ROT_PRESSURE_HP_PCT &&
+        dotCount >= ROT_PRESSURE_MIN_DOTS
+      ) {
         consecutiveRotSeconds++;
-        if (consecutiveRotSeconds >= 4 && !emittedForThisBlock) {
-          const windowStartMs = tsMs - 4000;
+        if (
+          consecutiveRotSeconds >= ROT_PRESSURE_MIN_SECONDS &&
+          !emittedForThisBlock
+        ) {
+          const windowStartMs = tsMs - ROT_PRESSURE_MIN_SECONDS * 1000;
           const windowEndMs = tsMs;
 
           let periodicDmg = 0;
@@ -263,10 +322,13 @@ export function emitRotPressureEntries(params: {
             }
           }
 
-          if (totalDmg === 0 || periodicDmg / totalDmg >= 0.5) {
+          if (
+            totalDmg === 0 ||
+            periodicDmg / totalDmg >= ROT_PRESSURE_MIN_PERIODIC_SHARE
+          ) {
             addEntry(
               t,
-              `${fmtTime(t)}  [ROT PRESSURE]   ${pid(player.name)} (${specToString(player.spec)}) at ${Math.round(hp)}% HP with ${dotCount} active DoTs`,
+              `${fmtTime(t)}  [ROT PRESSURE]   ${labelOf ? labelOf(player) : pid(player.name)} (${specToString(player.spec)}) at ${Math.round(hp)}% HP with ${dotCount} active DoTs`,
             );
             emittedForThisBlock = true;
           }
@@ -281,6 +343,85 @@ export function emitRotPressureEntries(params: {
 
 // ── [DMG SPIKE] events ──────────────────────────────────────────────────────
 
+/** A spike total as every `[DMG SPIKE]` figure prints it: `0.89M`. */
+const spikeM = (totalDamage: number): string =>
+  `${(totalDamage / 1_000_000).toFixed(2)}M`;
+
+/**
+ * D4 (user ruling 2026-10-10): the legend sentence that says the `[DMG SPIKE]`
+ * list is capped, by the ranking `selectPressureWindows` uses — the largest
+ * `PRESSURE_WINDOWS_TOP_N` totals over the whole team, a unit's own windows
+ * never overlapping, each at least `DMG_SPIKE_THRESHOLD`. The cap itself is
+ * the signed 2026-08-23 ruling and does not move; until now nothing in the
+ * prompt said it existed (88 % of 3,520 prompts print exactly five lines).
+ * A function, not a constant: both numbers are other modules' and are read
+ * when the legend is built, not while this module loads.
+ */
+export function dmgSpikeListLegend(): string {
+  return `    Only the round's ${PRESSURE_WINDOWS_TOP_N} largest windows are listed — ranked by \`N\` across your whole team, no two of one unit's overlapping — and only those of ${spikeM(DMG_SPIKE_THRESHOLD)} or more.`;
+}
+
+/**
+ * D4, second half: the one line that counts the windows the cap dropped —
+ * `Not listed this round: 8 more [DMG SPIKE] windows of 0.30M or more
+ * (largest: 0.89M on 2(HDHunter) at 1:01–1:11).` — printed under the legend
+ * sentence, and only when there is one. It opens on a word, not on the
+ * count: a legend line must never read as a timestamped entry to anything
+ * that looks at a line's first characters.
+ *
+ * `notListed` is `selectPressureWindows(...).notListed` with
+ * `notListedMinDamage = DMG_SPIKE_THRESHOLD`: the same greedy walk that
+ * picked the listed five, carried on past the cap — never a second
+ * derivation. A window that starts past the match end would not have printed
+ * even without the cap (`addEntry`, B103) and is not counted. Every figure is
+ * formatted as the `[DMG SPIKE]` lines format theirs (total, roster label,
+ * `fmtTime` bounds), and the gate reads the line back through
+ * `parseDmgSpikesNotListed`.
+ */
+export function formatDmgSpikesNotListed(params: {
+  notListed: ReadonlyArray<IDamageBucket>;
+  matchEndSeconds: number;
+  pid: (name: string) => string;
+}): string | null {
+  const dropped = params.notListed.filter(
+    (w) =>
+      w.totalDamage >= DMG_SPIKE_THRESHOLD &&
+      w.fromSeconds <= params.matchEndSeconds,
+  );
+  if (dropped.length === 0) return null;
+  // largest first already (the walk's order); do not rely on it
+  const top = dropped.reduce((a, b) => (b.totalDamage > a.totalDamage ? b : a));
+  const one = dropped.length === 1;
+  return (
+    `    Not listed this round: ${dropped.length} more [DMG SPIKE] window${one ? "" : "s"} of ${spikeM(DMG_SPIKE_THRESHOLD)} or more ` +
+    `(${one ? "" : "largest: "}${spikeM(top.totalDamage)} on ${params.pid(top.targetName)} at ${fmtTime(top.fromSeconds)}–${fmtTime(top.toSeconds)}).`
+  );
+}
+
+const DMG_SPIKES_NOT_LISTED_RE =
+  /^\s*Not listed this round: (\d+) more \[DMG SPIKE\] windows? of (\d+\.\d{2})M or more \((?:largest: )?(\d+\.\d{2})M on (\S+) at (\d+):(\d{2})–(\d+):(\d{2})\)\.$/;
+/** `formatDmgSpikesNotListed`'s line read back (amounts in M, bounds in
+ * whole seconds); null for any other line. */
+export function parseDmgSpikesNotListed(line: string): {
+  count: number;
+  thresholdM: number;
+  largestM: number;
+  unit: string;
+  fromSec: number;
+  toSec: number;
+} | null {
+  const m = line.match(DMG_SPIKES_NOT_LISTED_RE);
+  if (!m) return null;
+  return {
+    count: Number(m[1]),
+    thresholdM: Number(m[2]),
+    largestM: Number(m[3]),
+    unit: m[4]!,
+    fromSec: Number(m[5]) * 60 + Number(m[6]),
+    toSec: Number(m[7]) * 60 + Number(m[8]),
+  };
+}
+
 /**
  * Emits [DMG SPIKE] entries for each pressure window at or above DMG_SPIKE_THRESHOLD,
  * annotating HP velocity, absorbs, and top damage sources. Pushes entries via `addEntry`.
@@ -294,6 +435,8 @@ export function emitDmgSpikeEntries(params: {
   enemyIdMap?: Map<string, number>;
   /** summon GUID → owner name (`buildSummonOwnerNames`) */
   summonOwners?: ReadonlyMap<string, string>;
+  /** unit GUID → roster side (`buildRosterSides`) */
+  rosterSides?: RosterSides;
   /** unit GUID → name, to label an attacker known only by id (absorbs) */
   unitNames?: ReadonlyMap<string, string>;
   /** 与 [CC ON TEAM] 行同源的 CC 实例(analyzePlayerCCAndTrinket 产出)——
@@ -315,6 +458,7 @@ export function emitDmgSpikeEntries(params: {
     enemyIdMap,
     summonOwners,
     unitNames,
+    rosterSides,
     ccTrinketSummaries,
     ownerName,
     healerNames,
@@ -324,7 +468,11 @@ export function emitDmgSpikeEntries(params: {
   for (const pw of pressureWindows) {
     if (pw.totalDamage < DMG_SPIKE_THRESHOLD) continue;
     const dmgM = (pw.totalDamage / 1_000_000).toFixed(2);
-    const windowSec = Math.round(pw.toSeconds - pw.fromSeconds);
+    // The width of the DISPLAYED endpoints (`renderedWindowSeconds`): 10 for a
+    // full bucket, as before; fewer for one that closed at its victim's death
+    // or the round's end (T12 ① c) — `0:39–0:45 … in 6s`, not a raw 6.7
+    // rounded to 7 beside endpoints 6 apart.
+    const windowSec = renderedWindowSeconds(pw.fromSeconds, pw.toSeconds);
     // B20: Prevent Infinityk DPS on sub-second windows
     const dpsK = Math.round(pw.totalDamage / Math.max(1, windowSec) / 1000);
 
@@ -339,19 +487,25 @@ export function emitDmgSpikeEntries(params: {
     // critical windows once existed and has been deleted, see cooldowns.ts.
     const fromSec = toRenderSecond(pw.fromSeconds);
     const toSec = toRenderSecond(pw.toSeconds);
+    // Both ends are the `[STATE]` tick of their second as a number
+    // (`gridEndpointHpPct`, the burst ledger's `Target:` reading): the tick's
+    // sampler with its clamp at 100, and 0 on a second the tick prints `dead`.
+    //  - T12 ① c: a unit dead at the END second reads 0 there. The sampler
+    //    alone returned whatever advanced action sat within its radius of a
+    //    second the unit did not live to see (121-5-690: `33% -> 100% HP,
+    //    +7%/s` over a death), or nothing at all.
+    //  - 2026-10-11: the START is asked the same question. A bucket can open
+    //    in its victim's death second (no earlier hit in the 10 s before the
+    //    death opened one that covers it), and its start printed the last
+    //    pre-death sample —
+    //    `60% -> 0% HP, -60%/s` beside a tick reading `dead`. It reads
+    //    `0% -> 0% HP, 0%/s` now, with no low and no outcome word
+    //    (`isSpikeHealedThrough` needs a live end).
     const hpFrom = targetUnit
-      ? getUnitHpAtTimestamp(
-          targetUnit,
-          matchStartMs + fromSec * 1000,
-          HP_SAMPLE_RADIUS_MS,
-        )
+      ? gridEndpointHpPct(targetUnit, matchStartMs, fromSec)
       : null;
     const hpTo = targetUnit
-      ? getUnitHpAtTimestamp(
-          targetUnit,
-          matchStartMs + toSec * 1000,
-          HP_SAMPLE_RADIUS_MS,
-        )
+      ? gridEndpointHpPct(targetUnit, matchStartMs, toSec)
       : null;
     let hpStr = "";
     if (hpFrom !== null && hpTo !== null) {
@@ -365,19 +519,29 @@ export function emitDmgSpikeEntries(params: {
       //
       // …unless the endpoints hide a trough (2026-09-15 Opus baseline: 73/309
       // prompts read `81% -> 87% — healed through` over a window whose own
-      // [STATE] tick showed 37%). The minimum comes from the [STATE] tick's
-      // sampler (gridHpMinInWindow) and the "worth printing" question from
-      // isDmgSpikeTrough — the eval gate re-asks both on the rendered ticks.
+      // [STATE] tick showed 37%). "Worth printing" is isHpTroughWorthPrinting
+      // (≥ 10 points under both endpoints, ruling A′14).
+      //
+      // FT-T03 (user ruling 2026-10-10, D7): the low is a TROUGH — the true
+      // minimum of every sample inside the displayed seconds
+      // (hpTroughInWindow), printed at the second it occurred — no longer the
+      // lowest whole-second tick (141470d0: `low 33% @4:15` over a 6 % reading
+      // 0.4 s later; 0e0663e6: `82% -> 98% HP — healed through` over 65 %).
+      // The endpoints A / B stay [STATE] readings. The eval gate verifies the
+      // weaker invariant: no tick inside the window reads below the low.
       const low = targetUnit
-        ? gridHpMinInWindow(targetUnit, matchStartMs, fromSec, toSec)
+        ? hpTroughInWindow(targetUnit, matchStartMs, fromSec, toSec)
         : null;
       const trough =
-        low !== null && isDmgSpikeTrough(hpFrom, hpTo, low.pct) ? low : null;
+        low !== null && isHpTroughWorthPrinting(hpFrom, hpTo, low.pct)
+          ? low
+          : null;
       const troughTag = trough
         ? `, low ${trough.pct}% @${fmtTime(trough.atSec)}`
         : "";
-      const outcomeTag =
-        hpDelta >= 0 && trough === null ? " — healed through" : "";
+      const outcomeTag = isSpikeHealedThrough(hpFrom, hpTo, trough !== null)
+        ? " — healed through"
+        : "";
       hpStr = ` (${hpFrom}% -> ${hpTo}% HP, ${sign}${hpVelocity.toFixed(0)}%/s${troughTag}${outcomeTag})`;
     }
 
@@ -401,7 +565,7 @@ export function emitDmgSpikeEntries(params: {
     // shared incoming-pressure predicate now, same source the window itself
     // is built from.
     const totalAbsorbed = targetUnit
-      ? sumAbsorbedPressure(targetUnit, fromMs, toMs)
+      ? sumAbsorbedPressure(targetUnit, fromMs, toMs, rosterSides)
       : 0;
 
     const absorbStr =
@@ -419,6 +583,7 @@ export function emitDmgSpikeEntries(params: {
           enemyIdMap,
           summonOwners,
           unitNames,
+          rosterSides,
         )
       : [];
     const sourceStr =
@@ -444,6 +609,13 @@ export function emitDmgSpikeEntries(params: {
             cc.atSeconds + cc.durationSeconds <= pw.fromSeconds
           )
             continue;
+          // fact3 D30: a dispel-backlash silence is a [SILENCE] line, not
+          // enemy CC (the [CC ON TEAM] lines this list mirrors)
+          if (BACKLASH_AURA_CC_TYPE.get(cc.spellId) === "silence") continue;
+          // …and one of no length prints no [CC ON TEAM] line
+          // (`rendersCcOnTeamLine`; wide 234-3 1:57: a Polymorph cleansed in
+          // the ms it landed was cited with no line to match)
+          if (!rendersCcOnTeamLine(cc)) continue;
           const isTarget = summary.playerName === pw.targetName;
           const isOwner =
             ownerName !== undefined && summary.playerName === ownerName;
@@ -461,7 +633,8 @@ export function emitDmgSpikeEntries(params: {
           hits.push({
             at: cc.atSeconds,
             pri: isTarget ? 0 : isOwner || isHealerUnit ? 1 : 2,
-            txt: `${cc.spellName}\u2192${who}@${fmtTime(cc.atSeconds)} (${cc.durationSeconds.toFixed(1)}s)`,
+            // cc-dr F-DU1: whole seconds, the one CC formatter
+            txt: `${cc.spellName}\u2192${who}@${fmtTime(cc.atSeconds)} (${renderedCcDuration(cc)})`,
           });
         }
       }
@@ -561,11 +734,18 @@ export function emitManaMarkerEntries(params: {
 
 // ── [DEATH] events ──────────────────────────────────────────────────────────
 
+/** ` | dampening: N%` on a `[DEATH]` line — nothing where no value is stated
+ * (a 2v2 round that logged no stack; `getInitialDampening`, FT-T13 D11). */
 function dampeningSuffix(
-  dampeningAt: ((atSeconds: number) => number) | undefined,
+  dampeningAt:
+    | ((atSeconds: number, unit?: ICombatUnit) => number | null)
+    | undefined,
   atSeconds: number,
+  unit?: ICombatUnit,
 ): string {
-  return dampeningAt ? ` | dampening: ${dampeningAt(atSeconds)}%` : "";
+  // the dying unit's own doses (fact4 D53)
+  const pct = dampeningAt ? dampeningAt(atSeconds, unit) : null;
+  return pct === null ? "" : ` | dampening: ${pct}%`;
 }
 
 /**
@@ -607,6 +787,12 @@ export function lowPressureUnusedDefensiveNote(
       isProcOnly?: boolean;
     })[],
   minHpPct: number | null,
+  /** cast bars the owner began of a cooldown this round
+   * (`castBarsOfCooldown`): a press started and stopped — kicked — was no
+   * hold (fact2, 2026-10-20: 0d08dd90 Ultimate Penitence kicked at 1:41,
+   * the kit `[UNUSED — started 1×, never finished]`, the NOTE "correctly
+   * HELD") */
+  barsStarted?: (cd: Pick<IMajorCooldownInfo, "spellId" | "spellName">) => number,
 ): string | null {
   if (minHpPct === null || minHpPct < CD_WASTE_PRESSURE_HP_PCT) return null;
   // 这句注印的是「他没用的 **defensive** cooldowns 是正确留着的」,所以触发它的
@@ -632,7 +818,8 @@ export function lowPressureUnusedDefensiveNote(
       !cdIsProcOnly(cd) &&
       !cd.isThroughput &&
       (cd.tag === undefined || DEFENSIVE_TAGS.has(cd.tag)) &&
-      !canHelpAnotherUnit(cd.spellId, cd.tag),
+      !cdCanHelpAnotherUnit(cd) &&
+      (barsStarted?.(cd) ?? 0) === 0,
   );
   if (held.length === 0) return null;
   return `  NOTE: the log owner's lowest HP this match was ${Math.floor(minHpPct)}% — they were never under meaningful pressure themselves. Their never-used self-only defensive cooldowns (${held.map((cd) => cd.spellName).join(", ")}) were correctly HELD, not wasted.`;
@@ -661,22 +848,35 @@ export const MITIGATION_AUDIT_INDEPENDENT_NOTE =
  */
 export function formatMitigationAuditLine(row: IMitigationAuditRow): string {
   const overlap = row.activeOverlapS.toFixed(1);
+  // triage G7-P5 (other F-O5 + cc-dr F-MA1, one wording): every form says the
+  // overlap is inside the final window before the death
+  const inWindow = `in the final ${COUNTERFACTUAL_WINDOW_S}s`;
   if (row.kind === "arith") {
     const blockedK = Math.round((row.blockedAmount ?? 0) / 1000);
     const pctPart =
       row.blockedPctMaxHp !== undefined
         ? ` (≈${row.blockedPctMaxHp}% max HP)`
         : "";
-    return `Mitigation audit: ${row.spellName} blocked ~${blockedK}k${pctPart} over ${overlap}s active`;
+    return `Mitigation audit: ${row.spellName} blocked ~${blockedK}k${pctPart} over ${overlap}s active ${inWindow}`;
+  }
+  if (row.kind === "deferred") {
+    const deferredK = Math.round((row.deferredAmount ?? 0) / 1000);
+    const pctPart =
+      row.deferredPctMaxHp !== undefined
+        ? ` (≈${row.deferredPctMaxHp}% max HP)`
+        : "";
+    return `Mitigation audit: ${row.spellName} held back ~${deferredK}k${pctPart} over ${overlap}s active ${inWindow} — it lands later as the unit's own damage`;
   }
   if (row.kind === "immunity") {
     const dmgK = Math.round((row.damageTakenDuringImmunity ?? 0) / 1000);
     const outsideK = Math.round((row.damageOutsideImmunitySchool ?? 0) / 1000);
     const outsidePart =
       outsideK > 0 ? `; ~${outsideK}k of it outside the immunity's school` : "";
-    return `Mitigation audit: ${row.spellName} immunity covered ${overlap}s (still took ~${dmgK}k during it — dmg the immunity did not block${outsidePart})`;
+    return `Mitigation audit: ${row.spellName} immunity covered ${overlap}s ${inWindow} (still took ~${dmgK}k during it — dmg the immunity did not block${outsidePart})`;
   }
-  return `Mitigation audit: ${row.spellName} active ${overlap}s (mechanic — redirect/reflect, not modeled in the arithmetic)`;
+  // other F-O5: 24 of 25 such rows were shields, dodges or heals — "redirect /
+  // reflect" named one; say only what is true of all of them
+  return `Mitigation audit: ${row.spellName} active ${overlap}s ${inWindow} (not in the mitigation table — not modeled in the arithmetic)`;
 }
 
 /**
@@ -718,19 +918,26 @@ export function emitFriendlyDeathEntries<S>(params: {
     spec: string;
     cds: IMajorCooldownInfo[];
   }>;
+  /** Enemy players: a defensive pressed ON AN ENEMY (Touch of Karma) is
+   * "Unused" only with a living enemy in reach (`enemyTargetReaches`).
+   * Omitted → none in reach, so such a defensive is never listed. */
+  enemies?: readonly ICombatUnit[];
   matchStartMs: number;
   pid: (name: string) => string;
   playerIdMap?: Map<string, number>;
   enemyIdMap?: Map<string, number>;
   /** summon GUID → owner name (`buildSummonOwnerNames`) */
   summonOwners?: ReadonlyMap<string, string>;
+  /** unit GUID → roster side (`buildRosterSides`) */
+  rosterSides?: RosterSides;
   /** unit GUID → name, to label an attacker known only by id (absorbs) */
   unitNames?: ReadonlyMap<string, string>;
   /** GH #103 A1: the dampening at the death instant, same getter as the
    * `[CD] … | dampening: N%` lines. Without it the responder quoted the value
-   * of a neighbouring line ("died at 3:15 at 66%" — 66% was 3:16's). Omitted
-   * → no suffix. */
-  dampeningAt?: (atSeconds: number) => number;
+   * of a neighbouring line ("died at 3:15 at 66%" — 66% was 3:16's). Omitted,
+   * or `null` at that instant (a 2v2 round that logged no stack) → no
+   * suffix. */
+  dampeningAt?: (atSeconds: number, unit?: ICombatUnit) => number | null;
   /**
    * Mitigation audit / counterfactual (#17b Task4): given (victim name, death
    * instant), return a set of already-formatted lines (auditLines /
@@ -753,6 +960,7 @@ export function emitFriendlyDeathEntries<S>(params: {
     timeSeconds: number,
     forceFull?: boolean,
     bypassDebounce?: boolean,
+    deathOfUnitId?: string,
   ) => S;
   addEntry: (timeSeconds: number, ...lines: (string | S)[]) => void;
 }): void {
@@ -763,17 +971,22 @@ export function emitFriendlyDeathEntries<S>(params: {
     owner,
     ownerCDs,
     teammateCDs,
+    enemies = [],
     matchStartMs,
     pid,
     playerIdMap,
     enemyIdMap,
     summonOwners,
     unitNames,
+    rosterSides,
     counterfactualOf,
     requestSnapshotPlaceholder,
     addEntry,
   } = params;
 
+  const allUnitsById = new Map(
+    Array.from(unitsByName.values()).map((u) => [u.id, u]),
+  );
   for (const death of friendlyDeaths) {
     const dyingUnit = unitsByName.get(death.name);
     let unusedDefensives = "";
@@ -813,15 +1026,15 @@ export function emitFriendlyDeathEntries<S>(params: {
       const isLockedOutStunOnly = summary
         ? wasLockedOutByStunOnly(summary, death.atSeconds)
         : false;
-      const forbearance = selfForbearanceActiveAt(
-        dyingUnit,
-        Array.from(unitsByName.values()),
-        death.atSeconds,
-        matchStartMs,
-      );
+      const allUnits = Array.from(unitsByName.values());
 
       const readyAtDeath = allPlayerCDs
         .filter((cd) => cd.tag === "Defensive")
+        // a row owned on the spec baseline alone is cd-hoarded's only (ruling
+        // P-W6): this list has no school gate for a button never shown
+        // (Fable review of F-W6, round 9: an Unholy DK killed by pure
+        // physical damage read "Unused: Anti-Magic Shell")
+        .filter((cd) => !cd.baselineOnly)
         // Single-source predicate (BACKLOG #18 Minor #3): availability at the
         // death instant shares one decision with candidateFindings'
         // death-unused-defensive / external-unused, and no longer goes through
@@ -837,17 +1050,34 @@ export function emitFriendlyDeathEntries<S>(params: {
             // 同 death.ts:走谓词而不是直接查无条件集合(单源)。条件层要看
             // 死者的 PvP 天赋(2026-09-26 天赋影响审计:之前传 undefined,
             // 条件层在死亡行里永远不生效)。
+            // U-T1: the list is the dying unit's own saves, so a
+            // school-limited purge is judged against the stuns that held it.
             (isLockedOutStunOnly &&
               usableWhileStunned(
                 cd.spellId,
                 new Set<string>(dyingUnit.info?.pvpTalents ?? []),
+                summary
+                  ? lockoutWindowCcSpellIds(summary, death.atSeconds)
+                  : undefined,
               )),
         )
         // Forbearance: a paladin can't press Spellwarding/BoP/LoH/Divine Shield if it self-applied
         // Forbearance in the last 30s — don't list those as "unused" (false accusation).
         // Light's Revocation holders keep Divine Shield (forbearanceBlocks).
+        // One predicate with cd-hoarded and the kill sequence
+        // (`lockoutDebuffStopsPress`, recipient = the dying unit itself) —
+        // which also keeps an Ice Block under Hypothermia off the list
+        // (FT F22).
         .filter(
-          (cd) => !(forbearance && forbearanceBlocks(dyingUnit, cd.spellId)),
+          (cd) =>
+            !lockoutDebuffStopsPressAtDeath(
+              dyingUnit,
+              cd.spellId,
+              dyingUnit,
+              allUnits,
+              death.atSeconds,
+              matchStartMs,
+            ),
         )
         // Damage-redirect externals are a mechanical no-op on yourself (Blessing
         // of Sacrifice sends 30% of the damage TO the caster), so listing one as
@@ -856,7 +1086,33 @@ export function emitFriendlyDeathEntries<S>(params: {
         // an Unused list across 80 local matches were exactly this. The same set
         // already guards the "cheaper available" advice in cooldowns.ts; both
         // sides import it rather than each keeping a list.
-        .filter((cd) => !SELF_CAST_NOOP_EXTERNAL_IDS.has(cd.spellId))
+        .filter((cd) => cdHelpsRecipient(cd, true))
+        // A defensive pressed ON AN ENEMY (Touch of Karma) only with a living
+        // enemy in its reach — cd-hoarded's and the kill sequence's predicate
+        // (codex review of F-W6, round 7: a Windwalker with no Karma cast
+        // died with the only enemy 40 yd away, "Unused: Touch of Karma")
+        .filter((cd) =>
+          enemyTargetReaches(
+            cd.spellId,
+            dyingUnit,
+            enemies as ICombatUnit[],
+            matchStartMs + death.atSeconds * 1000,
+          ),
+        )
+        // B-tier B3a (user ruling 2026-10-06): a school-limited save is
+        // "unused" only when it covered what was killing them — cd-hoarded's
+        // rule over the 2 s up to the death (`saveCoversPressureOn`)
+        .filter((cd) =>
+          saveCoversPressureOn(
+            cd.spellId,
+            dyingUnit,
+            matchStartMs + death.atSeconds * 1000,
+            {
+              sides: rosterSides,
+              recordsAttackSpell: documentRecordsAttackSpell(allUnits),
+            },
+          ),
+        )
         .map((cd) => cd.spellName);
 
       if (readyAtDeath.length > 0) {
@@ -864,10 +1120,36 @@ export function emitFriendlyDeathEntries<S>(params: {
       }
     }
 
-    const trinketPart = trinketAvailable ? " (PvP Trinket available)" : "";
+    // A28 (user 2026-09-30, triage F-E28): say whether a CC worth breaking
+    // was on them — a bare "available" invited "should have trinketed".
+    const trinketSummary = ccTrinketSummaries.find(
+      (s) => s.playerName === death.name,
+    );
+    // F20 D13 (user ruling 4, 2026-10-28): a control the death cut short of
+    // A28's length is named, not denied (`deathCutCcBeforeDeath`)
+    const deathCut =
+      trinketAvailable &&
+      trinketSummary &&
+      dyingUnit &&
+      !breakableCcBeforeDeath(trinketSummary, death.atSeconds)
+        ? deathCutCcBeforeDeath(
+            trinketSummary,
+            dyingUnit,
+            matchStartMs,
+            death.atSeconds,
+          )
+        : undefined;
+    const trinketPart = !trinketAvailable
+      ? ""
+      : trinketSummary &&
+          breakableCcBeforeDeath(trinketSummary, death.atSeconds)
+        ? " (PvP Trinket available)"
+        : deathCut
+          ? ` (PvP Trinket available; ${deathCut.spellName} landed ${deathCut.leadSeconds} s before the death)`
+          : ` (PvP Trinket available; no breakable CC in the last ${DEATH_BREAKABLE_CC_LOOKBACK_S} s)`;
     const notePart = death.note ? ` [${death.note}]` : "";
     const deathLines: (string | S)[] = [
-      `${fmtTime(death.atSeconds)}  [DEATH]  ${pid(death.name)} (${death.spec} — friendly)${unusedDefensives}${trinketPart}${notePart}${dampeningSuffix(params.dampeningAt, death.atSeconds)}`,
+      `${fmtTime(death.atSeconds)}  [DEATH]  ${pid(death.name)} (${death.spec} — friendly)${unusedDefensives}${trinketPart}${notePart}${dampeningSuffix(params.dampeningAt, death.atSeconds, unitsByName.get(death.name))}`,
       // Anchored at the rendered instant: this [RES] sits directly under the
       // [DEATH] line above and carries no timestamp of its own, so a reader
       // (and the gate) can only read it as the same instant as the death.
@@ -879,30 +1161,37 @@ export function emitFriendlyDeathEntries<S>(params: {
       // unusedDefensives on the same line and the MISSED OPTIONS block are both
       // evaluated at death.atSeconds, so this aligns with them. 2026-07-20
       // full corpus: 3/1245 matches contradicted themselves because of this.
-      requestSnapshotPlaceholder(death.atSeconds, true, true),
+      // B14a: under a friendly death, a positional cooldown whose holder
+      // stood out of its reach of the dying player is not `rdy:`
+      requestSnapshotPlaceholder(death.atSeconds, true, true, dyingUnit?.id),
     ];
     if (dyingUnit) {
       // HP trajectory
       const checkpoints = [15, 10, 5, 3, 2, 1];
       const trajectory: string[] = [];
       for (const secondsBefore of checkpoints) {
-        // Deaths are critical windows: the surrounding [STATE] ticks sample at
-        // ±1.5s — use the identical radius so a trace checkpoint and a STATE
-        // line about the same second resolve to the same advanced sample.
-        // Integer-second grid (floor) — the same instants the [STATE] ticks
-        // sample — so a checkpoint and a co-second STATE line resolve to the
-        // SAME advanced sample and can never print different numbers.
+        // Integer-second grid (floor) and the one sampling radius — the same
+        // instants and the same sampler as the [STATE] ticks — so a checkpoint
+        // and a co-second STATE line resolve to the SAME advanced sample and
+        // can never print different numbers. (The literal 1 500 ms here was a
+        // leftover of the second radius deleted on 07-20; 0 of 540 checkpoints
+        // on the 60 triage rounds differ under HP_SAMPLE_RADIUS_MS.)
         const pct = getHpPercentAtTime(
           dyingUnit,
           Math.floor(death.atSeconds) - secondsBefore,
           matchStartMs,
-          1_500,
+          HP_SAMPLE_RADIUS_MS,
         );
         if (pct !== null)
           trajectory.push(`${Math.round(pct)}% at T-${secondsBefore}s`);
       }
       if (trajectory.length > 0) {
-        deathLines.push(`               HP: ${trajectory.join(" → ")} → dead`);
+        // Triage hp-state F-L1: T is the rendered death second, not the death
+        // instant — a reader took "T-5s" of a 1:35.8 death as 1:30.8. (No
+        // literal line tag in the wording: scans find death lines by it.)
+        deathLines.push(
+          `               HP (T = ${fmtTime(death.atSeconds)}, the death line's second): ${trajectory.join(" → ")} → dead`,
+        );
       }
 
       // Top damage sources in final COUNTERFACTUAL_WINDOW_S seconds — same
@@ -920,10 +1209,58 @@ export function emitFriendlyDeathEntries<S>(params: {
         enemyIdMap,
         summonOwners,
         unitNames,
+        rosterSides,
       );
       if (topSources.length > 0) {
         deathLines.push(
           `               Top damage in final ${COUNTERFACTUAL_WINDOW_S}s: ${topSources.join(", ")}`,
+        );
+      }
+      // B15a step 2: the death fell under the dying unit's own heal absorb
+      // (Death Pact) — quote what it ate, the fact its press line carries
+      {
+        const press = (dyingUnit.spellCastEvents ?? [])
+          .filter(
+            (c) =>
+              c.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+              !!c.spellId &&
+              HEAL_ABSORB_SELF_SAVE_IDS.has(c.spellId) &&
+              c.logLine.timestamp <= deathMs,
+          )
+          .sort((a, b) => b.logLine.timestamp - a.logLine.timestamp)[0];
+        const use = press
+          ? healAbsorbUseOf(
+              dyingUnit,
+              press.spellId!,
+              press.logLine.timestamp,
+              deathMs,
+              healerCreditOf(Array.from(unitsByName.values()), summonOwners),
+            )
+          : null;
+        if (press && use && use.ended === "death" && use.endMs === deathMs) {
+          const numId = (unitId: string): string => {
+            const u = allUnitsById.get(unitId);
+            const n = u ? playerIdMap?.get(u.name) : undefined;
+            return n !== undefined ? String(n) : (u?.name ?? unitId);
+          };
+          deathLines.push(
+            `               ${healAbsorbDeathLine(
+              use,
+              getEnglishSpellName(press.spellId!, press.spellName ?? ""),
+              dyingUnit.id,
+              numId,
+              (ms) => fmtTime((ms - matchStartMs) / 1000),
+            )}`,
+          );
+        }
+      }
+      // B15c-U11: the killing blow, only when it was an execute
+      const execute = executeKillingBlowOf(dyingUnit, deathMs, (id) =>
+        allUnitsById.get(id),
+      );
+      if (execute) {
+        deathLines.push(
+          `               Killing blow: ${damageEventLabel(execute, playerIdMap, enemyIdMap, summonOwners)} (an execute)`,
         );
       }
 
@@ -962,13 +1299,16 @@ export function emitEnemyDeathEntries<S>(params: {
   enemyIdMap?: Map<string, number>;
   /** summon GUID → owner name (`buildSummonOwnerNames`) */
   summonOwners?: ReadonlyMap<string, string>;
+  /** unit GUID → roster side (`buildRosterSides`) */
+  rosterSides?: RosterSides;
   /** unit GUID → name, to label an attacker known only by id (absorbs) */
   unitNames?: ReadonlyMap<string, string>;
   /** GH #103 A1 (see emitFriendlyDeathEntries): the dampening at the death instant, same getter as the
    * `[CD] … | dampening: N%` lines. Without it the responder quoted the value
-   * of a neighbouring line ("died at 3:15 at 66%" — 66% was 3:16's). Omitted
-   * → no suffix. */
-  dampeningAt?: (atSeconds: number) => number;
+   * of a neighbouring line ("died at 3:15 at 66%" — 66% was 3:16's). Omitted,
+   * or `null` at that instant (a 2v2 round that logged no stack) → no
+   * suffix. */
+  dampeningAt?: (atSeconds: number, unit?: ICombatUnit) => number | null;
   requestSnapshotPlaceholder: (
     timeSeconds: number,
     forceFull?: boolean,
@@ -985,6 +1325,7 @@ export function emitEnemyDeathEntries<S>(params: {
     enemyIdMap,
     summonOwners,
     unitNames,
+    rosterSides,
     dampeningAt,
     requestSnapshotPlaceholder,
     addEntry,
@@ -993,7 +1334,7 @@ export function emitEnemyDeathEntries<S>(params: {
   for (const death of enemyDeaths) {
     const dyingUnit = unitsByName.get(death.name);
     const deathLines: (string | S)[] = [
-      `${fmtTime(death.atSeconds)}  [DEATH]  ${enemyPid(death.name)} (${death.spec} — enemy)${dampeningSuffix(dampeningAt, death.atSeconds)}`,
+      `${fmtTime(death.atSeconds)}  [DEATH]  ${enemyPid(death.name)} (${death.spec} — enemy)${dampeningSuffix(dampeningAt, death.atSeconds, dyingUnit)}`,
       `${fmtTime(death.atSeconds)}  [ROSTER]  enemy ${enemyPid(death.name)} removed (dead)`,
       // Anchored at the rendered instant: this [RES] sits directly under the
       // [DEATH] line above and carries no timestamp of its own, so a reader
@@ -1014,23 +1355,28 @@ export function emitEnemyDeathEntries<S>(params: {
       const checkpoints = [15, 10, 5, 3, 2, 1];
       const trajectory: string[] = [];
       for (const secondsBefore of checkpoints) {
-        // Deaths are critical windows: the surrounding [STATE] ticks sample at
-        // ±1.5s — use the identical radius so a trace checkpoint and a STATE
-        // line about the same second resolve to the same advanced sample.
-        // Integer-second grid (floor) — the same instants the [STATE] ticks
-        // sample — so a checkpoint and a co-second STATE line resolve to the
-        // SAME advanced sample and can never print different numbers.
+        // Integer-second grid (floor) and the one sampling radius — the same
+        // instants and the same sampler as the [STATE] ticks — so a checkpoint
+        // and a co-second STATE line resolve to the SAME advanced sample and
+        // can never print different numbers. (The literal 1 500 ms here was a
+        // leftover of the second radius deleted on 07-20; 0 of 540 checkpoints
+        // on the 60 triage rounds differ under HP_SAMPLE_RADIUS_MS.)
         const pct = getHpPercentAtTime(
           dyingUnit,
           Math.floor(death.atSeconds) - secondsBefore,
           matchStartMs,
-          1_500,
+          HP_SAMPLE_RADIUS_MS,
         );
         if (pct !== null)
           trajectory.push(`${Math.round(pct)}% at T-${secondsBefore}s`);
       }
       if (trajectory.length > 0) {
-        deathLines.push(`               HP: ${trajectory.join(" → ")} → dead`);
+        // Triage hp-state F-L1: T is the rendered death second, not the death
+        // instant — a reader took "T-5s" of a 1:35.8 death as 1:30.8. (No
+        // literal line tag in the wording: scans find death lines by it.)
+        deathLines.push(
+          `               HP (T = ${fmtTime(death.atSeconds)}, the death line's second): ${trajectory.join(" → ")} → dead`,
+        );
       }
 
       // Top damage sources in final COUNTERFACTUAL_WINDOW_S seconds — derived
@@ -1045,6 +1391,7 @@ export function emitEnemyDeathEntries<S>(params: {
         enemyIdMap,
         summonOwners,
         unitNames,
+        rosterSides,
       );
       if (topSources.length > 0) {
         deathLines.push(

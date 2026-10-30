@@ -34,7 +34,8 @@
  * The CLI backends ignore `max_tokens` entirely.
  */
 export const API_MAX_TOKENS = {
-  /** First-round findings (4–8 findings + explanations, JSON). */
+  /** First-round findings (up to FINDINGS_COUNT_MAX = 8 findings +
+   * explanations, JSON; fewer on a menu of one to three events). */
   findings: 64_000,
   /** Deep-dive rounds and their audit-repair retry. */
   deepDive: 32_000,
@@ -46,6 +47,9 @@ export const API_MAX_TOKENS = {
   learning: 32_000,
   /** Compare commentary (exemplar-led). */
   compare: 32_000,
+  /** AI self-review of the first-round findings (the findings again plus a
+   * change log; same output scale as the first round). */
+  selfReview: 64_000,
 } as const;
 
 /** Floor pinned by the unit test: no budget may drop below this again. */

@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 import { render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { SettingsPanel } from "./SettingsPanel";
+
 import { bridge } from "../bridge";
+import { SettingsPanel } from "./SettingsPanel";
 
 vi.mock("../bridge");
 

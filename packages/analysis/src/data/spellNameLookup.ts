@@ -1,5 +1,5 @@
-import { SPELL_ICONS_GENERATED } from "./spellIconsGenerated";
 import { getSpellNamesSnapshot, spellNamesReady } from "./spellEffectData";
+import { SPELL_ICONS_GENERATED } from "./spellIconsGenerated";
 import { SPELL_NAME_STOPWORDS } from "./spellNameStopwords";
 
 let index: ReadonlyMap<string, readonly string[]> | null = null;

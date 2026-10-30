@@ -8,8 +8,12 @@ import {
 // Constants
 // ---------------------------------------------------------------------------
 // GH #31 ② (2026-09-02): shared official-face predicate replaces the hand set.
-import { isKillWindowMajorDefensive } from "../data/abilityProfile";
-import { MITIGATION_TABLE } from "../data/mitigationData";
+import {
+  countsAsKillWindowDefensiveInHand,
+  unpressedKitDefensiveInHand,
+} from "../data/abilityProfile";
+import { classMetadata } from "../data/classSpells";
+import { MITIGATION_WALL_IDS } from "../data/mitigationData";
 import {
   effectiveCooldownSeconds,
   spellEffectData,
@@ -17,17 +21,21 @@ import {
 import { getSortedAdvancedActions } from "./advancedActions";
 import { buffFullDurationForCaster } from "./buffDuration";
 import {
-  cdAvailableAt,
+  cdHelpsRecipient,
   chargesAvailableAt,
   getUnitHpAtTimestamp,
   HP_SAMPLE_RADIUS_MS,
   isHealerSpec,
   specToString,
+  unitCooldownAvailableAt,
   unitCooldownOf,
 } from "./cooldowns";
 import { IOffensiveWindow } from "./offensiveWindows";
+import { pvpTrinketUses, trinketUseRemainingSeconds } from "./pvpTrinketUses";
 import { fmtTime } from "./renderGrid";
+import { roundEndMs } from "./roundEnd";
 import { DPS_TRINKET_CD_S, HEALER_TRINKET_CD_S } from "./trinketCooldown";
+import { unusedKitRows } from "./unusedKitRows";
 
 /** PvP trinket spell IDs that break CC / grant freedom. Exported 2026-08-18:
  * killAttempts.ts detects "target trinketed OUT of the stun" from the same id
@@ -36,6 +44,9 @@ import { DPS_TRINKET_CD_S, HEALER_TRINKET_CD_S } from "./trinketCooldown";
 export const PVP_TRINKET_SPELL_IDS = new Set<string>([
   "336126", // Gladiator's Medallion (active break-CC)
 ]);
+// "Did X use their trinket" is `pvpTrinketUses` (G7-P2): the Medallion's cast
+// above plus Adaptation's 283167 trigger aura. This set stays the list of
+// trinket PRESS ids (a press-to-answer set in crisisDecisionPoints).
 
 /** Minimum window duration to bother comparing (mirrors MIN_VULN_SECONDS in offensiveWindows).
  * Shared with burstLedger's targeting audit — same "window long enough to judge" fact. */
@@ -63,12 +74,16 @@ export const MIN_WINDOW_SECONDS = 5;
  * not its stun-usability. User ruling 2026-09-04 ("改吧"): the door is now
  * every 20–99 % wall in hand. Tier conversion with this door is recorded in
  * IEnemySnapshot.tier below.
+ *
+ * 2026-10-11 (R08 b): WHICH walls a unit has is the cooldown ledger's answer
+ * (`unpressedWallsOwned` — a wall the unit owns and never pressed is in hand
+ * too), not "it cast one this round". The set and the door are unchanged.
+ *
+ * 2026-10-13: the slice itself is `MITIGATION_WALL_IDS` (data/mitigationData),
+ * aliased here — the walls a `defenseless` span is cut on are the same rows
+ * (`computeOffensiveWindows` step 2b).
  */
-export const WALL_IN_HAND_MIT_IDS: ReadonlySet<string> = new Set(
-  Object.entries(MITIGATION_TABLE)
-    .filter(([, e]) => e.pct >= 20 && e.pct < 100)
-    .map(([id]) => id),
-);
+export const WALL_IN_HAND_MIT_IDS: ReadonlySet<string> = MITIGATION_WALL_IDS;
 
 // ---------------------------------------------------------------------------
 // Interfaces
@@ -96,7 +111,11 @@ export interface IEnemySnapshot {
    *   locked  trinket still available
    *   gated   no trinket, but a 20–99 % wall (WALL_IN_HAND_MIT_IDS) in hand
    * Conversion with the re-ruled door: see the WALL_IN_HAND_MIT_IDS comment /
-   * BACKLOG #41 (8) for the measured numbers.
+   * BACKLOG #41 (8) for the measured numbers. With an owned, unpressed wall
+   * counted as in hand (2026-10-11, R08 b; 605 new-season files, 18,322
+   * landings): prime 5.7 / gated 2.4 / locked 1.8 — it was 5.2 / 1.9 / 1.8
+   * on the same landings with casts only (the header of
+   * packages/eval/scripts/killTierValidationScan.ts has the counts).
    * Replaces the former continuous softnessScore
    * (50·(1−hp) + 50·defensivesFraction + trinket 15), whose defensives
    * denominator only counted spells the enemy had already cast this match —
@@ -106,10 +125,10 @@ export interface IEnemySnapshot {
    */
   tier: KillOpportunityTier;
   /**
-   * Display names of the 20–99 % walls currently IN HAND (kit evidence: cast
-   * at least once this match — same gate as ccAvoidanceOptionsAt — and off
-   * cooldown). Non-empty exactly when the gated tier applies; rendered so the
-   * coach can say WHICH card to bait.
+   * Display names of the 20–99 % walls currently IN HAND (`wallsInHandAt`:
+   * pressed this round and off cooldown, or owned and never pressed — the
+   * kit line's `[UNUSED]` rows). Non-empty exactly when the gated tier
+   * applies; rendered so the coach can say WHICH card to bait.
    */
   wallsInHand: string[];
 }
@@ -192,11 +211,32 @@ export function getLowestHpPercentInWindow(
   return lowest;
 }
 
-/** Lowest HP% of the whole match (delegates to the windowed predicate, single
+/** Lowest HP% of the round (delegates to the windowed predicate, single
  * source). Consumed by "was this match actually dangerous" decisions such as
- * the cd-waste pressure gate; no advanced samples → null. */
-export function matchMinHpPct(unit: ICombatUnit): number | null {
-  return getLowestHpPercentInWindow(unit, -Infinity, Infinity, 0);
+ * the cd-waste pressure gate; no advanced samples → null.
+ *
+ * `combat` bounds the read to the round (triage 2026-09-29, hp-state F-M1): a
+ * round's unit carries advanced samples logged AFTER its end in 20 of the 60
+ * triage rounds, and the NOTE "lowest HP this match was 81%" of d692582c was
+ * a sample 3.7 s past the round end (92 % inside it). Both production
+ * callers pass it; without it the read is unbounded, as before.
+ *
+ * The end is `roundEndMs` — a Solo Shuffle round's ending death, the one
+ * round end every other "in the round" reader uses (acceptance 7e2a3c95 #6:
+ * 7d1f14af's NOTE "lowest HP this match was 69%" read a sample 1.2 s after
+ * the round's first death; 71.4 % inside the round). */
+export function matchMinHpPct(
+  unit: ICombatUnit,
+  combat?: Parameters<typeof roundEndMs>[0] & { startTime: number },
+): number | null {
+  return combat
+    ? getLowestHpPercentInWindow(
+        unit,
+        0,
+        (roundEndMs(combat) - combat.startTime) / 1000,
+        combat.startTime,
+      )
+    : getLowestHpPercentInWindow(unit, -Infinity, Infinity, 0);
 }
 
 /**
@@ -207,6 +247,7 @@ function getDefensiveStateAtTime(
   enemy: ICombatUnit,
   windowStartSeconds: number,
   matchStartMs: number,
+  combat?: AtomicArenaCombat,
 ): { available: string[]; unavailable: string[] } {
   const available: string[] = [];
   const unavailable: string[] = [];
@@ -218,7 +259,10 @@ function getDefensiveStateAtTime(
   for (const cast of enemy.spellCastEvents) {
     if (cast.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
     const { spellId } = cast;
-    if (!spellId || !isKillWindowMajorDefensive(spellId)) continue;
+    if (!spellId || !countsAsKillWindowDefensiveInHand(spellId)) continue;
+    // F20 D1: an external that cannot target its caster is never its
+    // holder's save in hand — the span's reading (`computeOffensiveWindows`)
+    if (!cdHelpsRecipient({ spellId }, true)) continue;
 
     const castSeconds = (cast.logLine.timestamp - matchStartMs) / 1000;
     if (castSeconds >= windowStartSeconds) continue; // after our snapshot time
@@ -285,7 +329,15 @@ function getDefensiveStateAtTime(
 
     const buffActive =
       casts[casts.length - 1].castSeconds + buffSeconds > windowStartSeconds;
-    const cdOnCooldown = currentCharges === 0;
+    // the shared cooldown model's answer (per-press talent effects, press
+    // identification — cooldown mastery round 2026-10-20) when the round is
+    // known; the cast list above only for a hand-built caller
+    const inHand = combat
+      ? unitCooldownAvailableAt(enemy, combat, spellId, windowStartSeconds, {
+          before: true,
+        })
+      : undefined;
+    const cdOnCooldown = inHand === undefined ? currentCharges === 0 : !inHand;
 
     if (buffActive || cdOnCooldown) {
       unavailable.push(effectData.name);
@@ -293,6 +345,15 @@ function getDefensiveStateAtTime(
       available.push(effectData.name);
     }
   }
+  // a roster defensive in the kit and never pressed is in hand the whole
+  // round (user ruling 2026-10-20, fact1215 retest idx 60 — the span's
+  // reading, `computeOffensiveWindows`)
+  for (const r of combat ? unusedKitRows(enemy, combat) : [])
+    if (
+      unpressedKitDefensiveInHand(r.spellId) &&
+      !castsBySpell.has(r.spellId)
+    )
+      available.push(r.name);
 
   return { available, unavailable };
 }
@@ -315,20 +376,39 @@ export function getTrinketStateAtTime(
   isHealer: boolean,
 ): boolean {
   const trinketCD = isHealer ? HEALER_TRINKET_CD_S : DPS_TRINKET_CD_S;
-  let lastUseSeconds: number | null = null;
-
-  for (const cast of enemy.spellCastEvents) {
-    if (cast.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
-    if (!cast.spellId || !PVP_TRINKET_SPELL_IDS.has(cast.spellId)) continue;
-
-    const castSeconds = (cast.logLine.timestamp - matchStartMs) / 1000;
-    if (castSeconds >= windowStartSeconds) break;
-
-    lastUseSeconds = castSeconds;
-  }
-
-  if (lastUseSeconds === null) return true; // never observed → arena-start reset ⇒ available
-  return lastUseSeconds + trinketCD <= windowStartSeconds;
+  // A trinket-equivalent racial (Will to Survive, Will of the Forsaken …)
+  // locks the trinket for 30–90 s, and this predicate deliberately does NOT
+  // read that lock. User ruling P-b7 (2026-10-01): the shared lock is short,
+  // the enemy who pressed the racial was usually being controlled rather than
+  // focused, and "softer" is not established by it (they have other tools) —
+  // so a racial press must not turn a target into the trinket-less PRIME
+  // tier. On the 605 S2 files honouring the lock re-tiered 1,227 of 28,154
+  // KILL ATTEMPTS lines and added one burst-into-mitigation candidate. The
+  // press itself is rendered as a fact (`[ENEMY TRINKET] … used X`). A study
+  // of racial × trinket shared cooldowns and "softer target" is on the
+  // brainstorm list.
+  // G7-P2 (triage F-E19 / F-C15): the shared use predicate — an Adaptation
+  // trigger aura counts, and its lockout interval says when it is back.
+  // The state AT the attempt's raw start, through the shared use primitive in
+  // its exact-time mode (the mode the [CC ON TEAM] note and the death line
+  // read). Deliberately NOT the render grid: a trinket pressed in the same
+  // second as the opener is the target's RESPONSE to it — on the grid 259
+  // attempts of the 605-file capture read "PRIME (no trinket)" on a line
+  // whose outcome is "target trinketed out" (measured 2026-10-01).
+  return (
+    trinketUseRemainingSeconds(
+      pvpTrinketUses(enemy).map((u) => ({
+        atSeconds: (u.atMs - matchStartMs) / 1000,
+        readyAtSeconds:
+          u.readyAtMs !== undefined
+            ? (u.readyAtMs - matchStartMs) / 1000
+            : undefined,
+      })),
+      trinketCD,
+      windowStartSeconds,
+      false,
+    ) <= 0
+  );
 }
 
 /**
@@ -337,13 +417,15 @@ export function getTrinketStateAtTime(
 function snapshotEnemy(
   enemy: ICombatUnit,
   windowStartSeconds: number,
-  matchStartMs: number,
+  combat: AtomicArenaCombat,
 ): IEnemySnapshot {
+  const matchStartMs = combat.startTime;
   const hpPercent = getHpPercentAtTime(enemy, windowStartSeconds, matchStartMs);
   const { available, unavailable } = getDefensiveStateAtTime(
     enemy,
     windowStartSeconds,
     matchStartMs,
+    combat,
   );
   // 2026-08-17(审计 §D2 同族):此处原本写死 false,注释称「做基于专精的治疗
   // 判断需要 import cooldowns」—— 而本文件第一行就在 import cooldowns,
@@ -361,7 +443,7 @@ function snapshotEnemy(
   const { tier, wallsInHand } = killOpportunityAt(
     enemy,
     windowStartSeconds,
-    matchStartMs,
+    combat,
   );
 
   return {
@@ -393,15 +475,17 @@ export interface IKillOpportunity {
 export function killOpportunityAt(
   enemy: ICombatUnit,
   atSeconds: number,
-  matchStartMs: number,
+  /** the round: its start, and the unit's cooldown ledger in it (which walls
+   * the unit owns — `unpressedWallsOwned`) */
+  combat: AtomicArenaCombat,
 ): IKillOpportunity {
   const trinketAvailable = getTrinketStateAtTime(
     enemy,
     atSeconds,
-    matchStartMs,
+    combat.startTime,
     isHealerSpec(enemy.spec),
   );
-  const wallsInHand = wallsInHandAt(enemy, atSeconds, matchStartMs);
+  const wallsInHand = wallsInHandAt(enemy, atSeconds, combat);
   const tier: KillOpportunityTier = trinketAvailable
     ? "locked"
     : wallsInHand.length > 0
@@ -411,19 +495,91 @@ export function killOpportunityAt(
 }
 
 /**
- * Which WALL_IN_HAND_MIT_IDS the enemy has IN HAND at `atSeconds`: kit-evidence
- * gate (a spell never cast this match is invisible — same reasoning as
- * ccAvoidanceOptionsAt: no cast, no proof they run it) + cdAvailableAt over
- * the observed casts. This asks a different question from
- * getDefensiveStateAtTime above ("is any major defensive up") — the id set is
- * the 20–99 % wall subset and the answer feeds the tier, so it gets its own
- * pass rather than filtering that function's name-keyed output.
+ * The 20–99 % walls (`WALL_IN_HAND_MIT_IDS`) a unit OWNS and has not pressed
+ * this round: the rows of its cooldown ledger the kit line tags `[UNUSED]`
+ * (`extractMajorCooldowns(…, { withBaselineOnly: true })` — the ledger the
+ * loadout renders — and `kitRowUnused`, the tag's own reading), by the name
+ * the kit prints. Memoised per (unit, round): the tier is asked per attempt
+ * and per window of every enemy, and the answer is the round's.
+ *
+ * What stands behind a row is the ledger's ownership rule, not a cast: a
+ * talent-tree wall only when COMBATANT_INFO's talents hold it (never when it
+ * was not taken; with an undecodable talent blob, or no COMBATANT_INFO row
+ * at all, only on a cast), a wall outside the spec's tree on a PvP-talent
+ * pick or on the spec's DB2 baseline (`BASELINE_DEFENSIVE_BY_SPEC`, ruling
+ * C4). 605 new-season files, every
+ * player-round: 2,122 such rows — 1,363 on a taken talent, 755 on the
+ * baseline, 4 on a PvP talent, none on anything else; 0 talent blobs
+ * undecoded (fix-FT/wp-kill-attempt-judgments/r08_tierPaired-605.txt).
+ */
+const unpressedWallsCache = new WeakMap<
+  ReadonlyArray<{ spellId: string; name: string }>,
+  ReadonlyArray<{ spellId: string; name: string }>
+>();
+export function unpressedWallsOwned(
+  unit: ICombatUnit,
+  combat: AtomicArenaCombat,
+): ReadonlyArray<{ spellId: string; name: string }> {
+  // keyed by the memoised kit rows: the same round answers with the same
+  // array (the tier is asked per attempt and per window)
+  const rows = unusedKitRows(unit, combat);
+  let walls = unpressedWallsCache.get(rows);
+  if (!walls) {
+    walls = rows.filter((r) => WALL_IN_HAND_MIT_IDS.has(r.spellId));
+    unpressedWallsCache.set(rows, walls);
+  }
+  return walls;
+}
+
+/**
+ * The names a kit line can print for a `WALL_IN_HAND_MIT_IDS` wall — the
+ * class catalog's name of the id and the official one — so the gate that
+ * reads the tier back off the text (`checkKillTierWallOwnership`) asks "is
+ * this `[UNUSED]` kit entry a 20–99 % wall" of the same set the tier does. No
+ * catalog ability carries one of these names under an id outside the set
+ * (pinned in killTierWallOwnership.test.ts).
+ */
+export function wallInHandKitNames(): ReadonlySet<string> {
+  const names = new Set<string>();
+  for (const id of WALL_IN_HAND_MIT_IDS) {
+    const official = spellEffectData[id]?.name;
+    if (official) names.add(official);
+    for (const cls of classMetadata)
+      for (const a of cls.abilities) if (a.spellId === id) names.add(a.name);
+  }
+  return names;
+}
+
+/**
+ * Which WALL_IN_HAND_MIT_IDS the enemy has IN HAND at `atSeconds`. This asks
+ * a different question from getDefensiveStateAtTime above ("is any major
+ * defensive up") — the id set is the 20–99 % wall subset and the answer feeds
+ * the tier, so it gets its own pass rather than filtering that function's
+ * name-keyed output.
+ *
+ * Two ways a wall is in hand:
+ *  - the unit PRESSED it (a cast anywhere in its events) and it is off
+ *    cooldown at `atSeconds` — cdAvailableAt over the observed casts,
+ *    unchanged;
+ *  - the unit OWNS it and has not pressed it this round (`unpressedWallsOwned`)
+ *    — ready the whole round, since nothing spent it. R08 (b), user ruling
+ *    2026-10-11: until then only the first counted ("no cast, no proof they
+ *    run it" — the reasoning of ccAvoidanceOptionsAt), while the loadout had
+ *    decided ownership from talents and the spec baseline since 2026-09-30
+ *    (C4). One prompt printed `Unending Resolve [180s, lasts 8s] [UNUSED]`
+ *    for an enemy and called him `PRIME (no trinket, no 20-99% wall in hand)`
+ *    — the less a unit had pressed, the softer it read (f4da82c5; the
+ *    PV334 audit ruled a swap-target conclusion built on it OVERSTATED).
+ *    "Does he have the wall" is now the ledger's answer in both places; the
+ *    tier model itself (prime > gated > locked, 2026-08-18; any 20–99 % wall,
+ *    2026-09-04; immunities take no part) is untouched.
  */
 function wallsInHandAt(
   enemy: ICombatUnit,
   atSeconds: number,
-  matchStartMs: number,
+  combat: AtomicArenaCombat,
 ): string[] {
+  const matchStartMs = combat.startTime;
   const castsBySpell = new Map<string, { timeSeconds: number }[]>();
   for (const cast of enemy.spellCastEvents) {
     if (cast.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
@@ -436,7 +592,7 @@ function wallsInHandAt(
     castsBySpell.set(spellId, arr);
   }
   const ready: string[] = [];
-  for (const [spellId, casts] of castsBySpell) {
+  for (const spellId of castsBySpell.keys()) {
     const effectData = spellEffectData[spellId];
     // admission on the official number, like every other ≥ 30 s gate
     if ((effectiveCooldownSeconds(spellId) ?? 0) < 30) continue;
@@ -444,22 +600,25 @@ function wallsInHandAt(
     // getDefensiveStateAtTime reads them: a second charge or a talented
     // cooldown was read as "spent" and the tier went prime instead of gated
     // (talent impact audit 2026-09-26).
-    const own = unitCooldownOf(enemy, spellId);
-    if (!own) continue;
+    // the shared cooldown model (`unitCooldownAvailableAt`, cooldown mastery
+    // round 2026-10-20) — the enemy's own presses with their per-press
+    // talent effects
+    // "in hand when the attempt began": only presses strictly before it
+    // spend it — the ledger's same-instant slack read a Darkness pressed
+    // 41 ms after the Bestial Wrath that opened the attempt as already
+    // spent and called the target PRIME (fact5 retest r2 e49b7c3b 2:40)
     if (
-      cdAvailableAt(
-        {
-          casts,
-          cooldownSeconds: own.cooldownSeconds,
-          charges: own.charges,
-          neverUsed: false,
-        },
-        atSeconds,
-      )
+      unitCooldownAvailableAt(enemy, combat, spellId, atSeconds, {
+        before: true,
+      })
     ) {
       ready.push(effectData?.name ?? spellId);
     }
   }
+  // …and the walls it owns and never pressed. A wall with a cast anywhere in
+  // the unit's events is the loop's above, whatever it decided.
+  for (const row of unpressedWallsOwned(enemy, combat))
+    if (!castsBySpell.has(row.spellId)) ready.push(row.name);
   return ready;
 }
 
@@ -493,7 +652,6 @@ export function analyzeKillWindowTargetSelection(
 ): IKillWindowTargetEval[] {
   if (enemies.length < 2) return [];
 
-  const matchStartMs = combat.startTime;
   const results: IKillWindowTargetEval[] = [];
 
   for (const window of windows) {
@@ -508,10 +666,10 @@ export function analyzeKillWindowTargetSelection(
     const focusedSnapshot = snapshotEnemy(
       focusedEnemy,
       window.fromSeconds,
-      matchStartMs,
+      combat,
     );
     const otherSnapshots = otherEnemies.map((e) =>
-      snapshotEnemy(e, window.fromSeconds, matchStartMs),
+      snapshotEnemy(e, window.fromSeconds, combat),
     );
 
     // The only claim the 2026-08-18 corpus validation supports: focusing a

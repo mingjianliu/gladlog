@@ -7,51 +7,39 @@ import {
 import type { LearnedRule } from "@gladlog/analysis/src/learning/types";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import {
+  AI_BACKENDS,
+  AI_MODELS,
+  type AiBackend,
+  BACKEND_CLI_TOOL,
+  resolveAiModel,
+} from "../../../../shared/aiModels";
+import type { AnalysisFallbackReason } from "../../../../shared/analysisFallback";
 import { bridge } from "../../bridge";
 import { DEMO_ANALYSIS } from "../data/demoAnalysis";
+import { cliWaitHint, fmtElapsed } from "../derive/aiRunStatus";
 import { buildAnalysisInput, buildDeepenPacks } from "../derive/analysisInput";
 import { categoryLabel, severityLabel } from "../derive/findingDisplay";
 import { makeRichText } from "../derive/inlineRich";
 import { resolveJumpTarget } from "../derive/jumpTarget";
 import { deriveKeyMoments } from "../derive/keyMoments";
+import { selfReviewNote, type SelfReviewView } from "../derive/selfReviewNote";
 import { backendModelLabel, slotLabel } from "../derive/slotLabel";
-import { cliWaitHint, fmtElapsed } from "../derive/aiRunStatus";
-import { useElapsedSince } from "./useElapsedSince";
 import type { ReportSource } from "../derive/types";
-import {
-  AI_BACKENDS,
-  AI_MODELS,
-  BACKEND_CLI_TOOL,
-  resolveAiModel,
-  type AiBackend,
-} from "../../../../shared/aiModels";
+import { zeroFindingText } from "../derive/zeroFindingText";
 import { ExportButtons } from "./ExportButtons";
 import { FindingsList } from "./FindingsList";
 import { KeyMomentAxis } from "./KeyMomentAxis";
+import { useElapsedSince } from "./useElapsedSince";
 
 type AnalysisResult = {
   findings: Finding[];
   dropped: number;
   hadNarration: boolean;
-  fallbackReason?: "no-candidates" | "no-client" | "bad-json";
+  fallbackReason?: AnalysisFallbackReason;
   deepened?: boolean;
+  selfReview?: SelfReviewView;
 };
-
-/** Chinese explanation for 0 findings (differentiated by fallback reason / audit drops, no longer a uniform English hint). */
-function zeroFindingText(r: AnalysisResult): string {
-  if (r.dropped > 0)
-    return `模型输出了 ${r.dropped} 条,但全部未通过审计(裸数字/编造事件/因果断言)被丢弃 —— 可点「重新分析」再试。`;
-  switch (r.fallbackReason) {
-    case "no-candidates":
-      return "本场无可指摘事件(无人阵亡、资源使用无明显问题)—— 这是好事,不硬编教练意见。";
-    case "no-client":
-      return "未配置 AI(设置里填 API key 或本地 CLI 后端),仅展示确定性事件。";
-    case "bad-json":
-      return "模型返回格式异常,已回退为确定性展示 —— 可点「重新分析」再试。";
-    default:
-      return "未生成解说(旧版本缓存),点「重新分析」重新生成。";
-  }
-}
 
 type State = "idle" | "running" | "done" | "error";
 
@@ -179,6 +167,9 @@ export function StructuredAnalysisPanel({
   // 首轮 bad-json 自动重试中(main 发 gladlog:analysis:retry)——总时长会
   // 翻倍,状态行必须解释这段额外等待。
   const [retrying, setRetrying] = useState(false);
+  // 首轮已出结果、正在跑 AI 自查(main 发 gladlog:analysis:reviewing;
+  // 重挂载时由 runningMeta.reviewing 回填)——与 retrying 同一套。
+  const [reviewing, setReviewing] = useState(false);
   const elapsedS = useElapsedSince(
     state === "running" ? (runMeta?.since ?? null) : null,
   );
@@ -318,6 +309,7 @@ export function StructuredAnalysisPanel({
     setActiveKey(null);
     setRunMeta(null);
     setRetrying(false);
+    setReviewing(false);
     void (async () => {
       try {
         // Single atomic query: the cache and the running flag must be read from
@@ -339,6 +331,7 @@ export function StructuredAnalysisPanel({
             backend: string;
             model: string;
             retrying?: boolean;
+            reviewing?: boolean;
           } | null;
           slots?: Array<{ key: string; createdAt: number; stale: boolean }>;
           activeKey?: string | null;
@@ -367,6 +360,7 @@ export function StructuredAnalysisPanel({
           // 重试标注也从 main 回填(agy review #1):重挂载后计时还在涨,
           // 「为什么翻倍」的解释不能丢
           setRetrying(runningMeta?.retrying === true);
+          setReviewing(runningMeta?.reviewing === true);
         }
       } catch {
         /* test stub / no bridge facet: stay idle */
@@ -382,6 +376,7 @@ export function StructuredAnalysisPanel({
     // bridge facet (test stub) must not make mounting throw.
     let offDelta: (() => void) | undefined;
     let offRetry: (() => void) | undefined;
+    let offReviewing: (() => void) | undefined;
     let offDone: (() => void) | undefined;
     let offError: (() => void) | undefined;
     try {
@@ -393,6 +388,10 @@ export function StructuredAnalysisPanel({
       offRetry = ai.onRetry?.((d: { matchId: string }) => {
         if (d.matchId !== matchId) return;
         setRetrying(true);
+      });
+      offReviewing = ai.onReviewing?.((d: { matchId: string }) => {
+        if (d.matchId !== matchId) return;
+        setReviewing(true);
       });
       offDone = ai.onDone(
         (d: { matchId: string; result: unknown; slotKey?: string }) => {
@@ -416,6 +415,7 @@ export function StructuredAnalysisPanel({
           setError("");
           setRunMeta(null);
           setRetrying(false);
+          setReviewing(false);
           // New analysis landed: back to "follow activeKey", discarding any
           // in-flight old-slot tab request (otherwise that late getCached
           // response could overwrite the fresh result with the old slot).
@@ -487,6 +487,7 @@ export function StructuredAnalysisPanel({
         setError(d.message);
         setRunMeta(null);
         setRetrying(false);
+        setReviewing(false);
       });
     } catch {
       /* test stub / no bridge facet: skip subscribing, mounting must not throw */
@@ -494,6 +495,7 @@ export function StructuredAnalysisPanel({
     return () => {
       offDelta?.();
       offRetry?.();
+      offReviewing?.();
       offDone?.();
       offError?.();
     };
@@ -759,7 +761,7 @@ export function StructuredAnalysisPanel({
   const anyBackend = AI_BACKENDS.some(isBackendAvailable);
   useEffect(() => {
     if (aiSettings) probeCliOnce();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [aiSettings]);
 
   const defaultBackend: AiBackend = aiSettings?.aiBackend ?? "anthropic";
@@ -778,6 +780,7 @@ export function StructuredAnalysisPanel({
     setPreview("");
     setState("running");
     setRetrying(false);
+    setReviewing(false);
     // 与 main 侧 run() 的 backend/model 决策同构(override 优先,否则
     // settings 默认);重挂载后会被 getState 的 runningMeta(单源)覆盖回填
     setRunMeta({
@@ -995,6 +998,18 @@ export function StructuredAnalysisPanel({
               ))}
             </div>
           )}
+          {displayEmpty !== "stale" &&
+            (() => {
+              const note = selfReviewNote(result);
+              return note ? (
+                <p
+                  className="rpt-self-review-note"
+                  data-testid="self-review-note"
+                >
+                  {note}
+                </p>
+              ) : null;
+            })()}
           {displayEmpty === "stale" ? (
             // Review I-2: getCached returned null for the selected slot (e.g.
             // the slot was invalidated by a prompt upgrade) -- say so honestly
@@ -1003,7 +1018,8 @@ export function StructuredAnalysisPanel({
             // these are the new slot's own findings). `result` itself is not
             // cleared, it is just not rendered here.
             <p className="rpt-slot-stale-note" data-testid="slot-stale-note">
-              该槽为旧版本分析(提示词已升级),重新分析后可查看
+              该槽为旧版本分析(提示词已升级,或 AI
+              自查设置已切换),重新分析后可查看
             </p>
           ) : result.hadNarration === false ? (
             <div>
@@ -1093,6 +1109,12 @@ export function StructuredAnalysisPanel({
             <>
               <br />
               首轮输出解析失败,已自动重试一次(总时长会翻倍)
+            </>
+          )}
+          {reviewing && (
+            <>
+              <br />
+              首轮已出结果,正在 AI 自查(多一次 AI 调用)
             </>
           )}
         </p>

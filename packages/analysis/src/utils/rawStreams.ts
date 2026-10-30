@@ -19,6 +19,7 @@
  */
 import {
   decodeAdvanced,
+  logLineInstantMs,
   parseTimestamp,
   splitLine,
 } from "@gladlog/parser-compat";
@@ -30,6 +31,20 @@ export const splitRawLine = splitLine;
 /** raw.txt 日期前缀(如 `"7/19/2026 04:19:05.269-4"`)→ 绝对 epoch ms,畸形返回
  * `null`。就是 parser 的 `parseTimestamp`(同一引用)。 */
 export const parseRawTimestamp = parseTimestamp;
+
+/** A raw.txt date prefix → the instant the line states for ITSELF: its wall
+ * clock minus the UTC offset written after the milliseconds, signed (west of
+ * UTC, `…32.167-4`) or unsigned (east, `…32.16710` is .167 and +10) — the same
+ * number on every machine; `null` when the line states no offset. The
+ * parser's `logLineInstantMs` (same reference; the measured grammar is in its
+ * header).
+ *
+ * NOT interchangeable with `parseRawTimestamp`: that one is the reading every
+ * parsed event carries (for an unsigned offset, the wall clock in the parsing
+ * machine's zone), so it is the only one a raw line may be subtracted from a
+ * parsed epoch with. This one answers a calendar question — on which side of
+ * a dated game change a line was written (utils/logEra.ts). */
+export const rawLineInstantMs = logLineInstantMs;
 
 /** advanced 块(actorGuid / hp / x / y / powers …)。就是 parser 的 `decodeAdvanced`
  * (同一引用);名字沿用镜像时期的 `mirrorDecodeAdvanced`,消费者不用改。 */
@@ -104,12 +119,38 @@ export interface RawStreams {
  * this event (packages/parser/src/l1/parseLine.ts:92-95). */
 const CAST_SUCCESS_ADVANCED_AT = 11;
 
+/** A sample of the file, before any round is chosen: its absolute instant
+ * (`parseRawTimestamp`) instead of `tSeconds`. */
+interface AbsManaSample {
+  absMs: number;
+  unitGuid: string;
+  mana: number;
+  manaMax: number;
+}
+interface AbsCastFailedEvent {
+  absMs: number;
+  unitGuid: string;
+  spellId: number;
+  spellName: string;
+  reason: string;
+}
+
+/** One raw.txt's two streams on absolute time — everything `parseRawStreams`
+ * reads off a line that does not depend on the round. Parse once per file
+ * (`parseRawStreamsAbsolute`) and cut each round from it
+ * (`rawStreamsForRound`): a Solo Shuffle's six rounds no longer re-read the
+ * whole file six times (2026-10-17, `profilePipeline.ts`: 29 % of a 12 MB
+ * shuffle's wall clock). Opaque to callers. */
+export interface RawStreamsAbsolute {
+  readonly available: boolean;
+  readonly mana: readonly AbsManaSample[];
+  readonly failed: readonly AbsCastFailedEvent[];
+}
+
 function parseLineInto(
   line: string,
-  manaSamples: ManaSample[],
-  castFailed: CastFailedEvent[],
-  baseMs: number,
-  roundDurationS: number | undefined,
+  manaSamples: AbsManaSample[],
+  castFailed: AbsCastFailedEvent[],
 ): void {
   // CRLF logs (a share of the archive): the last field — SPELL_CAST_FAILED's
   // reason — kept a trailing "\r", so "尚未恢复\r" never equalled the
@@ -127,30 +168,6 @@ function parseLineInto(
 
   const absMs = parseRawTimestamp(datePart);
   if (absMs === null) return;
-  const tSeconds = (absMs - baseMs) / 1000;
-
-  // Round-boundary clamp (BACKLOG #32, 2026-08-16): a Solo Shuffle raw.txt is
-  // ONE file shared by all 6 rounds, so without a bound here a line
-  // belonging to a DIFFERENT round of the same lobby still gets a `tSeconds`
-  // value relative to THIS round's `baseMs` and is indistinguishable from a
-  // same-round sample downstream (`oomWindows`/`castFailedInWindow` have no
-  // way to tell). Both directions leak: an earlier round's tail lands at
-  // negative `tSeconds`, a later round's head lands past this round's own
-  // duration. Zero grace (no slack past `roundDurationS`, no slack before 0):
-  // empirically verified on 300/300 sampled non-shuffle ("match"-kind, single
-  // round == the whole raw.txt) rounds from the real corpus that ZERO
-  // manaSamples/castFailed events ever fall outside `[0, roundDurationS]`
-  // even unclamped — real raw.txt logging is already exactly round-scoped
-  // when there is only one round, so no boundary-jitter slack is needed (see
-  // BACKLOG #32 fix commit for the check). `roundDurationS === undefined`
-  // (caller has no round context, e.g. a whole-match tool) skips this check
-  // entirely — unbounded, byte-identical to pre-#32 behavior.
-  if (
-    roundDurationS !== undefined &&
-    (tSeconds < 0 || tSeconds > roundDurationS)
-  ) {
-    return;
-  }
 
   if (eventName === "SPELL_CAST_FAILED") {
     // base units occupy params[0..7] (decodeBaseUnits); spell id/name/school
@@ -170,7 +187,7 @@ function parseLineInto(
     }
     const spellId = parseInt(spellIdStr, 10);
     if (!Number.isFinite(spellId)) return;
-    castFailed.push({ tSeconds, unitGuid, spellId, spellName, reason });
+    castFailed.push({ absMs, unitGuid, spellId, spellName, reason });
     return;
   }
 
@@ -181,7 +198,7 @@ function parseLineInto(
   const mana = extractManaFromAdvanced(params, CAST_SUCCESS_ADVANCED_AT);
   if (!mana) return;
   manaSamples.push({
-    tSeconds,
+    absMs,
     unitGuid: actorGuid,
     mana: mana.mana,
     manaMax: mana.manaMax,
@@ -204,7 +221,7 @@ function parseLineInto(
  *
  * `roundDurationS` (BACKLOG #32, optional, clamp at the single source):
  * when provided, every sample/event whose `tSeconds` falls outside
- * `[0, roundDurationS]` is excluded at parse time — see `parseLineInto`'s own
+ * `[0, roundDurationS]` is excluded at parse time — see `rawStreamsForRound`'s own
  * doc comment for why (Solo Shuffle's raw.txt spans all 6 rounds; without
  * this, a round's builders can silently see another round's data). Every
  * ROUND-scoped caller (production IPC, `matchExplore`'s mana/drink
@@ -220,11 +237,74 @@ export function parseRawStreams(
   baseMs: number,
   roundDurationS?: number,
 ): RawStreams {
-  if (!rawText) return { available: false, manaSamples: [], castFailed: [] };
+  return rawStreamsForRound(
+    parseRawStreamsAbsolute(rawText),
+    baseMs,
+    roundDurationS,
+  );
+}
+
+/** The file pass of `parseRawStreams`, once per raw.txt. */
+export function parseRawStreamsAbsolute(
+  rawText: string | null,
+): RawStreamsAbsolute {
+  if (!rawText) return { available: false, mana: [], failed: [] };
+  const mana: AbsManaSample[] = [];
+  const failed: AbsCastFailedEvent[] = [];
+  for (const line of rawText.split("\n")) parseLineInto(line, mana, failed);
+  return { available: true, mana, failed };
+}
+
+/** One round of a file pass — exactly what `parseRawStreams(rawText, baseMs,
+ * roundDurationS)` returns for the same text (same samples, same order, same
+ * `tSeconds` arithmetic). */
+export function rawStreamsForRound(
+  abs: RawStreamsAbsolute,
+  baseMs: number,
+  roundDurationS?: number,
+): RawStreams {
+  if (!abs.available) return { available: false, manaSamples: [], castFailed: [] };
+  // Round-boundary clamp (BACKLOG #32, 2026-08-16): a Solo Shuffle raw.txt is
+  // ONE file shared by all 6 rounds, so without a bound here a line
+  // belonging to a DIFFERENT round of the same lobby still gets a `tSeconds`
+  // value relative to THIS round's `baseMs` and is indistinguishable from a
+  // same-round sample downstream (`oomWindows`/`castFailedInWindow` have no
+  // way to tell). Both directions leak: an earlier round's tail lands at
+  // negative `tSeconds`, a later round's head lands past this round's own
+  // duration. Zero grace (no slack past `roundDurationS`, no slack before 0):
+  // empirically verified on 300/300 sampled non-shuffle ("match"-kind, single
+  // round == the whole raw.txt) rounds from the real corpus that ZERO
+  // manaSamples/castFailed events ever fall outside `[0, roundDurationS]`
+  // even unclamped — real raw.txt logging is already exactly round-scoped
+  // when there is only one round, so no boundary-jitter slack is needed (see
+  // BACKLOG #32 fix commit for the check). `roundDurationS === undefined`
+  // (caller has no round context, e.g. a whole-match tool) skips this check
+  // entirely — unbounded, byte-identical to pre-#32 behavior.
+  const outside = (tSeconds: number) =>
+    roundDurationS !== undefined &&
+    (tSeconds < 0 || tSeconds > roundDurationS);
   const manaSamples: ManaSample[] = [];
+  for (const m of abs.mana) {
+    const tSeconds = (m.absMs - baseMs) / 1000;
+    if (outside(tSeconds)) continue;
+    manaSamples.push({
+      tSeconds,
+      unitGuid: m.unitGuid,
+      mana: m.mana,
+      manaMax: m.manaMax,
+    });
+  }
   const castFailed: CastFailedEvent[] = [];
-  for (const line of rawText.split("\n")) {
-    parseLineInto(line, manaSamples, castFailed, baseMs, roundDurationS);
+  for (const f of abs.failed) {
+    const tSeconds = (f.absMs - baseMs) / 1000;
+    if (outside(tSeconds)) continue;
+    castFailed.push({
+      tSeconds,
+      unitGuid: f.unitGuid,
+      spellId: f.spellId,
+      spellName: f.spellName,
+      reason: f.reason,
+    });
   }
   return { available: true, manaSamples, castFailed };
 }
@@ -297,12 +377,23 @@ export function oomWindows(
   thresholdPct: number,
 ): Array<{ fromS: number; toS: number; minMana: number }> {
   if (!s.available) return [];
+  return oomWindowsOf(
+    s.manaSamples.filter((sample) => sample.unitGuid === unitGuid),
+    thresholdPct,
+  );
+}
+
+/** `oomWindows` over one unit's time-ordered mana series, whatever its source
+ * (`manaSeriesOf` in resourceAt.ts hands the advanced-sample series here). */
+export function oomWindowsOf(
+  samples: readonly ManaSample[],
+  thresholdPct: number,
+): Array<{ fromS: number; toS: number; minMana: number }> {
   const windows: Array<{ fromS: number; toS: number; minMana: number }> = [];
   let fromS: number | null = null;
   let toS = 0;
   let minMana = Infinity;
-  for (const sample of s.manaSamples) {
-    if (sample.unitGuid !== unitGuid) continue;
+  for (const sample of samples) {
     const pct = manaPct(sample);
     if (pct < thresholdPct) {
       if (fromS === null) {

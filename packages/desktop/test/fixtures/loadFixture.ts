@@ -80,6 +80,33 @@ export function loadRealMatchFixtureWithUncoveredWindow(): StoredMatch {
   return m as unknown as StoredMatch;
 }
 
+/**
+ * The real fixture with the enemy priest's own Power Word: Shield / Void
+ * Shield auras removed, so that it keeps a kill window.
+ *
+ * Why it exists (2026-10-21): the user ruled that a target's own rotational
+ * absorb shield ends `defenseless` (`KW_OWN_ROTATIONAL_ABSORB_AURA_IDS`). The
+ * fixture's last window (Player2-Test, 67.2 → 90 s) sits under the priest's
+ * own shields, so the fixture has no `[VULNERABLE]` / kill-window band at
+ * all — and the UI tests of the phase dropdown, the band strip and the
+ * time-range chip need one to exist. The production reading is the ruled
+ * one; what is adjusted is the fixture's premise, as for
+ * `loadRealMatchFixtureWithUncoveredWindow`.
+ */
+export function loadRealMatchFixtureWithKillWindow(): StoredMatch {
+  const m = loadRealMatchFixture() as unknown as {
+    units: Record<string, { auraEvents?: Array<{ spellId?: string }> }>;
+  };
+  const OWN_SHIELD_IDS = new Set(["17", "1253593"]);
+  for (const unit of Object.values(m.units ?? {})) {
+    if (!Array.isArray(unit.auraEvents)) continue;
+    unit.auraEvents = unit.auraEvents.filter(
+      (a) => !OWN_SHIELD_IDS.has(String(a.spellId ?? "")),
+    );
+  }
+  return m as unknown as StoredMatch;
+}
+
 export function buildSyntheticShuffle(
   base: StoredMatch,
   roundCount = 3,
