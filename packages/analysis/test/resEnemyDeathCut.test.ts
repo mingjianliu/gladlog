@@ -433,6 +433,23 @@ describe("[RES] enemy: time left of an effect its holder's death cut short (GH #
     expect(enemyField(tl, 12)).toContain("(18s left)");
   });
 
+  it("codex 20-G167-15: a re-broadcast pair inside the press window does not restart the length", () => {
+    const tl = avatarScene(
+      [10],
+      [
+        [LogEvent.SPELL_AURA_APPLIED, 10],
+        [LogEvent.SPELL_AURA_REMOVED, 11.5],
+        [LogEvent.SPELL_AURA_APPLIED, 11.5],
+        [LogEvent.SPELL_AURA_REMOVED, 15],
+      ],
+      15.04,
+    );
+    expect(
+      tl.players[0]!.offensiveCDs[0]!.deathCutOfficialEndSeconds,
+    ).toBeCloseTo(30, 3);
+    expect(enemyField(tl, 12)).toContain("(18s left)");
+  });
+
   it("codex 20-G167-14 #2: an application no press made does not restart the length", () => {
     const tl = avatarScene(
       [10],

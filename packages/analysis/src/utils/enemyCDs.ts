@@ -380,7 +380,9 @@ function observedEffectEnd(
     lastFromS: number;
   }): number => {
     let at: number | undefined;
-    for (const a of auraRowsOf(b.destId)) {
+    // re-broadcast pairs dropped first, as the interval builder does (codex
+    // 20-G167-15: a REMOVED + APPLIED at 11.5 s restarted the length)
+    for (const a of dropAuraRebroadcasts(auraRowsOf(b.destId, true))) {
       if (a.spellId !== b.auraId) continue;
       if (
         a.logLine.event !== LogEvent.SPELL_AURA_APPLIED &&
