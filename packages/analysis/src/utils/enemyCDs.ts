@@ -34,6 +34,7 @@ import {
 } from "./cooldowns";
 import { pressRowsWithHidden } from "./hiddenPress";
 import { fmtTime } from "./renderGrid";
+import { shuffleRoundEndMs } from "./roundEnd";
 import { DEATH_CASCADE_MS, firstDeathMs } from "./unitDeath";
 
 type SpellEntry = { type: string };
@@ -235,6 +236,29 @@ export function observedEffectEndSeconds(
    * 20-F17-11 #1) */
   onlyDestId?: string,
 ): number | null {
+  return (
+    observedEffectEnd(
+      caster,
+      castSpellId,
+      castS,
+      nextSameCastS,
+      combat,
+      onlyDestId,
+    )?.endS ?? null
+  );
+}
+
+/** `observedEffectEndSeconds` with the unit whose chain it read — the
+ * effect's holder (codex 20-G167-02: Power Infusion's end is its target's,
+ * not its caster's). */
+function observedEffectEnd(
+  caster: ICombatUnit,
+  castSpellId: string,
+  castS: number,
+  nextSameCastS: number,
+  combat: AtomicArenaCombat,
+  onlyDestId?: string,
+): { endS: number; holderId: string } | null {
   const ids = castAndEffectIds(castSpellId);
   const triggered = new Set(triggeredEffectAurasOfCast(castSpellId));
   const mine = auraIndexOf(combat).filter(
@@ -363,11 +387,35 @@ export function observedEffectEndSeconds(
       // Kingsbane case).
       const full = buffFullDurationForCaster(castSpellId, caster);
       return full !== undefined && castS + full < combatEndS
-        ? combatEndS
+        ? { endS: combatEndS, holderId: best.destId }
         : null;
     }
   }
-  return best?.observed ? best.end : null;
+  return best?.observed ? { endS: best.end, holderId: best.destId } : null;
+}
+
+/**
+ * GH #167: an effect whose observed end is a death — its holder's (the
+ * death cascade strips it, `DEATH_CASCADE_MS`, logged either side of the
+ * UNIT_DIED — codex 20-G167-02) or the Solo Shuffle round's ending one —
+ * was due to run to its official end; a row before that death states that
+ * time left (121afd91 r6 1:55: `Dark Transformation (5s left)` counted down
+ * to a death 5 s later). Undefined otherwise.
+ */
+function deathCutOfficialEnd(
+  holder: ICombatUnit | undefined,
+  endS: number,
+  officialEndS: number,
+  combat: AtomicArenaCombat,
+): number | undefined {
+  if (!(officialEndS > endS)) return undefined;
+  const endMs = combat.startTime + endS * 1000;
+  const near = (ms: number | undefined) =>
+    ms !== undefined && Math.abs(ms - endMs) <= DEATH_CASCADE_MS;
+  return (holder && near(firstDeathMs(holder))) ||
+    near(shuffleRoundEndMs(combat, Object.values(combat.units ?? {})))
+    ? officialEndS
+    : undefined;
 }
 
 const OWN_CAST_COMBAT = new WeakMap<object, AtomicArenaCombat>();
@@ -505,13 +553,34 @@ export function reconstructEnemyCDTimeline(
     // The span of each LOGGED cast ends where its effect was seen to end
     // (`observedEffectEndSeconds`) — before the aura-evidence merge below,
     // which keeps its own say for the effects it owns.
+    // each logged press's official end (cast + duration), before any
+    // observed end replaces it — what a death-cut effect was due to run to
+    const officialEndOf = new Map(
+      offensiveCDs.map((cd) => [cd, cd.buffEndSeconds]),
+    );
+    /** an observed end replaces the span's; one a death cut keeps the
+     * official end beside it (`deathCutOfficialEnd`) */
+    const setObservedEnd = (
+      cd: IEnemyCDCast,
+      endS: number,
+      officialEndS: number | undefined,
+      holder: ICombatUnit | undefined,
+    ) => {
+      cd.buffEndSeconds = endS;
+      const cut =
+        officialEndS === undefined
+          ? undefined
+          : deathCutOfficialEnd(holder, endS, officialEndS, combat);
+      if (cut === undefined) delete cd.deathCutOfficialEndSeconds;
+      else cd.deathCutOfficialEndSeconds = cut;
+    };
     for (const cd of offensiveCDs) {
       const next = offensiveCDs.find(
         (c) =>
           canonicalSpellId(c.spellId) === canonicalSpellId(cd.spellId) &&
           c.castTimeSeconds > cd.castTimeSeconds,
       );
-      const end = observedEffectEndSeconds(
+      const end = observedEffectEnd(
         enemy,
         cd.spellId,
         cd.castTimeSeconds,
@@ -519,16 +588,12 @@ export function reconstructEnemyCDTimeline(
         combat,
       );
       if (end === null) continue;
-      const officialEnd = cd.buffEndSeconds;
-      cd.buffEndSeconds = end;
-      const deathMs = firstDeathMs(enemy);
-      const endMs = matchStartMs + end * 1000;
-      if (
-        officialEnd > end &&
-        deathMs >= endMs &&
-        deathMs - endMs <= DEATH_CASCADE_MS
-      )
-        cd.deathCutOfficialEndSeconds = officialEnd;
+      setObservedEnd(
+        cd,
+        end.endS,
+        officialEndOf.get(cd),
+        combat.units?.[end.holderId] as ICombatUnit | undefined,
+      );
     }
 
     // GH #119: effects whose only evidence is an aura (Havoc Metamorphosis —
@@ -541,7 +606,13 @@ export function reconstructEnemyCDTimeline(
         (c) =>
           c.spellId === "384352" && Math.abs(c.castTimeSeconds - t) < 0.001,
       );
-      if (cast) cast.buffEndSeconds = (endMs - matchStartMs) / 1000;
+      if (cast)
+        setObservedEnd(
+          cast,
+          (endMs - matchStartMs) / 1000,
+          officialEndOf.get(cast),
+          enemy,
+        );
     }
     const offensiveFacts: IEnemyCDCast[] = [];
     // only casts that were LOGGED — never an aura occurrence appended below
@@ -602,12 +673,29 @@ export function reconstructEnemyCDTimeline(
         // may only lengthen it: a re-application closes the interval early
         // and must not cut a correct 15 s estimate to 5 s (agy review)
         const auraEnd = (o.endMs - matchStartMs) / 1000;
-        if (o.endObserved) logged.buffEndSeconds = auraEnd;
+        // the aura is the unit's own (`auraOffensiveOccurrences`)
+        if (o.endObserved)
+          setObservedEnd(logged, auraEnd, officialEndOf.get(logged), enemy);
         else if (o.provenance === "press-logged")
           logged.buffEndSeconds = Math.max(logged.buffEndSeconds, auraEnd);
         continue;
       }
+      const full = o.endObserved
+        ? buffFullDurationForCaster(o.spellId, enemy)
+        : undefined;
+      const cutOfficialEnd =
+        full === undefined
+          ? undefined
+          : deathCutOfficialEnd(
+              enemy,
+              (o.endMs - matchStartMs) / 1000,
+              castTimeSeconds + full,
+              combat,
+            );
       (o.burstRole === "fact" ? offensiveFacts : offensiveCDs).push({
+        ...(cutOfficialEnd !== undefined
+          ? { deathCutOfficialEndSeconds: cutOfficialEnd }
+          : {}),
         spellId: o.spellId,
         spellName: o.spellName,
         castTimeSeconds,

@@ -12,6 +12,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { buildResourceSnapshot } from "../src/context/resourceSnapshot";
 import { ensureAnalysisData } from "../src/data/ensure";
 import { reconstructEnemyCDTimeline } from "../src/utils/enemyCDs";
+import { SOLO_SHUFFLE_BRACKET } from "../src/utils/roundEnd";
 import {
   makeAuraEvent,
   makeSpellCastEvent,
@@ -20,6 +21,17 @@ import {
 
 const START = 1_000_000;
 const AVATAR = "107574"; // 20 s
+
+const aura = (
+  event: LogEvent,
+  spellId: string,
+  ms: number,
+  src: [string, string],
+  dest: string,
+) => ({
+  ...makeAuraEvent(event, spellId, ms, src[0], dest, "BUFF"),
+  srcUnitName: src[1],
+});
 
 function scene(deathS: number) {
   const warrior = makeUnit("e1", {
@@ -101,5 +113,191 @@ describe("[RES] enemy: time left of an effect its holder's death cut short (GH #
     const cd = tl.players[0]!.offensiveCDs[0]!;
     expect(cd.deathCutOfficialEndSeconds).toBeUndefined();
     expect(enemyField(tl, 12)).toContain("(3s left)");
+  });
+
+  it("codex 20-G167-02 #5: the REMOVED logged just after the UNIT_DIED is the cascade too", () => {
+    const cd = scene(14.96).players[0]!.offensiveCDs[0]!;
+    expect(cd.deathCutOfficialEndSeconds).toBeCloseTo(30, 3);
+  });
+
+  it("codex 20-G167-02 #3: the holder's death, not the caster's — Power Infusion on a teammate", () => {
+    const priest = makeUnit("e2", {
+      name: "Priest",
+      spec: CombatUnitSpec.Priest_Shadow,
+      spellCastEvents: [
+        makeSpellCastEvent(
+          "10060",
+          START + 10_000,
+          "e2",
+          "Priest",
+          "e1",
+          "Mate",
+        ),
+      ],
+    } as any);
+    const mate = makeUnit("e1", {
+      name: "Mate",
+      spec: CombatUnitSpec.Warrior_Arms,
+      auraEvents: [
+        aura(
+          LogEvent.SPELL_AURA_APPLIED,
+          "10060",
+          START + 10_000,
+          ["e2", "Priest"],
+          "e1",
+        ),
+        aura(
+          LogEvent.SPELL_AURA_REMOVED,
+          "10060",
+          START + 13_000,
+          ["e2", "Priest"],
+          "e1",
+        ),
+      ],
+    } as any);
+    (mate as any).deathRecords = [{ timestamp: START + 13_030 }];
+    const combat = {
+      startTime: START,
+      endTime: START + 200_000,
+      units: { e1: mate, e2: priest },
+    } as any;
+    const cd = reconstructEnemyCDTimeline([priest, mate], combat).players.find(
+      (p) => p.playerName === "Priest",
+    )!.offensiveCDs[0]!;
+    expect(cd.buffEndSeconds).toBeCloseTo(13, 3);
+    expect(cd.deathCutOfficialEndSeconds).toBeGreaterThan(13);
+    // control: the caster dying there instead says nothing about the buff
+    (mate as any).deathRecords = [];
+    (priest as any).deathRecords = [{ timestamp: START + 13_030 }];
+    expect(
+      reconstructEnemyCDTimeline([priest, mate], combat).players.find(
+        (p) => p.playerName === "Priest",
+      )!.offensiveCDs[0]!.deathCutOfficialEndSeconds,
+    ).toBeUndefined();
+  });
+
+  it("codex 20-G167-02 #4: a Solo Shuffle round ended by another player's death", () => {
+    const warrior = makeUnit("e1", {
+      name: "Warrior",
+      spec: CombatUnitSpec.Warrior_Arms,
+      info: {} as any,
+      spellCastEvents: [
+        makeSpellCastEvent(
+          AVATAR,
+          START + 10_000,
+          "e1",
+          "Warrior",
+          "e1",
+          "Warrior",
+        ),
+      ],
+      auraEvents: [
+        aura(
+          LogEvent.SPELL_AURA_APPLIED,
+          AVATAR,
+          START + 10_000,
+          ["e1", "Warrior"],
+          "e1",
+        ),
+        aura(
+          LogEvent.SPELL_AURA_REMOVED,
+          AVATAR,
+          START + 15_000,
+          ["e1", "Warrior"],
+          "e1",
+        ),
+      ],
+    } as any);
+    const other = makeUnit("p9", { name: "Other", info: {} as any } as any);
+    (other as any).deathRecords = [{ timestamp: START + 15_020 }];
+    const combat = (bracket: string) =>
+      ({
+        startTime: START,
+        endTime: START + 200_000,
+        startInfo: { bracket },
+        units: { e1: warrior, p9: other },
+      }) as any;
+    const cut = (bracket: string) =>
+      reconstructEnemyCDTimeline([warrior], combat(bracket)).players[0]!
+        .offensiveCDs[0]!.deathCutOfficialEndSeconds;
+    expect(cut(SOLO_SHUFFLE_BRACKET)).toBeCloseTo(30, 3);
+    // control: in a 3v3 another player's death ends no one's buff
+    expect(cut("Rated Arena 3v3")).toBeUndefined();
+  });
+
+  it("codex 20-G167-02 #1: a later press of the chain whose span ends later does not shorten the cut press's time left", () => {
+    const timeline = {
+      players: [
+        {
+          playerName: "Warrior",
+          specName: "Arms Warrior",
+          offensiveCDs: [
+            {
+              spellId: AVATAR,
+              spellName: "Avatar",
+              castTimeSeconds: 10,
+              cooldownSeconds: 90,
+              availableAgainAtSeconds: 100,
+              buffEndSeconds: 15,
+              deathCutOfficialEndSeconds: 30,
+              dangerWeight: 1,
+            },
+            {
+              spellId: AVATAR,
+              spellName: "Avatar",
+              castTimeSeconds: 13,
+              cooldownSeconds: 90,
+              availableAgainAtSeconds: 103,
+              buffEndSeconds: 15.5,
+              dangerWeight: 1,
+            },
+          ],
+        },
+      ],
+      alignedBurstWindows: [],
+    };
+    expect(enemyField(timeline, 14)).toContain("(16s left)");
+  });
+
+  it("codex 20-G167-02 #2: an aura-only occurrence (Havoc Metamorphosis — the button never logs) cut by its holder's death", () => {
+    const dh = (deathS: number) => {
+      const u = makeUnit("e1", {
+        name: "Dh",
+        spec: CombatUnitSpec.DemonHunter_Havoc,
+        spellCastEvents: [
+          makeSpellCastEvent("200166", START + 10_400, "e1", "Dh", "e1", "Dh"),
+        ],
+        auraEvents: [
+          aura(
+            LogEvent.SPELL_AURA_APPLIED,
+            "162264",
+            START + 10_000,
+            ["e1", "Dh"],
+            "e1",
+          ),
+          aura(
+            LogEvent.SPELL_AURA_REMOVED,
+            "162264",
+            START + 15_000,
+            ["e1", "Dh"],
+            "e1",
+          ),
+        ],
+      } as any);
+      (u as any).deathRecords = [{ timestamp: START + deathS * 1000 }];
+      return u;
+    };
+    const metaOf = (deathS: number) => {
+      const u = dh(deathS);
+      return reconstructEnemyCDTimeline([u], {
+        startTime: START,
+        endTime: START + 200_000,
+        units: { e1: u },
+      } as any).players[0]!.offensiveCDs.find((c) => c.spellId === "191427")!;
+    };
+    const cut = metaOf(15.04);
+    expect(cut.buffEndSeconds).toBeCloseTo(15, 3);
+    expect(cut.deathCutOfficialEndSeconds).toBeGreaterThan(15);
+    expect(metaOf(40).deathCutOfficialEndSeconds).toBeUndefined();
   });
 });

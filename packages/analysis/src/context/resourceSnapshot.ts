@@ -1094,10 +1094,16 @@ function buildResourceSnapshotOnce({
       const prev = windows.get(key);
       // an effect its holder's death cut short: shown until the death, its
       // time left the official one — the death is not known before it
-      // (GH #167)
-      const leftEnd = Math.max(end, cd.deathCutOfficialEndSeconds ?? end);
+      // (GH #167); merged on its own — a refresh that ends before a cut
+      // press's official end does not shorten it (codex 20-G167-02)
+      const leftEnd = Math.max(
+        end,
+        cd.deathCutOfficialEndSeconds ?? end,
+        prev?.leftEnd ?? end,
+      );
       if (prev === undefined || end > prev.end)
         windows.set(key, { spellName: cd.spellName, end, leftEnd });
+      else prev.leftEnd = leftEnd;
     }
     for (const w of windows.values()) {
       const remainingSeconds = Math.max(1, Math.round(w.leftEnd - timeSeconds));
