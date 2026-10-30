@@ -5174,8 +5174,15 @@ export function analyzePlayerCCAndTrinket(
     const castMs = cast.logLine.timestamp;
     const toMs =
       castMs + (AOE_CC_LANDING_WINDOW_S[cast.spellId]?.toS ?? 12) * 1000;
+    // a delayed control goes off no earlier than its window opens (codex
+    // 20-G167-10 #2: an older totem's pulse 0.5 s after this press vetoed
+    // the Roll that dodged this one)
+    const fromMs =
+      castMs +
+      Math.max(0, AOE_CC_LANDING_WINDOW_S[cast.spellId]?.fromS ?? 0) * 1000;
     // … and this press's, not another's (`goOffBelongsToCast`)
-    const ours = (ms: number) => goOffBelongsToCast(enemy, cast, family, ms);
+    const ours = (ms: number, src: string) =>
+      goOffBelongsToCast(enemy, cast, family, ms, src);
     let first: number | undefined;
     for (const u of unitsById.values())
       for (const r of [
@@ -5188,8 +5195,8 @@ export function analyzePlayerCCAndTrinket(
       ]) {
         if (!r.spellId || !family.has(r.spellId)) continue;
         if (!fromCaster(r.srcUnitId)) continue;
-        if (r.timestamp < castMs || r.timestamp > toMs) continue;
-        if (!ours(r.timestamp)) continue;
+        if (r.timestamp < fromMs || r.timestamp > toMs) continue;
+        if (!ours(r.timestamp, r.srcUnitId)) continue;
         if (first === undefined || r.timestamp < first) first = r.timestamp;
       }
     // …or the summon's own pulse row: a Capacitor Totem's 118905 is written
@@ -5208,16 +5215,14 @@ export function analyzePlayerCCAndTrinket(
       if (c.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
       if (!c.spellId || !family.has(c.spellId)) continue;
       const t = c.logLine.timestamp;
-      if (t < castMs || t > toMs) continue;
-      if (!ours(t)) continue;
+      if (t < fromMs || t > toMs) continue;
+      if (!ours(t, c.srcUnitId)) continue;
       if (first === undefined || t < first) first = t;
     }
     return first;
   };
-  const pulseByCast = new Map<
-    string,
-    Map<number, { ms: number; line: number | undefined }>
-  >();
+  type IPulse = { ms: number; line: number | undefined; src: string };
+  const pulseByCast = new Map<string, Map<number, IPulse>>();
   /** Each press's own pulse, for a delayed control (a landing window that
    * opens after the cast, `AOE_CC_LANDING_WINDOW_S` `fromS` > 0): the casts
    * of the spell, in order, each take the earliest landing (an APPLIED or a
@@ -5227,10 +5232,22 @@ export function analyzePlayerCCAndTrinket(
    * the next cast lost the first totem's own pulse). Keyed by cast ms; the
    * one pulse-ownership reading — `controlHitInstant` reads its instant from
    * it and the go-off readers (`goOffBelongsToCast`) its owner. */
+  /** Is a row (its ms, its source) part of this pulse? Its own ms, or its
+   * own source's rows up to PULSE_ROWS_SPREAD_MS after it. */
+  const inPulse = (
+    pulse: IPulse,
+    rowMs: number,
+    rowSrc: string | undefined,
+  ): boolean =>
+    rowMs === pulse.ms ||
+    (rowSrc !== undefined &&
+      rowSrc === pulse.src &&
+      rowMs > pulse.ms &&
+      rowMs <= pulse.ms + PULSE_ROWS_SPREAD_MS);
   const pulseAssignment = (
     enemy: ICombatUnit,
     cast: ICombatUnit["spellCastEvents"][number],
-  ): Map<number, { ms: number; line: number | undefined }> => {
+  ): Map<number, IPulse> => {
     const landing = cast.spellId
       ? AOE_CC_LANDING_WINDOW_S[cast.spellId]
       : undefined;
@@ -5254,7 +5271,7 @@ export function analyzePlayerCCAndTrinket(
           e.spellId === cast.spellId,
       )
       .sort((a, b) => a.logLine.timestamp - b.logLine.timestamp);
-    const landings: Array<{ ms: number; line: number | undefined }> = [];
+    const landings: IPulse[] = [];
     for (const u of unitsById.values())
       for (const r of [
         ...(u.auraEvents ?? []).filter(
@@ -5264,7 +5281,11 @@ export function analyzePlayerCCAndTrinket(
       ]) {
         if (!r.spellId || !family.has(r.spellId)) continue;
         if (!fromCaster(r.srcUnitId)) continue;
-        landings.push({ ms: r.timestamp, line: r.logLine?.lineIndex });
+        landings.push({
+          ms: r.timestamp,
+          line: r.logLine?.lineIndex,
+          src: r.srcUnitId,
+        });
       }
     // a summon's own row of the control at its pulse — Capacitor Totem's
     // 118905 — is the go-off too, logged before the stun it applies (GH
@@ -5280,23 +5301,32 @@ export function analyzePlayerCCAndTrinket(
         e.spellId !== cast.spellId &&
         family.has(e.spellId)
       )
-        landings.push({ ms: e.logLine.timestamp, line: e.logLine.lineIndex });
+        landings.push({
+          ms: e.logLine.timestamp,
+          line: e.logLine.lineIndex,
+          src: e.srcUnitId,
+        });
     landings.sort((a, b) => a.ms - b.ms);
     let takenUpTo = -Infinity;
+    const taken = new Set<IPulse>();
     for (const c of casts) {
       const cMs = c.logLine.timestamp;
       const hit = landings.find(
         (l) =>
           l.ms > takenUpTo &&
+          !taken.has(l) &&
           l.ms >= cMs + landing.fromS * 1000 &&
           l.ms <= cMs + landing.toS * 1000,
       );
       if (hit) {
         assigned.set(cMs, hit);
-        // one pulse's rows — the summon's go-off and the auras / misses it
-        // put on several units — are all taken (codex 20-G167-05 #1: the
-        // stun 1 ms after the totem's row went to the next press)
-        takenUpTo = hit.ms + PULSE_ROWS_SPREAD_MS;
+        // one pulse lands on several units in one ms: all of it is taken
+        takenUpTo = hit.ms;
+        // …and so are the rows its source logged just after it — the
+        // summon's go-off, then the auras / misses it put on each unit
+        // (`inPulse`, codex 20-G167-05 #1); another source's rows in that
+        // span are another pulse (20-G167-10 #1)
+        for (const l of landings) if (inPulse(hit, l.ms, l.src)) taken.add(l);
       }
     }
     pulseByCast.set(key, assigned);
@@ -5332,14 +5362,11 @@ export function analyzePlayerCCAndTrinket(
     cast: ICombatUnit["spellCastEvents"][number],
     family: ReadonlySet<string>,
     rowMs: number,
+    rowSrc: string | undefined,
   ): boolean => {
     const castMs = cast.logLine.timestamp;
-    // a pulse's rows logged just after its go-off are that pulse's too
-    // (`PULSE_ROWS_SPREAD_MS`, codex 20-G167-05 #1: the stun 1 ms after the
-    // totem's row was read as the next press's)
     for (const [ownerMs, pulse] of pulseAssignment(enemy, cast))
-      if (rowMs >= pulse.ms && rowMs <= pulse.ms + PULSE_ROWS_SPREAD_MS)
-        return ownerMs === castMs;
+      if (inPulse(pulse, rowMs, rowSrc)) return ownerMs === castMs;
     return rowMs < nextPressOfControlMs(enemy, cast, family);
   };
 
@@ -5406,7 +5433,7 @@ export function analyzePlayerCCAndTrinket(
         if (
           d >= -beforeMs &&
           d <= afterMs &&
-          goOffBelongsToCast(enemy, cast, family, a.timestamp)
+          goOffBelongsToCast(enemy, cast, family, a.timestamp, a.srcUnitId)
         )
           out.push({ unit: u, ms: a.timestamp });
       }
