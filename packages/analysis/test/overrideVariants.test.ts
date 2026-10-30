@@ -144,4 +144,20 @@ describe("override variants — the friendly ledger", () => {
       "Predator's Wake",
     ]);
   });
+
+  // GH #167: the id each press logged, for the reader that pairs the press
+  // with its own aura (`[BUFF FADED]`)
+  it("each press carries the variant id it logged", () => {
+    const both = ledger(
+      dh([
+        ["1246167", 10],
+        ["1259431", 100],
+      ]),
+    ).find((c) => canonicalSpellId(c.spellId) === "1246167")!;
+    expect(both.casts.map((c) => c.pressedId)).toEqual([undefined, "1259431"]);
+    const only = ledger(dh([["1259431", 28]])).find(
+      (c) => canonicalSpellId(c.spellId) === "1246167",
+    )!;
+    expect(only.casts.map((c) => c.pressedId)).toEqual(["1259431"]);
+  });
 });

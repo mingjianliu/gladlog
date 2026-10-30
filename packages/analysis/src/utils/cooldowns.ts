@@ -1578,6 +1578,11 @@ export interface ICooldownCast {
    * prints this name (user 2026-10-28: a shared-cooldown variant counts with
    * its base spell under its own name). Read it through `castSpellName`. */
   pressedName?: string;
+  /** The id this press logged, when it is a DB2 override variant sharing the
+   * entry's cooldown and not the entry's own id (the press `pressedName`
+   * names): the aura it puts up is the variant's own (Predator's Wake's
+   * 1259431, not The Hunt's 1246167) — what `[BUFF FADED]` pairs on. */
+  pressedId?: string;
   /**
    * Per-cast cooldown in seconds, when THIS press recovers differently from
    * the entry's `cooldownSeconds`. Only Guardian Angel needs it today: the
@@ -1630,12 +1635,12 @@ export interface ICooldownCast {
   nearestBurstGapS?: number;
 }
 
-/** `ICooldownCast.pressedName` for a press logged as `pressId` on the entry
- * `spell`: the press's own name when the two ids are distinct DB2 override
- * variants of one cooldown and the names differ, else undefined. */
-function overrideVariantPressName(
+/** `ICooldownCast.pressedId` for a press logged as `pressId` on the entry
+ * `spell`: the press's id when the two ids are distinct DB2 override variants
+ * of one cooldown, else undefined. */
+function overrideVariantPressId(
   pressId: string | null | undefined,
-  spell: { spellId: string; name: string },
+  spell: { spellId: string },
 ): string | undefined {
   if (!pressId || pressId === spell.spellId) return undefined;
   if (
@@ -1645,7 +1650,20 @@ function overrideVariantPressName(
     return undefined;
   if (canonicalSpellId(pressId) !== canonicalSpellId(spell.spellId))
     return undefined;
-  const name = getEnglishSpellName(pressId, "");
+  return pressId;
+}
+
+/** `ICooldownCast.pressedName` for a press logged as `pressId` on the entry
+ * `spell`: the press's own name when the two ids are distinct DB2 override
+ * variants of one cooldown (`overrideVariantPressId`) and the names differ,
+ * else undefined. */
+function overrideVariantPressName(
+  pressId: string | null | undefined,
+  spell: { spellId: string; name: string },
+): string | undefined {
+  const id = overrideVariantPressId(pressId, spell);
+  if (!id) return undefined;
+  const name = getEnglishSpellName(id, "");
   return name && name !== spell.name ? name : undefined;
 }
 
@@ -5153,6 +5171,8 @@ function buildCooldownEntry(
     .map((e) => {
       const timeSeconds = (e.logLine.timestamp - matchStartMs) / 1000;
       const cast: ICooldownCast = { timeSeconds };
+      const pressedId = overrideVariantPressId(e.spellId, spell);
+      if (pressedId) cast.pressedId = pressedId;
       const pressedName = overrideVariantPressName(e.spellId, spell);
       if (pressedName) cast.pressedName = pressedName;
       if (

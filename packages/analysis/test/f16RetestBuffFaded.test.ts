@@ -191,3 +191,59 @@ describe("F16 retest — [BUFF FADED] cause of a short buff and a form-bound one
     expect(spellEffectData["147833"]?.durationSeconds).toBe(3);
   });
 });
+
+// GH #167 (wide 74-6-1333 r6 1:37): F20 D23 put Predator's Wake 1259431
+// presses on The Hunt 1246167's row; the fade reader paired them on The
+// Hunt's aura, found no removal and printed `[BUFF FADED] The Hunt (expired,
+// estimated)` while Predator's Wake's own buff came off 9 ms after the press.
+describe("[BUFF FADED] of a shared-cooldown variant press is the variant's own", () => {
+  it("each press pairs with its own aura and names it", () => {
+    const HUNT = "1246167";
+    const WAKE = "1259431";
+    const aura = (ev: LogEvent, id: string, s: number) =>
+      makeAuraEvent(ev, id, at(s), "player-1", "player-1", "BUFF");
+    const dh = makeUnit("player-1", {
+      name: "You",
+      class: CombatUnitClass.DemonHunter,
+      spec: CombatUnitSpec.DemonHunter_Devourer,
+      info: {},
+      spellCastEvents: [
+        makeSpellCastEvent(HUNT, at(10), "player-1"),
+        makeSpellCastEvent(WAKE, at(100), "player-1"),
+      ],
+      auraEvents: [
+        aura(LogEvent.SPELL_AURA_APPLIED, HUNT, 9.9),
+        aura(LogEvent.SPELL_AURA_REMOVED, HUNT, 10.1),
+        aura(LogEvent.SPELL_AURA_APPLIED, WAKE, 100),
+        aura(LogEvent.SPELL_AURA_REMOVED, WAKE, 100.01),
+      ],
+    });
+    const cds = [
+      {
+        spellId: HUNT,
+        spellName: "The Hunt",
+        tag: "Offensive",
+        casts: [
+          { timeSeconds: 10 },
+          { timeSeconds: 100, pressedId: WAKE, pressedName: "Predator's Wake" },
+        ],
+        cooldownSeconds: 90,
+        neverUsed: false,
+        availableWindows: [],
+      },
+    ];
+    const out = extractOwnerCDBuffExpiry(
+      cds as never,
+      dh.id,
+      [dh],
+      T0,
+      dh,
+      [],
+      at(300),
+    ).map((e) => [e.spellName, e.expiresAtSeconds, e.isEstimated]);
+    expect(out).toEqual([
+      ["The Hunt", 10.1, false],
+      ["Predator's Wake", 100.01, false],
+    ]);
+  });
+});

@@ -39,6 +39,7 @@ import {
 import { isControlledPlayerFlags } from "../utils/charmedPlayer";
 import {
   allyReachTalentNote,
+  castSpellName,
   cdHelpsRecipient,
   cdReadyInTimeAt,
   IMajorCooldownInfo,
@@ -511,6 +512,34 @@ const BUFF_FADE_EARLY_TOLERANCE_S = 1.5;
  * than that had its REAL removal event rejected as "belongs to a different
  * cast" and fell back to an estimate at the wrong time.
  */
+/**
+ * A cooldown row split by the id each press logged (`ICooldownCast.pressedId`):
+ * a press of a shared-cooldown override variant puts up the variant's own
+ * aura, and its fade line names the variant as its press line does
+ * (`castSpellName`). GH #167 (wide 74-6-1333 r6): two Predator's Wake 1259431
+ * presses on a The Hunt 1246167 row were paired on 1246167's aura, found no
+ * removal and printed `[BUFF FADED] The Hunt (expired, estimated)` — the
+ * 1259431 buff's own REMOVED sat 9 ms after the 1:37 press.
+ */
+function byPressedVariant(cd: IMajorCooldownInfo): IMajorCooldownInfo[] {
+  if (!cd.casts.some((c) => c.pressedId !== undefined)) return [cd];
+  const byId = new Map<string, IMajorCooldownInfo["casts"]>();
+  for (const c of cd.casts) {
+    const id = c.pressedId ?? cd.spellId;
+    byId.set(id, [...(byId.get(id) ?? []), c]);
+  }
+  return [...byId].map(([spellId, casts]) =>
+    spellId === cd.spellId
+      ? { ...cd, casts }
+      : {
+          ...cd,
+          spellId,
+          spellName: castSpellName(cd, casts[0]!),
+          casts,
+        },
+  );
+}
+
 export function extractOwnerCDBuffExpiry(
   ownerCDs: IMajorCooldownInfo[],
   ownerId: string,
@@ -549,7 +578,7 @@ export function extractOwnerCDBuffExpiry(
     .map((a) => a.logLine.timestamp as number);
   const result: ICDExpiryEvent[] = [];
 
-  for (const cd of ownerCDs) {
+  for (const cd of ownerCDs.flatMap(byPressedVariant)) {
     // 光环从没在友方身上出现过的技能:friends 的 auraEvents 里永远配不到
     // SPELL_AURA_REMOVED,于是每次施放都退回「cast + 官方时长」的估值,印出一条
     // `[BUFF FADED] …(expired, estimated)` —— 对一个不在我方身上的光环,那个估值
@@ -1451,9 +1480,11 @@ export function casterOwnAuraOfPress(
         a.logLine.timestamp >= from &&
         a.logLine.timestamp < (nextApplied ?? Infinity),
     )
-    .reduce<
-      number | null
-    >((lo, a) => (lo === null || a.logLine.timestamp < lo ? a.logLine.timestamp : lo), null);
+    .reduce<number | null>(
+      (lo, a) =>
+        lo === null || a.logLine.timestamp < lo ? a.logLine.timestamp : lo,
+      null,
+    );
   return { seconds: removedMs === null ? null : (removedMs - from) / 1000 };
 }
 
