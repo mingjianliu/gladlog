@@ -775,12 +775,16 @@ export function computeOffensiveWindows(
     // kit printed `Barkskin [60s, lasts 12s] [UNUSED]` — KILL ATTEMPTS said
     // `gated (Barkskin in hand)` of the same unit). Such a unit is never
     // defenseless. The kit row is the ledger's ownership rule
-    // (`unusedKitRows`, the one KILL ATTEMPTS' wall tier reads).
+    // (`unusedKitRows`, the one KILL ATTEMPTS' wall tier reads). A press
+    // counts as the kit's does — inside the round (`t <= roundEndS`, the
+    // ledger's `inRound`): a Blessing of Protection 0.7 s after a Solo
+    // Shuffle round's deciding death left the kit's `[UNUSED]` standing and
+    // still opened a span (GH #167, net kitInHand 605 8 → 17 after F20).
     if (
       unusedKitRows(enemy, combat).some(
         (r) =>
           unpressedKitDefensiveInHand(r.spellId) &&
-          !castsBySpell.has(r.spellId),
+          !(castsBySpell.get(r.spellId) ?? []).some((t) => t <= roundEndS),
       )
     )
       continue;

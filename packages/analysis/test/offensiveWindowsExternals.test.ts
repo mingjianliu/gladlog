@@ -733,6 +733,38 @@ describe("computeOffensiveWindows — an unpressed kit defensive is in hand", ()
     expect(computeOffensiveWindows([u] as never, [], combat)).toEqual([]);
   });
 
+  // GH #167 (net kitInHand 605 8 → 17 after F20): the kit counts a press
+  // inside the round (`inRound`); a Barkskin after a Solo Shuffle round's
+  // deciding death leaves its `[UNUSED]` standing, and the span reads it so.
+  it("a press after the round's end leaves Barkskin in hand", () => {
+    const shuffle = {
+      startTime: T0,
+      endTime: at(120),
+      startInfo: { bracket: "Rated Solo Shuffle" },
+      units: {
+        m1: makeUnit("m1", { info: {}, deathRecords: [{ timestamp: at(100) }] }),
+      },
+    } as never;
+    const late = druid([
+      [IRONBARK, 2],
+      [BARKSKIN, 100.7],
+    ]);
+    expect(
+      unusedKitRows(late as never, shuffle).map((r) => r.spellId),
+    ).toContain(BARKSKIN);
+    expect(computeOffensiveWindows([late] as never, [], shuffle)).toEqual([]);
+    const inRound = druid([
+      [IRONBARK, 2],
+      [BARKSKIN, 3],
+    ]);
+    expect(
+      unusedKitRows(inRound as never, shuffle).map((r) => r.spellId),
+    ).not.toContain(BARKSKIN);
+    expect(
+      computeOffensiveWindows([inRound] as never, [], shuffle).length,
+    ).toBeGreaterThan(0);
+  });
+
   it("once Barkskin is pressed too, the span is the machine's again", () => {
     const ws = computeOffensiveWindows(
       [
