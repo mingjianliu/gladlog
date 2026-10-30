@@ -5679,6 +5679,12 @@ export const SELF_CAST_NOOP_EXTERNAL_IDS: ReadonlySet<string> = new Set([
   // evidence as 6940: DB2 SpellMisc Attributes_1 bit 19 (Exclude Caster),
   // 0 of 35 logged casts on the caster.
   "199448",
+  // GH #167 (codex 20-G167-08): the ally-only grips / redirects
+  // (`ENEMY_REDIRECT_SAVE_IDS`) — on the cooldown ledger as rows of their
+  // own, and as bare a "ready" there as Blessing of Sacrifice. DB2 SpellMisc
+  // Attributes_1 bit 19 (Exclude Caster) on both; casts all on an ally.
+  "3411", // Intervene — 596 casts
+  "73325", // Leap of Faith — 648 casts
 ]);
 
 /**

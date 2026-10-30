@@ -10,6 +10,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { ensureAnalysisData } from "../src/data/ensure";
 import { EXCLUDE_CASTER_SPELL_IDS } from "../src/data/excludeCasterGenerated";
 import observed from "../src/data/observedSpellIdsGenerated.json";
+import { ENEMY_REDIRECT_SAVE_IDS } from "../src/data/spellIdLists";
 import {
   canonicalSpellId,
   isAllyCastableDefensive,
@@ -23,13 +24,16 @@ describe("SELF_CAST_NOOP_EXTERNAL_IDS ↔ DB2 Exclude Caster", () => {
 
   // the universe is read on the canonical id (a talent variant — Ultimate
   // Sacrifice 199448 — is Blessing of Sacrifice's row, codex 20-G167-04),
-  // the bit and the list on the logged one
+  // the bit and the list on the logged one. It is every save the ledger can
+  // list: the ally-castable defensives and the grips / redirects (Intervene,
+  // Leap of Faith — codex 20-G167-08)
   it("forward: an observed ally-castable defensive with Exclude Caster is on the list", () => {
     const missing = (observed as number[])
       .map(String)
       .filter(
         (id) =>
-          isAllyCastableDefensive(canonicalSpellId(id)) &&
+          (isAllyCastableDefensive(canonicalSpellId(id)) ||
+            ENEMY_REDIRECT_SAVE_IDS.has(id)) &&
           EXCLUDE_CASTER_SPELL_IDS.has(id) &&
           !SELF_CAST_NOOP_EXTERNAL_IDS.has(id),
       );
