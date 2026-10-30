@@ -34,6 +34,7 @@ import {
 } from "./cooldowns";
 import { pressRowsWithHidden } from "./hiddenPress";
 import { fmtTime } from "./renderGrid";
+import { DEATH_CASCADE_MS, firstDeathMs } from "./unitDeath";
 
 type SpellEntry = { type: string };
 const SPELLS = spellsData as Record<string, SpellEntry>;
@@ -91,6 +92,12 @@ export interface IEnemyCDCast {
    * else the cast time. `burstCastSpan` reads it.
    */
   buffEndSeconds: number;
+  /** The observed end above is its holder's death (the effect came off in
+   * the death cascade, `DEATH_CASCADE_MS`): when the effect was due to end
+   * had the holder lived — the official end, what a row before the death
+   * can state as time left (GH #167, 121afd91 r6 1:55: `Dark
+   * Transformation (5s left)` counted down to a death 5 s later). */
+  deathCutOfficialEndSeconds?: number;
   /** GH #119: "fact" = shown, never part of a burst window (a Demonic
    * Metamorphosis form under OFFENSIVE_AURA_FLAGS.demonic "fact"). Absent =
    * "burst". */
@@ -511,7 +518,17 @@ export function reconstructEnemyCDTimeline(
         next?.castTimeSeconds ?? Infinity,
         combat,
       );
-      if (end !== null) cd.buffEndSeconds = end;
+      if (end === null) continue;
+      const officialEnd = cd.buffEndSeconds;
+      cd.buffEndSeconds = end;
+      const deathMs = firstDeathMs(enemy);
+      const endMs = matchStartMs + end * 1000;
+      if (
+        officialEnd > end &&
+        deathMs >= endMs &&
+        deathMs - endMs <= DEATH_CASCADE_MS
+      )
+        cd.deathCutOfficialEndSeconds = officialEnd;
     }
 
     // GH #119: effects whose only evidence is an aura (Havoc Metamorphosis —

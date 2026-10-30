@@ -1073,7 +1073,10 @@ function buildResourceSnapshotOnce({
     // latest end of the presses that are running (on a tie the first one's
     // name: a press before a cast-less `(no press)` occurrence of the same
     // chain — 4caab013 0:55 Volley), in first-press order.
-    const windows = new Map<string, { spellName: string; end: number }>();
+    const windows = new Map<
+      string,
+      { spellName: string; end: number; leftEnd: number }
+    >();
     for (const cd of player.offensiveCDs) {
       // Shown until its effect ends — `buffEndSeconds`, the burst span's own
       // end (the observed aura chain, else the official duration; triage
@@ -1089,11 +1092,15 @@ function buildResourceSnapshotOnce({
       if (timeSeconds > end) continue;
       const key = canonicalSpellId(cd.spellId);
       const prev = windows.get(key);
+      // an effect its holder's death cut short: shown until the death, its
+      // time left the official one — the death is not known before it
+      // (GH #167)
+      const leftEnd = Math.max(end, cd.deathCutOfficialEndSeconds ?? end);
       if (prev === undefined || end > prev.end)
-        windows.set(key, { spellName: cd.spellName, end });
+        windows.set(key, { spellName: cd.spellName, end, leftEnd });
     }
     for (const w of windows.values()) {
-      const remainingSeconds = Math.max(1, Math.round(w.end - timeSeconds));
+      const remainingSeconds = Math.max(1, Math.round(w.leftEnd - timeSeconds));
       enemyActiveParts.push(
         `${w.spellName}/${player.specName}(${remainingSeconds}s left)`,
       );
