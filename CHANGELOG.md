@@ -6,11 +6,67 @@ One section per release, listing every change and the commit behind it (on the
 `git log v<prev>..v<new>` basis; release and docs-only commits go under "Other").
 The release procedure is documented in `.claude/skills/release`.
 
+## v0.1.40 (2026-10-30)
+
+Three pieces of work. F20 fixed the fact6 round-6 double audit's 30 fact items (15 rounds, two independent auditors per round) by fact class, every reader of each fact included, after a deterministic class check per item was written first (`corpusFactScan5`). The GH #167 batch closes what F20 left: a Capacitor Totem that printed one hit twice, `[RES]` time left cut at a death the line could not know of yet, a kill window opened on a unit whose kit still held an unused defensive, and a false `The Hunt (expired, estimated)` after every Predator's Wake press. On the desktop, coach replies render as Markdown, spell icons show again, and a GUI launch finds the local CLIs. Every batch was measured on the 605-file capture and on the 10,039-context second corpus; every change that adds or removes an accusation was previewed and approved by the user before landing.
+
+Highlights:
+
+- An own talent shield that came with a press (Void Shield from Unfolding Vision, Chi Cocoon, Reversion riding Merithra's Blessing) ends `defenseless`; a passive absorb does not.
+- An area control that reached enemy players and put no control on them says `[no CC aura logged — hit X; DR: <family> Immune]`, never `hit no enemy player`.
+- Will to Survive locks the PvP trinket for 90 s (60 s for a healer); a racial locks no Adaptation holder's trinket.
+- Kicks on summons land, a pet's control times by the pet, a kill credits the side that dealt the blow, and a pet command prints once.
+- Spirit of Redemption and refused (IMMUNE) presses read as immunity; Peaceweaver is an `[ENEMY DEF]` line and ends `defenseless`.
+- Intervene and Leap of Faith are marked ally-only on the cooldown ledger and are never suggested as a self-save.
+- Coach chat replies render as Markdown; spell icons no longer go blank.
+
+Review: every fact-layer commit had its cross-AI (codex) review before landing — F20 (20-F20-*) and the GH #167 batch (20-G167-01 … 18). Every finding that changed a printed line is fixed; the remaining limits are recorded on GH #167.
+
+### AI coaching — what the report says about you
+
+- `3930f1887` **Own absorb shields** (user ruling 2026-10-28): a talent shield that came with one of the unit's own presses ends `defenseless`; a passive talent absorb (Divine Aegis, Soul Leech …) does not. The rider table is selected from DB2 trigger edges by the corpus (≥ 90 % of applications within 150 ms of the press).
+- `3930f1887` **Trinket lock:** Will to Survive locks the PvP trinket for 90 s, 60 s for a healer; a racial press locks no Adaptation holder's trinket.
+- `3930f1887` **Pets:** a kick on a summon lands; a pet's control times by the pet's own row; Roar of Sacrifice's share is a transfer, an overkill row the player lived through is no killing blow, and a summon's side is its owner's roster side; a pet command prints once.
+- `3930f1887` **Immunity:** Spirit of Redemption and refused presses read as immunity on the CC bookmark, burst anchor and press tag; Peaceweaver is an `[ENEMY DEF]` line on each carrier and ends `defenseless`.
+- `3930f1887` An ally-only save is no self-save. `a8b4b8ecf` Intervene and Leap of Faith join Blessing of Sacrifice on the cooldown ledger's ally-only list, so they are never listed as an unused self-save at a death.
+- `e9c0db09e` **A kill window needs the target's kit spent:** a defensive pressed just after a Solo Shuffle round's deciding death no longer counts as used inside the round, so a unit whose kit says `[UNUSED]` gets no `defenseless` span (605 files 17 → 0 contradictions, second corpus 32 → 0).
+
+### AI coaching — the timeline facts
+
+- `3930f1887` An area control that reached enemy players and put no control on them says `[no CC aura logged — hit X; DR: <family> Immune]`. Havoc Metamorphosis' landing stun is no control on a player.
+- `3930f1887` **DR:** one chain walk for every reader, same-millisecond landings in the log's order; a press's follow-up impact row carries the press's IMMUNE.
+- `3930f1887` A reflected DoT counts its whole run; one break press can end several disarms (`[DISARM] … trinket broke this disarm`); a death-cut breakable control says when it landed.
+- `3930f1887` An override variant counts with its base spell under its own name (The Hunt / Predator's Wake); one `[RES]` window per enemy press; Grounding's eaten redirects are named; a purge press's `k of N` counts the distinct buffs it removed.
+- `c5999cc45` `c9908d31e` `e244e3537` `c614ba31c` `46d259ef7` **Capacitor Totem prints one line per hit:** the totem's pulse row is the owner's press going off, not a second `[CC AVOIDED?]` (605 files: 9 duplicate pairs → 0; second corpus 30 → 0).
+- `c969b7d7d` `d8624be14` `459d38a49` `7016702d9` `7136167ef` `d6d195415` **`[RES]` time left is the official one** when the holder's death later cut the effect short — the line is written at the press and cannot know of the death yet.
+- `75b115ce9` **A Predator's Wake press reads Predator's Wake's own aura:** the false `The Hunt (expired, estimated)` after it is gone (605 files 55 → 0, second corpus 163 → 0).
+
+### Desktop
+
+- `097bccbb8` Coach chat replies render as Markdown (bold, headings, lists, tables); spell and spec names keep their icons; your own questions stay plain text.
+- `21d4c9f6c` Spell icons no longer stay blank when the report opens before the spell-name dictionary has loaded; four real icon names the cache rejected are allowed.
+- `c98e64e12` The icon table is regenerated: 71 icon names the CDN serves with hyphens, not spaces, are repaired (Ring of Frost among them).
+- `b059c1b1c` An app started from the Dock finds node for the local CLIs (claude, cbc, agy).
+- `148648d33` The codebuddy backend offers the hy4-preview and hy4-preview-x models.
+
+### Reliability / tests / CI
+
+- `7d03685bb` `3caaa8511` `000229f0c` `a1212ce2e` `corpusFactScan5`: one deterministic check per round-6 fact class, written before any fix (27 classes, 8,697 → 16 violations on 605 files after F20); its purge-definition check reads the definition the menu prints and counts only the other team's presses and the buffs they removed.
+- `3930f1887` Six new hard gates pin the rendered side of F20's fact classes.
+- `96d48d9e4` `f4f8651fc` The ally-only self-save table is checked forward and in reverse against DB2's Exclude Caster flag.
+
+### Other
+
+- `77a888bba` The report-ai visual baseline follows the coach reply's rich text.
+- `e23ea21b9` PROMPT_VERSION 465 (464 is carried by `3930f1887`).
+- `fe11809d3` `52361cd06` `d80869c74` `ce76600b9` `b080f4dfe` `b42ed0f70` Knowledge notes: the spec output study skill and log facts for healers (HoT and haste, Shuffle aura persistence, healing-received modifiers, Aspect of Harmony, Preservation Evoker).
+
 ## v0.1.39 (2026-10-28)
 
 Eight pieces of work. The fact4 round-4 audit (69 confirmed defects) finished with its last batches, fact4 batches 1–8 and a final batch. A weekly review of the previous week's commits found eight problems — two readers of one fact that disagreed, hand id tables the curated scans could not see, tests that had stopped testing what they are named for. A new CI job runs the public wowarenalogs test logs through the parser and every hard gate, and a mutation probe asks whether any test notices when a line of code is wrong; together they found a player falling out of the roster, Chinese spell names leaking into the prompt, and an invisibility that ended at its own press. The fact5 round-5 double audit (15 rounds, 26 defects) was fixed in batches 1–5, each fact class with a deterministic check in the new `corpusFactScan4`. The predicate-index rulings of 2026-10-24 put each listed two-reader fact on one reading. F19 fixed what the codex reader inventory found. The PV463 batch closes the hard gates that still failed on a second, newer corpus. GH #163 prices a Restoration druid's Barkskin at its PvP 40 %. From fact5 on, every batch was measured on the 605-file capture and on that second corpus of 728 newer files; every change that adds or removes an accusation was previewed and approved by the user before landing.
 
 Highlights:
+
 - A Solo Shuffle round ends at its deciding death for every reader — the timeline, roots, the cooldown ledger, cast bars, CC chains, kick-eaten and the desktop panels.
 - A player no longer falls out of the roster on a log whose aura list the decoder misread, and a player's side comes from the log's own team field.
 - A spell name from a Chinese or Korean client is never printed; an unknown id falls back to the id.
@@ -195,6 +251,7 @@ Review: every batch had its cross-AI (codex) review before or right after landin
 The fact3 round-3 audit (GH #153) checked thirty new rounds against their raw logs with two independent auditors. Its 61 confirmed defects were fixed class by class, every reader of each fact included. Two corpus-wide fact scans followed and became the regression net (`corpusFactScan`, `corpusFactScan2`: one deterministic check per audited fact class, run on a 605-file capture before and after every batch). After this release, batch 1 reads 0 in every class, and batch 2's residue is listed on GH #153.
 
 Highlights:
+
 - A cooldown pressed while its holder was out of sight counts as a press, tagged `[pressed while unseen]`.
 - A reflected spell's return is measured from the reflector's actual hits.
 - An IMMUNE control on your team always gets a line, with the cause the log shows.
