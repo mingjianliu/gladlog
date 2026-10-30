@@ -11,6 +11,7 @@ import { ensureAnalysisData } from "../src/data/ensure";
 import { EXCLUDE_CASTER_SPELL_IDS } from "../src/data/excludeCasterGenerated";
 import observed from "../src/data/observedSpellIdsGenerated.json";
 import {
+  canonicalSpellId,
   isAllyCastableDefensive,
   SELF_CAST_NOOP_EXTERNAL_IDS,
 } from "../src/utils/cooldowns";
@@ -20,12 +21,15 @@ describe("SELF_CAST_NOOP_EXTERNAL_IDS ↔ DB2 Exclude Caster", () => {
     await ensureAnalysisData();
   });
 
+  // the universe is read on the canonical id (a talent variant — Ultimate
+  // Sacrifice 199448 — is Blessing of Sacrifice's row, codex 20-G167-04),
+  // the bit and the list on the logged one
   it("forward: an observed ally-castable defensive with Exclude Caster is on the list", () => {
     const missing = (observed as number[])
       .map(String)
       .filter(
         (id) =>
-          isAllyCastableDefensive(id) &&
+          isAllyCastableDefensive(canonicalSpellId(id)) &&
           EXCLUDE_CASTER_SPELL_IDS.has(id) &&
           !SELF_CAST_NOOP_EXTERNAL_IDS.has(id),
       );
