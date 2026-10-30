@@ -167,6 +167,10 @@ export async function main(): Promise<void> {
       "channeledGenerated.ts": {
         entries: countQuotedIds("channeledGenerated.ts"),
       },
+      // GH #167: the forward check of SELF_CAST_NOOP_EXTERNAL_IDS
+      "excludeCasterGenerated.ts": {
+        entries: countQuotedIds("excludeCasterGenerated.ts"),
+      },
       "summonGenerated.ts": {
         entries: countQuotedIds("summonGenerated.ts"),
       },

@@ -294,6 +294,9 @@ npx tsx packages/analysis/scripts/datagen/genOffGcd.ts
 # 6f1. channelled spells (SpellMisc Attributes_1 bit 2 "Is Channelled"; kick-eaten's phase=channel,
 #      reliability round 3 W1k). Restricted to the observed universe like 6f.
 npx tsx packages/analysis/scripts/datagen/genChanneled.ts
+# 6f1a. spells that cannot target their caster (SpellMisc Attributes_1 bit 19 "Exclude Caster", observed
+#      universe) — the forward check of SELF_CAST_NOOP_EXTERNAL_IDS (test/selfCastNoopForward.test.ts, GH #167).
+npx tsx packages/analysis/scripts/datagen/genExcludeCaster.ts
 # 6f1b. shared charge pools (SpellCategories.ChargeCategory shared by ≥ 2 observed spells with charges;
 #      Blessing of Protection ↔ Spellwarding, Holy Bulwark ↔ Sacred Weapon …). A press of one spends the
 #      other's charge in the ledger (spendsSharedChargeOf, reliability round 2 W1e).

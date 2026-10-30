@@ -63,6 +63,9 @@
     "channeledGenerated.ts": {
       "entries": 83
     },
+    "excludeCasterGenerated.ts": {
+      "entries": 45
+    },
     "summonGenerated.ts": {
       "entries": 185
     },
