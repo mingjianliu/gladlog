@@ -419,4 +419,79 @@ describe("F16 retest — a ground control's press and its summon's pulse are one
     expect(r[0].castAtSeconds).toBeCloseTo(60, 3);
     expect(r[0].atSeconds).toBeCloseTo(62.004, 3);
   });
+  it("codex 20-G167-05 #1: a pulse's stun 1 ms after its totem's row is that press's, not the next press's", () => {
+    const enemy = makeUnit("enemy-1", {
+      name: "Enemy",
+      spec: CombatUnitSpec.Shaman_Restoration,
+      reaction: CombatUnitReaction.Hostile,
+      spellCastEvents: [
+        makeSpellCastEvent(CAPACITOR_TOTEM, CAST_AT, "0000000000000000", "nil", "enemy-1", "Enemy", 0, "Capacitor Totem"),
+        makeSpellCastEvent(CAPACITOR_TOTEM, CAST_AT + 1_500, "0000000000000000", "nil", "enemy-1", "Enemy", 0, "Capacitor Totem"),
+      ],
+    });
+    (enemy as { petSpellCastEvents?: unknown[] }).petSpellCastEvents = [
+      makeSpellCastEvent(STATIC_CHARGE, CAST_AT + 3_004, "0000000000000000", "nil", "totem-1", "Capacitor Totem", 0, "Capacitor Totem"),
+      makeSpellCastEvent(STATIC_CHARGE, CAST_AT + 4_504, "0000000000000000", "nil", "totem-2", "Capacitor Totem", 0, "Capacitor Totem"),
+    ];
+    const mate = makeUnit("mate-1", {
+      name: "Mate",
+      spec: CombatUnitSpec.Priest_Discipline,
+      reaction: CombatUnitReaction.Friendly,
+      auraEvents: [
+        makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, STATIC_CHARGE, CAST_AT + 3_005, "totem-1", "mate-1", "DEBUFF"),
+      ],
+    });
+    const player = makeUnit("player-1", {
+      name: "PlayerWarrior",
+      spec: CombatUnitSpec.Warrior_Arms,
+      reaction: CombatUnitReaction.Friendly,
+      auraEvents: [
+        makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, BLADESTORM, CAST_AT - 1_000, "player-1", "player-1", "BUFF"),
+        makeAuraEvent(LogEvent.SPELL_AURA_REMOVED, BLADESTORM, CAST_AT + 6_000, "player-1", "player-1", "BUFF"),
+      ],
+    });
+    const totems = ["totem-1", "totem-2"].map((id) =>
+      makeUnit(id, { name: "Capacitor Totem", reaction: CombatUnitReaction.Hostile, ownerId: "enemy-1" } as never),
+    );
+    const r = analyzePlayerCCAndTrinket(
+      player,
+      [enemy],
+      {
+        ...combat,
+        units: { "enemy-1": enemy, "mate-1": mate, "player-1": player, "totem-1": totems[0], "totem-2": totems[1] },
+      } as never,
+      totems,
+    ).ccAvoidedInstances;
+    // the first pulse caught the teammate (no position: no reach, no line);
+    // the second caught no one and is the one Bladestorm answered
+    expect(r.map((a) => [a.castAtSeconds, a.atSeconds])).toEqual([[61.5, 64.504]]);
+  });
+  it("codex 20-G167-05 #2: a move after the totem's pulse row did not dodge it — the row is the go-off", () => {
+    const ROLL = "109132";
+    const enemy = makeUnit("enemy-1", {
+      name: "Enemy",
+      spec: CombatUnitSpec.Shaman_Restoration,
+      reaction: CombatUnitReaction.Hostile,
+      spellCastEvents: [
+        makeSpellCastEvent(CAPACITOR_TOTEM, CAST_AT, "0000000000000000", "nil", "enemy-1", "Enemy", 0, "Capacitor Totem"),
+      ],
+    });
+    (enemy as { petSpellCastEvents?: unknown[] }).petSpellCastEvents = [
+      makeSpellCastEvent(STATIC_CHARGE, CAST_AT + 2_004, "0000000000000000", "nil", "totem-1", "Capacitor Totem", 0, "Capacitor Totem"),
+    ];
+    const lines = (rollAt: number) => {
+      const player = makeUnit("player-1", {
+        name: "PlayerMonk",
+        spec: CombatUnitSpec.Monk_Windwalker,
+        reaction: CombatUnitReaction.Friendly,
+        spellCastEvents: [
+          makeSpellCastEvent(ROLL, CAST_AT + rollAt, "player-1", "PlayerMonk", "player-1", "PlayerMonk", 0, "Roll"),
+        ],
+      });
+      return analyzePlayerCCAndTrinket(player, [enemy], combat as never).ccAvoidedInstances;
+    };
+    expect(lines(3_000)).toEqual([]);
+    // control: a Roll before the pulse is still the dodge
+    expect(lines(1_500)).toHaveLength(1);
+  });
 });

@@ -590,6 +590,12 @@ export const BREAKABLE_CC_SPELL_IDS = new Set([
  */
 export const CC_LANDED_MATCH_WINDOW_MS = 1500;
 
+/** One pulse of a delayed control is logged as a burst of rows — the
+ * summon's go-off, then the auras and misses it puts on each unit: 1 ms
+ * apart at 533229d9 r6 1:15 (GH #167). A press takes its pulse's rows this
+ * far past the first; two presses' pulses are a GCD or more apart. */
+const PULSE_ROWS_SPREAD_MS = 100;
+
 /**
  * The window in which a CC aura counts as THIS cast's landing, around the
  * cast: `beforeMs` before it, `afterMs` after it. `CC_LANDED_MATCH_WINDOW_MS`
@@ -5190,16 +5196,22 @@ export function analyzePlayerCCAndTrinket(
     // as the totem's SPELL_CAST_SUCCESS when it goes off, whether or not it
     // caught anyone (fact5 D20, e38f41c9 r0 0:38.26: a feather pressed 1.4 s
     // after the pulse was credited with dodging it)
-    for (const p of enemyPets)
-      if (p.ownerId === enemy.id)
-        for (const c of p.spellCastEvents ?? []) {
-          if (c.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
-          if (!c.spellId || !family.has(c.spellId)) continue;
-          const t = c.logLine.timestamp;
-          if (t < castMs || t > toMs) continue;
-          if (!ours(t)) continue;
-          if (first === undefined || t < first) first = t;
-        }
+    // — on the summon unit, or folded into its owner's summon rows (codex
+    // 20-G167-05 #2: a totem not in `enemyPets` timed the hit but not the
+    // go-off, and a Roll a second after the pulse was credited)
+    for (const c of [
+      ...enemyPets
+        .filter((p) => p.ownerId === enemy.id)
+        .flatMap((p) => p.spellCastEvents ?? []),
+      ...(enemy.petSpellCastEvents ?? []),
+    ]) {
+      if (c.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) continue;
+      if (!c.spellId || !family.has(c.spellId)) continue;
+      const t = c.logLine.timestamp;
+      if (t < castMs || t > toMs) continue;
+      if (!ours(t)) continue;
+      if (first === undefined || t < first) first = t;
+    }
     return first;
   };
   const pulseByCast = new Map<
@@ -5281,8 +5293,10 @@ export function analyzePlayerCCAndTrinket(
       );
       if (hit) {
         assigned.set(cMs, hit);
-        // one pulse lands on several units in one ms: all of it is taken
-        takenUpTo = hit.ms;
+        // one pulse's rows — the summon's go-off and the auras / misses it
+        // put on several units — are all taken (codex 20-G167-05 #1: the
+        // stun 1 ms after the totem's row went to the next press)
+        takenUpTo = hit.ms + PULSE_ROWS_SPREAD_MS;
       }
     }
     pulseByCast.set(key, assigned);
@@ -5320,8 +5334,12 @@ export function analyzePlayerCCAndTrinket(
     rowMs: number,
   ): boolean => {
     const castMs = cast.logLine.timestamp;
+    // a pulse's rows logged just after its go-off are that pulse's too
+    // (`PULSE_ROWS_SPREAD_MS`, codex 20-G167-05 #1: the stun 1 ms after the
+    // totem's row was read as the next press's)
     for (const [ownerMs, pulse] of pulseAssignment(enemy, cast))
-      if (pulse.ms === rowMs) return ownerMs === castMs;
+      if (rowMs >= pulse.ms && rowMs <= pulse.ms + PULSE_ROWS_SPREAD_MS)
+        return ownerMs === castMs;
     return rowMs < nextPressOfControlMs(enemy, cast, family);
   };
 
