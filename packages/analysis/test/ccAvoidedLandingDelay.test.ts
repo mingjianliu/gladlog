@@ -325,4 +325,36 @@ describe("F16 retest — a ground control's press and its summon's pulse are one
       analyzePlayerCCAndTrinket(player, [enemy], combat as never).ccAvoidedInstances,
     ).toHaveLength(2);
   });
+  it("GH #167 533229d9 r6 1:15: the totem's own 118905 row at the pulse is the press's go-off, not a second line", () => {
+    const pulseAt = CAST_AT + 2_004;
+    const enemy = makeUnit("enemy-1", {
+      name: "Enemy",
+      spec: CombatUnitSpec.Shaman_Restoration,
+      reaction: CombatUnitReaction.Hostile,
+      spellCastEvents: [
+        makeSpellCastEvent(CAPACITOR_TOTEM, CAST_AT, "0000000000000000", "nil", "enemy-1", "Enemy", 0, "Capacitor Totem"),
+      ],
+    });
+    // the totem's row: its own GUID, not the owner's
+    (enemy as { petSpellCastEvents?: unknown[] }).petSpellCastEvents = [
+      makeSpellCastEvent(STATIC_CHARGE, pulseAt, "0000000000000000", "nil", "totem-1", "Capacitor Totem", 0, "Capacitor Totem"),
+    ];
+    const player = makeUnit("player-1", {
+      name: "PlayerWarrior",
+      spec: CombatUnitSpec.Warrior_Arms,
+      reaction: CombatUnitReaction.Friendly,
+      auraEvents: [
+        makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, BLADESTORM, CAST_AT - 1_000, "player-1", "player-1", "BUFF"),
+        makeAuraEvent(LogEvent.SPELL_AURA_REMOVED, BLADESTORM, CAST_AT + 5_000, "player-1", "player-1", "BUFF"),
+      ],
+    });
+    const r = analyzePlayerCCAndTrinket(player, [enemy], combat as never);
+    expect(r.ccAvoidedInstances).toHaveLength(1);
+    expect(r.ccAvoidedInstances[0].castAtSeconds).toBeCloseTo(60, 3);
+    // control: a summon row with no press of its owner before it stands alone
+    enemy.spellCastEvents.length = 0;
+    expect(
+      analyzePlayerCCAndTrinket(player, [enemy], combat as never).ccAvoidedInstances,
+    ).toHaveLength(1);
+  });
 });
