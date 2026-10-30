@@ -4587,3 +4587,34 @@ fades 55 → 0; `[RES]` entries ending within 1 s of the holder's death 3,010 �
 (10,039 owner files): gates unchanged; kitInHand 32 → 0; duplicate pairs 30 →
 0; estimated The Hunt fades 163 → 0; fadedWhileUp 9 → 8; `[RES]` proxy 7,210 →
 2,969; corpusFactScan5 68,110 → 67,970.
+
+v466 (2026-10-30, Time Dilation by what it held back — user: no 50 % in the
+prompt, tell the model how much damage was actually taken). Measured on 138
+October arena files with a Preservation Evoker (eval-private
+runs/pevoker-pvp-2026-10-29, `probes/td_phase.py`, `td_sim.py`): the take-back
+361029 starts ~1 s after the first hit the shield holds (84 % of 10,562
+episodes ≤ 1.0 s), a tick after a new absorb is pending / 8 and one with none
+repeats the last, so 43 % of it lands while the buff is still up — the 07-30
+basis ("re-settled ~10 s later") does not hold. Run from the absorbs alone the
+rule reproduces the log (92 deaths: 17.66 M simulated vs 18.08 M still held
+back; per unit median 0.02 %, p90 7.7 %). The `[ENEMY DEF]` line prints
+`defers Nk` (the unit's own SPELL_ABSORBED rows while the aura was up) in place
+of `50%`, with a legend entry; `checkEnemyDefSaveEffect` reads it, and only a
+deferral may (`deferralWallNames`). A missed / unused Time Dilation's
+counterfactual (`savedByTimeDilation`) is what it would still hold back at the
+death, pressed when the 10 s window opens — or when the spell came off
+cooldown, if later — for its caster's talented length, a hit on the death's
+own millisecond covered; a decisive line says which. burst-into-mitigation
+carries `facts.mitDefers` (`defers Nk` over the burst) in place of `mitPct`
+for it, with a legend clause, and the desktop card says 延后 Nk 伤害. The
+table's 50 stays as the share each hit defers and the wall door. 605 (PV464
+base → this): candidates unchanged; the findings prompt differs only by the
+burst-into-mitigation legend clause (8 owner files carry that type, none of
+them Time Dilation); 27 `[ENEMY DEF]` lines `(50%, Ts)` → `(defers 9k–696k,
+Ts)`; the 9 Time Dilation counterfactual lines (3 deaths × 3 owners) gone;
+gates checkEnemyDefSaveEffect 27 → 0, every other class unchanged. Codex
+review (three rounds): the press-time, death-boundary and burst-into-mitigation
+findings, then readiness over the whole 10 s window
+(`offCooldownForLastSecondsBy`, `IMissedExternal.offCooldownSinceS`, slack-aware;
+the [DEATH] line's own 5 s walk unchanged) and the unused-self path — all
+fixed here, context unchanged by them on the 605.

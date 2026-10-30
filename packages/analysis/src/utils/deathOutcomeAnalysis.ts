@@ -284,6 +284,11 @@ export interface IMissedExternal {
   casterFreedom?: IDeathWindowFreedom;
   /** as `IDeathImmuneAvailable.offCooldownForLastS`, of the caster's spell */
   offCooldownForLastS?: number;
+  /** the match second the caster's spell came off cooldown, when that was
+   * inside the counterfactual's `COUNTERFACTUAL_WINDOW_S` — where
+   * `savedByTimeDilation` assumes its press (codex review). Absolute, so the
+   * consumer's floored death second cannot shift it. */
+  offCooldownSinceS?: number;
 }
 
 export interface IDeathOutcomeEvent {
@@ -544,16 +549,34 @@ export function offCooldownForLastSeconds(
   atSeconds: number,
   matchStartMs: number,
   resetSpellIds?: string[],
+  lookbackS: number = LETHAL_WINDOW_SECONDS,
+): number | undefined {
+  return offCooldownForLastSecondsBy(
+    (t) =>
+      isAvailableAt(unit, spellId, cooldown, t, matchStartMs, resetSpellIds),
+    atSeconds,
+    lookbackS,
+  );
+}
+
+/**
+ * The walk behind `offCooldownForLastSeconds` on any availability predicate
+ * that carries the rendered second's slack (`isAvailableAt`, the ledger's
+ * `cdAvailableAt`) — undefined when it was available for all of `lookbackS`.
+ */
+export function offCooldownForLastSecondsBy(
+  available: (tSeconds: number) => boolean,
+  atSeconds: number,
+  lookbackS: number,
 ): number | undefined {
   // `isAvailableAt` reads `t + CD_INSTANT_SLACK_S` (the rendered second's
   // slack): its first "available" instant is the real return minus that
   // slack, so the slack comes back off the figure — the cooldown's own
   // return, not the ledger's rounding (f4da82c5: logged removal − 1 s + 60 =
   // 4.0 s before the death, the walk's 4.5 s minus 0.5)
-  const windowStart = Math.max(0, atSeconds - LETHAL_WINDOW_SECONDS);
+  const windowStart = Math.max(0, atSeconds - lookbackS);
   for (let k = 1; atSeconds - k / 10 >= windowStart - 1e-9; k++) {
-    const t = atSeconds - k / 10;
-    if (!isAvailableAt(unit, spellId, cooldown, t, matchStartMs, resetSpellIds))
+    if (!available(atSeconds - k / 10))
       return Math.max(0, Math.round(k - 1 - CD_INSTANT_SLACK_S * 10) / 10);
   }
   return undefined;
@@ -617,6 +640,9 @@ function isLockedOutAt(
 
 /** Lethal-window length used to judge whether a player could have pressed a defensive before dying. */
 export const LETHAL_WINDOW_SECONDS = 5;
+/** The window a death's counterfactual reads (re-exported by
+ * `counterfactual.ts`, which imports this module). */
+export const COUNTERFACTUAL_WINDOW_S = 10;
 /** Minimum contiguous CC-free gap (seconds) that counts as "they had a moment to press something". */
 export const MIN_FREE_GAP_SECONDS = 1;
 
@@ -1301,6 +1327,28 @@ export function buildDeathOutcomeSummary(
             ...(extReadyFor !== undefined
               ? { offCooldownForLastS: extReadyFor }
               : {}),
+            ...(() => {
+              const cfReadyFor = offCooldownForLastSeconds(
+                teammate,
+                spellId,
+                cooldownSourceOf(
+                  teammate,
+                  spellId,
+                  spell.cooldownSeconds,
+                  resolvedCooldownSeconds?.(teammate, spellId),
+                  matchStartMs,
+                ),
+                atSeconds,
+                matchStartMs,
+                undefined,
+                // the walk stops before taking the slack back off: a return
+                // up to that slack after the window opens reads "available"
+                COUNTERFACTUAL_WINDOW_S + CD_INSTANT_SLACK_S,
+              );
+              return cfReadyFor !== undefined
+                ? { offCooldownSinceS: atSeconds - cfReadyFor }
+                : {};
+            })(),
           });
         }
       }

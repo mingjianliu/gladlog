@@ -135,6 +135,7 @@ import * as counterfactual from "@gladlog/analysis/src/utils/counterfactual";
 import * as damagePress from "@gladlog/analysis/src/utils/damagePress";
 import * as dampening from "@gladlog/analysis/src/utils/dampening";
 import * as deathOutcomeAnalysis from "@gladlog/analysis/src/utils/deathOutcomeAnalysis";
+import * as deferralShield from "@gladlog/analysis/src/utils/deferralShield";
 import * as dispelAnalysis from "@gladlog/analysis/src/utils/dispelAnalysis";
 import * as dispelKind from "@gladlog/analysis/src/utils/dispelKind";
 import * as dpsMetrics from "@gladlog/analysis/src/utils/dpsMetrics";
@@ -1484,6 +1485,26 @@ const INDEX: PredicateRow[] = [
     file: `${A}/utils/enemyDefensives.ts`,
     symbol: "ENEMY_DEF_IMMUNE_LABEL_RE_SRC",
     mod: enemyDefensives,
+  },
+  {
+    file: `${A}/utils/enemyDefensives.ts`,
+    symbol: "enemyDefDefersLabel",
+    mod: enemyDefensives,
+  },
+  {
+    file: `${A}/utils/enemyDefensives.ts`,
+    symbol: "ENEMY_DEF_DEFERS_LABEL_RE_SRC",
+    mod: enemyDefensives,
+  },
+  {
+    file: `${A}/utils/enemyDefensives.ts`,
+    symbol: "deferralWallNames",
+    mod: enemyDefensives,
+  },
+  {
+    file: `${A}/utils/deferralShield.ts`,
+    symbol: "timeDilationPendingAt",
+    mod: deferralShield,
   },
   {
     file: `${A}/data/spellSchools.ts`,

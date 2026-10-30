@@ -408,7 +408,7 @@ export function candidateDetail(c: CandidateEvent): string {
       return `${f.stun ?? ""} 开在 ${f.target ?? ""} 身上(徽章还在),当时 ${f.primeAlt ?? ""} 无徽章无控中减伤;失败原因 ${f.failedBy ?? "?"}${ref}`;
     }
     case "burst-into-mitigation":
-      return `${f.spell ?? ""} 打进 ${f.target ?? ""} 的 ${f.mitSpell ?? ""}(减伤 ${f.mitPct ?? "?"}%),当时 ${f.betterTarget ?? ""} 是更软的目标`;
+      return `${f.spell ?? ""} 打进 ${f.target ?? ""} 的 ${f.mitSpell ?? ""}(${f.mitDefers ? `延后 ${f.mitDefers.replace(/^defers /, "")} 伤害` : `减伤 ${f.mitPct ?? "?"}%`}),当时 ${f.betterTarget ?? ""} 是更软的目标`;
     case "cd-waste":
       return `${f.spell ?? ""} 整场未按`;
     case "crisis-no-response": {

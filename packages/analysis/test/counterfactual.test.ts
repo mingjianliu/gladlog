@@ -11,7 +11,10 @@ import {
   counterfactualTier,
   DECISIVE_MARGIN_PCT,
 } from "../src/utils/counterfactual";
-import { IMissedExternal } from "../src/utils/deathOutcomeAnalysis";
+import {
+  IMissedExternal,
+  offCooldownForLastSecondsBy,
+} from "../src/utils/deathOutcomeAnalysis";
 
 // ---------------------------------------------------------------------------
 // Fixture helpers (copied from deepDive.test.ts's mkUnit style: damageIn with
@@ -516,6 +519,159 @@ describe("computeMissedExternalCounterfactuals(B)", () => {
       60,
     );
     expect(hits).toEqual([]);
+  });
+});
+
+describe("时间膨胀按「死时还压着多少」定价(2026-10-30)", () => {
+  // window [50, 60], TD pressed at 50 s (no caster in the roster: the
+  // talented 10.4 s); 800k at 50.5 s → 400k deferred, ticks from 51.5 s at
+  // 50k a second → 8 ticks by 58.5 s, nothing left at the death
+  const missed: IMissedExternal[] = [
+    {
+      casterName: "Evo-Area52",
+      casterSpec: "Preservation Evoker",
+      spellId: "357170",
+      spellName: "Time Dilation",
+      casterWasInCC: false,
+    },
+  ];
+  const hp = [
+    { atS: 50, hp: 100_000, maxHp: 200_000 },
+    { atS: 60, hp: 100, maxHp: 200_000 },
+  ];
+  test("推后的伤害在窗口里已经回来 → 不算省下(旧算法 50%×800k = 400k decisive)", () => {
+    const victim = mkVictim(
+      "v20",
+      [{ atS: 50.5, amount: 800_000, school: "0x1" }],
+      [],
+      hp,
+    );
+    expect(
+      computeMissedExternalCounterfactuals(
+        missed,
+        victim,
+        { startTime: 0 },
+        60,
+      ),
+    ).toEqual([]);
+  });
+  test("死前刚吸收的还没回来 → 省下的是死时还压着的量", () => {
+    // 600k at 57.5 s: 300k deferred, ticks at 58.5 and 59.5 (37.5k each) →
+    // 225k still held back at 60 s
+    const victim = mkVictim(
+      "v21",
+      [{ atS: 57.5, amount: 600_000, school: "0x1" }],
+      [],
+      hp,
+    );
+    const hits = computeMissedExternalCounterfactuals(
+      missed,
+      victim,
+      { startTime: 0 },
+      60,
+    );
+    expect(hits).toHaveLength(1);
+    expect(hits[0].savedAmount).toBe(225_000);
+    expect(hits[0].pressedWhenReady).toBeUndefined();
+  });
+  test("冷却 58 秒才转好 → 57.5 秒那一下按不出来,不算省下(codex 审查)", () => {
+    const victim = mkVictim(
+      "v22",
+      [{ atS: 57.5, amount: 600_000, school: "0x1" }],
+      [],
+      hp,
+    );
+    expect(
+      computeMissedExternalCounterfactuals(
+        [{ ...missed[0], offCooldownSinceS: 58 }],
+        victim,
+        { startTime: 0 },
+        60,
+      ),
+    ).toEqual([]);
+  });
+  test("冷却 57 秒转好 → 从转好那一刻按,照样 225k,并标明按在转好时", () => {
+    const victim = mkVictim(
+      "v23",
+      [{ atS: 57.5, amount: 600_000, school: "0x1" }],
+      [],
+      hp,
+    );
+    const hits = computeMissedExternalCounterfactuals(
+      [{ ...missed[0], offCooldownSinceS: 57 }],
+      victim,
+      { startTime: 0 },
+      60,
+    );
+    expect(hits).toHaveLength(1);
+    expect(hits[0].savedAmount).toBe(225_000);
+    expect(hits[0].pressedWhenReady).toBe(true);
+  });
+  test("自己的时间膨胀:冷却 57 秒转好 → 从转好时按,225k;58 秒才转好 → 不算(codex 复审)", () => {
+    const tdCd = (returnsAtS: number): IMajorCooldownInfo =>
+      ({
+        spellId: "357170",
+        spellName: "Time Dilation",
+        tag: "External",
+        cooldownSeconds: returnsAtS,
+        maxChargesDetected: 1,
+        casts: [{ timeSeconds: 0 }],
+        availableWindows: [],
+        neverUsed: false,
+      }) as unknown as IMajorCooldownInfo;
+    const cc = {
+      playerName: "v25",
+      ccInstances: [],
+    } as unknown as Pick<IPlayerCCTrinketSummary, "playerName" | "ccInstances">;
+    const victim = () =>
+      mkVictim("v25", [{ atS: 57.5, amount: 600_000, school: "0x1" }], [], hp);
+    const ready57 = computeUnusedSelfCounterfactuals(
+      victim(),
+      [tdCd(57)],
+      cc,
+      { startTime: 0, units: {} },
+      60,
+    );
+    expect(ready57).toHaveLength(1);
+    expect(ready57[0].savedAmount).toBe(225_000);
+    expect(ready57[0].pressedWhenReady).toBe(true);
+    expect(
+      computeUnusedSelfCounterfactuals(
+        victim(),
+        [tdCd(58)],
+        cc,
+        { startTime: 0, units: {} },
+        60,
+      ),
+    ).toEqual([]);
+  });
+  test("就绪回看按反事实的 10 秒走:114 秒转好、120 秒死 → 6 秒(5 秒回看会当成整窗就绪)", () => {
+    // the predicate carries the rendered second's slack, as isAvailableAt does
+    const available = (t: number) => t + 0.5 >= 114;
+    expect(offCooldownForLastSecondsBy(available, 120, 5)).toBeUndefined();
+    expect(offCooldownForLastSecondsBy(available, 120, 10)).toBe(6);
+    expect(offCooldownForLastSecondsBy(() => true, 120, 10)).toBeUndefined();
+    // a return 0.4 s after the window opens: the slack hides it from a walk
+    // that stops at the window's start; the counterfactual walks the slack too
+    const at504 = (t: number) => t + 0.5 >= 50.4;
+    expect(offCooldownForLastSecondsBy(at504, 60, 10)).toBeUndefined();
+    expect(offCooldownForLastSecondsBy(at504, 60, 10.5)).toBe(9.6);
+  });
+  test("死亡同一毫秒的那一下也算进去:300k 全压着(codex 审查)", () => {
+    const victim = mkVictim(
+      "v24",
+      [{ atS: 60, amount: 600_000, school: "0x1" }],
+      [],
+      hp,
+    );
+    const hits = computeMissedExternalCounterfactuals(
+      missed,
+      victim,
+      { startTime: 0 },
+      60,
+    );
+    expect(hits).toHaveLength(1);
+    expect(hits[0].savedAmount).toBe(300_000);
   });
 });
 

@@ -334,6 +334,28 @@ describe("burst-into-mitigation(OFFENSIVE-002,2026-08-11 信号扩容批 2)", ()
     expect(found!.facts.mitPct).toBe("30");
   });
 
+  it("时间膨胀不写 50%:写它在爆发里压下了多少(用户 2026-10-30)", () => {
+    const { combat } = buildMitigationCombat({ mitSpellId: "357170" });
+    const absorb = (tsMs: number, amount: number) => ({
+      spellId: "357170",
+      spellName: "Time Dilation",
+      absorbedAmount: amount,
+      logLine: { timestamp: MATCH_START + tsMs },
+    });
+    // 60k + 40k inside the burst (it opens at 10 s); the 70k at 39 s is after
+    (combat.units.e1 as { absorbsIn: unknown[] }).absorbsIn = [
+      absorb(12_000, 60_000),
+      absorb(25_000, 40_000),
+      absorb(39_000, 70_000),
+    ];
+    const events = extractCandidateFindings(combat, "p1");
+    const found = events.find((e) => e.type === "burst-into-mitigation");
+    expect(found).toBeTruthy();
+    expect(found!.facts.mitSpell).toBe("Time Dilation");
+    expect(found!.facts.mitDefers).toBe("defers 100k");
+    expect(found!.facts.mitPct).toBeUndefined();
+  });
+
   it("减伤百分比低于门槛(<30%):不产出", () => {
     // Barkskin: 20% per MITIGATION_TABLE — below BURST_INTO_MITIGATION_MIN_PCT
     // (Anti-Magic Zone used to be the example at 15%; since 2026-09-04 it is the

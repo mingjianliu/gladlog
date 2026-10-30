@@ -47,6 +47,7 @@ import {
   wasLockedOutByStunOnly,
   wasLockedOutThroughWindow,
 } from "../utils/deathOutcomeAnalysis";
+import { TIME_DILATION_ID } from "../utils/deferralShield";
 import {
   HEAL_ABSORB_SELF_SAVE_IDS,
   healAbsorbDeathLine,
@@ -893,7 +894,13 @@ export function formatDecisiveCounterfactualLine(
     hit.source === "missed-external" && hit.casterName
       ? `${hit.spellName} from ${hit.casterName}`
       : hit.spellName;
-  return `Counterfactual (arithmetic, single-factor): ${subject} would have cut window damage below lethal (margin >${DECISIVE_MARGIN_PCT}% max HP)`;
+  // Time Dilation defers, it does not prevent: say what it would still have
+  // held back at the death (`savedByTimeDilation`), and the press it assumes
+  const deferral =
+    hit.spellId === TIME_DILATION_ID
+      ? ` (pressed when ${hit.pressedWhenReady ? "it came off cooldown" : "the window opened"}: ~${Math.round(hit.savedAmount / 1000)}k of the damage still held back at the death)`
+      : "";
+  return `Counterfactual (arithmetic, single-factor): ${subject}${deferral} would have cut window damage below lethal (margin >${DECISIVE_MARGIN_PCT}% max HP)`;
 }
 
 /**

@@ -9,18 +9,28 @@ import { getSortedAdvancedActions } from "./advancedActions";
 import { buildAuraIntervals, IAuraInterval } from "./auraIntervals";
 import { binarySearchClosest } from "./binarySearch";
 import { isCasterSideLinkAura } from "./brokenRowBreaker";
+import { buffFullDurationForCaster } from "./buffDuration";
 import { IPlayerCCTrinketSummary } from "./ccTrinketAnalysis";
 import { lockoutDebuffStopsPressAtDeath } from "./cooldowns";
 import {
+  CD_INSTANT_SLACK_S,
+  cdAvailableAt,
   cdReadyInTimeAt,
   HP_SAMPLE_RADIUS_MS,
   IMajorCooldownInfo,
 } from "./cooldowns";
 import {
+  COUNTERFACTUAL_WINDOW_S,
   IMissedExternal,
+  offCooldownForLastSecondsBy,
   wasLockedOutThroughWindow,
 } from "./deathOutcomeAnalysis";
-import { DEFERRAL_SHIELD_DAMAGE_IDS,hitSchoolId, logSchoolMask } from "./incomingPressure";
+import { TIME_DILATION_ID, timeDilationPendingAt } from "./deferralShield";
+import {
+  DEFERRAL_SHIELD_DAMAGE_IDS,
+  hitSchoolId,
+  logSchoolMask,
+} from "./incomingPressure";
 
 /**
  * counterfactual.ts — mitigation counterfactual accounting (#17b): the
@@ -50,7 +60,7 @@ import { DEFERRAL_SHIELD_DAMAGE_IDS,hitSchoolId, logSchoolMask } from "./incomin
  * not redefine any existing constant or table.
  */
 
-export const COUNTERFACTUAL_WINDOW_S = 10;
+export { COUNTERFACTUAL_WINDOW_S };
 /** Margin above the decisive line: 15% of maxHp. */
 export const DECISIVE_MARGIN_PCT = 15;
 /** Lower bound of the marginal tier: 0.5 × net HP lost. */
@@ -510,6 +520,100 @@ function savedByComponents(
   return Math.round(saved);
 }
 
+/**
+ * Time Dilation's hypothetical saving: what it would still hold back at the
+ * death (`timeDilationPendingAt`), not the table's 50 % of the window — the
+ * damage it defers comes back as the unit's own ticks from ~1 s after the
+ * first hit it takes, most of it inside a 10 s window. One press the healer
+ * could have made — when the window opens, or when the spell came off
+ * cooldown if that was later (`pressS`; codex review: a press at the window's
+ * start while it was still cooling down saved nobody), up for as long as its
+ * caster's talents make it (`buffFullDurationForCaster`: 8 / 9.2 / 10.4 s by
+ * Timeless Magic's rank) — not the best-timed one. A hit on the death's own
+ * millisecond is covered, as `windowDamage` counts it. Every hit it
+ * covers is deferred at the table's share (DB2 357170 #0, 50) of what the hit
+ * took off the unit's health: the real shield takes half of the whole hit
+ * before other shields eat theirs, so this reading defers less.
+ */
+function savedByTimeDilation(
+  res: NonNullable<ReturnType<typeof resolveMitigation>>,
+  victim: ICombatUnit,
+  pressS: number,
+  deathS: number,
+  combat: { startTime: number },
+  caster: ICombatUnit | undefined,
+): number {
+  const share =
+    Math.min(100, Math.max(...res.components.map((c) => c.pctMin))) / 100;
+  const durS = buffFullDurationForCaster(TIME_DILATION_ID, caster) ?? 0;
+  const fromMs = combat.startTime + pressS * 1000;
+  const expiresMs = fromMs + durS * 1000;
+  const deathMs = combat.startTime + deathS * 1000;
+  const absorbs = victim.damageIn
+    .filter(
+      (d) =>
+        d.logLine.timestamp >= fromMs &&
+        d.logLine.timestamp < expiresMs &&
+        d.logLine.timestamp <= deathMs,
+    )
+    .map((d) => ({
+      tsMs: d.logLine.timestamp,
+      amount: Math.abs(d.effectiveAmount) * share,
+    }))
+    .sort((a, b) => a.tsMs - b.tsMs);
+  return Math.round(timeDilationPendingAt(absorbs, deathMs));
+}
+
+/** Time Dilation's assumed press: the window's start, or the match second
+ * the spell came off cooldown when that was later
+ * (`IMissedExternal.offCooldownSinceS`, or `selfOffCooldownSinceS` for an
+ * unused self cooldown). */
+function timeDilationPressS(
+  windowStartS: number,
+  offCooldownSinceS: number | undefined,
+): number {
+  return offCooldownSinceS === undefined
+    ? windowStartS
+    : Math.max(windowStartS, offCooldownSinceS);
+}
+
+/** The ledger's own walk for an unused self cooldown, over the whole window
+ * plus the slack the walk takes back off (as the external producer's). */
+function selfOffCooldownSinceS(
+  cd: IMajorCooldownInfo,
+  deathS: number,
+): number | undefined {
+  const readyFor = offCooldownForLastSecondsBy(
+    (t) => cdAvailableAt(cd, t),
+    deathS,
+    COUNTERFACTUAL_WINDOW_S + CD_INSTANT_SLACK_S,
+  );
+  return readyFor === undefined ? undefined : deathS - readyFor;
+}
+
+/** Shape B / narrow gate: the hypothetical saving of one table entry. */
+function savedBy(
+  spellId: string,
+  res: NonNullable<ReturnType<typeof resolveMitigation>>,
+  victim: ICombatUnit,
+  windowStartS: number,
+  deathS: number,
+  combat: { startTime: number },
+  caster: ICombatUnit | undefined,
+  offCooldownSinceS?: number,
+): number {
+  return spellId === TIME_DILATION_ID
+    ? savedByTimeDilation(
+        res,
+        victim,
+        timeDilationPressS(windowStartS, offCooldownSinceS),
+        deathS,
+        combat,
+        caster,
+      )
+    : savedByComponents(res, victim, windowStartS, deathS, combat);
+}
+
 export interface ICounterfactualHit {
   spellId: string;
   spellName: string;
@@ -518,6 +622,9 @@ export interface ICounterfactualHit {
   savedAmount: number;
   savedPctMaxHp: number;
   tier: CounterfactualTier;
+  /** Time Dilation priced from a press when it came off cooldown, later
+   * than the window's start (`timeDilationPressS`) */
+  pressedWhenReady?: true;
 }
 
 /**
@@ -618,7 +725,20 @@ export function computeUnusedSelfCounterfactuals(
     });
     if (!res || res.positional) continue;
 
-    const saved = savedByComponents(res, victim, windowStartS, deathS, combat);
+    const readySinceS =
+      cd.spellId === TIME_DILATION_ID
+        ? selfOffCooldownSinceS(cd, deathS)
+        : undefined;
+    const saved = savedBy(
+      cd.spellId,
+      res,
+      victim,
+      windowStartS,
+      deathS,
+      combat,
+      victim,
+      readySinceS,
+    );
     const hit = decisiveHitFor(
       cd.spellId,
       cd.spellName,
@@ -628,6 +748,12 @@ export function computeUnusedSelfCounterfactuals(
       netDamage,
       maxHp,
     );
+    if (
+      hit &&
+      cd.spellId === TIME_DILATION_ID &&
+      timeDilationPressS(windowStartS, readySinceS) > windowStartS
+    )
+      hit.pressedWhenReady = true;
     if (hit) hits.push(hit);
   }
   return hits;
@@ -660,7 +786,16 @@ export function computeMissedExternalCounterfactuals(
     });
     if (!res || res.positional) continue; // skip off-table / positional
 
-    const saved = savedByComponents(res, victim, windowStartS, deathS, combat);
+    const saved = savedBy(
+      m.spellId,
+      res,
+      victim,
+      windowStartS,
+      deathS,
+      combat,
+      unitByName(combat.units, m.casterName),
+      m.offCooldownSinceS,
+    );
     const hit = decisiveHitFor(
       m.spellId,
       m.spellName,
@@ -670,6 +805,12 @@ export function computeMissedExternalCounterfactuals(
       netDamage,
       maxHp,
     );
+    if (
+      hit &&
+      m.spellId === TIME_DILATION_ID &&
+      timeDilationPressS(windowStartS, m.offCooldownSinceS) > windowStartS
+    )
+      hit.pressedWhenReady = true;
     if (hit) hits.push(hit);
   }
   return hits;

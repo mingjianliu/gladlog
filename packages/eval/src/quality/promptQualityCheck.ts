@@ -195,7 +195,9 @@ import {
 import { UNPURGED_FOR_RE_SRC } from "@gladlog/analysis/src/utils/dispelAnalysis";
 import { OWNER_AOE_CC_NO_PLAYER_TAG } from "@gladlog/analysis/src/utils/drAnalysis";
 import {
+  deferralWallNames,
   deflectionNames,
+  ENEMY_DEF_DEFERS_LABEL_RE_SRC,
   ENEMY_DEF_DEFLECTS_WORDS,
   ENEMY_DEF_END_NOT_LOGGED,
   ENEMY_DEF_END_NOT_LOGGED_SLOT_RE,
@@ -1639,7 +1641,7 @@ const CONTROL_CUT_SECONDS = new RegExp(
  * with its second (groups 1–2), the length (3) and the round-end label when
  * it follows (4). Read on the line's head, before any `| during it:`. */
 const ENEMY_DEF_PRINTED_LENGTH = new RegExp(
-  String.raw`^(\d+):(\d{2})\s+\[ENEMY DEF\][^|]*? \((?:(?:${ENEMY_DEF_IMMUNE_LABEL_RE_SRC}|\d+%|absorb(?: (?:\d+|<1)k)?), )?(\d+(?:\.\d+)?)s\b( — ${AURA_STILL_UP_AT_ROUND_END})?`,
+  String.raw`^(\d+):(\d{2})\s+\[ENEMY DEF\][^|]*? \((?:(?:${ENEMY_DEF_IMMUNE_LABEL_RE_SRC}|${ENEMY_DEF_DEFERS_LABEL_RE_SRC}|\d+%|absorb(?: (?:\d+|<1)k)?), )?(\d+(?:\.\d+)?)s\b( — ${AURA_STILL_UP_AT_ROUND_END})?`,
 );
 /** The timeline's legend header — the gate asks for the round-end legend
  * only of a prompt that carries the timeline's legend at all. */
@@ -4937,7 +4939,7 @@ export function checkKillAttemptAlreadyUpStated(lines: string[]): string[] {
  * the Turtle, a wall of the producer's cut since fact4 batch 1 — codex
  * 20-F17-01 #3: the gate skipped it). The words hold no regex metacharacter. */
 const ENEMY_DEF_OWN_PCT_LABEL = new RegExp(
-  String.raw`^\((?:(\d+)%|${ENEMY_DEF_DEFLECTS_WORDS})(?:, (?:${ENEMY_DEF_END_NOT_LOGGED}|(\d+(?:\.\d+)?)s))?`,
+  String.raw`^\((?:(\d+)%|${ENEMY_DEF_DEFLECTS_WORDS}|${ENEMY_DEF_DEFERS_LABEL_RE_SRC})(?:, (?:${ENEMY_DEF_END_NOT_LOGGED}|(\d+(?:\.\d+)?)s))?`,
 );
 
 /**
@@ -5243,7 +5245,7 @@ export function checkKillAttemptOwnControlClause(lines: string[]): string[] {
  * when its ability is neither an effect save nor a pressed self defensive:
  * a wall's `(N%…`, an immunity's `(immune…`, an area save's `(area)`. */
 const ENEMY_DEF_WALL_LABEL = new RegExp(
-  String.raw`^\((?:${ENEMY_DEF_IMMUNE_LABEL_RE_SRC}[,)]|\d+%[,)]|area\))`,
+  String.raw`^\((?:${ENEMY_DEF_IMMUNE_LABEL_RE_SRC}[,)]|\d+%[,)]|${ENEMY_DEF_DEFERS_LABEL_RE_SRC}[,)]|area\))`,
 );
 
 /**
@@ -5343,6 +5345,20 @@ export function checkEnemyDefSaveEffect(lines: string[]): string[] {
       return;
     }
     if (deflectLabel) return;
+    // a deferral shield (Time Dilation, user 2026-10-30) reads what it held
+    // back, `defers Nk`, and only a deferral does
+    const defersLabel = new RegExp(
+      String.raw`^\(${ENEMY_DEF_DEFERS_LABEL_RE_SRC}[,)]`,
+    ).test(after);
+    if (defersLabel !== deferralWallNames().has(spell)) {
+      failures.push(
+        defersLabel
+          ? `line ${i + 1}: [ENEMY DEF] prints ${spell} as a deferral, which it is not: ${quoted}`
+          : `line ${i + 1}: [ENEMY DEF] prints the deferral ${spell} without what it held back: ${quoted}`,
+      );
+      return;
+    }
+    if (defersLabel) return;
     if (stated !== undefined)
       failures.push(
         `line ${i + 1}: [ENEMY DEF] gives ${spell} an effect note (${stated}) it has no claim to: ${quoted}`,

@@ -65,6 +65,7 @@ import {
   hiddenPressMs,
   isResyncBatchAt,
 } from "./hiddenPress";
+import { isDeferralAbsorb } from "./incomingPressure";
 import { TOUCH_OF_KARMA_ID } from "./karmaFeed";
 import { toRenderSecond } from "./renderGrid";
 import {
@@ -786,6 +787,18 @@ export function enemySaveEffectNote(
  * (`checkEnemyDefEndNotLogged`).
  */
 export const ENEMY_DEF_END_NOT_LOGGED = "end not logged";
+/** What an `[ENEMY DEF]` line says of a deferral shield (Time Dilation) in
+ * place of `N%`: what it held back while it was up, from the unit's own
+ * SPELL_ABSORBED rows — `defers 64k` (`<1k` when it rounds to 0). That damage
+ * comes back as the unit's own ticks from ~1 s after the first hit it took
+ * (`deferralShield.ts`), so it is no reduction (user 2026-10-30: no 50 % in
+ * the prompt, tell the model how much damage was actually taken). One source
+ * for the renderer, the legend and the gates. */
+export const ENEMY_DEF_DEFERS_LABEL_RE_SRC = String.raw`defers (?:\d+|<1)k`;
+export function enemyDefDefersLabel(heldBack: number): string {
+  const k = Math.round(heldBack / 1000);
+  return `defers ${k < 1 ? "<1" : k}k`;
+}
 /** What an `[ENEMY DEF]` line says of a deflection in place of `immune` /
  * `N%` (`IMitigationEntry.deflectsDirectAttacks`: Aspect of the Turtle). */
 export const ENEMY_DEF_DEFLECTS_WORDS =
@@ -796,6 +809,17 @@ export const ENEMY_DEF_DEFLECTS_WORDS =
 export function deflectionNames(): ReadonlySet<string> {
   return new Set(
     [...DEFLECTION_IDS]
+      .map((id) => getEnglishSpellName(id, ""))
+      .filter((n) => n !== ""),
+  );
+}
+/** The names a deferral shield's `[ENEMY DEF]` line prints with
+ * `defers Nk` (`enemyDefDefersLabel`): the table's walls that only delay —
+ * the gate's "only a deferral reads the defers label". */
+export function deferralWallNames(): ReadonlySet<string> {
+  return new Set(
+    Object.keys(MITIGATION_TABLE)
+      .filter((id) => isDeferralAbsorb({ spellId: id }))
       .map((id) => getEnglishSpellName(id, ""))
       .filter((n) => n !== ""),
   );
@@ -839,7 +863,7 @@ export const ENEMY_DEF_IMMUNE_LABEL_RE_SRC = String.raw`immune(?: to [a-z]+(?:\/
 // REMOVED, `(deflects direct attacks; …, end not logged)`, read as a line with
 // no slot — a false hard failure and `endNotLogged` false)
 export const ENEMY_DEF_END_NOT_LOGGED_SLOT_RE = new RegExp(
-  String.raw`\((?:(?:${ENEMY_DEF_IMMUNE_LABEL_RE_SRC}|${ENEMY_DEF_DEFLECTS_WORDS}|\d+%|absorb(?: (?:\d+|<1)k)?), )?${ENEMY_DEF_END_NOT_LOGGED}\)`,
+  String.raw`\((?:(?:${ENEMY_DEF_IMMUNE_LABEL_RE_SRC}|${ENEMY_DEF_DEFLECTS_WORDS}|${ENEMY_DEF_DEFERS_LABEL_RE_SRC}|\d+%|absorb(?: (?:\d+|<1)k)?), )?${ENEMY_DEF_END_NOT_LOGGED}\)`,
 );
 
 /** The start of `enemySaveEffectNote`'s parenthesis, as rendered. */

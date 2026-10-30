@@ -679,4 +679,15 @@
  *  Capacitor pairs 9 → 0 / 30 → 0; false `The Hunt (expired, estimated)`
  *  55 → 0 / 163 → 0; gates unchanged. See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 465;
+/*
+ * v466 (2026-10-30): Time Dilation is priced by what it actually held back,
+ *  not the table's 50 % (user 2026-10-30) — the `[ENEMY DEF]` line prints
+ *  `defers Nk` from the unit's SPELL_ABSORBED rows; a missed one's
+ *  counterfactual is what would still be held back at the death under the
+ *  measured take-back rule (`deferralShield.ts`), pressed when the window
+ *  opens or the spell comes off cooldown; burst-into-mitigation carries
+ *  `facts.mitDefers` in place of `mitPct` for it. 605 (PV464 base): 27 lines
+ *  relabelled, 9 counterfactual lines (3 deaths) gone;
+ *  checkEnemyDefSaveEffect 27 → 0. See docs/prompt-version-history.md.
+ */
+export const PROMPT_VERSION = 466;

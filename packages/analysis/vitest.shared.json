@@ -168,6 +168,7 @@
     "test/deathOutcome.whitelist.test.ts",
     "test/deathTrinketTag.test.ts",
     "test/deferralRoleTag.test.ts",
+    "test/deferralShield.test.ts",
     "test/discoveryWallTags.test.ts",
     "test/dispelGates.test.ts",
     "test/dispelReachGrid.test.ts",

@@ -11,6 +11,7 @@ import { type ICombatUnit, LogEvent } from "@gladlog/parser-compat";
 
 import { MITIGATION_TABLE } from "../../data/mitigationData";
 import { TIMELINE_LINE_FLAGS } from "../../data/timelineLineFlags";
+import { absorbContributionsInWindow } from "../../utils/absorbShields";
 import {
   guardianSpiritSaveClause,
   hasOffensiveSpellActive,
@@ -23,6 +24,7 @@ import {
   ENEMY_DEF_END_NOT_LOGGED,
   ENEMY_DEF_NO_PRESS_TAG,
   ENEMY_DEF_UNSEEN_PRESS_TAG,
+  enemyDefDefersLabel,
   enemyDefensiveEvents,
   enemySaveEffectNote,
   immunitySchoolWords,
@@ -323,13 +325,28 @@ export function emitEnemyDefEntries(
           const deflects =
             MITIGATION_TABLE[wallTableIdOfAura(d.spellId)]
               ?.deflectsDirectAttacks === true;
+          // Time Dilation (user 2026-10-30): what it held back while up, not
+          // the table's 50 % — the damage lands later as the unit's own
+          const deferral = isDeferralAbsorb({
+            spellId: wallTableIdOfAura(d.spellId),
+          });
           const strength = deflects
             ? ENEMY_DEF_DEFLECTS_WORDS
-            : d.kind === "immune"
-              ? limited !== undefined
-                ? `immune to ${immunitySchoolWords(limited)}`
-                : "immune"
-              : `${d.pct}%`;
+            : deferral
+              ? enemyDefDefersLabel(
+                  absorbContributionsInWindow(
+                    enemy,
+                    matchStartMs + d.atSeconds * 1000,
+                    matchStartMs +
+                      (d.atSeconds + (d.observedSeconds ?? 0)) * 1000,
+                  ).find((c) => c.spellId === wallTableIdOfAura(d.spellId))
+                    ?.absorbedAmount ?? 0,
+                )
+              : d.kind === "immune"
+                ? limited !== undefined
+                  ? `immune to ${immunitySchoolWords(limited)}`
+                  : "immune"
+                : `${d.pct}%`;
           const hpStr = hpPct !== null ? ` (at ${hpPct.toFixed(0)}% HP)` : "";
           // F15 C5: a copy no press put up says so; fact3 D35: a press made
           // while the unit was unseen, too

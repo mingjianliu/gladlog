@@ -526,6 +526,23 @@ describe("checkEnemyDefSaveEffect (FT-T07, ruling D8)", () => {
     expect(f[1]).toContain("which it is not");
   });
 
+  it("Time Dilation (user 2026-10-30) reads what it held back, and nothing else does", () => {
+    const EVOKER = "5(PEvoker) (Preservation Evoker)";
+    expect(
+      checkEnemyDefSaveEffect([
+        D(EVOKER, "Time Dilation (defers 120k, 8.0s) (at 41% HP)"),
+        D(EVOKER, "Time Dilation (defers <1k, 8.0s)"),
+      ]),
+    ).toEqual([]);
+    const f = checkEnemyDefSaveEffect([
+      D(EVOKER, "Time Dilation (50%, 8.0s) (at 41% HP)"),
+      D("5(RDruid) (Restoration Druid)", "Barkskin (defers 12k, 12.0s)"),
+    ]);
+    expect(f).toHaveLength(2);
+    expect(f[0]).toContain("without what it held back");
+    expect(f[1]).toContain("as a deferral, which it is not");
+  });
+
   it("fails an effect note on an ability that has none", () => {
     const f = checkEnemyDefSaveEffect([
       D("4(FMage) (Fire Mage)", "Ice Block (absorb 12k, 10.0s)"),

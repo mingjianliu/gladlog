@@ -504,6 +504,7 @@ export function formatTimeline(
           "    line with them) — how long it lasted is unknown: it is NOT the full duration, and the unit may have been hit seconds later.",
           "    `immune` = full immunity, or the unit could not be hit while it lasted (Burrow, Time Stop, Mass Invisibility, Vanish);",
           `    \`${ENEMY_DEF_DEFLECTS_WORDS}\` = Aspect of the Turtle: no immunity — attacks and spells aimed at the unit are deflected, damage already ticking on it lands;`,
+          "    `defers Nk` = Time Dilation: it held back Nk of the damage while it was up (half of each hit) — no reduction: that damage lands on the unit later as its own `deferred Time Dilation` ticks, from about 1 s after the first hit it held, and counts when it lands;",
           "    `immune to magic` / `immune to physical` = an immunity to those schools only — the other school still hits (Cloak of Shadows, Blessing of Protection, Blessing of Spellwarding);",
           "    `(absorb Nk, Ts)` = a shield, not an immunity — the unit can still be hit; Nk = what it absorbed while up (no",
           "    figure = the log shows none; a bare `(absorb)` states the mechanism only). `(heal proc)` = Nature's Guardian",

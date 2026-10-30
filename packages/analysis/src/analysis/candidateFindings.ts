@@ -41,6 +41,7 @@ import {
   isDecisionTraceActive,
   traceDecision,
 } from "../facts/decisionTrace";
+import { absorbContributionsInWindow } from "../utils/absorbShields";
 import { buildAuraIntervals } from "../utils/auraIntervals";
 import { bracketKey } from "../utils/bracketKey";
 import { analyzeBurstLedger, wallUpAtOpen } from "../utils/burstLedger";
@@ -114,6 +115,7 @@ import {
 import { drResetMsAt } from "../utils/drAnalysis";
 import { reconstructEnemyCDTimeline } from "../utils/enemyCDs";
 import {
+  enemyDefDefersLabel,
   SCHOOL_LIMITED_IMMUNITY_IDS,
   wallTableIdOfAura,
 } from "../utils/enemyDefensives";
@@ -124,7 +126,10 @@ import {
 } from "../utils/externalDamage";
 import { forcedMovesText } from "../utils/forcedDisplacement";
 import { detectHealingGaps, type IHealingGap } from "../utils/healingGaps";
-import { documentRecordsAttackSpell } from "../utils/incomingPressure";
+import {
+  documentRecordsAttackSpell,
+  isDeferralAbsorb,
+} from "../utils/incomingPressure";
 import {
   attemptIntoTrinketEvents,
   extractKillAttempts,
@@ -5111,6 +5116,22 @@ function dpsOwnerEvents(
         )[0];
         return obs ? formatDuringExternalForOwner(obs) : undefined;
       })();
+      // Time Dilation reduces nothing (user 2026-10-30): what it held back
+      // during the burst replaces the table's 50 %, as on its [ENEMY DEF] line
+      const deferralKey = wallTableIdOfAura(hitDef.spellId);
+      const mitStrength: Record<string, string> = isDeferralAbsorb({
+        spellId: deferralKey,
+      })
+        ? {
+            mitDefers: enemyDefDefersLabel(
+              absorbContributionsInWindow(
+                enemies.find((e) => e.id === t.unitId) ?? { absorbsIn: [] },
+                combat.startTime + b.fromSeconds * 1000,
+                combat.startTime + b.toSeconds * 1000,
+              ).find((c) => c.spellId === deferralKey)?.absorbedAmount ?? 0,
+            ),
+          }
+        : { mitPct: String(mitPct) };
       out.push({
         id: `burst-into-mitigation:${owner.id}:${Math.round(b.fromSeconds)}`,
         type: "burst-into-mitigation",
@@ -5123,7 +5144,7 @@ function dpsOwnerEvents(
           spell: b.spells.map((s) => s.spellName).join(" + "),
           target: t.unitName,
           mitSpell,
-          mitPct: String(mitPct),
+          ...mitStrength,
           betterTarget: betterTargetName,
           ...(duringExternal ? { duringExternal } : {}),
         },
