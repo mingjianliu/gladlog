@@ -51,6 +51,7 @@ const MODULE_FILES = [
   "dr",
   "singles1",
   "singles2",
+  "unseenPress",
 ];
 await ensureAnalysisData();
 const modules: IScanModule[] = [];

@@ -228,6 +228,45 @@ describe("hiddenPressMs — the bounds no test pinned", () => {
     ]);
     expect(hiddenPressMs(past, EVASION, T0)).toEqual([first + life + 1]);
   });
+  it("Prowl removes 252071: the re-listing of the still-running 102543 is no press (fact7 D34)", () => {
+    const press = T0 + 6_000;
+    const prowl = press + 1_400;
+    const listedAt = prowl + 270;
+    const at = (event: LogEvent, id: string, ms: number) => ({
+      ...aura(event, id, ms),
+      destUnitId: "rogue",
+    });
+    const u = rogue([
+      at(LogEvent.SPELL_AURA_APPLIED, "102543", press),
+      at(LogEvent.SPELL_AURA_APPLIED, "252071", press),
+      at(LogEvent.SPELL_AURA_REMOVED, "252071", prowl),
+      ...Array.from({ length: 29 }, (_, i) =>
+        aura(LogEvent.SPELL_AURA_APPLIED, String(920_000 + i), listedAt, "x"),
+      ),
+      at(LogEvent.SPELL_AURA_APPLIED, "102543", listedAt),
+      at(LogEvent.SPELL_AURA_REMOVED, "102543", press + 25_000),
+    ]);
+    expect(hiddenPressMs(u, "102543", T0)).toEqual([]);
+  });
+  it("both of a press's auras down: a batch that lists one of them is a press", () => {
+    const first = T0 + 6_000;
+    const listedAt = first + 40_000;
+    const at = (event: LogEvent, id: string, ms: number) => ({
+      ...aura(event, id, ms),
+      destUnitId: "rogue",
+    });
+    const u = rogue([
+      at(LogEvent.SPELL_AURA_APPLIED, "102543", first),
+      at(LogEvent.SPELL_AURA_APPLIED, "252071", first),
+      at(LogEvent.SPELL_AURA_REMOVED, "252071", first + 1_000),
+      at(LogEvent.SPELL_AURA_REMOVED, "102543", first + 20_000),
+      ...Array.from({ length: 29 }, (_, i) =>
+        aura(LogEvent.SPELL_AURA_APPLIED, String(920_000 + i), listedAt, "x"),
+      ),
+      at(LogEvent.SPELL_AURA_APPLIED, "102543", listedAt),
+    ]);
+    expect(hiddenPressMs(u, "102543", T0)).toEqual([listedAt]);
+  });
   it("a press of two same-named auras: one's logged REMOVED keeps the press up across the other's re-listing (Alter Time 342245 / 342246)", () => {
     // untilOf's "up to its own REMOVED" is only visible here: the run of
     // 342246 is searched past the other id's rows to its REMOVED, so a

@@ -207,7 +207,13 @@ export function hiddenPressMs(
   // aura's official length (+ 1 s) after its last (re)application (codex
   // 21-R12-a #3: an Evasion APPLIED at 10 s with no REMOVED kept `up` true
   // for the round and hid a fresh unseen press at 140 s)
-  let upUntilMs = -Infinity;
+  // Per aura id: a press's same-named auras end on their own (fact7 D34 /
+  // D41: Prowl removes Incarnation's 252071 while its 102543 runs on, and the
+  // batch that re-states the druid re-lists 102543 — one clock for both read
+  // that as a third press). The press is up while any of them is.
+  const upUntilMs = new Map<string, number>();
+  const anyUpAt = (ms: number) =>
+    [...upUntilMs.values()].some((until) => ms <= until);
   // a same-ms REMOVED → APPLIED re-broadcast is the aura staying up, not a
   // new application (codex 62-POSTHOC-13f #1: a second Evasion "press")
   const kept = new Set(dropAuraRebroadcasts(own));
@@ -252,8 +258,9 @@ export function hiddenPressMs(
   for (const [i, a] of own.entries()) {
     if (!kept.has(a)) continue;
     const ms = a.logLine.timestamp;
-    const up = ms <= upUntilMs;
-    if (a.logLine.event === LogEvent.SPELL_AURA_REMOVED) upUntilMs = -Infinity;
+    const up = anyUpAt(ms);
+    if (a.logLine.event === LogEvent.SPELL_AURA_REMOVED)
+      upUntilMs.delete(a.spellId!);
     else if (a.logLine.event === LogEvent.SPELL_AURA_APPLIED) {
       if (
         !up &&
@@ -264,8 +271,8 @@ export function hiddenPressMs(
         !formBuffUpBefore(ms)
       )
         out.push(ms);
-      upUntilMs = untilOf(i, ms);
-    } else upUntilMs = untilOf(i, ms); // a REFRESH / dose row: it is up
+      upUntilMs.set(a.spellId!, untilOf(i, ms));
+    } else upUntilMs.set(a.spellId!, untilOf(i, ms)); // a REFRESH / dose row: it is up
   }
   return out;
 }
