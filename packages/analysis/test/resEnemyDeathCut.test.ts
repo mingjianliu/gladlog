@@ -300,4 +300,87 @@ describe("[RES] enemy: time left of an effect its holder's death cut short (GH #
     expect(cut.deathCutOfficialEndSeconds).toBeGreaterThan(15);
     expect(metaOf(40).deathCutOfficialEndSeconds).toBeUndefined();
   });
+
+  it("codex 20-G167-06 #1: a Demonic form (Eye Beam) cut by its holder's death keeps Demonic's 5 s, not Metamorphosis's", () => {
+    const u = makeUnit("e1", {
+      name: "Dh",
+      spec: CombatUnitSpec.DemonHunter_Havoc,
+      spellCastEvents: [
+        makeSpellCastEvent("198013", START + 9_800, "e1", "Dh", "e2", "X"),
+      ],
+      auraEvents: [
+        aura(
+          LogEvent.SPELL_AURA_APPLIED,
+          "162264",
+          START + 10_000,
+          ["e1", "Dh"],
+          "e1",
+        ),
+        aura(
+          LogEvent.SPELL_AURA_REMOVED,
+          "162264",
+          START + 13_000,
+          ["e1", "Dh"],
+          "e1",
+        ),
+      ],
+    } as any);
+    (u as any).deathRecords = [{ timestamp: START + 13_040 }];
+    const tl = reconstructEnemyCDTimeline([u], {
+      startTime: START,
+      endTime: START + 200_000,
+      units: { e1: u },
+    } as any);
+    const form = [
+      ...tl.players[0]!.offensiveCDs,
+      ...(tl.players[0]!.offensiveFacts ?? []),
+    ].find((c) => c.spellId === "162264")!;
+    expect(form.buffEndSeconds).toBeCloseTo(13, 3);
+    expect(form.deathCutOfficialEndSeconds).toBeCloseTo(15, 3);
+  });
+
+  it("codex 20-G167-06 #3: a natural expiry at the aura's own end beside a Shuffle round's death is no cut (the press logged after its aura)", () => {
+    const warrior = makeUnit("e1", {
+      name: "Warrior",
+      spec: CombatUnitSpec.Warrior_Arms,
+      info: {} as any,
+      spellCastEvents: [
+        makeSpellCastEvent(
+          AVATAR,
+          START + 10_500,
+          "e1",
+          "Warrior",
+          "e1",
+          "Warrior",
+        ),
+      ],
+      auraEvents: [
+        aura(
+          LogEvent.SPELL_AURA_APPLIED,
+          AVATAR,
+          START + 10_000,
+          ["e1", "Warrior"],
+          "e1",
+        ),
+        aura(
+          LogEvent.SPELL_AURA_REMOVED,
+          AVATAR,
+          START + 30_000,
+          ["e1", "Warrior"],
+          "e1",
+        ),
+      ],
+    } as any);
+    const other = makeUnit("p9", { name: "Other", info: {} as any } as any);
+    (other as any).deathRecords = [{ timestamp: START + 30_080 }];
+    const tl = reconstructEnemyCDTimeline([warrior], {
+      startTime: START,
+      endTime: START + 200_000,
+      startInfo: { bracket: SOLO_SHUFFLE_BRACKET },
+      units: { e1: warrior, p9: other },
+    } as any);
+    expect(
+      tl.players[0]!.offensiveCDs[0]!.deathCutOfficialEndSeconds,
+    ).toBeUndefined();
+  });
 });

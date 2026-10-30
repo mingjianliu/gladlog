@@ -258,7 +258,14 @@ function observedEffectEnd(
   nextSameCastS: number,
   combat: AtomicArenaCombat,
   onlyDestId?: string,
-): { endS: number; holderId: string } | null {
+): {
+  endS: number;
+  holderId: string;
+  /** the chain's aura and its last interval's start — where an official
+   * end is read from (codex 20-G167-06) */
+  auraId: string;
+  lastFromS: number;
+} | null {
   const ids = castAndEffectIds(castSpellId);
   const triggered = new Set(triggeredEffectAurasOfCast(castSpellId));
   const mine = auraIndexOf(combat).filter(
@@ -295,6 +302,7 @@ function observedEffectEnd(
     observed: boolean;
     destId: string;
     lastFromS: number;
+    auraId: string;
   } | null = null;
   for (const dest of new Set(mine.map((m) => m.destId))) {
     const ivs = mine
@@ -351,7 +359,13 @@ function observedEffectEnd(
       }
     }
     if (best === null || chainEnd > best.end)
-      best = { end: chainEnd, observed, destId: dest, lastFromS };
+      best = {
+        end: chainEnd,
+        observed,
+        destId: dest,
+        lastFromS,
+        auraId: ivs[first]!.spellId,
+      };
   }
   // F15 / fact1215 R8: the interval builder clamps a REMOVED logged after
   // the combat's end onto that end (`buildAuraIntervals` `rel`) and still
@@ -387,11 +401,23 @@ function observedEffectEnd(
       // Kingsbane case).
       const full = buffFullDurationForCaster(castSpellId, caster);
       return full !== undefined && castS + full < combatEndS
-        ? { endS: combatEndS, holderId: best.destId }
+        ? {
+            endS: combatEndS,
+            holderId: best.destId,
+            auraId: best.auraId,
+            lastFromS: best.lastFromS,
+          }
         : null;
     }
   }
-  return best?.observed ? { endS: best.end, holderId: best.destId } : null;
+  return best?.observed
+    ? {
+        endS: best.end,
+        holderId: best.destId,
+        auraId: best.auraId,
+        lastFromS: best.lastFromS,
+      }
+    : null;
 }
 
 /**
@@ -402,13 +428,18 @@ function observedEffectEnd(
  * time left (121afd91 r6 1:55: `Dark Transformation (5s left)` counted down
  * to a death 5 s later). Undefined otherwise.
  */
+const DEATH_CUT_MIN_GAP_S = 0.5;
+
 function deathCutOfficialEnd(
   holder: ICombatUnit | undefined,
   endS: number,
   officialEndS: number,
   combat: AtomicArenaCombat,
 ): number | undefined {
-  if (!(officialEndS > endS)) return undefined;
+  // a natural expiry logs within a few hundred ms of its official end (a
+  // press logged after its aura, codex 20-G167-06 #3): less than
+  // DEATH_CUT_MIN_GAP_S short is no cut
+  if (!(officialEndS - endS > DEATH_CUT_MIN_GAP_S)) return undefined;
   const endMs = combat.startTime + endS * 1000;
   const near = (ms: number | undefined) =>
     ms !== undefined && Math.abs(ms - endMs) <= DEATH_CASCADE_MS;
@@ -588,10 +619,17 @@ export function reconstructEnemyCDTimeline(
         combat,
       );
       if (end === null) continue;
+      // the observed aura's own official length (this caster's talents —
+      // Thorim's Invocation lengthens Doom Winds' aura, not its press) from
+      // its own start (codex 20-G167-06 #2 / #3); the press's when the aura
+      // has none
+      const auraFull = buffFullDurationForCaster(end.auraId, enemy);
       setObservedEnd(
         cd,
         end.endS,
-        officialEndOf.get(cd),
+        auraFull === undefined
+          ? officialEndOf.get(cd)
+          : end.lastFromS + auraFull,
         combat.units?.[end.holderId] as ICombatUnit | undefined,
       );
     }
@@ -601,6 +639,7 @@ export function reconstructEnemyCDTimeline(
     // from the same round-bounded aura intervals the aura path reads
     const aura = auraOffensiveOccurrences(enemy, combat);
     for (const [castMs, endMs] of aura.observedEndOfCast) {
+      const auraOfficialMs = aura.officialEndOfCast.get(castMs);
       const t = (castMs - matchStartMs) / 1000;
       const cast = offensiveCDs.find(
         (c) =>
@@ -610,7 +649,9 @@ export function reconstructEnemyCDTimeline(
         setObservedEnd(
           cast,
           (endMs - matchStartMs) / 1000,
-          officialEndOf.get(cast),
+          auraOfficialMs === undefined
+            ? officialEndOf.get(cast)
+            : (auraOfficialMs - matchStartMs) / 1000,
           enemy,
         );
     }
@@ -675,21 +716,27 @@ export function reconstructEnemyCDTimeline(
         const auraEnd = (o.endMs - matchStartMs) / 1000;
         // the aura is the unit's own (`auraOffensiveOccurrences`)
         if (o.endObserved)
-          setObservedEnd(logged, auraEnd, officialEndOf.get(logged), enemy);
+          setObservedEnd(
+            logged,
+            auraEnd,
+            o.officialEndMs === undefined
+              ? officialEndOf.get(logged)
+              : (o.officialEndMs - matchStartMs) / 1000,
+            enemy,
+          );
         else if (o.provenance === "press-logged")
           logged.buffEndSeconds = Math.max(logged.buffEndSeconds, auraEnd);
         continue;
       }
-      const full = o.endObserved
-        ? buffFullDurationForCaster(o.spellId, enemy)
-        : undefined;
+      // its own official end (`officialEndMs` — a Demonic form's 5 s, not
+      // Metamorphosis's 20, codex 20-G167-06 #1)
       const cutOfficialEnd =
-        full === undefined
+        !o.endObserved || o.officialEndMs === undefined
           ? undefined
           : deathCutOfficialEnd(
               enemy,
               (o.endMs - matchStartMs) / 1000,
-              castTimeSeconds + full,
+              (o.officialEndMs - matchStartMs) / 1000,
               combat,
             );
       (o.burstRole === "fact" ? offensiveFacts : offensiveCDs).push({

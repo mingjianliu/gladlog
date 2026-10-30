@@ -159,6 +159,12 @@ export interface IAuraOffensiveOccurrence {
   startMs: number;
   endMs: number;
   endObserved: boolean;
+  /** where the effect was due to end had nothing cut it — the aura's own
+   * official length (this caster's talents) from its own start, Demonic's
+   * 5 s from its last evidence; undefined when no length is known (a short
+   * talent proc). A death-cut observed end keeps it for "time left" (GH
+   * #167, codex 20-G167-06). */
+  officialEndMs?: number;
   /** 0 when no cooldown was spent (a proc / unresolved form) */
   cooldownSeconds: number;
   /** when the cooldown comes back; null = no button (proc) */
@@ -179,6 +185,9 @@ export interface IAuraOccurrenceResult {
   /** logged Doom Winds presses whose buff end was observed: cast ms → end ms
    * (the timeline overwrites that cast's estimated buff end) */
   observedEndOfCast: Map<number, number>;
+  /** …and where each was due to end (the aura's own official length from
+   * its start, `officialEndMs`) */
+  officialEndOfCast: Map<number, number>;
   /** aura intervals that belong to a LOGGED press (the timeline already has
    * the cast) — the aura path still needs them as "active" */
   castCovered: Array<{ spellId: string; startMs: number; endMs: number }>;
@@ -218,6 +227,7 @@ export function auraOffensiveOccurrences(
   const result: IAuraOccurrenceResult = {
     occurrences: [],
     observedEndOfCast: new Map(),
+    officialEndOfCast: new Map(),
     castCovered: [],
   };
   const events = (unit.auraEvents ?? []).filter(
@@ -285,6 +295,10 @@ export function auraOffensiveOccurrences(
     const startMs = bounds.startTime + iv.fromS * 1000;
     const endMs = bounds.startTime + iv.toS * 1000;
     const endObserved = !iv.inferredEnd;
+    /** the aura's own official end for this caster, from its own start */
+    const auraFull = buffFullDurationForCaster(iv.spellId, unit);
+    const auraOfficialEndMs =
+      auraFull === undefined ? undefined : startMs + auraFull * 1000;
 
     const genericCd = genericCdOfAura(iv.spellId);
     if (genericCd !== undefined) {
@@ -323,6 +337,9 @@ export function auraOffensiveOccurrences(
         burstRole: "burst",
         provenance: "unresolved",
         generic: true,
+        ...(auraOfficialEndMs !== undefined
+          ? { officialEndMs: auraOfficialEndMs }
+          : {}),
       });
       continue;
     }
@@ -345,13 +362,9 @@ export function auraOffensiveOccurrences(
         // was up (an APPLIED / REFRESH inside the segment), never from the
         // first application alone (codex review: a REFRESH at 16 s after an
         // application at 10 s proves the form at 16 s)
-        const end = toObserved
-          ? toMs
-          : Math.min(
-              toMs,
-              lastEvidenceMs("162264", fromMs, toMs) +
-                DEMONIC_FORM_SECONDS * 1000,
-            );
+        const demonicEnd =
+          lastEvidenceMs("162264", fromMs, toMs) + DEMONIC_FORM_SECONDS * 1000;
+        const end = toObserved ? toMs : Math.min(toMs, demonicEnd);
         result.occurrences.push({
           spellId: "162264",
           spellName:
@@ -372,6 +385,9 @@ export function auraOffensiveOccurrences(
                 : 0,
           burstRole: role === "fact" ? "fact" : "burst",
           provenance: eyeBeam !== undefined ? "proc" : "unresolved",
+          // a Demonic form runs 5 s from its last evidence; one with no Eye
+          // Beam has no known length
+          ...(eyeBeam !== undefined ? { officialEndMs: demonicEnd } : {}),
         });
       };
       if (press === undefined) {
@@ -389,6 +405,7 @@ export function auraOffensiveOccurrences(
           .filter((o) => o.spellId === "162264" && o.fromS > iv.fromS)
           .map((o) => bounds.startTime + o.fromS * 1000)
           .sort((a, b) => a - b)[0] ?? bounds.endTime;
+      const metaFull = buffFullDurationForCaster("191427", unit);
       const pressEnd = endObserved
         ? endMs
         : Math.max(
@@ -396,7 +413,7 @@ export function auraOffensiveOccurrences(
             Math.min(
               nextStartMs,
               bounds.endTime,
-              splitAt + (buffFullDurationForCaster("191427", unit) ?? 0) * 1000,
+              splitAt + (metaFull ?? 0) * 1000,
             ),
           );
       result.occurrences.push({
@@ -411,6 +428,9 @@ export function auraOffensiveOccurrences(
         dangerWeight: metaWeight,
         burstRole: "burst",
         provenance: "press-inferred",
+        ...(metaFull !== undefined
+          ? { officialEndMs: splitAt + metaFull * 1000 }
+          : {}),
       });
       continue;
     }
@@ -452,6 +472,9 @@ export function auraOffensiveOccurrences(
           ),
           burstRole: "burst",
           provenance: "press-logged",
+          ...(auraOfficialEndMs !== undefined
+            ? { officialEndMs: auraOfficialEndMs }
+            : {}),
         });
       } else {
         // no press: a short talent proc (605 files: 14 such applications,
@@ -481,7 +504,11 @@ export function auraOffensiveOccurrences(
     if (iv.spellId === "466772") {
       const logged = near(doomWindsPresses, startMs, -W, W);
       if (logged !== undefined) {
-        if (endObserved) result.observedEndOfCast.set(logged, endMs);
+        if (endObserved) {
+          result.observedEndOfCast.set(logged, endMs);
+          if (auraOfficialEndMs !== undefined)
+            result.officialEndOfCast.set(logged, auraOfficialEndMs);
+        }
         result.castCovered.push({
           spellId: DOOM_WINDS_PRESS_ID,
           startMs,
@@ -508,6 +535,9 @@ export function auraOffensiveOccurrences(
         ),
         burstRole: "burst",
         provenance: "press-inferred",
+        ...(auraOfficialEndMs !== undefined
+          ? { officialEndMs: auraOfficialEndMs }
+          : {}),
       });
     }
   }
