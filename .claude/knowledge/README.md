@@ -18,9 +18,9 @@
 
 ## 领域知识
 
-- [combat-log-parsing.md](combat-log-parsing.md) — 时间戳 / nil 目标 / 单排换队 / 伤害符号;事件字段实测布局;absorbsIn 两层;召唤物按 GUID 归因;单排回合与光环跨回合、召唤物衰减;静默重放、部分跳、急速换算与读条时长
+- [combat-log-parsing.md](combat-log-parsing.md) — 时间戳 / nil 目标 / 单排换队 / 伤害符号;事件字段实测布局;absorbsIn 两层;召唤物按 GUID 归因;单排回合与光环跨回合、召唤物衰减;静默重放、部分跳、急速换算与读条时长;奶龙的延后盾、吸收转治疗、汇总行
 - [log-observability.md](log-observability.md) — raw.txt 保留约束、旧解析的本地库、[STATE] 取值规则、各方向结论
-- [db2-data-semantics.md](db2-data-semantics.md) — PvpMultiplier、tooltip 占位符、SpellMisc 属性位、充能两个数、受疗修正与减疗(只取最强、施加者天赋)、外部数据源
+- [db2-data-semantics.md](db2-data-semantics.md) — PvpMultiplier、tooltip 占位符、SpellMisc 属性位、充能两个数、受疗修正与减疗(只取最强、施加者天赋)、百分比治疗、被动改天赋数值、PvP 光环改主属性、外部数据源
 - [season-data-refresh.md](season-data-refresh.md) — 时代门与 DR 窗口、补丁说明审读、控制时长读 DB2、datagen 坑
 - [whitelist-rot.md](whitelist-rot.md) — 施法 / 光环双 id、串联白名单、赛季换号;「加进表 ≠ 看得见」
 - [cooldown-model.md](cooldown-model.md) — 容差单源、proc 不算按键、三态就绪 + 动态 CDR、进攻大招追踪
