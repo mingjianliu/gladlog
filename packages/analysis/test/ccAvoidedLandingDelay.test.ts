@@ -357,4 +357,66 @@ describe("F16 retest — a ground control's press and its summon's pulse are one
       analyzePlayerCCAndTrinket(player, [enemy], combat as never).ccAvoidedInstances,
     ).toHaveLength(1);
   });
+  it("codex 20-G167-01: two totems 2 s apart, each pulse's own MISS → two lines; a pulse that caught no one is timed by the totem's row", () => {
+    const totemMiss = (ms: number) => ({
+      spellId: STATIC_CHARGE,
+      spellName: "Static Charge",
+      srcUnitId: "totem-1",
+      srcUnitName: "Capacitor Totem",
+      destUnitId: "player-1",
+      destUnitName: "PlayerWarrior",
+      timestamp: ms,
+      missType: "MISS",
+      logLine: { timestamp: ms, event: LogEvent.SPELL_MISSED },
+    });
+    const enemy = makeUnit("enemy-1", {
+      name: "Enemy",
+      spec: CombatUnitSpec.Shaman_Restoration,
+      reaction: CombatUnitReaction.Hostile,
+      spellCastEvents: [
+        makeSpellCastEvent(CAPACITOR_TOTEM, CAST_AT, "0000000000000000", "nil", "enemy-1", "Enemy", 0, "Capacitor Totem"),
+        makeSpellCastEvent(CAPACITOR_TOTEM, CAST_AT + 2_000, "0000000000000000", "nil", "enemy-1", "Enemy", 0, "Capacitor Totem"),
+      ],
+    });
+    (enemy as { petSpellCastEvents?: unknown[] }).petSpellCastEvents = [
+      makeSpellCastEvent(STATIC_CHARGE, CAST_AT + 2_004, "0000000000000000", "nil", "totem-1", "Capacitor Totem", 0, "Capacitor Totem"),
+      makeSpellCastEvent(STATIC_CHARGE, CAST_AT + 4_004, "0000000000000000", "nil", "totem-2", "Capacitor Totem", 0, "Capacitor Totem"),
+    ];
+    const player = makeUnit("player-1", {
+      name: "PlayerWarrior",
+      spec: CombatUnitSpec.Warrior_Arms,
+      reaction: CombatUnitReaction.Friendly,
+      auraEvents: [
+        makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, BLADESTORM, CAST_AT - 1_000, "player-1", "player-1", "BUFF"),
+        makeAuraEvent(LogEvent.SPELL_AURA_REMOVED, BLADESTORM, CAST_AT + 5_000, "player-1", "player-1", "BUFF"),
+      ],
+    });
+    (player as { missesIn?: unknown[] }).missesIn = [
+      totemMiss(CAST_AT + 2_004),
+      { ...totemMiss(CAST_AT + 4_004), srcUnitId: "totem-2" },
+    ];
+    expect(
+      analyzePlayerCCAndTrinket(player, [enemy], combat as never).ccAvoidedInstances.map((a) => [
+        a.castAtSeconds,
+        a.atSeconds,
+      ]),
+    ).toEqual([
+      [60, 62.004],
+      [62, 64.004],
+    ]);
+    // a pulse with no aura and no miss: the buff up only around the pulse
+    // (61–66 s) is read at the totem's row, not at the press
+    enemy.spellCastEvents.length = 1;
+    (enemy as { petSpellCastEvents: unknown[] }).petSpellCastEvents.length = 1;
+    (player as { missesIn?: unknown[] }).missesIn = [];
+    player.auraEvents.length = 0;
+    player.auraEvents.push(
+      makeAuraEvent(LogEvent.SPELL_AURA_APPLIED, BLADESTORM, CAST_AT + 1_000, "player-1", "player-1", "BUFF") as never,
+      makeAuraEvent(LogEvent.SPELL_AURA_REMOVED, BLADESTORM, CAST_AT + 6_000, "player-1", "player-1", "BUFF") as never,
+    );
+    const r = analyzePlayerCCAndTrinket(player, [enemy], combat as never).ccAvoidedInstances;
+    expect(r).toHaveLength(1);
+    expect(r[0].castAtSeconds).toBeCloseTo(60, 3);
+    expect(r[0].atSeconds).toBeCloseTo(62.004, 3);
+  });
 });

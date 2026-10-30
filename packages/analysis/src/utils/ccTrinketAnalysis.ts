@@ -5254,6 +5254,21 @@ export function analyzePlayerCCAndTrinket(
         if (!fromCaster(r.srcUnitId)) continue;
         landings.push({ ms: r.timestamp, line: r.logLine?.lineIndex });
       }
+    // a summon's own row of the control at its pulse — Capacitor Totem's
+    // 118905 — is the go-off too, logged before the stun it applies (GH
+    // #167, 533229d9 r6 1:15: the press's hit read the stun's ms, 1 ms after
+    // the totem's row, so the sweep's same-ms dedupe kept both and one
+    // pulse printed two `[CC AVOIDED?]` lines; a pulse that landed on no
+    // one has only this row to time it). The parser folded it into this
+    // caster's summon rows, which is its ownership.
+    for (const e of enemy.petSpellCastEvents ?? [])
+      if (
+        e.logLine.event === LogEvent.SPELL_CAST_SUCCESS &&
+        e.spellId &&
+        e.spellId !== cast.spellId &&
+        family.has(e.spellId)
+      )
+        landings.push({ ms: e.logLine.timestamp, line: e.logLine.lineIndex });
     landings.sort((a, b) => a.ms - b.ms);
     let takenUpTo = -Infinity;
     for (const c of casts) {
@@ -5272,29 +5287,6 @@ export function analyzePlayerCCAndTrinket(
     }
     pulseByCast.set(key, assigned);
     return assigned;
-  };
-  /** A summon's own row of a delayed control its owner pressed — Capacitor
-   * Totem's 118905 at the pulse — inside that press's landing window: the
-   * press's go-off, read through the press (`controlHitInstant`), not a
-   * second control (GH #167, 533229d9 r6 1:15: one pulse printed two
-   * `[CC AVOIDED?]` lines, the press's hit 1 ms from the totem's row, so
-   * `takeGroundHit` kept both). */
-  const isSummonGoOffOfPress = (
-    enemy: ICombatUnit,
-    cast: ICombatUnit["spellCastEvents"][number],
-  ): boolean => {
-    const id = cast.spellId;
-    if (!id || !cast.srcUnitId || cast.srcUnitId === enemy.id) return false;
-    const ms = cast.logLine.timestamp;
-    return enemy.spellCastEvents.some((o) => {
-      if (o.logLine.event !== LogEvent.SPELL_CAST_SUCCESS) return false;
-      if (!o.spellId || o.spellId === id) return false;
-      const landing = AOE_CC_LANDING_WINDOW_S[o.spellId];
-      if (!landing || landing.fromS <= 0) return false;
-      if (!castAndEffectIds(o.spellId).has(id)) return false;
-      const oMs = o.logLine.timestamp;
-      return ms >= oMs + landing.fromS * 1000 && ms <= oMs + landing.toS * 1000;
-    });
   };
   const controlHitInstant = (
     enemy: ICombatUnit,
@@ -5484,7 +5476,6 @@ export function analyzePlayerCCAndTrinket(
         (!isControlCast(cast.spellId) && !isGroundCc(cast.spellId))
       )
         continue;
-      if (isSummonGoOffOfPress(enemy, cast)) continue;
 
       const isTargeted =
         cast.destUnitId === player.id || cast.destUnitName === player.name;
