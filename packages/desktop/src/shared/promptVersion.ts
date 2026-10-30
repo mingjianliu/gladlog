@@ -667,4 +667,16 @@
  *  failing gate lines 228 → 0 / 528 → 15; corpusFactScan5 8,697 → 16 /
  *  30,661 → 24. See docs/prompt-version-history.md.
  */
-export const PROMPT_VERSION = 464;
+/*
+ * v465 (2026-10-30, GH #167 — F20 leftovers): a Capacitor Totem hit prints one
+ *  `[CC AVOIDED?]` line (the totem's pulse row is the owner's press going
+ *  off); `[RES]` enemy time left is the official one when the holder's death
+ *  later cut the effect short; a kill window's kit check counts a press only
+ *  inside the round (a kit `[UNUSED]` unit gets no `defenseless` span); a
+ *  shared-cooldown variant press (Predator's Wake) reads its own aura on
+ *  `[BUFF FADED]`; Intervene and Leap of Faith are ally-only on the ledger.
+ *  605 / wide (PV464 → batch): kitInHand 17 → 0 / 32 → 0; duplicate
+ *  Capacitor pairs 9 → 0 / 30 → 0; false `The Hunt (expired, estimated)`
+ *  55 → 0 / 163 → 0; gates unchanged. See docs/prompt-version-history.md.
+ */
+export const PROMPT_VERSION = 465;

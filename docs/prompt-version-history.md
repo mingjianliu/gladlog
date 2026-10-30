@@ -4567,3 +4567,23 @@ GH #167); corpusFactScan reflectReturn 64 → 0. Wide (cap-m463 c027aef94 →
 batch, 10039 owner files): gate failures 528 → 15 (all checkDisarmTrinketTail,
 gate-side: the disarm ended 0.25–2.0 s before the press, the same rendered
 second); corpusFactScan5 30,661 → 24; reflectReturn 285 → 0.
+
+v465 (2026-10-30, GH #167 — the F20 leftovers): Capacitor Totem: the
+totem's pulse row of its owner's ground control is the press's go-off and a
+landing of it, never a second `[CC AVOIDED?]` (a pulse owns the rows its own
+source logs within 100 ms of the go-off). `[RES]` enemy `(Ns left)` of an
+effect its holder's death later cut short is the official end, run from the
+press's own application (the line is written at the press and cannot know of
+the death). A kill window's "was the kit pressed" counts a press only at or
+before the round's end, the ledger's own cut, so a unit whose kit says
+`[UNUSED]` gets no `defenseless` span (user ruling 2026-10-20 idx 60). A
+shared-cooldown variant press reads its own aura on `[BUFF FADED]`
+(Predator's Wake no longer prints `The Hunt (expired, estimated)`). Intervene
+and Leap of Faith join the ally-only self-cast no-op list.
+605 (PV464 cap-final2 → batch, 3519 owner files): gates unchanged; kitInHand
+17 → 0; duplicate Capacitor `[CC AVOIDED?]` pairs 9 → 0; estimated The Hunt
+fades 55 → 0; `[RES]` entries ending within 1 s of the holder's death 3,010 →
+1,065 (proxy, natural ends included); corpusFactScan5 24,174 → 24,130. Wide
+(10,039 owner files): gates unchanged; kitInHand 32 → 0; duplicate pairs 30 →
+0; estimated The Hunt fades 163 → 0; fadedWhileUp 9 → 8; `[RES]` proxy 7,210 →
+2,969; corpusFactScan5 68,110 → 67,970.
