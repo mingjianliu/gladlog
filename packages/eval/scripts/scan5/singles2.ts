@@ -1151,6 +1151,8 @@ function purgeRemovalCount(ctx: IRoundCtx): void {
   // corpus); the definition prints `PURGE_PRESS_REMOVALS_TEXT`, so with
   // the type on the menu that is the text read — every tool a purger of
   // the owner's team removed ≥ 2 with in one press must be named in it.
+  // A purge is an enemy's buffs taken: a cleanse of the purger's own side
+  // (Purify off a teammate) is no purge press (codex 20-G167-03).
   if (/"missed-purge"/.test(ctx.menu)) {
     ctx.bump("purgeRemovalCount");
     const team = String(ctx.owner.info?.teamId);
@@ -1159,6 +1161,8 @@ function purgeRemovalCount(ctx: IRoundCtx): void {
         p.counted >= 2 &&
         !REMOVE_ALL_TOOLS.has(p.tool) &&
         teamOf(ctx, ownerOrSelf(ctx, p.src)) === team &&
+        teamOf(ctx, p.dest) !== undefined &&
+        teamOf(ctx, p.dest) !== team &&
         !purgeTextNames(p.tool),
     );
     if (multi)
