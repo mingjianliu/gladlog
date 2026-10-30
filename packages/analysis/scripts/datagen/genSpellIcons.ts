@@ -55,6 +55,80 @@ export function mineSpellIcons(
   return result;
 }
 
+/** CDN path segment for an icon base name (same host the runtime iconCache
+ * uses, so "the candidate resolves" means it resolves for the app too). */
+export const iconCdnUrl = (name: string): string =>
+  "https://wow.zamimg.com/images/wow/icons/large/" +
+  encodeURIComponent(name) +
+  ".jpg";
+
+/** The only rewrite rule that has evidence behind it: Blizzard shipped some art
+ * names with spaces where every consumer (zamimg, wow.tools, wowhead) uses a
+ * hyphen — `spell_frost_ring of frost` against the CDN's
+ * `spell_frost_ring-of-frost`. Nothing else is guessed: underscores, casing and
+ * trailing-whitespace variants were measured too and none of them resolved, so
+ * guessing them would only add 404s. */
+export const iconNameVariants = (name: string): string[] => {
+  const hyphenated = name.trim().replace(/ /g, "-");
+  return hyphenated === name ? [] : [hyphenated];
+};
+
+/**
+ * Rewrite icon names that the CDN does not serve into a variant it does.
+ *
+ * The DB2 `ManifestInterfaceData` table is the source of truth for the id →
+ * icon mapping, but its FileName column carries a handful of names that no
+ * icon host actually serves (spaces instead of hyphens). Those entries are
+ * worse than absent: the runtime asks the CDN, gets a 404, and the spell shows
+ * an empty placeholder where every neighbouring spell shows art (Ring of Frost,
+ * reported 2026-09-30).
+ *
+ * Every candidate is verified against the CDN before it is adopted, so this can
+ * only ever replace a name that is known to 404 with one that is known to 200 —
+ * a failed lookup leaves the original name in place. `candidates` (one per
+ * distinct name) is the only thing fetched; the table spans ~7.7k names, of
+ * which ~300 are not plain identifiers.
+ */
+export async function repairUnservedIconNames(
+  icons: Record<string, string>,
+  probe: (url: string) => Promise<boolean>,
+  log: (msg: string) => void = console.log,
+): Promise<{ repaired: number; stillUnserved: number }> {
+  const plain = /^[a-z0-9_-]+$/i;
+  const distinct = [...new Set(Object.values(icons))];
+  const suspects = distinct.filter((n) => !plain.test(n));
+  if (suspects.length === 0) return { repaired: 0, stillUnserved: 0 };
+
+  const replacements = new Map<string, string>();
+  const stillUnserved: string[] = [];
+  for (const name of suspects) {
+    const variants = iconNameVariants(name);
+    let fixed: string | null = null;
+    for (const v of variants) {
+      if (await probe(iconCdnUrl(v))) {
+        fixed = v;
+        break;
+      }
+    }
+    if (fixed) replacements.set(name, fixed);
+    else stillUnserved.push(name);
+  }
+
+  if (replacements.size > 0) {
+    for (const id of Object.keys(icons)) {
+      const fixed = replacements.get(icons[id]!);
+      if (fixed) icons[id] = fixed;
+    }
+    for (const [from, to] of replacements)
+      log(`  repaired icon name: ${from} -> ${to}`);
+  }
+  log(
+    `icon names: ${suspects.length} not plain identifiers, ${replacements.size} repaired, ` +
+      `${stillUnserved.length} unresolvable (kept as-is; the spell falls back to its initial)`,
+  );
+  return { repaired: replacements.size, stillUnserved: stillUnserved.length };
+}
+
 export async function main(): Promise<void> {
   const manifestPath = new URL(
     "../../src/data/datagen-manifest.json",
@@ -122,6 +196,18 @@ export async function main(): Promise<void> {
     },
     universe,
   );
+
+  // Names the CDN does not serve are rewritten to a variant it does (concurrent,
+  // one lookup per distinct name). Runs before the dictionary is built so the
+  // emitted names are the servable ones.
+  await repairUnservedIconNames(icons, async (url) => {
+    try {
+      const res = await fetch(url, { method: "HEAD" });
+      return res.ok;
+    } catch {
+      return false;
+    }
+  });
 
   const jsonPath = new URL(
     "../../src/data/spellIconsGenerated.json",

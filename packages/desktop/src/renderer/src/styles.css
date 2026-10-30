@@ -794,6 +794,77 @@ pre {
   font-size: 11px;
   padding: 2px 8px;
 }
+/* Markdown 渲染容器(derive/markdown):气泡本身已是 pre-wrap,块级元素只需
+   收紧间距、让标题/代码/表格在 12px 的聊天字号里不显突兀 */
+.coach-chat-md {
+  min-width: 0;
+  overflow-x: auto;
+}
+.coach-chat-md > *:first-child {
+  margin-top: 0;
+}
+.coach-chat-md > *:last-child {
+  margin-bottom: 0;
+}
+.coach-chat-md .coach-md-p {
+  margin: 0 0 6px;
+  white-space: pre-wrap;
+}
+.coach-chat-md .coach-md-h {
+  margin: 8px 0 4px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.coach-chat-md .coach-md-list {
+  margin: 0 0 6px;
+  padding-left: 18px;
+}
+.coach-chat-md .coach-md-list li {
+  margin: 2px 0;
+}
+.coach-chat-md .coach-md-code {
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: var(--surface-2);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+}
+.coach-chat-md .coach-md-pre {
+  margin: 0 0 6px;
+  padding: 6px 8px;
+  border: 1px solid var(--hairline);
+  border-radius: 4px;
+  background: var(--surface-2);
+  overflow-x: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  line-height: 1.45;
+}
+.coach-chat-md .coach-md-quote {
+  margin: 0 0 6px;
+  padding-left: 8px;
+  border-left: 2px solid var(--hairline);
+  color: var(--ink-2);
+}
+.coach-chat-md .coach-md-hr {
+  margin: 8px 0;
+  border: 0;
+  border-top: 1px solid var(--hairline);
+}
+.coach-chat-md .coach-md-table {
+  margin: 0 0 6px;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+.coach-chat-md .coach-md-table th,
+.coach-chat-md .coach-md-table td {
+  border: 1px solid var(--hairline);
+  padding: 2px 6px;
+  text-align: left;
+}
+.coach-chat-md .coach-md-table th {
+  font-weight: 600;
+}
 .coach-chat-input-row {
   display: flex;
   gap: 8px;

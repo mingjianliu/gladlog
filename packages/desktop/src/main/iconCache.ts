@@ -44,7 +44,18 @@ export function createIconCache(deps: {
 
   return {
     async get(iconName: string): Promise<string | null> {
-      if (!/^[a-z0-9_-]+$/i.test(iconName)) {
+      // 83 of the 7710 generated icon base names are not plain identifiers:
+      // Blizzard's own art files carry spaces, apostrophes and periods
+      // ("spell_frost_ring of frost", "inv_misc_fork&knife"), and 7710 of them
+      // are still a fixed whitelist that never sees user input. Rejecting those
+      // characters silently cost every one of them its icon (Ring of Frost
+      // rendered an empty placeholder while every other spell was fine).
+      //
+      // What must stay rejected is anything that could escape the cache dir:
+      // path separators, traversal, NUL, and the URL/format metacharacters that
+      // would corrupt the CDN URL. Spaces and trailing/leading whitespace are
+      // tolerated because the upstream art names contain them.
+      if (!/^[a-z0-9_ .&'()-]+$/i.test(iconName) || iconName.includes("..")) {
         return null;
       }
       if (failed.has(iconName)) {

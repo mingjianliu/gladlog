@@ -934,7 +934,7 @@ export function MatchReport({
                   hidden={sideTab !== "chat"}
                   data-testid="side-pane-chat"
                 >
-                  <CoachChatCard source={source} matchId={resolvedMatchId} />
+                  <CoachChatCard source={source} matchId={resolvedMatchId} rich={rich} />
                 </div>
               </div>
             </div>
@@ -986,7 +986,7 @@ export function MatchReport({
                 chat.getState fetch on mount, and sending a message) happen while
                 the user is already looking at the top, so nothing below is
                 yanked away. */}
-              <CoachChatCard source={source} matchId={resolvedMatchId} />
+              <CoachChatCard source={source} matchId={resolvedMatchId} rich={rich} />
               <StructuredAnalysisPanel
                 source={source}
                 matchId={resolvedMatchId}

@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
-import { posix, win32 } from "node:path";
+import { dirname, posix, win32 } from "node:path";
 import { promisify } from "node:util";
 
 import { type AiBackend, BACKEND_CLI_TOOL } from "../shared/aiModels";
@@ -65,6 +65,38 @@ export function isWindowsBatchFile(
   platform: NodeJS.Platform = process.platform,
 ): boolean {
   return platform === "win32" && /\.(cmd|bat)$/i.test(file);
+}
+
+/**
+ * Environment for spawning a local CLI / probing its version.
+ *
+ * A packaged GUI app launched from the Dock inherits launchd's PATH
+ * (`/usr/bin:/bin:/usr/sbin:/sbin`), which does not contain Homebrew's
+ * `/opt/homebrew/bin`. `claude` / `cbc` / `agy` are node scripts whose shebang
+ * is `#!/usr/bin/env node`, so spawning the *absolute* CLI path exits 127 with
+ * `env: node: No such file or directory` before it ever reads the prompt on
+ * stdin — the caller then sees a bare EPIPE on the stdin write and no
+ * diagnosis at all. Detecting the CLI still succeeds (cliDetect probes the
+ * login shell and the well-known directories), which is exactly why this only
+ * ever shows up at spawn time.
+ *
+ * Purely additive: the CLI's own directory (where its `node` sits for an npm
+ * global install) plus the well-known install directories are appended to the
+ * inherited PATH; nothing is dropped. win32 is returned untouched — a
+ * `.cmd`/`bat` shim is executed through cmd.exe, which resolves interpreters
+ * via PATHEXT/associations, not a shebang.
+ */
+export function cliSpawnEnv(file?: string): NodeJS.ProcessEnv {
+  if (process.platform === "win32") return { ...process.env };
+  const sep = ":";
+  const current = (process.env.PATH ?? "").split(sep).filter(Boolean);
+  const extra = [
+    ...(file ? [dirname(file)] : []),
+    posix.join(homedir(), ".local", "bin"),
+    "/opt/homebrew/bin",
+    "/usr/local/bin",
+  ].filter((d) => !current.includes(d) && existsSync(d));
+  return { ...process.env, PATH: [...current, ...extra].join(sep) };
 }
 
 /** Windows 上 spawn 得起来的扩展名。npm 全局目录里还有一个无扩展名的
@@ -248,7 +280,14 @@ export async function probeCliVersion(
         ? execFileP("cmd.exe", ["/c", c, ...args], {
             timeout: CLI_VERSION_PROBE_TIMEOUT_MS,
           })
-        : execFileP(c, args, { timeout: CLI_VERSION_PROBE_TIMEOUT_MS }));
+        : // Same PATH caveat as defaultRun's spawn: `c` is a node script, so
+          // without the augmented PATH the probe fails as "env: node: No such
+          // file or directory" and every error message would carry a bogus
+          // "版本探测失败" hint.
+          execFileP(c, args, {
+            timeout: CLI_VERSION_PROBE_TIMEOUT_MS,
+            env: cliSpawnEnv(c),
+          }));
   try {
     const { stdout, stderr } = await exec(cmd, ["--version"]);
     const version =
