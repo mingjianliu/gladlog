@@ -261,10 +261,9 @@ function observedEffectEnd(
 ): {
   endS: number;
   holderId: string;
-  /** the chain's aura and its last application — the last interval's
-   * APPLIED or a REFRESH inside it (a press that refreshed the aura restarts
-   * its length, codex 20-G167-11 #1) — where an official end is read from
-   * (codex 20-G167-06) */
+  /** the chain's aura and this press's application of it
+   * (`pressAppliedS`) — where an official end is read from (codex
+   * 20-G167-06) */
   auraId: string;
   appliedS: number;
 } | null {
@@ -369,11 +368,18 @@ function observedEffectEnd(
         auraId: ivs[first]!.spellId,
       };
   }
-  const lastAppliedS = (
-    b: { destId: string; auraId: string; lastFromS: number },
-    endS: number,
-  ): number => {
-    let at = b.lastFromS;
+  /** Where this press's own application of the chain's aura is: its
+   * APPLIED / REFRESH inside the press's start window (the press that
+   * refreshed an aura already up restarts it, codex 20-G167-11 #1) — not a
+   * later press's refresh (20-G167-14 #1), nor an application no press made
+   * (a rebroadcast, a talent re-application, #2). Else the last interval's
+   * start. */
+  const pressAppliedS = (b: {
+    destId: string;
+    auraId: string;
+    lastFromS: number;
+  }): number => {
+    let at: number | undefined;
     for (const a of auraRowsOf(b.destId)) {
       if (a.spellId !== b.auraId) continue;
       if (
@@ -382,9 +388,12 @@ function observedEffectEnd(
       )
         continue;
       const t = (a.logLine.timestamp - combat.startTime) / 1000;
-      if (t >= b.lastFromS && t <= endS && t > at) at = t;
+      if (t < castS - EFFECT_START_BEFORE_S || t > castS + EFFECT_START_AFTER_S)
+        continue;
+      if (t >= nextSameCastS) continue;
+      if (at === undefined || t > at) at = t;
     }
-    return at;
+    return at ?? b.lastFromS;
   };
   // F15 / fact1215 R8: the interval builder clamps a REMOVED logged after
   // the combat's end onto that end (`buildAuraIntervals` `rel`) and still
@@ -424,7 +433,7 @@ function observedEffectEnd(
             endS: combatEndS,
             holderId: best.destId,
             auraId: best.auraId,
-            appliedS: lastAppliedS(best, combatEndS),
+            appliedS: pressAppliedS(best),
           }
         : null;
     }
@@ -434,7 +443,7 @@ function observedEffectEnd(
         endS: best.end,
         holderId: best.destId,
         auraId: best.auraId,
-        appliedS: lastAppliedS(best, best.end),
+        appliedS: pressAppliedS(best),
       }
     : null;
 }

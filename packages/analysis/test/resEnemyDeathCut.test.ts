@@ -429,6 +429,24 @@ describe("[RES] enemy: time left of an effect its holder's death cut short (GH #
     )!;
     expect(second.deathCutOfficialEndSeconds).toBeCloseTo(40, 3);
     expect(enemyField(tl, 22)).toContain("(18s left)");
+    // codex 20-G167-14 #1: the first press keeps its own 30 s
+    expect(enemyField(tl, 12)).toContain("(18s left)");
+  });
+
+  it("codex 20-G167-14 #2: an application no press made does not restart the length", () => {
+    const tl = avatarScene(
+      [10],
+      [
+        [LogEvent.SPELL_AURA_APPLIED, 10],
+        [LogEvent.SPELL_AURA_APPLIED, 20],
+        [LogEvent.SPELL_AURA_REMOVED, 30],
+      ],
+      30.04,
+    );
+    expect(
+      tl.players[0]!.offensiveCDs[0]!.deathCutOfficialEndSeconds,
+    ).toBeUndefined();
+    expect(enemyField(tl, 22)).toContain("(8s left)");
   });
 
   it("codex 20-G167-11 #2: a 0.3 s cut that moves the rounded number still counts", () => {
