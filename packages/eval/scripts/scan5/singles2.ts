@@ -83,6 +83,7 @@ import spellReach from "@gladlog/analysis/src/data/spellReachGenerated.json";
 import { CONTROL_FAILED_MISS_TYPES } from "@gladlog/analysis/src/utils/castMissRows";
 import {
   getDispelType,
+  PURGE_PRESS_REMOVALS_TEXT,
   UNPURGEABLE_MAGIC_AURAS,
 } from "@gladlog/analysis/src/utils/dispelAnalysis";
 import { AOE_CC_LANDING_WINDOW_S } from "@gladlog/analysis/src/utils/drAnalysis";
@@ -1144,14 +1145,21 @@ function purgeRemovalCount(ctx: IRoundCtx): void {
         `legend names ${named ?? "no multi-removal tool"}; ${unnamedMulti} removed ≥ 2 with one press`,
       );
   }
-  if (
-    /a purge removes ONE of them/.test(ctx.menu) &&
-    /"missed-purge"/.test(ctx.menu)
-  ) {
+  // the menu's missed-purge definition. The findings file holds the menu,
+  // not the type definitions (GH #167: keyed on the definition's old "a
+  // purge removes ONE of them" in it, the check never ran on either
+  // corpus); the definition prints `PURGE_PRESS_REMOVALS_TEXT`, so with
+  // the type on the menu that is the text read — every tool a purger of
+  // the owner's team removed ≥ 2 with in one press must be named in it.
+  if (/"missed-purge"/.test(ctx.menu)) {
     ctx.bump("purgeRemovalCount");
     const team = String(ctx.owner.info?.teamId);
     const multi = presses.find(
-      (p) => p.counted >= 2 && teamOf(ctx, ownerOrSelf(ctx, p.src)) === team,
+      (p) =>
+        p.counted >= 2 &&
+        !REMOVE_ALL_TOOLS.has(p.tool) &&
+        teamOf(ctx, ownerOrSelf(ctx, p.src)) === team &&
+        !purgeTextNames(p.tool),
     );
     if (multi)
       ctx.violate(
@@ -1159,9 +1167,15 @@ function purgeRemovalCount(ctx: IRoundCtx): void {
         "menuDefinition",
         multi.ms,
         "menu",
-        `missed-purge definition says ONE; ${multi.tool} at ${fmtS(sec(multi.ms))} removed ${multi.buffs.join(" + ")}`,
+        `missed-purge definition (${PURGE_PRESS_REMOVALS_TEXT}) leaves out ${multi.tool}; at ${fmtS(sec(multi.ms))} it removed ${multi.buffs.join(" + ")}`,
       );
   }
+}
+
+/** Does the purge-count wording name this tool among the multi-removal
+ * ones (`2 for Greater Purge and Fire Breath`)? */
+function purgeTextNames(tool: string): boolean {
+  return PURGE_PRESS_REMOVALS_TEXT.split(/, | and | for /).includes(tool);
 }
 
 // ── entry ───────────────────────────────────────────────────────────────────
