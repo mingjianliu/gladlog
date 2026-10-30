@@ -261,10 +261,12 @@ function observedEffectEnd(
 ): {
   endS: number;
   holderId: string;
-  /** the chain's aura and its last interval's start — where an official
-   * end is read from (codex 20-G167-06) */
+  /** the chain's aura and its last application — the last interval's
+   * APPLIED or a REFRESH inside it (a press that refreshed the aura restarts
+   * its length, codex 20-G167-11 #1) — where an official end is read from
+   * (codex 20-G167-06) */
   auraId: string;
-  lastFromS: number;
+  appliedS: number;
 } | null {
   const ids = castAndEffectIds(castSpellId);
   const triggered = new Set(triggeredEffectAurasOfCast(castSpellId));
@@ -367,6 +369,23 @@ function observedEffectEnd(
         auraId: ivs[first]!.spellId,
       };
   }
+  const lastAppliedS = (
+    b: { destId: string; auraId: string; lastFromS: number },
+    endS: number,
+  ): number => {
+    let at = b.lastFromS;
+    for (const a of auraRowsOf(b.destId)) {
+      if (a.spellId !== b.auraId) continue;
+      if (
+        a.logLine.event !== LogEvent.SPELL_AURA_APPLIED &&
+        a.logLine.event !== LogEvent.SPELL_AURA_REFRESH
+      )
+        continue;
+      const t = (a.logLine.timestamp - combat.startTime) / 1000;
+      if (t >= b.lastFromS && t <= endS && t > at) at = t;
+    }
+    return at;
+  };
   // F15 / fact1215 R8: the interval builder clamps a REMOVED logged after
   // the combat's end onto that end (`buildAuraIntervals` `rel`) and still
   // calls the end observed — a clamp is no observation (26bfd4f3: Kingsbane
@@ -405,7 +424,7 @@ function observedEffectEnd(
             endS: combatEndS,
             holderId: best.destId,
             auraId: best.auraId,
-            lastFromS: best.lastFromS,
+            appliedS: lastAppliedS(best, combatEndS),
           }
         : null;
     }
@@ -415,7 +434,7 @@ function observedEffectEnd(
         endS: best.end,
         holderId: best.destId,
         auraId: best.auraId,
-        lastFromS: best.lastFromS,
+        appliedS: lastAppliedS(best, best.end),
       }
     : null;
 }
@@ -428,7 +447,12 @@ function observedEffectEnd(
  * time left (121afd91 r6 1:55: `Dark Transformation (5s left)` counted down
  * to a death 5 s later). Undefined otherwise.
  */
-const DEATH_CUT_MIN_GAP_S = 0.5;
+/** Editorial, not measured: a natural expiry is logged on its official
+ * end, so a gap this small is timer jitter, not a cut — and small enough
+ * that a cut it drops cannot move a rounded "(Ns left)" by more than the
+ * jitter itself (codex 20-G167-11 #2: 0.5 s dropped a 0.3 s cut that
+ * moved the number). */
+const DEATH_CUT_MIN_GAP_S = 0.1;
 
 function deathCutOfficialEnd(
   holder: ICombatUnit | undefined,
@@ -436,9 +460,9 @@ function deathCutOfficialEnd(
   officialEndS: number,
   combat: AtomicArenaCombat,
 ): number | undefined {
-  // a natural expiry logs within a few hundred ms of its official end (a
-  // press logged after its aura, codex 20-G167-06 #3): less than
-  // DEATH_CUT_MIN_GAP_S short is no cut
+  // the official end is read from the aura's own application (a press
+  // logged after its aura, codex 20-G167-06 #3, is no cut); less than
+  // DEATH_CUT_MIN_GAP_S short is jitter
   if (!(officialEndS - endS > DEATH_CUT_MIN_GAP_S)) return undefined;
   const endMs = combat.startTime + endS * 1000;
   const near = (ms: number | undefined) =>
@@ -621,15 +645,15 @@ export function reconstructEnemyCDTimeline(
       if (end === null) continue;
       // the observed aura's own official length (this caster's talents —
       // Thorim's Invocation lengthens Doom Winds' aura, not its press) from
-      // its own start (codex 20-G167-06 #2 / #3); the press's when the aura
-      // has none
+      // its last application (codex 20-G167-06 #2 / #3, 20-G167-11 #1); the
+      // press's when the aura has none
       const auraFull = buffFullDurationForCaster(end.auraId, enemy);
       setObservedEnd(
         cd,
         end.endS,
         auraFull === undefined
           ? officialEndOf.get(cd)
-          : end.lastFromS + auraFull,
+          : end.appliedS + auraFull,
         combat.units?.[end.holderId] as ICombatUnit | undefined,
       );
     }

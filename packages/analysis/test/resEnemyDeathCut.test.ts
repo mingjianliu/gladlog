@@ -383,4 +383,66 @@ describe("[RES] enemy: time left of an effect its holder's death cut short (GH #
       tl.players[0]!.offensiveCDs[0]!.deathCutOfficialEndSeconds,
     ).toBeUndefined();
   });
+
+  const avatarScene = (
+    casts: number[],
+    rows: Array<[LogEvent, number]>,
+    deathS: number,
+  ) => {
+    const warrior = makeUnit("e1", {
+      name: "Warrior",
+      spec: CombatUnitSpec.Warrior_Arms,
+      spellCastEvents: casts.map((t) =>
+        makeSpellCastEvent(
+          AVATAR,
+          START + t * 1000,
+          "e1",
+          "Warrior",
+          "e1",
+          "Warrior",
+        ),
+      ),
+      auraEvents: rows.map(([ev, t]) =>
+        aura(ev, AVATAR, START + t * 1000, ["e1", "Warrior"], "e1"),
+      ),
+    } as any);
+    (warrior as any).deathRecords = [{ timestamp: START + deathS * 1000 }];
+    return reconstructEnemyCDTimeline([warrior], {
+      startTime: START,
+      endTime: START + 200_000,
+      units: { e1: warrior },
+    } as any);
+  };
+
+  it("codex 20-G167-11 #1: a press that refreshed the aura restarts its official length", () => {
+    const tl = avatarScene(
+      [10, 20],
+      [
+        [LogEvent.SPELL_AURA_APPLIED, 10],
+        [LogEvent.SPELL_AURA_REFRESH, 20],
+        [LogEvent.SPELL_AURA_REMOVED, 25],
+      ],
+      25.04,
+    );
+    const second = tl.players[0]!.offensiveCDs.find(
+      (c) => Math.abs(c.castTimeSeconds - 20) < 0.01,
+    )!;
+    expect(second.deathCutOfficialEndSeconds).toBeCloseTo(40, 3);
+    expect(enemyField(tl, 22)).toContain("(18s left)");
+  });
+
+  it("codex 20-G167-11 #2: a 0.3 s cut that moves the rounded number still counts", () => {
+    const tl = avatarScene(
+      [10.6],
+      [
+        [LogEvent.SPELL_AURA_APPLIED, 10.6],
+        [LogEvent.SPELL_AURA_REMOVED, 30.3],
+      ],
+      30.34,
+    );
+    expect(
+      tl.players[0]!.offensiveCDs[0]!.deathCutOfficialEndSeconds,
+    ).toBeCloseTo(30.6, 3);
+    expect(enemyField(tl, 25)).toContain("(6s left)");
+  });
 });
