@@ -15,9 +15,19 @@
  *   pending / 8, a tick with none repeats the previous amount until nothing
  *   is pending — so 43 % of the take-back lands while the buff is still up
  *   and the rest over the 8 s after it ends;
- * - run from the absorbs alone it reproduces the log: at 92 deaths 17.66 M
- *   still pending simulated vs 18.08 M logged (per unit median 0.02 %, p90
- *   7.7 %) — the simulation errs low, the safe side for a "would have" claim.
+ * - run from the absorbs alone it reproduces the log, read as each take-back
+ *   tick's baseAmount (the unit's own mitigation applies after the pool pays
+ *   it out) with fully absorbed ticks (SPELL_PERIODIC_MISSED ABSORB) still
+ *   paying the rule's amount: 90.6 % of 18,535 ticks within ±1 %, and at 93
+ *   deaths 17.68 M still pending simulated vs 17.16 M logged (per unit median
+ *   0.01 %, p90 4.7 %) — the simulation errs HIGH by ~3 % in aggregate (the
+ *   first reading, amount + absorbed without the missed ticks, made it look
+ *   low: 17.66 M vs 18.08 M);
+ * - a pool a unit still holds when a round ends can come back with its next
+ *   Time Dilation (Solo Shuffle; half of the October first ticks that exceed
+ *   their own absorbs match the carried balance exactly), but carrying every
+ *   balance fits worse, so when it carries is unresolved — and a hypothetical
+ *   press never inherits one.
  *
  * Other deferral shields (Stretch Time, Fel Armor) run other schedules and
  * are not modelled here.
